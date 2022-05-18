@@ -9,7 +9,7 @@ hw.module @complex(%clock: i1, %reset: i1, %r0en: i1, %mode: i1, %data0: i16) ->
   %tmp41.ro_data_0, %tmp41.rw_rdata_0 = hw.instance "tmp41"
    @FIRRTLMem_1_1_1_16_10_2_4_0_0(ro_addr_0: %c0_i4: i4, ro_en_0: %r0en: i1,
      ro_clock_0: %clock: i1, rw_addr_0: %c0_i4: i4, rw_en_0: %r0en: i1,
-     rw_clock_0: %clock: i1, rw_wmode_0: %mode: i1, 
+     rw_clock_0: %clock: i1, rw_wmode_0: %mode: i1,
      rw_wdata_0: %data0: i16,
      wo_addr_0: %c0_i4: i4, wo_en_0: %r0en: i1,
      wo_clock_0: %clock: i1, wo_data_0: %data0: i16) -> (ro_data_0: i16, rw_rdata_0: i16)
@@ -37,10 +37,10 @@ hw.module @simple(%clock: i1, %reset: i1, %r0en: i1, %mode: i1, %data0: i16) -> 
   %tmp41.ro_data_0, %tmp41.rw_rdata_0 = hw.instance "tmp41"
    @FIRRTLMem_1_1_1_16_10_0_1_0_0( ro_addr_0: %c0_i4: i4,ro_en_0: %r0en: i1,
      ro_clock_0: %clock: i1, rw_addr_0: %c0_i4: i4, rw_en_0: %r0en: i1,
-     rw_clock_0: %clock: i1, rw_wmode_0: %mode: i1, 
+     rw_clock_0: %clock: i1, rw_wmode_0: %mode: i1,
      rw_wdata_0: %data0: i16,
      wo_addr_0: %c0_i4: i4, wo_en_0: %r0en: i1,
-     wo_clock_0: %clock: i1, wo_data_0: %data0: i16) -> 
+     wo_clock_0: %clock: i1, wo_data_0: %data0: i16) ->
      (ro_data_0: i16, rw_rdata_0: i16)
 
   hw.output %tmp41.ro_data_0, %tmp41.rw_rdata_0 : i16, i16
@@ -50,7 +50,7 @@ hw.module @simple(%clock: i1, %reset: i1, %r0en: i1, %mode: i1, %data0: i16) -> 
 hw.module @WriteOrderedSameClock(%clock: i1, %w0_addr: i4, %w0_en: i1, %w0_data: i8, %w0_mask: i1, %w1_addr: i4, %w1_en: i1, %w1_data: i8, %w1_mask: i1) {
   hw.instance "memory"
     @FIRRTLMemOneAlways(wo_addr_0: %w0_addr: i4, wo_en_0: %w0_en: i1,
-      wo_clock_0: %clock: i1, wo_data_0: %w0_data: i8, 
+      wo_clock_0: %clock: i1, wo_data_0: %w0_data: i8,
       wo_addr_1: %w1_addr: i4, wo_en_1: %w1_en: i1, wo_clock_1: %clock: i1,
        wo_data_1: %w1_data: i8) -> ()
   hw.output
@@ -60,7 +60,7 @@ hw.module @WriteOrderedSameClock(%clock: i1, %w0_addr: i4, %w0_en: i1, %w0_data:
 hw.module @WriteOrderedDifferentClock(%clock: i1, %clock2: i1, %w0_addr: i4, %w0_en: i1, %w0_data: i8, %w0_mask: i1, %w1_addr: i4, %w1_en: i1, %w1_data: i8, %w1_mask: i1) {
   hw.instance "memory"
     @FIRRTLMemTwoAlways(wo_addr_0: %w0_addr: i4, wo_en_0: %w0_en: i1,
-      wo_clock_0: %clock: i1, wo_data_0: %w0_data: i8, 
+      wo_clock_0: %clock: i1, wo_data_0: %w0_data: i8,
       wo_addr_1: %w1_addr: i4, wo_en_1: %w1_en: i1, wo_clock_1: %clock2: i1,
       wo_data_1: %w1_data: i8) -> ()
   hw.output
@@ -98,7 +98,29 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0_0, @FIRRTLMem(%ro_addr_0: i4, %
 //CHECK-NEXT:    sv.if %wo_en_0 {
 //CHECK-NEXT:      %[[wslot:.+]] = sv.array_index_inout %Memory[%wo_addr_0]
 //CHECK-NEXT:      %[[c0_i32:.+]] = hw.constant 0 : i32
-//CHECK-NEXT:      sv.passign %[[wslot]], %wo_data_0 
+//CHECK-NEXT:      sv.passign %[[wslot]], %wo_data_0
+//CHECK-NEXT:    }
+//CHECK-NEXT:  }
+//CHECK-NEXT:  sv.ifdef "SYNTHESIS" {
+//CHECK-NEXT:  } else {
+//CHECK-NEXT:    sv.ifdef "RANDOMIZE_MEM_INIT" {
+//CHECK-NEXT:      sv.verbatim "integer [[INITVAR:.+]];\0A" {{.+}}
+//CHECK-NEXT:      %[[RANDOM_MEM:.+]] = sv.reg sym @[[_RANDOM_MEM:.+]] : !hw.inout<i32>
+//CHECK-NEXT:    }
+//CHECK-NEXT:    sv.ifdef "RANDOMIZE_REG_INIT" {
+//CHECK-NEXT:    }
+//CHECK-NEXT:    sv.initial {
+//CHECK-NEXT:      sv.verbatim "`INIT_RANDOM_PROLOG_"
+//CHECK-NEXT:      sv.ifdef.procedural "RANDOMIZE_MEM_INIT" {
+//CHECK-NEXT:        sv.verbatim "for ([[INITVAR]] = 0; [[INITVAR]] < 10; [[INITVAR]] = [[INITVAR]] + 1) begin\0A
+//CHECK-SAME{LITERAL}: {{0}} = {`RANDOM};\0A
+//CHECK-SAME:          Memory[[[INITVAR]]] =
+//CHECK-SAME{LITERAL}:   {{0}}[15:0];\0A
+//CHECK-SAME:          end"
+//CHECK-SAME:          {symbols = [#hw.innerNameRef<@FIRRTLMem_1_1_1_16_10_0_1_0_0::@[[_RANDOM_MEM]]>]}
+//CHECK-NEXT:      }
+//CHECK-NEXT:      sv.ifdef.procedural "RANDOMIZE_REG_INIT" {
+//CHECK-NEXT:      }
 //CHECK-NEXT:    }
 //CHECK-NEXT:  }
 //CHECK-NEXT:  hw.output %[[readres]], %[[rwres]]
@@ -112,17 +134,17 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_2_4_0_0, @FIRRTLMem(%ro_addr_0: i4, %
 //CHECK-NEXT:      sv.passign %0, %ro_en_0 : i1
 //CHECK-NEXT:    }
 //CHECK-NEXT:    %1 = sv.read_inout %0 : !hw.inout<i1>
-//CHECK-NEXT:    %2 = sv.reg  : !hw.inout<i1>
+//CHECK-NEXT:    %2 = sv.reg {{.+}}  : !hw.inout<i1>
 //CHECK-NEXT:    sv.always posedge %ro_clock_0 {
 //CHECK-NEXT:      sv.passign %2, %1 : i1
 //CHECK-NEXT:    }
 //CHECK-NEXT:    %3 = sv.read_inout %2 : !hw.inout<i1>
-//CHECK-NEXT:    %4 = sv.reg  : !hw.inout<i4>
+//CHECK-NEXT:    %4 = sv.reg {{.+}}  : !hw.inout<i4>
 //CHECK-NEXT:    sv.always posedge %ro_clock_0 {
 //CHECK-NEXT:      sv.passign %4, %ro_addr_0 : i4
 //CHECK-NEXT:    }
 //CHECK-NEXT:    %5 = sv.read_inout %4 : !hw.inout<i4>
-//CHECK-NEXT:    %6 = sv.reg  : !hw.inout<i4>
+//CHECK-NEXT:    %6 = sv.reg {{.+}} : !hw.inout<i4>
 //CHECK-NEXT:    sv.always posedge %ro_clock_0 {
 //CHECK-NEXT:      sv.passign %6, %5 : i4
 //CHECK-NEXT:    }
@@ -187,7 +209,7 @@ hw.module.generated @FIRRTLMemTwoAlways, @FIRRTLMem( %wo_addr_0: i4, %wo_en_0: i
   // CHECK:    sv.passign %[[v22:.+]], %W0_data : i32
   // CHECK:  }
   // CHECK:  %[[v23:.+]] = sv.read_inout %[[v22]] : !hw.inout<i32>
-  // CHECK:  %[[v24:.+]] = sv.reg  : !hw.inout<i32>
+  // CHECK:  %[[v24:.+]] = sv.reg {{.+}} : !hw.inout<i32>
   // CHECK:  sv.always posedge %W0_clk {
   // CHECK:    sv.passign %[[v24:.+]], %[[v23:.+]] : i32
   // CHECK:  }
@@ -259,3 +281,15 @@ numReadPorts = 1 : ui32, numReadWritePorts = 1 : ui32,maskGran = 8 :ui32, numWri
 // CHECK:        sv.passign %[[vv83]], %[[v85]] : i8
 // CHECK:      }
 // CHECK:    }
+
+// Ensure state is cleaned up between the expansion of modules.
+// See https://github.com/llvm/circt/pull/2769
+
+// CHECK-LABEL: hw.module @PR2769
+// CHECK-NOT: _GEN
+hw.module.generated @PR2769, @FIRRTLMem(%ro_addr_0: i4, %ro_en_0: i1, %ro_clock_0: i1,%rw_addr_0: i4, %rw_en_0: i1,  %rw_clock_0: i1, %rw_wmode_0: i1, %rw_wdata_0: i16,  %wo_addr_0: i4, %wo_en_0: i1, %wo_clock_0: i1, %wo_data_0: i16) -> (ro_data_0: i16, rw_rdata_0: i16) attributes {depth = 10 : i64, numReadPorts = 1 : ui32, numReadWritePorts = 1 : ui32, numWritePorts = 1 : ui32, readLatency = 0 : ui32, readUnderWrite = 0 : ui32, width = 16 : ui32, writeClockIDs = [], writeLatency = 1 : ui32, writeUnderWrite = 0 : i32}
+
+// CHECK-LABEL: hw.module @RandomizeWeirdWidths
+// CHECK: sv.ifdef.procedural "RANDOMIZE_MEM_INIT"
+// CHECK-NEXT{LITERAL}: sv.verbatim "for (initvar = 0; initvar < 10; initvar = initvar + 1) begin\0A  {{0}} = {{`RANDOM}, {`RANDOM}, {`RANDOM}, {`RANDOM}, {`RANDOM}};\0A  Memory[initvar] = {{0}}[144:0];\0Aend"
+hw.module.generated @RandomizeWeirdWidths, @FIRRTLMem(%ro_addr_0: i4, %ro_en_0: i1, %ro_clock_0: i1,%rw_addr_0: i4, %rw_en_0: i1,  %rw_clock_0: i1, %rw_wmode_0: i1, %rw_wdata_0: i145, %wo_addr_0: i4, %wo_en_0: i1, %wo_clock_0: i1, %wo_data_0: i145) -> (ro_data_0: i145, rw_rdata_0: i145) attributes {depth = 10 : i64, numReadPorts = 1 : ui32, numReadWritePorts = 1 : ui32, numWritePorts = 1 : ui32, readLatency = 2 : ui32, readUnderWrite = 0 : ui32, width = 145 : ui32, writeClockIDs = [], writeLatency = 4 : ui32, writeUnderWrite = 0 : i32}

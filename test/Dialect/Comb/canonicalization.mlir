@@ -737,9 +737,9 @@ hw.module @narrow_extract_from_and(%arg0: i32) -> (o1: i8, o2: i14, o3: i8, o4: 
   %2 = comb.extract %0 from 2 : (i32) -> i14
 
   // CHECK: %0 = comb.extract %arg0 from 4 : (i32) -> i4
-  // CHECK: %1 = comb.concat %c0_i8, %0, %c0_i2 : i8, i4, i2
+  // CHECK: %1 = comb.concat %c0_i3, %0, %false : i3, i4, i1
+  // CHECK: %2 = comb.concat %c0_i8, %0, %c0_i2 : i8, i4, i2
 
-  // CHECK: %2 = comb.concat %c0_i3, %0, %false : i3, i4, i1
   %c42_i32 = hw.constant 42 : i32  // 0b101010
   %3 = comb.and %arg0, %c42_i32 : i32
   %4 = comb.extract %3 from 1 : (i32) -> i8  
@@ -754,7 +754,7 @@ hw.module @narrow_extract_from_and(%arg0: i32) -> (o1: i8, o2: i14, o3: i8, o4: 
   // CHECK: %7 = comb.concat %c0_i4, %6, %c0_i2 : i4, i2, i2
  
   hw.output %1, %2, %4, %6 : i8, i14, i8, i8
-  // CHECK: hw.output %2, %1, %5, %7 : i8, i14, i8, i8
+  // CHECK: hw.output %1, %2, %5, %7 : i8, i14, i8, i8
 }
 
 // CHECK-LABEL: hw.module @fold_mux_tree1
@@ -1042,10 +1042,9 @@ hw.module @combine_icmp_compare_concat0(%thing: i3) -> (a: i1) {
   %c0 = hw.constant 0 : i7
   %1 = comb.icmp ne %0, %c0 : i7
 
-  // CHECK: %c0_i6 = hw.constant 0 : i6
-  // CHECK: %0 = comb.replicate %thing : (i3) -> i6
-  // CHECK: %1 = comb.icmp ne %0, %c0_i6 : i6
-  // CHECK: hw.output %1 : i1
+  // CHECK: %c0_i3 = hw.constant 0 : i3
+  // CHECK: %0 = comb.icmp ne %thing, %c0_i3 : i3
+  // CHECK: hw.output %0 : i1
   hw.output %1 : i1
 }
 
@@ -1070,10 +1069,9 @@ hw.module @combine_icmp_compare_concat2(%thing: i3) -> (a: i1) {
   %1 = comb.icmp eq %0, %c0 : i8
   hw.output %1 : i1
 
-  // CHECK: %c0_i6 = hw.constant 0 : i6
-  // CHECK: %0 = comb.replicate %thing : (i3) -> i6
-  // CHECK: %1 = comb.icmp eq %0, %c0_i6 : i6
-  // CHECK: hw.output %1 : i1
+  // CHECK: %c0_i3 = hw.constant 0 : i3
+  // CHECK: %0 = comb.icmp eq %thing, %c0_i3 : i3
+  // CHECK: hw.output %0 : i1
 }
 
 // CHECK-LABEL: hw.module @combine_icmp_compare_known_bits0
@@ -1331,4 +1329,23 @@ hw.module @muxCommonOp(%cond: i1,
  
   // CHECK: hw.output [[O1]], [[O2]], [[O3]]
   hw.output %o1, %o2, %o3 : i128, i128, i128
+}
+
+// CHECK-LABEL: hw.module @ReductionReplicate(
+hw.module @ReductionReplicate(%r: i4) -> (a:i1, b:i1, c:i1, d:i1) {
+  %allones = hw.constant -1 : i32
+  %zero = hw.constant 0 : i32
+  %0 = comb.replicate %r : (i4) -> i32
+  // CHECK:      %c0_i4 = hw.constant 0 : i4
+  // CHECK-NEXT: %c-1_i4 = hw.constant -1 : i4
+  // CHECK-NEXT: [[A:%.+]] = comb.icmp eq %r, %c-1_i4
+  // CHECK-NEXT: [[B:%.+]] = comb.icmp eq %r, %c0_i4
+  // CHECK-NEXT: [[C:%.+]] = comb.icmp ne %r, %c-1_i4
+  // CHECK-NEXT: [[D:%.+]] = comb.icmp ne %r, %c0_i4
+  %a = comb.icmp eq %0, %allones : i32
+  %b = comb.icmp eq %0, %zero : i32
+  %c = comb.icmp ne %0, %allones : i32
+  %d = comb.icmp ne %0, %zero : i32
+  // CHECK-NEXT: hw.output [[A]], [[B]], [[C]], [[D]]
+  hw.output %a, %b, %c, %d: i1, i1, i1, i1
 }

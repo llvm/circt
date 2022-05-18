@@ -10,11 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "State.h"
-#include "Trace.h"
-
-#include "circt/Conversion/LLHDToLLVM.h"
 #include "circt/Dialect/LLHD/Simulator/Engine.h"
+#include "circt/Conversion/LLHDToLLVM.h"
 
 #include "mlir/ExecutionEngine/ExecutionEngine.h"
 #include "mlir/IR/Builders.h"
@@ -27,8 +24,8 @@ Engine::Engine(
     llvm::raw_ostream &out, ModuleOp module,
     llvm::function_ref<mlir::LogicalResult(mlir::ModuleOp)> mlirTransformer,
     llvm::function_ref<llvm::Error(llvm::Module *)> llvmTransformer,
-    std::string root, int mode, ArrayRef<StringRef> sharedLibPaths)
-    : out(out), root(root), traceMode(mode) {
+    std::string root, TraceMode tm, ArrayRef<StringRef> sharedLibPaths)
+    : out(out), root(root), traceMode(tm) {
   state = std::make_unique<State>();
   state->root = root + '.' + root;
 
@@ -53,9 +50,10 @@ Engine::Engine(
   llvm::InitializeNativeTarget();
   llvm::InitializeNativeTargetAsmPrinter();
 
-  auto maybeEngine = mlir::ExecutionEngine::create(
-      this->module, nullptr, llvmTransformer,
-      /*jitCodeGenOptLevel=*/llvm::None, /*sharedLibPaths=*/sharedLibPaths);
+  mlir::ExecutionEngineOptions options;
+  options.transformer = llvmTransformer;
+  options.sharedLibPaths = sharedLibPaths;
+  auto maybeEngine = mlir::ExecutionEngine::create(this->module, options);
   assert(maybeEngine && "failed to create JIT");
   engine = std::move(*maybeEngine);
 }
@@ -81,7 +79,7 @@ int Engine::simulate(int n, uint64_t maxTime) {
     return -1;
   }
 
-  if (traceMode >= 0) {
+  if (traceMode != TraceMode::None) {
     // Add changes for all the signals' initial values.
     for (size_t i = 0, e = state->signals.size(); i < e; ++i) {
       trace.addChange(i);
@@ -113,25 +111,26 @@ int Engine::simulate(int n, uint64_t maxTime) {
     const auto &pop = state->queue.top();
 
     // Interrupt the simulation if a stop condition is met.
-    if ((n > 0 && cycle >= n) || (maxTime > 0 && pop.time.time > maxTime)) {
+    if ((n > 0 && cycle >= n) ||
+        (maxTime > 0 && pop.time.getTime() > maxTime)) {
       break;
     }
 
     // Update the simulation time.
     state->time = pop.time;
 
-    if (traceMode >= 0)
+    if (traceMode != TraceMode::None)
       trace.flush();
 
     // Process signal changes.
     size_t i = 0, e = pop.changesSize;
     while (i < e) {
       const auto sigIndex = pop.changes[i].first;
-      const auto &curr = state->signals[sigIndex];
+      auto &curr = state->signals[sigIndex];
       APInt buff(
-          curr.size * 8,
-          llvm::makeArrayRef(reinterpret_cast<uint64_t *>(curr.value.get()),
-                             llvm::divideCeil(curr.size, 8)));
+          curr.getSize() * 8,
+          llvm::makeArrayRef(reinterpret_cast<uint64_t *>(curr.getValue()),
+                             llvm::divideCeil(curr.getSize(), 8)));
 
       // Apply the changes to the buffer until we reach the next signal.
       while (i < e && pop.changes[i].first == sigIndex) {
@@ -146,15 +145,11 @@ int Engine::simulate(int n, uint64_t maxTime) {
         ++i;
       }
 
-      // Skip if the updated signal value is equal to the initial value.
-      if (std::memcmp(curr.value.get(), buff.getRawData(), curr.size) == 0)
+      if (!curr.updateWhenChanged(buff.getRawData()))
         continue;
 
-      // Apply the signal update.
-      std::memcpy(curr.value.get(), buff.getRawData(), curr.size);
-
       // Add sensitive instances.
-      for (auto inst : curr.triggers) {
+      for (auto inst : curr.getTriggeredInstanceIndices()) {
         // Skip if the process is not currently sensible to the signal.
         if (!state->instances[inst].isEntity) {
           const auto &sensList = state->instances[inst].sensitivityList;
@@ -174,7 +169,7 @@ int Engine::simulate(int n, uint64_t maxTime) {
       }
 
       // Dump the updated signal.
-      if (traceMode >= 0)
+      if (traceMode != TraceMode::None)
         trace.addChange(sigIndex);
     }
 
@@ -211,12 +206,12 @@ int Engine::simulate(int n, uint64_t maxTime) {
     ++cycle;
   }
 
-  if (traceMode >= 0) {
+  if (traceMode != TraceMode::None) {
     // Flush any remainign changes
     trace.flush(/*force=*/true);
   }
 
-  llvm::errs() << "Finished at " << state->time.dump() << " (" << cycle
+  llvm::errs() << "Finished at " << state->time.toString() << " (" << cycle
                << " cycles)\n";
   return 0;
 }
@@ -244,7 +239,7 @@ void Engine::buildLayout(ModuleOp module) {
   for (size_t i = 0, e = state->instances.size(); i < e; ++i) {
     auto &inst = state->instances[i];
     for (auto trigger : inst.sensitivityList) {
-      state->signals[trigger.globalIndex].triggers.push_back(i);
+      state->signals[trigger.globalIndex].pushInstanceIndex(i);
     }
   }
 }
@@ -285,14 +280,15 @@ void Engine::walkEntity(EntityOp entity, Instance &child) {
             auto detail = child.sensitivityList[blockArg.getArgNumber()];
             detail.instIndex = i;
             newChild.sensitivityList.push_back(detail);
-          } else if (auto sig = dyn_cast<SigOp>(args[i].getDefiningOp())) {
+          } else if (auto sigOp = dyn_cast<SigOp>(args[i].getDefiningOp())) {
             // The signal comes from one of the instance's owned signals.
             auto it = std::find_if(
                 child.sensitivityList.begin(), child.sensitivityList.end(),
                 [&](SignalDetail &detail) {
-                  return state->signals[detail.globalIndex].name ==
-                             sig.name() &&
-                         state->signals[detail.globalIndex].owner == child.name;
+                  return state->signals[detail.globalIndex].getName() ==
+                             sigOp.name() &&
+                         state->signals[detail.globalIndex].getOwner() ==
+                             child.name;
                 });
             if (it != child.sensitivityList.end()) {
               auto detail = *it;

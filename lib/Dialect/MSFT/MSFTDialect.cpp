@@ -45,42 +45,5 @@ Operation *MSFTDialect::materializeConstant(OpBuilder &builder, Attribute value,
   return nullptr;
 }
 
-static msft::InstanceOp getInstance(MSFTModuleOp root,
-                                    ArrayRef<StringRef> path) {
-  assert(!path.empty());
-
-  // Unfortunately, instance names are not symbols and modules are not symbol
-  // tables, so we have to do a full walk.
-  StringRef searchName = path[0];
-  msft::InstanceOp match = nullptr;
-  root.walk([&](msft::InstanceOp inst) {
-    if (inst.instanceName() != searchName)
-      return WalkResult::advance();
-    match = inst;
-    return WalkResult::interrupt();
-  });
-  if (!match)
-    return nullptr;
-  if (path.size() == 1)
-    return match;
-
-  // We're not the leaf, so recurse.
-  auto subPath = path.slice(1);
-  Operation *submoduleOp = match.getReferencedModule();
-  auto submodule = dyn_cast<msft::MSFTModuleOp>(submoduleOp);
-  if (!submodule)
-    return nullptr;
-  return getInstance(submodule, subPath);
-}
-
-msft::InstanceOp circt::msft::getInstance(MSFTModuleOp root,
-                                          SymbolRefAttr pathAttr) {
-  SmallVector<StringRef, 16> path;
-  path.push_back(pathAttr.getRootReference().getValue());
-  for (auto sym : pathAttr.getNestedReferences())
-    path.push_back(sym.getValue());
-  return ::getInstance(root, path);
-}
-
 #include "circt/Dialect/MSFT/MSFTDialect.cpp.inc"
 #include "circt/Dialect/MSFT/MSFTEnums.cpp.inc"

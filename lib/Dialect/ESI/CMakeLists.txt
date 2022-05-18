@@ -21,7 +21,10 @@ set(ESI_LinkLibs
   CIRCTHW
   MLIRIR
   MLIRTransforms
-  MLIRTranslation
+  MLIRControlFlow
+  MLIRFunc
+  MLIRArithmetic
+  MLIRTranslateLib
 )
 
 set(ESI_Deps

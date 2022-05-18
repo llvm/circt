@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Support/APInt.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Matchers.h"
@@ -19,9 +20,6 @@
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
-
-// Forward Decl for patterns.
-static bool isUselessName(circt::StringRef name);
 
 // Declarative canonicalization patterns
 namespace circt {
@@ -34,25 +32,6 @@ namespace patterns {
 
 using namespace circt;
 using namespace firrtl;
-
-static IntegerAttr getIntAttr(Type type, const APInt &value) {
-  auto intType = type.cast<IntType>();
-  assert((!intType.hasWidth() ||
-          (unsigned)intType.getWidthOrSentinel() == value.getBitWidth()) &&
-         "value / type width mismatch");
-  auto intSign =
-      intType.isSigned() ? IntegerType::Signed : IntegerType::Unsigned;
-  auto attrType =
-      IntegerType::get(type.getContext(), value.getBitWidth(), intSign);
-  return IntegerAttr::get(attrType, value);
-}
-
-/// Return an IntegerAttr filled with zeros for the specified FIRRTL integer
-/// type. This handles both the known width and unknown width case.
-static IntegerAttr getIntZerosAttr(Type type) {
-  int32_t width = abs(type.cast<IntType>().getWidthOrSentinel());
-  return getIntAttr(type, APInt(width, 0));
-}
 
 /// Return true if this operation's operands and results all have a known width.
 /// This only works for integer types.
@@ -76,22 +55,22 @@ static bool isUInt1(Type type) {
 
 /// Return true if this is a useless temporary name produced by FIRRTL.  We
 /// drop these as they don't convey semantic meaning.
-static bool isUselessName(StringRef name) {
+bool circt::firrtl::isUselessName(StringRef name) {
   if (name.empty())
     return true;
-  // Ignore _T and _T_123
-  if (name.startswith("_T")) {
-    if (name.size() == 2)
-      return true;
-    return name.size() > 3 && name[2] == '_' && llvm::isDigit(name[3]);
-  }
+  // Ignore _.*
+  return name.startswith("_");
+}
 
-  // Ignore _GEN and _GEN_123, these are produced by Namespace.scala.
-  if (name.startswith("_GEN")) {
-    if (name.size() == 4)
-      return true;
-    return name.size() > 5 && name[4] == '_' && llvm::isDigit(name[5]);
-  }
+/// Return true if this is a useless temporary name produced by FIRRTL.  We
+/// drop these as they don't convey semantic meaning.
+bool circt::firrtl::isUselessName(Operation *op) {
+  if (auto wire = dyn_cast<WireOp>(op))
+    return isUselessName(wire.name());
+  if (auto node = dyn_cast<NodeOp>(op))
+    return isUselessName(node.name());
+  if (auto reg = dyn_cast<RegOp>(op))
+    return isUselessName(reg.name());
   return false;
 }
 
@@ -1413,8 +1392,8 @@ LogicalResult MultibitMuxOp::canonicalize(MultibitMuxOp op,
 static StrictConnectOp getSingleConnectUserOf(Value value) {
   StrictConnectOp connect;
   for (Operation *user : value.getUsers()) {
-    // If we see a partial connect or attach, just conservatively fail.
-    if (isa<AttachOp, PartialConnectOp>(user))
+    // If we see an attach, just conservatively fail.
+    if (isa<AttachOp>(user))
       return {};
 
     if (auto aConnect = dyn_cast<StrictConnectOp>(user))
@@ -1444,8 +1423,11 @@ static LogicalResult canonicalizeSingleSetConnect(StrictConnectOp op,
     return failure();
 
   // Only forward if the types exactly match and there is one connect.
-  if (op.dest().getType() != op.src().getType() ||
-      getSingleConnectUserOf(op.dest()) != op)
+  if (getSingleConnectUserOf(op.dest()) != op)
+    return failure();
+
+  // Only foward if there is more than one use
+  if (connectedDecl->hasOneUse())
     return failure();
 
   // Only do this if the connectee and the declaration are in the same block.
@@ -1471,6 +1453,8 @@ static LogicalResult canonicalizeSingleSetConnect(StrictConnectOp op,
   if (srcValueOp) {
     // Replace with constant zero.
     if (isa<InvalidValueOp>(srcValueOp)) {
+      if (op.dest().getType().isa<BundleType, FVectorType>())
+        return failure();
       if (op.dest().getType().isa<ClockType, AsyncResetType, ResetType>())
         replacement = rewriter.create<SpecialConstantOp>(
             op.src().getLoc(), op.dest().getType(),
@@ -1487,19 +1471,27 @@ static LogicalResult canonicalizeSingleSetConnect(StrictConnectOp op,
     }
   }
 
-  // Replace all things *using* the decl with the constant/port, and
-  // remove the declaration.
-  rewriter.replaceOp(connectedDecl, replacement);
+  if (isUselessName(connectedDecl)) {
+    // Replace all things *using* the decl with the constant/port, and
+    // remove the declaration.
+    rewriter.replaceOp(connectedDecl, replacement);
 
-  // Remove the connect.
-  rewriter.eraseOp(op);
+    // Remove the connect
+    rewriter.eraseOp(op);
+  } else {
+    // bypass the decl, but keep it around
+    rewriter.startRootUpdate(connectedDecl);
+    connectedDecl->replaceAllUsesWith(ArrayRef{replacement});
+    op->setOperand(0, connectedDecl->getResult(0));
+    rewriter.finalizeRootUpdate(connectedDecl);
+  }
 
   return success();
 }
 
 static LogicalResult canonicalizeIntTypeConnect(ConnectOp op,
                                                 PatternRewriter &rewriter) {
-  // If a partial connect exists from a shorter int to a longer int, simplify
+  // If a connect exists from a shorter int to a longer int, simplify
   // to an extend and strict connect.
   auto destType =
       op.getOperand(0).getType().cast<FIRRTLType>().getPassiveType();
@@ -1625,38 +1617,6 @@ LogicalResult AttachOp::canonicalize(AttachOp op, PatternRewriter &rewriter) {
   return failure();
 }
 
-LogicalResult PartialConnectOp::canonicalize(PartialConnectOp op,
-                                             PatternRewriter &rewriter) {
-  // If a partial connect exists from a longer int to a shorter int, simplify
-  // to a truncation and connect.
-  auto destType =
-      op.getOperand(0).getType().cast<FIRRTLType>().getPassiveType();
-  auto srcType = op.getOperand(1).getType().cast<FIRRTLType>();
-  if (destType == srcType)
-    return failure();
-
-  auto srcWidth = srcType.getBitWidthOrSentinel();
-  auto destWidth = destType.getBitWidthOrSentinel();
-
-  if (destType.isa<IntType>() && srcType.isa<IntType>() && srcWidth >= 0 &&
-      destWidth >= 0 && destWidth < srcWidth) {
-    // firrtl.tail always returns uint even for sint operands.
-    IntType tmpType = destType.cast<IntType>();
-    if (tmpType.isSigned())
-      tmpType = UIntType::get(destType.getContext(), destWidth);
-    auto shortened = rewriter.createOrFold<TailPrimOp>(
-        op.getLoc(), tmpType, op.getOperand(1), srcWidth - destWidth);
-    // Insert the cast back to signed if needed.
-    if (tmpType != destType)
-      shortened =
-          rewriter.createOrFold<AsSIntPrimOp>(op.getLoc(), destType, shortened);
-    rewriter.create<ConnectOp>(op.getLoc(), op.getOperand(0), shortened);
-    rewriter.eraseOp(op);
-    return success();
-  }
-  return failure();
-}
-
 // Remove private nodes.  If they have an interesting names, move the name to
 // the source expression.
 struct FoldNodeName : public mlir::RewritePattern {
@@ -1666,7 +1626,8 @@ struct FoldNodeName : public mlir::RewritePattern {
                                 PatternRewriter &rewriter) const override {
     auto node = cast<NodeOp>(op);
     auto name = node.nameAttr();
-    if (node.inner_sym() || !node.annotations().empty())
+    if (!isUselessName(name.getValue()) || node.inner_sym() ||
+        !node.annotations().empty())
       return failure();
     auto *expr = node.input().getDefiningOp();
     if (expr && !expr->hasAttr("name") && !isUselessName(name))

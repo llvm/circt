@@ -1,14 +1,14 @@
 // RUN: circt-opt -convert-affine-to-staticlogic %s | FileCheck %s
 
 // CHECK-LABEL: func @minimal
-func @minimal(%arg0 : memref<10xindex>) {
+func.func @minimal(%arg0 : memref<10xindex>) {
   // Setup constants.
   // CHECK: %[[LB:.+]] = arith.constant 0 : [[ITER_TYPE:.+]]
-  // CHECK: %[[UB:.+]] = arith.constant 10 : [[ITER_TYPE]]
+  // CHECK: %[[UB:.+]] = arith.constant [[TRIP_COUNT:.+]] : [[ITER_TYPE]]
   // CHECK: %[[STEP:.+]] = arith.constant 1 : [[ITER_TYPE]]
 
   // Pipeline header.
-  // CHECK: staticlogic.pipeline.while II = 1 iter_args(%[[ITER_ARG:.+]] = %[[LB]]) : ([[ITER_TYPE]]) -> ()
+  // CHECK: staticlogic.pipeline.while II = 1 trip_count = [[TRIP_COUNT]] iter_args(%[[ITER_ARG:.+]] = %[[LB]]) : ([[ITER_TYPE]]) -> ()
 
   // Condition block.
   // CHECK: %[[COND_RESULT:.+]] = arith.cmpi ult, %[[ITER_ARG]]
@@ -30,7 +30,7 @@ func @minimal(%arg0 : memref<10xindex>) {
 }
 
 // CHECK-LABEL: func @dot
-func @dot(%arg0: memref<64xi32>, %arg1: memref<64xi32>) -> i32 {
+func.func @dot(%arg0: memref<64xi32>, %arg1: memref<64xi32>) -> i32 {
   // Pipeline boilerplate checked above, just check the stages computations.
 
   // First stage.

@@ -12,7 +12,7 @@
 
 def LLHD_EntityOp : LLHD_Op<"entity", [
     Symbol,
-    FunctionLike,
+    FunctionOpInterface,
     IsolatedFromAbove,
     SingleBlock,
     NoTerminator,
@@ -52,31 +52,38 @@ def LLHD_EntityOp : LLHD_Op<"entity", [
   let arguments = (ins I64Attr: $ins);
   let regions = (region SizedRegion<1>: $body);
 
-  let verifier = [{ return ::verify(*this); }];
+  let hasVerifier = 1;
 
   let extraClassDeclaration = [{
-    friend class OpTrait::FunctionLike<EntityOp>;
+    /// Returns the type of this function.
+    FunctionType getFunctionType() {
+      return getFunctionTypeAttr().getValue().cast<FunctionType>();
+    }
 
-    // use FunctionLike traits's getBody method
-    using OpTrait::FunctionLike<EntityOp>::getBody;
+    /// Returns the argument types of this function.
+    ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
 
-    /// Hooks for the input/output type enumeration in FunctionLike.
-    unsigned getNumFuncArguments() { return getType().getNumInputs(); }
-    unsigned getNumFuncResults() { return getType().getNumResults(); }
+    /// Returns the result types of this function.
+    ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
 
-    /// Hook for FunctionLike verifier.
+    /// Verify the type attribute of this function. Returns failure and emits
+    /// an error if the attribute is invalid.
     LogicalResult verifyType();
 
     /// Verifies the body of the function.
     LogicalResult verifyBody();
 
+    // Use FunctionOpInterface traits's getBody method.
+    using mlir::detail::FunctionOpInterfaceTrait<EntityOp>::getBody;
+
+    /// Return the block corresponding to the region.
     Block *getBodyBlock() { return &body().front(); }
   }];
 }
 
 def LLHD_ProcOp : LLHD_Op<"proc", [
     Symbol,
-    FunctionLike,
+    FunctionOpInterface,
     IsolatedFromAbove,
     DeclareOpInterfaceMethods<CallableOpInterface>
   ]> {
@@ -122,20 +129,26 @@ def LLHD_ProcOp : LLHD_Op<"proc", [
   let regions = (region AnyRegion: $body);
 
   let extraClassDeclaration = [{
-    friend class OpTrait::FunctionLike<ProcOp>;
+    /// Returns the type of this function.
+    FunctionType getFunctionType() {
+      return getFunctionTypeAttr().getValue().cast<FunctionType>();
+    }
 
-    /// Hooks for the input/output type enumeration in FunctionLike.
-    unsigned getNumFuncArguments() { return getType().getNumInputs(); }
-    unsigned getNumFuncResults() { return getType().getNumResults(); }
+    /// Returns the argument types of this function.
+    ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
 
-    /// Hook for FunctionLike verifier.
+    /// Returns the result types of this function.
+    ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
+
+    /// Verify the type attribute of this function. Returns failure and emits
+    /// an error if the attribute is invalid.
     LogicalResult verifyType();
 
     /// Verifies the body of the function.
     LogicalResult verifyBody();
   }];
 
-  let verifier = [{ return ::verify(*this); }];
+  let hasVerifier = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -199,7 +212,7 @@ def LLHD_InstOp : LLHD_Op<"inst", [
     }
   }];
 
-  let verifier = [{ return ::verify(*this); }];
+  let hasVerifier = 1;
 }
 
 def LLHD_ConnectOp : LLHD_Op<"con", [

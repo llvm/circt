@@ -19,7 +19,7 @@ include "mlir/Pass/PassBase.td"
 // AffineToStaticLogic
 //===----------------------------------------------------------------------===//
 
-def AffineToStaticLogic : Pass<"convert-affine-to-staticlogic", "mlir::FuncOp"> {
+def AffineToStaticLogic : Pass<"convert-affine-to-staticlogic", "mlir::func::FuncOp"> {
   let summary = "Convert Affine dialect to StaticLogic pipelines";
   let description = [{
     This pass analyzes Affine loops and control flow, creates a Scheduling
@@ -30,9 +30,10 @@ def AffineToStaticLogic : Pass<"convert-affine-to-staticlogic", "mlir::FuncOp"> 
   let dependentDialects = [
     "circt::staticlogic::StaticLogicDialect",
     "mlir::arith::ArithmeticDialect",
+    "mlir::cf::ControlFlowDialect",
     "mlir::memref::MemRefDialect",
     "mlir::scf::SCFDialect",
-    "mlir::StandardOpsDialect"
+    "mlir::func::FuncDialect"
   ];
 }
 
@@ -85,10 +86,13 @@ def SCFToCalyx : Pass<"lower-scf-to-calyx", "mlir::ModuleOp"> {
     "calyx::CalyxDialect", "::mlir::scf::SCFDialect", "hw::HWDialect",
     "comb::CombDialect"
   ];
-  let options =
-      [Option<"topLevelFunctionOpt", "top-level-function", "std::string", "",
-              "Identifier of top-level function to be the entry-point component"
-              " of the Calyx program.">];
+  let options = [
+    Option<"topLevelFunctionOpt", "top-level-function", "std::string", "",
+            "Identifier of top-level function to be the entry-point component"
+            " of the Calyx program.">,
+    Option<"ciderSourceLocationMetadata", "cider-source-location-metadata", "bool", "",
+            "Whether to track source location for the Cider debugger.">
+  ];
 }
 
 //===----------------------------------------------------------------------===//
@@ -102,7 +106,7 @@ def CalyxToHW : Pass<"lower-calyx-to-hw", "mlir::ModuleOp"> {
   }];
   let constructor = "circt::createCalyxToHWPass()";
   let dependentDialects = ["comb::CombDialect", "hw::HWDialect",
-                           "sv::SVDialect"];
+                           "seq::SeqDialect", "sv::SVDialect"];
 }
 
 //===----------------------------------------------------------------------===//
@@ -120,11 +124,21 @@ def LowerFIRRTLToHW : Pass<"lower-firrtl-to-hw", "mlir::ModuleOp"> {
   let options = [
     Option<"enableAnnotationWarning", "warn-on-unprocessed-annotations",
            "bool", "false",
-    "Emit warnings on unprocessed annotations during lower-to-hw pass">,
-    Option<"nonConstAsyncResetValueIsError",
-           "error-on-non-const-async-reset-values", "bool", "false",
-    "Emit errors instead of warnings on non-constant async reset values">
+    "Emit warnings on unprocessed annotations during lower-to-hw pass">
   ];
+}
+
+//===----------------------------------------------------------------------===//
+// HandshakeToHW
+//===----------------------------------------------------------------------===//
+
+def HandshakeToHW : Pass<"lower-handshake-to-hw", "mlir::ModuleOp"> {
+  let summary = "Lower Handshake to ESI/HW/Comb/Seq";
+  let description = [{
+    Lower Handshake to ESI/HW/Comb/Seq.
+  }];
+  let constructor = "circt::createHandshakeToHWPass()";
+  let dependentDialects = ["hw::HWDialect", "esi::ESIDialect"];
 }
 
 //===----------------------------------------------------------------------===//
@@ -213,7 +227,7 @@ def HandshakeRemoveBlock : Pass<"handshake-remove-block-structure", "handshake::
 // StandardToStaticLogic
 //===----------------------------------------------------------------------===//
 
-def CreatePipeline : Pass<"create-pipeline", "mlir::FuncOp"> {
+def CreatePipeline : Pass<"create-pipeline", "mlir::func::FuncOp"> {
   let summary = "Create StaticLogic pipeline operations";
   let constructor = "circt::createCreatePipelinePass()";
   let dependentDialects = ["staticlogic::StaticLogicDialect"];

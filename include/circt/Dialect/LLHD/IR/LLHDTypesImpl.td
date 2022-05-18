@@ -86,6 +86,8 @@ def LLHD_TimeAttr : AttrDef<LLHD_Dialect, "Time", []> {
   let storageType= [{ llhd::TimeAttr }];
   let genVerifyDecl = 1;
 
+  let hasCustomAssemblyFormat = 1;
+
   let parameters = (ins AttributeSelfTypeParameter<"", "llhd::TimeType">:$type,
                         "unsigned":$time,
                         StringRefParameter<"SI time unit">:$timeUnit,

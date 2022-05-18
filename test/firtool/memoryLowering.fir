@@ -1,4 +1,4 @@
-; RUN: firtool %s --format=fir  --annotation-file %s.anno.json -emit-metadata -repl-seq-mem -repl-seq-mem-file="metadata/test.conf" --verilog |  FileCheck %s
+; RUN: firtool %s --format=fir --lower-memory --annotation-file %s.anno.json -emit-metadata -repl-seq-mem -repl-seq-mem-file="metadata/test.conf" --verilog |  FileCheck %s
 
 circuit test:
   module test:
@@ -35,7 +35,7 @@ circuit test:
 
 ; CHECK: metadata/seq_mems.json
 
-; CHECK: [{"module_name":"memory_ext","depth":16,"width":32,"masked":true,"read":true,"write":true,"readwrite":false,"mask_granularity":8,"extra_ports":[],"hierarchy":[]}]
+; CHECK: [{"module_name":"memory_ext","depth":16,"width":32,"masked":true,"read":true,"write":true,"readwrite":false,"mask_granularity":8,"extra_ports":[],"hierarchy":["test.memory.memory_ext"]}]
 
 ; CHECK: metadata/test.conf
 

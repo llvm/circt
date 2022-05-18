@@ -48,10 +48,10 @@ LogicalResult resolveInstanceGraph(ModuleOp moduleOp,
 LogicalResult verifyAllValuesHasOneUse(handshake::FuncOp op);
 
 // Adds sink operations to any unused value in f.
-LogicalResult addSinkOps(handshake::FuncOp f, OpBuilder &rewriter);
+LogicalResult addSinkOps(Region &r, OpBuilder &rewriter);
 
 // Adds fork operations to any value with multiple uses in f.
-LogicalResult addForkOps(handshake::FuncOp f, OpBuilder &rewriter);
+LogicalResult addForkOps(Region &r, OpBuilder &rewriter);
 void insertFork(Value result, bool isLazy, OpBuilder &rewriter);
 
 /// Generate the code for registering passes.

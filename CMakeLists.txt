@@ -19,6 +19,12 @@ if(POLICY CMP0077)
   cmake_policy(SET CMP0077 NEW)
 endif()
 
+# CMP0116: Ninja generators transform `DEPFILE`s from `add_custom_command()`
+# New in CMake 3.20. https://cmake.org/cmake/help/latest/policy/CMP0116.html
+if(POLICY CMP0116)
+  cmake_policy(SET CMP0116 OLD)
+endif()
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
 
@@ -38,11 +44,11 @@ if( CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR )
 # Project setup and globals
 #-------------------------------------------------------------------------------
   project(circt LANGUAGES CXX C)
-  
+
 #-------------------------------------------------------------------------------
 # Options and settings
 #-------------------------------------------------------------------------------
-  
+
   option(LLVM_INCLUDE_TOOLS "Generate build targets for the LLVM tools." ON)
   option(LLVM_BUILD_TOOLS "Build the LLVM tools. If OFF, just generate build targets." ON)
 
@@ -51,22 +57,22 @@ if (MSVC)
 else ()
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-exceptions -fno-rtti")
 endif ()
-  
+
 #-------------------------------------------------------------------------------
 # MLIR/LLVM Configuration
 #-------------------------------------------------------------------------------
-  
+
   find_package(MLIR REQUIRED CONFIG)
-  
+
   message(STATUS "Using MLIRConfig.cmake in: ${MLIR_DIR}")
   message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
-  
+
   set(LLVM_RUNTIME_OUTPUT_INTDIR ${CMAKE_BINARY_DIR}/bin)
   set(LLVM_LIBRARY_OUTPUT_INTDIR ${CMAKE_BINARY_DIR}/lib)
-  
+
   list(APPEND CMAKE_MODULE_PATH "${MLIR_CMAKE_DIR}")
   list(APPEND CMAKE_MODULE_PATH "${LLVM_CMAKE_DIR}")
-  
+
   include(TableGen)
   include(AddLLVM)
   include(AddMLIR)
@@ -74,6 +80,46 @@ endif ()
 
   set(CIRCT_BUILT_STANDALONE 1)
   set(BACKEND_PACKAGE_STRING "LLVM ${LLVM_PACKAGE_VERSION}")
+
+  # Handle unittests when building out-of-tree against an installed version of
+  # LLVM/MLIR (not a build tree). Adapted from `llvm/flang/CMakeLists.txt`.
+  set(CIRCT_GTEST_AVAILABLE 0)
+  set(UNITTEST_DIR ${LLVM_BUILD_MAIN_SRC_DIR}/utils/unittest)
+  if (NOT EXISTS ${UNITTEST_DIR}/googletest/include/gtest/gtest.h)
+    set(UNITTEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/llvm/llvm/utils/unittest)
+  endif()
+  if (EXISTS ${UNITTEST_DIR}/googletest/include/gtest/gtest.h)
+    if (NOT TARGET llvm_gtest)
+      find_package(Threads)
+      add_llvm_library(llvm_gtest
+        ${UNITTEST_DIR}/googletest/src/gtest-all.cc
+        ${UNITTEST_DIR}/googlemock/src/gmock-all.cc
+        LINK_LIBS pthread
+        LINK_COMPONENTS Support # llvm::raw_ostream
+        BUILDTREE_ONLY
+      )
+      target_include_directories(llvm_gtest
+        PUBLIC
+        "${UNITTEST_DIR}/googletest/include"
+        "${UNITTEST_DIR}/googlemock/include"
+        PRIVATE
+        "${UNITTEST_DIR}/googletest"
+        "${UNITTEST_DIR}/googlemock"
+      )
+      add_llvm_library(llvm_gtest_main
+        ${UNITTEST_DIR}/UnitTestMain/TestMain.cpp
+        LINK_LIBS llvm_gtest
+        LINK_COMPONENTS Support # llvm::cl
+        BUILDTREE_ONLY
+      )
+    endif()
+    set(CIRCT_GTEST_AVAILABLE 1)
+  else()
+    message(WARNING "Skipping unittests since LLVM install does not include \
+      gtest headers and libraries")
+    set(CIRCT_GTEST_AVAILABLE 0)
+  endif()
+
 else()
   # CMake library generation settings.
   set(BUILD_SHARED_LIBS OFF CACHE BOOL "Default to building a static mondo-lib")
@@ -271,6 +317,24 @@ else()
 endif()
 
 #-------------------------------------------------------------------------------
+# Icarus Verilog Configuration
+#-------------------------------------------------------------------------------
+
+# If Icarus Verilog hasn't been explicitly disabled, find it.
+option(IVERILOG_DISABLE "Disable the Icarus Verilog tests.")
+if (IVERILOG_DISABLE)
+  message(STATUS "Disabling Icarus Verilog tests.")
+else()
+  find_program(IVERILOG_PATH "iverilog")
+  if(EXISTS ${IVERILOG_PATH})
+    message(STATUS "Found iverilog at ${IVERILOG_PATH}.")
+  else()
+    set(IVERILOG_PATH "")
+    message(STATUS "Did not find iverilog.")
+  endif()
+endif()
+
+#-------------------------------------------------------------------------------
 # capnp Configuration
 #-------------------------------------------------------------------------------
 
@@ -304,12 +368,16 @@ if (OR_TOOLS_DISABLE)
   message(STATUS "Disabling OR-Tools.")
 else()
   if(DEFINED OR_TOOLS_PATH)
-    list(APPEND CMAKE_PREFIX_PATH ${OR_TOOLS_PATH}/lib/cmake)
+    list(APPEND CMAKE_PREFIX_PATH ${OR_TOOLS_PATH})
   endif()
+
+  list(APPEND CMAKE_PREFIX_PATH ${CMAKE_CURRENT_SOURCE_DIR}/ext)
 
   find_package(ortools CONFIG)
 
   if (ortools_FOUND)
+    get_filename_component(ortools_CMAKEDIR ${ortools_DIR} DIRECTORY)
+    get_filename_component(ortools_LIBDIR ${ortools_CMAKEDIR} DIRECTORY)
     list(APPEND CMAKE_INSTALL_RPATH ${ortools_LIBDIR})
     set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
   endif()
@@ -341,31 +409,8 @@ option(CIRCT_BINDINGS_PYTHON_ENABLED "Enables CIRCT Python bindings." OFF)
 
 if(CIRCT_BINDINGS_PYTHON_ENABLED)
   message(STATUS "CIRCT Python bindings are enabled.")
-
   include(MLIRDetectPythonEnv)
-  # After CMake 3.18, we are able to limit the scope of the search to just
-  # Development.Module. Searching for Development will fail in situations where
-  # the Python libraries are not available. When possible, limit to just
-  # Development.Module.
-  # See https://pybind11.readthedocs.io/en/stable/compiling.html#findpython-mode
-  if(CMAKE_VERSION VERSION_LESS "3.18.0")
-    set(_python_development_component Development)
-  else()
-    set(_python_development_component Development.Module)
-  endif()
-  find_package(Python3 ${LLVM_MINIMUM_PYTHON_VERSION}
-    COMPONENTS Interpreter ${_python_development_component} REQUIRED)
-  unset(_python_development_component)
-  message(STATUS "Found Python include dirs: ${Python3_INCLUDE_DIRS}")
-  message(STATUS "Found Python libraries: ${Python3_LIBRARIES}")
-  message(STATUS "Found Python executable: ${Python3_EXECUTABLE}")
-
-  mlir_detect_pybind11_install()
-  find_package(pybind11 2.6 CONFIG REQUIRED)
-  message(STATUS "Found pybind11 v${pybind11_VERSION}: ${pybind11_INCLUDE_DIR}")
-  message(STATUS "Python prefix = '${PYTHON_MODULE_PREFIX}', "
-                 "suffix = '${PYTHON_MODULE_SUFFIX}', "
-                 "extension = '${PYTHON_MODULE_EXTENSION}'")
+  mlir_configure_python_dev_packages()
 else()
   message(STATUS "CIRCT Python bindings are disabled.")
 endif()
@@ -392,7 +437,9 @@ endif()
 add_subdirectory(include/circt)
 add_subdirectory(lib)
 add_subdirectory(tools)
-#add_subdirectory(unittests)
+if (CIRCT_GTEST_AVAILABLE)
+  add_subdirectory(unittests)
+endif()
 add_subdirectory(test)
 add_subdirectory(integration_test)
 add_subdirectory(frontends)

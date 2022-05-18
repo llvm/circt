@@ -17,11 +17,12 @@
 #include "circt/Dialect/HW/HWDialect.h"
 
 #include "circt/Support/LLVM.h"
+#include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Types.h"
 
 namespace circt {
 namespace hw {
-class SymbolCache;
+class HWSymbolCache;
 class ParamDeclAttr;
 class TypedeclOp;
 namespace detail {

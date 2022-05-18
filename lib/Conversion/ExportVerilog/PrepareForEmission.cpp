@@ -31,7 +31,7 @@ using namespace sv;
 using namespace ExportVerilog;
 
 // Check if the value is from read of a wire or reg or is a port.
-static bool isSimpleReadOrPort(Value v) {
+bool ExportVerilog::isSimpleReadOrPort(Value v) {
   if (v.isa<BlockArgument>())
     return true;
   auto vOp = v.getDefiningOp();
@@ -46,14 +46,46 @@ static bool isSimpleReadOrPort(Value v) {
   return isa<WireOp, RegOp>(readSrc);
 }
 
+// Check if the value is deemed worth spilling into a wire.
+static bool shouldSpillWire(Operation &op, const LoweringOptions &options) {
+  auto isAssign = [](Operation *op) {
+    return isa<AssignOp, PAssignOp, BPAssignOp, OutputOp>(op);
+  };
+  auto isConcat = [](Operation *op) { return isa<ConcatOp>(op); };
+
+  if (!isVerilogExpression(&op))
+    return false;
+
+  // If there are more than the maximum number of terms in this single result
+  // expression, and it hasn't already been spilled, this should spill.
+  if (op.getNumOperands() > options.maximumNumberOfTermsPerExpression &&
+      op.getNumResults() == 1 &&
+      llvm::none_of(op.getResult(0).getUsers(), isAssign))
+    return true;
+
+  // Work around Verilator #3405. Large expressions inside a concat is worst
+  // case O(n^2) in a certain Verilator optimization, and can effectively hang
+  // Verilator on large designs. Verilator 4.224+ works around this by having a
+  // hard limit on its recursion. Here we break large expressions inside concats
+  // according to a configurable limit to work around the same issue.
+  // See https://github.com/verilator/verilator/issues/3405.
+  if (op.getNumOperands() > options.maximumNumberOfTermsInConcat &&
+      op.getNumResults() == 1 &&
+      llvm::any_of(op.getResult(0).getUsers(), isConcat))
+    return true;
+
+  return false;
+}
+
 // Given an invisible instance, make sure all inputs are driven from
 // wires or ports.
 static void lowerBoundInstance(InstanceOp op) {
+  if (!op->hasAttr("doNotPrint"))
+    return;
   Block *block = op->getParentOfType<HWModuleOp>().getBodyBlock();
   auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), block);
 
-  SmallString<32> nameTmp;
-  nameTmp = (op.instanceName() + "_").str();
+  SmallString<32> nameTmp{"_", op.instanceName(), "_"};
   auto namePrefixSize = nameTmp.size();
 
   size_t nextOpNo = 0;
@@ -79,21 +111,12 @@ static void lowerBoundInstance(InstanceOp op) {
   }
 }
 
-static bool onlyUseIsAssign(Value v) {
-  if (!v.hasOneUse())
-    return false;
-  if (!dyn_cast_or_null<AssignOp>(v.getDefiningOp()))
-    return false;
-  return true;
-}
-
 // Ensure that each output of an instance are used only by a wire
 static void lowerInstanceResults(InstanceOp op) {
   Block *block = op->getParentOfType<HWModuleOp>().getBodyBlock();
   auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), block);
 
-  SmallString<32> nameTmp;
-  nameTmp = (op.instanceName() + "_").str();
+  SmallString<32> nameTmp{"_", op.instanceName(), "_"};
   auto namePrefixSize = nameTmp.size();
 
   size_t nextResultNo = 0;
@@ -101,33 +124,33 @@ static void lowerInstanceResults(InstanceOp op) {
     auto result = op.getResult(nextResultNo);
     ++nextResultNo;
 
-    if (onlyUseIsAssign(result))
-      continue;
-
-    bool isOneUseOutput = false;
     if (result.hasOneUse()) {
       OpOperand &use = *result.getUses().begin();
-      isOneUseOutput = dyn_cast_or_null<OutputOp>(use.getOwner()) != nullptr;
-    }
-
-    if (!isOneUseOutput) {
-      nameTmp.resize(namePrefixSize);
-      if (port.name)
-        nameTmp += port.name.getValue().str();
-      else
-        nameTmp += std::to_string(nextResultNo - 1);
-
-      auto newWire = builder.create<WireOp>(result.getType(), nameTmp);
-      while (!result.use_empty()) {
-        auto newWireRead = builder.create<ReadInOutOp>(newWire);
-        OpOperand &use = *result.getUses().begin();
-        use.set(newWireRead);
-        newWireRead->moveBefore(use.getOwner());
+      if (dyn_cast_or_null<OutputOp>(use.getOwner()))
+        continue;
+      if (auto assign = dyn_cast_or_null<AssignOp>(use.getOwner())) {
+        // Move assign op after instance to resolve cyclic dependencies.
+        assign->moveAfter(op);
+        continue;
       }
-
-      auto connect = builder.create<AssignOp>(newWire, result);
-      connect->moveAfter(op);
     }
+
+    nameTmp.resize(namePrefixSize);
+    if (port.name)
+      nameTmp += port.name.getValue().str();
+    else
+      nameTmp += std::to_string(nextResultNo - 1);
+    Value newWire = builder.create<WireOp>(result.getType(), nameTmp);
+
+    while (!result.use_empty()) {
+      auto newWireRead = builder.create<ReadInOutOp>(newWire);
+      OpOperand &use = *result.getUses().begin();
+      use.set(newWireRead);
+      newWireRead->moveBefore(use.getOwner());
+    }
+
+    auto connect = builder.create<AssignOp>(newWire, result);
+    connect->moveAfter(op);
   }
 }
 
@@ -358,6 +381,55 @@ static bool hoistNonSideEffectExpr(Operation *op) {
   return true;
 }
 
+/// Check whether an op is a declaration that can be moved.
+static bool isMovableDeclaration(Operation *op) {
+  return op->getNumResults() == 1 &&
+         op->getResult(0).getType().isa<InOutType>() &&
+         op->getNumOperands() == 0;
+}
+
+/// If exactly one use of this op is an assign, replace the other uses with a
+/// read from the assigned wire or reg. This assumes the preconditions for doing
+/// so are met: op must be an expression in a non-procedural region.
+static void reuseExistingInOut(Operation *op) {
+  // Try to collect a single assign and all the other uses of op.
+  sv::AssignOp assign;
+  SmallVector<OpOperand *> uses;
+
+  // Look at each use.
+  for (OpOperand &use : op->getUses()) {
+    // If it's an assign, try to save it.
+    if (auto assignUse = dyn_cast<AssignOp>(use.getOwner())) {
+      // If there are multiple assigns, bail out.
+      if (assign)
+        return;
+
+      // Remember this assign for later.
+      assign = assignUse;
+      continue;
+    }
+
+    // If not an assign, remember this use for later.
+    uses.push_back(&use);
+  }
+
+  // If we didn't find anything, bail out.
+  if (!assign || uses.empty())
+    return;
+
+  if (auto *cop = assign.src().getDefiningOp())
+    if (isa<ConstantOp>(cop))
+      return;
+
+  // Replace all saved uses with a read from the assigned destination.
+  ImplicitLocOpBuilder builder(assign.dest().getLoc(), op->getContext());
+  for (OpOperand *use : uses) {
+    builder.setInsertionPoint(use->getOwner());
+    auto read = builder.create<ReadInOutOp>(assign.dest());
+    use->set(read);
+  }
+}
+
 /// For each module we emit, do a prepass over the structure, pre-lowering and
 /// otherwise rewriting operations we don't want to emit.
 void ExportVerilog::prepareHWModule(Block &block,
@@ -381,40 +453,6 @@ void ExportVerilog::prepareHWModule(Block &block,
        opIterator != e;) {
     auto &op = *opIterator++;
 
-    // Lower variadic fully-associative operations with more than two operands
-    // into balanced operand trees so we can split long lines across multiple
-    // statements.
-    // TODO: This is checking the Commutative property, which doesn't seem
-    // right in general.  MLIR doesn't have a "fully associative" property.
-    if (op.getNumOperands() > 2 && op.getNumResults() == 1 &&
-        op.hasTrait<mlir::OpTrait::IsCommutative>() &&
-        mlir::MemoryEffectOpInterface::hasNoEffect(&op) &&
-        op.getNumRegions() == 0 && op.getNumSuccessors() == 0 &&
-        (op.getAttrs().empty() ||
-         (op.getAttrs().size() == 1 && op.hasAttr("sv.namehint")))) {
-      // Lower this operation to a balanced binary tree of the same operation.
-      SmallVector<Operation *> newOps;
-      auto result = lowerFullyAssociativeOp(op, op.getOperands(), newOps);
-      op.getResult(0).replaceAllUsesWith(result);
-      op.erase();
-
-      // Make sure we revisit the newly inserted operations.
-      opIterator = Block::iterator(newOps.front());
-      continue;
-    }
-
-    // Turn a + -cst  ==> a - cst
-    if (auto addOp = dyn_cast<comb::AddOp>(op)) {
-      if (auto cst = addOp.getOperand(1).getDefiningOp<hw::ConstantOp>()) {
-        assert(addOp.getNumOperands() == 2 && "commutative lowering is done");
-        if (cst.getValue().isNegative()) {
-          Operation *firstOp = rewriteAddWithNegativeConstant(addOp, cst);
-          opIterator = Block::iterator(firstOp);
-          continue;
-        }
-      }
-    }
-
     // Name legalization should have happened in a different pass for these sv
     // elements and we don't want to change their name through re-legalization
     // (e.g. letting a temporary take the name of an unvisited wire). Adding
@@ -424,8 +462,7 @@ void ExportVerilog::prepareHWModule(Block &block,
       // Anchor return values to wires early
       lowerInstanceResults(instance);
       // Anchor ports of bound instances
-      if (instance->hasAttr("doNotPrint"))
-        lowerBoundInstance(instance);
+      lowerBoundInstance(instance);
     }
 
     // Force any expression used in the event control of an always process to be
@@ -433,18 +470,23 @@ void ExportVerilog::prepareHWModule(Block &block,
     if (!options.allowExprInEventControl) {
       auto enforceWire = [&](Value expr) {
         // Direct port uses are fine.
-        if (expr.isa<BlockArgument>())
+        if (isSimpleReadOrPort(expr))
           return;
-        // If this is a read from a wire, we're fine.
-        if (auto read = expr.getDefiningOp<ReadInOutOp>())
-          if (read.input().getDefiningOp<WireOp>())
-            return;
-        auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), &block);
+        if (auto inst = expr.getDefiningOp<InstanceOp>())
+          return;
+        auto builder = ImplicitLocOpBuilder::atBlockBegin(
+            op.getLoc(), &op.getParentOfType<HWModuleOp>().front());
         auto newWire = builder.create<WireOp>(expr.getType());
         builder.setInsertionPoint(&op);
-        builder.create<AssignOp>(newWire, expr);
         auto newWireRead = builder.create<ReadInOutOp>(newWire);
-        op.replaceUsesOfWith(expr, newWireRead);
+        // For simplicity, replace all uses with the read first.  This lets us
+        // recursive root out all uses of the expression.
+        expr.replaceAllUsesWith(newWireRead);
+        builder.setInsertionPoint(&op);
+        builder.create<AssignOp>(newWire, expr);
+        // To get the output correct, given that reads are always inline,
+        // duplicate them for each use.
+        lowerAlwaysInlineOperation(newWireRead);
       };
       if (auto always = dyn_cast<AlwaysOp>(op)) {
         for (auto clock : always.clocks())
@@ -490,6 +532,63 @@ void ExportVerilog::prepareHWModule(Block &block,
       lowerAlwaysInlineOperation(&op);
       continue;
     }
+
+    // If this expression is deemed worth spilling into a wire, do it here.
+    if (shouldSpillWire(op, options)) {
+      // If we're not in a procedural region, or we are, but we can hoist out of
+      // it, we are good to generate a wire.
+      if (!isProceduralRegion ||
+          (isProceduralRegion && hoistNonSideEffectExpr(&op))) {
+        lowerUsersToTemporaryWire(op);
+
+        // If we're in a procedural region, we move on to the next op in the
+        // block. The expression splitting and canonicalization below will
+        // happen after we recurse back up. If we're not in a procedural region,
+        // the expression can continue being worked on.
+        if (isProceduralRegion)
+          continue;
+      }
+    }
+
+    // Lower variadic fully-associative operations with more than two operands
+    // into balanced operand trees so we can split long lines across multiple
+    // statements.
+    // TODO: This is checking the Commutative property, which doesn't seem
+    // right in general.  MLIR doesn't have a "fully associative" property.
+    if (op.getNumOperands() > 2 && op.getNumResults() == 1 &&
+        op.hasTrait<mlir::OpTrait::IsCommutative>() &&
+        mlir::MemoryEffectOpInterface::hasNoEffect(&op) &&
+        op.getNumRegions() == 0 && op.getNumSuccessors() == 0 &&
+        (op.getAttrs().empty() ||
+         (op.getAttrs().size() == 1 && op.hasAttr("sv.namehint")))) {
+      // Lower this operation to a balanced binary tree of the same operation.
+      SmallVector<Operation *> newOps;
+      auto result = lowerFullyAssociativeOp(op, op.getOperands(), newOps);
+      op.getResult(0).replaceAllUsesWith(result);
+      op.erase();
+
+      // Make sure we revisit the newly inserted operations.
+      opIterator = Block::iterator(newOps.front());
+      continue;
+    }
+
+    // Turn a + -cst  ==> a - cst
+    if (auto addOp = dyn_cast<comb::AddOp>(op)) {
+      if (auto cst = addOp.getOperand(1).getDefiningOp<hw::ConstantOp>()) {
+        assert(addOp.getNumOperands() == 2 && "commutative lowering is done");
+        if (cst.getValue().isNegative()) {
+          Operation *firstOp = rewriteAddWithNegativeConstant(addOp, cst);
+          opIterator = Block::iterator(firstOp);
+          continue;
+        }
+      }
+    }
+
+    // Try to anticipate expressions that ExportVerilog may spill to a temporary
+    // inout, and re-use an existing inout when possible. This is legal when op
+    // is an expression in a non-procedural region.
+    if (!isProceduralRegion && isVerilogExpression(&op))
+      reuseExistingInOut(&op);
   }
 
   // Now that all the basic ops are settled, check for any use-before def issues
@@ -524,9 +623,7 @@ void ExportVerilog::prepareHWModule(Block &block,
 
       // If this is a reg/wire declaration, then we move it to the top of the
       // block.  We can't abstract the inout result.
-      if (op.getNumResults() == 1 &&
-          op.getResult(0).getType().isa<InOutType>() &&
-          op.getNumOperands() == 0) {
+      if (isMovableDeclaration(&op)) {
         op.moveBefore(&block.front());
         continue;
       }
@@ -535,6 +632,17 @@ void ExportVerilog::prepareHWModule(Block &block,
       if (isConstantExpression(&op)) {
         op.moveBefore(&block.front());
         continue;
+      }
+
+      // If this is a an operation reading from a declaration, move it up,
+      // along with the corresponding declaration.
+      if (auto readInOut = dyn_cast<ReadInOutOp>(op)) {
+        auto *def = readInOut.input().getDefiningOp();
+        if (isMovableDeclaration(def)) {
+          op.moveBefore(&block.front());
+          def->moveBefore(&block.front());
+          continue;
+        }
       }
 
       // Otherwise, we need to lower this to a wire to resolve this.

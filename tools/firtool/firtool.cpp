@@ -25,10 +25,10 @@
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Support/LoweringOptions.h"
 #include "circt/Support/Version.h"
-#include "mlir/Dialect/StandardOps/IR/Ops.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/BuiltinOps.h"
-#include "mlir/Parser.h"
+#include "mlir/Parser/Parser.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassInstrumentation.h"
 #include "mlir/Pass/PassManager.h"
@@ -54,189 +54,228 @@ using namespace circt;
 /// input.
 enum InputFormatKind { InputUnspecified, InputFIRFile, InputMLIRFile };
 
+static cl::OptionCategory mainCategory("firtool Options");
+
 static cl::opt<InputFormatKind> inputFormat(
     "format", cl::desc("Specify input file format:"),
     cl::values(clEnumValN(InputUnspecified, "autodetect",
                           "Autodetect input format"),
                clEnumValN(InputFIRFile, "fir", "Parse as .fir file"),
                clEnumValN(InputMLIRFile, "mlir", "Parse as .mlir file")),
-    cl::init(InputUnspecified));
+    cl::init(InputUnspecified), cl::cat(mainCategory));
 
-static cl::opt<std::string>
-    inputFilename(cl::Positional, cl::desc("<input file>"), cl::init("-"));
+static cl::opt<std::string> inputFilename(cl::Positional,
+                                          cl::desc("<input file>"),
+                                          cl::init("-"), cl::cat(mainCategory));
 
-static cl::opt<std::string>
-    outputFilename("o",
-                   cl::desc("Output filename, or directory for split output"),
-                   cl::value_desc("filename"), cl::init("-"));
+static cl::opt<std::string> outputFilename(
+    "o", cl::desc("Output filename, or directory for split output"),
+    cl::value_desc("filename"), cl::init("-"), cl::cat(mainCategory));
 
 static cl::opt<bool>
     splitInputFile("split-input-file",
                    cl::desc("Split the input file into pieces and process each "
                             "chunk independently"),
-                   cl::init(false), cl::Hidden);
+                   cl::init(false), cl::Hidden, cl::cat(mainCategory));
 
 static cl::opt<bool>
     verifyDiagnostics("verify-diagnostics",
                       cl::desc("Check that emitted diagnostics match "
                                "expected-* lines on the corresponding line"),
-                      cl::init(false), cl::Hidden);
+                      cl::init(false), cl::Hidden, cl::cat(mainCategory));
 
 static cl::opt<bool> disableOptimization("disable-opt",
-                                         cl::desc("disable optimizations"));
+                                         cl::desc("disable optimizations"),
+                                         cl::cat(mainCategory));
 
 static cl::opt<bool> inliner("inline",
                              cl::desc("Run the FIRRTL module inliner"),
-                             cl::init(true));
+                             cl::init(true), cl::cat(mainCategory));
 
 static cl::opt<bool> enableAnnotationWarning(
     "warn-on-unprocessed-annotations",
     cl::desc("Warn about annotations that were not removed by lower-to-hw"),
-    cl::init(false));
+    cl::init(false), cl::cat(mainCategory));
 
 static cl::opt<bool> disableAnnotationsClassless(
     "disable-annotation-classless",
     cl::desc("Ignore annotations without a class when parsing"),
-    cl::init(false));
+    cl::init(false), cl::cat(mainCategory));
 
 static cl::opt<bool> disableAnnotationsUnknown(
     "disable-annotation-unknown",
-    cl::desc("Ignore unknown annotations when parsing"), cl::init(false));
+    cl::desc("Ignore unknown annotations when parsing"), cl::init(false),
+    cl::cat(mainCategory));
 
 static cl::opt<bool>
     emitMetadata("emit-metadata",
                  cl::desc("emit metadata for metadata annotations"),
-                 cl::init(true));
+                 cl::init(true), cl::cat(mainCategory));
 
 static cl::opt<bool> emitOMIR("emit-omir",
                               cl::desc("emit OMIR annotations to a JSON file"),
-                              cl::init(true));
+                              cl::init(true), cl::cat(mainCategory));
 
 static cl::opt<bool> replSeqMem(
     "repl-seq-mem",
     cl::desc(
         "replace the seq mem for macro replacement and emit relevant metadata"),
-    cl::init(false));
+    cl::init(false), cl::cat(mainCategory));
+
 static cl::opt<bool>
     preserveAggregate("preserve-aggregate",
                       cl::desc("preserve aggregate types in lower types"),
-                      cl::init(false));
+                      cl::init(false), cl::cat(mainCategory));
 
 static cl::opt<bool> preservePublicTypes(
     "preserve-public-types",
     cl::desc("force to lower ports of toplevel and external modules"),
-    cl::init(true));
+    cl::init(true), cl::cat(mainCategory));
 
 static cl::opt<std::string>
     replSeqMemCircuit("repl-seq-mem-circuit",
                       cl::desc("circuit root for seq mem metadata"),
-                      cl::init(""));
+                      cl::init(""), cl::cat(mainCategory));
+
 static cl::opt<std::string>
     replSeqMemFile("repl-seq-mem-file",
-                   cl::desc("file name for seq mem metadata"), cl::init(""));
+                   cl::desc("file name for seq mem metadata"), cl::init(""),
+                   cl::cat(mainCategory));
 
 static cl::opt<bool>
     ignoreReadEnableMem("ignore-read-enable-mem",
                         cl::desc("ignore the read enable signal, instead of "
                                  "assigning X on read disable"),
-                        cl::init(false));
+                        cl::init(false), cl::cat(mainCategory));
 
 static cl::opt<bool> imconstprop(
     "imconstprop",
     cl::desc(
         "Enable intermodule constant propagation and dead code elimination"),
-    cl::init(true));
+    cl::init(true), cl::cat(mainCategory));
+
+// TODO: this pass is temporarily off by default, while we migrate over to the
+// new memory lowering pipeline.
+static cl::opt<bool> lowerMemory("lower-memory",
+                                 cl::desc("run the lower-memory pass"),
+                                 cl::init(true), cl::cat(mainCategory));
 
 static cl::opt<bool>
     lowerTypes("lower-types",
                cl::desc("run the lower-types pass within lower-to-hw"),
-               cl::init(true));
+               cl::init(true), cl::cat(mainCategory));
 
 static cl::opt<bool> expandWhens("expand-whens",
                                  cl::desc("disable the expand-whens pass"),
-                                 cl::init(true));
+                                 cl::init(true), cl::cat(mainCategory));
+
+static cl::opt<bool>
+    addSeqMemPorts("add-seqmem-ports",
+                   cl::desc("add user defined ports to sequential memories"),
+                   cl::init(true), cl::cat(mainCategory));
 
 static cl::opt<bool>
     blackBoxMemory("blackbox-memory",
                    cl::desc("Create a black box for all memory operations"),
-                   cl::init(false));
+                   cl::init(false), cl::cat(mainCategory));
 
 static cl::opt<bool>
     dedup("dedup", cl::desc("deduplicate structurally identical modules"),
-          cl::init(false));
+          cl::init(false), cl::cat(mainCategory));
 
 static cl::opt<bool>
     ignoreFIRLocations("ignore-fir-locators",
                        cl::desc("ignore the @info locations in the .fir file"),
-                       cl::init(false));
+                       cl::init(false), cl::cat(mainCategory));
 
 static cl::opt<bool>
     lowerCHIRRTL("lower-chirrtl",
                  cl::desc("lower CHIRRTL memories to FIRRTL memories"),
-                 cl::init(true));
+                 cl::init(true), cl::cat(mainCategory));
 
 static cl::opt<bool> wireDFT("wire-dft", cl::desc("wire the DFT ports"),
-                             cl::init(true));
+                             cl::init(true), cl::cat(mainCategory));
 
 static cl::opt<bool>
     inferWidths("infer-widths",
                 cl::desc("run the width inference pass on firrtl"),
-                cl::init(true));
+                cl::init(true), cl::cat(mainCategory));
 
 static cl::opt<bool>
     inferResets("infer-resets",
                 cl::desc("run the reset inference pass on firrtl"),
-                cl::init(true));
+                cl::init(true), cl::cat(mainCategory));
+
+static cl::opt<bool>
+    injectDUTHierarchy("inject-dut-hierarchy",
+                       cl::desc("add a level of hierarchy to the DUT"),
+                       cl::init(true), cl::cat(mainCategory));
+
+static cl::opt<bool>
+    extractInstances("extract-instances",
+                     cl::desc("extract black boxes, seq mems, and clock gates"),
+                     cl::init(true), cl::cat(mainCategory));
+
+static cl::opt<bool>
+    memToRegOfVec("mem-to-regofvec",
+                  cl::desc("run the memToRegOfVec transform pass on firrtl"),
+                  cl::init(true));
 
 static cl::opt<bool>
     prefixModules("prefix-modules",
                   cl::desc("prefix modules with NestedPrefixAnnotation"),
-                  cl::init(true));
+                  cl::init(true), cl::cat(mainCategory));
 
 static cl::opt<bool> extractTestCode("extract-test-code",
                                      cl::desc("run the extract test code pass"),
-                                     cl::init(false));
+                                     cl::init(false), cl::cat(mainCategory));
+
 static cl::opt<bool>
     grandCentral("firrtl-grand-central",
                  cl::desc("create interfaces and data/memory taps from SiFive "
                           "Grand Central annotations"),
-                 cl::init(false));
+                 cl::init(false), cl::cat(mainCategory));
+
 static cl::opt<bool> exportModuleHierarchy(
     "export-module-hierarchy",
-    cl::desc("export module and instance hierarchy as JSON"), cl::init(false));
+    cl::desc("export module and instance hierarchy as JSON"), cl::init(false),
+    cl::cat(mainCategory));
 
 static cl::opt<bool>
     checkCombCycles("firrtl-check-comb-cycles",
                     cl::desc("check combinational cycles on firrtl"),
-                    cl::init(false));
+                    cl::init(false), cl::cat(mainCategory));
+
 static cl::opt<bool> newAnno("new-anno",
                              cl::desc("enable new annotation handling"),
-                             cl::init(false));
+                             cl::init(false), cl::cat(mainCategory));
+
 static cl::opt<bool> removeUnusedPorts("remove-unused-ports",
                                        cl::desc("enable unused ports pruning"),
-                                       cl::init(true));
+                                       cl::init(true), cl::cat(mainCategory));
 
 static cl::opt<bool> mergeConnections(
     "merge-connections",
     cl::desc("merge field-level connections into full aggregate connections"),
-    cl::init(true));
+    cl::init(true), cl::cat(mainCategory));
 
 static cl::opt<bool>
     mergeConnectionsAgggresively("merge-connections-aggressive-merging",
                                  cl::desc("merge connections aggressively"),
-                                 cl::init(false));
+                                 cl::init(false), cl::cat(mainCategory));
 
 /// Enable the pass to merge the read and write ports of a memory, if their
 /// enable conditions are mutually exclusive.
 static cl::opt<bool>
     inferMemReadWrite("infer-rw",
                       cl::desc("enable infer read write ports for memory"),
-                      cl::init(true));
+                      cl::init(true), cl::cat(mainCategory));
 
 enum OutputFormatKind {
   OutputParseOnly,
   OutputIRFir,
   OutputIRHW,
+  OutputIRSV,
   OutputIRVerilog,
   OutputVerilog,
   OutputSplitVerilog,
@@ -250,6 +289,7 @@ static cl::opt<OutputFormatKind> outputFormat(
                    "Emit FIR dialect after parsing"),
         clEnumValN(OutputIRFir, "ir-fir", "Emit FIR dialect after pipeline"),
         clEnumValN(OutputIRHW, "ir-hw", "Emit HW dialect"),
+        clEnumValN(OutputIRSV, "ir-sv", "Emit SV dialect"),
         clEnumValN(OutputIRVerilog, "ir-verilog",
                    "Emit IR after Verilog lowering"),
         clEnumValN(OutputVerilog, "verilog", "Emit Verilog"),
@@ -257,42 +297,55 @@ static cl::opt<OutputFormatKind> outputFormat(
                    "Emit Verilog (one file per module; specify "
                    "directory with -o=<dir>)"),
         clEnumValN(OutputDisabled, "disable-output", "Do not output anything")),
-    cl::init(OutputVerilog));
+    cl::init(OutputVerilog), cl::cat(mainCategory));
 
 static cl::opt<bool>
     verifyPasses("verify-each",
                  cl::desc("Run the verifier after each transformation pass"),
-                 cl::init(true));
+                 cl::init(true), cl::cat(mainCategory));
 
-static cl::list<std::string>
-    inputAnnotationFilenames("annotation-file",
-                             cl::desc("Optional input annotation file"),
-                             cl::CommaSeparated, cl::value_desc("filename"));
+static cl::list<std::string> inputAnnotationFilenames(
+    "annotation-file", cl::desc("Optional input annotation file"),
+    cl::CommaSeparated, cl::value_desc("filename"), cl::cat(mainCategory));
 
-static cl::list<std::string>
-    inputOMIRFilenames("omir-file",
-                       cl::desc("Optional input object model 2.0 file"),
-                       cl::CommaSeparated, cl::value_desc("filename"));
+static cl::list<std::string> inputOMIRFilenames(
+    "omir-file", cl::desc("Optional input object model 2.0 file"),
+    cl::CommaSeparated, cl::value_desc("filename"), cl::cat(mainCategory));
 
 static cl::opt<std::string>
     omirOutFile("output-omir", cl::desc("file name for the output omir"),
-                cl::init(""));
+                cl::init(""), cl::cat(mainCategory));
+
+static cl::opt<std::string>
+    mlirOutFile("output-final-mlir",
+                cl::desc("Optional file name to output the final MLIR into, in "
+                         "addition to the output requested by -o"),
+                cl::init(""), cl::value_desc("filename"),
+                cl::cat(mainCategory));
 
 static cl::opt<std::string> blackBoxRootPath(
     "blackbox-path",
     cl::desc("Optional path to use as the root of black box annotations"),
-    cl::value_desc("path"), cl::init(""));
-
-static cl::opt<std::string> blackBoxRootResourcePath(
-    "blackbox-resource-path",
-    cl::desc(
-        "Optional path to use as the root of black box resource annotations"),
-    cl::value_desc("path"), cl::init(""));
+    cl::value_desc("path"), cl::init(""), cl::cat(mainCategory));
 
 static cl::opt<bool>
     verbosePassExecutions("verbose-pass-executions",
                           cl::desc("Log executions of toplevel module passes"),
-                          cl::init(false));
+                          cl::init(false), cl::cat(mainCategory));
+
+static cl::opt<bool> stripDebugInfo(
+    "strip-debug-info",
+    cl::desc("Disable source locator information in output Verilog"),
+    cl::init(false), cl::cat(mainCategory));
+
+static cl::opt<std::string>
+    sigmapPrefix("sigmap-prefix",
+                 cl::desc("prefix for signal mapping module dut path"),
+                 cl::init(""), cl::cat(mainCategory));
+static cl::opt<std::string>
+    sigmapDut("sigmap-dut",
+              cl::desc("dut for signal mapping target correction"),
+              cl::init(""), cl::cat(mainCategory));
 
 /// Create a simple canonicalizer pass.
 static std::unique_ptr<Pass> createSimpleCanonicalizerPass() {
@@ -370,21 +423,37 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   }
 
   // Parse the input.
-  OwningModuleRef module;
+  mlir::OwningOpRef<mlir::ModuleOp> module;
+
+  llvm::sys::TimePoint<> parseStartTime;
+  if (verbosePassExecutions) {
+    llvm::errs() << "[firtool] Running "
+                 << (inputFormat == InputFIRFile ? "fir" : "mlir")
+                 << " parser\n";
+    parseStartTime = llvm::sys::TimePoint<>::clock::now();
+  }
+
   if (inputFormat == InputFIRFile) {
     auto parserTimer = ts.nest("FIR Parser");
     firrtl::FIRParserOptions options;
     options.ignoreInfoLocators = ignoreFIRLocations;
-    options.rawAnnotations = newAnno;
     options.numAnnotationFiles = numAnnotationFiles;
-    module = importFIRFile(sourceMgr, &context, options);
+    module = importFIRFile(sourceMgr, &context, parserTimer, options);
   } else {
     auto parserTimer = ts.nest("MLIR Parser");
     assert(inputFormat == InputMLIRFile);
-    module = parseSourceFile(sourceMgr, &context);
+    module = parseSourceFile<ModuleOp>(sourceMgr, &context);
   }
   if (!module)
     return failure();
+
+  if (verbosePassExecutions) {
+    auto elpased = std::chrono::duration<double>(
+                       llvm::sys::TimePoint<>::clock::now() - parseStartTime) /
+                   std::chrono::seconds(1);
+    llvm::errs() << "[firtool] -- Done in " << llvm::format("%.3f", elpased)
+                 << " sec\n";
+  }
 
   // If the user asked for just a parse, stop here.
   if (outputFormat == OutputParseOnly) {
@@ -411,6 +480,10 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         createCSEPass());
 
+  if (injectDUTHierarchy)
+    pm.nest<firrtl::CircuitOp>().addPass(
+        firrtl::createInjectDUTHierarchyPass());
+
   if (lowerCHIRRTL)
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         firrtl::createLowerCHIRRTLPass());
@@ -418,6 +491,10 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   // Width inference creates canonicalization opportunities.
   if (inferWidths)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferWidthsPass());
+
+  if (memToRegOfVec)
+    pm.nest<firrtl::CircuitOp>().addPass(
+        firrtl::createMemToRegOfVecPass(replSeqMem, ignoreReadEnableMem));
 
   if (inferResets)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferResetsPass());
@@ -428,22 +505,22 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   if (wireDFT)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createWireDFTPass());
 
-  if (prefixModules)
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createPrefixModulesPass());
-
   if (blackBoxMemory)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createBlackBoxMemoryPass());
 
+  if (replSeqMem)
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+        firrtl::createFlattenMemoryPass());
   // The input mlir file could be firrtl dialect so we might need to clean
   // things up.
   if (lowerTypes) {
     pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass(
-        replSeqMem, preserveAggregate, preservePublicTypes));
+        preserveAggregate, preservePublicTypes));
     // Only enable expand whens if lower types is also enabled.
     if (expandWhens) {
       auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
       modulePM.addPass(firrtl::createExpandWhensPass());
-      modulePM.addPass(firrtl::createRemoveResetsPass());
+      modulePM.addPass(firrtl::createSFCCompatPass());
     }
   }
 
@@ -461,31 +538,45 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         firrtl::createInferReadWritePass());
 
+  if (lowerMemory)
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerMemoryPass());
+
+  if (prefixModules)
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createPrefixModulesPass());
+
   if (inliner)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInlinerPass());
 
-  bool nonConstAsyncResetValueIsError = false;
-  if (imconstprop && !disableOptimization) {
+  if (imconstprop && !disableOptimization)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createIMConstPropPass());
-    nonConstAsyncResetValueIsError = true;
+
+  if (addSeqMemPorts)
+    pm.addNestedPass<firrtl::CircuitOp>(firrtl::createAddSeqMemPortsPass());
+
+  if (emitMetadata)
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCreateSiFiveMetadataPass(
+        replSeqMem, replSeqMemCircuit, replSeqMemFile));
+
+  if (extractInstances)
+    pm.addNestedPass<firrtl::CircuitOp>(firrtl::createExtractInstancesPass());
+
+  // Run passes to resolve Grand Central features.  This should run before
+  // BlackBoxReader because Grand Central needs to inform BlackBoxReader where
+  // certain black boxes should be placed.
+  if (grandCentral) {
+    auto &circuitPM = pm.nest<firrtl::CircuitOp>();
+    circuitPM.addPass(firrtl::createGrandCentralPass());
+    circuitPM.addPass(firrtl::createGrandCentralTapsPass());
+    circuitPM.addPass(firrtl::createGrandCentralSignalMappingsPass(
+        outputFilename, sigmapDut, sigmapPrefix));
   }
 
   // Read black box source files into the IR.
   StringRef blackBoxRoot = blackBoxRootPath.empty()
                                ? llvm::sys::path::parent_path(inputFilename)
                                : blackBoxRootPath;
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createBlackBoxReaderPass(
-      blackBoxRoot, blackBoxRootResourcePath.empty()
-                        ? blackBoxRoot
-                        : blackBoxRootResourcePath));
-
-  if (grandCentral) {
-    auto &circuitPM = pm.nest<firrtl::CircuitOp>();
-    circuitPM.addPass(firrtl::createGrandCentralPass());
-    circuitPM.addPass(firrtl::createGrandCentralTapsPass());
-    circuitPM.nest<firrtl::FModuleOp>().addPass(
-        firrtl::createGrandCentralSignalMappingsPass());
-  }
+  pm.nest<firrtl::CircuitOp>().addPass(
+      firrtl::createBlackBoxReaderPass(blackBoxRoot));
 
   // The above passes, IMConstProp in particular, introduce additional
   // canonicalization opportunities that we should pick up here before we
@@ -498,10 +589,6 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
           firrtl::createRemoveUnusedPortsPass());
   }
 
-  if (emitMetadata)
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCreateSiFiveMetadataPass(
-        replSeqMem, replSeqMemCircuit, replSeqMemFile));
-
   if (emitOMIR)
     pm.nest<firrtl::CircuitOp>().addPass(
         firrtl::createEmitOMIRPass(omirOutFile));
@@ -512,54 +599,29 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
 
   // Lower if we are going to verilog or if lowering was specifically requested.
   if (outputFormat != OutputIRFir) {
-    pm.addPass(createLowerFIRRTLToHWPass(enableAnnotationWarning.getValue(),
-                                         nonConstAsyncResetValueIsError));
-    pm.addPass(sv::createHWMemSimImplPass(replSeqMem, ignoreReadEnableMem));
+    pm.addPass(createLowerFIRRTLToHWPass(enableAnnotationWarning.getValue()));
 
-    if (extractTestCode)
-      pm.addPass(sv::createSVExtractTestCodePass());
+    if (outputFormat == OutputIRHW) {
+      if (!disableOptimization) {
+        auto &modulePM = pm.nest<hw::HWModuleOp>();
+        modulePM.addPass(createCSEPass());
+        modulePM.addPass(createSimpleCanonicalizerPass());
+      }
+    } else {
+      pm.addPass(sv::createHWMemSimImplPass(replSeqMem, ignoreReadEnableMem));
 
-    // If enabled, run the optimizer.
-    if (!disableOptimization) {
-      auto &modulePM = pm.nest<hw::HWModuleOp>();
-      modulePM.addPass(createCSEPass());
-      modulePM.addPass(createSimpleCanonicalizerPass());
-      modulePM.addPass(sv::createHWCleanupPass());
+      if (extractTestCode)
+        pm.addPass(sv::createSVExtractTestCodePass());
+
+      // If enabled, run the optimizer.
+      if (!disableOptimization) {
+        auto &modulePM = pm.nest<hw::HWModuleOp>();
+        modulePM.addPass(createCSEPass());
+        modulePM.addPass(createSimpleCanonicalizerPass());
+        modulePM.addPass(createCSEPass());
+        modulePM.addPass(sv::createHWCleanupPass());
+      }
     }
-  }
-
-  // Add passes specific to Verilog emission if we're going there.
-  if (outputFormat == OutputVerilog || outputFormat == OutputSplitVerilog ||
-      outputFormat == OutputIRVerilog) {
-    // Legalize unsupported operations within the modules.
-    pm.nest<hw::HWModuleOp>().addPass(sv::createHWLegalizeModulesPass());
-
-    // Tidy up the IR to improve verilog emission quality.
-    if (!disableOptimization) {
-      auto &modulePM = pm.nest<hw::HWModuleOp>();
-      modulePM.addPass(sv::createPrettifyVerilogPass());
-    }
-
-    // Emit a single file or multiple files depending on the output format.
-    switch (outputFormat) {
-    default:
-      llvm_unreachable("can't reach this");
-    case OutputVerilog:
-      pm.addPass(createExportVerilogPass(outputFile.getValue()->os()));
-      break;
-    case OutputSplitVerilog:
-      pm.addPass(createExportSplitVerilogPass(outputFilename));
-      break;
-    case OutputIRVerilog:
-      // Run the ExportVerilog pass to get its lowering, but discard the output.
-      pm.addPass(createExportVerilogPass(llvm::nulls()));
-      break;
-    }
-
-    // Run module hierarchy emission after verilog emission, which ensures we
-    // pick up any changes that verilog emission made.
-    if (exportModuleHierarchy)
-      pm.addPass(sv::createHWExportModuleHierarchyPass(outputFilename));
   }
 
   // Load the emitter options from the command line. Command line options if
@@ -569,10 +631,73 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   if (failed(pm.run(module.get())))
     return failure();
 
-  if (outputFormat == OutputIRFir || outputFormat == OutputIRHW ||
+  // Add passes specific to Verilog emission if we're going there.
+  if (outputFormat == OutputVerilog || outputFormat == OutputSplitVerilog ||
       outputFormat == OutputIRVerilog) {
+    PassManager exportPm(&context);
+    exportPm.enableTiming(ts);
+    applyPassManagerCLOptions(exportPm);
+    if (verbosePassExecutions)
+      exportPm.addInstrumentation(
+          std::make_unique<FirtoolPassInstrumentation>());
+    // Legalize unsupported operations within the modules.
+    exportPm.nest<hw::HWModuleOp>().addPass(sv::createHWLegalizeModulesPass());
+
+    // Tidy up the IR to improve verilog emission quality.
+    if (!disableOptimization) {
+      auto &modulePM = exportPm.nest<hw::HWModuleOp>();
+      modulePM.addPass(sv::createPrettifyVerilogPass());
+    }
+
+    if (stripDebugInfo)
+      exportPm.addPass(mlir::createStripDebugInfoPass());
+
+    // Emit a single file or multiple files depending on the output format.
+    switch (outputFormat) {
+    default:
+      llvm_unreachable("can't reach this");
+    case OutputVerilog:
+      exportPm.addPass(createExportVerilogPass(outputFile.getValue()->os()));
+      break;
+    case OutputSplitVerilog:
+      exportPm.addPass(createExportSplitVerilogPass(outputFilename));
+      break;
+    case OutputIRVerilog:
+      // Run the ExportVerilog pass to get its lowering, but discard the output.
+      exportPm.addPass(createExportVerilogPass(llvm::nulls()));
+      break;
+    }
+
+    // Run module hierarchy emission after verilog emission, which ensures we
+    // pick up any changes that verilog emission made.
+    if (exportModuleHierarchy)
+      exportPm.addPass(sv::createHWExportModuleHierarchyPass(outputFilename));
+
+    // Load the emitter options from the command line. Command line options if
+    // specified will override any module options.
+    applyLoweringCLOptions(module.get());
+
+    if (failed(exportPm.run(module.get())))
+      return failure();
+  }
+
+  if (outputFormat == OutputIRFir || outputFormat == OutputIRHW ||
+      outputFormat == OutputIRSV || outputFormat == OutputIRVerilog) {
     auto outputTimer = ts.nest("Print .mlir output");
     module->print(outputFile.getValue()->os());
+  }
+
+  // If requested, print the final MLIR into mlirOutFile.
+  if (!mlirOutFile.empty()) {
+    std::string mlirOutError;
+    auto mlirFile = openOutputFile(mlirOutFile, &mlirOutError);
+    if (!mlirFile) {
+      llvm::errs() << mlirOutError;
+      return failure();
+    }
+
+    module->print(mlirFile->os());
+    mlirFile->keep();
   }
 
   // We intentionally "leak" the Module into the MLIRContext instead of
@@ -677,7 +802,7 @@ static LogicalResult executeFirtool(MLIRContext &context) {
       llvm::errs() << "missing output directory: specify with -o=<dir>\n";
       return failure();
     }
-    auto error = llvm::sys::fs::create_directory(outputFilename);
+    auto error = llvm::sys::fs::create_directories(outputFilename);
     if (error) {
       llvm::errs() << "cannot create output directory '" << outputFilename
                    << "': " << error.message() << "\n";
@@ -706,6 +831,10 @@ static LogicalResult executeFirtool(MLIRContext &context) {
 /// MLIRContext and modules inside of it (reducing compile time).
 int main(int argc, char **argv) {
   InitLLVM y(argc, argv);
+
+  // Hide default LLVM options, other than for this tool.
+  // MLIR options are added below.
+  cl::HideUnrelatedOptions(mainCategory);
 
   // Register any pass manager command line options.
   registerMLIRContextCLOptions();

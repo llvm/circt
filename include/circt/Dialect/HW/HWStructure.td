@@ -10,19 +10,48 @@
 //
 //===----------------------------------------------------------------------===//
 
-/// Ensure symbol is one of the hw module.* types.  Passes on failed lookup, so
-/// more basic symbol validation can provide more useful error messages.
-def isModuleSymbol : AttrConstraint<
-    CPred<"!::mlir::SymbolTable::lookupNearestSymbolFrom("
-            "&$_op, $_self.cast<::mlir::FlatSymbolRefAttr>()) || "
-          "hw::isAnyModule(::mlir::SymbolTable::lookupNearestSymbolFrom("
-            "&$_op, $_self.cast<::mlir::FlatSymbolRefAttr>()))"
-    >, "is module like">;
+/// Base class factoring out some of the additional class declarations common to
+/// the module-like operations.
+class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
+    HWOp<mnemonic, traits # [
+      DeclareOpInterfaceMethods<HWModuleLike>, FunctionOpInterface, Symbol,
+      OpAsmOpInterface, HasParent<"mlir::ModuleOp">]> {
+  /// Additional class declarations inside the module op.
+  code extraModuleClassDeclaration = ?;
 
-def HWModuleOp : HWOp<"module",
-      [IsolatedFromAbove, FunctionLike, Symbol, RegionKindInterface,
-       SingleBlockImplicitTerminator<"OutputOp">, HasParent<"mlir::ModuleOp">,
-       OpAsmOpInterface]>{
+  let extraClassDeclaration = extraModuleClassDeclaration # [{
+    /// Insert and remove input and output ports of this module. Does not modify
+    /// the block arguments of the module body. The insertion and removal
+    /// indices must be in ascending order. The indices refer to the port
+    /// positions before any insertion or removal occurs. Ports inserted at the
+    /// same index will appear in the module in the same order as they were
+    /// listed in the insertion arrays.
+    void modifyPorts(
+      ArrayRef<std::pair<unsigned, PortInfo>> insertInputs,
+      ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs,
+      ArrayRef<unsigned> eraseInputs,
+      ArrayRef<unsigned> eraseOutputs
+    );
+
+    /// Insert ports into the module. Does not modify the block arguments of the
+    /// module body.
+    void insertPorts(
+      ArrayRef<std::pair<unsigned, PortInfo>> insertInputs,
+      ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs
+    ) { modifyPorts(insertInputs, insertOutputs, {}, {}); }
+
+    /// Erase ports from the module. Does not modify the block arguments of the
+    /// module body.
+    void erasePorts(
+      ArrayRef<unsigned> eraseInputs,
+      ArrayRef<unsigned> eraseOutputs
+    ) { modifyPorts({}, {}, eraseInputs, eraseOutputs); }
+  }];
+}
+
+def HWModuleOp : HWModuleOpBase<"module",
+      [IsolatedFromAbove, RegionKindInterface,
+       SingleBlockImplicitTerminator<"OutputOp">]>{
   let summary = "HW Module";
   let description = [{
     The "hw.module" operation represents a Verilog module, including a given
@@ -47,9 +76,9 @@ def HWModuleOp : HWOp<"module",
                    CArg<"StringAttr", "{}">:$comment)>
   ];
 
-  let extraClassDeclaration = [{
-    using FunctionLike::front;
-    using FunctionLike::getBody;
+  let extraModuleClassDeclaration = [{
+    using mlir::detail::FunctionOpInterfaceTrait<HWModuleOp>::front;
+    using mlir::detail::FunctionOpInterfaceTrait<HWModuleOp>::getBody;
 
     // Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph;}
@@ -74,6 +103,16 @@ def HWModuleOp : HWOp<"module",
       return getModuleOutputPort(*this, i);
     }
 
+    /// Inserts a list of output ports into the port list at a specific
+    /// location, shifting all subsequent ports.  Rewrites the output op
+    /// to return the associated values.
+    void insertOutputs(unsigned index,
+                       ArrayRef<std::pair<StringAttr, Value>> outputs);
+
+    /// Appends output ports to the module with the specified names and
+    /// rewrites the output op to return the associated values.
+    void appendOutputs(ArrayRef<std::pair<StringAttr, Value>> outputs);
+
     // TODO(mlir): FunctionLike shouldn't produce a getBody() helper, it is
     // squatting on the name.
     Block *getBodyBlock() { return &body().front(); }
@@ -91,36 +130,36 @@ def HWModuleOp : HWOp<"module",
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
 
-  private:
-    // This trait needs access to the hooks defined below.
-    friend class OpTrait::FunctionLike<HWModuleOp>;
+    /// Returns the type of this function.
+    FunctionType getFunctionType() {
+      return getFunctionTypeAttr().getValue().cast<FunctionType>();
+    }
 
-    /// Returns the number of arguments, implementing OpTrait::FunctionLike.
-    unsigned getNumFuncArguments() { return getType().getInputs().size(); }
-    /// Returns the number of results, implementing OpTrait::FunctionLike.
-    unsigned getNumFuncResults() { return getType().getResults().size(); }
+    /// Returns the argument types of this function.
+    ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
 
-    /// Hook for OpTrait::FunctionLike, called after verifying that the 'type'
-    /// attribute is present and checks if it holds a function type.  Ensures
-    /// getType, getNumFuncArguments, and getNumFuncResults can be called
-    ///  safely.
+    /// Returns the result types of this function.
+    ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
+
+    /// Verify the type attribute of this function. Returns failure and emits
+    /// an error if the attribute is invalid.
     LogicalResult verifyType() {
-      auto type = getTypeAttr().getValue();
+      auto type = getFunctionTypeAttr().getValue();
       if (!type.isa<FunctionType>())
         return emitOpError("requires '" + getTypeAttrName() +
                            "' attribute of function type");
       return success();
     }
-  public:
+
+    /// Verifies the body of the function.
+    LogicalResult verifyBody();
   }];
 
-  let printer = "return ::print$cppClass(p, *this);";
-  let parser = "return ::parse$cppClass(parser, result);";
-  let verifier = "return ::verify$cppClass(*this);";
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
 }
 
-def HWModuleExternOp : HWOp<"module.extern",
-      [FunctionLike, Symbol, OpAsmOpInterface, HasParent<"mlir::ModuleOp">]> {
+def HWModuleExternOp : HWModuleOpBase<"module.extern"> {
   let summary = "HW external Module";
   let description = [{
     The "hw.module.extern" operation represents an external reference to a
@@ -149,7 +188,7 @@ def HWModuleExternOp : HWOp<"module.extern",
                    CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>
   ];
 
-  let extraClassDeclaration = [{
+  let extraModuleClassDeclaration = [{
     /// Decode information about the input and output ports on this module.
     ModulePortInfo getPorts() {
       return getModulePortInfo(*this);
@@ -196,32 +235,30 @@ def HWModuleExternOp : HWOp<"module.extern",
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
 
-  private:
-    // This trait needs access to the hooks defined below.
-    friend class OpTrait::FunctionLike<HWModuleExternOp>;
+    /// Returns the type of this function.
+    FunctionType getFunctionType() {
+      return getFunctionTypeAttr().getValue().cast<FunctionType>();
+    }
 
-    /// Returns the number of arguments, implementing OpTrait::FunctionLike.
-    unsigned getNumFuncArguments() { return getType().getInputs().size(); }
-    /// Returns the number of results, implementing OpTrait::FunctionLike.
-    unsigned getNumFuncResults() { return getType().getResults().size(); }
+    /// Returns the argument types of this function.
+    ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
 
-    /// Hook for OpTrait::FunctionLike, called after verifying that the 'type'
-    /// attribute is present and checks if it holds a function type.  Ensures
-    /// getType, getNumFuncArguments, and getNumFuncResults can be called
-    ///  safely.
+    /// Returns the result types of this function.
+    ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
+
+    /// Verify the type attribute of this function. Returns failure and emits
+    /// an error if the attribute is invalid.
     LogicalResult verifyType() {
-      auto type = getTypeAttr().getValue();
+      auto type = getFunctionTypeAttr().getValue();
       if (!type.isa<FunctionType>())
         return emitOpError("requires '" + getTypeAttrName() +
                            "' attribute of function type");
       return success();
     }
-  public:
   }];
 
-  let printer = "return ::print$cppClass(p, *this);";
-  let parser = "return ::parse$cppClass(parser, result);";
-  let verifier = "return ::verify$cppClass(*this);";
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
 }
 
 def HWGeneratorSchemaOp : HWOp<"generator.schema",
@@ -247,9 +284,9 @@ def HWGeneratorSchemaOp : HWOp<"generator.schema",
   let assemblyFormat = "$sym_name `,` $descriptor `,` $requiredAttrs attr-dict";
 }
 
-def HWModuleGeneratedOp : HWOp<"module.generated",
-      [IsolatedFromAbove, FunctionLike, Symbol, OpAsmOpInterface,
-       HasParent<"mlir::ModuleOp">]> {
+def HWModuleGeneratedOp : HWModuleOpBase<"module.generated", [
+      DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+      IsolatedFromAbove]> {
   let summary = "HW Generated Module";
   let description = [{
     The "hw.module.generated" operation represents a reference to an external
@@ -280,7 +317,7 @@ def HWModuleGeneratedOp : HWOp<"module.generated",
                    CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>
   ];
 
-  let extraClassDeclaration = [{
+  let extraModuleClassDeclaration = [{
     /// Decode information about the input and output ports on this module.
     ModulePortInfo getPorts() {
       return getModulePortInfo(*this);
@@ -309,49 +346,51 @@ def HWModuleGeneratedOp : HWOp<"module.generated",
 
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
-  private:
-    // This trait needs access to the hooks defined below.
-    friend class OpTrait::FunctionLike<HWModuleGeneratedOp>;
 
-    /// Returns the number of arguments, implementing OpTrait::FunctionLike.
-    unsigned getNumFuncArguments() { return getType().getInputs().size(); }
-    /// Returns the number of results, implementing OpTrait::FunctionLike.
-    unsigned getNumFuncResults() { return getType().getResults().size(); }
+    /// Returns the type of this function.
+    FunctionType getFunctionType() {
+      return getFunctionTypeAttr().getValue().cast<FunctionType>();
+    }
 
-    /// Hook for OpTrait::FunctionLike, called after verifying that the 'type'
-    /// attribute is present and checks if it holds a function type.  Ensures
-    /// getType, getNumFuncArguments, and getNumFuncResults can be called
-    ///  safely.
+    /// Returns the argument types of this function.
+    ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
+
+    /// Returns the result types of this function.
+    ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
+
+    /// Verify the type attribute of this function. Returns failure and emits
+    /// an error if the attribute is invalid.
     LogicalResult verifyType() {
-      auto type = getTypeAttr().getValue();
+      auto type = getFunctionTypeAttr().getValue();
       if (!type.isa<FunctionType>())
         return emitOpError("requires '" + getTypeAttrName() +
                            "' attribute of function type");
       return success();
     }
-  public:
+
+    TypeAttr getTypeAttr();
   }];
 
-  let printer = "return ::print$cppClass(p, *this);";
-  let parser = "return ::parse$cppClass(parser, result);";
-  let verifier = "return ::verify$cppClass(*this);";
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
 }
 
 def InstanceOp : HWOp<"instance", [
         DeclareOpInterfaceMethods<SymbolUserOpInterface>,
-        DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
+        DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+        DeclareOpInterfaceMethods<HWInstanceLike>]> {
   let summary = "Create an instance of a module";
   let description = [{
     This represents an instance of a module. The inputs and results are
     the referenced module's inputs and outputs.  The `argNames` and
     `resultNames` attributes must match the referenced module.
-    
+
     Any parameters in the "old" format (slated to be removed) are stored in the
     `oldParameters` dictionary.
   }];
 
   let arguments = (ins StrAttr:$instanceName,
-                       Confined<FlatSymbolRefAttr, [isModuleSymbol]>:$moduleName,
+                       FlatSymbolRefAttr:$moduleName,
                        Variadic<AnyType>:$inputs,
                        StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
                        ParamDeclArrayAttr:$parameters,
@@ -401,7 +440,7 @@ def InstanceOp : HWOp<"instance", [
 
     /// Lookup the module or extmodule for the symbol.  This returns null on
     /// invalid IR.
-    Operation *getReferencedModule(const SymbolCache *cache = nullptr);
+    Operation *getReferencedModule(const HWSymbolCache *cache = nullptr);
 
     /// Get the instances's name.
     StringAttr getName() {
@@ -413,8 +452,6 @@ def InstanceOp : HWOp<"instance", [
       instanceNameAttr(name);
     }
 
-    LogicalResult verifyCustom();
-
     //===------------------------------------------------------------------===//
     // SymbolOpInterface Methods
     //===------------------------------------------------------------------===//
@@ -423,9 +460,8 @@ def InstanceOp : HWOp<"instance", [
     bool isOptionalSymbol() { return true; }
   }];
 
-  let parser = "return ::parse$cppClass(parser, result);";
-  let printer = "return ::print$cppClass(p, *this);";
-  let verifier = "return this->verifyCustom();";
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
 }
 
 def OutputOp : HWOp<"output", [Terminator, HasParent<"HWModuleOp">,
@@ -444,10 +480,12 @@ def OutputOp : HWOp<"output", [Terminator, HasParent<"HWModuleOp">,
 
   let assemblyFormat = "attr-dict ($operands^ `:` qualified(type($operands)))?";
 
-  let verifier = "return ::verifyOutputOp(this);";
+  let hasVerifier = 1;
 }
 
-def GlobalRefOp : HWOp<"globalRef", [IsolatedFromAbove, Symbol]> {
+def GlobalRefOp : HWOp<"globalRef", [
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+    IsolatedFromAbove, Symbol]> {
   let summary = "A global reference to uniquely identify each"
                                     "instance of an operation";
   let description = [{
@@ -457,15 +495,9 @@ def GlobalRefOp : HWOp<"globalRef", [IsolatedFromAbove, Symbol]> {
     This also lets components of the path point to a common entity.
   }];
 
-  let extraClassDeclaration = [{
-    LogicalResult verifyGlobalRef();
-  }];
-
   let arguments = (ins SymbolNameAttr:$sym_name, NameRefArrayAttr:$namepath);
 
-  let assemblyFormat = [{ $sym_name $namepath attr-dict}];
-
-  let verifier = "return this->verifyGlobalRef();";
+  let assemblyFormat = [{ $sym_name $namepath attr-dict }];
 }
 
 def ProbeOp : HWOp<"probe", []> {
@@ -483,4 +515,3 @@ def ProbeOp : HWOp<"probe", []> {
   let assemblyFormat = "$inner_sym attr-dict (`,` $operands^ `:` qualified(type($operands)))?";
 
 }
-

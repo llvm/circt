@@ -3,6 +3,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt-c/Dialect/MSFT.h"
+#include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/MSFT/DeviceDB.h"
 #include "circt/Dialect/MSFT/ExportTcl.h"
 #include "circt/Dialect/MSFT/MSFTAttributes.h"
@@ -57,7 +58,7 @@ bool circtMSFTPrimitiveDBIsValidLocation(CirctMSFTPrimitiveDB self,
 
 DEFINE_C_API_PTR_METHODS(CirctMSFTPlacementDB, circt::msft::PlacementDB)
 
-CirctMSFTPlacementDB circtMSFTCreatePlacementDB(MlirOperation top,
+CirctMSFTPlacementDB circtMSFTCreatePlacementDB(MlirModule top,
                                                 CirctMSFTPrimitiveDB seed) {
   if (seed.ptr == nullptr)
     return wrap(new PlacementDB(unwrap(top)));
@@ -66,73 +67,48 @@ CirctMSFTPlacementDB circtMSFTCreatePlacementDB(MlirOperation top,
 void circtMSFTDeletePlacementDB(CirctMSFTPlacementDB self) {
   delete unwrap(self);
 }
-size_t circtMSFTPlacementDBAddDesignPlacements(CirctMSFTPlacementDB self) {
-  return unwrap(self)->addDesignPlacements();
-}
-MlirLogicalResult
-circtMSFTPlacementDBAddPlacement(CirctMSFTPlacementDB self, MlirAttribute cLoc,
-                                 CirctMSFTPlacedInstance cInst) {
-  Attribute attr = unwrap(cLoc);
-  ArrayAttr path = unwrap(cInst.path).cast<ArrayAttr>();
-  StringAttr subpath = StringAttr::get(
-      attr.getContext(), StringRef(cInst.subpath, cInst.subpathLength));
-  auto inst = PlacementDB::PlacedInstance{path, subpath, unwrap(cInst.op)};
 
-  if (auto loc = attr.dyn_cast<PhysLocationAttr>())
-    return wrap(unwrap(self)->addPlacement(loc, inst));
-
-  return wrap(failure());
+MlirOperation circtMSFTPlacementDBPlace(CirctMSFTPlacementDB db,
+                                        MlirOperation inst, MlirAttribute loc,
+                                        MlirStringRef subpath,
+                                        MlirLocation srcLoc) {
+  return wrap(unwrap(db)->place(cast<DynamicInstanceOp>(unwrap(inst)),
+                                unwrap(loc).cast<PhysLocationAttr>(),
+                                unwrap(subpath), unwrap(srcLoc)));
 }
-MlirLogicalResult circtMSFTPlacementDBRemovePlacement(CirctMSFTPlacementDB db,
-                                                      MlirAttribute cLoc) {
-  auto loc = unwrap(cLoc).cast<PhysLocationAttr>();
-  return wrap(unwrap(db)->removePlacement(loc));
+void circtMSFTPlacementDBRemovePlacement(CirctMSFTPlacementDB db,
+                                         MlirOperation locOp) {
+  unwrap(db)->removePlacement(cast<PDPhysLocationOp>(unwrap(locOp)));
 }
 MlirLogicalResult circtMSFTPlacementDBMovePlacement(CirctMSFTPlacementDB db,
-                                                    MlirAttribute cOldLoc,
-                                                    MlirAttribute cNewLoc) {
-  auto oldLoc = unwrap(cOldLoc).cast<PhysLocationAttr>();
-  auto newLoc = unwrap(cNewLoc).cast<PhysLocationAttr>();
-  return wrap(unwrap(db)->movePlacement(oldLoc, newLoc));
-}
-bool circtMSFTPlacementDBTryGetInstanceAt(CirctMSFTPlacementDB self,
-                                          MlirAttribute cLoc,
-                                          CirctMSFTPlacedInstance *out) {
-  auto loc = unwrap(cLoc).cast<PhysLocationAttr>();
-  Optional<PlacementDB::PlacedInstance> inst = unwrap(self)->getInstanceAt(loc);
-  if (!inst)
-    return false;
-  if (out != nullptr) {
-    out->path = wrap(inst->path);
-    out->subpath = inst->subpath.data();
-    out->subpathLength = inst->subpath.size();
-    out->op = wrap(inst->op);
-  }
-  return true;
-}
-
-MlirAttribute circtMSFTPlacementDBGetNearestFreeInColumn(
-    CirctMSFTPlacementDB cdb, CirctMSFTPrimitiveType prim, uint64_t column,
-    uint64_t nearestToY) {
-  auto db = unwrap(cdb);
+                                                    MlirOperation locOp,
+                                                    MlirAttribute newLoc) {
   return wrap(
-      db->getNearestFreeInColumn((PrimitiveType)prim, column, nearestToY));
+      unwrap(db)->movePlacement(cast<PDPhysLocationOp>(unwrap(locOp)),
+                                unwrap(newLoc).cast<PhysLocationAttr>()));
+}
+MlirOperation circtMSFTPlacementDBGetInstanceAt(CirctMSFTPlacementDB db,
+                                                MlirAttribute loc) {
+  return wrap(unwrap(db)->getInstanceAt(unwrap(loc).cast<PhysLocationAttr>()));
+}
+MlirAttribute circtMSFTPlacementDBGetNearestFreeInColumn(
+    CirctMSFTPlacementDB db, CirctMSFTPrimitiveType prim, uint64_t column,
+    uint64_t nearestToY) {
+
+  return wrap(unwrap(db)->getNearestFreeInColumn((PrimitiveType)prim, column,
+                                                 nearestToY));
 }
 
-void circtMSFTPlacementDBWalkPlacements(CirctMSFTPlacementDB cdb,
-                                        CirctMSFTPlacementCallback ccb,
-                                        int64_t bounds[4],
-                                        CirctMSFTPrimitiveType cPrimTypeFilter,
-                                        CirctMSFTWalkOrder cWalkOrder,
-                                        void *userData) {
+/// Walk all the placements within 'bounds' ([xmin, xmax, ymin, ymax], inclusive
+/// on all sides), with -1 meaning unbounded.
+MLIR_CAPI_EXPORTED void circtMSFTPlacementDBWalkPlacements(
+    CirctMSFTPlacementDB cdb, CirctMSFTPlacementCallback ccb, int64_t bounds[4],
+    CirctMSFTPrimitiveType cPrimTypeFilter, CirctMSFTWalkOrder cWalkOrder,
+    void *userData) {
+
   PlacementDB *db = unwrap(cdb);
-  auto cb = [ccb, userData](PhysLocationAttr loc,
-                            PlacementDB::PlacedInstance p) {
-    if (!p.subpath)
-      p.subpath = StringAttr::get(loc.getContext(), "");
-    CirctMSFTPlacedInstance cPlacement = {wrap(p.path), p.subpath.data(),
-                                          p.subpath.size(), wrap(p.op)};
-    ccb(wrap(loc), cPlacement, userData);
+  auto cb = [ccb, userData](PhysLocationAttr loc, PDPhysLocationOp locOp) {
+    ccb(wrap(loc), wrap(locOp), userData);
   };
   Optional<PrimitiveType> primTypeFilter;
   if (cPrimTypeFilter >= 0)
@@ -171,8 +147,8 @@ bool circtMSFTAttributeIsAPhysLocationAttribute(MlirAttribute attr) {
 }
 MlirAttribute circtMSFTPhysLocationAttrGet(MlirContext cCtxt,
                                            CirctMSFTPrimitiveType devType,
-                                           uint64_t x, uint64_t y, uint64_t num,
-                                           MlirStringRef subPath) {
+                                           uint64_t x, uint64_t y,
+                                           uint64_t num) {
   auto *ctxt = unwrap(cCtxt);
   return wrap(PhysLocationAttr::get(
       ctxt, PrimitiveTypeAttr::get(ctxt, (PrimitiveType)devType), x, y, num));
@@ -204,10 +180,4 @@ MlirAttribute circtMSFTPhysicalBoundsAttrGet(MlirContext cContext,
                                              uint64_t yMin, uint64_t yMax) {
   auto *context = unwrap(cContext);
   return wrap(PhysicalBoundsAttr::get(context, xMin, xMax, yMin, yMax));
-}
-
-MlirOperation circtMSFTGetInstance(MlirOperation cRoot, MlirAttribute cPath) {
-  auto root = cast<circt::msft::MSFTModuleOp>(unwrap(cRoot));
-  auto path = unwrap(cPath).cast<SymbolRefAttr>();
-  return wrap(getInstance(root, path));
 }

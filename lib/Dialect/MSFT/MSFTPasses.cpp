@@ -14,6 +14,7 @@
 #include "circt/Dialect/MSFT/MSFTOpInterfaces.h"
 #include "circt/Dialect/MSFT/MSFTOps.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "circt/Support/SymCache.h"
 
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -61,49 +62,33 @@ static SymbolRefAttr getPart(Operation *op) {
 //===----------------------------------------------------------------------===//
 
 namespace {
-/// Lower MSFT's dynamic instance to global ref and associated PD ops.
-struct DynamicInstanceOpLowering
-    : public OpConversionPattern<DynamicInstanceOp> {
-public:
-  using OpConversionPattern::OpConversionPattern;
+struct LowerInstancesPass : public LowerInstancesBase<LowerInstancesPass> {
+  void runOnOperation() override;
 
-  DynamicInstanceOpLowering(
-      MLIRContext *ctxt, const hw::SymbolCache &topSyms,
-      DenseSet<StringAttr> &newSyms,
-      DenseMap<Operation *, SmallVector<hw::GlobalRefAttr, 0>>
-          &globalRefsToApply)
-      : OpConversionPattern(ctxt), topSyms(topSyms), newSyms(newSyms),
-        globalRefsToApply(globalRefsToApply) {}
+  LogicalResult lower(DynamicInstanceOp inst, OpBuilder &b);
 
-  LogicalResult
-  matchAndRewrite(DynamicInstanceOp, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const final;
+  // Aggregation of the global ref attributes populated as a side-effect of the
+  // conversion.
+  DenseMap<Operation *, SmallVector<hw::GlobalRefAttr, 0>> globalRefsToApply;
 
-private:
-  // Symbol cache for top module symbols.
-  const hw::SymbolCache &topSyms;
-  // List of symbols which have been created in this pass. Along with `topSyms`,
-  // used to generate unique symbol names.
-  DenseSet<StringAttr> &newSyms;
-  // Aggregate the globalRef attributes which have to be applied to static
-  // operations.
-  DenseMap<Operation *, SmallVector<hw::GlobalRefAttr, 0>> &globalRefsToApply;
+  // Cache the top-level symbols. Insert the new ones we're creating for new
+  // global ref ops.
+  SymbolCache topSyms;
 
-  // In order to be efficient, cache the symbols in each module.
-  mutable DenseMap<MSFTModuleOp, hw::SymbolCache> perModSyms;
+  // In order to be efficient, cache the "symbols" in each module.
+  DenseMap<MSFTModuleOp, SymbolCache> perModSyms;
   // Accessor for `perModSyms` which lazily constructs each cache.
-  const hw::SymbolCache &getSyms(MSFTModuleOp mod) const;
+  const SymbolCache &getSyms(MSFTModuleOp mod);
 };
 } // anonymous namespace
 
-const hw::SymbolCache &
-DynamicInstanceOpLowering::getSyms(MSFTModuleOp mod) const {
+const SymbolCache &LowerInstancesPass::getSyms(MSFTModuleOp mod) {
   auto symsFound = perModSyms.find(mod);
   if (symsFound != perModSyms.end())
     return symsFound->getSecond();
 
-  // Build the cache if necessary;
-  hw::SymbolCache &syms = perModSyms[mod];
+  // Build the cache.
+  SymbolCache &syms = perModSyms[mod];
   mod.walk([&syms, mod](Operation *op) {
     if (op == mod)
       return;
@@ -111,102 +96,104 @@ DynamicInstanceOpLowering::getSyms(MSFTModuleOp mod) const {
             op->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName()))
       syms.addDefinition(name, op);
   });
-  syms.freeze();
   return syms;
 }
 
-LogicalResult DynamicInstanceOpLowering::matchAndRewrite(
-    DynamicInstanceOp inst, OpAdaptor adaptor,
-    ConversionPatternRewriter &rewriter) const {
+LogicalResult LowerInstancesPass::lower(DynamicInstanceOp inst, OpBuilder &b) {
 
-  // Come up with a unique symbol name.
-  auto refSym = StringAttr::get(getContext(), "instref");
-  auto origRefSym = refSym;
-  unsigned ctr = 0;
-  while (topSyms.getDefinition(refSym) || newSyms.contains(refSym))
-    refSym = StringAttr::get(getContext(),
-                             origRefSym.getValue() + "_" + Twine(++ctr));
-  newSyms.insert(refSym);
+  hw::GlobalRefOp ref = nullptr;
 
-  // Create a global ref to replace us.
-  auto ref =
-      rewriter.create<hw::GlobalRefOp>(inst.getLoc(), refSym, inst.appid());
-  auto refAttr = hw::GlobalRefAttr::get(ref);
+  // If 'inst' doesn't contain any ops which use a global ref op, don't create
+  // one.
+  if (llvm::any_of(inst.getOps(), [](Operation &op) {
+        return isa<DynInstDataOpInterface>(op);
+      })) {
 
-  // For each level of `appid`, find the static operation which needs a back
-  // reference to the global ref which is replacing us.
-  bool symNotFound = false;
-  for (auto innerRef : inst.appid().getAsRange<hw::InnerRefAttr>()) {
-    MSFTModuleOp mod =
-        cast<MSFTModuleOp>(topSyms.getDefinition(innerRef.getModule()));
-    const hw::SymbolCache &modSyms = getSyms(mod);
-    Operation *tgtOp = modSyms.getDefinition(innerRef.getName());
-    if (!tgtOp) {
-      symNotFound = true;
-      inst.emitOpError("Could not find ")
-          << innerRef.getName() << " in module " << innerRef.getModule();
-      continue;
+    // Come up with a unique symbol name.
+    auto refSym = StringAttr::get(&getContext(), "instref");
+    auto origRefSym = refSym;
+    unsigned ctr = 0;
+    while (topSyms.getDefinition(refSym))
+      refSym = StringAttr::get(&getContext(),
+                               origRefSym.getValue() + "_" + Twine(++ctr));
+
+    // Create a global ref to replace us.
+    ArrayAttr globalRefPath = inst.globalRefPath();
+    ref = b.create<hw::GlobalRefOp>(inst.getLoc(), refSym, globalRefPath);
+    auto refAttr = hw::GlobalRefAttr::get(ref);
+
+    // Add the new symbol to the symbol cache.
+    topSyms.addDefinition(refSym, ref);
+
+    // For each level of `globalRef`, find the static operation which needs a
+    // back reference to the global ref which is replacing us.
+    bool symNotFound = false;
+    for (auto innerRef : globalRefPath.getAsRange<hw::InnerRefAttr>()) {
+      MSFTModuleOp mod =
+          cast<MSFTModuleOp>(topSyms.getDefinition(innerRef.getModule()));
+      const SymbolCache &modSyms = getSyms(mod);
+      Operation *tgtOp = modSyms.getDefinition(innerRef.getName());
+      if (!tgtOp) {
+        symNotFound = true;
+        inst.emitOpError("Could not find ")
+            << innerRef.getName() << " in module " << innerRef.getModule();
+        continue;
+      }
+      // Add the backref to the list of attributes to apply.
+      globalRefsToApply[tgtOp].push_back(refAttr);
+
+      // Since GlobalRefOp uses the `inner_sym` attribute, assign the
+      // 'inner_sym' attribute if it's not already assigned.
+      if (!tgtOp->hasAttr("inner_sym")) {
+        tgtOp->setAttr("inner_sym", innerRef.getName());
+      }
     }
-    // Add the backref to the list of attributes to apply.
-    globalRefsToApply[tgtOp].push_back(refAttr);
-
-    // Since GlobalRefOp uses the `inner_sym` attribute, assign the 'inner_sym'
-    // attribute if it's not already assigned.
-    if (!tgtOp->hasAttr("inner_sym")) {
-      tgtOp->setAttr("inner_sym", innerRef.getName());
-    }
+    if (symNotFound)
+      return inst.emitOpError(
+          "Could not find operation corresponding to instance reference");
   }
-  if (symNotFound)
-    return failure();
 
   // Relocate all my children.
-  rewriter.setInsertionPointAfter(inst);
   for (Operation &op : llvm::make_early_inc_range(inst.getOps())) {
+    // Child instances should have been lowered already.
+    assert(!isa<DynamicInstanceOp>(op));
     op.remove();
-    rewriter.insert(&op);
+    b.insert(&op);
 
     // Assign a ref for ops which need it.
-    if (auto specOp = dyn_cast<DynInstDataOpInterface>(op))
+    if (auto specOp = dyn_cast<DynInstDataOpInterface>(op)) {
+      assert(ref);
       specOp.setGlobalRef(ref);
+    }
   }
 
-  rewriter.eraseOp(inst);
+  inst.erase();
   return success();
 }
-
-namespace {
-struct LowerInstancesPass : public LowerInstancesBase<LowerInstancesPass> {
-  void runOnOperation() override;
-};
-} // anonymous namespace
-
 void LowerInstancesPass::runOnOperation() {
   auto top = getOperation();
   auto *ctxt = &getContext();
-  // Aggregation of the global ref attributes populated as a side-effect of the
-  // conversion.
-  DenseMap<Operation *, SmallVector<hw::GlobalRefAttr, 0>> globalRefsToApply;
 
   // Populate the top level symbol cache.
-  hw::SymbolCache topSyms;
-  for (Operation &op : top.getOps())
-    if (auto symOp = dyn_cast<mlir::SymbolOpInterface>(op))
-      if (auto name = symOp.getNameAttr())
-        topSyms.addDefinition(name, symOp);
-  topSyms.freeze();
-  DenseSet<StringAttr> newSyms;
+  topSyms.addDefinitions(top);
 
-  ConversionTarget target(*ctxt);
-  target.addLegalDialect<hw::HWDialect>();
-  target.addLegalDialect<sv::SVDialect>();
-  target.addLegalDialect<msft::MSFTDialect>();
-  target.addIllegalOp<DynamicInstanceOp>();
+  size_t numFailed = 0;
+  OpBuilder builder(ctxt);
 
-  RewritePatternSet patterns(ctxt);
-  patterns.insert<DynamicInstanceOpLowering>(ctxt, topSyms, newSyms,
-                                             globalRefsToApply);
-
-  if (failed(applyPartialConversion(top, target, std::move(patterns))))
+  // Find all of the InstanceHierarchyOps.
+  for (Operation &op : llvm::make_early_inc_range(top.getOps())) {
+    if (!isa<InstanceHierarchyOp>(op))
+      continue;
+    builder.setInsertionPoint(&op);
+    // Walk the child dynamic instances in _post-order_ so we lower and delete
+    // the children first.
+    op.walk<mlir::WalkOrder::PostOrder>([&](DynamicInstanceOp inst) {
+      if (failed(lower(inst, builder)))
+        ++numFailed;
+    });
+    op.erase();
+  }
+  if (numFailed)
     signalPassFailure();
 
   // Since applying a large number of attributes is very expensive in MLIR (both
@@ -474,11 +461,19 @@ void ExportTclPass::runOnOperation() {
 
   // Traverse MSFT location attributes and export the required Tcl into
   // templated `sv::VerbatimOp`s with symbolic references to the instance paths.
-  for (auto moduleName : tops) {
+  for (std::string moduleName : tops) {
     Operation *hwmod =
         emitter.getDefinition(FlatSymbolRefAttr::get(ctxt, moduleName));
-    if (!hwmod || failed(emitter.emit(hwmod, tclFile)))
-      return signalPassFailure();
+    if (!hwmod) {
+      top.emitError("Failed to find module '") << moduleName << "'";
+      signalPassFailure();
+      return;
+    }
+    if (failed(emitter.emit(hwmod, tclFile))) {
+      hwmod->emitError("failed to emit tcl");
+      signalPassFailure();
+      return;
+    }
   }
 
   ConversionTarget target(*ctxt);
@@ -490,6 +485,8 @@ void ExportTclPass::runOnOperation() {
   DenseSet<SymbolRefAttr> refsUsed;
   patterns.insert<RemovePhysOpLowering<PDPhysLocationOp>>(ctxt, refsUsed);
   patterns.insert<RemovePhysOpLowering<PDPhysRegionOp>>(ctxt, refsUsed);
+  patterns.insert<RemovePhysOpLowering<DynamicInstanceVerbatimAttrOp>>(
+      ctxt, refsUsed);
   patterns.insert<RemoveOpLowering<DeclPhysicalRegionOp>>(ctxt);
   if (failed(applyPartialConversion(top, target, std::move(patterns))))
     signalPassFailure();
@@ -518,10 +515,9 @@ std::unique_ptr<Pass> createExportTclPass() {
 namespace {
 struct PassCommon {
 protected:
-  hw::SymbolCache topLevelSyms;
+  SymbolCache topLevelSyms;
   DenseMap<MSFTModuleOp, SmallVector<InstanceOp, 1>> moduleInstantiations;
 
-  void populateSymbolCache(ModuleOp topMod);
   LogicalResult verifyInstances(ModuleOp topMod);
 
   // Find all the modules and use the partial order of the instantiation DAG
@@ -571,9 +567,8 @@ SmallVector<InstanceOp, 1> &PassCommon::updateInstances(
   for (InstanceOp inst : moduleInstantiations[mod]) {
     assert(inst->getParentOp());
     OpBuilder b(inst);
-    auto newInst =
-        b.create<InstanceOp>(inst.getLoc(), mod.getType().getResults(),
-                             inst.getOperands(), inst->getAttrs());
+    auto newInst = b.create<InstanceOp>(inst.getLoc(), mod.getResultTypes(),
+                                        inst.getOperands(), inst->getAttrs());
 
     SmallVector<Value> newOperands;
     getOperandsFunc(newInst, inst, newOperands);
@@ -622,18 +617,6 @@ void PassCommon::getAndSortModules(ModuleOp topMod,
       [&](MSFTModuleOp mod) { getAndSortModulesVisitor(mod, mods, modsSeen); });
 }
 
-/// Fill a symbol cache with all the top level symbols.
-void PassCommon::populateSymbolCache(mlir::ModuleOp mod) {
-  for (Operation &op : mod.getBody()->getOperations()) {
-    StringAttr symName = SymbolTable::getSymbolName(&op);
-    if (!symName)
-      continue;
-    // Add the symbol to the cache.
-    topLevelSyms.addDefinition(symName, &op);
-  }
-  topLevelSyms.freeze();
-}
-
 LogicalResult PassCommon::verifyInstances(mlir::ModuleOp mod) {
   WalkResult r = mod.walk([&](InstanceOp inst) {
     Operation *modOp = topLevelSyms.getDefinition(inst.moduleNameAttr());
@@ -675,7 +658,7 @@ private:
 void PartitionPass::runOnOperation() {
   ModuleOp outerMod = getOperation();
   ctxt = outerMod.getContext();
-  populateSymbolCache(outerMod);
+  topLevelSyms.addDefinitions(outerMod);
   if (failed(verifyInstances(outerMod))) {
     signalPassFailure();
     return;
@@ -890,7 +873,7 @@ static void setEntityName(Operation *op, Twine name) {
 }
 
 /// Try to get a "good" name for the given Value.
-static StringRef getValueName(Value v, const hw::SymbolCache &syms,
+static StringRef getValueName(Value v, const SymbolCache &syms,
                               std::string &buff) {
   Operation *defOp = v.getDefiningOp();
   if (auto inst = dyn_cast_or_null<InstanceOp>(defOp)) {
@@ -923,7 +906,7 @@ static StringRef getValueName(Value v, const hw::SymbolCache &syms,
 }
 
 /// Heuristics to get the output name.
-static StringRef getResultName(OpResult res, const hw::SymbolCache &syms,
+static StringRef getResultName(OpResult res, const SymbolCache &syms,
                                std::string &buff) {
 
   StringRef valName = getValueName(res, syms, buff);
@@ -939,7 +922,7 @@ static StringRef getResultName(OpResult res, const hw::SymbolCache &syms,
 }
 
 /// Heuristics to get the input name.
-static StringRef getOperandName(OpOperand &oper, const hw::SymbolCache &syms,
+static StringRef getOperandName(OpOperand &oper, const SymbolCache &syms,
                                 std::string &buff) {
   Operation *op = oper.getOwner();
   if (auto inst = dyn_cast<InstanceOp>(op)) {
@@ -1003,6 +986,7 @@ void PartitionPass::bubbleUpGlobalRefs(
     // previous node in the path must point to parentName.
     size_t opIndex = 0;
     bool found = false;
+    (void)found;
     for (; opIndex < oldPath.size(); ++opIndex) {
       auto oldNode = oldPath[opIndex].cast<hw::InnerRefAttr>();
       if (oldNode.getModule() == parentMod &&
@@ -1076,6 +1060,7 @@ void PartitionPass::pushDownGlobalRefs(
       }
     }
 
+    (void)found;
     assert(found);
 
     // If this path already points to the design partition, we are done.
@@ -1120,7 +1105,7 @@ static SmallVector<unsigned> makeSequentialRange(unsigned size) {
 
 void PartitionPass::bubbleUp(MSFTModuleOp mod, Block *partBlock) {
   auto *ctxt = mod.getContext();
-  FunctionType origType = mod.getType();
+  FunctionType origType = mod.getFunctionType();
   std::string nameBuffer;
 
   //*************
@@ -1335,7 +1320,7 @@ MSFTModuleOp PartitionPass::partition(DesignPartitionOp partOp,
       auto existingF = newInputMap.find(v);
       if (existingF == newInputMap.end()) {
         // If there's not an existing input, create one.
-        auto arg = partBlock->addArgument(v.getType());
+        auto arg = partBlock->addArgument(v.getType(), loc);
         oper.set(arg);
 
         newInputMap[v] = inputPorts.size();
@@ -1435,7 +1420,7 @@ struct WireCleanupPass : public WireCleanupBase<WireCleanupPass>, PassCommon {
 
 void WireCleanupPass::runOnOperation() {
   ModuleOp topMod = getOperation();
-  populateSymbolCache(topMod);
+  topLevelSyms.addDefinitions(topMod);
   if (failed(verifyInstances(topMod))) {
     signalPassFailure();
     return;
@@ -1475,7 +1460,7 @@ void PassCommon::dedupOutputs(MSFTModuleOp mod) {
   }
 
   mod.removePorts(llvm::BitVector(mod.getNumArguments()), outputPortsToRemove);
-  updateInstances(mod, makeSequentialRange(mod.getType().getNumResults()),
+  updateInstances(mod, makeSequentialRange(mod.getNumResults()),
                   [&](InstanceOp newInst, InstanceOp oldInst,
                       SmallVectorImpl<Value> &newOperands) {
                     // Operands don't change.
@@ -1659,6 +1644,143 @@ namespace circt {
 namespace msft {
 std::unique_ptr<Pass> createWireCleanupPass() {
   return std::make_unique<WireCleanupPass>();
+}
+} // namespace msft
+} // namespace circt
+
+//===----------------------------------------------------------------------===//
+// Lower MSFT constructs
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+struct LowerConstructsPass : public LowerConstructsBase<LowerConstructsPass>,
+                             PassCommon {
+  void runOnOperation() override;
+};
+} // anonymous namespace
+
+namespace {
+/// Lower MSFT's OutputOp to HW's.
+struct SystolicArrayOpLowering : public OpConversionPattern<SystolicArrayOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(SystolicArrayOp array, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    MLIRContext *ctxt = getContext();
+    Location loc = array.getLoc();
+    Block &peBlock = array.pe().front();
+    rewriter.setInsertionPointAfter(array);
+
+    // For the row broadcasts, break out the row values which must be broadcast
+    // to each PE.
+    hw::ArrayType rowInputs =
+        hw::type_cast<hw::ArrayType>(array.rowInputs().getType());
+    IntegerType rowIdxType = rewriter.getIntegerType(
+        std::max(1u, llvm::Log2_64_Ceil(rowInputs.getSize())));
+    SmallVector<Value> rowValues;
+    for (size_t rowNum = 0, numRows = rowInputs.getSize(); rowNum < numRows;
+         ++rowNum) {
+      Value rowNumVal =
+          rewriter.create<hw::ConstantOp>(loc, rowIdxType, rowNum);
+      auto rowValue =
+          rewriter.create<hw::ArrayGetOp>(loc, array.rowInputs(), rowNumVal);
+      rowValue->setAttr("sv.namehint",
+                        StringAttr::get(ctxt, "row_" + Twine(rowNum)));
+      rowValues.push_back(rowValue);
+    }
+
+    // For the column broadcasts, break out the column values which must be
+    // broadcast to each PE.
+    hw::ArrayType colInputs =
+        hw::type_cast<hw::ArrayType>(array.colInputs().getType());
+    IntegerType colIdxType = rewriter.getIntegerType(
+        std::max(1u, llvm::Log2_64_Ceil(colInputs.getSize())));
+    SmallVector<Value> colValues;
+    for (size_t colNum = 0, numCols = colInputs.getSize(); colNum < numCols;
+         ++colNum) {
+      Value colNumVal =
+          rewriter.create<hw::ConstantOp>(loc, colIdxType, colNum);
+      auto colValue =
+          rewriter.create<hw::ArrayGetOp>(loc, array.colInputs(), colNumVal);
+      colValue->setAttr("sv.namehint",
+                        StringAttr::get(ctxt, "col_" + Twine(colNum)));
+      colValues.push_back(colValue);
+    }
+
+    // Build the PE matrix.
+    SmallVector<Value> peOutputs;
+    for (size_t rowNum = 0, numRows = rowInputs.getSize(); rowNum < numRows;
+         ++rowNum) {
+      Value rowValue = rowValues[rowNum];
+      SmallVector<Value> colPEOutputs;
+      for (size_t colNum = 0, numCols = colInputs.getSize(); colNum < numCols;
+           ++colNum) {
+        Value colValue = colValues[colNum];
+        // Clone the PE block, substituting %row (arg 0) and %col (arg 1) for
+        // the corresponding row/column broadcast value.
+        // NOTE: the PE region is NOT a graph region so we don't have to deal
+        // with backedges.
+        BlockAndValueMapping mapper;
+        mapper.map(peBlock.getArgument(0), rowValue);
+        mapper.map(peBlock.getArgument(1), colValue);
+        for (Operation &peOperation : peBlock)
+          // If we see the output op (which should be the block terminator), add
+          // its operand to the output matrix.
+          if (auto outputOp = dyn_cast<PEOutputOp>(peOperation)) {
+            colPEOutputs.push_back(mapper.lookup(outputOp.output()));
+          } else {
+            Operation *clone = rewriter.clone(peOperation, mapper);
+
+            StringRef nameSource = "name";
+            auto name = clone->getAttrOfType<StringAttr>(nameSource);
+            if (!name) {
+              nameSource = "sv.namehint";
+              name = clone->getAttrOfType<StringAttr>(nameSource);
+            }
+            if (name)
+              clone->setAttr(nameSource,
+                             StringAttr::get(ctxt, name.getValue() + "_" +
+                                                       Twine(rowNum) + "_" +
+                                                       Twine(colNum)));
+          }
+      }
+      // Reverse the vector since ArrayCreateOp has the opposite ordering to C
+      // vectors.
+      std::reverse(colPEOutputs.begin(), colPEOutputs.end());
+      peOutputs.push_back(
+          rewriter.create<hw::ArrayCreateOp>(loc, colPEOutputs));
+    }
+
+    std::reverse(peOutputs.begin(), peOutputs.end());
+    rewriter.replaceOp(array,
+                       {rewriter.create<hw::ArrayCreateOp>(loc, peOutputs)});
+    return success();
+  }
+};
+} // anonymous namespace
+
+void LowerConstructsPass::runOnOperation() {
+  auto top = getOperation();
+  auto *ctxt = &getContext();
+
+  ConversionTarget target(*ctxt);
+  target.markUnknownOpDynamicallyLegal([](Operation *) { return true; });
+  target.addIllegalOp<SystolicArrayOp>();
+
+  RewritePatternSet patterns(ctxt);
+  patterns.insert<SystolicArrayOpLowering>(ctxt);
+
+  if (failed(mlir::applyPartialConversion(top, target, std::move(patterns))))
+    signalPassFailure();
+}
+
+namespace circt {
+namespace msft {
+std::unique_ptr<Pass> createLowerConstructsPass() {
+  return std::make_unique<LowerConstructsPass>();
 }
 } // namespace msft
 } // namespace circt

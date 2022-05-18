@@ -11,7 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
-#include "AnnotationDetails.h"
+#include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
@@ -19,9 +19,6 @@
 #include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/Operation.h"
 #include "llvm/ADT/TypeSwitch.h"
-
-using mlir::function_like_impl::getArgAttrDict;
-using mlir::function_like_impl::setAllArgAttrDicts;
 
 using namespace circt;
 using namespace firrtl;
@@ -535,6 +532,8 @@ void Annotation::removeMember(StringRef name) {
   setDict(DictionaryAttr::getWithSorted(dict.getContext(), attributes));
 }
 
+void Annotation::dump() { attr.dump(); }
+
 //===----------------------------------------------------------------------===//
 // AnnotationSetIterator
 //===----------------------------------------------------------------------===//
@@ -602,7 +601,7 @@ StringAttr OpAnnoTarget::getInnerSym(ModuleNamespace &moduleNamespace) const {
     // Try to come up with a reasonable name.
     StringRef name = "inner_sym";
     auto nameAttr = getOp()->getAttrOfType<StringAttr>("name");
-    if (nameAttr)
+    if (nameAttr && !nameAttr.getValue().empty())
       name = nameAttr.getValue();
     innerSym = StringAttr::get(context, moduleNamespace.newName(name));
     getOp()->setAttr("inner_sym", innerSym);
@@ -615,8 +614,7 @@ Attribute
 OpAnnoTarget::getNLAReference(ModuleNamespace &moduleNamespace) const {
   // If the op is a module, just return the module name.
   if (auto module = llvm::dyn_cast<FModuleLike>(getOp())) {
-    auto moduleName = module.moduleNameAttr();
-    assert(moduleName && "invalid NLA reference");
+    assert(module.moduleNameAttr() && "invalid NLA reference");
     return FlatSymbolRefAttr::get(module.moduleNameAttr());
   }
   // Return an inner-ref to the target.

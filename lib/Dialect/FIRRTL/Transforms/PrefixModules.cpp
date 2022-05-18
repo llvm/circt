@@ -10,11 +10,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "../AnnotationDetails.h"
 #include "PassDetails.h"
+#include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
+#include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
-#include "circt/Dialect/FIRRTL/InstanceGraph.h"
+#include "circt/Dialect/FIRRTL/NLATable.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Support/LLVM.h"
@@ -90,9 +91,11 @@ static StringRef getPrefix(Operation *module) {
 /// duplicated and each module will have one prefix applied.
 namespace {
 class PrefixModulesPass : public PrefixModulesBase<PrefixModulesPass> {
+  void removeDeadAnnotations(StringAttr moduleName, Operation *op);
   void renameModuleBody(std::string prefix, FModuleOp module);
   void renameModule(FModuleOp module);
   void renameExtModule(FExtModuleOp extModule);
+  void renameMemModule(FMemModuleOp memModule);
   void runOnOperation() override;
 
   /// Mutate Grand Central Interface definitions (an Annotation on the circuit)
@@ -104,36 +107,29 @@ class PrefixModulesPass : public PrefixModulesBase<PrefixModulesPass> {
   /// This is a map from a module name to new prefixes to be applied.
   PrefixMap prefixMap;
 
+  DenseMap<StringRef, uint32_t> prefixIdMap;
+
   /// A map of Grand Central interface ID to prefix.
   DenseMap<Attribute, std::string> interfacePrefixMap;
 
   /// Cached instance graph analysis.
   InstanceGraph *instanceGraph = nullptr;
 
-  /// Map of symbol name to NonLocalAnchor op.
-  llvm::StringMap<Operation *> nlaMap;
-
-  /// Map of root module name to NonLocalAnchor op.
-  DenseMap<Attribute, SmallVector<Operation *>> nlaRootMap;
+  /// Cached nla table analysis.
+  NLATable *nlaTable = nullptr;
 
   /// Boolean keeping track of any name changes.
   bool anythingChanged = false;
 };
 } // namespace
 
-/// Applies the prefix to the module.  This will update the required prefixes of
-/// any referenced module in the prefix map.
-void PrefixModulesPass::renameModuleBody(std::string prefix, FModuleOp module) {
-  auto *context = module.getContext();
-
-  // If we are renaming the body of this module, we need to mark that we have
-  // changed the IR. If we are prefixing with the empty string, then nothing has
-  // changed yet.
-  if (!prefix.empty())
-    anythingChanged = true;
-  StringAttr thisMod = module.getNameAttr();
+/// When a module is cloned, it carries with it all non-local annotations. This
+/// function will remove all non-local annotations from the clone with a path
+/// that doesn't match.
+void PrefixModulesPass::removeDeadAnnotations(StringAttr moduleName,
+                                              Operation *op) {
   // A predicate to check if an annotation can be removed. If there is a
-  // refernece to a NLA, the NLA should either contain this module in its path,
+  // reference to a NLA, the NLA should either contain this module in its path,
   // if its an InstanceOp. Else, it must exist at the leaf of the NLA. Otherwise
   // the NLA reference can be removed, since its a spurious annotation, result
   // of cloning the original module.
@@ -141,38 +137,63 @@ void PrefixModulesPass::renameModuleBody(std::string prefix, FModuleOp module) {
     auto nla = anno.getMember("circt.nonlocal");
     if (!nla)
       return false;
-    auto nlaName = nla.cast<FlatSymbolRefAttr>().getValue();
-    auto nlaIter = nlaMap.find(nlaName);
-    if (nlaIter == nlaMap.end()) {
-      op->emitError("cannot find NonLocalAnchor :" + nlaName);
-      return true;
+    auto nlaName = nla.cast<FlatSymbolRefAttr>().getAttr();
+    auto nlaOp = nlaTable->getNLA(nlaName);
+    if (!nlaOp) {
+      op->emitError("cannot find NonLocalAnchor :" + nlaName.getValue());
+      signalPassFailure();
+      return false;
     }
 
-    auto nlaOp = dyn_cast<NonLocalAnchor>(nlaIter->second);
     bool isValid = false;
     if (isa<InstanceOp>(op))
-      isValid = nlaOp.hasModule(thisMod);
+      isValid = nlaOp.hasModule(moduleName);
     else
-      isValid = nlaOp.leafMod() == thisMod;
+      isValid = nlaOp.leafMod() == moduleName;
     return !isValid;
   };
+  AnnotationSet::removePortAnnotations(
+      op, std::bind(canRemoveAnno, std::placeholders::_2, op));
+  AnnotationSet::removeAnnotations(
+      op, std::bind(canRemoveAnno, std::placeholders::_1, op));
+}
+
+/// Applies the prefix to the module.  This will update the required prefixes of
+/// any referenced module in the prefix map.
+void PrefixModulesPass::renameModuleBody(std::string prefix, FModuleOp module) {
+  auto *context = module.getContext();
+  uint32_t groupID = 0;
+  auto iter = prefixIdMap.find(prefix);
+  if (iter == prefixIdMap.end()) {
+    groupID = prefixIdMap.size() + 1;
+    prefixIdMap[prefix] = groupID;
+  } else
+    groupID = iter->getSecond();
+
+  // If we are renaming the body of this module, we need to mark that we have
+  // changed the IR. If we are prefixing with the empty string, then nothing has
+  // changed yet.
+  if (!prefix.empty())
+    anythingChanged = true;
+  StringAttr thisMod = module.getNameAttr();
+
   // Remove spurious NLA references from the module ports and the module itself.
   // Some of the NLA references become invalid after a module is cloned, based
-  // on the instnace.
-  AnnotationSet::removePortAnnotations(
-      module, std::bind(canRemoveAnno, std::placeholders::_2, module));
-  AnnotationSet::removeAnnotations(
-      module, std::bind(canRemoveAnno, std::placeholders::_1, module));
+  // on the instance.
+  removeDeadAnnotations(thisMod, module);
+
   module.body().walk([&](Operation *op) {
     // Remove spurious NLA references either on a leaf op, or the InstanceOp.
-    AnnotationSet::removeAnnotations(
-        op, std::bind(canRemoveAnno, std::placeholders::_1, op));
+    removeDeadAnnotations(thisMod, op);
+
     if (auto memOp = dyn_cast<MemOp>(op)) {
       // Memories will be turned into modules and should be prefixed.
       memOp.nameAttr(StringAttr::get(context, prefix + memOp.name()));
+      memOp.groupIDAttr(IntegerAttr::get(
+          IntegerType::get(context, 32, IntegerType::Unsigned), groupID));
     } else if (auto instanceOp = dyn_cast<InstanceOp>(op)) {
-      auto target =
-          dyn_cast<FModuleLike>(instanceGraph->getReferencedModule(instanceOp));
+      auto target = dyn_cast<FModuleLike>(
+          *instanceGraph->getReferencedModule(instanceOp));
 
       // Skip all external modules, unless one of the following conditions
       // is true:
@@ -191,22 +212,17 @@ void PrefixModulesPass::renameModuleBody(std::string prefix, FModuleOp module) {
 
       // Fixup this instance op to use the prefixed module name.  Note that the
       // referenced FModuleOp will be renamed later.
-      auto newTarget = (prefix + getPrefix(target) + target.moduleName()).str();
+      auto newTarget = StringAttr::get(context, prefix + getPrefix(target) +
+                                                    target.moduleName());
       AnnotationSet instAnnos(instanceOp);
       // If the instance has NonLocalAnchor, then update its module name also.
       // There can be multiple NonLocalAnchors attached to the instance op.
 
+      StringAttr oldModName = instanceOp.moduleNameAttr().getAttr();
       for (Annotation anno : instAnnos) {
         if (auto nla = anno.getMember("circt.nonlocal")) {
-          auto nlaName = nla.cast<FlatSymbolRefAttr>().getValue();
-          auto nlaIter = nlaMap.find(nlaName);
-          if (nlaIter == nlaMap.end())
-            instanceOp.emitError("cannot find NonLocalAnchor :" + nlaName);
-          else {
-            auto nlaOp = dyn_cast<NonLocalAnchor>(nlaIter->second);
-            StringAttr oldModName = instanceOp.moduleNameAttr().getAttr();
-            nlaOp.updateModule(oldModName, StringAttr::get(context, newTarget));
-          }
+          auto nlaName = nla.cast<FlatSymbolRefAttr>().getAttr();
+          nlaTable->updateModuleInNLA(nlaName, oldModName, newTarget);
         }
       }
 
@@ -244,10 +260,9 @@ void PrefixModulesPass::renameModule(FModuleOp module) {
   auto &firstPrefix = prefixes.front();
 
   auto fixNLAsRootedAt = [&](StringAttr oldModName, StringAttr newModuleName) {
-    auto iter = nlaRootMap.find(oldModName);
-    if (iter != nlaRootMap.end())
-      for (auto &n : iter->second)
-        cast<NonLocalAnchor>(n).updateModule(oldModName, newModuleName);
+    for (auto n : nlaTable->lookup(oldModName))
+      if (n.root() == oldModName)
+        n.updateModule(oldModName, newModuleName);
   };
   // Rename the module for each required prefix. This will clone the module
   // once for each prefix but the first.
@@ -344,50 +359,27 @@ void PrefixModulesPass::renameExtModule(FExtModuleOp extModule) {
   applyPrefixToNameAndDefName(extModule, prefixes.front());
 }
 
-void PrefixModulesPass::runOnOperation() {
-  auto *context = &getContext();
-  instanceGraph = &getAnalysis<InstanceGraph>();
-  auto circuitOp = getOperation();
+/// Apply prefixes from the `prefixMap` to a memory module.
+void PrefixModulesPass::renameMemModule(FMemModuleOp memModule) {
+  // Lookup prefixes for this module.  If none exist, bail out.
+  auto &prefixes = prefixMap[memModule.getName()];
+  if (prefixes.empty())
+    return;
 
-  // Record all the NLA ops in the circt.
-  for (auto nla : circuitOp.body().getOps<NonLocalAnchor>()) {
-    nlaMap[nla.sym_name()] = nla;
-    nlaRootMap[nla.root()].push_back(nla);
+  OpBuilder builder(memModule);
+  builder.setInsertionPointAfter(memModule);
+
+  // Duplicate the external module if there is more than one prefix.
+  auto originalName = memModule.getName();
+  for (auto &prefix : llvm::drop_begin(prefixes)) {
+    auto duplicate = cast<FMemModuleOp>(builder.clone(*memModule));
+    duplicate.setName((prefix + originalName).str());
+    removeDeadAnnotations(duplicate.getNameAttr(), duplicate);
   }
 
-  // If the main module is prefixed, we have to update the CircuitOp.
-  auto mainModule = instanceGraph->getTopLevelModule();
-  auto prefix = getPrefix(mainModule);
-  auto oldModName = mainModule.moduleNameAttr();
-  if (!prefix.empty()) {
-    auto newMainModuleName = ((prefix + circuitOp.name()).str());
-    circuitOp.nameAttr(StringAttr::get(context, newMainModuleName));
-    // Now update all the NLAs that have the top level module symbol.
-    for (auto &n : nlaRootMap[oldModName])
-      cast<NonLocalAnchor>(n).updateModule(
-          oldModName, StringAttr::get(context, newMainModuleName));
-  }
-  nlaRootMap.erase(oldModName);
-
-  // Walk all Modules in a top-down order.  For each module, look at the list of
-  // required prefixes to be applied.
-  DenseSet<InstanceGraphNode *> visited;
-  for (auto *current : *instanceGraph) {
-    for (auto &node : llvm::inverse_post_order_ext(current, visited)) {
-      if (auto module = dyn_cast<FModuleOp>(node->getModule()))
-        renameModule(module);
-      if (auto extModule = dyn_cast<FExtModuleOp>(node->getModule()))
-        renameExtModule(extModule);
-    }
-  }
-
-  // Update any interface definitions if needed.
-  prefixGrandCentralInterfaces();
-
-  prefixMap.clear();
-  interfacePrefixMap.clear();
-  if (!anythingChanged)
-    markAllAnalysesPreserved();
+  // Update the original module with a new prefix.
+  memModule.setName((prefixes.front() + originalName).str());
+  removeDeadAnnotations(memModule.getNameAttr(), memModule);
 }
 
 /// Mutate circuit-level annotations to add prefix information to Grand Central
@@ -431,6 +423,50 @@ void PrefixModulesPass::prefixGrandCentralInterfaces() {
   // Overwrite the old circuit annotation with the new one created here.
   AnnotationSet(newCircuitAnnotations, builder.getContext())
       .applyToOperation(circuit);
+}
+
+void PrefixModulesPass::runOnOperation() {
+  auto *context = &getContext();
+  instanceGraph = &getAnalysis<InstanceGraph>();
+  nlaTable = &getAnalysis<NLATable>();
+  auto circuitOp = getOperation();
+
+  // If the main module is prefixed, we have to update the CircuitOp.
+  auto mainModule = instanceGraph->getTopLevelModule();
+  auto prefix = getPrefix(mainModule);
+  if (!prefix.empty()) {
+    auto oldModName = mainModule.moduleNameAttr();
+    auto newMainModuleName =
+        StringAttr::get(context, (prefix + circuitOp.name()).str());
+    circuitOp.nameAttr(newMainModuleName);
+
+    // Now update all the NLAs that have the top level module symbol.
+    for (auto n : nlaTable->lookup(oldModName))
+      if (n.root() == oldModName)
+        nlaTable->updateModuleInNLA(n, oldModName, newMainModuleName);
+  }
+
+  // Walk all Modules in a top-down order.  For each module, look at the list of
+  // required prefixes to be applied.
+  DenseSet<InstanceGraphNode *> visited;
+  for (auto *current : *instanceGraph) {
+    for (auto &node : llvm::inverse_post_order_ext(current, visited)) {
+      if (auto module = dyn_cast<FModuleOp>(*node->getModule()))
+        renameModule(module);
+      if (auto extModule = dyn_cast<FExtModuleOp>(*node->getModule()))
+        renameExtModule(extModule);
+      if (auto memModule = dyn_cast<FMemModuleOp>(*node->getModule()))
+        renameMemModule(memModule);
+    }
+  }
+
+  // Update any interface definitions if needed.
+  prefixGrandCentralInterfaces();
+
+  prefixMap.clear();
+  interfacePrefixMap.clear();
+  if (!anythingChanged)
+    markAllAnalysesPreserved();
 }
 
 std::unique_ptr<mlir::Pass> circt::firrtl::createPrefixModulesPass() {

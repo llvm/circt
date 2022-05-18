@@ -22,7 +22,8 @@ namespace circt {
 namespace handshake {
 bool simulate(llvm::StringRef toplevelFunction,
               llvm::ArrayRef<std::string> inputArgs,
-              mlir::OwningModuleRef &module, mlir::MLIRContext &context);
+              mlir::OwningOpRef<mlir::ModuleOp> &module,
+              mlir::MLIRContext &context);
 } // namespace handshake
 } // namespace circt
 

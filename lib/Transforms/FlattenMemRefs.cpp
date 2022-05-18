@@ -14,8 +14,9 @@
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/LLVMCommon/Pattern.h"
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
-#include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/BuiltinDialect.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -34,7 +35,7 @@ static bool isUniDimensional(MemRefType memref) {
 /// A struct for maintaining function declarations which needs to be rewritten,
 /// if they contain memref arguments that was flattened.
 struct FunctionRewrite {
-  FuncOp op;
+  func::FuncOp op;
   FunctionType type;
 };
 
@@ -144,38 +145,39 @@ struct AllocOpConversion : public OpConversionPattern<memref::AllocOp> {
   }
 };
 
-struct ReturnOpConversion : public OpConversionPattern<mlir::ReturnOp> {
+struct ReturnOpConversion : public OpConversionPattern<func::ReturnOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(mlir::ReturnOp op, OpAdaptor adaptor,
+  matchAndRewrite(func::ReturnOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<mlir::ReturnOp>(op, adaptor.operands());
+    rewriter.replaceOpWithNewOp<func::ReturnOp>(op, adaptor.operands());
     return success();
   }
 };
 
-struct CondBranchOpConversion : public OpConversionPattern<mlir::CondBranchOp> {
+struct CondBranchOpConversion
+    : public OpConversionPattern<mlir::cf::CondBranchOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(mlir::CondBranchOp op, OpAdaptor adaptor,
+  matchAndRewrite(mlir::cf::CondBranchOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<mlir::CondBranchOp>(
+    rewriter.replaceOpWithNewOp<mlir::cf::CondBranchOp>(
         op, adaptor.getCondition(), adaptor.getTrueDestOperands(),
         adaptor.getFalseDestOperands(), op.getTrueDest(), op.getFalseDest());
     return success();
   }
 };
 
-struct BranchOpConversion : public OpConversionPattern<mlir::BranchOp> {
+struct BranchOpConversion : public OpConversionPattern<mlir::cf::BranchOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(mlir::BranchOp op, OpAdaptor adaptor,
+  matchAndRewrite(mlir::cf::BranchOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<mlir::BranchOp>(op, op.getDest(),
-                                                adaptor.getDestOperands());
+    rewriter.replaceOpWithNewOp<mlir::cf::BranchOp>(op, op.getDest(),
+                                                    adaptor.getDestOperands());
     return success();
   }
 };
@@ -183,19 +185,19 @@ struct BranchOpConversion : public OpConversionPattern<mlir::BranchOp> {
 // Rewrites a call op signature to flattened types. If rewriteFunctions is set,
 // will also replace the callee with a private definition of the called
 // function of the updated signature.
-struct CallOpConversion : public OpConversionPattern<mlir::CallOp> {
+struct CallOpConversion : public OpConversionPattern<func::CallOp> {
   CallOpConversion(TypeConverter &typeConverter, MLIRContext *context,
                    bool rewriteFunctions = false)
       : OpConversionPattern(typeConverter, context),
         rewriteFunctions(rewriteFunctions) {}
 
   LogicalResult
-  matchAndRewrite(mlir::CallOp op, OpAdaptor adaptor,
+  matchAndRewrite(func::CallOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     llvm::SmallVector<Type> convResTypes;
     if (typeConverter->convertTypes(op.getResultTypes(), convResTypes).failed())
       return failure();
-    auto newCallOp = rewriter.replaceOpWithNewOp<mlir::CallOp>(
+    auto newCallOp = rewriter.replaceOpWithNewOp<func::CallOp>(
         op, adaptor.getCallee(), convResTypes, adaptor.getOperands());
 
     if (!rewriteFunctions)
@@ -204,17 +206,17 @@ struct CallOpConversion : public OpConversionPattern<mlir::CallOp> {
     // Override any definition corresponding to the updated signature.
     // It is up to users of this pass to define how these rewritten functions
     // are to be implemented.
-    rewriter.setInsertionPoint(op->getParentOfType<FuncOp>());
+    rewriter.setInsertionPoint(op->getParentOfType<func::FuncOp>());
     auto *calledFunction = dyn_cast<CallOpInterface>(*op).resolveCallable();
     FunctionType funcType = FunctionType::get(
         op.getContext(), newCallOp.getOperandTypes(), convResTypes);
-    FuncOp newFuncOp;
+    func::FuncOp newFuncOp;
     if (calledFunction)
-      newFuncOp = rewriter.replaceOpWithNewOp<FuncOp>(calledFunction,
-                                                      op.getCallee(), funcType);
+      newFuncOp = rewriter.replaceOpWithNewOp<func::FuncOp>(
+          calledFunction, op.getCallee(), funcType);
     else
       newFuncOp =
-          rewriter.create<FuncOp>(op.getLoc(), op.getCallee(), funcType);
+          rewriter.create<func::FuncOp>(op.getLoc(), op.getCallee(), funcType);
     newFuncOp.setVisibility(SymbolTable::Visibility::Private);
 
     return success();
@@ -241,22 +243,21 @@ static void populateFlattenMemRefsLegality(ConversionTarget &target) {
   target.addDynamicallyLegalOp<memref::LoadOp>(
       [](memref::LoadOp op) { return op.getIndices().size() == 1; });
 
-  addGenericLegalityConstraint<mlir::CondBranchOp>(target);
-  addGenericLegalityConstraint<mlir::BranchOp>(target);
-  addGenericLegalityConstraint<mlir::CallOp>(target);
-  addGenericLegalityConstraint<mlir::ReturnOp>(target);
+  addGenericLegalityConstraint<mlir::cf::CondBranchOp>(target);
+  addGenericLegalityConstraint<mlir::cf::BranchOp>(target);
+  addGenericLegalityConstraint<func::CallOp>(target);
+  addGenericLegalityConstraint<func::ReturnOp>(target);
 
-  target.addDynamicallyLegalOp<mlir::FuncOp>([](mlir::FuncOp op) {
+  target.addDynamicallyLegalOp<func::FuncOp>([](func::FuncOp op) {
     auto argsConverted = llvm::none_of(op.getBlocks(), [](auto &block) {
       return hasMultiDimMemRef(block.getArguments());
     });
 
-    auto resultsConverted =
-        llvm::all_of(op.getType().getResults(), [](Type type) {
-          if (auto memref = type.dyn_cast<MemRefType>())
-            return isUniDimensional(memref);
-          return true;
-        });
+    auto resultsConverted = llvm::all_of(op.getResultTypes(), [](Type type) {
+      if (auto memref = type.dyn_cast<MemRefType>())
+        return isUniDimensional(memref);
+      return true;
+    });
 
     return argsConverted && resultsConverted;
   });
@@ -310,7 +311,8 @@ public:
     patterns.add<LoadOpConversion, StoreOpConversion, AllocOpConversion,
                  ReturnOpConversion, CondBranchOpConversion, BranchOpConversion,
                  CallOpConversion>(typeConverter, ctx);
-    populateFunctionLikeTypeConversionPattern<FuncOp>(patterns, typeConverter);
+    populateFunctionOpInterfaceTypeConversionPattern<func::FuncOp>(
+        patterns, typeConverter);
 
     ConversionTarget target(*ctx);
     populateFlattenMemRefsLegality(target);
@@ -343,7 +345,8 @@ public:
 
     ConversionTarget target(*ctx);
     target.addLegalDialect<memref::MemRefDialect, mlir::BuiltinDialect>();
-    addGenericLegalityConstraint<mlir::CallOp>(target);
+    addGenericLegalityConstraint<func::CallOp>(target);
+    addGenericLegalityConstraint<func::FuncOp>(target);
 
     // Add a target materializer to handle memory flattening through
     // memref.subview operations.

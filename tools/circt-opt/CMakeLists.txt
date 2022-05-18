@@ -19,8 +19,10 @@ target_link_libraries(circt-opt
   CIRCTFIRRTLToHW
   CIRCTFIRRTLTransforms
   CIRCTFSM
+  CIRCTFSMTransforms
   CIRCTHandshake
   CIRCTHandshakeToFIRRTL
+  CIRCTHandshakeToHW
   CIRCTHandshakeTransforms
   CIRCTLLHD
   CIRCTLLHDToLLVM
@@ -30,6 +32,7 @@ target_link_libraries(circt-opt
   CIRCTMSFT
   CIRCTHW
   CIRCTHWToLLHD
+  CIRCTHWTransforms
   CIRCTSCFToCalyx
   CIRCTScheduling
   CIRCTSchedulingTestPasses
@@ -47,7 +50,7 @@ target_link_libraries(circt-opt
   MLIRMemRef
   MLIROptLib
   MLIRParser
-  MLIRStandard
+  MLIRFunc
   MLIRSupport
   MLIRTransforms
   MLIRSCF

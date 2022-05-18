@@ -31,6 +31,15 @@ LoweringOptions::LoweringOptions(mlir::ModuleOp module) : LoweringOptions() {
   parseFromAttribute(module);
 }
 
+static Optional<LoweringOptions::LocationInfoStyle>
+parseLocationInfoStyle(StringRef option) {
+  return llvm::StringSwitch<llvm::Optional<LoweringOptions::LocationInfoStyle>>(
+             option)
+      .Case("plain", LoweringOptions::Plain)
+      .Case("wrapInAtSquareBracket", LoweringOptions::WrapInAtSquareBracket)
+      .Default(llvm::None);
+}
+
 void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
   while (!text.empty()) {
     // Remove the first option from the text.
@@ -49,26 +58,38 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
       disallowLocalVariables = true;
     } else if (option == "verifLabels") {
       enforceVerifLabels = true;
-    } else if (option.startswith("emittedLineLength=")) {
-      option = option.drop_front(strlen("emittedLineLength="));
+    } else if (option.consume_front("emittedLineLength=")) {
       if (option.getAsInteger(10, emittedLineLength)) {
         errorHandler("expected integer source width");
         emittedLineLength = DEFAULT_LINE_LENGTH;
       }
-    } else if (option.startswith("maximumNumberOfTokensPerExpression=")) {
-      option = option.drop_front(strlen("maximumNumberOfTokensPerExpression="));
-      if (option.getAsInteger(10, maximumNumberOfTokensPerExpression)) {
+    } else if (option == "explicitBitcastAddMul") {
+      explicitBitcastAddMul = true;
+    } else if (option == "emitReplicatedOpsToHeader") {
+      emitReplicatedOpsToHeader = true;
+    } else if (option.consume_front("maximumNumberOfTermsPerExpression=")) {
+      if (option.getAsInteger(10, maximumNumberOfTermsPerExpression)) {
         errorHandler("expected integer source width");
-        maximumNumberOfTokensPerExpression = DEFAULT_TOKEN_NUMBER;
+        maximumNumberOfTermsPerExpression = DEFAULT_TERM_LIMIT;
       }
+    } else if (option.consume_front("maximumNumberOfTermsInConcat=")) {
+      if (option.getAsInteger(10, maximumNumberOfTermsInConcat)) {
+        errorHandler("expected integer source width");
+        maximumNumberOfTermsInConcat = DEFAULT_CONCAT_TERM_LIMIT;
+      }
+    } else if (option.consume_front("locationInfoStyle=")) {
+      if (auto style = parseLocationInfoStyle(option)) {
+        locationInfoStyle = *style;
+      } else {
+        errorHandler("expected 'plain' or 'wrapInAtSquareBracket'");
+      }
+    } else if (option == "disallowPortDeclSharing") {
+      disallowPortDeclSharing = true;
     } else {
       errorHandler(llvm::Twine("unknown style option \'") + option + "\'");
       // We continue parsing options after a failure.
     }
   }
-  if (maximumNumberOfTokensPerExpression < emittedLineLength)
-    errorHandler("maximumNumberOfTokensPerExpression must be equal or larger "
-                 "than emittedLineLength");
 }
 
 std::string LoweringOptions::toString() const {
@@ -84,12 +105,23 @@ std::string LoweringOptions::toString() const {
     options += "disallowLocalVariables,";
   if (enforceVerifLabels)
     options += "verifLabels,";
+  if (explicitBitcastAddMul)
+    options += "explicitBitcastAddMul,";
+  if (emitReplicatedOpsToHeader)
+    options += "emitReplicatedOpsToHeader,";
+  if (locationInfoStyle == LocationInfoStyle::WrapInAtSquareBracket)
+    options += "locationInfoStyle=wrapInAtSquareBracket,";
+  if (disallowPortDeclSharing)
+    options += "disallowPortDeclSharing,";
 
   if (emittedLineLength != DEFAULT_LINE_LENGTH)
     options += "emittedLineLength=" + std::to_string(emittedLineLength) + ',';
-  if (maximumNumberOfTokensPerExpression != DEFAULT_TOKEN_NUMBER)
-    options += "maximumNumberOfTokensPerExpression=" +
-               std::to_string(maximumNumberOfTokensPerExpression) + ',';
+  if (maximumNumberOfTermsPerExpression != DEFAULT_TERM_LIMIT)
+    options += "maximumNumberOfTermsPerExpression=" +
+               std::to_string(maximumNumberOfTermsPerExpression) + ',';
+  if (maximumNumberOfTermsInConcat != DEFAULT_CONCAT_TERM_LIMIT)
+    options += "maximumNumberOfTermsInConcat=" +
+               std::to_string(maximumNumberOfTermsInConcat) + ',';
 
   // Remove a trailing comma if present.
   if (!options.empty()) {
@@ -142,7 +174,11 @@ struct LoweringCLOptions {
           "Style options.  Valid flags include: alwaysFF, "
           "noAlwaysComb, exprInEventControl, disallowPackedArrays, "
           "disallowLocalVariables, verifLabels, emittedLineLength=<n>, "
-          "maximumNumberOfTokensPerExpression=<n>"),
+          "maximumNumberOfTermsPerExpression=<n>, "
+          "maximumNumberOfTermsInConcat=<n>, explicitBitcastAddMul, "
+          "emitReplicatedOpsToHeader, "
+          "locationInfoStyle={plain,wrapInAtSquareBracket}, "
+          "disallowPortDeclSharing"),
       llvm::cl::value_desc("option")};
 };
 } // namespace

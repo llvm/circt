@@ -10,7 +10,7 @@
 // CHECK:           %[[VAL_6:.*]] = br %[[VAL_4]]#1 : none
 // CHECK:           %[[VAL_7:.*]] = br %[[VAL_5]] : index
 // CHECK:           %[[VAL_8:.*]], %[[VAL_9:.*]] = control_merge %[[VAL_6]] : none
-// CHECK:           %[[VAL_10:.*]] = buffer [1] %[[VAL_11:.*]] {initValues = [0], sequential = true} : i1
+// CHECK:           %[[VAL_10:.*]] = buffer [1] seq %[[VAL_11:.*]] {initValues = [0]} : i1
 // CHECK:           %[[VAL_12:.*]]:2 = fork [2] %[[VAL_10]] : i1
 // CHECK:           %[[VAL_13:.*]] = mux %[[VAL_12]]#1 {{\[}}%[[VAL_8]], %[[VAL_14:.*]]] : i1, none
 // CHECK:           %[[VAL_15:.*]] = mux %[[VAL_9]] {{\[}}%[[VAL_7]]] : index, index
@@ -36,19 +36,19 @@
 // CHECK:           sink %[[VAL_32]] : index
 // CHECK:           return %[[VAL_31]] : none
 // CHECK:         }
-func @simple_loop() {
+func.func @simple_loop() {
 ^bb0:
-  br ^bb1
+  cf.br ^bb1
 ^bb1:	// pred: ^bb0
   %c42 = arith.constant 42 : index
-  br ^bb2
+  cf.br ^bb2
 ^bb2:	// 2 preds: ^bb1, ^bb3
   %1 = arith.cmpi slt, %c42, %c42 : index
-  cond_br %1, ^bb3, ^bb4
+  cf.cond_br %1, ^bb3, ^bb4
 ^bb3:	// pred: ^bb2
   %c52 = arith.constant 52 : index
   %c62 = arith.constant 62 : index
-  br ^bb2
+  cf.br ^bb2
 ^bb4:	// pred: ^bb2
   return
 }

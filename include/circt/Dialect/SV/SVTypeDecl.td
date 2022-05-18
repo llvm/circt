@@ -10,6 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "mlir/IR/EnumAttr.td"
+
 //===----------------------------------------------------------------------===//
 // Interface operations
 //===----------------------------------------------------------------------===//
@@ -28,8 +30,8 @@ def InterfaceOp : SVOp<"interface",
     ```mlir
     sv.interface @myinterface {
       sv.interface.signal @data : i32
-      sv.interface.modport @input_port ("input" @data)
-      sv.interface.modport @output_port ("output" @data)
+      sv.interface.modport @input_port (input @data)
+      sv.interface.modport @output_port (output @data)
     }
     ```
   }];
@@ -106,13 +108,18 @@ def InterfaceSignalOp : SVOp<"interface.signal",
   ];
 }
 
-def ModportDirectionInput : StrEnumAttrCase<"input">;
-def ModportDirectionOutput : StrEnumAttrCase<"output">;
-def ModportDirectionInOut : StrEnumAttrCase<"inout">;
+def ModportDirectionInput : I32EnumAttrCase<"input", 0>;
+def ModportDirectionOutput : I32EnumAttrCase<"output", 1>;
+def ModportDirectionInOut : I32EnumAttrCase<"inout", 2>;
 
-def ModportDirectionAttr : StrEnumAttr<"ModportDirectionAttr",
+def ModportDirection : I32EnumAttr<"ModportDirection",
   "Defines direction in a modport",
-  [ModportDirectionInput, ModportDirectionOutput, ModportDirectionInOut]>;
+  [ModportDirectionInput, ModportDirectionOutput, ModportDirectionInOut]> {
+  let genSpecializedAttr = 0;
+}
+
+def ModportDirectionAttr : EnumAttr<SVDialect, ModportDirection,
+  "modport_direction">;
 
 def ModportDirectionField : StructFieldAttr<"direction", ModportDirectionAttr>;
 
@@ -137,8 +144,8 @@ def InterfaceModportOp : SVOp<"interface.modport",
     Example:
 
     ```mlir
-    sv.interface.modport @input_port ("input" @data)
-    sv.interface.modport @output_port ("output" @data)
+    sv.interface.modport @input_port (input @data)
+    sv.interface.modport @output_port (output @data)
     ```
   }];
 
@@ -190,7 +197,7 @@ def ModportType : SVType<"Modport"> {
 // Other operations
 //===----------------------------------------------------------------------===//
 
-def InterfaceInstanceOp : SVOp<"interface.instance", [Symbol]> {
+def InterfaceInstanceOp : SVOp<"interface.instance"> {
   let summary = "Instantiate an interface";
   let description = [{
     Use this to declare an instance of an interface:
@@ -200,11 +207,13 @@ def InterfaceInstanceOp : SVOp<"interface.instance", [Symbol]> {
   }];
 
   let arguments = (ins StrAttr:$name,
-                       OptionalAttr<SymbolNameAttr>:$sym_name);
+                       OptionalAttr<SymbolNameAttr>:$inner_sym);
   let results = (outs InterfaceType : $result);
 
-  let assemblyFormat =
-    "(`sym` $sym_name^)? custom<ImplicitSSAName>(attr-dict) `:` qualified(type($result))";
+  let assemblyFormat = [{
+    (`sym` $inner_sym^)? custom<ImplicitSSAName>(attr-dict)
+    `:` qualified(type($result))
+  }];
 
   let builders = [
     OpBuilder<(ins "::mlir::Type":$result), [{
@@ -212,23 +221,23 @@ def InterfaceInstanceOp : SVOp<"interface.instance", [Symbol]> {
     }]>
   ];
 
-  let verifier = "return ::verifyInterfaceInstanceOp(*this);";
+  let hasVerifier = 1;
 
   let extraClassDeclaration = [{
     InterfaceType getInterfaceType() { return getType().cast<InterfaceType>(); }
 
     /// Lookup the interface that this is an instance of.  This returns null on
     /// invalid IR.
-    Operation *getReferencedInterface(const hw::SymbolCache *cache = nullptr);
+    Operation *getReferencedInterface(const hw::HWSymbolCache *cache = nullptr);
 
-    
+
     //===------------------------------------------------------------------===//
     // SymbolOpInterface Methods
     //===------------------------------------------------------------------===//
 
     /// An InstanceOp may optionally define a symbol.
     bool isOptionalSymbol() { return true; }
-    
+
   }];
 }
 
@@ -251,7 +260,7 @@ def GetModportOp: SVOp<"modport.get", [NoSideEffect]> {
   let assemblyFormat =
     "$iface $field attr-dict `:` qualified(type($iface)) `->` qualified(type($result))";
 
-  let verifier = "return ::verifyGetModportOp(*this);";
+  let hasVerifier = 1;
 
   let builders = [
     OpBuilder<(ins "Value":$value, "::llvm::StringRef":$field)>
@@ -260,7 +269,7 @@ def GetModportOp: SVOp<"modport.get", [NoSideEffect]> {
   let extraClassDeclaration = [{
     /// Lookup the op for the modport declaration.  This returns null on invalid
     /// IR.
-    InterfaceModportOp getReferencedDecl(const hw::SymbolCache &cache);
+    InterfaceModportOp getReferencedDecl(const hw::HWSymbolCache &cache);
   }];
 }
 
@@ -289,7 +298,7 @@ def AssignInterfaceSignalOp : SVOp<"interface.signal.assign", []> {
         `=` $rhs attr-dict `:` qualified(type($rhs))
   }];
 
-  let verifier = "return ::verifySignalExists(iface(), signalNameAttr());";
+  let hasVerifier = 1;
 }
 
 def ReadInterfaceSignalOp : SVOp<"interface.signal.read", [NoSideEffect]> {
@@ -324,8 +333,8 @@ def ReadInterfaceSignalOp : SVOp<"interface.signal.read", [NoSideEffect]> {
   let extraClassDeclaration = [{
     /// Lookup the op for the signal declaration.  This returns null on invalid
     /// IR.
-    InterfaceSignalOp getReferencedDecl(const hw::SymbolCache &cache);
+    InterfaceSignalOp getReferencedDecl(const hw::HWSymbolCache &cache);
   }];
 
-  let verifier = "return ::verifySignalExists(iface(), signalNameAttr());";
+  let hasVerifier = 1;
 }

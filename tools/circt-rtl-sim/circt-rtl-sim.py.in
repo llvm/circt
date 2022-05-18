@@ -21,13 +21,25 @@ ThisFileDir = os.path.dirname(__file__)
 DebugBuild = "@CMAKE_BUILD_TYPE@" == "Debug"
 
 
-class Questa:
-  """Run and compile funcs for Questasim."""
+class IEEEDriver:
+  """Common driver for event-based simulators."""
 
   DefaultDriver = "driver.sv"
 
   def __init__(self, path, args):
     self.args = args
+
+    if args.no_default_driver:
+      self.top = args.top
+    else:
+      self.top = "driver"
+
+
+class Questa(IEEEDriver):
+  """Run and compile funcs for Questasim."""
+
+  def __init__(self, path, args):
+    super().__init__(path, args)
 
     # Find Questa
     if os.path.exists(path):
@@ -54,18 +66,13 @@ class Questa:
     return subprocess.run(args)
 
   def run(self, cycles, simargs):
-    if self.args.no_default_driver:
-      top = self.args.top
-    else:
-      top = "driver"
-
     vsim = os.path.join(self.path, "vsim")
     # Note: vsim exit codes say nothing about the test run's pass/fail even
     # if $fatal is encountered in the simulation.
     if self.args.gui:
-      cmd = [vsim, top, "-gui", "-voptargs=\"+acc\""]
+      cmd = [vsim, self.top, "-gui", "-voptargs=\"+acc\""]
     else:
-      cmd = [vsim, top, "-batch", "-do", "run -all"]
+      cmd = [vsim, self.top, "-batch", "-do", "run -all"]
     if cycles >= 0:
       cmd.append(f"+cycles={cycles}")
     for lib in self.dpiLibs:
@@ -78,14 +85,12 @@ class Questa:
     return subprocess.run(cmd + simargs.split())
 
 
-class Vivado:
+class Vivado(IEEEDriver):
   """Run and compile funcs for Vivado."""
 
-  DefaultDriver = "driver.sv"
-
   def __init__(self, path, args):
+    super().__init__(path, args)
     self.path = path
-    self.args = args
 
   def compile(self, sources):
     sources = filter(lambda fn: not (fn.endswith(".so") or fn.endswith(".dll")),
@@ -98,22 +103,14 @@ class Vivado:
       return rc
 
     elab = os.path.join(self.path, "xelab")
-    if self.args.no_default_driver:
-      top = self.args.top
-    else:
-      top = "driver"
-    top = self.libname + "." + top
+    top = self.libname + "." + self.top
     args = [elab, top, "-lib", work, "-debug", "typical"]
     return subprocess.run(args)
 
   def run(self, cycles, simargs):
     xsim = os.path.join(self.path, "xsim")
 
-    if self.args.no_default_driver:
-      top = self.args.top
-    else:
-      top = "driver"
-    top = self.libname + "." + top
+    top = self.libname + "." + self.top
     args = [xsim, top]
 
     script = "script.tcl"
@@ -138,6 +135,36 @@ class Vivado:
     if not name:
       name = "work"
     return name
+
+
+class Iverilog(IEEEDriver):
+  """Run and compile funcs for Iverilog."""
+
+  def __init__(self, path, args):
+    super().__init__(path, args)
+
+    # Find the compiler & simulator.
+    self.iverilog = args.sim
+    self.vvp = os.path.join(os.path.dirname(self.iverilog), "vvp")
+
+  def compile(self, sources):
+    return subprocess.run([
+        self.iverilog, "-s", self.top, "-g2005-sv", "-o", "obj.vvp"
+    ] + sources)
+
+  def run(self, cycles, args):
+    print(self.top)
+
+    cmd = [self.vvp, "obj.vvp"]
+
+    if cycles >= 0:
+      cmd.append(f"+cycles={cycles}")
+
+    cmd += args.split()
+    print(f"Running: {cmd}")
+    sys.stdout.flush()
+
+    return subprocess.run(cmd)
 
 
 class Verilator:
@@ -261,6 +288,8 @@ def __main__(args):
     sim = Questa(simParts[0], args)
   elif simName == "xsim":
     sim = Vivado(simParts[0], args)
+  elif simName == "iverilog":
+    sim = Iverilog(simParts[0], args)
   elif simName == "verilator":
     sim = Verilator(args)
   else:

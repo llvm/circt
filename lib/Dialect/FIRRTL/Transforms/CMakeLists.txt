@@ -1,4 +1,5 @@
 add_circt_dialect_library(CIRCTFIRRTLTransforms
+  AddSeqMemPorts.cpp
   BlackBoxMemory.cpp
   BlackBoxReader.cpp
   CheckCombCycles.cpp
@@ -6,6 +7,8 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   Dedup.cpp
   EmitOMIR.cpp
   ExpandWhens.cpp
+  ExtractInstances.cpp
+  FlattenMemory.cpp
   GrandCentral.cpp
   GrandCentralTaps.cpp
   GrandCentralSignalMappings.cpp
@@ -13,15 +16,19 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   InferResets.cpp
   InferReadWrite.cpp
   InferWidths.cpp
+  InjectDUTHierarchy.cpp
   LowerAnnotations.cpp
   LowerCHIRRTL.cpp
+  LowerMemory.cpp
   LowerTypes.cpp
   MergeConnections.cpp
+  MemToRegOfVec.cpp
   ModuleInliner.cpp
   PrefixModules.cpp
   PrintInstanceGraph.cpp
-  RemoveResets.cpp
+  PrintNLATable.cpp
   RemoveUnusedPorts.cpp
+  SFCCompat.cpp
   WireDFT.cpp
 
   DEPENDS

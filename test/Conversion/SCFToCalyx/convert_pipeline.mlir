@@ -31,14 +31,14 @@
 // CHECK-NEXT:          calyx.par
 // CHECK-NEXT:            calyx.enable @[[COMPUTE_GROUP]]
 // CHECK-NEXT:          }
-// CHECK-NEXT:        }
+// CHECK-NEXT:        } {bound = 10 : i64}
 // CHECK-NEXT:      }
 // CHECK-NEXT:    }
-func @minimal() {
+func.func @minimal() {
   %c0_i64 = arith.constant 0 : i64
   %c10_i64 = arith.constant 10 : i64
   %c1_i64 = arith.constant 1 : i64
-  staticlogic.pipeline.while II =  1 iter_args(%arg0 = %c0_i64) : (i64) -> () {
+  staticlogic.pipeline.while II =  1 trip_count = 10 iter_args(%arg0 = %c0_i64) : (i64) -> () {
     %0 = arith.cmpi ult, %arg0, %c10_i64 : i64
     staticlogic.pipeline.register %0 : i1
   } do {
@@ -54,7 +54,7 @@ func @minimal() {
 // -----
 
 // CHECK:     calyx.program "dot"
-// CHECK:       calyx.component @dot(%[[MEM0_READ:.+]]: i32, {{.+}}, %[[MEM1_READ:.+]]: i32, {{.+}}) -> ({{.+}} %[[MEM0_ADDR:.+]]: i6, {{.+}} %[[MEM1_ADDR:.+]]: i6, {{.+}} %[[OUT:.+]]: i32, {{.+}}) {
+// CHECK:       calyx.component @dot(%[[MEM0_READ:.+]]: i32 {mem = {id = 0 : i32, tag = "read_data"}}, {{.+}}, %[[MEM1_READ:.+]]: i32 {mem = {id = 1 : i32, tag = "read_data"}}, {{.+}}) -> ({{.+}} %[[MEM0_ADDR:.+]]: i6 {mem = {addr_idx = 0 : i32, id = 0 : i32, tag = "addr"}}, {{.+}} %[[MEM1_ADDR:.+]]: i6 {mem = {addr_idx = 0 : i32, id = 1 : i32, tag = "addr"}}, {{.+}} %[[OUT:.+]]: i32, {{.+}}) {
 // CHECK-DAG:     %[[TRUE:.+]] = hw.constant true
 // CHECK-DAG:     %[[C0:.+]] = hw.constant 0 : i32
 // CHECK-DAG:     %[[C64:.+]] = hw.constant 64 : i32
@@ -63,7 +63,7 @@ func @minimal() {
 // CHECK-DAG:     %[[SLICE1_IN:.+]], %[[SLICE1_OUT:.+]] = calyx.std_slice @std_slice_1
 // CHECK-DAG:     %[[ADD0_LEFT:.+]], %[[ADD0_RIGHT:.+]], %[[ADD0_OUT:.+]] = calyx.std_add @std_add_0
 // CHECK-DAG:     %[[ADD1_LEFT:.+]], %[[ADD1_RIGHT:.+]], %[[ADD1_OUT:.+]] = calyx.std_add @std_add_1
-// CHECK-DAG:     %[[MUL_LEFT:.+]], %[[MUL_RIGHT:.+]], %[[MUL_GO:.+]], {{.+}}, {{.+}}, %[[MUL_OUT:.+]], %[[MUL_DONE:.+]] = calyx.std_mult_pipe
+// CHECK-DAG:     {{.+}}, {{.+}}, %[[MUL_GO:.+]], %[[MUL_LEFT:.+]], %[[MUL_RIGHT:.+]], %[[MUL_OUT:.+]], %[[MUL_DONE:.+]] = calyx.std_mult_pipe
 // CHECK-DAG:     %[[LT_LEFT:.+]], %[[LT_RIGHT:.+]], %[[LT_OUT:.+]] = calyx.std_lt
 // CHECK-DAG:     %[[ITER_ARG0_IN:.+]], %[[ITER_ARG0_EN:.+]], {{.+}}, {{.+}}, %[[ITER_ARG0_OUT:.+]], %[[ITER_ARG0_DONE:.+]] = calyx.register @while_0_arg0_reg
 // CHECK-DAG:     %[[ITER_ARG1_IN:.+]], %[[ITER_ARG1_EN:.+]], {{.+}}, {{.+}}, %[[ITER_ARG1_OUT:.+]], %[[ITER_ARG1_DONE:.+]] = calyx.register @while_0_arg1_reg
@@ -145,7 +145,7 @@ func @minimal() {
 // CHECK-NEXT:              calyx.enable @[[S1_GROUP0]]
 // CHECK-NEXT:              calyx.enable @[[S2_GROUP0]]
 // CHECK-NEXT:            }
-// CHECK-NEXT:          }
+// CHECK-NEXT:          } {bound = 3 : i64}
 // CHECK-NEXT:          calyx.par  {
 // CHECK-NEXT:            calyx.enable @[[S1_GROUP0]]
 // CHECK-NEXT:            calyx.enable @[[S2_GROUP0]]
@@ -158,12 +158,12 @@ func @minimal() {
 // CHECK-NEXT:      }
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }
-func @dot(%arg0: memref<64xi32>, %arg1: memref<64xi32>) -> i32 {
+func.func @dot(%arg0: memref<64xi32>, %arg1: memref<64xi32>) -> i32 {
   %c0_i32 = arith.constant 0 : i32
   %c0 = arith.constant 0 : index
   %c64 = arith.constant 64 : index
   %c1 = arith.constant 1 : index
-  %0 = staticlogic.pipeline.while II =  1 iter_args(%arg2 = %c0, %arg3 = %c0_i32) : (index, i32) -> i32 {
+  %0 = staticlogic.pipeline.while II =  1 trip_count = 5 iter_args(%arg2 = %c0, %arg3 = %c0_i32) : (index, i32) -> i32 {
     %1 = arith.cmpi ult, %arg2, %c64 : index
     staticlogic.pipeline.register %1 : i1
   } do {

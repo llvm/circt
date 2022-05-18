@@ -18,7 +18,7 @@
 // CHECK:           %[[VAL_16:.*]] = br %[[VAL_10]] : index
 // CHECK:           %[[VAL_17:.*]], %[[VAL_18:.*]] = control_merge %[[VAL_12]] : none
 // CHECK:           %[[VAL_19:.*]]:5 = fork [5] %[[VAL_18]] : index
-// CHECK:           %[[VAL_20:.*]] = buffer [1] %[[VAL_21:.*]] {initValues = [0], sequential = true} : i1
+// CHECK:           %[[VAL_20:.*]] = buffer [1] seq %[[VAL_21:.*]] {initValues = [0]} : i1
 // CHECK:           %[[VAL_22:.*]]:6 = fork [6] %[[VAL_20]] : i1
 // CHECK:           %[[VAL_23:.*]] = mux %[[VAL_22]]#5 {{\[}}%[[VAL_17]], %[[VAL_24:.*]]] : i1, none
 // CHECK:           %[[VAL_25:.*]] = mux %[[VAL_19]]#4 {{\[}}%[[VAL_15]]] : index, index
@@ -78,16 +78,16 @@
 // CHECK:           sink %[[VAL_77]] : index
 // CHECK:           return %[[VAL_76]] : none
 // CHECK:         }
-func @affine_store(%arg0: index) {
+func.func @affine_store(%arg0: index) {
   %0 = memref.alloc() : memref<10xf32>
   %cst = arith.constant 1.100000e+01 : f32
   %c0 = arith.constant 0 : index
   %c10 = arith.constant 10 : index
   %c1 = arith.constant 1 : index
-  br ^bb1(%c0 : index)
+  cf.br ^bb1(%c0 : index)
 ^bb1(%1: index):      // 2 preds: ^bb0, ^bb2
   %2 = arith.cmpi slt, %1, %c10 : index
-  cond_br %2, ^bb2, ^bb3
+  cf.cond_br %2, ^bb2, ^bb3
 ^bb2: // pred: ^bb1
   %c-1 = arith.constant -1 : index
   %3 = arith.muli %arg0, %c-1 : index
@@ -96,7 +96,7 @@ func @affine_store(%arg0: index) {
   %5 = arith.addi %4, %c7 : index
   memref.store %cst, %0[%5] : memref<10xf32>
   %6 = arith.addi %1, %c1 : index
-  br ^bb1(%6 : index)
+  cf.br ^bb1(%6 : index)
 ^bb3: // pred: ^bb1
   return
 }

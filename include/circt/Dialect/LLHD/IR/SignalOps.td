@@ -10,8 +10,9 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "mlir/IR/EnumAttr.td"
+
 def LLHD_SigOp : LLHD_Op<"sig", [
-    HasParent<"EntityOp">,
     TypesMatchWith<
       "type of 'init' and underlying type of 'signal' have to match.",
       "init", "result", "SigType::get($_self)">
@@ -21,8 +22,7 @@ def LLHD_SigOp : LLHD_Op<"sig", [
     The `llhd.sig` instruction introduces a new signal in the IR. The input
     operand determines the initial value carried by the signal, while the
     result type will always be a signal carrying the type of the init operand.
-    A signal defines a unique name within the entity it resides in. Signals
-    can only be allocated within entities.
+    A signal defines a unique name within the entity it resides in.
 
     Syntax:
 
@@ -82,6 +82,46 @@ def LLHD_PrbOp : LLHD_Op<"prb", [
   let results = (outs LLHD_AnyUnderlyingType: $result);
 
   let assemblyFormat = "$signal attr-dict `:` qualified(type($signal))";
+}
+
+def LLHD_OutputOp : LLHD_Op<"output", [
+    TypesMatchWith<
+      "type of 'value' and underlying type of 'result' have to match.",
+      "value", "result", "SigType::get($_self)">
+  ]> {
+  let summary = "Introduce a new signal and drive a value onto it.";
+  let description = [{
+    The `llhd.output` operation introduces a new signal and continuously
+    drives a the given value onto it after a given time-delay. The same
+    value is used to initialize the signal in the same way as the 'init'
+    value in `llhd.sig`. An optional name can be given to the created signal.
+    This shows up, e.g., in the simulation trace.
+
+    Example:
+
+    ```mlir
+    %value = llhd.const 1 : i1
+    %time = llhd.const #llhd.time<1ns, 0d, 0e> : !llhd.time
+    %sig = llhd.output "sigName" %value after %time : i1
+
+    // is equivalent to
+
+    %value = llhd.const 1 : i1
+    %time = llhd.const #llhd.time<1ns, 0d, 0e> : !llhd.time
+    %sig = llhd.sig "sigName" %value : i1
+    llhd.drv %sig, %value after %time : !llhd.sig<i1>
+    ```
+  }];
+
+  let arguments = (ins OptionalAttr<StrAttr>: $name,
+                       LLHD_AnyUnderlyingType: $value,
+                       LLHD_TimeType: $time);
+
+  let results = (outs LLHD_AnySigType: $result);
+
+  let assemblyFormat = [{
+    ( $name^ )? $value `after` $time attr-dict `:` qualified(type($value))
+  }];
 }
 
 def LLHD_DrvOp : LLHD_Op<"drv", [
@@ -261,5 +301,5 @@ def LLHD_RegOp : LLHD_Op<"reg", [
     }
   }];
 
-  let verifier = [{ return ::verify(*this); }];
+  let hasVerifier = 1;
 }

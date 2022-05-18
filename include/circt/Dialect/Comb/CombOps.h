@@ -16,7 +16,7 @@
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinOps.h"
-#include "mlir/IR/FunctionSupport.h"
+#include "mlir/IR/FunctionInterfaces.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/Interfaces/InferTypeOpInterface.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
@@ -48,6 +48,10 @@ KnownBits computeKnownBits(Value value);
 Value createOrFoldSExt(Location loc, Value value, Type destTy,
                        OpBuilder &builder);
 Value createOrFoldSExt(Value value, Type destTy, ImplicitLocOpBuilder &builder);
+
+/// Create a ``Not'' gate on a value.
+Value createOrFoldNot(Location loc, Value value, OpBuilder &builder);
+Value createOrFoldNot(Value value, ImplicitLocOpBuilder &builder);
 
 } // namespace comb
 } // namespace circt

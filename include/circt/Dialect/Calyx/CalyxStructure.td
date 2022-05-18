@@ -53,14 +53,14 @@ def ProgramOp : CalyxContainer<"program", [
     }
   }];
   let assemblyFormat = "$entryPointName $body attr-dict";
-  let verifier = "return ::verify$cppClass(*this);";
+  let hasVerifier = 1;
 }
 
 def ComponentOp : CalyxOp<"component", [
     HasParent<"ProgramOp">,
     SymbolTable, /* contains Cell names. */
     Symbol,
-    FunctionLike,
+    FunctionOpInterface,
     IsolatedFromAbove,
     SingleBlock,
     NoTerminator,
@@ -72,7 +72,7 @@ def ComponentOp : CalyxOp<"component", [
     (1) In- and output port definitions that define the interface.
     (2) The cells, wires, and control schedule.
 
-    A Calyx component requires attributes `clk`, `go`, and `reset` on separate input ports, 
+    A Calyx component requires attributes `clk`, `go`, and `reset` on separate input ports,
     and `done` on an output port.
 
     ```mlir
@@ -97,17 +97,30 @@ def ComponentOp : CalyxOp<"component", [
   ];
 
   let extraClassDeclaration = [{
-    // Necessary to avoid name clashing with `front`.
-    using FunctionLike::front;
+      using mlir::detail::FunctionOpInterfaceTrait<ComponentOp>::front;
+      using mlir::detail::FunctionOpInterfaceTrait<ComponentOp>::getBody;
 
-    private:
-      // This trait needs access to the hooks defined below.
-      friend class OpTrait::FunctionLike<ComponentOp>;
+      /// Returns the type of this function.
+      FunctionType getFunctionType() {
+        return getFunctionTypeAttr().getValue().cast<FunctionType>();
+      }
 
-      /// Hooks for the input/output type enumeration in FunctionLike.
-      unsigned getNumFuncArguments() { return getType().getNumInputs(); }
-      unsigned getNumFuncResults() { return getType().getNumResults(); }
-    public:
+      /// Returns the argument types of this function.
+      ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
+
+      /// Returns the result types of this function.
+      ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
+
+      /// Verify the type attribute of this function. Returns failure and emits
+      /// an error if the attribute is invalid.
+      LogicalResult verifyType() {
+        auto type = getFunctionTypeAttr().getValue();
+        if (!type.isa<FunctionType>())
+          return emitOpError("requires '" + getTypeAttrName() +
+                             "' attribute of function type");
+        return success();
+      }
+
       /// Returns the body of a Calyx component.
       Block *getBody() {
         Region* region = &getOperation()->getRegion(0);
@@ -138,18 +151,25 @@ def ComponentOp : CalyxOp<"component", [
 
       /// Gets the Go port of a Calyx component.
       Value getGoPort();
+
+      /// Gets the Clock port of a Calyx component.
+      Value getClkPort();
+
+      /// Gets the Reset port of a Calyx component.
+      Value getResetPort();
+
       void getAsmBlockArgumentNames(mlir::Region &region,
                                     mlir::OpAsmSetValueNameFn setNameFn);
   }];
 
-  let verifier = "return ::verify$cppClass(*this);";
-  let printer = "return ::print$cppClass(p, *this);";
-  let parser = "return ::parse$cppClass(parser, result);";
+  let hasVerifier = 1;
+  let hasCustomAssemblyFormat = 1;
 }
 
 def WiresOp : CalyxContainer<"wires", [
     HasParent<"ComponentOp">,
-    SymbolTable /* contains GroupInterface names. */
+    SymbolTable /* contains GroupInterface names. */,
+    RegionKindInterface
   ]> {
   let summary = "Calyx Wires";
   let description = [{
@@ -171,7 +191,13 @@ def WiresOp : CalyxContainer<"wires", [
       region->push_back(new Block());
     }]>
   ];
-  let verifier = "return ::verify$cppClass(*this);";
+
+  let extraClassDeclaration = [{
+    /// Implement RegionKindInterface.
+    static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
+  }];
+
+  let hasVerifier = 1;
 }
 
 def InstanceOp : CalyxCell<"instance", [
@@ -193,13 +219,13 @@ def InstanceOp : CalyxCell<"instance", [
   }];
 
   let arguments = (ins
-    FlatSymbolRefAttr:$instanceName,
+    SymbolNameAttr:$sym_name,
     FlatSymbolRefAttr:$componentName
   );
   let results = (outs Variadic<AnyType>:$results);
 
   let assemblyFormat = [{
-    $instanceName `of` $componentName attr-dict (`:` qualified(type($results))^)?
+    $sym_name `of` $componentName attr-dict (`:` qualified(type($results))^)?
   }];
 }
 
@@ -290,7 +316,7 @@ def CombGroupOp : CalyxOp<"comb_group", [
 
   let regions = (region SizedRegion<1>:$body);
   let assemblyFormat = "$sym_name $body attr-dict";
-  let verifier = "return ::verify$cppClass(*this);";
+  let hasVerifier = 1;
   let skipDefaultBuilders = true;
   let builders = [
     OpBuilder<(ins "StringRef":$sym_name), [{
@@ -336,9 +362,8 @@ def AssignOp : CalyxOp<"assign", [
       $_state.addOperands({dest, src});
     }]>
   ];
-  let verifier = "return ::verify$cppClass(*this);";
-  let printer = "return ::print$cppClass(p, *this);";
-  let parser = "return ::parse$cppClass(parser, result);";
+  let hasVerifier = 1;
+  let hasCustomAssemblyFormat = 1;
 }
 
 def GroupDoneOp : CalyxGroupPort<"group_done", [
@@ -357,8 +382,7 @@ def GroupDoneOp : CalyxGroupPort<"group_done", [
     ```
   }];
   let results = (outs);
-  let printer = "return ::print$cppClass(p, *this);";
-  let parser = "return ::parse$cppClass(parser, result);";
+  let hasCustomAssemblyFormat = 1;
   let builders = [
     OpBuilder<(ins "Value":$src), [{
       $_state.addOperands(src);
@@ -385,8 +409,7 @@ def GroupGoOp : CalyxGroupPort<"group_go", [
     ```
   }];
   let results = (outs I1);
-  let printer = "return ::print$cppClass(p, *this);";
-  let parser = "return ::parse$cppClass(parser, result);";
+  let hasCustomAssemblyFormat = 1;
   let builders = [
     OpBuilder<(ins "Value":$src), [{
       $_state.addTypes($_builder.getI1Type());

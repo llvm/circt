@@ -36,7 +36,7 @@
 // CHECK:           sink %[[VAL_27]] : i32
 // CHECK:           return %[[VAL_13]]#0, %[[VAL_18]]#0, %[[VAL_4]] : f32, i32, none
 // CHECK:         }
-func @ops(f32, f32, i32, i32) -> (f32, i32) {
+func.func @ops(f32, f32, i32, i32) -> (f32, i32) {
 ^bb0(%arg0: f32, %arg1: f32, %arg2: i32, %arg3: i32):
   %0 = arith.subf %arg0, %arg1: f32
   %1 = arith.subi %arg2, %arg3: i32
@@ -45,7 +45,7 @@ func @ops(f32, f32, i32, i32) -> (f32, i32) {
   %5 = arith.addi %1, %4 : i32
   %6 = arith.addi %arg2, %arg3 : i32
   %7 = arith.remui %arg2, %arg3 : i32
-  %8 = select %2, %arg2, %arg3 : i32
+  %8 = arith.select %2, %arg2, %arg3 : i32
   %9 = arith.divf %0, %arg1 : f32
   %10 = arith.remf %0, %arg1 : f32
   %11 = arith.andi %arg2, %arg3 : i32

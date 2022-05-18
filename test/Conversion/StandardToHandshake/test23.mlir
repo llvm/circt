@@ -43,7 +43,7 @@
 // CHECK:           sink %[[VAL_44]] : index
 // CHECK:           return %[[VAL_43]] : none
 // CHECK:         }
-func @multi_cond(%arg0: index, %arg1: index, %arg2: index, %arg3: index) {
+func.func @multi_cond(%arg0: index, %arg1: index, %arg2: index, %arg3: index) {
     %c0 = arith.constant 0 : index
     %c-1 = arith.constant -1 : index
     %1 = arith.muli %c0, %c-1 : index
@@ -67,11 +67,11 @@ func @multi_cond(%arg0: index, %arg1: index, %arg2: index, %arg3: index) {
     %14 = arith.addi %arg3, %c-42 : index
     %15 = arith.cmpi eq, %14, %c0 : index
     %16 = arith.andi %13, %15 : i1
-    cond_br %16, ^bb1, ^bb2
+    cf.cond_br %16, ^bb1, ^bb2
   ^bb1: // pred: ^bb0
-    br ^bb3
+    cf.br ^bb3
   ^bb2: // pred: ^bb0
-    br ^bb3
+    cf.br ^bb3
   ^bb3: // 2 preds: ^bb1, ^bb2
     return
   }

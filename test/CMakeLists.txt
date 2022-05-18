@@ -8,9 +8,16 @@ configure_lit_site_cfg(
   MAIN_CONFIG
   ${CMAKE_CURRENT_SOURCE_DIR}/lit.cfg.py
   )
+configure_lit_site_cfg(
+  ${CMAKE_CURRENT_SOURCE_DIR}/Unit/lit.site.cfg.py.in
+  ${CMAKE_CURRENT_BINARY_DIR}/Unit/lit.site.cfg.py
+  MAIN_CONFIG
+  ${CMAKE_CURRENT_SOURCE_DIR}/Unit/lit.cfg.py
+  )
 
 set(CIRCT_TEST_DEPENDS
   FileCheck count not
+  split-file
   circt-capi-ir-test
   circt-opt
   circt-translate
@@ -21,6 +28,10 @@ set(CIRCT_TEST_DEPENDS
   mlir-opt
   mlir-cpu-runner
   )
+
+if (CIRCT_GTEST_AVAILABLE)
+  list(APPEND CIRCT_TEST_DEPENDS CIRCTUnitTests)
+endif()
 
 if(CIRCT_LLHD_SIM_ENABLED)
   list(APPEND CIRCT_TEST_DEPENDS llhd-sim)

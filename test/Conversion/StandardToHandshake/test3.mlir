@@ -13,7 +13,7 @@
 // CHECK:           %[[VAL_9:.*]] = br %[[VAL_6]] : index
 // CHECK:           %[[VAL_10:.*]], %[[VAL_11:.*]] = control_merge %[[VAL_7]] : none
 // CHECK:           %[[VAL_12:.*]]:2 = fork [2] %[[VAL_11]] : index
-// CHECK:           %[[VAL_13:.*]] = buffer [1] %[[VAL_14:.*]] {initValues = [0], sequential = true} : i1
+// CHECK:           %[[VAL_13:.*]] = buffer [1] seq %[[VAL_14:.*]] {initValues = [0]} : i1
 // CHECK:           %[[VAL_15:.*]]:3 = fork [3] %[[VAL_13]] : i1
 // CHECK:           %[[VAL_16:.*]] = mux %[[VAL_15]]#2 {{\[}}%[[VAL_10]], %[[VAL_17:.*]]] : i1, none
 // CHECK:           %[[VAL_18:.*]] = mux %[[VAL_12]]#1 {{\[}}%[[VAL_9]]] : index, index
@@ -144,46 +144,46 @@
 // CHECK:           sink %[[VAL_150]] : index
 // CHECK:           return %[[VAL_149]] : none
 // CHECK:         }
-func @more_imperfectly_nested_loops() {
+func.func @more_imperfectly_nested_loops() {
 ^bb0:
-  br ^bb1
+  cf.br ^bb1
 ^bb1:	// pred: ^bb0
   %c0 = arith.constant 0 : index
   %c42 = arith.constant 42 : index
-  br ^bb2(%c0 : index)
+  cf.br ^bb2(%c0 : index)
 ^bb2(%0: index):	// 2 preds: ^bb1, ^bb11
   %1 = arith.cmpi slt, %0, %c42 : index
-  cond_br %1, ^bb3, ^bb12
+  cf.cond_br %1, ^bb3, ^bb12
 ^bb3:	// pred: ^bb2
-  br ^bb4
+  cf.br ^bb4
 ^bb4:	// pred: ^bb3
   %c7 = arith.constant 7 : index
   %c56 = arith.constant 56 : index
-  br ^bb5(%c7 : index)
+  cf.br ^bb5(%c7 : index)
 ^bb5(%2: index):	// 2 preds: ^bb4, ^bb6
   %3 = arith.cmpi slt, %2, %c56 : index
-  cond_br %3, ^bb6, ^bb7
+  cf.cond_br %3, ^bb6, ^bb7
 ^bb6:	// pred: ^bb5
   %c2 = arith.constant 2 : index
   %4 = arith.addi %2, %c2 : index
-  br ^bb5(%4 : index)
+  cf.br ^bb5(%4 : index)
 ^bb7:	// pred: ^bb5
-  br ^bb8
+  cf.br ^bb8
 ^bb8:	// pred: ^bb7
   %c18 = arith.constant 18 : index
   %c37 = arith.constant 37 : index
-  br ^bb9(%c18 : index)
+  cf.br ^bb9(%c18 : index)
 ^bb9(%5: index):	// 2 preds: ^bb8, ^bb10
   %6 = arith.cmpi slt, %5, %c37 : index
-  cond_br %6, ^bb10, ^bb11
+  cf.cond_br %6, ^bb10, ^bb11
 ^bb10:	// pred: ^bb9
   %c3 = arith.constant 3 : index
   %7 = arith.addi %5, %c3 : index
-  br ^bb9(%7 : index)
+  cf.br ^bb9(%7 : index)
 ^bb11:	// pred: ^bb9
   %c1 = arith.constant 1 : index
   %8 = arith.addi %0, %c1 : index
-  br ^bb2(%8 : index)
+  cf.br ^bb2(%8 : index)
 ^bb12:	// pred: ^bb2
   return
 }

@@ -12,6 +12,7 @@
 
 #include "circt/Scheduling/Algorithms.h"
 
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/Pass/Pass.h"
 
@@ -54,7 +55,7 @@ parseArrayOfDicts(ArrayAttr attr, StringRef key) {
   return result;
 }
 
-static void constructProblem(Problem &prob, FuncOp func) {
+static void constructProblem(Problem &prob, func::FuncOp func) {
   // set up catch-all operator type with unit latency
   auto unitOpr = prob.getOrInsertOperatorType("unit");
   prob.setLatency(unitOpr, 1);
@@ -83,18 +84,19 @@ static void constructProblem(Problem &prob, FuncOp func) {
   // of integer attributes
   if (auto attr = func->getAttrOfType<ArrayAttr>("auxdeps")) {
     auto &ops = prob.getOperations();
-    unsigned nOps = ops.size();
     for (auto &elemArr : parseArrayOfArrays(attr)) {
-      assert(elemArr.size() >= 2 && elemArr[0] < nOps && elemArr[1] < nOps);
+      assert(elemArr.size() >= 2 && elemArr[0] < ops.size() &&
+             elemArr[1] < ops.size());
       Operation *from = ops[elemArr[0]];
       Operation *to = ops[elemArr[1]];
       auto res = prob.insertDependence(std::make_pair(from, to));
       assert(succeeded(res));
+      (void)res;
     }
   }
 }
 
-static void constructCyclicProblem(CyclicProblem &prob, FuncOp func) {
+static void constructCyclicProblem(CyclicProblem &prob, func::FuncOp func) {
   // parse auxiliary dependences in the testcase (again), in order to set the
   // optional distance in the cyclic problem
   if (auto attr = func->getAttrOfType<ArrayAttr>("auxdeps")) {
@@ -110,7 +112,7 @@ static void constructCyclicProblem(CyclicProblem &prob, FuncOp func) {
   }
 }
 
-static void constructChainingProblem(ChainingProblem &prob, FuncOp func) {
+static void constructChainingProblem(ChainingProblem &prob, func::FuncOp func) {
   // patch the default operator type to have zero-delay
   auto unitOpr = prob.getOrInsertOperatorType("unit");
   prob.setIncomingDelay(unitOpr, 0.0f);
@@ -130,7 +132,7 @@ static void constructChainingProblem(ChainingProblem &prob, FuncOp func) {
 }
 
 static void constructSharedOperatorsProblem(SharedOperatorsProblem &prob,
-                                            FuncOp func) {
+                                            func::FuncOp func) {
   // parse operator type info (again) to extract optional operator limit
   if (auto attr = func->getAttrOfType<ArrayAttr>("operatortypes")) {
     for (auto &elem : parseArrayOfDicts(attr, "limit")) {
@@ -154,7 +156,9 @@ static void emitSchedule(Problem &prob, StringRef attrName,
 
 namespace {
 struct TestProblemPass
-    : public PassWrapper<TestProblemPass, OperationPass<FuncOp>> {
+    : public PassWrapper<TestProblemPass, OperationPass<func::FuncOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TestProblemPass)
+
   void runOnOperation() override;
   StringRef getArgument() const override { return "test-scheduling-problem"; }
   StringRef getDescription() const override {
@@ -191,7 +195,9 @@ void TestProblemPass::runOnOperation() {
 
 namespace {
 struct TestCyclicProblemPass
-    : public PassWrapper<TestCyclicProblemPass, OperationPass<FuncOp>> {
+    : public PassWrapper<TestCyclicProblemPass, OperationPass<func::FuncOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TestCyclicProblemPass)
+
   void runOnOperation() override;
   StringRef getArgument() const override { return "test-cyclic-problem"; }
   StringRef getDescription() const override {
@@ -233,7 +239,9 @@ void TestCyclicProblemPass::runOnOperation() {
 
 namespace {
 struct TestChainingProblemPass
-    : public PassWrapper<TestChainingProblemPass, OperationPass<FuncOp>> {
+    : public PassWrapper<TestChainingProblemPass, OperationPass<func::FuncOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TestChainingProblemPass)
+
   void runOnOperation() override;
   StringRef getArgument() const override { return "test-chaining-problem"; }
   StringRef getDescription() const override {
@@ -275,7 +283,9 @@ void TestChainingProblemPass::runOnOperation() {
 namespace {
 struct TestSharedOperatorsProblemPass
     : public PassWrapper<TestSharedOperatorsProblemPass,
-                         OperationPass<FuncOp>> {
+                         OperationPass<func::FuncOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TestSharedOperatorsProblemPass)
+
   void runOnOperation() override;
   StringRef getArgument() const override {
     return "test-shared-operators-problem";
@@ -316,7 +326,9 @@ void TestSharedOperatorsProblemPass::runOnOperation() {
 
 namespace {
 struct TestModuloProblemPass
-    : public PassWrapper<TestModuloProblemPass, OperationPass<FuncOp>> {
+    : public PassWrapper<TestModuloProblemPass, OperationPass<func::FuncOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TestModuloProblemPass)
+
   void runOnOperation() override;
   StringRef getArgument() const override { return "test-modulo-problem"; }
   StringRef getDescription() const override {
@@ -359,7 +371,9 @@ void TestModuloProblemPass::runOnOperation() {
 
 namespace {
 struct TestASAPSchedulerPass
-    : public PassWrapper<TestASAPSchedulerPass, OperationPass<FuncOp>> {
+    : public PassWrapper<TestASAPSchedulerPass, OperationPass<func::FuncOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TestASAPSchedulerPass)
+
   void runOnOperation() override;
   StringRef getArgument() const override { return "test-asap-scheduler"; }
   StringRef getDescription() const override {
@@ -395,7 +409,10 @@ void TestASAPSchedulerPass::runOnOperation() {
 
 namespace {
 struct TestSimplexSchedulerPass
-    : public PassWrapper<TestSimplexSchedulerPass, OperationPass<FuncOp>> {
+    : public PassWrapper<TestSimplexSchedulerPass,
+                         OperationPass<func::FuncOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TestSimplexSchedulerPass)
+
   TestSimplexSchedulerPass() = default;
   TestSimplexSchedulerPass(const TestSimplexSchedulerPass &) {}
   Option<std::string> problemToTest{*this, "with", llvm::cl::init("Problem")};
@@ -548,7 +565,9 @@ void TestSimplexSchedulerPass::runOnOperation() {
 
 namespace {
 struct TestLPSchedulerPass
-    : public PassWrapper<TestLPSchedulerPass, OperationPass<FuncOp>> {
+    : public PassWrapper<TestLPSchedulerPass, OperationPass<func::FuncOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TestLPSchedulerPass)
+
   TestLPSchedulerPass() = default;
   TestLPSchedulerPass(const TestLPSchedulerPass &) {}
   Option<std::string> problemToTest{*this, "with", llvm::cl::init("Problem")};
@@ -580,6 +599,28 @@ void TestLPSchedulerPass::runOnOperation() {
       return signalPassFailure();
     }
 
+    emitSchedule(prob, "lpStartTime", builder);
+    return;
+  }
+
+  if (problemToTest == "CyclicProblem") {
+    auto prob = CyclicProblem::get(func);
+    constructProblem(prob, func);
+    constructCyclicProblem(prob, func);
+    assert(succeeded(prob.check()));
+
+    if (failed(scheduleLP(prob, lastOp))) {
+      func->emitError("scheduling failed");
+      return signalPassFailure();
+    }
+
+    if (failed(prob.verify())) {
+      func->emitError("schedule verification failed");
+      return signalPassFailure();
+    }
+
+    func->setAttr("lpInitiationInterval",
+                  builder.getI32IntegerAttr(*prob.getInitiationInterval()));
     emitSchedule(prob, "lpStartTime", builder);
     return;
   }

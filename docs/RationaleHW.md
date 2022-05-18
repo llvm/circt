@@ -322,8 +322,9 @@ This set includes:
 
  - Constant folding: parameter expressions with all integer constant operands
    are folded to their corresponding result.
- - Constant identities are simplified, e.g. `p1 & 0` into `0` and `p1 * 1` into
-   `p1`.
+ - Constant identities are simplified, e.g. `p1 & 0` into `0`, `p1 * 1` into
+   `p1`, `p1 << 0` into `p1`, `p1 >> 0` into `p1`, `p1 / 1` into `p1` and 
+   `p1 % 1` into `0`.
  - Constant operand merging: any constant operands in associative operations are
    merged into a single operand and moved to the right, e.g. `(add 4, x, 2)` 
    into `(add x, 6)`.
@@ -345,6 +346,13 @@ This set includes:
  - As mentioned above, `sub` is not supported as a ParamExprAttr - it is
    represented as multiply by `-1`.  This allows it to trivially compose
    with affine expression canonicalizations.
+
+### clog2 Parameter Expression
+A `clog2` parameter expression opcode is provided, which calculates the ceiling
+of log base 2 of its argument. This is useful for calculating things like the
+minimum bitwidth needed to address memory of a parameterized size.
+
+Note that `clog2(0)` is `0`, which follows the Verilog spec.
 
 ### Using parameters in the body of a module
 

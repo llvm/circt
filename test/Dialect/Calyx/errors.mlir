@@ -41,8 +41,9 @@ calyx.program "main" {
   }
   calyx.component @main(%in: i16, %go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
     %c1_1 = hw.constant 1 : i1
-    // expected-error @+1 {{'calyx.instance' op with instance symbol: 'c' is already a symbol for another instance.}}
+    // expected-note @+1 {{see existing symbol definition here}}
     calyx.instance @c of @foo : i1, i1, i1, i1
+    // expected-error @+1 {{redefinition of symbol named 'c'}}
     calyx.instance @c of @foo : i1, i1, i1, i1
     calyx.wires { calyx.assign %done = %c1_1 : i1 }
     calyx.control {}
@@ -819,5 +820,48 @@ calyx.program "main" {
     %c1_1 = hw.constant 1 : i1
     calyx.wires { calyx.assign %done = %c1_1 : i1 }
     calyx.control {}
+  }
+}
+
+// -----
+
+calyx.program "main" {
+  calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
+    %std_lt_0.left, %std_lt_0.right, %std_lt_0.out = calyx.std_lt @std_lt_0 : i32, i32, i1
+    %c64_i32 = hw.constant 64 : i32
+    %c42_i32 = hw.constant 42 : i32
+    calyx.wires {
+      calyx.assign %std_lt_0.left = %c64_i32 : i32
+      // expected-error @+1 {{'calyx.assign' op destination is already continuously driven. Other assignment is "calyx.assign"(%0#0, %1) : (i32, i32) -> ()}}
+      calyx.assign %std_lt_0.left = %c42_i32 : i32
+    }
+    calyx.control {
+      calyx.seq { }
+    }
+  }
+}
+
+// -----
+
+calyx.program "main" {
+  calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
+    %std_lt_0.left, %std_lt_0.right, %std_lt_0.out = calyx.std_lt @std_lt_0 : i32, i32, i1
+    %c64_i32 = hw.constant 64 : i32
+    %c42_i32 = hw.constant 42 : i32
+    %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register @r : i1, i1, i1, i1, i1, i1
+    calyx.wires {
+      calyx.assign %std_lt_0.left = %c64_i32 : i32
+      calyx.group @A {
+      // expected-error @+1 {{'calyx.assign' op destination is already continuously driven. Other assignment is "calyx.assign"(%0#0, %1) : (i32, i32) -> ()}}
+        calyx.assign %std_lt_0.left = %c42_i32 : i32
+        calyx.assign %std_lt_0.right = %c42_i32 : i32
+        calyx.group_done %r.done : i1
+      }
+    }
+    calyx.control {
+      calyx.seq {
+        calyx.enable @A
+      }
+    }
   }
 }

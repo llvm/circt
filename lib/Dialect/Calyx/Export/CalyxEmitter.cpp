@@ -18,7 +18,7 @@
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
-#include "mlir/Translation.h"
+#include "mlir/Tools/mlir-translate/Translation.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 
@@ -48,28 +48,26 @@ static constexpr std::string_view LBraceEndL() { return "{\n"; }
 static constexpr std::string_view RBraceEndL() { return "}\n"; }
 static constexpr std::string_view semicolonEndL() { return ";\n"; }
 static constexpr std::string_view addressSymbol() { return "@"; }
+static constexpr std::string_view endl() { return "\n"; }
+static constexpr std::string_view metadataLBrace() { return "#{\n"; }
+static constexpr std::string_view metadataRBrace() { return "}#\n"; }
 
-// clang-format off
 /// A list of integer attributes supported by the native Calyx compiler.
-// NOLINTNEXTLINE(readability-identifier-naming)
-constexpr std::array<StringRef, 6> CalyxIntegerAttributes{
-  "external", "static", "share", "bound", "write_together", "read_together"
+constexpr std::array<StringRef, 7> integerAttributes{
+    "external",       "static",        "share", "bound",
+    "write_together", "read_together", "pos",
 };
 
 /// A list of boolean attributes supported by the native Calyx compiler.
-// NOLINTNEXTLINE(readability-identifier-naming)
-constexpr std::array<StringRef, 7> CalyxBooleanAttributes{
-  "clk", "done", "go", "reset", "generated", "precious", "toplevel"
+constexpr std::array<StringRef, 7> booleanAttributes{
+    "clk", "done", "go", "reset", "generated", "precious", "toplevel",
 };
-// clang-format on
 
 /// Determines whether the given identifier is a valid Calyx attribute.
 static bool isValidCalyxAttribute(StringRef identifier) {
 
-  return llvm::find(CalyxIntegerAttributes, identifier) !=
-             CalyxIntegerAttributes.end() ||
-         llvm::find(CalyxBooleanAttributes, identifier) !=
-             CalyxBooleanAttributes.end();
+  return llvm::find(integerAttributes, identifier) != integerAttributes.end() ||
+         llvm::find(booleanAttributes, identifier) != booleanAttributes.end();
 }
 
 /// A tracker to determine which libraries should be imported for a given
@@ -97,7 +95,7 @@ private:
     TypeSwitch<Operation *>(op)
         .Case<MemoryOp, RegisterOp, NotLibOp, AndLibOp, OrLibOp, XorLibOp,
               AddLibOp, SubLibOp, GtLibOp, LtLibOp, EqLibOp, NeqLibOp, GeLibOp,
-              LeLibOp, LshLibOp, RshLibOp, SliceLibOp, PadLibOp>(
+              LeLibOp, LshLibOp, RshLibOp, SliceLibOp, PadLibOp, WireLibOp>(
             [&](auto op) { library = "core"; })
         .Case<SgtLibOp, SltLibOp, SeqLibOp, SneqLibOp, SgeLibOp, SleLibOp,
               SrshLibOp, MultPipeLibOp, DivPipeLibOp>(
@@ -132,6 +130,24 @@ struct Emitter {
 
   // Program emission
   void emitProgram(ProgramOp op);
+
+  // Metadata emission for the Cider debugger.
+  void emitCiderMetadata(mlir::ModuleOp op) {
+    auto metadata = op->getAttrOfType<ArrayAttr>("calyx.metadata");
+    if (!metadata)
+      return;
+
+    constexpr std::string_view metadataIdentifier = "metadata";
+    os << endl() << metadataIdentifier << space() << metadataLBrace();
+
+    for (auto sourceLoc : llvm::enumerate(metadata)) {
+      // <index>: <source-location>\n
+      os << std::to_string(sourceLoc.index()) << colon();
+      os << sourceLoc.value().cast<StringAttr>().getValue() << endl();
+    }
+
+    os << metadataRBrace();
+  }
 
   /// Import emission.
   void emitImports(ProgramOp op) {
@@ -190,6 +206,14 @@ struct Emitter {
   //   f = std_foo(32);
   void emitLibraryPrimTypedByFirstInputPort(Operation *op);
 
+  // Emits a library primitive with a single template parameter based on the
+  // first output port.
+  // e.g.:
+  //   $f.in0, $f.in1, $f.out : calyx.std_foo "f" : i32, i32, i1
+  // emits:
+  //   f = std_foo(1);
+  void emitLibraryPrimTypedByFirstOutputPort(Operation *op);
+
 private:
   /// Used to track which imports are required for this program.
   ImportTracker importTracker;
@@ -226,8 +250,8 @@ private:
     llvm::raw_string_ostream buffer(output);
     buffer.reserveExtraSpace(16);
 
-    bool isBooleanAttribute = llvm::find(CalyxBooleanAttributes, identifier) !=
-                              CalyxBooleanAttributes.end();
+    bool isBooleanAttribute =
+        llvm::find(booleanAttributes, identifier) != booleanAttributes.end();
     if (attr.isa<UnitAttr>()) {
       assert(isBooleanAttribute &&
              "Non-boolean attributes must provide an integer value.");
@@ -479,8 +503,10 @@ void Emitter::emitComponent(ComponentOp op) {
           .Case<LtLibOp, GtLibOp, EqLibOp, NeqLibOp, GeLibOp, LeLibOp, SltLibOp,
                 SgtLibOp, SeqLibOp, SneqLibOp, SgeLibOp, SleLibOp, AddLibOp,
                 SubLibOp, ShruLibOp, RshLibOp, SrshLibOp, LshLibOp, AndLibOp,
-                NotLibOp, OrLibOp, XorLibOp, MultPipeLibOp, DivPipeLibOp>(
+                NotLibOp, OrLibOp, XorLibOp, WireLibOp>(
               [&](auto op) { emitLibraryPrimTypedByFirstInputPort(op); })
+          .Case<MultPipeLibOp, DivPipeLibOp>(
+              [&](auto op) { emitLibraryPrimTypedByFirstOutputPort(op); })
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside component");
           });
@@ -580,6 +606,16 @@ void Emitter::emitLibraryPrimTypedByFirstInputPort(Operation *op) {
            << RParen() << semicolonEndL();
 }
 
+void Emitter::emitLibraryPrimTypedByFirstOutputPort(Operation *op) {
+  auto cell = cast<CellInterface>(op);
+  unsigned bitWidth =
+      cell.getOutputPorts()[0].getType().getIntOrFloatBitWidth();
+  StringRef opName = op->getName().getStringRef();
+  indent() << getAttributes(op) << cell.instanceName() << space() << equals()
+           << space() << removeCalyxPrefix(opName) << LParen() << bitWidth
+           << RParen() << semicolonEndL();
+}
+
 void Emitter::emitAssignment(AssignOp op) {
 
   emitValue(op.dest(), /*isIndented=*/true);
@@ -649,6 +685,7 @@ mlir::LogicalResult circt::calyx::exportCalyx(mlir::ModuleOp module,
       emitter.emitProgram(program);
     });
   }
+  emitter.emitCiderMetadata(module);
   return emitter.finalize();
 }
 

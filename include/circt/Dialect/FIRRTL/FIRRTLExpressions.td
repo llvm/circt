@@ -19,8 +19,8 @@ def SameOperandsIntTypeKind : NativeOpTrait<"SameOperandsIntTypeKind"> {
 
 // A common base class for operations that implement type inference and parsed
 // argument validation.
-class FIRRTLExprOp<string mnemonic, list<OpTrait> traits = []> :
-    FIRRTLOp<mnemonic, traits # [InferTypeOpInterface, NoSideEffect]> {
+class FIRRTLExprOp<string mnemonic, list<Trait> traits = []> :
+    FIRRTLOp<mnemonic, traits # [HasCustomSSAName, InferTypeOpInterface, NoSideEffect]> {
 
   // The narrow operation-specific type inference method. Operations can
   // override this with an inline declaration for the class header, or just
@@ -77,8 +77,9 @@ class FIRRTLExprOp<string mnemonic, list<OpTrait> traits = []> :
   }];
 }
 
-def ConstantOp : FIRRTLOp<"constant", [NoSideEffect, ConstantLike,
-                                       FirstAttrDerivedResultType]> {
+def ConstantOp : FIRRTLOp<"constant",
+      [NoSideEffect, ConstantLike, FirstAttrDerivedResultType,
+       HasCustomSSAName]> {
   let summary = "Produce a constant value";
   let description = [{
     The constant operation produces a constant value of SInt or UInt type, it
@@ -90,22 +91,18 @@ def ConstantOp : FIRRTLOp<"constant", [NoSideEffect, ConstantLike,
 
   let arguments = (ins APSIntAttr:$value);
   let results = (outs IntType:$result);
-
-  // Need a custom parser/printer to avoid redundant type for the attribute and
-  // the op itself.
-  let parser = "return parse$cppClass(parser, result);";
-  let printer = "print$cppClass(p, *this);";
+  let hasCustomAssemblyFormat = 1;
 
   let builders = [
     OpBuilder<(ins "IntType":$type, "const APInt &":$value)>,
     OpBuilder<(ins "const APSInt &":$value)>
   ];
   let hasFolder = 1;
-  let verifier = "return ::verifyConstantOp(*this);";
+  let hasVerifier = 1;
 }
 
-def SpecialConstantOp : FIRRTLOp<"specialconstant", [NoSideEffect,
-                                                     ConstantLike]> {
+def SpecialConstantOp : FIRRTLOp<"specialconstant",
+      [NoSideEffect, ConstantLike, HasCustomSSAName]> {
   let summary = "Produce a constant Reset or Clock value";
   let description = [{
     The constant operation produces a constant value of Reset, AsyncReset, or
@@ -119,14 +116,12 @@ def SpecialConstantOp : FIRRTLOp<"specialconstant", [NoSideEffect,
   let results = (outs
     AnyTypeOf<[ClockType, ResetType, AsyncResetType]>:$result);
 
-  // Need a custom parser/printer to avoid redundant type for the attribute and
-  // the op itself.
-  let parser = "return parse$cppClass(parser, result);";
-  let printer = "print$cppClass(p, *this);";
+  let hasCustomAssemblyFormat = 1;
   let hasFolder = 1;
 }
 
-def InvalidValueOp : FIRRTLOp<"invalidvalue", [NoSideEffect, ConstantLike]> {
+def InvalidValueOp : FIRRTLOp<"invalidvalue",
+      [NoSideEffect, ConstantLike, HasCustomSSAName]> {
   let summary = "InvalidValue primitive";
   let description = [{
     The InvalidValue operation returns an invalid value of a specified type:
@@ -182,7 +177,7 @@ def SubfieldOp : FIRRTLExprOp<"subfield"> {
     }
   }];
 
-  let verifier = "return ::verifySubfieldOp(*this);";
+  let hasVerifier = 1;
 }
 
 class IndexConstraint<string value, string resultValue>
@@ -257,10 +252,7 @@ def MultibitMuxOp : FIRRTLExprOp<"multibit_mux"> {
 
   let arguments = (ins FIRRTLType:$index, Variadic<FIRRTLType>:$inputs);
   let results = (outs FIRRTLType:$result);
-
-  // Need a custom parser/printer to emit operands type only once.
-  let parser = "return parse$cppClass(parser, result);";
-  let printer = "print$cppClass(p, *this);";
+  let hasCustomAssemblyFormat = 1;
   let hasFolder = true;
   let hasCanonicalizeMethod = true;
 }
@@ -270,7 +262,7 @@ def MultibitMuxOp : FIRRTLExprOp<"multibit_mux"> {
 //===----------------------------------------------------------------------===//
 
 /// PrimOp is a FIRRTLOp without side effects.
-class PrimOp<string mnemonic, list<OpTrait> traits = []> :
+class PrimOp<string mnemonic, list<Trait> traits = []> :
     FIRRTLExprOp<mnemonic, traits> {
   let hasFolder = 1;
 }
@@ -281,7 +273,7 @@ class PrimOp<string mnemonic, list<OpTrait> traits = []> :
 
 // Base class for binary primitive operators.
 class BinaryPrimOp<string mnemonic, Type lhsType, Type rhsType, Type resultType,
-                   list<OpTrait> traits = []> : PrimOp<mnemonic, traits> {
+                   list<Trait> traits = []> : PrimOp<mnemonic, traits> {
   let arguments = (ins lhsType:$lhs, rhsType:$rhs);
   let results = (outs resultType:$result);
 
@@ -314,7 +306,7 @@ class BinaryPrimOp<string mnemonic, Type lhsType, Type rhsType, Type resultType,
 
 // A binary operation on two integer-typed arguments of the same kind.
 class IntBinaryPrimOp<string mnemonic, Type resultType,
-                      list<OpTrait> traits = []> :
+                      list<Trait> traits = []> :
    BinaryPrimOp<mnemonic, IntType, IntType, resultType,
                 traits # [SameOperandsIntTypeKind]>;
 
@@ -386,7 +378,7 @@ def DShrPrimOp  : BinaryPrimOp<"dshr", IntType, UIntType, IntType> {
 
 // Base class for binary primitive operators.
 class UnaryPrimOp<string mnemonic, Type srcType, Type resultType,
-                  list<OpTrait> traits = []> : PrimOp<mnemonic, traits> {
+                  list<Trait> traits = []> : PrimOp<mnemonic, traits> {
   let arguments = (ins srcType:$input);
   let results = (outs resultType:$result);
 
@@ -554,9 +546,6 @@ def TailPrimOp : PrimOp<"tail"> {
 // Verbatim
 //===----------------------------------------------------------------------===//
 
-def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface,
-                         ["getAsmResultNames"]>;
-
 def VerbatimExprOp : FIRRTLOp<"verbatim.expr",
                               [NoSideEffect, HasCustomSSAName]> {
   let summary = "Expression that expands to a value given SystemVerilog text";
@@ -637,7 +626,7 @@ def HWStructCastOp : FIRRTLOp<"hwStructCast", [NoSideEffect]> {
   let assemblyFormat =
     "$input attr-dict `:` functional-type($input, $result)";
 
-  let verifier = "return ::verifyHWStructCastOp(*this);";
+  let hasVerifier = 1;
 }
 
 def BitCastOp: FIRRTLOp<"bitcast", [NoSideEffect]> {
@@ -648,7 +637,7 @@ def BitCastOp: FIRRTLOp<"bitcast", [NoSideEffect]> {
 
   let arguments = (ins FIRRTLType:$input);
   let results = (outs FIRRTLType:$result);
-  let verifier = "return ::verifyBitCastOp(*this);";
+  let hasVerifier = 1;
   let hasFolder = 1;
 
   let assemblyFormat = "$input attr-dict `:` functional-type($input, $result)";

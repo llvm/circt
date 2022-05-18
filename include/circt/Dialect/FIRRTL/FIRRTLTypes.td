@@ -10,6 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "mlir/IR/EnumAttr.td"
+
 //===----------------------------------------------------------------------===//
 // FIRRTL Types Definitions
 //===----------------------------------------------------------------------===//
@@ -38,6 +40,11 @@ def BundleType : DialectType<FIRRTLDialect, CPred<"$_self.isa<BundleType>()">,
 
 def FVectorType : DialectType<FIRRTLDialect, CPred<"$_self.isa<FVectorType>()">,
   "FVectorType", "::circt::firrtl::FVectorType">;
+
+def SizedType : DialectType<FIRRTLDialect,
+    CPred<"$_self.isa<FIRRTLType>() && "
+          "!$_self.cast<FIRRTLType>().hasUninferredWidth()">,
+    "a sized type (contains no unifered widths)", "::circt::firrtl::FIRRTLType">;
 
 def UInt1Type : DialectType<FIRRTLDialect,
     CPred<"$_self.isa<UIntType>() && "
@@ -72,6 +79,12 @@ def OneBitType : DialectType<FIRRTLDialect,
 def AnyResetType : DialectType<FIRRTLDialect,
     CPred<"$_self.isa<FIRRTLType>() && $_self.cast<FIRRTLType>().isResetType()">,
     "Reset", "::circt::firrtl::FIRRTLType">;
+
+def AnyRegisterType : DialectType<FIRRTLDialect,
+    CPred<"$_self.isa<FIRRTLType>() && "
+          "$_self.cast<FIRRTLType>().isRegisterType()">,
+    "a passive type that does not contain analog",
+    "::circt::firrtl::FIRRTLType">;
 
 def UIntSIntClockType : AnyTypeOf<[SIntType, UIntType, ClockType],
                                   "sint, uint, or clock",

@@ -13,7 +13,7 @@ hw.module @MainDesign(%in: i1) -> (out: i1) {
   hw.output %0 : i1
 }
 
-hw.module @TestHarness() attributes {firrtl.moduleHierarchyFile = #hw.output_file<"testharness_hier.json", excludeFromFileList>} {
+hw.module @TestHarness() attributes {firrtl.moduleHierarchyFile = [#hw.output_file<"testharness_hier.json", excludeFromFileList>]} {
   %0 = hw.constant 1 : i1
   hw.instance "main_design" @MainDesign(in: %0: i1) -> (out: i1)
 }

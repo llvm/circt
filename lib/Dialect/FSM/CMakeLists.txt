@@ -1,5 +1,6 @@
 add_circt_dialect_library(CIRCTFSM
   FSMDialect.cpp
+  FSMGraph.cpp
   FSMOps.cpp
   FSMTypes.cpp
 
@@ -7,6 +8,9 @@ add_circt_dialect_library(CIRCTFSM
   MLIRFSMIncGen
 
   LINK_LIBS PUBLIC
-  MLIRStandard
   MLIRIR
+  MLIRFunc
+  MLIRArithmetic
   )
+
+add_subdirectory(Transforms)

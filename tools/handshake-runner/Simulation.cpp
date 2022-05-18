@@ -13,11 +13,14 @@
 
 #include <list>
 
-#include "mlir/Dialect/StandardOps/IR/Ops.h"
-
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/Handshake/Simulation.h"
+#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/IR/BuiltinTypes.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
 
@@ -81,8 +84,7 @@ void debugArg(const std::string &head, mlir::Value op, const Any &value,
   }
 }
 
-Any readValueWithType(mlir::Type type, std::string in) {
-  std::stringstream arg(in);
+Any readValueWithType(mlir::Type type, std::stringstream &arg) {
   if (type.isIndex()) {
     int64_t x;
     arg >> x;
@@ -105,22 +107,52 @@ Any readValueWithType(mlir::Type type, std::string in) {
     arg >> x;
     APFloat aparg(x);
     return aparg;
+  } else if (auto tupleType = type.dyn_cast<TupleType>()) {
+    char tmp;
+    arg >> tmp;
+    assert(tmp == '(' && "tuple should start with '('");
+    std::vector<Any> values;
+    unsigned size = tupleType.getTypes().size();
+    values.reserve(size);
+    // Parse element by element
+    for (unsigned i = 0; i < size; ++i) {
+      values.push_back(readValueWithType(tupleType.getType(i), arg));
+      // Consumes either the ',' or the ')'
+      arg >> tmp;
+    }
+    assert(tmp == ')' && "tuple should end with ')'");
+    assert(
+        values.size() == tupleType.getTypes().size() &&
+        "expected the number of tuple elements to match with the tuple type");
+    return values;
   } else {
     assert(false && "unknown argument type!");
     return {};
   }
 }
 
-std::string printAnyValueWithType(mlir::Type type, Any &value) {
-  std::stringstream out;
+Any readValueWithType(mlir::Type type, std::string in) {
+  std::stringstream stream(in);
+  return readValueWithType(type, stream);
+}
+
+void printAnyValueWithType(llvm::raw_ostream &out, mlir::Type type,
+                           Any &value) {
   if (type.isa<mlir::IntegerType>() || type.isa<mlir::IndexType>()) {
     out << any_cast<APInt>(value).getSExtValue();
-    return out.str();
   } else if (type.isa<mlir::FloatType>()) {
     out << any_cast<APFloat>(value).convertToDouble();
-    return out.str();
   } else if (type.isa<mlir::NoneType>()) {
-    return "none";
+    out << "none";
+  } else if (auto tupleType = type.dyn_cast<mlir::TupleType>()) {
+    auto values = any_cast<std::vector<llvm::Any>>(value);
+    out << "(";
+    llvm::interleaveComma(llvm::zip(tupleType.getTypes(), values), out,
+                          [&](auto pair) {
+                            auto [type, value] = pair;
+                            return printAnyValueWithType(out, type, value);
+                          });
+    out << ")";
   } else {
     llvm_unreachable("Unknown result type!");
   }
@@ -183,8 +215,8 @@ unsigned allocateMemRef(mlir::MemRefType type, std::vector<Any> &in,
 
 class HandshakeExecuter {
 public:
-  /// Entry point for mlir::FuncOp top-level functions
-  HandshakeExecuter(mlir::FuncOp &toplevel,
+  /// Entry point for mlir::func::FuncOp top-level functions
+  HandshakeExecuter(mlir::func::FuncOp &toplevel,
                     llvm::DenseMap<mlir::Value, Any> &valueMap,
                     llvm::DenseMap<mlir::Value, double> &timeMap,
                     std::vector<Any> &results, std::vector<double> &resultTimes,
@@ -198,7 +230,7 @@ public:
                     std::vector<Any> &results, std::vector<double> &resultTimes,
                     std::vector<std::vector<Any>> &store,
                     std::vector<double> &storeTimes,
-                    mlir::OwningModuleRef &module);
+                    mlir::OwningOpRef<mlir::ModuleOp> &module);
 
   bool succeeded() const { return successFlag; }
 
@@ -244,10 +276,11 @@ private:
                         std::vector<Any> &);
   LogicalResult execute(memref::AllocOp, std::vector<Any> &,
                         std::vector<Any> &);
-  LogicalResult execute(mlir::BranchOp, std::vector<Any> &, std::vector<Any> &);
-  LogicalResult execute(mlir::CondBranchOp, std::vector<Any> &,
+  LogicalResult execute(mlir::cf::BranchOp, std::vector<Any> &,
                         std::vector<Any> &);
-  LogicalResult execute(mlir::ReturnOp, std::vector<Any> &, std::vector<Any> &);
+  LogicalResult execute(mlir::cf::CondBranchOp, std::vector<Any> &,
+                        std::vector<Any> &);
+  LogicalResult execute(func::ReturnOp, std::vector<Any> &, std::vector<Any> &);
   LogicalResult execute(handshake::ReturnOp, std::vector<Any> &,
                         std::vector<Any> &);
   LogicalResult execute(mlir::CallOpInterface, std::vector<Any> &,
@@ -264,7 +297,7 @@ private:
   std::vector<std::vector<Any>> &store;
   std::vector<double> &storeTimes;
   double time;
-  mlir::OwningModuleRef *module = nullptr;
+  mlir::OwningOpRef<mlir::ModuleOp> *module = nullptr;
 
   /// Flag indicating whether execution was successful.
   bool successFlag = true;
@@ -483,7 +516,7 @@ LogicalResult HandshakeExecuter::execute(mlir::memref::AllocOp op,
   return success();
 }
 
-LogicalResult HandshakeExecuter::execute(mlir::BranchOp branchOp,
+LogicalResult HandshakeExecuter::execute(mlir::cf::BranchOp branchOp,
                                          std::vector<Any> &in,
                                          std::vector<Any> &) {
   mlir::Block *dest = branchOp.getDest();
@@ -496,7 +529,7 @@ LogicalResult HandshakeExecuter::execute(mlir::BranchOp branchOp,
   return success();
 }
 
-LogicalResult HandshakeExecuter::execute(mlir::CondBranchOp condBranchOp,
+LogicalResult HandshakeExecuter::execute(mlir::cf::CondBranchOp condBranchOp,
                                          std::vector<Any> &in,
                                          std::vector<Any> &) {
   APInt condition = any_cast<APInt>(in[0]);
@@ -531,7 +564,7 @@ LogicalResult HandshakeExecuter::execute(mlir::CondBranchOp condBranchOp,
   return success();
 }
 
-LogicalResult HandshakeExecuter::execute(mlir::ReturnOp op,
+LogicalResult HandshakeExecuter::execute(func::ReturnOp op,
                                          std::vector<Any> &in,
                                          std::vector<Any> &) {
   for (unsigned i = 0; i < results.size(); ++i) {
@@ -557,9 +590,8 @@ LogicalResult HandshakeExecuter::execute(mlir::CallOpInterface callOp,
   // implement function calls.
   auto op = callOp.getOperation();
   mlir::Operation *calledOp = callOp.resolveCallable();
-  if (auto funcOp = dyn_cast<mlir::FuncOp>(calledOp)) {
-    mlir::FunctionType ftype = funcOp.getType();
-    unsigned outputs = ftype.getNumResults();
+  if (auto funcOp = dyn_cast<mlir::func::FuncOp>(calledOp)) {
+    unsigned outputs = funcOp.getNumResults();
     llvm::DenseMap<mlir::Value, Any> newValueMap;
     llvm::DenseMap<mlir::Value, double> newTimeMap;
     std::vector<Any> results(outputs);
@@ -601,7 +633,7 @@ LogicalResult HandshakeExecuter::execute(handshake::InstanceOp instanceOp,
       /// intanceOp - available in the enclosing scope value map - and the
       /// argument SSA values within the called function of the InstanceOp.
 
-      const unsigned nRealFuncOuts = func.getType().getNumResults() - 1;
+      const unsigned nRealFuncOuts = func.getNumResults() - 1;
       mlir::Block &entryBlock = func.getBody().front();
       mlir::Block::BlockArgListType instanceBlockArgs =
           entryBlock.getArguments();
@@ -659,7 +691,7 @@ LogicalResult HandshakeExecuter::execute(handshake::InstanceOp instanceOp,
 enum ExecuteStrategy { Default = 1 << 0, Continue = 1 << 1, Return = 1 << 2 };
 
 HandshakeExecuter::HandshakeExecuter(
-    mlir::FuncOp &toplevel, llvm::DenseMap<mlir::Value, Any> &valueMap,
+    mlir::func::FuncOp &toplevel, llvm::DenseMap<mlir::Value, Any> &valueMap,
     llvm::DenseMap<mlir::Value, double> &timeMap, std::vector<Any> &results,
     std::vector<double> &resultTimes, std::vector<std::vector<Any>> &store,
     std::vector<double> &storeTimes)
@@ -698,12 +730,12 @@ HandshakeExecuter::HandshakeExecuter(
               strat = ExecuteStrategy::Default;
               return execute(op, inValues, outValues);
             })
-            .Case<mlir::BranchOp, mlir::CondBranchOp, mlir::CallOpInterface>(
-                [&](auto op) {
-                  strat = ExecuteStrategy::Continue;
-                  return execute(op, inValues, outValues);
-                })
-            .Case<mlir::ReturnOp>([&](auto op) {
+            .Case<mlir::cf::BranchOp, mlir::cf::CondBranchOp,
+                  mlir::CallOpInterface>([&](auto op) {
+              strat = ExecuteStrategy::Continue;
+              return execute(op, inValues, outValues);
+            })
+            .Case<func::ReturnOp>([&](auto op) {
               strat = ExecuteStrategy::Return;
               return execute(op, inValues, outValues);
             })
@@ -736,7 +768,7 @@ HandshakeExecuter::HandshakeExecuter(
     handshake::FuncOp &func, llvm::DenseMap<mlir::Value, Any> &valueMap,
     llvm::DenseMap<mlir::Value, double> &timeMap, std::vector<Any> &results,
     std::vector<double> &resultTimes, std::vector<std::vector<Any>> &store,
-    std::vector<double> &storeTimes, mlir::OwningModuleRef &module)
+    std::vector<double> &storeTimes, mlir::OwningOpRef<mlir::ModuleOp> &module)
     : valueMap(valueMap), timeMap(timeMap), results(results),
       resultTimes(resultTimes), store(store), storeTimes(storeTimes),
       module(&module) {
@@ -882,7 +914,7 @@ HandshakeExecuter::HandshakeExecuter(
 //===----------------------------------------------------------------------===//
 
 bool simulate(StringRef toplevelFunction, ArrayRef<std::string> inputArgs,
-              mlir::OwningModuleRef &module, mlir::MLIRContext &) {
+              mlir::OwningOpRef<mlir::ModuleOp> &module, mlir::MLIRContext &) {
   // The store associates each allocation in the program
   // (represented by a int) with a vector of values which can be
   // accessed by it.  Currently values are assumed to be an integer.
@@ -912,27 +944,27 @@ bool simulate(StringRef toplevelFunction, ArrayRef<std::string> inputArgs,
   unsigned realInputs;
   unsigned realOutputs;
 
-  if (mlir::FuncOp toplevel =
-          module->lookupSymbol<mlir::FuncOp>(toplevelFunction)) {
-    ftype = toplevel.getType();
+  if (mlir::func::FuncOp toplevel =
+          module->lookupSymbol<mlir::func::FuncOp>(toplevelFunction)) {
+    ftype = toplevel.getFunctionType();
     mlir::Block &entryBlock = toplevel.getBody().front();
     blockArgs = entryBlock.getArguments();
 
     // Get the primary inputs of toplevel off the command line.
-    inputs = ftype.getNumInputs();
+    inputs = toplevel.getNumArguments();
     realInputs = inputs;
-    outputs = ftype.getNumResults();
+    outputs = toplevel.getNumResults();
     realOutputs = outputs;
   } else if (handshake::FuncOp toplevel =
                  module->lookupSymbol<handshake::FuncOp>(toplevelFunction)) {
-    ftype = toplevel.getType();
+    ftype = toplevel.getFunctionType();
     mlir::Block &entryBlock = toplevel.getBody().front();
     blockArgs = entryBlock.getArguments();
 
     // Get the primary inputs of toplevel off the command line.
-    inputs = ftype.getNumInputs();
+    inputs = toplevel.getNumArguments();
     realInputs = inputs - 1;
-    outputs = ftype.getNumResults();
+    outputs = toplevel.getNumResults();
     realOutputs = outputs - 1;
     if (inputs == 0) {
       errs() << "Function " << toplevelFunction << " is expected to have "
@@ -984,8 +1016,8 @@ bool simulate(StringRef toplevelFunction, ArrayRef<std::string> inputArgs,
   std::vector<Any> results(realOutputs);
   std::vector<double> resultTimes(realOutputs);
   bool succeeded = false;
-  if (mlir::FuncOp toplevel =
-          module->lookupSymbol<mlir::FuncOp>(toplevelFunction)) {
+  if (mlir::func::FuncOp toplevel =
+          module->lookupSymbol<mlir::func::FuncOp>(toplevelFunction)) {
     succeeded = HandshakeExecuter(toplevel, valueMap, timeMap, results,
                                   resultTimes, store, storeTimes)
                     .succeeded();
@@ -1002,7 +1034,8 @@ bool simulate(StringRef toplevelFunction, ArrayRef<std::string> inputArgs,
   double time = 0.0;
   for (unsigned i = 0; i < results.size(); ++i) {
     mlir::Type t = ftype.getResult(i);
-    outs() << printAnyValueWithType(t, results[i]) << " ";
+    printAnyValueWithType(outs(), t, results[i]);
+    outs() << " ";
     time = std::max(resultTimes[i], time);
   }
   // Go back through the arguments and output any memrefs.
@@ -1016,7 +1049,7 @@ bool simulate(StringRef toplevelFunction, ArrayRef<std::string> inputArgs,
       for (int j = 0; j < memreftype.getNumElements(); ++j) {
         if (j != 0)
           outs() << ",";
-        outs() << printAnyValueWithType(elementType, store[buffer][j]);
+        printAnyValueWithType(outs(), elementType, store[buffer][j]);
       }
       outs() << " ";
     }

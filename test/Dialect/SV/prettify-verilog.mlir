@@ -47,6 +47,9 @@ hw.module @sink_constants(%clock :i1) -> (out : i1){
   // CHECK: %false = hw.constant false
   %false = hw.constant false
 
+  // CHECK-NOT: %fd = hw.constant -2147483646 : i32
+  %fd = hw.constant 0x80000002 : i32
+
   /// Constants not used should be removed.
   // CHECK-NOT: %true = hw.constant true
   %true = hw.constant true
@@ -55,22 +58,24 @@ hw.module @sink_constants(%clock :i1) -> (out : i1){
   sv.ifdef "FOO" {
     sv.initial {
       // CHECK: [[FALSE:%.*]] = hw.constant false
+      // CHECK: [[FD:%.*]] = hw.constant -2147483646 : i32
       // CHECK: [[TRUE:%.*]] = hw.constant true
-      // CHECK: sv.fwrite "%x"([[TRUE]]) : i1
-      sv.fwrite "%x"(%true) : i1
-      // CHECK: sv.fwrite "%x"([[FALSE]]) : i1
-      sv.fwrite "%x"(%false) : i1
+      // CHECK: sv.fwrite [[FD]], "%x"([[TRUE]]) : i1
+      sv.fwrite %fd, "%x"(%true) : i1
+      // CHECK: sv.fwrite [[FD]], "%x"([[FALSE]]) : i1
+      sv.fwrite %fd, "%x"(%false) : i1
     }
   }
 
   /// Multiple uses in the same block should use the same constant.
   sv.ifdef "FOO" {
     sv.initial {
+      // CHECK: [[FD:%.*]] = hw.constant -2147483646 : i32
       // CHECK: [[TRUE:%.*]] = hw.constant true
-      // CHECK: sv.fwrite "%x"([[TRUE]]) : i1
-      // CHECK: sv.fwrite "%x"([[TRUE]]) : i1
-      sv.fwrite "%x"(%true) : i1
-      sv.fwrite "%x"(%true) : i1
+      // CHECK: sv.fwrite [[FD]], "%x"([[TRUE]]) : i1
+      // CHECK: sv.fwrite [[FD]], "%x"([[TRUE]]) : i1
+      sv.fwrite %fd, "%x"(%true) : i1
+      sv.fwrite %fd, "%x"(%true) : i1
     }
   }
 
@@ -215,7 +220,7 @@ hw.module @unary_sink_no_duplicate(%arg0: i4) -> (result: i4) {
   %ones = hw.constant 15: i4
 
   // CHECK-NOT: comb.xor
- 
+
   // We normally duplicate unary operations like this one so they can be inlined
   // into the using expressions.  However, not all users can be inlined *into*.
   // Things like extract/sext do not support this, so do not duplicate if used
@@ -223,9 +228,9 @@ hw.module @unary_sink_no_duplicate(%arg0: i4) -> (result: i4) {
 
   // CHECK: comb.xor %arg0,
   %0 = comb.xor %arg0, %ones : i4
- 
+
  // CHECK-NOT: comb.xor
- 
+
   %a = comb.extract %0 from 0 : (i4) -> i1
   %b = comb.extract %0 from 1 : (i4) -> i1
   %c = comb.extract %0 from 2 : (i4) -> i2
@@ -235,5 +240,3 @@ hw.module @unary_sink_no_duplicate(%arg0: i4) -> (result: i4) {
   %r = comb.concat %a, %b, %c : i1, i1, i2
   hw.output %r : i4
 }
-
-

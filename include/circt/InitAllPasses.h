@@ -19,6 +19,8 @@
 #include "circt/Dialect/Calyx/CalyxPasses.h"
 #include "circt/Dialect/ESI/ESIDialect.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Dialect/FSM/FSMPasses.h"
+#include "circt/Dialect/HW/HWPasses.h"
 #include "circt/Dialect/Handshake/HandshakePasses.h"
 #include "circt/Dialect/LLHD/Transforms/Passes.h"
 #include "circt/Dialect/MSFT/MSFTDialect.h"
@@ -39,11 +41,13 @@ inline void registerAllPasses() {
   calyx::registerPasses();
   esi::registerESIPasses();
   firrtl::registerPasses();
+  fsm::registerPasses();
   llhd::initLLHDTransformationPasses();
   msft::registerMSFTPasses();
   seq::registerSeqPasses();
   sv::registerPasses();
   handshake::registerPasses();
+  hw::registerPasses();
 }
 
 } // namespace circt

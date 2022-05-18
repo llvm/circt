@@ -25,7 +25,7 @@
 // CHECK:           %[[VAL_21:.*]] = br %[[VAL_11]] : index
 // CHECK:           %[[VAL_22:.*]], %[[VAL_23:.*]] = control_merge %[[VAL_13]] : none
 // CHECK:           %[[VAL_24:.*]]:9 = fork [9] %[[VAL_23]] : index
-// CHECK:           %[[VAL_25:.*]] = buffer [1] %[[VAL_26:.*]] {initValues = [0], sequential = true} : i1
+// CHECK:           %[[VAL_25:.*]] = buffer [1] seq %[[VAL_26:.*]] {initValues = [0]} : i1
 // CHECK:           %[[VAL_27:.*]]:10 = fork [10] %[[VAL_25]] : i1
 // CHECK:           %[[VAL_28:.*]] = mux %[[VAL_27]]#9 {{\[}}%[[VAL_22]], %[[VAL_29:.*]]] : i1, none
 // CHECK:           %[[VAL_30:.*]] = mux %[[VAL_24]]#8 {{\[}}%[[VAL_20]]] : index, index
@@ -110,7 +110,7 @@
 // CHECK:           sink %[[VAL_107]] : index
 // CHECK:           return %[[VAL_106]] : none
 // CHECK:         }
-func @affine_dma_start(%arg0: index) {
+func.func @affine_dma_start(%arg0: index) {
   %0 = memref.alloc() : memref<100xf32>
   %1 = memref.alloc() : memref<100xf32, 2>
   %2 = memref.alloc() : memref<1xi32>
@@ -119,10 +119,10 @@ func @affine_dma_start(%arg0: index) {
   %c0_0 = arith.constant 0 : index
   %c10 = arith.constant 10 : index
   %c1 = arith.constant 1 : index
-  br ^bb1(%c0_0 : index)
+  cf.br ^bb1(%c0_0 : index)
 ^bb1(%3: index):      // 2 preds: ^bb0, ^bb2
   %4 = arith.cmpi slt, %3, %c10 : index
-  cond_br %4, ^bb2, ^bb3
+  cf.cond_br %4, ^bb2, ^bb3
 ^bb2: // pred: ^bb1
   %c7 = arith.constant 7 : index
   %5 = arith.addi %3, %c7 : index
@@ -130,7 +130,7 @@ func @affine_dma_start(%arg0: index) {
   %6 = arith.addi %arg0, %c11 : index
   memref.dma_start %0[%5], %1[%6], %c64, %2[%c0] : memref<100xf32>, memref<100xf32, 2>, memref<1xi32>
   %7 = arith.addi %3, %c1 : index
-  br ^bb1(%7 : index)
+  cf.br ^bb1(%7 : index)
 ^bb3: // pred: ^bb1
   return
 }

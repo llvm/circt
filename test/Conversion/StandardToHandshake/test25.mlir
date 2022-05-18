@@ -21,18 +21,18 @@
 // CHECK:           sink %[[VAL_18]] : index
 // CHECK:           return %[[VAL_17]] : none
 // CHECK:         }
-  func @if_else() {
+  func.func @if_else() {
     %c0 = arith.constant 0 : index
     %c-1 = arith.constant -1 : index
     %1 = arith.muli %c0, %c-1 : index
     %c20 = arith.constant 20 : index
     %2 = arith.addi %1, %c20 : index
     %3 = arith.cmpi sge, %2, %c0 : index
-    cond_br %3, ^bb1, ^bb2
+    cf.cond_br %3, ^bb1, ^bb2
   ^bb1: // pred: ^bb0
-    br ^bb3
+    cf.br ^bb3
   ^bb2: // pred: ^bb0
-    br ^bb3
+    cf.br ^bb3
   ^bb3: // 2 preds: ^bb1, ^bb2
     return
   }

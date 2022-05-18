@@ -15,6 +15,7 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/DialectImplementation.h"
+#include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;
 using namespace circt::handshake;
@@ -29,9 +30,15 @@ void HandshakeDialect::initialize() {
 #define GET_OP_LIST
 #include "circt/Dialect/Handshake/Handshake.cpp.inc"
       >();
+  addAttributes<
+#define GET_ATTRDEF_LIST
+#include "circt/Dialect/Handshake/HandshakeAttributes.cpp.inc"
+      >();
 }
 
 // Provide implementations for the enums, attributes and interfaces that we use.
+#define GET_ATTRDEF_CLASSES
+#include "circt/Dialect/Handshake/HandshakeAttributes.cpp.inc"
 #include "circt/Dialect/Handshake/HandshakeAttrs.cpp.inc"
 #include "circt/Dialect/Handshake/HandshakeDialect.cpp.inc"
 #include "circt/Dialect/Handshake/HandshakeEnums.cpp.inc"

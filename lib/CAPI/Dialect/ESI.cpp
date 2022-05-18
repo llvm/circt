@@ -10,7 +10,7 @@
 #include "mlir/CAPI/Utils.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/SymbolTable.h"
-#include "mlir/Parser.h"
+#include "mlir/Parser/Parser.h"
 #include "mlir/Support/FileUtilities.h"
 
 using namespace circt::esi;
@@ -55,11 +55,12 @@ MlirOperation circtESIWrapModule(MlirOperation cModOp, long numPorts,
 
 void circtESIAppendMlirFile(MlirModule cMod, MlirStringRef filename) {
   ModuleOp modOp = unwrap(cMod);
-  auto loadedMod = parseSourceFile(unwrap(filename), modOp.getContext());
+  auto loadedMod =
+      parseSourceFile<ModuleOp>(unwrap(filename), modOp.getContext());
   Block *loadedBlock = loadedMod->getBody();
   assert(!modOp->getRegions().empty());
-  if (modOp.body().empty()) {
-    modOp.body().push_back(loadedBlock);
+  if (modOp.getBodyRegion().empty()) {
+    modOp.getBodyRegion().push_back(loadedBlock);
     return;
   }
   auto &ops = modOp.getBody()->getOperations();

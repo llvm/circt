@@ -26,11 +26,10 @@ using namespace circt::esi;
 // ChannelBuffer functions.
 //===----------------------------------------------------------------------===//
 
-static ParseResult parseChannelBuffer(OpAsmParser &parser,
-                                      OperationState &result) {
+ParseResult ChannelBuffer::parse(OpAsmParser &parser, OperationState &result) {
   llvm::SMLoc inputOperandsLoc = parser.getCurrentLocation();
 
-  llvm::SmallVector<OpAsmParser::OperandType, 4> operands;
+  llvm::SmallVector<OpAsmParser::UnresolvedOperand, 4> operands;
   if (parser.parseOperandList(operands, /*requiredOperandCount=*/3,
                               /*delimiter=*/OpAsmParser::Delimiter::None))
     return failure();
@@ -56,22 +55,21 @@ static ParseResult parseChannelBuffer(OpAsmParser &parser,
   return success();
 }
 
-static void printChannelBuffer(OpAsmPrinter &p, ChannelBuffer &op) {
-  p << " " << op.clk() << ", " << op.rstn() << ", " << op.input() << " ";
-  p.printAttributeWithoutType(op.options());
-  p.printOptionalAttrDict(op->getAttrs(), /*elidedAttrs=*/{"options"});
-  p << " : " << op.output().getType().cast<ChannelPort>().getInner();
+void ChannelBuffer::print(OpAsmPrinter &p) {
+  p << " " << clk() << ", " << rstn() << ", " << input() << " ";
+  p.printAttributeWithoutType(options());
+  p.printOptionalAttrDict((*this)->getAttrs(), /*elidedAttrs=*/{"options"});
+  p << " : " << output().getType().cast<ChannelPort>().getInner();
 }
 
 //===----------------------------------------------------------------------===//
 // PipelineStage functions.
 //===----------------------------------------------------------------------===//
 
-static ParseResult parsePipelineStage(OpAsmParser &parser,
-                                      OperationState &result) {
+ParseResult PipelineStage::parse(OpAsmParser &parser, OperationState &result) {
   llvm::SMLoc inputOperandsLoc = parser.getCurrentLocation();
 
-  SmallVector<OpAsmParser::OperandType, 4> operands;
+  SmallVector<OpAsmParser::UnresolvedOperand, 4> operands;
   Type innerOutputType;
   if (parser.parseOperandList(operands, /*requiredOperandCount=*/3) ||
       parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
@@ -88,21 +86,20 @@ static ParseResult parsePipelineStage(OpAsmParser &parser,
   return success();
 }
 
-static void printPipelineStage(OpAsmPrinter &p, PipelineStage &op) {
-  p << " " << op.clk() << ", " << op.rstn() << ", " << op.input() << " ";
-  p.printOptionalAttrDict(op->getAttrs());
-  p << " : " << op.output().getType().cast<ChannelPort>().getInner();
+void PipelineStage::print(OpAsmPrinter &p) {
+  p << " " << clk() << ", " << rstn() << ", " << input() << " ";
+  p.printOptionalAttrDict((*this)->getAttrs());
+  p << " : " << output().getType().cast<ChannelPort>().getInner();
 }
 
 //===----------------------------------------------------------------------===//
 // Wrap / unwrap.
 //===----------------------------------------------------------------------===//
 
-static ParseResult parseWrapValidReady(OpAsmParser &parser,
-                                       OperationState &result) {
+ParseResult WrapValidReady::parse(OpAsmParser &parser, OperationState &result) {
   llvm::SMLoc inputOperandsLoc = parser.getCurrentLocation();
 
-  llvm::SmallVector<OpAsmParser::OperandType, 2> opList;
+  llvm::SmallVector<OpAsmParser::UnresolvedOperand, 2> opList;
   Type innerOutputType;
   if (parser.parseOperandList(opList, 2, OpAsmParser::Delimiter::None) ||
       parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
@@ -119,10 +116,10 @@ static ParseResult parseWrapValidReady(OpAsmParser &parser,
   return success();
 }
 
-void printWrapValidReady(OpAsmPrinter &p, WrapValidReady &op) {
-  p << " " << op.rawInput() << ", " << op.valid();
-  p.printOptionalAttrDict(op->getAttrs());
-  p << " : " << op.chanOutput().getType().cast<ChannelPort>().getInner();
+void WrapValidReady::print(OpAsmPrinter &p) {
+  p << " " << rawInput() << ", " << valid();
+  p.printOptionalAttrDict((*this)->getAttrs());
+  p << " : " << chanOutput().getType().cast<ChannelPort>().getInner();
 }
 
 void WrapValidReady::build(OpBuilder &b, OperationState &state, Value data,
@@ -131,11 +128,11 @@ void WrapValidReady::build(OpBuilder &b, OperationState &state, Value data,
         b.getI1Type(), data, valid);
 }
 
-static ParseResult parseUnwrapValidReady(OpAsmParser &parser,
-                                         OperationState &result) {
+ParseResult UnwrapValidReady::parse(OpAsmParser &parser,
+                                    OperationState &result) {
   llvm::SMLoc inputOperandsLoc = parser.getCurrentLocation();
 
-  llvm::SmallVector<OpAsmParser::OperandType, 2> opList;
+  llvm::SmallVector<OpAsmParser::UnresolvedOperand, 2> opList;
   Type outputType;
   if (parser.parseOperandList(opList, 2, OpAsmParser::Delimiter::None) ||
       parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
@@ -154,10 +151,10 @@ static ParseResult parseUnwrapValidReady(OpAsmParser &parser,
   return success();
 }
 
-static void printUnwrapValidReady(OpAsmPrinter &p, UnwrapValidReady &op) {
-  p << " " << op.chanInput() << ", " << op.ready();
-  p.printOptionalAttrDict(op->getAttrs());
-  p << " : " << op.rawOutput().getType();
+void UnwrapValidReady::print(OpAsmPrinter &p) {
+  p << " " << chanInput() << ", " << ready();
+  p.printOptionalAttrDict((*this)->getAttrs());
+  p << " : " << rawOutput().getType();
 }
 
 void UnwrapValidReady::build(OpBuilder &b, OperationState &state, Value inChan,
@@ -202,18 +199,16 @@ static LogicalResult verifySVInterface(Operation *op,
   return success();
 }
 
-static LogicalResult verifyWrapSVInterface(WrapSVInterface &op) {
-  auto modportType =
-      op.interfaceSink().getType().cast<circt::sv::ModportType>();
-  auto chanType = op.output().getType().cast<ChannelPort>();
-  return verifySVInterface(op, modportType, chanType);
+LogicalResult WrapSVInterface::verify() {
+  auto modportType = interfaceSink().getType().cast<circt::sv::ModportType>();
+  auto chanType = output().getType().cast<ChannelPort>();
+  return verifySVInterface(*this, modportType, chanType);
 }
 
-static LogicalResult verifyUnwrapSVInterface(UnwrapSVInterface &op) {
-  auto modportType =
-      op.interfaceSource().getType().cast<circt::sv::ModportType>();
-  auto chanType = op.chanInput().getType().cast<ChannelPort>();
-  return verifySVInterface(op, modportType, chanType);
+LogicalResult UnwrapSVInterface::verify() {
+  auto modportType = interfaceSource().getType().cast<circt::sv::ModportType>();
+  auto chanType = chanInput().getType().cast<ChannelPort>();
+  return verifySVInterface(*this, modportType, chanType);
 }
 
 #define GET_OP_CLASSES

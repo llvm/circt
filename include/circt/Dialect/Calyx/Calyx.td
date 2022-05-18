@@ -18,6 +18,7 @@ include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/OpBase.td"
 include "mlir/IR/RegionKindInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
+include "mlir/IR/FunctionInterfaces.td"
 include "circt/Dialect/Calyx/CalyxInterfaces.td"
 
 def CalyxDialect : Dialect {
@@ -43,18 +44,19 @@ class SameTypeConstraint<string lhs, string rhs>
                    lhs, rhs, [{ $_self }]>;
 
 /// Base class for the operation in this dialect.
-class CalyxOp<string mnemonic, list<OpTrait> traits = []> :
+class CalyxOp<string mnemonic, list<Trait> traits = []> :
   Op<CalyxDialect, mnemonic, traits>;
 
 /// Base class for Calyx cells.
-class CalyxCell<string mnemonic, list<OpTrait> traits = []> :
+class CalyxCell<string mnemonic, list<Trait> traits = []> :
   CalyxOp<mnemonic, !listconcat(traits, [
+    Symbol,
     DeclareOpInterfaceMethods<CellOpInterface>,
     DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>
   ])> {}
 
 /// Base class for Calyx containers.
-class CalyxContainer<string mnemonic, list<OpTrait> traits = []> :
+class CalyxContainer<string mnemonic, list<Trait> traits = []> :
   CalyxOp<mnemonic, !listconcat(traits, [
     NoRegionArguments,
     NoTerminator,
@@ -74,7 +76,7 @@ class CalyxContainer<string mnemonic, list<OpTrait> traits = []> :
 }
 
 /// Base class for ports associated with a Calyx GroupOp.
-class CalyxGroupPort<string mnemonic, list<OpTrait> traits = []> :
+class CalyxGroupPort<string mnemonic, list<Trait> traits = []> :
   CalyxOp<mnemonic, !listconcat(traits, [
     HasParent<"GroupOp">
   ])> {
@@ -82,7 +84,7 @@ class CalyxGroupPort<string mnemonic, list<OpTrait> traits = []> :
     I1:$src,
     Optional<I1>:$guard
   );
-  let verifier = "return ::verify$cppClass(*this);";
+  let hasVerifier = 1;
 }
 
 include "circt/Dialect/Calyx/CalyxStructure.td"

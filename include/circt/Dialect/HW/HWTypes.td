@@ -22,44 +22,54 @@ include "circt/Dialect/HW/HWDialect.td"
 // Type constraint that indicates that an operand/result may only be a valid,
 // known, non-directional type.
 def HWIntegerType : DialectType<HWDialect,
-    CPred<"hw::isHWIntegerType($_self)">,
+    CPred<"::circt::hw::isHWIntegerType($_self)">,
     "an integer bitvector of one or more bits", "::mlir::IntegerType">;
 
 // Type constraint that indicates that an operand/result may only be a valid,
 // known, non-directional type.
 def HWValueType : DialectType<HWDialect,
-    CPred<"hw::isHWValueType($_self)">, "a known primitive element">;
+    CPred<"::circt::hw::isHWValueType($_self)">, "a known primitive element">;
 
 // Type constraint that indicates that an operand/result may only be a valid
 // non-directional type.
 def HWNonInOutType : DialectType<HWDialect,
-    CPred<"!hw::hasHWInOutType($_self)">, "a type without inout">;
+    CPred<"!circt::hw::hasHWInOutType($_self)">, "a type without inout">;
 
 def InOutType : DialectType<HWDialect,
-    CPred<"hw::type_isa<hw::InOutType>($_self)">, "InOutType", "InOutType">;
+    CPred<"::circt::hw::type_isa<circt::hw::InOutType>($_self)">,
+          "InOutType", "InOutType">;
 
-// A handle to refer to hw::ArrayType in ODS.
+// A handle to refer to circt::hw::ArrayType in ODS.
 def ArrayType : DialectType<HWDialect,
-    CPred<"hw::type_isa<hw::ArrayType>($_self)">, "an ArrayType",
-    "TypeAliasOr<ArrayType>">;
+    CPred<"::circt::hw::type_isa<circt::hw::ArrayType>($_self)">,
+          "an ArrayType", "::circt::hw::TypeAliasOr<circt::hw::ArrayType>">;
 
-// A handle to refer to hw::StructType in ODS.
+// A handle to refer to circt::hw::StructType in ODS.
 def StructType : DialectType<HWDialect,
-    CPred<"hw::type_isa<hw::StructType>($_self)">, "a StructType",
-    "TypeAliasOr<StructType>">;
+    CPred<"::circt::hw::type_isa<circt::hw::StructType>($_self)">,
+          "a StructType", "::circt::hw::TypeAliasOr<circt::hw::StructType>">;
 
-// A handle to refer to hw::UnionType in ODS.
+// A handle to refer to circt::hw::UnionType in ODS.
 def UnionType : DialectType<HWDialect,
-    CPred<"hw::type_isa<hw::UnionType>($_self)">, "a UnionType",
-    "TypeAliasOr<UnionType>">;
+    CPred<"::circt::hw::type_isa<circt::hw::UnionType>($_self)">,
+          "a UnionType", "::circt::hw::TypeAliasOr<hw::UnionType>">;
 
 //===----------------------------------------------------------------------===//
 // Type Definitions
 //===----------------------------------------------------------------------===//
 
+/// Points to a name within a module.
+def HWInnerRefAttr : Attr<
+  CPred<"$_self.isa<::circt::hw::InnerRefAttr>()">,
+        "name reference attribute"> {
+  let returnType = "::circt::hw::InnerRefAttr";
+  let storageType = "::circt::hw::InnerRefAttr";
+  let convertFromStorage = "$_self";
+}
+
 /// A flat symbol reference or a reference to a name within a module.
 def NameRefAttr : Attr<
-  CPred<"$_self.isa<::mlir::FlatSymbolRefAttr, ::hw::InnerRefAttr>()">,
+  CPred<"$_self.isa<::mlir::FlatSymbolRefAttr, ::circt::hw::InnerRefAttr>()">,
   "name reference attribute">;
 
 // Like a FlatSymbolRefArrayAttr, but can also refer to names inside modules.

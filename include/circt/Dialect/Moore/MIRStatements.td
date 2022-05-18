@@ -15,7 +15,9 @@ def VariableDeclOp : MIROp<"vardecl", []> {
 
   let arguments = (ins StrAttr:$name, I32Attr:$init);
   let results = (outs MooreLValueType:$result);
-  let assemblyFormat = "$name `=` $init attr-dict `:` qualified(type($result))";
+  let assemblyFormat = [{
+    $name `=` $init attr-dict `:` custom<LValueType>(type($result))
+  }];
 }
 
 //===----------------------------------------------------------------------===//
@@ -24,7 +26,7 @@ def VariableDeclOp : MIROp<"vardecl", []> {
 
 def AssignOp : MIROp<"assign",
     [TypesMatchWith<"src and dest types have to match", "src", "dest",
-     "LValueType::get($_self.cast<RValueType>().getNestedType())">]> {
+     "LValueType::get($_self)">]> {
 
   let summary = "Continuous assignment";
   let description = [{
@@ -34,6 +36,6 @@ def AssignOp : MIROp<"assign",
   let arguments = (ins MooreLValueType:$dest, MooreRValueType:$src);
   let results = (outs);
   let assemblyFormat = [{
-    $dest `,` $src  attr-dict `:` qualified(type($dest)) `,` qualified(type($src))
+    $dest `,` $src  attr-dict `:` qualified(type($src))
   }];
 }

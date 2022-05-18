@@ -13,14 +13,14 @@ hw.module.extern @Reciever(%a: !esi.channel<i4>, %clk: i1)
 // IFACE-NEXT:    sv.interface.signal @valid : i1
 // IFACE-NEXT:    sv.interface.signal @ready : i1
 // IFACE-NEXT:    sv.interface.signal @data : i4
-// IFACE-NEXT:    sv.interface.modport @sink ("input" @ready, "output" @valid, "output" @data)
-// IFACE-NEXT:    sv.interface.modport @source ("input" @valid, "input" @data, "output" @ready)
+// IFACE-NEXT:    sv.interface.modport @sink (input @ready, output @valid, output @data)
+// IFACE-NEXT:    sv.interface.modport @source (input @valid, input @data, output @ready)
 // IFACE-LABEL: sv.interface @IValidReady_ArrayOf4xi64 {
 // IFACE-NEXT:    sv.interface.signal @valid : i1
 // IFACE-NEXT:    sv.interface.signal @ready : i1
 // IFACE-NEXT:    sv.interface.signal @data : !hw.array<4xi64>
-// IFACE-NEXT:    sv.interface.modport @sink  ("input" @ready, "output" @valid, "output" @data)
-// IFACE-NEXT:    sv.interface.modport @source  ("input" @valid, "input" @data, "output" @ready)
+// IFACE-NEXT:    sv.interface.modport @sink  (input @ready, output @valid, output @data)
+// IFACE-NEXT:    sv.interface.modport @source  (input @valid, input @data, output @ready)
 // IFACE-LABEL: hw.module.extern @Sender(%clk: i1, %x: !sv.modport<@IValidReady_i4::@sink>) -> (y: i8)
 // IFACE-LABEL: hw.module.extern @ArrSender(%x: !sv.modport<@IValidReady_ArrayOf4xi64::@sink>)
 // IFACE-LABEL: hw.module.extern @Reciever(%a: !sv.modport<@IValidReady_i4::@source>, %clk: i1)
@@ -99,3 +99,10 @@ hw.module @twoChannelArgs(%clk: i1, %ints: !esi.channel<i32>, %foo: !esi.channel
 // HW-LABEL: hw.module @twoChannelArgs(%clk: i1, %ints: i32, %ints_valid: i1, %foo: i7, %foo_valid: i1) -> (ints_ready: i1, foo_ready: i1)
 // HW:   %true = hw.constant true
 // HW:   hw.output %true, %true : i1, i1
+
+// IFACE: sv.interface.instance  {name = "i1ToHandshake_fork0FromArg0"} : !sv.interface<@IValidReady_i1>
+hw.module.extern @handshake_fork_1ins_2outs_ctrl(%in0: !esi.channel<i1>, %clock: i1, %reset: i1) -> (out0: !esi.channel<i1>, out1: !esi.channel<i1>)
+hw.module @test_constant(%arg0: !esi.channel<i1>, %clock: i1, %reset: i1) -> (outCtrl: !esi.channel<i1>) {
+  %handshake_fork0.out0, %handshake_fork0.out1 = hw.instance "handshake_fork0" @handshake_fork_1ins_2outs_ctrl(in0: %arg0: !esi.channel<i1>, clock: %clock: i1, reset: %reset: i1) -> (out0: !esi.channel<i1>, out1: !esi.channel<i1>)
+  hw.output %handshake_fork0.out1 : !esi.channel<i1>
+}

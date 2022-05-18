@@ -24,9 +24,19 @@ llhd.entity @check_illegal_drv (%sig : !llhd.sig<i1>) -> () {
 
 // -----
 
-// expected-error @+4 {{Redefinition of signal named 'sigI1'!}}
+// expected-error @+4 {{redefinition of signal named 'sigI1'!}}
 llhd.entity @check_unique_sig_names () -> () {
   %cI1 = hw.constant 0 : i1
   %sig1 = llhd.sig "sigI1" %cI1 : i1
   %sig2 = llhd.sig "sigI1" %cI1 : i1
+}
+
+// -----
+
+// expected-error @+5 {{redefinition of signal named 'sigI1'!}}
+llhd.entity @check_unique_sig_names2 () -> () {
+  %cI1 = hw.constant 0 : i1
+  %time = llhd.constant_time <0ns, 1d, 0e>
+  %sig1 = llhd.sig "sigI1" %cI1 : i1
+  %sig2 = llhd.output "sigI1" %cI1 after %time : i1
 }

@@ -82,6 +82,29 @@ def VerbatimExprSEOp : SVOp<"verbatim.expr.se", [HasCustomSSAName]> {
   ];
 }
 
+def MacroRefExprOp : SVOp<"macro.ref", [NoSideEffect, HasCustomSSAName]> {
+  let summary = "Expression to refer to a SystemVerilog macro";
+  let description = [{
+    This operation produces a value by referencing a named macro.
+
+    Presently, it is assumed that the referenced macro is a constant with no
+    side effects.  This expression is subject to CSE.  It can be duplicated
+    and emitted inline by the Verilog emitter.
+    }];
+
+  let arguments = (ins MacroIdentAttr:$ident);
+  let results = (outs HWValueOrInOutType:$result);
+
+  let assemblyFormat = "`<` $ident `>` attr-dict `:` qualified(type($result))";
+
+  let builders = [
+    OpBuilder<(ins "Type":$resultType, "StringRef":$ident),
+               "build(odsBuilder, odsState, resultType, "
+                 "::circt::sv::MacroIdentAttr::get("
+                   "$_builder.getContext(), ident));">
+  ];
+}
+
 def ConstantXOp : SVOp<"constantX", [NoSideEffect, HasCustomSSAName]> {
   let summary = "A constant of value 'x'";
   let description = [{
@@ -92,7 +115,7 @@ def ConstantXOp : SVOp<"constantX", [NoSideEffect, HasCustomSSAName]> {
   let arguments = (ins);
   let results = (outs HWValueType:$result);
   let assemblyFormat = " attr-dict `:` qualified(type($result))";
-  let verifier = "return ::verify$cppClass(*this);";
+  let hasVerifier = 1;
   let extraClassDeclaration = [{
     int64_t getWidth() {
       return hw::getBitWidth(getType());
@@ -110,7 +133,7 @@ def ConstantZOp : SVOp<"constantZ", [NoSideEffect, HasCustomSSAName]> {
   let arguments = (ins);
   let results = (outs HWValueType:$result);
   let assemblyFormat = " attr-dict `:` qualified(type($result))";
-  let verifier = "return ::verify$cppClass(*this);";
+  let hasVerifier = 1;
   let extraClassDeclaration = [{
     int64_t getWidth() {
       return hw::getBitWidth(getType());
@@ -133,7 +156,7 @@ def LocalParamOp : SVOp<"localparam",
     `:` qualified(type($result)) custom<ImplicitSSAName>(attr-dict)
   }];
 
-  let verifier = "return ::verify$cppClass(*this);";
+  let hasVerifier = 1;
 }
 
 def IndexedPartSelectOp
@@ -155,7 +178,7 @@ def IndexedPartSelectOp
                                                 CArg<"bool", "false">:$decrement)>
   ];
 
-  let verifier = "return ::verifyIndexedPartSelectOp(*this);";
+  let hasVerifier = 1;
 
   let extraClassDeclaration = [{
     /// Infer the return types of this operation.

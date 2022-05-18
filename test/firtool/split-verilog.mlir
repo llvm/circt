@@ -46,12 +46,12 @@ hw.module.extern @inout_2 () -> ()
 sv.verbatim "// Foo" {output_file = #hw.output_file<"custom1.sv">}
 sv.verbatim "// Bar" {output_file = #hw.output_file<"custom2.sv", excludeFromFileList>}
 
-// LIST:      foo.sv
-// LIST-NEXT: bar.sv
-// LIST-NEXT: usb.sv
-// LIST-NEXT: extern_modules.sv
-// LIST-NEXT: inout_3.sv
-// LIST-NEXT: custom1.sv
+// LIST:      {{^}}foo.sv{{$}}
+// LIST-NEXT: {{^}}bar.sv{{$}}
+// LIST-NEXT: {{^}}usb.sv{{$}}
+// LIST-NEXT: {{^}}extern_modules.sv{{$}}
+// LIST-NEXT: {{^}}inout_3.sv{{$}}
+// LIST-NEXT: {{^}}custom1.sv{{$}}
 // LIST-NOT:  custom2.sv
 
 // VERILOG-FOO:       // I'm everywhere

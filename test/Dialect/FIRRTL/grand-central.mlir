@@ -595,15 +595,15 @@ firrtl.circuit "BindInterfaceTest"  attributes {
   }
 }
 
-// The bind is dropped in the outer module, outside the circuit.
 // CHECK: module {
-// CHECK-NEXT: sv.bind.interface @[[INTERFACE_INSTANCE_SYMBOL:.+]] {output_file
-
 // CHECK-LABEL: firrtl.circuit "BindInterfaceTest"
 
 // Annotations are removed from the circuit.
 // CHECK-NOT: annotations
 // CHECK-SAME: {
+
+// The bind is dropped inside the circuit.
+// CHECK-NEXT: sv.bind.interface <@DUT::@[[INTERFACE_INSTANCE_SYMBOL:.+]]> {output_file
 
 // Annotations are removed from the module.
 // CHECK: firrtl.module @DUT
@@ -942,6 +942,205 @@ firrtl.circuit "ParentIsMainModule" attributes {
 // CHECK-SAME:      #hw.innerNameRef<@ParentIsMainModule::@__View_Foo__>
 // CHECK-SAME:      @ParentIsMainModule
 // CHECK-SAME:      #hw.innerNameRef<@ParentIsMainModule::@a>
+
+// -----
+
+firrtl.circuit "DedupedPath" attributes {
+  annotations = [
+    {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+     defName = "Foo",
+     elements = [
+       {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+        name = "foo",
+        id = 1 : i64},
+       {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+        name = "bar",
+        id = 2 : i64}],
+     id = 0 : i64,
+     name = "View"}]} {
+  firrtl.nla @nla_0 [#hw.innerNameRef<@DUT::@tile1>, #hw.innerNameRef<@Tile::@w>]
+  firrtl.nla @nla [#hw.innerNameRef<@DUT::@tile2>, #hw.innerNameRef<@Tile::@w>]
+  firrtl.module @Tile() {
+    %w = firrtl.wire sym @w {
+      annotations = [
+        #firrtl.subAnno<fieldID = 0, {
+          circt.nonlocal = @nla,
+          class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+          id = 2 : i64}>,
+        #firrtl.subAnno<fieldID = 0, {
+          circt.nonlocal = @nla_0,
+          class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+          id = 1 : i64}>]} : !firrtl.uint<8>
+  }
+  firrtl.module @MyView_companion() attributes {
+    annotations = [
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+       id = 0 : i64,
+       name = "MyView",
+       type = "companion"},
+      {class = "firrtl.transforms.NoDedupAnnotation"}]} {}
+  firrtl.module @DUT() attributes {
+    annotations = [
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+       id = 0 : i64,
+       name = "MyView",
+       type = "parent"},
+      {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
+    firrtl.instance tile1 sym @tile1 {annotations = [
+      {circt.nonlocal = @nla_0,
+       class = "circt.nonlocal"}]} @Tile()
+    firrtl.instance tile2 sym @tile2 {annotations = [
+      {circt.nonlocal = @nla,
+       class = "circt.nonlocal"}]} @Tile()
+    firrtl.instance MyView_companion  @MyView_companion()
+  }
+  firrtl.module @DedupedPath() {
+    firrtl.instance dut @DUT()
+  }
+}
+
+// Chceck that NLAs that encode a path to a Grand Central leaf work.  This
+// should result in two things:
+//   1) The compute XMR should include information from the NLA.
+//   2) The NLAs should be removed.
+//
+// CHECK-LABEL:          firrtl.circuit "DedupedPath"
+// CHECK-NOT:              firrtl.nla
+// CHECK-NEXT:             firrtl.module @Tile()
+// CHECK-NOT:                circt.nonlocal
+// CHECK:                  firrtl.module @DUT()
+// CHECK-NOT:                circt.nonlocal
+// CHECK:                  firrtl.module @DedupedPath
+// CHECK-NEXT:               firrtl.instance dut sym @[[dutSym:[a-zA-Z0-9]+]]
+// CHECK:                  firrtl.module @MyView_mapping()
+// CHECK-NEXT{LITERAL}:      sv.verbatim "assign {{0}}.foo = {{1}}.{{2}}.{{3}}.{{4}};"
+// CHECK-SAME:                 symbols = [#hw.innerNameRef<@DUT::@__MyView_Foo__>,
+// CHECK-SAME:                   @DedupedPath,
+// CHECK-SAME:                   #hw.innerNameRef<@DedupedPath::@[[dutSym]]>,
+// CHECK-SAME:                   #hw.innerNameRef<@DUT::@tile1>,
+// CHECK-SAME:                   #hw.innerNameRef<@Tile::@w>]
+// CHECK-NEXT{LITERAL}:      sv.verbatim "assign {{0}}.bar = {{1}}.{{2}}.{{3}}.{{4}};"
+// CHECK-SAME:                 symbols = [#hw.innerNameRef<@DUT::@__MyView_Foo__>,
+// CHECK-SAME:                   @DedupedPath,
+// CHECK-SAME:                   #hw.innerNameRef<@DedupedPath::@[[dutSym]]>,
+// CHECK-SAME:                   #hw.innerNameRef<@DUT::@tile2>,
+// CHECK-SAME:                   #hw.innerNameRef<@Tile::@w>]
+
+// -----
+
+firrtl.circuit "BlackBoxDirectoryBehavior" attributes {
+  annotations = [
+    {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+     defName = "Foo",
+     elements = [],
+     id = 0 : i64,
+     name = "View"},
+    {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
+     directory = "gct-dir",
+     filename = "gct-dir/bindings.sv"}]} {
+  firrtl.extmodule @BlackBox_DUT() attributes {annotations = [{class = "firrtl.transforms.BlackBoxInlineAnno", name = "DUTOnly.v", text = ""}]}
+  firrtl.extmodule @BlackBox_GCT() attributes {annotations = [{class = "firrtl.transforms.BlackBoxInlineAnno", name = "GCTOnly.v", text = ""}]}
+  firrtl.extmodule @BlackBox_DUTAndGCT() attributes {annotations = [{class = "firrtl.transforms.BlackBoxInlineAnno", name = "DUTAndGCT.v", text = ""}]}
+  firrtl.module @View_companion() attributes {
+    annotations = [
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+       defName = "Foo",
+       id = 0 : i64,
+       name = "View",
+       type = "companion"}]} {
+    firrtl.instance bbox1 @BlackBox_GCT()
+    firrtl.instance bbox2 @BlackBox_DUTAndGCT()
+  }
+  firrtl.module @DUT() attributes {
+    annotations = [
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+       id = 0 : i64,
+       name = "view",
+       type = "parent"}
+    ]} {
+    firrtl.instance View_companion @View_companion()
+    firrtl.instance bbox1 @BlackBox_DUT()
+    firrtl.instance bbox2 @BlackBox_DUTAndGCT()
+  }
+  firrtl.module @BlackBoxDirectoryBehavior() {
+    firrtl.instance dut @DUT()
+  }
+}
+
+// Check that black boxes that are instantiated under a Grand Central companion
+// have their "output_file" set to the extraction directory.  This information
+// will later be used by BlackBoxReader to control where these black boxes are
+// extracted to.  This test exists to verify SFC-exact behavior around Grand
+// Central.
+//
+// CHECK-LABEL: "BlackBoxDirectoryBehavior"
+// CHECK:      firrtl.extmodule @BlackBox_DUT()
+// CHECK-NOT:    output_file
+// CHECK-NEXT: firrtl.extmodule @BlackBox_GCT() {{.+}} output_file = #hw.output_file<"gct-dir/">
+// CHECK-NEXT: firrtl.extmodule @BlackBox_DUTAndGCT() {{.+}} output_file = #hw.output_file<"gct-dir/">
+
+// -----
+
+firrtl.circuit "InterfaceInTestHarness" attributes {
+  annotations = [
+    {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+     defName = "Foo",
+     elements = [
+       {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+        description = "description of foo",
+        name = "foo",
+        id = 1 : i64}],
+     id = 0 : i64,
+     name = "View"},
+    {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
+     directory = "gct-dir",
+     filename = "gct-dir/bindings.sv"},
+    {class = "sifive.enterprise.firrtl.TestBenchDirAnnotation",
+     dirname = "testbenchDir"}]} {
+  firrtl.module @View_companion() attributes {
+    annotations = [
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+       defName = "Foo",
+       id = 0 : i64,
+       name = "View",
+       type = "companion"}]} {}
+  firrtl.module @DUT() attributes {
+    annotations = [
+      {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}
+    ]} {
+  }
+  firrtl.module @InterfaceInTestHarness() attributes {
+    annotations = [
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+       id = 0 : i64,
+       name = "view",
+       type = "parent"}]} {
+    firrtl.instance dut @DUT()
+    %a = firrtl.wire {annotations = [
+      {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+       id = 1 : i64},
+      {class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<2>
+    firrtl.instance View_companion @View_companion()
+  }
+}
+
+// Check that an interface, instantiated inside the test harness (technically,
+// in a module which is not a child of the marked Design Under Test), will not
+// be extracted via a bind.  Also, check that interfaces only inside the test
+// harness will be written to the test harness directory.
+//
+// CHECK-LABEL: "InterfaceInTestHarness"
+// CHECK:       firrtl.module @InterfaceInTestHarness
+// CHECK:         firrtl.instance View_companion
+// CHECK-NOT:       output_file
+// CHECK-NOT:       lowerToBind
+// CHECK:         sv.interface.instance
+// CHECK-NOT:       output_file
+// CHECK-NOT:       lowerToBind
+// CHECK-SAME:      !sv.interface
+// CHECK-NEXT:  }
+// CHECK:       sv.interface
+// CHECK-SAME:    output_file = #hw.output_file<"testbenchDir/Foo.sv", excludeFromFileList>
 
 // -----
 

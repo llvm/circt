@@ -45,8 +45,11 @@ def PipelineOp : Op<StaticLogic_Dialect, "pipeline", [NoSideEffect]> {
 
   let builders = [OpBuilder<(ins "ValueRange":$operands, "ValueRange":$results), [{
     SmallVector<Type, 4> argTypes;
-    for (auto value : operands)
+    SmallVector<Location, 4> argLocs;
+    for (auto value : operands) {
       argTypes.push_back(value.getType());
+      argLocs.push_back(value.getLoc());
+    }
 
     SmallVector<Type, 4> resultTypes;
     for (auto value : results)
@@ -55,7 +58,7 @@ def PipelineOp : Op<StaticLogic_Dialect, "pipeline", [NoSideEffect]> {
     Region *bodyRegion = odsState.addRegion();
     Block *body = new Block();
     bodyRegion->push_back(body);
-    body->addArguments(argTypes);
+    body->addArguments(argTypes, argLocs);
 
     odsState.addOperands(operands);
     odsState.addTypes(resultTypes);
@@ -114,6 +117,7 @@ def PipelineWhileOp : Op<StaticLogic_Dialect, "pipeline.while", []> {
 
   let arguments = (ins
     I64Attr:$II,
+    OptionalAttr<I64Attr>:$tripCount,
     Variadic<AnyType>:$iterArgs
   );
 
@@ -126,22 +130,15 @@ def PipelineWhileOp : Op<StaticLogic_Dialect, "pipeline.while", []> {
     SizedRegion<1>:$stages
   );
 
-  let parser = [{
-    return parse$cppClass(parser, result);
-  }];
+  let hasCustomAssemblyFormat = 1;
 
-  let printer = [{
-    print$cppClass(p, *this);
-  }];
-
-  let verifier = [{
-    return ::verify$cppClass(*this);
-  }];
+  let hasVerifier = 1;
 
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilder<(ins "mlir::TypeRange":$resultTypes, "mlir::IntegerAttr":$II,
-                   "mlir::ValueRange":$iterArgs)>
+                   "llvm::Optional<IntegerAttr>": $tripCount,
+		   "mlir::ValueRange":$iterArgs)>
   ];
 
   let extraClassDeclaration = [{
@@ -195,9 +192,7 @@ def PipelineStageOp : Op<StaticLogic_Dialect, "pipeline.stage",
     `start` `=` $start (`when` $when^)? $body (`:` qualified(type($results))^)? attr-dict
   }];
 
-  let verifier = [{
-    return ::verify$cppClass(*this);
-  }];
+  let hasVerifier = 1;
 
   let skipDefaultBuilders = 1;
   let builders = [
@@ -227,9 +222,7 @@ def PipelineRegisterOp : Op<StaticLogic_Dialect, "pipeline.register",
     $operands (`:` qualified(type($operands))^)? attr-dict
   }];
 
-  let verifier = [{
-    return ::verify$cppClass(*this);
-  }];
+  let hasVerifier = 1;
 }
 
 def PipelineTerminatorOp : Op<StaticLogic_Dialect, "pipeline.terminator",
@@ -261,9 +254,7 @@ def PipelineTerminatorOp : Op<StaticLogic_Dialect, "pipeline.terminator",
     functional-type($iter_args, $results) attr-dict
   }];
 
-  let verifier = [{
-    return ::verify$cppClass(*this);
-  }];
+  let hasVerifier = 1;
 }
 
 #endif // STATICLOGIC_OPS

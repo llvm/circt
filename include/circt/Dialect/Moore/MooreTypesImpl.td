@@ -10,10 +10,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-class MooreType<string name> : TypeDef<MooreDialect, name> { }
+include "mlir/IR/EnumAttr.td"
 
-class WrapperTypeBase<string name, string mnemo> : MooreType<name> {
-  let mnemonic = mnemo;
+class MooreTypeDef<string name> : TypeDef<MooreDialect, name> { }
+
+def LValueTypeImpl : MooreTypeDef<"LValue"> {
+  let mnemonic = "lvalue";
   let parameters = (ins "::mlir::Type":$nestedType);
   let assemblyFormat = "`<` $nestedType `>`";
 
@@ -22,20 +24,4 @@ class WrapperTypeBase<string name, string mnemo> : MooreType<name> {
       return $_get(nestedType.getContext(), nestedType);
     }]>
   ];
-}
-
-//===----------------------------------------------------------------------===//
-// LValue / RValue wrapper types
-//===----------------------------------------------------------------------===//
-
-def LValueTypeImpl : WrapperTypeBase<"LValue", "lvalue">;
-def RValueTypeImpl : WrapperTypeBase<"RValue", "rvalue">;
-
-//===----------------------------------------------------------------------===//
-// Integer atom types
-//===----------------------------------------------------------------------===//
-
-def IntTypeImpl : MooreType<"Int"> {
-  let summary = "System-Verilog int type";
-  let mnemonic = "sv.int";
 }

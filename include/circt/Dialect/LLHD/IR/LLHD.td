@@ -13,11 +13,14 @@
 #ifndef CIRCT_DIALECT_LLHD_IR_LLHD
 #define CIRCT_DIALECT_LLHD_IR_LLHD
 
+include "mlir/IR/AttrTypeBase.td"
 include "mlir/IR/OpBase.td"
+include "mlir/IR/PatternBase.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/Interfaces/CallInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
+include "mlir/IR/FunctionInterfaces.td"
 include "mlir/IR/SymbolInterfaces.td"
 
 //===----------------------------------------------------------------------===//
@@ -72,18 +75,23 @@ def LLHD_AnySigType : LLHD_SigType<[LLHD_AnyUnderlyingType]>;
 
 // LLHD ptr type
 class LLHD_PtrType<list<Type> allowedTypes>
-    : ContainerType<AnyTypeOf<allowedTypes>, CPred<"$_self.isa<PtrType>()">,
-                    "$_self.cast<PtrType>().getUnderlyingType()",
-                    "LLHD pointer type">;
+  : ContainerType<AnyTypeOf<allowedTypes>, CPred<"$_self.isa<PtrType>()">,
+    "$_self.cast<PtrType>().getUnderlyingType()", "LLHD pointer type">;
 
 def LLHD_AnyPtrType : LLHD_PtrType<[LLHD_AnyUnderlyingType]>;
+
+// LLHD sig or ptr type
+class LLHD_SigOrPtrType<list<Type> allowedTypes>
+  : AnyTypeOf<[LLHD_SigType<allowedTypes>, LLHD_PtrType<allowedTypes>]>;
+
+def LLHD_AnySigOrPtrType : LLHD_SigOrPtrType<[LLHD_AnyUnderlyingType]>;
 
 //===----------------------------------------------------------------------===//
 // LLHD op definition
 //===----------------------------------------------------------------------===//
 
 // Base class for all LLHD ops.
-class LLHD_Op<string mnemonic, list<OpTrait> traits = []>
+class LLHD_Op<string mnemonic, list<Trait> traits = []>
     : Op<LLHD_Dialect, mnemonic, traits> {
 
   // For each LLHD op, the following static functions need to be defined in
@@ -92,8 +100,7 @@ class LLHD_Op<string mnemonic, list<OpTrait> traits = []>
   // * static ParseResult parse<op-c++-class-name>(OpAsmParser &parser,
   //                                               OperationState &state);
   // * static void print<op-c++-class-name>(OpAsmPrinter &p, <op-c++-class-name> op)
-  let parser = [{ return ::parse$cppClass(parser, result); }];
-  let printer = [{ ::print$cppClass(p, *this); }];
+  let hasCustomAssemblyFormat = 1;
 }
 
 //===----------------------------------------------------------------------===//

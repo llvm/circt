@@ -2,6 +2,14 @@
 
 firrtl.circuit "MyModule" {
 
+firrtl.module @mod() { }
+firrtl.extmodule @extmod()
+firrtl.memmodule @memmod () attributes {
+  depth = 16 : ui64, dataWidth = 1 : ui32, extraPorts = [], 
+  maskBits = 0 : ui32, numReadPorts = 0 : ui32, numWritePorts = 0 : ui32,
+  numReadWritePorts = 0 : ui32, readLatency = 0 : ui32,
+  writeLatency = 1 : ui32}
+
 // Constant op supports different return types.
 firrtl.module @Constants() {
   // CHECK: %c0_ui0 = firrtl.constant 0 : !firrtl.uint<0>
@@ -112,6 +120,13 @@ firrtl.module @TestDshRL(in %in1 : !firrtl.uint<2>, in %in2: !firrtl.uint<3>) {
 
   // CHECK: %2 = firrtl.dshlw %in1, %in2 : (!firrtl.uint<2>, !firrtl.uint<3>) -> !firrtl.uint<2>
   %2 = firrtl.dshlw %in1, %in2 : (!firrtl.uint<2>, !firrtl.uint<3>) -> !firrtl.uint<2>
+}
+
+// We allow implicit truncation of a register's reset value.
+// CHECK-LABEL: @RegResetTruncation
+firrtl.module @RegResetTruncation(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %value: !firrtl.bundle<a: uint<2>>, out %out: !firrtl.bundle<a: uint<1>>) {
+  %r2 = firrtl.regreset %clock, %reset, %value  : !firrtl.uint<1>, !firrtl.bundle<a: uint<2>>, !firrtl.bundle<a: uint<1>>
+  firrtl.connect %out, %r2 : !firrtl.bundle<a: uint<1>>, !firrtl.bundle<a: uint<1>>
 }
 
 // CHECK-LABEL: @TestNodeName

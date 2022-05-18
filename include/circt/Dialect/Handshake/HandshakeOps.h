@@ -20,12 +20,14 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Dialect.h"
+#include "mlir/IR/FunctionInterfaces.h"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/Operation.h"
 #include "mlir/IR/RegionKindInterface.h"
 #include "mlir/IR/TypeSupport.h"
 #include "mlir/IR/Types.h"
+#include "mlir/Interfaces/CallInterfaces.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/Any.h"
@@ -46,6 +48,9 @@ template <typename ConcreteType>
 class HasClock : public TraitBase<ConcreteType, HasClock> {};
 } // namespace OpTrait
 } // namespace mlir
+
+#define GET_ATTRDEF_CLASSES
+#include "circt/Dialect/Handshake/HandshakeAttributes.h.inc"
 
 #define GET_OP_CLASSES
 #include "circt/Dialect/Handshake/Handshake.h.inc"

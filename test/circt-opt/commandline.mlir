@@ -8,11 +8,13 @@
 // DIALECT-NEXT: arith
 // DIALECT-NEXT: builtin
 // DIALECT-NEXT: calyx
+// DIALECT-NEXT: cf
 // DIALECT-NEXT: chirrtl
 // DIALECT-NEXT: comb
 // DIALECT-NEXT: esi
 // DIALECT-NEXT: firrtl
 // DIALECT-NEXT: fsm
+// DIALECT-NEXT: func
 // DIALECT-NEXT: handshake
 // DIALECT-NEXT: hw
 // DIALECT-NEXT: llhd
@@ -23,5 +25,4 @@
 // DIALECT-NEXT: scf
 // DIALECT-NEXT: seq
 // DIALECT-NEXT: staticlogic
-// DIALECT-NEXT: std
 // DIALECT-NEXT: sv

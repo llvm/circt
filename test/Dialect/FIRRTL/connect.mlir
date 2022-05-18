@@ -87,12 +87,6 @@ firrtl.module @bitwidth(in %a : !firrtl.uint<1>, out %b : !firrtl.uint<2>) {
   firrtl.connect %b, %a : !firrtl.uint<2>, !firrtl.uint<1>
 }
 
-/// Partial connects may truncate.
-firrtl.module @partial_bitwidth(in %a : !firrtl.uint<2>, out %b : !firrtl.uint<1>) {
-  // CHECK: firrtl.partialconnect %b, %a
-  firrtl.partialconnect %b, %a : !firrtl.uint<1>, !firrtl.uint<2>
-}
-
 firrtl.module @wires0(in %in : !firrtl.uint<1>, out %out : !firrtl.uint<1>) {
   %w = firrtl.wire : !firrtl.uint<1>
   // CHECK: firrtl.connect %w, %in : !firrtl.uint<1>, !firrtl.uint<1>

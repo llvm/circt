@@ -13,6 +13,7 @@
 #ifndef CHIRRTL_TD
 #define CHIRRTL_TD
 
+include "mlir/IR/AttrTypeBase.td"
 include "mlir/IR/OpBase.td"
 include "mlir/IR/OpAsmInterface.td"
 include "circt/Dialect/FIRRTL/FIRRTLDialect.td"
@@ -59,16 +60,17 @@ def CMemoryType : TypeDef<CHIRRTLDialect, "CMemory"> {
   }];
 
   let parameters = (ins "firrtl::FIRRTLType":$elementType,
-                        "unsigned":$numElements);
+                        "uint64_t":$numElements);
 
   let builders = [
     TypeBuilderWithInferredContext<(ins "firrtl::FIRRTLType":$elementType,
-                                        "unsigned":$numElements), [{
+                                        "uint64_t":$numElements), [{
       return $_get(elementType.getContext(), elementType, numElements);
     }]>
   ];
 
   let genVerifyDecl = 1;
+  let hasCustomAssemblyFormat = 1;
 }
 
 def CMemoryPortType : TypeDef<CHIRRTLDialect, "CMemoryPort"> {
@@ -90,11 +92,14 @@ def CMemoryPortType : TypeDef<CHIRRTLDialect, "CMemoryPort"> {
 // CHIRRTL Operations
 //===----------------------------------------------------------------------===//
 
+def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface,
+                         ["getAsmResultNames"]>;
+
 // Base class for the operation in this dialect.
-class CHIRRTLOp<string mnemonic, list<OpTrait> traits = []> :
+class CHIRRTLOp<string mnemonic, list<Trait> traits = []> :
     Op<CHIRRTLDialect, mnemonic, traits>;
 
-def CombMemOp : CHIRRTLOp<"combmem"> {
+def CombMemOp : CHIRRTLOp<"combmem", [HasCustomSSAName]> {
   let summary = "Define a new combinational memory";
   let description = [{
     Define a new behavioral combinational memory. Combinational memories have a
@@ -105,13 +110,13 @@ def CombMemOp : CHIRRTLOp<"combmem"> {
   let results = (outs CMemoryType:$result);
   let assemblyFormat = "(`sym` $inner_sym^)? custom<CombMemOp>(attr-dict) `:` qualified(type($result))";
   let builders = [
-    OpBuilder<(ins "firrtl::FIRRTLType":$elementType, "unsigned":$numElements,
+    OpBuilder<(ins "firrtl::FIRRTLType":$elementType, "uint64_t":$numElements,
                    "mlir::StringRef":$name, "ArrayAttr":$annotations,
                    CArg<"StringAttr", "StringAttr()">:$inner_sym)>
   ];
 }
 
-def SeqMemOp : CHIRRTLOp<"seqmem"> {
+def SeqMemOp : CHIRRTLOp<"seqmem", [HasCustomSSAName]> {
   let summary = "Define a new sequential memory";
   let description = [{
     Define a new behavioral sequential memory.  Sequential memories have a
@@ -123,7 +128,7 @@ def SeqMemOp : CHIRRTLOp<"seqmem"> {
   let results = (outs CMemoryType:$result);
   let assemblyFormat = "(`sym` $inner_sym^)? $ruw custom<SeqMemOp>(attr-dict) `:` qualified(type($result))";
   let builders = [
-    OpBuilder<(ins "firrtl::FIRRTLType":$elementType, "unsigned":$numElements,
+    OpBuilder<(ins "firrtl::FIRRTLType":$elementType, "uint64_t":$numElements,
                    "RUWAttr":$ruw, "mlir::StringRef":$name,
                    "ArrayAttr":$annotations,
                    CArg<"StringAttr", "StringAttr()">:$inner_sym)>
@@ -131,13 +136,13 @@ def SeqMemOp : CHIRRTLOp<"seqmem"> {
 }
 
 def MemoryPortOp : CHIRRTLOp<"memoryport", [InferTypeOpInterface,
-         DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
+      HasCustomSSAName]> {
   let summary = "Declares a memory port on a memory";
 
   let summary = "Defines a memory port on CHIRRTL memory";
   let description = [{
     This operation defines a new memory port on a `seqmem` or `combmem`CHISEL.
-    `data` is the data returned from the memory port.  
+    `data` is the data returned from the memory port.
 
     The memory port requires an access point, which sets the enable condition
     of the port, the clock, and the address.  This is done by passing the the
@@ -161,7 +166,7 @@ def MemoryPortOp : CHIRRTLOp<"memoryport", [InferTypeOpInterface,
                    CArg<"ArrayRef<Attribute>","{}">:$annotations)>
   ];
 
-  let verifier = "return ::verifyMemoryPortOp(*this);";
+  let hasVerifier = 1;
 
   let extraClassDeclaration = [{
     /// Get the assocated access op.

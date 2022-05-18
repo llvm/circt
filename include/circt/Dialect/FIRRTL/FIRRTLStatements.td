@@ -21,7 +21,7 @@ def AttachOp : FIRRTLOp<"attach"> {
   let hasCanonicalizeMethod = true;
 }
 
-def ConnectOp : FIRRTLOp<"connect"> {
+def ConnectOp : FIRRTLOp<"connect", [FConnectLike]> {
   let summary = "Connect two signals";
   let description = [{
     Connect Operation:
@@ -36,30 +36,11 @@ def ConnectOp : FIRRTLOp<"connect"> {
   let assemblyFormat =
     "$dest `,` $src  attr-dict `:` qualified(type($dest)) `,` qualified(type($src))";
 
-  let verifier = "return ::verifyConnectOp(*this);";
+  let hasVerifier = 1;
   let hasCanonicalizeMethod = true;
 }
 
-def PartialConnectOp : FIRRTLOp<"partialconnect"> {
-  let summary = "Connect two signals";
-  let description = [{
-    Connect two values with fewer constraints:
-    ```
-      firrtl.partialconnect %dest, %src : t1, t2
-    ```
-    }];
-
-  let arguments = (ins FIRRTLType:$dest, FIRRTLType:$src);
-  let results = (outs);
-  let hasCanonicalizeMethod = true;
-
-  let verifier = "return ::verifyPartialConnectOp(*this);";
-
-  let assemblyFormat =
-    "$dest `,` $src  attr-dict `:` qualified(type($dest)) `,` qualified(type($src))";
-}
-
-def StrictConnectOp : FIRRTLOp<"strictconnect", [SameTypeOperands]> {
+def StrictConnectOp : FIRRTLOp<"strictconnect", [SameTypeOperands, FConnectLike]> {
   let summary = "Connect two signals";
   let description =  [{
     Connect two values with strict constraints:
@@ -68,11 +49,11 @@ def StrictConnectOp : FIRRTLOp<"strictconnect", [SameTypeOperands]> {
     ```
     }];
 
-  let arguments = (ins FIRRTLType:$dest, FIRRTLType:$src);
+  let arguments = (ins SizedType:$dest, SizedType:$src);
   let results = (outs);
   let hasCanonicalizeMethod = true;
 
-  let verifier = "return ::verifyStrictConnectOp(*this);";
+  let hasVerifier = 1;
 
   let assemblyFormat =
     "$dest `,` $src  attr-dict `:` qualified(type($dest))";
@@ -128,7 +109,7 @@ def AtEdge   : I32EnumAttrCase<"AtEdge", 2, "edge">;
 def EventControlAttr : I32EnumAttr<"EventControl", "edge control trigger",
                                    [AtPosEdge, AtNegEdge, AtEdge]>  {}
 
-class VerifOp<string mnemonic, list<OpTrait> traits = []> :
+class VerifOp<string mnemonic, list<Trait> traits = []> :
     FIRRTLOp<mnemonic, traits> {
   let arguments = (ins
     ClockType:$clock,

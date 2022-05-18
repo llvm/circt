@@ -26,7 +26,13 @@ def MooreDialect : Dialect {
   let extraClassDeclaration = [{
     /// Register all Moore types.
     void registerTypes();
+
+    /// Type parsing and printing.
+    Type parseType(DialectAsmParser &parser) const override;
+    void printType(Type, DialectAsmPrinter &) const override;
   }];
+  let useDefaultTypePrinterParser = 0;
+  int emitAccessorPrefix = kEmitAccessorPrefix_Prefixed;
 }
 
 #endif // CIRCT_DIALECT_MOORE_MOOREDIALECT

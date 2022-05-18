@@ -25,14 +25,7 @@
 
 namespace circt {
 namespace msft {
-class InstanceOp;
-class MSFTModuleOp;
-
 void registerMSFTPasses();
-
-/// Find the instance in the instance hierarchy as specified by the instance
-/// names in 'path'.
-InstanceOp getInstance(MSFTModuleOp root, SymbolRefAttr path);
 } // namespace msft
 } // namespace circt
 

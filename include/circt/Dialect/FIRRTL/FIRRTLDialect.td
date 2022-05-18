@@ -21,6 +21,9 @@ def FIRRTLDialect : Dialect {
   }];
 
   let hasConstantMaterializer = 1;
+  let dependentDialects = [
+    "circt::hw::HWDialect"
+  ];
   let cppNamespace = "::circt::firrtl";
   let extraClassDeclaration = [{
     /// Register all FIRRTL types.
@@ -31,5 +34,5 @@ def FIRRTLDialect : Dialect {
 }
 
 // Base class for the operation in this dialect.
-class FIRRTLOp<string mnemonic, list<OpTrait> traits = []> :
+class FIRRTLOp<string mnemonic, list<Trait> traits = []> :
     Op<FIRRTLDialect, mnemonic, traits>;

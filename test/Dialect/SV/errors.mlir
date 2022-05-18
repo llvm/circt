@@ -34,8 +34,9 @@ hw.module @Aliasing(%a : !hw.inout<i42>, %b : !hw.inout<i42>,
 
 // -----
 hw.module @Fwrite() {
+  %fd = hw.constant 0x80000002 : i32
   // expected-error @+1 {{sv.fwrite should be in a procedural region}}
-  sv.fwrite "error"
+  sv.fwrite %fd, "error"
 }
 
 // -----
@@ -68,9 +69,10 @@ hw.module @ReleasePassign(%arg0: i1) {
 
 // -----
 hw.module @IfOp(%arg0: i1) {
+  %fd = hw.constant 0x80000002 : i32
   // expected-error @+1 {{sv.if should be in a procedural region}}
   sv.if %arg0 {
-    sv.fwrite "Foo"
+    sv.fwrite %fd, "Foo"
   }
 }
 
@@ -88,13 +90,14 @@ hw.module @Finish() {
 
 // -----
 hw.module @CaseZ(%arg8: i8) {
-  // expected-error @+1 {{sv.casez should be in a procedural region}}
-  sv.casez %arg8 : i8
+  %fd = hw.constant 0x80000002 : i32
+  // expected-error @+1 {{sv.case should be in a procedural region}}
+  sv.case %arg8 : i8
     case b0000001x: {
-      sv.fwrite "x"
+      sv.fwrite %fd, "x"
     }
     default: {
-      sv.fwrite "z"
+      sv.fwrite %fd, "z"
     }
 }
 
@@ -159,11 +162,13 @@ hw.module @Cover(%arg0: i1) {
 // -----
 // expected-error @+1 {{Referenced instance doesn't exist}}
 sv.bind #hw.innerNameRef<@assume::@A>
+hw.module @assume() {
+  hw.output
+}
 
 // -----
-// expected-error @+1 {{Referenced instance doesn't exist}}
+// expected-error @+1 {{Referenced module doesn't exist}}
 sv.bind #hw.innerNameRef<@NotAModule::@A>
-
 
 // -----
 hw.module.extern @ExternDestMod()

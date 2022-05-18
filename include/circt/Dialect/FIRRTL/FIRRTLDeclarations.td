@@ -10,8 +10,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-def InstanceOp : FIRRTLOp<"instance", [
-    DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
+def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface,
+                         ["getAsmResultNames"]>;
+
+def InstanceOp : FIRRTLOp<"instance", [HasParent<"firrtl::FModuleOp, firrtl::WhenOp">,
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>, HasCustomSSAName,
+    DeclareOpInterfaceMethods<HWInstanceLike, ["instanceName"]>]> {
   let summary = "Instantiate an instance of a module";
   let description = [{
     This represents an instance of a module.  The results are the modules inputs
@@ -32,9 +36,7 @@ def InstanceOp : FIRRTLOp<"instance", [
 
   let results = (outs Variadic<FIRRTLType>:$results);
 
-  let verifier = "return ::verifyInstanceOp(*this);";
-  let printer = "printInstanceOp(p, *this);";
-  let parser = "return parseInstanceOp(parser, result);";
+  let hasCustomAssemblyFormat = 1;
 
   let builders = [
     OpBuilder<(ins "::mlir::TypeRange":$resultTypes,
@@ -91,7 +93,7 @@ def InstanceOp : FIRRTLOp<"instance", [
   }];
 }
 
-def MemOp : FIRRTLOp<"mem"> {
+def MemOp : FIRRTLOp<"mem", [HasCustomSSAName]> {
   let summary = "Define a new mem";
   let arguments =
     (ins Confined<I32Attr, [IntMinValue<0>]>:$readLatency,
@@ -100,7 +102,8 @@ def MemOp : FIRRTLOp<"mem"> {
          StrArrayAttr:$portNames, StrAttr:$name,
          AnnotationArrayAttr:$annotations,
          PortAnnotationsAttr:$portAnnotations,
-         OptionalAttr<SymbolNameAttr>:$inner_sym);
+         OptionalAttr<SymbolNameAttr>:$inner_sym,
+         OptionalAttr<UI32Attr>:$groupID);
   let results = (outs Variadic<FIRRTLType>:$results);
 
   let assemblyFormat = [{
@@ -119,7 +122,7 @@ def MemOp : FIRRTLOp<"mem"> {
                    CArg<"StringAttr", "StringAttr()">:$inner_sym)>
   ];
 
-  let verifier = "return ::verifyMemOp(*this);";
+  let hasVerifier = 1;
 
   let hasCanonicalizeMethod = true;
 
@@ -176,7 +179,7 @@ def MemOp : FIRRTLOp<"mem"> {
 }
 
 def NodeOp : FIRRTLOp<"node",
-                      [SameOperandsAndResultType, InferTypeOpInterface]> {
+      [SameOperandsAndResultType, InferTypeOpInterface, HasCustomSSAName]> {
   let summary = "No-op to name a value";
   let description = [{
     A node is simply a named intermediate value in a circuit. The node must
@@ -211,19 +214,9 @@ def NodeOp : FIRRTLOp<"node",
   }];
 
   let hasCanonicalizer = true;
-
-  let extraClassDeclaration = [{
-    /// Infer the return types of this operation.
-    static LogicalResult inferReturnTypes(MLIRContext *context,
-                                          Optional<Location> loc,
-                                          ValueRange operands,
-                                          DictionaryAttr attrs,
-                                          mlir::RegionRange regions,
-                                          SmallVectorImpl<Type> &results);
-  }];
 }
 
-def RegOp : FIRRTLOp<"reg", [/*MemAlloc*/]> {
+def RegOp : FIRRTLOp<"reg", [HasCustomSSAName/*MemAlloc*/]> {
   let summary = "Define a new register";
   let description = [{
     Declare a new register:
@@ -237,7 +230,7 @@ def RegOp : FIRRTLOp<"reg", [/*MemAlloc*/]> {
     ins ClockType:$clockVal, StrAttr:$name,
         AnnotationArrayAttr:$annotations,
         OptionalAttr<SymbolNameAttr>:$inner_sym);
-  let results = (outs PassiveType:$result);
+  let results = (outs AnyRegisterType:$result);
 
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$clockVal,
@@ -256,7 +249,7 @@ def RegOp : FIRRTLOp<"reg", [/*MemAlloc*/]> {
   let hasCanonicalizeMethod = true;
 }
 
-def RegResetOp : FIRRTLOp<"regreset", [/*MemAlloc*/]> {
+def RegResetOp : FIRRTLOp<"regreset", [HasCustomSSAName/*MemAlloc*/]> {
   let summary = "Define a new register with a reset";
   let description = [{
     Declare a new register:
@@ -266,10 +259,11 @@ def RegResetOp : FIRRTLOp<"regreset", [/*MemAlloc*/]> {
     }];
 
   let arguments = (
-    ins ClockType:$clockVal, AnyResetType:$resetSignal, PassiveType:$resetValue,
+    ins ClockType:$clockVal, AnyResetType:$resetSignal,
+        AnyRegisterType:$resetValue,
         StrAttr:$name, AnnotationArrayAttr:$annotations,
         OptionalAttr<SymbolNameAttr>:$inner_sym);
-  let results = (outs PassiveType:$result);
+  let results = (outs AnyRegisterType:$result);
 
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$clockVal,
@@ -290,9 +284,10 @@ def RegResetOp : FIRRTLOp<"regreset", [/*MemAlloc*/]> {
   }];
 
   let hasCanonicalizer = true;
+  let hasVerifier = 1;
 }
 
-def WireOp : FIRRTLOp<"wire", []> {
+def WireOp : FIRRTLOp<"wire", [HasCustomSSAName]> {
   let summary = "Define a new wire";
   let description = [{
     Declare a new wire:

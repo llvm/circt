@@ -11,10 +11,10 @@
 //===----------------------------------------------------------------------===//
 
 /// Base class for Calyx primitives.
-class CalyxPrimitive<string mnemonic, list<OpTrait> traits = []> :
+class CalyxPrimitive<string mnemonic, list<Trait> traits = []> :
   CalyxCell<mnemonic, traits> {
-    let assemblyFormat = "$instanceName attr-dict `:` qualified(type(results))";
-    let arguments = (ins FlatSymbolRefAttr:$instanceName);
+    let assemblyFormat = "$sym_name attr-dict `:` qualified(type(results))";
+    let arguments = (ins SymbolNameAttr:$sym_name);
     let skipDefaultBuilders = 1;
 }
 
@@ -36,14 +36,14 @@ def RegisterOp : CalyxPrimitive<"register", [
   }];
   let results = (outs AnyType:$in, I1:$write_en, I1:$clk, I1:$reset, AnyType:$out, I1:$done);
   let builders = [
-    OpBuilder<(ins "StringRef":$instanceName, "size_t":$width), [{
-      $_state.addAttribute("instanceName", FlatSymbolRefAttr::get($_builder.getContext(), instanceName));
+    OpBuilder<(ins "StringRef":$sym_name, "size_t":$width), [{
+      $_state.addAttribute(mlir::SymbolTable::getSymbolAttrName(), $_builder.getStringAttr(sym_name));
       Type i1Type = $_builder.getI1Type();
       Type widthType = $_builder.getIntegerType(width);
       $_state.addTypes({widthType, i1Type, i1Type, i1Type, widthType, i1Type});
     }]>,
-    OpBuilder<(ins "StringRef":$instanceName, "Type":$type), [{
-      $_state.addAttribute("instanceName", FlatSymbolRefAttr::get($_builder.getContext(), instanceName));
+    OpBuilder<(ins "StringRef":$sym_name, "Type":$type), [{
+      $_state.addAttribute(mlir::SymbolTable::getSymbolAttrName(), $_builder.getStringAttr(sym_name));
       Type i1Type = $_builder.getI1Type();
       $_state.addTypes({type, i1Type, i1Type, i1Type, type, i1Type});
     }]>
@@ -75,7 +75,7 @@ def MemoryOp : CalyxPrimitive<"memory", []> {
   }];
 
   let arguments = (ins
-    FlatSymbolRefAttr:$instanceName,
+    SymbolNameAttr:$sym_name,
     I64Attr:$width,
     ArrayAttr:$sizes,
     ArrayAttr:$addrSizes
@@ -86,14 +86,14 @@ def MemoryOp : CalyxPrimitive<"memory", []> {
   );
 
   let assemblyFormat = [{
-    $instanceName ` ` `<` $sizes `x` $width `>` $addrSizes attr-dict `:` qualified(type($results))
+    $sym_name ` ` `<` $sizes `x` $width `>` $addrSizes attr-dict `:` qualified(type($results))
   }];
 
-  let verifier = "return ::verify$cppClass(*this);";
+  let hasVerifier = 1;
 
   let builders = [
     OpBuilder<(ins
-      "StringRef":$instanceName,
+      "StringRef":$sym_name,
       "int64_t":$width,
       "ArrayRef<int64_t>":$sizes,
       "ArrayRef<int64_t>":$addrSizes
@@ -116,7 +116,7 @@ def MemoryOp : CalyxPrimitive<"memory", []> {
   }];
 }
 
-class CalyxLibraryOp<string mnemonic, list<OpTrait> traits = []> :
+class CalyxLibraryOp<string mnemonic, list<Trait> traits = []> :
   CalyxPrimitive<"std_" # mnemonic, traits> {
 
   let summary = "Defines an operation which maps to a Calyx library primitive";
@@ -139,12 +139,10 @@ class CalyxLibraryOp<string mnemonic, list<OpTrait> traits = []> :
     ```
   }];
 
-  let arguments = (ins FlatSymbolRefAttr:$instanceName);
+  let arguments = (ins SymbolNameAttr:$sym_name);
   let builders = [
-    OpBuilder<(ins "StringRef":$instanceName, "::mlir::TypeRange":$resultTypes), [{
-      $_state.addAttribute("instanceName",
-        FlatSymbolRefAttr::get($_builder.getContext(), instanceName)
-      );
+    OpBuilder<(ins "StringRef":$sym_name, "::mlir::TypeRange":$resultTypes), [{
+      $_state.addAttribute(mlir::SymbolTable::getSymbolAttrName(), $_builder.getStringAttr(sym_name));
       $_state.addTypes(resultTypes);
     }]>
   ];
@@ -170,7 +168,7 @@ def SneqLibOp : BoolBinaryLibraryOp<"sneq"> {}
 def SgeLibOp  : BoolBinaryLibraryOp<"sge"> {}
 def SleLibOp  : BoolBinaryLibraryOp<"sle"> {}
 
-class ArithBinaryLibraryOp<string mnemonic, list<OpTrait> traits = []> :
+class ArithBinaryLibraryOp<string mnemonic, list<Trait> traits = []> :
   CalyxLibraryOp<mnemonic, !listconcat(traits, [
     SameTypeConstraint<"left", "right">
   ])> {}
@@ -196,7 +194,7 @@ def XorLibOp  : CombinationalArithBinaryLibraryOp<"xor"> {}
 def MultPipeLibOp : ArithBinaryLibraryOp<"mult_pipe", [
     SameTypeConstraint<"left", "out">
   ]> {
-  let results = (outs AnyType:$left, AnyType:$right, I1:$go, I1:$clk, I1:$reset, AnyType:$out, I1:$done);
+  let results = (outs I1:$clk, I1:$reset, I1:$go, AnyType:$left, AnyType:$right, AnyType:$out, I1:$done);
 }
 
 def DivPipeLibOp : ArithBinaryLibraryOp<"div_pipe", [
@@ -204,34 +202,24 @@ def DivPipeLibOp : ArithBinaryLibraryOp<"div_pipe", [
     SameTypeConstraint<"right", "out_remainder">
   ]> {
   let results = (outs
-    AnyType:$left, AnyType:$right, I1:$go, I1:$clk, I1:$reset,
+    I1:$clk, I1:$reset, I1:$go, AnyType:$left, AnyType:$right,
     AnyType:$out_quotient, AnyType:$out_remainder, I1:$done
   );
 }
 
-class UnaryLibraryOp<string mnemonic> : CalyxLibraryOp<mnemonic, [Combinational]> {
+class UnaryLibraryOp<string mnemonic, list<Trait> traits = []> :
+    CalyxLibraryOp<mnemonic, !listconcat(traits, [Combinational])> {
   let results = (outs AnyInteger:$in, AnyInteger:$out);
 }
 
 def PadLibOp : UnaryLibraryOp<"pad"> {
-  let verifier = [{
-    unsigned inBits = getResult(0).getType().getIntOrFloatBitWidth();
-    unsigned outBits = getResult(1).getType().getIntOrFloatBitWidth();
-    if (inBits >= outBits)
-      return emitOpError("expected input bits (") << inBits << ')' <<
-                         " to be less than output bits (" << outBits << ')';
-    return success();
-  }];
+  let hasVerifier = 1;
 }
 
 def SliceLibOp : UnaryLibraryOp<"slice"> {
-  let verifier = [{
-    unsigned inBits = getResult(0).getType().getIntOrFloatBitWidth();
-    unsigned outBits = getResult(1).getType().getIntOrFloatBitWidth();
-    if (inBits <= outBits)
-      return emitOpError("expected input bits (") << inBits << ')' <<
-                         " to be greater than output bits (" << outBits << ')';
-    return success();
-  }];
+  let hasVerifier = 1;
 }
+
 def NotLibOp  : UnaryLibraryOp<"not"> {}
+
+def WireLibOp : UnaryLibraryOp<"wire", [SameTypeConstraint<"in", "out">]> {}

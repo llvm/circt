@@ -10,9 +10,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "AnnotationDetails.h"
 #include "PassDetails.h"
-#include "circt/Dialect/FIRRTL/InstanceGraph.h"
+#include "circt/Dialect/FIRRTL/AnnotationDetails.h"
+#include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
+#include "circt/Dialect/FIRRTL/NLATable.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
@@ -115,9 +116,8 @@ private:
 
   /// Whether any errors have occurred in the current `runOnOperation`.
   bool anyFailures;
-  /// Analyses for the current operation; only valid within `runOnOperation`.
-  SymbolTable *symtbl;
   CircuitNamespace *circuitNamespace;
+  InstanceGraph *instanceGraph;
   InstancePathCache *instancePaths;
   /// OMIR target trackers gathered in the current operation, by tracker ID.
   DenseMap<Attribute, Tracker> trackers;
@@ -135,6 +135,9 @@ private:
   DenseSet<Operation *> tempSymInstances;
   /// The Design Under Test module.
   StringAttr dutModuleName;
+
+  /// Cached NLA table analysis.
+  NLATable *nlaTable;
 };
 } // namespace
 
@@ -176,8 +179,8 @@ static IntegerAttr isOMSRAM(Attribute &node) {
 void EmitOMIRPass::runOnOperation() {
   MLIRContext *context = &getContext();
   anyFailures = false;
-  symtbl = nullptr;
   circuitNamespace = nullptr;
+  instanceGraph = nullptr;
   instancePaths = nullptr;
   trackers.clear();
   symbols.clear();
@@ -245,11 +248,12 @@ void EmitOMIRPass::runOnOperation() {
     return;
   }
   // Establish some of the analyses we need throughout the pass.
-  SymbolTable currentSymtbl(circuitOp);
   CircuitNamespace currentCircuitNamespace(circuitOp);
-  InstancePathCache currentInstancePaths(getAnalysis<InstanceGraph>());
-  symtbl = &currentSymtbl;
+  InstanceGraph &currentInstanceGraph = getAnalysis<InstanceGraph>();
+  nlaTable = &getAnalysis<NLATable>();
+  InstancePathCache currentInstancePaths(currentInstanceGraph);
   circuitNamespace = &currentCircuitNamespace;
+  instanceGraph = &currentInstanceGraph;
   instancePaths = &currentInstancePaths;
   dutModuleName = {};
 
@@ -282,11 +286,16 @@ void EmitOMIRPass::runOnOperation() {
         return true;
       }
       if (auto nlaSym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal")) {
-        tracker.nla =
-            dyn_cast_or_null<NonLocalAnchor>(symtbl->lookup(nlaSym.getAttr()));
+        auto tmp = nlaTable->getNLA(nlaSym.getAttr());
+        if (!tmp) {
+          op->emitError("missing annotation ") << nlaSym.getValue();
+          anyFailures = true;
+          return true;
+        }
+        tracker.nla = cast<NonLocalAnchor>(tmp);
         removeTempNLAs.push_back(tracker.nla);
       }
-      if (sramIDs.erase(tracker.id) && !tracker.nla)
+      if (sramIDs.erase(tracker.id))
         makeTrackerAbsolute(tracker);
       trackers.insert({tracker.id, tracker});
       return true;
@@ -325,7 +334,7 @@ void EmitOMIRPass::runOnOperation() {
   DenseSet<StringAttr> nlaSymNamesToDrop;
 
   for (auto nla : removeTempNLAs) {
-    LLVM_DEBUG(llvm::dbgs() << "Removing " << nla << "\n");
+    LLVM_DEBUG(llvm::dbgs() << "Removing '" << nla << "'\n");
     nlaSymNamesToDrop.insert(nla.sym_nameAttr());
     for (auto nameRef : nla.namepath()) {
       if (auto innerRef = nameRef.dyn_cast<hw::InnerRefAttr>()) {
@@ -335,7 +344,8 @@ void EmitOMIRPass::runOnOperation() {
         instsToModify.insert(it->second);
       }
     }
-    nla->erase();
+    nlaTable->erase(nla);
+    nla.erase();
   }
 
   for (auto instOp : instsToModify) {
@@ -368,6 +378,8 @@ void EmitOMIRPass::runOnOperation() {
       context, *outputFilename, /*excludeFromFilelist=*/true, false);
   verbatimOp->setAttr("output_file", fileAttr);
   verbatimOp.symbolsAttr(ArrayAttr::get(context, symbols));
+
+  markAnalysesPreserved<NLATable>();
 }
 
 /// Make a tracker absolute by adding an NLA to it which starts at the root
@@ -389,8 +401,16 @@ void EmitOMIRPass::makeTrackerAbsolute(Tracker &tracker) {
       builder.getNamedAttr("class", StringAttr::get(context, "circt.nonlocal")),
   });
 
+  // Get all the paths instantiating this module. If there is an NLA already
+  // attached to this tracker, we use it as a base to disambiguate the path to
+  // the memory.
+  Operation *mod;
+  if (tracker.nla)
+    mod = instanceGraph->lookup(tracker.nla.root())->getModule();
+  else
+    mod = tracker.op->getParentOfType<FModuleOp>();
+
   // Get all the paths instantiating this module.
-  auto mod = tracker.op->getParentOfType<FModuleOp>();
   auto paths = instancePaths->getAbsolutePaths(mod);
   if (paths.empty()) {
     tracker.op->emitError("OMIR node targets uninstantiated component `")
@@ -419,14 +439,36 @@ void EmitOMIRPass::makeTrackerAbsolute(Tracker &tracker) {
     namepath.push_back(hw::InnerRefAttr::getFromOperation(
         op, name, op->getParentOfType<FModuleOp>().getNameAttr()));
   };
+  // Add the path up to where the NLA starts.
   for (InstanceOp inst : paths[0])
     addToPath(inst, inst.nameAttr());
-  addToPath(tracker.op, opName);
+  // Add the path from the NLA to the op.
+  if (tracker.nla) {
+    auto path = tracker.nla.namepath().getValue();
+    for (auto attr : path.drop_back()) {
+      auto ref = attr.cast<hw::InnerRefAttr>();
+      // Find the instance referenced by the NLA.
+      auto *node = instanceGraph->lookup(ref.getModule());
+      auto it = llvm::find_if(*node, [&](hw::InstanceRecord *record) {
+        return cast<InstanceOp>(*record->getInstance()).inner_symAttr() ==
+               ref.getName();
+      });
+      assert(it != node->end() &&
+             "Instance referenced by NLA does not exist in module");
+      addToPath((*it)->getInstance(), ref.getName());
+    }
+  }
+  // Add the op itself.
+  namepath.push_back(hw::InnerRefAttr::getFromOperation(
+      tracker.op, opName,
+      tracker.op->getParentOfType<FModuleOp>().getNameAttr()));
 
   // Add the NLA to the tracker and mark it to be deleted later.
   tracker.nla = builder.create<NonLocalAnchor>(builder.getUnknownLoc(),
                                                builder.getStringAttr(nlaName),
                                                builder.getArrayAttr(namepath));
+  nlaTable->addNLA(tracker.nla);
+
   removeTempNLAs.push_back(tracker.nla);
 }
 
@@ -587,7 +629,12 @@ void EmitOMIRPass::emitOptionalRTLPorts(DictionaryAttr node,
         jsonStream.object([&] {
           // Emit the `ref` field.
           buf.assign("OMDontTouchedReferenceTarget:~");
-          buf.append(getOperation().name());
+          if (module.moduleNameAttr() == dutModuleName) {
+            // If module is DUT, then root the target relative to the DUT.
+            buf.append(module.moduleName());
+          } else {
+            buf.append(getOperation().name());
+          }
           buf.push_back('|');
           buf.append(addSymbol(module));
           buf.push_back('>');
@@ -769,7 +816,7 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
         instName = {};
       }
 
-      Operation *module = symtbl->lookup(modName);
+      Operation *module = nlaTable->getModule(modName);
       assert(module);
       if (notFirst)
         target.push_back('/');
@@ -781,15 +828,14 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
       target.append(addSymbol(module));
 
       if (auto innerRef = nameRef.dyn_cast<hw::InnerRefAttr>()) {
-        auto nameAttr = innerRef.getName();
         // Find an instance with the given name in this module. Ensure it has a
         // symbol that we can refer to.
         auto instOp = instancesByName.lookup(innerRef);
         if (!instOp)
           continue;
-        LLVM_DEBUG(llvm::dbgs()
-                   << "Marking NLA-participating instance " << nameAttr
-                   << " in module " << modName << " as dont-touch\n");
+        LLVM_DEBUG(llvm::dbgs() << "Marking NLA-participating instance "
+                                << innerRef.getName() << " in module "
+                                << modName << " as dont-touch\n");
         instName = getInnerRefTo(instOp);
       }
     }

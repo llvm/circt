@@ -1,4 +1,4 @@
-// RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl-check-comb-cycles)' --split-input-file --verify-diagnostics %s | FileCheck %s
+// RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl-check-comb-cycles{print-simple-cycle=false})' --split-input-file --verify-diagnostics %s | FileCheck %s
 
 module  {
   // Loop-free circuit
@@ -163,5 +163,16 @@ module  {
       firrtl.connect %e, %b : !firrtl.uint<1>, !firrtl.uint<1>
       firrtl.connect %o, %e : !firrtl.uint<1>, !firrtl.uint<1>
     }
+  }
+}
+
+// -----
+
+firrtl.circuit "strictConnectAndConnect" {
+  // expected-error @+2 {{detected combinational cycle in a FIRRTL module}}
+  // expected-note @+1 {{this operation is part of the combinational cycle}}
+  firrtl.module @strictConnectAndConnect(out %a: !firrtl.uint<11>, out %b: !firrtl.uint<11>) {
+    firrtl.connect %a, %b : !firrtl.uint<11>, !firrtl.uint<11>
+    firrtl.strictconnect %b, %a : !firrtl.uint<11>
   }
 }

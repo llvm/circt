@@ -5,6 +5,7 @@ set(LLVM_OPTIONAL_SOURCES
   MSFT.cpp
   HW.cpp
   LLHD.cpp
+  Moore.cpp
   Seq.cpp
   SV.cpp
 )
@@ -51,6 +52,14 @@ add_mlir_public_c_api_library(CIRCTCAPILLHD
   LINK_LIBS PUBLIC
   MLIRCAPIIR
   CIRCTLLHD
+  )
+
+add_mlir_public_c_api_library(CIRCTCAPIMoore
+  Moore.cpp
+
+  LINK_LIBS PUBLIC
+  MLIRCAPIIR
+  CIRCTMoore
   )
 
 add_mlir_public_c_api_library(CIRCTCAPISeq

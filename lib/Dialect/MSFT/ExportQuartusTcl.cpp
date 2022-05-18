@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/MSFT/DeviceDB.h"
 #include "circt/Dialect/MSFT/ExportTcl.h"
@@ -21,7 +22,7 @@
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Builders.h"
-#include "mlir/Translation.h"
+#include "mlir/Tools/mlir-translate/Translation.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/raw_ostream.h"
@@ -91,6 +92,7 @@ struct TclOutputState {
 
   LogicalResult emit(PDPhysRegionOp region);
   LogicalResult emit(PDPhysLocationOp loc);
+  LogicalResult emit(DynamicInstanceVerbatimAttrOp attr);
 
   void emitPath(hw::GlobalRefOp ref, Optional<StringRef> subpath);
   void emitInnerRefPart(hw::InnerRefAttr innerRef);
@@ -162,6 +164,24 @@ LogicalResult TclOutputState::emit(PDPhysLocationOp loc) {
   // To which entity does this apply?
   os << " -to $parent|";
   emitPath(ref, loc.subPath());
+  return success();
+}
+
+/// Emit tcl in the form of:
+/// "set_global_assignment -name NAME VALUE -to $parent|fooInst|entityName"
+LogicalResult TclOutputState::emit(DynamicInstanceVerbatimAttrOp attr) {
+
+  auto ref =
+      dyn_cast_or_null<hw::GlobalRefOp>(emitter.getDefinition(attr.refAttr()));
+  if (!ref)
+    return attr.emitOpError("could not find hw.globalRef named ")
+           << attr.refAttr();
+  indent() << "set_instance_assignment -name " << attr.name() << " "
+           << attr.value();
+
+  // To which entity does this apply?
+  os << " -to $parent|";
+  emitPath(ref, attr.subPath());
   return success();
 }
 
@@ -241,6 +261,9 @@ LogicalResult TclEmitter::emit(Operation *hwMod, StringRef outputFile) {
         TypeSwitch<Operation *, LogicalResult>(tclOp)
             .Case([&](PDPhysLocationOp op) { return state.emit(op); })
             .Case([&](PDPhysRegionOp op) { return state.emit(op); })
+            .Case([&](DynamicInstanceVerbatimAttrOp op) {
+              return state.emit(op);
+            })
             .Default([](Operation *op) {
               return op->emitOpError("could not determine how to output tcl");
             });

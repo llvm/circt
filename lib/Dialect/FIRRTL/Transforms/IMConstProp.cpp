@@ -9,7 +9,7 @@
 #include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
-#include "circt/Dialect/FIRRTL/InstanceGraph.h"
+#include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Support/APInt.h"
 #include "mlir/IR/Threading.h"
@@ -31,6 +31,9 @@ static bool isAggregate(Operation *op) {
 
 /// Return true if this is a wire or register we're allowed to delete.
 static bool isDeletableWireOrReg(Operation *op) {
+  if (auto wire = dyn_cast<WireOp>(op))
+    if (!isUselessName(wire.name()))
+      return false;
   return isWireOrReg(op) && !hasDontTouch(op);
 }
 
@@ -258,7 +261,6 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
 
   void visitConnect(ConnectOp connect);
   void visitStrictConnect(StrictConnectOp connect);
-  void visitPartialConnect(PartialConnectOp connect);
   void visitOperation(Operation *op);
 
 private:
@@ -291,20 +293,12 @@ void IMConstPropPass::runOnOperation() {
 
   instanceGraph = &getAnalysis<InstanceGraph>();
 
-  // If the top level module is an external module, mark the input ports
-  // overdefined.
-  if (auto module = dyn_cast<FModuleOp>(circuit.getMainModule())) {
-    markBlockExecutable(module.getBody());
-    for (auto port : module.getBody()->getArguments())
-      markOverdefined(port);
-  } else {
-    // Otherwise, mark all module ports as being overdefined.
-    for (auto &circuitBodyOp : circuit.getBody()->getOperations()) {
-      if (auto module = dyn_cast<FModuleOp>(circuitBodyOp)) {
-        markBlockExecutable(module.getBody());
-        for (auto port : module.getBody()->getArguments())
-          markOverdefined(port);
-      }
+  // Mark the input ports of public modules as being overdefined.
+  for (auto module : circuit.getBody()->getOps<FModuleOp>()) {
+    if (module.isPublic()) {
+      markBlockExecutable(module.getBody());
+      for (auto port : module.getBody()->getArguments())
+        markOverdefined(port);
     }
   }
 
@@ -415,11 +409,17 @@ void IMConstPropPass::markRegResetOp(RegResetOp regReset) {
   if (!regReset.getType().getPassiveType().isGround())
     return markOverdefined(regReset);
 
-  // The reset value may be known - if so, merge it in.
+  // The reset value may be known - if so, merge it in if the enable is greater
+  // than invalid.
   auto srcValue = getExtendedLatticeValue(regReset.resetValue(),
                                           regReset.getType().cast<FIRRTLType>(),
                                           /*allowTruncation=*/true);
-  mergeLatticeValue(regReset, srcValue);
+  auto enable = getExtendedLatticeValue(regReset.resetSignal(),
+                                        regReset.getType().cast<FIRRTLType>(),
+                                        /*allowTruncation=*/true);
+  if (enable.isOverdefined() ||
+      (enable.isConstant() && !enable.getConstant().getValue().isZero()))
+    mergeLatticeValue(regReset, srcValue);
 }
 
 void IMConstPropPass::markMemOp(MemOp mem) {
@@ -443,16 +443,17 @@ void IMConstPropPass::markInvalidValueOp(InvalidValueOp invalid) {
 /// enclosing block is marked live.  This sets up the def-use edges for ports.
 void IMConstPropPass::markInstanceOp(InstanceOp instance) {
   // Get the module being reference or a null pointer if this is an extmodule.
-  auto module = instanceGraph->getReferencedModule(instance);
+  Operation *op = instanceGraph->getReferencedModule(instance);
 
   // If this is an extmodule, just remember that any results and inouts are
   // overdefined.
-  if (auto extModule = dyn_cast<FExtModuleOp>(module)) {
+  if (!isa<FModuleOp>(op)) {
+    auto module = dyn_cast<FModuleLike>(op);
     for (size_t resultNo = 0, e = instance.getNumResults(); resultNo != e;
          ++resultNo) {
       auto portVal = instance.getResult(resultNo);
       // If this is an input to the extmodule, we can ignore it.
-      if (extModule.getPortDirection(resultNo) == Direction::In)
+      if (module.getPortDirection(resultNo) == Direction::In)
         continue;
 
       // Otherwise this is a result from it or an inout, mark it as overdefined.
@@ -462,7 +463,7 @@ void IMConstPropPass::markInstanceOp(InstanceOp instance) {
   }
 
   // Otherwise this is a defined module.
-  auto fModule = cast<FModuleOp>(module);
+  auto fModule = cast<FModuleOp>(op);
   markBlockExecutable(fModule.getBody());
 
   // Ok, it is a normal internal module reference.  Populate
@@ -529,7 +530,7 @@ void IMConstPropPass::visitConnect(ConnectOp connect) {
     // Update the dest, when its an instance op.
     mergeLatticeValue(connect.dest(), srcValue);
     auto module =
-        dyn_cast<FModuleOp>(instanceGraph->getReferencedModule(instance));
+        dyn_cast<FModuleOp>(*instanceGraph->getReferencedModule(instance));
     if (!module)
       return;
 
@@ -581,7 +582,7 @@ void IMConstPropPass::visitStrictConnect(StrictConnectOp connect) {
     // Update the dest, when its an instance op.
     mergeLatticeValue(connect.dest(), srcValue);
     auto module =
-        dyn_cast<FModuleOp>(instanceGraph->getReferencedModule(instance));
+        dyn_cast<FModuleOp>(*instanceGraph->getReferencedModule(instance));
     if (!module)
       return;
 
@@ -607,10 +608,6 @@ void IMConstPropPass::visitStrictConnect(StrictConnectOp connect) {
       << "strictconnect destination is here";
 }
 
-void IMConstPropPass::visitPartialConnect(PartialConnectOp partialConnect) {
-  partialConnect.emitError("IMConstProp cannot handle partial connect");
-}
-
 /// This method is invoked when an operand of the specified op changes its
 /// lattice value state and when the block containing the operation is first
 /// noticed as being alive.
@@ -623,8 +620,6 @@ void IMConstPropPass::visitOperation(Operation *op) {
     return visitConnect(connectOp);
   if (auto strictConnectOp = dyn_cast<StrictConnectOp>(op))
     return visitStrictConnect(strictConnectOp);
-  if (auto partialConnectOp = dyn_cast<PartialConnectOp>(op))
-    return visitPartialConnect(partialConnectOp);
   if (auto regResetOp = dyn_cast<RegResetOp>(op))
     return markRegResetOp(regResetOp);
 
@@ -632,6 +627,12 @@ void IMConstPropPass::visitOperation(Operation *op) {
   if (isa<RegOp>(op))
     return;
   // TODO: Handle 'when' operations.
+
+  // Nodes might not fold since they might have a name, but should prop
+  if (isa<NodeOp>(op)) {
+    mergeLatticeValue(op->getResult(0), op->getOperand(0));
+    return;
+  }
 
   // If all of the results of this operation are already overdefined (or if
   // there are no results) then bail out early: we've converged.

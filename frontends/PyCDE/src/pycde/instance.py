@@ -3,167 +3,222 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from __future__ import annotations
-from typing import Union
+from typing import Dict, List, Optional, Tuple, Union
 
-from pycde.devicedb import PhysLocation, PrimitiveDB, PlacementDB
-from .appid import AppID
-
-from circt.dialects import hw, msft, seq
+from circt.dialects import msft
 
 import mlir.ir as ir
 
 
-# TODO: bug: holds an Operation* without releasing it. Use a level of
-# indirection.
 class Instance:
-  """Represents a _specific_ instance, unique in a design. This is in contrast
-  to a module instantiation within another module."""
-  import pycde.system as system
+  """Parent class for anything which should be walked and can contain PD ops."""
+  from .module import _SpecializedModule
 
-  global_ref_counter = 0
+  __slots__ = ["inside_of", "tgt_mod", "root", "_child_cache", "_op_cache"]
 
-  def __init__(self,
-               module: type,
-               instOp: Union[msft.InstanceOp, seq.CompRegOp],
-               parent: Instance,
-               sys: system.System,
-               primdb: PrimitiveDB = None):
-    assert module is not None
-    assert instOp is None or (isinstance(instOp, msft.InstanceOp) or
-                              isinstance(instOp, seq.CompRegOp))
-    self.module = module
-    self.instOp = instOp
-    self.parent = parent
-    if parent is None:
-      self.placedb = PlacementDB(sys._get_circt_mod(module), primdb)
-    assert isinstance(sys, Instance.system.System)
-    self.sys = sys
+  def __init__(self, inside_of: _SpecializedModule,
+               tgt_mod: Optional[_SpecializedModule],
+               root: InstanceHierarchyRoot):
+    """
+    Construct a new instance. Since the terminology can be confusing:
+    - inside_of: the module which contains this instance (e.g. the instantiation
+      site).
+    - tgt_mod: if the instance is an instantation, `tgt_mod` is the module being
+      instantiated. Examples of things which aren't instantiations:
+      `seq.compreg`s.
+    """
 
-  @property
-  def path(self) -> list[Instance]:
-    if self.parent is None:
-      return []
-    return self.parent.path + [self]
+    self.inside_of = inside_of
+    self.tgt_mod = tgt_mod
+    self.root = root
+    self._child_cache: Dict[ir.StringAttr, NonRootInstance] = None
+    self._op_cache = root.system._op_cache
 
-  @property
-  def root_module(self) -> hw.HWModuleOp:
-    if self.parent is None:
-      return self.module
-    return self.parent.root_module
+  def _create_instance(self, parent: NonRootInstance,
+                       static_op: ir.Operation) -> NonRootInstance:
+    """Create a new `Instance` which is a child of `parent` in the instance
+    hierarchy and corresponds to the given static operation. The static
+    operation need not be a module instantiation."""
 
-  @property
-  def root_instance(self) -> Instance:
-    if self.parent is None:
-      return self
-    return self.parent.root_instance
+    sym_name = static_op.attributes["sym_name"]
+    tgt_mod = None
+    if isinstance(static_op, msft.InstanceOp):
+      tgt_mod = self._op_cache.get_symbol_module(static_op.moduleName)
+    inst = NonRootInstance(parent,
+                           instance_sym=sym_name,
+                           inside_of=self.tgt_mod,
+                           tgt_mod=tgt_mod,
+                           root=self.root)
+    return inst
 
-  @property
-  def path_attr(self) -> ir.ArrayAttr:
-    module_names = [self.sys._get_module_symbol(self.root_module)] + [
-        self.sys._get_module_symbol(instance.module)
-        for instance in self.path[:-1]
-    ]
-    modules = [ir.StringAttr.get(name) for name in module_names]
-    instances = [instance.name_attr for instance in self.path]
-    inner_refs = [hw.InnerRefAttr.get(m, i) for m, i in zip(modules, instances)]
-    return ir.ArrayAttr.get(inner_refs)
+  def _get_ip(self) -> ir.InsertionPoint:
+    return ir.InsertionPoint(self._dyn_inst.body.blocks[0])
 
   @property
-  def name(self):
-    return self.name_attr.value
+  def _inside_of_symbol(self) -> str:
+    """Return the string symbol of the module which contains this instance."""
+    return self._op_cache.get_module_symbol(self.inside_of)
 
-  @property
-  def name_attr(self):
-    if isinstance(self.instOp, msft.InstanceOp):
-      return ir.StringAttr(self.instOp.sym_name)
-    elif isinstance(self.instOp, seq.CompRegOp):
-      return ir.StringAttr(self.instOp.innerSym)
-
-  @property
-  def is_root(self):
-    return self.parent is None
-
-  @property
-  def appid(self):
-    return AppID(*[i.name for i in self.path])
-
-  @classmethod
-  def get_global_ref_symbol(cls):
-    counter = cls.global_ref_counter
-    cls.global_ref_counter += 1
-    return ir.StringAttr.get("ref" + str(counter))
-
-  def __repr__(self):
-    path_names = map(lambda i: i.name, self.path)
+  def __repr__(self) -> str:
+    path_names = [i.name for i in self.path]
     return "<instance: [" + ", ".join(path_names) + "]>"
+
+  def _children(self) -> Dict[ir.StringAttr, NonRootInstance]:
+    """Return a dict of MLIR StringAttr this instances' children. Cache said
+    list."""
+    if self._child_cache is not None:
+      return self._child_cache
+    symbols_in_mod = self._op_cache.get_sym_ops_in_module(self.tgt_mod)
+    children = {
+        sym: self._create_instance(self, op)
+        for (sym, op) in symbols_in_mod.items()
+    }
+    # TODO: make these weak refs
+    self._child_cache = children
+    return children
+
+  @property
+  def children(self) -> Dict[str, NonRootInstance]:
+    """Return a dict of python strings to this instances' children."""
+    return {ir.StringAttr(key).value: inst for (key, inst) in self._children()}
+
+  def __getitem__(self, child_name: str) -> NonRootInstance:
+    """Get a child instance."""
+    return self._children()[ir.StringAttr.get(child_name)]
 
   def walk(self, callback):
     """Descend the instance hierarchy, calling back on each instance."""
-    circt_mod = self.sys._get_circt_mod(self.module)
-    if isinstance(circt_mod, msft.MSFTModuleExternOp):
-      return
-    for op in circt_mod.entry_block:
-      if isinstance(op, seq.CompRegOp):
-        inst = Instance(circt_mod, op, self, self.sys)
-        callback(inst)
-        continue
+    callback(self)
+    for child in self._children().values():
+      child.walk(callback)
 
-      if not isinstance(op, msft.InstanceOp):
-        continue
+  @property
+  def path_names(self):
+    """A list of instance names representing the instance path."""
+    return [i.name for i in self.path]
 
-      assert "moduleName" in op.attributes
-      tgt_modname = ir.FlatSymbolRefAttr(op.attributes["moduleName"]).value
-      tgt_mod = self.sys._get_symbol_module(tgt_modname).modcls
-      assert tgt_mod is not None
-      inst = Instance(tgt_mod, op, self, self.sys)
-      callback(inst)
-      inst.walk(callback)
-
-  def _attach_attribute(self, sub_path: str, attr: ir.Attribute):
-    if isinstance(attr, PhysLocation):
-      attr = attr._loc
-
-    db = self.root_instance.placedb._db
-    rc = db.add_placement(attr, self.path_attr, sub_path, self.instOp.operation)
-    if not rc:
-      raise ValueError("Failed to place")
-
-    # Create a global ref to this path.
-    global_ref_symbol = Instance.get_global_ref_symbol()
-    path_attr = self.path_attr
-    with ir.InsertionPoint(self.sys.mod.body):
-      global_ref = hw.GlobalRefOp(global_ref_symbol, path_attr)
-
-    # Attach the attribute to the global ref.
-    global_ref.attributes["loc:" + sub_path] = attr
-
-    # Add references to the global ref for each instance through the hierarchy.
-    for instance in self.path:
-      # Find any existing global refs.
-      if "circt.globalRef" in instance.instOp.attributes:
-        global_refs = [
-            ref for ref in ir.ArrayAttr(
-                instance.instOp.attributes["circt.globalRef"])
-        ]
-      else:
-        global_refs = []
-
-      # Add the new global ref.
-      global_refs.append(hw.GlobalRefAttr.get(global_ref_symbol))
-      global_refs_attr = ir.ArrayAttr.get(global_refs)
-      instance.instOp.attributes["circt.globalRef"] = global_refs_attr
-
-      # Set the expected inner_sym attribute on the instance to abide by the
-      # global ref contract.
-      instance.instOp.attributes["inner_sym"] = instance.name_attr
+  def add_named_attribute(self,
+                          name: str,
+                          value: str,
+                          subPath: Union[str, list[str]] = None):
+    """Add an arbitrary named attribute to this instance."""
+    if isinstance(subPath, list):
+      subPath = "|".join(subPath)
+    with self._get_ip():
+      msft.DynamicInstanceVerbatimAttrOp(
+          name=ir.StringAttr.get(name),
+          value=ir.StringAttr.get(value),
+          subPath=None if subPath is None else ir.StringAttr.get(subPath),
+          ref=None)
 
   def place(self,
-            subpath: Union[str, list[str]],
             devtype: msft.PrimitiveType,
             x: int,
             y: int,
-            num: int = 0):
+            num: int = 0,
+            subpath: Union[str, list[str]] = ""):
+    import pycde.devicedb as devdb
     if isinstance(subpath, list):
       subpath = "|".join(subpath)
-    loc = msft.PhysLocationAttr.get(devtype, x, y, num, subpath)
-    self._attach_attribute(subpath, loc)
+    loc = devdb.PhysLocation(devtype, x, y, num)
+    self.root.system.placedb.place(self, loc, subpath)
+
+  @property
+  def locations(self) -> List[Tuple[object, str]]:
+    """Returns a list of physical locations assigned to this instance in
+    (PhysLocation, subpath) format."""
+
+    def conv(op):
+      import pycde.devicedb as devdb
+      loc = devdb.PhysLocation(op.loc)
+      subPath = op.subPath
+      if subPath is not None:
+        subPath = ir.StringAttr(subPath).value
+      return (loc, subPath)
+
+    dyn_inst_block = self._dyn_inst.operation.regions[0].blocks[0]
+    return [
+        conv(op)
+        for op in dyn_inst_block
+        if isinstance(op, msft.PDPhysLocationOp)
+    ]
+
+
+class NonRootInstance(Instance):
+  """Represents a _specific_ instance, unique in a design. This is in contrast
+  to a module instantiation within another module."""
+
+  from .module import _SpecializedModule
+
+  __slots__ = ["parent", "symbol"]
+
+  def __init__(self, parent: NonRootInstance, instance_sym: ir.Attribute,
+               inside_of: _SpecializedModule,
+               tgt_mod: Optional[_SpecializedModule],
+               root: InstanceHierarchyRoot):
+    super().__init__(inside_of, tgt_mod, root)
+    self.parent = parent
+    self.symbol = instance_sym
+
+  @property
+  def _dyn_inst(self) -> msft.DynamicInstanceOp:
+    """Returns the raw CIRCT op backing this Instance."""
+    op = self._op_cache.create_or_get_dyn_inst(self)
+    if op is None:
+      raise InstanceDoesNotExistError(str(self))
+    return op
+
+  @property
+  def path(self) -> list[NonRootInstance]:
+    return self.parent.path + [self]
+
+  @property
+  def name(self) -> str:
+    return ir.StringAttr(self.symbol).value
+
+
+class InstanceHierarchyRoot(Instance):
+  """
+  A root of an instance hierarchy starting at top-level 'module'. Different from
+  an `Instance` since the base cases differ, and doesn't have an instance symbol
+  (since it addresses the 'top' module). Plus, CIRCT models it this way.
+  """
+  import pycde.system as cdesys
+  from .module import _SpecializedModule
+
+  __slots__ = ["system"]
+
+  def __init__(self, module: _SpecializedModule, sys: cdesys.System):
+    self.system = sys
+    super().__init__(inside_of=module, tgt_mod=module, root=self)
+    sys._op_cache.create_instance_hier_op(self)
+
+  @property
+  def _dyn_inst(self) -> msft.InstanceHierarchyOp:
+    """Returns the raw CIRCT op backing this Instance."""
+    op = self._op_cache.get_instance_hier_op(self)
+    if op is None:
+      raise InstanceDoesNotExistError(self.inside_of.modcls.__name__)
+    return op
+
+  @property
+  def name(self) -> str:
+    return "<<root>>"
+
+  @property
+  def path(self) -> list:
+    return []
+
+
+class InstanceError(Exception):
+  """An error related to dynamic instances."""
+
+  def __init__(self, msg: str):
+    super().__init__(msg)
+
+
+class InstanceDoesNotExistError(Exception):
+  """The instance which you are trying to reach does not exist (anymore)"""
+
+  def __init__(self, inst_str: str):
+    super().__init__(f"Instance {self} does not exist (anymore)")

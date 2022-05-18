@@ -13,6 +13,7 @@
 #ifndef CIRCT_DIALECT_SV_OPS_H
 #define CIRCT_DIALECT_SV_OPS_H
 
+#include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/SV/SVTypes.h"
 #include "mlir/IR/OpImplementation.h"
@@ -23,7 +24,7 @@
 namespace circt {
 namespace hw {
 class InstanceOp;
-class SymbolCache;
+class HWSymbolCache;
 class InnerRefAttr;
 } // namespace hw
 
@@ -33,46 +34,54 @@ namespace sv {
 bool isExpression(Operation *op);
 
 //===----------------------------------------------------------------------===//
-// CaseZOp Support
+// CaseOp Support
 //===----------------------------------------------------------------------===//
 
-/// This describes the bit in a pattern, 0/1/x.
-enum class CaseZPatternBit { Zero = 0, One = 1, Any = 2 };
+/// This describes the bit in a pattern, 0/1/x/z.
+enum class CasePatternBit { Zero = 0, One = 1, AnyX = 2, AnyZ = 3 };
 
-/// Return the letter for the specified pattern bit, e.g. "0", "1", "?" or "x".
-/// isVerilog indicates whether we should use "?" (verilog syntax) or "x" (mlir
-/// operation syntax.
-char getLetter(CaseZPatternBit bit, bool isVerilog);
+/// Return the letter for the specified pattern bit, e.g. "0", "1", "x" or "z".
+char getLetter(CasePatternBit bit);
 
 // This is provides convenient access to encode and decode a pattern.
-struct CaseZPattern {
+struct CasePattern {
   IntegerAttr attr;
+
+  struct DefaultPatternTag {};
 
   // Return the number of bits in the pattern.
   size_t getWidth() const { return attr.getValue().getBitWidth() / 2; }
 
   /// Return the specified bit, bit 0 is the least significant bit.
-  CaseZPatternBit getBit(size_t bitNumber) const;
+  CasePatternBit getBit(size_t bitNumber) const;
 
   /// Return true if this pattern always matches.
   bool isDefault() const;
 
-  /// Get a CaseZPattern from a specified list of CaseZPatternBit.  Bits are
+  /// Return true if this pattern has an X.
+  bool hasX() const;
+
+  /// Return true if this pattern has an Z.
+  bool hasZ() const;
+
+  /// Get a CasePattern from a specified list of CasePatternBit.  Bits are
   /// specified in most least significant order - element zero is the least
   /// significant bit.
-  CaseZPattern(ArrayRef<CaseZPatternBit> bits, MLIRContext *context);
+  CasePattern(ArrayRef<CasePatternBit> bits, MLIRContext *context);
 
-  /// Get a CaseZPattern for the specified constant value.
-  CaseZPattern(const APInt &value, MLIRContext *context);
+  /// Get a CasePattern for the specified constant value.
+  CasePattern(const APInt &value, MLIRContext *context);
 
-  /// Get a CaseZPattern with a correctly encoded attribute.
-  CaseZPattern(IntegerAttr attr) : attr(attr) {}
+  /// Get a CasePattern with a correctly encoded attribute.
+  CasePattern(IntegerAttr attr) : attr(attr) {}
 
-  static CaseZPattern getDefault(unsigned width, MLIRContext *context);
+  /// Get a CasePattern of a default for the specified width.
+  CasePattern(size_t width, DefaultPatternTag, MLIRContext *context);
 };
+
 // This provides information about one case.
-struct CaseZInfo {
-  CaseZPattern pattern;
+struct CaseInfo {
+  CasePattern pattern;
   Block *block;
 };
 
@@ -115,13 +124,19 @@ public:
   }
 };
 
+/// This class provides a verifier for ops that are expecting their parent
+/// to be one of the given parent ops
+template <typename ConcreteType>
+class VendorExtension
+    : public mlir::OpTrait::TraitBase<ConcreteType, VendorExtension> {
+public:
+  static LogicalResult verifyTrait(Operation *op) { return success(); }
+};
+
 } // namespace sv
 } // namespace circt
 
 #define GET_OP_CLASSES
-#include "circt/Dialect/SV/SVEnums.h.inc"
-// Clang format shouldn't reorder these headers.
 #include "circt/Dialect/SV/SV.h.inc"
-#include "circt/Dialect/SV/SVStructs.h.inc"
 
 #endif // CIRCT_DIALECT_SV_OPS_H

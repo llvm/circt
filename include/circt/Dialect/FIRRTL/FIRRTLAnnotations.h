@@ -24,6 +24,7 @@ namespace firrtl {
 class AnnotationSetIterator;
 class FModuleLike;
 class MemOp;
+class InstanceOp;
 struct ModuleNamespace;
 class FIRRTLType;
 
@@ -35,6 +36,10 @@ inline StringRef getPortAnnotationAttrName() { return "portAnnotations"; }
 
 /// Return the name of the dialect-prefixed attribute used for annotations.
 inline StringRef getDialectAnnotationAttrName() { return "firrtl.annotations"; }
+
+/// Check if an OMIR type is a string-encoded value that the FIRRTL dialect
+/// simply passes through as a string without any decoding.
+bool isOMIRStringEncodedPassthrough(StringRef type);
 
 /// This class provides a read-only projection of an annotation.
 class Annotation {
@@ -93,6 +98,8 @@ public:
   bool operator!=(const Annotation &other) const { return !(*this == other); }
   explicit operator bool() const { return bool(attr); }
   bool operator!() const { return attr == nullptr; }
+
+  void dump();
 
 private:
   Attribute attr;

@@ -174,6 +174,7 @@ protected:
   void moveBy(unsigned startTimeVariable, unsigned amount);
   unsigned getStartTime(unsigned startTimeVariable);
 
+  LogicalResult checkLastOp();
   void dumpTableau();
 
 public:
@@ -734,6 +735,14 @@ unsigned SimplexSchedulerBase::getStartTime(unsigned startTimeVariable) {
   return getParametricConstant(-startTimeLocations[startTimeVariable]);
 }
 
+LogicalResult SimplexSchedulerBase::checkLastOp() {
+  auto &prob = getProblem();
+  if (!prob.hasOperation(lastOp))
+    return prob.getContainingOp()->emitError(
+        "problem does not include last operation");
+  return success();
+}
+
 void SimplexSchedulerBase::dumpTableau() {
   for (unsigned j = 0; j < nColumns; ++j)
     dbgs() << "====";
@@ -771,6 +780,9 @@ void SimplexSchedulerBase::dumpTableau() {
 //===----------------------------------------------------------------------===//
 
 LogicalResult SimplexScheduler::schedule() {
+  if (failed(checkLastOp()))
+    return failure();
+
   parameterS = 0;
   parameterT = 0;
   buildTableau();
@@ -804,6 +816,9 @@ void CyclicSimplexScheduler::fillConstraintRow(SmallVector<int> &row,
 }
 
 LogicalResult CyclicSimplexScheduler::schedule() {
+  if (failed(checkLastOp()))
+    return failure();
+
   parameterS = 0;
   parameterT = 1;
   buildTableau();
@@ -834,6 +849,9 @@ static bool isLimited(Operation *op, SharedOperatorsProblem &prob) {
 }
 
 LogicalResult SharedOperatorsSimplexScheduler::schedule() {
+  if (failed(checkLastOp()))
+    return failure();
+
   parameterS = 0;
   parameterT = 0;
   buildTableau();
@@ -1098,6 +1116,9 @@ void ModuloSimplexScheduler::scheduleOperation(Operation *n) {
 }
 
 LogicalResult ModuloSimplexScheduler::schedule() {
+  if (failed(checkLastOp()))
+    return failure();
+
   parameterS = 0;
   parameterT = 1;
   buildTableau();
@@ -1163,8 +1184,8 @@ void ChainingSimplexScheduler::fillAdditionalConstraintRow(
 }
 
 LogicalResult ChainingSimplexScheduler::schedule() {
-  if (failed(computeChainBreakingDependences(prob, cycleTime,
-                                             additionalConstraints)))
+  if (failed(checkLastOp()) || failed(computeChainBreakingDependences(
+                                   prob, cycleTime, additionalConstraints)))
     return failure();
 
   parameterS = 0;

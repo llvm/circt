@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "mlir/IR/EnumAttr.td"
 include "mlir/IR/OpBase.td"
 
 // Op interface for groups.
@@ -91,8 +92,8 @@ def CellOpInterface : OpInterface<"CellInterface"> {
       (ins),
       /*methodBody=*/"",
       /*defaultImplementation=*/[{
-        Operation* op = (*static_cast<ConcreteOp *>($_op));
-        return op->getAttrOfType<mlir::FlatSymbolRefAttr>("instanceName").getValue();
+        return $_op.getOperation()->template getAttrOfType<mlir::StringAttr>(
+          mlir::SymbolTable::getSymbolAttrName()).getValue();
       }]
     >,
     InterfaceMethod<

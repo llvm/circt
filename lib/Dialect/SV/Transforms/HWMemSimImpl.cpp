@@ -13,7 +13,9 @@
 
 #include "PassDetail.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/Namespace.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -42,6 +44,24 @@ struct FirMemory {
 } // end anonymous namespace
 
 namespace {
+
+class HWMemSimImpl {
+  MLIRContext &ctx;
+  bool ignoreReadEnableMem;
+
+  SmallVector<sv::RegOp> registers;
+
+  Value addPipelineStages(ImplicitLocOpBuilder &b,
+                          ModuleNamespace &moduleNamespace, size_t stages,
+                          Value clock, Value data, Value gate = {});
+
+public:
+  HWMemSimImpl(MLIRContext &ctx, bool replSeqMem, bool ignoreReadEnableMem)
+      : ctx(ctx), ignoreReadEnableMem(ignoreReadEnableMem) {}
+
+  void generateMemory(HWModuleOp op, FirMemory mem);
+};
+
 struct HWMemSimImplPass : public sv::HWMemSimImplBase<HWMemSimImplPass> {
   void runOnOperation() override;
 
@@ -50,9 +70,6 @@ public:
     replSeqMem = e;
     ignoreReadEnableMem = ignoreEn;
   }
-
-private:
-  void generateMemory(HWModuleOp op, FirMemory mem);
 };
 } // end anonymous namespace
 
@@ -81,13 +98,18 @@ static FirMemory analyzeMemOp(HWModuleGeneratedOp op) {
   return mem;
 }
 
-static Value addPipelineStages(ImplicitLocOpBuilder &b, size_t stages,
-                               Value clock, Value data, Value gate = {}) {
+Value HWMemSimImpl::addPipelineStages(ImplicitLocOpBuilder &b,
+                                      ModuleNamespace &moduleNamespace,
+                                      size_t stages, Value clock, Value data,
+                                      Value gate) {
   if (!stages)
     return data;
 
   while (stages--) {
-    auto reg = b.create<sv::RegOp>(data.getType());
+    auto reg =
+        b.create<sv::RegOp>(data.getType(), StringAttr{},
+                            b.getStringAttr(moduleNamespace.newName("_GEN")));
+    registers.push_back(reg);
 
     // pipeline stage
     b.create<sv::AlwaysOp>(sv::EventControl::AtPosEdge, clock, [&]() {
@@ -103,8 +125,10 @@ static Value addPipelineStages(ImplicitLocOpBuilder &b, size_t stages,
   return data;
 }
 
-void HWMemSimImplPass::generateMemory(HWModuleOp op, FirMemory mem) {
-  ImplicitLocOpBuilder b(UnknownLoc::get(&getContext()), op.getBody());
+void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
+  ImplicitLocOpBuilder b(UnknownLoc::get(&ctx), op.getBody());
+
+  ModuleNamespace moduleNamespace(op);
 
   // Compute total number of mask bits.
   if (mem.maskGran == 0)
@@ -130,12 +154,13 @@ void HWMemSimImplPass::generateMemory(HWModuleOp op, FirMemory mem) {
       for (size_t j = 0, e = mem.readLatency; j != e; ++j) {
         auto enLast = en;
         if (j < e - 1)
-          en = addPipelineStages(b, 1, clock, en);
-        addr = addPipelineStages(b, 1, clock, addr, enLast);
+          en = addPipelineStages(b, moduleNamespace, 1, clock, en);
+        addr = addPipelineStages(b, moduleNamespace, 1, clock, addr, enLast);
       }
     } else {
-      en = addPipelineStages(b, mem.readLatency, clock, en);
-      addr = addPipelineStages(b, mem.readLatency, clock, addr);
+      en = addPipelineStages(b, moduleNamespace, mem.readLatency, clock, en);
+      addr =
+          addPipelineStages(b, moduleNamespace, mem.readLatency, clock, addr);
     }
 
     // Read Logic
@@ -164,12 +189,13 @@ void HWMemSimImplPass::generateMemory(HWModuleOp op, FirMemory mem) {
       wmaskBits = b.create<ConstantOp>(b.getIntegerAttr(en.getType(), 1));
 
     // Add pipeline stages
-    addr = addPipelineStages(b, numStages, clock, addr);
-    en = addPipelineStages(b, numStages, clock, en);
-    wmode = addPipelineStages(b, numStages, clock, wmode);
-    wdataIn = addPipelineStages(b, numStages, clock, wdataIn);
+    addr = addPipelineStages(b, moduleNamespace, numStages, clock, addr);
+    en = addPipelineStages(b, moduleNamespace, numStages, clock, en);
+    wmode = addPipelineStages(b, moduleNamespace, numStages, clock, wmode);
+    wdataIn = addPipelineStages(b, moduleNamespace, numStages, clock, wdataIn);
     if (isMasked)
-      wmaskBits = addPipelineStages(b, numStages, clock, wmaskBits);
+      wmaskBits =
+          addPipelineStages(b, moduleNamespace, numStages, clock, wmaskBits);
     SmallVector<Value, 4> maskValues(maskBits);
     SmallVector<Value, 4> dataValues(maskBits);
     // For multi-bit mask, extract corresponding write data bits of
@@ -229,11 +255,12 @@ void HWMemSimImplPass::generateMemory(HWModuleOp op, FirMemory mem) {
     else
       wmaskBits = b.create<ConstantOp>(b.getIntegerAttr(en.getType(), 1));
     // Add pipeline stages
-    addr = addPipelineStages(b, numStages, clock, addr);
-    en = addPipelineStages(b, numStages, clock, en);
-    wdataIn = addPipelineStages(b, numStages, clock, wdataIn);
+    addr = addPipelineStages(b, moduleNamespace, numStages, clock, addr);
+    en = addPipelineStages(b, moduleNamespace, numStages, clock, en);
+    wdataIn = addPipelineStages(b, moduleNamespace, numStages, clock, wdataIn);
     if (isMasked)
-      wmaskBits = addPipelineStages(b, numStages, clock, wmaskBits);
+      wmaskBits =
+          addPipelineStages(b, moduleNamespace, numStages, clock, wmaskBits);
 
     SmallVector<Value, 4> maskValues(maskBits);
     SmallVector<Value, 4> dataValues(maskBits);
@@ -292,6 +319,138 @@ void HWMemSimImplPass::generateMemory(HWModuleOp op, FirMemory mem) {
     }
   }
 
+  // Add logic to initialize the memory and any internal registers to random
+  // values.
+  constexpr unsigned randomWidth = 32;
+  sv::RegOp randomMemReg;
+  b.create<sv::IfDefOp>("SYNTHESIS", std::function<void()>(), [&]() {
+    sv::RegOp randReg;
+    StringRef initvar;
+
+    // Declare variables for use by memory randomization logic.
+    b.create<sv::IfDefOp>("RANDOMIZE_MEM_INIT", [&]() {
+      initvar = moduleNamespace.newName("initvar");
+      b.create<sv::VerbatimOp>("integer " + Twine(initvar) + ";\n");
+      randomMemReg = b.create<sv::RegOp>(
+          b.getIntegerType(llvm::divideCeil(mem.dataWidth, randomWidth) *
+                           randomWidth),
+          b.getStringAttr("_RANDOM_MEM"),
+          b.getStringAttr(moduleNamespace.newName("_RANDOM_MEM")));
+    });
+
+    // Declare variables for use by register randomization logic.
+    SmallVector<sv::RegOp> randRegs;
+    b.create<sv::IfDefOp>("RANDOMIZE_REG_INIT", [&]() {
+      signed totalWidth = 0;
+      for (sv::RegOp &reg : registers)
+        totalWidth += reg.getElementType().getIntOrFloatBitWidth();
+      while (totalWidth > 0) {
+        auto name = b.getStringAttr(moduleNamespace.newName(Twine("_RANDOM")));
+        randRegs.push_back(
+            b.create<sv::RegOp>(b.getIntegerType(randomWidth), name, name));
+        totalWidth -= randomWidth;
+      }
+    });
+
+    b.create<sv::InitialOp>([&]() {
+      b.create<sv::VerbatimOp>("`INIT_RANDOM_PROLOG_");
+
+      // Memory randomization logic.  The entire memory is randomized.
+      b.create<sv::IfDefProceduralOp>("RANDOMIZE_MEM_INIT", [&]() {
+        std::string verbatimForLoop;
+        llvm::raw_string_ostream s(verbatimForLoop);
+        s << "for (" << initvar << " = 0; " << initvar << " < " << mem.depth
+          << "; " << initvar << " = " << initvar << " + 1) begin\n"
+          << "  {{0}} = ";
+        auto repetitionCount = llvm::divideCeil(mem.dataWidth, randomWidth);
+        if (repetitionCount > 1)
+          s << "{";
+        for (size_t i = 0; i != repetitionCount; ++i) {
+          if (i > 0)
+            s << ", ";
+          s << "{`RANDOM}";
+        }
+        if (repetitionCount > 1)
+          s << "}";
+        s << ";\n";
+        s << "  Memory[" << initvar << "] = "
+          << "{{0}}[" << mem.dataWidth - 1 << ":" << 0 << "];\n"
+          << "end";
+        b.create<sv::VerbatimOp>(
+            verbatimForLoop, ValueRange{},
+            b.getArrayAttr({hw::InnerRefAttr::get(
+                op.getNameAttr(), randomMemReg.inner_symAttr())}));
+      });
+
+      // Register randomization logic.  Randomize every register to a random
+      // making efficient use of available randomization registers.
+      //
+      // TODO: This shares a lot of common logic with LowerToHW.  Combine these
+      // two in a common randomization utility.
+      b.create<sv::IfDefProceduralOp>("RANDOMIZE_REG_INIT", [&]() {
+        unsigned bits = randomWidth;
+        for (sv::RegOp &reg : randRegs)
+          b.create<sv::VerbatimOp>(b.getStringAttr("{{0}} = {`RANDOM};"),
+                                   ValueRange{},
+                                   b.getArrayAttr(hw::InnerRefAttr::get(
+                                       op.getNameAttr(), reg.inner_symAttr())));
+        auto randRegIdx = 0;
+        for (sv::RegOp &reg : registers) {
+          SmallVector<std::pair<Attribute, std::pair<size_t, size_t>>> values;
+          auto width = reg.getElementType().getIntOrFloatBitWidth();
+          auto widthRemaining = width;
+          while (widthRemaining > 0) {
+            if (bits == randomWidth) {
+              randReg = randRegs[randRegIdx++];
+              bits = 0;
+            }
+            auto innerRef = hw::InnerRefAttr::get(op.getNameAttr(),
+                                                  randReg.inner_symAttr());
+            if (widthRemaining <= randomWidth - bits) {
+              values.push_back({innerRef, {bits + widthRemaining - 1, bits}});
+              bits += widthRemaining;
+              widthRemaining = 0;
+              continue;
+            }
+            values.push_back({innerRef, {randomWidth - 1, bits}});
+            widthRemaining -= (randomWidth - bits);
+            bits = randomWidth;
+          }
+          SmallString<32> rhs("{{0}} = ");
+          unsigned idx = 1;
+          assert(reg.inner_symAttr());
+          SmallVector<Attribute, 4> symbols(
+              {hw::InnerRefAttr::get(op.getNameAttr(), reg.inner_symAttr())});
+          if (values.size() > 1)
+            rhs.append("{");
+          for (auto &v : values) {
+            if (idx > 1)
+              rhs.append(", ");
+            auto [sym, range] = v;
+            symbols.push_back(sym);
+            rhs.append(("{{" + Twine(idx++) + "}}").str());
+            // Do not emit a part select as the whole value is used.
+            if (range.first == randomWidth - 1 && range.second == 0)
+              continue;
+            // Emit a single bit part select, e.g., "[3]"
+            if (range.first == range.second) {
+              rhs.append(("[" + Twine(range.first) + "]").str());
+              continue;
+            }
+            // Emit a part select, e.g., "[4:2]"
+            rhs.append(
+                ("[" + Twine(range.first) + ":" + Twine(range.second) + "]")
+                    .str());
+          }
+          if (values.size() > 1)
+            rhs.append("}");
+          rhs.append(";");
+          b.create<sv::VerbatimOp>(rhs, ValueRange{}, b.getArrayAttr(symbols));
+        }
+      });
+    });
+  });
+
   auto outputOp = op.getBodyBlock()->getTerminator();
   outputOp->setOperands(outputs);
 }
@@ -328,8 +487,10 @@ void HWMemSimImplPass::runOnOperation() {
       } else {
         auto newModule = builder.create<HWModuleOp>(
             oldModule.getLoc(), nameAttr, oldModule.getPorts());
-        generateMemory(newModule, mem);
+        HWMemSimImpl(getContext(), replSeqMem, ignoreReadEnableMem)
+            .generateMemory(newModule, mem);
       }
+
       oldModule.erase();
       anythingChanged = true;
     }

@@ -434,13 +434,11 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
   }
 
     // Handle the case of builtin Chisel assertions.
-    //
-    // These are historically emitted as non-concurrent assertions but we choose
-    // to treat them as concurrent.
   case VerifFlavor::ChiselAssert: {
-    builder.create<AssertOp>(
+    auto op = builder.create<AssertOp>(
         printOp.clock(), builder.create<NotPrimOp>(whenStmt.condition()),
         printOp.cond(), fmt, printOp.operands(), "chisel3_builtin", true);
+    op->setAttr("format", StringAttr::get(context, "ifElseFatal"));
     printOp.erase();
     break;
   }
@@ -505,6 +503,8 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
       return failure();
 
     Value predicate = whenStmt.condition();
+    predicate = builder.create<NotPrimOp>(
+        predicate); // assertion triggers when predicate fails
     switch (predMod) {
     case PredicateModifier::NoMod:
       // Leave the predicate unmodified.
@@ -578,8 +578,6 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
 
     // Build the verification op itself.
     Operation *op;
-    predicate = builder.create<NotPrimOp>(
-        predicate); // assertion triggers when predicate fails
     // TODO: The "ifElseFatal" variant isn't actually a concurrent assertion,
     // but downstream logic assumes that isConcurrent is set.
     if (flavor == VerifFlavor::VerifLibAssert)

@@ -19,11 +19,13 @@
 #include "circt/Conversion/FIRRTLToHW.h"
 #include "circt/Conversion/HWToLLHD.h"
 #include "circt/Conversion/HandshakeToFIRRTL.h"
+#include "circt/Conversion/HandshakeToHW.h"
 #include "circt/Conversion/LLHDToLLVM.h"
 #include "circt/Conversion/MooreToCore.h"
 #include "circt/Conversion/SCFToCalyx.h"
 #include "circt/Conversion/StandardToHandshake.h"
 #include "circt/Conversion/StandardToStaticLogic.h"
+#include "mlir/IR/DialectRegistry.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassRegistry.h"
 

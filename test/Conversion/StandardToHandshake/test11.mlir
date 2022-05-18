@@ -12,7 +12,7 @@
 // CHECK:           %[[VAL_8:.*]] = br %[[VAL_4]] : index
 // CHECK:           %[[VAL_9:.*]], %[[VAL_10:.*]] = control_merge %[[VAL_5]] : none
 // CHECK:           %[[VAL_11:.*]]:3 = fork [3] %[[VAL_10]] : index
-// CHECK:           %[[VAL_12:.*]] = buffer [1] %[[VAL_13:.*]] {initValues = [0], sequential = true} : i1
+// CHECK:           %[[VAL_12:.*]] = buffer [1] seq %[[VAL_13:.*]] {initValues = [0]} : i1
 // CHECK:           %[[VAL_14:.*]]:4 = fork [4] %[[VAL_12]] : i1
 // CHECK:           %[[VAL_15:.*]] = mux %[[VAL_14]]#3 {{\[}}%[[VAL_9]], %[[VAL_16:.*]]] : i1, none
 // CHECK:           %[[VAL_17:.*]] = mux %[[VAL_11]]#2 {{\[}}%[[VAL_7]]] : index, index
@@ -103,28 +103,28 @@
 // CHECK:           sink %[[VAL_106]] : index
 // CHECK:           return %[[VAL_105]] : none
 // CHECK:         }
-func @imperfectly_nested_loops() {
+func.func @imperfectly_nested_loops() {
   %c0 = arith.constant 0 : index
   %c42 = arith.constant 42 : index
   %c1 = arith.constant 1 : index
-  br ^bb1(%c0 : index)
+  cf.br ^bb1(%c0 : index)
 ^bb1(%0: index):      // 2 preds: ^bb0, ^bb5
   %1 = arith.cmpi slt, %0, %c42 : index
-  cond_br %1, ^bb2, ^bb6
+  cf.cond_br %1, ^bb2, ^bb6
 ^bb2: // pred: ^bb1
   %c7 = arith.constant 7 : index
   %c56 = arith.constant 56 : index
   %c2 = arith.constant 2 : index
-  br ^bb3(%c7 : index)
+  cf.br ^bb3(%c7 : index)
 ^bb3(%2: index):      // 2 preds: ^bb2, ^bb4
   %3 = arith.cmpi slt, %2, %c56 : index
-  cond_br %3, ^bb4, ^bb5
+  cf.cond_br %3, ^bb4, ^bb5
 ^bb4: // pred: ^bb3
   %4 = arith.addi %2, %c2 : index
-  br ^bb3(%4 : index)
+  cf.br ^bb3(%4 : index)
 ^bb5: // pred: ^bb3
   %5 = arith.addi %0, %c1 : index
-  br ^bb1(%5 : index)
+  cf.br ^bb1(%5 : index)
 ^bb6: // pred: ^bb1
   return
 }

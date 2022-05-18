@@ -41,6 +41,7 @@ private:
   bool prettifyUnaryOperator(Operation *op);
   void sinkOrCloneOpToUses(Operation *op);
   void sinkExpression(Operation *op);
+  void useNamedOperands(Operation *op, DenseMap<Value, Operation *> &pipeMap);
 
   bool anythingChanged;
 };

@@ -16,7 +16,7 @@
 // CHECK:           %[[VAL_13:.*]] = br %[[VAL_8]] : index
 // CHECK:           %[[VAL_14:.*]], %[[VAL_15:.*]] = control_merge %[[VAL_10]] : none
 // CHECK:           %[[VAL_16:.*]]:4 = fork [4] %[[VAL_15]] : index
-// CHECK:           %[[VAL_17:.*]] = buffer [1] %[[VAL_18:.*]] {initValues = [0], sequential = true} : i1
+// CHECK:           %[[VAL_17:.*]] = buffer [1] seq %[[VAL_18:.*]] {initValues = [0]} : i1
 // CHECK:           %[[VAL_19:.*]]:5 = fork [5] %[[VAL_17]] : i1
 // CHECK:           %[[VAL_20:.*]] = mux %[[VAL_19]]#4 {{\[}}%[[VAL_14]], %[[VAL_21:.*]]] : i1, none
 // CHECK:           %[[VAL_22:.*]] = mux %[[VAL_16]]#3 {{\[}}%[[VAL_12]]] : index, index
@@ -68,22 +68,22 @@
 // CHECK:           sink %[[VAL_66]] : index
 // CHECK:           return %[[VAL_65]] : none
 // CHECK:         }
-func @affine_load(%arg0: index) {
+func.func @affine_load(%arg0: index) {
   %0 = memref.alloc() : memref<10xf32>
   %c0 = arith.constant 0 : index
   %c10 = arith.constant 10 : index
   %c1 = arith.constant 1 : index
-  br ^bb1(%c0 : index)
+  cf.br ^bb1(%c0 : index)
 ^bb1(%1: index):      // 2 preds: ^bb0, ^bb2
   %2 = arith.cmpi slt, %1, %c10 : index
-  cond_br %2, ^bb2, ^bb3
+  cf.cond_br %2, ^bb2, ^bb3
 ^bb2: // pred: ^bb1
   %3 = arith.addi %1, %arg0 : index
   %c7 = arith.constant 7 : index
   %4 = arith.addi %3, %c7 : index
   %5 = memref.load %0[%4] : memref<10xf32>
   %6 = arith.addi %1, %c1 : index
-  br ^bb1(%6 : index)
+  cf.br ^bb1(%6 : index)
 ^bb3: // pred: ^bb1
   return
 }

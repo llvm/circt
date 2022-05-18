@@ -16,7 +16,7 @@
 #include "circt/InitAllDialects.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
-#include "mlir/Parser.h"
+#include "mlir/Parser/Parser.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Pass/PassRegistry.h"
 #include "mlir/Reducer/Tester.h"
@@ -70,7 +70,7 @@ private:
 static bool onlyInvalidated(Value arg) {
   return llvm::all_of(arg.getUses(), [](OpOperand &use) {
     auto *op = use.getOwner();
-    if (!isa<firrtl::ConnectOp, firrtl::PartialConnectOp>(op))
+    if (!isa<firrtl::ConnectOp, firrtl::StrictConnectOp>(op))
       return false;
     if (use.getOperandNumber() != 0)
       return false;
@@ -79,6 +79,71 @@ static bool onlyInvalidated(Value arg) {
     return true;
   });
 }
+
+/// A tracker for track NLAs affected by a reduction. Performs the necessary
+/// cleanup steps in order to maintain IR validity after the reduction has
+/// applied. For example, removing an instance that forms part of an NLA path
+/// requires that NLA to be removed as well.
+struct NLARemover {
+  /// Clear the set of marked NLAs. Call this before attempting a reduction.
+  void clear() { nlasToRemove.clear(); }
+
+  /// Remove all marked annotations. Call this after applying a reduction in
+  /// order to validate the IR.
+  void remove(mlir::ModuleOp module) {
+    unsigned numRemoved = 0;
+    for (Operation &rootOp : *module.getBody()) {
+      if (!isa<firrtl::CircuitOp>(&rootOp))
+        continue;
+      SymbolTable symbolTable(&rootOp);
+      for (auto sym : nlasToRemove) {
+        if (auto *op = symbolTable.lookup(sym)) {
+          ++numRemoved;
+          op->erase();
+        }
+      }
+    }
+    LLVM_DEBUG({
+      unsigned numLost = nlasToRemove.size() - numRemoved;
+      if (numRemoved > 0 || numLost > 0) {
+        llvm::dbgs() << "Removed " << numRemoved << " NLAs";
+        if (numLost > 0)
+          llvm::dbgs() << " (" << numLost << " no longer there)";
+        llvm::dbgs() << "\n";
+      }
+    });
+  }
+
+  /// Mark all NLAs referenced in the given annotation as to be removed. This
+  /// can be an entire array or dictionary of annotations, and the function will
+  /// descend into child annotations appropriately.
+  void markNLAsInAnnotation(Attribute anno) {
+    if (auto dict = anno.dyn_cast<DictionaryAttr>()) {
+      if (auto field = dict.getAs<FlatSymbolRefAttr>("circt.nonlocal"))
+        nlasToRemove.insert(field.getAttr());
+      for (auto namedAttr : dict)
+        markNLAsInAnnotation(namedAttr.getValue());
+    } else if (auto array = anno.dyn_cast<ArrayAttr>()) {
+      for (auto attr : array)
+        markNLAsInAnnotation(attr);
+    } else if (auto subAnno = anno.dyn_cast<firrtl::SubAnnotationAttr>()) {
+      markNLAsInAnnotation(subAnno.getAnnotations());
+    }
+  }
+
+  /// Mark all NLAs referenced in an operation. Also traverses all nested
+  /// operations. Call this before removing an operation, to mark any associated
+  /// NLAs as to be removed as well.
+  void markNLAsInOperation(Operation *op) {
+    op->walk([&](Operation *op) {
+      if (auto annos = op->getAttrOfType<ArrayAttr>("annotations"))
+        markNLAsInAnnotation(annos);
+    });
+  }
+
+  /// The set of NLAs to remove, identified by their symbol.
+  llvm::DenseSet<StringAttr> nlasToRemove;
+};
 
 //===----------------------------------------------------------------------===//
 // Reduction
@@ -105,7 +170,7 @@ PassReduction::PassReduction(MLIRContext *context, std::unique_ptr<Pass> pass,
 }
 
 bool PassReduction::match(Operation *op) {
-  return op->getName().getStringRef() == pm->getOpName(*context);
+  return op->getName() == pm->getOpName(*context);
 }
 
 LogicalResult PassReduction::rewrite(Operation *op) { return pm->run(op); }
@@ -118,9 +183,13 @@ std::string PassReduction::getName() const { return passName.str(); }
 
 /// A sample reduction pattern that maps `firrtl.module` to `firrtl.extmodule`.
 struct ModuleExternalizer : public Reduction {
+  void beforeReduction(mlir::ModuleOp op) override { nlaRemover.clear(); }
+  void afterReduction(mlir::ModuleOp op) override { nlaRemover.remove(op); }
+
   bool match(Operation *op) override { return isa<firrtl::FModuleOp>(op); }
   LogicalResult rewrite(Operation *op) override {
     auto module = cast<firrtl::FModuleOp>(op);
+    nlaRemover.markNLAsInOperation(op);
     OpBuilder builder(module);
     builder.create<firrtl::FExtModuleOp>(
         module->getLoc(),
@@ -130,6 +199,8 @@ struct ModuleExternalizer : public Reduction {
     return success();
   }
   std::string getName() const override { return "module-externalizer"; }
+
+  NLARemover nlaRemover;
 };
 
 /// Invalidate all the leaf fields of a value with a given flippedness by
@@ -197,6 +268,13 @@ static void connectToLeafs(ImplicitLocOpBuilder &builder, Value dest,
                      value);
     return;
   }
+  auto valueType = value.getType().dyn_cast<firrtl::FIRRTLType>();
+  if (!valueType)
+    return;
+  auto destWidth = type.getBitWidthOrSentinel();
+  auto valueWidth = valueType ? valueType.getBitWidthOrSentinel() : -1;
+  if (destWidth >= 0 && valueWidth >= 0 && destWidth < valueWidth)
+    value = builder.create<firrtl::HeadPrimOp>(value, destWidth);
   if (!type.isa<firrtl::UIntType>()) {
     if (type.isa<firrtl::SIntType>())
       value = builder.create<firrtl::AsSIntPrimOp>(value);
@@ -237,7 +315,11 @@ static void reduceXor(ImplicitLocOpBuilder &builder, Value &into, Value value) {
 /// invalidated wires. This often shortcuts a long iterative process of connect
 /// invalidation, module externalization, and wire stripping
 struct InstanceStubber : public Reduction {
-  void beforeReduction(mlir::ModuleOp op) override { symbols.clear(); }
+  void beforeReduction(mlir::ModuleOp op) override {
+    symbols.clear();
+    nlaRemover.clear();
+  }
+  void afterReduction(mlir::ModuleOp op) override { nlaRemover.remove(op); }
 
   bool match(Operation *op) override { return isa<firrtl::InstanceOp>(op); }
 
@@ -258,6 +340,7 @@ struct InstanceStubber : public Reduction {
     }
     auto tableOp = SymbolTable::getNearestSymbolTable(instOp);
     auto moduleOp = instOp.getReferencedModule(symbols.getSymbolTable(tableOp));
+    nlaRemover.markNLAsInOperation(instOp);
     instOp->erase();
     if (symbols.getSymbolUserMap(tableOp).useEmpty(moduleOp)) {
       LLVM_DEBUG(llvm::dbgs() << "- Removing now unused module `"
@@ -271,11 +354,14 @@ struct InstanceStubber : public Reduction {
   bool acceptSizeIncrease() const override { return true; }
 
   SymbolCache symbols;
+  NLARemover nlaRemover;
 };
 
 /// A sample reduction pattern that maps `firrtl.mem` to a set of invalidated
 /// wires.
 struct MemoryStubber : public Reduction {
+  void beforeReduction(mlir::ModuleOp op) override { nlaRemover.clear(); }
+  void afterReduction(mlir::ModuleOp op) override { nlaRemover.remove(op); }
   bool match(Operation *op) override { return isa<firrtl::MemOp>(op); }
   LogicalResult rewrite(Operation *op) override {
     auto memOp = cast<firrtl::MemOp>(op);
@@ -328,11 +414,13 @@ struct MemoryStubber : public Reduction {
     for (auto output : outputs)
       connectToLeafs(builder, output, xorInputs);
 
+    nlaRemover.markNLAsInOperation(memOp);
     memOp->erase();
     return success();
   }
   std::string getName() const override { return "memory-stubber"; }
   bool acceptSizeIncrease() const override { return true; }
+  NLARemover nlaRemover;
 };
 
 /// Starting at the given `op`, traverse through it and its operands and erase
@@ -435,12 +523,13 @@ struct Constantifier : public Reduction {
 };
 
 /// A sample reduction pattern that replaces the right-hand-side of
-/// `firrtl.connect` and `firrtl.partialconnect` operations with a
+/// `firrtl.connect` and `firrtl.strictconnect` operations with a
 /// `firrtl.invalidvalue`. This removes uses from the fanin cone to these
 /// connects and creates opportunities for reduction in DCE/CSE.
 struct ConnectInvalidator : public Reduction {
   bool match(Operation *op) override {
-    return isa<firrtl::ConnectOp, firrtl::PartialConnectOp>(op) &&
+    return isa<firrtl::ConnectOp, firrtl::StrictConnectOp>(op) &&
+           op->getOperand(1).getType().cast<firrtl::FIRRTLType>().isPassive() &&
            !op->getOperand(1).getDefiningOp<firrtl::InvalidValueOp>();
   }
   LogicalResult rewrite(Operation *op) override {
@@ -482,14 +571,19 @@ struct OperationPruner : public Reduction {
 /// A sample reduction pattern that removes FIRRTL annotations from ports and
 /// operations.
 struct AnnotationRemover : public Reduction {
+  void beforeReduction(mlir::ModuleOp op) override { nlaRemover.clear(); }
+  void afterReduction(mlir::ModuleOp op) override { nlaRemover.remove(op); }
   bool match(Operation *op) override {
     return op->hasAttr("annotations") || op->hasAttr("portAnnotations");
   }
   LogicalResult rewrite(Operation *op) override {
     auto emptyArray = ArrayAttr::get(op->getContext(), {});
-    if (op->hasAttr("annotations"))
+    if (auto annos = op->getAttr("annotations")) {
+      nlaRemover.markNLAsInAnnotation(annos);
       op->setAttr("annotations", emptyArray);
-    if (op->hasAttr("portAnnotations")) {
+    }
+    if (auto annos = op->getAttr("portAnnotations")) {
+      nlaRemover.markNLAsInAnnotation(annos);
       auto attr = emptyArray;
       if (isa<firrtl::InstanceOp>(op))
         attr = ArrayAttr::get(
@@ -500,6 +594,7 @@ struct AnnotationRemover : public Reduction {
     return success();
   }
   std::string getName() const override { return "annotation-remover"; }
+  NLARemover nlaRemover;
 };
 
 /// A sample reduction pattern that removes ports from the root `firrtl.module`
@@ -534,7 +629,11 @@ struct RootPortPruner : public Reduction {
 /// A sample reduction pattern that replaces instances of `firrtl.extmodule`
 /// with wires.
 struct ExtmoduleInstanceRemover : public Reduction {
-  void beforeReduction(mlir::ModuleOp op) override { symbols.clear(); }
+  void beforeReduction(mlir::ModuleOp op) override {
+    symbols.clear();
+    nlaRemover.clear();
+  }
+  void afterReduction(mlir::ModuleOp op) override { nlaRemover.remove(op); }
 
   bool match(Operation *op) override {
     if (auto instOp = dyn_cast<firrtl::InstanceOp>(op))
@@ -558,6 +657,7 @@ struct ExtmoduleInstanceRemover : public Reduction {
       }
       replacementWires.push_back(wire);
     }
+    nlaRemover.markNLAsInOperation(instOp);
     instOp.replaceAllUsesWith(std::move(replacementWires));
     instOp->erase();
     return success();
@@ -566,6 +666,7 @@ struct ExtmoduleInstanceRemover : public Reduction {
   bool acceptSizeIncrease() const override { return true; }
 
   SymbolCache symbols;
+  NLARemover nlaRemover;
 };
 
 /// A sample reduction pattern that replaces a single-use wire and register with
@@ -573,10 +674,9 @@ struct ExtmoduleInstanceRemover : public Reduction {
 template <unsigned OpNum>
 struct ConnectSourceOperandForwarder : public Reduction {
   bool match(Operation *op) override {
-    auto connect = dyn_cast<firrtl::ConnectOp>(op);
-    if (!connect)
+    if (!isa<firrtl::ConnectOp, firrtl::StrictConnectOp>(op))
       return false;
-    auto dest = connect.dest();
+    auto dest = op->getOperand(0);
     auto *destOp = dest.getDefiningOp();
 
     // Ensure that the destination is used only once.
@@ -584,7 +684,7 @@ struct ConnectSourceOperandForwarder : public Reduction {
         !isa<firrtl::WireOp, firrtl::RegOp, firrtl::RegResetOp>(destOp))
       return false;
 
-    auto *srcOp = connect.src().getDefiningOp();
+    auto *srcOp = op->getOperand(1).getDefiningOp();
     if (!srcOp || OpNum >= srcOp->getNumOperands())
       return false;
 
@@ -600,9 +700,8 @@ struct ConnectSourceOperandForwarder : public Reduction {
   }
 
   LogicalResult rewrite(Operation *op) override {
-    auto connect = cast<firrtl::ConnectOp>(op);
-    auto *destOp = connect.dest().getDefiningOp();
-    auto *srcOp = connect.src().getDefiningOp();
+    auto *destOp = op->getOperand(0).getDefiningOp();
+    auto *srcOp = op->getOperand(1).getDefiningOp();
     auto forwardedOperand = srcOp->getOperand(OpNum);
     ImplicitLocOpBuilder builder(destOp->getLoc(), destOp);
     Value newDest;
@@ -618,7 +717,10 @@ struct ConnectSourceOperandForwarder : public Reduction {
 
     // Create new connection between a new wire and the forwarded operand.
     builder.setInsertionPointAfter(op);
-    builder.create<firrtl::ConnectOp>(newDest, forwardedOperand);
+    if (isa<firrtl::ConnectOp>(op))
+      builder.create<firrtl::ConnectOp>(newDest, forwardedOperand);
+    else
+      builder.create<firrtl::StrictConnectOp>(newDest, forwardedOperand);
 
     // Remove the old connection and destination. We don't have to replace them
     // because destination has only one use.
@@ -631,6 +733,74 @@ struct ConnectSourceOperandForwarder : public Reduction {
   std::string getName() const override {
     return ("connect-source-operand-" + Twine(OpNum) + "-forwarder").str();
   }
+};
+
+/// A sample reduction pattern that tries to remove aggregate wires by replacing
+/// all subaccesses with new independent wires. This can disentangle large
+/// unused wires that are otherwise difficult to collect due to the subaccesses.
+struct DetachSubaccesses : public Reduction {
+  void beforeReduction(mlir::ModuleOp op) override { opsToErase.clear(); }
+  void afterReduction(mlir::ModuleOp op) override {
+    for (auto *op : opsToErase)
+      op->dropAllReferences();
+    for (auto *op : opsToErase)
+      op->erase();
+  }
+  bool match(Operation *op) override {
+    // Only applies to wires and registers that are purely used in subaccess
+    // operations.
+    return isa<firrtl::WireOp, firrtl::RegOp, firrtl::RegResetOp>(op) &&
+           llvm::all_of(op->getUses(), [](auto &use) {
+             return use.getOperandNumber() == 0 &&
+                    isa<firrtl::SubfieldOp, firrtl::SubindexOp,
+                        firrtl::SubaccessOp>(use.getOwner());
+           });
+  }
+  LogicalResult rewrite(Operation *op) override {
+    assert(match(op));
+    OpBuilder builder(op);
+    bool isWire = isa<firrtl::WireOp>(op);
+    Value invalidClock;
+    if (!isWire)
+      invalidClock = builder.create<firrtl::InvalidValueOp>(
+          op->getLoc(), firrtl::ClockType::get(op->getContext()));
+    for (Operation *user : llvm::make_early_inc_range(op->getUsers())) {
+      builder.setInsertionPoint(user);
+      auto type = user->getResult(0).getType();
+      Operation *replOp;
+      if (isWire)
+        replOp = builder.create<firrtl::WireOp>(user->getLoc(), type);
+      else
+        replOp =
+            builder.create<firrtl::RegOp>(user->getLoc(), type, invalidClock);
+      user->replaceAllUsesWith(replOp);
+      opsToErase.insert(user);
+    }
+    opsToErase.insert(op);
+    return success();
+  }
+  std::string getName() const override { return "detach-subaccesses"; }
+  llvm::DenseSet<Operation *> opsToErase;
+};
+
+/// This reduction removes symbols on node ops. Name preservation creates a lot
+/// of nodes ops with symbols to keep name information but it also prevents
+/// normal canonicalizations.
+struct NodeSymbolRemover : public Reduction {
+
+  bool match(Operation *op) override {
+    if (auto nodeOp = dyn_cast<firrtl::NodeOp>(op))
+      return nodeOp.inner_sym() && !nodeOp.inner_sym().getValue().empty();
+    return false;
+  }
+
+  LogicalResult rewrite(Operation *op) override {
+    auto nodeOp = cast<firrtl::NodeOp>(op);
+    nodeOp.removeInner_symAttr();
+    return success();
+  }
+
+  std::string getName() const override { return "node-symbol-remover"; }
 };
 
 //===----------------------------------------------------------------------===//
@@ -657,6 +827,9 @@ void circt::createAllReductions(
                                       true, true));
   add(std::make_unique<PassReduction>(context, firrtl::createInferResetsPass(),
                                       true, true));
+  add(std::make_unique<ModuleExternalizer>());
+  add(std::make_unique<InstanceStubber>());
+  add(std::make_unique<MemoryStubber>());
   add(std::make_unique<PassReduction>(
       context, firrtl::createLowerFIRRTLTypesPass(), true, true));
   add(std::make_unique<PassReduction>(context, firrtl::createExpandWhensPass(),
@@ -665,17 +838,18 @@ void circt::createAllReductions(
   add(std::make_unique<PassReduction>(context,
                                       createSimpleCanonicalizerPass()));
   add(std::make_unique<PassReduction>(context,
-                                      firrtl::createRemoveUnusedPortsPass()));
-  add(std::make_unique<InstanceStubber>());
-  add(std::make_unique<MemoryStubber>());
-  add(std::make_unique<ModuleExternalizer>());
+                                      firrtl::createIMConstPropPass()));
+  add(std::make_unique<PassReduction>(
+      context, firrtl::createRemoveUnusedPortsPass(/*ignoreDontTouch=*/true)));
   add(std::make_unique<PassReduction>(context, createCSEPass()));
+  add(std::make_unique<NodeSymbolRemover>());
   add(std::make_unique<ConnectInvalidator>());
   add(std::make_unique<Constantifier>());
   add(std::make_unique<OperandForwarder<0>>());
   add(std::make_unique<OperandForwarder<1>>());
   add(std::make_unique<OperandForwarder<2>>());
   add(std::make_unique<OperationPruner>());
+  add(std::make_unique<DetachSubaccesses>());
   add(std::make_unique<AnnotationRemover>());
   add(std::make_unique<RootPortPruner>());
   add(std::make_unique<ExtmoduleInstanceRemover>());

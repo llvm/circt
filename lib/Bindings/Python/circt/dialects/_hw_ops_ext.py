@@ -160,7 +160,7 @@ class ModuleLike:
     if len(parameters) > 0 or "parameters" not in attributes:
       attributes["parameters"] = ArrayAttr.get(parameters)
 
-    attributes["type"] = TypeAttr.get(
+    attributes["function_type"] = TypeAttr.get(
         FunctionType.get(inputs=input_types, results=output_types))
 
     super().__init__(
@@ -180,7 +180,7 @@ class ModuleLike:
 
   @property
   def type(self):
-    return FunctionType(TypeAttr(self.attributes["type"]).value)
+    return FunctionType(TypeAttr(self.attributes["function_type"]).value)
 
   @property
   def name(self):

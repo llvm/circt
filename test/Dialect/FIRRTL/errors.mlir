@@ -191,7 +191,7 @@ firrtl.circuit "Foo" {
 firrtl.circuit "Foo" {
   firrtl.module @Foo() {
   // expected-error @+1 {{'firrtl.mem' op attribute 'writeLatency' failed to satisfy constraint: 32-bit signless integer attribute whose minimum value is 1}}
-    %m = firrtl.mem Undefined {depth = 32 : i64, name = "m", readLatency = 0 : i32, writeLatency = 0 : i32} : !firrtl.bundle<>
+    %m = firrtl.mem Undefined {depth = 32 : i64, name = "m", portNames = ["rw"], readLatency = 0 : i32, writeLatency = 0 : i32} : !firrtl.bundle<>
   }
 }
 
@@ -266,7 +266,7 @@ firrtl.circuit "Foo" {
 
 firrtl.circuit "Foo" {
   firrtl.extmodule @Foo()
-  // expected-error @+1 {{'firrtl.instance' op should be embedded in a 'firrtl.module'}}
+  // expected-error @+1 {{'firrtl.instance' op expects parent op to be one of 'firrtl.module, firrtl.when'}}
   firrtl.instance "" @Foo()
 }
 
@@ -480,6 +480,7 @@ firrtl.circuit "MemoryPortInvalidReturnType" {
     %mem = chirrtl.combmem : !chirrtl.cmemory<uint<8>, 8>
     // expected-error @+1 {{'chirrtl.memoryport' op inferred type(s) '!firrtl.uint<8>', '!chirrtl.cmemoryport' are incompatible with return type(s) of operation '!firrtl.uint<9>', '!chirrtl.cmemoryport'}}
     %memoryport_data, %memoryport_port = chirrtl.memoryport Infer %mem {name = "memoryport"} : (!chirrtl.cmemory<uint<8>, 8>) -> (!firrtl.uint<9>, !chirrtl.cmemoryport)
+    chirrtl.memoryport.access %memoryport_port[%sel], %clock : !chirrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
   }
 }
 
@@ -768,3 +769,48 @@ firrtl.circuit "Top"   {
   }
 }
 
+// -----
+
+firrtl.circuit "Top" {
+  firrtl.module @Top (in %in : !firrtl.uint) {
+    %a = firrtl.wire : !firrtl.uint
+    // expected-error @+1 {{op operand #0 must be a sized type}}
+    firrtl.strictconnect %a, %in : !firrtl.uint
+  }
+}
+
+// -----
+
+firrtl.circuit "AnalogRegister" {
+  firrtl.module @AnalogRegister(in %clock: !firrtl.clock) {
+    // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive type that does not contain analog, but got '!firrtl.analog'}}
+    %r = firrtl.reg %clock : !firrtl.analog
+  }
+}
+
+// -----
+
+firrtl.circuit "AnalogVectorRegister" {
+  firrtl.module @AnalogVectorRegister(in %clock: !firrtl.clock) {
+    // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive type that does not contain analog, but got '!firrtl.vector<analog, 2>'}}
+    %r = firrtl.reg %clock : !firrtl.vector<analog, 2>
+  }
+}
+
+// -----
+
+firrtl.circuit "MismatchedRegister" {
+  firrtl.module @MismatchedRegister(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, out %z: !firrtl.vector<uint<1>, 1>) {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    // expected-error @+1 {{type mismatch between register '!firrtl.vector<uint<1>, 1>' and reset value '!firrtl.uint<1>'}}
+    %r = firrtl.regreset %clock, %reset, %c0_ui1  : !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.vector<uint<1>, 1>
+    firrtl.connect %z, %r : !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>
+  }
+}
+
+// -----
+
+// expected-error @+1 {{'firrtl.circuit' op main module 'private_main' must be public}}
+firrtl.circuit "private_main" {
+  firrtl.module private @private_main() {}
+}

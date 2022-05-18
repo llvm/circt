@@ -14,14 +14,14 @@ module {
 
   sv.interface @myinterface {
     sv.interface.signal @data : i32
-    sv.interface.modport @input_port ("input" @data)
-    sv.interface.modport @output_port ("output" @data)
+    sv.interface.modport @input_port (input @data)
+    sv.interface.modport @output_port (output @data)
   }
 
   // CHECK-NEXT: sv.interface @myinterface {
   // CHECK-NEXT:   sv.interface.signal @data : i32
-  // CHECK-NEXT:   sv.interface.modport @input_port ("input" @data)
-  // CHECK-NEXT:   sv.interface.modport @output_port ("output" @data)
+  // CHECK-NEXT:   sv.interface.modport @input_port (input @data)
+  // CHECK-NEXT:   sv.interface.modport @output_port (output @data)
   // CHECK-NEXT: }
 
   // Handshake-like interface smoke test
@@ -30,16 +30,16 @@ module {
     sv.interface.signal @data : i32
     sv.interface.signal @valid : i1
     sv.interface.signal @ready : i1
-    sv.interface.modport @dataflow_in ("input" @data, "input" @valid, "output" @ready)
-    sv.interface.modport @dataflow_out ("output" @data, "output" @valid, "input" @ready)
+    sv.interface.modport @dataflow_in (input @data, input @valid, output @ready)
+    sv.interface.modport @dataflow_out (output @data, output @valid, input @ready)
   }
 
   // CHECK-NEXT: sv.interface @handshake_example {
   // CHECK-NEXT:   sv.interface.signal @data : i32
   // CHECK-NEXT:   sv.interface.signal @valid : i1
   // CHECK-NEXT:   sv.interface.signal @ready : i1
-  // CHECK-NEXT:   sv.interface.modport @dataflow_in ("input" @data, "input" @valid, "output" @ready)
-  // CHECK-NEXT:   sv.interface.modport @dataflow_out ("output" @data, "output" @valid, "input" @ready)
+  // CHECK-NEXT:   sv.interface.modport @dataflow_in (input @data, input @valid, output @ready)
+  // CHECK-NEXT:   sv.interface.modport @dataflow_out (output @data, output @valid, input @ready)
   // CHECK-NEXT: }
 
   hw.module.extern @Rcvr (%m: !sv.modport<@handshake_example::@dataflow_in>)

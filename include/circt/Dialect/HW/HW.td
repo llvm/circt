@@ -13,12 +13,15 @@
 #ifndef HW_TD
 #define HW_TD
 
+include "mlir/IR/AttrTypeBase.td"
 include "mlir/IR/OpBase.td"
-include "mlir/Interfaces/SideEffectInterfaces.td"
-include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/IR/RegionKindInterface.td"
+include "mlir/IR/FunctionInterfaces.td"
+include "mlir/IR/SubElementInterfaces.td"
+include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/Interfaces/ControlFlowInterfaces.td"
 
 include "circt/Dialect/HW/HWDialect.td"
 include "circt/Dialect/HW/HWAttributes.td"
@@ -28,9 +31,10 @@ include "circt/Dialect/HW/HWTypesImpl.td"
 include "circt/Dialect/HW/HWTypes.td"
 
 // Base class for the operation in this dialect.
-class HWOp<string mnemonic, list<OpTrait> traits = []> :
+class HWOp<string mnemonic, list<Trait> traits = []> :
     Op<HWDialect, mnemonic, traits>;
 
+include "circt/Dialect/HW/HWOpInterfaces.td"
 include "circt/Dialect/HW/HWMiscOps.td"
 include "circt/Dialect/HW/HWAggregates.td"
 include "circt/Dialect/HW/HWStructure.td"

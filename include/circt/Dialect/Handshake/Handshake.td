@@ -14,8 +14,10 @@
 #define HANDSHAKE_TD
 
 include "mlir/IR/OpBase.td"
+include "mlir/IR/PatternBase.td"
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/IR/RegionKindInterface.td"
+include "mlir/IR/FunctionInterfaces.td"
 include "mlir/Interfaces/CallInterfaces.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "circt/Dialect/Handshake/HandshakeInterfaces.td"
@@ -23,10 +25,16 @@ include "circt/Dialect/Handshake/HandshakeInterfaces.td"
 def Handshake_Dialect : Dialect {
   let name = "handshake";
   let cppNamespace = "::circt::handshake";
+  let summary = "Types and operations for the handshake dialect";
+  let description = [{
+    This dialect defined the `handshake` dialect, modeling dataflow circuits.
+    Handshake/dataflow IR is describes independent, unsynchronized processes
+    communicating data through First-in First-out (FIFO) communication channels.
+  }];
 }
 
 // Base class for Handshake dialect ops.
-class Handshake_Op<string mnemonic, list<OpTrait> traits = []>
+class Handshake_Op<string mnemonic, list<Trait> traits = []>
     : Op<Handshake_Dialect, mnemonic,
          traits #[HasParent<"handshake::FuncOp">,
          DeclareOpInterfaceMethods<NamedIOInterface>,

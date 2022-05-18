@@ -36,6 +36,8 @@ def Channel : ESI_Port<"Channel"> {
 
   let mnemonic = "channel";
   let parameters = (ins "Type":$inner);
+
+  let assemblyFormat = "`<` $inner `>`";
 }
 
 def ChannelType :
@@ -55,9 +57,7 @@ def WrapValidReady : ESI_Op<"wrap.vr", [NoSideEffect]> {
 
   let arguments = (ins AnyType:$rawInput, I1:$valid);
   let results = (outs ChannelType:$chanOutput, I1:$ready);
-
-  let printer = [{ return ::print$cppClass(p, *this); }];
-  let parser = [{ return ::parse$cppClass(parser, result); }];
+  let hasCustomAssemblyFormat = 1;
   let hasFolder = 1;
 
   let builders = [
@@ -75,9 +75,7 @@ def UnwrapValidReady : ESI_Op<"unwrap.vr", [NoSideEffect]> {
 
   let arguments = (ins ChannelType:$chanInput, I1:$ready);
   let results = (outs AnyType:$rawOutput, I1:$valid);
-
-  let printer = [{ return ::print$cppClass(p, *this); }];
-  let parser = [{ return ::parse$cppClass(parser, result); }];
+  let hasCustomAssemblyFormat = 1;
 
   let builders = [
     OpBuilder<(ins "mlir::Value":$inChan, "mlir::Value":$ready)>
@@ -102,9 +100,7 @@ def WrapSVInterface: ESI_Op<"wrap.iface", [NoSideEffect]> {
     $interfaceSink attr-dict `:` qualified(type($interfaceSink)) `->` qualified(type($output))
   }];
 
-  let verifier = [{
-    return ::verify$cppClass(*this);
-  }];
+  let hasVerifier = 1;
 }
 
 def UnwrapSVInterface : ESI_Op<"unwrap.iface", []> {
@@ -121,7 +117,5 @@ def UnwrapSVInterface : ESI_Op<"unwrap.iface", []> {
     $chanInput `into` $interfaceSource attr-dict `:` `(` qualified(type($chanInput)) `,` qualified(type($interfaceSource)) `)`
   }];
 
-  let verifier = [{
-    return ::verify$cppClass(*this);
-  }];
+  let hasVerifier = 1;
 }

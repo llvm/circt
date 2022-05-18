@@ -39,8 +39,8 @@ firrtl.circuit "Arithmetic" {
     // CHECK: hw.output %c0_i3, [[ADDRES]], %c0_i4, %true
   }
 
-  // CHECK-LABEL: hw.module @Exotic
-  firrtl.module @Exotic(in %uin3c: !firrtl.uint<3>,
+  // CHECK-LABEL: hw.module private @Exotic
+  firrtl.module private @Exotic(in %uin3c: !firrtl.uint<3>,
                         out %out0: !firrtl.uint<3>,
                         out %out1: !firrtl.uint<3>) {
     %uin0c = firrtl.wire : !firrtl.uint<0>
@@ -67,8 +67,8 @@ firrtl.circuit "Arithmetic" {
     // CHECK: hw.output %uin3c, %uin3c : i3, i3
   }
 
-  // CHECK-LABEL: hw.module @Decls
-  firrtl.module @Decls(in %uin3c: !firrtl.uint<3>) {
+  // CHECK-LABEL: hw.module private @Decls
+  firrtl.module private @Decls(in %uin3c: !firrtl.uint<3>) {
     %sin0c = firrtl.wire : !firrtl.sint<0>
     %uin0c = firrtl.wire : !firrtl.uint<0>
 

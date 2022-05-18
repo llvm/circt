@@ -17,7 +17,7 @@
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinOps.h"
-#include "mlir/Translation.h"
+#include "mlir/Tools/mlir-translate/Translation.h"
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -65,7 +65,7 @@ struct Emitter {
   void emitStatement(SkipOp op);
   void emitStatement(PrintFOp op);
   void emitStatement(ConnectOp op);
-  void emitStatement(PartialConnectOp op);
+  void emitStatement(StrictConnectOp op);
   void emitStatement(InstanceOp op);
   void emitStatement(AttachOp op);
   void emitStatement(MemOp op);
@@ -315,9 +315,9 @@ void Emitter::emitStatementsInBlock(Block &block) {
       continue;
     TypeSwitch<Operation *>(&bodyOp)
         .Case<WhenOp, WireOp, RegOp, RegResetOp, NodeOp, StopOp, SkipOp,
-              PrintFOp, AssertOp, AssumeOp, CoverOp, ConnectOp,
-              PartialConnectOp, InstanceOp, AttachOp, MemOp, InvalidValueOp,
-              SeqMemOp, CombMemOp, MemoryPortOp, MemoryPortAccessOp>(
+              PrintFOp, AssertOp, AssumeOp, CoverOp, ConnectOp, StrictConnectOp,
+              InstanceOp, AttachOp, MemOp, InvalidValueOp, SeqMemOp, CombMemOp,
+              MemoryPortOp, MemoryPortAccessOp>(
             [&](auto op) { emitStatement(op); })
         .Default([&](auto op) {
           indent() << "// operation " << op->getName() << "\n";
@@ -458,12 +458,15 @@ void Emitter::emitStatement(ConnectOp op) {
   emitLocationAndNewLine(op);
 }
 
-void Emitter::emitStatement(PartialConnectOp op) {
+void Emitter::emitStatement(StrictConnectOp op) {
   indent();
   emitExpression(op.dest());
-  // TODO: Check if partial connects can also encode `<dest> is invalid`.
-  os << " <- ";
-  emitExpression(op.src());
+  if (op.src().getDefiningOp<InvalidValueOp>()) {
+    os << " is invalid";
+  } else {
+    os << " <= ";
+    emitExpression(op.src());
+  }
   emitLocationAndNewLine(op);
 }
 
@@ -595,7 +598,7 @@ void Emitter::emitStatement(InvalidValueOp op) {
   // a connect.
   if (llvm::all_of(op->getUses(), [&](OpOperand &use) {
         return use.getOperandNumber() == 1 &&
-               isa<ConnectOp, PartialConnectOp>(use.getOwner());
+               isa<ConnectOp, StrictConnectOp>(use.getOwner());
       }))
     return;
 

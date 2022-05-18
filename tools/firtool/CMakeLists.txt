@@ -11,13 +11,13 @@ target_link_libraries(firtool PRIVATE
   CIRCTImportFIRFile
   CIRCTFIRRTLToHW
   CIRCTFIRRTLTransforms
+  CIRCTHWTransforms
   CIRCTSVTransforms
 
   MLIRParser
   MLIRSupport
   MLIRIR
   MLIROptLib
-  MLIRStandard
+  MLIRFunc
   MLIRTransforms
-  MLIRTranslation
   )

@@ -11,6 +11,8 @@ add_circt_library(CIRCTSupport
   LoweringOptions.cpp
   Path.cpp
   APInt.cpp
+  ValueMapper.cpp
+  SymCache.cpp
   "${VERSION_CPP}"
 
   ADDITIONAL_HEADER_DIRS

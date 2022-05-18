@@ -6,12 +6,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-include "circt/Dialect/HW/HWTypes.td"
-
-// Base class for the operation in this dialect.
-class MSFTOp<string mnemonic, list<OpTrait> traits = []> :
-    Op<MSFTDialect, mnemonic, traits>;
-
 def InstanceOp : MSFTOp<"instance", [
         Symbol,
         ParentOneOf<["::circt::hw::HWModuleOp", "MSFTModuleOp"]>,
@@ -64,7 +58,7 @@ def OneOrNoBlocksRegion : Region<
   "region with at most 1 block">;
 
 def MSFTModuleOp : MSFTOp<"module",
-      [IsolatedFromAbove, FunctionLike, Symbol, RegionKindInterface,
+      [IsolatedFromAbove, FunctionOpInterface, Symbol, RegionKindInterface,
        HasParent<"mlir::ModuleOp">,
        SingleBlockImplicitTerminator<"OutputOp">,
        OpAsmOpInterface]>{
@@ -89,8 +83,8 @@ def MSFTModuleOp : MSFTOp<"module",
   ];
 
   let extraClassDeclaration = [{
-    using FunctionLike::front;
-    using FunctionLike::getBody;
+    using mlir::detail::FunctionOpInterfaceTrait<MSFTModuleOp>::front;
+    using mlir::detail::FunctionOpInterfaceTrait<MSFTModuleOp>::getBody;
 
     // Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) {
@@ -126,31 +120,30 @@ def MSFTModuleOp : MSFTOp<"module",
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
 
-  private:
-    // This trait needs access to the hooks defined below.
-    friend class OpTrait::FunctionLike<MSFTModuleOp>;
+    /// Returns the type of this function.
+    FunctionType getFunctionType() {
+      return getFunctionTypeAttr().getValue().cast<FunctionType>();
+    }
 
-    /// Returns the number of arguments, implementing OpTrait::FunctionLike.
-    unsigned getNumFuncArguments() { return getType().getInputs().size(); }
-    /// Returns the number of results, implementing OpTrait::FunctionLike.
-    unsigned getNumFuncResults() { return getType().getResults().size(); }
+    /// Returns the argument types of this function.
+    ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
 
-    /// Hook for OpTrait::FunctionLike, called after verifying that the 'type'
-    /// attribute is present and checks if it holds a function type.  Ensures
-    /// getType, getNumFuncArguments, and getNumFuncResults can be called
-    /// safely.
+    /// Returns the result types of this function.
+    ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
+
+    /// Verify the type attribute of this function. Returns failure and emits
+    /// an error if the attribute is invalid.
     LogicalResult verifyType() {
-      auto type = getTypeAttr().getValue();
+      auto type = getFunctionTypeAttr().getValue();
       if (!type.isa<FunctionType>())
-        return emitOpError("requires '" + getTypeAttrName() +
-                           "' attribute of function type");
+        return emitOpError(
+            "requires '" + mlir::function_interface_impl::getTypeAttrName() +
+            "' attribute of function type");
       return success();
     }
-  public:
   }];
 
-  let printer = "return ::print$cppClass(p, *this);";
-  let parser = "return ::parse$cppClass(parser, result);";
+  let hasCustomAssemblyFormat = 1;
 }
 
 def MSFTModuleExternOp : MSFTOp<"module.extern",
@@ -174,9 +167,8 @@ def MSFTModuleExternOp : MSFTOp<"module.extern",
                    CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>
   ];
 
-  let printer = "return ::print$cppClass(p, *this);";
-  let parser = "return ::parse$cppClass(parser, result);";
-  let verifier = "return ::verify$cppClass(*this);";
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
 
   let extraClassDeclaration = [{
     /// Decode information about the input and output ports on this module.
@@ -210,88 +202,4 @@ def OutputOp : MSFTOp<"output", [Terminator, HasParent<"MSFTModuleOp">,
   ];
 
   let assemblyFormat = "attr-dict ($operands^ `:` qualified(type($operands)))?";
-}
-
-def DeclPhysicalRegionOp : MSFTOp<"physical_region",
-    [Symbol, HasParent<"mlir::ModuleOp">]> {
-  let arguments = (ins
-    SymbolNameAttr:$sym_name,
-    PhysicalBoundsArray:$bounds
-  );
-
-  let assemblyFormat = [{
-    $sym_name `,` $bounds attr-dict
-  }];
-}
-
-def EntityExternOp : MSFTOp<"entity.extern",
-    [Symbol, HasParent<"mlir::ModuleOp">]> {
-  let arguments = (ins
-    SymbolNameAttr:$sym_name,
-    AnyAttr:$metadata);
-  let assemblyFormat = [{
-    $sym_name $metadata attr-dict
-  }];
-}
-
-def PDPhysLocationOp : MSFTOp<"pd.location",
-      [DeclareOpInterfaceMethods<DynInstDataOpInterface>]> {
-  let summary = "Specify a location for an instance";
-  let description = [{
-    Used to specify a specific location on an FPGA to place a dynamic instance.
-    Supports specifying the location of a subpath for extern modules and device
-    primitives. Intended to live as a child of `instance.dynamic` initially
-    without the `ref` field. The dynamic instance lowering will fill in `ref`
-    with the symol of the `hw.globalref` op corresponding to the lowered dynamic
-    instance.
-  }];
-  let arguments = (ins PhysLocation:$loc,
-                       OptionalAttr<StrAttr>:$subPath,
-                       OptionalAttr<FlatSymbolRefAttr>:$ref);
-  let assemblyFormat = [{
-    ($ref^)? custom<PhysLoc>($loc) (`path` `:` $subPath^)? attr-dict
-  }];
-}
-
-def PDPhysRegionOp : MSFTOp<"pd.physregion", 
-      [DeclareOpInterfaceMethods<DynInstDataOpInterface>]> {
-  let summary = "Specify a physical region for an instance";
-  let description = [{
-    Annotate a particular entity within an op with the region of the devices
-    on an FPGA to which it should mapped. The physRegionRef must refer to a
-    DeclPhysicalRegion operation.
-  }];
-  let arguments = (ins FlatSymbolRefAttr:$physRegionRef,
-                       OptionalAttr<StrAttr>:$subPath,
-                       OptionalAttr<FlatSymbolRefAttr>:$ref);
-  let assemblyFormat = [{
-    ($ref^)? $physRegionRef (`path` `:` $subPath^)? attr-dict
-  }];
-}
-
-def DynamicInstanceOp : MSFTOp<"instance.dynamic",
-                               [HasParent<"mlir::ModuleOp">, NoTerminator]> {
-
-  let summary = "A module instance in the instance hierarchy";
-  let description = [{
-    Represents an instance (as in instance in the instance hierarchy) referred
-    to henceforth as a dynamic instance. Specified with a path through the
-    instance hierarchy (which in the future will be replaced with an AppID).
-    Lowers to a `hw.globalref` but unlike a global ref, does not require all of
-    the ops participating in the globalref to contain a back pointer attribute.
-    Allows users to efficiently add placements to a large number of dynamic
-    instances which happen to map to a small number of static instances by
-    bulk-adding the necessary `hw.globalref` attributes.
-
-    During the lowering, moves the operations in the body to the top level and
-    gives them the symbol of the globalref which was created to replace the
-    dynamic instance.
-  }];
-  let arguments = (ins NameRefArrayAttr:$appid);
-  let regions = (region SizedRegion<1>:$body);
-
-  let assemblyFormat = [{
-    $appid $body attr-dict
-  }];
-
 }

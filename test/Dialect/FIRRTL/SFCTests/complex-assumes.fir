@@ -55,7 +55,7 @@ circuit Foo:
       stop(clock, enable, 1)
 
     ; assume with predicate option for X-passing
-    ; CHECK-NEXT: {{assume__verif_library.*}}: assume property (@(posedge clock) ~enable | ~(~predicate6 | ~predicate6 === 1'bx))
+    ; CHECK-NEXT: {{assume__verif_library.*}}: assume property (@(posedge clock) ~enable | predicate6 | predicate6 === 1'bx)
     ; CHECK-SAME:   else $error("Assumption does not hold (verification library): X-passing assume example");
     when not(predicate6) :
       printf(clock, enable, "foo [verif-library-assume]<extraction-summary>{\"predicateModifier\":{\"type\":\"trueOrIsX\"},\"baseMsg\":\"Assumption does not hold (verification library): X-passing assume example\"}</extraction-summary> bar")

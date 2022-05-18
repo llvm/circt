@@ -2,7 +2,7 @@
 // RUN: circt-opt %s -test-lp-scheduler=with=Problem -allow-unregistered-dialect | FileCheck %s -check-prefix=LP
 
 // LP-LABEL: unit_latencies
-func @unit_latencies(%a1 : i32, %a2 : i32, %a3 : i32, %a4 : i32) -> i32 {
+func.func @unit_latencies(%a1 : i32, %a2 : i32, %a3 : i32, %a4 : i32) -> i32 {
   %0 = arith.addi %a1, %a2 : i32
   %1 = arith.addi %0, %a3 : i32
   %2:3 = "more.results"(%0, %1) : (i32, i32) -> (i32, i32, i32)
@@ -16,7 +16,7 @@ func @unit_latencies(%a1 : i32, %a2 : i32, %a3 : i32, %a4 : i32) -> i32 {
 }
 
 // LP-LABEL: arbitrary_latencies
-func @arbitrary_latencies(%v : complex<f32>) -> f32 attributes {
+func.func @arbitrary_latencies(%v : complex<f32>) -> f32 attributes {
   operatortypes = [
     { name = "extr", latency = 0 },
     { name = "add", latency = 3 },
@@ -35,7 +35,7 @@ func @arbitrary_latencies(%v : complex<f32>) -> f32 attributes {
 }
 
 // LP-LABEL: auxiliary_dependences
-func @auxiliary_dependences() attributes { auxdeps = [
+func.func @auxiliary_dependences() attributes { auxdeps = [
     [0,1], [0,2], [2,3], [3,4], [3,6], [4,5], [5,6]
   ] } {
   %0 = arith.constant 0 : i32

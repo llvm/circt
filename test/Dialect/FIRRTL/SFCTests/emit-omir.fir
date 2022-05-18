@@ -1,4 +1,4 @@
-; RUN: firtool --verify-diagnostics --verilog --emit-omir %s | FileCheck %s
+; RUN: firtool --mem-to-regofvec=0 --verify-diagnostics --verilog --emit-omir %s | FileCheck %s
 
 circuit Foo : %[[
   {
@@ -80,9 +80,9 @@ circuit Foo : %[[
     mem shortint :
         data-type => UInt<42>
         depth => 8
-        read-latency => 0
+        read-latency => 1
         write-latency => 1
-        reader => port
+        writer => port
         read-under-write => undefined
     shortint.port is invalid
 
@@ -132,7 +132,7 @@ circuit Foo : %[[
 
 ; CHECK:       "id": "OMID:3"
 ; CHECK:       "name": "finalPath"
-; CHECK-NEXT:  "value": "OMMemberInstanceTarget:~Foo|Foo/parameter_2:Bar/shortint_1:{{[^"]+}}"
+; CHECK-NEXT:  "value": "OMMemberInstanceTarget:~Foo|Foo/parameter_2:Bar/shortint_1:shortint_0/shortint_ext:{{[^"]+}}"
 
 ; CHECK:       "id": "OMID:4"
 ; CHECK:       "name": "containingModule"

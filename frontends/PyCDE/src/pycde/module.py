@@ -4,17 +4,15 @@
 
 from __future__ import annotations
 from typing import Tuple, Union, Dict
-import typing
 
 from pycde.support import _obj_to_value
 
-from .pycde_types import TypeAliasType, types
 from .support import (get_user_loc, _obj_to_attribute, OpOperandConnect,
                       create_type_string, create_const_zero)
 from .value import Value
 
 from circt import support
-from circt.dialects import hw, msft
+from circt.dialects import esi, hw, msft
 from circt.support import BackedgeBuilder, attribute_to_var
 
 import mlir.ir
@@ -25,8 +23,7 @@ import inspect
 import sys
 
 # A memoization table for module parameterization function calls.
-_MODULE_CACHE: typing.Dict[Tuple[builtins.function, mlir.ir.DictAttr],
-                           object] = {}
+_MODULE_CACHE: Dict[Tuple[builtins.function, mlir.ir.DictAttr], object] = {}
 
 
 class ModuleDecl:
@@ -44,11 +41,27 @@ class ModuleDecl:
 
 
 class Output(ModuleDecl):
-  pass
+  """Create an RTL-level output port"""
+
+
+class OutputChannel(Output):
+  """Create an ESI output channel port."""
+
+  def __init__(self, type: mlir.ir.Type, name: str = None):
+    esi_type = esi.ChannelType.get(type)
+    super().__init__(esi_type, name)
 
 
 class Input(ModuleDecl):
-  pass
+  """Create an RTL-level input port."""
+
+
+class InputChannel(Input):
+  """Create an ESI input channel port."""
+
+  def __init__(self, type: mlir.ir.Type, name: str = None):
+    esi_type = esi.ChannelType.get(type)
+    super().__init__(esi_type, name)
 
 
 def _create_module_name(name: str, params: mlir.ir.DictAttr):
@@ -150,7 +163,7 @@ class _SpecializedModule:
     for (idx, (name, type)) in enumerate(self.output_ports):
       setattr(
           self.modcls, name,
-          property(lambda self, idx=idx, type=type: Value.get(
+          property(lambda self, idx=idx, type=type: Value(
               self._instantiation.operation.results[idx], type)))
 
   # Bug: currently only works with one System. See notes at the top of this
@@ -197,7 +210,7 @@ class _SpecializedModule:
   def circt_mod(self):
     from .system import System
     sys = System.current()
-    return sys._get_circt_mod(self)
+    return sys._op_cache.get_circt_mod(self)
 
   def instantiate(self, instance_name: str, inputs: dict, loc):
     """Create a instance op."""
@@ -368,7 +381,7 @@ def _module_base(cls, extern_name: str, params={}):
                                                       mod._pycde_mod.circt_mod,
                                                       loc=loc)
           self.backedges[idx] = backedge
-          value = Value.get(backedge.result)
+          value = Value(backedge.result)
         inputs[name] = value
 
       instance_name = cls.__name__
@@ -507,7 +520,7 @@ class _GeneratorPortAccess:
     if name in self._mod.input_port_lookup:
       idx = self._mod.input_port_lookup[name]
       val = self._mod.circt_mod.entry_block.arguments[idx]
-      return Value.get(val)
+      return Value(val)
     if name in self._mod.output_port_lookup:
       if name not in self._output_values:
         raise ValueError("Must set output value before accessing it")

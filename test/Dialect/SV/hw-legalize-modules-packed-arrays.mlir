@@ -26,7 +26,7 @@ hw.module @array_create_get_comb(%arg0: i8, %arg1: i8, %arg2: i8, %arg3: i8,
    -> (a: i8) {
   // CHECK: %casez_tmp = sv.reg  : !hw.inout<i8>
   // CHECK: sv.alwayscomb  {
-  // CHECK:   sv.casez %sel : i2
+  // CHECK:   sv.case casez %sel : i2
   // CHECK:   case b00: {
   // CHECK:     sv.bpassign %casez_tmp, %arg0 : i8
   // CHECK:   }
@@ -56,7 +56,7 @@ hw.module @array_create_get_default(%arg0: i8, %arg1: i8, %arg2: i8, %arg3: i8,
   // CHECK: sv.initial  {
   sv.initial {
     // CHECK:   %x_i8 = sv.constantX : i8
-    // CHECK:   sv.casez %sel : i2
+    // CHECK:   sv.case casez %sel : i2
     // CHECK:   case b00: {
     // CHECK:     sv.bpassign %casez_tmp, %arg0 : i8
     // CHECK:   }

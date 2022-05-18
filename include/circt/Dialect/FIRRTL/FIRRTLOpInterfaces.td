@@ -258,7 +258,21 @@ def FModuleLike : OpInterface<"FModuleLike"> {
     static_assert(
         ConcreteOp::template hasTrait<::mlir::SymbolOpInterface::Trait>(),
         "expected operation to be a symbol");
+    static_assert(
+        ConcreteOp::template hasTrait<::circt::hw::HWModuleLike::Trait>(),
+        "expected operation to be also be a hardware module");
     return verifyModuleLikeOpInterface(op);
   }];
 }
 
+def FConnectLike : OpInterface<"FConnectLike"> {
+  let cppNamespace = "circt::firrtl";
+  let description = "Provide common connection information.";
+
+  let methods = [
+    InterfaceMethod<"Return a destination of connection.",
+    "Value", "dest", (ins)>,
+    InterfaceMethod<"Return a source of connection.",
+    "Value", "src", (ins)>,
+  ];
+}

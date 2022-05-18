@@ -38,6 +38,22 @@ firrtl.circuit "Simple" {
 }
 
 
+// Should pick a valid symbol when a wire has no name.
+// CHECK-LABEL: firrtl.circuit "Top"
+firrtl.circuit "Top"  {
+  firrtl.module @Top() {
+    %a1_x = firrtl.instance a1  @A(out x: !firrtl.uint<1>)
+    %a2_x = firrtl.instance a2  @A_(out x: !firrtl.uint<1>)
+  }
+  firrtl.module @A(out %x: !firrtl.uint<1>) {
+    // CHECK: %0 = firrtl.wire sym @inner_sym
+    %0 = firrtl.wire  {annotations = [{class = "hello"}]} : !firrtl.uint<1>
+  }
+  firrtl.module @A_(out %x: !firrtl.uint<1>) {
+    %0 = firrtl.wire  : !firrtl.uint<1>
+  }
+}
+
 // CHECK-LABEL: firrtl.circuit "PrimOps"
 firrtl.circuit "PrimOps" {
   // CHECK: firrtl.module @PrimOps0
@@ -75,24 +91,24 @@ firrtl.circuit "Annotations" {
   firrtl.nla @annos_nla0 [#hw.innerNameRef<@Annotations::@annotations0>, #hw.innerNameRef<@Annotations0::@d>]
   firrtl.nla @annos_nla1 [#hw.innerNameRef<@Annotations::@annotations1>, #hw.innerNameRef<@Annotations1::@i>]
 
-  // CHECK: firrtl.module @Annotations0() attributes {annotations = [{circt.nonlocal = [[NLA3]], class = "one"}]} 
+  // CHECK: firrtl.module @Annotations0() attributes {annotations = [{circt.nonlocal = [[NLA3]], class = "one"}]}
   firrtl.module @Annotations0() {
     // Same annotation on both ops should stay local.
     // CHECK: %a = firrtl.wire  {annotations = [{class = "both"}]}
     %a = firrtl.wire {annotations = [{class = "both"}]} : !firrtl.uint<1>
-    
+
     // Annotation from other module becomes non-local.
     // CHECK: %b = firrtl.wire sym @b  {annotations = [{circt.nonlocal = [[NLA0]], class = "one"}]}
     %b = firrtl.wire : !firrtl.uint<1>
-    
+
     // Annotation from this module becomes non-local.
     // CHECK: %c = firrtl.wire sym @c  {annotations = [{circt.nonlocal = [[NLA1]], class = "one"}]}
     %c = firrtl.wire {annotations = [{class = "one"}]} : !firrtl.uint<1>
-    
+
     // Two non-local annotations are unchanged, as they have enough context in the NLA already.
     // CHECK: %d = firrtl.wire sym @d  {annotations = [{circt.nonlocal = @annos_nla1, class = "NonLocal"}, {circt.nonlocal = @annos_nla0, class = "NonLocal"}]}
     %d = firrtl.wire sym @d {annotations = [{circt.nonlocal = @annos_nla0, class = "NonLocal"}]} : !firrtl.uint<1>
-    
+
     // Subannotations should be handled correctly.
     // CHECK: %e = firrtl.wire sym @e  {annotations = [#firrtl.subAnno<fieldID = 1, {circt.nonlocal = [[NLA2]], class = "subanno"}>]}
     %e = firrtl.wire {annotations = [#firrtl.subAnno<fieldID = 1, {class = "subanno"}>]} : !firrtl.bundle<a: uint<1>>
@@ -116,14 +132,14 @@ firrtl.circuit "Annotations" {
 // Check that module and memory port annotations are merged correctly.
 // CHECK-LABEL: firrtl.circuit "PortAnnotations"
 firrtl.circuit "PortAnnotations" {
-  // CHECK: firrtl.nla [[NLA3:@nla.*]] [#hw.innerNameRef<@PortAnnotations::@portannos0>, #hw.innerNameRef<@PortAnnotations0::@in>]
-  // CHECK: firrtl.nla [[NLA2:@nla.*]] [#hw.innerNameRef<@PortAnnotations::@portannos1>, #hw.innerNameRef<@PortAnnotations0::@in>]
+  // CHECK: firrtl.nla [[NLA3:@nla.*]] [#hw.innerNameRef<@PortAnnotations::@portannos0>, #hw.innerNameRef<@PortAnnotations0::@a>]
+  // CHECK: firrtl.nla [[NLA2:@nla.*]] [#hw.innerNameRef<@PortAnnotations::@portannos1>, #hw.innerNameRef<@PortAnnotations0::@a>]
   // CHECK: firrtl.nla [[NLA1:@nla.*]] [#hw.innerNameRef<@PortAnnotations::@portannos0>, #hw.innerNameRef<@PortAnnotations0::@bar>]
   // CHECK: firrtl.nla [[NLA0:@nla.*]] [#hw.innerNameRef<@PortAnnotations::@portannos1>, #hw.innerNameRef<@PortAnnotations0::@bar>]
-  // CHECK: firrtl.module @PortAnnotations0(in %in: !firrtl.uint<1> sym @in [
+  // CHECK: firrtl.module @PortAnnotations0(in %a: !firrtl.uint<1> sym @a [
   // CHECK-SAME: {circt.nonlocal = [[NLA2]], class = "port1"},
   // CHECK-SAME: {circt.nonlocal = [[NLA3]], class = "port0"}]) {
-  firrtl.module @PortAnnotations0(in %in : !firrtl.uint<1> [{class = "port0"}]) {
+  firrtl.module @PortAnnotations0(in %a : !firrtl.uint<1> [{class = "port0"}]) {
     // CHECK: %bar_r = firrtl.mem sym @bar
     // CHECK-SAME: portAnnotations =
     // CHECK-SAME:  {circt.nonlocal = [[NLA0]], class = "mem1"},
@@ -131,18 +147,17 @@ firrtl.circuit "PortAnnotations" {
     %bar_r = firrtl.mem Undefined  {depth = 16 : i64, name = "bar", portAnnotations = [[{class = "mem0"}]], portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>
   }
   // CHECK-NOT: firrtl.module @PortAnnotations1
-  firrtl.module @PortAnnotations1(in %in : !firrtl.uint<1> [{class = "port1"}])  {
+  firrtl.module @PortAnnotations1(in %b : !firrtl.uint<1> [{class = "port1"}])  {
     %bar_r = firrtl.mem Undefined  {depth = 16 : i64, name = "bar", portAnnotations = [[{class = "mem1"}]], portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>
   }
   // CHECK: firrtl.module @PortAnnotations
   firrtl.module @PortAnnotations() {
     // CHECK: annotations = [{circt.nonlocal = [[NLA1]], class = "circt.nonlocal"}, {circt.nonlocal = [[NLA3]], class = "circt.nonlocal"}]
-    %portannos0_in = firrtl.instance portannos0 @PortAnnotations0(in in: !firrtl.uint<1>)
+    %portannos0_in = firrtl.instance portannos0 @PortAnnotations0(in a: !firrtl.uint<1>)
     // CHECK: annotations = [{circt.nonlocal = [[NLA0]], class = "circt.nonlocal"}, {circt.nonlocal = [[NLA2]], class = "circt.nonlocal"}]
-    %portannos1_in = firrtl.instance portannos1 @PortAnnotations1(in in: !firrtl.uint<1>)
+    %portannos1_in = firrtl.instance portannos1 @PortAnnotations1(in b: !firrtl.uint<1>)
   }
 }
-
 
 // Non-local annotations should have their path updated and bread crumbs should
 // not be turned into non-local annotations. Note that this should not create
@@ -159,7 +174,7 @@ firrtl.circuit "Breadcrumb" {
   // CHECK:  @breadcrumb_nla3 [#hw.innerNameRef<@Breadcrumb::@breadcrumb1>, #hw.innerNameRef<@Breadcrumb0::@crumb0>, #hw.innerNameRef<@Crumb::@w>]
   firrtl.nla @breadcrumb_nla3 [#hw.innerNameRef<@Breadcrumb::@breadcrumb1>, #hw.innerNameRef<@Breadcrumb1::@crumb1>, #hw.innerNameRef<@Crumb::@w>]
   firrtl.module @Crumb(in %in: !firrtl.uint<1> sym @in [
-      {circt.nonlocal = @breadcrumb_nla0, class = "port0"}, 
+      {circt.nonlocal = @breadcrumb_nla0, class = "port0"},
       {circt.nonlocal = @breadcrumb_nla1, class = "port1"}]) {
     %w = firrtl.wire sym @w {annotations = [
       {circt.nonlocal = @breadcrumb_nla2, class = "wire0"},
@@ -226,7 +241,7 @@ firrtl.circuit "Context" {
       {circt.nonlocal = @context_nla0, class = "port0"},
       {circt.nonlocal = @context_nla2, class = "port1"}
     ]) {
-  
+
     // CHECK: %w = firrtl.wire sym @w  {annotations = [
     // CHECK-SAME: {circt.nonlocal = [[NLA2]], class = "fake0"}
     // CHECK-SAME: {circt.nonlocal = [[NLA3]], class = "fake1"}
@@ -282,6 +297,39 @@ firrtl.circuit "ExtModuleTest" {
   }
 }
 
+// External modules with NLAs on ports should be properly rewritten.
+// https://github.com/llvm/circt/issues/2713
+// CHECK-LABEL: firrtl.circuit "Foo"
+firrtl.circuit "Foo"  {
+  // CHECK: firrtl.nla @nla_1 [#hw.innerNameRef<@Foo::@b>, #hw.innerNameRef<@A::@a>]
+  firrtl.nla @nla_1 [#hw.innerNameRef<@Foo::@b>, #hw.innerNameRef<@B::@b>]
+  // CHECK: firrtl.extmodule @A(out a: !firrtl.clock sym @a [{circt.nonlocal = @nla_1}])
+  firrtl.extmodule @A(out a: !firrtl.clock)
+  firrtl.extmodule @B(out b: !firrtl.clock sym @b [{circt.nonlocal = @nla_1}])
+  firrtl.module @Foo() {
+    %b0_out = firrtl.instance a @A(out a: !firrtl.clock)
+    // CHECK: firrtl.instance b sym @b  {annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}]} @A(out a: !firrtl.clock)
+    %b1_out = firrtl.instance b sym @b {annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}]} @B(out b: !firrtl.clock)
+  }
+}
+
+// Extmodules should properly hash port types and not dedup when they differ.
+// CHECK-LABEL: firrtl.circuit "Foo"
+firrtl.circuit "Foo"  {
+  // CHECK: firrtl.extmodule @Bar
+  firrtl.extmodule @Bar(
+    in clock: !firrtl.clock, out io: !firrtl.bundle<a: clock>)
+  // CHECK: firrtl.extmodule @Baz
+  firrtl.extmodule @Baz(
+    in clock: !firrtl.clock, out io: !firrtl.bundle<a flip: uint<1>, b flip: uint<16>, c: uint<1>>)
+  firrtl.module @Foo() {
+    %bar_clock, %bar_io = firrtl.instance bar @Bar(
+      in clock: !firrtl.clock, out io: !firrtl.bundle<a: clock>)
+    %baz_clock, %baz_io = firrtl.instance baz @Baz(
+      in clock: !firrtl.clock, out io: !firrtl.bundle<a flip: uint<1>, b flip: uint<16>, c: uint<1>>)
+  }
+}
+
 // As we dedup modules, the chain on NLAs should continuously grow.
 // CHECK-LABEL: firrtl.circuit "Chain"
 firrtl.circuit "Chain" {
@@ -320,7 +368,7 @@ firrtl.circuit "Chain" {
 }
 
 
-// Check that we fixup subfields, partial connects, and connects, when an
+// Check that we fixup subfields and connects, when an
 // instance op starts returning a different bundle type.
 // CHECK-LABEL: firrtl.circuit "Bundle"
 firrtl.circuit "Bundle" {
@@ -333,28 +381,20 @@ firrtl.circuit "Bundle" {
     %a = firrtl.instance bundle0 @Bundle0(out a: !firrtl.bundle<b: bundle<c flip: uint<1>, d: uint<1>>>)
     // CHECK: firrtl.instance bundle1  @Bundle0
     %e = firrtl.instance bundle1 @Bundle1(out e: !firrtl.bundle<f: bundle<g flip: uint<1>, h: uint<1>>>)
-    
+
     // CHECK: [[B:%.+]] = firrtl.subfield %bundle0_a(0)
     %b = firrtl.subfield %a(0) : (!firrtl.bundle<b: bundle<c flip: uint<1>, d: uint<1>>>) -> !firrtl.bundle<c flip: uint<1>, d: uint<1>>
     // CHECK: [[F:%.+]] = firrtl.subfield %bundle1_a(0)
     %f = firrtl.subfield %e(0) : (!firrtl.bundle<f: bundle<g flip: uint<1>, h: uint<1>>>) -> !firrtl.bundle<g flip: uint<1>, h: uint<1>>
-  
+
     // Check that we properly fixup connects when the field names change.
     %w0 = firrtl.wire : !firrtl.bundle<g flip: uint<1>, h: uint<1>>
     // CHECK: [[W0_G:%.+]] = firrtl.subfield %w0(0)
     // CHECK: [[F_G:%.+]] = firrtl.subfield [[F]](0)
     // CHECK: firrtl.connect [[F_G]], [[W0_G]]
     firrtl.connect %w0, %f : !firrtl.bundle<g flip: uint<1>, h: uint<1>>, !firrtl.bundle<g flip: uint<1>, h: uint<1>>
-    
-    // Check that we properly fixup partial connects when the field names change.
-    %w1 = firrtl.wire : !firrtl.bundle<g flip: uint<1>>
-    // CHECK: [[F_G:%.+]] = firrtl.subfield [[F]](0)
-    // CHECK: [[W1_G:%.+]] = firrtl.subfield %w1(0)
-    // CHECK: firrtl.partialconnect [[F_G]], [[W1_G]]
-    firrtl.partialconnect %w1, %f : !firrtl.bundle<g flip: uint<1>>, !firrtl.bundle<g flip: uint<1>, h: uint<1>>
   }
 }
-
 
 // Make sure flipped fields are handled properly. This should pass flow
 // verification checking.
@@ -375,11 +415,40 @@ firrtl.circuit "Flip" {
     %1 = firrtl.subfield %io(0) : (!firrtl.bundle<foo: bundle<foo flip: uint<1>, fuzz: uint<1>>, bar: bundle<bar flip: uint<1>, buzz: uint<1>>>) -> !firrtl.bundle<foo flip: uint<1>, fuzz: uint<1>>
     %foo_io = firrtl.instance foo  @Flip0(out io: !firrtl.bundle<foo flip: uint<1>, fuzz: uint<1>>)
     %bar_io = firrtl.instance bar  @Flip1(out io: !firrtl.bundle<bar flip: uint<1>, buzz: uint<1>>)
-    firrtl.partialconnect %1, %foo_io : !firrtl.bundle<foo flip: uint<1>, fuzz: uint<1>>, !firrtl.bundle<foo flip: uint<1>, fuzz: uint<1>>
+    firrtl.connect %1, %foo_io : !firrtl.bundle<foo flip: uint<1>, fuzz: uint<1>>, !firrtl.bundle<foo flip: uint<1>, fuzz: uint<1>>
     firrtl.connect %0, %bar_io : !firrtl.bundle<bar flip: uint<1>, buzz: uint<1>>, !firrtl.bundle<bar flip: uint<1>, buzz: uint<1>>
   }
 }
 
+// This is checking that the fixup phase due to changing bundle names does not
+// block the deduplication of parent modules.
+// CHECK-LABEL: firrtl.circuit "DelayedFixup"
+firrtl.circuit "DelayedFixup"  {
+  // CHECK: firrtl.extmodule @Foo
+  firrtl.extmodule @Foo(out a: !firrtl.bundle<a: uint<1>>)
+  // CHECK-NOT: firrtl.extmodule @Bar
+  firrtl.extmodule @Bar(out b: !firrtl.bundle<b: uint<1>>)
+  // CHECK: firrtl.module @Parent0
+  firrtl.module @Parent0(out %a: !firrtl.bundle<a: uint<1>>, out %b: !firrtl.bundle<b: uint<1>>) {
+    %foo_a = firrtl.instance foo  @Foo(out a: !firrtl.bundle<a: uint<1>>)
+    firrtl.connect %a, %foo_a : !firrtl.bundle<a: uint<1>>, !firrtl.bundle<a: uint<1>>
+    %bar_b = firrtl.instance bar  @Bar(out b: !firrtl.bundle<b: uint<1>>)
+    firrtl.connect %b, %bar_b : !firrtl.bundle<b: uint<1>>, !firrtl.bundle<b: uint<1>>
+  }
+  // CHECK-NOT: firrtl.module @Parent1
+  firrtl.module @Parent1(out %a: !firrtl.bundle<a: uint<1>>, out %b: !firrtl.bundle<b: uint<1>>) {
+    %foo_a = firrtl.instance foo  @Foo(out a: !firrtl.bundle<a: uint<1>>)
+    firrtl.connect %a, %foo_a : !firrtl.bundle<a: uint<1>>, !firrtl.bundle<a: uint<1>>
+    %bar_b = firrtl.instance bar  @Bar(out b: !firrtl.bundle<b: uint<1>>)
+    firrtl.connect %b, %bar_b : !firrtl.bundle<b: uint<1>>, !firrtl.bundle<b: uint<1>>
+  }
+  firrtl.module @DelayedFixup() {
+    // CHECK: firrtl.instance parent0  @Parent0
+    %parent0_a, %parent0_b = firrtl.instance parent0  @Parent0(out a: !firrtl.bundle<a: uint<1>>, out b: !firrtl.bundle<b: uint<1>>)
+    // CHECK: firrtl.instance parent1  @Parent0
+    %parent1_a, %parent1_b = firrtl.instance parent1  @Parent1(out a: !firrtl.bundle<a: uint<1>>, out b: !firrtl.bundle<b: uint<1>>)
+  }
+}
 
 // Don't attach empty annotations onto ops without annotations.
 // CHECK-LABEL: firrtl.circuit "NoEmptyAnnos"
@@ -407,8 +476,27 @@ firrtl.circuit "NoEmptyAnnos" {
 firrtl.circuit "NoDedup" {
   firrtl.module @Simple0() { }
   firrtl.module @Simple1() attributes {annotations = [{class = "firrtl.transforms.NoDedupAnnotation"}]} { }
-  // CHECK: firrtl.module @NoDedup 
+  // CHECK: firrtl.module @NoDedup
   firrtl.module @NoDedup() {
+    firrtl.instance simple0 @Simple0()
+    firrtl.instance simple1 @Simple1()
+  }
+}
+
+// Check that modules marked MustDedup have been deduped.
+// CHECK-LABEL: firrtl.circuit "MustDedup"
+firrtl.circuit "MustDedup" attributes {annotations = [{
+    // The annotation should be removed.
+    // CHECK-NOT: class = "firrtl.transforms.MustDeduplicateAnnotation"
+    class = "firrtl.transforms.MustDeduplicateAnnotation",
+    modules = ["~MustDedup|Simple0", "~MustDedup|Simple1"]}]
+   } {
+  // CHECK: @Simple0
+  firrtl.module @Simple0() { }
+  // CHECK-NOT: @Simple1
+  firrtl.module @Simple1() { }
+  // CHECK: firrtl.module @MustDedup
+  firrtl.module @MustDedup() {
     firrtl.instance simple0 @Simple0()
     firrtl.instance simple1 @Simple1()
   }

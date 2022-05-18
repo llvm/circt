@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -export-verilog -verify-diagnostics --lowering-options=exprInEventControl | FileCheck %s --strict-whitespace
+// RUN: circt-opt %s -export-verilog -verify-diagnostics --lowering-options=exprInEventControl,explicitBitcastAddMul,maximumNumberOfTermsInConcat=10 | FileCheck %s --strict-whitespace
 
 // CHECK-LABEL: module M1
 // CHECK-NEXT:    #(parameter [41:0] param1) (
@@ -6,6 +6,8 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
   %wire42 = sv.reg : !hw.inout<i42>
   %forceWire = sv.wire sym @wire1 : !hw.inout<i1>
   %partSelectReg = sv.reg : !hw.inout<i42>
+
+  %fd = hw.constant 0x80000002 : i32
 
   %c11_i42 = hw.constant 11: i42
   // CHECK: localparam [41:0] param_x = 42'd11;
@@ -21,24 +23,17 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
   // CHECK-NEXT:   `ifndef SYNTHESIS
     sv.ifdef.procedural "SYNTHESIS" {
     } else {
-  // CHECK-NEXT:     if (PRINTF_COND_ & 1'bx & 1'bz & 1'bz & cond & forceWire)
-      %tmp = sv.verbatim.expr "PRINTF_COND_" : () -> i1
+  // CHECK-NEXT:     if ((`PRINTF_COND_) & 1'bx & 1'bz & 1'bz & cond & forceWire)
+      %tmp = sv.macro.ref<"PRINTF_COND_"> : i1
       %verb_tmp = sv.verbatim.expr "{{0}}" : () -> i1 {symbols = [#hw.innerNameRef<@M1::@wire1>] }
       %tmp1 = sv.constantX : i1
       %tmp2 = sv.constantZ : i1
       %tmp3 = comb.and %tmp, %tmp1, %tmp2, %tmp2, %cond, %verb_tmp : i1
       sv.if %tmp3 {
   // CHECK-NEXT:       $fwrite(32'h80000002, "Hi\n");
-        sv.fwrite "Hi\n"
+        sv.fwrite %fd, "Hi\n"
       }
 
-      // CHECK-NEXT: if (!(clock | cond))
-      // CHECK-NEXT:   $fwrite(32'h80000002, "Bye\n");
-      %tmp4 = comb.or %clock, %cond : i1
-      sv.if %tmp4 {
-      } else {
-        sv.fwrite "Bye\n"
-      }
   // CHECK-NEXT: release forceWire;
     sv.release %forceWire : !hw.inout<i1>
   // CHECK-NEXT:   `endif
@@ -69,7 +64,7 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
   // CHECK-NEXT: always_ff @(posedge clock)
   // CHECK-NEXT:   $fwrite(32'h80000002, "Yo\n");
   sv.alwaysff(posedge %clock) {
-    sv.fwrite "Yo\n"
+    sv.fwrite %fd, "Yo\n"
   }
 
   // CHECK-NEXT: always_ff @(posedge clock) begin
@@ -79,9 +74,9 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
   // CHECK-NEXT:     $fwrite(32'h80000002, "Sync Main Block\n");
   // CHECK-NEXT: end // always_ff @(posedge)
   sv.alwaysff(posedge %clock) {
-    sv.fwrite "Sync Main Block\n"
+    sv.fwrite %fd, "Sync Main Block\n"
   } ( syncreset : posedge %cond) {
-    sv.fwrite "Sync Reset Block\n"
+    sv.fwrite %fd, "Sync Reset Block\n"
   }
 
   // CHECK-NEXT: always_ff @(posedge clock or negedge cond) begin
@@ -91,9 +86,9 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
   // CHECK-NEXT:     $fwrite(32'h80000002, "Async Main Block\n");
   // CHECK-NEXT: end // always_ff @(posedge or negedge)
   sv.alwaysff(posedge %clock) {
-    sv.fwrite "Async Main Block\n"
+    sv.fwrite %fd, "Async Main Block\n"
   } ( asyncreset : negedge %cond) {
-    sv.fwrite "Async Reset Block\n"
+    sv.fwrite %fd, "Async Reset Block\n"
   }
 
   // CHECK-NEXT:  initial begin
@@ -122,9 +117,11 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
     sv.if %cond {
       %c42 = hw.constant 42 : i8
       %add = comb.add %val, %c42 : i8
+      %sub_inner = comb.sub %val, %c42 : i8
+      %sub = comb.sub %sub_inner, %c42 : i8
 
-      // CHECK-NEXT: $fwrite(32'h80000002, "Inlined! %x\n", val + 8'h2A);
-      sv.fwrite "Inlined! %x\n"(%add) : i8
+      // CHECK-NEXT: $fwrite(32'h80000002, "Inlined! %x %x\n", 8'(val + 8'h2A), 8'(val - 8'h2A - 8'h2A));
+      sv.fwrite %fd, "Inlined! %x %x\n"(%add, %sub) : i8, i8
     }
 
     // begin/end required here to avoid else-confusion.
@@ -134,23 +131,23 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
       // CHECK-NEXT: if (clock)
       sv.if %clock {
         // CHECK-NEXT: $fwrite(32'h80000002, "Inside Block\n");
-        sv.fwrite "Inside Block\n"
+        sv.fwrite %fd, "Inside Block\n"
       }
       // CHECK-NEXT: end
     } else { // CHECK-NEXT: else
       // CHECK-NOT: begin
       // CHECK-NEXT: $fwrite(32'h80000002, "Else Block\n");
-      sv.fwrite "Else Block\n"
+      sv.fwrite %fd, "Else Block\n"
     }
 
     // CHECK-NEXT:   if (cond) begin
     sv.if %cond {
       // CHECK-NEXT:     $fwrite(32'h80000002, "Hi\n");
-      sv.fwrite "Hi\n"
+      sv.fwrite %fd, "Hi\n"
 
-      // CHECK-NEXT:     $fwrite(32'h80000002, "Bye %x\n", val + val);
+      // CHECK-NEXT:     $fwrite(32'h80000002, "Bye %x\n", 8'(val + val));
       %tmp = comb.add %val, %val : i8
-      sv.fwrite "Bye %x\n"(%tmp) : i8
+      sv.fwrite %fd, "Bye %x\n"(%tmp) : i8
 
       // CHECK-NEXT:     assert(cond);
       sv.assert %cond, immediate
@@ -239,8 +236,8 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
       // CHECK-NEXT: `define MACRO
       %text = sv.verbatim.expr "`MACRO({{0}}, {{1}})" (%add, %xor): (i8,i8) -> i8
 
-      // CHECK-NEXT: $fwrite(32'h80000002, "M: %x\n", `MACRO(val + 8'h2A, val ^ 8'h2A));
-      sv.fwrite "M: %x\n"(%text) : i8
+      // CHECK-NEXT: $fwrite(32'h80000002, "M: %x\n", `MACRO(8'(val + 8'h2A), val ^ 8'h2A));
+      sv.fwrite %fd, "M: %x\n"(%text) : i8
 
     }// CHECK-NEXT:   {{end$}}
   }
@@ -286,14 +283,14 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
     sv.ifdef.procedural "FOO" {
       // CHECK-NEXT: `ifdef FOO
       %c1 = sv.verbatim.expr "\"THING\"" : () -> i1
-      sv.fwrite "%d" (%c1) : i1
+      sv.fwrite %fd, "%d" (%c1) : i1
       // CHECK-NEXT: fwrite(32'h80000002, "%d", "THING");
-      sv.fwrite "%d" (%c1) : i1
+      sv.fwrite %fd, "%d" (%c1) : i1
       // CHECK-NEXT: fwrite(32'h80000002, "%d", "THING");
       %c2 = sv.verbatim.expr "\"VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE\"" : () -> i1
       // CHECK-NEXT: _GEN = "VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE";
       // CHECK-NEXT: fwrite(32'h80000002, "%d", _GEN);
-      sv.fwrite "%d" (%c2) : i1
+      sv.fwrite %fd, "%d" (%c2) : i1
       // CHECK-NEXT: `endif
     }
 
@@ -301,40 +298,119 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
     sv.bpassign %wire42, %thing : i42
 
     // CHECK-NEXT: casez (val)
-    sv.casez %val : i8
-    // CHECK-NEXT: 8'b0000001?: begin
-    case b0000001x: {
+    sv.case casez %val : i8
+    // CHECK-NEXT: 8'b0000001z: begin
+    case b0000001z: {
       // CHECK-NEXT: $fwrite(32'h80000002, "a");
-      sv.fwrite "a"
+      sv.fwrite %fd, "a"
       // CHECK-NEXT: $fwrite(32'h80000002, "b");
-      sv.fwrite "b"
+      sv.fwrite %fd, "b"
     } // CHECK-NEXT: end
-
-    // CHECK-NEXT: 8'b000000?1:
+    // CHECK-NEXT: 8'b000000z1:
     // CHECK-NOT: begin
-    case b000000x1: {
+    case b000000z1: {
       // CHECK-NEXT:  $fwrite(32'h80000002, "y");
-      sv.fwrite "y"
+      sv.fwrite %fd, "y"
+    }  // implicit yield is ok.
+    // CHECK-NEXT: 8'b00000x11:
+    // CHECK-NOT: begin
+    case b00000x11: {
+      // CHECK-NEXT:  $fwrite(32'h80000002, "z");
+      sv.fwrite %fd, "z"
     }  // implicit yield is ok.
     // CHECK-NEXT: default:
     // CHECK-NOT: begin
     default: {
       // CHECK-NEXT:  $fwrite(32'h80000002, "z");
-      sv.fwrite "z"
+      sv.fwrite %fd, "z"
     } // CHECK-NEXT: endcase
 
+    // CHECK-NEXT: casex (val)
+    sv.case casex %val : i8
+    // CHECK-NEXT: 8'b0000001z: begin
+    case b0000001z: {
+      // CHECK-NEXT: $fwrite(32'h80000002, "a");
+      sv.fwrite %fd, "a"
+      // CHECK-NEXT: $fwrite(32'h80000002, "b");
+      sv.fwrite %fd, "b"
+    } // CHECK-NEXT: end
+    // CHECK-NEXT: 8'b000000z1:
+    // CHECK-NOT: begin
+    case b000000z1: {
+      // CHECK-NEXT:  $fwrite(32'h80000002, "y");
+      sv.fwrite %fd, "y"
+    }  // implicit yield is ok.
+    // CHECK-NEXT: 8'b00000x11:
+    // CHECK-NOT: begin
+    case b00000x11: {
+      // CHECK-NEXT:  $fwrite(32'h80000002, "z");
+      sv.fwrite %fd, "z"
+    }  // implicit yield is ok.
+    // CHECK-NEXT: default:
+    // CHECK-NOT: begin
+    default: {
+      // CHECK-NEXT:  $fwrite(32'h80000002, "z");
+      sv.fwrite %fd, "z"
+    } // CHECK-NEXT: endcase
+
+    // CHECK-NEXT: case (val)
+    sv.case case %val : i8
+    // CHECK-NEXT: 8'b0000001z: begin
+    case b0000001z: {
+      // CHECK-NEXT: $fwrite(32'h80000002, "a");
+      sv.fwrite %fd, "a"
+      // CHECK-NEXT: $fwrite(32'h80000002, "b");
+      sv.fwrite %fd, "b"
+    } // CHECK-NEXT: end
+    // CHECK-NEXT: 8'b000000z1:
+    // CHECK-NOT: begin
+    case b000000z1: {
+      // CHECK-NEXT:  $fwrite(32'h80000002, "y");
+      sv.fwrite %fd, "y"
+    }  // implicit yield is ok.
+    // CHECK-NEXT: 8'b00000x11:
+    // CHECK-NOT: begin
+    case b00000x11: {
+      // CHECK-NEXT:  $fwrite(32'h80000002, "z");
+      sv.fwrite %fd, "z"
+    }  // implicit yield is ok.
+    // CHECK-NEXT: default:
+    // CHECK-NOT: begin
+    default: {
+      // CHECK-NEXT:  $fwrite(32'h80000002, "z");
+      sv.fwrite %fd, "z"
+    } // CHECK-NEXT: endcase
+
+
+
    // CHECK-NEXT: casez (cond)
-   sv.casez %cond : i1
+   sv.case casez %cond : i1
    // CHECK-NEXT: 1'b0:
      case b0: {
        // CHECK-NEXT: $fwrite(32'h80000002, "zero");
-       sv.fwrite "zero"
+       sv.fwrite %fd, "zero"
      }
      // CHECK-NEXT: 1'b1:
      case b1: {
        // CHECK-NEXT: $fwrite(32'h80000002, "one");
-       sv.fwrite "one"
+       sv.fwrite %fd, "one"
      } // CHECK-NEXT: endcase
+
+    // CHECK-NEXT: priority case (cond)
+    sv.case priority %cond : i1
+    // CHECK-NEXT: default:
+    default: {
+      // CHECK-NEXT: $fwrite(32'h80000002, "zero");
+      sv.fwrite %fd, "zero"
+    } // CHECK-NEXT: endcase
+
+    // CHECK-NEXT: unique casez (cond)
+    sv.case casez unique %cond : i1
+    // CHECK-NEXT: default:
+    default: {
+      // CHECK-NEXT: $fwrite(32'h80000002, "zero");
+      sv.fwrite %fd, "zero"
+    } // CHECK-NEXT: endcase
   }// CHECK-NEXT:   {{end // initial$}}
 
   sv.ifdef "VERILATOR"  {          // CHECK-NEXT: `ifdef VERILATOR
@@ -345,7 +421,7 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
 
   %add = comb.add %val, %val : i8
 
-  // CHECK-NEXT: `define STUFF "wire42 (val + val)"
+  // CHECK-NEXT: `define STUFF "wire42 (8'(val + val))"
   sv.verbatim "`define STUFF \"{{0}} ({{1}})\"" (%wire42, %add) : !hw.inout<i42>, i8
 
   // CHECK-NEXT: `ifdef FOO
@@ -355,9 +431,9 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
     // CHECK-NEXT: initial begin
     sv.initial {
       // CHECK-NEXT: fwrite(32'h80000002, "%d", "THING");
-      sv.fwrite "%d" (%c1) : i1
+      sv.fwrite %fd, "%d" (%c1) : i1
       // CHECK-NEXT: fwrite(32'h80000002, "%d", "THING");
-      sv.fwrite "%d" (%c1) : i1
+      sv.fwrite %fd, "%d" (%c1) : i1
 
     // CHECK-NEXT: end // initial
     }
@@ -367,7 +443,9 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
 }
 
 // CHECK-LABEL: module Aliasing(
-// CHECK-NEXT:             inout [41:0] a, b, c
+// CHECK-NEXT:             inout [41:0] a, 
+// CHECK-NEXT:                          b,
+// CHECK-NEXT:                          c)
 hw.module @Aliasing(%a : !hw.inout<i42>, %b : !hw.inout<i42>,
                       %c : !hw.inout<i42>) {
 
@@ -381,7 +459,8 @@ hw.module @reg_0(%in4: i4, %in8: i8) -> (a: i8, b: i8) {
   // CHECK-LABEL: module reg_0(
   // CHECK-NEXT:   input  [3:0] in4,
   // CHECK-NEXT:   input  [7:0] in8,
-  // CHECK-NEXT:   output [7:0] a, b);
+  // CHECK-NEXT:   output [7:0] a, 
+  // CHECK-NEXT:                b);
 
   // CHECK-EMPTY:
   // CHECK-NEXT: reg [7:0]       myReg;
@@ -499,6 +578,8 @@ hw.module @issue508(%in1: i1, %in2: i1) {
 // CHECK-LABEL: exprInlineTestIssue439
 // https://github.com/llvm/circt/issues/439
 hw.module @exprInlineTestIssue439(%clk: i1) {
+  %fd = hw.constant 0x80000002 : i32
+
   // CHECK: always @(posedge clk) begin
   sv.always posedge %clk {
     %c = hw.constant 0 : i32
@@ -506,8 +587,8 @@ hw.module @exprInlineTestIssue439(%clk: i1) {
     // CHECK: localparam [31:0] _GEN = 32'h0;
     %e = comb.extract %c from 0 : (i32) -> i16
     %f = comb.add %e, %e : i16
-    sv.fwrite "%d"(%f) : i16
-    // CHECK: $fwrite(32'h80000002, "%d", _GEN[15:0] + _GEN[15:0]);
+    sv.fwrite %fd, "%d"(%f) : i16
+    // CHECK: $fwrite(32'h80000002, "%d", 16'(_GEN[15:0] + _GEN[15:0]));
     // CHECK: end // always @(posedge)
   }
 }
@@ -594,7 +675,7 @@ hw.module @slice_inline_ports(%arr: !hw.array<128xi1>, %x: i3, %y: i7)
   // CHECK: assign o2 = arr[7'h1 +: 64];
   %2 = hw.array_slice %arr[%c1_i7] : (!hw.array<128xi1>) -> !hw.array<64xi1>
 
-  // CHECK: assign o3 = arr[y + 7'h1 +: 64];
+  // CHECK: assign o3 = arr[7'(y + 7'h1) +: 64];
   %sum = comb.add %y, %c1_i7 : i7
   %3 = hw.array_slice %arr[%sum] : (!hw.array<128xi1>) -> !hw.array<64xi1>
 
@@ -724,6 +805,8 @@ hw.module @issue720ifdef(%clock: i1, %arg1: i1, %arg2: i1, %arg3: i1) {
 
 // CHECK-LABEL: module issue728(
 hw.module @issue728(%clock: i1, %asdfasdfasdfasdfafa: i1, %gasfdasafwjhijjafija: i1) {
+  %fd = hw.constant 0x80000002 : i32
+
   // CHECK:  always @(posedge clock) begin
   // CHECK:    $fwrite(32'h80000002, "force output");
   // CHECK:    if (asdfasdfasdfasdfafa & gasfdasafwjhijjafija & asdfasdfasdfasdfafa & gasfdasafwjhijjafija &
@@ -731,10 +814,10 @@ hw.module @issue728(%clock: i1, %asdfasdfasdfasdfafa: i1, %gasfdasafwjhijjafija:
   // CHECK:      $fwrite(32'h80000002, "this cond is split");
   // CHECK:  end // always @(posedge)
   sv.always posedge %clock  {
-     sv.fwrite "force output"
+     sv.fwrite %fd, "force output"
      %cond = comb.and %asdfasdfasdfasdfafa, %gasfdasafwjhijjafija, %asdfasdfasdfasdfafa, %gasfdasafwjhijjafija, %asdfasdfasdfasdfafa, %gasfdasafwjhijjafija : i1
      sv.if %cond  {
-       sv.fwrite "this cond is split"
+       sv.fwrite %fd, "this cond is split"
      }
   }
   hw.output
@@ -742,6 +825,8 @@ hw.module @issue728(%clock: i1, %asdfasdfasdfasdfafa: i1, %gasfdasafwjhijjafija:
 
 // CHECK-LABEL: module issue728ifdef(
 hw.module @issue728ifdef(%clock: i1, %asdfasdfasdfasdfafa: i1, %gasfdasafwjhijjafija: i1) {
+  %fd = hw.constant 0x80000002 : i32
+
   // CHECK: always @(posedge clock) begin
   // CHECK:    $fwrite(32'h80000002, "force output");
   // CHECK:    `ifdef FUN_AND_GAMES
@@ -751,11 +836,11 @@ hw.module @issue728ifdef(%clock: i1, %asdfasdfasdfasdfafa: i1, %gasfdasafwjhijja
   // CHECK:    `endif
   // CHECK: end // always @(posedge)
   sv.always posedge %clock  {
-     sv.fwrite "force output"
+     sv.fwrite %fd, "force output"
      sv.ifdef.procedural "FUN_AND_GAMES" {
        %cond = comb.and %asdfasdfasdfasdfafa, %gasfdasafwjhijjafija, %asdfasdfasdfasdfafa, %gasfdasafwjhijjafija, %asdfasdfasdfasdfafa, %gasfdasafwjhijjafija : i1
        sv.if %cond  {
-         sv.fwrite "this cond is split"
+         sv.fwrite %fd, "this cond is split"
        }
      }
   }
@@ -850,15 +935,14 @@ hw.module @OutOfLineConstantsInAlwaysSensitivity() {
 // CHECK-LABEL: module TooLongConstExpr
 hw.module @TooLongConstExpr() {
   %myreg = sv.reg : !hw.inout<i4200>
-  // CHECK: always @* begin
+  // CHECK: always @*
   sv.always {
-    // CHECK-NEXT: localparam [4199:0] _tmp = 4200'h
-    // CHECK-NEXT: myreg <= _tmp + _tmp;
+    // CHECK-NEXT: myreg <= 4200'(4200'h2323CB3A9903AD1D87D91023532E89D313E12BFCFCA2492A8561CADD94652CC4 +
+    // CHECK-NEXT:                             4200'h2323CB3A9903AD1D87D91023532E89D313E12BFCFCA2492A8561CADD94652CC4);
     %0 = hw.constant 15894191981981165163143546843135416146464164161464654561818646486465164684484 : i4200
     %1 = comb.add %0, %0 : i4200
     sv.passign %myreg, %1 : i4200
   }
-  // CHECK-NEXT: end
 }
 
 // Constants defined before use should be emitted in-place.
@@ -939,7 +1023,7 @@ hw.module @MultiUseReadInOut(%auto_in_ar_bits_id : i2) -> (aa: i3, bb: i3){
   %127 = hw.array_create %124, %123, %125, %126 : i3
   %128 = hw.array_get %127[%auto_in_ar_bits_id] : !hw.array<4xi3>
 
-  // CHECK: assign bb = b + a;
+  // CHECK: assign bb = 3'(b + a);
   %xx = comb.add %123, %124 : i3
   hw.output %128, %xx : i3, i3
 }
@@ -983,7 +1067,7 @@ hw.module @verbatim_M1(%clock : i1, %cond : i1, %val : i8) {
   %c42_2 = hw.constant 42 : i8
   %xor = comb.xor %val, %c42_2 : i8
   hw.instance "aa1" sym @verbatim_b1 @verbatim_inout_2() ->()
-  // CHECK: MACRO(val + 8'h2A, val ^ 8'h2A reg=reg1, verbatim_M2, verbatim_inout_2, aa1,reg2 = reg2 )
+  // CHECK: MACRO(8'(val + 8'h2A), val ^ 8'h2A reg=reg1, verbatim_M2, verbatim_inout_2, aa1,reg2 = reg2 )
   sv.verbatim  "MACRO({{0}}, {{1}} reg={{2}}, {{3}}, {{4}}, {{5}},reg2 = {{6}} )"
           (%add, %xor)  : i8,i8
           {symbols = [#hw.innerNameRef<@verbatim_M1::@verbatim_reg1>, @verbatim_M2,
@@ -998,7 +1082,7 @@ hw.module @verbatim_M2(%clock : i1, %cond : i1, %val : i8) {
   %add = comb.add %val, %c42 : i8
   %c42_2 = hw.constant 42 : i8
   %xor = comb.xor %val, %c42_2 : i8
-  // CHECK: MACRO(val + 8'h2A, val ^ 8'h2A, verbatim_M1 -- verbatim_M2)
+  // CHECK: MACRO(8'(val + 8'h2A), val ^ 8'h2A, verbatim_M1 -- verbatim_M2)
   sv.verbatim  "MACRO({{0}}, {{1}}, {{2}} -- {{3}})"
                 (%add, %xor)  : i8,i8
                 {symbols = [@verbatim_M1, @verbatim_M2, #hw.innerNameRef<@verbatim_M1::@verbatim_b1>]}
@@ -1011,8 +1095,8 @@ hw.module @InlineAutomaticLogicInit(%a : i42, %b: i42, %really_really_long_port:
   // CHECK: initial begin
   sv.initial {
     // CHECK: automatic logic [63:0] _THING = `THING;
-    // CHECK: automatic logic [41:0] _GEN = a + a;
-    // CHECK: automatic logic [41:0] _GEN_0 = _GEN + b;
+    // CHECK: automatic logic [41:0] _GEN = 42'(a + a);
+    // CHECK: automatic logic [41:0] _GEN_0 = 42'(_GEN + b);
     // CHECK: automatic logic [41:0] _GEN_1;
     %thing = sv.verbatim.expr "`THING" : () -> i64
 
@@ -1034,11 +1118,11 @@ hw.module @InlineAutomaticLogicInit(%a : i42, %b: i42, %really_really_long_port:
 
     %tmp3 = comb.add %tmp2, %b : i42
     sv.bpassign %regValue, %tmp3 : i42
-    // CHECK: regValue = _GEN_0 + b;
+    // CHECK: regValue = 42'(_GEN_0 + b);
 
     // CHECK: `ifdef FOO
     sv.ifdef.procedural "FOO" {
-      // CHECK: _GEN_1 = a + a;
+      // CHECK: _GEN_1 = 42'(a + a);
       // tmp is multi-use so it needs a temporary, but cannot be emitted inline
       // because it is in an ifdef.
       %tmp4 = comb.add %a, %a : i42
@@ -1047,7 +1131,7 @@ hw.module @InlineAutomaticLogicInit(%a : i42, %b: i42, %really_really_long_port:
 
       %tmp5 = comb.add %tmp4, %b : i42
       sv.bpassign %regValue, %tmp5 : i42
-      // CHECK: regValue = _GEN_1 + b;
+      // CHECK: regValue = 42'(_GEN_1 + b);
     }
   }
 
@@ -1057,12 +1141,12 @@ hw.module @InlineAutomaticLogicInit(%a : i42, %b: i42, %really_really_long_port:
   // CHECK: initial begin
   sv.initial {
     // CHECK: automatic logic [41:0] [[THING:.+]] = `THING;
-    // CHECK: automatic logic [41:0] [[THING3:.+]] = [[THING]] + {{..}}31{really_really_long_port[10]}},
-    // CHECK-SAME: really_really_long_port};
+    // CHECK: automatic logic [41:0] [[THING3:.+]] = 42'([[THING]] + {{..}}31{really_really_long_port[10]}},
+    // CHECK-SAME: really_really_long_port});
     // CHECK: automatic logic [41:0] [[MANYTHING:.+]] =
-    // CHECK-SAME: [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] *
-    // CHECK:  [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] *
-    // CHECK:  [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]];
+    // CHECK-SAME: [[THING]] | [[THING]] | [[THING]] | [[THING]] | [[THING]] | [[THING]] | [[THING]] | [[THING]] |
+    // CHECK:  [[THING]] | [[THING]] | [[THING]] | [[THING]] | [[THING]] | [[THING]] | [[THING]] | [[THING]] |
+    // CHECK:  [[THING]] | [[THING]] | [[THING]] | [[THING]] | [[THING]] | [[THING]] | [[THING]] | [[THING]];
 
     // Check the indentation level of temporaries.  Issue #1625
     %thing = sv.verbatim.expr.se "`THING" : () -> i42
@@ -1074,10 +1158,10 @@ hw.module @InlineAutomaticLogicInit(%a : i42, %b: i42, %really_really_long_port:
 
     // multiuse, refers to other 'automatic logic' thing so must be emitted in
     // the proper order.
-    %manyThing = comb.mul %thing, %thing, %thing, %thing, %thing, %thing,
-                          %thing, %thing, %thing, %thing, %thing, %thing,
-                          %thing, %thing, %thing, %thing, %thing, %thing,
-                          %thing, %thing, %thing, %thing, %thing, %thing : i42
+    %manyThing = comb.or %thing, %thing, %thing, %thing, %thing, %thing,
+                         %thing, %thing, %thing, %thing, %thing, %thing,
+                         %thing, %thing, %thing, %thing, %thing, %thing,
+                         %thing, %thing, %thing, %thing, %thing, %thing : i42
 
     // CHECK: regValue = [[THING]];
     sv.bpassign %regValue, %thing : i42
@@ -1133,11 +1217,32 @@ hw.module @XMR_src(%a : i23) -> (aa: i3) {
   hw.output %r : i3
 }
 
+
+hw.module.extern @MyExtModule(%in: i8)
+
+// CHECK-LABEL: module MoveInstances
+hw.module @MoveInstances(%a_in: i8) -> (outc : i8){
+  // CHECK: MyExtModule xyz3 (
+  // CHECK:   .in (8'(a_in + a_in))
+  // CHECK: );
+  // CHECK: assign outc = 8'((8'(8'(a_in + a_in) + a_in)) * a_in)
+
+  %0 = comb.add %a_in, %a_in : i8
+  hw.instance "xyz3" @MyExtModule(in: %0: i8) -> ()
+  %1 = comb.add %a_in, %a_in : i8
+  %2 = comb.add %1, %a_in : i8
+  %outc = comb.mul %2, %a_in : i8
+  hw.output %outc : i8
+}
+
 // CHECK-LABEL: module extInst
 hw.module.extern @extInst(%_h: i1, %_i: i1, %_j: i1, %_k: i1, %_z :i0) -> ()
 
 // CHECK-LABEL: module extInst2
-// CHECK-NEXT:     input                signed_0, _i, _j, _k
+// CHECK-NEXT:     input                signed_0,
+// CHECK-NEXT:                          _i,
+// CHECK-NEXT:                          _j,
+// CHECK-NEXT:                          _k
 hw.module @extInst2(%signed: i1, %_i: i1, %_j: i1, %_k: i1, %_z :i0) -> () {}
 
 // CHECK-LABEL: module remoteInstDut
@@ -1154,24 +1259,163 @@ hw.module @remoteInstDut(%i: i1, %j: i1, %z: i0) -> () {
   hw.instance "a1" sym @bindInst @extInst(_h: %mywire_rd: i1, _i: %myreg_rd: i1, _j: %j: i1, _k: %0: i1, _z: %z: i0) -> () {doNotPrint=1}
   hw.instance "a2" sym @bindInst2 @extInst(_h: %mywire_rd: i1, _i: %myreg_rd: i1, _j: %j: i1, _k: %0: i1, _z: %z: i0) -> () {doNotPrint=1}
   hw.instance "signed" sym @bindInst3 @extInst2(signed: %mywire_rd1 : i1, _i: %myreg_rd1 : i1, _j: %j: i1, _k: %0: i1, _z: %z: i0) -> () {doNotPrint=1}
-// CHECK: wire signed__k
-// CHECK-NEXT: wire a2__k
-// CHECK-NEXT: wire a1__k
+// CHECK: wire _signed__k
+// CHECK-NEXT: wire _a2__k
+// CHECK-NEXT: wire _a1__k
 // CHECK-NEXT: wire mywire
 // CHECK-NEXT: myreg
 // CHECK-NEXT: wire signed_0
 // CHECK-NEXT: reg  output_1
-// CHECK: assign a1__k = 1'h1
+// CHECK: assign _a1__k = 1'h1
 // CHECK-NEXT: /* This instance is elsewhere emitted as a bind statement
 // CHECK-NEXT:    extInst a1
-// CHECK: assign a2__k = 1'h1
+// CHECK: assign _a2__k = 1'h1
 // CHECK-NEXT: /* This instance is elsewhere emitted as a bind statement
 // CHECK-NEXT:    extInst a2
-// CHECK:  assign signed__k = 1'h1
+// CHECK:  assign _signed__k = 1'h1
 // CHECK-NEXT:  /* This instance is elsewhere emitted as a bind statement
 // CHECK-NEXT:    extInst2 signed_2
 // CHECK-NEXT:    .signed_0 (signed_0)
 }
+
+// CHECK-LABEL: SimplyNestedElseIf
+// CHECK: if (flag1)
+// CHECK: else if (flag2)
+// CHECK: else if (flag3)
+// CHECK: else
+hw.module @SimplyNestedElseIf(%clock: i1, %flag1 : i1, %flag2: i1, %flag3: i1) {
+  %fd = hw.constant 0x80000002 : i32
+
+  sv.always posedge %clock {
+    sv.if %flag1 {
+      sv.fwrite %fd, "A"
+    } else {
+      sv.if %flag2 {
+        sv.fwrite %fd, "B"
+      } else {
+        sv.if %flag3 {
+          sv.fwrite %fd, "C"
+        } else {
+          sv.fwrite %fd, "D"
+        }
+      }
+    }
+  }
+
+  hw.output
+}
+
+// CHECK-LABEL: DoNotChainElseIf
+// CHECK: if (flag1)
+// CHECK: else begin
+// CHECK: if (flag2)
+// CHECK: else
+// CHECK: end
+hw.module @DoNotChainElseIf(%clock: i1, %flag1 : i1, %flag2: i1) {
+  %wire = sv.reg : !hw.inout<i32>
+  %fd = hw.constant 0x80000002 : i32
+
+  sv.always posedge %clock {
+    sv.if %flag1 {
+      sv.fwrite %fd, "A"
+    } else {
+      sv.passign %wire, %fd : i32
+      sv.if %flag2 {
+        sv.fwrite %fd, "B"
+      } else {
+        sv.fwrite %fd, "C"
+      }
+    }
+  }
+
+  hw.output
+}
+
+// CHECK-LABEL: NestedElseIfHoist
+// CHECK: automatic logic [[FLAG:.*]] = flag2 & flag4;
+// CHECK: if (flag1)
+// CHECK: else if ([[FLAG]])
+// CHECK: else if (flag3 & [[FLAG]])
+// CHECK: else
+// CHECK: arg0 | arg1 | arg2
+hw.module @NestedElseIfHoist(%clock: i1, %flag1 : i1, %flag2: i1, %flag3: i1, %flag4 : i1, %arg0: i32, %arg1: i32, %arg2: i32) {
+  %fd = hw.constant 0x80000002 : i32
+
+  sv.always posedge %clock {
+    sv.if %flag1 {
+      sv.fwrite %fd, "A"
+    } else {
+      %0 = comb.and %flag2, %flag4 : i1
+      %10 = comb.or %arg0, %arg1 : i32
+      sv.if %0 {
+        sv.fwrite %fd, "B"
+      } else {
+        %1 = comb.and %flag3, %0 : i1
+        %11 = comb.or %10, %arg2 : i32
+        sv.if %1 {
+          sv.fwrite %fd, "C"
+        } else {
+          sv.fwrite %fd, "D(%d)" (%11) : i32
+        }
+      }
+    }
+  }
+
+  hw.output
+}
+
+// CHECK-LABEL: ReuseExistingInOut
+// CHECK: input {{.+}},
+// CHECK:        [[INPUT:[:alnum:]+]],
+// CHECK: output [[OUTPUT:.+]])
+hw.module @ReuseExistingInOut(%clock: i1, %a: i1) -> (out1: i1) {
+  %expr1 = comb.or %a, %a : i1
+  %expr2 = comb.and %a, %a : i1
+
+  // CHECK: wire [[WIRE1:.+]];
+  // CHECK: wire [[WIRE2:.+]];
+  // CHECK: reg  [[REG:.+]];
+  %mywire = sv.wire : !hw.inout<i1>
+  %otherwire = sv.wire : !hw.inout<i1>
+  %myreg = sv.reg : !hw.inout<i1>
+
+  // CHECK: assign [[WIRE1]] = [[INPUT]] | [[INPUT]];
+  sv.assign %mywire, %expr1 : i1
+
+  sv.always posedge %clock {
+    // CHECK: [[REG]] <= [[WIRE1]];
+    sv.passign %myreg, %expr1 : i1
+  }
+
+  %0 = comb.or %a, %expr2 : i1
+
+  // CHECK: assign [[WIRE2]] = [[INPUT]] & [[INPUT]];
+  sv.assign %otherwire, %expr2 : i1
+
+  // CHECK: assign [[OUTPUT]] = [[INPUT]] | [[WIRE2]];
+  hw.output %0 : i1
+}
+
+// See https://github.com/verilator/verilator/issues/3405.
+// CHECK-LABEL: Verilator3405
+// CHECK-DAG: wire [[GEN0:.+]];
+// CHECK-DAG: wire [[GEN1:.+]];
+// CHECK-DAG: assign [[GEN0]] = {{.+}} | {{.+}} | {{.+}}
+// CHECK-DAG: assign [[GEN1]] = {{.+}} | {{.+}} | {{.+}}
+// CHECK: assign out = {[[GEN1]], [[GEN0]]}
+hw.module @Verilator3405(
+  %0: i1, %1: i1, %2: i1, %3: i1, %4: i1, %5: i1, %6: i1, %7: i1, %8: i1,
+  %9: i1, %10: i1, %11: i1, %12: i1, %13: i1, %14: i1, %15: i1, %16: i1,
+  %17: i1, %18: i1, %19: i1, %20: i1, %21: i1, %22: i1) -> (out: i2) {
+
+  %lhs = comb.or %0, %1, %2, %3, %4, %5, %6, %7, %8, %9, %10 : i1
+  %rhs = comb.or %11, %12, %13, %14, %15, %16, %17, %18, %19, %20, %21 : i1
+
+  %out = comb.concat %lhs, %rhs : i1, i1
+
+  hw.output %out : i2
+}
+
 
 hw.module @bindInMod() {
   sv.bind #hw.innerNameRef<@remoteInstDut::@bindInst>
@@ -1183,14 +1427,14 @@ hw.module @bindInMod() {
 // CHECK-NEXT:   ._h (mywire),
 // CHECK-NEXT:   ._i (myreg),
 // CHECK-NEXT:   ._j (j),
-// CHECK-NEXT:   ._k (a1__k)
+// CHECK-NEXT:   ._k (_a1__k)
 // CHECK-NEXT: //._z (z)
 // CHECK-NEXT: );
 // CHECK-NEXT:  bind remoteInstDut extInst2 signed_2 (
 // CHECK-NEXT:    .signed_0 (signed_0),
 // CHECK-NEXT:    ._i       (output_1),
 // CHECK-NEXT:    ._j       (j),
-// CHECK-NEXT:    ._k       (signed__k)
+// CHECK-NEXT:    ._k       (_signed__k)
 // CHECK: endmodule
 
 sv.bind #hw.innerNameRef<@remoteInstDut::@bindInst2>
@@ -1199,7 +1443,7 @@ sv.bind #hw.innerNameRef<@remoteInstDut::@bindInst2>
 // CHECK-NEXT:   ._h (mywire),
 // CHECK-NEXT:   ._i (myreg),
 // CHECK-NEXT:   ._j (j),
-// CHECK-NEXT:   ._k (a2__k)
+// CHECK-NEXT:   ._k (_a2__k)
 // CHECK-NEXT: //._z (z)
 // CHECK-NEXT: );
 
@@ -1214,8 +1458,8 @@ hw.module @NastyPort(%.lots$of.dots: i1) -> (".more.dots": i1) {
 }
 sv.bind #hw.innerNameRef<@NastyPortParent::@foo>
 // CHECK-LABEL: bind NastyPortParent NastyPort foo (
-// CHECK-NEXT:    ._lots24of_dots (foo__lots24of_dots)
-// CHECK-NEXT:    ._more_dots     (foo__more_dots)
+// CHECK-NEXT:    ._lots24of_dots (_foo__lots24of_dots)
+// CHECK-NEXT:    ._more_dots     (_foo__more_dots)
 // CHECK-NEXT:  );
 
 // CHECK-LABEL:  hw.module @issue595

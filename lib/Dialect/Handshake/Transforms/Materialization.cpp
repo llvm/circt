@@ -16,8 +16,9 @@
 #include "circt/Support/LLVM.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
-#include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/OperationSupport.h"
 #include "mlir/IR/PatternMatch.h"
@@ -37,6 +38,13 @@ static void replaceFirstUse(Operation *op, Value oldVal, Value newVal) {
       break;
     }
   return;
+}
+
+static void insertSink(Value val, OpBuilder &rewriter) {
+  rewriter.setInsertionPointAfterValue(val);
+  auto sinkOp = rewriter.create<SinkOp>(val.getLoc(), val);
+  if (val.getType().isa<NoneType>())
+    sinkOp->setAttr("control", rewriter.getBoolAttr(true));
 }
 
 namespace circt {
@@ -67,8 +75,8 @@ void insertFork(Value result, bool isLazy, OpBuilder &rewriter) {
 
 // Insert Fork Operation for every operation and function argument with more
 // than one successor.
-LogicalResult addForkOps(handshake::FuncOp f, OpBuilder &rewriter) {
-  for (Operation &op : f.getOps()) {
+LogicalResult addForkOps(Region &r, OpBuilder &rewriter) {
+  for (Operation &op : r.getOps()) {
     // Ignore terminators, and don't add Forks to Forks.
     if (op.getNumSuccessors() == 0 && !isa<ForkOp>(op)) {
       for (auto result : op.getResults()) {
@@ -79,7 +87,7 @@ LogicalResult addForkOps(handshake::FuncOp f, OpBuilder &rewriter) {
     }
   }
 
-  for (auto barg : f.front().getArguments())
+  for (auto barg : r.front().getArguments())
     if (!barg.use_empty() && !barg.hasOneUse())
       insertFork(barg, false, rewriter);
 
@@ -87,16 +95,20 @@ LogicalResult addForkOps(handshake::FuncOp f, OpBuilder &rewriter) {
 }
 
 // Create sink for every unused result
-LogicalResult addSinkOps(handshake::FuncOp f, OpBuilder &rewriter) {
+LogicalResult addSinkOps(Region &r, OpBuilder &rewriter) {
   BlockValues liveOuts;
 
-  for (Block &block : f) {
+  for (Block &block : r) {
+    for (auto arg : block.getArguments()) {
+      if (arg.use_empty())
+        insertSink(arg, rewriter);
+    }
     for (Operation &op : block) {
       // Do not add sinks for unused MLIR operations which the rewriter will
       // later remove We have already replaced these ops with their handshake
       // equivalents
       // TODO: should we use other indicator for op that has been erased?
-      if (isa<mlir::CondBranchOp, mlir::BranchOp, memref::LoadOp,
+      if (isa<mlir::cf::CondBranchOp, mlir::cf::BranchOp, memref::LoadOp,
               mlir::AffineReadOpInterface, mlir::AffineForOp>(op))
         continue;
 
@@ -104,12 +116,8 @@ LogicalResult addSinkOps(handshake::FuncOp f, OpBuilder &rewriter) {
         continue;
 
       for (auto result : op.getResults())
-        if (result.use_empty()) {
-          rewriter.setInsertionPointAfter(&op);
-          auto sinkOp = rewriter.create<SinkOp>(op.getLoc(), result);
-          if (result.getType().isa<NoneType>())
-            sinkOp->setAttr("control", rewriter.getBoolAttr(true));
-        }
+        if (result.use_empty())
+          insertSink(result, rewriter);
     }
   }
   return success();
@@ -125,7 +133,8 @@ struct HandshakeMaterializeForksSinksPass
   void runOnOperation() override {
     handshake::FuncOp op = getOperation();
     OpBuilder builder(op);
-    if (addForkOps(op, builder).failed() || addSinkOps(op, builder).failed() ||
+    if (addForkOps(op.getRegion(), builder).failed() ||
+        addSinkOps(op.getRegion(), builder).failed() ||
         verifyAllValuesHasOneUse(op).failed())
       return signalPassFailure();
   };

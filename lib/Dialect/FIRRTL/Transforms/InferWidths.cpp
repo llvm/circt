@@ -678,10 +678,12 @@ void ConstraintSolver::dumpConstraints(llvm::raw_ostream &os) {
   }
 }
 
+#ifndef NDEBUG
 inline llvm::raw_ostream &operator<<(llvm::raw_ostream &os, const LinIneq &l) {
   l.print(os);
   return os;
 }
+#endif
 
 /// Compute the canonicalized linear inequality expression starting at `expr`,
 /// for the `var` as the left hand side `x` of the inequality. `seenVars` is
@@ -811,10 +813,9 @@ computeBinary(ExprSolution lhs, ExprSolution rhs,
 static ExprSolution solveExpr(Expr *expr, SmallPtrSetImpl<Expr *> &seenVars,
                               unsigned indent = 1) {
   // See if we have a memoized result we can return.
-  bool isTrivial = isa<KnownExpr>(expr);
   if (expr->solution) {
     LLVM_DEBUG({
-      if (!isTrivial)
+      if (!isa<KnownExpr>(expr))
         llvm::dbgs().indent(indent * 2)
             << "- Cached " << *expr << " = " << *expr->solution << "\n";
     });
@@ -823,7 +824,7 @@ static ExprSolution solveExpr(Expr *expr, SmallPtrSetImpl<Expr *> &seenVars,
 
   // Otherwise compute the value of the expression.
   LLVM_DEBUG({
-    if (!isTrivial)
+    if (!isa<KnownExpr>(expr))
       llvm::dbgs().indent(indent * 2) << "- Solving " << *expr << "\n";
   });
   auto solution =
@@ -884,7 +885,7 @@ static ExprSolution solveExpr(Expr *expr, SmallPtrSetImpl<Expr *> &seenVars,
 
   // Produce some useful debug prints.
   LLVM_DEBUG({
-    if (!isTrivial) {
+    if (!isa<KnownExpr>(expr)) {
       if (solution.first)
         llvm::dbgs().indent(indent * 2)
             << "= Solved " << *expr << " = " << *solution.first;
@@ -1081,13 +1082,14 @@ public:
   /// non-aggregate.
   Expr *declareVar(FIRRTLType type, Location loc);
 
+  /// Assign the constraint expressions of the fields in the `result` argument
+  /// as the max of expressions in the `rhs` and `lhs` arguments. Both fields
+  /// must be the same type.
+  void maximumOfTypes(Value result, Value rhs, Value lhs);
+
   /// Constrain the value "larger" to be greater than or equal to "smaller".
   /// These may be aggregate values. This is used for regular connects.
   void constrainTypes(Value larger, Value smaller);
-
-  /// Constrain the value "larger" to be greater than or equal to "smaller".
-  /// These may be aggregate values. This is used for partial connects.
-  void partiallyConstrainTypes(Value larger, Value smaller);
 
   /// Constrain the expression "larger" to be greater than or equals to
   /// the expression "smaller".
@@ -1211,8 +1213,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
     else
       allWidthsKnown = false;
   }
-  if (allWidthsKnown &&
-      !isa<ConnectOp, PartialConnectOp, StrictConnectOp, AttachOp>(op))
+  if (allWidthsKnown && !isa<ConnectOp, StrictConnectOp, AttachOp>(op))
     return success();
 
   // Actually generate the necessary constraint expressions.
@@ -1403,26 +1404,16 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
       .Case<MuxPrimOp>([&](auto op) {
         auto sel = getExpr(op.sel());
         constrainTypes(sel, solver.known(1));
-        auto high = getExpr(op.high());
-        auto low = getExpr(op.low());
-        auto e = solver.max(high, low);
-        setExpr(op.getResult(), e);
+        maximumOfTypes(op.getResult(), op.high(), op.low());
       })
 
       // Handle the various connect statements that imply a type constraint.
-      .Case<ConnectOp>([&](auto op) {
+      .Case<ConnectOp, StrictConnectOp>([&](auto op) {
         // If the source is an invalid value, we don't set a constraint between
         // these two types.
         if (dyn_cast_or_null<InvalidValueOp>(op.src().getDefiningOp()))
           return;
         constrainTypes(op.dest(), op.src());
-      })
-      .Case<PartialConnectOp>([&](auto op) {
-        // If the source is an invalid value, we don't set a constraint between
-        // these two types.
-        if (dyn_cast_or_null<InvalidValueOp>(op.src().getDefiningOp()))
-          return;
-        partiallyConstrainTypes(op.dest(), op.src());
       })
       .Case<AttachOp>([&](auto op) {
         // Attach connects multiple analog signals together. All signals must
@@ -1560,6 +1551,37 @@ void InferenceMapping::declareVars(Value value, Location loc) {
   declare(ftype);
 }
 
+/// Assign the constraint expressions of the fields in the `result` argument as
+/// the max of expressions in the `rhs` and `lhs` arguments. Both fields must be
+/// the same type.
+void InferenceMapping::maximumOfTypes(Value result, Value rhs, Value lhs) {
+  // Recurse to every leaf element and set larger >= smaller.
+  auto fieldID = 0;
+  std::function<void(FIRRTLType)> maximize = [&](FIRRTLType type) {
+    if (auto bundleType = type.dyn_cast<BundleType>()) {
+      fieldID++;
+      for (auto &element : bundleType.getElements())
+        maximize(element.type);
+    } else if (auto vecType = type.dyn_cast<FVectorType>()) {
+      fieldID++;
+      auto save = fieldID;
+      // Skip 0 length vectors.
+      if (vecType.getNumElements() > 0)
+        maximize(vecType.getElementType());
+      fieldID = save + vecType.getMaxFieldID();
+    } else if (type.isGround()) {
+      auto *e = solver.max(getExpr(FieldRef(rhs, fieldID)),
+                           getExpr(FieldRef(lhs, fieldID)));
+      setExpr(FieldRef(result, fieldID), e);
+      fieldID++;
+    } else {
+      llvm_unreachable("Unknown type inside a bundle!");
+    }
+  };
+  auto type = result.getType().cast<FIRRTLType>();
+  maximize(type);
+}
+
 /// Establishes constraints to ensure the sizes in the `larger` type are greater
 /// than or equal to the sizes in the `smaller` type. Types have to be
 /// compatible in the sense that they may only differ in the presence or absence
@@ -1599,54 +1621,6 @@ void InferenceMapping::constrainTypes(Value larger, Value smaller) {
       };
 
   constrain(type, larger, smaller);
-}
-
-/// Establishes constraints to ensure the sizes in the `larger` type are greater
-/// than or equal to the sizes in the `smaller` type. The types do not have to
-/// be identical, but they must be similar in the sense that corresponding
-/// fields must have the same kind (scalars, bundles, vectors).
-///
-/// This function is used to apply partial connects.
-void InferenceMapping::partiallyConstrainTypes(Value larger, Value smaller) {
-  // Recurse to every leaf element and set larger >= smaller.
-  std::function<void(FIRRTLType, Value, unsigned, FIRRTLType, Value, unsigned)>
-      constrain = [&](FIRRTLType aType, Value a, unsigned aID, FIRRTLType bType,
-                      Value b, unsigned bID) {
-        if (auto aBundle = aType.dyn_cast<BundleType>()) {
-          auto bBundle = bType.cast<BundleType>();
-          for (unsigned aIndex = 0, e = aBundle.getNumElements(); aIndex < e;
-               ++aIndex) {
-            auto aField = aBundle.getElements()[aIndex].name;
-            auto bIndex = bBundle.getElementIndex(aField);
-            if (!bIndex)
-              continue;
-            auto &aElt = aBundle.getElements()[aIndex];
-            auto &bElt = bBundle.getElements()[*bIndex];
-            if (aElt.isFlip)
-              constrain(bElt.type, b, bID + bBundle.getFieldID(*bIndex),
-                        aElt.type, a, aID + aBundle.getFieldID(aIndex));
-            else
-              constrain(aElt.type, a, aID + aBundle.getFieldID(aIndex),
-                        bElt.type, b, bID + bBundle.getFieldID(*bIndex));
-          }
-        } else if (auto aVecType = aType.dyn_cast<FVectorType>()) {
-          // Do not constrain the elements of a zero length vector.
-          if (aVecType.getNumElements() == 0)
-            return;
-          auto bVecType = bType.cast<FVectorType>();
-          constrain(aVecType.getElementType(), a, aID + 1,
-                    bVecType.getElementType(), b, bID + 1);
-        } else if (aType.isGround()) {
-          // Leaf element, look up their expressions, and create the constraint.
-          constrainTypes(getExpr(FieldRef(a, aID)), getExpr(FieldRef(b, bID)));
-        } else {
-          llvm_unreachable("Unknown type inside a bundle!");
-        }
-      };
-
-  auto largerType = larger.getType().cast<FIRRTLType>();
-  auto smallerType = smaller.getType().cast<FIRRTLType>();
-  constrain(largerType, larger, 0, smallerType, smaller, 0);
 }
 
 /// Establishes constraints to ensure the sizes in the `larger` type are greater
@@ -1793,7 +1767,8 @@ bool InferenceTypeUpdate::updateOperation(Operation *op) {
   // operand width will have definitely been mapped in.
   if (isa<InvalidValueOp>(op) &&
       hasUninferredWidth(op->getResultTypes().front())) {
-    if (op->use_empty() || !isa<ConnectOp>(*op->getUsers().begin())) {
+    if (op->use_empty() ||
+        !isa<ConnectOp, StrictConnectOp>(*op->getUsers().begin())) {
       auto diag = mlir::emitError(
           op->getLoc(), "uninferred width: invalid value is unconstrained");
       anyFailed = true;

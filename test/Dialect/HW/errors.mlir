@@ -1,27 +1,27 @@
 // RUN: circt-opt %s -split-input-file -verify-diagnostics
 
-func private @test_extract(%arg0: i4) {
+func.func private @test_extract(%arg0: i4) {
   // expected-error @+1 {{'comb.extract' op from bit too large for input}}
   %a = comb.extract %arg0 from 6 : (i4) -> i3
 }
 
 // -----
 
-func private @test_extract(%arg0: i4) {
+func.func private @test_extract(%arg0: i4) {
   // expected-error @+1 {{'comb.extract' op from bit too large for input}}
   %b = comb.extract %arg0 from 2 : (i4) -> i3
 }
 
 // -----
 
-func private @test_and() {
+func.func private @test_and() {
   // expected-error @+1 {{'comb.and' op expected 1 or more operands}}
   %b = comb.and : i111
 }
 
 // -----
 
-func private @notModule () {
+func.func private @notModule () {
   return
 }
 
@@ -39,18 +39,31 @@ hw.module @A(%arg0: i1) {
 
 // -----
 
+hw.generator.schema @S, "Test Schema", ["test"]
+// expected-error @+1 {{Cannot find generator definition 'S2'}}
+hw.module.generated @A, @S2(%arg0: i1) -> (a: i1) attributes { test = 1 }
+
+// -----
+
+hw.module @S() { }
+// expected-error @+1 {{which is not a HWGeneratorSchemaOp}}
+hw.module.generated @A, @S(%arg0: i1) -> (a: i1) attributes { test = 1 }
+
+
+// -----
+
 // expected-error @+1 {{'hw.output' op must have same number of operands as region results}}
 hw.module @A() -> ("": i1) { }
 
 // -----
 
-// expected-error @+1 {{hw.array only supports one dimension}}
-func private @arrayDims(%a: !hw.array<3 x 4 x i5>) { }
+// expected-error @+1 {{expected non-function type}}
+func.func private @arrayDims(%a: !hw.array<3 x 4 x i5>) { }
 
 // -----
 
 // expected-error @+1 {{invalid element for hw.inout type}}
-func private @invalidInout(%arg0: !hw.inout<tensor<*xf32>>) { }
+func.func private @invalidInout(%arg0: !hw.inout<tensor<*xf32>>) { }
 
 // -----
 
@@ -287,3 +300,32 @@ module  {
     hw.instance "h2" sym @inst_0 @C() -> () {circt.globalRef = [#hw.globalNameRef<@glbl_D_M1>]}
   }
 }
+
+// -----
+
+module {
+  hw.module @A(%a : !hw.int<41>) -> (out: !hw.int<42>) {
+// expected-error @+1 {{'hw.instance' op operand type #0 must be 'i42', but got 'i41'}}
+    %r0 = hw.instance "inst1" @parameters<p1: i42 = 42>(arg0: %a: !hw.int<41>) -> (out: !hw.int<42>)
+    hw.output %r0: !hw.int<42>
+  }
+// expected-note @+1 {{module declared here}}
+  hw.module.extern @parameters<p1: i42>(%arg0: !hw.int<#hw.param.decl.ref<"p1">>) -> (out: !hw.int<#hw.param.decl.ref<"p1">>)
+}
+
+// -----
+
+module {
+  hw.module @A(%a : !hw.int<42>) -> (out: !hw.int<41>) {
+// expected-error @+1 {{'hw.instance' op result type #0 must be 'i42', but got 'i41'}}
+    %r0 = hw.instance "inst1" @parameters<p1: i42 = 42>(arg0: %a: !hw.int<42>) -> (out: !hw.int<41>)
+    hw.output %r0: !hw.int<41>
+  }
+// expected-note @+1 {{module declared here}}
+  hw.module.extern @parameters<p1: i42>(%arg0: !hw.int<#hw.param.decl.ref<"p1">>) -> (out: !hw.int<#hw.param.decl.ref<"p1">>)
+}
+
+// -----
+
+// expected-error @+1 {{unsupported dimension kind in hw.array}}
+hw.module @bab<param: i32, N: i32> ( %array2d: !hw.array<i3 x i4>) {}

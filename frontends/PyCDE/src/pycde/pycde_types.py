@@ -4,10 +4,11 @@
 
 from collections import OrderedDict
 
-from .value import RegularValue, ListValue, StructValue, BitVectorValue
+from .value import (BitVectorValue, ChannelValue, ListValue, StructValue,
+                    RegularValue, Value)
 
 import mlir.ir
-from circt.dialects import hw, sv
+from circt.dialects import esi, hw, sv
 import circt.support
 
 
@@ -31,6 +32,9 @@ class _Types:
             name: str = None) -> hw.ArrayType:
     return self.wrap(hw.ArrayType.get(inner, size), name)
 
+  def channel(self, inner):
+    return self.wrap(esi.ChannelType.get(inner))
+
   def struct(self, members, name: str = None) -> hw.StructType:
     members = OrderedDict(members)
     if isinstance(members, dict):
@@ -42,7 +46,7 @@ class _Types:
   def wrap(self, type, name=None):
     if name is not None:
       type = self._create_alias(type, name)
-    return PyCDEType(type)
+    return Type(type)
 
   def _create_alias(self, inner_type, name):
     alias = hw.TypeAliasType.get(_Types.TYPE_SCOPE, name, inner_type)
@@ -102,30 +106,34 @@ class _Types:
 types = _Types()
 
 
-# Parameterized class to subclass 'type'.
-def PyCDEType(type):
-  if isinstance(type, Type):
-    return type
-  type = circt.support.type_to_pytype(type)
-  if isinstance(type, hw.ArrayType):
-    return ArrayType(type)
-  if isinstance(type, hw.StructType):
-    return StructType(type)
-  if isinstance(type, hw.TypeAliasType):
-    return TypeAliasType(type)
-  if isinstance(type, mlir.ir.IntegerType):
-    return BitVectorType(type)
-  return Type(type)
-
-
 class Type(mlir.ir.Type):
   """PyCDE type hierarchy root class. Can wrap any MLIR/CIRCT type, but can only
   do anything useful with types for which subclasses exist."""
   __slots__ = ["_type"]
 
+  # Dummy __init__ as everything is done in __new__.
   def __init__(self, type):
-    super().__init__(type)
-    self._type = circt.support.type_to_pytype(type)
+    pass
+
+  def __new__(cls, type):
+    if isinstance(type, Type):
+      return type
+    type = circt.support.type_to_pytype(type)
+    if isinstance(type, hw.ArrayType):
+      ret = super().__new__(ArrayType)
+    if isinstance(type, hw.StructType):
+      ret = super().__new__(StructType)
+    if isinstance(type, hw.TypeAliasType):
+      ret = super().__new__(TypeAliasType)
+    if isinstance(type, mlir.ir.IntegerType):
+      ret = super().__new__(BitVectorType)
+    if isinstance(type, esi.ChannelType):
+      ret = super().__new__(ChannelType)
+    if ret is None:
+      ret = super().__new__(Type)
+    ret._type = type
+    super().__init__(ret, type)
+    return ret
 
   @property
   def strip(self):
@@ -143,13 +151,6 @@ class Type(mlir.ir.Type):
     """Return the class which should be instantiated to create a Value."""
     return RegularValue
 
-  def get_value(self, value):
-    """Get a pycde.Value."""
-    # Separating out the instantiation from figuring out which Value class to
-    # instantiate allows us to support type aliases. They need to construct the
-    # Value class for their inner type, but with the type of the typealias.
-    return self._get_value_class()(value, self)
-
 
 class TypeAliasType(Type):
 
@@ -159,14 +160,14 @@ class TypeAliasType(Type):
 
   @property
   def inner_type(self):
-    return PyCDEType(self._type.inner_type)
+    return Type(self._type.inner_type)
 
   def __str__(self):
     return self.name
 
   @property
   def strip(self):
-    return PyCDEType(self._type.inner_type)
+    return Type(self._type.inner_type)
 
   def _get_value_class(self):
     return self.strip._get_value_class()
@@ -179,7 +180,7 @@ class ArrayType(Type):
 
   @property
   def element_type(self):
-    return PyCDEType(self._type.element_type)
+    return Type(self._type.element_type)
 
   @property
   def size(self):
@@ -204,7 +205,7 @@ class StructType(Type):
   def __getattr__(self, attrname: str):
     for field in self.fields:
       if field[0] == attrname:
-        return PyCDEType(self._type.get_field(attrname))
+        return Type(self._type.get_field(attrname))
     return super().__getattribute__(attrname)
 
   def _get_value_class(self):
@@ -233,12 +234,33 @@ class BitVectorType(Type):
     return BitVectorValue
 
 
+class ChannelType(Type):
+  """An ESI channel type."""
+
+  @property
+  def inner_type(self):
+    return Type(self._type.inner)
+
+  def _get_value_class(self):
+    return ChannelValue
+
+  def __str__(self):
+    return f"channel<{self.inner_type}>"
+
+  def wrap(self, value, valid):
+    from .support import _obj_to_value
+    value = _obj_to_value(value, self._type.inner)
+    valid = _obj_to_value(valid, types.i1)
+    wrap_op = esi.WrapValidReady(self._type, types.i1, value.value, valid.value)
+    return Value(wrap_op.chanOutput), BitVectorValue(wrap_op.ready, types.i1)
+
+
 def dim(inner_type_or_bitwidth, *size: int, name: str = None) -> ArrayType:
   """Creates a multidimensional array from innermost to outermost dimension."""
   if isinstance(inner_type_or_bitwidth, int):
-    ret = PyCDEType(mlir.ir.IntegerType.get_signless(inner_type_or_bitwidth))
+    ret = Type(mlir.ir.IntegerType.get_signless(inner_type_or_bitwidth))
   else:
     ret = inner_type_or_bitwidth
   for s in size:
-    ret = PyCDEType(hw.ArrayType.get(ret, s))
+    ret = Type(hw.ArrayType.get(ret, s))
   return types.wrap(ret, name)

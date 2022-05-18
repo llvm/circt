@@ -1,4 +1,4 @@
-// RUN: circt-opt -lower-firrtl-to-hw -split-input-file -verify-diagnostics %s
+// RUN: circt-opt -lower-firrtl-to-hw -verify-diagnostics %s
 
 firrtl.circuit "Div" {
 
@@ -17,7 +17,6 @@ firrtl.circuit "Div" {
   // COM: This is a memory with aggregates which is currently not
   // supported.
   firrtl.module @Div(in %clock1: !firrtl.clock, in %clock2: !firrtl.clock) {
-  // expected-error @+2 {{'firrtl.mem' should have simple type and known width}}
   // expected-error @+1 {{'firrtl.mem' op should have already been lowered from a ground type to an aggregate type using the LowerTypes pass}}
     %_M_read, %_M_write = firrtl.mem Undefined {depth = 20 : i64, name = "_M", portNames = ["read", "write"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<5>, en: uint<1>, clk: clock, data flip: bundle<id: uint<4>, other: sint<8>>>, !firrtl.bundle<addr: uint<5>, en: uint<1>, clk: clock, data: bundle<id: uint<4>, other: sint<8>>, mask: bundle<id: uint<1>, other: uint<1>>>
   }
@@ -33,7 +32,6 @@ firrtl.circuit "Div" {
   //         read-under-write => undefined
   // COM: This is an aggregate memory which is not supported.
   firrtl.module @MemOne() {
-  // expected-error @+2 {{'firrtl.mem' should have simple type and known width}}
   // expected-error @+1 {{'firrtl.mem' op should have already been lowered from a ground type to an aggregate type using the LowerTypes pass}}
     %_M_read, %_M_write = firrtl.mem Undefined {depth = 1 : i64, name = "_M", portNames=["read", "write"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: bundle<id: uint<4>, other: sint<8>>>, !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: bundle<id: uint<4>, other: sint<8>>, mask: bundle<id: uint<1>, other: uint<1>>>
   }
@@ -47,7 +45,6 @@ firrtl.circuit "Div" {
     %c0_ui4 = firrtl.constant 0 : !firrtl.uint<4>
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %c0_ui25 = firrtl.constant 0 : !firrtl.uint<25>
-  // expected-error @+1 {{'firrtl.mem' should have simple type and known width}}
     %tmp41_r0, %tmp41_w0 = firrtl.mem Undefined {depth = 10 : i64, name = "tmp41", portNames = ["r0", "w0"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<0>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<0>, mask: uint<1>>
     %0 = firrtl.subfield %tmp41_r0(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<0>>) -> !firrtl.clock
     firrtl.connect %0, %clock : !firrtl.clock, !firrtl.clock
@@ -64,29 +61,5 @@ firrtl.circuit "Div" {
     %6 = firrtl.subfield %tmp41_w0(4) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<0>, mask: uint<1>>) -> !firrtl.uint<1>
     firrtl.connect %6, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     %7 = firrtl.subfield %tmp41_w0(3) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<0>, mask: uint<1>>) -> !firrtl.uint<0>
-    firrtl.partialconnect %7, %c0_ui25 : !firrtl.uint<0>, !firrtl.uint<25>
-  }
-}
-
-// -----
-
-// Constant check should handle trivial cases.
-firrtl.circuit "Foo" {
-  // expected-note @+1 {{reset value defined here:}}
-  firrtl.module @Foo(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %v: !firrtl.uint<8>) {
-    // expected-warning @+1 {{register with async reset requires constant reset value}}
-    %0 = firrtl.regreset %clock, %reset, %v : !firrtl.asyncreset, !firrtl.uint<8>, !firrtl.uint<8>
-  }
-}
-
-// -----
-
-// Constant check should see through nodes.
-firrtl.circuit "Foo" {
-  firrtl.module @Foo(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %v: !firrtl.uint<8>) {
-    // expected-note @+1 {{reset value defined here:}}
-    %node = firrtl.node %v : !firrtl.uint<8>
-    // expected-warning @+1 {{register with async reset requires constant reset value}}
-    %1 = firrtl.regreset %clock, %reset, %node : !firrtl.asyncreset, !firrtl.uint<8>, !firrtl.uint<8>
   }
 }

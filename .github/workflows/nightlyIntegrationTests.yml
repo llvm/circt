@@ -13,8 +13,9 @@ jobs:
     name: Build and Test
     runs-on: ubuntu-18.04
     container:
-      image: ghcr.io/circt/images/circt-integration-test:v10.1
+      image: ghcr.io/circt/images/circt-integration-test:v10.2
     strategy:
+      fail-fast: false
       matrix:
         build-assert: [ON, OFF]
         build-shared: [ON, OFF]
@@ -76,6 +77,7 @@ jobs:
             -DLLVM_ENABLE_PROJECTS=mlir \
             -DLLVM_EXTERNAL_PROJECTS=circt \
             -DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=.. \
+            -DLLVM_TARGETS_TO_BUILD="host" \
             -DLLVM_USE_LINKER=lld \
             -DMLIR_ENABLE_BINDINGS_PYTHON=ON \
             -DCIRCT_BINDINGS_PYTHON_ENABLED=ON

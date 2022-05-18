@@ -1,7 +1,8 @@
 // RUN: circt-opt %s -export-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
 
 // CHECK-LABEL: module inputs_only(
-// CHECK-NEXT: input a, b);
+// CHECK-NEXT: input a, 
+// CHECK-NEXT:       b);
 hw.module @inputs_only(%a: i1, %b: i1) {
   hw.output
 }
@@ -14,9 +15,13 @@ hw.module @no_ports() {
 // CHECK-LABEL: module Expressions(
 // CHECK-NEXT:    input  [3:0]  in4,
 // CHECK-NEXT:    input         clock,
-// CHECK-NEXT:    output        out1a, out1b, out1c,
-// CHECK-NEXT:    output [3:0]  out4, out4s,
-// CHECK-NEXT:    output [15:0] out16, out16s,
+// CHECK-NEXT:    output        out1a,
+// CHECK-NEXT:                  out1b,
+// CHECK-NEXT:                  out1c,
+// CHECK-NEXT:    output [3:0]  out4,
+// CHECK-NEXT:                  out4s,
+// CHECK-NEXT:    output [15:0] out16,
+// CHECK-NEXT:                  out16s,
 // CHECK-NEXT:    output [16:0] sext17,
 // CHECK-NEXT:    output [1:0]  orvout);
 
@@ -293,6 +298,39 @@ hw.module @MultiUseExpr(%a: i4) -> (b0: i1, b1: i1, b2: i1, b3: i1, b4: i2) {
   hw.output %0, %3, %4, %5, %7 : i1, i1, i1, i1, i2
 }
 
+// CHECK-LABEL: module SimpleConstPrint(
+// CHECK-NEXT:    input  [3:0] in4,
+// CHECK-NEXT:    output [3:0] out4);
+// CHECK:  wire [3:0] w = 4'h1;
+// CHECK:  assign out4 = in4 + 4'h1;
+// CHECK-NEXT: endmodule
+hw.module @SimpleConstPrint(%in4: i4) -> (out4: i4) {
+  %w = sv.wire : !hw.inout<i4>
+  %c1_i4 = hw.constant 1 : i4
+  sv.assign %w, %c1_i4 : i4
+  %1 = comb.add %in4, %c1_i4 : i4
+  hw.output %1 : i4
+}
+
+// Use constants, don't fold them into wires
+// CHECK-LABEL: module SimpleConstPrintReset(
+// CHECK:  q <= 4'h1;
+hw.module @SimpleConstPrintReset(%clock: i1, %reset: i1, %in4: i4) -> () {
+  %w = sv.wire : !hw.inout<i4>
+  %q = sv.reg : !hw.inout<i4>
+  %c1_i4 = hw.constant 1 : i4
+  sv.assign %w, %c1_i4 : i4
+  sv.always posedge %clock, posedge %reset {
+    sv.if %reset {
+        sv.passign %q, %c1_i4 : i4
+      } else {
+        sv.passign %q, %in4 : i4
+      }
+    }
+    hw.output
+
+}
+
 hw.module.extern @MyExtModule(%in: i8) -> (out: i1) attributes {verilogName = "FooExtModule"}
 hw.module.extern @AParameterizedExtModule<CFG: none>(%in: i8) -> (out: i1)
 
@@ -357,20 +395,21 @@ hw.module @Stop(%clock: i1, %reset: i1) {
 
 // CHECK-LABEL: module Print
 hw.module @Print(%clock: i1, %reset: i1, %a: i4, %b: i4) {
+  %fd = hw.constant 0x80000002 : i32
   %false = hw.constant false
   %c1_i5 = hw.constant 1 : i5
 
   // CHECK: always @(posedge clock) begin
-  // CHECK:   if (`PRINTF_COND_ & reset)
+  // CHECK:   if ((`PRINTF_COND_) & reset)
   // CHECK:     $fwrite(32'h80000002, "Hi %x %x\n", {1'h0, a} << 5'h1, b);
   // CHECK: end // always @(posedge)
   %0 = comb.concat %false, %a : i1, i4
   %1 = comb.shl %0, %c1_i5 : i5
   sv.always posedge %clock  {
-    %2 = sv.verbatim.expr "`PRINTF_COND_" : () -> i1
+    %2 = sv.macro.ref<"PRINTF_COND_"> : i1
     %3 = comb.and %2, %reset : i1
     sv.if %3  {
-      sv.fwrite "Hi %x %x\0A"(%1, %b) : i5, i4
+      sv.fwrite %fd, "Hi %x %x\0A"(%1, %b) : i5, i4
     }
   }
   hw.output
@@ -456,7 +495,7 @@ sv.verbatim "{{0}} {{{0}}}" {symbols = [@CheckNestedBracesSymbol]}
 
 
 sv.bind #hw.innerNameRef<@BindEmission::@__BindEmissionInstance__> {output_file = #hw.output_file<"BindTest/BindEmissionInstance.sv", excludeFromFileList>}
-// CHECK-LABL: module BindEmissionInstance()
+// CHECK-LABEL: module BindEmissionInstance()
 hw.module @BindEmissionInstance() {
   hw.output
 }
@@ -469,9 +508,23 @@ hw.module @BindEmission() -> () {
   hw.output
 }
 
+// Check for instance name matching module name
+sv.bind #hw.innerNameRef<@BindEmission2::@BindEmissionInstance> {output_file = #hw.output_file<"BindTest/BindEmissionInstance2.sv", excludeFromFileList>}
+// CHECK-LABEL: module BindEmission2()
+hw.module @BindEmission2() -> () {
+  // CHECK-NEXT: /* This instance is elsewhere emitted as a bind statement
+  // CHECK-NEXT:    BindEmissionInstance BindEmissionInstance ();
+  // CHECK-NEXT: */
+  hw.instance "BindEmissionInstance" sym @BindEmissionInstance @BindEmissionInstance() -> ()  {doNotPrint = true}
+  hw.output
+}
+
+
 hw.module @bind_rename_port(%.io_req_ready.output: i1, %reset: i1, %clock: i1) {
   // CHECK-LABEL: module bind_rename_port
-  // CHECK-NEXT: input _io_req_ready_output, reset, clock
+  // CHECK-NEXT: input _io_req_ready_output,
+  // CHECK-NEXT:       reset,
+  // CHECK-NEXT:       clock
   hw.output
 }
 
@@ -482,11 +535,30 @@ hw.module @SiFive_MulDiv(%clock: i1, %reset: i1) -> (io_req_ready: i1) {
   hw.output %false : i1
 }
 
-sv.bind.interface @__Interface__ {output_file = #hw.output_file<"BindTest/BindInterface.sv", excludeFromFileList>}
+sv.bind.interface <@BindInterface::@__Interface__> {output_file = #hw.output_file<"BindTest/BindInterface.sv", excludeFromFileList>}
 sv.interface @Interface {
   sv.interface.signal @a : i1
   sv.interface.signal @b : i1
 }
+
+  hw.module.extern @W422_Bar() -> (clock: i1, reset: i1)
+  hw.module.extern @W422_Baz() -> (q: i1)
+// CHECK-LABEL: module W422_Foo
+// CHECK-NOT: GEN
+  hw.module @W422_Foo() {
+    %false = hw.constant false
+    %bar.clock, %bar.reset = hw.instance "bar" @W422_Bar() -> (clock: i1, reset: i1)
+    %baz.q = hw.instance "baz" @W422_Baz() -> (q: i1)
+    %q = sv.reg sym @__q__  : !hw.inout<i1>
+    sv.always posedge %bar.clock, posedge %bar.reset {
+      sv.if %bar.reset {
+        sv.passign %q, %false : i1
+      } else {
+        sv.passign %q, %baz.q : i1
+      }
+    }
+    hw.output
+  }
 
 hw.module @BindInterface() -> () {
   %bar = sv.interface.instance sym @__Interface__ {doNotPrint = true} : !sv.interface<@Interface>
@@ -501,6 +573,7 @@ hw.module @BindInterface() -> () {
 
 sv.bind #hw.innerNameRef<@SiFive_MulDiv::@__ETC_SiFive_MulDiv_assert>
 // CHECK-LABEL: bind SiFive_MulDiv bind_rename_port InvisibleBind_assert
-// CHECK-NEXT:  ._io_req_ready_output (InvisibleBind_assert__io_req_ready_output)
+// CHECK-NEXT:  ._io_req_ready_output (_InvisibleBind_assert__io_req_ready_output)
 // CHECK-NEXT:  .reset                (reset),
 // CHECK-NEXT:  .clock                (clock)
+

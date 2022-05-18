@@ -45,6 +45,7 @@ config.yosys_path = "@YOSYS_PATH@"
 config.quartus_path = "@QUARTUS_PATH@"
 config.vivado_path = "@VIVADO_PATH@"
 config.questa_path = "@QUESTA_PATH@"
+config.iverilog_path = "@IVERILOG_PATH@"
 config.esi_capnp = "@ESI_CAPNP@"
 config.bindings_python_enabled = @CIRCT_BINDINGS_PYTHON_ENABLED@
 config.bindings_tcl_enabled = @CIRCT_BINDINGS_TCL_ENABLED@

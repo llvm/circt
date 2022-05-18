@@ -130,7 +130,8 @@ class Operation;
 class OpFoldResult;
 class OpOperand;
 class OpResult;
-class OwningModuleRef;
+template <typename OpTy>
+class OwningOpRef;
 class ParseResult;
 class Pass;
 class PatternRewriter;
@@ -149,6 +150,7 @@ class TypeConverter;
 class TypeID;
 class TypeRange;
 class TypeStorage;
+class UnitAttr;
 class UnknownLoc;
 class Value;
 class ValueRange;
@@ -241,7 +243,7 @@ using mlir::OpFoldResult;              // NOLINT(misc-unused-using-decls)
 using mlir::OpOperand;                 // NOLINT(misc-unused-using-decls)
 using mlir::OpResult;                  // NOLINT(misc-unused-using-decls)
 using mlir::OpRewritePattern;          // NOLINT(misc-unused-using-decls)
-using mlir::OwningModuleRef;           // NOLINT(misc-unused-using-decls)
+using mlir::OwningOpRef;               // NOLINT(misc-unused-using-decls)
 using mlir::ParseResult;               // NOLINT(misc-unused-using-decls)
 using mlir::Pass;                      // NOLINT(misc-unused-using-decls)
 using mlir::PatternRewriter;           // NOLINT(misc-unused-using-decls)
@@ -263,6 +265,7 @@ using mlir::TypeConverter;             // NOLINT(misc-unused-using-decls)
 using mlir::TypeID;                    // NOLINT(misc-unused-using-decls)
 using mlir::TypeRange;                 // NOLINT(misc-unused-using-decls)
 using mlir::TypeStorage;               // NOLINT(misc-unused-using-decls)
+using mlir::UnitAttr;                  // NOLINT(misc-unused-using-decls)
 using mlir::UnknownLoc;                // NOLINT(misc-unused-using-decls)
 using mlir::Value;                     // NOLINT(misc-unused-using-decls)
 using mlir::ValueRange;                // NOLINT(misc-unused-using-decls)

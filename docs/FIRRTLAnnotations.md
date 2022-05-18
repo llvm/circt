@@ -263,28 +263,6 @@ Example:
 }
 ```
 
-### [BlackBoxResourceAnno](https://www.chisel-lang.org/api/firrtl/latest/firrtl/transforms/BlackBoxResourceAnno.html)
-
-| Property   | Type   | Description                              |
-| ---------- | ------ | -------------                            |
-| class      | string | `firrtl.transforms.BlackBoxResourceAnno` |
-| target     | string | An ExtModule name target                 |
-| path       | string | ModuleName target                        |
-
-Specifies the file `path` as source code for the module. In contrast to
-the `BlackBoxPathAnno`, the file is searched for in the black box resource
-search path. This is a remnant of the Scala origins of FIRRTL. Copies the
-file to the target directory.
-
-Example:
-```json
-{
-  "class": "firrtl.transforms.BlackBoxResourceAnno",
-  "target": "~Foo|Foo",
-  "resourceId": "myfile.v"
-}
-```
-
 ### [BlackBoxResourceFileNameAnno](https://www.chisel-lang.org/api/firrtl/latest/firrtl/transforms/BlackBoxResourceFileNameAnno.html)
 
 | Property         | Type   | Description                              |
@@ -336,6 +314,56 @@ Example:
 {
   "class": "sifive.enterprise.firrtl.ElaborationArtefactsDirectory",
   "dirname": "output/artefacts"
+}
+```
+
+### AddSeqMemPortAnnotation
+
+| Property | Type    | Description                                                   |
+| -------- | ------  | -------------                                                 |
+| class    | string  | `sifive.enterprise.firrtl.AddSeqMemPortAnnotation`            |
+| name     | string  | The name of the port to insert                                |
+| input    | bool    | If true this is an input port, otherwise it is an output port |
+| width    | integer | The width of the port                                         |
+
+This annotation causes an extra port to be added to all SRAMs modules in the
+DUT. The extra port is a regular module port of unsigned integer type with the
+specified width. These extra ports are commonly used to implement SRAM features
+not represented by the FIRRTL memory op, such as MBIST.  The added port will be
+wired to the DUT, where it will be tied to 0.
+
+Example:
+```json
+{
+  "class":"sifive.enterprise.firrtl.AddSeqMemPortAnnotation",
+  "name":"user_outputs",
+  "input":false,
+  "width":1
+}
+```
+
+### AddSeqMemPortsFileAnnotation
+
+| Property | Type   | Description                                             |
+| -------- | ------ | -------------                                           |
+| class    | string | `sifive.enterprise.firrtl.AddSeqMemPortsFileAnnotation` |
+| filename | string | The filename to output to                               |
+
+This annotation is used to emit metadata about the extra ports created by
+`AddSeqMemPortAnnotation`.  This file is emitted relative to the
+`MetadataDirAnnotation`. The file lists each SRAM and provides the mapping to
+where it is in the hierarchy, and gives its IO prefix at the DUT top level.
+
+```
+0 -> Dut.submodule.sram0.sram0_ext
+1 -> Dut.submodule.sram1.sram1_ext
+```
+
+Example:
+```json
+{
+  "class":"sifive.enterprise.firrtl.AddSeqMemPortsFileAnnotation",
+  "filename":"SRAMPorts.txt"
 }
 ```
 
@@ -417,6 +445,30 @@ Example:
 }
 ```
 
+### InjectDUTHierarchyAnnotation
+
+| Property | Type   | Description                                             |
+|----------|--------|---------------------------------------------------------|
+| class    | string | `sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation` |
+| name     | string | The name of the module containing original DUT logic    |
+
+This annotation can be used to add an extra level of hierarchy in the design
+under the DUT (indicated with a `MarkDUTAnnotation`).  All logic in the original
+DUT will be moved into a module with the specified `name`.  This is typically
+used in combination with `ExtractBlackBoxAnnotation` (or with passes that add
+these annotations to extract components like clock gates or memories) to not
+intermix the original DUT contents with extracted module instantiations.
+
+This annotation should only appear zero or once.
+
+Example:
+``` json
+{
+  "class": "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation",
+  "name": "Logic"
+}
+```
+
 ### [InlineAnnotation](https://www.chisel-lang.org/api/firrtl/latest/firrtl/passes/InlineAnnotation.html)
 
 | Property   | Type   | Description                      |
@@ -487,6 +539,27 @@ Example:
 {
   "class": "sifive.enterprise.firrtl.ModuleHierarchyAnnotation",
   "filename": "./dir/hier.json"
+}
+```
+
+### MustDeduplicateAnnotation
+
+| Property   | Type   | Description                                      |
+| ---------- | ------ | -------------                                    |
+| class      | string | `firrtl.transforms.MustDeduplicateAnnotation`    |
+| modules    | array  | A list of module targets which must deduplicate. |
+
+This annotation causes the deduplication pass to check that the listed modules
+are deduplicated with each other.
+
+Example:
+```json
+{
+  "class":"firrtl.transforms.MustDeduplicateAnnotation",
+  "modules":[
+    "~Top|A"
+    "~Top|B"
+  ]
 }
 ```
 
@@ -621,7 +694,7 @@ Example:
 
 | Property   | Type   | Description                                              |
 | ---------- | ------ | -------------                                            |
-| class      | string | `sifive.enterprise.firrtl.RetimeModuleAnnotation` |
+| class      | string | `freechips.rocketchip.util.RetimeModuleAnnotation` |
 
 This annotation is used to mark modules which should be retimed, and is
 generally just passed through to other tools.
@@ -629,7 +702,7 @@ generally just passed through to other tools.
 Example:
 ```json
 {
-    "class": "sifive.enterprise.firrtl.RetimeModuleAnnotation"
+    "class": "freechips.rocketchip.util.RetimeModuleAnnotation"
 }
 ```
 
@@ -800,6 +873,90 @@ Example:
 {
   "class": "sifive.enterprise.firrtl.TestHarnessHierarchyAnnotation",
   "filename": "./dir/hier.json"
+}
+```
+
+### Instance Extraction
+
+#### ExtractBlackBoxAnnotation
+
+| Property    | Type   | Description                                                                 |
+| --------    | ----   | -----------                                                                 |
+| class       | string | `sifive.enterprise.firrtl.ExtractBlackBoxAnnotation`                        |
+| target      | string | Reference target to the instance to be extracted                            |
+| filename    | string | Output file to be filled with the applied hierarchy changes                 |
+| prefix      | string | Prefix for the extracted instance                                           |
+| dest        | string | Name of an optional wrapper module under which to group extracted instances |
+
+This annotation causes the `ExtractInstances` pass to move the annotated
+instance, or all instances if the annotation is on a module, upwards in the
+hierarchy. If the `dest` field is present and non-empty, the instances are
+placed in a module underneath the DUT (marked by `MarkDUTAnnotation`) with the
+name provided in that field. If the `dest` field is empty, the instances are
+extracted out of the DUT, such that the DUT gains additional ports that
+correspond to the extracted instance ports. This allows the DUT to be
+instantiated and custom implementations for the extracted instances to be
+provided at the instantiation site. Instances are never extracted out of the
+root module of the design.
+
+Applies to modules and instances.
+
+Example:
+```json
+{
+  "class": "sifive.enterprise.firrtl.ExtractBlackBoxAnnotation",
+  "target": "~TestHarness|MyBlackBox",
+  "filename": "BlackBoxes.txt",
+  "prefix": "bb",
+  "dest": "BlackBoxes" // optional
+}
+```
+
+#### ExtractClockGatesFileAnnotation
+
+| Property    | Type   | Description                                                                 |
+| --------    | ----   | -----------                                                                 |
+| class       | string | `sifive.enterprise.firrtl.ExtractClockGatesFileAnnotation`                  |
+| filename    | string | Output file to be filled with the applied hierarchy changes                 |
+| group       | string | Name of an optional wrapper module under which to group extracted instances |
+
+This annotation causes the `ExtractInstances` pass to move instances of
+extmodules with defname `EICG_wrapper` upwards in the hierarchy, either out of
+the DUT if `group` is omitted or empty, or into a submodule of the DUT with the
+name given in `group`. The wiring prefix is hard-coded to `clock_gate`.
+
+Applies to the circuit.
+
+Example:
+```json
+{
+  "class": "sifive.enterprise.firrtl.ExtractClockGatesFileAnnotation",
+  "filename": "ClockGates.txt",
+  "group": "ClockGates" // optional
+}
+```
+
+#### ExtractSeqMemsFileAnnotation
+
+| Property    | Type   | Description                                                                 |
+| --------    | ----   | -----------                                                                 |
+| class       | string | `sifive.enterprise.firrtl.ExtractSeqMemsFileAnnotation`                  |
+| filename    | string | Output file to be filled with the applied hierarchy changes                 |
+| group       | string | Name of an optional wrapper module under which to group extracted instances |
+
+This annotation causes the `ExtractInstances` pass to move memory instances
+upwards in the hierarchy, either out of the DUT if `group` is omitted or empty,
+or into a submodule of the DUT with the name given in `group`. The wiring
+prefix is hard-coded to `mem_wiring`.
+
+Applies to the circuit.
+
+Example:
+```json
+{
+  "class": "sifive.enterprise.firrtl.ExtractSeqMemsFileAnnotation",
+  "filename": "SeqMems.txt",
+  "group": "SeqMems" // optional
 }
 ```
 
@@ -1268,7 +1425,8 @@ section describes well-defined attributes used by HW/SV passes.
 ### firrtl.moduleHierarchyFile
 
 Used by HWExportModuleHierarchy.  Signifies a root from which to dump the module
-hierarchy as a json file. This attribute has type OutputFileAttr.
+hierarchy as a json file. This attribute is a list of files to output to, and
+has type `ArraAttr<OutputFileAttr>`.
 
 The exported JSON file encodes a recursive tree of module instances as JSON
 objects, with each object containing the following members:
@@ -1282,32 +1440,32 @@ objects, with each object containing the following members:
 ### firrtl.extract.assert
 
 Used by SVExtractTestCode.  Specifies the output directory for extracted
-modules. This attribute has type OutputFileAttr.
+modules. This attribute has type `OutputFileAttr`.
 
 ### firrtl.extract.assume
 
 Used by SVExtractTestCode.  Specifies the output directory for extracted
-modules. This attribute has type OutputFileAttr.
+modules. This attribute has type `OutputFileAttr`.
 
 ### firrtl.extract.cover
 
 Used by SVExtractTestCode.  Specifies the output directory for extracted
-modules. This attribute has type OutputFileAttr.
+modules. This attribute has type `OutputFileAttr`.
 
 ### firrtl.extract.assert.bindfile
 
 Used by SVExtractTestCode.  Specifies the output file for extracted
-modules' bind file. This attribute has type OutputFileAttr.
+modules' bind file. This attribute has type `OutputFileAttr`.
 
 ### firrtl.extract.assume.bindfile
 
 Used by SVExtractTestCode.  Specifies the output file for extracted
-modules' bind file. This attribute has type OutputFileAttr.
+modules' bind file. This attribute has type `OutputFileAttr`.
 
 ### firrtl.extract.cover.bindfile
 
 Used by SVExtractTestCode.  Specifies the output file for extracted
-modules' bind file. This attribute has type OutputFileAttr.
+modules' bind file. This attribute has type `OutputFileAttr`.
 
 ### firrtl.extract.[cover|assume|assert].extra
 

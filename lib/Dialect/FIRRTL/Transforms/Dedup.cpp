@@ -11,17 +11,22 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
+#include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
-#include "circt/Dialect/FIRRTL/InstanceGraph.h"
+#include "circt/Dialect/FIRRTL/NLATable.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Support/LLVM.h"
+#include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/Support/LogicalResult.h"
+#include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/DenseMapInfo.h"
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/PostOrderIterator.h"
-#include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/SHA256.h"
@@ -29,19 +34,6 @@
 using namespace circt;
 using namespace firrtl;
 using hw::InnerRefAttr;
-
-/// This stores a mapping from a module name to every NLA that it particiapates
-/// in.
-using NLAMap = DenseMap<Attribute, std::vector<NonLocalAnchor>>;
-
-NLAMap createNLAMap(CircuitOp circuit) {
-  NLAMap nlaMap;
-  for (auto nla : circuit.getBody()->getOps<NonLocalAnchor>()) {
-    for (size_t i = 0, e = nla.namepath().size(); i != e; ++i)
-      nlaMap[nla.modPart(i)].push_back(nla);
-  }
-  return nlaMap;
-}
 
 //===----------------------------------------------------------------------===//
 // Hashing
@@ -54,10 +46,7 @@ llvm::raw_ostream &printHex(llvm::raw_ostream &stream,
 }
 
 llvm::raw_ostream &printHash(llvm::raw_ostream &stream, llvm::SHA256 &data) {
-  auto string = data.result();
-  ArrayRef bytes(reinterpret_cast<const uint8_t *>(string.begin()),
-                 string.size());
-  return printHex(stream, bytes);
+  return printHex(stream, data.result());
 }
 
 llvm::raw_ostream &printHash(llvm::raw_ostream &stream, std::string data) {
@@ -68,19 +57,19 @@ llvm::raw_ostream &printHash(llvm::raw_ostream &stream, std::string data) {
 
 struct StructuralHasher {
   explicit StructuralHasher(MLIRContext *context) {
+    portTypesAttr = StringAttr::get(context, "portTypes");
     nonessentialAttributes.insert(StringAttr::get(context, "annotations"));
     nonessentialAttributes.insert(StringAttr::get(context, "name"));
     nonessentialAttributes.insert(StringAttr::get(context, "portAnnotations"));
     nonessentialAttributes.insert(StringAttr::get(context, "portNames"));
     nonessentialAttributes.insert(StringAttr::get(context, "portSyms"));
-    nonessentialAttributes.insert(StringAttr::get(context, "portTypes"));
     nonessentialAttributes.insert(StringAttr::get(context, "sym_name"));
     nonessentialAttributes.insert(StringAttr::get(context, "inner_sym"));
   };
 
-  std::string hash(FModuleLike module) {
+  std::array<uint8_t, 32> hash(FModuleLike module) {
     update(&(*module));
-    auto hash = sha.final().str();
+    auto hash = sha.final();
     reset();
     return hash;
   }
@@ -104,6 +93,7 @@ private:
 
   void update(TypeID typeID) { update(typeID.getAsOpaquePointer()); }
 
+  // NOLINTNEXTLINE(misc-no-recursion)
   void update(BundleType type) {
     update(type.getTypeID());
     for (auto &element : type.getElements()) {
@@ -112,17 +102,14 @@ private:
     }
   }
 
+  // NOLINTNEXTLINE(misc-no-recursion)
   void update(Type type) {
     if (auto bundle = type.dyn_cast<BundleType>())
       return update(bundle);
     update(type.getAsOpaquePointer());
   }
 
-  void update(BlockArgument arg) {
-    indexes[arg] = currentIndex++;
-    update(arg.getArgNumber());
-    update(arg.getType());
-  }
+  void update(BlockArgument arg) { indexes[arg] = currentIndex++; }
 
   void update(OpResult result) {
     indexes[result] = currentIndex++;
@@ -139,12 +126,20 @@ private:
   void update(DictionaryAttr dict) {
     for (auto namedAttr : dict) {
       auto name = namedAttr.getName();
+      auto value = namedAttr.getValue();
       // Skip names and annotations.
       if (nonessentialAttributes.contains(name))
         continue;
+      // Hash the port types.
+      if (name == portTypesAttr) {
+        auto portTypes = value.cast<ArrayAttr>().getAsValueRange<TypeAttr>();
+        for (auto type : portTypes)
+          update(type);
+        continue;
+      }
       // Hash the interned pointer.
       update(name.getAsOpaquePointer());
-      update(namedAttr.getValue().getAsOpaquePointer());
+      update(value.getAsOpaquePointer());
     }
   }
 
@@ -186,10 +181,362 @@ private:
 
   // This is a set of every attribute we should ignore.
   DenseSet<Attribute> nonessentialAttributes;
+  // This is a cached "portTypes" string attr.
+  StringAttr portTypesAttr;
 
   // This is the actual running hash calculation. This is a stateful element
   // that should be reinitialized after each hash is produced.
   llvm::SHA256 sha;
+};
+
+//===----------------------------------------------------------------------===//
+// Equivalence
+//===----------------------------------------------------------------------===//
+
+/// This class is for reporting differences between two modules which should
+/// have been deduplicated.
+struct Equivalence {
+  Equivalence(MLIRContext *context, InstanceGraph &instanceGraph)
+      : instanceGraph(instanceGraph) {
+    noDedupClass =
+        StringAttr::get(context, "firrtl.transforms.NoDedupAnnotation");
+    portTypesAttr = StringAttr::get(context, "portTypes");
+    nonessentialAttributes.insert(StringAttr::get(context, "annotations"));
+    nonessentialAttributes.insert(StringAttr::get(context, "name"));
+    nonessentialAttributes.insert(StringAttr::get(context, "portAnnotations"));
+    nonessentialAttributes.insert(StringAttr::get(context, "portNames"));
+    nonessentialAttributes.insert(StringAttr::get(context, "portTypes"));
+    nonessentialAttributes.insert(StringAttr::get(context, "portSyms"));
+    nonessentialAttributes.insert(StringAttr::get(context, "sym_name"));
+    nonessentialAttributes.insert(StringAttr::get(context, "inner_sym"));
+  }
+
+  // NOLINTNEXTLINE(misc-no-recursion)
+  LogicalResult check(InFlightDiagnostic &diag, const Twine &message,
+                      Operation *a, BundleType aType, Operation *b,
+                      BundleType bType) {
+    if (aType.getNumElements() != bType.getNumElements()) {
+      diag.attachNote(a->getLoc())
+          << message << " bundle type has different number of elements";
+      diag.attachNote(b->getLoc()) << "second operation here";
+      return failure();
+    }
+
+    for (auto elementPair :
+         llvm::zip(aType.getElements(), bType.getElements())) {
+      auto aElement = std::get<0>(elementPair);
+      auto bElement = std::get<1>(elementPair);
+      if (aElement.isFlip != bElement.isFlip) {
+        diag.attachNote(a->getLoc()) << message << " bundle element "
+                                     << aElement.name << " flip does not match";
+        diag.attachNote(b->getLoc()) << "second operation here";
+        return failure();
+      }
+
+      if (failed(check(diag,
+                       "bundle element \'" + aElement.name.getValue() + "'", a,
+                       aElement.type, b, bElement.type)))
+        return failure();
+    }
+    return success();
+  }
+
+  LogicalResult check(InFlightDiagnostic &diag, const Twine &message,
+                      Operation *a, Type aType, Operation *b, Type bType) {
+    if (aType == bType)
+      return success();
+    if (aType.isa<BundleType>() && bType.isa<BundleType>())
+      return check(diag, message, a, aType.cast<BundleType>(), b,
+                   bType.cast<BundleType>());
+    diag.attachNote(a->getLoc())
+        << message << " types don't match, first type is " << aType;
+    diag.attachNote(b->getLoc()) << "second type is " << bType;
+    return failure();
+  }
+
+  LogicalResult check(InFlightDiagnostic &diag, BlockAndValueMapping &map,
+                      Operation *a, Block &aBlock, Operation *b,
+                      Block &bBlock) {
+
+    // Block Arguments.
+    if (aBlock.getNumArguments() != bBlock.getNumArguments()) {
+      diag.attachNote(a->getLoc())
+          << "modules have a different number of ports";
+      diag.attachNote(b->getLoc()) << "second module here";
+      return failure();
+    }
+
+    // Block argument types.
+    auto portNames = a->getAttrOfType<ArrayAttr>("portNames");
+    auto portNo = 0;
+    for (auto argPair :
+         llvm::zip(aBlock.getArguments(), bBlock.getArguments())) {
+      auto &aArg = std::get<0>(argPair);
+      auto &bArg = std::get<1>(argPair);
+      // TODO: we should print the port number if there are no port names, but
+      // there are always port names ;).
+      StringRef portName;
+      if (portNames) {
+        if (auto portNameAttr = portNames[portNo].dyn_cast<StringAttr>())
+          portName = portNameAttr.getValue();
+      }
+      // Assumption here that block arguments correspond to ports.
+      if (failed(check(diag, "module port '" + portName + "'", a,
+                       aArg.getType(), b, bArg.getType())))
+        return failure();
+      map.map(aArg, bArg);
+      portNo++;
+    }
+
+    // Blocks operations.
+    auto aIt = aBlock.begin();
+    auto aEnd = aBlock.end();
+    auto bIt = bBlock.begin();
+    auto bEnd = bBlock.end();
+    while (aIt != aEnd && bIt != bEnd)
+      if (failed(check(diag, map, &*aIt++, &*bIt++)))
+        return failure();
+    if (aIt != aEnd) {
+      diag.attachNote(aIt->getLoc()) << "first block has more operations";
+      diag.attachNote(b->getLoc()) << "second block here";
+      return failure();
+    }
+    if (bIt != bEnd) {
+      diag.attachNote(bIt->getLoc()) << "second block has more operations";
+      diag.attachNote(a->getLoc()) << "first block here";
+      return failure();
+    }
+    return success();
+  }
+
+  LogicalResult check(InFlightDiagnostic &diag, BlockAndValueMapping &map,
+                      Operation *a, Region &aRegion, Operation *b,
+                      Region &bRegion) {
+    auto aIt = aRegion.begin();
+    auto aEnd = aRegion.end();
+    auto bIt = bRegion.begin();
+    auto bEnd = bRegion.end();
+
+    // Region blocks.
+    while (aIt != aEnd && bIt != bEnd)
+      if (failed(check(diag, map, a, *aIt++, b, *bIt++)))
+        return failure();
+    if (aIt != aEnd || bIt != bEnd) {
+      diag.attachNote(a->getLoc())
+          << "operation regions have different number of blocks";
+      diag.attachNote(b->getLoc()) << "second operation here";
+      return failure();
+    }
+    return success();
+  }
+
+  LogicalResult check(InFlightDiagnostic &diag, Operation *a, IntegerAttr aAttr,
+                      Operation *b, IntegerAttr bAttr) {
+    if (aAttr == bAttr)
+      return success();
+    auto aDirections = direction::unpackAttribute(aAttr);
+    auto bDirections = direction::unpackAttribute(bAttr);
+    auto portNames = a->getAttrOfType<ArrayAttr>("portNames");
+    for (unsigned i = 0, e = aDirections.size(); i < e; ++i) {
+      auto aDirection = aDirections[i];
+      auto bDirection = bDirections[i];
+      if (aDirection != bDirection) {
+        auto &note = diag.attachNote(a->getLoc()) << "module port ";
+        if (portNames)
+          note << "'" << portNames[i].cast<StringAttr>().getValue() << "'";
+        else
+          note << i;
+        note << " directions don't match, first direction is '"
+             << direction::toString(aDirection) << "'";
+        diag.attachNote(b->getLoc()) << "second direction is '"
+                                     << direction::toString(bDirection) << "'";
+        return failure();
+      }
+    }
+    return success();
+  }
+
+  LogicalResult check(InFlightDiagnostic &diag, BlockAndValueMapping &map,
+                      Operation *a, DictionaryAttr aDict, Operation *b,
+                      DictionaryAttr bDict) {
+    // Fast path.
+    if (aDict == bDict)
+      return success();
+
+    DenseSet<Attribute> seenAttrs;
+    for (auto namedAttr : aDict) {
+      auto attrName = namedAttr.getName();
+      if (nonessentialAttributes.contains(attrName))
+        continue;
+
+      auto aAttr = namedAttr.getValue();
+      auto bAttr = bDict.get(attrName);
+      if (!bAttr) {
+        diag.attachNote(a->getLoc())
+            << "second operation is missing attribute " << attrName;
+        diag.attachNote(b->getLoc()) << "second operation here";
+        return diag;
+      }
+
+      if (attrName == "portDirections") {
+        // Special handling for the port directions attribute for better
+        // error messages.
+        if (failed(check(diag, a, aAttr.cast<IntegerAttr>(), b,
+                         bAttr.cast<IntegerAttr>())))
+          return failure();
+      } else if (aAttr != bAttr) {
+        diag.attachNote(a->getLoc())
+            << "first operation has attribute '" << attrName.getValue()
+            << "' with value " << aAttr;
+        diag.attachNote(b->getLoc()) << "second operation has value " << bAttr;
+        return failure();
+      }
+      seenAttrs.insert(attrName);
+    }
+    if (aDict.getValue().size() != bDict.getValue().size()) {
+      for (auto namedAttr : bDict) {
+        auto attrName = namedAttr.getName();
+        // Skip the attribute if we don't care about this particular one or it
+        // is one that is known to be in both dictionaries.
+        if (nonessentialAttributes.contains(attrName) ||
+            seenAttrs.contains(attrName))
+          continue;
+        // We have found an attribute that is only in the second operation.
+        diag.attachNote(a->getLoc())
+            << "first operation is missing attribute " << attrName;
+        diag.attachNote(b->getLoc()) << "second operation here";
+        return failure();
+      }
+    }
+    return success();
+  }
+
+  // NOLINTNEXTLINE(misc-no-recursion)
+  LogicalResult check(InFlightDiagnostic &diag, InstanceOp a, InstanceOp b) {
+    auto aName = a.moduleNameAttr().getAttr();
+    auto bName = b.moduleNameAttr().getAttr();
+    // If the modules instantiate are different we will want to know why the
+    // sub module did not dedupliate. This code recursively checks the child
+    // module.
+    if (aName != bName) {
+      diag.attachNote(a->getLoc()) << "first instance targets module " << aName;
+      diag.attachNote(b->getLoc())
+          << "second instance targets module " << bName;
+      diag.report();
+      auto aModule = instanceGraph.getReferencedModule(a);
+      auto bModule = instanceGraph.getReferencedModule(b);
+      // Create a new error for the submodule.
+      auto newDiag = emitError(aModule->getLoc())
+                     << "module " << aName << " not deduplicated with "
+                     << bName;
+      check(newDiag, aModule, bModule);
+      return failure();
+    }
+    return success();
+  }
+
+  // NOLINTNEXTLINE(misc-no-recursion)
+  LogicalResult check(InFlightDiagnostic &diag, BlockAndValueMapping &map,
+                      Operation *a, Operation *b) {
+    // Operation name.
+    if (a->getName() != b->getName()) {
+      diag.attachNote(a->getLoc()) << "first operation is a " << a->getName();
+      diag.attachNote(b->getLoc()) << "second operation is a " << b->getName();
+      return failure();
+    }
+
+    // If its an instance operaiton, perform some checking and possibly
+    // recurse.
+    if (auto aInst = dyn_cast<InstanceOp>(a)) {
+      auto bInst = cast<InstanceOp>(b);
+      if (failed(check(diag, aInst, bInst)))
+        return failure();
+    }
+
+    // Operation results.
+    if (a->getNumResults() != b->getNumResults()) {
+      diag.attachNote(a->getLoc())
+          << "operations have different number of results";
+      diag.attachNote(b->getLoc()) << "second operation here";
+      return failure();
+    }
+    for (auto resultPair : llvm::zip(a->getResults(), b->getResults())) {
+      auto &aValue = std::get<0>(resultPair);
+      auto &bValue = std::get<1>(resultPair);
+      if (failed(check(diag, "operation result", a, aValue.getType(), b,
+                       bValue.getType())))
+        return failure();
+      map.map(aValue, bValue);
+    }
+
+    // Operations operands.
+    if (a->getNumOperands() != b->getNumOperands()) {
+      diag.attachNote(a->getLoc())
+          << "operations have different number of operands";
+      diag.attachNote(b->getLoc()) << "second operation here";
+      return failure();
+    }
+    for (auto operandPair : llvm::zip(a->getOperands(), b->getOperands())) {
+      auto &aValue = std::get<0>(operandPair);
+      auto &bValue = std::get<1>(operandPair);
+      if (bValue != map.lookup(aValue)) {
+        diag.attachNote(a->getLoc())
+            << "operations use different operands, first operand is '"
+            << getFieldName(getFieldRefFromValue(aValue)) << "'";
+        diag.attachNote(b->getLoc())
+            << "second operand is '"
+            << getFieldName(getFieldRefFromValue(bValue))
+            << "', but should have been '"
+            << getFieldName(getFieldRefFromValue(map.lookup(aValue))) << "'";
+        return failure();
+      }
+    }
+
+    // Operation regions.
+    if (a->getNumRegions() != b->getNumRegions()) {
+      diag.attachNote(a->getLoc())
+          << "operations have different number of regions";
+      diag.attachNote(b->getLoc()) << "second operation here";
+      return failure();
+    }
+    for (auto regionPair : llvm::zip(a->getRegions(), b->getRegions())) {
+      auto &aRegion = std::get<0>(regionPair);
+      auto &bRegion = std::get<1>(regionPair);
+      if (failed(check(diag, map, a, aRegion, b, bRegion)))
+        return failure();
+    }
+
+    // Operation attributes.
+    if (failed(check(diag, map, a, a->getAttrDictionary(), b,
+                     b->getAttrDictionary())))
+      return failure();
+    return success();
+  }
+
+  // NOLINTNEXTLINE(misc-no-recursion)
+  void check(InFlightDiagnostic &diag, Operation *a, Operation *b) {
+    BlockAndValueMapping map;
+    if (AnnotationSet(a).hasAnnotation(noDedupClass)) {
+      diag.attachNote(a->getLoc()) << "module marked NoDedup";
+      return;
+    }
+    if (AnnotationSet(b).hasAnnotation(noDedupClass)) {
+      diag.attachNote(b->getLoc()) << "module marked NoDedup";
+      return;
+    }
+    if (failed(check(diag, map, a, b)))
+      return;
+    diag.attachNote(a->getLoc()) << "first module here";
+    diag.attachNote(b->getLoc()) << "second module here";
+  }
+
+  // This is a cached "portTypes" string attr.
+  StringAttr portTypesAttr;
+  // This is a cached "NoDedup" annotation class string attr.
+  StringAttr noDedupClass;
+  // This is a set of every attribute we should ignore.
+  DenseSet<Attribute> nonessentialAttributes;
+  InstanceGraph &instanceGraph;
 };
 
 //===----------------------------------------------------------------------===//
@@ -201,9 +548,10 @@ struct Deduper {
   using RenameMap = DenseMap<StringAttr, StringAttr>;
 
   Deduper(InstanceGraph &instanceGraph, SymbolTable &symbolTable,
-          NLAMap &nlaMap, CircuitOp circuit)
+          NLATable *nlaTable, CircuitOp circuit)
       : context(circuit->getContext()), instanceGraph(instanceGraph),
-        symbolTable(symbolTable), nlaMap(nlaMap), nlaBlock(circuit.getBody()),
+        symbolTable(symbolTable), nlaTable(nlaTable),
+        nlaBlock(circuit.getBody()),
         nonLocalString(StringAttr::get(context, "circt.nonlocal")),
         classString(StringAttr::get(context, "class")) {}
 
@@ -223,13 +571,9 @@ struct Deduper {
     if (auto to = dyn_cast<FModuleOp>(*toModule))
       rewriteModuleNLAs(renameMap, to, cast<FModuleOp>(*fromModule));
     else
-      rewriteExtModuleNLAs(toModule.moduleNameAttr(),
+      rewriteExtModuleNLAs(renameMap, toModule.moduleNameAttr(),
                            fromModule.moduleNameAttr());
-
-    // Replace all instance of one module with the other.  If the module returns
-    // a different bundle type we have to fix up anything connecting to an
-    // instance of it.
-    fixupReferences(toModule, fromModule);
+    replaceInstances(toModule, fromModule);
   }
 
   /// Record the usages of any NLA's in this module, so that we may update the
@@ -277,180 +621,19 @@ private:
           targetMap[nlaRef.getAttr()] = PortAnnoTarget(mem, pair.index());
   }
 
-  /// This fixes up connects when the field names of a bundle type changes.  It
-  /// finds all fields which were previously bulk connected and legalizes it
-  /// into a connect for each field.
-  void fixupConnect(ImplicitLocOpBuilder &builder, Value dst, Type dstType,
-                    Value src, Type srcType) {
-    // If its not a bundle type, the types are guaranteed to be unchanged.  If
-    // it is a bundle type, we would rather bulk-connect the values instead of
-    // decomposing the connect if the type is unchanged.
-    if (dstType == dst.getType() && srcType == src.getType()) {
-      builder.create<ConnectOp>(dst, src);
-      return;
-    }
-    // It must be a bundle type and the field name has changed. We have to
-    // manually decompose the bulk connect into a connect for each field.
-    auto dstBundle = dstType.cast<BundleType>();
-    auto srcBundle = srcType.cast<BundleType>();
-    for (unsigned i = 0; i < dstBundle.getNumElements(); ++i) {
-      auto dstField = builder.create<SubfieldOp>(dst, i);
-      auto srcField = builder.create<SubfieldOp>(src, i);
-      if (dstBundle.getElement(i).isFlip) {
-        std::swap(srcBundle, dstBundle);
-        std::swap(srcField, dstField);
-      }
-      fixupConnect(builder, dstField, dstBundle.getElementType(i), srcField,
-                   srcBundle.getElementType(i));
-    }
-  }
-
-  /// This fixes up a partial connect when the field names of a bundle type
-  /// changes.  It finds all the fields which were previously connected and
-  /// replaces them with new partial connects.
-  using LazyValue = std::function<Value(ImplicitLocOpBuilder &)>;
-  // NOLINTNEXTLINE(misc-no-recursion)
-  void fixupPartialConnect(ImplicitLocOpBuilder &builder, LazyValue dst,
-                           Type dstNewType, Type dstOldType, LazyValue src,
-                           Type srcNewType, Type srcOldType) {
-    // If the types didn't change, just emit a partial connect.
-    if (dstOldType == dstNewType && srcOldType == srcNewType) {
-      auto dstField = dst(builder);
-      auto srcField = src(builder);
-      builder.create<PartialConnectOp>(dstField, srcField);
-      return;
-    }
-    // Check if they are bundle types.
-    if (auto dstOldBundle = dstOldType.dyn_cast<BundleType>()) {
-      auto dstNewBundle = dstOldType.cast<BundleType>();
-      auto srcNewBundle = dstNewType.cast<BundleType>();
-      auto srcOldBundle = srcOldType.cast<BundleType>();
-      for (auto &pair : llvm::enumerate(dstOldBundle)) {
-        // Find a matching field in the old type.
-        auto dstField = pair.value();
-        auto maybeIndex = srcOldBundle.getElementIndex(dstField.name);
-        if (!maybeIndex)
-          continue;
-        auto dstIndex = pair.index();
-        auto srcIndex = *maybeIndex;
-        // Recurse on the matching field. The code is complicated because we are
-        // trying to avoid creating subfield operations when no field ultimately
-        // matches.
-        Value dstValue;
-        LazyValue dstLazy = [&](ImplicitLocOpBuilder &builder) -> Value {
-          if (!dstValue)
-            dstValue = builder.create<SubfieldOp>(dst(builder), dstIndex);
-          return dstValue;
-        };
-        auto dstNewElement = dstNewBundle.getElementType(dstIndex);
-        auto dstOldElement = dstOldBundle.getElementType(dstIndex);
-        Value srcValue;
-        LazyValue srcLazy = [&](ImplicitLocOpBuilder &builder) -> Value {
-          if (!srcValue)
-            srcValue = builder.create<SubfieldOp>(src(builder), srcIndex);
-          return srcValue;
-        };
-        auto srcNewElement = srcNewBundle.getElementType(srcIndex);
-        auto srcOldElement = srcOldBundle.getElementType(srcIndex);
-        if (dstField.isFlip) {
-          std::swap(srcLazy, dstLazy);
-          std::swap(srcNewElement, dstNewElement);
-          std::swap(srcOldElement, dstOldElement);
-        }
-        fixupPartialConnect(builder, dstLazy, dstNewElement, dstOldElement,
-                            srcLazy, srcNewElement, srcOldElement);
-      }
-      return;
-    }
-    // If its not a bundle type, just replace it with a partial connect.
-    builder.create<PartialConnectOp>(dst(builder), src(builder));
-  }
-
-  /// When we replace a bundle type with a similar bundle with different field
-  /// names, we have to rewrite all the code to use the new field names. This
-  /// mostly affects subfield result types and any bulk connects.
-  // NOLINTNEXTLINE(misc-no-recursion)
-  void fixupReferences(Value newValue, Type oldType) {
-    SmallVector<std::pair<Value, Type>> workList;
-    workList.emplace_back(newValue, oldType);
-    while (!workList.empty()) {
-      auto [newValue, oldType] = workList.pop_back_val();
-      auto newType = newValue.getType();
-      for (auto *op : llvm::make_early_inc_range(newValue.getUsers())) {
-        // If the two types are identical, we don't need to do anything.
-        if (oldType == newType)
-          continue;
-        if (auto subfield = dyn_cast<SubfieldOp>(op)) {
-          // Rewrite a subfield op to return the correct type.
-          auto index = subfield.fieldIndex();
-          auto newResultType = newType.cast<BundleType>().getElementType(index);
-          auto result = subfield.getResult();
-          workList.emplace_back(result, result.getType());
-          subfield.getResult().setType(newResultType);
-          continue;
-        }
-        if (auto partial = dyn_cast<PartialConnectOp>(op)) {
-          // Rewrite the partial connect to connect the same elements.
-          auto dstOldType = partial.dest().getType();
-          auto dstNewType = dstOldType;
-          auto srcOldType = partial.src().getType();
-          auto srcNewType = srcOldType;
-          // Check which side of the partial connect was updated.
-          if (newValue == partial.dest())
-            dstOldType = oldType;
-          else
-            srcOldType = oldType;
-          ImplicitLocOpBuilder builder(partial.getLoc(), partial);
-          fixupPartialConnect(
-              builder, [&](auto) { return partial.dest(); }, dstNewType,
-              dstOldType, [&](auto) { return partial.src(); }, srcNewType,
-              srcOldType);
-          partial->erase();
-          continue;
-        }
-        if (auto connect = dyn_cast<ConnectOp>(op)) {
-          // Rewrite the connect to connect all values.
-          auto dst = connect.dest();
-          auto src = connect.src();
-          ImplicitLocOpBuilder builder(connect.getLoc(), connect);
-          // Check which side of the connect was updated.
-          if (newValue == dst)
-            fixupConnect(builder, dst, oldType, src, src.getType());
-          else
-            fixupConnect(builder, dst, dst.getType(), src, oldType);
-          connect->erase();
-        }
-      }
-    }
-  }
-
-  /// This is the root method to fixup module references when a module changes.
-  /// It matches all the results of "to" module with the results of the "from"
-  /// module.
-  void fixupReferences(FModuleLike toModule, Operation *fromModule) {
+  /// This deletes and replaces all instances of the "fromModule" with instances
+  /// of the "toModule".
+  void replaceInstances(FModuleLike toModule, Operation *fromModule) {
     // Replace all instances of the other module.
     auto *fromNode = instanceGraph[fromModule];
-    auto *toNode = instanceGraph[toModule];
+    auto *toNode = instanceGraph[::cast<hw::HWModuleLike>(*toModule)];
+    auto toModuleRef = FlatSymbolRefAttr::get(toModule.moduleNameAttr());
     for (auto *oldInstRec : llvm::make_early_inc_range(fromNode->uses())) {
-      auto oldInst = oldInstRec->getInstance();
-      // Create an instance to replace the old module.
-      auto newInst = OpBuilder(oldInst).create<InstanceOp>(
-          oldInst.getLoc(), toModule, oldInst.nameAttr());
-      newInst.annotationsAttr(oldInst.annotationsAttr());
-      auto oldInnerSym = oldInst.inner_symAttr();
-      if (oldInnerSym)
-        newInst.inner_symAttr(oldInnerSym);
-
-      // We have to replaceAll before fixing up references, we walk the new
-      // usages when fixing up any references.
-      oldInst.replaceAllUsesWith(newInst.getResults());
-      oldInstRec->getParent()->addInstance(newInst, toNode);
-      //  Update bulk connections and subfield operations.
-      for (auto results :
-           llvm::zip(newInst.getResults(), oldInst.getResultTypes()))
-        fixupReferences(std::get<0>(results), std::get<1>(results));
+      auto inst = ::cast<InstanceOp>(*oldInstRec->getInstance());
+      inst.moduleNameAttr(toModuleRef);
+      inst.portNamesAttr(toModule.getPortNamesAttr());
+      oldInstRec->getParent()->addInstance(inst, toNode);
       oldInstRec->erase();
-      oldInst->erase();
     }
     instanceGraph.erase(fromNode);
     fromModule->erase();
@@ -471,7 +654,7 @@ private:
     auto loc = fromModule->getLoc();
     SmallVector<FlatSymbolRefAttr> nlas;
     for (auto *instanceRecord : instanceGraph[fromModule]->uses()) {
-      auto parent = cast<FModuleOp>(instanceRecord->getParent()->getModule());
+      auto parent = cast<FModuleOp>(*instanceRecord->getParent()->getModule());
       auto inst = instanceRecord->getInstance();
       namepath[0] = OpAnnoTarget(inst).getNLAReference(getNamespace(parent));
       auto arrayAttr = ArrayAttr::get(context, namepath);
@@ -482,9 +665,7 @@ private:
       auto nlaName = nla.getNameAttr();
       auto nlaRef = FlatSymbolRefAttr::get(nlaName);
       nlas.push_back(nlaRef);
-      // Make sure we update the NLAMap if the toModule gets deduped later.
-      nlaMap[toModuleName].push_back(nla);
-      nlaMap[parent.getNameAttr()].push_back(nla);
+      nlaTable->insert(nla);
       targetMap[nlaName] = to;
       // Update the instance breadcrumbs.
       auto nonLocalClass = NamedAttribute(classString, nonLocalString);
@@ -504,7 +685,8 @@ private:
         // Find the instance referenced by the NLA.
         auto targetInstanceName = innerRef.getName();
         auto it = llvm::find_if(*node, [&](InstanceRecord *record) {
-          return record->getInstance().inner_symAttr() == targetInstanceName;
+          return cast<InstanceOp>(*record->getInstance()).inner_symAttr() ==
+                 targetInstanceName;
         });
         assert(it != node->end() &&
                "Instance referenced by NLA does not exist in module");
@@ -545,31 +727,6 @@ private:
     }
   }
 
-  /// This finds all NLAs which contain the "from" module, and renames any
-  /// reference to the "to" module.
-  void renameModuleInNLA(DenseMap<StringAttr, StringAttr> &renameMap,
-                         StringAttr toName, StringAttr fromName,
-                         NonLocalAnchor nla) {
-    auto fromRef = FlatSymbolRefAttr::get(fromName);
-    SmallVector<Attribute> namepath;
-    for (auto element : nla.namepath()) {
-      if (auto innerRef = element.dyn_cast<InnerRefAttr>()) {
-        if (innerRef.getModule() == fromName) {
-          auto to = renameMap[innerRef.getName()];
-          assert(to && "should have been renamed");
-          namepath.push_back(
-              InnerRefAttr::get(toName, renameMap[innerRef.getName()]));
-        } else
-          namepath.push_back(element);
-      } else if (element == fromRef) {
-        namepath.push_back(FlatSymbolRefAttr::get(toName));
-      } else {
-        namepath.push_back(element);
-      }
-    }
-    nla.namepathAttr(ArrayAttr::get(context, namepath));
-  }
-
   /// This erases the NLA op, all breadcrumb trails, and removes the NLA from
   /// every module's NLA map, but it does not delete the NLA reference from
   /// the target operation's annotations.
@@ -582,12 +739,12 @@ private:
     for (auto attr : namepath.drop_back()) {
       auto innerRef = attr.cast<InnerRefAttr>();
       auto moduleName = innerRef.getModule();
-      llvm::erase_value(nlaMap[moduleName], nla);
       // Find the instance referenced by the NLA.
       auto *node = instanceGraph.lookup(moduleName);
       auto targetInstanceName = innerRef.getName();
       auto it = llvm::find_if(*node, [&](InstanceRecord *record) {
-        return record->getInstance().inner_symAttr() == targetInstanceName;
+        return cast<InstanceOp>(*record->getInstance()).inner_symAttr() ==
+               targetInstanceName;
       });
       assert(it != node->end() &&
              "Instance referenced by NLA does not exist in module");
@@ -598,9 +755,9 @@ private:
       instAnnos.applyToOperation(inst);
     }
     // Erase the NLA from the leaf module's nlaMap.
-    llvm::erase_value(nlaMap[nla.leafMod()], nla);
     targetMap.erase(nla.getNameAttr());
-    nla->erase();
+    nlaTable->erase(nla);
+    symbolTable.erase(nla);
   }
 
   /// Process all NLAs referencing the "from" module to point to the "to"
@@ -611,11 +768,10 @@ private:
     auto fromName = fromModule.getNameAttr();
     // Create a copy of the current NLAs. We will be pushing and removing
     // NLAs from this op as we go.
-    auto nlas = nlaMap[fromModule.getNameAttr()];
+    auto nlas = nlaTable->lookup(fromModule.getNameAttr()).vec();
+    // Change the NLA to target the toModule.
+    nlaTable->renameModuleAndInnerRef(toName, fromName, renameMap);
     for (auto nla : nlas) {
-      // Change the NLA to target the toModule.
-      if (toModule != fromModule)
-        renameModuleInNLA(renameMap, toName, fromName, nla);
       auto elements = nla.namepath().getValue();
       // If we don't need to add more context, we're done here.
       if (nla.root() != toName)
@@ -661,16 +817,9 @@ private:
 
   // Update all NLAs which the "from" external module participates in to the
   // "toName".
-  void rewriteExtModuleNLAs(StringAttr toName, StringAttr fromName) {
-    for (auto nla : nlaMap[fromName]) {
-      SmallVector<Attribute> namepath;
-      // External modules are guaranteed to be the final element of the NLA,
-      // since they do not have any bodies.
-      llvm::copy(nla.namepath().getValue().drop_back(),
-                 std::back_inserter(namepath));
-      namepath.push_back(FlatSymbolRefAttr::get(toName));
-      nla.namepathAttr(ArrayAttr::get(context, namepath));
-    }
+  void rewriteExtModuleNLAs(RenameMap &renameMap, StringAttr toName,
+                            StringAttr fromName) {
+    nlaTable->renameModuleAndInnerRef(toName, fromName, renameMap);
   }
 
   /// Take an annotation, and update it to be a non-local annotation.  If the
@@ -910,9 +1059,8 @@ private:
   InstanceGraph &instanceGraph;
   SymbolTable &symbolTable;
 
-  // This maps a module name to all NLAs it participates in. This is used to
-  // fixup any NLAs when a module is deduped.
-  NLAMap &nlaMap;
+  /// Cached nla table analysis.
+  NLATable *nlaTable = nullptr;
 
   /// We insert all NLAs to the beginning of this block.
   Block *nlaBlock;
@@ -931,6 +1079,123 @@ private:
 };
 
 //===----------------------------------------------------------------------===//
+// Fixup
+//===----------------------------------------------------------------------===//
+
+/// This fixes up connects when the field names of a bundle type changes.  It
+/// finds all fields which were previously bulk connected and legalizes it
+/// into a connect for each field.
+template <typename T>
+void fixupConnect(ImplicitLocOpBuilder &builder, Value dst, Value src) {
+  // If the types already match we can emit a connect.
+  auto dstType = dst.getType();
+  auto srcType = src.getType();
+  if (dstType == srcType) {
+    builder.create<T>(dst, src);
+    return;
+  }
+  // It must be a bundle type and the field name has changed. We have to
+  // manually decompose the bulk connect into a connect for each field.
+  auto dstBundle = dstType.cast<BundleType>();
+  auto srcBundle = srcType.cast<BundleType>();
+  for (unsigned i = 0; i < dstBundle.getNumElements(); ++i) {
+    auto dstField = builder.create<SubfieldOp>(dst, i);
+    auto srcField = builder.create<SubfieldOp>(src, i);
+    if (dstBundle.getElement(i).isFlip) {
+      std::swap(srcBundle, dstBundle);
+      std::swap(srcField, dstField);
+    }
+    fixupConnect<T>(builder, dstField, srcField);
+  }
+}
+
+/// Replaces a ConnectOp or StrictConnectOp with new bundle types.
+template <typename T>
+void fixupConnect(T connect) {
+  ImplicitLocOpBuilder builder(connect.getLoc(), connect);
+  fixupConnect<T>(builder, connect.dest(), connect.src());
+  connect->erase();
+}
+
+/// When we replace a bundle type with a similar bundle with different field
+/// names, we have to rewrite all the code to use the new field names. This
+/// mostly affects subfield result types and any bulk connects.
+void fixupReferences(Value oldValue, Type newType) {
+  SmallVector<std::pair<Value, Type>> workList;
+  workList.emplace_back(oldValue, newType);
+  while (!workList.empty()) {
+    auto [oldValue, newType] = workList.pop_back_val();
+    auto oldType = oldValue.getType();
+    // If the two types are identical, we don't need to do anything, otherwise
+    // update the type in place.
+    if (oldType == newType)
+      continue;
+    oldValue.setType(newType);
+    for (auto *op : llvm::make_early_inc_range(oldValue.getUsers())) {
+      if (auto subfield = dyn_cast<SubfieldOp>(op)) {
+        // Rewrite a subfield op to return the correct type.
+        auto index = subfield.fieldIndex();
+        auto result = subfield.getResult();
+        auto newResultType = newType.cast<BundleType>().getElementType(index);
+        workList.emplace_back(result, newResultType);
+        continue;
+      }
+      if (auto connect = dyn_cast<ConnectOp>(op)) {
+        fixupConnect<ConnectOp>(connect);
+        continue;
+      }
+      if (auto strict = dyn_cast<StrictConnectOp>(op)) {
+        fixupConnect<StrictConnectOp>(strict);
+        continue;
+      }
+    }
+  }
+}
+
+/// This is the root method to fixup module references when a module changes.
+/// It matches all the results of "to" module with the results of the "from"
+/// module.
+void fixupAllModules(InstanceGraph &instanceGraph) {
+  for (auto *node : instanceGraph) {
+    auto module = cast<FModuleLike>(*node->getModule());
+    for (auto *instRec : node->uses()) {
+      auto inst = instRec->getInstance();
+      for (unsigned i = 0, e = module.getNumPorts(); i < e; ++i)
+        fixupReferences(inst->getResult(i), module.getPortType(i));
+    }
+  }
+}
+
+/// A DenseMapInfo implementation for llvm::SHA256 hashes, which are represented
+/// as std::array<uint8_t, 32>. This allows us to create DenseMaps with SHA256
+/// hashes as keys.
+struct SHA256HashDenseMapInfo {
+  static inline std::array<uint8_t, 32> getEmptyKey() {
+    std::array<uint8_t, 32> key;
+    std::fill(key.begin(), key.end(), ~0);
+    return key;
+  }
+  static inline std::array<uint8_t, 32> getTombstoneKey() {
+    std::array<uint8_t, 32> key;
+    std::fill(key.begin(), key.end(), ~0 - 1);
+    return key;
+  }
+
+  static unsigned getHashValue(const std::array<uint8_t, 32> &val) {
+    // We assume SHA256 is already a good hash and just truncate down to the
+    // number of bytes we need for DenseMap.
+    unsigned hash;
+    std::memcpy(&hash, val.data(), sizeof(unsigned));
+    return hash;
+  }
+
+  static bool isEqual(const std::array<uint8_t, 32> &lhs,
+                      const std::array<uint8_t, 32> &rhs) {
+    return lhs == rhs;
+  }
+};
+
+//===----------------------------------------------------------------------===//
 // DedupPass
 //===----------------------------------------------------------------------===//
 
@@ -940,10 +1205,11 @@ class DedupPass : public DedupBase<DedupPass> {
     auto *context = &getContext();
     auto circuit = getOperation();
     auto &instanceGraph = getAnalysis<InstanceGraph>();
+    auto *nlaTable = &getAnalysis<NLATable>();
     SymbolTable symbolTable(circuit);
-    NLAMap nlaMap = createNLAMap(circuit);
-    Deduper deduper(instanceGraph, symbolTable, nlaMap, circuit);
+    Deduper deduper(instanceGraph, symbolTable, nlaTable, circuit);
     StructuralHasher hasher(&getContext());
+    Equivalence equiv(context, instanceGraph);
     auto anythingChanged = false;
 
     // Modules annotated with this should not be considered for deduplication.
@@ -951,35 +1217,124 @@ class DedupPass : public DedupBase<DedupPass> {
         StringAttr::get(context, "firrtl.transforms.NoDedupAnnotation");
 
     // A map of all the module hashes that we have calculated so far.
-    llvm::StringMap<Operation *> moduleHashes;
+    llvm::DenseMap<std::array<uint8_t, 32>, Operation *, SHA256HashDenseMapInfo>
+        moduleHashes;
+
+    // We track the name of the module that each module is deduped into, so that
+    // we can make sure all modules which are marked "must dedup" with each
+    // other were all deduped to the same module.
+    DenseMap<Attribute, StringAttr> dedupMap;
 
     // We must iterate the modules from the bottom up so that we can properly
     // deduplicate the modules. We have to store the visit order first so that
     // we can safely delete nodes as we go from the instance graph.
     for (auto *node : llvm::post_order(&instanceGraph)) {
-      auto module = cast<FModuleLike>(node->getModule());
+      auto module = cast<FModuleLike>(*node->getModule());
+      auto moduleName = module.moduleNameAttr();
       // If the module is marked with NoDedup, just skip it.
-      if (AnnotationSet(module).hasAnnotation(noDedupClass))
+      if (AnnotationSet(module).hasAnnotation(noDedupClass)) {
+        // We record it in the dedup map to help detect errors when the user
+        // marks the module as both NoDedup and MustDedup. We do not record this
+        // module in the hasher to make sure no other module dedups "into" this
+        // one.
+        dedupMap[moduleName] = moduleName;
         continue;
+      }
       // Calculate the hash of the module.
       auto h = hasher.hash(module);
       // Check if there a module with the same hash.
       auto it = moduleHashes.find(h);
       if (it != moduleHashes.end()) {
-        deduper.dedup(it->second, module);
+        auto original = cast<FModuleLike>(it->second);
+        // Record the group ID of the other module.
+        dedupMap[moduleName] = original.moduleNameAttr();
+        deduper.dedup(original, module);
         erasedModules++;
         anythingChanged = true;
         continue;
       }
-
       // Any module not deduplicated must be recorded.
       deduper.record(module);
-
-      // TODO: if the module is marked must dedup, error here.
-
-      // Record the module's hash if it has not been removed.
+      // Add the module to a new dedup group.
+      dedupMap[moduleName] = moduleName;
+      // Record the module's hash.
       moduleHashes[h] = module;
     }
+
+    // This part verifies that all modules marked by "MustDedup" have been
+    // properly deduped with each other. For this check to succeed, all modules
+    // have to been deduped to the same module. It is possible that a module was
+    // deduped with the wrong thing.
+
+    auto failed = false;
+    // This parses the module name out of a target string.
+    auto parseModule = [&](Attribute path) -> StringAttr {
+      // Each module is listed as a target "~Circuit|Module" which we have to
+      // parse.
+      auto [_, rhs] = path.cast<StringAttr>().getValue().split('|');
+      return StringAttr::get(context, rhs);
+    };
+    // This gets the name of the module which the current module was deduped
+    // with. If the named module isn't in the map, then we didn't encounter it
+    // in the circuit.
+    auto getLead = [&](StringAttr module) -> StringAttr {
+      auto it = dedupMap.find(module);
+      if (it == dedupMap.end()) {
+        auto diag = emitError(circuit.getLoc(),
+                              "MustDeduplicateAnnotation references module ")
+                    << module << " which does not exist";
+        failed = true;
+        return 0;
+      }
+      return it->second;
+    };
+
+    AnnotationSet::removeAnnotations(circuit, [&](Annotation annotation) {
+      // If we have already failed, don't process any more annotations.
+      if (failed)
+        return false;
+      if (!annotation.isClass("firrtl.transforms.MustDeduplicateAnnotation"))
+        return false;
+      auto modules = annotation.getMember<ArrayAttr>("modules");
+      if (!modules) {
+        emitError(circuit.getLoc(),
+                  "MustDeduplicateAnnotation missing \"modules\" member");
+        failed = true;
+        return false;
+      }
+      // Empty module list has nothing to process.
+      if (modules.size() == 0)
+        return true;
+      // Get the first element.
+      auto firstModule = parseModule(modules[0]);
+      auto firstLead = getLead(firstModule);
+      if (failed)
+        return false;
+      // Verify that the remaining elements are all the same as the first.
+      for (auto attr : modules.getValue().drop_front()) {
+        auto nextModule = parseModule(attr);
+        auto nextLead = getLead(nextModule);
+        if (failed)
+          return false;
+        if (firstLead != nextLead) {
+          auto diag = emitError(circuit.getLoc(), "module ")
+                      << nextModule << " not deduplicated with " << firstModule;
+          auto a = instanceGraph.lookup(firstLead)->getModule();
+          auto b = instanceGraph.lookup(nextLead)->getModule();
+          equiv.check(diag, a, b);
+          failed = true;
+          return false;
+        }
+      }
+      return true;
+    });
+    if (failed)
+      return signalPassFailure();
+
+    // Walk all the modules and fixup the instance operation to return the
+    // correct type. We delay this fixup until the end because doing it early
+    // can block the deduplication of the parent modules.
+    fixupAllModules(instanceGraph);
 
     if (!anythingChanged)
       markAllAnalysesPreserved();

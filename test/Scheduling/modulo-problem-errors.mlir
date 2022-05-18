@@ -2,7 +2,7 @@
 
 // expected-error@+2 {{Operator type 'limited' is oversubscribed}}
 // expected-error@+1 {{problem verification failed}}
-func @oversubscribed(%a0 : i32, %a1 : i32, %a2 : i32) -> i32 attributes {
+func.func @oversubscribed(%a0 : i32, %a1 : i32, %a2 : i32) -> i32 attributes {
   problemInitiationInterval = 2,
   operatortypes = [ { name = "limited", latency = 1, limit = 2} ]
   } {

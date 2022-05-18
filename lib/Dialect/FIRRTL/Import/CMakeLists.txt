@@ -8,5 +8,6 @@ add_circt_translation_library(CIRCTImportFIRFile
 
   LINK_LIBS PUBLIC
   CIRCTFIRRTL
-  MLIRTranslation
+  CIRCTFIRRTLTransforms
+  MLIRTranslateLib
   )

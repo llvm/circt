@@ -10,6 +10,7 @@
 #define CONVERSION_EXPORTVERILOG_EXPORTVERILOGINTERNAL_H
 
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
@@ -20,6 +21,9 @@ struct LoweringOptions;
 
 namespace ExportVerilog {
 class GlobalNameResolver;
+
+/// Check if the value is from read of a wire or reg or is a port.
+bool isSimpleReadOrPort(Value v);
 
 /// If the given `op` is a declaration, return the attribute that dictates its
 /// name. For things like wires and registers this will be the `name` attribute,
@@ -137,6 +141,9 @@ struct FileInfo {
 
   /// Whether to include this file as part of the emitted file list.
   bool addToFilelist = true;
+
+  /// If true, the file is a header.
+  bool isHeader = false;
 };
 
 /// This class wraps an operation or a fixed string that should be emitted.
@@ -214,7 +221,7 @@ struct SharedEmitterState {
 
   /// A cache of symbol -> defining ops built once and used by each of the
   /// verilog module emitters.  This is built at "gatherFiles" time.
-  hw::SymbolCache symbolCache;
+  hw::HWSymbolCache symbolCache;
 
   // Emitter options extracted from the top-level module.
   const LoweringOptions &options;
@@ -234,7 +241,8 @@ struct SharedEmitterState {
 
   using EmissionList = std::vector<StringOrOpToEmit>;
 
-  void collectOpsForFile(const FileInfo &fileInfo, EmissionList &thingsToEmit);
+  void collectOpsForFile(const FileInfo &fileInfo, EmissionList &thingsToEmit,
+                         bool emitHeader = false);
   void emitOps(EmissionList &thingsToEmit, raw_ostream &os, bool parallelize);
 };
 

@@ -139,6 +139,13 @@ class PhysicalRegionOp:
     self.attributes["bounds"] = new_bounds
 
 
+class InstanceOp:
+
+  @property
+  def moduleName(self):
+    return _ir.FlatSymbolRefAttr(self.attributes["moduleName"])
+
+
 class EntityExternOp:
 
   @staticmethod
@@ -146,3 +153,46 @@ class EntityExternOp:
     symbol_attr = support.var_to_attribute(symbol)
     metadata_attr = support.var_to_attribute(metadata)
     return _msft.EntityExternOp(symbol_attr, metadata_attr)
+
+
+class InstanceHierarchyOp:
+
+  @staticmethod
+  def create(root_mod):
+    hier = _msft.InstanceHierarchyOp(root_mod)
+    hier.body.blocks.append()
+    return hier
+
+  @property
+  def top_module_ref(self):
+    return self.attributes["topModuleRef"]
+
+
+class DynamicInstanceOp:
+
+  @staticmethod
+  def create(name_ref):
+    inst = _msft.DynamicInstanceOp(name_ref)
+    inst.body.blocks.append()
+    return inst
+
+  @property
+  def instance_path(self):
+    path = []
+    next = self
+    while isinstance(next, DynamicInstanceOp):
+      path.append(next.attributes["instanceRef"])
+      next = next.operation.parent.opview
+    path.reverse()
+    return _ir.ArrayAttr.get(path)
+
+  @property
+  def instanceRef(self):
+    return self.attributes["instanceRef"]
+
+
+class PDPhysLocationOp:
+
+  @property
+  def loc(self):
+    return _msft.PhysLocationAttr(self.attributes["loc"])

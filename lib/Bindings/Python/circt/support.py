@@ -87,7 +87,7 @@ def type_to_pytype(t):
   if t.__class__ != ir.Type:
     return t
 
-  from circt.dialects import hw
+  from circt.dialects import esi, hw
   try:
     return ir.IntegerType(t)
   except ValueError:
@@ -104,6 +104,10 @@ def type_to_pytype(t):
     return hw.TypeAliasType(t)
   except ValueError:
     pass
+  try:
+    return esi.ChannelType(t)
+  except ValueError:
+    pass
 
   raise TypeError(f"Cannot convert {repr(t)} to python type")
 
@@ -114,6 +118,8 @@ def type_to_pytype(t):
 def attribute_to_var(attr):
   import mlir.ir as ir
 
+  if attr is None:
+    return None
   if not isinstance(attr, ir.Attribute):
     raise TypeError("attribute_to_var only accepts MLIR Attributes")
 

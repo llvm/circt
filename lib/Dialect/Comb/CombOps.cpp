@@ -45,6 +45,15 @@ Value comb::createOrFoldSExt(Value value, Type destTy,
   return createOrFoldSExt(builder.getLoc(), value, destTy, builder);
 }
 
+Value comb::createOrFoldNot(Location loc, Value value, OpBuilder &builder) {
+  auto allOnes = builder.create<hw::ConstantOp>(loc, value.getType(), -1);
+  return builder.createOrFold<XorOp>(loc, value, allOnes);
+}
+
+Value comb::createOrFoldNot(Value value, ImplicitLocOpBuilder &builder) {
+  return createOrFoldNot(builder.getLoc(), value, builder);
+}
+
 //===----------------------------------------------------------------------===//
 // ICmpOp
 //===----------------------------------------------------------------------===//
@@ -149,20 +158,20 @@ bool ICmpOp::isNotEqualZero() {
 // Unary Operations
 //===----------------------------------------------------------------------===//
 
-static LogicalResult verifyReplicateOp(ReplicateOp op) {
+LogicalResult ReplicateOp::verify() {
   // The source must be equal or smaller than the dest type, and an even
   // multiple of it.  Both are already known to be signless integers.
-  auto srcWidth = op.getOperand().getType().cast<IntegerType>().getWidth();
-  auto dstWidth = op.getType().getWidth();
+  auto srcWidth = getOperand().getType().cast<IntegerType>().getWidth();
+  auto dstWidth = getType().getWidth();
   if (srcWidth == 0)
-    return op.emitOpError("replicate does not take zero bit integer");
+    return emitOpError("replicate does not take zero bit integer");
 
   if (srcWidth > dstWidth)
-    return op.emitOpError("replicate cannot shrink bitwidth of operand"),
+    return emitOpError("replicate cannot shrink bitwidth of operand"),
            failure();
 
   if (dstWidth % srcWidth)
-    return op.emitOpError("replicate must produce integer multiple of operand"),
+    return emitOpError("replicate must produce integer multiple of operand"),
            failure();
 
   return success();
@@ -172,20 +181,28 @@ static LogicalResult verifyReplicateOp(ReplicateOp op) {
 // Variadic operations
 //===----------------------------------------------------------------------===//
 
-static LogicalResult verifyUTVariadicOp(Operation *op) {
+static LogicalResult verifyUTBinOp(Operation *op) {
   if (op->getOperands().empty())
     return op->emitOpError("requires 1 or more args");
-
   return success();
 }
+
+LogicalResult AddOp::verify() { return verifyUTBinOp(*this); }
+
+LogicalResult MulOp::verify() { return verifyUTBinOp(*this); }
+
+LogicalResult AndOp::verify() { return verifyUTBinOp(*this); }
+
+LogicalResult OrOp::verify() { return verifyUTBinOp(*this); }
+
+LogicalResult XorOp::verify() { return verifyUTBinOp(*this); }
 
 /// Return true if this is a two operand xor with an all ones constant as its
 /// RHS operand.
 bool XorOp::isBinaryNot() {
   if (getNumOperands() != 2)
     return false;
-  if (auto cst =
-          dyn_cast_or_null<hw::ConstantOp>(getOperand(1).getDefiningOp()))
+  if (auto cst = getOperand(1).getDefiningOp<hw::ConstantOp>())
     if (cst.getValue().isAllOnes())
       return true;
   return false;
@@ -203,13 +220,13 @@ static unsigned getTotalWidth(ValueRange inputs) {
   return resultWidth;
 }
 
-static LogicalResult verifyConcatOp(ConcatOp concatOp) {
-  unsigned tyWidth = concatOp.getType().getWidth();
-  unsigned operandsTotalWidth = getTotalWidth(concatOp.inputs());
+LogicalResult ConcatOp::verify() {
+  unsigned tyWidth = getType().getWidth();
+  unsigned operandsTotalWidth = getTotalWidth(inputs());
   if (tyWidth != operandsTotalWidth)
-    return concatOp.emitOpError("ConcatOp requires operands total width to "
-                                "match type width. operands "
-                                "totalWidth is")
+    return emitOpError("ConcatOp requires operands total width to "
+                       "match type width. operands "
+                       "totalWidth is")
            << operandsTotalWidth << ", but concatOp type width is " << tyWidth;
 
   return success();
@@ -238,11 +255,11 @@ LogicalResult ConcatOp::inferReturnTypes(MLIRContext *context,
 // Other Operations
 //===----------------------------------------------------------------------===//
 
-static LogicalResult verifyExtractOp(ExtractOp op) {
-  unsigned srcWidth = op.input().getType().cast<IntegerType>().getWidth();
-  unsigned dstWidth = op.getType().getWidth();
-  if (op.lowBit() >= srcWidth || srcWidth - op.lowBit() < dstWidth)
-    return op.emitOpError("from bit too large for input"), failure();
+LogicalResult ExtractOp::verify() {
+  unsigned srcWidth = input().getType().cast<IntegerType>().getWidth();
+  unsigned dstWidth = getType().getWidth();
+  if (lowBit() >= srcWidth || srcWidth - lowBit() < dstWidth)
+    return emitOpError("from bit too large for input"), failure();
 
   return success();
 }

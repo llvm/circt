@@ -59,6 +59,9 @@ public:
   /// types recursively within itself.
   bool isPassive() { return getRecursiveTypeProperties().isPassive; }
 
+  /// Returns true if this is a "passive" that which is not analog.
+  bool isRegisterType() { return isPassive() && !containsAnalog(); }
+
   /// Return true if this is a 'ground' type, aka a non-aggregate type.
   bool isGround();
 
@@ -126,11 +129,10 @@ protected:
   using Type::Type;
 };
 
-/// Returns whether the two types are equivalent. See the FIRRTL spec for the
-/// full definition of type equivalence. This predicate differs from the spec in
-/// that it only compares passive types. Because of how the FIRRTL dialect uses
-/// flip types in module ports and aggregates, this definition, unlike the spec,
-/// ignores flips.
+/// Returns whether the two types are equivalent.  This implements the exact
+/// definition of type equivalence in the FIRRTL spec.  If the types being
+/// compared have any outer flips that encode FIRRTL module directions (input or
+/// output), these should be stripped before using this method.
 bool areTypesEquivalent(FIRRTLType destType, FIRRTLType srcType);
 
 /// Returns true if two types are weakly equivalent.  See the FIRRTL spec,
@@ -139,6 +141,15 @@ bool areTypesEquivalent(FIRRTLType destType, FIRRTLType srcType);
 /// types with flips in different positions to be equivalent.
 bool areTypesWeaklyEquivalent(FIRRTLType destType, FIRRTLType srcType,
                               bool destFlip = false, bool srcFlip = false);
+
+/// Returns true if the destination is at least as wide as a source.  The source
+/// and destination types must be equivalent non-analog types.  The types are
+/// recursively connected to ensure that the destination is larger than the
+/// source: ground types are compared on width, vector types are checked
+/// recursively based on their elements and bundles are compared
+/// field-by-field.  Types with unresolved widths are assumed to fit into or
+/// hold their counterparts.
+bool isTypeLarger(FIRRTLType dstType, FIRRTLType srcType);
 
 mlir::Type getVectorElementType(mlir::Type array);
 mlir::Type getPassiveType(mlir::Type anyFIRRTLType);
@@ -371,10 +382,10 @@ class FVectorType : public FIRRTLType::TypeBase<FVectorType, FIRRTLType,
 public:
   using Base::Base;
 
-  static FIRRTLType get(FIRRTLType elementType, unsigned numElements);
+  static FIRRTLType get(FIRRTLType elementType, size_t numElements);
 
   FIRRTLType getElementType();
-  unsigned getNumElements();
+  size_t getNumElements();
 
   /// Return the recursive properties of the type.
   RecursiveTypeProperties getRecursiveTypeProperties();
@@ -385,25 +396,25 @@ public:
   /// Get an integer ID for the field. Field IDs start at 1, and are assigned
   /// to each field in a vector in a recursive depth-first walk of all elements.
   /// A field ID of 0 is used to reference the vector itself.
-  unsigned getFieldID(unsigned index);
+  size_t getFieldID(size_t index);
 
   /// Find the element index corresponding to the desired fieldID.  If the
   /// fieldID corresponds to a field in nested under an element, it will return
   /// the index of the parent element.
-  unsigned getIndexForFieldID(unsigned fieldID);
+  size_t getIndexForFieldID(size_t fieldID);
 
   /// Strip off a single layer of this type and return the sub-type and a field
   /// ID targeting the same field, but rebased on the sub-type.
-  std::pair<FIRRTLType, unsigned> getSubTypeByFieldID(unsigned fieldID);
+  std::pair<FIRRTLType, size_t> getSubTypeByFieldID(size_t fieldID);
 
   /// Get the maximum field ID in this vector.  This is helpful for constructing
   /// field IDs when this VectorType is nested in another aggregate type.
-  unsigned getMaxFieldID();
+  size_t getMaxFieldID();
 
   /// Returns the effective field id when treating the index field as the root
   /// of the type.  Essentially maps a fieldID to a fieldID after a subfield op.
   /// Returns the new id and whether the id is in the given child.
-  std::pair<unsigned, bool> rootChildFieldID(unsigned fieldID, unsigned index);
+  std::pair<size_t, bool> rootChildFieldID(size_t fieldID, size_t index);
 };
 
 // Get the bit width for this type, return None  if unknown. Unlike
@@ -412,7 +423,7 @@ public:
 // field element and return the total bit width of the aggregate type. This
 // returns None, if any of the bundle fields is a flip type, or ground type with
 // unknown bit width.
-llvm::Optional<int32_t> getBitWidth(FIRRTLType type);
+llvm::Optional<int64_t> getBitWidth(FIRRTLType type);
 
 // Parse a FIRRTL type without a leading `!firrtl.` dialect tag.
 ParseResult parseNestedType(FIRRTLType &result, AsmParser &parser);

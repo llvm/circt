@@ -10,12 +10,15 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "mlir/IR/EnumAttr.td"
+
 /// Ensure symbol is one of the hw module.* types
 def isModuleSymbol : AttrConstraint<
   CPred<
     "hw::isAnyModule(::mlir::SymbolTable::lookupNearestSymbolFrom("
       "&$_op, $_self.cast<::mlir::FlatSymbolRefAttr>().getValue()))"
   >, "is module like">;
+
 
 //===----------------------------------------------------------------------===//
 // Control flow like-operations
@@ -31,7 +34,7 @@ def IfDefOp : SVOp<"ifdef", [SingleBlock, NoTerminator, NoRegionArguments,
   }];
 
   let regions = (region SizedRegion<1>:$thenRegion, AnyRegion:$elseRegion);
-  let arguments = (ins StrAttr:$cond);
+  let arguments = (ins MacroIdentAttr:$cond);
   let results = (outs);
 
   let hasCanonicalizeMethod = true;
@@ -45,6 +48,9 @@ def IfDefOp : SVOp<"ifdef", [SingleBlock, NoTerminator, NoRegionArguments,
                       CArg<"std::function<void()>", "{}">:$thenCtor,
                       CArg<"std::function<void()>", "{}">:$elseCtor)>,
     OpBuilder<(ins "StringAttr":$cond,
+                      CArg<"std::function<void()>", "{}">:$thenCtor,
+                      CArg<"std::function<void()>", "{}">:$elseCtor)>,
+    OpBuilder<(ins "MacroIdentAttr":$cond,
                       CArg<"std::function<void()>", "{}">:$thenCtor,
                       CArg<"std::function<void()>", "{}">:$elseCtor)>
   ];
@@ -75,8 +81,9 @@ def IfDefProceduralOp
     This operation is for procedural regions and its body is procedural.
   }];
 
+  let hasCanonicalizeMethod = true;
   let regions = (region SizedRegion<1>:$thenRegion, AnyRegion:$elseRegion);
-  let arguments = (ins StrAttr:$cond);
+  let arguments = (ins MacroIdentAttr:$cond);
   let results = (outs);
 
   let assemblyFormat = "$cond $thenRegion (`else` $elseRegion^)? attr-dict";
@@ -86,6 +93,9 @@ def IfDefProceduralOp
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilder<(ins "StringRef":$cond,
+                      CArg<"std::function<void()>", "{}">:$thenCtor,
+                      CArg<"std::function<void()>", "{}">:$elseCtor)>,
+    OpBuilder<(ins "MacroIdentAttr":$cond,
                       CArg<"std::function<void()>", "{}">:$thenCtor,
                       CArg<"std::function<void()>", "{}">:$elseCtor)>
   ];
@@ -189,7 +199,7 @@ def AlwaysOp : SVOp<"always", [SingleBlock, NoTerminator, NoRegionArguments,
   }];
 
   // Check that we have the same number of events and conditions.
-  let verifier = "return ::verifyAlwaysOp(*this);";
+  let hasVerifier = 1;
 }
 
 def AlwaysCombOp : SVOp<"alwayscomb", [SingleBlock, NoTerminator,
@@ -291,28 +301,61 @@ def InitialOp : SVOp<"initial", [SingleBlock, NoTerminator, NoRegionArguments,
   }];
 }
 
-def CaseZOp : SVOp<"casez", [SingleBlock, NoTerminator, NoRegionArguments,
-                             ProceduralRegion, ProceduralOp]> {
-  let summary = "'casez (cond)' block";
-  let description = "See SystemVerilog 2017 12.5.1.";
+def CaseStmt: I32EnumAttrCase<"CaseStmt", 0, "case">;
+def CaseXStmt: I32EnumAttrCase<"CaseXStmt", 1, "casex">;
+def CaseZStmt: I32EnumAttrCase<"CaseZStmt", 2, "casez">;
+
+def CaseStmtTypeAttr : I32EnumAttr<"CaseStmtType", "case type",
+                                   [CaseStmt, CaseXStmt, CaseZStmt]>;
+
+def ValidationQualifierPlain: I32EnumAttrCase<"ValidationQualifierPlain", 0, "plain">;
+def ValidationQualifierUnique: I32EnumAttrCase<"ValidationQualifierUnique", 1, "unique">;
+def ValidationQualifierUnique0: I32EnumAttrCase<"ValidationQualifierUnique0", 2, "unique0">;
+def ValidationQualifierPriority: I32EnumAttrCase<"ValidationQualifierPriority", 3, "priority">;
+
+def ValidationQualifierTypeEnum: I32EnumAttr<"ValidationQualifierTypeEnum", "validation qualifier type",
+              [ValidationQualifierPlain, ValidationQualifierUnique,
+               ValidationQualifierUnique0, ValidationQualifierPriority]> {
+  let genSpecializedAttr = 0;
+  let cppNamespace = "::circt::sv";
+}
+
+def ValidationQualifierTypeAttr: EnumAttr<SVDialect, ValidationQualifierTypeEnum, "validation_qualifier">;
+
+def CaseOp : SVOp<"case", [SingleBlock, NoTerminator, NoRegionArguments,
+                           ProceduralRegion, ProceduralOp]> {
+  let summary = "'case (cond)' block";
+  let description = "See SystemVerilog 2017 12.5.";
 
   let regions = (region VariadicRegion<SizedRegion<1>>:$caseRegions);
-  let arguments = (ins HWIntegerType:$cond, ArrayAttr:$casePatterns);
+  let arguments = (ins DefaultValuedAttr<CaseStmtTypeAttr,
+                                         "CaseStmtType::CaseStmt">:$caseStyle,
+                       HWIntegerType:$cond, ArrayAttr:$casePatterns,
+                       DefaultValuedAttr<ValidationQualifierTypeAttr,
+                       "ValidationQualifierTypeEnum::ValidationQualifierPlain">:
+                       $validationQualifier);
   let results = (outs);
-
-  let parser = "return parseCaseZOp(parser, result);";
-  let printer = "printCaseZOp(p, *this);";
-  let verifier = "return ::verifyCaseZOp(*this);";
-
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+  let hasCanonicalizeMethod = 1;
+  
   let builders = [
     /// This ctor allows you to build a CaseZ with some number of cases, getting
     /// a callback for each case.
-    OpBuilder<(ins "Value":$cond, "size_t":$numCases,
-               "std::function<CaseZPattern(size_t)>":$caseCtor)>
+    OpBuilder<(ins "CaseStmtType":$caseStyle,
+                   "ValidationQualifierTypeEnum":$validationQualifier,
+                   "Value":$cond, "size_t":$numCases,
+                   "std::function<CasePattern(size_t)>":$caseCtor)>,
+    OpBuilder<(ins "CaseStmtType":$caseStyle, "Value":$cond, "size_t":$numCases,
+               "std::function<CasePattern(size_t)>":$caseCtor), [{
+      build($_builder, $_state, caseStyle,
+            ValidationQualifierTypeEnum::ValidationQualifierPlain, cond,  numCases,
+            caseCtor);
+    }]>
   ];
 
   let extraClassDeclaration = [{
-    SmallVector<CaseZInfo, 4> getCases();
+    SmallVector<CaseInfo, 4> getCases();
 
     // void addCase(...)
   }];
@@ -345,7 +388,7 @@ def BPAssignOp : SVOp<"bpassign", [InOutTypeConstraint<"src", "dest">,
   let arguments = (ins InOutType:$dest, InOutElementType:$src);
   let results = (outs);
   let assemblyFormat = "$dest `,` $src  attr-dict `:` qualified(type($src))";
-  let verifier = "return ::verifyBPAssignOp(*this);";
+  let hasVerifier = 1;
 }
 
 def PAssignOp : SVOp<"passign", [InOutTypeConstraint<"src", "dest">,
@@ -360,7 +403,7 @@ def PAssignOp : SVOp<"passign", [InOutTypeConstraint<"src", "dest">,
   let arguments = (ins InOutType:$dest, InOutElementType:$src);
   let results = (outs);
   let assemblyFormat = "$dest `,` $src  attr-dict `:` qualified(type($src))";
-  let verifier = "return ::verifyPAssignOp(*this);";
+  let hasVerifier = 1;
 }
 
 
@@ -417,19 +460,17 @@ def AliasOp : SVOp<"alias"> {
   let assemblyFormat = "$operands attr-dict `:` qualified(type($operands))";
 
   // Verify that we have at least two operands.
-  let verifier = "return ::verifyAliasOp(*this);";
+  let hasVerifier = 1;
 }
 
-// TODO: This needs to model the file descriptor to write on.  This is currently
-// hard coded to 32'h80000002.
 def FWriteOp : SVOp<"fwrite", [ProceduralOp]> {
   let summary = "'$fwrite' statement";
 
-  let arguments = (ins StrAttr:$string, Variadic<AnyType>:$operands);
+  let arguments = (ins I32:$fd, StrAttr:$string, Variadic<AnyType>:$operands);
   let results = (outs);
 
   let assemblyFormat =
-    "$string attr-dict (`(` $operands^ `)` `:` qualified(type($operands)))?";
+    "$fd `,` $string attr-dict (`(` $operands^ `)` `:` qualified(type($operands)))?";
 }
 
 def VerbatimOp : SVOp<"verbatim"> {
@@ -460,7 +501,8 @@ def VerbatimOp : SVOp<"verbatim"> {
 // Bind Statements
 //===----------------------------------------------------------------------===//
 
-def BindOp : SVOp<"bind", []> {
+def BindOp : SVOp<"bind", 
+    [DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let summary = "indirect instantiation statement";
   let description = [{
     Indirectly instantiate a module from the context of another module. BindOp
@@ -472,10 +514,8 @@ def BindOp : SVOp<"bind", []> {
     See 23.11 of SV 2017 spec for more information about bind.
   }];
 
-  let arguments =
-   (ins InnerRefAttr:$instance);
+  let arguments = (ins InnerRefAttr:$instance);
   let results = (outs);
-  let verifier = "return ::verify$cppClass(*this);";
 
   let assemblyFormat = "$instance attr-dict";
   let builders = [
@@ -483,23 +523,24 @@ def BindOp : SVOp<"bind", []> {
   ];
   let extraClassDeclaration = [{
     /// Lookup the instance for the bind.  This returns null on invalid IR.
-    hw::InstanceOp getReferencedInstance(const hw::SymbolCache *cache = nullptr);
+    hw::InstanceOp getReferencedInstance(const hw::HWSymbolCache *cache = nullptr);
   }];
 }
 
-def BindInterfaceOp : SVOp<"bind.interface", []> {
+def BindInterfaceOp : SVOp<"bind.interface", 
+    [DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let summary = "indirectly instantiate an interface";
   let description = [{
     Indirectly instantiate an interface in the context of another module. This
     operation must pair with a `sv.interface.instance`.
   }];
-  let arguments = (ins FlatSymbolRefAttr:$interface);
+  let arguments = (ins InnerRefAttr:$instance);
   let results = (outs);
-  let verifier = "return ::verify$cppClass(*this);";
-  let assemblyFormat = [{ $interface attr-dict }];
+
+  let assemblyFormat = "$instance attr-dict";
   let extraClassDeclaration = [{
     sv::InterfaceInstanceOp
-    getReferencedInstance(const hw::SymbolCache *cache = nullptr);
+    getReferencedInstance(const hw::HWSymbolCache *cache = nullptr);
   }];
 }
 
@@ -519,7 +560,7 @@ def VerbosityIntAttr : DefaultValuedAttr<Confined<I8Attr,
   [IntMinValue<0>, IntMaxValue<2>]>, "1">;
 
 /// Commonalities between `StopOp` and `FinishOp`.
-class FinishOrStopOp<string mnemonic, list<OpTrait> traits = []> :
+class FinishOrStopOp<string mnemonic, list<Trait> traits = []> :
     SVOp<mnemonic, [ProceduralOp] # traits> {
   let arguments = (ins VerbosityIntAttr:$verbosity);
   let assemblyFormat = "$verbosity attr-dict";
@@ -594,7 +635,7 @@ def FatalOp : SVOp<"fatal", [ProceduralOp]> {
 }
 
 /// Commonalities between `ErrorOp`, `WarningOp`, and `InfoOp`.
-class NonfatalMessageOp<string mnemonic, list<OpTrait> traits = []> :
+class NonfatalMessageOp<string mnemonic, list<Trait> traits = []> :
     SVOp<mnemonic, [ProceduralOp] # traits> {
   string messageDescription = [{
     If present, the optional message is printed with any additional operands
@@ -633,4 +674,16 @@ def InfoOp : NonfatalMessageOp<"info"> {
   let description = [{
     This system task indicates a message with no specific severity.
   }] # messageDescription;
+}
+
+def DepositOp : SVOp<"nonstandard.deposit", 
+    [ProceduralOp, VendorExtension, InOutTypeConstraint<"src", "dest">]> {
+  let summary = "`$deposit` system task";
+  let description = [{
+    This system task sets the value of a net or variable, but doesn't hold it.
+    This is a common simulation vendor extension.
+  }];
+  let arguments = (ins InOutType:$dest, InOutElementType:$src);
+  let results = (outs);
+  let assemblyFormat = "$dest `,` $src  attr-dict `:` qualified(type($src))";
 }

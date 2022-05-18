@@ -13,10 +13,11 @@ add_circt_library(CIRCTCalyxToHW
   LINK_LIBS PUBLIC
   CIRCTCalyx
   CIRCTSV
+  CIRCTSeq
   CIRCTHW
   MLIRIR
   MLIRPass
-  MLIRStandard
+  MLIRFunc
   MLIRSupport
   MLIRTransforms
   )

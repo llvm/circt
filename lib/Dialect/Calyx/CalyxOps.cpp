@@ -104,7 +104,11 @@ static LogicalResult verifyNotComplexSource(Op op) {
 static std::string valueName(Operation *scopeOp, Value v) {
   std::string s;
   llvm::raw_string_ostream os(s);
-  AsmState asmState(scopeOp);
+  // CAVEAT: Since commit 27df7158fe MLIR prefers verifiers to print errors for
+  // operations in generic form, and the printer by default runs a verification.
+  // `valueName` is used in some of these verifiers where preferably the generic
+  // operand form should be used instead.
+  AsmState asmState(scopeOp, OpPrintingFlags().assumeVerified());
   v.printAsOperand(os, asmState);
   return s;
 }
@@ -170,9 +174,6 @@ LogicalResult calyx::verifyCell(Operation *op) {
   if (!isa<ComponentOp>(opParent))
     return op->emitOpError()
            << "has parent: " << opParent << ", expected ComponentOp.";
-  if (!op->hasAttr("instanceName"))
-    return op->emitOpError() << "does not have an instanceName attribute.";
-
   return success();
 }
 
@@ -207,13 +208,13 @@ LogicalResult calyx::verifyControlLikeOp(Operation *op) {
 // (1) %<guard> ? %<src> : i1
 // (2) %<src> : i1
 static ParseResult parseGroupPort(OpAsmParser &parser, OperationState &result) {
-  SmallVector<OpAsmParser::OperandType, 2> operandInfos;
-  OpAsmParser::OperandType guardOrSource;
+  SmallVector<OpAsmParser::UnresolvedOperand, 2> operandInfos;
+  OpAsmParser::UnresolvedOperand guardOrSource;
   if (parser.parseOperand(guardOrSource))
     return failure();
 
   if (succeeded(parser.parseOptionalQuestion())) {
-    OpAsmParser::OperandType source;
+    OpAsmParser::UnresolvedOperand source;
     // The guard exists.
     if (parser.parseOperand(source))
       return failure();
@@ -307,10 +308,10 @@ static void eraseControlWithGroupAndConditional(OpTy op,
 // ProgramOp
 //===----------------------------------------------------------------------===//
 
-static LogicalResult verifyProgramOp(ProgramOp program) {
-  if (program.getEntryPointComponent() == nullptr)
-    return program.emitOpError() << "has undefined entry-point component: \""
-                                 << program.entryPointName() << "\".";
+LogicalResult ProgramOp::verify() {
+  if (getEntryPointComponent() == nullptr)
+    return emitOpError() << "has undefined entry-point component: \""
+                         << entryPointName() << "\".";
 
   return success();
 }
@@ -361,13 +362,16 @@ Value calyx::ComponentOp::getDonePort() {
   return getBlockArgumentWithName("done", *this);
 }
 
-/// Returns the type of the given component as a function type.
-static FunctionType getComponentType(ComponentOp component) {
-  return component.getTypeAttr().getValue().cast<FunctionType>();
+Value calyx::ComponentOp::getClkPort() {
+  return getBlockArgumentWithName("clk", *this);
+}
+
+Value calyx::ComponentOp::getResetPort() {
+  return getBlockArgumentWithName("reset", *this);
 }
 
 SmallVector<PortInfo> ComponentOp::getPortInfo() {
-  auto portTypes = getComponentType(*this).getInputs();
+  auto portTypes = getArgumentTypes();
   ArrayAttr portNamesAttr = portNames(), portAttrs = portAttributes();
   APInt portDirectionsAttr = portDirections();
 
@@ -399,9 +403,10 @@ SmallVector<PortInfo> ComponentOp::getOutputPortInfo() {
       *this, [](const PortInfo &port) { return port.direction == Input; });
 }
 
-static void printComponentOp(OpAsmPrinter &p, ComponentOp op) {
+void ComponentOp::print(OpAsmPrinter &p) {
   auto componentName =
-      op->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName())
+      (*this)
+          ->getAttrOfType<StringAttr>(::mlir::SymbolTable::getSymbolAttrName())
           .getValue();
   p << " ";
   p.printSymbolName(componentName);
@@ -418,34 +423,36 @@ static void printComponentOp(OpAsmPrinter &p, ComponentOp op) {
     });
     p << ")";
   };
-  printPortDefList(op.getInputPortInfo());
+  printPortDefList(getInputPortInfo());
   p << " -> ";
-  printPortDefList(op.getOutputPortInfo());
+  printPortDefList(getOutputPortInfo());
 
   p << " ";
-  p.printRegion(op.body(), /*printEntryBlockArgs=*/false,
+  p.printRegion(body(), /*printEntryBlockArgs=*/false,
                 /*printBlockTerminators=*/false,
                 /*printEmptyBlock=*/false);
 
   SmallVector<StringRef> elidedAttrs = {"portAttributes", "portNames",
-                                        "portDirections", "sym_name", "type"};
-  p.printOptionalAttrDict(op->getAttrs(), elidedAttrs);
+                                        "portDirections", "sym_name",
+                                        ComponentOp::getTypeAttrName()};
+  p.printOptionalAttrDict((*this)->getAttrs(), elidedAttrs);
 }
 
 /// Parses the ports of a Calyx component signature, and adds the corresponding
 /// port names to `attrName`.
 static ParseResult
 parsePortDefList(OpAsmParser &parser, OperationState &result,
-                 SmallVectorImpl<OpAsmParser::OperandType> &ports,
+                 SmallVectorImpl<OpAsmParser::Argument> &ports,
                  SmallVectorImpl<Type> &portTypes,
                  SmallVectorImpl<NamedAttrList> &portAttrs) {
   auto parsePort = [&]() -> ParseResult {
-    OpAsmParser::OperandType port;
+    OpAsmParser::Argument port;
     Type portType;
     // Expect each port to have the form `%<ssa-name> : <type>`.
-    if (parser.parseRegionArgument(port) || parser.parseColon() ||
+    if (parser.parseArgument(port) || parser.parseColon() ||
         parser.parseType(portType))
       return failure();
+    port.type = portType;
     ports.push_back(port);
     portTypes.push_back(portType);
 
@@ -463,9 +470,9 @@ parsePortDefList(OpAsmParser &parser, OperationState &result,
 /// Parses the signature of a Calyx component.
 static ParseResult
 parseComponentSignature(OpAsmParser &parser, OperationState &result,
-                        SmallVectorImpl<OpAsmParser::OperandType> &ports,
+                        SmallVectorImpl<OpAsmParser::Argument> &ports,
                         SmallVectorImpl<Type> &portTypes) {
-  SmallVector<OpAsmParser::OperandType> inPorts, outPorts;
+  SmallVector<OpAsmParser::Argument> inPorts, outPorts;
   SmallVector<Type> inPortTypes, outPortTypes;
   SmallVector<NamedAttrList> portAttributes;
 
@@ -481,7 +488,7 @@ parseComponentSignature(OpAsmParser &parser, OperationState &result,
   // just inferred from the SSA names of the component.
   SmallVector<Attribute> portNames;
   auto getPortName = [context](const auto &port) -> StringAttr {
-    StringRef name = port.name;
+    StringRef name = port.ssaName.name;
     if (name.startswith("%"))
       name = name.drop_front();
     return StringAttr::get(context, name);
@@ -507,16 +514,17 @@ parseComponentSignature(OpAsmParser &parser, OperationState &result,
   return success();
 }
 
-static ParseResult parseComponentOp(OpAsmParser &parser,
-                                    OperationState &result) {
-  using namespace mlir::function_like_impl;
+ParseResult ComponentOp::parse(OpAsmParser &parser, OperationState &result) {
+  using namespace mlir::function_interface_impl;
 
   StringAttr componentName;
-  if (parser.parseSymbolName(componentName, SymbolTable::getSymbolAttrName(),
+  if (parser.parseSymbolName(componentName,
+                             ::mlir::SymbolTable::getSymbolAttrName(),
                              result.attributes))
     return failure();
 
-  SmallVector<OpAsmParser::OperandType> ports;
+  SmallVector<mlir::OpAsmParser::Argument> ports;
+
   SmallVector<Type> portTypes;
   if (parseComponentSignature(parser, result, ports, portTypes))
     return failure();
@@ -528,7 +536,7 @@ static ParseResult parseComponentOp(OpAsmParser &parser,
   result.addAttribute(ComponentOp::getTypeAttrName(), TypeAttr::get(type));
 
   auto *body = result.addRegion();
-  if (parser.parseRegion(*body, ports, portTypes))
+  if (parser.parseRegion(*body, ports))
     return failure();
 
   if (body->empty())
@@ -570,26 +578,26 @@ static LogicalResult hasRequiredPorts(ComponentOp op) {
          << difference;
 }
 
-static LogicalResult verifyComponentOp(ComponentOp op) {
+LogicalResult ComponentOp::verify() {
   // Verify there is exactly one of each the wires and control operations.
-  auto wIt = op.getBody()->getOps<WiresOp>();
-  auto cIt = op.getBody()->getOps<ControlOp>();
+  auto wIt = getBody()->getOps<WiresOp>();
+  auto cIt = getBody()->getOps<ControlOp>();
   if (std::distance(wIt.begin(), wIt.end()) +
           std::distance(cIt.begin(), cIt.end()) !=
       2)
-    return op.emitOpError(
+    return emitOpError(
         "requires exactly one of each: 'calyx.wires', 'calyx.control'.");
 
-  if (failed(hasRequiredPorts(op)))
+  if (failed(hasRequiredPorts(*this)))
     return failure();
 
   // Verify the component actually does something: has a non-empty Control
   // region, or continuous assignments.
   bool hasNoControlConstructs =
-      op.getControlOp().getBody()->getOperations().empty();
-  bool hasNoAssignments = op.getWiresOp().getBody()->getOps<AssignOp>().empty();
+      getControlOp().getBody()->getOperations().empty();
+  bool hasNoAssignments = getWiresOp().getBody()->getOps<AssignOp>().empty();
   if (hasNoControlConstructs && hasNoAssignments)
-    return op->emitOpError(
+    return emitOpError(
         "The component currently does nothing. It needs to either have "
         "continuous assignments in the Wires region or control constructs in "
         "the Control region.");
@@ -609,7 +617,7 @@ static SmallVector<T> concat(const SmallVectorImpl<T> &a,
 
 void ComponentOp::build(OpBuilder &builder, OperationState &result,
                         StringAttr name, ArrayRef<PortInfo> ports) {
-  using namespace mlir::function_like_impl;
+  using namespace mlir::function_interface_impl;
 
   result.addAttribute(::mlir::SymbolTable::getSymbolAttrName(), name);
 
@@ -650,7 +658,8 @@ void ComponentOp::build(OpBuilder &builder, OperationState &result,
   region->push_back(body);
 
   // Add all ports to the body.
-  body->addArguments(portTypes);
+  body->addArguments(portTypes, SmallVector<Location, 4>(
+                                    portTypes.size(), builder.getUnknownLoc()));
 
   // Insert the WiresOp and ControlOp.
   IRRewriter::InsertionGuard guard(builder);
@@ -672,9 +681,7 @@ void ComponentOp::getAsmBlockArgumentNames(
 //===----------------------------------------------------------------------===//
 // ControlOp
 //===----------------------------------------------------------------------===//
-static LogicalResult verifyControlOp(ControlOp control) {
-  return verifyControlBody(control);
-}
+LogicalResult ControlOp::verify() { return verifyControlBody(*this); }
 
 //===----------------------------------------------------------------------===//
 // SeqOp
@@ -691,17 +698,16 @@ void SeqOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
 // ParOp
 //===----------------------------------------------------------------------===//
 
-static LogicalResult verifyParOp(ParOp parOp) {
+LogicalResult ParOp::verify() {
   llvm::SmallSet<StringRef, 8> groupNames;
-  Block *body = parOp.getBody();
 
   // Add loose requirement that the body of a ParOp may not enable the same
   // Group more than once, e.g. calyx.par { calyx.enable @G calyx.enable @G }
-  for (EnableOp op : body->getOps<EnableOp>()) {
+  for (EnableOp op : getBody()->getOps<EnableOp>()) {
     StringRef groupName = op.groupName();
     if (groupNames.count(groupName))
-      return parOp->emitOpError() << "cannot enable the same group: \""
-                                  << groupName << "\" more than once.";
+      return emitOpError() << "cannot enable the same group: \"" << groupName
+                           << "\" more than once.";
     groupNames.insert(groupName);
   }
 
@@ -718,20 +724,44 @@ void ParOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
 //===----------------------------------------------------------------------===//
 // WiresOp
 //===----------------------------------------------------------------------===//
-static LogicalResult verifyWiresOp(WiresOp wires) {
-  auto component = wires->getParentOfType<ComponentOp>();
+LogicalResult WiresOp::verify() {
+  auto component = (*this)->getParentOfType<ComponentOp>();
   auto control = component.getControlOp();
 
   // Verify each group is referenced in the control section.
-  for (auto &&op : *wires.getBody()) {
+  for (auto &&op : *getBody()) {
     if (!isa<GroupInterface>(op))
       continue;
     auto group = cast<GroupInterface>(op);
     auto groupName = group.symName();
-    if (SymbolTable::symbolKnownUseEmpty(groupName, control))
+    if (mlir::SymbolTable::symbolKnownUseEmpty(groupName, control))
       return op.emitOpError() << "with name: " << groupName
                               << " is unused in the control execution schedule";
   }
+
+  // Verify that:
+  // - At most one continuous assignment exists for any given value
+  // - A continuously assigned wire has no assignments inside groups.
+  for (auto thisAssignment : getBody()->getOps<AssignOp>()) {
+    // Always assume guarded assignments will not be driven simultaneously. We
+    // liberally assume that guards are mutually exclusive (more elaborate
+    // static and dynamic checking can be performed to validate such cases).
+    if (thisAssignment.guard())
+      continue;
+
+    Value dest = thisAssignment.dest();
+    for (Operation *user : dest.getUsers()) {
+      auto assignUser = dyn_cast<AssignOp>(user);
+      if (!assignUser || assignUser.dest() != dest ||
+          assignUser == thisAssignment)
+        continue;
+
+      return user->emitOpError() << "destination is already continuously "
+                                    "driven. Other assignment is "
+                                 << thisAssignment;
+    }
+  }
+
   return success();
 }
 
@@ -781,15 +811,14 @@ static LogicalResult isCombinational(Value value, GroupInterface group) {
 
 /// Verifies a combinational group may contain only combinational primitives or
 /// perform combinational logic.
-static LogicalResult verifyCombGroupOp(CombGroupOp group) {
-
-  for (auto &&op : *group.getBody()) {
+LogicalResult CombGroupOp::verify() {
+  for (auto &&op : *getBody()) {
     auto assign = dyn_cast<AssignOp>(op);
     if (assign == nullptr)
       continue;
     Value dst = assign.dest(), src = assign.src();
-    if (failed(isCombinational(dst, group)) ||
-        failed(isCombinational(src, group)))
+    if (failed(isCombinational(dst, *this)) ||
+        failed(isCombinational(src, *this)))
       return failure();
   }
   return success();
@@ -799,9 +828,9 @@ static LogicalResult verifyCombGroupOp(CombGroupOp group) {
 // GroupOp
 //===----------------------------------------------------------------------===//
 GroupGoOp GroupOp::getGoOp() {
-  auto body = this->getBody();
-  auto opIt = body->getOps<GroupGoOp>().begin();
-  return *opIt;
+  auto goOps = getBody()->getOps<GroupGoOp>();
+  size_t nOps = std::distance(goOps.begin(), goOps.end());
+  return nOps ? *goOps.begin() : GroupGoOp();
 }
 
 GroupDoneOp GroupOp::getDoneOp() {
@@ -1014,11 +1043,10 @@ LogicalResult calyx::verifyGroupInterface(Operation *op) {
 /// <instance-name>.<port-name>
 static void getCellAsmResultNames(OpAsmSetValueNameFn setNameFn, Operation *op,
                                   ArrayRef<StringRef> portNames) {
-  assert(isa<CellInterface>(op) && "must implement the Cell interface");
+  auto cellInterface = dyn_cast<CellInterface>(op);
+  assert(cellInterface && "must implement the Cell interface");
 
-  auto instanceName =
-      op->getAttrOfType<FlatSymbolRefAttr>("instanceName").getValue();
-  std::string prefix = instanceName.str() + ".";
+  std::string prefix = cellInterface.instanceName().str() + ".";
   for (size_t i = 0, e = portNames.size(); i != e; ++i)
     setNameFn(op->getResult(i), prefix + portNames[i].str());
 }
@@ -1076,31 +1104,31 @@ static LogicalResult verifyAssignOpValue(AssignOp op, bool isDestination) {
   return success();
 }
 
-static LogicalResult verifyAssignOp(AssignOp assign) {
+LogicalResult AssignOp::verify() {
   bool isDestination = true, isSource = false;
-  if (failed(verifyAssignOpValue(assign, isDestination)))
+  if (failed(verifyAssignOpValue(*this, isDestination)))
     return failure();
-  if (failed(verifyAssignOpValue(assign, isSource)))
+  if (failed(verifyAssignOpValue(*this, isSource)))
     return failure();
 
   return success();
 }
 
-static ParseResult parseAssignOp(OpAsmParser &parser, OperationState &result) {
-  OpAsmParser::OperandType destination;
+ParseResult AssignOp::parse(OpAsmParser &parser, OperationState &result) {
+  OpAsmParser::UnresolvedOperand destination;
   if (parser.parseOperand(destination) || parser.parseEqual())
     return failure();
 
   // An AssignOp takes one of the two following forms:
   // (1) %<dest> = %<src> : <type>
   // (2) %<dest> = %<guard> ? %<src> : <type>
-  OpAsmParser::OperandType guardOrSource;
+  OpAsmParser::UnresolvedOperand guardOrSource;
   if (parser.parseOperand(guardOrSource))
     return failure();
 
   // Since the guard is optional, we need to check if there is an accompanying
   // `?` symbol.
-  OpAsmParser::OperandType source;
+  OpAsmParser::UnresolvedOperand source;
   bool hasGuard = succeeded(parser.parseOptionalQuestion());
   if (hasGuard) {
     // The guard exists. Parse the source.
@@ -1129,13 +1157,13 @@ static ParseResult parseAssignOp(OpAsmParser &parser, OperationState &result) {
   return success();
 }
 
-static void printAssignOp(OpAsmPrinter &p, AssignOp op) {
-  p << " " << op.dest() << " = ";
+void AssignOp::print(OpAsmPrinter &p) {
+  p << " " << dest() << " = ";
 
-  Value guard = op.guard(), source = op.src();
+  Value bguard = guard(), source = src();
   // The guard is optional.
-  if (guard)
-    p << guard << " ? ";
+  if (bguard)
+    p << bguard << " ? ";
 
   // We only need to print a single type; the destination and source are
   // guaranteed to be the same type.
@@ -1167,21 +1195,6 @@ static LogicalResult verifyInstanceOpType(InstanceOp instance,
     return instance.emitOpError()
            << "cannot reference the entry-point component: '" << entryPointName
            << "'.";
-
-  // Verify there are no other instances with this name.
-  auto component = instance->getParentOfType<ComponentOp>();
-  StringAttr name =
-      StringAttr::get(instance.getContext(), instance.instanceName());
-  Optional<SymbolTable::UseRange> componentUseRange =
-      SymbolTable::getSymbolUses(name, component.getRegion());
-  if (componentUseRange.hasValue() &&
-      llvm::any_of(componentUseRange.getValue(),
-                   [&](SymbolTable::SymbolUse use) {
-                     return use.getUser() != instance;
-                   }))
-    return instance.emitOpError()
-           << "with instance symbol: '" << name.getValue()
-           << "' is already a symbol for another instance.";
 
   // Verify the instance result ports with those of its referenced component.
   SmallVector<PortInfo> componentPorts = referencedComponent.getPortInfo();
@@ -1215,7 +1228,7 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
                        << "', which does not exist.";
 
   Operation *shadowedComponentName =
-      symbolTable.lookupNearestSymbolFrom(program, instanceNameAttr());
+      symbolTable.lookupNearestSymbolFrom(program, sym_nameAttr());
   if (shadowedComponentName != nullptr)
     return emitError() << "instance symbol: '" << instanceName()
                        << "' is already a symbol for another component.";
@@ -1260,9 +1273,7 @@ SmallVector<DictionaryAttr> InstanceOp::portAttributes() {
 // GroupGoOp
 //===----------------------------------------------------------------------===//
 
-static LogicalResult verifyGroupGoOp(GroupGoOp goOp) {
-  return verifyNotComplexSource(goOp);
-}
+LogicalResult GroupGoOp::verify() { return verifyNotComplexSource(*this); }
 
 /// Provide meaningful names to the result value of a GroupGoOp.
 void GroupGoOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
@@ -1272,11 +1283,9 @@ void GroupGoOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   setNameFn(getResult(), resultName);
 }
 
-static void printGroupGoOp(OpAsmPrinter &p, GroupGoOp op) {
-  printGroupPort(p, op);
-}
+void GroupGoOp::print(OpAsmPrinter &p) { printGroupPort(p, *this); }
 
-static ParseResult parseGroupGoOp(OpAsmParser &parser, OperationState &result) {
+ParseResult GroupGoOp::parse(OpAsmParser &parser, OperationState &result) {
   if (parseGroupPort(parser, result))
     return failure();
 
@@ -1288,9 +1297,9 @@ static ParseResult parseGroupGoOp(OpAsmParser &parser, OperationState &result) {
 // GroupDoneOp
 //===----------------------------------------------------------------------===//
 
-static LogicalResult verifyGroupDoneOp(GroupDoneOp doneOp) {
-  Operation *srcOp = doneOp.src().getDefiningOp();
-  Value optionalGuard = doneOp.guard();
+LogicalResult GroupDoneOp::verify() {
+  Operation *srcOp = src().getDefiningOp();
+  Value optionalGuard = guard();
   Operation *guardOp = optionalGuard ? optionalGuard.getDefiningOp() : nullptr;
   bool noGuard = (guardOp == nullptr);
 
@@ -1299,19 +1308,16 @@ static LogicalResult verifyGroupDoneOp(GroupDoneOp doneOp) {
     return success();
 
   if (isa<hw::ConstantOp>(srcOp) && (noGuard || isa<hw::ConstantOp>(guardOp)))
-    return doneOp->emitOpError()
-           << "with constant source" << (noGuard ? "" : " and constant guard")
-           << ". This should be a combinational group.";
+    return emitOpError() << "with constant source"
+                         << (noGuard ? "" : " and constant guard")
+                         << ". This should be a combinational group.";
 
-  return verifyNotComplexSource(doneOp);
+  return verifyNotComplexSource(*this);
 }
 
-static void printGroupDoneOp(OpAsmPrinter &p, GroupDoneOp op) {
-  printGroupPort(p, op);
-}
+void GroupDoneOp::print(OpAsmPrinter &p) { printGroupPort(p, *this); }
 
-static ParseResult parseGroupDoneOp(OpAsmParser &parser,
-                                    OperationState &result) {
+ParseResult GroupDoneOp::parse(OpAsmParser &parser, OperationState &result) {
   return parseGroupPort(parser, result);
 }
 
@@ -1341,11 +1347,11 @@ SmallVector<DictionaryAttr> RegisterOp::portAttributes() {
   reset.append("reset", isSet);
   done.append("done", isSet);
   return {
-      DictionaryAttr(),               // In
+      DictionaryAttr::get(context),   // In
       writeEn.getDictionary(context), // Write enable
       clk.getDictionary(context),     // Clk
       reset.getDictionary(context),   // Reset
-      DictionaryAttr(),               // Out
+      DictionaryAttr::get(context),   // Out
       done.getDictionary(context)     // Done
   };
 }
@@ -1382,7 +1388,7 @@ SmallVector<DictionaryAttr> MemoryOp::portAttributes() {
   SmallVector<DictionaryAttr> portAttributes;
   MLIRContext *context = getContext();
   for (size_t i = 0, e = addrSizes().size(); i != e; ++i)
-    portAttributes.push_back(DictionaryAttr()); // Addresses
+    portAttributes.push_back(DictionaryAttr::get(context)); // Addresses
 
   // Use a boolean to indicate this attribute is used.
   IntegerAttr isSet = IntegerAttr::get(IntegerType::get(context, 1), 1);
@@ -1390,10 +1396,10 @@ SmallVector<DictionaryAttr> MemoryOp::portAttributes() {
   writeEn.append("go", isSet);
   clk.append("clk", isSet);
   done.append("done", isSet);
-  portAttributes.append({DictionaryAttr(),               // In
+  portAttributes.append({DictionaryAttr::get(context),   // In
                          writeEn.getDictionary(context), // Write enable
                          clk.getDictionary(context),     // Clk
-                         DictionaryAttr(),               // Out
+                         DictionaryAttr::get(context),   // Out
                          done.getDictionary(context)}    // Done
   );
   return portAttributes;
@@ -1402,8 +1408,8 @@ SmallVector<DictionaryAttr> MemoryOp::portAttributes() {
 void MemoryOp::build(OpBuilder &builder, OperationState &state,
                      StringRef instanceName, int64_t width,
                      ArrayRef<int64_t> sizes, ArrayRef<int64_t> addrSizes) {
-  state.addAttribute("instanceName", FlatSymbolRefAttr::get(
-                                         builder.getContext(), instanceName));
+  state.addAttribute(SymbolTable::getSymbolAttrName(),
+                     builder.getStringAttr(instanceName));
   state.addAttribute("width", builder.getI64IntegerAttr(width));
   state.addAttribute("sizes", builder.getI64ArrayAttr(sizes));
   state.addAttribute("addrSizes", builder.getI64ArrayAttr(addrSizes));
@@ -1418,25 +1424,25 @@ void MemoryOp::build(OpBuilder &builder, OperationState &state,
   state.addTypes(types);
 }
 
-static LogicalResult verifyMemoryOp(MemoryOp memoryOp) {
-  ArrayRef<Attribute> sizes = memoryOp.sizes().getValue();
-  ArrayRef<Attribute> addrSizes = memoryOp.addrSizes().getValue();
-  size_t numDims = memoryOp.sizes().size();
-  size_t numAddrs = memoryOp.addrSizes().size();
+LogicalResult MemoryOp::verify() {
+  ArrayRef<Attribute> opSizes = sizes().getValue();
+  ArrayRef<Attribute> opAddrSizes = addrSizes().getValue();
+  size_t numDims = sizes().size();
+  size_t numAddrs = addrSizes().size();
   if (numDims != numAddrs)
-    return memoryOp.emitOpError("mismatched number of dimensions (")
+    return emitOpError("mismatched number of dimensions (")
            << numDims << ") and address sizes (" << numAddrs << ")";
 
   size_t numExtraPorts = 5; // write data/enable, clk, and read data/done.
-  if (memoryOp.getNumResults() != numAddrs + numExtraPorts)
-    return memoryOp.emitOpError("incorrect number of address ports, expected ")
+  if (getNumResults() != numAddrs + numExtraPorts)
+    return emitOpError("incorrect number of address ports, expected ")
            << numAddrs;
 
   for (size_t i = 0; i < numDims; ++i) {
-    int64_t size = sizes[i].cast<IntegerAttr>().getInt();
-    int64_t addrSize = addrSizes[i].cast<IntegerAttr>().getInt();
+    int64_t size = opSizes[i].cast<IntegerAttr>().getInt();
+    int64_t addrSize = opAddrSizes[i].cast<IntegerAttr>().getInt();
     if (llvm::Log2_64_Ceil(size) > addrSize)
-      return memoryOp.emitOpError("address size (")
+      return emitOpError("address size (")
              << addrSize << ") for dimension " << i
              << " can't address the entire range (" << size << ")";
   }
@@ -1447,19 +1453,19 @@ static LogicalResult verifyMemoryOp(MemoryOp memoryOp) {
 //===----------------------------------------------------------------------===//
 // EnableOp
 //===----------------------------------------------------------------------===//
-static LogicalResult verifyEnableOp(EnableOp enableOp) {
-  auto component = enableOp->getParentOfType<ComponentOp>();
+LogicalResult EnableOp::verify() {
+  auto component = (*this)->getParentOfType<ComponentOp>();
   auto wiresOp = component.getWiresOp();
-  StringRef groupName = enableOp.groupName();
+  StringRef name = groupName();
 
-  auto groupOp = wiresOp.lookupSymbol<GroupInterface>(groupName);
+  auto groupOp = wiresOp.lookupSymbol<GroupInterface>(name);
   if (!groupOp)
-    return enableOp.emitOpError()
-           << "with group '" << groupName << "', which does not exist.";
+    return emitOpError() << "with group '" << name
+                         << "', which does not exist.";
 
   if (isa<CombGroupOp>(groupOp))
-    return enableOp.emitOpError() << "with group '" << groupName
-                                  << "', which is a combinational group.";
+    return emitOpError() << "with group '" << name
+                         << "', which is a combinational group.";
 
   return success();
 }
@@ -1468,14 +1474,14 @@ static LogicalResult verifyEnableOp(EnableOp enableOp) {
 // IfOp
 //===----------------------------------------------------------------------===//
 
-static LogicalResult verifyIfOp(IfOp ifOp) {
-  auto component = ifOp->getParentOfType<ComponentOp>();
+LogicalResult IfOp::verify() {
+  auto component = (*this)->getParentOfType<ComponentOp>();
   WiresOp wiresOp = component.getWiresOp();
 
-  if (ifOp.elseBodyExists() && ifOp.getElseBody()->empty())
-    return ifOp.emitError() << "empty 'else' region.";
+  if (elseBodyExists() && getElseBody()->empty())
+    return emitError() << "empty 'else' region.";
 
-  Optional<StringRef> optGroupName = ifOp.groupName();
+  Optional<StringRef> optGroupName = groupName();
   if (!optGroupName.hasValue()) {
     // No combinational group was provided.
     return success();
@@ -1483,18 +1489,18 @@ static LogicalResult verifyIfOp(IfOp ifOp) {
   StringRef groupName = optGroupName.getValue();
   auto groupOp = wiresOp.lookupSymbol<GroupInterface>(groupName);
   if (!groupOp)
-    return ifOp.emitOpError()
-           << "with group '" << groupName << "', which does not exist.";
+    return emitOpError() << "with group '" << groupName
+                         << "', which does not exist.";
 
   if (isa<GroupOp>(groupOp))
-    return ifOp.emitOpError() << "with group '" << groupName
-                              << "', which is not a combinational group.";
+    return emitOpError() << "with group '" << groupName
+                         << "', which is not a combinational group.";
 
-  if (failed(groupOp.drivesPort(ifOp.cond())))
-    return ifOp.emitError()
-           << "with conditional op: '" << valueName(component, ifOp.cond())
-           << "' expected to be driven from group: '" << groupName
-           << "' but no driver was found.";
+  if (failed(groupOp.drivesPort(cond())))
+    return emitError() << "with conditional op: '"
+                       << valueName(component, cond())
+                       << "' expected to be driven from group: '" << groupName
+                       << "' but no driver was found.";
 
   return success();
 }
@@ -1673,11 +1679,11 @@ void IfOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
 //===----------------------------------------------------------------------===//
 // WhileOp
 //===----------------------------------------------------------------------===//
-static LogicalResult verifyWhileOp(WhileOp whileOp) {
-  auto component = whileOp->getParentOfType<ComponentOp>();
+LogicalResult WhileOp::verify() {
+  auto component = (*this)->getParentOfType<ComponentOp>();
   auto wiresOp = component.getWiresOp();
 
-  Optional<StringRef> optGroupName = whileOp.groupName();
+  Optional<StringRef> optGroupName = groupName();
   if (!optGroupName.hasValue()) {
     /// No combinational group was provided
     return success();
@@ -1685,18 +1691,17 @@ static LogicalResult verifyWhileOp(WhileOp whileOp) {
   StringRef groupName = optGroupName.getValue();
   auto groupOp = wiresOp.lookupSymbol<GroupInterface>(groupName);
   if (!groupOp)
-    return whileOp.emitOpError()
-           << "with group '" << groupName << "', which does not exist.";
+    return emitOpError() << "with group '" << groupName
+                         << "', which does not exist.";
 
   if (isa<GroupOp>(groupOp))
-    return whileOp.emitOpError() << "with group '" << groupName
-                                 << "', which is not a combinational group.";
+    return emitOpError() << "with group '" << groupName
+                         << "', which is not a combinational group.";
 
-  if (failed(groupOp.drivesPort(whileOp.cond())))
-    return whileOp.emitError()
-           << "conditional op: '" << valueName(component, whileOp.cond())
-           << "' expected to be driven from group: '" << groupName
-           << "' but no driver was found.";
+  if (failed(groupOp.drivesPort(cond())))
+    return emitError() << "conditional op: '" << valueName(component, cond())
+                       << "' expected to be driven from group: '" << groupName
+                       << "' but no driver was found.";
 
   return success();
 }
@@ -1716,7 +1721,7 @@ LogicalResult WhileOp::canonicalize(WhileOp whileOp,
 //===----------------------------------------------------------------------===//
 
 SmallVector<StringRef> MultPipeLibOp::portNames() {
-  return {"left", "right", "go", "clk", "reset", "out", "done"};
+  return {"clk", "reset", "go", "left", "right", "out", "done"};
 }
 
 SmallVector<Direction> MultPipeLibOp::portDirections() {
@@ -1736,12 +1741,12 @@ SmallVector<DictionaryAttr> MultPipeLibOp::portAttributes() {
   reset.append("reset", isSet);
   done.append("done", isSet);
   return {
-      DictionaryAttr(),             /* Lhs    */
-      DictionaryAttr(),             /* Rhs    */
-      go.getDictionary(context),    /* Go     */
       clk.getDictionary(context),   /* Clk    */
       reset.getDictionary(context), /* Reset  */
-      DictionaryAttr(),             /* Out    */
+      go.getDictionary(context),    /* Go     */
+      DictionaryAttr::get(context), /* Lhs    */
+      DictionaryAttr::get(context), /* Rhs    */
+      DictionaryAttr::get(context), /* Out    */
       done.getDictionary(context)   /* Done   */
   };
 }
@@ -1751,7 +1756,7 @@ SmallVector<DictionaryAttr> MultPipeLibOp::portAttributes() {
 //===----------------------------------------------------------------------===//
 
 SmallVector<StringRef> DivPipeLibOp::portNames() {
-  return {"left",         "right",         "go",  "clk", "reset",
+  return {"clk",          "reset",         "go",  "left", "right",
           "out_quotient", "out_remainder", "done"};
 }
 
@@ -1772,13 +1777,13 @@ SmallVector<DictionaryAttr> DivPipeLibOp::portAttributes() {
   reset.append("reset", isSet);
   done.append("done", isSet);
   return {
-      DictionaryAttr(),             /* Lhs       */
-      DictionaryAttr(),             /* Rhs       */
-      go.getDictionary(context),    /* Go        */
       clk.getDictionary(context),   /* Clk       */
       reset.getDictionary(context), /* Reset     */
-      DictionaryAttr(),             /* Quotient  */
-      DictionaryAttr(),             /* Remainder */
+      go.getDictionary(context),    /* Go        */
+      DictionaryAttr::get(context), /* Lhs       */
+      DictionaryAttr::get(context), /* Rhs       */
+      DictionaryAttr::get(context), /* Quotient  */
+      DictionaryAttr::get(context), /* Remainder */
       done.getDictionary(context)   /* Done      */
   };
 }
@@ -1787,11 +1792,32 @@ SmallVector<DictionaryAttr> DivPipeLibOp::portAttributes() {
 // Calyx library ops
 //===----------------------------------------------------------------------===//
 
+LogicalResult PadLibOp::verify() {
+  unsigned inBits = getResult(0).getType().getIntOrFloatBitWidth();
+  unsigned outBits = getResult(1).getType().getIntOrFloatBitWidth();
+  if (inBits >= outBits)
+    return emitOpError("expected input bits (")
+           << inBits << ')' << " to be less than output bits (" << outBits
+           << ')';
+  return success();
+}
+
+LogicalResult SliceLibOp::verify() {
+  unsigned inBits = getResult(0).getType().getIntOrFloatBitWidth();
+  unsigned outBits = getResult(1).getType().getIntOrFloatBitWidth();
+  if (inBits <= outBits)
+    return emitOpError("expected input bits (")
+           << inBits << ')' << " to be greater than output bits (" << outBits
+           << ')';
+  return success();
+}
+
 #define ImplUnaryOpCellInterface(OpType)                                       \
   SmallVector<StringRef> OpType::portNames() { return {"in", "out"}; }         \
   SmallVector<Direction> OpType::portDirections() { return {Input, Output}; }  \
   SmallVector<DictionaryAttr> OpType::portAttributes() {                       \
-    return {DictionaryAttr(), DictionaryAttr()};                               \
+    return {DictionaryAttr::get(getContext()),                                 \
+            DictionaryAttr::get(getContext())};                                \
   }                                                                            \
   void OpType::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {              \
     getCellAsmResultNames(setNameFn, *this, this->portNames());                \
@@ -1808,13 +1834,16 @@ SmallVector<DictionaryAttr> DivPipeLibOp::portAttributes() {
     getCellAsmResultNames(setNameFn, *this, this->portNames());                \
   }                                                                            \
   SmallVector<DictionaryAttr> OpType::portAttributes() {                       \
-    return {DictionaryAttr(), DictionaryAttr(), DictionaryAttr()};             \
+    return {DictionaryAttr::get(getContext()),                                 \
+            DictionaryAttr::get(getContext()),                                 \
+            DictionaryAttr::get(getContext())};                                \
   }
 
 // clang-format off
 ImplUnaryOpCellInterface(PadLibOp)
 ImplUnaryOpCellInterface(SliceLibOp)
 ImplUnaryOpCellInterface(NotLibOp)
+ImplUnaryOpCellInterface(WireLibOp)
 
 ImplBinOpCellInterface(LtLibOp)
 ImplBinOpCellInterface(GtLibOp)

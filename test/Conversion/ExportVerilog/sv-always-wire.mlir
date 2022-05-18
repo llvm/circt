@@ -1,4 +1,4 @@
-// RUN: circt-opt %s --export-verilog --verify-diagnostics | FileCheck %s --strict-whitespace
+// RUN: circt-opt %s --export-verilog --verify-diagnostics -o %t | FileCheck %s --strict-whitespace
 
 // CHECK-LABEL: module AlwaysSpill(
 hw.module @AlwaysSpill(%port: i1) {
@@ -26,4 +26,14 @@ hw.module @AlwaysSpill(%port: i1) {
   // CHECK: assign [[TMP:.+]] =
   // CHECK-NEXT: always_ff @(posedge [[TMP]])
   sv.alwaysff(posedge %true) {}
+}
+
+// CHECK-LABEL: module Foo
+hw.module @Foo(%clock: i1, %reset0: i1, %reset1: i1) -> () {
+  %0 = comb.or %reset0, %reset1 : i1
+// CHECK-NOT: _GEN_0
+  sv.always posedge %0 {
+    sv.if %0 {
+    }
+  }
 }

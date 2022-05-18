@@ -10,7 +10,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
-#include "circt/Dialect/FIRRTL/InstanceGraph.h"
+#include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "llvm/Support/DOTGraphTraits.h"
 #include "llvm/Support/GraphWriter.h"
@@ -18,32 +18,6 @@
 
 using namespace circt;
 using namespace firrtl;
-
-template <>
-struct llvm::DOTGraphTraits<InstanceGraph *>
-    : public llvm::DefaultDOTGraphTraits {
-  using DefaultDOTGraphTraits::DefaultDOTGraphTraits;
-
-  static std::string getNodeLabel(InstanceGraphNode *node, InstanceGraph *) {
-    // The name of the graph node is the module name.
-    auto *op = node->getModule();
-    if (auto module = dyn_cast<FModuleOp>(op)) {
-      return module.getName().str();
-    }
-    if (auto extModule = dyn_cast<FExtModuleOp>(op)) {
-      return extModule.getName().str();
-    }
-    return "<<unknown>>";
-  }
-  template <typename Iterator>
-  static std::string getEdgeAttributes(const InstanceGraphNode *node,
-                                       Iterator it, InstanceGraph *) {
-    // Set an edge label that is the name of the instance.
-    auto *instanceRecord = *it.getCurrent();
-    auto instanceOp = instanceRecord->getInstance();
-    return ("label=" + instanceOp.name()).str();
-  }
-};
 
 namespace {
 struct PrintInstanceGraphPass

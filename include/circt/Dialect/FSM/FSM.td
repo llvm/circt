@@ -9,7 +9,9 @@
 #ifndef CIRCT_DIALECT_FSM_TD
 #define CIRCT_DIALECT_FSM_TD
 
+include "mlir/IR/AttrTypeBase.td"
 include "mlir/IR/OpBase.td"
+include "mlir/IR/FunctionInterfaces.td"
 
 def FSMDialect : Dialect {
   let name = "fsm";
@@ -26,7 +28,7 @@ def FSMDialect : Dialect {
 class FSMType<string name> : TypeDef<FSMDialect, name> {}
 
 // Base class for the operations in this dialect.
-class FSMOp<string mnemonic, list<OpTrait> traits = []> :
+class FSMOp<string mnemonic, list<Trait> traits = []> :
     Op<FSMDialect, mnemonic, traits>;
 
 include "FSMTypes.td"

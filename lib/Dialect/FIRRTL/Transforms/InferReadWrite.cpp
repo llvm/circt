@@ -125,7 +125,8 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
           resultTypes, memOp.readLatency(), memOp.writeLatency(), memOp.depth(),
           RUWAttr::Undefined, builder.getArrayAttr(resultNames),
           memOp.nameAttr(), memOp.annotations(),
-          builder.getArrayAttr(portAnnotations), memOp.inner_symAttr());
+          builder.getArrayAttr(portAnnotations), memOp.inner_symAttr(),
+          memOp.groupIDAttr());
       auto rwPort = rwMem->getResult(0);
       // Create the subfield access to all fields of the port.
       // The addr should be connected to read/write address depending on the
@@ -149,13 +150,13 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
       auto writeClock =
           builder.create<WireOp>(ClockType::get(enb.getContext()));
       // addr = Mux(WriteEnable, WriteAddress, ReadAddress).
-      builder.create<ConnectOp>(
+      builder.create<StrictConnectOp>(
           addr, builder.create<MuxPrimOp>(wEnWire, wAddr, rAddr));
       // Enable = Or(WriteEnable, ReadEnable).
-      builder.create<ConnectOp>(enb,
-                                builder.create<OrPrimOp>(rEnWire, wEnWire));
+      builder.create<StrictConnectOp>(
+          enb, builder.create<OrPrimOp>(rEnWire, wEnWire));
       // WriteMode = WriteEnable.
-      builder.create<ConnectOp>(wmode, wEnWire);
+      builder.create<StrictConnectOp>(wmode, wEnWire);
       // Now iterate over the original memory read and write ports.
       for (auto portIt : llvm::enumerate(memOp.results())) {
         // Get the port value.
@@ -200,7 +201,7 @@ private:
   // Get the source value which is connected to the dst.
   Value getConnectSrc(Value dst) {
     for (auto *c : dst.getUsers())
-      if (auto connect = dyn_cast<ConnectOp>(c))
+      if (auto connect = dyn_cast<FConnectLike>(c))
         if (connect.dest() == dst)
           return connect.src();
 
@@ -363,7 +364,7 @@ private:
           if (fName.contains("mask")) {
             WireOp dummy = builder.create<WireOp>(oldRes.getType());
             oldRes->replaceAllUsesWith(dummy);
-            builder.create<ConnectOp>(
+            builder.create<StrictConnectOp>(
                 sf, builder.create<ConstantOp>(
                         UIntType::get(builder.getContext(), 1), APInt(1, 1)));
           } else

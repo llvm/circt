@@ -81,15 +81,38 @@ struct LoweringOptions {
   /// statements to be labeled.
   bool enforceVerifLabels = false;
 
-  /// This parameter limits the maximum number of tokes per one expression.
-  /// https://github.com/verilator/verilator/issues/2752
-  enum { DEFAULT_TOKEN_NUMBER = 40000 };
-  unsigned maximumNumberOfTokensPerExpression = DEFAULT_TOKEN_NUMBER;
+  /// This is the maximum number of terms in an expression before that
+  /// expression spills a wire.
+  enum { DEFAULT_TERM_LIMIT = 256 };
+  unsigned maximumNumberOfTermsPerExpression = DEFAULT_TERM_LIMIT;
+
+  /// This is the maximum number of terms in an expression used in a concat
+  /// before that expression spills a wire.
+  enum { DEFAULT_CONCAT_TERM_LIMIT = 10 };
+  unsigned maximumNumberOfTermsInConcat = DEFAULT_CONCAT_TERM_LIMIT;
 
   /// This is the target width of lines in an emitted Verilog source file in
   /// columns.
   enum { DEFAULT_LINE_LENGTH = 90 };
   unsigned emittedLineLength = DEFAULT_LINE_LENGTH;
+
+  /// Add an explicit bitcast for avoiding bitwidth mismatch LINT errors.
+  /// TODO: Change the name of option since it is not limit to add/mul anymore.
+  bool explicitBitcastAddMul = false;
+
+  /// If true, replicated ops are emitted to a header file.
+  bool emitReplicatedOpsToHeader = false;
+
+  /// This option controls emitted location information style.
+  enum LocationInfoStyle {
+    Plain,                // Default.
+    WrapInAtSquareBracket // Wrap location info in @[..].
+  } locationInfoStyle = Plain;
+
+  /// If true, every port is declared separately
+  /// (each includes direction and type (e.g., `input [3:0]`)).
+  /// When false (default), ports share declarations when possible.
+  bool disallowPortDeclSharing = false;
 };
 
 /// Register commandline options for the verilog emitter.

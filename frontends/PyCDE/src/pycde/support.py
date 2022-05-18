@@ -80,24 +80,24 @@ def _obj_to_value(x, type, result_type=None):
   from .value import Value
   from .dialects import hw
   from .pycde_types import (TypeAliasType, ArrayType, StructType, BitVectorType,
-                            PyCDEType)
+                            Type)
 
-  type = PyCDEType(type)
+  type = Type(type)
   if isinstance(type, TypeAliasType):
     return _obj_to_value(x, type.inner_type, type)
 
   if result_type is None:
     result_type = type
   else:
-    result_type = PyCDEType(result_type)
+    result_type = Type(result_type)
     assert isinstance(result_type, TypeAliasType) or result_type == type
 
-  val = Value.get(x)
+  val = Value(x)
   # If x is already a valid value, just return it.
   if val is not None:
     if val.type != result_type:
       raise ValueError(f"Expected {result_type}, got {val.type}")
-    return Value.get(val)
+    return val
 
   if isinstance(x, int):
     if not isinstance(type, BitVectorType):

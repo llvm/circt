@@ -15,7 +15,7 @@
 #include "Tester.h"
 #include "circt/InitAllDialects.h"
 #include "mlir/IR/AsmState.h"
-#include "mlir/Parser.h"
+#include "mlir/Parser/Parser.h"
 #include "mlir/Support/FileUtilities.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/InitLLVM.h"
@@ -37,42 +37,54 @@ using namespace circt;
 // Options
 //===----------------------------------------------------------------------===//
 
-static cl::opt<std::string>
-    inputFilename(cl::Positional, cl::desc("<input file>"), cl::Required);
+static cl::OptionCategory mainCategory("circt-reduce Options");
+
+static cl::opt<std::string> inputFilename(cl::Positional,
+                                          cl::desc("<input file>"),
+                                          cl::Required, cl::cat(mainCategory));
 
 static cl::opt<std::string>
     outputFilename("o", cl::init("-"),
-                   cl::desc("Output filename for the reduced test case"));
+                   cl::desc("Output filename for the reduced test case"),
+                   cl::cat(mainCategory));
 
 static cl::opt<bool>
     keepBest("keep-best", cl::init(true),
-             cl::desc("Keep overwriting the output with better reductions"));
+             cl::desc("Keep overwriting the output with better reductions"),
+             cl::cat(mainCategory));
 
-static cl::opt<bool> skipInitial(
-    "skip-initial", cl::init(false),
-    cl::desc("Skip checking the initial input for interestingness"));
+static cl::opt<bool>
+    skipInitial("skip-initial", cl::init(false),
+                cl::desc("Skip checking the initial input for interestingness"),
+                cl::cat(mainCategory));
 
 static cl::opt<bool> listReductions("list", cl::init(false),
-                                    cl::desc("List all available reductions"));
+                                    cl::desc("List all available reductions"),
+                                    cl::cat(mainCategory));
 
-static cl::list<std::string> includeReductions(
-    "include", cl::ZeroOrMore,
-    cl::desc("Only run a subset of the available reductions"));
+static cl::list<std::string>
+    includeReductions("include", cl::ZeroOrMore,
+                      cl::desc("Only run a subset of the available reductions"),
+                      cl::cat(mainCategory));
 
 static cl::list<std::string>
     excludeReductions("exclude", cl::ZeroOrMore,
-                      cl::desc("Do not run some of the available reductions"));
+                      cl::desc("Do not run some of the available reductions"),
+                      cl::cat(mainCategory));
 
 static cl::opt<std::string> testerCommand(
     "test", cl::Required,
-    cl::desc("A command or script to check if output is interesting"));
+    cl::desc("A command or script to check if output is interesting"),
+    cl::cat(mainCategory));
 
 static cl::list<std::string>
     testerArgs("test-arg", cl::ZeroOrMore,
-               cl::desc("Additional arguments to the test"));
+               cl::desc("Additional arguments to the test"),
+               cl::cat(mainCategory));
 
 static cl::opt<bool> verbose("v", cl::init(true),
-                             cl::desc("Print reduction progress to stderr"));
+                             cl::desc("Print reduction progress to stderr"),
+                             cl::cat(mainCategory));
 
 //===----------------------------------------------------------------------===//
 // Tool Implementation
@@ -127,7 +139,8 @@ static LogicalResult execute(MLIRContext &context) {
 
   // Parse the input file.
   VERBOSE(llvm::errs() << "Reading input\n");
-  OwningModuleRef module = parseSourceFile(inputFilename, &context);
+  mlir::OwningOpRef<mlir::ModuleOp> module =
+      parseSourceFile<ModuleOp>(inputFilename, &context);
   if (!module)
     return failure();
 
@@ -168,7 +181,7 @@ static LogicalResult execute(MLIRContext &context) {
       // Apply the pattern to the subset of operations selected by `rangeBase`
       // and `rangeLength`.
       size_t opIdx = 0;
-      OwningModuleRef newModule = module->clone();
+      mlir::OwningOpRef<mlir::ModuleOp> newModule = module->clone();
       pattern.beforeReduction(*newModule);
       newModule->walk([&](Operation *op) {
         if (!pattern.match(op))
@@ -283,6 +296,10 @@ static LogicalResult execute(MLIRContext &context) {
 /// `execute` function to do the actual work.
 int main(int argc, char **argv) {
   llvm::InitLLVM y(argc, argv);
+
+  // Hide default LLVM options, other than for this tool.
+  // MLIR options are added below.
+  cl::HideUnrelatedOptions(mainCategory);
 
   // Parse the command line options provided by the user.
   registerMLIRContextCLOptions();

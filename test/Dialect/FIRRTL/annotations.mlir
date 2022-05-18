@@ -3,7 +3,7 @@
 // circt.test copies the annotation to the target
 // circt.testNT puts the targetless annotation on the circuit
 
-firrtl.circuit "Aggregates" attributes {annotations = [
+firrtl.circuit "Aggregates" attributes {rawAnnotations = [
   {class = "circt.test", target = "~Aggregates|Aggregates>vector[1][1][1]"},
   {class = "circt.test", target = "~Aggregates|Aggregates>bundle.a.b.c"}
   ]} {
@@ -30,7 +30,7 @@ firrtl.circuit "Aggregates" attributes {annotations = [
 // CHECK: firrtl.instance baz sym @baz {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}, {circt.nonlocal = @nla_0, class = "circt.nonlocal"}, {circt.nonlocal = @nla_1, class = "circt.nonlocal"}]} @BazNL()
 // CHECK: firrtl.module @FooL
 // CHECK: %w3 = firrtl.wire {annotations = [{class = "circt.test", nl = "nl3"}]}
-firrtl.circuit "FooNL"  attributes {annotations = [
+firrtl.circuit "FooNL"  attributes {rawAnnotations = [
   {class = "circt.test", nl = "nl", target = "~FooNL|FooNL/baz:BazNL/bar:BarNL"},
   {class = "circt.test", nl = "nl", target = "~FooNL|FooNL/baz:BazNL/bar:BarNL>w"},
   {class = "circt.test", nl = "nl2", target = "~FooNL|FooNL/baz:BazNL/bar:BarNL>w2.b[2]"},
@@ -64,7 +64,7 @@ firrtl.circuit "FooNL"  attributes {annotations = [
 // CHECK: firrtl.module @MemPortsNL()
 // CHECK:   firrtl.instance child sym @child
 // CHECK-SAME: annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}]
-firrtl.circuit "MemPortsNL" attributes {annotations = [
+firrtl.circuit "MemPortsNL" attributes {rawAnnotations = [
   {class = "circt.test", nl = "nl", target = "~MemPortsNL|MemPortsNL/child:Child>bar.r"}
   ]}  {
   firrtl.module @Child() {
@@ -78,7 +78,7 @@ firrtl.circuit "MemPortsNL" attributes {annotations = [
 // -----
 
 // Annotations on ports should work.
-firrtl.circuit "Test" attributes {annotations = [
+firrtl.circuit "Test" attributes {rawAnnotations = [
   {class = "circt.test", target = "~Test|PortTest>in"}
   ]} {
   firrtl.module @PortTest(in %in : !firrtl.uint<1>) {}
@@ -90,7 +90,7 @@ firrtl.circuit "Test" attributes {annotations = [
 // -----
 
 // Subannotations on ports should work.
-firrtl.circuit "Test" attributes {annotations = [
+firrtl.circuit "Test" attributes {rawAnnotations = [
   {class = "circt.test", target = "~Test|PortTest>in.a"}
   ]} {
   // CHECK: firrtl.module @PortTest(in %in: !firrtl.bundle<a: uint<1>> [{circt.fieldID = 1 : i32, class = "circt.test"}])
@@ -102,7 +102,7 @@ firrtl.circuit "Test" attributes {annotations = [
 // -----
 
 // Annotations on instances should be moved to the target module.
-firrtl.circuit "Test" attributes {annotations = [
+firrtl.circuit "Test" attributes {rawAnnotations = [
   {class = "circt.test", target = "~Test|Test>exttest"}
   ]} {
   // CHECK: firrtl.nla @nla [#hw.innerNameRef<@Test::@exttest>, @ExtTest]
@@ -118,7 +118,7 @@ firrtl.circuit "Test" attributes {annotations = [
 // -----
 
 // Annotations on instances should be moved to the target module.
-firrtl.circuit "Test" attributes {annotations = [
+firrtl.circuit "Test" attributes {rawAnnotations = [
   {class = "circt.test", target = "~Test|Test>exttest.in"}
   ]} {
   // CHECK: firrtl.nla @nla [#hw.innerNameRef<@Test::@exttest>, #hw.innerNameRef<@ExtTest::@in>]

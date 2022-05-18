@@ -20,6 +20,7 @@ target_link_libraries(circt-reduce
   CIRCTMoore
   CIRCTMSFT
   CIRCTHW
+  CIRCTHWTransforms
   CIRCTScheduling
   CIRCTSeq
   CIRCTStaticLogicOps
@@ -27,7 +28,6 @@ target_link_libraries(circt-reduce
 
   MLIRIR
   MLIRParser
-  MLIRStandard
   MLIRSupport
   MLIRTransforms
   MLIRReduceLib

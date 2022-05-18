@@ -71,7 +71,7 @@ hw.module @inout(%inout: i1) -> (output: i1) {
 hw.module @inout_inst(%a: i1) {
   // CHECK: inout_0 foo (
   // CHECK:   .inout_0  (a),
-  // CHECK:   .output_1 (foo_output)
+  // CHECK:   .output_1 (_foo_output)
   // CHECK: );
   %0 = hw.instance "foo" @inout (inout: %a: i1) -> (output: i1)
 }
@@ -88,7 +88,8 @@ hw.module @reg(%inout: i1) -> (output: i1) {
 
 // https://github.com/llvm/circt/issues/525
 // CHECK-LABEL: module issue525(
-// CHECK-NEXT:    input  [1:0] struct_0, else_1,
+// CHECK-NEXT:    input  [1:0] struct_0,
+// CHECK-NEXT:                 else_1,
 // CHECK-NEXT:    output [1:0] casex_2);
 hw.module @issue525(%struct: i2, %else: i2) -> (casex: i2) {
   // CHECK: assign casex_2 = struct_0 + else_1;
@@ -167,7 +168,7 @@ sv.interface @output {
   // CHECK-NEXT: logic wire_1;
   sv.interface.signal @wire : i1
   // CHECK-NEXT: modport always_2(input input_0, output wire_1);
-  sv.interface.modport @always ("input" @input, "output" @wire)
+  sv.interface.modport @always (input @input, output @wire)
 }
 
 // Renaming the above interface declarations needs to rename their use in the

@@ -83,7 +83,7 @@
 // CHECK:   firrtl.connect %[[VAL_63]], %[[VAL_61]] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>
 // CHECK: }
 handshake.func @test_buffer(%arg0: none, %arg1: none, ...) -> (none, none) {
-  %0 = buffer [3] %arg0 {sequential = true} : none
+  %0 = buffer [3] seq %arg0 : none
   return %0, %arg1 : none, none
 }
 
@@ -126,7 +126,7 @@ handshake.func @test_buffer(%arg0: none, %arg1: none, ...) -> (none, none) {
 // CHECK:   firrtl.connect %[[VAL_67]], %[[VAL_65]] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>
 // CHECK: }
 handshake.func @test_buffer_data(%arg0: index, %arg1: none, ...) -> (index, none) {
-  %0 = buffer [2] %arg0 {sequential = true} : index
+  %0 = buffer [2] seq %arg0 : index
   return %0, %arg1 : index, none
 }
 
@@ -136,6 +136,18 @@ handshake.func @test_buffer_data(%arg0: index, %arg1: none, ...) -> (index, none
 // CHECK: %dataReg0 = firrtl.regreset %clock, %reset, %c42_ui64  : !firrtl.uint<1>, !firrtl.uint<64>, !firrtl.uint<64>
 
 handshake.func @test_buffer_init(%arg0: index, %arg1: none, ...) -> (index, none) {
-  %0 = buffer [1] %arg0 {sequential = true, initValues=[42]} : index
+  %0 = buffer [1] seq %arg0 {initValues=[42]} : index
   return %0, %arg1 : index, none
+}
+
+// -----
+
+// CHECK-LABEL: firrtl.module @handshake_buffer_in_tuple_ui32_ui32_out_tuple_ui32_ui32_2slots_seq(
+// CHECK: %[[VALUE:.*]] = firrtl.constant 0 : !firrtl.sint<64>
+// CHECK: %[[ZERO_BUNDLE:.*]] = firrtl.bitcast %[[VALUE]] : (!firrtl.sint<64>) -> !firrtl.bundle<field0: uint<32>, field1: uint<32>>
+// CHECK: %dataReg0 = firrtl.regreset %{{.*}}, %{{.*}}, %[[ZERO_BUNDLE]]  : !firrtl.uint<1>, !firrtl.bundle<field0: uint<32>, field1: uint<32>>, !firrtl.bundle<field0: uint<32>, field1: uint<32>>
+
+handshake.func @test_buffer_tuple_seq(%t: tuple<i32, i32>, %arg0: none, ...) -> (tuple<i32, i32>, none) {
+  %0 = buffer [2] seq %t : tuple<i32, i32>
+  return %0, %arg0 : tuple<i32, i32>, none
 }

@@ -6,6 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "mlir/IR/EnumAttr.td"
+
 // "Forward-declare" these HW attributes rather than including or duplicating
 // them here. This lets us to refer to them in ODS, but delegates to HW in C++.
 // These are used to represent parameters to MSFTModuleExternOp.
@@ -38,6 +40,8 @@ def PhysLocation : MSFT_Attr<"PhysLocation"> {
   let parameters = (ins
     "PrimitiveTypeAttr":$primitiveType,
     "uint64_t":$x, "uint64_t":$y, "uint64_t":$num);
+
+  let hasCustomAssemblyFormat = 1;
 }
 
 def PhysicalBounds : MSFT_Attr<"PhysicalBounds"> {
@@ -53,6 +57,8 @@ def PhysicalBounds : MSFT_Attr<"PhysicalBounds"> {
     "uint64_t":$yMin,
     "uint64_t":$yMax
   );
+
+  let hasCustomAssemblyFormat = 1;
 }
 
 def PhysicalBoundsArray : TypedArrayAttrBase<PhysicalBounds,

@@ -3,6 +3,7 @@
 /docker_build
 tags
 .vscode
+.idea
 compile_commands.json
 .cache/
 #*

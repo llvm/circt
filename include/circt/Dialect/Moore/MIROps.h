@@ -15,6 +15,7 @@
 
 #include "circt/Dialect/Moore/MooreDialect.h"
 #include "circt/Dialect/Moore/MooreTypes.h"
+#include "mlir/Interfaces/InferTypeOpInterface.h"
 
 #define GET_OP_CLASSES
 #include "circt/Dialect/Moore/MooreEnums.h.inc"

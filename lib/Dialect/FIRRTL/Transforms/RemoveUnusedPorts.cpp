@@ -9,10 +9,11 @@
 #include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
-#include "circt/Dialect/FIRRTL/InstanceGraph.h"
+#include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/APSInt.h"
+#include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "firrtl-remove-unused-ports"
@@ -26,6 +27,12 @@ struct RemoveUnusedPortsPass
   void runOnOperation() override;
   void removeUnusedModulePorts(FModuleOp module,
                                InstanceGraphNode *instanceGraphNode);
+
+  /// If true, the pass will remove unused ports even if they have carry a
+  /// symbol or annotations. This is likely to break the IR, but may be useful
+  /// for `circt-reduce` where preserving functional correctness of the IR is
+  /// not important.
+  bool ignoreDontTouch = false;
 };
 } // namespace
 
@@ -33,13 +40,12 @@ void RemoveUnusedPortsPass::runOnOperation() {
   auto &instanceGraph = getAnalysis<InstanceGraph>();
   LLVM_DEBUG(llvm::dbgs() << "===----- Remove unused ports -----==="
                           << "\n");
-  CircuitOp circuit = getOperation();
   // Iterate in the reverse order of instance graph iterator, i.e. from leaves
   // to top.
-  for (auto *node : llvm::reverse(instanceGraph))
-    if (auto module = dyn_cast<FModuleOp>(node->getModule()))
+  for (auto *node : llvm::post_order(&instanceGraph))
+    if (auto module = dyn_cast<FModuleOp>(*node->getModule()))
       // Don't prune the main module.
-      if (circuit.getMainModule() != module)
+      if (!module.isPublic())
         removeUnusedModulePorts(module, node);
 }
 
@@ -61,7 +67,7 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
 
     // If the port is don't touch or has unprocessed annotations, we cannot
     // remove the port. Maybe we can allow annotations though.
-    if (hasDontTouch(arg) || !port.annotations.empty())
+    if ((hasDontTouch(arg) || !port.annotations.empty()) && !ignoreDontTouch)
       continue;
 
     // TODO: Handle inout ports.
@@ -73,21 +79,35 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
     if (port.isInput() && !arg.use_empty())
       continue;
 
+    auto portIsUnused = [&](InstanceRecord *a) -> bool {
+      auto port = a->getInstance()->getResult(arg.getArgNumber());
+      return port.getUses().empty();
+    };
+
     // Output port.
     if (port.isOutput()) {
       if (arg.use_empty()) {
         // Sometimes the connection is already removed possibly by IMCP.
         // In that case, regard the port value as an invalid value.
         outputPortConstants.push_back(None);
+      } else if (llvm::all_of(instanceGraphNode->uses(), portIsUnused)) {
+        // Replace the port with a wire if it is unused.
+        auto builder =
+            ImplicitLocOpBuilder::atBlockBegin(arg.getLoc(), module.getBody());
+        auto wire = builder.create<WireOp>(arg.getType());
+        arg.replaceAllUsesWith(wire);
+        outputPortConstants.push_back(None);
       } else if (arg.hasOneUse()) {
         // If the port has a single use, check the port is only connected to
         // invalid or constant
-        auto connect = dyn_cast<ConnectOp>(*arg.user_begin());
-        if (!connect || !isa_and_nonnull<InvalidValueOp, ConstantOp>(
-                            connect.src().getDefiningOp()))
+        Operation *op = arg.use_begin().getUser();
+        auto connectLike = dyn_cast<FConnectLike>(op);
+        if (!connectLike)
+          continue;
+        auto *srcOp = connectLike.src().getDefiningOp();
+        if (!isa_and_nonnull<InvalidValueOp, ConstantOp>(srcOp))
           continue;
 
-        Operation *srcOp = connect.src().getDefiningOp();
         if (auto constant = dyn_cast<ConstantOp>(srcOp))
           outputPortConstants.push_back(constant.value());
         else {
@@ -96,7 +116,7 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
         }
 
         // Erase connect op because we are going to remove this output ports.
-        connect.erase();
+        op->erase();
 
         if (srcOp->use_empty())
           srcOp->erase();
@@ -121,7 +141,7 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
 
   // Rewrite all uses.
   for (auto *use : instanceGraphNode->uses()) {
-    auto instance = use->getInstance();
+    auto instance = ::cast<InstanceOp>(*use->getInstance());
     ImplicitLocOpBuilder builder(instance.getLoc(), instance);
     unsigned outputPortIndex = 0;
     for (auto index : removalPortIndexes) {
@@ -136,14 +156,14 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
         // Check that the input port is only written. Sometimes input ports are
         // used as temporary wires. In that case, we cannot erase connections.
         bool onlyWritten = llvm::all_of(result.getUsers(), [&](Operation *op) {
-          if (auto connect = dyn_cast<ConnectOp>(op))
+          if (auto connect = dyn_cast<FConnectLike>(op))
             return connect.dest() == result;
           return false;
         });
 
         result.replaceUsesWithIf(wire, [&](OpOperand &op) -> bool {
           // Connects can be deleted directly.
-          if (onlyWritten && isa<ConnectOp>(op.getOwner())) {
+          if (onlyWritten && isa<FConnectLike>(op.getOwner())) {
             op.getOwner()->erase();
             return false;
           }
@@ -157,7 +177,7 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
         continue;
       }
 
-      // Output port.  Replace with the output port with an invalid or constan
+      // Output port. Replace with the output port with an invalid or constant
       // value.
       auto portConstant = outputPortConstants[outputPortIndex++];
       Value value;
@@ -178,6 +198,9 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
   numRemovedPorts += removalPortIndexes.size();
 }
 
-std::unique_ptr<mlir::Pass> circt::firrtl::createRemoveUnusedPortsPass() {
-  return std::make_unique<RemoveUnusedPortsPass>();
+std::unique_ptr<mlir::Pass>
+circt::firrtl::createRemoveUnusedPortsPass(bool ignoreDontTouch) {
+  auto pass = std::make_unique<RemoveUnusedPortsPass>();
+  pass->ignoreDontTouch = ignoreDontTouch;
+  return pass;
 }

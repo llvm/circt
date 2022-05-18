@@ -100,6 +100,20 @@ def Inliner : Pass<"firrtl-inliner", "firrtl::CircuitOp"> {
   let constructor = "circt::firrtl::createInlinerPass()";
 }
 
+def AddSeqMemPorts : Pass<"firrtl-add-seqmem-ports", "firrtl::CircuitOp"> {
+  let summary = "Add extra ports to memory modules";
+  let description = [{
+    This pass looks for `AddSeqMemPortAnnotation` annotations and adds extra
+    ports to memories.  It will emit metadata based if the
+    `AddSeqMemPortsFileAnnotation` annotation is specified.
+
+    This pass requires that FIRRTL MemOps have been lowered to modules to add
+    the extra ports.
+  }];
+  let constructor = "circt::firrtl::createAddSeqMemPortsPass()";
+  let dependentDialects = ["sv::SVDialect", "hw::HWDialect"];
+}
+
 def BlackBoxMemory : Pass<"firrtl-blackbox-memory", "firrtl::CircuitOp"> {
   let summary = "Replace all FIRRTL memories with an external module black box.";
   let description = [{
@@ -132,6 +146,23 @@ def CreateSiFiveMetadata : Pass<"firrtl-emit-metadata", "firrtl::CircuitOp"> {
       "File to which emit seq meme metadata">
   ];
   let dependentDialects = ["hw::HWDialect"];
+}
+
+def FlattenMemory : Pass<"firrtl-flatten-memory", "firrtl::FModuleOp"> {
+  let summary = "Flatten aggregate memory data to a UInt";
+  let description = [{
+    This pass flattens the aggregate data of memory into a UInt, and inserts
+    appropriate bitcasts to access the data.
+  }];
+  let constructor = "circt::firrtl::createFlattenMemoryPass()";
+}
+
+def LowerMemory : Pass<"firrtl-lower-memory", "firrtl::CircuitOp"> {
+  let summary = "Lower memories to generated modules";
+  let description = [{
+    This pass lowers FIRRTL memory operations to generated modules.
+  }];
+  let constructor = "circt::firrtl::createLowerMemoryPass()";
 }
 
 def WireDFT : Pass<"firrtl-dft", "firrtl::CircuitOp"> {
@@ -225,7 +256,7 @@ def LowerCHIRRTLPass : Pass<"firrtl-lower-chirrtl", "firrtl::FModuleOp"> {
 
       1. If a wire or register is used as the index of the memory port, then
          the memory is enabled whenever a non-invalid value is driven to the
-         address. 
+         address.
       2. If a node is used as the index of the memory port, then the memory is
          enabled at the declaration of the node.
       3. In all other cases, the memory is never enabled.
@@ -266,8 +297,8 @@ def BlackBoxReader : Pass<"firrtl-blackbox-reader", "CircuitOp"> {
     This pass handles reads the Verilog source files for black boxes and adds
     them as `sv.verbatim.file` operations into the IR. Later passes can then
     write these files back to disk to ensure that they can be accessed by other
-    tools down the line in a well-known location. Supports inline, resource, and
-    path annotations for black box source files.
+    tools down the line in a well-known location. Supports inline and path
+    annotations for black box source files.
 
     The supported `firrtl.circuit` annotations are:
 
@@ -297,16 +328,6 @@ def BlackBoxReader : Pass<"firrtl-blackbox-reader", "CircuitOp"> {
       ```
       Specifies the file `path` as source code for the module. Copies the file
       to the target directory.
-    - ```
-      {
-        class = "firrtl.transforms.BlackBoxResourceAnno",
-        resourceId = "myfile.v"
-      }
-      ```
-      Specifies the file `path` as source code for the module. In contrast to
-      the `BlackBoxPathAnno`, the file is searched for in the black box resource
-      search path. This is a remnant of the Scala origins of FIRRTL. Copies the
-      file to the target directory.
   }];
 
   let constructor = "circt::firrtl::createBlackBoxReaderPass()";
@@ -314,11 +335,7 @@ def BlackBoxReader : Pass<"firrtl-blackbox-reader", "CircuitOp"> {
     Option<"inputPrefix", "input-prefix", "std::string", "",
       "Prefix for input paths in black box annotations. This should be the "
       "directory where the input file was located, to allow for annotations "
-      "relative to the input file.">,
-    Option<"resourcePrefix", "resource-prefix", "std::string",
-      "\"src/main/resources\"",
-      "Search path for black box sources specified via the "
-      "`BlackBoxResourceAnno` annotation.">
+      "relative to the input file.">
   ];
   let dependentDialects = ["sv::SVDialect", "hw::HWDialect"];
 }
@@ -353,6 +370,12 @@ def PrintInstanceGraph
   let constructor =  "circt::firrtl::createPrintInstanceGraphPass()";
 }
 
+def PrintNLATable
+    : Pass<"firrtl-print-nla-table", "firrtl::CircuitOp"> {
+  let summary = "Print the NLA Table.";
+  let constructor =  "circt::firrtl::createPrintNLATablePass()";
+}
+
 def GrandCentral : Pass<"firrtl-grand-central", "CircuitOp"> {
   let summary = "Remove Grand Central Annotations";
   let description = [{
@@ -370,9 +393,12 @@ def GrandCentralTaps : Pass<"firrtl-grand-central-taps", "firrtl::CircuitOp"> {
 }
 
 def GrandCentralSignalMappings : Pass<"firrtl-grand-central-signal-mappings",
-                                      "FModuleOp"> {
+                                      "firrtl::CircuitOp"> {
   let summary = "Generate signal mappings that force/probe remote signals";
   let constructor = "circt::firrtl::createGrandCentralSignalMappingsPass()";
+  let options = [Option<"outputFilename", "file", "std::string", "",
+      "Output file for the JSON-serialized OMIR data">];
+  let dependentDialects = ["sv::SVDialect", "circt::hw::HWDialect"];
 }
 
 def CheckCombCycles : Pass<"firrtl-check-comb-cycles", "firrtl::CircuitOp"> {
@@ -380,12 +406,16 @@ def CheckCombCycles : Pass<"firrtl-check-comb-cycles", "firrtl::CircuitOp"> {
   let description = [{
     This pass checks combinational cycles in the IR and emit errors.
   }];
+  let options = [
+    Option<"printSimpleCycle", "print-simple-cycle", "bool", "true",
+      "Print a simple cycle instead of printing all operations in SCC">
+  ];
   let constructor = "circt::firrtl::createCheckCombCyclesPass()";
 }
 
-def RemoveResets : Pass<"firrtl-remove-resets", "firrtl::FModuleOp"> {
-  let summary = "Remove module-scoped invalidated resets";
-  let constructor = "circt::firrtl::createRemoveResetsPass()";
+def SFCCompat : Pass<"firrtl-sfc-compat", "firrtl::FModuleOp"> {
+  let summary = "Perform SFC Compatibility fixes";
+  let constructor = "circt::firrtl::createSFCCompatPass()";
 }
 
 def MergeConnections : Pass<"merge-connections", "firrtl::FModuleOp"> {
@@ -405,9 +435,53 @@ def InferReadWrite : Pass<"firrtl-infer-rw", "firrtl::FModuleOp"> {
     conditions are mutually exclusive.
     The heuristic tries to break up the read enable and write enable logic into an
     `AND` expression tree. It then compares the read and write `AND` terms,
-    looking for a situation where the read/write is the complement of the write/read. 
+    looking for a situation where the read/write is the complement of the write/read.
   }];
   let constructor = "circt::firrtl::createInferReadWritePass()";
+}
+
+def InjectDUTHierarchy : Pass<"firrtl-inject-dut-hier", "firrtl::CircuitOp"> {
+  let summary = "Add a level of hierarchy outside the DUT";
+  let description = [{
+    This pass takes the DUT (as indicated by the presence of a
+    MarkDUTAnnotation) and moves all the contents of it into a new module
+    insided the DUT named by an InjectDUTHierarchyAnnotation.  This pass is
+    intended to be used in conjunction with passes that pull things out of the
+    DUT, e.g., SRAM extraction, to give the extracted modules a new home that is
+    still inside the original DUT.
+  }];
+  let constructor = "circt::firrtl::createInjectDUTHierarchyPass()";
+}
+
+def ExtractInstances : Pass<"firrtl-extract-instances", "firrtl::CircuitOp"> {
+  let summary = "Move annotated instances upwards in the module hierarchy";
+  let description = [{
+    This pass takes instances in the design annotated with one out of a
+    particular set of annotations and pulls them upwards to a location further
+    up in the module hierarchy.
+
+    The annotations that control the behaviour of this pass are:
+    - `MarkDUTAnnotation`
+    - `ExtractBlackBoxAnnotation`
+    - `ExtractClockGatesFileAnnotation`
+  }];
+  let constructor = "circt::firrtl::createExtractInstancesPass()";
+  let dependentDialects = ["sv::SVDialect", "circt::hw::HWDialect"];
+}
+
+def MemToRegOfVec : Pass<"mem-to-regofvec", "firrtl::CircuitOp"> {
+  let summary = "Convert the memory to a Register vector";
+  let description = [{
+    This pass generates the logic to implement a memory using Registers.
+  }];
+  let options = [
+    Option<"replSeqMem", "repl-seq-mem", "bool",
+                "false", "Prepare seq mems for macro replacement">,
+    Option<"ignoreReadEnable", "ignore-read-enable-mem", "bool",
+                "false",
+    "ignore the read enable signal, instead of assigning X on read disable">
+   ];
+  let constructor = "circt::firrtl::createMemToRegOfVecPass()";
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD

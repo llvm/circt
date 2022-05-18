@@ -107,12 +107,11 @@ LogicalResult MemoryPortOp::inferReturnTypes(MLIRContext *context,
   return success();
 }
 
-static LogicalResult verifyMemoryPortOp(MemoryPortOp memoryPort) {
+LogicalResult MemoryPortOp::verify() {
   // MemoryPorts require exactly 1 access. Right now there are no other
   // operations that could be using that value due to the types.
-  if (!memoryPort.port().hasOneUse())
-    return memoryPort.emitOpError(
-        "port should be used by a chirrtl.memoryport.access");
+  if (!port().hasOneUse())
+    return emitOpError("port should be used by a chirrtl.memoryport.access");
   return success();
 }
 
@@ -168,12 +167,16 @@ static void printCombMemOp(OpAsmPrinter &p, Operation *op,
 }
 
 void CombMemOp::build(OpBuilder &builder, OperationState &result,
-                      FIRRTLType elementType, unsigned numElements,
+                      FIRRTLType elementType, uint64_t numElements,
                       StringRef name, ArrayAttr annotations,
                       StringAttr innerSym) {
   build(builder, result,
         CMemoryType::get(builder.getContext(), elementType, numElements), name,
         annotations, innerSym);
+}
+
+void CombMemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getResult(), name());
 }
 
 //===----------------------------------------------------------------------===//
@@ -191,12 +194,16 @@ static void printSeqMemOp(OpAsmPrinter &p, Operation *op, DictionaryAttr attr) {
 }
 
 void SeqMemOp::build(OpBuilder &builder, OperationState &result,
-                     FIRRTLType elementType, unsigned numElements, RUWAttr ruw,
+                     FIRRTLType elementType, uint64_t numElements, RUWAttr ruw,
                      StringRef name, ArrayAttr annotations,
                      StringAttr innerSym) {
   build(builder, result,
         CMemoryType::get(builder.getContext(), elementType, numElements), ruw,
         name, annotations, innerSym);
+}
+
+void SeqMemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getResult(), name());
 }
 
 //===----------------------------------------------------------------------===//
@@ -208,8 +215,7 @@ void SeqMemOp::build(OpBuilder &builder, OperationState &result,
 namespace {
 struct CHIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
   using OpAsmDialectInterface::OpAsmDialectInterface;
-  void getAsmResultNames(Operation *op,
-                         OpAsmSetValueNameFn setNameFn) const override {
+  void getAsmResultNames(Operation *op, OpAsmSetValueNameFn setNameFn) const {
     // Many CHIRRTL dialect operations have an optional 'name' attribute.  If
     // present, use it.
     if (op->getNumResults() == 1)
@@ -257,7 +263,7 @@ void CMemoryType::print(AsmPrinter &printer) const {
 
 Type CMemoryType::parse(AsmParser &parser) {
   FIRRTLType elementType;
-  unsigned numElements;
+  uint64_t numElements;
   if (parser.parseLess() || firrtl::parseNestedType(elementType, parser) ||
       parser.parseComma() || parser.parseInteger(numElements) ||
       parser.parseGreater())
@@ -267,7 +273,7 @@ Type CMemoryType::parse(AsmParser &parser) {
 
 LogicalResult CMemoryType::verify(function_ref<InFlightDiagnostic()> emitError,
                                   FIRRTLType elementType,
-                                  unsigned numElements) {
+                                  uint64_t numElements) {
   if (!elementType.isPassive()) {
     return emitError() << "behavioral memory element type must be passive";
   }

@@ -13,9 +13,11 @@
 #include "circt/Dialect/FIRRTL/FIRParser.h"
 #include "FIRAnnotations.h"
 #include "FIRLexer.h"
+#include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Support/LLVM.h"
@@ -25,7 +27,8 @@
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/IR/Verifier.h"
-#include "mlir/Translation.h"
+#include "mlir/Support/Timing.h"
+#include "mlir/Tools/mlir-translate/Translation.h"
 #include "llvm/ADT/PointerEmbeddedInt.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallPtrSet.h"
@@ -1553,6 +1556,9 @@ private:
   // the representation simpler and more consistent.
   void emitInvalidate(Value val) { emitInvalidate(val, foldFlow(val)); }
 
+  /// Emit the logic for a partial connect using standard connect.
+  void emitPartialConnect(ImplicitLocOpBuilder &builder, Value dst, Value src);
+
   /// Parse an @info marker if present and inform locationProcessor about it.
   ParseResult parseOptionalInfo() {
     LocationAttr loc;
@@ -1631,7 +1637,18 @@ private:
 void FIRStmtParser::emitInvalidate(Value val, Flow flow) {
   auto tpe = val.getType().cast<FIRRTLType>();
 
-  // Recurse until we hit leaves.  Connect any leaves which have sink or
+  auto props = tpe.getRecursiveTypeProperties();
+  if (props.isPassive && !props.containsAnalog) {
+    if (flow == Flow::Source)
+      return;
+    if (props.hasUninferredWidth)
+      builder.create<ConnectOp>(val, builder.create<InvalidValueOp>(tpe));
+    else
+      builder.create<StrictConnectOp>(val, builder.create<InvalidValueOp>(tpe));
+    return;
+  }
+
+  // Recurse until we hit passive leaves.  Connect any leaves which have sink or
   // duplex flow.
   //
   // TODO: This is very similar to connect expansion in the LowerTypes pass
@@ -1662,14 +1679,75 @@ void FIRStmtParser::emitInvalidate(Value val, Flow flow) {
           }
           emitInvalidate(subindex, flow);
         }
-      })
-      // Drop invalidation of analog.
-      .Case<AnalogType>([](auto) {})
-      // Invalidate any sink or duplex flow ground types.
-      .Default([&](auto tpe) {
-        if (flow != Flow::Source)
-          builder.create<ConnectOp>(val, builder.create<InvalidValueOp>(tpe));
       });
+}
+
+void FIRStmtParser::emitPartialConnect(ImplicitLocOpBuilder &builder, Value dst,
+                                       Value src) {
+  auto dstType = dst.getType().cast<FIRRTLType>();
+  auto srcType = src.getType().cast<FIRRTLType>();
+  if (dstType.isa<AnalogType>()) {
+    builder.create<AttachOp>(SmallVector{dst, src});
+  } else if (dstType == srcType && !dstType.containsAnalog()) {
+    emitConnect(builder, dst, src);
+  } else if (auto dstBundle = dstType.dyn_cast<BundleType>()) {
+    auto srcBundle = srcType.cast<BundleType>();
+    auto numElements = dstBundle.getNumElements();
+    for (size_t dstIndex = 0; dstIndex < numElements; ++dstIndex) {
+      // Find a matching field by name in the other bundle.
+      auto &dstElement = dstBundle.getElements()[dstIndex];
+      auto name = dstElement.name;
+      auto maybe = srcBundle.getElementIndex(name);
+      // If there was no matching field name, don't connect this one.
+      if (!maybe)
+        continue;
+      auto dstRef = moduleContext.getCachedSubaccess(dst, dstIndex);
+      if (!dstRef) {
+        OpBuilder::InsertionGuard guard(builder);
+        builder.setInsertionPointAfterValue(dst);
+        dstRef = builder.create<SubfieldOp>(dst, dstIndex);
+      }
+      // We are pulling two fields from the cache. If the dstField was a
+      // pointer into the cache, then the lookup for srcField might invalidate
+      // it. So, we just copy dstField into a local.
+      auto dstField = dstRef;
+      auto srcIndex = *maybe;
+      auto &srcField = moduleContext.getCachedSubaccess(src, srcIndex);
+      if (!srcField) {
+        OpBuilder::InsertionGuard guard(builder);
+        builder.setInsertionPointAfterValue(src);
+        srcField = builder.create<SubfieldOp>(src, srcIndex);
+      }
+      if (!dstElement.isFlip)
+        emitPartialConnect(builder, dstField, srcField);
+      else
+        emitPartialConnect(builder, srcField, dstField);
+    }
+  } else if (auto dstVector = dstType.dyn_cast<FVectorType>()) {
+    auto srcVector = srcType.cast<FVectorType>();
+    auto dstNumElements = dstVector.getNumElements();
+    auto srcNumEelemnts = srcVector.getNumElements();
+    // Partial connect will connect all elements up to the end of the array.
+    auto numElements = std::min(dstNumElements, srcNumEelemnts);
+    for (size_t i = 0; i != numElements; ++i) {
+      auto &dstRef = moduleContext.getCachedSubaccess(dst, i);
+      if (!dstRef) {
+        OpBuilder::InsertionGuard guard(builder);
+        builder.setInsertionPointAfterValue(dst);
+        dstRef = builder.create<SubindexOp>(dst, i);
+      }
+      auto dstField = dstRef; // copy to ensure not invalidated
+      auto &srcField = moduleContext.getCachedSubaccess(src, i);
+      if (!srcField) {
+        OpBuilder::InsertionGuard guard(builder);
+        builder.setInsertionPointAfterValue(src);
+        srcField = builder.create<SubindexOp>(src, i);
+      }
+      emitPartialConnect(builder, dstField, srcField);
+    }
+  } else {
+    emitConnect(builder, dst, src);
+  }
 }
 
 //===-------------------------------
@@ -2133,7 +2211,7 @@ ParseResult FIRStmtParser::parseIntegerLiteralExp(Value &result) {
   // dominance.
   OpBuilder::InsertPoint savedIP;
 
-  auto parentOp = builder.getInsertionBlock()->getParentOp();
+  auto *parentOp = builder.getInsertionBlock()->getParentOp();
   if (!isa<FModuleOp>(parentOp)) {
     savedIP = builder.saveInsertionPoint();
     while (!isa<FModuleOp>(parentOp)) {
@@ -2377,9 +2455,8 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
   auto resultType = memVType.getElementType();
 
   ArrayAttr annotations = getConstants().emptyArrayAttr;
-  if (!getConstants().options.rawAnnotations)
-    annotations = getAnnotations(getModuleTarget() + ">" + id, startLoc,
-                                 moduleContext.targetsInModule, resultType);
+  annotations = getAnnotations(getModuleTarget() + ">" + id, startLoc,
+                               moduleContext.targetsInModule, resultType);
 
   locationProcessor.setLoc(startLoc);
 
@@ -2668,22 +2745,21 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs) {
 
   locationProcessor.setLoc(loc);
 
+  auto lhsType = lhs.getType().cast<FIRRTLType>();
+  auto rhsType = rhs.getType().cast<FIRRTLType>();
+
   if (kind == FIRToken::less_equal) {
-    // Some operations, dshl for example, have implicit truncations, even in lo
-    // firrtl.  Chisel will also use connects as partial connects to do
-    // truncation.  Handle truncations as partial connects, which allow
-    // truncation.
-    auto lhsPType = lhs.getType().cast<FIRRTLType>().getPassiveType();
-    auto rhsPType = rhs.getType().cast<FIRRTLType>().getPassiveType();
-    if (lhsPType != rhsPType && lhsPType.getBitWidthOrSentinel() >= 0 &&
-        lhsPType.getBitWidthOrSentinel() < rhsPType.getBitWidthOrSentinel()) {
-      builder.create<PartialConnectOp>(lhs, rhs);
-    } else {
-      builder.create<ConnectOp>(lhs, rhs);
-    }
+    if (!areTypesEquivalent(lhsType, rhsType))
+      return emitError(loc, "cannot connect non-equivalent type ")
+             << rhsType << " to " << lhsType;
+    emitConnect(builder, lhs, rhs);
   } else {
     assert(kind == FIRToken::less_minus && "unexpected kind");
-    builder.create<PartialConnectOp>(lhs, rhs);
+    if (!areTypesWeaklyEquivalent(lhsType, rhsType))
+      return emitError(loc,
+                       "cannot partially connect non-weakly-equivalent type ")
+             << rhsType << " to " << lhsType;
+    emitPartialConnect(builder, lhs, rhs);
   }
   return success();
 }
@@ -2733,24 +2809,20 @@ ParseResult FIRStmtParser::parseInstance() {
   }
 
   InstanceOp result;
-  if (getConstants().options.rawAnnotations) {
-    result = builder.create<InstanceOp>(referencedModule, id);
-  } else {
-    // Combine annotations that are ReferenceTargets and InstanceTargets.  By
-    // example, this will lookup all annotations with either of the following
-    // formats:
-    //     ~Foo|Foo>bar
-    //     ~Foo|Foo/bar:Bar
-    auto annotations = getSplitAnnotations(
-        {getModuleTarget() + ">" + id,
-         getModuleTarget() + "/" + id + ":" + moduleName},
-        startTok.getLoc(), resultNamesAndTypes, moduleContext.targetsInModule);
+  // Combine annotations that are ReferenceTargets and InstanceTargets.  By
+  // example, this will lookup all annotations with either of the following
+  // formats:
+  //     ~Foo|Foo>bar
+  //     ~Foo|Foo/bar:Bar
+  auto annotations = getSplitAnnotations(
+      {getModuleTarget() + ">" + id,
+       getModuleTarget() + "/" + id + ":" + moduleName},
+      startTok.getLoc(), resultNamesAndTypes, moduleContext.targetsInModule);
 
-    auto sym = getSymbolIfRequired(annotations.first, id);
-    result = builder.create<InstanceOp>(
-        referencedModule, id, annotations.first.getValue(),
-        annotations.second.getValue(), false, sym);
-  }
+  auto sym = getSymbolIfRequired(annotations.first, id);
+  result = builder.create<InstanceOp>(
+      referencedModule, id, annotations.first.getValue(),
+      annotations.second.getValue(), false, sym);
 
   // Since we are implicitly unbundling the instance results, we need to keep
   // track of the mapping from bundle fields to results in the unbundledValues
@@ -2792,10 +2864,8 @@ ParseResult FIRStmtParser::parseCombMem() {
     return emitError("cmem requires vector type");
 
   auto annotations = getConstants().emptyArrayAttr;
-  if (!getConstants().options.rawAnnotations)
-    annotations =
-        getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
-                       moduleContext.targetsInModule, type);
+  annotations = getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
+                               moduleContext.targetsInModule, type);
 
   auto sym = getSymbolIfRequired(annotations, id);
   auto result = builder.create<CombMemOp>(vectorType.getElementType(),
@@ -2832,10 +2902,8 @@ ParseResult FIRStmtParser::parseSeqMem() {
     return emitError("smem requires vector type");
 
   auto annotations = getConstants().emptyArrayAttr;
-  if (!getConstants().options.rawAnnotations)
-    annotations =
-        getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
-                       moduleContext.targetsInModule, type);
+  annotations = getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
+                               moduleContext.targetsInModule, type);
   auto sym = getSymbolIfRequired(annotations, id);
 
   auto result = builder.create<SeqMemOp>(vectorType.getElementType(),
@@ -2964,27 +3032,23 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
   locationProcessor.setLoc(startTok.getLoc());
 
   MemOp result;
-  if (getConstants().options.rawAnnotations) {
-    SmallVector<Attribute, 4> portAnnotations(ports.size(),
-                                              ArrayAttr::get(getContext(), {}));
+  auto annotations =
+      getSplitAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
+                          ports, moduleContext.targetsInModule);
 
-    result = builder.create<MemOp>(
-        resultTypes, readLatency, writeLatency, depth, ruw,
-        builder.getArrayAttr(resultNames), id, getConstants().emptyArrayAttr,
-        builder.getArrayAttr(portAnnotations), StringAttr{});
-  } else {
-    auto annotations =
-        getSplitAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
-                            ports, moduleContext.targetsInModule);
-
-    auto sym = getSymbolIfRequired(annotations.first, id);
-    if (!sym)
-      sym = getSymbolIfRequired(annotations.second, id);
-    result =
-        builder.create<MemOp>(resultTypes, readLatency, writeLatency, depth,
-                              ruw, builder.getArrayAttr(resultNames), id,
-                              annotations.first, annotations.second, sym);
-  }
+  auto sym = getSymbolIfRequired(annotations.first, id);
+  // Port annotations are an ArrayAttr of ArrayAttrs, so iterate over all the
+  // annotations for each port, and check if any of the port needs a symbol.
+  if (!sym)
+    for (auto portAnno : annotations.second.getAsRange<ArrayAttr>()) {
+      sym = getSymbolIfRequired(portAnno, id);
+      if (sym)
+        break;
+    }
+  result = builder.create<MemOp>(resultTypes, readLatency, writeLatency, depth,
+                                 ruw, builder.getArrayAttr(resultNames), id,
+                                 annotations.first, annotations.second, sym,
+                                 IntegerAttr());
 
   UnbundledValueEntry unbundledValueEntry;
   unbundledValueEntry.reserve(result.getNumResults());
@@ -3034,10 +3098,8 @@ ParseResult FIRStmtParser::parseNode() {
   }
 
   auto annotations = getConstants().emptyArrayAttr;
-  if (!getConstants().options.rawAnnotations)
-    annotations =
-        getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
-                       moduleContext.targetsInModule, initializerType);
+  annotations = getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
+                               moduleContext.targetsInModule, initializerType);
 
   auto sym = getSymbolIfRequired(annotations, id);
   auto result = builder.create<NodeOp>(initializer.getType(), initializer, id,
@@ -3064,10 +3126,8 @@ ParseResult FIRStmtParser::parseWire() {
   locationProcessor.setLoc(startTok.getLoc());
 
   auto annotations = getConstants().emptyArrayAttr;
-  if (!getConstants().options.rawAnnotations)
-    annotations =
-        getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
-                       moduleContext.targetsInModule, type);
+  annotations = getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
+                               moduleContext.targetsInModule, type);
 
   auto sym = getSymbolIfRequired(annotations, id);
   auto result = builder.create<WireOp>(type, id, annotations, sym);
@@ -3157,10 +3217,8 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
   locationProcessor.setLoc(startTok.getLoc());
 
   ArrayAttr annotations = getConstants().emptyArrayAttr;
-  if (!getConstants().options.rawAnnotations)
-    annotations =
-        getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
-                       moduleContext.targetsInModule, type);
+  annotations = getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
+                               moduleContext.targetsInModule, type);
 
   Value result;
   auto sym = getSymbolIfRequired(annotations, id);
@@ -3186,7 +3244,8 @@ struct FIRCircuitParser : public FIRParser {
 
   ParseResult
   parseCircuit(SmallVectorImpl<const llvm::MemoryBuffer *> &annotationsBuf,
-               SmallVectorImpl<const llvm::MemoryBuffer *> &omirBuf);
+               SmallVectorImpl<const llvm::MemoryBuffer *> &omirBuf,
+               mlir::TimingScope &ts);
 
 private:
   /// Add annotations from a string to the internal annotation map.  Report
@@ -3410,15 +3469,13 @@ FIRCircuitParser::parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
 
     AnnotationSet annotations(getContext());
     StringAttr innerSym = {};
-    if (!getConstants().options.rawAnnotations) {
-      auto annos =
-          getAnnotations(moduleTarget + ">" + name.getValue(), info.getFIRLoc(),
-                         getConstants().targetSet, type);
-      bool addSym = needsSymbol(annos);
-      if (addSym)
-        innerSym = StringAttr::get(getContext(), name.getValue());
-      annotations = AnnotationSet(annos);
-    }
+    auto annos =
+        getAnnotations(moduleTarget + ">" + name.getValue(), info.getFIRLoc(),
+                       getConstants().targetSet, type);
+    bool addSym = needsSymbol(annos);
+    if (addSym)
+      innerSym = StringAttr::get(getContext(), name.getValue());
+    annotations = AnnotationSet(annos);
     resultPorts.push_back({name, type, direction::get(isOutput), innerSym,
                            info.getLoc(), annotations});
     resultPortLocs.push_back(info.getFIRLoc());
@@ -3453,9 +3510,8 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
 
   auto moduleTarget = (circuitTarget + "|" + name.getValue()).str();
   ArrayAttr annotations = getConstants().emptyArrayAttr;
-  if (!getConstants().options.rawAnnotations)
-    annotations = getAnnotations({moduleTarget}, info.getFIRLoc(),
-                                 getConstants().targetSet);
+  annotations = getAnnotations({moduleTarget}, info.getFIRLoc(),
+                               getConstants().targetSet);
 
   if (parseToken(FIRToken::colon, "expected ':' in module definition") ||
       info.parseOptionalInfo() ||
@@ -3659,7 +3715,9 @@ FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
 ///
 ParseResult FIRCircuitParser::parseCircuit(
     SmallVectorImpl<const llvm::MemoryBuffer *> &annotationsBufs,
-    SmallVectorImpl<const llvm::MemoryBuffer *> &omirBufs) {
+    SmallVectorImpl<const llvm::MemoryBuffer *> &omirBufs,
+    mlir::TimingScope &ts) {
+
   auto indent = getIndentation();
   if (!indent.hasValue())
     return emitError("'circuit' must be first token on its line"), failure();
@@ -3686,65 +3744,49 @@ ParseResult FIRCircuitParser::parseCircuit(
   std::string circuitTarget = "~" + name.getValue().str();
   size_t nlaNumber = 0;
 
+  // A timer to get execution time of annotation parsing.
+  auto parseAnnotationTimer = ts.nest("Parse annotations");
   ArrayAttr annotations;
-  if (getConstants().options.rawAnnotations) {
-    SmallVector<Attribute> rawAnno;
-    // Deal with any inline annotations, if they exist.  These are processed
-    // first to place any annotations from an annotation file *after* the inline
-    // annotations.  While arbitrary, this makes the annotation file have
-    // "append" semantics.
-    if (!inlineAnnotations.empty())
-      if (importAnnotationsRaw(inlineAnnotationsLoc, circuitTarget,
-                               inlineAnnotations, rawAnno))
-        return failure();
 
-    // Deal with the annotation file if one was specified
-    for (auto annotationsBuf : annotationsBufs)
-      if (importAnnotationsRaw(info.getFIRLoc(), circuitTarget,
-                               annotationsBuf->getBuffer(), rawAnno))
-        return failure();
+  // Deal with any inline annotations, if they exist.  These are processed
+  // first to place any annotations from an annotation file *after* the inline
+  // annotations.  While arbitrary, this makes the annotation file have
+  // "append" semantics.
+  if (!inlineAnnotations.empty())
+    if (importAnnotations(circuit, inlineAnnotationsLoc, circuitTarget,
+                          inlineAnnotations, nlaNumber))
+      return failure();
 
-    if (!omirBufs.empty())
-      mlir::emitWarning(translateLocation(info.getFIRLoc()))
-          << "OMIR is not supported with the 'raw' annotation processing right "
-             "now and will just be ignored";
+  // Deal with the annotation file if one was specified
+  for (auto *annotationsBuf : annotationsBufs)
+    if (importAnnotations(circuit, info.getFIRLoc(), circuitTarget,
+                          annotationsBuf->getBuffer(), nlaNumber))
+      return failure();
 
-    // Get annotations associated with this circuit. These are either:
-    //   1. Annotations with no target (which we use "~" to identify)
-    //   2. Annotations targeting the circuit, e.g., "~Foo"
-    annotations = b.getArrayAttr(rawAnno);
+  // Process OMIR files as annotations with a class of
+  // "freechips.rocketchip.objectmodel.OMNode"
+  for (auto *omirBuf : omirBufs)
+    if (importOMIR(circuit, info.getFIRLoc(), circuitTarget,
+                   omirBuf->getBuffer(), nlaNumber))
+      return failure();
 
-  } else {
-
-    // Deal with any inline annotations, if they exist.  These are processed
-    // first to place any annotations from an annotation file *after* the inline
-    // annotations.  While arbitrary, this makes the annotation file have
-    // "append" semantics.
-    if (!inlineAnnotations.empty())
-      if (importAnnotations(circuit, inlineAnnotationsLoc, circuitTarget,
-                            inlineAnnotations, nlaNumber))
-        return failure();
-
-    // Deal with the annotation file if one was specified
-    for (auto annotationsBuf : annotationsBufs)
-      if (importAnnotations(circuit, info.getFIRLoc(), circuitTarget,
-                            annotationsBuf->getBuffer(), nlaNumber))
-        return failure();
-
-    // Process OMIR files as annotations with a class of
-    // "freechips.rocketchip.objectmodel.OMNode"
-    for (auto *omirBuf : omirBufs)
-      if (importOMIR(circuit, info.getFIRLoc(), circuitTarget,
-                     omirBuf->getBuffer(), nlaNumber))
-        return failure();
-
-    // Get annotations associated with this circuit. These are either:
-    //   1. Annotations with no target (which we use "~" to identify)
-    //   2. Annotations targeting the circuit, e.g., "~Foo"
-    annotations = getAnnotations({"~", circuitTarget}, info.getFIRLoc(),
-                                 getConstants().targetSet);
-  }
+  // Get annotations associated with this circuit. These are either:
+  //   1. Annotations with no target (which we use "~" to identify)
+  //   2. Annotations targeting the circuit, e.g., "~Foo"
+  annotations = getAnnotations({"~", circuitTarget}, info.getFIRLoc(),
+                               getConstants().targetSet);
   circuit->setAttr("annotations", annotations);
+  // Get annotations that are supposed to be specially handled by the
+  // LowerAnnotations pass.
+  if (getConstants().annotationMap.count(rawAnnotations)) {
+    auto extraAnnos = getConstants().annotationMap.lookup(rawAnnotations);
+    circuit->setAttr(rawAnnotations, extraAnnos);
+  }
+
+  parseAnnotationTimer.stop();
+
+  // A timer to get execution time of module parsing.
+  auto parseTimer = ts.nest("Parse modules");
   deferredModules.reserve(16);
 
   // Parse any contained modules.
@@ -3812,6 +3854,9 @@ DoneParsing:
     if (getConstants().targetSet.contains(entry.getKey()))
       continue;
 
+    if (entry.getKey() == rawAnnotations)
+      continue;
+
     foundUnappliedAnnotations = true;
     mlir::emitError(circuit.getLoc())
         << "unapplied annotations with target '" << entry.getKey()
@@ -3821,6 +3866,26 @@ DoneParsing:
   if (foundUnappliedAnnotations)
     return failure();
 
+  auto main = circuit.getMainModule();
+  if (!main) {
+    // Give more specific error if no modules defined at all
+    if (circuit.getOps<FModuleLike>().empty()) {
+      return mlir::emitError(circuit.getLoc())
+             << "no modules found, circuit must contain one or more modules";
+    }
+    return mlir::emitError(circuit.getLoc())
+           << "no main module found, circuit '" << circuit.name()
+           << "' must contain a module named '" << circuit.name() << "'";
+  }
+
+  // If the circuit has an entry point that is not an external module, set the
+  // visibility of all non-main modules to private.
+  if (isa<FModuleOp>(main)) {
+    for (auto mod : circuit.getOps<FModuleLike>()) {
+      if (mod != main)
+        SymbolTable::setSymbolVisibility(mod, SymbolTable::Visibility::Private);
+    }
+  }
   return success();
 }
 
@@ -3829,9 +3894,9 @@ DoneParsing:
 //===----------------------------------------------------------------------===//
 
 // Parse the specified .fir file into the specified MLIR context.
-OwningModuleRef circt::firrtl::importFIRFile(SourceMgr &sourceMgr,
-                                             MLIRContext *context,
-                                             FIRParserOptions options) {
+mlir::OwningOpRef<mlir::ModuleOp>
+circt::firrtl::importFIRFile(SourceMgr &sourceMgr, MLIRContext *context,
+                             mlir::TimingScope &ts, FIRParserOptions options) {
   auto sourceBuf = sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID());
   SmallVector<const llvm::MemoryBuffer *> annotationsBufs;
   unsigned fileID = 1;
@@ -3848,17 +3913,18 @@ OwningModuleRef circt::firrtl::importFIRFile(SourceMgr &sourceMgr,
   context->loadDialect<FIRRTLDialect, hw::HWDialect>();
 
   // This is the result module we are parsing into.
-  OwningModuleRef module(ModuleOp::create(
+  mlir::OwningOpRef<mlir::ModuleOp> module(ModuleOp::create(
       FileLineColLoc::get(context, sourceBuf->getBufferIdentifier(), /*line=*/0,
                           /*column=*/0)));
   SharedParserConstants state(context, options);
   FIRLexer lexer(sourceMgr, context);
   if (FIRCircuitParser(state, lexer, *module)
-          .parseCircuit(annotationsBufs, omirBufs))
+          .parseCircuit(annotationsBufs, omirBufs, ts))
     return nullptr;
 
   // Make sure the parse module has no other structural problems detected by
   // the verifier.
+  auto circuitVerificationTimer = ts.nest("Verify circuit");
   if (failed(verify(*module)))
     return {};
 
@@ -3868,6 +3934,7 @@ OwningModuleRef circt::firrtl::importFIRFile(SourceMgr &sourceMgr,
 void circt::firrtl::registerFromFIRFileTranslation() {
   static mlir::TranslateToMLIRRegistration fromFIR(
       "import-firrtl", [](llvm::SourceMgr &sourceMgr, MLIRContext *context) {
-        return importFIRFile(sourceMgr, context);
+        mlir::TimingScope ts;
+        return importFIRFile(sourceMgr, context, ts);
       });
 }

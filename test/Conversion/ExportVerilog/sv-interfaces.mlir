@@ -18,8 +18,8 @@ module {
     sv.interface.signal @ready : i1
     sv.interface.signal @arrayData : !hw.array<4xi8>
     sv.interface.signal @uarrayData : !hw.uarray<4xi8>
-    sv.interface.modport @data_in ("input" @data, "input" @valid, "output" @ready)
-    sv.interface.modport @data_out ("output" @data, "output" @valid, "input" @ready)
+    sv.interface.modport @data_in (input @data, input @valid, output @ready)
+    sv.interface.modport @data_out (output @data, output @valid, input @ready)
     sv.verbatim  "//MACRO({{0}}, {{1}}, {{2}} -- {{3}})"
                     {symbols = [@data, @valid, @ready, @data_in]}
   }
@@ -36,8 +36,8 @@ module {
     sv.interface.signal @data : !hw.struct<foo: i7, bar: !hw.array<5 x i16>>
     sv.interface.signal @valid : i1
     sv.interface.signal @ready : i1
-    sv.interface.modport @data_in ("input" @data, "input" @valid, "output" @ready)
-    sv.interface.modport @data_out ("output" @data, "output" @valid, "input" @ready)
+    sv.interface.modport @data_in (input @data, input @valid, output @ready)
+    sv.interface.modport @data_out (output @data, output @valid, input @ready)
   }
 
   hw.module.extern @Rcvr (%m: !sv.modport<@data_vr::@data_in>)
@@ -69,9 +69,11 @@ module {
     sv.interface.signal.assign %iface(@data_vr::@valid) = %c1 : i1
 
     sv.always posedge %clk {
+      %fd = hw.constant 0x80000002 : i32
+
       %validValue = sv.interface.signal.read %iface(@data_vr::@valid) : i1
       // CHECK: $fwrite(32'h80000002, "valid: %d\n", iface.valid);
-      sv.fwrite "valid: %d\n" (%validValue) : i1
+      sv.fwrite %fd, "valid: %d\n" (%validValue) : i1
       // CHECK: assert(iface.valid);
       sv.assert %validValue, immediate
 
@@ -79,7 +81,7 @@ module {
         %structDataSignal = sv.interface.signal.read %structIface(@struct_vr::@data) : !hw.struct<foo: i7, bar: !hw.array<5 x i16>>
         %structData = hw.struct_extract %structDataSignal["foo"] : !hw.struct<foo: i7, bar: !hw.array<5 x i16>>
         // CHECK: $fwrite(32'h80000002, "%d", [[IFACEST]].data.foo);
-        sv.fwrite "%d"(%structData) : i7
+        sv.fwrite %fd, "%d"(%structData) : i7
       }
     }
   }

@@ -10,17 +10,20 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "mlir/IR/EnumAttr.td"
 include "mlir/IR/OpAsmInterface.td"
+include "mlir/IR/BuiltinTypes.td"
 
 // This is almost exactly like a standard FuncOp, except that it has some
 // extra verification conditions.  In particular, each Value must
 // only have a single use.  Also, it defines a Dominance-Free Scope
 def FuncOp : Op<Handshake_Dialect, "func", [
    IsolatedFromAbove,
-   FunctionLike,
+   FunctionOpInterface,
    Symbol,
    RegionKindInterface,
-   OpAsmOpInterface
+   OpAsmOpInterface,
+   HasClock
 ]> {
   let summary = "Handshake dialect function.";
   let description = [{
@@ -45,24 +48,19 @@ def FuncOp : Op<Handshake_Dialect, "func", [
     // to match the signature of the function.
     Block *addEntryBlock();
 
-    FunctionType getType() {
-      return (*this)->getAttrOfType<TypeAttr>(getTypeAttrName())
-          .getValue()
-          .cast<FunctionType>();
+    /// Returns the type of this function.
+    FunctionType getFunctionType() {
+      return getFunctionTypeAttr().getValue().cast<FunctionType>();
     }
-
-    // This trait needs access to the hooks defined below.
-    friend class OpTrait::FunctionLike<handshake::FuncOp>;
 
     /// Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
 
-    /// Returns the number of arguments. This is a hook for
-    /// OpTrait::FunctionLike.
-    unsigned getNumFuncArguments() { return getType().getInputs().size(); }
+    /// Returns the argument types of this function.
+    ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
 
-    /// Returns the number of results. This is a hook for OpTrait::FunctionLike.
-    unsigned getNumFuncResults() { return getType().getResults().size(); }
+    /// Returns the result types of this function.
+    ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
 
     /// Returns the names of the arguments to this function.
     ArrayAttr getArgNames() {
@@ -89,15 +87,16 @@ def FuncOp : Op<Handshake_Dialect, "func", [
     /// operation fulfills the name requirements of the handshake function.
     void resolveArgAndResNames();
 
-    /// Hook for OpTrait::FunctionLike, called after verifying that the 'type'
+    /// Hook for FunctionOpInterface, called after verifying that the 'type'
     /// attribute is present and checks if it holds a function type.  Ensures
     /// getType, getNumFuncArguments, and getNumFuncResults can be called
     /// safely.
     LogicalResult verifyType() {
-      auto type = getTypeAttr().getValue();
+      auto type = getFunctionTypeAttr().getValue();
       if (!type.isa<FunctionType>())
-        return emitOpError("requires '" + getTypeAttrName() +
-                           "' attribute of function type");
+        return emitOpError(
+            "requires '" + mlir::function_interface_impl::getTypeAttrName() +
+            "' attribute of function type");
       return success();
     }
 
@@ -110,9 +109,8 @@ def FuncOp : Op<Handshake_Dialect, "func", [
     }
   }];
 
-  let verifier = [{ return ::verify$cppClass(*this); }];
-  let printer = [{ return ::print$cppClass(p, *this); }];
-  let parser = [{ return ::parse$cppClass(parser, result); }];
+  let hasVerifier = 1;
+  let hasCustomAssemblyFormat = 1;
 }
 
 // InstanceOp
@@ -139,8 +137,7 @@ def InstanceOp : Handshake_Op<"instance", [CallOpInterface]> {
     (ins "FuncOp":$module, CArg<"ValueRange", "{}">:$operands), [{
       $_state.addOperands(operands);
       $_state.addAttribute("module", SymbolRefAttr::get(module));
-      $_state.addTypes(module.getType().getResults());
-      $_state.addTypes({$_builder.getType<::mlir::NoneType>()});
+      $_state.addTypes(module.getResultTypes());
   }]>, OpBuilder<
     (ins "SymbolRefAttr":$module, "TypeRange":$results,
      CArg<"ValueRange", "{}">:$operands), [{
@@ -183,7 +180,7 @@ def InstanceOp : Handshake_Op<"instance", [CallOpInterface]> {
     $module `(` $operands `)` attr-dict `:` functional-type($operands, results)
   }];
 
-  let verifier = [{ return ::verify$cppClass(*this); }];
+  let hasVerifier = 1;
 }
 
 // This is almost exactly like a standard FuncOp, except that it has some
@@ -202,11 +199,22 @@ def ReturnOp : Handshake_Op<"return", [Terminator]> {
   let arguments = (ins Variadic<AnyType> : $operands, NoneType : $control);
 
   let skipDefaultBuilders = 1;
-  let builders = [OpBuilder<(ins "ArrayRef<Value>":$operands)>];
+  let builders = [OpBuilder<(ins "ValueRange":$operands)>];
 
-  let verifier = "return ::verify(*this);";
+  let hasVerifier = 1;
   let assemblyFormat = [{ operands attr-dict `:` qualified(type(operands)) }];
 }
+
+// Here use I32EnumAttr to better suit the BufferOp sequential
+// attribute for it can only be seq or fifo.
+def BufferCaseSeq: I32EnumAttrCase<"seq", 0>;
+def BufferCaseFIFO: I32EnumAttrCase<"fifo", 1>;
+
+def BufferTypeEnum: I32EnumAttr<
+  "BufferTypeEnum", "BufferOp seq or fifo", [BufferCaseSeq, BufferCaseFIFO]> {
+  let genSpecializedAttr = 0;
+}
+def BufferTypeEnumAttr: EnumAttr<Handshake_Dialect, BufferTypeEnum, "buffer_type_enum">;
 
 def BufferOp : Handshake_Op<"buffer", [NoSideEffect, HasClock,
   DeclareOpInterfaceMethods<ExecutableOpInterface>,
@@ -215,8 +223,8 @@ def BufferOp : Handshake_Op<"buffer", [NoSideEffect, HasClock,
 
   let description = [{
     The buffer operation represents a buffer operation. $slots
-    must be an unsigned integer larger than 0. $sequantial=True indicates a
-    nontransparent buffer, while $sequantial=False indicates a transparent
+    must be an unsigned integer larger than 0. $bufferType=BufferTypeEnum::seq indicates a
+    nontransparent buffer, while $bufferType=BufferTypeEnum::fifo indicates a transparent
     buffer.
 
     An 'initValues' attribute containing a list of integer values may be provided.
@@ -231,16 +239,16 @@ def BufferOp : Handshake_Op<"buffer", [NoSideEffect, HasClock,
     TypeAttr:$dataType,
     Confined<I32Attr, [IntMinValue<1>]>:$size,
     AnyType:$operand,
-    BoolAttr:$sequential,
+    BufferTypeEnumAttr:$bufferType,
     OptionalAttr<I64ArrayAttr>:$initValues);
   let results = (outs AnyType:$result);
   let skipDefaultBuilders = 1;
   let builders = [OpBuilder<(ins "Type":$dataType, "int":$size,
-    "Value":$operand, "bool":$sequential)>];
+    "Value":$operand, "BufferTypeEnum":$bufferType)>];
 
   let extraClassDeclaration = [{
     bool isSequential() {
-      return (*this)->getAttrOfType<BoolAttr>("sequential").getValue();
+      return this->bufferType() == BufferTypeEnum::seq;
     }
     int getNumSlots() {
       return (*this)->getAttrOfType<IntegerAttr>("size").getValue().getZExtValue();
@@ -254,9 +262,8 @@ def BufferOp : Handshake_Op<"buffer", [NoSideEffect, HasClock,
     }
 
   }];
-  let printer = "return ::print$cppClass(p, *this);";
-  let parser = "return ::parse$cppClass(parser, result);";
-  let verifier = "return ::verify$cppClass(*this);";
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
   let hasCanonicalizer = 1;
 }
 
@@ -286,8 +293,7 @@ def ForkOp : Handshake_Op<"fork", [
   let hasCanonicalizer = 1;
   let skipDefaultBuilders = 1;
   let builders = [OpBuilder<(ins "Value":$operand, "int":$outputs)>];
-  let printer = "return ::print$cppClass(p, *this);";
-  let parser = "return ::parse$cppClass(parser, result);";
+  let hasCustomAssemblyFormat = 1;
 }
 
 def LazyForkOp : Handshake_Op<"lazy_fork", [NoSideEffect]> {
@@ -308,8 +314,7 @@ def LazyForkOp : Handshake_Op<"lazy_fork", [NoSideEffect]> {
     Confined<I32Attr, [IntMinValue<1>]>:$size,
     AnyType : $operand);
   let results = (outs Variadic<AnyType> : $result);
-  let printer = "return ::print$cppClass(p, *this);";
-  let parser = "return ::parse$cppClass(parser, result);";
+  let hasCustomAssemblyFormat = 1;
   let skipDefaultBuilders = 1;
   let builders = [OpBuilder<(ins "Value":$operand, "int":$outputs)>];
 }
@@ -336,9 +341,7 @@ def MergeOp : Handshake_Op<"merge", [
     Confined<I32Attr, [IntMinValue<1>]>:$size,
     Variadic<AnyType>:$dataOperands);
   let results = (outs AnyType:$result);
-  let printer = "return ::print$cppClass(p, *this);";
-  let parser = "return ::parse$cppClass(parser, result);";
-
+  let hasCustomAssemblyFormat = 1;
   let hasCanonicalizer = 1;
   let skipDefaultBuilders = 1;
   let builders = [OpBuilder<(ins "ValueRange":$operands)>];
@@ -347,7 +350,7 @@ def MergeOp : Handshake_Op<"merge", [
 def MuxOp : Handshake_Op<"mux", [
   NoSideEffect, MergeLikeOpInterface,
   DeclareOpInterfaceMethods<ExecutableOpInterface>,
-  DeclareOpInterfaceMethods<NamedIOInterface, ["getOperandName"]> 
+  DeclareOpInterfaceMethods<NamedIOInterface, ["getOperandName"]>
 ]> {
   let summary = "mux operation";
   let description = [{
@@ -381,9 +384,8 @@ def MuxOp : Handshake_Op<"mux", [
     OpBuilder<(ins "Value":$anyInput, "int":$inputs)>,
     // Use this builder for any other use case.
     OpBuilder<(ins "Value":$selectOperand, "ValueRange":$inputs)>];
-  let printer = "return ::print$cppClass(p, *this);";
-  let parser = "return ::parse$cppClass(parser, result);";
-  let verifier = "return ::verify(*this);";
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
   let hasCanonicalizer = 1;
 }
 
@@ -420,8 +422,7 @@ def ControlMergeOp : Handshake_Op<"control_merge", [
     OpBuilder<(ins "Value":$operand, "int":$inputs)>,
     OpBuilder<(ins "ValueRange":$inputs)>
   ];
-  let printer = "return ::print$cppClass(p, *this);";
-  let parser = "return ::parse$cppClass(parser, result);";
+  let hasCustomAssemblyFormat = 1;
 }
 
 def BranchOp : Handshake_Op<"br", [
@@ -450,8 +451,7 @@ def BranchOp : Handshake_Op<"br", [
   let builders = [OpBuilder<(ins "Value":$dataOperand)>];
 
   let hasCanonicalizer = 1;
-  let parser = "return ::parse$cppClass(parser, result);";
-  let printer = "return ::print$cppClass(p, *this);";
+  let hasCustomAssemblyFormat = 1;
 }
 
 def ConditionalBranchOp : Handshake_Op<"cond_br", [
@@ -482,8 +482,7 @@ def ConditionalBranchOp : Handshake_Op<"cond_br", [
 
   let builders = [OpBuilder<(ins "Value":$condOperand, "Value":$dataOperand)>];
   let skipDefaultBuilders = 1;
-  let printer = "return ::print$cppClass(p, *this);";
-  let parser = "return ::parse$cppClass(parser, result);";
+  let hasCustomAssemblyFormat = 1;
   let extraClassDeclaration = [{
     // These are the indices into the dests list.
     enum { trueIndex = 0, falseIndex = 1 };
@@ -519,11 +518,10 @@ def SelectOp : Handshake_Op<"select", [
                        AnyType : $trueOperand, AnyType : $falseOperand);
   let results = (outs AnyType : $result);
 
-  let builders = [OpBuilder<(ins 
+  let builders = [OpBuilder<(ins
     "Value":$condOperand, "Value":$trueOperand, "Value":$falseOperand)>];
   let skipDefaultBuilders = 1;
-  let printer = "return ::print$cppClass(p, *this);";
-  let parser = "return ::parse$cppClass(parser, result);";
+  let hasCustomAssemblyFormat = 1;
 }
 
 def SinkOp
@@ -535,7 +533,7 @@ def SinkOp
 
     Example:
     ```mlir
-    sink %data : i32 
+    sink %data : i32
     ```
   }];
   let arguments = (ins AnyType:$operand);
@@ -543,12 +541,11 @@ def SinkOp
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilder<(ins "Value":$operand)>,
-    // Like ODS-generated builder, needed for instantiation through declarative rewrite patterns. 
-    OpBuilder<(ins 
+    // Like ODS-generated builder, needed for instantiation through declarative rewrite patterns.
+    OpBuilder<(ins
       "TypeRange":$resultTypes, "ValueRange":$operands, "ArrayRef<::mlir::NamedAttribute>":$attributes)>
   ];
-  let printer = "return ::print$cppClass(p, *this);";
-  let parser = "return ::parse$cppClass(parser, result);";
+  let hasCustomAssemblyFormat = 1;
 }
 
 def SourceOp : Handshake_Op<"source", [NoSideEffect]> {
@@ -561,9 +558,8 @@ def SourceOp : Handshake_Op<"source", [NoSideEffect]> {
 
   let skipDefaultBuilders = 1;
   let results = (outs AnyType:$result);
-  let parser = "return ::parse$cppClass(parser, result);";
+  let hasCustomAssemblyFormat = 1;
   let builders = [OpBuilder<(ins)>];
-  let printer = "return ::print$cppClass(p, *this);";
 }
 
 def NeverOp : Handshake_Op<"never", [NoSideEffect]> {
@@ -606,7 +602,7 @@ def ConstantOp : Handshake_Op<"constant", [
     Attribute getValue() { return (*this)->getAttr("value"); }
   }];
   let assemblyFormat = [{ $ctrl attr-dict `:` qualified(type($result))}];
-  let verifier = "return ::verify$cppClass(*this);";
+  let hasVerifier = 1;
 }
 
 def EndOp
@@ -683,11 +679,11 @@ def MemoryOp : Handshake_Op<"memory", [
 
   let skipDefaultBuilders = 1;
   let builders = [OpBuilder<(
-      ins "ArrayRef<Value>":$operands, "int":$outputs, "int":$control_outputs, "bool":$lsq,
+      ins "ValueRange":$operands, "int":$outputs, "int":$control_outputs, "bool":$lsq,
       "int":$id, "Value":$memref)>
   ];
   let assemblyFormat = "`[` `ld` `=` $ldCount `,` `st` `=`  $stCount `]` `(` $inputs `)` attr-dict `:` $memRefType `,` functional-type($inputs, $outputs)";
-  let verifier = "return ::verify$cppClass(*this);";
+  let hasVerifier = 1;
 }
 
 def ExternalMemoryOp : Handshake_Op<"extmemory", [
@@ -723,7 +719,7 @@ def ExternalMemoryOp : Handshake_Op<"extmemory", [
 
   let skipDefaultBuilders = 1;
   let builders = [OpBuilder<(
-      ins "Value":$memref, "ArrayRef<Value>":$inputs, "int":$ldCount, "int":$stCount,
+      ins "Value":$memref, "ValueRange":$inputs, "int":$ldCount, "int":$stCount,
       "int":$id)>
   ];
   let assemblyFormat = "`[` `ld` `=` $ldCount `,` `st` `=`  $stCount `]` `(` $memref `:` qualified(type($memref)) `)` `(` $inputs `)` attr-dict `:` functional-type($inputs, $outputs)";
@@ -755,10 +751,9 @@ def LoadOp : Handshake_Op<"load", [
   let arguments = (ins Variadic<AnyType>:$addresses, AnyType:$data, NoneType:$ctrl);
   let results = (outs AnyType:$dataResult, Variadic<AnyType>:$addressResults);
   let skipDefaultBuilders = 1;
-  let builders = [OpBuilder<(ins "Value":$memref, "ArrayRef<Value>":$indices)>];
-  let printer = "return ::print$cppClass(p, *this);";
-  let parser = "return ::parse$cppClass(parser, result);";
-  let verifier = "return ::verify$cppClass(*this);";
+  let builders = [OpBuilder<(ins "Value":$memref, "ValueRange":$indices)>];
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
 }
 
 def StoreOp : Handshake_Op<"store", [
@@ -789,10 +784,9 @@ def StoreOp : Handshake_Op<"store", [
   let results = (outs AnyType:$dataResult, Variadic<AnyType>:$addressResult);
 
   let builders =
-      [OpBuilder<(ins "Value":$valueToStore, "ArrayRef<Value>":$indices)>];
-  let printer = "return ::print$cppClass(p, *this);";
-  let parser = "return ::parse$cppClass(parser, result);";
-  let verifier = "return ::verify$cppClass(*this);";
+      [OpBuilder<(ins "Value":$valueToStore, "ValueRange":$indices)>];
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
 }
 
 def JoinOp : Handshake_Op<"join", [
@@ -803,7 +797,7 @@ def JoinOp : Handshake_Op<"join", [
   let description = [{
     A control-only synchronizer.  Produces a valid output when all
     inputs become available.
-    
+
     Example:
     ```mlir
     %0 = join %a, %b, %c : i32
@@ -813,10 +807,76 @@ def JoinOp : Handshake_Op<"join", [
   let results = (outs NoneType : $result);
 
   let skipDefaultBuilders = 1;
-  let builders = [OpBuilder<(ins "ArrayRef<Value>":$operands)>];
-  let printer = "return ::print$cppClass(p, *this);";
-  let parser = "return ::parse$cppClass(parser, result);";
+  let builders = [OpBuilder<(ins "ValueRange":$operands)>];
+  let hasCustomAssemblyFormat = 1;
 }
 
 def I4 : I<4>;
 def I4Attr : SignlessIntegerAttrBase<I4, "4-bit integer attribute">;
+
+def UnpackOp : Handshake_Op<"unpack", [
+  HasClock, DeclareOpInterfaceMethods<ExecutableOpInterface>,
+  DeclareOpInterfaceMethods<GeneralOpInterface>,
+  TypesMatchWith<"result types match element types of 'tuple'",
+                     "input", "results",
+                     "$_self.cast<TupleType>().getTypes()">
+]> {
+  let summary = "unpacks a tuple";
+  let description = [{
+    The `unpack` operation assigns each value of a tuple to a separate
+    value for further processing. The number of results corresponds
+    to the number of tuple elements.
+    Similar to `fork`, each output is distributed as soon as the corresponding
+    successor is ready.
+
+    Example:
+    ```mlir
+    %a, %b = handshake.unpack %tuple {attributes} : tuple<i32, i64>
+    ```
+  }];
+
+  let arguments = (ins Builtin_Tuple:$input);
+  let results = (outs Variadic<AnyType>:$results);
+
+  let builders = [OpBuilder<(ins "Value":$input), [{
+    $_state.addOperands(input);
+
+    TupleType type = input.getType().dyn_cast_or_null<TupleType>();
+    assert(type && "expect unpack to have a 'TupleType' operand");
+    $_state.addTypes(type.getTypes());
+  }]>];
+
+  let hasCustomAssemblyFormat = 1;
+}
+
+def PackOp : Handshake_Op<"pack", [
+  DeclareOpInterfaceMethods<ExecutableOpInterface>,
+  DeclareOpInterfaceMethods<GeneralOpInterface>,
+  TypesMatchWith<"input types match element types of 'tuple'",
+                   "result", "inputs",
+                   "$_self.cast<TupleType>().getTypes()">
+]> {
+
+  let summary = "packs a tuple";
+  let description = [{
+    The `pack` operation constructs a tuple from separate values.
+    The number of operands corresponds to the number of tuple elements.
+    Similar to `join`, the output is ready when all inputs are ready.
+
+    Example:
+    ```mlir
+    %tuple = handshake.pack %a, %b {attributes} : tuple<i32, i64>
+    ```
+    }];
+
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs Builtin_Tuple:$result);
+
+  let builders = [OpBuilder<
+    (ins "ValueRange":$operands), [{
+      $_state.addOperands(operands);
+      $_state.addTypes(TupleType::get($_builder.getContext(), operands.getTypes()));
+  }]>];
+
+  let hasCustomAssemblyFormat = 1;
+}

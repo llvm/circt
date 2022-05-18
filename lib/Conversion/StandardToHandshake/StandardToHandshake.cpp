@@ -20,9 +20,11 @@
 #include "mlir/Dialect/Affine/Analysis/AffineStructures.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Affine/IR/AffineValueMap.h"
+#include "mlir/Dialect/Affine/Utils.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/SCF.h"
-#include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Diagnostics.h"
@@ -35,7 +37,6 @@
 #include "mlir/Support/LLVM.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/Passes.h"
-#include "mlir/Transforms/Utils.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -43,36 +44,33 @@
 #include <map>
 
 using namespace mlir;
+using namespace mlir::func;
 using namespace circt;
 using namespace circt::handshake;
 using namespace std;
-
-typedef DenseMap<Block *, std::vector<Value>> BlockValues;
-typedef DenseMap<Block *, std::vector<Operation *>> BlockOps;
-typedef DenseMap<Value, Operation *> blockArgPairs;
-typedef llvm::MapVector<Value, std::vector<Operation *>> MemRefToMemoryAccessOp;
 
 // ============================================================================
 // Partial lowering infrastructure
 // ============================================================================
 
-template <typename TFuncOp>
-class LowerFuncOpTarget : public ConversionTarget {
+namespace {
+template <typename TOp>
+class LowerOpTarget : public ConversionTarget {
 public:
-  explicit LowerFuncOpTarget(MLIRContext &context) : ConversionTarget(context) {
-    loweredFuncs.clear();
+  explicit LowerOpTarget(MLIRContext &context) : ConversionTarget(context) {
+    loweredOps.clear();
     addLegalDialect<HandshakeDialect>();
-    addLegalDialect<StandardOpsDialect>();
-    addLegalDialect<arith::ArithmeticDialect>();
-    addIllegalDialect<scf::SCFDialect>();
+    addLegalDialect<mlir::func::FuncDialect>();
+    addLegalDialect<mlir::arith::ArithmeticDialect>();
+    addIllegalDialect<mlir::scf::SCFDialect>();
     addIllegalDialect<mlir::AffineDialect>();
-    /// The root function operation to be replaced is marked dynamically legal
-    /// based on the lowering status of the given function, see
-    /// PartialLowerFuncOp.
-    addDynamicallyLegalOp<TFuncOp>(
-        [&](const auto &funcOp) { return loweredFuncs[funcOp]; });
+
+    /// The root operation to be replaced is marked dynamically legal
+    /// based on the lowering status of the given operation, see
+    /// PartialLowerOp.
+    addDynamicallyLegalOp<TOp>([&](const auto &op) { return loweredOps[op]; });
   }
-  DenseMap<Operation *, bool> loweredFuncs;
+  DenseMap<Operation *, bool> loweredOps;
 };
 
 /// Default function for partial lowering of handshake::FuncOp. Lowering is
@@ -87,157 +85,143 @@ public:
 /// after matchAndRewrite returned true. To work around this,
 /// LowerFuncOpTarget::loweredFuncs is used to communicate between the target
 /// and the conversion, to indicate that the partial lowering was completed.
-template <typename TFuncOp>
-struct PartialLowerFuncOp : public ConversionPattern {
+template <typename TOp>
+struct PartialLowerOp : public ConversionPattern {
   using PartialLoweringFunc =
-      std::function<LogicalResult(TFuncOp, ConversionPatternRewriter &)>;
+      std::function<LogicalResult(TOp, ConversionPatternRewriter &)>;
 
 public:
-  PartialLowerFuncOp(LowerFuncOpTarget<TFuncOp> &target, MLIRContext *context,
-                     LogicalResult &loweringResRef,
-                     const PartialLoweringFunc &fun)
-      : ConversionPattern(TFuncOp::getOperationName(), 1, context),
-        target(target), loweringRes(loweringResRef), fun(fun) {}
+  PartialLowerOp(LowerOpTarget<TOp> &target, MLIRContext *context,
+                 LogicalResult &loweringResRef, const PartialLoweringFunc &fun)
+      : ConversionPattern(TOp::getOperationName(), 1, context), target(target),
+        loweringRes(loweringResRef), fun(fun) {}
   using ConversionPattern::ConversionPattern;
   LogicalResult
-  matchAndRewrite(Operation *funcOp, ArrayRef<Value> /*operands*/,
+  matchAndRewrite(Operation *op, ArrayRef<Value> /*operands*/,
                   ConversionPatternRewriter &rewriter) const override {
-    assert(isa<TFuncOp>(funcOp));
-    rewriter.updateRootInPlace(funcOp, [&] {
-      loweringRes = fun(dyn_cast<TFuncOp>(funcOp), rewriter);
-    });
-    target.loweredFuncs[funcOp] = true;
+    assert(isa<TOp>(op));
+    rewriter.updateRootInPlace(
+        op, [&] { loweringRes = fun(dyn_cast<TOp>(op), rewriter); });
+    target.loweredOps[op] = true;
     return loweringRes;
   };
 
 private:
-  LowerFuncOpTarget<TFuncOp> &target;
+  LowerOpTarget<TOp> &target;
   LogicalResult &loweringRes;
+  // NOTE: this is basically the rewrite function
   PartialLoweringFunc fun;
 };
+} // namespace
 
-/// Calls to rewriter.replaceOpWithNewOp are invalid, given the commitment of
-/// all side-effects of of any op replacements are deferred until after the
-/// return of matchAndRewrite. This is incompatible with the design of the
-/// StandardToHandshake pass, which converts a top-level FuncOp in a sequential
-/// manner, assuming any side-effects from operand replacements (in particular
-/// rewriting of SSA use-def's) are performed instantly.
-/// The following convenience function wraps a replacement pattern @p TConv
-/// inside a distinct call to applyPartialConversion, ensuring that any call to
-/// rewrite replacement methods have been fully performed after this call. Each
-/// replacement pattern is expected to define their own conversion target, to
-/// guide pattern matching.
-///
-template <typename TConv, typename TFuncOp, typename... TArgs>
-LogicalResult lowerToHandshake(TFuncOp op, MLIRContext *context,
-                               TArgs &...args) {
-  RewritePatternSet patterns(context);
-  auto target = LowerFuncOpTarget<TFuncOp>(*context);
+// Convenience function for running lowerToHandshake with a partial
+// handshake::FuncOp lowering function.
+template <typename TOp>
+static LogicalResult partiallyLowerOp(
+    const std::function<LogicalResult(TOp, ConversionPatternRewriter &)>
+        &loweringFunc,
+    MLIRContext *ctx, TOp op) {
+
+  RewritePatternSet patterns(ctx);
+  auto target = LowerOpTarget<TOp>(*ctx);
   LogicalResult partialLoweringSuccessfull = success();
-  patterns.add<TConv>(target, context, partialLoweringSuccessfull, args...);
+  patterns.add<PartialLowerOp<TOp>>(target, ctx, partialLoweringSuccessfull,
+                                    loweringFunc);
   return success(
       applyPartialConversion(op, target, std::move(patterns)).succeeded() &&
       partialLoweringSuccessfull.succeeded());
 }
 
-// Convenience function for running lowerToHandshake with a partial
-// handshake::FuncOp lowering function.
-template <typename TFuncOp>
-LogicalResult partiallyLowerFuncOp(
-    const std::function<LogicalResult(TFuncOp, ConversionPatternRewriter &)>
-        &loweringFunc,
-    MLIRContext *ctx, TFuncOp funcOp) {
-  return lowerToHandshake<PartialLowerFuncOp<TFuncOp>>(funcOp, ctx,
-                                                       loweringFunc);
+class LowerRegionTarget : public ConversionTarget {
+public:
+  explicit LowerRegionTarget(MLIRContext &context, Region &region)
+      : ConversionTarget(context), region(region) {
+    // The root operation is marked dynamically legal to ensure
+    // the pattern on its region is only applied once.
+    markUnknownOpDynamicallyLegal([&](Operation *op) {
+      if (op != region.getParentOp())
+        return true;
+      return opLowered;
+    });
+  }
+  bool opLowered = false;
+  Region &region;
+};
+
+/// Allows to partially lower a region by matching on the parent operation to
+/// then call the provided partial lowering function with the region and the
+/// rewriter.
+///
+/// The interplay with the target is similar to PartialLowerOp
+struct PartialLowerRegion : public ConversionPattern {
+  using PartialLoweringFunc =
+      std::function<LogicalResult(Region &, ConversionPatternRewriter &)>;
+
+public:
+  PartialLowerRegion(LowerRegionTarget &target, MLIRContext *context,
+                     LogicalResult &loweringResRef,
+                     const PartialLoweringFunc &fun)
+      : ConversionPattern(target.region.getParentOp()->getName().getStringRef(),
+                          1, context),
+        target(target), loweringRes(loweringResRef), fun(fun) {}
+  using ConversionPattern::ConversionPattern;
+  LogicalResult
+  matchAndRewrite(Operation *op, ArrayRef<Value> /*operands*/,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.updateRootInPlace(
+        op, [&] { loweringRes = fun(target.region, rewriter); });
+
+    target.opLowered = true;
+    return loweringRes;
+  };
+
+private:
+  LowerRegionTarget &target;
+  LogicalResult &loweringRes;
+  PartialLoweringFunc fun;
+};
+
+LogicalResult
+handshake::partiallyLowerRegion(const RegionLoweringFunc &loweringFunc,
+                                MLIRContext *ctx, Region &r) {
+
+  Operation *op = r.getParentOp();
+  RewritePatternSet patterns(ctx);
+  auto target = LowerRegionTarget(*ctx, r);
+  LogicalResult partialLoweringSuccessfull = success();
+  patterns.add<PartialLowerRegion>(target, ctx, partialLoweringSuccessfull,
+                                   loweringFunc);
+  return success(
+      applyPartialConversion(op, target, std::move(patterns)).succeeded() &&
+      partialLoweringSuccessfull.succeeded());
 }
 
 #define returnOnError(logicalResult)                                           \
   if (failed(logicalResult))                                                   \
-    return logicalResult;
+    return failure();
 
 // ============================================================================
 // Start of lowering passes
 // ============================================================================
 
-// A class for maintaining state between all the partial handshake lowering
-// passes. The std-to-handshake pass was initially written in such a way that
-// all temporary state was added to the IR itself. Consequences of this are that
-// the IR is in an inconsistent (non-valid) state during lowering, as well as a
-// lot of assumptions being put on the IR itself for tracking things; i.e.
-// control values for blocks were always assumed to be any control_merge within
-// that block (which may not be the case).
-// Through this class, state is made explicit, which should hopefully aid in the
-// debugability and extensibility of this pass.
-class FuncOpLowering {
-public:
-  explicit FuncOpLowering(handshake::FuncOp f) : f(f) {}
-  LogicalResult addMergeOps(ConversionPatternRewriter &rewriter);
-  LogicalResult addBranchOps(ConversionPatternRewriter &rewriter);
-  LogicalResult replaceCallOps(ConversionPatternRewriter &rewriter);
-  LogicalResult setControlOnlyPath(ConversionPatternRewriter &rewriter);
-  LogicalResult connectConstantsToControl(ConversionPatternRewriter &rewriter,
-                                          bool sourceConstants);
-  LogicalResult loopNetworkRewriting(ConversionPatternRewriter &rewriter);
-
-  BlockOps insertMergeOps(BlockValues blockLiveIns, blockArgPairs &mergePairs,
-                          ConversionPatternRewriter &rewriter);
-  Operation *insertMerge(Block *block, Value val,
-                         ConversionPatternRewriter &rewriter);
-
-  // Replaces standard memory ops with their handshake version (i.e.,
-  // ops which connect to memory/LSQ). Returns a map with an ordered
-  // list of new ops corresponding to each memref. Later, we instantiate
-  // a memory node for each memref and connect it to its load/store ops
-  LogicalResult replaceMemoryOps(ConversionPatternRewriter &rewriter,
-                                 MemRefToMemoryAccessOp &memRefOps);
-
-  LogicalResult connectToMemory(ConversionPatternRewriter &rewriter,
-                                MemRefToMemoryAccessOp memRefOps, bool lsq);
-  void setMemOpControlInputs(ConversionPatternRewriter &rewriter,
-                             ArrayRef<Operation *> memOps, Operation *memOp,
-                             int offset, ArrayRef<int> cntrlInd);
-
-  LogicalResult finalize(ConversionPatternRewriter &rewriter,
-                         TypeRange argTypes, TypeRange resTypes,
-                         mlir::FuncOp origFunc);
-
-  // Partial lowering driver. This function will instantiate a new
-  // partial lowering call, creating a conversion rewriter context which is then
-  // passed to the instance of the member function referenced.
-  template <typename F, typename... TArgs>
-  LogicalResult runPartialLowering(F &&memberFunc, TArgs &...args) {
-    return partiallyLowerFuncOp<handshake::FuncOp>(
-        [&](handshake::FuncOp,
-            ConversionPatternRewriter &rewriter) -> LogicalResult {
-          return ((*this).*memberFunc)(rewriter, args...);
-        },
-        f.getContext(), f);
-  }
-
-  // Returns the entry control value for operations contained within this block.
-  Value getBlockEntryControl(Block *block) const;
-  void setBlockEntryControl(Block *block, Value v);
-
-private:
-  DenseMap<Block *, Value> blockEntryControlMap;
-  handshake::FuncOp f;
-};
-
-Value FuncOpLowering::getBlockEntryControl(Block *block) const {
+Value HandshakeLowering::getBlockEntryControl(Block *block) const {
   auto it = blockEntryControlMap.find(block);
   assert(it != blockEntryControlMap.end() &&
          "No block entry control value registerred for this block!");
   return it->second;
 }
 
-void FuncOpLowering::setBlockEntryControl(Block *block, Value v) {
+void HandshakeLowering::setBlockEntryControl(Block *block, Value v) {
   blockEntryControlMap[block] = v;
 }
 
 /// Remove basic blocks inside the given FuncOp. This allows the result to be
 /// a valid graph region, since multi-basic block regions are not allowed to
 /// be graph regions currently.
-void removeBasicBlocks(handshake::FuncOp funcOp) {
+static void removeBasicBlocks(handshake::FuncOp funcOp) {
+  if (funcOp.isExternal())
+    return; // nothing to do, external funcOp.
+
   auto &entryBlock = funcOp.getBody().front().getOperations();
 
   // Erase all TerminatorOp, and move ReturnOp to the end of entry block.
@@ -263,30 +247,10 @@ void removeBasicBlocks(handshake::FuncOp funcOp) {
   }
 }
 
-LogicalResult
-FuncOpLowering::setControlOnlyPath(ConversionPatternRewriter &rewriter) {
-  // Creates start and end points of the control-only path
-
-  // Temporary start node (removed in later steps) in entry block
-  Block *entryBlock = &f.front();
-  rewriter.setInsertionPointToStart(entryBlock);
-  Operation *startOp = rewriter.create<StartOp>(entryBlock->front().getLoc());
-  setBlockEntryControl(entryBlock, startOp->getResult(0));
-
-  // Replace original return ops with new returns with additional control input
-  for (auto retOp : llvm::make_early_inc_range(f.getOps<mlir::ReturnOp>())) {
-    rewriter.setInsertionPoint(retOp);
-    SmallVector<Value, 8> operands(retOp->getOperands());
-    operands.push_back(startOp->getResult(0));
-    rewriter.replaceOpWithNewOp<handshake::ReturnOp>(retOp, operands);
-  }
-  return success();
-}
-
-BlockValues getBlockUses(handshake::FuncOp f) {
+static HandshakeLowering::BlockValues getBlockUses(Region &f) {
   // Returns map of values used in block but defined outside of block
   // For liveness analysis
-  BlockValues uses;
+  HandshakeLowering::BlockValues uses;
   for (Block &block : f) {
     // Operands of operations in b which do not originate from operations or
     // arguments of b
@@ -314,10 +278,10 @@ BlockValues getBlockUses(handshake::FuncOp f) {
   return uses;
 }
 
-BlockValues getBlockDefs(handshake::FuncOp f) {
+static HandshakeLowering::BlockValues getBlockDefs(Region &f) {
   // Returns map of values defined in each block
   // For liveness analysis
-  BlockValues defs;
+  HandshakeLowering::BlockValues defs;
   for (Block &block : f) {
     // Values produced by operations in b
     for (Operation &op : block) {
@@ -334,7 +298,7 @@ BlockValues getBlockDefs(handshake::FuncOp f) {
   return defs;
 }
 
-std::vector<Value> vectorUnion(ArrayRef<Value> v1, ArrayRef<Value> v2) {
+static std::vector<Value> vectorUnion(ArrayRef<Value> v1, ArrayRef<Value> v2) {
   // Returns v1 U v2
   // Assumes unique values in v1
   std::vector<Value> v1c = v1;
@@ -346,7 +310,7 @@ std::vector<Value> vectorUnion(ArrayRef<Value> v1, ArrayRef<Value> v2) {
   return v1c;
 }
 
-std::vector<Value> vectorDiff(ArrayRef<Value> v1, ArrayRef<Value> v2) {
+static std::vector<Value> vectorDiff(ArrayRef<Value> v1, ArrayRef<Value> v2) {
   // Returns v1 - v2
   std::vector<Value> d;
   for (int i = 0, e = v1.size(); i < e; ++i) {
@@ -357,18 +321,18 @@ std::vector<Value> vectorDiff(ArrayRef<Value> v1, ArrayRef<Value> v2) {
   return d;
 }
 
-BlockValues livenessAnalysis(handshake::FuncOp f) {
+static HandshakeLowering::BlockValues livenessAnalysis(Region &f) {
   // Liveness analysis algorithm adapted from:
   // https://suif.stanford.edu/~courses/cs243/lectures/l2.pdf
   // See slide 19 (Liveness: Iterative Algorithm)
 
   // blockUses: values used in block but not defined in block
-  BlockValues blockUses = getBlockUses(f);
+  HandshakeLowering::BlockValues blockUses = getBlockUses(f);
 
   // blockDefs: values defined in block
-  BlockValues blockDefs = getBlockDefs(f);
+  HandshakeLowering::BlockValues blockDefs = getBlockDefs(f);
 
-  BlockValues blockLiveIns;
+  HandshakeLowering::BlockValues blockLiveIns;
 
   bool change = true;
   // Iterate while there are any changes to any of the livein sets
@@ -401,7 +365,7 @@ BlockValues livenessAnalysis(handshake::FuncOp f) {
   return blockLiveIns;
 }
 
-unsigned getBlockPredecessorCount(Block *block) {
+static unsigned getBlockPredecessorCount(Block *block) {
   // Returns number of block predecessors
   auto predecessors = block->getPredecessors();
   return std::distance(predecessors.begin(), predecessors.end());
@@ -409,8 +373,8 @@ unsigned getBlockPredecessorCount(Block *block) {
 
 // Insert appropriate type of Merge CMerge for control-only path,
 // Merge for single-successor blocks, Mux otherwise
-Operation *FuncOpLowering::insertMerge(Block *block, Value val,
-                                       ConversionPatternRewriter &rewriter) {
+Operation *HandshakeLowering::insertMerge(Block *block, Value val,
+                                          ConversionPatternRewriter &rewriter) {
   unsigned numPredecessors = getBlockPredecessorCount(block);
 
   // Control-only path originates from StartOp
@@ -426,8 +390,8 @@ Operation *FuncOpLowering::insertMerge(Block *block, Value val,
   // If there are no block predecessors (i.e., entry block)
   if (numPredecessors <= 1) {
     SmallVector<Value> mergeOperands;
-    mergeOperands.append(2, val); // 2 dummy values used here due to hard-coded
-                                  // logic of reconnectMergeOps.
+    mergeOperands.append(2, val); // 2 dummy values used here due to
+                                  // hard-coded logic of reconnectMergeOps.
     return rewriter.create<handshake::MergeOp>(block->front().getLoc(),
                                                mergeOperands);
   }
@@ -436,13 +400,12 @@ Operation *FuncOpLowering::insertMerge(Block *block, Value val,
                                            numPredecessors);
 }
 
-// Adds Merge for every live-in and block argument
-// Returns DenseMap of all inserted operations
-BlockOps FuncOpLowering::insertMergeOps(BlockValues blockLiveIns,
-                                        blockArgPairs &mergePairs,
-                                        ConversionPatternRewriter &rewriter) {
-  BlockOps blockMerges;
-  for (Block &block : f) {
+HandshakeLowering::BlockOps
+HandshakeLowering::insertMergeOps(HandshakeLowering::BlockValues blockLiveIns,
+                                  HandshakeLowering::blockArgPairs &mergePairs,
+                                  ConversionPatternRewriter &rewriter) {
+  HandshakeLowering::BlockOps blockMerges;
+  for (Block &block : r) {
     // Live-ins identified by liveness analysis
     rewriter.setInsertionPointToStart(&block);
     for (auto &val : blockLiveIns[&block]) {
@@ -466,7 +429,7 @@ BlockOps FuncOpLowering::insertMergeOps(BlockValues blockLiveIns,
 }
 
 // Check if block contains operation which produces val
-bool blockHasSrcOp(Value val, Block *block) {
+static bool blockHasSrcOp(Value val, Block *block) {
   // Arguments do not have an operation producer
   if (val.isa<BlockArgument>())
     return false;
@@ -477,7 +440,8 @@ bool blockHasSrcOp(Value val, Block *block) {
 }
 
 // Get value from predBlock which will be set as operand of op (merge)
-Value getMergeOperand(Operation *op, Block *predBlock, BlockOps blockMerges) {
+static Value getMergeOperand(Operation *op, Block *predBlock,
+                             HandshakeLowering::BlockOps blockMerges) {
   // Helper value (defining value of merge) to identify Merges which propagate
   // the same defining value
   Value srcVal = op->getOperand(0);
@@ -501,20 +465,20 @@ Value getMergeOperand(Operation *op, Block *predBlock, BlockOps blockMerges) {
   else {
     unsigned index = srcVal.cast<BlockArgument>().getArgNumber();
     Operation *termOp = predBlock->getTerminator();
-    if (mlir::CondBranchOp br = dyn_cast<mlir::CondBranchOp>(termOp)) {
+    if (mlir::cf::CondBranchOp br = dyn_cast<mlir::cf::CondBranchOp>(termOp)) {
       if (block == br.getTrueDest())
         return br.getTrueOperand(index);
       else {
         assert(block == br.getFalseDest());
         return br.getFalseOperand(index);
       }
-    } else if (isa<mlir::BranchOp>(termOp))
+    } else if (isa<mlir::cf::BranchOp>(termOp))
       return termOp->getOperand(index);
   }
   return nullptr;
 }
 
-void removeBlockOperands(handshake::FuncOp f) {
+static void removeBlockOperands(Region &f) {
   // Remove all block arguments, they are no longer used
   // eraseArguments also removes corresponding branch operands
   for (Block &block : f) {
@@ -529,18 +493,18 @@ void removeBlockOperands(handshake::FuncOp f) {
 /// Returns the first occurance of an operation of type TOp, else, returns
 /// null op.
 template <typename TOp>
-Operation *getFirstOp(Block *block) {
+static Operation *getFirstOp(Block *block) {
   auto ops = block->getOps<TOp>();
   if (ops.empty())
     return nullptr;
   return *ops.begin();
 }
 
-Operation *getControlMerge(Block *block) {
+static Operation *getControlMerge(Block *block) {
   return getFirstOp<ControlMergeOp>(block);
 }
 
-ConditionalBranchOp getControlCondBranch(Block *block) {
+static ConditionalBranchOp getControlCondBranch(Block *block) {
   for (auto cbranch : block->getOps<handshake::ConditionalBranchOp>()) {
     if (cbranch.isControl())
       return cbranch;
@@ -548,8 +512,9 @@ ConditionalBranchOp getControlCondBranch(Block *block) {
   return nullptr;
 }
 
-void reconnectMergeOps(handshake::FuncOp f, BlockOps blockMerges,
-                       blockArgPairs &mergePairs) {
+static void reconnectMergeOps(Region &f,
+                              HandshakeLowering::BlockOps blockMerges,
+                              HandshakeLowering::blockArgPairs &mergePairs) {
   // All merge operands are initially set to original (defining) value
   // We here replace defining value with appropriate value from predecessor
   // block The predecessor can either be a merge, the original defining value,
@@ -602,22 +567,23 @@ void reconnectMergeOps(handshake::FuncOp f, BlockOps blockMerges,
   removeBlockOperands(f);
 }
 
-LogicalResult FuncOpLowering::addMergeOps(ConversionPatternRewriter &rewriter) {
+LogicalResult
+HandshakeLowering::addMergeOps(ConversionPatternRewriter &rewriter) {
 
   blockArgPairs mergePairs;
 
   // blockLiveIns: live in variables of block
-  BlockValues liveIns = livenessAnalysis(f);
+  BlockValues liveIns = livenessAnalysis(r);
 
   // Insert merge operations
   BlockOps mergeOps = insertMergeOps(liveIns, mergePairs, rewriter);
 
   // Set merge operands and uses
-  reconnectMergeOps(f, mergeOps, mergePairs);
+  reconnectMergeOps(r, mergeOps, mergePairs);
   return success();
 }
 
-bool isLiveOut(Value val) {
+static bool isLiveOut(Value val) {
   // Identifies liveout values after adding Merges
   for (auto &u : val.getUses())
     // Result is liveout if used by some Merge block
@@ -630,7 +596,7 @@ bool isLiveOut(Value val) {
 // (for instance, there can be an SSA phi and a merge that we insert)
 // This function determines the number of branches to insert based on the
 // value uses in successor blocks
-int getBranchCount(Value val, Block *block) {
+static int getBranchCount(Value val, Block *block) {
   int uses = 0;
   for (int i = 0, e = block->getNumSuccessors(); i < e; ++i) {
     int curr = 0;
@@ -692,6 +658,8 @@ static bool isReachable(Block *from, Block *to) {
   return isReachable;
 }
 
+namespace {
+
 // This function creates the loop 'continue' and 'exit' network around backedges
 // in the CFG.
 // We don't have a standard dialect based LoopInfo utility in MLIR
@@ -703,10 +671,9 @@ static bool isReachable(Block *from, Block *to) {
 // pipelining within a single function invocation).
 class LoopNetworkRewriter {
 public:
-  LoopNetworkRewriter(FuncOpLowering &fol) : fol(fol) {}
+  LoopNetworkRewriter(HandshakeLowering &hl) : hl(hl) {}
 
-  LogicalResult processFunction(handshake::FuncOp f,
-                                ConversionPatternRewriter &rewriter);
+  LogicalResult processRegion(Region &r, ConversionPatternRewriter &rewriter);
 
 private:
   // An exit pair is a pair of <in loop block, outside loop block> that
@@ -737,22 +704,25 @@ private:
   std::set<Block *> visited;
   std::list<Block *> queue;
   DominanceInfo domInfo;
-  FuncOpLowering &fol;
+  HandshakeLowering &hl;
 };
+} // namespace
 
 LogicalResult
-FuncOpLowering::loopNetworkRewriting(ConversionPatternRewriter &rewriter) {
-  return LoopNetworkRewriter(*this).processFunction(f, rewriter);
+HandshakeLowering::loopNetworkRewriting(ConversionPatternRewriter &rewriter) {
+  return LoopNetworkRewriter(*this).processRegion(r, rewriter);
 }
 
 LogicalResult
-LoopNetworkRewriter::processFunction(handshake::FuncOp f,
-                                     ConversionPatternRewriter &rewriter) {
+LoopNetworkRewriter::processRegion(Region &r,
+                                   ConversionPatternRewriter &rewriter) {
   this->rewriter = &rewriter;
 
+  Operation *op = r.getParentOp();
+
   // Initialize the BFS queue with the entry block.
-  queue = {&f.getRegion().front()};
-  domInfo = DominanceInfo(f);
+  queue = {&r.front()};
+  domInfo = DominanceInfo(op);
 
   while (!queue.empty()) {
     Block *currBlock = queue.front();
@@ -773,7 +743,7 @@ LoopNetworkRewriter::processFunction(handshake::FuncOp f,
           if (dominates)
             loopLatches.insert(backedge);
           else
-            return f.emitError()
+            return op->emitError()
                    << "Non-canonical loop structures detected; a potential "
                       "loop header has backedges not dominated by the loop "
                       "header. This indicates that the loop has multiple entry "
@@ -784,15 +754,15 @@ LoopNetworkRewriter::processFunction(handshake::FuncOp f,
 
       if (!loopLatches.empty()) {
         if (loopLatches.size() > 1)
-          return emitError(f.getLoc()) << "Multiple loop latches detected "
-                                          "(backedges from within the loop "
-                                          "to the loop header). Loop task "
-                                          "pipelining is only supported for "
-                                          "loops with unified loop latches.";
+          return emitError(op->getLoc()) << "Multiple loop latches detected "
+                                            "(backedges from within the loop "
+                                            "to the loop header). Loop task "
+                                            "pipelining is only supported for "
+                                            "loops with unified loop latches.";
 
         // This is the start of an outer loop - go process!
-        if (failed(
-                processOuterLoop(f.getLoc(), currBlock, *loopLatches.begin())))
+        if (failed(processOuterLoop(op->getLoc(), currBlock,
+                                    *loopLatches.begin())))
           return failure();
       }
     }
@@ -849,7 +819,7 @@ BufferOp LoopNetworkRewriter::buildContinueNetwork(Block *loopHeader,
   // lowering, no other form of control can be used for the loop header block
   // than a control merge.
   auto *cmerge = getControlMerge(loopHeader);
-  assert(fol.getBlockEntryControl(loopHeader) == cmerge->getResult(0) &&
+  assert(hl.getBlockEntryControl(loopHeader) == cmerge->getResult(0) &&
          "Expected control merge to be the control component of a loop header");
   auto loc = cmerge->getLoc();
 
@@ -876,9 +846,9 @@ BufferOp LoopNetworkRewriter::buildContinueNetwork(Block *loopHeader,
   // Create loop mux and the loop priming register. The loop mux will on select
   // "0" select external control, and internal control at "1". This convention
   // must be followed by the loop exit network.
-  auto primingRegister =
-      rewriter->create<BufferOp>(loc, rewriter->getI1Type(), /*size=*/1,
-                                 loopPrimingInput, /*sequential=*/true);
+  auto primingRegister = rewriter->create<BufferOp>(
+      loc, rewriter->getI1Type(), /*size=*/1, loopPrimingInput,
+      /*bufferType=*/BufferTypeEnum::seq);
   // Initialize the priming register to path 0.
   primingRegister->setAttr("initValues", rewriter->getI64ArrayAttr({0}));
 
@@ -893,7 +863,7 @@ BufferOp LoopNetworkRewriter::buildContinueNetwork(Block *loopHeader,
   cmerge->getResult(0).replaceAllUsesWith(loopCtrlMux.getResult());
 
   // Register the new block entry control value
-  fol.setBlockEntryControl(loopHeader, loopCtrlMux.getResult());
+  hl.setBlockEntryControl(loopHeader, loopCtrlMux.getResult());
 
   // Next, we need to consider how to replace the control merge 'index' output,
   // used to drive input selection to the block.
@@ -963,10 +933,10 @@ void LoopNetworkRewriter::buildExitNetwork(Block *loopHeader,
         condBr &&
         "Expected a conditional control branch op in the loop condition block");
     Operation *trueUser = *condBr.trueResult().getUsers().begin();
-    Operation *falseUser = *condBr.falseResult().getUsers().begin();
     bool isTrueParity = trueUser->getBlock() == exitBlock;
-    bool isFalseParity = falseUser->getBlock() == exitBlock;
-    assert(isTrueParity ^ isFalseParity &&
+    assert(isTrueParity ^
+               ((*condBr.falseResult().getUsers().begin())->getBlock() ==
+                exitBlock) &&
            "The user of either the true or the false result should be in the "
            "exit block");
 
@@ -1060,9 +1030,10 @@ LogicalResult LoopNetworkRewriter::processOuterLoop(Location loc,
 }
 
 // Return the appropriate branch result based on successor block which uses it
-Value getSuccResult(Operation *termOp, Operation *newOp, Block *succBlock) {
+static Value getSuccResult(Operation *termOp, Operation *newOp,
+                           Block *succBlock) {
   // For conditional block, check if result goes to true or to false successor
-  if (auto condBranchOp = dyn_cast<mlir::CondBranchOp>(termOp)) {
+  if (auto condBranchOp = dyn_cast<mlir::cf::CondBranchOp>(termOp)) {
     if (condBranchOp.getTrueDest() == succBlock)
       return dyn_cast<handshake::ConditionalBranchOp>(newOp).trueResult();
     else {
@@ -1075,11 +1046,11 @@ Value getSuccResult(Operation *termOp, Operation *newOp, Block *succBlock) {
 }
 
 LogicalResult
-FuncOpLowering::addBranchOps(ConversionPatternRewriter &rewriter) {
+HandshakeLowering::addBranchOps(ConversionPatternRewriter &rewriter) {
 
   BlockValues liveOuts;
 
-  for (Block &block : f) {
+  for (Block &block : r) {
     for (Operation &op : block) {
       for (auto result : op.getResults())
         if (isLiveOut(result))
@@ -1087,7 +1058,7 @@ FuncOpLowering::addBranchOps(ConversionPatternRewriter &rewriter) {
     }
   }
 
-  for (Block &block : f) {
+  for (Block &block : r) {
     Operation *termOp = block.getTerminator();
     rewriter.setInsertionPoint(termOp);
 
@@ -1099,10 +1070,10 @@ FuncOpLowering::addBranchOps(ConversionPatternRewriter &rewriter) {
       for (int i = 0, e = numBranches; i < e; ++i) {
         Operation *newOp = nullptr;
 
-        if (auto condBranchOp = dyn_cast<mlir::CondBranchOp>(termOp))
+        if (auto condBranchOp = dyn_cast<mlir::cf::CondBranchOp>(termOp))
           newOp = rewriter.create<handshake::ConditionalBranchOp>(
               termOp->getLoc(), condBranchOp.getCondition(), val);
-        else if (isa<mlir::BranchOp>(termOp))
+        else if (isa<mlir::cf::BranchOp>(termOp))
           newOp = rewriter.create<handshake::BranchOp>(termOp->getLoc(), val);
 
         if (newOp == nullptr)
@@ -1124,11 +1095,12 @@ FuncOpLowering::addBranchOps(ConversionPatternRewriter &rewriter) {
   }
 
   // Remove StandardOp branch terminators and place new terminator
-  // Should be removed in some subsequent pass (we only need it to pass checks
-  // in Verifier.cpp)
-  for (Block &block : f) {
+  // Should be removed in some subsequent pass (we only need it to pass
+  // checks in Verifier.cpp)
+  for (Block &block : r) {
     Operation *termOp = block.getTerminator();
-    if (!(isa<mlir::CondBranchOp>(termOp) || isa<mlir::BranchOp>(termOp)))
+    if (!(isa<mlir::cf::CondBranchOp>(termOp) ||
+          isa<mlir::cf::BranchOp>(termOp)))
       continue;
 
     SmallVector<mlir::Block *, 8> results(block.getSuccessors());
@@ -1144,27 +1116,26 @@ FuncOpLowering::addBranchOps(ConversionPatternRewriter &rewriter) {
   return success();
 }
 
-LogicalResult
-FuncOpLowering::connectConstantsToControl(ConversionPatternRewriter &rewriter,
-                                          bool sourceConstants) {
-  // Create new constants which have a control-only input to trigger them. These
-  // are conneted to the control network or optionally to a Source operation
-  // (always triggering). Control-network connected constants may help
-  // debugability, but result in a slightly larger circuit.
+LogicalResult HandshakeLowering::connectConstantsToControl(
+    ConversionPatternRewriter &rewriter, bool sourceConstants) {
+  // Create new constants which have a control-only input to trigger them.
+  // These are conneted to the control network or optionally to a Source
+  // operation (always triggering). Control-network connected constants may
+  // help debugability, but result in a slightly larger circuit.
 
   if (sourceConstants) {
-    for (auto constantOp :
-         llvm::make_early_inc_range(f.getOps<arith::ConstantOp>())) {
+    for (auto constantOp : llvm::make_early_inc_range(
+             r.template getOps<mlir::arith::ConstantOp>())) {
       rewriter.setInsertionPointAfter(constantOp);
       rewriter.replaceOpWithNewOp<handshake::ConstantOp>(
           constantOp, constantOp.getValue(),
           rewriter.create<handshake::SourceOp>(constantOp.getLoc()));
     }
   } else {
-    for (Block &block : f) {
+    for (Block &block : r) {
       Value blockEntryCtrl = getBlockEntryControl(&block);
-      for (auto constantOp :
-           llvm::make_early_inc_range(block.getOps<arith::ConstantOp>())) {
+      for (auto constantOp : llvm::make_early_inc_range(
+               block.template getOps<mlir::arith::ConstantOp>())) {
         rewriter.setInsertionPointAfter(constantOp);
         rewriter.replaceOpWithNewOp<handshake::ConstantOp>(
             constantOp, constantOp.getValue(), blockEntryCtrl);
@@ -1174,7 +1145,7 @@ FuncOpLowering::connectConstantsToControl(ConversionPatternRewriter &rewriter,
   return success();
 }
 
-LogicalResult checkUseCount(Operation *op, Value res) {
+static LogicalResult checkUseCount(Operation *op, Value res) {
   // Checks if every result has single use
   if (!res.hasOneUse()) {
     int i = 0;
@@ -1189,7 +1160,7 @@ LogicalResult checkUseCount(Operation *op, Value res) {
 }
 
 // Checks if op successors are in appropriate blocks
-LogicalResult checkSuccessorBlocks(Operation *op, Value res) {
+static LogicalResult checkSuccessorBlocks(Operation *op, Value res) {
   for (auto &u : res.getUses()) {
     Operation *succOp = u.getOwner();
     // Non-branch ops: succesors must be in same block
@@ -1215,8 +1186,8 @@ LogicalResult checkSuccessorBlocks(Operation *op, Value res) {
 }
 
 // Checks if merge predecessors are in appropriate block
-LogicalResult checkMergeOps(MergeLikeOpInterface mergeOp,
-                            bool disableTaskPipelining) {
+static LogicalResult checkMergeOps(MergeLikeOpInterface mergeOp,
+                                   bool disableTaskPipelining) {
   Block *block = mergeOp->getBlock();
   unsigned operand_count = mergeOp.dataOperands().size();
 
@@ -1259,10 +1230,10 @@ LogicalResult checkMergeOps(MergeLikeOpInterface mergeOp,
   return success();
 }
 
-LogicalResult checkDataflowConversion(handshake::FuncOp f,
-                                      bool disableTaskPipelining) {
-  for (Operation &op : f.getOps()) {
-    if (isa<mlir::CondBranchOp, mlir::BranchOp, memref::LoadOp,
+LogicalResult handshake::checkDataflowConversion(Region &r,
+                                                 bool disableTaskPipelining) {
+  for (Operation &op : r.getOps()) {
+    if (isa<mlir::cf::CondBranchOp, mlir::cf::BranchOp, memref::LoadOp,
             arith::ConstantOp, mlir::AffineReadOpInterface, mlir::AffineForOp>(
             op))
       continue;
@@ -1281,7 +1252,7 @@ LogicalResult checkDataflowConversion(handshake::FuncOp f,
   return success();
 }
 
-Value getBlockControlValue(Block *block) {
+static Value getBlockControlValue(Block *block) {
   // Get control-only value sent to the block terminator
   for (Operation &op : *block) {
     if (auto BranchOp = dyn_cast<handshake::BranchOp>(op))
@@ -1296,7 +1267,7 @@ Value getBlockControlValue(Block *block) {
   return nullptr;
 }
 
-LogicalResult getOpMemRef(Operation *op, Value &out) {
+static LogicalResult getOpMemRef(Operation *op, Value &out) {
   out = Value();
   if (auto memOp = dyn_cast<memref::LoadOp>(op))
     out = memOp.getMemRef();
@@ -1311,20 +1282,21 @@ LogicalResult getOpMemRef(Operation *op, Value &out) {
   return op->emitOpError("Unknown Op type");
 }
 
-bool isMemoryOp(Operation *op) {
+static bool isMemoryOp(Operation *op) {
   return isa<memref::LoadOp, memref::StoreOp, mlir::AffineReadOpInterface,
              mlir::AffineWriteOpInterface>(op);
 }
 
 LogicalResult
-FuncOpLowering::replaceMemoryOps(ConversionPatternRewriter &rewriter,
-                                 MemRefToMemoryAccessOp &memRefOps) {
+HandshakeLowering::replaceMemoryOps(ConversionPatternRewriter &rewriter,
+                                    MemRefToMemoryAccessOp &memRefOps) {
 
   std::vector<Operation *> opsToErase;
 
   // Replace load and store ops with the corresponding handshake ops
-  // Need to traverse ops in blocks to store them in memRefOps in program order
-  for (Operation &op : f.getOps()) {
+  // Need to traverse ops in blocks to store them in memRefOps in program
+  // order
+  for (Operation &op : r.getOps()) {
     if (!isMemoryOp(&op))
       continue;
 
@@ -1353,41 +1325,41 @@ FuncOpLowering::replaceMemoryOps(ConversionPatternRewriter &rewriter,
           newOp = rewriter.create<handshake::StoreOp>(
               op.getLoc(), storeOp.getValueToStore(), operands);
         })
-        .Case<mlir::AffineReadOpInterface,
-              mlir::AffineWriteOpInterface>([&](auto) {
-          // Get essential memref access inforamtion.
-          MemRefAccess access(&op);
-          // The address of an affine load/store operation can be a result of
-          // an affine map, which is a linear combination of constants and
-          // parameters. Therefore, we should extract the affine map of each
-          // address and expand it into proper expressions that calculate the
-          // result.
-          AffineMap map;
-          if (auto loadOp = dyn_cast<mlir::AffineReadOpInterface>(op))
-            map = loadOp.getAffineMap();
-          else
-            map = dyn_cast<AffineWriteOpInterface>(op).getAffineMap();
+        .Case<mlir::AffineReadOpInterface, mlir::AffineWriteOpInterface>(
+            [&](auto) {
+              // Get essential memref access inforamtion.
+              MemRefAccess access(&op);
+              // The address of an affine load/store operation can be a result
+              // of an affine map, which is a linear combination of constants
+              // and parameters. Therefore, we should extract the affine map of
+              // each address and expand it into proper expressions that
+              // calculate the result.
+              mlir::AffineMap map;
+              if (auto loadOp = dyn_cast<mlir::AffineReadOpInterface>(op))
+                map = loadOp.getAffineMap();
+              else
+                map = dyn_cast<mlir::AffineWriteOpInterface>(op).getAffineMap();
 
-          // The returned object from expandAffineMap is an optional list of
-          // the expansion results from the given affine map, which are the
-          // actual address indices that can be used as operands for handshake
-          // LoadOp/StoreOp. The following processing requires it to be a
-          // valid result.
-          auto operands =
-              expandAffineMap(rewriter, op.getLoc(), map, access.indices);
-          assert(operands &&
-                 "Address operands of affine memref access cannot be reduced.");
+              // The returned object from expandAffineMap is an optional list of
+              // the expansion results from the given affine map, which are the
+              // actual address indices that can be used as operands for
+              // handshake LoadOp/StoreOp. The following processing requires it
+              // to be a valid result.
+              auto operands =
+                  expandAffineMap(rewriter, op.getLoc(), map, access.indices);
+              assert(operands && "Address operands of affine memref access "
+                                 "cannot be reduced.");
 
-          if (isa<mlir::AffineReadOpInterface>(op)) {
-            auto loadOp = rewriter.create<handshake::LoadOp>(
-                op.getLoc(), access.memref, *operands);
-            newOp = loadOp;
-            op.getResult(0).replaceAllUsesWith(loadOp.dataResult());
-          } else {
-            newOp = rewriter.create<handshake::StoreOp>(
-                op.getLoc(), op.getOperand(0), *operands);
-          }
-        })
+              if (isa<mlir::AffineReadOpInterface>(op)) {
+                auto loadOp = rewriter.create<handshake::LoadOp>(
+                    op.getLoc(), access.memref, *operands);
+                newOp = loadOp;
+                op.getResult(0).replaceAllUsesWith(loadOp.dataResult());
+              } else {
+                newOp = rewriter.create<handshake::StoreOp>(
+                    op.getLoc(), op.getOperand(0), *operands);
+              }
+            })
         .Default([&](auto) {
           op.emitOpError("Load/store operation cannot be handled.");
         });
@@ -1409,20 +1381,7 @@ FuncOpLowering::replaceMemoryOps(ConversionPatternRewriter &rewriter,
   return success();
 }
 
-std::vector<Block *> getOperationBlocks(ArrayRef<Operation *> ops) {
-  // Get list of (unique) blocks which ops belong to
-  // Used to connect control network to memory
-  std::vector<Block *> blocks;
-
-  for (Operation *op : ops) {
-    Block *b = op->getBlock();
-    if (std::find(blocks.begin(), blocks.end(), b) == blocks.end())
-      blocks.push_back(b);
-  }
-  return blocks;
-}
-
-SmallVector<Value, 8> getResultsToMemory(Operation *op) {
+static SmallVector<Value, 8> getResultsToMemory(Operation *op) {
   // Get load/store results which are given as inputs to MemoryOp
 
   if (handshake::LoadOp loadOp = dyn_cast<handshake::LoadOp>(op)) {
@@ -1440,7 +1399,7 @@ SmallVector<Value, 8> getResultsToMemory(Operation *op) {
   }
 }
 
-void addLazyForks(handshake::FuncOp f, ConversionPatternRewriter &rewriter) {
+static void addLazyForks(Region &f, ConversionPatternRewriter &rewriter) {
 
   for (Block &block : f) {
     Value res = getBlockControlValue(&block);
@@ -1449,7 +1408,7 @@ void addLazyForks(handshake::FuncOp f, ConversionPatternRewriter &rewriter) {
   }
 }
 
-void addMemOpForks(handshake::FuncOp f, ConversionPatternRewriter &rewriter) {
+static void addMemOpForks(Region &f, ConversionPatternRewriter &rewriter) {
 
   for (Block &block : f) {
     for (Operation &op : block) {
@@ -1464,7 +1423,7 @@ void addMemOpForks(handshake::FuncOp f, ConversionPatternRewriter &rewriter) {
   }
 }
 
-void removeAllocOps(handshake::FuncOp f, ConversionPatternRewriter &rewriter) {
+static void removeAllocOps(Region &f, ConversionPatternRewriter &rewriter) {
   std::vector<Operation *> opsToDelete;
 
   /// TODO(mortbopet): use explicit template parameter when moving to C++20
@@ -1484,8 +1443,8 @@ void removeAllocOps(handshake::FuncOp f, ConversionPatternRewriter &rewriter) {
   llvm::for_each(opsToDelete, [&](auto allocOp) { rewriter.eraseOp(allocOp); });
 }
 
-void removeRedundantSinks(handshake::FuncOp f,
-                          ConversionPatternRewriter &rewriter) {
+static void removeRedundantSinks(Region &f,
+                                 ConversionPatternRewriter &rewriter) {
   std::vector<Operation *> redundantSinks;
 
   for (Block &block : f)
@@ -1505,8 +1464,8 @@ void removeRedundantSinks(handshake::FuncOp f,
   }
 }
 
-void addJoinOps(ConversionPatternRewriter &rewriter,
-                ArrayRef<Value> controlVals) {
+static void addJoinOps(ConversionPatternRewriter &rewriter,
+                       ArrayRef<Value> controlVals) {
   for (auto val : controlVals) {
     assert(val.hasOneUse());
     auto srcOp = val.getDefiningOp();
@@ -1522,7 +1481,7 @@ void addJoinOps(ConversionPatternRewriter &rewriter,
   }
 }
 
-std::vector<Value> getControlValues(ArrayRef<Operation *> memOps) {
+static std::vector<Value> getControlValues(ArrayRef<Operation *> memOps) {
   std::vector<Value> vals;
 
   for (Operation *op : memOps) {
@@ -1538,14 +1497,14 @@ std::vector<Value> getControlValues(ArrayRef<Operation *> memOps) {
   return vals;
 }
 
-void addValueToOperands(Operation *op, Value val) {
+static void addValueToOperands(Operation *op, Value val) {
 
   SmallVector<Value, 8> results(op->getOperands());
   results.push_back(val);
   op->setOperands(results);
 }
 
-void setLoadDataInputs(ArrayRef<Operation *> memOps, Operation *memOp) {
+static void setLoadDataInputs(ArrayRef<Operation *> memOps, Operation *memOp) {
   // Set memory outputs as load input data
   int ld_count = 0;
   for (auto *op : memOps) {
@@ -1554,9 +1513,9 @@ void setLoadDataInputs(ArrayRef<Operation *> memOps, Operation *memOp) {
   }
 }
 
-LogicalResult setJoinControlInputs(ArrayRef<Operation *> memOps,
-                                   Operation *memOp, int offset,
-                                   ArrayRef<int> cntrlInd) {
+static LogicalResult setJoinControlInputs(ArrayRef<Operation *> memOps,
+                                          Operation *memOp, int offset,
+                                          ArrayRef<int> cntrlInd) {
   // Connect all memory ops to the join of that block (ensures that all mem
   // ops terminate before a new block starts)
   for (int i = 0, e = memOps.size(); i < e; ++i) {
@@ -1571,10 +1530,9 @@ LogicalResult setJoinControlInputs(ArrayRef<Operation *> memOps,
   return success();
 }
 
-void FuncOpLowering::setMemOpControlInputs(ConversionPatternRewriter &rewriter,
-                                           ArrayRef<Operation *> memOps,
-                                           Operation *memOp, int offset,
-                                           ArrayRef<int> cntrlInd) {
+void HandshakeLowering::setMemOpControlInputs(
+    ConversionPatternRewriter &rewriter, ArrayRef<Operation *> memOps,
+    Operation *memOp, int offset, ArrayRef<int> cntrlInd) {
   for (int i = 0, e = memOps.size(); i < e; ++i) {
     std::vector<Value> controlOperands;
     Operation *currOp = memOps[i];
@@ -1610,8 +1568,8 @@ void FuncOpLowering::setMemOpControlInputs(ConversionPatternRewriter &rewriter,
 }
 
 LogicalResult
-FuncOpLowering::connectToMemory(ConversionPatternRewriter &rewriter,
-                                MemRefToMemoryAccessOp memRefOps, bool lsq) {
+HandshakeLowering::connectToMemory(ConversionPatternRewriter &rewriter,
+                                   MemRefToMemoryAccessOp memRefOps, bool lsq) {
   // Add MemoryOps which represent the memory interface
   // Connect memory operations and control appropriately
   int mem_count = 0;
@@ -1628,15 +1586,16 @@ FuncOpLowering::connectToMemory(ConversionPatternRewriter &rewriter,
     if (memrefType.getNumDynamicDims() != 0 ||
         memrefType.getShape().size() != 1)
       return emitError(memrefOperand.getLoc())
-             << "memref's must be both statically sized and unidimensional.";
+             << "memref's must be both statically sized and "
+                "unidimensional.";
 
     std::vector<Value> operands;
 
     // Get control values which need to connect to memory
     std::vector<Value> controlVals = getControlValues(memory.second);
 
-    // In case of LSQ interface, set control values as inputs (used to trigger
-    // allocation to LSQ)
+    // In case of LSQ interface, set control values as inputs (used to
+    // trigger allocation to LSQ)
     if (lsq)
       operands.insert(operands.end(), controlVals.begin(), controlVals.end());
 
@@ -1677,7 +1636,7 @@ FuncOpLowering::connectToMemory(ConversionPatternRewriter &rewriter,
     // control-only outputs for each access (indicate access completion)
     int cntrl_count = lsq ? 0 : memory.second.size();
 
-    Block *entryBlock = &f.front();
+    Block *entryBlock = &r.front();
     rewriter.setInsertionPointToStart(entryBlock);
 
     // Place memory op next to the alloc op
@@ -1727,22 +1686,22 @@ FuncOpLowering::connectToMemory(ConversionPatternRewriter &rewriter,
   }
 
   if (lsq)
-    addLazyForks(f, rewriter);
+    addLazyForks(r, rewriter);
   else
-    addMemOpForks(f, rewriter);
+    addMemOpForks(r, rewriter);
 
-  removeAllocOps(f, rewriter);
+  removeAllocOps(r, rewriter);
 
-  // Loads and stores have some sinks which are no longer needed now that they
-  // connect to MemoryOp
-  removeRedundantSinks(f, rewriter);
+  // Loads and stores have some sinks which are no longer needed now that
+  // they connect to MemoryOp
+  removeRedundantSinks(r, rewriter);
   return success();
 }
 
 // A handshake::StartOp should have been created in the first block of the
 // enclosing function region
-static Operation *findStartOp(Region *region) {
-  for (Operation &op : region->front())
+static Operation *findStartOp(Region &region) {
+  for (Operation &op : region.front())
     if (isa<handshake::StartOp>(op))
       return &op;
 
@@ -1778,13 +1737,13 @@ struct HandshakeCanonicalizePattern : public ConversionPattern {
 };
 
 LogicalResult
-FuncOpLowering::replaceCallOps(ConversionPatternRewriter &rewriter) {
-  for (Block &block : f) {
-    /// An instance is activated whenever control arrives at the basic block of
-    /// the source callOp.
+HandshakeLowering::replaceCallOps(ConversionPatternRewriter &rewriter) {
+  for (Block &block : r) {
+    /// An instance is activated whenever control arrives at the basic block
+    /// of the source callOp.
     Value blockEntryControl = getBlockEntryControl(&block);
     for (Operation &op : block) {
-      if (auto callOp = dyn_cast<CallOp>(op)) {
+      if (auto callOp = dyn_cast<mlir::func::CallOp>(op)) {
         llvm::SmallVector<Value> operands;
         llvm::copy(callOp.getOperands(), std::back_inserter(operands));
         operands.push_back(blockEntryControl);
@@ -1802,119 +1761,74 @@ FuncOpLowering::replaceCallOps(ConversionPatternRewriter &rewriter) {
   return success();
 }
 
-LogicalResult FuncOpLowering::finalize(ConversionPatternRewriter &rewriter,
-                                       TypeRange argTypes, TypeRange resTypes,
-                                       mlir::FuncOp origFunc) {
-  SmallVector<Type> newArgTypes(argTypes);
-  newArgTypes.push_back(rewriter.getNoneType());
+LogicalResult HandshakeLowering::finalize(ConversionPatternRewriter &rewriter) {
+  auto ctrlArg =
+      r.front().addArgument(rewriter.getNoneType(), rewriter.getUnknownLoc());
 
-  auto funcType = rewriter.getFunctionType(newArgTypes, resTypes);
-  f.setType(funcType);
-  auto ctrlArg = f.front().addArgument(rewriter.getNoneType());
-
-  // We've now added all types to the handshake.funcOp; resolve arg- and
-  // res names to ensure they are up to date with the final type
-  // signature.
-  f.resolveArgAndResNames();
-
-  Operation *startOp = findStartOp(&f.getRegion());
+  Operation *startOp = findStartOp(r);
   startOp->getResult(0).replaceAllUsesWith(ctrlArg);
   rewriter.eraseOp(startOp);
-  rewriter.eraseOp(origFunc);
+
   return success();
 }
 
-LogicalResult lowerFuncOp(mlir::FuncOp funcOp, MLIRContext *ctx,
-                          bool sourceConstants, bool disableTaskPipelining) {
+static LogicalResult lowerFuncOp(func::FuncOp funcOp, MLIRContext *ctx,
+                                 bool sourceConstants,
+                                 bool disableTaskPipelining) {
   // Only retain those attributes that are not constructed by build.
   SmallVector<NamedAttribute, 4> attributes;
   for (const auto &attr : funcOp->getAttrs()) {
     if (attr.getName() == SymbolTable::getSymbolAttrName() ||
-        attr.getName() == function_like_impl::getTypeAttrName())
+        attr.getName() == function_interface_impl::getTypeAttrName())
       continue;
     attributes.push_back(attr);
   }
 
   // Get function arguments
   llvm::SmallVector<mlir::Type, 8> argTypes;
-  for (auto &arg : funcOp.getArguments()) {
-    mlir::Type type = arg.getType();
-    argTypes.push_back(type);
-  }
+  for (auto &argType : funcOp.getArgumentTypes())
+    argTypes.push_back(argType);
 
   // Get function results
   llvm::SmallVector<mlir::Type, 8> resTypes;
-  for (auto arg : funcOp.getType().getResults())
-    resTypes.push_back(arg);
+  for (auto resType : funcOp.getResultTypes())
+    resTypes.push_back(resType);
 
   handshake::FuncOp newFuncOp;
 
   // Add control input/output to function arguments/results and create a
   // handshake::FuncOp of appropriate type
-  returnOnError(partiallyLowerFuncOp<mlir::FuncOp>(
-      [&](mlir::FuncOp funcOp, PatternRewriter &rewriter) {
+  returnOnError(partiallyLowerOp<func::FuncOp>(
+      [&](func::FuncOp funcOp, PatternRewriter &rewriter) {
         auto noneType = rewriter.getNoneType();
         resTypes.push_back(noneType);
+        argTypes.push_back(noneType);
         auto func_type = rewriter.getFunctionType(argTypes, resTypes);
         newFuncOp = rewriter.create<handshake::FuncOp>(
             funcOp.getLoc(), funcOp.getName(), func_type, attributes);
         rewriter.inlineRegionBefore(funcOp.getBody(), newFuncOp.getBody(),
                                     newFuncOp.end());
+        if (!newFuncOp.isExternal())
+          newFuncOp.resolveArgAndResNames();
+        rewriter.eraseOp(funcOp);
         return success();
       },
       ctx, funcOp));
 
-  FuncOpLowering fol(newFuncOp);
-
-  // Perform initial dataflow conversion. This process allows for the use of
-  // non-deterministic merge-like operations.
-  MemRefToMemoryAccessOp memOps;
-  returnOnError(
-      fol.runPartialLowering(&FuncOpLowering::replaceMemoryOps, memOps));
-  returnOnError(fol.runPartialLowering(&FuncOpLowering::setControlOnlyPath));
-  returnOnError(fol.runPartialLowering(&FuncOpLowering::addMergeOps));
-  returnOnError(fol.runPartialLowering(&FuncOpLowering::replaceCallOps));
-  returnOnError(fol.runPartialLowering(&FuncOpLowering::replaceCallOps));
-  returnOnError(fol.runPartialLowering(&FuncOpLowering::addBranchOps));
-
-  // The following passes modifies the dataflow graph to being safe for task
-  // pipelining. In doing so, non-deterministic merge structures are replaced
-  // for deterministic structures.
-  if (!disableTaskPipelining) {
-    returnOnError(
-        fol.runPartialLowering(&FuncOpLowering::loopNetworkRewriting));
+  if (!newFuncOp.isExternal()) {
+    HandshakeLowering fol(newFuncOp.getBody());
+    returnOnError(lowerRegion<func::ReturnOp>(fol, sourceConstants,
+                                              disableTaskPipelining));
   }
 
-  // Fork/sink materialization. @todo: this should be removed and
-  // materialization should be run as a separate pass afterward initial dataflow
-  // conversion! However, connectToMemory has some hard-coded assumptions on the
-  // existence of fork/sink operations...
-  returnOnError(
-      partiallyLowerFuncOp<handshake::FuncOp>(addSinkOps, ctx, newFuncOp));
-  returnOnError(fol.runPartialLowering(
-      &FuncOpLowering::connectConstantsToControl, sourceConstants));
-  returnOnError(
-      partiallyLowerFuncOp<handshake::FuncOp>(addForkOps, ctx, newFuncOp));
-  returnOnError(checkDataflowConversion(newFuncOp, disableTaskPipelining));
-
-  bool lsq = false;
-  returnOnError(
-      fol.runPartialLowering(&FuncOpLowering::connectToMemory, memOps, lsq));
-
-  // Add  control argument to entry block, replace references to the
-  // temporary handshake::StartOp operation, and finally remove the start
-  // op.
-  returnOnError(fol.runPartialLowering(&FuncOpLowering::finalize, argTypes,
-                                       resTypes, funcOp));
   return success();
 }
 
 namespace {
-
-struct ConvertSelectOps : public OpConversionPattern<mlir::SelectOp> {
+struct ConvertSelectOps : public OpConversionPattern<mlir::arith::SelectOp> {
   using OpConversionPattern::OpConversionPattern;
   LogicalResult
-  matchAndRewrite(mlir::SelectOp op, OpAdaptor adaptor,
+  matchAndRewrite(mlir::arith::SelectOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     rewriter.replaceOpWithNewOp<handshake::SelectOp>(op, adaptor.getCondition(),
                                                      adaptor.getFalseValue(),
@@ -1933,7 +1847,7 @@ struct StandardToHandshakePass
   void runOnOperation() override {
     ModuleOp m = getOperation();
 
-    for (auto funcOp : llvm::make_early_inc_range(m.getOps<mlir::FuncOp>())) {
+    for (auto funcOp : llvm::make_early_inc_range(m.getOps<func::FuncOp>())) {
       if (failed(lowerFuncOp(funcOp, &getContext(), sourceConstants,
                              disableTaskPipelining))) {
         signalPassFailure();
@@ -1953,7 +1867,7 @@ struct StandardToHandshakePass
   LogicalResult postDataflowConvert(handshake::FuncOp op) {
     ConversionTarget target(getContext());
     target.addLegalDialect<handshake::HandshakeDialect>();
-    target.addIllegalOp<mlir::SelectOp>();
+    target.addIllegalOp<mlir::arith::SelectOp>();
     RewritePatternSet patterns(&getContext());
     patterns.insert<ConvertSelectOps>(&getContext());
     return applyPartialConversion(op, target, std::move(patterns));

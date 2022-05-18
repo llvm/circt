@@ -14,9 +14,10 @@
 #define CIRCT_DIALECT_HW_OPS_H
 
 #include "circt/Dialect/HW/HWDialect.h"
+#include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "mlir/IR/BuiltinOps.h"
-#include "mlir/IR/FunctionSupport.h"
+#include "mlir/IR/FunctionInterfaces.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/RegionKindInterface.h"
 #include "mlir/IR/SymbolTable.h"
@@ -27,12 +28,15 @@
 namespace circt {
 namespace hw {
 
-/// A HW module ports direction.
-enum PortDirection {
+/// A module port direction.
+enum class PortDirection {
   INPUT = 1,
   OUTPUT = 2,
   INOUT = 3,
 };
+
+/// Flip a port direction.
+PortDirection flip(PortDirection direction);
 
 /// This holds the name, type, direction of a module's ports
 struct PortInfo {
@@ -49,7 +53,9 @@ struct PortInfo {
   StringAttr sym = {};
 
   StringRef getName() const { return name.getValue(); }
-  bool isOutput() const { return direction == OUTPUT; }
+  bool isInput() const { return direction == PortDirection::INPUT; }
+  bool isOutput() const { return direction == PortDirection::OUTPUT; }
+  bool isInOut() const { return direction == PortDirection::INOUT; }
 
   /// Return a unique numeric identifier for this port.
   ssize_t getId() const { return isOutput() ? argNum : (-1 - argNum); };
@@ -95,6 +101,16 @@ PortInfo getModuleInOrInoutPort(Operation *op, size_t idx);
 
 /// Return the PortInfo for the specified output port.
 PortInfo getModuleOutputPort(Operation *op, size_t idx);
+
+/// Insert and remove ports of a module. The insertion and removal indices must
+/// be in ascending order. The indices refer to the port positions before any
+/// insertion or removal occurs. Ports inserted at the same index will appear in
+/// the module in the same order as they were listed in the `insert*` array.
+void modifyModulePorts(Operation *op,
+                       ArrayRef<std::pair<unsigned, PortInfo>> insertInputs,
+                       ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs,
+                       ArrayRef<unsigned> removeInputs,
+                       ArrayRef<unsigned> removeOutputs);
 
 // Helpers for working with modules.
 
@@ -169,95 +185,6 @@ StringAttr getArgSym(Operation *op, unsigned i);
 /// Return the symbol (if any, else null) on the corresponding output port
 /// argument.
 StringAttr getResultSym(Operation *op, unsigned i);
-
-/// This stores lookup tables to make manipulating and working with the IR more
-/// efficient.  There are two phases to this object: the "building" phase in
-/// which it is "write only" and then the "using" phase which is read-only (and
-/// thus can be used by multiple threads).  The
-/// "freeze" method transitions between the two states.
-class SymbolCache {
-public:
-  class Item {
-  public:
-    Item(Operation *op) : op(op), port(~0ULL) {}
-    Item(Operation *op, size_t port) : op(op), port(port) {}
-    bool hasPort() const { return port != ~0ULL; }
-    Operation *getOp() const { return op; }
-    size_t getPort() const { return port; }
-
-  private:
-    Operation *op;
-    size_t port;
-  };
-
-  /// In the building phase, add symbols.
-  void addDefinition(StringAttr symbol, Operation *op) {
-    assert(!isFrozen && "cannot mutate a frozen cache");
-    symbolCache.try_emplace(symbol.getValue(), op, ~0ULL);
-  }
-
-  // Add inner names, which might be ports
-  void addDefinition(StringAttr symbol, StringRef name, Operation *op,
-                     size_t port = ~0ULL) {
-    assert(!isFrozen && "cannot mutate a frozen cache");
-    auto key = mkInnerKey(symbol.getValue(), name);
-    symbolCache.try_emplace(StringRef(key.data(), key.size()), op, port);
-  }
-
-  /// Mark the cache as frozen, which allows it to be shared across threads.
-  void freeze() { isFrozen = true; }
-
-  Operation *getDefinition(StringRef symbol) const {
-    assert(isFrozen && "cannot read from this cache until it is frozen");
-    auto it = symbolCache.find(symbol);
-    if (it == symbolCache.end())
-      return nullptr;
-    assert(!it->second.hasPort() && "Module names should never be ports");
-    return it->second.getOp();
-  }
-
-  Operation *getDefinition(StringAttr symbol) const {
-    return getDefinition(symbol.getValue());
-  }
-
-  Operation *getDefinition(FlatSymbolRefAttr symbol) const {
-    return getDefinition(symbol.getValue());
-  }
-
-  Item getDefinition(StringRef symbol, StringRef name) const {
-    assert(isFrozen && "cannot read from this cache until it is frozen");
-    auto key = mkInnerKey(symbol, name);
-    auto it = symbolCache.find(StringRef(key.data(), key.size()));
-    return it == symbolCache.end() ? Item{nullptr, ~0ULL} : it->second;
-  }
-
-  Item getDefinition(StringAttr symbol, StringAttr name) const {
-    return getDefinition(symbol.getValue(), name.getValue());
-  }
-
-private:
-  bool isFrozen = false;
-
-  /// This stores a lookup table from symbol attribute to the operation
-  /// (hw.module, hw.instance, etc) that defines it.
-  /// TODO: It is super annoying that symbols are *defined* as StringAttr, but
-  /// are then referenced as FlatSymbolRefAttr.  Why can't we have nice
-  /// pointer uniqued things?? :-(
-  llvm::StringMap<Item> symbolCache;
-
-  // Construct a string key with embedded null.  StringMapImpl::FindKey uses
-  // explicit lengths and stores keylength, rather than relying on null
-  // characters.
-  SmallVector<char> mkInnerKey(StringRef mod, StringRef name) const {
-    assert(!mod.contains(0) && !name.contains(0) &&
-           "Null character in identifier");
-    SmallVector<char> key;
-    key.append(mod.begin(), mod.end());
-    key.push_back(0);
-    key.append(name.begin(), name.end());
-    return key;
-  }
-};
 
 } // namespace hw
 } // namespace circt

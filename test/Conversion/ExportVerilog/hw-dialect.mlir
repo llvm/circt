@@ -97,28 +97,53 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
    !hw.struct<foo: i2, bar: i4>, !hw.struct<foo: i2, bar: i4>, i1
 }
 // CHECK-LABEL: module TESTSIMPLE(
-// CHECK-NEXT:   input  [3:0]                                              a, b,
+// CHECK-NEXT:   input  [3:0]                                              a,
+// CHECK-NEXT:                                                             b,
 // CHECK-NEXT:   input  [1:0]                                              c,
 // CHECK-NEXT:   input                                                     cond,
 // CHECK-NEXT:   input  [11:0][9:0][3:0]                                   array2d,
-// CHECK-NEXT:   input  [7:0]                                              uarray[0:15], postUArray,
+// CHECK-NEXT:   input  [7:0]                                              uarray[0:15],
+// CHECK-NEXT:                                                             postUArray,
 // CHECK-NEXT:   input  struct packed {logic [1:0] foo; logic [3:0] bar; } structA,
 // CHECK-NEXT:   input  struct packed {logic [1:0] foo; }[4:0]             arrOfStructA,
 // CHECK-NEXT:   input  [0:0]                                              array1,
-// CHECK-NEXT:   output [3:0]                                              r0, r2, r4, r6, r7, r8, r9,
-// CHECK-NEXT:   output [3:0]                                              r10, r11, r12, r13, r14, r15,
-// CHECK-NEXT:   output                                                    r16, r17, r18, r19, r20, r21,
-// CHECK-NEXT:   output                                                    r22, r23, r24, r25, r26, r27,
-// CHECK-NEXT:   output                                                    r28,
+// CHECK-NEXT:   output [3:0]                                              r0,
+// CHECK-NEXT:                                                             r2,
+// CHECK-NEXT:                                                             r4,
+// CHECK-NEXT:                                                             r6,
+// CHECK-NEXT:                                                             r7,
+// CHECK-NEXT:                                                             r8,
+// CHECK-NEXT:                                                             r9,
+// CHECK-NEXT:                                                            r10,
+// CHECK-NEXT:                                                             r11,
+// CHECK-NEXT:                                                             r12,
+// CHECK-NEXT:                                                             r13,
+// CHECK-NEXT:                                                             r14,
+// CHECK-NEXT:                                                             r15,
+// CHECK-NEXT:   output                                                    r16,
+// CHECK-NEXT:                                                             r17,
+// CHECK-NEXT:                                                             r18,
+// CHECK-NEXT:                                                             r19,
+// CHECK-NEXT:                                                             r20,
+// CHECK-NEXT:                                                             r21,
+// CHECK-NEXT:                                                             r22,
+// CHECK-NEXT:                                                             r23,
+// CHECK-NEXT:                                                             r24,
+// CHECK-NEXT:                                                             r25,
+// CHECK-NEXT:                                                             r26,
+// CHECK-NEXT:                                                             r27,
+// CHECK-NEXT:                                                             r28,
 // CHECK-NEXT:   output [11:0]                                             r29,
 // CHECK-NEXT:   output [1:0]                                              r30,
 // CHECK-NEXT:   output [8:0]                                              r31,
-// CHECK-NEXT:   output [3:0]                                              r33, r34,
+// CHECK-NEXT:   output [3:0]                                              r33,
+// CHECK-NEXT:                                                             r34,
 // CHECK-NEXT:   output [2:0][3:0]                                         r35,
 // CHECK-NEXT:   output [11:0]                                             r36,
 // CHECK-NEXT:   output [3:0]                                              r37,
 // CHECK-NEXT:   output [5:0][3:0]                                         r38,
-// CHECK-NEXT:   output struct packed {logic [1:0] foo; logic [3:0] bar; } r40, r41,
+// CHECK-NEXT:   output struct packed {logic [1:0] foo; logic [3:0] bar; } r40,
+// CHECK-NEXT:                                                             r41,
 // CHECK-NEXT:   output                                                    r42);
 // CHECK-EMPTY:
 // CHECK-NEXT:   wire [8:0][3:0] [[WIRE0:.+]] = {{[{}][{}]}}4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}};
@@ -173,7 +198,8 @@ hw.module @B(%a: i1) -> (b: i1, c: i1) {
 }
 // CHECK-LABEL: module B(
 // CHECK-NEXT:   input  a,
-// CHECK-NEXT:   output b, c);
+// CHECK-NEXT:   output b,
+// CHECK-NEXT:          c);
 // CHECK-EMPTY:
 // CHECK-NEXT:   assign b = a | a;
 // CHECK-NEXT:   assign c = a & a;
@@ -184,7 +210,8 @@ hw.module @A(%d: i1, %e: i1) -> (f: i1) {
   hw.output %1 : i1
 }
 // CHECK-LABEL: module A(
-// CHECK-NEXT:  input  d, e,
+// CHECK-NEXT:  input  d,
+// CHECK-NEXT:         e,
 // CHECK-NEXT:  output f);
 // CHECK-EMPTY:
 // CHECK-NEXT:  assign f = d ? d : e;
@@ -195,7 +222,8 @@ hw.module @AAA(%d: i1, %e: i1) -> (f: i1) {
   hw.output %z : i1
 }
 // CHECK-LABEL: module AAA(
-// CHECK-NEXT:  input  d, e,
+// CHECK-NEXT:  input  d,
+// CHECK-NEXT:         e,
 // CHECK-NEXT:  output f);
 // CHECK-EMPTY:
 // CHECK-NEXT:  assign f = 1'h0;
@@ -224,22 +252,26 @@ hw.module @AB(%w: i1, %x: i1, %i2: i2, %i3: i0) -> (y: i1, z: i1, p: i1, p2: i1)
   hw.output %y, %x, %p, %p2 : i1, i1, i1, i1
 }
 // CHECK-LABEL: module AB(
-// CHECK-NEXT:      input                 w, x,
+// CHECK-NEXT:      input                 w,
+// CHECK-NEXT:                            x,
 // CHECK-NEXT:      input  [1:0]          i2,
 // CHECK-NEXT:   // input  /*Zero Width*/ i3,
-// CHECK-NEXT:      output                y, z, p, p2);
+// CHECK-NEXT:      output                y,
+// CHECK-NEXT:                            z,
+// CHECK-NEXT:                            p,
+// CHECK-NEXT:                            p2);
 // CHECK-EMPTY:
-// CHECK-NEXT:   wire b1_b;
-// CHECK-NEXT:   wire a1_f;
+// CHECK-NEXT:   wire _b1_b;
+// CHECK-NEXT:   wire _a1_f;
 // CHECK-EMPTY:
 // CHECK-NEXT:   AAA a1 (
 // CHECK-NEXT:     .d (w),
-// CHECK-NEXT:     .e (b1_b),
-// CHECK-NEXT:     .f (a1_f)
+// CHECK-NEXT:     .e (_b1_b),
+// CHECK-NEXT:     .f (_a1_f)
 // CHECK-NEXT:   );
 // CHECK-NEXT:   B b1 (
-// CHECK-NEXT:     .a (a1_f),
-// CHECK-NEXT:     .b (b1_b),
+// CHECK-NEXT:     .a (_a1_f),
+// CHECK-NEXT:     .b (_b1_b),
 // CHECK-NEXT:     .c (y)
 // CHECK-NEXT:   );
 // CHECK-NEXT:   FooModule #(
@@ -307,7 +339,8 @@ hw.module @wires(%in4: i4, %in8: i8) -> (a: i4, b: i8, c: i8) {
   // CHECK-NEXT:   input  [3:0] in4,
   // CHECK-NEXT:   input  [7:0] in8,
   // CHECK-NEXT:   output [3:0] a,
-  // CHECK-NEXT:   output [7:0] b, c);
+  // CHECK-NEXT:   output [7:0] b,
+  // CHECK-NEXT:                c);
 
   // CHECK-EMPTY:
 
@@ -543,8 +576,10 @@ hw.module @longvariadic(%a: i8) -> (b: i8) {
 // https://github.com/llvm/circt/issues/736
 // Can't depend on left associativeness since ops can have args with different sizes
 // CHECK-LABEL: module eqIssue(
-// CHECK-NEXT: input  [8:0] a, c,
-// CHECK-NEXT: input  [3:0] d, e,
+// CHECK-NEXT: input  [8:0] a,
+// CHECK-NEXT:              c,
+// CHECK-NEXT: input  [3:0] d,
+// CHECK-NEXT:              e,
 // CHECK-NEXT: output       r);
 // CHECK-EMPTY:
 // CHECK-NEXT: assign r = a == c == (d == e);
@@ -579,32 +614,37 @@ hw.module @ArrayLHS(%clock: i1) {
   }
 }
 
-// CHECK-LABEL: module notEmitDuplicateWiresThatWereUnInlinedDueToLongNames
-hw.module @notEmitDuplicateWiresThatWereUnInlinedDueToLongNames(%clock: i1, %x: i1) {
-  // CHECK: wire _GEN;
+// CHECK-LABEL: module noTemporaryIfReadInOutIsAfterUse
+hw.module @noTemporaryIfReadInOutIsAfterUse(%clock: i1, %x: i1) {
   // CHECK: wire aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;
+
   %0 = comb.and %1, %x : i1
   // CHECK: always_ff @(posedge clock) begin
   sv.alwaysff(posedge %clock) {
-    // CHECK: if (_GEN & x) begin
+    // CHECK: if (aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa & x) begin
     sv.if %0  {
       sv.verbatim "// hello"
     }
   }
 
   // CHECK: end // always_ff @(posedge)
-  // CHECK: assign _GEN = aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;
   %aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa = sv.wire  : !hw.inout<i1>
   %1 = sv.read_inout %aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa : !hw.inout<i1>
 }
 
 // CHECK-LABEL: module largeConstant
 hw.module @largeConstant(%a: i100000, %b: i16) -> (x: i100000, y: i16) {
-  // Large constant is broken out to its own localparam to avoid long line problems.
+  // Large constant is inlined on multiple lines.
 
-  // CHECK: localparam [99999:0] _tmp = 100000'h2CD76FE086B93CE2F768A00B22A00000000000;
+  // CHECK: assign x = a + 100000'h2CD76FE086B93CE2F768A00B22A00000000000 +
+  // CHECK:               100000'h2CD76FE086B93CE2F768A00B22A00000000000 +
+  // CHECK:               100000'h2CD76FE086B93CE2F768A00B22A00000000000 +
+  // CHECK:               100000'h2CD76FE086B93CE2F768A00B22A00000000000 +
+  // CHECK:               100000'h2CD76FE086B93CE2F768A00B22A00000000000 +
+  // CHECK:               100000'h2CD76FE086B93CE2F768A00B22A00000000000 +
+  // CHECK:               100000'h2CD76FE086B93CE2F768A00B22A00000000000 +
+  // CHECK:               100000'h2CD76FE086B93CE2F768A00B22A00000000000;
   %c = hw.constant 1000000000000000000000000000000000000000000000 : i100000
-  // CHECK: assign x = a + _tmp + _tmp + _tmp + _tmp + _tmp + _tmp + _tmp + _tmp;
   %1 = comb.add %a, %c, %c, %c, %c, %c, %c, %c, %c : i100000
 
   // Small constants are emitted inline.
@@ -623,20 +663,46 @@ hw.module @StructExtractExtract(%a: !hw.struct<b: i4>) -> (r: i2) {
   hw.output %1 : i2
 }
 
+// CHECK-LABEL: StrurctExtractInline
+hw.module @StrurctExtractInline(%a: !hw.struct<v: i1>) -> (b: i1, c: i1) {
+  %0 = hw.struct_extract %a["v"] : !hw.struct<v: i1>
+  // CHECK:      assign b = a.v;
+  // CHECK-NEXT: assign c = a.v;
+  hw.output %0, %0 : i1, i1
+}
+
 hw.module.extern @DifferentResultMod() -> (out1: i1, out2: i2)
 
 // CHECK-LABEL: module out_of_order_multi_result(
 hw.module @out_of_order_multi_result() -> (b: i1, c: i2) {
-  // CHECK: wire       b1_out1;
-  // CHECK: wire [1:0] b1_out2;
+  // CHECK: wire       _b1_out1;
+  // CHECK: wire [1:0] _b1_out2;
   %b = comb.add %out1, %out1 : i1
   %c = comb.add %out2, %out2 : i2
 
   %out1, %out2 = hw.instance "b1" @DifferentResultMod() -> (out1: i1, out2: i2)
 
-  // CHECK: assign b = b1_out1 + b1_out1;
-  // CHECK: assign c = b1_out2 + b1_out2;
+  // CHECK: assign b = _b1_out1 + _b1_out1;
+  // CHECK: assign c = _b1_out2 + _b1_out2;
   hw.output %b, %c : i1, i2
+}
+
+hw.module.extern @single_result() -> (res: i3)
+// CHECK-LABEL: module instance_result_reuse_wires(
+hw.module @instance_result_reuse_wires() -> (b: i3) {
+  // CHECK:       wire {{.*}} some_wire;
+  // CHECK-EMPTY:
+  // CHECK-NEXT:  single_result b1 (
+  // CHECK-NEXT:  .res (some_wire)
+  // CHECK-NEXT:  );
+  // CHECK-NEXT:  assign b = some_wire;
+  %some_wire = sv.wire : !hw.inout<i3>
+  %read = sv.read_inout %some_wire : !hw.inout<i3>
+
+  %out1 = hw.instance "b1" @single_result() -> (res: i3)
+  sv.assign %some_wire, %out1 : i3
+
+  hw.output %read : i3
 }
 
 
@@ -649,20 +715,20 @@ hw.module @ABC(%a: i1, %b: i2) -> (c: i4) {
   hw.output %1 : i4
 }
 
-// CHECK:   wire [2:0] whatever_c;
+// CHECK:   wire [2:0] _whatever_c;
 // CHECK-EMPTY:
 // CHECK-NEXT:   /* This instance is elsewhere emitted as a bind statement
 // CHECK-NEXT:      ExternDestMod whatever (
 // CHECK-NEXT:        .a (a),
 // CHECK-NEXT:        .b (b),
-// CHECK-NEXT:        .c (whatever_c),
+// CHECK-NEXT:        .c (_whatever_c),
 // CHECK-NEXT:        .d (c)
 // CHECK-NEXT:      );
 // CHECK-NEXT:   */
 // CHECK-NEXT:   /* This instance is elsewhere emitted as a bind statement
 // CHECK-NEXT:      InternalDestMod yo (
 // CHECK-NEXT:        .a (a),
-// CHECK-NEXT:        .b (whatever_c)
+// CHECK-NEXT:        .b (_whatever_c)
 // CHECK-NEXT:      );
 // CHECK-NEXT:   */
 // CHECK-NEXT: endmodule
@@ -674,19 +740,19 @@ hw.module.extern @Owo(%owo_in : i32) -> ()
 // CHECK-LABEL: module Nya(
 hw.module @Nya() -> (nya_output : i32) {
   %0 = hw.instance "uwu" @Uwu() -> (uwu_output: i32)
-  // CHECK: wire [31:0] uwu_uwu_output;
+  // CHECK: wire [31:0] _uwu_uwu_output;
   // CHECK-EMPTY:
   // CHECK: Uwu uwu (
-  // CHECK: .uwu_output (uwu_uwu_output)
+  // CHECK: .uwu_output (_uwu_uwu_output)
   // CHECK: );
 
   hw.instance "owo" @Owo(owo_in: %0: i32) -> ()
   // CHECK: Owo owo (
-  // CHECK: .owo_in (uwu_uwu_output)
+  // CHECK: .owo_in (_uwu_uwu_output)
   // CHECK: );
 
   hw.output %0 : i32
-  // CHECK: assign nya_output = uwu_uwu_output;
+  // CHECK: assign nya_output = _uwu_uwu_output;
   // CHECK: endmodule
 }
 
@@ -719,15 +785,15 @@ hw.module @Ichi() -> (Ichi_output : i0) {
 hw.module @Chi() -> (Chi_output : i0) {
   %0 = hw.instance "ni" @Ni() -> (ni_output: i0)
   // CHECK: Ni ni (
-  // CHECK: //.ni_output (ni_ni_output)
+  // CHECK: //.ni_output (_ni_ni_output)
   // CHECK-NEXT: );
 
   hw.instance "san" @San(san_input: %0: i0) -> ()
   // CHECK: San san (
-  // CHECK: //.san_input (ni_ni_output)
+  // CHECK: //.san_input (_ni_ni_output)
   // CHECK-NEXT: );
 
-  // CHECK: // Zero width: assign Chi_output = ni_ni_output;
+  // CHECK: // Zero width: assign Chi_output = _ni_ni_output;
   hw.output %0 : i0
   // CHECK: endmodule
 }
@@ -864,17 +930,18 @@ hw.module @renameKeyword(%a: !hw.struct<repeat: i1, repeat_0: i1>) -> (r1: !hw.s
 
 // CHECK-LABEL: useRenamedStruct(
 // CHECK-NEXT:  inout  struct packed {logic repeat_0; logic repeat_0_1; } a,
-// CHECK-NEXT:  output                                                    r1, r2,
+// CHECK-NEXT:  output                                                    r1,
+// CHECK-NEXT:                                                            r2,
 // CHECK-NEXT:  output struct packed {logic repeat_0; logic repeat_0_1; } r3);
 hw.module @useRenamedStruct(%a: !hw.inout<struct<repeat: i1, repeat_0: i1>>) -> (r1: i1, r2: i1, r3: !hw.struct<repeat: i1, repeat_0: i1>) {
   // CHECK-EMPTY:
-  // CHECK-NEXT: wire struct packed {logic repeat_0; logic repeat_0_1; } inst1_r1;
+  // CHECK-NEXT: wire struct packed {logic repeat_0; logic repeat_0_1; } _inst1_r1;
   %read = sv.read_inout %a : !hw.inout<struct<repeat: i1, repeat_0: i1>>
 
   %i0 = hw.instance "inst1" @renameKeyword(a: %read: !hw.struct<repeat: i1, repeat_0: i1>) -> (r1: !hw.struct<repeat: i1, repeat_0: i1>)
   // CHECK:      renameKeyword inst1 (
   // CHECK-NEXT:   .a  (a),
-  // CHECK-NEXT:   .r1 (inst1_r1)
+  // CHECK-NEXT:   .r1 (_inst1_r1)
   // CHECK-NEXT: )
 
   // CHECK: wire struct packed {logic repeat_0; logic repeat_0_1; } [[WIREA:.+]] = a;
@@ -910,6 +977,27 @@ hw.module @replicate(%arg0: i7, %arg1: i1) -> (r1: i21, r2: i9, r3: i16, r4: i16
   hw.output %r1, %r2, %r3, %r4 : i21, i9, i16, i16
 }
 
+// CHECK-LABEL: module addParenthesesToSuccessiveOperators
+hw.module @addParenthesesToSuccessiveOperators(%a: i4, %b: i1, %c: i4) -> (o1:i1, o2:i1, o3:i1) {
+  %one4 = hw.constant -1 : i4
+  %zero4 = hw.constant 0 : i4
+  // CHECK: wire [[GEN:.+]] = &c;
+
+  %0 = comb.icmp eq %a, %one4 : i4
+  %and = comb.and %b, %0 : i1
+  // CHECK-NEXT: assign o1 = b & (&a);
+
+  %1 = comb.icmp ne %a, %zero4 : i4
+  %or = comb.or %b, %1 : i1
+  // CHECK-NEXT: assign o2 = b | (|a);
+
+  %3 = comb.icmp eq %c, %one4 : i4
+  %multiuse = comb.and %3, %3 : i1
+  // CHECK-NEXT: assign o3 = [[GEN]] & [[GEN]];
+
+  hw.output %and, %or, %multiuse : i1, i1, i1
+}
+
 // CHECK-LABEL: module parameters
 // CHECK-NEXT: #(parameter [41:0] p1 = 42'd17
 // CHECK-NEXT:   parameter [0:0]  p2) (
@@ -926,8 +1014,17 @@ hw.module @parameters<p1: i42 = 17, p2: i1>(%arg0: i8) -> (out: i8) {
 
 hw.module.extern @parameters2<p1: i42 = 17, p2: i1 = 0>(%arg0: i8) -> (out: i8)
 
+// CHECK-LABEL: module parameters3
+// CHECK-NEXT:   #(parameter [41:0] p1 = 42'd17) (
+// CHECK-NEXT:   input  [p1 - 1:0] arg0,
+// CHECK-NEXT:   output [p1 - 1:0] out);
+// CHECK:   assign out = arg0;
+hw.module @parameters3<p1: i42 = 17>(%arg0: !hw.int<#hw.param.decl.ref<"p1">>) -> (out: !hw.int<#hw.param.decl.ref<"p1">>) {
+  hw.output %arg0 : !hw.int<#hw.param.decl.ref<"p1">>
+}
+
 // CHECK-LABEL: module UseParameterized(
-hw.module @UseParameterized(%a: i8) -> (ww: i8, xx: i8, yy: i8, zz: i8) {
+hw.module @UseParameterized(%a: i8) -> (ww: i8, xx: i8, yy: i8, zz: i8, qq: i8) {
   // Two parameters.
   // CHECK:      parameters #(
   // CHECK-NEXT:   .p1(42'd4),
@@ -964,7 +1061,16 @@ hw.module @UseParameterized(%a: i8) -> (ww: i8, xx: i8, yy: i8, zz: i8) {
   // CHECK-NEXT: );
   %r3 = hw.instance "inst4" @parameters2<p1: i42 = 17, p2: i1 = 0>(arg0: %a: i8) -> (out: i8)
 
-  hw.output %r0, %r1, %r2, %r3: i8, i8, i8, i8
+  // Parameterized I/O ports.
+  // CHECK: parameters3 #(
+  // CHECK-NEXT:   .p1(42'd8)
+  // CHECK-NEXT: ) inst5 (
+  // CHECK-NEXT:   .arg0 (a),
+  // CHECK-NEXT:   .out  (qq)
+  // CHECK-NEXT: );
+  %r4 = hw.instance "inst5" @parameters3<p1: i42 = 8>(arg0: %a: i8) -> (out: i8)
+
+  hw.output %r0, %r1, %r2, %r3, %r4: i8, i8, i8, i8, i8
 }
 
 // CHECK-LABEL: module UseParameterValue
@@ -1018,8 +1124,10 @@ hw.module @VerilogCompatParameters<p1: i42, p2: i32, p3: f64 = 1.5,
 hw.module @parameterizedTypes<param: i32 = 1, wire: i32 = 2>
   // CHECK: input [16:0]{{ *}}a,
   (%a: !hw.int<17>,
-  // CHECK: input [param - 1:0] b);
-   %b: !hw.int<#hw.param.decl.ref<"param">>) {
+  // CHECK: input [param - 1:0]{{ *}}b,
+   %b: !hw.int<#hw.param.decl.ref<"param">>,
+  // CHECK: input [$clog2($unsigned(param)) - 1:0]{{ *}}c);
+   %c: !hw.int<#hw.param.expr.clog2<#hw.param.decl.ref<"param">>>) {
 
   // Check that the parameter name renamification propagates.
   // CHECK: wire [wire_0 - 1:0] paramWire;
@@ -1050,4 +1158,35 @@ hw.module @InlineArrayGet(%source: !hw.array<1xi1>) -> (r1:i1, r2:i1) {
   // CHECK:      assign r1 = source[1'h0];
   // CHECK-NEXT: assign r2 = source[1'h0];
   hw.output %0, %0 : i1, i1
+}
+
+// CHECK-LABEL: module parameterizedArrays
+// CHECK-NEXT:   #(parameter /*integer*/ param,
+// CHECK-NEXT:     parameter /*integer*/ N) (
+// CHECK-NEXT:   input  [41:0][param - 1:0]        a,
+// CHECK-NEXT:   input  [N - 64'd1:0][param - 1:0] b,
+// CHECK-NEXT:   output [N - 64'd1:0][param - 1:0] c);
+hw.module @parameterizedArrays<param: i32, N: i32>
+  (%a: !hw.array<42x!hw.int<#hw.param.decl.ref<"param">>>,
+   %b: !hw.array<#hw.param.decl.ref<"N"> x !hw.int<#hw.param.decl.ref<"param">>>) ->
+   (c: !hw.array<#hw.param.decl.ref<"N"> x !hw.int<#hw.param.decl.ref<"param">>>) {
+  hw.output %b : !hw.array<#hw.param.decl.ref<"N"> x !hw.int<#hw.param.decl.ref<"param">>>
+}
+
+// CHECK-LABEL: module UseParameterizedArrays(
+// CHECK-NEXT: input [41:0][11:0] a,
+// CHECK-NEXT: input [23:0][11:0] b);
+hw.module @UseParameterizedArrays(%a: !hw.array<42xint<12>>, %b: !hw.array<24xint<12>>) {
+// CHECK:  wire [23:0][11:0] _inst_c;
+// CHECK:  parameterizedArrays #(
+// CHECK-NEXT:    .param(12),
+// CHECK-NEXT:    .N(24)
+// CHECK-NEXT:  ) inst (
+// CHECK-NEXT:    .a (a),
+// CHECK-NEXT:    .b (b),
+// CHECK-NEXT:    .c (_inst_c)
+// CHECK-NEXT:  );
+// CHECK-NEXT: endmodule
+  %c = hw.instance "inst" @parameterizedArrays<param: i32 = 12, N: i32 = 24>
+    (a: %a : !hw.array<42xint<12>>, b: %b : !hw.array<24xint<12>>) -> (c: !hw.array<24xint<12>>) {}
 }

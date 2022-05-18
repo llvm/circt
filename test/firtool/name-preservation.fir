@@ -1,0 +1,31 @@
+; RUN: firtool %s | FileCheck %s 
+
+circuit Foo:
+  ; CHECK-LABEL: module Foo
+  module Foo:
+    input a: {a: UInt<1>, flip b: UInt<1>}
+    output b: {a: UInt<1>, flip b: UInt<1>}
+
+    ; Unnamed wires are always removed.
+    ; CHECK-NOT: wire _x_a;
+    ; CHECK-NOT: wire _x_b;
+
+    wire _x: {a: UInt<1>, flip b: UInt<1>}
+    _x <= a
+
+    ; Default behavior is to preserve named wires.
+    ; CHECK:        wire x_a;
+    ; CHECK:        wire x_b;
+    wire x: {a: UInt<1>, flip b: UInt<1>}
+    x <= _x
+
+    ; Unnamed nodes are always removed.
+    ; CHECK-NOT: wire _y_a;
+    node _y_a = x.a
+
+    ; Default behavior is to preserve named nodes.
+    ; CHECK:        wire y;
+    node y = _y_a
+
+    b.a <= y
+    x.b <= b.b

@@ -4,7 +4,7 @@
 
 // ASAP-LABEL: unit_latencies
 // SIMPLEX-LABEL: unit_latencies
-func @unit_latencies(%a1 : i32, %a2 : i32, %a3 : i32, %a4 : i32) -> i32 {
+func.func @unit_latencies(%a1 : i32, %a2 : i32, %a3 : i32, %a4 : i32) -> i32 {
   // ASAP-NEXT: asapStartTime = 0
   %0 = arith.addi %a1, %a2 { problemStartTime = 0 } : i32
   // ASAP-NEXT: asapStartTime = 1
@@ -27,7 +27,7 @@ func @unit_latencies(%a1 : i32, %a2 : i32, %a3 : i32, %a4 : i32) -> i32 {
 
 // ASAP-LABEL: arbitrary_latencies
 // SIMPLEX-LABEL: arbitrary_latencies
-func @arbitrary_latencies(%v : complex<f32>) -> f32 attributes {
+func.func @arbitrary_latencies(%v : complex<f32>) -> f32 attributes {
   operatortypes = [
     { name = "extr", latency = 0 },
     { name = "add", latency = 3 },
@@ -54,7 +54,7 @@ func @arbitrary_latencies(%v : complex<f32>) -> f32 attributes {
 
 // ASAP-LABEL: auxiliary_dependences
 // SIMPLEX-LABEL: auxiliary_dependences
-func @auxiliary_dependences() attributes { auxdeps = [
+func.func @auxiliary_dependences() attributes { auxdeps = [
     [0,1], [0,2], [2,3], [3,4], [3,6], [4,5], [5,6]
   ] } {
   // ASAP-NEXT: asapStartTime = 0

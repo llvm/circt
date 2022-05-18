@@ -3,7 +3,7 @@
 // CHECK-LABEL: convert_bitwise_i1
 // CHECK-SAME: %[[LHS:.*]]: i1,
 // CHECK-SAME: %[[RHS:.*]]: i1
-func @convert_bitwise_i1(%lhs : i1, %rhs : i1) {
+func.func @convert_bitwise_i1(%lhs : i1, %rhs : i1) {
   // CHECK-NEXT: %{{.*}} = llvm.and %[[LHS]], %[[RHS]] : i1
   %1 = comb.and %lhs, %rhs : i1
   // CHECK-NEXT: %{{.*}} = llvm.or %[[LHS]], %[[RHS]] : i1
@@ -17,7 +17,7 @@ func @convert_bitwise_i1(%lhs : i1, %rhs : i1) {
 // CHECK-LABEL: convert_bitwise_i32
 // CHECK-SAME: %[[LHS:.*]]: i32,
 // CHECK-SAME: %[[RHS:.*]]: i32
-func @convert_bitwise_i32(%lhs : i32, %rhs : i32) {
+func.func @convert_bitwise_i32(%lhs : i32, %rhs : i32) {
   // CHECK-NEXT: %{{.*}} = llvm.and %[[LHS]], %[[RHS]] : i32
   comb.and %lhs, %rhs : i32
   // CHECK-NEXT: %{{.*}} = llvm.or %[[LHS]], %[[RHS]] : i32
@@ -29,7 +29,7 @@ func @convert_bitwise_i32(%lhs : i32, %rhs : i32) {
 }
 
 // CHECK-LABEL: convert_bitwise_i32_variadic
-func @convert_bitwise_i32_variadic(%arg0 : i32, %arg1 : i32, %arg2 : i32) {
+func.func @convert_bitwise_i32_variadic(%arg0 : i32, %arg1 : i32, %arg2 : i32) {
   %a = comb.and %arg0 : i32
   %b = comb.or %arg1 : i32
   %c = comb.xor %arg2 : i32
@@ -51,7 +51,7 @@ func @convert_bitwise_i32_variadic(%arg0 : i32, %arg1 : i32, %arg2 : i32) {
 // CHECK-SAME: %[[BASE:.*]]: i5,
 // CHECK-SAME: %[[HIDDEN:.*]]: i2,
 // CHECK-SAME: %[[AMOUNT:.*]]: i2
-func @convert_shl_i5_i2_i2(%base : i5, %hidden : i2, %amount : i2) {
+func.func @convert_shl_i5_i2_i2(%base : i5, %hidden : i2, %amount : i2) {
   // CHECK-NEXT: %[[ZEXTB:.*]] = llvm.zext %[[BASE]] : i5 to i7
   // CHECK-NEXT: %[[ZEXTH:.*]] = llvm.zext %[[HIDDEN]] : i2 to i7
   // CHECK-NEXT: %[[ZEXTA:.*]] = llvm.zext %[[AMOUNT]] : i2 to i7
@@ -70,7 +70,7 @@ func @convert_shl_i5_i2_i2(%base : i5, %hidden : i2, %amount : i2) {
 // CHECK-SAME: %[[BASE:.*]]: i5,
 // CHECK-SAME: %[[HIDDEN:.*]]: i2,
 // CHECK-SAME: %[[AMOUNT:.*]]: i2
-func @convert_shr_i5_i2_i2(%base : i5, %hidden : i2, %amount : i2) {
+func.func @convert_shr_i5_i2_i2(%base : i5, %hidden : i2, %amount : i2) {
   // CHECK-NEXT: %[[ZEXTB:.*]] = llvm.zext %[[BASE]] : i5 to i7
   // CHECK-NEXT: %[[ZEXTH:.*]] = llvm.zext %[[HIDDEN]] : i2 to i7
   // CHECK-NEXT: %[[ZEXTA:.*]] = llvm.zext %[[AMOUNT]] : i2 to i7
@@ -85,7 +85,7 @@ func @convert_shr_i5_i2_i2(%base : i5, %hidden : i2, %amount : i2) {
 }
 
 // CHECK-LABEL: llvm.func @convert_comb_shift
-func @convert_comb_shift(%arg0: i32, %arg1: i32, %arg2: i1) -> i32 {
+func.func @convert_comb_shift(%arg0: i32, %arg1: i32, %arg2: i1) -> i32 {
 
   // CHECK: %[[R0:.*]] = llvm.shl %arg0, %arg1 : i32
   %0 = comb.shl %arg0, %arg1 : i32

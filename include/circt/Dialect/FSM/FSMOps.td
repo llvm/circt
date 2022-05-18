@@ -15,7 +15,7 @@ include "mlir/Interfaces/ControlFlowInterfaces.td"
 
 def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>;
 
-def MachineOp : FSMOp<"machine", [HasParent<"mlir::ModuleOp">, FunctionLike,
+def MachineOp : FSMOp<"machine", [HasParent<"mlir::ModuleOp">, FunctionOpInterface,
       Symbol, SymbolTable, IsolatedFromAbove, NoTerminator]> {
   let summary = "Define a finite-state machine";
   let description = [{
@@ -24,39 +24,40 @@ def MachineOp : FSMOp<"machine", [HasParent<"mlir::ModuleOp">, FunctionLike,
     includes a `$body` region that contains internal variables and states.
   }];
 
-  let arguments = (ins StrAttr:$sym_name, TypeAttr:$stateType, TypeAttr:$type);
+  let arguments = (ins StrAttr:$sym_name, TypeAttr:$stateType,
+                       StrAttr:$initialState,
+                       TypeAttrOf<FunctionType>:$function_type);
   let regions = (region SizedRegion<1>:$body);
 
   let builders = [
-    OpBuilder<(ins "StringRef":$name, "Type":$stateType, "FunctionType":$type,
+    OpBuilder<(ins "StringRef":$name, "StringRef":$initialState,
+      "Type":$stateType, "FunctionType":$function_type,
       CArg<"ArrayRef<NamedAttribute>", "{}">:$attrs,
       CArg<"ArrayRef<DictionaryAttr>", "{}">:$argAttrs)>
   ];
 
   let extraClassDeclaration = [{
-    /// Get the default state of the machine.
-    StateOp getDefaultState();
+    /// Get the initial state of the machine.
+    StateOp getInitialStateOp();
 
     /// Get the port information of the machine.
     void getHWPortInfo(SmallVectorImpl<hw::PortInfo> &);
 
-  private:
-    /// This trait needs access to the hooks defined below.
-    friend class OpTrait::FunctionLike<MachineOp>;
+    /// Returns the type of this function.
+    FunctionType getFunctionType() {
+      return getFunctionTypeAttr().getValue().cast<FunctionType>();
+    }
 
-    /// Returns the number of arguments. This is a hook for
-    /// OpTrait::FunctionLike.
-    unsigned getNumFuncArguments() { return getType().getInputs().size(); }
+    /// Returns the argument types of this function.
+    ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
 
-    /// Returns the number of results. This is a hook for OpTrait::FunctionLike.
-    unsigned getNumFuncResults() { return getType().getResults().size(); }
+    /// Returns the result types of this function.
+    ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
 
-    /// Hook for OpTrait::FunctionLike, called after verifying that the 'type'
-    /// attribute is present and checks if it holds a function type. Ensures
-    /// getType, getNumFuncArguments, and getNumFuncResults can be called
-    /// safely.
+    /// Verify the type attribute of this function. Returns failure and emits
+    /// an error if the attribute is invalid.
     LogicalResult verifyType() {
-      auto type = getTypeAttr().getValue();
+      auto type = getFunctionTypeAttr().getValue();
       if (!type.isa<FunctionType>())
         return emitOpError("requires '" + getTypeAttrName() +
                            "' attribute of function type");
@@ -64,9 +65,8 @@ def MachineOp : FSMOp<"machine", [HasParent<"mlir::ModuleOp">, FunctionLike,
     }
   }];
 
-  let parser = [{ return ::parse$cppClass(parser, result); }];
-  let printer = [{ return ::print(*this, p); }];
-  let verifier = [{ return ::verify$cppClass(*this); }];
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
 }
 
 def InstanceOp : FSMOp<"instance", [Symbol, HasCustomSSAName]> {
@@ -86,7 +86,7 @@ def InstanceOp : FSMOp<"instance", [Symbol, HasCustomSSAName]> {
     MachineOp getMachine();
   }];
 
-  let verifier = [{ return ::verify$cppClass(*this); }];
+  let hasVerifier = 1;
 }
 
 def TriggerOp : FSMOp<"trigger", []> {
@@ -109,7 +109,7 @@ def TriggerOp : FSMOp<"trigger", []> {
     MachineOp getMachine();
   }];
 
-  let verifier = [{ return ::verify$cppClass(*this); }];
+  let hasVerifier = 1;
 }
 
 def HWInstanceOp : FSMOp<"hw_instance", [Symbol, AttrSizedOperandSegments]> {
@@ -137,7 +137,7 @@ def HWInstanceOp : FSMOp<"hw_instance", [Symbol, AttrSizedOperandSegments]> {
     MachineOp getMachine();
   }];
 
-  let verifier = [{ return ::verify$cppClass(*this); }];
+  let hasVerifier = 1;
 }
 
 def StateOp : FSMOp<"state", [HasParent<"MachineOp">, Symbol,
@@ -174,7 +174,7 @@ def OutputOp : FSMOp<"output", [HasParent<"StateOp">, ReturnLike, Terminator]> {
 
   let assemblyFormat = [{ attr-dict ($operands^ `:` qualified(type($operands)))? }];
 
-  let verifier = [{ return ::verify$cppClass(*this); }];
+  let hasVerifier = 1;
 }
 
 def TransitionOp : FSMOp<"transition", [HasParent<"StateOp">,
@@ -182,19 +182,19 @@ def TransitionOp : FSMOp<"transition", [HasParent<"StateOp">,
   let summary = "Define a transition of a state";
   let description = [{
     `fsm.transition` represents a transition of a state with a symbol reference
-    of the next state. This op includes a `$guard` region with an `fsm.return`
+    of the next state. This op includes an optional `$guard` region with an `fsm.return`
     as terminator that returns a Boolean value indicating the guard condition of
-    this transition. This op also includes an `$action` region that represents
+    this transition. This op also includes an optional `$action` region that represents
     the actions to be executed when this transition is taken.
   }];
 
   let arguments = (ins FlatSymbolRefAttr:$nextState);
-  let regions = (region SizedRegion<1>:$guard, SizedRegion<1>:$action);
+  let regions = (region AnyRegion:$guard, AnyRegion:$action);
 
   let hasCanonicalizeMethod = true;
 
   let assemblyFormat = [{
-    $nextState attr-dict `guard` $guard `action` $action
+    $nextState attr-dict (`guard` $guard^)? (`action` $action^)?
   }];
 
   let extraClassDeclaration = [{
@@ -208,13 +208,25 @@ def TransitionOp : FSMOp<"transition", [HasParent<"StateOp">,
 
     /// Get the return operation of the guard region, this should never fail.
     ReturnOp getGuardReturn() {
+      assert(!guard().empty() && "this transition has no guard");
       return cast<ReturnOp>(guard().front().getTerminator());
     }
 
+    /// Return whether this transition has a guard.
+    bool hasGuard() {
+      return !guard().empty();
+    }
+
+    /// Return whether this transition has an action.
+    bool hasAction() {
+      return !action().empty();
+    }
+
+    /// Returns true if this transition is always taken.
     bool isAlwaysTaken();
   }];
 
-  let verifier = [{ return ::verify$cppClass(*this); }];
+  let hasVerifier = 1;
 }
 
 def ReturnOp : FSMOp<"return", [HasParent<"TransitionOp">, ReturnLike,
@@ -263,7 +275,7 @@ def UpdateOp : FSMOp<"update", [HasParent<"TransitionOp">, SameTypeOperands]> {
     VariableOp getVariable();
   }];
 
-  let verifier = [{ return ::verify$cppClass(*this); }];
+  let hasVerifier = 1;
 }
 
 #endif // CIRCT_DIALECT_FSM_FSMOPS_TD

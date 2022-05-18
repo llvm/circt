@@ -10,22 +10,41 @@
 //
 //===----------------------------------------------------------------------===//
 
-def InnerRefAttr : AttrDef<HWDialect, "InnerRef"> {
+def InnerRefAttr : AttrDef<HWDialect, "InnerRef", [
+    DeclareAttrInterfaceMethods<SubElementAttrInterface>]> {
   let summary = "Refer to a name inside a module";
   let description = [{
     This works like a symbol reference, but to a name inside a module.
   }];
   let mnemonic = "innerNameRef";
-  let parameters = (ins "::mlir::StringAttr":$module, "::mlir::StringAttr":$name);
+  let parameters = (ins "::mlir::FlatSymbolRefAttr":$moduleRef,
+                        "::mlir::StringAttr":$name);
+
   let builders = [
-    AttrBuilderWithInferredContext<(ins "::mlir::StringAttr":$module, "::mlir::StringAttr":$name),[{
-      return get(module.getContext(), module, name);
-    }]>,
+    AttrBuilderWithInferredContext<(ins "::mlir::StringAttr":$module,
+                                        "::mlir::StringAttr":$name), [{
+      return $_get(
+          module.getContext(), mlir::FlatSymbolRefAttr::get(module), name);
+    }]>
   ];
+
+  let hasCustomAssemblyFormat = 1;
+
   let extraClassDeclaration = [{
     /// Get the InnerRefAttr for an operation and add the sym on it.
     static InnerRefAttr getFromOperation(mlir::Operation *op,
-                  mlir::StringAttr symName, mlir::StringAttr moduleName) ;
+                                         mlir::StringAttr symName,
+                                         mlir::StringAttr moduleName);
+
+    /// Recursively traverse the sub-attribute.
+    void walkImmediateSubElements(
+        llvm::function_ref<void(mlir::Attribute)> walkAttrsFn,
+        llvm::function_ref<void(mlir::Type)> walkTypesFn) {
+      walkAttrsFn(getModule());
+    }
+
+    /// Return the name of the referenced module.
+    mlir::StringAttr getModule() const { return getModuleRef().getAttr(); }
   }];
 }
 
@@ -42,6 +61,8 @@ def GlobalRefAttr : AttrDef<HWDialect, "GlobalRef"> {
       return get(ref.getContext(), SymbolRefAttr::get(ref));
     }]>,
   ];
+
+  let assemblyFormat = "`<` $glblSym `>`";
 
   let extraClassDeclaration = [{
     static constexpr char DialectAttrName[] = "circt.globalRef";

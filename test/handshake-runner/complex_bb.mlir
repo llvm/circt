@@ -2,7 +2,7 @@
 // RUN: circt-opt -lower-std-to-handshake %s | handshake-runner | FileCheck %s
 // CHECK: 763 2996
 module {
-  func @main() -> (index, index) {
+  func.func @main() -> (index, index) {
     %c0 = arith.constant 0 : index
     %c101 = arith.constant 101 : index
     %c102 = arith.constant 102 : index

@@ -4,7 +4,7 @@ firrtl.circuit "Test" {
 
   // CHECK-LABEL: @PassThrough
   // CHECK: (in %source: !firrtl.uint<1>, out %dest: !firrtl.uint<1>)
-  firrtl.module @PassThrough(in %source: !firrtl.uint<1>, out %dest: !firrtl.uint<1>) {
+  firrtl.module private @PassThrough(in %source: !firrtl.uint<1>, out %dest: !firrtl.uint<1>) {
     // CHECK-NEXT: %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
 
     %dontTouchWire = firrtl.wire sym @a1 : !firrtl.uint<1>
@@ -35,7 +35,8 @@ firrtl.circuit "Test" {
     %someWire = firrtl.wire : !firrtl.uint<1>
     firrtl.connect %someWire, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
 
-    // CHECK-NOT: firrtl.wire
+    // CHECK: %someWire = firrtl.wire 
+    // CHECK: firrtl.connect %someWire, %c0_ui1 
     // CHECK: firrtl.connect %result1, %c0_ui1_0
     firrtl.connect %result1, %someWire : !firrtl.uint<1>, !firrtl.uint<1>
 
@@ -44,7 +45,8 @@ firrtl.circuit "Test" {
     %clockWire = firrtl.wire : !firrtl.clock
     firrtl.connect %clockWire, %c0_clock : !firrtl.clock, !firrtl.clock
 
-    // CHECK-NOT: firrtl.wire
+    // CHECK: %clockWire = firrtl.wire
+    // CHECK: firrtl.connect %clockWire, %c0_clock
     // CHECK: firrtl.connect %result2, %c0_clock
     firrtl.connect %result2, %clockWire : !firrtl.clock, !firrtl.clock
 
@@ -77,10 +79,9 @@ firrtl.circuit "Test" {
     firrtl.connect %result5, %extWire: !firrtl.uint<2>, !firrtl.uint<2>
 
     // regreset
-    %c0_ui20 = firrtl.constant 0 : !firrtl.uint<20>
-    %regreset = firrtl.regreset %clock, %reset, %c0_ui20 : !firrtl.uint<1>, !firrtl.uint<20>, !firrtl.uint<2>
-
     %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
+    %regreset = firrtl.regreset %clock, %reset, %c0_ui2 : !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>
+
     firrtl.connect %regreset, %c0_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
 
     // CHECK: firrtl.connect %result6, %c0_ui2
@@ -119,7 +120,7 @@ firrtl.circuit "Test" {
   // https://github.com/llvm/circt/issues/1236
 
   // CHECK-LABEL: @UnusedModule(in %source: !firrtl.uint<1>, out %dest: !firrtl.uint<1>)
-  firrtl.module @UnusedModule(in %source: !firrtl.uint<1>, out %dest: !firrtl.uint<1>) {
+  firrtl.module private @UnusedModule(in %source: !firrtl.uint<1>, out %dest: !firrtl.uint<1>) {
     // CHECK-NEXT: firrtl.connect %dest, %source
     firrtl.connect %dest, %source : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK-NEXT: }
@@ -127,7 +128,7 @@ firrtl.circuit "Test" {
 
 
   // CHECK-LABEL: ReadMem
-  firrtl.module @ReadMem() {
+  firrtl.module private @ReadMem() {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
 
@@ -172,8 +173,8 @@ firrtl.circuit "Issue1188"  {
 
 // DontTouch annotation should block constant propagation.
 firrtl.circuit "testDontTouch"  {
-  // CHECK-LABEL: firrtl.module @blockProp
-  firrtl.module @blockProp1(in %clock: !firrtl.clock, in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) attributes {
+  // CHECK-LABEL: firrtl.module private @blockProp
+  firrtl.module private @blockProp1(in %clock: !firrtl.clock, in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) attributes {
     portAnnotations = [[], [],[]],
     portSyms = ["", "dntSym", ""]
   }{
@@ -182,16 +183,16 @@ firrtl.circuit "testDontTouch"  {
     firrtl.connect %c, %a : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %b, %c : !firrtl.uint<1>, !firrtl.uint<1>
   }
-  // CHECK-LABEL: firrtl.module @allowProp
-  firrtl.module @allowProp(in %clock: !firrtl.clock, in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
+  // CHECK-LABEL: firrtl.module private @allowProp
+  firrtl.module private @allowProp(in %clock: !firrtl.clock, in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
     // CHECK: [[CONST:%.+]] = firrtl.constant 1 : !firrtl.uint<1>
     %c = firrtl.reg %clock  : !firrtl.uint<1>
     firrtl.connect %c, %a : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK: firrtl.connect %b, [[CONST]]
     firrtl.connect %b, %c : !firrtl.uint<1>, !firrtl.uint<1>
   }
-  // CHECK-LABEL: firrtl.module @blockProp3
-  firrtl.module @blockProp3(in %clock: !firrtl.clock, in %a: !firrtl.uint<1> , out %b: !firrtl.uint<1>) {
+  // CHECK-LABEL: firrtl.module private @blockProp3
+  firrtl.module private @blockProp3(in %clock: !firrtl.clock, in %a: !firrtl.uint<1> , out %b: !firrtl.uint<1>) {
     //CHECK: %c = firrtl.reg
     %c = firrtl.reg sym @s2 %clock : !firrtl.uint<1>
     firrtl.connect %c, %a : !firrtl.uint<1>, !firrtl.uint<1>
@@ -216,8 +217,8 @@ firrtl.circuit "testDontTouch"  {
     // CHECK: firrtl.connect %a2, %blockProp3_b
     firrtl.connect %a2, %blockProp3_b : !firrtl.uint<1>, !firrtl.uint<1>
   }
-  // CHECK-LABEL: firrtl.module @CheckNode
-  firrtl.module @CheckNode(in %x: !firrtl.uint<1>, out %y: !firrtl.uint<1>) {
+  // CHECK-LABEL: firrtl.module private @CheckNode
+  firrtl.module private @CheckNode(in %x: !firrtl.uint<1>, out %y: !firrtl.uint<1>) {
     %z = firrtl.node   sym @s2 %x: !firrtl.uint<1>
     // CHECK: firrtl.connect %y, %z
     firrtl.connect %y, %z : !firrtl.uint<1>, !firrtl.uint<1>
@@ -228,11 +229,11 @@ firrtl.circuit "testDontTouch"  {
 // -----
 
 firrtl.circuit "OutPortTop" {
-    firrtl.module @OutPortChild1(out %out: !firrtl.uint<1>)  attributes {portSyms = ["dntSym"]}{
+    firrtl.module private @OutPortChild1(out %out: !firrtl.uint<1>)  attributes {portSyms = ["dntSym"]}{
       %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
       firrtl.connect %out, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     } 
-    firrtl.module @OutPortChild2(out %out: !firrtl.uint<1>) {
+    firrtl.module private @OutPortChild2(out %out: !firrtl.uint<1>) {
       %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
       firrtl.connect %out, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     }
@@ -255,14 +256,14 @@ firrtl.circuit "OutPortTop" {
 // -----
 
 firrtl.circuit "InputPortTop"   {
-  // CHECK-LABEL: firrtl.module @InputPortChild2
-  firrtl.module @InputPortChild2(in %in0: !firrtl.uint<1>, in %in1: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
+  // CHECK-LABEL: firrtl.module private @InputPortChild2
+  firrtl.module private @InputPortChild2(in %in0: !firrtl.uint<1>, in %in1: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
     // CHECK: = firrtl.constant 1
     %0 = firrtl.and %in0, %in1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     firrtl.connect %out, %0 : !firrtl.uint<1>, !firrtl.uint<1>
   }
-  // CHECK-LABEL: firrtl.module @InputPortChild
-  firrtl.module @InputPortChild(in %in0: !firrtl.uint<1>, in %in1: !firrtl.uint<1>, out %out: !firrtl.uint<1>) attributes {
+  // CHECK-LABEL: firrtl.module private @InputPortChild
+  firrtl.module private @InputPortChild(in %in0: !firrtl.uint<1>, in %in1: !firrtl.uint<1>, out %out: !firrtl.uint<1>) attributes {
     portAnnotations = [[], [], []], portSyms = ["", "dntSym", ""]
   } {
     // CHECK: %0 = firrtl.and %in0, %in1
@@ -285,7 +286,7 @@ firrtl.circuit "InputPortTop"   {
 // -----
 
 firrtl.circuit "InstanceOut"   {
-  firrtl.extmodule @Ext(in a: !firrtl.uint<1>)
+  firrtl.extmodule private @Ext(in a: !firrtl.uint<1>)
 
   // CHECK-LABEL: firrtl.module @InstanceOut
   firrtl.module @InstanceOut(in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
@@ -302,7 +303,7 @@ firrtl.circuit "InstanceOut"   {
 // -----
 
 firrtl.circuit "InstanceOut2"   {
-  firrtl.module @Ext(in %a: !firrtl.uint<1>) {
+  firrtl.module private @Ext(in %a: !firrtl.uint<1>) {
   }
 
   // CHECK-LABEL: firrtl.module @InstanceOut2
@@ -347,6 +348,35 @@ firrtl.circuit "invalidReg2"   {
 
 // -----
 
+// CHECK-LABEL: firrtl.circuit "RegResetInvalid"
+firrtl.circuit "RegResetInvalid"  {
+  firrtl.module @RegResetInvalid(in %clock: !firrtl.clock, in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %r = firrtl.regreset %clock, %a, %c1_ui1  : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+    %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
+    firrtl.strictconnect %r, %invalid_ui1 : !firrtl.uint<1>
+    // CHECK: %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    // CHECK: firrtl.strictconnect %b, %c1_ui1 : !firrtl.uint<1>
+    firrtl.strictconnect %b, %r : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// CHECK-LABEL: firrtl.circuit "RegResetInvalidReset"
+firrtl.circuit "RegResetInvalidReset"  {
+  firrtl.module @RegResetInvalidReset(in %clock: !firrtl.clock, out %a: !firrtl.uint<1>) {
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
+    %r = firrtl.regreset %clock, %invalid_ui1, %c1_ui1  : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.strictconnect %r, %invalid_ui1 : !firrtl.uint<1>
+    // CHECK: %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
+    // CHECK: firrtl.strictconnect %a, %invalid_ui1 : !firrtl.uint<1>
+    firrtl.strictconnect %a, %r : !firrtl.uint<1>
+  }
+}
+// -----
+
 // This test is checking the behavior of a RegOp, "r", and a RegResetOp, "s",
 // that are combinationally connected to themselves through simple and weird
 // formulations.  In all cases it should NOT be optimized away.  For more discussion, see:
@@ -356,8 +386,8 @@ firrtl.circuit "invalidReg2"   {
 //
 // CHECK-LABEL: "Oscillators"
 firrtl.circuit "Oscillators"   {
-  // CHECK: firrtl.module @Foo
-  firrtl.module @Foo(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, out %a: !firrtl.uint<1>) {
+  // CHECK: firrtl.module private @Foo
+  firrtl.module private @Foo(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, out %a: !firrtl.uint<1>) {
     // CHECK: firrtl.reg
     %r = firrtl.reg %clock : !firrtl.uint<1>
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
@@ -370,8 +400,8 @@ firrtl.circuit "Oscillators"   {
     %2 = firrtl.or %r, %s : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     firrtl.connect %a, %2 : !firrtl.uint<1>, !firrtl.uint<1>
   }
-  // CHECK: firrtl.module @Bar
-  firrtl.module @Bar(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, out %a: !firrtl.uint<1>) {
+  // CHECK: firrtl.module private @Bar
+  firrtl.module private @Bar(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, out %a: !firrtl.uint<1>) {
     // CHECK: firrtl.reg
     %r = firrtl.reg %clock  : !firrtl.uint<1>
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
@@ -385,8 +415,8 @@ firrtl.circuit "Oscillators"   {
     %2 = firrtl.or %r, %s : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     firrtl.connect %a, %2 : !firrtl.uint<1>, !firrtl.uint<1>
   }
-  // CHECK: firrtl.module @Baz
-  firrtl.module @Baz(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, out %a: !firrtl.uint<1>) {
+  // CHECK: firrtl.module private @Baz
+  firrtl.module private @Baz(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, out %a: !firrtl.uint<1>) {
     // CHECK: firrtl.reg
     %r = firrtl.reg %clock  : !firrtl.uint<1>
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
@@ -400,8 +430,8 @@ firrtl.circuit "Oscillators"   {
     firrtl.connect %a, %2 : !firrtl.uint<1>, !firrtl.uint<1>
   }
   firrtl.extmodule @Ext(in a: !firrtl.uint<1>)
-  // CHECK: firrtl.module @Qux
-  firrtl.module @Qux(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, out %a: !firrtl.uint<1>) {
+  // CHECK: firrtl.module private @Qux
+  firrtl.module private @Qux(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, out %a: !firrtl.uint<1>) {
     %ext_a = firrtl.instance ext @Ext(in a: !firrtl.uint<1>)
     // CHECK: firrtl.reg
     %r = firrtl.reg %clock  : !firrtl.uint<1>
@@ -445,8 +475,8 @@ firrtl.circuit "Oscillators"   {
 //
 // CHECK-LABK: firrtl.circuit "rhs_sink_output_used_as_wire"
 firrtl.circuit "rhs_sink_output_used_as_wire" {
-  // CHECK: firrtl.module @Bar
-  firrtl.module @Bar(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>, out %d: !firrtl.uint<1>) {
+  // CHECK: firrtl.module private @Bar
+  firrtl.module private @Bar(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>, out %d: !firrtl.uint<1>) {
     firrtl.connect %c, %b : !firrtl.uint<1>, !firrtl.uint<1>
     %_c = firrtl.wire  : !firrtl.uint<1>
     // CHECK: firrtl.xor %a, %c
@@ -538,7 +568,7 @@ firrtl.circuit "dntOutput" {
     %m = firrtl.mux(%c, %int_b, %const) : (!firrtl.uint<1>, !firrtl.uint<3>, !firrtl.uint<3>) -> !firrtl.uint<3>
     firrtl.connect %b, %m : !firrtl.uint<3>, !firrtl.uint<3>
   }
-  firrtl.module @foo(out %b: !firrtl.uint<3> ) attributes {portSyms = ["dntSym1"] } {
+  firrtl.module private @foo(out %b: !firrtl.uint<3> ) attributes {portSyms = ["dntSym1"] } {
     %const = firrtl.constant 1 : !firrtl.uint<3>
     firrtl.connect %b, %const : !firrtl.uint<3>, !firrtl.uint<3>
   }

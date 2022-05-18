@@ -1,6 +1,6 @@
 // RUN: circt-translate --export-firrtl --verify-diagnostics %s -o %t
 // RUN: cat %t | FileCheck %s --strict-whitespace
-// RUN: circt-translate --import-firrtl %t --mlir-print-debuginfo | circt-translate --export-firrtl | diff - %t
+// Wire preservation breaks this: circt-translate --import-firrtl %t --mlir-print-debuginfo | circt-translate --export-firrtl | diff - %t
 
 // CHECK-LABEL: circuit Foo :
 firrtl.circuit "Foo" {
@@ -91,18 +91,21 @@ firrtl.circuit "Foo" {
     firrtl.assume %someClock, %ui1, %ui1, "msg" {name = "foo"}
     firrtl.cover %someClock, %ui1, %ui1, "msg" {name = "foo"}
     // CHECK: someOut <= ui1
-    // CHECK: someOut <- ui1
     firrtl.connect %someOut, %ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-    firrtl.partialconnect %someOut, %ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK: inst someInst of Simple
     // CHECK: someInst.someIn <= ui1
     // CHECK: someOut <= someInst.someOut
     %someInst_someIn, %someInst_someOut = firrtl.instance someInst @Simple(in someIn: !firrtl.uint<1>, out someOut: !firrtl.uint<1>)
     firrtl.connect %someInst_someIn, %ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %someOut, %someInst_someOut : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK-NOT: _invalid
     // CHECK: someOut is invalid
     %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
     firrtl.connect %someOut, %invalid_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK-NOT: _invalid
+    // CHECK: someOut is invalid
+    %invalid_ui2 = firrtl.invalidvalue : !firrtl.uint<1>
+    firrtl.strictconnect %someOut, %invalid_ui2 : !firrtl.uint<1>
     // CHECK: attach(an0, an1)
     %an0 = firrtl.wire : !firrtl.analog<1>
     %an1 = firrtl.wire : !firrtl.analog<1>

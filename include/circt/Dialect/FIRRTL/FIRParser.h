@@ -18,11 +18,12 @@
 
 namespace llvm {
 class SourceMgr;
-}
+} // namespace llvm
 
 namespace mlir {
 class LocationAttr;
-}
+class TimingScope;
+} // namespace mlir
 
 namespace circt {
 namespace firrtl {
@@ -31,18 +32,16 @@ struct FIRParserOptions {
   /// If this is set to true, the @info locators are ignored, and the locations
   /// are set to the location in the .fir file.
   bool ignoreInfoLocators = false;
-  /// If this is set to true, the annotations are just attached to the circuit
-  /// and not scattered or processed.
-  bool rawAnnotations = false;
   /// The number of annotation files that were specified on the command line.
   /// This, along with numOMIRFiles provides structure to the buffers in the
   /// source manager.
   unsigned numAnnotationFiles;
 };
 
-mlir::OwningModuleRef importFIRFile(llvm::SourceMgr &sourceMgr,
-                                    mlir::MLIRContext *context,
-                                    FIRParserOptions options = {});
+mlir::OwningOpRef<mlir::ModuleOp> importFIRFile(llvm::SourceMgr &sourceMgr,
+                                                mlir::MLIRContext *context,
+                                                mlir::TimingScope &ts,
+                                                FIRParserOptions options = {});
 
 // Decode a source locator string `spelling`, returning a pair indicating that
 // the the `spelling` was correct and an optional location attribute.  The

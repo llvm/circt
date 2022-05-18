@@ -16,10 +16,11 @@
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.h"
 #include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Support/FieldRef.h"
 #include "mlir/IR/Builders.h"
-#include "mlir/IR/FunctionSupport.h"
+#include "mlir/IR/FunctionInterfaces.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/RegionKindInterface.h"
 #include "mlir/IR/SymbolTable.h"
@@ -28,6 +29,12 @@
 
 namespace circt {
 namespace firrtl {
+
+// is the name useless?
+bool isUselessName(circt::StringRef name);
+
+// works for regs, nodes, and wires
+bool isUselessName(Operation *op);
 
 /// Return true if the specified operation is a firrtl expression.
 bool isExpression(Operation *op);
@@ -156,16 +163,17 @@ struct FirMemory {
   SmallVector<int32_t> writeClockIDs;
   StringAttr modName;
   bool isMasked;
+  uint32_t groupID;
 
   // Location is carried along but not considered part of the identity of this.
   Location loc;
 
   std::tuple<size_t, size_t, size_t, size_t, size_t, size_t, size_t, size_t,
-             size_t, hw::WUW, SmallVector<int32_t>>
+             size_t, hw::WUW, SmallVector<int32_t>, uint32_t>
   getTuple() const {
     return std::tie(numReadPorts, numWritePorts, numReadWritePorts, dataWidth,
                     depth, readLatency, writeLatency, maskBits, readUnderWrite,
-                    writeUnderWrite, writeClockIDs);
+                    writeUnderWrite, writeClockIDs, groupID);
   }
   bool operator<(const FirMemory &rhs) const {
     return getTuple() < rhs.getTuple();
@@ -202,6 +210,7 @@ struct InnerRefRecord {
   bool operator==(const InnerRefRecord &rhs) const {
     return (innerSym == rhs.innerSym && mod == rhs.mod);
   }
+  bool operator!=(const InnerRefRecord &rhs) const { return !(*this == rhs); }
 };
 
 // A data structure to record and lookup an InnerSym and the corresponding
@@ -212,7 +221,8 @@ struct InnerRefRecord {
 // insert-phase and lookup-phase based code.
 // TODO: Generalize this data structure.
 struct InnerRefList {
-  InnerRefList(MLIRContext* context) : InnerSymAttr(StringAttr::get(context, "inner_sym")) {}
+  InnerRefList(MLIRContext *context)
+      : InnerSymAttr(StringAttr::get(context, "inner_sym")) {}
 
   void sort() {
     llvm::sort(list);

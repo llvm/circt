@@ -331,7 +331,7 @@ firrtl.circuit "SRAMPaths" attributes {annotations = [{
 // CHECK-SAME:  ]
 
 //===----------------------------------------------------------------------===//
-// Make SRAM Paths Absolute with existing NLAs (`SetOMIRSRAMPaths`)
+// Make SRAM Paths Absolute with existing absolute NLA (`SetOMIRSRAMPaths`)
 //===----------------------------------------------------------------------===//
 
 firrtl.circuit "SRAMPathsWithNLA" attributes {annotations = [{
@@ -373,6 +373,47 @@ firrtl.circuit "SRAMPathsWithNLA" attributes {annotations = [{
 // CHECK-SAME:    @Submodule,
 // CHECK-SAME:    #hw.innerNameRef<@Submodule::[[SYMMEM1:@[a-zA-Z0-9_]+]]>
 // CHECK-SAME:  ]
+
+//===----------------------------------------------------------------------===//
+// Make SRAM Paths Absolute with existing non-absolute NLAs (`SetOMIRSRAMPaths`)
+//===----------------------------------------------------------------------===//
+
+firrtl.circuit "SRAMPathsWithNLA" attributes {annotations = [{
+  class = "freechips.rocketchip.objectmodel.OMIRAnnotation",
+  nodes = [
+    {
+      info = #loc,
+      id = "OMID:0",
+      fields = {
+        omType = {info = #loc, index = 0, value = ["OMString:OMLazyModule", "OMString:OMSRAM"]},
+        instancePath = {info = #loc, index = 1, value = {omir.tracker, id = 0, type = "OMMemberReferenceTarget"}}
+      }
+    }
+  ]
+}]} {
+  firrtl.nla @nla [#hw.innerNameRef<@SRAMPaths::@sub>, @Submodule]
+  firrtl.extmodule @MySRAM()
+  firrtl.module @Submodule() {
+    firrtl.instance mem1 {annotations = [{circt.nonlocal = @nla, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 0}]} @MySRAM()
+  }
+  firrtl.module @SRAMPaths() {
+    firrtl.instance sub sym @sub {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}]} @Submodule()
+  }
+  firrtl.module @SRAMPathsWithNLA() {
+    firrtl.instance paths @SRAMPaths()
+  }
+}
+
+// CHECK-LABEL: firrtl.circuit "SRAMPathsWithNLA"
+// CHECK:      symbols = [
+// CHECK-SAME:   @SRAMPathsWithNLA,
+// CHECK-SAME:   #hw.innerNameRef<@SRAMPathsWithNLA::@paths>,
+// CHECK-SAME:   @SRAMPaths,
+// CHECK-SAME:   #hw.innerNameRef<@SRAMPaths::@sub>,
+// CHECK-SAME:   @Submodule,
+// CHECK-SAME:   #hw.innerNameRef<@Submodule::@mem1>,
+// CHECK-SAME:   @MySRAM
+// CHECK-SAME: ]
 
 //===----------------------------------------------------------------------===//
 // Add module port information to the OMIR (`SetOMIRPorts`)
@@ -466,6 +507,73 @@ firrtl.circuit "AddPorts" attributes {annotations = [{
 // CHECK-SAME:    #hw.innerNameRef<@AddPorts::[[SYMX]]>,
 // CHECK-SAME:    #hw.innerNameRef<@AddPorts::[[SYMY]]>,
 // CHECK-SAME:    #hw.innerNameRef<@AddPorts::[[SYMW]]>
+// CHECK-SAME:  ]
+
+firrtl.circuit "AddPortsRelative" attributes {annotations = [{
+  class = "freechips.rocketchip.objectmodel.OMIRAnnotation",
+  nodes = [
+    {
+      info = #loc,
+      id = "OMID:0",
+      fields = {
+        containingModule = {
+          info = #loc,
+          index = 0,
+          value = {
+            omir.tracker,
+            id = 0,
+            path = "~AddPortsRelative|DUT",
+            type = "OMInstanceTarget"
+          }
+        }
+      }
+    }
+  ]
+}]} {
+  firrtl.module @AddPortsRelative () {
+    %in = firrtl.wire : !firrtl.uint<1>
+    %out = firrtl.wire : !firrtl.uint<1>
+    %instance_x, %instance_y = firrtl.instance dut @DUT(in x: !firrtl.uint<1>, out y: !firrtl.uint<1>)
+    firrtl.connect %instance_x, %in : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %out, %instance_y : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+
+  firrtl.module @DUT(in %x: !firrtl.uint<1> sym @x, out %y: !firrtl.uint<1> sym @y) attributes {
+    annotations = [
+      {class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 0},
+      {class = "sifive.enterprise.firrtl.MarkDUTAnnotation", id = 1}
+    ]} {
+    firrtl.connect %y, %x : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+}
+
+// CHECK-LABEL: firrtl.circuit "AddPortsRelative"
+// CHECK:       firrtl.module @DUT
+// CHECK-SAME:    in %x: !firrtl.uint<1> sym [[SYMX:@[a-zA-Z0-9_]+]]
+// CHECK-SAME:    out %y: !firrtl.uint<1> sym [[SYMY:@[a-zA-Z0-9_]+]]
+
+// CHECK:       sv.verbatim
+// CHECK-SAME:  \22id\22: \22OMID:0\22
+// CHECK-SAME:    \22name\22: \22containingModule\22
+// CHECK-SAME:    \22value\22: \22OMInstanceTarget:~DUT|{{[{][{]0[}][}]}}\22
+// CHECK-SAME:    \22name\22: \22ports\22
+// CHECK-SAME:    \22value\22: [
+// CHECK-SAME:      {
+// CHECK-SAME:        \22ref\22: \22OMDontTouchedReferenceTarget:~DUT|{{[{][{]0[}][}]}}>{{[{][{]1[}][}]}}\22
+// CHECK-SAME:        \22direction\22: \22OMString:Input\22
+// CHECK-SAME:        \22width\22: \22OMBigInt:1\22
+// CHECK-SAME:      }
+// CHECK-SAME:      {
+// CHECK-SAME:        \22ref\22: \22OMDontTouchedReferenceTarget:~DUT|{{[{][{]0[}][}]}}>{{[{][{]2[}][}]}}\22
+// CHECK-SAME:        \22direction\22: \22OMString:Output\22
+// CHECK-SAME:        \22width\22: \22OMBigInt:1\22
+// CHECK-SAME:      }
+// CHECK-SAME:    ]
+
+// CHECK-SAME:  symbols = [
+// CHECK-SAME:    @DUT,
+// CHECK-SAME:    #hw.innerNameRef<@DUT::[[SYMX]]>,
+// CHECK-SAME:    #hw.innerNameRef<@DUT::[[SYMY]]>
 // CHECK-SAME:  ]
 
 

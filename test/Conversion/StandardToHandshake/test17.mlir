@@ -20,15 +20,15 @@
 // CHECK:           %[[VAL_16:.*]] = select %[[VAL_10]]#0, %[[VAL_14]]#0, %[[VAL_15]] : index
 // CHECK:           return %[[VAL_16]], %[[VAL_4]]#3 : index, none
 // CHECK:         }
-func @affine_apply_floordiv(%arg0: index) -> index {
+func.func @affine_apply_floordiv(%arg0: index) -> index {
     %c42 = arith.constant 42 : index
     %c0 = arith.constant 0 : index
     %c-1 = arith.constant -1 : index
     %0 = arith.cmpi slt, %arg0, %c0 : index
     %1 = arith.subi %c-1, %arg0 : index
-    %2 = select %0, %1, %arg0 : index
+    %2 = arith.select %0, %1, %arg0 : index
     %3 = arith.divsi %2, %c42 : index
     %4 = arith.subi %c-1, %3 : index
-    %5 = select %0, %4, %3 : index
+    %5 = arith.select %0, %4, %3 : index
     return %5 : index
   }

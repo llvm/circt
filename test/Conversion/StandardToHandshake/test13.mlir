@@ -13,7 +13,7 @@
 // CHECK:           %[[VAL_9:.*]] = br %[[VAL_5]] : index
 // CHECK:           %[[VAL_10:.*]], %[[VAL_11:.*]] = control_merge %[[VAL_7]] : none
 // CHECK:           %[[VAL_12:.*]]:3 = fork [3] %[[VAL_11]] : index
-// CHECK:           %[[VAL_13:.*]] = buffer [1] %[[VAL_14:.*]] {initValues = [0], sequential = true} : i1
+// CHECK:           %[[VAL_13:.*]] = buffer [1] seq %[[VAL_14:.*]] {initValues = [0]} : i1
 // CHECK:           %[[VAL_15:.*]]:4 = fork [4] %[[VAL_13]] : i1
 // CHECK:           %[[VAL_16:.*]] = mux %[[VAL_15]]#3 {{\[}}%[[VAL_10]], %[[VAL_17:.*]]] : i1, none
 // CHECK:           %[[VAL_18:.*]] = mux %[[VAL_12]]#2 {{\[}}%[[VAL_6]]] : index, index
@@ -104,26 +104,26 @@
 // CHECK:           sink %[[VAL_107]] : index
 // CHECK:           return %[[VAL_106]] : none
 // CHECK:         }
-func @affine_apply_loops_shorthand(%arg0: index) {
+func.func @affine_apply_loops_shorthand(%arg0: index) {
   %c0 = arith.constant 0 : index
   %c1 = arith.constant 1 : index
-  br ^bb1(%c0 : index)
+  cf.br ^bb1(%c0 : index)
 ^bb1(%0: index):      // 2 preds: ^bb0, ^bb5
   %1 = arith.cmpi slt, %0, %arg0 : index
-  cond_br %1, ^bb2, ^bb6
+  cf.cond_br %1, ^bb2, ^bb6
 ^bb2: // pred: ^bb1
   %c42 = arith.constant 42 : index
   %c1_0 = arith.constant 1 : index
-  br ^bb3(%0 : index)
+  cf.br ^bb3(%0 : index)
 ^bb3(%2: index):      // 2 preds: ^bb2, ^bb4
   %3 = arith.cmpi slt, %2, %c42 : index
-  cond_br %3, ^bb4, ^bb5
+  cf.cond_br %3, ^bb4, ^bb5
 ^bb4: // pred: ^bb3
   %4 = arith.addi %2, %c1_0 : index
-  br ^bb3(%4 : index)
+  cf.br ^bb3(%4 : index)
 ^bb5: // pred: ^bb3
   %5 = arith.addi %0, %c1 : index
-  br ^bb1(%5 : index)
+  cf.br ^bb1(%5 : index)
 ^bb6: // pred: ^bb1
   return
 }

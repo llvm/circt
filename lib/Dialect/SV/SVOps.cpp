@@ -14,6 +14,7 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -28,7 +29,8 @@ using namespace sv;
 /// Return true if the specified operation is an expression.
 bool sv::isExpression(Operation *op) {
   return isa<VerbatimExprOp, VerbatimExprSEOp, GetModportOp,
-             ReadInterfaceSignalOp, ConstantXOp, ConstantZOp>(op);
+             ReadInterfaceSignalOp, ConstantXOp, ConstantZOp, MacroRefExprOp>(
+      op);
 }
 
 LogicalResult sv::verifyInProceduralRegion(Operation *op) {
@@ -163,6 +165,15 @@ void VerbatimExprSEOp::getAsmResultNames(
 }
 
 //===----------------------------------------------------------------------===//
+// MacroRefExprOp
+//===----------------------------------------------------------------------===//
+
+void MacroRefExprOp::getAsmResultNames(
+    function_ref<void(Value, StringRef)> setNameFn) {
+  setNameFn(getResult(), ident().getName());
+}
+
+//===----------------------------------------------------------------------===//
 // ConstantXOp / ConstantZOp
 //===----------------------------------------------------------------------===//
 
@@ -174,10 +185,10 @@ void ConstantXOp::getAsmResultNames(
   setNameFn(getResult(), specialName.str());
 }
 
-static LogicalResult verifyConstantXOp(ConstantXOp op) {
+LogicalResult ConstantXOp::verify() {
   // We don't allow zero width constant or unknown width.
-  if (op.getWidth() <= 0)
-    return op.emitError("unsupported type");
+  if (getWidth() <= 0)
+    return emitError("unsupported type");
   return success();
 }
 
@@ -189,10 +200,10 @@ void ConstantZOp::getAsmResultNames(
   setNameFn(getResult(), specialName.str());
 }
 
-static LogicalResult verifyConstantZOp(ConstantZOp op) {
+LogicalResult ConstantZOp::verify() {
   // We don't allow zero width constant or unknown type.
-  if (op.getWidth() <= 0)
-    return op.emitError("unsupported type");
+  if (getWidth() <= 0)
+    return emitError("unsupported type");
   return success();
 }
 
@@ -207,10 +218,10 @@ void LocalParamOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
     setNameFn(getResult(), nameAttr.getValue());
 }
 
-static LogicalResult verifyLocalParamOp(LocalParamOp op) {
+LogicalResult LocalParamOp::verify() {
   // Verify that this is a valid parameter value.
-  return hw::checkParameterInContext(op.value(),
-                                     op->getParentOfType<hw::HWModuleOp>(), op);
+  return hw::checkParameterInContext(
+      value(), (*this)->getParentOfType<hw::HWModuleOp>(), *this);
 }
 
 //===----------------------------------------------------------------------===//
@@ -272,8 +283,13 @@ void IfDefOp::build(OpBuilder &builder, OperationState &result, StringRef cond,
 void IfDefOp::build(OpBuilder &builder, OperationState &result, StringAttr cond,
                     std::function<void()> thenCtor,
                     std::function<void()> elseCtor) {
-  assert(!cond.getValue().empty() && cond.getValue().front() != '!' &&
-         "Should only use simple Verilog identifiers in ifdef conditions");
+  build(builder, result, MacroIdentAttr::get(builder.getContext(), cond),
+        thenCtor, elseCtor);
+}
+
+void IfDefOp::build(OpBuilder &builder, OperationState &result,
+                    MacroIdentAttr cond, std::function<void()> thenCtor,
+                    std::function<void()> elseCtor) {
   OpBuilder::InsertionGuard guard(builder);
 
   result.addAttribute("cond", cond);
@@ -290,21 +306,21 @@ void IfDefOp::build(OpBuilder &builder, OperationState &result, StringAttr cond,
   }
 }
 
-static bool isEmptyBlockExceptForTerminator(Block *block) {
-  assert(block && "Blcok must be non-null");
-  return block->empty() || block->front().hasTrait<OpTrait::IsTerminator>();
-}
-
 // If both thenRegion and elseRegion are empty, erase op.
-LogicalResult IfDefOp::canonicalize(IfDefOp op, PatternRewriter &rewriter) {
-  if (!isEmptyBlockExceptForTerminator(op.getThenBlock()))
+template <class Op>
+static LogicalResult canonicalizeIfDefLike(Op op, PatternRewriter &rewriter) {
+  if (!op.getThenBlock()->empty())
     return failure();
 
-  if (op.hasElse() && !isEmptyBlockExceptForTerminator(op.getElseBlock()))
+  if (op.hasElse() && !op.getElseBlock()->empty())
     return failure();
 
   rewriter.eraseOp(op);
   return success();
+}
+
+LogicalResult IfDefOp::canonicalize(IfDefOp op, PatternRewriter &rewriter) {
+  return canonicalizeIfDefLike(op, rewriter);
 }
 
 //===----------------------------------------------------------------------===//
@@ -315,6 +331,19 @@ void IfDefProceduralOp::build(OpBuilder &builder, OperationState &result,
                               std::function<void()> elseCtor) {
   IfDefOp::build(builder, result, cond, std::move(thenCtor),
                  std::move(elseCtor));
+}
+
+void IfDefProceduralOp::build(OpBuilder &builder, OperationState &result,
+                              MacroIdentAttr cond,
+                              std::function<void()> thenCtor,
+                              std::function<void()> elseCtor) {
+  IfDefOp::build(builder, result, cond, std::move(thenCtor),
+                 std::move(elseCtor));
+}
+
+LogicalResult IfDefProceduralOp::canonicalize(IfDefProceduralOp op,
+                                              PatternRewriter &rewriter) {
+  return canonicalizeIfDefLike(op, rewriter);
 }
 
 //===----------------------------------------------------------------------===//
@@ -376,11 +405,7 @@ LogicalResult IfOp::canonicalize(IfOp op, PatternRewriter &rewriter) {
 
   // Otherwise, invert the condition and move the 'else' block to the 'then'
   // region.
-  auto full =
-      rewriter.create<hw::ConstantOp>(op.getLoc(), op.cond().getType(), -1);
-  Value ops[] = {full, op.cond()};
-  auto cond =
-      rewriter.createOrFold<comb::XorOp>(op.getLoc(), op.cond().getType(), ops);
+  auto cond = comb::createOrFoldNot(op.getLoc(), op.cond(), rewriter);
   op.setOperand(cond);
 
   auto *thenBlock = op.getThenBlock(), *elseBlock = op.getElseBlock();
@@ -423,15 +448,15 @@ void AlwaysOp::build(OpBuilder &builder, OperationState &result,
 }
 
 /// Ensure that the symbol being instantiated exists and is an InterfaceOp.
-static LogicalResult verifyAlwaysOp(AlwaysOp op) {
-  if (op.events().size() != op.getNumOperands())
-    return op.emitError("different number of operands and events");
+LogicalResult AlwaysOp::verify() {
+  if (events().size() != getNumOperands())
+    return emitError("different number of operands and events");
   return success();
 }
 
-static ParseResult
-parseEventList(OpAsmParser &p, Attribute &eventsAttr,
-               SmallVectorImpl<OpAsmParser::OperandType> &clocksOperands) {
+static ParseResult parseEventList(
+    OpAsmParser &p, Attribute &eventsAttr,
+    SmallVectorImpl<OpAsmParser::UnresolvedOperand> &clocksOperands) {
 
   // Parse zero or more conditions intoevents and clocksOperands.
   SmallVector<Attribute> events;
@@ -556,62 +581,74 @@ void InitialOp::build(OpBuilder &builder, OperationState &result,
 }
 
 //===----------------------------------------------------------------------===//
-// CaseZOp
+// CaseOp
 //===----------------------------------------------------------------------===//
 
-/// Return the letter for the specified pattern bit, e.g. "0", "1", "?" or "x".
-/// isVerilog indicates whether we should use "?" (verilog syntax) or "x" (mlir
-/// operation syntax.
-char sv::getLetter(CaseZPatternBit bit, bool isVerilog) {
+/// Return the letter for the specified pattern bit, e.g. "0", "1", "x" or "z".
+char sv::getLetter(CasePatternBit bit) {
   switch (bit) {
-  case CaseZPatternBit::Zero:
+  case CasePatternBit::Zero:
     return '0';
-  case CaseZPatternBit::One:
+  case CasePatternBit::One:
     return '1';
-  case CaseZPatternBit::Any:
-    return isVerilog ? '?' : 'x';
+  case CasePatternBit::AnyX:
+    return 'x';
+  case CasePatternBit::AnyZ:
+    return 'z';
   }
   llvm_unreachable("invalid casez PatternBit");
 }
 
 /// Return the specified bit, bit 0 is the least significant bit.
-auto CaseZPattern::getBit(size_t bitNumber) const -> CaseZPatternBit {
-  return CaseZPatternBit(unsigned(attr.getValue()[bitNumber * 2]) +
-                         2 * unsigned(attr.getValue()[bitNumber * 2 + 1]));
+auto CasePattern::getBit(size_t bitNumber) const -> CasePatternBit {
+  return CasePatternBit(unsigned(attr.getValue()[bitNumber * 2]) +
+                        2 * unsigned(attr.getValue()[bitNumber * 2 + 1]));
 }
 
-bool CaseZPattern::isDefault() const {
+bool CasePattern::isDefault() const {
+  return attr.getValue().getBitWidth() % 2;
+}
+
+bool CasePattern::hasX() const {
   for (size_t i = 0, e = getWidth(); i != e; ++i)
-    if (getBit(i) != CaseZPatternBit::Any)
-      return false;
-  return true;
+    if (getBit(i) == CasePatternBit::AnyX)
+      return true;
+  return false;
 }
 
-static SmallVector<CaseZPatternBit> getPatternBitsForValue(const APInt &value) {
-  SmallVector<CaseZPatternBit> result;
+bool CasePattern::hasZ() const {
+  for (size_t i = 0, e = getWidth(); i != e; ++i)
+    if (getBit(i) == CasePatternBit::AnyZ)
+      return true;
+  return false;
+}
+
+static SmallVector<CasePatternBit> getPatternBitsForValue(const APInt &value) {
+  SmallVector<CasePatternBit> result;
   result.reserve(value.getBitWidth());
   for (size_t i = 0, e = value.getBitWidth(); i != e; ++i)
-    result.push_back(CaseZPatternBit(value[i]));
+    result.push_back(CasePatternBit(value[i]));
 
   return result;
 }
 
-// Get a CaseZPattern from a specified list of PatternBits.  Bits are
+// Get a CasePattern from a specified list of PatternBits.  Bits are
 // specified in most least significant order - element zero is the least
 // significant bit.
-CaseZPattern::CaseZPattern(const APInt &value, MLIRContext *context)
-    : CaseZPattern(getPatternBitsForValue(value), context) {}
+CasePattern::CasePattern(const APInt &value, MLIRContext *context)
+    : CasePattern(getPatternBitsForValue(value), context) {}
 
-CaseZPattern CaseZPattern::getDefault(unsigned width, MLIRContext *context) {
-  return CaseZPattern(SmallVector<CaseZPatternBit>(width, CaseZPatternBit::Any),
-                      context);
+CasePattern::CasePattern(size_t width, DefaultPatternTag,
+                         MLIRContext *context) {
+  APInt pattern(width * 2 + 1, 0);
+  auto patternType = IntegerType::get(context, width * 2 + 1);
+  attr = IntegerAttr::get(patternType, pattern);
 }
 
-// Get a CaseZPattern from a specified list of PatternBits.  Bits are
+// Get a CasePattern from a specified list of PatternBits.  Bits are
 // specified in most least significant order - element zero is the least
 // significant bit.
-CaseZPattern::CaseZPattern(ArrayRef<CaseZPatternBit> bits,
-                           MLIRContext *context) {
+CasePattern::CasePattern(ArrayRef<CasePatternBit> bits, MLIRContext *context) {
   APInt pattern(bits.size() * 2, 0);
   for (auto elt : llvm::reverse(bits)) {
     pattern <<= 2;
@@ -621,26 +658,50 @@ CaseZPattern::CaseZPattern(ArrayRef<CaseZPatternBit> bits,
   attr = IntegerAttr::get(patternType, pattern);
 }
 
-auto CaseZOp::getCases() -> SmallVector<CaseZInfo, 4> {
-  SmallVector<CaseZInfo, 4> result;
+auto CaseOp::getCases() -> SmallVector<CaseInfo, 4> {
+  SmallVector<CaseInfo, 4> result;
   assert(casePatterns().size() == getNumRegions() &&
          "case pattern / region count mismatch");
   size_t nextRegion = 0;
   for (auto elt : casePatterns()) {
-    result.push_back({CaseZPattern(elt.cast<IntegerAttr>()),
+    result.push_back({CasePattern(elt.cast<IntegerAttr>()),
                       &getRegion(nextRegion++).front()});
   }
 
   return result;
 }
 
-static ParseResult parseCaseZOp(OpAsmParser &parser, OperationState &result) {
+/// Parse case op.
+/// case op ::= `sv.case` case-style? validation-qualifier? cond `:` type
+///             attr-dict case-pattern^*
+/// case-style ::= `case` | `casex` | `casez`
+/// validation-qualifier (see SV Spec 12.5.3) ::= `unique` | `unique0`
+///                                             | `priority`
+/// case-pattern ::= `case` bit-pattern `:` region
+ParseResult CaseOp::parse(OpAsmParser &parser, OperationState &result) {
   auto &builder = parser.getBuilder();
 
-  OpAsmParser::OperandType condOperand;
+  OpAsmParser::UnresolvedOperand condOperand;
   Type condType;
 
   auto loc = parser.getCurrentLocation();
+
+  StringRef keyword;
+  if (!parser.parseOptionalKeyword(&keyword, {"case", "casex", "casez"})) {
+    auto kind = symbolizeCaseStmtType(keyword);
+    auto caseEnum = static_cast<int32_t>(kind.getValue());
+    result.addAttribute("caseStyle", builder.getI32IntegerAttr(caseEnum));
+  }
+
+  // Parse validation qualifier.
+  if (!parser.parseOptionalKeyword(
+          &keyword, {"plain", "priority", "unique", "unique0"})) {
+    auto kind = symbolizeValidationQualifierTypeEnum(keyword);
+    result.addAttribute("validationQualifier",
+                        ValidationQualifierTypeEnumAttr::get(
+                            builder.getContext(), kind.getValue()));
+  }
+
   if (parser.parseOperand(condOperand) || parser.parseColonType(condType) ||
       parser.parseOptionalAttrDict(result.attributes) ||
       parser.resolveOperand(condOperand, condType, result.operands))
@@ -653,11 +714,12 @@ static ParseResult parseCaseZOp(OpAsmParser &parser, OperationState &result) {
 
   // Parse all the cases.
   SmallVector<Attribute> casePatterns;
-  SmallVector<CaseZPatternBit, 16> caseBits;
+  SmallVector<CasePatternBit, 16> caseBits;
+  bool defaultElem = false;
   while (1) {
     if (succeeded(parser.parseOptionalKeyword("default"))) {
       // Fill the pattern with Any.
-      caseBits.assign(condWidth, CaseZPatternBit::Any);
+      defaultElem = true;
     } else if (failed(parser.parseOptionalKeyword("case"))) {
       // Not default or case, must be the end of the cases.
       break;
@@ -674,16 +736,19 @@ static ParseResult parseCaseZOp(OpAsmParser &parser, OperationState &result) {
 
       // Parse and decode each bit, we reverse the list later for MSB->LSB.
       for (; !caseVal.empty(); caseVal = caseVal.drop_front()) {
-        CaseZPatternBit bit;
+        CasePatternBit bit;
         switch (caseVal.front()) {
         case '0':
-          bit = CaseZPatternBit::Zero;
+          bit = CasePatternBit::Zero;
           break;
         case '1':
-          bit = CaseZPatternBit::One;
+          bit = CasePatternBit::One;
           break;
         case 'x':
-          bit = CaseZPatternBit::Any;
+          bit = CasePatternBit::AnyX;
+          break;
+        case 'z':
+          bit = CasePatternBit::AnyZ;
           break;
         default:
           return parser.emitError(loc, "unexpected case bit '")
@@ -698,10 +763,13 @@ static ParseResult parseCaseZOp(OpAsmParser &parser, OperationState &result) {
 
       // High zeros may be missing.
       if (caseBits.size() < condWidth)
-        caseBits.append(condWidth - caseBits.size(), CaseZPatternBit::Zero);
+        caseBits.append(condWidth - caseBits.size(), CasePatternBit::Zero);
     }
 
-    auto resultPattern = CaseZPattern(caseBits, builder.getContext());
+    auto resultPattern =
+        defaultElem ? CasePattern(condWidth, CasePattern::DefaultPatternTag(),
+                                  builder.getContext())
+                    : CasePattern(caseBits, builder.getContext());
     casePatterns.push_back(resultPattern.attr);
     caseBits.clear();
 
@@ -716,11 +784,23 @@ static ParseResult parseCaseZOp(OpAsmParser &parser, OperationState &result) {
   return success();
 }
 
-static void printCaseZOp(OpAsmPrinter &p, CaseZOp op) {
-  p << ' ' << op.cond() << " : " << op.cond().getType();
-  p.printOptionalAttrDict(op->getAttrs(), /*elidedAttrs=*/{"casePatterns"});
+void CaseOp::print(OpAsmPrinter &p) {
+  p << ' ';
+  if (caseStyle() == CaseStmtType::CaseXStmt)
+    p << "casex ";
+  else if (caseStyle() == CaseStmtType::CaseZStmt)
+    p << "casez ";
 
-  for (auto caseInfo : op.getCases()) {
+  if (validationQualifier() !=
+      ValidationQualifierTypeEnum::ValidationQualifierPlain)
+    p << stringifyValidationQualifierTypeEnum(validationQualifier()) << ' ';
+
+  p << cond() << " : " << cond().getType();
+  p.printOptionalAttrDict(
+      (*this)->getAttrs(),
+      /*elidedAttrs=*/{"casePatterns", "caseStyle", "validationQualifier"});
+
+  for (auto caseInfo : getCases()) {
     p.printNewline();
     auto pattern = caseInfo.pattern;
     if (pattern.isDefault()) {
@@ -728,8 +808,7 @@ static void printCaseZOp(OpAsmPrinter &p, CaseZOp op) {
     } else {
       p << "case b";
       for (size_t i = 0, e = pattern.getWidth(); i != e; ++i)
-        p << getLetter(pattern.getBit(e - i - 1),
-                       /*isVerilog=*/false);
+        p << getLetter(pattern.getBit(e - i - 1));
     }
 
     p << ": ";
@@ -738,19 +817,26 @@ static void printCaseZOp(OpAsmPrinter &p, CaseZOp op) {
   }
 }
 
-static LogicalResult verifyCaseZOp(CaseZOp op) {
+LogicalResult CaseOp::verify() {
   // Ensure that the number of regions and number of case values match.
-  if (op.casePatterns().size() != op.getNumRegions())
-    return op.emitOpError("case pattern / region count mismatch");
+  if (casePatterns().size() != getNumRegions())
+    return emitOpError("case pattern / region count mismatch");
   return success();
 }
 
 /// This ctor allows you to build a CaseZ with some number of cases, getting
 /// a callback for each case.
-void CaseZOp::build(OpBuilder &builder, OperationState &result, Value cond,
-                    size_t numCases,
-                    std::function<CaseZPattern(size_t)> caseCtor) {
+void CaseOp::build(OpBuilder &builder, OperationState &result,
+                   CaseStmtType caseStyle,
+                   ValidationQualifierTypeEnum validationQualifier, Value cond,
+                   size_t numCases,
+                   std::function<CasePattern(size_t)> caseCtor) {
   result.addOperands(cond);
+  result.addAttribute("caseStyle",
+                      CaseStmtTypeAttr::get(builder.getContext(), caseStyle));
+  result.addAttribute("validationQualifier",
+                      ValidationQualifierTypeEnumAttr::get(
+                          builder.getContext(), validationQualifier));
   SmallVector<Attribute> casePatterns;
 
   OpBuilder::InsertionGuard guard(builder);
@@ -764,21 +850,63 @@ void CaseZOp::build(OpBuilder &builder, OperationState &result, Value cond,
   result.addAttribute("casePatterns", builder.getArrayAttr(casePatterns));
 }
 
+// Strength reduce case styles based on the bit patterns.
+LogicalResult CaseOp::canonicalize(CaseOp op, PatternRewriter &rewriter) {
+  if (op.caseStyle() == CaseStmtType::CaseStmt)
+    return failure();
+
+  auto caseInfo = op.getCases();
+  bool noXZ = llvm::all_of(caseInfo, [](const CaseInfo &ci) {
+    return !ci.pattern.hasX() && !ci.pattern.hasZ();
+  });
+  bool noX = llvm::all_of(
+      caseInfo, [](const CaseInfo &ci) { return !ci.pattern.hasX(); });
+  bool noZ = llvm::all_of(
+      caseInfo, [](const CaseInfo &ci) { return !ci.pattern.hasZ(); });
+
+  if (op.caseStyle() == CaseStmtType::CaseXStmt) {
+    if (noXZ) {
+      rewriter.updateRootInPlace(op, [&]() {
+        op.caseStyleAttr(
+            CaseStmtTypeAttr::get(op.getContext(), CaseStmtType::CaseStmt));
+      });
+      return success();
+    }
+    if (noX) {
+      rewriter.updateRootInPlace(op, [&]() {
+        op.caseStyleAttr(
+            CaseStmtTypeAttr::get(op.getContext(), CaseStmtType::CaseZStmt));
+      });
+      return success();
+    }
+  }
+
+  if (op.caseStyle() == CaseStmtType::CaseZStmt && noZ) {
+    rewriter.updateRootInPlace(op, [&]() {
+      op.caseStyleAttr(
+          CaseStmtTypeAttr::get(op.getContext(), CaseStmtType::CaseStmt));
+    });
+    return success();
+  }
+
+  return failure();
+}
+
 //===----------------------------------------------------------------------===//
 // Assignment statements
 //===----------------------------------------------------------------------===//
 
-static LogicalResult verifyBPAssignOp(BPAssignOp op) {
-  if (isa<sv::WireOp>(op.dest().getDefiningOp()))
-    return op.emitOpError(
+LogicalResult BPAssignOp::verify() {
+  if (isa<sv::WireOp>(dest().getDefiningOp()))
+    return emitOpError(
         "Verilog disallows procedural assignment to a net type (did you intend "
         "to use a variable type, e.g., sv.reg?)");
   return success();
 }
 
-static LogicalResult verifyPAssignOp(PAssignOp op) {
-  if (isa<sv::WireOp>(op.dest().getDefiningOp()))
-    return op.emitOpError(
+LogicalResult PAssignOp::verify() {
+  if (isa<sv::WireOp>(dest().getDefiningOp()))
+    return emitOpError(
         "Verilog disallows procedural assignment to a net type (did you intend "
         "to use a variable type, e.g., sv.reg?)");
   return success();
@@ -822,12 +950,16 @@ static ParseResult parseModportStructs(OpAsmParser &parser,
 
   SmallVector<Attribute, 8> ports;
   auto parseElement = [&]() -> ParseResult {
-    StringAttr direction;
-    FlatSymbolRefAttr signal;
-    if (parser.parseAttribute(direction) || parser.parseAttribute(signal))
+    auto direction = ModportDirectionAttr::parse(parser, {});
+    if (!direction)
       return failure();
 
-    ports.push_back(ModportStructAttr::get(direction, signal, context));
+    FlatSymbolRefAttr signal;
+    if (parser.parseAttribute(signal))
+      return failure();
+
+    ports.push_back(ModportStructAttr::get(
+        direction.cast<ModportDirectionAttr>(), signal, context));
     return success();
   };
   if (parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
@@ -840,10 +972,10 @@ static ParseResult parseModportStructs(OpAsmParser &parser,
 
 static void printModportStructs(OpAsmPrinter &p, Operation *,
                                 ArrayAttr portsAttr) {
-  p << " (";
+  p << "(";
   llvm::interleaveComma(portsAttr, p, [&](Attribute attr) {
     auto port = attr.cast<ModportStructAttr>();
-    p << port.direction();
+    p << stringifyEnum(port.direction().getValue());
     p << ' ';
     p.printSymbolName(port.signal().getRootReference().getValue());
   });
@@ -861,8 +993,10 @@ void InterfaceModportOp::build(OpBuilder &builder, OperationState &state,
                                ArrayRef<StringRef> outputs) {
   auto *ctxt = builder.getContext();
   SmallVector<Attribute, 8> directions;
-  StringAttr inputDir = StringAttr::get(ctxt, "input");
-  StringAttr outputDir = StringAttr::get(ctxt, "output");
+  ModportDirectionAttr inputDir =
+      ModportDirectionAttr::get(ctxt, ModportDirection::input);
+  ModportDirectionAttr outputDir =
+      ModportDirectionAttr::get(ctxt, ModportDirection::output);
   for (auto input : inputs)
     directions.push_back(ModportStructAttr::get(
         inputDir, SymbolRefAttr::get(ctxt, input), ctxt));
@@ -873,36 +1007,36 @@ void InterfaceModportOp::build(OpBuilder &builder, OperationState &state,
 }
 
 /// Ensure that the symbol being instantiated exists and is an InterfaceOp.
-static LogicalResult verifyInterfaceInstanceOp(InterfaceInstanceOp op) {
-  auto symtable = SymbolTable::getNearestSymbolTable(op);
+LogicalResult InterfaceInstanceOp::verify() {
+  auto *symtable = SymbolTable::getNearestSymbolTable(*this);
   if (!symtable)
-    return op.emitError("sv.interface.instance must exist within a region "
-                        "which has a symbol table.");
-  auto ifaceTy = op.getType();
+    return emitError("sv.interface.instance must exist within a region "
+                     "which has a symbol table.");
+  auto ifaceTy = getType();
   auto referencedOp =
       SymbolTable::lookupSymbolIn(symtable, ifaceTy.getInterface());
   if (!referencedOp)
-    return op.emitError("Symbol not found: ") << ifaceTy.getInterface() << ".";
+    return emitError("Symbol not found: ") << ifaceTy.getInterface() << ".";
   if (!isa<InterfaceOp>(referencedOp))
-    return op.emitError("Symbol ")
+    return emitError("Symbol ")
            << ifaceTy.getInterface() << " is not an InterfaceOp.";
   return success();
 }
 
 /// Ensure that the symbol being instantiated exists and is an
 /// InterfaceModportOp.
-static LogicalResult verifyGetModportOp(GetModportOp op) {
-  auto symtable = SymbolTable::getNearestSymbolTable(op);
+LogicalResult GetModportOp::verify() {
+  auto *symtable = SymbolTable::getNearestSymbolTable(*this);
   if (!symtable)
-    return op.emitError("sv.interface.instance must exist within a region "
-                        "which has a symbol table.");
-  auto ifaceTy = op.getType();
+    return emitError("sv.interface.instance must exist within a region "
+                     "which has a symbol table.");
+  auto ifaceTy = getType();
   auto referencedOp =
       SymbolTable::lookupSymbolIn(symtable, ifaceTy.getModport());
   if (!referencedOp)
-    return op.emitError("Symbol not found: ") << ifaceTy.getModport() << ".";
+    return emitError("Symbol not found: ") << ifaceTy.getModport() << ".";
   if (!isa<InterfaceModportOp>(referencedOp))
-    return op.emitError("Symbol ")
+    return emitError("Symbol ")
            << ifaceTy.getModport() << " is not an InterfaceModportOp.";
   return success();
 }
@@ -921,7 +1055,7 @@ void GetModportOp::build(OpBuilder &builder, OperationState &state, Value value,
 /// Lookup the op for the modport declaration.  This returns null on invalid
 /// IR.
 InterfaceModportOp
-GetModportOp::getReferencedDecl(const hw::SymbolCache &cache) {
+GetModportOp::getReferencedDecl(const hw::HWSymbolCache &cache) {
   return dyn_cast_or_null<InterfaceModportOp>(cache.getDefinition(fieldAttr()));
 }
 
@@ -940,7 +1074,7 @@ void ReadInterfaceSignalOp::build(OpBuilder &builder, OperationState &state,
 /// Lookup the op for the signal declaration.  This returns null on invalid
 /// IR.
 InterfaceSignalOp
-ReadInterfaceSignalOp::getReferencedDecl(const hw::SymbolCache &cache) {
+ReadInterfaceSignalOp::getReferencedDecl(const hw::HWSymbolCache &cache) {
   return dyn_cast_or_null<InterfaceSignalOp>(
       cache.getDefinition(signalNameAttr()));
 }
@@ -982,7 +1116,7 @@ LogicalResult verifySignalExists(Value ifaceVal, FlatSymbolRefAttr signalName) {
 }
 
 Operation *
-InterfaceInstanceOp::getReferencedInterface(const hw::SymbolCache *cache) {
+InterfaceInstanceOp::getReferencedInterface(const hw::HWSymbolCache *cache) {
   FlatSymbolRefAttr interface = getInterfaceType().getInterface();
   if (cache)
     if (auto *result = cache->getDefinition(interface))
@@ -993,6 +1127,14 @@ InterfaceInstanceOp::getReferencedInterface(const hw::SymbolCache *cache) {
     return nullptr;
 
   return topLevelModuleOp.lookupSymbol(interface);
+}
+
+LogicalResult AssignInterfaceSignalOp::verify() {
+  return verifySignalExists(iface(), signalNameAttr());
+}
+
+LogicalResult ReadInterfaceSignalOp::verify() {
+  return verifySignalExists(iface(), signalNameAttr());
 }
 
 //===----------------------------------------------------------------------===//
@@ -1069,13 +1211,6 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
   return success();
 }
 
-/// Ensure that the symbol being instantiated exists and is an InterfaceOp.
-static LogicalResult verifyWireOp(WireOp op) {
-  if (!isa<hw::HWModuleOp>(op->getParentOp()))
-    return op.emitError("sv.wire must not be in an always or initial block");
-  return success();
-}
-
 //===----------------------------------------------------------------------===//
 // ReadInOutOp
 //===----------------------------------------------------------------------===//
@@ -1123,6 +1258,32 @@ LogicalResult IndexedPartSelectInOutOp::inferReturnTypes(
   return success();
 }
 
+LogicalResult IndexedPartSelectInOutOp::verify() {
+  unsigned inputWidth = 0, resultWidth = 0;
+  auto opWidth = width();
+
+  if (auto i = input()
+                   .getType()
+                   .cast<InOutType>()
+                   .getElementType()
+                   .dyn_cast<IntegerType>())
+    inputWidth = i.getWidth();
+  else
+    return emitError("input element type must be Integer");
+
+  if (auto resType =
+          getType().cast<InOutType>().getElementType().dyn_cast<IntegerType>())
+    resultWidth = resType.getWidth();
+  else
+    return emitError("result element type must be Integer");
+
+  if (opWidth > inputWidth)
+    return emitError("slice width should not be greater than input width");
+  if (opWidth != resultWidth)
+    return emitError("result width must be equal to slice width");
+  return success();
+}
+
 OpFoldResult IndexedPartSelectInOutOp::fold(ArrayRef<Attribute> constants) {
   if (getType() == input().getType())
     return input();
@@ -1153,42 +1314,16 @@ LogicalResult IndexedPartSelectOp::inferReturnTypes(
   return success();
 }
 
-static LogicalResult verifyIndexedPartSelectOp(Operation *op) {
-  return TypeSwitch<Operation *, LogicalResult>(op)
-      .Case<IndexedPartSelectOp, IndexedPartSelectInOutOp>(
-          [&](auto p) -> LogicalResult {
-            unsigned inputWidth = 0, resultWidth = 0;
-            auto width = p.width();
-            if (isa<IndexedPartSelectInOutOp>(p)) {
-              if (auto i = p.input()
-                               .getType()
-                               .template cast<InOutType>()
-                               .getElementType()
-                               .template dyn_cast<IntegerType>())
-                inputWidth = i.getWidth();
-              else
-                return op->emitError("input element type must be Integer");
-              if (auto resType = p.getType()
-                                     .template cast<InOutType>()
-                                     .getElementType()
-                                     .template dyn_cast<IntegerType>())
-                resultWidth = resType.getWidth();
-              else
-                return op->emitError("result element type must be Integer");
-            } else {
-              resultWidth = p.getType().template cast<IntegerType>().getWidth();
-              inputWidth =
-                  p.input().getType().template cast<IntegerType>().getWidth();
-            }
-            if (width > inputWidth)
-              return op->emitError(
-                  "slice width should not be greater than input width");
-            if (width != resultWidth)
-              return op->emitError("result width must be equal to slice width");
-            return success();
-          })
-      .Default([&](auto) { return failure(); });
+LogicalResult IndexedPartSelectOp::verify() {
+  auto opWidth = width();
 
+  unsigned resultWidth = getType().cast<IntegerType>().getWidth();
+  unsigned inputWidth = input().getType().cast<IntegerType>().getWidth();
+
+  if (opWidth > inputWidth)
+    return emitError("slice width should not be greater than input width");
+  if (opWidth != resultWidth)
+    return emitError("result width must be equal to slice width");
   return success();
 }
 
@@ -1217,10 +1352,10 @@ LogicalResult StructFieldInOutOp::inferReturnTypes(
 // Other ops.
 //===----------------------------------------------------------------------===//
 
-static LogicalResult verifyAliasOp(AliasOp op) {
+LogicalResult AliasOp::verify() {
   // Must have at least two operands.
-  if (op.operands().size() < 2)
-    return op.emitOpError("alias must have at least two operands");
+  if (operands().size() < 2)
+    return emitOpError("alias must have at least two operands");
 
   return success();
 }
@@ -1264,11 +1399,7 @@ LogicalResult PAssignOp::canonicalize(PAssignOp op, PatternRewriter &rewriter) {
   // conditional procedural assign.  We've ensured that this is the only write
   // of the register.
   if (trueBranch) {
-    auto one =
-        rewriter.create<hw::ConstantOp>(mux.getLoc(), mux.cond().getType(), -1);
-    Value ops[] = {mux.cond(), one};
-    auto cond = rewriter.createOrFold<comb::XorOp>(mux.getLoc(),
-                                                   mux.cond().getType(), ops);
+    auto cond = comb::createOrFoldNot(mux.getLoc(), mux.cond(), rewriter);
     rewriter.create<sv::IfOp>(mux.getLoc(), cond, [&]() {
       rewriter.create<PAssignOp>(op.getLoc(), reg, mux.falseValue());
     });
@@ -1289,33 +1420,36 @@ LogicalResult PAssignOp::canonicalize(PAssignOp op, PatternRewriter &rewriter) {
 
 /// Instances must be at the top level of the hw.module (or within a `ifdef)
 // and are typically at the end of it, so we scan backwards to find them.
-static hw::InstanceOp findInstanceSymbolInBlock(StringAttr name, Block *body) {
+template <class Op>
+static Op findInstanceSymbolInBlock(StringAttr name, Block *body) {
   for (auto &op : llvm::reverse(body->getOperations())) {
-    if (auto instance = dyn_cast<hw::InstanceOp>(op)) {
+    if (auto instance = dyn_cast<Op>(op)) {
       if (instance.inner_sym() &&
           instance.inner_sym().getValue() == name.getValue())
         return instance;
     }
 
     if (auto ifdef = dyn_cast<IfDefOp>(op)) {
-      if (auto result = findInstanceSymbolInBlock(name, ifdef.getThenBlock()))
+      if (auto result =
+              findInstanceSymbolInBlock<Op>(name, ifdef.getThenBlock()))
         return result;
       if (ifdef.hasElse())
-        if (auto result = findInstanceSymbolInBlock(name, ifdef.getElseBlock()))
+        if (auto result =
+                findInstanceSymbolInBlock<Op>(name, ifdef.getElseBlock()))
           return result;
     }
   }
   return {};
 }
 
-hw::InstanceOp BindOp::getReferencedInstance(const hw::SymbolCache *cache) {
+hw::InstanceOp BindOp::getReferencedInstance(const hw::HWSymbolCache *cache) {
   // If we have a cache, directly look up the referenced instance.
-  // FIXME
-  if (cache)
-    if (auto *result = cache->getDefinition(instance().getName()))
-      return dyn_cast<hw::InstanceOp>(result);
+  if (cache) {
+    auto result = cache->getInnerDefinition(instance());
+    return cast<hw::InstanceOp>(result.getOp());
+  }
 
-  // Otherwise, resolve the instance by looking up the hw.module...
+  // Otherwise, resolve the instance by looking up the module ...
   auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
   if (!topLevelModuleOp)
     return {};
@@ -1326,17 +1460,26 @@ hw::InstanceOp BindOp::getReferencedInstance(const hw::SymbolCache *cache) {
     return {};
 
   // ... then look up the instance within it.
-  return findInstanceSymbolInBlock(instance().getName(),
-                                   hwModule.getBodyBlock());
+  return findInstanceSymbolInBlock<hw::InstanceOp>(instance().getName(),
+                                                   hwModule.getBodyBlock());
 }
 
 /// Ensure that the symbol being instantiated exists and is an InterfaceOp.
-static LogicalResult verifyBindOp(BindOp op) {
-  auto inst = op.getReferencedInstance();
+LogicalResult BindOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto module = (*this)->getParentOfType<mlir::ModuleOp>();
+  auto hwModule = dyn_cast_or_null<hw::HWModuleOp>(
+      symbolTable.lookupSymbolIn(module, instance().getModule()));
+  if (!hwModule)
+    return emitError("Referenced module doesn't exist ")
+           << instance().getModule() << "::" << instance().getName();
+
+  auto inst = findInstanceSymbolInBlock<hw::InstanceOp>(
+      instance().getName(), hwModule.getBodyBlock());
   if (!inst)
-    return op.emitError("Referenced instance doesn't exist");
+    return emitError("Referenced instance doesn't exist ")
+           << instance().getModule() << "::" << instance().getName();
   if (!inst->getAttr("doNotPrint"))
-    return op.emitError("Referenced instance isn't marked as doNotPrint");
+    return emitError("Referenced instance isn't marked as doNotPrint");
   return success();
 }
 
@@ -1351,28 +1494,43 @@ void BindOp::build(OpBuilder &builder, OperationState &odsState, StringAttr mod,
 //===----------------------------------------------------------------------===//
 
 sv::InterfaceInstanceOp
-BindInterfaceOp::getReferencedInstance(const hw::SymbolCache *cache) {
-  if (cache)
-    if (auto *result = cache->getDefinition(interfaceAttr()))
-      return dyn_cast<sv::InterfaceInstanceOp>(result);
+BindInterfaceOp::getReferencedInstance(const hw::HWSymbolCache *cache) {
+  // If we have a cache, directly look up the referenced instance.
+  if (cache) {
+    auto result = cache->getInnerDefinition(instance());
+    return cast<sv::InterfaceInstanceOp>(result.getOp());
+  }
 
-  auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
-  if (!topLevelModuleOp)
-    return nullptr;
+  // Otherwise, resolve the instance by looking up the module ...
+  auto *symbolTable = SymbolTable::getNearestSymbolTable(*this);
+  if (!symbolTable)
+    return {};
+  auto *parentOp =
+      lookupSymbolInNested(symbolTable, instance().getModule().getValue());
+  if (!parentOp)
+    return {};
 
-  /// Lookup the instance for the symbol.  This returns null on
-  /// invalid IR.
-  auto *inst = lookupSymbolInNested(topLevelModuleOp, interface());
-  return dyn_cast_or_null<sv::InterfaceInstanceOp>(inst);
+  // ... then look up the instance within it.
+  return findInstanceSymbolInBlock<sv::InterfaceInstanceOp>(
+      instance().getName(), &parentOp->getRegion(0).front());
 }
 
 /// Ensure that the symbol being instantiated exists and is an InterfaceOp.
-static LogicalResult verifyBindInterfaceOp(BindInterfaceOp op) {
-  auto inst = op.getReferencedInstance();
+LogicalResult
+BindInterfaceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto parentOp =
+      symbolTable.lookupNearestSymbolFrom(*this, instance().getModule());
+  if (!parentOp)
+    return emitError("Referenced module doesn't exist ")
+           << instance().getModule() << "::" << instance().getName();
+
+  auto inst = findInstanceSymbolInBlock<sv::InterfaceInstanceOp>(
+      instance().getName(), &parentOp->getRegion(0).front());
   if (!inst)
-    return op.emitError("Referenced interface doesn't exist");
+    return emitError("Referenced interface doesn't exist ")
+           << instance().getModule() << "::" << instance().getName();
   if (!inst->getAttr("doNotPrint"))
-    return op.emitError("Referenced interface isn't marked as doNotPrint");
+    return emitError("Referenced interface isn't marked as doNotPrint");
   return success();
 }
 
@@ -1412,11 +1570,66 @@ void printXMRPath(OpAsmPrinter &p, XMROp op, ArrayAttr pathAttr,
 }
 
 //===----------------------------------------------------------------------===//
+// Verification Ops.
+//===----------------------------------------------------------------------===//
+
+static LogicalResult eraseIfNotZero(Operation *op, Value value,
+                                    PatternRewriter &rewriter) {
+  if (auto constant = value.getDefiningOp<hw::ConstantOp>())
+    if (!constant.getValue().isZero()) {
+      rewriter.eraseOp(op);
+      return success();
+    }
+
+  return failure();
+}
+
+template <class Op>
+static LogicalResult canonicalizeImmediateVerifOp(Op op,
+                                                  PatternRewriter &rewriter) {
+  return eraseIfNotZero(op, op.expression(), rewriter);
+}
+
+void AssertOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                           MLIRContext *context) {
+  results.add(canonicalizeImmediateVerifOp<AssertOp>);
+}
+
+void AssumeOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                           MLIRContext *context) {
+  results.add(canonicalizeImmediateVerifOp<AssumeOp>);
+}
+
+void CoverOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                          MLIRContext *context) {
+  results.add(canonicalizeImmediateVerifOp<CoverOp>);
+}
+
+template <class Op>
+static LogicalResult canonicalizeConcurrentVerifOp(Op op,
+                                                   PatternRewriter &rewriter) {
+  return eraseIfNotZero(op, op.property(), rewriter);
+}
+
+void AssertConcurrentOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                                     MLIRContext *context) {
+  results.add(canonicalizeConcurrentVerifOp<AssertConcurrentOp>);
+}
+
+void AssumeConcurrentOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                                     MLIRContext *context) {
+  results.add(canonicalizeConcurrentVerifOp<AssumeConcurrentOp>);
+}
+
+void CoverConcurrentOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                                    MLIRContext *context) {
+  results.add(canonicalizeConcurrentVerifOp<CoverConcurrentOp>);
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 
 // Provide the autogenerated implementation guts for the Op classes.
 #define GET_OP_CLASSES
 #include "circt/Dialect/SV/SV.cpp.inc"
-#include "circt/Dialect/SV/SVEnums.cpp.inc"
-#include "circt/Dialect/SV/SVStructs.cpp.inc"

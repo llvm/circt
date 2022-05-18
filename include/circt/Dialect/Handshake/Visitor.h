@@ -14,7 +14,8 @@
 #define CIRCT_DIALECT_HANDSHAKE_VISITORS_H
 
 #include "circt/Dialect/Handshake/HandshakeOps.h"
-#include "mlir/Dialect/StandardOps/IR/Ops.h"
+#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 namespace circt {
@@ -33,10 +34,10 @@ public:
             BranchOp, BufferOp, ConditionalBranchOp, ConstantOp, ControlMergeOp,
             EndOp, ForkOp, FuncOp, InstanceOp, JoinOp, LazyForkOp, LoadOp,
             MemoryOp, ExternalMemoryOp, MergeOp, MuxOp, ReturnOp, SinkOp,
-            handshake::SelectOp, SourceOp, StartOp, StoreOp, TerminatorOp>(
-            [&](auto opNode) -> ResultType {
-              return thisCast->visitHandshake(opNode, args...);
-            })
+            handshake::SelectOp, SourceOp, StartOp, StoreOp, TerminatorOp,
+            PackOp, UnpackOp>([&](auto opNode) -> ResultType {
+          return thisCast->visitHandshake(opNode, args...);
+        })
         .Default([&](auto opNode) -> ResultType {
           return thisCast->visitInvalidOp(op, args...);
         });
@@ -83,6 +84,8 @@ public:
   HANDLE(StartOp);
   HANDLE(StoreOp);
   HANDLE(TerminatorOp);
+  HANDLE(PackOp);
+  HANDLE(UnpackOp);
 #undef HANDLE
 };
 
@@ -99,16 +102,15 @@ public:
   ResultType dispatchStdExprVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<arith::IndexCastOp, arith::ExtUIOp, arith::TruncIOp,
-                       // Integer binary expressions.
-                       arith::CmpIOp, arith::AddIOp, arith::SubIOp,
-                       arith::MulIOp, arith::DivSIOp, arith::RemSIOp,
-                       arith::DivUIOp, arith::RemUIOp, arith::XOrIOp,
-                       arith::AndIOp, arith::OrIOp, arith::ShLIOp,
-                       arith::ShRSIOp, arith::ShRUIOp>(
-            [&](auto opNode) -> ResultType {
-              return thisCast->visitStdExpr(opNode, args...);
-            })
+        .template Case<
+            arith::IndexCastOp, arith::ExtUIOp, arith::ExtSIOp, arith::TruncIOp,
+            // Integer binary expressions.
+            arith::CmpIOp, arith::AddIOp, arith::SubIOp, arith::MulIOp,
+            arith::DivSIOp, arith::RemSIOp, arith::DivUIOp, arith::RemUIOp,
+            arith::XOrIOp, arith::AndIOp, arith::OrIOp, arith::ShLIOp,
+            arith::ShRSIOp, arith::ShRUIOp>([&](auto opNode) -> ResultType {
+          return thisCast->visitStdExpr(opNode, args...);
+        })
         .Default([&](auto opNode) -> ResultType {
           return thisCast->visitInvalidOp(op, args...);
         });
@@ -132,6 +134,7 @@ public:
   }
 
   HANDLE(arith::IndexCastOp);
+  HANDLE(arith::ExtSIOp);
   HANDLE(arith::ExtUIOp);
   HANDLE(arith::TruncIOp);
 

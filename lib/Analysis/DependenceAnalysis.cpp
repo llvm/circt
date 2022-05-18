@@ -17,8 +17,9 @@
 #include "mlir/Dialect/Affine/Analysis/Utils.h"
 #include "mlir/Dialect/Affine/IR/AffineMemoryOpInterfaces.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
+#include "mlir/Dialect/Affine/LoopUtils.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/BuiltinOps.h"
-#include "mlir/Transforms/LoopUtils.h"
 
 using namespace mlir;
 using namespace circt::analysis;
@@ -124,7 +125,7 @@ static void checkMemrefDependence(SmallVectorImpl<Operation *> &memoryOps,
 /// MemoryDependenceResult, which can by queried by Operation.
 circt::analysis::MemoryDependenceAnalysis::MemoryDependenceAnalysis(
     Operation *op) {
-  auto funcOp = cast<FuncOp>(op);
+  auto funcOp = cast<func::FuncOp>(op);
 
   // Collect affine loops grouped by nesting depth.
   std::vector<SmallVector<AffineForOp, 2>> depthToLoops;

@@ -23,17 +23,17 @@
 // CHECK:           %[[VAL_19:.*]] = select %[[VAL_11]]#0, %[[VAL_18]], %[[VAL_17]] : index
 // CHECK:           return %[[VAL_19]], %[[VAL_4]]#3 : index, none
 // CHECK:         }
-func @affine_apply_ceildiv(%arg0: index) -> index {
+func.func @affine_apply_ceildiv(%arg0: index) -> index {
     %c42 = arith.constant 42 : index
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %0 = arith.cmpi sle, %arg0, %c0 : index
     %1 = arith.subi %c0, %arg0 : index
     %2 = arith.subi %arg0, %c1 : index
-    %3 = select %0, %1, %2 : index
+    %3 = arith.select %0, %1, %2 : index
     %4 = arith.divsi %3, %c42 : index
     %5 = arith.subi %c0, %4 : index
     %6 = arith.addi %4, %c1 : index
-    %7 = select %0, %5, %6 : index
+    %7 = arith.select %0, %5, %6 : index
     return %7 : index
   }

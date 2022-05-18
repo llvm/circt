@@ -10,12 +10,18 @@
 #ifndef CONVERSION_PASSDETAIL_H
 #define CONVERSION_PASSDETAIL_H
 
+#include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/DialectRegistry.h"
 #include "mlir/Pass/Pass.h"
 
 namespace mlir {
 namespace arith {
 class ArithmeticDialect;
 } // namespace arith
+
+namespace cf {
+class ControlFlowDialect;
+} // namespace cf
 
 namespace memref {
 class MemRefDialect;
@@ -29,7 +35,10 @@ namespace LLVM {
 class LLVMDialect;
 } // namespace LLVM
 
-class StandardOpsDialect;
+namespace func {
+class FuncDialect;
+class FuncOp;
+} // namespace func
 } // namespace mlir
 
 namespace circt {
@@ -47,6 +56,10 @@ namespace handshake {
 class HandshakeDialect;
 class FuncOp;
 } // namespace handshake
+
+namespace esi {
+class ESIDialect;
+} // namespace esi
 
 namespace moore {
 class MooreDialect;
@@ -68,6 +81,10 @@ class HWModuleOp;
 namespace staticlogic {
 class StaticLogicDialect;
 } // namespace staticlogic
+
+namespace seq {
+class SeqDialect;
+} // namespace seq
 
 namespace sv {
 class SVDialect;

@@ -17,13 +17,14 @@
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "circt/Support/LLVM.h"
+#include "mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"
+#include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVM.h"
+#include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVMPass.h"
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/LLVMCommon/Pattern.h"
 #include "mlir/Conversion/ReconcileUnrealizedCasts/ReconcileUnrealizedCasts.h"
-#include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVM.h"
-#include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
-#include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -1646,9 +1647,11 @@ struct RegOpConversion : public ConvertToLLVMPattern {
     auto continueBlock = block->splitBlock(op);
 
     auto drvBlock = rewriter.createBlock(continueBlock);
-    auto valArg = drvBlock->addArgument(transformed.values()[0].getType());
-    auto delayArg = drvBlock->addArgument(transformed.delays()[0].getType());
-    auto gateArg = drvBlock->addArgument(i1Ty);
+    auto valArg = drvBlock->addArgument(transformed.values()[0].getType(),
+                                        transformed.values()[0].getLoc());
+    auto delayArg = drvBlock->addArgument(transformed.delays()[0].getType(),
+                                          transformed.delays()[0].getLoc());
+    auto gateArg = drvBlock->addArgument(i1Ty, rewriter.getUnknownLoc());
 
     // Create a drive with the block arguments.
     rewriter.setInsertionPointToStart(drvBlock);
@@ -2682,6 +2685,7 @@ void LLHDToLLVMLoweringPass::runOnOperation() {
   LLVMConversionTarget target(getContext());
   target.addIllegalOp<InstOp>();
   target.addLegalOp<UnrealizedConversionCastOp>();
+  cf::populateControlFlowToLLVMConversionPatterns(converter, patterns);
 
   // Apply the partial conversion.
   if (failed(
@@ -2690,7 +2694,7 @@ void LLHDToLLVMLoweringPass::runOnOperation() {
   patterns.clear();
 
   // Setup the full conversion.
-  populateStdToLLVMConversionPatterns(converter, patterns);
+  populateFuncToLLVMConversionPatterns(converter, patterns);
   populateLLHDToLLVMConversionPatterns(converter, patterns, sigCounter,
                                        regCounter);
 

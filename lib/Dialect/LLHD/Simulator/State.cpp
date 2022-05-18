@@ -11,7 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "State.h"
+#include "circt/Dialect/LLHD/Simulator/State.h"
 
 #include "llvm/Support/Format.h"
 #include "llvm/Support/raw_ostream.h"
@@ -25,72 +25,29 @@ using namespace circt::llhd::sim;
 // Time
 //===----------------------------------------------------------------------===//
 
-bool Time::operator<(const Time &rhs) const {
-  if (time < rhs.time)
-    return true;
-  if (time == rhs.time && delta < rhs.delta)
-    return true;
-  if (time == rhs.time && delta == rhs.delta && eps < rhs.eps)
-    return true;
-  return false;
-}
-
-bool Time::operator==(const Time &rhs) const {
-  return (time == rhs.time && delta == rhs.delta && eps == rhs.eps);
-}
-
-Time Time::operator+(const Time &rhs) const {
-  return Time(time + rhs.time, delta + rhs.delta, eps + rhs.eps);
-}
-
-bool Time::isZero() { return (time == 0 && delta == 0 && eps == 0); }
-
-std::string Time::dump() {
-  std::string ret;
-  raw_string_ostream ss(ret);
-  ss << time << "ps " << delta << "d " << eps << "e";
-  return ss.str();
+std::string Time::toString() const {
+  return std::to_string(time) + "ps " + std::to_string(delta) + "d " +
+         std::to_string(eps) + "e";
 }
 
 //===----------------------------------------------------------------------===//
 // Signal
 //===----------------------------------------------------------------------===//
 
-Signal::Signal(std::string name, std::string owner)
-    : name(name), owner(owner), size(0), value(nullptr) {}
-
-Signal::Signal(std::string name, std::string owner, uint8_t *value,
-               uint64_t size)
-    : name(name), owner(owner), size(size), value(value) {}
-
-bool Signal::operator==(const Signal &rhs) const {
-  if (owner != rhs.owner || name != rhs.name || size != rhs.size)
-    return false;
-  return std::memcmp(value.get(), rhs.value.get(), size);
-}
-
-bool Signal::operator<(const Signal &rhs) const {
-  if (owner < rhs.owner)
-    return true;
-  if (owner == rhs.owner && name < rhs.name)
-    return true;
-  return false;
-}
-
-std::string Signal::dump() {
+std::string Signal::toHexString() const {
   std::string ret;
   raw_string_ostream ss(ret);
   ss << "0x";
   for (int i = size - 1; i >= 0; --i) {
-    ss << format_hex_no_prefix(static_cast<int>(value.get()[i]), 2);
+    ss << format_hex_no_prefix(static_cast<int>(value[i]), 2);
   }
-  return ss.str();
+  return ret;
 }
 
-std::string Signal::dump(unsigned elemIndex) {
+std::string Signal::toHexString(unsigned elemIndex) const {
   assert(elements.size() > 0 && "the signal type has to be tuple or array!");
   auto elemSize = elements[elemIndex].second;
-  auto ptr = value.get() + elements[elemIndex].first;
+  auto *ptr = value + elements[elemIndex].first;
   std::string ret;
   raw_string_ostream ss(ret);
   ss << "0x";
@@ -285,15 +242,14 @@ int State::addSignalData(int index, std::string owner, uint8_t *value,
   auto &sig = signals[globalIdx];
 
   // Add pointer and size to global signal table entry.
-  sig.value = std::unique_ptr<uint8_t>(value);
-  sig.size = size;
+  sig.store(value, size);
 
   // Add the value pointer to the signal detail struct for each instance this
   // signal appears in.
-  for (auto inst : signals[globalIdx].triggers) {
+  for (auto inst : signals[globalIdx].getTriggeredInstanceIndices()) {
     for (auto &detail : instances[inst].sensitivityList) {
       if (detail.globalIndex == globalIdx) {
-        detail.value = sig.value.get();
+        detail.value = sig.getValue();
       }
     }
   }
@@ -301,14 +257,14 @@ int State::addSignalData(int index, std::string owner, uint8_t *value,
 }
 
 void State::addSignalElement(unsigned index, unsigned offset, unsigned size) {
-  signals[index].elements.push_back(std::make_pair(offset, size));
+  signals[index].pushElement(std::make_pair(offset, size));
 }
 
 void State::dumpSignal(llvm::raw_ostream &out, int index) {
   auto &sig = signals[index];
-  for (auto inst : sig.triggers) {
-    out << time.dump() << "  " << instances[inst].path << "/" << sig.name
-        << "  " << sig.dump() << "\n";
+  for (auto inst : sig.getTriggeredInstanceIndices()) {
+    out << time.toString() << "  " << instances[inst].path << "/"
+        << sig.getName() << "  " << sig.toHexString() << "\n";
   }
 }
 
@@ -330,8 +286,9 @@ void State::dumpLayout() {
 void State::dumpSignalTriggers() {
   llvm::errs() << "::------------- Signal information -------------::\n";
   for (size_t i = 0, e = signals.size(); i < e; ++i) {
-    llvm::errs() << signals[i].owner << "/" << signals[i].name << " triggers: ";
-    for (auto trig : signals[i].triggers) {
+    llvm::errs() << signals[i].getOwner() << "/" << signals[i].getName()
+                 << " triggers: ";
+    for (auto trig : signals[i].getTriggeredInstanceIndices()) {
       llvm::errs() << trig << " ";
     }
     llvm::errs() << "\n";
