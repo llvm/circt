@@ -27,6 +27,9 @@
 #include "mlir/IR/Diagnostics.h"
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/Support/Debug.h"
+
+#define DEBUG_TYPE "lower-annos"
 
 using namespace circt;
 using namespace firrtl;
@@ -293,6 +296,8 @@ struct LowerAnnotationsPass
 
 LogicalResult LowerAnnotationsPass::applyAnnotation(DictionaryAttr anno,
                                                     ApplyState &state) {
+  LLVM_DEBUG(llvm::dbgs() << "  - anno: " << anno << "\n";);
+
   // Lookup the class
   StringRef annoClassVal;
   if (auto annoClass = anno.getNamed("class"))
@@ -324,6 +329,9 @@ void LowerAnnotationsPass::runOnOperation() {
   CircuitOp circuit = getOperation();
   SymbolTable modules(circuit);
 
+  LLVM_DEBUG(llvm::dbgs() << "===- Running LowerAnnotations Pass "
+                             "------------------------------------------===\n");
+
   // Grab the annotations from a non-standard attribute called "rawAnnotations".
   // This is a temporary location for all annotations that are earmarked for
   // processing by this pass as we migrate annotations from being handled by
@@ -344,6 +352,7 @@ void LowerAnnotationsPass::runOnOperation() {
                    [&](DictionaryAttr ann) { worklistAttrs.push_back(ann); }
 
   };
+  LLVM_DEBUG(llvm::dbgs() << "Processing annotations:\n");
   while (!worklistAttrs.empty()) {
     auto attr = worklistAttrs.pop_back_val();
     if (applyAnnotation(attr, state).failed())
