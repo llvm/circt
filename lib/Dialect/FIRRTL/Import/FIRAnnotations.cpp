@@ -217,48 +217,6 @@ static llvm::Optional<std::string> oldCanonicalizeTarget(StringRef target) {
   return llvm::Optional<std::string>(newTarget);
 }
 
-/// Implements the same behavior as DictionaryAttr::getAs<A> to return the value
-/// of a specific type associated with a key in a dictionary.  However, this is
-/// specialized to print a useful error message, specific to custom annotation
-/// process, on failure.
-template <typename A>
-static A tryGetAs(DictionaryAttr &dict, const Attribute &root, StringRef key,
-                  Location loc, Twine className, Twine path = Twine()) {
-  // Check that the key exists.
-  auto value = dict.get(key);
-  if (!value) {
-    SmallString<128> msg;
-    if (path.isTriviallyEmpty())
-      msg = ("Annotation '" + className + "' did not contain required key '" +
-             key + "'.")
-                .str();
-    else
-      msg = ("Annotation '" + className + "' with path '" + path +
-             "' did not contain required key '" + key + "'.")
-                .str();
-    mlir::emitError(loc, msg).attachNote()
-        << "The full Annotation is reproduced here: " << root << "\n";
-    return nullptr;
-  }
-  // Check that the value has the correct type.
-  auto valueA = value.dyn_cast_or_null<A>();
-  if (!valueA) {
-    SmallString<128> msg;
-    if (path.isTriviallyEmpty())
-      msg = ("Annotation '" + className +
-             "' did not contain the correct type for key '" + key + "'.")
-                .str();
-    else
-      msg = ("Annotation '" + className + "' with path '" + path +
-             "' did not contain the correct type for key '" + key + "'.")
-                .str();
-    mlir::emitError(loc, msg).attachNote()
-        << "The full Annotation is reproduced here: " << root << "\n";
-    return nullptr;
-  }
-  return valueA;
-}
-
 /// Convert arbitrary JSON to an MLIR Attribute.
 static Attribute convertJSONToAttribute(MLIRContext *context,
                                         json::Value &value, json::Path p) {
