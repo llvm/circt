@@ -98,8 +98,14 @@ struct ApplyState {
     return *ptr;
   }
 
+  IntegerAttr newID() {
+    return IntegerAttr::get(IntegerType::get(circuit.getContext(), 64),
+                            annotationID++);
+  };
+
 private:
   DenseMap<Operation *, std::unique_ptr<ModuleNamespace>> namespaces;
+  unsigned annotationID = 0;
 };
 
 /// Implements the same behavior as DictionaryAttr::getAs<A> to return the value
