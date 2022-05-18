@@ -246,10 +246,6 @@ static cl::opt<bool>
                     cl::desc("check combinational cycles on firrtl"),
                     cl::init(false), cl::cat(mainCategory));
 
-static cl::opt<bool> newAnno("new-anno",
-                             cl::desc("enable new annotation handling"),
-                             cl::init(false), cl::cat(mainCategory));
-
 static cl::opt<bool> removeUnusedPorts("remove-unused-ports",
                                        cl::desc("enable unused ports pruning"),
                                        cl::init(true), cl::cat(mainCategory));
@@ -471,10 +467,8 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     pm.addInstrumentation(std::make_unique<FirtoolPassInstrumentation>());
   applyPassManagerCLOptions(pm);
 
-  if (newAnno)
-    pm.nest<firrtl::CircuitOp>().addPass(
-        firrtl::createLowerFIRRTLAnnotationsPass(disableAnnotationsUnknown,
-                                                 disableAnnotationsClassless));
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerFIRRTLAnnotationsPass(
+      disableAnnotationsUnknown, disableAnnotationsClassless));
 
   if (!disableOptimization)
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
