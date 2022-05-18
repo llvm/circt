@@ -48,6 +48,10 @@ constexpr const char *testBenchDirAnnoClass =
     "sifive.enterprise.firrtl.TestBenchDirAnnotation";
 
 // Grand Central Annotations
+constexpr const char *serializedViewAnnoClass =
+    "sifive.enterprise.grandcentral.GrandCentralView$SerializedViewAnnotation";
+constexpr const char *viewAnnoClass =
+    "sifive.enterprise.grandcentral.ViewAnnotation";
 constexpr const char *dataTapsClass =
     "sifive.enterprise.grandcentral.DataTapsAnnotation";
 constexpr const char *memTapClass =
@@ -62,6 +66,10 @@ constexpr const char *internalKeyClass =
     "sifive.enterprise.grandcentral.DataTapModuleSignalKey";
 constexpr const char *extractGrandCentralClass =
     "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation";
+constexpr const char *signalDriverAnnoClass =
+    "sifive.enterprise.grandcentral.SignalDriverAnnotation";
+constexpr const char *moduleReplacementAnnoClass =
+    "sifive.enterprise.grandcentral.ModuleReplacementAnnotation";
 
 // SiFive specific Annotations
 constexpr const char *dutAnnoClass =

@@ -1330,7 +1330,7 @@ bool circt::firrtl::scatterCustomAnnotations(
     // A Literal is a FIRRTL IR literal serialized to a string.  For now, just
     // store the string.
     // TODO: Parse the literal string into a UInt or SInt literal.
-    if (clazz == "sifive.enterprise.grandcentral.DataTapsAnnotation") {
+    if (clazz == dataTapsClass) {
       auto id = newID();
       NamedAttrList attrs;
       attrs.append("class", classAttr);
@@ -1373,8 +1373,7 @@ bool circt::firrtl::scatterCustomAnnotations(
         port.append("id", id);
         addDontTouch(portPair.first, portPair.second);
 
-        if (classAttr.getValue() ==
-            "sifive.enterprise.grandcentral.ReferenceDataTapKey") {
+        if (classAttr.getValue() == referenceKeyClass) {
           NamedAttrList source;
           auto portID = newID();
           source.append("class", bDict.get("class"));
@@ -1419,8 +1418,7 @@ bool circt::firrtl::scatterCustomAnnotations(
           continue;
         }
 
-        if (classAttr.getValue() ==
-            "sifive.enterprise.grandcentral.DataTapModuleSignalKey") {
+        if (classAttr.getValue() == internalKeyClass) {
           NamedAttrList module;
           auto portID = newID();
           module.append("class", classAttr);
@@ -1447,16 +1445,14 @@ bool circt::firrtl::scatterCustomAnnotations(
           continue;
         }
 
-        if (classAttr.getValue() ==
-            "sifive.enterprise.grandcentral.DeletedDataTapKey") {
+        if (classAttr.getValue() == deletedKeyClass) {
           // Port Annotations generation.
           newAnnotations[portPair.first].push_back(
               DictionaryAttr::get(context, port));
           continue;
         }
 
-        if (classAttr.getValue() ==
-            "sifive.enterprise.grandcentral.LiteralDataTapKey") {
+        if (classAttr.getValue() == literalKeyClass) {
           NamedAttrList literal;
           literal.append("class", classAttr);
           auto literalAttr =
@@ -1483,7 +1479,7 @@ bool circt::firrtl::scatterCustomAnnotations(
       continue;
     }
 
-    if (clazz == "sifive.enterprise.grandcentral.MemTapAnnotation") {
+    if (clazz == memTapClass) {
       auto id = newID();
       NamedAttrList attrs;
       auto sourceAttr = tryGetAs<StringAttr>(dict, dict, "source", loc, clazz);
@@ -1544,11 +1540,8 @@ bool circt::firrtl::scatterCustomAnnotations(
       continue;
     }
 
-    if (clazz == "sifive.enterprise.grandcentral.GrandCentralView$"
-                 "SerializedViewAnnotation" ||
-        clazz == "sifive.enterprise.grandcentral.ViewAnnotation") {
-      auto viewAnnotationClass = StringAttr::get(
-          context, "sifive.enterprise.grandcentral.ViewAnnotation");
+    if (clazz == serializedViewAnnoClass || clazz == viewAnnoClass) {
+      auto viewAnnotationClass = StringAttr::get(context, viewAnnoClass);
       auto id = newID();
       NamedAttrList companionAttrs, parentAttrs;
       companionAttrs.append("class", viewAnnotationClass);
@@ -1590,7 +1583,7 @@ bool circt::firrtl::scatterCustomAnnotations(
 
     // Scatter signal driver annotations to the sources *and* the targets of the
     // drives.
-    if (clazz == "sifive.enterprise.grandcentral.SignalDriverAnnotation") {
+    if (clazz == signalDriverAnnoClass) {
       auto id = newID();
 
       // Rework the circuit-level annotation to no longer include the
@@ -1741,7 +1734,7 @@ bool circt::firrtl::scatterCustomAnnotations(
       continue;
     }
 
-    if (clazz == "sifive.enterprise.grandcentral.ModuleReplacementAnnotation") {
+    if (clazz == moduleReplacementAnnoClass) {
       auto id = newID();
       NamedAttrList fields;
       auto annotationsAttr =
