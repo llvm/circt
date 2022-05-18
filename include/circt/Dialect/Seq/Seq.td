@@ -52,10 +52,4 @@ def CompRegOp : SeqOp<"compreg",
   let hasCustomAssemblyFormat = 1;
 }
 
-def LowerSeqToSV: Pass<"lower-seq-to-sv", "mlir::ModuleOp"> {
-  let summary = "Lower sequential ops to SV.";
-  let constructor = "circt::seq::createSeqLowerToSVPass()";
-  let dependentDialects = ["circt::sv::SVDialect"];
-}
-
 #endif // SEQ_TD

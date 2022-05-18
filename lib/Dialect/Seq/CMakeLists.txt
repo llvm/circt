@@ -12,7 +12,6 @@
 add_circt_dialect_library(CIRCTSeq
   SeqDialect.cpp
   SeqOps.cpp
-  SeqPasses.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${CIRCT_MAIN_INCLUDE_DIR}/circt/Dialect/Seq
@@ -21,7 +20,6 @@ add_circt_dialect_library(CIRCTSeq
   CIRCTHW
   CIRCTSV
   MLIRSeqIncGen
-  MLIRSeqMiscIncGen
   
   LINK_COMPONENTS
   Support
@@ -35,3 +33,5 @@ add_circt_dialect_library(CIRCTSeq
    )
 
 add_dependencies(circt-headers MLIRSeqIncGen)
+
+add_subdirectory(Transforms)
