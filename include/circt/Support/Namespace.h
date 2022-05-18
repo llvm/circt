@@ -15,6 +15,7 @@
 #define CIRCT_SUPPORT_NAMESPACE_H
 
 #include "circt/Support/LLVM.h"
+#include "circt/Support/SymCache.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/Twine.h"
@@ -30,6 +31,15 @@ public:
   Namespace() {}
   Namespace(const Namespace &other) = default;
   Namespace(Namespace &&other) : nextIndex(std::move(other.nextIndex)) {}
+
+  /// SymbolCache initializer; initialize from every key that is convertible to
+  /// a StringAttr in the SymbolCache.
+  Namespace(SymbolCache &symCache) {
+    for (auto &&[attr, _] : symCache) {
+      if (auto strAttr = attr.dyn_cast<StringAttr>())
+        nextIndex.insert({strAttr.getValue(), 0});
+    }
+  }
 
   Namespace &operator=(const Namespace &other) = default;
   Namespace &operator=(Namespace &&other) {
