@@ -1802,12 +1802,14 @@ class BuildPipelineRegs : public FuncOpPartialLoweringPattern {
         for (auto &use : stageResult.getUses()) {
           unsigned operandNo = use.getOperandNumber();
           if (auto term =
-                  dyn_cast<staticlogic::PipelineTerminatorOp>(use.getOwner());
-              term && operandNo < term.iter_args().size()) {
-            WhileOpInterface whileOp(stage->getParentOp());
-            auto reg = getComponentState().getWhileIterReg(whileOp, operandNo);
-            getComponentState().addPipelineReg(stage, reg, i);
-            isIterArg = true;
+                  dyn_cast<staticlogic::PipelineTerminatorOp>(use.getOwner())) {
+            if (operandNo < term.iter_args().size()) {
+              WhileOpInterface whileOp(stage->getParentOp());
+              auto reg =
+                  getComponentState().getWhileIterReg(whileOp, operandNo);
+              getComponentState().addPipelineReg(stage, reg, i);
+              isIterArg = true;
+            }
           }
         }
         if (isIterArg)
