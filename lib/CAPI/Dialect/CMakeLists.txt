@@ -68,6 +68,7 @@ add_mlir_public_c_api_library(CIRCTCAPISeq
   LINK_LIBS PUBLIC
   MLIRCAPIIR
   CIRCTSeq
+  CIRCTSeqTransforms
   )
 
 add_mlir_public_c_api_library(CIRCTCAPISV

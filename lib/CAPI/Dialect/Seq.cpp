@@ -8,9 +8,10 @@
 
 #include "circt-c/Dialect/Seq.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
+#include "circt/Dialect/Seq/SeqPasses.h"
 
 #include "mlir/CAPI/Registration.h"
 
 MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(Sequential, seq, circt::seq::SeqDialect)
 
-void registerSeqPasses() { circt::seq::registerSeqPasses(); }
+void registerSeqPasses() { circt::seq::registerPasses(); }

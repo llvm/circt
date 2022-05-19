@@ -16,14 +16,6 @@
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Dialect.h"
 
-namespace circt {
-namespace seq {
-
-void registerSeqPasses();
-
-} // namespace seq
-} // namespace circt
-
 // Pull in the dialect definition.
 #include "circt/Dialect/Seq/SeqDialect.h.inc"
 

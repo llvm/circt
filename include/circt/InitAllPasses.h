@@ -25,7 +25,7 @@
 #include "circt/Dialect/LLHD/Transforms/Passes.h"
 #include "circt/Dialect/MSFT/MSFTDialect.h"
 #include "circt/Dialect/SV/SVPasses.h"
-#include "circt/Dialect/Seq/SeqDialect.h"
+#include "circt/Dialect/Seq/SeqPasses.h"
 #include "circt/Transforms/Passes.h"
 
 namespace circt {
@@ -44,7 +44,7 @@ inline void registerAllPasses() {
   fsm::registerPasses();
   llhd::initLLHDTransformationPasses();
   msft::registerMSFTPasses();
-  seq::registerSeqPasses();
+  seq::registerPasses();
   sv::registerPasses();
   handshake::registerPasses();
   hw::registerPasses();
