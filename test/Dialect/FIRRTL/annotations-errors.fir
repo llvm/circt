@@ -155,36 +155,36 @@ circuit Foo: %[[{"a":null,"target":"~Foo|Foo/baz:Bar"}]]
     inst bar of Bar
 
 ; // -----
-; This should work, but for now we are just checking that the annotation parses 
-; into a path, not that the application is correct.  This is pending GC handling 
-; nlas. 
+; This should work, but for now we are just checking that the annotation parses
+; into a path, not that the application is correct.  This is pending GC handling
+; nlas.
 
 ; expected-error @+2 {{unapplied annotations with target '~NLAParse|A_companion' and payload '[{class = "sifive.enterprise.grandcentral.ViewAnnotation", id = 0 : i64, name = "A", type = "companion"}]'}}
 ; expected-error @+1 {{unapplied annotations with target '~NLAParse|FooBar>clock' and payload '[{class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 1 : i64, target = []}, {class = "firrtl.transforms.DontTouchAnnotation", target = []}]'}}
 circuit NLAParse : %[[
   {
-   "class": "sifive.enterprise.grandcentral.GrandCentralView$SerializedViewAnnotation", 
-    "companion": "~NLAParse|A_companion", 
-    "name": "A", 
-    "parent": "~NLAParse|DUT", 
+   "class": "sifive.enterprise.grandcentral.GrandCentralView$SerializedViewAnnotation",
+    "companion": "~NLAParse|A_companion",
+    "name": "A",
+    "parent": "~NLAParse|DUT",
     "view": {
-      "class": "sifive.enterprise.grandcentral.AugmentedBundleType", 
-      "defName": "B", 
+      "class": "sifive.enterprise.grandcentral.AugmentedBundleType",
+      "defName": "B",
       "elements": [
         {
-          "name": "C", 
+          "name": "C",
           "tpe": {
-            "class": "sifive.enterprise.grandcentral.AugmentedBundleType", 
-            "defName": "D", 
+            "class": "sifive.enterprise.grandcentral.AugmentedBundleType",
+            "defName": "D",
             "elements": [
               {
-                "name": "clock", 
+                "name": "clock",
                 "tpe": {
-                  "class": "sifive.enterprise.grandcentral.AugmentedGroundType", 
+                  "class": "sifive.enterprise.grandcentral.AugmentedGroundType",
                   "ref": {
-                    "circuit": "NLAParse", 
-                    "component": [], 
-                    "module": "NLAParse", 
+                    "circuit": "NLAParse",
+                    "component": [],
+                    "module": "NLAParse",
                     "path": [
                       {
                         "_1": {
@@ -197,12 +197,12 @@ circuit NLAParse : %[[
                       {
                         "_1": {
                           "value": "foobar"
-                        }, 
+                        },
                         "_2": {
                           "value": "FooBar"
                         }
                       }
-                    ], 
+                    ],
                     "ref": "clock"
                   }
                 }
@@ -214,7 +214,7 @@ circuit NLAParse : %[[
     }
   }
 ]]
-  
+
   module FooBar :
 
   module DUT :
