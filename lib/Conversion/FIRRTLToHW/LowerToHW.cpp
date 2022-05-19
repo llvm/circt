@@ -325,7 +325,9 @@ struct CircuitLoweringState {
 
   InstanceGraph *getInstanceGraph() { return instanceGraph; }
 
-  StringAttr getNewMemName(StringAttr oldName) const {
+  // Given the FirMemory name, return the generated op module name. This map
+  // maintains the appropriate names for the deduped memories.
+  StringAttr getGenOpMemName(StringAttr oldName) const {
     auto iter = memoryNameMap.find(oldName);
     assert(iter != memoryNameMap.end() && "Memory name map not found");
     return iter->getSecond();
@@ -371,6 +373,10 @@ private:
   /// applicable).
   DenseMap<std::pair<Attribute, Attribute>, Attribute> instanceForceNames;
 
+  /// Map of original FirMemory name to the Generated Op name. All the deduped
+  /// memories have the same FirMemory name (because it is derived from the
+  /// memory parameters), but the generated op name depends on the MemOp name,
+  /// which is selected after dedup.
   DenseMap<StringAttr, StringAttr> memoryNameMap;
 
   /// Cached nla table analysis.
@@ -590,9 +596,12 @@ void FIRRTLModuleLowering::runOnOperation() {
         moduleHierarchyFileAttrName,
         ArrayAttr::get(&getContext(), testHarnessHierarchyFiles));
 
+  // Collect all the memories in the module. Construct the FirMemory, set the
+  // DUT flag and also record the Memop.
   auto collectFIRRTLMemories =
       [&state](FModuleOp module) -> SmallVector<FirMemory> {
     SmallVector<FirMemory> retval;
+    // Check if this module is in the DUT hierarchy.
     bool isInDut = state.isInDUT(module);
     for (auto op : module.getBody()->getOps<MemOp>()) {
       auto sum = op.getSummary();
@@ -603,10 +612,17 @@ void FIRRTLModuleLowering::runOnOperation() {
     return retval;
   };
 
+  // 1. First collect the memories as FirMemory, set the DUT flag and also
+  // record the MemOp.
+  // 2. Then Dedup the memories using the mergeFIRRTLMemories routine. This uses
+  // the memory parameters to merge memories with the exactly same parameters.
+  // 3. Then For each of the deduped memories, create the HWModuleGeneratedOp,
+  // and assign a unique name to the wrapper module based on the MemOp name. It
+  // is important to use the MemOp name because appropriate prefixes have to be
+  // respected, also the correct output directory needs to be set based on the
+  // DUT or testbench hierarchy.
   SmallVector<FirMemory> memories;
   if (getContext().isMultithreadingEnabled()) {
-    // TODO: Update this to use a mlir::parallelTransformReduce once it
-    // exists.
     memories = llvm::parallelTransformReduce(
         modulesToProcess.begin(), modulesToProcess.end(),
         SmallVector<FirMemory>(), mergeFIRRTLMemories, collectFIRRTLMemories);
@@ -736,12 +752,20 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
         b.getNamedAttr("writeClockIDs", b.getI32ArrayAttr(mem.writeClockIDs))};
 
     // Make the global module for the memory
+    // Set a name for the memory wrapper module, the combMem is an arbitrary
+    // suffix. It is important to derive the name from the original MemOp name,
+    // to respect the corresponding prefixes..
     auto memoryName = b.getStringAttr(
         namesp.newName(static_cast<MemOp>(mem.op).name() + "_combMem"));
+    // Now record this generated name for the corresponding FirMemory name,
+    // because all the memories that have the same FirMemory name, will now use
+    // this new generated name at the Instance Op. Basically this is the name
+    // used for all the deduped memories.
     state.memoryNameMap[mem.getFirMemoryName()] = memoryName;
     auto genOp = b.create<hw::HWModuleGeneratedOp>(
         mem.loc, memorySchema, memoryName, ports, StringRef(), ArrayAttr(),
         genAttrs);
+    // Also set the appropriate directory.
     if (!mem.isInDut)
       if (auto testBenchDir = state.getTestBenchDirectory())
         genOp->setAttr("output_file", testBenchDir);
@@ -2839,7 +2863,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
   }
 
   auto memModuleAttr =
-      circuitState.getNewMemName(memSummary.getFirMemoryName());
+      circuitState.getGenOpMemName(memSummary.getFirMemoryName());
 
   // Create the instance to replace the memop.
   auto inst = builder.create<hw::InstanceOp>(
