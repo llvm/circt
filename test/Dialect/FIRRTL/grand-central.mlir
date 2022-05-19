@@ -1144,6 +1144,66 @@ firrtl.circuit "InterfaceInTestHarness" attributes {
 
 // -----
 
+firrtl.circuit "ConstantsInMappingsModule" attributes {
+  annotations = [
+    {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+     defName = "Foo",
+     elements = [
+       {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+        name = "foo",
+        id = 1 : i64},
+       {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+        name = "bar",
+        id = 2 : i64},
+       {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+        name = "baz",
+        id = 3 : i64}],
+     id = 0 : i64,
+     name = "View"}]} {
+  firrtl.module @View_companion() attributes {
+    annotations = [
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
+       defName = "Foo",
+       id = 0 : i64,
+       name = "View",
+       type = "companion"}]} {}
+  firrtl.module @DUT() attributes {
+    annotations = [
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation.parent",
+       id = 0 : i64,
+       name = "view",
+       type = "parent"}
+    ]} {
+    %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
+    %a = firrtl.wire {annotations = [
+      {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+       id = 1 : i64}]} : !firrtl.uint<2>
+    firrtl.strictconnect %a, %c1_ui2 : !firrtl.uint<2>
+    %c0x8000_0000_0000_0000_ui64 = firrtl.constant 9223372036854775808 : !firrtl.uint<64>
+    %b = firrtl.wire {annotations = [
+      {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+       id = 2 : i64}]} : !firrtl.uint<64>
+    firrtl.strictconnect %b, %c0x8000_0000_0000_0000_ui64 : !firrtl.uint<64>
+    %c-1_si2 = firrtl.constant -1 : !firrtl.sint<2>
+    %c = firrtl.wire {annotations = [
+      {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+       id = 3 : i64}]} : !firrtl.sint<2>
+    firrtl.strictconnect %c, %c-1_si2 : !firrtl.sint<2>
+    firrtl.instance View_companion @View_companion()
+  }
+  firrtl.module @ConstantsInMappingsModule() {
+    firrtl.instance dut @DUT()
+  }
+}
+
+// CHECK-LABEL: "ConstantsInMappingsModule"
+// CHECK:       firrtl.module @View_mapping
+// CHECK-NEXT{LITERAL}: sv.verbatim "assign {{0}}.foo = 2'h1;"
+// CHECK-NEXT{LITERAL}: sv.verbatim "assign {{0}}.bar = 64'h8000000000000000;"
+// CHECK-NEXT{LITERAL}: sv.verbatim "assign {{0}}.baz = 2'h3;"
+
+// -----
+
 firrtl.circuit "YAMLOutputEmptyInterface" attributes {
   annotations = [
     {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
