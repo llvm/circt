@@ -19,6 +19,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/NLATable.h"
+#include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
@@ -211,13 +212,6 @@ static void moveVerifAnno(ModuleOp top, AnnotationSet &annos,
   }
 }
 
-static SmallVector<FirMemory> collectFIRRTLMemories(FModuleOp module) {
-  SmallVector<FirMemory> retval;
-  for (auto op : module.getBody()->getOps<MemOp>())
-    retval.push_back(op.getSummary());
-  return retval;
-}
-
 static SmallVector<FirMemory>
 mergeFIRRTLMemories(const SmallVector<FirMemory> &lhs,
                     SmallVector<FirMemory> rhs) {
@@ -331,6 +325,12 @@ struct CircuitLoweringState {
 
   InstanceGraph *getInstanceGraph() { return instanceGraph; }
 
+  StringAttr getNewMemName(StringAttr oldName) const {
+    auto iter = memoryNameMap.find(oldName);
+    assert(iter != memoryNameMap.end() && "Memory name map not found");
+    return iter->getSecond();
+  }
+
 private:
   friend struct FIRRTLModuleLowering;
   friend struct FIRRTLLowering;
@@ -370,6 +370,8 @@ private:
   /// A mapping of instances to their forced instantiation names (if
   /// applicable).
   DenseMap<std::pair<Attribute, Attribute>, Attribute> instanceForceNames;
+
+  DenseMap<StringAttr, StringAttr> memoryNameMap;
 
   /// Cached nla table analysis.
   NLATable *nlaTable = nullptr;
@@ -588,6 +590,19 @@ void FIRRTLModuleLowering::runOnOperation() {
         moduleHierarchyFileAttrName,
         ArrayAttr::get(&getContext(), testHarnessHierarchyFiles));
 
+  auto collectFIRRTLMemories =
+      [&state](FModuleOp module) -> SmallVector<FirMemory> {
+    SmallVector<FirMemory> retval;
+    bool isInDut = state.isInDUT(module);
+    for (auto op : module.getBody()->getOps<MemOp>()) {
+      auto sum = op.getSummary();
+      sum.isInDut = isInDut;
+      sum.op = op;
+      retval.push_back(sum);
+    }
+    return retval;
+  };
+
   SmallVector<FirMemory> memories;
   if (getContext().isMultithreadingEnabled()) {
     // TODO: Update this to use a mlir::parallelTransformReduce once it
@@ -632,6 +647,7 @@ void FIRRTLModuleLowering::runOnOperation() {
 void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
                                             CircuitLoweringState &state) {
   assert(!mems.empty());
+  auto namesp = CircuitNamespace(state.circuitOp);
   state.used_RANDOMIZE_MEM_INIT = 1;
   // Insert memories at the bottom of the file.
   OpBuilder b(state.circuitOp);
@@ -720,9 +736,15 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
         b.getNamedAttr("writeClockIDs", b.getI32ArrayAttr(mem.writeClockIDs))};
 
     // Make the global module for the memory
-    auto memoryName = mem.getFirMemoryName();
-    b.create<hw::HWModuleGeneratedOp>(mem.loc, memorySchema, memoryName, ports,
-                                      StringRef(), ArrayAttr(), genAttrs);
+    auto memoryName = b.getStringAttr(
+        namesp.newName(static_cast<MemOp>(mem.op).name() + "_combMem"));
+    state.memoryNameMap[mem.getFirMemoryName()] = memoryName;
+    auto genOp = b.create<hw::HWModuleGeneratedOp>(
+        mem.loc, memorySchema, memoryName, ports, StringRef(), ArrayAttr(),
+        genAttrs);
+    if (!mem.isInDut)
+      if (auto testBenchDir = state.getTestBenchDirectory())
+        genOp->setAttr("output_file", testBenchDir);
   }
 }
 
@@ -2816,7 +2838,8 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
     }
   }
 
-  auto memModuleAttr = SymbolRefAttr::get(memSummary.getFirMemoryName());
+  auto memModuleAttr =
+      circuitState.getNewMemName(memSummary.getFirMemoryName());
 
   // Create the instance to replace the memop.
   auto inst = builder.create<hw::InstanceOp>(

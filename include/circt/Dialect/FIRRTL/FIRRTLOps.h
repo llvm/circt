@@ -167,6 +167,8 @@ struct FirMemory {
 
   // Location is carried along but not considered part of the identity of this.
   Location loc;
+  bool isInDut = false;
+  Operation *op = nullptr;
 
   std::tuple<size_t, size_t, size_t, size_t, size_t, size_t, size_t, size_t,
              size_t, hw::WUW, SmallVector<int32_t>, uint32_t>
