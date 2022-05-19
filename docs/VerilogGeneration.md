@@ -89,6 +89,8 @@ The current set of "style" Lowering Options is:
    declaration.  Instead of `input a,\n b` this will produce
    `input a,\n input b`.  When false, ports are emitted using the same
    declaration when possible.
+ * `printDebugInfo` (default=`false`). If true, emit additional debug information
+   (e.g. inner symbols) into comments.
 
 ### Specifying `LoweringOptions` in a front-end HDL tool
 

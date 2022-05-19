@@ -113,6 +113,9 @@ struct LoweringOptions {
   /// (each includes direction and type (e.g., `input [3:0]`)).
   /// When false (default), ports share declarations when possible.
   bool disallowPortDeclSharing = false;
+
+  /// Print debug info.
+  bool printDebugInfo = false;
 };
 
 /// Register commandline options for the verilog emitter.
