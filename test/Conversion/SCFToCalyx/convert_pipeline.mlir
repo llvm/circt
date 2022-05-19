@@ -202,7 +202,8 @@ func.func @dot(%arg0: memref<64xi32>, %arg1: memref<64xi32>) -> i32 {
 // CHECK:       calyx.comb_group @[[COND_GROUP:.+]] {
 // CHECK:       calyx.group @[[LOAD_GROUP:.+]] {
 // CHECK:       calyx.group @[[INCR_GROUP:.+]] {
-// CHECK:       calyx.group @[[STORE_GROUP:.+]] {
+// CHECK:       calyx.group @[[STORE_GROUP1:.+]] {
+// CHECK:       calyx.group @[[STORE_GROUP2:.+]] {
 // CHECK-DAG:         calyx.assign %[[SLICE0_IN]] = %[[ITER_ARG0_OUT]]
 // CHECK-DAG:         calyx.assign %[[MEM1_WRITE_DATA]] = %[[S0_REG0_OUT]]
 // CHECK-DAG:         calyx.assign %[[MEM1_ADDR]] = %[[SLICE0_OUT]]
@@ -213,7 +214,8 @@ func.func @dot(%arg0: memref<64xi32>, %arg1: memref<64xi32>) -> i32 {
 // CHECK-NEXT: calyx.par {
 // CHECK-NEXT: calyx.enable @[[LOAD_GROUP]]
 // CHECK-NEXT: calyx.enable @[[INCR_GROUP]]
-// CHECK-NEXT: calyx.enable @[[STORE_GROUP]]
+// CHECK-NEXT: calyx.enable @[[STORE_GROUP1]]
+// CHECK-NEXT: calyx.enable @[[STORE_GROUP2]]
 // CHECK-NEXT: }
 module {
   func.func @store(%arg0: memref<4xi32>, %arg1: memref<4xi32>) {
@@ -230,6 +232,7 @@ module {
         staticlogic.pipeline.register %1, %2 : i32, index
       } : i32, index
       staticlogic.pipeline.stage start = 1 {
+        memref.store %0#0, %arg1[%arg2] : memref<4xi32>
         memref.store %0#0, %arg1[%arg2] : memref<4xi32>
         staticlogic.pipeline.register
       }

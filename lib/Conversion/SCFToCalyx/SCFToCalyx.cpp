@@ -1802,12 +1802,14 @@ class BuildPipelineRegs : public FuncOpPartialLoweringPattern {
         for (auto &use : stageResult.getUses()) {
           unsigned operandNo = use.getOperandNumber();
           if (auto term =
-                  dyn_cast<staticlogic::PipelineTerminatorOp>(use.getOwner());
-              term && operandNo < term.iter_args().size()) {
-            WhileOpInterface whileOp(stage->getParentOp());
-            auto reg = getComponentState().getWhileIterReg(whileOp, operandNo);
-            getComponentState().addPipelineReg(stage, reg, i);
-            isIterArg = true;
+                  dyn_cast<staticlogic::PipelineTerminatorOp>(use.getOwner())) {
+            if (operandNo < term.iter_args().size()) {
+              WhileOpInterface whileOp(stage->getParentOp());
+              auto reg =
+                  getComponentState().getWhileIterReg(whileOp, operandNo);
+              getComponentState().addPipelineReg(stage, reg, i);
+              isIterArg = true;
+            }
           }
         }
         if (isIterArg)
@@ -1846,10 +1848,9 @@ class BuildPipelineGroups : public FuncOpPartialLoweringPattern {
                            PatternRewriter &rewriter) const override {
     for (auto pipeline : funcOp.getOps<staticlogic::PipelineWhileOp>())
       for (auto stage :
-           pipeline.getStagesBlock().getOps<staticlogic::PipelineStageOp>()) {
+           pipeline.getStagesBlock().getOps<staticlogic::PipelineStageOp>())
         if (failed(buildStageGroups(pipeline, stage, rewriter)))
           return failure();
-      }
 
     return success();
   }
@@ -1892,19 +1893,13 @@ class BuildPipelineGroups : public FuncOpPartialLoweringPattern {
     if (isStageWithNoPipelinedValues) {
       // Covers the case where there are no values that need to be passed
       // through to the next stage, e.g., some intermediary store.
-      auto it = llvm::find_if(stage.getBodyBlock(), [&](auto &op) {
+      for (auto &op : stage.getBodyBlock()) {
         Optional<calyx::GroupOp> group =
             getComponentState().getNonPipelinedGroupFrom<calyx::GroupOp>(&op);
-
         if (!group.hasValue())
-          return false;
-
+          continue;
         updatePrologueAndEpilogue(*group);
-        return true;
-      });
-
-      if (it == stage.getBodyBlock().end())
-        return failure();
+      }
     }
 
     for (auto &operand : operands) {
