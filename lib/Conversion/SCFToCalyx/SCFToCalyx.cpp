@@ -958,7 +958,7 @@ private:
   template <typename TGroupOp>
   TGroupOp createGroupForOp(PatternRewriter &rewriter, Operation *op) const {
     Block *block = op->getBlock();
-    std::string groupName = getComponentState().getUniqueName(
+    auto groupName = getComponentState().getUniqueName(
         getComponentState().getProgramState().blockName(block));
     return createGroup<TGroupOp>(rewriter, getComponentState().getComponentOp(),
                                  op->getLoc(), groupName);
@@ -1800,13 +1800,12 @@ class BuildPipelineRegs : public FuncOpPartialLoweringPattern {
         Value stageResult = stage.getResult(i);
         bool isIterArg = false;
         for (auto &use : stageResult.getUses()) {
-          unsigned operandNo = use.getOperandNumber();
           if (auto term =
                   dyn_cast<staticlogic::PipelineTerminatorOp>(use.getOwner())) {
-            if (operandNo < term.iter_args().size()) {
+            if (use.getOperandNumber() < term.iter_args().size()) {
               WhileOpInterface whileOp(stage->getParentOp());
-              auto reg =
-                  getComponentState().getWhileIterReg(whileOp, operandNo);
+              auto reg = getComponentState().getWhileIterReg(
+                  whileOp, use.getOperandNumber());
               getComponentState().addPipelineReg(stage, reg, i);
               isIterArg = true;
             }
