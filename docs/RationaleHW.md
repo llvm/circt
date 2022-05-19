@@ -501,7 +501,7 @@ typedef logic mytype;
 We take an approach to type canonicalization similar to [Clang](https://clang.llvm.org/docs/InternalsManual.html#canonical-types).
 
 To implement this, CIRCT has an extra layer of indirection in the ODS
-declarations of types that may be targetted by Type Declarations. This layer
+declarations of types that may be targeted by Type Declarations. This layer
 makes it possible to generically let operations declare their operands and
 results to be of a specific type, and also accept type declarations that
 canonicalize to that type.
