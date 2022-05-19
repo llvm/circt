@@ -2342,19 +2342,19 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
         Twine("__") + moduleName + Twine("__") + name.getValue()));
   }
 
-  bool hasChiselName = false;
+  bool hasUserSpecifiedName = false;
   if (!symName && !isUselessName(name)) {
     auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
     symName = builder.getStringAttr(moduleNamespace.newName(
         Twine("__") + moduleName + Twine("__") + name.getValue()));
-    hasChiselName = true;
+    hasUserSpecifiedName = true;
   }
   // This is not a temporary wire created by the compiler, so attach a symbol
   // name.
   auto wire =
       builder.create<sv::WireOp>(op.getLoc(), resultType, name, symName);
-  if (hasChiselName)
-    wire->setAttr("chisel_name", builder.getUnitAttr());
+  if (hasUserSpecifiedName)
+    wire->setAttr("user_specified_name", builder.getUnitAttr());
   return setLowering(op, wire);
 }
 
@@ -2401,18 +2401,18 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
                                     name.getValue());
   }
 
-  bool hasChiselName = false;
+  bool hasUserSpecifiedName = false;
   if (!symName && !isUselessName(name)) {
     auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
     symName = builder.getStringAttr(Twine("__") + moduleName + Twine("__") +
                                     name.getValue());
-    hasChiselName = true;
+    hasUserSpecifiedName = true;
   }
 
   if (symName) {
     auto wire = builder.create<sv::WireOp>(operand.getType(), name, symName);
-    if (hasChiselName)
-      wire->setAttr("chisel_name", builder.getUnitAttr());
+    if (hasUserSpecifiedName)
+      wire->setAttr("user_specified_name", builder.getUnitAttr());
     builder.create<sv::AssignOp>(wire, operand);
     operand = builder.create<sv::ReadInOutOp>(wire);
   }
