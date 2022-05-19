@@ -928,7 +928,7 @@ circuit GCTInterface : %[
     ; members of the interface inside the parent.  Both port "a" and register
     ; "r" should be annotated.
     ; CHECK: firrtl.module @GCTInterface
-    ; CHECK-SAME: %a: !firrtl.uint<1> sym @a [
+    ; CHECK-SAME: %a: !firrtl.uint<1> [
     ; CHECK-SAME:   #firrtl.subAnno<fieldID = 0, {
     ; CHECK-SAME:     class = "sifive.enterprise.grandcentral.AugmentedGroundType",
     ; CHECK-SAME:     id = [[ID_port]] : i64}>

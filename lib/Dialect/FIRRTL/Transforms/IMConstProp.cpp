@@ -34,6 +34,12 @@ static bool isDeletableWireOrReg(Operation *op) {
   if (auto wire = dyn_cast<WireOp>(op))
     if (!isUselessName(wire.name()))
       return false;
+  // TODO: This is a dirty hack that is blocking wire removal if this is part of
+  // a Grand Central interface.  This should eventually be removed in favor of
+  // better annotation handling.
+  if (AnnotationSet(op).hasAnnotation(
+          "sifive.enterprise.grandcentral.AugmentedGroundType"))
+    return false;
   return isWireOrReg(op) && !hasDontTouch(op);
 }
 

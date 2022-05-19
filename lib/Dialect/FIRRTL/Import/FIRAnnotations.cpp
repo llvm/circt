@@ -795,7 +795,7 @@ static Optional<DictionaryAttr> parseAugmentedType(
     auto localTarget = std::get<0>(expandNonLocal(target.first).back());
     auto subTargets = target.second;
 
-    NamedAttrList elementIface, elementScattered, dontTouch;
+    NamedAttrList elementIface, elementScattered;
 
     // Populate the annotation for the interface element.
     elementIface.append("class", classAttr);
@@ -806,20 +806,13 @@ static Optional<DictionaryAttr> parseAugmentedType(
     // Populate an annotation that will be scattered onto the element.
     elementScattered.append("class", classAttr);
     elementScattered.append("id", id);
-    // Populate a dont touch annotation for the scattered element.
-    dontTouch.append(
-        "class",
-        StringAttr::get(context, "firrtl.transforms.DontTouchAnnotation"));
     // If there are sub-targets, then add these.
     if (subTargets) {
       elementScattered.append("target", subTargets);
-      dontTouch.append("target", subTargets);
     }
 
     newAnnotations[localTarget].push_back(
         DictionaryAttr::getWithSorted(context, elementScattered));
-    newAnnotations[localTarget].push_back(
-        DictionaryAttr::getWithSorted(context, dontTouch));
 
     return DictionaryAttr::getWithSorted(context, elementIface);
   }

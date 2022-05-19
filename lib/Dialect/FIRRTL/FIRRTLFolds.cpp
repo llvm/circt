@@ -1471,7 +1471,13 @@ static LogicalResult canonicalizeSingleSetConnect(StrictConnectOp op,
     }
   }
 
-  if (isUselessName(connectedDecl)) {
+  // TODO: This is a hack to prevent removal if the operation is used by the
+  // Grand Central pass.  This should be changed later to use something less
+  // brittle.
+  auto gctTap =
+      AnnotationSet(connectedDecl)
+          .hasAnnotation("sifive.enterprise.grandcentral.AugmentedGroundType");
+  if (isUselessName(connectedDecl) && !gctTap) {
     // Replace all things *using* the decl with the constant/port, and
     // remove the declaration.
     rewriter.replaceOp(connectedDecl, replacement);
