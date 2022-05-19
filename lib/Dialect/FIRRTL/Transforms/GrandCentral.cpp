@@ -14,6 +14,7 @@
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/NLATable.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
@@ -816,8 +817,30 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
         assert(srcPaths.size() == 1 &&
                "Unable to handle multiply instantiated companions");
 
-        // Add the root module.
         path += " = ";
+
+        // There are two posisibilites for what this is tapping:
+        //   1. This is a constant that will be synced into the mappings file.
+        //   2. This is something else and we need an XMR.
+        // Handle case (1) here and exit.  Handle case (2) following.
+        auto driver = getModuleScopedDriver(leafValue, true, true, false);
+        auto uloc = builder.getUnknownLoc();
+        if (driver) {
+          if (auto constant =
+                  dyn_cast_or_null<ConstantOp>(driver.getDefiningOp())) {
+            path.append(Twine(constant.value().getBitWidth()));
+            path += "'h";
+            path.append(Twine(constant.value().getExtValue()));
+            builder.create<sv::VerbatimOp>(
+                uloc,
+                StringAttr::get(&getContext(),
+                                "assign " + path.getString() + ";"),
+                ValueRange{}, ArrayAttr::get(&getContext(), path.getSymbols()));
+            return true;
+          }
+        }
+
+        // Add the root module.
         path += FlatSymbolRefAttr::get(SymbolTable::getSymbolName(
             srcPaths[0].empty()
                 ? enclosing
@@ -838,7 +861,6 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
           }
 
         // Add the leaf value to the path.
-        auto uloc = builder.getUnknownLoc();
         path += '.';
         if (auto blockArg = leafValue.dyn_cast<BlockArgument>()) {
           auto module = cast<FModuleOp>(blockArg.getOwner()->getParentOp());
