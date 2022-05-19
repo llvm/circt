@@ -185,6 +185,11 @@ include_directories(${MLIR_INCLUDE_DIRS})
 include_directories(${CIRCT_MAIN_INCLUDE_DIR})
 include_directories(${CIRCT_INCLUDE_DIR})
 
+# Set the release tag.
+option(CIRCT_RELEASE_TAG_ENABLED "Emit the release tag to output." ON)
+set(CIRCT_RELEASE_TAG "circtorg" CACHE STRING
+    "Prefix of the release tag (e.g. circtorg, pycde and sifive).")
+
 #-------------------------------------------------------------------------------
 # Verilator Configuration
 #-------------------------------------------------------------------------------

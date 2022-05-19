@@ -3,24 +3,29 @@
 #   IN_FILE             - An absolute path of Version.cpp.in
 #   OUT_FILE            - An absolute path of Version.cpp
 #   RELEASE_PATTERN      - A pattern to search release tags
-
-message(STATUS "Generating ${OUT_FILE} from ${IN_FILE} by `git describe --dirty --tags --match ${RELEASE_PATTERN}`")
+#   DRY_RUN             - If true, make the version unknown.
 
 set(GIT_DESCRIBE_DEFAULT "unknown git version")
-find_package(Git QUIET)
-if (Git_FOUND)
-  execute_process(COMMAND ${GIT_EXECUTABLE} describe --dirty --tags --match ${RELEASE_PATTERN}
-    RESULT_VARIABLE GIT_OUTPUT_RESULT
-    OUTPUT_VARIABLE GIT_DESCRIBE_OUTPUT
-    OUTPUT_STRIP_TRAILING_WHITESPACE)
-  if (NOT ${GIT_OUTPUT_RESULT} EQUAL 0)
-    message(WARNING "git describe failed, set version to ${GIT_DESCRIBE_DEFAULT}")
+if (DRY_RUN)
+  message(STATUS "Version generation is disabled.")
+  set(GIT_DESCRIBE_OUTPUT "${GIT_DESCRIBE_DEFAULT}")
+else ()
+  message(STATUS "Generating ${OUT_FILE} from ${IN_FILE} by `git describe --dirty --tags --match ${RELEASE_PATTERN}`")
+  find_package(Git QUIET)
+  if (Git_FOUND)
+    execute_process(COMMAND ${GIT_EXECUTABLE} describe --dirty --tags --match ${RELEASE_PATTERN}
+      RESULT_VARIABLE GIT_OUTPUT_RESULT
+      OUTPUT_VARIABLE GIT_DESCRIBE_OUTPUT
+      OUTPUT_STRIP_TRAILING_WHITESPACE)
+    if (NOT ${GIT_OUTPUT_RESULT} EQUAL 0)
+      message(WARNING "git describe failed, set version to ${GIT_DESCRIBE_DEFAULT}")
+      set(GIT_DESCRIBE_OUTPUT "${GIT_DESCRIBE_DEFAULT}")
+    endif ()
+  else ()
+    message(WARNING "Git not found: ${GIT_EXECUTABLE}, set version to ${GIT_DESCRIBE_DEFAULT}")
     set(GIT_DESCRIBE_OUTPUT "${GIT_DESCRIBE_DEFAULT}")
   endif ()
-else ()
-  message(WARNING "Git not found: ${GIT_EXECUTABLE}, set version to ${GIT_DESCRIBE_DEFAULT}")
-  set(GIT_DESCRIBE_OUTPUT "${GIT_DESCRIBE_DEFAULT}")
-endif ()
+endif()
 
 # This command will prepend CMAKE_CURRENT_{SOURCE,BINARY}_DIR if <input> or <output> is relative,
 # that's why I need IN_FILE and OUT_FILE to be absolute path.
