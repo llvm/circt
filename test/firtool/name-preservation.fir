@@ -5,7 +5,6 @@ circuit Foo:
   module Foo:
     input a: {a: UInt<1>, flip b: UInt<1>}
     output b: {a: UInt<1>, flip b: UInt<1>}
-    output c: UInt<1>
 
     ; Unnamed wires are always removed.
     ; CHECK-NOT: wire _x_a;
@@ -28,10 +27,5 @@ circuit Foo:
     ; CHECK:        wire y;
     node y = _y_a
 
-    ; Named constant wires are always deleted.
-    ; CHECK-NOT: wire z;
-    node z = UInt<1>(1);
-
     b.a <= y
     x.b <= b.b
-    c <= z

@@ -2270,6 +2270,24 @@ SubExprInfo ExprEmitter::visitUnhandledExpr(Operation *op) {
 // NameCollector
 //===----------------------------------------------------------------------===//
 
+static std::pair<ConstantOp, AssignOp> isSingleConstantAssign(Operation *op) {
+  auto wire = dyn_cast<WireOp>(op);
+  if (!wire)
+    return {};
+  ConstantOp con;
+  AssignOp assignOp;
+  for (auto *user : wire->getUsers()) {
+    auto assign = dyn_cast<AssignOp>(*user);
+    if (assign && assignOp)
+      return {};
+    assignOp = assign;
+  }
+  if (!assignOp)
+    return {};
+  return std::make_pair(
+      dyn_cast_or_null<ConstantOp>(assignOp.src().getDefiningOp()), assignOp);
+}
+
 namespace {
 class NameCollector {
 public:
@@ -3682,13 +3700,11 @@ void StmtEmitter::collectNamesEmitDecls(Block &block) {
       emitter.expressionsEmittedIntoDecl.insert(op);
     }
 
-    if (auto wire = dyn_cast<WireOp>(op)) {
-      auto [constOp, assignOp] = circt::sv::getSingleConstantAssign(wire);
-      if (constOp) {
-        os << " = ";
-        emitExpression(constOp, opsForLocation, ForceEmitMultiUse);
-        emitter.assignsInlined.insert(assignOp);
-      }
+    auto [constOp, assignOp] = isSingleConstantAssign(op);
+    if (constOp) {
+      os << " = ";
+      emitExpression(constOp, opsForLocation, ForceEmitMultiUse);
+      emitter.assignsInlined.insert(assignOp);
     }
 
     os << ';';

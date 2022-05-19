@@ -20,12 +20,7 @@
 #include "llvm/ADT/StringSet.h"
 
 namespace circt {
-namespace hw {
-class ConstantOp;
-}
 namespace sv {
-class AssignOp;
-class WireOp;
 
 /// Given string \p origName, generate a new name if it conflicts with any
 /// keyword or any other name in the set \p recordNames. Use the int \p
@@ -46,14 +41,6 @@ StringRef legalizeName(llvm::StringRef name, llvm::StringSet<> &recordNames,
 ///
 /// Call \c legalizeName() to obtain a legal version of the name.
 bool isNameValid(llvm::StringRef name);
-
-/// Return a single assignment to the wire. If the wire has users other than
-/// read_inout or assign op, it returns nullptr for the safety.
-AssignOp getSingleAssignOp(WireOp wire);
-
-/// Return a pair of a single assignment and its constant source value by
-/// using `getSingleAssignOp`.
-std::pair<hw::ConstantOp, AssignOp> getSingleConstantAssign(WireOp wire);
 
 } // namespace sv
 } // namespace circt

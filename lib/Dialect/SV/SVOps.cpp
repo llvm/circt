@@ -47,32 +47,6 @@ LogicalResult sv::verifyInNonProceduralRegion(Operation *op) {
   return failure();
 }
 
-/// Return a single assignment to the wire. If the wire has users other than
-/// read_inout or assign op, it returns nullptr for the safety.
-sv::AssignOp circt::sv::getSingleAssignOp(sv::WireOp wire) {
-  AssignOp assignOp;
-  for (auto *user : wire->getUsers()) {
-    // If there is an unknown operation, return nullptr.
-    if (!isa<sv::AssignOp, sv::ReadInOutOp>(*user))
-      return {};
-    auto assign = dyn_cast<sv::AssignOp>(*user);
-    if (assign && assignOp)
-      return {};
-    assignOp = assign;
-  }
-
-  return assignOp;
-}
-
-/// Return a pair of a single assignment and its constant source value.
-std::pair<hw::ConstantOp, sv::AssignOp>
-circt::sv::getSingleConstantAssign(sv::WireOp wire) {
-  auto assign = circt::sv::getSingleAssignOp(wire);
-  if (!assign)
-    return {};
-  return {assign.src().getDefiningOp<hw::ConstantOp>(), assign};
-}
-
 /// Returns the operation registered with the given symbol name with the regions
 /// of 'symbolTableOp'. recurse through nested regions which don't contain the
 /// symboltable trait. Returns nullptr if no valid symbol was found.

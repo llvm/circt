@@ -269,22 +269,6 @@ void PrettifyVerilogPass::processPostOrder(Block &body) {
         wire->erase();
         continue;
       }
-
-      // If the name wire is a constant wire, it will become dead at
-      // ExportVerilog so replace the wire with constant op.
-      auto [constOp, _] = getSingleConstantAssign(wire);
-      if (constOp) {
-        // Replace the wire read with constant op.
-        while (!wire.use_empty()) {
-          auto user = *wire->getUsers().begin();
-          if (auto read = dyn_cast<sv::ReadInOutOp>(user))
-            read->replaceAllUsesWith(constOp);
-          user->erase();
-        }
-
-        wire->erase();
-        continue;
-      }
     }
 
     // Sink and duplicate unary operators.
