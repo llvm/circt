@@ -31,8 +31,6 @@ using namespace hw;
 
 namespace {
 
-using InstanceParameters = llvm::DenseMap<hw::HWModuleOp, ArrayAttr>;
-
 // Generates a module name by composing the name of 'moduleOp' and the set of
 // provided 'parameters'.
 static std::string generateModuleName(SymbolCache &symbolCache,
@@ -81,6 +79,37 @@ static FailureOr<Value> narrowValueToArrayWidth(OpBuilder &builder, Value array,
                           .getResult();
 }
 
+static hw::HWModuleOp targetModuleOp(hw::InstanceOp instanceOp,
+                                     const SymbolCache &sc) {
+  auto *targetOp = sc.getDefinition(instanceOp.moduleNameAttr());
+  auto targetHWModule = dyn_cast<hw::HWModuleOp>(targetOp);
+  if (!targetHWModule)
+    return {}; // Won't specialize external modules.
+
+  if (targetHWModule.parameters().size() == 0)
+    return {}; // nothing to record or specialize
+
+  return targetHWModule;
+}
+
+// Stores unique module parameters and references to them
+struct ParameterSpecializationRegistry {
+  llvm::MapVector<hw::HWModuleOp, llvm::SetVector<ArrayAttr>>
+      uniqueModuleParameters;
+
+  bool isRegistered(hw::HWModuleOp moduleOp, ArrayAttr parameters,
+                    const SymbolCache &sc) const {
+    auto it = uniqueModuleParameters.find(moduleOp);
+    return it != uniqueModuleParameters.end() &&
+           it->second.contains(parameters);
+  }
+
+  void registerModuleOp(hw::HWModuleOp moduleOp, ArrayAttr parameters,
+                        SymbolCache &sc) {
+    uniqueModuleParameters[moduleOp].insert(parameters);
+  }
+};
+
 struct EliminateParamValueOpPattern : public OpRewritePattern<ParamValueOp> {
   EliminateParamValueOpPattern(MLIRContext *context, ArrayAttr parameters)
       : OpRewritePattern<ParamValueOp>(context), parameters(parameters) {}
@@ -88,12 +117,13 @@ struct EliminateParamValueOpPattern : public OpRewritePattern<ParamValueOp> {
   LogicalResult matchAndRewrite(ParamValueOp op,
                                 PatternRewriter &rewriter) const override {
     // Substitute the param value op with an evaluated constant operation.
-    FailureOr<APInt> paramValue =
+    FailureOr<Attribute> evaluated =
         evaluateParametricAttr(op.getLoc(), parameters, op.value());
-    if (failed(paramValue))
+    if (failed(evaluated))
       return failure();
     rewriter.replaceOpWithNewOp<hw::ConstantOp>(
-        op, op.getType(), paramValue.getValue().getSExtValue());
+        op, op.getType(),
+        evaluated->cast<IntegerAttr>().getValue().getSExtValue());
     return success();
   }
 
@@ -101,8 +131,8 @@ struct EliminateParamValueOpPattern : public OpRewritePattern<ParamValueOp> {
 };
 
 // hw.array_get operations require indexes to be of equal width of the
-// array itself. Since indexes may originate from constants or parameters, emit
-// comb.extract operations to fulfill this invariant.
+// array itself. Since indexes may originate from constants or parameters,
+// emit comb.extract operations to fulfill this invariant.
 struct NarrowArrayGetIndexPattern : public OpConversionPattern<ArrayGetOp> {
 public:
   using OpConversionPattern<ArrayGetOp>::OpConversionPattern;
@@ -185,6 +215,54 @@ static void populateTypeConversion(Location loc, TypeConverter &typeConverter,
   typeConverter.addConversion([](mlir::IntegerType type) { return type; });
 }
 
+// Registers any nested parametric instance ops of `target` for the next
+// specialization loop
+static LogicalResult registerNestedParametricInstanceOps(
+    HWModuleOp target, ArrayAttr parameters, SymbolCache &sc,
+    const ParameterSpecializationRegistry &currentRegistry,
+    ParameterSpecializationRegistry &nextRegistry,
+    llvm::DenseMap<hw::HWModuleOp,
+                   llvm::DenseMap<ArrayAttr, llvm::SmallVector<hw::InstanceOp>>>
+        &parametersUsers) {
+  // Register any nested parametric instance ops for the next loop
+  auto walkResult = target->walk([&](InstanceOp instanceOp) -> WalkResult {
+    auto instanceParameters = instanceOp.parameters();
+    // We can ignore non-parametric instances
+    if (instanceParameters.empty())
+      return WalkResult::advance();
+
+    // Replace instance parameters with evaluated versions
+    llvm::SmallVector<Attribute> evaluatedInstanceParameters;
+    evaluatedInstanceParameters.reserve(instanceParameters.size());
+    for (auto instanceParameter : instanceParameters) {
+      auto instanceParameterDecl = instanceParameter.cast<hw::ParamDeclAttr>();
+      auto instanceParameterValue = instanceParameterDecl.getValue();
+      auto evaluated = evaluateParametricAttr(target.getLoc(), parameters,
+                                              instanceParameterValue);
+      if (failed(evaluated))
+        return WalkResult::interrupt();
+      evaluatedInstanceParameters.push_back(hw::ParamDeclAttr::get(
+          instanceParameterDecl.getName(), evaluated.getValue()));
+    }
+
+    auto evaluatedInstanceParametersAttr =
+        ArrayAttr::get(target.getContext(), evaluatedInstanceParameters);
+
+    if (auto targetHWModule = targetModuleOp(instanceOp, sc)) {
+      if (!currentRegistry.isRegistered(targetHWModule,
+                                        evaluatedInstanceParametersAttr, sc))
+        nextRegistry.registerModuleOp(targetHWModule,
+                                      evaluatedInstanceParametersAttr, sc);
+      parametersUsers[targetHWModule][evaluatedInstanceParametersAttr]
+          .push_back(instanceOp);
+    }
+
+    return WalkResult::advance();
+  });
+
+  return failure(walkResult.wasInterrupted());
+}
+
 // Specializes the provided 'base' module into the 'target' module. By doing
 // so, we create a new module which
 // 1. has no parameters
@@ -193,9 +271,13 @@ static void populateTypeConversion(Location loc, TypeConverter &typeConverter,
 // 3. Has a top-level interface with any parametric types resolved.
 // 4. Any references to module parameters have been replaced with the
 // parameter value.
-static LogicalResult specializeModule(OpBuilder builder, ArrayAttr parameters,
-                                      SymbolCache &sc, HWModuleOp source,
-                                      HWModuleOp &target) {
+static LogicalResult specializeModule(
+    OpBuilder builder, ArrayAttr parameters, SymbolCache &sc, HWModuleOp source,
+    HWModuleOp &target, const ParameterSpecializationRegistry &currentRegistry,
+    ParameterSpecializationRegistry &nextRegistry,
+    llvm::DenseMap<hw::HWModuleOp,
+                   llvm::DenseMap<ArrayAttr, llvm::SmallVector<hw::InstanceOp>>>
+        &parametersUsers) {
   auto *ctx = builder.getContext();
   // Update the types of the source module ports based on evaluating any
   // parametric in/output ports.
@@ -243,9 +325,15 @@ static LogicalResult specializeModule(OpBuilder builder, ArrayAttr parameters,
       mapper.set(oldRes, newRes);
   }
 
+  // Register any nested parametric instance ops for the next loop
+  auto nestedRegistrationResult = registerNestedParametricInstanceOps(
+      target, parameters, sc, currentRegistry, nextRegistry, parametersUsers);
+  if (failed(nestedRegistrationResult))
+    return failure();
+
   // We've now created a separate copy of the source module with a rewritten
-  // top-level interface. Next, we enter the module to convert parametric types
-  // within operations.
+  // top-level interface. Next, we enter the module to convert parametric
+  // types within operations.
   RewritePatternSet patterns(ctx);
   TypeConverter t;
   populateTypeConversion(target.getLoc(), t, parameters);
@@ -267,50 +355,73 @@ void HWSpecializePass::runOnOperation() {
   ModuleOp module = getOperation();
 
   // Record unique module parameters and references to these.
-  llvm::DenseMap<hw::HWModuleOp, llvm::SetVector<ArrayAttr>>
-      uniqueModuleParameters;
   llvm::DenseMap<hw::HWModuleOp,
                  llvm::DenseMap<ArrayAttr, llvm::SmallVector<hw::InstanceOp>>>
       parametersUsers;
+  ParameterSpecializationRegistry registry;
 
   // Maintain a symbol cache for fast lookup during module specialization.
   SymbolCache sc;
   sc.addDefinitions(module);
 
   for (auto hwModule : module.getOps<hw::HWModuleOp>()) {
+    // If this module is parametric, defer registering its parametric
+    // instantiations until this module is specialized
+    if (!hwModule.parameters().empty())
+      continue;
     for (auto instanceOp : hwModule.getOps<hw::InstanceOp>()) {
-      auto *targetOp = sc.getDefinition(instanceOp.moduleNameAttr());
-      auto targetHWModule = dyn_cast<hw::HWModuleOp>(targetOp);
-      if (!targetHWModule)
-        continue; // Won't specialize external modules.
+      if (auto targetHWModule = targetModuleOp(instanceOp, sc)) {
+        auto parameters = instanceOp.parameters();
+        registry.registerModuleOp(targetHWModule, parameters, sc);
 
-      if (targetHWModule.parameters().size() == 0)
-        continue; // nothing to record or specializeauto paramValue =.
-
-      auto parameters = instanceOp.parameters();
-      uniqueModuleParameters[targetHWModule].insert(parameters);
-      parametersUsers[targetHWModule][parameters].push_back(instanceOp);
+        parametersUsers[targetHWModule][parameters].push_back(instanceOp);
+      }
     }
   }
 
   // Create specialized modules.
   OpBuilder builder = OpBuilder(&getContext());
   builder.setInsertionPointToStart(module.getBody());
-  for (auto it : uniqueModuleParameters) {
-    for (auto parameters : it.getSecond()) {
-      HWModuleOp specializedModule;
-      if (failed(specializeModule(builder, parameters, sc, it.getFirst(),
-                                  specializedModule))) {
-        signalPassFailure();
-        return;
+  llvm::DenseMap<hw::HWModuleOp, llvm::DenseMap<ArrayAttr, hw::HWModuleOp>>
+      specializations;
+
+  // For every module specialization, any nested parametric modules will be
+  // registered for the next loop. We loop until no new nested modules have been
+  // registered.
+  while (!registry.uniqueModuleParameters.empty()) {
+    // The registry for the next specialization loop
+    ParameterSpecializationRegistry nextRegistry;
+    for (auto it : registry.uniqueModuleParameters) {
+      for (auto parameters : it.second) {
+        HWModuleOp specializedModule;
+        if (failed(specializeModule(builder, parameters, sc, it.first,
+                                    specializedModule, registry, nextRegistry,
+                                    parametersUsers))) {
+          signalPassFailure();
+          return;
+        }
+
+        // Extend the symbol cache with the newly created module.
+        sc.addDefinition(specializedModule.getNameAttr(), specializedModule);
+
+        // Add the specialization
+        specializations[it.first][parameters] = specializedModule;
       }
+    }
 
-      // Extend the symbol cache with the newly created module.
-      sc.addDefinition(specializedModule.getNameAttr(), specializedModule);
+    // Transfer newly registered specializations to iterate over
+    registry.uniqueModuleParameters =
+        std::move(nextRegistry.uniqueModuleParameters);
+  }
 
-      // Rewrite instances of the specialized module to the specialized
-      // module.
-      for (auto instanceOp : parametersUsers[it.getFirst()][parameters]) {
+  // Rewrite instances of specialized modules to the specialized module.
+  for (auto it : specializations) {
+    auto unspecialized = it.getFirst();
+    auto &users = parametersUsers[unspecialized];
+    for (auto specialization : it.getSecond()) {
+      auto parameters = specialization.getFirst();
+      auto specializedModule = specialization.getSecond();
+      for (auto instanceOp : users[parameters]) {
         instanceOp->setAttr("moduleName",
                             FlatSymbolRefAttr::get(specializedModule));
         instanceOp->setAttr("parameters", ArrayAttr::get(&getContext(), {}));
