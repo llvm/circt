@@ -1435,6 +1435,42 @@ ParseResult JoinOp::parse(OpAsmParser &parser, OperationState &result) {
 
 void JoinOp::print(OpAsmPrinter &p) { sost::printOp(p, *this, false); }
 
+/// Based on mlir::func::CallOp::verifySymbolUses
+LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  // Check that the module attribute was specified.
+  auto fnAttr = this->moduleAttr();
+  assert(fnAttr && "requires a 'module' symbol reference attribute");
+
+  FuncOp fn = symbolTable.lookupNearestSymbolFrom<FuncOp>(*this, fnAttr);
+  if (!fn)
+    return emitOpError() << "'" << fnAttr.getValue()
+                         << "' does not reference a valid handshake function";
+
+  // Verify that the operand and result types match the callee.
+  auto fnType = fn.getFunctionType();
+  if (fnType.getNumInputs() != getNumOperands())
+    return emitOpError(
+        "incorrect number of operands for the referenced handshake function");
+
+  for (unsigned i = 0, e = fnType.getNumInputs(); i != e; ++i)
+    if (getOperand(i).getType() != fnType.getInput(i))
+      return emitOpError("operand type mismatch: expected operand type ")
+             << fnType.getInput(i) << ", but provided "
+             << getOperand(i).getType() << " for operand number " << i;
+
+  if (fnType.getNumResults() != getNumResults())
+    return emitOpError(
+        "incorrect number of results for the referenced handshake function");
+
+  for (unsigned i = 0, e = fnType.getNumResults(); i != e; ++i)
+    if (getResult(i).getType() != fnType.getResult(i))
+      return emitOpError("result type mismatch: expected result type ")
+             << fnType.getResult(i) << ", but provided "
+             << getResult(i).getType() << " for result number " << i;
+
+  return success();
+}
+
 LogicalResult InstanceOp::verify() {
   if ((*this)->getNumOperands() == 0)
     return emitOpError() << "must provide at least a control operand.";
