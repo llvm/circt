@@ -137,7 +137,7 @@ func.func @minimal() {
 // CHECK-NEXT:            calyx.enable @[[S0_GROUP2]]
 // CHECK-NEXT:            calyx.enable @[[S1_GROUP0]]
 // CHECK-NEXT:          }
-// CHECK-NEXT:          calyx.while %std_lt_0.out with @bb0_0  {
+// CHECK-NEXT:          calyx.while %[[LT_OUT]] with @[[COND_GROUP]]  {
 // CHECK-NEXT:            calyx.par  {
 // CHECK-NEXT:              calyx.enable @[[S0_GROUP0]]
 // CHECK-NEXT:              calyx.enable @[[S0_GROUP1]]
@@ -184,4 +184,60 @@ func.func @dot(%arg0: memref<64xi32>, %arg1: memref<64xi32>) -> i32 {
     staticlogic.pipeline.terminator iter_args(%1#2, %3), results(%3) : (index, i32) -> i32
   }
   return %0 : i32
+}
+
+// -----
+
+// Verify that independent store operations are still pipelined.
+// See: https://github.com/llvm/circt/issues/3112
+
+// CHECK:       calyx.component @store({{.+}}, {{.+}}, {{.+}}, %[[MEM1_DONE:.+]]: i1 {mem = {id = 1 : i32, tag = "done"}}, {{.+}}) -> ({{.+}}, %[[MEM1_WRITE_DATA:.+]]: i32 {mem = {id = 1 : i32, tag = "write_data"}}, %[[MEM1_ADDR0:.+]]: i2 {mem = {addr_idx = 0 : i32, id = 1 : i32, tag = "addr"}}, %[[MEM1_WRITE_EN:.+]]: i1 {mem = {id = 1 : i32, tag = "write_en"}}, {{.+}}) {
+// CHECK-DAG:     %[[SLICE0_IN:.+]], %[[SLICE0_OUT:.+]] = calyx.std_slice @std_slice_0
+// CHECK-DAG:     {{.+}}, {{.+}}, {{.+}}, {{.+}}, %[[S0_REG0_OUT:.+]], {{.+}} = calyx.register @stage_0_register_0_reg
+// CHECK-DAG:     {{.+}}, {{.+}}, {{.+}}, {{.+}}, %[[ITER_ARG0_OUT:.+]], {{.+}} = calyx.register @while_0_arg0_reg
+// CHECK-DAG:     {{.+}}, {{.+}}, %[[LT_OUT:.+]] = calyx.std_lt
+// CHECK-DAG:     %[[TRUE:.+]] = hw.constant true
+
+// CHECK:       calyx.group @[[INIT_GROUP:.+]] {
+// CHECK:       calyx.comb_group @[[COND_GROUP:.+]] {
+// CHECK:       calyx.group @[[LOAD_GROUP:.+]] {
+// CHECK:       calyx.group @[[INCR_GROUP:.+]] {
+// CHECK:       calyx.group @[[STORE_GROUP1:.+]] {
+// CHECK:       calyx.group @[[STORE_GROUP2:.+]] {
+// CHECK-DAG:         calyx.assign %[[SLICE0_IN]] = %[[ITER_ARG0_OUT]]
+// CHECK-DAG:         calyx.assign %[[MEM1_WRITE_DATA]] = %[[S0_REG0_OUT]]
+// CHECK-DAG:         calyx.assign %[[MEM1_ADDR]] = %[[SLICE0_OUT]]
+// CHECK-DAG:         calyx.assign %[[MEM1_WRITE_EN]] = %[[TRUE]]
+// CHECK-DAG:         calyx.group_done %[[MEM1_DONE]]
+
+// CHECK: calyx.while %[[LT_OUT]] with @[[COND_GROUP]] {
+// CHECK-NEXT: calyx.par {
+// CHECK-NEXT: calyx.enable @[[LOAD_GROUP]]
+// CHECK-NEXT: calyx.enable @[[INCR_GROUP]]
+// CHECK-NEXT: calyx.enable @[[STORE_GROUP1]]
+// CHECK-NEXT: calyx.enable @[[STORE_GROUP2]]
+// CHECK-NEXT: }
+module {
+  func.func @store(%arg0: memref<4xi32>, %arg1: memref<4xi32>) {
+    %c0 = arith.constant 0 : index
+    %c4 = arith.constant 4 : index
+    %c1 = arith.constant 1 : index
+    staticlogic.pipeline.while II =  1 trip_count =  4 iter_args(%arg2 = %c0) : (index) -> () {
+      %0 = arith.cmpi ult, %arg2, %c4 : index
+      staticlogic.pipeline.register %0 : i1
+    } do {
+      %0:2 = staticlogic.pipeline.stage start = 0 {
+        %1 = memref.load %arg0[%arg2] : memref<4xi32>
+        %2 = arith.addi %arg2, %c1 : index
+        staticlogic.pipeline.register %1, %2 : i32, index
+      } : i32, index
+      staticlogic.pipeline.stage start = 1 {
+        memref.store %0#0, %arg1[%arg2] : memref<4xi32>
+        memref.store %0#0, %arg1[%arg2] : memref<4xi32>
+        staticlogic.pipeline.register
+      }
+      staticlogic.pipeline.terminator iter_args(%0#1), results() : (index) -> ()
+    }
+    return
+  }
 }
