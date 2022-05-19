@@ -21,6 +21,10 @@ Rationale](RationaleSV.md).
     - [Parameterized Types](#parameterized-types)
     - [Answers to other common questions](#answers-to-other-common-questions)
   - [Type declarations](#type-declarations)
+    - [Type declaration IR](#type-declaration-ir])
+    - [Type declaration System Verilog output](#type-declaration-system-verilog-output)
+    - [Type canonicalization](#type-canonicalization)
+    - [Open Issues](#open-issues)
   - [Symbols and Visibility](#symbols-and-visibility)
   - [Future Directions](#future-directions)
 
@@ -452,7 +456,90 @@ All that said, using attributes is the right thing for a number of reasons:
 
 ## Type declarations
 
-TODO: Talk about `hw.typedecl` and implications for canonical types etc.
+**Type declaration IR**
+
+*Type Scope Operation*
+
+A [Type Scope](Dialects/HW/#hwtype_scope-circthwtypescopeop) declares a single
+region with a single block that contains type declarations. Type scopes provide
+a means to group type declarations. Type scopes have a symbol and are themselves
+symbol tables, so they may be looked up, and type declarations may be looked up
+within them.
+
+*Type Declaration Operation*
+
+A [Type Declaration](https://circt.llvm.org/docs/Dialects/HW/#hwtypedecl-circthwtypedeclop)
+declares a symbolic name for a type. It consists of:
+
+* A symbolic name, which can be referred to in the IR by a Type Alias Type.
+* A type attribute, which contains the underlying type the name refers to
+* An optional string attribute, which specifies a name to give the type in the
+  output. If not specified, the symbolic name is used in the output.
+
+*Type Alias Type*
+
+A [Type Alias](https://circt.llvm.org/docs/Dialects/HW/#an-symbolic-reference-to-a-type-declaration)
+refers to a type declaration symbolically. It consists of:
+
+* A symbolic reference to a Type Scope and Type Declaration within the scope
+* A copy of the underlying type, cached in type storage
+* A copy of the canonical type, cached in type storage
+
+**Type declaration System Verilog output**
+
+In ExportVerilog, Type Scopes may be split into their own output file, included
+at the top of multiple split output files, or included via a header file.
+
+Each Type Declaration will be emitted according to the System Verilog spec,
+section 6.18, User-defined types. For example:
+
+```
+typedef logic mytype;
+```
+
+**Type canonicalization**
+
+We take an approach to type canonicalization similar to [Clang](https://clang.llvm.org/docs/InternalsManual.html#canonical-types).
+
+To implement this, CIRCT has an extra layer of indirection in the ODS
+declarations of types that may be targeted by Type Declarations. This layer
+makes it possible to generically let operations declare their operands and
+results to be of a specific type, and also accept type declarations that
+canonicalize to that type.
+
+The HW dialect types are declared in [HWTypesImpl.td](https://github.com/llvm/circt/blob/main/include/circt/Dialect/HW/HWTypesImpl.td),
+which declares the actual type and is used to generate the C++ wrappers. To make
+these types usable in ODS operations in a generic way that support type
+declarations, wrapper types are declared in [HWTypes.td](https://github.com/llvm/circt/blob/main/include/circt/Dialect/HW/HWTypes.td),
+which uses helpers to define dialect types that may be either the declared type,
+or a type declaration whose canonical type is the declared type.
+
+In order to "see through" type declarations and get at the canonical type, a set
+of helper functions are added to the hardware dialect: `hw::type_isa`,
+`hw::type_cast`, and `hw::type_dyn_cast`. These should generally be used instead
+of the MLIR `Type::isa`, `Type::cast`, and `Type::dyn_cast`, because they
+transparently support type declarations.
+
+As the Clang docs state: "The only hard part here is remembering not to use the
+isa/cast/dyn_cast operations."
+
+**Open Issues**
+
+*Duplicated type in Type Alias Type IR*
+
+In order to support Type canonicalization, the Type Alias Type keeps a copy of
+the underlying type, as well as what it canonicalizes to, cached in Type
+storage. This allows the helpers like `hw::type_isa` to efficiently query the
+underlying type or canonical type in constant time.
+
+Ideally, the Type Alias Type would only contain a symbolic reference to the
+declaration, and at construction time (during parsing or when built
+programmatically) look up and cache the underlying type and its canonical type.
+
+Unfortunately, this is not currently possible with the MLIR parser API. There is
+some discussion about this on [Discourse](https://discourse.llvm.org/t/contextual-type-verification/4525),
+and it seems like a good enhancement. This is tracked in issue [#1642](https://github.com/llvm/circt/issues/1642).
+Until then, we must duplicate the type in the IR.
 
 ## Symbols and Visibility
 
