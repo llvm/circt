@@ -118,8 +118,7 @@ circuit test_mod : %[[{"a": "a"}]]
 ; MLIR-NEXT:    firrtl.strictconnect %multibitMux_a_1, %vec_1 : !firrtl.uint<1>
 ; MLIR-NEXT:    firrtl.strictconnect %multibitMux_a_2, %vec_2 : !firrtl.uint<1>
 ; MLIR-NEXT:    firrtl.strictconnect %multibitMux_sel, %b : !firrtl.uint<2>
-; MLIR-NEXT:    %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
-; MLIR-NEXT:    firrtl.instance unusedPortsMod @UnusedPortsMod()
+; MLIR:         firrtl.instance unusedPortsMod @UnusedPortsMod()
 
 ; ANNOTATIONS-LABEL: firrtl.module @test_mod
 ; ANNOTATIONS-SAME: info = "a ModuleTarget Annotation"

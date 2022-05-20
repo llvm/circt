@@ -79,6 +79,13 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
     if (port.isInput() && !arg.use_empty())
       continue;
 
+    // If the port is an input and has an inner symbol, we cannot remove it.
+    // For output ports we can create a local wire to capture any locally driven
+    // value, but not so for inputs.
+    bool hasSymbol = port.sym && !port.sym.getValue().empty();
+    if (port.isInput() && hasSymbol)
+      continue;
+
     auto portIsUnused = [&](InstanceRecord *a) -> bool {
       auto port = a->getInstance()->getResult(arg.getArgNumber());
       return port.getUses().empty();
@@ -86,44 +93,82 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
 
     // Output port.
     if (port.isOutput()) {
-      if (arg.use_empty()) {
-        // Sometimes the connection is already removed possibly by IMCP.
-        // In that case, regard the port value as an invalid value.
-        outputPortConstants.push_back(None);
-      } else if (llvm::all_of(instanceGraphNode->uses(), portIsUnused)) {
-        // Replace the port with a wire if it is unused.
-        auto builder =
-            ImplicitLocOpBuilder::atBlockBegin(arg.getLoc(), module.getBody());
-        auto wire = builder.create<WireOp>(arg.getType());
-        arg.replaceAllUsesWith(wire);
-        outputPortConstants.push_back(None);
-      } else if (arg.hasOneUse()) {
-        // If the port has a single use, check the port is only connected to
-        // invalid or constant
+      Optional<APSInt> constantValue; // constant value of the port, if any
+      FConnectLike constantConnect;   // set if the sole use is a const connect
+
+      if (arg.hasOneUse()) {
+        // Check if the port has a single connect driving it to a constant or
+        // invalid value.
         Operation *op = arg.use_begin().getUser();
-        auto connectLike = dyn_cast<FConnectLike>(op);
-        if (!connectLike)
+        constantConnect = dyn_cast<FConnectLike>(op);
+        if (!constantConnect)
           continue;
-        auto *srcOp = connectLike.src().getDefiningOp();
-        if (!isa_and_nonnull<InvalidValueOp, ConstantOp>(srcOp))
+        auto *srcOp = constantConnect.src().getDefiningOp();
+        if (!srcOp)
           continue;
-
-        if (auto constant = dyn_cast<ConstantOp>(srcOp))
-          outputPortConstants.push_back(constant.value());
-        else {
-          assert(isa<InvalidValueOp>(srcOp) && "only expect invalid");
-          outputPortConstants.push_back(None);
+        if (auto constant = dyn_cast<ConstantOp>(srcOp)) {
+          constantValue = constant.value();
+        } else if (isa<InvalidValueOp>(srcOp)) {
+          constantValue = None;
+        } else {
+          continue;
         }
-
-        // Erase connect op because we are going to remove this output ports.
-        op->erase();
-
-        if (srcOp->use_empty())
-          srcOp->erase();
-      } else {
-        // Otherwise, we cannot remove the port.
+      } else if (!arg.use_empty() &&
+                 !llvm::all_of(instanceGraphNode->uses(), portIsUnused)) {
+        // If the port is internally driven and has external uses we cannot
+        // remove it.
         continue;
       }
+      LLVM_DEBUG({
+        llvm::dbgs() << "- Removing " << port.name << "\n";
+        if (constantConnect)
+          llvm::dbgs() << "  - Constant " << constantValue << "\n";
+      });
+
+      // At this point we have decided to remove the port. First of all, replace
+      // the port with an internal wire in case the port has internal uses or a
+      // symbol.
+      //
+      // NOTE: There are usecases where the output port has no internal connects
+      // anymore as a result of other canonicalizations running before port
+      // removal. In that case the local wire is only needed if the port carries
+      // a symbol which someone might refer to.
+      WireOp wire;
+      auto builder =
+          ImplicitLocOpBuilder::atBlockBegin(arg.getLoc(), module.getBody());
+      if ((!arg.use_empty() && !constantConnect) || hasSymbol) {
+        LLVM_DEBUG(llvm::dbgs() << "  - Creating replacement wire\n");
+        wire = builder.create<WireOp>(arg.getType());
+        if (hasSymbol)
+          wire.inner_symAttr(port.sym);
+        arg.replaceAllUsesWith(wire);
+      }
+
+      // At this point we might have a wire that has replaced the port in all
+      // operations. In case there were no internal uses, drive an invalid value
+      // onto the wire.
+      if (wire && wire.use_empty()) {
+        LLVM_DEBUG(llvm::dbgs()
+                   << "  - Invalidating due to lack of internal uses\n");
+        auto invalidValue = builder.create<InvalidValueOp>(wire.getType());
+        builder.create<StrictConnectOp>(wire, invalidValue);
+      }
+
+      // In case the port was connected to a constant or invalid value, and we
+      // had no need for a replacement wire, delete the constant connect.
+      if (constantConnect && constantConnect.dest() != wire) {
+        LLVM_DEBUG(llvm::dbgs()
+                   << "  - Cleaning up " << constantConnect << "\n");
+        auto *srcOp = constantConnect.src().getDefiningOp();
+        constantConnect->erase();
+        constantConnect = {};
+        if (srcOp && srcOp->use_empty()) {
+          LLVM_DEBUG(llvm::dbgs() << "  - Cleaning up " << *srcOp << "\n");
+          srcOp->erase();
+        }
+      }
+
+      outputPortConstants.push_back(constantValue);
     }
 
     removalPortIndexes.push_back(index);

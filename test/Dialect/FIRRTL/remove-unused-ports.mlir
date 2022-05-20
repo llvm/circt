@@ -46,21 +46,27 @@ firrtl.circuit "Top"   {
     firrtl.connect %d_invalid, %A_d_invalid : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %d_constant, %A_d_constant : !firrtl.uint<1>, !firrtl.uint<1>
   }
+}
 
-  // Make sure that %a, %b and %c are not erased because they have an annotation or a symbol.
-  // CHECK-LABEL: firrtl.module private @Foo(in %a: !firrtl.uint<1> sym @dntSym, in %b: !firrtl.uint<1> [{a = "a"}], out %c: !firrtl.uint<1> sym @dntSym)
-  firrtl.module private @Foo(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>) attributes {
-    portAnnotations = [[], [{a = "a"}], []], portSyms = ["dntSym", "", "dntSym"]}
-  {
-    // CHECK: firrtl.connect %c, %{{invalid_ui1.*}}
+// -----
+
+firrtl.circuit "UseFoo" {
+  // Make sure that %a and %b are not erased because they have an annotation or
+  // a symbol. %c can be removed despite its symbol, as long as we replace it
+  // with a local wire carrying the symbol.
+  // CHECK-LABEL: firrtl.module private @Foo(in %a: !firrtl.uint<1> sym @dntSym1, in %b: !firrtl.uint<1> [{a = "a"}])
+  firrtl.module private @Foo(in %a: !firrtl.uint<1> sym @dntSym1, in %b: !firrtl.uint<1> [{a = "a"}], out %c: !firrtl.uint<1> sym @dntSym2) {
+    // CHECK-NEXT: [[WIRE:%.+]] = firrtl.wire sym @dntSym2
+    // CHECK-NEXT: [[INV:%.+]] = firrtl.invalidvalue
+    // CHECK-NEXT: firrtl.connect [[WIRE]], [[INV]]
     %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
     firrtl.connect %c, %invalid_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
   }
 
-  // CHECK-LABEL: firrtl.module private @UseFoo(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>)
-  firrtl.module private @UseFoo(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>) {
+  // CHECK-LABEL: firrtl.module public @UseFoo(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>)
+  firrtl.module public @UseFoo(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>) {
     %A_a, %A_b, %A_c = firrtl.instance A  @Foo(in a: !firrtl.uint<1>, in b: !firrtl.uint<1>, out c: !firrtl.uint<1>)
-    // CHECK: %A_a, %A_b, %A_c = firrtl.instance A @Foo(in a: !firrtl.uint<1>, in b: !firrtl.uint<1>, out c: !firrtl.uint<1>)
+    // CHECK: %A_a, %A_b = firrtl.instance A @Foo(in a: !firrtl.uint<1>, in b: !firrtl.uint<1>)
     firrtl.connect %A_a, %a : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %A_b, %b : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %c, %A_c : !firrtl.uint<1>, !firrtl.uint<1>
@@ -70,7 +76,7 @@ firrtl.circuit "Top"   {
 // -----
 
 // Strict connect version.
-firrtl.circuit "Top"   {
+firrtl.circuit "Top" {
   // CHECK-LABEL: firrtl.module @Top(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>,
   // CHECK-SAME :                    out %d_unused: !firrtl.uint<1>, out %d_invalid: !firrtl.uint<1>, out %d_constant: !firrtl.uint<1>)
   firrtl.module @Top(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>,
@@ -117,21 +123,27 @@ firrtl.circuit "Top"   {
     firrtl.strictconnect %d_invalid, %A_d_invalid : !firrtl.uint<1>
     firrtl.strictconnect %d_constant, %A_d_constant : !firrtl.uint<1>
   }
+}
 
-  // Make sure that %a, %b and %c are not erased because they have an annotation or a symbol.
-  // CHECK-LABEL: firrtl.module private @Foo(in %a: !firrtl.uint<1> sym @dntSym, in %b: !firrtl.uint<1> [{a = "a"}], out %c: !firrtl.uint<1> sym @dntSym)
-  firrtl.module private @Foo(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>) attributes {
-    portAnnotations = [[], [{a = "a"}], []], portSyms = ["dntSym", "", "dntSym"]}
-  {
-    // CHECK: firrtl.strictconnect %c, %{{invalid_ui1.*}}
+// -----
+
+firrtl.circuit "UseFoo" {
+  // Make sure that %a and %b are not erased because they have an annotation or
+  // a symbol. %c can be removed despite its symbol, as long as we replace it
+  // with a local wire carrying the symbol.
+  // CHECK-LABEL: firrtl.module private @Foo(in %a: !firrtl.uint<1> sym @dntSym1, in %b: !firrtl.uint<1> [{a = "a"}])
+  firrtl.module private @Foo(in %a: !firrtl.uint<1> sym @dntSym1, in %b: !firrtl.uint<1> [{a = "a"}], out %c: !firrtl.uint<1> sym @dntSym2) {
+    // CHECK-NEXT: [[WIRE:%.+]] = firrtl.wire sym @dntSym2
+    // CHECK-NEXT: [[INV:%.+]] = firrtl.invalidvalue
+    // CHECK-NEXT: firrtl.strictconnect [[WIRE]], [[INV]]
     %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
     firrtl.strictconnect %c, %invalid_ui1 : !firrtl.uint<1>
   }
 
-  // CHECK-LABEL: firrtl.module private @UseFoo(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>)
-  firrtl.module private @UseFoo(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>) {
+  // CHECK-LABEL: firrtl.module public @UseFoo(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>)
+  firrtl.module public @UseFoo(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>) {
     %A_a, %A_b, %A_c = firrtl.instance A  @Foo(in a: !firrtl.uint<1>, in b: !firrtl.uint<1>, out c: !firrtl.uint<1>)
-    // CHECK: %A_a, %A_b, %A_c = firrtl.instance A @Foo(in a: !firrtl.uint<1>, in b: !firrtl.uint<1>, out c: !firrtl.uint<1>)
+    // CHECK: %A_a, %A_b = firrtl.instance A @Foo(in a: !firrtl.uint<1>, in b: !firrtl.uint<1>)
     firrtl.strictconnect %A_a, %a : !firrtl.uint<1>
     firrtl.strictconnect %A_b, %b : !firrtl.uint<1>
     firrtl.strictconnect %c, %A_c : !firrtl.uint<1>
@@ -163,8 +175,8 @@ firrtl.circuit "PreserveOutputFile" {
 firrtl.circuit "UnusedOutput"  {
   // CHECK: firrtl.module {{.+}}@SingleDriver
   // CHECK-NOT:     out %c
-  firrtl.module private @SingleDriver(in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>) {
-    // CHECK-NEXT: %[[c_wire:.+]] = firrtl.wire
+  firrtl.module private @SingleDriver(in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>, out %c: !firrtl.uint<1> sym @c) {
+    // CHECK-NEXT: %[[c_wire:.+]] = firrtl.wire sym @c
     // CHECK-NEXT: firrtl.strictconnect %b, %[[c_wire]]
     firrtl.strictconnect %b, %c : !firrtl.uint<1>
     // CHECK-NEXT: %[[not_a:.+]] = firrtl.not %a
