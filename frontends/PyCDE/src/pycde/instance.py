@@ -15,9 +15,10 @@ class Instance:
   to a module instantiation within another module."""
   from .module import _SpecializedModule
 
-  __slots__ = ["parent", "inside_of", "root", "_child_cache", "_op_cache"]
+  __slots__ = ["parent", "inside_of", "root", "symbol", "_op_cache"]
 
-  def __init__(self, parent: Instance, inside_of: _SpecializedModule):
+  def __init__(self, parent: Instance, inside_of: _SpecializedModule,
+               symbol: Optional[ir.Attribute]):
     """
     Construct a new instance. Since the terminology can be confusing:
     - inside_of: the module which contains this instance (e.g. the instantiation
@@ -30,7 +31,7 @@ class Instance:
     self.inside_of = inside_of
     self.parent = parent
     self.root = parent.root
-    self._child_cache: Dict[ir.StringAttr, Instance] = None
+    self.symbol = symbol
     self._op_cache = parent.root.system._op_cache
 
   def _get_ip(self) -> ir.InsertionPoint:
@@ -84,6 +85,8 @@ class Instance:
 
   @property
   def name(self) -> str:
+    assert self.symbol is not None, \
+           "If symbol is None, name() needs to be overridden"
     return ir.StringAttr(self.symbol).value
 
 
@@ -93,13 +96,13 @@ class ModuleInstance(Instance):
 
   from .module import _SpecializedModule
 
-  __slots__ = ["symbol", "tgt_mod"]
+  __slots__ = ["tgt_mod", "_child_cache"]
 
   def __init__(self, parent: Instance, instance_sym: Optional[ir.Attribute],
                inside_of: _SpecializedModule, tgt_mod: _SpecializedModule):
-    super().__init__(parent, inside_of)
+    super().__init__(parent, inside_of, instance_sym)
     self.tgt_mod = tgt_mod
-    self.symbol = instance_sym
+    self._child_cache: Dict[ir.StringAttr, Instance] = None
 
   def _create_instance(self, static_op: ir.Operation) -> Instance:
     """Create a new `Instance` which is a child of `parent` in the instance
@@ -115,7 +118,7 @@ class ModuleInstance(Instance):
                             inside_of=self.tgt_mod,
                             tgt_mod=tgt_mod)
     if isinstance(static_op, seq.CompRegOp):
-      return RegInstance(self, sym_name, self.tgt_mod)
+      return RegInstance(self, self.tgt_mod, sym_name)
 
     return Instance(self, self.tgt_mod)
 
@@ -184,15 +187,6 @@ class ModuleInstance(Instance):
 
 class RegInstance(Instance):
   """Instance specialization for registers."""
-
-  from .module import _SpecializedModule
-
-  __slots__ = ["symbol"]
-
-  def __init__(self, parent: Instance, instance_sym: ir.Attribute,
-               inside_of: _SpecializedModule):
-    super().__init__(parent, inside_of)
-    self.symbol = instance_sym
 
   def place(self,
             x: int,
