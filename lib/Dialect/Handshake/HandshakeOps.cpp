@@ -1482,6 +1482,10 @@ LogicalResult InstanceOp::verify() {
   return success();
 }
 
+FunctionType InstanceOp::getModuleType() {
+  return FunctionType::get(getContext(), getOperandTypes(), getResultTypes());
+}
+
 ParseResult UnpackOp::parse(OpAsmParser &parser, OperationState &result) {
   OpAsmParser::UnresolvedOperand tuple;
   TupleType type;
