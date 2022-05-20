@@ -795,7 +795,7 @@ static Optional<DictionaryAttr> parseAugmentedType(
     auto localTarget = std::get<0>(expandNonLocal(target.first).back());
     auto subTargets = target.second;
 
-    NamedAttrList elementIface, elementScattered, dontTouch;
+    NamedAttrList elementIface, elementScattered;
 
     // Populate the annotation for the interface element.
     elementIface.append("class", classAttr);
@@ -806,20 +806,12 @@ static Optional<DictionaryAttr> parseAugmentedType(
     // Populate an annotation that will be scattered onto the element.
     elementScattered.append("class", classAttr);
     elementScattered.append("id", id);
-    // Populate a dont touch annotation for the scattered element.
-    dontTouch.append(
-        "class",
-        StringAttr::get(context, "firrtl.transforms.DontTouchAnnotation"));
     // If there are sub-targets, then add these.
-    if (subTargets) {
+    if (subTargets)
       elementScattered.append("target", subTargets);
-      dontTouch.append("target", subTargets);
-    }
 
     newAnnotations[localTarget].push_back(
         DictionaryAttr::getWithSorted(context, elementScattered));
-    newAnnotations[localTarget].push_back(
-        DictionaryAttr::getWithSorted(context, dontTouch));
 
     return DictionaryAttr::getWithSorted(context, elementIface);
   }
@@ -1301,7 +1293,6 @@ bool circt::firrtl::scatterCustomAnnotations(
         return false;
       newAnnotations[target.getValue()].push_back(
           DictionaryAttr::getWithSorted(context, attrs));
-      addDontTouch(target.getValue());
 
       // Process all the taps.
       auto keyAttr = tryGetAs<ArrayAttr>(dict, dict, "keys", loc, clazz);
@@ -1329,7 +1320,6 @@ bool circt::firrtl::scatterCustomAnnotations(
             splitAndAppendTarget(port, maybePortTarget.getValue(), context);
         port.append("class", classAttr);
         port.append("id", id);
-        addDontTouch(portPair.first, portPair.second);
 
         if (classAttr.getValue() == referenceKeyClass) {
           NamedAttrList source;
@@ -1355,7 +1345,6 @@ bool circt::firrtl::scatterCustomAnnotations(
           source.append("type", StringAttr::get(context, "source"));
           newAnnotations[leafTarget.first].push_back(
               DictionaryAttr::get(context, source));
-          addDontTouch(leafTarget.first, leafTarget.second);
 
           for (int i = 0, e = NLATargets.size() - 1; i < e; ++i) {
             NamedAttrList pathmetadata;
@@ -1365,7 +1354,6 @@ bool circt::firrtl::scatterCustomAnnotations(
             StringRef tgt = std::get<0>(NLATargets[i]);
             newAnnotations[tgt].push_back(
                 DictionaryAttr::get(context, pathmetadata));
-            addDontTouch(tgt);
           }
 
           // Port Annotations generation.
@@ -1394,7 +1382,6 @@ bool circt::firrtl::scatterCustomAnnotations(
             return false;
           newAnnotations[moduleTarget.getValue()].push_back(
               DictionaryAttr::getWithSorted(context, module));
-          addDontTouch(moduleTarget.getValue());
 
           // Port Annotations generation.
           port.append("portID", portID);
@@ -1480,7 +1467,6 @@ bool circt::firrtl::scatterCustomAnnotations(
         if (NLATargets.size() > 1) {
           nlaSym = buildNLA(circuit, ++nlaNumber, NLATargets);
           foo.append("circt.nonlocal", nlaSym);
-          addDontTouch(leafTarget);
         }
         newAnnotations[leafTarget].push_back(DictionaryAttr::get(context, foo));
 
@@ -1492,7 +1478,6 @@ bool circt::firrtl::scatterCustomAnnotations(
           StringRef tgt = std::get<0>(NLATargets[i]);
           newAnnotations[tgt].push_back(
               DictionaryAttr::get(context, pathmetadata));
-          addDontTouch(tgt);
         }
       }
       continue;
