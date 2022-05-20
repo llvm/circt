@@ -40,20 +40,12 @@ struct MemoryInterface {
   explicit MemoryInterface(const MemoryPortsImpl &ports);
   explicit MemoryInterface(calyx::MemoryOp memOp);
 
-#define memoryInterfaceGetter(portName, TRet)                                  \
-  TRet portName() {                                                            \
-    if (auto memOp = std::get_if<calyx::MemoryOp>(&impl); memOp)               \
-      return memOp->portName();                                                \
-    else                                                                       \
-      return std::get<MemoryPortsImpl>(impl).portName;                         \
-  }
-
-  memoryInterfaceGetter(readData, Value);
-  memoryInterfaceGetter(done, Value);
-  memoryInterfaceGetter(writeData, Value);
-  memoryInterfaceGetter(writeEn, Value);
-  memoryInterfaceGetter(addrPorts, ValueRange);
-#undef memoryInterfaceGetter
+  // Getter methods for each memory interface port.
+  Value readData();
+  Value done();
+  Value writeData();
+  Value writeEn();
+  ValueRange addrPorts();
 
 private:
   std::variant<calyx::MemoryOp, MemoryPortsImpl> impl;

@@ -23,5 +23,40 @@ MemoryInterface::MemoryInterface() {}
 MemoryInterface::MemoryInterface(const MemoryPortsImpl &ports) : impl(ports) {}
 MemoryInterface::MemoryInterface(calyx::MemoryOp memOp) : impl(memOp) {}
 
+Value MemoryInterface::readData() {
+  if (auto memOp = std::get_if<calyx::MemoryOp>(&impl); memOp) {
+    return memOp->readData();
+  }
+  return std::get<MemoryPortsImpl>(impl).readData;
+}
+
+Value MemoryInterface::done() {
+  if (auto memOp = std::get_if<calyx::MemoryOp>(&impl); memOp) {
+    return memOp->done();
+  }
+  return std::get<MemoryPortsImpl>(impl).done;
+}
+
+Value MemoryInterface::writeData() {
+  if (auto memOp = std::get_if<calyx::MemoryOp>(&impl); memOp) {
+    return memOp->writeData();
+  }
+  return std::get<MemoryPortsImpl>(impl).writeData;
+}
+
+Value MemoryInterface::writeEn() {
+  if (auto memOp = std::get_if<calyx::MemoryOp>(&impl); memOp) {
+    return memOp->writeEn();
+  }
+  return std::get<MemoryPortsImpl>(impl).writeEn;
+}
+
+ValueRange MemoryInterface::addrPorts() {
+  if (auto memOp = std::get_if<calyx::MemoryOp>(&impl); memOp) {
+    return memOp->addrPorts();
+  }
+  return std::get<MemoryPortsImpl>(impl).addrPorts;
+}
+
 } // namespace calyx
 } // namespace circt
