@@ -19,6 +19,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/NLATable.h"
+#include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
@@ -855,6 +856,7 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
 LogicalResult FIRRTLModuleLowering::lowerPorts(
     ArrayRef<PortInfo> firrtlPorts, SmallVectorImpl<hw::PortInfo> &ports,
     Operation *moduleOp, CircuitLoweringState &loweringState) {
+  ModuleNamespace moduleNamespace(cast<FModuleLike>(moduleOp));
   ports.reserve(firrtlPorts.size());
   size_t numArgs = 0;
   size_t numResults = 0;
@@ -862,16 +864,14 @@ LogicalResult FIRRTLModuleLowering::lowerPorts(
     hw::PortInfo hwPort;
     hwPort.name = firrtlPort.name;
     hwPort.type = lowerType(firrtlPort.type);
-    if (firrtlPort.sym)
-      hwPort.sym = firrtlPort.sym;
-    else {
-      firrtlPort.annotations.hasDontTouch();
-      // If the port doesn't have a symbol, but has a DontTouchAnnotation, then
-      // generate a symbol.
-      //
-      // TODO: This needs to use a namespace if this is a module.
-      hwPort.sym = StringAttr::get(moduleOp->getContext(),
-                                   Twine("__") + hwPort.name.getValue() + "__");
+    hwPort.sym = firrtlPort.sym;
+
+    // If the port doesn't have a symbol, but has a DontTouchAnnotation, then
+    // generate a symbol.
+    if (firrtlPort.annotations.hasDontTouch() && !hwPort.sym) {
+      hwPort.sym = StringAttr::get(
+          moduleOp->getContext(),
+          moduleNamespace.newName(Twine("__") + hwPort.name.getValue() + "__"));
     }
 
     // We can't lower all types, so make sure to cleanly reject them.
