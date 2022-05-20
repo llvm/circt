@@ -41,18 +41,18 @@ struct HWExportModuleHierarchyPass
 
 /// Recursively print the module hierarchy as serialized as JSON.
 static void printHierarchy(hw::InstanceOp &inst, SymbolTable &symbolTable,
-                           llvm::json::OStream &J) {
+                           llvm::json::OStream &j) {
   auto moduleOp = symbolTable.lookup(inst.moduleNameAttr().getValue());
 
-  J.object([&] {
-    J.attribute("instance_name", inst.instanceName());
-    J.attribute("module_name", hw::getVerilogModuleName(moduleOp));
-    J.attributeArray("instances", [&] {
+  j.object([&] {
+    j.attribute("instance_name", inst.instanceName());
+    j.attribute("module_name", hw::getVerilogModuleName(moduleOp));
+    j.attributeArray("instances", [&] {
       // Only recurse on module ops, not extern or generated ops, whose internal
       // are opaque.
       if (auto module = dyn_cast<hw::HWModuleOp>(moduleOp)) {
         for (auto op : module.getOps<hw::InstanceOp>()) {
-          printHierarchy(op, symbolTable, J);
+          printHierarchy(op, symbolTable, j);
         }
       }
     });
@@ -63,16 +63,16 @@ static void printHierarchy(hw::InstanceOp &inst, SymbolTable &symbolTable,
 /// of the hierarchy.
 static void extractHierarchyFromTop(hw::HWModuleOp op, SymbolTable &symbolTable,
                                     llvm::raw_ostream &os) {
-  llvm::json::OStream J(os);
+  llvm::json::OStream j(os, 2);
 
   // As a special case for top-level module, set instance name to module name,
   // since the top-level module is not instantiated.
-  J.object([&] {
-    J.attribute("instance_name", op.getName());
-    J.attribute("module_name", hw::getVerilogModuleName(op));
-    J.attributeArray("instances", [&] {
+  j.object([&] {
+    j.attribute("instance_name", op.getName());
+    j.attribute("module_name", hw::getVerilogModuleName(op));
+    j.attributeArray("instances", [&] {
       for (auto op : op.getOps<hw::InstanceOp>())
-        printHierarchy(op, symbolTable, J);
+        printHierarchy(op, symbolTable, j);
     });
   });
 }
