@@ -15,6 +15,7 @@
 
 def SVDialect : Dialect {
   let name = "sv";
+  let cppNamespace = "::circt::sv";
 
   let summary = "Types and operations for SV dialect";
   let description = [{
@@ -22,7 +23,10 @@ def SVDialect : Dialect {
     SystemVerilog-specific constructs in an AST-like representation.
   }];
   let dependentDialects = ["circt::comb::CombDialect"];
-  let cppNamespace = "::circt::sv";
+
+  let useDefaultTypePrinterParser = 1;
+  let useDefaultAttributePrinterParser = 1;
+
   let extraClassDeclaration = [{
     /// Register all SV types.
     void registerTypes();

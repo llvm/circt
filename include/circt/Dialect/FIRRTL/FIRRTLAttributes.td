@@ -64,7 +64,7 @@ def InvalidValueAttr : AttrDef<FIRRTLDialect, "InvalidValue"> {
   let mnemonic = "invalidvalue";
   let parameters = (ins  AttributeSelfTypeParameter<"">:$type);
 
-  let assemblyFormat = "`<` $type `>`";
+  let assemblyFormat = "";
 
   let builders = [
     AttrBuilderWithInferredContext<(ins "Type":$type),

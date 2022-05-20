@@ -1,5 +1,5 @@
 add_circt_dialect(SV sv)
-add_circt_doc(SV -gen-dialect-doc SV Dialects/)
+add_circt_dialect_doc(SV sv)
 
 set(LLVM_TARGET_DEFINITIONS SV.td)
 
@@ -21,4 +21,4 @@ add_dependencies(circt-headers MLIRSVStructsIncGen)
 set(LLVM_TARGET_DEFINITIONS SVPasses.td)
 mlir_tablegen(SVPasses.h.inc -gen-pass-decls)
 add_public_tablegen_target(CIRCTSVTransformsIncGen)
-add_circt_doc(SVPasses -gen-pass-doc SVPasses ./)
+add_circt_doc(SVPasses SVPasses -gen-pass-doc)

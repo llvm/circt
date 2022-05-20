@@ -15,13 +15,15 @@ include "mlir/IR/FunctionInterfaces.td"
 
 def FSMDialect : Dialect {
   let name = "fsm";
+  let cppNamespace = "::circt::fsm";
+
   let summary = "Types and operations for FSM dialect";
   let description = [{
     This dialect defines the `fsm` dialect, which is intended to represent
     finite-state machines.
   }];
 
-  let cppNamespace = "::circt::fsm";
+  let useDefaultTypePrinterParser = 1;
 }
 
 // Base class for the types in this dialect.

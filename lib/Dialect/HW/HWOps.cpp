@@ -800,7 +800,7 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
   auto &builder = parser.getBuilder();
 
   // Parse the visibility attribute.
-  mlir::impl::parseOptionalVisibilityKeyword(parser, result.attributes);
+  (void)mlir::impl::parseOptionalVisibilityKeyword(parser, result.attributes);
 
   // Parse the name as a symbol.
   StringAttr nameAttr;
