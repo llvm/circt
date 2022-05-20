@@ -1,4 +1,4 @@
-//===- SCFToCalyx.cpp - SCF to Calyx pass entry point -----------*- C++ -*-===//
+//=== StaticLogicToCalyx.cpp - StaticLogic to Calyx pass entry point *-----===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,11 +6,11 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This is the main SCF to Calyx conversion pass implementation.
+// This is the main StaticLogic to Calyx conversion pass implementation.
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Conversion/SCFToCalyx.h"
+#include "circt/Conversion/StaticLogicToCalyx.h"
 #include "../PassDetail.h"
 #include "circt/Dialect/Calyx/CalyxHelpers.h"
 #include "circt/Dialect/Calyx/CalyxLoweringUtils.h"
@@ -38,7 +38,7 @@ using namespace mlir::cf;
 using namespace mlir::func;
 
 namespace circt {
-namespace scftocalyx {
+namespace staticlogictocalyx {
 
 //===----------------------------------------------------------------------===//
 // Utility types
@@ -69,7 +69,6 @@ struct WhileOpInterface {
         .Case([](staticlogic::PipelineWhileOp op) {
           return op.getStagesBlock().getArguments();
         });
-    ;
   }
 
   Block *getBodyBlock() {
@@ -2460,10 +2459,12 @@ struct MultipleGroupDonePattern : mlir::OpRewritePattern<calyx::GroupOp> {
 //===----------------------------------------------------------------------===//
 // Pass driver
 //===----------------------------------------------------------------------===//
-class SCFToCalyxPass : public SCFToCalyxBase<SCFToCalyxPass> {
+class StaticLogicToCalyxPass
+    : public StaticLogicToCalyxBase<StaticLogicToCalyxPass> {
 public:
-  SCFToCalyxPass()
-      : SCFToCalyxBase<SCFToCalyxPass>(), partialPatternRes(success()) {}
+  StaticLogicToCalyxPass()
+      : StaticLogicToCalyxBase<StaticLogicToCalyxPass>(),
+        partialPatternRes(success()) {}
   void runOnOperation() override;
 
   LogicalResult setTopLevelFunction(mlir::ModuleOp moduleOp,
@@ -2595,7 +2596,7 @@ private:
   std::shared_ptr<ProgramLoweringState> loweringState = nullptr;
 };
 
-void SCFToCalyxPass::runOnOperation() {
+void StaticLogicToCalyxPass::runOnOperation() {
   std::string topLevelFunction;
   if (failed(setTopLevelFunction(getOperation(), topLevelFunction))) {
     signalPassFailure();
@@ -2721,14 +2722,14 @@ void SCFToCalyxPass::runOnOperation() {
   }
 }
 
-} // namespace scftocalyx
+} // namespace staticlogictocalyx
 
 //===----------------------------------------------------------------------===//
 // Pass initialization
 //===----------------------------------------------------------------------===//
 
-std::unique_ptr<OperationPass<ModuleOp>> createSCFToCalyxPass() {
-  return std::make_unique<scftocalyx::SCFToCalyxPass>();
+std::unique_ptr<OperationPass<ModuleOp>> createStaticLogicToCalyxPass() {
+  return std::make_unique<staticlogictocalyx::StaticLogicToCalyxPass>();
 }
 
 } // namespace circt
