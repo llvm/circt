@@ -45,9 +45,25 @@ struct ModuleNamespace : public Namespace {
   /// Populate the namespace from a module-like operation. This namespace will
   /// be composed of the `inner_sym`s of the module's ports and declarations.
   void add(FModuleLike module) {
+    addPorts(module);
+    addBody(module);
+  }
+
+  /// Populate the namespace with the ports of a module-like operation.
+  void addPorts(FModuleLike module) {
     for (auto portSymbol : module.getPortSymbolsAttr().getAsRange<StringAttr>())
       if (!portSymbol.getValue().empty())
         nextIndex.insert({portSymbol.getValue(), 0});
+  }
+
+  void addPorts(ArrayRef<PortInfo> ports) {
+    for (auto port : ports)
+      if (port.sym)
+        nextIndex.insert({port.sym.getValue(), 0});
+  }
+
+  /// Populate the namespace with the body of a module-like operation.
+  void addBody(FModuleLike module) {
     module.walk([&](Operation *op) {
       auto attr = op->getAttrOfType<StringAttr>("inner_sym");
       if (attr)
