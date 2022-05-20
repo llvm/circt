@@ -40,6 +40,10 @@ using namespace mlir::func;
 namespace circt {
 namespace staticlogictocalyx {
 
+// TODO(#2988): Legacy code is being copied in here. This will be subsequently
+// removed and/or updated to follow the more strict clang-tidy strandards.
+// NOLINTBEGIN
+
 //===----------------------------------------------------------------------===//
 // Utility types
 //===----------------------------------------------------------------------===//
@@ -2725,6 +2729,8 @@ void StaticLogicToCalyxPass::runOnOperation() {
 
 } // namespace staticlogictocalyx
 
+// NOLINTEND
+
 //===----------------------------------------------------------------------===//
 // Pass initialization
 //===----------------------------------------------------------------------===//
@@ -2734,3 +2740,4 @@ std::unique_ptr<OperationPass<ModuleOp>> createStaticLogicToCalyxPass() {
 }
 
 } // namespace circt
+
