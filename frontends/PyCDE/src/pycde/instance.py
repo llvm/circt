@@ -120,7 +120,7 @@ class ModuleInstance(Instance):
     if isinstance(static_op, seq.CompRegOp):
       return RegInstance(self, self.tgt_mod, sym_name)
 
-    return Instance(self, self.tgt_mod)
+    return Instance(self, self.tgt_mod, sym_name)
 
   def _children(self) -> Dict[ir.StringAttr, Instance]:
     """Return a dict of MLIR StringAttr this instances' children. Cache said

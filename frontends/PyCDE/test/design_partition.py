@@ -50,6 +50,9 @@ s = pycde.System([TopLevel],
 print("Generating...")
 s.generate()
 
+inst = s.get_instance(TopLevel)
+inst.walk(lambda i: print(i))
+
 s.cleanup()
 s.print()
 s.run_passes(partition=True)
