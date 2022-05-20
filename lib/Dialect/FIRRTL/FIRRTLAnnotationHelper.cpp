@@ -199,7 +199,7 @@ Optional<AnnoPathValue> firrtl::resolveEntities(TokenAnnoTarget path,
     instances.push_back(cast<InstanceOp>(resolved.getOp()));
   }
   // The final module is where the named target is (or is the named target).
-  auto mod = symTbl.lookup<FModuleOp>(path.module);
+  auto mod = symTbl.lookup<FModuleLike>(path.module);
   if (!mod) {
     circuit->emitError("module doesn't exist '") << path.module << '\'';
     return {};
@@ -212,7 +212,7 @@ Optional<AnnoPathValue> firrtl::resolveEntities(TokenAnnoTarget path,
     ref = findNamedThing(path.name, mod);
     if (!ref) {
       circuit->emitError("cannot find name '")
-          << path.name << "' in " << mod.getName();
+          << path.name << "' in " << mod.moduleName();
       return {};
     }
   }
