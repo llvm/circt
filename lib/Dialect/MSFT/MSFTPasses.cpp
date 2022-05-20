@@ -484,6 +484,7 @@ void ExportTclPass::runOnOperation() {
   RewritePatternSet patterns(ctxt);
   DenseSet<SymbolRefAttr> refsUsed;
   patterns.insert<RemovePhysOpLowering<PDPhysLocationOp>>(ctxt, refsUsed);
+  patterns.insert<RemovePhysOpLowering<PDRegPhysLocationOp>>(ctxt, refsUsed);
   patterns.insert<RemovePhysOpLowering<PDPhysRegionOp>>(ctxt, refsUsed);
   patterns.insert<RemovePhysOpLowering<DynamicInstanceVerbatimAttrOp>>(
       ctxt, refsUsed);

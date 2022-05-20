@@ -63,3 +63,13 @@ def PhysicalBounds : MSFT_Attr<"PhysicalBounds"> {
 
 def PhysicalBoundsArray : TypedArrayAttrBase<PhysicalBounds,
   "array of PhysicalBounds">;
+
+def LocationVector : MSFT_Attr<"LocationVector"> {
+  let summary = "Vector of optional locations corresponding to bits in a type";
+  let mnemonic = "location_vec";
+  let parameters = (ins "::mlir::TypeAttr":$type,
+                        ArrayRefParameter<"::circt::msft::PhysLocationAttr">:$locs);
+
+  let hasCustomAssemblyFormat = 1;
+  let genVerifyDecl = 1;
+}

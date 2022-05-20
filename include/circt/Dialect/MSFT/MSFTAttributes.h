@@ -21,4 +21,18 @@
 #define GET_ATTRDEF_CLASSES
 #include "circt/Dialect/MSFT/MSFTAttributes.h.inc"
 
+namespace circt {
+namespace msft {
+
+/// Parse and append a PhysLocAttr. Options are '*' for null location, <x, y,
+/// num> for a location which is implicitily a FF, or a full phys location
+/// attribute.
+LogicalResult parseOptionalRegLoc(SmallVectorImpl<PhysLocationAttr> &locs,
+                                  AsmParser &p);
+/// Print out the above.
+void printOptionalRegLoc(PhysLocationAttr loc, AsmPrinter &p);
+
+} // namespace msft
+} // namespace circt
+
 #endif // CIRCT_DIALECT_MSFT_MSFTATTRIBUTES_H

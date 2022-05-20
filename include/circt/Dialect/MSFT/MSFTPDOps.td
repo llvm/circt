@@ -49,6 +49,20 @@ def PDPhysLocationOp : MSFTOp<"pd.location",
   }];
 }
 
+def PDRegPhysLocationOp : MSFTOp<"pd.reg_location",
+      [DeclareOpInterfaceMethods<DynInstDataOpInterface>]> {
+  let summary = "Specify register locations";
+  let description = [{
+    A version of "PDPhysLocationOp" specialized for registers, which have one
+    location per bit.
+  }];
+  let arguments = (ins LocationVector:$locs,
+                       OptionalAttr<FlatSymbolRefAttr>:$ref);
+  let assemblyFormat = [{
+    (`ref` $ref^)? custom<ListOptionalRegLocList>($locs) attr-dict
+  }];
+}
+
 def PDPhysRegionOp : MSFTOp<"pd.physregion",
       [DeclareOpInterfaceMethods<DynInstDataOpInterface>]> {
   let summary = "Specify a physical region for an instance";
