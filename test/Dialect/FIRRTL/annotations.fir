@@ -397,25 +397,26 @@ circuit Foo: %[[{"target": "~Foo|Foo>_T_0", "class": "firrtl.transforms.DontTouc
     input reset : UInt<1>
     input clock : Clock
 
-    ; CHECK: %_T_0 = firrtl.wire sym @_T_0
+    ; CHECK: %_T_0 = firrtl.wire {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}
     wire _T_0 : UInt<1>
-    ; CHECK: %_T_1 = firrtl.node sym @_T_1 %_T_0
+    ; CHECK: %_T_1 = firrtl.node %_T_0 {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}
     node _T_1 = _T_0
-    ; CHECK: %_T_2 = firrtl.reg sym @_T_2 %clock
+    ; CHECK: %_T_2 = firrtl.reg %clock {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}
     reg _T_2 : UInt<1>, clock
-    ; CHECK: %_T_3 = firrtl.regreset sym @_T_3 %clock, %reset, %c0_ui4
+    ; CHECK: %_T_3 = firrtl.regreset %clock, %reset, %c0_ui4 {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}
     reg _T_3 : UInt<4>, clock with :
       reset => (reset, UInt<4>("h0"))
-    ; CHECK: %_T_4 = chirrtl.seqmem sym @_T_4 Undefined
+    ; CHECK: %_T_4 = chirrtl.seqmem Undefined {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}
     smem _T_4 : UInt<1>[9] [256]
-    ; CHECK: %_T_5 = chirrtl.combmem sym @_T_5
+    ; CHECK: %_T_5 = chirrtl.combmem {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}
     cmem _T_5 : UInt<1>[9] [256]
     ; CHECK: chirrtl.memoryport Infer %_T_5 {annotations =
     ; CHECK-SAME: {class = "firrtl.transforms.DontTouchAnnotation"}
     infer mport _T_6 = _T_5[reset], clock
-    ; CHECK: firrtl.instance _T_7 sym @_T_7
+    ; CHECK: firrtl.instance _T_7 {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}
     inst _T_7 of Bar
-    ; CHECK: firrtl.mem sym @_T_8 Undefined
+    ; CHECK: firrtl.mem Undefined
+    ; CHECK-SAME: annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]
     mem _T_8 :
         data-type => UInt<4>
         depth => 8
@@ -558,65 +559,55 @@ circuit GCTDataTap : %[
     ; CHECK-SAME: annotations = [{unrelatedAnnotation}]
     ; CHECK:      firrtl.nla @nla_1 [#hw.innerNameRef<@GCTDataTap::@im>, #hw.innerNameRef<@InnerMod::@w>]
     ; CHECK: firrtl.extmodule private @DataTap
-    ; CHECK-SAME: _0: !firrtl.uint<1> sym @_0 [
+    ; CHECK-SAME: _0: !firrtl.uint<1> [
     ; CHECK-SAME:   {class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
     ; CHECK-SAME:    id = [[ID:[0-9]+]] : i64,
     ; CHECK-SAME:    portID = [[PORT_ID_0:[0-9]+]] : i64,
     ; CHECK-SAME:    type = "portName"}
     ; CHECK-SAME: _1: !firrtl.vector<uint<1>, 1> [
     ; CHECK-SAME:   #firrtl.subAnno<fieldID = 1,
-    ; CHECK-SAME:     {class = "firrtl.transforms.DontTouchAnnotation"}>
-    ; CHECK-SAME:   #firrtl.subAnno<fieldID = 1,
     ; CHECK-SAME:     {class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
     ; CHECK-SAME:      id = [[ID]] : i64,
     ; CHECK-SAME:      portID = [[PORT_ID_1:[0-9]+]] : i64,
     ; CHECK-SAME:      type = "portName"}>
-    ; CHECK-SAME: _2: !firrtl.uint<1> sym @_2 [
+    ; CHECK-SAME: _2: !firrtl.uint<1> [
     ; CHECK-SAME:   {class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
     ; CHECK-SAME:    id = [[ID]] : i64,
     ; CHECK-SAME:    portID = [[PORT_ID_2:[0-9]+]] : i64,
     ; CHECK-SAME:    type = "portName"}
     ; CHECK-SAME: _3: !firrtl.vector<uint<1>, 1> [
     ; CHECK-SAME:   #firrtl.subAnno<fieldID = 1,
-    ; CHECK-SAME:     {class = "firrtl.transforms.DontTouchAnnotation"}>
-    ; CHECK-SAME:   #firrtl.subAnno<fieldID = 1,
     ; CHECK-SAME:     {class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
     ; CHECK-SAME:      id = [[ID]] : i64,
     ; CHECK-SAME:      portID = [[PORT_ID_3:[0-9]+]] : i64,
     ; CHECK-SAME:      type = "portName"}>
-    ; CHECK-SAME: _4: !firrtl.uint<1> sym @_4 [
+    ; CHECK-SAME: _4: !firrtl.uint<1> [
     ; CHECK-SAME:   {class = "sifive.enterprise.grandcentral.DataTapModuleSignalKey",
     ; CHECK-SAME:    id = [[ID]] : i64,
     ; CHECK-SAME:    portID = [[PORT_ID_4:[0-9]+]] : i64}
     ; CHECK-SAME: _5: !firrtl.vector<uint<1>, 1> [
     ; CHECK-SAME:   #firrtl.subAnno<fieldID = 1,
-    ; CHECK-SAME:     {class = "firrtl.transforms.DontTouchAnnotation"}>
-    ; CHECK-SAME:   #firrtl.subAnno<fieldID = 1,
     ; CHECK-SAME:     {class = "sifive.enterprise.grandcentral.DataTapModuleSignalKey",
     ; CHECK-SAME:      id = [[ID]] : i64,
     ; CHECK-SAME:      portID = [[PORT_ID_5:[0-9]+]] : i64}>
-    ; CHECK-SAME: _6: !firrtl.uint<1> sym @_6 [
+    ; CHECK-SAME: _6: !firrtl.uint<1> [
     ; CHECK-SAME:   {class = "sifive.enterprise.grandcentral.DeletedDataTapKey",
     ; CHECK-SAME:    id = [[ID]] : i64}
     ; CHECK-SAME: _7: !firrtl.vector<uint<1>, 1> [
     ; CHECK-SAME:   #firrtl.subAnno<fieldID = 1,
-    ; CHECK-SAME:     {class = "firrtl.transforms.DontTouchAnnotation"}>
-    ; CHECK-SAME:   #firrtl.subAnno<fieldID = 1,
     ; CHECK-SAME:     {class = "sifive.enterprise.grandcentral.DeletedDataTapKey",
     ; CHECK-SAME:      id = [[ID]] : i64}>
-    ; CHECK-SAME: _8: !firrtl.uint<1> sym @_8 [
+    ; CHECK-SAME: _8: !firrtl.uint<1> [
     ; CHECK-SAME:   {class = "sifive.enterprise.grandcentral.LiteralDataTapKey",
     ; CHECK-SAME:    literal = "UInt<16>(\22h2a\22)"}
     ; CHECK-SAME: _9: !firrtl.vector<uint<1>, 1> [
     ; CHECK-SAME:   #firrtl.subAnno<fieldID = 1,
-    ; CHECK-SAME:     {class = "firrtl.transforms.DontTouchAnnotation"}>
     ; CHECK-SAME:     {class = "sifive.enterprise.grandcentral.LiteralDataTapKey",
     ; CHECK-SAME:      literal = "UInt<16>(\22h2a\22)"}
-    ; CHECK-SAME: _10: !firrtl.uint<1> sym @_10 [
+    ; CHECK-SAME: _10: !firrtl.uint<1> [
     ; CHECK-SAME:     {class = "sifive.enterprise.grandcentral.ReferenceDataTapKey", id = [[ID]] : i64, portID = [[PORT_ID_6:[0-9]+]] : i64, type = "portName"}
     ; CHECK-SAME: annotations = [
-    ; CHECK-SAME:   {class = "sifive.enterprise.grandcentral.DataTapsAnnotation"},
-    ; CHECK-SAME:   {class = "firrtl.transforms.DontTouchAnnotation"}]
+    ; CHECK-SAME:   {class = "sifive.enterprise.grandcentral.DataTapsAnnotation"}
 
     ; CHECK: firrtl.extmodule private @BlackBox
     ; CHECK-SAME: annotations = [
@@ -624,7 +615,6 @@ circuit GCTDataTap : %[
     ; CHECK-SAME:    id = [[ID]] : i64,
     ; CHECK-SAME:    internalPath = "baz.qux",
     ; CHECK-SAME:    portID = [[PORT_ID_4]] : i64}
-    ; CHECK-SAME:   {class = "firrtl.transforms.DontTouchAnnotation"}
     ; CHECK-SAME:   {class = "sifive.enterprise.grandcentral.DataTapModuleSignalKey",
     ; CHECK-SAME:    id = [[ID]] : i64,
     ; CHECK-SAME:    internalPath = "baz.quz",
@@ -635,7 +625,7 @@ circuit GCTDataTap : %[
     ; CHECK-SAME: {circt.nonlocal = @nla_1, class = "sifive.enterprise.grandcentral.ReferenceDataTapKey", id = 0 : i64, portID = 7 : i64, type = "source"}
 
     ; CHECK: firrtl.module @GCTDataTap
-    ; CHECK: firrtl.reg  sym @r
+    ; CHECK: firrtl.reg
     ; CHECk-SAME: annotations =
     ; CHECK-SAME:   {class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
     ; CHECK-SAME:    id = [[ID]] : i64,
@@ -649,8 +639,6 @@ circuit GCTDataTap : %[
     ; CHECK-SAME:      id = [[ID]] : i64,
     ; CHECK-SAME:      portID = [[PORT_ID_2]] : i64,
     ; CHECK-SAME:      type = "source"}>
-    ; CHECK-SAME:   #firrtl.subAnno<fieldID = 1,
-    ; CHECK-SAME:     {class = "firrtl.transforms.DontTouchAnnotation"}>
     ; CHECK-SAME:   #firrtl.subAnno<fieldID = 1,
     ; CHECK-SAME:     {class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
     ; CHECK-SAME:      id = [[ID]] : i64,
@@ -928,7 +916,7 @@ circuit GCTInterface : %[
     ; members of the interface inside the parent.  Both port "a" and register
     ; "r" should be annotated.
     ; CHECK: firrtl.module @GCTInterface
-    ; CHECK-SAME: %a: !firrtl.uint<1> sym @a [
+    ; CHECK-SAME: %a: !firrtl.uint<1> [
     ; CHECK-SAME:   #firrtl.subAnno<fieldID = 0, {
     ; CHECK-SAME:     class = "sifive.enterprise.grandcentral.AugmentedGroundType",
     ; CHECK-SAME:     id = [[ID_port]] : i64}>
@@ -1166,8 +1154,8 @@ circuit Top : %[[{
 ; CHECK-SAME: sym @child {annotations = [{circt.nonlocal = @nla_2, class = "circt.nonlocal"}]}
 
 ; CHECK: firrtl.extmodule private @Child(
-; CHECK-SAME:   in in: !firrtl.uint<123> sym @in,
-; CHECK-SAME:   out out: !firrtl.uint<456> sym @out
+; CHECK-SAME:   in in: !firrtl.uint<123> [{class = "firrtl.transforms.DontTouchAnnotation"}],
+; CHECK-SAME:   out out: !firrtl.uint<456> [{class = "firrtl.transforms.DontTouchAnnotation"}]
 ; CHECK-SAME: )
 ; CHECK-SAME: attributes {annotations = [
 ; CHECK-SAME:   {circt.nonlocal = @nla_1, id = [[ID]] : i64},

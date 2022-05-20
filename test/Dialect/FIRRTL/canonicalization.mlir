@@ -801,7 +801,7 @@ firrtl.module @reg_cst_prop1(in %clock: !firrtl.clock, out %out_b: !firrtl.uint<
 // Check for DontTouch annotation
 // CHECK-LABEL: @reg_cst_prop1_DontTouch
 // CHECK-NEXT:      %c5_ui8 = firrtl.constant 5 : !firrtl.uint<8>
-// CHECK-NEXT:      %tmp_a = firrtl.reg sym @reg1 %clock : !firrtl.uint<8>
+// CHECK-NEXT:      %tmp_a = firrtl.reg %clock
 // CHECK-NEXT:      %tmp_b = firrtl.reg %clock  : !firrtl.uint<8>
 // CHECK-NEXT:      firrtl.strictconnect %tmp_a, %c5_ui8 : !firrtl.uint<8>
 // CHECK-NEXT:      firrtl.strictconnect %tmp_b, %tmp_a : !firrtl.uint<8>
@@ -809,7 +809,7 @@ firrtl.module @reg_cst_prop1(in %clock: !firrtl.clock, out %out_b: !firrtl.uint<
 
 firrtl.module @reg_cst_prop1_DontTouch(in %clock: !firrtl.clock, out %out_b: !firrtl.uint<8>) {
   %c5_ui8 = firrtl.constant 5 : !firrtl.uint<8>
-  %_tmp_a = firrtl.reg  sym @reg1 %clock {name = "tmp_a"} : !firrtl.uint<8>
+  %_tmp_a = firrtl.reg %clock {name = "tmp_a", annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<8>
   %_tmp_b = firrtl.reg %clock {name = "tmp_b"} : !firrtl.uint<8>
   firrtl.connect %_tmp_a, %c5_ui8 : !firrtl.uint<8>, !firrtl.uint<8>
   firrtl.connect %_tmp_b, %_tmp_a : !firrtl.uint<8>, !firrtl.uint<8>
@@ -873,7 +873,7 @@ firrtl.module @AttachDeadWireDontTouch(in %a: !firrtl.analog<1>, in %b: !firrtl.
   // CHECK-NEXT: %c = firrtl.wire
   // CHECK-NEXT: firrtl.attach %a, %b, %c :
   // CHECK-NEXT: }
-  %c = firrtl.wire sym @s1 : !firrtl.analog<1>
+  %c = firrtl.wire {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.analog<1>
   firrtl.attach %a, %b, %c : !firrtl.analog<1>, !firrtl.analog<1>, !firrtl.analog<1>
 }
 
@@ -2121,7 +2121,7 @@ firrtl.module @constReg7(in %v: !firrtl.uint<1>, in %clock: !firrtl.clock, in %r
 firrtl.module @constReg8(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
   %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
   // CHECK: firrtl.regreset
-  %r = firrtl.regreset  sym @s2 %clock, %reset, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+  %r = firrtl.regreset %clock, %reset, %c1_ui1 {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
   %0 = firrtl.mux(%reset, %c1_ui1, %r) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
   firrtl.connect %r, %0 : !firrtl.uint<1>, !firrtl.uint<1>
   firrtl.connect %out, %r : !firrtl.uint<1>, !firrtl.uint<1>

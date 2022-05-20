@@ -45,9 +45,14 @@ circuit Top : %[[{
 ; CHECK:          c,
 ; CHECK:          d
 ; CHECK: );
-; CHECK:   assign b = Top.foo.f;
-; CHECK:   assign c = Top.foo.g;
+; CHECK:   assign b = Top.foo.[[F:.+]];
+; CHECK:   assign c = Top.foo.[[G:.+]];
 ; CHECK:   assign d = Top.k;
+; CHECK: endmodule
+
+; CHECK: module Foo();
+; CHECK:   wire [[G]] =
+; CHECK:   wire [[F]] =
 ; CHECK: endmodule
 
 ; // -----

@@ -147,7 +147,7 @@ circuit Foo: %[[{"a":null,"target":"~Foo|Foo>x"}]]
 
 ; A target pointing at a non-existent instance should error.
 
-; expected-error @+1 {{unapplied annotations with target '~Foo|Foo>baz' and payload '[{circt.nonlocal = @nla_1, class = "circt.nonlocal"}, {class = "firrtl.transforms.DontTouchAnnotation"}]'}}
+; expected-error @+1 {{unapplied annotations with target '~Foo|Foo>baz' and payload '[{circt.nonlocal = @nla_1, class = "circt.nonlocal"}]'}}
 circuit Foo: %[[{"a":null,"target":"~Foo|Foo/baz:Bar"}]]
   module Bar:
     skip
@@ -160,7 +160,7 @@ circuit Foo: %[[{"a":null,"target":"~Foo|Foo/baz:Bar"}]]
 ; nlas.
 
 ; expected-error @+2 {{unapplied annotations with target '~NLAParse|A_companion' and payload '[{class = "sifive.enterprise.grandcentral.ViewAnnotation", id = 0 : i64, name = "A", type = "companion"}]'}}
-; expected-error @+1 {{unapplied annotations with target '~NLAParse|FooBar>clock' and payload '[{class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 1 : i64, target = []}, {class = "firrtl.transforms.DontTouchAnnotation", target = []}]'}}
+; expected-error @+1 {{unapplied annotations with target '~NLAParse|FooBar>clock' and payload '[{class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 1 : i64, target = []}]'}}
 circuit NLAParse : %[[
   {
    "class": "sifive.enterprise.grandcentral.GrandCentralView$SerializedViewAnnotation",

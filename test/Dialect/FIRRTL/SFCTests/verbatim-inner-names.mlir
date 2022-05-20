@@ -10,11 +10,11 @@ firrtl.circuit "Foo" {
     in %clock: !firrtl.clock sym @symClock,
     in %reset: !firrtl.uint<1> sym @symReset
   ) {
-    %instName_clockIn, %instName_clockOut = firrtl.instance instName sym @instSym @Bar(in extClockIn: !firrtl.clock, out extClockOut: !firrtl.clock)
-    %nodeName = firrtl.node sym @nodeSym %value : !firrtl.uint<42>
-    %wireName = firrtl.wire sym @wireSym : !firrtl.uint<42>
-    %regName = firrtl.reg sym @regSym %clock : !firrtl.uint<42>
-    %regResetName = firrtl.regreset sym @regResetSym %clock, %reset, %value : !firrtl.uint<1>, !firrtl.uint<42>, !firrtl.uint<42>
+    %instName_clockIn, %instName_clockOut = firrtl.instance instName sym @instSym {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} @Bar(in extClockIn: !firrtl.clock, out extClockOut: !firrtl.clock)
+    %nodeName = firrtl.node sym @nodeSym %value {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<42>
+    %wireName = firrtl.wire sym @wireSym {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<42>
+    %regName = firrtl.reg sym @regSym %clock {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<42>
+    %regResetName = firrtl.regreset sym @regResetSym %clock, %reset, %value {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<1>, !firrtl.uint<42>, !firrtl.uint<42>
 
     %invalid_ui42 = firrtl.invalidvalue : !firrtl.uint<42>
     firrtl.connect %instName_clockIn, %clock : !firrtl.clock, !firrtl.clock
