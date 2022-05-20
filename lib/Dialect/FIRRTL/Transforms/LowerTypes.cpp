@@ -493,8 +493,18 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(
     // nlaNameToNewSymList, will have multiple entries with the same NLA name in
     // such scenarios. So, whenever a reference to an NLA is copied to the
     // retval, update the nlaNameToNewSymList.
-    auto subAnno = opAttr.dyn_cast<SubAnnotationAttr>();
-    if (!subAnno) {
+    Optional<int64_t> maybeFieldID = None;
+    DictionaryAttr annotation;
+    if (auto subAnno = opAttr.dyn_cast<SubAnnotationAttr>()) {
+      maybeFieldID = subAnno.getFieldID();
+      annotation = subAnno.getAnnotations();
+    } else {
+      annotation = opAttr.dyn_cast<DictionaryAttr>();
+      if (annotations)
+        if (auto id = annotation.getAs<IntegerAttr>("circt.fieldID"))
+          maybeFieldID = id.getInt();
+    }
+    if (!maybeFieldID) {
       retval.push_back(
           updateAnnotationFieldID(ctxt, opAttr, field.fieldID, cache.i64ty));
       // Check for ground type, to ensure spurious entries are not created for
@@ -508,15 +518,15 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(
 
       continue;
     }
+    auto fieldID = maybeFieldID.getValue();
     /* subAnno handling... */
     // Check whether the annotation falls into the range of the current field.
-    if (subAnno.getFieldID() != 0 &&
-        !(subAnno.getFieldID() >= field.fieldID &&
-          subAnno.getFieldID() <= field.fieldID + field.type.getMaxFieldID()))
+    if (fieldID != 0 &&
+        !(fieldID >= field.fieldID &&
+          fieldID <= field.fieldID + field.type.getMaxFieldID()))
       continue;
 
-    auto nlaRef =
-        subAnno.getAnnotations().getAs<FlatSymbolRefAttr>("circt.nonlocal");
+    auto nlaRef = annotation.getAs<FlatSymbolRefAttr>("circt.nonlocal");
     auto isDontTouch = Annotation(opAttr).getClass() ==
                        "firrtl.transforms.DontTouchAnnotation";
 
@@ -530,18 +540,17 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(
         !alreadyAddedNLAs.insert(nlaRef.getAttr()).second)
       nlaRef = {};
     // Apply annotations to all elements if fieldID is equal to zero.
-    if (subAnno.getFieldID() == 0) {
-      retval.push_back(subAnno.getAnnotations());
+    if (fieldID == 0) {
+      retval.push_back(annotation);
       if (isGroundType && nlaRef)
         nlaNameToNewSymList.push_back({nlaRef.getAttr(), symAttr});
       continue;
     }
 
-    if (auto newFieldID = subAnno.getFieldID() - field.fieldID) {
+    if (auto newFieldID = fieldID - field.fieldID) {
       // If the target is a subfield/subindex of the current field, create a
       // new sub-annotation with a new field ID.
-      retval.push_back(
-          SubAnnotationAttr::get(ctxt, newFieldID, subAnno.getAnnotations()));
+      retval.push_back(SubAnnotationAttr::get(ctxt, newFieldID, annotation));
       continue;
     }
     if (isDontTouch) {
@@ -564,7 +573,7 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(
     }
     // Otherwise, if the current field is exactly the target, degenerate
     // the sub-annotation to a normal annotation.
-    retval.push_back(subAnno.getAnnotations());
+    retval.push_back(annotation);
   }
   return ArrayAttr::get(ctxt, retval);
 }
