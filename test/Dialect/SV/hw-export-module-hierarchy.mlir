@@ -2,7 +2,23 @@
 // RUN: circt-opt -pass-pipeline='hw-export-module-hierarchy{dir-name=%t}' %s
 // RUN: FileCheck %s < %t/testharness_hier.json
 
-// CHECK: {"instance_name":"TestHarness","module_name":"TestHarness","instances":[{"instance_name":"main_design","module_name":"MainDesign","instances":[{"instance_name":"inner","module_name":"InnerModule","instances":[]}]}]}
+// CHECK:      {
+// CHECK-NEXT:   "instance_name": "TestHarness",
+// CHECK-NEXT:   "module_name": "TestHarness",
+// CHECK-NEXT:   "instances": [
+// CHECK-NEXT:     {
+// CHECK-NEXT:       "instance_name": "main_design",
+// CHECK-NEXT:       "module_name": "MainDesign",
+// CHECK-NEXT:       "instances": [
+// CHECK-NEXT:         {
+// CHECK-NEXT:           "instance_name": "inner",
+// CHECK-NEXT:           "module_name": "InnerModule",
+// CHECK-NEXT:           "instances": []
+// CHECK-NEXT:         }
+// CHECK-NEXT:       ]
+// CHECK-NEXT:     }
+// CHECK-NEXT:   ]
+// CHECK-NEXT: }
 
 hw.module @InnerModule(%in: i1) -> (out: i1) {
   hw.output %in : i1

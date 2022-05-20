@@ -63,7 +63,7 @@ static void printHierarchy(hw::InstanceOp &inst, SymbolTable &symbolTable,
 /// of the hierarchy.
 static void extractHierarchyFromTop(hw::HWModuleOp op, SymbolTable &symbolTable,
                                     llvm::raw_ostream &os) {
-  llvm::json::OStream J(os);
+  llvm::json::OStream J(os, 2);
 
   // As a special case for top-level module, set instance name to module name,
   // since the top-level module is not instantiated.

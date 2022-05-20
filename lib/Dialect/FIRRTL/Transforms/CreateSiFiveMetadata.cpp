@@ -170,10 +170,10 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
 
   std::string testBenchJsonBuffer;
   llvm::raw_string_ostream testBenchOs(testBenchJsonBuffer);
-  llvm::json::OStream testBenchJson(testBenchOs);
+  llvm::json::OStream testBenchJson(testBenchOs, 2);
   std::string dutJsonBuffer;
   llvm::raw_string_ostream dutOs(dutJsonBuffer);
-  llvm::json::OStream dutJson(dutOs);
+  llvm::json::OStream dutJson(dutOs, 2);
 
   std::string seqMemConfStr;
   dutJson.array([&] {
@@ -295,7 +295,7 @@ LogicalResult CreateSiFiveMetadataPass::emitRetimeModulesMetadata() {
   // Create a string buffer for the json data.
   std::string buffer;
   llvm::raw_string_ostream os(buffer);
-  llvm::json::OStream j(os);
+  llvm::json::OStream j(os, 2);
 
   // The output is a json array with each element a module name.
   unsigned index = 0;
@@ -410,7 +410,7 @@ LogicalResult CreateSiFiveMetadataPass::emitSitestBlackboxMetadata() {
     // defname of a module can't change so we can output them verbatim.
     std::string buffer;
     llvm::raw_string_ostream os(buffer);
-    llvm::json::OStream j(os);
+    llvm::json::OStream j(os, 2);
     j.array([&] {
       for (auto &name : names)
         j.value(name);
