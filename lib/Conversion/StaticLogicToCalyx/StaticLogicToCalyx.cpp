@@ -2740,4 +2740,3 @@ std::unique_ptr<OperationPass<ModuleOp>> createStaticLogicToCalyxPass() {
 }
 
 } // namespace circt
-
