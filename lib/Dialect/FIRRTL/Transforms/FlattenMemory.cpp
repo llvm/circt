@@ -38,7 +38,8 @@ struct FlattenMemoryPass : public FlattenMemoryBase<FlattenMemoryPass> {
     auto hasSubAnno = [&](MemOp op) -> bool {
       for (size_t portIdx = 0, e = op.getNumResults(); portIdx < e; ++portIdx)
         for (auto attr : op.getPortAnnotation(portIdx))
-          if (auto subAnno = attr.dyn_cast<SubAnnotationAttr>())
+          if (attr.isa<SubAnnotationAttr>() ||
+              attr.cast<DictionaryAttr>().get("circt.fieldID"))
             return true;
 
       return false;
