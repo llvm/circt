@@ -1508,14 +1508,6 @@ static bool needsSymbol(ArrayAttr &annotations) {
     if (!attr.isa<SubAnnotationAttr, DictionaryAttr>())
       continue;
     Annotation anno(attr);
-    // Check if it is a DontTouch annotation that applies to all subfields in
-    // case of a bundle. getFieldID returns 0 if it is not a SubAnno.
-    if (anno.getFieldID() == 0 &&
-        anno.isClass("firrtl.transforms.DontTouchAnnotation")) {
-      needsSymbol = true;
-      // Ignore the annotation.
-      continue;
-    }
     if (anno.getMember("circt.nonlocal"))
       needsSymbol = true;
     filteredAnnos.push_back(attr);
