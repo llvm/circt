@@ -87,7 +87,7 @@ LogicalResult LocationVectorAttr::verify(
 LogicalResult
 circt::msft::parseOptionalRegLoc(SmallVectorImpl<PhysLocationAttr> &locs,
                                  AsmParser &p) {
-  auto ctxt = p.getContext();
+  MLIRContext *ctxt = p.getContext();
   if (!p.parseOptionalStar()) {
     locs.push_back({});
     return success();
