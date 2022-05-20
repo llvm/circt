@@ -13,6 +13,7 @@
 #include "circt/Conversion/StaticLogicToCalyx.h"
 #include "../PassDetail.h"
 #include "circt/Dialect/Calyx/CalyxHelpers.h"
+#include "circt/Dialect/Calyx/CalyxLoweringUtils.h"
 #include "circt/Dialect/Calyx/CalyxOps.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
@@ -123,44 +124,6 @@ struct PipelineScheduleable : LoopScheduleable {};
 /// A variant of types representing scheduleable operations.
 using Scheduleable =
     std::variant<calyx::GroupOp, WhileScheduleable, PipelineScheduleable>;
-
-/// A structure representing a set of ports which act as a memory interface.
-struct CalyxMemoryPorts {
-  Value readData;
-  Value done;
-  Value writeData;
-  SmallVector<Value> addrPorts;
-  Value writeEn;
-};
-
-/// The various lowering passes are agnostic wrt. whether working with a
-/// calyx::MemoryOp (internally allocated memory) or external memory (through
-/// CalyxMemoryPort). This is achieved through the following
-/// CalyxMemoryInterface for accessing either a calyx::MemoryOp or a
-/// CalyxMemoryPorts struct.
-struct CalyxMemoryInterface {
-  CalyxMemoryInterface() {}
-  explicit CalyxMemoryInterface(const CalyxMemoryPorts &ports) : impl(ports) {}
-  explicit CalyxMemoryInterface(calyx::MemoryOp memOp) : impl(memOp) {}
-
-#define memoryInterfaceGetter(portName, TRet)                                  \
-  TRet portName() {                                                            \
-    if (auto memOp = std::get_if<calyx::MemoryOp>(&impl); memOp)               \
-      return memOp->portName();                                                \
-    else                                                                       \
-      return std::get<CalyxMemoryPorts>(impl).portName;                        \
-  }
-
-  memoryInterfaceGetter(readData, Value);
-  memoryInterfaceGetter(done, Value);
-  memoryInterfaceGetter(writeData, Value);
-  memoryInterfaceGetter(writeEn, Value);
-  memoryInterfaceGetter(addrPorts, ValueRange);
-#undef memoryInterfaceGetter
-
-private:
-  std::variant<calyx::MemoryOp, CalyxMemoryPorts> impl;
-};
 
 //===----------------------------------------------------------------------===//
 // Utility functions
@@ -528,7 +491,7 @@ public:
   /// Registers a memory interface as being associated with a memory identified
   /// by 'memref'.
   void registerMemoryInterface(Value memref,
-                               const CalyxMemoryInterface &memoryInterface) {
+                               const calyx::MemoryInterface &memoryInterface) {
     assert(memref.getType().isa<MemRefType>());
     assert(memories.find(memref) == memories.end() &&
            "Memory already registered for memref");
@@ -536,7 +499,7 @@ public:
   }
 
   /// Returns the memory interface registered for the given memref.
-  CalyxMemoryInterface getMemoryInterface(Value memref) {
+  calyx::MemoryInterface getMemoryInterface(Value memref) {
     assert(memref.getType().isa<MemRefType>());
     auto it = memories.find(memref);
     assert(it != memories.end() && "No memory registered for memref");
@@ -545,7 +508,7 @@ public:
 
   /// If v is an input to any memory registered within this component, returns
   /// the memory. If not, returns null.
-  Optional<CalyxMemoryInterface> isInputPortOfMemory(Value v) {
+  Optional<calyx::MemoryInterface> isInputPortOfMemory(Value v) {
     for (auto &memIf : memories) {
       auto &mem = memIf.getSecond();
       if (mem.writeEn() == v || mem.writeData() == v ||
@@ -632,7 +595,7 @@ private:
   DenseMap<Operation *, DenseMap<unsigned, calyx::RegisterOp>> whileIterRegs;
 
   /// A mapping from memref's to their corresponding Calyx memory interface.
-  DenseMap<Value, CalyxMemoryInterface> memories;
+  DenseMap<Value, calyx::MemoryInterface> memories;
 
   /// A mapping between the source funcOp result indices and the corresponding
   /// output port indices of this componentOp.
@@ -1006,7 +969,7 @@ private:
   /// memoryOp based on the provided addressValues.
   void assignAddressPorts(PatternRewriter &rewriter, Location loc,
                           calyx::GroupInterface group,
-                          CalyxMemoryInterface memoryInterface,
+                          calyx::MemoryInterface memoryInterface,
                           Operation::operand_range addressValues) const {
     IRRewriter::InsertionGuard guard(rewriter);
     rewriter.setInsertionPointToEnd(group.getBody());
@@ -1153,7 +1116,7 @@ static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
   memoryOp->setAttr("external",
                     IntegerAttr::get(rewriter.getI1Type(), llvm::APInt(1, 1)));
   componentState.registerMemoryInterface(allocOp.getResult(),
-                                         CalyxMemoryInterface(memoryOp));
+                                         calyx::MemoryInterface(memoryOp));
   return success();
 }
 
@@ -1633,7 +1596,7 @@ struct FuncOpConversion : public FuncOpPartialLoweringPattern {
     for (auto extMemPortIndices : extMemoryCompPortIndices) {
       /// Create a mapping for the in- and output ports using the Calyx memory
       /// port structure.
-      CalyxMemoryPorts extMemPorts;
+      calyx::MemoryPortsImpl extMemPorts;
       unsigned inPortsIt = extMemPortIndices.getSecond().first;
       unsigned outPortsIt = extMemPortIndices.getSecond().second +
                             compOp.getInputPortInfo().size();
@@ -1652,7 +1615,7 @@ struct FuncOpConversion : public FuncOpPartialLoweringPattern {
       /// Register the external memory ports as a memory interface within the
       /// component.
       compState.registerMemoryInterface(extMemPortIndices.getFirst(),
-                                        CalyxMemoryInterface(extMemPorts));
+                                        calyx::MemoryInterface(extMemPorts));
     }
 
     return success();
