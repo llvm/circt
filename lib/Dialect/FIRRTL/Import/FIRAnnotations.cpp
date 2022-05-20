@@ -1391,17 +1391,16 @@ bool circt::firrtl::scatterCustomAnnotations(
         }
 
         if (classAttr.getValue() == literalKeyClass) {
-          NamedAttrList literal;
-          literal.append("class", classAttr);
           auto literalAttr =
               tryGetAs<StringAttr>(bDict, dict, "literal", loc, clazz, path);
           if (!literalAttr)
             return false;
-          literal.append("literal", literalAttr);
+          port.erase("id");
+          port.append("literal", literalAttr);
 
-          // Port Annotaiton generation.
+          // Port Annotations generation.
           newAnnotations[portPair.first].push_back(
-              DictionaryAttr::get(context, literal));
+              DictionaryAttr::get(context, port));
           continue;
         }
 
