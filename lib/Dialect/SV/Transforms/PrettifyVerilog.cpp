@@ -262,7 +262,7 @@ void PrettifyVerilogPass::processPostOrder(Block &body) {
     }
 
     auto wire = dyn_cast<sv::WireOp>(op);
-    if (wire && wire->hasAttr("user_specified_name")) {
+    if (wire && wire->hasAttr("sv.user_specified_name")) {
       // Remove the wire if it is dead.
       if (wire->hasOneUse() && isa<sv::AssignOp>(*wire->getUsers().begin())) {
         wire->getUsers().begin()->erase();

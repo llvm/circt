@@ -2354,7 +2354,7 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
   auto wire =
       builder.create<sv::WireOp>(op.getLoc(), resultType, name, symName);
   if (hasUserSpecifiedName)
-    wire->setAttr("user_specified_name", builder.getUnitAttr());
+    wire->setAttr("sv.user_specified_name", builder.getUnitAttr());
   return setLowering(op, wire);
 }
 
@@ -2412,7 +2412,7 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
   if (symName) {
     auto wire = builder.create<sv::WireOp>(operand.getType(), name, symName);
     if (hasUserSpecifiedName)
-      wire->setAttr("user_specified_name", builder.getUnitAttr());
+      wire->setAttr("sv.user_specified_name", builder.getUnitAttr());
     builder.create<sv::AssignOp>(wire, operand);
     operand = builder.create<sv::ReadInOutOp>(wire);
   }

@@ -145,3 +145,20 @@ sv.verbatim "MACRO({{0}}, {{1}} reg={{4}}, {{3}})"
 The SV dialect is primarily designed for human consumption, not machines.  As
 such, transformations should aim to reduce redundancy, eliminate useless
 constructs (e.g. eliminate empty ifdef and if blocks), etc.
+
+## Attributes
+### Namings
+- `sv.namehint` - Used by ExportVerilog. If the associated value is required to have a name, the specified name will be used. This attribute is just a hint so it is not guranteed that the specified name appears in the output verilog. Example,
+```mlir
+%0 = sv.wire {sv.namehint = "foo"} : i1
+// wire foo;
+%1 = comb.add %a, %b {sv.namehint = "bar"} : i1
+// If a temporary wire is created:
+//   wire bar = a + b;
+%dead_expr = comb.and %a, %a {sv.namehint = "baz"} : i1
+// sv.namehint doesn't prevent any optimization. %dead_expr will be erased. To prevent an optimization
+```
+- `sv.user_specified_name` - Used by PrettifyVerilog. This attribute can be attached to sv.wire. At PrettifyVerilog, if the wire is dead (aka. no users), the wire will be deleted even if the wire has a symbol.
+```
+%wire = sv.wire @SYM {sv.user_specified_name} : i1
+```
