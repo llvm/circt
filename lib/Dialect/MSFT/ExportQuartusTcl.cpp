@@ -90,8 +90,14 @@ struct TclOutputState {
   TclEmitter &emitter;
   SmallVector<Attribute> symbolRefs;
 
+  void emit(PhysLocationAttr);
+  LogicalResult emitLocationAssignment(DynInstDataOpInterface refOp,
+                                       PhysLocationAttr,
+                                       Optional<StringRef> subpath);
+
   LogicalResult emit(PDPhysRegionOp region);
   LogicalResult emit(PDPhysLocationOp loc);
+  LogicalResult emit(PDRegPhysLocationOp);
   LogicalResult emit(DynamicInstanceVerbatimAttrOp attr);
 
   void emitPath(hw::GlobalRefOp ref, Optional<StringRef> subpath);
@@ -122,22 +128,9 @@ void TclOutputState::emitPath(hw::GlobalRefOp ref,
   // Some placements don't require subpaths.
   if (subpath)
     os << '|' << subpath;
-
-  os << '\n';
 }
 
-/// Emit tcl in the form of:
-/// "set_location_assignment MPDSP_X34_Y285_N0 -to $parent|fooInst|entityName"
-LogicalResult TclOutputState::emit(PDPhysLocationOp loc) {
-
-  auto ref =
-      dyn_cast_or_null<hw::GlobalRefOp>(emitter.getDefinition(loc.refAttr()));
-  if (!ref)
-    return loc.emitOpError("could not find hw.globalRef named ")
-           << loc.refAttr();
-  PhysLocationAttr pla = loc.loc();
-  indent() << "set_location_assignment ";
-
+void TclOutputState::emit(PhysLocationAttr pla) {
   // Different devices have different 'number' letters (the 'N' in 'N0'). M20Ks
   // and DSPs happen to have the same one, probably because they never co-exist
   // at the same location.
@@ -160,10 +153,48 @@ LogicalResult TclOutputState::emit(PDPhysLocationOp loc) {
   // Write out the rest of the location info.
   os << "_X" << pla.getX() << "_Y" << pla.getY() << "_" << numCharacter
      << pla.getNum();
+}
+
+/// Emit tcl in the form of:
+/// "set_location_assignment MPDSP_X34_Y285_N0 -to
+/// $parent|fooInst|entityName(|subpath)"
+LogicalResult
+TclOutputState::emitLocationAssignment(DynInstDataOpInterface refOp,
+                                       PhysLocationAttr loc,
+                                       Optional<StringRef> subpath) {
+  auto ref = dyn_cast_or_null<hw::GlobalRefOp>(
+      emitter.getDefinition(refOp.getGlobalRefSym()));
+  if (!ref)
+    return refOp.emitOpError("could not find hw.globalRef named ")
+           << refOp.getGlobalRefSym();
+
+  indent() << "set_location_assignment ";
+  emit(loc);
 
   // To which entity does this apply?
   os << " -to $parent|";
-  emitPath(ref, loc.subPath());
+  emitPath(ref, subpath);
+
+  return success();
+}
+
+LogicalResult TclOutputState::emit(PDPhysLocationOp loc) {
+  if (failed(emitLocationAssignment(loc, loc.loc(), loc.subPath())))
+    return failure();
+  os << '\n';
+  return success();
+}
+
+LogicalResult TclOutputState::emit(PDRegPhysLocationOp locs) {
+  ArrayRef<PhysLocationAttr> locArr = locs.locs().getLocs();
+  for (size_t i = 0, e = locArr.size(); i < e; ++i) {
+    PhysLocationAttr pla = locArr[i];
+    if (!pla)
+      continue;
+    if (failed(emitLocationAssignment(locs, pla, {})))
+      return failure();
+    os << "[" << i << "]\n";
+  }
   return success();
 }
 
@@ -260,6 +291,7 @@ LogicalResult TclEmitter::emit(Operation *hwMod, StringRef outputFile) {
     LogicalResult rc =
         TypeSwitch<Operation *, LogicalResult>(tclOp)
             .Case([&](PDPhysLocationOp op) { return state.emit(op); })
+            .Case([&](PDRegPhysLocationOp op) { return state.emit(op); })
             .Case([&](PDPhysRegionOp op) { return state.emit(op); })
             .Case([&](DynamicInstanceVerbatimAttrOp op) {
               return state.emit(op);

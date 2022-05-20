@@ -58,6 +58,32 @@ static void printPhysLoc(OpAsmPrinter &p, Operation *, PhysLocationAttr loc) {
     << " x: " << loc.getX() << " y: " << loc.getY() << " n: " << loc.getNum();
 }
 
+ParseResult parseListOptionalRegLocList(OpAsmParser &p,
+                                        LocationVectorAttr &locs) {
+  SmallVector<PhysLocationAttr, 32> locArr;
+  TypeAttr type;
+  if (p.parseAttribute(type) || p.parseLSquare() ||
+      p.parseCommaSeparatedList(
+          [&]() { return parseOptionalRegLoc(locArr, p); }) ||
+      p.parseRSquare())
+    return failure();
+
+  if (failed(LocationVectorAttr::verify(
+          [&p]() { return p.emitError(p.getNameLoc()); }, type, locArr)))
+    return failure();
+  locs = LocationVectorAttr::get(p.getContext(), type, locArr);
+  return success();
+}
+
+void printListOptionalRegLocList(OpAsmPrinter &p, Operation *,
+                                 LocationVectorAttr locs) {
+  p << locs.getType() << " [";
+  llvm::interleaveComma(locs.getLocs(), p, [&p](PhysLocationAttr loc) {
+    printOptionalRegLoc(loc, p);
+  });
+  p << "]";
+}
+
 //===----------------------------------------------------------------------===//
 // Misc MSFT ops
 //===----------------------------------------------------------------------===//
