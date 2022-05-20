@@ -286,18 +286,11 @@ static std::string addNLATargets(
   }
 
   for (int i = 0, e = nlaTargets.size() - 1; i < e; ++i) {
-    NamedAttrList pathmetadata, dontTouch;
+    NamedAttrList pathmetadata;
     pathmetadata.append("circt.nonlocal", nlaSym);
     pathmetadata.append("class", StringAttr::get(context, "circt.nonlocal"));
-    dontTouch.append(
-        "class",
-        StringAttr::get(context, "firrtl.transforms.DontTouchAnnotation"));
     mutableAnnotationMap[std::get<0>(nlaTargets[i])].push_back(
         DictionaryAttr::get(context, pathmetadata));
-    // Every op with nonlocal anchor must have a symbol. Hence add the
-    // dontTouch.
-    mutableAnnotationMap[std::get<0>(nlaTargets[i])].push_back(
-        DictionaryAttr::get(context, dontTouch));
   }
 
   // Annotations on the element instance.
