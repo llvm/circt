@@ -6,24 +6,24 @@ msft.instance.hierarchy @deeper {
   msft.instance.dynamic @deeper::@branch {
     msft.instance.dynamic @shallow::@leaf {
       msft.instance.dynamic @leaf::@module {
-        msft.pd.location M20K x: 15 y: 9 n: 3 path: "memBank2"
-        msft.instance.verb_attr name: "RESERVE_PLACE_REGION" value: "OFF" path: "memBank2"
+        msft.pd.location M20K x: 15 y: 9 n: 3 path: "|memBank2"
+        msft.instance.verb_attr name: "RESERVE_PLACE_REGION" value: "OFF" path: "|memBank2"
       }
     }
   }
 }
 // CHECK: hw.globalRef @instref [#hw.innerNameRef<@deeper::@branch>, #hw.innerNameRef<@shallow::@leaf>, #hw.innerNameRef<@leaf::@module>]
-// CHECK: msft.pd.location @instref M20K x: 15 y: 9 n: 3 path : "memBank2"
+// CHECK: msft.pd.location @instref M20K x: 15 y: 9 n: 3 path : "|memBank2"
 
 msft.instance.hierarchy @shallow {
   msft.instance.dynamic @shallow::@leaf {
     msft.instance.dynamic @leaf::@module {
-      msft.pd.location M20K x: 8 y: 19 n: 1 path: "memBank2"
+      msft.pd.location M20K x: 8 y: 19 n: 1 path: "|memBank2"
     }
   }
 }
 // CHECK: hw.globalRef @instref_1 [#hw.innerNameRef<@shallow::@leaf>, #hw.innerNameRef<@leaf::@module>]
-// CHECK: msft.pd.location @instref_1 M20K x: 8 y: 19 n: 1 path : "memBank2"
+// CHECK: msft.pd.location @instref_1 M20K x: 8 y: 19 n: 1 path : "|memBank2"
 
 msft.instance.hierarchy @reg {
   msft.instance.dynamic @reg::@reg {

@@ -57,15 +57,17 @@ class Instance:
   def add_named_attribute(self,
                           name: str,
                           value: str,
-                          subPath: Union[str, list[str]] = None):
+                          subpath: Union[str, list[str]] = None):
     """Add an arbitrary named attribute to this instance."""
-    if isinstance(subPath, list):
-      subPath = "|".join(subPath)
+    if isinstance(subpath, list):
+      subpath = "|".join(subpath)
+    if subpath:
+      subpath = "|" + subpath
     with self._get_ip():
       msft.DynamicInstanceVerbatimAttrOp(
           name=ir.StringAttr.get(name),
           value=ir.StringAttr.get(value),
-          subPath=None if subPath is None else ir.StringAttr.get(subPath),
+          subPath=None if subpath is None else ir.StringAttr.get(subpath),
           ref=None)
 
   @property
@@ -154,6 +156,8 @@ class ModuleInstance(Instance):
     import pycde.devicedb as devdb
     if isinstance(subpath, list):
       subpath = "|".join(subpath)
+    if subpath:
+      subpath = "|" + subpath
     loc = devdb.PhysLocation(devtype, x, y, num)
     self.root.system.placedb.place(self, loc, subpath)
 

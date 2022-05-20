@@ -41,6 +41,7 @@ target_link_libraries(circt-opt
   CIRCTStandardToHandshake
   CIRCTStandardToStaticLogic
   CIRCTStaticLogicOps
+  CIRCTStaticLogicToCalyx
   CIRCTSV
   CIRCTSVTransforms
   CIRCTTransforms
