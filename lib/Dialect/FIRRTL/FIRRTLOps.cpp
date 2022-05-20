@@ -178,7 +178,7 @@ bool firrtl::hasDontTouch(Value value) {
     return hasDontTouch(op);
   auto arg = value.dyn_cast<BlockArgument>();
   auto module = cast<FModuleOp>(arg.getOwner()->getParentOp());
-  return (!module.getPortSymbol(arg.getArgNumber()).empty());
+  return AnnotationSet::forPort(module, arg.getArgNumber()).hasDontTouch();
 }
 
 /// Get a special name to use when printing the entry block arguments of the

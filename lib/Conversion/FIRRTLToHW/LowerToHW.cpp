@@ -862,7 +862,17 @@ LogicalResult FIRRTLModuleLowering::lowerPorts(
     hw::PortInfo hwPort;
     hwPort.name = firrtlPort.name;
     hwPort.type = lowerType(firrtlPort.type);
-    hwPort.sym = firrtlPort.sym;
+    if (firrtlPort.sym)
+      hwPort.sym = firrtlPort.sym;
+    else {
+      firrtlPort.annotations.hasDontTouch();
+      // If the port doesn't have a symbol, but has a DontTouchAnnotation, then
+      // generate a symbol.
+      //
+      // TODO: This needs to use a namespace if this is a module.
+      hwPort.sym = StringAttr::get(moduleOp->getContext(),
+                                   Twine("__") + hwPort.name.getValue() + "__");
+    }
 
     // We can't lower all types, so make sure to cleanly reject them.
     if (!hwPort.type) {
