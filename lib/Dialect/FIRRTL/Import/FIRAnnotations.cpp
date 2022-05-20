@@ -1738,7 +1738,6 @@ bool circt::firrtl::scatterCustomAnnotations(
         if (nlaTargets.size() > 1) {
           nlaSym = buildNLA(circuit, ++nlaNumber, nlaTargets);
           fields.append("circt.nonlocal", nlaSym);
-          addDontTouch(leafTarget.first);
         }
         newAnnotations[leafTarget.first].push_back(
             DictionaryAttr::get(context, fields));
@@ -1750,7 +1749,6 @@ bool circt::firrtl::scatterCustomAnnotations(
           fields.append("class", StringAttr::get(context, "circt.nonlocal"));
           newAnnotations[std::get<0>(nlaTargets[i])].push_back(
               DictionaryAttr::get(context, fields));
-          addDontTouch(std::get<0>(nlaTargets[i]));
         }
       }
     }
