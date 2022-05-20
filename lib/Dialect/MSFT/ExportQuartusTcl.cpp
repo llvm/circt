@@ -127,7 +127,7 @@ void TclOutputState::emitPath(hw::GlobalRefOp ref,
 
   // Some placements don't require subpaths.
   if (subpath)
-    os << '|' << subpath;
+    os << subpath;
 }
 
 void TclOutputState::emit(PhysLocationAttr pla) {
@@ -157,7 +157,7 @@ void TclOutputState::emit(PhysLocationAttr pla) {
 
 /// Emit tcl in the form of:
 /// "set_location_assignment MPDSP_X34_Y285_N0 -to
-/// $parent|fooInst|entityName(|subpath)"
+/// $parent|fooInst|entityName(subpath)"
 LogicalResult
 TclOutputState::emitLocationAssignment(DynInstDataOpInterface refOp,
                                        PhysLocationAttr loc,
@@ -213,6 +213,7 @@ LogicalResult TclOutputState::emit(DynamicInstanceVerbatimAttrOp attr) {
   // To which entity does this apply?
   os << " -to $parent|";
   emitPath(ref, attr.subPath());
+  os << '\n';
   return success();
 }
 
@@ -252,22 +253,26 @@ LogicalResult TclOutputState::emit(PDPhysRegionOp region) {
 
   os << " -to $parent|";
   emitPath(ref, region.subPath());
+  os << '\n';
 
   // RESERVE_PLACE_REGION directive.
   indent() << "set_instance_assignment -name RESERVE_PLACE_REGION OFF";
   os << " -to $parent|";
   emitPath(ref, region.subPath());
+  os << '\n';
 
   // CORE_ONLY_PLACE_REGION directive.
   indent() << "set_instance_assignment -name CORE_ONLY_PLACE_REGION ON";
   os << " -to $parent|";
   emitPath(ref, region.subPath());
+  os << '\n';
 
   // REGION_NAME directive.
   indent() << "set_instance_assignment -name REGION_NAME ";
   os << physicalRegion.getName();
   os << " -to $parent|";
   emitPath(ref, region.subPath());
+  os << '\n';
   return success();
 }
 
