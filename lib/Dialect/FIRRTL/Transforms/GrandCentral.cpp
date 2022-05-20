@@ -1832,7 +1832,8 @@ StringAttr GrandCentralPass::getOrAddInnerSym(Operation *op) {
   auto module = op->getParentOfType<FModuleOp>();
   StringRef nameHint = "gct_sym";
   if (auto attr = op->getAttrOfType<StringAttr>("name"))
-    nameHint = attr.getValue();
+    if (!attr.getValue().empty())
+      nameHint = attr.getValue();
   auto name = getModuleNamespace(module).newName(nameHint);
   attr = StringAttr::get(op->getContext(), name);
   op->setAttr("inner_sym", attr);
@@ -1846,7 +1847,8 @@ StringAttr GrandCentralPass::getOrAddInnerSym(FModuleLike module,
     return attr;
   StringRef nameHint = "gct_sym";
   if (auto attr = module.getPortNameAttr(portIdx))
-    nameHint = attr.getValue();
+    if (!attr.getValue().empty())
+      nameHint = attr.getValue();
   auto name = getModuleNamespace(module).newName(nameHint);
   attr = StringAttr::get(module.getContext(), name);
   module.setPortSymbolAttr(portIdx, attr);

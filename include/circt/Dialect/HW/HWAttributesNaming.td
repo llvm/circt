@@ -23,6 +23,8 @@ def InnerRefAttr : AttrDef<HWDialect, "InnerRef", [
   let builders = [
     AttrBuilderWithInferredContext<(ins "::mlir::StringAttr":$module,
                                         "::mlir::StringAttr":$name), [{
+      assert(!module.getValue().empty());
+      assert(!name.getValue().empty());
       return $_get(
           module.getContext(), mlir::FlatSymbolRefAttr::get(module), name);
     }]>

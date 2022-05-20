@@ -868,7 +868,8 @@ LogicalResult FIRRTLModuleLowering::lowerPorts(
 
     // If the port doesn't have a symbol, but has a DontTouchAnnotation, then
     // generate a symbol.
-    if (firrtlPort.annotations.hasDontTouch() && !hwPort.sym) {
+    if (firrtlPort.annotations.hasDontTouch() &&
+        (!hwPort.sym || hwPort.sym.getValue().empty())) {
       hwPort.sym = StringAttr::get(
           moduleOp->getContext(),
           moduleNamespace.newName(Twine("__") + hwPort.name.getValue() + "__"));
