@@ -73,7 +73,6 @@ struct WhileOpInterface {
         .Case([](staticlogic::PipelineWhileOp op) {
           return op.getStagesBlock().getArguments();
         });
-    ;
   }
 
   Block *getBodyBlock() {
