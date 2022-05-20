@@ -34,6 +34,8 @@ static bool isDeletableWireOrReg(Operation *op) {
   if (auto wire = dyn_cast<WireOp>(op))
     if (!isUselessName(wire.name()))
       return false;
+  if (!AnnotationSet(op).empty())
+    return false;
   return isWireOrReg(op) && !hasDontTouch(op);
 }
 

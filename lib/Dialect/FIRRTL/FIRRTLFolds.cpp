@@ -1471,7 +1471,7 @@ static LogicalResult canonicalizeSingleSetConnect(StrictConnectOp op,
     }
   }
 
-  if (isUselessName(connectedDecl)) {
+  if (isUselessName(connectedDecl) && AnnotationSet(connectedDecl).empty()) {
     // Replace all things *using* the decl with the constant/port, and
     // remove the declaration.
     rewriter.replaceOp(connectedDecl, replacement);
