@@ -34,18 +34,18 @@ struct MemoryPortsImpl {
 
 // Represents the interface of memory in Calyx. The various lowering passes
 // are agnostic wrt. whether working with a calyx::MemoryOp (internally
-// allocated memory) or external memory (through MemoryPortsImpl).
+// allocated memory) or MemoryPortsImpl (external memory).
 struct MemoryInterface {
-  MemoryInterface() {}
-  explicit MemoryInterface(const MemoryPortsImpl &ports) : impl(ports) {}
-  explicit MemoryInterface(calyx::MemoryOp memOp) : impl(memOp) {}
+  MemoryInterface();
+  explicit MemoryInterface(const MemoryPortsImpl &ports);
+  explicit MemoryInterface(calyx::MemoryOp memOp);
 
 #define memoryInterfaceGetter(portName, TRet)                                  \
   TRet portName() {                                                            \
     if (auto memOp = std::get_if<calyx::MemoryOp>(&impl); memOp)               \
       return memOp->portName();                                                \
     else                                                                       \
-      return std::get<MemoryPortsImpl>(impl).portName;                        \
+      return std::get<MemoryPortsImpl>(impl).portName;                         \
   }
 
   memoryInterfaceGetter(readData, Value);
