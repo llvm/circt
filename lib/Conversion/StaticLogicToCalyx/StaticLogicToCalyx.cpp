@@ -51,22 +51,22 @@ using FuncMapping = DenseMap<FuncOp, calyx::ComponentOp>;
 class StaticLogicWhileOp
     : public calyx::WhileOpInterface<staticlogic::PipelineWhileOp> {
 public:
-  explicit StaticLogicWhileOp(Operation *op)
+  explicit StaticLogicWhileOp(staticlogic::PipelineWhileOp op)
       : calyx::WhileOpInterface<staticlogic::PipelineWhileOp>(op) {}
 
-  Block::BlockArgListType getBodyArgs() {
+  Block::BlockArgListType getBodyArgs() override {
     return getOperation().getStagesBlock().getArguments();
   }
 
-  Block *getBodyBlock() { return &getOperation().getStagesBlock(); }
+  Block *getBodyBlock() override { return &getOperation().getStagesBlock(); }
 
-  Block *getConditionBlock() { return &getOperation().getCondBlock(); }
+  Block *getConditionBlock() override { return &getOperation().getCondBlock(); }
 
-  Value getConditionValue() {
+  Value getConditionValue() override {
     return getOperation().getCondBlock().getTerminator()->getOperand(0);
   }
 
-  Optional<uint64_t> getBound() { return getOperation().tripCount(); }
+  Optional<uint64_t> getBound() override { return getOperation().tripCount(); }
 };
 
 struct LoopScheduleable {
@@ -1525,7 +1525,7 @@ class BuildWhileGroups : public FuncOpPartialLoweringPattern {
       if (!isa<staticlogic::PipelineWhileOp>(op))
         return WalkResult::advance();
 
-      StaticLogicWhileOp whileOp(op);
+      StaticLogicWhileOp whileOp(dyn_cast<staticlogic::PipelineWhileOp>(op));
 
       getComponentState().setUniqueName(whileOp.getOperation(), "while");
 
@@ -1627,7 +1627,8 @@ class BuildPipelineRegs : public FuncOpPartialLoweringPattern {
           if (auto term =
                   dyn_cast<staticlogic::PipelineTerminatorOp>(use.getOwner())) {
             if (use.getOperandNumber() < term.iter_args().size()) {
-              StaticLogicWhileOp whileOp(stage->getParentOp());
+              StaticLogicWhileOp whileOp(
+                  dyn_cast<staticlogic::PipelineWhileOp>(stage->getParentOp()));
               auto reg = getComponentState().getWhileIterReg(
                   whileOp, use.getOperandNumber());
               getComponentState().addPipelineReg(stage, reg, i);

@@ -49,22 +49,24 @@ using FuncMapping = DenseMap<FuncOp, calyx::ComponentOp>;
 
 class ScfWhileOp : public calyx::WhileOpInterface<scf::WhileOp> {
 public:
-  explicit ScfWhileOp(Operation *op)
+  explicit ScfWhileOp(scf::WhileOp op)
       : calyx::WhileOpInterface<scf::WhileOp>(op) {}
 
-  Block::BlockArgListType getBodyArgs() {
+  Block::BlockArgListType getBodyArgs() override {
     return getOperation().getAfterArguments();
   }
 
-  Block *getBodyBlock() { return &getOperation().getAfter().front(); }
+  Block *getBodyBlock() override { return &getOperation().getAfter().front(); }
 
-  Block *getConditionBlock() { return &getOperation().getBefore().front(); }
+  Block *getConditionBlock() override {
+    return &getOperation().getBefore().front();
+  }
 
-  Value getConditionValue() {
+  Value getConditionValue() override {
     return getOperation().getConditionOp().getOperand(0);
   }
 
-  Optional<uint64_t> getBound() { return None; }
+  Optional<uint64_t> getBound() override { return None; }
 };
 
 struct LoopScheduleable {
@@ -1467,7 +1469,7 @@ class BuildWhileGroups : public FuncOpPartialLoweringPattern {
       if (!isa<scf::WhileOp>(op))
         return WalkResult::advance();
 
-      ScfWhileOp whileOp(op);
+      ScfWhileOp whileOp(dyn_cast<scf::WhileOp>(op));
 
       getComponentState().setUniqueName(whileOp.getOperation(), "while");
 
