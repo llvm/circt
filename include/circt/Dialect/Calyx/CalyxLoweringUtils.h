@@ -15,6 +15,7 @@
 #define CIRCT_DIALECT_CALYX_CALYXLOWERINGUTILS_H
 
 #include "circt/Dialect/Calyx/CalyxOps.h"
+#include "circt/Dialect/StaticLogic/StaticLogic.h"
 #include "circt/Support/LLVM.h"
 
 #include <variant>
@@ -49,6 +50,46 @@ struct MemoryInterface {
 
 private:
   std::variant<calyx::MemoryOp, MemoryPortsImpl> impl;
+};
+
+// Abstracts the control flow while operation across different dialects.
+template <typename T>
+class WhileOpInterface {
+public:
+  explicit WhileOpInterface(T op) : impl(op) {}
+  explicit WhileOpInterface(Operation *op)
+      : impl(dyn_cast_or_null<T>(op)) {}
+
+  virtual ~WhileOpInterface() = default;
+
+  // Returns the arguments to this while operation.
+  virtual Block::BlockArgListType getBodyArgs() = 0;
+
+  // Returns body of this while operation.
+  virtual Block *getBodyBlock() = 0;
+
+  // Returns the Block in which the condition exists.
+  virtual Block *getConditionBlock() = 0;
+
+  // Returns the condition as a Value.
+  virtual Value getConditionValue() = 0;
+
+  // Returns the number of iterations the while loop will conduct if known.
+  virtual Optional<uint64_t> getBound() = 0;
+
+  // Returns whether this is a pipelined while operation.
+  bool isPipelined() {
+    return isa<staticlogic::PipelineWhileOp>(getOperation());
+  }
+
+  // Returns the operation.
+  T getOperation() { return impl; }
+
+  // Returns the source location of the operation.
+  Location getLoc() { return impl->getLoc(); }
+
+private:
+  T impl;
 };
 
 } // namespace calyx
