@@ -76,7 +76,7 @@ def var_to_attribute(obj, none_on_fail: bool = False) -> ir.Attribute:
 # There is currently no support in MLIR for querying type types. The
 # conversation regarding how to achieve this is ongoing and I expect it to be a
 # long one. This is a way that works for now.
-def type_to_pytype(t):
+def type_to_pytype(t) -> ir.Type:
   import mlir.ir as ir
 
   if not isinstance(t, ir.Type):

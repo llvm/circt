@@ -76,10 +76,12 @@ public:
     Direction rows;
   };
 
-  /// Assign an instance to a primitive. Return false if another instance is
+  /// Assign an instance to a primitive. Return null if another instance is
   /// already placed at that location.
   PDPhysLocationOp place(DynamicInstanceOp inst, PhysLocationAttr,
                          StringRef subpath, Location srcLoc);
+  PDRegPhysLocationOp place(DynamicInstanceOp inst, LocationVectorAttr,
+                            Location srcLoc);
   /// Assign an operation to a physical region. Return false on failure.
   PDPhysRegionOp placeIn(DynamicInstanceOp inst, DeclPhysicalRegionOp,
                          StringRef subPath, Location srcLoc);
@@ -90,8 +92,14 @@ public:
   /// is already placed at the new location.
   LogicalResult movePlacement(PDPhysLocationOp, PhysLocationAttr);
 
+  /// Remove the placement from the DB and IR. Erases the op.
+  void removePlacement(PDRegPhysLocationOp);
+  /// Move a placement location to a new location. Returns failure if something
+  /// is already placed at the new location.
+  LogicalResult movePlacement(PDRegPhysLocationOp, LocationVectorAttr);
+
   /// Lookup the instance at a particular location.
-  PDPhysLocationOp getInstanceAt(PhysLocationAttr);
+  DynInstDataOpInterface getInstanceAt(PhysLocationAttr);
 
   /// Find the nearest unoccupied primitive location to 'nearestToY' in
   /// 'column'.
@@ -101,11 +109,12 @@ public:
   /// Walk the placement information in some sort of reasonable order. Bounds
   /// restricts the walk to a rectangle of [xmin, xmax, ymin, ymax] (inclusive),
   /// with -1 meaning unbounded.
-  void walkPlacements(function_ref<void(PhysLocationAttr, PDPhysLocationOp)>,
-                      std::tuple<int64_t, int64_t, int64_t, int64_t> bounds =
-                          std::make_tuple(-1, -1, -1, -1),
-                      Optional<PrimitiveType> primType = {},
-                      Optional<WalkOrder> = {});
+  void
+  walkPlacements(function_ref<void(PhysLocationAttr, DynInstDataOpInterface)>,
+                 std::tuple<int64_t, int64_t, int64_t, int64_t> bounds =
+                     std::make_tuple(-1, -1, -1, -1),
+                 Optional<PrimitiveType> primType = {},
+                 Optional<WalkOrder> = {});
 
   /// Walk the region placement information.
   void walkRegionPlacements(function_ref<void(PDPhysRegionOp)>);
@@ -114,7 +123,7 @@ private:
   /// A memory slot. Useful to distinguish the memory location from the
   /// reference stored there.
   struct PlacementCell {
-    PDPhysLocationOp locOp;
+    DynInstDataOpInterface locOp;
   };
 
   MLIRContext *ctxt;
@@ -137,11 +146,21 @@ private:
   /// Load the placements from `inst`.  Return the number of placements which
   /// weren't added due to conflicts.
   size_t addPlacements(DynamicInstanceOp inst);
-  LogicalResult insertPlacement(PDPhysLocationOp locOp);
+  LogicalResult insertPlacement(DynInstDataOpInterface owner, PhysLocationAttr);
 
   /// Load the database from the IR. Return the number of placements which
   /// failed to load due to invalid specifications.
   size_t addDesignPlacements();
+
+  /// Remove the placement from the DB.
+  void removePlacement(DynInstDataOpInterface, PhysLocationAttr);
+
+  /// Check to make sure the move is going to succeed.
+  LogicalResult movePlacementCheck(DynInstDataOpInterface op,
+                                   PhysLocationAttr from, PhysLocationAttr to);
+  /// Move it.
+  void movePlacement(DynInstDataOpInterface op, PhysLocationAttr from,
+                     PhysLocationAttr to);
 };
 
 } // namespace msft

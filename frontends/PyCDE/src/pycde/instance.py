@@ -5,9 +5,10 @@
 from __future__ import annotations
 from typing import Dict, List, Optional, Tuple, Union
 
-from circt.dialects import msft, seq
+from circt.dialects import hw, msft, seq
 
 import mlir.ir as ir
+from pycde.devicedb import PhysLocation, PrimitiveType
 
 
 class Instance:
@@ -110,7 +111,6 @@ class ModuleInstance(Instance):
     operation need not be a module instantiation."""
 
     sym_name = static_op.attributes["sym_name"]
-    tgt_mod = None
     if isinstance(static_op, msft.InstanceOp):
       tgt_mod = self._op_cache.get_symbol_module(static_op.moduleName)
       return ModuleInstance(self,
@@ -118,7 +118,7 @@ class ModuleInstance(Instance):
                             inside_of=self.tgt_mod,
                             tgt_mod=tgt_mod)
     if isinstance(static_op, seq.CompRegOp):
-      return RegInstance(self, self.tgt_mod, sym_name)
+      return RegInstance(self, self.tgt_mod, sym_name, static_op)
 
     return Instance(self, self.tgt_mod, sym_name)
 
@@ -188,16 +188,21 @@ class ModuleInstance(Instance):
 class RegInstance(Instance):
   """Instance specialization for registers."""
 
-  def place(self,
-            x: int,
-            y: int,
-            num: int,
-            bit_idx: int,
-            devtype: msft.PrimitiveType = msft.PrimitiveType.FF):
+  from .module import _SpecializedModule
+
+  __slots__ = ["type"]
+
+  def __init__(self, parent: Instance, inside_of: _SpecializedModule,
+               symbol: Optional[ir.Attribute], static_op: seq.CompRegOp):
+    super().__init__(parent, inside_of, symbol)
+
+    from .pycde_types import Type
+    self.type = Type(static_op.operation.operands[0].type)
+
+  def place(self, locs: List[Optional[Tuple[int, int, int]]]):
     import pycde.devicedb as devdb
-    subpath = f"[{bit_idx}]"
-    loc = devdb.PhysLocation(devtype, x, y, num)
-    self.root.system.placedb.place(self, loc, subpath)
+    vec = devdb.LocationVector(self.type, locs)
+    self.root.system.placedb.place(self, vec)
 
 
 class InstanceHierarchyRoot(ModuleInstance):
