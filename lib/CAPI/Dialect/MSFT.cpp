@@ -69,23 +69,41 @@ void circtMSFTDeletePlacementDB(CirctMSFTPlacementDB self) {
 }
 
 MlirOperation circtMSFTPlacementDBPlace(CirctMSFTPlacementDB db,
-                                        MlirOperation inst, MlirAttribute loc,
+                                        MlirOperation cinst, MlirAttribute cloc,
                                         MlirStringRef subpath,
-                                        MlirLocation srcLoc) {
-  return wrap(unwrap(db)->place(cast<DynamicInstanceOp>(unwrap(inst)),
-                                unwrap(loc).cast<PhysLocationAttr>(),
-                                unwrap(subpath), unwrap(srcLoc)));
+                                        MlirLocation csrcLoc) {
+  auto inst = cast<DynamicInstanceOp>(unwrap(cinst));
+  Location srcLoc = unwrap(csrcLoc);
+  Attribute locAttr = unwrap(cloc);
+
+  if (auto pla = locAttr.dyn_cast<PhysLocationAttr>())
+    return wrap(unwrap(db)->place(inst, pla, unwrap(subpath), srcLoc));
+  if (auto locVec = locAttr.dyn_cast<LocationVectorAttr>())
+    return wrap(unwrap(db)->place(inst, locVec, srcLoc));
+  assert(false && "Can only place PDPhysLocationOp and PDRegPhysLocationOp");
 }
 void circtMSFTPlacementDBRemovePlacement(CirctMSFTPlacementDB db,
-                                         MlirOperation locOp) {
-  unwrap(db)->removePlacement(cast<PDPhysLocationOp>(unwrap(locOp)));
+                                         MlirOperation clocOp) {
+  Operation *locOp = unwrap(clocOp);
+  if (auto physLocOp = dyn_cast<PDPhysLocationOp>(locOp))
+    unwrap(db)->removePlacement(physLocOp);
+  else if (auto regPhysLocOp = dyn_cast<PDRegPhysLocationOp>(locOp))
+    unwrap(db)->removePlacement(regPhysLocOp);
+  else
+    assert(false && "Can only remove PDPhysLocationOp and PDRegPhysLocationOp");
 }
 MlirLogicalResult circtMSFTPlacementDBMovePlacement(CirctMSFTPlacementDB db,
-                                                    MlirOperation locOp,
-                                                    MlirAttribute newLoc) {
-  return wrap(
-      unwrap(db)->movePlacement(cast<PDPhysLocationOp>(unwrap(locOp)),
-                                unwrap(newLoc).cast<PhysLocationAttr>()));
+                                                    MlirOperation clocOp,
+                                                    MlirAttribute cnewLoc) {
+  Operation *locOp = unwrap(clocOp);
+  Attribute newLoc = unwrap(cnewLoc);
+  if (auto physLocOp = dyn_cast<PDPhysLocationOp>(locOp))
+    return wrap(
+        unwrap(db)->movePlacement(physLocOp, newLoc.cast<PhysLocationAttr>()));
+  if (auto regPhysLocOp = dyn_cast<PDRegPhysLocationOp>(locOp))
+    return wrap(unwrap(db)->movePlacement(regPhysLocOp,
+                                          newLoc.cast<LocationVectorAttr>()));
+  assert(false && "Can only move PDPhysLocationOp and PDRegPhysLocationOp");
 }
 MlirOperation circtMSFTPlacementDBGetInstanceAt(CirctMSFTPlacementDB db,
                                                 MlirAttribute loc) {
@@ -181,4 +199,27 @@ MlirAttribute circtMSFTPhysicalBoundsAttrGet(MlirContext cContext,
                                              uint64_t yMin, uint64_t yMax) {
   auto *context = unwrap(cContext);
   return wrap(PhysicalBoundsAttr::get(context, xMin, xMax, yMin, yMax));
+}
+
+bool circtMSFTAttributeIsALocationVectorAttribute(MlirAttribute attr) {
+  return unwrap(attr).isa<LocationVectorAttr>();
+}
+MlirAttribute circtMSFTLocationVectorAttrGet(MlirContext ctxt, MlirType type,
+                                             intptr_t numElements,
+                                             MlirAttribute const *elements) {
+  SmallVector<PhysLocationAttr, 32> physLocs;
+  for (intptr_t i = 0; i < numElements; ++i)
+    physLocs.push_back(unwrap(elements[i]).cast<PhysLocationAttr>());
+  return wrap(LocationVectorAttr::get(unwrap(ctxt), TypeAttr::get(unwrap(type)),
+                                      physLocs));
+}
+MlirType circtMSFTLocationVectorAttrGetType(MlirAttribute attr) {
+  return wrap(unwrap(attr).cast<LocationVectorAttr>().getType().getValue());
+}
+intptr_t circtMSFTLocationVectorAttrGetNumElements(MlirAttribute attr) {
+  return unwrap(attr).cast<LocationVectorAttr>().getLocs().size();
+}
+MlirAttribute circtMSFTLocationVectorAttrGetElement(MlirAttribute attr,
+                                                    intptr_t pos) {
+  return wrap(unwrap(attr).cast<LocationVectorAttr>().getLocs()[pos]);
 }
