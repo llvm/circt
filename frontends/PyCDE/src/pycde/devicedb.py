@@ -81,7 +81,7 @@ class LocationVector:
 
   @property
   def locs(self) -> List[PhysLocation]:
-    return [loc if loc is not None else None for loc in self._loc]
+    return [PhysLocation(loc) if loc is not None else None for loc in self._loc]
 
   def __str__(self) -> str:
     locs = [f"{loc}" for loc in self.locs]
