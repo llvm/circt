@@ -100,7 +100,7 @@ MlirLogicalResult circtMSFTPlacementDBMovePlacement(CirctMSFTPlacementDB db,
   if (auto physLocOp = dyn_cast<PDPhysLocationOp>(locOp))
     return wrap(
         unwrap(db)->movePlacement(physLocOp, newLoc.cast<PhysLocationAttr>()));
-  else if (auto regPhysLocOp = dyn_cast<PDRegPhysLocationOp>(locOp))
+  if (auto regPhysLocOp = dyn_cast<PDRegPhysLocationOp>(locOp))
     return wrap(unwrap(db)->movePlacement(regPhysLocOp,
                                           newLoc.cast<LocationVectorAttr>()));
   assert(false && "Can only move PDPhysLocationOp and PDRegPhysLocationOp");
