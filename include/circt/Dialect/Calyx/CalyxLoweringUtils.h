@@ -51,13 +51,15 @@ private:
   std::variant<calyx::MemoryOp, MemoryPortsImpl> impl;
 };
 
-// Abstracts the control flow while operation across different dialects.
+// Provides an interface for the control flow `while` operation across different
+// dialects.
 template <typename T>
 class WhileOpInterface {
+  static_assert(std::is_convertible_v<T, Operation *>);
+
 public:
   explicit WhileOpInterface(T op) : impl(op) {}
-  explicit WhileOpInterface(Operation *op)
-      : impl(dyn_cast_or_null<T>(op)) {}
+  explicit WhileOpInterface(Operation *op) : impl(dyn_cast_or_null<T>(op)) {}
 
   virtual ~WhileOpInterface() = default;
 
