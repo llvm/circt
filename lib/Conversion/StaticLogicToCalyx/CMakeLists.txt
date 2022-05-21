@@ -18,5 +18,4 @@ add_circt_conversion_library(CIRCTStaticLogicToCalyx
   MLIRSupport
   MLIRTransforms
   MLIRAffineToStandard
-  MLIRSCF
 )

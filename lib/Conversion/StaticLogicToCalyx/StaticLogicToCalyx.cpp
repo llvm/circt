@@ -48,70 +48,30 @@ namespace staticlogictocalyx {
 /// Calyx component.
 using FuncMapping = DenseMap<FuncOp, calyx::ComponentOp>;
 
-/// A structure that abstracts a WhileOp or PipelineWhileOp to provide a
-/// consistent interface.
-struct WhileOpInterface {
-  WhileOpInterface(Operation *op) {
-    assert(isSupported(op));
-    if (auto scfWhile = dyn_cast<scf::WhileOp>(op))
-      impl = scfWhile;
-    if (auto staticLogicWhile = dyn_cast<staticlogic::PipelineWhileOp>(op))
-      impl = staticLogicWhile;
+class StaticLogicWhileOp
+    : public calyx::WhileOpInterface<staticlogic::PipelineWhileOp> {
+public:
+  explicit StaticLogicWhileOp(staticlogic::PipelineWhileOp op)
+      : calyx::WhileOpInterface<staticlogic::PipelineWhileOp>(op) {}
+
+  Block::BlockArgListType getBodyArgs() override {
+    return getOperation().getStagesBlock().getArguments();
   }
 
-  static bool isSupported(Operation *op) {
-    return isa<scf::WhileOp, staticlogic::PipelineWhileOp>(op);
+  Block *getBodyBlock() override { return &getOperation().getStagesBlock(); }
+
+  Block *getConditionBlock() override { return &getOperation().getCondBlock(); }
+
+  Value getConditionValue() override {
+    return getOperation().getCondBlock().getTerminator()->getOperand(0);
   }
 
-  Block::BlockArgListType getBodyArgs() {
-    return TypeSwitch<Operation *, Block::BlockArgListType>(impl)
-        .Case([](scf::WhileOp op) { return op.getAfterArguments(); })
-        .Case([](staticlogic::PipelineWhileOp op) {
-          return op.getStagesBlock().getArguments();
-        });
-  }
-
-  Block *getBodyBlock() {
-    return TypeSwitch<Operation *, Block *>(impl)
-        .Case([](scf::WhileOp op) { return &op.getAfter().front(); })
-        .Case([](staticlogic::PipelineWhileOp op) {
-          return &op.getStagesBlock();
-        });
-  }
-
-  Block *getConditionBlock() {
-    return TypeSwitch<Operation *, Block *>(impl)
-        .Case([](scf::WhileOp op) { return &op.getBefore().front(); })
-        .Case(
-            [](staticlogic::PipelineWhileOp op) { return &op.getCondBlock(); });
-  }
-
-  Value getConditionValue() {
-    return TypeSwitch<Operation *, Value>(impl)
-        .Case([](scf::WhileOp op) { return op.getConditionOp().getOperand(0); })
-        .Case([](staticlogic::PipelineWhileOp op) {
-          return op.getCondBlock().getTerminator()->getOperand(0);
-        });
-  }
-
-  bool isPipelined() { return isa<staticlogic::PipelineWhileOp>(impl); }
-
-  Optional<uint64_t> getBound() {
-    return TypeSwitch<Operation *, Optional<uint64_t>>(impl)
-        .Case([](staticlogic::PipelineWhileOp op) { return op.tripCount(); })
-        .Default([](auto op) { return None; });
-  }
-
-  Operation *getOperation() { return impl; }
-  Location getLoc() { return impl->getLoc(); }
-
-private:
-  Operation *impl;
+  Optional<uint64_t> getBound() override { return getOperation().tripCount(); }
 };
 
 struct LoopScheduleable {
   /// While operation to schedule.
-  WhileOpInterface whileOp;
+  StaticLogicWhileOp whileOp;
   /// The group(s) to schedule before the while operation These groups should
   /// set the initial value(s) of the loop init_args register(s).
   SmallVector<calyx::GroupOp> initGroups;
@@ -448,7 +408,7 @@ public:
   }
 
   /// Register reg as being the idx'th iter_args register for 'whileOp'.
-  void addWhileIterReg(WhileOpInterface whileOp, calyx::RegisterOp reg,
+  void addWhileIterReg(StaticLogicWhileOp whileOp, calyx::RegisterOp reg,
                        unsigned idx) {
     assert(whileIterRegs[whileOp.getOperation()].count(idx) == 0 &&
            "A register was already registered for the given while iter_arg "
@@ -458,7 +418,7 @@ public:
   }
 
   /// Return a mapping of block argument indices to block argument registers.
-  calyx::RegisterOp getWhileIterReg(WhileOpInterface whileOp, unsigned idx) {
+  calyx::RegisterOp getWhileIterReg(StaticLogicWhileOp whileOp, unsigned idx) {
     auto iterRegs = getWhileIterRegs(whileOp);
     auto it = iterRegs.find(idx);
     assert(it != iterRegs.end() &&
@@ -468,19 +428,19 @@ public:
 
   /// Return a mapping of block argument indices to block argument registers.
   const DenseMap<unsigned, calyx::RegisterOp> &
-  getWhileIterRegs(WhileOpInterface whileOp) {
+  getWhileIterRegs(StaticLogicWhileOp whileOp) {
     return whileIterRegs[whileOp.getOperation()];
   }
 
   /// Registers grp to be the while latch group of whileOp.
-  void setWhileLatchGroup(WhileOpInterface whileOp, calyx::GroupOp grp) {
+  void setWhileLatchGroup(StaticLogicWhileOp whileOp, calyx::GroupOp grp) {
     assert(whileLatchGroups.count(whileOp.getOperation()) == 0 &&
            "A latch group was already set for this whileOp");
     whileLatchGroups[whileOp.getOperation()] = grp;
   }
 
   /// Retrieve the while latch group registered for whileOp.
-  calyx::GroupOp getWhileLatchGroup(WhileOpInterface whileOp) {
+  calyx::GroupOp getWhileLatchGroup(StaticLogicWhileOp whileOp) {
     auto it = whileLatchGroups.find(whileOp.getOperation());
     assert(it != whileLatchGroups.end() &&
            "No while latch group was set for this whileOp");
@@ -678,7 +638,7 @@ static void buildAssignmentsForRegisterWrite(ComponentLoweringState &state,
 static calyx::GroupOp
 buildWhileIterArgAssignments(PatternRewriter &rewriter,
                              ComponentLoweringState &state, Location loc,
-                             WhileOpInterface whileOp, Twine uniqueSuffix,
+                             StaticLogicWhileOp whileOp, Twine uniqueSuffix,
                              MutableArrayRef<OpOperand> ops) {
   assert(whileOp.getOperation());
   /// Pass iteration arguments through registers. This follows closely
@@ -806,8 +766,6 @@ class BuildOpGroups : public FuncOpPartialLoweringPattern {
       opBuiltSuccessfully &=
           TypeSwitch<mlir::Operation *, bool>(_op)
               .template Case<arith::ConstantOp, ReturnOp, BranchOpInterface,
-                             /// SCF
-                             scf::YieldOp,
                              /// memref
                              memref::AllocOp, memref::AllocaOp, memref::LoadOp,
                              memref::StoreOp,
@@ -818,8 +776,7 @@ class BuildOpGroups : public FuncOpPartialLoweringPattern {
                              /// static logic
                              staticlogic::PipelineTerminatorOp>(
                   [&](auto op) { return buildOp(rewriter, op).succeeded(); })
-              .template Case<scf::WhileOp, FuncOp, scf::ConditionOp,
-                             staticlogic::PipelineWhileOp,
+              .template Case<FuncOp, staticlogic::PipelineWhileOp,
                              staticlogic::PipelineRegisterOp,
                              staticlogic::PipelineStageOp>([&](auto) {
                 /// Skip: these special cases will be handled separately.
@@ -839,7 +796,6 @@ class BuildOpGroups : public FuncOpPartialLoweringPattern {
 
 private:
   /// Op builder specializations.
-  LogicalResult buildOp(PatternRewriter &rewriter, scf::YieldOp yieldOp) const;
   LogicalResult buildOp(PatternRewriter &rewriter,
                         BranchOpInterface brOp) const;
   LogicalResult buildOp(PatternRewriter &rewriter,
@@ -1129,22 +1085,6 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   return buildAllocOp(getComponentState(), rewriter, allocOp);
 }
 
-LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
-                                     scf::YieldOp yieldOp) const {
-  if (yieldOp.getOperands().size() == 0)
-    return success();
-  auto whileOp = dyn_cast<scf::WhileOp>(yieldOp->getParentOp());
-  assert(whileOp);
-  WhileOpInterface whileOpInterface(whileOp);
-
-  auto assignGroup = buildWhileIterArgAssignments(
-      rewriter, getComponentState(), yieldOp.getLoc(), whileOpInterface,
-      getComponentState().getUniqueName(whileOp) + "_latch",
-      yieldOp->getOpOperands());
-  getComponentState().setWhileLatchGroup(whileOpInterface, assignGroup);
-  return success();
-}
-
 LogicalResult
 BuildOpGroups::buildOp(PatternRewriter &rewriter,
                        staticlogic::PipelineTerminatorOp term) const {
@@ -1396,57 +1336,6 @@ class ConvertIndexTypes : public FuncOpPartialLoweringPattern {
   }
 };
 
-/// Inlines Calyx ExecuteRegionOp operations within their parent blocks.
-/// An execution region op (ERO) is inlined by:
-///  i  : add a sink basic block for all yield operations inside the
-///       ERO to jump to
-///  ii : Rewrite scf.yield calls inside the ERO to branch to the sink block
-///  iii: inline the ERO region
-/// TODO(#1850) evaluate the usefulness of this lowering pattern.
-class InlineExecuteRegionOpPattern
-    : public OpRewritePattern<scf::ExecuteRegionOp> {
-  using OpRewritePattern::OpRewritePattern;
-
-  LogicalResult matchAndRewrite(scf::ExecuteRegionOp execOp,
-                                PatternRewriter &rewriter) const override {
-    /// Determine type of "yield" operations inside the ERO.
-    TypeRange yieldTypes = execOp.getResultTypes();
-
-    /// Create sink basic block and rewrite uses of yield results to sink block
-    /// arguments.
-    rewriter.setInsertionPointAfter(execOp);
-    auto *sinkBlock = rewriter.splitBlock(
-        execOp->getBlock(),
-        execOp.getOperation()->getIterator()->getNextNode()->getIterator());
-    sinkBlock->addArguments(
-        yieldTypes,
-        SmallVector<Location, 4>(yieldTypes.size(), rewriter.getUnknownLoc()));
-    for (auto res : enumerate(execOp.getResults()))
-      res.value().replaceAllUsesWith(sinkBlock->getArgument(res.index()));
-
-    /// Rewrite yield calls as branches.
-    for (auto yieldOp :
-         make_early_inc_range(execOp.getRegion().getOps<scf::YieldOp>())) {
-      rewriter.setInsertionPointAfter(yieldOp);
-      rewriter.replaceOpWithNewOp<BranchOp>(yieldOp, sinkBlock,
-                                            yieldOp.getOperands());
-    }
-
-    /// Inline the regionOp.
-    auto *preBlock = execOp->getBlock();
-    auto *execOpEntryBlock = &execOp.getRegion().front();
-    auto *postBlock = execOp->getBlock()->splitBlock(execOp);
-    rewriter.inlineRegionBefore(execOp.getRegion(), postBlock);
-    rewriter.mergeBlocks(postBlock, preBlock);
-    rewriter.eraseOp(execOp);
-
-    /// Finally, erase the unused entry block of the execOp region.
-    rewriter.mergeBlocks(execOpEntryBlock, preBlock);
-
-    return success();
-  }
-};
-
 static void
 appendPortsForExternalMemref(PatternRewriter &rewriter, StringRef memName,
                              Value memref, unsigned memoryID,
@@ -1633,35 +1522,12 @@ class BuildWhileGroups : public FuncOpPartialLoweringPattern {
                            PatternRewriter &rewriter) const override {
     LogicalResult res = success();
     funcOp.walk([&](Operation *op) {
-      // Only work on ops that support the WhileOpInterface.
-      if (!WhileOpInterface::isSupported(op))
+      if (!isa<staticlogic::PipelineWhileOp>(op))
         return WalkResult::advance();
 
-      WhileOpInterface whileOp(op);
+      StaticLogicWhileOp whileOp(cast<staticlogic::PipelineWhileOp>(op));
 
       getComponentState().setUniqueName(whileOp.getOperation(), "while");
-
-      /// Check for do-while loops.
-      /// TODO(mortbopet) can we support these? for now, do not support loops
-      /// where iterargs are changed in the 'before' region. scf.WhileOp also
-      /// has support for different types of iter_args and return args which we
-      /// also do not support; iter_args and while return values are placed in
-      /// the same registers.
-      if (auto scfWhileOp = dyn_cast<scf::WhileOp>(op)) {
-        for (auto barg :
-             enumerate(scfWhileOp.getBefore().front().getArguments())) {
-          auto condOp = scfWhileOp.getConditionOp().getArgs()[barg.index()];
-          if (barg.value() != condOp) {
-            res = whileOp.getOperation()->emitError()
-                  << progState().irName(barg.value())
-                  << " != " << progState().irName(condOp)
-                  << "do-while loops not supported; expected iter-args to "
-                     "remain untransformed in the 'before' region of the "
-                     "scf.while op.";
-            return WalkResult::interrupt();
-          }
-        }
-      }
 
       /// Create iteration argument registers.
       /// The iteration argument registers will be referenced:
@@ -1699,14 +1565,9 @@ class BuildWhileGroups : public FuncOpPartialLoweringPattern {
 
       /// Add the while op to the list of scheduleable things in the current
       /// block.
-      if (whileOp.isPipelined())
-        getComponentState().addBlockScheduleable(
-            whileOp.getOperation()->getBlock(),
-            PipelineScheduleable{{whileOp, initGroups}});
-      else
-        getComponentState().addBlockScheduleable(
-            whileOp.getOperation()->getBlock(),
-            WhileScheduleable{{whileOp, initGroups}});
+      getComponentState().addBlockScheduleable(
+          whileOp.getOperation()->getBlock(),
+          PipelineScheduleable{{whileOp, initGroups}});
       return WalkResult::advance();
     });
     return res;
@@ -1766,7 +1627,8 @@ class BuildPipelineRegs : public FuncOpPartialLoweringPattern {
           if (auto term =
                   dyn_cast<staticlogic::PipelineTerminatorOp>(use.getOwner())) {
             if (use.getOperandNumber() < term.iter_args().size()) {
-              WhileOpInterface whileOp(stage->getParentOp());
+              StaticLogicWhileOp whileOp(
+                  dyn_cast<staticlogic::PipelineWhileOp>(stage->getParentOp()));
               auto reg = getComponentState().getWhileIterReg(
                   whileOp, use.getOperandNumber());
               getComponentState().addPipelineReg(stage, reg, i);
@@ -2212,7 +2074,7 @@ private:
     return success();
   }
 
-  calyx::WhileOp buildWhileCtrlOp(WhileOpInterface whileOp,
+  calyx::WhileOp buildWhileCtrlOp(StaticLogicWhileOp whileOp,
                                   SmallVector<calyx::GroupOp> initGroups,
                                   PatternRewriter &rewriter) const {
     Location loc = whileOp.getLoc();
@@ -2310,8 +2172,8 @@ private:
       ///   LateSSAReplacement)
       if (src.isa<BlockArgument>() ||
           isa<calyx::RegisterOp, calyx::MemoryOp, hw::ConstantOp,
-              arith::ConstantOp, calyx::MultPipeLibOp, calyx::DivPipeLibOp,
-              scf::WhileOp>(src.getDefiningOp()))
+              arith::ConstantOp, calyx::MultPipeLibOp, calyx::DivPipeLibOp>(
+              src.getDefiningOp()))
         continue;
 
       auto srcCombGroup = dyn_cast<calyx::CombGroupOp>(
@@ -2336,19 +2198,6 @@ class LateSSAReplacement : public FuncOpPartialLoweringPattern {
 
   LogicalResult PartiallyLowerFuncToComp(FuncOp funcOp,
                                          PatternRewriter &) const override {
-    funcOp.walk([&](scf::WhileOp op) {
-      /// The yielded values returned from the while op will be present in the
-      /// iterargs registers post execution of the loop.
-      /// This is done now, as opposed to during BuildWhileGroups since if the
-      /// results of the whileOp were replaced before
-      /// BuildOpGroups/BuildControl, the whileOp would get dead-code
-      /// eliminated.
-      WhileOpInterface whileOp(op);
-      for (auto res : getComponentState().getWhileIterRegs(whileOp))
-        whileOp.getOperation()->getResults()[res.first].replaceAllUsesWith(
-            res.second.out());
-    });
-
     funcOp.walk([&](memref::LoadOp loadOp) {
       if (singleLoadFromMemory(loadOp)) {
         /// In buildOpGroups we did not replace loadOp's results, to ensure a
@@ -2518,14 +2367,9 @@ public:
 
     ConversionTarget target(getContext());
     target.addLegalDialect<calyx::CalyxDialect>();
-    target.addLegalDialect<scf::SCFDialect>();
     target.addIllegalDialect<hw::HWDialect>();
     target.addIllegalDialect<comb::CombDialect>();
-
-    // For loops should have been lowered to while loops
-    target.addIllegalOp<scf::ForOp>();
-
-    // Only accept std operations which we've added lowerings for
+    // Only accept std operations which we've added lowerings for.
     target.addIllegalDialect<FuncDialect>();
     target.addIllegalDialect<ArithmeticDialect>();
     target.addLegalOp<AddIOp, SubIOp, CmpIOp, ShLIOp, ShRUIOp, ShRSIOp, AndIOp,
@@ -2625,9 +2469,6 @@ void StaticLogicToCalyxPass::runOnOperation() {
 
   /// Creates a new Calyx component for each FuncOp in the inpurt module.
   addOncePattern<FuncOpConversion>(loweringPatterns, funcMap, *loweringState);
-
-  /// This pass inlines scf.ExecuteRegionOp's by adding control-flow.
-  addGreedyPattern<InlineExecuteRegionOpPattern>(loweringPatterns);
 
   /// This pattern converts all index typed values to an i32 integer.
   addOncePattern<ConvertIndexTypes>(loweringPatterns, funcMap, *loweringState);

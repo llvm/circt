@@ -51,6 +51,43 @@ private:
   std::variant<calyx::MemoryOp, MemoryPortsImpl> impl;
 };
 
+// Provides an interface for the control flow `while` operation across different
+// dialects.
+template <typename T>
+class WhileOpInterface {
+  static_assert(std::is_convertible_v<T, Operation *>);
+
+public:
+  explicit WhileOpInterface(T op) : impl(op) {}
+  explicit WhileOpInterface(Operation *op) : impl(dyn_cast_or_null<T>(op)) {}
+
+  virtual ~WhileOpInterface() = default;
+
+  // Returns the arguments to this while operation.
+  virtual Block::BlockArgListType getBodyArgs() = 0;
+
+  // Returns body of this while operation.
+  virtual Block *getBodyBlock() = 0;
+
+  // Returns the Block in which the condition exists.
+  virtual Block *getConditionBlock() = 0;
+
+  // Returns the condition as a Value.
+  virtual Value getConditionValue() = 0;
+
+  // Returns the number of iterations the while loop will conduct if known.
+  virtual Optional<uint64_t> getBound() = 0;
+
+  // Returns the operation.
+  T getOperation() { return impl; }
+
+  // Returns the source location of the operation.
+  Location getLoc() { return impl->getLoc(); }
+
+private:
+  T impl;
+};
+
 } // namespace calyx
 } // namespace circt
 
