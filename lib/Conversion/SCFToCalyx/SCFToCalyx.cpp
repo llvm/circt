@@ -1469,7 +1469,8 @@ class BuildWhileGroups : public FuncOpPartialLoweringPattern {
       if (!isa<scf::WhileOp>(op))
         return WalkResult::advance();
 
-      ScfWhileOp whileOp(dyn_cast<scf::WhileOp>(op));
+      auto scfWhileOp = cast<scf::WhileOp>(op);
+      ScfWhileOp whileOp(scfWhileOp);
 
       getComponentState().setUniqueName(whileOp.getOperation(), "while");
 
@@ -1479,19 +1480,17 @@ class BuildWhileGroups : public FuncOpPartialLoweringPattern {
       /// has support for different types of iter_args and return args which we
       /// also do not support; iter_args and while return values are placed in
       /// the same registers.
-      if (auto scfWhileOp = dyn_cast<scf::WhileOp>(op)) {
-        for (auto barg :
-             enumerate(scfWhileOp.getBefore().front().getArguments())) {
-          auto condOp = scfWhileOp.getConditionOp().getArgs()[barg.index()];
-          if (barg.value() != condOp) {
-            res = whileOp.getOperation()->emitError()
-                  << progState().irName(barg.value())
-                  << " != " << progState().irName(condOp)
-                  << "do-while loops not supported; expected iter-args to "
-                     "remain untransformed in the 'before' region of the "
-                     "scf.while op.";
-            return WalkResult::interrupt();
-          }
+      for (auto barg :
+           enumerate(scfWhileOp.getBefore().front().getArguments())) {
+        auto condOp = scfWhileOp.getConditionOp().getArgs()[barg.index()];
+        if (barg.value() != condOp) {
+          res = whileOp.getOperation()->emitError()
+                << progState().irName(barg.value())
+                << " != " << progState().irName(condOp)
+                << "do-while loops not supported; expected iter-args to "
+                   "remain untransformed in the 'before' region of the "
+                   "scf.while op.";
+          return WalkResult::interrupt();
         }
       }
 

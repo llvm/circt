@@ -1525,7 +1525,7 @@ class BuildWhileGroups : public FuncOpPartialLoweringPattern {
       if (!isa<staticlogic::PipelineWhileOp>(op))
         return WalkResult::advance();
 
-      StaticLogicWhileOp whileOp(dyn_cast<staticlogic::PipelineWhileOp>(op));
+      StaticLogicWhileOp whileOp(cast<staticlogic::PipelineWhileOp>(op));
 
       getComponentState().setUniqueName(whileOp.getOperation(), "while");
 
