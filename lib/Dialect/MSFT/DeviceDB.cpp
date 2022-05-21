@@ -114,6 +114,8 @@ PDRegPhysLocationOp PlacementDB::place(DynamicInstanceOp inst,
 
 LogicalResult PlacementDB::insertPlacement(DynInstDataOpInterface op,
                                            PhysLocationAttr loc) {
+  if (!loc)
+    return success();
   PlacementCell *leaf = getLeaf(loc);
   if (!leaf)
     return op->emitOpError("Could not apply placement. Invalid location: ")
@@ -204,7 +206,8 @@ LogicalResult PlacementDB::movePlacement(PDPhysLocationOp locOp,
 /// placed there.
 void PlacementDB::removePlacement(PDRegPhysLocationOp locOp) {
   for (PhysLocationAttr loc : locOp.locs().getLocs())
-    removePlacement(locOp, loc);
+    if (loc)
+      removePlacement(locOp, loc);
   locOp.erase();
 }
 
@@ -215,10 +218,15 @@ LogicalResult PlacementDB::movePlacement(PDRegPhysLocationOp locOp,
                                          LocationVectorAttr newLocs) {
   ArrayRef<PhysLocationAttr> fromLocs = locOp.locs().getLocs();
   for (auto [from, to] : llvm::zip(fromLocs, newLocs.getLocs()))
-    if (failed(movePlacementCheck(locOp, from, to)))
+    if (from && to && failed(movePlacementCheck(locOp, from, to)))
+      return failure();
+    else if (to && getInstanceAt(to))
       return failure();
   for (auto [from, to] : llvm::zip(fromLocs, newLocs.getLocs()))
-    movePlacement(locOp, from, to);
+    if (from && to)
+      movePlacement(locOp, from, to);
+    else if (from)
+      removePlacement(locOp, from);
   locOp.locsAttr(newLocs);
   return success();
 }

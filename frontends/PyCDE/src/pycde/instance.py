@@ -8,7 +8,7 @@ from typing import Dict, List, Optional, Tuple, Union
 from circt.dialects import hw, msft, seq
 
 import mlir.ir as ir
-from pycde.devicedb import PhysLocation, PrimitiveType
+from pycde.devicedb import LocationVector, PhysLocation, PrimitiveType
 
 
 class Instance:
@@ -199,9 +199,13 @@ class RegInstance(Instance):
     from .pycde_types import Type
     self.type = Type(static_op.operation.operands[0].type)
 
-  def place(self, locs: List[Optional[Tuple[int, int, int]]]):
+  def place(self, locs: Union[LocationVector, List[Optional[Tuple[int, int,
+                                                                  int]]]]):
     import pycde.devicedb as devdb
-    vec = devdb.LocationVector(self.type, locs)
+    if isinstance(locs, devdb.LocationVector):
+      vec = locs
+    else:
+      vec = devdb.LocationVector(self.type, locs)
     self.root.system.placedb.place(self, vec)
 
 
