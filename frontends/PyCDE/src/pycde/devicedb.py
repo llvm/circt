@@ -75,7 +75,8 @@ class LocationVector:
     self._loc = loc
 
   def __str__(self) -> str:
-    return "LocationVector"
+    loc = self._loc
+    return f"LocationVector<[]>"
 
   def __repr__(self) -> str:
     return self.__str__()
