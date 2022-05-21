@@ -215,12 +215,12 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
           [](py::object cls, MlirType type, std::vector<py::handle> pylocs,
              MlirContext ctxt) {
             SmallVector<MlirAttribute> locs;
-            for (auto attrObj : pylocs)
-              if (attrObj.is_none())
+            for (auto attrHandle : pylocs)
+              if (attrHandle.is_none())
                 locs.push_back({nullptr});
               else
                 locs.push_back(mlirPythonCapsuleToAttribute(
-                    mlirApiObjectToCapsule(attrObj).ptr()));
+                    mlirApiObjectToCapsule(attrHandle).ptr()));
             return cls(circtMSFTLocationVectorAttrGet(ctxt, type, locs.size(),
                                                       locs.data()));
           },
