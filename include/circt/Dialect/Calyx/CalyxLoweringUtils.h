@@ -15,7 +15,6 @@
 #define CIRCT_DIALECT_CALYX_CALYXLOWERINGUTILS_H
 
 #include "circt/Dialect/Calyx/CalyxOps.h"
-#include "circt/Dialect/StaticLogic/StaticLogic.h"
 #include "circt/Support/LLVM.h"
 
 #include <variant>
@@ -76,11 +75,6 @@ public:
 
   // Returns the number of iterations the while loop will conduct if known.
   virtual Optional<uint64_t> getBound() = 0;
-
-  // Returns whether this is a pipelined while operation.
-  bool isPipelined() {
-    return isa<staticlogic::PipelineWhileOp>(getOperation());
-  }
 
   // Returns the operation.
   T getOperation() { return impl; }

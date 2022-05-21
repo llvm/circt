@@ -1565,14 +1565,9 @@ class BuildWhileGroups : public FuncOpPartialLoweringPattern {
 
       /// Add the while op to the list of scheduleable things in the current
       /// block.
-      if (whileOp.isPipelined())
-        getComponentState().addBlockScheduleable(
-            whileOp.getOperation()->getBlock(),
-            PipelineScheduleable{{whileOp, initGroups}});
-      else
-        getComponentState().addBlockScheduleable(
-            whileOp.getOperation()->getBlock(),
-            WhileScheduleable{{whileOp, initGroups}});
+      getComponentState().addBlockScheduleable(
+          whileOp.getOperation()->getBlock(),
+          PipelineScheduleable{{whileOp, initGroups}});
       return WalkResult::advance();
     });
     return res;
