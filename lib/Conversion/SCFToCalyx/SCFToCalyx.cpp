@@ -1464,11 +1464,10 @@ class BuildWhileGroups : public FuncOpPartialLoweringPattern {
     LogicalResult res = success();
     funcOp.walk([&](Operation *op) {
       // Only work on ops that support the ScfWhileOp.
-      auto operation = dyn_cast<scf::WhileOp>(op);
-      if (!operation)
+      if (!isa<scf::WhileOp>(op))
         return WalkResult::advance();
 
-      ScfWhileOp whileOp(operation);
+      ScfWhileOp whileOp(op);
 
       getComponentState().setUniqueName(whileOp.getOperation(), "while");
 
