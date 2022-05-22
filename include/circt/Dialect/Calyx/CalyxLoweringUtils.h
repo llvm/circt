@@ -103,11 +103,11 @@ bool matchConstantOp(Operation *op, APInt &value);
 
 // Returns true if there exists only a single memref::LoadOp which loads from
 // the memory referenced by loadOp.
-bool singleLoadFromMemory(Value memref);
+bool singleLoadFromMemory(Value memoryReference);
 
 // Returns true if there are no memref::StoreOp uses with the referenced
 // memory.
-bool noStoresToMemory(Value memref);
+bool noStoresToMemory(Value memoryReference);
 
 // Get the index'th output port of compOp.
 Value getComponentOutput(calyx::ComponentOp compOp, unsigned outPortIdx);
