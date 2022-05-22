@@ -27,7 +27,10 @@ circuit Top:
     b <= signed.b
 
     ; CHECK:      module DUT
-    ; CHECK:        wire [[wireName:.+]];
+    ; CHECK:        wire [[gctTap:.+]];
+    ; CHECK-NEXT:   wire [[wireName:.+]];
+    ; CHECK:        assign [[gctTap]] = [[driver:.+]];
+    ; CHECK-NEXT:   assign [[wireName]] = [[driver]];
     ; CHECK:      endmodule
 
     ; CHECK:      module Top
@@ -35,7 +38,7 @@ circuit Top:
     ; CHECK:      endmodule
 
     ; CHECK:      module MyView_mapping();
-    ; CHECK-NEXT:   assign MyView.[[elementName:.+]] = Top.[[dutName]].[[wireName]]
+    ; CHECK-NEXT:   assign MyView.[[elementName:.+]] = Top.[[dutName]].[[gctTap]]
     ; CHECK-NEXT: endmodule
 
     ; CHECK: interface MyInterface

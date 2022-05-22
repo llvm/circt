@@ -175,12 +175,93 @@ firrtl.circuit "Foo"  attributes {
 
 // -----
 
-firrtl.circuit "GCTInterface"  attributes {annotations = [{unrelatedAnnotation}], rawAnnotations = [{class = "sifive.enterprise.grandcentral.GrandCentralView$SerializedViewAnnotation", companion = "~GCTInterface|view_companion", name = "view", parent = "~GCTInterface|GCTInterface", view = {class = "sifive.enterprise.grandcentral.AugmentedBundleType", defName = "ViewName", elements = [{description = "the register in GCTInterface", name = "register", tpe = {class = "sifive.enterprise.grandcentral.AugmentedBundleType", defName = "Register", elements = [{name = "_2", tpe = {class = "sifive.enterprise.grandcentral.AugmentedVectorType", elements = [{class = "sifive.enterprise.grandcentral.AugmentedGroundType", ref = {circuit = "GCTInterface", component = [{class = "firrtl.annotations.TargetToken$Field", value = "_2"}, {class = "firrtl.annotations.TargetToken$Index", value = 0 : i64}], module = "GCTInterface", path = [], ref = "r"}, tpe = {class = "sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$"}}, {class = "sifive.enterprise.grandcentral.AugmentedGroundType", ref = {circuit = "GCTInterface", component = [{class = "firrtl.annotations.TargetToken$Field", value = "_2"}, {class = "firrtl.annotations.TargetToken$Index", value = 1 : i64}], module = "GCTInterface", path = [], ref = "r"}, tpe = {class = "sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$"}}]}}, {name = "_0_inst", tpe = {class = "sifive.enterprise.grandcentral.AugmentedBundleType", defName = "_0_def", elements = [{name = "_1", tpe = {class = "sifive.enterprise.grandcentral.AugmentedGroundType", ref = {circuit = "GCTInterface", component = [{class = "firrtl.annotations.TargetToken$Field", value = "_0"}, {class = "firrtl.annotations.TargetToken$Field", value = "_1"}], module = "GCTInterface", path = [], ref = "r"}, tpe = {class = "sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$"}}}, {name = "_0", tpe = {class = "sifive.enterprise.grandcentral.AugmentedGroundType", ref = {circuit = "GCTInterface", component = [{class = "firrtl.annotations.TargetToken$Field", value = "_0"}, {class = "firrtl.annotations.TargetToken$Field", value = "_0"}], module = "GCTInterface", path = [], ref = "r"}, tpe = {class = "sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$"}}}]}}]}}, {description = "the port 'a' in GCTInterface", name = "port", tpe = {class = "sifive.enterprise.grandcentral.AugmentedGroundType", ref = {circuit = "GCTInterface", component = [], module = "GCTInterface", path = [], ref = "a"}, tpe = {class = "sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$"}}}]}}]} {
+firrtl.circuit "GCTInterface"  attributes {
+  annotations = [{unrelatedAnnotation}],
+  rawAnnotations = [
+    {class = "sifive.enterprise.grandcentral.GrandCentralView$SerializedViewAnnotation",
+     companion = "~GCTInterface|view_companion",
+     name = "view",
+     parent = "~GCTInterface|GCTInterface",
+     view = {
+       class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+       defName = "ViewName",
+       elements = [
+         {description = "the register in GCTInterface",
+          name = "register",
+          tpe = {
+            class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+            defName = "Register",
+            elements = [
+              {name = "_2",
+               tpe = {
+                 class = "sifive.enterprise.grandcentral.AugmentedVectorType",
+                 elements = [
+                   {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+                    ref = {
+                      circuit = "GCTInterface",
+                      component = [
+                        {class = "firrtl.annotations.TargetToken$Field", value = "_2"},
+                        {class = "firrtl.annotations.TargetToken$Index", value = 0 : i64}],
+                      module = "GCTInterface",
+                      path = [],
+                      ref = "r"},
+                    tpe = {
+                      class = "sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$"}},
+                  {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+                   ref = {
+                     circuit = "GCTInterface",
+                     component = [
+                       {class = "firrtl.annotations.TargetToken$Field", value = "_2"},
+                       {class = "firrtl.annotations.TargetToken$Index", value = 1 : i64}],
+                     module = "GCTInterface",
+                     path = [],
+                     ref = "r"},
+                   tpe = {class = "sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$"}}]}},
+              {name = "_0_inst",
+               tpe = {
+                 class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+                 defName = "_0_def",
+                 elements = [
+                   {name = "_1",
+                    tpe = {
+                      class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+                      ref = {
+                        circuit = "GCTInterface",
+                        component = [
+                          {class = "firrtl.annotations.TargetToken$Field", value = "_0"},
+                          {class = "firrtl.annotations.TargetToken$Field", value = "_1"}],
+                        module = "GCTInterface",
+                        path = [],
+                        ref = "r"},
+                      tpe = {class = "sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$"}}},
+                   {name = "_0",
+                    tpe = {
+                      class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+                      ref = {
+                        circuit = "GCTInterface",
+                        component = [
+                          {class = "firrtl.annotations.TargetToken$Field", value = "_0"},
+                          {class = "firrtl.annotations.TargetToken$Field", value = "_0"}],
+                        module = "GCTInterface",
+                        path = [],
+                        ref = "r"},
+                      tpe = {class = "sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$"}}}]}}]}},
+         {description = "the port 'a' in GCTInterface",
+          name = "port",
+          tpe = {
+            class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+            ref = {
+              circuit = "GCTInterface",
+              component = [],
+              module = "GCTInterface",
+              path = [],
+              ref = "a"},
+            tpe = {class = "sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$"}}}]}}]} {
   firrtl.module private @view_companion() {
     firrtl.skip
   }
   firrtl.module @GCTInterface(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %a: !firrtl.uint<1>) {
-    %r = firrtl.reg %clock  : !firrtl.bundle<_0: bundle<_0: uint<1>, _1: uint<1>>, _2: vector<uint<1>, 2>>
+    %r = firrtl.reg %clock  : !firrtl.bundle<_0: bundle<_0: uint<1>, _1: uint<2>>, _2: vector<uint<3>, 2>>
     firrtl.instance view_companion  @view_companion()
   }
 }
@@ -236,32 +317,58 @@ firrtl.circuit "GCTInterface"  attributes {annotations = [{unrelatedAnnotation}]
 // members of the interface inside the parent.  Both port "a" and register
 // "r" should be annotated.
 // CHECK: firrtl.module @GCTInterface
-// CHECK-SAME: %a: !firrtl.uint<1> sym @a [
+// CHECK-SAME: %a: !firrtl.uint<1>
+// CHECK-NEXT: %[[tap_a:.+]] = firrtl.wire sym
 // CHECK-SAME:   {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
-// CHECK-SAME:    d = [[ID_port]] : i64}
-// CHECK-SAME: annotations = [
-// CHECK-SAME:   {class = "sifive.enterprise.grandcentral.ViewAnnotation.parent",
-// CHECK-SAME:    id = [[ID_ViewName]] : i64,
-// CHECK-SAME:    name = "view",
-// CHECK-SAME:    type = "parent"}]
-// CHECK: firrtl.reg
-// CHECK-SAME: annotations
-// CHECK-SAME:   {circt.fieldID = 2 : i32,
-// CHECK-SAME:    class = "sifive.enterprise.grandcentral.AugmentedGroundType",
-// CHECK-SAME:    id = [[ID_0]] : i64}
-// CHECK-SAME:   {circt.fieldID = 3 : i32,
-// CHECK-SAME:    class = "sifive.enterprise.grandcentral.AugmentedGroundType",
-// CHECK-SAME:    id = [[ID_1]] : i64}
-// CHECK-SAME:   {circt.fieldID = 6 : i32,
-// CHECK-SAME:    class = "sifive.enterprise.grandcentral.AugmentedGroundType",
-// CHECK-SAME:    id = [[ID_2_1]] : i64}
-// CHECK-SAME:   {circt.fieldID = 5 : i32,
-// CHECK-SAME:    class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+// CHECK-SAME:    id = [[ID_port]] : i64}
+// CHECK-NEXT: firrtl.strictconnect %[[tap_a]], %a
+// CHECK:      %[[tap_r_2_0:.+]] = firrtl.wire sym
+// CHECK-SAME:   {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
 // CHECK-SAME:    id = [[ID_2_0]] : i64}
+// CHECK-NEXT: %[[tap_r_2_1:.+]] = firrtl.wire sym
+// CHECK-SAME:   {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+// CHECK-SAME:    id = [[ID_2_1]] : i64}
+// CHECK-NEXT: %[[tap_r_1:.+]] = firrtl.wire sym
+// CHECK-SAME:   {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+// CHECK-SAME:    id = [[ID_1]] : i64}
+// CHECK-NEXT: %[[tap_r_0:.+]] = firrtl.wire sym
+// CHECK-SAME:   {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+// CHECK-SAME:    id = [[ID_0]] : i64}
+// CHECK-NEXT: firrtl.reg
+// CHECK-NOT: annotations
 
 // -----
 
-firrtl.circuit "Foo"  attributes {rawAnnotations = [{class = "sifive.enterprise.grandcentral.ViewAnnotation", companion = "~Foo|Bar_companion", name = "Bar", parent = "~Foo|Foo", view = {class = "sifive.enterprise.grandcentral.AugmentedBundleType", defName = "View", elements = [{description = "a string", name = "string", tpe = {class = "sifive.enterprise.grandcentral.AugmentedStringType", value = "hello"}}, {description = "a boolean", name = "boolean", tpe = {class = "sifive.enterprise.grandcentral.AugmentedBooleanType", value = false}}, {description = "an integer", name = "integer", tpe = {class = "sifive.enterprise.grandcentral.AugmentedIntegerType", value = 42 : i64}}, {description = "a double", name = "double", tpe = {class = "sifive.enterprise.grandcentral.AugmentedDoubleType", value = 3.140000e+00 : f64}}]}}]} {
+firrtl.circuit "Foo"  attributes {
+  rawAnnotations = [
+    {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+     companion = "~Foo|Bar_companion",
+     name = "Bar",
+     parent = "~Foo|Foo",
+     view = {
+       class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+       defName = "View",
+       elements = [
+         {description = "a string",
+          name = "string",
+          tpe = {
+            class = "sifive.enterprise.grandcentral.AugmentedStringType",
+            value = "hello"}},
+         {description = "a boolean",
+          name = "boolean",
+          tpe = {
+            class = "sifive.enterprise.grandcentral.AugmentedBooleanType",
+            value = false}},
+         {description = "an integer",
+          name = "integer",
+          tpe = {
+            class = "sifive.enterprise.grandcentral.AugmentedIntegerType",
+            value = 42 : i64}},
+         {description = "a double",
+          name = "double",
+          tpe = {
+            class = "sifive.enterprise.grandcentral.AugmentedDoubleType",
+            value = 3.140000e+00 : f64}}]}}]} {
   firrtl.extmodule private @Bar_companion()
   firrtl.module @Foo() {
      firrtl.instance Bar_companion @Bar_companion()
