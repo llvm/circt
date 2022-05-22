@@ -74,5 +74,9 @@ void addMandatoryComponentPorts(PatternRewriter &rewriter,
                   });
 }
 
+unsigned handleZeroWidth(int64_t dim) {
+  return std::max(llvm::Log2_64_Ceil(dim), 1U);
+}
+
 } // namespace calyx
 } // namespace circt

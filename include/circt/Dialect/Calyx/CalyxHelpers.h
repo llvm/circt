@@ -46,6 +46,10 @@ DictionaryAttr getMandatoryPortAttr(MLIRContext *ctx, StringRef name);
 void addMandatoryComponentPorts(PatternRewriter &rewriter,
                                 SmallVectorImpl<calyx::PortInfo> &ports);
 
+// Returns the bit width for the given dimension. This will always be greater
+// than zero. See: https://github.com/llvm/circt/issues/2660
+unsigned handleZeroWidth(int64_t dim);
+
 } // namespace calyx
 } // namespace circt
 
