@@ -36,9 +36,7 @@ hw::ConstantOp createConstant(Location loc, OpBuilder &builder,
                                         APInt(width, value, /*unsigned=*/true));
 }
 
-bool isControlLeafNode(Operation *op) {
-  return isa<calyx::EnableOp>(op);
-}
+bool isControlLeafNode(Operation *op) { return isa<calyx::EnableOp>(op); }
 
 DictionaryAttr getMandatoryPortAttr(MLIRContext *ctx, StringRef name) {
   return DictionaryAttr::get(
@@ -49,29 +47,29 @@ void addMandatoryComponentPorts(PatternRewriter &rewriter,
                                 SmallVectorImpl<calyx::PortInfo> &ports) {
   MLIRContext *ctx = rewriter.getContext();
   ports.push_back({
-                      rewriter.getStringAttr("clk"),
-                      rewriter.getI1Type(),
-                      calyx::Direction::Input,
-                      getMandatoryPortAttr(ctx, "clk"),
-                  });
+      rewriter.getStringAttr("clk"),
+      rewriter.getI1Type(),
+      calyx::Direction::Input,
+      getMandatoryPortAttr(ctx, "clk"),
+  });
   ports.push_back({
-                      rewriter.getStringAttr("reset"),
-                      rewriter.getI1Type(),
-                      calyx::Direction::Input,
-                      getMandatoryPortAttr(ctx, "reset"),
-                  });
+      rewriter.getStringAttr("reset"),
+      rewriter.getI1Type(),
+      calyx::Direction::Input,
+      getMandatoryPortAttr(ctx, "reset"),
+  });
   ports.push_back({
-                      rewriter.getStringAttr("go"),
-                      rewriter.getI1Type(),
-                      calyx::Direction::Input,
-                      getMandatoryPortAttr(ctx, "go"),
-                  });
+      rewriter.getStringAttr("go"),
+      rewriter.getI1Type(),
+      calyx::Direction::Input,
+      getMandatoryPortAttr(ctx, "go"),
+  });
   ports.push_back({
-                      rewriter.getStringAttr("done"),
-                      rewriter.getI1Type(),
-                      calyx::Direction::Output,
-                      getMandatoryPortAttr(ctx, "done"),
-                  });
+      rewriter.getStringAttr("done"),
+      rewriter.getI1Type(),
+      calyx::Direction::Output,
+      getMandatoryPortAttr(ctx, "done"),
+  });
 }
 
 unsigned handleZeroWidth(int64_t dim) {
