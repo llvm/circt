@@ -1167,6 +1167,17 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
   if (wire.inner_symAttr())
     return failure();
 
+  if (wire->hasAttr("sv.user_specified_name")) {
+    sv::AssignOp assign;
+    if (wire->hasOneUse() &&
+        (assign = dyn_cast<sv::AssignOp>(*wire->getUsers().begin()))) {
+      rewriter.eraseOp(assign);
+      rewriter.eraseOp(wire);
+      return success();
+    }
+    return failure();
+  }
+
   // Wires have inout type, so they'll have assigns and read_inout operations
   // that work on them.  If anything unexpected is found then leave it alone.
   SmallVector<sv::ReadInOutOp> reads;

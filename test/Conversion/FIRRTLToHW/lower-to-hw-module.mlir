@@ -100,11 +100,11 @@ firrtl.circuit "Simple" {
                              out %outD: !firrtl.uint<4>,
                              in %inE: !firrtl.uint<3>,
                              out %outE: !firrtl.uint<4>) {
-    // CHECK: %.outB.output = sv.wire sym @__PortMadness__.outB.output {sv.user_specified_name} : !hw.inout<i4>
+    // CHECK: %.outB.output = sv.wire {sv.user_specified_name} : !hw.inout<i4>
     // CHECK: [[OUTBR:%.+]] = sv.read_inout %.outB.output
-    // CHECK: [[OUTC:%.+]] = sv.wire sym @__PortMadness__.outC.output {sv.user_specified_name} : !hw.inout<i4>
+    // CHECK: [[OUTC:%.+]] = sv.wire {sv.user_specified_name} : !hw.inout<i4>
     // CHECK: [[OUTCR:%.+]] = sv.read_inout %.outC.output
-    // CHECK: [[OUTD:%.+]] = sv.wire sym @__PortMadness__.outD.output {sv.user_specified_name} : !hw.inout<i4>
+    // CHECK: [[OUTD:%.+]] = sv.wire {sv.user_specified_name} : !hw.inout<i4>
     // CHECK: [[OUTDR:%.+]] = sv.read_inout %.outD.output
 
     // Normal
