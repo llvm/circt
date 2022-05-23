@@ -12,6 +12,7 @@
 
 def FIRRTLDialect : Dialect {
   let name = "firrtl";
+  let cppNamespace = "::circt::firrtl";
 
   let summary = "Types and operations for firrtl dialect";
   let description = [{
@@ -21,10 +22,13 @@ def FIRRTLDialect : Dialect {
   }];
 
   let hasConstantMaterializer = 1;
+  let useDefaultTypePrinterParser = 1;
+  let useDefaultAttributePrinterParser = 1;
+
   let dependentDialects = [
     "circt::hw::HWDialect"
   ];
-  let cppNamespace = "::circt::firrtl";
+
   let extraClassDeclaration = [{
     /// Register all FIRRTL types.
     void registerTypes();

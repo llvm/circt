@@ -487,6 +487,8 @@ void HWMemSimImplPass::runOnOperation() {
       } else {
         auto newModule = builder.create<HWModuleOp>(
             oldModule.getLoc(), nameAttr, oldModule.getPorts());
+        if (auto outdir = oldModule->getAttr("output_file"))
+          newModule->setAttr("output_file", outdir);
         HWMemSimImpl(getContext(), replSeqMem, ignoreReadEnableMem)
             .generateMemory(newModule, mem);
       }

@@ -12,7 +12,7 @@ hw.module @intLoopback(%clk:i1, %rstn:i1) -> () {
   %bufferedResp = esi.buffer %clk, %rstn, %cosimRecv {stages=1} : i32
 }
 
-!KeyText = type !hw.struct<text: !hw.array<6xi14>, key: !hw.array<4xi8>>
+!KeyText = !hw.struct<text: !hw.array<6xi14>, key: !hw.array<4xi8>>
 hw.module @twoListLoopback(%clk:i1, %rstn:i1) -> () {
   %cosim = esi.cosim %clk, %rstn, %resp, 2 {name="KeyTextEP"} : !esi.channel<!KeyText> -> !esi.channel<!KeyText>
   %resp = esi.buffer %clk, %rstn, %cosim {stages=4} : !KeyText

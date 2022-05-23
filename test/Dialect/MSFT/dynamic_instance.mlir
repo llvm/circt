@@ -6,32 +6,32 @@ msft.instance.hierarchy @deeper {
   msft.instance.dynamic @deeper::@branch {
     msft.instance.dynamic @shallow::@leaf {
       msft.instance.dynamic @leaf::@module {
-        msft.pd.location M20K x: 15 y: 9 n: 3 path: "memBank2"
-        msft.instance.verb_attr name: "RESERVE_PLACE_REGION" value: "OFF" path: "memBank2"
+        msft.pd.location M20K x: 15 y: 9 n: 3 path: "|memBank2"
+        msft.instance.verb_attr name: "RESERVE_PLACE_REGION" value: "OFF" path: "|memBank2"
       }
     }
   }
 }
 // CHECK: hw.globalRef @instref [#hw.innerNameRef<@deeper::@branch>, #hw.innerNameRef<@shallow::@leaf>, #hw.innerNameRef<@leaf::@module>]
-// CHECK: msft.pd.location @instref M20K x: 15 y: 9 n: 3 path : "memBank2"
+// CHECK: msft.pd.location @instref M20K x: 15 y: 9 n: 3 path : "|memBank2"
 
 msft.instance.hierarchy @shallow {
   msft.instance.dynamic @shallow::@leaf {
     msft.instance.dynamic @leaf::@module {
-      msft.pd.location M20K x: 8 y: 19 n: 1 path: "memBank2"
+      msft.pd.location M20K x: 8 y: 19 n: 1 path: "|memBank2"
     }
   }
 }
 // CHECK: hw.globalRef @instref_1 [#hw.innerNameRef<@shallow::@leaf>, #hw.innerNameRef<@leaf::@module>]
-// CHECK: msft.pd.location @instref_1 M20K x: 8 y: 19 n: 1 path : "memBank2"
+// CHECK: msft.pd.location @instref_1 M20K x: 8 y: 19 n: 1 path : "|memBank2"
 
 msft.instance.hierarchy @reg {
   msft.instance.dynamic @reg::@reg {
-    msft.pd.location FF x: 0 y: 0 n: 0
+    msft.pd.reg_location i4 [*, <1,2,3>, <1,2,4>, <1,2,5>]
   }
 }
 // CHECK: hw.globalRef @instref_2 [#hw.innerNameRef<@reg::@reg>]
-// CHECK: msft.pd.location @instref_2 FF x: 0 y: 0 n: 0
+// CHECK: msft.pd.reg_location ref @instref_2 i4 [*, <1, 2, 3>, <1, 2, 4>, <1, 2, 5>]
 
 
 
@@ -72,8 +72,10 @@ msft.module @deeper {} () -> () {
 }
 
 // TCL-LABEL: proc reg_0_config
-msft.module @reg {} (%input : i8, %clk : i1) -> () {
-  %reg = seq.compreg sym @reg %input, %clk  : i8
-  // TCL: set_location_assignment FF_X0_Y0_N0 -to $parent|reg_1
+msft.module @reg {} (%input : i4, %clk : i1) -> () {
+  %reg = seq.compreg sym @reg %input, %clk  : i4
+  // TCL: set_location_assignment FF_X1_Y2_N3 -to $parent|reg_1[1]
+  // TCL: set_location_assignment FF_X1_Y2_N4 -to $parent|reg_1[2]
+  // TCL: set_location_assignment FF_X1_Y2_N5 -to $parent|reg_1[3]
   msft.output
 }

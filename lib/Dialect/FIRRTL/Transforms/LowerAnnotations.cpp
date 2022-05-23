@@ -203,8 +203,16 @@ static LogicalResult applyWithoutTargetImpl(AnnoPathValue target,
                                             DictionaryAttr anno,
                                             ApplyState &state,
                                             bool allowNonLocal) {
-  if (!allowNonLocal && !target.isLocal())
+  if (!allowNonLocal && !target.isLocal()) {
+    Annotation annotation(anno);
+    auto diag = mlir::emitError(target.ref.getOp()->getLoc())
+                << "is targeted by a non-local annotation \""
+                << annotation.getClass() << "\" with target "
+                << annotation.getMember("target")
+                << ", but this annotation cannot be non-local";
+    diag.attachNote() << "see current annotation: " << anno << "\n";
     return failure();
+  }
   SmallVector<NamedAttribute> newAnnoAttrs;
   for (auto &na : anno) {
     if (na.getName().getValue() != "target") {
@@ -257,6 +265,7 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
 
     // Testing Annotation
     {"circt.test", {stdResolve, applyWithoutTarget<true>}},
+    {"circt.testLocalOnly", {stdResolve, applyWithoutTarget<>}},
     {"circt.testNT", {noResolve, applyWithoutTarget<>}},
     {"circt.missing", {tryResolve, applyWithoutTarget<>}}
 

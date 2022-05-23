@@ -25,7 +25,8 @@ ParseResult CompRegOp::parse(OpAsmParser &parser, OperationState &result) {
 
   if (succeeded(parser.parseOptionalKeyword("sym"))) {
     StringAttr symName;
-    parser.parseSymbolName(symName, "sym_name", result.attributes);
+    if (parser.parseSymbolName(symName, "sym_name", result.attributes))
+      return failure();
   }
 
   SmallVector<OpAsmParser::UnresolvedOperand, 4> operands;

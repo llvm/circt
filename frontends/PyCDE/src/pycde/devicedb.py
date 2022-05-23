@@ -3,7 +3,7 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from __future__ import annotations
-from typing import Any, Optional, Union
+from typing import Any, List, Optional, Tuple, Union
 
 from circt.dialects import msft
 from circt.support import attribute_to_var
@@ -45,6 +45,37 @@ class PhysLocation:
   def __str__(self) -> str:
     loc = self._loc
     return f"PhysLocation<{loc.devtype}, x:{loc.x}, y:{loc.y}, num:{loc.num}>"
+
+  def __repr__(self) -> str:
+    return self.__str__()
+
+
+class LocationVector:
+  from .pycde_types import Type
+
+  __slots__ = ["_loc"]
+
+  @singledispatchmethod
+  def __init__(self, type: Type, locs: List[Optional[Tuple[int, int, int]]]):
+    assert len(locs) == type.bitwidth, \
+      "List length must match reg bitwidth"
+    from circt.dialects import msft as circt_msft
+    phys_locs: List[circt_msft.PhysLocationAttr] = list()
+    for loc in locs:
+      if loc is None:
+        phys_locs.append(None)
+      else:
+        phys_locs.append(
+            circt_msft.PhysLocationAttr.get(PrimitiveType.FF, loc[0], loc[1],
+                                            loc[2]))
+    self._loc = circt_msft.LocationVectorAttr.get(type._type, phys_locs)
+
+  @__init__.register(msft.LocationVectorAttr)
+  def __from_loc(self, loc):
+    self._loc = loc
+
+  def __str__(self) -> str:
+    return "LocationVector"
 
   def __repr__(self) -> str:
     return self.__str__()
@@ -111,6 +142,8 @@ class PrimitiveDB:
 
 
 class PlacementDB:
+  from .instance import Instance
+
   __slots__ = ["_db", "_sys"]
 
   def __init__(self, sys, _circt_mod, seed: Optional[PrimitiveDB]):
@@ -133,7 +166,7 @@ class PlacementDB:
     subpath = ""
     self._db.add_placement(loc._loc, path, subpath, entity._entity_extern)
 
-  def place(self, inst, loc: PhysLocation, subpath: str = ""):
+  def place(self, inst: Instance, loc: PhysLocation, subpath: str = ""):
     self._db.place(inst._dyn_inst.operation, loc._loc, subpath, get_user_loc())
 
 

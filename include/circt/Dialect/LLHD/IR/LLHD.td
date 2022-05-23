@@ -29,14 +29,16 @@ include "mlir/IR/SymbolInterfaces.td"
 
 def LLHD_Dialect : Dialect {
   let name = "llhd";
+  let cppNamespace = "::circt::llhd";
 
   let description = [{
     A low-level hardware description dialect in MLIR.
   }];
 
-  let cppNamespace = "::circt::llhd";
-
   let hasConstantMaterializer = 1;
+  let useDefaultTypePrinterParser = 1;
+  let useDefaultAttributePrinterParser = 1;
+
   let extraClassDeclaration = [{
     /// Register all LLHD types.
     void registerTypes();

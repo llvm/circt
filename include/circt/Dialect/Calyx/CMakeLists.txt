@@ -1,5 +1,5 @@
 add_circt_dialect(Calyx calyx)
-add_circt_doc(Calyx -gen-dialect-doc Calyx Dialects/)
+add_circt_dialect_doc(Calyx calyx)
 
 set(LLVM_TARGET_DEFINITIONS Calyx.td)
 
@@ -22,4 +22,4 @@ add_dependencies(circt-headers MLIRCalyxInterfacesIncGen)
 set(LLVM_TARGET_DEFINITIONS CalyxPasses.td)
 mlir_tablegen(CalyxPasses.h.inc -gen-pass-decls)
 add_public_tablegen_target(CIRCTCalyxTransformsIncGen)
-add_circt_doc(CalyxPasses -gen-pass-doc CalyxPasses ./)
+add_circt_doc(CalyxPasses CalyxPasses -gen-pass-doc)

@@ -114,7 +114,10 @@ def FuncOp : Op<Handshake_Dialect, "func", [
 }
 
 // InstanceOp
-def InstanceOp : Handshake_Op<"instance", [CallOpInterface]> {
+def InstanceOp : Handshake_Op<"instance", [
+    CallOpInterface,
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>
+]> {
   let summary = "module instantiate operation";
   let description = [{
     The `instance` operation represents the instantiation of a module.  This

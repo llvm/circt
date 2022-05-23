@@ -49,6 +49,17 @@ MLIR_CAPI_EXPORTED
 MlirAttribute circtMSFTPhysicalBoundsAttrGet(MlirContext, uint64_t, uint64_t,
                                              uint64_t, uint64_t);
 
+MLIR_CAPI_EXPORTED bool
+    circtMSFTAttributeIsALocationVectorAttribute(MlirAttribute);
+MLIR_CAPI_EXPORTED MlirAttribute
+circtMSFTLocationVectorAttrGet(MlirContext, MlirType type, intptr_t numElements,
+                               MlirAttribute const *elements);
+MLIR_CAPI_EXPORTED MlirType circtMSFTLocationVectorAttrGetType(MlirAttribute);
+MLIR_CAPI_EXPORTED
+intptr_t circtMSFTLocationVectorAttrGetNumElements(MlirAttribute);
+MLIR_CAPI_EXPORTED MlirAttribute
+circtMSFTLocationVectorAttrGetElement(MlirAttribute attr, intptr_t pos);
+
 //===----------------------------------------------------------------------===//
 // PrimitiveDB.
 //===----------------------------------------------------------------------===//

@@ -96,6 +96,29 @@ def SCFToCalyx : Pass<"lower-scf-to-calyx", "mlir::ModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
+// StaticLogicToCalyx
+//===----------------------------------------------------------------------===//
+
+def StaticLogicToCalyx : Pass<"lower-static-logic-to-calyx", "mlir::ModuleOp"> {
+  let summary = "Lower StaticLogic to Calyx";
+  let description = [{
+    This pass lowers StaticLogic to Calyx.
+  }];
+  let constructor = "circt::createStaticLogicToCalyxPass()";
+  let dependentDialects = [
+    "calyx::CalyxDialect", "::mlir::scf::SCFDialect", "hw::HWDialect",
+    "comb::CombDialect"
+  ];
+  let options = [
+    Option<"topLevelFunctionOpt", "top-level-function", "std::string", "",
+            "Identifier of top-level function to be the entry-point component"
+            " of the Calyx program.">,
+    Option<"ciderSourceLocationMetadata", "cider-source-location-metadata", "bool", "",
+            "Whether to track source location for the Cider debugger.">
+  ];
+}
+
+//===----------------------------------------------------------------------===//
 // CalyxToHW
 //===----------------------------------------------------------------------===//
 

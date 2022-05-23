@@ -139,6 +139,10 @@ class Type(mlir.ir.Type):
   def strip(self):
     return self
 
+  @property
+  def bitwidth(self):
+    return hw.get_bitwidth(self._type)
+
   def __call__(self, value_obj, name: str = None):
     """Create a Value of this type from a python object."""
     from .support import _obj_to_value

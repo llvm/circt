@@ -6,7 +6,6 @@
 import pycde
 from pycde import types, module, Input, Output
 
-from pycde.devicedb import PrimitiveType
 from pycde.dialects import seq
 from pycde.module import generator
 
@@ -34,7 +33,8 @@ mod.print()
 mod.generate()
 top_inst = mod.get_instance(CompReg)
 mod.createdb()
-top_inst["reg"].place(PrimitiveType.FF, 0, 0, 0)
+top_inst["reg"].place([(0, 0, 0), (0, 0, 1), (0, 0, 2), (0, 0, 3), (0, 0, 4),
+                       (0, 0, 5), (0, 0, 6), (0, 0, 7)])
 mod.print()
 mod.emit_outputs()
 
@@ -42,4 +42,11 @@ mod.emit_outputs()
 # CHECK: always_ff @(posedge clk)
 # CHECK: [[NAME]] <= {{.+}}
 
-# TCL: set_location_assignment FF_X0_Y0_N0 -to $parent|reg_{{.}}
+# TCL-DAG: set_location_assignment FF_X0_Y0_N7 -to $parent|reg_2[7]
+# TCL-DAG: set_location_assignment FF_X0_Y0_N6 -to $parent|reg_2[6]
+# TCL-DAG: set_location_assignment FF_X0_Y0_N5 -to $parent|reg_2[5]
+# TCL-DAG: set_location_assignment FF_X0_Y0_N4 -to $parent|reg_2[4]
+# TCL-DAG: set_location_assignment FF_X0_Y0_N3 -to $parent|reg_2[3]
+# TCL-DAG: set_location_assignment FF_X0_Y0_N2 -to $parent|reg_2[2]
+# TCL-DAG: set_location_assignment FF_X0_Y0_N1 -to $parent|reg_2[1]
+# TCL-DAG: set_location_assignment FF_X0_Y0_N0 -to $parent|reg_2[0]

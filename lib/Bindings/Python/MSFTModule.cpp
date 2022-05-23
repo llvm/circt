@@ -115,6 +115,30 @@ private:
   CirctMSFTPlacementDB db;
 };
 
+class PyLocationVecIterator {
+public:
+  PyLocationVecIterator(MlirAttribute attr) : attr(attr) {}
+
+  PyLocationVecIterator &dunderIter() { return *this; }
+
+  MlirAttribute dunderNext() {
+    if (nextIndex >= circtMSFTLocationVectorAttrGetNumElements(attr)) {
+      throw py::stop_iteration();
+    }
+    return circtMSFTLocationVectorAttrGetElement(attr, nextIndex++);
+  }
+
+  static void bind(py::module &m) {
+    py::class_<PyLocationVecIterator>(m, "LocationVectorAttrIterator",
+                                      py::module_local())
+        .def("__iter__", &PyLocationVecIterator::dunderIter)
+        .def("__next__", &PyLocationVecIterator::dunderNext);
+  }
+
+private:
+  MlirAttribute attr;
+  intptr_t nextIndex = 0;
+};
 /// Populate the msft python module.
 void circt::python::populateDialectMSFTSubmodule(py::module &m) {
   mlirMSFTRegisterPasses();
@@ -176,6 +200,29 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
           "Create a PhysicalBounds attribute", py::arg("cls"), py::arg("xMin"),
           py::arg("xMax"), py::arg("yMin"), py::arg("yMax"),
           py::arg("context") = py::none());
+
+  mlir_attribute_subclass(m, "LocationVectorAttr",
+                          circtMSFTAttributeIsALocationVectorAttribute)
+      .def_classmethod(
+          "get",
+          [](py::object cls, MlirType type, std::vector<MlirAttribute> locs,
+             MlirContext ctxt) {
+            return cls(circtMSFTLocationVectorAttrGet(ctxt, type, locs.size(),
+                                                      locs.data()));
+          },
+          "Create a LocationVector attribute", py::arg("cls"), py::arg("type"),
+          py::arg("locs"), py::arg("context") = py::none())
+      .def("reg_type", &circtMSFTLocationVectorAttrGetType)
+      .def("__len__", &circtMSFTLocationVectorAttrGetNumElements)
+      .def(
+          "__getitem__",
+          [](MlirAttribute locVec, intptr_t pos) {
+            return circtMSFTLocationVectorAttrGetElement(locVec, pos);
+          },
+          "Get the location at the specified position", py::arg("pos"))
+      .def("__iter__",
+           [](MlirAttribute arr) { return PyLocationVecIterator(arr); });
+  PyLocationVecIterator::bind(m);
 
   py::class_<PrimitiveDB>(m, "PrimitiveDB")
       .def(py::init<MlirContext>(), py::arg("ctxt") = py::none())

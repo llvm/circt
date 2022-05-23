@@ -167,6 +167,11 @@ struct FirMemory {
 
   // Location is carried along but not considered part of the identity of this.
   Location loc;
+  // Flag to indicate if the memory was under the DUT hierarchy, only used in
+  // LowerToHW. Not part of the identity.
+  bool isInDut = false;
+  // The original MemOp, only used in LowerToHW.  Also not part of the identity.
+  Operation *op = nullptr;
 
   std::tuple<size_t, size_t, size_t, size_t, size_t, size_t, size_t, size_t,
              size_t, hw::WUW, SmallVector<int32_t>, uint32_t>

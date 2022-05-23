@@ -1,5 +1,5 @@
 add_circt_dialect(HW hw)
-add_circt_doc(HW -gen-dialect-doc HW Dialects/)
+add_circt_dialect_doc(HW hw)
 
 set(LLVM_TARGET_DEFINITIONS HW.td)
 
@@ -16,7 +16,7 @@ add_dependencies(circt-headers MLIRHWEnumsIncGen)
 set(LLVM_TARGET_DEFINITIONS Passes.td)
 mlir_tablegen(Passes.h.inc -gen-pass-decls)
 add_public_tablegen_target(CIRCTHWTransformsIncGen)
-add_circt_doc(Passes -gen-pass-doc HWPasses ./)
+add_circt_doc(Passes HWPasses -gen-pass-doc)
 
 set(LLVM_TARGET_DEFINITIONS HWOpInterfaces.td)
 mlir_tablegen(HWOpInterfaces.h.inc -gen-op-interface-decls)

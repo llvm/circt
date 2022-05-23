@@ -10,18 +10,26 @@ function(add_circt_interface interface)
   add_dependencies(circt-headers MLIR${interface}IncGen)
 endfunction()
 
-function(add_circt_doc doc_filename command output_file output_directory)
-  set(LLVM_TARGET_DEFINITIONS ${doc_filename}.td)
-  tablegen(MLIR ${output_file}.md ${command})
-  set(GEN_DOC_FILE ${CIRCT_BINARY_DIR}/docs/${output_directory}${output_file}.md)
+# Additional parameters are forwarded to tablegen.
+function(add_circt_doc tablegen_file output_path command)
+  set(LLVM_TARGET_DEFINITIONS ${tablegen_file}.td)
+  string(MAKE_C_IDENTIFIER ${output_path} output_id)
+  tablegen(MLIR ${output_id}.md ${command} ${ARGN})
+  set(GEN_DOC_FILE ${CIRCT_BINARY_DIR}/docs/${output_path}.md)
   add_custom_command(
           OUTPUT ${GEN_DOC_FILE}
           COMMAND ${CMAKE_COMMAND} -E copy
-                  ${CMAKE_CURRENT_BINARY_DIR}/${output_file}.md
+                  ${CMAKE_CURRENT_BINARY_DIR}/${output_id}.md
                   ${GEN_DOC_FILE}
-          DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${output_file}.md)
-  add_custom_target(${output_file}DocGen DEPENDS ${GEN_DOC_FILE})
-  add_dependencies(circt-doc ${output_file}DocGen)
+          DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${output_id}.md)
+  add_custom_target(${output_id}DocGen DEPENDS ${GEN_DOC_FILE})
+  add_dependencies(circt-doc ${output_id}DocGen)
+endfunction()
+
+function(add_circt_dialect_doc dialect dialect_namespace)
+  add_circt_doc(
+    ${dialect} Dialects/${dialect}
+    -gen-dialect-doc -dialect ${dialect_namespace})
 endfunction()
 
 function(add_circt_library name)

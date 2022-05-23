@@ -69,13 +69,15 @@ ParseResult PipelineWhileOp::parse(OpAsmParser &parser,
 
   // Parse condition region.
   Region *condition = result.addRegion();
-  parser.parseRegion(*condition, regionArgs);
+  if (parser.parseRegion(*condition, regionArgs))
+    return failure();
 
   // Parse stages region.
   if (parser.parseKeyword("do"))
     return failure();
   Region *stages = result.addRegion();
-  parser.parseRegion(*stages, regionArgs);
+  if (parser.parseRegion(*stages, regionArgs))
+    return failure();
 
   return success();
 }

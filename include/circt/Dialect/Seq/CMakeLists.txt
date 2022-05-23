@@ -10,9 +10,9 @@
 ##===----------------------------------------------------------------------===//
 
 add_circt_dialect(Seq seq)
-add_circt_doc(Seq -gen-dialect-doc Seq Dialects/)
+add_circt_dialect_doc(Seq seq)
 
 set(LLVM_TARGET_DEFINITIONS SeqPasses.td)
 mlir_tablegen(SeqPasses.h.inc -gen-pass-decls)
 add_public_tablegen_target(CIRCTSeqTransformsIncGen)
-add_circt_doc(SeqPasses -gen-pass-doc SeqPasses ./)
+add_circt_doc(SeqPasses SeqPasses -gen-pass-doc)

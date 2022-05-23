@@ -25,10 +25,10 @@ hw.module @array(%clk: i1, %rstn: i1) {
   %arrTotalBuffered = esi.buffer %clk, %rstn, %arrTotal {stages=2, name="totalChan"} : !hw.array<2 x ui24>
 }
 
-!DataPkt = type !hw.struct<encrypted: i1, blob: !hw.array<32 x i8>>
-!pktChan = type !esi.channel<!DataPkt>
-!Config  = type !hw.struct<encrypt:   i1, otp:  !hw.array<32 x i8>>
-!cfgChan = type !esi.channel<!Config>
+!DataPkt = !hw.struct<encrypted: i1, blob: !hw.array<32 x i8>>
+!pktChan = !esi.channel<!DataPkt>
+!Config  = !hw.struct<encrypt:   i1, otp:  !hw.array<32 x i8>>
+!cfgChan = !esi.channel<!Config>
 
 hw.module.extern @Encryptor(%clk: i1, %rstn: i1, %in: !pktChan, %cfg: !cfgChan) -> (x: !pktChan)
 

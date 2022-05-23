@@ -73,8 +73,8 @@ func.func @empy_op(%arg0: i1) {
 }
 
 // CHECK-LABEL: func @invert_if(%arg0: i1) {
-// CHECK-NEXT:    [[FD:%.*]] = hw.constant -2147483646 : i32
 // CHECK-NEXT:    %true = hw.constant true
+// CHECK-NEXT:    [[FD:%.*]] = hw.constant -2147483646 : i32
 // CHECK-NEXT:    sv.initial  {
 // CHECK-NEXT:      %0 = comb.xor %arg0, %true : i1
 // CHECK-NEXT:      sv.if %0  {

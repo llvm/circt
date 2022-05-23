@@ -41,9 +41,71 @@ handshake.func @foo(%ctrl : none) -> none{
   return %ctrl : none
 }
 
+handshake.func @invalid_instance_op(%arg0 : i32, %ctrl : none) -> none {
+  // expected-error @+1 {{'handshake.instance' op incorrect number of operands for the referenced handshake function}}
+  instance @foo(%arg0, %ctrl) : (i32, none) -> ()
+  return %ctrl : none
+}
+
+// -----
+
+handshake.func @foo(%arg0 : i32, %ctrl : none) -> (none) {
+  return %ctrl : none
+}
+
+handshake.func @invalid_instance_op(%arg0 : i64, %ctrl : none) -> none {
+  // expected-error @+1 {{'handshake.instance' op operand type mismatch: expected operand type 'i32', but provided 'i64' for operand number 0}}
+  instance @foo(%arg0, %ctrl) : (i64, none) -> (none)
+  return %ctrl : none
+}
+
+// -----
+
+handshake.func @foo(%ctrl : none) -> (i32, none) {
+  %0 = constant %ctrl {value = 1 : i32} : i32
+  return %0, %ctrl : i32, none
+}
+
+handshake.func @invalid_instance_op(%arg0 : i32, %ctrl : none) -> none {
+  // expected-error @+1 {{'handshake.instance' op incorrect number of results for the referenced handshake function}}
+  instance @foo(%ctrl) : (none) -> (none)
+  return %ctrl : none
+}
+
+// -----
+
+handshake.func @foo(%ctrl : none) -> (i32, none) {
+  %0 = constant %ctrl {value = 1 : i32} : i32
+  return %0, %ctrl : i32, none
+}
+
+handshake.func @invalid_instance_op(%arg0 : i32, %ctrl : none) -> none {
+  // expected-error @+1 {{'handshake.instance' op result type mismatch: expected result type 'i32', but provided 'i64' for result number 0}}
+  %0, %outCtrl = instance @foo(%ctrl) : (none) -> (i64, none)
+  return %ctrl : none
+}
+
+// -----
+
+handshake.func @foo(%ctrl : none) -> none{
+  return %ctrl : none
+}
+
 handshake.func @invalid_instance_op(%ctrl : none) -> none {
   // expected-error @+1 {{'handshake.instance' op must provide at least a control operand.}}
   instance @foo() : () -> ()
+  return %ctrl : none
+}
+
+// -----
+
+func.func @foo() {
+  return
+}
+
+handshake.func @invalid_instance_op(%ctrl : none) -> none {
+  // expected-error @+1 {{'handshake.instance' op 'foo' does not reference a valid handshake function}}
+  instance @foo(%ctrl) : (none) -> (none)
   return %ctrl : none
 }
 

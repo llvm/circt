@@ -2,8 +2,8 @@
 // RUN: circt-translate %s -export-esi-capnp -verify-diagnostics | FileCheck --check-prefix=CAPNP %s
 // RUN: circt-opt %s --lower-esi-ports --lower-esi-to-hw -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck --check-prefix=COSIM %s
 
-!DataPkt = type !hw.struct<encrypted: i1, compressionLevel: ui4, blob: !hw.array<32 x i8>>
-!pktChan = type !esi.channel<!DataPkt>
+!DataPkt = !hw.struct<encrypted: i1, compressionLevel: ui4, blob: !hw.array<32 x i8>>
+!pktChan = !esi.channel<!DataPkt>
 
 hw.module.extern @Compressor(%in: !esi.channel<i1>) -> (x: !pktChan)
 

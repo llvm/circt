@@ -7,7 +7,7 @@ from pycde.devicedb import (EntityExtern, PlacementDB, PrimitiveDB,
 
 from .module import _SpecializedModule
 from .pycde_types import types
-from .instance import NonRootInstance, InstanceHierarchyRoot
+from .instance import Instance, InstanceHierarchyRoot
 
 from circt.dialects import hw, msft
 
@@ -223,7 +223,7 @@ class _OpCache:
 
     self._instance_hier_cache: dict[str, msft.InstanceHierarchyOp] = None
     self._instance_hier_obj_cache: dict[str, InstanceHierarchyRoot] = {}
-    self._instance_cache: dict[NonRootInstance, msft.DynamicInstanceOp] = {}
+    self._instance_cache: dict[Instance, msft.DynamicInstanceOp] = {}
 
     self._module_inside_sym_cache: Dict[ir.Operation, Dict[ir.Attribute,
                                                            ir.Operation]] = {}
@@ -337,8 +337,7 @@ class _OpCache:
         self.get_module_symbol(inst_hier.inside_of))
     return self._instance_hier_cache.get(root_mod_symbol, None)
 
-  def create_or_get_dyn_inst(self,
-                             inst: NonRootInstance) -> msft.DynamicInstanceOp:
+  def create_or_get_dyn_inst(self, inst: Instance) -> msft.DynamicInstanceOp:
     """Get the dynamic instance op corresponding to 'inst'. Returns 'None' if
     the instance doesn't have a static op in the IR."""
 

@@ -176,18 +176,52 @@ circuit test:
 
 
 ; CHECK-LABEL: FILE "metadata/tb_seq_mems.json"
-; CHECK:      [{"module_name":"tbMemoryKind1_ext",
-; CHECK-SAME: "depth":16,"width":8,"masked":false,"read":true,"write":true,"readwrite":false,"extra_ports":[],
-; CHECK-SAME: "hierarchy":["test.h2.m.tbMemoryKind1.tbMemoryKind1_ext"]},
-; CHECK-SAME: {"module_name":"tbMemoryKind1_0_ext",
-; CHECK-SAME: "depth":16,"width":8,"masked":false,"read":true,"write":true,"readwrite":false,"extra_ports":[],
-; CHECK-SAME: "hierarchy":["test.h1.tbMemoryKind1.tbMemoryKind1_0_ext"]}]
+; CHECK:      [
+; CHECK-NEXT:   {
+; CHECK-NEXT:     "module_name": "tbMemoryKind1_ext",
+; CHECK-NEXT:     "depth": 16,
+; CHECK-NEXT:     "width": 8,
+; CHECK-NEXT:     "masked": false,
+; CHECK-NEXT:     "read": true,
+; CHECK-NEXT:     "write": true,
+; CHECK-NEXT:     "readwrite": false,
+; CHECK-NEXT:     "extra_ports": [],
+; CHECK-NEXT:     "hierarchy": [
+; CHECK-NEXT:       "test.h2.m.tbMemoryKind1.tbMemoryKind1_ext"
+; CHECK-NEXT:     ]
+; CHECK-NEXT:   },
+; CHECK-NEXT:   {
+; CHECK-NEXT:     "module_name": "tbMemoryKind1_0_ext",
+; CHECK-NEXT:     "depth": 16,
+; CHECK-NEXT:     "width": 8,
+; CHECK-NEXT:     "masked": false,
+; CHECK-NEXT:     "read": true,
+; CHECK-NEXT:     "write": true,
+; CHECK-NEXT:     "readwrite": false,
+; CHECK-NEXT:     "extra_ports": [],
+; CHECK-NEXT:     "hierarchy": [
+; CHECK-NEXT:       "test.h1.tbMemoryKind1.tbMemoryKind1_0_ext"
+; CHECK-NEXT:     ]
+; CHECK-NEXT:   }
+; CHECK-NEXT: ]
 
 
 ; CHECK-LABEL: FILE "metadata/seq_mems.json"
-; CHECK:      [{"module_name":"dutMemory_ext",
-; CHECK-SAME: "depth":32,"width":8,"masked":false,"read":true,"write":true,"readwrite":false,"extra_ports":[],
-; CHECK-SAME: "hierarchy":["dutModule.m.dutMemory.dutMemory_ext"]}]
+; CHECK:      [
+; CHECK-NEXT:   {
+; CHECK-NEXT:     "module_name": "dutMemory_ext",
+; CHECK-NEXT:     "depth": 32,
+; CHECK-NEXT:     "width": 8,
+; CHECK-NEXT:     "masked": false,
+; CHECK-NEXT:     "read": true,
+; CHECK-NEXT:     "write": true,
+; CHECK-NEXT:     "readwrite": false,
+; CHECK-NEXT:     "extra_ports": [],
+; CHECK-NEXT:     "hierarchy": [
+; CHECK-NEXT:       "dutModule.m.dutMemory.dutMemory_ext"
+; CHECK-NEXT:     ]
+; CHECK-NEXT:   }
+; CHECK-NEXT: ]
 
 
 ; CHECK-LABEL: FILE "metadata/dutModule.conf"

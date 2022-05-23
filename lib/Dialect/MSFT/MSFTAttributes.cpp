@@ -73,6 +73,75 @@ void PhysicalBoundsAttr::print(AsmPrinter &p) const {
   p << '>';
 }
 
+LogicalResult LocationVectorAttr::verify(
+    llvm::function_ref<mlir::InFlightDiagnostic()> emitError, TypeAttr type,
+    ArrayRef<PhysLocationAttr> locs) {
+  uint64_t typeBitWidth = hw::getBitWidth(type.getValue());
+  if (typeBitWidth < 0)
+    return emitError() << "cannot compute bit width of type '" << type << "'";
+  if (typeBitWidth != locs.size())
+    return emitError() << "must specify " << typeBitWidth << " locations";
+  return success();
+}
+
+LogicalResult
+circt::msft::parseOptionalRegLoc(SmallVectorImpl<PhysLocationAttr> &locs,
+                                 AsmParser &p) {
+  MLIRContext *ctxt = p.getContext();
+  if (!p.parseOptionalStar()) {
+    locs.push_back({});
+    return success();
+  }
+
+  PhysLocationAttr loc;
+  if (p.parseOptionalAttribute(loc).hasValue()) {
+    locs.push_back(loc);
+    return success();
+  }
+
+  uint64_t x, y, n;
+  if (p.parseLess() || p.parseInteger(x) || p.parseComma() ||
+      p.parseInteger(y) || p.parseComma() || p.parseInteger(n) ||
+      p.parseGreater())
+    return failure();
+  locs.push_back(PhysLocationAttr::get(
+      ctxt, PrimitiveTypeAttr::get(ctxt, PrimitiveType::FF), x, y, n));
+  return success();
+}
+
+void circt::msft::printOptionalRegLoc(PhysLocationAttr loc, AsmPrinter &p) {
+  if (loc && loc.getPrimitiveType().getValue() == PrimitiveType::FF)
+    p << '<' << loc.getX() << ", " << loc.getY() << ", " << loc.getNum() << '>';
+  else if (loc)
+    p << loc;
+  else
+    p << "*";
+}
+
+Attribute LocationVectorAttr::parse(AsmParser &p, Type) {
+  MLIRContext *ctxt = p.getContext();
+  TypeAttr type;
+  SmallVector<PhysLocationAttr, 32> locs;
+
+  if (p.parseLess() || p.parseAttribute(type) || p.parseComma() ||
+      p.parseLSquare() || p.parseCommaSeparatedList([&]() {
+        return parseOptionalRegLoc(locs, p);
+      }) ||
+      p.parseRSquare() || p.parseGreater())
+    return {};
+
+  return LocationVectorAttr::getChecked(p.getEncodedSourceLoc(p.getNameLoc()),
+                                        ctxt, type, locs);
+}
+
+void LocationVectorAttr::print(AsmPrinter &p) const {
+  p << '<' << getType() << ", [";
+  llvm::interleaveComma(getLocs(), p, [&p](PhysLocationAttr loc) {
+    printOptionalRegLoc(loc, p);
+  });
+  p << "]>";
+}
+
 void MSFTDialect::registerAttributes() {
   addAttributes<
 #define GET_ATTRDEF_LIST

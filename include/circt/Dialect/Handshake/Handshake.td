@@ -25,12 +25,15 @@ include "circt/Dialect/Handshake/HandshakeInterfaces.td"
 def Handshake_Dialect : Dialect {
   let name = "handshake";
   let cppNamespace = "::circt::handshake";
+
   let summary = "Types and operations for the handshake dialect";
   let description = [{
     This dialect defined the `handshake` dialect, modeling dataflow circuits.
     Handshake/dataflow IR is describes independent, unsynchronized processes
     communicating data through First-in First-out (FIFO) communication channels.
   }];
+
+  let useDefaultAttributePrinterParser = 1;
 }
 
 // Base class for Handshake dialect ops.
