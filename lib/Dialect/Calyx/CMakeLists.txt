@@ -16,6 +16,7 @@ set(Calyx_LinkLibs
   CIRCTHW
   MLIRArithmetic
   MLIRIR
+  MLIRMemRef
   MLIRTransforms
   )
 

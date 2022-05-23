@@ -120,7 +120,6 @@ Type convIndexType(PatternRewriter &rewriter, Type type);
 template <typename TGroup>
 TGroup createGroup(PatternRewriter &rewriter, calyx::ComponentOp compOp,
                    Location loc, Twine uniqueName) {
-
   mlir::IRRewriter::InsertionGuard guard(rewriter);
   rewriter.setInsertionPointToEnd(compOp.getWiresOp().getBody());
   return rewriter.create<TGroup>(loc, uniqueName.str());
