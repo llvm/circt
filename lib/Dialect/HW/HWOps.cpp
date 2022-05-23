@@ -363,8 +363,8 @@ enum ExternModKind { PlainMod, ExternMod, GenMod };
 static void buildModule(OpBuilder &builder, OperationState &result,
                         StringAttr name, const ModulePortInfo &ports,
                         ArrayAttr parameters,
-                        ArrayRef<NamedAttribute> attributes,
-                        StringAttr comment) {
+                        ArrayRef<NamedAttribute> attributes, StringAttr comment,
+                        StringAttr topOfFileComment) {
   using namespace mlir::function_interface_impl;
 
   // Add an attribute for the name.
@@ -418,6 +418,9 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   if (!comment)
     comment = builder.getStringAttr("");
   result.addAttribute("comment", comment);
+  if (!topOfFileComment)
+    topOfFileComment = builder.getStringAttr("");
+  result.addAttribute("topOfFileComment", topOfFileComment);
   result.addAttributes(attributes);
   result.addRegion();
 }
@@ -550,9 +553,10 @@ void hw::modifyModulePorts(
 void HWModuleOp::build(OpBuilder &builder, OperationState &result,
                        StringAttr name, const ModulePortInfo &ports,
                        ArrayAttr parameters,
-                       ArrayRef<NamedAttribute> attributes,
-                       StringAttr comment) {
-  buildModule(builder, result, name, ports, parameters, attributes, comment);
+                       ArrayRef<NamedAttribute> attributes, StringAttr comment,
+                       StringAttr topOfFileComment) {
+  buildModule(builder, result, name, ports, parameters, attributes, comment,
+              topOfFileComment);
 
   // Create a region and a block for the body.
   auto *bodyRegion = result.regions[0].get();
@@ -569,10 +573,10 @@ void HWModuleOp::build(OpBuilder &builder, OperationState &result,
 void HWModuleOp::build(OpBuilder &builder, OperationState &result,
                        StringAttr name, ArrayRef<PortInfo> ports,
                        ArrayAttr parameters,
-                       ArrayRef<NamedAttribute> attributes,
-                       StringAttr comment) {
+                       ArrayRef<NamedAttribute> attributes, StringAttr comment,
+                       StringAttr topOfFileComment) {
   build(builder, result, name, ModulePortInfo(ports), parameters, attributes,
-        comment);
+        comment, topOfFileComment);
 }
 
 void HWModuleOp::modifyPorts(
@@ -605,7 +609,7 @@ void HWModuleExternOp::build(OpBuilder &builder, OperationState &result,
                              StringAttr name, const ModulePortInfo &ports,
                              StringRef verilogName, ArrayAttr parameters,
                              ArrayRef<NamedAttribute> attributes) {
-  buildModule(builder, result, name, ports, parameters, attributes, {});
+  buildModule(builder, result, name, ports, parameters, attributes, {}, {});
 
   if (!verilogName.empty())
     result.addAttribute("verilogName", builder.getStringAttr(verilogName));
@@ -632,7 +636,7 @@ void HWModuleGeneratedOp::build(OpBuilder &builder, OperationState &result,
                                 const ModulePortInfo &ports,
                                 StringRef verilogName, ArrayAttr parameters,
                                 ArrayRef<NamedAttribute> attributes) {
-  buildModule(builder, result, name, ports, parameters, attributes, {});
+  buildModule(builder, result, name, ports, parameters, attributes, {}, {});
   result.addAttribute("generatorKind", genKind);
   if (!verilogName.empty())
     result.addAttribute("verilogName", builder.getStringAttr(verilogName));
@@ -866,6 +870,8 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
   result.addAttribute("parameters", ArrayAttr::get(context, parameters));
   if (!hasAttribute("comment", result.attributes))
     result.addAttribute("comment", StringAttr::get(context, ""));
+  if (!hasAttribute("topOfFileComment", result.attributes))
+    result.addAttribute("topOfFileComment", StringAttr::get(context, ""));
 
   assert(resultAttrs.size() == resultTypes.size());
 
@@ -958,6 +964,8 @@ static void printModuleOp(OpAsmPrinter &p, Operation *op,
   omittedAttrs.push_back(visibilityAttrName);
   if (op->getAttrOfType<StringAttr>("comment").getValue().empty())
     omittedAttrs.push_back("comment");
+  if (op->getAttrOfType<StringAttr>("topOfFileComment").getValue().empty())
+    omittedAttrs.push_back("topOfFileComment");
 
   printFunctionAttributes(p, op, argTypes.size(), resultTypes.size(),
                           omittedAttrs);

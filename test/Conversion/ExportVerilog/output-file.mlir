@@ -21,10 +21,12 @@ hw.module @foo2(%a: i1) -> (b: i1) attributes {output_file = #file2, output_file
 
 #file3 = #hw.output_file<"dir2/", includeReplicatedOps>
 #filelist3 = [#hw.output_filelist<"dir5/bar.f">]
-hw.module @foo3(%a: i1) -> (b: i1) attributes {output_file = #file3, output_filelist = #filelist3} {
+hw.module @foo3(%a: i1) -> (b: i1) attributes {output_file = #file3, output_filelist = #filelist3, topOfFileComment="TOP COMMENT"} {
   hw.output %a : i1
 }
 // CHECK-LABEL: FILE "dir2{{.}}foo3.sv"
+// CHECK-EMPTY:
+// CHECK-NEXT: TOP COMMENT
 // CHECK-LABEL: module foo3
 // CHECK-LABEL: module B
 

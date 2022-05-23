@@ -60,7 +60,7 @@ def HWModuleOp : HWModuleOpBase<"module",
   }];
   let arguments = (ins StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
                        ParamDeclArrayAttr:$parameters,
-                       StrAttr:$comment);
+                       StrAttr:$comment, StrAttr:$topOfFileComment);
   let results = (outs);
   let regions = (region SizedRegion<1>:$body);
 
@@ -69,11 +69,13 @@ def HWModuleOp : HWModuleOpBase<"module",
     OpBuilder<(ins "StringAttr":$name, "ArrayRef<PortInfo>":$ports,
                    CArg<"ArrayAttr", "{}">:$parameters,
                    CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes,
-                   CArg<"StringAttr", "{}">:$comment)>,
+                   CArg<"StringAttr", "{}">:$comment,
+                   CArg<"StringAttr", "{}">:$topOfFileComment)>,
     OpBuilder<(ins "StringAttr":$name, "const ModulePortInfo &":$ports,
                    CArg<"ArrayAttr", "{}">:$parameters,
                    CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes,
-                   CArg<"StringAttr", "{}">:$comment)>
+                   CArg<"StringAttr", "{}">:$comment,
+                   CArg<"StringAttr", "{}">:$topOfFileComment)>
   ];
 
   let extraModuleClassDeclaration = [{

@@ -136,6 +136,8 @@ struct FileInfo {
   /// replicated per-file operations the operation should be emitted.
   SmallVector<OpFileInfo, 1> ops;
 
+  StringAttr topOfFileComment;
+
   /// Whether to emit the replicated per-file operations.
   bool emitReplicatedOps = true;
 

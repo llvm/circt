@@ -4190,7 +4190,8 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
       for (auto fl : fla)
         opFileList.push_back(fl.cast<hw::FileListAttr>().getFilename());
 
-    auto separateFile = [&](Operation *op, Twine defaultFileName = "") {
+    auto separateFile = [&](Operation *op, Twine defaultFileName = "",
+                            StringAttr topOfFileComment = {}) {
       // If we're emitting to a separate file and the output_file attribute
       // didn't specify a filename, take the default one if present or emit an
       // error if not.
@@ -4209,6 +4210,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
       file.ops.push_back(info);
       file.emitReplicatedOps = emitReplicatedOps;
       file.addToFilelist = addToFilelist;
+      file.topOfFileComment = topOfFileComment;
       for (auto fl : opFileList)
         fileLists[fl.getValue()].push_back(destFile);
     };
@@ -4224,7 +4226,8 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
 
           // Emit into a separate file named after the module.
           if (attr || separateModules)
-            separateFile(mod, getVerilogModuleName(mod) + ".sv");
+            separateFile(mod, getVerilogModuleName(mod) + ".sv",
+                         mod.topOfFileCommentAttr());
           else
             rootFile.ops.push_back(info);
         })
@@ -4295,6 +4298,12 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
 void SharedEmitterState::collectOpsForFile(const FileInfo &file,
                                            EmissionList &thingsToEmit,
                                            bool emitHeader) {
+  // If the file has a comment at the top, emit it.
+  if (file.topOfFileComment && !file.topOfFileComment.getValue().empty()) {
+    thingsToEmit.emplace_back(file.topOfFileComment.strref());
+    thingsToEmit.emplace_back("\n");
+  }
+
   // If we're emitting replicated ops, keep track of where we are in the list.
   size_t lastReplicatedOp = 0;
 
@@ -4566,6 +4575,7 @@ LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
         emitter.files
             .insert({StringAttr::get(module.getContext(), circtHeader),
                      FileInfo{/*ops*/ {},
+                              /*topOfFileComment*/ {},
                               /*emitReplicatedOps*/ true,
                               /*addToFilelist*/ true,
                               /*isHeader*/ true}})
