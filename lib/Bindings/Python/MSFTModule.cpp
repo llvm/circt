@@ -117,6 +117,7 @@ private:
 
 class PyLocationVecIterator {
 public:
+  /// Get item at the specified position, translating a nullptr to None.
   static py::handle getItem(MlirAttribute locVec, intptr_t pos) {
     MlirAttribute loc = circtMSFTLocationVectorAttrGetElement(locVec, pos);
     if (loc.ptr == nullptr)
@@ -214,6 +215,8 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
           "get",
           [](py::object cls, MlirType type, std::vector<py::handle> pylocs,
              MlirContext ctxt) {
+            // Get a LocationVector being sensitive to None in the list of
+            // locations.
             SmallVector<MlirAttribute> locs;
             for (auto attrHandle : pylocs)
               if (attrHandle.is_none())
