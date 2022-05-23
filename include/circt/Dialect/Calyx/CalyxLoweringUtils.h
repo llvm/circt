@@ -16,6 +16,7 @@
 
 #include "circt/Dialect/Calyx/CalyxOps.h"
 #include "circt/Support/LLVM.h"
+#include "mlir/IR/PatternMatch.h"
 
 #include <variant>
 
@@ -87,6 +88,42 @@ public:
 private:
   T impl;
 };
+
+// Walks the control of this component, and appends source information for leaf
+// nodes. It also appends a position attribute that connects the source location
+// metadata to the corresponding control operation.
+WalkResult
+getCiderSourceLocationMetadata(calyx::ComponentOp component,
+                               SmallVectorImpl<Attribute> &sourceLocations);
+
+// Tries to match a constant value defined by op. If the match was
+// successful, returns true and binds the constant to 'value'. If unsuccessful,
+// the value is unmodified.
+bool matchConstantOp(Operation *op, APInt &value);
+
+// Returns true if there exists only a single memref::LoadOp which loads from
+// the memory referenced by loadOp.
+bool singleLoadFromMemory(Value memoryReference);
+
+// Returns true if there are no memref::StoreOp uses with the referenced
+// memory.
+bool noStoresToMemory(Value memoryReference);
+
+// Get the index'th output port of compOp.
+Value getComponentOutput(calyx::ComponentOp compOp, unsigned outPortIdx);
+
+// If the provided type is an index type, converts it to i32, else, returns the
+// unmodified type.
+Type convIndexType(PatternRewriter &rewriter, Type type);
+
+// Creates a new calyx::CombGroupOp or calyx::GroupOp group within compOp.
+template <typename TGroup>
+TGroup createGroup(PatternRewriter &rewriter, calyx::ComponentOp compOp,
+                   Location loc, Twine uniqueName) {
+  mlir::IRRewriter::InsertionGuard guard(rewriter);
+  rewriter.setInsertionPointToEnd(compOp.getWiresOp().getBody());
+  return rewriter.create<TGroup>(loc, uniqueName.str());
+}
 
 } // namespace calyx
 } // namespace circt

@@ -32,6 +32,24 @@ calyx::RegisterOp createRegister(Location loc, OpBuilder &builder,
 hw::ConstantOp createConstant(Location loc, OpBuilder &builder,
                               ComponentOp component, size_t width,
                               size_t value);
+
+// Returns whether this operation is a leaf node in the Calyx control.
+// TODO(github.com/llvm/circt/issues/1679): Add Invoke.
+bool isControlLeafNode(Operation *op);
+
+// Creates a DictionaryAttr containing a unit attribute 'name'. Used for
+// defining mandatory port attributes for calyx::ComponentOp's.
+DictionaryAttr getMandatoryPortAttr(MLIRContext *ctx, StringRef name);
+
+// Adds the mandatory Calyx component I/O ports (->[clk, reset, go], [done]->)
+// to ports.
+void addMandatoryComponentPorts(PatternRewriter &rewriter,
+                                SmallVectorImpl<calyx::PortInfo> &ports);
+
+// Returns the bit width for the given dimension. This will always be greater
+// than zero. See: https://github.com/llvm/circt/issues/2660
+unsigned handleZeroWidth(int64_t dim);
+
 } // namespace calyx
 } // namespace circt
 
