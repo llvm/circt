@@ -2129,7 +2129,9 @@ firrtl.module @constReg8(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, o
 
 // CHECK-LABEL: firrtl.module @namedrop
 firrtl.module @namedrop(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %in: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
+  // CHECK-NOT: unused_named_node
   // CHECK-NOT: _T_
+  %unused_named_node = firrtl.node %in : !firrtl.uint<1>
   %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
   %_T_0 = firrtl.node %in : !firrtl.uint<1>
   %_T_1 = firrtl.wire : !firrtl.uint<1>

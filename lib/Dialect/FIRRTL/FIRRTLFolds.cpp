@@ -1626,9 +1626,19 @@ struct FoldNodeName : public mlir::RewritePattern {
                                 PatternRewriter &rewriter) const override {
     auto node = cast<NodeOp>(op);
     auto name = node.nameAttr();
-    if (!isUselessName(name.getValue()) || node.inner_sym() ||
-        !node.annotations().empty())
+    if (node.inner_sym() || !node.annotations().empty())
       return failure();
+
+    // If node has an interesting name, we can delete the node only when it has
+    // no use.
+    if (!isUselessName(name.getValue())) {
+      if (node.use_empty()) {
+        rewriter.eraseOp(node);
+        return success();
+      }
+      return failure();
+    }
+
     auto *expr = node.input().getDefiningOp();
     if (expr && !expr->hasAttr("name") && !isUselessName(name))
       rewriter.updateRootInPlace(expr, [&] { expr->setAttr("name", name); });
