@@ -37,8 +37,8 @@ static void expandNames(ArrayRef<Attribute> names, TypeRange types,
   assert(names.size() == types.size());
 
   for (auto item : llvm::enumerate(names)) {
-    auto name = item.value();
-    auto type = types[item.index()];
+    Attribute name = item.value();
+    Type type = types[item.index()];
     if (auto structTy = type.dyn_cast<StructType>()) {
       for (auto element : structTy.getElements()) {
         StringRef prefix = name.dyn_cast<StringAttr>().getValue();
@@ -59,8 +59,8 @@ static void expandOperands(ValueRange oldOperands, ValueRange newOperands,
   assert(oldOperands.size() == newOperands.size());
 
   for (auto item : llvm::enumerate(oldOperands)) {
-    auto oldOperand = item.value();
-    auto newOperand = newOperands[item.index()];
+    Value oldOperand = item.value();
+    Value newOperand = newOperands[item.index()];
     if (auto structTy = oldOperand.getType().dyn_cast<StructType>()) {
       if (auto cast = newOperand.getDefiningOp<UnrealizedConversionCastOp>()) {
         if (index < 0)
@@ -210,9 +210,8 @@ FlattenInstance::matchAndRewrite(InstanceOp op, OpAdaptor adaptor,
 
   // Convert result types.
   SmallVector<Type> newTypes;
-  auto converted = typeConverter->convertTypes(op.getResultTypes(), newTypes);
-  assert(succeeded(converted));
-  (void)converted;
+  if (failed(typeConverter->convertTypes(op.getResultTypes(), newTypes)))
+    return failure();
 
   // Make new instance, with the converted types and port names.
   auto newInstance = rewriter.create<InstanceOp>(
@@ -228,7 +227,8 @@ FlattenInstance::matchAndRewrite(InstanceOp op, OpAdaptor adaptor,
   for (auto type : op.getResultTypes()) {
     if (auto structTy = type.dyn_cast<StructType>()) {
       unsigned nElements = structTy.getElements().size();
-      auto castInputs = newInstance.getResults().slice(resultIndex, nElements);
+      ResultRange castInputs =
+          newInstance.getResults().slice(resultIndex, nElements);
       auto cast = rewriter.create<UnrealizedConversionCastOp>(
           op.getLoc(), structTy, castInputs);
       newResults.push_back(cast.getResult(0));
