@@ -91,15 +91,13 @@ struct ParameterSpecializationRegistry {
   llvm::MapVector<hw::HWModuleOp, llvm::SetVector<ArrayAttr>>
       uniqueModuleParameters;
 
-  bool isRegistered(hw::HWModuleOp moduleOp, ArrayAttr parameters,
-                    const SymbolCache &sc) const {
+  bool isRegistered(hw::HWModuleOp moduleOp, ArrayAttr parameters) const {
     auto it = uniqueModuleParameters.find(moduleOp);
     return it != uniqueModuleParameters.end() &&
            it->second.contains(parameters);
   }
 
-  void registerModuleOp(hw::HWModuleOp moduleOp, ArrayAttr parameters,
-                        SymbolCache &sc) {
+  void registerModuleOp(hw::HWModuleOp moduleOp, ArrayAttr parameters) {
     uniqueModuleParameters[moduleOp].insert(parameters);
   }
 };
@@ -244,9 +242,9 @@ static LogicalResult registerNestedParametricInstanceOps(
 
     if (auto targetHWModule = targetModuleOp(instanceOp, sc)) {
       if (!currentRegistry.isRegistered(targetHWModule,
-                                        evaluatedInstanceParametersAttr, sc))
+                                        evaluatedInstanceParametersAttr))
         nextRegistry.registerModuleOp(targetHWModule,
-                                      evaluatedInstanceParametersAttr, sc);
+                                      evaluatedInstanceParametersAttr);
       parametersUsers[targetHWModule][evaluatedInstanceParametersAttr]
           .push_back(instanceOp);
     }
@@ -266,8 +264,9 @@ static LogicalResult registerNestedParametricInstanceOps(
 // 4. Any references to module parameters have been replaced with the
 // parameter value.
 static LogicalResult specializeModule(
-    OpBuilder builder, ArrayAttr parameters, Namespace &ns, HWModuleOp source,
-    HWModuleOp &target, const ParameterSpecializationRegistry &currentRegistry,
+    OpBuilder builder, ArrayAttr parameters, SymbolCache &sc, Namespace &ns,
+    HWModuleOp source, HWModuleOp &target,
+    const ParameterSpecializationRegistry &currentRegistry,
     ParameterSpecializationRegistry &nextRegistry,
     llvm::DenseMap<hw::HWModuleOp,
                    llvm::DenseMap<ArrayAttr, llvm::SmallVector<hw::InstanceOp>>>
@@ -367,7 +366,7 @@ void HWSpecializePass::runOnOperation() {
     for (auto instanceOp : hwModule.getOps<hw::InstanceOp>()) {
       if (auto targetHWModule = targetModuleOp(instanceOp, sc)) {
         auto parameters = instanceOp.parameters();
-        registry.registerModuleOp(targetHWModule, parameters, sc);
+        registry.registerModuleOp(targetHWModule, parameters);
 
         parametersUsers[targetHWModule][parameters].push_back(instanceOp);
       }
@@ -389,12 +388,15 @@ void HWSpecializePass::runOnOperation() {
     for (auto it : registry.uniqueModuleParameters) {
       for (auto parameters : it.second) {
         HWModuleOp specializedModule;
-        if (failed(specializeModule(builder, parameters, ns, it.first,
+        if (failed(specializeModule(builder, parameters, sc, ns, it.first,
                                     specializedModule, registry, nextRegistry,
                                     parametersUsers))) {
           signalPassFailure();
           return;
         }
+
+        // Extend the symbol cache with the newly created module.
+        sc.addDefinition(specializedModule.getNameAttr(), specializedModule);
 
         // Add the specialization
         specializations[it.first][parameters] = specializedModule;
@@ -421,7 +423,6 @@ void HWSpecializePass::runOnOperation() {
     }
   }
 }
-
 
 } // namespace
 
