@@ -283,3 +283,17 @@ hw.module @case_stmt(%arg: i3) {
   }
 
   }
+
+// CHECK-LABEL: @delete_user_specified_wire
+hw.module @delete_user_specified_wire(%arg: i3) -> (a:i3) {
+  // CHECK-NEXT: %wire = sv.wire {sv.user_specified_name} : !hw.inout<i3>
+  // CHECK-NEXT: sv.assign %wire, %arg : i3
+  // CHECK-NEXT: %0 = sv.read_inout %wire : !hw.inout<i3>
+  // CHECK-NEXT: hw.output %0 : i3
+  %dead_wire = sv.wire {sv.user_specified_name} : !hw.inout<i3>
+  sv.assign %dead_wire, %arg: i3
+  %wire = sv.wire {sv.user_specified_name} : !hw.inout<i3>
+  sv.assign %wire, %arg: i3
+  %0 = sv.read_inout %wire : !hw.inout<i3>
+  hw.output %0 : i3
+}
