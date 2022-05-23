@@ -1679,7 +1679,7 @@ firrtl.module @add_cst_prop3(out %out_b: !firrtl.sint<4>) {
 // CHECK: %[[pad:.+]] = firrtl.pad %tmp_a, 5
 // CHECK-NEXT: firrtl.strictconnect %out_b, %[[pad]]
 // CHECK-NEXT: %[[pad:.+]] = firrtl.pad %tmp_a, 5
-// CHECK_NEXT: firrtl.strictconnect %out_b, %[[pad]]
+// CHECK-NEXT: firrtl.strictconnect %out_b, %[[pad]]
 firrtl.module @add_cst_prop4(out %out_b: !firrtl.uint<5>) {
   %tmp_a = firrtl.wire : !firrtl.uint<4>
   %invalid_ui4 = firrtl.invalidvalue : !firrtl.uint<4>
@@ -1693,7 +1693,7 @@ firrtl.module @add_cst_prop4(out %out_b: !firrtl.uint<5>) {
 // CHECK: %[[pad:.+]] = firrtl.pad %tmp_a, 5
 // CHECK-NEXT: firrtl.strictconnect %out_b, %[[pad]]
 // CHECK-NEXT: %[[pad:.+]] = firrtl.pad %tmp_a, 5
-// CHECK_NEXT: firrtl.strictconnect %out_b, %[[pad]]
+// CHECK-NEXT: firrtl.strictconnect %out_b, %[[pad]]
 firrtl.module @add_cst_prop5(out %out_b: !firrtl.uint<5>) {
   %tmp_a = firrtl.wire : !firrtl.uint<4>
   %c0_ui4 = firrtl.constant 0 : !firrtl.uint<4>
