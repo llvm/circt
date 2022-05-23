@@ -356,7 +356,8 @@ void HWSpecializePass::runOnOperation() {
   // Maintain a symbol cache for fast lookup during module specialization.
   SymbolCache sc;
   sc.addDefinitions(module);
-  Namespace ns(sc);
+  Namespace ns;
+  ns.add(sc);
 
   for (auto hwModule : module.getOps<hw::HWModuleOp>()) {
     // If this module is parametric, defer registering its parametric
