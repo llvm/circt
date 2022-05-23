@@ -33,4 +33,27 @@ def HWSpecialize : Pass<"hw-specialize", "mlir::ModuleOp"> {
   }];
 }
 
+def HWFlattenStructs : Pass<"hw-flatten-structs", "mlir::ModuleOp"> {
+  let summary = "Flatten struct types";
+  let constructor = "circt::hw::createHWFlattenStructsPass()";
+  let description = [{
+    This pass breaks down `hw.struct` types into their scalar elements, and
+    expands module and instance ports accordingly.
+
+    Example:
+    ```
+    hw.module @foo(%in: !hw.struct<a: i8, b: i8>) ->
+                  (out: !hw.struct<a: i8, b: i8>) {
+      hw.output %in : !hw.struct<a: i8, b: i8>
+    }
+    ```
+    is transformed to
+    ```
+    hw.module @foo(%in_a: i8, %in_b: i8) -> (out_a: i8, out_b: i8) {
+      hw.output %in_a, %in_b : i8, i8
+    }
+    ```
+  }];
+}
+
 #endif // CIRCT_DIALECT_HW_PASSES_TD
