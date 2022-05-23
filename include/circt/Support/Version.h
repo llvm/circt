@@ -4,7 +4,7 @@
 #include <string>
 
 namespace circt {
-std::string getCirctVersion();
+const char *getCirctVersion();
 } // namespace circt
 
 #endif // CIRCT_SUPPORT_VERSION_H
