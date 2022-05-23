@@ -750,8 +750,9 @@ replaceDeclRefInExpr(Location loc,
   return {};
 }
 
-FailureOr<APInt> hw::evaluateParametricAttr(Location loc, ArrayAttr parameters,
-                                            Attribute paramAttr) {
+FailureOr<Attribute> hw::evaluateParametricAttr(Location loc,
+                                                ArrayAttr parameters,
+                                                Attribute paramAttr) {
   // Create a map of the provided parameters for faster lookup.
   std::map<std::string, Attribute> parameterMap;
   for (auto param : parameters) {
@@ -767,38 +768,36 @@ FailureOr<APInt> hw::evaluateParametricAttr(Location loc, ArrayAttr parameters,
   paramAttr = paramAttrRes.getValue();
 
   // Then, evaluate the parametric attribute.
-  if (auto intAttr = paramAttr.dyn_cast<IntegerAttr>())
-    return intAttr.getValue();
+  if (paramAttr.isa<IntegerAttr>() || paramAttr.isa<hw::ParamDeclRefAttr>())
+    return paramAttr;
   if (auto paramExprAttr = paramAttr.dyn_cast<hw::ParamExprAttr>()) {
-    // Since any ParamDeclRefAttr was replaced within the expression, the
-    // expression should be able to be fully canonicalized to a constant. We do
-    // this through the existing ParamExprAttr canonicalizer.
-    auto resAttr = ParamExprAttr::get(paramExprAttr.getOpcode(),
-                                      paramExprAttr.getOperands());
-    auto resIntAttr = resAttr.dyn_cast<IntegerAttr>();
-    if (!resIntAttr)
-      return emitError(loc,
-                       "Could not evaluate the expression to a constant value")
-                 .attachNote()
-             << "This means that some parts of the expression did not resolve "
-                "to a constant";
-    return resIntAttr.getValue();
+    // Since any ParamDeclRefAttr was replaced within the expression,
+    // we re-evaluate the expression through the existing ParamExprAttr
+    // canonicalizer.
+    return ParamExprAttr::get(paramExprAttr.getOpcode(),
+                              paramExprAttr.getOperands());
   }
 
   llvm_unreachable("Unhandled parametric attribute");
-  return APInt();
+  return Attribute();
 }
 
 FailureOr<Type> hw::evaluateParametricType(Location loc, ArrayAttr parameters,
                                            Type type) {
   return llvm::TypeSwitch<Type, Type>(type)
       .Case<hw::IntType>([&](hw::IntType t) -> FailureOr<Type> {
-        auto attrValue = evaluateParametricAttr(loc, parameters, t.getWidth());
-        if (failed(attrValue))
+        auto evaluatedWidth =
+            evaluateParametricAttr(loc, parameters, t.getWidth());
+        if (failed(evaluatedWidth))
           return {failure()};
 
-        return {IntegerType::get(type.getContext(),
-                                 attrValue.getValue().getSExtValue())};
+        // If the width was evaluated to a constant, return an `IntegerType`
+        if (auto intAttr = evaluatedWidth->dyn_cast<IntegerAttr>())
+          return {IntegerType::get(type.getContext(),
+                                   intAttr.getValue().getSExtValue())};
+
+        // Otherwise parameter references are still involved
+        return hw::IntType::get(evaluatedWidth.getValue());
       })
       .Case<hw::ArrayType>([&](hw::ArrayType arrayType) -> FailureOr<Type> {
         auto size =
@@ -809,10 +808,18 @@ FailureOr<Type> hw::evaluateParametricType(Location loc, ArrayAttr parameters,
             evaluateParametricType(loc, parameters, arrayType.getElementType());
         if (failed(elementType))
           return failure();
-        return hw::ArrayType::get(
-            arrayType.getContext(), elementType.getValue(),
-            IntegerAttr::get(IntegerType::get(type.getContext(), 64),
-                             size.getValue().getSExtValue()));
+
+        // If the size was evaluated to a constant, use a 64-bit integer
+        // attribute version of it
+        if (auto intAttr = size->dyn_cast<IntegerAttr>())
+          return hw::ArrayType::get(
+              arrayType.getContext(), elementType.getValue(),
+              IntegerAttr::get(IntegerType::get(type.getContext(), 64),
+                               intAttr.getValue().getSExtValue()));
+
+        // Otherwise parameter references are still involved
+        return hw::ArrayType::get(arrayType.getContext(),
+                                  elementType.getValue(), size.getValue());
       })
       .Default([&](auto) { return type; });
 }

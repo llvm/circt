@@ -33,9 +33,9 @@ mlir::FailureOr<mlir::Type> evaluateParametricType(mlir::Location loc,
 
 /// Evaluates a parametric attribute (param.decl.ref/param.expr) based on a set
 /// of provided parameter values.
-mlir::FailureOr<mlir::APInt> evaluateParametricAttr(mlir::Location loc,
-                                                    mlir::ArrayAttr parameters,
-                                                    mlir::Attribute paramAttr);
+mlir::FailureOr<mlir::Attribute>
+evaluateParametricAttr(mlir::Location loc, mlir::ArrayAttr parameters,
+                       mlir::Attribute paramAttr);
 
 /// Returns true if any part of t is parametric.
 bool isParametricType(mlir::Type t);

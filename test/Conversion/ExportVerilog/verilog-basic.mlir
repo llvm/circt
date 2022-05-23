@@ -1,7 +1,7 @@
 // RUN: circt-opt %s -export-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
 
 // CHECK-LABEL: module inputs_only(
-// CHECK-NEXT: input a, 
+// CHECK-NEXT: input a,
 // CHECK-NEXT:       b);
 hw.module @inputs_only(%a: i1, %b: i1) {
   hw.output
@@ -370,6 +370,28 @@ hw.module @UseInstances(%a_in: i8) -> (a_out1: i1, a_out2: i1) {
      WIDTH: i8 = 32
   >(in: %a_in: i8) -> (out: i1)
   hw.output %xyz.out, %xyz2.out : i1, i1
+}
+
+// Instantiate a parametric module using parameters from its parent module
+hw.module.extern @ExternParametricWidth<width: i32>
+  (%in: !hw.int<#hw.param.decl.ref<"width">>) -> (out: !hw.int<#hw.param.decl.ref<"width">>)
+// CHECK-LABEL: module NestedParameterUsage
+hw.module @NestedParameterUsage<param: i32>(
+  %in: !hw.int<#hw.param.decl.ref<"param">>) -> (out: !hw.int<#hw.param.decl.ref<"param">>) {
+  // CHECK: #(parameter /*integer*/ param) (
+  // CHECK: input  [param - 1:0] in,
+  // CHECK: output [param - 1:0] out);
+  // CHECK: ExternParametricWidth #(
+  // CHECK:   .width(param)
+  // CHECK: ) externWidth (
+  // CHECK:   .in  (in),
+  // CHECK:   .out (out)
+  // CHECK: );
+  // CHECK: endmodule
+  %externWidth.out = hw.instance "externWidth"
+    @ExternParametricWidth<width: i32 = #hw.param.decl.ref<"param">>(
+      in: %in : !hw.int<#hw.param.decl.ref<"param">>) -> (out: !hw.int<#hw.param.decl.ref<"param">>)
+  hw.output %externWidth.out : !hw.int<#hw.param.decl.ref<"param">>
 }
 
 // CHECK-LABEL: module Stop(

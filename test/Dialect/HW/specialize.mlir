@@ -126,3 +126,45 @@ module {
     hw.output %0 : i64
   }
 }
+
+// -----
+
+// Test a parent module instantiating parametric modules using its parameters
+
+module {
+  hw.module @constantGen<V: i32>() -> (out: i32) {
+    %0 = hw.param.value i32 = #hw.param.decl.ref<"V">
+    hw.output %0 : i32
+  }
+
+  hw.module @takesParametericWidth<width: i32>(
+    %in: !hw.int<#hw.param.decl.ref<"width">>) {}
+
+  hw.module @usesConstantGen<V: i32>(
+    %in: !hw.int<#hw.param.decl.ref<"V">>) -> (out: i32) {
+    %0 = hw.instance "inst1" @constantGen<V: i32 = #hw.param.decl.ref<"V">> () -> (out: i32)
+    hw.instance "inst2" @takesParametericWidth<width: i32 = #hw.param.decl.ref<"V">>(in: %in : !hw.int<#hw.param.decl.ref<"V">>) -> ()
+    hw.output %0 : i32
+  }
+
+  // CHECK-LABEL: hw.module @usesConstantGen_V_8(%in: i8) -> (out: i32) {
+  // CHECK:         %[[VAL_0:.*]] = hw.instance "inst1" @constantGen_V_8() -> (out: i32)
+  // CHECK:         hw.instance "inst2" @takesParametericWidth_width_8(in: %in: i8) -> ()
+  // CHECK:         hw.output %[[VAL_0]] : i32
+  // CHECK:       }
+
+  // CHECK-LABEL: hw.module @constantGen_V_8() -> (out: i32) {
+  // CHECK:         %[[VAL_0:.*]] = hw.constant 8 : i32
+  // CHECK:         hw.output %[[VAL_0]] : i32
+  // CHECK:       }
+
+  // CHECK-LABEL: hw.module @takesParametericWidth_width_8(%in: i8) {
+  // CHECK:          hw.output
+  // CHECK:       }
+
+  hw.module @top() -> (out: i32) {
+    %in = hw.constant 1 : i8
+    %0 = hw.instance "inst" @usesConstantGen<V: i32 = 8> (in: %in: i8) -> (out: i32)
+    hw.output %0 : i32
+  }
+}
