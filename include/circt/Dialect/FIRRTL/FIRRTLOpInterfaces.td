@@ -292,8 +292,10 @@ def InnerSymbol : OpInterface<"InnerSymbolOpInterface"> {
     For instances to be able to resolve the modules they
     instantiate, the symbol use in an instance must resolve 
     in the top-level symbol table.  If a module were a
-    symbol table, modules would try to resolve from their
-    own module, never seeing other modules.
+    symbol table, instances resolving a symbol would start from 
+    their own module, never seeing other modules (since 
+    resolution would start in the parent module of the 
+    instance and be unable to go to the global scope).
     The second problem arises from nesting.  Symbols defining 
     ops must be immediate children of a symbol table.  FIRRTL
     and SV operations which define a inner_sym are grandchildren,
