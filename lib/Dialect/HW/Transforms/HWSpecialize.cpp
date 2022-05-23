@@ -17,6 +17,7 @@
 #include "circt/Dialect/HW/HWPasses.h"
 #include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/SV/SVPasses.h"
+#include "circt/Support/Namespace.h"
 #include "circt/Support/ValueMapper.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/Builders.h"
@@ -33,8 +34,7 @@ namespace {
 
 // Generates a module name by composing the name of 'moduleOp' and the set of
 // provided 'parameters'.
-static std::string generateModuleName(SymbolCache &symbolCache,
-                                      hw::HWModuleOp moduleOp,
+static std::string generateModuleName(Namespace &ns, hw::HWModuleOp moduleOp,
                                       ArrayAttr parameters) {
   assert(parameters.size() != 0);
   std::string name = moduleOp.getName().str();
@@ -44,14 +44,8 @@ static std::string generateModuleName(SymbolCache &symbolCache,
     name += "_" + paramAttr.getName().str() + "_" + std::to_string(paramValue);
   }
 
-  // Uniqueness check
-  int uniqueCntr = 0;
-  std::string uniqueName = name;
-  auto *ctx = moduleOp.getContext();
-  while (symbolCache.getDefinition(StringAttr::get(ctx, uniqueName)))
-    uniqueName = name + "_" + std::to_string(uniqueCntr++);
-
-  return uniqueName;
+  // Query the namespace to generate a unique name.
+  return ns.newName(name).str();
 }
 
 // Returns true if any operand or result of 'op' is parametric.
@@ -97,15 +91,13 @@ struct ParameterSpecializationRegistry {
   llvm::MapVector<hw::HWModuleOp, llvm::SetVector<ArrayAttr>>
       uniqueModuleParameters;
 
-  bool isRegistered(hw::HWModuleOp moduleOp, ArrayAttr parameters,
-                    const SymbolCache &sc) const {
+  bool isRegistered(hw::HWModuleOp moduleOp, ArrayAttr parameters) const {
     auto it = uniqueModuleParameters.find(moduleOp);
     return it != uniqueModuleParameters.end() &&
            it->second.contains(parameters);
   }
 
-  void registerModuleOp(hw::HWModuleOp moduleOp, ArrayAttr parameters,
-                        SymbolCache &sc) {
+  void registerModuleOp(hw::HWModuleOp moduleOp, ArrayAttr parameters) {
     uniqueModuleParameters[moduleOp].insert(parameters);
   }
 };
@@ -250,9 +242,9 @@ static LogicalResult registerNestedParametricInstanceOps(
 
     if (auto targetHWModule = targetModuleOp(instanceOp, sc)) {
       if (!currentRegistry.isRegistered(targetHWModule,
-                                        evaluatedInstanceParametersAttr, sc))
+                                        evaluatedInstanceParametersAttr))
         nextRegistry.registerModuleOp(targetHWModule,
-                                      evaluatedInstanceParametersAttr, sc);
+                                      evaluatedInstanceParametersAttr);
       parametersUsers[targetHWModule][evaluatedInstanceParametersAttr]
           .push_back(instanceOp);
     }
@@ -272,8 +264,9 @@ static LogicalResult registerNestedParametricInstanceOps(
 // 4. Any references to module parameters have been replaced with the
 // parameter value.
 static LogicalResult specializeModule(
-    OpBuilder builder, ArrayAttr parameters, SymbolCache &sc, HWModuleOp source,
-    HWModuleOp &target, const ParameterSpecializationRegistry &currentRegistry,
+    OpBuilder builder, ArrayAttr parameters, SymbolCache &sc, Namespace &ns,
+    HWModuleOp source, HWModuleOp &target,
+    const ParameterSpecializationRegistry &currentRegistry,
     ParameterSpecializationRegistry &nextRegistry,
     llvm::DenseMap<hw::HWModuleOp,
                    llvm::DenseMap<ArrayAttr, llvm::SmallVector<hw::InstanceOp>>>
@@ -300,7 +293,7 @@ static LogicalResult specializeModule(
   // Create the specialized module using the evaluated port info.
   target = builder.create<HWModuleOp>(
       source.getLoc(),
-      StringAttr::get(ctx, generateModuleName(sc, source, parameters)), ports);
+      StringAttr::get(ctx, generateModuleName(ns, source, parameters)), ports);
 
   // Erase the default created hw.output op - we'll copy the correct operation
   // during body elaboration.
@@ -363,6 +356,8 @@ void HWSpecializePass::runOnOperation() {
   // Maintain a symbol cache for fast lookup during module specialization.
   SymbolCache sc;
   sc.addDefinitions(module);
+  Namespace ns;
+  ns.add(sc);
 
   for (auto hwModule : module.getOps<hw::HWModuleOp>()) {
     // If this module is parametric, defer registering its parametric
@@ -372,7 +367,7 @@ void HWSpecializePass::runOnOperation() {
     for (auto instanceOp : hwModule.getOps<hw::InstanceOp>()) {
       if (auto targetHWModule = targetModuleOp(instanceOp, sc)) {
         auto parameters = instanceOp.parameters();
-        registry.registerModuleOp(targetHWModule, parameters, sc);
+        registry.registerModuleOp(targetHWModule, parameters);
 
         parametersUsers[targetHWModule][parameters].push_back(instanceOp);
       }
@@ -394,7 +389,7 @@ void HWSpecializePass::runOnOperation() {
     for (auto it : registry.uniqueModuleParameters) {
       for (auto parameters : it.second) {
         HWModuleOp specializedModule;
-        if (failed(specializeModule(builder, parameters, sc, it.first,
+        if (failed(specializeModule(builder, parameters, sc, ns, it.first,
                                     specializedModule, registry, nextRegistry,
                                     parametersUsers))) {
           signalPassFailure();

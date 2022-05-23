@@ -86,6 +86,31 @@ private:
   /// This stores a lookup table from symbol attribute to the item
   /// that defines it.
   llvm::DenseMap<mlir::Attribute, Item> symbolCache;
+
+private:
+  // Iterator support. Map from Item's to their inner operations.
+  using Iterator = decltype(symbolCache)::iterator;
+  struct HwSymbolCacheIteratorImpl : public CacheIteratorImpl {
+    HwSymbolCacheIteratorImpl(Iterator it) : it(it) {}
+    CacheItem operator*() override {
+      return {it->getFirst(), it->getSecond().getOp()};
+    }
+    void operator++() override { it++; }
+    bool operator==(CacheIteratorImpl *other) override {
+      return it == static_cast<HwSymbolCacheIteratorImpl *>(other)->it;
+    }
+    Iterator it;
+  };
+
+public:
+  SymbolCacheBase::Iterator begin() override {
+    return SymbolCacheBase::Iterator(
+        std::make_unique<HwSymbolCacheIteratorImpl>(symbolCache.begin()));
+  }
+  SymbolCacheBase::Iterator end() override {
+    return SymbolCacheBase::Iterator(
+        std::make_unique<HwSymbolCacheIteratorImpl>(symbolCache.end()));
+  }
 };
 
 } // namespace hw
