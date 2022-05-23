@@ -294,7 +294,7 @@ def InnerSymbol : OpInterface<"InnerSymbolOpInterface"> {
     in the top-level symbol table.  If a module were a
     symbol table, modules would try to resolve from their
     own module, never seeing other modules.
-    The second problem arrises from nesting.  Symbols defining 
+    The second problem arises from nesting.  Symbols defining 
     ops must be immediate children of a symbol table.  FIRRTL
     and SV operations which define a inner_sym are grandchildren,
     at least, of a symbol table and may be much further nested.
