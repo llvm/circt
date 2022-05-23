@@ -303,7 +303,7 @@ def InnerSymbol : OpInterface<"InnerSymbolOpInterface"> {
   }];
 
   let cppNamespace = "::circt::firrtl";
-    let methods = [];
+  let methods = [];
 
 }
 
