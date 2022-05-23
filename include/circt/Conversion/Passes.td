@@ -133,6 +133,19 @@ def CalyxToHW : Pass<"lower-calyx-to-hw", "mlir::ModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
+// CalyxToFSM
+//===----------------------------------------------------------------------===//
+
+def CalyxToFSM : Pass<"lower-calyx-to-fsm", "calyx::ComponentOp"> {
+  let summary = "Lower Calyx to FSM";
+  let description = [{
+    This pass lowers a Calyx control schedule to an FSM representation.
+  }];
+  let constructor = "circt::createCalyxToFSMPass()";
+  let dependentDialects = ["fsm::FSMDialect", "comb::CombDialect"];
+}
+
+//===----------------------------------------------------------------------===//
 // FIRRTLToHW
 //===----------------------------------------------------------------------===//
 

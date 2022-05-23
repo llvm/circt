@@ -30,10 +30,15 @@ void MachineOp::build(OpBuilder &builder, OperationState &state, StringRef name,
                      builder.getStringAttr(name));
   state.addAttribute("stateType", TypeAttr::get(stateType));
   state.addAttribute(getTypeAttrName(), TypeAttr::get(type));
-  state.addAttribute("initialStateName",
+  state.addAttribute("initialState",
                      StringAttr::get(state.getContext(), initialStateName));
   state.attributes.append(attrs.begin(), attrs.end());
-  state.addRegion();
+  Region *region = state.addRegion();
+  Block *body = new Block();
+  region->push_back(body);
+  body->addArguments(
+      type.getInputs(),
+      SmallVector<Location, 4>(type.getNumInputs(), builder.getUnknownLoc()));
 
   if (argAttrs.empty())
     return;
@@ -207,6 +212,25 @@ LogicalResult HWInstanceOp::verify() { return verifyCallerTypes(*this); }
 // StateOp
 //===----------------------------------------------------------------------===//
 
+void StateOp::build(OpBuilder &builder, OperationState &state,
+                    StringRef stateName) {
+  Region *output = state.addRegion();
+  Region *transitions = state.addRegion();
+  state.addAttribute("sym_name", builder.getStringAttr(stateName));
+
+  ensureTerminator(*output, builder, state.location);
+  ensureTerminator(*transitions, builder, state.location);
+}
+
+SetVector<StateOp> StateOp::getNextStates() {
+  SmallVector<StateOp> nextStates;
+  llvm::transform(
+      transitions().getOps<TransitionOp>(),
+      std::inserter(nextStates, nextStates.begin()),
+      [](TransitionOp transition) { return transition.getNextState(); });
+  return SetVector<StateOp>(nextStates.begin(), nextStates.end());
+}
+
 LogicalResult StateOp::canonicalize(StateOp op, PatternRewriter &rewriter) {
   bool hasAlwaysTakenTransition = false;
   SmallVector<TransitionOp, 4> transitionsToErase;
@@ -248,6 +272,22 @@ LogicalResult OutputOp::verify() {
 //===----------------------------------------------------------------------===//
 // TransitionOp
 //===----------------------------------------------------------------------===//
+
+void TransitionOp::build(OpBuilder &builder, OperationState &state,
+                         StringRef nextState) {
+  Region *guard = state.addRegion();
+  Region *action = state.addRegion();
+  state.addAttribute("nextState",
+                     FlatSymbolRefAttr::get(builder.getStringAttr(nextState)));
+
+  ensureTerminator(*guard, builder, state.location);
+  ensureTerminator(*action, builder, state.location);
+}
+
+void TransitionOp::build(OpBuilder &builder, OperationState &state,
+                         StateOp nextState) {
+  build(builder, state, nextState.getName());
+}
 
 /// Lookup the next state for the symbol. This returns null on invalid IR.
 StateOp TransitionOp::getNextState() {
@@ -322,6 +362,17 @@ LogicalResult TransitionOp::verify() {
 void VariableOp::getAsmResultNames(
     function_ref<void(Value, StringRef)> setNameFn) {
   setNameFn(result(), name());
+}
+
+//===----------------------------------------------------------------------===//
+// ReturnOp
+//===----------------------------------------------------------------------===//
+
+void ReturnOp::setOperand(Value value) {
+  if (operand())
+    getOperation()->setOperand(0, value);
+  else
+    getOperation()->insertOperands(0, {value});
 }
 
 //===----------------------------------------------------------------------===//

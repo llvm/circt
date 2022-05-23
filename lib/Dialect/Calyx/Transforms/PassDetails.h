@@ -18,6 +18,7 @@
 
 #include "circt/Dialect/Calyx/CalyxOps.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/FSM/FSMOps.h"
 #include "mlir/Pass/Pass.h"
 
 namespace circt {
