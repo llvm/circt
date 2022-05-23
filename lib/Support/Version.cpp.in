@@ -1,0 +1,3 @@
+#include "circt/Support/Version.h"
+
+const char *circt::getCirctVersion() { return "CIRCT @GIT_DESCRIBE_OUTPUT@"; }
