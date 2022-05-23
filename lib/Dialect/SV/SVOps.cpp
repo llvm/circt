@@ -1167,6 +1167,8 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
   if (wire.inner_symAttr())
     return failure();
 
+  // If the wire has a 'sv.user_specified_name' attribute, we cannot propagate
+  // the written value. It is fine to delete the wire if it is dead.
   if (wire->hasAttr("sv.user_specified_name")) {
     sv::AssignOp assign;
     if (wire->hasOneUse() &&
