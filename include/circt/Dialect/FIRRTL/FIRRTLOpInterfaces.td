@@ -281,7 +281,7 @@ def InnerSymbol : OpInterface<"InnerSymbolOpInterface"> {
   let description = [{
     This interface describes an operation that may define an
     `inner_sym`.  An `inner_sym` operation resides 
-    in arbitrarily-nested regions of a region that define a
+    in arbitrarily-nested regions of a region that defines a
     `InnerSymbolTable`.
     Inner Symbols are different from normal symbols due to 
     MLIR symbol table resolution rules.  Specifically normal
