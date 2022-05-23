@@ -15,6 +15,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/HW/HWOpInterfaces.h"
+#include "mlir/IR/Attributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/SymbolTable.h"
@@ -62,5 +63,15 @@ LogicalResult verifyModuleLikeOpInterface(FModuleLike module);
 
 } // namespace firrtl
 } // namespace circt
+
+namespace mlir {
+namespace OpTrait {
+template <typename ConcreteType>
+class InnerSymbolTable : public TraitBase<ConcreteType, InnerSymbolTable> {
+public:
+  static LogicalResult verifyRegionTrait(Operation *op) { return success(); }
+};
+} // namespace OpTrait
+} // namespace mlir
 
 #include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.h.inc"

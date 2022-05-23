@@ -14,7 +14,7 @@ def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface,
                          ["getAsmResultNames"]>;
 
 def InstanceOp : FIRRTLOp<"instance", [HasParent<"firrtl::FModuleOp, firrtl::WhenOp">,
-    DeclareOpInterfaceMethods<SymbolUserOpInterface>, HasCustomSSAName,
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>, HasCustomSSAName, InnerSymbol,
     DeclareOpInterfaceMethods<HWInstanceLike, ["instanceName"]>]> {
   let summary = "Instantiate an instance of a module";
   let description = [{
@@ -179,7 +179,7 @@ def MemOp : FIRRTLOp<"mem", [HasCustomSSAName]> {
 }
 
 def NodeOp : FIRRTLOp<"node",
-      [SameOperandsAndResultType, InferTypeOpInterface, HasCustomSSAName]> {
+      [SameOperandsAndResultType, InferTypeOpInterface, HasCustomSSAName, InnerSymbol]> {
   let summary = "No-op to name a value";
   let description = [{
     A node is simply a named intermediate value in a circuit. The node must
@@ -216,7 +216,7 @@ def NodeOp : FIRRTLOp<"node",
   let hasCanonicalizer = true;
 }
 
-def RegOp : FIRRTLOp<"reg", [HasCustomSSAName/*MemAlloc*/]> {
+def RegOp : FIRRTLOp<"reg", [HasCustomSSAName, InnerSymbol]> {
   let summary = "Define a new register";
   let description = [{
     Declare a new register:
@@ -249,7 +249,7 @@ def RegOp : FIRRTLOp<"reg", [HasCustomSSAName/*MemAlloc*/]> {
   let hasCanonicalizeMethod = true;
 }
 
-def RegResetOp : FIRRTLOp<"regreset", [HasCustomSSAName/*MemAlloc*/]> {
+def RegResetOp : FIRRTLOp<"regreset", [HasCustomSSAName, InnerSymbol]> {
   let summary = "Define a new register with a reset";
   let description = [{
     Declare a new register:
