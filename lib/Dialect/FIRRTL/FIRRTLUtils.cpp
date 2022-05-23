@@ -33,8 +33,7 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
   // If the types are the exact same we can just connect them.
   if (dstType == srcType) {
     // Strict connect does not allow uninferred widths.
-    // TODO: enable strict connect.
-    if (true || dstType.hasUninferredWidth())
+    if (dstType.hasUninferredWidth())
       builder.create<ConnectOp>(dst, src);
     else
       builder.create<StrictConnectOp>(dst, src);
@@ -106,7 +105,7 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
 
   // Strict connect requires the types to be completely equal, including
   // connecting uint<1> to abstract reset types.
-  if (dstType == srcType)
+  if (dstType == src.getType())
     builder.create<StrictConnectOp>(dst, src);
   else
     builder.create<ConnectOp>(dst, src);

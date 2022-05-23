@@ -79,16 +79,6 @@ struct NlaNameNewSym {
 };
 } // end anonymous namespace
 
-static void mkConnect(ImplicitLocOpBuilder *builder, Value dst, Value src) {
-  auto dstType = dst.getType().cast<FIRRTLType>();
-  auto srcType = src.getType().cast<FIRRTLType>();
-
-  if (srcType == dstType)
-    builder->create<StrictConnectOp>(dst, src);
-  else
-    builder->create<ConnectOp>(dst, src);
-}
-
 /// Return true if the type has more than zero bitwidth.
 static bool hasZeroBitWidth(FIRRTLType type) {
   return TypeSwitch<FIRRTLType, bool>(type)
@@ -762,11 +752,7 @@ void TypeLoweringVisitor::lowerSAWritePath(Operation *op,
       for (int i = writePath.size() - 2; i >= 0; --i)
         leaf = cloneAccess(builder, writePath[i], leaf);
 
-      if (isa<ConnectOp, StrictConnectOp>(op) ||
-          leaf.getType() == op->getOperand(1).getType())
-        mkConnect(builder, leaf, op->getOperand(1));
-      else
-        emitConnect(*builder, leaf, op->getOperand(1));
+      emitConnect(*builder, leaf, op->getOperand(1));
     });
   }
 }
@@ -790,7 +776,7 @@ bool TypeLoweringVisitor::visitStmt(ConnectOp op) {
     Value dest = getSubWhatever(op.dest(), field.index());
     if (field.value().isOutput)
       std::swap(src, dest);
-    mkConnect(builder, dest, src);
+    emitConnect(*builder, dest, src);
   }
   return true;
 }
@@ -814,10 +800,7 @@ bool TypeLoweringVisitor::visitStmt(StrictConnectOp op) {
     Value dest = getSubWhatever(op.dest(), field.index());
     if (field.value().isOutput)
       std::swap(src, dest);
-    if (src.getType().isa<AnalogType>())
-      builder->create<AttachOp>(ArrayRef<Value>{dest, src});
-    else
-      builder->create<StrictConnectOp>(dest, src);
+    builder->create<StrictConnectOp>(dest, src);
   }
   return true;
 }
@@ -883,13 +866,13 @@ bool TypeLoweringVisitor::visitDecl(MemOp op) {
               newMemories[field.index].getResult(index), fieldIndex);
           if (rType.getElement(fieldIndex).isFlip)
             std::swap(realOldField, newField);
-          mkConnect(builder, newField, realOldField);
+          emitConnect(*builder, newField, realOldField);
         }
       } else {
         for (auto mem : newMemories) {
           auto newField =
               builder->create<SubfieldOp>(mem.getResult(index), fieldIndex);
-          mkConnect(builder, newField, oldField);
+          emitConnect(*builder, newField, oldField);
         }
       }
     }

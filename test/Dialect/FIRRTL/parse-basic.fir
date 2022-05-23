@@ -85,10 +85,10 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: %_t_2 = firrtl.wire : !firrtl.vector<uint<1>, 12>
     wire _t_2 : UInt<1>[12]
 
-    ; CHECK: firrtl.connect %_t, %_t_2 : !firrtl.vector<uint<1>, 12>, !firrtl.vector<uint<1>, 12>
+    ; CHECK: firrtl.strictconnect %_t, %_t_2 : !firrtl.vector<uint<1>, 12>
     _t <= _t_2
 
-    ; CHECK: firrtl.connect %_t, %_t_2
+    ; CHECK: firrtl.strictconnect %_t, %_t_2
     _t <- _t_2
     
     ; CHECK: [[a0:%.+]] = firrtl.subfield %bundleWithAnalog(0)
@@ -115,6 +115,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     auto is invalid
 
     ; CHECK-NOT: firrtl.connect %reset
+    ; CHECK-NOT: firrtl.strictconnect %reset
     reset is invalid
 
     ; CHECK: %out_0 = firrtl.wire : !firrtl.bundle<member: bundle<0: bundle<clock: clock, reset: uint<1>>>>
@@ -123,14 +124,14 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: [[A:%.+]] = firrtl.subfield %out_0(0) : (!firrtl.bundle<member: bundle<0: bundle<clock: clock, reset: uint<1>>>>) -> !firrtl.bundle<0: bundle<clock: clock, reset: uint<1>>>
     ; CHECK: [[B:%.+]] = firrtl.subfield [[A]](0) : (!firrtl.bundle<0: bundle<clock: clock, reset: uint<1>>>) -> !firrtl.bundle<clock: clock, reset: uint<1>>
     ; CHECK: [[C:%.+]] = firrtl.subfield [[B]](1) : (!firrtl.bundle<clock: clock, reset: uint<1>>) -> !firrtl.uint<1>
-    ; CHECK: firrtl.connect %auto, [[C]] : !firrtl.uint<1>, !firrtl.uint<1>
+    ; CHECK: firrtl.strictconnect %auto, [[C]] : !firrtl.uint<1>
     auto <- out_0.member.0.reset @[Field 173:49]
 
     ; CHECK: %_t_3 = firrtl.wire : !firrtl.vector<uint<1>, 12>
     ; CHECK: [[A:%.+]] = firrtl.subindex %_t_3[0] : !firrtl.vector<uint<1>, 12>
     ; CHECK: %_t_4 = firrtl.wire : !firrtl.vector<uint<1>, 12>
     ; CHECK: [[B:%.+]] = firrtl.subindex %_t_4[0] : !firrtl.vector<uint<1>, 12>
-    ; CHECK: firrtl.connect [[A]], [[B]]
+    ; CHECK: firrtl.strictconnect [[A]], [[B]]
     wire _t_3 : UInt<1>[12] @[Nodes.scala 370:76]
     wire _t_4 : UInt<1>[12]
     _t_3[0] <= _t_4[0] @[Xbar.scala 21:44]
@@ -202,25 +203,25 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: %c42_ui10 = firrtl.constant 42 : !firrtl.uint<10>
     ; CHECK: %c171_ui8 = firrtl.constant 171 : !firrtl.uint<8>
     ; CHECK: firrtl.add %c42_ui10, %c171_ui8
-    ; CHECK: firrtl.connect %auto
+    ; CHECK: firrtl.strictconnect %auto
     auto11 <= add(UInt<10>(42), UInt<8>("hAB"))
 
     ; CHECK: %c-85_si8 = firrtl.constant -85 : !firrtl.sint<8>
     sauto <= add(s8, SInt<8>(-85))
 
     ; CHECK: firrtl.when %reset {
-    ; CHECK:   firrtl.connect %_t, %_t_2
+    ; CHECK:   firrtl.strictconnect %_t, %_t_2
     ; CHECK: } else {
-    ; CHECK:   firrtl.connect %_t, %_t_2
+    ; CHECK:   firrtl.strictconnect %_t, %_t_2
     ; CHECK: }
     when reset : _t <= _t_2 else : _t <- _t_2
 
     ; CHECK: firrtl.when %reset {
     ; CHECK:   [[N4A:%.+]] = firrtl.node %_t_2
-    ; CHECK:   firrtl.connect %_t, [[N4A]]
+    ; CHECK:   firrtl.strictconnect %_t, [[N4A]]
     ; CHECK: } else {
     ; CHECK:   [[N4B:%.+]] = firrtl.node %_t_2
-    ; CHECK:   firrtl.connect %_t, [[N4B]]
+    ; CHECK:   firrtl.strictconnect %_t, [[N4B]]
     ; CHECK: }
     when reset :
       node n4 = _t_2
@@ -232,18 +233,18 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: [[TMP:%.+]] = firrtl.constant 4
     ; CHECK: [[COND:%.+]] = firrtl.lt %reset, [[TMP]]
     ; CHECK: firrtl.when [[COND]] {
-    ; CHECK:   firrtl.connect %_t, %_t_2
+    ; CHECK:   firrtl.strictconnect %_t, %_t_2
     ; CHECK: }
     ; CHECK-NOT: else
     when lt(reset, UInt(4)) :   ;; When with no else.
       _t <= _t_2
 
     ; CHECK: firrtl.when %reset  {
-    ; CHECK:   firrtl.connect %_t, %_t_2
+    ; CHECK:   firrtl.strictconnect %_t, %_t_2
     ; CHECK: } else  {
     ; CHECK:   [[COND:%.+]] = firrtl.not %reset
     ; CHECK:   firrtl.when [[COND]]  {
-    ; CHECK:     firrtl.connect %_t, %_t_2
+    ; CHECK:     firrtl.strictconnect %_t, %_t_2
     ; CHECK:   }
     ; CHECK: }
     when reset :
@@ -252,13 +253,13 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
       _t <= _t_2
 
     ; CHECK: firrtl.when %reset  {
-    ; CHECK:   firrtl.connect %_t, %_t
+    ; CHECK:   firrtl.strictconnect %_t, %_t
     ; CHECK: } else  {
     ; CHECK:   [[COND:%.+]] = firrtl.not %reset
     ; CHECK:   firrtl.when [[COND]]  {
-    ; CHECK:     firrtl.connect %_t, %_t_2
+    ; CHECK:     firrtl.strictconnect %_t, %_t_2
     ; CHECK:   } else  {
-    ; CHECK:     firrtl.connect %_t, %_t_2
+    ; CHECK:     firrtl.strictconnect %_t, %_t_2
     ; CHECK:   }
     ; CHECK: }
     when reset:
@@ -327,7 +328,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: %xyz_in = firrtl.instance xyz @circuit(in in: !firrtl.uint<80>)
     inst xyz of circuit
     ; CHECK: [[PAD:%.*]] = firrtl.pad %i8, 80 : (!firrtl.uint<8>) -> !firrtl.uint<80>
-    ; CHECK: firrtl.connect %xyz_in, [[PAD]] : !firrtl.uint<80>, !firrtl.uint<80>
+    ; CHECK: firrtl.strictconnect %xyz_in, [[PAD]] : !firrtl.uint<80>
     xyz.in <= i8
 
     ; CHECK: %myext_in, %myext_out = firrtl.instance myext @MyExtModule(in in: !firrtl.uint, out out: !firrtl.uint<8>)
@@ -611,7 +612,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     output tmp5: SInt<19>
     tmp5 <= SInt<19>(8)
      ; CHECK: %c8_si19 = firrtl.constant 8 : !firrtl.sint<19>
-     ; CHECK: firrtl.connect %tmp5, %c8_si19 : !firrtl.sint<19>, !firrtl.sint<19>
+     ; CHECK: firrtl.strictconnect %tmp5, %c8_si19 : !firrtl.sint<19>
 
    ; CHECK-LABEL: firrtl.module private @issue347
   module issue347 :
@@ -687,18 +688,20 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   module TrickyIssue559:
     input input: UInt<1>
     output output: UInt<1>
-    ; CHECK: firrtl.connect %output, %input
+    ; CHECK: firrtl.strictconnect %output, %input
     output <= input
 
   ; CHECK-LABEL: firrtl.module private @CheckInvalids
   module CheckInvalids_in0 :
     input in0 : UInt<1>
     ; CHECK-NOT: firrtl.connect %in0
+    ; CHECK-NOT: firrtl.strictconnect %in0
     in0 is invalid
 
   module CheckInvalids_in1 :
     input in1 : { a : UInt<1>, b : UInt<1> }
     ; CHECK-NOT: firrtl.connect %in1
+    ; CHECK-NOT: firrtl.strictconnect %in1
     in1 is invalid
 
   module CheckInvalids_in2 :
@@ -796,7 +799,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   module mutableSubIndex606 :
     output io : UInt<1>[8]
     ; CHECK:  %0 = firrtl.subindex %io[0] : !firrtl.vector<uint<1>, 8>
-    ; CHECK: firrtl.connect %0, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+    ; CHECK: firrtl.strictconnect %0, %c0_ui1 : !firrtl.uint<1>
     io[0] <= UInt<1>("h00")
 
 
@@ -853,11 +856,11 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
     cmem a: UInt<1>[8]
 
-    ; CHECK: firrtl.connect %rData, %r
+    ; CHECK: firrtl.strictconnect %rData, %r
     infer mport r = a[rAddr], clock
     rData <= r
 
-    ; CHECK: firrtl.connect %w_data, %wData
+    ; CHECK: firrtl.strictconnect %w_data, %wData
     infer mport w = a[wAddr], clock
     w <= wData
 
