@@ -225,7 +225,7 @@ LogicalResult PlacementDB::movePlacement(PDRegPhysLocationOp locOp,
     if (from && to && failed(movePlacementCheck(locOp, from, to)))
       return failure();
     // If only 'to' is valid, this location is the initial placement.
-    else if (to && getInstanceAt(to))
+    if (to && getInstanceAt(to))
       return failure();
     // If 'to' isn't valid, it's a placement removal which will always succeed.
   }
