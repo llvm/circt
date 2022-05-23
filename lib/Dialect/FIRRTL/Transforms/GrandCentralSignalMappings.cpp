@@ -261,7 +261,6 @@ FModuleOp ModuleSignalMappings::emitMappingsModule() {
   builder.setInsertionPointToStart(mappingsModule.getBody());
   unsigned portIdx = 0;
   for (auto &mapping : localMappings) {
-    SmallString<32> remoteXmrName;
     // TODO: Actually generate a proper XMR here. For now just do some textual
     // replacements. Generating a real IR node (like a proper XMR op) would be
     // much better, but the modules that `EmitSignalMappings` interacts with
@@ -276,6 +275,7 @@ FModuleOp ModuleSignalMappings::emitMappingsModule() {
       continue;
     }
 
+    SmallString<32> remoteXmrName;
     if (tokenized->instances.empty()) {
       // If no instance path, just use module directly
       remoteXmrName = tokenized->module;
