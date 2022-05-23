@@ -209,7 +209,10 @@ MlirAttribute circtMSFTLocationVectorAttrGet(MlirContext ctxt, MlirType type,
                                              MlirAttribute const *elements) {
   SmallVector<PhysLocationAttr, 32> physLocs;
   for (intptr_t i = 0; i < numElements; ++i)
-    physLocs.push_back(unwrap(elements[i]).cast<PhysLocationAttr>());
+    if (elements[i].ptr != nullptr)
+      physLocs.push_back(unwrap(elements[i]).cast<PhysLocationAttr>());
+    else
+      physLocs.push_back({});
   return wrap(LocationVectorAttr::get(unwrap(ctxt), TypeAttr::get(unwrap(type)),
                                       physLocs));
 }

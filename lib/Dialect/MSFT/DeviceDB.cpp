@@ -114,6 +114,8 @@ PDRegPhysLocationOp PlacementDB::place(DynamicInstanceOp inst,
 
 LogicalResult PlacementDB::insertPlacement(DynInstDataOpInterface op,
                                            PhysLocationAttr loc) {
+  if (!loc)
+    return success();
   PlacementCell *leaf = getLeaf(loc);
   if (!leaf)
     return op->emitOpError("Could not apply placement. Invalid location: ")
@@ -204,7 +206,8 @@ LogicalResult PlacementDB::movePlacement(PDPhysLocationOp locOp,
 /// placed there.
 void PlacementDB::removePlacement(PDRegPhysLocationOp locOp) {
   for (PhysLocationAttr loc : locOp.locs().getLocs())
-    removePlacement(locOp, loc);
+    if (loc)
+      removePlacement(locOp, loc);
   locOp.erase();
 }
 
@@ -214,11 +217,34 @@ void PlacementDB::removePlacement(PDRegPhysLocationOp locOp) {
 LogicalResult PlacementDB::movePlacement(PDRegPhysLocationOp locOp,
                                          LocationVectorAttr newLocs) {
   ArrayRef<PhysLocationAttr> fromLocs = locOp.locs().getLocs();
-  for (auto [from, to] : llvm::zip(fromLocs, newLocs.getLocs()))
-    if (failed(movePlacementCheck(locOp, from, to)))
+
+  // Check that each move/insert/delete will succeed before doing any of the
+  // mutations.
+  for (auto [from, to] : llvm::zip(fromLocs, newLocs.getLocs())) {
+    // If 'from' and 'to' are both non-null, this location is being moved.
+    if (from && to && failed(movePlacementCheck(locOp, from, to)))
       return failure();
-  for (auto [from, to] : llvm::zip(fromLocs, newLocs.getLocs()))
-    movePlacement(locOp, from, to);
+    // If only 'to' is valid, this location is the initial placement.
+    if (to && getInstanceAt(to))
+      return failure();
+    // If 'to' isn't valid, it's a placement removal which will always succeed.
+  }
+
+  // Mutate.
+  for (auto [from, to] : llvm::zip(fromLocs, newLocs.getLocs())) {
+    // If 'from' and 'to' are both non-null, this location is being moved.
+    if (from && to)
+      movePlacement(locOp, from, to);
+    // If 'to' isn't valid, it's a placement removal.
+    else if (from)
+      removePlacement(locOp, from);
+    // If only 'to' is valid, this location is the initial placement. Since we
+    // checked that there isn't anything currently located at 'to' this call
+    // will never fail.
+    else if (to)
+      (void)insertPlacement(locOp, to);
+  }
+
   locOp.locsAttr(newLocs);
   return success();
 }
@@ -234,6 +260,9 @@ void PlacementDB::removePlacement(DynInstDataOpInterface op,
 LogicalResult PlacementDB::movePlacementCheck(DynInstDataOpInterface op,
                                               PhysLocationAttr from,
                                               PhysLocationAttr to) {
+  if (from == to)
+    return success();
+
   PlacementCell *oldLeaf = getLeaf(from);
   PlacementCell *newLeaf = getLeaf(to);
 
@@ -259,6 +288,8 @@ void PlacementDB::movePlacement(DynInstDataOpInterface op,
                                 PhysLocationAttr from, PhysLocationAttr to) {
   assert(succeeded(movePlacementCheck(op, from, to)) &&
          "Call `movePlacementCheck` first to ensure that move is legal.");
+  if (from == to)
+    return;
   PlacementCell *oldLeaf = getLeaf(from);
   PlacementCell *newLeaf = getLeaf(to);
   newLeaf->locOp = op;

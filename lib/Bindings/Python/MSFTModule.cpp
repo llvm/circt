@@ -117,15 +117,23 @@ private:
 
 class PyLocationVecIterator {
 public:
-  PyLocationVecIterator(MlirAttribute attr) : attr(attr) {}
+  /// Get item at the specified position, translating a nullptr to None.
+  static py::handle getItem(MlirAttribute locVec, intptr_t pos) {
+    MlirAttribute loc = circtMSFTLocationVectorAttrGetElement(locVec, pos);
+    if (loc.ptr == nullptr)
+      return py::none();
+    return py::detail::type_caster<MlirAttribute>().cast(
+        loc, py::return_value_policy::automatic, py::handle());
+  }
 
+  PyLocationVecIterator(MlirAttribute attr) : attr(attr) {}
   PyLocationVecIterator &dunderIter() { return *this; }
 
-  MlirAttribute dunderNext() {
+  py::handle dunderNext() {
     if (nextIndex >= circtMSFTLocationVectorAttrGetNumElements(attr)) {
       throw py::stop_iteration();
     }
-    return circtMSFTLocationVectorAttrGetElement(attr, nextIndex++);
+    return getItem(attr, nextIndex++);
   }
 
   static void bind(py::module &m) {
@@ -205,8 +213,17 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
                           circtMSFTAttributeIsALocationVectorAttribute)
       .def_classmethod(
           "get",
-          [](py::object cls, MlirType type, std::vector<MlirAttribute> locs,
+          [](py::object cls, MlirType type, std::vector<py::handle> pylocs,
              MlirContext ctxt) {
+            // Get a LocationVector being sensitive to None in the list of
+            // locations.
+            SmallVector<MlirAttribute> locs;
+            for (auto attrHandle : pylocs)
+              if (attrHandle.is_none())
+                locs.push_back({nullptr});
+              else
+                locs.push_back(mlirPythonCapsuleToAttribute(
+                    mlirApiObjectToCapsule(attrHandle).ptr()));
             return cls(circtMSFTLocationVectorAttrGet(ctxt, type, locs.size(),
                                                       locs.data()));
           },
@@ -214,12 +231,8 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
           py::arg("locs"), py::arg("context") = py::none())
       .def("reg_type", &circtMSFTLocationVectorAttrGetType)
       .def("__len__", &circtMSFTLocationVectorAttrGetNumElements)
-      .def(
-          "__getitem__",
-          [](MlirAttribute locVec, intptr_t pos) {
-            return circtMSFTLocationVectorAttrGetElement(locVec, pos);
-          },
-          "Get the location at the specified position", py::arg("pos"))
+      .def("__getitem__", &PyLocationVecIterator::getItem,
+           "Get the location at the specified position", py::arg("pos"))
       .def("__iter__",
            [](MlirAttribute arr) { return PyLocationVecIterator(arr); });
   PyLocationVecIterator::bind(m);

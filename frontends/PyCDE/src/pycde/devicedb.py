@@ -8,7 +8,7 @@ from typing import Any, List, Optional, Tuple, Union
 from circt.dialects import msft
 from circt.support import attribute_to_var
 
-from mlir.ir import StringAttr, ArrayAttr, FlatSymbolRefAttr
+from mlir.ir import Attribute, StringAttr, ArrayAttr, FlatSymbolRefAttr
 from pycde.support import get_user_loc
 
 from functools import singledispatchmethod
@@ -42,6 +42,10 @@ class PhysLocation:
   def __from_loc(self, loc):
     self._loc = loc
 
+  @__init__.register(Attribute)
+  def __from_attr(self, loc):
+    self._loc = msft.PhysLocationAttr(loc)
+
   def __str__(self) -> str:
     loc = self._loc
     return f"PhysLocation<{loc.devtype}, x:{loc.x}, y:{loc.y}, num:{loc.num}>"
@@ -53,13 +57,14 @@ class PhysLocation:
 class LocationVector:
   from .pycde_types import Type
 
-  __slots__ = ["_loc"]
+  __slots__ = ["type", "_loc"]
 
   @singledispatchmethod
   def __init__(self, type: Type, locs: List[Optional[Tuple[int, int, int]]]):
     assert len(locs) == type.bitwidth, \
       "List length must match reg bitwidth"
     from circt.dialects import msft as circt_msft
+    self.type = type
     phys_locs: List[circt_msft.PhysLocationAttr] = list()
     for loc in locs:
       if loc is None:
@@ -74,8 +79,13 @@ class LocationVector:
   def __from_loc(self, loc):
     self._loc = loc
 
+  @property
+  def locs(self) -> List[PhysLocation]:
+    return [PhysLocation(loc) if loc is not None else None for loc in self._loc]
+
   def __str__(self) -> str:
-    return "LocationVector"
+    locs = [f"{loc}" for loc in self.locs]
+    return f"LocationVector<{self.type}, [" + ", ".join(locs) + "]>"
 
   def __repr__(self) -> str:
     return self.__str__()
