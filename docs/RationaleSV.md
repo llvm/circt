@@ -158,7 +158,7 @@ constructs (e.g. eliminate empty ifdef and if blocks), etc.
 %dead_expr = comb.and %a, %a {sv.namehint = "baz"} : i1
 // sv.namehint doesn't prevent any optimization. %dead_expr will be erased. To prevent an optimization
 ```
-- `sv.user_specified_name` - Used by PrettifyVerilog. This attribute can be attached to sv.wire. At PrettifyVerilog, if the wire is dead (aka. no users), the wire will be deleted even if the wire has a symbol.
-```
-%wire = sv.wire @SYM {sv.user_specified_name} : i1
+- `sv.user_specified_name` - This attribute can be attached to sv.wire and blocks optimizations through the wire. Unlike symbols it is allowed to delete the wire if it has no use.
+```mlir
+%wire = sv.wire {sv.user_specified_name} : i1
 ```
