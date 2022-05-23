@@ -12,6 +12,7 @@
 
 #include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
+#include "circt/Dialect/FIRRTL/FIRRTLAnnotationHelper.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
@@ -92,8 +93,7 @@ struct SignalMapping {
 /// A helper structure that collects the data necessary to generate the signal
 /// mappings module for an existing `FModuleOp` in the IR.
 struct ModuleSignalMappings {
-  ModuleSignalMappings(FModuleOp module, StringRef markDut, StringRef prefix)
-      : module(module), markDut(markDut), prefix(prefix) {}
+  ModuleSignalMappings(FModuleOp module) : module(module) {}
   void run();
   void addTarget(Value value, Annotation anno);
   FModuleOp emitMappingsModule();
@@ -103,9 +103,6 @@ struct ModuleSignalMappings {
   bool allAnalysesPreserved = true;
   SmallVector<SignalMapping> mappings;
   SmallString<64> mappingsModuleName;
-
-  StringRef markDut;
-  StringRef prefix;
 };
 } // namespace
 
@@ -264,48 +261,45 @@ FModuleOp ModuleSignalMappings::emitMappingsModule() {
   builder.setInsertionPointToStart(mappingsModule.getBody());
   unsigned portIdx = 0;
   for (auto &mapping : localMappings) {
+    SmallString<32> remoteXmrName;
     // TODO: Actually generate a proper XMR here. For now just do some textual
     // replacements. Generating a real IR node (like a proper XMR op) would be
     // much better, but the modules that `EmitSignalMappings` interacts with
     // generally live in a separate circuit. Multiple circuits are not fully
     // supported at the moment.
-    SmallString<32> remoteXmrName;
-    auto [circuitName, pathName] = mapping.remoteTarget.getValue().split('|');
-    // llvm::errs() << "Rewriting " << circuitName << " " << pathName <<
-    // "\nWith: " << markDut << " " << Prefix << "\n";
-    bool seenRoot = false;
-    auto [modulePath, varPath] = pathName.split('>');
-    if (markDut.empty()) {
-      // If no DUT, top-level is first module in modulePath
-      // ("~Top|Foo/b:B" -> "Foo.b")
-      remoteXmrName += modulePath.split('/').first;
-      seenRoot = true;
+    auto tokenized = tokenizePath(mapping.remoteTarget);
+    if (!tokenized) {
+      emitWarning(module.getLoc(),
+                  llvm::formatv("unable to parse remote target '{0}' found in "
+                                "SignalDriverAnnotation, skipping",
+                                mapping.remoteTarget));
+      continue;
     }
-    do {
-      auto [item, tail] = modulePath.split(':');
-      modulePath = tail;
-      auto [modName, instName] = item.split('/');
-      if (!markDut.empty() && markDut == modName) {
-        remoteXmrName += prefix;
-        remoteXmrName += markDut;
-        seenRoot = true;
+
+    if (tokenized->instances.empty()) {
+      // If no instance path, just use module directly
+      remoteXmrName = tokenized->module;
+    } else {
+      // First module encountered is our starting point
+      auto &[firstMod, _] = tokenized->instances.front();
+      remoteXmrName = firstMod;
+      for (auto &[mod, inst] : tokenized->instances) {
+        remoteXmrName.push_back('.');
+        remoteXmrName += inst;
       }
-      if (tail.empty())
-        break;
-      if (!markDut.empty() && !seenRoot)
-        continue;
-      if (!instName.empty()) {
-        remoteXmrName += '.';
-        remoteXmrName += instName;
-      }
-    } while (true);
+    }
+    assert(!remoteXmrName.empty());
+
     remoteXmrName.push_back('.');
-    for (auto c : varPath) {
-      if (c == '[' || c == '.')
-        remoteXmrName.push_back('_');
-      else if (c != ']')
-        remoteXmrName.push_back(c);
+    remoteXmrName += tokenized->name;
+
+    // TODO: Actually index into vectors/bundles?
+    // For now, convert to expected name of expanded aggregate
+    for (auto &comp : tokenized->component) {
+      remoteXmrName.push_back('_');
+      remoteXmrName += comp.name;
     }
+
     // llvm::errs() << "XMR: " << remoteXmrName << "\n\n";
     if (mapping.dir == MappingDirection::DriveRemote) {
       auto xmr = builder.create<VerbatimWireOp>(mapping.type, remoteXmrName);
@@ -383,8 +377,6 @@ class GrandCentralSignalMappingsPass
 
 public:
   std::string outputFilename;
-  std::string markDut;
-  std::string prefix;
 };
 
 void GrandCentralSignalMappingsPass::runOnOperation() {
@@ -445,8 +437,8 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
 
   mlir::parallelForEachN(
       circuit.getContext(), 0, modules.size(),
-      [this, &modules, &results](size_t index) {
-        ModuleSignalMappings mapper(modules[index], markDut, prefix);
+      [&modules, &results](size_t index) {
+        ModuleSignalMappings mapper(modules[index]);
         mapper.run();
         results[index] = {
             mapper.allAnalysesPreserved, modules[index],
@@ -724,14 +716,10 @@ FailureOr<bool> GrandCentralSignalMappingsPass::emitUpdatedMappings(
   return allAnalysesPreserved;
 }
 
-std::unique_ptr<mlir::Pass> circt::firrtl::createGrandCentralSignalMappingsPass(
-    StringRef outputFilename, StringRef markDut, StringRef prefix) {
+std::unique_ptr<mlir::Pass>
+circt::firrtl::createGrandCentralSignalMappingsPass(StringRef outputFilename) {
   auto pass = std::make_unique<GrandCentralSignalMappingsPass>();
   if (!outputFilename.empty())
     pass->outputFilename = outputFilename;
-  if (!markDut.empty())
-    pass->markDut = markDut;
-  if (!prefix.empty())
-    pass->prefix = prefix;
   return pass;
 }
