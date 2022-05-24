@@ -24,7 +24,6 @@
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Support/LoweringOptions.h"
-#include "circt/Support/Version.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -842,8 +841,6 @@ int main(int argc, char **argv) {
   registerDefaultTimingManagerCLOptions();
   registerAsmPrinterCLOptions();
   registerLoweringCLOptions();
-  cl::AddExtraVersionPrinter(
-      [](raw_ostream &os) { os << getCirctVersion() << '\n'; });
   // Parse pass names in main to ensure static initialization completed.
   cl::ParseCommandLineOptions(argc, argv, "MLIR-based FIRRTL compiler\n");
 
