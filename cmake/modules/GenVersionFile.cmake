@@ -7,7 +7,6 @@
 
 set(GIT_DESCRIBE_DEFAULT "unknown git version")
 if (DRY_RUN)
-  message(STATUS "Version generation is disabled.")
   set(GIT_DESCRIBE_OUTPUT "${GIT_DESCRIBE_DEFAULT}")
 else ()
   message(STATUS "Generating ${OUT_FILE} from ${IN_FILE} by `git describe --dirty --tags --match ${RELEASE_PATTERN}`")

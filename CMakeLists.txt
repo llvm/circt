@@ -186,7 +186,13 @@ include_directories(${CIRCT_MAIN_INCLUDE_DIR})
 include_directories(${CIRCT_INCLUDE_DIR})
 
 # Set the release tag.
-option(CIRCT_RELEASE_TAG_ENABLED "Emit the release tag to output." ON)
+option(CIRCT_RELEASE_TAG_ENABLED "Emit the release tag to output." OFF)
+if (NOT CIRCT_RELEASE_TAG_ENABLED)
+  message(STATUS "Version generation is disabled. To enable the version "
+               "generation, please set CIRCT_RELEASE_TAG_ENABLED CMake "
+               "variable")
+endif()
+
 set(CIRCT_RELEASE_TAG "circtorg" CACHE STRING
     "Prefix of the release tag (e.g. circtorg, pycde and sifive).")
 
