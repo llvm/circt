@@ -65,6 +65,12 @@ public:
     llvm::set_intersect(common, set2);
   }
 
+  /// Get the instances that the InstanceOp participates in.
+  void getInstanceNLAs(InstanceOp inst, DenseSet<NonLocalAnchor> &nlas) {
+    commonNLAs(inst->getParentOfType<FModuleOp>().getNameAttr(),
+               inst.moduleNameAttr().getAttr(), nlas);
+  }
+
   //===-------------------------------------------------------------------------
   // Methods to keep an NLATable up to date.
   //
@@ -97,6 +103,13 @@ public:
   void renameModuleAndInnerRef(
       StringAttr newModName, StringAttr oldModName,
       const DenseMap<StringAttr, StringAttr> &innerSymRenameMap);
+
+  // Remove the NLA from the Module.
+  void removeNLAfromModule(NonLocalAnchor nla, StringAttr mod);
+
+  // Remove all the nlas in the set from the module.
+  void removeNLAsfromModule(const DenseSet<NonLocalAnchor> &nlas,
+                            StringAttr mod);
 
 private:
   NLATable(const NLATable &) = delete;

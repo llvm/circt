@@ -88,6 +88,23 @@ void NLATable::renameModuleAndInnerRef(
   return;
 }
 
+void NLATable::removeNLAfromModule(NonLocalAnchor nla, StringAttr mod) {
+  auto nlaList = nodeMap[mod];
+  for (auto it = nlaList.begin(), e = nlaList.end(); it != e; ++it)
+    if ((*it) == nla) {
+      nlaList.erase(it);
+      break;
+    }
+}
+
+void NLATable::removeNLAsfromModule(const DenseSet<NonLocalAnchor> &nlas,
+                                    StringAttr mod) {
+  auto nlaList = nodeMap[mod];
+  for (auto it = nlaList.begin(), e = nlaList.end(); it != e; ++it)
+    if (nlas.count(*it))
+      nlaList.erase(it);
+}
+
 void NLATable::updateModuleInNLA(StringAttr name, StringAttr oldModule,
                                  StringAttr newModule) {
   auto nlaOp = getNLA(name);
@@ -118,11 +135,6 @@ FModuleLike NLATable::getModule(StringAttr name) {
   auto *n = symToOp.lookup(name);
   return dyn_cast_or_null<FModuleLike>(n);
 }
-
-// void NLATable::retargetInstance(InstanceOp inst, StringRef newModName) {
-//     inst.moduleNameAttr(FlatSymbolRefAttr::get(inst.getContext(),
-//     newModName));
-// }
 
 ArrayRef<NonLocalAnchor> NLATable::lookup(StringAttr name) {
   auto iter = nodeMap.find(name);
