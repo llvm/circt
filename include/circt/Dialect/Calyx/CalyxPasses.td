@@ -116,4 +116,19 @@ def GoInsertion : Pass<"calyx-go-insertion", "calyx::ComponentOp"> {
   let constructor = "circt::calyx::createGoInsertionPass()";
 }
 
+def MaterializeFSM : Pass<"calyx-materialize-fsm", "calyx::ComponentOp"> {
+  let summary = "Materializes an FSM embedded inside the control of this Calyx component.";
+  let description = [{
+    Materializes the FSM in the control of the component. This materializes the
+    top-level I/O of the FSM to receive `group_done` signals as input and
+    `group_go` signals as output, based on the `calyx.enable` operations
+    used within the states of the FSM.
+    Each transition of the FSM is predicated on the enabled groups within a
+    state being done, or, for static groups, a separate sub-FSM is instantiated
+    to await the group finishing.
+  }];
+  let dependentDialects = ["comb::CombDialect", "hw::HWDialect", "fsm::FSMDialect"];
+  let constructor = "circt::calyx::createMaterializeFSMPass()";
+}
+
 #endif // CIRCT_DIALECT_CALYX_CALYXPASSES_TD

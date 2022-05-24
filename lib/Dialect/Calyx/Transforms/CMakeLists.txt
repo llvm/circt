@@ -6,6 +6,7 @@ add_circt_dialect_library(CIRCTCalyxTransforms
   RemoveGroups.cpp
   CalyxHelpers.cpp
   CalyxLoweringUtils.cpp
+  MaterializeFSM.cpp
 
   DEPENDS
   CIRCTCalyxTransformsIncGen
