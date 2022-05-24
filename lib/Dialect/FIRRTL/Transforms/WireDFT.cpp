@@ -15,6 +15,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/DepthFirstIterator.h"
@@ -90,29 +91,6 @@ lowestCommonAncestor(InstanceGraphNode *top,
   return currentLCA;
 }
 
-/// This gets the value targeted by a field id.  If the field id is targeting
-/// the value itself, it returns it unchanged. If it is targeting a single field
-/// in a aggregate value, such as a bundle or vector, this will create the
-/// necessary subaccesses to get the value.
-static Value getEnable(ImplicitLocOpBuilder builder, Value value,
-                       unsigned fieldID) {
-  // When the fieldID hits 0, we've found the target value.
-  while (fieldID != 0) {
-    auto type = value.getType();
-    if (auto bundle = type.dyn_cast<BundleType>()) {
-      auto index = bundle.getIndexForFieldID(fieldID);
-      value = builder.create<SubfieldOp>(value, index);
-      fieldID -= bundle.getFieldID(index);
-    } else {
-      auto vector = type.cast<FVectorType>();
-      auto index = vector.getIndexForFieldID(fieldID);
-      value = builder.create<SubindexOp>(value, index);
-      fieldID -= vector.getFieldID(index);
-    }
-  }
-  return value;
-}
-
 static const char dutClass[] = "sifive.enterprise.firrtl.MarkDUTAnnotation";
 static const char dftEnableClass[] =
     "sifive.enterprise.firrtl.DFTTestModeEnableAnnotation";
@@ -173,9 +151,10 @@ void WireDFTPass::runOnOperation() {
         return false;
       }
       // Grab the enable value and remove the annotation.
-      enableSignal = getEnable(ImplicitLocOpBuilder::atBlockBegin(
-                                   module->getLoc(), module.getBody()),
-                               module.getArgument(i), anno.getFieldID());
+      enableSignal =
+          getValueByFieldID(ImplicitLocOpBuilder::atBlockBegin(
+                                module->getLoc(), module.getBody()),
+                            module.getArgument(i), anno.getFieldID());
       enableModule = module;
       return true;
     });
@@ -197,7 +176,7 @@ void WireDFTPass::runOnOperation() {
           return false;
         }
         // Grab the enable value and remove the annotation.
-        enableSignal = getEnable(
+        enableSignal = getValueByFieldID(
             ImplicitLocOpBuilder::atBlockEnd(op->getLoc(), op->getBlock()),
             op->getResult(0), anno.getFieldID());
         enableModule = module;

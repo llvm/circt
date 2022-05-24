@@ -211,3 +211,26 @@ Value circt::firrtl::getModuleScopedDriver(Value val, bool lookThroughWires,
   };
   return val;
 }
+
+/// This gets the value targeted by a field id.  If the field id is targeting
+/// the value itself, it returns it unchanged. If it is targeting a single field
+/// in a aggregate value, such as a bundle or vector, this will create the
+/// necessary subaccesses to get the value.
+Value circt::firrtl::getValueByFieldID(ImplicitLocOpBuilder builder,
+                                       Value value, unsigned fieldID) {
+  // When the fieldID hits 0, we've found the target value.
+  while (fieldID != 0) {
+    auto type = value.getType();
+    if (auto bundle = type.dyn_cast<BundleType>()) {
+      auto index = bundle.getIndexForFieldID(fieldID);
+      value = builder.create<SubfieldOp>(value, index);
+      fieldID -= bundle.getFieldID(index);
+    } else {
+      auto vector = type.cast<FVectorType>();
+      auto index = vector.getIndexForFieldID(fieldID);
+      value = builder.create<SubindexOp>(value, index);
+      fieldID -= vector.getFieldID(index);
+    }
+  }
+  return value;
+}

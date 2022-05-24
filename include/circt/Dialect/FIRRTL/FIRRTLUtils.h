@@ -51,6 +51,9 @@ static bool isModuleScopedDrivenBy(Value val, bool lookThroughWires,
   return isa<A, B...>(op);
 }
 
+Value getValueByFieldID(ImplicitLocOpBuilder builder, Value value,
+                        unsigned fieldID);
+
 } // namespace firrtl
 } // namespace circt
 
