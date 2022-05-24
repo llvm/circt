@@ -32,16 +32,16 @@ public:
   /// CircuitOp or MLIR ModuleOp.
   explicit NLATable(Operation *operation);
 
-  /// Lookup all NLAs an operation participates in
+  /// Lookup all NLAs an operation participates in.
   ArrayRef<NonLocalAnchor> lookup(Operation *op);
 
-  /// Lookup all NLAs an operation participates in
+  /// Lookup all NLAs an operation participates in.
   ArrayRef<NonLocalAnchor> lookup(StringAttr name);
 
-  /// Resolve a symbol to an NLA
+  /// Resolve a symbol to an NLA.
   NonLocalAnchor getNLA(StringAttr name);
 
-  /// Resolve a symbol to a Module
+  /// Resolve a symbol to a Module.
   FModuleLike getModule(StringAttr name);
 
   /// Insert a new NLA.
@@ -79,43 +79,48 @@ public:
   // NLATable is used as an analysis, this is only safe when the pass is
   // on a CircuitOp.
 
-  // Record a new NLA operation.
+  /// Record a new NLA operation.
   void addNLA(NonLocalAnchor nla);
 
-  // Stop tracking a module
+  /// Stop tracking a module.
   void eraseModule(StringAttr name);
 
-  // Move NLA 'name' from oldModule to newModule, updating the nla and updating
-  // the tracking.
+  /// Move NLA \p name from \p oldModule to \p newModule, updating the nla and
+  /// updating the tracking.
   void updateModuleInNLA(StringAttr name, StringAttr oldModule,
                          StringAttr newModule);
+
+  /// Move NLA \p nlaOp from \p oldModule to \p newModule, updating the nla and
+  /// updating the tracking.
   void updateModuleInNLA(NonLocalAnchor nlaOp, StringAttr oldModule,
                          StringAttr newModule);
 
-  // Rename a module, this updates the name to module tracking and the name to
-  // NLA tracking.
+  /// Rename a module, this updates the name to module tracking and the name to
+  /// NLA tracking.
   void renameModule(StringAttr oldModName, StringAttr newModName);
 
-  // Replace the module oldModName with newModName in the namepath of any NLA.
-  // Since the module is being updated, the symbols inside the module should
-  // also be renamed. Use the rename map to update the inner_sym names in the
-  // namepath.
+  /// Replace the module \p oldModName with \p newModName in the namepath of any
+  /// NLA. Since the module is being updated, the symbols inside the module
+  /// should also be renamed. Use the rename map \p innerSymRenameMap to update
+  /// the inner_sym names in the namepath.
   void renameModuleAndInnerRef(
       StringAttr newModName, StringAttr oldModName,
       const DenseMap<StringAttr, StringAttr> &innerSymRenameMap);
 
-  // Remove the NLA from the Module.
+  /// Remove the NLA from the Module.
   void removeNLAfromModule(NonLocalAnchor nla, StringAttr mod);
 
-  // Remove all the nlas in the set from the module.
+  /// Remove all the nlas in the set from the module.
   void removeNLAsfromModule(const DenseSet<NonLocalAnchor> &nlas,
                             StringAttr mod);
 
 private:
   NLATable(const NLATable &) = delete;
 
-  /// This maps each operation to its graph node.
+  /// Map modules to the NLA's that target them.
   llvm::DenseMap<StringAttr, SmallVector<NonLocalAnchor, 4>> nodeMap;
+
+  /// Map symbol names to module and NLA operations.
   llvm::DenseMap<StringAttr, Operation *> symToOp;
 };
 
