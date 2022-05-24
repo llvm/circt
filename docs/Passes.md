@@ -8,6 +8,10 @@ This document describes the available CIRCT passes and their contracts.
 
 [include "CIRCTConversionPasses.md"]
 
+## Calyx Dialect Passes
+
+[include "CalyxPasses.md"]
+
 ## ESI Dialect Passes
 
 [include "ESIPasses.md"]
@@ -16,9 +20,17 @@ This document describes the available CIRCT passes and their contracts.
 
 [include "FIRRTLPasses.md"]
 
+## FSM Dialect Passes
+
+[include "FSMPasses.md"]
+
 ## Handshake Dialect Passes
 
 [include "HandshakePasses.md"]
+
+## HW Dialect Passes
+
+[include "HWPasses.md"]
 
 ## LLHD Dialect Passes
 
