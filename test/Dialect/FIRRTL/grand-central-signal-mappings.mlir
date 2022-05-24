@@ -1,11 +1,19 @@
 // RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl-grand-central-signal-mappings)' --split-input-file %s | FileCheck %s
 
-firrtl.circuit "SubCircuit" {
+firrtl.circuit "SubCircuit" attributes {
+  annotations = [
+    {annotations = [],
+    circuit = "",
+    circuitPackage = "driving",
+    class = "sifive.enterprise.grandcentral.SignalDriverAnnotation",
+    isSubCircuit = true,
+    id = 0 : i64}]} {
   firrtl.extmodule @FooExtern(in clockIn: !firrtl.clock, out clockOut: !firrtl.clock)
   firrtl.extmodule @BarExtern(in someInput: !firrtl.uint<42>, out someOutput: !firrtl.uint<42>)
 
   // Create a name collision for the signal mappings file to ensure it's
   // properly handled.
+  // CHECK-LABEL: firrtl.extmodule @Bar_signal_mappings(
   firrtl.extmodule @Bar_signal_mappings()
 
   // CHECK-LABEL: firrtl.module @Foo_signal_mappings
@@ -84,7 +92,14 @@ firrtl.circuit "SubCircuit" {
 // CHECK-LABEL: "signal_driver"
 // CHECK-COUNT-1: firrtl.module
 // CHECK-NOT:     firrtl.module
-firrtl.circuit "signal_driver" {
+firrtl.circuit "signal_driver" attributes {
+  annotations = [
+    {annotations = [],
+    circuit = "",
+    circuitPackage = "driving",
+    class = "sifive.enterprise.grandcentral.SignalDriverAnnotation",
+    isSubCircuit = true,
+    id = 0 : i64}]} {
   firrtl.module @signal_driver() attributes {annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", id = 0 : i64}]} {
     %_w_sink = firrtl.wire sym @w_sink  {annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", dir = "sink", id = 0 : i64, peer = "~Foo|Bar>w", side = "local", targetId = 1 : i64}]} : !firrtl.uint<0>
     %w_sink = firrtl.node sym @w_sink_0 %_w_sink  : !firrtl.uint<0>
@@ -109,7 +124,7 @@ firrtl.circuit "GenerateJSON"  attributes {
     circuit = "",
     circuitPackage = "driving",
     class = "sifive.enterprise.grandcentral.SignalDriverAnnotation",
-    emitJSON,
+    isSubCircuit = true,
     id = 0 : i64}]} {
   firrtl.extmodule private @ExternalModule(out out: !firrtl.uint<1>) attributes {defname = "ExternalModule"}
   firrtl.extmodule private @InlineExternalModule(out out: !firrtl.uint<1>) attributes {
@@ -165,7 +180,14 @@ firrtl.circuit "GenerateJSON"  attributes {
 // driven wires in the output.
 //
 // CHECK-LABEL: "RemoveDrivers"
-firrtl.circuit "RemoveDrivers" {
+firrtl.circuit "RemoveDrivers" attributes {
+  annotations = [
+    {annotations = [],
+    circuit = "",
+    circuitPackage = "driving",
+    class = "sifive.enterprise.grandcentral.SignalDriverAnnotation",
+    isSubCircuit = true,
+    id = 0 : i64}]} {
   // CHECK: firrtl.module @RemoveDrivers
   firrtl.module @RemoveDrivers() attributes {annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", id = 0 : i64}]} {
     %source = firrtl.wire sym @source  {annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", dir = "source", id = 0 : i64, peer = "~Foo|Bar>w", side = "local", targetId = 1 : i64}]} : !firrtl.uint<1>
@@ -177,15 +199,16 @@ firrtl.circuit "RemoveDrivers" {
 
 // -----
 
-// Check that GCT-SM generates a dummy wire for any input ports which are
+// Check that GCT-SM generates 2 dummy wires for any input ports which are
 // forced.  This is done to work around the way that SystemVerilog force
 // statements work.  If an input port is forced, this will force that entire
 // net.  If there is NOT a wire used at the connection of the input port, the
 // effect of the force can be extremely far-reaching.  The Scala-based FIRRTL
 // Compiler (SFC) _always_ emits a wire and never saw this problem.
+// Two wires are used so an 'assign' is created, which is what breaks the net.
 // Specifically, check the following things:
-//   1. An input port that is forced gets a dummy wire.
-//   2. An output port that is forced does NOT get a dummy wire.
+//   1. An input port that is forced gets the 2 dummy wires.
+//   2. An output port that is forced does NOT get dummy wires.
 //
 // CHECK-LABEL: firrtl.circuit "AddWireToForcedInputs"
 firrtl.circuit "AddWireToForcedInputs"  attributes {
@@ -194,6 +217,7 @@ firrtl.circuit "AddWireToForcedInputs"  attributes {
      circuit = "circuit empty :\0A  module empty :\0A\0A    skip\0A",
      circuitPackage = "driving",
      class = "sifive.enterprise.grandcentral.SignalDriverAnnotation",
+     isSubCircuit = false,
      id = 0 : i64}]} {
   firrtl.module private @ForcedPort(
     in %in: !firrtl.uint<1> sym @in [
@@ -217,8 +241,10 @@ firrtl.circuit "AddWireToForcedInputs"  attributes {
       {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", id = 0 : i64}]} {
     // CHECK-NEXT: firrtl.instance sub
     %sub_in, %sub_out = firrtl.instance sub  @ForcedPort(in in: !firrtl.uint<1>, out out: !firrtl.uint<1>)
+    // CHECK-NEXT: %[[buffer_wire:.+]] = firrtl.wire sym @[[buffer_wire_sym:.+]] : !firrtl.uint<1>
     // CHECK-NEXT: %[[sub_in_wire:.+]] = firrtl.wire sym @[[sub_in_wire_sym:.+]] : !firrtl.uint<1>
-    // CHECK-NEXT: firrtl.strictconnect %sub_in, %[[sub_in_wire]]
+    // CHECK-NEXT: firrtl.strictconnect %sub_in, %[[buffer_wire]]
+    // CHECK-NEXT: firrtl.strictconnect %[[buffer_wire]], %[[sub_in_wire]]
     // CHECK-NEXT: firrtl.strictconnect %[[sub_in_wire]], %in
     firrtl.strictconnect %sub_in, %in : !firrtl.uint<1>
     // CHECK-NEXT: firrtl.strictconnect %out, %sub_out

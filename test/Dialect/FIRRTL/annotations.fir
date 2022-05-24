@@ -743,7 +743,7 @@ circuit Sub : %[[{
     dataSink <= ext.someOutput
 
 ; CHECK-LABEL: firrtl.circuit "Sub"
-; CHECK-SAME: {annotations = [], circuit = "", circuitPackage = "other", class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", emitJSON, id = [[ID:.+]] : i64}
+; CHECK-SAME: {annotations = [], circuit = "", circuitPackage = "other", class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", id = [[ID:[0-9]+]] : i64, isSubCircuit = true}
 
 ; CHECK-LABEL: firrtl.module @Sub
 ; CHECK-SAME: {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", id = [[ID]] : i64}
