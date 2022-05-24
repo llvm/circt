@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
@@ -350,11 +351,10 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
   void scatterMemTapAnno(RegOp op, ArrayAttr attr,
                          ImplicitLocOpBuilder &builder) {
     AnnotationSet annos(attr);
-    StringRef memAnnoClass = "sifive.enterprise.grandcentral.MemTapAnnotation";
     SmallVector<Attribute> regAnnotations;
     auto vecType = op.getType().cast<FVectorType>();
     for (auto anno : annos) {
-      if (anno.isClass(memAnnoClass)) {
+      if (anno.isClass(memTapSourceClass)) {
         for (size_t i = 0,
                     e = op.getType().cast<FVectorType>().getNumElements();
              i != e; ++i) {

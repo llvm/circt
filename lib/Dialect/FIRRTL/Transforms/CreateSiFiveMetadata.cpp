@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
@@ -26,7 +27,6 @@
 using namespace circt;
 using namespace firrtl;
 
-static const char dutAnnoClass[] = "sifive.enterprise.firrtl.MarkDUTAnnotation";
 /// Attribute that indicates where some json files should be dumped.
 static const char metadataDirectoryAnnoClass[] =
     "sifive.enterprise.firrtl.MetadataDirAnnotation";
@@ -343,8 +343,8 @@ LogicalResult CreateSiFiveMetadataPass::emitSitestBlackboxMetadata() {
       "firrtl.transforms.BlackBox",
       "firrtl.transforms.BlackBoxInlineAnno",
       "firrtl.transforms.BlackBoxPathAnno",
-      "sifive.enterprise.grandcentral.DataTapsAnnotation",
-      "sifive.enterprise.grandcentral.MemTapAnnotation",
+      dataTapsBlackboxClass,
+      memTapBlackboxClass,
       "sifive.enterprise.grandcentral.transforms.SignalMappingAnnotation"};
 
   auto *context = &getContext();

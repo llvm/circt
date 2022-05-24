@@ -12,6 +12,7 @@
 
 #include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
+#include "circt/Dialect/FIRRTL/FIRRTLAnnotationHelper.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
@@ -136,27 +137,6 @@ struct Port : std::pair<Operation *, unsigned> {
 template <typename T>
 static T &operator<<(T &os, Key key) {
   return os << "[" << key.first << ", " << key.second << "]";
-}
-
-/// Check if an annotation is a `ReferenceDataTapKey`, and that it has a `type`
-/// field with a given content.
-static bool isReferenceDataTapOfType(Annotation anno, StringRef type) {
-  if (!anno.isClass(referenceKeyClass))
-    return false;
-  auto typeAttr = anno.getMember<StringAttr>("type");
-  if (!typeAttr)
-    return false;
-  return typeAttr.getValue() == type;
-}
-
-/// Check if an annotation is a `ReferenceDataTapKey` with `source` type.
-static bool isReferenceDataTapSource(Annotation anno) {
-  return isReferenceDataTapOfType(anno, "source");
-}
-
-/// Check if an annotation is a `ReferenceDataTapKey` with `portName` type.
-static bool isReferenceDataTapPortName(Annotation anno) {
-  return isReferenceDataTapOfType(anno, "portName");
 }
 
 /// Map an annotation to a `Key`.
@@ -288,6 +268,216 @@ static FailureOr<Literal> parseIntegerLiteral(MLIRContext *context,
 }
 
 //===----------------------------------------------------------------------===//
+// Code related to handling Grand Central Data/Mem Taps annotations
+//===----------------------------------------------------------------------===//
+
+LogicalResult circt::firrtl::applyGCTDataTaps(AnnoPathValue target,
+                                              DictionaryAttr anno,
+                                              ApplyState &state) {
+
+  auto *context = state.circuit.getContext();
+  auto loc = state.circuit.getLoc();
+
+  auto dontTouch = [&](StringRef targetStr) {
+    NamedAttrList anno;
+    anno.append("class", StringAttr::get(context, dontTouchAnnoClass));
+    anno.append("target", StringAttr::get(context, targetStr));
+    state.addToWorklistFn(DictionaryAttr::get(context, anno));
+  };
+
+  auto id = state.newID();
+  NamedAttrList attrs;
+  attrs.append("class", StringAttr::get(context, dataTapsBlackboxClass));
+  auto blackBoxAttr =
+      tryGetAs<StringAttr>(anno, anno, "blackBox", loc, dataTapsClass);
+  if (!blackBoxAttr)
+    return failure();
+  auto canonicalTarget = canonicalizeTarget(blackBoxAttr.getValue());
+  if (!tokenizePath(canonicalTarget))
+    return failure();
+  attrs.append("target", StringAttr::get(context, canonicalTarget));
+  state.addToWorklistFn(DictionaryAttr::getWithSorted(context, attrs));
+
+  // Process all the taps.
+  auto keyAttr = tryGetAs<ArrayAttr>(anno, anno, "keys", loc, dataTapsClass);
+  if (!keyAttr)
+    return failure();
+  for (size_t i = 0, e = keyAttr.size(); i != e; ++i) {
+    auto b = keyAttr[i];
+    auto path = ("keys[" + Twine(i) + "]").str();
+    auto bDict = b.cast<DictionaryAttr>();
+    auto classAttr =
+        tryGetAs<StringAttr>(bDict, anno, "class", loc, dataTapsClass, path);
+    if (!classAttr)
+      return failure();
+
+    // The "portName" field is common across all sub-types of DataTapKey.
+    NamedAttrList port;
+    auto portNameAttr =
+        tryGetAs<StringAttr>(bDict, anno, "portName", loc, dataTapsClass, path);
+    if (!portNameAttr)
+      return failure();
+    auto portTarget = canonicalizeTarget(portNameAttr.getValue());
+    if (!tokenizePath(portTarget))
+      return failure();
+
+    if (classAttr.getValue() == referenceKeyClass) {
+      NamedAttrList source;
+      auto portID = state.newID();
+      source.append("class", StringAttr::get(context, referenceKeySourceClass));
+      source.append("id", id);
+      source.append("portID", portID);
+      auto sourceAttr =
+          tryGetAs<StringAttr>(bDict, anno, "source", loc, dataTapsClass, path);
+      if (!sourceAttr)
+        return failure();
+      auto sourceTarget = canonicalizeTarget(sourceAttr.getValue());
+      if (!tokenizePath(sourceTarget))
+        return failure();
+
+      source.append("target", StringAttr::get(context, sourceTarget));
+
+      state.addToWorklistFn(DictionaryAttr::get(context, source));
+      dontTouch(sourceTarget);
+
+      // Annotate the data tap module port.
+      port.append("class", StringAttr::get(context, referenceKeyPortClass));
+      port.append("id", id);
+      port.append("portID", portID);
+      port.append("target", StringAttr::get(context, portTarget));
+      state.addToWorklistFn(DictionaryAttr::getWithSorted(context, port));
+      continue;
+    }
+
+    if (classAttr.getValue() == internalKeyClass) {
+      NamedAttrList module;
+      auto portID = state.newID();
+      module.append("class", StringAttr::get(context, internalKeySourceClass));
+      module.append("id", id);
+      auto internalPathAttr = tryGetAs<StringAttr>(bDict, anno, "internalPath",
+                                                   loc, dataTapsClass, path);
+      auto moduleAttr =
+          tryGetAs<StringAttr>(bDict, anno, "module", loc, dataTapsClass, path);
+      if (!internalPathAttr || !moduleAttr)
+        return failure();
+      module.append("internalPath", internalPathAttr);
+      module.append("portID", portID);
+      auto moduleTarget = canonicalizeTarget(moduleAttr.getValue());
+      if (!tokenizePath(moduleTarget))
+        return failure();
+
+      module.append("target", StringAttr::get(context, moduleTarget));
+      state.addToWorklistFn(DictionaryAttr::getWithSorted(context, module));
+
+      // Annotate the data tap module port.
+      port.append("class", StringAttr::get(context, internalKeyPortClass));
+      port.append("id", id);
+      port.append("portID", portID);
+      port.append("target", StringAttr::get(context, portTarget));
+      state.addToWorklistFn(DictionaryAttr::get(context, port));
+      continue;
+    }
+
+    if (classAttr.getValue() == deletedKeyClass) {
+      // Annotate the data tap module port.
+      port.append("class", classAttr);
+      port.append("id", id);
+      port.append("target", StringAttr::get(context, portTarget));
+      state.addToWorklistFn(DictionaryAttr::get(context, port));
+      continue;
+    }
+
+    if (classAttr.getValue() == literalKeyClass) {
+      auto literalAttr = tryGetAs<StringAttr>(bDict, anno, "literal", loc,
+                                              dataTapsClass, path);
+      if (!literalAttr)
+        return failure();
+
+      // Annotate the data tap module port.
+      port.append("class", classAttr);
+      port.append("id", id);
+      port.append("literal", literalAttr);
+      port.append("target", StringAttr::get(context, portTarget));
+      state.addToWorklistFn(DictionaryAttr::get(context, port));
+      continue;
+    }
+
+    mlir::emitError(
+        loc, "Annotation '" + Twine(dataTapsClass) + "' with path '" + path +
+                 ".class" +
+                 +"' contained an unknown/unimplemented DataTapKey class '" +
+                 classAttr.getValue() + "'.")
+            .attachNote()
+        << "The full Annotation is reprodcued here: " << anno << "\n";
+    return failure();
+  }
+
+  return success();
+}
+
+LogicalResult circt::firrtl::applyGCTMemTaps(AnnoPathValue target,
+                                             DictionaryAttr anno,
+                                             ApplyState &state) {
+
+  auto *context = state.circuit.getContext();
+  auto loc = state.circuit.getLoc();
+
+  auto id = state.newID();
+  NamedAttrList attrs;
+  auto sourceAttr =
+      tryGetAs<StringAttr>(anno, anno, "source", loc, memTapClass);
+  if (!sourceAttr)
+    return failure();
+  auto sourceTarget = canonicalizeTarget(sourceAttr.getValue());
+  if (!tokenizePath(sourceTarget))
+    return failure();
+  attrs.append("class", StringAttr::get(context, memTapSourceClass));
+  attrs.append("id", id);
+  attrs.append("target", StringAttr::get(context, sourceTarget));
+  state.addToWorklistFn(DictionaryAttr::get(context, attrs));
+
+  auto tapsAttr = tryGetAs<ArrayAttr>(anno, anno, "taps", loc, memTapClass);
+  if (!tapsAttr)
+    return failure();
+  StringSet<> memTapBlackboxes;
+  for (size_t i = 0, e = tapsAttr.size(); i != e; ++i) {
+    auto tap = tapsAttr[i].dyn_cast_or_null<StringAttr>();
+    if (!tap) {
+      mlir::emitError(
+          loc, "Annotation '" + Twine(memTapClass) + "' with path '.taps[" +
+                   Twine(i) +
+                   "]' contained an unexpected type (expected a string).")
+              .attachNote()
+          << "The full Annotation is reprodcued here: " << anno << "\n";
+      return failure();
+    }
+    NamedAttrList port;
+    port.append("class", StringAttr::get(context, memTapPortClass));
+    port.append("id", id);
+    port.append("portID", IntegerAttr::get(IntegerType::get(context, 64), i));
+    auto canonTarget = canonicalizeTarget(tap.getValue());
+    if (!tokenizePath(canonTarget))
+      return failure();
+    port.append("target", StringAttr::get(context, canonTarget));
+    state.addToWorklistFn(DictionaryAttr::get(context, port));
+
+    auto blackboxTarget = tokenizePath(canonTarget).getValue();
+    blackboxTarget.name = {};
+    blackboxTarget.component.clear();
+    auto blackboxTargetStr = blackboxTarget.str();
+    if (!memTapBlackboxes.insert(blackboxTargetStr).second)
+      continue;
+
+    NamedAttrList blackbox;
+    blackbox.append("class", StringAttr::get(context, memTapBlackboxClass));
+    blackbox.append("target", StringAttr::get(context, blackboxTargetStr));
+    state.addToWorklistFn(DictionaryAttr::getWithSorted(context, blackbox));
+  }
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // Pass Infrastructure
 //===----------------------------------------------------------------------===//
 
@@ -407,11 +597,13 @@ void GrandCentralTapsPass::runOnOperation() {
   SmallVector<AnnotatedExtModule, 4> modules;
   for (auto extModule : llvm::make_early_inc_range(
            circuitOp.getBody()->getOps<FExtModuleOp>())) {
+
     // If the external module indicates that it is a data or mem tap, but does
     // not actually contain any taps (it has no ports), then delete the module
     // and all instantiations of it.
     AnnotationSet annotations(extModule);
-    if (annotations.hasAnnotation(dataTapsClass) && !extModule.getNumPorts()) {
+    if (annotations.hasAnnotation(dataTapsBlackboxClass) &&
+        !extModule.getNumPorts()) {
       LLVM_DEBUG(llvm::dbgs() << "Extmodule " << extModule.getName()
                               << " is a data/memtap that has no ports and "
                                  "will be deleted\n";);
@@ -429,9 +621,8 @@ void GrandCentralTapsPass::runOnOperation() {
       // mem tap ones to the list.
       auto annos = AnnotationSet::forPort(extModule, argNum);
       annos.removeAnnotations([&](Annotation anno) {
-        if (anno.isClass(memTapClass, deletedKeyClass, literalKeyClass,
-                         internalKeyClass) ||
-            isReferenceDataTapPortName(anno)) {
+        if (anno.isClass(memTapPortClass, deletedKeyClass, literalKeyClass,
+                         internalKeyPortClass, referenceKeyPortClass)) {
           result.portAnnos.push_back({argNum, anno});
           return true;
         }
@@ -444,7 +635,7 @@ void GrandCentralTapsPass::runOnOperation() {
     // case, create a filtered array of annotations with them removed.
     AnnotationSet annos(extModule.getOperation());
     annos.removeAnnotations(
-        [&](Annotation anno) { return anno.isClass(dataTapsClass); });
+        [&](Annotation anno) { return anno.isClass(dataTapsBlackboxClass); });
     result.filteredModuleAnnos = annos.getArrayAttr();
 
     if (!result.portAnnos.empty())
@@ -716,7 +907,7 @@ void GrandCentralTapsPass::gatherAnnotations(Operation *op) {
   if (isa<FModuleOp, FExtModuleOp>(op)) {
     // Handle port annotations on module/extmodule ops.
     auto gather = [&](unsigned argNum, Annotation anno) {
-      if (isReferenceDataTapSource(anno)) {
+      if (anno.isClass(referenceKeySourceClass)) {
         gatherTap(anno, Port{op, argNum});
         return true;
       }
@@ -727,7 +918,7 @@ void GrandCentralTapsPass::gatherAnnotations(Operation *op) {
     // Handle internal data taps on extmodule ops.
     if (isa<FExtModuleOp>(op)) {
       auto gather = [&](Annotation anno) {
-        if (anno.isClass(internalKeyClass)) {
+        if (anno.isClass(internalKeySourceClass)) {
           gatherTap(anno, op);
           return true;
         }
@@ -744,7 +935,7 @@ void GrandCentralTapsPass::gatherAnnotations(Operation *op) {
   // targets, we should never see multiple values or memories annotated
   // with the exact same annotation (hence the asserts).
   AnnotationSet::removeAnnotations(op, [&](Annotation anno) {
-    if (anno.isClass(memTapClass) || isReferenceDataTapSource(anno)) {
+    if (anno.isClass(memTapSourceClass, referenceKeySourceClass)) {
       gatherTap(anno, op);
       return true;
     }
@@ -766,8 +957,15 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
   // the case of a `LiteralDataTapKey`, in which use the annotation on the
   // data tap module port again.
   auto targetAnnoIt = annos.find(key);
+  if (portAnno.anno.isClass(memTapPortClass) && targetAnnoIt == annos.end())
+    targetAnnoIt = annos.find({key.first, {}});
   auto targetAnno =
       targetAnnoIt != annos.end() ? targetAnnoIt->second : portAnno.anno;
+  LLVM_DEBUG(llvm::dbgs() << "  Target anno " << targetAnno.getDict() << "\n");
+
+  // NOTE:
+  // - portAnno holds the "*.port" flavor of the annotation
+  // - targetAnno holds the "*.source" flavor of the annotation
 
   // If the annotation is non-local, look up the corresponding NLA operation to
   // find the exact instance path. We basically make the `wiring.prefices` array
@@ -786,7 +984,7 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
   }
 
   // Handle data taps on signals and ports.
-  if (targetAnno.isClass(referenceKeyClass)) {
+  if (targetAnno.isClass(referenceKeySourceClass)) {
     // Handle ports.
     if (auto port = tappedPorts.lookup(key)) {
       if (!nla)
@@ -828,7 +1026,7 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
   }
 
   // Handle data taps on black boxes.
-  if (targetAnno.isClass(internalKeyClass)) {
+  if (targetAnno.isClass(internalKeySourceClass)) {
     auto op = tappedOps.lookup(key);
     if (!op) {
       blackBox.extModule.emitOpError(
@@ -883,14 +1081,14 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
   }
 
   // Handle memory taps.
-  if (targetAnno.isClass(memTapClass)) {
+  if (targetAnno.isClass(memTapSourceClass)) {
 
     // Handle operations.
     if (auto *op = tappedOps.lookup(key)) {
       // We require the target to be a wire or node, such that it gets a name
       // during Verilog emission.
       if (!isa<WireOp, NodeOp, RegOp, RegResetOp>(op)) {
-        auto diag = blackBox.extModule.emitError("ReferenceDataTapKey on port ")
+        auto diag = blackBox.extModule.emitError("MemTapAnnotation on port ")
                     << portName << " must be a wire, node, or reg";
         diag.attachNote(op->getLoc()) << "referenced operation is here:";
         signalPassFailure();

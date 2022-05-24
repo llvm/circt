@@ -260,7 +260,7 @@ firrtl.circuit "GCTDataMemTapsPrefix" {
   // CHECK-SAME:   defname = "FOO_DataTap"
   firrtl.extmodule @DataTap()
     attributes {annotations = [{
-      class = "sifive.enterprise.grandcentral.DataTapsAnnotation"}],
+      class = "sifive.enterprise.grandcentral.DataTapsAnnotation.blackbox"}],
       defname = "DataTap"}
   // The Mem tap should be prefixed with "FOO_" and cloned to create a copy
   // prefixed with "BAR_".
@@ -272,7 +272,7 @@ firrtl.circuit "GCTDataMemTapsPrefix" {
   firrtl.extmodule @MemTap(
     out mem: !firrtl.vector<uint<1>, 1>
       [#firrtl.subAnno<fieldID = 1, {
-        class = "sifive.enterprise.grandcentral.MemTapAnnotation",
+        class = "sifive.enterprise.grandcentral.MemTapAnnotation.port",
         id = 0 : i64,
         word = 0 : i64}>])
     attributes {defname = "MemTap"}

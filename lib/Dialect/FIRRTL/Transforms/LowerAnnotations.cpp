@@ -257,7 +257,7 @@ static LogicalResult applyDontTouch(AnnoPathValue target, DictionaryAttr anno,
   // A DontTouchAnnotation is only allowed to be placed on a ReferenceTarget.
   // If this winds up on a module. then it indicates that the original
   // annotation was incorrect.
-  if (target.isOpOfType<FModuleOp>()) {
+  if (target.isOpOfType<FModuleOp, FExtModuleOp>()) {
     mlir::emitError(target.ref.getOp()->getLoc())
         << "'firrtl.module' op is targeted by a DontTouchAnotation with target "
         << Annotation(anno).getMember("target")
@@ -300,6 +300,20 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
     {companionAnnoClass, {stdResolve, applyWithoutTarget<>}},
     {parentAnnoClass, {stdResolve, applyWithoutTarget<>}},
     {augmentedGroundTypeClass, {stdResolve, applyWithoutTarget<true>}},
+    // Grand Central Data Tap Annotations
+    {dataTapsClass, {noResolve, applyGCTDataTaps}},
+    {dataTapsBlackboxClass, {stdResolve, applyWithoutTarget<true>}},
+    {referenceKeySourceClass, {stdResolve, applyWithoutTarget<true>}},
+    {referenceKeyPortClass, {stdResolve, applyWithoutTarget<true>}},
+    {internalKeySourceClass, {stdResolve, applyWithoutTarget<true>}},
+    {internalKeyPortClass, {stdResolve, applyWithoutTarget<true>}},
+    {deletedKeyClass, {stdResolve, applyWithoutTarget<true>}},
+    {literalKeyClass, {stdResolve, applyWithoutTarget<true>}},
+    // Grand Central Mem Tap Annotations
+    {memTapClass, {noResolve, applyGCTMemTaps}},
+    {memTapSourceClass, {stdResolve, applyWithoutTarget<true>}},
+    {memTapPortClass, {stdResolve, applyWithoutTarget<true>}},
+    {memTapBlackboxClass, {stdResolve, applyWithoutTarget<true>}},
     // Miscellaneous Annotations
     {dontTouchAnnoClass, {stdResolve, applyDontTouch}}
 
@@ -384,6 +398,7 @@ void LowerAnnotationsPass::runOnOperation() {
   auto annotations = circuit->getAttrOfType<ArrayAttr>(rawAnnotations);
   if (!annotations)
     return;
+  circuit->removeAttr(rawAnnotations);
 
   // Grab the annotations.
   for (auto anno : annotations)
