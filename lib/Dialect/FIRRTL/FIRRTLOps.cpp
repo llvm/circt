@@ -3642,6 +3642,7 @@ NonLocalAnchor::verifySymbolUses(mlir::SymbolTableCollection &symtblC) {
       return emitOpError() << " module: " << innerRef.getModule()
                            << " does not contain any instance with symbol: "
                            << innerRef.getName();
+    // Check for BreadCrumbs on InstanceOp removed.
     expectedModuleName = instOp.moduleNameAttr().getAttr();
   }
   // The instance path has been verified. Now verify the last element.
