@@ -89,20 +89,13 @@ void NLATable::renameModuleAndInnerRef(
 }
 
 void NLATable::removeNLAfromModule(NonLocalAnchor nla, StringAttr mod) {
-  auto nlaList = nodeMap[mod];
-  for (auto it = nlaList.begin(), e = nlaList.end(); it != e; ++it)
-    if ((*it) == nla) {
-      nlaList.erase(it);
-      break;
-    }
+  llvm::erase_value(nodeMap[mod], nla);
 }
 
 void NLATable::removeNLAsfromModule(const DenseSet<NonLocalAnchor> &nlas,
                                     StringAttr mod) {
-  auto nlaList = nodeMap[mod];
-  for (auto it = nlaList.begin(), e = nlaList.end(); it != e; ++it)
-    if (nlas.count(*it))
-      nlaList.erase(it);
+  llvm::erase_if(nodeMap[mod],
+                 [&nlas](const auto &nla) { return nlas.count(nla); });
 }
 
 void NLATable::updateModuleInNLA(StringAttr name, StringAttr oldModule,
