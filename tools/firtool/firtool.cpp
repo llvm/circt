@@ -523,7 +523,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         firrtl::createInferReadWritePass());
 
-  if (lowerMemory)
+  if (replSeqMem && lowerMemory)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerMemoryPass());
 
   if (prefixModules)
