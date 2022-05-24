@@ -3562,6 +3562,16 @@ bool NonLocalAnchor::hasModule(StringAttr modName) {
   return false;
 }
 
+/// Return true if the NLA has the InnerSym .
+bool NonLocalAnchor::hasInnerSym(StringAttr modName, StringAttr symName) const {
+  for (auto nameRef : const_cast<NonLocalAnchor *>(this)->namepath())
+    if (auto ref = nameRef.dyn_cast<hw::InnerRefAttr>())
+      if (ref.getName() == symName && ref.getModule() == modName)
+        return true;
+
+  return false;
+}
+
 /// Return just the reference part of the namepath at a specific index.  This
 /// will return an empty attribute if this is the leaf and the leaf is a module.
 StringAttr NonLocalAnchor::refPart(unsigned i) {
