@@ -63,7 +63,7 @@ Names in verilog form part of the public API of a design.  It is therefore
 critical that Chisel, and by extension FIRRTL, have language-level semantics
 about how entities are named and how named entities are used and transformed.  
 This must specify which entities with names in Chisel generate predictable 
-output.  Since names server multiple purposes in a design; for example, 
+output.  Since names serve multiple purposes in a design; for example, 
 debugging, test-bench attachment, hooks for physical layout, etc; we must 
 balance multiple needs.  This section describes the base semantics, which are 
 conservative and aimed at enabling debugging.  _It is expected that the 
