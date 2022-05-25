@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 include "circt/Dialect/HW/HWTypes.td"
+include "mlir/Interfaces/InferTypeOpInterface.td"
 
 // A handle to refer to hw::ArrayType of hw::ArrayType in ODS.
 def MatrixType : DialectType<HWDialect,
@@ -40,4 +41,24 @@ def PEOutputOp: MSFTOp<"pe.output", [Terminator]> {
   let summary = "Set the outputs from a PE block";
   let arguments = (ins AnyType:$output);
   let assemblyFormat = "$output attr-dict `:` type($output)";
+}
+
+def ChannelOp: MSFTOp<"constructs.channel",
+                      [NoSideEffect, SameOperandsAndResultType]> {
+
+  let summary = "A pipeline-able connection";
+  let description = [{
+    A logical, feed-forward connection between a producer and consumer. Can be
+    pipelined with a number of stages (cycle delay) on a per-instance basis.
+    `defaultStages` is used when `stages` isn't specified by a
+    `DynamicInstance`.
+  }];
+
+  let arguments = (ins AnyType:$input, StrAttr:$sym_name,
+                       UI32Attr:$defaultStages);
+  let results = (outs AnyType:$output);
+
+  let assemblyFormat = [{
+    $input $sym_name `(` $defaultStages `)` attr-dict `:` type($input)
+  }];
 }

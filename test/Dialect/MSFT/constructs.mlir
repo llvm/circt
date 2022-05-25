@@ -49,3 +49,11 @@ hw.module @PE(%clk: i1, %a: i8, %b: i8) -> (sum: i8) {
   %sumDelay1 = seq.compreg %sum, %clk : i8
   hw.output %sumDelay1 : i8
 }
+
+// CHECK-LABEL: hw.module @ChannelExample(%a: i8) -> (out: i8) {
+// CHECK:         [[REG0:%.+]] = msft.constructs.channel %a "chEx"(2) : i8
+// CHECK:         hw.output [[REG0]] : i8
+hw.module @ChannelExample (%a : i8) -> (out: i8) {
+  %out = msft.constructs.channel %a "chEx" (2) : i8
+  hw.output %out : i8
+}
