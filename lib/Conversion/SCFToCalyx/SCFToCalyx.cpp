@@ -560,8 +560,8 @@ class BuildOpGroups : public FuncOpPartialLoweringPattern {
                              memref::StoreOp,
                              /// standard arithmetic
                              AddIOp, SubIOp, CmpIOp, ShLIOp, ShRUIOp, ShRSIOp,
-                             AndIOp, XOrIOp, OrIOp, ExtUIOp, TruncIOp, MulIOp,
-                             DivUIOp, RemUIOp, IndexCastOp>(
+                             AndIOp, XOrIOp, OrIOp, ExtUIOp, ExtSIOp, TruncIOp,
+                             MulIOp, DivUIOp, RemUIOp, IndexCastOp>(
                   [&](auto op) { return buildOp(rewriter, op).succeeded(); })
               .template Case<scf::WhileOp, FuncOp, scf::ConditionOp>([&](auto) {
                 /// Skip: these special cases will be handled separately.
@@ -600,6 +600,7 @@ private:
   LogicalResult buildOp(PatternRewriter &rewriter, CmpIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, TruncIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, ExtUIOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter, ExtSIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, ReturnOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, IndexCastOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, memref::AllocOp op) const;
@@ -1008,6 +1009,12 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      ExtUIOp op) const {
   return buildLibraryOp<calyx::CombGroupOp, calyx::PadLibOp>(
+      rewriter, op, {op.getOperand().getType()}, {op.getType()});
+}
+
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     ExtSIOp op) const {
+  return buildLibraryOp<calyx::CombGroupOp, calyx::ExtSILibOp>(
       rewriter, op, {op.getOperand().getType()}, {op.getType()});
 }
 
@@ -1983,7 +1990,7 @@ public:
     target.addLegalOp<AddIOp, SubIOp, CmpIOp, ShLIOp, ShRUIOp, ShRSIOp, AndIOp,
                       XOrIOp, OrIOp, ExtUIOp, TruncIOp, CondBranchOp, BranchOp,
                       MulIOp, DivUIOp, RemUIOp, ReturnOp, arith::ConstantOp,
-                      IndexCastOp, FuncOp>();
+                      IndexCastOp, FuncOp, ExtSIOp>();
 
     RewritePatternSet legalizePatterns(&getContext());
     legalizePatterns.add<DummyPattern>(&getContext());

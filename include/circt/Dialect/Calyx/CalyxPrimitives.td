@@ -223,3 +223,5 @@ def SliceLibOp : UnaryLibraryOp<"slice"> {
 def NotLibOp  : UnaryLibraryOp<"not"> {}
 
 def WireLibOp : UnaryLibraryOp<"wire", [SameTypeConstraint<"in", "out">]> {}
+
+def ExtSILibOp  : UnaryLibraryOp<"extsi"> {}

@@ -1844,6 +1844,7 @@ ImplUnaryOpCellInterface(PadLibOp)
 ImplUnaryOpCellInterface(SliceLibOp)
 ImplUnaryOpCellInterface(NotLibOp)
 ImplUnaryOpCellInterface(WireLibOp)
+ImplUnaryOpCellInterface(ExtSILibOp)
 
 ImplBinOpCellInterface(LtLibOp)
 ImplBinOpCellInterface(GtLibOp)
