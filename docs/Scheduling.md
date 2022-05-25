@@ -77,7 +77,7 @@ Note that we do not have to tell the instance about the *dependences* between th
 
 ### Scheduling
 
-Before we attempt to schedule, we invoke the `check()` method, which ensures that the constructed instance is complete and valid. For example, the check would capture if we had forgot to set an operator type's latency. We dump the instance to visualize the depedence graph.
+Before we attempt to schedule, we invoke the `check()` method, which ensures that the constructed instance is complete and valid. For example, the check would capture if we had forgot to set an operator type's latency. We dump the instance to visualize the dependence graph.
 
 ```c++
 auto checkRes = prob.check();
@@ -96,7 +96,7 @@ assert(succeeded(schedRes));
 
 ### Working with the solution
 
-The solution is now stored in the instance, and we invoke the problem's `verify()` method to ensure that the computed start times adhere to the precendence constraint we stated earlier, i.e. operations start after their operands have computed their results. We can also convince ourselves of that by dumping the instance and inspecting the solution.
+The solution is now stored in the instance, and we invoke the problem's `verify()` method to ensure that the computed start times adhere to the precedence constraint we stated earlier, i.e. operations start after their operands have computed their results. We can also convince ourselves of that by dumping the instance and inspecting the solution.
 
 ```c++
 auto verifRes = prob.verify();
@@ -151,7 +151,7 @@ Properties can involve arbitrary data types, as long as these can be stored in m
 
 #### Constraints
 
-Clients call the virtual `Problem::check()` method to test any input constraints, and `Problem::verify()` to test the solution constraits. Problem classes are expected to override them as needed. There are no further restrictions of how these methods are implemented, but it is recommended to introduce helper methods that test a specific aspect and can be reused in extended problems. In addition, it makes sense to check/verify the properties in an order that avoids redundant tests for the presence of a particular property as well as redundant iteration over the problem components.
+Clients call the virtual `Problem::check()` method to test any input constraints, and `Problem::verify()` to test the solution constraints. Problem classes are expected to override them as needed. There are no further restrictions of how these methods are implemented, but it is recommended to introduce helper methods that test a specific aspect and can be reused in extended problems. In addition, it makes sense to check/verify the properties in an order that avoids redundant tests for the presence of a particular property as well as redundant iteration over the problem components.
 
 ## Available problem definitions
 
@@ -174,7 +174,7 @@ NB: The classes listed above each model a *trait*-like aspect of scheduling. The
 ## Utilities
 
 See [`Utilities.h`](https://github.com/llvm/circt/blob/main/include/circt/Scheduling/Utilities.h):
-- Topologic graph traversal
+- Topological graph traversal
 - DFA to compute combinational path delays
 - DOT dump
 
@@ -185,7 +185,7 @@ See [`Utilities.h`](https://github.com/llvm/circt/blob/main/include/circt/Schedu
 - Decide where to add it. Guideline: If it is trait-like and similar to the existing problem mentioned above, add it to `Problems.h`. If the model is specific to your use-case, it is best to start out in locally in your dialect/pass.
 - Declare the new problem class and inherit *virtually* from the relevant superclasses (at least `Problem`).
 - Define additional properties (private), and the corresponding public getters/setters. Getters return `Optional<T>` values, to indicate an unset state.
-   - Note that dependence properties are somewhat expensive to store, making it desirable that clients and algorithms expect and handle the unset state. This should be clearly documented. Example: `distance` propertiy in `CyclicProblem`.
+   - Note that dependence properties are somewhat expensive to store, making it desirable that clients and algorithms expect and handle the unset state. This should be clearly documented. Example: `distance` property in `CyclicProblem`.
 - Redefine the `getProperties(*)` methods to get dumping support. These should consider any properties the new class adds, plus properties defined in the superclass(es).
 - Redefine `check()` (input constraints) and `verify()` (solution constraints). If possible, follow the [design used in the existing problem classes](#constraints).
 - Write a couple of "positive" testcases, as well as at least one error test for each input/solution constraint, as validated by `check()` / `verify()`. See [`TestPasses.cpp`](https://github.com/llvm/circt/blob/main/lib/Scheduling/TestPasses.cpp) for inspiration. The testing situation will hopefully improve with [#2760](https://github.com/llvm/circt/issues/2760).
