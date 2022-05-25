@@ -59,16 +59,24 @@ community that would benefit from adding support for these, we can do so.
 
 ## Naming
 
-Names in verilog form part of the public API of a design.  It is therefore
+Names in verilog form part of the public API of a design and used for many 
+purposes and flows.  Many things in verilog may have names, and those names 
+specify points of interaction with the design.  For example, a wire has a name,
+and one can monitor the value on the wire from a testbench by knowing this name.
+Instances have names and form the core of hierarchical references through 
+designs.  Even always blocks and loops can have names, which are required and
+used.
+
+It is therefore
 critical that Chisel, and by extension FIRRTL, have language-level semantics
 about how entities are named and how named entities are used and transformed.  
 This must specify which entities with names in Chisel generate predictable 
-output.  Since names serve multiple purposes in a design; for example, 
-debugging, test-bench attachment, hooks for physical layout, etc; we must 
+output.  Since names serve multiple purposes in a design, for example, 
+debugging, test-bench attachment, hooks for physical layout, etc, we must 
 balance multiple needs.  This section describes the base semantics, which are 
 conservative and aimed at enabling debugging.  _It is expected that the 
-compiler provide flags to relax these rules to produce more synthesis- or 
-production-ready output_.
+compiler provide flags to relax these rules to produce more synthesis-friendly
+or production-ready output_.
 
 Modules shall use the name given in Chisel, unless they conflict with a verilog 
 reserved word, not withstanding de-duplication or relevant annotations on the module.
