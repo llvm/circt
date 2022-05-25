@@ -77,7 +77,7 @@ Instances shall use the name given in Chisel, unless they conflict with a
 verilog reserved.  Instances have preferential use of the name in the output in 
 case of a conflict, after ports.
 
-Chisel's provides a "Don't Touch" annotation to protect entities from 
+Chisel provides a "Don't Touch" annotation to protect entities from 
 transformation.  A don't touch on a wire or node produces a wire in verilog and 
 preserves the data-flow through that wire.  Even a wire driven by a constant 
 shall not have the constant forwarded around the wire.  This is because a 
