@@ -75,7 +75,7 @@ static Optional<StringRef> unsupportedOpInfo(Operation *op) {
   return llvm::TypeSwitch<Operation *, Optional<StringRef>>(op)
       .Case<ExtSILibOp>([](auto) -> Optional<StringRef> {
         static std::string_view info =
-            "calyx.extsi is currently not available in the native Rust "
+            "calyx.std_extsi is currently not available in the native Rust "
             "compiler (see github.com/cucapra/calyx/issues/1009)";
         return {info};
       })
