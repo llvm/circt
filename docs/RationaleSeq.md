@@ -105,7 +105,7 @@ optimization) another op could be added.
 do not detect and generate the SystemVerilog correctly), we can build it into
 the compreg op.
 - Reset style and clock style: how should we model posedge vs negedge clocks?
-Async vs sync resets? There are some reasonble options here: attributes on
+Async vs sync resets? There are some reasonable options here: attributes on
 this op or `clock` and `reset` types which are parameterized with that
 information.
 - Initial value: this register is uninitialized. Using an uninitialized value
