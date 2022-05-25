@@ -65,10 +65,27 @@ public:
     llvm::set_intersect(common, set2);
   }
 
-  /// Get the instances that the InstanceOp participates in.
+  /// Get the NLAs that the InstanceOp participates in, insert it to the
+  /// DenseSet `nlas`.
   void getInstanceNLAs(InstanceOp inst, DenseSet<NonLocalAnchor> &nlas) {
+    auto instSym = inst.inner_symAttr();
+    // If there is no inner sym on the InstanceOp, then it doesnot participate
+    // in any NLA.
+    if (!instSym)
+      return;
+    auto mod = inst->getParentOfType<FModuleOp>().getNameAttr();
+    // Get the NLAs that are common between the parent module and the target
+    // module. This should contain the NLAs that this InstanceOp participates
+    // in.
     commonNLAs(inst->getParentOfType<FModuleOp>().getNameAttr(),
                inst.moduleNameAttr().getAttr(), nlas);
+    // Handle the case when there are more than one Instances for the same
+    // target module. Getting the `commonNLA`, in that case is not enough,
+    // remove the NLAs that donot have the InstanceOp as the innerSym.
+    for (auto nla : llvm::make_early_inc_range(nlas)) {
+      if (!nla.hasInnerSym(mod, instSym))
+        nlas.erase(nla);
+    }
   }
 
   //===-------------------------------------------------------------------------
@@ -113,6 +130,11 @@ public:
   /// Remove all the nlas in the set from the module.
   void removeNLAsfromModule(const DenseSet<NonLocalAnchor> &nlas,
                             StringAttr mod);
+
+  /// Add the nla to the module.
+  void addNLAtoModule(NonLocalAnchor nla, StringAttr mod) {
+    nodeMap[mod].push_back(nla);
+  }
 
 private:
   NLATable(const NLATable &) = delete;

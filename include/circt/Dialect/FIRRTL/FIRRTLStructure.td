@@ -252,6 +252,9 @@ def NonLocalAnchor : FIRRTLOp<"nla",
     /// Returns true, if the NLA path contains the module.
     bool hasModule(StringAttr modName);
 
+    /// Returns true, if the NLA path contains the InnerSym {modName, symName}.
+    bool hasInnerSym(StringAttr modName, StringAttr symName) const;
+
     /// Returns true if this NLA targets a module or instance of a module (as
     /// opposed to an instance's port or something inside an instance).
     bool isModule();
