@@ -321,7 +321,7 @@ circuit Top : %[[
 ]]
   ; CHECK: firrtl.nla @[[nlaSym:[_a-zA-Z0-9]+]] [@Top::@[[a1Sym:[_a-zA-Z0-9]+]], @A::@[[bSym:[_a-zA-Z0-9]+]]]
   ; CHECK: firrtl.module @Top
-  ; CHECK-NEXT: firrtl.instance a1 sym @[[a1Sym]] {annotations = [{circt.nonlocal = @[[nlaSym]], class = "circt.nonlocal"}]} @A(
+  ; CHECK-NEXT: firrtl.instance a1 sym @[[a1Sym]] @A(
   ; CHECK-NEXT: firrtl.instance a2 @A(
   module Top :
     inst a1 of A
@@ -357,8 +357,8 @@ circuit Top : %[[
   ; CHECK: firrtl.nla @[[nlaSym1:[_a-zA-Z0-9]+]] [@Top::@[[a1Sym:[_a-zA-Z0-9]+]], @A::@[[bSym:[_a-zA-Z0-9]+]]]
   ; CHECK: firrtl.nla @[[nlaSym2:[_a-zA-Z0-9]+]] [@Top::@[[a2Sym:[_a-zA-Z0-9]+]], @A::@[[bSym]]]
   ; CHECK: firrtl.module @Top
-  ; CHECK-NEXT: firrtl.instance a1 sym @[[a1Sym]] {annotations = [{circt.nonlocal = @[[nlaSym1]], class = "circt.nonlocal"}]} @A(
-  ; CHECK-NEXT: firrtl.instance a2 sym @[[a2Sym]] {annotations = [{circt.nonlocal = @[[nlaSym2]], class = "circt.nonlocal"}]} @A(
+  ; CHECK-NEXT: firrtl.instance a1 sym @[[a1Sym]] @A(
+  ; CHECK-NEXT: firrtl.instance a2 sym @[[a2Sym]] @A(
   module Top :
     inst a1 of A
     inst a2 of A_
