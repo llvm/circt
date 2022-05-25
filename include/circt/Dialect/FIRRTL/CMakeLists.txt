@@ -8,7 +8,6 @@ mlir_tablegen(FIRRTLEnums.cpp.inc -gen-enum-defs)
 mlir_tablegen(FIRRTLAttributes.h.inc -gen-attrdef-decls)
 mlir_tablegen(FIRRTLAttributes.cpp.inc -gen-attrdef-defs)
 add_public_tablegen_target(CIRCTFIRRTLEnumsIncGen)
-add_circt_doc(FIRRTL Dialects/FIRRTLAttributes -gen-attrdef-doc)
 
 set(LLVM_TARGET_DEFINITIONS Passes.td)
 mlir_tablegen(Passes.h.inc -gen-pass-decls)
