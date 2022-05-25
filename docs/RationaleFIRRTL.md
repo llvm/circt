@@ -59,7 +59,7 @@ community that would benefit from adding support for these, we can do so.
 
 ## Naming
 
-Names in verilog form part of the public API of a design and used for many 
+Names in Verilog form part of the public API of a design and are used for many 
 purposes and flows.  Many things in verilog may have names, and those names 
 specify points of interaction with the design.  For example, a wire has a name,
 and one can monitor the value on the wire from a testbench by knowing this name.
@@ -78,21 +78,21 @@ conservative and aimed at enabling debugging.  _It is expected that the
 compiler provide flags to relax these rules to produce more synthesis-friendly
 or production-ready output_.
 
-Modules shall use the name given in Chisel, unless they conflict with a verilog 
+Modules shall use the name given in Chisel, unless they conflict with a Verilog 
 reserved word, not withstanding de-duplication or relevant annotations on the module.
 
 Instances shall use the name given in Chisel, unless they conflict with a 
-verilog reserved word.  Instances have preferential use of the name in the output in 
+Verilog reserved word.  Instances have preferential use of the name in the output in 
 case of a conflict, after ports.
 
 Chisel provides a "Don't Touch" annotation to protect entities from 
-transformation.  A don't touch on a wire or node produces a wire in verilog and 
+transformation.  A "Don't Touch" on a wire or node produces a wire in Verilog and 
 preserves the data-flow through that wire.  Even a wire driven by a constant 
 shall not have the constant forwarded around the wire.  This is because a 
-"don't touch" annotation signals the possible public use of a wire and one 
+"Don't Touch" annotation signals the possible public use of a wire and one 
 common use is to provide a place to drive a new value into the logic from an 
 external test-bench.  If the node or wire is named (and it always should be for 
-Chisel don't touch), this name is used, unless it conflicts with a verilog 
+Chisel "Don't Touch"), this name is used, unless it conflicts with a Verilog 
 reserved word.  This wire has preferential use of the name in the output in 
 case of a conflict, after ports and instances.
 
@@ -146,8 +146,8 @@ if the object has an array attribute `annotations` containing the attribute
 ## Symbols and Inner Symbols
 
 Symbols and Inner Symbols are documented in the [symbol rationale](RationaleSymbols.md).
-This section documents how symbols are used, their interaction with don't 
-touch, and the semantics imposed by them.
+This section documents how symbols are used, their interaction with "Don't 
+Touch", and the semantics imposed by them.
 
 Public Symbols indicate there are uses of an entity outside the analysis scope 
 of the compiler.  This requires the entity be preserved in such a way as 
@@ -165,17 +165,17 @@ semantic preserving with respect to all uses of the private symbol.  If it can
 be proved a wire with a private symbol is only read from via its symbol and 
 not written to, for example, the input can forwarded to the output (bypassing 
 the wire) safely.  If a private symbol is unused, it may be removed.  Private 
-symbols impose no restriction on output, they only exist to enable non-local 
+symbols impose no restriction on output; they only exist to enable non-local 
 effects in the IR.
 
-Don't touch is implemented as a public symbol on an entity.  A conservative 
-interpretation of "don't touch", and a common use case, is that the entity is 
+"Don't Touch" is implemented as a public symbol on an entity.  A conservative 
+interpretation of "Don't Touch", and a common use case, is that the entity is 
 referred to by a testbench in unknown ways.  This implies no transformation 
 which would change observed behavior if the entity was arbitrarily read or 
 written to remotely.  This further implies the existence of the entity in the 
 output.
 
-Importantly the existence of a symbol doesn't specify whether something is 
+Importantly, the existence of a symbol doesn't specify whether something is 
 read-only, write-only, or read-write.  Without analysis, a pass must assume the 
 most conservative case, and in the case of public symbols, must always assume 
 the most conservative case.  To do better, all uses must be analyzed and 
@@ -187,18 +187,18 @@ In the `FIRRTL` dialect, only modules have a symbol on them and it might be
  `instance`, `wire`, `reg` or `mem`.
 The NonLocalAnchor operation (`firrtl.nla`) can be used to identify the unique
  instance of a `FIRRTL` operation globally.
-`firrtl.nla` can be used to attach nonlocal annotations and also for metadata
+`firrtl.nla` can be used to attach nonlocal annotations and for metadata
  emission.
 `firrtl.nla` defines a symbol and contains a list of module symbols followed
  by a list of instance names corresponding to each module.
  For example, in the following example, `@nla_0` specifies instance
- "baz" in module `@FooNL`, followed by instance
+ `"baz"` in module `@FooNL`, followed by instance
  `"bar"` in module `@BazNL`, followed by
  the wire named `"w"` in module `@BarNL`.
 
 `firrtl.nla` can define a unique instance path, and each element along the way
- carries an annotation with class `circt. nonlocal`, which has a matching
- `circt. nonlocal` field pointing to the global op.
+ carries an annotation with class `circt.nonlocal`, which has a matching
+ `circt.nonlocal` field pointing to the global op.
  Thus instances participating in nonlocal paths are readily apparent.
 
  In the following example the `@nla_0` is used in the verbatim op
