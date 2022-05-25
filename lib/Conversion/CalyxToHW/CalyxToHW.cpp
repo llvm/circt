@@ -316,12 +316,15 @@ private:
           auto destWidth = op.out().getType().getIntOrFloatBitWidth();
           auto zero = b.create<hw::ConstantOp>(op.getLoc(),
                                                APInt(destWidth - srcWidth, 0));
-          auto padded = b.createOrFold<comb::ConcatOp>(zero, in);
+          auto padded = wireOut(b.createOrFold<comb::ConcatOp>(zero, in),
+                                op.instanceName(), op.portName(op.out()), b);
           wires.append({in.input(), padded});
         })
         .Case([&](ExtSILibOp op) {
           auto in = wireIn(op.in(), op.instanceName(), op.portName(op.in()), b);
-          auto extsi = createOrFoldSExt(op.getLoc(), in, op.out().getType(), b);
+          auto extsi =
+              wireOut(createOrFoldSExt(op.getLoc(), in, op.out().getType(), b),
+                      op.instanceName(), op.portName(op.out()), b);
           wires.append({in.input(), extsi});
         })
         .Default([](Operation *) { return SmallVector<Value>(); });

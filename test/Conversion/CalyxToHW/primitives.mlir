@@ -1,12 +1,23 @@
-// RUN: circt-opt --split-input-file -lower-calyx-to-hw --canonicalize %s | FileCheck %s
+// RUN: circt-opt --split-input-file -lower-calyx-to-hw %s | FileCheck %s
 
-// CHECK-LABEL:   hw.module @main(
-// CHECK-SAME:                    %[[IN0:.*]]: i4, %[[CLK:.*]]: i1, %[[RESET:.*]]: i1, %[[GO:.*]]: i1) -> (out0: i8, done: i1) {
-// CHECK:           %[[C0:.*]] = hw.constant 0 : i4
-// CHECK:           %[[C1:.*]] = hw.constant true
-// CHECK:           %[[PADDED:.*]] = comb.concat %[[C0]], %[[IN0]] : i4, i4
-// CHECK:           hw.output %[[PADDED]], %[[C1]] : i8, i1
-// CHECK:         }
+// CHECK: hw.module @main(%in0: i4, %clk: i1, %reset: i1, %go: i1) -> (out0: i8, done: i1) {
+// CHECK:   %out0 = sv.wire  : !hw.inout<i8>
+// CHECK:   %0 = sv.read_inout %out0 : !hw.inout<i8>
+// CHECK:   %done = sv.wire  : !hw.inout<i1>
+// CHECK:   %1 = sv.read_inout %done : !hw.inout<i1>
+// CHECK:   %true = hw.constant true
+// CHECK:   %[[IN_WIRE:.*]] = sv.wire  : !hw.inout<i4>
+// CHECK:   %[[IN_WIRE_READ:.*]] = sv.read_inout %[[IN_WIRE]] : !hw.inout<i4>
+// CHECK:   %c0_i4 = hw.constant 0 : i4
+// CHECK:   %[[PADDED:.*]] = comb.concat %c0_i4, %[[IN_WIRE_READ]] : i4, i4
+// CHECK:   %[[PADDED_WIRE:.*]] = sv.wire  : !hw.inout<i8>
+// CHECK:   sv.assign %[[PADDED_WIRE]], %[[PADDED]] : i8
+// CHECK:   %[[PADDED_WIRE_READ:.*]] = sv.read_inout %[[PADDED_WIRE]] : !hw.inout<i8>
+// CHECK:   sv.assign %[[IN_WIRE]], %in0 : i4
+// CHECK:   sv.assign %out0, %[[PADDED_WIRE_READ]] : i8
+// CHECK:   sv.assign %done, %true : i1
+// CHECK:   hw.output %0, %1 : i8, i1
+// CHECK: }
 calyx.program "main" {
   calyx.component @main(%in0: i4, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%out0: i8, %done: i1 {done}) {
     %true = hw.constant true
@@ -22,14 +33,25 @@ calyx.program "main" {
 
 // -----
 
-// CHECK-LABEL:   hw.module @main(
-// CHECK-SAME:                    %[[IN0:.*]]: i4, %[[CLK:.*]]: i1, %[[RESET:.*]]: i1, %[[GO:.*]]: i1) -> (out0: i8, done: i1) {
-// CHECK:           %[[C1:.*]] = hw.constant true
-// CHECK:           %[[SIGN:.*]] = comb.extract %[[IN0]] from 3 : (i4) -> i1
-// CHECK:           %[[SIGNVEC:.*]] = comb.replicate %[[SIGN]] : (i1) -> i4
-// CHECK:           %[[EXTENDED:.*]] = comb.concat %[[SIGNVEC]], %[[IN0]] : i4, i4
-// CHECK:           hw.output %[[EXTENDED]], %[[C1]] : i8, i1
-// CHECK:         }
+// CHECK: hw.module @main(%in0: i4, %clk: i1, %reset: i1, %go: i1) -> (out0: i8, done: i1) {
+// CHECK:   %out0 = sv.wire  : !hw.inout<i8>
+// CHECK:   %0 = sv.read_inout %out0 : !hw.inout<i8>
+// CHECK:   %done = sv.wire  : !hw.inout<i1>
+// CHECK:   %1 = sv.read_inout %done : !hw.inout<i1>
+// CHECK:   %true = hw.constant true
+// CHECK:   %[[IN_WIRE:.*]] = sv.wire  : !hw.inout<i4>
+// CHECK:   %[[IN_WIRE_READ:.*]] = sv.read_inout %[[IN_WIRE]] : !hw.inout<i4>
+// CHECK:   %[[SIGNBIT:.*]] = comb.extract %[[IN_WIRE_READ]] from 3 : (i4) -> i1
+// CHECK:   %[[SIGNBITVEC:.*]] = comb.replicate %[[SIGNBIT]] : (i1) -> i4
+// CHECK:   %[[EXTENDED:.*]] = comb.concat %[[SIGNBITVEC]], %[[IN_WIRE_READ]] : i4, i4
+// CHECK:   %[[EXTENDED_WIRE:.*]] = sv.wire  : !hw.inout<i8>
+// CHECK:   sv.assign %[[EXTENDED_WIRE]], %[[EXTENDED]] : i8
+// CHECK:   %[[EXTENDED_WIRE_READ:.*]] = sv.read_inout %[[EXTENDED_WIRE]] : !hw.inout<i8>
+// CHECK:   sv.assign %[[IN_WIRE]], %in0 : i4
+// CHECK:   sv.assign %out0, %[[EXTENDED_WIRE_READ]] : i8
+// CHECK:   sv.assign %done, %true : i1
+// CHECK:   hw.output %0, %1 : i8, i1
+
 calyx.program "main" {
   calyx.component @main(%in0: i4, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%out0: i8, %done: i1 {done}) {
     %true = hw.constant true
