@@ -71,7 +71,7 @@ compiler provide flags to relax these rules to produce more synthesis or
 production-ready output_.
 
 Modules shall use the name given in Chisel, unless they conflict with a verilog 
-reserved, not withstanding de-duplication or relevant annotations on the module.
+reserved word, not withstanding de-duplication or relevant annotations on the module.
 
 Instances shall use the name given in Chisel, unless they conflict with a 
 verilog reserved.  Instances have preferential use of the name in the output in 
