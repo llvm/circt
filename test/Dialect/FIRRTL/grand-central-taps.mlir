@@ -333,9 +333,9 @@ firrtl.circuit "NLAGarbageCollection" {
   // CHECK-NOT: @nla_1
   // CHECK-NOT: @nla_2
   // CHECK-NOT: @nla_3
-  firrtl.nla @nla_1 [#hw.innerNameRef<@NLAGarbageCollection::@dut>, #hw.innerNameRef<@DUT::@submodule>, #hw.innerNameRef<@Submodule::@foo>]
-  firrtl.nla @nla_2 [#hw.innerNameRef<@NLAGarbageCollection::@dut>, #hw.innerNameRef<@DUT::@submodule>, #hw.innerNameRef<@Submodule::@port>]
-  firrtl.nla @nla_3 [#hw.innerNameRef<@NLAGarbageCollection::@dut>, #hw.innerNameRef<@DUT::@submodule>, #hw.innerNameRef<@Submodule::@bar_0>]
+  firrtl.nla @nla_1 [@NLAGarbageCollection::@dut, @DUT::@submodule, @Submodule::@foo]
+  firrtl.nla @nla_2 [@NLAGarbageCollection::@dut, @DUT::@submodule, @Submodule::@port]
+  firrtl.nla @nla_3 [@NLAGarbageCollection::@dut, @DUT::@submodule, @Submodule::@bar_0]
   firrtl.module @Submodule(
     in %port: !firrtl.uint<1> sym @port [
       {circt.nonlocal = @nla_2,
@@ -419,8 +419,8 @@ firrtl.circuit "NLAGarbageCollection" {
 firrtl.circuit "NLAUsedInWiring"  {
   // CHECK-NOT: @nla_1
   // CHECK-NOT: @nla_2
-  firrtl.nla @nla_1 [#hw.innerNameRef<@NLAUsedInWiring::@foo>, #hw.innerNameRef<@Foo::@f>]
-  firrtl.nla @nla_2 [#hw.innerNameRef<@NLAUsedInWiring::@foo>, #hw.innerNameRef<@Foo::@g>]
+  firrtl.nla @nla_1 [@NLAUsedInWiring::@foo, @Foo::@f]
+  firrtl.nla @nla_2 [@NLAUsedInWiring::@foo, @Foo::@g]
 
   // CHECK-LABEL: firrtl.module @DataTap
   // CHECK-NEXT: [[TMP:%.+]] = firrtl.verbatim.expr
@@ -495,8 +495,8 @@ firrtl.circuit "NLAUsedInWiring"  {
 // See https://github.com/llvm/circt/issues/2767.
 
 firrtl.circuit "Top" {
-  firrtl.nla @nla_0 [#hw.innerNameRef<@DUT::@submodule_1>, #hw.innerNameRef<@Submodule::@bar_0>]
-  firrtl.nla @nla [#hw.innerNameRef<@DUT::@submodule_2>, #hw.innerNameRef<@Submodule::@bar_0>]
+  firrtl.nla @nla_0 [@DUT::@submodule_1, @Submodule::@bar_0]
+  firrtl.nla @nla [@DUT::@submodule_2, @Submodule::@bar_0]
   firrtl.module @Submodule(in %clock: !firrtl.clock, out %out: !firrtl.uint<1>) {
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>

@@ -1266,11 +1266,11 @@ firrtl.module private @Issue2315(in %x: !firrtl.vector<uint<10>, 5>, in %source:
 }
 
   // Check if the NLA is updated with the new lowered symbol on a field element.
-  firrtl.nla @nla [#hw.innerNameRef<@fallBackName::@test>, #hw.innerNameRef<@Aardvark::@test>, #hw.innerNameRef<@Zebra::@b>]
-  // CHECK:  firrtl.nla @nla_0 [#hw.innerNameRef<@fallBackName::@test>, #hw.innerNameRef<@Aardvark::@test>, #hw.innerNameRef<@Zebra::@b_data>]
-  // CHECK: firrtl.nla @nla [#hw.innerNameRef<@fallBackName::@test>, #hw.innerNameRef<@Aardvark::@test>, #hw.innerNameRef<@Zebra::@b_ready>]
-  firrtl.nla @nla_1 [#hw.innerNameRef<@fallBackName::@test>,#hw.innerNameRef<@Aardvark::@test_1>, @Zebra]
-  firrtl.nla @nla_2 [#hw.innerNameRef<@fallBackName::@test>, #hw.innerNameRef<@Aardvark::@test>, #hw.innerNameRef<@Zebra::@b2>]
+  firrtl.nla @nla [@fallBackName::@test, @Aardvark::@test, @Zebra::@b]
+  // CHECK:  firrtl.nla @nla_0 [@fallBackName::@test, @Aardvark::@test, @Zebra::@b_data]
+  // CHECK: firrtl.nla @nla [@fallBackName::@test, @Aardvark::@test, @Zebra::@b_ready]
+  firrtl.nla @nla_1 [@fallBackName::@test,@Aardvark::@test_1, @Zebra]
+  firrtl.nla @nla_2 [@fallBackName::@test, @Aardvark::@test, @Zebra::@b2]
   // CHECK-NOT: firrtl.nla @nla_2
   firrtl.module private @fallBackName() {
     firrtl.instance test  sym @test {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}, {circt.nonlocal = @nla_1, class = "circt.nonlocal"} , {circt.nonlocal = @nla_2, class = "circt.nonlocal"}]}@Aardvark()
@@ -1299,12 +1299,12 @@ firrtl.module private @Issue2315(in %x: !firrtl.vector<uint<10>, 5>, in %source:
   }
 
 // Test the update of NLA when a new symbol is added after lowering of bundle fields.
-  firrtl.nla @lowernla_2 [#hw.innerNameRef<@testNLAbundle::@testBundle_Bar>, #hw.innerNameRef<@testBundle_Bar::@d>]
-  // CHECK: firrtl.nla @lowernla_2_0 [#hw.innerNameRef<@testNLAbundle::@testBundle_Bar>, #hw.innerNameRef<@testBundle_Bar::@d_qux>]
-  // CHECK: firrtl.nla @lowernla_2 [#hw.innerNameRef<@testNLAbundle::@testBundle_Bar>, #hw.innerNameRef<@testBundle_Bar::@d_baz>]
-  firrtl.nla @lowernla_1 [#hw.innerNameRef<@testNLAbundle::@testBundle_Bar>, #hw.innerNameRef<@testBundle_Bar::@b>]
-  // CHECK: firrtl.nla @lowernla_1_0 [#hw.innerNameRef<@testNLAbundle::@testBundle_Bar>, #hw.innerNameRef<@testBundle_Bar::@b_qux>]
-  // CHECK: firrtl.nla @lowernla_1 [#hw.innerNameRef<@testNLAbundle::@testBundle_Bar>, #hw.innerNameRef<@testBundle_Bar::@b_baz>]
+  firrtl.nla @lowernla_2 [@testNLAbundle::@testBundle_Bar, @testBundle_Bar::@d]
+  // CHECK: firrtl.nla @lowernla_2_0 [@testNLAbundle::@testBundle_Bar, @testBundle_Bar::@d_qux]
+  // CHECK: firrtl.nla @lowernla_2 [@testNLAbundle::@testBundle_Bar, @testBundle_Bar::@d_baz]
+  firrtl.nla @lowernla_1 [@testNLAbundle::@testBundle_Bar, @testBundle_Bar::@b]
+  // CHECK: firrtl.nla @lowernla_1_0 [@testNLAbundle::@testBundle_Bar, @testBundle_Bar::@b_qux]
+  // CHECK: firrtl.nla @lowernla_1 [@testNLAbundle::@testBundle_Bar, @testBundle_Bar::@b_baz]
   firrtl.module private @testBundle_Bar(in %a: !firrtl.uint<1>, out %b: !firrtl.bundle<baz: uint<1>, qux: uint<1>, data: uint<2>> sym @b [#firrtl<"subAnno<fieldID = 3, {circt.nonlocal = @lowernla_1, class =\"firrtl.transforms.DontTouchAnnotation\" }>">, #firrtl.subAnno<fieldID = 1, {circt.nonlocal = @lowernla_1, A}>, #firrtl.subAnno<fieldID = 1, {circt.nonlocal = @lowernla_1, B}>, #firrtl.subAnno<fieldID = 2, {circt.nonlocal = @lowernla_1, C}>], out %c: !firrtl.uint<1>) {
   // CHECK-LABEL: firrtl.module private @testBundle_Bar
   // CHECK-SAME: out %b_baz: !firrtl.uint<1> sym @b_baz [{A, circt.nonlocal = @lowernla_1}, {B, circt.nonlocal = @lowernla_1}]

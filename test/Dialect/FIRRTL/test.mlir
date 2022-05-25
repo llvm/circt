@@ -153,6 +153,16 @@ firrtl.module @TestInvalidAttr() {
   }
 }
 
+// Basic test for NLA operations.
+// CHECK: firrtl.nla @nla [@Parent::@child, @Child::@w]
+firrtl.nla @nla [@Parent::@child, @Child::@w]
+firrtl.module @Child() {
+  %w = firrtl.wire sym @w : !firrtl.uint<1>
+}
+firrtl.module @Parent() {
+  firrtl.instance child sym @child {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}]} @Child()
+}
+
 // CHECK-LABEL: @VerbatimExpr
 firrtl.module @VerbatimExpr() {
   // CHECK: %[[TMP:.+]] = firrtl.verbatim.expr "FOO" : () -> !firrtl.uint<42>
