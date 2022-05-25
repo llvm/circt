@@ -6,11 +6,11 @@ This document also explains in a high-level manner how different components are
 organized, the principles behind them and the conventions we followed.
 The document assume that you have basic understanding of 
 [asynchronous digital circuits](https://en.wikipedia.org/wiki/Asynchronous_circuit) 
-at the behavioral level abstraction.
+at the behavioral level of abstraction.
 
 ## Principle
 
-Handshake/dataflow IR is describes independent, unsynchronized processes 
+Handshake/dataflow IR describes independent, unsynchronized processes
 communicating data through First-in First-out (FIFO) communication channels. 
 This can be implemented in many ways, such as using synchronous logic, or with 
 processors. 
@@ -40,7 +40,7 @@ can also lower the std MLIR produced by different frontends to Handshake IR.
 
 ## IR Representation
 
-Simple Handshake IR snippet for add function look like this -
+Simple Handshake IR snippet for an add function looks like this -
 ```
 handshake.func @simple_addi(%arg0: index, %arg1: index, %arg2: none, ...) -> (index, none) {
         %0 = addi %arg0, %arg1 : index
