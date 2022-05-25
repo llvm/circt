@@ -67,7 +67,7 @@ output.  Since names serve multiple purposes in a design; for example,
 debugging, test-bench attachment, hooks for physical layout, etc; we must 
 balance multiple needs.  This section describes the base semantics, which are 
 conservative and aimed at enabling debugging.  _It is expected that the 
-compiler provide flags to relax these rules to produce more synthesis or 
+compiler provide flags to relax these rules to produce more synthesis- or 
 production-ready output_.
 
 Modules shall use the name given in Chisel, unless they conflict with a verilog 
