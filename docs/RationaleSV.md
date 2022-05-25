@@ -84,7 +84,7 @@ that is lowered to the `indexed part-select` operation.
  The `sv.part_select` is defined on `Integer` type input and 
  `sv.part_select_inout` is defined on `inout` type.
 
- Part select consits of 3 arguments, the input value,
+ Part select consists of 3 arguments, the input value,
  a `width` and a `base` and an optional boolean attribute `decrement`.
  The `width` shall be a compile-time constant expression. 
  The `base` can be a runtime integer expression. 

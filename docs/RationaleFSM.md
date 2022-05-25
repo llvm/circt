@@ -54,7 +54,7 @@ don't have such a semantics -- SW IRs “run” sequentially.
 Here we define that each *trigger* causes the possibility of a transition from
 one state to another state through exactly one transition.  In a SW context,
 `fsm.instance` generates an `InstanceType` value to represent a state machine
-instance.  Each `fsm.trigger` targets a machine instance and explicilty causes a
+instance.  Each `fsm.trigger` targets a machine instance and explicitly causes a
 *trigger*.  Therefore, `fsm.trigger` may change the state of the machine
 instance thus is a side-effecting operation.  The following MLIR code shows an
 example of instantiating and triggering the state machine defined above:
@@ -74,7 +74,7 @@ func @bar() {
 In the contrast, to comply with the HW semantics, `fsm.hw_instance` directly
 consumes inputs and generates results.  The operand and result types must align
 with the type of the referenced `fsm.machine`.  In a HW context, *trigger*s are
-implicilty initiated by the processors of `fsm.hw_instance`.  The following
+implicitly initiated by the processors of `fsm.hw_instance`.  The following
 MLIR code shows an example of instantiating the same state machine in HW IRs:
 
 ```mlir

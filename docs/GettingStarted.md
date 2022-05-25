@@ -45,7 +45,7 @@ $ git submodule update
 *Note:* The repository is set up so that `git submodule update` performs a 
 shallow clone, meaning it downloads just enough of the LLVM repository to check 
 out the currently specified commit. If you wish to work with the full history of
-the LLVM repository, you can manually "unshallow" the the submodule:
+the LLVM repository, you can manually "unshallow" the submodule:
 
 ```
 $ cd llvm
@@ -116,7 +116,7 @@ the right thing.
 
 [Verilator](https://github.com/verilator/verilator) can be used to check
 SystemVerilog code. To run the tests, build or install a **recent** version
-of Verilator (at least v4.034, ideally v1.110 or later to avoid a known bug).
+of Verilator (at least v4.034, ideally v4.110 or later to avoid a known bug).
 (Some Linux distributions have *ancient* versions.) If Verilator is in your
 PATH, `build check-circt` should run the tests which require Verilator.
 
@@ -135,9 +135,8 @@ dependencies are installed on your system. They are:
 
 7) **Install Cap'nProto** (optional, affects ESI dialect only)
 
-Some of the ESI dialect code requires [libcapnp](https://capnproto.org/).
-(Specifically, the [cosimulation](ESI/cosim.md) component.) That code
-requires a version of libcapnp which is not yet part of a release. Most of
+Some of the ESI dialect code requires [libcapnp](https://capnproto.org/), 0.9.1 or newer.
+(Specifically, the [cosimulation](ESI/cosim.md) component.) Most of
 the ESI cosim integration tests also require the python bindings: pycapnp.
 The `utils/get-capnp.sh` script downloads, compiles, and installs a known
 good version to a directory within the circt source code. It optionally
@@ -151,10 +150,10 @@ Alternatively, you can use a docker image we provide via
 software suite for (mathematical) optimization. It provides a uniform interface
 to several open-source and commercial solvers, e.g. for linear programs and
 satisfiability problems. Here, it is optionally used in the static scheduling
-instructure. Binary distributions often do not include the required CMake build
-info. The `utils/get-or-tools.sh` script downloads, compiles, and installs a
-known good version to a directory within the CIRCT source code, where it is then
-picked up automatically by the build.
+infrastructure. Binary distributions often do not include the required CMake
+build info. The `utils/get-or-tools.sh` script downloads, compiles, and
+installs a known good version to a directory within the CIRCT source code,
+where it is then picked up automatically by the build.
 
 ## Windows: notes on setting up with Ninja
 

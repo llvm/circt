@@ -44,8 +44,8 @@ FIRRTL specification and is actively maintained, tracking new enhancements. The
 FIRRTL dialect supports some undocumented features and the "CHIRRTL" flavor of
 FIRRTL IR that is produced from Chisel.  The FIRRTL dialect has support for
 parsing an SFC Annotation file consisting of only local annotations and
-converting this to operation or argument attributes.  Non-local annotation
-support is planned, but not implemented.
+converting this to operation or argument attributes.  Non-local annotations
+are also supported.
 
 There are some exceptions to the above:
 
@@ -379,7 +379,7 @@ result value of the `firrtl.mem` operation.  Also, the `firrtl.mem` node does
 not allow zero port memories for simplicity.  Zero port memories are dropped by
 the .fir file parser.
 
-In the FIRRTL pipeline, the firrtl.mem op can be lowered into either a external
+In the FIRRTL pipeline, the `firrtl.mem` op can be lowered into either a external
 module for macro replacement or a register of vector type. The conditions for
 macro replacement are as follows:
 
@@ -570,7 +570,7 @@ firrtl.connect %out, %myport_data : !firrtl.uint<1>, !firrtl.uint<1
 
 The CHIRRTL operations and types are contained in the CHIRRTL dialect.  The is
 primary reason to move them into their own dialect was to keep the CHIRRTL
-types out of the FIRRTL dialect type hiearchy. We tried to have the CHIRRTL
+types out of the FIRRTL dialect type hierarchy. We tried to have the CHIRRTL
 dialect depend on the FIRRTL dialect, but the flow checking in FIRRTL had to
 know about CHIRRTL operations, which created a circular dependency.  To
 simplify how this is handled, both dialects are contained in the same library.

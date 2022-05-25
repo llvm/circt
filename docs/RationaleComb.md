@@ -30,7 +30,7 @@ substrate that may be extended with higher level dialects mixed into it.
 
 ## Type System for `comb` Dialect
 
-TODO: Simple integer types, eventually parametricly wide integer type
+TODO: Simple integer types, eventually parametrically wide integer type
 `hw.int<width>`.  Supports type aliases.  See HW rationale for more info.
 
 ### Zero-bit integer width is not supported
@@ -156,13 +156,13 @@ discussed the tradeoffs of adding support for a single-operation mux.  Such a
 move has some advantages and disadvantages:
 
 1) It is another operation that many transformations would need to be aware of,
-   e.g. verilog emission would have to handle it, and peephole optimizations
-   would have to be aware of array_get and comb.mux.
+   e.g. Verilog emission would have to handle it, and peephole optimizations
+   would have to be aware of `array_get` and `comb.mux`.
 2) We don't have any known analyses or optimizations that are difficult to
    implement with the current representation.
 
 We agreed that we'd revisit in the future if there were a specific reason to
-add it.  Until then we represent the array_create/array_get pattern for
+add it.  Until then we represent the `array_create`/`array_get` pattern for
 frontends that want to generate this.
 
 ## Endianness: operand ordering and internal representation
@@ -197,12 +197,14 @@ them in lexical order.
 %arr456 = ... // {0x4, 0x5, 0x6}
 %arr78  = ... // {0x7, 0x8}
 %arr = comb.array_concat %arr123, %arr456, %arr78 : !hw.array<3 x i4>, !hw.array<3 x i4>, !hw.array<2 x i4>
-// %arr[0] = 0x6
-// %arr[1] = 0x5
-// %arr[2] = 0x4
-// %arr[3] = 0x3
-// %arr[4] = 0x2
-// %arr[5] = 0x1
+// %arr[0] = 0x8
+// %arr[1] = 0x7
+// %arr[2] = 0x6
+// %arr[3] = 0x5
+// %arr[4] = 0x4
+// %arr[5] = 0x3
+// %arr[6] = 0x2
+// %arr[7] = 0x1
 ```
 
 **Note**: This ordering scheme is unintuitive for anyone expecting C
@@ -231,7 +233,7 @@ operand list which created the array upon which the op is running.
 
 ## Bitcasts
 
-The bitcast operation represents a bitwise reinerpretation (cast) of a value.
+The bitcast operation represents a bitwise reinterpretation (cast) of a value.
 This always synthesizes away in hardware, though it may or may not be
 syntactically represented in lowering or export language. Since bitcasting
 requires information on the bitwise layout of the types on which it operates,
@@ -244,7 +246,7 @@ used to represent bit vectors. They are never padded or aligned.
 layout matches C -- the high index of array starts at the MSB. Array's 0th
 element's LSB located at array LSB.
 - **Structs**: The HW dialect defines a custom `StructType`. The in-hardware
-layout matchss C -- the first listed member's MSB corresponds to the struct's
+layout matches C -- the first listed member's MSB corresponds to the struct's
 MSB. The last member in the list shares its LSB with the struct.
 - **Unions**: The HW dialect's `UnionType` could contain the data of any of the
 member types so its layout is defined to be equivalent to the union of members
@@ -347,7 +349,8 @@ because
 - `extract` gets "closer" to underlying `add/sub/xor/op` operations, giving way
   optimizations like narrowing.
 - the form gives a more accurate view of the values that are being depended on.
-- redundant extract operations can be removed from the concat args lists, eg:
+- redundant extract operations can be removed from the concat argument lists,
+  e.g.:
   `cat(extract(a), b, c, extract(d))`
 
 Both forms perform similarly on hardware, since they are simply bit-copies.

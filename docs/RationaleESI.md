@@ -8,7 +8,7 @@ to standardize the signaling protocols there are many minor and major
 variants, both of which lead to confusion which can cause real problems when
 one is listening to and twiddling the wires manually. ESI solves this by
 providing a simple, intuitive, common, and standardized interface to developers
-then figures out the signaling details and conversions between then.
+and then figures out the signaling details and conversions between them.
 
 While the ABI/signaling problem is slowly being partially solved, it does not
 speak to the types of data on the wires – the software analogy being memory

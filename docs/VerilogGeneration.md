@@ -3,7 +3,7 @@
 [Verilog](https://en.wikipedia.org/wiki/Verilog) and
  [SystemVerilog](https://en.wikipedia.org/wiki/SystemVerilog) are critical
  components of the hardware design tool
-ecosystem, but generating syntatically correct Verilog that is acceptable by a
+ecosystem, but generating syntactically correct Verilog that is acceptable by a
 wide range
 of tools is a challenge -- and generating "good looking" output even more so.
 This document describes CIRCT's approach and support for generating Verilog and
@@ -146,7 +146,7 @@ of your pipeline should work well:
   // passes after this that aren't aware of LoweringOptions.
   modulePM.addPass(sv::createHWLegalizeModulesPass());
 
-  // Optional: Tidy up the IR to improve verilog emission quality.
+  // Optional: Tidy up the IR to improve Verilog emission quality.
   modulePM.addPass(sv::createPrettifyVerilogPass());
 
   // Actually export the module.
@@ -205,7 +205,7 @@ in inverse order.
 ### The core `ExportVerilog` logic
 
 The core of `ExportVerilog` walks the IR and prints out syntactically correct
-verilog to an `llvm::raw_ostream`.
+Verilog to an `llvm::raw_ostream`.
 
 TODO: Talk about line splitting, preorder traversal, NameCollector, etc.  Cross
 block references always go through a temporary.  This doesn't support cyclic
