@@ -197,12 +197,14 @@ them in lexical order.
 %arr456 = ... // {0x4, 0x5, 0x6}
 %arr78  = ... // {0x7, 0x8}
 %arr = comb.array_concat %arr123, %arr456, %arr78 : !hw.array<3 x i4>, !hw.array<3 x i4>, !hw.array<2 x i4>
-// %arr[0] = 0x6
-// %arr[1] = 0x5
-// %arr[2] = 0x4
-// %arr[3] = 0x3
-// %arr[4] = 0x2
-// %arr[5] = 0x1
+// %arr[0] = 0x8
+// %arr[1] = 0x7
+// %arr[2] = 0x6
+// %arr[3] = 0x5
+// %arr[4] = 0x4
+// %arr[5] = 0x3
+// %arr[6] = 0x2
+// %arr[7] = 0x1
 ```
 
 **Note**: This ordering scheme is unintuitive for anyone expecting C
