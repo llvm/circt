@@ -114,14 +114,14 @@ private:
               AddLibOp, SubLibOp, GtLibOp, LtLibOp, EqLibOp, NeqLibOp, GeLibOp,
               LeLibOp, LshLibOp, RshLibOp, SliceLibOp, PadLibOp, WireLibOp>(
             [&](auto op) -> FailureOr<StringRef> {
-              static std::string_view s_core = "core";
-              return {s_core};
+              static std::string_view sCore = "core";
+              return {sCore};
             })
         .Case<SgtLibOp, SltLibOp, SeqLibOp, SneqLibOp, SgeLibOp, SleLibOp,
               SrshLibOp, MultPipeLibOp, DivPipeLibOp>(
             [&](auto op) -> FailureOr<StringRef> {
-              static std::string_view s_binary_operators = "binary_operators";
-              return {s_binary_operators};
+              static std::string_view sBinaryOperators = "binary_operators";
+              return {sBinaryOperators};
             })
         /*.Case<>([&](auto op) { library = "math"; })*/
         .Default([&](auto op) {
