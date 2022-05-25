@@ -357,6 +357,20 @@ LogicalResult circt::firrtl::applyGCTDataTaps(AnnoPathValue target,
         emitConnect(builder, tap, value);
         sourceTarget->name = tap.name();
         sourceTarget->component.clear(); // resolved in getValueByFieldID
+      } else if (!portSourceTarget) {
+        ImplicitLocOpBuilder builder(path.ref.getOp()->getLoc(),
+                                     path.ref.getOp());
+        builder.setInsertionPointAfter(path.ref.getOp());
+        Value value = path.ref.getOp()->getResult(0);
+        auto type = path.ref.getType()
+                        .getFinalTypeByFieldID(path.fieldIdx)
+                        .getPassiveType();
+        auto tap = builder.create<WireOp>(
+            type, state.getNamespace(path.ref.getModule()).newName("_gctTap"));
+        value = getValueByFieldID(builder, value, path.fieldIdx);
+        emitConnect(builder, tap, value);
+        sourceTarget->name = tap.name();
+        sourceTarget->component.clear(); // resolved in getValueByFieldID
       }
 
       sourceTargetPath = sourceTarget->str();

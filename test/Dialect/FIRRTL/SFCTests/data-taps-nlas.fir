@@ -24,8 +24,8 @@ circuit Top : %[[{
   module Foo :
     output g : UInt<1>
     wire f : UInt<1>
-    g is invalid
-    f is invalid
+    g <= UInt<1>(0)
+    f <= UInt<1>(1)
 
   module Top:
     inst foo of Foo
@@ -41,18 +41,23 @@ circuit Top : %[[{
     defname = DataTap
 
 ; CHECK-LABEL: module Foo();
-; CHECK:   wire [[TAP:.+]] = 1'h0;
-; CHECK:   wire f = 1'h0;
-; CHECK: endmodule
+; CHECK-NEXT:    wire [[g_tap:.+]] = 1'h0;
+; CHECK-NEXT:    wire f = 1'h1;
+; CHECK-NEXT:    wire [[f_tap:.+]] = 1'h1;
+; CHECK:       endmodule
+
+; CHECK-LABEL: module Top();
+; CHECK:         wire k = 1'h0;
+; CHECK:         wire [[k_tap:.+]] = 1'h0;
 
 ; CHECK-LABEL: module DataTap_impl_0(
 ; CHECK:   output b,
 ; CHECK:          c,
 ; CHECK:          d
 ; CHECK: );
-; CHECK:   assign b = Top.foo.f;
-; CHECK:   assign c = Top.foo.[[TAP]];
-; CHECK:   assign d = Top.k;
+; CHECK:   assign b = Top.foo.[[f_tap]];
+; CHECK:   assign c = Top.foo.[[g_tap]];
+; CHECK:   assign d = Top.[[k_tap]];
 ; CHECK: endmodule
 
 ; // -----
@@ -86,4 +91,8 @@ circuit TestHarness : %[[
 
 ; CHECK:     module DataTap
 ; CHECK-NOT: endmodule
-; CHECK:       assign _0 = TestHarness.system.test.signal;
+; CHECK:       assign _0 = TestHarness.system.test.[[signal_tap:.+]];
+
+; CHECK:     module Test()
+; CHECK-NOT: endmodule
+; CHECK:       wire [7:0] [[signal_tap]] = 8'h0;

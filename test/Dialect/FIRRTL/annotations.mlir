@@ -478,7 +478,7 @@ firrtl.circuit "GCTDataTap" attributes {rawAnnotations = [{
 }
 
 // CHECK-LABEL: firrtl.circuit "GCTDataTap"
-// CHECK:      firrtl.nla [[NLA:@.+]] [@GCTDataTap::@im, @InnerMod::@w]
+// CHECK:      firrtl.nla [[NLA:@.+]] [@GCTDataTap::@im, @InnerMod::@[[InnerMod_w_tap_sym:.+]]]
 
 // CHECK-LABEL: firrtl.extmodule private @DataTap
 
@@ -559,7 +559,9 @@ firrtl.circuit "GCTDataTap" attributes {rawAnnotations = [{
 // CHECK-SAME: ]
 
 // CHECK-LABEL: firrtl.module private @InnerMod
-// CHECK-NEXT: %w = firrtl.wire sym @w
+// CHECK-NEXT: %w = firrtl.wire
+// CHECK-NOT:    sym
+// CHECK-NEXT: %[[w_tap:.+]] = firrtl.wire sym @[[InnerMod_w_tap_sym]]
 // CHECK-SAME: annotations = [
 // CHECK-SAME:   {
 // CHECK-SAME:     circt.nonlocal = [[NLA]]
@@ -568,9 +570,21 @@ firrtl.circuit "GCTDataTap" attributes {rawAnnotations = [{
 // CHECK-SAME:     portID = [[PORT_ID_6]]
 // CHECK-SAME:   }
 // CHECK-SAME: ]
+// CHECK-NEXT: firrtl.strictconnect %[[w_tap]], %w
 
-// CHECK: firrtl.module @GCTDataTap
-// CHECK-LABEL: firrtl.reg sym @r
+// CHECK-LABEL: firrtl.module @GCTDataTap
+// CHECK-NEXT: %r = firrtl.reg
+// CHECK-NOT     sym
+// CHECK-NEXT: %[[r_tap_1:.+]] = firrtl.wire sym
+// CHECk-SAME: annotations = [
+// CHECK-SAME:   {
+// CHECK-SAME:     class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.source"
+// CHECK-SAME:     id = [[ID]]
+// CHECK-SAME:     portID = [[PORT_ID_1]]
+// CHECK-SAME:   }
+// CHECK-SAME: ]
+// CHECK-NEXT: firrtl.strictconnect %[[r_tap_1]], %r
+// CHECK-NEXT: %[[r_tap_0:.+]] = firrtl.wire sym
 // CHECk-SAME: annotations = [
 // CHECK-SAME:   {
 // CHECK-SAME:     class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.source"
@@ -578,25 +592,29 @@ firrtl.circuit "GCTDataTap" attributes {rawAnnotations = [{
 // CHECK-SAME:     portID = [[PORT_ID_0]]
 // CHECK-SAME:   }
 // CHECK-SAME: ]
+// CHECK-NEXT: firrtl.strictconnect %[[r_tap_0]], %r
 
-// CHECK-LABEL: firrtl.wire
+// CHECK:      %w = firrtl.wire
+// CHECK-NOT:    sym
+// CHECK-NEXT: %[[w_tap_3:.+]] = firrtl.wire sym
 // CHECK-SAME: annotations = [
 // CHECK-SAME:   {
-// CHECK-SAME:     circt.fieldID = 1
-// CHECK-SAME:     class = "firrtl.transforms.DontTouchAnnotation"
-// CHECK-SAME:   }
-// CHECK-SAME:   {
-// CHECK-SAME:     circt.fieldID = 1
 // CHECK-SAME:     class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.source"
 // CHECK-SAME:     id = [[ID]]
 // CHECK-SAME:     portID = [[PORT_ID_3]]
 // CHECK-SAME:   }
+// CHECK-NEXT: %[[w_0:.+]] = firrtl.subfield %w(0)
+// CHECK-NEXT: firrtl.strictconnect %[[w_tap_3]], %[[w_0]]
+// CHECK:      %[[w_tap_2:.+]] = firrtl.wire sym
+// CHECK-SAME: annotations = [
 // CHECK-SAME:   {
 // CHECK-SAME:     class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.source",
-// CHECK-SAME:      id = [[ID]]
-// CHECK-SAME:      portID = [[PORT_ID_2]]
+// CHECK-SAME:     id = [[ID]]
+// CHECK-SAME:     portID = [[PORT_ID_2]]
 // CHECK-SAME:   }
 // CHECK-SAME: ]
+// CHECK-NEXT: %[[w_0:.+]] = firrtl.subfield %w(0)
+// CHECK-NEXT: firrtl.strictconnect %[[w_tap_2]], %[[w_0]]
 
 // -----
 
