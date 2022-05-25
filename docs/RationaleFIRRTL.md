@@ -59,7 +59,7 @@ community that would benefit from adding support for these, we can do so.
 
 ## Naming
 
-Names in verilog form part of the public-api of a design.  It is therefore
+Names in verilog form part of the public API of a design.  It is therefore
 critical that Chisel, and by extension FIRRTL, have language-level semantics
 about how entities are named and how named entities are used and transformed.  
 This must specify which entities with names in Chisel generate predictable 
