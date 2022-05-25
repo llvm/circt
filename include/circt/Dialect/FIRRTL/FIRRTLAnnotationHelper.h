@@ -34,6 +34,16 @@ struct TokenAnnoTarget {
   StringRef name;
   // Any aggregates indexed.
   SmallVector<TargetToken> component;
+
+  /// Append the annotation path to the given `SmallString` or `SmallVector`.
+  void toVector(SmallVectorImpl<char> &out) const;
+
+  /// Convert the annotation path to a string.
+  std::string str() const {
+    SmallString<32> out;
+    toVector(out);
+    return std::string(out);
+  }
 };
 
 // The potentially non-local resolved annotation.

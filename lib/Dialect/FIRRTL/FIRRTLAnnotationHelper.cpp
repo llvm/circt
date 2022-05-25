@@ -140,6 +140,27 @@ static FailureOr<unsigned> findFieldID(AnnoTarget &ref,
   return fieldIdx;
 }
 
+void TokenAnnoTarget::toVector(SmallVectorImpl<char> &out) const {
+  out.push_back('~');
+  out.append(circuit.begin(), circuit.end());
+  out.push_back('|');
+  for (auto modInstPair : instances) {
+    out.append(modInstPair.first.begin(), modInstPair.first.end());
+    out.push_back('/');
+    out.append(modInstPair.second.begin(), modInstPair.second.end());
+    out.push_back(':');
+  }
+  out.append(module.begin(), module.end());
+  out.push_back('>');
+  out.append(name.begin(), name.end());
+  for (auto comp : component) {
+    out.push_back(comp.isIndex ? '[' : '.');
+    out.append(comp.name.begin(), comp.name.end());
+    if (comp.isIndex)
+      out.push_back(']');
+  }
+}
+
 std::string firrtl::canonicalizeTarget(StringRef target) {
 
   if (target.empty())
