@@ -443,6 +443,13 @@ static std::string getSubModuleName(Operation *oldOp) {
       subModuleName += "_seq";
     else
       subModuleName += "_fifo";
+
+    if (bufferOp.initValues().hasValue()) {
+      subModuleName += "_init";
+      for (auto e : *bufferOp.initValues())
+        subModuleName +=
+            "_" + std::to_string(e.dyn_cast<IntegerAttr>().getInt());
+    }
   }
 
   // Add control information.
