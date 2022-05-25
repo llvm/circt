@@ -154,7 +154,7 @@ Private Symbols indicate there are symbolic references to the entity, but they
 are all within the scope of the compiler's IR and analysis.  An entity with a 
 private symbol may be arbitrarily transformed, so long as the transformation is 
 semantic preserving with respect to all uses of the private symbol.  If it can 
-be proved a wire with a private symbol is only read from via it's symbol and 
+be proved a wire with a private symbol is only read from via its symbol and 
 not written to, for example, the input can forwarded to the output (bypassing 
 the wire) safely.  If a private symbol is unused, it may be removed.  Private 
 symbols impose no restriction on output, they only exist to enable non-local 
