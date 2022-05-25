@@ -2,8 +2,9 @@
 # Input variables:
 #   IN_FILE             - An absolute path of Version.cpp.in
 #   OUT_FILE            - An absolute path of Version.cpp
-#   RELEASE_PATTERN      - A pattern to search release tags
+#   RELEASE_PATTERN     - A pattern to search release tags
 #   DRY_RUN             - If true, make the version unknown.
+#   SOURCE_ROOT         - Path to root directory of source
 
 set(GIT_DESCRIBE_DEFAULT "unknown git version")
 if (DRY_RUN)
@@ -13,6 +14,7 @@ else ()
   find_package(Git QUIET)
   if (Git_FOUND)
     execute_process(COMMAND ${GIT_EXECUTABLE} describe --dirty --tags --match ${RELEASE_PATTERN}
+      WORKING_DIRECTORY "${SOURCE_ROOT}"
       RESULT_VARIABLE GIT_OUTPUT_RESULT
       OUTPUT_VARIABLE GIT_DESCRIBE_OUTPUT
       OUTPUT_STRIP_TRAILING_WHITESPACE)
