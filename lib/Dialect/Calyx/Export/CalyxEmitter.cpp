@@ -70,41 +70,67 @@ static bool isValidCalyxAttribute(StringRef identifier) {
          llvm::find(booleanAttributes, identifier) != booleanAttributes.end();
 }
 
+/// Additional information about an unsupported operation.
+static Optional<StringRef> unsupportedOpInfo(Operation *op) {
+  return llvm::TypeSwitch<Operation *, Optional<StringRef>>(op)
+      .Case<ExtSILibOp>([](auto) -> Optional<StringRef> {
+        static std::string_view info =
+            "calyx.std_extsi is currently not available in the native Rust "
+            "compiler (see github.com/cucapra/calyx/issues/1009)";
+        return {info};
+      })
+      .Default([](auto) { return Optional<StringRef>(); });
+}
+
 /// A tracker to determine which libraries should be imported for a given
 /// program.
 struct ImportTracker {
 public:
   /// Returns the list of library names used for in this program.
   /// E.g. if `primitives/core.futil` is used, returns { "core" }.
-  llvm::SmallSet<StringRef, 4> getLibraryNames(ProgramOp program) {
-    program.walk([&](ComponentOp component) {
+  FailureOr<llvm::SmallSet<StringRef, 4>> getLibraryNames(ProgramOp program) {
+    auto walkRes = program.walk([&](ComponentOp component) {
       for (auto &op : *component.getBody()) {
         if (!isa<CellInterface>(op) || isa<InstanceOp>(op))
           // It is not a primitive.
           continue;
-        usedLibraries.insert(getLibraryFor(&op));
+        auto libraryName = getLibraryFor(&op);
+        if (failed(libraryName))
+          return WalkResult::interrupt();
+        usedLibraries.insert(libraryName.getValue());
       }
+      return WalkResult::advance();
     });
+    if (walkRes.wasInterrupted())
+      return failure();
     return usedLibraries;
   }
 
 private:
   /// Returns the library name for a given Operation Type.
-  StringRef getLibraryFor(Operation *op) {
-    StringRef library;
-    TypeSwitch<Operation *>(op)
+  FailureOr<StringRef> getLibraryFor(Operation *op) {
+    return TypeSwitch<Operation *, FailureOr<StringRef>>(op)
         .Case<MemoryOp, RegisterOp, NotLibOp, AndLibOp, OrLibOp, XorLibOp,
               AddLibOp, SubLibOp, GtLibOp, LtLibOp, EqLibOp, NeqLibOp, GeLibOp,
               LeLibOp, LshLibOp, RshLibOp, SliceLibOp, PadLibOp, WireLibOp>(
-            [&](auto op) { library = "core"; })
+            [&](auto op) -> FailureOr<StringRef> {
+              static std::string_view sCore = "core";
+              return {sCore};
+            })
         .Case<SgtLibOp, SltLibOp, SeqLibOp, SneqLibOp, SgeLibOp, SleLibOp,
               SrshLibOp, MultPipeLibOp, DivPipeLibOp>(
-            [&](auto op) { library = "binary_operators"; })
+            [&](auto op) -> FailureOr<StringRef> {
+              static std::string_view sBinaryOperators = "binary_operators";
+              return {sBinaryOperators};
+            })
         /*.Case<>([&](auto op) { library = "math"; })*/
         .Default([&](auto op) {
-          llvm_unreachable("Type matching failed for this operation.");
+          auto diag = op->emitOpError() << "not supported for emission";
+          auto note = unsupportedOpInfo(op);
+          if (note)
+            diag.attachNote() << *note;
+          return diag;
         });
-    return library;
   }
   /// Maintains a unique list of libraries used throughout the lifetime of the
   /// tracker.
@@ -150,7 +176,7 @@ struct Emitter {
   }
 
   /// Import emission.
-  void emitImports(ProgramOp op) {
+  LogicalResult emitImports(ProgramOp op) {
     auto emitImport = [&](StringRef library) {
       // Libraries share a common relative path:
       //   primitives/<library-name>.futil
@@ -158,8 +184,14 @@ struct Emitter {
          << "futil" << delimiter() << semicolonEndL();
     };
 
-    for (StringRef library : importTracker.getLibraryNames(op))
+    auto libraryNames = importTracker.getLibraryNames(op);
+    if (failed(libraryNames))
+      return failure();
+
+    for (StringRef library : libraryNames.getValue())
       emitImport(library);
+
+    return success();
   }
 
   // Component emission
@@ -680,10 +712,14 @@ mlir::LogicalResult circt::calyx::exportCalyx(mlir::ModuleOp module,
                                               llvm::raw_ostream &os) {
   Emitter emitter(os);
   for (auto &op : *module.getBody()) {
-    op.walk([&](ProgramOp program) {
-      emitter.emitImports(program);
+    auto walkRes = op.walk([&](ProgramOp program) {
+      if (failed(emitter.emitImports(program)))
+        return WalkResult::interrupt();
       emitter.emitProgram(program);
+      return WalkResult::advance();
     });
+    if (walkRes.wasInterrupted())
+      return failure();
   }
   emitter.emitCiderMetadata(module);
   return emitter.finalize();
