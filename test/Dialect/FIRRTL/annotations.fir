@@ -77,7 +77,7 @@ circuit Foo: %[[
   module Foo:
     inst bar of Bar
     ; CHECK-LABEL: firrtl.circuit "Foo"
-    ; CHECK: firrtl.nla  @nla_1 [#hw.innerNameRef<@Foo::@bar>, @Bar]
+    ; CHECK: firrtl.nla  @nla_1 [@Foo::@bar, @Bar]
     ; CHECK: firrtl.module private @Bar
     ; CHECK-SAME annotations = [{c = "c"}]
     ; CHECK: firrtl.module @Foo
@@ -106,8 +106,8 @@ circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar.a"},
     inst bar of Bar
 
     ; CHECK-LABEL: firrtl.circuit "Foo"
-    ; CHECK: firrtl.nla @nla_2 [#hw.innerNameRef<@Foo::@bar>, #hw.innerNameRef<@Bar::@d>]
-    ; CHECK: firrtl.nla @nla_1 [#hw.innerNameRef<@Foo::@bar>, #hw.innerNameRef<@Bar::@b>]
+    ; CHECK: firrtl.nla @nla_2 [@Foo::@bar, @Bar::@d]
+    ; CHECK: firrtl.nla @nla_1 [@Foo::@bar, @Bar::@b]
     ; CHECK: firrtl.module private @Bar
     ; CHECK-SAME: sym @b [#firrtl.subAnno<fieldID = 2, {circt.nonlocal = @nla_1, three}>]
     ; CHECK-NEXT:  %d = firrtl.wire sym @d
@@ -408,7 +408,7 @@ circuit Test : %[[
     inst Test of Example
 
 ; CHECK-LABEL:  firrtl.circuit "Test"
-; CHECK: firrtl.nla @nla_1 [#hw.innerNameRef<@Test::@Test>, @Example]
+; CHECK: firrtl.nla @nla_1 [@Test::@Test, @Example]
 ; CHECK: firrtl.module private @Example() attributes {
 ; CHECK-SAME: annotations = [{circt.nonlocal = @nla_1, class = "fake"}]
 ; CHECK: firrtl.module @Test()
@@ -427,8 +427,8 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Foo/bar:Bar/baz:Baz"}, {"b":"b","target"
   module Foo :
     inst bar of Bar
 ; CHECK-LABEL: firrtl.circuit "Foo"
-; CHECK: firrtl.nla @nla_2 [#hw.innerNameRef<@Foo::@bar>, #hw.innerNameRef<@Bar::@baz>, @Baz]
-; CHECK: firrtl.nla @nla_1 [#hw.innerNameRef<@Foo::@bar>, #hw.innerNameRef<@Bar::@baz>, @Baz]
+; CHECK: firrtl.nla @nla_2 [@Foo::@bar, @Bar::@baz, @Baz]
+; CHECK: firrtl.nla @nla_1 [@Foo::@bar, @Bar::@baz, @Baz]
 ; CHECK: firrtl.module private @Baz
 ; CHECK-SAME: annotations = [{a = "a", circt.nonlocal = @nla_1}, {b = "b", circt.nonlocal = @nla_2}]
 ; CHECK: firrtl.module private @Bar()
@@ -586,7 +586,7 @@ circuit memportAnno: %[[
       write-latency => 1
       read-under-write => undefined
 ; CHECK-LABEL: firrtl.circuit "memportAnno"  {
-; CHECK:        firrtl.nla @nla_1 [#hw.innerNameRef<@memportAnno::@foo>, #hw.innerNameRef<@Foo::@memory>]
+; CHECK:        firrtl.nla @nla_1 [@memportAnno::@foo, @Foo::@memory]
 ; CHECK:        %memory_w = firrtl.mem sym @memory Undefined  {depth = 16 : i64, name = "memory", portAnnotations
 ; CHECK-SAME:   [{circt.nonlocal = @nla_1, class = "test"}]
 

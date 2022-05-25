@@ -319,7 +319,7 @@ circuit Top : %[[
     "target":"Top.A.b"
   }
 ]]
-  ; CHECK: firrtl.nla @[[nlaSym:[_a-zA-Z0-9]+]] [#hw.innerNameRef<@Top::@[[a1Sym:[_a-zA-Z0-9]+]]>, #hw.innerNameRef<@A::@[[bSym:[_a-zA-Z0-9]+]]>]
+  ; CHECK: firrtl.nla @[[nlaSym:[_a-zA-Z0-9]+]] [@Top::@[[a1Sym:[_a-zA-Z0-9]+]], @A::@[[bSym:[_a-zA-Z0-9]+]]]
   ; CHECK: firrtl.module @Top
   ; CHECK-NEXT: firrtl.instance a1 sym @[[a1Sym]] {annotations = [{circt.nonlocal = @[[nlaSym]], class = "circt.nonlocal"}]} @A(
   ; CHECK-NEXT: firrtl.instance a2 @A(
@@ -354,8 +354,8 @@ circuit Top : %[[
     "target":"~Top|A_>b"
   }
 ]]
-  ; CHECK: firrtl.nla @[[nlaSym1:[_a-zA-Z0-9]+]] [#hw.innerNameRef<@Top::@[[a1Sym:[_a-zA-Z0-9]+]]>, #hw.innerNameRef<@A::@[[bSym:[_a-zA-Z0-9]+]]>]
-  ; CHECK: firrtl.nla @[[nlaSym2:[_a-zA-Z0-9]+]] [#hw.innerNameRef<@Top::@[[a2Sym:[_a-zA-Z0-9]+]]>, #hw.innerNameRef<@A::@[[bSym]]>]
+  ; CHECK: firrtl.nla @[[nlaSym1:[_a-zA-Z0-9]+]] [@Top::@[[a1Sym:[_a-zA-Z0-9]+]], @A::@[[bSym:[_a-zA-Z0-9]+]]]
+  ; CHECK: firrtl.nla @[[nlaSym2:[_a-zA-Z0-9]+]] [@Top::@[[a2Sym:[_a-zA-Z0-9]+]], @A::@[[bSym]]]
   ; CHECK: firrtl.module @Top
   ; CHECK-NEXT: firrtl.instance a1 sym @[[a1Sym]] {annotations = [{circt.nonlocal = @[[nlaSym1]], class = "circt.nonlocal"}]} @A(
   ; CHECK-NEXT: firrtl.instance a2 sym @[[a2Sym]] {annotations = [{circt.nonlocal = @[[nlaSym2]], class = "circt.nonlocal"}]} @A(
@@ -450,10 +450,10 @@ circuit Top : %[[
     "target":"~Top|Top/a_:A_/b_:B_>bar"
   }
 ]]
-  ; CHECK: firrtl.nla @[[nla_4:[_a-zA-Z0-9]+]] [#hw.innerNameRef<@Top::@[[a_Sym:[_a-zA-Z0-9]+]]>, #hw.innerNameRef<@A::@[[bSym:[_a-zA-Z0-9]+]]>, #hw.innerNameRef<@B::@[[fooSym:[_a-zA-Z0-9]+]]>]
-  ; CHECK: firrtl.nla @[[nla_3:[_a-zA-Z0-9]+]] [#hw.innerNameRef<@Top::@[[a_Sym]]>, #hw.innerNameRef<@A::@[[bSym]]>, @B]
-  ; CHECK: firrtl.nla @[[nla_2:[_a-zA-Z0-9]+]] [#hw.innerNameRef<@Top::@[[aSym:[_a-zA-Z0-9]+]]>, #hw.innerNameRef<@A::@[[bSym]]>, #hw.innerNameRef<@B::@[[fooSym]]>]
-  ; CHECK: firrtl.nla @[[nla_1:[_a-zA-Z0-9]+]] [#hw.innerNameRef<@Top::@[[aSym]]>, #hw.innerNameRef<@A::@[[bSym]]>, @B]
+  ; CHECK: firrtl.nla @[[nla_4:[_a-zA-Z0-9]+]] [@Top::@[[a_Sym:[_a-zA-Z0-9]+]], @A::@[[bSym:[_a-zA-Z0-9]+]], @B::@[[fooSym:[_a-zA-Z0-9]+]]]
+  ; CHECK: firrtl.nla @[[nla_3:[_a-zA-Z0-9]+]] [@Top::@[[a_Sym]], @A::@[[bSym]], @B]
+  ; CHECK: firrtl.nla @[[nla_2:[_a-zA-Z0-9]+]] [@Top::@[[aSym:[_a-zA-Z0-9]+]], @A::@[[bSym]], @B::@[[fooSym]]]
+  ; CHECK: firrtl.nla @[[nla_1:[_a-zA-Z0-9]+]] [@Top::@[[aSym]], @A::@[[bSym]], @B]
   ; CHECK: firrtl.module @Top
   module Top :
     ; CHECK-NEXT: firrtl.instance a sym @[[aSym]] {{.+}} [{circt.nonlocal = @[[nla_1]], class = "circt.nonlocal"}, {circt.nonlocal = @[[nla_2]], class = "circt.nonlocal"}]} @A()
@@ -512,28 +512,28 @@ circuit Top : %[[
   }
 ]]
   ; CHECK:        firrtl.nla @[[nla_4:[_a-zA-Z0-9]+]]
-  ; CHECK-SAME:     [#hw.innerNameRef<@Top::@[[a_Sym:[_a-zA-Z0-9]+]]>,
-  ; CHECK-SAME:      #hw.innerNameRef<@A::@[[bSym:[_a-zA-Z0-9]+]]>,
-  ; CHECK-SAME:      #hw.innerNameRef<@B::@[[cSym:[_a-zA-Z0-9]+]]>,
-  ; CHECK-SAME:      #hw.innerNameRef<@C::@[[dSym:[_a-zA-Z0-9]+]]>,
-  ; CHECK-SAME:      #hw.innerNameRef<@D::@[[fooSym:[_a-zA-Z0-9]+]]>]
+  ; CHECK-SAME:     [@Top::@[[a_Sym:[_a-zA-Z0-9]+]],
+  ; CHECK-SAME:      @A::@[[bSym:[_a-zA-Z0-9]+]],
+  ; CHECK-SAME:      @B::@[[cSym:[_a-zA-Z0-9]+]],
+  ; CHECK-SAME:      @C::@[[dSym:[_a-zA-Z0-9]+]],
+  ; CHECK-SAME:      @D::@[[fooSym:[_a-zA-Z0-9]+]]]
   ; CHECK-NEXT:   firrtl.nla @[[nla_3:[_a-zA-Z0-9]+]]
-  ; CHECK-SAME:     [#hw.innerNameRef<@Top::@[[a_Sym]]>,
-  ; CHECK-SAME:      #hw.innerNameRef<@A::@[[bSym]]>,
-  ; CHECK-SAME:      #hw.innerNameRef<@B::@[[cSym]]>,
-  ; CHECK-SAME:      #hw.innerNameRef<@C::@[[dSym]]>,
+  ; CHECK-SAME:     [@Top::@[[a_Sym]],
+  ; CHECK-SAME:      @A::@[[bSym]],
+  ; CHECK-SAME:      @B::@[[cSym]],
+  ; CHECK-SAME:      @C::@[[dSym]],
   ; CHECK-SAME:      @D]
   ; CHECK-NEXT:   firrtl.nla @[[nla_2:[_a-zA-Z0-9]+]]
-  ; CHECK-SAME:     [#hw.innerNameRef<@Top::@[[aSym:[_a-zA-Z0-9]+]]>,
-  ; CHECK-SAME:      #hw.innerNameRef<@A::@[[bSym]]>,
-  ; CHECK-SAME:      #hw.innerNameRef<@B::@[[cSym]]>,
-  ; CHECK-SAME:      #hw.innerNameRef<@C::@[[dSym]]>,
-  ; CHECK-SAME:      #hw.innerNameRef<@D::@[[fooSym]]>]
+  ; CHECK-SAME:     [@Top::@[[aSym:[_a-zA-Z0-9]+]],
+  ; CHECK-SAME:      @A::@[[bSym]],
+  ; CHECK-SAME:      @B::@[[cSym]],
+  ; CHECK-SAME:      @C::@[[dSym]],
+  ; CHECK-SAME:      @D::@[[fooSym]]]
   ; CHECK-NEXT:   firrtl.nla @[[nla_1:[_a-zA-Z0-9]+]]
-  ; CHECK-SAME:     [#hw.innerNameRef<@Top::@[[aSym]]>,
-  ; CHECK-SAME:      #hw.innerNameRef<@A::@[[bSym]]>,
-  ; CHECK-SAME:      #hw.innerNameRef<@B::@[[cSym]]>,
-  ; CHECK-SAME:      #hw.innerNameRef<@C::@[[dSym]]>,
+  ; CHECK-SAME:     [@Top::@[[aSym]],
+  ; CHECK-SAME:      @A::@[[bSym]],
+  ; CHECK-SAME:      @B::@[[cSym]],
+  ; CHECK-SAME:      @C::@[[dSym]],
   ; CHECK-SAME:      @D]
   ; CHECK-NEXT:   firrtl.module @Top
   module Top :
@@ -657,54 +657,54 @@ circuit Top : %[[
   }
 ]]
   ; CHECK:        firrtl.nla @[[nla_12:[_a-zA-Z0-9]+]]
-  ; CHECK-SAME:     [#hw.innerNameRef<@Top::@[[Topa2Sym:[_a-zA-Z0-9]+]]>,
-  ; CHECK-SAME:      #hw.innerNameRef<@A::@[[AbSym:[_a-zA-Z0-9]+]]>,
-  ; CHECK-SAME:      #hw.innerNameRef<@B::@[[BcSym:[_a-zA-Z0-9]+]]>,
+  ; CHECK-SAME:     [@Top::@[[Topa2Sym:[_a-zA-Z0-9]+]],
+  ; CHECK-SAME:      @A::@[[AbSym:[_a-zA-Z0-9]+]],
+  ; CHECK-SAME:      @B::@[[BcSym:[_a-zA-Z0-9]+]],
   ; CHECK-SAME:      @C]
   ; CHECK:        firrtl.nla @[[nla_11:[_a-zA-Z0-9]+]]
-  ; CHECK-SAME:     [#hw.innerNameRef<@Top::@[[Topa1Sym:[_a-zA-Z0-9]+]]>,
-  ; CHECK-SAME:      #hw.innerNameRef<@A::@[[AbSym]]>,
-  ; CHECK-SAME:      #hw.innerNameRef<@B::@[[BcSym]]>,
+  ; CHECK-SAME:     [@Top::@[[Topa1Sym:[_a-zA-Z0-9]+]],
+  ; CHECK-SAME:      @A::@[[AbSym]],
+  ; CHECK-SAME:      @B::@[[BcSym]],
   ; CHECK-SAME:      @C]
   ; CHECK:        firrtl.nla @[[nla_10:[_a-zA-Z0-9]+]]
-  ; CHECK-SAME:     [#hw.innerNameRef<@Top::@[[Topa2Sym]]>,
-  ; CHECK-SAME:      #hw.innerNameRef<@A::@[[Ab_Sym:[_a-zA-Z0-9]+]]>,
-  ; CHECK-SAME:      #hw.innerNameRef<@B::@[[BcSym]]>,
+  ; CHECK-SAME:     [@Top::@[[Topa2Sym]],
+  ; CHECK-SAME:      @A::@[[Ab_Sym:[_a-zA-Z0-9]+]],
+  ; CHECK-SAME:      @B::@[[BcSym]],
   ; CHECK-SAME:      @C]
   ; CHECK:        firrtl.nla @[[nla_9:[_a-zA-Z0-9]+]]
-  ; CHECK-SAME:     [#hw.innerNameRef<@Top::@[[Topa1Sym]]>,
-  ; CHECK-SAME:      #hw.innerNameRef<@A::@[[Ab_Sym]]>,
-  ; CHECK-SAME:      #hw.innerNameRef<@B::@[[BcSym]]>,
+  ; CHECK-SAME:     [@Top::@[[Topa1Sym]],
+  ; CHECK-SAME:      @A::@[[Ab_Sym]],
+  ; CHECK-SAME:      @B::@[[BcSym]],
   ; CHECK-SAME:      @C]
   ; CHECK:        firrtl.nla @[[nla_8:[_a-zA-Z0-9]+]]
-  ; CHECK-SAME:     [#hw.innerNameRef<@Top::@[[Topb_Sym:[_a-zA-Z0-9]+]]>,
-  ; CHECK-SAME:      #hw.innerNameRef<@B::@[[BcSym]]>,
+  ; CHECK-SAME:     [@Top::@[[Topb_Sym:[_a-zA-Z0-9]+]],
+  ; CHECK-SAME:      @B::@[[BcSym]],
   ; CHECK-SAME:      @C]
   ; CHECK:        firrtl.nla @[[nla_7:[_a-zA-Z0-9]+]]
-  ; CHECK-SAME:     [#hw.innerNameRef<@Top::@[[TopbSym:[_a-zA-Z0-9]+]]>,
-  ; CHECK-SAME:      #hw.innerNameRef<@B::@[[BcSym]]>,
+  ; CHECK-SAME:     [@Top::@[[TopbSym:[_a-zA-Z0-9]+]],
+  ; CHECK-SAME:      @B::@[[BcSym]],
   ; CHECK-SAME:      @C]
   ; CHECK:        firrtl.nla @[[nla_6:[_a-zA-Z0-9]+]]
-  ; CHECK-SAME:     [#hw.innerNameRef<@Top::@[[Topa2Sym]]>,
-  ; CHECK-SAME:      #hw.innerNameRef<@A::@[[AbSym]]>,
+  ; CHECK-SAME:     [@Top::@[[Topa2Sym]],
+  ; CHECK-SAME:      @A::@[[AbSym]],
   ; CHECK-SAME:      @B]
   ; CHECK:        firrtl.nla @[[nla_5:[_a-zA-Z0-9]+]]
-  ; CHECK-SAME:     [#hw.innerNameRef<@Top::@[[Topa1Sym]]>,
-  ; CHECK-SAME:      #hw.innerNameRef<@A::@[[AbSym]]>,
+  ; CHECK-SAME:     [@Top::@[[Topa1Sym]],
+  ; CHECK-SAME:      @A::@[[AbSym]],
   ; CHECK-SAME:      @B]
   ; CHECK:        firrtl.nla @[[nla_4:[_a-zA-Z0-9]+]]
-  ; CHECK-SAME:     [#hw.innerNameRef<@Top::@[[Topa2Sym]]>,
-  ; CHECK-SAME:      #hw.innerNameRef<@A::@[[Ab_Sym]]>,
+  ; CHECK-SAME:     [@Top::@[[Topa2Sym]],
+  ; CHECK-SAME:      @A::@[[Ab_Sym]],
   ; CHECK-SAME:      @B]
   ; CHECK:        firrtl.nla @[[nla_3:[_a-zA-Z0-9]+]]
-  ; CHECK-SAME:     [#hw.innerNameRef<@Top::@[[Topa1Sym]]>,
-  ; CHECK-SAME:      #hw.innerNameRef<@A::@[[Ab_Sym]]>,
+  ; CHECK-SAME:     [@Top::@[[Topa1Sym]],
+  ; CHECK-SAME:      @A::@[[Ab_Sym]],
   ; CHECK-SAME:      @B]
   ; CHECK:        firrtl.nla @[[nla_2:[_a-zA-Z0-9]+]]
-  ; CHECK-SAME:     [#hw.innerNameRef<@Top::@[[Topb_Sym]]>,
+  ; CHECK-SAME:     [@Top::@[[Topb_Sym]],
   ; CHECK-SAME:      @B]
   ; CHECK:        firrtl.nla @[[nla_1:[_a-zA-Z0-9]+]]
-  ; CHECK-SAME:     [#hw.innerNameRef<@Top::@[[TopbSym]]>,
+  ; CHECK-SAME:     [@Top::@[[TopbSym]],
   ; CHECK-SAME:      @B]
   ; CHECK-NEXT:   firrtl.module @Top
   module Top :
@@ -802,11 +802,11 @@ circuit top : %[[
   }
 ]]
   ; CHECK:      firrtl.nla @[[nla_1:[_a-zA-Z0-9]+]]
-  ; CHECK-SAME:   [#hw.innerNameRef<@top::@[[topaSym:[_a-zA-Z0-9]+]]>,
-  ; CHECK-SAME:    #hw.innerNameRef<@a::@[[aiSym:[_a-zA-Z0-9]+]]>
+  ; CHECK-SAME:   [@top::@[[topaSym:[_a-zA-Z0-9]+]],
+  ; CHECK-SAME:    @a::@[[aiSym:[_a-zA-Z0-9]+]]
   ; CHECK:      firrtl.nla @[[nla_2:[_a-zA-Z0-9]+]]
-  ; CHECK-SAME:   [#hw.innerNameRef<@top::@[[topbSym:[_a-zA-Z0-9]+]]>,
-  ; CHECK-SAME:    #hw.innerNameRef<@a::@[[aiSym]]>
+  ; CHECK-SAME:   [@top::@[[topbSym:[_a-zA-Z0-9]+]],
+  ; CHECK-SAME:    @a::@[[aiSym]]
   ; CHECK: firrtl.module @top
   module top:
     input ia: {z: {y: {x: UInt<1>}}, a: UInt<1>}

@@ -182,71 +182,41 @@ the most conservative case.  To do better, all uses must be analyzed and
 understood (e.g. a symbol used by a verbatim has unknown use).
 
 ### NonLocalAnchor
-In the `FIRRTL` dialect, only modules have a symbol on them and it might be
- difficult to globally identify other operations like
- `instance`, `wire`, `reg` or `mem`.
-The NonLocalAnchor operation (`firrtl.nla`) can be used to identify the unique
- instance of a `FIRRTL` operation globally.
-`firrtl.nla` can be used to attach nonlocal annotations and for metadata
- emission.
-`firrtl.nla` defines a symbol and contains a list of module symbols followed
- by a list of instance names corresponding to each module.
- For example, in the following example, `@nla_0` specifies instance
- `"baz"` in module `@FooNL`, followed by instance
- `"bar"` in module `@BazNL`, followed by
- the wire named `"w"` in module `@BarNL`.
 
-`firrtl.nla` can define a unique instance path, and each element along the way
- carries an annotation with class `circt.nonlocal`, which has a matching
- `circt.nonlocal` field pointing to the global op.
- Thus instances participating in nonlocal paths are readily apparent.
+In the FIRRTL dialect, it might be necessary to identify specific instances of
+operations in the instance hierarchy. The FIRRTL `NonLocalAnchor` operation
+(`firrtl.nla`) can be used to describe the path through an instance hiearchy to
+a declaration, which can be used by other operations or non-local annotations.
+Non-local anchors can refer to most declarations, such as modules, instances,
+wires, registers, and memories.
 
- In the following example the `@nla_0` is used in the verbatim op
- to capture the final Verilog name of the wire `w`.
+The `firrtl.nla` operations defines a symbol and contains a namepath, which is
+a list of `InnerRefAttr` and `FlatSymbolRefAttr` attributes. A
+`FlatSymbolRefAttr` is used to identify modules, and is printed as `@Module`.
+`InnerRefAttr` identifies a declaration inside a module, and is printed as
+`@Module::@wire`. Each element along the NLA's namepath carries an annotation
+with class `circt. nonlocal`, which has a matching `circt. nonlocal` field
+pointing to the global op. Thus instances participating in nonlocal paths are
+readily apparent.
 
-The second `nla`, `@nla_1` doesn't specify the instance path and is anchored
- on all instances of `@BarNL`.
-This example shows that the `firrtl.nla` can be used to attach a symbol with
- any operation.
-
+In the following example, `@nla` specifies instance `@bar` in module `@Foo`,
+followed by instance `@baz` in module `@Bar`, followed by the wire named `@w`
+in module `@Baz`.
 
 ``` mlir
- firrtl.circuit "FooNL"   {
-    firrtl.nla @nla_0 [@FooNL, @BazNL, @BarNL] ["baz", "bar", "w"]
-    firrtl.nla @nla_1 [@BarNL] ["w"]
-    firrtl.module @BarNL() {
-      %w = firrtl.wire  {annotations = [{circt.nonlocal = @nla_0, class = "circt.nonlocal"}, {circt.nonlocal = @nla_1, class = "circt.nonlocal"} ]} : !firrtl.uint
-    }
-    firrtl.module @BazNL() {
-      firrtl.instance bar  {annotations = [{circt.nonlocal = @nla_0, class = "circt.nonlocal"}]} @BarNL()
-    }
-    firrtl.module @FooNL() {
-      firrtl.instance baz  {annotations = [{circt.nonlocal = @nla_0, class = "circt.nonlocal"}]} @BazNL()
-    }
+firrtl.circuit "Foo"   {
+  firrtl.nla @nla [@Foo::@bar, @Bar::@baz, @Baz::@w]
+  firrtl.module @Baz() {
+    %w = firrtl.wire sym @w {annotations = [{circt.nonlocal = @nla, class = "ExampleAnno"}]} : !firrtl.uint
   }
-
-sv.verbatim "{{0}}" { symbols = [@nla_0] }
-sv.verbatim "{{0}}" { symbols = [@nla_1] }
-```
-
-Following is an example of attaching non local annotations with a specific instance of the `wire` `w`.
-
-``` mlir
-firrtl.circuit "FooNL"   {
-    firrtl.nla @nla_0 [@FooNL, @BazNL, @BarNL] ["baz", "bar", "w"]
-
-    firrtl.module @BarNL() {
-      %w = firrtl.wire  {annotations = [{circt.nonlocal = @nla_0, class = "circt.test", nl = "nl"}]} : !firrtl.uint
-    }
-    firrtl.module @BazNL() {
-      firrtl.instance bar  {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}]} @BarNL()
-    }
-    firrtl.module @FooNL() {
-      firrtl.instance baz  {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}]} @BazNL()
-    }
+  firrtl.module @Bar() {
+    firrtl.instance baz sym @baz {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}]} @Baz()
   }
+  firrtl.module @Foo() {
+    firrtl.instance bar sym @bar {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}]} @Bar()
+  }
+}
 ```
-
 
 ## Type system
 

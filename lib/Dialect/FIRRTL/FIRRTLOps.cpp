@@ -3686,6 +3686,63 @@ NonLocalAnchor::verifySymbolUses(mlir::SymbolTableCollection &symtblC) {
   return success();
 }
 
+void NonLocalAnchor::print(OpAsmPrinter &p) {
+  p << " ";
+  p.printSymbolName(sym_name());
+  p << " [";
+  llvm::interleaveComma(namepath().getValue(), p, [&](Attribute attr) {
+    if (auto ref = attr.dyn_cast<hw::InnerRefAttr>()) {
+      p.printSymbolName(ref.getModule().getValue());
+      p << "::";
+      p.printSymbolName(ref.getName().getValue());
+    } else {
+      p.printSymbolName(attr.cast<FlatSymbolRefAttr>().getValue());
+    }
+  });
+  p << "]";
+  p.printOptionalAttrDict((*this)->getAttrs(),
+                          {SymbolTable::getSymbolAttrName(), "namepath"});
+}
+
+ParseResult NonLocalAnchor::parse(OpAsmParser &parser, OperationState &result) {
+  // Parse the symbol name.
+  StringAttr symName;
+  if (parser.parseSymbolName(symName, SymbolTable::getSymbolAttrName(),
+                             result.attributes))
+    return failure();
+
+  // Parse the namepath.
+  SmallVector<Attribute> namepath;
+  if (parser.parseCommaSeparatedList(
+          OpAsmParser::Delimiter::Square, [&]() -> ParseResult {
+            auto loc = parser.getCurrentLocation();
+            SymbolRefAttr ref;
+            if (parser.parseAttribute(ref))
+              return failure();
+
+            // "A" is a Ref, "A::b" is a InnerRef, "A::B::c" is an error.
+            auto pathLength = ref.getNestedReferences().size();
+            if (pathLength == 0)
+              namepath.push_back(
+                  FlatSymbolRefAttr::get(ref.getRootReference()));
+            else if (pathLength == 1)
+              namepath.push_back(hw::InnerRefAttr::get(ref.getRootReference(),
+                                                       ref.getLeafReference()));
+            else
+              return parser.emitError(loc,
+                                      "only one nested reference is allowed");
+            return success();
+          }))
+    return failure();
+  result.addAttribute("namepath",
+                      ArrayAttr::get(parser.getContext(), namepath));
+
+  if (parser.parseOptionalAttrDict(result.attributes))
+    return failure();
+
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // Various namers.
 //===----------------------------------------------------------------------===//

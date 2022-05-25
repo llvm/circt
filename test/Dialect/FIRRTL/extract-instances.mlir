@@ -65,22 +65,12 @@ firrtl.circuit "ExtractBlackBoxesSimple" attributes {annotations = [{class = "fi
 
 // CHECK: firrtl.circuit "ExtractBlackBoxesSimple2"
 firrtl.circuit "ExtractBlackBoxesSimple2" attributes {annotations = [{class = "firrtl.transforms.BlackBoxTargetDirAnno", targetDir = "BlackBoxes"}]} {
-  // CHECK: firrtl.nla @nla_1 [#hw.innerNameRef<@ExtractBlackBoxesSimple2::@bb>, @MyBlackBox]
+  // CHECK: firrtl.nla @nla_1 [@ExtractBlackBoxesSimple2::@bb, @MyBlackBox]
   // CHECK-NOT: firrtl.nla @nla_2
   // CHECK-NOT: firrtl.nla @nla_3
-  firrtl.nla @nla_1 [
-    #hw.innerNameRef<@BBWrapper::@bb>,
-    @MyBlackBox
-  ]
-  firrtl.nla @nla_2 [
-    #hw.innerNameRef<@DUTModule::@mod>,
-    #hw.innerNameRef<@BBWrapper::@bb>
-  ]
-  firrtl.nla @nla_3 [
-    #hw.innerNameRef<@ExtractBlackBoxesSimple2::@dut>,
-    #hw.innerNameRef<@DUTModule::@mod>,
-    #hw.innerNameRef<@BBWrapper::@bb>
-  ]
+  firrtl.nla @nla_1 [@BBWrapper::@bb, @MyBlackBox]
+  firrtl.nla @nla_2 [@DUTModule::@mod, @BBWrapper::@bb]
+  firrtl.nla @nla_3 [@ExtractBlackBoxesSimple2::@dut, @DUTModule::@mod, @BBWrapper::@bb]
   // Annotation on the extmodule itself
   // CHECK-LABEL: firrtl.extmodule private @MyBlackBox
   firrtl.extmodule private @MyBlackBox(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>) attributes {annotations = [
@@ -157,9 +147,9 @@ firrtl.circuit "ExtractBlackBoxesSimple2" attributes {annotations = [{class = "f
   // CHECK-SAME: output_file = #hw.output_file<"BlackBoxes.txt", excludeFromFileList>
   // CHECK-SAME: symbols = [
   // CHECK-SAME: @DUTModule
-  // CHECK-SAME: #hw.innerNameRef<@DUTModule::[[WRAPPER_SYM]]>
-  // CHECK-SAME: #hw.innerNameRef<@ExtractBlackBoxesSimple2::[[BB2_SYM]]>
-  // CHECK-SAME: #hw.innerNameRef<@ExtractBlackBoxesSimple2::[[BB_SYM]]>
+  // CHECK-SAME: @DUTModule::[[WRAPPER_SYM]]
+  // CHECK-SAME: @ExtractBlackBoxesSimple2::[[BB2_SYM]]
+  // CHECK-SAME: @ExtractBlackBoxesSimple2::[[BB_SYM]]
   // CHECK-SAME: ]
 }
 
@@ -170,28 +160,28 @@ firrtl.circuit "ExtractBlackBoxesSimple2" attributes {annotations = [{class = "f
 // CHECK: firrtl.circuit "ExtractBlackBoxesIntoDUTSubmodule"
 firrtl.circuit "ExtractBlackBoxesIntoDUTSubmodule"  {
   // CHECK-LABEL: firrtl.nla @nla_1 [
-  // CHECK-SAME:    #hw.innerNameRef<@ExtractBlackBoxesIntoDUTSubmodule::@tb>
-  // CHECK-SAME:    #hw.innerNameRef<@TestHarness::@dut>
-  // CHECK-SAME:    #hw.innerNameRef<@DUTModule::@BlackBoxes>
-  // CHECK-SAME:    #hw.innerNameRef<@BlackBoxes::@bb1>
+  // CHECK-SAME:    @ExtractBlackBoxesIntoDUTSubmodule::@tb
+  // CHECK-SAME:    @TestHarness::@dut
+  // CHECK-SAME:    @DUTModule::@BlackBoxes
+  // CHECK-SAME:    @BlackBoxes::@bb1
   // CHECK-SAME:  ]
   firrtl.nla @nla_1 [
-    #hw.innerNameRef<@ExtractBlackBoxesIntoDUTSubmodule::@tb>,
-    #hw.innerNameRef<@TestHarness::@dut>,
-    #hw.innerNameRef<@DUTModule::@mod>,
-    #hw.innerNameRef<@BBWrapper::@bb1>
+    @ExtractBlackBoxesIntoDUTSubmodule::@tb,
+    @TestHarness::@dut,
+    @DUTModule::@mod,
+    @BBWrapper::@bb1
   ]
   // CHECK-LABEL: firrtl.nla @nla_2 [
-  // CHECK-SAME:    #hw.innerNameRef<@ExtractBlackBoxesIntoDUTSubmodule::@tb>
-  // CHECK-SAME:    #hw.innerNameRef<@TestHarness::@dut>
-  // CHECK-SAME:    #hw.innerNameRef<@DUTModule::@BlackBoxes>
-  // CHECK-SAME:    #hw.innerNameRef<@BlackBoxes::@bb2>
+  // CHECK-SAME:    @ExtractBlackBoxesIntoDUTSubmodule::@tb
+  // CHECK-SAME:    @TestHarness::@dut
+  // CHECK-SAME:    @DUTModule::@BlackBoxes
+  // CHECK-SAME:    @BlackBoxes::@bb2
   // CHECK-SAME:  ]
   firrtl.nla @nla_2 [
-    #hw.innerNameRef<@ExtractBlackBoxesIntoDUTSubmodule::@tb>,
-    #hw.innerNameRef<@TestHarness::@dut>,
-    #hw.innerNameRef<@DUTModule::@mod>,
-    #hw.innerNameRef<@BBWrapper::@bb2>
+    @ExtractBlackBoxesIntoDUTSubmodule::@tb,
+    @TestHarness::@dut,
+    @DUTModule::@mod,
+    @BBWrapper::@bb2
   ]
   firrtl.extmodule private @MyBlackBox(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>) attributes {annotations = [{class = "sifive.enterprise.firrtl.ExtractBlackBoxAnnotation", dest = "BlackBoxes", filename = "BlackBoxes.txt", prefix = "bb"}], defname = "MyBlackBox"}
   firrtl.module private @BBWrapper(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
@@ -247,9 +237,9 @@ firrtl.circuit "ExtractBlackBoxesIntoDUTSubmodule"  {
   // CHECK-SAME: output_file = #hw.output_file<"BlackBoxes.txt", excludeFromFileList>
   // CHECK-SAME: symbols = [
   // CHECK-SAME: @DUTModule
-  // CHECK-SAME: #hw.innerNameRef<@DUTModule::[[WRAPPER_SYM]]>
-  // CHECK-SAME: #hw.innerNameRef<@BlackBoxes::[[BB2_SYM]]>
-  // CHECK-SAME: #hw.innerNameRef<@BlackBoxes::[[BB1_SYM]]>
+  // CHECK-SAME: @DUTModule::[[WRAPPER_SYM]]
+  // CHECK-SAME: @BlackBoxes::[[BB2_SYM]]
+  // CHECK-SAME: @BlackBoxes::[[BB1_SYM]]
   // CHECK-SAME: ]
 }
 
@@ -277,7 +267,7 @@ firrtl.circuit "ExtractClockGatesSimple" attributes {annotations = [{class = "si
   // CHECK-SAME: output_file = #hw.output_file<"ClockGates.txt", excludeFromFileList>
   // CHECK-SAME: symbols = [
   // CHECK-SAME: @DUTModule
-  // CHECK-SAME: #hw.innerNameRef<@ExtractClockGatesSimple::[[CKG_SYM]]>
+  // CHECK-SAME: @ExtractClockGatesSimple::[[CKG_SYM]]
   // CHECK-SAME: ]
 }
 
@@ -356,9 +346,9 @@ firrtl.circuit "ExtractClockGatesMixed" attributes {annotations = [{class = "sif
   // CHECK-SAME: output_file = #hw.output_file<"ClockGates.txt", excludeFromFileList>
   // CHECK-SAME: symbols = [
   // CHECK-SAME: @DUTModule
-  // CHECK-SAME: #hw.innerNameRef<@DUTModule::@inst>
-  // CHECK-SAME: #hw.innerNameRef<@ExtractClockGatesMixed::@ckg1>
-  // CHECK-SAME: #hw.innerNameRef<@ExtractClockGatesMixed::@ckg2>
+  // CHECK-SAME: @DUTModule::@inst
+  // CHECK-SAME: @ExtractClockGatesMixed::@ckg1
+  // CHECK-SAME: @ExtractClockGatesMixed::@ckg2
   // CHECK-SAME: ]
 }
 
@@ -392,14 +382,14 @@ firrtl.circuit "ExtractClockGatesComposed" attributes {annotations = [
   // CHECK-SAME: output_file = #hw.output_file<"ClockGates.txt", excludeFromFileList>
   // CHECK-SAME: symbols = [
   // CHECK-SAME: @DUTModule
-  // CHECK-SAME: #hw.innerNameRef<@ExtractClockGatesComposed::[[CKG_SYM]]>
+  // CHECK-SAME: @ExtractClockGatesComposed::[[CKG_SYM]]
   // CHECK-SAME: ]
   // CHECK: sv.verbatim "
   // CHECK-SAME{LITERAL}: mem_wiring_0 -> {{0}}.{{1}}\0A
   // CHECK-SAME: output_file = #hw.output_file<"SeqMems.txt", excludeFromFileList>
   // CHECK-SAME: symbols = [
   // CHECK-SAME: @DUTModule
-  // CHECK-SAME: #hw.innerNameRef<@ExtractClockGatesComposed::[[MEM_SYM]]>
+  // CHECK-SAME: @ExtractClockGatesComposed::[[MEM_SYM]]
   // CHECK-SAME: ]
 }
 
@@ -431,8 +421,8 @@ firrtl.circuit "ExtractSeqMemsSimple2" attributes {annotations = [{class = "sifi
   // CHECK-SAME: output_file = #hw.output_file<"SeqMems.txt", excludeFromFileList>
   // CHECK-SAME: symbols = [
   // CHECK-SAME: @DUTModule
-  // CHECK-SAME: #hw.innerNameRef<@DUTModule::[[MEM_SYM]]>
-  // CHECK-SAME: #hw.innerNameRef<@ExtractSeqMemsSimple2::[[MEM_EXT_SYM]]>
+  // CHECK-SAME: @DUTModule::[[MEM_SYM]]
+  // CHECK-SAME: @ExtractSeqMemsSimple2::[[MEM_EXT_SYM]]
   // CHECK-SAME: ]
 }
 
@@ -446,14 +436,14 @@ firrtl.circuit "InstSymConflict" {
   // CHECK-NOT: firrtl.nla @nla_1
   // CHECK-NOT: firrtl.nla @nla_2
   firrtl.nla @nla_1 [
-    #hw.innerNameRef<@InstSymConflict::@dut>,
-    #hw.innerNameRef<@DUTModule::@mod1>,
-    #hw.innerNameRef<@BBWrapper::@bb>
+    @InstSymConflict::@dut,
+    @DUTModule::@mod1,
+    @BBWrapper::@bb
   ]
   firrtl.nla @nla_2 [
-    #hw.innerNameRef<@InstSymConflict::@dut>,
-    #hw.innerNameRef<@DUTModule::@mod2>,
-    #hw.innerNameRef<@BBWrapper::@bb>
+    @InstSymConflict::@dut,
+    @DUTModule::@mod2,
+    @BBWrapper::@bb
   ]
   firrtl.extmodule private @MyBlackBox(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>) attributes {defname = "MyBlackBox"}
   firrtl.module private @BBWrapper(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
