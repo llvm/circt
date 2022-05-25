@@ -209,13 +209,6 @@ void InjectDUTHierarchy::runOnOperation() {
         hw::InnerRefAttr::get(wrapper.moduleNameAttr(), dutRef.getName()));
     newNamepath.append(back.begin(), back.end());
     nla->setAttr("namepath", b.getArrayAttr(newNamepath));
-
-    // Add the breadcrumb to the instance.
-    AnnotationSet annotations(wrapperInst);
-    NamedAttribute breadcrumb(b.getStringAttr("circt.nonlocal"),
-                              FlatSymbolRefAttr::get(nla.sym_nameAttr()));
-    annotations.addAnnotations(b.getDictionaryAttr({breadcrumb}));
-    annotations.applyToOperation(wrapperInst);
   }
 }
 
