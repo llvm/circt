@@ -35,7 +35,7 @@ standard language for hardware design and verification, is known by a large
 number of engineers who write it manually, and is
 an important interchange format between EDA tools.  However, while it is
 ubiquitous, SystemVerilog is not easy to generate or transform.  Furthermore, it
-is non-trivial for compiler tools to generate high quality human readable
+is non-trivial for compiler tools to generate high-quality human-readable
 SystemVerilog.
 
 The `hw`, `comb` and `sv` dialects attempt to address these problems with
@@ -144,7 +144,7 @@ notable differences: for example:
  - The `comb` dialect in particular does not use signed integer types, its
    operators do not support zero-width integer types.  Modules in the `hw` dialect,
    on the other hand, do support both of these.  Zero width ports are omitted (printed as
-   comments) when generating verilog.
+   comments) when generating Verilog.
 
 ### GlobalRefOp
 The GlobalRefOp operation (`hw.globalRef`) can be used to identify the unique
@@ -213,7 +213,7 @@ This allows for metaprogramming along the instance tree, guaranteed
 "instantiation time" optimizations and code generation, further enables
 the "IR compression" benefits of using instances in the first place, and enables
 the generation of parameters in generated Verilog (which can increase the
-percieved readability of the generated code).
+perceived readability of the generated code).
 
 Parameters are declared on modules (including generated and external ones)
 with angle brackets: each parameter has a name and type, and can optionally
@@ -272,7 +272,7 @@ module:
   rules to ensure important cases are canonicalized to uniquable
   representations.
 - `#hw.param.verbatim<"some string">` may be used to provide an opaque blob of
-  textual verilog that is uniqued by its string contents.  This is intended
+  textual Verilog that is uniqued by its string contents.  This is intended
   as a general "escape hatch" that allows frontend authors to express anything
   Verilog cannot, even if first-class IR support doesn't exist yet.  CIRCT does not
   provide any checking to ensure that this is correct or safe, and assumes it
@@ -318,8 +318,8 @@ well.
 
 On the other hand, we expect to support a lot of weird expressions over time (at
 least the full complement that Verilog supports) and canonicalize arbitrary
-expressions in a predictable way is untennable.  As such, we support
-canonicalizating a fixed set of expressions predictably: more may be added in
+expressions in a predictable way is untenable.  As such, we support
+canonicalizing a fixed set of expressions predictably: more may be added in
 the future.
 
 This set includes:
@@ -446,7 +446,7 @@ All that said, using attributes is the right thing for a number of reasons:
 3) We need to support parameterized types like `!hw.int<n>`: because MLIR types
    are immortal and uniqued, they can refer to attributes but cannot refer to
    [SSA values](https://en.wikipedia.org/wiki/Static_single_assignment_form)
-   (which may be destoyed).
+   (which may be destroyed).
 4) Operations need to be able to compute their own type without creating other
    operations.  For example, we need to compute that the result type of
    `comb.concat %a, %b : (i1, !hw.int<n>)` is `!hw.int<n+1>` without introducing
@@ -545,7 +545,7 @@ Until then, we must duplicate the type in the IR.
 
 Verilog has a broad notion of what can be named outside the context of its
 declaration.  This is compounded by the many tools which have additional source
-files which refer to verilog names (e.g. tcl files).  However, we do not want to
+files which refer to Verilog names (e.g. tcl files).  However, we do not want to
 require that every wire, register, instance, localparam, port, etc which can be
 named not be touched by passes.  We want only entities marked as public facing
 to impede transformation.
@@ -564,7 +564,7 @@ references are more general, SV and HW dialects do not define symbol tables for
 modules.  Therefore, wires, registers, and interfaces exist in the same
 namespace as modules.  It is encouraged that one prefaces the names to avoid
 conflict with modules.  The symbol names on these entities has no bearing on the
-output verilog, each of these entities has a defined way to assign its name (SSA
+output Verilog, each of these entities has a defined way to assign its name (SSA
 value name for wires and regs, a non-optional string for instances).
 
 As MLIR symbol support improves, it is desired to move to per-module symbol
@@ -572,7 +572,7 @@ tables and to unify names with symbol names.
 
 **Ports**
 
-Module ports are remotely namable entities in Verilog, but are not easily named
+Module ports are remotely nameable entities in Verilog, but are not easily named
 with symbols.  A suggested workaround is to attach a wire to a port and use its
 symbol for remote references.  Instance ports have a similar problem.
 
