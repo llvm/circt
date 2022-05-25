@@ -74,7 +74,7 @@ Modules shall use the name given in Chisel, unless they conflict with a verilog
 reserved word, not withstanding de-duplication or relevant annotations on the module.
 
 Instances shall use the name given in Chisel, unless they conflict with a 
-verilog reserved.  Instances have preferential use of the name in the output in 
+verilog reserved word.  Instances have preferential use of the name in the output in 
 case of a conflict, after ports.
 
 Chisel provides a "Don't Touch" annotation to protect entities from 
