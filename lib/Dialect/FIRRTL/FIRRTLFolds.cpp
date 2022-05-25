@@ -533,7 +533,7 @@ OpFoldResult LEQPrimOp::fold(ArrayRef<Attribute> operands) {
     if (auto rhsCst = getConstant(operands[1])) {
       auto commonWidth =
           std::max<int32_t>(*width, rhsCst.getValue().getBitWidth());
-      commonWidth = std::max(commonWidth, 0);
+      commonWidth = std::max(commonWidth, 1);
 
       // leq(x, const) -> 0 where const < minValue of the unsigned type of x
       // This can never occur since const is unsigned and cannot be less than 0.
@@ -587,7 +587,7 @@ OpFoldResult LTPrimOp::fold(ArrayRef<Attribute> operands) {
     if (auto rhsCst = getConstant(operands[1])) {
       auto commonWidth =
           std::max<int32_t>(*width, rhsCst.getValue().getBitWidth());
-      commonWidth = std::max(commonWidth, 0);
+      commonWidth = std::max(commonWidth, 1);
 
       // lt(x, const) -> 0 where const <= minValue of the unsigned type of x
       // Handled explicitly above.
@@ -640,7 +640,7 @@ OpFoldResult GEQPrimOp::fold(ArrayRef<Attribute> operands) {
     if (auto rhsCst = getConstant(operands[1])) {
       auto commonWidth =
           std::max<int32_t>(*width, rhsCst.getValue().getBitWidth());
-      commonWidth = std::max(commonWidth, 0);
+      commonWidth = std::max(commonWidth, 1);
 
       // geq(x, const) -> 0 where const > maxValue of the unsigned type of x
       if (isUnsigned &&
@@ -688,7 +688,7 @@ OpFoldResult GTPrimOp::fold(ArrayRef<Attribute> operands) {
     if (auto rhsCst = getConstant(operands[1])) {
       auto commonWidth =
           std::max<int32_t>(*width, rhsCst.getValue().getBitWidth());
-      commonWidth = std::max(commonWidth, 0);
+      commonWidth = std::max(commonWidth, 1);
 
       // gt(x, const) -> 0 where const >= maxValue of the unsigned type of x
       if (isUnsigned &&
