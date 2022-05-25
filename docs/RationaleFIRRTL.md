@@ -44,8 +44,8 @@ FIRRTL specification and is actively maintained, tracking new enhancements. The
 FIRRTL dialect supports some undocumented features and the "CHIRRTL" flavor of
 FIRRTL IR that is produced from Chisel.  The FIRRTL dialect has support for
 parsing an SFC Annotation file consisting of only local annotations and
-converting this to operation or argument attributes.  Non-local annotation
-support is planned, but not implemented.
+converting this to operation or argument attributes.  Non-local annotations
+are also supported.
 
 There are some exceptions to the above:
 
