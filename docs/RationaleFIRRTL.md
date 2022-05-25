@@ -167,7 +167,7 @@ which would change observed behavior if the entity was arbitrarily read or
 written to remotely.  This further implies the existence of the entity in the 
 output.
 
-Importantly the existance of a symbol doesn't specify whether something is 
+Importantly the existence of a symbol doesn't specify whether something is 
 read-only, write-only, or read-write.  Without analysis, a pass must assume the 
 most conservative case, and in the case of public symbols, must always assume 
 the most conservative case.  To do better, all uses must be analyzed and 
