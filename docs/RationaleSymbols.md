@@ -8,11 +8,11 @@ related types.  This follows in the spirit of other
 ## Introduction
 
 Verilog and FIRRTL have, from a software compiler perspective, an unusual 
-number of namable entities which can be refered to non-locally.  These entities 
+number of namable entities which can be referred to non-locally.  These entities 
 have deep nesting in the code structures.  The requirements of dealing with 
 these entities and references entails a more complexity than provided by MLIR's 
 symbols and symbol tables.  Several Circt dialects, therefor, share a common 
-supplimental mechanism called "Inner Symbols" to manage these requirements.  
+supplemental mechanism called "Inner Symbols" to manage these requirements.  
 Inner Symbols necessarily deviates from MLIR nested symbol tables to enable 
 representation of the behavior of verilog and firrtl.
 
@@ -24,7 +24,7 @@ interfaces and firrtl non-local anchors and bind statements, also share this
 space.  Modules and instances of them are well suited to mlir symbols.  They 
 are analogous in scoping and structure to functions and call instructions.  The 
 top-level mlir module or firrtl circuit op define a symbol table and all 
-modules contained define symbols, with instances refering by symbol to their 
+modules contained define symbols, with instances referring by symbol to their 
 instantiated module.
 
 ## Inner Symbol
@@ -70,10 +70,10 @@ non-local references.
 ## Common Use
 
 The most common use for InnerRefs are to build paths through the instantiation 
-graph to use a subsetset of the instances of an entitity is some way.  This may 
+graph to use a subset of the instances of an entity is some way.  This may 
 be reading values via System Verilog XMRs, specifying SV bind constraints, 
 specifying placement constraints, or representing non-local attributes (FIRRTL).
 
-The commone element for building paths of instances through the instantiation 
+The common element for building paths of instances through the instantiation 
 graph is with a `NameRefArrayAttr` attribute.  This is used, for example, by 
 `sv.GlobalRefOp` and `firrtl.NonLocalAnchor` .
