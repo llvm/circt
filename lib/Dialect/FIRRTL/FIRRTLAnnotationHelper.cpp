@@ -151,6 +151,8 @@ void TokenAnnoTarget::toVector(SmallVectorImpl<char> &out) const {
     out.push_back(':');
   }
   out.append(module.begin(), module.end());
+  if (name.empty())
+    return;
   out.push_back('>');
   out.append(name.begin(), name.end());
   for (auto comp : component) {
