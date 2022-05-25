@@ -220,12 +220,14 @@ void PrefixModulesPass::renameModuleBody(std::string prefix, FModuleOp module) {
       // There can be multiple NonLocalAnchors attached to the instance op.
 
       StringAttr oldModName = instanceOp.moduleNameAttr().getAttr();
+      // Update the NLAs that apply on this InstanceOp.
       for (Annotation anno : instAnnos) {
         if (auto nla = anno.getMember("circt.nonlocal")) {
           auto nlaName = nla.cast<FlatSymbolRefAttr>().getAttr();
           nlaTable->updateModuleInNLA(nlaName, oldModName, newTarget);
         }
       }
+      // Now get the NLAs that pass through the InstanceOp and update them also.
       DenseSet<NonLocalAnchor> instNLAs;
       nlaTable->getInstanceNLAs(instanceOp, instNLAs);
       for (auto nla : instNLAs)
@@ -279,6 +281,8 @@ void PrefixModulesPass::renameModule(FModuleOp module) {
     auto newModuleName = (outerPrefix + moduleName);
     auto newModNameAttr = StringAttr::get(module.getContext(), newModuleName);
     moduleClone.setName(newModuleName);
+    // It is critical to add the new module to the NLATable, otherwise the
+    // rename operation would fail.
     nlaTable->addModule(moduleClone);
     fixNLAsRootedAt(oldModName, newModNameAttr);
     // Each call to this function could invalidate the `prefixes` reference.
