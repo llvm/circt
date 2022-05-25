@@ -147,3 +147,7 @@ void NLATable::eraseModule(StringAttr name) {
   symToOp.erase(name);
   nodeMap.erase(name);
 }
+
+void NLATable::addModule(Operation *op) {
+  symToOp[static_cast<FModuleLike>(op).moduleNameAttr()] = op;
+}

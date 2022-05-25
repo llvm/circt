@@ -99,6 +99,9 @@ public:
   /// Record a new NLA operation.
   void addNLA(NonLocalAnchor nla);
 
+  /// Record a new FModuleLike operation.
+  void addModule(Operation *mod);
+
   /// Stop tracking a module.
   void eraseModule(StringAttr name);
 
