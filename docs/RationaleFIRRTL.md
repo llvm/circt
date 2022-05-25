@@ -104,7 +104,7 @@ output.
 ### Mandatory Renaming
 
 We want the naming of Verilog objects to match the names used in
-the original CHISEL, but in several passes, there is mandatory renaming.  It is 
+the original Chisel, but in several passes, there is mandatory renaming.  It is 
 important that this be a predictable transformation.  For example, after 
 bundles are replaced with scalars in the lower-types pass, each field should be 
 prefixed with the bundle name:
