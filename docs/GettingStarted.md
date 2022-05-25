@@ -116,7 +116,7 @@ the right thing.
 
 [Verilator](https://github.com/verilator/verilator) can be used to check
 SystemVerilog code. To run the tests, build or install a **recent** version
-of Verilator (at least v4.034, ideally v1.110 or later to avoid a known bug).
+of Verilator (at least v4.034, also v1.110 has a known bug).
 (Some Linux distributions have *ancient* versions.) If Verilator is in your
 PATH, `build check-circt` should run the tests which require Verilator.
 
