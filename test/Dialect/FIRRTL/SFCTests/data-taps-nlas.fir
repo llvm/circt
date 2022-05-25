@@ -21,12 +21,6 @@ circuit Top : %[[{
       "portName": "~Top|DataTap>d"
     }
 ]}]]
-  extmodule DataTap :
-    output b : UInt<1>
-    output c : UInt<1>
-    output d : UInt<1>
-    defname = DataTap
-
   module Foo :
     output g : UInt<1>
     wire f : UInt<1>
@@ -40,13 +34,24 @@ circuit Top : %[[{
     wire k : UInt<1>
     k is invalid
 
-; CHECK: module DataTap_impl_0(
-; CHECK:   output b, 
+  extmodule DataTap :
+    output b : UInt<1>
+    output c : UInt<1>
+    output d : UInt<1>
+    defname = DataTap
+
+; CHECK-LABEL: module Foo();
+; CHECK:   wire [[TAP:.+]] = 1'h0;
+; CHECK:   wire f = 1'h0;
+; CHECK: endmodule
+
+; CHECK-LABEL: module DataTap_impl_0(
+; CHECK:   output b,
 ; CHECK:          c,
 ; CHECK:          d
 ; CHECK: );
 ; CHECK:   assign b = Top.foo.f;
-; CHECK:   assign c = Top.foo.g;
+; CHECK:   assign c = Top.foo.[[TAP]];
 ; CHECK:   assign d = Top.k;
 ; CHECK: endmodule
 

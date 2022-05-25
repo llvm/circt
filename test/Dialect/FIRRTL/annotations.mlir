@@ -646,3 +646,79 @@ firrtl.circuit "GCTMemTap" attributes {rawAnnotations = [{
 // CHECK-SAME:     id = [[ID]]
 // CHECK-SAME:   }
 // CHECK-SAME: ]
+
+// -----
+
+// Check that module port data taps are implemented as a "tap wire".
+// CHECK-LABEL: firrtl.circuit "Foo"
+firrtl.circuit "Foo" attributes {rawAnnotations = [{
+  blackBox = "~Foo|DataTap",
+  class = "sifive.enterprise.grandcentral.DataTapsAnnotation",
+  keys = [
+    {
+      class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
+      portName = "~Foo|DataTap>tappedInput",
+      source = "~Foo|Foo>a"
+    },
+    {
+      class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
+      portName = "~Foo|DataTap>tappedNlaInput",
+      source = "~Foo|Foo/im:Bar>a"
+    },
+    {
+      class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
+      portName = "~Foo|DataTap>tappedOutput",
+      source = "~Foo|Foo>b"
+    },
+    {
+      class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
+      portName = "~Foo|DataTap>tappedInputSubfield",
+      source = "~Foo|Foo>c.d.e"
+    }
+  ]
+}]} {
+  firrtl.extmodule private @DataTap(
+    out tappedInput: !firrtl.uint<1>,
+    out tappedInputSubfield: !firrtl.uint<1>,
+    out tappedNlaInput: !firrtl.uint<1>,
+    out tappedOutput: !firrtl.uint<1>
+  ) attributes {defname = "DataTap"}
+
+  // CHECK-LABEL: firrtl.module @Foo
+  // CHECK-NOT: sifive.enterprise.grandcentral.ReferenceDataTapKey.source
+  firrtl.module @Foo(in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>, in %c: !firrtl.bundle<d: bundle<e: uint<1>>>) {
+    // CHECK: [[TAP_SUB:%.+]] = firrtl.wire
+    // CHECK-NOT: circt.fieldID
+    // CHECK-SAME: class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.source"
+    // CHECK-SAME: portID = 4
+    // CHECK-NEXT: [[C_D:%.+]] = firrtl.subfield %c(0)
+    // CHECK-NEXT: [[C_D_E:%.+]] = firrtl.subfield [[C_D]](0)
+    // CHECK-NEXT: firrtl.strictconnect [[TAP_SUB]], [[C_D_E]]
+
+    // CHECK: [[TAP_OUT:%.+]] = firrtl.wire
+    // CHECK-NOT: circt.fieldID
+    // CHECK-SAME: class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.source"
+    // CHECK-SAME: portID = 3
+    // CHECK-NEXT: firrtl.strictconnect [[TAP_OUT]], %b
+
+    // CHECK: [[TAP_IN:%.+]] = firrtl.wire
+    // CHECK-NOT: circt.fieldID
+    // CHECK-SAME: class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.source"
+    // CHECK-SAME: portID = 1
+    // CHECK-NEXT: firrtl.strictconnect [[TAP_IN]], %a
+
+    firrtl.instance dt @DataTap(out tappedInput: !firrtl.uint<1>, out tappedInputSubfield: !firrtl.uint<1>, out tappedNlaInput: !firrtl.uint<1>, out tappedOutput: !firrtl.uint<1>)
+    firrtl.instance im @Bar(in a: !firrtl.uint<1>)
+    firrtl.strictconnect %b, %a : !firrtl.uint<1>
+  }
+
+  // CHECK-LABEL: firrtl.module private @Bar
+  firrtl.module private @Bar(in %a: !firrtl.uint<1>) {
+    // CHECK: [[TAP:%.+]] = firrtl.wire
+    // CHECK-NOT: circt.fieldID
+    // CHECK-SAME: circt.nonlocal
+    // CHECK-SAME: class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.source"
+    // CHECK-SAME: portID = 2
+    // CHECK-NEXT: firrtl.strictconnect [[TAP]], %a
+  }
+}
