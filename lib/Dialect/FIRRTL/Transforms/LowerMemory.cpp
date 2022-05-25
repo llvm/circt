@@ -232,25 +232,19 @@ void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
 
   // Create an instance of the wrapper memory module, which will replace the
   // original mem op.
-  auto inst = emitMemoryInstance(mem, wrapper, summary);
+  emitMemoryInstance(mem, wrapper, summary);
 
   // We fixup the annotations here. We will be copying all annotations on to the
   // module op, so we have to fix up the NLA to have the module as the leaf
-  // element.  We also have to make sure that the instance op has all the needed
-  // breadcrumb annotations.
+  // element.
 
   auto leafSym = memModule.moduleNameAttr();
   auto leafAttr = hw::InnerRefAttr::get(wrapper.moduleNameAttr(), leafSym);
 
   // NLAs that we have already processed.
   SmallPtrSet<Attribute, 8> processedNLAs;
-  // List of breadcrumbs to go on the wrapper intance.
-  SmallVector<Attribute> breadcrumbs;
-  // Half-created single breadcrumb.
   auto nonlocalAttr = StringAttr::get(context, "circt.nonlocal");
-  SmallVector<NamedAttribute> breadcrumb;
-  breadcrumb.emplace_back(nonlocalAttr, nonlocalAttr);
-  breadcrumb.emplace_back(StringAttr::get(context, "class"), nonlocalAttr);
+  bool nlaUpdated = false;
 
   for (auto anno : AnnotationSet(mem)) {
     // We're only looking for non-local annotations.
@@ -261,23 +255,16 @@ void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
     if (!processedNLAs.insert(nlaSym).second)
       continue;
 
-    // Add this NLA to the list of breadcrumbs for the wrapper instance.
-    breadcrumb[0].setValue(nlaSym);
-    breadcrumbs.push_back(DictionaryAttr::getWithSorted(context, breadcrumb));
-
     // Update the NLA path to have the additional wrapper module.
     auto nla = dyn_cast<NonLocalAnchor>(symbolTable->lookup(nlaSym.getAttr()));
     auto namepath = nla.namepath().getValue();
     SmallVector<Attribute> newNamepath(namepath.begin(), namepath.end());
     newNamepath.push_back(leafAttr);
     nla.namepathAttr(ArrayAttr::get(context, newNamepath));
+    nlaUpdated = true;
   }
-
-  // Attach the breadcrumbs to the instance op.
-  if (breadcrumbs.size()) {
-    AnnotationSet(breadcrumbs, context).applyToOperation(inst);
+  if (nlaUpdated)
     memInst.inner_symAttr(leafSym);
-  }
 
   mem->erase();
 }
