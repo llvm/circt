@@ -175,11 +175,6 @@ static cl::opt<bool>
                    cl::init(true), cl::cat(mainCategory));
 
 static cl::opt<bool>
-    blackBoxMemory("blackbox-memory",
-                   cl::desc("Create a black box for all memory operations"),
-                   cl::init(false), cl::cat(mainCategory));
-
-static cl::opt<bool>
     dedup("dedup", cl::desc("deduplicate structurally identical modules"),
           cl::init(false), cl::cat(mainCategory));
 
@@ -489,9 +484,6 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
 
   if (wireDFT)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createWireDFTPass());
-
-  if (blackBoxMemory)
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createBlackBoxMemoryPass());
 
   if (replSeqMem)
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
