@@ -2272,4 +2272,89 @@ firrtl.module @Issue3043(out %a: !firrtl.vector<uint<5>, 3>) {
   firrtl.connect %a, %_b : !firrtl.vector<uint<5>, 3>, !firrtl.vector<uint<5>, 3>
 }
 
+// Test behaviors folding with zero-width constants, issue #2514.
+// CHECK-LABEL: @Issue2514
+firrtl.module @Issue2514(
+  in %s: !firrtl.sint<0>,
+  in %u: !firrtl.uint<0>,
+  out %geq_0: !firrtl.uint<1>,
+  out %geq_1: !firrtl.uint<1>,
+  out %geq_2: !firrtl.uint<1>,
+  out %geq_3: !firrtl.uint<1>,
+  out %gt_0:  !firrtl.uint<1>,
+  out %gt_1:  !firrtl.uint<1>,
+  out %gt_2:  !firrtl.uint<1>,
+  out %gt_3:  !firrtl.uint<1>,
+  out %lt_0:  !firrtl.uint<1>,
+  out %lt_1:  !firrtl.uint<1>,
+  out %lt_2:  !firrtl.uint<1>,
+  out %lt_3:  !firrtl.uint<1>,
+  out %leq_0: !firrtl.uint<1>,
+  out %leq_1: !firrtl.uint<1>,
+  out %leq_2: !firrtl.uint<1>,
+  out %leq_3: !firrtl.uint<1>
+) {
+  %t = firrtl.constant 0: !firrtl.sint<0>
+  %v = firrtl.constant 0: !firrtl.uint<0>
+
+  // CHECK-DAG: %[[zero_i1:.+]] = firrtl.constant 0 : !firrtl.uint<1>
+  // CHECK-DAG: %[[one_i1:.+]] = firrtl.constant 1 : !firrtl.uint<1>
+
+  // geq(x, y) -> 1 when x and y are both zero-width (and here, one is a constant)
+  %3 = firrtl.geq %s, %t : (!firrtl.sint<0>, !firrtl.sint<0>) -> !firrtl.uint<1>
+  %4 = firrtl.geq %t, %s : (!firrtl.sint<0>, !firrtl.sint<0>) -> !firrtl.uint<1>
+  %5 = firrtl.geq %u, %v : (!firrtl.uint<0>, !firrtl.uint<0>) -> !firrtl.uint<1>
+  %6 = firrtl.geq %v, %u : (!firrtl.uint<0>, !firrtl.uint<0>) -> !firrtl.uint<1>
+  firrtl.strictconnect %geq_0, %3 : !firrtl.uint<1>
+  firrtl.strictconnect %geq_1, %4 : !firrtl.uint<1>
+  firrtl.strictconnect %geq_2, %5 : !firrtl.uint<1>
+  firrtl.strictconnect %geq_3, %6 : !firrtl.uint<1>
+  // CHECK: firrtl.strictconnect %geq_0, %[[one_i1]]
+  // CHECK: firrtl.strictconnect %geq_1, %[[one_i1]]
+  // CHECK: firrtl.strictconnect %geq_2, %[[one_i1]]
+  // CHECK: firrtl.strictconnect %geq_3, %[[one_i1]]
+
+  // gt(x, y) -> 0 when x and y are both zero-width (and here, one is a constant)
+  %7 = firrtl.gt %s, %t : (!firrtl.sint<0>, !firrtl.sint<0>) -> !firrtl.uint<1>
+  %8 = firrtl.gt %t, %s : (!firrtl.sint<0>, !firrtl.sint<0>) -> !firrtl.uint<1>
+  %9 = firrtl.gt %u, %v : (!firrtl.uint<0>, !firrtl.uint<0>) -> !firrtl.uint<1>
+  %10 = firrtl.gt %v, %u : (!firrtl.uint<0>, !firrtl.uint<0>) -> !firrtl.uint<1>
+  firrtl.strictconnect %gt_0, %7 : !firrtl.uint<1>
+  firrtl.strictconnect %gt_1, %8 : !firrtl.uint<1>
+  firrtl.strictconnect %gt_2, %9 : !firrtl.uint<1>
+  firrtl.strictconnect %gt_3, %10 : !firrtl.uint<1>
+  // CHECK: firrtl.strictconnect %gt_0, %[[zero_i1]]
+  // CHECK: firrtl.strictconnect %gt_1, %[[zero_i1]]
+  // CHECK: firrtl.strictconnect %gt_2, %[[zero_i1]]
+  // CHECK: firrtl.strictconnect %gt_3, %[[zero_i1]]
+
+  // lt(x, y) -> 0 when x and y are both zero-width (and here, one is a constant)
+  %11 = firrtl.lt %s, %t : (!firrtl.sint<0>, !firrtl.sint<0>) -> !firrtl.uint<1>
+  %12 = firrtl.lt %t, %s : (!firrtl.sint<0>, !firrtl.sint<0>) -> !firrtl.uint<1>
+  %13 = firrtl.lt %u, %v : (!firrtl.uint<0>, !firrtl.uint<0>) -> !firrtl.uint<1>
+  %14 = firrtl.lt %v, %u : (!firrtl.uint<0>, !firrtl.uint<0>) -> !firrtl.uint<1>
+  firrtl.strictconnect %lt_0, %11 : !firrtl.uint<1>
+  firrtl.strictconnect %lt_1, %12 : !firrtl.uint<1>
+  firrtl.strictconnect %lt_2, %13 : !firrtl.uint<1>
+  firrtl.strictconnect %lt_3, %14 : !firrtl.uint<1>
+  // CHECK: firrtl.strictconnect %lt_0, %[[zero_i1]]
+  // CHECK: firrtl.strictconnect %lt_1, %[[zero_i1]]
+  // CHECK: firrtl.strictconnect %lt_2, %[[zero_i1]]
+  // CHECK: firrtl.strictconnect %lt_3, %[[zero_i1]]
+
+  // leq(x, y) -> 1 when x and y are both zero-width (and here, one is a constant)
+  %15 = firrtl.leq %s, %t : (!firrtl.sint<0>, !firrtl.sint<0>) -> !firrtl.uint<1>
+  %16 = firrtl.leq %t, %s : (!firrtl.sint<0>, !firrtl.sint<0>) -> !firrtl.uint<1>
+  %17 = firrtl.leq %u, %v : (!firrtl.uint<0>, !firrtl.uint<0>) -> !firrtl.uint<1>
+  %18 = firrtl.leq %v, %u : (!firrtl.uint<0>, !firrtl.uint<0>) -> !firrtl.uint<1>
+  firrtl.strictconnect %leq_0, %15 : !firrtl.uint<1>
+  firrtl.strictconnect %leq_1, %16 : !firrtl.uint<1>
+  firrtl.strictconnect %leq_2, %17 : !firrtl.uint<1>
+  firrtl.strictconnect %leq_3, %18 : !firrtl.uint<1>
+  // CHECK: firrtl.strictconnect %leq_0, %[[one_i1]]
+  // CHECK: firrtl.strictconnect %leq_1, %[[one_i1]]
+  // CHECK: firrtl.strictconnect %leq_2, %[[one_i1]]
+  // CHECK: firrtl.strictconnect %leq_3, %[[one_i1]]
+}
+
 }
