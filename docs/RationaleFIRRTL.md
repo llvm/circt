@@ -88,7 +88,7 @@ Chisel don't touch), this name is used, unless it conflicts with a verilog
 reserved word.  This wire has preferential use of the name in the output in 
 case of a conflict, after ports and instances.
 
-Named wires and nodes in firrtl shall appear as a wire in the output verilog.  
+Named wires and nodes in FIRRTL shall appear as a wire in the output verilog.  
 There is no requirement that data-flow through a wire be maintained, only that 
 the data-flow into a wire be maintained.  This allows bypassing and forwarding 
 around wires who exist solely because of their name.  An implementation may 
