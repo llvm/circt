@@ -141,7 +141,7 @@ Symbols and Inner Symbols are documented in the [symbol rationale](RationaleSymb
 This section documents how symbols are used, their interaction with don't 
 touch, and the semantics imposed by them.
 
-Public Symbols indicate there are used of an entity outside the analysis scope 
+Public Symbols indicate there are uses of an entity outside the analysis scope 
 of the compiler.  This requires the the entity be preserved in such a way as 
 the operations possible in the target language have the expected effect.  For 
 example, a wire or port with a public symbol may be used by name in a test 
