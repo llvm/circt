@@ -121,6 +121,12 @@ private:
 LogicalResult applyGCTView(AnnoPathValue target, DictionaryAttr anno,
                            ApplyState &state);
 
+LogicalResult applyGCTDataTaps(AnnoPathValue target, DictionaryAttr anno,
+                               ApplyState &state);
+
+LogicalResult applyGCTMemTaps(AnnoPathValue target, DictionaryAttr anno,
+                              ApplyState &state);
+
 /// Implements the same behavior as DictionaryAttr::getAs<A> to return the value
 /// of a specific type associated with a key in a dictionary.  However, this is
 /// specialized to print a useful error message, specific to custom annotation

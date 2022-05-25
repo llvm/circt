@@ -54,10 +54,9 @@ circuit Foo: %[[{"a":"a"},]]]
 
 ; expected-error @+2 {{did not contain required key}}
 ; expected-note @+1 {{}}
-circuit Foo: %[
-[
+circuit Foo: %[[
   {
-    "class": "sifive.enterprise.grandcentral.DataTapsAnnotation"
+    "class":"freechips.rocketchip.objectmodel.OMIRAnnotation"
   }
 ]]
   module Foo:
