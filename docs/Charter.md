@@ -3,7 +3,7 @@
 ## Abstract
 
 Recent trends in computer architecture have resulted in two core problems.
-Firstly, how do we design complex, heterogenous systems-on-chip mixing
+Firstly, how do we design complex, heterogeneous systems-on-chip mixing
 general purpose and specialized components?  Secondly, how do we
 program them?  We believe that design tools that represent and
 manipulate a wide variety of abstractions are central to solving these
@@ -134,7 +134,7 @@ transformation performed on RTL descriptions.
 
 ### Finite-State Machine + Datapath (FSMD)
 
-High-Level synthesis(HLS) of RTL designs from C code has become a common
+High-Level synthesis (HLS) of RTL designs from C code has become a common
 paradigm for accelerator design.
 Typically generating a high-performance implementation requires analysis
 and scheduling of the FSMD model in order to understand the performance
