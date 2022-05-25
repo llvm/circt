@@ -145,7 +145,7 @@ Public Symbols indicate there are uses of an entity outside the analysis scope
 of the compiler.  This requires the the entity be preserved in such a way as 
 the operations possible in the target language have the expected effect.  For 
 example, a wire or port with a public symbol may be used by name in a test 
-bench to read or write new values into the circuit.  Therefor, these wires 
+bench to read or write new values into the circuit.  Therefore, these wires 
 cannot be detached form their original dataflow as this would break the remote 
 write case, nor can their input dataflow be changed, as this would break the 
 remote read case.  They cannot be renamed, as this would break all remote access.
