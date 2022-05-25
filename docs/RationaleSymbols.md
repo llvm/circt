@@ -23,7 +23,7 @@ consists of `hw` or `firrtl` modules, though other entities, such as `sv`
 interfaces and bind statements and `firrtl` non-local anchors, also share this 
 space.  Modules and instances of them are well suited to MLIR symbols.  They 
 are analogous in scoping and structure to functions and call instructions.  The 
-top-level `mlir.module` or `firrtl.circuit` operations define a symbol table, and all 
+top-level `builtin.module` or `firrtl.circuit` operations define a symbol table, and all 
 modules contained define symbols, with instances referring by symbol to their 
 instantiated module.
 
@@ -32,22 +32,22 @@ instantiated module.
 Within a `firrtl` or `hw` module, many entities may exist which can be referenced 
 outside the module.  Operations and ports (and memory ports), need to define 
 symbol-like data to allow forming non-SSA linkage between disparate elements.  
-To accomplish this, an attribute named `inner_sym` is attached providing a
+To accomplish this, an attribute named `inner_sym` is attached, providing a 
 scoped symbol-like name to the element.  An operation with an `inner_sym`
 resides in arbitrarily-nested regions of a region that defines an
 `InnerSymbolTable` and a `Symbol` .
 
 Inner Symbols are different from normal symbols due to MLIR symbol table 
-resolution rules.  Specifically normal symbols are resolved by first going up 
+resolution rules.  Specifically, normal symbols are resolved by first going up 
 to the closest parent symbol table and resolving down from there (recursing 
-back down for nested symbol paths).  In FIRRTL and SV, modules define a symbol in a 
-`firrtl.circuit` or `std.module` symbol table.  For instances to be able to resolve the 
+back down for nested symbol paths).  In FIRRTL and HW, modules define a symbol in a 
+`firrtl.circuit` or `builtin.module` symbol table.  For instances to be able to resolve the 
 modules they instantiate, the symbol use in an instance must resolve in the 
 top-level symbol table.  If a module were a symbol table, instances resolving a 
 symbol would start from their own module, never seeing other modules (since 
 resolution would start in the parent module of the instance and be unable to go 
-to the global scope).  The second problem arises from nesting.  Symbols 
-defining operations must be immediate children of a symbol table.  FIRRTL and SV 
+to the global scope).  The second problem arises from nesting.  Symbol 
+defining operations must be immediate children of a symbol table.  FIRRTL and HW/SV 
 operations which define an `inner_sym` are grandchildren, at least, of a symbol 
 table and may be much further nested.  Lastly, ports need to define `inner_sym`, 
 something not allowed by normal symbols.
@@ -77,4 +77,4 @@ specifying placement constraints, or representing non-local attributes (FIRRTL).
 
 The common element for building paths of instances through the instantiation 
 graph is with a `NameRefArrayAttr` attribute.  This is used, for example, by 
-`sv.GlobalRefOp` and `firrtl.NonLocalAnchor` .
+`hw.GlobalRefOp` and `firrtl.NonLocalAnchor`.
