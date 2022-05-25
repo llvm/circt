@@ -45,7 +45,7 @@ $ git submodule update
 *Note:* The repository is set up so that `git submodule update` performs a 
 shallow clone, meaning it downloads just enough of the LLVM repository to check 
 out the currently specified commit. If you wish to work with the full history of
-the LLVM repository, you can manually "unshallow" the the submodule:
+the LLVM repository, you can manually "unshallow" the submodule:
 
 ```
 $ cd llvm
@@ -150,10 +150,10 @@ Alternatively, you can use a docker image we provide via
 software suite for (mathematical) optimization. It provides a uniform interface
 to several open-source and commercial solvers, e.g. for linear programs and
 satisfiability problems. Here, it is optionally used in the static scheduling
-instructure. Binary distributions often do not include the required CMake build
-info. The `utils/get-or-tools.sh` script downloads, compiles, and installs a
-known good version to a directory within the CIRCT source code, where it is then
-picked up automatically by the build.
+infrastructure. Binary distributions often do not include the required CMake
+build info. The `utils/get-or-tools.sh` script downloads, compiles, and
+installs a known good version to a directory within the CIRCT source code,
+where it is then picked up automatically by the build.
 
 ## Windows: notes on setting up with Ninja
 
