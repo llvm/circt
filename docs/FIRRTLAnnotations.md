@@ -763,12 +763,12 @@ This annotation records the name of the Java or Scala class which corresponds
 to the module.
 
 Example:
-```
-  {
-    "class":"sifive.enterprise.firrtl.ScalaClassAnnotation",
-    "target":"Top.ClockGroupAggregator",
-    "className":"freechips.rocketchip.prci.ClockGroupAggregator"
-  },
+```json
+{
+  "class":"sifive.enterprise.firrtl.ScalaClassAnnotation",
+  "target":"Top.ClockGroupAggregator",
+  "className":"freechips.rocketchip.prci.ClockGroupAggregator"
+}
 ```
 
 ### SitestBlackBoxAnnotation
@@ -829,7 +829,6 @@ commandline option `sub-circuits-target-dir`.
 -sctd <dir>
 ```
 
-```
 Example:
 ```json
 {
@@ -1245,9 +1244,8 @@ An example of this annotation is as follows:
 
 ``` json
 {
-  "class"
-      : "sifive.enterprise.grandcentral.GrandCentralHierarchyFileAnnotation",
-        "filename" : "directory/file.yaml"
+  "class" : "sifive.enterprise.grandcentral.GrandCentralHierarchyFileAnnotation",
+  "filename" : "directory/file.yaml"
 }
 ```
 
