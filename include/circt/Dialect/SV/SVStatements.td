@@ -24,6 +24,25 @@ def isModuleSymbol : AttrConstraint<
 // Control flow like-operations
 //===----------------------------------------------------------------------===//
 
+def OrderedOutputOp : SVOp<"ordered", [SingleBlock, NoTerminator, NoRegionArguments,
+                             NonProceduralOp]> {
+  let summary = "a sub-graph region which guarantees to output statements in-order";
+
+  let description = [{
+    This operation groups operations into a region whose purpose is to force
+    verilog emission to be statement-by-statement, in-order.  This allows
+    side-effecting operations, or macro expansions which applie to subsequent
+    operations to be properly sequenced.
+    This operation is for non-procedural regions and its body is non-procedural.
+  }];
+
+  let regions = (region SizedRegion<1>:$body);
+  let arguments = (ins);
+  let results = (outs);
+
+  let assemblyFormat = "$body attr-dict";
+}
+
 def IfDefOp : SVOp<"ifdef", [SingleBlock, NoTerminator, NoRegionArguments,
                              NonProceduralOp]> {
   let summary = "'ifdef MACRO' block";
