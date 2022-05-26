@@ -20,6 +20,8 @@
 #include "circt/Support/LLVM.h"
 
 #include "mlir/IR/BuiltinAttributes.h"
+#include "mlir/Interfaces/InferTypeOpInterface.h"
+
 #include "llvm/ADT/BitVector.h"
 
 #define GET_OP_CLASSES

@@ -30,6 +30,7 @@ add_circt_dialect_library(CIRCTMSFT
   LINK_LIBS PUBLIC
   MLIRIR
   MLIRTransforms
+  MLIRInferTypeOpInterface
   CIRCTHW
   CIRCTSeq
   CIRCTSV

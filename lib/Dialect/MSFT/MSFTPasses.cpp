@@ -14,7 +14,8 @@
 #include "circt/Dialect/MSFT/MSFTOpInterfaces.h"
 #include "circt/Dialect/MSFT/MSFTOps.h"
 #include "circt/Dialect/SV/SVOps.h"
-#include "circt/Support/SymCache.h"
+#include "circt/Dialect/Seq/SeqOps.h"
+#include "circt/Support/Namespace.h"
 
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -1658,6 +1659,22 @@ namespace {
 struct LowerConstructsPass : public LowerConstructsBase<LowerConstructsPass>,
                              PassCommon {
   void runOnOperation() override;
+
+  /// For naming purposes, get the inner Namespace for a module, building it
+  /// lazily.
+  Namespace &getNamespaceFor(Operation *mod) {
+    auto ns = moduleNamespaces.find(mod);
+    if (ns != moduleNamespaces.end())
+      return ns->getSecond();
+    Namespace &nsNew = moduleNamespaces[mod];
+    SymbolCache syms;
+    syms.addDefinitions(mod);
+    nsNew.add(syms);
+    return nsNew;
+  }
+
+private:
+  DenseMap<Operation *, circt::Namespace> moduleNamespaces;
 };
 } // anonymous namespace
 
@@ -1763,16 +1780,47 @@ public:
 };
 } // anonymous namespace
 
+namespace {
+/// Lower MSFT's ChannelOp to a set of registers.
+struct ChannelOpLowering : public OpConversionPattern<ChannelOp> {
+public:
+  ChannelOpLowering(MLIRContext *ctxt, LowerConstructsPass &pass)
+      : OpConversionPattern(ctxt), pass(pass) {}
+
+  LogicalResult
+  matchAndRewrite(ChannelOp chan, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    Location loc = chan.getLoc();
+    Operation *mod = chan->getParentOfType<MSFTModuleOp>();
+    assert(mod && "ChannelOp must be contained by module");
+    Namespace &ns = pass.getNamespaceFor(mod);
+    Value clk = chan.clk();
+    Value v = chan.input();
+    for (uint64_t stageNum = 0, e = chan.defaultStages(); stageNum < e;
+         ++stageNum)
+      v = rewriter.create<seq::CompRegOp>(loc, v, clk,
+                                          ns.newName(chan.sym_name()));
+    rewriter.replaceOp(chan, {v});
+    return success();
+  }
+
+protected:
+  LowerConstructsPass &pass;
+};
+} // namespace
+
 void LowerConstructsPass::runOnOperation() {
   auto top = getOperation();
   auto *ctxt = &getContext();
 
   ConversionTarget target(*ctxt);
   target.markUnknownOpDynamicallyLegal([](Operation *) { return true; });
-  target.addIllegalOp<SystolicArrayOp>();
 
   RewritePatternSet patterns(ctxt);
   patterns.insert<SystolicArrayOpLowering>(ctxt);
+  target.addIllegalOp<SystolicArrayOp>();
+  patterns.insert<ChannelOpLowering>(ctxt, *this);
+  target.addIllegalOp<ChannelOp>();
 
   if (failed(mlir::applyPartialConversion(top, target, std::move(patterns))))
     signalPassFailure();
