@@ -286,14 +286,10 @@ static std::string addNLATargets(
   }
 
   for (int i = 0, e = nlaTargets.size() - 1; i < e; ++i) {
-    NamedAttrList pathmetadata, dontTouch;
-    pathmetadata.append("circt.nonlocal", nlaSym);
-    pathmetadata.append("class", StringAttr::get(context, "circt.nonlocal"));
+    NamedAttrList dontTouch;
     dontTouch.append(
         "class",
         StringAttr::get(context, "firrtl.transforms.DontTouchAnnotation"));
-    mutableAnnotationMap[std::get<0>(nlaTargets[i])].push_back(
-        DictionaryAttr::get(context, pathmetadata));
     // Every op with nonlocal anchor must have a symbol. Hence add the
     // dontTouch.
     mutableAnnotationMap[std::get<0>(nlaTargets[i])].push_back(
@@ -1097,11 +1093,7 @@ bool circt::firrtl::scatterCustomAnnotations(
 
           // Annotate instances along the NLA path.
           for (int i = 0, e = NLATargets.size() - 1; i < e; ++i) {
-            NamedAttrList fields;
-            fields.append("circt.nonlocal", nlaSym);
-            fields.append("class", StringAttr::get(context, "circt.nonlocal"));
             StringRef tgt = std::get<0>(NLATargets[i]);
-            newAnnotations[tgt].push_back(DictionaryAttr::get(context, fields));
             addDontTouch(tgt);
           }
         }
@@ -1217,11 +1209,6 @@ bool circt::firrtl::scatterCustomAnnotations(
 
         // Annotate instances along the NLA path.
         for (int i = 0, e = nlaTargets.size() - 1; i < e; ++i) {
-          NamedAttrList fields;
-          fields.append("circt.nonlocal", nlaSym);
-          fields.append("class", StringAttr::get(context, "circt.nonlocal"));
-          newAnnotations[std::get<0>(nlaTargets[i])].push_back(
-              DictionaryAttr::get(context, fields));
           addDontTouch(std::get<0>(nlaTargets[i]));
         }
       }

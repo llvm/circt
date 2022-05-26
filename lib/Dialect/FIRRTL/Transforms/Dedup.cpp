@@ -601,10 +601,6 @@ private:
   void recordAnnotations(Operation *op) {
     for (auto anno : AnnotationSet(op)) {
       if (auto nlaRef = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal")) {
-        // Don't record instance breadcrumbs.  We're only looking for the final
-        // target of an NLA.
-        if (anno.getClassAttr() == nonLocalString)
-          continue;
         targetMap[nlaRef.getAttr()] = OpAnnoTarget(op);
       }
     }
@@ -667,35 +663,6 @@ private:
       nlas.push_back(nlaRef);
       nlaTable->insert(nla);
       targetMap[nlaName] = to;
-      // Update the instance breadcrumbs.
-      auto nonLocalClass = NamedAttribute(classString, nonLocalString);
-      auto dict = DictionaryAttr::get(
-          context, {{nonLocalString, nlaRef}, nonLocalClass});
-      // Add the breadcrumb on the first instance.
-      AnnotationSet instAnnos(inst);
-      instAnnos.addAnnotations(dict);
-      instAnnos.applyToOperation(inst);
-
-      // Set the breadcrumb on following instances. Ignore the first element
-      // which was already handled above, and the last element which does not
-      // need to be breadcrumbed.
-      for (auto attr : nla.namepath().getValue().drop_front().drop_back()) {
-        auto innerRef = attr.cast<InnerRefAttr>();
-        auto *node = instanceGraph.lookup(innerRef.getModule());
-        // Find the instance referenced by the NLA.
-        auto targetInstanceName = innerRef.getName();
-        auto it = llvm::find_if(*node, [&](InstanceRecord *record) {
-          return cast<InstanceOp>(*record->getInstance()).inner_symAttr() ==
-                 targetInstanceName;
-        });
-        assert(it != node->end() &&
-               "Instance referenced by NLA does not exist in module");
-        // Commit the annotation update.
-        auto inst = (*it)->getInstance();
-        AnnotationSet instAnnos(inst);
-        instAnnos.addAnnotations(dict);
-        instAnnos.applyToOperation(inst);
-      }
     }
     return nlas;
   }
@@ -731,29 +698,6 @@ private:
   /// every module's NLA map, but it does not delete the NLA reference from
   /// the target operation's annotations.
   void eraseNLA(NonLocalAnchor nla) {
-    auto nlaRef = FlatSymbolRefAttr::get(nla.getNameAttr());
-    auto nonLocalClass = NamedAttribute(classString, nonLocalString);
-    auto dict =
-        DictionaryAttr::get(context, {{nonLocalString, nlaRef}, nonLocalClass});
-    auto namepath = nla.namepath().getValue();
-    for (auto attr : namepath.drop_back()) {
-      auto innerRef = attr.cast<InnerRefAttr>();
-      auto moduleName = innerRef.getModule();
-      // Find the instance referenced by the NLA.
-      auto *node = instanceGraph.lookup(moduleName);
-      auto targetInstanceName = innerRef.getName();
-      auto it = llvm::find_if(*node, [&](InstanceRecord *record) {
-        return cast<InstanceOp>(*record->getInstance()).inner_symAttr() ==
-               targetInstanceName;
-      });
-      assert(it != node->end() &&
-             "Instance referenced by NLA does not exist in module");
-      // Commit the annotation update.
-      auto inst = (*it)->getInstance();
-      AnnotationSet instAnnos(inst);
-      instAnnos.removeAnnotation(dict);
-      instAnnos.applyToOperation(inst);
-    }
     // Erase the NLA from the leaf module's nlaMap.
     targetMap.erase(nla.getNameAttr());
     nlaTable->erase(nla);
@@ -883,12 +827,6 @@ private:
     // annotation into non-local annotations.
     SmallVector<FlatSymbolRefAttr> fromNLAs;
     for (auto anno : fromAnnos) {
-      // If this is a breadcrumb, copy it over with no changes.
-      if (anno.getClassAttr() == nonLocalString) {
-        newAnnotations.push_back(anno);
-        continue;
-      }
-
       // If the ops have the same annotation, we don't have to turn it into a
       // non-local annotation.
       auto found = llvm::find(toAnnos, anno);
@@ -919,12 +857,7 @@ private:
         index = getNextHandledIndex();
         continue;
       }
-      // If this is a breadcrumb, copy it over with no changes.
       auto anno = pair.value();
-      if (anno.getClassAttr() == nonLocalString) {
-        newAnnotations.push_back(anno);
-        continue;
-      }
       makeAnnotationNonLocal(toNLAs, toModule, toModule.moduleNameAttr(), to,
                              toModule, to, anno, newAnnotations);
     }

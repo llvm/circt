@@ -125,14 +125,6 @@ static FlatSymbolRefAttr scatterNonLocalPath(AnnoPathValue target,
                                              ApplyState &state) {
 
   FlatSymbolRefAttr sym = buildNLA(target, state);
-
-  NamedAttrList pathmetadata;
-  pathmetadata.append("circt.nonlocal", sym);
-  pathmetadata.append(
-      "class", StringAttr::get(state.circuit.getContext(), "circt.nonlocal"));
-  for (auto item : target.instances)
-    addAnnotation(OpAnnoTarget(item), 0, pathmetadata);
-
   return sym;
 }
 

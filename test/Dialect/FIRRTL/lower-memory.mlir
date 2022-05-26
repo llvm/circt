@@ -232,11 +232,11 @@ firrtl.circuit "NonLocalAnnotation" {
 firrtl.nla @nla [@NonLocalAnnotation::@dut, @DUT::@sym]
 // CHECK: firrtl.module @NonLocalAnnotation()
 firrtl.module @NonLocalAnnotation()  {
-  firrtl.instance dut sym @dut {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}]} @DUT()
+  firrtl.instance dut sym @dut @DUT()
 }
 // CHECK: firrtl.module @DUT()
 firrtl.module @DUT() {
-  // CHECK: firrtl.instance mem0 sym @sym {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}]} @mem0
+  // CHECK: firrtl.instance mem0 sym @sym @mem0
   %mem0_write = firrtl.mem sym @sym Undefined {annotations = [{circt.nonlocal = @nla, class = "test0"}, {circt.nonlocal = @nla, class = "test2"}], depth = 12 : i64, name = "mem0", portNames = ["write"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
 // LowerMemory should ignore MemOps that are not seqmems. The following memory is a combmem with readLatency=1.
   %MRead_read = firrtl.mem Undefined {depth = 12 : i64, name = "MRead", portNames = ["read"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>

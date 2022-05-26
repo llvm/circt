@@ -217,8 +217,8 @@ firrtl.circuit "NLATop" {
       inclusive = true
     }]} {
 
-    // CHECK:  firrtl.instance test sym @test {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}, {circt.nonlocal = @nla_1, class = "circt.nonlocal"}]} @T_Aardvark()
-    firrtl.instance test  sym @test {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}, {circt.nonlocal = @nla_1, class = "circt.nonlocal"} ]}@Aardvark()
+    // CHECK:  firrtl.instance test sym @test @T_Aardvark()
+    firrtl.instance test  sym @test @Aardvark()
 
     // CHECK: firrtl.instance test2 @T_Z_Zebra()
     firrtl.instance test2 @Zebra()
@@ -232,9 +232,9 @@ firrtl.circuit "NLATop" {
       inclusive = false
     }]} {
 
-    // CHECK:  firrtl.instance test sym @test {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}]} @T_A_Z_Zebra()
-    firrtl.instance test sym @test {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}]}@Zebra()
-    firrtl.instance test1 sym @test_1 {annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}]}@Zebra()
+    // CHECK:  firrtl.instance test sym @test @T_A_Z_Zebra()
+    firrtl.instance test sym @test @Zebra()
+    firrtl.instance test1 sym @test_1 @Zebra()
   }
 
   // CHECK: firrtl.module @T_Z_Zebra
@@ -315,24 +315,24 @@ firrtl.circuit "GCTDataMemTapsPrefix" {
     // CHECK:       firrtl.nla @nla_4 [@X_Foo::@bar, @X_Bar::@baz, @X_Baz]
     // CHECK-LABEL: firrtl.module @FixNLA()
     firrtl.module @FixNLA() {
-      firrtl.instance foo sym @foo  {annotations = [{circt.nonlocal = @nla_2, class = "circt.nonlocal"}]} @Foo()
-      firrtl.instance bar sym @bar  {annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}, {circt.nonlocal = @nla_3, class = "circt.nonlocal"}]} @Bar()
-      // CHECK:   firrtl.instance foo sym @foo  {annotations = [{circt.nonlocal = @nla_2, class = "circt.nonlocal"}]} @X_Foo()
-      // CHECK:   firrtl.instance bar sym @bar  {annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}, {circt.nonlocal = @nla_3, class = "circt.nonlocal"}]} @Bar()
+      firrtl.instance foo sym @foo  @Foo()
+      firrtl.instance bar sym @bar  @Bar()
+      // CHECK:   firrtl.instance foo sym @foo @X_Foo()
+      // CHECK:   firrtl.instance bar sym @bar @Bar()
     }
     firrtl.module @Foo() attributes {annotations = [{class = "sifive.enterprise.firrtl.NestedPrefixModulesAnnotation", inclusive = true, prefix = "X_"}]} {
-      firrtl.instance bar sym @bar  {annotations = [{circt.nonlocal = @nla_2, class = "circt.nonlocal"}, {circt.nonlocal = @nla_4, class = "circt.nonlocal"}]} @Bar()
+      firrtl.instance bar sym @bar  @Bar()
     }
     // CHECK-LABEL:   firrtl.module @X_Foo()
-    // CHECK:         firrtl.instance bar sym @bar  {annotations = [{circt.nonlocal = @nla_2, class = "circt.nonlocal"}, {circt.nonlocal = @nla_4, class = "circt.nonlocal"}]} @X_Bar()
+    // CHECK:         firrtl.instance bar sym @bar @X_Bar()
 
     // CHECK-LABEL:   firrtl.module @Bar()
     firrtl.module @Bar() {
-      firrtl.instance baz sym @baz  {annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}, {circt.nonlocal = @nla_2, class = "circt.nonlocal"}, {circt.nonlocal = @nla_3, class = "circt.nonlocal"}, {circt.nonlocal = @nla_4, class = "circt.nonlocal"}]} @Baz()
-      // CHECK:     firrtl.instance baz sym @baz  {annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}, {circt.nonlocal = @nla_3, class = "circt.nonlocal"}]} @Baz()
+      firrtl.instance baz sym @baz @Baz()
+      // CHECK:     firrtl.instance baz sym @baz @Baz()
     }
     // CHECK-LABEL: firrtl.module @X_Bar()
-    // CHECK:       firrtl.instance baz sym @baz  {annotations = [{circt.nonlocal = @nla_2, class = "circt.nonlocal"}, {circt.nonlocal = @nla_4, class = "circt.nonlocal"}]} @X_Baz()
+    // CHECK:       firrtl.instance baz sym @baz @X_Baz()
 
     firrtl.module @Baz() attributes {annotations = [{circt.nonlocal = @nla_1, class = "nla_1"}, {circt.nonlocal = @nla_3, class = "nla_3"}, {circt.nonlocal = @nla_4, class = "nla_4"}]} {
       %mem_MPORT_en = firrtl.wire sym @s1  {annotations = [{circt.nonlocal = @nla_2, class = "nla_2"}]} : !firrtl.uint<1>
@@ -354,16 +354,16 @@ firrtl.circuit "Test"   {
   firrtl.nla @nla_2 [@Test::@foo2, @Foo2::@bar, @Bar]
 
   firrtl.module @Test() {
-    firrtl.instance foo1 sym @foo1 {annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}]} @Foo1()
-    firrtl.instance foo2 sym @foo2 {annotations = [{circt.nonlocal = @nla_2, class = "circt.nonlocal"}]} @Foo2()
+    firrtl.instance foo1 sym @foo1 @Foo1()
+    firrtl.instance foo2 sym @foo2 @Foo2()
   }
 
   firrtl.module @Foo1() attributes {annotations = [{class = "sifive.enterprise.firrtl.NestedPrefixModulesAnnotation", inclusive = true, prefix = "A_"}]} {
-    firrtl.instance bar sym @bar {annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}]} @Bar()
+    firrtl.instance bar sym @bar @Bar()
   }
 
   firrtl.module @Foo2() attributes {annotations = [{class = "sifive.enterprise.firrtl.NestedPrefixModulesAnnotation", inclusive = true, prefix = "B_"}]} {
-    firrtl.instance bar sym @bar {annotations = [{circt.nonlocal = @nla_2, class = "circt.nonlocal"}]} @Bar()
+    firrtl.instance bar sym @bar @Bar()
   }
 
   // CHECK: firrtl.memmodule @A_Bar() attributes {annotations = [{circt.nonlocal = @nla_1, class = "test1"}]

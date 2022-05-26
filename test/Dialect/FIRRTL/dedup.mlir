@@ -122,10 +122,10 @@ firrtl.circuit "Annotations" {
     %j = firrtl.wire : !firrtl.bundle<a: uint<1>>
   }
   firrtl.module @Annotations() {
-    // CHECK: firrtl.instance annotations0 sym @annotations0  {annotations = [{circt.nonlocal = @annos_nla0, class = "circt.nonlocal"}, {circt.nonlocal = [[NLA1]], class = "circt.nonlocal"}, {circt.nonlocal = [[NLA2]], class = "circt.nonlocal"}]} @Annotations0()
-    // CHECK: firrtl.instance annotations1 sym @annotations1  {annotations = [{circt.nonlocal = @annos_nla1, class = "circt.nonlocal"}, {circt.nonlocal = [[NLA0]], class = "circt.nonlocal"}, {circt.nonlocal = [[NLA3]], class = "circt.nonlocal"}]} @Annotations0()
-    firrtl.instance annotations0 sym @annotations0 {annotations = [{circt.nonlocal = @annos_nla0, class = "circt.nonlocal"}]} @Annotations0()
-    firrtl.instance annotations1 sym @annotations1 {annotations = [{circt.nonlocal = @annos_nla1, class = "circt.nonlocal"}]} @Annotations1()
+    // CHECK: firrtl.instance annotations0 sym @annotations0  @Annotations0()
+    // CHECK: firrtl.instance annotations1 sym @annotations1  @Annotations0()
+    firrtl.instance annotations0 sym @annotations0 @Annotations0()
+    firrtl.instance annotations1 sym @annotations1 @Annotations1()
   }
 }
 
@@ -152,9 +152,7 @@ firrtl.circuit "PortAnnotations" {
   }
   // CHECK: firrtl.module @PortAnnotations
   firrtl.module @PortAnnotations() {
-    // CHECK: annotations = [{circt.nonlocal = [[NLA1]], class = "circt.nonlocal"}, {circt.nonlocal = [[NLA3]], class = "circt.nonlocal"}]
     %portannos0_in = firrtl.instance portannos0 @PortAnnotations0(in a: !firrtl.uint<1>)
-    // CHECK: annotations = [{circt.nonlocal = [[NLA0]], class = "circt.nonlocal"}, {circt.nonlocal = [[NLA2]], class = "circt.nonlocal"}]
     %portannos1_in = firrtl.instance portannos1 @PortAnnotations1(in b: !firrtl.uint<1>)
   }
 }
@@ -182,37 +180,17 @@ firrtl.circuit "Breadcrumb" {
   }
   // CHECK: firrtl.module @Breadcrumb0()
   firrtl.module @Breadcrumb0() {
-    // CHECK: %crumb0_in = firrtl.instance crumb0 sym @crumb0  {annotations = [
-    // CHECK-SAME: {circt.nonlocal = @breadcrumb_nla1, class = "circt.nonlocal"},
-    // CHECK-SAME: {circt.nonlocal = @breadcrumb_nla3, class = "circt.nonlocal"},
-    // CHECK-SAME: {circt.nonlocal = @breadcrumb_nla0, class = "circt.nonlocal"},
-    // CHECK-SAME: {circt.nonlocal = @breadcrumb_nla2, class = "circt.nonlocal"}]}
-    %crumb_in = firrtl.instance crumb0 sym @crumb0 {annotations = [
-      {circt.nonlocal = @breadcrumb_nla0, class = "circt.nonlocal"},
-      {circt.nonlocal = @breadcrumb_nla2, class = "circt.nonlocal"}
-    ]} @Crumb(in in : !firrtl.uint<1>)
+    // CHECK: %crumb0_in = firrtl.instance crumb0 sym @crumb0
+    %crumb_in = firrtl.instance crumb0 sym @crumb0 @Crumb(in in : !firrtl.uint<1>)
   }
   // CHECK-NOT: firrtl.module @Breadcrumb1()
   firrtl.module @Breadcrumb1() {
-    %crumb_in = firrtl.instance crumb1 sym @crumb1 {annotations = [
-      {circt.nonlocal = @breadcrumb_nla1, class = "circt.nonlocal"},
-      {circt.nonlocal = @breadcrumb_nla3, class = "circt.nonlocal"}
-    ]} @Crumb(in in : !firrtl.uint<1>)
+    %crumb_in = firrtl.instance crumb1 sym @crumb1 @Crumb(in in : !firrtl.uint<1>)
   }
   // CHECK: firrtl.module @Breadcrumb()
   firrtl.module @Breadcrumb() {
-    // CHECK:     [{circt.nonlocal = @breadcrumb_nla0, class = "circt.nonlocal"},
-    // CHECK-SAME: {circt.nonlocal = @breadcrumb_nla2, class = "circt.nonlocal"}]}
-    firrtl.instance breadcrumb0 sym @breadcrumb0 {annotations = [
-      {circt.nonlocal = @breadcrumb_nla0, class = "circt.nonlocal"},
-      {circt.nonlocal = @breadcrumb_nla2, class = "circt.nonlocal"}
-    ]} @Breadcrumb0()
-    // CHECK:     [{circt.nonlocal = @breadcrumb_nla1, class = "circt.nonlocal"},
-    // CHECK-SAME: {circt.nonlocal = @breadcrumb_nla3, class = "circt.nonlocal"}]}
-    firrtl.instance breadcrumb1 sym @breadcrumb1 {annotations = [
-      {circt.nonlocal = @breadcrumb_nla1, class = "circt.nonlocal"},
-      {circt.nonlocal = @breadcrumb_nla3, class = "circt.nonlocal"}
-    ]} @Breadcrumb1()
+    firrtl.instance breadcrumb0 sym @breadcrumb0 @Breadcrumb0()
+    firrtl.instance breadcrumb1 sym @breadcrumb1 @Breadcrumb1()
   }
 }
 
@@ -250,31 +228,17 @@ firrtl.circuit "Context" {
       {circt.nonlocal = @context_nla3, class = "fake1"}]}: !firrtl.uint<3>
   }
   firrtl.module @Context0() {
-    // CHECK: %leaf_in = firrtl.instance leaf sym @c0  {annotations = [
-    // CHECK-SAME: {circt.nonlocal = [[NLA0]], class = "circt.nonlocal"},
-    // CHECK-SAME: {circt.nonlocal = [[NLA2]], class = "circt.nonlocal"},
-    // CHECK-SAME: {circt.nonlocal = [[NLA1]], class = "circt.nonlocal"},
-    // CHECK-SAME: {circt.nonlocal = [[NLA3]], class = "circt.nonlocal"}]}
-    %leaf_in = firrtl.instance leaf sym @c0 {annotations = [
-      {circt.nonlocal = @context_nla0, class = "circt.nonlocal"},
-      {circt.nonlocal = @context_nla1, class = "circt.nonlocal"}
-    ]} @ContextLeaf(in in : !firrtl.uint<1>)
+    // CHECK: %leaf_in = firrtl.instance leaf sym @c0
+    %leaf_in = firrtl.instance leaf sym @c0 @ContextLeaf(in in : !firrtl.uint<1>)
   }
   // CHECK-NOT: firrtl.module @Context1()
   firrtl.module @Context1() {
-    %leaf_in = firrtl.instance leaf sym @c1 {annotations = [
-      {circt.nonlocal = @context_nla2, class = "circt.nonlocal"},
-      {circt.nonlocal = @context_nla3, class = "circt.nonlocal"}
-    ]} @ContextLeaf(in in : !firrtl.uint<1>)
+    %leaf_in = firrtl.instance leaf sym @c1 @ContextLeaf(in in : !firrtl.uint<1>)
   }
   firrtl.module @Context() {
-    // CHECK: firrtl.instance context0 sym @context0  {annotations = [
-    // CHECK-SAME: {circt.nonlocal = [[NLA0]], class = "circt.nonlocal"},
-    // CHECK-SAME: {circt.nonlocal = [[NLA2]], class = "circt.nonlocal"}]}
+    // CHECK: firrtl.instance context0 sym @context0
     firrtl.instance context0 @Context0()
-    // CHECK: firrtl.instance context1 sym @context1  {annotations = [
-    // CHECK-SAME: {circt.nonlocal = [[NLA1]], class = "circt.nonlocal"},
-    // CHECK-SAME: {circt.nonlocal = [[NLA3]], class = "circt.nonlocal"}]}
+    // CHECK: firrtl.instance context1 sym @context1
     firrtl.instance context1 @Context1()
   }
 }
@@ -292,8 +256,8 @@ firrtl.circuit "ExtModuleTest" {
   firrtl.module @ExtModuleTest() {
     // CHECK: firrtl.instance e0  @ExtMod0()
     firrtl.instance e0 @ExtMod0()
-    // CHECK: firrtl.instance e1 sym @e1  {annotations = [{circt.nonlocal = @ext_nla, class = "circt.nonlocal"}]} @ExtMod0()
-    firrtl.instance e1 sym @e1 {annotations = [{circt.nonlocal = @ext_nla, class = "circt.nonlocal"}]} @ExtMod1()
+    // CHECK: firrtl.instance e1 sym @e1 @ExtMod0()
+    firrtl.instance e1 sym @e1 @ExtMod1()
   }
 }
 
@@ -308,8 +272,8 @@ firrtl.circuit "Foo"  {
   firrtl.extmodule @B(out b: !firrtl.clock sym @b [{circt.nonlocal = @nla_1}])
   firrtl.module @Foo() {
     %b0_out = firrtl.instance a @A(out a: !firrtl.clock)
-    // CHECK: firrtl.instance b sym @b  {annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}]} @A(out a: !firrtl.clock)
-    %b1_out = firrtl.instance b sym @b {annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}]} @B(out b: !firrtl.clock)
+    // CHECK: firrtl.instance b sym @b  @A(out a: !firrtl.clock)
+    %b1_out = firrtl.instance b sym @b @B(out b: !firrtl.clock)
   }
 }
 
@@ -337,7 +301,6 @@ firrtl.circuit "Chain" {
   // CHECK: firrtl.nla [[NLA1:@nla.*]] [@Chain::@chainB0, @ChainB0::@chainA0, @ChainA0::@extchain0, @ExtChain0]
   // CHECK: firrtl.module @ChainB0()
   firrtl.module @ChainB0() {
-    // CHECK: {annotations = [{circt.nonlocal = [[NLA1]], class = "circt.nonlocal"}, {circt.nonlocal = [[NLA0]], class = "circt.nonlocal"}]}
     firrtl.instance chainA0 @ChainA0()
   }
   // CHECK: firrtl.extmodule @ExtChain0() attributes {annotations = [
@@ -348,7 +311,6 @@ firrtl.circuit "Chain" {
   firrtl.extmodule @ExtChain1() attributes {annotations = [{class = "1"}], defname = "ExtChain"}
   // CHECK: firrtl.module @ChainA0()
   firrtl.module @ChainA0()  {
-    // CHECK: {circt.nonlocal = [[NLA1]], class = "circt.nonlocal"}, {circt.nonlocal = [[NLA0]], class = "circt.nonlocal"}
     firrtl.instance extchain0 @ExtChain0()
   }
   // CHECK-NOT: firrtl.module @ChainB1()
@@ -360,9 +322,9 @@ firrtl.circuit "Chain" {
     firrtl.instance extchain1 @ExtChain1()
   }
   firrtl.module @Chain() {
-    // CHECK: firrtl.instance chainB0 sym @chainB0  {annotations = [{circt.nonlocal = [[NLA1]], class = "circt.nonlocal"}]} @ChainB0()
+    // CHECK: firrtl.instance chainB0 sym @chainB0 @ChainB0()
     firrtl.instance chainB0 @ChainB0()
-    // CHECK: firrtl.instance chainB1 sym @chainB1  {annotations = [{circt.nonlocal = [[NLA0]], class = "circt.nonlocal"}]} @ChainB0()
+    // CHECK: firrtl.instance chainB1 sym @chainB1 @ChainB0()
     firrtl.instance chainB1 @ChainB1()
   }
 }
