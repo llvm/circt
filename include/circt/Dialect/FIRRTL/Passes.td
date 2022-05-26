@@ -451,7 +451,7 @@ def ExtractInstances : Pass<"firrtl-extract-instances", "firrtl::CircuitOp"> {
   let dependentDialects = ["sv::SVDialect", "circt::hw::HWDialect"];
 }
 
-def MemToRegOfVec : Pass<"mem-to-regofvec", "firrtl::CircuitOp"> {
+def MemToRegOfVec : Pass<"firrtl-mem-to-reg-of-vec", "firrtl::CircuitOp"> {
   let summary = "Convert the memory to a Register vector";
   let description = [{
     This pass generates the logic to implement a memory using Registers.
