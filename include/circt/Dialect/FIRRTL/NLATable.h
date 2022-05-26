@@ -29,13 +29,19 @@ class NLATable {
 
 public:
   /// Create a new NLA table of a circuit.  This must be called on a FIRRTL
-  /// CircuitOp or MLIR ModuleOp.
+  /// CircuitOp or MLIR ModuleOp. To esnure that the analysis does not return
+  /// stale data while a pass is running, it should be kept up-to-date when
+  /// modules are added or renamed and NLAs are updated.
   explicit NLATable(Operation *operation);
 
-  /// Lookup all NLAs an operation participates in.
+  /// Lookup all NLAs an operation participates in. This returns a reference to
+  /// the internal record, so make a copy before making any update to the
+  /// NLATable.
   ArrayRef<NonLocalAnchor> lookup(Operation *op);
 
-  /// Lookup all NLAs an operation participates in.
+  /// Lookup all NLAs an operation participates in. This returns a reference to
+  /// the internal record, so make a copy before making any update to the
+  /// NLATable.
   ArrayRef<NonLocalAnchor> lookup(StringAttr name);
 
   /// Resolve a symbol to an NLA.
@@ -44,14 +50,22 @@ public:
   /// Resolve a symbol to a Module.
   FModuleLike getModule(StringAttr name);
 
-  /// Insert a new NLA.
+  /// Insert a new NLA. This updates two internal records,
+  /// 1. Update the map for the `nlaOp` name to the Operation.
+  /// 2. For each module in the NLA namepath, insert the NLA into the list of
+  /// NonlocalAnchors that participate in the corresponding module. This does
+  /// not update the module name to module op map, if any potentially new module
+  /// in the namepath does not already exist in the record.
   void insert(NonLocalAnchor nlaOp);
 
-  /// Remove the NLA from the analysis.
+  /// Remove the NLA from the analysis. This updates two internal records,
+  /// 1. Remove the NLA name to the operation map entry.
+  /// 2. For each module in the namepath of the NLA, remove the entry from the
+  /// list of NLAs that the module participates in.
   void erase(NonLocalAnchor nlaOp);
 
-  /// Compute the NLAs that are common between the two modules, \p mod1 and \p
-  /// mod2 and insert them into the set \p common.
+  /// Compute the NLAs that are common between the two modules, `mod1` and
+  /// `mod2` and insert them into the set `common`.
   ///  The set of NLAs that an instance op participates in is the set of common
   ///  NLAs between the parent module and the instance target. This can be used
   ///  to get the set of NLAs that an InstanceOp participates in, instead of
@@ -103,7 +117,8 @@ public:
   // NLATable is used as an analysis, this is only safe when the pass is
   // on a CircuitOp.
 
-  /// Record a new NLA operation.
+  /// Record a new NLA operation. Duplicate of `insert'.
+  /// TODO: Remove this.
   void addNLA(NonLocalAnchor nla);
 
   /// Record a new FModuleLike operation.
@@ -137,11 +152,13 @@ public:
   /// Remove the NLA from the Module.
   void removeNLAfromModule(NonLocalAnchor nla, StringAttr mod);
 
-  /// Remove all the nlas in the set from the module.
+  /// Remove all the nlas in the set `nlas` from the module.
   void removeNLAsfromModule(const DenseSet<NonLocalAnchor> &nlas,
                             StringAttr mod);
 
-  /// Add the nla to the module.
+  /// Add the nla to the module. This ensures that the list of NLAs that the
+  /// module participates in is updated. This will be required if `mod` is added
+  /// to the namepath of `nla`.
   void addNLAtoModule(NonLocalAnchor nla, StringAttr mod) {
     nodeMap[mod].push_back(nla);
   }
