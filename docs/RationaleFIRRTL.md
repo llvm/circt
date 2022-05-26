@@ -265,7 +265,7 @@ three problems were identified:
 
 As an example of the first problem, consider the following circuit:
 
-``` scala
+```firrtl
 module Foo:
   output a: { flip a: UInt<1> }
   output b: { a: UInt<1> }
@@ -277,7 +277,7 @@ The connection `b <= a` _is illegal_ FIRRTL due to a type mismatch where `{ flip
 a: UInt<1> }` is not equal to `{ a: UInt<1> }`.  However, type canonicalization
 would transform this circuit into the following circuit:
 
-```scala
+```firrtl
 module Foo:
   input a: { a: UInt<1> }
   output b: { a: UInt<1> }
@@ -290,7 +290,7 @@ for a type canonical form to be type checked.
 
 As an example of the second problem, consider the following circuit:
 
-```scala
+```firrtl
 module Bar:
   output a: { flip a: UInt<1> }
   input b: { flip a: UInt<1> }
@@ -302,7 +302,7 @@ Here, the connection `b <= a` _is illegal_ FIRRTL because `b` is a source and
 `a` is a sink.  However, type canonicalization converts this to the following
 circuit:
 
-``` scala
+```firrtl
 module Bar:
   input a: { a: UInt<1> }
   output b: { a: UInt<1> }
@@ -316,7 +316,7 @@ flow checked.
 
 As an example of the third problem, consider the following circuit:
 
-``` scala
+```firrtl
 module Baz:
   wire a: {flip a: {flip a: UInt<1>}}
   wire b: {flip a: {flip a: UInt<1>}}
@@ -328,7 +328,7 @@ The connection `b.a <= a.a`, when lowered, results in the _reverse_ connect
 `a.a.a <= b.a.a`.  However, type canonicalization will remove the flips from the
 circuit to produce:
 
-```scala
+```firrtl
 module Baz:
   wire a: {a: {a: UInt<1>}}
   wire b: {a: {a: UInt<1>}}
@@ -667,7 +667,7 @@ During parsing, we break up an `x is invalid` statement into leaf connections.
 As an example, consider the following FIRRTL module where a bi-directional
 aggregate, `a` is invalidated:
 
-``` scala
+```firrtl
 module Foo:
   output a: { a: UInt<1>, flip b: UInt<1> }
 
@@ -689,7 +689,7 @@ firrtl.module @Foo(out %a: !firrtl.bundle<a: uint<1>, b: flip<uint<1>>>) {
 The FIRRTL spec describes a `validif(en, x)` operation that is used during
 lowering from high to low FIRRTL. Consider the following example:
 
-```scala
+```firrtl
 c <= invalid
 when a:
   c <= b
@@ -697,7 +697,7 @@ when a:
 
 Lowering will introduce the following intermediate representation in low FIRRTL:
 
-```scala
+```firrtl
 c <= validif(a, b)
 ```
 
@@ -784,7 +784,7 @@ It is legal to use an invalidated output port or instance input port.
 As an example, the following module should have register `r` converted to a
 reset-less register:
 
-``` scala
+```firrtl
 wire inv: UInt<8>
 inv is invalid
 
@@ -799,13 +799,13 @@ Notably, if `tmp` is a `node`, this optimization should not be performed.
 Interpretation (2) and Interpretation (3) mean that either of the following
 circuits should be optimized to a direct connection from `bar` to `foo`:
 
-``` scala
+```firrtl
 foo is invalid
 when cond:
   foo <= bar
 ```
 
-``` scala
+```firrtl
 foo <= validif(cond, bar)
 ```
 
@@ -820,7 +820,7 @@ It is important to note that the above two formulations using `when` or
 code below should be optimized using Interpretation (4) of invalid as constant
 zero:
 
-``` scala
+```firrtl
 wire inv: UInt<8>
 inv is invalid
 
@@ -829,7 +829,7 @@ foo <= mux(cond, bar, inv)
 
 A legal lowering of this is only to:
 
-``` scala
+```firrtl
 foo <= mux(cond, bar, UInt<8>(0))
 ```
 
@@ -843,7 +843,7 @@ where the SFC is treated as ground truth.
 As an example, consider a reformulation of the `when` example above, but using a
 temporary, single-use, invalidated wire:
 
-``` scala
+```firrtl
 wire inv: UInt<8>
 inv is invalid
 
@@ -855,7 +855,7 @@ when cond:
 This should _not_ produce a direction connection to `b` and should instead lower
 to:
 
-``` scala
+```firrtl
 b <= mux(cond, a, inv)
 ```
 
