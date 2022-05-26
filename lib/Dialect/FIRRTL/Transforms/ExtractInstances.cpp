@@ -442,7 +442,6 @@ void ExtractInstancesPass::extractInstances() {
   DenseMap<StringRef, unsigned> prefixUniqueIDs;
 
   SmallPtrSet<Operation *, 4> nlasToRemove;
-  SmallPtrSet<Attribute, 4> nlasToRemoveFromParent;
 
   auto &nlaTable = getAnalysis<NLATable>();
 
@@ -523,6 +522,28 @@ void ExtractInstancesPass::extractInstances() {
           parent.getArgument(numParentPorts + portIdx));
     }
     assert(inst.use_empty() && "instance ports should have been detached");
+    DenseSet<NonLocalAnchor> instanceNLAs;
+    // Get the NLAs that pass through the InstanceOp `inst`.
+    // This does not returns NLAs that have the `inst` as the leaf.
+    nlaTable.getInstanceNLAs(inst, instanceNLAs);
+    // Map of the NLAs, that are applied to the InstanceOp. That is the NLA
+    // terminates on the InstanceOp.
+    DenseMap<NonLocalAnchor, Annotation> instNonlocalAnnos;
+    // Get the NLAs that are applied on the InstanceOp, since the NLATable does
+    // not return them.
+    AnnotationSet::removeAnnotations(inst, [&](Annotation anno) {
+      auto nlaName = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal");
+      // Ignore any other anno.
+      if (!nlaName)
+        return false;
+      // Ignore the breadcrumb annos, since NLATable already tracks them.
+      if (!anno.isClass("circt.nonlocal"))
+        if (NonLocalAnchor nla = nlaTable.getNLA(nlaName.getAttr())) {
+          instNonlocalAnnos[nla] = anno;
+          instanceNLAs.insert(nla);
+        }
+      return true;
+    });
 
     // Move the original instance one level up such that it is right next to
     // the instances of the parent module, and wire the instance ports up to
@@ -584,19 +605,12 @@ void ExtractInstancesPass::extractInstances() {
       auto &extractionPath = (extractionPaths[newInst] = extractionPaths[inst]);
       extractionPath.push_back(getInnerRefTo(newParentInst));
       originalInstanceParents[newInst] = originalInstanceParents[inst];
+      // Record the Nonlocal annotations that need to be applied to the new
+      // Inst.
+      SmallVector<Annotation> newInstNonlocalAnnos;
 
-      // Update all NLAs that touch the moved instance. We do this through
-      // `removeAnnotations` which gives us an opportunity to drop annotations
-      // that we want to replace with an updated version. We add the new ones to
-      // `newInstAnnos` since we cannot modify the `AnnotationSet` within
-      // `removeAnnotations`.
-      AnnotationSet annos(newInst);
-      SmallVector<Attribute> newInstAnnos;
-      annos.removeAnnotations([&](Annotation anno) {
-        auto nlaName = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal");
-        if (!nlaName)
-          return false;
-        auto nla = nlaTable.getNLA(nlaName.getAttr());
+      // Update all NLAs that touch the moved instance.
+      for (auto nla : instanceNLAs) {
         LLVM_DEBUG(llvm::dbgs() << "  - Updating " << nla << "\n");
 
         // Find the position of the instance in the NLA path. This is going to
@@ -622,7 +636,7 @@ void ExtractInstancesPass::extractInstances() {
         // updated.
         if (nlaIdx >= nlaLen) {
           LLVM_DEBUG(llvm::dbgs() << "    - Instance no longer in path\n");
-          return true;
+          continue;
         }
         LLVM_DEBUG(llvm::dbgs() << "    - Position " << nlaIdx << "\n");
 
@@ -638,14 +652,9 @@ void ExtractInstancesPass::extractInstances() {
             LLVM_DEBUG(llvm::dbgs()
                        << "    - Ignored since NLA parent " << innerRef
                        << " does not pass through extraction parent\n");
-            return true;
+            continue;
           }
         }
-
-        // Since we're moving the instance out of its parent module, this NLA
-        // will no longer pass through that parent module. Mark it to be removed
-        // from the parent later.
-        nlasToRemoveFromParent.insert(nla.sym_nameAttr());
 
         // There are two interesting cases now:
         // - If `nlaIdx == 0`, the NLA is rooted at the module the instance was
@@ -660,32 +669,28 @@ void ExtractInstancesPass::extractInstances() {
         // instance since we've moved it past the module at which the old NLA
         // was rooted at.
         if (nlaIdx == 0) {
-          LLVM_DEBUG(llvm::dbgs()
-                     << "    - Re-rooting " << nlaPath[nlaIdx] << "\n");
-          nlaPath[nlaIdx] =
+          LLVM_DEBUG(llvm::dbgs() << "    - Re-rooting " << nlaPath[0] << "\n");
+          nlaPath[0] =
               InnerRefAttr::get(newParent.moduleNameAttr(),
-                                nlaPath[nlaIdx].cast<InnerRefAttr>().getName());
+                                nlaPath[0].cast<InnerRefAttr>().getName());
           auto builder = OpBuilder::atBlockBegin(getOperation().getBody());
-          // CAVEAT(fschuiki): There are likely cases where the following
-          // creates multiple NLAs with the same name. This is going to happen
-          // if an NLA has to be re-rooted and the parent is instantiated
-          // multiple times, requiring us to create a new NLA for each of the
-          // parent instances. To fix this you'll have to pick a name through
-          // `circuitNamespace.newName(...)` and visit every module/instance in
-          // the old NLA, remove the reference to the old NLA, and add
-          // references for all the newly-created ones.
+
           auto newNla = builder.create<NonLocalAnchor>(
-              newInst.getLoc(), nla.sym_nameAttr(),
+              newInst.getLoc(), circuitNamespace.newName(nla.sym_name()),
               builder.getArrayAttr(nlaPath));
+          auto nlaAnno = instNonlocalAnnos.find(nla);
+          if (nlaAnno != instNonlocalAnnos.end()) {
+            Annotation newAnno = nlaAnno->getSecond();
+            newAnno.setMember("circt.nonlocal",
+                              FlatSymbolRefAttr::get(newNla.sym_nameAttr()));
+            newInstNonlocalAnnos.push_back(newAnno);
+          }
+
+          nlaTable.erase(nla);
           nlasToRemove.insert(nla);
           nlaTable.addNLA(newNla);
-          // This modifies our local copy of the anno, not the actual anno on
-          // the operation.
-          anno.setMember("circt.nonlocal",
-                         FlatSymbolRefAttr::get(newNla.sym_nameAttr()));
-          newInstAnnos.push_back(anno.getDict());
           LLVM_DEBUG(llvm::dbgs() << "    - Created " << newNla << "\n");
-          return true; // delete the old anno
+          continue;
         }
 
         // In the subequent code block we are going to remove one element from
@@ -695,12 +700,17 @@ void ExtractInstancesPass::extractInstances() {
         // its path. If that is the case we have to convert the NLA into a
         // regular local annotation.
         if (nlaPath.size() == 2) {
-          anno.removeMember("circt.nonlocal");
-          newInstAnnos.push_back(anno.getDict());
+          auto nlaAnno = instNonlocalAnnos.find(nla);
+          if (nlaAnno != instNonlocalAnnos.end()) {
+            auto anno = nlaAnno->getSecond();
+            anno.removeMember("circt.nonlocal");
+            newInstNonlocalAnnos.push_back(anno);
+            LLVM_DEBUG(llvm::dbgs() << "    - Converted to local "
+                                    << anno.getDict() << "\n");
+          }
+          nlaTable.erase(nla);
           nlasToRemove.insert(nla);
-          LLVM_DEBUG(llvm::dbgs()
-                     << "    - Converted to local " << anno.getDict() << "\n");
-          return true; // delete the old anno
+          continue;
         }
 
         // At this point the NLA looks like `NewParent::X, OldParent::BB`, and
@@ -716,35 +726,32 @@ void ExtractInstancesPass::extractInstances() {
         nlaPath[nlaIdx] = newInnerRef;
         nlaPath.erase(nlaPath.begin() + nlaIdx - 1);
         nla.namepathAttr(builder.getArrayAttr(nlaPath));
+        auto nlaAnno = instNonlocalAnnos.find(nla);
+        if (nlaAnno != instNonlocalAnnos.end())
+          newInstNonlocalAnnos.push_back(nlaAnno->getSecond());
+
         LLVM_DEBUG(llvm::dbgs() << "    - Modified to " << nla << "\n");
-        return false;
-      });
-      annos.addAnnotations(newInstAnnos);
-      annos.applyToOperation(newInst);
+        // No update to NLATable required, since it will be deleted from the
+        // parent, and it should already exist in the new parent module.
+        continue;
+      }
+      AnnotationSet newInstAnnos(newInst);
+      newInstAnnos.addAnnotations(newInstNonlocalAnnos);
+      newInstAnnos.applyToOperation(newInst);
 
       // Add the moved instance to the extraction worklist such that it gets
       // bubbled up further if needed.
       extractionWorklist.push_back({newInst, info});
       LLVM_DEBUG(llvm::dbgs() << "  - Updated to " << newInst << "\n");
 
-      // Remove the obsolete NLAs from the instance of the parent module, since
-      // the extracted instance no longer resides in that module and any NLAs to
-      // it no longer go through the parent module.
-      AnnotationSet::removeAnnotations(newParentInst, [&](Annotation anno) {
-        auto nlaName = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal");
-        if (nlaName && nlasToRemoveFromParent.contains(nlaName.getAttr())) {
-          LLVM_DEBUG(llvm::dbgs()
-                     << "  - Remove from parent: " << anno.getDict() << "\n");
-          return true;
-        }
-        return false;
-      });
-      nlasToRemoveFromParent.clear();
-
       // Keep instance graph up-to-date.
       instanceGraph->replaceInstance(oldParentInst, newParentInst);
       oldParentInst.erase();
     }
+    // Remove the obsolete NLAs from the instance of the parent module, since
+    // the extracted instance no longer resides in that module and any NLAs to
+    // it no longer go through the parent module.
+    nlaTable.removeNLAsfromModule(instanceNLAs, parent.getNameAttr());
 
     // Clean up the original instance.
     inst.erase();
@@ -779,7 +786,6 @@ void ExtractInstancesPass::groupInstances() {
 
   // Generate the wrappers.
   SmallVector<PortInfo> ports;
-  SmallVector<Attribute> wrapperInstAnnos;
   auto &nlaTable = getAnalysis<NLATable>();
 
   for (auto &[parentAndWrapperName, insts] : instsByWrapper) {
@@ -800,7 +806,6 @@ void ExtractInstancesPass::groupInstances() {
     // NLAs that target the grouped instances since these will have to pass
     // through the wrapper module.
     ports.clear();
-    wrapperInstAnnos.clear();
     for (auto inst : insts) {
       // Determine the ports for the wrapper.
       StringRef prefix(instPrefices[inst]);
@@ -816,14 +821,22 @@ void ExtractInstancesPass::groupInstances() {
         ports.push_back(port);
       }
 
-      // Determine the additional NLA breadcrumbs to put on the wrapper instance
-      // and update the NLA's path to include the wrapper instance we're about
-      // to construct.
-      for (auto anno : AnnotationSet(inst)) {
+      // Set of NLAs that have a reference to this InstanceOp `inst`.
+      DenseSet<NonLocalAnchor> instNlas;
+      // Get the NLAs that pass through the `inst`, and not end at it.
+      nlaTable.getInstanceNLAs(inst, instNlas);
+      AnnotationSet instAnnos(inst);
+      // Get the NLAs that end at the InstanceOp, that is the Nonlocal
+      // annotations that apply to the InstanceOp.
+      for (auto anno : instAnnos) {
         auto nlaName = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal");
         if (!nlaName)
           continue;
-        auto nla = nlaTable.getNLA(nlaName.getAttr());
+        NonLocalAnchor nla = nlaTable.getNLA(nlaName.getAttr());
+        if (nla)
+          instNlas.insert(nla);
+      }
+      for (auto nla : instNlas) {
         LLVM_DEBUG(llvm::dbgs() << "  - Updating " << nla << "\n");
 
         // Find the position of the instance in the NLA path. This is going to
@@ -856,14 +869,8 @@ void ExtractInstancesPass::groupInstances() {
         nlaPath.insert(nlaPath.begin() + nlaIdx + 1, ref2);
         nla.namepathAttr(builder.getArrayAttr(nlaPath));
         LLVM_DEBUG(llvm::dbgs() << "    - Modified to " << nla << "\n");
-
-        // Create a breadcrumb annotation for the wrapper instance which we'll
-        // create further down.
-        wrapperInstAnnos.push_back(builder.getDictionaryAttr(
-            {{builder.getStringAttr("class"),
-              builder.getStringAttr("circt.nonlocal")},
-             {builder.getStringAttr("circt.nonlocal"),
-              FlatSymbolRefAttr::get(nla.sym_nameAttr())}}));
+        // Add the NLA to the wrapper module.
+        nlaTable.addNLAtoModule(nla, ref2.getModule());
       }
     }
 
@@ -876,7 +883,7 @@ void ExtractInstancesPass::groupInstances() {
     // This will essentially disconnect the extracted instances.
     builder.setInsertionPointToStart(parent.getBody());
     auto wrapperInst = builder.create<InstanceOp>(
-        wrapper.getLoc(), wrapper, wrapperName, wrapperInstAnnos,
+        wrapper.getLoc(), wrapper, wrapperName, ArrayRef<Attribute>{},
         /*portAnnotations=*/ArrayRef<Attribute>{}, /*lowerToBind=*/false,
         wrapperInstName);
     unsigned portIdx = 0;

@@ -65,7 +65,7 @@ firrtl.circuit "ExtractBlackBoxesSimple" attributes {annotations = [{class = "fi
 
 // CHECK: firrtl.circuit "ExtractBlackBoxesSimple2"
 firrtl.circuit "ExtractBlackBoxesSimple2" attributes {annotations = [{class = "firrtl.transforms.BlackBoxTargetDirAnno", targetDir = "BlackBoxes"}]} {
-  // CHECK: firrtl.nla @nla_1 [@ExtractBlackBoxesSimple2::@bb, @MyBlackBox]
+  // CHECK: firrtl.nla @nla_1{{.*}} [@ExtractBlackBoxesSimple2::@bb, @MyBlackBox]
   // CHECK-NOT: firrtl.nla @nla_2
   // CHECK-NOT: firrtl.nla @nla_3
   firrtl.nla @nla_1 [@BBWrapper::@bb, @MyBlackBox]
@@ -90,7 +90,6 @@ firrtl.circuit "ExtractBlackBoxesSimple2" attributes {annotations = [{class = "f
     // CHECK-NOT: firrtl.instance bb @MyBlackBox
     // CHECK-NOT: firrtl.instance bb2 @MyBlackBox2
     %bb_in, %bb_out = firrtl.instance bb sym @bb {annotations = [
-        {circt.nonlocal = @nla_1, class = "circt.nonlocal"},
         {circt.nonlocal = @nla_2, class = "DummyB"},
         {circt.nonlocal = @nla_3, class = "DummyC"}
       ]} @MyBlackBox(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
@@ -111,16 +110,13 @@ firrtl.circuit "ExtractBlackBoxesSimple2" attributes {annotations = [{class = "f
     // CHECK-NOT: firrtl.instance bb @MyBlackBox
     // CHECK-NOT: firrtl.instance bb2 @MyBlackBox2
     // CHECK: %mod_in, %mod_out, %mod_prefix_0_in, %mod_prefix_0_out, %mod_prefix_1_in, %mod_prefix_1_out = firrtl.instance mod
-    // CHECK-NOT: annotations =
     // CHECK-SAME: sym [[WRAPPER_SYM:@.+]] @BBWrapper
+    // CHECK-NOT: annotations =
     // CHECK-NEXT: firrtl.strictconnect %prefix_1_in, %mod_prefix_1_in
     // CHECK-NEXT: firrtl.strictconnect %mod_prefix_1_out, %prefix_1_out
     // CHECK-NEXT: firrtl.strictconnect %prefix_0_in, %mod_prefix_0_in
     // CHECK-NEXT: firrtl.strictconnect %mod_prefix_0_out, %prefix_0_out
-    %mod_in, %mod_out = firrtl.instance mod sym @mod {annotations = [
-        {circt.nonlocal = @nla_2, class = "circt.nonlocal"},
-        {circt.nonlocal = @nla_3, class = "circt.nonlocal"}
-      ]} @BBWrapper(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
+    %mod_in, %mod_out = firrtl.instance mod sym @mod @BBWrapper(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
     firrtl.connect %out, %mod_out : !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.connect %mod_in, %in : !firrtl.uint<8>, !firrtl.uint<8>
   }
@@ -129,15 +125,13 @@ firrtl.circuit "ExtractBlackBoxesSimple2" attributes {annotations = [{class = "f
     // CHECK: %dut_in, %dut_out, %dut_prefix_0_in, %dut_prefix_0_out, %dut_prefix_1_in, %dut_prefix_1_out = firrtl.instance dut
     // CHECK-NOT: annotations =
     // CHECK-SAME: sym {{@.+}} @DUTModule
-    // CHECK-NEXT: %bb_in, %bb_out = firrtl.instance bb sym [[BB_SYM:@.+]] {annotations = [{class = "DummyB"}, {class = "DummyC"}, {circt.nonlocal = @nla_1, class = "circt.nonlocal"}]} @MyBlackBox
+    // CHECK-NEXT: %bb_in, %bb_out = firrtl.instance bb sym [[BB_SYM:@.+]] {annotations = [{class = "DummyB"}, {class = "DummyC"}]} @MyBlackBox
     // CHECK-NEXT: firrtl.strictconnect %bb_in, %dut_prefix_1_in
     // CHECK-NEXT: firrtl.strictconnect %dut_prefix_1_out, %bb_out
     // CHECK-NEXT: %bb2_in, %bb2_out = firrtl.instance bb2 sym [[BB2_SYM:@.+]] @MyBlackBox2
     // CHECK-NEXT: firrtl.strictconnect %bb2_in, %dut_prefix_0_in
     // CHECK-NEXT: firrtl.strictconnect %dut_prefix_0_out, %bb2_out
-    %dut_in, %dut_out = firrtl.instance dut sym @dut {annotations = [
-        {circt.nonlocal = @nla_3, class = "circt.nonlocal"}
-      ]} @DUTModule(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
+    %dut_in, %dut_out = firrtl.instance dut sym @dut @DUTModule(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
     firrtl.connect %out, %dut_out : !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.connect %dut_in, %in : !firrtl.uint<8>, !firrtl.uint<8>
   }
@@ -207,8 +201,6 @@ firrtl.circuit "ExtractBlackBoxesIntoDUTSubmodule"  {
   // CHECK-LABEL: firrtl.module private @DUTModule
   firrtl.module private @DUTModule(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
     // CHECK: %BlackBoxes_bb_0_in, %BlackBoxes_bb_0_out, %BlackBoxes_bb_1_in, %BlackBoxes_bb_1_out = firrtl.instance BlackBoxes sym @BlackBoxes
-    // CHECK-SAME: {circt.nonlocal = @nla_2, class = "circt.nonlocal"}
-    // CHECK-SAME: {circt.nonlocal = @nla_1, class = "circt.nonlocal"}
     // CHECK-SAME: @BlackBoxes
     // CHECK-NEXT: %mod_in, %mod_out, %mod_bb_0_in, %mod_bb_0_out, %mod_bb_1_in, %mod_bb_1_out = firrtl.instance mod
     // CHECK-NOT: annotations =
@@ -217,17 +209,17 @@ firrtl.circuit "ExtractBlackBoxesIntoDUTSubmodule"  {
     // CHECK-NEXT: firrtl.strictconnect %mod_bb_1_out, %BlackBoxes_bb_1_out
     // CHECK-NEXT: firrtl.strictconnect %BlackBoxes_bb_0_in, %mod_bb_0_in
     // CHECK-NEXT: firrtl.strictconnect %mod_bb_0_out, %BlackBoxes_bb_0_out
-    %mod_in, %mod_out = firrtl.instance mod sym @mod {annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}, {circt.nonlocal = @nla_2, class = "circt.nonlocal"}]} @BBWrapper(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
+    %mod_in, %mod_out = firrtl.instance mod sym @mod @BBWrapper(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
     firrtl.connect %out, %mod_out : !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.connect %mod_in, %in : !firrtl.uint<8>, !firrtl.uint<8>
   }
   firrtl.module @TestHarness(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
-    %dut_in, %dut_out = firrtl.instance dut sym @dut {annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}, {circt.nonlocal = @nla_2, class = "circt.nonlocal"}]} @DUTModule(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
+    %dut_in, %dut_out = firrtl.instance dut sym @dut @DUTModule(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
     firrtl.connect %out, %dut_out : !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.connect %dut_in, %in : !firrtl.uint<8>, !firrtl.uint<8>
   }
   firrtl.module @ExtractBlackBoxesIntoDUTSubmodule(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
-    %tb_in, %tb_out = firrtl.instance tb sym @tb {annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}, {circt.nonlocal = @nla_2, class = "circt.nonlocal"}]} @TestHarness(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
+    %tb_in, %tb_out = firrtl.instance tb sym @tb @TestHarness(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
     firrtl.connect %out, %tb_out : !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.connect %tb_in, %in : !firrtl.uint<8>, !firrtl.uint<8>
   }
@@ -456,8 +448,8 @@ firrtl.circuit "InstSymConflict" {
     firrtl.strictconnect %out, %bb_out : !firrtl.uint<8>
   }
   firrtl.module private @DUTModule(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
-    %mod1_in, %mod1_out = firrtl.instance mod1 sym @mod1 {annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}]} @BBWrapper(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
-    %mod2_in, %mod2_out = firrtl.instance mod2 sym @mod2 {annotations = [{circt.nonlocal = @nla_2, class = "circt.nonlocal"}]} @BBWrapper(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
+    %mod1_in, %mod1_out = firrtl.instance mod1 sym @mod1 @BBWrapper(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
+    %mod2_in, %mod2_out = firrtl.instance mod2 sym @mod2 @BBWrapper(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
     firrtl.strictconnect %mod1_in, %in : !firrtl.uint<8>
     firrtl.strictconnect %mod2_in, %mod1_out : !firrtl.uint<8>
     firrtl.strictconnect %out, %mod2_out : !firrtl.uint<8>
@@ -467,10 +459,7 @@ firrtl.circuit "InstSymConflict" {
     // CHECK-NEXT: firrtl.instance dut sym @dut @DUTModule
     // CHECK: firrtl.instance bb sym @bb {annotations = [{class = "DummyB"}]} @MyBlackBox
     // CHECK: firrtl.instance bb sym @bb_0 {annotations = [{class = "DummyA"}]} @MyBlackBox
-    %dut_in, %dut_out = firrtl.instance dut sym @dut {annotations = [
-        {circt.nonlocal = @nla_1, class = "circt.nonlocal"},
-        {circt.nonlocal = @nla_2, class = "circt.nonlocal"}
-      ]} @DUTModule(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
+    %dut_in, %dut_out = firrtl.instance dut sym @dut @DUTModule(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
     firrtl.strictconnect %dut_in, %in : !firrtl.uint<8>
     firrtl.strictconnect %out, %dut_out : !firrtl.uint<8>
   }
