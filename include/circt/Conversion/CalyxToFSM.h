@@ -31,6 +31,7 @@ static constexpr std::string_view sExitStateName = "fsm_exit";
 } // namespace calyxToFSM
 
 std::unique_ptr<mlir::Pass> createCalyxToFSMPass();
+std::unique_ptr<mlir::Pass> createMaterializeCalyxToFSMPass();
 
 } // namespace circt
 
