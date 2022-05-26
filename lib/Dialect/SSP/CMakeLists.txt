@@ -6,6 +6,7 @@
 
 set(SSP_Srcs
   SSPDialect.cpp
+  SSPOps.cpp
   )
 
 set(SSP_LinkLibs

@@ -27,4 +27,6 @@ def SSPDialect : Dialect {
   let cppNamespace = "::circt::ssp";
 }
 
+include "circt/Dialect/SSP/SSPOps.td"
+
 #endif // SSP_TD

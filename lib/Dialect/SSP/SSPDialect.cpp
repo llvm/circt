@@ -1,4 +1,4 @@
-//===- SSPDialect.cpp - Implement the SSP dialect -------------------------===//
+//===- SSPDialect.cpp - SSP dialect implementation ------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -11,8 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/SSP/SSPDialect.h"
-
-#include "mlir/IR/DialectImplementation.h"
+#include "circt/Dialect/SSP/SSPOps.h"
 
 using namespace circt;
 using namespace circt::ssp;
