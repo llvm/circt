@@ -28,6 +28,9 @@ IntegerAttr getIntAttr(Type type, const APInt &value);
 /// Utility for generating a constant zero attribute.
 IntegerAttr getIntZerosAttr(Type type);
 
+/// Return the module-scoped driver of a value only looking through one connect.
+Value getDriverFromConnect(Value val);
+
 /// Return the module-scoped driver of a value
 Value getModuleScopedDriver(Value val, bool lookThroughWires,
                             bool lookThroughNodes, bool lookThroughCasts);

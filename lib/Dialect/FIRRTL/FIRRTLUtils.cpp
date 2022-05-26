@@ -130,6 +130,22 @@ IntegerAttr circt::firrtl::getIntZerosAttr(Type type) {
   return getIntAttr(type, APInt(width, 0));
 }
 
+/// Return the value that drives another FIRRTL value within module scope.  Only
+/// look backwards through one connection.  This is intended to be used in
+/// situations where you only need to look at the most recent connect, e.g., to
+/// know if a wire has been driven to a constant.  Return null if no driver via
+/// a connect was found.
+Value circt::firrtl::getDriverFromConnect(Value val) {
+  for (auto *user : val.getUsers()) {
+    if (auto connect = dyn_cast<FConnectLike>(user)) {
+      if (connect.dest() != val)
+        continue;
+      return connect.src();
+    }
+  }
+  return nullptr;
+}
+
 /// Return the value that drives another FIRRTL value within module scope.  This
 /// is parameterized by looking through or not through certain constructs.  This
 /// assumes a single driver and should only be run after `ExpandWhens`.
