@@ -50,6 +50,14 @@ def CompRegOp : SeqOp<"compreg",
     OptionalAttr<SymbolNameAttr>:$sym_name);
   let results = (outs AnyType:$data);
   let hasCustomAssemblyFormat = 1;
+
+  let builders = [
+    OpBuilder<(ins "Value":$input, "Value":$clk, "StringRef":$sym_name), [{
+      return build($_builder, $_state, input.getType(),
+                   input, clk, sym_name, Value(), Value(),
+                   StringAttr::get($_builder.getContext(), sym_name));
+    }]>,
+  ];
 }
 
 #endif // SEQ_TD
