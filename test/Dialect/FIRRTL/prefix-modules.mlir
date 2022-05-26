@@ -205,10 +205,10 @@ firrtl.circuit "GCTInterfacePrefix"
 // CHECK: firrtl.circuit "T_NLATop"
 firrtl.circuit "NLATop" {
 
-  firrtl.nla @nla [#hw.innerNameRef<@NLATop::@test>, #hw.innerNameRef<@Aardvark::@test>, @Zebra]
-  firrtl.nla @nla_1 [#hw.innerNameRef<@NLATop::@test>,#hw.innerNameRef<@Aardvark::@test_1>, @Zebra]
-  // CHECK: firrtl.nla @nla [#hw.innerNameRef<@T_NLATop::@test>, #hw.innerNameRef<@T_Aardvark::@test>, @T_A_Z_Zebra]
-  // CHECK: firrtl.nla @nla_1 [#hw.innerNameRef<@T_NLATop::@test>, #hw.innerNameRef<@T_Aardvark::@test_1>, @T_A_Z_Zebra]
+  firrtl.nla @nla [@NLATop::@test, @Aardvark::@test, @Zebra]
+  firrtl.nla @nla_1 [@NLATop::@test,@Aardvark::@test_1, @Zebra]
+  // CHECK: firrtl.nla @nla [@T_NLATop::@test, @T_Aardvark::@test, @T_A_Z_Zebra]
+  // CHECK: firrtl.nla @nla_1 [@T_NLATop::@test, @T_Aardvark::@test_1, @T_A_Z_Zebra]
   // CHECK: firrtl.module @T_NLATop
   firrtl.module @NLATop()
     attributes {annotations = [{
@@ -305,14 +305,14 @@ firrtl.circuit "GCTDataMemTapsPrefix" {
 // Test the the NonLocalAnchor is properly updated.
 // CHECK-LABEL: firrtl.circuit "FixNLA" {
   firrtl.circuit "FixNLA"   {
-    firrtl.nla @nla_1 [#hw.innerNameRef<@FixNLA::@bar>, #hw.innerNameRef<@Bar::@baz>, @Baz]
-    // CHECK:   firrtl.nla @nla_1 [#hw.innerNameRef<@FixNLA::@bar>, #hw.innerNameRef<@Bar::@baz>, @Baz]
-    firrtl.nla @nla_2 [#hw.innerNameRef<@FixNLA::@foo>, #hw.innerNameRef<@Foo::@bar>, #hw.innerNameRef<@Bar::@baz>, #hw.innerNameRef<@Baz::@s1>]
-    // CHECK:   firrtl.nla @nla_2 [#hw.innerNameRef<@FixNLA::@foo>, #hw.innerNameRef<@X_Foo::@bar>, #hw.innerNameRef<@X_Bar::@baz>, #hw.innerNameRef<@X_Baz::@s1>]
-    firrtl.nla @nla_3 [#hw.innerNameRef<@FixNLA::@bar>, #hw.innerNameRef<@Bar::@baz>, @Baz]
-    // CHECK:   firrtl.nla @nla_3 [#hw.innerNameRef<@FixNLA::@bar>, #hw.innerNameRef<@Bar::@baz>, @Baz]
-    firrtl.nla @nla_4 [#hw.innerNameRef<@Foo::@bar>, #hw.innerNameRef<@Bar::@baz>, @Baz]
-    // CHECK:       firrtl.nla @nla_4 [#hw.innerNameRef<@X_Foo::@bar>, #hw.innerNameRef<@X_Bar::@baz>, @X_Baz]
+    firrtl.nla @nla_1 [@FixNLA::@bar, @Bar::@baz, @Baz]
+    // CHECK:   firrtl.nla @nla_1 [@FixNLA::@bar, @Bar::@baz, @Baz]
+    firrtl.nla @nla_2 [@FixNLA::@foo, @Foo::@bar, @Bar::@baz, @Baz::@s1]
+    // CHECK:   firrtl.nla @nla_2 [@FixNLA::@foo, @X_Foo::@bar, @X_Bar::@baz, @X_Baz::@s1]
+    firrtl.nla @nla_3 [@FixNLA::@bar, @Bar::@baz, @Baz]
+    // CHECK:   firrtl.nla @nla_3 [@FixNLA::@bar, @Bar::@baz, @Baz]
+    firrtl.nla @nla_4 [@Foo::@bar, @Bar::@baz, @Baz]
+    // CHECK:       firrtl.nla @nla_4 [@X_Foo::@bar, @X_Bar::@baz, @X_Baz]
     // CHECK-LABEL: firrtl.module @FixNLA()
     firrtl.module @FixNLA() {
       firrtl.instance foo sym @foo  {annotations = [{circt.nonlocal = @nla_2, class = "circt.nonlocal"}]} @Foo()
@@ -348,10 +348,10 @@ firrtl.circuit "GCTDataMemTapsPrefix" {
 
 // Test that NonLocalAnchors are properly updated with memmodules.
 firrtl.circuit "Test"   {
-  // CHECK: firrtl.nla @nla_1 [#hw.innerNameRef<@Test::@foo1>, #hw.innerNameRef<@A_Foo1::@bar>, @A_Bar]
-  firrtl.nla @nla_1 [#hw.innerNameRef<@Test::@foo1>, #hw.innerNameRef<@Foo1::@bar>, @Bar]
-  // CHECK: firrtl.nla @nla_2 [#hw.innerNameRef<@Test::@foo2>, #hw.innerNameRef<@B_Foo2::@bar>, @B_Bar]
-  firrtl.nla @nla_2 [#hw.innerNameRef<@Test::@foo2>, #hw.innerNameRef<@Foo2::@bar>, @Bar]
+  // CHECK: firrtl.nla @nla_1 [@Test::@foo1, @A_Foo1::@bar, @A_Bar]
+  firrtl.nla @nla_1 [@Test::@foo1, @Foo1::@bar, @Bar]
+  // CHECK: firrtl.nla @nla_2 [@Test::@foo2, @B_Foo2::@bar, @B_Bar]
+  firrtl.nla @nla_2 [@Test::@foo2, @Foo2::@bar, @Bar]
 
   firrtl.module @Test() {
     firrtl.instance foo1 sym @foo1 {annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}]} @Foo1()

@@ -114,24 +114,6 @@ def AddSeqMemPorts : Pass<"firrtl-add-seqmem-ports", "firrtl::CircuitOp"> {
   let dependentDialects = ["sv::SVDialect", "hw::HWDialect"];
 }
 
-def BlackBoxMemory : Pass<"firrtl-blackbox-memory", "firrtl::CircuitOp"> {
-  let summary = "Replace all FIRRTL memories with an external module black box.";
-  let description = [{
-    This pass replaces all sequential memory operations with an external module
-    black box.  For each memory operation, it creates a FModuleOp which
-    replicates the return types of the memory operation, and replaces the
-    MemoryOp with an instance of the module.  Inside the new module, an
-    instance of an FExtModule black box is created.  The black box module must
-    use the same parameter naming conventions used by the ReplaceSeqMemories
-    pass in the Scala FIRRTL compiler.
-  }];
-  let constructor = "circt::firrtl::createBlackBoxMemoryPass()";
-  let options = [
-    Option<"emitWrapper", "emit-wrapper", "bool", "true",
-           "Create a wrapper module around the black box external module.">
-  ];
-}
-
 def CreateSiFiveMetadata : Pass<"firrtl-emit-metadata", "firrtl::CircuitOp"> {
   let summary = "Emit metadata of the FIRRTL modules";
   let description = [{

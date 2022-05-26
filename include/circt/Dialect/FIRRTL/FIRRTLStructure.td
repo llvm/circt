@@ -201,7 +201,7 @@ def NonLocalAnchor : FIRRTLOp<"nla",
   }];
   let arguments = (ins SymbolNameAttr:$sym_name, NameRefArrayAttr:$namepath);
   let results = (outs);
-  let assemblyFormat = [{ $sym_name $namepath attr-dict}];
+  let hasCustomAssemblyFormat = 1;
   let extraClassDeclaration = [{
     /// Drop the module from the namepath. If its a InnerNameRef, then drop
     /// the Module-Instance pair, else drop the final module from the namepath.

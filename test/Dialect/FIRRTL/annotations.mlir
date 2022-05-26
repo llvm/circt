@@ -20,9 +20,9 @@ firrtl.circuit "Aggregates" attributes {rawAnnotations = [
 // A non-local annotation should work.
 
 // CHECK-LABEL: firrtl.circuit "FooNL"
-// CHECK: firrtl.nla @nla_1 [#hw.innerNameRef<@FooNL::@baz>, #hw.innerNameRef<@BazNL::@bar>, @BarNL]
-// CHECK: firrtl.nla @nla_0 [#hw.innerNameRef<@FooNL::@baz>, #hw.innerNameRef<@BazNL::@bar>, #hw.innerNameRef<@BarNL::@w>]
-// CHECK: firrtl.nla @nla [#hw.innerNameRef<@FooNL::@baz>, #hw.innerNameRef<@BazNL::@bar>, #hw.innerNameRef<@BarNL::@w2>]
+// CHECK: firrtl.nla @nla_1 [@FooNL::@baz, @BazNL::@bar, @BarNL]
+// CHECK: firrtl.nla @nla_0 [@FooNL::@baz, @BazNL::@bar, @BarNL::@w]
+// CHECK: firrtl.nla @nla [@FooNL::@baz, @BazNL::@bar, @BarNL::@w2]
 // CHECK: firrtl.module @BarNL
 // CHECK: %w = firrtl.wire sym @w {annotations = [{circt.nonlocal = @nla_0, class = "circt.test", nl = "nl"}]}
 // CHECK: %w2 = firrtl.wire sym @w2 {annotations = [{circt.fieldID = 5 : i32, circt.nonlocal = @nla, class = "circt.test", nl = "nl2"}]} : !firrtl.bundle<a: uint, b: vector<uint, 4>>
@@ -57,7 +57,7 @@ firrtl.circuit "FooNL"  attributes {rawAnnotations = [
 // Non-local annotations on memory ports should work.
 
 // CHECK-LABEL: firrtl.circuit "MemPortsNL"
-// CHECK: firrtl.nla @nla [#hw.innerNameRef<@MemPortsNL::@child>, #hw.innerNameRef<@Child::@bar>]
+// CHECK: firrtl.nla @nla [@MemPortsNL::@child, @Child::@bar]
 // CHECK: firrtl.module @Child()
 // CHECK:   %bar_r = firrtl.mem sym @bar
 // CHECK-SAME: portAnnotations = {{\[}}[{circt.nonlocal = @nla, class = "circt.test", nl = "nl"}]]
@@ -105,7 +105,7 @@ firrtl.circuit "Test" attributes {rawAnnotations = [
 firrtl.circuit "Test" attributes {rawAnnotations = [
   {class = "circt.test", target = "~Test|Test>exttest"}
   ]} {
-  // CHECK: firrtl.nla @nla [#hw.innerNameRef<@Test::@exttest>, @ExtTest]
+  // CHECK: firrtl.nla @nla [@Test::@exttest, @ExtTest]
   // CHECK: firrtl.extmodule @ExtTest() attributes {annotations = [{circt.nonlocal = @nla, class = "circt.test"}]}
   firrtl.extmodule @ExtTest()
 
@@ -121,7 +121,7 @@ firrtl.circuit "Test" attributes {rawAnnotations = [
 firrtl.circuit "Test" attributes {rawAnnotations = [
   {class = "circt.test", target = "~Test|Test>exttest.in"}
   ]} {
-  // CHECK: firrtl.nla @nla [#hw.innerNameRef<@Test::@exttest>, #hw.innerNameRef<@ExtTest::@in>]
+  // CHECK: firrtl.nla @nla [@Test::@exttest, @ExtTest::@in]
   // CHECK: firrtl.extmodule @ExtTest(in in: !firrtl.uint<1> sym @in [{circt.nonlocal = @nla, class = "circt.test"}])
   firrtl.extmodule @ExtTest(in in: !firrtl.uint<1>)
 
@@ -372,7 +372,7 @@ firrtl.circuit "GCTDataTap" attributes {rawAnnotations = [{
 }
 
 // CHECK-LABEL: firrtl.circuit "GCTDataTap"
-// CHECK:      firrtl.nla [[NLA:@.+]] [#hw.innerNameRef<@GCTDataTap::@im>, #hw.innerNameRef<@InnerMod::@w>]
+// CHECK:      firrtl.nla [[NLA:@.+]] [@GCTDataTap::@im, @InnerMod::@w]
 
 // CHECK-LABEL: firrtl.extmodule private @DataTap
 
