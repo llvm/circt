@@ -296,6 +296,8 @@ class HWModuleOp(ModuleLike):
   ):
     if "comment" not in attributes:
       attributes["comment"] = StringAttr.get("")
+    if "topOfFileComment" not in attributes:
+      attributes["topOfFileComment"] = StringAttr.get("")
     super().__init__(name,
                      input_ports,
                      output_ports,
@@ -359,6 +361,8 @@ class HWModuleExternOp(ModuleLike):
   ):
     if "comment" not in attributes:
       attributes["comment"] = StringAttr.get("")
+    if "topOfFileComment" not in attributes:
+      attributes["topOfFileComment"] = StringAttr.get("")
     super().__init__(name,
                      input_ports,
                      output_ports,
