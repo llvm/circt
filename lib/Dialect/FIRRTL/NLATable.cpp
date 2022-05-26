@@ -30,6 +30,30 @@ NLATable::NLATable(Operation *operation) {
   }
 }
 
+ArrayRef<NonLocalAnchor> NLATable::lookup(StringAttr name) {
+  auto iter = nodeMap.find(name);
+  if (iter == nodeMap.end())
+    return {};
+  return iter->second;
+}
+
+ArrayRef<NonLocalAnchor> NLATable::lookup(Operation *op) {
+  auto name = op->getAttrOfType<StringAttr>("sym_name");
+  if (!name)
+    return {};
+  return lookup(name);
+}
+
+NonLocalAnchor NLATable::getNLA(StringAttr name) {
+  auto *n = symToOp.lookup(name);
+  return dyn_cast_or_null<NonLocalAnchor>(n);
+}
+
+FModuleLike NLATable::getModule(StringAttr name) {
+  auto *n = symToOp.lookup(name);
+  return dyn_cast_or_null<FModuleLike>(n);
+}
+
 void NLATable::addNLA(NonLocalAnchor nla) {
   symToOp[nla.sym_nameAttr()] = nla;
   for (auto ent : nla.namepath()) {
@@ -40,23 +64,36 @@ void NLATable::addNLA(NonLocalAnchor nla) {
   }
 }
 
-void NLATable::insert(NonLocalAnchor nla) {
-  symToOp[nla.sym_nameAttr()] = nla;
-  for (auto ent : nla.namepath()) {
-    if (auto mod = ent.dyn_cast<FlatSymbolRefAttr>())
-      nodeMap[mod.getAttr()].push_back(nla);
-    else if (auto inr = ent.dyn_cast<hw::InnerRefAttr>())
-      nodeMap[inr.getModule()].push_back(nla);
-  }
-}
-
-void NLATable::erase(NonLocalAnchor nla) {
+void NLATable::erase(NonLocalAnchor nla, SymbolTable *symbolTable) {
   symToOp.erase(nla.sym_nameAttr());
   for (auto ent : nla.namepath())
     if (auto mod = ent.dyn_cast<FlatSymbolRefAttr>())
       llvm::erase_value(nodeMap[mod.getAttr()], nla);
     else if (auto inr = ent.dyn_cast<hw::InnerRefAttr>())
       llvm::erase_value(nodeMap[inr.getModule()], nla);
+  if (symbolTable)
+    symbolTable->erase(nla);
+}
+
+void NLATable::updateModuleInNLA(NonLocalAnchor nlaOp, StringAttr oldModule,
+                                 StringAttr newModule) {
+  nlaOp.updateModule(oldModule, newModule);
+  auto &nlas = nodeMap[oldModule];
+  auto *iter = std::find(nlas.begin(), nlas.end(), nlaOp);
+  if (iter != nlas.end()) {
+    nlas.erase(iter);
+    if (nlas.empty())
+      nodeMap.erase(oldModule);
+    nodeMap[newModule].push_back(nlaOp);
+  }
+}
+
+void NLATable::updateModuleInNLA(StringAttr name, StringAttr oldModule,
+                                 StringAttr newModule) {
+  auto nlaOp = getNLA(name);
+  if (!nlaOp)
+    return;
+  updateModuleInNLA(nlaOp, oldModule, newModule);
 }
 
 void NLATable::renameModule(StringAttr oldModName, StringAttr newModName) {
@@ -87,65 +124,3 @@ void NLATable::renameModuleAndInnerRef(
   nodeMap.erase(oldModName);
   return;
 }
-
-void NLATable::removeNLAfromModule(NonLocalAnchor nla, StringAttr mod) {
-  llvm::erase_value(nodeMap[mod], nla);
-}
-
-void NLATable::removeNLAsfromModule(const DenseSet<NonLocalAnchor> &nlas,
-                                    StringAttr mod) {
-  llvm::erase_if(nodeMap[mod],
-                 [&nlas](const auto &nla) { return nlas.count(nla); });
-}
-
-void NLATable::updateModuleInNLA(StringAttr name, StringAttr oldModule,
-                                 StringAttr newModule) {
-  auto nlaOp = getNLA(name);
-  if (!nlaOp)
-    return;
-  updateModuleInNLA(nlaOp, oldModule, newModule);
-}
-
-void NLATable::updateModuleInNLA(NonLocalAnchor nlaOp, StringAttr oldModule,
-                                 StringAttr newModule) {
-  nlaOp.updateModule(oldModule, newModule);
-  auto &nlas = nodeMap[oldModule];
-  auto *iter = std::find(nlas.begin(), nlas.end(), nlaOp);
-  if (iter != nlas.end()) {
-    nlas.erase(iter);
-    if (nlas.empty())
-      nodeMap.erase(oldModule);
-    nodeMap[newModule].push_back(nlaOp);
-  }
-}
-
-NonLocalAnchor NLATable::getNLA(StringAttr name) {
-  auto *n = symToOp.lookup(name);
-  return dyn_cast_or_null<NonLocalAnchor>(n);
-}
-
-FModuleLike NLATable::getModule(StringAttr name) {
-  auto *n = symToOp.lookup(name);
-  return dyn_cast_or_null<FModuleLike>(n);
-}
-
-ArrayRef<NonLocalAnchor> NLATable::lookup(StringAttr name) {
-  auto iter = nodeMap.find(name);
-  if (iter == nodeMap.end())
-    return {};
-  return iter->second;
-}
-
-ArrayRef<NonLocalAnchor> NLATable::lookup(Operation *op) {
-  auto name = op->getAttrOfType<StringAttr>("sym_name");
-  if (!name)
-    return {};
-  return lookup(name);
-}
-
-void NLATable::eraseModule(StringAttr name) {
-  symToOp.erase(name);
-  nodeMap.erase(name);
-}
-
-void NLATable::addModule(FModuleLike op) { symToOp[op.moduleNameAttr()] = op; }
