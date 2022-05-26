@@ -467,9 +467,10 @@ firrtl.circuit "NLAUsedInWiring"  {
       id = 0 : i64,
       portID = 1 : i64
     }]} : !firrtl.uint<1>
-    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    firrtl.connect %g, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-    firrtl.connect %f, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+    // Use a verbatim expression to prevent constant optimization.
+    %x = firrtl.verbatim.expr "<foo>" : () -> !firrtl.uint<1>
+    firrtl.connect %g, %x : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %f, %x : !firrtl.uint<1>, !firrtl.uint<1>
   }
 
   firrtl.module @NLAUsedInWiring() {
@@ -484,8 +485,9 @@ firrtl.circuit "NLAUsedInWiring"  {
       portID = 3 : i64
     }]} : !firrtl.uint<1>
     %dataTap_b, %dataTap_c, %dataTap_d = firrtl.instance dataTap @DataTap(out b: !firrtl.uint<1>, out c: !firrtl.uint<1>, out d: !firrtl.uint<1>)
-    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    firrtl.connect %k, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+    // Use a verbatim expression to prevent constant optimization.
+    %x = firrtl.verbatim.expr "<foo>" : () -> !firrtl.uint<1>
+    firrtl.connect %k, %x : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
 
@@ -552,5 +554,29 @@ firrtl.circuit "Top" {
   }
   firrtl.module @Top() {
     firrtl.instance dut @DUT()
+  }
+}
+
+// -----
+
+// Check that constants are sunk into data taps.
+
+// CHECK-LABEL: "ConstantPropagation"
+firrtl.circuit "ConstantPropagation" {
+
+  firrtl.extmodule private @DataTap(
+    out _0: !firrtl.uint<1> [{class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.port", id = 1 : i64, portID = 2 : i64}]
+  ) attributes {annotations = [{class = "sifive.enterprise.grandcentral.DataTapsAnnotation.blackbox"}], defname = "DataTap_3"}
+  // CHECK:      firrtl.module @DataTap
+  // CHECK-NEXT:   %c1_ui1 = firrtl.constant 1
+  // CHECK-NEXT:   firrtl.connect %_0, %c1_ui1
+
+  firrtl.module @ConstantPropagation() attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %_gctTap_0 = firrtl.wire sym @_gctTap_0_0  {annotations = [{class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.source", id = 1 : i64, portID = 3 : i64}]} : !firrtl.uint<1>
+    firrtl.strictconnect %_gctTap_0, %c1_ui1 : !firrtl.uint<1>
+    %_gctTap = firrtl.wire sym @_gctTap_1  {annotations = [{class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.source", id = 1 : i64, portID = 2 : i64}]} : !firrtl.uint<1>
+    firrtl.strictconnect %_gctTap, %c1_ui1 : !firrtl.uint<1>
+    %_0 = firrtl.instance DataTap_3  @DataTap(out _0: !firrtl.uint<1>)
   }
 }

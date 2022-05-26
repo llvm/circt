@@ -1048,6 +1048,18 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
       if (!nla)
         wiring.prefices =
             instancePaths.getAbsolutePaths(op->getParentOfType<FModuleOp>());
+
+      // Set the literal member if this wire or node is driven by a constant.
+      auto driver = getDriverFromConnect(op->getResult(0));
+      if (driver)
+        if (auto constant =
+                dyn_cast_or_null<ConstantOp>(driver.getDefiningOp())) {
+          wiring.literal = {
+              IntegerAttr::get(constant.getContext(), constant.value()),
+              constant.getType()};
+          op->removeAttr("inner_sym");
+        }
+
       wiring.target = PortWiring::Target(op);
       portWiring.push_back(std::move(wiring));
       return;

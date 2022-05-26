@@ -1,6 +1,9 @@
 ; RUN: firtool --firrtl-grand-central --verilog --split-input-file %s | FileCheck %s
 ; See https://github.com/llvm/circt/issues/2691
 
+; Note: This includes DontTouchAnnotations to prevent these from getting
+; optimized away to constants as the purpose of this test is not to check
+; constant propagation behavior, but that NLAs work.
 circuit Top : %[[{
   "class": "sifive.enterprise.grandcentral.DataTapsAnnotation",
   "blackBox": "~Top|DataTap",
@@ -20,7 +23,20 @@ circuit Top : %[[{
       "source": "~Top|Top>k",
       "portName": "~Top|DataTap>d"
     }
-]}]]
+  ]
+},
+{
+  "class": "firrtl.transforms.DontTouchAnnotation",
+  "target": "~Top|Foo>g"
+},
+{
+  "class": "firrtl.transforms.DontTouchAnnotation",
+  "target": "~Top|Foo>f"
+},
+{
+  "class": "firrtl.transforms.DontTouchAnnotation",
+  "target": "~Top|Top>k"
+}]]
   module Foo :
     output g : UInt<1>
     wire f : UInt<1>
@@ -40,15 +56,13 @@ circuit Top : %[[{
     output d : UInt<1>
     defname = DataTap
 
-; CHECK-LABEL: module Foo();
-; CHECK-NEXT:    wire [[g_tap:.+]] = 1'h0;
-; CHECK-NEXT:    wire f = 1'h1;
-; CHECK-NEXT:    wire [[f_tap:.+]] = 1'h1;
+; CHECK-LABEL: module Foo(
+; CHECK:         assign [[g_tap:_gctTap.*]] = {{.*g.*}};
+; CHECK:         assign [[f_tap:_gctTap.*]] = f;
 ; CHECK:       endmodule
 
 ; CHECK-LABEL: module Top();
-; CHECK:         wire k = 1'h0;
-; CHECK:         wire [[k_tap:.+]] = 1'h0;
+; CHECK:         assign [[k_tap:.+]] = k;
 
 ; CHECK-LABEL: module DataTap_impl_0(
 ; CHECK:   output b,
@@ -62,6 +76,9 @@ circuit Top : %[[{
 
 ; // -----
 
+; Note: This includes DontTouchAnnotations to prevent these from getting
+; optimized away to constants as the purpose of this test is not to check
+; constant propagation behavior, but that NLAs work.
 circuit TestHarness : %[[
   {
     "class":"sifive.enterprise.grandcentral.DataTapsAnnotation",
@@ -73,6 +90,10 @@ circuit TestHarness : %[[
         "portName":"~TestHarness|DataTap>_0"
       }
     ]
+  },
+  {
+    "class": "firrtl.transforms.DontTouchAnnotation",
+    "target": "~TestHarness|TestHarness/system:Top/test:Test>signal"
   }
 ]]
   module TestHarness :
@@ -81,7 +102,7 @@ circuit TestHarness : %[[
     inst test of Test
     inst Companion of Companion
   extmodule DataTap :
-    output _0 : UInt<1>
+    output _0 : UInt<8>
     defname = DataTap
   module Companion :
     inst DataTap of DataTap
@@ -95,4 +116,4 @@ circuit TestHarness : %[[
 
 ; CHECK:     module Test()
 ; CHECK-NOT: endmodule
-; CHECK:       wire [7:0] [[signal_tap]] = 8'h0;
+; CHECK:       assign [[signal_tap]] = signal;
