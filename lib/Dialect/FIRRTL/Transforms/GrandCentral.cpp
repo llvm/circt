@@ -15,6 +15,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotationHelper.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/NLATable.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
@@ -959,6 +960,73 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
 
     NamedAttrList elementIface, elementScattered, dontTouch;
 
+    // Generate annotations for the ground type.  When possible, generate a dead
+    // wire "tap" on the actual ground type to not block optimizations.  The
+    // following cases can occur:
+    //
+    // 1. The tap is on an external module port.
+    // 2. The tap is on a module port.
+    // 3. The tap is on something inside a module.
+    //
+    // The case of (1) is handled WITHOUT a tap and the ground type stays on the
+    // port.  The cases of (2) and (3) are handled the same: a tap is generated,
+    // the tap is driven by the ground type, and any annotations are placed on
+    // the tap.  (2) requires port-specific handling logic.  (Also, remember
+    // that it is okay to have an output port on the RHS of a connect.  This
+    // avoids having to special case input and output ports.)
+    //
+    // TODO: Consider a dedicated tap operation instead of a dead wire tap.
+    AnnoPathValue path =
+        resolvePath(target, state.circuit, state.symTbl).getValue();
+    Operation *op = path.ref.getOp();
+    ImplicitLocOpBuilder builder(UnknownLoc::get(op->getContext()), op);
+
+    auto newTarget =
+        TypeSwitch<Operation *, TokenAnnoTarget>(op)
+            // Case (1): ground type is an external module port.
+            .Case<FExtModuleOp>([&](FExtModuleOp extModule) {
+              return tokenizePath(target).getValue();
+            })
+            // Case (2): ground type is a module port.
+            .Case<FModuleOp>([&](FModuleOp module) {
+              Value src = module.getArgument(path.ref.getImpl().getPortNo());
+              auto fieldIdx = path.fieldIdx;
+              builder.setInsertionPointToStart(module.getBody());
+              WireOp tap = builder.create<WireOp>(
+                  builder.getUnknownLoc(),
+                  path.ref.getType()
+                      .getFinalTypeByFieldID(fieldIdx)
+                      .getPassiveType(),
+                  state.getNamespace(module).newName("_gctTap"));
+              src = getValueByFieldID(builder, src, fieldIdx);
+              emitConnect(builder, tap, src);
+              auto newTarget = tokenizePath(target).getValue();
+              newTarget.name = tap.name();
+              newTarget.component.clear();
+              return newTarget;
+            })
+            // Case (3): ground type is inside a module.
+            .Default([&](Operation *op) {
+              auto module = op->getParentOfType<FModuleOp>();
+              Value src = op->getResult(0);
+              auto fieldIdx = path.fieldIdx;
+              builder.setInsertionPoint(op);
+              WireOp tap = builder.create<WireOp>(
+                  builder.getUnknownLoc(),
+                  path.ref.getType()
+                      .getFinalTypeByFieldID(fieldIdx)
+                      .getPassiveType(),
+                  state.getNamespace(module).newName("_gctTap"));
+              builder.setInsertionPointAfter(op);
+              src = getValueByFieldID(builder, src, fieldIdx);
+              builder.setInsertionPointAfterValue(src);
+              emitConnect(builder, tap, src);
+              auto newTarget = tokenizePath(target).getValue();
+              newTarget.name = tap.name();
+              newTarget.component.clear();
+              return newTarget;
+            });
+
     // Populate the annotation for the interface element.
     elementIface.append("class", classAttr);
     if (description)
@@ -969,7 +1037,7 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
     elementScattered.append("class", classAttr);
     elementScattered.append("id", id);
     // If there are sub-targets, then add these.
-    auto targetAttr = StringAttr::get(context, target);
+    auto targetAttr = StringAttr::get(context, newTarget.str());
     elementScattered.append("target", targetAttr);
 
     dontTouch.append("class", StringAttr::get(context, dontTouchAnnoClass));
@@ -1178,8 +1246,33 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
         assert(srcPaths.size() == 1 &&
                "Unable to handle multiply instantiated companions");
 
-        // Add the root module.
         path += " = ";
+
+        // There are two posisibilites for what this is tapping:
+        //   1. This is a constant that will be synced into the mappings file.
+        //   2. This is something else and we need an XMR.
+        // Handle case (1) here and exit.  Handle case (2) following.
+        auto driver = getDriverFromConnect(leafValue);
+        auto uloc = builder.getUnknownLoc();
+        if (driver) {
+          if (auto constant =
+                  dyn_cast_or_null<ConstantOp>(driver.getDefiningOp())) {
+            path.append(Twine(constant.value().getBitWidth()));
+            path += "'h";
+            SmallString<32> valueStr;
+            constant.value().toStringUnsigned(valueStr, 16);
+            path.append(valueStr);
+            builder.create<sv::VerbatimOp>(
+                uloc,
+                StringAttr::get(&getContext(),
+                                "assign " + path.getString() + ";"),
+                ValueRange{}, ArrayAttr::get(&getContext(), path.getSymbols()));
+            leafValue.getDefiningOp()->removeAttr("inner_sym");
+            return true;
+          }
+        }
+
+        // Add the root module.
         path += FlatSymbolRefAttr::get(SymbolTable::getSymbolName(
             srcPaths[0].empty()
                 ? enclosing
@@ -1200,7 +1293,6 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
           }
 
         // Add the leaf value to the path.
-        auto uloc = builder.getUnknownLoc();
         path += '.';
         if (auto blockArg = leafValue.dyn_cast<BlockArgument>()) {
           auto module = cast<FModuleOp>(blockArg.getOwner()->getParentOp());
