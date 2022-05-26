@@ -1,4 +1,4 @@
-// RUN: circt-opt -pass-pipeline='firrtl.circuit(mem-to-regofvec)' %s | FileCheck  %s
+// RUN: circt-opt -pass-pipeline='firrtl.circuit(firrtl-mem-to-reg-of-vec)' %s | FileCheck  %s
 
 firrtl.circuit "Mem" attributes {annotations = [{class = "sifive.enterprise.firrtl.ConvertMemToRegOfVecAnnotation$"}]}{
   firrtl.module public @Mem() attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]}{

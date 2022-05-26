@@ -212,8 +212,8 @@ static cl::opt<bool>
                      cl::init(true), cl::cat(mainCategory));
 
 static cl::opt<bool>
-    memToRegOfVec("mem-to-regofvec",
-                  cl::desc("run the memToRegOfVec transform pass on firrtl"),
+    memToRegOfVec("mem-to-reg-of-vec",
+                  cl::desc("convert combinational memories to registers"),
                   cl::init(true));
 
 static cl::opt<bool>
