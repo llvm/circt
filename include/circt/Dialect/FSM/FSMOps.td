@@ -65,6 +65,7 @@ def MachineOp : FSMOp<"machine", [HasParent<"mlir::ModuleOp">, FunctionOpInterfa
     }
   }];
 
+  let skipDefaultBuilders = 1;
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
 }
@@ -158,6 +159,17 @@ def StateOp : FSMOp<"state", [HasParent<"MachineOp">, Symbol,
   let assemblyFormat = [{
     $sym_name attr-dict `output` $output `transitions` $transitions
   }];
+
+  let extraClassDeclaration = [{
+    /// Returns all possible next states from this state.
+    llvm::SetVector<StateOp> getNextStates();
+  }];
+
+  let builders = [
+    OpBuilder<(ins "StringRef":$stateName)>
+  ];
+
+  let skipDefaultBuilders = 1;
 }
 
 def OutputOp : FSMOp<"output", [HasParent<"StateOp">, ReturnLike, Terminator]> {
@@ -226,6 +238,12 @@ def TransitionOp : FSMOp<"transition", [HasParent<"StateOp">,
     bool isAlwaysTaken();
   }];
 
+  let builders = [
+    OpBuilder<(ins "StringRef":$nextState)>,
+    OpBuilder<(ins "fsm::StateOp":$nextState)>
+  ];
+
+  let skipDefaultBuilders = 1;
   let hasVerifier = 1;
 }
 
@@ -237,10 +255,13 @@ def ReturnOp : FSMOp<"return", [HasParent<"TransitionOp">, ReturnLike,
     values if the parent region is a `$guard` region.
   }];
 
+  let extraClassDeclaration = [{
+    // Assigns the guard operand to the provided value.
+    void setOperand(Value operand);
+  }];
+
   let arguments = (ins Optional<I1>:$operand);
-
   let builders = [ OpBuilder<(ins), "build($_builder, $_state, Value());"> ];
-
   let assemblyFormat = [{ attr-dict ($operand^)? }];
 }
 
