@@ -267,7 +267,9 @@ void PrefixModulesPass::renameModule(FModuleOp module) {
   auto &firstPrefix = prefixes.front();
 
   auto fixNLAsRootedAt = [&](StringAttr oldModName, StringAttr newModuleName) {
-    for (auto n : nlaTable->lookup(oldModName))
+    DenseSet<NonLocalAnchor> nlas;
+    nlaTable->getNLAsInModule(oldModName, nlas);
+    for (auto n : nlas)
       if (n.root() == oldModName)
         nlaTable->updateModuleInNLA(n, oldModName, newModuleName);
   };
