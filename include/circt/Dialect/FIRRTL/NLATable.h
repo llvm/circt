@@ -88,7 +88,8 @@ public:
     }
   }
 
-  /// Get the NLAs that the module `modName` particiaptes in, and insert them into the DenseSet `nlas`.
+  /// Get the NLAs that the module `modName` particiaptes in, and insert them
+  /// into the DenseSet `nlas`.
   void getNLAsInModule(StringAttr modName, DenseSet<NonLocalAnchor> &nlas) {
     for (auto nla : lookup(modName))
       nlas.insert(nla);
