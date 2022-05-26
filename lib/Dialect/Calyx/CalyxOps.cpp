@@ -179,6 +179,13 @@ LogicalResult calyx::verifyCell(Operation *op) {
 
 LogicalResult calyx::verifyControlLikeOp(Operation *op) {
   auto parent = op->getParentOp();
+
+  if (isa<calyx::EnableOp>(op) &&
+      !isa<calyx::CalyxDialect>(parent->getDialect())) {
+    // calyx.enable mixed with other dialects; anything goes.
+    return success();
+  }
+
   if (!hasControlRegion(parent))
     return op->emitOpError()
            << "has parent: " << parent
