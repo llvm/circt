@@ -3616,17 +3616,6 @@ bool NonLocalAnchor::isComponent() { return (bool)ref(); }
 // 7. The last element of the namepath can also be a module symbol.
 LogicalResult
 NonLocalAnchor::verifySymbolUses(mlir::SymbolTableCollection &symtblC) {
-  auto cnlaAttr = StringAttr::get(getContext(), "circt.nonlocal");
-
-  auto hasNonLocal = [&](InstanceOp instOp) {
-    auto sname = sym_nameAttr();
-    auto annos = AnnotationSet(instOp);
-    for (auto anno : annos)
-      if (auto nlaRef = anno.getMember(cnlaAttr))
-        if (nlaRef.cast<FlatSymbolRefAttr>().getAttr() == sname)
-          return true;
-    return false;
-  };
 
   Operation *op = *this;
   CircuitOp cop = op->getParentOfType<CircuitOp>();
@@ -3653,13 +3642,6 @@ NonLocalAnchor::verifySymbolUses(mlir::SymbolTableCollection &symtblC) {
       return emitOpError() << " module: " << innerRef.getModule()
                            << " does not contain any instance with symbol: "
                            << innerRef.getName();
-    if (!hasNonLocal(instOp)) {
-      auto diag = emitOpError()
-                  << " instance with symbol: " << innerRef
-                  << " does not contain a reference to the NonLocalAnchor";
-      diag.attachNote(instOp.getLoc()) << "the instance was defined here";
-      return failure();
-    }
     expectedModuleName = instOp.moduleNameAttr().getAttr();
   }
   // The instance path has been verified. Now verify the last element.
