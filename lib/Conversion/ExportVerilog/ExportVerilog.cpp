@@ -4190,8 +4190,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
       for (auto fl : fla)
         opFileList.push_back(fl.cast<hw::FileListAttr>().getFilename());
 
-    auto separateFile = [&](Operation *op, Twine defaultFileName = "",
-                            bool isVerilog = false) {
+    auto separateFile = [&](Operation *op, Twine defaultFileName = "") {
       // If we're emitting to a separate file and the output_file attribute
       // didn't specify a filename, take the default one if present or emit an
       // error if not.
@@ -4210,7 +4209,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
       file.ops.push_back(info);
       file.emitReplicatedOps = emitReplicatedOps;
       file.addToFilelist = addToFilelist;
-      file.isVerilog = isVerilog;
+      file.isVerilog = outputPath.endswith(".sv");
       for (auto fl : opFileList)
         fileLists[fl.getValue()].push_back(destFile);
     };
@@ -4226,8 +4225,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
 
           // Emit into a separate file named after the module.
           if (attr || separateModules)
-            separateFile(mod, getVerilogModuleName(mod) + ".sv",
-                         /*isVerilog=*/true);
+            separateFile(mod, getVerilogModuleName(mod) + ".sv");
           else
             rootFile.ops.push_back(info);
         })
@@ -4243,7 +4241,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
 
           // Emit into a separate file named after the interface.
           if (attr || separateModules)
-            separateFile(intf, intf.sym_name() + ".sv", /*isVerilog=*/true);
+            separateFile(intf, intf.sym_name() + ".sv");
           else
             rootFile.ops.push_back(info);
         })
@@ -4252,7 +4250,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
           symbolCache.addDefinition(op.getNameAttr(), op);
           collectPorts(op);
           if (separateModules)
-            separateFile(op, "extern_modules.sv", /*isVerilog=*/true);
+            separateFile(op, "extern_modules.sv");
           else
             rootFile.ops.push_back(info);
         })
@@ -4273,13 +4271,13 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
           if (!attr) {
             replicatedOps.push_back(op);
           } else
-            separateFile(op, "", /*isVerilog=*/true);
+            separateFile(op, "");
         })
         .Case<BindOp, BindInterfaceOp>([&](auto op) {
           if (!attr) {
-            separateFile(op, "bindfile", /*isVerilog=*/true);
+            separateFile(op, "bindfile");
           } else {
-            separateFile(op, "", /*isVerilog=*/true);
+            separateFile(op);
           }
         })
         .Default([&](auto *) {
