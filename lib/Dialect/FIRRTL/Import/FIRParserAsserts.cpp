@@ -389,8 +389,9 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
     // practice the Scala impl of ExtractTestCode just discards that `%d` label
     // and replaces it with `notX`. Also prepare the condition to be checked
     // here.
-    Value notCond = builder.create<NotPrimOp>(whenStmt.condition());
-    Value predicate = notCond;
+    Value predicate = whenStmt.condition();
+    if (flavor != VerifFlavor::Cover)
+      predicate = builder.create<NotPrimOp>(predicate);
     if (flavor == VerifFlavor::AssertNotX) {
       label = "notX";
       if (printOp.operands().size() != 1) {
@@ -398,6 +399,7 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
         return failure();
       }
       // Construct a `!whenCond | (value !== 1'bx)` predicate.
+      Value notCond = predicate;
       predicate = builder.create<XorRPrimOp>(printOp.operands()[0]);
       predicate = builder.create<VerbatimExprOp>(UIntType::get(context, 1),
                                                  "{{0}} !== 1'bx", predicate);
