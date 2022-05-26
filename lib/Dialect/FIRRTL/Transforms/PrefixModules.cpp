@@ -220,12 +220,18 @@ void PrefixModulesPass::renameModuleBody(std::string prefix, FModuleOp module) {
       // There can be multiple NonLocalAnchors attached to the instance op.
 
       StringAttr oldModName = instanceOp.moduleNameAttr().getAttr();
+      // Update the NLAs that apply on this InstanceOp.
       for (Annotation anno : instAnnos) {
         if (auto nla = anno.getMember("circt.nonlocal")) {
           auto nlaName = nla.cast<FlatSymbolRefAttr>().getAttr();
           nlaTable->updateModuleInNLA(nlaName, oldModName, newTarget);
         }
       }
+      // Now get the NLAs that pass through the InstanceOp and update them also.
+      DenseSet<NonLocalAnchor> instNLAs;
+      nlaTable->getInstanceNLAs(instanceOp, instNLAs);
+      for (auto nla : instNLAs)
+        nlaTable->updateModuleInNLA(nla, oldModName, newTarget);
 
       instanceOp.moduleNameAttr(FlatSymbolRefAttr::get(context, newTarget));
     }
@@ -261,31 +267,38 @@ void PrefixModulesPass::renameModule(FModuleOp module) {
   auto &firstPrefix = prefixes.front();
 
   auto fixNLAsRootedAt = [&](StringAttr oldModName, StringAttr newModuleName) {
-    for (auto n : nlaTable->lookup(oldModName))
+    DenseSet<NonLocalAnchor> nlas;
+    nlaTable->getNLAsInModule(oldModName, nlas);
+    for (auto n : nlas)
       if (n.root() == oldModName)
-        n.updateModule(oldModName, newModuleName);
+        nlaTable->updateModuleInNLA(n, oldModName, newModuleName);
   };
   // Rename the module for each required prefix. This will clone the module
   // once for each prefix but the first.
   OpBuilder builder(module);
   builder.setInsertionPointAfter(module);
+  auto oldModName = module.getNameAttr();
   for (auto &outerPrefix : llvm::drop_begin(prefixes)) {
     auto moduleClone = cast<FModuleOp>(builder.clone(*module));
     auto newModuleName = (outerPrefix + moduleName);
-    fixNLAsRootedAt(module.getNameAttr(),
-                    StringAttr::get(module.getContext(), newModuleName));
+    auto newModNameAttr = StringAttr::get(module.getContext(), newModuleName);
     moduleClone.setName(newModuleName);
+    // It is critical to add the new module to the NLATable, otherwise the
+    // rename operation would fail.
+    nlaTable->addModule(moduleClone);
+    fixNLAsRootedAt(oldModName, newModNameAttr);
     // Each call to this function could invalidate the `prefixes` reference.
     renameModuleBody((outerPrefix + innerPrefix).str(), moduleClone);
   }
 
   auto prefixFull = (firstPrefix + innerPrefix).str();
   auto newModuleName = firstPrefix + moduleName;
-  fixNLAsRootedAt(module.getNameAttr(),
-                  StringAttr::get(module.getContext(), newModuleName));
   // The first prefix renames the module in place. There is always at least 1
   // prefix.
   module.setName(newModuleName);
+  nlaTable->addModule(module);
+  fixNLAsRootedAt(oldModName,
+                  StringAttr::get(module.getContext(), newModuleName));
   renameModuleBody(prefixFull, module);
 
   // If this module contains a Grand Central interface, then also apply renames
@@ -442,6 +455,7 @@ void PrefixModulesPass::runOnOperation() {
     circuitOp.nameAttr(newMainModuleName);
 
     // Now update all the NLAs that have the top level module symbol.
+    nlaTable->renameModule(oldModName, newMainModuleName);
     for (auto n : nlaTable->lookup(oldModName))
       if (n.root() == oldModName)
         nlaTable->updateModuleInNLA(n, oldModName, newMainModuleName);

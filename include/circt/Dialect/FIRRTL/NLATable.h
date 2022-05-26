@@ -88,6 +88,13 @@ public:
     }
   }
 
+  /// Get the NLAs that the module `modName` particiaptes in, and insert them
+  /// into the DenseSet `nlas`.
+  void getNLAsInModule(StringAttr modName, DenseSet<NonLocalAnchor> &nlas) {
+    for (auto nla : lookup(modName))
+      nlas.insert(nla);
+  }
+
   //===-------------------------------------------------------------------------
   // Methods to keep an NLATable up to date.
   //
@@ -98,6 +105,9 @@ public:
 
   /// Record a new NLA operation.
   void addNLA(NonLocalAnchor nla);
+
+  /// Record a new FModuleLike operation.
+  void addModule(FModuleLike mod);
 
   /// Stop tracking a module.
   void eraseModule(StringAttr name);
