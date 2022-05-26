@@ -1791,7 +1791,7 @@ public:
   matchAndRewrite(ChannelOp chan, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
     Location loc = chan.getLoc();
-    Operation *mod = chan->getParentOfType<hw::HWModuleLike>();
+    Operation *mod = chan->getParentOfType<MSFTModuleOp>();
     assert(mod && "ChannelOp must be contained by module");
     Namespace &ns = pass.getNamespaceFor(mod);
     Value clk = chan.clk();

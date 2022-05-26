@@ -45,7 +45,8 @@ def PEOutputOp: MSFTOp<"pe.output", [Terminator]> {
 }
 
 def ChannelOp: MSFTOp<"constructs.channel",
-    [NoSideEffect, Symbol, AllTypesMatch<["input", "output"]>]> {
+    [NoSideEffect, Symbol, HasParent<"MSFTModuleOp">,
+     AllTypesMatch<["input", "output"]>]> {
 
   let summary = "A pipeline-able connection";
   let description = [{
