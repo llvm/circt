@@ -671,6 +671,8 @@ Attribute ParamExprAttr::get(PEO opcode, ArrayRef<Attribute> operandsIn) {
   case PEO::CLog2:
     result = simplifyCLog2(operands);
     break;
+  case PEO::Concat:
+    break;
   }
 
   // If we folded to an operand, return it.
