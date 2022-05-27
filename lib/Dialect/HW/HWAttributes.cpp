@@ -625,15 +625,18 @@ static Attribute simplifyConcat(SmallVector<Attribute, 4> &operands) {
   auto combineAndPush = [&]() {
     if (stringsToCombine.empty())
       return;
+    // Concatenate buffered strings, push to ops.
     SmallString<32> newString;
     for (auto part : stringsToCombine)
       newString.append(part.getValue());
     newOperands.push_back(
         StringAttr::get(stringsToCombine[0].getContext(), newString));
+    stringsToCombine.clear();
   };
 
   for (Attribute op : operands) {
     if (auto strOp = op.dyn_cast<StringAttr>()) {
+      // Queue up adjacent strings.
       stringsToCombine.push_back(strOp);
     } else {
       newOperands.push_back(op);
