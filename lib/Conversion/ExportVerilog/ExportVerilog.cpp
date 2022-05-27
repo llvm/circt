@@ -3683,6 +3683,13 @@ void StmtEmitter::collectNamesEmitDecls(Block &block) {
     // Print out any array subscripts or other post-name stuff.
     emitter.printUnpackedTypePostfix(type, os);
 
+    // Print debug info.
+    if (state.options.printDebugInfo && isa<WireOp, RegOp>(op)) {
+      StringAttr sym = op->getAttr("inner_sym").dyn_cast_or_null<StringAttr>();
+      if (sym && !sym.getValue().empty())
+        os << " /* inner_sym: " << sym.getValue() << " */";
+    }
+
     if (auto localparam = dyn_cast<LocalParamOp>(op)) {
       os << " = ";
       emitter.printParamValue(localparam.value(), os, [&]() {
@@ -4075,6 +4082,11 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
     // Emit the name.
     os << getPortVerilogName(module, portInfo[portIdx]);
     printUnpackedTypePostfix(portType, os);
+
+    if (state.options.printDebugInfo && portInfo[portIdx].sym &&
+        !portInfo[portIdx].sym.getValue().empty())
+      os << " /* inner_sym: " << portInfo[portIdx].sym.getValue() << " */";
+
     ++portIdx;
 
     // If we have any more ports with the same types and the same direction,
@@ -4089,6 +4101,11 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
         os << ",\n";
         os.indent(startOfNamePos) << name;
         printUnpackedTypePostfix(portInfo[portIdx].type, os);
+
+        if (state.options.printDebugInfo && portInfo[portIdx].sym &&
+            !portInfo[portIdx].sym.getValue().empty())
+          os << " /* inner_sym: " << portInfo[portIdx].sym.getValue() << " */";
+
         ++portIdx;
       }
     }
