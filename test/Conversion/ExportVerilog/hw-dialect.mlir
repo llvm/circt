@@ -1107,13 +1107,15 @@ hw.module @UseParameterValue<xx: i42>(%arg0: i8)
 
 // CHECK-LABEL: module VerilogCompatParameters
 hw.module @VerilogCompatParameters<p1: i42, p2: i32, p3: f64 = 1.5,
-                                   p4: i32 = 4, p5: none = "foo">()
+                                   p4: i32 = 4, p5: none = "foo",
+                                   p6: none>()
   -> () {
   // CHECK-NEXT: #(parameter [41:0]      p1,
   // CHECK-NEXT:   parameter /*integer*/ p2,
   // CHECK-NEXT:   parameter             p3 = 1.500000e+00,
   // CHECK-NEXT:   parameter             p4 = 4,
-  // CHECK-NEXT:   parameter             p5 = "foo")
+  // CHECK-NEXT:   parameter             p5 = "foo",
+  // CHECK-NEXT:   parameter             p6)
 
 }
 

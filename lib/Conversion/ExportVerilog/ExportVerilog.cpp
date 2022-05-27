@@ -3947,9 +3947,9 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
         if (auto fpAttr = defaultValue.dyn_cast<FloatAttr>())
           if (fpAttr.getType().isF64())
             return;
-        if (defaultValue.isa<StringAttr>())
-          return;
       }
+      if (type.isa<NoneType>())
+        return;
 
       // Classic Verilog parser don't allow a type in the parameter declaration.
       // For compatibility with them, we omit the type when it is implicit based
