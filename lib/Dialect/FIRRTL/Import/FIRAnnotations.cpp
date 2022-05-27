@@ -954,25 +954,6 @@ bool circt::firrtl::scatterCustomAnnotations(
     // class.
     StringRef clazz = classAttr.getValue();
 
-    // Describes tap points into the design.  This has the following structure:
-    //   blackBox: ModuleTarget
-    //   keys: Seq[DataTapKey]
-    // DataTapKey has multiple implementations:
-    //   - ReferenceDataTapKey: (tapping a point which exists in the FIRRTL)
-    //       portName: ReferenceTarget
-    //       source: ReferenceTarget
-    //   - DataTapModuleSignalKey: (tapping a point, by name, in a blackbox)
-    //       portName: ReferenceTarget
-    //       module: IsModule
-    //       internalPath: String
-    //   - DeletedDataTapKey: (not implemented here)
-    //       portName: ReferenceTarget
-    //   - LiteralDataTapKey: (not implemented here)
-    //       portName: ReferenceTarget
-    //       literal: Literal
-    // A Literal is a FIRRTL IR literal serialized to a string.  For now, just
-    // store the string.
-    // TODO: Parse the literal string into a UInt or SInt literal.
     if (clazz == dataTapsClass)
       llvm_unreachable(
           "these annotations should never be handled by FIRAnnotations");
