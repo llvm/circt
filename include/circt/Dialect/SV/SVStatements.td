@@ -41,6 +41,9 @@ def OrderedOutputOp : SVOp<"ordered", [SingleBlock, NoTerminator, NoRegionArgume
   let results = (outs);
 
   let assemblyFormat = "$body attr-dict";
+  let builders = [
+    OpBuilder<(ins CArg<"std::function<void()>", "{}">:$body)>
+  ];
 }
 
 def IfDefOp : SVOp<"ifdef", [SingleBlock, NoTerminator, NoRegionArguments,

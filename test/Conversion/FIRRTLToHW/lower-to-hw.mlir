@@ -480,6 +480,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     in %enable: !firrtl.uint<1>
   ) {
     firrtl.assert %clock, %cond, %enable, "assert0" {isConcurrent = true, guards = ["HELLO", "WORLD"]}
+    firrtl.assume %clock, %cond, %enable, "assume0" {isConcurrent = true, guards = ["HELLO", "WORLD"]}
+    firrtl.cover %clock, %cond, %enable, "cover0" {isConcurrent = true, guards = ["HELLO", "WORLD"]}
+
     // CHECK-NEXT: sv.ifdef "HELLO" {
     // CHECK-NEXT:   sv.ifdef "WORLD" {
     // CHECK-NEXT:     [[TRUE:%.+]] = hw.constant true
@@ -489,12 +492,6 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT:     sv.ifdef "USE_PROPERTY_AS_CONSTRAINT" {
     // CHECK-NEXT:       sv.assume.concurrent posedge %clock, [[TMP2]]
     // CHECK-NEXT:     }
-    // CHECK-NEXT:   }
-    // CHECK-NEXT: }
-    firrtl.assume %clock, %cond, %enable, "assume0" {isConcurrent = true, guards = ["HELLO", "WORLD"]}
-    firrtl.cover %clock, %cond, %enable, "cover0" {isConcurrent = true, guards = ["HELLO", "WORLD"]}
-    // CHECK-NEXT: sv.ifdef "HELLO" {
-    // CHECK-NEXT:   sv.ifdef "WORLD" {
     // CHECK-NEXT:     [[TRUE:%.+]] = hw.constant true
     // CHECK-NEXT:     [[TMP1:%.+]] = comb.xor %enable, [[TRUE]]
     // CHECK-NEXT:     [[TMP2:%.+]] = comb.or [[TMP1]], %cond
@@ -659,15 +656,23 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
     // CHECK-NEXT: sv.ifdef "SYNTHESIS"  {
     // CHECK-NEXT:   } else {
-    // CHECK-NEXT:    sv.ifdef "RANDOMIZE_REG_INIT" {
-    // CHECK-NEXT:      %[[RANDOM:.+]] = sv.reg sym @[[RANDOM_SYM:[_A-Za-z0-9]+]] {{.+}}
-    // CHECK-NEXT:    }
-    // CHECK-NEXT:    sv.initial {
-    // CHECK-NEXT:    sv.verbatim "`INIT_RANDOM_PROLOG_"
-    // CHECK-NEXT:    sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
-    // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@UninitReg1::@[[RANDOM_SYM]]>]}
-    // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}} = {{[{][{]1[}][}]}}[1:0];" {symbols = [#hw.innerNameRef<@UninitReg1::@count>, #hw.innerNameRef<@UninitReg1::@[[RANDOM_SYM]]>]}
-    // CHECK-NEXT:     }
+    // CHECK-NEXT:     sv.ordered {
+    // CHECK-NEXT:       sv.ifdef "RANDOMIZE_REG_INIT" {
+    // CHECK-NEXT:         %[[RANDOM:.+]] = sv.reg sym @[[RANDOM_SYM:[_A-Za-z0-9]+]] {{.+}}
+    // CHECK-NEXT:       }
+    // CHECK-NEXT:       sv.ifdef "FIRRTL_BEFORE_INITIAL" {
+    // CHECK-NEXT:         sv.verbatim "`FIRRTL_BEFORE_INITIAL" {symbols = []}
+    // CHECK-NEXT:       }
+    // CHECK-NEXT:       sv.initial {
+    // CHECK-NEXT:       sv.verbatim "`INIT_RANDOM_PROLOG_"
+    // CHECK-NEXT:       sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
+    // CHECK-NEXT:          sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@UninitReg1::@[[RANDOM_SYM]]>]}
+    // CHECK-NEXT:          sv.verbatim "{{[{][{]0[}][}]}} = {{[{][{]1[}][}]}}[1:0];" {symbols = [#hw.innerNameRef<@UninitReg1::@count>, #hw.innerNameRef<@UninitReg1::@[[RANDOM_SYM]]>]}
+    // CHECK-NEXT:        }
+    // CHECK-NEXT:       }
+    // CHECK-NEXT:       sv.ifdef "FIRRTL_AFTER_INITIAL" {
+    // CHECK-NEXT:         sv.verbatim "`FIRRTL_AFTER_INITIAL" {symbols = []}
+    // CHECK-NEXT:       }
     // CHECK-NEXT:    }
     // CHECK-NEXT:  }
 
@@ -721,26 +726,34 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: %reg3 = sv.reg sym @[[reg3_sym:.+]] : !hw.inout<i32
     // CHECK-NEXT: sv.ifdef "SYNTHESIS"  {
     // CHECK-NEXT: } else {
-    // CHECK-NEXT:   sv.ifdef "RANDOMIZE_REG_INIT" {
-    // CHECK-NEXT:     %[[RANDOM:.+]] = sv.reg sym @[[RANDOM_SYM:[_A-Za-z0-9]+]] {{.+}}
-    // CHECK-NEXT:     %[[RANDOM_2:.+]] = sv.reg sym @[[RANDOM_2_SYM:[_A-Za-z0-9]+]] {{.+}}
-    // CHECK-NEXT:     %[[RANDOM_3:.+]] = sv.reg sym @[[RANDOM_3_SYM:[_A-Za-z0-9]+]] {{.+}}
-    // CHECK-NEXT:   }
-    // CHECK-NEXT:   sv.initial {
-    // CHECK-NEXT:     sv.verbatim "`INIT_RANDOM_PROLOG_"
-    // CHECK-NEXT:     sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
-    // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@InitReg1::@[[RANDOM_SYM]]>]}
-    // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}} = {{[{][{]1[}][}]}};" {symbols = [#hw.innerNameRef<@InitReg1::@[[reg_sym]]>, #hw.innerNameRef<@InitReg1::@[[RANDOM_SYM]]>]}
-    // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@InitReg1::@[[RANDOM_2_SYM]]>]}
-    // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}} = {{[{][{]1[}][}]}};" {symbols = [#hw.innerNameRef<@InitReg1::@[[reg2_sym]]>, #hw.innerNameRef<@InitReg1::@[[RANDOM_2_SYM]]>]}
-    // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@InitReg1::@[[RANDOM_3_SYM]]>]}
-    // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}} = {{[{][{]1[}][}]}};" {symbols = [#hw.innerNameRef<@InitReg1::@[[reg3_sym]]>, #hw.innerNameRef<@InitReg1::@[[RANDOM_3_SYM]]>]}
+    // CHECK-NEXT:   sv.ordered {
+    // CHECK-NEXT:     sv.ifdef "RANDOMIZE_REG_INIT" {
+    // CHECK-NEXT:       %[[RANDOM:.+]] = sv.reg sym @[[RANDOM_SYM:[_A-Za-z0-9]+]] {{.+}}
+    // CHECK-NEXT:       %[[RANDOM_2:.+]] = sv.reg sym @[[RANDOM_2_SYM:[_A-Za-z0-9]+]] {{.+}}
+    // CHECK-NEXT:       %[[RANDOM_3:.+]] = sv.reg sym @[[RANDOM_3_SYM:[_A-Za-z0-9]+]] {{.+}}
     // CHECK-NEXT:     }
-    // CHECK-NEXT:     sv.ifdef.procedural "RANDOMIZE"  {
-    // CHECK-NEXT:       sv.if %reset {
-    // CHECK-NEXT:         sv.bpassign %reg, %c0_i32 : i32
-    // CHECK-NEXT:         sv.bpassign %reg3, %c1_i32 : i32
+    // CHECK-NEXT:     sv.ifdef "FIRRTL_BEFORE_INITIAL" {
+    // CHECK-NEXT:       sv.verbatim "`FIRRTL_BEFORE_INITIAL" {symbols = []}
+    // CHECK-NEXT:     }
+    // CHECK-NEXT:     sv.initial {
+    // CHECK-NEXT:       sv.verbatim "`INIT_RANDOM_PROLOG_"
+    // CHECK-NEXT:       sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
+    // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@InitReg1::@[[RANDOM_SYM]]>]}
+    // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {{[{][{]1[}][}]}};" {symbols = [#hw.innerNameRef<@InitReg1::@[[reg_sym]]>, #hw.innerNameRef<@InitReg1::@[[RANDOM_SYM]]>]}
+    // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@InitReg1::@[[RANDOM_2_SYM]]>]}
+    // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {{[{][{]1[}][}]}};" {symbols = [#hw.innerNameRef<@InitReg1::@[[reg2_sym]]>, #hw.innerNameRef<@InitReg1::@[[RANDOM_2_SYM]]>]}
+    // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@InitReg1::@[[RANDOM_3_SYM]]>]}
+    // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {{[{][{]1[}][}]}};" {symbols = [#hw.innerNameRef<@InitReg1::@[[reg3_sym]]>, #hw.innerNameRef<@InitReg1::@[[RANDOM_3_SYM]]>]}
     // CHECK-NEXT:       }
+    // CHECK-NEXT:       sv.ifdef.procedural "RANDOMIZE"  {
+    // CHECK-NEXT:         sv.if %reset {
+    // CHECK-NEXT:           sv.bpassign %reg, %c0_i32 : i32
+    // CHECK-NEXT:           sv.bpassign %reg3, %c1_i32 : i32
+    // CHECK-NEXT:         }
+    // CHECK-NEXT:       }
+    // CHECK-NEXT:     }
+    // CHECK-NEXT:     sv.ifdef "FIRRTL_AFTER_INITIAL" {
+    // CHECK-NEXT:       sv.verbatim "`FIRRTL_AFTER_INITIAL" {symbols = []}
     // CHECK-NEXT:     }
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
@@ -1021,17 +1034,25 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
     // CHECK: sv.ifdef "SYNTHESIS"  {
     // CHECK-NEXT:   } else {
-    // CHECK-NEXT:    sv.ifdef "RANDOMIZE_REG_INIT" {
-    // CHECK-NEXT:      %[[RANDOM_0:.+]] = sv.reg sym @[[RANDOM_0_SYM:[_A-Za-z0-9]+]] {{.+}}
-    // CHECK-NEXT:      %[[RANDOM_1:.+]] = sv.reg sym @[[RANDOM_1_SYM:[_A-Za-z0-9]+]] {{.+}}
-    // CHECK-NEXT:    }
-    // CHECK-NEXT:    sv.initial {
-    // CHECK-NEXT:    sv.verbatim "`INIT_RANDOM_PROLOG_"
-    // CHECK-NEXT:    sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
-    // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@UninitReg42::@[[RANDOM_0_SYM]]>]}
-    // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@UninitReg42::@[[RANDOM_1_SYM]]>]}
-    // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}} = {{[{][{][{]1[}][}]}}[9:0], {{[{][{]2[}][}][}]}};" {symbols = [#hw.innerNameRef<@UninitReg42::@count>, #hw.innerNameRef<@UninitReg42::@[[RANDOM_1_SYM]]>, #hw.innerNameRef<@UninitReg42::@[[RANDOM_0_SYM]]>]}
-    // CHECK-NEXT:     }
+    // CHECK-NEXT:    sv.ordered {
+    // CHECK-NEXT:      sv.ifdef "RANDOMIZE_REG_INIT" {
+    // CHECK-NEXT:        %[[RANDOM_0:.+]] = sv.reg sym @[[RANDOM_0_SYM:[_A-Za-z0-9]+]] {{.+}}
+    // CHECK-NEXT:        %[[RANDOM_1:.+]] = sv.reg sym @[[RANDOM_1_SYM:[_A-Za-z0-9]+]] {{.+}}
+    // CHECK-NEXT:      }
+    // CHECK-NEXT:      sv.ifdef "FIRRTL_BEFORE_INITIAL" {
+    // CHECK-NEXT:        sv.verbatim "`FIRRTL_BEFORE_INITIAL" {symbols = []}
+    // CHECK-NEXT:      }
+    // CHECK-NEXT:      sv.initial {
+    // CHECK-NEXT:      sv.verbatim "`INIT_RANDOM_PROLOG_"
+    // CHECK-NEXT:      sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
+    // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@UninitReg42::@[[RANDOM_0_SYM]]>]}
+    // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@UninitReg42::@[[RANDOM_1_SYM]]>]}
+    // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {{[{][{][{]1[}][}]}}[9:0], {{[{][{]2[}][}][}]}};" {symbols = [#hw.innerNameRef<@UninitReg42::@count>, #hw.innerNameRef<@UninitReg42::@[[RANDOM_1_SYM]]>, #hw.innerNameRef<@UninitReg42::@[[RANDOM_0_SYM]]>]}
+    // CHECK-NEXT:       }
+    // CHECK-NEXT:      }
+    // CHECK-NEXT:      sv.ifdef "FIRRTL_AFTER_INITIAL" {
+    // CHECK-NEXT:        sv.verbatim "`FIRRTL_AFTER_INITIAL" {symbols = []}
+    // CHECK-NEXT:      }
     // CHECK-NEXT:    }
     // CHECK-NEXT:  }
 
@@ -1232,25 +1253,33 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK:      %r4 = sv.reg sym @[[r4_sym:[_A-Za-z0-9]+]]
     // CHECK:      sv.ifdef "SYNTHESIS" {
     // CHECK-NEXT: } else {
-    // CHECK-NEXT:   sv.ifdef "RANDOMIZE_REG_INIT" {
-    // CHECK-NEXT:     %[[RANDOM_0:.+]] = sv.reg sym @[[RANDOM_0_SYM:[_A-Za-z0-9]+]]
-    // CHECK-NEXT:     %[[RANDOM_1:.+]] = sv.reg sym @[[RANDOM_1_SYM:[_A-Za-z0-9]+]]
-    // CHECK-NEXT:     %[[RANDOM_2:.+]] = sv.reg sym @[[RANDOM_2_SYM:[_A-Za-z0-9]+]]
-    // CHECK-NEXT:     %[[RANDOM_3:.+]] = sv.reg sym @[[RANDOM_3_SYM:[_A-Za-z0-9]+]]
-    // CHECK-NEXT:     %[[RANDOM_4:.+]] = sv.reg sym @[[RANDOM_4_SYM:[_A-Za-z0-9]+]]{{.+}}
-    // CHECK-NEXT:   }
-    // CHECK-NEXT:   sv.initial {
-    // CHECK-NEXT:     sv.verbatim "`INIT_RANDOM_PROLOG_"
-    // CHECK-NEXT:     sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
-    // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_0_SYM]]>]}
-    // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}} = {{[{][{]1[}][}]}}[1:0];" {symbols = [#hw.innerNameRef<@regInitRandomReuse::@[[r1_sym]]>, #hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_0_SYM]]>]}
-    // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}} = {{[{][{]1[}][}]}}[5:2];" {symbols = [#hw.innerNameRef<@regInitRandomReuse::@[[r2_sym]]>, #hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_0_SYM]]>]}
-    // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_1_SYM]]>]}
-    // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}} = {{[{]}}{{[{][{]1[}][}]}}[5:0], {{[{][{]2[}][}]}}[31:6]{{[}]}};" {symbols = [#hw.innerNameRef<@regInitRandomReuse::@[[r3_sym]]>, #hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_1_SYM]]>, #hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_0_SYM]]>]}
-    // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_2_SYM]]>]}
-    // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_3_SYM]]>]}
-    // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_4_SYM]]>]}
-    // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}} = {{[{]}}{{[{][{]1[}][}]}}[9:0], {{[{][{]2[}][}]}}, {{[{][{]3[}][}]}}, {{[{][{]4[}][}]}}[31:6]{{[}]}};" {symbols = [#hw.innerNameRef<@regInitRandomReuse::@[[r4_sym]]>, #hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_4_SYM]]>, #hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_3_SYM]]>, #hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_2_SYM]]>, #hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_1_SYM]]>]}
+    // CHECK-NEXT:   sv.ordered {
+    // CHECK-NEXT:     sv.ifdef "RANDOMIZE_REG_INIT" {
+    // CHECK-NEXT:       %[[RANDOM_0:.+]] = sv.reg sym @[[RANDOM_0_SYM:[_A-Za-z0-9]+]]
+    // CHECK-NEXT:       %[[RANDOM_1:.+]] = sv.reg sym @[[RANDOM_1_SYM:[_A-Za-z0-9]+]]
+    // CHECK-NEXT:       %[[RANDOM_2:.+]] = sv.reg sym @[[RANDOM_2_SYM:[_A-Za-z0-9]+]]
+    // CHECK-NEXT:       %[[RANDOM_3:.+]] = sv.reg sym @[[RANDOM_3_SYM:[_A-Za-z0-9]+]]
+    // CHECK-NEXT:       %[[RANDOM_4:.+]] = sv.reg sym @[[RANDOM_4_SYM:[_A-Za-z0-9]+]]{{.+}}
+    // CHECK-NEXT:     }
+    // CHECK-NEXT:     sv.ifdef "FIRRTL_BEFORE_INITIAL" {
+    // CHECK-NEXT:       sv.verbatim "`FIRRTL_BEFORE_INITIAL" {symbols = []}
+    // CHECK-NEXT:     }
+    // CHECK-NEXT:     sv.initial {
+    // CHECK-NEXT:       sv.verbatim "`INIT_RANDOM_PROLOG_"
+    // CHECK-NEXT:       sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
+    // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_0_SYM]]>]}
+    // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {{[{][{]1[}][}]}}[1:0];" {symbols = [#hw.innerNameRef<@regInitRandomReuse::@[[r1_sym]]>, #hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_0_SYM]]>]}
+    // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {{[{][{]1[}][}]}}[5:2];" {symbols = [#hw.innerNameRef<@regInitRandomReuse::@[[r2_sym]]>, #hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_0_SYM]]>]}
+    // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_1_SYM]]>]}
+    // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {{[{]}}{{[{][{]1[}][}]}}[5:0], {{[{][{]2[}][}]}}[31:6]{{[}]}};" {symbols = [#hw.innerNameRef<@regInitRandomReuse::@[[r3_sym]]>, #hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_1_SYM]]>, #hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_0_SYM]]>]}
+    // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_2_SYM]]>]}
+    // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_3_SYM]]>]}
+    // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_4_SYM]]>]}
+    // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {{[{]}}{{[{][{]1[}][}]}}[9:0], {{[{][{]2[}][}]}}, {{[{][{]3[}][}]}}, {{[{][{]4[}][}]}}[31:6]{{[}]}};" {symbols = [#hw.innerNameRef<@regInitRandomReuse::@[[r4_sym]]>, #hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_4_SYM]]>, #hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_3_SYM]]>, #hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_2_SYM]]>, #hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_1_SYM]]>]}
+    // CHECK-NEXT:       }
+    // CHECK-NEXT:     }
+    // CHECK-NEXT:     sv.ifdef "FIRRTL_AFTER_INITIAL" {
+    // CHECK-NEXT:       sv.verbatim "`FIRRTL_AFTER_INITIAL" {symbols = []}
     // CHECK-NEXT:     }
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
@@ -1270,15 +1299,23 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK:      %r = sv.reg sym @[[r_sym:[_A-Za-z0-9]+]]
     // CHECK:      sv.ifdef "SYNTHESIS" {
     // CHECK-NEXT: } else {
-    // CHECK-NEXT:   sv.ifdef "RANDOMIZE_REG_INIT" {
-    // CHECK-NEXT:     %[[RANDOM:.+]] = sv.reg sym @[[RANDOM_SYM:[_A-Za-z0-9]+]]{{.+}}
-    // CHECK-NEXT:   }
-    // CHECK-NEXT:   sv.initial {
-    // CHECK-NEXT:     sv.verbatim "`INIT_RANDOM_PROLOG_"
-    // CHECK-NEXT:     sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
-    // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@init1DVector::@[[RANDOM_SYM]]>]}
-    // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}}[0] = {{[{][{]1[}][}]}}[0];" {symbols = [#hw.innerNameRef<@init1DVector::@[[r_sym]]>, #hw.innerNameRef<@init1DVector::@[[RANDOM_SYM]]>]}
-    // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}}[1] = {{[{][{]1[}][}]}}[1];" {symbols = [#hw.innerNameRef<@init1DVector::@[[r_sym]]>, #hw.innerNameRef<@init1DVector::@[[RANDOM_SYM]]>]}
+    // CHECK-NEXT:   sv.ordered {
+    // CHECK-NEXT:     sv.ifdef "RANDOMIZE_REG_INIT" {
+    // CHECK-NEXT:       %[[RANDOM:.+]] = sv.reg sym @[[RANDOM_SYM:[_A-Za-z0-9]+]]{{.+}}
+    // CHECK-NEXT:     }
+    // CHECK-NEXT:     sv.ifdef "FIRRTL_BEFORE_INITIAL" {
+    // CHECK-NEXT:       sv.verbatim "`FIRRTL_BEFORE_INITIAL" {symbols = []}
+    // CHECK-NEXT:     }
+    // CHECK-NEXT:     sv.initial {
+    // CHECK-NEXT:       sv.verbatim "`INIT_RANDOM_PROLOG_"
+    // CHECK-NEXT:       sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
+    // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@init1DVector::@[[RANDOM_SYM]]>]}
+    // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}}[0] = {{[{][{]1[}][}]}}[0];" {symbols = [#hw.innerNameRef<@init1DVector::@[[r_sym]]>, #hw.innerNameRef<@init1DVector::@[[RANDOM_SYM]]>]}
+    // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}}[1] = {{[{][{]1[}][}]}}[1];" {symbols = [#hw.innerNameRef<@init1DVector::@[[r_sym]]>, #hw.innerNameRef<@init1DVector::@[[RANDOM_SYM]]>]}
+    // CHECK-NEXT:       }
+    // CHECK-NEXT:     }
+    // CHECK-NEXT:     sv.ifdef "FIRRTL_AFTER_INITIAL" {
+    // CHECK-NEXT:       sv.verbatim "`FIRRTL_AFTER_INITIAL" {symbols = []}
     // CHECK-NEXT:     }
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
@@ -1455,14 +1492,22 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK:      %r = sv.reg sym @[[r_sym:[_A-Za-z0-9]+]]
     // CHECK:      sv.ifdef "SYNTHESIS" {
     // CHECK-NEXT: } else {
-    // CHECK-NEXT:   sv.ifdef "RANDOMIZE_REG_INIT" {
-    // CHECK-NEXT:     %[[RANDOM:.+]] = sv.reg sym @[[RANDOM_SYM:[_A-Za-z0-9]+]]{{.+}}
-    // CHECK-NEXT:   }
-    // CHECK-NEXT:   sv.initial {
-    // CHECK-NEXT:     sv.verbatim "`INIT_RANDOM_PROLOG_"
-    // CHECK-NEXT:     sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
-    // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@initStruct::@[[RANDOM_SYM]]>]}
-    // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}}.a = {{[{][{]1[}][}]}}[0];" {symbols = [#hw.innerNameRef<@initStruct::@[[r_sym]]>, #hw.innerNameRef<@initStruct::@[[RANDOM_SYM]]>]}
+    // CHECK-NEXT:   sv.ordered {
+    // CHECK-NEXT:     sv.ifdef "RANDOMIZE_REG_INIT" {
+    // CHECK-NEXT:       %[[RANDOM:.+]] = sv.reg sym @[[RANDOM_SYM:[_A-Za-z0-9]+]]{{.+}}
+    // CHECK-NEXT:     }
+    // CHECK-NEXT:     sv.ifdef "FIRRTL_BEFORE_INITIAL" {
+    // CHECK-NEXT:       sv.verbatim "`FIRRTL_BEFORE_INITIAL" {symbols = []}
+    // CHECK-NEXT:     }
+    // CHECK-NEXT:     sv.initial {
+    // CHECK-NEXT:       sv.verbatim "`INIT_RANDOM_PROLOG_"
+    // CHECK-NEXT:       sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
+    // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@initStruct::@[[RANDOM_SYM]]>]}
+    // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}}.a = {{[{][{]1[}][}]}}[0];" {symbols = [#hw.innerNameRef<@initStruct::@[[r_sym]]>, #hw.innerNameRef<@initStruct::@[[RANDOM_SYM]]>]}
+    // CHECK-NEXT:       }
+    // CHECK-NEXT:     }
+    // CHECK-NEXT:     sv.ifdef "FIRRTL_AFTER_INITIAL" {
+    // CHECK-NEXT:       sv.verbatim "`FIRRTL_AFTER_INITIAL" {symbols = []}
     // CHECK-NEXT:     }
     // CHECK-NEXT:   }
     // CHECK-NEXT: }

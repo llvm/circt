@@ -892,6 +892,17 @@ LogicalResult CaseOp::canonicalize(CaseOp op, PatternRewriter &rewriter) {
   return failure();
 }
 
+void OrderedOutputOp::build(OpBuilder &builder, OperationState &result,
+                            std::function<void()> body) {
+  OpBuilder::InsertionGuard guard(builder);
+
+  builder.createBlock(result.addRegion());
+
+  // Fill in the body of the ordered block.
+  if (body)
+    body();
+}
+
 //===----------------------------------------------------------------------===//
 // Assignment statements
 //===----------------------------------------------------------------------===//
