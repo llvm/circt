@@ -34,8 +34,8 @@ public:
             // Declarations.
             RegOp, WireOp, LocalParamOp, XMROp,
             // Control flow.
-            IfDefOp, IfDefProceduralOp, IfOp, AlwaysOp, AlwaysCombOp,
-            AlwaysFFOp, InitialOp, CaseOp,
+            OrderedOutputOp, IfDefOp, IfDefProceduralOp, IfOp, AlwaysOp,
+            AlwaysCombOp, AlwaysFFOp, InitialOp, CaseOp,
             // Other Statements.
             AssignOp, BPAssignOp, PAssignOp, ForceOp, ReleaseOp, AliasOp,
             FWriteOp, VerbatimOp,
@@ -97,6 +97,7 @@ public:
   HANDLE(MacroRefExprOp, Unhandled);
 
   // Control flow.
+  HANDLE(OrderedOutputOp, Unhandled);
   HANDLE(IfDefOp, Unhandled);
   HANDLE(IfDefProceduralOp, Unhandled);
   HANDLE(IfOp, Unhandled);

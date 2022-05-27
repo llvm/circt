@@ -2485,6 +2485,7 @@ private:
   LogicalResult visitStmt(TypedeclOp op);
 
   LogicalResult emitIfDef(Operation *op, MacroIdentAttr cond);
+  LogicalResult visitSV(OrderedOutputOp op);
   LogicalResult visitSV(IfDefOp op) { return emitIfDef(op, op.cond()); }
   LogicalResult visitSV(IfDefProceduralOp op) {
     return emitIfDef(op, op.cond());
@@ -3089,6 +3090,13 @@ void StmtEmitter::emitBlockAsStatement(Block *block,
   if (!multiLineComment.empty())
     os << " // " << multiLineComment;
   os << '\n';
+}
+
+LogicalResult StmtEmitter::visitSV(OrderedOutputOp ooop) {
+  // Emit the body.
+  for (auto &op : *ooop.getBody())
+    emitStatement(&op);
+  return success();
 }
 
 LogicalResult StmtEmitter::visitSV(IfOp op) {

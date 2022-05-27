@@ -331,6 +331,34 @@ hw.module @SimpleConstPrintReset(%clock: i1, %reset: i1, %in4: i4) -> () {
 
 }
 
+
+// CHECK-LABEL: module ordered_region
+// CHECK-NEXT: input a
+// CHECK-EMPTY:
+hw.module @ordered_region(%a: i1) {
+  sv.ordered {
+    // CHECK-NEXT: `ifdef foo
+    sv.ifdef "foo" {
+      // CHECK-NEXT: wire
+      %wire = sv.wire : !hw.inout<i1>
+      // CHECK-EMPTY:
+      // CHECK-NEXT: assign
+      sv.assign %wire, %a : i1
+    }
+    // CHECK-NEXT: `endif
+    // CHECK-NEXT: `ifdef bar
+    sv.ifdef "bar" {
+      // CHECK-NEXT: wire
+      %wire = sv.wire : !hw.inout<i1>
+      // CHECK-EMPTY:
+      // CHECK-NEXT: assign
+      sv.assign %wire, %a : i1
+    }
+    // CHECK-NEXT: `endif
+  }
+}
+
+
 hw.module.extern @MyExtModule(%in: i8) -> (out: i1) attributes {verilogName = "FooExtModule"}
 hw.module.extern @AParameterizedExtModule<CFG: none>(%in: i8) -> (out: i1)
 
