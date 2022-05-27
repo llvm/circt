@@ -3687,7 +3687,7 @@ void StmtEmitter::collectNamesEmitDecls(Block &block) {
     if (state.options.printDebugInfo && isa<WireOp, RegOp>(op)) {
       StringAttr sym = op->getAttr("inner_sym").dyn_cast_or_null<StringAttr>();
       if (sym && !sym.getValue().empty())
-        os << " /* inner_sym: " << sym.getValue() << "*/";
+        os << " /* inner_sym: " << sym.getValue() << " */";
     }
 
     if (auto localparam = dyn_cast<LocalParamOp>(op)) {
@@ -4085,7 +4085,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
 
     if (state.options.printDebugInfo && portInfo[portIdx].sym &&
         !portInfo[portIdx].sym.getValue().empty())
-      os << " /* inner_sym: " << portInfo[portIdx].sym.getValue() << "*/";
+      os << " /* inner_sym: " << portInfo[portIdx].sym.getValue() << " */";
 
     ++portIdx;
 
@@ -4104,7 +4104,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
 
         if (state.options.printDebugInfo && portInfo[portIdx].sym &&
             !portInfo[portIdx].sym.getValue().empty())
-          os << " /* inner_sym: " << portInfo[portIdx].sym.getValue() << "*/";
+          os << " /* inner_sym: " << portInfo[portIdx].sym.getValue() << " */";
 
         ++portIdx;
       }
