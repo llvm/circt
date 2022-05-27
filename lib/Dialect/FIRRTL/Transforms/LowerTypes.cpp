@@ -1439,7 +1439,7 @@ void LowerTypesPass::runOnOperation() {
         auto newNLAop = theBuilder.create<NonLocalAnchor>(
             circtNamespace.newName(nlaName.getValue()), newPath);
         updateNamepath(newNLAop, nlaName, false);
-        nlaTable->insert(newNLAop);
+        nlaTable->addNLA(newNLAop);
       } else
         nla.namepathAttr(newPath);
     } else if (nlaName != prevNLA)
