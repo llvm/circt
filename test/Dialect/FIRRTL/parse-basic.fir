@@ -44,6 +44,14 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     parameter DEFAULT = 0
     parameter WIDTH = 32
     parameter DEPTH = 32.42
+    
+  ; Check that integers are extended to 32 bits if they are smaller.
+  ; CHECK-LABEL: firrtl.extmodule private @IntegerParamsModul
+  extmodule IntegerParamsModule :
+    ; CHECK-SAME: a: ui32 = 1
+    parameter a = 1
+    ; CHECK-SAME: b: ui64 = 2251799813685248
+    parameter b = 2251799813685248
 
   ; Module to test type parsing.
 
