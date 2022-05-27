@@ -6,7 +6,7 @@
 msft.module @top {} () {
   msft.instance @foo @Foo() : () -> (i32)
   // CHECK: %foo.x = msft.instance @foo @Foo() : () -> i32
-  // HWLOW: %foo.x = hw.instance "foo" sym @foo @Foo<__INST_HIER: none = #hw.param.expr.concat<#hw.param.decl.ref<"__INST_HIER">, ".", "foo">>() -> (x: i32)
+  // HWLOW: %foo.x = hw.instance "foo" sym @foo @Foo<__INST_HIER: none = #hw.param.expr.str.concat<#hw.param.decl.ref<"__INST_HIER">, ".foo">>() -> (x: i32)
 
   %true = hw.constant true
   %extern.out = msft.instance @extern @Extern(%true)<param: i1 = false> : (i1) -> i1

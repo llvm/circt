@@ -256,7 +256,7 @@ InstanceOpLowering::matchAndRewrite(InstanceOp msftInst, OpAdaptor adaptor,
       paramValues = rewriter.getArrayAttr({});
   } else {
     auto instAppendParam = hw::ParamExprAttr::get(
-        hw::PEO::Concat,
+        hw::PEO::StrConcat,
         {hw::ParamDeclRefAttr::get(rewriter.getStringAttr("__INST_HIER"),
                                    rewriter.getNoneType()),
          rewriter.getStringAttr("."), msftInst.sym_nameAttr()});
