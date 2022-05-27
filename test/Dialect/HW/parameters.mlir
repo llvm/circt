@@ -229,3 +229,12 @@ hw.module @parameterizedArraysInstance
   %c = hw.instance "inst" @parameterizedArrays<param: i32 = 12, N: i32 = 24>
     (a: %a : !hw.array<42xint<12>>, b: %b : !hw.array<24xint<12>>) -> (c: !hw.array<24xint<12>>) {}
 }
+
+// CHECK-LABEL: hw.module @NoneTypeParam<p1: none>()
+hw.module @NoneTypeParam<p1: none>() -> () {}
+
+// CHECK-LABEL: hw.module @ParamConcatInst() {
+// CHECK:         hw.instance "inst" @NoneTypeParam<p1: none = "top.child">() -> ()
+hw.module @ParamConcatInst() -> () {
+  hw.instance "inst" @NoneTypeParam<p1: none = #hw.param.expr.str.concat<"top", ".", "child">>() -> ()
+}

@@ -226,11 +226,14 @@ def PEO_ModS : I32EnumAttrCase<"ModS",11, "mods">;
 // Unary Expression Opcodes.
 def PEO_CLog2 : I32EnumAttrCase<"CLog2", 12, "clog2">;
 
+// String manipulation Opcodes.
+def PEO_StrConcat : I32EnumAttrCase<"StrConcat", 13, "str.concat">;
+
 def PEOAttr  : I32EnumAttr<"PEO", "Parameter Expression Opcode",
                            [PEO_Add, PEO_Mul, PEO_And, PEO_Or, PEO_Xor,
                             PEO_Shl, PEO_ShrU, PEO_ShrS,
                             PEO_DivU, PEO_DivS, PEO_ModU, PEO_ModS,
-                            PEO_CLog2]>;
+                            PEO_CLog2, PEO_StrConcat]>;
 }
 
 def ParamExprAttr : AttrDef<HWDialect, "ParamExpr"> {

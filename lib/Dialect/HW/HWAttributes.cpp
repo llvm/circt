@@ -618,6 +618,41 @@ static Attribute simplifyCLog2(SmallVector<Attribute, 4> &operands) {
   });
 }
 
+static Attribute simplifyStrConcat(SmallVector<Attribute, 4> &operands) {
+  // Combine all adjacent strings.
+  SmallVector<Attribute> newOperands;
+  SmallVector<StringAttr> stringsToCombine;
+  auto combineAndPush = [&]() {
+    if (stringsToCombine.empty())
+      return;
+    // Concatenate buffered strings, push to ops.
+    SmallString<32> newString;
+    for (auto part : stringsToCombine)
+      newString.append(part.getValue());
+    newOperands.push_back(
+        StringAttr::get(stringsToCombine[0].getContext(), newString));
+    stringsToCombine.clear();
+  };
+
+  for (Attribute op : operands) {
+    if (auto strOp = op.dyn_cast<StringAttr>()) {
+      // Queue up adjacent strings.
+      stringsToCombine.push_back(strOp);
+    } else {
+      combineAndPush();
+      newOperands.push_back(op);
+    }
+  }
+  combineAndPush();
+
+  assert(!newOperands.empty());
+  if (newOperands.size() == 1)
+    return newOperands[0];
+  if (newOperands.size() < operands.size())
+    return ParamExprAttr::get(PEO::StrConcat, newOperands);
+  return {};
+}
+
 /// Build a parameter expression.  This automatically canonicalizes and
 /// folds, so it may not necessarily return a ParamExprAttr.
 Attribute ParamExprAttr::get(PEO opcode, ArrayRef<Attribute> operandsIn) {
@@ -670,6 +705,9 @@ Attribute ParamExprAttr::get(PEO opcode, ArrayRef<Attribute> operandsIn) {
     break;
   case PEO::CLog2:
     result = simplifyCLog2(operands);
+    break;
+  case PEO::StrConcat:
+    result = simplifyStrConcat(operands);
     break;
   }
 

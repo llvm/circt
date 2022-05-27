@@ -1453,6 +1453,11 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
     operandSign = IsUnsigned;
     isUnary = true;
     break;
+  case PEO::StrConcat:
+    operatorStr = ", ";
+    subprecedence = Symbol;
+    isUnary = false;
+    break;
   }
 
   // Emit the specified operand with a $signed() or $unsigned() wrapper around
@@ -1477,6 +1482,8 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
 
   if (subprecedence > parenthesizeIfLooserThan)
     os << '(';
+  if (expr.getOpcode() == PEO::StrConcat)
+    os << '{';
   bool allOperandsSigned = emitOperand(expr.getOperands()[0]);
   for (auto op : ArrayRef(expr.getOperands()).drop_front()) {
     // Handle the special case of (a + b + -42) as (a + b - 42).
@@ -1496,6 +1503,8 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
     os << operatorStr;
     allOperandsSigned &= emitOperand(op);
   }
+  if (expr.getOpcode() == PEO::StrConcat)
+    os << '}';
   if (subprecedence > parenthesizeIfLooserThan) {
     os << ')';
     subprecedence = Symbol;
