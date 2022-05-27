@@ -3787,8 +3787,13 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
     }
 
     // Formulate the `enable -> predicate` as `!enable | predicate`.
-    auto notEnable = comb::createOrFoldNot(enable, builder);
-    predicate = builder.createOrFold<comb::OrOp>(notEnable, predicate);
+    // Except for covers, combine them: enable & predicate
+    if (!isCover) {
+      auto notEnable = comb::createOrFoldNot(enable, builder);
+      predicate = builder.createOrFold<comb::OrOp>(notEnable, predicate);
+    } else {
+      predicate = builder.createOrFold<comb::AndOp>(enable, predicate);
+    }
 
     // Handle the regular SVA case.
     sv::EventControl event;

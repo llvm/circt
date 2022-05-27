@@ -431,18 +431,12 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.cover %clock, %cCond, %cEn, "cover0" {isConcurrent = true}
     firrtl.cover %clock, %cCond, %cEn, "cover0" {isConcurrent = true, name = "cover_0"}
     firrtl.cover %clock, %cCond, %cEn, "cover0"(%value) : !firrtl.uint<42> {isConcurrent = true}
-    // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
-    // CHECK-NEXT: [[TMP1:%.+]] = comb.xor %cEn, [[TRUE]]
-    // CHECK-NEXT: [[TMP2:%.+]] = comb.or [[TMP1]], %cCond
-    // CHECK-NEXT: sv.cover.concurrent posedge %clock, [[TMP2]]
-    // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
-    // CHECK-NEXT: [[TMP1:%.+]] = comb.xor %cEn, [[TRUE]]
-    // CHECK-NEXT: [[TMP2:%.+]] = comb.or [[TMP1]], %cCond
-    // CHECK-NEXT: sv.cover.concurrent posedge %clock, [[TMP2]] label "cover__cover_0"
-    // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
-    // CHECK-NEXT: [[TMP1:%.+]] = comb.xor %cEn, [[TRUE]]
-    // CHECK-NEXT: [[TMP2:%.+]] = comb.or [[TMP1]], %cCond
-    // CHECK-NEXT: sv.cover.concurrent posedge %clock, [[TMP2]]
+    // CHECK-NEXT: [[TMP:%.+]] = comb.and %cEn, %cCond
+    // CHECK-NEXT: sv.cover.concurrent posedge %clock, [[TMP]]
+    // CHECK-NEXT: [[TMP:%.+]] = comb.and %cEn, %cCond
+    // CHECK-NEXT: sv.cover.concurrent posedge %clock, [[TMP]] label "cover__cover_0"
+    // CHECK-NEXT: [[TMP:%.+]] = comb.and %cEn, %cCond
+    // CHECK-NEXT: sv.cover.concurrent posedge %clock, [[TMP]]
     firrtl.cover %clock, %cCond, %cEn, "cover1" {eventControl = 1 : i32, isConcurrent = true, name = "cover_1"}
     firrtl.cover %clock, %cCond, %cEn, "cover2" {eventControl = 2 : i32, isConcurrent = true, name = "cover_2"}
     // CHECK: sv.cover.concurrent negedge %clock, {{%.+}} label "cover__cover_1"
@@ -505,10 +499,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT:     [[TMP1:%.+]] = comb.xor %enable, [[TRUE]]
     // CHECK-NEXT:     [[TMP2:%.+]] = comb.or [[TMP1]], %cond
     // CHECK-NEXT:     sv.assume.concurrent posedge %clock, [[TMP2]] message "assume0"
-    // CHECK-NEXT:     [[TRUE:%.+]] = hw.constant true
-    // CHECK-NEXT:     [[TMP1:%.+]] = comb.xor %enable, [[TRUE]]
-    // CHECK-NEXT:     [[TMP2:%.+]] = comb.or [[TMP1]], %cond
-    // CHECK-NEXT:     sv.cover.concurrent posedge %clock, [[TMP2]]
+    // CHECK-NEXT:     [[TMP:%.+]] = comb.and %enable, %cond
+    // CHECK-NEXT:     sv.cover.concurrent posedge %clock, [[TMP]]
     // CHECK-NOT:      label
     // CHECK-NEXT:   }
     // CHECK-NEXT: }

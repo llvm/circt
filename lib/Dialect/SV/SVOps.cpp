@@ -1573,10 +1573,11 @@ void printXMRPath(OpAsmPrinter &p, XMROp op, ArrayAttr pathAttr,
 // Verification Ops.
 //===----------------------------------------------------------------------===//
 
-static LogicalResult eraseIfNotZero(Operation *op, Value value,
-                                    PatternRewriter &rewriter) {
+static LogicalResult eraseIfZeroOrNotZero(Operation *op, Value value,
+                                          PatternRewriter &rewriter,
+                                          bool eraseIfZero) {
   if (auto constant = value.getDefiningOp<hw::ConstantOp>())
-    if (!constant.getValue().isZero()) {
+    if (constant.getValue().isZero() == eraseIfZero) {
       rewriter.eraseOp(op);
       return success();
     }
@@ -1584,10 +1585,10 @@ static LogicalResult eraseIfNotZero(Operation *op, Value value,
   return failure();
 }
 
-template <class Op>
+template <class Op, bool EraseIfZero = false>
 static LogicalResult canonicalizeImmediateVerifOp(Op op,
                                                   PatternRewriter &rewriter) {
-  return eraseIfNotZero(op, op.expression(), rewriter);
+  return eraseIfZeroOrNotZero(op, op.expression(), rewriter, EraseIfZero);
 }
 
 void AssertOp::getCanonicalizationPatterns(RewritePatternSet &results,
@@ -1602,13 +1603,13 @@ void AssumeOp::getCanonicalizationPatterns(RewritePatternSet &results,
 
 void CoverOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                           MLIRContext *context) {
-  results.add(canonicalizeImmediateVerifOp<CoverOp>);
+  results.add(canonicalizeImmediateVerifOp<CoverOp, /* EraseIfZero = */ true>);
 }
 
-template <class Op>
+template <class Op, bool EraseIfZero = false>
 static LogicalResult canonicalizeConcurrentVerifOp(Op op,
                                                    PatternRewriter &rewriter) {
-  return eraseIfNotZero(op, op.property(), rewriter);
+  return eraseIfZeroOrNotZero(op, op.property(), rewriter, EraseIfZero);
 }
 
 void AssertConcurrentOp::getCanonicalizationPatterns(RewritePatternSet &results,
@@ -1623,7 +1624,8 @@ void AssumeConcurrentOp::getCanonicalizationPatterns(RewritePatternSet &results,
 
 void CoverConcurrentOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                                     MLIRContext *context) {
-  results.add(canonicalizeConcurrentVerifOp<CoverConcurrentOp>);
+  results.add(
+      canonicalizeConcurrentVerifOp<CoverConcurrentOp, /* EraseIfZero */ true>);
 }
 
 //===----------------------------------------------------------------------===//

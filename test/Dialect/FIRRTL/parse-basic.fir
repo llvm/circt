@@ -943,8 +943,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
     when cond:
       printf(clock, enable, "cover:foo 2", value)
-    ; CHECK: [[TMP:%.+]] = firrtl.not %cond
-    ; CHECK-NEXT: firrtl.cover %clock, [[TMP]], %enable, "foo 2" {eventControl = 0 : i32, isConcurrent = true}
+    ; CHECK-NEXT: firrtl.cover %clock, %cond, %enable, "foo 2" {eventControl = 0 : i32, isConcurrent = true}
 
     when cond:
       printf(clock, enable, "assert:custom label 0:foo 3", value)
@@ -958,8 +957,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
     when cond:
       printf(clock, enable, "cover:custom label 2:foo 5", value)
-    ; CHECK: [[TMP:%.+]] = firrtl.not %cond
-    ; CHECK-NEXT: firrtl.cover %clock, [[TMP]], %enable, "foo 5" {eventControl = 0 : i32, isConcurrent = true, name = "custom label 2"}
+    ; CHECK-NEXT: firrtl.cover %clock, %cond, %enable, "foo 5" {eventControl = 0 : i32, isConcurrent = true, name = "custom label 2"}
 
     ; Optional `stop` with same clock and condition should be removed.
     when cond:
