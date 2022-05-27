@@ -196,7 +196,7 @@ public:
       last = writeBack(nla.root(), nla.getNameAttr());
     for (auto root : newTops)
       last = writeBack(root.getModule(), root.getName());
-    nlaTable.insert(last);
+    nlaTable.addNLA(last);
     nlaTable.erase(nla);
     nla.erase();
     return last;

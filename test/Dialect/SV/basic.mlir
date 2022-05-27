@@ -331,3 +331,24 @@ hw.module @nested_wire(%a: i1) {
     sv.assign %wire, %a : i1
   }
 }
+
+
+// CHECK-LABEL: hw.module @ordered_region
+hw.module @ordered_region(%a: i1) {
+  // CHECK: sv.ordered 
+  sv.ordered {
+    // CHECK: sv.ifdef "foo"
+    sv.ifdef "foo" {
+      // CHECK: sv.wire
+      %wire = sv.wire : !hw.inout<i1>
+      // CHECK: sv.assign
+      sv.assign %wire, %a : i1
+    }
+    sv.ifdef "bar" {
+      // CHECK: sv.wire
+      %wire = sv.wire : !hw.inout<i1>
+      // CHECK: sv.assign
+      sv.assign %wire, %a : i1
+    }
+  }
+}

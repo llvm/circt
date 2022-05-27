@@ -17,6 +17,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
@@ -271,6 +272,25 @@ static FailureOr<Literal> parseIntegerLiteral(MLIRContext *context,
 // Code related to handling Grand Central Data/Mem Taps annotations
 //===----------------------------------------------------------------------===//
 
+// Describes tap points into the design.  This has the following structure:
+//   blackBox: ModuleTarget
+//   keys: Seq[DataTapKey]
+// DataTapKey has multiple implementations:
+//   - ReferenceDataTapKey: (tapping a point which exists in the FIRRTL)
+//       portName: ReferenceTarget
+//       source: ReferenceTarget
+//   - DataTapModuleSignalKey: (tapping a point, by name, in a blackbox)
+//       portName: ReferenceTarget
+//       module: IsModule
+//       internalPath: String
+//   - DeletedDataTapKey: (not implemented here)
+//       portName: ReferenceTarget
+//   - LiteralDataTapKey: (not implemented here)
+//       portName: ReferenceTarget
+//       literal: Literal
+// A Literal is a FIRRTL IR literal serialized to a string.  For now, just
+// store the string.
+// TODO: Parse the literal string into a UInt or SInt literal.
 LogicalResult circt::firrtl::applyGCTDataTaps(AnnoPathValue target,
                                               DictionaryAttr anno,
                                               ApplyState &state) {
@@ -331,14 +351,52 @@ LogicalResult circt::firrtl::applyGCTDataTaps(AnnoPathValue target,
           tryGetAs<StringAttr>(bDict, anno, "source", loc, dataTapsClass, path);
       if (!sourceAttr)
         return failure();
-      auto sourceTarget = canonicalizeTarget(sourceAttr.getValue());
-      if (!tokenizePath(sourceTarget))
+      auto sourceTargetPath = canonicalizeTarget(sourceAttr.getValue());
+      auto sourceTarget = tokenizePath(sourceTargetPath);
+      if (!sourceTarget)
         return failure();
 
-      source.append("target", StringAttr::get(context, sourceTarget));
+      // If this refers to a module port, create a "tap" wire to observe the
+      // value of the port, which can unblock optimizations by not pointing at
+      // the port directly.
+      AnnoPathValue path =
+          resolvePath(sourceTargetPath, state.circuit, state.symTbl).getValue();
+      auto portSourceTarget = path.ref.dyn_cast_or_null<PortAnnoTarget>();
+      if (portSourceTarget && isa<FModuleOp>(portSourceTarget.getOp())) {
+        auto module = cast<FModuleOp>(portSourceTarget.getOp());
+        Value value = module.getArgument(portSourceTarget.getPortNo());
+        auto builder = ImplicitLocOpBuilder::atBlockBegin(value.getLoc(),
+                                                          module.getBody());
+        auto type = portSourceTarget.getType()
+                        .getFinalTypeByFieldID(path.fieldIdx)
+                        .getPassiveType();
+        auto tap = builder.create<WireOp>(
+            type, state.getNamespace(module).newName("_gctTap"));
+        value = getValueByFieldID(builder, value, path.fieldIdx);
+        emitConnect(builder, tap, value);
+        sourceTarget->name = tap.name();
+        sourceTarget->component.clear(); // resolved in getValueByFieldID
+      } else if (!portSourceTarget) {
+        ImplicitLocOpBuilder builder(path.ref.getOp()->getLoc(),
+                                     path.ref.getOp());
+        builder.setInsertionPointAfter(path.ref.getOp());
+        Value value = path.ref.getOp()->getResult(0);
+        auto type = path.ref.getType()
+                        .getFinalTypeByFieldID(path.fieldIdx)
+                        .getPassiveType();
+        auto tap = builder.create<WireOp>(
+            type, state.getNamespace(path.ref.getModule()).newName("_gctTap"));
+        value = getValueByFieldID(builder, value, path.fieldIdx);
+        emitConnect(builder, tap, value);
+        sourceTarget->name = tap.name();
+        sourceTarget->component.clear(); // resolved in getValueByFieldID
+      }
+
+      sourceTargetPath = sourceTarget->str();
+      source.append("target", StringAttr::get(context, sourceTargetPath));
 
       state.addToWorklistFn(DictionaryAttr::get(context, source));
-      dontTouch(sourceTarget);
+      dontTouch(sourceTargetPath);
 
       // Annotate the data tap module port.
       port.append("class", StringAttr::get(context, referenceKeyPortClass));
@@ -1009,6 +1067,18 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
       if (!nla)
         wiring.prefices =
             instancePaths.getAbsolutePaths(op->getParentOfType<FModuleOp>());
+
+      // Set the literal member if this wire or node is driven by a constant.
+      auto driver = getDriverFromConnect(op->getResult(0));
+      if (driver)
+        if (auto constant =
+                dyn_cast_or_null<ConstantOp>(driver.getDefiningOp())) {
+          wiring.literal = {
+              IntegerAttr::get(constant.getContext(), constant.value()),
+              constant.getType()};
+          op->removeAttr("inner_sym");
+        }
+
       wiring.target = PortWiring::Target(op);
       portWiring.push_back(std::move(wiring));
       return;

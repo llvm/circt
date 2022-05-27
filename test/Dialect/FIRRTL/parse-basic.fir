@@ -44,6 +44,14 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     parameter DEFAULT = 0
     parameter WIDTH = 32
     parameter DEPTH = 32.42
+    
+  ; Check that integers are extended to 32 bits if they are smaller.
+  ; CHECK-LABEL: firrtl.extmodule private @IntegerParamsModule
+  extmodule IntegerParamsModule :
+    ; CHECK-SAME: a: ui32 = 1
+    parameter a = 1
+    ; CHECK-SAME: b: ui40 = 4294967296
+    parameter b = 4294967296
 
   ; Module to test type parsing.
 
@@ -943,8 +951,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
     when cond:
       printf(clock, enable, "cover:foo 2", value)
-    ; CHECK: [[TMP:%.+]] = firrtl.not %cond
-    ; CHECK-NEXT: firrtl.cover %clock, [[TMP]], %enable, "foo 2" {eventControl = 0 : i32, isConcurrent = true}
+    ; CHECK-NEXT: firrtl.cover %clock, %cond, %enable, "foo 2" {eventControl = 0 : i32, isConcurrent = true}
 
     when cond:
       printf(clock, enable, "assert:custom label 0:foo 3", value)
@@ -958,8 +965,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
     when cond:
       printf(clock, enable, "cover:custom label 2:foo 5", value)
-    ; CHECK: [[TMP:%.+]] = firrtl.not %cond
-    ; CHECK-NEXT: firrtl.cover %clock, [[TMP]], %enable, "foo 5" {eventControl = 0 : i32, isConcurrent = true, name = "custom label 2"}
+    ; CHECK-NEXT: firrtl.cover %clock, %cond, %enable, "foo 5" {eventControl = 0 : i32, isConcurrent = true, name = "custom label 2"}
 
     ; Optional `stop` with same clock and condition should be removed.
     when cond:

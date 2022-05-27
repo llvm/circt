@@ -5,6 +5,7 @@
 
 namespace circt {
 const char *getCirctVersion();
+const char *getCirctVersionComment();
 } // namespace circt
 
 #endif // CIRCT_SUPPORT_VERSION_H

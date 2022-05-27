@@ -661,7 +661,7 @@ private:
       auto nlaName = nla.getNameAttr();
       auto nlaRef = FlatSymbolRefAttr::get(nlaName);
       nlas.push_back(nlaRef);
-      nlaTable->insert(nla);
+      nlaTable->addNLA(nla);
       targetMap[nlaName] = to;
     }
     return nlas;
@@ -1269,6 +1269,7 @@ class DedupPass : public DedupBase<DedupPass> {
     // can block the deduplication of the parent modules.
     fixupAllModules(instanceGraph);
 
+    markAnalysesPreserved<NLATable>();
     if (!anythingChanged)
       markAllAnalysesPreserved();
   }

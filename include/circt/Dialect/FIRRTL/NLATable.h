@@ -28,7 +28,7 @@ namespace firrtl {
 class NLATable {
 
 public:
-  /// Create a new NLA table of a circuit.  This must be called on a FIRRTL
+  /// Create a new NLA table of a circuit. This must be called on a FIRRTL
   /// CircuitOp or MLIR ModuleOp. To esnure that the analysis does not return
   /// stale data while a pass is running, it should be kept up-to-date when
   /// modules are added or renamed and NLAs are updated.
@@ -49,20 +49,6 @@ public:
 
   /// Resolve a symbol to a Module.
   FModuleLike getModule(StringAttr name);
-
-  /// Insert a new NLA. This updates two internal records,
-  /// 1. Update the map for the `nlaOp` name to the Operation.
-  /// 2. For each module in the NLA namepath, insert the NLA into the list of
-  /// NonlocalAnchors that participate in the corresponding module. This does
-  /// not update the module name to module op map, if any potentially new module
-  /// in the namepath does not already exist in the record.
-  void insert(NonLocalAnchor nlaOp);
-
-  /// Remove the NLA from the analysis. This updates two internal records,
-  /// 1. Remove the NLA name to the operation map entry.
-  /// 2. For each module in the namepath of the NLA, remove the entry from the
-  /// list of NLAs that the module participates in.
-  void erase(NonLocalAnchor nlaOp);
 
   /// Compute the NLAs that are common between the two modules, `mod1` and
   /// `mod2` and insert them into the set `common`.
@@ -117,44 +103,77 @@ public:
   // NLATable is used as an analysis, this is only safe when the pass is
   // on a CircuitOp.
 
-  /// Record a new NLA operation. Duplicate of `insert'.
-  /// TODO: Remove this.
+  /// Insert a new NLA. This updates two internal records,
+  /// 1. Update the map for the `nlaOp` name to the Operation.
+  /// 2. For each module in the NLA namepath, insert the NLA into the list of
+  /// NonlocalAnchors that participate in the corresponding module. This does
+  /// not update the module name to module op map, if any potentially new module
+  /// in the namepath does not already exist in the record.
   void addNLA(NonLocalAnchor nla);
 
-  /// Record a new FModuleLike operation.
-  void addModule(FModuleLike mod);
+  /// Remove the NLA from the analysis. This updates two internal records,
+  /// 1. Remove the NLA name to the operation map entry.
+  /// 2. For each module in the namepath of the NLA, remove the entry from the
+  ///    list of NLAs that the module participates in.
+  /// Note that this invalidates any reference to the NLA list returned by
+  /// 'lookup'.
+  void erase(NonLocalAnchor nlaOp, SymbolTable *symbolTable = nullptr);
 
-  /// Stop tracking a module.
-  void eraseModule(StringAttr name);
+  /// Record a new FModuleLike operation. This updates the Module name to Module
+  /// operation map.
+  void addModule(FModuleLike mod) { symToOp[mod.moduleNameAttr()] = mod; }
 
-  /// Move NLA \p name from \p oldModule to \p newModule, updating the nla and
-  /// updating the tracking.
-  void updateModuleInNLA(StringAttr name, StringAttr oldModule,
+  /// Stop tracking a module. Remove the module from two internal records,
+  /// 1. Module name to Module op map.
+  /// 2. Module name to list of NLAs that the module participates in.
+  void eraseModule(StringAttr name) {
+    symToOp.erase(name);
+    nodeMap.erase(name);
+  }
+
+  /// Replace the module `oldModule` with `newModule` in the namepath of the nla
+  /// `nlaName`. This moves the nla from from the list of `oldModule` to
+  /// `newModule`. Move `nlaName` from the list of NLAs that `oldModule`
+  /// participates in to `newModule`. This can delete and invalidate any
+  /// reference returned by `lookup`.
+  void updateModuleInNLA(StringAttr nlaName, StringAttr oldModule,
                          StringAttr newModule);
 
-  /// Move NLA \p nlaOp from \p oldModule to \p newModule, updating the nla and
-  /// updating the tracking.
+  /// Replace the module `oldModule` with `newModule` in the namepath of the nla
+  /// `nlaName`. This moves the nla from from the list of `oldModule` to
+  /// `newModule`. Move `nlaName` from the list of NLAs that `oldModule`
+  /// participates in to `newModule`. This can delete and invalidate any
+  /// reference returned by `lookup`.
   void updateModuleInNLA(NonLocalAnchor nlaOp, StringAttr oldModule,
                          StringAttr newModule);
 
   /// Rename a module, this updates the name to module tracking and the name to
-  /// NLA tracking.
+  /// NLA tracking. This moves all the NLAs that `oldModName` is participating
+  /// in to the `newModName`. The `oldModName` must exist in the name to module
+  /// record. This also removes all the entries for `oldModName`.
   void renameModule(StringAttr oldModName, StringAttr newModName);
 
-  /// Replace the module \p oldModName with \p newModName in the namepath of any
+  /// Replace the module `oldModName` with `newModName` in the namepath of any
   /// NLA. Since the module is being updated, the symbols inside the module
-  /// should also be renamed. Use the rename map \p innerSymRenameMap to update
+  /// should also be renamed. Use the rename map `innerSymRenameMap` to update
   /// the inner_sym names in the namepath.
   void renameModuleAndInnerRef(
       StringAttr newModName, StringAttr oldModName,
       const DenseMap<StringAttr, StringAttr> &innerSymRenameMap);
 
-  /// Remove the NLA from the Module.
-  void removeNLAfromModule(NonLocalAnchor nla, StringAttr mod);
+  /// Remove the NLA from the Module. This updates the module name to NLA
+  /// tracking.
+  void removeNLAfromModule(NonLocalAnchor nla, StringAttr mod) {
+    llvm::erase_value(nodeMap[mod], nla);
+  }
 
-  /// Remove all the nlas in the set `nlas` from the module.
+  /// Remove all the nlas in the set `nlas` from the module. This updates the
+  /// module name to NLA tracking.
   void removeNLAsfromModule(const DenseSet<NonLocalAnchor> &nlas,
-                            StringAttr mod);
+                            StringAttr mod) {
+    llvm::erase_if(nodeMap[mod],
+                   [&nlas](const auto &nla) { return nlas.count(nla); });
+  }
 
   /// Add the nla to the module. This ensures that the list of NLAs that the
   /// module participates in is updated. This will be required if `mod` is added

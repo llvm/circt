@@ -15,9 +15,8 @@
 
 using namespace circt;
 
-APInt circt::sextOrSelfZeroWidth(APInt value, unsigned width) {
-  return value.getBitWidth() ? value.sextOrSelf(width)
-                             : value.zextOrSelf(width);
+APInt circt::sextZeroWidth(APInt value, unsigned width) {
+  return value.getBitWidth() ? value.sext(width) : value.zext(width);
 }
 
 APSInt circt::extOrTruncZeroWidth(APSInt value, unsigned width) {

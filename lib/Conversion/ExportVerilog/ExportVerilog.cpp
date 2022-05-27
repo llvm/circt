@@ -1453,7 +1453,7 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
     operandSign = IsUnsigned;
     isUnary = true;
     break;
-  case PEO::Concat:
+  case PEO::StrConcat:
     operatorStr = ", ";
     subprecedence = Symbol;
     isUnary = false;
@@ -1482,7 +1482,7 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
 
   if (subprecedence > parenthesizeIfLooserThan)
     os << '(';
-  if (expr.getOpcode() == PEO::Concat)
+  if (expr.getOpcode() == PEO::StrConcat)
     os << '{';
   bool allOperandsSigned = emitOperand(expr.getOperands()[0]);
   for (auto op : ArrayRef(expr.getOperands()).drop_front()) {
@@ -1503,7 +1503,7 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
     os << operatorStr;
     allOperandsSigned &= emitOperand(op);
   }
-  if (expr.getOpcode() == PEO::Concat)
+  if (expr.getOpcode() == PEO::StrConcat)
     os << '}';
   if (subprecedence > parenthesizeIfLooserThan) {
     os << ')';
@@ -2494,6 +2494,7 @@ private:
   LogicalResult visitStmt(TypedeclOp op);
 
   LogicalResult emitIfDef(Operation *op, MacroIdentAttr cond);
+  LogicalResult visitSV(OrderedOutputOp op);
   LogicalResult visitSV(IfDefOp op) { return emitIfDef(op, op.cond()); }
   LogicalResult visitSV(IfDefProceduralOp op) {
     return emitIfDef(op, op.cond());
@@ -3100,6 +3101,13 @@ void StmtEmitter::emitBlockAsStatement(Block *block,
   os << '\n';
 }
 
+LogicalResult StmtEmitter::visitSV(OrderedOutputOp ooop) {
+  // Emit the body.
+  for (auto &op : *ooop.getBody())
+    emitStatement(&op);
+  return success();
+}
+
 LogicalResult StmtEmitter::visitSV(IfOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
@@ -3692,6 +3700,13 @@ void StmtEmitter::collectNamesEmitDecls(Block &block) {
     // Print out any array subscripts or other post-name stuff.
     emitter.printUnpackedTypePostfix(type, os);
 
+    // Print debug info.
+    if (state.options.printDebugInfo && isa<WireOp, RegOp>(op)) {
+      StringAttr sym = op->getAttr("inner_sym").dyn_cast_or_null<StringAttr>();
+      if (sym && !sym.getValue().empty())
+        os << " /* inner_sym: " << sym.getValue() << " */";
+    }
+
     if (auto localparam = dyn_cast<LocalParamOp>(op)) {
       os << " = ";
       emitter.printParamValue(localparam.value(), os, [&]() {
@@ -3956,9 +3971,9 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
         if (auto fpAttr = defaultValue.dyn_cast<FloatAttr>())
           if (fpAttr.getType().isF64())
             return;
-        if (defaultValue.isa<StringAttr>())
-          return;
       }
+      if (type.isa<NoneType>())
+        return;
 
       // Classic Verilog parser don't allow a type in the parameter declaration.
       // For compatibility with them, we omit the type when it is implicit based
@@ -4085,6 +4100,11 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
     // Emit the name.
     os << getPortVerilogName(module, portInfo[portIdx]);
     printUnpackedTypePostfix(portType, os);
+
+    if (state.options.printDebugInfo && portInfo[portIdx].sym &&
+        !portInfo[portIdx].sym.getValue().empty())
+      os << " /* inner_sym: " << portInfo[portIdx].sym.getValue() << " */";
+
     ++portIdx;
 
     // If we have any more ports with the same types and the same direction,
@@ -4099,6 +4119,11 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
         os << ",\n";
         os.indent(startOfNamePos) << name;
         printUnpackedTypePostfix(portInfo[portIdx].type, os);
+
+        if (state.options.printDebugInfo && portInfo[portIdx].sym &&
+            !portInfo[portIdx].sym.getValue().empty())
+          os << " /* inner_sym: " << portInfo[portIdx].sym.getValue() << " */";
+
         ++portIdx;
       }
     }
@@ -4219,6 +4244,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
       file.ops.push_back(info);
       file.emitReplicatedOps = emitReplicatedOps;
       file.addToFilelist = addToFilelist;
+      file.isVerilog = outputPath.endswith(".sv");
       for (auto fl : opFileList)
         fileLists[fl.getValue()].push_back(destFile);
     };
@@ -4305,6 +4331,10 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
 void SharedEmitterState::collectOpsForFile(const FileInfo &file,
                                            EmissionList &thingsToEmit,
                                            bool emitHeader) {
+  // Include the version string comment when the file is verilog.
+  if (file.isVerilog)
+    thingsToEmit.emplace_back(circt::getCirctVersionComment());
+
   // If we're emitting replicated ops, keep track of where we are in the list.
   size_t lastReplicatedOp = 0;
 

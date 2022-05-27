@@ -1107,13 +1107,15 @@ hw.module @UseParameterValue<xx: i42>(%arg0: i8)
 
 // CHECK-LABEL: module VerilogCompatParameters
 hw.module @VerilogCompatParameters<p1: i42, p2: i32, p3: f64 = 1.5,
-                                   p4: i32 = 4, p5: none = "foo">()
+                                   p4: i32 = 4, p5: none = "foo",
+                                   p6: none>()
   -> () {
   // CHECK-NEXT: #(parameter [41:0]      p1,
   // CHECK-NEXT:   parameter /*integer*/ p2,
   // CHECK-NEXT:   parameter             p3 = 1.500000e+00,
   // CHECK-NEXT:   parameter             p4 = 4,
-  // CHECK-NEXT:   parameter             p5 = "foo")
+  // CHECK-NEXT:   parameter             p5 = "foo",
+  // CHECK-NEXT:   parameter             p6)
 
 }
 
@@ -1189,4 +1191,19 @@ hw.module @UseParameterizedArrays(%a: !hw.array<42xint<12>>, %b: !hw.array<24xin
 // CHECK-NEXT: endmodule
   %c = hw.instance "inst" @parameterizedArrays<param: i32 = 12, N: i32 = 24>
     (a: %a : !hw.array<42xint<12>>, b: %b : !hw.array<24xint<12>>) -> (c: !hw.array<24xint<12>>) {}
+}
+
+// CHECK-LABEL: module NoneTypeParam
+// CHECK:         #(parameter p1) ();
+// CHECK:       endmodule
+hw.module @NoneTypeParam<p1: none>() -> () {}
+
+// CHECK-LABEL: module ParamConcatInst
+// CHECK:         #(parameter name = "top") ();
+// CHECK:         NoneTypeParam #(
+// CHECK:           .p1({".", name, ".child"})
+// CHECK:         ) inst ();
+// CHECK:       endmodule
+hw.module @ParamConcatInst<name: none = "top">() -> () {
+  hw.instance "inst" @NoneTypeParam<p1: none = #hw.param.expr.str.concat<".", #hw.param.decl.ref<"name">, ".", "child">>() -> ()
 }

@@ -1059,6 +1059,7 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
       newModule->setAttr("output_file", testBenchDir);
       newModule->setAttr("firrtl.extract.do_not_extract",
                          builder.getUnitAttr());
+      newModule.commentAttr(builder.getStringAttr("VCS coverage exclude_file"));
     }
 
   bool failed = false;
@@ -1416,6 +1417,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
                                  std::function<void(void)> elseCtor = {});
   void addIfProceduralBlock(Value cond, std::function<void(void)> thenCtor,
                             std::function<void(void)> elseCtor = {});
+  void addToOrderedBlock(std::function<void(void)> body);
   Value getExtOrTruncAggregateValue(Value array, FIRRTLType sourceType,
                                     FIRRTLType destType, bool allowTruncate);
 
@@ -1601,6 +1603,7 @@ private:
   llvm::SmallDenseMap<Block *, sv::IfDefProceduralOp> randomizeRegInitIfOp;
   llvm::SmallDenseMap<std::pair<Block *, Value>, sv::IfOp>
       asyncRegPostRandomizationIfOp;
+  llvm::SmallDenseMap<Block *, sv::OrderedOutputOp> orderedOutputOp;
 
   /// This is a set of wires that get inserted as an artifact of the
   /// lowering process.  LowerToHW should attempt to clean these up after
@@ -1610,6 +1613,10 @@ private:
   /// This is true if we've emitted `INIT_RANDOM_PROLOG_ into an initial
   /// block in this module already.
   bool randomizePrologEmitted;
+
+  /// This is true if we've emitted `FIRRTL_BEFORE_INITIAL and
+  /// `FIRRTL_AFTER_INITIAL into an initial block in this module already.
+  bool areFIRRTLBeforeAndAfterInitialEmitted;
 
   /// This is a map from block to a pair of a random value and its unused
   /// bits. It is used to reduce the number of random value.
@@ -1633,6 +1640,7 @@ LogicalResult FIRRTLLowering::run() {
   // casts if we cannot.
   auto &body = theModule.getBody();
   randomizePrologEmitted = false;
+  areFIRRTLBeforeAndAfterInitialEmitted = false;
 
   SmallVector<Operation *, 16> opsToRemove;
 
@@ -2109,10 +2117,11 @@ void FIRRTLLowering::addToAlwaysBlock(sv::EventControl clockEdge, Value clock,
                                       sv::EventControl resetEdge, Value reset,
                                       std::function<void(void)> body,
                                       std::function<void(void)> resetBody) {
-  auto &op = alwaysBlocks[{builder.getBlock(), clockEdge, clock, resetStyle,
-                           resetEdge, reset}];
-  auto &alwaysOp = op.first;
-  auto &insideIfOp = op.second;
+  AlwaysKeyType key{builder.getBlock(), clockEdge, clock,
+                    resetStyle,         resetEdge, reset};
+  sv::AlwaysOp alwaysOp;
+  sv::IfOp insideIfOp;
+  std::tie(alwaysOp, insideIfOp) = alwaysBlocks.lookup(key);
 
   if (!alwaysOp) {
     if (reset) {
@@ -2152,6 +2161,7 @@ void FIRRTLLowering::addToAlwaysBlock(sv::EventControl clockEdge, Value clock,
       alwaysOp = builder.create<sv::AlwaysOp>(clockEdge, clock);
       insideIfOp = nullptr;
     }
+    alwaysBlocks[key] = {alwaysOp, insideIfOp};
   }
 
   if (reset) {
@@ -2173,7 +2183,7 @@ void FIRRTLLowering::addToIfDefBlock(StringRef cond,
                                      std::function<void(void)> thenCtor,
                                      std::function<void(void)> elseCtor) {
   auto condAttr = builder.getStringAttr(cond);
-  auto &op = ifdefBlocks[{builder.getBlock(), condAttr}];
+  auto op = ifdefBlocks.lookup({builder.getBlock(), condAttr});
   if (op) {
     runWithInsertionPointAtEndOfBlock(thenCtor, op.thenRegion());
     runWithInsertionPointAtEndOfBlock(elseCtor, op.elseRegion());
@@ -2183,12 +2193,29 @@ void FIRRTLLowering::addToIfDefBlock(StringRef cond,
     // defined ahead of the uses, which leads to better generated Verilog.
     op->moveBefore(builder.getInsertionBlock(), builder.getInsertionPoint());
   } else {
-    op = builder.create<sv::IfDefOp>(condAttr, thenCtor, elseCtor);
+    ifdefBlocks[{builder.getBlock(), condAttr}] =
+        builder.create<sv::IfDefOp>(condAttr, thenCtor, elseCtor);
+  }
+}
+
+void FIRRTLLowering::addToOrderedBlock(std::function<void(void)> body) {
+  auto op = orderedOutputOp.lookup(builder.getBlock());
+  if (op) {
+    runWithInsertionPointAtEndOfBlock(body, op.getRegion());
+
+    // Move the earlier sv.ordered block(s) down to where the last would have
+    // been inserted.  This ensures that any values used by the sv.ordered
+    // blocks are defined ahead of the uses, which leads to better generated
+    // Verilog.
+    op->moveBefore(builder.getInsertionBlock(), builder.getInsertionPoint());
+  } else {
+    orderedOutputOp[builder.getBlock()] =
+        builder.create<sv::OrderedOutputOp>(body);
   }
 }
 
 void FIRRTLLowering::addToInitialBlock(std::function<void(void)> body) {
-  auto &op = initialBlocks[builder.getBlock()];
+  auto op = initialBlocks.lookup(builder.getBlock());
   if (op) {
     runWithInsertionPointAtEndOfBlock(body, op.body());
 
@@ -2197,7 +2224,7 @@ void FIRRTLLowering::addToInitialBlock(std::function<void(void)> body) {
     // are defined ahead of the uses, which leads to better generated Verilog.
     op->moveBefore(builder.getInsertionBlock(), builder.getInsertionPoint());
   } else {
-    op = builder.create<sv::InitialOp>(body);
+    initialBlocks[builder.getBlock()] = builder.create<sv::InitialOp>(body);
   }
 }
 
@@ -2597,41 +2624,63 @@ void FIRRTLLowering::initializeRegister(
 
   // Emit the initializer expression for simulation that fills it with random
   // value.
+
   addToIfDefBlock("SYNTHESIS", std::function<void()>(), [&]() {
-    addToIfDefBlock(
-        "RANDOMIZE_REG_INIT",
-        [&]() { regInsertionPoint = builder.saveInsertionPoint(); },
-        std::function<void()>());
-    addToInitialBlock([&]() {
-      emitRandomizePrologIfNeeded();
-      circuitState.used_RANDOMIZE_REG_INIT = 1;
-      auto *block = builder.getBlock();
+    addToOrderedBlock([&]() {
+      addToIfDefBlock(
+          "RANDOMIZE_REG_INIT",
+          [&]() { regInsertionPoint = builder.saveInsertionPoint(); },
+          std::function<void()>());
 
-      // Randomized values are assigned to registers in `ifdef
-      // RANDOMIZE_REG_INIT block.
-      auto &op = randomizeRegInitIfOp[block];
-      if (!op)
-        op = builder.create<sv::IfDefProceduralOp>("RANDOMIZE_REG_INIT",
-                                                   [&]() {});
-      runWithInsertionPointAtEndOfBlock(randomInit, op.thenRegion());
+      addToIfDefBlock(
+          "FIRRTL_BEFORE_INITIAL",
+          [&] {
+            if (!areFIRRTLBeforeAndAfterInitialEmitted)
+              builder.create<sv::VerbatimOp>("`FIRRTL_BEFORE_INITIAL");
+          },
+          std::function<void()>());
 
-      // If the register is async reset, we need to insert extra initialization
-      // in post-randomization so that we can set the reset value to register if
-      // the reset signal is enabled.
-      if (asyncRegResetInitPair.hasValue()) {
-        Value resetSignal, resetValue;
-        std::tie(resetSignal, resetValue) = *asyncRegResetInitPair;
-        // Merge if op if their reset values are same.
-        auto &op = asyncRegPostRandomizationIfOp[{block, resetSignal}];
+      addToInitialBlock([&]() {
+        emitRandomizePrologIfNeeded();
+        circuitState.used_RANDOMIZE_REG_INIT = 1;
+        auto *block = builder.getBlock();
+
+        // Randomized values are assigned to registers in `ifdef
+        // RANDOMIZE_REG_INIT block.
+        auto &op = randomizeRegInitIfOp[block];
         if (!op)
-          builder.create<sv::IfDefProceduralOp>("RANDOMIZE", [&] {
-            op = builder.create<sv::IfOp>(resetSignal, [&]() {});
-          });
+          op = builder.create<sv::IfDefProceduralOp>("RANDOMIZE_REG_INIT",
+                                                     [&]() {});
+        runWithInsertionPointAtEndOfBlock(randomInit, op.thenRegion());
 
-        runWithInsertionPointAtEndOfBlock(
-            [&]() { builder.create<sv::BPAssignOp>(reg, resetValue); },
-            op.thenRegion());
-      }
+        // If the register is async reset, we need to insert extra
+        // initialization in post-randomization so that we can set the reset
+        // value to register if the reset signal is enabled.
+        if (asyncRegResetInitPair.hasValue()) {
+          Value resetSignal, resetValue;
+          std::tie(resetSignal, resetValue) = *asyncRegResetInitPair;
+          // Merge if op if their reset values are same.
+          auto &op = asyncRegPostRandomizationIfOp[{block, resetSignal}];
+          if (!op)
+            builder.create<sv::IfDefProceduralOp>("RANDOMIZE", [&] {
+              op = builder.create<sv::IfOp>(resetSignal, [&]() {});
+            });
+
+          runWithInsertionPointAtEndOfBlock(
+              [&]() { builder.create<sv::BPAssignOp>(reg, resetValue); },
+              op.thenRegion());
+        }
+      });
+
+      addToIfDefBlock(
+          "FIRRTL_AFTER_INITIAL",
+          [&] {
+            if (!areFIRRTLBeforeAndAfterInitialEmitted) {
+              builder.create<sv::VerbatimOp>("`FIRRTL_AFTER_INITIAL");
+              areFIRRTLBeforeAndAfterInitialEmitted = true;
+            }
+          },
+          std::function<void()>());
     });
   });
 }
@@ -3786,8 +3835,13 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
     }
 
     // Formulate the `enable -> predicate` as `!enable | predicate`.
-    auto notEnable = comb::createOrFoldNot(enable, builder);
-    predicate = builder.createOrFold<comb::OrOp>(notEnable, predicate);
+    // Except for covers, combine them: enable & predicate
+    if (!isCover) {
+      auto notEnable = comb::createOrFoldNot(enable, builder);
+      predicate = builder.createOrFold<comb::OrOp>(notEnable, predicate);
+    } else {
+      predicate = builder.createOrFold<comb::AndOp>(enable, predicate);
+    }
 
     // Handle the regular SVA case.
     sv::EventControl event;

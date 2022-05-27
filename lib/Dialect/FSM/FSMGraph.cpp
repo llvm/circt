@@ -11,11 +11,36 @@
 using namespace circt;
 using namespace fsm;
 
-FSMTransitionEdge *FSMStateNode::addTransition(FSMStateNode *nextState,
-                                               TransitionOp transition) {
+void FSMTransitionEdge::erase() {
+  // Update the prev node to point to the next node.
+  if (prevUse)
+    prevUse->nextUse = nextUse;
+  else
+    nextState->firstUse = nextUse;
+  // Update the next node to point to the prev node.
+  if (nextUse)
+    nextUse->prevUse = prevUse;
+  currentState->eraseTransitionEdge(this);
+}
+
+void FSMStateNode::eraseTransitionEdge(FSMTransitionEdge *edge) {
+  edge->getTransition().erase();
+  transitions.erase(edge);
+}
+
+FSMTransitionEdge *FSMStateNode::addTransitionEdge(FSMStateNode *nextState,
+                                                   TransitionOp transition) {
   auto *transitionEdge = new FSMTransitionEdge(this, transition, nextState);
+  nextState->recordUse(transitionEdge);
   transitions.push_back(transitionEdge);
   return transitionEdge;
+}
+
+void FSMStateNode::recordUse(FSMTransitionEdge *transition) {
+  transition->nextUse = firstUse;
+  if (firstUse)
+    firstUse->prevUse = transition;
+  firstUse = transition;
 }
 
 FSMGraph::FSMGraph(Operation *op) {
@@ -25,11 +50,11 @@ FSMGraph::FSMGraph(Operation *op) {
   // Find all states in the machine.
   for (auto stateOp : machine.getOps<StateOp>()) {
     // Add an edge to indicate that this state transitions to some other state.
-    auto *currentStateNode = getOrAddNode(stateOp);
+    auto *currentStateNode = getOrAddState(stateOp);
 
     for (auto transitionOp : stateOp.transitions().getOps<TransitionOp>()) {
-      auto *nextStateNode = getOrAddNode(transitionOp.getNextState());
-      currentStateNode->addTransition(nextStateNode, transitionOp);
+      auto *nextStateNode = getOrAddState(transitionOp.getNextState());
+      currentStateNode->addTransitionEdge(nextStateNode, transitionOp);
     }
   }
 }
@@ -44,7 +69,7 @@ FSMStateNode *FSMGraph::lookup(StateOp state) {
   return lookup(state.getNameAttr());
 }
 
-FSMStateNode *FSMGraph::getOrAddNode(StateOp state) {
+FSMStateNode *FSMGraph::getOrAddState(StateOp state) {
   // Try to insert an FSMStateNode. If its not inserted, it returns
   // an iterator pointing to the node.
   auto *&node = nodeMap[state.getNameAttr()];
@@ -53,4 +78,61 @@ FSMStateNode *FSMGraph::getOrAddNode(StateOp state) {
     nodes.push_back(node);
   }
   return node;
+}
+
+FSMStateNode *FSMGraph::createState(OpBuilder &builder, Location loc,
+                                    StringRef name) {
+  OpBuilder::InsertionGuard g(builder);
+  builder.setInsertionPointToEnd(&getMachine().body().front());
+  auto stateOp = builder.create<StateOp>(loc, name);
+  return getOrAddState(stateOp);
+}
+
+FSMTransitionEdge *FSMGraph::createTransition(OpBuilder &builder, Location loc,
+                                              StateOp from, StateOp to) {
+  auto *currentStateNode = getOrAddState(from);
+  auto *nextStateNode = getOrAddState(to);
+  OpBuilder::InsertionGuard g(builder);
+  // Set the insertion point to the end of the transitions. This will always be
+  // right before the implicit fsm.output terminator operation. @todo: the
+  // transition region should obviously not have a terminator, but this needs a
+  // significant change in the ODS/parser of the op.
+  builder.setInsertionPoint(
+      *from.transitions().getBlocks().front().getOps<OutputOp>().begin());
+  auto transition = builder.create<TransitionOp>(loc, to);
+  return currentStateNode->addTransitionEdge(nextStateNode, transition);
+}
+
+void FSMGraph::eraseState(StateOp state) {
+  auto *stateNode = getOrAddState(state);
+
+  for (auto *incomingTransition : llvm::make_early_inc_range(stateNode->uses()))
+    incomingTransition->erase();
+
+  for (auto *outgoingTransitions : llvm::make_early_inc_range(*stateNode))
+    outgoingTransitions->erase();
+  nodeMap.erase(state.getNameAttr());
+  nodes.erase(stateNode);
+}
+
+void FSMGraph::renameState(StateOp state, StringRef name) {
+  auto *stateNode = getOrAddState(state);
+  auto nameStrAttr = StringAttr::get(state.getContext(), name);
+
+  state.setName(nameStrAttr);
+
+  // Update in- and outgoing transitions to the state.
+  auto updateTransitions = [&](auto &&transitionRange) {
+    for (auto *transition : transitionRange) {
+      auto transitionOp = transition->getTransition();
+      transitionOp->setAttr(transitionOp.nextStateAttrName(), nameStrAttr);
+    }
+  };
+
+  updateTransitions(stateNode->uses());
+  updateTransitions(*stateNode);
+
+  // Update nodemap
+  nodeMap.erase(state.getNameAttr());
+  nodeMap[nameStrAttr] = stateNode;
 }

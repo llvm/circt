@@ -17,9 +17,9 @@
 
 namespace circt {
 
-/// A safe version of APInt::sextOrSelf that will NOT assert on zero-width
+/// A safe version of APInt::sext that will NOT assert on zero-width
 /// signed APSInts.  Instead of asserting, this will zero extend.
-APInt sextOrSelfZeroWidth(APInt value, unsigned width);
+APInt sextZeroWidth(APInt value, unsigned width);
 
 /// A safe version of APSInt::extOrTrunc that will NOT assert on zero-width
 /// signed APSInts.  Instead of asserting, this will zero extend.

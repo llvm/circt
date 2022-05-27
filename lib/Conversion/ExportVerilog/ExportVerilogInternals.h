@@ -144,6 +144,10 @@ struct FileInfo {
 
   /// If true, the file is a header.
   bool isHeader = false;
+
+  /// If true, the file is known to be (system) verilog source code.
+  /// This flag is used to distinguish verilog from other files such as json.
+  bool isVerilog = true;
 };
 
 /// This class wraps an operation or a fixed string that should be emitted.
