@@ -1059,6 +1059,7 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
       newModule->setAttr("output_file", testBenchDir);
       newModule->setAttr("firrtl.extract.do_not_extract",
                          builder.getUnitAttr());
+      newModule.commentAttr(builder.getStringAttr("VCS coverage exclude_file"));
     }
 
   bool failed = false;
