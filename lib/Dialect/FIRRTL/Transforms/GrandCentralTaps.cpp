@@ -17,6 +17,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
@@ -331,14 +332,52 @@ LogicalResult circt::firrtl::applyGCTDataTaps(AnnoPathValue target,
           tryGetAs<StringAttr>(bDict, anno, "source", loc, dataTapsClass, path);
       if (!sourceAttr)
         return failure();
-      auto sourceTarget = canonicalizeTarget(sourceAttr.getValue());
-      if (!tokenizePath(sourceTarget))
+      auto sourceTargetPath = canonicalizeTarget(sourceAttr.getValue());
+      auto sourceTarget = tokenizePath(sourceTargetPath);
+      if (!sourceTarget)
         return failure();
 
-      source.append("target", StringAttr::get(context, sourceTarget));
+      // If this refers to a module port, create a "tap" wire to observe the
+      // value of the port, which can unblock optimizations by not pointing at
+      // the port directly.
+      AnnoPathValue path =
+          resolvePath(sourceTargetPath, state.circuit, state.symTbl).getValue();
+      auto portSourceTarget = path.ref.dyn_cast_or_null<PortAnnoTarget>();
+      if (portSourceTarget && isa<FModuleOp>(portSourceTarget.getOp())) {
+        auto module = cast<FModuleOp>(portSourceTarget.getOp());
+        Value value = module.getArgument(portSourceTarget.getPortNo());
+        auto builder = ImplicitLocOpBuilder::atBlockBegin(value.getLoc(),
+                                                          module.getBody());
+        auto type = portSourceTarget.getType()
+                        .getFinalTypeByFieldID(path.fieldIdx)
+                        .getPassiveType();
+        auto tap = builder.create<WireOp>(
+            type, state.getNamespace(module).newName("_gctTap"));
+        value = getValueByFieldID(builder, value, path.fieldIdx);
+        emitConnect(builder, tap, value);
+        sourceTarget->name = tap.name();
+        sourceTarget->component.clear(); // resolved in getValueByFieldID
+      } else if (!portSourceTarget) {
+        ImplicitLocOpBuilder builder(path.ref.getOp()->getLoc(),
+                                     path.ref.getOp());
+        builder.setInsertionPointAfter(path.ref.getOp());
+        Value value = path.ref.getOp()->getResult(0);
+        auto type = path.ref.getType()
+                        .getFinalTypeByFieldID(path.fieldIdx)
+                        .getPassiveType();
+        auto tap = builder.create<WireOp>(
+            type, state.getNamespace(path.ref.getModule()).newName("_gctTap"));
+        value = getValueByFieldID(builder, value, path.fieldIdx);
+        emitConnect(builder, tap, value);
+        sourceTarget->name = tap.name();
+        sourceTarget->component.clear(); // resolved in getValueByFieldID
+      }
+
+      sourceTargetPath = sourceTarget->str();
+      source.append("target", StringAttr::get(context, sourceTargetPath));
 
       state.addToWorklistFn(DictionaryAttr::get(context, source));
-      dontTouch(sourceTarget);
+      dontTouch(sourceTargetPath);
 
       // Annotate the data tap module port.
       port.append("class", StringAttr::get(context, referenceKeyPortClass));
@@ -1009,6 +1048,18 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
       if (!nla)
         wiring.prefices =
             instancePaths.getAbsolutePaths(op->getParentOfType<FModuleOp>());
+
+      // Set the literal member if this wire or node is driven by a constant.
+      auto driver = getDriverFromConnect(op->getResult(0));
+      if (driver)
+        if (auto constant =
+                dyn_cast_or_null<ConstantOp>(driver.getDefiningOp())) {
+          wiring.literal = {
+              IntegerAttr::get(constant.getContext(), constant.value()),
+              constant.getType()};
+          op->removeAttr("inner_sym");
+        }
+
       wiring.target = PortWiring::Target(op);
       portWiring.push_back(std::move(wiring));
       return;
