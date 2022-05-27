@@ -589,6 +589,7 @@ OpFoldResult LTPrimOp::fold(ArrayRef<Attribute> operands) {
       // lt(x, const) -> 0 where const <= minValue of the unsigned type of x
       // Handled explicitly above.
 
+      // lt(x, const) -> 0 where const <= minValue of the signed type of x
       if (!isUnsigned && sextZeroWidth(rhsCst.getValue(), commonWidth)
                              .sle(getMinSignedValue(*width).sext(commonWidth)))
         return getIntAttr(getType(), APInt(1, 0));
