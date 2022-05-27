@@ -66,6 +66,7 @@ void SFCCompatPass::runOnOperation() {
       reg.replaceAllUsesWith(newReg.getResult());
       reg.erase();
       madeModifications = true;
+      continue;
     }
 
     // If the `RegResetOp` has an asynchronous reset and the reset value is not
