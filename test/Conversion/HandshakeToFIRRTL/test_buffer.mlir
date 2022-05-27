@@ -132,6 +132,7 @@ handshake.func @test_buffer_data(%arg0: index, %arg1: none, ...) -> (index, none
 
 // -----
 
+// CHECK-LABEL: firrtl.module @handshake_buffer_in_ui64_out_ui64_1slots_seq_init_42
 // CHECK: %validReg0 = firrtl.regreset %clock, %reset, %c1_ui1  : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK: %dataReg0 = firrtl.regreset %clock, %reset, %c42_ui64  : !firrtl.uint<1>, !firrtl.uint<64>, !firrtl.uint<64>
 
@@ -150,4 +151,13 @@ handshake.func @test_buffer_init(%arg0: index, %arg1: none, ...) -> (index, none
 handshake.func @test_buffer_tuple_seq(%t: tuple<i32, i32>, %arg0: none, ...) -> (tuple<i32, i32>, none) {
   %0 = buffer [2] seq %t : tuple<i32, i32>
   return %0, %arg0 : tuple<i32, i32>, none
+}
+
+// -----
+
+// CHECK-LABEL: firrtl.module @handshake_buffer_in_ui64_out_ui64_2slots_seq_init_42_24
+
+handshake.func @test_buffer_init(%arg0: index, %arg1: none, ...) -> (index, none) {
+  %0 = buffer [2] seq %arg0 {initValues=[42, 24]} : index
+  return %0, %arg1 : index, none
 }
