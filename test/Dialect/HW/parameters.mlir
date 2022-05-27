@@ -236,5 +236,5 @@ hw.module @NoneTypeParam<p1: none>() -> () {}
 // CHECK-LABEL: hw.module @ParamConcatInst() {
 // CHECK:         hw.instance "inst" @NoneTypeParam<p1: none = "top.child">() -> ()
 hw.module @ParamConcatInst() -> () {
-  hw.instance "inst" @NoneTypeParam<p1: none = #hw.param.expr.concat<"top", ".", "child">>() -> ()
+  hw.instance "inst" @NoneTypeParam<p1: none = #hw.param.expr.str.concat<"top", ".", "child">>() -> ()
 }

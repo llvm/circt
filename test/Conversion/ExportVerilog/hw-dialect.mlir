@@ -1205,5 +1205,5 @@ hw.module @NoneTypeParam<p1: none>() -> () {}
 // CHECK:         ) inst ();
 // CHECK:       endmodule
 hw.module @ParamConcatInst<name: none = "top">() -> () {
-  hw.instance "inst" @NoneTypeParam<p1: none = #hw.param.expr.concat<".", #hw.param.decl.ref<"name">, ".", "child">>() -> ()
+  hw.instance "inst" @NoneTypeParam<p1: none = #hw.param.expr.str.concat<".", #hw.param.decl.ref<"name">, ".", "child">>() -> ()
 }

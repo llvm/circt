@@ -618,7 +618,7 @@ static Attribute simplifyCLog2(SmallVector<Attribute, 4> &operands) {
   });
 }
 
-static Attribute simplifyConcat(SmallVector<Attribute, 4> &operands) {
+static Attribute simplifyStrConcat(SmallVector<Attribute, 4> &operands) {
   // Combine all adjacent strings.
   SmallVector<Attribute> newOperands;
   SmallVector<StringAttr> stringsToCombine;
@@ -649,7 +649,7 @@ static Attribute simplifyConcat(SmallVector<Attribute, 4> &operands) {
   if (newOperands.size() == 1)
     return newOperands[0];
   if (newOperands.size() < operands.size())
-    return ParamExprAttr::get(PEO::Concat, newOperands);
+    return ParamExprAttr::get(PEO::StrConcat, newOperands);
   return {};
 }
 
@@ -706,8 +706,8 @@ Attribute ParamExprAttr::get(PEO opcode, ArrayRef<Attribute> operandsIn) {
   case PEO::CLog2:
     result = simplifyCLog2(operands);
     break;
-  case PEO::Concat:
-    result = simplifyConcat(operands);
+  case PEO::StrConcat:
+    result = simplifyStrConcat(operands);
     break;
   }
 

@@ -1453,7 +1453,7 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
     operandSign = IsUnsigned;
     isUnary = true;
     break;
-  case PEO::Concat:
+  case PEO::StrConcat:
     operatorStr = ", ";
     subprecedence = Symbol;
     isUnary = false;
@@ -1482,7 +1482,7 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
 
   if (subprecedence > parenthesizeIfLooserThan)
     os << '(';
-  if (expr.getOpcode() == PEO::Concat)
+  if (expr.getOpcode() == PEO::StrConcat)
     os << '{';
   bool allOperandsSigned = emitOperand(expr.getOperands()[0]);
   for (auto op : ArrayRef(expr.getOperands()).drop_front()) {
@@ -1503,7 +1503,7 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
     os << operatorStr;
     allOperandsSigned &= emitOperand(op);
   }
-  if (expr.getOpcode() == PEO::Concat)
+  if (expr.getOpcode() == PEO::StrConcat)
     os << '}';
   if (subprecedence > parenthesizeIfLooserThan) {
     os << ')';
