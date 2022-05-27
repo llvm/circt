@@ -954,19 +954,6 @@ bool circt::firrtl::scatterCustomAnnotations(
     // class.
     StringRef clazz = classAttr.getValue();
 
-    if (clazz == dataTapsClass)
-      llvm_unreachable(
-          "these annotations should never be handled by FIRAnnotations");
-
-    if (clazz == memTapClass)
-      llvm_unreachable(
-          "these annotations should never be handled by FIRAnnotations");
-
-    // These have been migrated to LowerAnnotations.
-    if (clazz == serializedViewAnnoClass || clazz == viewAnnoClass)
-      llvm_unreachable(
-          "these annotations should never be handled by FIRAnnotations");
-
     // Scatter signal driver annotations to the sources *and* the targets of the
     // drives.
     if (clazz == signalDriverAnnoClass) {
