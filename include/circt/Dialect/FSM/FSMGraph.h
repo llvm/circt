@@ -95,6 +95,10 @@ public:
 
   TransitionOp getTransition() const { return transition; }
 
+  /// Erase this transition, removing it from the source state and the target
+  /// state's use-list.
+  void erase();
+
 private:
   friend class FSMGraphBase;
   friend class FSMStateNode;
@@ -113,6 +117,10 @@ private:
 
   /// The next state of this transition.
   FSMStateNode *nextState;
+
+  /// Intrusive linked list for other uses.
+  FSMTransitionEdge *nextUse = nullptr;
+  FSMTransitionEdge *prevUse = nullptr;
 };
 
 /// This is a Node in the FSMGraph.  Each node represents a state in the FSM.
@@ -125,24 +133,65 @@ public:
   /// Get the state operation that this node is tracking.
   StateOp getState() const { return state; }
 
-  /// Adds a new transition from this state.
-  FSMTransitionEdge *addTransition(FSMStateNode *nextState,
-                                   TransitionOp transition);
+  /// Adds a new transition edge from this state to 'nextState'.
+  FSMTransitionEdge *addTransitionEdge(FSMStateNode *nextState,
+                                       TransitionOp transition);
+
+  /// Erases a transition edge from this state. This also removes the underlying
+  /// TransitionOp.
+  void eraseTransitionEdge(FSMTransitionEdge *edge);
 
   /// Iterate outgoing FSM transitions of this state.
   using iterator = detail::AddressIterator<FSMTransitionList::iterator>;
   iterator begin() { return transitions.begin(); }
   iterator end() { return transitions.end(); }
 
+  /// Iterator for state uses.
+  struct UseIterator
+      : public llvm::iterator_facade_base<
+            UseIterator, std::forward_iterator_tag, FSMTransitionEdge *> {
+    UseIterator() : current(nullptr) {}
+    UseIterator(FSMStateNode *node) : current(node->firstUse) {}
+    FSMTransitionEdge *operator*() const { return current; }
+    using llvm::iterator_facade_base<UseIterator, std::forward_iterator_tag,
+                                     FSMTransitionEdge *>::operator++;
+    UseIterator &operator++() {
+      assert(current && "incrementing past end");
+      current = current->nextUse;
+      return *this;
+    }
+    bool operator==(const UseIterator &other) const {
+      return current == other.current;
+    }
+
+  private:
+    FSMTransitionEdge *current;
+  };
+
+  /// Iterate the instance records which instantiate this module.
+  UseIterator usesBegin() { return {this}; }
+  UseIterator usesEnd() { return {}; }
+  llvm::iterator_range<UseIterator> uses() {
+    return llvm::make_range(usesBegin(), usesEnd());
+  }
+
 private:
+  friend class FSMTransitionEdge;
+
   FSMStateNode(StateOp state) : state(state) {}
   FSMStateNode(const FSMStateNode &) = delete;
+
+  /// Record that a tramsition referenced this state.
+  void recordUse(FSMTransitionEdge *transition);
 
   /// The state.
   StateOp state;
 
   /// List of outgoing transitions from this state.
   FSMTransitionList transitions;
+
+  /// List of transitions which reference this state.
+  FSMTransitionEdge *firstUse = nullptr;
 
   /// Provide access to the constructor.
   friend class FSMGraph;
@@ -172,14 +221,32 @@ public:
   /// Return the FSM machine operation which this graph tracks.
   MachineOp getMachine() const { return machine; }
 
+  /// Retrieves the state node for a 'state'. If the node does not yet exists, a
+  /// new state node is created.
+  FSMStateNode *getOrAddState(StateOp state);
+
+  /// Creates a new StateOp operation in this machine and updates the graph.
+  FSMStateNode *createState(OpBuilder &builder, Location loc, StringRef name);
+
+  /// Creates a new transition operation between two states and updates the
+  /// graph.
+  FSMTransitionEdge *createTransition(OpBuilder &builder, Location loc,
+                                      StateOp from, StateOp to);
+
+  /// Removes this state from the graph. This will also remove the state in the
+  /// underlying machine and all transitions to the state.
+  void eraseState(StateOp state);
+
+  /// Renames the 'state' to the provided 'name', and updates all referencing
+  /// transitions.
+  void renameState(StateOp state, StringRef name);
+
   /// Iterate through all states.
   using iterator = detail::AddressIterator<NodeList::iterator>;
   iterator begin() { return nodes.begin(); }
   iterator end() { return nodes.end(); }
 
 private:
-  FSMStateNode *getOrAddNode(StateOp state);
-
   FSMGraph(const FSMGraph &) = delete;
 
   /// The node under which all states are nested.
