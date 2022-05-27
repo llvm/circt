@@ -4209,6 +4209,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
       file.ops.push_back(info);
       file.emitReplicatedOps = emitReplicatedOps;
       file.addToFilelist = addToFilelist;
+      file.isVerilog = outputPath.endswith(".sv");
       for (auto fl : opFileList)
         fileLists[fl.getValue()].push_back(destFile);
     };
@@ -4295,6 +4296,10 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
 void SharedEmitterState::collectOpsForFile(const FileInfo &file,
                                            EmissionList &thingsToEmit,
                                            bool emitHeader) {
+  // Include the version string comment when the file is verilog.
+  if (file.isVerilog)
+    thingsToEmit.emplace_back(circt::getCirctVersionComment());
+
   // If we're emitting replicated ops, keep track of where we are in the list.
   size_t lastReplicatedOp = 0;
 
