@@ -56,6 +56,33 @@ def ProgramOp : CalyxContainer<"program", [
   let hasVerifier = 1;
 }
 
+def PrimitiveOp : CalyxOp<"primitive", [
+    HasParent<"ProgramOp">,
+    Symbol,
+    IsolatedFromAbove,
+    NoTerminator,
+    OpAsmOpInterface
+]> {
+
+  let summary = "Calyx Primitive";
+
+  let description = [{
+    The "calyx.primitive" operation represents an externally defined parameteric primitive
+    that a Calyx program can instantiate. It contains:
+    (1) Parameters for the widths of ports
+    (2) In- and output port definitions that define the interface.
+    ```
+  }];
+
+  let arguments = (ins
+    ArrayAttr:$portNames,
+    ArrayAttr:$portAttributes,
+    APIntAttr:$portDirections
+  );
+
+  let results = (outs);
+}
+
 def ComponentOp : CalyxOp<"component", [
     HasParent<"ProgramOp">,
     SymbolTable, /* contains Cell names. */
