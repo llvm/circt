@@ -3606,7 +3606,8 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
       // If the integer parameter is less than 32-bits, sign extend this to a
       // 32-bit value.  This needs to eventually emit as a 32-bit value in
       // Verilog and we want to get the size correct immediately.
-      result = result.sext(32);
+      if (result.getBitWidth() < 32)
+        result = result.sext(32);
 
       value = builder.getIntegerAttr(
           builder.getIntegerType(result.getBitWidth(), result.isSignBitSet()),
