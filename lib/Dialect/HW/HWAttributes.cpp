@@ -639,8 +639,8 @@ static Attribute simplifyConcat(SmallVector<Attribute, 4> &operands) {
       // Queue up adjacent strings.
       stringsToCombine.push_back(strOp);
     } else {
-      newOperands.push_back(op);
       combineAndPush();
+      newOperands.push_back(op);
     }
   }
   combineAndPush();
