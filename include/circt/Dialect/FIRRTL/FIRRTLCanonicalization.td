@@ -35,6 +35,7 @@ def EmptyAttrDict : Constraint<CPred<"$0.empty()">>;
 def NonEmptyStringAttr : Constraint<CPred<"!$0.getValue().empty()">>;
 def uselessNameAttr : Constraint<CPred<"isUselessName($0.getValue())">>;
 def NullAttr : Constraint<CPred<"!$0">>;
+def notDontTouched : Constraint<CPred<"!AnnotationSet($0).hasDontTouch()">>;
 
 // Constraint that enforces equal types
 def EqualTypes : Constraint<CPred<"$0.getType() == $1.getType()">>;
@@ -119,33 +120,38 @@ def GetWidthAsIntAttr : NativeCodeCall<
                     "$0.getType().cast<FIRRTLType>().getBitWidthOrSentinel())">;
 
 ////////////////////////////////////////////////////////////////////////////////
-// Drop name if no symbol (DontTouch application) and name is a stylized 
-// temporary name
+// Drop name if the name is useless, there is no inner symbol, and if the
+// operation does not have a DontTouchAnnotation for operations which can have a
+// DontTouchAnnotation.
 ////////////////////////////////////////////////////////////////////////////////
 
 // node(x,name),!dnt -> node(x, "")
 def DropNameNode : Pat<
   (NodeOp $x, $name, $annotations, $inner_sym),
   (NodeOp $x, (GetEmptyString), $annotations, $inner_sym),
-  [(uselessNameAttr $name), (NonEmptyStringAttr $name), (NullAttr $inner_sym)]>;
+  [(uselessNameAttr $name), (NonEmptyStringAttr $name), (NullAttr $inner_sym),
+   (notDontTouched $annotations)]>;
 
 // wire(name),!dnt -> wire("")
 def DropNameWire : Pat<
   (WireOp $name, $annotations, $inner_sym),
   (WireOp (GetEmptyString), $annotations, $inner_sym),
-  [(uselessNameAttr $name), (NonEmptyStringAttr $name), (NullAttr $inner_sym)]>;
+  [(uselessNameAttr $name), (NonEmptyStringAttr $name), (NullAttr $inner_sym),
+   (notDontTouched $annotations)]>;
 
 // reg(clk, name),!dnt -> reg(clk, "")
 def DropNameReg : Pat<
   (RegOp $clk, $name, $annotations, $inner_sym),
   (RegOp $clk, (GetEmptyString), $annotations, $inner_sym),
-  [(uselessNameAttr $name), (NonEmptyStringAttr $name), (NullAttr $inner_sym)]>;
+  [(uselessNameAttr $name), (NonEmptyStringAttr $name), (NullAttr $inner_sym),
+   (notDontTouched $annotations)]>;
 
 // regreset(clk, sig, val, name),!dnt -> regreset(clk, sig, val, "")
 def DropNameRegReset : Pat<
   (RegResetOp $clk, $sig, $val, $name, $annotations, $inner_sym),
   (RegResetOp $clk, $sig, $val, (GetEmptyString), $annotations, $inner_sym),
-  [(uselessNameAttr $name), (NonEmptyStringAttr $name), (NullAttr $inner_sym)]>;
+  [(uselessNameAttr $name), (NonEmptyStringAttr $name), (NullAttr $inner_sym),
+   (notDontTouched $annotations)]>;
 
 // Mem(...,name),!dnt -> Mem(...x, "")
 def DropNameMem : Pat<
