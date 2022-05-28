@@ -2050,23 +2050,29 @@ static LogicalResult checkConnectFlow(Operation *connect) {
     // A sink that is a port output or instance input used as a source is okay.
     auto kind = getDeclarationKind(src);
     if (kind != DeclKind::Port && kind != DeclKind::Instance) {
-      auto diag =
-          connect->emitOpError()
-          << "has invalid flow: the right-hand-side has sink flow and "
-             "is not an output port or instance input (expected source "
-             "flow, duplex flow, an output port, or an instance input).";
-      return diag.attachNote(src.getLoc())
-             << "the right-hand-side was defined here.";
+      auto srcRef = getFieldRefFromValue(src);
+      bool rootKnown;
+      auto srcName = getFieldName(srcRef, rootKnown);
+      auto diag = emitError(connect->getLoc());
+      diag << "connect has invalid flow: the source expression ";
+      if (rootKnown)
+        diag << "\"" << srcName << "\" ";
+      diag << "has sink flow, expected source or duplex flow";
+      return diag.attachNote(srcRef.getLoc()) << "the source was defined here";
     }
   }
   if (foldFlow(dst) == Flow::Source) {
-    auto diag = connect->emitOpError()
-                << "has invalid flow: the left-hand-side has source flow "
-                   "(expected sink or duplex flow).";
-    return diag.attachNote(dst.getLoc())
-           << "the left-hand-side was defined here.";
+    auto dstRef = getFieldRefFromValue(dst);
+    bool rootKnown;
+    auto dstName = getFieldName(dstRef, rootKnown);
+    auto diag = emitError(connect->getLoc());
+    diag << "connect has invalid flow: the destination expression ";
+    if (rootKnown)
+      diag << "\"" << dstName << "\" ";
+    diag << "has source flow, expected sink or duplex flow";
+    return diag.attachNote(dstRef.getLoc())
+           << "the destination was defined here";
   }
-
   return success();
 }
 

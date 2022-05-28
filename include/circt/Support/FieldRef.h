@@ -48,6 +48,9 @@ public:
     return FieldRef(value, id + subFieldID);
   }
 
+  /// Get the location associated with the value of this field ref.
+  Location getLoc() const { return getValue().getLoc(); }
+
   bool operator==(const FieldRef &other) const {
     return value == other.value && id == other.id;
   }
