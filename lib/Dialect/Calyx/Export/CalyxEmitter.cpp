@@ -79,6 +79,15 @@ static Optional<StringRef> unsupportedOpInfo(Operation *op) {
             "compiler (see github.com/cucapra/calyx/issues/1009)";
         return {info};
       })
+      .Case<DivUPipeLibOp, DivSPipeLibOp, RemUPipeLibOp, RemSPipeLibOp>(
+          [](auto) -> Optional<StringRef> {
+            static std::string_view info =
+                "The Calyx CIRCT implementation implements distinct operations "
+                "for divu/divs/remu/rems operations, which is incompatible "
+                "with the native Rust compiler (see "
+                "https://github.com/llvm/circt/pull/3238)";
+            return {info};
+          })
       .Default([](auto) { return Optional<StringRef>(); });
 }
 
@@ -118,11 +127,10 @@ private:
               return {sCore};
             })
         .Case<SgtLibOp, SltLibOp, SeqLibOp, SneqLibOp, SgeLibOp, SleLibOp,
-              SrshLibOp, MultPipeLibOp, DivPipeLibOp>(
-            [&](auto op) -> FailureOr<StringRef> {
-              static std::string_view sBinaryOperators = "binary_operators";
-              return {sBinaryOperators};
-            })
+              SrshLibOp, MultPipeLibOp>([&](auto op) -> FailureOr<StringRef> {
+          static std::string_view sBinaryOperators = "binary_operators";
+          return {sBinaryOperators};
+        })
         /*.Case<>([&](auto op) { library = "math"; })*/
         .Default([&](auto op) {
           auto diag = op->emitOpError() << "not supported for emission";
@@ -537,7 +545,7 @@ void Emitter::emitComponent(ComponentOp op) {
                 SubLibOp, ShruLibOp, RshLibOp, SrshLibOp, LshLibOp, AndLibOp,
                 NotLibOp, OrLibOp, XorLibOp, WireLibOp>(
               [&](auto op) { emitLibraryPrimTypedByFirstInputPort(op); })
-          .Case<MultPipeLibOp, DivPipeLibOp>(
+          .Case<MultPipeLibOp, DivUPipeLibOp, DivSPipeLibOp>(
               [&](auto op) { emitLibraryPrimTypedByFirstOutputPort(op); })
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside component");

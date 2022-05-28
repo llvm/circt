@@ -920,11 +920,10 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   Location loc = div.getLoc();
   Type width = div.getResult().getType(), one = rewriter.getI1Type();
   auto divPipe =
-      getComponentState().getNewLibraryOpInstance<calyx::DivPipeLibOp>(
+      getComponentState().getNewLibraryOpInstance<calyx::DivUPipeLibOp>(
           rewriter, loc, {one, one, one, width, width, width, width, one});
-  return buildLibraryBinaryPipeOp<calyx::DivPipeLibOp>(
-      rewriter, div, divPipe,
-      /*out=*/divPipe.out_quotient());
+  return buildLibraryBinaryPipeOp<calyx::DivUPipeLibOp>(rewriter, div, divPipe,
+                                                        /*out=*/divPipe.out());
 }
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
@@ -932,11 +931,10 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   Location loc = rem.getLoc();
   Type width = rem.getResult().getType(), one = rewriter.getI1Type();
   auto remPipe =
-      getComponentState().getNewLibraryOpInstance<calyx::DivPipeLibOp>(
+      getComponentState().getNewLibraryOpInstance<calyx::DivUPipeLibOp>(
           rewriter, loc, {one, one, one, width, width, width, width, one});
-  return buildLibraryBinaryPipeOp<calyx::DivPipeLibOp>(
-      rewriter, rem, remPipe,
-      /*out=*/remPipe.out_remainder());
+  return buildLibraryBinaryPipeOp<calyx::DivUPipeLibOp>(rewriter, rem, remPipe,
+                                                        /*out=*/remPipe.out());
 }
 
 template <typename TAllocOp>
@@ -2059,7 +2057,7 @@ private:
       ///   LateSSAReplacement)
       if (src.isa<BlockArgument>() ||
           isa<calyx::RegisterOp, calyx::MemoryOp, hw::ConstantOp,
-              arith::ConstantOp, calyx::MultPipeLibOp, calyx::DivPipeLibOp>(
+              arith::ConstantOp, calyx::MultPipeLibOp, calyx::DivUPipeLibOp>(
               src.getDefiningOp()))
         continue;
 
