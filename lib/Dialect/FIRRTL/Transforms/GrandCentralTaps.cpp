@@ -1076,6 +1076,12 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
           wiring.literal = {
               IntegerAttr::get(constant.getContext(), constant.value()),
               constant.getType()};
+          // Delete any NLAs on the dead wire tap if as we are going to delete
+          // the symbol.  This deals with the situation where there is a
+          // non-local DontTouchAnnotation.
+          for (auto anno : AnnotationSet(op))
+            if (auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal"))
+              deadNLAs.insert(sym.getAttr());
           op->removeAttr("inner_sym");
         }
 

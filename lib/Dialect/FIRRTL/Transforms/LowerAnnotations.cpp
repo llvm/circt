@@ -257,13 +257,7 @@ static LogicalResult applyDontTouch(AnnoPathValue target, DictionaryAttr anno,
     return failure();
   }
 
-  // If the annotation is on a MemoryPortOp or if the annotation is on part of
-  // an aggregate, then keep the DontTouchAnnotation around.
-  if (isa<chirrtl::MemoryPortOp>(target.ref.getOp()) || target.fieldIdx)
-    return applyWithoutTarget<true>(target, anno, state);
-
-  target.ref.getInnerSym(state.getNamespace(target.ref.getModule()));
-  return success();
+  return applyWithoutTarget<true>(target, anno, state);
 }
 
 //===----------------------------------------------------------------------===//

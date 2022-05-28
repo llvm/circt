@@ -527,17 +527,11 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(
       continue;
 
     auto nlaRef = annotation.getAs<FlatSymbolRefAttr>("circt.nonlocal");
-    auto isDontTouch = Annotation(opAttr).getClass() ==
-                       "firrtl.transforms.DontTouchAnnotation";
 
-    // If its a valid NLA and it is not a DontTouch and we have already added
-    // an entry for this NLA with this field's symbol, ignore this NLA. This is
-    // required such that there is only a single entry for a pair of NLA and
-    // lowered symbol. This means, there can be multiple entries for the same
-    // NLA and DontTouch. Since, DontTouch NLAs can be simply deleted, there is
-    // no need to create a unique entry.
-    if (nlaRef && !isDontTouch &&
-        !alreadyAddedNLAs.insert(nlaRef.getAttr()).second)
+    // If its a valid NLA and we have already added an entry for this NLA with
+    // this field's symbol, ignore this NLA. This is required such that there is
+    // only a single entry for a pair of NLA and lowered symbol.
+    if (nlaRef && !alreadyAddedNLAs.insert(nlaRef.getAttr()).second)
       nlaRef = {};
     // Apply annotations to all elements if fieldID is equal to zero.
     if (fieldID == 0) {
@@ -551,17 +545,6 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(
       // If the target is a subfield/subindex of the current field, create a
       // new sub-annotation with a new field ID.
       retval.push_back(SubAnnotationAttr::get(ctxt, newFieldID, annotation));
-      continue;
-    }
-    if (isDontTouch) {
-      needsSym = true;
-      // If this is a nonlocal DontTouch, then,
-      // 1. Drop the annotation and the circt.nonlocal reference.
-      // 2. This makes the NLA redundant.
-      // 3. Just record the nla name, and insert a null Attr, to signify that
-      // the original NLA must be deleted.
-      if (nlaRef)
-        nlaNameToNewSymList.push_back({nlaRef.getAttr(), {}});
       continue;
     }
     // If this subfield has a nonlocal anchor, then we need to update the
@@ -625,7 +608,7 @@ bool TypeLoweringVisitor::lowerProducer(
     if (!loweredName.empty())
       newOp->setAttr(cache.nameAttr, StringAttr::get(context, loweredName));
     // Carry over the inner_sym name, if present.
-    if (needsSym || op->hasAttr(cache.innerSymAttr)) {
+    if (needsSym) {
       auto newName = StringAttr::get(context, loweredSymName);
       newOp->setAttr(cache.innerSymAttr, newName);
       opSymNames[newName] = newOp;

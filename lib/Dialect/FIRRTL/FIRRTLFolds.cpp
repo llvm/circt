@@ -1405,7 +1405,9 @@ static LogicalResult canonicalizeSingleSetConnect(StrictConnectOp op,
   // Only support wire and reg for now.
   if (!isa<WireOp>(connectedDecl) && !isa<RegOp>(connectedDecl))
     return failure();
-  if (hasDontTouch(connectedDecl))
+  AnnotationSet annotations(connectedDecl);
+  if (hasDontTouch(connectedDecl) ||
+      connectedDecl->getAttr(hw::InnerName::getInnerNameAttrName()))
     return failure();
 
   // Only forward if the types exactly match and there is one connect.

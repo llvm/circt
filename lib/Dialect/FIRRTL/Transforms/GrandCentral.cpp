@@ -1267,6 +1267,13 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
                 StringAttr::get(&getContext(),
                                 "assign " + path.getString() + ";"),
                 ValueRange{}, ArrayAttr::get(&getContext(), path.getSymbols()));
+            // Delete any NLAs on the dead wire tap if as we are going to delete
+            // the symbol.  This deals with the situation where there is a
+            // non-local DontTouchAnnotation.
+            for (auto anno : AnnotationSet(leafValue.getDefiningOp()))
+              if (auto sym =
+                      anno.getMember<FlatSymbolRefAttr>("circt.nonlocal"))
+                deadNLAs.insert(sym.getAttr());
             leafValue.getDefiningOp()->removeAttr("inner_sym");
             return true;
           }
