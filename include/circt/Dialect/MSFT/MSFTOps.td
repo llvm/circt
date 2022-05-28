@@ -8,7 +8,7 @@
 
 def InstanceOp : MSFTOp<"instance", [
         Symbol,
-        ParentOneOf<["::circt::hw::HWModuleOp", "MSFTModuleOp"]>,
+        ParentOneOf<["MSFTModuleOp"]>,
         DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
         DeclareOpInterfaceMethods<SymbolUserOpInterface>
     ]> {

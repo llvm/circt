@@ -248,11 +248,27 @@ InstanceOpLowering::matchAndRewrite(InstanceOp msftInst, OpAdaptor adaptor,
   if (!hw::isAnyModule(referencedModule))
     return rewriter.notifyMatchFailure(
         msftInst, "Referenced module was not an HW module");
+
+  ArrayAttr paramValues;
+  if (isa<hw::HWModuleExternOp>(referencedModule)) {
+    paramValues = msftInst.parametersAttr();
+    if (!paramValues)
+      paramValues = rewriter.getArrayAttr({});
+  } else {
+    auto instAppendParam = hw::ParamExprAttr::get(
+        hw::PEO::StrConcat,
+        {hw::ParamDeclRefAttr::get(rewriter.getStringAttr("__INST_HIER"),
+                                   rewriter.getNoneType()),
+         rewriter.getStringAttr("."), msftInst.sym_nameAttr()});
+    paramValues = rewriter.getArrayAttr(
+        {hw::ParamDeclAttr::get("__INST_HIER", instAppendParam)});
+  }
+
   auto hwInst = rewriter.create<hw::InstanceOp>(
       msftInst.getLoc(), referencedModule, msftInst.instanceNameAttr(),
       SmallVector<Value>(adaptor.getOperands().begin(),
                          adaptor.getOperands().end()),
-      msftInst.parameters().getValueOr(ArrayAttr()), msftInst.sym_nameAttr());
+      paramValues, msftInst.sym_nameAttr());
   hwInst->setDialectAttrs(msftInst->getDialectAttrs());
   rewriter.replaceOp(msftInst, hwInst.getResults());
   return success();
@@ -288,8 +304,10 @@ ModuleOpLowering::matchAndRewrite(MSFTModuleOp mod, OpAdaptor adaptor,
     return success();
   }
 
+  ArrayAttr params = rewriter.getArrayAttr({hw::ParamDeclAttr::get(
+      rewriter.getStringAttr("__INST_HIER"), rewriter.getNoneType())});
   auto hwmod = rewriter.replaceOpWithNewOp<hw::HWModuleOp>(
-      mod, mod.getNameAttr(), mod.getPorts());
+      mod, mod.getNameAttr(), mod.getPorts(), params);
   rewriter.eraseBlock(hwmod.getBodyBlock());
   rewriter.inlineRegionBefore(mod.getBody(), hwmod.getBody(),
                               hwmod.getBody().end());

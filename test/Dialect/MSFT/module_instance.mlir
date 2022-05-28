@@ -1,21 +1,22 @@
 // RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
 // RUN: circt-opt %s --lower-msft-to-hw -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s --check-prefix=HWLOW
 
-// CHECK-LABEL: hw.module @top
+// CHECK-LABEL: msft.module @top
 // HWLOW-LABEL: hw.module @top
-hw.module @top () {
+msft.module @top {} () {
   msft.instance @foo @Foo() : () -> (i32)
   // CHECK: %foo.x = msft.instance @foo @Foo() : () -> i32
-  // HWLOW: %foo.x = hw.instance "foo" sym @foo @Foo() -> (x: i32)
+  // HWLOW: %foo.x = hw.instance "foo" sym @foo @Foo<__INST_HIER: none = #hw.param.expr.str.concat<#hw.param.decl.ref<"__INST_HIER">, ".foo">>() -> (x: i32)
 
   %true = hw.constant true
   %extern.out = msft.instance @extern @Extern(%true)<param: i1 = false> : (i1) -> i1
   // CHECK: %extern.out = msft.instance @extern @Extern(%true) <param: i1 = false> : (i1) -> i1
   // HWLOW: %extern.out = hw.instance "extern" sym @extern @Extern<param: i1 = false>(in: %true: i1) -> (out: i1)
+  msft.output
 }
 
 // CHECK-LABEL: msft.module @B {WIDTH = 1 : i64} (%a: i4) -> (nameOfPortInSV: i4) attributes {fileName = "b.sv"} {
-// HWLOW-LABEL: hw.module @B(%a: i4) -> (nameOfPortInSV: i4) attributes {output_file = #hw.output_file<"b.sv", includeReplicatedOps>} {
+// HWLOW-LABEL: hw.module @B<__INST_HIER: none>(%a: i4) -> (nameOfPortInSV: i4) attributes {output_file = #hw.output_file<"b.sv", includeReplicatedOps>} {
 msft.module @B { "WIDTH" = 1 } (%a: i4) -> (nameOfPortInSV: i4) attributes {fileName = "b.sv"} {
   %0 = comb.add %a, %a : i4
   // CHECK: comb.add %a, %a : i4
