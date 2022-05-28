@@ -228,6 +228,9 @@ private:
         .Case([&](RshLibOp op) {
           convertArithBinaryOp<RshLibOp, ShrUOp>(op, wires, b);
         })
+        .Case([&](SrshLibOp op) {
+          convertArithBinaryOp<SrshLibOp, ShrSOp>(op, wires, b);
+        })
         .Case([&](LshLibOp op) {
           convertArithBinaryOp<LshLibOp, ShlOp>(op, wires, b);
         })
