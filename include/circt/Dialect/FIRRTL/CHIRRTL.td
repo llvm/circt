@@ -19,6 +19,7 @@ include "mlir/IR/OpAsmInterface.td"
 include "circt/Dialect/FIRRTL/FIRRTLDialect.td"
 include "circt/Dialect/FIRRTL/FIRRTLAttributes.td"
 include "circt/Dialect/FIRRTL/FIRRTLTypes.td"
+include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
 
@@ -102,7 +103,7 @@ def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface,
 class CHIRRTLOp<string mnemonic, list<Trait> traits = []> :
     Op<CHIRRTLDialect, mnemonic, traits>;
 
-def CombMemOp : CHIRRTLOp<"combmem", [HasCustomSSAName]> {
+def CombMemOp : CHIRRTLOp<"combmem", [HasCustomSSAName, InnerSymbol]> {
   let summary = "Define a new combinational memory";
   let description = [{
     Define a new behavioral combinational memory. Combinational memories have a
@@ -119,7 +120,7 @@ def CombMemOp : CHIRRTLOp<"combmem", [HasCustomSSAName]> {
   ];
 }
 
-def SeqMemOp : CHIRRTLOp<"seqmem", [HasCustomSSAName]> {
+def SeqMemOp : CHIRRTLOp<"seqmem", [HasCustomSSAName, InnerSymbol]> {
   let summary = "Define a new sequential memory";
   let description = [{
     Define a new behavioral sequential memory.  Sequential memories have a

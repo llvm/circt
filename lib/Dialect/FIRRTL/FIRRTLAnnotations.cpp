@@ -13,6 +13,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/HW/HWAttributes.h"
@@ -595,18 +596,18 @@ void OpAnnoTarget::setAnnotations(AnnotationSet annotations) const {
 }
 
 StringAttr OpAnnoTarget::getInnerSym(ModuleNamespace &moduleNamespace) const {
-  auto *context = getOp()->getContext();
-  auto innerSym = getOp()->getAttrOfType<StringAttr>("inner_sym");
+  auto innerSymOp = mlir::cast<InnerSymbolOpInterface>(getOp());
+  auto innerSym = innerSymOp.getNameAttr();
   if (!innerSym) {
     // Try to come up with a reasonable name.
     StringRef name = "inner_sym";
     auto nameAttr = getOp()->getAttrOfType<StringAttr>("name");
     if (nameAttr && !nameAttr.getValue().empty())
       name = nameAttr.getValue();
+    auto *context = getOp()->getContext();
     innerSym = StringAttr::get(context, moduleNamespace.newName(name));
-    getOp()->setAttr("inner_sym", innerSym);
+    innerSymOp.setNameAttr(innerSym);
   }
-  assert(innerSym && "invalid inner_sym");
   return innerSym;
 }
 

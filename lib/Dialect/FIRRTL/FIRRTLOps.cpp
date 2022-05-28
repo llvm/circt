@@ -227,17 +227,12 @@ static bool hasPortNamed(FModuleLike op, StringAttr name) {
 }
 
 static bool hasValNamed(FModuleLike op, StringAttr name) {
-  bool retval = false;
-  op.walk([name, &retval](Operation *op) {
-    auto attr = op->getAttrOfType<StringAttr>("inner_sym");
-    if (attr == name) {
-      retval = true;
+  auto result = op.walk([name](InnerSymbolOpInterface op) {
+    if (op.getNameAttr() == name)
       return WalkResult::interrupt();
-    }
     return WalkResult::advance();
-    ;
   });
-  return retval;
+  return result.wasInterrupted();
 }
 
 //===----------------------------------------------------------------------===//

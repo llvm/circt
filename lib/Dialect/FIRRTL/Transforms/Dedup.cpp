@@ -13,6 +13,7 @@
 #include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/NLATable.h"
@@ -901,9 +902,11 @@ private:
                         Operation *from) {
     // If the "from" operation has an inner_sym, we need to make sure the
     // "to" operation also has an `inner_sym` and then record the renaming.
-    if (auto fromSym = from->getAttrOfType<StringAttr>("inner_sym")) {
-      auto toSym = OpAnnoTarget(to).getInnerSym(getNamespace(toModule));
-      renameMap[fromSym] = toSym;
+    if (auto fromSymOp = dyn_cast<InnerSymbolOpInterface>(from)) {
+      if (auto fromSym = fromSymOp.getNameAttr()) {
+        auto toSym = OpAnnoTarget(to).getInnerSym(getNamespace(toModule));
+        renameMap[fromSym] = toSym;
+      }
     }
 
     // If there are no port symbols on the "from" operation, we are done here.

@@ -13,6 +13,7 @@
 #include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
@@ -46,16 +47,16 @@ struct AddSeqMemPortsPass : public AddSeqMemPortsBase<AddSeqMemPortsPass> {
 
   /// Returns an operation's `inner_sym`, adding one if necessary.
   StringAttr getOrAddInnerSym(Operation *op) {
-    auto attr = op->getAttrOfType<StringAttr>("inner_sym");
-    if (attr)
+    auto innerSymOp = cast<InnerSymbolOpInterface>(op);
+    if (auto attr = innerSymOp.getNameAttr())
       return attr;
     auto module = op->getParentOfType<FModuleOp>();
     StringRef name = "sym";
     if (auto nameAttr = op->getAttrOfType<StringAttr>("name"))
       name = nameAttr.getValue();
     name = getModuleNamespace(module).newName(name);
-    attr = StringAttr::get(op->getContext(), name);
-    op->setAttr("inner_sym", attr);
+    auto attr = StringAttr::get(op->getContext(), name);
+    innerSymOp.setNameAttr(attr);
     return attr;
   }
 

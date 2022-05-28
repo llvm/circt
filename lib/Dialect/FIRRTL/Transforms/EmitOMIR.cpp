@@ -263,7 +263,7 @@ void EmitOMIRPass::runOnOperation() {
     if (auto instOp = dyn_cast<InstanceOp>(op)) {
       // This instance does not have a symbol, but we are adding one. Remove it
       // after the pass.
-      if (!op->getAttrOfType<StringAttr>("inner_sym"))
+      if (!instOp.inner_symAttr())
         tempSymInstances.insert(instOp);
 
       instancesByName.insert(
@@ -366,7 +366,7 @@ void EmitOMIRPass::runOnOperation() {
   removeTempNLAs.clear();
   // Remove the temp symbol from instances.
   for (auto *op : tempSymInstances)
-    cast<InstanceOp>(op)->removeAttr("inner_sym");
+    cast<InstanceOp>(op).removeNameAttr();
   tempSymInstances.clear();
 
   // Emit the OMIR JSON as a verbatim op.
@@ -901,14 +901,14 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
 
 StringAttr EmitOMIRPass::getOrAddInnerSym(Operation *op) {
   tempSymInstances.erase(op);
-  auto attr = op->getAttrOfType<StringAttr>("inner_sym");
+  auto innerSymOp = cast<InnerSymbolOpInterface>(op);
+  auto attr = innerSymOp.getNameAttr();
   if (attr)
     return attr;
   auto module = op->getParentOfType<FModuleOp>();
-  // TODO: Cache the module namespace.
   auto name = getModuleNamespace(module).newName("omir_sym");
   attr = StringAttr::get(op->getContext(), name);
-  op->setAttr("inner_sym", attr);
+  innerSymOp.setNameAttr(attr);
   return attr;
 }
 

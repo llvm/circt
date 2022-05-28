@@ -1076,7 +1076,7 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
           wiring.literal = {
               IntegerAttr::get(constant.getContext(), constant.value()),
               constant.getType()};
-          op->removeAttr("inner_sym");
+          cast<InnerSymbolOpInterface>(op).removeNameAttr();
         }
 
       wiring.target = PortWiring::Target(op);
@@ -1216,13 +1216,14 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
 }
 
 StringAttr GrandCentralTapsPass::getOrAddInnerSym(Operation *op) {
-  auto attr = op->getAttrOfType<StringAttr>("inner_sym");
+  auto innerSymOp = cast<InnerSymbolOpInterface>(op);
+  auto attr = innerSymOp.getNameAttr();
   if (attr)
     return attr;
   auto module = op->getParentOfType<FModuleOp>();
   auto name = getModuleNamespace(module).newName("gct_sym");
   attr = StringAttr::get(op->getContext(), name);
-  op->setAttr("inner_sym", attr);
+  innerSymOp.setNameAttr(attr);
   return attr;
 }
 

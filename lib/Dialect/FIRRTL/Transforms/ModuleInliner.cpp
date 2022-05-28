@@ -13,6 +13,7 @@
 #include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
@@ -532,25 +533,27 @@ void Inliner::rename(StringRef prefix, Operation *op,
 
   // If the operation has an inner symbol, ensure that it is unique.  Record
   // renames for any NLAs that this participates in if the symbol was renamed.
-  if (auto sym = op->getAttrOfType<StringAttr>("inner_sym")) {
-    auto newSym = moduleNamespace.newName(sym.getValue());
-    if (newSym != sym.getValue()) {
-      auto newSymAttr = StringAttr::get(op->getContext(), newSym);
-      op->setAttr("inner_sym", newSymAttr);
-      for (Annotation anno : AnnotationSet(op)) {
-        auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal");
-        if (!sym)
-          continue;
-        // If this is a breadcrumb, we update the annotation path
-        // unconditionally. If this is the leaf of the NLA, we need to make sure
-        // we only update the annotation if the current path matches the NLA.
-        // This matters when the same module is inlined twice and the NLA only
-        // applies to one of them.
-        auto &mnla = nlaMap[sym.getAttr()];
-        if (!anno.isClass("circt.nonlocal") &&
-            !doesNLAMatchCurrentPath(mnla.getNLA()))
-          continue;
-        mnla.setInnerSym(moduleNamespace.module.moduleNameAttr(), newSymAttr);
+  if (auto innerSymOp = dyn_cast<InnerSymbolOpInterface>(op)) {
+    if (auto sym = innerSymOp.getNameAttr()) {
+      auto newSym = moduleNamespace.newName(sym.getValue());
+      if (newSym != sym) {
+        auto newSymAttr = StringAttr::get(context, newSym);
+        innerSymOp.setNameAttr(newSymAttr);
+        for (Annotation anno : AnnotationSet(op)) {
+          auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal");
+          if (!sym)
+            continue;
+          // If this is a breadcrumb, we update the annotation path
+          // unconditionally. If this is the leaf of the NLA, we need to make
+          // sure we only update the annotation if the current path matches the
+          // NLA. This matters when the same module is inlined twice and the NLA
+          // only applies to one of them.
+          auto &mnla = nlaMap[sym.getAttr()];
+          if (!anno.isClass("circt.nonlocal") &&
+              !doesNLAMatchCurrentPath(mnla.getNLA()))
+            continue;
+          mnla.setInnerSym(moduleNamespace.module.moduleNameAttr(), newSymAttr);
+        }
       }
     }
   }

@@ -1267,7 +1267,8 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
                 StringAttr::get(&getContext(),
                                 "assign " + path.getString() + ";"),
                 ValueRange{}, ArrayAttr::get(&getContext(), path.getSymbols()));
-            leafValue.getDefiningOp()->removeAttr("inner_sym");
+            cast<InnerSymbolOpInterface>(leafValue.getDefiningOp())
+                .removeNameAttr();
             return true;
           }
         }
@@ -2260,7 +2261,8 @@ void GrandCentralPass::runOnOperation() {
 }
 
 StringAttr GrandCentralPass::getOrAddInnerSym(Operation *op) {
-  auto attr = op->getAttrOfType<StringAttr>("inner_sym");
+  auto innerSymOp = cast<InnerSymbolOpInterface>(op);
+  auto attr = innerSymOp.getNameAttr();
   if (attr)
     return attr;
   auto module = op->getParentOfType<FModuleOp>();
@@ -2269,7 +2271,7 @@ StringAttr GrandCentralPass::getOrAddInnerSym(Operation *op) {
     nameHint = attr.getValue();
   auto name = getModuleNamespace(module).newName(nameHint);
   attr = StringAttr::get(op->getContext(), name);
-  op->setAttr("inner_sym", attr);
+  innerSymOp.setNameAttr(attr);
   return attr;
 }
 

@@ -12,6 +12,7 @@
 
 #include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/CHIRRTLVisitors.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
@@ -338,8 +339,8 @@ void LowerCHIRRTLPass::replaceMem(Operation *cmem, StringRef name,
       resultTypes, readLatency, writeLatency, depth, ruw,
       memBuilder.getArrayAttr(resultNames), name, annotations,
       memBuilder.getArrayAttr(portAnnotations), StringAttr{}, IntegerAttr());
-  if (auto innerSym = cmem->getAttr("inner_sym"))
-    memory->setAttr("inner_sym", innerSym);
+  if (auto innerSym = cast<InnerSymbolOpInterface>(cmem).getNameAttr())
+    memory.inner_symAttr(innerSym);
 
   // Process each memory port, initializing the memory port and inferring when
   // to set the enable signal high.

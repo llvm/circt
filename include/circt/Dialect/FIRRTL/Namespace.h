@@ -14,6 +14,7 @@
 #ifndef CIRCT_DIALECT_FIRRTL_NAMESPACE_H
 #define CIRCT_DIALECT_FIRRTL_NAMESPACE_H
 
+#include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Support/Namespace.h"
 
@@ -64,8 +65,8 @@ struct ModuleNamespace : public Namespace {
 
   /// Populate the namespace with the body of a module-like operation.
   void addBody(FModuleLike module) {
-    module.walk([&](Operation *op) {
-      auto attr = op->getAttrOfType<StringAttr>("inner_sym");
+    module.walk([&](InnerSymbolOpInterface op) {
+      auto attr = op.getNameAttr();
       if (attr)
         nextIndex.insert({attr.getValue(), 0});
     });

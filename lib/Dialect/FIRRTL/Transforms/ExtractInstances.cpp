@@ -75,13 +75,14 @@ struct ExtractInstancesPass
 
   /// Returns an operation's `inner_sym`, adding one if necessary.
   StringAttr getOrAddInnerSym(Operation *op) {
-    auto attr = op->getAttrOfType<StringAttr>("inner_sym");
+    auto innerSymOp = cast<InnerSymbolOpInterface>(op);
+    auto attr = innerSymOp.getNameAttr();
     if (attr)
       return attr;
     auto module = op->getParentOfType<FModuleOp>();
     auto name = getModuleNamespace(module).newName("extraction_sym");
     attr = StringAttr::get(op->getContext(), name);
-    op->setAttr("inner_sym", attr);
+    innerSymOp.setNameAttr(attr);
     return attr;
   }
 

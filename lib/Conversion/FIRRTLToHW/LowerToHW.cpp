@@ -2500,11 +2500,15 @@ void FIRRTLLowering::initializeRegister(
   mlir::OpBuilder::InsertPoint regInsertionPoint;
 
   auto regDef = cast<sv::RegOp>(reg.getDefiningOp());
-  if (!regDef->hasAttrOfType<StringAttr>("inner_sym"))
-    regDef->setAttr("inner_sym", builder.getStringAttr(moduleNamespace.newName(
-                                     Twine("__") + regDef.name() + "__")));
-  auto regDefSym =
-      hw::InnerRefAttr::get(theModule.getNameAttr(), regDef.inner_symAttr());
+
+  // Construct a reference to this register.
+  auto innerSym = regDef.inner_symAttr();
+  if (!innerSym) {
+    auto newName = moduleNamespace.newName("__" + regDef.name() + "__");
+    innerSym = builder.getStringAttr(newName);
+    regDef.inner_symAttr(innerSym);
+  }
+  auto regDefSym = hw::InnerRefAttr::get(theModule.getNameAttr(), innerSym);
 
   // Construct and return a new reference to `RANDOM.  It is always a 32-bit
   // unsigned expression.  Calls to $random have side effects, so we use

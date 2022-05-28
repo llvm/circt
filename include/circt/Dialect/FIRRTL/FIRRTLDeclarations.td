@@ -93,7 +93,7 @@ def InstanceOp : FIRRTLOp<"instance", [HasParent<"firrtl::FModuleOp, firrtl::Whe
   }];
 }
 
-def MemOp : FIRRTLOp<"mem", [HasCustomSSAName]> {
+def MemOp : FIRRTLOp<"mem", [HasCustomSSAName, InnerSymbol]> {
   let summary = "Define a new mem";
   let arguments =
     (ins Confined<I32Attr, [IntMinValue<0>]>:$readLatency,
@@ -287,7 +287,7 @@ def RegResetOp : FIRRTLOp<"regreset", [HasCustomSSAName, InnerSymbol]> {
   let hasVerifier = 1;
 }
 
-def WireOp : FIRRTLOp<"wire", [HasCustomSSAName]> {
+def WireOp : FIRRTLOp<"wire", [HasCustomSSAName, InnerSymbol]> {
   let summary = "Define a new wire";
   let description = [{
     Declare a new wire:

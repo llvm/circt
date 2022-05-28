@@ -14,6 +14,7 @@
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotationHelper.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/SV/SVOps.h"
@@ -633,7 +634,8 @@ FailureOr<bool> GrandCentralSignalMappingsPass::emitUpdatedMappings(
   // Use inner_sym for non-ports
   SmallVector<Attribute> symbols;
   auto getOrAddInnerSym = [&](Operation *op) -> StringAttr {
-    auto attr = op->getAttrOfType<StringAttr>("inner_sym");
+    auto innerSymOp = cast<InnerSymbolOpInterface>(op);
+    auto attr = innerSymOp.getNameAttr();
     if (attr)
       return attr;
     StringRef name = "sym";
@@ -642,7 +644,7 @@ FailureOr<bool> GrandCentralSignalMappingsPass::emitUpdatedMappings(
     auto module = op->getParentOfType<FModuleOp>();
     name = getModuleNamespace(module).newName(name);
     attr = StringAttr::get(op->getContext(), name);
-    op->setAttr("inner_sym", attr);
+    innerSymOp.setNameAttr(attr);
     return attr;
   };
   auto mkRef = [&](FModuleOp module,

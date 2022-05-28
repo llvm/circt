@@ -10,6 +10,9 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef FIRRTLOPINTERFACES_TD
+#define FIRRTLOPINTERFACES_TD
+
 include "mlir/IR/OpBase.td"
 
 def FModuleLike : OpInterface<"FModuleLike"> {
@@ -279,34 +282,70 @@ def FConnectLike : OpInterface<"FConnectLike"> {
 
 def InnerSymbol : OpInterface<"InnerSymbolOpInterface"> {
   let description = [{
-    This interface describes an operation that may define an
-    `inner_sym`.  An `inner_sym` operation resides 
-    in arbitrarily-nested regions of a region that defines a
-    `InnerSymbolTable`.
-    Inner Symbols are different from normal symbols due to 
-    MLIR symbol table resolution rules.  Specifically normal
-    symbols are resolved by first going up to the closest
-    parent symbol table and resolving from there (recursing
-    down for complex symbol paths).  In FIRRTL and SV, modules
-    define a symbol in a circuit or std.module symbol table.
-    For instances to be able to resolve the modules they
-    instantiate, the symbol use in an instance must resolve 
-    in the top-level symbol table.  If a module were a
-    symbol table, instances resolving a symbol would start from 
-    their own module, never seeing other modules (since 
-    resolution would start in the parent module of the 
-    instance and be unable to go to the global scope).
-    The second problem arises from nesting.  Symbols defining 
-    ops must be immediate children of a symbol table.  FIRRTL
-    and SV operations which define a inner_sym are grandchildren,
-    at least, of a symbol table and may be much further nested.
-    Lastly, ports need to define inner_sym, something not allowed
-    by normal symbols.
+    This interface describes an operation that may define an `inner_sym`.  An
+    `inner_sym` operation resides in arbitrarily-nested regions of a region
+    that defines a `InnerSymbolTable`.
+
+    Inner Symbols are different from normal symbols due to MLIR symbol table
+    resolution rules.  Specifically normal symbols are resolved by first going
+    up to the closest parent symbol table and resolving from there (recursing
+    down for complex symbol paths).  In FIRRTL and SV, modules define a symbol
+    in a circuit or std.module symbol table. For instances to be able to
+    resolve the modules they instantiate, the symbol use in an instance must
+    resolve in the top-level symbol table.  If a module were a symbol table,
+    instances resolving a symbol would start from their own module, never
+    seeing other modules (since resolution would start in the parent module of
+    the instance and be unable to go to the global scope).
+
+    The second problem arises from nesting.  Symbols defining ops must be
+    immediate children of a symbol table.  FIRRTL and SV operations which
+    define a inner_sym are grandchildren, at least, of a symbol table and may
+    be much further nested. Lastly, ports need to define inner_sym, something
+    not allowed by normal symbols.
   }];
 
   let cppNamespace = "::circt::firrtl";
-  let methods = [];
-
+  let methods = [
+    InterfaceMethod<"Returns the name attribute of this inner symbol.",
+      "StringAttr", "getNameAttr", (ins), [{}],
+      /*defaultImplementation=*/[{
+        return $_op->template getAttrOfType<StringAttr>(
+          InnerSymbolOpInterface::getInnerSymAttrName());
+      }]
+    >,
+    InterfaceMethod<"Returns the name of this inner symbol.",
+      "StringRef", "getName", (ins), [{}],
+      /*defaultImplementation=*/[{
+        return $_op.getNameAttr().getValue();
+      }]
+    >,
+    InterfaceMethod<"Sets the name of this inner symbol.",
+      "void", "setNameAttr", (ins "StringAttr":$name), [{}],
+      /*defaultImplementation=*/[{
+        $_op->setAttr(InnerSymbolOpInterface::getInnerSymAttrName(), name);
+      }]
+    >,
+    InterfaceMethod<"Sets the name of this inner symbol.",
+      "void", "setName", (ins "StringRef":$name), [{}],
+      /*defaultImplementation=*/[{
+        $_op.setNameAttr(StringAttr::get($_op->getContext(), name));
+      }]
+    >,
+    InterfaceMethod<"Remove the name of this inner symbol.",
+      "void", "removeNameAttr", (ins), [{}],
+      /*defaultImplementation=*/[{
+        $_op->removeAttr(InnerSymbolOpInterface::getInnerSymAttrName());
+      }]
+    >
+  ];
+  let extraClassDeclaration = [{
+    /// Get the attribute name for inner symbol.
+    static StringRef getInnerSymAttrName() {
+      return "inner_sym";
+    }
+  }];
 }
 
 def InnerSymbolTable : NativeOpTrait<"InnerSymbolTable">;
+
+#endif // FIRRTLOPINTERFACES_TD
