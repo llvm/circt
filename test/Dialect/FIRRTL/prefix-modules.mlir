@@ -341,7 +341,7 @@ firrtl.circuit "GCTDataMemTapsPrefix" {
     // CHECK-SAME:  annotations = [{circt.nonlocal = @nla_4, class = "nla_4"}]
     // CHECK:       %mem_MPORT_en = firrtl.wire sym @s1  {annotations = [{circt.nonlocal = @nla_2, class = "nla_2"}]} : !firrtl.uint<1>
     // CHECK:       firrtl.module @Baz()
-    // CHECK_SAME:  annotations = [{circt.nonlocal = @nla_1, class = "nla_1"}, {circt.nonlocal = @nla_3, class = "nla_3"}]
+    // CHECK-SAME:  annotations = [{circt.nonlocal = @nla_1, class = "nla_1"}, {circt.nonlocal = @nla_3, class = "nla_3"}]
     // CHECK:       %mem_MPORT_en = firrtl.wire sym @s1  : !firrtl.uint<1>
     
   }
