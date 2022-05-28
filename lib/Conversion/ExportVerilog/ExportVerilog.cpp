@@ -3985,11 +3985,10 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
           return;
         }
 
-      if (!type.isa<NoneType>())
-        printPackedType(type, sstream, module->getLoc(),
-                        /*implicitIntType=*/true,
-                        // Print single-bit values as explicit `[0:0]` type.
-                        /*singleBitDefaultType=*/false);
+      printPackedType(type, sstream, module->getLoc(),
+                      /*implicitIntType=*/true,
+                      // Print single-bit values as explicit `[0:0]` type.
+                      /*singleBitDefaultType=*/false);
     };
 
     // Determine the max width of the parameter types so things are lined up.
