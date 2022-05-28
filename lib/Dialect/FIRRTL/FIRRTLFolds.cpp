@@ -960,12 +960,8 @@ OpFoldResult CatPrimOp::fold(ArrayRef<Attribute> operands) {
 
   // Constant fold cat.
   if (auto lhs = getConstant(operands[0]))
-    if (auto rhs = getConstant(operands[1])) {
-      auto destWidth = getType().getWidthOrSentinel();
-      APInt tmp1 = lhs->zext(destWidth) << rhs->getBitWidth();
-      APInt tmp2 = rhs->zext(destWidth);
-      return getIntAttr(getType(), tmp1 | tmp2);
-    }
+    if (auto rhs = getConstant(operands[1]))
+      return getIntAttr(getType(), lhs->concat(*rhs));
 
   return {};
 }
@@ -1050,7 +1046,7 @@ OpFoldResult BitsPrimOp::fold(ArrayRef<Attribute> operands) {
   // Constant fold.
   if (hasKnownWidthIntTypes(*this))
     if (auto cst = getConstant(operands[0]))
-      return getIntAttr(getType(), cst->lshr(lo()).trunc(hi() - lo() + 1));
+      return getIntAttr(getType(), cst->extractBits(hi() - lo() + 1, lo()));
 
   return {};
 }
