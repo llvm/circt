@@ -124,6 +124,13 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/circt/images/circt-ci-build:20220216182244
+    strategy:
+      matrix:
+        compiler:
+          - cc: clang
+            cxx: clang++
+          - cc: gcc
+            cxx: g++
     steps:
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
       # time.
@@ -140,22 +147,22 @@ jobs:
 
       - name: Get workflow spec hash
         id: get-workflow-hash
-        run: echo "::set-output name=hash::$(md5sum $GITHUB_WORKSPACE/.github/workflows/buildAndTest.yml)"
+        run: echo "::set-output name=hash::$(md5sum $GITHUB_WORKSPACE/.github/workflows/buildAndTest.yml | awk '{print $1}')"
 
       # Try to fetch LLVM from the cache.
-      - name: Cache LLVM
+      - name: Cache LLVM (${{ matrix.compiler.cc }})
         id: cache-llvm
         uses: actions/cache@v2
         with:
           path: |
             llvm/build
             llvm/install
-          key: ${{ runner.os }}-llvm-${{ steps.get-llvm-hash.outputs.hash }}-${{ steps.get-workflow-hash.outputs.hash }}
+          key: ${{ runner.os }}-llvm-${{ steps.get-llvm-hash.outputs.hash }}-${{ steps.get-workflow-hash.outputs.hash }}-${{ matrix.compiler.cc }}-${{ matrix.compiler.cxx }}
 
       # Build LLVM if we didn't hit in the cache.
       - name: Rebuild and Install LLVM
         if: steps.cache-llvm.outputs.cache-hit != 'true'
-        run: utils/build-llvm.sh
+        run: utils/build-llvm.sh build install Release ${{ matrix.compiler.cc }} ${{ matrix.compiler.cxx }}
 
 
     # Installing the results into the cache is an action which is automatically
@@ -224,21 +231,38 @@ jobs:
         run: echo "::set-output name=hash::$(md5sum $GITHUB_WORKSPACE/.github/workflows/buildAndTest.yml)"
 
       # Try to fetch LLVM from the cache.
-      - name: Cache LLVM
-        id: cache-llvm
+      - name: Cache LLVM (Clang)
+        id: cache-llvm-clang
         uses: actions/cache@v2
         with:
           path: |
-            llvm/build
-            llvm/install
-          key: ${{ runner.os }}-llvm-${{ steps.get-llvm-hash.outputs.hash }}-${{ steps.get-workflow-hash.outputs.hash }}
+            llvm/build-clang
+            llvm/install-clang
+          key: ${{ runner.os }}-llvm-${{ steps.get-llvm-hash.outputs.hash }}-${{ steps.get-workflow-hash.outputs.hash }}-clang
 
       # Build LLVM if we didn't hit in the cache. Even though we build it in
       # the previous job, there is a low chance that it'll have been evicted by
       # the time we get here.
-      - name: Rebuild and Install LLVM
-        if: steps.cache-llvm.outputs.cache-hit != 'true'
-        run: utils/build-llvm.sh
+      - name: Rebuild and Install LLVM (Clang)
+        if: steps.cache-llvm-clang.outputs.cache-hit != 'true'
+        run: utils/build-llvm.sh build-clang install-clang Release clang clang++
+
+      # Try to fetch LLVM from the cache.
+      - name: Cache LLVM (GCC)
+        id: cache-llvm-gcc
+        uses: actions/cache@v2
+        with:
+          path: |
+            llvm/build-gcc
+            llvm/install-gcc
+          key: ${{ runner.os }}-llvm-${{ steps.get-llvm-hash.outputs.hash }}-${{ steps.get-workflow-hash.outputs.hash }}-gcc
+
+      # Build LLVM if we didn't hit in the cache. Even though we build it in
+      # the previous job, there is a low chance that it'll have been evicted by
+      # the time we get here.
+      - name: Rebuild and Install LLVM (GCC)
+        if: steps.cache-llvm-gcc.outputs.cache-hit != 'true'
+        run: utils/build-llvm.sh build-gcc install-gcc Release gcc g++
 
       # --------
       # Build and test CIRCT in both debug and release mode.
@@ -257,12 +281,12 @@ jobs:
             -DBUILD_SHARED_LIBS=ON \
             -DCMAKE_BUILD_TYPE=Release \
             -DLLVM_ENABLE_ASSERTIONS=OFF \
-            -DMLIR_DIR=../llvm/install/lib/cmake/mlir/ \
-            -DLLVM_DIR=../llvm/install/lib/cmake/llvm/ \
+            -DMLIR_DIR=`pwd`/../llvm/install-clang/lib/cmake/mlir \
+            -DLLVM_DIR=`pwd`/../llvm/install-clang/lib/cmake/llvm \
             -DLLVM_USE_LINKER=lld \
             -DCMAKE_C_COMPILER=clang \
             -DCMAKE_CXX_COMPILER=clang++ \
-            -DLLVM_EXTERNAL_LIT=`pwd`/../llvm/build/bin/llvm-lit \
+            -DLLVM_EXTERNAL_LIT=`pwd`/../llvm/build-clang/bin/llvm-lit \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
           make check-circt -j$(nproc)
           make circt-doc
@@ -275,12 +299,12 @@ jobs:
           cmake .. \
             -DCMAKE_BUILD_TYPE=Debug \
             -DLLVM_ENABLE_ASSERTIONS=ON \
-            -DMLIR_DIR=../llvm/install/lib/cmake/mlir/ \
-            -DLLVM_DIR=../llvm/install/lib/cmake/llvm/ \
+            -DMLIR_DIR=`pwd`/../llvm/install-gcc/lib/cmake/mlir/ \
+            -DLLVM_DIR=`pwd`/../llvm/install-gcc/lib/cmake/llvm/ \
             -DLLVM_USE_LINKER=lld \
             -DCMAKE_C_COMPILER=gcc \
             -DCMAKE_CXX_COMPILER=g++ \
-            -DLLVM_EXTERNAL_LIT=`pwd`/../llvm/build/bin/llvm-lit
+            -DLLVM_EXTERNAL_LIT=`pwd`/../llvm/build-gcc/bin/llvm-lit
           make check-circt -j$(nproc)
           make circt-doc
 
