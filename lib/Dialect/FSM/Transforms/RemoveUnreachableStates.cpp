@@ -29,12 +29,13 @@ static SmallVector<StateOp> unreachableStates(MachineOp machine) {
   SmallVector<StateOp, 4> queue;
   queue.push_back(machine.getInitialStateOp());
   while (!queue.empty()) {
-    auto *state = queue.begin();
-    queue.erase(state);
-    if (reachableStates.contains(*state))
+    auto *stateIt = queue.begin();
+    StateOp state = *stateIt;
+    queue.erase(stateIt);
+    if (reachableStates.contains(state))
       continue;
-    reachableStates.insert(*state);
-    llvm::copy(state->getNextStates(), std::back_inserter(queue));
+    reachableStates.insert(state);
+    llvm::copy(state.getNextStates(), std::back_inserter(queue));
   }
 
   // Get the difference between reachable states and all states in the machine.
