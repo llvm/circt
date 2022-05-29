@@ -352,13 +352,9 @@ LogicalResult AffineToStaticLogic::createStaticLogicPipeline(
   auto innerLoop = loopNest.back();
   ImplicitLocOpBuilder builder(outerLoop.getLoc(), outerLoop);
 
-  // Create constants for the loop's lower and upper bounds.
-  int64_t lbValue = innerLoop.getConstantLowerBound();
-  auto lowerBound = builder.create<arith::ConstantOp>(
-      IntegerAttr::get(builder.getIndexType(), lbValue));
-  int64_t ubValue = innerLoop.getConstantUpperBound();
-  auto upperBound = builder.create<arith::ConstantOp>(
-      IntegerAttr::get(builder.getIndexType(), ubValue));
+  // Create Values for the loop's lower and upper bounds.
+  Value lowerBound = lowerAffineLowerBound(innerLoop, builder);
+  Value upperBound = lowerAffineUpperBound(innerLoop, builder);
   int64_t stepValue = innerLoop.getStep();
   auto step = builder.create<arith::ConstantOp>(
       IntegerAttr::get(builder.getIndexType(), stepValue));
