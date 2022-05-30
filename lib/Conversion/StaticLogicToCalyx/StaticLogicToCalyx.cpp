@@ -77,12 +77,11 @@ struct LoopScheduleable {
   SmallVector<calyx::GroupOp> initGroups;
 };
 
-struct WhileScheduleable : LoopScheduleable {};
 struct PipelineScheduleable : LoopScheduleable {};
 
 /// A variant of types representing scheduleable operations.
 using Scheduleable =
-    std::variant<calyx::GroupOp, WhileScheduleable, PipelineScheduleable>;
+    std::variant<calyx::GroupOp, PipelineScheduleable>;
 
 //===----------------------------------------------------------------------===//
 // Lowering state classes
@@ -206,48 +205,6 @@ public:
     }
   }
 
-  /// Register reg as being the idx'th iter_args register for 'whileOp'.
-  void addWhileIterReg(StaticLogicWhileOp op, calyx::RegisterOp reg,
-                       unsigned idx) override {
-    assert(whileIterRegs[op.getOperation()].count(idx) == 0 &&
-           "A register was already registered for the given while iter_arg "
-           "index");
-    assert(idx < op.getBodyArgs().size());
-    whileIterRegs[op.getOperation()][idx] = reg;
-  }
-
-  /// Return a mapping of block argument indices to block argument registers.
-  calyx::RegisterOp getWhileIterReg(StaticLogicWhileOp op,
-                                    unsigned idx) override {
-    auto iterRegs = getWhileIterRegs(op);
-    auto it = iterRegs.find(idx);
-    assert(it != iterRegs.end() &&
-           "No iter arg register set for the provided index");
-    return it->second;
-  }
-
-  /// Return a mapping of block argument indices to block argument registers.
-  const DenseMap<unsigned, calyx::RegisterOp> &
-  getWhileIterRegs(StaticLogicWhileOp op) override {
-    return whileIterRegs[op.getOperation()];
-  }
-
-  /// Registers grp to be the while latch group of whileOp.
-  void setWhileLatchGroup(StaticLogicWhileOp op,
-                          calyx::GroupOp grp) override {
-    assert(whileLatchGroups.count(op.getOperation()) == 0 &&
-           "A latch group was already set for this whileOp");
-    whileLatchGroups[op.getOperation()] = grp;
-  }
-
-  /// Retrieve the while latch group registered for whileOp.
-  calyx::GroupOp getWhileLatchGroup(StaticLogicWhileOp op) override {
-    auto it = whileLatchGroups.find(op.getOperation());
-    assert(it != whileLatchGroups.end() &&
-           "No while latch group was set for this whileOp");
-    return it->second;
-  }
-
 private:
   /// A reference to the parent program lowering state.
   ProgramLoweringState &programLoweringState;
@@ -273,14 +230,6 @@ private:
   /// constitute the pipeline epilogue. Each inner vector consists of the groups
   /// for one stage.
   DenseMap<Operation *, SmallVector<SmallVector<StringAttr>>> pipelineEpilogue;
-
-  /// A while latch group is a group that should be sequentially executed when
-  /// finishing a while loop body. The execution of this group will write the
-  /// yield'ed loop body values to the iteration argument registers.
-  DenseMap<Operation *, calyx::GroupOp> whileLatchGroups;
-
-  /// A mapping from while ops to iteration argument registers.
-  DenseMap<Operation *, DenseMap<unsigned, calyx::RegisterOp>> whileIterRegs;
 };
 
 /// Handles the current state of lowering of a Calyx program. It is mainly used
@@ -315,7 +264,8 @@ private:
 /// and then perform their own walking of the IR. FuncOpPartialLoweringPatterns
 /// have direct access to the ComponentLoweringState for the corresponding
 /// component of the matched FuncOp.
-class FuncOpPartialLoweringPattern : public calyx::PartialLoweringPattern<FuncOp> {
+class FuncOpPartialLoweringPattern
+    : public calyx::PartialLoweringPattern<FuncOp> {
 public:
   FuncOpPartialLoweringPattern(MLIRContext *context, LogicalResult &resRef,
                                FuncMapping &_funcMap, ProgramLoweringState &pls)
@@ -600,8 +550,8 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
     auto reg = createRegister(loadOp.getLoc(), rewriter, *getComponent(),
                               loadOp.getMemRefType().getElementTypeBitWidth(),
                               getComponentState().getUniqueName("load"));
-    getComponentState().buildAssignmentsForRegisterWrite(rewriter, group, reg,
-                                     memoryInterface.readData());
+    getComponentState().buildAssignmentsForRegisterWrite(
+        rewriter, group, reg, memoryInterface.readData());
     loadOp.getResult().replaceAllUsesWith(reg.out());
     getComponentState().addBlockScheduleable(loadOp->getBlock(), group);
   }
@@ -737,7 +687,7 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
     for (auto arg : enumerate(succOperands.getForwardedOperands())) {
       auto reg = dstBlockArgRegs[arg.index()];
       getComponentState().buildAssignmentsForRegisterWrite(rewriter, groupOp,
-                                       reg, arg.value());
+                                                           reg, arg.value());
     }
     /// Register the group as a block argument group, to be executed
     /// when entering the successor block from this block (srcBlock).
@@ -758,8 +708,8 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                                     retOp.getLoc(), groupName);
   for (auto op : enumerate(retOp.getOperands())) {
     auto reg = getComponentState().getReturnReg(op.index());
-    getComponentState().buildAssignmentsForRegisterWrite( rewriter, groupOp,
-                                     reg, op.value());
+    getComponentState().buildAssignmentsForRegisterWrite(rewriter, groupOp, reg,
+                                                         op.value());
   }
   /// Schedule group for execution for when executing the return op block.
   getComponentState().addBlockScheduleable(retOp->getBlock(), groupOp);
@@ -875,7 +825,8 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 /// This pass rewrites memory accesses that have a width mismatch. Such
 /// mismatches are due to index types being assumed 32-bit wide due to the lack
 /// of a width inference pass.
-class RewriteMemoryAccesses : public calyx::PartialLoweringPattern<calyx::AssignOp> {
+class RewriteMemoryAccesses
+    : public calyx::PartialLoweringPattern<calyx::AssignOp> {
 public:
   RewriteMemoryAccesses(MLIRContext *context, LogicalResult &resRef,
                         ProgramLoweringState &pls)
@@ -1170,8 +1121,7 @@ class BuildWhileGroups : public FuncOpPartialLoweringPattern {
       auto numOperands = whileOp.getOperation()->getNumOperands();
       for (size_t i = 0; i < numOperands; ++i) {
         auto initGroupOp = getComponentState().buildWhileIterArgAssignments(
-            rewriter,
-            whileOp,
+            rewriter, whileOp,
             getComponentState().getUniqueName(whileOp.getOperation()) +
                 "_init_" + std::to_string(i),
             whileOp.getOperation()->getOpOperand(i));
@@ -1396,8 +1346,8 @@ class BuildPipelineGroups : public FuncOpPartialLoweringPattern {
     rewriter.eraseOp(combGroup);
 
     // Stitch evaluating group to register.
-    getComponentState().buildAssignmentsForRegisterWrite(rewriter, group,
-                                     pipelineRegister, value);
+    getComponentState().buildAssignmentsForRegisterWrite(
+        rewriter, group, pipelineRegister, value);
 
     // Mark the new group as the evaluating group.
     for (auto assign : group.getOps<calyx::AssignOp>())
@@ -1504,31 +1454,6 @@ private:
       if (auto groupPtr = std::get_if<calyx::GroupOp>(&group); groupPtr) {
         rewriter.create<calyx::EnableOp>(groupPtr->getLoc(),
                                          groupPtr->sym_name());
-      } else if (auto whileSchedPtr = std::get_if<WhileScheduleable>(&group);
-                 whileSchedPtr) {
-        auto &whileOp = whileSchedPtr->whileOp;
-
-        auto whileCtrlOp =
-            buildWhileCtrlOp(whileOp, whileSchedPtr->initGroups, rewriter);
-        rewriter.setInsertionPointToEnd(whileCtrlOp.getBody());
-        auto whileBodyOp =
-            rewriter.create<calyx::SeqOp>(whileOp.getOperation()->getLoc());
-        auto *whileBodyOpBlock = whileBodyOp.getBody();
-
-        /// Only schedule the 'after' block. The 'before' block is
-        /// implicitly scheduled when evaluating the while condition.
-        LogicalResult res = buildCFGControl(path, rewriter, whileBodyOpBlock,
-                                            block, whileOp.getBodyBlock());
-
-        // Insert loop-latch at the end of the while group
-        rewriter.setInsertionPointToEnd(whileBodyOpBlock);
-        calyx::GroupOp whileLatchGroup =
-            getComponentState().getWhileLatchGroup(whileOp);
-        rewriter.create<calyx::EnableOp>(whileLatchGroup.getLoc(),
-                                         whileLatchGroup.getName());
-
-        if (res.failed())
-          return res;
       } else if (auto *pipeSchedPtr = std::get_if<PipelineScheduleable>(&group);
                  pipeSchedPtr) {
         auto &whileOp = pipeSchedPtr->whileOp;
@@ -1688,7 +1613,7 @@ private:
 /// non-stateful groups) into groups referenced in the control schedule.
 class InlineCombGroups
     : public calyx::PartialLoweringPattern<calyx::GroupInterface,
-                                    OpInterfaceRewritePattern> {
+                                           OpInterfaceRewritePattern> {
 public:
   InlineCombGroups(MLIRContext *context, LogicalResult &resRef,
                    ProgramLoweringState &pls)
@@ -1962,8 +1887,8 @@ public:
 
     // Program conversion
     RewritePatternSet conversionPatterns(&getContext());
-    conversionPatterns.add<calyx::ModuleOpConversion>(&getContext(), topLevelFunction,
-                                               programOpOut);
+    conversionPatterns.add<calyx::ModuleOpConversion>(
+        &getContext(), topLevelFunction, programOpOut);
     return applyOpPatternsAndFold(getOperation(),
                                   std::move(conversionPatterns));
   }
@@ -1973,7 +1898,7 @@ public:
   /// results are skipped for Once patterns).
   template <typename TPattern, typename... PatternArgs>
   void addOncePattern(SmallVectorImpl<LoweringPattern> &patterns,
-                      PatternArgs &&... args) {
+                      PatternArgs &&...args) {
     RewritePatternSet ps(&getContext());
     ps.add<TPattern>(&getContext(), partialPatternRes, args...);
     patterns.push_back(
@@ -1982,7 +1907,7 @@ public:
 
   template <typename TPattern, typename... PatternArgs>
   void addGreedyPattern(SmallVectorImpl<LoweringPattern> &patterns,
-                        PatternArgs &&... args) {
+                        PatternArgs &&...args) {
     RewritePatternSet ps(&getContext());
     ps.add<TPattern>(&getContext(), args...);
     patterns.push_back(

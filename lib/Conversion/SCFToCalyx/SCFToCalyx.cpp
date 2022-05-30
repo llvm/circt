@@ -127,43 +127,6 @@ public:
     return {};
   }
 
-  /// Register reg as being the idx'th iter_args register for 'whileOp'.
-  void addWhileIterReg(ScfWhileOp op, calyx::RegisterOp reg,
-                       unsigned idx) override {
-    assert(whileIterRegs[op.getOperation()].count(idx) == 0 &&
-           "A register was already registered for the given while iter_arg "
-           "index");
-    assert(idx < op.getBodyArgs().size());
-    whileIterRegs[op.getOperation()][idx] = reg;
-  }
-
-  calyx::RegisterOp getWhileIterReg(ScfWhileOp op, unsigned idx) override {
-    auto iterRegs = getWhileIterRegs(op);
-    auto it = iterRegs.find(idx);
-    assert(it != iterRegs.end() &&
-           "No iter arg register set for the provided index");
-    return it->second;
-  }
-
-  const DenseMap<unsigned, calyx::RegisterOp> &
-  getWhileIterRegs(ScfWhileOp op) override {
-    return whileIterRegs[op.getOperation()];
-  }
-
-  void setWhileLatchGroup(ScfWhileOp op, calyx::GroupOp group) override {
-    Operation *operation = op.getOperation();
-    assert(whileLatchGroups.count(operation) == 0 &&
-           "A latch group was already set for this whileOp");
-    whileLatchGroups[operation] = group;
-  }
-
-  calyx::GroupOp getWhileLatchGroup(ScfWhileOp op) override {
-    auto it = whileLatchGroups.find(op.getOperation());
-    assert(it != whileLatchGroups.end() &&
-           "No while latch group was set for this whileOp");
-    return it->second;
-  }
-
 private:
   /// A reference to the parent program lowering state.
   ProgramLoweringState &programLoweringState;
@@ -171,14 +134,6 @@ private:
   /// BlockScheduleables is a list of scheduleables that should be
   /// sequentially executed when executing the associated basic block.
   DenseMap<mlir::Block *, SmallVector<Scheduleable>> blockScheduleables;
-
-  /// A while latch group is a group that should be sequentially executed when
-  /// finishing a while loop body. The execution of this group will write the
-  /// yield'ed loop body values to the iteration argument registers.
-  DenseMap<Operation *, calyx::GroupOp> whileLatchGroups;
-
-  /// A mapping from while ops to iteration argument registers.
-  DenseMap<Operation *, DenseMap<unsigned, calyx::RegisterOp>> whileIterRegs;
 };
 
 /// Handles the current state of lowering of a Calyx program. It is mainly used
@@ -1703,7 +1658,7 @@ public:
   /// results are skipped for Once patterns).
   template <typename TPattern, typename... PatternArgs>
   void addOncePattern(SmallVectorImpl<LoweringPattern> &patterns,
-                      PatternArgs &&... args) {
+                      PatternArgs &&...args) {
     RewritePatternSet ps(&getContext());
     ps.add<TPattern>(&getContext(), partialPatternRes, args...);
     patterns.push_back(
@@ -1712,7 +1667,7 @@ public:
 
   template <typename TPattern, typename... PatternArgs>
   void addGreedyPattern(SmallVectorImpl<LoweringPattern> &patterns,
-                        PatternArgs &&... args) {
+                        PatternArgs &&...args) {
     RewritePatternSet ps(&getContext());
     ps.add<TPattern>(&getContext(), args...);
     patterns.push_back(

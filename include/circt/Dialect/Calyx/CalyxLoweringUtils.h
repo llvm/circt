@@ -135,7 +135,8 @@ private:
 // Lowering state classes
 //===----------------------------------------------------------------------===//
 
-// An interface for the Calyx component lowering state.
+// An interface for the Calyx component lowering state. The `Loop` type must
+// implement the LoopInterface; it will be used for several lowering patterns.
 template <typename Loop>
 class ComponentLoweringStateInterface {
   static_assert(std::is_base_of_v<LoopInterface, Loop>);
@@ -147,21 +148,44 @@ public:
   virtual ~ComponentLoweringStateInterface() = default;
 
   /// Register reg as being the idx'th iter_args register for 'op'.
-  virtual void addWhileIterReg(Loop op, calyx::RegisterOp reg,
-                               unsigned idx) = 0;
+  virtual void addWhileIterReg(Loop op, calyx::RegisterOp reg, unsigned idx) {
+    assert(whileIterRegs[op.getOperation()].count(idx) == 0 &&
+           "A register was already registered for the given while iter_arg "
+           "index");
+    assert(idx < op.getBodyArgs().size());
+    whileIterRegs[op.getOperation()][idx] = reg;
+  }
 
   /// Return a mapping of block argument indices to block argument.
-  virtual calyx::RegisterOp getWhileIterReg(Loop op, unsigned idx) = 0;
+  virtual calyx::RegisterOp getWhileIterReg(Loop op, unsigned idx) {
+    auto iterRegs = getWhileIterRegs(op);
+    auto it = iterRegs.find(idx);
+    assert(it != iterRegs.end() &&
+           "No iter arg register set for the provided index");
+    return it->second;
+  }
 
   /// Return a mapping of block argument indices to block argument.
   virtual const DenseMap<unsigned, calyx::RegisterOp> &
-  getWhileIterRegs(Loop op) = 0;
+  getWhileIterRegs(Loop op) {
+    return whileIterRegs[op.getOperation()];
+  }
 
   /// Registers grp to be the while latch group of `op`.
-  virtual void setWhileLatchGroup(Loop op, calyx::GroupOp group) = 0;
+  virtual void setWhileLatchGroup(Loop op, calyx::GroupOp group) {
+    Operation *operation = op.getOperation();
+    assert(whileLatchGroups.count(operation) == 0 &&
+           "A latch group was already set for this whileOp");
+    whileLatchGroups[operation] = group;
+  }
 
   /// Retrieve the while latch group registered for `op`.
-  virtual calyx::GroupOp getWhileLatchGroup(Loop op) = 0;
+  calyx::GroupOp getWhileLatchGroup(Loop op) {
+    auto it = whileLatchGroups.find(op.getOperation());
+    assert(it != whileLatchGroups.end() &&
+           "No while latch group was set for this whileOp");
+    return it->second;
+  }
 
   /// Returns the calyx::ComponentOp associated with this lowering state.
   calyx::ComponentOp getComponentOp() { return component; }
@@ -371,6 +395,14 @@ private:
   /// A mapping between the source funcOp result indices and the corresponding
   /// output port indices of this componentOp.
   DenseMap<unsigned, unsigned> funcOpResultMapping;
+
+  /// A mapping from while ops to iteration argument registers.
+  DenseMap<Operation *, DenseMap<unsigned, calyx::RegisterOp>> whileIterRegs;
+
+  /// A while latch group is a group that should be sequentially executed when
+  /// finishing a while loop body. The execution of this group will write the
+  /// yield'ed loop body values to the iteration argument registers.
+  DenseMap<Operation *, calyx::GroupOp> whileLatchGroups;
 };
 
 /// An interface for conversion passes that lower Calyx programs.
