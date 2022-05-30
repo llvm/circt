@@ -207,13 +207,13 @@ public:
                                              MutableArrayRef<OpOperand> ops) {
     /// Pass iteration arguments through registers. This follows closely
     /// to what is done for branch ops.
-    auto groupName = "assign_" + uniqueSuffix;
+    std::string groupName = "assign_" + uniqueSuffix.str();
     auto groupOp = calyx::createGroup<calyx::GroupOp>(rewriter, componentOp,
                                                       op.getLoc(), groupName);
     /// Create register assignment for each iter_arg. a calyx::GroupDone signal
     /// is created for each register. These will be &'ed together in
     /// MultipleGroupDonePattern.
-    for (auto &arg : ops) {
+    for (OpOperand &arg : ops) {
       auto reg = getLoopIterReg(op, arg.getOperandNumber());
       buildAssignmentsForRegisterWrite(rewriter, groupOp, componentOp, reg,
                                        arg.get());

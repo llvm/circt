@@ -291,7 +291,7 @@ ModuleOpConversion::matchAndRewrite(mlir::ModuleOp moduleOp,
 
     // Inlining the body region also removes ^bb0 from the module body
     // region, so recreate that, before finally inserting the programOp
-    auto moduleBlock = rewriter.createBlock(&moduleOp.getBodyRegion());
+    auto* moduleBlock = rewriter.createBlock(&moduleOp.getBodyRegion());
     rewriter.setInsertionPointToStart(moduleBlock);
     rewriter.insert(programOp);
     *programOpOutput = programOp;
