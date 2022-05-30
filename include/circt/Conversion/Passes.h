@@ -14,6 +14,7 @@
 #define CIRCT_CONVERSION_PASSES_H
 
 #include "circt/Conversion/AffineToStaticLogic.h"
+#include "circt/Conversion/CalyxToFSM.h"
 #include "circt/Conversion/CalyxToHW.h"
 #include "circt/Conversion/ExportVerilog.h"
 #include "circt/Conversion/FIRRTLToHW.h"

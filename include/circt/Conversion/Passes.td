@@ -133,6 +133,34 @@ def CalyxToHW : Pass<"lower-calyx-to-hw", "mlir::ModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
+// CalyxToFSM
+//===----------------------------------------------------------------------===//
+
+def CalyxToFSM : Pass<"lower-calyx-to-fsm", "calyx::ComponentOp"> {
+  let summary = "Lower Calyx to FSM";
+  let description = [{
+    This pass lowers a Calyx control schedule to an FSM representation.
+    An `fsm.machine` operation is nested within the `control` region of the Calyx
+    component. This machine is itself in an intermediate format wherein it has
+    no I/O ports and solely contains output statements with `calyx.enable`s
+    referencing `calyx.group` and transition logic guarded by the SSA values
+    specified in the source control schedule.
+    This intermediate state facilitates transformation of the FSM, given that
+    top-level I/O has yet to be materialized (one input and output per activated
+    group) as well as guard transition logic (every transition must be guarded
+    on all groups active within the state having finished). As such, `calyx.enable`
+    operations can easily be moved between states without worrying about updating
+    transition guards while doing so.
+
+    Eventually, the FSM must be materialized (materialize I/O ports, remove
+    `calyx.enable` operations in favor of asserting output ports, guarding
+    transitions by input `done` ports) and outlined to a separate module.
+  }];
+  let constructor = "circt::createCalyxToFSMPass()";
+  let dependentDialects = ["fsm::FSMDialect", "comb::CombDialect"];
+}
+
+//===----------------------------------------------------------------------===//
 // FIRRTLToHW
 //===----------------------------------------------------------------------===//
 

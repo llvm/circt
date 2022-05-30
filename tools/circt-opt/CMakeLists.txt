@@ -12,6 +12,7 @@ target_link_libraries(circt-opt
   CIRCTAnalysisTestPasses
   CIRCTCalyx
   CIRCTCalyxToHW
+  CIRCTCalyxToFSM
   CIRCTCalyxTransforms
   CIRCTESI
   CIRCTExportVerilog
