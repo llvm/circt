@@ -26,10 +26,10 @@ using namespace ssp;
 
 LogicalResult
 DependenceAttr::verify(function_ref<InFlightDiagnostic()> emitError,
-                       IntegerAttr operandIdx, FlatSymbolRefAttr sourceOp,
+                       IntegerAttr operandIdx, FlatSymbolRefAttr sourceRef,
                        DictionaryAttr properties) {
-  if ((operandIdx && sourceOp))
-    return emitError() << "Can either be an `ssa` or an `aux` dependence.";
+  if ((operandIdx && sourceRef) || (!operandIdx && !sourceRef))
+    return emitError() << "Must either be an `ssa` or an `aux` dependence.";
   return success();
 }
 

@@ -16,12 +16,15 @@ def DependenceAttr : SSPAttribute<"Dependence"> {
   let mnemonic = "dependence";
   
   let parameters = (ins OptionalParameter<"::mlir::IntegerAttr">:$operandIdx,
-                        OptionalParameter<"::mlir::FlatSymbolRefAttr">:$sourceOp,
+                        OptionalParameter<"::mlir::FlatSymbolRefAttr">:$sourceRef,
                         "::mlir::DictionaryAttr":$properties);
   // This format is not meant to be user-facing. The `ssa` and `aux` clauses
   // are mutually exclusive.
   let assemblyFormat = [{
-    `<` (`ssa` $operandIdx^)? (`aux` $sourceOp^)? `,` $properties `>`
+    `<` (`ssa` $operandIdx^)? (`aux` $sourceRef^)? `,` $properties `>`
   }];
   let genVerifyDecl = 1;
 }
+
+def DependenceArrayAttr
+  : TypedArrayAttrBase<DependenceAttr, "dependence array attribute">;

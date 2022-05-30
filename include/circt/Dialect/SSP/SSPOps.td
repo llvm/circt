@@ -40,7 +40,8 @@ def OperatorTypeOp : SSPOp<"operator_type",
 }
 
 def OperationOp : SSPOp<"operation",
-    [Symbol, HasParent<"InstanceOp">]> {
+    [Symbol, HasParent<"InstanceOp">,
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let summary = "Operation op";
   let description = [{
     TODO
@@ -48,8 +49,9 @@ def OperationOp : SSPOp<"operation",
 
   let arguments = (ins SymbolNameAttr:$sym_name,
                        Variadic<NoneType>:$operands,
-                       ArrayAttr:$dependences);
+                       DependenceArrayAttr:$dependences);
   let results = (outs Variadic<NoneType>:$results);
 
   let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
 }

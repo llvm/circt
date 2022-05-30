@@ -95,8 +95,8 @@ void OperationOp::print(OpAsmPrinter &p) {
   llvm::interleaveComma(getDependences(), p, [&](Attribute attr) {
     DependenceAttr dep = attr.cast<DependenceAttr>();
 
-    if (auto sourceOp = dep.getSourceOp())
-      p << sourceOp;
+    if (auto sourceRef = dep.getSourceRef())
+      p << sourceRef;
     else if (auto operandIdx = dep.getOperandIdx())
       p.printOperand(getOperand(operandIdx.getValue().getZExtValue()));
 
@@ -108,7 +108,28 @@ void OperationOp::print(OpAsmPrinter &p) {
   SmallVector<StringRef> elidedAttrs = {
       SymbolTable::getSymbolAttrName(),
       OperationOp::getDependencesAttrName().getValue()};
-  p.printOptionalAttrDict(getOperation()->getAttrs(), elidedAttrs);
+  p.printOptionalAttrDict((*this)->getAttrs(), elidedAttrs);
+}
+
+LogicalResult OperationOp::verify() {
+  // TODO: better check that all SSA operands have an associated DependenceAttr.
+  if (getDependences().size() < getNumOperands())
+    return emitOpError("has malformed `dependences` attribute");
+  return success();
+}
+
+LogicalResult
+OperationOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  for (auto dep : getDependences().getAsRange<DependenceAttr>()) {
+    if (auto sourceRef = dep.getSourceRef()) {
+      Operation *sourceOp =
+          symbolTable.lookupNearestSymbolFrom(*this, sourceRef);
+      if (!sourceOp || !isa<OperationOp>(sourceOp))
+        return emitOpError("references invalid source operation: ")
+               << sourceRef;
+    }
+  }
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
