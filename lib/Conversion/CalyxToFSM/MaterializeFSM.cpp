@@ -33,43 +33,21 @@ struct MaterializeCalyxToFSMPass
     : public MaterializeCalyxToFSMBase<MaterializeCalyxToFSMPass> {
   void runOnOperation() override;
 
-  struct StateEnableInfo {
-    llvm::SmallVector<Value> outputOperands;
-    llvm::SmallVector<Value> doneGuards;
-  };
-
-  /// Returns an operand vector for the states which should be enabled for a
-  /// given state, as well as the state done signals that should be considered
-  /// for the state transition guard. We do this here to avoid
-  /// assignStateOutputOperands/assignStateTransitionGuard having to each walk
-  /// the set of output operations.
-  StateEnableInfo gatherStateEnableInfo(StateOp stateOp) {
-    StateEnableInfo info;
-    size_t portIndex = 0;
-    auto &enabledGroups = stateEnables[stateOp];
-    for (auto group : referencedGroups) {
-      if (enabledGroups.contains(group)) {
-        info.outputOperands.push_back(c1);
-        info.doneGuards.push_back(machineOp.getArgument(portIndex));
-      } else
-        info.outputOperands.push_back(c0);
-
-      ++portIndex;
-    }
-    return info;
-  }
-
   /// Assigns the 'fsm.output' operation of the provided 'state' to enabled the
   /// set of provided groups. If 'topLevelDone' is set, also asserts the
   /// top-level done signal.
-  void assignStateOutputOperands(StateOp stateOp,
-                                 llvm::SmallVector<Value> outputOperands,
+  void assignStateOutputOperands(OpBuilder &b, StateOp stateOp,
                                  bool topLevelDone = false) {
+    SmallVector<Value> outputOperands;
+    auto &enabledGroups = stateEnables[stateOp];
+    for (StringAttr group : referencedGroups)
+      outputOperands.push_back(
+          getOrCreateConstant(b, APInt(1, enabledGroups.contains(group))));
+
     assert(outputOperands.size() == machineOp.getNumArguments() - 1 &&
            "Expected exactly one value for each uniquely referenced group in "
            "this machine");
-    // outputOperands is expected to only have
-    outputOperands.push_back(topLevelDone ? c1 : c0);
+    outputOperands.push_back(getOrCreateConstant(b, APInt(1, topLevelDone)));
     auto outputOp = stateOp.output().getOps<fsm::OutputOp>();
     assert(!outputOp.empty() &&
            "Expected an fsm.output op inside the state output region");
@@ -77,9 +55,16 @@ struct MaterializeCalyxToFSMPass
   }
 
   /// Extends every `fsm.return` guard in the transitions of this state to also
-  /// include the provided set of 'doneGuards'.
+  /// include the provided set of 'doneGuards'. 'doneGuards' is passed by value
+  /// to allow the caller to provide additional done guards apart from group
+  /// enable-generated guards.
   void assignStateTransitionGuard(OpBuilder &b, StateOp stateOp,
-                                  llvm::ArrayRef<Value> doneGuards) {
+                                  SmallVector<Value> doneGuards = {}) {
+    auto &enabledGroups = stateEnables[stateOp];
+    for (auto groupIt : llvm::enumerate(referencedGroups))
+      if (enabledGroups.contains(groupIt.value()))
+        doneGuards.push_back(machineOp.getArgument(groupIt.index()));
+
     for (auto transition : stateOp.transitions().getOps<fsm::TransitionOp>()) {
       auto guardOp = transition.getGuardReturn();
       llvm::SmallVector<Value> guards;
@@ -100,6 +85,18 @@ struct MaterializeCalyxToFSMPass
     }
   }
 
+  Value getOrCreateConstant(OpBuilder &b, APInt value) {
+    auto it = constants.find(value);
+    if (it != constants.end())
+      return it->second;
+
+    OpBuilder::InsertionGuard g(b);
+    b.setInsertionPointToStart(&machineOp.getBody().front());
+    auto constantOp = b.create<hw::ConstantOp>(machineOp.getLoc(), value);
+    constants[value] = constantOp;
+    return constantOp;
+  }
+
   /// Maintain a set of all groups referenced within this fsm.machine.
   GroupSet referencedGroups;
 
@@ -109,8 +106,8 @@ struct MaterializeCalyxToFSMPass
   /// A handle to the machine under transformation.
   MachineOp machineOp;
 
-  /// Commonly used constants.
-  Value c1, c0;
+  /// Constant cache.
+  DenseMap<APInt, Value> constants;
 };
 
 } // end anonymous namespace
@@ -142,11 +139,6 @@ void MaterializeCalyxToFSMPass::runOnOperation() {
     return;
   }
 
-  // Generate commonly used constants.
-  b.setInsertionPointToStart(&machineOp.getBody().front());
-  c1 = b.create<hw::ConstantOp>(machineOp.getLoc(), b.getI1Type(), 1);
-  c0 = b.create<hw::ConstantOp>(machineOp.getLoc(), b.getI1Type(), 0);
-
   // Walk the states of the machine and gather the relation between states and
   // the groups which they enable as well as the set of all enabled states.
   for (auto stateOp : machineOp.getOps<fsm::StateOp>()) {
@@ -177,20 +169,18 @@ void MaterializeCalyxToFSMPass::runOnOperation() {
   // assume that the ordering of states in referencedGroups is fixed and
   // deterministic, since it is used as an analogue for port I/O ordering.
   for (auto stateOp : machineOp.getOps<fsm::StateOp>()) {
-    StateEnableInfo info = gatherStateEnableInfo(stateOp);
-    assignStateOutputOperands(stateOp, info.outputOperands,
+    assignStateOutputOperands(b, stateOp,
                               /*topLevelDone=*/false);
-    assignStateTransitionGuard(b, stateOp, info.doneGuards);
+    assignStateTransitionGuard(b, stateOp);
   }
 
   // Assign top-level go guard in the transition state.
   size_t topLevelGoIdx = nGroups;
   assignStateTransitionGuard(b, entryState->getState(),
-                             machineOp.getArgument(topLevelGoIdx));
+                             {machineOp.getArgument(topLevelGoIdx)});
 
   // Assign top-level done in the exit state.
-  assignStateOutputOperands(exitState->getState(),
-                            SmallVector<Value>(nGroups, c0),
+  assignStateOutputOperands(b, exitState->getState(),
                             /*topLevelDone=*/true);
 }
 
