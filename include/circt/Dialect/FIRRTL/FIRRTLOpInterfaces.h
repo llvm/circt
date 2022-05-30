@@ -61,6 +61,13 @@ struct PortInfo {
 /// Verification hook for verifying module like operations.
 LogicalResult verifyModuleLikeOpInterface(FModuleLike module);
 
+class InnerSymbolTable {
+
+public:
+  /// Return the name of the attribute used for inner symbol names.
+  static StringRef getInnerSymbolAttrName() { return "inner_sym"; }
+};
+
 } // namespace firrtl
 } // namespace circt
 

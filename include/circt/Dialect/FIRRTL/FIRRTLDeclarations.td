@@ -13,8 +13,13 @@
 def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface,
                          ["getAsmResultNames"]>;
 
-def InstanceOp : FIRRTLOp<"instance", [HasParent<"firrtl::FModuleOp, firrtl::WhenOp">,
-    DeclareOpInterfaceMethods<SymbolUserOpInterface>, HasCustomSSAName, InnerSymbol,
+class ReferableDeclOp<string mnemonic, list<Trait> traits = []> :
+  FIRRTLOp<mnemonic, traits # [HasCustomSSAName, InnerSymbol]> {
+
+}
+
+def InstanceOp : ReferableDeclOp<"instance", [HasParent<"firrtl::FModuleOp, firrtl::WhenOp">,
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>, 
     DeclareOpInterfaceMethods<HWInstanceLike, ["instanceName"]>]> {
   let summary = "Instantiate an instance of a module";
   let description = [{
@@ -93,7 +98,7 @@ def InstanceOp : FIRRTLOp<"instance", [HasParent<"firrtl::FModuleOp, firrtl::Whe
   }];
 }
 
-def MemOp : FIRRTLOp<"mem", [HasCustomSSAName]> {
+def MemOp : ReferableDeclOp<"mem"> {
   let summary = "Define a new mem";
   let arguments =
     (ins Confined<I32Attr, [IntMinValue<0>]>:$readLatency,
@@ -178,8 +183,8 @@ def MemOp : FIRRTLOp<"mem", [HasCustomSSAName]> {
   }];
 }
 
-def NodeOp : FIRRTLOp<"node",
-      [SameOperandsAndResultType, InferTypeOpInterface, HasCustomSSAName, InnerSymbol]> {
+def NodeOp : ReferableDeclOp<"node",
+      [SameOperandsAndResultType, InferTypeOpInterface]> {
   let summary = "No-op to name a value";
   let description = [{
     A node is simply a named intermediate value in a circuit. The node must
@@ -216,7 +221,7 @@ def NodeOp : FIRRTLOp<"node",
   let hasCanonicalizer = true;
 }
 
-def RegOp : FIRRTLOp<"reg", [HasCustomSSAName, InnerSymbol]> {
+def RegOp : ReferableDeclOp<"reg"> {
   let summary = "Define a new register";
   let description = [{
     Declare a new register:
@@ -249,7 +254,7 @@ def RegOp : FIRRTLOp<"reg", [HasCustomSSAName, InnerSymbol]> {
   let hasCanonicalizeMethod = true;
 }
 
-def RegResetOp : FIRRTLOp<"regreset", [HasCustomSSAName, InnerSymbol]> {
+def RegResetOp : ReferableDeclOp<"regreset"> {
   let summary = "Define a new register with a reset";
   let description = [{
     Declare a new register:
@@ -287,7 +292,7 @@ def RegResetOp : FIRRTLOp<"regreset", [HasCustomSSAName, InnerSymbol]> {
   let hasVerifier = 1;
 }
 
-def WireOp : FIRRTLOp<"wire", [HasCustomSSAName]> {
+def WireOp : ReferableDeclOp<"wire"> {
   let summary = "Define a new wire";
   let description = [{
     Declare a new wire:
