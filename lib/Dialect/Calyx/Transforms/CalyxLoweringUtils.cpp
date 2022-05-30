@@ -22,6 +22,55 @@
 namespace circt {
 namespace calyx {
 
+WalkResult
+getCiderSourceLocationMetadata(calyx::ComponentOp component,
+                               SmallVectorImpl<Attribute> &sourceLocations) {
+  Builder builder(component->getContext());
+  return component.getControlOp().walk([&](Operation *op) {
+    if (!calyx::isControlLeafNode(op))
+      return WalkResult::advance();
+
+    std::string sourceLocation;
+    llvm::raw_string_ostream os(sourceLocation);
+    op->getLoc()->print(os);
+    int64_t position = sourceLocations.size();
+    sourceLocations.push_back(
+        StringAttr::get(op->getContext(), sourceLocation));
+
+    op->setAttr("pos", builder.getI64IntegerAttr(position));
+    return WalkResult::advance();
+  });
+}
+
+bool matchConstantOp(Operation *op, APInt &value) {
+  return mlir::detail::constant_int_op_binder(&value).match(op);
+}
+
+bool singleLoadFromMemory(Value memoryReference) {
+  return llvm::count_if(memoryReference.getUses(), [](OpOperand &user) {
+           return isa<mlir::memref::LoadOp>(user.getOwner());
+         }) <= 1;
+}
+
+bool noStoresToMemory(Value memoryReference) {
+  return llvm::none_of(memoryReference.getUses(), [](OpOperand &user) {
+    return isa<mlir::memref::StoreOp>(user.getOwner());
+  });
+}
+
+Value getComponentOutput(calyx::ComponentOp compOp, unsigned outPortIdx) {
+  size_t index = compOp.getInputPortInfo().size() + outPortIdx;
+  assert(index < compOp.getNumArguments() &&
+         "Exceeded number of arguments in the Component");
+  return compOp.getArgument(index);
+}
+
+Type convIndexType(PatternRewriter &rewriter, Type type) {
+  if (type.isIndex())
+    return rewriter.getI32Type();
+  return type;
+}
+
 //===----------------------------------------------------------------------===//
 // MemoryInterface
 //===----------------------------------------------------------------------===//
@@ -73,8 +122,6 @@ ProgramLoweringStateInterface::ProgramLoweringStateInterface(
     calyx::ProgramOp program, StringRef topLevelFunction)
     : topLevelFunction(topLevelFunction), program(program) {}
 
-/// Returns a meaningful name for a block within the program scope (removes
-/// the ^ prefix from block names).
 std::string ProgramLoweringStateInterface::blockName(Block *b) {
   auto blockName = irName(*b);
   blockName.erase(std::remove(blockName.begin(), blockName.end(), '^'),
@@ -82,64 +129,13 @@ std::string ProgramLoweringStateInterface::blockName(Block *b) {
   return blockName;
 }
 
-/// Returns the current program.
 calyx::ProgramOp ProgramLoweringStateInterface::getProgram() {
   assert(program.getOperation() != nullptr);
   return program;
 }
 
-/// Returns the name of the top-level function in the source program.
 StringRef ProgramLoweringStateInterface::getTopLevelFunction() const {
   return topLevelFunction;
-}
-
-WalkResult
-getCiderSourceLocationMetadata(calyx::ComponentOp component,
-                               SmallVectorImpl<Attribute> &sourceLocations) {
-  Builder builder(component->getContext());
-  return component.getControlOp().walk([&](Operation *op) {
-    if (!calyx::isControlLeafNode(op))
-      return WalkResult::advance();
-
-    std::string sourceLocation;
-    llvm::raw_string_ostream os(sourceLocation);
-    op->getLoc()->print(os);
-    int64_t position = sourceLocations.size();
-    sourceLocations.push_back(
-        StringAttr::get(op->getContext(), sourceLocation));
-
-    op->setAttr("pos", builder.getI64IntegerAttr(position));
-    return WalkResult::advance();
-  });
-}
-
-bool matchConstantOp(Operation *op, APInt &value) {
-  return mlir::detail::constant_int_op_binder(&value).match(op);
-}
-
-bool singleLoadFromMemory(Value memoryReference) {
-  return llvm::count_if(memoryReference.getUses(), [](OpOperand &user) {
-           return isa<mlir::memref::LoadOp>(user.getOwner());
-         }) <= 1;
-}
-
-bool noStoresToMemory(Value memoryReference) {
-  return llvm::none_of(memoryReference.getUses(), [](OpOperand &user) {
-    return isa<mlir::memref::StoreOp>(user.getOwner());
-  });
-}
-
-Value getComponentOutput(calyx::ComponentOp compOp, unsigned outPortIdx) {
-  size_t index = compOp.getInputPortInfo().size() + outPortIdx;
-  assert(index < compOp.getNumArguments() &&
-         "Exceeded number of arguments in the Component");
-  return compOp.getArgument(index);
-}
-
-Type convIndexType(PatternRewriter &rewriter, Type type) {
-  if (type.isIndex())
-    return rewriter.getI32Type();
-  return type;
 }
 
 //===----------------------------------------------------------------------===//
