@@ -69,7 +69,7 @@ public:
   /// DenseSet `nlas`.
   void getInstanceNLAs(InstanceOp inst, DenseSet<NonLocalAnchor> &nlas) {
     auto instSym = inst.inner_symAttr();
-    // If there is no inner sym on the InstanceOp, then it doesnot participate
+    // If there is no inner sym on the InstanceOp, then it does not participate
     // in any NLA.
     if (!instSym)
       return;

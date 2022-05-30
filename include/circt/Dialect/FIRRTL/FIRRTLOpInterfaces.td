@@ -302,6 +302,10 @@ def InnerSymbol : OpInterface<"InnerSymbolOpInterface"> {
     at least, of a symbol table and may be much further nested.
     Lastly, ports need to define inner_sym, something not allowed
     by normal symbols.
+
+    Any operation implementing an InnerSymbol may have the inner symbol be
+    optional and all methods should be robuse to the attribute not being
+    defined.
   }];
 
   let cppNamespace = "::circt::firrtl";
