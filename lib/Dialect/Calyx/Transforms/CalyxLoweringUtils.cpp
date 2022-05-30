@@ -22,6 +22,10 @@
 namespace circt {
 namespace calyx {
 
+//===----------------------------------------------------------------------===//
+// MemoryInterface
+//===----------------------------------------------------------------------===//
+
 MemoryInterface::MemoryInterface() {}
 MemoryInterface::MemoryInterface(const MemoryPortsImpl &ports) : impl(ports) {}
 MemoryInterface::MemoryInterface(calyx::MemoryOp memOp) : impl(memOp) {}
@@ -59,6 +63,34 @@ ValueRange MemoryInterface::addrPorts() {
     return memOp->addrPorts();
   }
   return std::get<MemoryPortsImpl>(impl).addrPorts;
+}
+
+//===----------------------------------------------------------------------===//
+// ProgramLoweringStateInterface
+//===----------------------------------------------------------------------===//
+
+ProgramLoweringStateInterface::ProgramLoweringStateInterface(
+    calyx::ProgramOp program, StringRef topLevelFunction)
+    : topLevelFunction(topLevelFunction), program(program) {}
+
+/// Returns a meaningful name for a block within the program scope (removes
+/// the ^ prefix from block names).
+std::string ProgramLoweringStateInterface::blockName(Block *b) {
+  auto blockName = irName(*b);
+  blockName.erase(std::remove(blockName.begin(), blockName.end(), '^'),
+                  blockName.end());
+  return blockName;
+}
+
+/// Returns the current program.
+calyx::ProgramOp ProgramLoweringStateInterface::getProgram() {
+  assert(program.getOperation() != nullptr);
+  return program;
+}
+
+/// Returns the name of the top-level function in the source program.
+StringRef ProgramLoweringStateInterface::getTopLevelFunction() const {
+  return topLevelFunction;
 }
 
 WalkResult
@@ -108,6 +140,46 @@ Type convIndexType(PatternRewriter &rewriter, Type type) {
   if (type.isIndex())
     return rewriter.getI32Type();
   return type;
+}
+
+//===----------------------------------------------------------------------===//
+// ModuleOpConversion
+//===----------------------------------------------------------------------===//
+
+ModuleOpConversion::ModuleOpConversion(MLIRContext *context,
+                                       StringRef topLevelFunction,
+                                       calyx::ProgramOp *programOpOutput)
+    : OpRewritePattern<mlir::ModuleOp>(context),
+      programOpOutput(programOpOutput), topLevelFunction(topLevelFunction) {
+  assert(programOpOutput->getOperation() == nullptr &&
+         "this function will set programOpOutput post module conversion");
+}
+
+LogicalResult
+ModuleOpConversion::matchAndRewrite(mlir::ModuleOp moduleOp,
+                                    PatternRewriter &rewriter) const {
+  if (!moduleOp.getOps<calyx::ProgramOp>().empty())
+    return failure();
+
+  rewriter.updateRootInPlace(moduleOp, [&] {
+    // Create ProgramOp
+    rewriter.setInsertionPointAfter(moduleOp);
+    auto programOp = rewriter.create<calyx::ProgramOp>(
+        moduleOp.getLoc(), StringAttr::get(getContext(), topLevelFunction));
+
+    // Inline the module body region
+    rewriter.inlineRegionBefore(moduleOp.getBodyRegion(),
+                                programOp.getBodyRegion(),
+                                programOp.getBodyRegion().end());
+
+    // Inlining the body region also removes ^bb0 from the module body
+    // region, so recreate that, before finally inserting the programOp
+    auto moduleBlock = rewriter.createBlock(&moduleOp.getBodyRegion());
+    rewriter.setInsertionPointToStart(moduleBlock);
+    rewriter.insert(programOp);
+    *programOpOutput = programOp;
+  });
+  return success();
 }
 
 } // namespace calyx
