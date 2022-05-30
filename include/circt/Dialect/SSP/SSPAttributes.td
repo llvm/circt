@@ -11,17 +11,21 @@
 //===----------------------------------------------------------------------===//
 
 def DependenceAttr : SSPAttribute<"Dependence"> {
-  let summary = "TODO";
-  let description = [{ TODO }];
-  let mnemonic = "dependence";
-  
+  let description = [{
+    An attribute to uniformly model def-use and auxiliary
+    [dependences](https://circt.llvm.org/docs/Scheduling/#components) as well as
+    to attach [properties](https://circt.llvm.org/docs/Scheduling/#properties)
+    to them. This attribute is an implementation detail of the `ssp.OperationOp`
+    and as such is supposed to be hidden by the custom parser/printer.
+  }];
+
   let parameters = (ins OptionalParameter<"::mlir::IntegerAttr">:$operandIdx,
                         OptionalParameter<"::mlir::FlatSymbolRefAttr">:$sourceRef,
                         "::mlir::DictionaryAttr":$properties);
-  // This format is not meant to be user-facing. The `ssa` and `aux` clauses
-  // are mutually exclusive.
+
+  let mnemonic = "dependence";
   let assemblyFormat = [{
-    `<` (`ssa` $operandIdx^)? (`aux` $sourceRef^)? `,` $properties `>`
+    `<` (`defuse` $operandIdx^)? (`auxiliary` $sourceRef^)? `,` $properties `>`
   }];
   let genVerifyDecl = 1;
 }
