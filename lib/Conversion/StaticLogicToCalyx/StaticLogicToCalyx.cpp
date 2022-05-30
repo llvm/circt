@@ -80,8 +80,7 @@ struct LoopScheduleable {
 struct PipelineScheduleable : LoopScheduleable {};
 
 /// A variant of types representing scheduleable operations.
-using Scheduleable =
-    std::variant<calyx::GroupOp, PipelineScheduleable>;
+using Scheduleable = std::variant<calyx::GroupOp, PipelineScheduleable>;
 
 //===----------------------------------------------------------------------===//
 // Lowering state classes

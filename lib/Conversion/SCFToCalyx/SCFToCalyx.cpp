@@ -168,7 +168,8 @@ private:
 /// and then perform their own walking of the IR. FuncOpPartialLoweringPatterns
 /// have direct access to the ComponentLoweringState for the corresponding
 /// component of the matched FuncOp.
-class FuncOpPartialLoweringPattern : public calyx::PartialLoweringPattern<FuncOp> {
+class FuncOpPartialLoweringPattern
+    : public calyx::PartialLoweringPattern<FuncOp> {
 public:
   FuncOpPartialLoweringPattern(MLIRContext *context, LogicalResult &resRef,
                                FuncMapping &_funcMap, ProgramLoweringState &pls)
@@ -732,7 +733,8 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 /// This pass rewrites memory accesses that have a width mismatch. Such
 /// mismatches are due to index types being assumed 32-bit wide due to the lack
 /// of a width inference pass.
-class RewriteMemoryAccesses : public calyx::PartialLoweringPattern<calyx::AssignOp> {
+class RewriteMemoryAccesses
+    : public calyx::PartialLoweringPattern<calyx::AssignOp> {
 public:
   RewriteMemoryAccesses(MLIRContext *context, LogicalResult &resRef,
                         ProgramLoweringState &pls)
@@ -1357,7 +1359,7 @@ private:
 /// non-stateful groups) into groups referenced in the control schedule.
 class InlineCombGroups
     : public calyx::PartialLoweringPattern<calyx::GroupInterface,
-                                    OpInterfaceRewritePattern> {
+                                           OpInterfaceRewritePattern> {
 public:
   InlineCombGroups(MLIRContext *context, LogicalResult &resRef,
                    ProgramLoweringState &pls)
@@ -1647,8 +1649,8 @@ public:
 
     // Program conversion
     RewritePatternSet conversionPatterns(&getContext());
-    conversionPatterns.add<calyx::ModuleOpConversion>(&getContext(), topLevelFunction,
-                                               programOpOut);
+    conversionPatterns.add<calyx::ModuleOpConversion>(
+        &getContext(), topLevelFunction, programOpOut);
     return applyOpPatternsAndFold(getOperation(),
                                   std::move(conversionPatterns));
   }
