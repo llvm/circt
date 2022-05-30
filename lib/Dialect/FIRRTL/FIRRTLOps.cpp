@@ -2823,6 +2823,11 @@ FIRRTLType NotPrimOp::inferUnaryReturnType(FIRRTLType input,
   return UIntType::get(input.getContext(), inputi.getWidthOrSentinel());
 }
 
+FIRRTLType OptimizationBarrierOp::inferUnaryReturnType(FIRRTLType input,
+                                                       Optional<Location> loc) {
+  return input;
+}
+
 FIRRTLType impl::inferReductionResult(FIRRTLType input,
                                       Optional<Location> loc) {
   return UIntType::get(input.getContext(), 1);
@@ -3819,6 +3824,9 @@ void NegPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 void NotPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void OptimizationBarrierOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 void OrPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {

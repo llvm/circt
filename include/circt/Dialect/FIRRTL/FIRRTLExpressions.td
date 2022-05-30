@@ -331,6 +331,7 @@ def DivPrimOp : IntBinaryPrimOp<"div", IntType> {
     optimized FIRRTL dialects that are separately converted to Verilog.
   }];
 }
+
 def RemPrimOp : IntBinaryPrimOp<"rem", IntType>;
 let inferType = "impl::inferBitwiseResult" in {
   def AndPrimOp : IntBinaryPrimOp<"and", UIntType, [Commutative]>;
@@ -355,6 +356,7 @@ let inferType = "impl::inferComparisonResult" in {
 def CatPrimOp : IntBinaryPrimOp<"cat", UIntType> {
   let hasCanonicalizeMethod = true;
 }
+
 def DShlPrimOp  : BinaryPrimOp<"dshl", IntType, UIntType, IntType>  {
   let description = [{
     A dynamic shift left operation. The width of `$result` is expanded to
@@ -362,12 +364,14 @@ def DShlPrimOp  : BinaryPrimOp<"dshl", IntType, UIntType, IntType>  {
   }];
   let hasCanonicalizeMethod = true;
 }
+
 def DShlwPrimOp : BinaryPrimOp<"dshlw", IntType, UIntType, IntType> {
   let description = [{
     A dynamic shift left operation same as 'dshl' but with different width rule.
     The width of `$result` is equal to `$lhs`.
   }];
 }
+
 def DShrPrimOp  : BinaryPrimOp<"dshr", IntType, UIntType, IntType> {
   let hasCanonicalizeMethod = true;
 }
@@ -437,6 +441,15 @@ let inferType = "impl::inferReductionResult" in {
       such, it returns 0 for zero-bit-wide operands.
     }];
   }
+}
+
+def OptimizationBarrierOp : UnaryPrimOp<"optbar", FIRRTLType, FIRRTLType> {
+  let description = [{
+    This operation serves to block optimizations through it.  It may not have
+    annotations.  It has no name.  It produces no output, though may cause 
+    changes in the output to preserve the dataflow (e.g. introduce an anonymous
+    wire).
+  }];
 }
 
 //===----------------------------------------------------------------------===//

@@ -126,7 +126,6 @@ firrtl.circuit "Test" {
     // CHECK-NEXT: }
   }
 
-
   // CHECK-LABEL: ReadMem
   firrtl.module private @ReadMem() {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
@@ -141,6 +140,44 @@ firrtl.circuit "Test" {
     firrtl.connect %3, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     %4 = firrtl.subfield %0(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<8>>) -> !firrtl.clock
   }
+}
+
+// -----
+
+firrtl.circuit "OptBarrier" {
+// optimization barriers don't prop constants
+// CHECK-LABEL: @OptBarrier
+firrtl.module @OptBarrier(in %a: !firrtl.uint<6>, out %b: !firrtl.uint<7>) {
+  // CHECK: %c0_ui6 = firrtl.constant 0
+  // CHECK-NEXT: %0 = firrtl.optbar %c0_ui6
+  // CHECK-NEXT: %1 = firrtl.add %a, %0 
+  // CHECK-NEXT: firrtl.connect %b, %1
+  %c0 = firrtl.constant 0 : !firrtl.uint<6>
+  %c = firrtl.optbar %c0 : (!firrtl.uint<6>) -> !firrtl.uint<6>
+  %1 = firrtl.add %a, %c : (!firrtl.uint<6>, !firrtl.uint<6>) -> !firrtl.uint<7>
+  firrtl.connect %b, %1 : !firrtl.uint<7>, !firrtl.uint<7>
+}
+}
+
+// -----
+
+firrtl.circuit "OptBarrierB" {
+// optimization barriers don't prop constants
+// CHECK-LABEL: @OptBarrierA
+firrtl.module private @OptBarrierA(in %a: !firrtl.uint<6>, out %b: !firrtl.uint<6>) {
+  %0 = firrtl.optbar %a : (!firrtl.uint<6>) -> !firrtl.uint<6>
+  firrtl.connect %b, %0 : !firrtl.uint<6>, !firrtl.uint<6>
+}
+// CHECK-LABEL: @OptBarrierB
+firrtl.module @OptBarrierB(out %b: !firrtl.uint<7>) {
+  %opta_a, %opta_b = firrtl.instance opta @OptBarrierA(in a: !firrtl.uint<6>, out b: !firrtl.uint<6>)
+  %c0 = firrtl.constant 0 : !firrtl.uint<6>
+  firrtl.connect %opta_a, %c0 : !firrtl.uint<6>, !firrtl.uint<6>
+  %add = firrtl.add %opta_b, %c0 : (!firrtl.uint<6>, !firrtl.uint<6>) -> !firrtl.uint<7>
+  firrtl.connect %b, %add : !firrtl.uint<7>, !firrtl.uint<7>
+  // CHECK: %0 = firrtl.add %opta_b, %c0_ui6_0
+  // CHECK-NEXT: firrtl.connect %b, %0 : !firrtl.uint<7>, !firrtl.uint<7>
+}
 }
 
 // -----
@@ -573,3 +610,4 @@ firrtl.circuit "dntOutput" {
     firrtl.connect %b, %const : !firrtl.uint<3>, !firrtl.uint<3>
   }
 }
+

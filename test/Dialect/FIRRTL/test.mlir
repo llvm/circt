@@ -109,6 +109,17 @@ firrtl.module @ClockCast(in %clock: !firrtl.clock) {
   %1 = builtin.unrealized_conversion_cast %0 : i1 to !firrtl.clock
 }
 
+// optimization barriers
+// CHECK-LABEL: @OptBarrier
+firrtl.module @OptBarrier(in %a: !firrtl.uint<6>, out %b: !firrtl.uint<7>) {
+  // CHECK: %c0_ui6 = firrtl.constant 0
+  // CHECK-NEXT: %0 = firrtl.optbar %c0_ui6
+  // CHECK-NEXT: %1 = firrtl.add %a, %0 
+  %c0 = firrtl.constant 0 : !firrtl.uint<6>
+  %c = firrtl.optbar %c0 : (!firrtl.uint<6>) -> !firrtl.uint<6>
+  %1 = firrtl.add %a, %c : (!firrtl.uint<6>, !firrtl.uint<6>) -> !firrtl.uint<7>
+  firrtl.connect %b, %1 : !firrtl.uint<7>, !firrtl.uint<7>
+}
 
 // CHECK-LABEL: @TestDshRL
 firrtl.module @TestDshRL(in %in1 : !firrtl.uint<2>, in %in2: !firrtl.uint<3>) {

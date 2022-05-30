@@ -306,6 +306,10 @@ OpFoldResult InvalidValueOp::fold(ArrayRef<Attribute> operands) {
   return InvalidValueAttr::get(getType());
 }
 
+OpFoldResult OptimizationBarrierOp::fold(ArrayRef<Attribute> operands) {
+  return {};
+}
+
 //===----------------------------------------------------------------------===//
 // Binary Operators
 //===----------------------------------------------------------------------===//
