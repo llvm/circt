@@ -13,6 +13,7 @@
 #ifndef SSP_TD
 #define SSP_TD
 
+include "mlir/IR/AttrTypeBase.td"
 include "mlir/IR/OpBase.td"
 
 def SSPDialect : Dialect {
@@ -24,9 +25,24 @@ def SSPDialect : Dialect {
     intended as an import/export format for rapid prototyping, benchmarking,
     and testing of problem definitions and algorithm implmentations.
   }];
+
   let cppNamespace = "::circt::ssp";
+  let emitAccessorPrefix = kEmitAccessorPrefix_Prefixed;
+
+  let useDefaultAttributePrinterParser = 1;
+  let extraClassDeclaration = [{
+    /// Register all SSP attributes.
+    void registerAttributes();
+  }];
 }
 
+class SSPAttribute<string name, list<Trait> traits = []> :
+  AttrDef<SSPDialect, name, traits>;
+
+class SSPOp<string mnemonic, list<Trait> traits = []> :
+  Op<SSPDialect, mnemonic, traits>;
+
+include "circt/Dialect/SSP/SSPAttributes.td"
 include "circt/Dialect/SSP/SSPOps.td"
 
 #endif // SSP_TD

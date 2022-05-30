@@ -5,6 +5,7 @@
 ##===----------------------------------------------------------------------===//
 
 set(SSP_Srcs
+  SSPAttributes.cpp
   SSPDialect.cpp
   SSPOps.cpp
   )
@@ -15,6 +16,7 @@ set(SSP_LinkLibs
 
 set(SSP_Deps
   ${SSP_LinkLibs}
+  CIRCTSSPAttributesIncGen
   )
 
 add_circt_dialect_library(CIRCTSSP

@@ -21,6 +21,7 @@ void SSPDialect::initialize() {
 #define GET_OP_LIST
 #include "circt/Dialect/SSP/SSP.cpp.inc"
       >();
+  registerAttributes();
 }
 
 #include "circt/Dialect/SSP/SSPDialect.cpp.inc"

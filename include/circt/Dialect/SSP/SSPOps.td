@@ -13,17 +13,43 @@
 include "mlir/IR/RegionKindInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
 
-def InstanceOp : Op<SSPDialect, "instance",
-    [IsolatedFromAbove, SymbolTable,
-    NoRegionArguments, NoTerminator, SingleBlock,
-    DeclareOpInterfaceMethods<RegionKindInterface>]> {
-  
-  let summary = "Foo";
+def InstanceOp : SSPOp<"instance",
+    [IsolatedFromAbove, SymbolTable, NoRegionArguments]
+    # GraphRegionNoTerminator.traits> {
+
+  let summary = "Instance op";
   let description = [{
     TODO
   }];
 
-  let arguments = (ins StrAttr:$problemName);
+  let arguments = (ins StrAttr:$instanceName, StrAttr:$problemName);
   let regions = (region SizedRegion<1>: $body);
-  let assemblyFormat = "$problemName $body attr-dict";
+  let assemblyFormat = "$instanceName `of` $problemName $body attr-dict";
+}
+
+def OperatorTypeOp : SSPOp<"operator_type",
+    [Symbol, HasParent<"InstanceOp">]> {
+
+  let summary = "Operator type op";
+  let description = [{
+    TODO
+  }];
+
+  let arguments = (ins SymbolNameAttr:$sym_name);
+  let assemblyFormat = "$sym_name attr-dict";
+}
+
+def OperationOp : SSPOp<"operation",
+    [Symbol, HasParent<"InstanceOp">]> {
+  let summary = "Operation op";
+  let description = [{
+    TODO
+  }];
+
+  let arguments = (ins SymbolNameAttr:$sym_name,
+                       Variadic<NoneType>:$operands,
+                       ArrayAttr:$dependences);
+  let results = (outs Variadic<NoneType>:$results);
+
+  let hasCustomAssemblyFormat = 1;
 }
