@@ -14,6 +14,7 @@
 #ifndef CIRCT_DIALECT_CALYX_CALYXLOWERINGUTILS_H
 #define CIRCT_DIALECT_CALYX_CALYXLOWERINGUTILS_H
 
+#include "circt/Dialect/Calyx/CalyxHelpers.h"
 #include "circt/Dialect/Calyx/CalyxOps.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/AsmState.h"
@@ -89,16 +90,15 @@ private:
   std::variant<calyx::MemoryOp, MemoryPortsImpl> impl;
 };
 
-// Provide a common interface for loop operations that need to be lowered to
-// Calyx.
+// A common interface for loop operations that need to be lowered to Calyx.
 class LoopInterface {
 public:
-  virtual ~LoopInterface() = default;
+  virtual ~LoopInterface();
 
-  // Returns the arguments to this while operation.
+  // Returns the arguments to this loop operation.
   virtual Block::BlockArgListType getBodyArgs() = 0;
 
-  // Returns body of this while operation.
+  // Returns body of this loop operation.
   virtual Block *getBodyBlock() = 0;
 
   // Returns the Block in which the condition exists.
@@ -107,11 +107,11 @@ public:
   // Returns the condition as a Value.
   virtual Value getConditionValue() = 0;
 
-  // Returns the number of iterations the while loop will conduct if known.
+  // Returns the number of iterations the loop will conduct if known.
   virtual Optional<uint64_t> getBound() = 0;
 };
 
-// Provides an interface for the control flow `while` operation across different
+// Provides an interface for the control flow `loop` operation across different
 // dialects.
 template <typename T>
 class WhileOpInterface : LoopInterface {
@@ -135,30 +135,27 @@ private:
 // Lowering state classes
 //===----------------------------------------------------------------------===//
 
-// An interface for the Calyx component lowering state. The `Loop` type must
-// implement the LoopInterface; it will be used for several lowering patterns.
+// Handles state during the lowering of a loop. It will be used for
+// several lowering patterns.
 template <typename Loop>
-class ComponentLoweringStateInterface {
+class LoopLoweringStateInterface {
   static_assert(std::is_base_of_v<LoopInterface, Loop>);
 
 public:
-  ComponentLoweringStateInterface(calyx::ComponentOp component)
-      : component(component) {}
-
-  virtual ~ComponentLoweringStateInterface() = default;
+  ~LoopLoweringStateInterface() = default;
 
   /// Register reg as being the idx'th iter_args register for 'op'.
-  virtual void addWhileIterReg(Loop op, calyx::RegisterOp reg, unsigned idx) {
-    assert(whileIterRegs[op.getOperation()].count(idx) == 0 &&
-           "A register was already registered for the given while iter_arg "
+  void addLoopIterReg(Loop op, calyx::RegisterOp reg, unsigned idx) {
+    assert(loopIterRegs[op.getOperation()].count(idx) == 0 &&
+           "A register was already registered for the given loop iter_arg "
            "index");
     assert(idx < op.getBodyArgs().size());
-    whileIterRegs[op.getOperation()][idx] = reg;
+    loopIterRegs[op.getOperation()][idx] = reg;
   }
 
   /// Return a mapping of block argument indices to block argument.
-  virtual calyx::RegisterOp getWhileIterReg(Loop op, unsigned idx) {
-    auto iterRegs = getWhileIterRegs(op);
+  calyx::RegisterOp getLoopIterReg(Loop op, unsigned idx) {
+    auto iterRegs = getLoopIterRegs(op);
     auto it = iterRegs.find(idx);
     assert(it != iterRegs.end() &&
            "No iter arg register set for the provided index");
@@ -166,92 +163,138 @@ public:
   }
 
   /// Return a mapping of block argument indices to block argument.
-  virtual const DenseMap<unsigned, calyx::RegisterOp> &
-  getWhileIterRegs(Loop op) {
-    return whileIterRegs[op.getOperation()];
+  const DenseMap<unsigned, calyx::RegisterOp> &getLoopIterRegs(Loop op) {
+    return loopIterRegs[op.getOperation()];
   }
 
-  /// Registers grp to be the while latch group of `op`.
-  virtual void setWhileLatchGroup(Loop op, calyx::GroupOp group) {
+  /// Registers grp to be the loop latch group of `op`.
+  void setLoopLatchGroup(Loop op, calyx::GroupOp group) {
     Operation *operation = op.getOperation();
-    assert(whileLatchGroups.count(operation) == 0 &&
-           "A latch group was already set for this whileOp");
-    whileLatchGroups[operation] = group;
+    assert(loopLatchGroups.count(operation) == 0 &&
+           "A latch group was already set for this loopOp");
+    loopLatchGroups[operation] = group;
   }
 
-  /// Retrieve the while latch group registered for `op`.
-  calyx::GroupOp getWhileLatchGroup(Loop op) {
-    auto it = whileLatchGroups.find(op.getOperation());
-    assert(it != whileLatchGroups.end() &&
-           "No while latch group was set for this whileOp");
+  /// Retrieve the loop latch group registered for `op`.
+  calyx::GroupOp getLoopLatchGroup(Loop op) {
+    auto it = loopLatchGroups.find(op.getOperation());
+    assert(it != loopLatchGroups.end() &&
+           "No loop latch group was set for this loopOp");
     return it->second;
   }
 
+  /// Creates register assignment operations within the provided groupOp.
+  /// The component operation will house the constants.
+  void buildAssignmentsForRegisterWrite(PatternRewriter &rewriter,
+                                        calyx::GroupOp groupOp,
+                                        calyx::ComponentOp componentOp,
+                                        calyx::RegisterOp &reg,
+                                        Value inputValue) {
+    mlir::IRRewriter::InsertionGuard guard(rewriter);
+    auto loc = inputValue.getLoc();
+    rewriter.setInsertionPointToEnd(groupOp.getBody());
+    rewriter.create<calyx::AssignOp>(loc, reg.in(), inputValue);
+    rewriter.create<calyx::AssignOp>(
+        loc, reg.write_en(), createConstant(loc, rewriter, componentOp, 1, 1));
+    rewriter.create<calyx::GroupDoneOp>(loc, reg.done());
+  }
+
+  /// Creates a new group that assigns the 'ops' values to the iter arg
+  /// registers of the loop operation.
+  calyx::GroupOp buildLoopIterArgAssignments(PatternRewriter &rewriter, Loop op,
+                                             calyx::ComponentOp componentOp,
+                                             Twine uniqueSuffix,
+                                             MutableArrayRef<OpOperand> ops) {
+    /// Pass iteration arguments through registers. This follows closely
+    /// to what is done for branch ops.
+    auto groupName = "assign_" + uniqueSuffix;
+    auto groupOp = calyx::createGroup<calyx::GroupOp>(rewriter, componentOp,
+                                                      op.getLoc(), groupName);
+    /// Create register assignment for each iter_arg. a calyx::GroupDone signal
+    /// is created for each register. These will be &'ed together in
+    /// MultipleGroupDonePattern.
+    for (auto &arg : ops) {
+      auto reg = getLoopIterReg(op, arg.getOperandNumber());
+      buildAssignmentsForRegisterWrite(rewriter, groupOp, componentOp, reg,
+                                       arg.get());
+    }
+    return groupOp;
+  }
+
+private:
+  /// A mapping from loop ops to iteration argument registers.
+  DenseMap<Operation *, DenseMap<unsigned, calyx::RegisterOp>> loopIterRegs;
+
+  /// A loop latch group is a group that should be sequentially executed when
+  /// finishing a loop body. The execution of this group will write the
+  /// yield'ed loop body values to the iteration argument registers.
+  DenseMap<Operation *, calyx::GroupOp> loopLatchGroups;
+};
+
+// Handles state during the lowering of a Calyx component. This provides common
+// tools for converting to the Calyx ComponentOp.
+class ComponentLoweringStateInterface {
+public:
+  ComponentLoweringStateInterface(calyx::ComponentOp component);
+
+  ~ComponentLoweringStateInterface();
+
   /// Returns the calyx::ComponentOp associated with this lowering state.
-  calyx::ComponentOp getComponentOp() { return component; }
+  calyx::ComponentOp getComponentOp();
 
   /// Register reg as being the idx'th argument register for block. This is
   /// necessary for the `BuildBBReg` pass.
-  void addBlockArgReg(Block *block, calyx::RegisterOp reg, unsigned idx) {
-    assert(blockArgRegs[block].count(idx) == 0);
-    assert(idx < block->getArguments().size());
-    blockArgRegs[block][idx] = reg;
-  }
+  void addBlockArgReg(Block *block, calyx::RegisterOp reg, unsigned idx);
 
   /// Return a mapping of block argument indices to block argument registers.
   /// This is necessary for the `BuildBBReg` pass.
-  const DenseMap<unsigned, calyx::RegisterOp> &getBlockArgRegs(Block *block) {
-    return blockArgRegs[block];
-  }
+  const DenseMap<unsigned, calyx::RegisterOp> &getBlockArgRegs(Block *block);
 
   /// Register 'grp' as a group which performs block argument
   /// register transfer when transitioning from basic block from to to.
-  void addBlockArgGroup(Block *from, Block *to, calyx::GroupOp grp) {
-    blockArgGroups[from][to].push_back(grp);
-  }
+  void addBlockArgGroup(Block *from, Block *to, calyx::GroupOp grp);
 
   /// Returns a list of groups to be evaluated to perform the block argument
   /// register assignments when transitioning from basic block 'from' to 'to'.
-  ArrayRef<calyx::GroupOp> getBlockArgGroups(Block *from, Block *to) {
-    return blockArgGroups[from][to];
-  }
+  ArrayRef<calyx::GroupOp> getBlockArgGroups(Block *from, Block *to);
 
   /// Returns a unique name within compOp with the provided prefix.
-  std::string getUniqueName(StringRef prefix) {
-    std::string prefixStr = prefix.str();
-    unsigned idx = prefixIdMap[prefixStr];
-    ++prefixIdMap[prefixStr];
-    return (prefix + "_" + std::to_string(idx)).str();
-  }
+  std::string getUniqueName(StringRef prefix);
 
   /// Returns a unique name associated with a specific operation.
-  StringRef getUniqueName(Operation *op) {
-    auto it = opNames.find(op);
-    assert(it != opNames.end() && "A unique name should have been set for op");
-    return it->second;
-  }
+  StringRef getUniqueName(Operation *op);
 
   /// Registers a unique name for a given operation using a provided prefix.
-  void setUniqueName(Operation *op, StringRef prefix) {
-    assert(opNames.find(op) == opNames.end() &&
-           "A unique name was already set for op");
-    opNames[op] = getUniqueName(prefix);
-  }
-
-  template <typename TLibraryOp>
-  TLibraryOp getNewLibraryOpInstance(PatternRewriter &rewriter, Location loc,
-                                     TypeRange resTypes) {
-    mlir::IRRewriter::InsertionGuard guard(rewriter);
-    Block *body = component.getBody();
-    rewriter.setInsertionPoint(body, body->begin());
-    auto name = TLibraryOp::getOperationName().split(".").second;
-    return rewriter.create<TLibraryOp>(loc, getUniqueName(name), resTypes);
-  }
+  void setUniqueName(Operation *op, StringRef prefix);
 
   /// Register value v as being evaluated when scheduling group.
-  void registerEvaluatingGroup(Value v, calyx::GroupInterface group) {
-    valueGroupAssigns[v] = group;
-  }
+  void registerEvaluatingGroup(Value v, calyx::GroupInterface group);
+
+  /// Register reg as being the idx'th return value register.
+  void addReturnReg(calyx::RegisterOp reg, unsigned idx);
+
+  /// Returns the idx'th return value register.
+  calyx::RegisterOp getReturnReg(unsigned idx);
+
+  /// Registers a memory interface as being associated with a memory identified
+  /// by 'memref'.
+  void registerMemoryInterface(Value memref,
+                               const calyx::MemoryInterface &memoryInterface);
+
+  /// Returns the memory interface registered for the given memref.
+  calyx::MemoryInterface getMemoryInterface(Value memref);
+
+  /// If v is an input to any memory registered within this component, returns
+  /// the memory. If not, returns null.
+  Optional<calyx::MemoryInterface> isInputPortOfMemory(Value v);
+
+  /// Assign a mapping between the source funcOp result indices and the
+  /// corresponding output port indices of this componentOp.
+  void setFuncOpResultMapping(const DenseMap<unsigned, unsigned> &mapping);
+
+  /// Get the output port index of this component for which the funcReturnIdx of
+  /// the original function maps to.
+  unsigned getFuncOpResultMapping(unsigned funcReturnIdx);
 
   /// Return the group which evaluates the value v. Optionally, caller may
   /// specify the expected type of the group.
@@ -268,98 +311,14 @@ public:
     }
   }
 
-  /// Register reg as being the idx'th return value register.
-  void addReturnReg(calyx::RegisterOp reg, unsigned idx) {
-    assert(returnRegs.count(idx) == 0 &&
-           "A register was already registered for this index");
-    returnRegs[idx] = reg;
-  }
-
-  /// Returns the idx'th return value register.
-  calyx::RegisterOp getReturnReg(unsigned idx) {
-    assert(returnRegs.count(idx) && "No register registered for index!");
-    return returnRegs[idx];
-  }
-
-  /// Registers a memory interface as being associated with a memory identified
-  /// by 'memref'.
-  void registerMemoryInterface(Value memref,
-                               const calyx::MemoryInterface &memoryInterface) {
-    assert(memref.getType().isa<MemRefType>());
-    assert(memories.find(memref) == memories.end() &&
-           "Memory already registered for memref");
-    memories[memref] = memoryInterface;
-  }
-
-  /// Returns the memory interface registered for the given memref.
-  calyx::MemoryInterface getMemoryInterface(Value memref) {
-    assert(memref.getType().isa<MemRefType>());
-    auto it = memories.find(memref);
-    assert(it != memories.end() && "No memory registered for memref");
-    return it->second;
-  }
-
-  /// If v is an input to any memory registered within this component, returns
-  /// the memory. If not, returns null.
-  Optional<calyx::MemoryInterface> isInputPortOfMemory(Value v) {
-    for (auto &memIf : memories) {
-      auto &mem = memIf.getSecond();
-      if (mem.writeEn() == v || mem.writeData() == v ||
-          llvm::any_of(mem.addrPorts(), [=](Value port) { return port == v; }))
-        return {mem};
-    }
-    return {};
-  }
-
-  /// Creates register assignment operations within the provided groupOp.
-  void buildAssignmentsForRegisterWrite(PatternRewriter &rewriter,
-                                        calyx::GroupOp groupOp,
-                                        calyx::RegisterOp &reg,
-                                        Value inputValue) {
+  template <typename TLibraryOp>
+  TLibraryOp getNewLibraryOpInstance(PatternRewriter &rewriter, Location loc,
+                                     TypeRange resTypes) {
     mlir::IRRewriter::InsertionGuard guard(rewriter);
-    auto loc = inputValue.getLoc();
-    rewriter.setInsertionPointToEnd(groupOp.getBody());
-    rewriter.create<calyx::AssignOp>(loc, reg.in(), inputValue);
-    rewriter.create<calyx::AssignOp>(
-        loc, reg.write_en(),
-        createConstant(loc, rewriter, getComponentOp(), 1, 1));
-    rewriter.create<calyx::GroupDoneOp>(loc, reg.done());
-  }
-
-  /// Creates a new group that assigns the 'ops' values to the iter arg
-  /// registers of the 'whileOp'.
-  calyx::GroupOp buildWhileIterArgAssignments(PatternRewriter &rewriter,
-                                              Loop op, Twine uniqueSuffix,
-                                              MutableArrayRef<OpOperand> ops) {
-    /// Pass iteration arguments through registers. This follows closely
-    /// to what is done for branch ops.
-    auto groupName = "assign_" + uniqueSuffix;
-    auto groupOp = calyx::createGroup<calyx::GroupOp>(
-        rewriter, getComponentOp(), op.getLoc(), groupName);
-    /// Create register assignment for each iter_arg. a calyx::GroupDone signal
-    /// is created for each register. These will be &'ed together in
-    /// MultipleGroupDonePattern.
-    for (auto &arg : ops) {
-      auto reg = getWhileIterReg(op, arg.getOperandNumber());
-      buildAssignmentsForRegisterWrite(rewriter, groupOp, reg, arg.get());
-    }
-    return groupOp;
-  }
-
-  /// Assign a mapping between the source funcOp result indices and the
-  /// corresponding output port indices of this componentOp.
-  void setFuncOpResultMapping(const DenseMap<unsigned, unsigned> &mapping) {
-    funcOpResultMapping = mapping;
-  }
-
-  /// Get the output port index of this component for which the funcReturnIdx of
-  /// the original function maps to.
-  unsigned getFuncOpResultMapping(unsigned funcReturnIdx) {
-    auto it = funcOpResultMapping.find(funcReturnIdx);
-    assert(it != funcOpResultMapping.end() &&
-           "No component return port index recorded for the requested function "
-           "return index");
-    return it->second;
+    Block *body = component.getBody();
+    rewriter.setInsertionPoint(body, body->begin());
+    auto name = TLibraryOp::getOperationName().split(".").second;
+    return rewriter.create<TLibraryOp>(loc, getUniqueName(name), resTypes);
   }
 
 private:
@@ -395,17 +354,10 @@ private:
   /// A mapping between the source funcOp result indices and the corresponding
   /// output port indices of this componentOp.
   DenseMap<unsigned, unsigned> funcOpResultMapping;
-
-  /// A mapping from while ops to iteration argument registers.
-  DenseMap<Operation *, DenseMap<unsigned, calyx::RegisterOp>> whileIterRegs;
-
-  /// A while latch group is a group that should be sequentially executed when
-  /// finishing a while loop body. The execution of this group will write the
-  /// yield'ed loop body values to the iteration argument registers.
-  DenseMap<Operation *, calyx::GroupOp> whileLatchGroups;
 };
 
-/// An interface for conversion passes that lower Calyx programs.
+/// An interface for conversion passes that lower Calyx programs. This handles
+/// state during the lowering of a Calyx program.
 class ProgramLoweringStateInterface {
 public:
   explicit ProgramLoweringStateInterface(calyx::ProgramOp program,

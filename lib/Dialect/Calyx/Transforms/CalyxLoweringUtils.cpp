@@ -123,7 +123,7 @@ ProgramLoweringStateInterface::ProgramLoweringStateInterface(
     : topLevelFunction(topLevelFunction), program(program) {}
 
 std::string ProgramLoweringStateInterface::blockName(Block *b) {
-  auto blockName = irName(*b);
+  std::string blockName = irName(*b);
   blockName.erase(std::remove(blockName.begin(), blockName.end(), '^'),
                   blockName.end());
   return blockName;
@@ -136,6 +136,127 @@ calyx::ProgramOp ProgramLoweringStateInterface::getProgram() {
 
 StringRef ProgramLoweringStateInterface::getTopLevelFunction() const {
   return topLevelFunction;
+}
+
+//===----------------------------------------------------------------------===//
+// LoopInterface
+//===----------------------------------------------------------------------===//
+
+LoopInterface::~LoopInterface() = default;
+
+//===----------------------------------------------------------------------===//
+// ComponentLoweringStateInterface
+//===----------------------------------------------------------------------===//
+
+ComponentLoweringStateInterface::ComponentLoweringStateInterface(
+    calyx::ComponentOp component)
+    : component(component) {}
+
+ComponentLoweringStateInterface::~ComponentLoweringStateInterface() = default;
+
+calyx::ComponentOp ComponentLoweringStateInterface::getComponentOp() {
+  return component;
+}
+
+void ComponentLoweringStateInterface::addBlockArgReg(Block *block,
+                                                     calyx::RegisterOp reg,
+                                                     unsigned idx) {
+  assert(blockArgRegs[block].count(idx) == 0);
+  assert(idx < block->getArguments().size());
+  blockArgRegs[block][idx] = reg;
+}
+
+const DenseMap<unsigned, calyx::RegisterOp> &
+ComponentLoweringStateInterface::getBlockArgRegs(Block *block) {
+  return blockArgRegs[block];
+}
+
+void ComponentLoweringStateInterface::addBlockArgGroup(Block *from, Block *to,
+                                                       calyx::GroupOp grp) {
+  blockArgGroups[from][to].push_back(grp);
+}
+
+ArrayRef<calyx::GroupOp>
+ComponentLoweringStateInterface::getBlockArgGroups(Block *from, Block *to) {
+  return blockArgGroups[from][to];
+}
+
+std::string ComponentLoweringStateInterface::getUniqueName(StringRef prefix) {
+  std::string prefixStr = prefix.str();
+  unsigned idx = prefixIdMap[prefixStr];
+  ++prefixIdMap[prefixStr];
+  return (prefix + "_" + std::to_string(idx)).str();
+}
+
+StringRef ComponentLoweringStateInterface::getUniqueName(Operation *op) {
+  auto it = opNames.find(op);
+  assert(it != opNames.end() && "A unique name should have been set for op");
+  return it->second;
+}
+
+void ComponentLoweringStateInterface::setUniqueName(Operation *op,
+                                                    StringRef prefix) {
+  assert(opNames.find(op) == opNames.end() &&
+         "A unique name was already set for op");
+  opNames[op] = getUniqueName(prefix);
+}
+
+void ComponentLoweringStateInterface::registerEvaluatingGroup(
+    Value v, calyx::GroupInterface group) {
+  valueGroupAssigns[v] = group;
+}
+
+void ComponentLoweringStateInterface::addReturnReg(calyx::RegisterOp reg,
+                                                   unsigned idx) {
+  assert(returnRegs.count(idx) == 0 &&
+         "A register was already registered for this index");
+  returnRegs[idx] = reg;
+}
+
+calyx::RegisterOp ComponentLoweringStateInterface::getReturnReg(unsigned idx) {
+  assert(returnRegs.count(idx) && "No register registered for index!");
+  return returnRegs[idx];
+}
+
+void ComponentLoweringStateInterface::registerMemoryInterface(
+    Value memref, const calyx::MemoryInterface &memoryInterface) {
+  assert(memref.getType().isa<MemRefType>());
+  assert(memories.find(memref) == memories.end() &&
+         "Memory already registered for memref");
+  memories[memref] = memoryInterface;
+}
+
+calyx::MemoryInterface
+ComponentLoweringStateInterface::getMemoryInterface(Value memref) {
+  assert(memref.getType().isa<MemRefType>());
+  auto it = memories.find(memref);
+  assert(it != memories.end() && "No memory registered for memref");
+  return it->second;
+}
+
+Optional<calyx::MemoryInterface>
+ComponentLoweringStateInterface::isInputPortOfMemory(Value v) {
+  for (auto &memIf : memories) {
+    auto &mem = memIf.getSecond();
+    if (mem.writeEn() == v || mem.writeData() == v ||
+        llvm::any_of(mem.addrPorts(), [=](Value port) { return port == v; }))
+      return {mem};
+  }
+  return {};
+}
+
+void ComponentLoweringStateInterface::setFuncOpResultMapping(
+    const DenseMap<unsigned, unsigned> &mapping) {
+  funcOpResultMapping = mapping;
+}
+
+unsigned ComponentLoweringStateInterface::getFuncOpResultMapping(
+    unsigned funcReturnIdx) {
+  auto it = funcOpResultMapping.find(funcReturnIdx);
+  assert(it != funcOpResultMapping.end() &&
+         "No component return port index recorded for the requested function "
+         "return index");
+  return it->second;
 }
 
 //===----------------------------------------------------------------------===//

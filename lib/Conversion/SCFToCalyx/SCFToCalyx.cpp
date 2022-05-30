@@ -91,11 +91,12 @@ class ProgramLoweringState;
 /// used as a key/value store for recording information during partial lowering,
 /// which is required at later lowering passes.
 class ComponentLoweringState
-    : public calyx::ComponentLoweringStateInterface<ScfWhileOp> {
+    : public calyx::ComponentLoweringStateInterface,
+      public calyx::LoopLoweringStateInterface<ScfWhileOp> {
 public:
   ComponentLoweringState(ProgramLoweringState &state,
                          calyx::ComponentOp component)
-      : calyx::ComponentLoweringStateInterface<ScfWhileOp>(component),
+      : calyx::ComponentLoweringStateInterface(component),
         programLoweringState(state) {}
 
   /// Returns the program state associated with this component.
@@ -453,7 +454,8 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                               loadOp.getMemRefType().getElementTypeBitWidth(),
                               getComponentState().getUniqueName("load"));
     getComponentState().buildAssignmentsForRegisterWrite(
-        rewriter, group, reg, memoryInterface.readData());
+        rewriter, group, getComponentState().getComponentOp(), reg,
+        memoryInterface.readData());
     loadOp.getResult().replaceAllUsesWith(reg.out());
     getComponentState().addBlockScheduleable(loadOp->getBlock(), group);
   }
@@ -558,11 +560,11 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   assert(whileOp);
   ScfWhileOp whileOpInterface(whileOp);
 
-  auto assignGroup = getComponentState().buildWhileIterArgAssignments(
-      rewriter, whileOpInterface,
+  auto assignGroup = getComponentState().buildLoopIterArgAssignments(
+      rewriter, whileOpInterface, getComponentState().getComponentOp(),
       getComponentState().getUniqueName(whileOp) + "_latch",
       yieldOp->getOpOperands());
-  getComponentState().setWhileLatchGroup(whileOpInterface, assignGroup);
+  getComponentState().setLoopLatchGroup(whileOpInterface, assignGroup);
   return success();
 }
 
@@ -588,8 +590,9 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
     // Create register assignment for each block argument
     for (auto arg : enumerate(succOperands.getForwardedOperands())) {
       auto reg = dstBlockArgRegs[arg.index()];
-      getComponentState().buildAssignmentsForRegisterWrite(rewriter, groupOp,
-                                                           reg, arg.value());
+      getComponentState().buildAssignmentsForRegisterWrite(
+          rewriter, groupOp, getComponentState().getComponentOp(), reg,
+          arg.value());
     }
     /// Register the group as a block argument group, to be executed
     /// when entering the successor block from this block (srcBlock).
@@ -610,8 +613,9 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                                     retOp.getLoc(), groupName);
   for (auto op : enumerate(retOp.getOperands())) {
     auto reg = getComponentState().getReturnReg(op.index());
-    getComponentState().buildAssignmentsForRegisterWrite(rewriter, groupOp, reg,
-                                                         op.value());
+    getComponentState().buildAssignmentsForRegisterWrite(
+        rewriter, groupOp, getComponentState().getComponentOp(), reg,
+        op.value());
   }
   /// Schedule group for execution for when executing the return op block.
   getComponentState().addBlockScheduleable(retOp->getBlock(), groupOp);
@@ -1088,7 +1092,7 @@ class BuildWhileGroups : public FuncOpPartialLoweringPattern {
         auto reg =
             createRegister(arg.value().getLoc(), rewriter, *getComponent(),
                            arg.value().getType().getIntOrFloatBitWidth(), name);
-        getComponentState().addWhileIterReg(whileOp, reg, arg.index());
+        getComponentState().addLoopIterReg(whileOp, reg, arg.index());
         arg.value().replaceAllUsesWith(reg.out());
 
         /// Also replace uses in the "before" region of the while loop
@@ -1101,8 +1105,8 @@ class BuildWhileGroups : public FuncOpPartialLoweringPattern {
       SmallVector<calyx::GroupOp> initGroups;
       auto numOperands = whileOp.getOperation()->getNumOperands();
       for (size_t i = 0; i < numOperands; ++i) {
-        auto initGroupOp = getComponentState().buildWhileIterArgAssignments(
-            rewriter, whileOp,
+        auto initGroupOp = getComponentState().buildLoopIterArgAssignments(
+            rewriter, whileOp, getComponentState().getComponentOp(),
             getComponentState().getUniqueName(whileOp.getOperation()) +
                 "_init_" + std::to_string(i),
             whileOp.getOperation()->getOpOperand(i));
@@ -1235,7 +1239,7 @@ private:
         // Insert loop-latch at the end of the while group
         rewriter.setInsertionPointToEnd(whileBodyOpBlock);
         calyx::GroupOp whileLatchGroup =
-            getComponentState().getWhileLatchGroup(whileOp);
+            getComponentState().getLoopLatchGroup(whileOp);
         rewriter.create<calyx::EnableOp>(whileLatchGroup.getLoc(),
                                          whileLatchGroup.getName());
 
@@ -1452,7 +1456,7 @@ class LateSSAReplacement : public FuncOpPartialLoweringPattern {
       /// BuildOpGroups/BuildControl, the whileOp would get dead-code
       /// eliminated.
       ScfWhileOp whileOp(op);
-      for (auto res : getComponentState().getWhileIterRegs(whileOp))
+      for (auto res : getComponentState().getLoopIterRegs(whileOp))
         whileOp.getOperation()->getResults()[res.first].replaceAllUsesWith(
             res.second.out());
     });
