@@ -99,7 +99,7 @@ module {
 // CHECK:       calyx.group @bb0_0  {
 // CHECK-DAG:    calyx.assign %std_divu_pipe_0.left = %in0 : i32
 // CHECK-DAG:    calyx.assign %std_divu_pipe_0.right = %in1 : i32
-// CHECK-DAG:    calyx.assign %divui_0_reg.in = %std_divu_pipe_0.out : i32
+// CHECK-DAG:    calyx.assign %divui_0_reg.in = %std_divu_pipe_0.out_quotient : i32
 // CHECK-DAG:    calyx.assign %divui_0_reg.write_en = %std_divu_pipe_0.done : i1
 // CHECK-DAG:    calyx.assign %std_divu_pipe_0.go = %true : i1
 // CHECK-DAG:    calyx.group_done %divui_0_reg.done : i1
@@ -116,7 +116,7 @@ module {
 // CHECK:       calyx.group @bb0_0  {
 // CHECK-DAG:    calyx.assign %std_remu_pipe_0.left = %in0 : i32
 // CHECK-DAG:    calyx.assign %std_remu_pipe_0.right = %in1 : i32
-// CHECK-DAG:    calyx.assign %remui_0_reg.in = %std_remu_pipe_0.out : i32
+// CHECK-DAG:    calyx.assign %remui_0_reg.in = %std_remu_pipe_0.out_remainder : i32
 // CHECK-DAG:    calyx.assign %remui_0_reg.write_en = %std_remu_pipe_0.done : i1
 // CHECK-DAG:    calyx.assign %std_remu_pipe_0.go = %true : i1
 // CHECK-DAG:    calyx.group_done %remui_0_reg.done : i1
@@ -133,7 +133,7 @@ module {
 // CHECK:       calyx.group @bb0_0  {
 // CHECK-DAG:    calyx.assign %std_divs_pipe_0.left = %in0 : i32
 // CHECK-DAG:    calyx.assign %std_divs_pipe_0.right = %in1 : i32
-// CHECK-DAG:    calyx.assign %divsi_0_reg.in = %std_divs_pipe_0.out : i32
+// CHECK-DAG:    calyx.assign %divsi_0_reg.in = %std_divs_pipe_0.out_quotient : i32
 // CHECK-DAG:    calyx.assign %divsi_0_reg.write_en = %std_divs_pipe_0.done : i1
 // CHECK-DAG:    calyx.assign %std_divs_pipe_0.go = %true : i1
 // CHECK-DAG:    calyx.group_done %divsi_0_reg.done : i1
@@ -150,7 +150,7 @@ module {
 // CHECK:       calyx.group @bb0_0  {
 // CHECK-DAG:    calyx.assign %std_rems_pipe_0.left = %in0 : i32
 // CHECK-DAG:    calyx.assign %std_rems_pipe_0.right = %in1 : i32
-// CHECK-DAG:    calyx.assign %remsi_0_reg.in = %std_rems_pipe_0.out : i32
+// CHECK-DAG:    calyx.assign %remsi_0_reg.in = %std_rems_pipe_0.out_remainder : i32
 // CHECK-DAG:    calyx.assign %remsi_0_reg.write_en = %std_rems_pipe_0.done : i1
 // CHECK-DAG:    calyx.assign %std_rems_pipe_0.go = %true : i1
 // CHECK-DAG:    calyx.group_done %remsi_0_reg.done : i1

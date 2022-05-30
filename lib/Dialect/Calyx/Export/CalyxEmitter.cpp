@@ -74,20 +74,11 @@ static bool isValidCalyxAttribute(StringRef identifier) {
 static Optional<StringRef> unsupportedOpInfo(Operation *op) {
   return llvm::TypeSwitch<Operation *, Optional<StringRef>>(op)
       .Case<ExtSILibOp>([](auto) -> Optional<StringRef> {
-        static std::string_view info =
+        static constexpr std::string_view info =
             "calyx.std_extsi is currently not available in the native Rust "
             "compiler (see github.com/cucapra/calyx/issues/1009)";
         return {info};
       })
-      .Case<DivUPipeLibOp, DivSPipeLibOp, RemUPipeLibOp, RemSPipeLibOp>(
-          [](auto) -> Optional<StringRef> {
-            static std::string_view info =
-                "The Calyx CIRCT implementation implements distinct operations "
-                "for divu/divs/remu/rems operations, which is incompatible "
-                "with the native Rust compiler (see "
-                "https://github.com/llvm/circt/pull/3238)";
-            return {info};
-          })
       .Default([](auto) { return Optional<StringRef>(); });
 }
 
@@ -123,14 +114,17 @@ private:
               AddLibOp, SubLibOp, GtLibOp, LtLibOp, EqLibOp, NeqLibOp, GeLibOp,
               LeLibOp, LshLibOp, RshLibOp, SliceLibOp, PadLibOp, WireLibOp>(
             [&](auto op) -> FailureOr<StringRef> {
-              static std::string_view sCore = "core";
+              static constexpr std::string_view sCore = "core";
               return {sCore};
             })
         .Case<SgtLibOp, SltLibOp, SeqLibOp, SneqLibOp, SgeLibOp, SleLibOp,
-              SrshLibOp, MultPipeLibOp>([&](auto op) -> FailureOr<StringRef> {
-          static std::string_view sBinaryOperators = "binary_operators";
-          return {sBinaryOperators};
-        })
+              SrshLibOp, MultPipeLibOp, RemUPipeLibOp, RemSPipeLibOp,
+              DivUPipeLibOp, DivSPipeLibOp>(
+            [&](auto op) -> FailureOr<StringRef> {
+              static constexpr std::string_view sBinaryOperators =
+                  "binary_operators";
+              return {sBinaryOperators};
+            })
         /*.Case<>([&](auto op) { library = "math"; })*/
         .Default([&](auto op) {
           auto diag = op->emitOpError() << "not supported for emission";
@@ -252,7 +246,9 @@ struct Emitter {
   //   $f.in0, $f.in1, $f.out : calyx.std_foo "f" : i32, i32, i1
   // emits:
   //   f = std_foo(1);
-  void emitLibraryPrimTypedByFirstOutputPort(Operation *op);
+  void
+  emitLibraryPrimTypedByFirstOutputPort(Operation *op,
+                                        Optional<StringRef> calyxLibName = {});
 
 private:
   /// Used to track which imports are required for this program.
@@ -545,8 +541,12 @@ void Emitter::emitComponent(ComponentOp op) {
                 SubLibOp, ShruLibOp, RshLibOp, SrshLibOp, LshLibOp, AndLibOp,
                 NotLibOp, OrLibOp, XorLibOp, WireLibOp>(
               [&](auto op) { emitLibraryPrimTypedByFirstInputPort(op); })
-          .Case<MultPipeLibOp, DivUPipeLibOp, DivSPipeLibOp>(
+          .Case<MultPipeLibOp>(
               [&](auto op) { emitLibraryPrimTypedByFirstOutputPort(op); })
+          .Case<RemUPipeLibOp, RemSPipeLibOp, DivUPipeLibOp, DivSPipeLibOp>(
+              [&](auto op) {
+                emitLibraryPrimTypedByFirstOutputPort(op, {"std_div_pipe"});
+              })
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside component");
           });
@@ -646,14 +646,17 @@ void Emitter::emitLibraryPrimTypedByFirstInputPort(Operation *op) {
            << RParen() << semicolonEndL();
 }
 
-void Emitter::emitLibraryPrimTypedByFirstOutputPort(Operation *op) {
+void Emitter::emitLibraryPrimTypedByFirstOutputPort(
+    Operation *op, Optional<StringRef> calyxLibName) {
   auto cell = cast<CellInterface>(op);
   unsigned bitWidth =
       cell.getOutputPorts()[0].getType().getIntOrFloatBitWidth();
   StringRef opName = op->getName().getStringRef();
   indent() << getAttributes(op) << cell.instanceName() << space() << equals()
-           << space() << removeCalyxPrefix(opName) << LParen() << bitWidth
-           << RParen() << semicolonEndL();
+           << space()
+           << (calyxLibName.hasValue() ? *calyxLibName
+                                       : removeCalyxPrefix(opName))
+           << LParen() << bitWidth << RParen() << semicolonEndL();
 }
 
 void Emitter::emitAssignment(AssignOp op) {

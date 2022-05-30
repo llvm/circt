@@ -1720,9 +1720,9 @@ LogicalResult WhileOp::canonicalize(WhileOp whileOp,
 // Calyx library ops
 //===----------------------------------------------------------------------===//
 
-#define ImplBinPipeOpCellInterface(OpType)                                     \
+#define ImplBinPipeOpCellInterface(OpType, outName)                            \
   SmallVector<StringRef> OpType::portNames() {                                 \
-    return {"clk", "reset", "go", "left", "right", "out", "done"};             \
+    return {"clk", "reset", "go", "left", "right", outName, "done"};           \
   }                                                                            \
                                                                                \
   SmallVector<Direction> OpType::portDirections() {                            \
@@ -1752,11 +1752,11 @@ LogicalResult WhileOp::canonicalize(WhileOp whileOp,
     };                                                                         \
   }
 
-ImplBinPipeOpCellInterface(MultPipeLibOp);
-ImplBinPipeOpCellInterface(DivUPipeLibOp);
-ImplBinPipeOpCellInterface(DivSPipeLibOp);
-ImplBinPipeOpCellInterface(RemUPipeLibOp);
-ImplBinPipeOpCellInterface(RemSPipeLibOp);
+ImplBinPipeOpCellInterface(MultPipeLibOp, "out");
+ImplBinPipeOpCellInterface(DivUPipeLibOp, "out_quotient");
+ImplBinPipeOpCellInterface(DivSPipeLibOp, "out_quotient");
+ImplBinPipeOpCellInterface(RemUPipeLibOp, "out_remainder");
+ImplBinPipeOpCellInterface(RemSPipeLibOp, "out_remainder");
 
 LogicalResult PadLibOp::verify() {
   unsigned inBits = getResult(0).getType().getIntOrFloatBitWidth();
