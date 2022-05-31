@@ -1639,16 +1639,11 @@ struct WireToNode : public mlir::RewritePattern {
       : RewritePattern(WireOp::getOperationName(), 0, context) {}
   LogicalResult matchAndRewrite(Operation *op,
                                 PatternRewriter &rewriter) const override {
-    //    llvm::errs() << "WireToNode\n";
-    //    op->dump();
     auto wire = cast<WireOp>(op);
-    //    wire.dump();
     auto strictcon = getSingleConnectUserOf(wire);
     if (!strictcon)
       return failure();
-    //    strictcon.dump();
     for (auto *user : wire->getUsers()) {
-      //        user->dump();
       if (user == strictcon)
         continue;
       if (user->isBeforeInBlock(strictcon))
