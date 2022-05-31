@@ -286,6 +286,56 @@ bool AnnotationSet::removeDontTouch(Operation *op) {
   return changed;
 }
 
+// firrtl.transforms.DontRemoveAnnotation
+bool AnnotationSet::hasDontRemove() const {
+  return hasAnnotation(dontRemoveAnnoClass);
+}
+
+bool AnnotationSet::setDontRemove(bool dontRemove) {
+  if (dontRemove)
+    return addDontRemove();
+  return removeDontRemove();
+}
+
+bool AnnotationSet::addDontRemove() {
+  if (hasDontRemove())
+    return false;
+  addAnnotations(DictionaryAttr::get(
+      getContext(), {{StringAttr::get(getContext(), "class"),
+                      StringAttr::get(getContext(), dontRemoveAnnoClass)}}));
+  return true;
+}
+
+bool AnnotationSet::removeDontRemove() {
+  return removeAnnotation(dontRemoveAnnoClass);
+}
+
+bool AnnotationSet::hasDontRemove(Operation *op) {
+  return AnnotationSet(op).hasDontRemove();
+}
+
+bool AnnotationSet::setDontRemove(Operation *op, bool dontRemove) {
+  if (dontRemove)
+    return addDontRemove(op);
+  return removeDontRemove(op);
+}
+
+bool AnnotationSet::addDontRemove(Operation *op) {
+  AnnotationSet annos(op);
+  auto changed = annos.addDontRemove();
+  if (changed)
+    annos.applyToOperation(op);
+  return changed;
+}
+
+bool AnnotationSet::removeDontRemove(Operation *op) {
+  AnnotationSet annos(op);
+  auto changed = annos.removeDontRemove();
+  if (changed)
+    annos.applyToOperation(op);
+  return changed;
+}
+
 /// Add more annotations to this AttributeSet.
 void AnnotationSet::addAnnotations(ArrayRef<Annotation> newAnnotations) {
   if (newAnnotations.empty())

@@ -260,6 +260,16 @@ public:
   static bool addDontTouch(Operation *op);
   static bool removeDontTouch(Operation *op);
 
+  /// firrtl.transforms.DontRemoveAnnotation
+  bool hasDontRemove() const;
+  bool setDontRemove(bool dontTouch);
+  bool addDontRemove();
+  bool removeDontRemove();
+  static bool hasDontRemove(Operation *op);
+  static bool setDontRemove(Operation *op, bool dontTouch);
+  static bool addDontRemove(Operation *op);
+  static bool removeDontRemove(Operation *op);
+
   bool operator==(const AnnotationSet &other) const {
     return annotations == other.annotations;
   }

@@ -30,6 +30,8 @@ constexpr const char *rawAnnotations = "rawAnnotations";
 
 constexpr const char *dontTouchAnnoClass =
     "firrtl.transforms.DontTouchAnnotation";
+constexpr const char *dontRemoveAnnoClass =
+    "firrtl.transforms.DontRemoveAnnotation"; // not in SFC
 
 constexpr const char *omirAnnoClass =
     "freechips.rocketchip.objectmodel.OMIRAnnotation";
