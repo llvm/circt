@@ -298,13 +298,6 @@ LogicalResult circt::firrtl::applyGCTDataTaps(AnnoPathValue target,
   auto *context = state.circuit.getContext();
   auto loc = state.circuit.getLoc();
 
-  auto dontTouch = [&](StringRef targetStr) {
-    NamedAttrList anno;
-    anno.append("class", StringAttr::get(context, dontTouchAnnoClass));
-    anno.append("target", StringAttr::get(context, targetStr));
-    state.addToWorklistFn(DictionaryAttr::get(context, anno));
-  };
-
   auto id = state.newID();
   NamedAttrList attrs;
   attrs.append("class", StringAttr::get(context, dataTapsBlackboxClass));
@@ -356,47 +349,10 @@ LogicalResult circt::firrtl::applyGCTDataTaps(AnnoPathValue target,
       if (!sourceTarget)
         return failure();
 
-      // If this refers to a module port, create a "tap" wire to observe the
-      // value of the port, which can unblock optimizations by not pointing at
-      // the port directly.
-      AnnoPathValue path =
-          resolvePath(sourceTargetPath, state.circuit, state.symTbl).getValue();
-      auto portSourceTarget = path.ref.dyn_cast_or_null<PortAnnoTarget>();
-      if (portSourceTarget && isa<FModuleOp>(portSourceTarget.getOp())) {
-        auto module = cast<FModuleOp>(portSourceTarget.getOp());
-        Value value = module.getArgument(portSourceTarget.getPortNo());
-        auto builder = ImplicitLocOpBuilder::atBlockBegin(value.getLoc(),
-                                                          module.getBody());
-        auto type = portSourceTarget.getType()
-                        .getFinalTypeByFieldID(path.fieldIdx)
-                        .getPassiveType();
-        auto tap = builder.create<WireOp>(
-            type, state.getNamespace(module).newName("_gctTap"));
-        value = getValueByFieldID(builder, value, path.fieldIdx);
-        emitConnect(builder, tap, value);
-        sourceTarget->name = tap.name();
-        sourceTarget->component.clear(); // resolved in getValueByFieldID
-      } else if (!portSourceTarget) {
-        ImplicitLocOpBuilder builder(path.ref.getOp()->getLoc(),
-                                     path.ref.getOp());
-        builder.setInsertionPointAfter(path.ref.getOp());
-        Value value = path.ref.getOp()->getResult(0);
-        auto type = path.ref.getType()
-                        .getFinalTypeByFieldID(path.fieldIdx)
-                        .getPassiveType();
-        auto tap = builder.create<WireOp>(
-            type, state.getNamespace(path.ref.getModule()).newName("_gctTap"));
-        value = getValueByFieldID(builder, value, path.fieldIdx);
-        emitConnect(builder, tap, value);
-        sourceTarget->name = tap.name();
-        sourceTarget->component.clear(); // resolved in getValueByFieldID
-      }
-
       sourceTargetPath = sourceTarget->str();
       source.append("target", StringAttr::get(context, sourceTargetPath));
 
       state.addToWorklistFn(DictionaryAttr::get(context, source));
-      dontTouch(sourceTargetPath);
 
       // Annotate the data tap module port.
       port.append("class", StringAttr::get(context, referenceKeyPortClass));
@@ -892,6 +848,19 @@ void GrandCentralTapsPass::runOnOperation() {
           else
             addSymbol(getInnerRefTo(port.target.getOp()));
         }
+
+        // Add a symbol use annotation to block removal.
+        if (port.target.getOp()) {
+          if (port.target.hasPort()) {
+            auto annotations = AnnotationSet::forPort(port.target.getOp(),
+                                                      port.target.getPort());
+            annotations.addDontRemove();
+            annotations.applyToPort(port.target.getOp(), port.target.getPort());
+          } else {
+            AnnotationSet::addDontRemove(port.target.getOp());
+          }
+        }
+
         if (!port.suffix.empty()) {
           hname += '.';
           hname += port.suffix;
@@ -1076,13 +1045,6 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
           wiring.literal = {
               IntegerAttr::get(constant.getContext(), constant.value()),
               constant.getType()};
-          // Delete any NLAs on the dead wire tap if as we are going to delete
-          // the symbol.  This deals with the situation where there is a
-          // non-local DontTouchAnnotation.
-          for (auto anno : AnnotationSet(op))
-            if (auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal"))
-              deadNLAs.insert(sym.getAttr());
-          op->removeAttr("inner_sym");
         }
 
       wiring.target = PortWiring::Target(op);
