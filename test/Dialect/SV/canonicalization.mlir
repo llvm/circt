@@ -94,38 +94,40 @@ func.func @invert_if(%arg0: i1) {
   return
 }
 
-// CHECK-LABEL: func @mux_to_cond_assign_f
+// CHECK-LABEL: hw.module @mux_to_cond_assign_f
 // CHECK-NEXT:    %r = sv.reg  : !hw.inout<i2>
-// CHECK-NEXT:    sv.alwaysff(posedge %arg0)  {
-// CHECK-NEXT:      sv.if %arg1  {
-// CHECK-NEXT:        sv.passign %r, %arg2 : i2
+// CHECK-NEXT:    %0 = sv.read_inout %r : !hw.inout<i2>
+// CHECK-NEXT:    sv.alwaysff(posedge %clock)  {
+// CHECK-NEXT:      sv.if %c  {
+// CHECK-NEXT:        sv.passign %r, %data : i2
 // CHECK-NEXT:      }
 // CHECK-NEXT:    }
-// CHECK-NEXT:    return
+// CHECK-NEXT:    hw.output %0
 // CHECK-NEXT:  }
-func.func @mux_to_cond_assign_f(%clock: i1, %c: i1, %data: i2) {
+hw.module @mux_to_cond_assign_f(%clock: i1, %c: i1, %data: i2) -> (r: i2) {
   %r = sv.reg  : !hw.inout<i2>
   %1 = sv.read_inout %r : !hw.inout<i2>
   %0 = comb.mux %c, %data, %1 : i2
   sv.alwaysff(posedge %clock)  {
     sv.passign %r, %0 : i2
   }
-  return
+  hw.output %1: i2
 }
 
-// CHECK-LABEL: func @mux_to_cond_assign_t
+// CHECK-LABEL: hw.module @mux_to_cond_assign_t
 // CHECK-NEXT:    %true = hw.constant true
 // CHECK-NEXT:    %r = sv.reg  : !hw.inout<i2>
 // CHECK-NEXT:    %r3 = sv.reg  sym @r3 : !hw.inout<i2>
-// CHECK-NEXT:    sv.alwaysff(posedge %arg0)  {
-// CHECK-NEXT:      %0 = comb.xor %arg1, %true : i1
-// CHECK-NEXT:      sv.if %0  {
-// CHECK-NEXT:        sv.passign %r, %arg2 : i2
+// CHECK-NEXT:    %0 = sv.read_inout %r : !hw.inout<i2>
+// CHECK-NEXT:    sv.alwaysff(posedge %clock)  {
+// CHECK-NEXT:      %1 = comb.xor %c, %true : i1
+// CHECK-NEXT:      sv.if %1  {
+// CHECK-NEXT:        sv.passign %r, %data : i2
 // CHECK-NEXT:      }
 // CHECK-NEXT:    }
-// CHECK-NEXT:    return
+// CHECK-NEXT:    hw.output %0
 // CHECK-NEXT:  }
-func.func @mux_to_cond_assign_t(%clock: i1, %c: i1, %data: i2) {
+hw.module @mux_to_cond_assign_t(%clock: i1, %c: i1, %data: i2) -> (r: i2) {
   %r = sv.reg  : !hw.inout<i2>
   %r2 = sv.reg  : !hw.inout<i2>
   %r3 = sv.reg sym @r3 : !hw.inout<i2>
@@ -134,7 +136,7 @@ func.func @mux_to_cond_assign_t(%clock: i1, %c: i1, %data: i2) {
   sv.alwaysff(posedge %clock)  {
     sv.passign %r, %0 : i2
   }
-  return
+  hw.output %1 : i2
 }
 
 // CHECK-LABEL; @immediate_assert_canonicalization
@@ -284,3 +286,16 @@ hw.module @case_stmt(%arg: i3) {
   }
 
   }
+
+// Remove read-only registers.
+// CHECK-LABEL: hw.module @remove_reg
+// CHECK-NEXT:  %r2 = sv.reg sym @r3 : !hw.inout<i2>
+// CHECK-NEXT:  hw.output
+hw.module @remove_reg(%input: i2){
+  %r1 = sv.reg  : !hw.inout<i2>
+  %r2 = sv.reg sym @r3 : !hw.inout<i2>
+  sv.initial {
+    sv.passign %r1, %input : i2
+    sv.bpassign %r1, %input : i2
+  }
+}

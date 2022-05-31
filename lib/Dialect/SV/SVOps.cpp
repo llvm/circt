@@ -255,7 +255,7 @@ LogicalResult RegOp::canonicalize(RegOp op, PatternRewriter &rewriter) {
   // Check that all operations on the wire are sv.assigns. All other wire
   // operations will have been handled by other canonicalization.
   for (auto &use : op.getResult().getUses())
-    if (!isa<AssignOp>(use.getOwner()))
+    if (!isa<PAssignOp, BPAssignOp>(use.getOwner()))
       return failure();
 
   // Remove all uses of the wire.

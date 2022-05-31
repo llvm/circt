@@ -1,7 +1,7 @@
 // RUN: firtool %s -verilog | FileCheck %s
 // Issue 2393: Check that if statements created by canonicalizer are merged.
 // CHECK-LABEL: module Issue2393(
-hw.module @Issue2393(%clock: i1, %c: i1, %data: i2) {
+hw.module @Issue2393(%clock: i1, %c: i1, %data: i2) -> (a: i2, b: i2) {
   %r1 = sv.reg : !hw.inout<i2>
   %1 = sv.read_inout %r1 : !hw.inout<i2>
   %r2 = sv.reg : !hw.inout<i2>
@@ -18,4 +18,5 @@ hw.module @Issue2393(%clock: i1, %c: i1, %data: i2) {
   // CHECK-NEXT:     r2 <= data;
   // CHECK-NEXT:   end
   // CHECK-NEXT: end
+  hw.output %1, %2 : i2, i2
 }
