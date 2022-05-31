@@ -129,7 +129,7 @@ def MemOp : ReferableDeclOp<"mem"> {
 
   let hasVerifier = 1;
 
-  let hasCanonicalizeMethod = true;
+  let hasCanonicalizeMethod = 1;
 
   let extraClassDeclaration = [{
     enum class PortKind { Read, Write, ReadWrite };
@@ -218,7 +218,8 @@ def NodeOp : ReferableDeclOp<"node",
     $input custom<ImplicitSSAName>(attr-dict) `:` qualified(type($input))
   }];
 
-  let hasCanonicalizer = true;
+  let hasCanonicalizer = 1;
+  let hasFolder = 1;
 }
 
 def RegOp : ReferableDeclOp<"reg"> {
@@ -251,7 +252,7 @@ def RegOp : ReferableDeclOp<"reg"> {
     (`sym` $inner_sym^)?
     operands custom<ImplicitSSAName>(attr-dict) `:` qualified(type($result))
   }];
-  let hasCanonicalizeMethod = true;
+  let hasCanonicalizeMethod = 1;
 }
 
 def RegResetOp : ReferableDeclOp<"regreset"> {
@@ -288,7 +289,7 @@ def RegResetOp : ReferableDeclOp<"regreset"> {
     `:` qualified(type($resetSignal)) `,` qualified(type($resetValue)) `,` qualified(type($result))
   }];
 
-  let hasCanonicalizer = true;
+  let hasCanonicalizer = 1;
   let hasVerifier = 1;
 }
 
@@ -320,5 +321,5 @@ def WireOp : ReferableDeclOp<"wire"> {
     (`sym` $inner_sym^)?
     custom<ImplicitSSAName>(attr-dict) `:` qualified(type($result))
   }];
-  let hasCanonicalizer = true;
+  let hasCanonicalizer = 1;
 }

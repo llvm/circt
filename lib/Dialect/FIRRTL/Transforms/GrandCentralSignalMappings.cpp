@@ -318,9 +318,9 @@ void ModuleSignalMappings::instantiateMappingsModule(FModuleOp mappingsModule) {
   LLVM_DEBUG(llvm::dbgs() << "- Instantiating `" << mappingsModuleName
                           << "`\n");
   // Create the actual module.
-  auto builder =
-      ImplicitLocOpBuilder::atBlockEnd(module.getLoc(), module.getBody());
-  auto inst = builder.create<InstanceOp>(mappingsModule, "signal_mappings");
+  auto builder = OpBuilder::atBlockEnd(module.getBody());
+  auto inst = builder.create<InstanceOp>(module.getLoc(), mappingsModule,
+                                         "signal_mappings");
 
   // Generate the connections to and from the instance.
   unsigned portIdx = 0;
@@ -329,9 +329,18 @@ void ModuleSignalMappings::instantiateMappingsModule(FModuleOp mappingsModule) {
   for (auto &mapping : localMappings) {
     Value dst = inst.getResult(portIdx++);
     Value src = mapping.localValue;
+    if (auto srcNode = dyn_cast_or_null<NodeOp>(src.getDefiningOp())) {
+      auto srcWire = builder.create<WireOp>(
+          srcNode.getLoc(), srcNode.getType(), srcNode.name(),
+          srcNode.annotations(), srcNode.inner_symAttr());
+      srcWire->moveAfter(srcNode);
+      srcNode->replaceAllUsesWith(srcWire);
+      src = srcWire;
+      srcNode->erase();
+    }
     if (mapping.dir == MappingDirection::ProbeRemote)
       std::swap(src, dst);
-    builder.create<ConnectOp>(dst, src);
+    builder.create<ConnectOp>(src.getLoc(), dst, src);
   }
 }
 
