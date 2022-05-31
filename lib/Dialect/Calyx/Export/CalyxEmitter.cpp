@@ -543,10 +543,14 @@ void Emitter::emitComponent(ComponentOp op) {
               [&](auto op) { emitLibraryPrimTypedByFirstInputPort(op); })
           .Case<MultPipeLibOp>(
               [&](auto op) { emitLibraryPrimTypedByFirstOutputPort(op); })
-          .Case<RemUPipeLibOp, RemSPipeLibOp, DivUPipeLibOp, DivSPipeLibOp>(
-              [&](auto op) {
-                emitLibraryPrimTypedByFirstOutputPort(op, {"std_div_pipe"});
-              })
+          .Case<RemUPipeLibOp, DivUPipeLibOp>([&](auto op) {
+            emitLibraryPrimTypedByFirstOutputPort(
+                op, /*calyxLibName=*/{"std_div_pipe"});
+          })
+          .Case<RemSPipeLibOp, DivSPipeLibOp>([&](auto op) {
+            emitLibraryPrimTypedByFirstOutputPort(
+                op, /*calyxLibName=*/{"std_sdiv_pipe"});
+          })
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside component");
           });

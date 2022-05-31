@@ -22,7 +22,7 @@ calyx.program "main" {
     %s2.in, %s2.write_en, %s2.clk, %s2.reset, %s2.out, %s2.done = calyx.register @s2 : i32, i1, i1, i1, i32, i1
     // CHECK: mu = std_mult_pipe(32);
     %mu.clk, %mu.reset, %mu.go, %mu.left, %mu.right, %mu.out, %mu.done = calyx.std_mult_pipe @mu : i1, i1, i1, i32, i32, i32, i1
-    // CHECK: divs = std_div_pipe(32);
+    // CHECK: divs = std_sdiv_pipe(32);
     // CHECK: remu = std_div_pipe(32);
     %divs.clk, %divs.reset, %divs.go, %divs.left, %divs.right, %divs.out, %divs.done = calyx.std_divs_pipe @divs : i1, i1, i1, i32, i32, i32, i1
     %remu.clk, %remu.reset, %remu.go, %remu.left, %remu.right, %remu.out, %remu.done = calyx.std_remu_pipe @remu : i1, i1, i1, i32, i32, i32, i1
