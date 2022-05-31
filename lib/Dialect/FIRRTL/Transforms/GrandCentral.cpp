@@ -1630,7 +1630,8 @@ void GrandCentralPass::runOnOperation() {
   });
 
   // Exit immediately if no annotations indicative of interfaces that need to be
-  // built exist.
+  // built exist.  However, still generate the YAML file if the annotation for
+  // this was passed in because some flows expect this.
   if (worklist.empty()) {
     if (maybeHierarchyFileYAML) {
       std::string yamlString;
