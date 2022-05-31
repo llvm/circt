@@ -53,24 +53,19 @@ static bool isUInt1(Type type) {
   return true;
 }
 
-/// Return true if this is a useless temporary name produced by FIRRTL.  We
-/// drop these as they don't convey semantic meaning.
-bool circt::firrtl::isUselessName(StringRef name) {
+NameKindEnum circt::firrtl::inferNameKind(StringRef name) {
   if (name.empty())
-    return true;
+    return NameKindEnum::UselessName;
   // Ignore _.*
-  return name.startswith("_");
+  return name.startswith("_") ? NameKindEnum::UselessName
+                              : NameKindEnum::InterestingName;
 }
 
 /// Return true if this is a useless temporary name produced by FIRRTL.  We
 /// drop these as they don't convey semantic meaning.
 bool circt::firrtl::isUselessName(Operation *op) {
-  if (auto wire = dyn_cast<WireOp>(op))
-    return isUselessName(wire.name());
-  if (auto node = dyn_cast<NodeOp>(op))
-    return isUselessName(node.name());
-  if (auto reg = dyn_cast<RegOp>(op))
-    return isUselessName(reg.name());
+  if (auto namableOp = dyn_cast<firrtl::FNamableOp>(op))
+    return namableOp.hasUselessName();
   return false;
 }
 
@@ -1612,11 +1607,11 @@ struct FoldNodeName : public mlir::RewritePattern {
                                 PatternRewriter &rewriter) const override {
     auto node = cast<NodeOp>(op);
     auto name = node.nameAttr();
-    if (!isUselessName(name.getValue()) || node.inner_sym() ||
+    if (!isUselessName(op) || node.inner_sym() ||
         !node.annotations().empty())
       return failure();
     auto *expr = node.input().getDefiningOp();
-    if (expr && !expr->hasAttr("name") && !isUselessName(name))
+    if (expr && !expr->hasAttr("name") && !isUselessName(op))
       rewriter.updateRootInPlace(expr, [&] { expr->setAttr("name", name); });
     rewriter.replaceOp(node, node.input());
     return success();

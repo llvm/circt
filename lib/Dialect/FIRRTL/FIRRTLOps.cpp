@@ -1583,6 +1583,8 @@ void MemOp::build(OpBuilder &builder, OperationState &result,
   result.addAttribute("ruw", ::RUWAttrAttr::get(builder.getContext(), ruw));
   result.addAttribute("portNames", builder.getArrayAttr(portNames));
   result.addAttribute("name", builder.getStringAttr(name));
+  result.addAttribute("nameKind", NameKindEnumAttr::get(builder.getContext(),
+                                                        inferNameKind(name)));
   result.addAttribute("annotations", builder.getArrayAttr(annotations));
   if (innerSym)
     result.addAttribute("inner_sym", innerSym);
@@ -3247,6 +3249,8 @@ static void printElideAnnotations(OpAsmPrinter &p, Operation *op,
   // Elide "annotations" if it is empty.
   if (op->getAttrOfType<ArrayAttr>("annotations").empty())
     elidedAttrs.push_back("annotations");
+  // Elide "nameKind".
+  elidedAttrs.push_back("nameKind");
 
   p.printOptionalAttrDict(op->getAttrs(), elidedAttrs);
 }
@@ -3276,6 +3280,35 @@ static void printElidePortAnnotations(OpAsmPrinter &p, Operation *op,
                    [&](Attribute a) { return a.cast<ArrayAttr>().empty(); }))
     elidedAttrs.push_back("portAnnotations");
   printElideAnnotations(p, op, attr, elidedAttrs);
+}
+
+//===----------------------------------------------------------------------===//
+// NameKind Custom Directive
+//===----------------------------------------------------------------------===//
+
+static ParseResult parseNameKind(OpAsmParser &parser,
+                                 firrtl::NameKindEnumAttr &result) {
+  StringRef keyword;
+
+  if (!parser.parseOptionalKeyword(
+          &keyword,
+          {"interesting_name", "weak_interesting_name", "useless_name"})) {
+    auto kind = symbolizeNameKindEnum(keyword);
+    result = NameKindEnumAttr::get(parser.getContext(), kind.getValue());
+    return success();
+  }
+
+  // Default is interesting name.
+  result =
+      NameKindEnumAttr::get(parser.getContext(), NameKindEnum::InterestingName);
+  return success();
+}
+
+static void printNameKind(OpAsmPrinter &p, Operation *op,
+                          firrtl::NameKindEnumAttr attr,
+                          ArrayRef<StringRef> extraElides = {}) {
+  if (attr.getValue() != NameKindEnum::InterestingName)
+    p << stringifyNameKindEnum(attr.getValue()) << ' ';
 }
 
 //===----------------------------------------------------------------------===//

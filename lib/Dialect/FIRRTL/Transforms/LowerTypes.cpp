@@ -278,6 +278,7 @@ struct AttrCache {
     i64ty = IntegerType::get(context, 64);
     innerSymAttr = StringAttr::get(context, "inner_sym");
     nameAttr = StringAttr::get(context, "name");
+    nameKindAttr = StringAttr::get(context, "nameKind");
     sPortDirections = StringAttr::get(context, "portDirections");
     sPortNames = StringAttr::get(context, "portNames");
     sPortTypes = StringAttr::get(context, "portTypes");
@@ -288,8 +289,8 @@ struct AttrCache {
   AttrCache(const AttrCache &) = default;
 
   Type i64ty;
-  StringAttr innerSymAttr, nameAttr, sPortDirections, sPortNames, sPortTypes,
-      sPortSyms, sPortAnnotations, sEmpty;
+  StringAttr innerSymAttr, nameAttr, nameKindAttr, sPortDirections, sPortNames,
+      sPortTypes, sPortSyms, sPortAnnotations, sEmpty;
 };
 
 // The visitors all return true if the operation should be deleted, false if
@@ -592,6 +593,7 @@ bool TypeLoweringVisitor::lowerProducer(
   // Loop over the leaf aggregates.
   SmallString<16> loweredName;
   SmallString<16> loweredSymName;
+  auto nameKindAttr = op->getAttrOfType<NameKindEnumAttr>(cache.nameKindAttr);
 
   if (auto innerSymAttr = op->getAttrOfType<StringAttr>(cache.innerSymAttr))
     loweredSymName = innerSymAttr.getValue();
@@ -624,6 +626,8 @@ bool TypeLoweringVisitor::lowerProducer(
     // Carry over the name, if present.
     if (!loweredName.empty())
       newOp->setAttr(cache.nameAttr, StringAttr::get(context, loweredName));
+    if (nameKindAttr)
+      newOp->setAttr(cache.nameKindAttr, nameKindAttr);
     // Carry over the inner_sym name, if present.
     if (needsSym || op->hasAttr(cache.innerSymAttr)) {
       auto newName = StringAttr::get(context, loweredSymName);
