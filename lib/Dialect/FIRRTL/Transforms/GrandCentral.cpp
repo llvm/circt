@@ -1603,11 +1603,6 @@ void GrandCentralPass::runOnOperation() {
   if (removalError)
     return signalPassFailure();
 
-  // Exit immediately if no annotations indicative of interfaces that need to be
-  // built exist.
-  if (worklist.empty())
-    return markAllAnalysesPreserved();
-
   LLVM_DEBUG({
     llvm::dbgs() << "Extraction Info:\n";
     if (maybeExtractInfo)
@@ -1633,6 +1628,29 @@ void GrandCentralPass::runOnOperation() {
       llvm::dbgs() << "<none>";
     llvm::dbgs() << "\n";
   });
+
+  // Exit immediately if no annotations indicative of interfaces that need to be
+  // built exist.
+  if (worklist.empty()) {
+    if (maybeHierarchyFileYAML) {
+      std::string yamlString;
+      llvm::raw_string_ostream stream(yamlString);
+      ::yaml::Context yamlContext({interfaceMap});
+      llvm::yaml::Output yout(stream);
+      OpBuilder builder(circuitOp);
+      SmallVector<sv::InterfaceOp, 0> interfaceVec;
+      yamlize(yout, interfaceVec, true, yamlContext);
+      builder.setInsertionPointToStart(circuitOp.getBody());
+      builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), yamlString)
+          ->setAttr("output_file",
+                    hw::OutputFileAttr::getFromFilename(
+                        &getContext(),
+                        maybeHierarchyFileYAML.getValue().getValue(),
+                        /*excludFromFileList=*/true));
+      LLVM_DEBUG({ llvm::dbgs() << "Generated YAML:" << yamlString << "\n"; });
+    }
+    return markAllAnalysesPreserved();
+  }
 
   // Setup the builder to create ops _inside the FIRRTL circuit_.  This is
   // necessary because interfaces and interface instances are created.

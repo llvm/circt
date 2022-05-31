@@ -1427,3 +1427,16 @@ firrtl.circuit "YAMLOutputInstance" attributes {
 // CHECK-SAME:                  dimensions: [ ]
 // CHECK-SAME:                  width: 8
 // CHECK-SAME:              instances: []
+
+// -----
+
+firrtl.circuit "NoInterfaces" attributes {
+  annotations = [
+    {class = "sifive.enterprise.grandcentral.GrandCentralHierarchyFileAnnotation",
+     filename = "gct-dir/gct.yaml"}]} {
+  firrtl.module @NoInterfaces() {}
+}
+
+// CHECK-LABEL: module {
+// CHECK:         sv.verbatim
+// CHECK-SAME:      []
