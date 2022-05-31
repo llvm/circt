@@ -1057,6 +1057,22 @@ void HWModuleOp::appendOutputs(ArrayRef<std::pair<StringAttr, Value>> outputs) {
   return insertOutputs(getResultTypes().size(), outputs);
 }
 
+Value HWModuleOp::appendInput(Type type, const Twine &name) {
+  return appendInput(type, StringAttr::get(getContext(), name));
+}
+
+Value HWModuleOp::appendInput(Type type, StringAttr name) {
+  unsigned index = getArgumentTypes().size();
+
+  PortInfo port;
+  port.name = name;
+  port.type = type;
+  port.direction = PortDirection::INPUT;
+  insertPorts({{index, port}}, {});
+
+  return getBodyBlock()->insertArgument(index, type, getLoc());
+}
+
 void HWModuleOp::getAsmBlockArgumentNames(mlir::Region &region,
                                           mlir::OpAsmSetValueNameFn setNameFn) {
   getAsmBlockArgumentNamesImpl(region, setNameFn);

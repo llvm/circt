@@ -113,6 +113,14 @@ def HWModuleOp : HWModuleOpBase<"module",
     /// rewrites the output op to return the associated values.
     void appendOutputs(ArrayRef<std::pair<StringAttr, Value>> outputs);
 
+    /// Append a single input to the port list of the module.
+    /// Return the value of the associated block argument.
+    Value appendInput(Type type, const Twine &name);
+
+    /// Append a single input to the port list of the module.
+    /// Return the value of the associated block argument.
+    Value appendInput(Type type, StringAttr name);
+
     // TODO(mlir): FunctionLike shouldn't produce a getBody() helper, it is
     // squatting on the name.
     Block *getBodyBlock() { return &body().front(); }
