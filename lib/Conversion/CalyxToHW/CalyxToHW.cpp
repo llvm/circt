@@ -245,28 +245,19 @@ private:
         })
         // Pipelined arithmetic operations.
         .Case([&](MultPipeLibOp op) {
-          auto clk =
-              wireIn(op.clk(), op.instanceName(), op.portName(op.clk()), b);
-          auto reset =
-              wireIn(op.reset(), op.instanceName(), op.portName(op.reset()), b);
-          auto go = wireIn(op.go(), op.instanceName(), op.portName(op.go()), b);
-          auto left =
-              wireIn(op.left(), op.instanceName(), op.portName(op.left()), b);
-          auto right =
-              wireIn(op.right(), op.instanceName(), op.portName(op.right()), b);
-
-          auto mul = b.create<MulOp>(left, right);
-          auto mulReg = reg(mul, clk, reset, op.instanceName(), b);
-          auto doneReg =
-              reg(go, clk, reset,
-                  op.instanceName() + "_" + op.portName(op.done()), b);
-
-          auto out =
-              wireOut(mulReg, op.instanceName(), op.portName(op.out()), b);
-          auto done =
-              wireOut(doneReg, op.instanceName(), op.portName(op.done()), b);
-          wires.append({clk.input(), reset.input(), go.input(), left.input(),
-                        right.input(), out, done});
+          convertPipelineOp<MultPipeLibOp, comb::MulOp>(op, wires, b);
+        })
+        .Case([&](DivUPipeLibOp op) {
+          convertPipelineOp<DivUPipeLibOp, comb::DivUOp>(op, wires, b);
+        })
+        .Case([&](DivSPipeLibOp op) {
+          convertPipelineOp<DivSPipeLibOp, comb::DivSOp>(op, wires, b);
+        })
+        .Case([&](RemSPipeLibOp op) {
+          convertPipelineOp<RemSPipeLibOp, comb::ModSOp>(op, wires, b);
+        })
+        .Case([&](RemUPipeLibOp op) {
+          convertPipelineOp<RemUPipeLibOp, comb::ModUOp>(op, wires, b);
         })
         // Sequential operations.
         .Case([&](RegisterOp op) {
@@ -358,6 +349,34 @@ private:
 
     auto out = wireOut(add, op.instanceName(), op.portName(op.out()), b);
     wires.append({left.input(), right.input(), out});
+  }
+
+  template <typename SrcOpTy, typename TargetOpTy>
+  void convertPipelineOp(SrcOpTy op, SmallVectorImpl<Value> &wires,
+                         ImplicitLocOpBuilder &b) const {
+    auto clk = wireIn(op.clk(), op.instanceName(), op.portName(op.clk()), b);
+    auto reset =
+        wireIn(op.reset(), op.instanceName(), op.portName(op.reset()), b);
+    auto go = wireIn(op.go(), op.instanceName(), op.portName(op.go()), b);
+    auto left = wireIn(op.left(), op.instanceName(), op.portName(op.left()), b);
+    auto right =
+        wireIn(op.right(), op.instanceName(), op.portName(op.right()), b);
+    wires.append(
+        {clk.input(), reset.input(), go.input(), left.input(), right.input()});
+
+    auto targetOp = b.create<TargetOpTy>(left, right);
+    for (auto &&[targetRes, sourceRes] :
+         llvm::zip(targetOp->getResults(), op.getOutputPorts())) {
+      auto portName = op.portName(sourceRes);
+      auto resReg = reg(targetRes, clk, reset,
+                        createName(op.instanceName(), portName), b);
+      wires.push_back(wireOut(resReg, op.instanceName(), portName, b));
+    }
+
+    auto doneReg = reg(go, clk, reset,
+                       op.instanceName() + "_" + op.portName(op.done()), b);
+    auto done = wireOut(doneReg, op.instanceName(), op.portName(op.done()), b);
+    wires.push_back(done);
   }
 
   ReadInOutOp wireIn(Value source, StringRef instanceName, StringRef portName,

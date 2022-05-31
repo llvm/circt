@@ -18,12 +18,34 @@ calyx.program "main" {
   // CHECK-LABEL: component B<"toplevel"=1>(in: 1, @go go: 1, @clk clk: 1, @reset reset: 1) -> (out: 1, @done done: 1) {
   calyx.component @B(%in: i1, %go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%out: i1, %done: i1 {done}) {
     %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register @r : i1, i1, i1, i1, i1, i1
-    %s.in, %s.write_en, %s.clk, %s.reset, %s.out, %s.done = calyx.register @s : i32, i1, i1, i1, i32, i1
+    %s1.in, %s1.write_en, %s1.clk, %s1.reset, %s1.out, %s1.done = calyx.register @s1 : i32, i1, i1, i1, i32, i1
+    %s2.in, %s2.write_en, %s2.clk, %s2.reset, %s2.out, %s2.done = calyx.register @s2 : i32, i1, i1, i1, i32, i1
     // CHECK: mu = std_mult_pipe(32);
     %mu.clk, %mu.reset, %mu.go, %mu.left, %mu.right, %mu.out, %mu.done = calyx.std_mult_pipe @mu : i1, i1, i1, i32, i32, i32, i1
+    // CHECK: divs = std_sdiv_pipe(32);
+    // CHECK: remu = std_div_pipe(32);
+    %divs.clk, %divs.reset, %divs.go, %divs.left, %divs.right, %divs.out, %divs.done = calyx.std_divs_pipe @divs : i1, i1, i1, i32, i32, i32, i1
+    %remu.clk, %remu.reset, %remu.go, %remu.left, %remu.right, %remu.out, %remu.done = calyx.std_remu_pipe @remu : i1, i1, i1, i32, i32, i32, i1
+
     %c1_1 = hw.constant 1 : i1
     %c4_32 = hw.constant 4 : i32
     calyx.wires {
+
+    // CHECK-LABEL: group DivRemWrite {
+    // CHECK-NEXT:   s1.in = divs.out_quotient;
+    // CHECK-NEXT:   s2.in = remu.out_remainder;
+    // CHECK-NEXT:   s1.write_en = 1'd1;
+    // CHECK-NEXT:   s2.write_en = 1'd1;
+    // CHECK-NEXT:   DivRemWrite[done] = s1.done;
+    // CHECK-NEXT: }
+      calyx.group @DivRemWrite {
+        calyx.assign %s1.in = %divs.out : i32
+        calyx.assign %s2.in = %remu.out : i32
+        calyx.assign %s1.write_en = %c1_1 : i1
+        calyx.assign %s2.write_en = %c1_1 : i1
+        calyx.group_done %s1.done : i1
+      }
+
       calyx.group @RegisterWrite {
         calyx.assign %r.in = %c1_1 : i1
         calyx.assign %r.write_en = %c1_1 : i1
@@ -33,16 +55,16 @@ calyx.program "main" {
       // CHECK-NEXT: mu.left = 32'd4;
       // CHECK-NEXT: mu.right = 32'd4;
       // CHECK-NEXT: mu.go = 1'd1;
-      // CHECK-NEXT: s.write_en = mu.done;
-      // CHECK-NEXT: s.in = mu.out;
-      // CHECK-NEXT: MultWrite[done] = s.done;
+      // CHECK-NEXT: s1.write_en = mu.done;
+      // CHECK-NEXT: s1.in = mu.out;
+      // CHECK-NEXT: MultWrite[done] = s1.done;
       calyx.group @MultWrite {
         calyx.assign %mu.left = %c4_32 : i32
         calyx.assign %mu.right = %c4_32 : i32
         calyx.assign %mu.go = %c1_1 : i1
-        calyx.assign %s.write_en = %mu.done : i1
-        calyx.assign %s.in = %mu.out : i32
-        calyx.group_done %s.done : i1
+        calyx.assign %s1.write_en = %mu.done : i1
+        calyx.assign %s1.in = %mu.out : i32
+        calyx.group_done %s1.done : i1
       }
     }
 
@@ -58,6 +80,7 @@ calyx.program "main" {
         } else {
           calyx.enable @MultWrite
         }
+        calyx.enable @DivRemWrite
       }
     }
   } {toplevel}

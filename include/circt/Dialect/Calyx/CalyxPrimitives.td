@@ -191,21 +191,17 @@ def AndLibOp  : CombinationalArithBinaryLibraryOp<"and"> {}
 def OrLibOp   : CombinationalArithBinaryLibraryOp<"or"> {}
 def XorLibOp  : CombinationalArithBinaryLibraryOp<"xor"> {}
 
-def MultPipeLibOp : ArithBinaryLibraryOp<"mult_pipe", [
+class ArithBinaryPipeLibraryOp<string mnemonic> : ArithBinaryLibraryOp<mnemonic # "_pipe", [
     SameTypeConstraint<"left", "out">
   ]> {
   let results = (outs I1:$clk, I1:$reset, I1:$go, AnyType:$left, AnyType:$right, AnyType:$out, I1:$done);
 }
 
-def DivPipeLibOp : ArithBinaryLibraryOp<"div_pipe", [
-    SameTypeConstraint<"left", "out_quotient">,
-    SameTypeConstraint<"right", "out_remainder">
-  ]> {
-  let results = (outs
-    I1:$clk, I1:$reset, I1:$go, AnyType:$left, AnyType:$right,
-    AnyType:$out_quotient, AnyType:$out_remainder, I1:$done
-  );
-}
+def MultPipeLibOp : ArithBinaryPipeLibraryOp<"mult"> {}
+def DivSPipeLibOp : ArithBinaryPipeLibraryOp<"divs"> {}
+def DivUPipeLibOp : ArithBinaryPipeLibraryOp<"divu"> {}
+def RemUPipeLibOp : ArithBinaryPipeLibraryOp<"remu"> {}
+def RemSPipeLibOp : ArithBinaryPipeLibraryOp<"rems"> {}
 
 class UnaryLibraryOp<string mnemonic, list<Trait> traits = []> :
     CalyxLibraryOp<mnemonic, !listconcat(traits, [Combinational])> {

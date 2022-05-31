@@ -14,3 +14,4 @@ calyx.program "main" {
     calyx.control {}
   }
 }
+
