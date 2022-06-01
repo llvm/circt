@@ -1405,7 +1405,8 @@ static LogicalResult canonicalizeSingleSetConnect(StrictConnectOp op,
   // Only support wire and reg for now.
   if (!isa<WireOp>(connectedDecl) && !isa<RegOp>(connectedDecl))
     return failure();
-  if (hasDontTouch(connectedDecl))
+  // Bail if the wire cannot be removed.
+  if (dontRemove(connectedDecl))
     return failure();
 
   // Only forward if the types exactly match and there is one connect.

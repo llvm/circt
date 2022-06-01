@@ -102,6 +102,9 @@ bool hasDontTouch(Value value);
 /// should prevent certain types of canonicalizations.
 bool hasDontTouch(Operation *op);
 
+/// Check whether an operation should not be removed.
+bool dontRemove(Operation *op);
+
 // Out-of-line implementation of various trait verification methods and
 // functions commonly used among operations.
 namespace impl {

@@ -730,7 +730,7 @@ firrtl.circuit "NLATop1" {
 // This should not error out. Note that there is no symbol on the %bundle. This handles a special case, when the nonlocal is applied to a subfield.
 firrtl.circuit "fallBackName" {
 
-  firrtl.hierpath @nla [@fallBackName::@test, @Aardvark::@test, @Zebra::@bundle]
+  firrtl.hierpath @nla [@fallBackName::@test, @Aardvark::@test, @Zebra]
   firrtl.hierpath @nla_1 [@fallBackName::@test,@Aardvark::@test_1, @Zebra]
   firrtl.module @fallBackName() {
     firrtl.instance test  sym @test {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}, {circt.nonlocal = @nla_1, class = "circt.nonlocal"} ]}@Aardvark()
@@ -749,23 +749,11 @@ firrtl.circuit "fallBackName" {
 
 // -----
 
-firrtl.circuit "Foo"   {
-  // expected-error @+1 {{operation with symbol: #hw.innerNameRef<@Bar::@b> was not found}}
-  firrtl.hierpath @nla_1 [@Foo::@bar, @Bar::@b]
-  firrtl.module @Bar(in %a: !firrtl.uint<1>, out %b: !firrtl.bundle<baz: uint<1>, qux: uint<1>> [#firrtl.subAnno<fieldID = 2, {circt.nonlocal = @nla_1, three}>], out %c: !firrtl.uint<1>) {
-  }
-  firrtl.module @Foo() {
-    %bar_a, %bar_b, %bar_c = firrtl.instance bar sym @bar  {annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}]} @Bar(in a: !firrtl.uint<1> [{one}], out b: !firrtl.bundle<baz: uint<1>, qux: uint<1>> [#firrtl.subAnno<fieldID = 1, {two}>], out c: !firrtl.uint<1> [{four}])
-  }
-}
-
-// -----
-
 firrtl.circuit "Top"   {
  // Legal nla would be:
-//firrtl.hierpath @nla [@Top::@mid, @Mid::@leaf, @Leaf::@w]
+//firrtl.hierpath @nla [@Top::@mid, @Mid::@leaf, @Leaf]
   // expected-error @+1 {{instance path is incorrect. Expected module: "Middle" instead found: "Leaf"}}
-  firrtl.hierpath @nla [@Top::@mid, @Leaf::@w]
+  firrtl.hierpath @nla [@Top::@mid, @Leaf]
   firrtl.module @Leaf() {
     %w = firrtl.wire sym @w  {annotations = [{circt.nonlocal = @nla, class = "fake1"}]} : !firrtl.uint<3>
   }

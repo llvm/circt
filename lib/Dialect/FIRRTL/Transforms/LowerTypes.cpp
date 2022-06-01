@@ -1316,30 +1316,6 @@ void LowerTypesPass::runOnOperation() {
     auto tl = TypeLoweringVisitor(&getContext(), preserveAggregate,
                                   preservePublicTypes, symTbl, cache);
     tl.lowerModule(op);
-
-    std::lock_guard<std::mutex> lg(nlaAppendLock);
-    // This section updates shared data structures using a lock.
-    nlaToNewSymList.append(tl.getNLAs());
-    // Create an inner_sym to op record, which will be used to lookup ops given
-    // the InnerRefAttr, during NLA fixup.
-    StringAttr modName = op.moduleNameAttr();
-    ArrayAttr portSyms = op.getPortSymbolsAttr();
-    // We are only interested in Modules and Extern Modules.
-    // Create inner_sym record for module ports.
-    for (auto pSym : llvm::enumerate(portSyms.getAsRange<StringAttr>()))
-      if (pSym.value() && !pSym.value().getValue().empty())
-        opSymNames.emplace_back(/*module name*/ modName,
-                                /*inner sym*/ pSym.value(), /*Module*/ op,
-                                /*Port index*/ pSym.index());
-
-    // Create inner_sym record for rest of the interesting ops within the
-    // module. t1.getOpSymNames, will return the symbol for ops which were
-    // created during lowering, and the instance ops.
-    for (auto instName : tl.getOpSymNames())
-      if (instName.second != op)
-        opSymNames.emplace_back(/*module name*/ modName,
-                                /*inner sym*/ instName.getFirst(),
-                                /*operation*/ instName.getSecond());
   };
   parallelForEach(&getContext(), ops.begin(), ops.end(), lowerModules);
   // Sort it, to enable binary search.
@@ -1353,59 +1329,6 @@ void LowerTypesPass::runOnOperation() {
              [](const NlaNameNewSym &a, const NlaNameNewSym &b) {
                return a.nlaName.getValue() < b.nlaName.getValue();
              });
-  // Given the nla, iterate over the namepath, and update the "circt.nonlocal"
-  // annotation to refer to `nla` instead of `oldNLAName` and drop the reference
-  // to `oldNLAName` if removeNLA is true.
-  auto updateNamepath = [&](HierPathOp nla, StringAttr oldNLAname,
-                            bool removeNLA) {
-    FlatSymbolRefAttr newName = FlatSymbolRefAttr::get(nla);
-    // This starts from the leaf element, such that if the leaf is not updated,
-    // none of the path should be updated.
-    for (auto innerRef : nla.namepath().getAsRange<hw::InnerRefAttr>()) {
-      // Binary search over the list of Ops, given the InnerRefAttr;
-      auto record = InnerRefRecord(innerRef);
-      const auto *iter =
-          std::lower_bound(opSymNames.begin(), opSymNames.end(), record);
-      // The search will fail, if the NLA is dropped from the leaf element.
-      if (iter == opSymNames.end() || *iter != record)
-        continue;
-      auto *pathOp = iter->op;
-      bool isInstanceOp = isa<InstanceOp>(pathOp);
-      // There can be multiple annotations that share the same NLA, this list is
-      // used to record all such annotations with the updated NLA reference,
-      // which will be appended to the op annotations.
-      SmallVector<Annotation> newNLAs;
-      auto isModule = isa<FModuleOp>(pathOp) || isa<FExtModuleOp>(pathOp);
-      // If its a module, then get the corresponding port annotation.
-      // This lambda will not be used to update NLAs on modules, because
-      // LowerTypes shouldnot cause any update to them.
-      AnnotationSet annos = isModule
-                                ? AnnotationSet::forPort(pathOp, iter->portIdx)
-                                : AnnotationSet(pathOp);
-      annos.removeAnnotations([&](Annotation anno) {
-        if (auto nlaRef = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal"))
-          if (oldNLAname == nlaRef.getAttr()) {
-            // Found the NLA, now delete it if removeNLA is true.
-            // Else, record its contents with the updated NLA reference.
-            if (removeNLA)
-              return true;
-            auto newNLA = anno;
-            newNLA.setMember("circt.nonlocal", newName);
-            newNLAs.push_back(newNLA);
-            // For InstanceOp, append the reference to the new NLA (i.e., donot
-            // delete). For leaf, just replace with a reference to the new NLA
-            // (i.e., delete old anno).
-            return !isInstanceOp;
-          }
-        return false;
-      });
-      annos.addAnnotations(newNLAs);
-      if (isModule)
-        annos.applyToPort(pathOp, iter->portIdx);
-      else
-        annos.applyToOperation(pathOp);
-    }
-  };
   DenseSet<Operation *> nlasToRemove;
   // Fixup the nla, with the updated symbol names.
   // LowerTypes can either update the symbol on a leaf element, or create
@@ -1428,17 +1351,12 @@ void LowerTypesPass::runOnOperation() {
     if (nlaToSym.newSym) {
       auto namepath = nla.namepath();
       SmallVector<Attribute> path(namepath.begin(), namepath.end());
-      // Update the leaf element of the instance path to the new symbol.
-      path[path.size() - 1] = hw::InnerRefAttr::get(
-          path[path.size() - 1].cast<hw::InnerRefAttr>().getModule(),
-          nlaToSym.newSym);
       auto newPath = ArrayAttr::get(&getContext(), path);
       if (nlaName == prevNLA) {
         // NLA reused, create new NLA.
         ImplicitLocOpBuilder theBuilder(nla.getLoc(), nla);
         auto newNLAop = theBuilder.create<HierPathOp>(
             circtNamespace.newName(nlaName.getValue()), newPath);
-        updateNamepath(newNLAop, nlaName, false);
         nlaTable->addNLA(newNLAop);
       } else
         nla.namepathAttr(newPath);
@@ -1461,7 +1379,6 @@ void LowerTypesPass::runOnOperation() {
     // corresponding NLA must also be removed. In this block, remove all the
     // references to the nla from the InstanceOps and erase the NLA.
     auto nla = cast<HierPathOp>(nlaOp);
-    updateNamepath(nla, nla.getNameAttr(), true);
     nlaTable->erase(nla);
     symTbl.erase(nla);
   }

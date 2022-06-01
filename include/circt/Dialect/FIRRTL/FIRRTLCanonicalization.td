@@ -127,25 +127,29 @@ def GetWidthAsIntAttr : NativeCodeCall<
 def DropNameNode : Pat<
   (NodeOp $x, $name, $annotations, $inner_sym),
   (NodeOp $x, (GetEmptyString), $annotations, $inner_sym),
-  [(uselessNameAttr $name), (NonEmptyStringAttr $name), (NullAttr $inner_sym)]>;
+  [(uselessNameAttr $name), (NonEmptyStringAttr $name), (NullAttr $inner_sym),
+   (EmptyAttrDict $annotations)]>;
 
 // wire(name),!dnt -> wire("")
 def DropNameWire : Pat<
   (WireOp $name, $annotations, $inner_sym),
   (WireOp (GetEmptyString), $annotations, $inner_sym),
-  [(uselessNameAttr $name), (NonEmptyStringAttr $name), (NullAttr $inner_sym)]>;
+  [(uselessNameAttr $name), (NonEmptyStringAttr $name), (NullAttr $inner_sym),
+   (EmptyAttrDict $annotations)]>;
 
 // reg(clk, name),!dnt -> reg(clk, "")
 def DropNameReg : Pat<
   (RegOp $clk, $name, $annotations, $inner_sym),
   (RegOp $clk, (GetEmptyString), $annotations, $inner_sym),
-  [(uselessNameAttr $name), (NonEmptyStringAttr $name), (NullAttr $inner_sym)]>;
+  [(uselessNameAttr $name), (NonEmptyStringAttr $name), (NullAttr $inner_sym),
+   (EmptyAttrDict $annotations)]>;
 
 // regreset(clk, sig, val, name),!dnt -> regreset(clk, sig, val, "")
 def DropNameRegReset : Pat<
   (RegResetOp $clk, $sig, $val, $name, $annotations, $inner_sym),
   (RegResetOp $clk, $sig, $val, (GetEmptyString), $annotations, $inner_sym),
-  [(uselessNameAttr $name), (NonEmptyStringAttr $name), (NullAttr $inner_sym)]>;
+  [(uselessNameAttr $name), (NonEmptyStringAttr $name), (NullAttr $inner_sym),
+   (EmptyAttrDict $annotations)]>;
 
 // Mem(...,name),!dnt -> Mem(...x, "")
 def DropNameMem : Pat<

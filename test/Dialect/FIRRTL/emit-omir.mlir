@@ -347,7 +347,7 @@ firrtl.circuit "SRAMPathsWithNLA" attributes {annotations = [{
     }
   ]
 }]} {
-  firrtl.hierpath @nla [@SRAMPathsWithNLA::@s1, @Submodule::@m1]
+  firrtl.hierpath @nla [@SRAMPathsWithNLA::@s1, @Submodule]
   firrtl.module @Submodule() {
     %mem2_port = firrtl.mem sym @m1 Undefined {annotations = [{circt.nonlocal = @nla, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 1}], depth = 8, name = "mem2", portNames = ["port"], readLatency = 0 : i32, writeLatency = 1 : i32 } : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: uint<42>>
   }
@@ -645,10 +645,10 @@ firrtl.circuit "AddPortsRelative" attributes {annotations = [{
 //   }
 // ]
 
-firrtl.circuit "FixPath"  attributes 
+firrtl.circuit "FixPath"  attributes
 {annotations = [{class = "freechips.rocketchip.objectmodel.OMIRAnnotation", nodes = [{fields = {d = {index = 3 : i64, info = loc(unknown), value = {id = 3 : i64, omir.tracker, path = "~FixPath|D", type = "OMMemberInstanceTarget"}}, dutInstance = {index = 0 : i64, info = loc(unknown), value = {id = 0 : i64, omir.tracker, path = "~FixPath|FixPath/c:C", type = "OMMemberInstanceTarget"}}, power = {index = 2 : i64, info = loc(unknown), value = {id = 2 : i64, omir.tracker, path = "~FixPath|FixPath/c:C/cd:D", type = "OMMemberInstanceTarget"}}, pwm = {index = 1 : i64, info = loc(unknown), value = {id = 1 : i64, omir.tracker, path = "~FixPath|FixPath/c:C>in", type = "OMMemberInstanceTarget"}}}, id = "OMID:0", info = loc(unknown)}]}]} {
   firrtl.hierpath @nla_3 [@FixPath::@c, @C::@cd, @D]
-  firrtl.hierpath @nla_2 [@FixPath::@c, @C::@in]
+  firrtl.hierpath @nla_2 [@FixPath::@c, @C]
   firrtl.hierpath @nla_1 [@FixPath::@c, @C]
   firrtl.module @C(in %in: !firrtl.uint<1> sym @in [{circt.nonlocal = @nla_2, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 1 : i64}]) attributes {annotations = [{circt.nonlocal = @nla_1, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 0 : i64}, {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
     firrtl.instance cd sym @cd  {annotations = [{circt.nonlocal = @nla_3, class = "circt.nonlocal"}]} @D()

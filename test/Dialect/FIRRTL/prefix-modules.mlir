@@ -307,8 +307,8 @@ firrtl.circuit "GCTDataMemTapsPrefix" {
   firrtl.circuit "FixNLA"   {
     firrtl.hierpath @nla_1 [@FixNLA::@bar, @Bar::@baz, @Baz]
     // CHECK:   firrtl.hierpath @nla_1 [@FixNLA::@bar, @Bar::@baz, @Baz]
-    firrtl.hierpath @nla_2 [@FixNLA::@foo, @Foo::@bar, @Bar::@baz, @Baz::@s1]
-    // CHECK:   firrtl.hierpath @nla_2 [@FixNLA::@foo, @X_Foo::@bar, @X_Bar::@baz, @X_Baz::@s1]
+    firrtl.hierpath @nla_2 [@FixNLA::@foo, @Foo::@bar, @Bar::@baz, @Baz]
+    // CHECK:   firrtl.hierpath @nla_2 [@FixNLA::@foo, @X_Foo::@bar, @X_Bar::@baz, @X_Baz]
     firrtl.hierpath @nla_3 [@FixNLA::@bar, @Bar::@baz, @Baz]
     // CHECK:   firrtl.hierpath @nla_3 [@FixNLA::@bar, @Bar::@baz, @Baz]
     firrtl.hierpath @nla_4 [@Foo::@bar, @Bar::@baz, @Baz]

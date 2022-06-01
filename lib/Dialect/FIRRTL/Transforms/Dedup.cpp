@@ -675,7 +675,7 @@ private:
                                             AnnoTarget to,
                                             FModuleLike fromModule) {
     return createNLAs(toModuleName, to, fromModule,
-                      to.getNLAReference(getNamespace(toModule)));
+                      FlatSymbolRefAttr::get(to.getModule().moduleNameAttr()));
   }
 
   /// Clone the annotation for each NLA in a list.

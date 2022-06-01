@@ -172,6 +172,14 @@ bool firrtl::hasDontTouch(Operation *op) {
   return op->getAttr(hw::InnerName::getInnerNameAttrName()) != nullptr;
 }
 
+/// Check whether an operation should not be removed.
+bool firrtl::dontRemove(Operation *op) {
+  AnnotationSet annotations(op);
+  if (isa<FExtModuleOp, FModuleOp>(op))
+    return !annotations.empty() || hasDontTouch(op);
+  return !annotations.empty() || hasDontTouch(op);
+}
+
 /// Check whether a block argument ("port") or the operation defining a value
 /// has a `DontTouch` annotation, or a symbol that should prevent certain types
 /// of canonicalizations.
@@ -3641,25 +3649,17 @@ HierPathOp::verifySymbolUses(mlir::SymbolTableCollection &symtblC) {
     expectedModuleName = instOp.moduleNameAttr().getAttr();
   }
   // The instance path has been verified. Now verify the last element.
-  auto leafRef = namepath()[namepath().size() - 1];
-  if (auto innerRef = leafRef.dyn_cast<hw::InnerRefAttr>()) {
-    auto *fmod = symtbl.lookup(innerRef.getModule());
-    auto mod = cast<FModuleLike>(fmod);
-    if (!hasPortNamed(mod, innerRef.getName()) &&
-        !hasValNamed(mod, innerRef.getName())) {
-      return emitOpError() << " operation with symbol: " << innerRef
-                           << " was not found ";
-    }
-    if (expectedModuleName && expectedModuleName != innerRef.getModule())
-      return emitOpError() << "instance path is incorrect. Expected module: "
-                           << expectedModuleName
-                           << " instead found: " << innerRef.getModule();
-  } else if (expectedModuleName !=
-             leafRef.cast<FlatSymbolRefAttr>().getAttr()) {
+  auto leafMod =
+      namepath()[namepath().size() - 1].dyn_cast<FlatSymbolRefAttr>();
+  if (!leafMod) {
+    return emitOpError()
+           << "must end in a module reference (FlatSymbolRefAttr)";
+  }
+  if (expectedModuleName != leafMod.getAttr()) {
     // This is the case when the nla is applied to a module.
     return emitOpError() << "instance path is incorrect. Expected module: "
-                         << expectedModuleName << " instead found: "
-                         << leafRef.cast<FlatSymbolRefAttr>().getAttr();
+                         << expectedModuleName
+                         << " instead found: " << leafMod.getAttr();
   }
   return success();
 }

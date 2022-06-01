@@ -1516,8 +1516,6 @@ static bool needsSymbol(ArrayAttr &annotations) {
       // Ignore the annotation.
       continue;
     }
-    if (anno.getMember("circt.nonlocal"))
-      needsSymbol = true;
     filteredAnnos.push_back(attr);
   }
   if (needsSymbol)

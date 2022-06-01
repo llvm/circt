@@ -958,8 +958,8 @@ firrtl.circuit "DedupedPath" attributes {
         id = 2 : i64}],
      id = 0 : i64,
      name = "View"}]} {
-  firrtl.hierpath @nla_0 [@DUT::@tile1, @Tile::@w]
-  firrtl.hierpath @nla [@DUT::@tile2, @Tile::@w]
+  firrtl.hierpath @nla_0 [@DUT::@tile1, @Tile]
+  firrtl.hierpath @nla [@DUT::@tile2, @Tile]
   firrtl.module @Tile() {
     %w = firrtl.wire sym @w {
       annotations = [
