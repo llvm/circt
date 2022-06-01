@@ -10,6 +10,9 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_HW_HWATTRIBUTESNAMING
+#define CIRCT_DIALECT_HW_HWATTRIBUTESNAMING
+
 def InnerRefAttr : AttrDef<HWDialect, "InnerRef", [
     DeclareAttrInterfaceMethods<SubElementAttrInterface>]> {
   let summary = "Refer to a name inside a module";
@@ -68,3 +71,5 @@ def GlobalRefAttr : AttrDef<HWDialect, "GlobalRef"> {
     static constexpr char DialectAttrName[] = "circt.globalRef";
   }];
 }
+
+#endif // CIRCT_DIALECT_HW_HWATTRIBUTESNAMING
