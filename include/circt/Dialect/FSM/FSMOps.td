@@ -15,8 +15,8 @@ include "mlir/Interfaces/ControlFlowInterfaces.td"
 
 def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>;
 
-def MachineOp : FSMOp<"machine", [HasParent<"mlir::ModuleOp">, FunctionOpInterface,
-      Symbol, SymbolTable, IsolatedFromAbove, NoTerminator]> {
+def MachineOp : FSMOp<"machine", [FunctionOpInterface,
+      Symbol, SymbolTable, NoTerminator]> {
   let summary = "Define a finite-state machine";
   let description = [{
     `fsm.machine` represents a finite-state machine, including a machine name,
