@@ -29,6 +29,9 @@
 // CHECK-NOT: foo_assert
 // CHECK-NOT: foo_assume
 // CHECK-NOT: foo_cover
+// CHECK: hw.instance "issue1246_assert"
+// CHECK: hw.instance "issue1246_assume"
+// CHECK: hw.instance "issue1246_cover"
 // CHECK: sv.bind <@issue1246::@__ETC_issue1246_assert>
 // CHECK: sv.bind <@issue1246::@__ETC_issue1246_assume> {output_file = #hw.output_file<"file4", excludeFromFileList>}
 // CHECK: sv.bind <@issue1246::@__ETC_issue1246_cover>
