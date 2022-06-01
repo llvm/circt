@@ -48,7 +48,7 @@ namespace {
 /// written back to the IR to replace the original NLA.
 class MutableNLA {
   // Storage of the NLA this represents.
-  NonLocalAnchor nla;
+  HierPathOp nla;
 
   // A namespace that can be used to generate new symbol names if needed.
   CircuitNamespace *circuitNamespace;
@@ -97,7 +97,7 @@ class MutableNLA {
   }
 
 public:
-  MutableNLA(NonLocalAnchor nla, CircuitNamespace *circuitNamespace)
+  MutableNLA(HierPathOp nla, CircuitNamespace *circuitNamespace)
       : nla(nla), circuitNamespace(circuitNamespace),
         inlinedSymbols(BitVector(nla.namepath().size(), true)),
         size(nla.namepath().size()) {
@@ -123,7 +123,7 @@ public:
   void markDead() { dead = true; }
 
   /// Return the original NLA that this was pointing at.
-  NonLocalAnchor getNLA() { return nla; }
+  HierPathOp getNLA() { return nla; }
 
   /// Writeback updates accumulated in this MutableNLA to the IR.  This method
   /// should only ever be called once and, if a writeback occurrs, the
@@ -131,7 +131,7 @@ public:
   /// MutableNLA in any way after calling this method may result in crashes.
   /// (This is done to save unnecessary state cleanup of a pass-private
   /// utility.)
-  NonLocalAnchor applyUpdates(NLATable &nlaTable) {
+  HierPathOp applyUpdates(NLATable &nlaTable) {
     // Delete an NLA which is either dead or has been made local.
     if (isLocal() || isDead()) {
       nlaTable.erase(nla);
@@ -147,7 +147,7 @@ public:
     // The NLA has updates.  Generate a new NLA with the same symbol and delete
     // the original NLA.
     OpBuilder b(nla);
-    auto writeBack = [&](StringAttr root, StringAttr sym) -> NonLocalAnchor {
+    auto writeBack = [&](StringAttr root, StringAttr sym) -> HierPathOp {
       SmallVector<Attribute> namepath;
       StringAttr lastMod;
 
@@ -186,11 +186,11 @@ public:
       else
         namepath.push_back(FlatSymbolRefAttr::get(modPart));
 
-      return b.create<NonLocalAnchor>(b.getUnknownLoc(), sym,
+      return b.create<HierPathOp>(b.getUnknownLoc(), sym,
                                       b.getArrayAttr(namepath));
     };
 
-    NonLocalAnchor last;
+    HierPathOp last;
     assert(!dead || !newTops.empty());
     if (!dead)
       last = writeBack(nla.root(), nla.getNameAttr());
@@ -416,7 +416,7 @@ private:
   /// Returns true if the NLA matches the current path.  This will only return
   /// false if there is a mismatch indicating that the NLA definitely is
   /// referring to some other path.
-  bool doesNLAMatchCurrentPath(NonLocalAnchor nla);
+  bool doesNLAMatchCurrentPath(HierPathOp nla);
 
   /// Rename an operation and unique any symbols it has.
   void rename(StringRef prefix, Operation *op,
@@ -495,7 +495,7 @@ private:
 /// Check if the NLA applies to our instance path. This works by verifying the
 /// instance paths backwords starting from the current module. We drop the back
 /// element from the NLA because it obviously matches the current operation.
-bool Inliner::doesNLAMatchCurrentPath(NonLocalAnchor nla) {
+bool Inliner::doesNLAMatchCurrentPath(HierPathOp nla) {
   auto nlaPath = nla.namepath().getValue().drop_back();
   auto nlaIt = nlaPath.rbegin();
   auto nlaEnd = nlaPath.rend();
@@ -732,7 +732,7 @@ void Inliner::flattenInstances(FModuleOp module) {
     // Preorder update of any non-local annotations this instance participates
     // in.  This needs to happen _before_ visiting modules so that internal
     // non-local annotations can be deleted if they are now local.
-    DenseSet<NonLocalAnchor> instNLAs;
+    DenseSet<HierPathOp> instNLAs;
     // To estimate the NLAs that this instance participates in, get the NLAs
     // that are common between the parent module and the target module. This
     // computes the set of NLAs that an instance participates in, instead of
@@ -804,7 +804,7 @@ void Inliner::inlineInto(StringRef prefix, OpBuilder &b,
     // in.  This needs ot happen _before_ visiting modules so that internal
     // non-local annotations can be deleted if they are now local.
     auto toBeFlattened = shouldFlatten(target);
-    DenseSet<NonLocalAnchor> instNLAs;
+    DenseSet<HierPathOp> instNLAs;
     nlaTable.commonNLAs(moduleName, target.getNameAttr(), instNLAs);
     for (auto targetNLA : instNLAs) {
       auto sym = targetNLA.sym_nameAttr();
@@ -880,7 +880,7 @@ void Inliner::inlineInstances(FModuleOp parent) {
     // in.  This needs ot happen _before_ visiting modules so that internal
     // non-local annotations can be deleted if they are now local.
     auto toBeFlattened = shouldFlatten(target);
-    DenseSet<NonLocalAnchor> instNLAs;
+    DenseSet<HierPathOp> instNLAs;
     nlaTable.commonNLAs(moduleName, target.getNameAttr(), instNLAs);
     for (auto targetNLA : instNLAs) {
       auto sym = targetNLA.sym_nameAttr();
@@ -935,7 +935,7 @@ Inliner::Inliner(CircuitOp circuit, NLATable &nlaTable)
 void Inliner::run() {
   CircuitNamespace circuitNamespace(circuit);
 
-  for (auto nla : circuit.getBody()->getOps<NonLocalAnchor>()) {
+  for (auto nla : circuit.getBody()->getOps<HierPathOp>()) {
     auto mnla = MutableNLA(nla, &circuitNamespace);
     nlaMap.insert({nla.sym_nameAttr(), mnla});
     rootMap[mnla.getNLA().root()].push_back(nla.sym_nameAttr());
@@ -990,7 +990,7 @@ void Inliner::run() {
 
   LLVM_DEBUG({
     llvm::dbgs() << "NLA modifications:\n";
-    for (auto nla : circuit.getBody()->getOps<NonLocalAnchor>()) {
+    for (auto nla : circuit.getBody()->getOps<HierPathOp>()) {
       auto &mnla = nlaMap[nla.getNameAttr()];
       mnla.dump();
     }

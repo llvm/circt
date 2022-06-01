@@ -189,15 +189,15 @@ def FMemModuleOp : FIRRTLOp<"memmodule",
   let hasCustomAssemblyFormat = 1;
 }
 
-def NonLocalAnchor : FIRRTLOp<"nla",
+def HierPathOp : FIRRTLOp<"hierpath",
       [IsolatedFromAbove, Symbol,
        DeclareOpInterfaceMethods<SymbolUserOpInterface>,
        HasParent<"CircuitOp">]> {
-  let summary = "Anchor for non-local annotations";
+  let summary = "Hierarchical path specification";
   let description = [{
-    The "firrtl.nla" operation represents a common point for non-local (path)
-    annotations to anchor to in the global scope.  This lets components of the
-    path point to a common entity.
+    The "firrtl.hierpath" operation represents a path through the hierarchy.
+    This is used to specify namable things for use in other operations, for 
+    example in verbatim substitution. Non-local annotations also use these.
   }];
   let arguments = (ins SymbolNameAttr:$sym_name, NameRefArrayAttr:$namepath);
   let results = (outs);

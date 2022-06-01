@@ -256,7 +256,7 @@ void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
       continue;
 
     // Update the NLA path to have the additional wrapper module.
-    auto nla = dyn_cast<NonLocalAnchor>(symbolTable->lookup(nlaSym.getAttr()));
+    auto nla = dyn_cast<HierPathOp>(symbolTable->lookup(nlaSym.getAttr()));
     auto namepath = nla.namepath().getValue();
     SmallVector<Attribute> newNamepath(namepath.begin(), namepath.end());
     newNamepath.push_back(leafAttr);

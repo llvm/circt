@@ -65,12 +65,12 @@ firrtl.circuit "ExtractBlackBoxesSimple" attributes {annotations = [{class = "fi
 
 // CHECK: firrtl.circuit "ExtractBlackBoxesSimple2"
 firrtl.circuit "ExtractBlackBoxesSimple2" attributes {annotations = [{class = "firrtl.transforms.BlackBoxTargetDirAnno", targetDir = "BlackBoxes"}]} {
-  // CHECK: firrtl.nla @nla_1{{.*}} [@ExtractBlackBoxesSimple2::@bb, @MyBlackBox]
-  // CHECK-NOT: firrtl.nla @nla_2
-  // CHECK-NOT: firrtl.nla @nla_3
-  firrtl.nla @nla_1 [@BBWrapper::@bb, @MyBlackBox]
-  firrtl.nla @nla_2 [@DUTModule::@mod, @BBWrapper::@bb]
-  firrtl.nla @nla_3 [@ExtractBlackBoxesSimple2::@dut, @DUTModule::@mod, @BBWrapper::@bb]
+  // CHECK: firrtl.hierpath @nla_1{{.*}} [@ExtractBlackBoxesSimple2::@bb, @MyBlackBox]
+  // CHECK-NOT: firrtl.hierpath @nla_2
+  // CHECK-NOT: firrtl.hierpath @nla_3
+  firrtl.hierpath @nla_1 [@BBWrapper::@bb, @MyBlackBox]
+  firrtl.hierpath @nla_2 [@DUTModule::@mod, @BBWrapper::@bb]
+  firrtl.hierpath @nla_3 [@ExtractBlackBoxesSimple2::@dut, @DUTModule::@mod, @BBWrapper::@bb]
   // Annotation on the extmodule itself
   // CHECK-LABEL: firrtl.extmodule private @MyBlackBox
   firrtl.extmodule private @MyBlackBox(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>) attributes {annotations = [
@@ -153,25 +153,25 @@ firrtl.circuit "ExtractBlackBoxesSimple2" attributes {annotations = [{class = "f
 
 // CHECK: firrtl.circuit "ExtractBlackBoxesIntoDUTSubmodule"
 firrtl.circuit "ExtractBlackBoxesIntoDUTSubmodule"  {
-  // CHECK-LABEL: firrtl.nla @nla_1 [
+  // CHECK-LABEL: firrtl.hierpath @nla_1 [
   // CHECK-SAME:    @ExtractBlackBoxesIntoDUTSubmodule::@tb
   // CHECK-SAME:    @TestHarness::@dut
   // CHECK-SAME:    @DUTModule::@BlackBoxes
   // CHECK-SAME:    @BlackBoxes::@bb1
   // CHECK-SAME:  ]
-  firrtl.nla @nla_1 [
+  firrtl.hierpath @nla_1 [
     @ExtractBlackBoxesIntoDUTSubmodule::@tb,
     @TestHarness::@dut,
     @DUTModule::@mod,
     @BBWrapper::@bb1
   ]
-  // CHECK-LABEL: firrtl.nla @nla_2 [
+  // CHECK-LABEL: firrtl.hierpath @nla_2 [
   // CHECK-SAME:    @ExtractBlackBoxesIntoDUTSubmodule::@tb
   // CHECK-SAME:    @TestHarness::@dut
   // CHECK-SAME:    @DUTModule::@BlackBoxes
   // CHECK-SAME:    @BlackBoxes::@bb2
   // CHECK-SAME:  ]
-  firrtl.nla @nla_2 [
+  firrtl.hierpath @nla_2 [
     @ExtractBlackBoxesIntoDUTSubmodule::@tb,
     @TestHarness::@dut,
     @DUTModule::@mod,
@@ -425,14 +425,14 @@ firrtl.circuit "ExtractSeqMemsSimple2" attributes {annotations = [{class = "sifi
 
 // CHECK: firrtl.circuit "InstSymConflict"
 firrtl.circuit "InstSymConflict" {
-  // CHECK-NOT: firrtl.nla @nla_1
-  // CHECK-NOT: firrtl.nla @nla_2
-  firrtl.nla @nla_1 [
+  // CHECK-NOT: firrtl.hierpath @nla_1
+  // CHECK-NOT: firrtl.hierpath @nla_2
+  firrtl.hierpath @nla_1 [
     @InstSymConflict::@dut,
     @DUTModule::@mod1,
     @BBWrapper::@bb
   ]
-  firrtl.nla @nla_2 [
+  firrtl.hierpath @nla_2 [
     @InstSymConflict::@dut,
     @DUTModule::@mod2,
     @BBWrapper::@bb

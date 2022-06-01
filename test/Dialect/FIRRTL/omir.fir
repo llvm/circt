@@ -269,8 +269,8 @@ circuit Foo: %[[
     ; CHECK-SAME:    e = {{{[^{}]+}} value = {id = [[eID:[0-9]+]] : i64, omir.tracker, path = {{"[a-zA-Z~|:/>]+"}}, type = {{"OM[a-zA-Z]+"}}
     ; CHECK-SAME:    f = {{{[^{}]+}} value = {id = [[fID:[0-9]+]] : i64, omir.tracker, path = {{"[a-zA-Z~|:/>]+"}}, type = {{"OM[a-zA-Z]+"}}
     ; CHECK-SAME:    g = {{{[^{}]+}} value = {id = [[gID:[0-9]+]] : i64, omir.tracker, path = {{"[a-zA-Z~|:/>]+"}}, type = {{"OM[a-zA-Z]+"}}
-    ; CHECK-DAG:   firrtl.nla @[[Foo_eE_E:nla_[0-9]+]]
-    ; CHECK-DAG:   firrtl.nla @[[Foo_cC_C:nla_[0-9]+]]
+    ; CHECK-DAG:   firrtl.hierpath @[[Foo_eE_E:nla_[0-9]+]]
+    ; CHECK-DAG:   firrtl.hierpath @[[Foo_cC_C:nla_[0-9]+]]
     ; CHECK:       firrtl.module private @C
     ; CHECK-SAME:    {circt.nonlocal = @[[Foo_cC_C]], class = "freechips.rocketchip.objectmodel.OMIRTracker", id = [[cID]] : i64}
     ; CHECK:       firrtl.module private @D

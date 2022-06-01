@@ -300,17 +300,17 @@ sv.verbatim "hello"
 //
 // CHECK-LABEL: firrtl.circuit "NLAInlining"
 firrtl.circuit "NLAInlining" {
-  // CHECK-NEXT: firrtl.nla @nla1 [@NLAInlining::@bar, @Bar]
-  // CHECK-NEXT: firrtl.nla @nla2 [@NLAInlining::@bar, @Bar::@a]
-  // CHECK-NEXT: firrtl.nla @nla3 [@NLAInlining::@bar, @Bar::@port]
-  // CHECK-NOT:  firrtl.nla @nla4
-  // CHECK-NOT:  firrtl.nla @nla5
-  firrtl.nla @nla1 [@NLAInlining::@foo, @Foo::@bar, @Bar]
-  firrtl.nla @nla2 [@NLAInlining::@foo, @Foo::@bar, @Bar::@a]
-  firrtl.nla @nla3 [@NLAInlining::@foo, @Foo::@bar, @Bar::@port]
-  firrtl.nla @nla4 [@NLAInlining::@foo, @Foo]
-  firrtl.nla @nla5 [@NLAInlining::@foo, @Foo::@b]
-  firrtl.nla @nla6 [@NLAInlining::@foo, @Foo::@port]
+  // CHECK-NEXT: firrtl.hierpath @nla1 [@NLAInlining::@bar, @Bar]
+  // CHECK-NEXT: firrtl.hierpath @nla2 [@NLAInlining::@bar, @Bar::@a]
+  // CHECK-NEXT: firrtl.hierpath @nla3 [@NLAInlining::@bar, @Bar::@port]
+  // CHECK-NOT:  firrtl.hierpath @nla4
+  // CHECK-NOT:  firrtl.hierpath @nla5
+  firrtl.hierpath @nla1 [@NLAInlining::@foo, @Foo::@bar, @Bar]
+  firrtl.hierpath @nla2 [@NLAInlining::@foo, @Foo::@bar, @Bar::@a]
+  firrtl.hierpath @nla3 [@NLAInlining::@foo, @Foo::@bar, @Bar::@port]
+  firrtl.hierpath @nla4 [@NLAInlining::@foo, @Foo]
+  firrtl.hierpath @nla5 [@NLAInlining::@foo, @Foo::@b]
+  firrtl.hierpath @nla6 [@NLAInlining::@foo, @Foo::@port]
   // CHECK-NEXT: firrtl.module private @Bar
   // CHECK-SAME: %port: {{.+}} sym @port [{circt.nonlocal = @nla3, class = "nla3"}]
   // CHECK-SAME: [{circt.nonlocal = @nla1, class = "nla1"}]
@@ -354,12 +354,12 @@ firrtl.circuit "NLAInlining" {
 //
 // CHECK-LABEL: firrtl.circuit "NLAInliningNotMainRoot"
 firrtl.circuit "NLAInliningNotMainRoot" {
-  // CHECK-NEXT: firrtl.nla @nla1 [@NLAInliningNotMainRoot::@baz, @Baz::@a]
-  // CHECK-NEXT: firrtl.nla @nla1_0 [@Foo::@baz, @Baz::@a]
-  // CHECK-NEXT: firrtl.nla @nla2 [@NLAInliningNotMainRoot::@baz, @Baz::@port]
-  // CHECK-NEXT: firrtl.nla @nla2_0 [@Foo::@baz, @Baz::@port]
-  firrtl.nla @nla1 [@Bar::@baz, @Baz::@a]
-  firrtl.nla @nla2 [@Bar::@baz, @Baz::@port]
+  // CHECK-NEXT: firrtl.hierpath @nla1 [@NLAInliningNotMainRoot::@baz, @Baz::@a]
+  // CHECK-NEXT: firrtl.hierpath @nla1_0 [@Foo::@baz, @Baz::@a]
+  // CHECK-NEXT: firrtl.hierpath @nla2 [@NLAInliningNotMainRoot::@baz, @Baz::@port]
+  // CHECK-NEXT: firrtl.hierpath @nla2_0 [@Foo::@baz, @Baz::@port]
+  firrtl.hierpath @nla1 [@Bar::@baz, @Baz::@a]
+  firrtl.hierpath @nla2 [@Bar::@baz, @Baz::@port]
   // CHECK: firrtl.module private @Baz
   // CHECK-SAME: %port: {{.+}} [{circt.nonlocal = @nla2, class = "nla2"}, {circt.nonlocal = @nla2_0, class = "nla2"}]
   firrtl.module private @Baz(
@@ -399,14 +399,14 @@ firrtl.circuit "NLAInliningNotMainRoot" {
 //
 // CHECK-LABEL: firrtl.circuit "NLAFlattening"
 firrtl.circuit "NLAFlattening" {
-  // CHECK-NEXT: firrtl.nla @nla1 [@NLAFlattening::@foo, @Foo::@a]
-  // CHECK-NEXT: firrtl.nla @nla2 [@NLAFlattening::@foo, @Foo::@port]
-  // CHECK-NOT:  firrtl.nla @nla3
-  // CHECK-NOT:  firrtl.nla @nla4
-  firrtl.nla @nla1 [@NLAFlattening::@foo, @Foo::@bar, @Bar::@baz, @Baz::@a]
-  firrtl.nla @nla2 [@NLAFlattening::@foo, @Foo::@bar, @Bar::@baz, @Baz::@port]
-  firrtl.nla @nla3 [@NLAFlattening::@foo, @Foo::@bar, @Bar::@baz, @Baz]
-  firrtl.nla @nla4 [@Foo::@bar, @Bar::@b]
+  // CHECK-NEXT: firrtl.hierpath @nla1 [@NLAFlattening::@foo, @Foo::@a]
+  // CHECK-NEXT: firrtl.hierpath @nla2 [@NLAFlattening::@foo, @Foo::@port]
+  // CHECK-NOT:  firrtl.hierpath @nla3
+  // CHECK-NOT:  firrtl.hierpath @nla4
+  firrtl.hierpath @nla1 [@NLAFlattening::@foo, @Foo::@bar, @Bar::@baz, @Baz::@a]
+  firrtl.hierpath @nla2 [@NLAFlattening::@foo, @Foo::@bar, @Bar::@baz, @Baz::@port]
+  firrtl.hierpath @nla3 [@NLAFlattening::@foo, @Foo::@bar, @Bar::@baz, @Baz]
+  firrtl.hierpath @nla4 [@Foo::@bar, @Bar::@b]
   firrtl.module @Baz(
     in %port: !firrtl.uint<1> sym @port [{circt.nonlocal = @nla2, class = "nla2"}]
   ) attributes {annotations = [{circt.nonlocal = @nla3, class = "nla3"}]} {
@@ -453,14 +453,14 @@ firrtl.circuit "NLAFlattening" {
 //
 // CHECK-LABEL: firrtl.circuit "NLAFlatteningChildRoot"
 firrtl.circuit "NLAFlatteningChildRoot" {
-  // CHECK-NOT:  firrtl.nla @nla1
-  // CHECK-NOT:  firrtl.nla @nla2
-  // CHECK-NEXT: firrtl.nla @nla3 [@Baz::@quz, @Quz::@b]
-  // CHECK-NEXT: firrtl.nla @nla4 [@Baz::@quz, @Quz::@Quz_port]
-  firrtl.nla @nla1 [@Bar::@qux, @Qux::@a]
-  firrtl.nla @nla2 [@Bar::@qux, @Qux::@Qux_port]
-  firrtl.nla @nla3 [@Baz::@quz, @Quz::@b]
-  firrtl.nla @nla4 [@Baz::@quz, @Quz::@Quz_port]
+  // CHECK-NOT:  firrtl.hierpath @nla1
+  // CHECK-NOT:  firrtl.hierpath @nla2
+  // CHECK-NEXT: firrtl.hierpath @nla3 [@Baz::@quz, @Quz::@b]
+  // CHECK-NEXT: firrtl.hierpath @nla4 [@Baz::@quz, @Quz::@Quz_port]
+  firrtl.hierpath @nla1 [@Bar::@qux, @Qux::@a]
+  firrtl.hierpath @nla2 [@Bar::@qux, @Qux::@Qux_port]
+  firrtl.hierpath @nla3 [@Baz::@quz, @Quz::@b]
+  firrtl.hierpath @nla4 [@Baz::@quz, @Quz::@Quz_port]
   // CHECK: firrtl.module private @Quz
   // CHECK-SAME: in %port: {{.+}} [{circt.nonlocal = @nla4, class = "nla4"}]
   firrtl.module private @Quz(
@@ -510,8 +510,8 @@ firrtl.circuit "NLAFlatteningChildRoot" {
 //
 // CHECK-LABEL: CollidingSymbols
 firrtl.circuit "CollidingSymbols" {
-  // CHECK-NEXT: firrtl.nla @nla1 [@CollidingSymbols::@[[FoobarSym:[_a-zA-Z0-9]+]], @Bar]
-  firrtl.nla @nla1 [@CollidingSymbols::@foo, @Foo::@bar, @Bar]
+  // CHECK-NEXT: firrtl.hierpath @nla1 [@CollidingSymbols::@[[FoobarSym:[_a-zA-Z0-9]+]], @Bar]
+  firrtl.hierpath @nla1 [@CollidingSymbols::@foo, @Foo::@bar, @Bar]
   firrtl.module @Bar() attributes {annotations = [{circt.nonlocal = @nla1, class = "nla1"}]} {}
   firrtl.module @Foo() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
     %b = firrtl.wire sym @b : !firrtl.uint<1>
@@ -540,8 +540,8 @@ firrtl.circuit "CollidingSymbols" {
 //
 // CHECK-LABEL: CollidingSymbolsPort
 firrtl.circuit "CollidingSymbolsPort" {
-  // CHECK-NEXT: firrtl.nla @nla1 [@CollidingSymbolsPort::@foo, @Foo::@[[BarbSym:[_a-zA-Z0-9]+]]]
-  firrtl.nla @nla1 [@CollidingSymbolsPort::@foo, @Foo::@bar, @Bar::@b]
+  // CHECK-NEXT: firrtl.hierpath @nla1 [@CollidingSymbolsPort::@foo, @Foo::@[[BarbSym:[_a-zA-Z0-9]+]]]
+  firrtl.hierpath @nla1 [@CollidingSymbolsPort::@foo, @Foo::@bar, @Bar::@b]
   // CHECK-NOT: firrtl.module private @Bar
   firrtl.module private @Bar(
     in %b: !firrtl.uint<1> sym @b [{circt.nonlocal = @nla1, class = "nla1"}]
@@ -574,9 +574,9 @@ firrtl.circuit "CollidingSymbolsPort" {
 firrtl.circuit "CollidingSymbolsReTop" {
   // CHECK-NOT:  #hw.innerNameRef<@CollidingSymbolsReTop::@baz>
   // CHECK-NOT:  #hw.innerNameRef<@Foo::@baz>
-  // CHECK-NEXT: firrtl.nla @nla1 [@CollidingSymbolsReTop::@[[TopbazSym:[_a-zA-Z0-9]+]], @Baz::@a]
-  // CHECK-NEXT: firrtl.nla @nla1_0 [@Foo::@[[FoobazSym:[_a-zA-Z0-9]+]], @Baz::@a]
-  firrtl.nla @nla1 [@Bar::@baz, @Baz::@a]
+  // CHECK-NEXT: firrtl.hierpath @nla1 [@CollidingSymbolsReTop::@[[TopbazSym:[_a-zA-Z0-9]+]], @Baz::@a]
+  // CHECK-NEXT: firrtl.hierpath @nla1_0 [@Foo::@[[FoobazSym:[_a-zA-Z0-9]+]], @Baz::@a]
+  firrtl.hierpath @nla1 [@Bar::@baz, @Baz::@a]
   // CHECK: firrtl.module @Baz
   firrtl.module @Baz() {
     // CHECK-NEXT: firrtl.wire {{.+}} [{circt.nonlocal = @nla1, class = "hello"}, {circt.nonlocal = @nla1_0, class = "hello"}]
@@ -609,11 +609,11 @@ firrtl.circuit "CollidingSymbolsReTop" {
 // instance inlined should be renamed, and it should *not* update the NLA.
 // CHECK-LABEL: firrtl.circuit "CollidingSymbolsNLAFixup"
 firrtl.circuit "CollidingSymbolsNLAFixup" {
-  // CHECK: firrtl.nla @nla0 [@Foo::@bar, @Bar::@io]
-  firrtl.nla @nla0 [@Foo::@bar, @Bar::@baz0, @Baz::@io]
+  // CHECK: firrtl.hierpath @nla0 [@Foo::@bar, @Bar::@io]
+  firrtl.hierpath @nla0 [@Foo::@bar, @Bar::@baz0, @Baz::@io]
 
-  // CHECK: firrtl.nla @nla1 [@Foo::@bar, @Bar::@w]
-  firrtl.nla @nla1 [@Foo::@bar, @Bar::@baz0, @Baz::@w]
+  // CHECK: firrtl.hierpath @nla1 [@Foo::@bar, @Bar::@w]
+  firrtl.hierpath @nla1 [@Foo::@bar, @Bar::@baz0, @Baz::@w]
 
   firrtl.module @Baz(out %io: !firrtl.uint<1> sym @io [{circt.nonlocal = @nla0, class = "test"}])
        attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
@@ -664,8 +664,8 @@ firrtl.circuit "RenameAnything" {
 // corresponds to the original NLA path.
 // CHECK-LABEL: firrtl.circuit "AnnotationSplit0"
 firrtl.circuit "AnnotationSplit0" {
-firrtl.nla @nla_5560 [@Bar0::@leaf, @Leaf::@w]
-firrtl.nla @nla_5561 [@Bar1::@leaf, @Leaf::@w]
+firrtl.hierpath @nla_5560 [@Bar0::@leaf, @Leaf::@w]
+firrtl.hierpath @nla_5561 [@Bar1::@leaf, @Leaf::@w]
 firrtl.module @Leaf() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
   %w = firrtl.wire sym @w {annotations = [
     {circt.nonlocal = @nla_5560, class = "test0"},
@@ -692,8 +692,8 @@ firrtl.module @AnnotationSplit0() {
 // above in that the annotation does not become a regular local annotation.
 // CHECK-LABEL: firrtl.circuit "AnnotationSplit1"
 firrtl.circuit "AnnotationSplit1" {
-firrtl.nla @nla_5560 [@AnnotationSplit1::@bar0, @Bar0::@leaf, @Leaf::@w]
-firrtl.nla @nla_5561 [@AnnotationSplit1::@bar1, @Bar1::@leaf, @Leaf::@w]
+firrtl.hierpath @nla_5560 [@AnnotationSplit1::@bar0, @Bar0::@leaf, @Leaf::@w]
+firrtl.hierpath @nla_5561 [@AnnotationSplit1::@bar1, @Bar1::@leaf, @Leaf::@w]
 firrtl.module @Leaf() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
   %w = firrtl.wire sym @w {annotations = [
     {circt.nonlocal = @nla_5560, class = "test0"},

@@ -28,25 +28,25 @@ firrtl.circuit "NLARenaming" attributes {
   } {
   // An NLA that is rooted at the DUT moves to the wrapper.
   //
-  // CHECK:      firrtl.nla @nla_DUTRoot [@Foo::@sub, @Sub::@a]
-  firrtl.nla @nla_DUTRoot [@DUT::@sub, @Sub::@a]
+  // CHECK:      firrtl.hierpath @nla_DUTRoot [@Foo::@sub, @Sub::@a]
+  firrtl.hierpath @nla_DUTRoot [@DUT::@sub, @Sub::@a]
 
   // NLAs that end at the DUT or a DUT port are unmodified.
   //
-  // CHECK-NEXT: firrtl.nla @nla_DUTLeafModule [@NLARenaming::@dut, @DUT]
-  // CHECK-NEXT: firrtl.nla @nla_DUTLeafPort [@NLARenaming::@dut, @DUT::@in]
-  firrtl.nla @nla_DUTLeafModule [@NLARenaming::@dut, @DUT]
-  firrtl.nla @nla_DUTLeafPort [@NLARenaming::@dut, @DUT::@in]
+  // CHECK-NEXT: firrtl.hierpath @nla_DUTLeafModule [@NLARenaming::@dut, @DUT]
+  // CHECK-NEXT: firrtl.hierpath @nla_DUTLeafPort [@NLARenaming::@dut, @DUT::@in]
+  firrtl.hierpath @nla_DUTLeafModule [@NLARenaming::@dut, @DUT]
+  firrtl.hierpath @nla_DUTLeafPort [@NLARenaming::@dut, @DUT::@in]
 
   // NLAs that end inside the DUT get an extra level of hierarchy.
   //
-  // CHECK-NEXT: firrtl.nla @nla_DUTLeafWire [@NLARenaming::@dut, @DUT::@[[inst_sym:.+]], @Foo::@w]
-  firrtl.nla @nla_DUTLeafWire [@NLARenaming::@dut, @DUT::@w]
+  // CHECK-NEXT: firrtl.hierpath @nla_DUTLeafWire [@NLARenaming::@dut, @DUT::@[[inst_sym:.+]], @Foo::@w]
+  firrtl.hierpath @nla_DUTLeafWire [@NLARenaming::@dut, @DUT::@w]
 
   // An NLA that passes through the DUT gets an extra level of hierarchy.
   //
-  // CHECK-NEXT: firrtl.nla @nla_DUTPassthrough [@NLARenaming::@dut, @DUT::@[[inst_sym:.+]], @Foo::@sub, @Sub]
-  firrtl.nla @nla_DUTPassthrough [@NLARenaming::@dut, @DUT::@sub, @Sub]
+  // CHECK-NEXT: firrtl.hierpath @nla_DUTPassthrough [@NLARenaming::@dut, @DUT::@[[inst_sym:.+]], @Foo::@sub, @Sub]
+  firrtl.hierpath @nla_DUTPassthrough [@NLARenaming::@dut, @DUT::@sub, @Sub]
   firrtl.module private @Sub() attributes {annotations = [{circt.nonlocal = @nla_DUTPassthrough, class = "nla_DUTPassthrough"}]} {
     %a = firrtl.wire sym @a : !firrtl.uint<1>
   }

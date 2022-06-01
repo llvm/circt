@@ -106,7 +106,7 @@ struct PortWiring {
   /// If set, the port should output a constant literal.
   Literal literal;
   /// The non-local anchor further specifying where to connect.
-  NonLocalAnchor nla;
+  HierPathOp nla;
 
   PortWiring() : target(nullptr) {}
 };
@@ -892,7 +892,7 @@ void GrandCentralTapsPass::runOnOperation() {
   for (auto &op :
        llvm::make_early_inc_range(circuitOp.getBody()->getOperations())) {
     // Remove NLA anchors whose leaf annotations were removed.
-    if (auto nla = dyn_cast<NonLocalAnchor>(op)) {
+    if (auto nla = dyn_cast<HierPathOp>(op)) {
       if (deadNLAs.contains(nla.getNameAttr()))
         nla.erase();
       continue;
@@ -992,9 +992,9 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
   // path. During wiring of the ports, we generate hierarchical names of the
   // form `<prefix>.<nla-path>.<suffix>`. If we don't have an NLA, we leave it
   // to the key-class-specific code below to come up with the possible prefices.
-  NonLocalAnchor nla;
+  HierPathOp nla;
   if (auto nlaSym = targetAnno.getMember<FlatSymbolRefAttr>("circt.nonlocal")) {
-    nla = dyn_cast<NonLocalAnchor>(circuitSymbols->lookup(nlaSym.getAttr()));
+    nla = dyn_cast<HierPathOp>(circuitSymbols->lookup(nlaSym.getAttr()));
     assert(nla);
     // Find all paths to the root of the NLA.
     Operation *root = circuitSymbols->lookup(nla.root());

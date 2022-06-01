@@ -379,7 +379,7 @@ private:
   ImplicitLocOpBuilder *builder;
 
   // After a bundle type is lowered to its field elements, they can have a
-  // reference to a NonLocalAnchor. This new lowered field element will get a
+  // reference to a HierPathOp. This new lowered field element will get a
   // new symbol, and the corresponding NLA needs to be updatd with this symbol.
   // This is a list of the NLA name  which needs to be updated, to the new
   // lowered field symbol name.
@@ -1356,7 +1356,7 @@ void LowerTypesPass::runOnOperation() {
   // Given the nla, iterate over the namepath, and update the "circt.nonlocal"
   // annotation to refer to `nla` instead of `oldNLAName` and drop the reference
   // to `oldNLAName` if removeNLA is true.
-  auto updateNamepath = [&](NonLocalAnchor nla, StringAttr oldNLAname,
+  auto updateNamepath = [&](HierPathOp nla, StringAttr oldNLAname,
                             bool removeNLA) {
     FlatSymbolRefAttr newName = FlatSymbolRefAttr::get(nla);
     // This starts from the leaf element, such that if the leaf is not updated,
@@ -1436,7 +1436,7 @@ void LowerTypesPass::runOnOperation() {
       if (nlaName == prevNLA) {
         // NLA reused, create new NLA.
         ImplicitLocOpBuilder theBuilder(nla.getLoc(), nla);
-        auto newNLAop = theBuilder.create<NonLocalAnchor>(
+        auto newNLAop = theBuilder.create<HierPathOp>(
             circtNamespace.newName(nlaName.getValue()), newPath);
         updateNamepath(newNLAop, nlaName, false);
         nlaTable->addNLA(newNLAop);
@@ -1460,7 +1460,7 @@ void LowerTypesPass::runOnOperation() {
     // nonlocal DontTouch is removed from the fields of a Bundle, the
     // corresponding NLA must also be removed. In this block, remove all the
     // references to the nla from the InstanceOps and erase the NLA.
-    auto nla = cast<NonLocalAnchor>(nlaOp);
+    auto nla = cast<HierPathOp>(nlaOp);
     updateNamepath(nla, nla.getNameAttr(), true);
     nlaTable->erase(nla);
     symTbl.erase(nla);

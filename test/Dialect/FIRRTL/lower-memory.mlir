@@ -229,7 +229,7 @@ firrtl.module @Annotations() attributes {annotations = [{class = "sifive.enterpr
 // CHECK-LABEL: firrtl.circuit "NonLocalAnnotation"
 firrtl.circuit "NonLocalAnnotation" {
 // CHECK:       [@NonLocalAnnotation::@dut, @DUT::@sym, @mem0::@mem0_ext]
-firrtl.nla @nla [@NonLocalAnnotation::@dut, @DUT::@sym]
+firrtl.hierpath @nla [@NonLocalAnnotation::@dut, @DUT::@sym]
 // CHECK: firrtl.module @NonLocalAnnotation()
 firrtl.module @NonLocalAnnotation()  {
   firrtl.instance dut sym @dut @DUT()

@@ -654,7 +654,7 @@ private:
       auto inst = instanceRecord->getInstance();
       namepath[0] = OpAnnoTarget(inst).getNLAReference(getNamespace(parent));
       auto arrayAttr = ArrayAttr::get(context, namepath);
-      auto nla = OpBuilder::atBlockBegin(nlaBlock).create<NonLocalAnchor>(
+      auto nla = OpBuilder::atBlockBegin(nlaBlock).create<HierPathOp>(
           loc, "nla", arrayAttr);
       // Insert it into the symbol table to get a unique name.
       symbolTable.insert(nla);
@@ -697,7 +697,7 @@ private:
   /// This erases the NLA op, all breadcrumb trails, and removes the NLA from
   /// every module's NLA map, but it does not delete the NLA reference from
   /// the target operation's annotations.
-  void eraseNLA(NonLocalAnchor nla) {
+  void eraseNLA(HierPathOp nla) {
     // Erase the NLA from the leaf module's nlaMap.
     targetMap.erase(nla.getNameAttr());
     nlaTable->erase(nla);

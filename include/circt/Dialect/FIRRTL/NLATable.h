@@ -37,15 +37,15 @@ public:
   /// Lookup all NLAs an operation participates in. This returns a reference to
   /// the internal record, so make a copy before making any update to the
   /// NLATable.
-  ArrayRef<NonLocalAnchor> lookup(Operation *op);
+  ArrayRef<HierPathOp> lookup(Operation *op);
 
   /// Lookup all NLAs an operation participates in. This returns a reference to
   /// the internal record, so make a copy before making any update to the
   /// NLATable.
-  ArrayRef<NonLocalAnchor> lookup(StringAttr name);
+  ArrayRef<HierPathOp> lookup(StringAttr name);
 
   /// Resolve a symbol to an NLA.
-  NonLocalAnchor getNLA(StringAttr name);
+  HierPathOp getNLA(StringAttr name);
 
   /// Resolve a symbol to a Module.
   FModuleLike getModule(StringAttr name);
@@ -57,17 +57,17 @@ public:
   ///  to get the set of NLAs that an InstanceOp participates in, instead of
   ///  recording them on the op in the IR.
   void commonNLAs(StringAttr mod1, StringAttr mod2,
-                  DenseSet<NonLocalAnchor> &common) {
+                  DenseSet<HierPathOp> &common) {
     auto mod1NLAs = lookup(mod1);
     auto mod2NLAs = lookup(mod2);
     common.insert(mod1NLAs.begin(), mod1NLAs.end());
-    DenseSet<NonLocalAnchor> set2(mod2NLAs.begin(), mod2NLAs.end());
+    DenseSet<HierPathOp> set2(mod2NLAs.begin(), mod2NLAs.end());
     llvm::set_intersect(common, set2);
   }
 
   /// Get the NLAs that the InstanceOp participates in, insert it to the
   /// DenseSet `nlas`.
-  void getInstanceNLAs(InstanceOp inst, DenseSet<NonLocalAnchor> &nlas) {
+  void getInstanceNLAs(InstanceOp inst, DenseSet<HierPathOp> &nlas) {
     auto instSym = inst.inner_symAttr();
     // If there is no inner sym on the InstanceOp, then it does not participate
     // in any NLA.
@@ -90,7 +90,7 @@ public:
 
   /// Get the NLAs that the module `modName` particiaptes in, and insert them
   /// into the DenseSet `nlas`.
-  void getNLAsInModule(StringAttr modName, DenseSet<NonLocalAnchor> &nlas) {
+  void getNLAsInModule(StringAttr modName, DenseSet<HierPathOp> &nlas) {
     for (auto nla : lookup(modName))
       nlas.insert(nla);
   }
@@ -106,10 +106,10 @@ public:
   /// Insert a new NLA. This updates two internal records,
   /// 1. Update the map for the `nlaOp` name to the Operation.
   /// 2. For each module in the NLA namepath, insert the NLA into the list of
-  /// NonlocalAnchors that participate in the corresponding module. This does
+  /// HierPathOps that participate in the corresponding module. This does
   /// not update the module name to module op map, if any potentially new module
   /// in the namepath does not already exist in the record.
-  void addNLA(NonLocalAnchor nla);
+  void addNLA(HierPathOp nla);
 
   /// Remove the NLA from the analysis. This updates two internal records,
   /// 1. Remove the NLA name to the operation map entry.
@@ -117,7 +117,7 @@ public:
   ///    list of NLAs that the module participates in.
   /// Note that this invalidates any reference to the NLA list returned by
   /// 'lookup'.
-  void erase(NonLocalAnchor nlaOp, SymbolTable *symbolTable = nullptr);
+  void erase(HierPathOp nlaOp, SymbolTable *symbolTable = nullptr);
 
   /// Record a new FModuleLike operation. This updates the Module name to Module
   /// operation map.
@@ -144,7 +144,7 @@ public:
   /// `newModule`. Move `nlaName` from the list of NLAs that `oldModule`
   /// participates in to `newModule`. This can delete and invalidate any
   /// reference returned by `lookup`.
-  void updateModuleInNLA(NonLocalAnchor nlaOp, StringAttr oldModule,
+  void updateModuleInNLA(HierPathOp nlaOp, StringAttr oldModule,
                          StringAttr newModule);
 
   /// Rename a module, this updates the name to module tracking and the name to
@@ -163,13 +163,13 @@ public:
 
   /// Remove the NLA from the Module. This updates the module name to NLA
   /// tracking.
-  void removeNLAfromModule(NonLocalAnchor nla, StringAttr mod) {
+  void removeNLAfromModule(HierPathOp nla, StringAttr mod) {
     llvm::erase_value(nodeMap[mod], nla);
   }
 
   /// Remove all the nlas in the set `nlas` from the module. This updates the
   /// module name to NLA tracking.
-  void removeNLAsfromModule(const DenseSet<NonLocalAnchor> &nlas,
+  void removeNLAsfromModule(const DenseSet<HierPathOp> &nlas,
                             StringAttr mod) {
     llvm::erase_if(nodeMap[mod],
                    [&nlas](const auto &nla) { return nlas.count(nla); });
@@ -178,7 +178,7 @@ public:
   /// Add the nla to the module. This ensures that the list of NLAs that the
   /// module participates in is updated. This will be required if `mod` is added
   /// to the namepath of `nla`.
-  void addNLAtoModule(NonLocalAnchor nla, StringAttr mod) {
+  void addNLAtoModule(HierPathOp nla, StringAttr mod) {
     nodeMap[mod].push_back(nla);
   }
 
@@ -186,7 +186,7 @@ private:
   NLATable(const NLATable &) = delete;
 
   /// Map modules to the NLA's that target them.
-  llvm::DenseMap<StringAttr, SmallVector<NonLocalAnchor, 4>> nodeMap;
+  llvm::DenseMap<StringAttr, SmallVector<HierPathOp, 4>> nodeMap;
 
   /// Map symbol names to module and NLA operations.
   llvm::DenseMap<StringAttr, Operation *> symToOp;

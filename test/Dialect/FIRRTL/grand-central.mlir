@@ -958,8 +958,8 @@ firrtl.circuit "DedupedPath" attributes {
         id = 2 : i64}],
      id = 0 : i64,
      name = "View"}]} {
-  firrtl.nla @nla_0 [@DUT::@tile1, @Tile::@w]
-  firrtl.nla @nla [@DUT::@tile2, @Tile::@w]
+  firrtl.hierpath @nla_0 [@DUT::@tile1, @Tile::@w]
+  firrtl.hierpath @nla [@DUT::@tile2, @Tile::@w]
   firrtl.module @Tile() {
     %w = firrtl.wire sym @w {
       annotations = [
@@ -1005,7 +1005,7 @@ firrtl.circuit "DedupedPath" attributes {
 //   2) The NLAs should be removed.
 //
 // CHECK-LABEL:          firrtl.circuit "DedupedPath"
-// CHECK-NOT:              firrtl.nla
+// CHECK-NOT:              firrtl.hierpath
 // CHECK-NEXT:             firrtl.module @Tile()
 // CHECK-NOT:                circt.nonlocal
 // CHECK:                  firrtl.module @DUT()

@@ -3390,10 +3390,10 @@ static void printVerifAttrs(OpAsmPrinter &p, Operation *op,
 }
 
 //===----------------------------------------------------------------------===//
-// NonLocalAnchor helpers.
+// HierPathOp helpers.
 //===----------------------------------------------------------------------===//
 
-bool NonLocalAnchor::dropModule(StringAttr moduleToDrop) {
+bool HierPathOp::dropModule(StringAttr moduleToDrop) {
   SmallVector<Attribute, 4> newPath;
   bool updateMade = false;
   for (auto nameRef : namepath()) {
@@ -3415,7 +3415,7 @@ bool NonLocalAnchor::dropModule(StringAttr moduleToDrop) {
   return updateMade;
 }
 
-bool NonLocalAnchor::inlineModule(StringAttr moduleToDrop) {
+bool HierPathOp::inlineModule(StringAttr moduleToDrop) {
   SmallVector<Attribute, 4> newPath;
   bool updateMade = false;
   StringRef inlinedInstanceName = "";
@@ -3445,7 +3445,7 @@ bool NonLocalAnchor::inlineModule(StringAttr moduleToDrop) {
   return updateMade;
 }
 
-bool NonLocalAnchor::updateModule(StringAttr oldMod, StringAttr newMod) {
+bool HierPathOp::updateModule(StringAttr oldMod, StringAttr newMod) {
   SmallVector<Attribute, 4> newPath;
   bool updateMade = false;
   for (auto nameRef : namepath()) {
@@ -3469,7 +3469,7 @@ bool NonLocalAnchor::updateModule(StringAttr oldMod, StringAttr newMod) {
   return updateMade;
 }
 
-bool NonLocalAnchor::updateModuleAndInnerRef(
+bool HierPathOp::updateModuleAndInnerRef(
     StringAttr oldMod, StringAttr newMod,
     const llvm::DenseMap<StringAttr, StringAttr> &innerSymRenameMap) {
   auto fromRef = FlatSymbolRefAttr::get(oldMod);
@@ -3505,7 +3505,7 @@ bool NonLocalAnchor::updateModuleAndInnerRef(
   return updateMade;
 }
 
-bool NonLocalAnchor::truncateAtModule(StringAttr atMod, bool includeMod) {
+bool HierPathOp::truncateAtModule(StringAttr atMod, bool includeMod) {
   SmallVector<Attribute, 4> newPath;
   bool updateMade = false;
   for (auto nameRef : namepath()) {
@@ -3532,20 +3532,20 @@ bool NonLocalAnchor::truncateAtModule(StringAttr atMod, bool includeMod) {
 }
 
 /// Return just the module part of the namepath at a specific index.
-StringAttr NonLocalAnchor::modPart(unsigned i) {
+StringAttr HierPathOp::modPart(unsigned i) {
   return TypeSwitch<Attribute, StringAttr>(namepath()[i])
       .Case<FlatSymbolRefAttr>([](auto a) { return a.getAttr(); })
       .Case<hw::InnerRefAttr>([](auto a) { return a.getModule(); });
 }
 
 /// Return the root module.
-StringAttr NonLocalAnchor::root() {
+StringAttr HierPathOp::root() {
   assert(!namepath().empty());
   return modPart(0);
 }
 
 /// Return true if the NLA has the module in its path.
-bool NonLocalAnchor::hasModule(StringAttr modName) {
+bool HierPathOp::hasModule(StringAttr modName) {
   for (auto nameRef : namepath()) {
     // nameRef is either an InnerRefAttr or a FlatSymbolRefAttr.
     if (auto ref = nameRef.dyn_cast<hw::InnerRefAttr>()) {
@@ -3560,8 +3560,8 @@ bool NonLocalAnchor::hasModule(StringAttr modName) {
 }
 
 /// Return true if the NLA has the InnerSym .
-bool NonLocalAnchor::hasInnerSym(StringAttr modName, StringAttr symName) const {
-  for (auto nameRef : const_cast<NonLocalAnchor *>(this)->namepath())
+bool HierPathOp::hasInnerSym(StringAttr modName, StringAttr symName) const {
+  for (auto nameRef : const_cast<HierPathOp *>(this)->namepath())
     if (auto ref = nameRef.dyn_cast<hw::InnerRefAttr>())
       if (ref.getName() == symName && ref.getModule() == modName)
         return true;
@@ -3571,7 +3571,7 @@ bool NonLocalAnchor::hasInnerSym(StringAttr modName, StringAttr symName) const {
 
 /// Return just the reference part of the namepath at a specific index.  This
 /// will return an empty attribute if this is the leaf and the leaf is a module.
-StringAttr NonLocalAnchor::refPart(unsigned i) {
+StringAttr HierPathOp::refPart(unsigned i) {
   return TypeSwitch<Attribute, StringAttr>(namepath()[i])
       .Case<FlatSymbolRefAttr>([](auto a) { return StringAttr({}); })
       .Case<hw::InnerRefAttr>([](auto a) { return a.getName(); });
@@ -3579,26 +3579,26 @@ StringAttr NonLocalAnchor::refPart(unsigned i) {
 
 /// Return the leaf reference.  This returns an empty attribute if the leaf
 /// reference is a module.
-StringAttr NonLocalAnchor::ref() {
+StringAttr HierPathOp::ref() {
   assert(!namepath().empty());
   return refPart(namepath().size() - 1);
 }
 
 /// Return the leaf module.
-StringAttr NonLocalAnchor::leafMod() {
+StringAttr HierPathOp::leafMod() {
   assert(!namepath().empty());
   return modPart(namepath().size() - 1);
 }
 
 /// Returns true if this NLA targets an instance of a module (as opposed to
 /// an instance's port or something inside an instance).
-bool NonLocalAnchor::isModule() { return !ref(); }
+bool HierPathOp::isModule() { return !ref(); }
 
 /// Returns true if this NLA targets something inside a module (as opposed
 /// to a module or an instance of a module);
-bool NonLocalAnchor::isComponent() { return (bool)ref(); }
+bool HierPathOp::isComponent() { return (bool)ref(); }
 
-// Verify the NonLocalAnchor.
+// Verify the HierPathOp.
 // 1. Iterate over the namepath.
 // 2. The namepath should be a valid instance path, specified either on a
 // module or a declaration inside a module.
@@ -3612,7 +3612,7 @@ bool NonLocalAnchor::isComponent() { return (bool)ref(); }
 // module port or a declaration inside the module.
 // 7. The last element of the namepath can also be a module symbol.
 LogicalResult
-NonLocalAnchor::verifySymbolUses(mlir::SymbolTableCollection &symtblC) {
+HierPathOp::verifySymbolUses(mlir::SymbolTableCollection &symtblC) {
   Operation *op = *this;
   CircuitOp cop = op->getParentOfType<CircuitOp>();
   auto &symtbl = symtblC.getSymbolTable(cop);
@@ -3664,7 +3664,7 @@ NonLocalAnchor::verifySymbolUses(mlir::SymbolTableCollection &symtblC) {
   return success();
 }
 
-void NonLocalAnchor::print(OpAsmPrinter &p) {
+void HierPathOp::print(OpAsmPrinter &p) {
   p << " ";
   p.printSymbolName(sym_name());
   p << " [";
@@ -3682,7 +3682,7 @@ void NonLocalAnchor::print(OpAsmPrinter &p) {
                           {SymbolTable::getSymbolAttrName(), "namepath"});
 }
 
-ParseResult NonLocalAnchor::parse(OpAsmParser &parser, OperationState &result) {
+ParseResult HierPathOp::parse(OpAsmParser &parser, OperationState &result) {
   // Parse the symbol name.
   StringAttr symName;
   if (parser.parseSymbolName(symName, SymbolTable::getSymbolAttrName(),

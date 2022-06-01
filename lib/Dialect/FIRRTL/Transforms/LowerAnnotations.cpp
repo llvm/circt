@@ -112,7 +112,7 @@ static FlatSymbolRefAttr buildNLA(AnnoPathValue target, ApplyState &state) {
     module = target.ref.getOp()->getParentOfType<FModuleLike>();
   insts.push_back(target.ref.getNLAReference(state.getNamespace(module)));
   auto instAttr = ArrayAttr::get(state.circuit.getContext(), insts);
-  auto nla = b.create<NonLocalAnchor>(state.circuit.getLoc(), "nla", instAttr);
+  auto nla = b.create<HierPathOp>(state.circuit.getLoc(), "nla", instAttr);
   state.symTbl.insert(nla);
   return FlatSymbolRefAttr::get(nla);
 }

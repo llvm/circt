@@ -82,14 +82,14 @@ firrtl.circuit "PrimOps" {
 
 // CHECK-LABEL: firrtl.circuit "Annotations"
 firrtl.circuit "Annotations" {
-  // CHECK: firrtl.nla [[NLA3:@nla.*]] [@Annotations::@annotations1, @Annotations0]
-  // CHECK: firrtl.nla [[NLA2:@nla.*]] [@Annotations::@annotations0, @Annotations0::@e]
-  // CHECK: firrtl.nla [[NLA1:@nla.*]] [@Annotations::@annotations0, @Annotations0::@c]
-  // CHECK: firrtl.nla [[NLA0:@nla.*]] [@Annotations::@annotations1, @Annotations0::@b]
-  // CHECK: firrtl.nla @annos_nla0 [@Annotations::@annotations0, @Annotations0::@d]
-  // CHECK: firrtl.nla @annos_nla1 [@Annotations::@annotations1, @Annotations0::@d]
-  firrtl.nla @annos_nla0 [@Annotations::@annotations0, @Annotations0::@d]
-  firrtl.nla @annos_nla1 [@Annotations::@annotations1, @Annotations1::@i]
+  // CHECK: firrtl.hierpath [[NLA3:@nla.*]] [@Annotations::@annotations1, @Annotations0]
+  // CHECK: firrtl.hierpath [[NLA2:@nla.*]] [@Annotations::@annotations0, @Annotations0::@e]
+  // CHECK: firrtl.hierpath [[NLA1:@nla.*]] [@Annotations::@annotations0, @Annotations0::@c]
+  // CHECK: firrtl.hierpath [[NLA0:@nla.*]] [@Annotations::@annotations1, @Annotations0::@b]
+  // CHECK: firrtl.hierpath @annos_nla0 [@Annotations::@annotations0, @Annotations0::@d]
+  // CHECK: firrtl.hierpath @annos_nla1 [@Annotations::@annotations1, @Annotations0::@d]
+  firrtl.hierpath @annos_nla0 [@Annotations::@annotations0, @Annotations0::@d]
+  firrtl.hierpath @annos_nla1 [@Annotations::@annotations1, @Annotations1::@i]
 
   // CHECK: firrtl.module @Annotations0() attributes {annotations = [{circt.nonlocal = [[NLA3]], class = "one"}]}
   firrtl.module @Annotations0() {
@@ -132,10 +132,10 @@ firrtl.circuit "Annotations" {
 // Check that module and memory port annotations are merged correctly.
 // CHECK-LABEL: firrtl.circuit "PortAnnotations"
 firrtl.circuit "PortAnnotations" {
-  // CHECK: firrtl.nla [[NLA3:@nla.*]] [@PortAnnotations::@portannos0, @PortAnnotations0::@a]
-  // CHECK: firrtl.nla [[NLA2:@nla.*]] [@PortAnnotations::@portannos1, @PortAnnotations0::@a]
-  // CHECK: firrtl.nla [[NLA1:@nla.*]] [@PortAnnotations::@portannos0, @PortAnnotations0::@bar]
-  // CHECK: firrtl.nla [[NLA0:@nla.*]] [@PortAnnotations::@portannos1, @PortAnnotations0::@bar]
+  // CHECK: firrtl.hierpath [[NLA3:@nla.*]] [@PortAnnotations::@portannos0, @PortAnnotations0::@a]
+  // CHECK: firrtl.hierpath [[NLA2:@nla.*]] [@PortAnnotations::@portannos1, @PortAnnotations0::@a]
+  // CHECK: firrtl.hierpath [[NLA1:@nla.*]] [@PortAnnotations::@portannos0, @PortAnnotations0::@bar]
+  // CHECK: firrtl.hierpath [[NLA0:@nla.*]] [@PortAnnotations::@portannos1, @PortAnnotations0::@bar]
   // CHECK: firrtl.module @PortAnnotations0(in %a: !firrtl.uint<1> sym @a [
   // CHECK-SAME: {circt.nonlocal = [[NLA2]], class = "port1"},
   // CHECK-SAME: {circt.nonlocal = [[NLA3]], class = "port0"}]) {
@@ -164,13 +164,13 @@ firrtl.circuit "PortAnnotations" {
 // CHECK-LABEL: firrtl.circuit "Breadcrumb"
 firrtl.circuit "Breadcrumb" {
   // CHECK:  @breadcrumb_nla0 [@Breadcrumb::@breadcrumb0, @Breadcrumb0::@crumb0, @Crumb::@in]
-  firrtl.nla @breadcrumb_nla0 [@Breadcrumb::@breadcrumb0, @Breadcrumb0::@crumb0, @Crumb::@in]
+  firrtl.hierpath @breadcrumb_nla0 [@Breadcrumb::@breadcrumb0, @Breadcrumb0::@crumb0, @Crumb::@in]
   // CHECK:  @breadcrumb_nla1 [@Breadcrumb::@breadcrumb1, @Breadcrumb0::@crumb0, @Crumb::@in]
-  firrtl.nla @breadcrumb_nla1 [@Breadcrumb::@breadcrumb1, @Breadcrumb1::@crumb1, @Crumb::@in]
+  firrtl.hierpath @breadcrumb_nla1 [@Breadcrumb::@breadcrumb1, @Breadcrumb1::@crumb1, @Crumb::@in]
   // CHECK:  @breadcrumb_nla2 [@Breadcrumb::@breadcrumb0, @Breadcrumb0::@crumb0, @Crumb::@w]
-  firrtl.nla @breadcrumb_nla2 [@Breadcrumb::@breadcrumb0, @Breadcrumb0::@crumb0, @Crumb::@w]
+  firrtl.hierpath @breadcrumb_nla2 [@Breadcrumb::@breadcrumb0, @Breadcrumb0::@crumb0, @Crumb::@w]
   // CHECK:  @breadcrumb_nla3 [@Breadcrumb::@breadcrumb1, @Breadcrumb0::@crumb0, @Crumb::@w]
-  firrtl.nla @breadcrumb_nla3 [@Breadcrumb::@breadcrumb1, @Breadcrumb1::@crumb1, @Crumb::@w]
+  firrtl.hierpath @breadcrumb_nla3 [@Breadcrumb::@breadcrumb1, @Breadcrumb1::@crumb1, @Crumb::@w]
   firrtl.module @Crumb(in %in: !firrtl.uint<1> sym @in [
       {circt.nonlocal = @breadcrumb_nla0, class = "port0"},
       {circt.nonlocal = @breadcrumb_nla1, class = "port1"}]) {
@@ -199,18 +199,18 @@ firrtl.circuit "Breadcrumb" {
 // and the annotation should be cloned for each parent of the root module.
 // CHECK-LABEL: firrtl.circuit "Context"
 firrtl.circuit "Context" {
-  // CHECK: firrtl.nla [[NLA3:@nla.*]] [@Context::@context1, @Context0::@c0, @ContextLeaf::@w]
-  // CHECK: firrtl.nla [[NLA1:@nla.*]] [@Context::@context1, @Context0::@c0, @ContextLeaf::@in]
-  // CHECK: firrtl.nla [[NLA2:@nla.*]] [@Context::@context0, @Context0::@c0, @ContextLeaf::@w]
-  // CHECK: firrtl.nla [[NLA0:@nla.*]] [@Context::@context0, @Context0::@c0, @ContextLeaf::@in]
+  // CHECK: firrtl.hierpath [[NLA3:@nla.*]] [@Context::@context1, @Context0::@c0, @ContextLeaf::@w]
+  // CHECK: firrtl.hierpath [[NLA1:@nla.*]] [@Context::@context1, @Context0::@c0, @ContextLeaf::@in]
+  // CHECK: firrtl.hierpath [[NLA2:@nla.*]] [@Context::@context0, @Context0::@c0, @ContextLeaf::@w]
+  // CHECK: firrtl.hierpath [[NLA0:@nla.*]] [@Context::@context0, @Context0::@c0, @ContextLeaf::@in]
   // CHECK-NOT: @context_nla0
   // CHECK-NOT: @context_nla1
   // CHECK-NOT: @context_nla2
   // CHECK-NOT: @context_nla3
-  firrtl.nla @context_nla0 [@Context0::@c0, @ContextLeaf::@in]
-  firrtl.nla @context_nla1 [@Context0::@c0, @ContextLeaf::@w]
-  firrtl.nla @context_nla2 [@Context1::@c1, @ContextLeaf::@in]
-  firrtl.nla @context_nla3 [@Context1::@c1, @ContextLeaf::@w]
+  firrtl.hierpath @context_nla0 [@Context0::@c0, @ContextLeaf::@in]
+  firrtl.hierpath @context_nla1 [@Context0::@c0, @ContextLeaf::@w]
+  firrtl.hierpath @context_nla2 [@Context1::@c1, @ContextLeaf::@in]
+  firrtl.hierpath @context_nla3 [@Context1::@c1, @ContextLeaf::@w]
 
   // CHECK: firrtl.module @ContextLeaf(in %in: !firrtl.uint<1> sym @in [
   // CHECK-SAME: {circt.nonlocal = [[NLA0]], class = "port0"},
@@ -247,8 +247,8 @@ firrtl.circuit "Context" {
 // External modules should dedup and fixup any NLAs.
 // CHECK: firrtl.circuit "ExtModuleTest"
 firrtl.circuit "ExtModuleTest" {
-  // CHECK: firrtl.nla @ext_nla [@ExtModuleTest::@e1, @ExtMod0]
-  firrtl.nla @ext_nla [@ExtModuleTest::@e1, @ExtMod1]
+  // CHECK: firrtl.hierpath @ext_nla [@ExtModuleTest::@e1, @ExtMod0]
+  firrtl.hierpath @ext_nla [@ExtModuleTest::@e1, @ExtMod1]
   // CHECK: firrtl.extmodule @ExtMod0() attributes {annotations = [{circt.nonlocal = @ext_nla}], defname = "a"}
   firrtl.extmodule @ExtMod0() attributes {defname = "a"}
   // CHECK-NOT: firrtl.extmodule @ExtMod1()
@@ -265,8 +265,8 @@ firrtl.circuit "ExtModuleTest" {
 // https://github.com/llvm/circt/issues/2713
 // CHECK-LABEL: firrtl.circuit "Foo"
 firrtl.circuit "Foo"  {
-  // CHECK: firrtl.nla @nla_1 [@Foo::@b, @A::@a]
-  firrtl.nla @nla_1 [@Foo::@b, @B::@b]
+  // CHECK: firrtl.hierpath @nla_1 [@Foo::@b, @A::@a]
+  firrtl.hierpath @nla_1 [@Foo::@b, @B::@b]
   // CHECK: firrtl.extmodule @A(out a: !firrtl.clock sym @a [{circt.nonlocal = @nla_1}])
   firrtl.extmodule @A(out a: !firrtl.clock)
   firrtl.extmodule @B(out b: !firrtl.clock sym @b [{circt.nonlocal = @nla_1}])
@@ -297,8 +297,8 @@ firrtl.circuit "Foo"  {
 // As we dedup modules, the chain on NLAs should continuously grow.
 // CHECK-LABEL: firrtl.circuit "Chain"
 firrtl.circuit "Chain" {
-  // CHECK: firrtl.nla [[NLA0:@nla.*]] [@Chain::@chainB1, @ChainB0::@chainA0, @ChainA0::@extchain0, @ExtChain0]
-  // CHECK: firrtl.nla [[NLA1:@nla.*]] [@Chain::@chainB0, @ChainB0::@chainA0, @ChainA0::@extchain0, @ExtChain0]
+  // CHECK: firrtl.hierpath [[NLA0:@nla.*]] [@Chain::@chainB1, @ChainB0::@chainA0, @ChainA0::@extchain0, @ExtChain0]
+  // CHECK: firrtl.hierpath [[NLA1:@nla.*]] [@Chain::@chainB0, @ChainB0::@chainA0, @ChainA0::@extchain0, @ExtChain0]
   // CHECK: firrtl.module @ChainB0()
   firrtl.module @ChainB0() {
     firrtl.instance chainA0 @ChainA0()

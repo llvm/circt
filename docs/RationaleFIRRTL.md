@@ -181,20 +181,20 @@ most conservative case, and in the case of public symbols, must always assume
 the most conservative case.  To do better, all uses must be analyzed and 
 understood (e.g. a symbol used by a verbatim has unknown use).
 
-### NonLocalAnchor
+### Hierarchical Path
 
 In the FIRRTL dialect, it might be necessary to identify specific instances of
-operations in the instance hierarchy. The FIRRTL `NonLocalAnchor` operation
-(`firrtl.nla`) can be used to describe the path through an instance hiearchy to
+operations in the instance hierarchy. The FIRRTL `HierPathOp` operation
+(`firrtl.hierpath`) can be used to describe the path through an instance hierarchy to
 a declaration, which can be used by other operations or non-local annotations.
 Non-local anchors can refer to most declarations, such as modules, instances,
 wires, registers, and memories.
 
-The `firrtl.nla` operations defines a symbol and contains a namepath, which is
+The `firrtl.hierpath` operations defines a symbol and contains a namepath, which is
 a list of `InnerRefAttr` and `FlatSymbolRefAttr` attributes. A
 `FlatSymbolRefAttr` is used to identify modules, and is printed as `@Module`.
 `InnerRefAttr` identifies a declaration inside a module, and is printed as
-`@Module::@wire`. Each element along the NLA's namepath carries an annotation
+`@Module::@wire`. Each element along the Paths's namepath carries an annotation
 with class `circt. nonlocal`, which has a matching `circt. nonlocal` field
 pointing to the global op. Thus instances participating in nonlocal paths are
 readily apparent.
@@ -205,7 +205,7 @@ in module `@Baz`.
 
 ``` mlir
 firrtl.circuit "Foo"   {
-  firrtl.nla @nla [@Foo::@bar, @Bar::@baz, @Baz::@w]
+  firrtl.hierpath @nla [@Foo::@bar, @Bar::@baz, @Baz::@w]
   firrtl.module @Baz() {
     %w = firrtl.wire sym @w {annotations = [{circt.nonlocal = @nla, class = "ExampleAnno"}]} : !firrtl.uint
   }

@@ -110,7 +110,7 @@ firrtl.circuit "Foo" attributes {annotations = [
         {class = "firrtl.transforms.BlackBox", circt.nonlocal = @nla_1}
     ]} {}
     // Non-local annotations should not produce errors either.
-    firrtl.nla  @nla_1 [@Bar::@s1, @Foo]
+    firrtl.hierpath  @nla_1 [@Bar::@s1, @Foo]
     firrtl.module @Bar() {
       firrtl.instance foo sym @s1 {annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}]} @Foo()
     }
