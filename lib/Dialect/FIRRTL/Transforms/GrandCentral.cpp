@@ -1633,24 +1633,24 @@ void GrandCentralPass::runOnOperation() {
   // built exist.  However, still generate the YAML file if the annotation for
   // this was passed in because some flows expect this.
   if (worklist.empty()) {
-    if (maybeHierarchyFileYAML) {
-      std::string yamlString;
-      llvm::raw_string_ostream stream(yamlString);
-      ::yaml::Context yamlContext({interfaceMap});
-      llvm::yaml::Output yout(stream);
-      OpBuilder builder(circuitOp);
-      SmallVector<sv::InterfaceOp, 0> interfaceVec;
-      yamlize(yout, interfaceVec, true, yamlContext);
-      builder.setInsertionPointToStart(circuitOp.getBody());
-      builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), yamlString)
-          ->setAttr("output_file",
-                    hw::OutputFileAttr::getFromFilename(
-                        &getContext(),
-                        maybeHierarchyFileYAML.getValue().getValue(),
-                        /*excludFromFileList=*/true));
-      LLVM_DEBUG({ llvm::dbgs() << "Generated YAML:" << yamlString << "\n"; });
-    }
-    return markAllAnalysesPreserved();
+    if (!maybeHierarchyFileYAML)
+      return markAllAnalysesPreserved();
+    std::string yamlString;
+    llvm::raw_string_ostream stream(yamlString);
+    ::yaml::Context yamlContext({interfaceMap});
+    llvm::yaml::Output yout(stream);
+    OpBuilder builder(circuitOp);
+    SmallVector<sv::InterfaceOp, 0> interfaceVec;
+    yamlize(yout, interfaceVec, true, yamlContext);
+    builder.setInsertionPointToStart(circuitOp.getBody());
+    builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), yamlString)
+        ->setAttr("output_file",
+                  hw::OutputFileAttr::getFromFilename(
+                      &getContext(),
+                      maybeHierarchyFileYAML.getValue().getValue(),
+                      /*excludFromFileList=*/true));
+    LLVM_DEBUG({ llvm::dbgs() << "Generated YAML:" << yamlString << "\n"; });
+    return;
   }
 
   // Setup the builder to create ops _inside the FIRRTL circuit_.  This is
