@@ -452,6 +452,14 @@ def InstanceOp : HWOp<"instance", [
       instanceNameAttr(name);
     }
 
+    /// Builds a new `InstanceOp` with the ports listed in `inputPortsIndices` and
+    /// `outputPortsIndices` erased, and updates any users of the remaining ports
+    /// to point at the new instance.
+    InstanceOp erasePorts(OpBuilder &builder,
+                          ArrayRef<unsigned> inputPortsIndices,
+                          ArrayRef<unsigned> outputPortsIndices);
+
+
     //===------------------------------------------------------------------===//
     // SymbolOpInterface Methods
     //===------------------------------------------------------------------===//

@@ -1474,6 +1474,80 @@ void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   }
 }
 
+/// Remove elements at the specified indices from the input array, returning the
+/// elements not mentioned.  The indices array is expected to be sorted and
+/// unique.
+template <typename T>
+static SmallVector<T>
+removeElementsAtIndices(ArrayRef<T> input, ArrayRef<unsigned> indicesToDrop) {
+  // Copy over the live chunks.
+  size_t lastCopied = 0;
+  SmallVector<T> result;
+  result.reserve(input.size() - indicesToDrop.size());
+
+  for (unsigned indexToDrop : indicesToDrop) {
+    // If we skipped over some valid elements, copy them over.
+    if (indexToDrop > lastCopied) {
+      result.append(input.begin() + lastCopied, input.begin() + indexToDrop);
+      lastCopied = indexToDrop;
+    }
+    // Ignore this value so we don't copy it in the next iteration.
+    ++lastCopied;
+  }
+
+  // If there are live elements at the end, copy them over.
+  if (lastCopied < input.size())
+    result.append(input.begin() + lastCopied, input.end());
+
+  return result;
+}
+
+/// Builds a new `InstanceOp` with the ports listed in `inputPortsIndices` and
+/// `outputPortsIndices` erased, and updates any users of the remaining ports to
+/// point at the new instance.
+InstanceOp InstanceOp::erasePorts(OpBuilder &builder,
+                                  ArrayRef<unsigned> inputPortsIndices,
+                                  ArrayRef<unsigned> outputPortsIndices) {
+  if (inputPortsIndices.empty() && outputPortsIndices.empty())
+    return *this;
+
+  SmallVector<Value> newInputs = removeElementsAtIndices<Value>(
+      SmallVector<Value>(inputs()), inputPortsIndices);
+  SmallVector<Type> newResultTypes = removeElementsAtIndices<Type>(
+      SmallVector<Type>(result_type_begin(), result_type_end()),
+      outputPortsIndices);
+  SmallVector<Attribute> newPortNames =
+      removeElementsAtIndices(argNamesAttr().getValue(), inputPortsIndices);
+  SmallVector<Attribute> newResultNames =
+      removeElementsAtIndices(resultNamesAttr().getValue(), outputPortsIndices);
+
+  auto newOp = builder.create<InstanceOp>(
+      getLoc(), newResultTypes, instanceName(), moduleName(), newInputs,
+      builder.getArrayAttr(newPortNames), builder.getArrayAttr(newResultNames),
+      parameters(), inner_symAttr());
+  llvm::SmallDenseSet<unsigned> outputPortSet(outputPortsIndices.begin(),
+                                              outputPortsIndices.end());
+
+  for (unsigned oldIdx = 0, newIdx = 0, numOldPorts = getNumResults();
+       oldIdx != numOldPorts; ++oldIdx) {
+    if (outputPortSet.contains(oldIdx)) {
+      assert(getResult(oldIdx).use_empty() && "removed instance port has uses");
+      continue;
+    }
+    getResult(oldIdx).replaceAllUsesWith(newOp.getResult(newIdx));
+    ++newIdx;
+  }
+
+  // Copy over "output_file" information so that this is not lost when ports
+  // are erased.
+  //
+  // TODO: Other attributes may need to be copied over.
+  if (auto outputFile = (*this)->getAttr("output_file"))
+    newOp->setAttr("output_file", outputFile);
+
+  return newOp;
+}
+
 //===----------------------------------------------------------------------===//
 // HWOutputOp
 //===----------------------------------------------------------------------===//
