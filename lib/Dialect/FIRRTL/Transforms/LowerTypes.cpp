@@ -28,6 +28,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
@@ -477,22 +478,7 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(
   DenseSet<StringAttr> alreadyAddedNLAs;
   if (!annotations || annotations.empty())
     return ArrayAttr::get(ctxt, retval);
-  bool isGroundType = field.type.isGround();
-  // symAttr is the new symbol assigned to the lowered field. This is required
-  // to fixup the NLA.
-  StringAttr symAttr = StringAttr::get(ctxt, sym);
   for (auto opAttr : annotations) {
-    // If this annotation refers to an NLA, then the NLA namepath must be fixed
-    // to refer to the lowered symbol instead of the original bundle symbol. So,
-    // create a record of the NLA name that needs to be fixed and the
-    // corresponding lowered symbol, which should be the new leaf for the NLA.
-    // Furthermore, an NLA can be shared among multiple fields, each of which
-    // will be a new leaf after lowering, but they had the same symbol
-    // corresponding to the bundle before lowering. This means, a new NLA needs
-    // to be created to refer to the unique ops created after lowering. Hence,
-    // nlaNameToNewSymList, will have multiple entries with the same NLA name in
-    // such scenarios. So, whenever a reference to an NLA is copied to the
-    // retval, update the nlaNameToNewSymList.
     Optional<int64_t> maybeFieldID = None;
     DictionaryAttr annotation;
     if (auto subAnno = opAttr.dyn_cast<SubAnnotationAttr>()) {
@@ -507,15 +493,6 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(
     if (!maybeFieldID) {
       retval.push_back(
           updateAnnotationFieldID(ctxt, opAttr, field.fieldID, cache.i64ty));
-      // Check for ground type, to ensure spurious entries are not created for
-      // intermediate ops generated during lowering of nested aggregate types.
-      if (!isGroundType)
-        continue;
-      if (auto nlaAttr =
-              Annotation(opAttr).getMember<FlatSymbolRefAttr>("circt.nonlocal"))
-        if (alreadyAddedNLAs.insert(nlaAttr.getAttr()).second)
-          nlaNameToNewSymList.push_back({nlaAttr.getAttr(), symAttr});
-
       continue;
     }
     auto fieldID = maybeFieldID.getValue();
@@ -526,24 +503,9 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(
           fieldID <= field.fieldID + field.type.getMaxFieldID()))
       continue;
 
-    auto nlaRef = annotation.getAs<FlatSymbolRefAttr>("circt.nonlocal");
-    auto isDontTouch = Annotation(opAttr).getClass() ==
-                       "firrtl.transforms.DontTouchAnnotation";
-
-    // If its a valid NLA and it is not a DontTouch and we have already added
-    // an entry for this NLA with this field's symbol, ignore this NLA. This is
-    // required such that there is only a single entry for a pair of NLA and
-    // lowered symbol. This means, there can be multiple entries for the same
-    // NLA and DontTouch. Since, DontTouch NLAs can be simply deleted, there is
-    // no need to create a unique entry.
-    if (nlaRef && !isDontTouch &&
-        !alreadyAddedNLAs.insert(nlaRef.getAttr()).second)
-      nlaRef = {};
     // Apply annotations to all elements if fieldID is equal to zero.
     if (fieldID == 0) {
       retval.push_back(annotation);
-      if (isGroundType && nlaRef)
-        nlaNameToNewSymList.push_back({nlaRef.getAttr(), symAttr});
       continue;
     }
 
@@ -553,26 +515,21 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(
       retval.push_back(SubAnnotationAttr::get(ctxt, newFieldID, annotation));
       continue;
     }
-    if (isDontTouch) {
+    // If the annotation is a local DontTouchAnnotation, then it is safe to
+    // lower this to a symbol.  Otherwise, preserve the non-local property of
+    // the DontTouchAnnotation (just like any other annotation).
+    if (Annotation(opAttr).isClass(dontTouchAnnoClass) &&
+        !annotation.getNamed("circt.nonlocal")) {
       needsSym = true;
-      // If this is a nonlocal DontTouch, then,
-      // 1. Drop the annotation and the circt.nonlocal reference.
-      // 2. This makes the NLA redundant.
-      // 3. Just record the nla name, and insert a null Attr, to signify that
-      // the original NLA must be deleted.
-      if (nlaRef)
-        nlaNameToNewSymList.push_back({nlaRef.getAttr(), {}});
       continue;
-    }
-    // If this subfield has a nonlocal anchor, then we need to update the
-    // NLA with the new symbol that would be added to the field after
-    // lowering.
-    if (isGroundType && nlaRef) {
-      nlaNameToNewSymList.push_back({nlaRef.getAttr(), symAttr});
-      needsSym = true;
     }
     // Otherwise, if the current field is exactly the target, degenerate
     // the sub-annotation to a normal annotation.
+    if (annotation.getNamed("circt.fieldID")) {
+      auto newAnno = Annotation(opAttr);
+      newAnno.removeMember("circt.fieldID");
+      annotation = newAnno.getDict();
+    }
     retval.push_back(annotation);
   }
   return ArrayAttr::get(ctxt, retval);
