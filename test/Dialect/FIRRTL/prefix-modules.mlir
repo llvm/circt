@@ -343,7 +343,7 @@ firrtl.circuit "GCTDataMemTapsPrefix" {
     // CHECK:       firrtl.module @Baz()
     // CHECK-SAME:  annotations = [{circt.nonlocal = @nla_1, class = "nla_1"}, {circt.nonlocal = @nla_3, class = "nla_3"}]
     // CHECK:       %mem_MPORT_en = firrtl.wire sym @s1  : !firrtl.uint<1>
-    
+
   }
 
 // Test that NonLocalAnchors are properly updated with memmodules.

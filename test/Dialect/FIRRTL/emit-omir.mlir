@@ -663,7 +663,7 @@ firrtl.circuit "FixPath"  attributes
   // CHECK-LABEL: firrtl.circuit "FixPath"
   // CHECK: firrtl.module @FixPath
   // CHECK:    firrtl.instance d  @D()
-  // CHECK: sv.verbatim 
+  // CHECK: sv.verbatim
   // CHECK-SAME: name\22: \22dutInstance\22,\0A
   // CHECK-SAME: OMMemberInstanceTarget:~FixPath|{{[{][{]0[}][}]}}/{{[{][{]1[}][}]}}:{{[{][{]2[}][}]}}
   // CHECK-SAME: name\22: \22pwm\22,\0A
@@ -671,6 +671,6 @@ firrtl.circuit "FixPath"  attributes
   // CHECK-SAME: name\22: \22power\22,\0A
   // CHECK-SAME: value\22: \22OMMemberInstanceTarget:~C|{{[{][{]2[}][}]}}/{{[{][{]4[}][}]}}:{{[{][{]5[}][}]}}
   // CHECK-SAME: name\22: \22d\22,\0A
-  // CHECK-SAME: value\22: \22OMMemberInstanceTarget:~FixPath|{{[{][{]5[}][}]}}\22\0A 
+  // CHECK-SAME: value\22: \22OMMemberInstanceTarget:~FixPath|{{[{][{]5[}][}]}}\22\0A
   // CHECK-SAME: {output_file = #hw.output_file<"omir.json", excludeFromFileList>, symbols = [@FixPath, #hw.innerNameRef<@FixPath::@c>, @C, #hw.innerNameRef<@C::@in>, #hw.innerNameRef<@C::@cd>, @D]}
 }

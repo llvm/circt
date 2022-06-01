@@ -675,7 +675,7 @@ firrtl.nla @NLA1 []
 firrtl.nla @NLA2 [@LowerToBind::@s1]
 firrtl.module @InstanceLowerToBind() {}
 firrtl.module @LowerToBind() {
-  firrtl.instance foo sym @s1 {lowerToBind = true, annotations = [{circt.nonlocal = @NLA2, class = "circt.test", nl = "nl"}]} @InstanceLowerToBind() 
+  firrtl.instance foo sym @s1 {lowerToBind = true, annotations = [{circt.nonlocal = @NLA2, class = "circt.test", nl = "nl"}]} @InstanceLowerToBind()
 }
 }
 

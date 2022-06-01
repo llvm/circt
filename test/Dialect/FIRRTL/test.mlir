@@ -5,7 +5,7 @@ firrtl.circuit "MyModule" {
 firrtl.module @mod() { }
 firrtl.extmodule @extmod()
 firrtl.memmodule @memmod () attributes {
-  depth = 16 : ui64, dataWidth = 1 : ui32, extraPorts = [], 
+  depth = 16 : ui64, dataWidth = 1 : ui32, extraPorts = [],
   maskBits = 0 : ui32, numReadPorts = 0 : ui32, numWritePorts = 0 : ui32,
   numReadWritePorts = 0 : ui32, readLatency = 0 : ui32,
   writeLatency = 1 : ui32}
@@ -177,7 +177,7 @@ firrtl.module @VerbatimExpr() {
 // CHECK: firrtl.instance foo sym @s1 {lowerToBind = true} @InstanceLowerToBind()
 firrtl.module @InstanceLowerToBind() {}
 firrtl.module @LowerToBind() {
-  firrtl.instance foo sym @s1 {lowerToBind = true} @InstanceLowerToBind() 
+  firrtl.instance foo sym @s1 {lowerToBind = true} @InstanceLowerToBind()
 }
 
 // CHECK-LABEL: @ProbeTest

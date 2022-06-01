@@ -119,7 +119,7 @@ def GetWidthAsIntAttr : NativeCodeCall<
                     "$0.getType().cast<FIRRTLType>().getBitWidthOrSentinel())">;
 
 ////////////////////////////////////////////////////////////////////////////////
-// Drop name if no symbol (DontTouch application) and name is a stylized 
+// Drop name if no symbol (DontTouch application) and name is a stylized
 // temporary name
 ////////////////////////////////////////////////////////////////////////////////
 

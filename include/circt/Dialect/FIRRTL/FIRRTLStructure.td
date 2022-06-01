@@ -153,7 +153,7 @@ def FMemModuleOp : FIRRTLOp<"memmodule",
     The "firrtl.memmodule" operation represents an external reference to a
     memory module. See the "firrtl.mem" op for a deeper explantation of the
     parameters.
-    
+
     A "firrtl.mem" operation is typically lowered to this operation when they
     are not directly lowered to registers by the compiler.
   }];
@@ -190,7 +190,7 @@ def FMemModuleOp : FIRRTLOp<"memmodule",
 }
 
 def NonLocalAnchor : FIRRTLOp<"nla",
-      [IsolatedFromAbove, Symbol, 
+      [IsolatedFromAbove, Symbol,
        DeclareOpInterfaceMethods<SymbolUserOpInterface>,
        HasParent<"CircuitOp">]> {
   let summary = "Anchor for non-local annotations";
@@ -220,7 +220,7 @@ def NonLocalAnchor : FIRRTLOp<"nla",
 
     /// Replace the oldMod module with newMod module in the namepath of the NLA.
     /// Since the module is being updated, the symbols inside the module should
-    /// also be renamed. Use the rename Map to update the corresponding 
+    /// also be renamed. Use the rename Map to update the corresponding
     /// inner_sym names in the namepath. Return true if any update is made.
     bool updateModuleAndInnerRef(StringAttr oldMod, StringAttr newMod,
          const llvm::DenseMap<StringAttr, StringAttr> &innerSymRenameMap);

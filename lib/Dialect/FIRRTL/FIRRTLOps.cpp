@@ -3208,7 +3208,6 @@ LogicalResult HWStructCastOp::verify() {
 }
 
 LogicalResult BitCastOp::verify() {
-
   auto inTypeBits = getBitWidth(getOperand().getType().cast<FIRRTLType>());
   auto resTypeBits = getBitWidth(getType());
   if (inTypeBits.hasValue() && resTypeBits.hasValue()) {
@@ -3285,7 +3284,6 @@ static void printElidePortAnnotations(OpAsmPrinter &p, Operation *op,
 
 static ParseResult parseImplicitSSAName(OpAsmParser &parser,
                                         NamedAttrList &resultAttrs) {
-
   if (parseElideAnnotations(parser, resultAttrs))
     return failure();
 
@@ -3356,7 +3354,6 @@ static ParseResult parseElideEmptyName(OpAsmParser &p,
 static void printElideEmptyName(OpAsmPrinter &p, Operation *op,
                                 DictionaryAttr attr,
                                 ArrayRef<StringRef> extraElides = {}) {
-
   SmallVector<StringRef> elides(extraElides.begin(), extraElides.end());
   if (op->getAttrOfType<StringAttr>("name").getValue().empty())
     elides.push_back("name");
@@ -3616,7 +3613,6 @@ bool NonLocalAnchor::isComponent() { return (bool)ref(); }
 // 7. The last element of the namepath can also be a module symbol.
 LogicalResult
 NonLocalAnchor::verifySymbolUses(mlir::SymbolTableCollection &symtblC) {
-
   Operation *op = *this;
   CircuitOp cop = op->getParentOfType<CircuitOp>();
   auto &symtbl = symtblC.getSymbolTable(cop);
@@ -3731,7 +3727,6 @@ ParseResult NonLocalAnchor::parse(OpAsmParser &parser, OperationState &result) {
 
 static void genericAsmResultNames(Operation *op,
                                   OpAsmSetValueNameFn setNameFn) {
-
   // Many firrtl dialect operations have an optional 'name' attribute.  If
   // present, use it.
   if (op->getNumResults() == 1)
