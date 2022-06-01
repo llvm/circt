@@ -182,7 +182,10 @@ LogicalResult calyx::verifyControlLikeOp(Operation *op) {
 
   if (isa<calyx::EnableOp>(op) &&
       !isa<calyx::CalyxDialect>(parent->getDialect())) {
-    // calyx.enable mixed with other dialects; anything goes.
+    // Allow embedding calyx.enable ops within other dialects. This is motivated
+    // by allowing experimentation with new styles of Calyx lowering. For more
+    // info and the historical discussion, see:
+    // https://github.com/llvm/circt/pull/3211
     return success();
   }
 
