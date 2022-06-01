@@ -29,9 +29,6 @@
 // CHECK-NOT: foo_assert
 // CHECK-NOT: foo_assume
 // CHECK-NOT: foo_cover
-// CHECK: hw.instance "issue1246_assert"
-// CHECK: hw.instance "issue1246_assume"
-// CHECK: hw.instance "issue1246_cover"
 // CHECK: sv.bind <@issue1246::@__ETC_issue1246_assert>
 // CHECK: sv.bind <@issue1246::@__ETC_issue1246_assume> {output_file = #hw.output_file<"file4", excludeFromFileList>}
 // CHECK: sv.bind <@issue1246::@__ETC_issue1246_cover>
@@ -94,6 +91,31 @@ module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFrom
   hw.module @ModuleInTestHarness(%clock: i1) -> () attributes {"firrtl.extract.do_not_extract"} {
     sv.always posedge %clock  {
       sv.assert %clock, immediate
+    }
+  }
+}
+
+// -----
+// Check names given to instantations of extracted module, and module names
+
+// CHECK-LABEL: @InstanceName_assert
+// CHECK-LABEL: @InstanceName_assume
+// CHECK-LABEL: @InstanceName_cover
+
+// CHECK-LABEL: @InstanceName
+// CHECK-NOT: InvisibleBind
+// CHECK: hw.instance "InstanceName_assert"
+// CHECK-NOT: InvisibleBind
+// CHECK: hw.instance "InstanceName_assume"
+// CHECK-NOT: InvisibleBind
+// CHECK: hw.instance "InstanceName_cover"
+// CHECK-NOT: InvisibleBind
+module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>} {
+  hw.module @InstanceName(%clock: i1, %cond: i1, %cond2: i1) -> () {
+    sv.always posedge %clock  {
+      sv.assert %cond, immediate
+      sv.assume %cond, immediate
+      sv.cover %cond, immediate
     }
   }
 }
