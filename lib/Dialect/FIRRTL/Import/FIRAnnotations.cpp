@@ -148,8 +148,8 @@ buildNLA(CircuitOp circuit, size_t nlaSuffix,
                                             StringAttr::get(ctxt, inst)));
   }
   auto instAttr = ArrayAttr::get(ctxt, insts);
-  auto nla = b.create<HierPathOp>(
-      circuit.getLoc(), "nla_" + std::to_string(nlaSuffix), instAttr);
+  auto nla = b.create<HierPathOp>(circuit.getLoc(),
+                                  "nla_" + std::to_string(nlaSuffix), instAttr);
   return FlatSymbolRefAttr::get(nla);
 }
 

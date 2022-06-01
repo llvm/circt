@@ -187,7 +187,7 @@ public:
         namepath.push_back(FlatSymbolRefAttr::get(modPart));
 
       return b.create<HierPathOp>(b.getUnknownLoc(), sym,
-                                      b.getArrayAttr(namepath));
+                                  b.getArrayAttr(namepath));
     };
 
     HierPathOp last;

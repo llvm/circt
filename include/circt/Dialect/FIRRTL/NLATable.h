@@ -169,8 +169,7 @@ public:
 
   /// Remove all the nlas in the set `nlas` from the module. This updates the
   /// module name to NLA tracking.
-  void removeNLAsfromModule(const DenseSet<HierPathOp> &nlas,
-                            StringAttr mod) {
+  void removeNLAsfromModule(const DenseSet<HierPathOp> &nlas, StringAttr mod) {
     llvm::erase_if(nodeMap[mod],
                    [&nlas](const auto &nla) { return nlas.count(nla); });
   }

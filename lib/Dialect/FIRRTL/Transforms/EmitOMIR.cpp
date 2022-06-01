@@ -465,8 +465,8 @@ void EmitOMIRPass::makeTrackerAbsolute(Tracker &tracker) {
 
   // Add the NLA to the tracker and mark it to be deleted later.
   tracker.nla = builder.create<HierPathOp>(builder.getUnknownLoc(),
-                                               builder.getStringAttr(nlaName),
-                                               builder.getArrayAttr(namepath));
+                                           builder.getStringAttr(nlaName),
+                                           builder.getArrayAttr(namepath));
   nlaTable->addNLA(tracker.nla);
 
   removeTempNLAs.push_back(tracker.nla);
