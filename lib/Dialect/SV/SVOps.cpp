@@ -1558,35 +1558,46 @@ BindInterfaceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 // XMROp
 //===----------------------------------------------------------------------===//
 
-ParseResult parseXMRPath(::mlir::OpAsmParser &parser, ArrayAttr &pathAttr,
-                         StringAttr &terminalAttr) {
-  SmallVector<Attribute> strings;
-  ParseResult ret = parser.parseCommaSeparatedList([&]() {
-    StringAttr result;
-    StringRef keyword;
-    if (succeeded(parser.parseOptionalKeyword(&keyword))) {
-      strings.push_back(parser.getBuilder().getStringAttr(keyword));
-      return success();
-    }
-    if (succeeded(parser.parseAttribute(
-            result, parser.getBuilder().getType<NoneType>()))) {
-      strings.push_back(result);
-      return success();
-    }
-    return failure();
-  });
+ParseResult parseXMRPath(::mlir::OpAsmParser &parser, ArrayAttr &pathAttr) {
+  // Parse the namepath.
+  SmallVector<Attribute> namepath;
+  ParseResult ret = parser.parseCommaSeparatedList(
+      OpAsmParser::Delimiter::Square, [&]() -> ParseResult {
+        auto loc = parser.getCurrentLocation();
+        SymbolRefAttr ref;
+        if (parser.parseAttribute(ref))
+          return failure();
+
+        // "A" is a Ref, "A::b" is a InnerRef, "A::B::c" is an error.
+        auto pathLength = ref.getNestedReferences().size();
+        if (pathLength == 0)
+          namepath.push_back(FlatSymbolRefAttr::get(ref.getRootReference()));
+        else if (pathLength == 1)
+          namepath.push_back(hw::InnerRefAttr::get(ref.getRootReference(),
+                                                   ref.getLeafReference()));
+        else
+          return parser.emitError(loc, "only one nested reference is allowed");
+        return success();
+      });
   if (succeeded(ret)) {
     pathAttr = parser.getBuilder().getArrayAttr(
-        ArrayRef(strings.begin(), strings.end() - 1));
-    terminalAttr = (*strings.rbegin()).cast<StringAttr>();
+        ArrayRef(namepath.begin(), namepath.end()));
   }
   return ret;
 }
 
-void printXMRPath(OpAsmPrinter &p, XMROp op, ArrayAttr pathAttr,
-                  StringAttr terminalAttr) {
-  llvm::interleaveComma(pathAttr, p);
-  p << ", " << terminalAttr;
+void printXMRPath(OpAsmPrinter &p, XMROp op, ArrayAttr namepath) {
+  p << "[";
+  llvm::interleaveComma(namepath, p, [&](Attribute attr) {
+    if (auto ref = attr.dyn_cast<hw::InnerRefAttr>()) {
+      p.printSymbolName(ref.getModule().getValue());
+      p << "::";
+      p.printSymbolName(ref.getName().getValue());
+    } else {
+      p.printSymbolName(attr.cast<FlatSymbolRefAttr>().getValue());
+    }
+  });
+  p << "]";
 }
 
 //===----------------------------------------------------------------------===//

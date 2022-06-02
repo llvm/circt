@@ -93,9 +93,9 @@ def XMROp : SVOp<"xmr", []> {
     generating this op should ensure that any instance or object in the intended
     path has public visibility so paths are not invalidated.
   }];
-  let arguments = (ins UnitAttr:$isRooted, StrArrayAttr:$path, StrAttr:$terminal);
+  let arguments = (ins NameRefArrayAttr:$namepath);
   let results = (outs InOutType:$result);
-  let assemblyFormat = "(`isRooted` $isRooted^)? custom<XMRPath>($path, $terminal) attr-dict `:` qualified(type($result))";
+  let assemblyFormat = "custom<XMRPath>($namepath) attr-dict `:` qualified(type($result))";
 }
 
 def ReadInOutOp
