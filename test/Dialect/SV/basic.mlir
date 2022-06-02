@@ -290,10 +290,10 @@ hw.module @AB(%a: i1, %b: i2) {
 
 //CHECK-LABEL: hw.module @XMR_src
 hw.module @XMR_src(%a : i23) {
-  //CHECK-NEXT:   sv.xmr isRooted "a", "b", "c" : !hw.inout<i23>
-  %xmr1 = sv.xmr isRooted a,b,c : !hw.inout<i23>
-  //CHECK-NEXT:   sv.xmr "a", "b", "c" : !hw.inout<i3>
-  %xmr2 = sv.xmr "a",b,c : !hw.inout<i3>
+  //CHECK-NEXT:   = sv.xmr [@Mod1::@e1, @Mod0::@e3] : !hw.inout<i23>
+  %xmr1 = sv.xmr [@Mod1::@e1, @Mod0::@e3]: !hw.inout<i23>
+  //CHECK-NEXT:   = sv.xmr [@Mod2::@e2, @Mod2::@e4] : !hw.inout<i3>
+  %xmr2 = sv.xmr [@Mod2::@e2, @Mod2::@e4]: !hw.inout<i3>
   %r = sv.read_inout %xmr1 : !hw.inout<i23>
   sv.assign %xmr1, %a : i23
 }
