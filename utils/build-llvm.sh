@@ -15,7 +15,9 @@
 BUILD_DIR=${1:-"build"}
 INSTALL_DIR=${2:-"install"}
 BUILD_TYPE=${3:-"Release"}
-EXTRA_ARGS=${@:4}
+CC=${4:-"clang"}
+CXX=${5:-"clang++"}
+EXTRA_ARGS=${@:6}
 
 mkdir -p llvm/$BUILD_DIR
 mkdir -p llvm/$INSTALL_DIR
@@ -23,8 +25,8 @@ cd llvm/$BUILD_DIR
 cmake ../llvm \
   -DBUILD_SHARED_LIBS=ON \
   -DCMAKE_BUILD_TYPE=$BUILD_TYPE \
-  -DCMAKE_C_COMPILER=clang \
-  -DCMAKE_CXX_COMPILER=clang++ \
+  -DCMAKE_C_COMPILER=$CC \
+  -DCMAKE_CXX_COMPILER=$CXX \
   -DCMAKE_INSTALL_PREFIX=../$INSTALL_DIR \
   -DLLVM_BUILD_EXAMPLES=OFF \
   -DLLVM_ENABLE_ASSERTIONS=ON \
