@@ -129,30 +129,6 @@ ValueRange MemoryInterface::addrPorts() {
 }
 
 //===----------------------------------------------------------------------===//
-// ProgramLoweringStateInterface
-//===----------------------------------------------------------------------===//
-
-ProgramLoweringStateInterface::ProgramLoweringStateInterface(
-    calyx::ProgramOp program, StringRef topLevelFunction)
-    : topLevelFunction(topLevelFunction), program(program) {}
-
-std::string ProgramLoweringStateInterface::blockName(Block *b) {
-  std::string blockName = irName(*b);
-  blockName.erase(std::remove(blockName.begin(), blockName.end(), '^'),
-                  blockName.end());
-  return blockName;
-}
-
-calyx::ProgramOp ProgramLoweringStateInterface::getProgram() {
-  assert(program.getOperation() != nullptr);
-  return program;
-}
-
-StringRef ProgramLoweringStateInterface::getTopLevelFunction() const {
-  return topLevelFunction;
-}
-
-//===----------------------------------------------------------------------===//
 // LoopInterface
 //===----------------------------------------------------------------------===//
 

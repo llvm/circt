@@ -61,6 +61,13 @@ TGroup createGroup(PatternRewriter &rewriter, calyx::ComponentOp compOp,
   return rewriter.create<TGroup>(loc, uniqueName.str());
 }
 
+/// Creates register assignment operations within the provided groupOp.
+/// The component operation will house the constants.
+void buildAssignmentsForRegisterWrite(PatternRewriter &rewriter,
+                                      calyx::GroupOp groupOp,
+                                      calyx::ComponentOp componentOp,
+                                      calyx::RegisterOp &reg, Value inputValue);
+
 // A structure representing a set of ports which act as a memory interface for
 // external memories.
 struct MemoryPortsImpl {
@@ -70,13 +77,6 @@ struct MemoryPortsImpl {
   SmallVector<Value> addrPorts;
   Value writeEn;
 };
-
-/// Creates register assignment operations within the provided groupOp.
-/// The component operation will house the constants.
-void buildAssignmentsForRegisterWrite(PatternRewriter &rewriter,
-                                      calyx::GroupOp groupOp,
-                                      calyx::ComponentOp componentOp,
-                                      calyx::RegisterOp &reg, Value inputValue);
 
 // Represents the interface of memory in Calyx. The various lowering passes
 // are agnostic wrt. whether working with a calyx::MemoryOp (internally
@@ -349,10 +349,32 @@ private:
 
 /// An interface for conversion passes that lower Calyx programs. This handles
 /// state during the lowering of a Calyx program.
-class ProgramLoweringStateInterface {
+template <typename TComponentLoweringState>
+class ProgramLoweringState {
 public:
-  explicit ProgramLoweringStateInterface(calyx::ProgramOp program,
-                                         StringRef topLevelFunction);
+  explicit ProgramLoweringState(calyx::ProgramOp program,
+                                StringRef topLevelFunction)
+      : topLevelFunction(topLevelFunction), program(program) {}
+
+  /// Returns the current program.
+  calyx::ProgramOp getProgram() {
+    assert(program.getOperation() != nullptr);
+    return program;
+  }
+
+  /// Returns the name of the top-level function in the source program.
+  StringRef getTopLevelFunction() const { return topLevelFunction; }
+
+  /// Returns the component lowering state associated with compOp.
+  TComponentLoweringState &compLoweringState(calyx::ComponentOp compOp) {
+    auto it = compStates.find(compOp);
+    if (it != compStates.end())
+      return it->second;
+
+    /// Create a new ComponentLoweringState for the compOp.
+    auto newCompStateIt = compStates.try_emplace(compOp, compOp);
+    return newCompStateIt.first->second;
+  }
 
   /// Returns a meaningful name for a value within the program scope.
   template <typename ValueOrBlock>
@@ -366,19 +388,20 @@ public:
 
   /// Returns a meaningful name for a block within the program scope (removes
   /// the ^ prefix from block names).
-  std::string blockName(Block *b);
-
-  /// Returns the current program.
-  calyx::ProgramOp getProgram();
-
-  /// Returns the name of the top-level function in the source program.
-  StringRef getTopLevelFunction() const;
+  std::string blockName(Block *b) {
+    std::string blockName = irName(*b);
+    blockName.erase(std::remove(blockName.begin(), blockName.end(), '^'),
+                    blockName.end());
+    return blockName;
+  }
 
 private:
   /// The name of this top-level function.
   StringRef topLevelFunction;
   /// The program associated with this state.
   calyx::ProgramOp program;
+  /// Mapping from ComponentOp to component lowering state.
+  DenseMap<Operation *, TComponentLoweringState> compStates;
 };
 
 /// Base class for partial lowering passes. A partial lowering pass

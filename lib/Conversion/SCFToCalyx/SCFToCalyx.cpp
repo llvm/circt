@@ -86,7 +86,6 @@ using Scheduleable = std::variant<calyx::GroupOp, WhileScheduleable>;
 // Lowering state classes
 //===----------------------------------------------------------------------===//
 
-class ProgramLoweringState;
 /// Handles the current state of lowering of a Calyx component. It is mainly
 /// used as a key/value store for recording information during partial lowering,
 /// which is required at later lowering passes.
@@ -94,13 +93,8 @@ class ComponentLoweringState
     : public calyx::ComponentLoweringStateInterface,
       public calyx::LoopLoweringStateInterface<ScfWhileOp> {
 public:
-  ComponentLoweringState(ProgramLoweringState &state,
-                         calyx::ComponentOp component)
-      : calyx::ComponentLoweringStateInterface(component),
-        programLoweringState(state) {}
-
-  /// Returns the program state associated with this component.
-  ProgramLoweringState &getProgramState() { return programLoweringState; }
+  ComponentLoweringState(calyx::ComponentOp component)
+      : calyx::ComponentLoweringStateInterface(component) {}
 
   /// Register 'scheduleable' as being generated through lowering 'block'.
   ///
@@ -129,36 +123,9 @@ public:
   }
 
 private:
-  /// A reference to the parent program lowering state.
-  ProgramLoweringState &programLoweringState;
-
   /// BlockScheduleables is a list of scheduleables that should be
   /// sequentially executed when executing the associated basic block.
   DenseMap<mlir::Block *, SmallVector<Scheduleable>> blockScheduleables;
-};
-
-/// Handles the current state of lowering of a Calyx program. It is mainly used
-/// as a key/value store for recording information during partial lowering,
-/// which is required at later lowering passes.
-class ProgramLoweringState : public calyx::ProgramLoweringStateInterface {
-public:
-  explicit ProgramLoweringState(calyx::ProgramOp program,
-                                StringRef topLevelFunction)
-      : ProgramLoweringStateInterface(program, topLevelFunction) {}
-  /// Returns the component lowering state associated with compOp.
-  ComponentLoweringState &compLoweringState(calyx::ComponentOp compOp) {
-    auto it = compStates.find(compOp);
-    if (it != compStates.end())
-      return it->second;
-
-    /// Create a new ComponentLoweringState for the compOp.
-    auto newCompStateIt = compStates.try_emplace(compOp, *this, compOp);
-    return newCompStateIt.first->second;
-  }
-
-private:
-  /// Mapping from ComponentOp to component lowering state.
-  DenseMap<Operation *, ComponentLoweringState> compStates;
 };
 
 //===----------------------------------------------------------------------===//
@@ -172,8 +139,9 @@ private:
 class FuncOpPartialLoweringPattern
     : public calyx::PartialLoweringPattern<FuncOp> {
 public:
-  FuncOpPartialLoweringPattern(MLIRContext *context, LogicalResult &resRef,
-                               FuncMapping &_funcMap, ProgramLoweringState &pls)
+  FuncOpPartialLoweringPattern(
+      MLIRContext *context, LogicalResult &resRef, FuncMapping &_funcMap,
+      calyx::ProgramLoweringState<ComponentLoweringState> &pls)
       : PartialLoweringPattern(context, resRef), funcMap(_funcMap), pls(pls) {}
 
   LogicalResult partiallyLower(FuncOp funcOp,
@@ -207,7 +175,9 @@ public:
     return *compLoweringState;
   }
 
-  ProgramLoweringState &progState() const { return pls; }
+  calyx::ProgramLoweringState<ComponentLoweringState> &programState() const {
+    return pls;
+  }
 
   /// Partial lowering implementation.
   virtual LogicalResult
@@ -219,7 +189,7 @@ protected:
 private:
   mutable calyx::ComponentOp *compOp = nullptr;
   mutable ComponentLoweringState *compLoweringState = nullptr;
-  ProgramLoweringState &pls;
+  calyx::ProgramLoweringState<ComponentLoweringState> &pls;
 };
 
 //===----------------------------------------------------------------------===//
@@ -350,8 +320,7 @@ private:
   template <typename TGroupOp>
   TGroupOp createGroupForOp(PatternRewriter &rewriter, Operation *op) const {
     Block *block = op->getBlock();
-    auto groupName = getComponentState().getUniqueName(
-        getComponentState().getProgramState().blockName(block));
+    auto groupName = getComponentState().getUniqueName(programState().blockName(block));
     return calyx::createGroup<TGroupOp>(rewriter,
                                         getComponentState().getComponentOp(),
                                         op->getLoc(), groupName);
@@ -580,8 +549,8 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
     if (succOperands.empty())
       continue;
     // Create operand passing group
-    std::string groupName = progState().blockName(srcBlock) + "_to_" +
-                            progState().blockName(succBlock.value());
+    std::string groupName = programState().blockName(srcBlock) + "_to_" +
+        programState().blockName(succBlock.value());
     auto groupOp = calyx::createGroup<calyx::GroupOp>(rewriter, *getComponent(),
                                                       brOp.getLoc(), groupName);
     // Fetch block argument registers associated with the basic block
@@ -741,7 +710,7 @@ class RewriteMemoryAccesses
     : public calyx::PartialLoweringPattern<calyx::AssignOp> {
 public:
   RewriteMemoryAccesses(MLIRContext *context, LogicalResult &resRef,
-                        ProgramLoweringState &pls)
+                        calyx::ProgramLoweringState<ComponentLoweringState> &pls)
       : PartialLoweringPattern(context, resRef), pls(pls) {}
 
   LogicalResult partiallyLower(calyx::AssignOp assignOp,
@@ -779,7 +748,7 @@ public:
   }
 
 private:
-  ProgramLoweringState &pls;
+  calyx::ProgramLoweringState<ComponentLoweringState> &pls;
 };
 
 /// Connverts all index-typed operations and values to i32 values.
@@ -1001,7 +970,7 @@ struct FuncOpConversion : public FuncOpPartialLoweringPattern {
 
     /// Store the function-to-component mapping.
     funcMap[funcOp] = compOp;
-    auto &compState = progState().compLoweringState(compOp);
+    auto &compState = programState().compLoweringState(compOp);
     compState.setFuncOpResultMapping(funcOpResultMapping);
 
     /// Rewrite funcOp SSA argument values to the CompOp arguments.
@@ -1071,8 +1040,8 @@ class BuildWhileGroups : public FuncOpPartialLoweringPattern {
         auto condOp = scfWhileOp.getConditionOp().getArgs()[barg.index()];
         if (barg.value() != condOp) {
           res = whileOp.getOperation()->emitError()
-                << progState().irName(barg.value())
-                << " != " << progState().irName(condOp)
+                << programState().irName(barg.value())
+                << " != " << programState().irName(condOp)
                 << "do-while loops not supported; expected iter-args to "
                    "remain untransformed in the 'before' region of the "
                    "scf.while op.";
@@ -1139,7 +1108,7 @@ class BuildBBRegs : public FuncOpPartialLoweringPattern {
         assert(argType.isa<IntegerType>() && "unsupported block argument type");
         unsigned width = argType.getIntOrFloatBitWidth();
         std::string name =
-            progState().blockName(block) + "_arg" + std::to_string(arg.index());
+            programState().blockName(block) + "_arg" + std::to_string(arg.index());
         auto reg = createRegister(arg.value().getLoc(), rewriter,
                                   *getComponent(), width, name);
         getComponentState().addBlockArgReg(block, reg, arg.index());
@@ -1366,7 +1335,7 @@ class InlineCombGroups
                                            OpInterfaceRewritePattern> {
 public:
   InlineCombGroups(MLIRContext *context, LogicalResult &resRef,
-                   ProgramLoweringState &pls)
+                   calyx::ProgramLoweringState<ComponentLoweringState> &pls)
       : PartialLoweringPattern(context, resRef), pls(pls) {}
 
   LogicalResult partiallyLower(calyx::GroupInterface originGroup,
@@ -1438,7 +1407,7 @@ private:
     }
   }
 
-  ProgramLoweringState &pls;
+  calyx::ProgramLoweringState<ComponentLoweringState> &pls;
 };
 
 /// LateSSAReplacement contains various functions for replacing SSA values that
@@ -1703,7 +1672,8 @@ public:
 
 private:
   LogicalResult partialPatternRes;
-  std::shared_ptr<ProgramLoweringState> loweringState = nullptr;
+  std::shared_ptr<calyx::ProgramLoweringState<ComponentLoweringState>> loweringState =
+      nullptr;
 };
 
 void SCFToCalyxPass::runOnOperation() {
@@ -1723,7 +1693,8 @@ void SCFToCalyxPass::runOnOperation() {
          "programOp should have been set during module "
          "conversion, if module conversion succeeded.");
   loweringState =
-      std::make_shared<ProgramLoweringState>(programOp, topLevelFunction);
+      std::make_shared<calyx::ProgramLoweringState<ComponentLoweringState>>(
+          programOp, topLevelFunction);
 
   /// --------------------------------------------------------------------------
   /// If you are a developer, it may be helpful to add a
