@@ -1,17 +1,24 @@
 ; Check main circuit + subcircuit mappings flow
 
-; Execute flow both normally and with altering hierarchy (via inline)
+; Execute flow normally and with variations altering hierarchy
+; (inline, dedup) and checking behavior with marked DUT.
 
 ; Create some directories for output, cleanup if present
-; RUN: rm -rf %t && mkdir -p %t/default %t/inline
+; RUN: rm -rf %t && mkdir -p %t/default %t/inline %t/dedup %t/dut %t/dutdedup
 
 ; 1) Run on main circuit, with signal mapping annotations
 ; RUN: firtool %S/main.fir --annotation-file %S/subCircuit.json --firrtl-grand-central --split-verilog -o %t/default
-; RUN: firtool %S/main.fir --annotation-file %S/subCircuit.json --annotation-file %S/inline.json --firrtl-grand-central --split-verilog -o %t/inline
+; RUN: firtool %S/main.fir --annotation-file %S/subCircuit.json --firrtl-grand-central --split-verilog -o %t/inline   --annotation-file %S/inline.json
+; RUN: firtool %S/main.fir --annotation-file %S/subCircuit.json --firrtl-grand-central --split-verilog -o %t/dedup    --dedup
+; RUN: firtool %S/main.fir --annotation-file %S/subCircuit.json --firrtl-grand-central --split-verilog -o %t/dut      --annotation-file %S/prefixed-dut.json
+; RUN: firtool %S/main.fir --annotation-file %S/subCircuit.json --firrtl-grand-central --split-verilog -o %t/dutdedup --dedup --annotation-file %S/prefixed-dut.json
 
 ; Check the generated file
-; RUN: FileCheck %s --input-file=%t/default/sigdrive.json --check-prefix=JSONDEFAULT
-; RUN: FileCheck %s --input-file=%t/inline/sigdrive.json --check-prefix=JSONINLINE
+; RUN: FileCheck %s --input-file=%t/default/sigdrive.json  --check-prefix=JSONDEFAULT
+; RUN: FileCheck %s --input-file=%t/inline/sigdrive.json   --check-prefix=JSONINLINE
+; RUN: FileCheck %s --input-file=%t/dedup/sigdrive.json    --check-prefix=JSONDEDUP
+; RUN: FileCheck %s --input-file=%t/dut/sigdrive.json      --check-prefixes=JSONDUT,JSONDUTNODEDUP
+; RUN: FileCheck %s --input-file=%t/dutdedup/sigdrive.json --check-prefixes=JSONDUT,JSONDUTDEDUP
 
 ; JSONDEFAULT:        SignalDriverAnnotation
 ; JSONDEFAULT-LABEL:    "sinkTargets"
@@ -41,10 +48,43 @@
 ; JSONINLINE:           "annotations": []
 ; JSONINLINE:           "circuitPackage": "flowtest"
 
+; JSONDEDUP:          SignalDriverAnnotation
+; JSONDEDUP-LABEL:      "sinkTargets"
+; JSONDEDUP{LITERAL}:     "_1": "~Top|Foo>clock",
+; JSONDEDUP{LITERAL}:     "_1": "~Top|Foo>dataIn_a_b_c",
+; JSONDEDUP{LITERAL}:     "_1": "~Top|Foo>dataIn_d",
+; JSONDEDUP{LITERAL}:     "_1": "~Top|Foo/bar:Bar>b",
+; JSONDEDUP-LABEL:      "sourceTargets"
+; JSONDEDUP{LITERAL}:     "_1": "~Top|Top>clock",
+; JSONDEDUP{LITERAL}:     "_1": "~Top|Foo>dataOut_x_y_z",
+; JSONDEDUP{LITERAL}:     "_1": "~Top|Foo>dataOut_w",
+; JSONDEDUP:            "circuit"
+; JSONDEDUP:            "annotations": []
+; JSONDEDUP:            "circuitPackage": "flowtest"
+
+; JSONDUT:            SignalDriverAnnotation
+; JSONDUT-LABEL:        "sinkTargets"
+; JSONDUT{LITERAL}:       "_1": "~Prefix_Foo|Prefix_Foo>clock",
+; JSONDUT{LITERAL}:       "_1": "~Prefix_Foo|Prefix_Foo>dataIn_a_b_c",
+; JSONDUT{LITERAL}:       "_1": "~Prefix_Foo|Prefix_Foo>dataIn_d",
+; Varies if dedup is run:
+; JSONDUTNODEDUP{LITERAL}: "_1": "~Prefix_Foo|Prefix_Bar>b",
+; JSONDUTDEDUP{LITERAL}:   "_1": "~Prefix_Foo|Prefix_Foo/bar:Prefix_Bar>b",
+; (cont)
+; JSONDUT-LABEL:        "sourceTargets"
+; JSONDUT{LITERAL}:       "_1": "~Prefix_Foo|Top>clock",
+; JSONDUT{LITERAL}:       "_1": "~Prefix_Foo|Prefix_Foo>dataOut_x_y_z",
+; JSONDUT{LITERAL}:       "_1": "~Prefix_Foo|Prefix_Foo>dataOut_w",
+; JSONDUT:              "circuit"
+; JSONDUT:              "annotations": []
+; JSONDUT:              "circuitPackage": "flowtest"
 
 ; 2) Run on sub circuit, with updated annotation file (sigdrive.json) from (1):
-; RUN: firtool %S/subcircuit.fir --annotation-file %t/default/sigdrive.json --firrtl-grand-central | FileCheck %s --check-prefix=MAPPINGDEFAULT
-; RUN: firtool %S/subcircuit.fir --annotation-file %t/inline/sigdrive.json --firrtl-grand-central | FileCheck %s --check-prefix=MAPPINGINLINE
+; RUN: firtool %S/subcircuit.fir --annotation-file %t/default/sigdrive.json  --firrtl-grand-central | FileCheck %s --check-prefix=MAPPINGDEFAULT
+; RUN: firtool %S/subcircuit.fir --annotation-file %t/inline/sigdrive.json   --firrtl-grand-central | FileCheck %s --check-prefix=MAPPINGINLINE
+; RUN: firtool %S/subcircuit.fir --annotation-file %t/dedup/sigdrive.json    --firrtl-grand-central | FileCheck %s --check-prefixes=MAPPINGDEDUP
+; RUN: firtool %S/subcircuit.fir --annotation-file %t/dut/sigdrive.json      --firrtl-grand-central | FileCheck %s --check-prefixes=MAPPINGDUT,MAPPINGDUTNODUP
+; RUN: firtool %S/subcircuit.fir --annotation-file %t/dutdedup/sigdrive.json --firrtl-grand-central | FileCheck %s --check-prefixes=MAPPINGDUT,MAPPINGDUTDEDUP
 
 ; MAPPINGDEFAULT-LABEL: module Sub_signal_mappings(
 ; MAPPINGDEFAULT-NEXT:   input           clock_sink,
@@ -63,7 +103,7 @@
 ; MAPPINGDEFAULT-NEXT:     force Foo.clock = clock_sink;
 ; MAPPINGDEFAULT-NEXT:     force Foo.dataIn_a_b_c = data_sink_u;
 ; MAPPINGDEFAULT-NEXT:     force Foo.dataIn_d = data_sink_v;
-; TODO: This is wrong but expected for now
+; TODO: This is wrong but expected for now (double force)
 ; MAPPINGDEFAULT-NEXT:     force Bar.b = data_sink_w_0;
 ; MAPPINGDEFAULT-NEXT:     force Bar.b = data_sink_w_1;
 ; (cont)
@@ -93,7 +133,7 @@
 ; MAPPINGINLINE-NEXT:     force Top.foo_clock = clock_sink;
 ; MAPPINGINLINE-NEXT:     force Top.foo_dataIn_a_b_c = data_sink_u;
 ; MAPPINGINLINE-NEXT:     force Top.foo_dataIn_d = data_sink_v;
-; TODO: This is wrong but expected for now
+; TODO: This is wrong but expected for now (double force)
 ; MAPPINGINLINE-NEXT:     force Bar.b = data_sink_w_0;
 ; MAPPINGINLINE-NEXT:     force Bar.b = data_sink_w_1;
 ; (cont)
@@ -106,4 +146,42 @@
 ; MAPPINGINLINE-NOT:           data_source_w_1
 ; MAPPINGINLINE-NEXT: endmodule
 
+; MAPPINGDEDUP:       `ifndef VERILATOR
+; MAPPINGDEDUP-NEXT:   initial begin
+; MAPPINGDEDUP-NEXT:     force Foo.clock = clock_sink;
+; MAPPINGDEDUP-NEXT:     force Foo.dataIn_a_b_c = data_sink_u;
+; MAPPINGDEDUP-NEXT:     force Foo.dataIn_d = data_sink_v;
+; TODO: This is wrong but expected for now (double-force)
+; MAPPINGDEDUP-NEXT:     force Foo.bar.b = data_sink_w_0;
+; MAPPINGDEDUP-NEXT:     force Foo.bar.b = data_sink_w_1;
+; (cont)
+; MAPPINGDEDUP-NEXT:   end
+; MAPPINGDEDUP-NEXT:   `endif
+; MAPPINGDEDUP-NEXT:   assign clock_source = Top.clock;
+; MAPPINGDEDUP-NEXT:   assign data_source_u = Foo.dataOut_x_y_z;
+; MAPPINGDEDUP-NEXT:   assign data_source_v = Foo.dataOut_w;
+; MAPPINGDEDUP-NOT:           data_source_w_0
+; MAPPINGDEDUP-NOT:           data_source_w_1
+; MAPPINGDEDUP-NEXT: endmodule
 
+
+; DUT + DUTDEDUP combined (only minor variation):
+; MAPPINGDUT:            `ifndef VERILATOR
+; MAPPINGDUT-NEXT:        initial begin
+; MAPPINGDUT-NEXT:          force Prefix_Foo.clock = clock_sink;
+; MAPPINGDUT-NEXT:          force Prefix_Foo.dataIn_a_b_c = data_sink_u;
+; MAPPINGDUT-NEXT:          force Prefix_Foo.dataIn_d = data_sink_v;
+; TODO: This wrong but expected for now (double-force)
+; MAPPINGDUTNODUP-NEXT:     force Prefix_Bar.b = data_sink_w_0;
+; MAPPINGDUTNODUP-NEXT:     force Prefix_Bar.b = data_sink_w_1;
+; MAPPINGDUTDEDUP-NEXT:     force Prefix_Foo.bar.b = data_sink_w_0;
+; MAPPINGDUTDEDUP-NEXT:     force Prefix_Foo.bar.b = data_sink_w_1;
+; (cont)
+; MAPPINGDUT-NEXT:        end
+; MAPPINGDUT-NEXT:        `endif
+; MAPPINGDUT-NEXT:        assign clock_source = Top.clock;
+; MAPPINGDUT-NEXT:        assign data_source_u = Prefix_Foo.dataOut_x_y_z;
+; MAPPINGDUT-NEXT:        assign data_source_v = Prefix_Foo.dataOut_w;
+; MAPPINGDUT-NOT:                data_source_w_0
+; MAPPINGDUT-NOT:                data_source_w_1
+; MAPPINGDUT-NEXT:      endmodule

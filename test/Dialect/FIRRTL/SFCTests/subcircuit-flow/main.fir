@@ -7,6 +7,12 @@ circuit Top :
     output o: UInt
     o <= add(a, not(b))
 
+  module BarDup :
+    input a: UInt
+    input b: UInt
+    output o: UInt
+    o <= add(a, not(b))
+
   module Foo :
     input clock : Clock
     input reset : Reset
@@ -21,9 +27,12 @@ circuit Top :
     dataOut.w <= stuff2
 
     inst bar of Bar
+    inst dup of BarDup
     bar.a <= dataIn.a.b.c
     bar.b <= dataIn.e
-    dataOut.u <= bar.o
+    dup.a <= dataIn.a.b.c
+    dup.b <= dataIn.e
+    dataOut.u <= and(bar.o, dup.o)
 
   module Top :
     input clock : Clock
