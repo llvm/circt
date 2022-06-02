@@ -71,6 +71,13 @@ struct MemoryPortsImpl {
   Value writeEn;
 };
 
+/// Creates register assignment operations within the provided groupOp.
+/// The component operation will house the constants.
+void buildAssignmentsForRegisterWrite(PatternRewriter &rewriter,
+                                      calyx::GroupOp groupOp,
+                                      calyx::ComponentOp componentOp,
+                                      calyx::RegisterOp &reg, Value inputValue);
+
 // Represents the interface of memory in Calyx. The various lowering passes
 // are agnostic wrt. whether working with a calyx::MemoryOp (internally
 // allocated memory) or MemoryPortsImpl (external memory).
@@ -111,7 +118,7 @@ public:
   virtual Optional<uint64_t> getBound() = 0;
 };
 
-// Provides an interface for the control flow `loop` operation across different
+// Provides an interface for the control flow `while` operation across different
 // dialects.
 template <typename T>
 class WhileOpInterface : LoopInterface {
@@ -181,22 +188,6 @@ public:
     assert(it != loopLatchGroups.end() &&
            "No loop latch group was set for this loopOp");
     return it->second;
-  }
-
-  /// Creates register assignment operations within the provided groupOp.
-  /// The component operation will house the constants.
-  void buildAssignmentsForRegisterWrite(PatternRewriter &rewriter,
-                                        calyx::GroupOp groupOp,
-                                        calyx::ComponentOp componentOp,
-                                        calyx::RegisterOp &reg,
-                                        Value inputValue) {
-    mlir::IRRewriter::InsertionGuard guard(rewriter);
-    auto loc = inputValue.getLoc();
-    rewriter.setInsertionPointToEnd(groupOp.getBody());
-    rewriter.create<calyx::AssignOp>(loc, reg.in(), inputValue);
-    rewriter.create<calyx::AssignOp>(
-        loc, reg.write_en(), createConstant(loc, rewriter, componentOp, 1, 1));
-    rewriter.create<calyx::GroupDoneOp>(loc, reg.done());
   }
 
   /// Creates a new group that assigns the 'ops' values to the iter arg

@@ -71,6 +71,20 @@ Type convIndexType(PatternRewriter &rewriter, Type type) {
   return type;
 }
 
+void buildAssignmentsForRegisterWrite(PatternRewriter &rewriter,
+                                      calyx::GroupOp groupOp,
+                                      calyx::ComponentOp componentOp,
+                                      calyx::RegisterOp &reg,
+                                      Value inputValue) {
+  mlir::IRRewriter::InsertionGuard guard(rewriter);
+  auto loc = inputValue.getLoc();
+  rewriter.setInsertionPointToEnd(groupOp.getBody());
+  rewriter.create<calyx::AssignOp>(loc, reg.in(), inputValue);
+  rewriter.create<calyx::AssignOp>(
+      loc, reg.write_en(), createConstant(loc, rewriter, componentOp, 1, 1));
+  rewriter.create<calyx::GroupDoneOp>(loc, reg.done());
+}
+
 //===----------------------------------------------------------------------===//
 // MemoryInterface
 //===----------------------------------------------------------------------===//

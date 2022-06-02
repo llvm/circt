@@ -550,7 +550,7 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
     auto reg = createRegister(loadOp.getLoc(), rewriter, *getComponent(),
                               loadOp.getMemRefType().getElementTypeBitWidth(),
                               getComponentState().getUniqueName("load"));
-    getComponentState().buildAssignmentsForRegisterWrite(
+    calyx::buildAssignmentsForRegisterWrite(
         rewriter, group, getComponentState().getComponentOp(), reg,
         memoryInterface.readData());
     loadOp.getResult().replaceAllUsesWith(reg.out());
@@ -687,7 +687,7 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
     // Create register assignment for each block argument
     for (auto arg : enumerate(succOperands.getForwardedOperands())) {
       auto reg = dstBlockArgRegs[arg.index()];
-      getComponentState().buildAssignmentsForRegisterWrite(
+      calyx::buildAssignmentsForRegisterWrite(
           rewriter, groupOp, getComponentState().getComponentOp(), reg,
           arg.value());
     }
@@ -710,7 +710,7 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                                     retOp.getLoc(), groupName);
   for (auto op : enumerate(retOp.getOperands())) {
     auto reg = getComponentState().getReturnReg(op.index());
-    getComponentState().buildAssignmentsForRegisterWrite(
+    calyx::buildAssignmentsForRegisterWrite(
         rewriter, groupOp, getComponentState().getComponentOp(), reg,
         op.value());
   }
@@ -1349,7 +1349,7 @@ class BuildPipelineGroups : public FuncOpPartialLoweringPattern {
     rewriter.eraseOp(combGroup);
 
     // Stitch evaluating group to register.
-    getComponentState().buildAssignmentsForRegisterWrite(
+    calyx::buildAssignmentsForRegisterWrite(
         rewriter, group, getComponentState().getComponentOp(), pipelineRegister,
         value);
 
