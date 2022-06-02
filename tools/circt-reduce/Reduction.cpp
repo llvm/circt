@@ -705,14 +705,16 @@ struct ConnectSourceOperandForwarder : public Reduction {
     auto forwardedOperand = srcOp->getOperand(OpNum);
     ImplicitLocOpBuilder builder(destOp->getLoc(), destOp);
     Value newDest;
-    if (isa<firrtl::WireOp>(destOp))
-      newDest = builder.create<firrtl::WireOp>(forwardedOperand.getType());
+    if (auto wire = dyn_cast<firrtl::WireOp>(destOp))
+      newDest = builder.create<firrtl::WireOp>(forwardedOperand.getType(),
+                                               wire.name());
     else {
+      auto regName = destOp->getAttrOfType<StringAttr>("name");
       // We can promote the register into a wire but we wouldn't do here because
       // the error might be caused by the register.
       auto clock = destOp->getOperand(0);
-      newDest =
-          builder.create<firrtl::RegOp>(forwardedOperand.getType(), clock);
+      newDest = builder.create<firrtl::RegOp>(forwardedOperand.getType(), clock,
+                                              regName ? regName.str() : "");
     }
 
     // Create new connection between a new wire and the forwarded operand.

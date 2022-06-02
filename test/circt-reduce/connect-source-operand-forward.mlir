@@ -9,12 +9,12 @@ firrtl.circuit "Foo" {
     firrtl.connect %a, %0 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %b, %0 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %c, %0 : !firrtl.uint<1>, !firrtl.uint<1>
-    // CHECK-NEXT:   %0 = firrtl.wire  : !firrtl.uint<2>
-    // CHECK-NEXT:   %1 = firrtl.reg %clock  : !firrtl.uint<2>
-    // CHECK-NEXT:   %2 = firrtl.reg %clock  : !firrtl.uint<2>
-    // CHECK-NEXT:   firrtl.connect %0, %val : !firrtl.uint<2>, !firrtl.uint<2>
-    // CHECK-NEXT:   firrtl.connect %1, %val : !firrtl.uint<2>, !firrtl.uint<2>
-    // CHECK-NEXT:   firrtl.connect %2, %val : !firrtl.uint<2>, !firrtl.uint<2>
+    // CHECK-NEXT:   %a = firrtl.wire  : !firrtl.uint<2>
+    // CHECK-NEXT:   %b = firrtl.reg %clock  : !firrtl.uint<2>
+    // CHECK-NEXT:   %c = firrtl.reg %clock  : !firrtl.uint<2>
+    // CHECK-NEXT:   firrtl.connect %a, %val : !firrtl.uint<2>, !firrtl.uint<2>
+    // CHECK-NEXT:   firrtl.connect %b, %val : !firrtl.uint<2>, !firrtl.uint<2>
+    // CHECK-NEXT:   firrtl.connect %c, %val : !firrtl.uint<2>, !firrtl.uint<2>
     // CHECK-NEXT: }
   }
 }
