@@ -1041,12 +1041,15 @@ firrtl.module private @is1436_FOO() {
     // CHECK-NEXT: firrtl.connect %z, %0 : !firrtl.uint<10>, !firrtl.uint<10>
   }
 
+} // CIRCUIT
+
+firrtl.circuit "NLALowering" {
   // Check if the NLA is updated with the new lowered symbol on a field element.
-  firrtl.hierpath @nla [@fallBackName::@test, @Aardvark::@test, @Zebra::@b]
-  // CHECK: firrtl.hierpath @nla_0 [@fallBackName::@test, @Aardvark::@test, @Zebra::@b_data]
-  // CHECK: firrtl.hierpath @nla [@fallBackName::@test, @Aardvark::@test, @Zebra::@b_ready]
-  firrtl.hierpath @nla_1 [@fallBackName::@test, @Aardvark::@test_1, @Zebra]
-  firrtl.hierpath @nla_2 [@fallBackName::@test, @Aardvark::@test, @Zebra::@b2]
+  firrtl.hierpath @nla [@fallBackName::@test, @Aardvark::@test, @NLALowering::@b]
+  // CHECK: firrtl.hierpath @nla_0 [@fallBackName::@test, @Aardvark::@test, @NLALowering::@b_data]
+  // CHECK: firrtl.hierpath @nla [@fallBackName::@test, @Aardvark::@test, @NLALowering::@b_ready]
+  firrtl.hierpath @nla_1 [@fallBackName::@test, @Aardvark::@test_1, @NLALowering]
+  firrtl.hierpath @nla_2 [@fallBackName::@test, @Aardvark::@test, @NLALowering::@b2]
   // CHECK-NOT: firrtl.hierpath @nla_2
   firrtl.module private @fallBackName() {
     firrtl.instance test sym @test {
@@ -1056,7 +1059,7 @@ firrtl.module private @is1436_FOO() {
         {circt.nonlocal = @nla_2, class = "circt.nonlocal"}
       ]
     } @Aardvark()
-    firrtl.instance test2 @Zebra()
+    firrtl.instance test2 @NLALowering()
   }
 
   firrtl.module private @Aardvark() {
@@ -1065,12 +1068,12 @@ firrtl.module private @is1436_FOO() {
         {circt.nonlocal = @nla, class = "circt.nonlocal"},
         {circt.nonlocal = @nla_2, class = "circt.nonlocal"}
       ]
-    } @Zebra()
-    firrtl.instance test1 sym @test_1 {annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}]}@Zebra()
+    } @NLALowering()
+    firrtl.instance test1 sym @test_1 {annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}]}@NLALowering()
   }
 
-  // CHECK-LABEL: firrtl.module private @Zebra()
-  firrtl.module private @Zebra() attributes {annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}]}{
+  // CHECK-LABEL: firrtl.module @NLALowering()
+  firrtl.module @NLALowering() attributes {annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}]}{
     // bundle has annotations reusing the same NLA, the DontTouch should get dropped.
     %bundle = firrtl.wire sym @b {
       annotations = [
@@ -1097,14 +1100,16 @@ firrtl.module private @is1436_FOO() {
     // CHECK:   %bundle2_ready = firrtl.wire sym @b2_ready  : !firrtl.uint<1>
     // CHECK:   %bundle2_data = firrtl.wire sym @b2_data  : !firrtl.uint<64>
   }
+}
 
-  // Test the update of NLA when a new symbol is added after lowering of bundle fields.
-  firrtl.hierpath @lowernla_2 [@testNLAbundle::@testBundle_Bar, @testBundle_Bar::@d]
-  // CHECK: firrtl.hierpath @lowernla_2_0 [@testNLAbundle::@testBundle_Bar, @testBundle_Bar::@d_qux]
-  // CHECK: firrtl.hierpath @lowernla_2 [@testNLAbundle::@testBundle_Bar, @testBundle_Bar::@d_baz]
-  firrtl.hierpath @lowernla_1 [@testNLAbundle::@testBundle_Bar, @testBundle_Bar::@b]
-  // CHECK: firrtl.hierpath @lowernla_1_0 [@testNLAbundle::@testBundle_Bar, @testBundle_Bar::@b_qux]
-  // CHECK: firrtl.hierpath @lowernla_1 [@testNLAbundle::@testBundle_Bar, @testBundle_Bar::@b_baz]
+// Test the update of NLA when a new symbol is added after lowering of bundle fields.
+firrtl.circuit "NLALoweringNewSymbol" {
+  firrtl.hierpath @lowernla_2 [@NLALoweringNewSymbol::@testBundle_Bar, @testBundle_Bar::@d]
+  // CHECK: firrtl.hierpath @lowernla_2_0 [@NLALoweringNewSymbol::@testBundle_Bar, @testBundle_Bar::@d_qux]
+  // CHECK: firrtl.hierpath @lowernla_2 [@NLALoweringNewSymbol::@testBundle_Bar, @testBundle_Bar::@d_baz]
+  firrtl.hierpath @lowernla_1 [@NLALoweringNewSymbol::@testBundle_Bar, @testBundle_Bar::@b]
+  // CHECK: firrtl.hierpath @lowernla_1_0 [@NLALoweringNewSymbol::@testBundle_Bar, @testBundle_Bar::@b_qux]
+  // CHECK: firrtl.hierpath @lowernla_1 [@NLALoweringNewSymbol::@testBundle_Bar, @testBundle_Bar::@b_baz]
   firrtl.module private @testBundle_Bar(
     in %a: !firrtl.uint<1>,
     out %b: !firrtl.bundle<baz: uint<1>, qux: uint<1>,
@@ -1130,7 +1135,7 @@ firrtl.module private @is1436_FOO() {
     // CHECK: %d_baz = firrtl.wire sym @d_baz {annotations = [{A, circt.nonlocal = @lowernla_2}, {C, circt.nonlocal = @lowernla_2}, {D, circt.nonlocal = @lowernla_2}]}
     // CHECK: %d_qux = firrtl.wire sym @d_qux {annotations = [{A, circt.nonlocal = @lowernla_2_0}, {B, circt.nonlocal = @lowernla_2_0}, {C, circt.nonlocal = @lowernla_2_0}, {D, circt.nonlocal = @lowernla_2_0}]} : !firrtl.uint<1>
   }
-  firrtl.module private @testNLAbundle() {
+  firrtl.module @NLALoweringNewSymbol() {
     %testBundle_Bar_a, %testBundle_Bar_b, %testBundle_Bar_c = firrtl.instance testBundle_Bar sym @testBundle_Bar {
       annotations = [
         {circt.nonlocal = @lowernla_1, class = "circt.nonlocal"},
@@ -1144,13 +1149,14 @@ firrtl.module private @is1436_FOO() {
       out c: !firrtl.uint<1> [{four}]
     )
   }
+}
 
-  // CHECK-LABEL: firrtl.module @symNameCollision
+firrtl.circuit "SymbolCollision" {
+  // CHECK-LABEL: firrtl.module @SymbolCollision
   // CHECK-SAME: in %a_foo: !firrtl.uint<1> sym @a_foo
   // CHECK-SAME: in %b_foo: !firrtl.uint<1> sym @b_foo
-  firrtl.module @symNameCollision(
+  firrtl.module @SymbolCollision(
     in %a: !firrtl.bundle<foo: uint<1>> [#firrtl.subAnno<fieldID=1, {circt.nonlocal = @foo}>],
     in %b: !firrtl.bundle<foo: uint<1>> [#firrtl.subAnno<fieldID=1, {circt.nonlocal = @bar}>]) {
   }
-
-} // CIRCUIT
+}
