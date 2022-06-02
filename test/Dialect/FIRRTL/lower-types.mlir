@@ -506,7 +506,7 @@ firrtl.circuit "TopLevel" {
   firrtl.module private @AnnotationsWithFieldIdWireOp() {
     %foo = firrtl.wire {annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation"}]} : !firrtl.uint<1>
     %bar = firrtl.wire {annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation"}]} : !firrtl.bundle<a: vector<uint<1>, 2>, b: uint<1>>
-    %baz = firrtl.wire {annotations = [#firrtl<"subAnno<fieldID = 2, {class = \"sifive.enterprise.grandcentral.SignalDriverAnnotation\"}>">]} : !firrtl.bundle<a: uint<1>, b: vector<uint<1>, 2>>
+    %baz = firrtl.wire {annotations = [#firrtl.subAnno<fieldID = 2, {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation"}>]} : !firrtl.bundle<a: uint<1>, b: vector<uint<1>, 2>>
   }
   // CHECK: %foo = firrtl.wire
   // CHECK-SAME: {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation"}
@@ -1074,17 +1074,17 @@ firrtl.module private @is1436_FOO() {
     // bundle has annotations reusing the same NLA, the DontTouch should get dropped.
     %bundle = firrtl.wire sym @b {
       annotations = [
-        #firrtl<"subAnno<fieldID = 2, {circt.nonlocal = @nla, class =\"test\" }>">,
-        #firrtl<"subAnno<fieldID = 2, {circt.nonlocal = @nla, class =\"firrtl.transforms.DontTouchAnnotation\"}>">,
-        #firrtl<"subAnno<fieldID = 3, {circt.nonlocal = @nla, B}>">,
-        #firrtl<"subAnno<fieldID = 3, {circt.nonlocal = @nla, A}>">,
-        #firrtl<"subAnno<fieldID = 3, {circt.nonlocal = @nla, class =\"firrtl.transforms.DontTouchAnnotation\"}>">
+        #firrtl.subAnno<fieldID = 2, {circt.nonlocal = @nla, class = "test" }>,
+        #firrtl.subAnno<fieldID = 2, {circt.nonlocal = @nla, class = "firrtl.transforms.DontTouchAnnotation"}>,
+        #firrtl.subAnno<fieldID = 3, {circt.nonlocal = @nla, B}>,
+        #firrtl.subAnno<fieldID = 3, {circt.nonlocal = @nla, A}>,
+        #firrtl.subAnno<fieldID = 3, {circt.nonlocal = @nla, class = "firrtl.transforms.DontTouchAnnotation"}>
       ]
     } : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>
     %bundle2 = firrtl.wire sym @b2 {
       annotations = [
-        #firrtl<"subAnno<fieldID = 3, {circt.nonlocal = @nla_2, class =\"firrtl.transforms.DontTouchAnnotation\"}>">,
-        #firrtl<"subAnno<fieldID = 2, {circt.nonlocal = @nla_2, class =\"firrtl.transforms.DontTouchAnnotation\"}>">
+        #firrtl.subAnno<fieldID = 3, {circt.nonlocal = @nla_2, class = "firrtl.transforms.DontTouchAnnotation"}>,
+        #firrtl.subAnno<fieldID = 2, {circt.nonlocal = @nla_2, class = "firrtl.transforms.DontTouchAnnotation"}>
       ]
     } : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>
     // CHECK:   %bundle_valid = firrtl.wire sym @b_valid : !firrtl.uint<1>
@@ -1109,7 +1109,7 @@ firrtl.module private @is1436_FOO() {
     in %a: !firrtl.uint<1>,
     out %b: !firrtl.bundle<baz: uint<1>, qux: uint<1>,
     data: uint<2>> sym @b [
-      #firrtl<"subAnno<fieldID = 3, {circt.nonlocal = @lowernla_1, class =\"firrtl.transforms.DontTouchAnnotation\"}>">,
+      #firrtl.subAnno<fieldID = 3, {circt.nonlocal = @lowernla_1, class = "firrtl.transforms.DontTouchAnnotation"}>,
       #firrtl.subAnno<fieldID = 1, {circt.nonlocal = @lowernla_1, A}>,
       #firrtl.subAnno<fieldID = 1, {circt.nonlocal = @lowernla_1, B}>,
       #firrtl.subAnno<fieldID = 2, {circt.nonlocal = @lowernla_1, C}>
@@ -1121,7 +1121,7 @@ firrtl.module private @is1436_FOO() {
     // CHECK-SAME: out %b_data: !firrtl.uint<2> sym @b_data,
     %d = firrtl.wire sym @d {
       annotations = [
-        #firrtl<"subAnno<fieldID = 0, {circt.nonlocal = @lowernla_2, A }>">,
+        #firrtl.subAnno<fieldID = 0, {circt.nonlocal = @lowernla_2, A }>,
         #firrtl.subAnno<fieldID = 2, {circt.nonlocal = @lowernla_2, B}>,
         #firrtl.subAnno<fieldID = 0, {circt.nonlocal = @lowernla_2, C}>,
         {D, circt.nonlocal = @lowernla_2}
