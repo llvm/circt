@@ -2065,11 +2065,14 @@ SubExprInfo ExprEmitter::visitSV(ReadInterfaceSignalOp op) {
 }
 
 SubExprInfo ExprEmitter::visitSV(XMROp op) {
-  if (op.isRooted())
-    os << "$root.";
-  for (auto s : op.path())
-    os << s.cast<StringAttr>().getValue() << '.';
-  os << op.terminal();
+  os << op.namepath()[0].cast<hw::InnerRefAttr>().getModule().getValue() << ".";
+  for (unsigned i = 0, s = op.namepath().size() - 1; i < s; ++i)
+    if (auto innerRef = op.namepath()[i].dyn_cast<hw::InnerRefAttr>())
+      os << innerRef.getName().getValue() << ".";
+
+  auto leafRef = op.namepath()[op.namepath().size() - 1];
+  if (auto innerRef = leafRef.dyn_cast<hw::InnerRefAttr>())
+    os << innerRef.getName().getValue();
   return {Selection, IsUnsigned};
 }
 

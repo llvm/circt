@@ -81,21 +81,20 @@ def XMROp : SVOp<"xmr", []> {
   let summary = "Encode a reference to a non-local net.";
   let description = [{
     This represents a non-local hierarchical name to a net, sometimes called a
-    cross-module reference.  A hierarchical name may be absolute, when prefixed
-    with '$root', in which case it is resolved from the set of top-level modules
-    (any non-instantiated modules).  Non-absolute paths are resolved by
-    attempting resolution of the path locally, then recursively up the instance
-    graph. See SV Spec 23.6, pp721.
+    cross-module reference. This Op assumes an Upwards name referencing syntax,
+    (SV Spec 23.8, pp 727). The hierarchy is specified as a sequence of 
+    `InnerRefAttr`, that is the reference to the `InnerSym` defined by an
+    `InstanceOp`, and ends with a reference to either a Module or a component
+    within the module.
 
-    It is impossible to completely resolve a hierarchical name without making a
-    closed-world assumption in the compiler.  We therefore don't try to link
-    hierarchical names to what they resolve to at compile time.  A frontend
-    generating this op should ensure that any instance or object in the intended
-    path has public visibility so paths are not invalidated.
+    A frontend generating this op should ensure that any instance or object in
+    the intended path has public visibility so paths are not invalidated.
+    ExportVerilog prints this `XMR` starting with the module name specified
+    in the `namepath`.
   }];
-  let arguments = (ins UnitAttr:$isRooted, StrArrayAttr:$path, StrAttr:$terminal);
+  let arguments = (ins NameRefArrayAttr:$namepath);
   let results = (outs InOutType:$result);
-  let assemblyFormat = "(`isRooted` $isRooted^)? custom<XMRPath>($path, $terminal) attr-dict `:` qualified(type($result))";
+  let assemblyFormat = "custom<XMRPath>($namepath) attr-dict `:` qualified(type($result))";
 }
 
 def ReadInOutOp
