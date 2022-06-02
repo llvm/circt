@@ -53,12 +53,12 @@ static bool isUInt1(Type type) {
   return true;
 }
 
-NameKindEnum circt::firrtl::inferNameKind(StringRef name) {
+/// Return true if this is a useless temporary name produced by FIRRTL.  We
+/// drop these as they don't convey semantic meaning.
+bool circt::firrtl::isUselessName(StringRef name) {
   if (name.empty())
-    return NameKindEnum::UselessName;
-  // Ignore _.*
-  return name.startswith("_") ? NameKindEnum::UselessName
-                              : NameKindEnum::InterestingName;
+    return true;
+  return name.startswith("_");
 }
 
 /// Return true if this is a useless temporary name produced by FIRRTL.  We
@@ -1607,11 +1607,11 @@ struct FoldNodeName : public mlir::RewritePattern {
                                 PatternRewriter &rewriter) const override {
     auto node = cast<NodeOp>(op);
     auto name = node.nameAttr();
-    if (!isUselessName(op) || node.inner_sym() ||
+    if (!node.hasUselessName() || node.inner_sym() ||
         !node.annotations().empty())
       return failure();
     auto *expr = node.input().getDefiningOp();
-    if (expr && !expr->hasAttr("name") && !isUselessName(op))
+    if (expr && !expr->hasAttr("name") && !isUselessName(name))
       rewriter.updateRootInPlace(expr, [&] { expr->setAttr("name", name); });
     rewriter.replaceOp(node, node.input());
     return success();

@@ -1583,8 +1583,8 @@ void MemOp::build(OpBuilder &builder, OperationState &result,
   result.addAttribute("ruw", ::RUWAttrAttr::get(builder.getContext(), ruw));
   result.addAttribute("portNames", builder.getArrayAttr(portNames));
   result.addAttribute("name", builder.getStringAttr(name));
-  result.addAttribute("nameKind", NameKindEnumAttr::get(builder.getContext(),
-                                                        inferNameKind(name)));
+  result.addAttribute("hasUselessName",
+                      BoolAttr::get(builder.getContext(), isUselessName(name)));
   result.addAttribute("annotations", builder.getArrayAttr(annotations));
   if (innerSym)
     result.addAttribute("inner_sym", innerSym);
@@ -3249,8 +3249,8 @@ static void printElideAnnotations(OpAsmPrinter &p, Operation *op,
   // Elide "annotations" if it is empty.
   if (op->getAttrOfType<ArrayAttr>("annotations").empty())
     elidedAttrs.push_back("annotations");
-  // Elide "nameKind".
-  elidedAttrs.push_back("nameKind");
+  // Elide "hasUselessName".
+  elidedAttrs.push_back("hasUselessName");
 
   p.printOptionalAttrDict(op->getAttrs(), elidedAttrs);
 }
@@ -3286,29 +3286,23 @@ static void printElidePortAnnotations(OpAsmPrinter &p, Operation *op,
 // NameKind Custom Directive
 //===----------------------------------------------------------------------===//
 
-static ParseResult parseNameKind(OpAsmParser &parser,
-                                 firrtl::NameKindEnumAttr &result) {
+static ParseResult parseNameKind(OpAsmParser &parser, BoolAttr &result) {
   StringRef keyword;
 
-  if (!parser.parseOptionalKeyword(
-          &keyword,
-          {"interesting_name", "weak_interesting_name", "useless_name"})) {
-    auto kind = symbolizeNameKindEnum(keyword);
-    result = NameKindEnumAttr::get(parser.getContext(), kind.getValue());
-    return success();
-  }
-
   // Default is interesting name.
-  result =
-      NameKindEnumAttr::get(parser.getContext(), NameKindEnum::InterestingName);
+  bool hasUselessName = false;
+  if (!parser.parseOptionalKeyword(&keyword,
+                                   {"interesting_name", "useless_name"}))
+    hasUselessName = keyword == "useless_name";
+
+  result = BoolAttr::get(parser.getContext(), hasUselessName);
   return success();
 }
 
-static void printNameKind(OpAsmPrinter &p, Operation *op,
-                          firrtl::NameKindEnumAttr attr,
+static void printNameKind(OpAsmPrinter &p, Operation *op, BoolAttr attr,
                           ArrayRef<StringRef> extraElides = {}) {
-  if (attr.getValue() != NameKindEnum::InterestingName)
-    p << stringifyNameKindEnum(attr.getValue()) << ' ';
+  if (attr.getValue())
+    p << "useless_name";
 }
 
 //===----------------------------------------------------------------------===//

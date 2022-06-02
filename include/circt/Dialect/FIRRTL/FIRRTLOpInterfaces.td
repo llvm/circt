@@ -341,14 +341,17 @@ def InnerSymbolTable : NativeOpTrait<"InnerSymbolTable">;
 
 def FNamableOp : OpInterface<"FNamableOp"> {
   let cppNamespace = "circt::firrtl";
-  let description = "Provide common connection information.";
+  let description = "Provide common interfaces for operations with chisel names.";
 
   let methods = [
-    InterfaceMethod<"Return a destination of connection.",
+    InterfaceMethod<"Return true if the op has an useless name.",
     "bool", "hasUselessName", (ins), [{}], /*defaultImplementation=*/[{
-      return this->getOperation()->getAttr("nameKind").template
-             cast<circt::firrtl::NameKindEnumAttr>().getValue() ==
-             NameKindEnum::UselessName;
+      return this->getOperation()->getAttr("hasUselessName").template
+             cast<mlir::BoolAttr>().getValue();
+    }]>,
+    InterfaceMethod<"Return true if the op has an interesting name.",
+    "bool", "hasInterestingName", (ins), [{}], /*defaultImplementation=*/[{
+      return !hasUselessName();
     }]>
   ];
 }

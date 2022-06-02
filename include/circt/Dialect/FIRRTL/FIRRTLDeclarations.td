@@ -18,19 +18,6 @@ class ReferableDeclOp<string mnemonic, list<Trait> traits = []> :
 
 }
 
-def UselessName: I32EnumAttrCase<"UselessName", 0, "useless_name">;
-def InterestingName: I32EnumAttrCase<"InterestingName", 1, "interesting_name">;
-def WeakInterestingName: I32EnumAttrCase<"WeakInterestingName", 2,
-                                         "weak_interesting_name">;
-
-def NameKindEnumImpl: I32EnumAttr<"NameKindEnum", "name kind",
-              [UselessName, InterestingName, WeakInterestingName]> {
-  let genSpecializedAttr = 0;
-  let cppNamespace = "::circt::firrtl";
-}
-
-def NameKindAttr: EnumAttr<FIRRTLDialect, NameKindEnumImpl, "name_kind">;
-
 def InstanceOp : ReferableDeclOp<"instance", [HasParent<"firrtl::FModuleOp, firrtl::WhenOp">,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>, 
     DeclareOpInterfaceMethods<HWInstanceLike, ["instanceName"]>]> {
@@ -122,11 +109,11 @@ def MemOp : ReferableDeclOp<"mem", [FNamableOp]> {
          PortAnnotationsAttr:$portAnnotations,
          OptionalAttr<SymbolNameAttr>:$inner_sym,
          OptionalAttr<UI32Attr>:$groupID,
-         NameKindAttr:$nameKind);
+         BoolAttr:$hasUselessName);
   let results = (outs Variadic<FIRRTLType>:$results);
 
   let assemblyFormat = [{
-    (`sym` $inner_sym^)? custom<NameKind>($nameKind)
+    (`sym` $inner_sym^)? custom<NameKind>($hasUselessName)
     $ruw custom<MemOp>(attr-dict) `:` qualified(type($results))
   }];
 
@@ -215,7 +202,7 @@ def NodeOp : ReferableDeclOp<"node",
   let arguments = (ins PassiveType:$input, StrAttr:$name,
                        AnnotationArrayAttr:$annotations,
                        OptionalAttr<SymbolNameAttr>:$inner_sym,
-                       NameKindAttr:$nameKind);
+                       BoolAttr:$hasUselessName);
   let results = (outs FIRRTLType:$result);
 
   let builders = [
@@ -226,12 +213,12 @@ def NodeOp : ReferableDeclOp<"node",
       if(!annotations)
         annotations = $_builder.getArrayAttr({});
       return build($_builder, $_state, elementType, input, name,
-                   annotations, inner_sym, inferNameKind(name));
+                   annotations, inner_sym, isUselessName(name));
     }]>
   ];
 
   let assemblyFormat = [{
-    (`sym` $inner_sym^)? custom<NameKind>($nameKind)
+    (`sym` $inner_sym^)? custom<NameKind>($hasUselessName)
     $input custom<ImplicitSSAName>(attr-dict) `:` qualified(type($input))
   }];
 
@@ -251,7 +238,7 @@ def RegOp : ReferableDeclOp<"reg", [FNamableOp]> {
   let arguments = (
     ins ClockType:$clockVal, StrAttr:$name,
         AnnotationArrayAttr:$annotations,
-        OptionalAttr<SymbolNameAttr>:$inner_sym, NameKindAttr:$nameKind);
+        OptionalAttr<SymbolNameAttr>:$inner_sym, BoolAttr:$hasUselessName);
   let results = (outs AnyRegisterType:$result);
 
   let builders = [
@@ -262,12 +249,12 @@ def RegOp : ReferableDeclOp<"reg", [FNamableOp]> {
       if(!annotations)
         annotations = $_builder.getArrayAttr({});
       return build($_builder, $_state, elementType, clockVal, name,
-                   annotations, inner_sym, inferNameKind(name));
+                   annotations, inner_sym, isUselessName(name));
     }]>
   ];
 
   let assemblyFormat = [{
-    (`sym` $inner_sym^)? custom<NameKind>($nameKind)
+    (`sym` $inner_sym^)? custom<NameKind>($hasUselessName)
     operands custom<ImplicitSSAName>(attr-dict) `:` qualified(type($result))
   }];
   let hasCanonicalizeMethod = true;
@@ -287,7 +274,7 @@ def RegResetOp : ReferableDeclOp<"regreset", [FNamableOp]> {
         AnyRegisterType:$resetValue,
         StrAttr:$name, AnnotationArrayAttr:$annotations,
         OptionalAttr<SymbolNameAttr>:$inner_sym,
-        NameKindAttr:$nameKind);
+        BoolAttr:$hasUselessName);
   let results = (outs AnyRegisterType:$result);
 
   let builders = [
@@ -299,12 +286,12 @@ def RegResetOp : ReferableDeclOp<"regreset", [FNamableOp]> {
       if(!annotations)
         annotations = $_builder.getArrayAttr({});
       return build($_builder, $_state, elementType, clockVal, resetSignal,
-                   resetValue, name, annotations, inner_sym, inferNameKind(name));
+                   resetValue, name, annotations, inner_sym, isUselessName(name));
     }]>
   ];
 
   let assemblyFormat = [{
-    (`sym` $inner_sym^)? custom<NameKind>($nameKind)
+    (`sym` $inner_sym^)? custom<NameKind>($hasUselessName)
     operands custom<ImplicitSSAName>(attr-dict)
     `:` qualified(type($resetSignal)) `,` qualified(type($resetValue)) `,` qualified(type($result))
   }];
@@ -325,7 +312,7 @@ def WireOp : ReferableDeclOp<"wire", [FNamableOp]> {
   let arguments = (ins StrAttr:$name,
                        AnnotationArrayAttr:$annotations,
                        OptionalAttr<SymbolNameAttr>:$inner_sym,
-                       NameKindAttr:$nameKind);
+                       BoolAttr:$hasUselessName);
   let results = (outs FIRRTLType:$result);
 
   let builders = [
@@ -336,12 +323,12 @@ def WireOp : ReferableDeclOp<"wire", [FNamableOp]> {
       if(!annotations)
         annotations = $_builder.getArrayAttr({});
       return build($_builder, $_state, elementType, name,
-                   annotations, inner_sym, inferNameKind(name));
+                   annotations, inner_sym, isUselessName(name));
     }]>,
   ];
 
   let assemblyFormat = [{
-    (`sym` $inner_sym^)? custom<NameKind>($nameKind)
+    (`sym` $inner_sym^)? custom<NameKind>($hasUselessName)
     custom<ImplicitSSAName>(attr-dict) `:` qualified(type($result))
   }];
   let hasCanonicalizer = true;
