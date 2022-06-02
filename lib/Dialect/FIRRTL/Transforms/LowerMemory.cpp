@@ -217,9 +217,11 @@ void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
   auto memModule = getOrCreateMemModule(mem, summary, ports, shouldDedup);
   b.setInsertionPointToStart(wrapper.getBody());
 
+  // Create the outer memory instance.  Annotations will be copied over later as
+  // they need to be updated.  The inner symbol is copied from the memory (if
+  // one exists).
   auto memInst =
-      b.create<InstanceOp>(mem->getLoc(), memModule, memModule.moduleName(),
-                           mem.annotations().getValue());
+      b.create<InstanceOp>(mem->getLoc(), memModule, memModule.moduleName());
 
   // Wire all the ports together.
   for (auto [dst, src] :
@@ -232,39 +234,63 @@ void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
 
   // Create an instance of the wrapper memory module, which will replace the
   // original mem op.
-  emitMemoryInstance(mem, wrapper, summary);
-
-  // We fixup the annotations here. We will be copying all annotations on to the
-  // module op, so we have to fix up the NLA to have the module as the leaf
-  // element.
-
-  auto leafSym = memModule.moduleNameAttr();
-  auto leafAttr = hw::InnerRefAttr::get(wrapper.moduleNameAttr(), leafSym);
+  auto ext = emitMemoryInstance(mem, wrapper, summary);
 
   // NLAs that we have already processed.
-  SmallPtrSet<Attribute, 8> processedNLAs;
+  DenseMap<Attribute, Attribute> processedNLAs;
   auto nonlocalAttr = StringAttr::get(context, "circt.nonlocal");
-  bool nlaUpdated = false;
 
-  for (auto anno : AnnotationSet(mem)) {
+  // We fixup the annotations here. We will be copying all annotations on to the
+  // module op, so we have to fix up the NLA with the extract hierarchy.
+  SmallVector<Annotation> newAnnotations;
+  AnnotationSet annotations(mem);
+  annotations.removeAnnotations([&](Annotation anno) {
     // We're only looking for non-local annotations.
     auto nlaSym = anno.getMember<FlatSymbolRefAttr>(nonlocalAttr);
     if (!nlaSym)
-      continue;
-    // If we have already seen this NLA, don't re-process it.
-    if (!processedNLAs.insert(nlaSym).second)
-      continue;
+      return false;
 
-    // Update the NLA path to have the additional wrapper module.
+    // If we have already seen this NLA symbol before, then just update the
+    // annotation to use the new one.
+    if (processedNLAs.count(nlaSym)) {
+      auto nla = processedNLAs[nlaSym];
+      anno.setMember(nonlocalAttr.getValue(), nla);
+      newAnnotations.push_back(anno);
+      return true;
+    }
+
+    // Generate a new hierarchical path that adds one level of hierarchy.
+    //
+    // TODO: This conservatively duplicates the hierarhical path as we do not
+    // know if there are other users of the old path.  Relax this restriction
+    // once there is better support for finding hierarchical path users.
     auto nla = dyn_cast<HierPathOp>(symbolTable->lookup(nlaSym.getAttr()));
     auto namepath = nla.namepath().getValue();
     SmallVector<Attribute> newNamepath(namepath.begin(), namepath.end());
-    newNamepath.push_back(leafAttr);
-    nla.namepathAttr(ArrayAttr::get(context, newNamepath));
-    nlaUpdated = true;
-  }
-  if (nlaUpdated)
-    memInst.inner_symAttr(leafSym);
+    assert(newNamepath.back().isa<FlatSymbolRefAttr>() &&
+           "invalid NLA that doesn't end in a FlatSymbolRefAttr");
+    auto sym = mem.inner_symAttr();
+    if (!sym)
+      sym = b.getStringAttr(ModuleNamespace(wrapper).newName(memInst.name()));
+    ext.inner_symAttr(sym);
+
+    newNamepath.back() = hw::InnerRefAttr::get(
+        newNamepath.back().cast<FlatSymbolRefAttr>().getAttr(),
+        ext.inner_symAttr());
+    newNamepath.push_back(ext.moduleNameAttr());
+    b.setInsertionPointAfter(nla);
+    nla = b.create<HierPathOp>(
+        nla.getLoc(), b.getStringAttr(circuitNamespace.newName(nla.sym_name())),
+        b.getArrayAttr(newNamepath));
+    anno.setMember(nonlocalAttr.getValue(), nla.getNameAttr());
+
+    newAnnotations.push_back(anno);
+    processedNLAs.insert({nlaSym, nla.getNameAttr()});
+    return true;
+  });
+
+  annotations.addAnnotations(newAnnotations);
+  annotations.applyToOperation(memInst);
 
   mem->erase();
 }
@@ -431,8 +457,7 @@ InstanceOp LowerMemoryPass::emitMemoryInstance(MemOp op, FModuleOp module,
   auto inst = builder.create<InstanceOp>(
       op.getLoc(), portTypes, module.getNameAttr(), summary.getFirMemoryName(),
       portDirections, portNames, /*annotations=*/ArrayRef<Attribute>(),
-      /*portAnnotations=*/ArrayRef<Attribute>(), /*lowerToBind=*/false,
-      op.inner_symAttr());
+      /*portAnnotations=*/ArrayRef<Attribute>(), /*lowerToBind=*/false);
 
   // Update all users of the result of read ports
   for (auto [subfield, result] : returnHolder) {
