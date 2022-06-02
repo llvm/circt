@@ -86,83 +86,15 @@ using Scheduleable = std::variant<calyx::GroupOp, WhileScheduleable>;
 // Lowering state classes
 //===----------------------------------------------------------------------===//
 
-/// ComponentLoweringState handles the current state of lowering of a Calyx
-/// component. It is mainly used as a key/value store for recording information
-/// during partial lowering, which is required at later lowering passes.
-class ProgramLoweringState;
-class ComponentLoweringState {
+/// Handles the current state of lowering of a Calyx component. It is mainly
+/// used as a key/value store for recording information during partial lowering,
+/// which is required at later lowering passes.
+class ComponentLoweringState
+    : public calyx::ComponentLoweringStateInterface,
+      public calyx::LoopLoweringStateInterface<ScfWhileOp> {
 public:
-  ComponentLoweringState(ProgramLoweringState &pls, calyx::ComponentOp compOp)
-      : programLoweringState(pls), compOp(compOp) {}
-
-  ProgramLoweringState &getProgramState() { return programLoweringState; }
-
-  /// Returns the calyx::ComponentOp associated with this lowering state.
-  calyx::ComponentOp getComponentOp() { return compOp; }
-
-  /// Returns a unique name within compOp with the provided prefix.
-  std::string getUniqueName(StringRef prefix) {
-    std::string prefixStr = prefix.str();
-    unsigned idx = prefixIdMap[prefixStr];
-    ++prefixIdMap[prefixStr];
-    return (prefix + "_" + std::to_string(idx)).str();
-  }
-
-  /// Returns a unique name associated with a specific operation.
-  StringRef getUniqueName(Operation *op) {
-    auto it = opNames.find(op);
-    assert(it != opNames.end() && "A unique name should have been set for op");
-    return it->second;
-  }
-
-  /// Registers a unique name for a given operation using a provided prefix.
-  void setUniqueName(Operation *op, StringRef prefix) {
-    assert(opNames.find(op) == opNames.end() &&
-           "A unique name was already set for op");
-    opNames[op] = getUniqueName(prefix);
-  }
-
-  template <typename TLibraryOp>
-  TLibraryOp getNewLibraryOpInstance(PatternRewriter &rewriter, Location loc,
-                                     TypeRange resTypes) {
-    IRRewriter::InsertionGuard guard(rewriter);
-    rewriter.setInsertionPoint(compOp.getBody(), compOp.getBody()->begin());
-    auto name = TLibraryOp::getOperationName().split(".").second;
-    return rewriter.create<TLibraryOp>(loc, getUniqueName(name), resTypes);
-  }
-
-  /// Register value v as being evaluated when scheduling group.
-  void registerEvaluatingGroup(Value v, calyx::GroupInterface group) {
-    valueGroupAssigns[v] = group;
-  }
-
-  /// Return the group which evaluates the value v. Optionally, caller may
-  /// specify the expected type of the group.
-  template <typename TGroupOp = calyx::GroupInterface>
-  TGroupOp getEvaluatingGroup(Value v) {
-    auto it = valueGroupAssigns.find(v);
-    assert(it != valueGroupAssigns.end() && "No group evaluating value!");
-    if constexpr (std::is_same<TGroupOp, calyx::GroupInterface>::value)
-      return it->second;
-    else {
-      auto group = dyn_cast<TGroupOp>(it->second.getOperation());
-      assert(group && "Actual group type differed from expected group type");
-      return group;
-    }
-  }
-
-  /// Register reg as being the idx'th return value register.
-  void addReturnReg(calyx::RegisterOp reg, unsigned idx) {
-    assert(returnRegs.count(idx) == 0 &&
-           "A register was already registered for this index");
-    returnRegs[idx] = reg;
-  }
-
-  /// Returns the idx'th return value register.
-  calyx::RegisterOp getReturnReg(unsigned idx) {
-    assert(returnRegs.count(idx) && "No register registered for index!");
-    return returnRegs[idx];
-  }
+  ComponentLoweringState(calyx::ComponentOp component)
+      : calyx::ComponentLoweringStateInterface(component) {}
 
   /// Register 'scheduleable' as being generated through lowering 'block'.
   ///
@@ -190,288 +122,10 @@ public:
     return {};
   }
 
-  /// Register 'grp' as a group which performs block argument
-  /// register transfer when transitioning from basic block from to to.
-  void addBlockArgGroup(Block *from, Block *to, calyx::GroupOp grp) {
-    blockArgGroups[from][to].push_back(grp);
-  }
-
-  /// Returns a list of groups to be evaluated to perform the block argument
-  /// register assignments when transitioning from basic block 'from' to 'to'.
-  ArrayRef<calyx::GroupOp> getBlockArgGroups(Block *from, Block *to) {
-    return blockArgGroups[from][to];
-  }
-
-  /// Register reg as being the idx'th argument register for block.
-  void addBlockArgReg(Block *block, calyx::RegisterOp reg, unsigned idx) {
-    assert(blockArgRegs[block].count(idx) == 0);
-    assert(idx < block->getArguments().size());
-    blockArgRegs[block][idx] = reg;
-  }
-
-  /// Return a mapping of block argument indices to block argument registers.
-  const DenseMap<unsigned, calyx::RegisterOp> &getBlockArgRegs(Block *block) {
-    return blockArgRegs[block];
-  }
-
-  /// Register reg as being the idx'th iter_args register for 'whileOp'.
-  void addWhileIterReg(ScfWhileOp whileOp, calyx::RegisterOp reg,
-                       unsigned idx) {
-    assert(whileIterRegs[whileOp.getOperation()].count(idx) == 0 &&
-           "A register was already registered for the given while iter_arg "
-           "index");
-    assert(idx < whileOp.getBodyArgs().size());
-    whileIterRegs[whileOp.getOperation()][idx] = reg;
-  }
-
-  /// Return a mapping of block argument indices to block argument registers.
-  calyx::RegisterOp getWhileIterReg(ScfWhileOp whileOp, unsigned idx) {
-    auto iterRegs = getWhileIterRegs(whileOp);
-    auto it = iterRegs.find(idx);
-    assert(it != iterRegs.end() &&
-           "No iter arg register set for the provided index");
-    return it->second;
-  }
-
-  /// Return a mapping of block argument indices to block argument registers.
-  const DenseMap<unsigned, calyx::RegisterOp> &
-  getWhileIterRegs(ScfWhileOp whileOp) {
-    return whileIterRegs[whileOp.getOperation()];
-  }
-
-  /// Registers grp to be the while latch group of whileOp.
-  void setWhileLatchGroup(ScfWhileOp whileOp, calyx::GroupOp grp) {
-    assert(whileLatchGroups.count(whileOp.getOperation()) == 0 &&
-           "A latch group was already set for this whileOp");
-    whileLatchGroups[whileOp.getOperation()] = grp;
-  }
-
-  /// Retrieve the while latch group registered for whileOp.
-  calyx::GroupOp getWhileLatchGroup(ScfWhileOp whileOp) {
-    auto it = whileLatchGroups.find(whileOp.getOperation());
-    assert(it != whileLatchGroups.end() &&
-           "No while latch group was set for this whileOp");
-    return it->second;
-  }
-
-  /// Registers a memory interface as being associated with a memory identified
-  /// by 'memref'.
-  void registerMemoryInterface(Value memref,
-                               const calyx::MemoryInterface &memoryInterface) {
-    assert(memref.getType().isa<MemRefType>());
-    assert(memories.find(memref) == memories.end() &&
-           "Memory already registered for memref");
-    memories[memref] = memoryInterface;
-  }
-
-  /// Returns the memory interface registered for the given memref.
-  calyx::MemoryInterface getMemoryInterface(Value memref) {
-    assert(memref.getType().isa<MemRefType>());
-    auto it = memories.find(memref);
-    assert(it != memories.end() && "No memory registered for memref");
-    return it->second;
-  }
-
-  /// If v is an input to any memory registered within this component, returns
-  /// the memory. If not, returns null.
-  Optional<calyx::MemoryInterface> isInputPortOfMemory(Value v) {
-    for (auto &memIf : memories) {
-      auto &mem = memIf.getSecond();
-      if (mem.writeEn() == v || mem.writeData() == v ||
-          llvm::any_of(mem.addrPorts(), [=](Value port) { return port == v; }))
-        return {mem};
-    }
-    return {};
-  }
-
-  /// Assign a mapping between the source funcOp result indices and the
-  /// corresponding output port indices of this componentOp.
-  void setFuncOpResultMapping(const DenseMap<unsigned, unsigned> &mapping) {
-    funcOpResultMapping = mapping;
-  }
-
-  /// Get the output port index of this component for which the funcReturnIdx of
-  /// the original function maps to.
-  unsigned getFuncOpResultMapping(unsigned funcReturnIdx) {
-    auto it = funcOpResultMapping.find(funcReturnIdx);
-    assert(it != funcOpResultMapping.end() &&
-           "No component return port index recorded for the requested function "
-           "return index");
-    return it->second;
-  }
-
 private:
-  /// A reference to the parent program lowering state.
-  ProgramLoweringState &programLoweringState;
-
-  /// The component which this lowering state is associated to.
-  calyx::ComponentOp compOp;
-
-  /// A mapping of string prefixes and the current uniqueness counter for that
-  /// prefix. Used to generate unique names.
-  std::map<std::string, unsigned> prefixIdMap;
-
-  /// A mapping from Operations and previously assigned unique name of the op.
-  std::map<Operation *, std::string> opNames;
-
-  /// A mapping between SSA values and the groups which assign them.
-  DenseMap<Value, calyx::GroupInterface> valueGroupAssigns;
-
-  /// A mapping from return value indexes to return value registers.
-  DenseMap<unsigned, calyx::RegisterOp> returnRegs;
-
   /// BlockScheduleables is a list of scheduleables that should be
   /// sequentially executed when executing the associated basic block.
   DenseMap<mlir::Block *, SmallVector<Scheduleable>> blockScheduleables;
-
-  /// A mapping from blocks to block argument registers.
-  DenseMap<Block *, DenseMap<unsigned, calyx::RegisterOp>> blockArgRegs;
-
-  /// Block arg groups is a list of groups that should be sequentially
-  /// executed when passing control from the source to destination block.
-  /// Block arg groups are executed before blockScheduleables (akin to a
-  /// phi-node).
-  DenseMap<Block *, DenseMap<Block *, SmallVector<calyx::GroupOp>>>
-      blockArgGroups;
-
-  /// A while latch group is a group that should be sequentially executed when
-  /// finishing a while loop body. The execution of this group will write the
-  /// yield'ed loop body values to the iteration argument registers.
-  DenseMap<Operation *, calyx::GroupOp> whileLatchGroups;
-
-  /// A mapping from while ops to iteration argument registers.
-  DenseMap<Operation *, DenseMap<unsigned, calyx::RegisterOp>> whileIterRegs;
-
-  /// A mapping from memref's to their corresponding Calyx memory interface.
-  DenseMap<Value, calyx::MemoryInterface> memories;
-
-  /// A mapping between the source funcOp result indices and the corresponding
-  /// output port indices of this componentOp.
-  DenseMap<unsigned, unsigned> funcOpResultMapping;
-};
-
-/// ProgramLoweringState handles the current state of lowering of a Calyx
-/// program. It is mainly used as a key/value store for recording information
-/// during partial lowering, which is required at later lowering passes.
-class ProgramLoweringState {
-public:
-  explicit ProgramLoweringState(calyx::ProgramOp program,
-                                StringRef topLevelFunction)
-      : topLevelFunction(topLevelFunction), program(program) {
-    getProgram();
-  }
-
-  /// Returns a meaningful name for a value within the program scope.
-  template <typename ValueOrBlock>
-  std::string irName(ValueOrBlock &v) {
-    std::string s;
-    llvm::raw_string_ostream os(s);
-    AsmState asmState(program);
-    v.printAsOperand(os, asmState);
-    return s;
-  }
-
-  /// Returns a meaningful name for a block within the program scope (removes
-  /// the ^ prefix from block names).
-  std::string blockName(Block *b) {
-    auto blockName = irName(*b);
-    blockName.erase(std::remove(blockName.begin(), blockName.end(), '^'),
-                    blockName.end());
-    return blockName;
-  }
-
-  /// Returns the component lowering state associated with compOp.
-  ComponentLoweringState &compLoweringState(calyx::ComponentOp compOp) {
-    auto it = compStates.find(compOp);
-    if (it != compStates.end())
-      return it->second;
-
-    /// Create a new ComponentLoweringState for the compOp.
-    auto newCompStateIt = compStates.try_emplace(compOp, *this, compOp);
-    return newCompStateIt.first->second;
-  }
-
-  /// Returns the current program.
-  calyx::ProgramOp getProgram() {
-    assert(program.getOperation() != nullptr);
-    return program;
-  }
-
-  /// Returns the name of the top-level function in the source program.
-  StringRef getTopLevelFunction() const { return topLevelFunction; }
-
-private:
-  StringRef topLevelFunction;
-  calyx::ProgramOp program;
-  DenseMap<Operation *, ComponentLoweringState> compStates;
-};
-
-/// Creates register assignment operations within the provided groupOp.
-static void buildAssignmentsForRegisterWrite(ComponentLoweringState &state,
-                                             PatternRewriter &rewriter,
-                                             calyx::GroupOp groupOp,
-                                             calyx::RegisterOp &reg,
-                                             Value inputValue) {
-  IRRewriter::InsertionGuard guard(rewriter);
-  auto loc = inputValue.getLoc();
-  rewriter.setInsertionPointToEnd(groupOp.getBody());
-  rewriter.create<calyx::AssignOp>(loc, reg.in(), inputValue);
-  rewriter.create<calyx::AssignOp>(
-      loc, reg.write_en(),
-      createConstant(loc, rewriter, state.getComponentOp(), 1, 1));
-  rewriter.create<calyx::GroupDoneOp>(loc, reg.done());
-}
-
-/// Creates a new group that assigns the 'ops' values to the iter arg registers
-/// of the 'whileOp'.
-static calyx::GroupOp buildWhileIterArgAssignments(
-    PatternRewriter &rewriter, ComponentLoweringState &state, Location loc,
-    ScfWhileOp whileOp, Twine uniqueSuffix, MutableArrayRef<OpOperand> ops) {
-  assert(whileOp.getOperation());
-  /// Pass iteration arguments through registers. This follows closely
-  /// to what is done for branch ops.
-  auto groupName = "assign_" + uniqueSuffix;
-  auto groupOp = calyx::createGroup<calyx::GroupOp>(
-      rewriter, state.getComponentOp(), loc, groupName);
-  /// Create register assignment for each iter_arg. a calyx::GroupDone signal
-  /// is created for each register. These will be &'ed together in
-  /// MultipleGroupDonePattern.
-  for (auto &arg : ops) {
-    auto reg = state.getWhileIterReg(whileOp, arg.getOperandNumber());
-    buildAssignmentsForRegisterWrite(state, rewriter, groupOp, reg, arg.get());
-  }
-  return groupOp;
-}
-
-//===----------------------------------------------------------------------===//
-// Partial lowering infrastructure
-//===----------------------------------------------------------------------===//
-
-/// Base class for partial lowering passes. A partial lowering pass
-/// modifies the root operation in place, but does not replace the root
-/// operation.
-/// The RewritePatternType template parameter allows for using both
-/// OpRewritePattern (default) or OpInterfaceRewritePattern.
-template <class OpType,
-          template <class> class RewritePatternType = OpRewritePattern>
-class PartialLoweringPattern : public RewritePatternType<OpType> {
-public:
-  using RewritePatternType<OpType>::RewritePatternType;
-  PartialLoweringPattern(MLIRContext *ctx, LogicalResult &resRef)
-      : RewritePatternType<OpType>(ctx), partialPatternRes(resRef) {}
-
-  LogicalResult matchAndRewrite(OpType op,
-                                PatternRewriter &rewriter) const override {
-    rewriter.updateRootInPlace(
-        op, [&] { partialPatternRes = partiallyLower(op, rewriter); });
-    return partialPatternRes;
-  }
-
-  virtual LogicalResult partiallyLower(OpType op,
-                                       PatternRewriter &rewriter) const = 0;
-
-private:
-  LogicalResult &partialPatternRes;
 };
 
 //===----------------------------------------------------------------------===//
@@ -482,11 +136,13 @@ private:
 /// and then perform their own walking of the IR. FuncOpPartialLoweringPatterns
 /// have direct access to the ComponentLoweringState for the corresponding
 /// component of the matched FuncOp.
-class FuncOpPartialLoweringPattern : public PartialLoweringPattern<FuncOp> {
+class FuncOpPartialLoweringPattern
+    : public calyx::PartialLoweringPattern<FuncOp> {
 public:
-  FuncOpPartialLoweringPattern(MLIRContext *context, LogicalResult &resRef,
-                               FuncMapping &_funcMap, ProgramLoweringState &pls)
-      : PartialLoweringPattern(context, resRef), funcMap(_funcMap), pls(pls) {}
+  FuncOpPartialLoweringPattern(
+      MLIRContext *context, LogicalResult &resRef, FuncMapping &map,
+      calyx::ProgramLoweringState<ComponentLoweringState> &pls)
+      : PartialLoweringPattern(context, resRef), funcMap(map), pls(pls) {}
 
   LogicalResult partiallyLower(FuncOp funcOp,
                                PatternRewriter &rewriter) const override final {
@@ -519,7 +175,9 @@ public:
     return *compLoweringState;
   }
 
-  ProgramLoweringState &progState() const { return pls; }
+  calyx::ProgramLoweringState<ComponentLoweringState> &programState() const {
+    return pls;
+  }
 
   /// Partial lowering implementation.
   virtual LogicalResult
@@ -531,7 +189,7 @@ protected:
 private:
   mutable calyx::ComponentOp *compOp = nullptr;
   mutable ComponentLoweringState *compLoweringState = nullptr;
-  ProgramLoweringState &pls;
+  calyx::ProgramLoweringState<ComponentLoweringState> &pls;
 };
 
 //===----------------------------------------------------------------------===//
@@ -665,8 +323,8 @@ private:
   template <typename TGroupOp>
   TGroupOp createGroupForOp(PatternRewriter &rewriter, Operation *op) const {
     Block *block = op->getBlock();
-    auto groupName = getComponentState().getUniqueName(
-        getComponentState().getProgramState().blockName(block));
+    auto groupName =
+        getComponentState().getUniqueName(programState().blockName(block));
     return calyx::createGroup<TGroupOp>(rewriter,
                                         getComponentState().getComponentOp(),
                                         op->getLoc(), groupName);
@@ -768,8 +426,9 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
     auto reg = createRegister(loadOp.getLoc(), rewriter, *getComponent(),
                               loadOp.getMemRefType().getElementTypeBitWidth(),
                               getComponentState().getUniqueName("load"));
-    buildAssignmentsForRegisterWrite(getComponentState(), rewriter, group, reg,
-                                     memoryInterface.readData());
+    calyx::buildAssignmentsForRegisterWrite(
+        rewriter, group, getComponentState().getComponentOp(), reg,
+        memoryInterface.readData());
     loadOp.getResult().replaceAllUsesWith(reg.out());
     getComponentState().addBlockScheduleable(loadOp->getBlock(), group);
   }
@@ -894,11 +553,11 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   assert(whileOp);
   ScfWhileOp whileOpInterface(whileOp);
 
-  auto assignGroup = buildWhileIterArgAssignments(
-      rewriter, getComponentState(), yieldOp.getLoc(), whileOpInterface,
+  auto assignGroup = getComponentState().buildLoopIterArgAssignments(
+      rewriter, whileOpInterface, getComponentState().getComponentOp(),
       getComponentState().getUniqueName(whileOp) + "_latch",
       yieldOp->getOpOperands());
-  getComponentState().setWhileLatchGroup(whileOpInterface, assignGroup);
+  getComponentState().setLoopLatchGroup(whileOpInterface, assignGroup);
   return success();
 }
 
@@ -914,8 +573,8 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
     if (succOperands.empty())
       continue;
     // Create operand passing group
-    std::string groupName = progState().blockName(srcBlock) + "_to_" +
-                            progState().blockName(succBlock.value());
+    std::string groupName = programState().blockName(srcBlock) + "_to_" +
+                            programState().blockName(succBlock.value());
     auto groupOp = calyx::createGroup<calyx::GroupOp>(rewriter, *getComponent(),
                                                       brOp.getLoc(), groupName);
     // Fetch block argument registers associated with the basic block
@@ -924,8 +583,9 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
     // Create register assignment for each block argument
     for (auto arg : enumerate(succOperands.getForwardedOperands())) {
       auto reg = dstBlockArgRegs[arg.index()];
-      buildAssignmentsForRegisterWrite(getComponentState(), rewriter, groupOp,
-                                       reg, arg.value());
+      calyx::buildAssignmentsForRegisterWrite(
+          rewriter, groupOp, getComponentState().getComponentOp(), reg,
+          arg.value());
     }
     /// Register the group as a block argument group, to be executed
     /// when entering the successor block from this block (srcBlock).
@@ -946,8 +606,9 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                                     retOp.getLoc(), groupName);
   for (auto op : enumerate(retOp.getOperands())) {
     auto reg = getComponentState().getReturnReg(op.index());
-    buildAssignmentsForRegisterWrite(getComponentState(), rewriter, groupOp,
-                                     reg, op.value());
+    calyx::buildAssignmentsForRegisterWrite(
+        rewriter, groupOp, getComponentState().getComponentOp(), reg,
+        op.value());
   }
   /// Schedule group for execution for when executing the return op block.
   getComponentState().addBlockScheduleable(retOp->getBlock(), groupOp);
@@ -1069,10 +730,12 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 /// This pass rewrites memory accesses that have a width mismatch. Such
 /// mismatches are due to index types being assumed 32-bit wide due to the lack
 /// of a width inference pass.
-class RewriteMemoryAccesses : public PartialLoweringPattern<calyx::AssignOp> {
+class RewriteMemoryAccesses
+    : public calyx::PartialLoweringPattern<calyx::AssignOp> {
 public:
-  RewriteMemoryAccesses(MLIRContext *context, LogicalResult &resRef,
-                        ProgramLoweringState &pls)
+  RewriteMemoryAccesses(
+      MLIRContext *context, LogicalResult &resRef,
+      calyx::ProgramLoweringState<ComponentLoweringState> &pls)
       : PartialLoweringPattern(context, resRef), pls(pls) {}
 
   LogicalResult partiallyLower(calyx::AssignOp assignOp,
@@ -1110,7 +773,7 @@ public:
   }
 
 private:
-  ProgramLoweringState &pls;
+  calyx::ProgramLoweringState<ComponentLoweringState> &pls;
 };
 
 /// Connverts all index-typed operations and values to i32 values.
@@ -1332,7 +995,7 @@ struct FuncOpConversion : public FuncOpPartialLoweringPattern {
 
     /// Store the function-to-component mapping.
     funcMap[funcOp] = compOp;
-    auto &compState = progState().compLoweringState(compOp);
+    auto &compState = programState().compLoweringState(compOp);
     compState.setFuncOpResultMapping(funcOpResultMapping);
 
     /// Rewrite funcOp SSA argument values to the CompOp arguments.
@@ -1402,8 +1065,8 @@ class BuildWhileGroups : public FuncOpPartialLoweringPattern {
         auto condOp = scfWhileOp.getConditionOp().getArgs()[barg.index()];
         if (barg.value() != condOp) {
           res = whileOp.getOperation()->emitError()
-                << progState().irName(barg.value())
-                << " != " << progState().irName(condOp)
+                << programState().irName(barg.value())
+                << " != " << programState().irName(condOp)
                 << "do-while loops not supported; expected iter-args to "
                    "remain untransformed in the 'before' region of the "
                    "scf.while op.";
@@ -1423,7 +1086,7 @@ class BuildWhileGroups : public FuncOpPartialLoweringPattern {
         auto reg =
             createRegister(arg.value().getLoc(), rewriter, *getComponent(),
                            arg.value().getType().getIntOrFloatBitWidth(), name);
-        getComponentState().addWhileIterReg(whileOp, reg, arg.index());
+        getComponentState().addLoopIterReg(whileOp, reg, arg.index());
         arg.value().replaceAllUsesWith(reg.out());
 
         /// Also replace uses in the "before" region of the while loop
@@ -1436,9 +1099,8 @@ class BuildWhileGroups : public FuncOpPartialLoweringPattern {
       SmallVector<calyx::GroupOp> initGroups;
       auto numOperands = whileOp.getOperation()->getNumOperands();
       for (size_t i = 0; i < numOperands; ++i) {
-        auto initGroupOp = buildWhileIterArgAssignments(
-            rewriter, getComponentState(), whileOp.getOperation()->getLoc(),
-            whileOp,
+        auto initGroupOp = getComponentState().buildLoopIterArgAssignments(
+            rewriter, whileOp, getComponentState().getComponentOp(),
             getComponentState().getUniqueName(whileOp.getOperation()) +
                 "_init_" + std::to_string(i),
             whileOp.getOperation()->getOpOperand(i));
@@ -1470,8 +1132,8 @@ class BuildBBRegs : public FuncOpPartialLoweringPattern {
         Type argType = arg.value().getType();
         assert(argType.isa<IntegerType>() && "unsupported block argument type");
         unsigned width = argType.getIntOrFloatBitWidth();
-        std::string name =
-            progState().blockName(block) + "_arg" + std::to_string(arg.index());
+        std::string name = programState().blockName(block) + "_arg" +
+                           std::to_string(arg.index());
         auto reg = createRegister(arg.value().getLoc(), rewriter,
                                   *getComponent(), width, name);
         getComponentState().addBlockArgReg(block, reg, arg.index());
@@ -1510,46 +1172,6 @@ class BuildReturnRegs : public FuncOpPartialLoweringPattern {
     }
     return success();
   }
-};
-
-struct ModuleOpConversion : public OpRewritePattern<mlir::ModuleOp> {
-  ModuleOpConversion(MLIRContext *context, StringRef topLevelFunction,
-                     calyx::ProgramOp *programOpOutput)
-      : OpRewritePattern<mlir::ModuleOp>(context),
-        programOpOutput(programOpOutput), topLevelFunction(topLevelFunction) {
-    assert(programOpOutput->getOperation() == nullptr &&
-           "this function will set programOpOutput post module conversion");
-  }
-
-  LogicalResult matchAndRewrite(mlir::ModuleOp moduleOp,
-                                PatternRewriter &rewriter) const override {
-    if (!moduleOp.getOps<calyx::ProgramOp>().empty())
-      return failure();
-
-    rewriter.updateRootInPlace(moduleOp, [&] {
-      // Create ProgramOp
-      rewriter.setInsertionPointAfter(moduleOp);
-      auto programOp = rewriter.create<calyx::ProgramOp>(
-          moduleOp.getLoc(), StringAttr::get(getContext(), topLevelFunction));
-
-      // Inline the module body region
-      rewriter.inlineRegionBefore(moduleOp.getBodyRegion(),
-                                  programOp.getBodyRegion(),
-                                  programOp.getBodyRegion().end());
-
-      // Inlining the body region also removes ^bb0 from the module body
-      // region, so recreate that, before finally inserting the programOp
-      auto moduleBlock = rewriter.createBlock(&moduleOp.getBodyRegion());
-      rewriter.setInsertionPointToStart(moduleBlock);
-      rewriter.insert(programOp);
-      *programOpOutput = programOp;
-    });
-    return success();
-  }
-
-private:
-  calyx::ProgramOp *programOpOutput = nullptr;
-  StringRef topLevelFunction;
 };
 
 /// Builds a control schedule by traversing the CFG of the function and
@@ -1611,7 +1233,7 @@ private:
         // Insert loop-latch at the end of the while group
         rewriter.setInsertionPointToEnd(whileBodyOpBlock);
         calyx::GroupOp whileLatchGroup =
-            getComponentState().getWhileLatchGroup(whileOp);
+            getComponentState().getLoopLatchGroup(whileOp);
         rewriter.create<calyx::EnableOp>(whileLatchGroup.getLoc(),
                                          whileLatchGroup.getName());
 
@@ -1734,11 +1356,11 @@ private:
 /// This pass recursively inlines use-def chains of combinational logic (from
 /// non-stateful groups) into groups referenced in the control schedule.
 class InlineCombGroups
-    : public PartialLoweringPattern<calyx::GroupInterface,
-                                    OpInterfaceRewritePattern> {
+    : public calyx::PartialLoweringPattern<calyx::GroupInterface,
+                                           OpInterfaceRewritePattern> {
 public:
   InlineCombGroups(MLIRContext *context, LogicalResult &resRef,
-                   ProgramLoweringState &pls)
+                   calyx::ProgramLoweringState<ComponentLoweringState> &pls)
       : PartialLoweringPattern(context, resRef), pls(pls) {}
 
   LogicalResult partiallyLower(calyx::GroupInterface originGroup,
@@ -1811,7 +1433,7 @@ private:
     }
   }
 
-  ProgramLoweringState &pls;
+  calyx::ProgramLoweringState<ComponentLoweringState> &pls;
 };
 
 /// LateSSAReplacement contains various functions for replacing SSA values that
@@ -1829,7 +1451,7 @@ class LateSSAReplacement : public FuncOpPartialLoweringPattern {
       /// BuildOpGroups/BuildControl, the whileOp would get dead-code
       /// eliminated.
       ScfWhileOp whileOp(op);
-      for (auto res : getComponentState().getWhileIterRegs(whileOp))
+      for (auto res : getComponentState().getLoopIterRegs(whileOp))
         whileOp.getOperation()->getResults()[res.first].replaceAllUsesWith(
             res.second.out());
     });
@@ -2026,8 +1648,8 @@ public:
 
     // Program conversion
     RewritePatternSet conversionPatterns(&getContext());
-    conversionPatterns.add<ModuleOpConversion>(&getContext(), topLevelFunction,
-                                               programOpOut);
+    conversionPatterns.add<calyx::ModuleOpConversion>(
+        &getContext(), topLevelFunction, programOpOut);
     return applyOpPatternsAndFold(getOperation(),
                                   std::move(conversionPatterns));
   }
@@ -2076,7 +1698,8 @@ public:
 
 private:
   LogicalResult partialPatternRes;
-  std::shared_ptr<ProgramLoweringState> loweringState = nullptr;
+  std::shared_ptr<calyx::ProgramLoweringState<ComponentLoweringState>>
+      loweringState = nullptr;
 };
 
 void SCFToCalyxPass::runOnOperation() {
@@ -2096,7 +1719,8 @@ void SCFToCalyxPass::runOnOperation() {
          "programOp should have been set during module "
          "conversion, if module conversion succeeded.");
   loweringState =
-      std::make_shared<ProgramLoweringState>(programOp, topLevelFunction);
+      std::make_shared<calyx::ProgramLoweringState<ComponentLoweringState>>(
+          programOp, topLevelFunction);
 
   /// --------------------------------------------------------------------------
   /// If you are a developer, it may be helpful to add a
