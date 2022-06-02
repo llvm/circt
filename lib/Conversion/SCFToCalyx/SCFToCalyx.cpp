@@ -140,9 +140,9 @@ class FuncOpPartialLoweringPattern
     : public calyx::PartialLoweringPattern<FuncOp> {
 public:
   FuncOpPartialLoweringPattern(
-      MLIRContext *context, LogicalResult &resRef, FuncMapping &_funcMap,
+      MLIRContext *context, LogicalResult &resRef, FuncMapping &map,
       calyx::ProgramLoweringState<ComponentLoweringState> &pls)
-      : PartialLoweringPattern(context, resRef), funcMap(_funcMap), pls(pls) {}
+      : PartialLoweringPattern(context, resRef), funcMap(map), pls(pls) {}
 
   LogicalResult partiallyLower(FuncOp funcOp,
                                PatternRewriter &rewriter) const override final {
