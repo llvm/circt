@@ -320,7 +320,8 @@ private:
   template <typename TGroupOp>
   TGroupOp createGroupForOp(PatternRewriter &rewriter, Operation *op) const {
     Block *block = op->getBlock();
-    auto groupName = getComponentState().getUniqueName(programState().blockName(block));
+    auto groupName =
+        getComponentState().getUniqueName(programState().blockName(block));
     return calyx::createGroup<TGroupOp>(rewriter,
                                         getComponentState().getComponentOp(),
                                         op->getLoc(), groupName);
@@ -550,7 +551,7 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
       continue;
     // Create operand passing group
     std::string groupName = programState().blockName(srcBlock) + "_to_" +
-        programState().blockName(succBlock.value());
+                            programState().blockName(succBlock.value());
     auto groupOp = calyx::createGroup<calyx::GroupOp>(rewriter, *getComponent(),
                                                       brOp.getLoc(), groupName);
     // Fetch block argument registers associated with the basic block
@@ -709,8 +710,9 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 class RewriteMemoryAccesses
     : public calyx::PartialLoweringPattern<calyx::AssignOp> {
 public:
-  RewriteMemoryAccesses(MLIRContext *context, LogicalResult &resRef,
-                        calyx::ProgramLoweringState<ComponentLoweringState> &pls)
+  RewriteMemoryAccesses(
+      MLIRContext *context, LogicalResult &resRef,
+      calyx::ProgramLoweringState<ComponentLoweringState> &pls)
       : PartialLoweringPattern(context, resRef), pls(pls) {}
 
   LogicalResult partiallyLower(calyx::AssignOp assignOp,
@@ -1107,8 +1109,8 @@ class BuildBBRegs : public FuncOpPartialLoweringPattern {
         Type argType = arg.value().getType();
         assert(argType.isa<IntegerType>() && "unsupported block argument type");
         unsigned width = argType.getIntOrFloatBitWidth();
-        std::string name =
-            programState().blockName(block) + "_arg" + std::to_string(arg.index());
+        std::string name = programState().blockName(block) + "_arg" +
+                           std::to_string(arg.index());
         auto reg = createRegister(arg.value().getLoc(), rewriter,
                                   *getComponent(), width, name);
         getComponentState().addBlockArgReg(block, reg, arg.index());
@@ -1672,8 +1674,8 @@ public:
 
 private:
   LogicalResult partialPatternRes;
-  std::shared_ptr<calyx::ProgramLoweringState<ComponentLoweringState>> loweringState =
-      nullptr;
+  std::shared_ptr<calyx::ProgramLoweringState<ComponentLoweringState>>
+      loweringState = nullptr;
 };
 
 void SCFToCalyxPass::runOnOperation() {
