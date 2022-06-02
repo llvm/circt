@@ -65,24 +65,24 @@ Value getComponentOutput(calyx::ComponentOp compOp, unsigned outPortIdx) {
   return compOp.getArgument(index);
 }
 
-Type convIndexType(PatternRewriter &rewriter, Type type) {
+Type convIndexType(OpBuilder &builder, Type type) {
   if (type.isIndex())
-    return rewriter.getI32Type();
+    return builder.getI32Type();
   return type;
 }
 
-void buildAssignmentsForRegisterWrite(PatternRewriter &rewriter,
+void buildAssignmentsForRegisterWrite(OpBuilder &builder,
                                       calyx::GroupOp groupOp,
                                       calyx::ComponentOp componentOp,
                                       calyx::RegisterOp &reg,
                                       Value inputValue) {
-  mlir::IRRewriter::InsertionGuard guard(rewriter);
+  mlir::IRRewriter::InsertionGuard guard(builder);
   auto loc = inputValue.getLoc();
-  rewriter.setInsertionPointToEnd(groupOp.getBody());
-  rewriter.create<calyx::AssignOp>(loc, reg.in(), inputValue);
-  rewriter.create<calyx::AssignOp>(
-      loc, reg.write_en(), createConstant(loc, rewriter, componentOp, 1, 1));
-  rewriter.create<calyx::GroupDoneOp>(loc, reg.done());
+  builder.setInsertionPointToEnd(groupOp.getBody());
+  builder.create<calyx::AssignOp>(loc, reg.in(), inputValue);
+  builder.create<calyx::AssignOp>(
+      loc, reg.write_en(), createConstant(loc, builder, componentOp, 1, 1));
+  builder.create<calyx::GroupDoneOp>(loc, reg.done());
 }
 
 //===----------------------------------------------------------------------===//

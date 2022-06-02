@@ -50,20 +50,20 @@ Value getComponentOutput(calyx::ComponentOp compOp, unsigned outPortIdx);
 
 // If the provided type is an index type, converts it to i32, else, returns the
 // unmodified type.
-Type convIndexType(PatternRewriter &rewriter, Type type);
+Type convIndexType(OpBuilder &builder, Type type);
 
 // Creates a new calyx::CombGroupOp or calyx::GroupOp group within compOp.
 template <typename TGroup>
-TGroup createGroup(PatternRewriter &rewriter, calyx::ComponentOp compOp,
-                   Location loc, Twine uniqueName) {
-  mlir::IRRewriter::InsertionGuard guard(rewriter);
-  rewriter.setInsertionPointToEnd(compOp.getWiresOp().getBody());
-  return rewriter.create<TGroup>(loc, uniqueName.str());
+TGroup createGroup(OpBuilder &builder, calyx::ComponentOp compOp, Location loc,
+                   Twine uniqueName) {
+  mlir::IRRewriter::InsertionGuard guard(builder);
+  builder.setInsertionPointToEnd(compOp.getWiresOp().getBody());
+  return builder.create<TGroup>(loc, uniqueName.str());
 }
 
 /// Creates register assignment operations within the provided groupOp.
 /// The component operation will house the constants.
-void buildAssignmentsForRegisterWrite(PatternRewriter &rewriter,
+void buildAssignmentsForRegisterWrite(OpBuilder &builder,
                                       calyx::GroupOp groupOp,
                                       calyx::ComponentOp componentOp,
                                       calyx::RegisterOp &reg, Value inputValue);
@@ -192,21 +192,21 @@ public:
 
   /// Creates a new group that assigns the 'ops' values to the iter arg
   /// registers of the loop operation.
-  calyx::GroupOp buildLoopIterArgAssignments(PatternRewriter &rewriter, Loop op,
+  calyx::GroupOp buildLoopIterArgAssignments(OpBuilder &builder, Loop op,
                                              calyx::ComponentOp componentOp,
                                              Twine uniqueSuffix,
                                              MutableArrayRef<OpOperand> ops) {
     /// Pass iteration arguments through registers. This follows closely
     /// to what is done for branch ops.
     std::string groupName = "assign_" + uniqueSuffix.str();
-    auto groupOp = calyx::createGroup<calyx::GroupOp>(rewriter, componentOp,
+    auto groupOp = calyx::createGroup<calyx::GroupOp>(builder, componentOp,
                                                       op.getLoc(), groupName);
     /// Create register assignment for each iter_arg. a calyx::GroupDone signal
     /// is created for each register. These will be &'ed together in
     /// MultipleGroupDonePattern.
     for (OpOperand &arg : ops) {
       auto reg = getLoopIterReg(op, arg.getOperandNumber());
-      buildAssignmentsForRegisterWrite(rewriter, groupOp, componentOp, reg,
+      buildAssignmentsForRegisterWrite(builder, groupOp, componentOp, reg,
                                        arg.get());
     }
     return groupOp;
@@ -303,13 +303,13 @@ public:
   }
 
   template <typename TLibraryOp>
-  TLibraryOp getNewLibraryOpInstance(PatternRewriter &rewriter, Location loc,
+  TLibraryOp getNewLibraryOpInstance(OpBuilder &builder, Location loc,
                                      TypeRange resTypes) {
-    mlir::IRRewriter::InsertionGuard guard(rewriter);
+    mlir::IRRewriter::InsertionGuard guard(builder);
     Block *body = component.getBody();
-    rewriter.setInsertionPoint(body, body->begin());
+    builder.setInsertionPoint(body, body->begin());
     auto name = TLibraryOp::getOperationName().split(".").second;
-    return rewriter.create<TLibraryOp>(loc, getUniqueName(name), resTypes);
+    return builder.create<TLibraryOp>(loc, getUniqueName(name), resTypes);
   }
 
 private:
