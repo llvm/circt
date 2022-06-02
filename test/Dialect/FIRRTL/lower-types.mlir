@@ -1236,7 +1236,7 @@ firrtl.module private @is1436_FOO() {
   // FLATTEN:    firrtl.strictconnect %[[memory_w_data_3]], %wData_3
 
 
-// Test that empty bundles can be lowered.
+  // Test that empty bundles can be lowered.
   // FLATTEN-LABEL: firrtl.module private @SiFive_Queue_8()
   firrtl.module private @SiFive_Queue_8()  {
     %SiFive_ram_MPORT, %SiFive_ram_io_deq_bits_MPORT = firrtl.mem Undefined  {depth = 2 : i64, name = "SiFive_ram", portNames = ["MPORT", "io_deq_bits_MPORT"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: bundle<id: uint<4>, addr: uint<31>, len: uint<8>, size: uint<3>, burst: uint<2>, lock: uint<1>, cache: uint<4>, prot: uint<3>, qos: uint<4>, user: bundle<>, echo: bundle<>>, mask: bundle<id: uint<1>, addr: uint<1>, len: uint<1>, size: uint<1>, burst: uint<1>, lock: uint<1>, cache: uint<1>, prot: uint<1>, qos: uint<1>, user: bundle<>, echo: bundle<>>>, !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: bundle<id: uint<4>, addr: uint<31>, len: uint<8>, size: uint<3>, burst: uint<2>, lock: uint<1>, cache: uint<4>, prot: uint<3>, qos: uint<4>, user: bundle<>, echo: bundle<>>>
@@ -1253,69 +1253,120 @@ firrtl.module private @is1436_FOO() {
    // FLATTEN:   firrtl.strictconnect %[[v3]], %[[v11]] : !firrtl.uint<60>
   }
 
-// Issue #2315: Narrow index constants overflow when subaccessing long vectors.
-// https://github.com/llvm/circt/issues/2315
-// CHECK-LABEL: firrtl.module private @Issue2315
-firrtl.module private @Issue2315(in %x: !firrtl.vector<uint<10>, 5>, in %source: !firrtl.uint<2>, out %z: !firrtl.uint<10>) {
-  %0 = firrtl.subaccess %x[%source] : !firrtl.vector<uint<10>, 5>, !firrtl.uint<2>
-  firrtl.connect %z, %0 : !firrtl.uint<10>, !firrtl.uint<10>
-  // The width of multibit mux index will be converted at LowerToHW,
-  // so it is ok that the type of `%source` is uint<2> here.
-  // CHECK:      %0 = firrtl.multibit_mux %source, %x_4, %x_3, %x_2, %x_1, %x_0 : !firrtl.uint<2>, !firrtl.uint<10>
-  // CHECK-NEXT: firrtl.connect %z, %0 : !firrtl.uint<10>, !firrtl.uint<10>
-}
+  // Issue #2315: Narrow index constants overflow when subaccessing long vectors.
+  // https://github.com/llvm/circt/issues/2315
+  // CHECK-LABEL: firrtl.module private @Issue2315
+  firrtl.module private @Issue2315(in %x: !firrtl.vector<uint<10>, 5>, in %source: !firrtl.uint<2>, out %z: !firrtl.uint<10>) {
+    %0 = firrtl.subaccess %x[%source] : !firrtl.vector<uint<10>, 5>, !firrtl.uint<2>
+    firrtl.connect %z, %0 : !firrtl.uint<10>, !firrtl.uint<10>
+    // The width of multibit mux index will be converted at LowerToHW,
+    // so it is ok that the type of `%source` is uint<2> here.
+    // CHECK:      %0 = firrtl.multibit_mux %source, %x_4, %x_3, %x_2, %x_1, %x_0 : !firrtl.uint<2>, !firrtl.uint<10>
+    // CHECK-NEXT: firrtl.connect %z, %0 : !firrtl.uint<10>, !firrtl.uint<10>
+  }
 
   // Check if the NLA is updated with the new lowered symbol on a field element.
   firrtl.hierpath @nla [@fallBackName::@test, @Aardvark::@test, @Zebra::@b]
-  // CHECK:  firrtl.hierpath @nla_0 [@fallBackName::@test, @Aardvark::@test, @Zebra::@b_data]
+  // CHECK: firrtl.hierpath @nla_0 [@fallBackName::@test, @Aardvark::@test, @Zebra::@b_data]
   // CHECK: firrtl.hierpath @nla [@fallBackName::@test, @Aardvark::@test, @Zebra::@b_ready]
-  firrtl.hierpath @nla_1 [@fallBackName::@test,@Aardvark::@test_1, @Zebra]
+  firrtl.hierpath @nla_1 [@fallBackName::@test, @Aardvark::@test_1, @Zebra]
   firrtl.hierpath @nla_2 [@fallBackName::@test, @Aardvark::@test, @Zebra::@b2]
   // CHECK-NOT: firrtl.hierpath @nla_2
   firrtl.module private @fallBackName() {
-    firrtl.instance test  sym @test {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}, {circt.nonlocal = @nla_1, class = "circt.nonlocal"} , {circt.nonlocal = @nla_2, class = "circt.nonlocal"}]}@Aardvark()
+    firrtl.instance test sym @test {
+      annotations = [
+        {circt.nonlocal = @nla, class = "circt.nonlocal"},
+        {circt.nonlocal = @nla_1, class = "circt.nonlocal"},
+        {circt.nonlocal = @nla_2, class = "circt.nonlocal"}
+      ]
+    } @Aardvark()
     firrtl.instance test2 @Zebra()
   }
 
   firrtl.module private @Aardvark() {
-    firrtl.instance test sym @test {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}, {circt.nonlocal = @nla_2, class = "circt.nonlocal"}]}@Zebra()
+    firrtl.instance test sym @test {
+      annotations = [
+        {circt.nonlocal = @nla, class = "circt.nonlocal"},
+        {circt.nonlocal = @nla_2, class = "circt.nonlocal"}
+      ]
+    } @Zebra()
     firrtl.instance test1 sym @test_1 {annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}]}@Zebra()
   }
 
   // CHECK-LABEL: firrtl.module private @Zebra()
   firrtl.module private @Zebra() attributes {annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}]}{
     // bundle has annotations reusing the same NLA, the DontTouch should get dropped.
-    %bundle = firrtl.wire sym @b {annotations = [#firrtl<"subAnno<fieldID = 2, {circt.nonlocal = @nla, class =\"test\" }>">,#firrtl<"subAnno<fieldID = 2, {circt.nonlocal = @nla, class =\"firrtl.transforms.DontTouchAnnotation\" }>">, #firrtl<"subAnno<fieldID = 3, {circt.nonlocal = @nla, B}>">, #firrtl<"subAnno<fieldID = 3, {circt.nonlocal = @nla, A}>">, #firrtl<"subAnno<fieldID = 3, {circt.nonlocal = @nla, class =\"firrtl.transforms.DontTouchAnnotation\" }>">]}: !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>
-    %bundle2 = firrtl.wire sym @b2 {annotations = [#firrtl<"subAnno<fieldID = 3, {circt.nonlocal = @nla_2, class =\"firrtl.transforms.DontTouchAnnotation\"}>">, #firrtl<"subAnno<fieldID = 2, {circt.nonlocal = @nla_2, class =\"firrtl.transforms.DontTouchAnnotation\"}>">]}: !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>
-   // CHECK:   %bundle_valid = firrtl.wire sym @b_valid : !firrtl.uint<1>
-   // Note that same NLA is reused. But this depends on the order of the annotations, if DontTouch was earlier in the list, it would be dropped and a new NLA would be created.
-   // CHECK-NEXT:   %bundle_ready = firrtl.wire sym @b_ready {annotations = [{circt.nonlocal = @nla, class = "test"}]} : !firrtl.uint<1>
-   // Note the new NLA added here.
-   // CHECK-NEXT:   %bundle_data = firrtl.wire sym @b_data
-   // CHECK-SAME: {annotations = [{B, circt.nonlocal = @nla_0}, {A, circt.nonlocal = @nla_0}]}
-   // CHECK:   %bundle2_valid = firrtl.wire sym @b2_valid  : !firrtl.uint<1>
-   // CHECK:   %bundle2_ready = firrtl.wire sym @b2_ready  : !firrtl.uint<1>
-   // CHECK:   %bundle2_data = firrtl.wire sym @b2_data  : !firrtl.uint<64>
+    %bundle = firrtl.wire sym @b {
+      annotations = [
+        #firrtl<"subAnno<fieldID = 2, {circt.nonlocal = @nla, class =\"test\" }>">,
+        #firrtl<"subAnno<fieldID = 2, {circt.nonlocal = @nla, class =\"firrtl.transforms.DontTouchAnnotation\"}>">,
+        #firrtl<"subAnno<fieldID = 3, {circt.nonlocal = @nla, B}>">,
+        #firrtl<"subAnno<fieldID = 3, {circt.nonlocal = @nla, A}>">,
+        #firrtl<"subAnno<fieldID = 3, {circt.nonlocal = @nla, class =\"firrtl.transforms.DontTouchAnnotation\"}>">
+      ]
+    } : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>
+    %bundle2 = firrtl.wire sym @b2 {
+      annotations = [
+        #firrtl<"subAnno<fieldID = 3, {circt.nonlocal = @nla_2, class =\"firrtl.transforms.DontTouchAnnotation\"}>">,
+        #firrtl<"subAnno<fieldID = 2, {circt.nonlocal = @nla_2, class =\"firrtl.transforms.DontTouchAnnotation\"}>">
+      ]
+    } : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>
+    // CHECK:   %bundle_valid = firrtl.wire sym @b_valid : !firrtl.uint<1>
+    // Note that same NLA is reused. But this depends on the order of the annotations, if DontTouch was earlier in the list, it would be dropped and a new NLA would be created.
+    // CHECK-NEXT:   %bundle_ready = firrtl.wire sym @b_ready {annotations = [{circt.nonlocal = @nla, class = "test"}]} : !firrtl.uint<1>
+    // Note the new NLA added here.
+    // CHECK-NEXT:   %bundle_data = firrtl.wire sym @b_data
+    // CHECK-SAME: {annotations = [{B, circt.nonlocal = @nla_0}, {A, circt.nonlocal = @nla_0}]}
+    // CHECK:   %bundle2_valid = firrtl.wire sym @b2_valid  : !firrtl.uint<1>
+    // CHECK:   %bundle2_ready = firrtl.wire sym @b2_ready  : !firrtl.uint<1>
+    // CHECK:   %bundle2_data = firrtl.wire sym @b2_data  : !firrtl.uint<64>
   }
 
-// Test the update of NLA when a new symbol is added after lowering of bundle fields.
+  // Test the update of NLA when a new symbol is added after lowering of bundle fields.
   firrtl.hierpath @lowernla_2 [@testNLAbundle::@testBundle_Bar, @testBundle_Bar::@d]
   // CHECK: firrtl.hierpath @lowernla_2_0 [@testNLAbundle::@testBundle_Bar, @testBundle_Bar::@d_qux]
   // CHECK: firrtl.hierpath @lowernla_2 [@testNLAbundle::@testBundle_Bar, @testBundle_Bar::@d_baz]
   firrtl.hierpath @lowernla_1 [@testNLAbundle::@testBundle_Bar, @testBundle_Bar::@b]
   // CHECK: firrtl.hierpath @lowernla_1_0 [@testNLAbundle::@testBundle_Bar, @testBundle_Bar::@b_qux]
   // CHECK: firrtl.hierpath @lowernla_1 [@testNLAbundle::@testBundle_Bar, @testBundle_Bar::@b_baz]
-  firrtl.module private @testBundle_Bar(in %a: !firrtl.uint<1>, out %b: !firrtl.bundle<baz: uint<1>, qux: uint<1>, data: uint<2>> sym @b [#firrtl<"subAnno<fieldID = 3, {circt.nonlocal = @lowernla_1, class =\"firrtl.transforms.DontTouchAnnotation\" }>">, #firrtl.subAnno<fieldID = 1, {circt.nonlocal = @lowernla_1, A}>, #firrtl.subAnno<fieldID = 1, {circt.nonlocal = @lowernla_1, B}>, #firrtl.subAnno<fieldID = 2, {circt.nonlocal = @lowernla_1, C}>], out %c: !firrtl.uint<1>) {
-  // CHECK-LABEL: firrtl.module private @testBundle_Bar
-  // CHECK-SAME: out %b_baz: !firrtl.uint<1> sym @b_baz [{A, circt.nonlocal = @lowernla_1}, {B, circt.nonlocal = @lowernla_1}]
-  // CHECK-SAME: out %b_qux: !firrtl.uint<1> sym @b_qux [{C, circt.nonlocal = @lowernla_1_0}]
-  // CHECK-SAME: out %b_data: !firrtl.uint<2> sym @b_data,
-    %d = firrtl.wire sym @d  {annotations = [#firrtl<"subAnno<fieldID = 0, {circt.nonlocal = @lowernla_2, A }>">, #firrtl.subAnno<fieldID = 2, {circt.nonlocal = @lowernla_2, B}>, #firrtl.subAnno<fieldID = 0, {circt.nonlocal = @lowernla_2, C}>, {D, circt.nonlocal = @lowernla_2}]} : !firrtl.bundle<baz: uint<1>, qux: uint<1>>
-    // CHECK: %d_baz = firrtl.wire sym @d_baz  {annotations = [{A, circt.nonlocal = @lowernla_2}, {C, circt.nonlocal = @lowernla_2}, {D, circt.nonlocal = @lowernla_2}]}
-    // CHECK: %d_qux = firrtl.wire sym @d_qux  {annotations = [{A, circt.nonlocal = @lowernla_2_0}, {B, circt.nonlocal = @lowernla_2_0}, {C, circt.nonlocal = @lowernla_2_0}, {D, circt.nonlocal = @lowernla_2_0}]} : !firrtl.uint<1>
+  firrtl.module private @testBundle_Bar(
+    in %a: !firrtl.uint<1>,
+    out %b: !firrtl.bundle<baz: uint<1>, qux: uint<1>,
+    data: uint<2>> sym @b [
+      #firrtl<"subAnno<fieldID = 3, {circt.nonlocal = @lowernla_1, class =\"firrtl.transforms.DontTouchAnnotation\"}>">,
+      #firrtl.subAnno<fieldID = 1, {circt.nonlocal = @lowernla_1, A}>,
+      #firrtl.subAnno<fieldID = 1, {circt.nonlocal = @lowernla_1, B}>,
+      #firrtl.subAnno<fieldID = 2, {circt.nonlocal = @lowernla_1, C}>
+    ],
+    out %c: !firrtl.uint<1>) {
+    // CHECK-LABEL: firrtl.module private @testBundle_Bar
+    // CHECK-SAME: out %b_baz: !firrtl.uint<1> sym @b_baz [{A, circt.nonlocal = @lowernla_1}, {B, circt.nonlocal = @lowernla_1}]
+    // CHECK-SAME: out %b_qux: !firrtl.uint<1> sym @b_qux [{C, circt.nonlocal = @lowernla_1_0}]
+    // CHECK-SAME: out %b_data: !firrtl.uint<2> sym @b_data,
+    %d = firrtl.wire sym @d {
+      annotations = [
+        #firrtl<"subAnno<fieldID = 0, {circt.nonlocal = @lowernla_2, A }>">,
+        #firrtl.subAnno<fieldID = 2, {circt.nonlocal = @lowernla_2, B}>,
+        #firrtl.subAnno<fieldID = 0, {circt.nonlocal = @lowernla_2, C}>,
+        {D, circt.nonlocal = @lowernla_2}
+      ]
+    } : !firrtl.bundle<baz: uint<1>, qux: uint<1>>
+    // CHECK: %d_baz = firrtl.wire sym @d_baz {annotations = [{A, circt.nonlocal = @lowernla_2}, {C, circt.nonlocal = @lowernla_2}, {D, circt.nonlocal = @lowernla_2}]}
+    // CHECK: %d_qux = firrtl.wire sym @d_qux {annotations = [{A, circt.nonlocal = @lowernla_2_0}, {B, circt.nonlocal = @lowernla_2_0}, {C, circt.nonlocal = @lowernla_2_0}, {D, circt.nonlocal = @lowernla_2_0}]} : !firrtl.uint<1>
   }
   firrtl.module private @testNLAbundle() {
-    %testBundle_Bar_a, %testBundle_Bar_b, %testBundle_Bar_c = firrtl.instance testBundle_Bar sym @testBundle_Bar  {annotations = [{circt.nonlocal = @lowernla_1, class = "circt.nonlocal"}, {circt.nonlocal = @lowernla_2, class = "circt.nonlocal"}]} @testBundle_Bar(in a: !firrtl.uint<1> [{one}], out b: !firrtl.bundle<baz: uint<1>, qux: uint<1>, data: uint<2>> [#firrtl.subAnno<fieldID = 1, {two}>], out c: !firrtl.uint<1> [{four}])
+    %testBundle_Bar_a, %testBundle_Bar_b, %testBundle_Bar_c = firrtl.instance testBundle_Bar sym @testBundle_Bar {
+      annotations = [
+        {circt.nonlocal = @lowernla_1, class = "circt.nonlocal"},
+        {circt.nonlocal = @lowernla_2, class = "circt.nonlocal"}
+      ]
+    } @testBundle_Bar(
+      in a: !firrtl.uint<1> [{one}],
+      out b: !firrtl.bundle<baz: uint<1>,
+      qux: uint<1>,
+      data: uint<2>> [#firrtl.subAnno<fieldID = 1, {two}>],
+      out c: !firrtl.uint<1> [{four}]
+    )
   }
 
   // CHECK-LABEL: firrtl.module @symNameCollision
@@ -1328,14 +1379,28 @@ firrtl.module private @Issue2315(in %x: !firrtl.vector<uint<10>, 5>, in %source:
 
   // Ensure 0 bit fields are handled properly.
   firrtl.module @ZeroWideMem(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
-    %ram_MPORT = firrtl.mem Undefined  {depth = 4 : i64, groupID = 1 : ui32, name = "ram", portNames = ["MPORT"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data: bundle<entry: bundle<a: uint<0>, b: uint<20>, c: uint<42>>>, mask: bundle<entry: bundle<a: uint<1>, b: uint<1>, c: uint<1>>>>
-    //FLATTEN   %ram_MPORT = firrtl.mem Undefined  {depth = 4 : i64, name = "ram", portNames = ["MPORT"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data: uint<62>, mask: uint<31>>
+    %ram_MPORT = firrtl.mem Undefined {
+      depth = 4 : i64,
+      groupID = 1 : ui32,
+      name = "ram",
+      portNames = ["MPORT"],
+      readLatency = 0 : i32,
+      writeLatency = 1 : i32
+    } : !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data: bundle<entry: bundle<a: uint<0>, b: uint<20>, c: uint<42>>>, mask: bundle<entry: bundle<a: uint<1>, b: uint<1>, c: uint<1>>>>
+    // FLATTEN  %ram_MPORT = firrtl.mem Undefined  {depth = 4 : i64, name = "ram", portNames = ["MPORT"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data: uint<62>, mask: uint<31>>
   }
 
   firrtl.module @ZeroBitMasks(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %io: !firrtl.bundle<a: uint<0>, b: uint<20>>) {
     %invalid = firrtl.invalidvalue : !firrtl.bundle<a: uint<1>, b: uint<1>>
     %invalid_0 = firrtl.invalidvalue : !firrtl.bundle<a: uint<0>, b: uint<20>>
-    %ram_MPORT = firrtl.mem Undefined  {depth = 1 : i64, groupID = 1 : ui32, name = "ram", portNames = ["MPORT"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: bundle<a: uint<0>, b: uint<20>>, mask: bundle<a: uint<1>, b: uint<1>>>
+    %ram_MPORT = firrtl.mem Undefined {
+      depth = 1 : i64,
+      groupID = 1 : ui32,
+      name = "ram",
+      portNames = ["MPORT"],
+      readLatency = 0 : i32,
+      writeLatency = 1 : i32
+    } : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: bundle<a: uint<0>, b: uint<20>>, mask: bundle<a: uint<1>, b: uint<1>>>
     %3 = firrtl.subfield %ram_MPORT(3) : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: bundle<a: uint<0>, b: uint<20>>, mask: bundle<a: uint<1>, b: uint<1>>>) -> !firrtl.bundle<a: uint<0>, b: uint<20>>
     firrtl.strictconnect %3, %invalid_0 : !firrtl.bundle<a: uint<0>, b: uint<20>>
     %4 = firrtl.subfield %ram_MPORT(4) : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: bundle<a: uint<0>, b: uint<20>>, mask: bundle<a: uint<1>, b: uint<1>>>) -> !firrtl.bundle<a: uint<1>, b: uint<1>>
