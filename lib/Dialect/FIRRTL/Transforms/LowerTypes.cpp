@@ -278,7 +278,7 @@ struct AttrCache {
     i64ty = IntegerType::get(context, 64);
     innerSymAttr = StringAttr::get(context, "inner_sym");
     nameAttr = StringAttr::get(context, "name");
-    nameKindAttr = StringAttr::get(context, "hasUselessName");
+    nameKindAttr = StringAttr::get(context, "hasDroppableName");
     sPortDirections = StringAttr::get(context, "portDirections");
     sPortNames = StringAttr::get(context, "portNames");
     sPortTypes = StringAttr::get(context, "portTypes");

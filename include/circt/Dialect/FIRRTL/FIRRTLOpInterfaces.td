@@ -344,14 +344,20 @@ def FNamableOp : OpInterface<"FNamableOp"> {
   let description = "Provide common interfaces for operations with chisel names.";
 
   let methods = [
-    InterfaceMethod<"Return true if the op has an useless name.",
-    "bool", "hasUselessName", (ins), [{}], /*defaultImplementation=*/[{
-      return this->getOperation()->getAttr("hasUselessName").template
+    InterfaceMethod<"Return true if the op has a droppable name.",
+    "bool", "hasDroppableName", (ins), [{}], /*defaultImplementation=*/[{
+      return this->getOperation()->getAttr("hasDroppableName").template
              cast<mlir::BoolAttr>().getValue();
     }]>,
-    InterfaceMethod<"Return true if the op has an interesting name.",
-    "bool", "hasInterestingName", (ins), [{}], /*defaultImplementation=*/[{
-      return !hasUselessName();
+    InterfaceMethod<"Make the name droppable.",
+    "void", "dropName", (ins), [{}], /*defaultImplementation=*/[{
+      this->getOperation()->setAttr("hasDroppableName",
+        BoolAttr::get(this->getOperation()->getContext(), true));
+    }]>,
+    InterfaceMethod<"Return the name.",
+    "mlir::StringAttr", "getName", (ins), [{}], /*defaultImplementation=*/[{
+      return this->getOperation()->getAttr("name").template
+             cast<mlir::StringAttr>();
     }]>
   ];
 }

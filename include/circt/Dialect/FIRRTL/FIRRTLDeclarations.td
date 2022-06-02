@@ -109,11 +109,11 @@ def MemOp : ReferableDeclOp<"mem", [FNamableOp]> {
          PortAnnotationsAttr:$portAnnotations,
          OptionalAttr<SymbolNameAttr>:$inner_sym,
          OptionalAttr<UI32Attr>:$groupID,
-         BoolAttr:$hasUselessName);
+         BoolAttr:$hasDroppableName);
   let results = (outs Variadic<FIRRTLType>:$results);
 
   let assemblyFormat = [{
-    (`sym` $inner_sym^)? custom<NameKind>($hasUselessName)
+    (`sym` $inner_sym^)? custom<NameKind>($hasDroppableName)
     $ruw custom<MemOp>(attr-dict) `:` qualified(type($results))
   }];
 
@@ -202,7 +202,7 @@ def NodeOp : ReferableDeclOp<"node",
   let arguments = (ins PassiveType:$input, StrAttr:$name,
                        AnnotationArrayAttr:$annotations,
                        OptionalAttr<SymbolNameAttr>:$inner_sym,
-                       BoolAttr:$hasUselessName);
+                       BoolAttr:$hasDroppableName);
   let results = (outs FIRRTLType:$result);
 
   let builders = [
@@ -218,7 +218,7 @@ def NodeOp : ReferableDeclOp<"node",
   ];
 
   let assemblyFormat = [{
-    (`sym` $inner_sym^)? custom<NameKind>($hasUselessName)
+    (`sym` $inner_sym^)? custom<NameKind>($hasDroppableName)
     $input custom<ImplicitSSAName>(attr-dict) `:` qualified(type($input))
   }];
 
@@ -238,7 +238,7 @@ def RegOp : ReferableDeclOp<"reg", [FNamableOp]> {
   let arguments = (
     ins ClockType:$clockVal, StrAttr:$name,
         AnnotationArrayAttr:$annotations,
-        OptionalAttr<SymbolNameAttr>:$inner_sym, BoolAttr:$hasUselessName);
+        OptionalAttr<SymbolNameAttr>:$inner_sym, BoolAttr:$hasDroppableName);
   let results = (outs AnyRegisterType:$result);
 
   let builders = [
@@ -254,7 +254,7 @@ def RegOp : ReferableDeclOp<"reg", [FNamableOp]> {
   ];
 
   let assemblyFormat = [{
-    (`sym` $inner_sym^)? custom<NameKind>($hasUselessName)
+    (`sym` $inner_sym^)? custom<NameKind>($hasDroppableName)
     operands custom<ImplicitSSAName>(attr-dict) `:` qualified(type($result))
   }];
   let hasCanonicalizeMethod = true;
@@ -274,7 +274,7 @@ def RegResetOp : ReferableDeclOp<"regreset", [FNamableOp]> {
         AnyRegisterType:$resetValue,
         StrAttr:$name, AnnotationArrayAttr:$annotations,
         OptionalAttr<SymbolNameAttr>:$inner_sym,
-        BoolAttr:$hasUselessName);
+        BoolAttr:$hasDroppableName);
   let results = (outs AnyRegisterType:$result);
 
   let builders = [
@@ -291,7 +291,7 @@ def RegResetOp : ReferableDeclOp<"regreset", [FNamableOp]> {
   ];
 
   let assemblyFormat = [{
-    (`sym` $inner_sym^)? custom<NameKind>($hasUselessName)
+    (`sym` $inner_sym^)? custom<NameKind>($hasDroppableName)
     operands custom<ImplicitSSAName>(attr-dict)
     `:` qualified(type($resetSignal)) `,` qualified(type($resetValue)) `,` qualified(type($result))
   }];
@@ -312,7 +312,7 @@ def WireOp : ReferableDeclOp<"wire", [FNamableOp]> {
   let arguments = (ins StrAttr:$name,
                        AnnotationArrayAttr:$annotations,
                        OptionalAttr<SymbolNameAttr>:$inner_sym,
-                       BoolAttr:$hasUselessName);
+                       BoolAttr:$hasDroppableName);
   let results = (outs FIRRTLType:$result);
 
   let builders = [
@@ -328,7 +328,7 @@ def WireOp : ReferableDeclOp<"wire", [FNamableOp]> {
   ];
 
   let assemblyFormat = [{
-    (`sym` $inner_sym^)? custom<NameKind>($hasUselessName)
+    (`sym` $inner_sym^)? custom<NameKind>($hasDroppableName)
     custom<ImplicitSSAName>(attr-dict) `:` qualified(type($result))
   }];
   let hasCanonicalizer = true;

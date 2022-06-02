@@ -1583,7 +1583,7 @@ void MemOp::build(OpBuilder &builder, OperationState &result,
   result.addAttribute("ruw", ::RUWAttrAttr::get(builder.getContext(), ruw));
   result.addAttribute("portNames", builder.getArrayAttr(portNames));
   result.addAttribute("name", builder.getStringAttr(name));
-  result.addAttribute("hasUselessName",
+  result.addAttribute("hasDroppableName",
                       BoolAttr::get(builder.getContext(), isUselessName(name)));
   result.addAttribute("annotations", builder.getArrayAttr(annotations));
   if (innerSym)
@@ -3249,8 +3249,8 @@ static void printElideAnnotations(OpAsmPrinter &p, Operation *op,
   // Elide "annotations" if it is empty.
   if (op->getAttrOfType<ArrayAttr>("annotations").empty())
     elidedAttrs.push_back("annotations");
-  // Elide "hasUselessName".
-  elidedAttrs.push_back("hasUselessName");
+  // Elide "hasDroppableName".
+  elidedAttrs.push_back("hasDroppableName");
 
   p.printOptionalAttrDict(op->getAttrs(), elidedAttrs);
 }
@@ -3290,19 +3290,19 @@ static ParseResult parseNameKind(OpAsmParser &parser, BoolAttr &result) {
   StringRef keyword;
 
   // Default is interesting name.
-  bool hasUselessName = false;
+  bool hasDroppableName = false;
   if (!parser.parseOptionalKeyword(&keyword,
-                                   {"interesting_name", "useless_name"}))
-    hasUselessName = keyword == "useless_name";
+                                   {"interesting_name", "droppable_name"}))
+    hasDroppableName = keyword == "droppable_name";
 
-  result = BoolAttr::get(parser.getContext(), hasUselessName);
+  result = BoolAttr::get(parser.getContext(), hasDroppableName);
   return success();
 }
 
 static void printNameKind(OpAsmPrinter &p, Operation *op, BoolAttr attr,
                           ArrayRef<StringRef> extraElides = {}) {
   if (attr.getValue())
-    p << "useless_name";
+    p << "droppable_name";
 }
 
 //===----------------------------------------------------------------------===//

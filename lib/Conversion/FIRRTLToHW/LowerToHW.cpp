@@ -2414,7 +2414,7 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
     symName = builder.getStringAttr(moduleNamespace.newName(
         Twine("__") + moduleName + Twine("__") + name.getValue()));
   }
-  if (!symName && !isUselessName(op)) {
+  if (!symName && !hasDroppableName(op)) {
     auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
     symName = builder.getStringAttr(moduleNamespace.newName(
         Twine("__") + moduleName + Twine("__") + name.getValue()));
@@ -2466,7 +2466,7 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
     symName = builder.getStringAttr(Twine("__") + moduleName + Twine("__") +
                                     name.getValue());
   }
-  if (!symName && !isUselessName(op)) {
+  if (!symName && !hasDroppableName(op)) {
     auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
     symName = builder.getStringAttr(Twine("__") + moduleName + Twine("__") +
                                     name.getValue());

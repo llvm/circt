@@ -434,11 +434,11 @@ firrtl.circuit "Top" {
     // CHECK: %c0_si = firrtl.constant 0 : !firrtl.sint
     // CHECK: %reg_sint = firrtl.regreset %clock, %reset, %c0_si
     %reg_sint = firrtl.reg %clock : !firrtl.sint
-    // CHECK: %0 = firrtl.wire useless_name : !firrtl.bundle<a: uint<8>, b: bundle<x: uint<8>, y: uint<8>>>
+    // CHECK: %0 = firrtl.wire droppable_name : !firrtl.bundle<a: uint<8>, b: bundle<x: uint<8>, y: uint<8>>>
     // CHECK: %c0_ui8 = firrtl.constant 0 : !firrtl.uint<8>
     // CHECK: %1 = firrtl.subfield %0(0)
     // CHECK: firrtl.strictconnect %1, %c0_ui8
-    // CHECK: %2 = firrtl.wire useless_name : !firrtl.bundle<x: uint<8>, y: uint<8>>
+    // CHECK: %2 = firrtl.wire droppable_name : !firrtl.bundle<x: uint<8>, y: uint<8>>
     // CHECK: %3 = firrtl.subfield %2(0)
     // CHECK: firrtl.strictconnect %3, %c0_ui8
     // CHECK: %4 = firrtl.subfield %2(1)
@@ -447,7 +447,7 @@ firrtl.circuit "Top" {
     // CHECK: firrtl.strictconnect %5, %2
     // CHECK: %reg_bundle = firrtl.regreset %clock, %reset, %0
     %reg_bundle = firrtl.reg %clock : !firrtl.bundle<a: uint<8>, b: bundle<x: uint<8>, y: uint<8>>>
-    // CHECK: %6 = firrtl.wire useless_name : !firrtl.vector<uint<8>, 4>
+    // CHECK: %6 = firrtl.wire droppable_name : !firrtl.vector<uint<8>, 4>
     // CHECK: %c0_ui8_0 = firrtl.constant 0 : !firrtl.uint<8>
     // CHECK: %7 = firrtl.subindex %6[0]
     // CHECK: firrtl.strictconnect %7, %c0_ui8_0
