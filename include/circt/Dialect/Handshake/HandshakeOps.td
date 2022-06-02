@@ -677,7 +677,8 @@ def MemoryOp : Handshake_Op<"memory", [
                    I32Attr : $ldCount,
                    I32Attr : $stCount,
                    I32Attr : $id,
-                   MemRefTypeAttr : $memRefType);
+                   MemRefTypeAttr : $memRefType,
+                   I1Attr : $lsq);
   let results = (outs Variadic<AnyType> : $outputs);
 
   let skipDefaultBuilders = 1;
