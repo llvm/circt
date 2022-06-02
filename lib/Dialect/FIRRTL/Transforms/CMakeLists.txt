@@ -4,6 +4,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   CheckCombCycles.cpp
   CreateSiFiveMetadata.cpp
   Dedup.cpp
+  DropName.cpp
   EmitOMIR.cpp
   ExpandWhens.cpp
   ExtractInstances.cpp
