@@ -145,7 +145,6 @@ firrtl.circuit "TopLevel" {
 //     memory.w.data <= wData
 
   // CHECK-LABEL: firrtl.module private @Mem2
-  // FLATTEN-LABEL: firrtl.module private @Mem2
   firrtl.module private @Mem2(in %clock: !firrtl.clock, in %rAddr: !firrtl.uint<4>, in %rEn: !firrtl.uint<1>, out %rData: !firrtl.bundle<a: uint<8>, b: uint<8>>, in %wAddr: !firrtl.uint<4>, in %wEn: !firrtl.uint<1>, in %wMask: !firrtl.bundle<a: uint<1>, b: uint<1>>, in %wData: !firrtl.bundle<a: uint<8>, b: uint<8>>) {
     %memory_r, %memory_w = firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["r", "w"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: bundle<a: uint<8>, b: uint<8>>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: bundle<a: uint<8>, b: uint<8>>, mask: bundle<a: uint<1>, b: uint<1>>>
     %0 = firrtl.subfield %memory_r(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: bundle<a: uint<8>, b: uint<8>>>) -> !firrtl.clock
@@ -227,60 +226,6 @@ firrtl.circuit "TopLevel" {
     // CHECK-NEXT: firrtl.strictconnect %[[WIRE_B_W_MASK]], %wMask_b
     // CHECK-NEXT: firrtl.strictconnect %[[WIRE_A_W_DATA]], %wData_a
     // CHECK-NEXT: firrtl.strictconnect %[[WIRE_B_W_DATA]], %wData_b
-  }
-
-// Test that a memory with a readwrite port is split into 1r1w
-//
-// circuit Foo:
-//  module Foo:
-//    input clock: Clock
-//    input rwEn: UInt<1>
-//    input rwMode: UInt<1>
-//    input rwAddr: UInt<4>
-//    input rwMask: UInt<1>
-//    input rwDataIn: UInt<8>
-//    output rwDataOut: UInt<8>
-//
-//    mem memory:
-//      data-type => UInt<8>
-//      depth => 16
-//      readwriter => rw
-//      read-latency => 0
-//      write-latency => 1
-//      read-under-write => undefined
-//
-//    memory.rw.clk <= clock
-//    memory.rw.en <= rwEn
-//    memory.rw.addr <= rwAddr
-//    memory.rw.wmode <= rwMode
-//    memory.rw.wmask <= rwMask
-//    memory.rw.wdata <= rwDataIn
-//    rwDataOut <= memory.rw.rdata
-
-  // FLATTEN-LABEL @MemoryRWSplit
-  firrtl.module private @MemoryRWSplit(in %clock: !firrtl.clock, in %rwEn: !firrtl.uint<1>, in %rwMode: !firrtl.uint<1>, in %rwAddr: !firrtl.uint<4>, in %rwMask: !firrtl.uint<1>, in %rwDataIn: !firrtl.uint<8>, out %rwDataOut: !firrtl.uint<8>) {
-    %memory_rw = firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["rw"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<8>, wmode: uint<1>, wdata: uint<8>, wmask: uint<1>>
-    %0 = firrtl.subfield %memory_rw(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<8>, wmode: uint<1>, wdata: uint<8>, wmask: uint<1>>) -> !firrtl.clock
-    firrtl.connect %0, %clock : !firrtl.clock, !firrtl.clock
-    %1 = firrtl.subfield %memory_rw(1) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<8>, wmode: uint<1>, wdata: uint<8>, wmask: uint<1>>) -> !firrtl.uint<1>
-    firrtl.connect %1, %rwEn : !firrtl.uint<1>, !firrtl.uint<1>
-    %2 = firrtl.subfield %memory_rw(0) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<8>, wmode: uint<1>, wdata: uint<8>, wmask: uint<1>>) -> !firrtl.uint<4>
-    firrtl.connect %2, %rwAddr : !firrtl.uint<4>, !firrtl.uint<4>
-    %3 = firrtl.subfield %memory_rw(4) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<8>, wmode: uint<1>, wdata: uint<8>, wmask: uint<1>>) -> !firrtl.uint<1>
-    firrtl.connect %3, %rwMode : !firrtl.uint<1>, !firrtl.uint<1>
-    %4 = firrtl.subfield %memory_rw(6) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<8>, wmode: uint<1>, wdata: uint<8>, wmask: uint<1>>) -> !firrtl.uint<1>
-    firrtl.connect %4, %rwMask : !firrtl.uint<1>, !firrtl.uint<1>
-    %5 = firrtl.subfield %memory_rw(5) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<8>, wmode: uint<1>, wdata: uint<8>, wmask: uint<1>>) -> !firrtl.uint<8>
-    firrtl.connect %5, %rwDataIn : !firrtl.uint<8>, !firrtl.uint<8>
-    %6 = firrtl.subfield %memory_rw(3) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<8>, wmode: uint<1>, wdata: uint<8>, wmask: uint<1>>) -> !firrtl.uint<8>
-    firrtl.connect %rwDataOut, %6 : !firrtl.uint<8>, !firrtl.uint<8>
-  }
-
-
-
- // FLATTEN-LABEL @MemoryRWSplitUnique
-  firrtl.module private @MemoryRWSplitUnique() {
-    %memory_rw, %memory_rw_r, %memory_rw_w = firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["rw", "rw_r", "rw_w"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<8>, wmode: uint<1>, wdata: uint<8>, wmask: uint<1>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
   }
 
 
@@ -994,7 +939,6 @@ firrtl.circuit "TopLevel" {
 //                 {"f":null,"target":"~Foo|Foo>bar.rw.wmask.baz"}]]
 
 // CHECK-LABEL: firrtl.module private @Foo4
-// FLATTEN-LABEL: firrtl.module private @Foo4
   firrtl.module private @Foo4() {
     // CHECK: firrtl.mem
     // CHECK-SAME: portAnnotations = [
@@ -1022,7 +966,6 @@ firrtl.circuit "TopLevel" {
 
 // This simply has to not crash
 // CHECK-LABEL: firrtl.module private @vecmem
-// FLATTEN-LABEL: firrtl.module private @vecmem
 firrtl.module private @vecmem(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
   %vmem_MPORT, %vmem_rdwrPort = firrtl.mem Undefined  {depth = 32 : i64, name = "vmem", portNames = ["MPORT", "rdwrPort"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<5>, en: uint<1>, clk: clock, data flip: vector<uint<17>, 8>>, !firrtl.bundle<addr: uint<5>, en: uint<1>, clk: clock, rdata flip: vector<uint<17>, 8>, wmode: uint<1>, wdata: vector<uint<17>, 8>, wmask: vector<uint<1>, 8>>
 }
@@ -1208,19 +1151,6 @@ firrtl.module private @is1436_FOO() {
   firrtl.module @symNameCollision(
     in %a: !firrtl.bundle<foo: uint<1>> [#firrtl.subAnno<fieldID=1, {circt.nonlocal = @foo}>],
     in %b: !firrtl.bundle<foo: uint<1>> [#firrtl.subAnno<fieldID=1, {circt.nonlocal = @bar}>]) {
-  }
-
-  // Ensure 0 bit fields are handled properly.
-  firrtl.module @ZeroWideMem(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
-    %ram_MPORT = firrtl.mem Undefined {
-      depth = 4 : i64,
-      groupID = 1 : ui32,
-      name = "ram",
-      portNames = ["MPORT"],
-      readLatency = 0 : i32,
-      writeLatency = 1 : i32
-    } : !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data: bundle<entry: bundle<a: uint<0>, b: uint<20>, c: uint<42>>>, mask: bundle<entry: bundle<a: uint<1>, b: uint<1>, c: uint<1>>>>
-    // FLATTEN  %ram_MPORT = firrtl.mem Undefined  {depth = 4 : i64, name = "ram", portNames = ["MPORT"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data: uint<62>, mask: uint<31>>
   }
 
 } // CIRCUIT
