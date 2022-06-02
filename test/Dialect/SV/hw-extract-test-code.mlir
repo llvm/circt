@@ -94,3 +94,20 @@ module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFrom
     }
   }
 }
+
+// -----
+// Check extracted modules and their instantations use same name
+
+// CHECK-LABEL: @InstanceName(
+// CHECK:      hw.instance "[[name:.+]]_assert" sym @{{[^ ]+}} @[[name]]_assert
+// CHECK-NEXT: hw.instance "[[name:.+]]_assume" sym @{{[^ ]+}} @[[name]]_assume
+// CHECK-NEXT: hw.instance "[[name:.+]]_cover"  sym @{{[^ ]+}} @[[name]]_cover
+module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>} {
+  hw.module @InstanceName(%clock: i1, %cond: i1, %cond2: i1) -> () {
+    sv.always posedge %clock  {
+      sv.assert %cond, immediate
+      sv.assume %cond, immediate
+      sv.cover %cond, immediate
+    }
+  }
+}
