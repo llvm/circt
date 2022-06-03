@@ -525,6 +525,16 @@ LogicalResult FuncOp::verify() {
   if (failed(verifyPortNameAttr("resNames", getNumResults())))
     return failure();
 
+  // Verify that all memrefs have a corresponding extmemory operation
+  for (auto arg : entryBlock.getArguments()) {
+    if (!arg.getType().isa<MemRefType>())
+      continue;
+    if (arg.getUsers().empty() ||
+        !isa<ExternalMemoryOp>(*arg.getUsers().begin()))
+      return emitOpError("expected that block argument #")
+             << arg.getArgNumber() << " is used by an 'extmemory' operation";
+  }
+
   return success();
 }
 

@@ -243,3 +243,10 @@ handshake.func @invalid_pack_wrong_types(%arg0 : i64, %arg1 : i32, %ctrl : none)
   %0 = handshake.pack %arg0, %arg1 : i64, i32
   return %0, %ctrl : tuple<i64, i32>, none
 }
+
+// -----
+
+handshake.func @invalid_memref_block_arg(%arg0 : memref<2xi64>, %ctrl : none) -> none {
+  // expected-error @-1 {{'handshake.func' op expected that block argument #0 is used by an 'extmemory' operation}}
+  return %ctrl : none
+}
