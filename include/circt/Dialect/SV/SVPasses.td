@@ -132,4 +132,12 @@ def HWExportModuleHierarchy : Pass<"hw-export-module-hierarchy",
    ];
 }
 
+def HWRemoveUnusedPorts : Pass<"hw-remove-unused-ports", "mlir::ModuleOp"> {
+  let summary = "Remove dead ports via intereprocedural dataflow analysis";
+  let constructor = "circt::sv::createHWRemoveUnusedPortsPass()";
+  let statistics = [
+    Statistic<"numRemovedPorts", "num-removed-ports", "Number of ports erased">,
+  ];
+}
+
 #endif // CIRCT_DIALECT_SV_SVPASSES
