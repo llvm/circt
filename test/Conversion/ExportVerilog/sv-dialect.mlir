@@ -1207,8 +1207,8 @@ hw.module @AggregateTemporay(%clock: i1, %foo: i1, %bar: i25) {
 }
 
 //CHECK-LABEL: module XMR_src
-//CHECK: assign e1.e3 = a;
-//CHECK-NEXT: assign aa = e2.e4;
+//CHECK: assign Mod1.e1.e3 = a;
+//CHECK-NEXT: assign aa = Mod2.e2.e4;
 hw.module @XMR_src(%a : i23) -> (aa: i3) {
   %xmr1 = sv.xmr [@Mod1::@e1, @Mod0::@e3]: !hw.inout<i23>
   %xmr2 = sv.xmr [@Mod2::@e2, @Mod2::@e4]: !hw.inout<i3>

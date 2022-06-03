@@ -841,11 +841,14 @@ void GrandCentralTapsPass::runOnOperation() {
             addSymbol(getInnerRefTo(p));
           }
         }
+        HierPathOp xmrNLA;
         for (auto inst : shortestPrefix.getValue())
           addSymbol(getInnerRefTo(inst));
         if (port.nla) {
           for (auto sym : port.nla.namepath())
             addSymbol(sym);
+          deadNLAs.erase(port.nla.getNameAttr());
+          xmrNLA = port.nla;
         } else if (port.target.getOp()) {
           if (port.target.hasPort())
             addSymbol(
@@ -871,8 +874,12 @@ void GrandCentralTapsPass::runOnOperation() {
 
         // Add a verbatim op that assigns this module port.
         auto arg = impl.getArgument(port.portNum);
-        auto hnameExpr = builder.create<VerbatimExprOp>(
+        Value hnameExpr = builder.create<VerbatimExprOp>(
             arg.getType().cast<FIRRTLType>(), hname, ValueRange{}, symbols);
+        if (xmrNLA)
+          hnameExpr = builder.create<XMROp>(
+              arg.getType(), xmrNLA.sym_nameAttr(),
+              hw::InnerRefAttr::get(xmrNLA.leafMod(), xmrNLA.ref()));
         builder.create<ConnectOp>(arg, hnameExpr);
       }
 
