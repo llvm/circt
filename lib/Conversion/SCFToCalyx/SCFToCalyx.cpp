@@ -198,7 +198,8 @@ private:
 
 /// Iterate through the operations of a source function and instantiate
 /// components or primitives based on the type of the operations.
-class BuildOpGroups : public FuncOpPartialLoweringPattern {
+class BuildOpGroups
+    : public calyx::FuncOpPartialLoweringPattern<ComponentLoweringState> {
   using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
 
   LogicalResult

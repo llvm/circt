@@ -17,6 +17,7 @@
 #include "circt/Dialect/Calyx/CalyxHelpers.h"
 #include "circt/Dialect/Calyx/CalyxOps.h"
 #include "circt/Support/LLVM.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/PatternMatch.h"
 
@@ -441,6 +442,72 @@ struct ModuleOpConversion : public OpRewritePattern<mlir::ModuleOp> {
 private:
   calyx::ProgramOp *programOpOutput;
   StringRef topLevelFunction;
+};
+
+/// FuncOpPartialLoweringPatterns are patterns which intend to match on FuncOps
+/// and then perform their own walking of the IR. FuncOpPartialLoweringPatterns
+/// have direct access to the TComponentLoweringState for the corresponding
+/// component of the matched FuncOp.
+template <typename TComponentLoweringState>
+class FuncOpPartialLoweringPattern
+    : public calyx::PartialLoweringPattern<mlir::func::FuncOp> {
+
+public:
+  FuncOpPartialLoweringPattern(
+      MLIRContext *context, LogicalResult &resRef,
+      DenseMap<mlir::func::FuncOp, calyx::ComponentOp> &map,
+      calyx::ProgramLoweringState<TComponentLoweringState> &pls)
+      : PartialLoweringPattern(context, resRef), functionMapping(map),
+        programLoweringState(pls) {}
+
+  LogicalResult partiallyLower(mlir::func::FuncOp funcOp,
+                               PatternRewriter &rewriter) const override final {
+    // Initialize the component op references if a calyx::ComponentOp has been
+    // created for the matched funcOp.
+    if (auto it = functionMapping.find(funcOp); it != functionMapping.end()) {
+      componentOp = &it->second;
+      componentLoweringState =
+          &programLoweringState.compLoweringState(*getComponent());
+    }
+
+    return PartiallyLowerFuncToComp(funcOp, rewriter);
+  }
+
+  /// Returns the component operation associated with the currently executing
+  /// partial lowering.
+  calyx::ComponentOp *getComponent() const {
+    assert(componentOp != nullptr &&
+           "Component operation should be set during pattern construction");
+    return componentOp;
+  }
+
+  /// Returns the component state associated with the currently executing
+  /// partial lowering.
+  TComponentLoweringState &getComponentState() const {
+    assert(
+        componentLoweringState != nullptr &&
+        "Component lowering state should be set during pattern construction");
+    return *componentLoweringState;
+  }
+
+  /// Return the program lowering state for this pattern.
+  calyx::ProgramLoweringState<TComponentLoweringState> &programState() const {
+    return programLoweringState;
+  }
+
+  /// Partial lowering implementation.
+  virtual LogicalResult
+  PartiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
+                           PatternRewriter &rewriter) const = 0;
+
+protected:
+  // A map from FuncOp to it's respective ComponentOp lowering.
+  DenseMap<mlir::func::FuncOp, calyx::ComponentOp> &functionMapping;
+
+private:
+  mutable calyx::ComponentOp *componentOp = nullptr;
+  mutable TComponentLoweringState *componentLoweringState = nullptr;
+  calyx::ProgramLoweringState<TComponentLoweringState> &programLoweringState;
 };
 
 } // namespace calyx
