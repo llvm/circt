@@ -3566,7 +3566,7 @@ bool HierPathOp::hasModule(StringAttr modName) {
 }
 
 /// Return true if the NLA has the InnerSym .
-bool HierPathOp::hasInnerSym(StringAttr modName, StringAttr symName) const {
+bool HierPathOp::hasInnerSym(StringAttr modName, StringAttr symName) {
   for (auto nameRef : const_cast<HierPathOp *>(this)->namepath())
     if (auto ref = nameRef.dyn_cast<hw::InnerRefAttr>())
       if (ref.getName() == symName && ref.getModule() == modName)
