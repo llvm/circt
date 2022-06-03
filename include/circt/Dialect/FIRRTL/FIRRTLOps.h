@@ -32,6 +32,7 @@ namespace firrtl {
 
 // is the name useless?
 bool isUselessName(circt::StringRef name);
+NameKindEnum inferNameKind(circt::StringRef name);
 
 // works for regs, nodes, and wires
 bool hasDroppableName(Operation *op);

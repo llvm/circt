@@ -278,7 +278,7 @@ struct AttrCache {
     i64ty = IntegerType::get(context, 64);
     innerSymAttr = StringAttr::get(context, "inner_sym");
     nameAttr = StringAttr::get(context, "name");
-    nameKindAttr = StringAttr::get(context, "hasDroppableName");
+    nameKindAttr = StringAttr::get(context, "nameKind");
     sPortDirections = StringAttr::get(context, "portDirections");
     sPortNames = StringAttr::get(context, "portNames");
     sPortTypes = StringAttr::get(context, "portTypes");
@@ -593,7 +593,7 @@ bool TypeLoweringVisitor::lowerProducer(
   // Loop over the leaf aggregates.
   SmallString<16> loweredName;
   SmallString<16> loweredSymName;
-  auto nameKindAttr = op->getAttrOfType<BoolAttr>(cache.nameKindAttr);
+  auto nameKindAttr = op->getAttrOfType<NameKindEnumAttr>(cache.nameKindAttr);
 
   if (auto innerSymAttr = op->getAttrOfType<StringAttr>(cache.innerSymAttr))
     loweredSymName = innerSymAttr.getValue();

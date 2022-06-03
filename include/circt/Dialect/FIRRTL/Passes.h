@@ -98,8 +98,6 @@ std::unique_ptr<mlir::Pass> createInjectDUTHierarchyPass();
 
 std::unique_ptr<mlir::Pass> createExtractInstancesPass();
 
-std::unique_ptr<mlir::Pass> createDropNamePass();
-
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/FIRRTL/Passes.h.inc"

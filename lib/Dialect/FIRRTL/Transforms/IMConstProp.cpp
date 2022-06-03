@@ -32,7 +32,7 @@ static bool isAggregate(Operation *op) {
 /// Return true if this is a wire or register we're allowed to delete.
 static bool isDeletableWireOrReg(Operation *op) {
   if (auto wire = dyn_cast<WireOp>(op))
-    if (!hasDroppableName(wire))
+    if (!wire.hasDroppableName())
       return false;
   return isWireOrReg(op) && !hasDontTouch(op);
 }

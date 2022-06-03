@@ -341,18 +341,20 @@ def InnerSymbolTable : NativeOpTrait<"InnerSymbolTable">;
 
 def FNamableOp : OpInterface<"FNamableOp"> {
   let cppNamespace = "circt::firrtl";
-  let description = "Provide common interfaces for operations with chisel names.";
+  let description = "Provide common connection information.";
 
   let methods = [
-    InterfaceMethod<"Return true if the op has a droppable name.",
+    InterfaceMethod<"Return a destination of connection.",
     "bool", "hasDroppableName", (ins), [{}], /*defaultImplementation=*/[{
-      return this->getOperation()->getAttr("hasDroppableName").template
-             cast<mlir::BoolAttr>().getValue();
+      return this->getOperation()->getAttr("nameKind").template
+             cast<NameKindEnumAttr>().getValue() ==
+             NameKindEnum::DroppableName;
     }]>,
     InterfaceMethod<"Make the name droppable.",
     "void", "dropName", (ins), [{}], /*defaultImplementation=*/[{
       this->getOperation()->setAttr("hasDroppableName",
-        BoolAttr::get(this->getOperation()->getContext(), true));
+        NameKindEnumAttr::get(this->getOperation()->getContext(),
+                              NameKindEnum::DroppableName));
     }]>,
     InterfaceMethod<"Return the name.",
     "mlir::StringAttr", "getName", (ins), [{}], /*defaultImplementation=*/[{

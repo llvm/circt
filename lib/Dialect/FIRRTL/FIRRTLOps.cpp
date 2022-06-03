@@ -1583,8 +1583,8 @@ void MemOp::build(OpBuilder &builder, OperationState &result,
   result.addAttribute("ruw", ::RUWAttrAttr::get(builder.getContext(), ruw));
   result.addAttribute("portNames", builder.getArrayAttr(portNames));
   result.addAttribute("name", builder.getStringAttr(name));
-  result.addAttribute("hasDroppableName",
-                      BoolAttr::get(builder.getContext(), isUselessName(name)));
+  result.addAttribute("nameKind", NameKindEnumAttr::get(builder.getContext(),
+                                                        inferNameKind(name)));
   result.addAttribute("annotations", builder.getArrayAttr(annotations));
   if (innerSym)
     result.addAttribute("inner_sym", innerSym);
@@ -3249,8 +3249,8 @@ static void printElideAnnotations(OpAsmPrinter &p, Operation *op,
   // Elide "annotations" if it is empty.
   if (op->getAttrOfType<ArrayAttr>("annotations").empty())
     elidedAttrs.push_back("annotations");
-  // Elide "hasDroppableName".
-  elidedAttrs.push_back("hasDroppableName");
+  // Elide "nameKind".
+  elidedAttrs.push_back("nameKind");
 
   p.printOptionalAttrDict(op->getAttrs(), elidedAttrs);
 }
@@ -3286,23 +3286,28 @@ static void printElidePortAnnotations(OpAsmPrinter &p, Operation *op,
 // NameKind Custom Directive
 //===----------------------------------------------------------------------===//
 
-static ParseResult parseNameKind(OpAsmParser &parser, BoolAttr &result) {
+static ParseResult parseNameKind(OpAsmParser &parser,
+                                 firrtl::NameKindEnumAttr &result) {
   StringRef keyword;
 
-  // Default is interesting name.
-  bool hasDroppableName = false;
   if (!parser.parseOptionalKeyword(&keyword,
-                                   {"interesting_name", "droppable_name"}))
-    hasDroppableName = keyword == "droppable_name";
+                                   {"interesting_name", "droppable_name"})) {
+    auto kind = symbolizeNameKindEnum(keyword);
+    result = NameKindEnumAttr::get(parser.getContext(), kind.getValue());
+    return success();
+  }
 
-  result = BoolAttr::get(parser.getContext(), hasDroppableName);
+  // Default is interesting name.
+  result =
+      NameKindEnumAttr::get(parser.getContext(), NameKindEnum::InterestingName);
   return success();
 }
 
-static void printNameKind(OpAsmPrinter &p, Operation *op, BoolAttr attr,
+static void printNameKind(OpAsmPrinter &p, Operation *op,
+                          firrtl::NameKindEnumAttr attr,
                           ArrayRef<StringRef> extraElides = {}) {
-  if (attr.getValue())
-    p << "droppable_name";
+  if (attr.getValue() != NameKindEnum::InterestingName)
+    p << stringifyNameKindEnum(attr.getValue()) << ' ';
 }
 
 //===----------------------------------------------------------------------===//

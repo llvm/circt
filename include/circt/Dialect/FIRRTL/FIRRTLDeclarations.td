@@ -13,8 +13,19 @@
 def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface,
                          ["getAsmResultNames"]>;
 
+def DroppableName: I32EnumAttrCase<"DroppableName", 0, "droppable_name">;
+def InterestingName: I32EnumAttrCase<"InterestingName", 1, "interesting_name">;
+
+def NameKindEnumImpl: I32EnumAttr<"NameKindEnum", "name kind",
+              [DroppableName, InterestingName]> {
+  let genSpecializedAttr = 0;
+  let cppNamespace = "::circt::firrtl";
+}
+
+def NameKindAttr: EnumAttr<FIRRTLDialect, NameKindEnumImpl, "name_kind">;
+
 class ReferableDeclOp<string mnemonic, list<Trait> traits = []> :
-  FIRRTLOp<mnemonic, traits # [HasCustomSSAName, InnerSymbol]> {
+  FIRRTLOp<mnemonic, traits # [HasCustomSSAName, InnerSymbol, FNamableOp]> {
 
 }
 
@@ -98,7 +109,7 @@ def InstanceOp : ReferableDeclOp<"instance", [HasParent<"firrtl::FModuleOp, firr
   }];
 }
 
-def MemOp : ReferableDeclOp<"mem", [FNamableOp]> {
+def MemOp : ReferableDeclOp<"mem"> {
   let summary = "Define a new mem";
   let arguments =
     (ins Confined<I32Attr, [IntMinValue<0>]>:$readLatency,
@@ -109,11 +120,11 @@ def MemOp : ReferableDeclOp<"mem", [FNamableOp]> {
          PortAnnotationsAttr:$portAnnotations,
          OptionalAttr<SymbolNameAttr>:$inner_sym,
          OptionalAttr<UI32Attr>:$groupID,
-         BoolAttr:$hasDroppableName);
+         NameKindAttr:$nameKind);
   let results = (outs Variadic<FIRRTLType>:$results);
 
   let assemblyFormat = [{
-    (`sym` $inner_sym^)? custom<NameKind>($hasDroppableName)
+    (`sym` $inner_sym^)? custom<NameKind>($nameKind)
     $ruw custom<MemOp>(attr-dict) `:` qualified(type($results))
   }];
 
@@ -186,7 +197,7 @@ def MemOp : ReferableDeclOp<"mem", [FNamableOp]> {
 
 
 def NodeOp : ReferableDeclOp<"node",
-      [SameOperandsAndResultType, InferTypeOpInterface, FNamableOp]> {
+      [SameOperandsAndResultType, InferTypeOpInterface]> {
   let summary = "No-op to name a value";
   let description = [{
     A node is simply a named intermediate value in a circuit. The node must
@@ -202,7 +213,7 @@ def NodeOp : ReferableDeclOp<"node",
   let arguments = (ins PassiveType:$input, StrAttr:$name,
                        AnnotationArrayAttr:$annotations,
                        OptionalAttr<SymbolNameAttr>:$inner_sym,
-                       BoolAttr:$hasDroppableName);
+                       NameKindAttr:$nameKind);
   let results = (outs FIRRTLType:$result);
 
   let builders = [
@@ -213,19 +224,19 @@ def NodeOp : ReferableDeclOp<"node",
       if(!annotations)
         annotations = $_builder.getArrayAttr({});
       return build($_builder, $_state, elementType, input, name,
-                   annotations, inner_sym, isUselessName(name));
+                   annotations, inner_sym, inferNameKind(name));
     }]>
   ];
 
   let assemblyFormat = [{
-    (`sym` $inner_sym^)? custom<NameKind>($hasDroppableName)
+    (`sym` $inner_sym^)? custom<NameKind>($nameKind)
     $input custom<ImplicitSSAName>(attr-dict) `:` qualified(type($input))
   }];
 
   let hasCanonicalizer = true;
 }
 
-def RegOp : ReferableDeclOp<"reg", [FNamableOp]> {
+def RegOp : ReferableDeclOp<"reg"> {
   let summary = "Define a new register";
   let description = [{
     Declare a new register:
@@ -238,7 +249,7 @@ def RegOp : ReferableDeclOp<"reg", [FNamableOp]> {
   let arguments = (
     ins ClockType:$clockVal, StrAttr:$name,
         AnnotationArrayAttr:$annotations,
-        OptionalAttr<SymbolNameAttr>:$inner_sym, BoolAttr:$hasDroppableName);
+        OptionalAttr<SymbolNameAttr>:$inner_sym, NameKindAttr:$nameKind);
   let results = (outs AnyRegisterType:$result);
 
   let builders = [
@@ -249,18 +260,18 @@ def RegOp : ReferableDeclOp<"reg", [FNamableOp]> {
       if(!annotations)
         annotations = $_builder.getArrayAttr({});
       return build($_builder, $_state, elementType, clockVal, name,
-                   annotations, inner_sym, isUselessName(name));
+                   annotations, inner_sym, inferNameKind(name));
     }]>
   ];
 
   let assemblyFormat = [{
-    (`sym` $inner_sym^)? custom<NameKind>($hasDroppableName)
+    (`sym` $inner_sym^)? custom<NameKind>($nameKind)
     operands custom<ImplicitSSAName>(attr-dict) `:` qualified(type($result))
   }];
   let hasCanonicalizeMethod = true;
 }
 
-def RegResetOp : ReferableDeclOp<"regreset", [FNamableOp]> {
+def RegResetOp : ReferableDeclOp<"regreset"> {
   let summary = "Define a new register with a reset";
   let description = [{
     Declare a new register:
@@ -274,7 +285,7 @@ def RegResetOp : ReferableDeclOp<"regreset", [FNamableOp]> {
         AnyRegisterType:$resetValue,
         StrAttr:$name, AnnotationArrayAttr:$annotations,
         OptionalAttr<SymbolNameAttr>:$inner_sym,
-        BoolAttr:$hasDroppableName);
+        NameKindAttr:$nameKind);
   let results = (outs AnyRegisterType:$result);
 
   let builders = [
@@ -286,12 +297,12 @@ def RegResetOp : ReferableDeclOp<"regreset", [FNamableOp]> {
       if(!annotations)
         annotations = $_builder.getArrayAttr({});
       return build($_builder, $_state, elementType, clockVal, resetSignal,
-                   resetValue, name, annotations, inner_sym, isUselessName(name));
+                   resetValue, name, annotations, inner_sym, inferNameKind(name));
     }]>
   ];
 
   let assemblyFormat = [{
-    (`sym` $inner_sym^)? custom<NameKind>($hasDroppableName)
+    (`sym` $inner_sym^)? custom<NameKind>($nameKind)
     operands custom<ImplicitSSAName>(attr-dict)
     `:` qualified(type($resetSignal)) `,` qualified(type($resetValue)) `,` qualified(type($result))
   }];
@@ -300,7 +311,7 @@ def RegResetOp : ReferableDeclOp<"regreset", [FNamableOp]> {
   let hasVerifier = 1;
 }
 
-def WireOp : ReferableDeclOp<"wire", [FNamableOp]> {
+def WireOp : ReferableDeclOp<"wire"> {
   let summary = "Define a new wire";
   let description = [{
     Declare a new wire:
@@ -312,7 +323,7 @@ def WireOp : ReferableDeclOp<"wire", [FNamableOp]> {
   let arguments = (ins StrAttr:$name,
                        AnnotationArrayAttr:$annotations,
                        OptionalAttr<SymbolNameAttr>:$inner_sym,
-                       BoolAttr:$hasDroppableName);
+                       NameKindAttr:$nameKind);
   let results = (outs FIRRTLType:$result);
 
   let builders = [
@@ -323,12 +334,12 @@ def WireOp : ReferableDeclOp<"wire", [FNamableOp]> {
       if(!annotations)
         annotations = $_builder.getArrayAttr({});
       return build($_builder, $_state, elementType, name,
-                   annotations, inner_sym, isUselessName(name));
+                   annotations, inner_sym, inferNameKind(name));
     }]>,
   ];
 
   let assemblyFormat = [{
-    (`sym` $inner_sym^)? custom<NameKind>($hasDroppableName)
+    (`sym` $inner_sym^)? custom<NameKind>($nameKind)
     custom<ImplicitSSAName>(attr-dict) `:` qualified(type($result))
   }];
   let hasCanonicalizer = true;
