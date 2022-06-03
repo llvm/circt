@@ -1293,6 +1293,13 @@ HandshakeLowering::replaceMemoryOps(ConversionPatternRewriter &rewriter,
 
   std::vector<Operation *> opsToErase;
 
+  // Enrich the memRefOps context with BlockArguments, in case they aren't used.
+  for (auto arg : r.getArguments()) {
+    if (!arg.getType().isa<MemRefType>())
+      continue;
+    memRefOps.insert(std::make_pair(arg, std::vector<Operation *>()));
+  }
+
   // Replace load and store ops with the corresponding handshake ops
   // Need to traverse ops in blocks to store them in memRefOps in program
   // order
