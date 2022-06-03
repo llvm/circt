@@ -155,7 +155,7 @@ public:
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<AttachOp, ConnectOp, StrictConnectOp, ForceOp, PrintFOp,
                        SkipOp, StopOp, WhenOp, AssertOp, AssumeOp, CoverOp,
-                       ProbeOp>([&](auto opNode) -> ResultType {
+                       ProbeOp, XMROp>([&](auto opNode) -> ResultType {
           return thisCast->visitStmt(opNode, args...);
         })
         .Default([&](auto expr) -> ResultType {
@@ -192,6 +192,7 @@ public:
   HANDLE(AssumeOp);
   HANDLE(CoverOp);
   HANDLE(ProbeOp);
+  HANDLE(XMROp);
 
 #undef HANDLE
 };

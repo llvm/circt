@@ -1566,6 +1566,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitStmt(CoverOp op);
   LogicalResult visitStmt(AttachOp op);
   LogicalResult visitStmt(ProbeOp op);
+  LogicalResult visitStmt(XMROp op);
 
 private:
   /// The module we're lowering into.
@@ -3505,6 +3506,28 @@ LogicalResult FIRRTLLowering::visitExpr(VerbatimExprOp op) {
 
   return setLoweringTo<sv::VerbatimExprOp>(op, resultTy, op.textAttr(),
                                            operands, symbols);
+}
+
+LogicalResult FIRRTLLowering::visitStmt(XMROp op) {
+  auto resultTy = lowerType(op.getType());
+  if (!resultTy)
+    return failure();
+  auto nla = circuitState.nlaTable->getNLA(op.hierPathSymAttr().getAttr());
+  if (!nla) {
+    return op.emitError("The HierPathOp cannot be found");
+  }
+
+  SmallVector<Attribute, 4> namepath;
+  namepath.reserve(nla.namepath().size() + 1);
+  for (auto attr : nla.namepath())
+    namepath.push_back(attr);
+  namepath.push_back(op.componentSymAttr());
+
+  auto xmrOp =
+      builder.create<sv::XMROp>(sv::InOutType::get(op.getContext(), resultTy),
+                                ArrayAttr::get(op.getContext(), namepath));
+
+  return setLoweringTo<sv::ReadInOutOp>(op, resultTy, xmrOp);
 }
 
 //===----------------------------------------------------------------------===//
