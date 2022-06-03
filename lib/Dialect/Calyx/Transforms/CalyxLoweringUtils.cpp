@@ -250,6 +250,30 @@ unsigned ComponentLoweringStateInterface::getFuncOpResultMapping(
 }
 
 //===----------------------------------------------------------------------===//
+// ProgramLoweringState
+//===----------------------------------------------------------------------===//
+
+ProgramLoweringState::ProgramLoweringState(calyx::ProgramOp program,
+                                           StringRef topLevelFunction)
+    : topLevelFunction(topLevelFunction), program(program) {}
+
+calyx::ProgramOp ProgramLoweringState::getProgram() {
+  assert(program.getOperation() != nullptr);
+  return program;
+}
+
+StringRef ProgramLoweringState::getTopLevelFunction() const {
+  return topLevelFunction;
+}
+
+std::string ProgramLoweringState::blockName(Block *b) {
+  std::string blockName = irName(*b);
+  blockName.erase(std::remove(blockName.begin(), blockName.end(), '^'),
+                  blockName.end());
+  return blockName;
+}
+
+//===----------------------------------------------------------------------===//
 // ModuleOpConversion
 //===----------------------------------------------------------------------===//
 

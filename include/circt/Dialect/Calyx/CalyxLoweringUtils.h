@@ -228,7 +228,7 @@ class ComponentLoweringStateInterface {
 public:
   ComponentLoweringStateInterface(calyx::ComponentOp component);
 
-  ~ComponentLoweringStateInterface();
+  virtual ~ComponentLoweringStateInterface();
 
   /// Returns the calyx::ComponentOp associated with this lowering state.
   calyx::ComponentOp getComponentOp();
@@ -293,7 +293,7 @@ public:
   TGroupOp getEvaluatingGroup(Value v) {
     auto it = valueGroupAssigns.find(v);
     assert(it != valueGroupAssigns.end() && "No group evaluating value!");
-    if constexpr (std::is_same<TGroupOp, calyx::GroupInterface>::value)
+    if constexpr (std::is_same_v<TGroupOp, calyx::GroupInterface>)
       return it->second;
     else {
       auto group = dyn_cast<TGroupOp>(it->second.getOperation());
@@ -349,31 +349,37 @@ private:
 
 /// An interface for conversion passes that lower Calyx programs. This handles
 /// state during the lowering of a Calyx program.
-template <typename TComponentLoweringState>
 class ProgramLoweringState {
 public:
   explicit ProgramLoweringState(calyx::ProgramOp program,
-                                StringRef topLevelFunction)
-      : topLevelFunction(topLevelFunction), program(program) {}
+                                StringRef topLevelFunction);
 
   /// Returns the current program.
-  calyx::ProgramOp getProgram() {
-    assert(program.getOperation() != nullptr);
-    return program;
-  }
+  calyx::ProgramOp getProgram();
 
   /// Returns the name of the top-level function in the source program.
-  StringRef getTopLevelFunction() const { return topLevelFunction; }
+  StringRef getTopLevelFunction() const;
 
-  /// Returns the component lowering state associated with compOp.
-  TComponentLoweringState &compLoweringState(calyx::ComponentOp compOp) {
-    auto it = compStates.find(compOp);
-    if (it != compStates.end())
-      return it->second;
+  /// Returns a meaningful name for a block within the program scope (removes
+  /// the ^ prefix from block names).
+  std::string blockName(Block *b);
 
-    /// Create a new ComponentLoweringState for the compOp.
-    auto newCompStateIt = compStates.try_emplace(compOp, compOp);
-    return newCompStateIt.first->second;
+  /// Returns the component lowering state associated with `op`. If not found
+  /// already found, a new mapping is added for this ComponentOp. Different
+  /// conversions may have different derived classes of the interface, so we
+  /// provided a template.
+  template <typename T>
+  T *getState(calyx::ComponentOp op) {
+    static_assert(std::is_convertible_v<T, ComponentLoweringStateInterface>);
+    auto it = componentStates.find(op);
+    if (it == componentStates.end()) {
+      // Create a new ComponentLoweringState for the compOp.
+      bool success;
+      std::tie(it, success) =
+          componentStates.try_emplace(op, std::make_unique<T>(op));
+    }
+
+    return static_cast<T *>(it->second.get());
   }
 
   /// Returns a meaningful name for a value within the program scope.
@@ -386,22 +392,14 @@ public:
     return s;
   }
 
-  /// Returns a meaningful name for a block within the program scope (removes
-  /// the ^ prefix from block names).
-  std::string blockName(Block *b) {
-    std::string blockName = irName(*b);
-    blockName.erase(std::remove(blockName.begin(), blockName.end(), '^'),
-                    blockName.end());
-    return blockName;
-  }
-
 private:
   /// The name of this top-level function.
   StringRef topLevelFunction;
   /// The program associated with this state.
   calyx::ProgramOp program;
   /// Mapping from ComponentOp to component lowering state.
-  DenseMap<Operation *, TComponentLoweringState> compStates;
+  DenseMap<Operation *, std::unique_ptr<ComponentLoweringStateInterface>>
+      componentStates;
 };
 
 /// Base class for partial lowering passes. A partial lowering pass
