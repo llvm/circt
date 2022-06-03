@@ -352,7 +352,7 @@ def FNamableOp : OpInterface<"FNamableOp"> {
     }]>,
     InterfaceMethod<"Make the name droppable.",
     "void", "dropName", (ins), [{}], /*defaultImplementation=*/[{
-      this->getOperation()->setAttr("hasDroppableName",
+      this->getOperation()->setAttr("nameKind",
         NameKindEnumAttr::get(this->getOperation()->getContext(),
                               NameKindEnum::DroppableName));
     }]>,

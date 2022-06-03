@@ -33,6 +33,8 @@ def NonConstantOp : Constraint<CPred<[{
 def EmptyAttrDict : Constraint<CPred<"$0.empty()">>;
 
 def NonEmptyStringAttr : Constraint<CPred<"!$0.getValue().empty()">>;
+def GetDroppableNameAttr : NativeCodeCall<
+  "NameKindEnumAttr::get($_builder.getContext(), NameKindEnum::DroppableName) ">;
 def uselessNameAttr : Constraint<CPred<"isUselessName($0.getValue())">>;
 def NullAttr : Constraint<CPred<"!$0">>;
 
@@ -96,21 +98,21 @@ def MuxSameCondHigh : Pat<
 
 // regreset(clock, invalidvalue, resetValue) -> reg(clock)
 def RegResetWithInvalidReset : Pat<
-  (RegResetOp $clock, (InvalidValueOp), $_, $name, $annotations, $inner_sym, $hasDroppableName),
-  (RegOp $clock, $name, $annotations, $inner_sym, $hasDroppableName),
+  (RegResetOp $clock, (InvalidValueOp), $_, $name, $annotations, $inner_sym, $nameKind),
+  (RegOp $clock, $name, $annotations, $inner_sym, $nameKind),
   []>;
 
 // regreset(clock, reset, invalidvalue) -> reg(clock)
 // This is handled by the `RemoveReset` pass in the original Scala code.
 def RegResetWithInvalidResetValue : Pat<
-  (RegResetOp $clock, $_, (InvalidValueOp), $name, $annotations, $inner_sym, $hasDroppableName),
-  (RegOp $clock, $name, $annotations, $inner_sym, $hasDroppableName),
+  (RegResetOp $clock, $_, (InvalidValueOp), $name, $annotations, $inner_sym, $nameKind),
+  (RegOp $clock, $name, $annotations, $inner_sym, $nameKind),
   []>;
 
 // regreset(clock, constant_zero, resetValue) -> reg(clock)
 def RegResetWithZeroReset : Pat<
-  (RegResetOp $clock, $reset, $_, $name, $annotations, $inner_sym, $hasDroppableName),
-  (RegOp $clock, $name, $annotations, $inner_sym, $hasDroppableName), [(ZeroConstantOp $reset)]>;
+  (RegResetOp $clock, $reset, $_, $name, $annotations, $inner_sym, $nameKind),
+  (RegOp $clock, $name, $annotations, $inner_sym, $nameKind), [(ZeroConstantOp $reset)]>;
 
 // Return the width of an operation result as an integer attribute.  This is
 // useful to pad another operation up to the width of the original operation.
@@ -125,34 +127,35 @@ def GetWidthAsIntAttr : NativeCodeCall<
 
 // node(x,name),!dnt -> node(x, "")
 def DropNameNode : Pat<
-  (NodeOp $x, $name, $annotations, $inner_sym, $hasDroppableName),
-  (NodeOp $x, (GetEmptyString),  $annotations, $inner_sym, $hasDroppableName),
+  (NodeOp $x, $name, $annotations, $inner_sym, $nameKind),
+  (NodeOp $x, (GetEmptyString),  $annotations, $inner_sym, (GetDroppableNameAttr)),
   [(uselessNameAttr $name), (NonEmptyStringAttr $name), (NullAttr $inner_sym)]>;
 
 // wire(name),!dnt -> wire("")
 def DropNameWire : Pat<
-  (WireOp $name,  $annotations, $inner_sym, $hasDroppableName),
-  (WireOp (GetEmptyString), $annotations, $inner_sym, $hasDroppableName),
+  (WireOp $name,  $annotations, $inner_sym, $nameKind),
+  (WireOp (GetEmptyString), $annotations, $inner_sym, (GetDroppableNameAttr)),
   [(uselessNameAttr $name), (NonEmptyStringAttr $name), (NullAttr $inner_sym)]>;
 
 // reg(clk, name),!dnt -> reg(clk, "")
 def DropNameReg : Pat<
-  (RegOp $clk, $name, $annotations, $inner_sym, $hasDroppableName),
-  (RegOp $clk, (GetEmptyString), $annotations, $inner_sym, $hasDroppableName),
+  (RegOp $clk, $name, $annotations, $inner_sym, $nameKind),
+  (RegOp $clk, (GetEmptyString), $annotations, $inner_sym, (GetDroppableNameAttr)),
   [(uselessNameAttr $name), (NonEmptyStringAttr $name), (NullAttr $inner_sym)]>;
 
 // regreset(clk, sig, val, name),!dnt -> regreset(clk, sig, val, "")
 def DropNameRegReset : Pat<
-  (RegResetOp $clk, $sig, $val, $name, $annotations, $inner_sym, $hasDroppableName),
-  (RegResetOp $clk, $sig, $val, (GetEmptyString), $annotations, $inner_sym, $hasDroppableName),
+  (RegResetOp $clk, $sig, $val, $name, $annotations, $inner_sym, $nameKind),
+  (RegResetOp $clk, $sig, $val, (GetEmptyString),
+                    $annotations, $inner_sym, (GetDroppableNameAttr)),
   [(uselessNameAttr $name), (NonEmptyStringAttr $name), (NullAttr $inner_sym)]>;
 
 // Mem(...,name),!dnt -> Mem(...x, "")
 def DropNameMem : Pat<
   (MemOp $rd, $rw, $depth, $ruw, $portNames, $name, $annotations, $portAnno,
-                                             $inner_sym, $groupID, $hasDroppableName),
+                                             $inner_sym, $groupID, $nameKind),
   (MemOp $rd, $rw, $depth, $ruw, $portNames, (GetEmptyString), $annotations,
-                                 $portAnno, $inner_sym, $groupID, $hasDroppableName),
+                     $portAnno, $inner_sym, $groupID, (GetDroppableNameAttr)),
   [(uselessNameAttr $name), (NonEmptyStringAttr $name), (NullAttr $inner_sym)]>;
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLCANONICALIZATION_TD
