@@ -16,10 +16,14 @@
 
 #include "circt/Dialect/Calyx/CalyxHelpers.h"
 #include "circt/Dialect/Calyx/CalyxOps.h"
+#include "circt/Dialect/StaticLogic/StaticLogic.h"
 #include "circt/Support/LLVM.h"
+#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/PatternMatch.h"
+#include "llvm/ADT/TypeSwitch.h"
 
 #include <variant>
 
@@ -508,6 +512,222 @@ private:
   mutable calyx::ComponentOp *componentOp = nullptr;
   mutable TComponentLoweringState *componentLoweringState = nullptr;
   calyx::ProgramLoweringState<TComponentLoweringState> &programLoweringState;
+};
+
+/// Iterate through the operations of a source function and instantiate
+/// components or primitives based on the type of the operations.
+template <typename TComponentLoweringState>
+class BuildOpGroups
+    : public calyx::FuncOpPartialLoweringPattern<TComponentLoweringState> {
+  using FuncOpPartialLoweringPattern<
+      TComponentLoweringState>::FuncOpPartialLoweringPattern;
+
+  LogicalResult
+  PartiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
+                           PatternRewriter &rewriter) const override {
+    /// We walk the operations of the funcOp to ensure that all def's have
+    /// been visited before their uses.
+    bool opBuiltSuccessfully = true;
+    funcOp.walk([&](Operation *_op) {
+      opBuiltSuccessfully &=
+          TypeSwitch<mlir::Operation *, bool>(_op)
+              .template Case<mlir::arith::ConstantOp, mlir::func::ReturnOp,
+                             mlir::BranchOpInterface,
+                             /// memref
+                             mlir::memref::AllocOp, mlir::memref::AllocaOp,
+                             mlir::memref::LoadOp, mlir::memref::StoreOp,
+                             /// standard arithmetic
+                             mlir::arith::AddIOp, mlir::arith::SubIOp,
+                             mlir::arith::CmpIOp, mlir::arith::ShLIOp,
+                             mlir::arith::ShRUIOp, mlir::arith::ShRSIOp,
+                             mlir::arith::AndIOp, mlir::arith::XOrIOp,
+                             mlir::arith::OrIOp, mlir::arith::ExtUIOp,
+                             mlir::arith::TruncIOp, mlir::arith::MulIOp,
+                             mlir::arith::DivUIOp, mlir::arith::RemUIOp,
+                             mlir::arith::IndexCastOp,
+                             /// static logic
+                             staticlogic::PipelineTerminatorOp>(
+                  [&](auto op) { return buildOp(rewriter, op).succeeded(); })
+              .template Case<mlir::func::FuncOp, staticlogic::PipelineWhileOp,
+                             staticlogic::PipelineRegisterOp,
+                             staticlogic::PipelineStageOp>([&](auto) {
+                /// Skip: these special cases will be handled separately.
+                return true;
+              })
+              .Default([&](auto op) {
+                op->emitError() << "Unhandled operation during BuildOpGroups()";
+                return false;
+              });
+
+      return opBuiltSuccessfully ? WalkResult::advance()
+                                 : WalkResult::interrupt();
+    });
+
+    return success(opBuiltSuccessfully);
+  }
+
+private:
+  /// Op builder specializations.
+  LogicalResult buildOp(PatternRewriter &rewriter,
+                        mlir::BranchOpInterface brOp) const;
+  LogicalResult buildOp(PatternRewriter &rewriter,
+                        mlir::arith::ConstantOp constOp) const;
+  LogicalResult buildOp(PatternRewriter &rewriter,
+                        mlir::arith::AddIOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter,
+                        mlir::arith::SubIOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter,
+                        mlir::arith::MulIOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter,
+                        mlir::arith::DivUIOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter,
+                        mlir::arith::RemUIOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter,
+                        mlir::arith::ShRUIOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter,
+                        mlir::arith::ShRSIOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter,
+                        mlir::arith::ShLIOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter,
+                        mlir::arith::AndIOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter, mlir::arith::OrIOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter,
+                        mlir::arith::XOrIOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter,
+                        mlir::arith::CmpIOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter,
+                        mlir::arith::TruncIOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter,
+                        mlir::arith::ExtUIOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter,
+                        mlir::func::ReturnOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter,
+                        mlir::arith::IndexCastOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter,
+                        mlir::memref::AllocOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter,
+                        mlir::memref::AllocaOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter,
+                        mlir::memref::LoadOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter,
+                        mlir::memref::StoreOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter,
+                        staticlogic::PipelineTerminatorOp op) const;
+
+  /// buildLibraryOp will build a TCalyxLibOp inside a TGroupOp based on the
+  /// source operation TSrcOp.
+  template <typename TGroupOp, typename TCalyxLibOp, typename TSrcOp>
+  LogicalResult buildLibraryOp(PatternRewriter &rewriter, TSrcOp op,
+                               TypeRange srcTypes, TypeRange dstTypes) const {
+    SmallVector<Type> types;
+    llvm::append_range(types, srcTypes);
+    llvm::append_range(types, dstTypes);
+
+    auto calyxOp =
+        this->getComponentState().template getNewLibraryOpInstance<TCalyxLibOp>(
+            rewriter, op.getLoc(), types);
+
+    auto directions = calyxOp.portDirections();
+    SmallVector<Value, 4> opInputPorts;
+    SmallVector<Value, 4> opOutputPorts;
+    for (auto dir : llvm::enumerate(directions)) {
+      if (dir.value() == calyx::Direction::Input)
+        opInputPorts.push_back(calyxOp.getResult(dir.index()));
+      else
+        opOutputPorts.push_back(calyxOp.getResult(dir.index()));
+    }
+    assert(
+        opInputPorts.size() == op->getNumOperands() &&
+        opOutputPorts.size() == op->getNumResults() &&
+        "Expected an equal number of in/out ports in the Calyx library op with "
+        "respect to the number of operands/results of the source operation.");
+
+    /// Create assignments to the inputs of the library op.
+    auto group = createGroupForOp<TGroupOp>(rewriter, op);
+    rewriter.setInsertionPointToEnd(group.getBody());
+    for (auto dstOp : enumerate(opInputPorts))
+      rewriter.create<calyx::AssignOp>(op.getLoc(), dstOp.value(),
+                                       op->getOperand(dstOp.index()));
+
+    /// Replace the result values of the source operator with the new operator.
+    for (auto res : enumerate(opOutputPorts)) {
+      this->getComponentState().registerEvaluatingGroup(res.value(), group);
+      op->getResult(res.index()).replaceAllUsesWith(res.value());
+    }
+    return success();
+  }
+
+  /// buildLibraryOp which provides in- and output types based on the operands
+  /// and results of the op argument.
+  template <typename TGroupOp, typename TCalyxLibOp, typename TSrcOp>
+  LogicalResult buildLibraryOp(PatternRewriter &rewriter, TSrcOp op) const {
+    return buildLibraryOp<TGroupOp, TCalyxLibOp, TSrcOp>(
+        rewriter, op, op.getOperandTypes(), op->getResultTypes());
+  }
+
+  /// Creates a group named by the basic block which the input op resides in.
+  template <typename TGroupOp>
+  TGroupOp createGroupForOp(PatternRewriter &rewriter, Operation *op) const {
+    Block *block = op->getBlock();
+    auto groupName = this->getComponentState().getUniqueName(
+        this->programState().blockName(block));
+    return calyx::createGroup<TGroupOp>(rewriter, this->getComponentOp(),
+                                        op->getLoc(), groupName);
+  }
+
+  /// buildLibraryBinaryPipeOp will build a TCalyxLibBinaryPipeOp, to
+  /// deal with MulIOp, DivUIOp and RemUIOp.
+  template <typename TOpType, typename TSrcOp>
+  LogicalResult buildLibraryBinaryPipeOp(PatternRewriter &rewriter, TSrcOp op,
+                                         TOpType opPipe, Value out) const {
+    StringRef opName = TSrcOp::getOperationName().split(".").second;
+    Location loc = op.getLoc();
+    Type width = op.getResult().getType();
+    // Pass the result from the Operation to the Calyx primitive.
+    op.getResult().replaceAllUsesWith(out);
+    auto reg = createRegister(op.getLoc(), rewriter, *this->getComponent(),
+                              width.getIntOrFloatBitWidth(),
+                              this->getComponentState().getUniqueName(opName));
+    // Operation pipelines are not combinational, so a GroupOp is required.
+    auto group = createGroupForOp<calyx::GroupOp>(rewriter, op);
+    this->getComponentState().addBlockScheduleable(op->getBlock(), group);
+
+    rewriter.setInsertionPointToEnd(group.getBody());
+    rewriter.create<calyx::AssignOp>(loc, opPipe.left(), op.getLhs());
+    rewriter.create<calyx::AssignOp>(loc, opPipe.right(), op.getRhs());
+    // Write the output to this register.
+    rewriter.create<calyx::AssignOp>(loc, reg.in(), out);
+    // The write enable port is high when the pipeline is done.
+    rewriter.create<calyx::AssignOp>(loc, reg.write_en(), opPipe.done());
+    rewriter.create<calyx::AssignOp>(
+        loc, opPipe.go(), createConstant(loc, rewriter, *this->getComponent(), 1, 1));
+    // The group is done when the register write is complete.
+    rewriter.create<calyx::GroupDoneOp>(loc, reg.done());
+
+    // Register the values for the pipeline.
+    this->getComponentState().registerEvaluatingGroup(out, group);
+    this->getComponentState().registerEvaluatingGroup(opPipe.left(), group);
+    this->getComponentState().registerEvaluatingGroup(opPipe.right(), group);
+
+    return success();
+  }
+
+  /// Creates assignments within the provided group to the address ports of the
+  /// memoryOp based on the provided addressValues.
+  void assignAddressPorts(PatternRewriter &rewriter, Location loc,
+                          calyx::GroupInterface group,
+                          calyx::MemoryInterface memoryInterface,
+                          Operation::operand_range addressValues) const {
+    mlir::IRRewriter::InsertionGuard guard(rewriter);
+    rewriter.setInsertionPointToEnd(group.getBody());
+    auto addrPorts = memoryInterface.addrPorts();
+    assert(addrPorts.size() == addressValues.size() &&
+           "Mismatch between number of address ports of the provided memory "
+           "and address assignment values");
+    for (auto &address : llvm::enumerate(addressValues))
+      rewriter.create<calyx::AssignOp>(loc, addrPorts[address.index()],
+                                       address.value());
+  }
 };
 
 } // namespace calyx
