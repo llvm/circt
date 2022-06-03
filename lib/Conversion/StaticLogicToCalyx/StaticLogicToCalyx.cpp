@@ -247,8 +247,7 @@ public:
     auto it = funcMap.find(funcOp);
     if (it != funcMap.end()) {
       compOp = &it->second;
-      compLoweringState =
-          pls.getState<ComponentLoweringState>(*getComponent());
+      compLoweringState = pls.getState<ComponentLoweringState>(*getComponent());
     }
 
     return PartiallyLowerFuncToComp(funcOp, rewriter);
@@ -1030,8 +1029,7 @@ struct FuncOpConversion : public FuncOpPartialLoweringPattern {
 
     /// Store the function-to-component mapping.
     funcMap[funcOp] = compOp;
-    auto *compState =
-        programState().getState<ComponentLoweringState>(compOp);
+    auto *compState = programState().getState<ComponentLoweringState>(compOp);
     compState->setFuncOpResultMapping(funcOpResultMapping);
 
     /// Rewrite funcOp SSA argument values to the CompOp arguments.
