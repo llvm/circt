@@ -2357,4 +2357,13 @@ firrtl.module @Issue2514(
   // CHECK: firrtl.strictconnect %leq_3, %[[one_i1]]
 }
 
+// CHECK-LABEL: @NamePropagation
+firrtl.module @NamePropagation(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, in %c: !firrtl.uint<4>, out %res1: !firrtl.uint<2>, out %res2: !firrtl.uint<2>) {
+  // CHECK-NEXT: %e = firrtl.bits %c 1 to 0 {name = "e"}
+  %1 = firrtl.bits %c 2 to 0 : (!firrtl.uint<4>) -> !firrtl.uint<3>
+  %e = firrtl.bits %1 1 to 0 {name = "e"}: (!firrtl.uint<3>) -> !firrtl.uint<2>
+  // CHECK-NEXT: firrtl.strictconnect %res2, %e
+  firrtl.strictconnect %res2, %e : !firrtl.uint<2>
+}
+
 }
