@@ -519,9 +519,6 @@ FailureOr<bool> GrandCentralSignalMappingsPass::emitUpdatedMappings(
   // 1) Sanity checking
   // 2) Fixup ports that are driven from subcircuit
   // 3) Generate new remote references
-  //    For now, just drive/probe using `module.name` XMR's,
-  //    it's much simpler than emitting hierarchical paths
-  //    from the top module/DUT, and works for now.
   // 4) Emit updated mappings as SignalDriverAnnotations
   //    for consumption when processing the subcircuit
   //    (as replacements for the original annotations)
@@ -536,13 +533,6 @@ FailureOr<bool> GrandCentralSignalMappingsPass::emitUpdatedMappings(
   // (1) Scan mappings for unexpected or unsupported values
   for (auto const &[_, mod, mappings] : results) {
     for (auto &mapping : mappings) {
-      // This isn't handled yet, error out instead of doing wrong thing
-      if (mapping.nlaSym) {
-        emitError(mapping.localValue.getLoc())
-            << "non-local value targeted by SignalDriverAnnotation, "
-               "unsupported (NLA found)";
-        return failure();
-      }
       // No local-side mappings on main circuit side
       if (mapping.isLocal) {
         emitError(mapping.localValue.getLoc())
@@ -565,12 +555,8 @@ FailureOr<bool> GrandCentralSignalMappingsPass::emitUpdatedMappings(
         if (auto blockArg = mapping.localValue.dyn_cast<BlockArgument>()) {
           auto portIdx = blockArg.getArgNumber();
           if (mod.getPortDirection(portIdx) == Direction::In) {
-            if (!forcedInputPorts.insert(portIdx).second) {
-              emitError(blockArg.getLoc())
-                  << "module port driven more than once, unsupported "
-                     "SignalDriverAnnotation";
-              return failure();
-            }
+            // Port may be driven multiple times along different instance paths
+            forcedInputPorts.insert(portIdx);
           }
         }
       }
@@ -583,17 +569,7 @@ FailureOr<bool> GrandCentralSignalMappingsPass::emitUpdatedMappings(
     if (forcedInputPorts.empty())
       continue;
 
-    unsigned useCount = 0;
     for (auto *use : instanceGraph->lookup(mod)->uses()) {
-      // Ensure just the one use for now, this matters if we want
-      // to be able to emit a unique path from the top module.
-      if (++useCount != 1) {
-        emitError(mod.getLoc())
-            << "module with input port driven instantiated more than once, "
-               "unsupported SignalDriverAnnotation";
-
-        return failure();
-      }
       allAnalysesPreserved = false;
 
       auto inst = use->getInstance();
@@ -629,9 +605,19 @@ FailureOr<bool> GrandCentralSignalMappingsPass::emitUpdatedMappings(
   }
 
   // (3) Generate updated remote references
-  // Helpers to emit basic 'module.name' XMR's for the mappings.
-  // Use inner_sym for non-ports
+
+  // For instance path references, determine where to start.
+  // This is either the main module or the DUT if any.
+  auto dut = circuit.getMainModule();
+  for (auto op : circuit.body().getOps<FModuleOp>())
+    if (AnnotationSet(op).hasAnnotation(dutAnnoClass)) {
+      dut = op;
+      break;
+    }
+
+  // Helpers to emit XMR's for the mappings.
   SmallVector<Attribute> symbols;
+  SmallDenseMap<Attribute, size_t> symMap;
   auto getOrAddInnerSym = [&](Operation *op) -> StringAttr {
     auto attr = op->getAttrOfType<StringAttr>("inner_sym");
     if (attr)
@@ -645,18 +631,74 @@ FailureOr<bool> GrandCentralSignalMappingsPass::emitUpdatedMappings(
     op->setAttr("inner_sym", attr);
     return attr;
   };
+
+  auto getSymIdx = [&](Attribute symbol) {
+    auto it = symMap.find(symbol);
+    if (it != symMap.end())
+      return it->second;
+
+    auto id = symbols.size();
+    symbols.push_back(symbol);
+    symMap.insert({symbol, id});
+    return id;
+  };
   auto mkRef = [&](FModuleOp module,
                    const SignalMapping &mapping) -> std::string {
-    if (mapping.localValue.isa<BlockArgument>()) {
-      return llvm::formatv("~{0}|{1}>{2}", circuit.name(), module.getName(),
-                           mapping.localName);
+    // Generate placeholder into specified storage, return StringRef for it
+    auto mkSymPlaceholder = [&](Attribute symbol, auto &out) -> StringRef {
+      ("{{" + Twine(getSymIdx(symbol)) + "}}").toVector(out);
+      return out;
+    };
+
+    // Construct target using placeholders:
+    SmallString<32> circuitStr, moduleStr, nameStr;
+    // Storage for <mod,inst> strings along instance path
+    SmallVector<std::pair<SmallString<8>, SmallString<8>>, 16> stringStorage;
+    TokenAnnoTarget target;
+    target.circuit = mkSymPlaceholder(FlatSymbolRefAttr::get(dut), circuitStr);
+    target.module = mkSymPlaceholder(FlatSymbolRefAttr::get(module), moduleStr);
+    target.component = {};
+
+    if (mapping.localValue.isa<BlockArgument>())
+      // TODO: inner_sym for ports too
+      target.name = mapping.localName;
+    else
+      target.name = mkSymPlaceholder(
+          hw::InnerRefAttr::get(
+              SymbolTable::getSymbolName(module),
+              getOrAddInnerSym(mapping.localValue.getDefiningOp())),
+          nameStr);
+
+    // If there's an NLA, add instance path information.
+    if (mapping.nlaSym) {
+      auto nla =
+          cast<HierPathOp>(circuit.lookupSymbol(mapping.nlaSym.getAttr()));
+      assert(!nla.namepath().empty());
+      assert(nla.isComponent());
+
+      // Start from root of NLA, or from top/DUT if through it
+      bool seenRoot = false;
+      bool usesTop = nla.hasModule(dut.moduleNameAttr());
+      ArrayRef<Attribute> path = nla.namepath().getValue();
+      stringStorage.resize(path.drop_back().size());
+      for (auto attr : llvm::enumerate(path.drop_back())) {
+        auto ref = attr.value().cast<hw::InnerRefAttr>();
+        if (usesTop && !seenRoot) {
+          if (ref.getModule() == dut.moduleNameAttr())
+            seenRoot = true;
+        }
+
+        if (!usesTop || seenRoot) {
+          auto &store = stringStorage[attr.index()];
+          auto modStr = mkSymPlaceholder(ref.getModuleRef(), store.first);
+          auto instStr = mkSymPlaceholder(
+              hw::InnerRefAttr::get(ref.getModule(), ref.getName()),
+              store.second);
+          target.instances.emplace_back(modStr, instStr);
+        }
+      };
     }
-    auto idx = symbols.size();
-    symbols.push_back(hw::InnerRefAttr::get(
-        SymbolTable::getSymbolName(module),
-        getOrAddInnerSym(mapping.localValue.getDefiningOp())));
-    return llvm::formatv("~{0}|{1}>{2}", circuit.name(), module.getName(),
-                         "{{" + Twine(idx) + "}}");
+    return target.str();
   };
 
   // Generate and sort new mappings for (better) output stability
