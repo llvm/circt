@@ -572,6 +572,23 @@ private:
   calyx::ProgramLoweringState &pls;
 };
 
+/// This pass rewrites memory accesses that have a width mismatch. Such
+/// mismatches are due to index types being assumed 32-bit wide due to the lack
+/// of a width inference pass.
+class RewriteMemoryAccesses
+    : public calyx::PartialLoweringPattern<calyx::AssignOp> {
+public:
+  RewriteMemoryAccesses(MLIRContext *context, LogicalResult &resRef,
+                        calyx::ProgramLoweringState &pls)
+      : PartialLoweringPattern(context, resRef), pls(pls) {}
+
+  LogicalResult partiallyLower(calyx::AssignOp assignOp,
+                               PatternRewriter &rewriter) const override;
+
+private:
+  calyx::ProgramLoweringState &pls;
+};
+
 } // namespace calyx
 } // namespace circt
 

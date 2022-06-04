@@ -686,54 +686,6 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   return res;
 }
 
-/// This pass rewrites memory accesses that have a width mismatch. Such
-/// mismatches are due to index types being assumed 32-bit wide due to the lack
-/// of a width inference pass.
-class RewriteMemoryAccesses
-    : public calyx::PartialLoweringPattern<calyx::AssignOp> {
-public:
-  RewriteMemoryAccesses(MLIRContext *context, LogicalResult &resRef,
-                        calyx::ProgramLoweringState &pls)
-      : PartialLoweringPattern(context, resRef), pls(pls) {}
-
-  LogicalResult partiallyLower(calyx::AssignOp assignOp,
-                               PatternRewriter &rewriter) const override {
-    auto *state = pls.getState<ComponentLoweringState>(
-        assignOp->getParentOfType<calyx::ComponentOp>());
-
-    auto dest = assignOp.dest();
-    if (!state->isInputPortOfMemory(dest).hasValue())
-      return success();
-
-    auto src = assignOp.src();
-    unsigned srcBits = src.getType().getIntOrFloatBitWidth();
-    unsigned dstBits = dest.getType().getIntOrFloatBitWidth();
-    if (srcBits == dstBits)
-      return success();
-
-    SmallVector<Type> types = {rewriter.getIntegerType(srcBits),
-                               rewriter.getIntegerType(dstBits)};
-    Operation *newOp;
-    if (srcBits > dstBits) {
-      newOp = state->getNewLibraryOpInstance<calyx::SliceLibOp>(
-          rewriter, assignOp.getLoc(), types);
-    } else {
-      newOp = state->getNewLibraryOpInstance<calyx::PadLibOp>(
-          rewriter, assignOp.getLoc(), types);
-    }
-    rewriter.setInsertionPoint(assignOp->getBlock(),
-                               assignOp->getBlock()->begin());
-    rewriter.create<calyx::AssignOp>(assignOp->getLoc(), newOp->getResult(0),
-                                     src);
-    assignOp.setOperand(1, newOp->getResult(1));
-
-    return success();
-  }
-
-private:
-  calyx::ProgramLoweringState &pls;
-};
-
 /// Inlines Calyx ExecuteRegionOp operations within their parent blocks.
 /// An execution region op (ERO) is inlined by:
 ///  i  : add a sink basic block for all yield operations inside the
@@ -1482,13 +1434,14 @@ void SCFToCalyxPass::runOnOperation() {
   addOncePattern<LateSSAReplacement>(loweringPatterns, funcMap, *loweringState);
 
   /// Eliminate any unused combinational groups. This is done before
-  /// RewriteMemoryAccesses to avoid inferring slice components for groups that
-  /// will be removed.
+  /// calyx::RewriteMemoryAccesses to avoid inferring slice components for
+  /// groups that will be removed.
   addGreedyPattern<calyx::EliminateUnusedCombGroups>(loweringPatterns);
 
   /// This pattern rewrites accesses to memories which are too wide due to
   /// index types being converted to a fixed-width integer type.
-  addOncePattern<RewriteMemoryAccesses>(loweringPatterns, *loweringState);
+  addOncePattern<calyx::RewriteMemoryAccesses>(loweringPatterns,
+                                               *loweringState);
 
   /// This pattern removes the source FuncOp which has now been converted into
   /// a Calyx component.

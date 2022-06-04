@@ -592,5 +592,43 @@ void InlineCombGroups::recurseInlineCombGroups(
   }
 }
 
+//===----------------------------------------------------------------------===//
+// RewriteMemoryAccesses
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+RewriteMemoryAccesses::partiallyLower(calyx::AssignOp assignOp,
+                                      PatternRewriter &rewriter) const {
+  auto *state = pls.getState(assignOp->getParentOfType<calyx::ComponentOp>());
+
+  Value dest = assignOp.dest();
+  if (!state->isInputPortOfMemory(dest).hasValue())
+    return success();
+
+  Value src = assignOp.src();
+  unsigned srcBits = src.getType().getIntOrFloatBitWidth();
+  unsigned dstBits = dest.getType().getIntOrFloatBitWidth();
+  if (srcBits == dstBits)
+    return success();
+
+  SmallVector<Type> types = {rewriter.getIntegerType(srcBits),
+                             rewriter.getIntegerType(dstBits)};
+  Operation *newOp;
+  if (srcBits > dstBits) {
+    newOp = state->getNewLibraryOpInstance<calyx::SliceLibOp>(
+        rewriter, assignOp.getLoc(), types);
+  } else {
+    newOp = state->getNewLibraryOpInstance<calyx::PadLibOp>(
+        rewriter, assignOp.getLoc(), types);
+  }
+  rewriter.setInsertionPoint(assignOp->getBlock(),
+                             assignOp->getBlock()->begin());
+  rewriter.create<calyx::AssignOp>(assignOp->getLoc(), newOp->getResult(0),
+                                   src);
+  assignOp.setOperand(1, newOp->getResult(1));
+
+  return success();
+}
+
 } // namespace calyx
 } // namespace circt
