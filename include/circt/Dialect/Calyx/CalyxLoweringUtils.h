@@ -16,6 +16,7 @@
 
 #include "circt/Dialect/Calyx/CalyxHelpers.h"
 #include "circt/Dialect/Calyx/CalyxOps.h"
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/StaticLogic/StaticLogic.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
@@ -510,6 +511,82 @@ class ConvertIndexTypes : public calyx::FuncOpPartialLoweringPattern {
   LogicalResult
   partiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
                            PatternRewriter &rewriter) const override;
+};
+
+/// GroupDoneOp's are terminator operations and should therefore be the last
+/// operator in a group. During group construction, we always append assignments
+/// to the end of a group, resulting in group_done ops migrating away from the
+/// terminator position. This pattern moves such ops to the end of their group.
+struct NonTerminatingGroupDonePattern
+    : mlir::OpRewritePattern<calyx::GroupDoneOp> {
+  using mlir::OpRewritePattern<calyx::GroupDoneOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(calyx::GroupDoneOp groupDoneOp,
+                                PatternRewriter &) const override;
+};
+
+/// When building groups which contain accesses to multiple sequential
+/// components, a group_done op is created for each of these. This pattern
+/// and's each of the group_done values into a single group_done.
+struct MultipleGroupDonePattern : mlir::OpRewritePattern<calyx::GroupOp> {
+  using mlir::OpRewritePattern<calyx::GroupOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(calyx::GroupOp groupOp,
+                                PatternRewriter &rewriter) const override;
+};
+
+/// Removes calyx::CombGroupOps which are unused. These correspond to
+/// combinational groups created during op building that, after conversion,
+/// have either been inlined into calyx::GroupOps or are referenced by an
+/// if/while with statement.
+/// We do not eliminate unused calyx::GroupOps; this should never happen, and is
+/// considered an error. In these cases, the program will be invalidated when
+/// the Calyx verifiers execute.
+struct EliminateUnusedCombGroups : mlir::OpRewritePattern<calyx::CombGroupOp> {
+  using mlir::OpRewritePattern<calyx::CombGroupOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(calyx::CombGroupOp combGroupOp,
+                                PatternRewriter &rewriter) const override;
+};
+
+/// This pass recursively inlines use-def chains of combinational logic (from
+/// non-stateful groups) into groups referenced in the control schedule.
+class InlineCombGroups
+    : public calyx::PartialLoweringPattern<calyx::GroupInterface,
+                                           mlir::OpInterfaceRewritePattern> {
+public:
+  InlineCombGroups(MLIRContext *context, LogicalResult &resRef,
+                   calyx::ProgramLoweringState &pls);
+
+  LogicalResult partiallyLower(calyx::GroupInterface originGroup,
+                               PatternRewriter &rewriter) const override;
+
+private:
+  void
+  recurseInlineCombGroups(PatternRewriter &rewriter,
+                          ComponentLoweringStateInterface &state,
+                          llvm::SmallSetVector<Operation *, 8> &inlinedGroups,
+                          calyx::GroupInterface originGroup,
+                          calyx::GroupInterface recGroup, bool doInline) const;
+
+  calyx::ProgramLoweringState &pls;
+};
+
+/// This pass rewrites memory accesses that have a width mismatch. Such
+/// mismatches are due to index types being assumed 32-bit wide due to the lack
+/// of a width inference pass.
+class RewriteMemoryAccesses
+    : public calyx::PartialLoweringPattern<calyx::AssignOp> {
+public:
+  RewriteMemoryAccesses(MLIRContext *context, LogicalResult &resRef,
+                        calyx::ProgramLoweringState &pls)
+      : PartialLoweringPattern(context, resRef), pls(pls) {}
+
+  LogicalResult partiallyLower(calyx::AssignOp assignOp,
+                               PatternRewriter &rewriter) const override;
+
+private:
+  calyx::ProgramLoweringState &pls;
 };
 
 } // namespace calyx

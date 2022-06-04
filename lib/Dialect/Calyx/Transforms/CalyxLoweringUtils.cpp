@@ -16,6 +16,7 @@
 #include "circt/Support/LLVM.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/IR/Matchers.h"
 
 #include <variant>
@@ -448,6 +449,185 @@ ConvertIndexTypes::partiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
           constant, rewriter.getI32IntegerAttr(value.getSExtValue()));
     }
   });
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// NonTerminatingGroupDonePattern
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+NonTerminatingGroupDonePattern::matchAndRewrite(calyx::GroupDoneOp groupDoneOp,
+                                                PatternRewriter &) const {
+  Block *block = groupDoneOp->getBlock();
+  if (&block->back() == groupDoneOp)
+    return failure();
+
+  groupDoneOp->moveBefore(groupDoneOp->getBlock(),
+                          groupDoneOp->getBlock()->end());
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// MultipleGroupDonePattern
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+MultipleGroupDonePattern::matchAndRewrite(calyx::GroupOp groupOp,
+                                          PatternRewriter &rewriter) const {
+  auto groupDoneOps = SmallVector<calyx::GroupDoneOp>(
+      groupOp.getBody()->getOps<calyx::GroupDoneOp>());
+
+  if (groupDoneOps.size() <= 1)
+    return failure();
+
+  /// 'and' all of the calyx::GroupDoneOp's.
+  rewriter.setInsertionPointToEnd(groupDoneOps[0]->getBlock());
+  SmallVector<Value> doneOpSrcs;
+  llvm::transform(groupDoneOps, std::back_inserter(doneOpSrcs),
+                  [](calyx::GroupDoneOp op) { return op.src(); });
+  Value allDone =
+      rewriter.create<comb::AndOp>(groupDoneOps.front().getLoc(), doneOpSrcs);
+
+  /// Create a group done op with the complex expression as a guard.
+  rewriter.create<calyx::GroupDoneOp>(
+      groupOp.getLoc(),
+      rewriter.create<hw::ConstantOp>(groupOp.getLoc(), APInt(1, 1)), allDone);
+  for (auto groupDoneOp : groupDoneOps)
+    rewriter.eraseOp(groupDoneOp);
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// EliminateUnusedCombGroups
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+EliminateUnusedCombGroups::matchAndRewrite(calyx::CombGroupOp combGroupOp,
+                                           PatternRewriter &rewriter) const {
+  auto control =
+      combGroupOp->getParentOfType<calyx::ComponentOp>().getControlOp();
+  if (!SymbolTable::symbolKnownUseEmpty(combGroupOp.sym_nameAttr(), control))
+    return failure();
+
+  rewriter.eraseOp(combGroupOp);
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// InlineCombGroups
+//===----------------------------------------------------------------------===//
+
+InlineCombGroups::InlineCombGroups(MLIRContext *context, LogicalResult &resRef,
+                                   calyx::ProgramLoweringState &pls)
+    : PartialLoweringPattern(context, resRef), pls(pls) {}
+
+LogicalResult
+InlineCombGroups::partiallyLower(calyx::GroupInterface originGroup,
+                                 PatternRewriter &rewriter) const {
+  auto component = originGroup->getParentOfType<calyx::ComponentOp>();
+  ComponentLoweringStateInterface *state = pls.getState(component);
+
+  // Filter groups which are not part of the control schedule.
+  if (SymbolTable::symbolKnownUseEmpty(originGroup.symName(),
+                                       component.getControlOp()))
+    return success();
+
+  // Maintain a set of the groups which we've inlined so far. The group
+  // itself is implicitly inlined.
+  llvm::SmallSetVector<Operation *, 8> inlinedGroups;
+  inlinedGroups.insert(originGroup);
+
+  // Starting from the matched originGroup, we traverse use-def chains of
+  // combinational logic, and inline assignments from the defining
+  // combinational groups.
+  recurseInlineCombGroups(rewriter, *state, inlinedGroups, originGroup,
+                          originGroup,
+                          /*doInline=*/false);
+  return success();
+}
+
+void InlineCombGroups::recurseInlineCombGroups(
+    PatternRewriter &rewriter, ComponentLoweringStateInterface &state,
+    llvm::SmallSetVector<Operation *, 8> &inlinedGroups,
+    calyx::GroupInterface originGroup, calyx::GroupInterface recGroup,
+    bool doInline) const {
+  inlinedGroups.insert(recGroup);
+  for (auto assignOp : recGroup.getBody()->getOps<calyx::AssignOp>()) {
+    if (doInline) {
+      /// Inline the assignment into the originGroup.
+      auto *clonedAssignOp = rewriter.clone(*assignOp.getOperation());
+      clonedAssignOp->moveBefore(originGroup.getBody(),
+                                 originGroup.getBody()->end());
+    }
+    Value src = assignOp.src();
+
+    // Things which stop recursive inlining (or in other words, what
+    // breaks combinational paths).
+    // - Component inputs
+    // - Register and memory reads
+    // - Constant ops (constant ops are not evaluated by any group)
+    // - Multiplication pipelines are sequential.
+    // - 'While' return values (these are registers, however, 'while'
+    //   return values have at the current point of conversion not yet
+    //   been rewritten to their register outputs, see comment in
+    //   LateSSAReplacement)
+    if (src.isa<BlockArgument>() ||
+        isa<calyx::RegisterOp, calyx::MemoryOp, hw::ConstantOp,
+            mlir::arith::ConstantOp, calyx::MultPipeLibOp, calyx::DivUPipeLibOp,
+            calyx::DivSPipeLibOp, calyx::RemSPipeLibOp, calyx::RemUPipeLibOp,
+            mlir::scf::WhileOp>(src.getDefiningOp()))
+      continue;
+
+    auto srcCombGroup = dyn_cast<calyx::CombGroupOp>(
+        state.getEvaluatingGroup(src).getOperation());
+    if (!srcCombGroup)
+      continue;
+    if (inlinedGroups.count(srcCombGroup))
+      continue;
+
+    recurseInlineCombGroups(rewriter, state, inlinedGroups, originGroup,
+                            srcCombGroup, /*doInline=*/true);
+  }
+}
+
+//===----------------------------------------------------------------------===//
+// RewriteMemoryAccesses
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+RewriteMemoryAccesses::partiallyLower(calyx::AssignOp assignOp,
+                                      PatternRewriter &rewriter) const {
+  auto *state = pls.getState(assignOp->getParentOfType<calyx::ComponentOp>());
+
+  Value dest = assignOp.dest();
+  if (!state->isInputPortOfMemory(dest).hasValue())
+    return success();
+
+  Value src = assignOp.src();
+  unsigned srcBits = src.getType().getIntOrFloatBitWidth();
+  unsigned dstBits = dest.getType().getIntOrFloatBitWidth();
+  if (srcBits == dstBits)
+    return success();
+
+  SmallVector<Type> types = {
+      rewriter.getIntegerType(srcBits),
+      rewriter.getIntegerType(dstBits),
+  };
+  mlir::Location loc = assignOp.getLoc();
+  Operation *newOp = srcBits > dstBits
+                         ? state->getNewLibraryOpInstance<calyx::SliceLibOp>(
+                               rewriter, loc, types)
+                         : state->getNewLibraryOpInstance<calyx::PadLibOp>(
+                               rewriter, loc, types);
+
+  rewriter.setInsertionPoint(assignOp->getBlock(),
+                             assignOp->getBlock()->begin());
+  rewriter.create<calyx::AssignOp>(assignOp->getLoc(), newOp->getResult(0),
+                                   src);
+  assignOp.setOperand(1, newOp->getResult(1));
+
   return success();
 }
 
