@@ -234,7 +234,7 @@ class BuildOpGroups : public calyx::FuncOpPartialLoweringPattern {
   using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
 
   LogicalResult
-  PartiallyLowerFuncToComp(FuncOp funcOp,
+  partiallyLowerFuncToComp(FuncOp funcOp,
                            PatternRewriter &rewriter) const override {
     /// We walk the operations of the funcOp to ensure that all def's have
     /// been visited before their uses.
@@ -801,7 +801,7 @@ struct FuncOpConversion : public calyx::FuncOpPartialLoweringPattern {
   using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
 
   LogicalResult
-  PartiallyLowerFuncToComp(FuncOp funcOp,
+  partiallyLowerFuncToComp(FuncOp funcOp,
                            PatternRewriter &rewriter) const override {
     /// Maintain a mapping between funcOp input arguments and the port index
     /// which the argument will eventually map to.
@@ -913,7 +913,7 @@ class BuildWhileGroups : public calyx::FuncOpPartialLoweringPattern {
   using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
 
   LogicalResult
-  PartiallyLowerFuncToComp(FuncOp funcOp,
+  partiallyLowerFuncToComp(FuncOp funcOp,
                            PatternRewriter &rewriter) const override {
     LogicalResult res = success();
     funcOp.walk([&](Operation *op) {
@@ -979,7 +979,7 @@ class BuildBBRegs : public calyx::FuncOpPartialLoweringPattern {
   using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
 
   LogicalResult
-  PartiallyLowerFuncToComp(FuncOp funcOp,
+  partiallyLowerFuncToComp(FuncOp funcOp,
                            PatternRewriter &rewriter) const override {
     funcOp.walk([&](Block *block) {
       /// Do not register component input values.
@@ -1008,7 +1008,7 @@ class BuildPipelineRegs : public calyx::FuncOpPartialLoweringPattern {
   using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
 
   LogicalResult
-  PartiallyLowerFuncToComp(FuncOp funcOp,
+  partiallyLowerFuncToComp(FuncOp funcOp,
                            PatternRewriter &rewriter) const override {
     funcOp.walk([&](staticlogic::PipelineRegisterOp op) {
       // Condition registers are handled in BuildWhileGroups.
@@ -1069,7 +1069,7 @@ class BuildPipelineGroups : public calyx::FuncOpPartialLoweringPattern {
   using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
 
   LogicalResult
-  PartiallyLowerFuncToComp(FuncOp funcOp,
+  partiallyLowerFuncToComp(FuncOp funcOp,
                            PatternRewriter &rewriter) const override {
     for (auto pipeline : funcOp.getOps<staticlogic::PipelineWhileOp>())
       for (auto stage :
@@ -1233,7 +1233,7 @@ class BuildReturnRegs : public calyx::FuncOpPartialLoweringPattern {
   using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
 
   LogicalResult
-  PartiallyLowerFuncToComp(FuncOp funcOp,
+  partiallyLowerFuncToComp(FuncOp funcOp,
                            PatternRewriter &rewriter) const override {
 
     for (auto argType : enumerate(funcOp.getResultTypes())) {
@@ -1267,7 +1267,7 @@ class BuildControl : public calyx::FuncOpPartialLoweringPattern {
   using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
 
   LogicalResult
-  PartiallyLowerFuncToComp(FuncOp funcOp,
+  partiallyLowerFuncToComp(FuncOp funcOp,
                            PatternRewriter &rewriter) const override {
     auto *entryBlock = &funcOp.getBlocks().front();
     rewriter.setInsertionPointToStart(getComponent()->getControlOp().getBody());
@@ -1542,7 +1542,7 @@ private:
 class LateSSAReplacement : public calyx::FuncOpPartialLoweringPattern {
   using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
 
-  LogicalResult PartiallyLowerFuncToComp(FuncOp funcOp,
+  LogicalResult partiallyLowerFuncToComp(FuncOp funcOp,
                                          PatternRewriter &) const override {
     funcOp.walk([&](memref::LoadOp loadOp) {
       if (calyx::singleLoadFromMemory(loadOp)) {
@@ -1566,7 +1566,7 @@ class CleanupFuncOps : public calyx::FuncOpPartialLoweringPattern {
   using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
 
   LogicalResult
-  PartiallyLowerFuncToComp(FuncOp funcOp,
+  partiallyLowerFuncToComp(FuncOp funcOp,
                            PatternRewriter &rewriter) const override {
     rewriter.eraseOp(funcOp);
     return success();

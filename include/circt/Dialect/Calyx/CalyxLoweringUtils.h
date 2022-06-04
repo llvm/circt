@@ -490,7 +490,7 @@ public:
 
   /// Partial lowering implementation.
   virtual LogicalResult
-  PartiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
+  partiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
                            PatternRewriter &rewriter) const = 0;
 
 protected:
@@ -508,7 +508,7 @@ class ConvertIndexTypes : public calyx::FuncOpPartialLoweringPattern {
   using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
 
   LogicalResult
-  PartiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
+  partiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
                            PatternRewriter &rewriter) const override;
 };
 

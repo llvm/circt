@@ -405,7 +405,7 @@ FuncOpPartialLoweringPattern::partiallyLower(mlir::func::FuncOp funcOp,
         programLoweringState.getState<ComponentLoweringStateInterface>(op);
   }
 
-  return PartiallyLowerFuncToComp(funcOp, rewriter);
+  return partiallyLowerFuncToComp(funcOp, rewriter);
 }
 
 calyx::ComponentOp *FuncOpPartialLoweringPattern::getComponent() const {
@@ -423,7 +423,7 @@ ProgramLoweringState &FuncOpPartialLoweringPattern::programState() const {
 //===----------------------------------------------------------------------===//
 
 LogicalResult
-ConvertIndexTypes::PartiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
+ConvertIndexTypes::partiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
                                             PatternRewriter &rewriter) const {
   funcOp.walk([&](Block *block) {
     for (Value arg : block->getArguments())
