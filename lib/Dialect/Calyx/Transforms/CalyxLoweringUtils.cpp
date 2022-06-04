@@ -557,7 +557,7 @@ void InlineCombGroups::recurseInlineCombGroups(
   for (auto assignOp : recGroup.getBody()->getOps<calyx::AssignOp>()) {
     if (doInline) {
       /// Inline the assignment into the originGroup.
-      auto clonedAssignOp = rewriter.clone(*assignOp.getOperation());
+      auto *clonedAssignOp = rewriter.clone(*assignOp.getOperation());
       clonedAssignOp->moveBefore(originGroup.getBody(),
                                  originGroup.getBody()->end());
     }
