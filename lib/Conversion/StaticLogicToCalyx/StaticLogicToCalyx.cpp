@@ -1584,7 +1584,7 @@ public:
   /// results are skipped for Once patterns).
   template <typename TPattern, typename... PatternArgs>
   void addOncePattern(SmallVectorImpl<LoweringPattern> &patterns,
-                      PatternArgs &&... args) {
+                      PatternArgs &&...args) {
     RewritePatternSet ps(&getContext());
     ps.add<TPattern>(&getContext(), partialPatternRes, args...);
     patterns.push_back(
@@ -1593,7 +1593,7 @@ public:
 
   template <typename TPattern, typename... PatternArgs>
   void addGreedyPattern(SmallVectorImpl<LoweringPattern> &patterns,
-                        PatternArgs &&... args) {
+                        PatternArgs &&...args) {
     RewritePatternSet ps(&getContext());
     ps.add<TPattern>(&getContext(), args...);
     patterns.push_back(
@@ -1748,6 +1748,14 @@ void StaticLogicToCalyxPass::runOnOperation() {
     getOperation()->setAttr("calyx.metadata",
                             ArrayAttr::get(context, sourceLocations));
   }
+
+  // Clear internal state. See https://github.com/llvm/circt/issues/3235
+  funcMap.shrink_and_clear();
+  loweringPatterns.clear();
+  topLevelFunction.clear();
+  cleanupPatterns.clear();
+  loweringState = nullptr;
+  partialPatternRes = LogicalResult::failure();
 }
 
 } // namespace staticlogictocalyx
