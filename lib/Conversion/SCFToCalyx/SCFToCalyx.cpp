@@ -350,7 +350,7 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
     // loading a value from the Calyx memory. At this point of lowering, we
     // keep the memref::LoadOp SSA value, and do value replacement _after_
     // control has been generated (see LateSSAReplacement). This is *vital* for
-    // things such as InlineCombGroups to be able to properly track which
+    // things such as calyx::InlineCombGroups to be able to properly track which
     // memory assignment groups belong to which accesses.
     getState<ComponentLoweringState>().registerEvaluatingGroup(
         loadOp.getResult(), combGroup);
@@ -1223,89 +1223,6 @@ private:
   }
 };
 
-/// This pass recursively inlines use-def chains of combinational logic (from
-/// non-stateful groups) into groups referenced in the control schedule.
-class InlineCombGroups
-    : public calyx::PartialLoweringPattern<calyx::GroupInterface,
-                                           OpInterfaceRewritePattern> {
-public:
-  InlineCombGroups(MLIRContext *context, LogicalResult &resRef,
-                   calyx::ProgramLoweringState &pls)
-      : PartialLoweringPattern(context, resRef), pls(pls) {}
-
-  LogicalResult partiallyLower(calyx::GroupInterface originGroup,
-                               PatternRewriter &rewriter) const override {
-    auto *state = pls.getState<ComponentLoweringState>(
-        originGroup->getParentOfType<calyx::ComponentOp>());
-
-    /// Filter groups which are not part of the control schedule.
-    if (SymbolTable::symbolKnownUseEmpty(
-            originGroup.symName(), state->getComponentOp().getControlOp()))
-      return success();
-
-    /// Maintain a set of the groups which we've inlined so far. The group
-    /// itself is implicitly inlined.
-    llvm::SmallSetVector<Operation *, 8> inlinedGroups;
-    inlinedGroups.insert(originGroup);
-
-    /// Starting from the matched originGroup, we traverse use-def chains of
-    /// combinational logic, and inline assignments from the defining
-    /// combinational groups.
-    recurseInlineCombGroups(
-        rewriter, *state, inlinedGroups, originGroup, originGroup,
-        /*disable inlining of the originGroup itself*/ false);
-    return success();
-  }
-
-private:
-  void
-  recurseInlineCombGroups(PatternRewriter &rewriter,
-                          ComponentLoweringState &state,
-                          llvm::SmallSetVector<Operation *, 8> &inlinedGroups,
-                          calyx::GroupInterface originGroup,
-                          calyx::GroupInterface recGroup, bool doInline) const {
-    inlinedGroups.insert(recGroup);
-    for (auto assignOp : recGroup.getBody()->getOps<calyx::AssignOp>()) {
-      if (doInline) {
-        /// Inline the assignment into the originGroup.
-        auto clonedAssignOp = rewriter.clone(*assignOp.getOperation());
-        clonedAssignOp->moveBefore(originGroup.getBody(),
-                                   originGroup.getBody()->end());
-      }
-      Value src = assignOp.src();
-
-      /// Things which stop recursive inlining (or in other words, what
-      /// breaks combinational paths).
-      /// - Component inputs
-      /// - Register and memory reads
-      /// - Constant ops (constant ops are not evaluated by any group)
-      /// - Multiplication pipelines are sequential.
-      /// - 'While' return values (these are registers, however, 'while'
-      ///   return values have at the current point of conversion not yet
-      ///   been rewritten to their register outputs, see comment in
-      ///   LateSSAReplacement)
-      if (src.isa<BlockArgument>() ||
-          isa<calyx::RegisterOp, calyx::MemoryOp, hw::ConstantOp,
-              arith::ConstantOp, calyx::MultPipeLibOp, calyx::DivUPipeLibOp,
-              calyx::DivSPipeLibOp, calyx::RemSPipeLibOp, calyx::RemUPipeLibOp,
-              scf::WhileOp>(src.getDefiningOp()))
-        continue;
-
-      auto srcCombGroup = dyn_cast<calyx::CombGroupOp>(
-          state.getEvaluatingGroup(src).getOperation());
-      if (!srcCombGroup)
-        continue;
-      if (inlinedGroups.count(srcCombGroup))
-        continue;
-
-      recurseInlineCombGroups(rewriter, state, inlinedGroups, originGroup,
-                              srcCombGroup, true);
-    }
-  }
-
-  calyx::ProgramLoweringState &pls;
-};
-
 /// LateSSAReplacement contains various functions for replacing SSA values that
 /// were not replaced during op construction.
 class LateSSAReplacement : public calyx::FuncOpPartialLoweringPattern {
@@ -1352,86 +1269,6 @@ class CleanupFuncOps : public calyx::FuncOpPartialLoweringPattern {
   partiallyLowerFuncToComp(FuncOp funcOp,
                            PatternRewriter &rewriter) const override {
     rewriter.eraseOp(funcOp);
-    return success();
-  }
-};
-
-//===----------------------------------------------------------------------===//
-// Simplification patterns
-//===----------------------------------------------------------------------===//
-
-/// Removes calyx::CombGroupOps which are unused. These correspond to
-/// combinational groups created during op building that, after conversion,
-/// have either been inlined into calyx::GroupOps or are referenced by an
-/// if/while with statement.
-/// We do not eliminate unused calyx::GroupOps; this should never happen, and is
-/// considered an error. In these cases, the program will be invalidated when
-/// the Calyx verifiers execute.
-struct EliminateUnusedCombGroups : mlir::OpRewritePattern<calyx::CombGroupOp> {
-  using mlir::OpRewritePattern<calyx::CombGroupOp>::OpRewritePattern;
-
-  LogicalResult matchAndRewrite(calyx::CombGroupOp combGroupOp,
-                                PatternRewriter &rewriter) const override {
-    auto control =
-        combGroupOp->getParentOfType<calyx::ComponentOp>().getControlOp();
-    if (!SymbolTable::symbolKnownUseEmpty(combGroupOp.sym_nameAttr(), control))
-      return failure();
-
-    rewriter.eraseOp(combGroupOp);
-    return success();
-  }
-};
-
-/// GroupDoneOp's are terminator operations and should therefore be the last
-/// operator in a group. During group construction, we always append assignments
-/// to the end of a group, resulting in group_done ops migrating away from the
-/// terminator position. This pattern moves such ops to the end of their group.
-struct NonTerminatingGroupDonePattern
-    : mlir::OpRewritePattern<calyx::GroupDoneOp> {
-  using mlir::OpRewritePattern<calyx::GroupDoneOp>::OpRewritePattern;
-
-  LogicalResult matchAndRewrite(calyx::GroupDoneOp groupDoneOp,
-                                PatternRewriter & /*rewriter*/) const override {
-    Block *block = groupDoneOp->getBlock();
-    if (&block->back() == groupDoneOp)
-      return failure();
-
-    groupDoneOp->moveBefore(groupDoneOp->getBlock(),
-                            groupDoneOp->getBlock()->end());
-    return success();
-  }
-};
-
-/// When building groups which contain accesses to multiple sequential
-/// components, a group_done op is created for each of these. This pattern
-/// and's each of the group_done values into a single group_done.
-struct MultipleGroupDonePattern : mlir::OpRewritePattern<calyx::GroupOp> {
-  using mlir::OpRewritePattern<calyx::GroupOp>::OpRewritePattern;
-
-  LogicalResult matchAndRewrite(calyx::GroupOp groupOp,
-                                PatternRewriter &rewriter) const override {
-    auto groupDoneOps = SmallVector<calyx::GroupDoneOp>(
-        groupOp.getBody()->getOps<calyx::GroupDoneOp>());
-
-    if (groupDoneOps.size() <= 1)
-      return failure();
-
-    /// 'and' all of the calyx::GroupDoneOp's.
-    rewriter.setInsertionPointToEnd(groupDoneOps[0]->getBlock());
-    SmallVector<Value> doneOpSrcs;
-    llvm::transform(groupDoneOps, std::back_inserter(doneOpSrcs),
-                    [](calyx::GroupDoneOp op) { return op.src(); });
-    Value allDone =
-        rewriter.create<comb::AndOp>(groupDoneOps.front().getLoc(), doneOpSrcs);
-
-    /// Create a group done op with the complex expression as a guard.
-    rewriter.create<calyx::GroupDoneOp>(
-        groupOp.getLoc(),
-        rewriter.create<hw::ConstantOp>(groupOp.getLoc(), APInt(1, 1)),
-        allDone);
-    for (auto groupDoneOp : groupDoneOps)
-      rewriter.eraseOp(groupDoneOp);
-
     return success();
   }
 };
@@ -1532,7 +1369,7 @@ public:
   /// results are skipped for Once patterns).
   template <typename TPattern, typename... PatternArgs>
   void addOncePattern(SmallVectorImpl<LoweringPattern> &patterns,
-                      PatternArgs &&...args) {
+                      PatternArgs &&... args) {
     RewritePatternSet ps(&getContext());
     ps.add<TPattern>(&getContext(), partialPatternRes, args...);
     patterns.push_back(
@@ -1541,7 +1378,7 @@ public:
 
   template <typename TPattern, typename... PatternArgs>
   void addGreedyPattern(SmallVectorImpl<LoweringPattern> &patterns,
-                        PatternArgs &&...args) {
+                        PatternArgs &&... args) {
     RewritePatternSet ps(&getContext());
     ps.add<TPattern>(&getContext(), args...);
     patterns.push_back(
@@ -1638,7 +1475,7 @@ void SCFToCalyxPass::runOnOperation() {
 
   /// This pass recursively inlines use-def chains of combinational logic (from
   /// non-stateful groups) into groups referenced in the control schedule.
-  addOncePattern<InlineCombGroups>(loweringPatterns, *loweringState);
+  addOncePattern<calyx::InlineCombGroups>(loweringPatterns, *loweringState);
 
   /// This pattern performs various SSA replacements that must be done
   /// after control generation.
@@ -1647,7 +1484,7 @@ void SCFToCalyxPass::runOnOperation() {
   /// Eliminate any unused combinational groups. This is done before
   /// RewriteMemoryAccesses to avoid inferring slice components for groups that
   /// will be removed.
-  addGreedyPattern<EliminateUnusedCombGroups>(loweringPatterns);
+  addGreedyPattern<calyx::EliminateUnusedCombGroups>(loweringPatterns);
 
   /// This pattern rewrites accesses to memories which are too wide due to
   /// index types being converted to a fixed-width integer type.
@@ -1672,8 +1509,8 @@ void SCFToCalyxPass::runOnOperation() {
   // Cleanup patterns
   //===----------------------------------------------------------------------===//
   RewritePatternSet cleanupPatterns(&getContext());
-  cleanupPatterns.add<MultipleGroupDonePattern, NonTerminatingGroupDonePattern>(
-      &getContext());
+  cleanupPatterns.add<calyx::MultipleGroupDonePattern,
+                      calyx::NonTerminatingGroupDonePattern>(&getContext());
   if (failed(applyPatternsAndFoldGreedily(getOperation(),
                                           std::move(cleanupPatterns)))) {
     signalPassFailure();
