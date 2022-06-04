@@ -16,14 +16,26 @@
 
 #include "circt/Dialect/Calyx/CalyxHelpers.h"
 #include "circt/Dialect/Calyx/CalyxOps.h"
+#include "circt/Dialect/StaticLogic/StaticLogic.h"
 #include "circt/Support/LLVM.h"
+#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/PatternMatch.h"
+#include "llvm/ADT/TypeSwitch.h"
 
 #include <variant>
 
 namespace circt {
 namespace calyx {
+
+void appendPortsForExternalMemref(PatternRewriter &rewriter, StringRef memName,
+                                  Value memref, unsigned memoryID,
+                                  SmallVectorImpl<calyx::PortInfo> &inPorts,
+                                  SmallVectorImpl<calyx::PortInfo> &outPorts);
 
 // Walks the control of this component, and appends source information for leaf
 // nodes. It also appends a position attribute that connects the source location
@@ -368,7 +380,7 @@ public:
   /// already found, a new mapping is added for this ComponentOp. Different
   /// conversions may have different derived classes of the interface, so we
   /// provided a template.
-  template <typename T>
+  template <typename T = calyx::ComponentLoweringStateInterface>
   T *getState(calyx::ComponentOp op) {
     static_assert(std::is_convertible_v<T, ComponentLoweringStateInterface>);
     auto it = componentStates.find(op);
@@ -439,6 +451,65 @@ struct ModuleOpConversion : public OpRewritePattern<mlir::ModuleOp> {
 private:
   calyx::ProgramOp *programOpOutput;
   StringRef topLevelFunction;
+};
+
+/// FuncOpPartialLoweringPatterns are patterns which intend to match on FuncOps
+/// and then perform their own walking of the IR.
+class FuncOpPartialLoweringPattern
+    : public calyx::PartialLoweringPattern<mlir::func::FuncOp> {
+
+public:
+  FuncOpPartialLoweringPattern(
+      MLIRContext *context, LogicalResult &resRef,
+      DenseMap<mlir::func::FuncOp, calyx::ComponentOp> &map,
+      calyx::ProgramLoweringState &state);
+
+  /// Entry point to initialize the state of this class and conduct the partial
+  /// lowering.
+  LogicalResult partiallyLower(mlir::func::FuncOp funcOp,
+                               PatternRewriter &rewriter) const override final;
+
+  /// Returns the component operation associated with the currently executing
+  /// partial lowering.
+  calyx::ComponentOp *getComponent() const;
+
+  // Returns the component state associated with the currently executing
+  // partial lowering.
+  template <typename T = ComponentLoweringStateInterface>
+  T &getState() const {
+    static_assert(
+        std::is_convertible_v<T, calyx::ComponentLoweringStateInterface>);
+    assert(
+        componentLoweringState != nullptr &&
+        "Component lowering state should be set during pattern construction");
+    return *static_cast<T *>(componentLoweringState);
+  }
+
+  /// Return the program lowering state for this pattern.
+  ProgramLoweringState &programState() const;
+
+  /// Partial lowering implementation.
+  virtual LogicalResult
+  PartiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
+                           PatternRewriter &rewriter) const = 0;
+
+protected:
+  // A map from FuncOp to it's respective ComponentOp lowering.
+  DenseMap<mlir::func::FuncOp, calyx::ComponentOp> &functionMapping;
+
+private:
+  mutable ComponentOp *componentOp = nullptr;
+  mutable ComponentLoweringStateInterface *componentLoweringState = nullptr;
+  ProgramLoweringState &programLoweringState;
+};
+
+/// Converts all index-typed operations and values to i32 values.
+class ConvertIndexTypes : public calyx::FuncOpPartialLoweringPattern {
+  using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
+
+  LogicalResult
+  PartiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
+                           PatternRewriter &rewriter) const override;
 };
 
 } // namespace calyx

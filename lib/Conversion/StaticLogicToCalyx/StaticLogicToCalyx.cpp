@@ -225,77 +225,12 @@ private:
 };
 
 //===----------------------------------------------------------------------===//
-// Partial lowering patterns
-//===----------------------------------------------------------------------===//
-
-/// FuncOpPartialLoweringPatterns are patterns which intend to match on FuncOps
-/// and then perform their own walking of the IR. FuncOpPartialLoweringPatterns
-/// have direct access to the ComponentLoweringState for the corresponding
-/// component of the matched FuncOp.
-class FuncOpPartialLoweringPattern
-    : public calyx::PartialLoweringPattern<FuncOp> {
-public:
-  FuncOpPartialLoweringPattern(MLIRContext *context, LogicalResult &resRef,
-                               FuncMapping &map,
-                               calyx::ProgramLoweringState &pls)
-      : PartialLoweringPattern(context, resRef), funcMap(map), pls(pls) {}
-
-  LogicalResult partiallyLower(FuncOp funcOp,
-                               PatternRewriter &rewriter) const override final {
-    // Initialize the component op references if a calyx::ComponentOp has been
-    // created for the matched funcOp.
-    auto it = funcMap.find(funcOp);
-    if (it != funcMap.end()) {
-      compOp = &it->second;
-      compLoweringState = pls.getState<ComponentLoweringState>(*getComponent());
-    }
-
-    return PartiallyLowerFuncToComp(funcOp, rewriter);
-  }
-
-  // Returns the component operation associated with the currently executing
-  // partial lowering.
-  calyx::ComponentOp *getComponent() const {
-    assert(
-        compOp != nullptr &&
-        "Expected component op to have been set during pattern construction");
-    return compOp;
-  }
-
-  // Returns the component state associated with the currently executing
-  // partial lowering.
-  template <typename T>
-  T &getState() const {
-    static_assert(
-        std::is_convertible_v<T, calyx::ComponentLoweringStateInterface>);
-    assert(compLoweringState != nullptr &&
-           "Expected component lowering state to have been set during pattern "
-           "construction");
-    return *static_cast<T *>(compLoweringState);
-  }
-
-  calyx::ProgramLoweringState &programState() const { return pls; }
-
-  /// Partial lowering implementation.
-  virtual LogicalResult
-  PartiallyLowerFuncToComp(FuncOp funcOp, PatternRewriter &rewriter) const = 0;
-
-protected:
-  FuncMapping &funcMap;
-
-private:
-  mutable calyx::ComponentOp *compOp = nullptr;
-  mutable ComponentLoweringState *compLoweringState = nullptr;
-  calyx::ProgramLoweringState &pls;
-};
-
-//===----------------------------------------------------------------------===//
 // Conversion patterns
 //===----------------------------------------------------------------------===//
 
 /// Iterate through the operations of a source function and instantiate
 /// components or primitives based on the type of the operations.
-class BuildOpGroups : public FuncOpPartialLoweringPattern {
+class BuildOpGroups : public calyx::FuncOpPartialLoweringPattern {
   using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
 
   LogicalResult
@@ -861,105 +796,8 @@ private:
   calyx::ProgramLoweringState &pls;
 };
 
-/// Connverts all index-typed operations and values to i32 values.
-class ConvertIndexTypes : public FuncOpPartialLoweringPattern {
-  using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
-
-  LogicalResult
-  PartiallyLowerFuncToComp(FuncOp funcOp,
-                           PatternRewriter &rewriter) const override {
-    funcOp.walk([&](Block *block) {
-      for (auto arg : block->getArguments())
-        arg.setType(calyx::convIndexType(rewriter, arg.getType()));
-    });
-
-    funcOp.walk([&](Operation *op) {
-      for (auto res : op->getResults()) {
-        auto resType = res.getType();
-        if (!resType.isIndex())
-          continue;
-
-        res.setType(calyx::convIndexType(rewriter, resType));
-        if (auto constOp = dyn_cast<arith::ConstantOp>(op)) {
-          APInt value;
-          calyx::matchConstantOp(constOp, value);
-          rewriter.setInsertionPoint(constOp);
-          rewriter.replaceOpWithNewOp<arith::ConstantOp>(
-              constOp, rewriter.getI32IntegerAttr(value.getSExtValue()));
-        }
-      }
-    });
-    return success();
-  }
-};
-
-static void
-appendPortsForExternalMemref(PatternRewriter &rewriter, StringRef memName,
-                             Value memref, unsigned memoryID,
-                             SmallVectorImpl<calyx::PortInfo> &inPorts,
-                             SmallVectorImpl<calyx::PortInfo> &outPorts) {
-  MemRefType memrefType = memref.getType().cast<MemRefType>();
-
-  /// Ports constituting a memory interface are added a set of attributes under
-  /// a "mem : {...}" dictionary. These attributes allows for deducing which
-  /// top-level I/O signals constitutes a unique memory interface.
-  auto getMemoryInterfaceAttr = [&](StringRef tag,
-                                    Optional<unsigned> addrIdx = {}) {
-    auto attrs = SmallVector<NamedAttribute>{
-        /// "id" denotes a unique memory interface.
-        rewriter.getNamedAttr("id", rewriter.getI32IntegerAttr(memoryID)),
-        /// "tag" denotes the function of this signal.
-        rewriter.getNamedAttr("tag", rewriter.getStringAttr(tag))};
-    if (addrIdx.hasValue())
-      /// "addr_idx" denotes the address index of this signal, for
-      /// multi-dimensional memory interfaces.
-      attrs.push_back(rewriter.getNamedAttr(
-          "addr_idx", rewriter.getI32IntegerAttr(addrIdx.getValue())));
-
-    return rewriter.getNamedAttr("mem", rewriter.getDictionaryAttr(attrs));
-  };
-
-  /// Read data
-  inPorts.push_back(calyx::PortInfo{
-      rewriter.getStringAttr(memName + "_read_data"),
-      memrefType.getElementType(), calyx::Direction::Input,
-      DictionaryAttr::get(rewriter.getContext(),
-                          {getMemoryInterfaceAttr("read_data")})});
-
-  /// Done
-  inPorts.push_back(
-      calyx::PortInfo{rewriter.getStringAttr(memName + "_done"),
-                      rewriter.getI1Type(), calyx::Direction::Input,
-                      DictionaryAttr::get(rewriter.getContext(),
-                                          {getMemoryInterfaceAttr("done")})});
-
-  /// Write data
-  outPorts.push_back(calyx::PortInfo{
-      rewriter.getStringAttr(memName + "_write_data"),
-      memrefType.getElementType(), calyx::Direction::Output,
-      DictionaryAttr::get(rewriter.getContext(),
-                          {getMemoryInterfaceAttr("write_data")})});
-
-  /// Memory address outputs
-  for (auto dim : enumerate(memrefType.getShape())) {
-    outPorts.push_back(calyx::PortInfo{
-        rewriter.getStringAttr(memName + "_addr" + std::to_string(dim.index())),
-        rewriter.getIntegerType(calyx::handleZeroWidth(dim.value())),
-        calyx::Direction::Output,
-        DictionaryAttr::get(rewriter.getContext(),
-                            {getMemoryInterfaceAttr("addr", dim.index())})});
-  }
-
-  /// Write enable
-  outPorts.push_back(calyx::PortInfo{
-      rewriter.getStringAttr(memName + "_write_en"), rewriter.getI1Type(),
-      calyx::Direction::Output,
-      DictionaryAttr::get(rewriter.getContext(),
-                          {getMemoryInterfaceAttr("write_en")})});
-}
-
 /// Creates a new Calyx component for each FuncOp in the program.
-struct FuncOpConversion : public FuncOpPartialLoweringPattern {
+struct FuncOpConversion : public calyx::FuncOpPartialLoweringPattern {
   using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
 
   LogicalResult
@@ -978,7 +816,7 @@ struct FuncOpConversion : public FuncOpPartialLoweringPattern {
     /// map to the memory ports. The pair denotes the start index of the memory
     /// ports in the in- and output ports of the component. Ports are expected
     /// to be ordered in the same manner as they are added by
-    /// appendPortsForExternalMemref.
+    /// calyx::appendPortsForExternalMemref.
     DenseMap<Value, std::pair<unsigned, unsigned>> extMemoryCompPortIndices;
 
     /// Create I/O ports. Maintain separate in/out port vectors to determine
@@ -993,8 +831,8 @@ struct FuncOpConversion : public FuncOpPartialLoweringPattern {
             "ext_mem" + std::to_string(extMemoryCompPortIndices.size());
         extMemoryCompPortIndices[arg.value()] = {inPorts.size(),
                                                  outPorts.size()};
-        appendPortsForExternalMemref(rewriter, memName, arg.value(),
-                                     extMemCounter++, inPorts, outPorts);
+        calyx::appendPortsForExternalMemref(rewriter, memName, arg.value(),
+                                            extMemCounter++, inPorts, outPorts);
       } else {
         /// Single-port arguments
         auto inName = "in" + std::to_string(arg.index());
@@ -1028,7 +866,7 @@ struct FuncOpConversion : public FuncOpPartialLoweringPattern {
     compOp->setAttr("toplevel", rewriter.getUnitAttr());
 
     /// Store the function-to-component mapping.
-    funcMap[funcOp] = compOp;
+    functionMapping[funcOp] = compOp;
     auto *compState = programState().getState<ComponentLoweringState>(compOp);
     compState->setFuncOpResultMapping(funcOpResultMapping);
 
@@ -1071,7 +909,7 @@ struct FuncOpConversion : public FuncOpPartialLoweringPattern {
 /// the while op. These registers are then written to on the while op
 /// terminating yield operation alongside before executing the whileOp in the
 /// schedule, to set the initial values of the argument registers.
-class BuildWhileGroups : public FuncOpPartialLoweringPattern {
+class BuildWhileGroups : public calyx::FuncOpPartialLoweringPattern {
   using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
 
   LogicalResult
@@ -1137,7 +975,7 @@ class BuildWhileGroups : public FuncOpPartialLoweringPattern {
 };
 
 /// Builds registers for each block argument in the program.
-class BuildBBRegs : public FuncOpPartialLoweringPattern {
+class BuildBBRegs : public calyx::FuncOpPartialLoweringPattern {
   using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
 
   LogicalResult
@@ -1166,7 +1004,7 @@ class BuildBBRegs : public FuncOpPartialLoweringPattern {
 };
 
 /// Builds registers for each pipeline stage in the program.
-class BuildPipelineRegs : public FuncOpPartialLoweringPattern {
+class BuildPipelineRegs : public calyx::FuncOpPartialLoweringPattern {
   using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
 
   LogicalResult
@@ -1227,7 +1065,7 @@ class BuildPipelineRegs : public FuncOpPartialLoweringPattern {
 };
 
 /// Builds groups for assigning registers for pipeline stages.
-class BuildPipelineGroups : public FuncOpPartialLoweringPattern {
+class BuildPipelineGroups : public calyx::FuncOpPartialLoweringPattern {
   using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
 
   LogicalResult
@@ -1391,7 +1229,7 @@ class BuildPipelineGroups : public FuncOpPartialLoweringPattern {
 
 /// Builds registers for the return statement of the program and constant
 /// assignments to the component return value.
-class BuildReturnRegs : public FuncOpPartialLoweringPattern {
+class BuildReturnRegs : public calyx::FuncOpPartialLoweringPattern {
   using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
 
   LogicalResult
@@ -1425,7 +1263,7 @@ class BuildReturnRegs : public FuncOpPartialLoweringPattern {
 /// For simplicity, the generated control flow is expanded for all possible
 /// paths in the input DAG. This elaborated control flow is later reduced in
 /// the runControlFlowSimplification passes.
-class BuildControl : public FuncOpPartialLoweringPattern {
+class BuildControl : public calyx::FuncOpPartialLoweringPattern {
   using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
 
   LogicalResult
@@ -1701,7 +1539,7 @@ private:
 
 /// LateSSAReplacement contains various functions for replacing SSA values that
 /// were not replaced during op construction.
-class LateSSAReplacement : public FuncOpPartialLoweringPattern {
+class LateSSAReplacement : public calyx::FuncOpPartialLoweringPattern {
   using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
 
   LogicalResult PartiallyLowerFuncToComp(FuncOp funcOp,
@@ -1724,7 +1562,7 @@ class LateSSAReplacement : public FuncOpPartialLoweringPattern {
 };
 
 /// Erases FuncOp operations.
-class CleanupFuncOps : public FuncOpPartialLoweringPattern {
+class CleanupFuncOps : public calyx::FuncOpPartialLoweringPattern {
   using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
 
   LogicalResult
@@ -1981,7 +1819,8 @@ void StaticLogicToCalyxPass::runOnOperation() {
   addOncePattern<FuncOpConversion>(loweringPatterns, funcMap, *loweringState);
 
   /// This pattern converts all index typed values to an i32 integer.
-  addOncePattern<ConvertIndexTypes>(loweringPatterns, funcMap, *loweringState);
+  addOncePattern<calyx::ConvertIndexTypes>(loweringPatterns, funcMap,
+                                           *loweringState);
 
   /// This pattern creates registers for all basic-block arguments.
   addOncePattern<BuildBBRegs>(loweringPatterns, funcMap, *loweringState);
