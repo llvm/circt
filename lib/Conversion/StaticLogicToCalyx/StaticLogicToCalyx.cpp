@@ -1579,6 +1579,10 @@ private:
 };
 
 void StaticLogicToCalyxPass::runOnOperation() {
+  // Clear internal state. See https://github.com/llvm/circt/issues/3235
+  loweringState.reset();
+  partialPatternRes = LogicalResult::failure();
+
   std::string topLevelFunction;
   if (failed(setTopLevelFunction(getOperation(), topLevelFunction))) {
     signalPassFailure();
@@ -1701,14 +1705,6 @@ void StaticLogicToCalyxPass::runOnOperation() {
     getOperation()->setAttr("calyx.metadata",
                             ArrayAttr::get(context, sourceLocations));
   }
-
-  // Clear internal state. See https://github.com/llvm/circt/issues/3235
-  funcMap.shrink_and_clear();
-  loweringPatterns.clear();
-  topLevelFunction.clear();
-  cleanupPatterns.clear();
-  loweringState.reset();
-  partialPatternRes = LogicalResult::failure();
 }
 
 } // namespace staticlogictocalyx
