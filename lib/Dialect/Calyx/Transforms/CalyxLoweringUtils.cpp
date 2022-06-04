@@ -616,11 +616,13 @@ RewriteMemoryAccesses::partiallyLower(calyx::AssignOp assignOp,
       rewriter.getIntegerType(dstBits),
   };
   mlir::Location loc = assignOp.getLoc();
-  Operation *newOp = srcBits > dstBits
-                         ? state->getNewLibraryOpInstance<calyx::SliceLibOp>(
-                               rewriter, loc, types)
-                         : state->getNewLibraryOpInstance<calyx::PadLibOp>(
-                               rewriter, loc, types);
+  Operation *newOp;
+  if (srcBits > dstBits)
+    newOp =
+        state->getNewLibraryOpInstance<calyx::SliceLibOp>(rewriter, loc, types);
+  else
+    newOp =
+        state->getNewLibraryOpInstance<calyx::PadLibOp>(rewriter, loc, types);
 
   rewriter.setInsertionPoint(assignOp->getBlock(),
                              assignOp->getBlock()->begin());
