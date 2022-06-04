@@ -14,13 +14,82 @@
 #include "circt/Dialect/Calyx/CalyxHelpers.h"
 #include "circt/Dialect/Calyx/CalyxOps.h"
 #include "circt/Support/LLVM.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/IR/Matchers.h"
 
 #include <variant>
 
+using namespace llvm;
+using namespace mlir;
+using namespace mlir::arith;
+
 namespace circt {
 namespace calyx {
+
+void appendPortsForExternalMemref(PatternRewriter &rewriter, StringRef memName,
+                                  Value memref, unsigned memoryID,
+                                  SmallVectorImpl<calyx::PortInfo> &inPorts,
+                                  SmallVectorImpl<calyx::PortInfo> &outPorts) {
+  MemRefType memrefType = memref.getType().cast<MemRefType>();
+
+  // Ports constituting a memory interface are added a set of attributes under
+  // a "mem : {...}" dictionary. These attributes allows for deducing which
+  // top-level I/O signals constitutes a unique memory interface.
+  auto getMemoryInterfaceAttr = [&](StringRef tag,
+                                    Optional<unsigned> addrIdx = {}) {
+    auto attrs = SmallVector<NamedAttribute>{
+        // "id" denotes a unique memory interface.
+        rewriter.getNamedAttr("id", rewriter.getI32IntegerAttr(memoryID)),
+        // "tag" denotes the function of this signal.
+        rewriter.getNamedAttr("tag", rewriter.getStringAttr(tag))};
+    if (addrIdx.hasValue())
+      // "addr_idx" denotes the address index of this signal, for
+      // multi-dimensional memory interfaces.
+      attrs.push_back(rewriter.getNamedAttr(
+          "addr_idx", rewriter.getI32IntegerAttr(addrIdx.getValue())));
+
+    return rewriter.getNamedAttr("mem", rewriter.getDictionaryAttr(attrs));
+  };
+
+  // Read data
+  inPorts.push_back(calyx::PortInfo{
+      rewriter.getStringAttr(memName + "_read_data"),
+      memrefType.getElementType(), calyx::Direction::Input,
+      DictionaryAttr::get(rewriter.getContext(),
+                          {getMemoryInterfaceAttr("read_data")})});
+
+  // Done
+  inPorts.push_back(
+      calyx::PortInfo{rewriter.getStringAttr(memName + "_done"),
+                      rewriter.getI1Type(), calyx::Direction::Input,
+                      DictionaryAttr::get(rewriter.getContext(),
+                                          {getMemoryInterfaceAttr("done")})});
+
+  // Write data
+  outPorts.push_back(calyx::PortInfo{
+      rewriter.getStringAttr(memName + "_write_data"),
+      memrefType.getElementType(), calyx::Direction::Output,
+      DictionaryAttr::get(rewriter.getContext(),
+                          {getMemoryInterfaceAttr("write_data")})});
+
+  // Memory address outputs
+  for (auto dim : enumerate(memrefType.getShape())) {
+    outPorts.push_back(calyx::PortInfo{
+        rewriter.getStringAttr(memName + "_addr" + std::to_string(dim.index())),
+        rewriter.getIntegerType(calyx::handleZeroWidth(dim.value())),
+        calyx::Direction::Output,
+        DictionaryAttr::get(rewriter.getContext(),
+                            {getMemoryInterfaceAttr("addr", dim.index())})});
+  }
+
+  // Write enable
+  outPorts.push_back(calyx::PortInfo{
+      rewriter.getStringAttr(memName + "_write_en"), rewriter.getI1Type(),
+      calyx::Direction::Output,
+      DictionaryAttr::get(rewriter.getContext(),
+                          {getMemoryInterfaceAttr("write_en")})});
+}
 
 WalkResult
 getCiderSourceLocationMetadata(calyx::ComponentOp component,
@@ -250,6 +319,30 @@ unsigned ComponentLoweringStateInterface::getFuncOpResultMapping(
 }
 
 //===----------------------------------------------------------------------===//
+// ProgramLoweringState
+//===----------------------------------------------------------------------===//
+
+ProgramLoweringState::ProgramLoweringState(calyx::ProgramOp program,
+                                           StringRef topLevelFunction)
+    : topLevelFunction(topLevelFunction), program(program) {}
+
+calyx::ProgramOp ProgramLoweringState::getProgram() {
+  assert(program.getOperation() != nullptr);
+  return program;
+}
+
+StringRef ProgramLoweringState::getTopLevelFunction() const {
+  return topLevelFunction;
+}
+
+std::string ProgramLoweringState::blockName(Block *b) {
+  std::string blockName = irName(*b);
+  blockName.erase(std::remove(blockName.begin(), blockName.end(), '^'),
+                  blockName.end());
+  return blockName;
+}
+
+//===----------------------------------------------------------------------===//
 // ModuleOpConversion
 //===----------------------------------------------------------------------===//
 
@@ -285,6 +378,75 @@ ModuleOpConversion::matchAndRewrite(mlir::ModuleOp moduleOp,
     rewriter.setInsertionPointToStart(moduleBlock);
     rewriter.insert(programOp);
     *programOpOutput = programOp;
+  });
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// Partial lowering patterns
+//===----------------------------------------------------------------------===//
+
+FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern(
+    MLIRContext *context, LogicalResult &resRef,
+    DenseMap<mlir::func::FuncOp, calyx::ComponentOp> &map,
+    calyx::ProgramLoweringState &state)
+    : PartialLoweringPattern(context, resRef), functionMapping(map),
+      programLoweringState(state) {}
+
+LogicalResult
+FuncOpPartialLoweringPattern::partiallyLower(mlir::func::FuncOp funcOp,
+                                             PatternRewriter &rewriter) const {
+  // Initialize the component op references if a calyx::ComponentOp has been
+  // created for the matched funcOp.
+  if (auto it = functionMapping.find(funcOp); it != functionMapping.end()) {
+    calyx::ComponentOp op = it->second;
+    componentOp = &op;
+    componentLoweringState =
+        programLoweringState.getState<ComponentLoweringStateInterface>(op);
+  }
+
+  return partiallyLowerFuncToComp(funcOp, rewriter);
+}
+
+calyx::ComponentOp *FuncOpPartialLoweringPattern::getComponent() const {
+  assert(componentOp != nullptr &&
+         "Component operation should be set during pattern construction");
+  return componentOp;
+}
+
+ProgramLoweringState &FuncOpPartialLoweringPattern::programState() const {
+  return programLoweringState;
+}
+
+//===----------------------------------------------------------------------===//
+// ConvertIndexTypes
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+ConvertIndexTypes::partiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
+                                            PatternRewriter &rewriter) const {
+  funcOp.walk([&](Block *block) {
+    for (Value arg : block->getArguments())
+      arg.setType(calyx::convIndexType(rewriter, arg.getType()));
+  });
+
+  funcOp.walk([&](Operation *op) {
+    for (Value result : op->getResults()) {
+      Type resType = result.getType();
+      if (!resType.isIndex())
+        continue;
+
+      result.setType(calyx::convIndexType(rewriter, resType));
+      auto constant = dyn_cast<mlir::arith::ConstantOp>(op);
+      if (!constant)
+        continue;
+
+      APInt value;
+      calyx::matchConstantOp(constant, value);
+      rewriter.setInsertionPoint(constant);
+      rewriter.replaceOpWithNewOp<mlir::arith::ConstantOp>(
+          constant, rewriter.getI32IntegerAttr(value.getSExtValue()));
+    }
   });
   return success();
 }

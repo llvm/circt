@@ -16,14 +16,26 @@
 
 #include "circt/Dialect/Calyx/CalyxHelpers.h"
 #include "circt/Dialect/Calyx/CalyxOps.h"
+#include "circt/Dialect/StaticLogic/StaticLogic.h"
 #include "circt/Support/LLVM.h"
+#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/PatternMatch.h"
+#include "llvm/ADT/TypeSwitch.h"
 
 #include <variant>
 
 namespace circt {
 namespace calyx {
+
+void appendPortsForExternalMemref(PatternRewriter &rewriter, StringRef memName,
+                                  Value memref, unsigned memoryID,
+                                  SmallVectorImpl<calyx::PortInfo> &inPorts,
+                                  SmallVectorImpl<calyx::PortInfo> &outPorts);
 
 // Walks the control of this component, and appends source information for leaf
 // nodes. It also appends a position attribute that connects the source location
@@ -293,7 +305,7 @@ public:
   TGroupOp getEvaluatingGroup(Value v) {
     auto it = valueGroupAssigns.find(v);
     assert(it != valueGroupAssigns.end() && "No group evaluating value!");
-    if constexpr (std::is_same<TGroupOp, calyx::GroupInterface>::value)
+    if constexpr (std::is_same_v<TGroupOp, calyx::GroupInterface>)
       return it->second;
     else {
       auto group = dyn_cast<TGroupOp>(it->second.getOperation());
@@ -349,31 +361,37 @@ private:
 
 /// An interface for conversion passes that lower Calyx programs. This handles
 /// state during the lowering of a Calyx program.
-template <typename TComponentLoweringState>
 class ProgramLoweringState {
 public:
   explicit ProgramLoweringState(calyx::ProgramOp program,
-                                StringRef topLevelFunction)
-      : topLevelFunction(topLevelFunction), program(program) {}
+                                StringRef topLevelFunction);
 
   /// Returns the current program.
-  calyx::ProgramOp getProgram() {
-    assert(program.getOperation() != nullptr);
-    return program;
-  }
+  calyx::ProgramOp getProgram();
 
   /// Returns the name of the top-level function in the source program.
-  StringRef getTopLevelFunction() const { return topLevelFunction; }
+  StringRef getTopLevelFunction() const;
 
-  /// Returns the component lowering state associated with compOp.
-  TComponentLoweringState &compLoweringState(calyx::ComponentOp compOp) {
-    auto it = compStates.find(compOp);
-    if (it != compStates.end())
-      return it->second;
+  /// Returns a meaningful name for a block within the program scope (removes
+  /// the ^ prefix from block names).
+  std::string blockName(Block *b);
 
-    /// Create a new ComponentLoweringState for the compOp.
-    auto newCompStateIt = compStates.try_emplace(compOp, compOp);
-    return newCompStateIt.first->second;
+  /// Returns the component lowering state associated with `op`. If not found
+  /// already found, a new mapping is added for this ComponentOp. Different
+  /// conversions may have different derived classes of the interface, so we
+  /// provided a template.
+  template <typename T = calyx::ComponentLoweringStateInterface>
+  T *getState(calyx::ComponentOp op) {
+    static_assert(std::is_convertible_v<T, ComponentLoweringStateInterface>);
+    auto it = componentStates.find(op);
+    if (it == componentStates.end()) {
+      // Create a new ComponentLoweringState for the compOp.
+      bool success;
+      std::tie(it, success) =
+          componentStates.try_emplace(op, std::make_unique<T>(op));
+    }
+
+    return static_cast<T *>(it->second.get());
   }
 
   /// Returns a meaningful name for a value within the program scope.
@@ -386,22 +404,14 @@ public:
     return s;
   }
 
-  /// Returns a meaningful name for a block within the program scope (removes
-  /// the ^ prefix from block names).
-  std::string blockName(Block *b) {
-    std::string blockName = irName(*b);
-    blockName.erase(std::remove(blockName.begin(), blockName.end(), '^'),
-                    blockName.end());
-    return blockName;
-  }
-
 private:
   /// The name of this top-level function.
   StringRef topLevelFunction;
   /// The program associated with this state.
   calyx::ProgramOp program;
   /// Mapping from ComponentOp to component lowering state.
-  DenseMap<Operation *, TComponentLoweringState> compStates;
+  DenseMap<Operation *, std::unique_ptr<ComponentLoweringStateInterface>>
+      componentStates;
 };
 
 /// Base class for partial lowering passes. A partial lowering pass
@@ -441,6 +451,65 @@ struct ModuleOpConversion : public OpRewritePattern<mlir::ModuleOp> {
 private:
   calyx::ProgramOp *programOpOutput;
   StringRef topLevelFunction;
+};
+
+/// FuncOpPartialLoweringPatterns are patterns which intend to match on FuncOps
+/// and then perform their own walking of the IR.
+class FuncOpPartialLoweringPattern
+    : public calyx::PartialLoweringPattern<mlir::func::FuncOp> {
+
+public:
+  FuncOpPartialLoweringPattern(
+      MLIRContext *context, LogicalResult &resRef,
+      DenseMap<mlir::func::FuncOp, calyx::ComponentOp> &map,
+      calyx::ProgramLoweringState &state);
+
+  /// Entry point to initialize the state of this class and conduct the partial
+  /// lowering.
+  LogicalResult partiallyLower(mlir::func::FuncOp funcOp,
+                               PatternRewriter &rewriter) const override final;
+
+  /// Returns the component operation associated with the currently executing
+  /// partial lowering.
+  calyx::ComponentOp *getComponent() const;
+
+  // Returns the component state associated with the currently executing
+  // partial lowering.
+  template <typename T = ComponentLoweringStateInterface>
+  T &getState() const {
+    static_assert(
+        std::is_convertible_v<T, calyx::ComponentLoweringStateInterface>);
+    assert(
+        componentLoweringState != nullptr &&
+        "Component lowering state should be set during pattern construction");
+    return *static_cast<T *>(componentLoweringState);
+  }
+
+  /// Return the program lowering state for this pattern.
+  ProgramLoweringState &programState() const;
+
+  /// Partial lowering implementation.
+  virtual LogicalResult
+  partiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
+                           PatternRewriter &rewriter) const = 0;
+
+protected:
+  // A map from FuncOp to it's respective ComponentOp lowering.
+  DenseMap<mlir::func::FuncOp, calyx::ComponentOp> &functionMapping;
+
+private:
+  mutable ComponentOp *componentOp = nullptr;
+  mutable ComponentLoweringStateInterface *componentLoweringState = nullptr;
+  ProgramLoweringState &programLoweringState;
+};
+
+/// Converts all index-typed operations and values to i32 values.
+class ConvertIndexTypes : public calyx::FuncOpPartialLoweringPattern {
+  using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
+
+  LogicalResult
+  partiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
+                           PatternRewriter &rewriter) const override;
 };
 
 } // namespace calyx
