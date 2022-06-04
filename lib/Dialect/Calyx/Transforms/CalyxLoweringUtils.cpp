@@ -16,6 +16,7 @@
 #include "circt/Support/LLVM.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/IR/Matchers.h"
 
 #include <variant>

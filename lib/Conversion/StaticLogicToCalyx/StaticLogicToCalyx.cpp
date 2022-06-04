@@ -1754,7 +1754,7 @@ void StaticLogicToCalyxPass::runOnOperation() {
   loweringPatterns.clear();
   topLevelFunction.clear();
   cleanupPatterns.clear();
-  loweringState = nullptr;
+  loweringState.reset();
   partialPatternRes = LogicalResult::failure();
 }
 
