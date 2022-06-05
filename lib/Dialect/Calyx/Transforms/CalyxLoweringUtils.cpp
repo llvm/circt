@@ -633,5 +633,60 @@ RewriteMemoryAccesses::partiallyLower(calyx::AssignOp assignOp,
   return success();
 }
 
+//===----------------------------------------------------------------------===//
+// BuildBasicBlockRegs
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+BuildBasicBlockRegs::partiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
+                                              PatternRewriter &rewriter) const {
+  funcOp.walk([&](Block *block) {
+    /// Do not register component input values.
+    if (block == &block->getParent()->front())
+      return;
+
+    for (auto arg : enumerate(block->getArguments())) {
+      Type argType = arg.value().getType();
+      assert(argType.isa<IntegerType>() && "unsupported block argument type");
+      unsigned width = argType.getIntOrFloatBitWidth();
+      std::string index = std::to_string(arg.index());
+      std::string name = programState().blockName(block) + "_arg" + index;
+      auto reg = createRegister(arg.value().getLoc(), rewriter, *getComponent(),
+                                width, name);
+      getState().addBlockArgReg(block, reg, arg.index());
+      arg.value().replaceAllUsesWith(reg.out());
+    }
+  });
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// BuildReturnRegs
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+BuildReturnRegs::partiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
+                                          PatternRewriter &rewriter) const {
+
+  for (auto argType : enumerate(funcOp.getResultTypes())) {
+    auto convArgType = calyx::convIndexType(rewriter, argType.value());
+    assert(convArgType.isa<IntegerType>() && "unsupported return type");
+    unsigned width = convArgType.getIntOrFloatBitWidth();
+    std::string name = "ret_arg" + std::to_string(argType.index());
+    auto reg =
+        createRegister(funcOp.getLoc(), rewriter, *getComponent(), width, name);
+    getState().addReturnReg(reg, argType.index());
+
+    rewriter.setInsertionPointToStart(getComponent()->getWiresOp().getBody());
+    rewriter.create<calyx::AssignOp>(
+        funcOp->getLoc(),
+        calyx::getComponentOutput(
+            *getComponent(),
+            getState().getFuncOpResultMapping(argType.index())),
+        reg.out());
+  }
+  return success();
+}
+
 } // namespace calyx
 } // namespace circt
