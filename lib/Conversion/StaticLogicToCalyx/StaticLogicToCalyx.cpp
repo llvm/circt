@@ -44,10 +44,6 @@ namespace staticlogictocalyx {
 // Utility types
 //===----------------------------------------------------------------------===//
 
-/// A mapping is maintained between a function operation and its corresponding
-/// Calyx component.
-using FuncMapping = DenseMap<FuncOp, calyx::ComponentOp>;
-
 class StaticLogicWhileOp
     : public calyx::WhileOpInterface<staticlogic::PipelineWhileOp> {
 public:
@@ -69,7 +65,11 @@ public:
   Optional<uint64_t> getBound() override { return getOperation().tripCount(); }
 };
 
-struct LoopScheduleable {
+//===----------------------------------------------------------------------===//
+// Lowering state classes
+//===----------------------------------------------------------------------===//
+
+struct PipelineScheduleable {
   /// While operation to schedule.
   StaticLogicWhileOp whileOp;
   /// The group(s) to schedule before the while operation These groups should
@@ -77,25 +77,12 @@ struct LoopScheduleable {
   SmallVector<calyx::GroupOp> initGroups;
 };
 
-struct PipelineScheduleable : LoopScheduleable {};
-
 /// A variant of types representing scheduleable operations.
 using Scheduleable = std::variant<calyx::GroupOp, PipelineScheduleable>;
 
-//===----------------------------------------------------------------------===//
-// Lowering state classes
-//===----------------------------------------------------------------------===//
-
-/// Handles the current state of lowering of a Calyx component. It is mainly
-/// used as a key/value store for recording information during partial lowering,
-/// which is required at later lowering passes.
-class ComponentLoweringState
-    : public calyx::ComponentLoweringStateInterface,
-      public calyx::LoopLoweringStateInterface<StaticLogicWhileOp> {
+/// Holds additional information required for scheduling StaticLogic pipelines.
+class PipelineScheduler : public calyx::SchedulerInterface<Scheduleable> {
 public:
-  ComponentLoweringState(calyx::ComponentOp component)
-      : calyx::ComponentLoweringStateInterface(component) {}
-
   /// Registers operations that may be used in a pipeline, but does not produce
   /// a value to be used in a further stage.
   void registerNonPipelineOperations(Operation *op,
@@ -119,33 +106,6 @@ public:
       return group;
     }
   }
-
-  /// Register 'scheduleable' as being generated through lowering 'block'.
-  ///
-  /// TODO(mortbopet): Add a post-insertion check to ensure that the use-def
-  /// ordering invariant holds for the groups. When the control schedule is
-  /// generated, scheduleables within a block are emitted sequentially based on
-  /// the order that this function was called during conversion.
-  ///
-  /// Currently, we assume this to always be true. Walking the FuncOp IR implies
-  /// sequential iteration over operations within basic blocks.
-  void addBlockScheduleable(mlir::Block *block,
-                            const Scheduleable &scheduleable) {
-    blockScheduleables[block].push_back(scheduleable);
-  }
-
-  /// Returns an ordered list of schedulables which registered themselves to be
-  /// a result of lowering the block in the source program. The list order
-  /// follows def-use chains between the scheduleables in the block.
-  SmallVector<Scheduleable> getBlockScheduleables(mlir::Block *block) {
-    auto it = blockScheduleables.find(block);
-    if (it != blockScheduleables.end())
-      return it->second;
-    /// In cases of a block resulting in purely combinational logic, no
-    /// scheduleables registered themselves with the block.
-    return {};
-  }
-
   /// Register reg as being the idx'th pipeline register for the stage.
   void addPipelineReg(Operation *stage, calyx::RegisterOp reg, unsigned idx) {
     assert(pipelineRegs[stage].count(idx) == 0);
@@ -206,10 +166,6 @@ private:
   /// actually pipeline any values.
   DenseMap<Operation *, calyx::GroupInterface> operationToGroup;
 
-  /// BlockScheduleables is a list of scheduleables that should be
-  /// sequentially executed when executing the associated basic block.
-  DenseMap<mlir::Block *, SmallVector<Scheduleable>> blockScheduleables;
-
   /// A mapping from pipeline stages to their registers.
   DenseMap<Operation *, DenseMap<unsigned, calyx::RegisterOp>> pipelineRegs;
 
@@ -222,6 +178,18 @@ private:
   /// constitute the pipeline epilogue. Each inner vector consists of the groups
   /// for one stage.
   DenseMap<Operation *, SmallVector<SmallVector<StringAttr>>> pipelineEpilogue;
+};
+
+/// Handles the current state of lowering of a Calyx component. It is mainly
+/// used as a key/value store for recording information during partial lowering,
+/// which is required at later lowering passes.
+class ComponentLoweringState
+    : public calyx::ComponentLoweringStateInterface,
+      public calyx::LoopLoweringStateInterface<StaticLogicWhileOp>,
+      public PipelineScheduler {
+public:
+  ComponentLoweringState(calyx::ComponentOp component)
+      : calyx::ComponentLoweringStateInterface(component) {}
 };
 
 //===----------------------------------------------------------------------===//
@@ -587,7 +555,7 @@ BuildOpGroups::buildOp(PatternRewriter &rewriter,
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      BranchOpInterface brOp) const {
   /// Branch argument passing group creation
-  /// Branch operands are passed through registers. In BuildBBRegs we
+  /// Branch operands are passed through registers. In BuildBasicBlockRegs we
   /// created registers for all branch arguments of each block. We now
   /// create groups for assigning values to these registers.
   Block *srcBlock = brOp->getBlock();
@@ -918,40 +886,13 @@ class BuildWhileGroups : public calyx::FuncOpPartialLoweringPattern {
       /// Add the while op to the list of scheduleable things in the current
       /// block.
       getState<ComponentLoweringState>().addBlockScheduleable(
-          whileOp.getOperation()->getBlock(),
-          PipelineScheduleable{{whileOp, initGroups}});
+          whileOp.getOperation()->getBlock(), PipelineScheduleable{
+                                                  whileOp,
+                                                  initGroups,
+                                              });
       return WalkResult::advance();
     });
     return res;
-  }
-};
-
-/// Builds registers for each block argument in the program.
-class BuildBBRegs : public calyx::FuncOpPartialLoweringPattern {
-  using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
-
-  LogicalResult
-  partiallyLowerFuncToComp(FuncOp funcOp,
-                           PatternRewriter &rewriter) const override {
-    funcOp.walk([&](Block *block) {
-      /// Do not register component input values.
-      if (block == &block->getParent()->front())
-        return;
-
-      for (auto arg : enumerate(block->getArguments())) {
-        Type argType = arg.value().getType();
-        assert(argType.isa<IntegerType>() && "unsupported block argument type");
-        unsigned width = argType.getIntOrFloatBitWidth();
-        std::string name = programState().blockName(block) + "_arg" +
-                           std::to_string(arg.index());
-        auto reg = createRegister(arg.value().getLoc(), rewriter,
-                                  *getComponent(), width, name);
-        getState<ComponentLoweringState>().addBlockArgReg(block, reg,
-                                                          arg.index());
-        arg.value().replaceAllUsesWith(reg.out());
-      }
-    });
-    return success();
   }
 };
 
@@ -1006,10 +947,10 @@ class BuildPipelineRegs : public calyx::FuncOpPartialLoweringPattern {
                                   width, name);
         getState<ComponentLoweringState>().addPipelineReg(stage, reg, i);
 
-        // Note that we do not use replace all uses with here as in BuildBBRegs.
-        // Instead, we wait until after BuildOpGroups, and replace all uses
-        // inside BuildPipelineGroups, once the pipeline register created here
-        // has been assigned to.
+        // Note that we do not use replace all uses with here as in
+        // BuildBasicBlockRegs. Instead, we wait until after BuildOpGroups, and
+        // replace all uses inside BuildPipelineGroups, once the pipeline
+        // register created here has been assigned to.
       }
     });
     return success();
@@ -1176,37 +1117,6 @@ class BuildPipelineGroups : public calyx::FuncOpPartialLoweringPattern {
     rewriter.eraseOp(tempReg);
 
     return group;
-  }
-};
-
-/// Builds registers for the return statement of the program and constant
-/// assignments to the component return value.
-class BuildReturnRegs : public calyx::FuncOpPartialLoweringPattern {
-  using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
-
-  LogicalResult
-  partiallyLowerFuncToComp(FuncOp funcOp,
-                           PatternRewriter &rewriter) const override {
-
-    for (auto argType : enumerate(funcOp.getResultTypes())) {
-      auto convArgType = calyx::convIndexType(rewriter, argType.value());
-      assert(convArgType.isa<IntegerType>() && "unsupported return type");
-      unsigned width = convArgType.getIntOrFloatBitWidth();
-      std::string name = "ret_arg" + std::to_string(argType.index());
-      auto reg = createRegister(funcOp.getLoc(), rewriter, *getComponent(),
-                                width, name);
-      getState<ComponentLoweringState>().addReturnReg(reg, argType.index());
-
-      rewriter.setInsertionPointToStart(getComponent()->getWiresOp().getBody());
-      rewriter.create<calyx::AssignOp>(
-          funcOp->getLoc(),
-          calyx::getComponentOutput(
-              *getComponent(),
-              getState<ComponentLoweringState>().getFuncOpResultMapping(
-                  argType.index())),
-          reg.out());
-    }
-    return success();
   }
 };
 
@@ -1606,7 +1516,10 @@ void StaticLogicToCalyxPass::runOnOperation() {
   /// 'getOperation()->dump()' call after the execution of each stage to
   /// view the transformations that's going on.
   /// --------------------------------------------------------------------------
-  FuncMapping funcMap;
+
+  /// A mapping is maintained between a function operation and its corresponding
+  /// Calyx component.
+  DenseMap<FuncOp, calyx::ComponentOp> funcMap;
   SmallVector<LoweringPattern, 8> loweringPatterns;
 
   /// Creates a new Calyx component for each FuncOp in the inpurt module.
@@ -1617,10 +1530,12 @@ void StaticLogicToCalyxPass::runOnOperation() {
                                            *loweringState);
 
   /// This pattern creates registers for all basic-block arguments.
-  addOncePattern<BuildBBRegs>(loweringPatterns, funcMap, *loweringState);
+  addOncePattern<calyx::BuildBasicBlockRegs>(loweringPatterns, funcMap,
+                                             *loweringState);
 
   /// This pattern creates registers for the function return values.
-  addOncePattern<BuildReturnRegs>(loweringPatterns, funcMap, *loweringState);
+  addOncePattern<calyx::BuildReturnRegs>(loweringPatterns, funcMap,
+                                         *loweringState);
 
   /// This pattern creates registers for iteration arguments of scf.while
   /// operations. Additionally, creates a group for assigning the initial

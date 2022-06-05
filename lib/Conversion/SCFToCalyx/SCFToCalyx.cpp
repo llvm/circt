@@ -44,10 +44,6 @@ namespace scftocalyx {
 // Utility types
 //===----------------------------------------------------------------------===//
 
-/// A mapping is maintained between a function operation and its corresponding
-/// Calyx component.
-using FuncMapping = DenseMap<FuncOp, calyx::ComponentOp>;
-
 class ScfWhileOp : public calyx::WhileOpInterface<scf::WhileOp> {
 public:
   explicit ScfWhileOp(scf::WhileOp op)
@@ -70,7 +66,11 @@ public:
   Optional<uint64_t> getBound() override { return None; }
 };
 
-struct LoopScheduleable {
+//===----------------------------------------------------------------------===//
+// Lowering state classes
+//===----------------------------------------------------------------------===//
+
+struct WhileScheduleable {
   /// While operation to schedule.
   ScfWhileOp whileOp;
   /// The group(s) to schedule before the while operation These groups should
@@ -78,55 +78,19 @@ struct LoopScheduleable {
   SmallVector<calyx::GroupOp> initGroups;
 };
 
-struct WhileScheduleable : LoopScheduleable {};
-
 /// A variant of types representing scheduleable operations.
 using Scheduleable = std::variant<calyx::GroupOp, WhileScheduleable>;
-
-//===----------------------------------------------------------------------===//
-// Lowering state classes
-//===----------------------------------------------------------------------===//
 
 /// Handles the current state of lowering of a Calyx component. It is mainly
 /// used as a key/value store for recording information during partial lowering,
 /// which is required at later lowering passes.
 class ComponentLoweringState
     : public calyx::ComponentLoweringStateInterface,
-      public calyx::LoopLoweringStateInterface<ScfWhileOp> {
+      public calyx::LoopLoweringStateInterface<ScfWhileOp>,
+      public calyx::SchedulerInterface<Scheduleable> {
 public:
   ComponentLoweringState(calyx::ComponentOp component)
       : calyx::ComponentLoweringStateInterface(component) {}
-
-  /// Register 'scheduleable' as being generated through lowering 'block'.
-  ///
-  /// TODO(mortbopet): Add a post-insertion check to ensure that the use-def
-  /// ordering invariant holds for the groups. When the control schedule is
-  /// generated, scheduleables within a block are emitted sequentially based on
-  /// the order that this function was called during conversion.
-  ///
-  /// Currently, we assume this to always be true. Walking the FuncOp IR implies
-  /// sequential iteration over operations within basic blocks.
-  void addBlockScheduleable(mlir::Block *block,
-                            const Scheduleable &scheduleable) {
-    blockScheduleables[block].push_back(scheduleable);
-  }
-
-  /// Returns an ordered list of schedulables which registered themselves to be
-  /// a result of lowering the block in the source program. The list order
-  /// follows def-use chains between the scheduleables in the block.
-  SmallVector<Scheduleable> getBlockScheduleables(mlir::Block *block) {
-    if (auto it = blockScheduleables.find(block);
-        it != blockScheduleables.end())
-      return it->second;
-    /// In cases of a block resulting in purely combinational logic, no
-    /// scheduleables registered themselves with the block.
-    return {};
-  }
-
-private:
-  /// BlockScheduleables is a list of scheduleables that should be
-  /// sequentially executed when executing the associated basic block.
-  DenseMap<mlir::Block *, SmallVector<Scheduleable>> blockScheduleables;
 };
 
 //===----------------------------------------------------------------------===//
@@ -519,7 +483,7 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      BranchOpInterface brOp) const {
   /// Branch argument passing group creation
-  /// Branch operands are passed through registers. In BuildBBRegs we
+  /// Branch operands are passed through registers. In BuildBasicBlockRegs we
   /// created registers for all branch arguments of each block. We now
   /// create groups for assigning values to these registers.
   Block *srcBlock = brOp->getBlock();
@@ -927,71 +891,13 @@ class BuildWhileGroups : public calyx::FuncOpPartialLoweringPattern {
       }
 
       getState<ComponentLoweringState>().addBlockScheduleable(
-          whileOp.getOperation()->getBlock(),
-          WhileScheduleable{{whileOp, initGroups}});
+          whileOp.getOperation()->getBlock(), WhileScheduleable{
+                                                  whileOp,
+                                                  initGroups,
+                                              });
       return WalkResult::advance();
     });
     return res;
-  }
-};
-
-/// Builds registers for each block argument in the program.
-class BuildBBRegs : public calyx::FuncOpPartialLoweringPattern {
-  using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
-
-  LogicalResult
-  partiallyLowerFuncToComp(FuncOp funcOp,
-                           PatternRewriter &rewriter) const override {
-    funcOp.walk([&](Block *block) {
-      /// Do not register component input values.
-      if (block == &block->getParent()->front())
-        return;
-
-      for (auto arg : enumerate(block->getArguments())) {
-        Type argType = arg.value().getType();
-        assert(argType.isa<IntegerType>() && "unsupported block argument type");
-        unsigned width = argType.getIntOrFloatBitWidth();
-        std::string name = programState().blockName(block) + "_arg" +
-                           std::to_string(arg.index());
-        auto reg = createRegister(arg.value().getLoc(), rewriter,
-                                  *getComponent(), width, name);
-        getState<ComponentLoweringState>().addBlockArgReg(block, reg,
-                                                          arg.index());
-        arg.value().replaceAllUsesWith(reg.out());
-      }
-    });
-    return success();
-  }
-};
-
-/// Builds registers for the return statement of the program and constant
-/// assignments to the component return value.
-class BuildReturnRegs : public calyx::FuncOpPartialLoweringPattern {
-  using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
-
-  LogicalResult
-  partiallyLowerFuncToComp(FuncOp funcOp,
-                           PatternRewriter &rewriter) const override {
-
-    for (auto argType : enumerate(funcOp.getResultTypes())) {
-      auto convArgType = calyx::convIndexType(rewriter, argType.value());
-      assert(convArgType.isa<IntegerType>() && "unsupported return type");
-      unsigned width = convArgType.getIntOrFloatBitWidth();
-      std::string name = "ret_arg" + std::to_string(argType.index());
-      auto reg = createRegister(funcOp.getLoc(), rewriter, *getComponent(),
-                                width, name);
-      getState<ComponentLoweringState>().addReturnReg(reg, argType.index());
-
-      rewriter.setInsertionPointToStart(getComponent()->getWiresOp().getBody());
-      rewriter.create<calyx::AssignOp>(
-          funcOp->getLoc(),
-          calyx::getComponentOutput(
-              *getComponent(),
-              getState<ComponentLoweringState>().getFuncOpResultMapping(
-                  argType.index())),
-          reg.out());
-    }
-    return success();
   }
 };
 
@@ -1391,7 +1297,10 @@ void SCFToCalyxPass::runOnOperation() {
   /// 'getOperation()->dump()' call after the execution of each stage to
   /// view the transformations that's going on.
   /// --------------------------------------------------------------------------
-  FuncMapping funcMap;
+
+  /// A mapping is maintained between a function operation and its corresponding
+  /// Calyx component.
+  DenseMap<FuncOp, calyx::ComponentOp> funcMap;
   SmallVector<LoweringPattern, 8> loweringPatterns;
 
   /// Creates a new Calyx component for each FuncOp in the inpurt module.
@@ -1405,10 +1314,12 @@ void SCFToCalyxPass::runOnOperation() {
                                            *loweringState);
 
   /// This pattern creates registers for all basic-block arguments.
-  addOncePattern<BuildBBRegs>(loweringPatterns, funcMap, *loweringState);
+  addOncePattern<calyx::BuildBasicBlockRegs>(loweringPatterns, funcMap,
+                                             *loweringState);
 
   /// This pattern creates registers for the function return values.
-  addOncePattern<BuildReturnRegs>(loweringPatterns, funcMap, *loweringState);
+  addOncePattern<calyx::BuildReturnRegs>(loweringPatterns, funcMap,
+                                         *loweringState);
 
   /// This pattern creates registers for iteration arguments of scf.while
   /// operations. Additionally, creates a group for assigning the initial

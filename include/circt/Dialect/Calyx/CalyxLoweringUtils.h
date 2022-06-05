@@ -129,6 +129,9 @@ public:
 
   // Returns the number of iterations the loop will conduct if known.
   virtual Optional<uint64_t> getBound() = 0;
+
+  // Returns the location of the loop interface.
+  virtual Location getLoc() = 0;
 };
 
 // Provides an interface for the control flow `while` operation across different
@@ -145,10 +148,45 @@ public:
   T getOperation() { return impl; }
 
   // Returns the source location of the operation.
-  Location getLoc() { return impl->getLoc(); }
+  Location getLoc() override { return impl->getLoc(); }
 
 private:
   T impl;
+};
+
+/// Holds common utilities used for scheduling when lowering to Calyx.
+template <typename T>
+class SchedulerInterface {
+public:
+  /// Register 'scheduleable' as being generated through lowering 'block'.
+  ///
+  /// TODO(mortbopet): Add a post-insertion check to ensure that the use-def
+  /// ordering invariant holds for the groups. When the control schedule is
+  /// generated, scheduleables within a block are emitted sequentially based on
+  /// the order that this function was called during conversion.
+  ///
+  /// Currently, we assume this to always be true. Walking the FuncOp IR implies
+  /// sequential iteration over operations within basic blocks.
+  void addBlockScheduleable(mlir::Block *block, const T &scheduleable) {
+    blockScheduleables[block].push_back(scheduleable);
+  }
+
+  /// Returns an ordered list of schedulables which registered themselves to be
+  /// a result of lowering the block in the source program. The list order
+  /// follows def-use chains between the scheduleables in the block.
+  SmallVector<T> getBlockScheduleables(mlir::Block *block) {
+    if (auto it = blockScheduleables.find(block);
+        it != blockScheduleables.end())
+      return it->second;
+    /// In cases of a block resulting in purely combinational logic, no
+    /// scheduleables registered themselves with the block.
+    return {};
+  }
+
+private:
+  /// BlockScheduleables is a list of scheduleables that should be
+  /// sequentially executed when executing the associated basic block.
+  DenseMap<mlir::Block *, SmallVector<T>> blockScheduleables;
 };
 
 //===----------------------------------------------------------------------===//
@@ -587,6 +625,25 @@ public:
 
 private:
   calyx::ProgramLoweringState &pls;
+};
+
+/// Builds registers for each block argument in the program.
+class BuildBasicBlockRegs : public calyx::FuncOpPartialLoweringPattern {
+  using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
+
+  LogicalResult
+  partiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
+                           PatternRewriter &rewriter) const override;
+};
+
+/// Builds registers for the return statement of the program and constant
+/// assignments to the component return value.
+class BuildReturnRegs : public calyx::FuncOpPartialLoweringPattern {
+  using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
+
+  LogicalResult
+  partiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
+                           PatternRewriter &rewriter) const override;
 };
 
 } // namespace calyx
