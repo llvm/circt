@@ -646,6 +646,115 @@ class BuildReturnRegs : public calyx::FuncOpPartialLoweringPattern {
                            PatternRewriter &rewriter) const override;
 };
 
+/// Creates a new Calyx component for each FuncOp in the program.
+struct FuncOpConversion : public calyx::FuncOpPartialLoweringPattern {
+  using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
+
+  LogicalResult
+  partiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
+                           PatternRewriter &rewriter) const override {
+    /// Maintain a mapping between funcOp input arguments and the port index
+    /// which the argument will eventually map to.
+    DenseMap<Value, unsigned> funcOpArgRewrites;
+
+    /// Maintain a mapping between funcOp output indexes and the component
+    /// output port index which the return value will eventually map to.
+    DenseMap<unsigned, unsigned> funcOpResultMapping;
+
+    /// Maintain a mapping between an external memory argument (identified by a
+    /// memref) and eventual component input- and output port indices that will
+    /// map to the memory ports. The pair denotes the start index of the memory
+    /// ports in the in- and output ports of the component. Ports are expected
+    /// to be ordered in the same manner as they are added by
+    /// calyx::appendPortsForExternalMemref.
+    DenseMap<Value, std::pair<unsigned, unsigned>> extMemoryCompPortIndices;
+
+    /// Create I/O ports. Maintain separate in/out port vectors to determine
+    /// which port index each function argument will eventually map to.
+    SmallVector<calyx::PortInfo> inPorts, outPorts;
+    FunctionType funcType = funcOp.getFunctionType();
+    unsigned extMemCounter = 0;
+    for (auto &arg : enumerate(funcOp.getArguments())) {
+      if (arg.value().getType().isa<MemRefType>()) {
+        /// External memories
+        auto memName =
+            "ext_mem" + std::to_string(extMemoryCompPortIndices.size());
+        extMemoryCompPortIndices[arg.value()] = {inPorts.size(),
+                                                 outPorts.size()};
+        calyx::appendPortsForExternalMemref(rewriter, memName, arg.value(),
+                                            extMemCounter++, inPorts, outPorts);
+      } else {
+        /// Single-port arguments
+        auto inName = "in" + std::to_string(arg.index());
+        funcOpArgRewrites[arg.value()] = inPorts.size();
+        inPorts.push_back(calyx::PortInfo{
+            rewriter.getStringAttr(inName),
+            calyx::convIndexType(rewriter, arg.value().getType()),
+            calyx::Direction::Input,
+            DictionaryAttr::get(rewriter.getContext(), {})});
+      }
+    }
+    for (auto &res : enumerate(funcType.getResults())) {
+      funcOpResultMapping[res.index()] = outPorts.size();
+      outPorts.push_back(calyx::PortInfo{
+          rewriter.getStringAttr("out" + std::to_string(res.index())),
+          calyx::convIndexType(rewriter, res.value()), calyx::Direction::Output,
+          DictionaryAttr::get(rewriter.getContext(), {})});
+    }
+
+    /// We've now recorded all necessary indices. Merge in- and output ports
+    /// and add the required mandatory component ports.
+    auto ports = inPorts;
+    llvm::append_range(ports, outPorts);
+    calyx::addMandatoryComponentPorts(rewriter, ports);
+
+    /// Create a calyx::ComponentOp corresponding to the to-be-lowered function.
+    auto compOp = rewriter.create<calyx::ComponentOp>(
+        funcOp.getLoc(), rewriter.getStringAttr(funcOp.getSymName()), ports);
+
+    /// Mark this component as the toplevel.
+    compOp->setAttr("toplevel", rewriter.getUnitAttr());
+
+    /// Store the function-to-component mapping.
+    functionMapping[funcOp] = compOp;
+    auto *compState = programState().getState(compOp);
+    compState->setFuncOpResultMapping(funcOpResultMapping);
+
+    /// Rewrite funcOp SSA argument values to the CompOp arguments.
+    for (auto &mapping : funcOpArgRewrites)
+      mapping.getFirst().replaceAllUsesWith(
+          compOp.getArgument(mapping.getSecond()));
+
+    /// Register external memories
+    for (auto extMemPortIndices : extMemoryCompPortIndices) {
+      /// Create a mapping for the in- and output ports using the Calyx memory
+      /// port structure.
+      calyx::MemoryPortsImpl extMemPorts;
+      unsigned inPortsIt = extMemPortIndices.getSecond().first;
+      unsigned outPortsIt = extMemPortIndices.getSecond().second +
+          compOp.getInputPortInfo().size();
+      extMemPorts.readData = compOp.getArgument(inPortsIt++);
+      extMemPorts.done = compOp.getArgument(inPortsIt);
+      extMemPorts.writeData = compOp.getArgument(outPortsIt++);
+      unsigned nAddresses = extMemPortIndices.getFirst()
+          .getType()
+          .cast<MemRefType>()
+          .getShape()
+          .size();
+      for (unsigned j = 0; j < nAddresses; ++j)
+        extMemPorts.addrPorts.push_back(compOp.getArgument(outPortsIt++));
+      extMemPorts.writeEn = compOp.getArgument(outPortsIt);
+
+      /// Register the external memory ports as a memory interface within the
+      /// component.
+      compState->registerMemoryInterface(extMemPortIndices.getFirst(),
+                                         calyx::MemoryInterface(extMemPorts));
+    }
+
+    return success();
+  }
+};
+
 } // namespace calyx
 } // namespace circt
 
