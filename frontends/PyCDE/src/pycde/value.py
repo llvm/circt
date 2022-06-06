@@ -3,8 +3,6 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from __future__ import annotations
-from curses.ascii import isdigit
-from email.mime import base
 
 from .support import get_user_loc, _obj_to_value_infer_type
 
@@ -13,6 +11,7 @@ import circt.support as support
 
 import mlir.ir as ir
 
+from functools import singledispatchmethod
 from typing import Union
 import re
 
@@ -52,7 +51,7 @@ class Value:
         if m:
           basename = m.group(1)
           reg_num = m.group(2)
-          if isdigit(reg_num):
+          if reg_num.isdigit():
             starting_reg = int(reg_num) + 1
           else:
             basename = self.name
@@ -136,7 +135,8 @@ class BitVectorValue(Value):
 
 class ListValue(Value):
 
-  def __getitem__(self, sub):
+  @singledispatchmethod
+  def __getitem__(self, sub: int):
     if isinstance(sub, int):
       idx = int(sub)
       if idx >= self.type.size:
@@ -153,6 +153,22 @@ class ListValue(Value):
       if self.name and isinstance(idx, int):
         v.name = self.name + f"__{idx}"
       return v
+
+  @__getitem__.register(slice)
+  def __get_item__slice(self, s: slice):
+    idxs = s.indices(len(self))
+    if idxs[2] != 1:
+      raise ValueError("Array slices do not support steps")
+
+    from .pycde_types import types
+    from .dialects import hw
+    ret_type = types.array(self.type.element_type, idxs[1] - idxs[0])
+
+    with get_user_loc():
+      ret = hw.ArraySliceOp(self.value, idxs[0], ret_type)
+      if self.name is not None:
+        ret.name = f"{self.name}_{idxs[0]}upto{idxs[1]}"
+      return ret
 
   def __len__(self):
     return self.type.strip.size
