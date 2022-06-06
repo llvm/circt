@@ -165,6 +165,7 @@ def _obj_to_value_infer_type(value):
     raise ValueError(f"Cannot infer CIRCT type from '{value}")
   return _obj_to_value(value, type)
 
+
 def create_type_string(ty):
   from .dialects import hw
   ty = support.type_to_pytype(ty)
