@@ -48,7 +48,8 @@ def InstanceOp : ReferableDeclOp<"instance", [HasParent<"firrtl::FModuleOp, firr
                        AnnotationArrayAttr:$annotations,
                        PortAnnotationsAttr:$portAnnotations,
                        BoolAttr:$lowerToBind,
-                       OptionalAttr<SymbolNameAttr>:$inner_sym);
+                       OptionalAttr<SymbolNameAttr>:$inner_sym,
+                       NameKindAttr:$nameKind);
 
   let results = (outs Variadic<FIRRTLType>:$results);
 

@@ -367,7 +367,7 @@ circuit Foo: %[[{"target": "~Foo|Foo>_T_0", "a": "a"},
     cmem _T_5 : UInt<1>[9] [256]
     ; CHECK: chirrtl.memoryport {{.+}} {annotations = [{a = "a"}]
     infer mport _T_6 = _T_5[reset], clock
-    ; CHECK: firrtl.instance _T_7 {annotations = [{a = "a"}]}
+    ; CHECK: firrtl.instance _T_7 droppable_name {annotations = [{a = "a"}]}
     inst _T_7 of Bar
     ; CHECK: firrtl.mem droppable_name Undefined  {annotations = [{a = "a"}]
     mem _T_8 :

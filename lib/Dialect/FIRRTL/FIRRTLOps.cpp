@@ -240,6 +240,10 @@ static bool hasValNamed(FModuleLike op, StringAttr name) {
   return retval;
 }
 
+/// A forward declaration for `NameKind` attribute parser.
+static ParseResult parseNameKind(OpAsmParser &parser,
+                                 firrtl::NameKindEnumAttr &result);
+
 //===----------------------------------------------------------------------===//
 // CircuitOp
 //===----------------------------------------------------------------------===//
@@ -1214,6 +1218,8 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
   result.addAttribute("lowerToBind", builder.getBoolAttr(lowerToBind));
   if (innerSym)
     result.addAttribute("inner_sym", innerSym);
+  result.addAttribute("nameKind", NameKindEnumAttr::get(builder.getContext(),
+                                                        inferNameKind(name)));
 
   if (portAnnotations.empty()) {
     SmallVector<Attribute, 16> portAnnotationsVec(resultTypes.size(),
@@ -1254,7 +1260,8 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
       SymbolRefAttr::get(builder.getContext(), module.moduleNameAttr()),
       builder.getStringAttr(name), module.getPortDirectionsAttr(),
       module.getPortNamesAttr(), builder.getArrayAttr(annotations),
-      portAnnotationsAttr, builder.getBoolAttr(lowerToBind), innerSym);
+      portAnnotationsAttr, builder.getBoolAttr(lowerToBind), innerSym,
+      NameKindEnumAttr::get(builder.getContext(), inferNameKind(name)));
 }
 
 /// Builds a new `InstanceOp` with the ports listed in `portIndices` erased, and
@@ -1470,12 +1477,15 @@ void InstanceOp::print(OpAsmPrinter &p) {
     p << " sym ";
     p.printSymbolName(attr.getValue());
   }
+  if (nameKindAttr().getValue() != NameKindEnum::InterestingName)
+    p << ' ' << stringifyNameKindEnum(nameKindAttr().getValue());
   p << " ";
 
   // Print the attr-dict.
-  SmallVector<StringRef, 4> omittedAttrs = {
-      "moduleName",      "name",     "portDirections", "portNames", "portTypes",
-      "portAnnotations", "inner_sym"};
+  SmallVector<StringRef, 4> omittedAttrs = {"moduleName",     "name",
+                                            "portDirections", "portNames",
+                                            "portTypes",      "portAnnotations",
+                                            "inner_sym",      "nameKind"};
   if (!lowerToBind())
     omittedAttrs.push_back("lowerToBind");
   if (annotations().empty())
@@ -1509,6 +1519,7 @@ ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
   SmallVector<Attribute, 4> portTypes;
   SmallVector<Attribute, 4> portAnnotations;
   SmallVector<Attribute, 4> portSyms;
+  NameKindEnumAttr nameKind;
 
   if (parser.parseKeywordOrString(&name))
     return failure();
@@ -1518,7 +1529,8 @@ ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
     (void)parser.parseOptionalSymbolName(
         innerSymAttr, hw::InnerName::getInnerNameAttrName(), result.attributes);
   }
-  if (parser.parseOptionalAttrDict(result.attributes) ||
+  if (parseNameKind(parser, nameKind) ||
+      parser.parseOptionalAttrDict(result.attributes) ||
       parser.parseAttribute(moduleName, "moduleName", resultAttrs) ||
       parseModulePorts(parser, /*hasSSAIdentifiers=*/false, entryArgs,
                        portDirections, portNames, portTypes, portAnnotations,
@@ -1531,6 +1543,7 @@ ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
     result.addAttribute("moduleName", moduleName);
   if (!resultAttrs.get("name"))
     result.addAttribute("name", StringAttr::get(context, name));
+  result.addAttribute("nameKind", nameKind);
   if (!resultAttrs.get("portDirections"))
     result.addAttribute("portDirections",
                         direction::packAttribute(context, portDirections));
