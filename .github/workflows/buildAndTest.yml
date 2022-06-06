@@ -205,6 +205,23 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/circt/images/circt-ci-build:20220216182244
+    strategy:
+      matrix:
+        compiler:
+          # Our PR builds are trying to test the two corners of the build matrix:
+          # clang + release + noassert + shared
+          # gcc   + debug   + assert   + static
+          - cc: clang
+            cxx: clang++
+            mode: release
+            assert: OFF
+            shared: ON
+          - cc: gcc
+            cxx: g++
+            mode: debug
+            assert: ON
+            shared: OFF
+
     steps:
       - name: Configure Environment
         run: echo "$GITHUB_WORKSPACE/llvm/install/bin" >> $GITHUB_PATH
@@ -231,80 +248,41 @@ jobs:
         run: echo "::set-output name=hash::$(md5sum $GITHUB_WORKSPACE/.github/workflows/buildAndTest.yml)"
 
       # Try to fetch LLVM from the cache.
-      - name: Cache LLVM (Clang)
-        id: cache-llvm-clang
+      - name: Cache LLVM
+        id: cache-llvm
         uses: actions/cache@v2
         with:
           path: |
-            llvm/build-clang
-            llvm/install-clang
-          key: ${{ runner.os }}-llvm-${{ steps.get-llvm-hash.outputs.hash }}-${{ steps.get-workflow-hash.outputs.hash }}-clang
+            llvm/build
+            llvm/install
+          key: ${{ runner.os }}-llvm-${{ steps.get-llvm-hash.outputs.hash }}-${{ steps.get-workflow-hash.outputs.hash }}-${{ matrix.compiler.cc }} 
 
       # Build LLVM if we didn't hit in the cache. Even though we build it in
       # the previous job, there is a low chance that it'll have been evicted by
       # the time we get here.
-      - name: Rebuild and Install LLVM (Clang)
-        if: steps.cache-llvm-clang.outputs.cache-hit != 'true'
-        run: utils/build-llvm.sh build-clang install-clang Release clang clang++
-
-      # Try to fetch LLVM from the cache.
-      - name: Cache LLVM (GCC)
-        id: cache-llvm-gcc
-        uses: actions/cache@v2
-        with:
-          path: |
-            llvm/build-gcc
-            llvm/install-gcc
-          key: ${{ runner.os }}-llvm-${{ steps.get-llvm-hash.outputs.hash }}-${{ steps.get-workflow-hash.outputs.hash }}-gcc
-
-      # Build LLVM if we didn't hit in the cache. Even though we build it in
-      # the previous job, there is a low chance that it'll have been evicted by
-      # the time we get here.
-      - name: Rebuild and Install LLVM (GCC)
-        if: steps.cache-llvm-gcc.outputs.cache-hit != 'true'
-        run: utils/build-llvm.sh build-gcc install-gcc Release gcc g++
+      - name: Rebuild and Install LLVM
+        if: steps.cache-llvm.outputs.cache-hit != 'true'
+        run: utils/build-llvm.sh build install ${{ matrix.compiler.mode }} ${{ matrix.compiler.cc }} ${{ matrix.compiler.cxx }}
 
       # --------
-      # Build and test CIRCT in both debug and release mode.
+      # Build and test CIRCT
       # --------
 
-      # Our PR builds are trying to test the two corners of the build matrix:
-      # clang + release + noassert + shared
-      # gcc   + debug   + assert   + static
-
-      # Build the CIRCT test target in release mode with assertions using Clang.
-      - name: Build and Test CIRCT (Clang release)
+      - name: Build and Test CIRCT
         run: |
-          mkdir build_clang
-          cd build_clang
+          mkdir build
+          cd build
           cmake .. \
-            -DBUILD_SHARED_LIBS=ON \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DLLVM_ENABLE_ASSERTIONS=OFF \
-            -DMLIR_DIR=`pwd`/../llvm/install-clang/lib/cmake/mlir \
-            -DLLVM_DIR=`pwd`/../llvm/install-clang/lib/cmake/llvm \
+            -DBUILD_SHARED_LIBS=${{ matrix.compiler.shared }} \
+            -DCMAKE_BUILD_TYPE=${{ matrix.compiler.mode }} \
+            -DLLVM_ENABLE_ASSERTIONS=${{ matrix.compiler.assert }} \
+            -DMLIR_DIR=`pwd`/../llvm/install/lib/cmake/mlir \
+            -DLLVM_DIR=`pwd`/../llvm/install/lib/cmake/llvm \
             -DLLVM_USE_LINKER=lld \
-            -DCMAKE_C_COMPILER=clang \
-            -DCMAKE_CXX_COMPILER=clang++ \
-            -DLLVM_EXTERNAL_LIT=`pwd`/../llvm/build-clang/bin/llvm-lit \
+            -DCMAKE_C_COMPILER=${{ matrix.compiler.cc }} \
+            -DCMAKE_CXX_COMPILER=${{ matrix.compiler.cxx }} \
+            -DLLVM_EXTERNAL_LIT=`pwd`/../llvm/build/bin/llvm-lit \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-          make check-circt -j$(nproc)
-          make circt-doc
-
-      # Build the CIRCT test target in debug mode with assertions using GCC.
-      - name: Build and Test CIRCT (GCC debug)
-        run: |
-          mkdir build_gcc
-          cd build_gcc
-          cmake .. \
-            -DCMAKE_BUILD_TYPE=Debug \
-            -DLLVM_ENABLE_ASSERTIONS=ON \
-            -DMLIR_DIR=`pwd`/../llvm/install-gcc/lib/cmake/mlir/ \
-            -DLLVM_DIR=`pwd`/../llvm/install-gcc/lib/cmake/llvm/ \
-            -DLLVM_USE_LINKER=lld \
-            -DCMAKE_C_COMPILER=gcc \
-            -DCMAKE_CXX_COMPILER=g++ \
-            -DLLVM_EXTERNAL_LIT=`pwd`/../llvm/build-gcc/bin/llvm-lit
           make check-circt -j$(nproc)
           make circt-doc
 
