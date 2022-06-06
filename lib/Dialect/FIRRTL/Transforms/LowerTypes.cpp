@@ -1215,7 +1215,8 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
       resultTypes, op.moduleNameAttr(), op.nameAttr(),
       direction::packAttribute(context, newDirs),
       builder->getArrayAttr(newNames), op.annotations(),
-      builder->getArrayAttr(newPortAnno), op.lowerToBindAttr(), sym, op.nameKindAttr());
+      builder->getArrayAttr(newPortAnno), op.lowerToBindAttr(), sym,
+      op.nameKindAttr());
 
   SmallVector<Value> lowered;
   for (size_t aggIndex = 0, eAgg = op.getNumResults(); aggIndex != eAgg;
