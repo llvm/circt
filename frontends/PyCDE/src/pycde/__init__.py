@@ -6,6 +6,7 @@ from .module import (externmodule, generator, module, no_connect)
 from .module import (Input, InputChannel, Output, OutputChannel)
 from .system import (System)
 from .pycde_types import (dim, types)
+from .value import (Value)
 from circt.support import (connect)
 
 import mlir.ir

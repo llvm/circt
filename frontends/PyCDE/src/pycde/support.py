@@ -82,6 +82,9 @@ def _obj_to_value(x, type, result_type=None):
   from .pycde_types import (TypeAliasType, ArrayType, StructType, BitVectorType,
                             Type)
 
+  if isinstance(x, Value):
+    return x
+
   type = Type(type)
   if isinstance(type, TypeAliasType):
     return _obj_to_value(x, type.inner_type, type)
@@ -92,7 +95,7 @@ def _obj_to_value(x, type, result_type=None):
     result_type = Type(result_type)
     assert isinstance(result_type, TypeAliasType) or result_type == type
 
-  val = Value(x)
+  val = support.get_value(x)
   # If x is already a valid value, just return it.
   if val is not None:
     if val.type != result_type:
@@ -132,6 +135,35 @@ def _obj_to_value(x, type, result_type=None):
       return hw.StructCreateOp(elem_name_values, result_type=result_type._type)
 
   raise ValueError(f"Unable to map object '{x}' to MLIR Value")
+
+
+def _infer_type(x):
+  """Infer the CIRCT type from a python object. Only works on lists."""
+  from .pycde_types import types
+  from .value import Value
+  if isinstance(x, Value):
+    return x.type
+
+  if isinstance(x, list):
+    list_types = [_infer_type(i) for i in x]
+    list_type = list_types[0]
+    if not all([i == list_type for i in list_types]):
+      raise ValueError(f"CIRCT array must be homogenous, unlike object")
+    return types.array(list_type, len(x))
+  if isinstance(x, int):
+    raise ValueError(f"Cannot infer width of {x}")
+  if isinstance(x, dict):
+    raise ValueError(f"Cannot infer struct field order of {x}")
+  return None
+
+
+def _obj_to_value_infer_type(value):
+  """Infer the CIRCT type, then convert the Python object to a CIRCT Value of
+  that type."""
+  type = _infer_type(value)
+  if type is None:
+    raise ValueError(f"Cannot infer CIRCT type from '{value}")
+  return _obj_to_value(value, type)
 
 
 def create_type_string(ty):
