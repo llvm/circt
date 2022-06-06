@@ -156,6 +156,6 @@ def DropNameMem : Pat<
                                              $inner_sym, $groupID, $nameKind),
   (MemOp $rd, $rw, $depth, $ruw, $portNames, (GetEmptyString), $annotations,
                      $portAnno, $inner_sym, $groupID, (GetDroppableNameAttr)),
-  [(uselessNameAttr $name), (NonStringAttr $name), (NullAttr $inner_sym)]>;
+  [(uselessNameAttr $name), (NonEmptyAttr $name), (NullAttr $inner_sym)]>;
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLCANONICALIZATION_TD
