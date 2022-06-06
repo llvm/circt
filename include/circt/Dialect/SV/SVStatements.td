@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 include "mlir/IR/EnumAttr.td"
+include "mlir/Interfaces/SideEffectInterfaces.td"
 
 /// Ensure symbol is one of the hw module.* types
 def isModuleSymbol : AttrConstraint<
@@ -388,7 +389,7 @@ def CaseOp : SVOp<"case", [SingleBlock, NoTerminator, NoRegionArguments,
 //===----------------------------------------------------------------------===//
 
 def AssignOp : SVOp<"assign", [InOutTypeConstraint<"src", "dest">,
-                                 NonProceduralOp]> {
+                                 NonProceduralOp, MemoryEffects<[MemWrite]>]> {
   let summary = "Continuous assignment";
   let description = [{
     A SystemVerilog assignment statement 'x = y;'.
@@ -400,7 +401,7 @@ def AssignOp : SVOp<"assign", [InOutTypeConstraint<"src", "dest">,
 }
 
 def BPAssignOp : SVOp<"bpassign", [InOutTypeConstraint<"src", "dest">,
-                                   ProceduralOp]> {
+                                   ProceduralOp, MemoryEffects<[MemWrite]>]> {
   let summary = "Blocking procedural assignment";
   let description = [{
     A SystemVerilog blocking procedural assignment statement 'x = y;'.  These
@@ -414,7 +415,7 @@ def BPAssignOp : SVOp<"bpassign", [InOutTypeConstraint<"src", "dest">,
 }
 
 def PAssignOp : SVOp<"passign", [InOutTypeConstraint<"src", "dest">,
-                                 ProceduralOp]> {
+                                 ProceduralOp, MemoryEffects<[MemWrite]>]> {
   let summary = "Nonblocking procedural assignment";
   let description = [{
     A SystemVerilog nonblocking procedural assignment statement 'x <= y;'.
@@ -435,7 +436,7 @@ def PAssignOp : SVOp<"passign", [InOutTypeConstraint<"src", "dest">,
 //===----------------------------------------------------------------------===//
 
 def ForceOp : SVOp<"force", [InOutTypeConstraint<"src", "dest">,
-                                   ProceduralOp]> {
+                                   ProceduralOp, MemoryEffects<[MemWrite]>]> {
   let summary = "Force procedural statement";
   let description = [{
     A SystemVerilog force procedural statement 'force x = y;'.  These
@@ -452,7 +453,7 @@ def ForceOp : SVOp<"force", [InOutTypeConstraint<"src", "dest">,
   let assemblyFormat = "$dest `,` $src  attr-dict `:` qualified(type($src))";
 }
 
-def ReleaseOp : SVOp<"release", [ProceduralOp]> {
+def ReleaseOp : SVOp<"release", [ProceduralOp, MemoryEffects<[MemWrite]>]> {
   let summary = "Release procedural statement";
   let description = [{
     Release is used in conjunction with force. When released,
@@ -699,7 +700,8 @@ def InfoOp : NonfatalMessageOp<"info"> {
 }
 
 def DepositOp : SVOp<"nonstandard.deposit", 
-    [ProceduralOp, VendorExtension, InOutTypeConstraint<"src", "dest">]> {
+    [ProceduralOp, VendorExtension, InOutTypeConstraint<"src", "dest">,
+     MemoryEffects<[MemWrite]>]> {
   let summary = "`$deposit` system task";
   let description = [{
     This system task sets the value of a net or variable, but doesn't hold it.

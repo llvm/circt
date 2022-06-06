@@ -19,6 +19,7 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/PatternMatch.h"
+#include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -247,22 +248,35 @@ void RegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
     setNameFn(getResult(), nameAttr.getValue());
 }
 
+static bool isWriteOnly(Operation *op) {
+  assert((llvm::isa<sv::RegOp, sv::WireOp>(op) && "reg or wire is expected"));
+
+  // Check that all users are write-like ops.
+  for (auto &use : op->getResult(0).getUses()) {
+    auto memEffectOpInterface =
+        dyn_cast<mlir::MemoryEffectOpInterface>(use.getOwner());
+    if (!memEffectOpInterface ||
+        !memEffectOpInterface
+             .template onlyHasEffect<mlir::MemoryEffects::Write>())
+      return false;
+  }
+  return true;
+}
+
 // If this reg is only written to, delete the reg and all writers.
 LogicalResult RegOp::canonicalize(RegOp op, PatternRewriter &rewriter) {
   // If the reg has a symbol, then we can't delete it.
   if (op.inner_symAttr())
     return failure();
-  // Check that all operations on the wire are sv.assigns. All other wire
-  // operations will have been handled by other canonicalization.
-  for (auto &use : op.getResult().getUses())
-    if (!isa<PAssignOp, BPAssignOp>(use.getOwner()))
-      return failure();
 
-  // Remove all uses of the wire.
+  if (!isWriteOnly(op))
+    return failure();
+
+  // Remove all uses of the reg.
   for (auto &use : op.getResult().getUses())
     rewriter.eraseOp(use.getOwner());
 
-  // Remove the wire.
+  // Remove the reg.
   rewriter.eraseOp(op);
   return success();
 }

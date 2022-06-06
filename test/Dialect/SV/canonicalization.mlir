@@ -287,15 +287,22 @@ hw.module @case_stmt(%arg: i3) {
 
   }
 
-// Remove read-only registers.
-// CHECK-LABEL: hw.module @remove_reg
-// CHECK-NEXT:  %r2 = sv.reg sym @r3 : !hw.inout<i2>
-// CHECK-NEXT:  hw.output
-hw.module @remove_reg(%input: i2){
+// Remove write-only registers.
+// CHECK-LABEL:  hw.module @remove_write_only(%input: i2) -> (a: i2) {
+// CHECK-NEXT:     %r2 = sv.reg  : !hw.inout<i2>
+// CHECK-NEXT:     %r3 = sv.reg sym @r3  : !hw.inout<i2>
+// CHECK-NEXT:     %0 = sv.read_inout %r2 : !hw.inout<i2>
+// CHECK-NEXT:     hw.output %0 : i2
+// CHECK-NEXT:   }
+hw.module @remove_write_only(%input: i2) -> (a: i2) {
   %r1 = sv.reg  : !hw.inout<i2>
-  %r2 = sv.reg sym @r3 : !hw.inout<i2>
+  %r2 = sv.reg : !hw.inout<i2>
+  %r3 = sv.reg sym @r3 : !hw.inout<i2>
   sv.initial {
     sv.passign %r1, %input : i2
     sv.bpassign %r1, %input : i2
   }
+  sv.assign %r1, %input : i2
+  %res = sv.read_inout %r2: !hw.inout<i2>
+  hw.output %res : i2
 }
