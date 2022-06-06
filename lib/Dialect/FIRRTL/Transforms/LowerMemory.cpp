@@ -408,7 +408,7 @@ InstanceOp LowerMemoryPass::emitMemoryInstance(MemOp op, FModuleOp module,
         if (summary.isMasked)
           addPort(Direction::In, "wmask", getType(summary.maskBits));
         else
-          removeMask("en", "wmask");
+          removeMask("wmode", "wmask");
       } else {
         addPort(Direction::In, "addr", addressType);
         addPort(Direction::In, "en", ui1Type);

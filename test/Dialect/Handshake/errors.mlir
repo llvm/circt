@@ -119,6 +119,14 @@ handshake.func @invalid_multidim_memory(%ctrl : none) -> none {
 
 // -----
 
+handshake.func @invalid_missing_lsq(%ctrl : none) -> none {
+  // expected-error @+1 {{'handshake.memory' op requires attribute 'lsq'}}
+  memory [ld = 0, st = 0] () {id = 0 : i32} : memref<10xi8>, () -> ()
+  return %ctrl : none
+}
+
+// -----
+
 handshake.func @invalid_dynamic_memory(%ctrl : none) -> none {
   // expected-error @+1 {{'handshake.memory' op memref dimensions for handshake.memory must be static.}}
   memory [ld = 0, st = 0] () {id = 0 : i32, lsq = false} : memref<?xi8>, () -> ()
@@ -234,4 +242,11 @@ handshake.func @invalid_pack_wrong_types(%arg0 : i64, %arg1 : i32, %ctrl : none)
   // expected-error @+1 {{'handshake.pack' invalid kind of type specified}}
   %0 = handshake.pack %arg0, %arg1 : i64, i32
   return %0, %ctrl : tuple<i64, i32>, none
+}
+
+// -----
+
+handshake.func @invalid_memref_block_arg(%arg0 : memref<2xi64>, %ctrl : none) -> none {
+  // expected-error @-1 {{'handshake.func' op expected that block argument #0 is used by an 'extmemory' operation}}
+  return %ctrl : none
 }

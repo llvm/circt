@@ -708,6 +708,26 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
 
   auto builder = OpBuilder::atBlockBegin(body);
 
+  // Unique constants per <Const,Type> pair, inserted at entry
+  DenseMap<std::pair<Attribute, Type>, Operation *> constPool;
+  auto getConst = [&](Attribute constantValue, Type type, Location loc) {
+    auto constIt = constPool.find({constantValue, type});
+    if (constIt != constPool.end()) {
+      auto *cst = constIt->second;
+      // Add location to the constant
+      cst->setLoc(builder.getFusedLoc(cst->getLoc(), loc));
+      return cst->getResult(0);
+    }
+    auto savedIP = builder.saveInsertionPoint();
+    builder.setInsertionPointToStart(body);
+    auto *cst = module->getDialect()->materializeConstant(
+        builder, constantValue, type, loc);
+    builder.restoreInsertionPoint(savedIP);
+    assert(cst && "all FIRRTL constants can be materialized");
+    constPool.insert({{constantValue, type}, cst});
+    return cst->getResult(0);
+  };
+
   // If the lattice value for the specified value is a constant or
   // InvalidValue, update it and return true.  Otherwise return false.
   auto replaceValueIfPossible = [&](Value value) -> bool {
@@ -716,12 +736,8 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
         it->second.isUnknown())
       return false;
 
-    // TODO: Unique constants into the entry block of the module.
-    Attribute constantValue = it->second.getValue();
-    auto *cst = module->getDialect()->materializeConstant(
-        builder, constantValue, value.getType(), value.getLoc());
-    assert(cst && "all FIRRTL constants can be materialized");
-    auto cstValue = cst->getResult(0);
+    auto cstValue =
+        getConst(it->second.getValue(), value.getType(), value.getLoc());
 
     // Replace all uses of this value with the constant, unless this is the
     // destination of a connect.  We leave those alone to avoid upsetting flow.

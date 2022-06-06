@@ -35,9 +35,9 @@ firrtl.circuit "Test" {
     %someWire = firrtl.wire : !firrtl.uint<1>
     firrtl.connect %someWire, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
 
-    // CHECK: %someWire = firrtl.wire 
-    // CHECK: firrtl.connect %someWire, %c0_ui1 
-    // CHECK: firrtl.connect %result1, %c0_ui1_0
+    // CHECK: %someWire = firrtl.wire
+    // CHECK: firrtl.connect %someWire, %c0_ui1
+    // CHECK: firrtl.connect %result1, %c0_ui1
     firrtl.connect %result1, %someWire : !firrtl.uint<1>, !firrtl.uint<1>
 
     // Trivial wire special constant propagation.
@@ -105,7 +105,7 @@ firrtl.circuit "Test" {
     // around.
     %a = firrtl.and %extWire, %c2_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
     %b = firrtl.or %a, %c1_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
-    // CHECK-NEXT: firrtl.constant 3
+    // CHECK-NOT: firrtl.constant
     %c = firrtl.xor %b, %c2_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
 
     // CHECK-NEXT: firrtl.connect %result9, %c3_ui2
@@ -239,15 +239,15 @@ firrtl.circuit "OutPortTop" {
     }
   // CHECK-LABEL: firrtl.module @OutPortTop
     firrtl.module @OutPortTop(in %x: !firrtl.uint<1>, out %zc: !firrtl.uint<1>, out %zn: !firrtl.uint<1>) {
+      // CHECK: %c0_ui1 = firrtl.constant 0
       %c_out = firrtl.instance c  sym @a2 @OutPortChild1(out out: !firrtl.uint<1>)
       %c_out_0 = firrtl.instance c  sym @a1 @OutPortChild2(out out: !firrtl.uint<1>)
       // CHECK: %0 = firrtl.and %x, %c_out
       %0 = firrtl.and %x, %c_out : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-      // CHECK: %c0_ui1_1 = firrtl.constant 0 
       %1 = firrtl.and %x, %c_out_0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
       // CHECK: firrtl.connect %zn, %0
       firrtl.connect %zn, %0 : !firrtl.uint<1>, !firrtl.uint<1>
-      // CHECK: firrtl.connect %zc, %c0_ui1_1
+      // CHECK: firrtl.connect %zc, %c0_ui1
       firrtl.connect %zc, %1 : !firrtl.uint<1>, !firrtl.uint<1>
     }
 }

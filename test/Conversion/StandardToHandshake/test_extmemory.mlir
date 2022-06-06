@@ -1,4 +1,4 @@
-// RUN: circt-opt -lower-std-to-handshake %s | FileCheck %s
+// RUN: circt-opt -lower-std-to-handshake %s --split-input-file | FileCheck %s
 
 // CHECK-LABEL:   handshake.func @main(
 // CHECK-SAME:                         %[[VAL_0:.*]]: memref<4xi32>,
@@ -15,4 +15,14 @@ func.func @main(%mem : memref<4xi32>) -> i32 {
   %idx = arith.constant 0 : index
   %0 = memref.load %mem[%idx] : memref<4xi32>
   return %0 : i32
+}
+
+// -----
+
+// CHECK-LABEL: handshake.func @no_use(%arg0: memref<4xi32>, %arg1: none, ...) -> none
+// CHECK:    extmemory[ld = 0, st = 0] (%arg0 : memref<4xi32>) () {id = 0 : i32} : () -> ()
+// CHECK:    return %arg1 : none
+// CHECK:  }
+func.func @no_use(%mem : memref<4xi32>) {
+  return
 }

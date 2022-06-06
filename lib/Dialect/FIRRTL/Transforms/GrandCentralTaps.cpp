@@ -897,26 +897,6 @@ void GrandCentralTapsPass::runOnOperation() {
         nla.erase();
       continue;
     }
-
-    // Remove NLA paths on instances associated with removed NLA
-    // leaves.
-    auto module = dyn_cast<FModuleOp>(op);
-    if (!module)
-      continue;
-    for (auto instance : module.getBody()->getOps<InstanceOp>()) {
-      AnnotationSet annotations(instance);
-      if (annotations.empty())
-        continue;
-      bool modified = false;
-      annotations.removeAnnotations([&](Annotation anno) {
-        if (auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal"))
-          if (deadNLAs.contains(sym.getAttr()))
-            return modified = true;
-        return false;
-      });
-      if (modified)
-        annotations.applyToOperation(instance);
-    }
   }
 }
 

@@ -54,6 +54,15 @@ static bool isModuleScopedDrivenBy(Value val, bool lookThroughWires,
   return isa<A, B...>(op);
 }
 
+/// Get the FieldRef from a value.  This will travel backwards to through the
+/// IR, following Subfield and Subindex to find the op which declares the
+/// location.
+FieldRef getFieldRefFromValue(Value value);
+
+/// Get a string identifier representing the FieldRef.
+std::string getFieldName(const FieldRef &fieldRef);
+std::string getFieldName(const FieldRef &fieldRef, bool &rootKnown);
+
 Value getValueByFieldID(ImplicitLocOpBuilder builder, Value value,
                         unsigned fieldID);
 

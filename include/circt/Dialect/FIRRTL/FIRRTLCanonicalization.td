@@ -32,9 +32,9 @@ def NonConstantOp : Constraint<CPred<[{
 // there are no FIRRTL annotation on an operation.
 def EmptyAttrDict : Constraint<CPred<"$0.empty()">>;
 
-def NonEmptyStringAttr : Constraint<CPred<"!$0.getValue().empty()">>;
 def GetDroppableNameAttr : NativeCodeCall<
   "NameKindEnumAttr::get($_builder.getContext(), NameKindEnum::DroppableName) ">;
+def NonEmptyAttr : Constraint<CPred<"!$0.getValue().empty()">>;
 def uselessNameAttr : Constraint<CPred<"isUselessName($0.getValue())">>;
 def NullAttr : Constraint<CPred<"!$0">>;
 
@@ -129,26 +129,26 @@ def GetWidthAsIntAttr : NativeCodeCall<
 def DropNameNode : Pat<
   (NodeOp $x, $name, $annotations, $inner_sym, $nameKind),
   (NodeOp $x, (GetEmptyString),  $annotations, $inner_sym, (GetDroppableNameAttr)),
-  [(uselessNameAttr $name), (NonEmptyStringAttr $name), (NullAttr $inner_sym)]>;
+  [(uselessNameAttr $name), (NonEmptyAttr $name), (NullAttr $inner_sym)]>;
 
 // wire(name),!dnt -> wire("")
 def DropNameWire : Pat<
   (WireOp $name,  $annotations, $inner_sym, $nameKind),
   (WireOp (GetEmptyString), $annotations, $inner_sym, (GetDroppableNameAttr)),
-  [(uselessNameAttr $name), (NonEmptyStringAttr $name), (NullAttr $inner_sym)]>;
+  [(uselessNameAttr $name), (NonEmptyAttr $name), (NullAttr $inner_sym)]>;
 
 // reg(clk, name),!dnt -> reg(clk, "")
 def DropNameReg : Pat<
   (RegOp $clk, $name, $annotations, $inner_sym, $nameKind),
   (RegOp $clk, (GetEmptyString), $annotations, $inner_sym, (GetDroppableNameAttr)),
-  [(uselessNameAttr $name), (NonEmptyStringAttr $name), (NullAttr $inner_sym)]>;
+  [(uselessNameAttr $name), (NonEmptyAttr $name), (NullAttr $inner_sym)]>;
 
 // regreset(clk, sig, val, name),!dnt -> regreset(clk, sig, val, "")
 def DropNameRegReset : Pat<
   (RegResetOp $clk, $sig, $val, $name, $annotations, $inner_sym, $nameKind),
   (RegResetOp $clk, $sig, $val, (GetEmptyString),
                     $annotations, $inner_sym, (GetDroppableNameAttr)),
-  [(uselessNameAttr $name), (NonEmptyStringAttr $name), (NullAttr $inner_sym)]>;
+  [(uselessNameAttr $name), (NonEmptyAttr $name), (NullAttr $inner_sym)]>;
 
 // Mem(...,name),!dnt -> Mem(...x, "")
 def DropNameMem : Pat<
@@ -156,6 +156,6 @@ def DropNameMem : Pat<
                                              $inner_sym, $groupID, $nameKind),
   (MemOp $rd, $rw, $depth, $ruw, $portNames, (GetEmptyString), $annotations,
                      $portAnno, $inner_sym, $groupID, (GetDroppableNameAttr)),
-  [(uselessNameAttr $name), (NonEmptyStringAttr $name), (NullAttr $inner_sym)]>;
+  [(uselessNameAttr $name), (NonStringAttr $name), (NullAttr $inner_sym)]>;
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLCANONICALIZATION_TD
