@@ -14,6 +14,8 @@ circuit Foo:
     _x <= a
 
     ; Default behavior is to preserve named wires.
+    ; CHECK:        wire x_a;
+    ; CHECK:        wire x_b;
     wire x: {a: UInt<1>, flip b: UInt<1>}
     x <= _x
 
@@ -22,11 +24,8 @@ circuit Foo:
     node _y_a = x.a
 
     ; Default behavior is to preserve named nodes.
+    ; CHECK:        wire y;
     node y = _y_a
 
     b.a <= y
     x.b <= b.b
-
-    ; CHECK:        wire x_a;
-    ; CHECK:        wire y;
-    ; CHECK:        wire x_b;

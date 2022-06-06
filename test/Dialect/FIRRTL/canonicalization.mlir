@@ -1636,17 +1636,6 @@ firrtl.module @ComparisonOfConsts(
   // CHECK-NEXT: firrtl.strictconnect %y19, %c1_ui1
 }
 
-// CHECK-LABEL: @wire2node
-// CHECK-NEXT:   %tmp_a = firrtl.node %a  : !firrtl.uint<7>
-// CHECK-NEXT:   firrtl.strictconnect %b, %a : !firrtl.uint<7>
-// CHECK-NEXT:  }
-firrtl.module @wire2node(in %a: !firrtl.uint<7>, out %b: !firrtl.uint<7>) {
-  %tmp_a = firrtl.wire : !firrtl.uint<7>
-  firrtl.connect %tmp_a, %a : !firrtl.uint<7>, !firrtl.uint<7>
-  firrtl.connect %b, %tmp_a : !firrtl.uint<7>, !firrtl.uint<7>
-}
-
-
 // CHECK-LABEL: @add_cst_prop1
 // CHECK-NEXT:   %c11_ui9 = firrtl.constant 11 : !firrtl.uint<9>
 // CHECK-NEXT:   firrtl.strictconnect %out_b, %c11_ui9 : !firrtl.uint<9>
