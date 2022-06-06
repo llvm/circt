@@ -256,8 +256,7 @@ static bool isWriteOnly(Operation *op) {
     auto memEffectOpInterface =
         dyn_cast<mlir::MemoryEffectOpInterface>(use.getOwner());
     if (!memEffectOpInterface ||
-        !memEffectOpInterface
-             .template onlyHasEffect<mlir::MemoryEffects::Write>())
+        !memEffectOpInterface.onlyHasEffect<mlir::MemoryEffects::Write>())
       return false;
   }
   return true;
