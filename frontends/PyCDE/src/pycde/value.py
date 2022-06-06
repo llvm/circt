@@ -3,6 +3,8 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from __future__ import annotations
+from curses.ascii import isdigit
+from email.mime import base
 
 from .support import get_user_loc, _obj_to_value_infer_type
 
@@ -41,25 +43,35 @@ class Value:
 
   _reg_name = re.compile(r"^(.*)__reg(\d+)$")
 
-  def reg(self, clk, rst=None, name=None):
+  def reg(self, clk, rst=None, name=None, cycles=1):
     from .dialects import seq
     if name is None:
-      name = self.name
-      if name is not None:
-        m = Value._reg_name.match(name)
+      basename = None
+      if self.name is not None:
+        m = Value._reg_name.match(self.name)
         if m:
           basename = m.group(1)
           reg_num = m.group(2)
-          name = f"{basename}__reg{int(reg_num)+1}"
+          if isdigit(reg_num):
+            starting_reg = int(reg_num) + 1
+          else:
+            basename = self.name
         else:
-          name = name + "__reg1"
+          basename = self.name
+          starting_reg = 1
     with get_user_loc():
-      return seq.CompRegOp(self.value.type,
-                           input=self.value,
-                           clk=clk,
-                           reset=rst,
-                           name=name,
-                           sym_name=name)
+      reg = self.value
+      for i in range(cycles):
+        give_name = name
+        if give_name is None and basename is not None:
+          give_name = f"{basename}__reg{i+starting_reg}"
+        reg = seq.CompRegOp(self.value.type,
+                            input=reg,
+                            clk=clk,
+                            reset=rst,
+                            name=give_name,
+                            sym_name=give_name)
+      return reg
 
   @property
   def _namehint_attrname(self):
