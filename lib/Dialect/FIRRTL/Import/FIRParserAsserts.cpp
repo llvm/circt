@@ -379,10 +379,13 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
   case VerifFlavor::Cover:
   case VerifFlavor::AssertNotX: {
     // Extract label and message from the format string.
-    StringRef label, message;
-    std::tie(label, message) = fmt.split(':');
-    if (message.empty())
-      std::swap(label, message); // in case of no label
+    StringRef label;
+    StringRef message = fmt;
+    auto index = fmt.find(':');
+    if (index != StringRef::npos) {
+      label = fmt.slice(0, index);
+      message = fmt.slice(index + 1, StringRef::npos);
+    }
 
     // AssertNotX has the special format `assertNotX:%d:msg`, where the `%d`
     // would theoretically interpolate the value being check for X, but in
