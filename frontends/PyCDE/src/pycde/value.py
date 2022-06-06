@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from .support import get_user_loc
+from .support import get_user_loc, _obj_to_value_infer_type
 
 from circt.dialects import esi
 import circt.support as support
@@ -27,8 +27,9 @@ class Value:
     if value is None or isinstance(value, Value):
       return value
     resvalue = support.get_value(value)
+
     if resvalue is None:
-      return None
+      return _obj_to_value_infer_type(value)
 
     if type is None:
       type = resvalue.type
