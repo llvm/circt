@@ -481,8 +481,9 @@ class TypedeclOp:
 
   @staticmethod
   def create(sym_name: str, type: Type, verilog_name: str = None):
-    return hw.TypedeclOp(StringAttr.get(sym_name), TypeAttr.get(type),
-                         verilog_name)
+    return hw.TypedeclOp(StringAttr.get(sym_name),
+                         TypeAttr.get(type),
+                         verilogName=verilog_name)
 
 
 class TypeScopeOp:
