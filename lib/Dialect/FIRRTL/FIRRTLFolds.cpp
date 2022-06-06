@@ -1624,39 +1624,9 @@ void NodeOp::getCanonicalizationPatterns(RewritePatternSet &results,
   results.insert<FoldNodeName, patterns::DropNameNode>(context);
 }
 
-OpFoldResult NodeOp::fold(ArrayRef<Attribute> operands) {
-  if (!inner_sym())
-    return operands[0];
-  return {};
-}
-
-struct WireToNode : public mlir::RewritePattern {
-  WireToNode(MLIRContext *context)
-      : RewritePattern(WireOp::getOperationName(), 0, context) {}
-  LogicalResult matchAndRewrite(Operation *op,
-                                PatternRewriter &rewriter) const override {
-    auto wire = cast<WireOp>(op);
-    auto strictcon = getSingleConnectUserOf(wire);
-    if (!strictcon)
-      return failure();
-    for (auto *user : wire->getUsers()) {
-      if (user == strictcon)
-        continue;
-      if (user->isBeforeInBlock(strictcon))
-        return failure();
-    }
-    auto node = rewriter.replaceOpWithNewOp<NodeOp>(
-        op, wire.result().getType(), strictcon.src(), wire.name(),
-        wire.annotations(), wire.inner_symAttr());
-    node->moveBefore(strictcon);
-    rewriter.eraseOp(strictcon);
-    return success();
-  }
-};
-
 void WireOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                          MLIRContext *context) {
-  results.insert<WireToNode, patterns::DropNameWire>(context);
+  results.insert<patterns::DropNameWire>(context);
 }
 
 // A register with constant reset and all connection to either itself or the
