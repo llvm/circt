@@ -442,7 +442,7 @@ def ForceOp : SVOp<"force", [InOutTypeConstraint<"src", "dest">,
     occur in initial, always, task, and function blocks.
     A force statement shall override a procedural assignment until
     a release statement is executed on the variable.
-    The left-hand side of the assignment can be avariable, a net,
+    The left-hand side of the assignment can be a variable, a net,
     a constant bit-select of a vector net, a part-select of a vector
     net or a concatenation. It cannot be a memory word or a bit-select
     or part-select of a vector variable. See SV Spec 10.6.2.
