@@ -108,7 +108,7 @@ def _obj_to_value(x, type, result_type=None):
     with get_user_loc():
       return hw.ConstantOp(type, x)
 
-  if isinstance(x, list):
+  if isinstance(x, (list, tuple)):
     if not isinstance(type, ArrayType):
       raise ValueError(f"List is only convertable to hw array, not '{type}'")
     elemty = result_type.element_type
@@ -144,7 +144,7 @@ def _infer_type(x):
   if isinstance(x, Value):
     return x.type
 
-  if isinstance(x, list):
+  if isinstance(x, (list, tuple)):
     list_types = [_infer_type(i) for i in x]
     list_type = list_types[0]
     if not all([i == list_type for i in list_types]):
