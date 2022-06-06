@@ -1651,6 +1651,38 @@ void CoverConcurrentOp::getCanonicalizationPatterns(RewritePatternSet &results,
 }
 
 //===----------------------------------------------------------------------===//
+// SV generate ops
+//===----------------------------------------------------------------------===//
+
+bool parseCaseRegions(OpAsmParser &p, ArrayAttr &patternsArray,
+                      SmallVectorImpl<std::unique_ptr<Region>> &caseRegions) {
+  SmallVector<Attribute> patterns;
+  while (!p.parseOptionalKeyword("case")) {
+    Attribute pattern;
+    std::unique_ptr<Region> region = std::make_unique<Region>();
+    if (p.parseLParen() || p.parseAttribute(pattern) || p.parseRParen() ||
+        p.parseRegion(*region))
+      return true;
+    patterns.push_back(pattern);
+    if (region->empty())
+      region->push_back(new Block());
+    caseRegions.push_back(std::move(region));
+  }
+  patternsArray = p.getBuilder().getArrayAttr(patterns);
+  return false;
+}
+
+void printCaseRegions(OpAsmPrinter &p, Operation *, ArrayAttr patternsArray,
+                      MutableArrayRef<Region> caseRegions) {
+  assert(patternsArray.size() == caseRegions.size());
+  for (size_t i = 0, e = caseRegions.size(); i < e; ++i) {
+    p.printNewline();
+    p << "case (" << patternsArray[i] << ") ";
+    p.printRegion(caseRegions[i]);
+  }
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 
