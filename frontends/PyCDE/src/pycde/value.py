@@ -108,6 +108,7 @@ class RegularValue(Value):
 
 class BitVectorValue(Value):
 
+  @singledispatchmethod
   def __getitem__(self, idxOrSlice: Union[int, slice]):
     if isinstance(idxOrSlice, int):
       s = slice(idxOrSlice, idxOrSlice + 1)
@@ -127,6 +128,25 @@ class BitVectorValue(Value):
       ret = comb.ExtractOp(idxs[0], ret_type, self.value)
       if self.name is not None:
         ret.name = f"{self.name}_{idxs[0]}upto{idxs[1]}"
+      return ret
+
+  @__getitem__.register(Value)
+  def __get_item__value(self, v: Value):
+    if not isinstance(v, BitVectorValue):
+      raise ValueError(
+          f"Bitvector index only supports bitvector values, not {type(v)}")
+
+    from .dialects import comb, hw
+    with get_user_loc():
+      if v.type != self.type:
+        if v.type.width < self.type.width:
+          c = hw.ConstantOp(
+              ir.IntegerType.get_signless(self.type.width - v.type.width), 0)
+          v = comb.ConcatOp(c, v)
+        else:
+          v = comb.ExtractOp(0, self.type, v)
+      shifted = comb.ShrUOp(self.value, v)
+      ret = comb.ExtractOp(0, ir.IntegerType.get_signless(1), shifted)
       return ret
 
   def __len__(self):
