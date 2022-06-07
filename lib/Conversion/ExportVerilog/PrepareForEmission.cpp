@@ -74,6 +74,12 @@ static bool shouldSpillWire(Operation &op, const LoweringOptions &options) {
       llvm::any_of(op.getResult(0).getUsers(), isConcat))
     return true;
 
+  // If `options.spillWiresForNamehints` option is enabled, spill a wire for
+  // an expression with sv.namehint.
+  if (options.spillWiresForNamehints && op.getNumResults() == 1 &&
+      op.hasAttr("sv.namehint"))
+    return true;
+
   return false;
 }
 
@@ -248,8 +254,12 @@ static void lowerUsersToTemporaryWire(Operation &op) {
   Block *block = op.getBlock();
   auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), block);
 
-  for (auto result : op.getResults()) {
-    auto newWire = builder.create<WireOp>(result.getType());
+  auto createWireForResult = [&](Value result, StringAttr name) {
+    Value newWire;
+    if (name)
+      newWire = builder.create<WireOp>(result.getType(), name);
+    else
+      newWire = builder.create<WireOp>(result.getType());
 
     while (!result.use_empty()) {
       auto newWireRead = builder.create<ReadInOutOp>(newWire);
@@ -257,10 +267,23 @@ static void lowerUsersToTemporaryWire(Operation &op) {
       use.set(newWireRead);
       newWireRead->moveBefore(use.getOwner());
     }
-
     auto connect = builder.create<AssignOp>(newWire, result);
     connect->moveAfter(&op);
+  };
+
+  // If the op has a single result and a namehint, give the name to its
+  // temporary wire.
+  if (op.getNumResults() == 1) {
+    auto str = op.getAttrOfType<StringAttr>("sv.namehint");
+    // Remove a namehint from the op because the name is moved to the wire.
+    op.removeAttr("sv.namehint");
+    createWireForResult(op.getResult(0), str);
+    return;
   }
+
+  // If the op has multiple results, create wires for each result.
+  for (auto result : op.getResults())
+    createWireForResult(result, StringAttr());
 }
 
 /// Transform "a + -cst" ==> "a - cst" for prettier output.  This returns the

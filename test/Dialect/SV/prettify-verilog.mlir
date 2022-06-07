@@ -3,7 +3,7 @@
 
 // CHECK-LABEL: hw.module @unary_ops
 hw.module @unary_ops(%arg0: i8, %arg1: i8, %arg2: i8, %arg3: i1)
-   -> (a: i8, b: i8, c: i1) {
+   -> (a: i8, b: i8, c: i1, d: i1) {
   %c-1_i8 = hw.constant -1 : i8
 
   // CHECK: [[XOR1:%.+]] = comb.xor %arg0
@@ -21,7 +21,12 @@ hw.module @unary_ops(%arg0: i8, %arg1: i8, %arg2: i8, %arg3: i1)
   %true = hw.constant true
   %c = comb.xor %arg3, %true : i1
 
+  // Expression with a namehint should not get duplicated.
   // CHECK: [[TRUE1:%.+]] = hw.constant true
+  // CHECK-NEXT: comb.xor %arg3, %true {sv.namehint = "foo"}
+  // CHECK-NOT: {sv.namehint = "foo"}
+  %d = comb.xor %arg3, %true {sv.namehint = "foo"}: i1
+
   sv.initial {
     // CHECK: [[TRUE2:%.+]] = hw.constant true
     // CHECK: [[XOR3:%.+]] = comb.xor %arg3, [[TRUE2]]
@@ -29,11 +34,14 @@ hw.module @unary_ops(%arg0: i8, %arg1: i8, %arg2: i8, %arg3: i1)
     sv.if %c {
       sv.fatal 1
     }
+    sv.if %d {
+      sv.fatal 1
+    }
   }
 
   // CHECK: [[XOR4:%.+]] = comb.xor %arg3, [[TRUE1]]
   // CHECK: hw.output %1, %3, [[XOR4]]
-  hw.output %a, %b, %c : i8, i8, i1
+  hw.output %a, %b, %c, %d : i8, i8, i1, i1
 }
 
 // VERILOG: assign a = ~arg0 + arg1;
