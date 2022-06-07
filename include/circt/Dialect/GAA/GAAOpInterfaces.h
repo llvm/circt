@@ -13,8 +13,6 @@
 #ifndef CIRCT_DIALECT_GAA_GAAOPINTERFAES_H
 #define CIRCT_DIALECT_GAA_GAAOPINTERFAES_H
 
-#include "llvm/Support/CommandLine.h"
-
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/SymbolTable.h"
