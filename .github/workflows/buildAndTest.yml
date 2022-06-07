@@ -147,7 +147,7 @@ jobs:
   # Build CIRCT and run its tests.
   build-circt:
     name: Build and Test
-    needs: build-llvm
+    needs: sanity-check
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/circt/images/circt-ci-build:20220216182244
