@@ -25,4 +25,6 @@ def GenerateCaseOp : SVOp<"generate.case",
       custom<CaseRegions>($casePatterns, $caseNames, $caseRegions)
     `]`
   }];
+
+  let hasVerifier = true;
 }

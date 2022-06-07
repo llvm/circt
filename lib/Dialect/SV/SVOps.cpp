@@ -1689,6 +1689,14 @@ void printCaseRegions(OpAsmPrinter &p, Operation *, ArrayAttr patternsArray,
   }
 }
 
+LogicalResult GenerateCaseOp::verify() {
+  size_t numPatterns = casePatterns().size();
+  if (caseRegions().size() != numPatterns || caseNames().size() != numPatterns)
+    return emitOpError(
+        "Size of caseRegions, patterns, and caseNames must match");
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
