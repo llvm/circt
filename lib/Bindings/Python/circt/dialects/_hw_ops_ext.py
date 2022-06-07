@@ -416,6 +416,7 @@ class ArraySliceOp:
       idx_val = support.get_value(low_index)
     return hw.ArraySliceOp(ret_type, array_value, idx_val)
 
+
 class ArrayCreateOp:
 
   @staticmethod
