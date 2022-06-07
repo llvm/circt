@@ -18,9 +18,9 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/iterator.h"
 
-#include "circt/Support/LLVM.h"
-#include "circt/Dialect/HW/InstanceGraphBase.h"
 #include "circt/Dialect/GAA/GAAOps.h"
+#include "circt/Dialect/HW/InstanceGraphBase.h"
+#include "circt/Support/LLVM.h"
 
 namespace circt {
 namespace gaa {
@@ -28,16 +28,24 @@ namespace gaa {
 class CallInfo {
 public:
   explicit CallInfo(Operation *operation);
-  llvm::SmallVector<std::pair<SymbolRefAttr, SymbolRefAttr>, 4> getAllCallee(llvm::StringRef symbolName);
-  llvm::SmallVector<std::pair<SymbolRefAttr, SymbolRefAttr>, 4> getAllMethodCallee(llvm::StringRef symbolName);
-  llvm::SmallVector<std::pair<SymbolRefAttr, SymbolRefAttr>, 4> getAllValueCallee(llvm::StringRef symbolName);
-  llvm::SmallVector<std::pair<SymbolRefAttr, SymbolRefAttr>, 4> getAllRuleCallee(llvm::StringRef symbolName);
-  llvm::SmallVector<llvm::StringRef> getAllCaller(llvm::StringRef instanceName, llvm::StringRef functionName);
+  llvm::SmallVector<std::pair<SymbolRefAttr, SymbolRefAttr>, 4>
+  getAllCallee(llvm::StringRef symbolName);
+  llvm::SmallVector<std::pair<SymbolRefAttr, SymbolRefAttr>, 4>
+  getAllMethodCallee(llvm::StringRef symbolName);
+  llvm::SmallVector<std::pair<SymbolRefAttr, SymbolRefAttr>, 4>
+  getAllValueCallee(llvm::StringRef symbolName);
+  llvm::SmallVector<std::pair<SymbolRefAttr, SymbolRefAttr>, 4>
+  getAllRuleCallee(llvm::StringRef symbolName);
+  llvm::SmallVector<llvm::StringRef> getAllCaller(llvm::StringRef instanceName,
+                                                  llvm::StringRef functionName);
+
 private:
-  using CallCache = DenseMap<llvm::StringRef, llvm::SmallVector<std::pair<SymbolRefAttr, SymbolRefAttr>, 4>>;
-  CallCache methodsCache = CallCache {};
-  CallCache valuesCache = CallCache {};
-  CallCache rulesCache = CallCache {};
+  using CallCache =
+      DenseMap<llvm::StringRef,
+               llvm::SmallVector<std::pair<SymbolRefAttr, SymbolRefAttr>, 4>>;
+  CallCache methodsCache = CallCache{};
+  CallCache valuesCache = CallCache{};
+  CallCache rulesCache = CallCache{};
 };
 } // namespace gaa
 } // namespace circt

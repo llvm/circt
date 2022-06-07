@@ -20,6 +20,7 @@
 #include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FSM/FSMOps.h"
+#include "circt/Dialect/GAA/GAADialect.h"
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/Handshake/HandshakeDialect.h"
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
@@ -27,7 +28,6 @@
 #include "circt/Dialect/Moore/MooreDialect.h"
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
-#include "circt/Dialect/GAA/GAADialect.h"
 #include "circt/Dialect/StaticLogic/StaticLogic.h"
 #include "mlir/IR/Dialect.h"
 

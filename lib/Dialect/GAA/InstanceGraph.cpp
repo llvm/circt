@@ -9,6 +9,7 @@
 #include "circt/Dialect/GAA/InstanceGraph.h"
 #include "mlir/IR/BuiltinOps.h"
 
+using namespace mlir;
 using namespace circt;
 using namespace gaa;
 

@@ -12,10 +12,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/GAA/CallInfo.h"
 #include "circt/Dialect/GAA/GAAOps.h"
 #include "circt/Dialect/GAA/GAAPasses.h"
 #include "circt/Dialect/GAA/InstanceGraph.h"
-#include "circt/Dialect/GAA/CallInfo.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -40,13 +40,13 @@ private:
   llvm::SmallVector<std::pair<StackElement, StringAttr>> rules;
 };
 
-
 void GenerateConflictMatrix::runOnOperation() {
   auto circuit = OperationPass<CircuitOp>::getOperation();
   auto builder = OpBuilder(circuit->getBlock(), ++Block::iterator(circuit));
 
-  // firstly we gather all function call inside the rule/method/value for each module.
-  circuit.walk([&](circt::gaa::ModuleOp module){
+  // firstly we gather all function call inside the rule/method/value for each
+  // module.
+  circuit.walk([&](circt::gaa::ModuleOp module) {
     auto callInfo = getChildAnalysis<CallInfo>(module);
   });
 
@@ -64,17 +64,18 @@ void GenerateConflictMatrix::runOnOperation() {
     auto &element = instancePath.back();
     auto &node = element.node;
     auto &iterator = element.iterator;
-    if(!element.viewed) {
+    if (!element.viewed) {
       auto module = node->getModule();
       // regard methods in the top being rule
-      if(node == top) {
+      if (node == top) {
         rules;
       }
-      auto moduleSymbolRef = mlir::SymbolRefAttr::get(module.getContext(), module.moduleName());
+      auto moduleSymbolRef =
+          mlir::SymbolRefAttr::get(module.getContext(), module.moduleName());
     }
     element.viewed = true;
 
-    if(iterator == node->end()) {
+    if (iterator == node->end()) {
       instancePath.pop_back();
       continue;
     }

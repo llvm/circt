@@ -13,11 +13,13 @@
 #ifndef CIRCT_DIALECT_GAA_GAAOPINTERFAES_H
 #define CIRCT_DIALECT_GAA_GAAOPINTERFAES_H
 
+#include "circt/Dialect/GAA/GAAAttributes.h"
+#include "circt/Dialect/GAA/GAATypes.h"
+#include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/SymbolTable.h"
 
-#include "circt/Dialect/HW/HWOpInterfaces.h"
-#include "circt/Dialect/GAA/GAAOpInterfaces.h.inc"
 
+#include "circt/Dialect/GAA/GAAOpInterfaces.h.inc"
 #endif // CIRCT_DIALECT_GAA_GAAOPINTERFAES_H

@@ -9,14 +9,13 @@
 // This file implement the GAA operation interfaces.
 //
 //===----------------------------------------------------------------------===//
-
+#include "circt/Dialect/GAA/GAAAttributes.h"
+#include "circt/Dialect/GAA/GAAOps.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "llvm/ADT/StringRef.h"
 
 using namespace mlir;
 using namespace llvm;
-#include "circt/Dialect/GAA/GAAOpInterfaces.h"
 using namespace circt::gaa;
-
 #include "circt/Dialect/GAA/GAAOpInterfaces.cpp.inc"

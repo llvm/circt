@@ -1,6 +1,10 @@
 {
   "name": "Add code owner for triage",
-  "includes": ["**/Dialect/GAA/**"],
+  "includes": [
+    "**/Dialect/GAA/**"
+  ],
   "action": "review",
-  "users": ["sequencer"]
+  "users": [
+    "sequencer"
+  ]
 }
