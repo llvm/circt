@@ -39,13 +39,15 @@ def _obj_to_attribute(obj) -> ir.Attribute:
 
 __dir__ = os.path.dirname(__file__)
 _local_files = set([os.path.join(__dir__, x) for x in os.listdir(__dir__)])
+_hidden_filenames = set(["functools.py"])
 
 
 def get_user_loc() -> ir.Location:
   import traceback
   stack = reversed(traceback.extract_stack())
   for frame in stack:
-    if frame.filename in _local_files:
+    fn = os.path.split(frame.filename)[1]
+    if frame.filename in _local_files or fn in _hidden_filenames:
       continue
     return ir.Location.file(frame.filename, frame.lineno, 0)
   return ir.Location.unknown()
@@ -108,7 +110,7 @@ def _obj_to_value(x, type, result_type=None):
     with get_user_loc():
       return hw.ConstantOp(type, x)
 
-  if isinstance(x, list):
+  if isinstance(x, (list, tuple)):
     if not isinstance(type, ArrayType):
       raise ValueError(f"List is only convertable to hw array, not '{type}'")
     elemty = result_type.element_type
@@ -144,7 +146,7 @@ def _infer_type(x):
   if isinstance(x, Value):
     return x.type
 
-  if isinstance(x, list):
+  if isinstance(x, (list, tuple)):
     list_types = [_infer_type(i) for i in x]
     list_type = list_types[0]
     if not all([i == list_type for i in list_types]):

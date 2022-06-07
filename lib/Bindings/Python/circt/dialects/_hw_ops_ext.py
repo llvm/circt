@@ -401,6 +401,22 @@ class ArrayGetOp:
     return hw.ArrayGetOp(array_type.element_type, array_value, idx_val)
 
 
+class ArraySliceOp:
+
+  @staticmethod
+  def create(array_value, low_index, ret_type):
+    array_value = support.get_value(array_value)
+    array_type = support.get_self_or_inner(array_value.type)
+    if isinstance(low_index, int):
+      idx_width = (array_type.size - 1).bit_length()
+      idx_width = max(1, idx_width)  # hw.constant cannot produce i0.
+      idx_val = ConstantOp.create(IntegerType.get_signless(idx_width),
+                                  low_index).result
+    else:
+      idx_val = support.get_value(low_index)
+    return hw.ArraySliceOp(ret_type, array_value, idx_val)
+
+
 class ArrayCreateOp:
 
   @staticmethod
