@@ -110,10 +110,23 @@ class RegularValue(Value):
   pass
 
 
+def _validate_idx(size: int, idx: Union[int, BitVectorValue]):
+  """Validate that `idx` is a valid index into a bitvector or array."""
+  if isinstance(idx, int):
+    if idx >= size:
+      raise ValueError("Subscript out-of-bounds")
+  else:
+    idx = support.get_value(idx)
+    if idx is None or not isinstance(support.type_to_pytype(idx.type),
+                                     ir.IntegerType):
+      raise TypeError("Subscript on array must be either int or MLIR int"
+                      f" Value, not {type(idx)}.")
+
+
 class BitVectorValue(Value):
 
   @singledispatchmethod
-  def __getitem__(self, idxOrSlice: Union[int, slice]):
+  def __getitem__(self, idxOrSlice: Union[int, slice]) -> BitVectorValue:
     if isinstance(idxOrSlice, int):
       s = slice(idxOrSlice, idxOrSlice + 1)
     elif isinstance(idxOrSlice, slice):
@@ -135,23 +148,42 @@ class BitVectorValue(Value):
       return ret
 
   @__getitem__.register(Value)
-  def __get_item__value(self, v: Value):
-    if not isinstance(v, BitVectorValue):
-      raise ValueError(
-          f"Bitvector index only supports bitvector values, not {type(v)}")
+  def __get_item__value(self, idx: BitVectorValue) -> BitVectorValue:
+    """Get the single bit at `idx`."""
+    return self.slice(idx, 1)
+
+  def slice(self, low_bit: BitVectorValue, num_bits: int):
+    """Get a constant-width slice starting at `low_bit` and ending at `low_bit +
+    num_bits`."""
+    _validate_idx(self.type.width, low_bit)
 
     from .dialects import comb, hw
     with get_user_loc():
-      if v.type != self.type:
-        if v.type.width < self.type.width:
+      if low_bit.type != self.type:
+        if low_bit.type.width < self.type.width:
           c = hw.ConstantOp(
-              ir.IntegerType.get_signless(self.type.width - v.type.width), 0)
-          v = comb.ConcatOp(c, v)
+              ir.IntegerType.get_signless(self.type.width - low_bit.type.width),
+              0)
+          low_bit = comb.ConcatOp(c, low_bit)
         else:
-          v = comb.ExtractOp(0, self.type, v)
-      shifted = comb.ShrUOp(self.value, v)
-      ret = comb.ExtractOp(0, ir.IntegerType.get_signless(1), shifted)
+          low_bit = comb.ExtractOp(0, self.type, low_bit)
+      shifted = comb.ShrUOp(self.value, low_bit)
+      ret = comb.ExtractOp(0, ir.IntegerType.get_signless(num_bits), shifted)
       return ret
+
+  def pad_or_truncate(self, num_bits: int):
+    """Make value exactly `num_bits` width by either adding zeros to or lopping
+    off the MSB."""
+    pad_width = num_bits - self.type.width
+
+    from .dialects import comb, hw
+    if pad_width < 0:
+      return comb.ExtractOp(0, ir.IntegerType.get_signless(num_bits),
+                            self.value)
+    if pad_width == 0:
+      return self
+    pad = hw.ConstantOp(ir.IntegerType.get_signless(pad_width), 0)
+    return comb.ConcatOp(pad.value, self.value)
 
   def __len__(self):
     return self.type.width
@@ -160,17 +192,8 @@ class BitVectorValue(Value):
 class ListValue(Value):
 
   @singledispatchmethod
-  def __getitem__(self, sub: int):
-    if isinstance(sub, int):
-      idx = int(sub)
-      if idx >= self.type.size:
-        raise ValueError("Subscript out-of-bounds")
-    else:
-      idx = support.get_value(sub)
-      if idx is None or not isinstance(support.type_to_pytype(idx.type),
-                                       ir.IntegerType):
-        raise TypeError("Subscript on array must be either int or MLIR int"
-                        f" Value, not {type(sub)}.")
+  def __getitem__(self, idx: Union[int, BitVectorValue]) -> Value:
+    _validate_idx(self.type.size, idx)
     from .dialects import hw
     with get_user_loc():
       v = hw.ArrayGetOp(self.value, idx)
@@ -193,6 +216,24 @@ class ListValue(Value):
       if self.name is not None:
         ret.name = f"{self.name}_{idxs[0]}upto{idxs[1]}"
       return ret
+
+  def slice(self, low_idx: Union[int, BitVectorValue], num_elems: int) -> Value:
+    """Get an array slice starting at `low_idx` and ending at `low_idx +
+    num_elems`."""
+    _validate_idx(self.type.size, low_idx)
+    if num_elems > self.type.size:
+      raise ValueError(
+          f"num_bits ({num_elems}) must be <= value width ({len(self)})")
+    if isinstance(low_idx, BitVectorValue):
+      low_idx = low_idx.pad_or_truncate(self.type.size.bit_length())
+
+    from .dialects import hw
+    with get_user_loc():
+      v = hw.ArraySliceOp(self.value, low_idx,
+                          hw.ArrayType.get(self.type.element_type, num_elems))
+      if self.name and isinstance(low_idx, int):
+        v.name = self.name + f"__{low_idx}upto{low_idx+num_elems}"
+      return v
 
   def __len__(self):
     return self.type.strip.size
