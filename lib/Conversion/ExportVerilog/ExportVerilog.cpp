@@ -2539,6 +2539,8 @@ private:
   LogicalResult visitSV(WarningOp op);
   LogicalResult visitSV(InfoOp op);
 
+  LogicalResult visitSV(GenerateCaseOp op);
+
   void emitAssertionLabel(Operation *op, StringRef opName);
   void emitAssertionMessage(StringAttr message, ValueRange args,
                             SmallPtrSet<Operation *, 8> &ops,
@@ -2962,6 +2964,53 @@ LogicalResult StmtEmitter::visitSV(WarningOp op) {
 LogicalResult StmtEmitter::visitSV(InfoOp op) {
   return emitSeverityMessageTask(op, "$info", {}, op.messageAttr(),
                                  op.operands());
+}
+
+// Emit the full generate case with all block labels as given in the op.
+LogicalResult StmtEmitter::visitSV(GenerateCaseOp op) {
+
+  // Print the preamble 'generate' and 'case'.
+  indent() << "generate begin: " << names.addName(op, op.block_name()) << "\n";
+  addIndent();
+  indent() << "case (";
+  emitter.printParamValue(op.cond(), os, VerilogPrecedence::Selection, [&]() {
+    return op->emitOpError("invalid case parameter");
+  });
+  os << ")\n";
+
+  // Ensure that all of the per-case arrays are the same length.
+  ArrayAttr patterns = op.casePatterns();
+  ArrayAttr caseNames = op.caseNames();
+  MutableArrayRef<Region> regions = op.caseRegions();
+  assert(patterns.size() == regions.size());
+  assert(patterns.size() == caseNames.size());
+
+  // Emit each case.
+  addIndent();
+  llvm::StringSet<> usedNames;
+  size_t nextGenID = 0;
+  for (size_t i = 0, e = patterns.size(); i < e; ++i) {
+    auto &region = regions[i];
+    assert(region.hasOneBlock());
+
+    indent();
+    emitter.printParamValue(
+        patterns[i], os, VerilogPrecedence::LowestPrecedence,
+        [&]() { return op->emitOpError("invalid case value"); });
+    StringRef legalName = legalizeName(
+        caseNames[i].cast<StringAttr>().getValue(), usedNames, nextGenID);
+    os << ": begin: " << legalName << "\n";
+    emitStatementBlock(region.getBlocks().front());
+    indent() << "end: " << legalName << "\n";
+  }
+  reduceIndent();
+
+  // Emit the necessay end matter.
+  indent() << "endcase\n";
+  reduceIndent();
+  indent() << "end: " << names.getName(op) << "\n";
+  indent() << "endgenerate\n";
+  return success();
 }
 
 /// Emit the `<label>:` portion of an immediate or concurrent verification

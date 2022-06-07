@@ -1655,29 +1655,36 @@ void CoverConcurrentOp::getCanonicalizationPatterns(RewritePatternSet &results,
 //===----------------------------------------------------------------------===//
 
 bool parseCaseRegions(OpAsmParser &p, ArrayAttr &patternsArray,
+                      ArrayAttr &caseNamesArray,
                       SmallVectorImpl<std::unique_ptr<Region>> &caseRegions) {
   SmallVector<Attribute> patterns;
+  SmallVector<Attribute> names;
   while (!p.parseOptionalKeyword("case")) {
     Attribute pattern;
+    StringAttr name;
     std::unique_ptr<Region> region = std::make_unique<Region>();
-    if (p.parseLParen() || p.parseAttribute(pattern) || p.parseRParen() ||
-        p.parseRegion(*region))
+    if (p.parseLParen() || p.parseAttribute(pattern) || p.parseComma() ||
+        p.parseAttribute(name) || p.parseRParen() || p.parseRegion(*region))
       return true;
     patterns.push_back(pattern);
+    names.push_back(name);
     if (region->empty())
       region->push_back(new Block());
     caseRegions.push_back(std::move(region));
   }
   patternsArray = p.getBuilder().getArrayAttr(patterns);
+  caseNamesArray = p.getBuilder().getArrayAttr(names);
   return false;
 }
 
 void printCaseRegions(OpAsmPrinter &p, Operation *, ArrayAttr patternsArray,
+                      ArrayAttr namesArray,
                       MutableArrayRef<Region> caseRegions) {
   assert(patternsArray.size() == caseRegions.size());
+  assert(patternsArray.size() == namesArray.size());
   for (size_t i = 0, e = caseRegions.size(); i < e; ++i) {
     p.printNewline();
-    p << "case (" << patternsArray[i] << ") ";
+    p << "case (" << patternsArray[i] << ", " << namesArray[i] << ") ";
     p.printRegion(caseRegions[i]);
   }
 }
