@@ -157,16 +157,12 @@ class BitVectorValue(Value):
     num_bits`."""
     _validate_idx(self.type.width, low_bit)
 
-    from .dialects import comb, hw
+    from .dialects import comb
+    # comb.extract only supports constant lowBits. Shift the bits right, then
+    # extract the correct number from the 0th bit.
     with get_user_loc():
-      if low_bit.type != self.type:
-        if low_bit.type.width < self.type.width:
-          c = hw.ConstantOp(
-              ir.IntegerType.get_signless(self.type.width - low_bit.type.width),
-              0)
-          low_bit = comb.ConcatOp(c, low_bit)
-        else:
-          low_bit = comb.ExtractOp(0, self.type, low_bit)
+      # comb.shru's rhs and lhs must be the same width.
+      low_bit = low_bit.pad_or_truncate(self.type.width)
       shifted = comb.ShrUOp(self.value, low_bit)
       ret = comb.ExtractOp(0, ir.IntegerType.get_signless(num_bits), shifted)
       return ret
