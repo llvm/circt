@@ -13,8 +13,10 @@
 #ifndef CIRCT_DIALECT_HW_HWOPINTERFACES_H
 #define CIRCT_DIALECT_HW_HWOPINTERFACES_H
 
+#include "circt/Dialect/HW/HWAttributes.h"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/SymbolTable.h"
+#include "llvm/ADT/TypeSwitch.h"
 
 #include "circt/Dialect/HW/HWOpInterfaces.h.inc"
 

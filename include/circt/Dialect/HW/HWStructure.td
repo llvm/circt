@@ -485,6 +485,7 @@ def OutputOp : HWOp<"output", [Terminator, HasParent<"HWModuleOp">,
 
 def GlobalRefOp : HWOp<"globalRef", [
     DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+    DeclareOpInterfaceMethods<HierarchicalPathLike>,
     IsolatedFromAbove, Symbol]> {
   let summary = "A global reference to uniquely identify each"
                                     "instance of an operation";
