@@ -43,6 +43,10 @@ class Value:
   _reg_name = re.compile(r"^(.*)__reg(\d+)$")
 
   def reg(self, clk, rst=None, name=None, cycles=1):
+    """Register this value, returning the delayed value.
+    `clk`, `rst`: the clock and reset signals.
+    `name`: name this register explicitly.
+    `cycles`: number of registers to add."""
     from .dialects import seq
     if name is None:
       basename = None
