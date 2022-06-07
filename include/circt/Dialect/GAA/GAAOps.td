@@ -23,12 +23,12 @@ def isHWModuleSymbol : AttrConstraint<
 
 def CircuitOp : GAAOp<
   "circuit", [
-  IsolatedFromAbove,
-  SingleBlock,
-  Symbol,
-  SymbolTable,
-  NoTerminator,
-  NoRegionArguments
+    IsolatedFromAbove,
+    SingleBlock,
+    Symbol,
+    SymbolTable,
+    NoTerminator,
+    NoRegionArguments
   ]> {
   let summary = "represent a GAA circuit.";
   let description = [{
@@ -40,14 +40,14 @@ def CircuitOp : GAAOp<
 
 def ExtModuleOp : GAAOp<
   "module.extern", [
-  HasParent<"CircuitOp">,
-  IsolatedFromAbove,
-  SingleBlock,
-  Symbol,
-  SymbolTable,
-  NoTerminator,
-  DeclareOpInterfaceMethods<GAAModuleLike>,
-  DeclareOpInterfaceMethods<HWModuleLike>
+    HasParent<"CircuitOp">,
+    IsolatedFromAbove,
+    SingleBlock,
+    Symbol,
+    SymbolTable,
+    NoTerminator,
+    DeclareOpInterfaceMethods<GAAModuleLike>,
+    DeclareOpInterfaceMethods<HWModuleLike>,
   ]> {
   let summary = "Binding a `hw.module` to GAA ExtModule.";
   let description = [{
@@ -62,7 +62,7 @@ def ExtModuleOp : GAAOp<
 
 def BindBareOp : GAAOp<
   "bind.bare", [
-  HasParent<"ExtModuleOp">
+    HasParent<"ExtModuleOp">
   ]> {
   let summary = "Binding a signal to a port";
   let description = [{
@@ -73,10 +73,10 @@ def BindBareOp : GAAOp<
 
 def BindValueOp : GAAOp<
   "bind.value", [
-  HasParent<"ExtModuleOp">,
-  DeclareOpInterfaceMethods<GAAFunctionLike>,
-  DeclareOpInterfaceMethods<GAAValueLike>,
-  Symbol
+    HasParent<"ExtModuleOp">,
+    DeclareOpInterfaceMethods<GAAFunctionLike>,
+    DeclareOpInterfaceMethods<GAAValueLike>,
+    Symbol
   ]> {
   let summary = "Binding a signal to a port";
   let description = [{
@@ -86,26 +86,26 @@ def BindValueOp : GAAOp<
 
 def BindMethodOp : GAAOp<
   "bind.method", [
-  HasParent<"ExtModuleOp">,
-  DeclareOpInterfaceMethods<GAAFunctionLike>,
-  DeclareOpInterfaceMethods<GAAMethodLike>,
-  Symbol,
-  NoTerminator,
-  IsolatedFromAbove
+    HasParent<"ExtModuleOp">,
+    DeclareOpInterfaceMethods<GAAFunctionLike>,
+    DeclareOpInterfaceMethods<GAAMethodLike>,
+    Symbol,
+    NoTerminator,
+    IsolatedFromAbove
   ]> {
   let regions = (region SizedRegion<1>:$body);
 }
 
 def ModuleOp : GAAOp<
   "module", [
-  HasParent<"CircuitOp">,
-  IsolatedFromAbove,
-  SingleBlock,
-  Symbol,
-  SymbolTable,
-  NoTerminator,
-  DeclareOpInterfaceMethods<GAAModuleLike>,
-  DeclareOpInterfaceMethods<HWModuleLike>
+    HasParent<"CircuitOp">,
+    IsolatedFromAbove,
+    SingleBlock,
+    Symbol,
+    SymbolTable,
+    NoTerminator,
+    DeclareOpInterfaceMethods<GAAModuleLike>,
+    DeclareOpInterfaceMethods<HWModuleLike>,
   ]> {
   let summary = "Defining a GAA Module.";
   let description = [{
@@ -117,9 +117,9 @@ def ModuleOp : GAAOp<
 
 def InstanceOp : GAAOp<
   "instance", [
-  HasParent<"ModuleOp">,
-  Symbol,
-  DeclareOpInterfaceMethods<HWInstanceLike, ["instanceName"]>
+    HasParent<"ModuleOp">,
+    Symbol,
+    DeclareOpInterfaceMethods<HWInstanceLike, ["instanceName"]>,
   ]> {
   let summary = "Instantiate a GAA Module or GAA ExtModule";
   let description = [{
@@ -133,10 +133,10 @@ def InstanceOp : GAAOp<
 }
 def RuleOp : GAAOp<
   "rule", [
-  HasParent<"ModuleOp">,
-  Symbol,
-  DeclareOpInterfaceMethods<GAARuleLike>,
-  SingleBlockImplicitTerminator<"RuleReturnOp">
+    HasParent<"ModuleOp">,
+    Symbol,
+    DeclareOpInterfaceMethods<GAARuleLike>,
+    SingleBlockImplicitTerminator<"RuleReturnOp">,
   ]> {
   let summary = "Define a rule";
   let description = [{
@@ -148,8 +148,8 @@ def RuleOp : GAAOp<
 // use DynInstDataOpInterface after migrate it into HW Dialect.
 def RuleRefOp : GAAOp<
   "ruleref", [
-  HasParent<"CircuitOp">,
-  Symbol
+    HasParent<"CircuitOp">,
+    Symbol,
   ]> {
   let summary = "Define a global reference to a rule";
   let description = [{
@@ -159,9 +159,9 @@ def RuleRefOp : GAAOp<
 
 def RuleReturnOp : GAAOp<
   "rule.return", [
-  Terminator,
-  ReturnLike,
-  HasParent<"RuleOp">,
+    Terminator,
+    ReturnLike,
+    HasParent<"RuleOp">,
   ]> {
   let summary = "Return ready to scheduler.";
   let description = [{
@@ -175,11 +175,11 @@ def RuleReturnOp : GAAOp<
 
 def ValueOp : GAAOp<
   "value", [
-  HasParent<"ModuleOp">,
-  Symbol,
-  DeclareOpInterfaceMethods<GAAFunctionLike>,
-  DeclareOpInterfaceMethods<GAAValueLike>,
-  SingleBlockImplicitTerminator<"ValueReturnOp">
+    HasParent<"ModuleOp">,
+    Symbol,
+    DeclareOpInterfaceMethods<GAAFunctionLike>,
+    DeclareOpInterfaceMethods<GAAValueLike>,
+    SingleBlockImplicitTerminator<"ValueReturnOp">
   ]> {
   let summary = "Define a value, can be used in both GAA ExtModule and Module.";
   let description = [{
@@ -196,8 +196,8 @@ def ValueOp : GAAOp<
 
 def ValueCallOp : GAAOp<
   "value.call", [
-  ParentOneOf<["RuleOp", "MethodOp", "ValueOp"]>,
-  DeclareOpInterfaceMethods<GAACallLike>
+    ParentOneOf<["RuleOp", "MethodOp", "ValueOp"]>,
+    DeclareOpInterfaceMethods<GAACallLike>,
   ]> {
   let summary = "Call Value.";
   let description = [{
@@ -215,9 +215,9 @@ def ValueCallOp : GAAOp<
 
 def ValueReturnOp : GAAOp<
   "value.return", [
-  Terminator,
-  ReturnLike,
-  HasParent<"ValueOp">,
+    Terminator,
+    ReturnLike,
+    HasParent<"ValueOp">,
   ]> {
   let summary = "Return signals.";
   let description = [{
@@ -232,12 +232,12 @@ def ValueReturnOp : GAAOp<
 
 def MethodOp : GAAOp<
   "method", [
-  HasParent<"ModuleOp">,
-  DeclareOpInterfaceMethods<GAAFunctionLike>,
-  DeclareOpInterfaceMethods<GAAMethodLike>,
-  Symbol,
-  SingleBlockImplicitTerminator<"MethodReturnOp">,
-  FunctionOpInterface
+    HasParent<"ModuleOp">,
+    DeclareOpInterfaceMethods<GAAFunctionLike>,
+    DeclareOpInterfaceMethods<GAAMethodLike>,
+    Symbol,
+    SingleBlockImplicitTerminator<"MethodReturnOp">,
+    FunctionOpInterface
   ]> {
   let summary = "Define a method, can be used in both GAA ExtModule and Module.";
   let description = [{
@@ -285,8 +285,8 @@ def MethodOp : GAAOp<
 
 def MethodCallOp : GAAOp<
   "method.call", [
-  ParentOneOf<["MethodOp", "RuleOp"]>,
-  DeclareOpInterfaceMethods<GAACallLike>
+    ParentOneOf<["MethodOp", "RuleOp"]>,
+    DeclareOpInterfaceMethods<GAACallLike>
   ]> {
   let summary = "Call Method.";
   let description = [{
@@ -306,9 +306,9 @@ def MethodCallOp : GAAOp<
 
 def MethodReturnOp : GAAOp<
   "method.return", [
-  Terminator,
-  ReturnLike,
-  HasParent<"MethodOp">,
+    Terminator,
+    ReturnLike,
+    HasParent<"MethodOp">,
   ]> {
   let summary = "Return signals.";
   let description = [{
@@ -318,6 +318,18 @@ def MethodReturnOp : GAAOp<
   }];
 
   let arguments = (ins HWIntegerType:$ready, Optional<HWIntegerType>:$operands);
+}
+
+def RulesToSchedule : GAAOp<
+  "scheduler.todo", [
+    SingleBlock,
+    SymbolTable,
+    NoTerminator,
+    NoRegionArguments,
+  ]
+  > {
+  let summary = "record a sequence of rules to schedule.";
+  let regions = (region SizedRegion<1>:$body);
 }
 
 #endif // CIRCT_DIALECT_GAA_GAAOPS_TD
