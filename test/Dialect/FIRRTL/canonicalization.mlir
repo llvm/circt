@@ -2146,7 +2146,7 @@ firrtl.module @namedrop(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in
   %_T_1 = firrtl.wire : !firrtl.uint<1>
   %_T_2 = firrtl.reg %clock : !firrtl.uint<1>
   %_T_3 = firrtl.regreset %clock, %reset, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
-  %a = firrtl.mem Undefined  {depth = 8 : i64, name = "_T_5", portNames = ["a"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: uint<1>>
+  %a = firrtl.mem Undefined {depth = 8 : i64, name = "_T_5", portNames = ["a"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: uint<1>>
   firrtl.connect %out, %in : !firrtl.uint<1>, !firrtl.uint<1>
   // CHECK: firrtl.strictconnect %out, %in
 }

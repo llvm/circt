@@ -346,9 +346,9 @@ def FNamableOp : OpInterface<"FNamableOp"> {
   let methods = [
     InterfaceMethod<"Return a destination of connection.",
     "bool", "hasDroppableName", (ins), [{}], /*defaultImplementation=*/[{
-      return this->getOperation()->getAttr("nameKind").template
-             cast<NameKindEnumAttr>().getValue() ==
-             NameKindEnum::DroppableName;
+      return this->getOperation()->template
+             getAttrOfType<NameKindEnumAttr>("nameKind").getValue()
+             == NameKindEnum::DroppableName;
     }]>,
     InterfaceMethod<"Make the name droppable.",
     "void", "dropName", (ins), [{}], /*defaultImplementation=*/[{
@@ -358,8 +358,8 @@ def FNamableOp : OpInterface<"FNamableOp"> {
     }]>,
     InterfaceMethod<"Return the name.",
     "mlir::StringAttr", "getName", (ins), [{}], /*defaultImplementation=*/[{
-      return this->getOperation()->getAttr("name").template
-             cast<mlir::StringAttr>();
+      return this->getOperation()->template
+             getAttrOfType<mlir::StringAttr>("name");
     }]>
   ];
 }
