@@ -25,28 +25,28 @@ NLATable::NLATable(Operation *operation) {
   for (auto &op : *circuit.getBody()) {
     if (auto module = dyn_cast<FModuleLike>(op))
       symToOp[module.moduleNameAttr()] = module;
-    if (auto nla = dyn_cast<HierPathOp>(op))
+    if (auto nla = dyn_cast<GlobalRefOp>(op))
       addNLA(nla);
   }
 }
 
-ArrayRef<HierPathOp> NLATable::lookup(StringAttr name) {
+ArrayRef<GlobalRefOp> NLATable::lookup(StringAttr name) {
   auto iter = nodeMap.find(name);
   if (iter == nodeMap.end())
     return {};
   return iter->second;
 }
 
-ArrayRef<HierPathOp> NLATable::lookup(Operation *op) {
+ArrayRef<GlobalRefOp> NLATable::lookup(Operation *op) {
   auto name = op->getAttrOfType<StringAttr>("sym_name");
   if (!name)
     return {};
   return lookup(name);
 }
 
-HierPathOp NLATable::getNLA(StringAttr name) {
+GlobalRefOp NLATable::getNLA(StringAttr name) {
   auto *n = symToOp.lookup(name);
-  return dyn_cast_or_null<HierPathOp>(n);
+  return dyn_cast_or_null<GlobalRefOp>(n);
 }
 
 FModuleLike NLATable::getModule(StringAttr name) {
@@ -54,7 +54,7 @@ FModuleLike NLATable::getModule(StringAttr name) {
   return dyn_cast_or_null<FModuleLike>(n);
 }
 
-void NLATable::addNLA(HierPathOp nla) {
+void NLATable::addNLA(GlobalRefOp nla) {
   symToOp[nla.sym_nameAttr()] = nla;
   for (auto ent : nla.namepath()) {
     if (auto mod = ent.dyn_cast<FlatSymbolRefAttr>())
@@ -64,7 +64,7 @@ void NLATable::addNLA(HierPathOp nla) {
   }
 }
 
-void NLATable::erase(HierPathOp nla, SymbolTable *symbolTable) {
+void NLATable::erase(GlobalRefOp nla, SymbolTable *symbolTable) {
   symToOp.erase(nla.sym_nameAttr());
   for (auto ent : nla.namepath())
     if (auto mod = ent.dyn_cast<FlatSymbolRefAttr>())
@@ -75,7 +75,7 @@ void NLATable::erase(HierPathOp nla, SymbolTable *symbolTable) {
     symbolTable->erase(nla);
 }
 
-void NLATable::updateModuleInNLA(HierPathOp nlaOp, StringAttr oldModule,
+void NLATable::updateModuleInNLA(GlobalRefOp nlaOp, StringAttr oldModule,
                                  StringAttr newModule) {
   nlaOp.updateModule(oldModule, newModule);
   auto &nlas = nodeMap[oldModule];

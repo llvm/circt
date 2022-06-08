@@ -188,19 +188,3 @@ def FMemModuleOp : FIRRTLOp<"memmodule",
 
   let hasCustomAssemblyFormat = 1;
 }
-
-def HierPathOp : FIRRTLOp<"hierpath",
-      [IsolatedFromAbove, Symbol,
-       DeclareOpInterfaceMethods<SymbolUserOpInterface>,
-       DeclareOpInterfaceMethods<HierarchicalPathLike>,
-       HasParent<"CircuitOp">]> {
-  let summary = "Hierarchical path specification";
-  let description = [{
-    The "firrtl.hierpath" operation represents a path through the hierarchy.
-    This is used to specify namable things for use in other operations, for 
-    example in verbatim substitution. Non-local annotations also use these.
-  }];
-  let arguments = (ins SymbolNameAttr:$sym_name, NameRefArrayAttr:$namepath);
-  let results = (outs);
-  let hasCustomAssemblyFormat = 1;
-}

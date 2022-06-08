@@ -1155,7 +1155,7 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
   return TypeSwitch<Attribute, bool>(field)
       .Case<AugmentedGroundTypeAttr>([&](auto ground) {
         auto [fieldRef, sym] = leafMap.lookup(ground.getID());
-        HierPathOp nla;
+        GlobalRefOp nla;
         if (sym)
           nla = nlaTable->getNLA(sym.getAttr());
         Value leafValue = fieldRef.getValue();
@@ -2155,7 +2155,7 @@ void GrandCentralPass::runOnOperation() {
        llvm::make_early_inc_range(circuitOp.getBody()->getOperations())) {
 
     // Remove NLA operations.
-    if (auto nla = dyn_cast<HierPathOp>(op)) {
+    if (auto nla = dyn_cast<GlobalRefOp>(op)) {
       if (deadNLAs.count(nla.sym_nameAttr())) {
         nlaTable->erase(nla);
         symTable.erase(nla);

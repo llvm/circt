@@ -140,7 +140,7 @@ void PrefixModulesPass::removeDeadAnnotations(StringAttr moduleName,
     auto nlaName = nla.cast<FlatSymbolRefAttr>().getAttr();
     auto nlaOp = nlaTable->getNLA(nlaName);
     if (!nlaOp) {
-      op->emitError("cannot find HierPathOp :" + nlaName.getValue());
+      op->emitError("cannot find GlobalRefOp :" + nlaName.getValue());
       signalPassFailure();
       return false;
     }
@@ -216,8 +216,8 @@ void PrefixModulesPass::renameModuleBody(std::string prefix, FModuleOp module) {
       auto newTarget = StringAttr::get(context, prefix + getPrefix(target) +
                                                     target.moduleName());
       AnnotationSet instAnnos(instanceOp);
-      // If the instance has HierPathOp, then update its module name also.
-      // There can be multiple HierPathOps attached to the instance op.
+      // If the instance has GlobalRefOp, then update its module name also.
+      // There can be multiple GlobalRefOps attached to the instance op.
 
       StringAttr oldModName = instanceOp.moduleNameAttr().getAttr();
       // Update the NLAs that apply on this InstanceOp.
@@ -228,7 +228,7 @@ void PrefixModulesPass::renameModuleBody(std::string prefix, FModuleOp module) {
         }
       }
       // Now get the NLAs that pass through the InstanceOp and update them also.
-      DenseSet<HierPathOp> instNLAs;
+      DenseSet<GlobalRefOp> instNLAs;
       nlaTable->getInstanceNLAs(instanceOp, instNLAs);
       for (auto nla : instNLAs)
         nlaTable->updateModuleInNLA(nla, oldModName, newTarget);
@@ -267,7 +267,7 @@ void PrefixModulesPass::renameModule(FModuleOp module) {
   auto &firstPrefix = prefixes.front();
 
   auto fixNLAsRootedAt = [&](StringAttr oldModName, StringAttr newModuleName) {
-    DenseSet<HierPathOp> nlas;
+    DenseSet<GlobalRefOp> nlas;
     nlaTable->getNLAsInModule(oldModName, nlas);
     for (auto n : nlas)
       if (n.root() == oldModName)

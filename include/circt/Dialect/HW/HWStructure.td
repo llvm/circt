@@ -497,8 +497,8 @@ def GlobalRefOp : HWOp<"globalRef", [
   }];
 
   let arguments = (ins SymbolNameAttr:$sym_name, NameRefArrayAttr:$namepath);
-
-  let assemblyFormat = [{ $sym_name $namepath attr-dict }];
+  let results = (outs);
+  let hasCustomAssemblyFormat = 1;
 }
 
 def ProbeOp : HWOp<"probe", []> {

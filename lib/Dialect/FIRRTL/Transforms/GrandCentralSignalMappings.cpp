@@ -672,7 +672,7 @@ FailureOr<bool> GrandCentralSignalMappingsPass::emitUpdatedMappings(
     // If there's an NLA, add instance path information.
     if (mapping.nlaSym) {
       auto nla =
-          cast<HierPathOp>(circuit.lookupSymbol(mapping.nlaSym.getAttr()));
+          cast<hw::GlobalRefOp>(circuit.lookupSymbol(mapping.nlaSym.getAttr()));
       assert(!nla.namepath().empty());
       assert(nla.isComponent());
 

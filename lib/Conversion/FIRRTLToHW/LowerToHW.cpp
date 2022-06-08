@@ -544,7 +544,7 @@ void FIRRTLModuleLowering::runOnOperation() {
             return signalPassFailure();
           state.oldToNewModuleMap[&op] = loweredMod;
         })
-        .Case<HierPathOp>([&](auto nla) {
+        .Case<hw::GlobalRefOp>([&](auto nla) {
           // Just drop it.
         })
         .Default([&](Operation *op) {

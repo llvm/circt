@@ -3396,10 +3396,10 @@ static void printVerifAttrs(OpAsmPrinter &p, Operation *op,
 }
 
 //===----------------------------------------------------------------------===//
-// HierPathOp helpers.
+// GlobalRefOp helpers.
 //===----------------------------------------------------------------------===//
 
-// Verify the HierPathOp.
+// Verify the GlobalRefOp.
 // 1. Iterate over the namepath.
 // 2. The namepath should be a valid instance path, specified either on a
 // module or a declaration inside a module.
@@ -3412,115 +3412,58 @@ static void printVerifAttrs(OpAsmPrinter &p, Operation *op,
 // 6. The last element of the namepath, can be an InnerRefAttr on either a
 // module port or a declaration inside the module.
 // 7. The last element of the namepath can also be a module symbol.
-LogicalResult
-HierPathOp::verifySymbolUses(mlir::SymbolTableCollection &symtblC) {
-  Operation *op = *this;
-  CircuitOp cop = op->getParentOfType<CircuitOp>();
-  auto &symtbl = symtblC.getSymbolTable(cop);
-  if (namepath().size() <= 1)
-    return emitOpError()
-           << "the instance path cannot be empty/single element, it "
-              "must specify an instance path.";
-
-  StringAttr expectedModuleName = {};
-  for (unsigned i = 0, s = namepath().size() - 1; i < s; ++i) {
-    hw::InnerRefAttr innerRef = namepath()[i].dyn_cast<hw::InnerRefAttr>();
-    if (!innerRef)
-      return emitOpError()
-             << "the instance path can only contain inner sym reference"
-             << ", only the leaf can refer to a module symbol";
-
-    if (expectedModuleName && expectedModuleName != innerRef.getModule())
-      return emitOpError() << "instance path is incorrect. Expected module: "
-                           << expectedModuleName
-                           << " instead found: " << innerRef.getModule();
-    InstanceOp instOp = getInstance(symtbl, innerRef);
-    if (!instOp)
-      return emitOpError() << " module: " << innerRef.getModule()
-                           << " does not contain any instance with symbol: "
-                           << innerRef.getName();
-    expectedModuleName = instOp.moduleNameAttr().getAttr();
-  }
-  // The instance path has been verified. Now verify the last element.
-  auto leafRef = namepath()[namepath().size() - 1];
-  if (auto innerRef = leafRef.dyn_cast<hw::InnerRefAttr>()) {
-    auto *fmod = symtbl.lookup(innerRef.getModule());
-    auto mod = cast<FModuleLike>(fmod);
-    if (!hasPortNamed(mod, innerRef.getName()) &&
-        !hasValNamed(mod, innerRef.getName())) {
-      return emitOpError() << " operation with symbol: " << innerRef
-                           << " was not found ";
-    }
-    if (expectedModuleName && expectedModuleName != innerRef.getModule())
-      return emitOpError() << "instance path is incorrect. Expected module: "
-                           << expectedModuleName
-                           << " instead found: " << innerRef.getModule();
-  } else if (expectedModuleName !=
-             leafRef.cast<FlatSymbolRefAttr>().getAttr()) {
-    // This is the case when the nla is applied to a module.
-    return emitOpError() << "instance path is incorrect. Expected module: "
-                         << expectedModuleName << " instead found: "
-                         << leafRef.cast<FlatSymbolRefAttr>().getAttr();
-  }
-  return success();
-}
-
-void HierPathOp::print(OpAsmPrinter &p) {
-  p << " ";
-  p.printSymbolName(sym_name());
-  p << " [";
-  llvm::interleaveComma(namepath().getValue(), p, [&](Attribute attr) {
-    if (auto ref = attr.dyn_cast<hw::InnerRefAttr>()) {
-      p.printSymbolName(ref.getModule().getValue());
-      p << "::";
-      p.printSymbolName(ref.getName().getValue());
-    } else {
-      p.printSymbolName(attr.cast<FlatSymbolRefAttr>().getValue());
-    }
-  });
-  p << "]";
-  p.printOptionalAttrDict((*this)->getAttrs(),
-                          {SymbolTable::getSymbolAttrName(), "namepath"});
-}
-
-ParseResult HierPathOp::parse(OpAsmParser &parser, OperationState &result) {
-  // Parse the symbol name.
-  StringAttr symName;
-  if (parser.parseSymbolName(symName, SymbolTable::getSymbolAttrName(),
-                             result.attributes))
-    return failure();
-
-  // Parse the namepath.
-  SmallVector<Attribute> namepath;
-  if (parser.parseCommaSeparatedList(
-          OpAsmParser::Delimiter::Square, [&]() -> ParseResult {
-            auto loc = parser.getCurrentLocation();
-            SymbolRefAttr ref;
-            if (parser.parseAttribute(ref))
-              return failure();
-
-            // "A" is a Ref, "A::b" is a InnerRef, "A::B::c" is an error.
-            auto pathLength = ref.getNestedReferences().size();
-            if (pathLength == 0)
-              namepath.push_back(
-                  FlatSymbolRefAttr::get(ref.getRootReference()));
-            else if (pathLength == 1)
-              namepath.push_back(hw::InnerRefAttr::get(ref.getRootReference(),
-                                                       ref.getLeafReference()));
-            else
-              return parser.emitError(loc,
-                                      "only one nested reference is allowed");
-            return success();
-          }))
-    return failure();
-  result.addAttribute("namepath",
-                      ArrayAttr::get(parser.getContext(), namepath));
-
-  if (parser.parseOptionalAttrDict(result.attributes))
-    return failure();
-
-  return success();
-}
+// LogicalResult
+// GlobalRefOp::verifySymbolUses(mlir::SymbolTableCollection &symtblC) {
+//  Operation *op = *this;
+//  CircuitOp cop = op->getParentOfType<CircuitOp>();
+//  auto &symtbl = symtblC.getSymbolTable(cop);
+//  if (namepath().size() <= 1)
+//    return emitOpError()
+//           << "the instance path cannot be empty/single element, it "
+//              "must specify an instance path.";
+//
+//  StringAttr expectedModuleName = {};
+//  for (unsigned i = 0, s = namepath().size() - 1; i < s; ++i) {
+//    hw::InnerRefAttr innerRef = namepath()[i].dyn_cast<hw::InnerRefAttr>();
+//    if (!innerRef)
+//      return emitOpError()
+//             << "the instance path can only contain inner sym reference"
+//             << ", only the leaf can refer to a module symbol";
+//
+//    if (expectedModuleName && expectedModuleName != innerRef.getModule())
+//      return emitOpError() << "instance path is incorrect. Expected module: "
+//                           << expectedModuleName
+//                           << " instead found: " << innerRef.getModule();
+//    InstanceOp instOp = getInstance(symtbl, innerRef);
+//    if (!instOp)
+//      return emitOpError() << " module: " << innerRef.getModule()
+//                           << " does not contain any instance with symbol: "
+//                           << innerRef.getName();
+//    expectedModuleName = instOp.moduleNameAttr().getAttr();
+//  }
+//  // The instance path has been verified. Now verify the last element.
+//  auto leafRef = namepath()[namepath().size() - 1];
+//  if (auto innerRef = leafRef.dyn_cast<hw::InnerRefAttr>()) {
+//    auto *fmod = symtbl.lookup(innerRef.getModule());
+//    auto mod = cast<FModuleLike>(fmod);
+//    if (!hasPortNamed(mod, innerRef.getName()) &&
+//        !hasValNamed(mod, innerRef.getName())) {
+//      return emitOpError() << " operation with symbol: " << innerRef
+//                           << " was not found ";
+//    }
+//    if (expectedModuleName && expectedModuleName != innerRef.getModule())
+//      return emitOpError() << "instance path is incorrect. Expected module: "
+//                           << expectedModuleName
+//                           << " instead found: " << innerRef.getModule();
+//  } else if (expectedModuleName !=
+//             leafRef.cast<FlatSymbolRefAttr>().getAttr()) {
+//    // This is the case when the nla is applied to a module.
+//    return emitOpError() << "instance path is incorrect. Expected module: "
+//                         << expectedModuleName << " instead found: "
+//                         << leafRef.cast<FlatSymbolRefAttr>().getAttr();
+//  }
+//  return success();
+//}
 
 //===----------------------------------------------------------------------===//
 // Various namers.

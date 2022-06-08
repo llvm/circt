@@ -522,13 +522,13 @@ void ExtractInstancesPass::extractInstances() {
           parent.getArgument(numParentPorts + portIdx));
     }
     assert(inst.use_empty() && "instance ports should have been detached");
-    DenseSet<HierPathOp> instanceNLAs;
+    DenseSet<GlobalRefOp> instanceNLAs;
     // Get the NLAs that pass through the InstanceOp `inst`.
     // This does not returns NLAs that have the `inst` as the leaf.
     nlaTable.getInstanceNLAs(inst, instanceNLAs);
     // Map of the NLAs, that are applied to the InstanceOp. That is the NLA
     // terminates on the InstanceOp.
-    DenseMap<HierPathOp, Annotation> instNonlocalAnnos;
+    DenseMap<GlobalRefOp, Annotation> instNonlocalAnnos;
     // Get the NLAs that are applied on the InstanceOp, since the NLATable does
     // not return them.
     AnnotationSet::removeAnnotations(inst, [&](Annotation anno) {
@@ -538,7 +538,7 @@ void ExtractInstancesPass::extractInstances() {
         return false;
       // Ignore the breadcrumb annos, since NLATable already tracks them.
       if (!anno.isClass("circt.nonlocal"))
-        if (HierPathOp nla = nlaTable.getNLA(nlaName.getAttr())) {
+        if (GlobalRefOp nla = nlaTable.getNLA(nlaName.getAttr())) {
           instNonlocalAnnos[nla] = anno;
           instanceNLAs.insert(nla);
         }
@@ -675,7 +675,7 @@ void ExtractInstancesPass::extractInstances() {
                                 nlaPath[0].cast<InnerRefAttr>().getName());
           auto builder = OpBuilder::atBlockBegin(getOperation().getBody());
 
-          auto newNla = builder.create<HierPathOp>(
+          auto newNla = builder.create<GlobalRefOp>(
               newInst.getLoc(), circuitNamespace.newName(nla.sym_name()),
               builder.getArrayAttr(nlaPath));
           auto nlaAnno = instNonlocalAnnos.find(nla);
@@ -822,7 +822,7 @@ void ExtractInstancesPass::groupInstances() {
       }
 
       // Set of NLAs that have a reference to this InstanceOp `inst`.
-      DenseSet<HierPathOp> instNlas;
+      DenseSet<GlobalRefOp> instNlas;
       // Get the NLAs that pass through the `inst`, and not end at it.
       nlaTable.getInstanceNLAs(inst, instNlas);
       AnnotationSet instAnnos(inst);
@@ -832,7 +832,7 @@ void ExtractInstancesPass::groupInstances() {
         auto nlaName = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal");
         if (!nlaName)
           continue;
-        HierPathOp nla = nlaTable.getNLA(nlaName.getAttr());
+        GlobalRefOp nla = nlaTable.getNLA(nlaName.getAttr());
         if (nla)
           instNlas.insert(nla);
       }

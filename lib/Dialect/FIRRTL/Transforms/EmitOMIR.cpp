@@ -28,6 +28,7 @@
 
 using namespace circt;
 using namespace firrtl;
+using hw::GlobalRefOp;
 using mlir::LocationAttr;
 using mlir::UnitAttr;
 
@@ -43,7 +44,7 @@ struct Tracker {
   /// The operation onto which this tracker was annotated.
   Operation *op;
   /// If this tracker is non-local, this is the corresponding anchor.
-  HierPathOp nla;
+  GlobalRefOp nla;
   /// If this is a port, then set the portIdx, else initialized to -1.
   int portNo = -1;
 };
@@ -127,7 +128,7 @@ private:
   SmallVector<Attribute> symbols;
   SmallDenseMap<Attribute, unsigned> symbolIndices;
   /// Temporary `firrtl.nla` operations to be deleted at the end of the pass.
-  SmallVector<HierPathOp> removeTempNLAs;
+  SmallVector<GlobalRefOp> removeTempNLAs;
   DenseMap<Operation *, ModuleNamespace> moduleNamespaces;
   /// Lookup table of instances by name and parent module.
   DenseMap<hw::InnerRefAttr, InstanceOp> instancesByName;
@@ -292,7 +293,7 @@ void EmitOMIRPass::runOnOperation() {
           anyFailures = true;
           return true;
         }
-        tracker.nla = cast<HierPathOp>(tmp);
+        tracker.nla = cast<GlobalRefOp>(tmp);
         removeTempNLAs.push_back(tracker.nla);
       }
       if (sramIDs.erase(tracker.id))
@@ -464,9 +465,9 @@ void EmitOMIRPass::makeTrackerAbsolute(Tracker &tracker) {
       tracker.op->getParentOfType<FModuleOp>().getNameAttr()));
 
   // Add the NLA to the tracker and mark it to be deleted later.
-  tracker.nla = builder.create<HierPathOp>(builder.getUnknownLoc(),
-                                           builder.getStringAttr(nlaName),
-                                           builder.getArrayAttr(namepath));
+  tracker.nla = builder.create<GlobalRefOp>(builder.getUnknownLoc(),
+                                            builder.getStringAttr(nlaName),
+                                            builder.getArrayAttr(namepath));
   nlaTable->addNLA(tracker.nla);
 
   removeTempNLAs.push_back(tracker.nla);
