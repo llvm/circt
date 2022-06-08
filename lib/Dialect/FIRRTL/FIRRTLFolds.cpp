@@ -90,11 +90,6 @@ bool circt::firrtl::isUselessName(StringRef name) {
   return name.startswith("_");
 }
 
-NameKindEnum circt::firrtl::inferNameKind(StringRef name) {
-  return circt::firrtl::isUselessName(name) ? NameKindEnum::DroppableName
-                                            : NameKindEnum::InterestingName;
-}
-
 /// Return true if the name is droppable. Note that this is different from
 /// `isUselessName` because non-useless names may be also droppable.
 bool circt::firrtl::hasDroppableName(Operation *op) {

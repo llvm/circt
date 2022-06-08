@@ -172,6 +172,11 @@ std::pair<bool, Optional<LocationAttr>> circt::firrtl::maybeStringToLocation(
   return {true, result};
 }
 
+static firrtl::NameKindEnum inferNameKind(StringRef name) {
+  return circt::firrtl::isUselessName(name) ? NameKindEnum::DroppableName
+                                            : NameKindEnum::InterestingName;
+}
+
 //===----------------------------------------------------------------------===//
 // SharedParserConstants
 //===----------------------------------------------------------------------===//
@@ -2870,7 +2875,7 @@ ParseResult FIRStmtParser::parseCombMem() {
   auto sym = getSymbolIfRequired(annotations, id);
   auto result = builder.create<CombMemOp>(vectorType.getElementType(),
                                           vectorType.getNumElements(), id,
-                                          annotations, sym);
+                                          inferNameKind(id), annotations, sym);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -2908,7 +2913,7 @@ ParseResult FIRStmtParser::parseSeqMem() {
 
   auto result = builder.create<SeqMemOp>(vectorType.getElementType(),
                                          vectorType.getNumElements(), ruw, id,
-                                         annotations, sym);
+                                         inferNameKind(id), annotations, sym);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 

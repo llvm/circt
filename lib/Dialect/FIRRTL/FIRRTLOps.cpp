@@ -1596,8 +1596,8 @@ void MemOp::build(OpBuilder &builder, OperationState &result,
   result.addAttribute("ruw", ::RUWAttrAttr::get(builder.getContext(), ruw));
   result.addAttribute("portNames", builder.getArrayAttr(portNames));
   result.addAttribute("name", builder.getStringAttr(name));
-  result.addAttribute("nameKind", NameKindEnumAttr::get(builder.getContext(),
-                                                        inferNameKind(name)));
+  result.addAttribute("nameKind",
+                      NameKindEnumAttr::get(builder.getContext(), nameKind));
   result.addAttribute("annotations", builder.getArrayAttr(annotations));
   if (innerSym)
     result.addAttribute("inner_sym", innerSym);

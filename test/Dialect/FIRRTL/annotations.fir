@@ -361,9 +361,9 @@ circuit Foo: %[[{"target": "~Foo|Foo>_T_0", "a": "a"},
     ; CHECK: %_T_3 = firrtl.regreset droppable_name {{.+}}  {annotations = [{a = "a"}]}
     reg _T_3 : UInt<4>, clock with :
       reset => (reset, UInt<4>("h0"))
-    ; CHECK: %_T_4 = chirrtl.seqmem Undefined {annotations = [{a = "a"}]}
+    ; CHECK: %_T_4 = chirrtl.seqmem droppable_name Undefined {annotations = [{a = "a"}]}
     smem _T_4 : UInt<1>[9] [256]
-    ; CHECK: %_T_5 = chirrtl.combmem  {annotations = [{a = "a"}]}
+    ; CHECK: %_T_5 = chirrtl.combmem droppable_name {annotations = [{a = "a"}]}
     cmem _T_5 : UInt<1>[9] [256]
     ; CHECK: chirrtl.memoryport {{.+}} {annotations = [{a = "a"}]
     infer mport _T_6 = _T_5[reset], clock
