@@ -3130,7 +3130,8 @@ ParseResult FIRStmtParser::parseWire() {
                                moduleContext.targetsInModule, type);
 
   auto sym = getSymbolIfRequired(annotations, id);
-  auto result = builder.create<WireOp>(type, id, annotations, sym);
+  auto result =
+      builder.create<WireOp>(type, id, inferNameKind(id), annotations, sym);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -3227,7 +3228,8 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
         builder.create<RegResetOp>(type, clock, resetSignal, resetValue, id,
                                    inferNameKind(id), annotations, sym);
   else
-    result = builder.create<RegOp>(type, clock, id, inferNameKind(id), annotations, sym);
+    result = builder.create<RegOp>(type, clock, id, inferNameKind(id),
+                                   annotations, sym);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 

@@ -1034,7 +1034,8 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
 /// Lower a wire op with a bundle to multiple non-bundled wires.
 bool TypeLoweringVisitor::visitDecl(WireOp op) {
   auto clone = [&](FlatBundleFieldEntry field, ArrayAttr attrs) -> Operation * {
-    return builder->create<WireOp>(field.type, "", attrs, StringAttr{});
+    return builder->create<WireOp>(field.type, "", NameKindEnum::DroppableName,
+                                   attrs, StringAttr{});
   };
   return lowerProducer(op, clone);
 }

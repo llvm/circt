@@ -332,7 +332,7 @@ void ModuleSignalMappings::instantiateMappingsModule(FModuleOp mappingsModule) {
     if (auto srcNode = dyn_cast_or_null<NodeOp>(src.getDefiningOp())) {
       auto srcWire = builder.create<WireOp>(
           srcNode.getLoc(), srcNode.getType(), srcNode.name(),
-          srcNode.annotations(), srcNode.inner_symAttr());
+          srcNode.nameKind(), srcNode.annotations(), srcNode.inner_symAttr());
       srcWire->moveAfter(srcNode);
       srcNode->replaceAllUsesWith(srcWire);
       src = srcWire;
@@ -600,10 +600,12 @@ FailureOr<bool> GrandCentralSignalMappingsPass::emitUpdatedMappings(
             replacementWireName.getValue() + "_buffer"));
         auto bufferWire = builder.create<WireOp>(
             builder.getUnknownLoc(), port.getType(), bufferWireName,
-            builder.getArrayAttr({}), bufferWireName);
+            NameKindEnum::InterestingName, builder.getArrayAttr({}),
+            bufferWireName);
         auto replacementWire = builder.create<WireOp>(
             builder.getUnknownLoc(), port.getType(), replacementWireName,
-            builder.getArrayAttr({}), replacementWireName);
+            NameKindEnum::InterestingName, builder.getArrayAttr({}),
+            replacementWireName);
         port.replaceAllUsesWith(replacementWire);
         builder.create<StrictConnectOp>(builder.getUnknownLoc(), port,
                                         bufferWire);

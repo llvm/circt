@@ -320,21 +320,19 @@ def WireOp : ReferableDeclOp<"wire"> {
     ```
     }];
 
-  let arguments = (ins StrAttr:$name,
+  let arguments = (ins StrAttr:$name, NameKindAttr:$nameKind,
                        AnnotationArrayAttr:$annotations,
-                       OptionalAttr<SymbolNameAttr>:$inner_sym,
-                       NameKindAttr:$nameKind);
+                       OptionalAttr<SymbolNameAttr>:$inner_sym);
   let results = (outs FIRRTLType:$result);
 
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType,
                       CArg<"StringRef", "{}">:$name,
-                      CArg<"ArrayAttr","ArrayAttr()">:$annotations,
+                      CArg<"NameKindEnum", "NameKindEnum::InterestingName">:$nameKind,
+                      CArg<"ArrayRef<Attribute>","{}">:$annotations,
                       CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
-      if(!annotations)
-        annotations = $_builder.getArrayAttr({});
-      return build($_builder, $_state, elementType, name,
-                   annotations, inner_sym, inferNameKind(name));
+      return build($_builder, $_state, elementType, name, nameKind,
+                   $_builder.getArrayAttr(annotations), inner_sym);
     }]>,
   ];
 

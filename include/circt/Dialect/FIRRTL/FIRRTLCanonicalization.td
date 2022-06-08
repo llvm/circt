@@ -133,8 +133,8 @@ def DropNameNode : Pat<
 
 // wire(name),!dnt -> wire("")
 def DropNameWire : Pat<
-  (WireOp $name,  $annotations, $inner_sym, $nameKind),
-  (WireOp (GetEmptyString), $annotations, $inner_sym, (GetDroppableNameAttr)),
+  (WireOp $name, $nameKind, $annotations, $inner_sym),
+  (WireOp (GetEmptyString), (GetDroppableNameAttr), $annotations, $inner_sym),
   [(uselessNameAttr $name), (NonEmptyAttr $name), (NullAttr $inner_sym)]>;
 
 // reg(clk, name),!dnt -> reg(clk, "")
