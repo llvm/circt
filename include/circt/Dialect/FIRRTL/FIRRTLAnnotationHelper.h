@@ -91,7 +91,7 @@ private:
   /// Walk the module and add named things to 'targets'.
   void gatherTargets(FModuleLike mod);
 
-  llvm::StringMap<AnnoTarget> targets;
+  llvm::DenseMap<StringRef, AnnoTarget> targets;
 };
 
 /// Cache AnnoTargets for a circuit's modules, walked as needed.
