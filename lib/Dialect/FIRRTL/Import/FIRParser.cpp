@@ -3047,8 +3047,8 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
     }
   result = builder.create<MemOp>(resultTypes, readLatency, writeLatency, depth,
                                  ruw, builder.getArrayAttr(resultNames), id,
-                                 annotations.first, annotations.second, sym,
-                                 IntegerAttr(), inferNameKind(id));
+                                 inferNameKind(id), annotations.first,
+                                 annotations.second, sym, IntegerAttr());
 
   UnbundledValueEntry unbundledValueEntry;
   unbundledValueEntry.reserve(result.getNumResults());

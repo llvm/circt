@@ -152,10 +152,10 @@ def DropNameRegReset : Pat<
 
 // Mem(...,name),!dnt -> Mem(...x, "")
 def DropNameMem : Pat<
-  (MemOp $rd, $rw, $depth, $ruw, $portNames, $name, $annotations, $portAnno,
-                                             $inner_sym, $groupID, $nameKind),
-  (MemOp $rd, $rw, $depth, $ruw, $portNames, (GetEmptyString), $annotations,
-                     $portAnno, $inner_sym, $groupID, (GetDroppableNameAttr)),
+  (MemOp $rd, $rw, $depth, $ruw, $portNames, $name, $nameKind, $annotations, $portAnno,
+                                             $inner_sym, $groupID),
+  (MemOp $rd, $rw, $depth, $ruw, $portNames, (GetEmptyString), (GetDroppableNameAttr),
+         $annotations, $portAnno, $inner_sym, $groupID),
   [(uselessNameAttr $name), (NonEmptyAttr $name), (NullAttr $inner_sym)]>;
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLCANONICALIZATION_TD

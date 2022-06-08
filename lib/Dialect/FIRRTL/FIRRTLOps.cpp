@@ -1583,7 +1583,7 @@ void MemOp::build(OpBuilder &builder, OperationState &result,
                   TypeRange resultTypes, uint32_t readLatency,
                   uint32_t writeLatency, uint64_t depth, RUWAttr ruw,
                   ArrayRef<Attribute> portNames, StringRef name,
-                  ArrayRef<Attribute> annotations,
+                  NameKindEnum nameKind, ArrayRef<Attribute> annotations,
                   ArrayRef<Attribute> portAnnotations, StringAttr innerSym) {
   result.addAttribute(
       "readLatency",

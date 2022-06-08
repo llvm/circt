@@ -214,10 +214,11 @@ static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
   }
 
   // It's easier to duplicate the old annotations, then fix and filter them.
-  auto newMem = b->create<MemOp>(
-      ports, op.readLatency(), op.writeLatency(), op.depth(), op.ruw(),
-      portNames, (op.name() + field.suffix).str(), op.annotations().getValue(),
-      op.portAnnotations().getValue(), op.inner_symAttr());
+  auto newMem =
+      b->create<MemOp>(ports, op.readLatency(), op.writeLatency(), op.depth(),
+                       op.ruw(), portNames, (op.name() + field.suffix).str(),
+                       op.nameKind(), op.annotations().getValue(),
+                       op.portAnnotations().getValue(), op.inner_symAttr());
   if (op.inner_sym())
     newMem.inner_symAttr(
         StringAttr::get(b->getContext(), op.inner_symAttr().getValue() +

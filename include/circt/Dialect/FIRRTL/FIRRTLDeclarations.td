@@ -116,12 +116,11 @@ def MemOp : ReferableDeclOp<"mem"> {
     (ins Confined<I32Attr, [IntMinValue<0>]>:$readLatency,
          Confined<I32Attr, [IntMinValue<1>]>:$writeLatency,
          Confined<I64Attr, [IntMinValue<1>]>:$depth, RUWAttr:$ruw,
-         StrArrayAttr:$portNames, StrAttr:$name,
+         StrArrayAttr:$portNames, StrAttr:$name, NameKindAttr:$nameKind,
          AnnotationArrayAttr:$annotations,
          PortAnnotationsAttr:$portAnnotations,
          OptionalAttr<SymbolNameAttr>:$inner_sym,
-         OptionalAttr<UI32Attr>:$groupID,
-         NameKindAttr:$nameKind);
+         OptionalAttr<UI32Attr>:$groupID);
   let results = (outs Variadic<FIRRTLType>:$results);
 
   let assemblyFormat = [{
@@ -135,6 +134,7 @@ def MemOp : ReferableDeclOp<"mem"> {
                    "uint64_t":$depth, "RUWAttr":$ruw,
                    "ArrayRef<Attribute>":$portNames,
                    CArg<"StringRef", "{}">:$name,
+                   CArg<"NameKindEnum", "NameKindEnum::InterestingName">:$nameKind,
                    CArg<"ArrayRef<Attribute>", "{}">:$annotations,
                    CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
                    CArg<"StringAttr", "StringAttr()">:$inner_sym)>
