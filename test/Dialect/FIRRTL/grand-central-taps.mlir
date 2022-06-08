@@ -408,6 +408,16 @@ firrtl.circuit "NLAGarbageCollection" {
         {circt.nonlocal = @nla_3, class = "circt.nonlocal"}]
     } @DUT()
   }
+  // CHECK-LABEL:   firrtl.module @MemTap_impl_0(out %mem_0: !firrtl.uint<1>)
+  // CHECK:     %[[v1:.+]] = firrtl.xmr @nla_3 : !firrtl.uint<1>
+  // CHECK:     firrtl.connect %mem_0, %[[v1]] : !firrtl.uint<1>, !firrtl.uint<1>
+
+  // CHECK-LABEL:   firrtl.module @DataTap_1_impl_0(out %_1: !firrtl.uint<1> sym @_1, out %_0: !firrtl.uint<1> sym @_0)
+  // CHECK:     %[[v11:.+]] = firrtl.xmr @nla_2 : !firrtl.uint<1>
+  // CHECK:     firrtl.connect %_1, %[[v11]] : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK:     %[[v3:.+]] = firrtl.xmr @nla_1 : !firrtl.uint<1>
+  // CHECK:     firrtl.connect %_0, %[[v3]] : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK:   }
 }
 
 // -----
@@ -423,14 +433,11 @@ firrtl.circuit "NLAUsedInWiring"  {
   // CHECK: firrtl.hierpath @nla_2 [@NLAUsedInWiring::@foo, @Foo::@g]
 
   // CHECK-LABEL: firrtl.module @DataTap
-  // CHECK-NEXT: [[TMP:%.+]] = firrtl.verbatim.expr
-  // CHECK-SAME:   symbols = [@NLAUsedInWiring, #hw.innerNameRef<@NLAUsedInWiring::@foo>, #hw.innerNameRef<@Foo::@f>]
+  // CHECK-NEXT: [[TMP:%.+]] = firrtl.xmr @nla_1 :
   // CHECK-NEXT: firrtl.connect %b, [[TMP]] : !firrtl.uint<1>, !firrtl.uint<1>
-  // CHECK-NEXT: [[TMP:%.+]] = firrtl.verbatim.expr
-  // CHECK-SAME:   symbols = [@NLAUsedInWiring, #hw.innerNameRef<@NLAUsedInWiring::@foo>, #hw.innerNameRef<@Foo::@g>]
+  // CHECK-NEXT: [[TMP:%.+]] = firrtl.xmr @nla_2 :
   // CHECK-NEXT: firrtl.connect %c, [[TMP]] : !firrtl.uint<1>, !firrtl.uint<1>
   // CHECK-NEXT: [[TMP:%.+]] = firrtl.verbatim.expr
-  // CHECK-SAME:   symbols = [@NLAUsedInWiring, #hw.innerNameRef<@NLAUsedInWiring::@k>]
   // CHECK-NEXT: firrtl.connect %d, [[TMP]] : !firrtl.uint<1>, !firrtl.uint<1>
   firrtl.extmodule @DataTap(
     out b: !firrtl.uint<1> sym @b [{
@@ -529,12 +536,10 @@ firrtl.circuit "Top" {
   }
 
   // CHECK-LABEL: firrtl.module @MemTap_1_impl_0
-  // CHECK-NEXT{LITERAL}: firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}.{{3}}"
-  // CHECK-SAME: symbols = [@Top, #hw.innerNameRef<@Top::@dut>, #hw.innerNameRef<@DUT::@submodule_1>, #hw.innerNameRef<@Submodule::@[[bar_0]]>]
+  // CHECK-NEXT: firrtl.xmr @nla_0 :
   firrtl.extmodule @MemTap_1(out mem_0: !firrtl.uint<1> [{class = "sifive.enterprise.grandcentral.MemTapAnnotation.port", id = 0 : i64, portID = 0 : i64}]) attributes {defname = "MemTap"}
   // CHECK-LABEL: firrtl.module @MemTap_2_impl_0
-  // CHECK-NEXT{LITERAL}: firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}.{{3}}"
-  // CHECK-SAME: symbols = [@Top, #hw.innerNameRef<@Top::@dut>, #hw.innerNameRef<@DUT::@submodule_2>, #hw.innerNameRef<@Submodule::@[[bar_0]]>]
+  // CHECK-NEXT: firrtl.xmr @nla :
   firrtl.extmodule @MemTap_2(out mem_0: !firrtl.uint<1> [{class = "sifive.enterprise.grandcentral.MemTapAnnotation.port", id = 1 : i64, portID = 0 : i64}]) attributes {defname = "MemTap"}
 }
 
