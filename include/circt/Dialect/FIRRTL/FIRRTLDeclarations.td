@@ -33,13 +33,12 @@ def InstanceOp : ReferableDeclOp<"instance", [HasParent<"firrtl::FModuleOp, firr
     ```
   }];
 
-  let arguments = (ins FlatSymbolRefAttr:$moduleName, StrAttr:$name,
+  let arguments = (ins FlatSymbolRefAttr:$moduleName, StrAttr:$name, NameKindAttr:$nameKind,
                        APIntAttr:$portDirections, StrArrayAttr:$portNames,
                        AnnotationArrayAttr:$annotations,
                        PortAnnotationsAttr:$portAnnotations,
                        BoolAttr:$lowerToBind,
-                       OptionalAttr<SymbolNameAttr>:$inner_sym,
-                       NameKindAttr:$nameKind);
+                       OptionalAttr<SymbolNameAttr>:$inner_sym);
 
   let results = (outs Variadic<FIRRTLType>:$results);
 
@@ -49,6 +48,7 @@ def InstanceOp : ReferableDeclOp<"instance", [HasParent<"firrtl::FModuleOp, firr
     OpBuilder<(ins "::mlir::TypeRange":$resultTypes,
                    "::mlir::StringRef":$moduleName,
                    "::mlir::StringRef":$name,
+                   "::circt::firrtl::NameKindEnum":$nameKind,
                    "::mlir::ArrayRef<Direction>":$portDirections,
                    "::mlir::ArrayRef<Attribute>":$portNames,
                    CArg<"ArrayRef<Attribute>", "{}">:$annotations,
@@ -59,6 +59,7 @@ def InstanceOp : ReferableDeclOp<"instance", [HasParent<"firrtl::FModuleOp, firr
     /// Constructor when you have the target module in hand.
     OpBuilder<(ins "FModuleLike":$module,
                    "mlir::StringRef":$name,
+                   CArg<"NameKindEnum", "NameKindEnum::InterestingName">:$nameKind,
                    CArg<"ArrayRef<Attribute>", "{}">:$annotations,
                    CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
                    CArg<"bool","false">:$lowerToBind,

@@ -1217,11 +1217,10 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
                             "sym" + op.nameAttr().getValue());
   // FIXME: annotation update
   auto newInstance = builder->create<InstanceOp>(
-      resultTypes, op.moduleNameAttr(), op.nameAttr(),
+      resultTypes, op.moduleNameAttr(), op.nameAttr(), op.nameKindAttr(),
       direction::packAttribute(context, newDirs),
       builder->getArrayAttr(newNames), op.annotations(),
-      builder->getArrayAttr(newPortAnno), op.lowerToBindAttr(), sym,
-      op.nameKindAttr());
+      builder->getArrayAttr(newPortAnno), op.lowerToBindAttr(), sym);
 
   SmallVector<Value> lowered;
   for (size_t aggIndex = 0, eAgg = op.getNumResults(); aggIndex != eAgg;

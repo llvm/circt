@@ -2826,7 +2826,7 @@ ParseResult FIRStmtParser::parseInstance() {
 
   auto sym = getSymbolIfRequired(annotations.first, id);
   result = builder.create<InstanceOp>(
-      referencedModule, id, annotations.first.getValue(),
+      referencedModule, id, inferNameKind(id), annotations.first.getValue(),
       annotations.second.getValue(), false, sym);
 
   // Since we are implicitly unbundling the instance results, we need to keep

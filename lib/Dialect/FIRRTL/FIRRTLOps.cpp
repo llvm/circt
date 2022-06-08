@@ -1201,7 +1201,8 @@ FModuleLike InstanceOp::getReferencedModule(SymbolTable &symbolTable) {
 
 void InstanceOp::build(OpBuilder &builder, OperationState &result,
                        TypeRange resultTypes, StringRef moduleName,
-                       StringRef name, ArrayRef<Direction> portDirections,
+                       StringRef name, NameKindEnum nameKind,
+                       ArrayRef<Direction> portDirections,
                        ArrayRef<Attribute> portNames,
                        ArrayRef<Attribute> annotations,
                        ArrayRef<Attribute> portAnnotations, bool lowerToBind,
@@ -1218,8 +1219,8 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
   result.addAttribute("lowerToBind", builder.getBoolAttr(lowerToBind));
   if (innerSym)
     result.addAttribute("inner_sym", innerSym);
-  result.addAttribute("nameKind", NameKindEnumAttr::get(builder.getContext(),
-                                                        inferNameKind(name)));
+  result.addAttribute("nameKind",
+                      NameKindEnumAttr::get(builder.getContext(), nameKind));
 
   if (portAnnotations.empty()) {
     SmallVector<Attribute, 16> portAnnotationsVec(resultTypes.size(),
@@ -1235,7 +1236,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
 
 void InstanceOp::build(OpBuilder &builder, OperationState &result,
                        FModuleLike module, StringRef name,
-                       ArrayRef<Attribute> annotations,
+                       NameKindEnum nameKind, ArrayRef<Attribute> annotations,
                        ArrayRef<Attribute> portAnnotations, bool lowerToBind,
                        StringAttr innerSym) {
 
@@ -1258,10 +1259,11 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
   return build(
       builder, result, resultTypes,
       SymbolRefAttr::get(builder.getContext(), module.moduleNameAttr()),
-      builder.getStringAttr(name), module.getPortDirectionsAttr(),
-      module.getPortNamesAttr(), builder.getArrayAttr(annotations),
-      portAnnotationsAttr, builder.getBoolAttr(lowerToBind), innerSym,
-      NameKindEnumAttr::get(builder.getContext(), inferNameKind(name)));
+      builder.getStringAttr(name),
+      NameKindEnumAttr::get(builder.getContext(), nameKind),
+      module.getPortDirectionsAttr(), module.getPortNamesAttr(),
+      builder.getArrayAttr(annotations), portAnnotationsAttr,
+      builder.getBoolAttr(lowerToBind), innerSym);
 }
 
 /// Builds a new `InstanceOp` with the ports listed in `portIndices` erased, and
@@ -1281,9 +1283,9 @@ InstanceOp InstanceOp::erasePorts(OpBuilder &builder,
       removeElementsAtIndices(portAnnotations().getValue(), portIndices);
 
   auto newOp = builder.create<InstanceOp>(
-      getLoc(), newResultTypes, moduleName(), name(), newPortDirections,
-      newPortNames, annotations().getValue(), newPortAnnotations, lowerToBind(),
-      inner_symAttr());
+      getLoc(), newResultTypes, moduleName(), name(), nameKind(),
+      newPortDirections, newPortNames, annotations().getValue(),
+      newPortAnnotations, lowerToBind(), inner_symAttr());
 
   SmallDenseSet<unsigned> portSet(portIndices.begin(), portIndices.end());
   for (unsigned oldIdx = 0, newIdx = 0, numOldPorts = getNumResults();
@@ -1355,9 +1357,9 @@ InstanceOp::cloneAndInsertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
 
   // Create a new instance op with the reset inserted.
   return OpBuilder(*this).create<InstanceOp>(
-      getLoc(), newPortTypes, moduleName(), name(), newPortDirections,
-      newPortNames, annotations().getValue(), newPortAnnos, lowerToBind(),
-      inner_symAttr());
+      getLoc(), newPortTypes, moduleName(), name(), nameKind(),
+      newPortDirections, newPortNames, annotations().getValue(), newPortAnnos,
+      lowerToBind(), inner_symAttr());
 }
 
 LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
