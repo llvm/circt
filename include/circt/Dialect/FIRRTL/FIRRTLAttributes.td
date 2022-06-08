@@ -229,14 +229,14 @@ def InnerSymAttr : AttrDef<FIRRTLDialect, "InnerSym"> {
     fieldID and visibility.
   }];
   let mnemonic = "innerSym";
-  let parameters = (ins 
+  let parameters = (ins
          "::mlir::StringAttr":$symName,
          DefaultValuedParameter<"int64_t", "0">:$fieldID,
          DefaultValuedParameter<"::mlir::StringAttr", "public">:$sym_visibility
          );
   let builders = [
     AttrBuilderWithInferredContext<(ins "::mlir::StringAttr":$sym),[{
-      return get(sym.getContext(), sym, 0, 
+      return get(sym.getContext(), sym, 0,
                  StringAttr::get(sym.getContext(), "public"));
     }]>
   ];
