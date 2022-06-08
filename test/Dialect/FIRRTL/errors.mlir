@@ -675,7 +675,7 @@ firrtl.hierpath @NLA1 []
 firrtl.hierpath @NLA2 [@LowerToBind::@s1]
 firrtl.module @InstanceLowerToBind() {}
 firrtl.module @LowerToBind() {
-  firrtl.instance foo sym @s1 {lowerToBind = true, annotations = [{circt.nonlocal = @NLA2, class = "circt.test", nl = "nl"}]} @InstanceLowerToBind()
+  firrtl.instance foo sym @s1 {lowerToBind = true} @InstanceLowerToBind()
 }
 }
 
@@ -687,13 +687,13 @@ firrtl.circuit "NLATop" {
   firrtl.hierpath @nla [@NLATop::@test, @Aardvark, @Zebra]
   firrtl.hierpath @nla_1 [@NLATop::@test,@Aardvark::@test_1, @Zebra]
   firrtl.module @NLATop() {
-    firrtl.instance test  sym @test {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}, {circt.nonlocal = @nla_1, class = "circt.nonlocal"} ]}@Aardvark()
+    firrtl.instance test  sym @test @Aardvark()
     firrtl.instance test2 @Zebra()
   }
 
   firrtl.module @Aardvark() {
-    firrtl.instance test sym @test {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}]}@Zebra()
-    firrtl.instance test1 sym @test_1 {annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}]}@Zebra()
+    firrtl.instance test sym @test @Zebra()
+    firrtl.instance test1 sym @test_1 @Zebra()
   }
 
   firrtl.module @Zebra() {
@@ -707,18 +707,18 @@ firrtl.circuit "NLATop1" {
   firrtl.hierpath @nla [@NLATop1::@test, @Zebra::@test,@Aardvark::@test]
   firrtl.hierpath @nla_1 [@NLATop1::@test,@Aardvark::@test_1, @Zebra]
   firrtl.module @NLATop1() {
-    firrtl.instance test  sym @test {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}, {circt.nonlocal = @nla_1, class = "circt.nonlocal"} ]}@Aardvark()
+    firrtl.instance test  sym @test @Aardvark()
     firrtl.instance test2 @Zebra()
   }
 
   firrtl.module @Aardvark() {
-    firrtl.instance test sym @test {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}]}@Zebra()
-    firrtl.instance test1 sym @test_1 {annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}]}@Zebra()
+    firrtl.instance test sym @test @Zebra()
+    firrtl.instance test1 sym @test_1 @Zebra()
   }
 
   firrtl.module @Zebra() {
-    firrtl.instance test sym @test {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}]}@Ext()
-    firrtl.instance test1 sym @test_1 {annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}]}@Ext()
+    firrtl.instance test sym @test @Ext()
+    firrtl.instance test1 sym @test_1 @Ext()
   }
 
   firrtl.module @Ext() {
@@ -733,13 +733,13 @@ firrtl.circuit "fallBackName" {
   firrtl.hierpath @nla [@fallBackName::@test, @Aardvark::@test, @Zebra::@bundle]
   firrtl.hierpath @nla_1 [@fallBackName::@test,@Aardvark::@test_1, @Zebra]
   firrtl.module @fallBackName() {
-    firrtl.instance test  sym @test {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}, {circt.nonlocal = @nla_1, class = "circt.nonlocal"} ]}@Aardvark()
+    firrtl.instance test  sym @test @Aardvark()
     firrtl.instance test2 @Zebra()
   }
 
   firrtl.module @Aardvark() {
-    firrtl.instance test sym @test {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}]}@Zebra()
-    firrtl.instance test1 sym @test_1 {annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}]}@Zebra()
+    firrtl.instance test sym @test @Zebra()
+    firrtl.instance test1 sym @test_1 @Zebra()
   }
 
   firrtl.module @Zebra(){
@@ -755,7 +755,7 @@ firrtl.circuit "Foo"   {
   firrtl.module @Bar(in %a: !firrtl.uint<1>, out %b: !firrtl.bundle<baz: uint<1>, qux: uint<1>> [#firrtl.subAnno<fieldID = 2, {circt.nonlocal = @nla_1, three}>], out %c: !firrtl.uint<1>) {
   }
   firrtl.module @Foo() {
-    %bar_a, %bar_b, %bar_c = firrtl.instance bar sym @bar  {annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}]} @Bar(in a: !firrtl.uint<1> [{one}], out b: !firrtl.bundle<baz: uint<1>, qux: uint<1>> [#firrtl.subAnno<fieldID = 1, {two}>], out c: !firrtl.uint<1> [{four}])
+    %bar_a, %bar_b, %bar_c = firrtl.instance bar sym @bar  @Bar(in a: !firrtl.uint<1> [{one}], out b: !firrtl.bundle<baz: uint<1>, qux: uint<1>> [#firrtl.subAnno<fieldID = 1, {two}>], out c: !firrtl.uint<1> [{four}])
   }
 }
 
@@ -770,10 +770,10 @@ firrtl.circuit "Top"   {
     %w = firrtl.wire sym @w  {annotations = [{circt.nonlocal = @nla, class = "fake1"}]} : !firrtl.uint<3>
   }
   firrtl.module @Middle() {
-    firrtl.instance leaf sym @leaf  {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}]} @Leaf()
+    firrtl.instance leaf sym @leaf  @Leaf()
   }
   firrtl.module @Top() {
-    firrtl.instance mid sym @mid  {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}]} @Middle()
+    firrtl.instance mid sym @mid  @Middle()
   }
 }
 
