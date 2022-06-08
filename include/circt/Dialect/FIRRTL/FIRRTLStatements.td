@@ -219,11 +219,10 @@ def XMROp : FIRRTLOp<"xmr", []> {
   let description = [{
     This represents a non-local hierarchical name to a net, sometimes called a
     cross-module reference. The hierarchical path is specified by a reference
-    to the symbol defined by a `HierPathOp`. The component within the module
-    is specified by a reference to an Inner Sym defined by the net.
+    to the symbol defined by a `HierPathOp`.
   }];
-  let arguments = (ins FlatSymbolRefAttr:$hierPathSym, HWInnerRefAttr:$componentSym);
+  let arguments = (ins FlatSymbolRefAttr:$hierPathSym);
   let results = (outs FIRRTLType:$result);
-  let assemblyFormat = "$hierPathSym  $componentSym attr-dict `:` qualified(type($result))";
+  let assemblyFormat = "$hierPathSym attr-dict `:` qualified(type($result))";
 }
 

@@ -877,9 +877,8 @@ void GrandCentralTapsPass::runOnOperation() {
         Value hnameExpr = builder.create<VerbatimExprOp>(
             arg.getType().cast<FIRRTLType>(), hname, ValueRange{}, symbols);
         if (xmrNLA)
-          hnameExpr = builder.create<XMROp>(
-              arg.getType(), xmrNLA.sym_nameAttr(),
-              hw::InnerRefAttr::get(xmrNLA.leafMod(), xmrNLA.ref()));
+          hnameExpr =
+              builder.create<XMROp>(arg.getType(), xmrNLA.sym_nameAttr());
         builder.create<ConnectOp>(arg, hnameExpr);
       }
 

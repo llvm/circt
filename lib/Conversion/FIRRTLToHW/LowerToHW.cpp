@@ -3518,10 +3518,9 @@ LogicalResult FIRRTLLowering::visitStmt(XMROp op) {
   }
 
   SmallVector<Attribute, 4> namepath;
-  namepath.reserve(nla.namepath().size() + 1);
+  namepath.reserve(nla.namepath().size());
   for (auto attr : nla.namepath())
     namepath.push_back(attr);
-  namepath.push_back(op.componentSymAttr());
 
   auto xmrOp =
       builder.create<sv::XMROp>(sv::InOutType::get(op.getContext(), resultTy),
