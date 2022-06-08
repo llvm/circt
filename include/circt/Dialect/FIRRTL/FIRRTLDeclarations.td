@@ -13,16 +13,6 @@
 def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface,
                          ["getAsmResultNames"]>;
 
-def DroppableName: I32EnumAttrCase<"DroppableName", 0, "droppable_name">;
-def InterestingName: I32EnumAttrCase<"InterestingName", 1, "interesting_name">;
-
-def NameKindEnumImpl: I32EnumAttr<"NameKindEnum", "name kind",
-              [DroppableName, InterestingName]> {
-  let genSpecializedAttr = 0;
-  let cppNamespace = "::circt::firrtl";
-}
-
-def NameKindAttr: EnumAttr<FIRRTLDialect, NameKindEnumImpl, "name_kind">;
 
 class ReferableDeclOp<string mnemonic, list<Trait> traits = []> :
   FIRRTLOp<mnemonic, traits # [HasCustomSSAName, InnerSymbol, FNamableOp]> {
