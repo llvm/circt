@@ -285,21 +285,20 @@ def RegResetOp : ReferableDeclOp<"regreset"> {
   let arguments = (
     ins ClockType:$clockVal, AnyResetType:$resetSignal,
         AnyRegisterType:$resetValue,
-        StrAttr:$name, AnnotationArrayAttr:$annotations,
-        OptionalAttr<SymbolNameAttr>:$inner_sym,
-        NameKindAttr:$nameKind);
+        StrAttr:$name, NameKindAttr:$nameKind,
+        AnnotationArrayAttr:$annotations,
+        OptionalAttr<SymbolNameAttr>:$inner_sym);
   let results = (outs AnyRegisterType:$result);
 
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$clockVal,
                    "::mlir::Value":$resetSignal, "::mlir::Value":$resetValue,
                    CArg<"StringRef", "{}">:$name,
-                   CArg<"ArrayAttr","ArrayAttr()">:$annotations,
+                   CArg<"NameKindEnum", "NameKindEnum::InterestingName">:$nameKind,
+                   CArg<"ArrayRef<Attribute>","{}">:$annotations,
                    CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
-      if(!annotations)
-        annotations = $_builder.getArrayAttr({});
       return build($_builder, $_state, elementType, clockVal, resetSignal,
-                   resetValue, name, annotations, inner_sym, inferNameKind(name));
+                   resetValue, name, nameKind, $_builder.getArrayAttr(annotations), inner_sym);
     }]>
   ];
 

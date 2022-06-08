@@ -1052,9 +1052,9 @@ bool TypeLoweringVisitor::visitDecl(RegOp op) {
 bool TypeLoweringVisitor::visitDecl(RegResetOp op) {
   auto clone = [&](FlatBundleFieldEntry field, ArrayAttr attrs) -> Operation * {
     auto resetVal = getSubWhatever(op.resetValue(), field.index);
-    return builder->create<RegResetOp>(field.type, op.clockVal(),
-                                       op.resetSignal(), resetVal, "", attrs,
-                                       StringAttr{});
+    return builder->create<RegResetOp>(
+        field.type, op.clockVal(), op.resetSignal(), resetVal, "",
+        NameKindEnum::DroppableName, attrs, StringAttr{});
   };
   return lowerProducer(op, clone);
 }

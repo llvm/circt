@@ -1807,7 +1807,7 @@ static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
   if (!constReg)
     rewriter.replaceOpWithNewOp<RegResetOp>(
         reg, reg.getType(), reg.clockVal(), mux.sel(), mux.high(), reg.name(),
-        reg.annotations(), reg.inner_symAttr());
+        reg.nameKindAttr().getValue(), reg.annotations(), reg.inner_symAttr());
   auto pt = rewriter.saveInsertionPoint();
   rewriter.setInsertionPoint(con);
   rewriter.replaceOpWithNewOp<ConnectOp>(con, con.dest(),
