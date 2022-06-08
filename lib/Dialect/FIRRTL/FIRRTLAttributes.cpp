@@ -11,6 +11,7 @@
 
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
+#include "mlir/IR/SymbolTable.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include <iterator>
 
@@ -83,4 +84,39 @@ void ParamDeclAttr::print(AsmPrinter &p) const {
   if (getValue())
     p << " = " << getValue();
   p << ">";
+}
+
+//===----------------------------------------------------------------------===//
+// InnerSymAttr
+//===----------------------------------------------------------------------===//
+
+Attribute InnerSymAttr::parse(AsmParser &p, Type type) {
+  //  A sample IR, parse begins after `sym`.
+  //  %wire = firrtl.wire sym @wireSym<fieldID=1><sym_visibility="private"> :
+  StringAttr sym;
+  NamedAttrList dummyList;
+  if (p.parseSymbolName(sym, "dummy", dummyList))
+    return Attribute();
+  int64_t fID = 0;
+  if (p.parseOptionalLess() || p.parseKeyword("fieldID") || p.parseEqual() ||
+      p.parseInteger(fID) || p.parseGreater())
+    fID = 0;
+  StringAttr visib;
+  if (p.parseOptionalLess() ||
+      p.parseKeyword(SymbolTable::getVisibilityAttrName()) || p.parseEqual() ||
+      p.parseAttribute<StringAttr>(visib) || p.parseGreater())
+    visib = StringAttr::get(p.getContext(), "public");
+  return InnerSymAttr::get(p.getContext(), sym, fID, visib);
+}
+
+void InnerSymAttr::print(AsmPrinter &p) const {
+  //  A sample IR, print begins after `sym`.
+  //  %wire = firrtl.wire sym @wireSym<fieldID=1><sym_visibility="private"> :
+
+  p << "@" << getSymName().getValue();
+  if (getFieldID() != 0)
+    p << "<fieldID=" << getFieldID() << ">";
+  auto visib = getSym_visibility().getValue();
+  if (!visib.equals("public"))
+    p << "<" << SymbolTable::getVisibilityAttrName() << "=" << visib << ">";
 }

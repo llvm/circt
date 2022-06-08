@@ -222,4 +222,26 @@ def NameKindEnumImpl: I32EnumAttr<"NameKindEnum", "name kind",
 
 def NameKindAttr: EnumAttr<FIRRTLDialect, NameKindEnumImpl, "name_kind">;
 
+def InnerSymAttr : AttrDef<FIRRTLDialect, "InnerSym"> {
+  let summary = "Defines the properties of an inner_sym attribute.";
+  let description = [{
+    Defines the properties of an inner_sym attribute: the symbol name, the
+    fieldID and visibility.
+  }];
+  let mnemonic = "innerSym";
+  let parameters = (ins 
+         "::mlir::StringAttr":$symName,
+         DefaultValuedParameter<"int64_t", "0">:$fieldID,
+         DefaultValuedParameter<"::mlir::StringAttr", "public">:$sym_visibility
+         );
+  let builders = [
+    AttrBuilderWithInferredContext<(ins "::mlir::StringAttr":$sym),[{
+      return get(sym.getContext(), sym, 0, 
+                 StringAttr::get(sym.getContext(), "public"));
+    }]>
+  ];
+
+  let hasCustomAssemblyFormat = 1;
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLATTRIBUTES_TD
