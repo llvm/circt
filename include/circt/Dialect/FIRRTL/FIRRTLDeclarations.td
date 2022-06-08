@@ -249,20 +249,19 @@ def RegOp : ReferableDeclOp<"reg"> {
     }];
 
   let arguments = (
-    ins ClockType:$clockVal, StrAttr:$name,
+    ins ClockType:$clockVal, StrAttr:$name, NameKindAttr:$nameKind,
         AnnotationArrayAttr:$annotations,
-        OptionalAttr<SymbolNameAttr>:$inner_sym, NameKindAttr:$nameKind);
+        OptionalAttr<SymbolNameAttr>:$inner_sym);
   let results = (outs AnyRegisterType:$result);
 
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$clockVal,
                    CArg<"StringRef", "{}">:$name,
-                   CArg<"ArrayAttr","ArrayAttr()">:$annotations,
+                   CArg<"NameKindEnum", "NameKindEnum::InterestingName">:$nameKind,
+                   CArg<"ArrayRef<Attribute>","{}">:$annotations,
                    CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
-      if(!annotations)
-        annotations = $_builder.getArrayAttr({});
       return build($_builder, $_state, elementType, clockVal, name,
-                   annotations, inner_sym, inferNameKind(name));
+                   nameKind, $_builder.getArrayAttr(annotations), inner_sym);
     }]>
   ];
 

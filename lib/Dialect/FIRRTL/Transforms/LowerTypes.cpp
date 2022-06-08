@@ -1042,7 +1042,8 @@ bool TypeLoweringVisitor::visitDecl(WireOp op) {
 /// Lower a reg op with a bundle to multiple non-bundled regs.
 bool TypeLoweringVisitor::visitDecl(RegOp op) {
   auto clone = [&](FlatBundleFieldEntry field, ArrayAttr attrs) -> Operation * {
-    return builder->create<RegOp>(field.type, op.clockVal(), "", attrs,
+    return builder->create<RegOp>(field.type, op.clockVal(), "",
+                                  NameKindEnum::DroppableName, attrs,
                                   StringAttr{});
   };
   return lowerProducer(op, clone);

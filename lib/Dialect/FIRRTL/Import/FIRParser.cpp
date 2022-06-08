@@ -3227,7 +3227,7 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
         builder.create<RegResetOp>(type, clock, resetSignal, resetValue, id,
                                    inferNameKind(id), annotations, sym);
   else
-    result = builder.create<RegOp>(type, clock, id, annotations, sym);
+    result = builder.create<RegOp>(type, clock, id, inferNameKind(id), annotations, sym);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 

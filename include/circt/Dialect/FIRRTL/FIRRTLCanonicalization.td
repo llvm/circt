@@ -99,20 +99,20 @@ def MuxSameCondHigh : Pat<
 // regreset(clock, invalidvalue, resetValue) -> reg(clock)
 def RegResetWithInvalidReset : Pat<
   (RegResetOp $clock, (InvalidValueOp), $_, $name, $nameKind , $annotations, $inner_sym),
-  (RegOp $clock, $name, $annotations, $inner_sym, $nameKind),
+  (RegOp $clock, $name, $nameKind, $annotations, $inner_sym),
   []>;
 
 // regreset(clock, reset, invalidvalue) -> reg(clock)
 // This is handled by the `RemoveReset` pass in the original Scala code.
 def RegResetWithInvalidResetValue : Pat<
   (RegResetOp $clock, $_, (InvalidValueOp), $name, $nameKind, $annotations, $inner_sym),
-  (RegOp $clock, $name, $annotations, $inner_sym, $nameKind),
+  (RegOp $clock, $name, $nameKind, $annotations, $inner_sym),
   []>;
 
 // regreset(clock, constant_zero, resetValue) -> reg(clock)
 def RegResetWithZeroReset : Pat<
   (RegResetOp $clock, $reset, $_, $name, $nameKind, $annotations, $inner_sym),
-  (RegOp $clock, $name, $annotations, $inner_sym, $nameKind), [(ZeroConstantOp $reset)]>;
+  (RegOp $clock, $name, $nameKind, $annotations, $inner_sym), [(ZeroConstantOp $reset)]>;
 
 // Return the width of an operation result as an integer attribute.  This is
 // useful to pad another operation up to the width of the original operation.
@@ -139,8 +139,8 @@ def DropNameWire : Pat<
 
 // reg(clk, name),!dnt -> reg(clk, "")
 def DropNameReg : Pat<
-  (RegOp $clk, $name, $annotations, $inner_sym, $nameKind),
-  (RegOp $clk, (GetEmptyString), $annotations, $inner_sym, (GetDroppableNameAttr)),
+  (RegOp $clk, $name, $nameKind, $annotations, $inner_sym),
+  (RegOp $clk, (GetEmptyString), (GetDroppableNameAttr), $annotations, $inner_sym),
   [(uselessNameAttr $name), (NonEmptyAttr $name), (NullAttr $inner_sym)]>;
 
 // regreset(clk, sig, val, name),!dnt -> regreset(clk, sig, val, "")

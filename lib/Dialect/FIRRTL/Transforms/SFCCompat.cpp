@@ -60,9 +60,9 @@ void SFCCompatPass::runOnOperation() {
       LLVM_DEBUG(llvm::dbgs() << "  - RegResetOp '" << reg.name()
                               << "' will be replaced with a RegOp\n");
       ImplicitLocOpBuilder builder(reg.getLoc(), reg);
-      RegOp newReg =
-          builder.create<RegOp>(reg.getType(), reg.clockVal(), reg.name(),
-                                reg.annotations(), reg.inner_symAttr());
+      RegOp newReg = builder.create<RegOp>(
+          reg.getType(), reg.clockVal(), reg.name(), reg.nameKind(),
+          reg.annotations(), reg.inner_symAttr());
       reg.replaceAllUsesWith(newReg.getResult());
       reg.erase();
       madeModifications = true;
