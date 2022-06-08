@@ -85,4 +85,4 @@ public:
 } // namespace mlir
 
 #include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.h.inc"
-#endif // CIRCT_DIALECT_OP_INTERFACES_H
+#endif // CIRCT_DIALECT_FIRRTL_OP_INTERFACES_H
