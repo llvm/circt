@@ -127,8 +127,8 @@ def GetWidthAsIntAttr : NativeCodeCall<
 
 // node(x,name),!dnt -> node(x, "")
 def DropNameNode : Pat<
-  (NodeOp $x, $name, $annotations, $inner_sym, $nameKind),
-  (NodeOp $x, (GetEmptyString),  $annotations, $inner_sym, (GetDroppableNameAttr)),
+  (NodeOp $x, $name, $nameKind, $annotations, $inner_sym),
+  (NodeOp $x, (GetEmptyString), (GetDroppableNameAttr), $annotations, $inner_sym),
   [(uselessNameAttr $name), (NonEmptyAttr $name), (NullAttr $inner_sym)]>;
 
 // wire(name),!dnt -> wire("")

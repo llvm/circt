@@ -223,7 +223,7 @@ def NodeOp : ReferableDeclOp<"node",
                   CArg<"NameKindEnum", "NameKindEnum::InterestingName">:$nameKind,
                   CArg<"ArrayRef<Attribute>", "{}">:$annotations,
                   CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
-      return build($_builder, $_state, elementType, input, name, nameKind
+      return build($_builder, $_state, elementType, input, name, nameKind,
                    $_builder.getArrayAttr(annotations), inner_sym);
     }]>
   ];
