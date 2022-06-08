@@ -874,11 +874,13 @@ void GrandCentralTapsPass::runOnOperation() {
 
         // Add a verbatim op that assigns this module port.
         auto arg = impl.getArgument(port.portNum);
-        Value hnameExpr = builder.create<VerbatimExprOp>(
-            arg.getType().cast<FIRRTLType>(), hname, ValueRange{}, symbols);
+        Value hnameExpr;
         if (xmrNLA)
           hnameExpr =
               builder.create<XMROp>(arg.getType(), xmrNLA.sym_nameAttr());
+        else
+          hnameExpr = builder.create<VerbatimExprOp>(
+              arg.getType().cast<FIRRTLType>(), hname, ValueRange{}, symbols);
         builder.create<ConnectOp>(arg, hnameExpr);
       }
 
