@@ -273,6 +273,7 @@ LogicalResult RegOp::canonicalize(RegOp op, PatternRewriter &rewriter) {
 
 //===----------------------------------------------------------------------===//
 // IfDefOp
+//===----------------------------------------------------------------------===//
 
 void IfDefOp::build(OpBuilder &builder, OperationState &result, StringRef cond,
                     std::function<void()> thenCtor,
@@ -325,6 +326,7 @@ LogicalResult IfDefOp::canonicalize(IfDefOp op, PatternRewriter &rewriter) {
 
 //===----------------------------------------------------------------------===//
 // IfDefProceduralOp
+//===----------------------------------------------------------------------===//
 
 void IfDefProceduralOp::build(OpBuilder &builder, OperationState &result,
                               StringRef cond, std::function<void()> thenCtor,
@@ -348,6 +350,7 @@ LogicalResult IfDefProceduralOp::canonicalize(IfDefProceduralOp op,
 
 //===----------------------------------------------------------------------===//
 // IfOp
+//===----------------------------------------------------------------------===//
 
 void IfOp::build(OpBuilder &builder, OperationState &result, Value cond,
                  std::function<void()> thenCtor,
@@ -419,6 +422,7 @@ LogicalResult IfOp::canonicalize(IfOp op, PatternRewriter &rewriter) {
 
 //===----------------------------------------------------------------------===//
 // AlwaysOp
+//===----------------------------------------------------------------------===//
 
 AlwaysOp::Condition AlwaysOp::getCondition(size_t idx) {
   return Condition{EventControl(events()[idx].cast<IntegerAttr>().getInt()),
@@ -499,6 +503,7 @@ static void printEventList(OpAsmPrinter &p, AlwaysOp op, ArrayAttr portsAttr,
 
 //===----------------------------------------------------------------------===//
 // AlwaysFFOp
+//===----------------------------------------------------------------------===//
 
 void AlwaysFFOp::build(OpBuilder &builder, OperationState &result,
                        EventControl clockEdge, Value clock,
@@ -891,6 +896,10 @@ LogicalResult CaseOp::canonicalize(CaseOp op, PatternRewriter &rewriter) {
 
   return failure();
 }
+
+//===----------------------------------------------------------------------===//
+// OrderedOutputOp
+//===----------------------------------------------------------------------===//
 
 void OrderedOutputOp::build(OpBuilder &builder, OperationState &result,
                             std::function<void()> body) {

@@ -1636,17 +1636,6 @@ firrtl.module @ComparisonOfConsts(
   // CHECK-NEXT: firrtl.strictconnect %y19, %c1_ui1
 }
 
-// CHECK-LABEL: @wire2node
-// CHECK-NEXT:   %tmp_a = firrtl.node %a  : !firrtl.uint<7>
-// CHECK-NEXT:   firrtl.strictconnect %b, %a : !firrtl.uint<7>
-// CHECK-NEXT:  }
-firrtl.module @wire2node(in %a: !firrtl.uint<7>, out %b: !firrtl.uint<7>) {
-  %tmp_a = firrtl.wire : !firrtl.uint<7>
-  firrtl.connect %tmp_a, %a : !firrtl.uint<7>, !firrtl.uint<7>
-  firrtl.connect %b, %tmp_a : !firrtl.uint<7>, !firrtl.uint<7>
-}
-
-
 // CHECK-LABEL: @add_cst_prop1
 // CHECK-NEXT:   %c11_ui9 = firrtl.constant 11 : !firrtl.uint<9>
 // CHECK-NEXT:   firrtl.strictconnect %out_b, %c11_ui9 : !firrtl.uint<9>
@@ -2366,6 +2355,15 @@ firrtl.module @Issue2514(
   // CHECK: firrtl.strictconnect %leq_1, %[[one_i1]]
   // CHECK: firrtl.strictconnect %leq_2, %[[one_i1]]
   // CHECK: firrtl.strictconnect %leq_3, %[[one_i1]]
+}
+
+// CHECK-LABEL: @NamePropagation
+firrtl.module @NamePropagation(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, in %c: !firrtl.uint<4>, out %res1: !firrtl.uint<2>, out %res2: !firrtl.uint<2>) {
+  // CHECK-NEXT: %e = firrtl.bits %c 1 to 0 {name = "e"}
+  %1 = firrtl.bits %c 2 to 0 : (!firrtl.uint<4>) -> !firrtl.uint<3>
+  %e = firrtl.bits %1 1 to 0 {name = "e"}: (!firrtl.uint<3>) -> !firrtl.uint<2>
+  // CHECK-NEXT: firrtl.strictconnect %res2, %e
+  firrtl.strictconnect %res2, %e : !firrtl.uint<2>
 }
 
 }

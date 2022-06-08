@@ -138,15 +138,15 @@ poly.run_passes()
 poly.print()
 # CHECK-LABEL: === Post-generate IR...
 # CHECK: hw.module @PolynomialSystem
-# CHECK: %[[EXAMPLE_Y:.+]] = hw.instance "example" sym @example @PolyComputeForCoeff_62_42_6(x: %c23_i32: i32) -> (y: i32)
-# CHECK: %example2.y = hw.instance "example2" sym @example2 @PolyComputeForCoeff_62_42_6(x: %[[EXAMPLE_Y]]: i32) -> (y: i32)
-# CHECK: hw.instance "example2_1" sym @example2_1 @PolyComputeForCoeff_1_2_3_4_5(x: %[[EXAMPLE_Y]]: i32)
+# CHECK: %[[EXAMPLE_Y:.+]] = hw.instance "example" sym @example @PolyComputeForCoeff_62_42_6<__INST_HIER: none = #hw.param.expr.str.concat<#hw.param.decl.ref<"__INST_HIER">, ".example">>(x: %c23_i32: i32) -> (y: i32)
+# CHECK: %example2.y = hw.instance "example2" sym @example2 @PolyComputeForCoeff_62_42_6<__INST_HIER: none = #hw.param.expr.str.concat<#hw.param.decl.ref<"__INST_HIER">, ".example2">>(x: %[[EXAMPLE_Y]]: i32) -> (y: i32)
+# CHECK: hw.instance "example2_1" sym @example2_1 @PolyComputeForCoeff_1_2_3_4_5<__INST_HIER: none = #hw.param.expr.str.concat<#hw.param.decl.ref<"__INST_HIER">, ".example2_1">>(x: %[[EXAMPLE_Y]]: i32)
 # CHECK: %CoolPolynomialCompute.y = hw.instance "CoolPolynomialCompute" sym @CoolPolynomialCompute @supercooldevice(x: %c23_i32{{.*}}: i32) -> (y: i32)
-# CHECK-LABEL: hw.module @PolyComputeForCoeff_62_42_6(%x: i32) -> (y: i32)
+# CHECK-LABEL: hw.module @PolyComputeForCoeff_62_42_6<__INST_HIER: none>(%x: i32) -> (y: i32)
 # CHECK: hw.constant 62
 # CHECK: hw.constant 42
 # CHECK: hw.constant 6
-# CHECK-LABEL: hw.module @PolyComputeForCoeff_1_2_3_4_5(%x: i32)
+# CHECK-LABEL: hw.module @PolyComputeForCoeff_1_2_3_4_5<__INST_HIER: none>(%x: i32)
 # CHECK: hw.constant 1
 # CHECK: hw.constant 2
 # CHECK: hw.constant 3
@@ -161,6 +161,6 @@ poly.emit_outputs()
 # OUTPUT: typedef struct packed {logic a; } exTypedef;
 # OUTPUT: `endif // __PYCDE_TYPES__
 
-# OUTPUT-LABEL:   module PolyComputeForCoeff_62_42_6(
+# OUTPUT-LABEL:   module PolyComputeForCoeff_62_42_6
 # OUTPUT:    input  [31:0] x,
 # OUTPUT:    output [31:0] y);

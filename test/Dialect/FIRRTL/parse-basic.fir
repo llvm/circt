@@ -954,6 +954,20 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK-NEXT: firrtl.cover %clock, %cond, %enable, "foo 2" {eventControl = 0 : i32, isConcurrent = true}
 
     when cond:
+      printf(clock, enable, "assert:foo_0:", value)
+    ; CHECK: [[TMP:%.+]] = firrtl.not %cond
+    ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "" {eventControl = 0 : i32, isConcurrent = true, name = "foo_0"}
+
+    when cond:
+      printf(clock, enable, "assume:foo_1:", value)
+    ; CHECK: [[TMP:%.+]] = firrtl.not %cond
+    ; CHECK-NEXT: firrtl.assume %clock, [[TMP]], %enable, "" {eventControl = 0 : i32, isConcurrent = true, name = "foo_1"}
+
+    when cond:
+      printf(clock, enable, "cover:foo_2:", value)
+    ; CHECK-NEXT: firrtl.cover %clock, %cond, %enable, "" {eventControl = 0 : i32, isConcurrent = true, name = "foo_2"}
+
+    when cond:
       printf(clock, enable, "assert:custom label 0:foo 3", value)
     ; CHECK: [[TMP:%.+]] = firrtl.not %cond
     ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "foo 3" {eventControl = 0 : i32, isConcurrent = true, name = "custom label 0"}

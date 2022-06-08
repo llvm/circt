@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-from .support import _obj_to_value
 from .pycde_types import dim
 from .value import Value
 from circt.support import get_value
@@ -24,7 +23,7 @@ def SystolicArray(row_inputs, col_inputs, pe_builder):
   with ir.InsertionPoint(pe_block):
     result = pe_builder(Value(pe_block.arguments[0]),
                         Value(pe_block.arguments[1]))
-    value = _obj_to_value(result, result.type)
+    value = Value(result)
     pe_output_type = value.type
     msft.PEOutputOp(value.value)
 
@@ -35,4 +34,4 @@ def SystolicArray(row_inputs, col_inputs, pe_builder):
   dummy_op.regions[0].blocks[0].append_to(array.regions[0])
   dummy_op.operation.erase()
 
-  return array.peOutputs
+  return Value(array.peOutputs)

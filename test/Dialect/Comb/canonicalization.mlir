@@ -1349,3 +1349,12 @@ hw.module @ReductionReplicate(%r: i4) -> (a:i1, b:i1, c:i1, d:i1) {
   // CHECK-NEXT: hw.output [[A]], [[B]], [[C]], [[D]]
   hw.output %a, %b, %c, %d: i1, i1, i1, i1
 }
+
+// CHECK-LABEL: @propagateNamehint
+hw.module @propagateNamehint(%x: i16) -> (o: i1) {
+  %c0_i16 = hw.constant 0 : i16
+  // swap %x and %c0_i16
+  // CHECK: %0 = comb.icmp eq %x, %c0_i16 {sv.namehint = "hint"}
+  %0 = comb.icmp eq %c0_i16, %x {sv.namehint = "hint"}: i16
+  hw.output %0 : i1
+}

@@ -53,6 +53,34 @@ static bool isUInt1(Type type) {
   return true;
 }
 
+/// A wrapper of `PatternRewriter::replaceOp` to propagate "name" attribute.
+/// If a replaced op has a "name" attribute, this function propagates the name
+/// to the new value.
+static void replaceOpAndCopyName(PatternRewriter &rewriter, Operation *op,
+                                 Value newValue) {
+  if (auto *newOp = newValue.getDefiningOp()) {
+    auto name = op->getAttrOfType<StringAttr>("name");
+    if (name && newOp && !newOp->hasAttr("name") && !isUselessName(name))
+      rewriter.updateRootInPlace(newOp, [&] { newOp->setAttr("name", name); });
+  }
+  rewriter.replaceOp(op, newValue);
+}
+
+/// A wrapper of `PatternRewriter::replaceOpWithNewOp` to propagate "name"
+/// attribute. If a replaced op has a "name" attribute, this function propagates
+/// the name to the new value.
+template <typename OpTy, typename... Args>
+static OpTy replaceOpWithNewOpAndCopyName(PatternRewriter &rewriter,
+                                          Operation *op, Args &&...args) {
+  auto name = op->getAttrOfType<StringAttr>("name");
+  auto newOp =
+      rewriter.replaceOpWithNewOp<OpTy>(op, std::forward<Args>(args)...);
+  if (name && newOp && !newOp->hasAttr("name") && !isUselessName(name))
+    rewriter.updateRootInPlace(newOp, [&] { newOp->setAttr("name", name); });
+
+  return newOp;
+}
+
 /// Return true if this is a useless temporary name produced by FIRRTL.  We
 /// drop these as they don't convey semantic meaning.
 bool circt::firrtl::isUselessName(StringRef name) {
@@ -267,7 +295,7 @@ static LogicalResult canonicalizePrimOp(
     resultValue = rewriter.create<AsUIntPrimOp>(op->getLoc(), resultValue);
 
   assert(type == resultValue.getType() && "canonicalization changed type");
-  rewriter.replaceOp(op, resultValue);
+  replaceOpAndCopyName(rewriter, op, resultValue);
   return success();
 }
 
@@ -1014,8 +1042,9 @@ LogicalResult CatPrimOp::canonicalize(CatPrimOp op, PatternRewriter &rewriter) {
     if (auto rhsBits = dyn_cast_or_null<BitsPrimOp>(op.rhs().getDefiningOp())) {
       if (lhsBits.input() == rhsBits.input() &&
           lhsBits.lo() - 1 == rhsBits.hi()) {
-        rewriter.replaceOpWithNewOp<BitsPrimOp>(
-            op, op.getType(), lhsBits.input(), lhsBits.hi(), rhsBits.lo());
+        replaceOpWithNewOpAndCopyName<BitsPrimOp>(rewriter, op, op.getType(),
+                                                  lhsBits.input(), lhsBits.hi(),
+                                                  rhsBits.lo());
         return success();
       }
     }
@@ -1059,8 +1088,8 @@ LogicalResult BitsPrimOp::canonicalize(BitsPrimOp op,
   if (auto innerBits = dyn_cast_or_null<BitsPrimOp>(inputOp)) {
     auto newLo = op.lo() + innerBits.lo();
     auto newHi = newLo + op.hi() - op.lo();
-    rewriter.replaceOpWithNewOp<BitsPrimOp>(op, innerBits.input(), newHi,
-                                            newLo);
+    replaceOpWithNewOpAndCopyName<BitsPrimOp>(rewriter, op, innerBits.input(),
+                                              newHi, newLo);
     return success();
   }
   return failure();
@@ -1148,8 +1177,9 @@ static LogicalResult canonicalizeMux(MuxPrimOp op, PatternRewriter &rewriter) {
   if (newHigh == op.high() && newLow == op.low())
     return failure();
 
-  rewriter.replaceOpWithNewOp<MuxPrimOp>(
-      op, op.getType(), ValueRange{op.sel(), newHigh, newLow}, op->getAttrs());
+  replaceOpWithNewOpAndCopyName<MuxPrimOp>(
+      rewriter, op, op.getType(), ValueRange{op.sel(), newHigh, newLow},
+      op->getAttrs());
   return success();
 }
 
@@ -1345,7 +1375,7 @@ LogicalResult MultibitMuxOp::canonicalize(MultibitMuxOp op,
   // is added here.
   if (llvm::all_of(op.inputs().drop_front(),
                    [&](auto input) { return input == op.inputs().front(); })) {
-    rewriter.replaceOp(op, op.inputs().front());
+    replaceOpAndCopyName(rewriter, op, op.inputs().front());
     return success();
   }
 
@@ -1359,8 +1389,8 @@ LogicalResult MultibitMuxOp::canonicalize(MultibitMuxOp op,
     return failure();
 
   // multibit_mux(index, {lhs, rhs}) -> mux(index, lhs, rhs)
-  rewriter.replaceOpWithNewOp<MuxPrimOp>(op, op.index(), op.inputs()[0],
-                                         op.inputs()[1]);
+  replaceOpWithNewOpAndCopyName<MuxPrimOp>(rewriter, op, op.index(),
+                                           op.inputs()[0], op.inputs()[1]);
   return success();
 }
 
@@ -1457,7 +1487,7 @@ static LogicalResult canonicalizeSingleSetConnect(StrictConnectOp op,
   if (hasDroppableName(connectedDecl)) {
     // Replace all things *using* the decl with the constant/port, and
     // remove the declaration.
-    rewriter.replaceOp(connectedDecl, replacement);
+    replaceOpAndCopyName(rewriter, connectedDecl, replacement);
 
     // Remove the connect
     rewriter.eraseOp(op);
@@ -1625,39 +1655,9 @@ void NodeOp::getCanonicalizationPatterns(RewritePatternSet &results,
   results.insert<FoldNodeName, patterns::DropNameNode>(context);
 }
 
-OpFoldResult NodeOp::fold(ArrayRef<Attribute> operands) {
-  if (!inner_sym())
-    return operands[0];
-  return {};
-}
-
-struct WireToNode : public mlir::RewritePattern {
-  WireToNode(MLIRContext *context)
-      : RewritePattern(WireOp::getOperationName(), 0, context) {}
-  LogicalResult matchAndRewrite(Operation *op,
-                                PatternRewriter &rewriter) const override {
-    auto wire = cast<WireOp>(op);
-    auto strictcon = getSingleConnectUserOf(wire);
-    if (!strictcon)
-      return failure();
-    for (auto *user : wire->getUsers()) {
-      if (user == strictcon)
-        continue;
-      if (user->isBeforeInBlock(strictcon))
-        return failure();
-    }
-    auto node = rewriter.replaceOpWithNewOp<NodeOp>(
-        op, wire.result().getType(), strictcon.src(), wire.name(),
-        wire.annotations(), wire.inner_symAttr());
-    node->moveBefore(strictcon);
-    rewriter.eraseOp(strictcon);
-    return success();
-  }
-};
-
 void WireOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                          MLIRContext *context) {
-  results.insert<WireToNode, patterns::DropNameWire>(context);
+  results.insert<patterns::DropNameWire>(context);
 }
 
 // A register with constant reset and all connection to either itself or the
@@ -1706,7 +1706,7 @@ struct FoldResetMux : public mlir::RewritePattern {
       constOp->moveBefore(&con->getBlock()->front());
 
     // Replace the register with the constant.
-    rewriter.replaceOp(reg, constOp.getResult());
+    replaceOpAndCopyName(rewriter, reg, constOp.getResult());
     // Remove the connect.
     rewriter.eraseOp(con);
     return success();
@@ -1740,7 +1740,8 @@ LogicalResult MemOp::canonicalize(MemOp op, PatternRewriter &rewriter) {
   for (auto port : op->getResults()) {
     for (auto *user : llvm::make_early_inc_range(port.getUsers())) {
       SubfieldOp sfop = cast<SubfieldOp>(user);
-      rewriter.replaceOpWithNewOp<WireOp>(sfop, sfop.result().getType());
+      replaceOpWithNewOpAndCopyName<WireOp>(rewriter, sfop,
+                                            sfop.result().getType());
     }
   }
   rewriter.eraseOp(op);
@@ -1805,13 +1806,13 @@ static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
     constOp->moveBefore(&con->getBlock()->front());
 
   if (!constReg)
-    rewriter.replaceOpWithNewOp<RegResetOp>(
-        reg, reg.getType(), reg.clockVal(), mux.sel(), mux.high(), reg.name(),
-        reg.nameKindAttr().getValue(), reg.annotations(), reg.inner_symAttr());
+    replaceOpWithNewOpAndCopyName<RegResetOp>(
+        rewriter, reg, reg.getType(), reg.clockVal(), mux.sel(), mux.high(),
+        reg.name(), reg.nameKind(), reg.annotations(), reg.inner_symAttr());
   auto pt = rewriter.saveInsertionPoint();
   rewriter.setInsertionPoint(con);
-  rewriter.replaceOpWithNewOp<ConnectOp>(con, con.dest(),
-                                         constReg ? constOp : mux.low());
+  replaceOpWithNewOpAndCopyName<ConnectOp>(rewriter, con, con.dest(),
+                                           constReg ? constOp : mux.low());
   rewriter.restoreInsertionPoint(pt);
   return success();
 }
