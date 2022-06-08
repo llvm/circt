@@ -1909,7 +1909,7 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
   signPreference = signRequirement;
 
   bool bitCastAdded = false;
-  if (state.options.explicitBitcastAddMul && isa<AddOp, MulOp, SubOp>(op))
+  if (state.options.explicitBitcast && isa<AddOp, MulOp, SubOp>(op))
     if (auto inType =
             (op->getResult(0).getType().dyn_cast_or_null<IntegerType>())) {
       os << inType.getWidth() << "'(";
