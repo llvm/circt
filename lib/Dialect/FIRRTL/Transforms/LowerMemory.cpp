@@ -232,7 +232,7 @@ void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
 
   // Create an instance of the wrapper memory module, which will replace the
   // original mem op.
-  emitMemoryInstance(mem, wrapper, summary);
+  auto inst = emitMemoryInstance(mem, wrapper, summary);
 
   // We fixup the annotations here. We will be copying all annotations on to the
   // module op, so we have to fix up the NLA to have the module as the leaf
@@ -259,6 +259,11 @@ void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
     auto nla = dyn_cast<HierPathOp>(symbolTable->lookup(nlaSym.getAttr()));
     auto namepath = nla.namepath().getValue();
     SmallVector<Attribute> newNamepath(namepath.begin(), namepath.end());
+    if (!nla.isComponent()) {
+      newNamepath[newNamepath.size() - 1] = hw::InnerRefAttr::get(
+          inst->getParentOfType<FModuleOp>().moduleNameAttr(),
+          inst.getInnerNameAttr());
+    }
     newNamepath.push_back(leafAttr);
     nla.namepathAttr(ArrayAttr::get(context, newNamepath));
     nlaUpdated = true;
