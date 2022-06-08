@@ -1694,6 +1694,16 @@ LogicalResult GenerateCaseOp::verify() {
   if (caseRegions().size() != numPatterns || caseNames().size() != numPatterns)
     return emitOpError(
         "Size of caseRegions, patterns, and caseNames must match");
+
+  StringSet<> usedNames;
+  for (Attribute name : caseNames()) {
+    StringAttr nameStr = name.dyn_cast<StringAttr>();
+    if (!nameStr)
+      return emitOpError("caseNames must all be string attributes");
+    if (usedNames.contains(nameStr.getValue()))
+      return emitOpError("caseNames must be unique");
+    usedNames.insert(nameStr.getValue());
+  }
   return success();
 }
 
