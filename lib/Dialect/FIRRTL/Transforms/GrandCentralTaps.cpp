@@ -844,8 +844,17 @@ void GrandCentralTapsPass::runOnOperation() {
         for (auto inst : shortestPrefix.getValue())
           addSymbol(getInnerRefTo(inst));
         if (port.nla) {
-          for (auto sym : port.nla.namepath())
+          auto namepath = port.nla.namepath();
+          Attribute leaf = namepath.getValue().back();
+          if (!leaf.isa<InnerRefAttr>()) {
+            if (port.target.hasPort())
+              leaf = getInnerRefTo(port.target.getOp(), port.target.getPort());
+            else
+              leaf = getInnerRefTo(port.target.getOp());
+          }
+          for (auto sym : namepath.getValue().drop_back())
             addSymbol(sym);
+          addSymbol(leaf);
         } else if (port.target.getOp()) {
           if (port.target.hasPort())
             addSymbol(
