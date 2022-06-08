@@ -125,10 +125,12 @@ def FileListAttr : AttrDef<HWDialect, "FileList"> {
 
 }
 
-/// An attribute describing a module parameter, or instance parameter
-/// specification.
 def ParamDeclAttr : AttrDef<HWDialect, "ParamDecl"> {
-  let summary = "module or instance parameter definition";
+  let summary = "Module or instance parameter definition";
+  let description = [{
+    An attribute describing a module parameter, or instance parameter
+    specification.
+  }];
 
   /// The value of the attribute - in a module, this is the default
   /// value (and may be missing).  In an instance, this is a required field that
