@@ -111,9 +111,8 @@ bool PrettifyVerilogPass::prettifyUnaryOperator(Operation *op) {
   //         = ^tmp2 + 42
   //
   // This is particularly helpful when the operand of the unary op has multiple
-  // uses as well. If the op has a namehint, it is not necessary to duplicate
-  // the op.
-  if (op->use_empty() || op->hasOneUse() || op->hasAttr("sv.namehint"))
+  // uses as well.
+  if (op->use_empty() || op->hasOneUse())
     return false;
 
   // If this operation has any users that cannot inline the operation, then
