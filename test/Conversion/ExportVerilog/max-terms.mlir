@@ -2,7 +2,7 @@
 
 // CHECK-LABEL: module large_use_in_procedural
 hw.module @large_use_in_procedural(%clock: i1, %a: i1) {
-  // CHECK: wire [[GEN:.+]];
+  // CHECK: wire [[GEN:long_concat]];
   // CHECK: reg [[REG:.+]];
 
   // CHECK: assign [[GEN]] = a + a + a + a + a;
@@ -10,7 +10,8 @@ hw.module @large_use_in_procedural(%clock: i1, %a: i1) {
   sv.always {
     sv.ifdef.procedural "FOO" {
       // This expression should be hoisted and spilled.
-      %1 = comb.add %a, %a, %a, %a, %a : i1
+      // If there is a namehint, we should use the name.
+      %1 = comb.add %a, %a, %a, %a, %a {sv.namehint = "long_concat"}: i1
       // CHECK: if ([[GEN]])
       sv.if %1 {
         sv.exit
