@@ -330,9 +330,9 @@ firrtl.circuit "TestHarness" attributes {
 //
 // CHECK-LABEL: firrtl.circuit "NLAGarbageCollection"
 firrtl.circuit "NLAGarbageCollection" {
-  // CHECK-NOT: @nla_1
-  // CHECK-NOT: @nla_2
-  // CHECK-NOT: @nla_3
+  // CHECK: @nla_1 [@NLAGarbageCollection::@dut, @DUT::@submodule, @Submodule::@foo]
+  // CHECK: @nla_2 [@NLAGarbageCollection::@dut, @DUT::@submodule, @Submodule::@port]
+  // CHECK: @nla_3 [@NLAGarbageCollection::@dut, @DUT::@submodule, @Submodule::@bar_0]
   firrtl.hierpath @nla_1 [@NLAGarbageCollection::@dut, @DUT::@submodule, @Submodule::@foo]
   firrtl.hierpath @nla_2 [@NLAGarbageCollection::@dut, @DUT::@submodule, @Submodule::@port]
   firrtl.hierpath @nla_3 [@NLAGarbageCollection::@dut, @DUT::@submodule, @Submodule::@bar_0]
@@ -417,10 +417,10 @@ firrtl.circuit "NLAGarbageCollection" {
 
 // CHECK-LABEL: firrtl.circuit "NLAUsedInWiring"
 firrtl.circuit "NLAUsedInWiring"  {
-  // CHECK-NOT: @nla_1
-  // CHECK-NOT: @nla_2
   firrtl.hierpath @nla_1 [@NLAUsedInWiring::@foo, @Foo::@f]
   firrtl.hierpath @nla_2 [@NLAUsedInWiring::@foo, @Foo::@g]
+  // CHECK: firrtl.hierpath @nla_1 [@NLAUsedInWiring::@foo, @Foo::@f]
+  // CHECK: firrtl.hierpath @nla_2 [@NLAUsedInWiring::@foo, @Foo::@g]
 
   // CHECK-LABEL: firrtl.module @DataTap
   // CHECK-NEXT: [[TMP:%.+]] = firrtl.verbatim.expr
