@@ -329,7 +329,7 @@ static cl::opt<bool> stripDebugInfo(
     cl::desc("Disable source locator information in output Verilog"),
     cl::init(false), cl::cat(mainCategory));
 
-static cl::opt<bool> dropName("drop-name", cl::desc("drop interesting names"),
+static cl::opt<bool> dropName("drop-names", cl::desc("drop interesting names"),
                               cl::init(false), cl::cat(mainCategory));
 
 /// Create a simple canonicalizer pass.
