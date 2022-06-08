@@ -112,7 +112,8 @@ def CombMemOp : CHIRRTLOp<"combmem", [HasCustomSSAName, FNamableOp]> {
   let arguments = (ins StrAttr:$name, NameKindAttr:$nameKind,
                        AnnotationArrayAttr:$annotations, OptionalAttr<SymbolNameAttr>:$inner_sym);
   let results = (outs CMemoryType:$result);
-  let assemblyFormat = "(`sym` $inner_sym^)? custom<NameKind>($nameKind) custom<CombMemOp>(attr-dict) `:` qualified(type($result))";
+  let assemblyFormat = [{(`sym` $inner_sym^)? custom<NameKind>($nameKind)
+                         custom<CombMemOp>(attr-dict) `:` qualified(type($result))}];
   let builders = [
     OpBuilder<(ins "firrtl::FIRRTLType":$elementType, "uint64_t":$numElements,
                    "mlir::StringRef":$name, "firrtl::NameKindEnum":$nameKind,
@@ -130,7 +131,8 @@ def SeqMemOp : CHIRRTLOp<"seqmem", [HasCustomSSAName, FNamableOp]> {
                        AnnotationArrayAttr:$annotations,
                        OptionalAttr<SymbolNameAttr>:$inner_sym);
   let results = (outs CMemoryType:$result);
-  let assemblyFormat = "(`sym` $inner_sym^)? custom<NameKind>($nameKind) $ruw custom<SeqMemOp>(attr-dict) `:` qualified(type($result))";
+  let assemblyFormat = [{(`sym` $inner_sym^)? custom<NameKind>($nameKind) $ruw
+                         custom<SeqMemOp>(attr-dict) `:` qualified(type($result))}];
   let builders = [
     OpBuilder<(ins "firrtl::FIRRTLType":$elementType, "uint64_t":$numElements,
                    "RUWAttr":$ruw, "mlir::StringRef":$name,
