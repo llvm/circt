@@ -212,20 +212,19 @@ def NodeOp : ReferableDeclOp<"node",
     }];
 
   let arguments = (ins PassiveType:$input, StrAttr:$name,
+                       NameKindAttr:$nameKind,
                        AnnotationArrayAttr:$annotations,
-                       OptionalAttr<SymbolNameAttr>:$inner_sym,
-                       NameKindAttr:$nameKind);
+                       OptionalAttr<SymbolNameAttr>:$inner_sym);
   let results = (outs FIRRTLType:$result);
 
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$input,
                   CArg<"StringRef", "{}">:$name,
-                  CArg<"ArrayAttr", "ArrayAttr()">:$annotations,
+                  CArg<"NameKindEnum", "NameKindEnum::InterestingName">:$nameKind,
+                  CArg<"ArrayRef<Attribute>", "{}">:$annotations,
                   CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
-      if(!annotations)
-        annotations = $_builder.getArrayAttr({});
-      return build($_builder, $_state, elementType, input, name,
-                   annotations, inner_sym, inferNameKind(name));
+      return build($_builder, $_state, elementType, input, name, nameKind
+                   $_builder.getArrayAttr(annotations), inner_sym);
     }]>
   ];
 

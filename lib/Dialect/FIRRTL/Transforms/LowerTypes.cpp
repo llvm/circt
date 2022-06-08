@@ -1065,7 +1065,9 @@ bool TypeLoweringVisitor::visitDecl(RegResetOp op) {
 bool TypeLoweringVisitor::visitDecl(NodeOp op) {
   auto clone = [&](FlatBundleFieldEntry field, ArrayAttr attrs) -> Operation * {
     auto input = getSubWhatever(op.input(), field.index);
-    return builder->create<NodeOp>(field.type, input, "", attrs, StringAttr{});
+    return builder->create<NodeOp>(field.type, input, "",
+                                   NameKindEnum::DroppableName, attrs,
+                                   StringAttr{});
   };
   return lowerProducer(op, clone);
 }

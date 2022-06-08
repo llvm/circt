@@ -3103,7 +3103,7 @@ ParseResult FIRStmtParser::parseNode() {
 
   auto sym = getSymbolIfRequired(annotations, id);
   auto result = builder.create<NodeOp>(initializer.getType(), initializer, id,
-                                       annotations, sym);
+                                       inferNameKind(id), annotations, sym);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
