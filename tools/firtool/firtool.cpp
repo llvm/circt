@@ -565,6 +565,12 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   pm.nest<firrtl::CircuitOp>().addPass(
       firrtl::createBlackBoxReaderPass(blackBoxRoot));
 
+  // Drop names introduced by middle-end passes (e.g. GrandCentral).
+  // TODO: Move this to the O1 pipeline.
+  if (dropName)
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+        firrtl::createDropNamesPass());
+
   // The above passes, IMConstProp in particular, introduce additional
   // canonicalization opportunities that we should pick up here before we
   // proceed to output-specific pipelines.
