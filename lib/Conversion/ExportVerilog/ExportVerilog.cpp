@@ -2967,10 +2967,7 @@ LogicalResult StmtEmitter::visitSV(InfoOp op) {
                                  op.operands());
 }
 
-// Emit the full generate case with all block labels as given in the op.
 LogicalResult StmtEmitter::visitSV(GenerateOp op) {
-
-  // Print the preamble 'generate' and 'case'.
   indent() << "generate\n";
   indent() << "begin: " << names.addName(op, op.sym_name()) << "\n";
   addIndent();
@@ -2995,10 +2992,14 @@ LogicalResult StmtEmitter::visitSV(GenerateCaseOp op) {
   assert(patterns.size() == regions.size());
   assert(patterns.size() == caseNames.size());
 
-  // Emit each case.
   addIndent();
+  // TODO: We'll probably need to store the legalized names somewhere for
+  // `verbose` formatting. Set up the infra for storing names recursively. Just
+  // store this locally for now.
   llvm::StringSet<> usedNames;
   size_t nextGenID = 0;
+
+  // Emit each case.
   for (size_t i = 0, e = patterns.size(); i < e; ++i) {
     auto &region = regions[i];
     assert(region.hasOneBlock());
@@ -3013,14 +3014,16 @@ LogicalResult StmtEmitter::visitSV(GenerateCaseOp op) {
     emitStatementBlock(region.getBlocks().front());
     indent() << "end: " << legalName << "\n";
   }
-  if (op.defaultRegion().hasOneBlock()) {
+
+  // Emit the default block, if given.
+  if (!op.defaultRegion().empty()) {
+    assert(op.defaultRegion().hasOneBlock());
     indent() << "default: begin: " << op.defaultLabel() << "\n";
     emitStatementBlock(op.defaultRegion().getBlocks().front());
     indent() << "end: " << op.defaultLabel() << "\n";
   }
-  reduceIndent();
 
-  // Emit the necessay end matter.
+  reduceIndent();
   indent() << "endcase\n";
   return success();
 }

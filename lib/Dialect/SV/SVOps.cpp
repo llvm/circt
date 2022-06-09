@@ -1654,6 +1654,8 @@ void CoverConcurrentOp::getCanonicalizationPatterns(RewritePatternSet &results,
 // SV generate ops
 //===----------------------------------------------------------------------===//
 
+/// Parse cases formatted like:
+///  case (pattern, "name") { ... }
 bool parseCaseRegions(OpAsmParser &p, ArrayAttr &patternsArray,
                       ArrayAttr &caseNamesArray,
                       SmallVectorImpl<std::unique_ptr<Region>> &caseRegions) {
@@ -1677,6 +1679,8 @@ bool parseCaseRegions(OpAsmParser &p, ArrayAttr &patternsArray,
   return false;
 }
 
+/// Print cases formatted like:
+///  case (pattern, "name") { ... }
 void printCaseRegions(OpAsmPrinter &p, Operation *, ArrayAttr patternsArray,
                       ArrayAttr namesArray,
                       MutableArrayRef<Region> caseRegions) {
@@ -1705,6 +1709,10 @@ LogicalResult GenerateCaseOp::verify() {
       return emitOpError("caseNames must be unique");
     usedNames.insert(nameStr.getValue());
   }
+
+  if (defaultRegion().empty() ^ !defaultLabel().hasValue())
+    return emitOpError("Must specify default region and label or neither");
+
   return success();
 }
 
