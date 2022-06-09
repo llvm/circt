@@ -152,7 +152,8 @@ static Optional<AnnoPathValue> stdResolveImpl(StringRef rawPath,
     return {};
   }
 
-  return resolveEntities(*tokens, state.circuit, state.symTbl);
+  return resolveEntities(*tokens, state.circuit, state.symTbl,
+                         state.targetCaches);
 }
 
 /// (SFC) FIRRTL SingleTargetAnnotation resolver.  Uses the 'target' field of

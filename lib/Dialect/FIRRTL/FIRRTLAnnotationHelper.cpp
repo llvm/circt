@@ -20,40 +20,6 @@ using namespace chirrtl;
 
 using llvm::StringRef;
 
-/// Abstraction over namable things.  Do they have names?
-static bool hasName(StringRef name, Operation *op) {
-  return TypeSwitch<Operation *, bool>(op)
-      .Case<InstanceOp, MemOp, NodeOp, RegOp, RegResetOp, WireOp, CombMemOp,
-            SeqMemOp, MemoryPortOp>(
-          [&](auto nop) { return nop.name() == name; })
-      .Default([](auto &) { return false; });
-}
-
-/// Find a matching name in an operation (usually FModuleOp).  This walk could
-/// be cached in the future.  This finds a port or operation for a given name.
-static AnnoTarget findNamedThing(StringRef name, Operation *op) {
-  AnnoTarget retval;
-  auto nameChecker = [name, &retval](Operation *op) -> WalkResult {
-    if (auto mod = dyn_cast<FModuleLike>(op)) {
-      // Check the ports.
-      auto ports = mod.getPorts();
-      for (size_t i = 0, e = ports.size(); i != e; ++i)
-        if (ports[i].name.getValue() == name) {
-          retval = PortAnnoTarget(op, i);
-          return WalkResult::interrupt();
-        }
-      return WalkResult::advance();
-    }
-    if (hasName(name, op)) {
-      retval = OpAnnoTarget(op);
-      return WalkResult::interrupt();
-    }
-    return WalkResult::advance();
-  };
-  op->walk(nameChecker);
-  return retval;
-}
-
 // Some types have been expanded so the first layer of aggregate path is
 // a return value.
 static LogicalResult updateExpandedPort(StringRef field, AnnoTarget &ref) {
@@ -191,7 +157,8 @@ std::string firrtl::canonicalizeTarget(StringRef target) {
 
 Optional<AnnoPathValue> firrtl::resolveEntities(TokenAnnoTarget path,
                                                 CircuitOp circuit,
-                                                SymbolTable &symTbl) {
+                                                SymbolTable &symTbl,
+                                                CircuitTargetCache &cache) {
   // Validate circuit name.
   if (!path.circuit.empty() && circuit.name() != path.circuit) {
     circuit->emitError("circuit name doesn't match annotation '")
@@ -213,7 +180,7 @@ Optional<AnnoPathValue> firrtl::resolveEntities(TokenAnnoTarget path,
       circuit->emitError("module doesn't exist '") << p.first << '\'';
       return {};
     }
-    auto resolved = findNamedThing(p.second, mod);
+    auto resolved = cache.lookup(mod, p.second);
     if (!resolved || !isa<InstanceOp>(resolved.getOp())) {
       circuit.emitError("cannot find instance '")
           << p.second << "' in '" << mod.getName() << "'";
@@ -232,7 +199,7 @@ Optional<AnnoPathValue> firrtl::resolveEntities(TokenAnnoTarget path,
     assert(path.component.empty());
     ref = OpAnnoTarget(mod);
   } else {
-    ref = findNamedThing(path.name, mod);
+    ref = cache.lookup(mod, path.name);
     if (!ref) {
       circuit->emitError("cannot find name '")
           << path.name << "' in " << mod.moduleName();
@@ -320,8 +287,10 @@ Optional<TokenAnnoTarget> firrtl::tokenizePath(StringRef origTarget) {
   return retval;
 }
 
-Optional<AnnoPathValue>
-firrtl::resolvePath(StringRef rawPath, CircuitOp circuit, SymbolTable &symTbl) {
+Optional<AnnoPathValue> firrtl::resolvePath(StringRef rawPath,
+                                            CircuitOp circuit,
+                                            SymbolTable &symTbl,
+                                            CircuitTargetCache &cache) {
   auto pathStr = canonicalizeTarget(rawPath);
   StringRef path{pathStr};
 
@@ -331,5 +300,26 @@ firrtl::resolvePath(StringRef rawPath, CircuitOp circuit, SymbolTable &symTbl) {
     return {};
   }
 
-  return resolveEntities(*tokens, circuit, symTbl);
+  return resolveEntities(*tokens, circuit, symTbl, cache);
+}
+
+//===----------------------------------------------------------------------===//
+// AnnoTargetCache
+//===----------------------------------------------------------------------===//
+
+void AnnoTargetCache::gatherTargets(FModuleLike mod) {
+  // Add ports
+  for (auto p : llvm::enumerate(mod.getPorts()))
+    targets.insert({p.value().name, PortAnnoTarget(mod, p.index())});
+
+  // And named things
+  mod.walk([&](Operation *op) {
+    TypeSwitch<Operation *>(op)
+        .Case<InstanceOp, MemOp, NodeOp, RegOp, RegResetOp, WireOp, CombMemOp,
+              SeqMemOp, MemoryPortOp>([&](auto op) {
+          // To be safe, check attribute and non-empty name before adding.
+          if (auto name = op.nameAttr(); name && !name.getValue().empty())
+            targets.insert({name, OpAnnoTarget(op)});
+        });
+  });
 }
