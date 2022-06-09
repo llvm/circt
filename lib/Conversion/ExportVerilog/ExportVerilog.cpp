@@ -3013,6 +3013,11 @@ LogicalResult StmtEmitter::visitSV(GenerateCaseOp op) {
     emitStatementBlock(region.getBlocks().front());
     indent() << "end: " << legalName << "\n";
   }
+  if (op.defaultRegion().hasOneBlock()) {
+    indent() << "default: begin: " << op.defaultLabel() << "\n";
+    emitStatementBlock(op.defaultRegion().getBlocks().front());
+    indent() << "end: " << op.defaultLabel() << "\n";
+  }
   reduceIndent();
 
   // Emit the necessay end matter.

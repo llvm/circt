@@ -1687,6 +1687,7 @@ void printCaseRegions(OpAsmPrinter &p, Operation *, ArrayAttr patternsArray,
     p << "case (" << patternsArray[i] << ", " << namesArray[i] << ") ";
     p.printRegion(caseRegions[i]);
   }
+  p.printNewline();
 }
 
 LogicalResult GenerateCaseOp::verify() {

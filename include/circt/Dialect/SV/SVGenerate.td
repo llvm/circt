@@ -12,7 +12,7 @@
 
 def GenerateOp : SVOp<"generate",
                       [SingleBlock, NoTerminator, NoRegionArguments]> {
-  let summary = "Generate block";
+  let summary = "A generate block";
   let description = "See SystemVerilog 2017 27.";
 
   let arguments = (ins StrAttr:$sym_name);
@@ -23,6 +23,11 @@ def GenerateOp : SVOp<"generate",
   }];
 }
 
+// A region with at most the given number of blocks.
+class MaxSizedRegion<int numBlocks> : Region<
+  CPred<"::llvm::hasNItemsOrLess($_self, " # numBlocks # ")">,
+  "region with at most " # numBlocks # " blocks">;
+
 def GenerateCaseOp : SVOp<"generate.case",
                           [SingleBlock, NoTerminator, NoRegionArguments,
                            HasParent<"GenerateOp">]> {
@@ -30,13 +35,16 @@ def GenerateCaseOp : SVOp<"generate.case",
   let summary = "A 'case' statement inside of a generate block";
   let description = "See SystemVerilog 2017 27.5.";
 
-  let regions = (region VariadicRegion<SizedRegion<1>>:$caseRegions);
+  let regions = (region MaxSizedRegion<1>:$defaultRegion,
+                        VariadicRegion<SizedRegion<1>>:$caseRegions);
   let arguments = (ins AnyAttr:$cond,
-                       ArrayAttr:$casePatterns, ArrayAttr:$caseNames);
+                       ArrayAttr:$casePatterns, ArrayAttr:$caseNames,
+                       OptionalAttr<StrAttr>:$defaultLabel);
 
   let assemblyFormat = [{
     $cond attr-dict `[`
       custom<CaseRegions>($casePatterns, $caseNames, $caseRegions)
+      ( `default` `(` $defaultLabel `)` $defaultRegion^)?
     `]`
   }];
 

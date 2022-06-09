@@ -19,7 +19,10 @@ hw.module @Case1<NUM : i8> () -> () {
         }
       }
       case (1 : i64, "case1") {
-        hw.instance "print" @PrintPath() -> ()
+        hw.instance "print1" @PrintPath() -> ()
+      }
+      default ("dflt") {
+        hw.instance "printDflt" @PrintPath() -> ()
       }
     ]
   }
@@ -35,10 +38,12 @@ hw.module @Case1<NUM : i8> () -> () {
 // CHECK-NEXT:          }
 // CHECK-NEXT:        }
 // CHECK-NEXT:        case (1 : i64, "case1") {
-// CHECK-NEXT:          hw.instance "print" @PrintPath() -> ()
+// CHECK-NEXT:          hw.instance "print1" @PrintPath() -> ()
+// CHECK-NEXT:        }
+// CHECK-NEXT:        default("dflt") {
+// CHECK-NEXT:          hw.instance "printDflt" @PrintPath() -> ()
 // CHECK-NEXT:        }]
 // CHECK-NEXT:    }
-
 
 // SV-LABEL: module Case1
 // SV:         #(parameter [7:0] NUM) ();
@@ -50,9 +55,26 @@ hw.module @Case1<NUM : i8> () -> () {
 // SV:                 $fwrite(32'h80000002, "case 0\n");
 // SV:             end: case0
 // SV:             64'd1: begin: case1
-// SV:               PrintPath print ();
+// SV:               PrintPath print1 ();
 // SV:             end: case1
+// SV:             default: begin: dflt
+// SV:               PrintPath printDflt ();
+// SV:             end: dflt
 // SV:           endcase
 // SV:         end: foo_case
 // SV:         endgenerate
 // SV:       endmodule
+
+hw.module @CaseNoDefault<NUM : i8> () -> () {
+  sv.generate "bar": {
+    sv.generate.case #hw.param.decl.ref<"NUM"> [
+      case (0 : i64, "bar0") { }
+    ]
+  }
+}
+
+// CHECK-LABEL: hw.module @CaseNoDefault
+// CHECK:         sv.generate "bar" : {
+// CHECK:           sv.generate.case #hw.param.decl.ref<"NUM">[
+// CHECK:             case (0, "bar0") { }
+// CHECK:           ]}
