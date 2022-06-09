@@ -1,4 +1,4 @@
-// RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl.module(firrtl-drop-name))' %s | FileCheck %s
+// RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl.module(firrtl-drop-names))' %s | FileCheck %s
 
 firrtl.circuit "Foo" {
   // CHECK: firrtl.module @Foo

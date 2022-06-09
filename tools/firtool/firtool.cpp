@@ -329,7 +329,7 @@ static cl::opt<bool> stripDebugInfo(
     cl::desc("Disable source locator information in output Verilog"),
     cl::init(false), cl::cat(mainCategory));
 
-static cl::opt<bool> dropName("drop-names", cl::desc("drop interesting names"),
+static cl::opt<bool> dropName("drop-names", cl::desc("Disable full name preservation by dropping interesting names"),
                               cl::init(false), cl::cat(mainCategory));
 
 /// Create a simple canonicalizer pass.
@@ -462,7 +462,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   // TODO: Move this to the O1 pipeline.
   if (dropName)
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
-        firrtl::createDropNamePass());
+        firrtl::createDropNamesPass());
 
   if (!disableOptimization)
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(

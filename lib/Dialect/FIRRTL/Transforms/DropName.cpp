@@ -18,7 +18,7 @@ using namespace circt;
 using namespace firrtl;
 
 namespace {
-struct DropNamePass : public DropNameBase<DropNamePass> {
+struct DropNamesPass : public DropNameBase<DropNamesPass> {
   void runOnOperation() override {
     getOperation()->walk([](FNamableOp op) {
       if (!op.hasDroppableName())
@@ -29,6 +29,6 @@ struct DropNamePass : public DropNameBase<DropNamePass> {
 
 } // end anonymous namespace
 
-std::unique_ptr<mlir::Pass> circt::firrtl::createDropNamePass() {
-  return std::make_unique<DropNamePass>();
+std::unique_ptr<mlir::Pass> circt::firrtl::createDropNamesPass() {
+  return std::make_unique<DropNamesPass>();
 }
