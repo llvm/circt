@@ -160,7 +160,7 @@ firrtl.module @Child() {
   %w = firrtl.wire sym @w : !firrtl.uint<1>
 }
 firrtl.module @Parent() {
-  firrtl.instance child sym @child {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}]} @Child()
+  firrtl.instance child sym @child @Child()
 }
 
 // CHECK-LABEL: @VerbatimExpr

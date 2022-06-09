@@ -16,10 +16,10 @@ firrtl.circuit "FooNL"  {
   }
   firrtl.module @BazNL() {
     %w = firrtl.wire sym @w  {annotations = [{circt.nonlocal = @nla_0, class = "circt.test", nl = "nl"}]} : !firrtl.uint
-    firrtl.instance bar sym @bar  {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}, {circt.nonlocal = @nla_0, class = "circt.nonlocal"}, {circt.nonlocal = @nla_1, class = "circt.nonlocal"}]} @BarNL()
+    firrtl.instance bar sym @bar @BarNL()
   }
   firrtl.module @FooNL() {
-    firrtl.instance baz sym @baz  {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}, {circt.nonlocal = @nla_0, class = "circt.nonlocal"}, {circt.nonlocal = @nla_1, class = "circt.nonlocal"}]} @BazNL()
+    firrtl.instance baz sym @baz @BazNL()
   }
   firrtl.module @FooL() {
     %w3 = firrtl.wire  {annotations = [{class = "circt.test", nl = "nl3"}]} : !firrtl.uint

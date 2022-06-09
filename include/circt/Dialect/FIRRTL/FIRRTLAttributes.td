@@ -28,7 +28,7 @@ def AnnotationArrayAttr: ArrayAttrBase<
             "[&](::mlir::Attribute attr) { return attr.isa<"
             "::mlir::DictionaryAttr,"
             "::circt::firrtl::SubAnnotationAttr>();})">]>,
-    "all elements must be DictionaryAttr or SubAnnotationAttr"> {
+    "Annotation array attribute"> {
   let constBuilderCall = "$_builder.getArrayAttr($0)";
 }
 
@@ -53,7 +53,7 @@ def PortAnnotationsAttr : ArrayAttrBase<
             "[&](::mlir::Attribute attr) { return attr.isa<"
             "::mlir::ArrayAttr,"
             "::mlir::DictionaryAttr>();})">]>,
-    ""> {
+    "Port annotations attribute"> {
   let constBuilderCall = "$_builder.getArrayAttr($0)";
 }
 
@@ -79,6 +79,7 @@ def InvalidValueAttr : AttrDef<FIRRTLDialect, "InvalidValue"> {
 //===----------------------------------------------------------------------===//
 
 class AugmentedType<string name> : AttrDef<FIRRTLDialect, name> {
+  let description = "Used in the GrandCentralPass.";
   let parameters = (
     ins "DictionaryAttr":$underlying
   );
@@ -110,6 +111,7 @@ class AugmentedType<string name> : AttrDef<FIRRTLDialect, name> {
 }
 
 def AugmentedBundleType : AugmentedType<"AugmentedBundleType"> {
+  let summary = "GrandCentral AugmentedBundleType";
   let extraClassDeclaration =
     defaultClassDeclaration #
     hasID #
@@ -121,37 +123,47 @@ def AugmentedBundleType : AugmentedType<"AugmentedBundleType"> {
 }
 
 def AugmentedVectorType : AugmentedType<"AugmentedVectorType"> {
+  let summary = "GrandCentral AugmentedVectorType";
   let extraClassDeclaration = defaultClassDeclaration # hasElements;
 }
 
 def AugmentedGroundType : AugmentedType<"AugmentedGroundType"> {
+  let summary = "GrandCentral AugmentedGroundType";
   let extraClassDeclaration = hasID # hasName;
 }
 
 def AugmentedStringType : AugmentedType<"AugmentedStringType"> {
+  let summary = "GrandCentral AugmentedStringType";
   let extraClassDeclaration = hasName;
 }
 def AugmentedBooleanType : AugmentedType<"AugmentedBooleanType"> {
+  let summary = "GrandCentral AugmentedBooleanType";
   let extraClassDeclaration = hasName;
 }
 def AugmentedIntegerType : AugmentedType<"AugmentedIntegerType"> {
+  let summary = "GrandCentral AugmentedIntegerType";
   let extraClassDeclaration = hasName;
 }
 def AugmentedDoubleType : AugmentedType<"AugmentedDoubleType"> {
+  let summary = "GrandCentral AugmentedDoubleType";
   let extraClassDeclaration = hasName;
 }
 def AugmentedLiteralType : AugmentedType<"AugmentedLiteralType"> {
+  let summary = "GrandCentral AugmentedLiteralType";
   let extraClassDeclaration = hasName;
 }
 def AugmentedDeletedType : AugmentedType<"AugmentedDeletedType"> {
+  let summary = "GrandCentral AugmentedDeletedType";
   let extraClassDeclaration = hasName;
 }
 
 
-/// An attribute describing a module parameter, or instance parameter
-/// specification.
 def ParamDeclAttr : AttrDef<FIRRTLDialect, "ParamDecl"> {
-  let summary = "module or instance parameter definition";
+  let summary = "Module or instance parameter definition";
+  let description = [{
+    An attribute describing a module parameter, or instance parameter
+    specification.
+  }];
 
   /// The value of the attribute - in a module, this is the default
   /// value (and may be missing).  In an instance, this is a required field that

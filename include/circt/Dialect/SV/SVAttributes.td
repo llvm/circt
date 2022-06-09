@@ -11,7 +11,10 @@
 //===----------------------------------------------------------------------===//
 
 def MacroIdentAttr : AttrDef<SVDialect, "MacroIdent"> {
-  let summary = "Represents a reference to a macro identifier";
+  let summary = "Macro identifier";
+  let description = [{
+    Represents a reference to a macro identifier.
+  }];
   let parameters = (ins "::mlir::StringAttr":$ident);
   let mnemonic = "macro.ident";
 
