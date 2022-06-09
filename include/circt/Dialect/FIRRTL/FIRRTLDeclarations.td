@@ -187,7 +187,6 @@ def MemOp : ReferableDeclOp<"mem"> {
   }];
 }
 
-
 def NodeOp : ReferableDeclOp<"node",
       [SameOperandsAndResultType, InferTypeOpInterface]> {
   let summary = "No-op to name a value";
