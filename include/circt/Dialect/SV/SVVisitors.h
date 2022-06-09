@@ -53,7 +53,7 @@ public:
             // Severity message tasks
             FatalOp, ErrorOp, WarningOp, InfoOp,
             // Generate statements
-            GenerateCaseOp,
+            GenerateOp, GenerateCaseOp,
             // Sampled value functiions
             SampledOp>([&](auto expr) -> ResultType {
           return thisCast->visitSV(expr, args...);
@@ -151,6 +151,7 @@ public:
   HANDLE(InfoOp, Unhandled);
 
   // Generate statements
+  HANDLE(GenerateOp, Unhandled);
   HANDLE(GenerateCaseOp, Unhandled);
 
   // Sampled Value Functions

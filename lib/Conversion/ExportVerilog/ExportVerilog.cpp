@@ -2539,6 +2539,7 @@ private:
   LogicalResult visitSV(WarningOp op);
   LogicalResult visitSV(InfoOp op);
 
+  LogicalResult visitSV(GenerateOp op);
   LogicalResult visitSV(GenerateCaseOp op);
 
   void emitAssertionLabel(Operation *op, StringRef opName);
@@ -2967,11 +2968,20 @@ LogicalResult StmtEmitter::visitSV(InfoOp op) {
 }
 
 // Emit the full generate case with all block labels as given in the op.
-LogicalResult StmtEmitter::visitSV(GenerateCaseOp op) {
+LogicalResult StmtEmitter::visitSV(GenerateOp op) {
 
   // Print the preamble 'generate' and 'case'.
-  indent() << "generate begin: " << names.addName(op, op.block_name()) << "\n";
+  indent() << "generate\n";
+  indent() << "begin: " << names.addName(op, op.sym_name()) << "\n";
   addIndent();
+  emitStatementBlock(op.body().getBlocks().front());
+  reduceIndent();
+  indent() << "end: " << names.getName(op) << "\n";
+  indent() << "endgenerate\n";
+  return success();
+}
+
+LogicalResult StmtEmitter::visitSV(GenerateCaseOp op) {
   indent() << "case (";
   emitter.printParamValue(op.cond(), os, VerilogPrecedence::Selection, [&]() {
     return op->emitOpError("invalid case parameter");
@@ -3007,9 +3017,6 @@ LogicalResult StmtEmitter::visitSV(GenerateCaseOp op) {
 
   // Emit the necessay end matter.
   indent() << "endcase\n";
-  reduceIndent();
-  indent() << "end: " << names.getName(op) << "\n";
-  indent() << "endgenerate\n";
   return success();
 }
 

@@ -10,18 +10,32 @@
 //
 //===----------------------------------------------------------------------===//
 
+def GenerateOp : SVOp<"generate",
+                      [SingleBlock, NoTerminator, NoRegionArguments]> {
+  let summary = "Generate block";
+  let description = "See SystemVerilog 2017 27.";
+
+  let arguments = (ins StrAttr:$sym_name);
+  let regions = (region SizedRegion<1>:$body);
+
+  let assemblyFormat = [{
+    $sym_name attr-dict `:` $body
+  }];
+}
+
 def GenerateCaseOp : SVOp<"generate.case",
-                          [SingleBlock, NoTerminator, NoRegionArguments]> {
+                          [SingleBlock, NoTerminator, NoRegionArguments,
+                           HasParent<"GenerateOp">]> {
 
   let summary = "A 'case' statement inside of a generate block";
   let description = "See SystemVerilog 2017 27.5.";
 
   let regions = (region VariadicRegion<SizedRegion<1>>:$caseRegions);
-  let arguments = (ins StrAttr:$block_name, AnyAttr:$cond,
+  let arguments = (ins AnyAttr:$cond,
                        ArrayAttr:$casePatterns, ArrayAttr:$caseNames);
 
   let assemblyFormat = [{
-    $block_name `:` `(` $cond `)` attr-dict `[`
+    $cond attr-dict `[`
       custom<CaseRegions>($casePatterns, $caseNames, $caseRegions)
     `]`
   }];
