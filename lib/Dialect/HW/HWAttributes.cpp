@@ -196,12 +196,31 @@ InnerRefAttr InnerRefAttr::getFromOperation(mlir::Operation *op,
                                             mlir::StringAttr symName,
                                             mlir::StringAttr moduleName) {
   char attrName[] = "inner_sym";
-  auto attr = op->getAttrOfType<StringAttr>(attrName);
+  auto attr = op->getAttrOfType<hw::InnerSymbolAttr>(attrName);
   if (!attr) {
-    attr = symName;
+    attr = hw::InnerSymbolAttr::get(symName);
     op->setAttr(attrName, attr);
   }
-  return InnerRefAttr::get(moduleName, attr);
+  return InnerRefAttr::get(moduleName, attr.getName());
+}
+
+//===----------------------------------------------------------------------===//
+// InnerSymbolAttr
+//===----------------------------------------------------------------------===//
+
+Attribute InnerSymbolAttr::parse(AsmParser &p, Type type) {
+  FlatSymbolRefAttr attr;
+  if (p.parseLess() || p.parseAttribute<FlatSymbolRefAttr>(attr) ||
+      p.parseGreater())
+    return Attribute();
+  return InnerSymbolAttr::get(attr.getAttr());
+}
+
+void InnerSymbolAttr::print(AsmPrinter &p) const {
+  assert(getName());
+  p << "<";
+  p.printSymbolName(getName());
+  p << ">";
 }
 
 //===----------------------------------------------------------------------===//

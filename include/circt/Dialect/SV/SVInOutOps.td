@@ -23,14 +23,14 @@ def WireOp : SVOp<"wire", [NonProceduralOp,
      See SV Spec 6.7, pp97.
     }];
 
-  let arguments = (ins StrAttr:$name, OptionalAttr<SymbolNameAttr>:$inner_sym);
+  let arguments = (ins StrAttr:$name, OptionalAttr<InnerSymbolAttr>:$inner_sym);
   let results = (outs InOutType:$result);
 
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType,
-                      CArg<"StringAttr", "StringAttr()">:$name,
-                      CArg<"StringAttr", "StringAttr()">:$inner_sym)>,
+                      CArg<"StringAttr", "{}">:$name,
+                      CArg<"hw::InnerSymbolAttr", "{}">:$inner_sym)>,
     OpBuilder<(ins "::mlir::Type":$elementType, CArg<"StringRef">:$name), [{
       return build($_builder, $_state, elementType,
                    $_builder.getStringAttr(name));
@@ -55,14 +55,14 @@ def RegOp : SVOp<"reg", [
      Declare a SystemVerilog Variable Declaration of 'reg' type.
      See SV Spec 6.8, pp100.
    }];
-  let arguments = (ins StrAttr:$name, OptionalAttr<SymbolNameAttr>:$inner_sym);
+  let arguments = (ins StrAttr:$name, OptionalAttr<InnerSymbolAttr>:$inner_sym);
   let results = (outs InOutType:$result);
 
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType,
-                    CArg<"StringAttr", "StringAttr()">:$name,
-                    CArg<"StringAttr", "StringAttr()">:$inner_sym)>
+                    CArg<"StringAttr", "{}">:$name,
+                    CArg<"hw::InnerSymbolAttr", "{}">:$inner_sym)>
   ];
 
   // We handle the name in a custom way, so we use a customer parser/printer.

@@ -10,6 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "circt/Dialect/HW/HWAttributesNaming.td"
+
 def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface,
                          ["getAsmResultNames"]>;
 
@@ -37,7 +39,7 @@ def InstanceOp : ReferableDeclOp<"instance", [HasParent<"firrtl::FModuleOp, firr
                        AnnotationArrayAttr:$annotations,
                        PortAnnotationsAttr:$portAnnotations,
                        BoolAttr:$lowerToBind,
-                       OptionalAttr<SymbolNameAttr>:$inner_sym);
+                       OptionalAttr<InnerSymbolAttr>:$inner_sym);
 
   let results = (outs Variadic<FIRRTLType>:$results);
 
@@ -52,7 +54,7 @@ def InstanceOp : ReferableDeclOp<"instance", [HasParent<"firrtl::FModuleOp, firr
                    CArg<"ArrayRef<Attribute>", "{}">:$annotations,
                    CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
                    CArg<"bool","false">:$lowerToBind,
-                   CArg<"StringAttr", "StringAttr()">:$inner_sym)>,
+                   CArg<"hw::InnerSymbolAttr", "{}">:$inner_sym)>,
 
     /// Constructor when you have the target module in hand.
     OpBuilder<(ins "FModuleLike":$module,
@@ -60,7 +62,7 @@ def InstanceOp : ReferableDeclOp<"instance", [HasParent<"firrtl::FModuleOp, firr
                    CArg<"ArrayRef<Attribute>", "{}">:$annotations,
                    CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
                    CArg<"bool","false">:$lowerToBind,
-                   CArg<"StringAttr", "StringAttr()">:$inner_sym)>
+                   CArg<"hw::InnerSymbolAttr", "{}">:$inner_sym)>
   ];
 
   let extraClassDeclaration = [{
@@ -107,7 +109,7 @@ def MemOp : ReferableDeclOp<"mem"> {
          StrArrayAttr:$portNames, StrAttr:$name,
          AnnotationArrayAttr:$annotations,
          PortAnnotationsAttr:$portAnnotations,
-         OptionalAttr<SymbolNameAttr>:$inner_sym,
+         OptionalAttr<InnerSymbolAttr>:$inner_sym,
          OptionalAttr<UI32Attr>:$groupID);
   let results = (outs Variadic<FIRRTLType>:$results);
 
@@ -124,7 +126,7 @@ def MemOp : ReferableDeclOp<"mem"> {
                    CArg<"StringRef", "{}">:$name,
                    CArg<"ArrayRef<Attribute>", "{}">:$annotations,
                    CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
-                   CArg<"StringAttr", "StringAttr()">:$inner_sym)>
+                   CArg<"hw::InnerSymbolAttr", "{}">:$inner_sym)>
   ];
 
   let hasVerifier = 1;
@@ -199,7 +201,7 @@ def NodeOp : ReferableDeclOp<"node",
 
   let arguments = (ins PassiveType:$input, StrAttr:$name,
                        AnnotationArrayAttr:$annotations,
-                       OptionalAttr<SymbolNameAttr>:$inner_sym);
+                       OptionalAttr<InnerSymbolAttr>:$inner_sym);
   let results = (outs FIRRTLType:$result);
 
   let builders = [
@@ -207,7 +209,7 @@ def NodeOp : ReferableDeclOp<"node",
                    "::mlir::Value":$input,
                    CArg<"StringRef", "{}">:$name,
                    CArg<"ArrayRef<Attribute>","{}">:$annotations,
-                   CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
+                   CArg<"hw::InnerSymbolAttr", "{}">:$inner_sym), [{
       return build($_builder, $_state, elementType, input, name,
                    $_builder.getArrayAttr(annotations), inner_sym);
     }]>
@@ -234,14 +236,14 @@ def RegOp : ReferableDeclOp<"reg"> {
   let arguments = (
     ins ClockType:$clockVal, StrAttr:$name,
         AnnotationArrayAttr:$annotations,
-        OptionalAttr<SymbolNameAttr>:$inner_sym);
+        OptionalAttr<InnerSymbolAttr>:$inner_sym);
   let results = (outs AnyRegisterType:$result);
 
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$clockVal,
                    CArg<"StringRef", "{}">:$name,
                    CArg<"ArrayRef<Attribute>","{}">:$annotations,
-                   CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
+                   CArg<"hw::InnerSymbolAttr", "{}">:$inner_sym), [{
       return build($_builder, $_state, elementType, clockVal, name,
                    $_builder.getArrayAttr(annotations), inner_sym);
     }]>
@@ -267,7 +269,7 @@ def RegResetOp : ReferableDeclOp<"regreset"> {
     ins ClockType:$clockVal, AnyResetType:$resetSignal,
         AnyRegisterType:$resetValue,
         StrAttr:$name, AnnotationArrayAttr:$annotations,
-        OptionalAttr<SymbolNameAttr>:$inner_sym);
+        OptionalAttr<InnerSymbolAttr>:$inner_sym);
   let results = (outs AnyRegisterType:$result);
 
   let builders = [
@@ -275,7 +277,7 @@ def RegResetOp : ReferableDeclOp<"regreset"> {
                    "::mlir::Value":$resetSignal, "::mlir::Value":$resetValue,
                    CArg<"StringRef", "{}">:$name,
                    CArg<"ArrayRef<Attribute>","{}">:$annotations,
-                   CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
+                   CArg<"hw::InnerSymbolAttr", "{}">:$inner_sym), [{
       return build($_builder, $_state, elementType, clockVal, resetSignal,
                    resetValue, name, $_builder.getArrayAttr(annotations),
                    inner_sym);
@@ -303,14 +305,14 @@ def WireOp : ReferableDeclOp<"wire"> {
 
   let arguments = (
     ins StrAttr:$name, AnnotationArrayAttr:$annotations,
-        OptionalAttr<SymbolNameAttr>:$inner_sym);
+        OptionalAttr<InnerSymbolAttr>:$inner_sym);
   let results = (outs FIRRTLType:$result);
 
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType,
                       CArg<"StringRef", "{}">:$name,
                       CArg<"ArrayRef<Attribute>","{}">:$annotations,
-                      CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
+                      CArg<"hw::InnerSymbolAttr", "{}">:$inner_sym), [{
       return build($_builder, $_state, elementType, name,
                    $_builder.getArrayAttr(annotations), inner_sym);
     }]>

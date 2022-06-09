@@ -161,16 +161,11 @@ def FModuleLike : OpInterface<"FModuleLike"> {
     }]>,
 
     InterfaceMethod<"Get a port symbol attribute",
-    "StringAttr", "getPortSymbolAttr", (ins "size_t":$portIndex), [{}], [{
+    "hw::InnerSymbolAttr", "getPortSymbolAttr", (ins "size_t":$portIndex), [{}], [{
       auto syms = $_op.getPortSymbols();
       if (syms.empty())
-        return StringAttr::get($_op.getContext(), "");
-      return syms[portIndex].template cast<StringAttr>();
-    }]>,
-
-    InterfaceMethod<"Get a port symbol",
-    "StringRef", "getPortSymbol", (ins "size_t":$portIndex), [{}], [{
-      return $_op.getPortSymbolAttr(portIndex).getValue();
+        return hw::InnerSymbolAttr{};
+      return syms[portIndex].template cast<hw::InnerSymbolAttr>();
     }]>,
 
     // Setters
@@ -187,20 +182,19 @@ def FModuleLike : OpInterface<"FModuleLike"> {
     InterfaceMethod<"Set the port symbols", "void",
     "setPortSymbols", (ins "ArrayRef<Attribute>":$symbols), [{}], [{
       if (llvm::all_of(symbols, [](Attribute symbol) {
-         return symbol.cast<StringAttr>().getValue().empty(); }))
+         return symbol.cast<hw::InnerSymbolAttr>().getName().empty(); }))
         symbols = {};
       assert(symbols.empty() || symbols.size() == $_op.getNumPorts());
       $_op.setPortSymbolsAttr(ArrayAttr::get($_op.getContext(), symbols));
     }]>,
 
     InterfaceMethod<"Set a port symbol attribute", "void",
-    "setPortSymbolAttr", (ins "size_t":$portIndex, "StringAttr":$symbol), [{}],
+    "setPortSymbolAttr", (ins "size_t":$portIndex, "hw::InnerSymbolAttr":$symbol), [{}],
     [{
       SmallVector<Attribute> symbols($_op.getPortSymbols().begin(),
                                      $_op.getPortSymbols().end());
       if (symbols.empty()) {
-        auto emptyString = StringAttr::get($_op.getContext(), "");
-        symbols.resize($_op.getNumPorts(), emptyString);
+        symbols.resize($_op.getNumPorts(), hw::InnerSymbolAttr{});
       }
       assert(symbols.size() == $_op.getNumPorts());
       symbols[portIndex] = symbol;
@@ -209,8 +203,8 @@ def FModuleLike : OpInterface<"FModuleLike"> {
 
     InterfaceMethod<"Set a port symbol", "void",
     "setPortSymbol", (ins "size_t":$portIndex, "StringRef":$symbol), [{}], [{
-      $_op.setPortSymbolAttr(portIndex, StringAttr::get($_op.getContext(),
-        symbol));
+      $_op.setPortSymbolAttr(portIndex, hw::InnerSymbolAttr::get(StringAttr::get($_op.getContext(),
+        symbol)));
     }]>,
 
     //===------------------------------------------------------------------===//

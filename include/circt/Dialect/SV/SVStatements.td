@@ -541,7 +541,8 @@ def BindOp : SVOp<"bind",
 
   let assemblyFormat = "$instance attr-dict";
   let builders = [
-    OpBuilder<(ins "StringAttr":$mod, "StringAttr":$name)>
+    OpBuilder<(ins "StringAttr":$mod, "StringAttr":$name)>,
+    OpBuilder<(ins "StringAttr":$mod, "hw::InnerSymbolAttr":$name)>
   ];
   let extraClassDeclaration = [{
     /// Lookup the instance for the bind.  This returns null on invalid IR.

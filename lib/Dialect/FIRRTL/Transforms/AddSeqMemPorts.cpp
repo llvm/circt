@@ -55,7 +55,7 @@ struct AddSeqMemPortsPass : public AddSeqMemPortsBase<AddSeqMemPortsPass> {
       name = nameAttr.getValue();
     name = getModuleNamespace(module).newName(name);
     attr = StringAttr::get(op->getContext(), name);
-    op->setAttr("inner_sym", attr);
+    op->setAttr("inner_sym", hw::InnerSymbolAttr::get(attr));
     return attr;
   }
 

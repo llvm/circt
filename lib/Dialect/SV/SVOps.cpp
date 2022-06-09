@@ -229,7 +229,7 @@ LogicalResult LocalParamOp::verify() {
 //===----------------------------------------------------------------------===//
 
 void RegOp::build(OpBuilder &builder, OperationState &odsState,
-                  Type elementType, StringAttr name, StringAttr sym_name) {
+                  Type elementType, StringAttr name, hw::InnerSymbolAttr sym_name) {
   if (!name)
     name = builder.getStringAttr("");
   odsState.addAttribute("name", name);
@@ -1153,7 +1153,7 @@ LogicalResult ReadInterfaceSignalOp::verify() {
 //===----------------------------------------------------------------------===//
 
 void WireOp::build(OpBuilder &builder, OperationState &odsState,
-                   Type elementType, StringAttr name, StringAttr sym_name) {
+                   Type elementType, StringAttr name,  hw::InnerSymbolAttr sym_name) {
   if (!name)
     name = builder.getStringAttr("");
   if (sym_name)
@@ -1435,8 +1435,8 @@ template <class Op>
 static Op findInstanceSymbolInBlock(StringAttr name, Block *body) {
   for (auto &op : llvm::reverse(body->getOperations())) {
     if (auto instance = dyn_cast<Op>(op)) {
-      if (instance.inner_sym() &&
-          instance.inner_sym().getValue() == name.getValue())
+      if (instance.inner_symAttr() &&
+          instance.inner_symAttr().getName().getValue() == name.getValue())
         return instance;
     }
 
@@ -1498,6 +1498,11 @@ void BindOp::build(OpBuilder &builder, OperationState &odsState, StringAttr mod,
                    StringAttr name) {
   auto ref = hw::InnerRefAttr::get(mod, name);
   odsState.addAttribute("instance", ref);
+}
+
+void BindOp::build(OpBuilder &builder, OperationState &odsState, StringAttr mod,
+                   hw::InnerSymbolAttr name) {
+                     return build(builder, odsState, mod, name.getName());
 }
 
 //===----------------------------------------------------------------------===//

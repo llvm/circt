@@ -532,10 +532,10 @@ void Inliner::rename(StringRef prefix, Operation *op,
 
   // If the operation has an inner symbol, ensure that it is unique.  Record
   // renames for any NLAs that this participates in if the symbol was renamed.
-  if (auto sym = op->getAttrOfType<StringAttr>("inner_sym")) {
-    auto newSym = moduleNamespace.newName(sym.getValue());
-    if (newSym != sym.getValue()) {
-      auto newSymAttr = StringAttr::get(op->getContext(), newSym);
+  if (auto sym = op->getAttrOfType<hw::InnerSymbolAttr>("inner_sym")) {
+    auto newSym = moduleNamespace.newName(sym.getName().getValue());
+    if (newSym != sym.getName().getValue()) {
+      auto newSymAttr = hw::InnerSymbolAttr::get(StringAttr::get(op->getContext(), newSym));
       op->setAttr("inner_sym", newSymAttr);
       for (Annotation anno : AnnotationSet(op)) {
         auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal");
@@ -603,9 +603,10 @@ Inliner::mapPortsToWires(StringRef prefix, OpBuilder &b,
       newAnnotations.push_back(anno.getAttr());
     }
 
+    hw::InnerSymbolAttr symAttr = hw::InnerSymbolAttr::get(newSym);
     auto wire = b.create<WireOp>(
         target.getLoc(), type, (prefix + portInfo[i].getName()).str(),
-        ArrayAttr::get(context, newAnnotations), newSym);
+        ArrayAttr::get(context, newAnnotations), symAttr);
     wires.push_back(wire);
     mapper.map(arg, wire.getResult());
   }

@@ -178,8 +178,9 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
   auto inst = b.create<hw::InstanceOp>(
       op.getLoc(), newMod, ("InvisibleBind" + suffix).str(),
       inputs.getArrayRef(), ArrayAttr(),
+      hw::InnerSymbolAttr::get(
       b.getStringAttr(
-          ("__ETC_" + getVerilogModuleNameAttr(op).getValue() + suffix).str()));
+          ("__ETC_" + getVerilogModuleNameAttr(op).getValue() + suffix).str())));
   inst->setAttr("doNotPrint", b.getBoolAttr(true));
   b = OpBuilder::atBlockEnd(
       &op->getParentOfType<mlir::ModuleOp>()->getRegion(0).front());

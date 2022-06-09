@@ -2822,7 +2822,7 @@ ParseResult FIRStmtParser::parseInstance() {
   auto sym = getSymbolIfRequired(annotations.first, id);
   result = builder.create<InstanceOp>(
       referencedModule, id, annotations.first.getValue(),
-      annotations.second.getValue(), false, sym);
+      annotations.second.getValue(), false, hw::InnerSymbolAttr::get(sym));
 
   // Since we are implicitly unbundling the instance results, we need to keep
   // track of the mapping from bundle fields to results in the unbundledValues
@@ -3047,8 +3047,8 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
     }
   result = builder.create<MemOp>(resultTypes, readLatency, writeLatency, depth,
                                  ruw, builder.getArrayAttr(resultNames), id,
-                                 annotations.first, annotations.second, sym,
-                                 IntegerAttr());
+                                 annotations.first, annotations.second, 
+                                 hw::InnerSymbolAttr::get(sym));
 
   UnbundledValueEntry unbundledValueEntry;
   unbundledValueEntry.reserve(result.getNumResults());
@@ -3102,8 +3102,11 @@ ParseResult FIRStmtParser::parseNode() {
                                moduleContext.targetsInModule, initializerType);
 
   auto sym = getSymbolIfRequired(annotations, id);
+  hw::InnerSymbolAttr symAttr;
+  if (sym)
+    symAttr = hw::InnerSymbolAttr::get(builder.getContext(), sym);
   auto result = builder.create<NodeOp>(initializer.getType(), initializer, id,
-                                       annotations, sym);
+                                       annotations, symAttr);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -3130,7 +3133,8 @@ ParseResult FIRStmtParser::parseWire() {
                                moduleContext.targetsInModule, type);
 
   auto sym = getSymbolIfRequired(annotations, id);
-  auto result = builder.create<WireOp>(type, id, annotations, sym);
+  hw::InnerSymbolAttr symAttr  = hw::InnerSymbolAttr::get(sym);
+  auto result = builder.create<WireOp>(type, id, annotations, symAttr);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -3222,11 +3226,14 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
 
   Value result;
   auto sym = getSymbolIfRequired(annotations, id);
+  hw::InnerSymbolAttr symAttr;
+  if (sym)
+    symAttr = hw::InnerSymbolAttr::get(builder.getContext(), sym);
   if (resetSignal)
     result = builder.create<RegResetOp>(type, clock, resetSignal, resetValue,
-                                        id, annotations, sym);
+                                        id, annotations, symAttr);
   else
-    result = builder.create<RegOp>(type, clock, id, annotations, sym);
+    result = builder.create<RegOp>(type, clock, id, annotations, symAttr);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 

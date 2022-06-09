@@ -75,12 +75,12 @@ struct ExtractInstancesPass
 
   /// Returns an operation's `inner_sym`, adding one if necessary.
   StringAttr getOrAddInnerSym(Operation *op) {
-    auto attr = op->getAttrOfType<StringAttr>("inner_sym");
+    auto attr = op->getAttrOfType<hw::InnerSymbolAttr>("inner_sym");
     if (attr)
       return attr;
     auto module = op->getParentOfType<FModuleOp>();
     auto name = getModuleNamespace(module).newName("extraction_sym");
-    attr = StringAttr::get(op->getContext(), name);
+    attr = hw::InnerSymbolAttr::get(StringAttr::get(op->getContext(), name));
     op->setAttr("inner_sym", attr);
     return attr;
   }
@@ -569,9 +569,10 @@ void ExtractInstancesPass::extractInstances() {
       // module we're extracting it to.
       if (auto instSym = inst.inner_symAttr()) {
         auto newName =
-            getModuleNamespace(newParent).newName(instSym.getValue());
-        if (newName != instSym.getValue())
-          newInst.inner_symAttr(StringAttr::get(&getContext(), newName));
+            getModuleNamespace(newParent).newName(instSym.getName().getValue());
+        if (newName != instSym.getName().getValue())
+          newInst.inner_symAttr(hw::InnerSymbolAttr::get(
+          StringAttr::get(&getContext(), newName)));
       }
 
       // Add the moved instance and hook it up to the added ports.
@@ -719,7 +720,7 @@ void ExtractInstancesPass::extractInstances() {
         // `OldParent::BB` to be `NewParent::BB` and delete `NewParent::X`.
         auto newInnerRef = InnerRefAttr::get(
             nlaPath[nlaIdx - 1].cast<InnerRefAttr>().getModule(),
-            newInst.inner_symAttr());
+            newInst.inner_symAttr().getName());
         LLVM_DEBUG(llvm::dbgs()
                    << "    - Replacing " << nlaPath[nlaIdx - 1] << " and "
                    << nlaPath[nlaIdx] << " with " << newInnerRef << "\n");
@@ -885,7 +886,7 @@ void ExtractInstancesPass::groupInstances() {
     auto wrapperInst = builder.create<InstanceOp>(
         wrapper.getLoc(), wrapper, wrapperName, ArrayRef<Attribute>{},
         /*portAnnotations=*/ArrayRef<Attribute>{}, /*lowerToBind=*/false,
-        wrapperInstName);
+        hw::InnerSymbolAttr::get(wrapperInstName));
     unsigned portIdx = 0;
     for (auto inst : insts)
       for (auto result : inst.getResults())

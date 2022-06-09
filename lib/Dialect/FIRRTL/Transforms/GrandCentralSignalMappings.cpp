@@ -615,10 +615,10 @@ FailureOr<bool> GrandCentralSignalMappingsPass::emitUpdatedMappings(
             replacementWireName.getValue() + "_buffer"));
         auto bufferWire = builder.create<WireOp>(
             builder.getUnknownLoc(), port.getType(), bufferWireName,
-            builder.getArrayAttr({}), bufferWireName);
+            builder.getArrayAttr({}), hw::InnerSymbolAttr::get(bufferWireName));
         auto replacementWire = builder.create<WireOp>(
             builder.getUnknownLoc(), port.getType(), replacementWireName,
-            builder.getArrayAttr({}), replacementWireName);
+            builder.getArrayAttr({}), hw::InnerSymbolAttr::get(replacementWireName));
         port.replaceAllUsesWith(replacementWire);
         builder.create<StrictConnectOp>(builder.getUnknownLoc(), port,
                                         bufferWire);
@@ -632,8 +632,8 @@ FailureOr<bool> GrandCentralSignalMappingsPass::emitUpdatedMappings(
   // Helpers to emit basic 'module.name' XMR's for the mappings.
   // Use inner_sym for non-ports
   SmallVector<Attribute> symbols;
-  auto getOrAddInnerSym = [&](Operation *op) -> StringAttr {
-    auto attr = op->getAttrOfType<StringAttr>("inner_sym");
+  auto getOrAddInnerSym = [&](Operation *op) -> hw::InnerSymbolAttr {
+    auto attr = op->getAttrOfType<hw::InnerSymbolAttr>("inner_sym");
     if (attr)
       return attr;
     StringRef name = "sym";
@@ -641,7 +641,7 @@ FailureOr<bool> GrandCentralSignalMappingsPass::emitUpdatedMappings(
       name = nameAttr.getValue();
     auto module = op->getParentOfType<FModuleOp>();
     name = getModuleNamespace(module).newName(name);
-    attr = StringAttr::get(op->getContext(), name);
+    attr = hw::InnerSymbolAttr::get(StringAttr::get(op->getContext(), name));
     op->setAttr("inner_sym", attr);
     return attr;
   };
@@ -654,7 +654,7 @@ FailureOr<bool> GrandCentralSignalMappingsPass::emitUpdatedMappings(
     auto idx = symbols.size();
     symbols.push_back(hw::InnerRefAttr::get(
         SymbolTable::getSymbolName(module),
-        getOrAddInnerSym(mapping.localValue.getDefiningOp())));
+        getOrAddInnerSym(mapping.localValue.getDefiningOp()).getName()));
     return llvm::formatv("~{0}|{1}>{2}", circuit.name(), module.getName(),
                          "{{" + Twine(idx) + "}}");
   };

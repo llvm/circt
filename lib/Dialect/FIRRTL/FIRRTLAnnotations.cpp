@@ -596,7 +596,7 @@ void OpAnnoTarget::setAnnotations(AnnotationSet annotations) const {
 
 StringAttr OpAnnoTarget::getInnerSym(ModuleNamespace &moduleNamespace) const {
   auto *context = getOp()->getContext();
-  auto innerSym = getOp()->getAttrOfType<StringAttr>("inner_sym");
+  auto innerSym = getOp()->getAttrOfType<hw::InnerSymbolAttr>("inner_sym");
   if (!innerSym) {
     // Try to come up with a reasonable name.
     StringRef name = "inner_sym";
@@ -604,7 +604,7 @@ StringAttr OpAnnoTarget::getInnerSym(ModuleNamespace &moduleNamespace) const {
     if (nameAttr && !nameAttr.getValue().empty())
       name = nameAttr.getValue();
     innerSym = StringAttr::get(context, moduleNamespace.newName(name));
-    getOp()->setAttr("inner_sym", innerSym);
+    getOp()->setAttr("inner_sym", hw::InnerSymbolAttr::get(innerSym));
   }
   assert(innerSym && "invalid inner_sym");
   return innerSym;

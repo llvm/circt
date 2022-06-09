@@ -95,9 +95,9 @@ private:
   }
 
   /// Returns an operation's `inner_sym`, adding one if necessary.
-  StringAttr getOrAddInnerSym(Operation *op);
+  hw::InnerSymbolAttr getOrAddInnerSym(Operation *op);
   /// Returns a port's `inner_sym`, adding one if necessary.
-  StringAttr getOrAddInnerSym(FModuleLike module, size_t portIdx);
+  hw::InnerSymbolAttr getOrAddInnerSym(FModuleLike module, size_t portIdx);
   /// Obtain an inner reference to an operation, possibly adding an `inner_sym`
   /// to that operation.
   hw::InnerRefAttr getInnerRefTo(Operation *op);
@@ -263,7 +263,7 @@ void EmitOMIRPass::runOnOperation() {
     if (auto instOp = dyn_cast<InstanceOp>(op)) {
       // This instance does not have a symbol, but we are adding one. Remove it
       // after the pass.
-      if (!op->getAttrOfType<StringAttr>("inner_sym"))
+      if (!op->getAttrOfType<hw::InnerSymbolAttr>("inner_sym"))
         tempSymInstances.insert(instOp);
 
       instancesByName.insert(
@@ -899,25 +899,25 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
   jsonStream.value(target);
 }
 
-StringAttr EmitOMIRPass::getOrAddInnerSym(Operation *op) {
+hw::InnerSymbolAttr EmitOMIRPass::getOrAddInnerSym(Operation *op) {
   tempSymInstances.erase(op);
-  auto attr = op->getAttrOfType<StringAttr>("inner_sym");
+  auto attr = op->getAttrOfType<hw::InnerSymbolAttr>("inner_sym");
   if (attr)
     return attr;
   auto module = op->getParentOfType<FModuleOp>();
   // TODO: Cache the module namespace.
   auto name = getModuleNamespace(module).newName("omir_sym");
-  attr = StringAttr::get(op->getContext(), name);
+  attr = hw::InnerSymbolAttr::get(StringAttr::get(op->getContext(), name));
   op->setAttr("inner_sym", attr);
   return attr;
 }
 
-StringAttr EmitOMIRPass::getOrAddInnerSym(FModuleLike module, size_t portIdx) {
+hw::InnerSymbolAttr EmitOMIRPass::getOrAddInnerSym(FModuleLike module, size_t portIdx) {
   auto attr = module.getPortSymbolAttr(portIdx);
   if (attr && !attr.getValue().empty())
     return attr;
   auto name = getModuleNamespace(module).newName("omir_sym");
-  attr = StringAttr::get(module.getContext(), name);
+  attr = hw::InnerSymbolAttr::get(StringAttr::get(module.getContext(), name));
   module.setPortSymbolAttr(portIdx, attr);
   return attr;
 }

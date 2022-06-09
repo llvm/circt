@@ -2411,13 +2411,13 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
     // Prepend the name of the module to make the symbol name unique in the
     // symbol table, it is already unique in the module. Checking if the name
     // is unique in the SymbolTable is non-trivial.
-    symName = builder.getStringAttr(moduleNamespace.newName(
-        Twine("__") + moduleName + Twine("__") + name.getValue()));
+    symName = hw::InnerSymbolAttr::get(builder.getStringAttr(moduleNamespace.newName(
+        Twine("__") + moduleName + Twine("__") + name.getValue())));
   }
   if (!symName && !isUselessName(name)) {
     auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
-    symName = builder.getStringAttr(moduleNamespace.newName(
-        Twine("__") + moduleName + Twine("__") + name.getValue()));
+    symName = hw::InnerSymbolAttr::get(builder.getStringAttr(moduleNamespace.newName(
+        Twine("__") + moduleName + Twine("__") + name.getValue())));
   }
   // This is not a temporary wire created by the compiler, so attach a symbol
   // name.
@@ -2463,13 +2463,15 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
       !symName) {
     // name may be empty
     auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
-    symName = builder.getStringAttr(Twine("__") + moduleName + Twine("__") +
-                                    name.getValue());
+    symName = hw::InnerSymbolAttr::get(op.getContext(),
+    builder.getStringAttr(Twine("__") + moduleName + Twine("__") +
+                                    name.getValue()));
   }
   if (!symName && !isUselessName(name)) {
     auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
-    symName = builder.getStringAttr(Twine("__") + moduleName + Twine("__") +
-                                    name.getValue());
+        symName = hw::InnerSymbolAttr::get(
+       builder.getStringAttr(Twine("__") + moduleName + Twine("__") +
+                                    name.getValue()));
   }
 
   if (symName) {
@@ -2501,10 +2503,10 @@ void FIRRTLLowering::initializeRegister(
 
   auto regDef = cast<sv::RegOp>(reg.getDefiningOp());
   if (!regDef->hasAttrOfType<StringAttr>("inner_sym"))
-    regDef->setAttr("inner_sym", builder.getStringAttr(moduleNamespace.newName(
-                                     Twine("__") + regDef.name() + "__")));
+    regDef->setAttr("inner_sym", hw::InnerSymbolAttr::get(builder.getStringAttr(moduleNamespace.newName(
+                                     Twine("__") + regDef.name() + "__"))));
   auto regDefSym =
-      hw::InnerRefAttr::get(theModule.getNameAttr(), regDef.inner_symAttr());
+      hw::InnerRefAttr::get(theModule.getNameAttr(), regDef.inner_symAttr().getName());
 
   // Construct and return a new reference to `RANDOM.  It is always a 32-bit
   // unsigned expression.  Calls to $random have side effects, so we use
@@ -2519,13 +2521,14 @@ void FIRRTLLowering::initializeRegister(
           reg.getLoc(), builder.getIntegerType(randomWidth),
           /*name=*/builder.getStringAttr("_RANDOM"),
           /*inner_sym=*/
-          builder.getStringAttr(moduleNamespace.newName(Twine("_RANDOM"))));
+          hw::InnerSymbolAttr::get(
+          builder.getStringAttr(moduleNamespace.newName(Twine("_RANDOM")))));
     }
 
     builder.create<sv::VerbatimOp>(
         builder.getStringAttr(Twine("{{0}} = {`RANDOM};")), ValueRange{},
         builder.getArrayAttr({hw::InnerRefAttr::get(theModule.getNameAttr(),
-                                                    randReg.inner_symAttr())}));
+                                                    randReg.inner_symAttr().getName())}));
 
     return randReg.getResult();
   };
@@ -2544,8 +2547,7 @@ void FIRRTLLowering::initializeRegister(
 
       auto reg = cast<sv::RegOp>(randomValueAndRemain.first.getDefiningOp());
 
-      auto symbol =
-          hw::InnerRefAttr::get(theModule.getNameAttr(), reg.inner_symAttr());
+      auto symbol = reg.inner_symAttr();
       unsigned low = randomWidth - randomValueAndRemain.second;
       unsigned high = randomWidth - 1;
       if (width <= randomValueAndRemain.second)
@@ -2697,7 +2699,7 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
   if (AnnotationSet::removeAnnotations(
           op, "firrtl.transforms.DontTouchAnnotation") &&
       !symName)
-    symName = op.nameAttr();
+    symName = hw::InnerSymbolAttr::get(op.nameAttr());
   auto regResult =
       builder.create<sv::RegOp>(resultType, op.nameAttr(), symName);
   (void)setLowering(op, regResult);
@@ -2727,7 +2729,7 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
   if (AnnotationSet::removeAnnotations(
           op, "firrtl.transforms.DontTouchAnnotation") &&
       !symName)
-    symName = op.nameAttr();
+    symName = hw::InnerSymbolAttr::get(op.nameAttr());
   auto regResult =
       builder.create<sv::RegOp>(resultType, op.nameAttr(), symName);
   (void)setLowering(op, regResult);
@@ -2996,7 +2998,9 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
   // for it and generate a bind op.  Enter the bind into global
   // CircuitLoweringState so that this can be moved outside of module once
   // we're guaranteed to not be a parallel context.
-  StringAttr symbol = oldInstance.inner_symAttr();
+  StringAttr symbol;
+  if (auto s = oldInstance.inner_symAttr())
+    symbol = s.getName();
   if (oldInstance.lowerToBind()) {
     if (!symbol)
       symbol = builder.getStringAttr("__" + oldInstance.name() + "__");
@@ -3012,7 +3016,8 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
 
   // Create the new hw.instance operation.
   auto newInstance = builder.create<hw::InstanceOp>(
-      newModule, oldInstance.nameAttr(), operands, parameters, symbol);
+      newModule, oldInstance.nameAttr(), operands, parameters, 
+      hw::InnerSymbolAttr::get(symbol));
 
   if (oldInstance.lowerToBind())
     newInstance->setAttr("doNotPrint", builder.getBoolAttr(true));

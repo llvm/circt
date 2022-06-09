@@ -83,7 +83,7 @@ public:
     // target module. Getting the `commonNLA`, in that case is not enough,
     // remove the NLAs that donot have the InstanceOp as the innerSym.
     for (auto nla : llvm::make_early_inc_range(nlas)) {
-      if (!nla.hasInnerSym(mod, instSym))
+      if (!nla.hasInnerSym(mod, instSym.getName()))
         nlas.erase(nla);
     }
   }

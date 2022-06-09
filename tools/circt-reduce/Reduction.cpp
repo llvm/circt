@@ -333,7 +333,7 @@ struct InstanceStubber : public Reduction {
       auto name = builder.getStringAttr(Twine(instOp.name()) + "_" +
                                         instOp.getPortNameStr(i));
       auto wire = builder.create<firrtl::WireOp>(
-          result.getType(), name, instOp.getPortAnnotation(i), StringAttr{});
+          result.getType(), name, instOp.getPortAnnotation(i), hw::InnerSymbolAttr{});
       invalidateOutputs(builder, wire, invalidCache,
                         instOp.getPortDirection(i) == firrtl::Direction::In);
       result.replaceAllUsesWith(wire);
@@ -375,7 +375,7 @@ struct MemoryStubber : public Reduction {
       auto name = builder.getStringAttr(Twine(memOp.name()) + "_" +
                                         memOp.getPortNameStr(i));
       auto wire = builder.create<firrtl::WireOp>(
-          result.getType(), name, memOp.getPortAnnotation(i), StringAttr{});
+          result.getType(), name, memOp.getPortAnnotation(i));
       invalidateOutputs(builder, wire, invalidCache, true);
       result.replaceAllUsesWith(wire);
 
@@ -790,7 +790,7 @@ struct NodeSymbolRemover : public Reduction {
 
   bool match(Operation *op) override {
     if (auto nodeOp = dyn_cast<firrtl::NodeOp>(op))
-      return nodeOp.inner_sym() && !nodeOp.inner_sym().getValue().empty();
+      return nodeOp.inner_sym() && !nodeOp.inner_sym().getValue().getName().getValue().empty();
     return false;
   }
 

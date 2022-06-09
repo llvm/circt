@@ -1164,13 +1164,13 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
   llvm_unreachable("portAnnos is never populated with unsupported annos");
 }
 
-StringAttr GrandCentralTapsPass::getOrAddInnerSym(Operation *op) {
-  auto attr = op->getAttrOfType<StringAttr>("inner_sym");
+hw::InnerSymbolAttr GrandCentralTapsPass::getOrAddInnerSym(Operation *op) {
+  auto attr = op->getAttrOfType<hw::InnerSymbolAttr>("inner_sym");
   if (attr)
     return attr;
   auto module = op->getParentOfType<FModuleOp>();
   auto name = getModuleNamespace(module).newName("gct_sym");
-  attr = StringAttr::get(op->getContext(), name);
+  attr = hw::InnerSymbolAttr::get(StringAttr::get(op->getContext(), name));
   op->setAttr("inner_sym", attr);
   return attr;
 }

@@ -706,7 +706,7 @@ private:
   DenseMap<Attribute, sv::InterfaceOp> interfaceMap;
 
   /// Returns an operation's `inner_sym`, adding one if necessary.
-  StringAttr getOrAddInnerSym(Operation *op);
+  hw::InnerSymbolAttr getOrAddInnerSym(Operation *op);
 
   /// Returns a port's `inner_sym`, adding one if necessary.
   StringAttr getOrAddInnerSym(FModuleLike module, size_t portIdx);
@@ -2103,7 +2103,7 @@ void GrandCentralPass::runOnOperation() {
     auto instance = builder.create<sv::InterfaceInstanceOp>(
         getOperation().getLoc(), iface.getValue().getInterfaceType(),
         companionIDMap.lookup(bundle.getID()).name,
-        builder.getStringAttr(symbolName));
+        hw::InnerSymbolAttr::get(builder.getStringAttr(symbolName)));
 
     // If no extraction information was present, then just leave the interface
     // instantiated in the parent.  Otherwise, make it a bind.
@@ -2186,8 +2186,8 @@ void GrandCentralPass::runOnOperation() {
   markAnalysesPreserved<NLATable>();
 }
 
-StringAttr GrandCentralPass::getOrAddInnerSym(Operation *op) {
-  auto attr = op->getAttrOfType<StringAttr>("inner_sym");
+hw::InnerSymbolAttr GrandCentralPass::getOrAddInnerSym(Operation *op) {
+  auto attr = op->getAttrOfType<hw::InnerSymbolAttr>("inner_sym");
   if (attr)
     return attr;
   auto module = op->getParentOfType<FModuleOp>();
@@ -2195,7 +2195,7 @@ StringAttr GrandCentralPass::getOrAddInnerSym(Operation *op) {
   if (auto attr = op->getAttrOfType<StringAttr>("name"))
     nameHint = attr.getValue();
   auto name = getModuleNamespace(module).newName(nameHint);
-  attr = StringAttr::get(op->getContext(), name);
+  attr = hw::InnerSymbolAttr::get(StringAttr::get(op->getContext(), name));
   op->setAttr("inner_sym", attr);
   return attr;
 }
@@ -2217,7 +2217,7 @@ StringAttr GrandCentralPass::getOrAddInnerSym(FModuleLike module,
 hw::InnerRefAttr GrandCentralPass::getInnerRefTo(Operation *op) {
   return hw::InnerRefAttr::get(
       SymbolTable::getSymbolName(op->getParentOfType<FModuleOp>()),
-      getOrAddInnerSym(op));
+      getOrAddInnerSym(op).getName());
 }
 
 hw::InnerRefAttr GrandCentralPass::getInnerRefTo(FModuleLike module,

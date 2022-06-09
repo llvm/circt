@@ -901,7 +901,7 @@ private:
                         Operation *from) {
     // If the "from" operation has an inner_sym, we need to make sure the
     // "to" operation also has an `inner_sym` and then record the renaming.
-    if (auto fromSym = from->getAttrOfType<StringAttr>("inner_sym")) {
+    if (auto fromSym = from->getAttrOfType<hw::InnerSymbolAttr>("inner_sym")) {
       auto toSym = OpAnnoTarget(to).getInnerSym(getNamespace(toModule));
       renameMap[fromSym] = toSym;
     }

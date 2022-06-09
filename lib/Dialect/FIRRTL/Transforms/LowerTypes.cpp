@@ -220,8 +220,8 @@ static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
       op.portAnnotations().getValue(), op.inner_symAttr());
   if (op.inner_sym())
     newMem.inner_symAttr(
-        StringAttr::get(b->getContext(), op.inner_symAttr().getValue() +
-                                             (op.name() + field.suffix)));
+        hw::InnerSymbolAttr::get(StringAttr::get(b->getContext(), op.inner_symAttr().getName().getValue() +
+                                             (op.name() + field.suffix))));
 
   SmallVector<Attribute> newAnnotations;
   for (size_t portIdx = 0, e = newMem.getNumResults(); portIdx < e; ++portIdx) {
@@ -1030,7 +1030,7 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
 /// Lower a wire op with a bundle to multiple non-bundled wires.
 bool TypeLoweringVisitor::visitDecl(WireOp op) {
   auto clone = [&](FlatBundleFieldEntry field, ArrayAttr attrs) -> Operation * {
-    return builder->create<WireOp>(field.type, "", attrs, StringAttr{});
+    return builder->create<WireOp>(field.type, "", attrs);
   };
   return lowerProducer(op, clone);
 }
@@ -1038,9 +1038,8 @@ bool TypeLoweringVisitor::visitDecl(WireOp op) {
 /// Lower a reg op with a bundle to multiple non-bundled regs.
 bool TypeLoweringVisitor::visitDecl(RegOp op) {
   auto clone = [&](FlatBundleFieldEntry field, ArrayAttr attrs) -> Operation * {
-    return builder->create<RegOp>(field.type, op.clockVal(), "", attrs,
-                                  StringAttr{});
-  };
+    return builder->create<RegOp>(field.type, op.clockVal(), "", attrs);
+      };
   return lowerProducer(op, clone);
 }
 
@@ -1049,8 +1048,7 @@ bool TypeLoweringVisitor::visitDecl(RegResetOp op) {
   auto clone = [&](FlatBundleFieldEntry field, ArrayAttr attrs) -> Operation * {
     auto resetVal = getSubWhatever(op.resetValue(), field.index);
     return builder->create<RegResetOp>(field.type, op.clockVal(),
-                                       op.resetSignal(), resetVal, "", attrs,
-                                       StringAttr{});
+                                       op.resetSignal(), resetVal, "", attrs);
   };
   return lowerProducer(op, clone);
 }
@@ -1059,7 +1057,7 @@ bool TypeLoweringVisitor::visitDecl(RegResetOp op) {
 bool TypeLoweringVisitor::visitDecl(NodeOp op) {
   auto clone = [&](FlatBundleFieldEntry field, ArrayAttr attrs) -> Operation * {
     auto input = getSubWhatever(op.input(), field.index);
-    return builder->create<NodeOp>(field.type, input, "", attrs, StringAttr{});
+    return builder->create<NodeOp>(field.type, input, "", attrs);
   };
   return lowerProducer(op, clone);
 }
@@ -1199,13 +1197,13 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
 
   if (skip) {
     if (sym)
-      opSymNames[sym] = op;
+      opSymNames[sym.getName()] = op;
     return false;
   }
-  if (!sym || sym.getValue().empty())
+  if (!sym)
     if (needsSymbol)
-      sym = StringAttr::get(builder->getContext(),
-                            "sym" + op.nameAttr().getValue());
+      sym = hw::InnerSymbolAttr::get(builder->getStringAttr(
+                            "sym" + op.nameAttr().getValue()));
   // FIXME: annotation update
   auto newInstance = builder->create<InstanceOp>(
       resultTypes, op.moduleNameAttr(), op.nameAttr(),
@@ -1228,7 +1226,7 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
       op.getResult(aggIndex).replaceAllUsesWith(lowered[0]);
   }
   if (sym)
-    opSymNames[sym] = newInstance;
+    opSymNames[sym.getName()] = newInstance;
   return true;
 }
 

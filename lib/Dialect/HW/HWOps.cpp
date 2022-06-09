@@ -1121,7 +1121,7 @@ LogicalResult HWModuleOp::verifyBody() { return success(); }
 void InstanceOp::build(OpBuilder &builder, OperationState &result,
                        Operation *module, StringAttr name,
                        ArrayRef<Value> inputs, ArrayAttr parameters,
-                       StringAttr sym_name) {
+                       InnerSymbolAttr sym_name) {
   assert(isAnyModule(module) && "Can only reference a module");
 
   if (!parameters)
@@ -1394,7 +1394,8 @@ void InstanceOp::print(OpAsmPrinter &p) {
   p.printAttributeWithoutType(instanceNameAttr());
   if (auto attr = inner_symAttr()) {
     p << " sym ";
-    p.printSymbolName(attr.getValue());
+    assert(attr.getName());
+    p.printSymbolName(attr.getName().getValue());
   }
   p << ' ';
   p.printAttributeWithoutType(moduleNameAttr());

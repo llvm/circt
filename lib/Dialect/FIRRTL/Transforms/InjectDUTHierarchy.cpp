@@ -151,7 +151,7 @@ void InjectDUTHierarchy::runOnOperation() {
   auto wrapperInst = b.create<InstanceOp>(
       b.getUnknownLoc(), wrapper, wrapper.moduleName(), ArrayRef<Attribute>{},
       ArrayRef<Attribute>{}, false,
-      b.getStringAttr(dutNS.newName(wrapper.moduleName())));
+      hw::InnerSymbolAttr::get(b.getStringAttr(dutNS.newName(wrapper.moduleName()))));
   for (auto pair : llvm::enumerate(wrapperInst.getResults())) {
     Value lhs = dut.getArgument(pair.index());
     Value rhs = pair.value();
@@ -204,7 +204,7 @@ void InjectDUTHierarchy::runOnOperation() {
     auto back = namepath.drop_front(nlaIdx + 1);
     SmallVector<Attribute> newNamepath(front.begin(), front.end());
     newNamepath.push_back(hw::InnerRefAttr::get(dut.moduleNameAttr(),
-                                                wrapperInst.inner_symAttr()));
+                                                wrapperInst.inner_symAttr().getName()));
     newNamepath.push_back(
         hw::InnerRefAttr::get(wrapper.moduleNameAttr(), dutRef.getName()));
     newNamepath.append(back.begin(), back.end());

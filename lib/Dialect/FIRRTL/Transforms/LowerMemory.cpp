@@ -264,7 +264,7 @@ void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
     nlaUpdated = true;
   }
   if (nlaUpdated)
-    memInst.inner_symAttr(leafSym);
+    memInst.inner_symAttr(hw::InnerSymbolAttr::get(leafSym));
 
   mem->erase();
 }

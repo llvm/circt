@@ -13,6 +13,8 @@
 #ifndef CIRCT_DIALECT_HW_HWATTRIBUTESNAMING
 #define CIRCT_DIALECT_HW_HWATTRIBUTESNAMING
 
+include "mlir/IR/SubElementInterfaces.td"
+
 def InnerRefAttr : AttrDef<HWDialect, "InnerRef", [
     DeclareAttrInterfaceMethods<SubElementAttrInterface>]> {
   let summary = "Refer to a name inside a module";
@@ -70,6 +72,21 @@ def GlobalRefAttr : AttrDef<HWDialect, "GlobalRef"> {
   let extraClassDeclaration = [{
     static constexpr char DialectAttrName[] = "circt.globalRef";
   }];
+}
+
+// A string attribute that represents the name of a symbol.
+def InnerSymbolAttr : AttrDef<HWDialect, "InnerSymbol"> {
+  let parameters = (ins "::mlir::StringAttr":$name);
+  let mnemonic = "innerSymbol";
+  let hasCustomAssemblyFormat = 1;
+  let builders = [
+    AttrBuilderWithInferredContext<(ins "::mlir::StringAttr":$name), [{
+      if (!name)
+        return {};
+      return $_get(
+          name.getContext(), name);
+    }]>
+  ];
 }
 
 #endif // CIRCT_DIALECT_HW_HWATTRIBUTESNAMING

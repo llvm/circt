@@ -3702,9 +3702,9 @@ void StmtEmitter::collectNamesEmitDecls(Block &block) {
 
     // Print debug info.
     if (state.options.printDebugInfo && isa<WireOp, RegOp>(op)) {
-      StringAttr sym = op->getAttr("inner_sym").dyn_cast_or_null<StringAttr>();
-      if (sym && !sym.getValue().empty())
-        os << " /* inner_sym: " << sym.getValue() << " */";
+      auto sym = op->getAttr("inner_sym").dyn_cast_or_null<InnerSymbolAttr>();
+      if (sym)
+        os << " /* inner_sym: " << sym.getName() << " */";
     }
 
     if (auto localparam = dyn_cast<LocalParamOp>(op)) {

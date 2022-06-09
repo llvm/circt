@@ -146,7 +146,7 @@ LogicalResult LowerInstancesPass::lower(DynamicInstanceOp inst, OpBuilder &b) {
       // Since GlobalRefOp uses the `inner_sym` attribute, assign the
       // 'inner_sym' attribute if it's not already assigned.
       if (!tgtOp->hasAttr("inner_sym")) {
-        tgtOp->setAttr("inner_sym", innerRef.getName());
+        tgtOp->setAttr("inner_sym", hw::InnerSymbolAttr::get(innerRef.getName()));
       }
     }
     if (symNotFound)
@@ -268,7 +268,7 @@ InstanceOpLowering::matchAndRewrite(InstanceOp msftInst, OpAdaptor adaptor,
       msftInst.getLoc(), referencedModule, msftInst.instanceNameAttr(),
       SmallVector<Value>(adaptor.getOperands().begin(),
                          adaptor.getOperands().end()),
-      paramValues, msftInst.sym_nameAttr());
+      paramValues, hw::InnerSymbolAttr::get(msftInst.sym_nameAttr()));
   hwInst->setDialectAttrs(msftInst->getDialectAttrs());
   rewriter.replaceOp(msftInst, hwInst.getResults());
   return success();
@@ -982,8 +982,8 @@ void PartitionPass::bubbleUpGlobalRefs(
     return;
 
   // GlobalRefs use the inner_sym attribute, so keep it up to date.
-  auto oldInnerSym = op->getAttrOfType<StringAttr>("inner_sym");
-  auto newInnerSym = StringAttr::get(op->getContext(), ::getOpName(op));
+  auto oldInnerSym = op->getAttrOfType<hw::InnerSymbolAttr>("inner_sym");
+  auto newInnerSym = hw::InnerSymbolAttr::get(StringAttr::get(op->getContext(), ::getOpName(op)));
   op->setAttr("inner_sym", newInnerSym);
 
   for (auto globalRef : globalRefs.getAsRange<hw::GlobalRefAttr>()) {
@@ -1069,12 +1069,12 @@ void PartitionPass::pushDownGlobalRefs(
     assert(partModName);
 
     // Find the index of the node in the path that points to the innerSym.
-    auto innerSym = op->getAttrOfType<StringAttr>("inner_sym");
+    auto innerSym = op->getAttrOfType<hw::InnerSymbolAttr>("inner_sym");
     size_t opIndex = 0;
     bool found = false;
     for (; opIndex < oldPath.size(); ++opIndex) {
       auto oldNode = oldPath[opIndex].cast<hw::InnerRefAttr>();
-      if (oldNode.getModule() == partMod && oldNode.getName() == innerSym) {
+      if (oldNode.getModule() == partMod && oldNode.getName() == innerSym.getName()) {
         found = true;
         break;
       }

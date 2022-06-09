@@ -16,6 +16,7 @@
 #include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/SV/SVTypes.h"
+#include "circt/Dialect/HW/HWAttributes.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Interfaces/InferTypeOpInterface.h"
@@ -26,6 +27,7 @@ namespace hw {
 class InstanceOp;
 class HWSymbolCache;
 class InnerRefAttr;
+class InnerSymbolAttr;
 } // namespace hw
 
 namespace sv {

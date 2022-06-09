@@ -108,7 +108,8 @@ Value HWMemSimImpl::addPipelineStages(ImplicitLocOpBuilder &b,
   while (stages--) {
     auto reg =
         b.create<sv::RegOp>(data.getType(), StringAttr{},
-                            b.getStringAttr(moduleNamespace.newName("_GEN")));
+        hw::InnerSymbolAttr::get(
+                            b.getStringAttr(moduleNamespace.newName("_GEN"))));
     registers.push_back(reg);
 
     // pipeline stage
@@ -335,7 +336,8 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
           b.getIntegerType(llvm::divideCeil(mem.dataWidth, randomWidth) *
                            randomWidth),
           b.getStringAttr("_RANDOM_MEM"),
-          b.getStringAttr(moduleNamespace.newName("_RANDOM_MEM")));
+          hw::InnerSymbolAttr::get(
+          b.getStringAttr(moduleNamespace.newName("_RANDOM_MEM"))));
     });
 
     // Declare variables for use by register randomization logic.
@@ -347,7 +349,7 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
       while (totalWidth > 0) {
         auto name = b.getStringAttr(moduleNamespace.newName(Twine("_RANDOM")));
         randRegs.push_back(
-            b.create<sv::RegOp>(b.getIntegerType(randomWidth), name, name));
+            b.create<sv::RegOp>(b.getIntegerType(randomWidth), name, hw::InnerSymbolAttr::get(name)));
         totalWidth -= randomWidth;
       }
     });
@@ -379,7 +381,7 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
         b.create<sv::VerbatimOp>(
             verbatimForLoop, ValueRange{},
             b.getArrayAttr({hw::InnerRefAttr::get(
-                op.getNameAttr(), randomMemReg.inner_symAttr())}));
+                op.getNameAttr(), randomMemReg.inner_symAttr().getName())}));
       });
 
       // Register randomization logic.  Randomize every register to a random
@@ -393,7 +395,7 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
           b.create<sv::VerbatimOp>(b.getStringAttr("{{0}} = {`RANDOM};"),
                                    ValueRange{},
                                    b.getArrayAttr(hw::InnerRefAttr::get(
-                                       op.getNameAttr(), reg.inner_symAttr())));
+                                       op.getNameAttr(), reg.inner_symAttr().getName())));
         auto randRegIdx = 0;
         for (sv::RegOp &reg : registers) {
           SmallVector<std::pair<Attribute, std::pair<size_t, size_t>>> values;
@@ -405,7 +407,7 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
               bits = 0;
             }
             auto innerRef = hw::InnerRefAttr::get(op.getNameAttr(),
-                                                  randReg.inner_symAttr());
+                                                  randReg.inner_symAttr().getName());
             if (widthRemaining <= randomWidth - bits) {
               values.push_back({innerRef, {bits + widthRemaining - 1, bits}});
               bits += widthRemaining;
@@ -420,7 +422,7 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
           unsigned idx = 1;
           assert(reg.inner_symAttr());
           SmallVector<Attribute, 4> symbols(
-              {hw::InnerRefAttr::get(op.getNameAttr(), reg.inner_symAttr())});
+              {hw::InnerRefAttr::get(op.getNameAttr(), reg.inner_symAttr().getName())});
           if (values.size() > 1)
             rhs.append("{");
           for (auto &v : values) {

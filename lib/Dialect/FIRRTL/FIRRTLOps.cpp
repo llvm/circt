@@ -229,8 +229,8 @@ static bool hasPortNamed(FModuleLike op, StringAttr name) {
 static bool hasValNamed(FModuleLike op, StringAttr name) {
   bool retval = false;
   op.walk([name, &retval](Operation *op) {
-    auto attr = op->getAttrOfType<StringAttr>("inner_sym");
-    if (attr == name) {
+    auto attr = op->getAttrOfType<hw::InnerSymbolAttr>("inner_sym");
+    if (attr && attr.getName() == name) {
       retval = true;
       return WalkResult::interrupt();
     }
@@ -1201,7 +1201,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
                        ArrayRef<Attribute> portNames,
                        ArrayRef<Attribute> annotations,
                        ArrayRef<Attribute> portAnnotations, bool lowerToBind,
-                       StringAttr innerSym) {
+                       hw::InnerSymbolAttr innerSym) {
   result.addTypes(resultTypes);
   result.addAttribute("moduleName",
                       SymbolRefAttr::get(builder.getContext(), moduleName));
@@ -1231,7 +1231,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
                        FModuleLike module, StringRef name,
                        ArrayRef<Attribute> annotations,
                        ArrayRef<Attribute> portAnnotations, bool lowerToBind,
-                       StringAttr innerSym) {
+                       hw::InnerSymbolAttr innerSym) {
 
   // Gather the result types.
   SmallVector<Type> resultTypes;
@@ -1467,8 +1467,7 @@ void InstanceOp::print(OpAsmPrinter &p) {
   p << " ";
   p.printKeywordOrString(name());
   if (auto attr = inner_symAttr()) {
-    p << " sym ";
-    p.printSymbolName(attr.getValue());
+    attr.print(p);
   }
   p << " ";
 
@@ -1571,7 +1570,7 @@ void MemOp::build(OpBuilder &builder, OperationState &result,
                   uint32_t writeLatency, uint64_t depth, RUWAttr ruw,
                   ArrayRef<Attribute> portNames, StringRef name,
                   ArrayRef<Attribute> annotations,
-                  ArrayRef<Attribute> portAnnotations, StringAttr innerSym) {
+                  ArrayRef<Attribute> portAnnotations, hw::InnerSymbolAttr innerSym) {
   result.addAttribute(
       "readLatency",
       builder.getIntegerAttr(builder.getIntegerType(32), readLatency));
