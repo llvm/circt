@@ -74,12 +74,6 @@ static bool shouldSpillWire(Operation &op, const LoweringOptions &options) {
       llvm::any_of(op.getResult(0).getUsers(), isConcat))
     return true;
 
-  // If `options.spillWiresForNamehints` option is enabled, spill a wire for
-  // an expression with sv.namehint.
-  if (options.spillWiresForNamehints && op.getNumResults() == 1 &&
-      op.hasAttr("sv.namehint"))
-    return true;
-
   return false;
 }
 
