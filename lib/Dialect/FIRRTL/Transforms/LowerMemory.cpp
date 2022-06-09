@@ -219,7 +219,7 @@ void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
 
   auto memInst =
       b.create<InstanceOp>(mem->getLoc(), memModule, memModule.moduleName(),
-                           mem.annotations().getValue());
+                           mem.nameKind(), mem.annotations().getValue());
 
   // Wire all the ports together.
   for (auto [dst, src] :
@@ -430,7 +430,8 @@ InstanceOp LowerMemoryPass::emitMemoryInstance(MemOp op, FModuleOp module,
   // TODO: how do we lower port annotations?
   auto inst = builder.create<InstanceOp>(
       op.getLoc(), portTypes, module.getNameAttr(), summary.getFirMemoryName(),
-      portDirections, portNames, /*annotations=*/ArrayRef<Attribute>(),
+      op.nameKind(), portDirections, portNames,
+      /*annotations=*/ArrayRef<Attribute>(),
       /*portAnnotations=*/ArrayRef<Attribute>(), /*lowerToBind=*/false,
       op.inner_symAttr());
 

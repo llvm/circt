@@ -240,6 +240,10 @@ static bool hasValNamed(FModuleLike op, StringAttr name) {
   return retval;
 }
 
+/// A forward declaration for `NameKind` attribute parser.
+static ParseResult parseNameKind(OpAsmParser &parser,
+                                 firrtl::NameKindEnumAttr &result);
+
 //===----------------------------------------------------------------------===//
 // CircuitOp
 //===----------------------------------------------------------------------===//
@@ -1197,7 +1201,8 @@ FModuleLike InstanceOp::getReferencedModule(SymbolTable &symbolTable) {
 
 void InstanceOp::build(OpBuilder &builder, OperationState &result,
                        TypeRange resultTypes, StringRef moduleName,
-                       StringRef name, ArrayRef<Direction> portDirections,
+                       StringRef name, NameKindEnum nameKind,
+                       ArrayRef<Direction> portDirections,
                        ArrayRef<Attribute> portNames,
                        ArrayRef<Attribute> annotations,
                        ArrayRef<Attribute> portAnnotations, bool lowerToBind,
@@ -1214,6 +1219,8 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
   result.addAttribute("lowerToBind", builder.getBoolAttr(lowerToBind));
   if (innerSym)
     result.addAttribute("inner_sym", innerSym);
+  result.addAttribute("nameKind",
+                      NameKindEnumAttr::get(builder.getContext(), nameKind));
 
   if (portAnnotations.empty()) {
     SmallVector<Attribute, 16> portAnnotationsVec(resultTypes.size(),
@@ -1229,7 +1236,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
 
 void InstanceOp::build(OpBuilder &builder, OperationState &result,
                        FModuleLike module, StringRef name,
-                       ArrayRef<Attribute> annotations,
+                       NameKindEnum nameKind, ArrayRef<Attribute> annotations,
                        ArrayRef<Attribute> portAnnotations, bool lowerToBind,
                        StringAttr innerSym) {
 
@@ -1252,9 +1259,11 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
   return build(
       builder, result, resultTypes,
       SymbolRefAttr::get(builder.getContext(), module.moduleNameAttr()),
-      builder.getStringAttr(name), module.getPortDirectionsAttr(),
-      module.getPortNamesAttr(), builder.getArrayAttr(annotations),
-      portAnnotationsAttr, builder.getBoolAttr(lowerToBind), innerSym);
+      builder.getStringAttr(name),
+      NameKindEnumAttr::get(builder.getContext(), nameKind),
+      module.getPortDirectionsAttr(), module.getPortNamesAttr(),
+      builder.getArrayAttr(annotations), portAnnotationsAttr,
+      builder.getBoolAttr(lowerToBind), innerSym);
 }
 
 /// Builds a new `InstanceOp` with the ports listed in `portIndices` erased, and
@@ -1274,9 +1283,9 @@ InstanceOp InstanceOp::erasePorts(OpBuilder &builder,
       removeElementsAtIndices(portAnnotations().getValue(), portIndices);
 
   auto newOp = builder.create<InstanceOp>(
-      getLoc(), newResultTypes, moduleName(), name(), newPortDirections,
-      newPortNames, annotations().getValue(), newPortAnnotations, lowerToBind(),
-      inner_symAttr());
+      getLoc(), newResultTypes, moduleName(), name(), nameKind(),
+      newPortDirections, newPortNames, annotations().getValue(),
+      newPortAnnotations, lowerToBind(), inner_symAttr());
 
   SmallDenseSet<unsigned> portSet(portIndices.begin(), portIndices.end());
   for (unsigned oldIdx = 0, newIdx = 0, numOldPorts = getNumResults();
@@ -1348,9 +1357,9 @@ InstanceOp::cloneAndInsertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
 
   // Create a new instance op with the reset inserted.
   return OpBuilder(*this).create<InstanceOp>(
-      getLoc(), newPortTypes, moduleName(), name(), newPortDirections,
-      newPortNames, annotations().getValue(), newPortAnnos, lowerToBind(),
-      inner_symAttr());
+      getLoc(), newPortTypes, moduleName(), name(), nameKind(),
+      newPortDirections, newPortNames, annotations().getValue(), newPortAnnos,
+      lowerToBind(), inner_symAttr());
 }
 
 LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
@@ -1470,12 +1479,15 @@ void InstanceOp::print(OpAsmPrinter &p) {
     p << " sym ";
     p.printSymbolName(attr.getValue());
   }
+  if (nameKindAttr().getValue() != NameKindEnum::InterestingName)
+    p << ' ' << stringifyNameKindEnum(nameKindAttr().getValue());
   p << " ";
 
   // Print the attr-dict.
-  SmallVector<StringRef, 4> omittedAttrs = {
-      "moduleName",      "name",     "portDirections", "portNames", "portTypes",
-      "portAnnotations", "inner_sym"};
+  SmallVector<StringRef, 4> omittedAttrs = {"moduleName",     "name",
+                                            "portDirections", "portNames",
+                                            "portTypes",      "portAnnotations",
+                                            "inner_sym",      "nameKind"};
   if (!lowerToBind())
     omittedAttrs.push_back("lowerToBind");
   if (annotations().empty())
@@ -1509,6 +1521,7 @@ ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
   SmallVector<Attribute, 4> portTypes;
   SmallVector<Attribute, 4> portAnnotations;
   SmallVector<Attribute, 4> portSyms;
+  NameKindEnumAttr nameKind;
 
   if (parser.parseKeywordOrString(&name))
     return failure();
@@ -1518,7 +1531,8 @@ ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
     (void)parser.parseOptionalSymbolName(
         innerSymAttr, hw::InnerName::getInnerNameAttrName(), result.attributes);
   }
-  if (parser.parseOptionalAttrDict(result.attributes) ||
+  if (parseNameKind(parser, nameKind) ||
+      parser.parseOptionalAttrDict(result.attributes) ||
       parser.parseAttribute(moduleName, "moduleName", resultAttrs) ||
       parseModulePorts(parser, /*hasSSAIdentifiers=*/false, entryArgs,
                        portDirections, portNames, portTypes, portAnnotations,
@@ -1531,6 +1545,7 @@ ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
     result.addAttribute("moduleName", moduleName);
   if (!resultAttrs.get("name"))
     result.addAttribute("name", StringAttr::get(context, name));
+  result.addAttribute("nameKind", nameKind);
   if (!resultAttrs.get("portDirections"))
     result.addAttribute("portDirections",
                         direction::packAttribute(context, portDirections));
@@ -1570,7 +1585,7 @@ void MemOp::build(OpBuilder &builder, OperationState &result,
                   TypeRange resultTypes, uint32_t readLatency,
                   uint32_t writeLatency, uint64_t depth, RUWAttr ruw,
                   ArrayRef<Attribute> portNames, StringRef name,
-                  ArrayRef<Attribute> annotations,
+                  NameKindEnum nameKind, ArrayRef<Attribute> annotations,
                   ArrayRef<Attribute> portAnnotations, StringAttr innerSym) {
   result.addAttribute(
       "readLatency",
@@ -1583,6 +1598,8 @@ void MemOp::build(OpBuilder &builder, OperationState &result,
   result.addAttribute("ruw", ::RUWAttrAttr::get(builder.getContext(), ruw));
   result.addAttribute("portNames", builder.getArrayAttr(portNames));
   result.addAttribute("name", builder.getStringAttr(name));
+  result.addAttribute("nameKind",
+                      NameKindEnumAttr::get(builder.getContext(), nameKind));
   result.addAttribute("annotations", builder.getArrayAttr(annotations));
   if (innerSym)
     result.addAttribute("inner_sym", innerSym);
@@ -3253,6 +3270,8 @@ static void printElideAnnotations(OpAsmPrinter &p, Operation *op,
   // Elide "annotations" if it is empty.
   if (op->getAttrOfType<ArrayAttr>("annotations").empty())
     elidedAttrs.push_back("annotations");
+  // Elide "nameKind".
+  elidedAttrs.push_back("nameKind");
 
   p.printOptionalAttrDict(op->getAttrs(), elidedAttrs);
 }
@@ -3282,6 +3301,34 @@ static void printElidePortAnnotations(OpAsmPrinter &p, Operation *op,
                    [&](Attribute a) { return a.cast<ArrayAttr>().empty(); }))
     elidedAttrs.push_back("portAnnotations");
   printElideAnnotations(p, op, attr, elidedAttrs);
+}
+
+//===----------------------------------------------------------------------===//
+// NameKind Custom Directive
+//===----------------------------------------------------------------------===//
+
+static ParseResult parseNameKind(OpAsmParser &parser,
+                                 firrtl::NameKindEnumAttr &result) {
+  StringRef keyword;
+
+  if (!parser.parseOptionalKeyword(&keyword,
+                                   {"interesting_name", "droppable_name"})) {
+    auto kind = symbolizeNameKindEnum(keyword);
+    result = NameKindEnumAttr::get(parser.getContext(), kind.getValue());
+    return success();
+  }
+
+  // Default is interesting name.
+  result =
+      NameKindEnumAttr::get(parser.getContext(), NameKindEnum::InterestingName);
+  return success();
+}
+
+static void printNameKind(OpAsmPrinter &p, Operation *op,
+                          firrtl::NameKindEnumAttr attr,
+                          ArrayRef<StringRef> extraElides = {}) {
+  if (attr.getValue() != NameKindEnum::InterestingName)
+    p << stringifyNameKindEnum(attr.getValue()) << ' ';
 }
 
 //===----------------------------------------------------------------------===//

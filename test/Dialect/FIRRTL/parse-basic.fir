@@ -87,10 +87,10 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     input a8 : Analog<8>          ; CHECK: in %a8: !firrtl.analog<8>,
     input ab : {x : Analog<1>}    ; CHECK: in %ab: !firrtl.bundle<x: analog<1>>)
 
-    ; CHECK: %_t = firrtl.wire : !firrtl.vector<uint<1>, 12>
+    ; CHECK: %_t = firrtl.wire droppable_name : !firrtl.vector<uint<1>, 12>
     wire _t : UInt<1>[12] @[Nodes.scala 370:76]
 
-    ; CHECK: %_t_2 = firrtl.wire : !firrtl.vector<uint<1>, 12>
+    ; CHECK: %_t_2 = firrtl.wire droppable_name : !firrtl.vector<uint<1>, 12>
     wire _t_2 : UInt<1>[12]
 
     ; CHECK: firrtl.strictconnect %_t, %_t_2 : !firrtl.vector<uint<1>, 12>
@@ -135,9 +135,9 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.strictconnect %auto, [[C]] : !firrtl.uint<1>
     auto <- out_0.member.0.reset @[Field 173:49]
 
-    ; CHECK: %_t_3 = firrtl.wire : !firrtl.vector<uint<1>, 12>
+    ; CHECK: %_t_3 = firrtl.wire droppable_name : !firrtl.vector<uint<1>, 12>
     ; CHECK: [[A:%.+]] = firrtl.subindex %_t_3[0] : !firrtl.vector<uint<1>, 12>
-    ; CHECK: %_t_4 = firrtl.wire : !firrtl.vector<uint<1>, 12>
+    ; CHECK: %_t_4 = firrtl.wire droppable_name : !firrtl.vector<uint<1>, 12>
     ; CHECK: [[B:%.+]] = firrtl.subindex %_t_4[0] : !firrtl.vector<uint<1>, 12>
     ; CHECK: firrtl.strictconnect [[A]], [[B]]
     wire _t_3 : UInt<1>[12] @[Nodes.scala 370:76]
@@ -307,11 +307,11 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.mux(%reset, %i8, %{{.*}}) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint) -> !firrtl.uint
     node n8 = mux(reset, i8, UInt(4))
 
-    ; CHECK: %_t_2621 = firrtl.regreset %clock, %reset, %{{.*}} : !firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>
+    ; CHECK: %_t_2621 = firrtl.regreset droppable_name %clock, %reset, %{{.*}} : !firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>
     reg _t_2621 : UInt<4>, clock with :
       reset => (reset, UInt<4>("h0")) @[Edges.scala 230:27]
 
-    ; CHECK: %_t_1601 = firrtl.regreset %clock, %reset, %{{.*}} : !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>
+    ; CHECK: %_t_1601 = firrtl.regreset droppable_name %clock, %reset, %{{.*}} : !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>
     reg _t_1601 : UInt<2>, clock with :
       (reset => (reset, UInt<2>("h00"))) @[Edges.scala 230:27]
 
@@ -329,7 +329,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; The Scala implementation of FIRRTL prints registers without a reset value
     ; using the register name as the reset.  Make sure we handle this for
     ; compatibility.
-    ; CHECK: %_t_2622 = firrtl.reg %clock : !firrtl.uint<4>
+    ; CHECK: %_t_2622 = firrtl.reg droppable_name %clock : !firrtl.uint<4>
     reg _t_2622 : UInt<4>, clock with :
       reset => (UInt<1>("h0"), _t_2622)
 
@@ -388,7 +388,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     node n13 = not(auto)
 
 
-    ; CHECK: %_M__T_10, %_M__T_11, %_M__T_18 = firrtl.mem Undefined {depth = 8 : i64, name = "_M", portNames = ["_T_10", "_T_11", "_T_18"]
+    ; CHECK: %_M__T_10, %_M__T_11, %_M__T_18 = firrtl.mem droppable_name Undefined {depth = 8 : i64, name = "_M", portNames = ["_T_10", "_T_11", "_T_18"]
     ; CHECK-SAME: readLatency = 0 : i32, writeLatency = 1 : i32} :
     ; CHECK-SAME: !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: bundle<id: uint<4>>, mask: bundle<id: uint<1>>>,
     ; CHECK-SAME: !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: bundle<id: uint<4>>, mask: bundle<id: uint<1>>>,
@@ -581,7 +581,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   module flip_one :
     input bf: { flip int_1 : UInt<1>, int_out : UInt<2>}
     ; CHECK: %0 = firrtl.subfield %bf(0)
-    ; CHECK: %_T = firrtl.node %0
+    ; CHECK: %_T = firrtl.node droppable_name %0
     node _T = bf.int_1
     ; CHECK: firrtl.when %_T {
     when _T :

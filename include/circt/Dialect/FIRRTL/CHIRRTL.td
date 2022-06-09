@@ -19,6 +19,7 @@ include "mlir/IR/OpAsmInterface.td"
 include "circt/Dialect/FIRRTL/FIRRTLDialect.td"
 include "circt/Dialect/FIRRTL/FIRRTLAttributes.td"
 include "circt/Dialect/FIRRTL/FIRRTLTypes.td"
+include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
 
@@ -102,38 +103,40 @@ def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface,
 class CHIRRTLOp<string mnemonic, list<Trait> traits = []> :
     Op<CHIRRTLDialect, mnemonic, traits>;
 
-def CombMemOp : CHIRRTLOp<"combmem", [HasCustomSSAName]> {
+def CombMemOp : CHIRRTLOp<"combmem", [HasCustomSSAName, FNamableOp]> {
   let summary = "Define a new combinational memory";
   let description = [{
     Define a new behavioral combinational memory. Combinational memories have a
     write latency of 1 and a read latency of 0.
   }];
-  let arguments = (ins StrAttr:$name, AnnotationArrayAttr:$annotations,
-                              OptionalAttr<SymbolNameAttr>:$inner_sym);
+  let arguments = (ins StrAttr:$name, NameKindAttr:$nameKind,
+                       AnnotationArrayAttr:$annotations, OptionalAttr<SymbolNameAttr>:$inner_sym);
   let results = (outs CMemoryType:$result);
-  let assemblyFormat = "(`sym` $inner_sym^)? custom<CombMemOp>(attr-dict) `:` qualified(type($result))";
+  let assemblyFormat = [{(`sym` $inner_sym^)? custom<NameKind>($nameKind)
+                         custom<CombMemOp>(attr-dict) `:` qualified(type($result))}];
   let builders = [
     OpBuilder<(ins "firrtl::FIRRTLType":$elementType, "uint64_t":$numElements,
-                   "mlir::StringRef":$name, "ArrayAttr":$annotations,
-                   CArg<"StringAttr", "StringAttr()">:$inner_sym)>
+                   "mlir::StringRef":$name, "firrtl::NameKindEnum":$nameKind,
+                   "ArrayAttr":$annotations, CArg<"StringAttr", "StringAttr()">:$inner_sym)>
   ];
 }
 
-def SeqMemOp : CHIRRTLOp<"seqmem", [HasCustomSSAName]> {
+def SeqMemOp : CHIRRTLOp<"seqmem", [HasCustomSSAName, FNamableOp]> {
   let summary = "Define a new sequential memory";
   let description = [{
     Define a new behavioral sequential memory.  Sequential memories have a
     write latency and a read latency of 1.
   }];
-  let arguments = (ins RUWAttr:$ruw, StrAttr:$name,
+  let arguments = (ins RUWAttr:$ruw, StrAttr:$name, NameKindAttr:$nameKind,
                        AnnotationArrayAttr:$annotations,
                        OptionalAttr<SymbolNameAttr>:$inner_sym);
   let results = (outs CMemoryType:$result);
-  let assemblyFormat = "(`sym` $inner_sym^)? $ruw custom<SeqMemOp>(attr-dict) `:` qualified(type($result))";
+  let assemblyFormat = [{(`sym` $inner_sym^)? custom<NameKind>($nameKind) $ruw
+                         custom<SeqMemOp>(attr-dict) `:` qualified(type($result))}];
   let builders = [
     OpBuilder<(ins "firrtl::FIRRTLType":$elementType, "uint64_t":$numElements,
                    "RUWAttr":$ruw, "mlir::StringRef":$name,
-                   "ArrayAttr":$annotations,
+                   "firrtl::NameKindEnum":$nameKind, "ArrayAttr":$annotations,
                    CArg<"StringAttr", "StringAttr()">:$inner_sym)>
   ];
 }

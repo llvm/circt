@@ -172,6 +172,11 @@ std::pair<bool, Optional<LocationAttr>> circt::firrtl::maybeStringToLocation(
   return {true, result};
 }
 
+static firrtl::NameKindEnum inferNameKind(StringRef name) {
+  return circt::firrtl::isUselessName(name) ? NameKindEnum::DroppableName
+                                            : NameKindEnum::InterestingName;
+}
+
 //===----------------------------------------------------------------------===//
 // SharedParserConstants
 //===----------------------------------------------------------------------===//
@@ -2821,7 +2826,7 @@ ParseResult FIRStmtParser::parseInstance() {
 
   auto sym = getSymbolIfRequired(annotations.first, id);
   result = builder.create<InstanceOp>(
-      referencedModule, id, annotations.first.getValue(),
+      referencedModule, id, inferNameKind(id), annotations.first.getValue(),
       annotations.second.getValue(), false, sym);
 
   // Since we are implicitly unbundling the instance results, we need to keep
@@ -2870,7 +2875,7 @@ ParseResult FIRStmtParser::parseCombMem() {
   auto sym = getSymbolIfRequired(annotations, id);
   auto result = builder.create<CombMemOp>(vectorType.getElementType(),
                                           vectorType.getNumElements(), id,
-                                          annotations, sym);
+                                          inferNameKind(id), annotations, sym);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -2908,7 +2913,7 @@ ParseResult FIRStmtParser::parseSeqMem() {
 
   auto result = builder.create<SeqMemOp>(vectorType.getElementType(),
                                          vectorType.getNumElements(), ruw, id,
-                                         annotations, sym);
+                                         inferNameKind(id), annotations, sym);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -3047,8 +3052,8 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
     }
   result = builder.create<MemOp>(resultTypes, readLatency, writeLatency, depth,
                                  ruw, builder.getArrayAttr(resultNames), id,
-                                 annotations.first, annotations.second, sym,
-                                 IntegerAttr());
+                                 inferNameKind(id), annotations.first,
+                                 annotations.second, sym, IntegerAttr());
 
   UnbundledValueEntry unbundledValueEntry;
   unbundledValueEntry.reserve(result.getNumResults());
@@ -3103,7 +3108,7 @@ ParseResult FIRStmtParser::parseNode() {
 
   auto sym = getSymbolIfRequired(annotations, id);
   auto result = builder.create<NodeOp>(initializer.getType(), initializer, id,
-                                       annotations, sym);
+                                       inferNameKind(id), annotations, sym);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -3130,7 +3135,8 @@ ParseResult FIRStmtParser::parseWire() {
                                moduleContext.targetsInModule, type);
 
   auto sym = getSymbolIfRequired(annotations, id);
-  auto result = builder.create<WireOp>(type, id, annotations, sym);
+  auto result =
+      builder.create<WireOp>(type, id, inferNameKind(id), annotations, sym);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -3223,10 +3229,12 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
   Value result;
   auto sym = getSymbolIfRequired(annotations, id);
   if (resetSignal)
-    result = builder.create<RegResetOp>(type, clock, resetSignal, resetValue,
-                                        id, annotations, sym);
+    result =
+        builder.create<RegResetOp>(type, clock, resetSignal, resetValue, id,
+                                   inferNameKind(id), annotations, sym);
   else
-    result = builder.create<RegOp>(type, clock, id, annotations, sym);
+    result = builder.create<RegOp>(type, clock, id, inferNameKind(id),
+                                   annotations, sym);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 

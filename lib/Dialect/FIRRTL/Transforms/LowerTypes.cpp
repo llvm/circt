@@ -214,10 +214,11 @@ static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
   }
 
   // It's easier to duplicate the old annotations, then fix and filter them.
-  auto newMem = b->create<MemOp>(
-      ports, op.readLatency(), op.writeLatency(), op.depth(), op.ruw(),
-      portNames, (op.name() + field.suffix).str(), op.annotations().getValue(),
-      op.portAnnotations().getValue(), op.inner_symAttr());
+  auto newMem =
+      b->create<MemOp>(ports, op.readLatency(), op.writeLatency(), op.depth(),
+                       op.ruw(), portNames, (op.name() + field.suffix).str(),
+                       op.nameKind(), op.annotations().getValue(),
+                       op.portAnnotations().getValue(), op.inner_symAttr());
   if (op.inner_sym())
     newMem.inner_symAttr(
         StringAttr::get(b->getContext(), op.inner_symAttr().getValue() +
@@ -278,6 +279,7 @@ struct AttrCache {
     i64ty = IntegerType::get(context, 64);
     innerSymAttr = StringAttr::get(context, "inner_sym");
     nameAttr = StringAttr::get(context, "name");
+    nameKindAttr = StringAttr::get(context, "nameKind");
     sPortDirections = StringAttr::get(context, "portDirections");
     sPortNames = StringAttr::get(context, "portNames");
     sPortTypes = StringAttr::get(context, "portTypes");
@@ -288,8 +290,8 @@ struct AttrCache {
   AttrCache(const AttrCache &) = default;
 
   Type i64ty;
-  StringAttr innerSymAttr, nameAttr, sPortDirections, sPortNames, sPortTypes,
-      sPortSyms, sPortAnnotations, sEmpty;
+  StringAttr innerSymAttr, nameAttr, nameKindAttr, sPortDirections, sPortNames,
+      sPortTypes, sPortSyms, sPortAnnotations, sEmpty;
 };
 
 // The visitors all return true if the operation should be deleted, false if
@@ -592,6 +594,7 @@ bool TypeLoweringVisitor::lowerProducer(
   // Loop over the leaf aggregates.
   SmallString<16> loweredName;
   SmallString<16> loweredSymName;
+  auto nameKindAttr = op->getAttrOfType<NameKindEnumAttr>(cache.nameKindAttr);
 
   if (auto innerSymAttr = op->getAttrOfType<StringAttr>(cache.innerSymAttr))
     loweredSymName = innerSymAttr.getValue();
@@ -624,6 +627,8 @@ bool TypeLoweringVisitor::lowerProducer(
     // Carry over the name, if present.
     if (!loweredName.empty())
       newOp->setAttr(cache.nameAttr, StringAttr::get(context, loweredName));
+    if (nameKindAttr)
+      newOp->setAttr(cache.nameKindAttr, nameKindAttr);
     // Carry over the inner_sym name, if present.
     if (needsSym || op->hasAttr(cache.innerSymAttr)) {
       auto newName = StringAttr::get(context, loweredSymName);
@@ -1030,7 +1035,8 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
 /// Lower a wire op with a bundle to multiple non-bundled wires.
 bool TypeLoweringVisitor::visitDecl(WireOp op) {
   auto clone = [&](FlatBundleFieldEntry field, ArrayAttr attrs) -> Operation * {
-    return builder->create<WireOp>(field.type, "", attrs, StringAttr{});
+    return builder->create<WireOp>(field.type, "", NameKindEnum::DroppableName,
+                                   attrs, StringAttr{});
   };
   return lowerProducer(op, clone);
 }
@@ -1038,7 +1044,8 @@ bool TypeLoweringVisitor::visitDecl(WireOp op) {
 /// Lower a reg op with a bundle to multiple non-bundled regs.
 bool TypeLoweringVisitor::visitDecl(RegOp op) {
   auto clone = [&](FlatBundleFieldEntry field, ArrayAttr attrs) -> Operation * {
-    return builder->create<RegOp>(field.type, op.clockVal(), "", attrs,
+    return builder->create<RegOp>(field.type, op.clockVal(), "",
+                                  NameKindEnum::DroppableName, attrs,
                                   StringAttr{});
   };
   return lowerProducer(op, clone);
@@ -1048,9 +1055,9 @@ bool TypeLoweringVisitor::visitDecl(RegOp op) {
 bool TypeLoweringVisitor::visitDecl(RegResetOp op) {
   auto clone = [&](FlatBundleFieldEntry field, ArrayAttr attrs) -> Operation * {
     auto resetVal = getSubWhatever(op.resetValue(), field.index);
-    return builder->create<RegResetOp>(field.type, op.clockVal(),
-                                       op.resetSignal(), resetVal, "", attrs,
-                                       StringAttr{});
+    return builder->create<RegResetOp>(
+        field.type, op.clockVal(), op.resetSignal(), resetVal, "",
+        NameKindEnum::DroppableName, attrs, StringAttr{});
   };
   return lowerProducer(op, clone);
 }
@@ -1059,7 +1066,9 @@ bool TypeLoweringVisitor::visitDecl(RegResetOp op) {
 bool TypeLoweringVisitor::visitDecl(NodeOp op) {
   auto clone = [&](FlatBundleFieldEntry field, ArrayAttr attrs) -> Operation * {
     auto input = getSubWhatever(op.input(), field.index);
-    return builder->create<NodeOp>(field.type, input, "", attrs, StringAttr{});
+    return builder->create<NodeOp>(field.type, input, "",
+                                   NameKindEnum::DroppableName, attrs,
+                                   StringAttr{});
   };
   return lowerProducer(op, clone);
 }
@@ -1208,7 +1217,7 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
                             "sym" + op.nameAttr().getValue());
   // FIXME: annotation update
   auto newInstance = builder->create<InstanceOp>(
-      resultTypes, op.moduleNameAttr(), op.nameAttr(),
+      resultTypes, op.moduleNameAttr(), op.nameAttr(), op.nameKindAttr(),
       direction::packAttribute(context, newDirs),
       builder->getArrayAttr(newNames), op.annotations(),
       builder->getArrayAttr(newPortAnno), op.lowerToBindAttr(), sym);

@@ -11,6 +11,9 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_FIRRTL_OP_INTERFACES_H
+#define CIRCT_DIALECT_FIRRTL_OP_INTERFACES_H
+
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
@@ -82,3 +85,4 @@ public:
 } // namespace mlir
 
 #include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.h.inc"
+#endif // CIRCT_DIALECT_FIRRTL_OP_INTERFACES_H

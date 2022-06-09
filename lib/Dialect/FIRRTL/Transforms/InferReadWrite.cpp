@@ -124,7 +124,7 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
       auto rwMem = builder.create<MemOp>(
           resultTypes, memOp.readLatency(), memOp.writeLatency(), memOp.depth(),
           RUWAttr::Undefined, builder.getArrayAttr(resultNames),
-          memOp.nameAttr(), memOp.annotations(),
+          memOp.nameAttr(), memOp.nameKind(), memOp.annotations(),
           builder.getArrayAttr(portAnnotations), memOp.inner_symAttr(),
           memOp.groupIDAttr());
       auto rwPort = rwMem->getResult(0);
@@ -340,8 +340,8 @@ private:
       auto newMem = builder.create<MemOp>(
           resultTypes, memOp.readLatency(), memOp.writeLatency(), memOp.depth(),
           memOp.ruw(), memOp.portNames().getValue(), memOp.nameAttr(),
-          memOp.annotations().getValue(), memOp.portAnnotations().getValue(),
-          memOp.inner_symAttr());
+          memOp.nameKind(), memOp.annotations().getValue(),
+          memOp.portAnnotations().getValue(), memOp.inner_symAttr());
       // Now replace the result of old memory with the new one.
       for (auto portIt : llvm::enumerate(memOp.results())) {
         // Old result.

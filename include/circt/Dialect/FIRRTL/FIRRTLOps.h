@@ -34,7 +34,7 @@ namespace firrtl {
 bool isUselessName(circt::StringRef name);
 
 // works for regs, nodes, and wires
-bool isUselessName(Operation *op);
+bool hasDroppableName(Operation *op);
 
 /// Return true if the specified operation is a firrtl expression.
 bool isExpression(Operation *op);
