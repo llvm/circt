@@ -470,7 +470,7 @@ def DropName : Pass<"firrtl-drop-names", "firrtl::FModuleOp"> {
   let summary = "Drop interesting names";
   let description = [{
     This pass changes names of namable ops to droppable so that
-    we can disable name preservations. For example,
+    we can disable full name preservation. For example,
     before:
     ```mlir
     %a = firrtl.node interesting_name %input
