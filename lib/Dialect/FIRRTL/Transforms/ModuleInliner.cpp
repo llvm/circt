@@ -605,7 +605,8 @@ Inliner::mapPortsToWires(StringRef prefix, OpBuilder &b,
 
     auto wire = b.create<WireOp>(
         target.getLoc(), type, (prefix + portInfo[i].getName()).str(),
-        ArrayAttr::get(context, newAnnotations), newSym);
+        NameKindEnum::InterestingName, ArrayAttr::get(context, newAnnotations),
+        newSym);
     wires.push_back(wire);
     mapper.map(arg, wire.getResult());
   }

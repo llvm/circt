@@ -65,17 +65,9 @@ firrtl.circuit "NLARenaming" attributes {
       annotations = [
         {circt.nonlocal = @nla_DUTPassthrough, class = "nla_DUT_LeafWire"}]
     } : !firrtl.uint<1>
-    firrtl.instance sub sym @sub {
-      annotations = [
-        {circt.nonlocal = @nla_DUTRoot, class = "circt.nonlocal"},
-        {circt.nonlocal = @nla_DUTPassthrough, class = "circt.nonlocal"}]} @Sub()
+    firrtl.instance sub sym @sub @Sub()
   }
   firrtl.module @NLARenaming() {
-    %dut_in = firrtl.instance dut sym @dut {
-      annotations = [
-        {circt.nonlocal = @nla_DUTLeafModule, class = "circt.nonlocal"},
-        {circt.nonlocal = @nla_DUTLeafPort, class = "circt.nonlocal"},
-        {circt.nonlocal = @nla_DUTLeafWire, class = "circt.nonlocal"},
-        {circt.nonlocal = @nla_DUTPassthrough, class = "circt.nonlocal"}]} @DUT(in in: !firrtl.uint<1>)
+    %dut_in = firrtl.instance dut sym @dut @DUT(in in: !firrtl.uint<1>)
   }
 }

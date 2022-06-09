@@ -70,12 +70,41 @@ static void printCHIRRTLOp(OpAsmPrinter &p, Operation *op, DictionaryAttr attr,
   if (actualName == expectedName ||
       (expectedName.empty() && isdigit(actualName[0])))
     elides.push_back("name");
+  elides.push_back("nameKind");
 
   // Elide "annotations" if it is empty.
   if (op->getAttrOfType<ArrayAttr>("annotations").empty())
     elides.push_back("annotations");
 
   p.printOptionalAttrDict(op->getAttrs(), elides);
+}
+
+//===----------------------------------------------------------------------===//
+// NameKind Custom Directive
+//===----------------------------------------------------------------------===//
+
+static ParseResult parseNameKind(OpAsmParser &parser,
+                                 firrtl::NameKindEnumAttr &result) {
+  StringRef keyword;
+
+  if (!parser.parseOptionalKeyword(&keyword,
+                                   {"interesting_name", "droppable_name"})) {
+    auto kind = symbolizeNameKindEnum(keyword);
+    result = NameKindEnumAttr::get(parser.getContext(), kind.getValue());
+    return success();
+  }
+
+  // Default is interesting name.
+  result =
+      NameKindEnumAttr::get(parser.getContext(), NameKindEnum::InterestingName);
+  return success();
+}
+
+static void printNameKind(OpAsmPrinter &p, Operation *op,
+                          firrtl::NameKindEnumAttr attr,
+                          ArrayRef<StringRef> extraElides = {}) {
+  if (attr.getValue() != NameKindEnum::InterestingName)
+    p << stringifyNameKindEnum(attr.getValue()) << ' ';
 }
 
 //===----------------------------------------------------------------------===//
@@ -168,11 +197,11 @@ static void printCombMemOp(OpAsmPrinter &p, Operation *op,
 
 void CombMemOp::build(OpBuilder &builder, OperationState &result,
                       FIRRTLType elementType, uint64_t numElements,
-                      StringRef name, ArrayAttr annotations,
-                      StringAttr innerSym) {
+                      StringRef name, NameKindEnum nameKind,
+                      ArrayAttr annotations, StringAttr innerSym) {
   build(builder, result,
         CMemoryType::get(builder.getContext(), elementType, numElements), name,
-        annotations, innerSym);
+        nameKind, annotations, innerSym);
 }
 
 void CombMemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
@@ -195,11 +224,11 @@ static void printSeqMemOp(OpAsmPrinter &p, Operation *op, DictionaryAttr attr) {
 
 void SeqMemOp::build(OpBuilder &builder, OperationState &result,
                      FIRRTLType elementType, uint64_t numElements, RUWAttr ruw,
-                     StringRef name, ArrayAttr annotations,
-                     StringAttr innerSym) {
+                     StringRef name, NameKindEnum nameKind,
+                     ArrayAttr annotations, StringAttr innerSym) {
   build(builder, result,
         CMemoryType::get(builder.getContext(), elementType, numElements), ruw,
-        name, annotations, innerSym);
+        name, nameKind, annotations, innerSym);
 }
 
 void SeqMemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {

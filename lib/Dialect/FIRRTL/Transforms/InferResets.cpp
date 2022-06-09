@@ -1577,8 +1577,8 @@ LogicalResult InferResetsPass::implementAsyncReset(FModuleOp module,
                    << "- Promoting node to wire for move: " << nodeOp << "\n");
         ImplicitLocOpBuilder builder(nodeOp.getLoc(), nodeOp);
         auto wireOp = builder.create<WireOp>(
-            nodeOp.getType(), nodeOp.nameAttr(), nodeOp.annotationsAttr(),
-            nodeOp.inner_symAttr());
+            nodeOp.getType(), nodeOp.nameAttr(), nodeOp.nameKind(),
+            nodeOp.annotationsAttr(), nodeOp.inner_symAttr());
         builder.create<StrictConnectOp>(wireOp, nodeOp.input());
         nodeOp->replaceAllUsesWith(wireOp);
         nodeOp.erase();
@@ -1694,7 +1694,7 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
     auto zero = createZeroValue(builder, regOp.getType());
     auto newRegOp = builder.create<RegResetOp>(
         regOp.getType(), regOp.clockVal(), actualReset, zero, regOp.nameAttr(),
-        regOp.annotations(), regOp.inner_symAttr());
+        regOp.nameKindAttr(), regOp.annotations(), regOp.inner_symAttr());
     regOp.getResult().replaceAllUsesWith(newRegOp);
     regOp->erase();
     return;

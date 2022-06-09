@@ -105,13 +105,13 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.wire {name = "test-name", annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<4>
 
     // CHECK-NEXT: = sv.wire : !hw.inout<i2>
-    %_t_1 = firrtl.wire : !firrtl.uint<2>
+    %_t_1 = firrtl.wire droppable_name : !firrtl.uint<2>
 
     // CHECK-NEXT: = sv.wire  : !hw.inout<array<13xi1>>
-    %_t_2 = firrtl.wire : !firrtl.vector<uint<1>, 13>
+    %_t_2 = firrtl.wire droppable_name : !firrtl.vector<uint<1>, 13>
 
     // CHECK-NEXT: = sv.wire  : !hw.inout<array<13xi2>>
-    %_t_3 = firrtl.wire : !firrtl.vector<uint<2>, 13>
+    %_t_3 = firrtl.wire droppable_name : !firrtl.vector<uint<2>, 13>
 
     // CHECK-NEXT: = comb.extract [[CONCAT1]] from 3 : (i8) -> i5
     %8 = firrtl.bits %6 7 to 3 : (!firrtl.uint<8>) -> !firrtl.uint<5>
@@ -174,7 +174,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %n2 = firrtl.node %in2  {name = "n2", annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<2>
 
     // Nodes with no names are just dropped.
-    %22 = firrtl.node %in2 {name = ""} : !firrtl.uint<2>
+    %22 = firrtl.node droppable_name %in2 {name = ""} : !firrtl.uint<2>
 
     // CHECK-NEXT: [[WIRE:%n3]] = sv.wire sym @nodeSym : !hw.inout<i2>
     // CHECK-NEXT: sv.assign [[WIRE]], %in2 : i2

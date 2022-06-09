@@ -986,12 +986,8 @@ firrtl.circuit "DedupedPath" attributes {
        name = "MyView",
        type = "parent"},
       {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
-    firrtl.instance tile1 sym @tile1 {annotations = [
-      {circt.nonlocal = @nla_0,
-       class = "circt.nonlocal"}]} @Tile()
-    firrtl.instance tile2 sym @tile2 {annotations = [
-      {circt.nonlocal = @nla,
-       class = "circt.nonlocal"}]} @Tile()
+    firrtl.instance tile1 sym @tile1 @Tile()
+    firrtl.instance tile2 sym @tile2 @Tile()
     firrtl.instance MyView_companion  @MyView_companion()
   }
   firrtl.module @DedupedPath() {

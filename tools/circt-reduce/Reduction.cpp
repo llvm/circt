@@ -333,7 +333,8 @@ struct InstanceStubber : public Reduction {
       auto name = builder.getStringAttr(Twine(instOp.name()) + "_" +
                                         instOp.getPortNameStr(i));
       auto wire = builder.create<firrtl::WireOp>(
-          result.getType(), name, instOp.getPortAnnotation(i), StringAttr{});
+          result.getType(), name, firrtl::NameKindEnum::DroppableName,
+          instOp.getPortAnnotation(i), StringAttr{});
       invalidateOutputs(builder, wire, invalidCache,
                         instOp.getPortDirection(i) == firrtl::Direction::In);
       result.replaceAllUsesWith(wire);
@@ -375,7 +376,8 @@ struct MemoryStubber : public Reduction {
       auto name = builder.getStringAttr(Twine(memOp.name()) + "_" +
                                         memOp.getPortNameStr(i));
       auto wire = builder.create<firrtl::WireOp>(
-          result.getType(), name, memOp.getPortAnnotation(i), StringAttr{});
+          result.getType(), name, firrtl::NameKindEnum::DroppableName,
+          memOp.getPortAnnotation(i), StringAttr{});
       invalidateOutputs(builder, wire, invalidCache, true);
       result.replaceAllUsesWith(wire);
 

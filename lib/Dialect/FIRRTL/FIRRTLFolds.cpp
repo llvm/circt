@@ -90,15 +90,11 @@ bool circt::firrtl::isUselessName(StringRef name) {
   return name.startswith("_");
 }
 
-/// Return true if this is a useless temporary name produced by FIRRTL.  We
-/// drop these as they don't convey semantic meaning.
-bool circt::firrtl::isUselessName(Operation *op) {
-  if (auto wire = dyn_cast<WireOp>(op))
-    return isUselessName(wire.name());
-  if (auto node = dyn_cast<NodeOp>(op))
-    return isUselessName(node.name());
-  if (auto reg = dyn_cast<RegOp>(op))
-    return isUselessName(reg.name());
+/// Return true if the name is droppable. Note that this is different from
+/// `isUselessName` because non-useless names may be also droppable.
+bool circt::firrtl::hasDroppableName(Operation *op) {
+  if (auto namableOp = dyn_cast<firrtl::FNamableOp>(op))
+    return namableOp.hasDroppableName();
   return false;
 }
 
@@ -1483,7 +1479,7 @@ static LogicalResult canonicalizeSingleSetConnect(StrictConnectOp op,
     }
   }
 
-  if (isUselessName(connectedDecl)) {
+  if (hasDroppableName(connectedDecl)) {
     // Replace all things *using* the decl with the constant/port, and
     // remove the declaration.
     replaceOpAndCopyName(rewriter, connectedDecl, replacement);
@@ -1638,7 +1634,7 @@ struct FoldNodeName : public mlir::RewritePattern {
                                 PatternRewriter &rewriter) const override {
     auto node = cast<NodeOp>(op);
     auto name = node.nameAttr();
-    if (!isUselessName(name.getValue()) || node.inner_sym() ||
+    if (!node.hasDroppableName() || node.inner_sym() ||
         !node.annotations().empty())
       return failure();
     auto *expr = node.input().getDefiningOp();
@@ -1807,7 +1803,7 @@ static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
   if (!constReg)
     replaceOpWithNewOpAndCopyName<RegResetOp>(
         rewriter, reg, reg.getType(), reg.clockVal(), mux.sel(), mux.high(),
-        reg.name(), reg.annotations(), reg.inner_symAttr());
+        reg.name(), reg.nameKind(), reg.annotations(), reg.inner_symAttr());
   auto pt = rewriter.saveInsertionPoint();
   rewriter.setInsertionPoint(con);
   replaceOpWithNewOpAndCopyName<ConnectOp>(rewriter, con, con.dest(),
