@@ -100,9 +100,8 @@ struct CircuitTargetCache {
   /// Returned reference may become invalidated by future calls.
   const AnnoTargetCache &getOrCreateCacheFor(FModuleLike module) {
     auto it = targetCaches.find(module);
-    if (it == targetCaches.end()) {
+    if (it == targetCaches.end())
       it = targetCaches.try_emplace(module, module).first;
-    }
     return it->second;
   }
 
