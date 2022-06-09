@@ -42,17 +42,15 @@ void circt::python::populateDialectHWSubmodule(py::module &m) {
       .def_property_readonly(
           "size", [](MlirType self) { return hwArrayTypeGetSize(self); });
 
-  mlir_type_subclass(m, "IntType", hwTypeIsAIntType)
+  mlir_type_subclass(m, "ParamIntType", hwTypeIsAIntType)
       .def_classmethod(
           "get_from_param",
-          [](py::object cls, MlirContext ctx, py::str param) {
-            auto paramStr = param.cast<std::string>();
-            auto paramStrRef =
-                mlirStringRefCreate(paramStr.data(), paramStr.size());
-            return cls(hwIntTypeGet(mlirIdentifierGet(ctx, paramStrRef)));
+          [](py::object cls, MlirContext ctx, MlirAttribute param) {
+            return cls(hwParamIntTypeGet(param));
           })
-      .def_property_readonly(
-          "width", [](MlirType self) { return hwIntTypeGetWidthAttr(self); });
+      .def_property_readonly("width", [](MlirType self) {
+        return hwParamIntTypeGetWidthAttr(self);
+      });
 
   mlir_type_subclass(m, "StructType", hwTypeIsAStructType)
       .def_classmethod(
