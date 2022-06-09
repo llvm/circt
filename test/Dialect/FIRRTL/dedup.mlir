@@ -80,6 +80,32 @@ firrtl.circuit "PrimOps" {
   }
 }
 
+// Check that when operations are recursively merged.
+// CHECK-LABEL: firrtl.circuit "WhenOps"
+firrtl.circuit "WhenOps" {
+  // CHECK: firrtl.module @WhenOps0
+  firrtl.module @WhenOps0(in %p : !firrtl.uint<1>) {
+    // CHECK: firrtl.when %p {
+    // CHECK:  %w = firrtl.wire : !firrtl.uint<8>
+    // CHECK: }
+    firrtl.when %p {
+      %w = firrtl.wire : !firrtl.uint<8>
+    }
+  }
+  // CHECK-NOT: firrtl.module @PrimOps1
+  firrtl.module @WhenOps1(in %p : !firrtl.uint<1>) {
+    firrtl.when %p {
+      %w = firrtl.wire : !firrtl.uint<8>
+    }
+  }
+  firrtl.module @WhenOps() {
+    // CHECK: firrtl.instance whenops0 @WhenOps0
+    // CHECK: firrtl.instance whenops1 @WhenOps0
+    %whenops0 = firrtl.instance whenops0 @WhenOps0(in p : !firrtl.uint<1>)
+    %whenops1 = firrtl.instance whenops1 @WhenOps1(in p : !firrtl.uint<1>)
+  }
+}
+
 // CHECK-LABEL: firrtl.circuit "Annotations"
 firrtl.circuit "Annotations" {
   // CHECK: firrtl.hierpath [[NLA3:@nla.*]] [@Annotations::@annotations1, @Annotations0]
