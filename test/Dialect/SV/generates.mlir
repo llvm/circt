@@ -76,5 +76,18 @@ hw.module @CaseNoDefault<NUM : i8> () -> () {
 // CHECK-LABEL: hw.module @CaseNoDefault
 // CHECK:         sv.generate "bar" : {
 // CHECK:           sv.generate.case #hw.param.decl.ref<"NUM">[
-// CHECK:             case (0, "bar0") { }
-// CHECK:           ]}
+// CHECK:             case (0 : i64, "bar0") {
+// CHECK:             }
+// CHECK:           ]
+
+// SV-LABEL: module CaseNoDefault
+// SV:         #(parameter [7:0] NUM) ();
+// SV:         generate
+// SV:         begin: bar
+// SV:             case (NUM)
+// SV:               64'd0: begin: bar0
+// SV:               end: bar0
+// SV:             endcase
+// SV:         end: bar
+// SV:         endgenerate
+// SV:       endmodule
