@@ -15,7 +15,7 @@ include "circt/Types.td"
 
 def CircuitOp : FIRRTLOp<"circuit",
       [IsolatedFromAbove, SymbolTable, SingleBlock, NoTerminator,
-       NoRegionArguments]> {
+       NoRegionArguments, InnerRefNamespace]> {
   let summary = "FIRRTL Circuit";
   let description = [{
     The "firrtl.circuit" operation represents an overall Verilog circuit,
@@ -191,7 +191,7 @@ def FMemModuleOp : FIRRTLOp<"memmodule",
 
 def HierPathOp : FIRRTLOp<"hierpath",
       [IsolatedFromAbove, Symbol,
-       DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+       DeclareOpInterfaceMethods<InnerRefUserOpInterface>,
        HasParent<"CircuitOp">]> {
   let summary = "Hierarchical path specification";
   let description = [{
