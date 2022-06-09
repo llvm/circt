@@ -197,7 +197,7 @@ are run in this order:
    "prettiness", and should always be used in practice.
 2) The mandatory [`PrepareForEmission` logic] that is built into the
    `exportVerilog` function, and is thus mandatory.
-3) The core [`ExportVerilog`](https://github.com/llvm/circt/blob/main/lib/Translation/ExportVerilog/ExportVerilog.cpp) logic, which handles printing out
+3) The core [`ExportVerilog`](https://github.com/llvm/circt/blob/main/lib/Conversion/ExportVerilog/ExportVerilog.cpp) logic, which handles printing out
    of Verilog source code.
 
 The first two of these are highly parameterized on `LoweringOptions`, and we're
