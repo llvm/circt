@@ -63,8 +63,8 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
         errorHandler("expected integer source width");
         emittedLineLength = DEFAULT_LINE_LENGTH;
       }
-    } else if (option == "explicitBitcastAddMul") {
-      explicitBitcastAddMul = true;
+    } else if (option == "explicitBitcast") {
+      explicitBitcast = true;
     } else if (option == "emitReplicatedOpsToHeader") {
       emitReplicatedOpsToHeader = true;
     } else if (option.consume_front("maximumNumberOfTermsPerExpression=")) {
@@ -107,8 +107,8 @@ std::string LoweringOptions::toString() const {
     options += "disallowLocalVariables,";
   if (enforceVerifLabels)
     options += "verifLabels,";
-  if (explicitBitcastAddMul)
-    options += "explicitBitcastAddMul,";
+  if (explicitBitcast)
+    options += "explicitBitcast,";
   if (emitReplicatedOpsToHeader)
     options += "emitReplicatedOpsToHeader,";
   if (locationInfoStyle == LocationInfoStyle::WrapInAtSquareBracket)
@@ -179,7 +179,7 @@ struct LoweringCLOptions {
           "noAlwaysComb, exprInEventControl, disallowPackedArrays, "
           "disallowLocalVariables, verifLabels, emittedLineLength=<n>, "
           "maximumNumberOfTermsPerExpression=<n>, "
-          "maximumNumberOfTermsInConcat=<n>, explicitBitcastAddMul, "
+          "maximumNumberOfTermsInConcat=<n>, explicitBitcast, "
           "emitReplicatedOpsToHeader, "
           "locationInfoStyle={plain,wrapInAtSquareBracket}, "
           "disallowPortDeclSharing, printDebugInfo"),

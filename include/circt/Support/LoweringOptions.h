@@ -97,8 +97,7 @@ struct LoweringOptions {
   unsigned emittedLineLength = DEFAULT_LINE_LENGTH;
 
   /// Add an explicit bitcast for avoiding bitwidth mismatch LINT errors.
-  /// TODO: Change the name of option since it is not limit to add/mul anymore.
-  bool explicitBitcastAddMul = false;
+  bool explicitBitcast = false;
 
   /// If true, replicated ops are emitted to a header file.
   bool emitReplicatedOpsToHeader = false;

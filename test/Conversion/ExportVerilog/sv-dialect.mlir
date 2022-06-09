@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -export-verilog -verify-diagnostics --lowering-options=exprInEventControl,explicitBitcastAddMul,maximumNumberOfTermsInConcat=10 | FileCheck %s --strict-whitespace
+// RUN: circt-opt %s -export-verilog -verify-diagnostics --lowering-options=exprInEventControl,explicitBitcast,maximumNumberOfTermsInConcat=10 | FileCheck %s --strict-whitespace
 
 // CHECK-LABEL: module M1
 // CHECK-NEXT:    #(parameter [41:0] param1) (
@@ -120,7 +120,7 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
       %sub_inner = comb.sub %val, %c42 : i8
       %sub = comb.sub %sub_inner, %c42 : i8
 
-      // CHECK-NEXT: $fwrite(32'h80000002, "Inlined! %x %x\n", 8'(val + 8'h2A), 8'(val - 8'h2A - 8'h2A));
+      // CHECK-NEXT: $fwrite(32'h80000002, "Inlined! %x %x\n", 8'(val + 8'h2A), 8'(8'(val - 8'h2A) - 8'h2A));
       sv.fwrite %fd, "Inlined! %x %x\n"(%add, %sub) : i8, i8
     }
 
