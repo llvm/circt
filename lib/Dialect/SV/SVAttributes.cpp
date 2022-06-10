@@ -25,7 +25,6 @@ using namespace circt::sv;
 #include "circt/Dialect/SV/SVAttributes.cpp.inc"
 
 #include "circt/Dialect/SV/SVEnums.cpp.inc"
-#include "circt/Dialect/SV/SVStructs.cpp.inc"
 
 void SVDialect::registerAttributes() {
   addAttributes<
