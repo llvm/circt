@@ -51,8 +51,6 @@ LogicalResult BackedgeBuilder::clearOrEmitError() {
 
 void BackedgeBuilder::abandon() { edges.clear(); }
 
-Backedge::operator mlir::Value() { return value; }
-
 BackedgeBuilder::BackedgeBuilder(OpBuilder &builder, Location loc)
     : builder(builder), rewriter(nullptr), loc(loc) {}
 BackedgeBuilder::BackedgeBuilder(PatternRewriter &rewriter, Location loc)
