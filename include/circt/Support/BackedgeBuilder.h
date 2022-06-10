@@ -53,9 +53,19 @@ public:
   BackedgeBuilder(mlir::OpBuilder &builder, mlir::Location loc);
   BackedgeBuilder(mlir::PatternRewriter &rewriter, mlir::Location loc);
   ~BackedgeBuilder();
+
   /// Create a typed backedge. If no location is provided, the one passed to the
   /// constructor will be used.
   Backedge get(mlir::Type resultType, mlir::LocationAttr optionalLoc = {});
+
+  /// Clear the backedges, erasing any remaining cursor ops. Returns `failure`
+  /// and emits diagnostic messages if a backedge is still active.
+  mlir::LogicalResult clearOrEmitError();
+
+  /// Abandon the backedges, suppressing any diagnostics if they are still
+  /// active upon destruction of the backedge builder. Also, any currently
+  /// existing cursor ops will be abandoned.
+  void abandon();
 
 private:
   mlir::OpBuilder &builder;
