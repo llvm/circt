@@ -115,7 +115,7 @@ circuit test:
     input clock: Clock
     input rAddr: UInt<4>
     input rEn: UInt<1>
-    output rData: UInt<8>
+    output rData: UInt<8>[3]
     input wMask: UInt<1>
     input wData: UInt<8>
 
@@ -124,7 +124,7 @@ circuit test:
     h1.clock <= clock
     h1.rAddr <= rAddr
     h1.rEn <= rEn
-    rData <= h1.rData
+    rData[0] <= h1.rData
     h1.wMask <= wMask
     h1.wData <= wData
 
@@ -132,7 +132,7 @@ circuit test:
     h2.clock <= clock
     h2.rAddr <= rAddr
     h2.rEn <= rEn
-    rData <= h2.rData
+    rData[1] <= h2.rData
     h2.wMask <= wMask
     h2.wData <= wData
 
@@ -140,7 +140,7 @@ circuit test:
     m2.clock <= clock
     m2.rAddr <= rAddr
     m2.rEn <= rEn
-    rData <= m2.rData
+    rData[2] <= m2.rData
     m2.wMask <= wMask
     m2.wData <= wData
 

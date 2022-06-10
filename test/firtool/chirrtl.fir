@@ -1,4 +1,4 @@
-; RUN: firtool --repl-seq-mem --repl-seq-mem-file="dummy" -remove-unused-ports=false -verilog %s | FileCheck %s
+; RUN: firtool --repl-seq-mem --repl-seq-mem-file="dummy" -imdce=false -verilog %s | FileCheck %s
 
 ; This is testing that CHIRRTL enable inference is working as intended.  If the
 ; no-op wires and nodes are not optimized away, then both ports should always

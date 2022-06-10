@@ -100,6 +100,8 @@ std::unique_ptr<mlir::Pass> createDropNamesPass();
 
 std::unique_ptr<mlir::Pass> createExtractInstancesPass();
 
+std::unique_ptr<mlir::Pass> createIMDCEPass();
+
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/FIRRTL/Passes.h.inc"
