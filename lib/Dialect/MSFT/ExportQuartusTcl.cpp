@@ -46,7 +46,9 @@ LogicalResult TclEmitter::populate() {
   populated = true;
 
   // Bin any operations we may need to emit based on the root module in the
-  // instance hierarchy path.
+  // instance hierarchy path and the potential instance name.
+
+  // Look in InstanceHierarchyOps to get the instance named ones.
   for (auto hier : topLevel.getOps<InstanceHierarchyOp>()) {
     Operation *mod = topLevelSymbols.getDefinition(hier.topModuleRefAttr());
     auto &tclOps = tclOpsForModInstance[mod][hier.instNameAttr()];
@@ -104,14 +106,16 @@ struct TclOutputState {
   void emitPath(hw::GlobalRefOp ref, Optional<StringRef> subpath);
   void emitInnerRefPart(hw::InnerRefAttr innerRef);
 
-  GlobalRefOp getRefOp(DynInstDataOpInterface refOp) {
+  /// Get the GlobalRefOp to which the given operation is pointing. Add it to
+  /// the set of used global refs.
+  GlobalRefOp getRefOp(DynInstDataOpInterface op) {
     auto ref = dyn_cast_or_null<hw::GlobalRefOp>(
-        emitter.getDefinition(refOp.getGlobalRefSym()));
-    if (!ref)
-      refOp.emitOpError("could not find hw.globalRef named ")
-          << refOp.getGlobalRefSym();
-    else
+        emitter.getDefinition(op.getGlobalRefSym()));
+    if (ref)
       emitter.usedRef(ref);
+    else
+      op.emitOpError("could not find hw.globalRef named ")
+          << op.getGlobalRefSym();
     return ref;
   }
 };
@@ -284,17 +288,20 @@ LogicalResult TclEmitter::emit(Operation *hwMod, StringRef outputFile) {
   std::string s;
   llvm::raw_string_ostream os(s);
   TclOutputState state(*this, os);
+
+  // Iterate through all the "instances" for 'hwMod' and produce a tcl proc for
+  // each one.
   for (auto tclOpsForInstancesKV : tclOpsForModInstance[hwMod]) {
-    StringAttr instName = tclOpsForInstancesKV.getFirst();
+    StringAttr instName = tclOpsForInstancesKV.first;
     os << "proc {{" << state.symbolRefs.size() << "}}";
     if (instName)
       os << '_' << instName.getValue();
     os << "_config { parent } {\n";
     state.symbolRefs.push_back(SymbolRefAttr::get(hwMod));
 
-    // Loop through the ops relevant to the specified root module.
+    // Loop through the ops relevant to the specified root module "instance".
     LogicalResult ret = success();
-    auto &tclOpsForMod = tclOpsForInstancesKV.getSecond();
+    auto &tclOpsForMod = tclOpsForInstancesKV.second;
     for (Operation *tclOp : tclOpsForMod) {
       LogicalResult rc =
           TypeSwitch<Operation *, LogicalResult>(tclOp)

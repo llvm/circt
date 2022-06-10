@@ -16,6 +16,8 @@
 #include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/MSFT/MSFTOpInterfaces.h"
 #include "circt/Support/LLVM.h"
+
+#include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/StringRef.h"
 
 namespace circt {
@@ -38,8 +40,11 @@ private:
 
   bool populated;
   hw::HWSymbolCache topLevelSymbols;
+
+  /// Map Module operations to their top-level "instance" names. Map those
+  /// "instance" names to the lowered ops which get directly emitted as tcl.
   DenseMap<Operation *,
-           DenseMap<StringAttr, SmallVector<DynInstDataOpInterface, 0>>>
+           llvm::MapVector<StringAttr, SmallVector<DynInstDataOpInterface, 0>>>
       tclOpsForModInstance;
   DenseSet<hw::GlobalRefOp> refsUsed;
 

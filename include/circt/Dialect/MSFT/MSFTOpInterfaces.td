@@ -68,21 +68,6 @@ def DynInstDataOpInterface : OpInterface<"DynInstDataOpInterface"> {
             ref.namepath()[0].cast<hw::InnerRefAttr>().getModule());
         return symCache.getDefinition(modSym);
       }]
-    >,
-    InterfaceMethod<
-      /*desc=*/[{
-        Get the top level instance name, if specified.
-      }],
-      /*retTy=*/"StringAttr",
-      /*methodName=*/"getTopInstanceName",
-      /*args=*/(ins),
-      /*methodBody=*/[{}],
-      /*defaultImplementation=*/[{
-        auto hierOp = $_op->template getParentOfType<InstanceHierarchyOp>();
-        if (!hierOp)
-          return {};
-        return hierOp.instNameAttr();
-      }]
     >
   ];
 }
