@@ -36,6 +36,16 @@ def HWModuleLike : OpInterface<"HWModuleLike"> {
     "::mlir::StringAttr", "moduleNameAttr", (ins),
     /*methodBody=*/[{}],
     /*defaultImplementation=*/[{ return $_op.getNameAttr(); }]>,
+
+    InterfaceMethod<"Get the InstanceLike with symbol name",
+    "circt::hw::HWInstanceLike", "getInstance", (ins "mlir::StringAttr": $name),
+    /*methodBody=*/[{}],
+    /*defaultImplementation=*/[{
+    for (auto i : $_op.template getOps<HWInstanceLike>())
+      if (i.instanceName() == name)
+        return i;
+    return {};
+    }]>,
   ];
 
   let verify = [{
