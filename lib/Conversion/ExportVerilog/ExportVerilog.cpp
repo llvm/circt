@@ -590,7 +590,14 @@ static bool isExpressionUnableToInline(Operation *op) {
 
 /// Return true if this expression should be emitted inline into any statement
 /// that uses it.
-static bool isExpressionEmittedInline(Operation *op) {
+static bool isExpressionEmittedInline(Operation *op,
+                                      const LoweringOptions &options) {
+  // If `spillWiresForNamehints` is enabled and the op has a namehint, spill a
+  // temporary wire for the op.
+  if (options.spillWiresForNamehints &&
+      op->hasAttrOfType<StringAttr>("sv.namehint"))
+    return false;
+
   // Never create a temporary which is only going to be assigned to an output
   // port.
   if (op->hasOneUse() && isa<hw::OutputOp>(*op->getUsers().begin()))
@@ -1763,7 +1770,7 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
   if (auto rhsICmp = op->getOperand(1).getDefiningOp<ICmpOp>()) {
     if ((rhsICmp.isEqualAllOnes() && isa<AndOp>(op)) ||
         (rhsICmp.isNotEqualZero() && isa<OrOp>(op))) {
-      if (isExpressionEmittedInline(rhsICmp)) {
+      if (isExpressionEmittedInline(rhsICmp, state.options)) {
         os << '(';
         emitRhsParentheses = true;
         rhsPrec = LowestPrecedence;
@@ -2345,7 +2352,8 @@ void NameCollector::collectNames(Block &block) {
     }
 
     bool isExpr = isVerilogExpression(&op);
-    bool isInlineExpr = isExpr && isExpressionEmittedInline(&op);
+    bool isInlineExpr =
+        isExpr && isExpressionEmittedInline(&op, moduleEmitter.state.options);
     for (auto result : op.getResults()) {
       // If this is an expression emitted inline or unused, it doesn't need a
       // name.
@@ -3595,7 +3603,7 @@ isExpressionEmittedInlineIntoProceduralDeclaration(Operation *op,
       continue; // Ports are always safe to reference.
 
     // If this is an internal node in the expression tree, process its operands.
-    if (isExpressionEmittedInline(expr)) {
+    if (isExpressionEmittedInline(expr, stmtEmitter.state.options)) {
       exprsToScan.append(expr->getOperands().begin(),
                          expr->getOperands().end());
       continue;

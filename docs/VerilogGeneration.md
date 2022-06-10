@@ -91,6 +91,9 @@ The current set of "style" Lowering Options is:
    declaration when possible.
  * `printDebugInfo` (default=`false`). If true, emit additional debug information
    (e.g. inner symbols) into comments.
+ * `spillWiresForNamehints` (default=`false`). If true, expressions with
+   `sv.namehint` attributes are spilled to wires even when it is not necessary
+   to create temporary wires.
 
 ### Specifying `LoweringOptions` in a front-end HDL tool
 

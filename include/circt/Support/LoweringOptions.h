@@ -115,6 +115,9 @@ struct LoweringOptions {
 
   /// Print debug info.
   bool printDebugInfo = false;
+
+  /// If true, expressions with "sv.namehint" are spilled to wires.
+  bool spillWiresForNamehints = false;
 };
 
 /// Register commandline options for the verilog emitter.
