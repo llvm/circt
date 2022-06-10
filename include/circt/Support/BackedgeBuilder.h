@@ -84,7 +84,10 @@ class Backedge {
   Backedge(mlir::Operation *op);
 
 public:
-  operator mlir::Value();
+  Backedge() {}
+
+  explicit operator bool() const { return !!value; }
+  operator mlir::Value() const { return value; }
   void setValue(mlir::Value);
 
 private:
