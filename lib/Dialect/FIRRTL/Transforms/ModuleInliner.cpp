@@ -16,7 +16,6 @@
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
-#include "circt/Dialect/FIRRTL/NLATable.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
@@ -131,17 +130,17 @@ public:
   /// MutableNLA in any way after calling this method may result in crashes.
   /// (This is done to save unnecessary state cleanup of a pass-private
   /// utility.)
-  HierPathOp applyUpdates(NLATable &nlaTable) {
+  HierPathOp applyUpdates() {
     // Delete an NLA which is either dead or has been made local.
     if (isLocal() || isDead()) {
-      nlaTable.erase(nla);
       nla.erase();
       return nullptr;
     }
 
     // The NLA was never updated, just return the NLA and do not writeback
     // anything.
-    if (inlinedSymbols.all() && newTops.empty() && flattenPoint == -1)
+    if (inlinedSymbols.all() && newTops.empty() && flattenPoint == -1 &&
+        renames.empty())
       return nla;
 
     // The NLA has updates.  Generate a new NLA with the same symbol and delete
@@ -196,8 +195,7 @@ public:
       last = writeBack(nla.root(), nla.getNameAttr());
     for (auto root : newTops)
       last = writeBack(root.getModule(), root.getName());
-    nlaTable.addNLA(last);
-    nlaTable.erase(nla);
+
     nla.erase();
     return last;
   }
@@ -407,7 +405,7 @@ namespace {
 class Inliner {
 public:
   /// Initialize the inliner to run on this circuit.
-  Inliner(CircuitOp circuit, NLATable &nlaTable);
+  Inliner(CircuitOp circuit);
 
   /// Run the inliner.
   void run();
@@ -488,7 +486,10 @@ private:
   /// current instance or not.
   SmallVector<std::pair<Attribute, Attribute>> currentPath;
 
-  NLATable &nlaTable;
+  /// Record the HierPathOps that each InstanceOp participates in. This is a map
+  /// from the InnerRefAttr to the list of HierPathOp names. The InnerRefAttr
+  /// corresponds to the InstanceOp.
+  DenseMap<InnerRefAttr, SmallVector<StringAttr>> instOpHierPaths;
 };
 } // namespace
 
@@ -530,6 +531,14 @@ void Inliner::rename(StringRef prefix, Operation *op,
                                           (prefix + nameAttr.getValue())));
   }
 
+  // Record the list of HierPathOps that the original op participates in, so
+  // that they can be moved to the op after renaming.
+  StringAttr instanceParent, oldInstSym;
+  if (auto inst = dyn_cast<InstanceOp>(op))
+    if (auto instSym = inst.inner_symAttr()) {
+      instanceParent = inst->getParentOfType<FModuleOp>().getNameAttr();
+      oldInstSym = instSym;
+    }
   // If the operation has an inner symbol, ensure that it is unique.  Record
   // renames for any NLAs that this participates in if the symbol was renamed.
   if (auto sym = op->getAttrOfType<StringAttr>("inner_sym")) {
@@ -547,10 +556,24 @@ void Inliner::rename(StringRef prefix, Operation *op,
         // This matters when the same module is inlined twice and the NLA only
         // applies to one of them.
         auto &mnla = nlaMap[sym.getAttr()];
-        if (!anno.isClass("circt.nonlocal") &&
-            !doesNLAMatchCurrentPath(mnla.getNLA()))
+        if (!doesNLAMatchCurrentPath(mnla.getNLA()))
           continue;
         mnla.setInnerSym(moduleNamespace.module.moduleNameAttr(), newSymAttr);
+      }
+      if (instanceParent) {
+        // The InstanceOp is renamed, so move the HierPathOps to the new
+        // InnerRefAttr.
+        auto newInnerRef = InnerRefAttr::get(instanceParent, newSymAttr);
+        auto oldInnerRef = InnerRefAttr::get(instanceParent, oldInstSym);
+        instOpHierPaths[newInnerRef] = std::move(instOpHierPaths[oldInnerRef]);
+        // Update the innerSym for all the affected HierPathOps.
+        for (auto nla : instOpHierPaths[newInnerRef]) {
+          if (!nlaMap.count(nla))
+            continue;
+          auto &mnla = nlaMap[nla];
+          mnla.setInnerSym(moduleNamespace.module.moduleNameAttr(), newSymAttr);
+        }
+        instOpHierPaths.erase(oldInnerRef);
       }
     }
   }
@@ -627,16 +650,6 @@ void Inliner::cloneAndRename(
     // If the annotation is not non-local, it will apply to all inlined
     // instances of this op. Add it to the cloned op.
     if (auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal")) {
-      // If this is a bread-crumb, the NLA may have been renamed.  This only
-      // matters for InstanceOps.
-      if (anno.isClass("circt.nonlocal")) {
-        if (auto newSym = symbolRenames.lookup(sym.getAttr())) {
-          auto symRef = FlatSymbolRefAttr::get(newSym.cast<StringAttr>());
-          anno.setMember("circt.nonlocal", symRef);
-        }
-        newAnnotations.push_back(anno);
-        continue;
-      }
       // Retrieve the corresponding NLA.
       auto &mnla = nlaMap[sym.getAttr()];
       // If the NLA does not match the path we don't want to copy it over.
@@ -652,7 +665,28 @@ void Inliner::cloneAndRename(
 
   // Clone and rename.
   auto *newOp = b.clone(op, mapper);
+  if (auto instance = dyn_cast<InstanceOp>(&op))
+    if (auto instSym = instance.inner_symAttr()) {
+      auto oldInnerRef = InnerRefAttr::get(
+          instance->getParentOfType<FModuleOp>().getNameAttr(), instSym);
+      auto newInnerRef =
+          InnerRefAttr::get(newOp->getParentOfType<FModuleOp>().getNameAttr(),
+                            cast<InstanceOp>(newOp).inner_symAttr());
+      instOpHierPaths[newInnerRef] = instOpHierPaths[oldInnerRef];
+    }
   rename(prefix, newOp, moduleNamespace);
+  if (isa<InstanceOp>(&op)) {
+    auto innerRef =
+        InnerRefAttr::get(newOp->getParentOfType<FModuleOp>().getNameAttr(),
+                          cast<InstanceOp>(newOp).inner_symAttr());
+    SmallVector<StringAttr> &nlaList = instOpHierPaths[innerRef];
+    // Now rename the Updated HierPathOps that this InstanceOp participates in.
+    for (auto en : llvm::enumerate(nlaList)) {
+      auto oldNLA = en.value();
+      if (auto newSym = symbolRenames.lookup(oldNLA))
+        nlaList[en.index()] = newSym.cast<StringAttr>();
+    }
+  }
   // We want to avoid attaching an empty annotation array on to an op that
   // never had an annotation array in the first place.
   if (!newAnnotations.empty() || !oldAnnotations.empty())
@@ -729,18 +763,15 @@ void Inliner::flattenInstances(FModuleOp module) {
       liveModules.insert(targetModule);
       continue;
     }
-
-    // Preorder update of any non-local annotations this instance participates
-    // in.  This needs to happen _before_ visiting modules so that internal
-    // non-local annotations can be deleted if they are now local.
-    DenseSet<HierPathOp> instNLAs;
-    // To estimate the NLAs that this instance participates in, get the NLAs
-    // that are common between the parent module and the target module. This
-    // computes the set of NLAs that an instance participates in, instead of
-    // recording them with the instance op in the IR.
-    nlaTable.commonNLAs(moduleName, target.getNameAttr(), instNLAs);
-    for (auto targetNLA : instNLAs)
-      nlaMap[targetNLA.sym_nameAttr()].flattenModule(target);
+    if (auto instSym = instance.inner_symAttr()) {
+      auto innerRef = InnerRefAttr::get(moduleName, instSym);
+      // Preorder update of any non-local annotations this instance participates
+      // in.  This needs to happen _before_ visiting modules so that internal
+      // non-local annotations can be deleted if they are now local.
+      for (auto targetNLA : instOpHierPaths[innerRef]) {
+        nlaMap[targetNLA].flattenModule(target);
+      }
+    }
 
     // Add any NLAs which start at this instance to the localSymbols set.
     // Anything in this set will be made local during the recursive flattenInto
@@ -801,18 +832,18 @@ void Inliner::inlineInto(StringRef prefix, OpBuilder &b,
       continue;
     }
 
-    // Preorder update of any non-local annotations this instance participates
-    // in.  This needs ot happen _before_ visiting modules so that internal
-    // non-local annotations can be deleted if they are now local.
     auto toBeFlattened = shouldFlatten(target);
-    DenseSet<HierPathOp> instNLAs;
-    nlaTable.commonNLAs(moduleName, target.getNameAttr(), instNLAs);
-    for (auto targetNLA : instNLAs) {
-      auto sym = targetNLA.sym_nameAttr();
-      if (toBeFlattened)
-        nlaMap[sym].flattenModule(target);
-      else
-        nlaMap[sym].inlineModule(target);
+    if (auto instSym = instance.inner_symAttr()) {
+      auto innerRef = InnerRefAttr::get(moduleName, instSym);
+      // Preorder update of any non-local annotations this instance participates
+      // in.  This needs ot happen _before_ visiting modules so that internal
+      // non-local annotations can be deleted if they are now local.
+      for (auto sym : instOpHierPaths[innerRef]) {
+        if (toBeFlattened)
+          nlaMap[sym].flattenModule(target);
+        else
+          nlaMap[sym].inlineModule(target);
+      }
     }
 
     currentPath.emplace_back(moduleName, instance.inner_symAttr());
@@ -877,18 +908,18 @@ void Inliner::inlineInstances(FModuleOp parent) {
       continue;
     }
 
-    // Preorder update of any non-local annotations this instance participates
-    // in.  This needs ot happen _before_ visiting modules so that internal
-    // non-local annotations can be deleted if they are now local.
     auto toBeFlattened = shouldFlatten(target);
-    DenseSet<HierPathOp> instNLAs;
-    nlaTable.commonNLAs(moduleName, target.getNameAttr(), instNLAs);
-    for (auto targetNLA : instNLAs) {
-      auto sym = targetNLA.sym_nameAttr();
-      if (toBeFlattened)
-        nlaMap[sym].flattenModule(target);
-      else
-        nlaMap[sym].inlineModule(target);
+    if (auto instSym = instance.inner_symAttr()) {
+      auto innerRef = InnerRefAttr::get(moduleName, instSym);
+      // Preorder update of any non-local annotations this instance participates
+      // in.  This needs ot happen _before_ visiting modules so that internal
+      // non-local annotations can be deleted if they are now local.
+      for (auto sym : instOpHierPaths[innerRef]) {
+        if (toBeFlattened)
+          nlaMap[sym].flattenModule(target);
+        else
+          nlaMap[sym].inlineModule(target);
+      }
     }
 
     currentPath.emplace_back(moduleName, instance.inner_symAttr());
@@ -929,9 +960,8 @@ void Inliner::inlineInstances(FModuleOp parent) {
   }
 }
 
-Inliner::Inliner(CircuitOp circuit, NLATable &nlaTable)
-    : circuit(circuit), context(circuit.getContext()), symbolTable(circuit),
-      nlaTable(nlaTable) {}
+Inliner::Inliner(CircuitOp circuit)
+    : circuit(circuit), context(circuit.getContext()), symbolTable(circuit) {}
 
 void Inliner::run() {
   CircuitNamespace circuitNamespace(circuit);
@@ -940,6 +970,9 @@ void Inliner::run() {
     auto mnla = MutableNLA(nla, &circuitNamespace);
     nlaMap.insert({nla.sym_nameAttr(), mnla});
     rootMap[mnla.getNLA().root()].push_back(nla.sym_nameAttr());
+    for (auto p : nla.namepath())
+      if (auto ref = p.dyn_cast<InnerRefAttr>())
+        instOpHierPaths[ref].push_back(nla.sym_nameAttr());
   }
 
   // Mark the top module as live, so it doesn't get deleted.
@@ -999,7 +1032,7 @@ void Inliner::run() {
 
   // Writeback all NLAs to MLIR.
   for (auto &nla : nlaMap)
-    nla.getSecond().applyUpdates(nlaTable);
+    nla.getSecond().applyUpdates();
 
   // Garbage collect any annotations which are now dead.  Duplicate annotations
   // which are now split.
@@ -1086,12 +1119,10 @@ class InlinerPass : public InlinerBase<InlinerPass> {
     LLVM_DEBUG(llvm::dbgs()
                << "===- Running Module Inliner Pass "
                   "--------------------------------------------===\n");
-    auto *nlaTable = &getAnalysis<NLATable>();
-    Inliner inliner(getOperation(), *nlaTable);
+    Inliner inliner(getOperation());
     inliner.run();
     LLVM_DEBUG(llvm::dbgs() << "===--------------------------------------------"
                                "------------------------------===\n");
-    markAnalysesPreserved<NLATable>();
   }
 };
 } // namespace
