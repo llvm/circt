@@ -53,8 +53,9 @@ public:
   BackedgeBuilder(mlir::OpBuilder &builder, mlir::Location loc);
   BackedgeBuilder(mlir::PatternRewriter &rewriter, mlir::Location loc);
   ~BackedgeBuilder();
-  /// Create a typed backedge.
-  Backedge get(mlir::Type resultType);
+  /// Create a typed backedge. If no location is provided, the one passed to the
+  /// constructor will be used.
+  Backedge get(mlir::Type resultType, mlir::LocationAttr optionalLoc = {});
 
 private:
   mlir::OpBuilder &builder;
