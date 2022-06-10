@@ -168,8 +168,7 @@ FIRLexer::FIRLexer(const llvm::SourceMgr &sourceMgr, MLIRContext *context)
 /// Encode the specified source location information into a Location object
 /// for attachment to the IR or error reporting.
 Location FIRLexer::translateLocation(llvm::SMLoc loc) {
-  unsigned mainFileID = sourceMgr.getMainFileID();
-  auto lineAndColumn = sourceMgr.getLineAndColumn(loc, mainFileID);
+  auto lineAndColumn = sourceMgr.getLineAndColumn(loc);
   return FileLineColLoc::get(bufferNameIdentifier, lineAndColumn.first,
                              lineAndColumn.second);
 }
