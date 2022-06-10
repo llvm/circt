@@ -46,24 +46,27 @@ LogicalResult TclEmitter::populate() {
   populated = true;
 
   // Bin any operations we may need to emit based on the root module in the
-  // instance hierarchy path.
-  for (auto tclOp : topLevel.getOps<DynInstDataOpInterface>()) {
-    FlatSymbolRefAttr refSym = tclOp.getGlobalRefSym();
-    if (!refSym)
-      return tclOp->emitOpError("must run dynamic instance lowering first");
-    auto ref = dyn_cast_or_null<hw::GlobalRefOp>(
-        topLevelSymbols.getDefinition(refSym));
-    if (!ref)
-      return tclOp->emitOpError("could not find hw.globalRef ") << refSym;
-    if (ref.namepath().empty())
-      continue;
-    auto modSym = FlatSymbolRefAttr::get(
-        ref.namepath()[0].cast<hw::InnerRefAttr>().getModule());
-    Operation *mod = topLevelSymbols.getDefinition(modSym);
-    assert(mod &&
-           "Invalid IR -- should have been caught by GlobalRef verifier");
-    tclOpsForMod[mod].push_back(tclOp);
+  // instance hierarchy path and the potential instance name.
+
+  // Look in InstanceHierarchyOps to get the instance named ones.
+  for (auto hier : topLevel.getOps<InstanceHierarchyOp>()) {
+    Operation *mod = topLevelSymbols.getDefinition(hier.topModuleRefAttr());
+    auto &tclOps = tclOpsForModInstance[mod][hier.instNameAttr()];
+    for (auto tclOp : hier.getOps<DynInstDataOpInterface>()) {
+      assert(tclOp.getTopModule(topLevelSymbols) == mod &&
+             "Referenced mod does does not match");
+      tclOps.push_back(tclOp);
+    }
   }
+
+  // Locations at the global scope are assumed to refer to the module without an
+  // instance.
+  for (auto tclOp : topLevel.getOps<DynInstDataOpInterface>()) {
+    Operation *mod = tclOp.getTopModule(topLevelSymbols);
+    assert(mod && "Must be able to resolve top module");
+    tclOpsForModInstance[mod][{}].push_back(tclOp);
+  }
+
   return success();
 }
 
@@ -102,6 +105,19 @@ struct TclOutputState {
 
   void emitPath(hw::GlobalRefOp ref, Optional<StringRef> subpath);
   void emitInnerRefPart(hw::InnerRefAttr innerRef);
+
+  /// Get the GlobalRefOp to which the given operation is pointing. Add it to
+  /// the set of used global refs.
+  GlobalRefOp getRefOp(DynInstDataOpInterface op) {
+    auto ref = dyn_cast_or_null<hw::GlobalRefOp>(
+        emitter.getDefinition(op.getGlobalRefSym()));
+    if (ref)
+      emitter.usedRef(ref);
+    else
+      op.emitOpError("could not find hw.globalRef named ")
+          << op.getGlobalRefSym();
+    return ref;
+  }
 };
 } // anonymous namespace
 
@@ -162,18 +178,12 @@ LogicalResult
 TclOutputState::emitLocationAssignment(DynInstDataOpInterface refOp,
                                        PhysLocationAttr loc,
                                        Optional<StringRef> subpath) {
-  auto ref = dyn_cast_or_null<hw::GlobalRefOp>(
-      emitter.getDefinition(refOp.getGlobalRefSym()));
-  if (!ref)
-    return refOp.emitOpError("could not find hw.globalRef named ")
-           << refOp.getGlobalRefSym();
-
   indent() << "set_location_assignment ";
   emit(loc);
 
   // To which entity does this apply?
   os << " -to $parent|";
-  emitPath(ref, subpath);
+  emitPath(getRefOp(refOp), subpath);
 
   return success();
 }
@@ -201,12 +211,7 @@ LogicalResult TclOutputState::emit(PDRegPhysLocationOp locs) {
 /// Emit tcl in the form of:
 /// "set_global_assignment -name NAME VALUE -to $parent|fooInst|entityName"
 LogicalResult TclOutputState::emit(DynamicInstanceVerbatimAttrOp attr) {
-
-  auto ref =
-      dyn_cast_or_null<hw::GlobalRefOp>(emitter.getDefinition(attr.refAttr()));
-  if (!ref)
-    return attr.emitOpError("could not find hw.globalRef named ")
-           << attr.refAttr();
+  GlobalRefOp ref = getRefOp(attr);
   indent() << "set_instance_assignment -name " << attr.name() << " "
            << attr.value();
 
@@ -223,11 +228,7 @@ LogicalResult TclOutputState::emit(DynamicInstanceVerbatimAttrOp attr) {
 /// set_instance_assignment -name CORE_ONLY_PLACE_REGION ON -to $parent|a|b|c
 /// set_instance_assignment -name REGION_NAME test_region -to $parent|a|b|c
 LogicalResult TclOutputState::emit(PDPhysRegionOp region) {
-  auto ref = dyn_cast_or_null<hw::GlobalRefOp>(
-      emitter.getDefinition(region.refAttr()));
-  if (!ref)
-    return region.emitOpError("could not find hw.globalRef named ")
-           << region.refAttr();
+  GlobalRefOp ref = getRefOp(region);
 
   auto physicalRegion = dyn_cast_or_null<DeclPhysicalRegionOp>(
       emitter.getDefinition(region.physRegionRefAttr()));
@@ -287,27 +288,37 @@ LogicalResult TclEmitter::emit(Operation *hwMod, StringRef outputFile) {
   std::string s;
   llvm::raw_string_ostream os(s);
   TclOutputState state(*this, os);
-  os << "proc {{" << state.symbolRefs.size() << "}}_config { parent } {\n";
-  state.symbolRefs.push_back(SymbolRefAttr::get(hwMod));
 
-  // Loop through the ops relevant to the specified root module.
-  LogicalResult ret = success();
-  for (Operation *tclOp : tclOpsForMod[hwMod]) {
-    LogicalResult rc =
-        TypeSwitch<Operation *, LogicalResult>(tclOp)
-            .Case([&](PDPhysLocationOp op) { return state.emit(op); })
-            .Case([&](PDRegPhysLocationOp op) { return state.emit(op); })
-            .Case([&](PDPhysRegionOp op) { return state.emit(op); })
-            .Case([&](DynamicInstanceVerbatimAttrOp op) {
-              return state.emit(op);
-            })
-            .Default([](Operation *op) {
-              return op->emitOpError("could not determine how to output tcl");
-            });
-    if (failed(rc))
-      ret = failure();
+  // Iterate through all the "instances" for 'hwMod' and produce a tcl proc for
+  // each one.
+  for (auto tclOpsForInstancesKV : tclOpsForModInstance[hwMod]) {
+    StringAttr instName = tclOpsForInstancesKV.first;
+    os << "proc {{" << state.symbolRefs.size() << "}}";
+    if (instName)
+      os << '_' << instName.getValue();
+    os << "_config { parent } {\n";
+    state.symbolRefs.push_back(SymbolRefAttr::get(hwMod));
+
+    // Loop through the ops relevant to the specified root module "instance".
+    LogicalResult ret = success();
+    auto &tclOpsForMod = tclOpsForInstancesKV.second;
+    for (Operation *tclOp : tclOpsForMod) {
+      LogicalResult rc =
+          TypeSwitch<Operation *, LogicalResult>(tclOp)
+              .Case([&](PDPhysLocationOp op) { return state.emit(op); })
+              .Case([&](PDRegPhysLocationOp op) { return state.emit(op); })
+              .Case([&](PDPhysRegionOp op) { return state.emit(op); })
+              .Case([&](DynamicInstanceVerbatimAttrOp op) {
+                return state.emit(op);
+              })
+              .Default([](Operation *op) {
+                return op->emitOpError("could not determine how to output tcl");
+              });
+      if (failed(rc))
+        ret = failure();
+    }
+    os << "}\n\n";
   }
-  os << "}\n\n";
 
   // Create a verbatim op containing the Tcl and symbol references.
   OpBuilder builder = OpBuilder::atBlockEnd(hwMod->getBlock());

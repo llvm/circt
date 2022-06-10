@@ -66,7 +66,8 @@ namespace {
 struct LowerInstancesPass : public LowerInstancesBase<LowerInstancesPass> {
   void runOnOperation() override;
 
-  LogicalResult lower(DynamicInstanceOp inst, OpBuilder &b);
+  LogicalResult lower(DynamicInstanceOp inst, InstanceHierarchyOp hier,
+                      OpBuilder &b);
 
   // Aggregation of the global ref attributes populated as a side-effect of the
   // conversion.
@@ -100,7 +101,9 @@ const SymbolCache &LowerInstancesPass::getSyms(MSFTModuleOp mod) {
   return syms;
 }
 
-LogicalResult LowerInstancesPass::lower(DynamicInstanceOp inst, OpBuilder &b) {
+LogicalResult LowerInstancesPass::lower(DynamicInstanceOp inst,
+                                        InstanceHierarchyOp hier,
+                                        OpBuilder &b) {
 
   hw::GlobalRefOp ref = nullptr;
 
@@ -155,11 +158,12 @@ LogicalResult LowerInstancesPass::lower(DynamicInstanceOp inst, OpBuilder &b) {
   }
 
   // Relocate all my children.
+  OpBuilder hierBlock(&hier.body().getBlocks().front().front());
   for (Operation &op : llvm::make_early_inc_range(inst.getOps())) {
     // Child instances should have been lowered already.
     assert(!isa<DynamicInstanceOp>(op));
     op.remove();
-    b.insert(&op);
+    hierBlock.insert(&op);
 
     // Assign a ref for ops which need it.
     if (auto specOp = dyn_cast<DynInstDataOpInterface>(op)) {
@@ -183,16 +187,16 @@ void LowerInstancesPass::runOnOperation() {
 
   // Find all of the InstanceHierarchyOps.
   for (Operation &op : llvm::make_early_inc_range(top.getOps())) {
-    if (!isa<InstanceHierarchyOp>(op))
+    auto instHierOp = dyn_cast<InstanceHierarchyOp>(op);
+    if (!instHierOp)
       continue;
     builder.setInsertionPoint(&op);
     // Walk the child dynamic instances in _post-order_ so we lower and delete
     // the children first.
-    op.walk<mlir::WalkOrder::PostOrder>([&](DynamicInstanceOp inst) {
-      if (failed(lower(inst, builder)))
+    instHierOp->walk<mlir::WalkOrder::PostOrder>([&](DynamicInstanceOp inst) {
+      if (failed(lower(inst, instHierOp, builder)))
         ++numFailed;
     });
-    op.erase();
   }
   if (numFailed)
     signalPassFailure();
@@ -423,7 +427,8 @@ void LowerToHWPass::runOnOperation() {
 
   // Then, convert the InstanceOps
   target.addDynamicallyLegalDialect<MSFTDialect>([](Operation *op) {
-    return isa<DynInstDataOpInterface, DeclPhysicalRegionOp>(op);
+    return isa<DynInstDataOpInterface, DeclPhysicalRegionOp,
+               InstanceHierarchyOp>(op);
   });
   RewritePatternSet instancePatterns(ctxt);
   instancePatterns.insert<InstanceOpLowering>(ctxt);
@@ -446,24 +451,15 @@ std::unique_ptr<Pass> createLowerToHWPass() {
 namespace {
 template <typename PhysOpTy>
 struct RemovePhysOpLowering : public OpConversionPattern<PhysOpTy> {
+  using OpConversionPattern<PhysOpTy>::OpConversionPattern;
   using OpAdaptor = typename OpConversionPattern<PhysOpTy>::OpAdaptor;
-
-  RemovePhysOpLowering(MLIRContext *ctxt, DenseSet<SymbolRefAttr> &refsUsed)
-      : OpConversionPattern<PhysOpTy>::OpConversionPattern(ctxt),
-        refsUsed(refsUsed) {}
 
   LogicalResult
   matchAndRewrite(PhysOpTy op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
-    SymbolRefAttr refSym = op->template getAttrOfType<FlatSymbolRefAttr>("ref");
-    if (refSym)
-      refsUsed.insert(refSym);
     rewriter.eraseOp(op);
     return success();
   }
-
-private:
-  DenseSet<SymbolRefAttr> &refsUsed;
 };
 } // anonymous namespace
 
@@ -501,18 +497,17 @@ void ExportTclPass::runOnOperation() {
   target.addLegalDialect<sv::SVDialect>();
 
   RewritePatternSet patterns(ctxt);
-  DenseSet<SymbolRefAttr> refsUsed;
-  patterns.insert<RemovePhysOpLowering<PDPhysLocationOp>>(ctxt, refsUsed);
-  patterns.insert<RemovePhysOpLowering<PDRegPhysLocationOp>>(ctxt, refsUsed);
-  patterns.insert<RemovePhysOpLowering<PDPhysRegionOp>>(ctxt, refsUsed);
-  patterns.insert<RemovePhysOpLowering<DynamicInstanceVerbatimAttrOp>>(
-      ctxt, refsUsed);
+  patterns.insert<RemovePhysOpLowering<PDPhysLocationOp>>(ctxt);
+  patterns.insert<RemovePhysOpLowering<PDRegPhysLocationOp>>(ctxt);
+  patterns.insert<RemovePhysOpLowering<PDPhysRegionOp>>(ctxt);
+  patterns.insert<RemovePhysOpLowering<InstanceHierarchyOp>>(ctxt);
+  patterns.insert<RemovePhysOpLowering<DynamicInstanceVerbatimAttrOp>>(ctxt);
   patterns.insert<RemoveOpLowering<DeclPhysicalRegionOp>>(ctxt);
   if (failed(applyPartialConversion(top, target, std::move(patterns))))
     signalPassFailure();
 
   target.addDynamicallyLegalOp<hw::GlobalRefOp>([&](hw::GlobalRefOp ref) {
-    return !refsUsed.contains(SymbolRefAttr::get(ref));
+    return !emitter.getRefsUsed().contains(ref);
   });
   patterns.clear();
   patterns.insert<RemoveOpLowering<hw::GlobalRefOp>>(ctxt);
