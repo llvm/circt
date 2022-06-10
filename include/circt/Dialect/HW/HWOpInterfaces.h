@@ -18,6 +18,15 @@
 #include "mlir/IR/SymbolTable.h"
 #include "llvm/ADT/TypeSwitch.h"
 
+namespace circt {
+namespace hw {
+class HWInstanceLike;
+class HWModuleLike;
+}
+}
+
 #include "circt/Dialect/HW/HWOpInterfaces.h.inc"
+
+circt::hw::HWInstanceLike getInstance(mlir::SymbolTable &symtbl, circt::hw::InnerRefAttr name);
 
 #endif // CIRCT_DIALECT_HW_HWOPINTERFACES_H
