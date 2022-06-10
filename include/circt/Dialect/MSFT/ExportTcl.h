@@ -30,13 +30,18 @@ public:
   LogicalResult emit(Operation *forMod, StringRef outputFile);
 
   Operation *getDefinition(FlatSymbolRefAttr);
+  const DenseSet<hw::GlobalRefOp> &getRefsUsed() { return refsUsed; }
+  void usedRef(hw::GlobalRefOp ref) { refsUsed.insert(ref); }
 
 private:
   mlir::ModuleOp topLevel;
 
   bool populated;
   hw::HWSymbolCache topLevelSymbols;
-  DenseMap<Operation *, SmallVector<DynInstDataOpInterface, 0>> tclOpsForMod;
+  DenseMap<Operation *,
+           DenseMap<StringAttr, SmallVector<DynInstDataOpInterface, 0>>>
+      tclOpsForModInstance;
+  DenseSet<hw::GlobalRefOp> refsUsed;
 
   LogicalResult populate();
 };
