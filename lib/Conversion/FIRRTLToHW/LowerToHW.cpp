@@ -26,6 +26,7 @@
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/HW/Namespace.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "circt/Support/BackedgeBuilder.h"
 #include "circt/Support/Namespace.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -1370,7 +1371,8 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   FIRRTLLowering(hw::HWModuleOp module, CircuitLoweringState &circuitState)
       : theModule(module), circuitState(circuitState),
         builder(module.getLoc(), module.getContext()),
-        moduleNamespace(hw::ModuleNamespace(module)) {}
+        moduleNamespace(hw::ModuleNamespace(module)),
+        backedgeBuilder(builder, module.getLoc()) {}
 
   LogicalResult run();
 
@@ -1390,6 +1392,8 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult setPossiblyFoldedLowering(Value orig, Value result);
   template <typename ResultOpType, typename... CtorArgTypes>
   LogicalResult setLoweringTo(Operation *orig, CtorArgTypes... args);
+  Backedge setBackedgeLowering(Value orig, Type result);
+  Backedge getBackedgeLowering(Value value);
   void emitRandomizePrologIfNeeded();
   void initializeRegister(Value reg, llvm::Optional<std::pair<Value, Value>>
                                          asyncRegResetInitPair = llvm::None);
@@ -1626,6 +1630,13 @@ private:
   /// A namespace that can be used to generte new symbol names that are unique
   /// within this module.
   hw::ModuleNamespace moduleNamespace;
+
+  /// A backedge builder to directly materialize values during the lowering
+  /// without requiring temporary wires.
+  BackedgeBuilder backedgeBuilder;
+  /// Currently unresolved backedges. More precisely, a mapping from the
+  /// backedge's value to the backedge itself.
+  llvm::SmallDenseMap<Value, Backedge> backedges;
 };
 } // end anonymous namespace
 
@@ -1662,6 +1673,7 @@ LogicalResult FIRRTLLowering::run() {
         opsToRemove.push_back(&op);
         break;
       case LoweringFailure:
+        backedgeBuilder.abandon();
         return failure();
       }
     }
@@ -1682,7 +1694,7 @@ LogicalResult FIRRTLLowering::run() {
   for (auto wire : tmpWiresToOptimize)
     optimizeTemporaryWire(wire);
 
-  return success();
+  return backedgeBuilder.clearOrEmitError();
 }
 
 // Try to optimize out temporary wires introduced during lowering.
@@ -2034,9 +2046,17 @@ LogicalResult FIRRTLLowering::setLowering(Value orig, Value result) {
              "Lowering produced null value but source wasn't zero width");
   }
 #endif
-
-  assert(!valueMapping.count(orig) && "value lowered multiple times");
-  valueMapping[orig] = result;
+  auto &slot = valueMapping[orig];
+  if (slot) {
+    auto backedgeIt = backedges.find(slot);
+    if (backedgeIt != backedges.end()) {
+      backedgeIt->second.setValue(result);
+      backedges.erase(backedgeIt);
+      slot = nullptr;
+    }
+  }
+  assert(!slot && "value lowered multiple times");
+  slot = result;
   return success();
 }
 
@@ -2074,6 +2094,24 @@ LogicalResult FIRRTLLowering::setLoweringTo(Operation *orig,
   if (auto *op = result.getDefiningOp())
     tryCopyName(op, orig);
   return setPossiblyFoldedLowering(orig->getResult(0), result);
+}
+
+/// Sets the lowering for a value to a backedge of the specified result type.
+/// This is useful for lowering types which cannot pass through a wire, or to
+/// directly materialize values in operations that violate the SSA dominance
+/// constraint.
+Backedge FIRRTLLowering::setBackedgeLowering(Value orig, Type result) {
+  auto backedge = backedgeBuilder.get(result, orig.getLoc());
+  backedges.insert({backedge, backedge});
+  (void)setLowering(orig, backedge);
+  return backedge;
+}
+
+/// If the given value has been lowered to a backedge, returns the value.
+/// Returns null if the value has not been lowered or it has been lowered to
+/// something else than a backedge.
+Backedge FIRRTLLowering::getBackedgeLowering(Value value) {
+  return backedges.lookup(getPossiblyInoutLoweredValue(value));
 }
 
 /// Switch the insertion point of the current builder to the end of the
@@ -2972,10 +3010,15 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
     if (port.isOutput())
       continue;
 
-    // If we can find the connects to this port, then we can directly
-    // materialize it.
     auto portResult = oldInstance.getResult(portIndex);
     assert(portResult && "invalid IR, couldn't find port");
+
+    // Directly materialize inputs which are trivially assigned once through a
+    // `StrictConnectOp`.
+    if (port.isInput() && getSingleConnectUserOf(portResult)) {
+      operands.push_back(setBackedgeLowering(portResult, portType));
+      continue;
+    }
 
     // Create a wire for each input/inout operand, so there is
     // something to connect to.
@@ -3572,6 +3615,9 @@ LogicalResult FIRRTLLowering::visitStmt(StrictConnectOp op) {
   auto srcVal = getLoweredValue(op.src());
   if (!srcVal)
     return handleZeroBit(op.src(), []() { return success(); });
+
+  if (getBackedgeLowering(dest))
+    return setLowering(dest, srcVal);
 
   auto destVal = getPossiblyInoutLoweredValue(dest);
   if (!destVal)
