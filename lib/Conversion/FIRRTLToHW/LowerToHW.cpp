@@ -2880,14 +2880,14 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
         addOutput("R", "_data", "data", memSummary.dataWidth);
       } else if (memportKind == MemOp::PortKind::ReadWrite) {
         addInput("RW", "_addr", "addr", llvm::Log2_64_Ceil(memSummary.depth));
+        addInput("RW", "_en", "en", 1);
+        addInput("RW", "_clk", "clk", 1);
         // If maskBits =1, then And the mask field with enable, and update the
         // enable. Else keep mask port.
         if (memSummary.isMasked)
-          addInput("RW", "_en", "en", 1);
+          addInput("RW", "_wmode", "wmode", 1);
         else
-          addInput("RW", "_en", "en", 1, "wmask");
-        addInput("RW", "_clk", "clk", 1);
-        addInput("RW", "_wmode", "wmode", 1);
+          addInput("RW", "_wmode", "wmode", 1, "wmask");
         addInput("RW", "_wdata", "wdata", memSummary.dataWidth);
         addOutput("RW", "_rdata", "rdata", memSummary.dataWidth);
         // Ignore mask port, if maskBits =1
