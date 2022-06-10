@@ -43,9 +43,11 @@ BackedgeBuilder::BackedgeBuilder(OpBuilder &builder, Location loc)
     : builder(builder), rewriter(nullptr), loc(loc) {}
 BackedgeBuilder::BackedgeBuilder(PatternRewriter &rewriter, Location loc)
     : builder(rewriter), rewriter(&rewriter), loc(loc) {}
-Backedge BackedgeBuilder::get(Type t) {
-  Operation *op =
-      builder.create<mlir::UnrealizedConversionCastOp>(loc, t, ValueRange{});
+Backedge BackedgeBuilder::get(Type t, mlir::LocationAttr optionalLoc) {
+  if (!optionalLoc)
+    optionalLoc = loc;
+  Operation *op = builder.create<mlir::UnrealizedConversionCastOp>(
+      optionalLoc, t, ValueRange{});
   edges.push_back(op);
   return Backedge(op);
 }
