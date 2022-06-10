@@ -93,7 +93,7 @@ def HierarchicalPathLike : OpInterface<"HierarchicalPathLike"> {
         "::mlir::StringAttr":$moduleToDrop),
       /*methodBody=*/[{}],
       /*defaultImplementation=*/[{
-        SmallVector<Attribute, 4> newPath;
+        llvm::SmallVector<mlir::Attribute, 4> newPath;
         bool updateMade = false;
         for (auto nameRef : $_op.namepath()) {
           // nameRef is either an InnerRefAttr or a FlatSymbolRefAttr.
@@ -103,14 +103,14 @@ def HierarchicalPathLike : OpInterface<"HierarchicalPathLike"> {
             else
               newPath.push_back(ref);
           } else {
-            if (nameRef.template cast<FlatSymbolRefAttr>().getAttr() == moduleToDrop)
+            if (nameRef.template cast<mlir::FlatSymbolRefAttr>().getAttr() == moduleToDrop)
               updateMade = true;
             else
               newPath.push_back(nameRef);
           }
         }
         if (updateMade)
-          $_op.namepathAttr(ArrayAttr::get($_op.getContext(), newPath));
+          $_op.namepathAttr(mlir::ArrayAttr::get($_op.getContext(), newPath));
         return updateMade;
       }]
     >,
@@ -123,11 +123,11 @@ def HierarchicalPathLike : OpInterface<"HierarchicalPathLike"> {
         "::mlir::StringAttr":$moduleToDrop),
       /*methodBody=*/[{}],
       /*defaultImplementation=*/[{
-        SmallVector<Attribute, 4> newPath;
+        llvm::SmallVector<mlir::Attribute, 4> newPath;
         bool updateMade = false;
-        StringRef inlinedInstanceName = "";
+        ::llvm::StringRef inlinedInstanceName = "";
         for (auto nameRef : $_op.namepath()) {
-          // nameRef is either an InnerRefAttr or a FlatSymbolRefAttr.
+          // nameRef is either an InnerRefAttr or a mlir::FlatSymbolRefAttr.
           if (auto ref = nameRef.template dyn_cast<hw::InnerRefAttr>()) {
             if (ref.getModule() == moduleToDrop) {
               inlinedInstanceName = ref.getName().getValue();
@@ -135,20 +135,20 @@ def HierarchicalPathLike : OpInterface<"HierarchicalPathLike"> {
             } else if (!inlinedInstanceName.empty()) {
               newPath.push_back(hw::InnerRefAttr::get(
                   ref.getModule(),
-                  StringAttr::get($_op.getContext(), inlinedInstanceName + "_" +
+                  ::mlir::StringAttr::get($_op.getContext(), inlinedInstanceName + "_" +
                                                     ref.getName().getValue())));
               inlinedInstanceName = "";
             } else
               newPath.push_back(ref);
           } else {
-            if (nameRef.template cast<FlatSymbolRefAttr>().getAttr() == moduleToDrop)
+            if (nameRef.template cast<mlir::FlatSymbolRefAttr>().getAttr() == moduleToDrop)
               updateMade = true;
             else
               newPath.push_back(nameRef);
           }
         }
         if (updateMade)
-          $_op.namepathAttr(ArrayAttr::get($_op.getContext(), newPath));
+          $_op.namepathAttr(mlir::ArrayAttr::get($_op.getContext(), newPath));
         return updateMade;
       }]
     >,
@@ -162,10 +162,10 @@ def HierarchicalPathLike : OpInterface<"HierarchicalPathLike"> {
         "::mlir::StringAttr":$newMod),
       /*methodBody=*/[{}],
       /*defaultImplementation=*/[{
-        SmallVector<Attribute, 4> newPath;
+        llvm::SmallVector<mlir::Attribute, 4> newPath;
         bool updateMade = false;
         for (auto nameRef : $_op.namepath()) {
-          // nameRef is either an InnerRefAttr or a FlatSymbolRefAttr.
+          // nameRef is either an InnerRefAttr or a mlir::FlatSymbolRefAttr.
           if (auto ref = nameRef.template dyn_cast<hw::InnerRefAttr>()) {
             if (ref.getModule() == oldMod) {
               newPath.push_back(hw::InnerRefAttr::get(newMod, ref.getName()));
@@ -173,15 +173,15 @@ def HierarchicalPathLike : OpInterface<"HierarchicalPathLike"> {
             } else
               newPath.push_back(ref);
           } else {
-            if (nameRef.template cast<FlatSymbolRefAttr>().getAttr() == oldMod) {
-              newPath.push_back(FlatSymbolRefAttr::get(newMod));
+            if (nameRef.template cast<mlir::FlatSymbolRefAttr>().getAttr() == oldMod) {
+              newPath.push_back(mlir::FlatSymbolRefAttr::get(newMod));
               updateMade = true;
             } else
               newPath.push_back(nameRef);
           }
         }
         if (updateMade)
-          $_op.namepathAttr(ArrayAttr::get($_op.getContext(), newPath));
+          $_op.namepathAttr(mlir::ArrayAttr::get($_op.getContext(), newPath));
         return updateMade;
       }]
     >,
@@ -193,10 +193,10 @@ def HierarchicalPathLike : OpInterface<"HierarchicalPathLike"> {
       (ins
         "::mlir::StringAttr":$oldMod,
         "::mlir::StringAttr":$newMod,
-        "const llvm::DenseMap<mlir::StringAttr, mlir::StringAttr> &":$innerSymRenameMap),
+        "const llvm::DenseMap<::mlir::StringAttr, ::mlir::StringAttr> &":$innerSymRenameMap),
       /*methodBody=*/[{}],
       /*defaultImplementation=*/[{
-        auto fromRef = FlatSymbolRefAttr::get(oldMod);
+        auto fromRef = mlir::FlatSymbolRefAttr::get(oldMod);
         if (oldMod == newMod)
           return false;
         auto namepathNew = $_op.namepath().getValue().vec();
@@ -219,11 +219,11 @@ def HierarchicalPathLike : OpInterface<"HierarchicalPathLike"> {
           if (element != fromRef)
             continue;
           updateMade = true;
-          element = FlatSymbolRefAttr::get(newMod);
+          element = mlir::FlatSymbolRefAttr::get(newMod);
           break;
         }
         if (updateMade)
-          $_op.namepathAttr(ArrayAttr::get($_op.getContext(), namepathNew));
+          $_op.namepathAttr(mlir::ArrayAttr::get($_op.getContext(), namepathNew));
         return updateMade;
       }]
     >,
@@ -237,10 +237,10 @@ def HierarchicalPathLike : OpInterface<"HierarchicalPathLike"> {
         "bool":$includeMod),
       /*methodBody=*/[{}],
       /*defaultImplementation=*/[{
-        SmallVector<Attribute, 4> newPath;
+        llvm::SmallVector<mlir::Attribute, 4> newPath;
         bool updateMade = false;
         for (auto nameRef : $_op.namepath()) {
-          // nameRef is either an InnerRefAttr or a FlatSymbolRefAttr.
+          // nameRef is either an InnerRefAttr or a mlir::FlatSymbolRefAttr.
           if (auto ref = nameRef.template dyn_cast<hw::InnerRefAttr>()) {
             if (ref.getModule() == atMod) {
               updateMade = true;
@@ -249,7 +249,7 @@ def HierarchicalPathLike : OpInterface<"HierarchicalPathLike"> {
             } else
               newPath.push_back(ref);
           } else {
-            if (nameRef.template cast<FlatSymbolRefAttr>().getAttr() == atMod && !includeMod)
+            if (nameRef.template cast<mlir::FlatSymbolRefAttr>().getAttr() == atMod && !includeMod)
               updateMade = true;
             else
               newPath.push_back(nameRef);
@@ -258,7 +258,7 @@ def HierarchicalPathLike : OpInterface<"HierarchicalPathLike"> {
             break;
         }
         if (updateMade)
-          $_op.namepathAttr(ArrayAttr::get($_op.getContext(), newPath));
+          $_op.namepathAttr(mlir::ArrayAttr::get($_op.getContext(), newPath));
         return updateMade;
       }]
     >,
@@ -271,8 +271,8 @@ def HierarchicalPathLike : OpInterface<"HierarchicalPathLike"> {
         "unsigned":$i),
       /*methodBody=*/[{}],
       /*defaultImplementation=*/[{
-        return TypeSwitch<Attribute, StringAttr>($_op.namepath()[i])
-            .template Case<FlatSymbolRefAttr>([](auto a) { return a.getAttr(); })
+        return TypeSwitch<mlir::Attribute, ::mlir::StringAttr>($_op.namepath()[i])
+            .template Case<mlir::FlatSymbolRefAttr>([](auto a) { return a.getAttr(); })
             .template Case<hw::InnerRefAttr>([](auto a) { return a.getModule(); });
       }]
     >,
@@ -296,8 +296,8 @@ def HierarchicalPathLike : OpInterface<"HierarchicalPathLike"> {
         "unsigned":$i),
       /*methodBody=*/[{}],
       /*defaultImplementation=*/[{
-        return TypeSwitch<Attribute, StringAttr>($_op.namepath()[i])
-            .template Case<FlatSymbolRefAttr>([](auto a) { return StringAttr({}); })
+        return TypeSwitch<mlir::Attribute, ::mlir::StringAttr>($_op.namepath()[i])
+            .template Case<mlir::FlatSymbolRefAttr>([](auto a) { return ::mlir::StringAttr({}); })
             .template Case<hw::InnerRefAttr>([](auto a) { return a.getName(); });
       }]
     >,
@@ -335,12 +335,12 @@ def HierarchicalPathLike : OpInterface<"HierarchicalPathLike"> {
       /*methodBody=*/[{}],
       /*defaultImplementation=*/[{
         for (auto nameRef : $_op.namepath()) {
-          // nameRef is either an InnerRefAttr or a FlatSymbolRefAttr.
+          // nameRef is either an InnerRefAttr or a mlir::FlatSymbolRefAttr.
           if (auto ref = nameRef.template dyn_cast<hw::InnerRefAttr>()) {
             if (ref.getModule() == modName)
               return true;
           } else {
-            if (nameRef.template cast<FlatSymbolRefAttr>().getAttr() == modName)
+            if (nameRef.template cast<mlir::FlatSymbolRefAttr>().getAttr() == modName)
               return true;
           }
         }
