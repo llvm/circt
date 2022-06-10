@@ -6,9 +6,9 @@
 // CHECK: FooL: 
 
 firrtl.circuit "FooNL"  {
-  firrtl.hierpath @nla_1 [@FooNL::@baz, @BazNL::@bar, @BarNL]
-  firrtl.hierpath @nla_0 [@FooNL::@baz, @BazNL::@w]
-  firrtl.hierpath @nla [@FooNL::@baz, @BazNL::@bar, @BarNL::@w2]
+  hw.globalRef @nla_1 [@FooNL::@baz, @BazNL::@bar, @BarNL]
+  hw.globalRef @nla_0 [@FooNL::@baz, @BazNL::@w]
+  hw.globalRef @nla [@FooNL::@baz, @BazNL::@bar, @BarNL::@w2]
 
   firrtl.module @BarNL() attributes {annotations = [{circt.nonlocal = @nla_1, class = "circt.test", nl = "nl"}]} {
     %w2 = firrtl.wire sym @w2  {annotations = [{circt.fieldID = 5 : i32, circt.nonlocal = @nla, class = "circt.test", nl = "nl2"}]} : !firrtl.bundle<a: uint, b: vector<uint, 4>>

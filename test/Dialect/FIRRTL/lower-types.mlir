@@ -1045,12 +1045,12 @@ firrtl.module private @is1436_FOO() {
 
 firrtl.circuit "NLALowering" {
   // Check if the NLA is updated with the new lowered symbol on a field element.
-  firrtl.hierpath @nla [@fallBackName::@test, @Aardvark::@test, @NLALowering::@b]
-  // CHECK: firrtl.hierpath @nla_0 [@fallBackName::@test, @Aardvark::@test, @NLALowering::@b_data]
-  // CHECK: firrtl.hierpath @nla [@fallBackName::@test, @Aardvark::@test, @NLALowering::@b_ready]
-  firrtl.hierpath @nla_1 [@fallBackName::@test, @Aardvark::@test_1, @NLALowering]
-  firrtl.hierpath @nla_2 [@fallBackName::@test, @Aardvark::@test, @NLALowering::@b2]
-  // CHECK-NOT: firrtl.hierpath @nla_2
+  hw.globalRef @nla [@fallBackName::@test, @Aardvark::@test, @NLALowering::@b]
+  // CHECK: hw.globalRef @nla_0 [@fallBackName::@test, @Aardvark::@test, @NLALowering::@b_data]
+  // CHECK: hw.globalRef @nla [@fallBackName::@test, @Aardvark::@test, @NLALowering::@b_ready]
+  hw.globalRef @nla_1 [@fallBackName::@test, @Aardvark::@test_1, @NLALowering]
+  hw.globalRef @nla_2 [@fallBackName::@test, @Aardvark::@test, @NLALowering::@b2]
+  // CHECK-NOT: hw.globalRef @nla_2
   firrtl.module private @fallBackName() {
     firrtl.instance test sym @test {
       annotations = [
@@ -1104,12 +1104,12 @@ firrtl.circuit "NLALowering" {
 
 // Test the update of NLA when a new symbol is added after lowering of bundle fields.
 firrtl.circuit "NLALoweringNewSymbol" {
-  firrtl.hierpath @lowernla_2 [@NLALoweringNewSymbol::@testBundle_Bar, @testBundle_Bar::@d]
-  // CHECK: firrtl.hierpath @lowernla_2_0 [@NLALoweringNewSymbol::@testBundle_Bar, @testBundle_Bar::@d_qux]
-  // CHECK: firrtl.hierpath @lowernla_2 [@NLALoweringNewSymbol::@testBundle_Bar, @testBundle_Bar::@d_baz]
-  firrtl.hierpath @lowernla_1 [@NLALoweringNewSymbol::@testBundle_Bar, @testBundle_Bar::@b]
-  // CHECK: firrtl.hierpath @lowernla_1_0 [@NLALoweringNewSymbol::@testBundle_Bar, @testBundle_Bar::@b_qux]
-  // CHECK: firrtl.hierpath @lowernla_1 [@NLALoweringNewSymbol::@testBundle_Bar, @testBundle_Bar::@b_baz]
+  hw.globalRef @lowernla_2 [@NLALoweringNewSymbol::@testBundle_Bar, @testBundle_Bar::@d]
+  // CHECK: hw.globalRef @lowernla_2_0 [@NLALoweringNewSymbol::@testBundle_Bar, @testBundle_Bar::@d_qux]
+  // CHECK: hw.globalRef @lowernla_2 [@NLALoweringNewSymbol::@testBundle_Bar, @testBundle_Bar::@d_baz]
+  hw.globalRef @lowernla_1 [@NLALoweringNewSymbol::@testBundle_Bar, @testBundle_Bar::@b]
+  // CHECK: hw.globalRef @lowernla_1_0 [@NLALoweringNewSymbol::@testBundle_Bar, @testBundle_Bar::@b_qux]
+  // CHECK: hw.globalRef @lowernla_1 [@NLALoweringNewSymbol::@testBundle_Bar, @testBundle_Bar::@b_baz]
   firrtl.module private @testBundle_Bar(
     in %a: !firrtl.uint<1>,
     out %b: !firrtl.bundle<baz: uint<1>, qux: uint<1>,

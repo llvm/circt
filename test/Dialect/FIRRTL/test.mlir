@@ -154,8 +154,8 @@ firrtl.module @TestInvalidAttr() {
 }
 
 // Basic test for NLA operations.
-// CHECK: firrtl.hierpath @nla [@Parent::@child, @Child::@w]
-firrtl.hierpath @nla [@Parent::@child, @Child::@w]
+// CHECK: hw.globalRef @nla [@Parent::@child, @Child::@w]
+hw.globalRef @nla [@Parent::@child, @Child::@w]
 firrtl.module @Child() {
   %w = firrtl.wire sym @w : !firrtl.uint<1>
 }

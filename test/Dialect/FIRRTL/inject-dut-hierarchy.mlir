@@ -28,25 +28,25 @@ firrtl.circuit "NLARenaming" attributes {
   } {
   // An NLA that is rooted at the DUT moves to the wrapper.
   //
-  // CHECK:      firrtl.hierpath @nla_DUTRoot [@Foo::@sub, @Sub::@a]
-  firrtl.hierpath @nla_DUTRoot [@DUT::@sub, @Sub::@a]
+  // CHECK:      hw.globalRef @nla_DUTRoot [@Foo::@sub, @Sub::@a]
+  hw.globalRef @nla_DUTRoot [@DUT::@sub, @Sub::@a]
 
   // NLAs that end at the DUT or a DUT port are unmodified.
   //
-  // CHECK-NEXT: firrtl.hierpath @nla_DUTLeafModule [@NLARenaming::@dut, @DUT]
-  // CHECK-NEXT: firrtl.hierpath @nla_DUTLeafPort [@NLARenaming::@dut, @DUT::@in]
-  firrtl.hierpath @nla_DUTLeafModule [@NLARenaming::@dut, @DUT]
-  firrtl.hierpath @nla_DUTLeafPort [@NLARenaming::@dut, @DUT::@in]
+  // CHECK-NEXT: hw.globalRef @nla_DUTLeafModule [@NLARenaming::@dut, @DUT]
+  // CHECK-NEXT: hw.globalRef @nla_DUTLeafPort [@NLARenaming::@dut, @DUT::@in]
+  hw.globalRef @nla_DUTLeafModule [@NLARenaming::@dut, @DUT]
+  hw.globalRef @nla_DUTLeafPort [@NLARenaming::@dut, @DUT::@in]
 
   // NLAs that end inside the DUT get an extra level of hierarchy.
   //
-  // CHECK-NEXT: firrtl.hierpath @nla_DUTLeafWire [@NLARenaming::@dut, @DUT::@[[inst_sym:.+]], @Foo::@w]
-  firrtl.hierpath @nla_DUTLeafWire [@NLARenaming::@dut, @DUT::@w]
+  // CHECK-NEXT: hw.globalRef @nla_DUTLeafWire [@NLARenaming::@dut, @DUT::@[[inst_sym:.+]], @Foo::@w]
+  hw.globalRef @nla_DUTLeafWire [@NLARenaming::@dut, @DUT::@w]
 
   // An NLA that passes through the DUT gets an extra level of hierarchy.
   //
-  // CHECK-NEXT: firrtl.hierpath @nla_DUTPassthrough [@NLARenaming::@dut, @DUT::@[[inst_sym:.+]], @Foo::@sub, @Sub]
-  firrtl.hierpath @nla_DUTPassthrough [@NLARenaming::@dut, @DUT::@sub, @Sub]
+  // CHECK-NEXT: hw.globalRef @nla_DUTPassthrough [@NLARenaming::@dut, @DUT::@[[inst_sym:.+]], @Foo::@sub, @Sub]
+  hw.globalRef @nla_DUTPassthrough [@NLARenaming::@dut, @DUT::@sub, @Sub]
   firrtl.module private @Sub() attributes {annotations = [{circt.nonlocal = @nla_DUTPassthrough, class = "nla_DUTPassthrough"}]} {
     %a = firrtl.wire sym @a : !firrtl.uint<1>
   }
