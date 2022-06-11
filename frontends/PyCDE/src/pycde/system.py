@@ -62,7 +62,9 @@ class System:
     self._op_cache: _OpCache = _OpCache(self.mod)
 
     self._generate_queue = []
-    self._instance_roots: dict[_SpecializedModule, InstanceHierarchyRoot] = {}
+    # _instance_roots indexed by (module, instance_name).
+    self._instance_roots: dict[(_SpecializedModule, str),
+                               InstanceHierarchyRoot] = {}
 
     self._placedb: PlacementDB = None
     self.files: Set[str] = set()
@@ -167,11 +169,15 @@ class System:
         i += 1
     return len(self._generate_queue)
 
-  def get_instance(self, mod_cls: object) -> InstanceHierarchyRoot:
+  def get_instance(self,
+                   mod_cls: object,
+                   instance_name: str = None) -> InstanceHierarchyRoot:
     mod = mod_cls._pycde_mod
-    if mod not in self._instance_roots:
-      self._instance_roots[mod] = InstanceHierarchyRoot(mod, self)
-    return self._instance_roots[mod]
+    key = (mod, instance_name)
+    if key not in self._instance_roots:
+      self._instance_roots[key] = InstanceHierarchyRoot(
+          mod, instance_name, self)
+    return self._instance_roots[key]
 
   def run_passes(self, partition=False):
     if self.passed:
@@ -221,8 +227,11 @@ class _OpCache:
     self._module_symbols: dict[_SpecializedModule, str] = {}
     self._symbol_modules: dict[str, _SpecializedModule] = {}
 
-    self._instance_hier_cache: dict[str, msft.InstanceHierarchyOp] = None
-    self._instance_hier_obj_cache: dict[str, InstanceHierarchyRoot] = {}
+    # InstanceHier caches are indexes are (module_sym, instance_name)
+    self._instance_hier_cache: dict[(ir.FlatSymbolRefAttr, ir.StringAttr),
+                                    msft.InstanceHierarchyOp] = None
+    self._instance_hier_obj_cache: dict[(ir.FlatSymbolRefAttr, ir.StringAttr),
+                                        InstanceHierarchyRoot] = {}
     self._instance_cache: dict[Instance, msft.DynamicInstanceOp] = {}
 
     self._module_inside_sym_cache: Dict[ir.Operation, Dict[ir.Attribute,
@@ -307,24 +316,24 @@ class _OpCache:
       self._instance_hier_cache = {}
       for op in self._module.operation.regions[0].blocks[0]:
         if isinstance(op, msft.InstanceHierarchyOp):
-          self._instance_hier_cache[op.top_module_ref] = op
+          self._instance_hier_cache[(op.top_module_ref, op.instName)] = op
 
   def create_instance_hier_op(
       self, inst_hier: InstanceHierarchyRoot) -> msft.InstanceHierarchyOp:
     """Create an instance hierarchy op 'inst_hier' and add it to the cache.
     Assert if one already exists in the cache."""
 
-    root_mod_symbol = ir.FlatSymbolRefAttr.get(
-        self.get_module_symbol(inst_hier.inside_of))
-
     self._build_instance_hier_cache()
+
+    (root_mod_symbol, instance_name) = inst_hier._cache_key
     assert root_mod_symbol not in self._instance_hier_cache, \
       "Cannot create two instance hierarchy roots for same module"
 
     with ir.InsertionPoint(self._module.body):
-      hier_op = msft.InstanceHierarchyOp.create(root_mod_symbol)
-      self._instance_hier_cache[root_mod_symbol] = hier_op
-      self._instance_hier_obj_cache[root_mod_symbol] = inst_hier
+      hier_op = msft.InstanceHierarchyOp.create(root_mod_symbol, instance_name)
+      self._instance_hier_cache[(root_mod_symbol, instance_name)] = hier_op
+      self._instance_hier_obj_cache[(root_mod_symbol,
+                                     instance_name)] = inst_hier
 
     return hier_op
 
@@ -333,9 +342,7 @@ class _OpCache:
     """Lookup an instance hierarchy op in the cache. None if not found."""
 
     self._build_instance_hier_cache()
-    root_mod_symbol = ir.FlatSymbolRefAttr.get(
-        self.get_module_symbol(inst_hier.inside_of))
-    return self._instance_hier_cache.get(root_mod_symbol, None)
+    return self._instance_hier_cache.get(inst_hier._cache_key, None)
 
   def create_or_get_dyn_inst(self, inst: Instance) -> msft.DynamicInstanceOp:
     """Get the dynamic instance op corresponding to 'inst'. Returns 'None' if
@@ -371,7 +378,7 @@ class _OpCache:
     Python Instance corresponding to 'op'."""
 
     if isinstance(op, msft.InstanceHierarchyOp):
-      return self._instance_hier_obj_cache[op.top_module_ref]
+      return self._instance_hier_obj_cache[(op.top_module_ref, op.instName)]
     if isinstance(op, msft.DynamicInstanceOp):
       parent_inst = self.get_or_create_inst_from_op(op.operation.parent.opview)
       instance_ref = hw.InnerRefAttr(op.instanceRef)

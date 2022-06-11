@@ -218,9 +218,11 @@ class InstanceHierarchyRoot(ModuleInstance):
   import pycde.system as cdesys
   from .module import _SpecializedModule
 
-  __slots__ = ["system"]
+  __slots__ = ["instance_name", "system"]
 
-  def __init__(self, module: _SpecializedModule, sys: cdesys.System):
+  def __init__(self, module: _SpecializedModule, instance_name: str,
+               sys: cdesys.System):
+    self.instance_name = instance_name
     self.system = sys
     self.root = self
     super().__init__(parent=self,
@@ -236,6 +238,14 @@ class InstanceHierarchyRoot(ModuleInstance):
     if op is None:
       raise InstanceDoesNotExistError(self.inside_of.modcls.__name__)
     return op
+
+  @property
+  def _cache_key(self):
+    mod_sym = ir.FlatSymbolRefAttr.get(
+        self._op_cache.get_module_symbol(self.inside_of))
+    inst_name = None if self.instance_name is None else ir.StringAttr.get(
+        self.instance_name)
+    return (mod_sym, inst_name)
 
   @property
   def name(self) -> str:

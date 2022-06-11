@@ -48,6 +48,7 @@ primdb.add_coords(PrimitiveType.M20K, 15, 25)
 primdb.add_coords(PrimitiveType.M20K, 40, 40)
 primdb.add_coords("DSP", 0, 10)
 primdb.add_coords(PrimitiveType.DSP, 1, 12)
+primdb.add_coords(PrimitiveType.DSP, 39, 90)
 primdb.add(PhysLocation(PrimitiveType.DSP, 39, 25))
 
 print(PhysLocation(PrimitiveType.DSP, 39, 25))
@@ -110,11 +111,11 @@ test_inst["UnParameterized"].add_named_attribute("FOO", "OFF",
 test_inst["UnParameterized"]["Nothing"].place(PrimitiveType.DSP, 39, 25, 0)
 
 test_inst.walk(lambda inst: print(inst, inst.locations))
-# CHECK: <instance: []> []
-# CHECK: <instance: [UnParameterized]> [(PhysLocation<PrimitiveType.M20K, x:15, y:25, num:0>, '|memory|bank')]
-# CHECK: <instance: [UnParameterized, Nothing]> [(PhysLocation<PrimitiveType.DSP, x:39, y:25, num:0>, None)]
-# CHECK: <instance: [UnParameterized_1]> [(PhysLocation<PrimitiveType.M20K, x:39, y:25, num:0>, '|memory|bank')]
-# CHECK: <instance: [UnParameterized_1, Nothing]> []
+# CHECK-DAG: <instance: []> []
+# CHECK-DAG: <instance: [UnParameterized]> [(PhysLocation<PrimitiveType.M20K, x:15, y:25, num:0>, '|memory|bank')]
+# CHECK-DAG: <instance: [UnParameterized, Nothing]> [(PhysLocation<PrimitiveType.DSP, x:39, y:25, num:0>, None)]
+# CHECK-DAG: <instance: [UnParameterized_1]> [(PhysLocation<PrimitiveType.M20K, x:39, y:25, num:0>, '|memory|bank')]
+# CHECK-DAG: <instance: [UnParameterized_1, Nothing]> []
 
 # TODO: add back anonymous reservations
 
@@ -144,6 +145,9 @@ test_inst.walk(lambda inst: print(inst, inst.locations))
 # CHECK: PhysLocation<PrimitiveType.DSP, x:39, y:25, num:0> has (<instance: [UnParameterized, Nothing]>, None)
 print(f"{loc} has {t.placedb.get_instance_at(loc)}")
 
+foo_inst = t.get_instance(Test, "foo_inst")
+foo_inst["UnParameterized"]["Nothing"].place(PrimitiveType.DSP, 39, 90, 0)
+
 print("=== Pre-pass mlir dump")
 t.print()
 
@@ -168,4 +172,7 @@ t.print()
 # OUTPUT-DAG:  set_instance_assignment -name FOO TRUE -to $parent|UnParameterized|Nothing
 # OUTPUT-NOT:  set_location_assignment
 # OUTPUT-NEXT: }
+# OUTPUT-LABEL: proc Test_foo_inst_config { parent } {
+# OUTPUT:         set_location_assignment MPDSP_X39_Y90_N0 -to $parent|UnParameterized|Nothing
+# OUTPUT:       }
 t.emit_outputs()
