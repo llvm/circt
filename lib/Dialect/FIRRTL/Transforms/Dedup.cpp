@@ -1008,9 +1008,7 @@ private:
   /// We insert all NLAs to the beginning of this block.
   Block *nlaBlock;
 
-  // This maps an NLA to the operation or port that uses it. Since NLAs include
-  // the name of the leaf element, its only possible for the NLA to be used by a
-  // single op or port.
+  // This maps an NLA to the operations and ports that uses it.
   DenseMap<Attribute, std::vector<AnnoTarget>> targetMap;
 
   // Cached attributes for faster comparisons and attribute building.
