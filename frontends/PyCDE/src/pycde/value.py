@@ -296,9 +296,10 @@ def wrap_opviews_with_values(dialect, module_name):
           if isinstance(created, support.NamedValueOpView):
             created = created.opview
 
-          # Return a Value.
-          assert len(created.results) == 1
-          return Value(created.results[0])
+          # Return the wrapped values, if any.
+          converted_results = tuple(Value(res) for res in created.results)
+          return converted_results[0] if len(
+              converted_results) == 1 else converted_results
 
         return create
 
