@@ -160,7 +160,7 @@ class EntityExternOp:
 class InstanceHierarchyOp:
 
   @staticmethod
-  def create(root_mod, instance_name=""):
+  def create(root_mod, instance_name=None):
     hier = _msft.InstanceHierarchyOp(root_mod, instName=instance_name)
     hier.body.blocks.append()
     return hier

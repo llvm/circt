@@ -175,8 +175,8 @@ class System:
     mod = mod_cls._pycde_mod
     key = (mod, instance_name)
     if key not in self._instance_roots:
-      self._instance_roots[key] = InstanceHierarchyRoot(
-          mod, instance_name, self)
+      self._instance_roots[key] = InstanceHierarchyRoot(mod, instance_name,
+                                                        self)
     return self._instance_roots[key]
 
   def run_passes(self, partition=False):
