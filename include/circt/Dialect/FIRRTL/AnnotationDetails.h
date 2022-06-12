@@ -102,6 +102,12 @@ constexpr const char *testbenchDirAnnoClass =
 constexpr const char *injectDUTHierarchyAnnoClass =
     "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation";
 
+// MemToRegOfVec Annotations
+static const char *convertMemToRegOfVecAnnoClass =
+    "sifive.enterprise.firrtl.ConvertMemToRegOfVecAnnotation$";
+static const char *excludeMemToRegAnnoClass =
+    "sifive.enterprise.firrtl.ExcludeMemFromMemToRegOfVec";
+
 // Instance Extraction
 constexpr const char *extractBlackBoxAnnoClass =
     "sifive.enterprise.firrtl.ExtractBlackBoxAnnotation";
