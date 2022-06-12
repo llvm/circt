@@ -685,16 +685,63 @@ firrtl.circuit "AddPortsRelative" attributes {annotations = [{
 //   }
 // ]
 
-firrtl.circuit "FixPath"  attributes
-{annotations = [{class = "freechips.rocketchip.objectmodel.OMIRAnnotation", nodes = [{fields = {d = {index = 3 : i64, info = loc(unknown), value = {id = 3 : i64, omir.tracker, path = "~FixPath|D", type = "OMMemberInstanceTarget"}}, dutInstance = {index = 0 : i64, info = loc(unknown), value = {id = 0 : i64, omir.tracker, path = "~FixPath|FixPath/c:C", type = "OMMemberInstanceTarget"}}, power = {index = 2 : i64, info = loc(unknown), value = {id = 2 : i64, omir.tracker, path = "~FixPath|FixPath/c:C/cd:D", type = "OMMemberInstanceTarget"}}, pwm = {index = 1 : i64, info = loc(unknown), value = {id = 1 : i64, omir.tracker, path = "~FixPath|FixPath/c:C>in", type = "OMMemberInstanceTarget"}}}, id = "OMID:0", info = loc(unknown)}]}]} {
+firrtl.circuit "FixPath"  attributes {annotations = [
+  {class = "freechips.rocketchip.objectmodel.OMIRAnnotation",
+   nodes = [
+     {fields = {
+        d = {
+          index = 3 : i64,
+          info = loc(unknown),
+          value = {
+            id = 3 : i64,
+            omir.tracker,
+            path = "~FixPath|D",
+            type = "OMMemberInstanceTarget"}},
+        dutInstance = {
+          index = 0 : i64,
+          info = loc(unknown),
+          value = {
+            id = 0 : i64,
+            omir.tracker,
+            path = "~FixPath|FixPath/c:C",
+            type = "OMMemberInstanceTarget"}},
+        power = {
+          index = 2 : i64,
+          info = loc(unknown),
+          value = {
+            id = 2 : i64,
+            omir.tracker,
+            path = "~FixPath|FixPath/c:C/cd:D",
+            type = "OMMemberInstanceTarget"}},
+        pwm = {
+          index = 1 : i64,
+          info = loc(unknown),
+          value = {
+            id = 1 : i64,
+            omir.tracker,
+            path = "~FixPath|FixPath/c:C>in",
+            type = "OMMemberInstanceTarget"}}},
+      id = "OMID:0",
+      info = loc(unknown)}
+    ]}]} {
   firrtl.hierpath @nla_3 [@FixPath::@c, @C::@cd, @D]
   firrtl.hierpath @nla_2 [@FixPath::@c, @C::@in]
   firrtl.hierpath @nla_1 [@FixPath::@c, @C]
-  firrtl.module @C(in %in: !firrtl.uint<1> sym @in [{circt.nonlocal = @nla_2, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 1 : i64}]) attributes {annotations = [{circt.nonlocal = @nla_1, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 0 : i64}, {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
+  firrtl.module @C(
+    in %in: !firrtl.uint<1> sym @in [
+      {circt.nonlocal = @nla_2, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 1 : i64}
+    ]
+  ) attributes {annotations = [
+       {circt.nonlocal = @nla_1, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 0 : i64},
+       {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}
+     ]}
+  {
     firrtl.instance cd sym @cd @D()
   }
-  firrtl.module @D() attributes {annotations = [{circt.nonlocal = @nla_3, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 2 : i64}, {class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 3 : i64}]} {
-  }
+  firrtl.module @D() attributes {annotations = [
+    {circt.nonlocal = @nla_3, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 2 : i64},
+    {class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 3 : i64}
+  ]} {}
   firrtl.module @FixPath(in %a: !firrtl.uint<1>) {
     %c_in = firrtl.instance c sym @c @C(in in: !firrtl.uint<1>)
     firrtl.connect %c_in, %a : !firrtl.uint<1>, !firrtl.uint<1>
