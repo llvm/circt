@@ -955,11 +955,21 @@ firrtl.circuit "DedupedPath" attributes {
         id = 1 : i64},
        {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
         name = "bar",
-        id = 2 : i64}],
+        id = 2 : i64},
+       {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+        name = "baz",
+        id = 3 : i64},
+       {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+        name = "qux",
+        id = 4 : i64}],
      id = 0 : i64,
      name = "View"}]} {
+  // TODO: Remove @nla_0 and @nla once NLAs are fully migrated to use hierpaths
+  // that end at the module.
   firrtl.hierpath @nla_0 [@DUT::@tile1, @Tile::@w]
   firrtl.hierpath @nla [@DUT::@tile2, @Tile::@w]
+  firrtl.hierpath @nla_new_0 [@DUT::@tile1, @Tile]
+  firrtl.hierpath @nla_new_1 [@DUT::@tile2, @Tile]
   firrtl.module @Tile() {
     %w = firrtl.wire sym @w {
       annotations = [
@@ -971,6 +981,16 @@ firrtl.circuit "DedupedPath" attributes {
           circt.nonlocal = @nla_0,
           class = "sifive.enterprise.grandcentral.AugmentedGroundType",
           id = 1 : i64}>]} : !firrtl.uint<8>
+    %x = firrtl.wire {
+      annotations = [
+        #firrtl.subAnno<fieldID = 0, {
+          circt.nonlocal = @nla_new_0,
+          class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+          id = 3 : i64}>,
+        #firrtl.subAnno<fieldID = 0, {
+          circt.nonlocal = @nla_new_1,
+          class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+          id = 4 : i64}>]} : !firrtl.uint<8>
   }
   firrtl.module @MyView_companion() attributes {
     annotations = [
@@ -1021,6 +1041,18 @@ firrtl.circuit "DedupedPath" attributes {
 // CHECK-SAME:                   #hw.innerNameRef<@DedupedPath::@[[dutSym]]>,
 // CHECK-SAME:                   #hw.innerNameRef<@DUT::@tile2>,
 // CHECK-SAME:                   #hw.innerNameRef<@Tile::@w>]
+// CHECK-NEXT{LITERAL}:      sv.verbatim "assign {{0}}.baz = {{1}}.{{2}}.{{3}}.{{4}};"
+// CHECK-SAME:                 symbols = [#hw.innerNameRef<@DUT::@__MyView_Foo__>,
+// CHECK-SAME:                   @DedupedPath,
+// CHECK-SAME:                   #hw.innerNameRef<@DedupedPath::@[[dutSym]]>,
+// CHECK-SAME:                   #hw.innerNameRef<@DUT::@tile1>,
+// CHECK-SAME:                   #hw.innerNameRef<@Tile::@x>]
+// CHECK-NEXT{LITERAL}:      sv.verbatim "assign {{0}}.qux = {{1}}.{{2}}.{{3}}.{{4}};"
+// CHECK-SAME:                 symbols = [#hw.innerNameRef<@DUT::@__MyView_Foo__>,
+// CHECK-SAME:                   @DedupedPath,
+// CHECK-SAME:                   #hw.innerNameRef<@DedupedPath::@[[dutSym]]>,
+// CHECK-SAME:                   #hw.innerNameRef<@DUT::@tile2>,
+// CHECK-SAME:                   #hw.innerNameRef<@Tile::@x>]
 
 // -----
 
