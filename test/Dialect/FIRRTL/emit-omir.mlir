@@ -347,14 +347,14 @@ firrtl.circuit "SRAMPathsWithNLA" attributes {annotations = [{
     }
   ]
 }]} {
-  firrtl.hierpath @nla [@SRAMPathsWithNLA::@s1, @Submodule::@m1]
+  firrtl.hierpath @nla [@SRAMPathsWithNLA::@s1, @Submodule::@mem]
   firrtl.module @Submodule() {
-    %mem2_port = firrtl.mem sym @m1 Undefined {
+    %mem_port = firrtl.mem sym @mem Undefined {
       annotations = [
         {circt.nonlocal = @nla, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 1}
       ],
       depth = 8,
-      name = "mem2",
+      name = "mem",
       portNames = ["port"],
       readLatency = 0 : i32,
       writeLatency = 1 : i32
