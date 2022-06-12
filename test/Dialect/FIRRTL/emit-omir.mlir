@@ -334,6 +334,7 @@ firrtl.circuit "SRAMPaths" attributes {annotations = [{
 // Make SRAM Paths Absolute with existing absolute NLA (`SetOMIRSRAMPaths`)
 //===----------------------------------------------------------------------===//
 
+// CHECK-LABEL: firrtl.circuit "SRAMPathsWithNLA"
 firrtl.circuit "SRAMPathsWithNLA" attributes {annotations = [{
   class = "freechips.rocketchip.objectmodel.OMIRAnnotation",
   nodes = [
@@ -344,17 +345,37 @@ firrtl.circuit "SRAMPathsWithNLA" attributes {annotations = [{
         omType = {info = #loc, index = 0, value = ["OMString:OMLazyModule", "OMString:OMSRAM"]},
         finalPath = {info = #loc, index = 1, value = {omir.tracker, id = 1, type = "OMMemberReferenceTarget"}}
       }
+    },
+    {
+      info = #loc,
+      id = "OMID:2",
+      fields = {
+        omType = {info = #loc, index = 0, value = ["OMString:OMLazyModule", "OMString:OMSRAM"]},
+        finalPath = {info = #loc, index = 1, value = {omir.tracker, id = 2, type = "OMMemberReferenceTarget"}}
+      }
     }
   ]
 }]} {
-  firrtl.hierpath @nla [@SRAMPathsWithNLA::@s1, @Submodule::@mem]
+  firrtl.hierpath @nla_old [@SRAMPathsWithNLA::@s1, @Submodule::@mem]
+  firrtl.hierpath @nla_new [@SRAMPathsWithNLA::@s1, @Submodule]
   firrtl.module @Submodule() {
     %mem_port = firrtl.mem sym @mem Undefined {
       annotations = [
-        {circt.nonlocal = @nla, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 1}
+        {circt.nonlocal = @nla_old, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 1}
       ],
       depth = 8,
       name = "mem",
+      portNames = ["port"],
+      readLatency = 0 : i32,
+      writeLatency = 1 : i32
+    } : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: uint<42>>
+    // CHECK: %mem2_port = firrtl.mem sym @[[mem2_sym:.+]] Undefined
+    %mem2_port = firrtl.mem Undefined {
+      annotations = [
+        {circt.nonlocal = @nla_new, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 2}
+      ],
+      depth = 8,
+      name = "mem2",
       portNames = ["port"],
       readLatency = 0 : i32,
       writeLatency = 1 : i32
@@ -365,7 +386,7 @@ firrtl.circuit "SRAMPathsWithNLA" attributes {annotations = [{
     firrtl.instance sub1 sym @s2 @Submodule()
   }
 }
-// CHECK-LABEL: firrtl.circuit "SRAMPathsWithNLA"
+
 // CHECK:         sv.verbatim
 // CHECK-SAME:           id\22: \22OMID:1\22
 // CHECK-SAME:             \22name\22: \22omType\22
@@ -376,11 +397,21 @@ firrtl.circuit "SRAMPathsWithNLA" attributes {annotations = [{
 // CHECK-SAME:             \22name\22: \22finalPath\22
 // CHECK-SAME{LITERAL}:    \22value\22: \22OMMemberInstanceTarget:~SRAMPathsWithNLA|{{0}}/{{1}}:{{2}}/{{3}}:
 
+// CHECK-SAME:           id\22: \22OMID:2\22
+// CHECK-SAME:             \22name\22: \22omType\22
+// CHECK-SAME:             \22value\22: [
+// CHECK-SAME:               \22OMString:OMLazyModule\22
+// CHECK-SAME:               \22OMString:OMSRAM\22
+// CHECK-SAME:             ]
+// CHECK-SAME:             \22name\22: \22finalPath\22
+// CHECK-SAME{LITERAL}:    \22value\22: \22OMMemberInstanceTarget:~SRAMPathsWithNLA|{{0}}/{{1}}:{{2}}/{{4}}:
+
 // CHECK-SAME:  symbols = [
 // CHECK-SAME:    @SRAMPathsWithNLA,
 // CHECK-SAME:    #hw.innerNameRef<@SRAMPathsWithNLA::[[SYMSUB:@[a-zA-Z0-9_]+]]>,
 // CHECK-SAME:    @Submodule,
-// CHECK-SAME:    #hw.innerNameRef<@Submodule::[[SYMMEM1:@[a-zA-Z0-9_]+]]>
+// CHECK-SAME:    #hw.innerNameRef<@Submodule::[[SYMMEM1:@[a-zA-Z0-9_]+]]>,
+// CHECK-SAME:    #hw.innerNameRef<@Submodule::@[[mem2_sym]]>
 // CHECK-SAME:  ]
 
 //===----------------------------------------------------------------------===//
