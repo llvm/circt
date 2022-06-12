@@ -227,3 +227,49 @@ firrtl.circuit "MemTap" attributes {annotations = [
 	}
 
 }
+
+// Test the behavior of non-local annotations using either the old or new
+// format work correctly.
+//
+// CHECK-LABEL: "NLA"
+firrtl.circuit "NLA" attributes {annotations = [
+  {class = "sifive.enterprise.firrtl.ConvertMemToRegOfVecAnnotation$"}
+]} {
+  // The hierachical paths are unchanged.
+  // CHECK:      firrtl.hierpath @path_old [@NLA::@foo, @Foo::@old]
+  // CHECK-NEXT: firrtl.hierpath @path_new [@NLA::@foo, @Foo]
+  firrtl.hierpath @path_old [@NLA::@foo, @Foo::@old]
+  firrtl.hierpath @path_new [@NLA::@foo, @Foo]
+  firrtl.module private @Foo() {
+    // CHECK:      %old = firrtl.reg sym @old
+    // CHECK-SAME:   {circt.nonlocal = @path, class = "oldNLA"}
+    %old_r = firrtl.mem sym @old Undefined {
+      annotations = [
+        {circt.nonlocal = @path, class = "oldNLA"}
+      ],
+      depth = 4 : i64,
+      name = "old",
+      portNames = ["r"],
+      readLatency = 0 : i32,
+      writeLatency = 1 : i32
+    } : !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data flip: uint<32>>
+    // CHECK:      %new = firrtl.reg
+    // CHECK-NOT:    sym
+    // CHECK-SAME:   {circt.nonlocal = @path, class = "newNLA"}
+    %new_r = firrtl.mem Undefined {
+      annotations = [
+        {circt.nonlocal = @path, class = "newNLA"}
+      ],
+      depth = 4 : i64,
+      name = "new",
+      portNames = ["r"],
+      readLatency = 0 : i32,
+      writeLatency = 1 : i32
+    } : !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data flip: uint<32>>
+  }
+  firrtl.module public @NLA() attributes {annotations = [
+    {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}
+  ]} {
+    firrtl.instance foo sym @foo @Foo()
+	}
+}
