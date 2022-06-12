@@ -349,23 +349,32 @@ firrtl.circuit "SRAMPathsWithNLA" attributes {annotations = [{
 }]} {
   firrtl.hierpath @nla [@SRAMPathsWithNLA::@s1, @Submodule::@m1]
   firrtl.module @Submodule() {
-    %mem2_port = firrtl.mem sym @m1 Undefined {annotations = [{circt.nonlocal = @nla, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 1}], depth = 8, name = "mem2", portNames = ["port"], readLatency = 0 : i32, writeLatency = 1 : i32 } : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: uint<42>>
+    %mem2_port = firrtl.mem sym @m1 Undefined {
+      annotations = [
+        {circt.nonlocal = @nla, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 1}
+      ],
+      depth = 8,
+      name = "mem2",
+      portNames = ["port"],
+      readLatency = 0 : i32,
+      writeLatency = 1 : i32
+    } : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: uint<42>>
   }
   firrtl.module @SRAMPathsWithNLA() {
-    firrtl.instance sub  sym @s1 {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}, {circt.nonlocal = @nla1, class = "circt.nonlocal"}]} @Submodule()
-    firrtl.instance sub1 sym @s2  @Submodule()
+    firrtl.instance sub sym @s1 @Submodule()
+    firrtl.instance sub1 sym @s2 @Submodule()
   }
 }
 // CHECK-LABEL: firrtl.circuit "SRAMPathsWithNLA"
-// CHECK:  sv.verbatim
-// CHECK-SAME:  id\22: \22OMID:1\22
-// CHECK-SAME:    \22name\22: \22omType\22
-// CHECK-SAME:    \22value\22: [
-// CHECK-SAME:      \22OMString:OMLazyModule\22
-// CHECK-SAME:      \22OMString:OMSRAM\22
-// CHECK-SAME:    ]
-// CHECK-SAME:    \22name\22: \22finalPath\22
-// CHECK-SAME:    \22value\22: \22OMMemberInstanceTarget:~SRAMPathsWithNLA|{{[{][{]0[}][}]}}/{{[{][{]1[}][}]}}:{{[{][{]2[}][}]}}/{{[{][{]3[}][}]}}:{{[^\\]+}}\22
+// CHECK:         sv.verbatim
+// CHECK-SAME:           id\22: \22OMID:1\22
+// CHECK-SAME:             \22name\22: \22omType\22
+// CHECK-SAME:             \22value\22: [
+// CHECK-SAME:               \22OMString:OMLazyModule\22
+// CHECK-SAME:               \22OMString:OMSRAM\22
+// CHECK-SAME:             ]
+// CHECK-SAME:             \22name\22: \22finalPath\22
+// CHECK-SAME{LITERAL}:    \22value\22: \22OMMemberInstanceTarget:~SRAMPathsWithNLA|{{0}}/{{1}}:{{2}}/{{3}}:
 
 // CHECK-SAME:  symbols = [
 // CHECK-SAME:    @SRAMPathsWithNLA,
