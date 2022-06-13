@@ -196,14 +196,22 @@ firrtl.circuit "LocalTrackers" attributes {annotations = [{
 // Trackers as Non-Local Annotations
 //===----------------------------------------------------------------------===//
 
+// CHECK-LABEL: firrtl.circuit "NonLocalTrackers"
 firrtl.circuit "NonLocalTrackers" attributes {annotations = [{
   class = "freechips.rocketchip.objectmodel.OMIRAnnotation",
   nodes = [{info = #loc, id = "OMID:0", fields = {
-    OMReferenceTarget1 = {info = #loc, index = 1, id = "OMID:1", value = {omir.tracker, id = 0, type = "OMReferenceTarget"}}
+    OMReferenceTarget1 = {info = #loc, index = 1, id = "OMID:1", value = {omir.tracker, id = 0, type = "OMReferenceTarget"}},
+    OMReferenceTarget2 = {info = #loc, index = 2, id = "OMID:2", value = {omir.tracker, id = 1, type = "OMReferenceTarget"}}
   }}]
 }]} {
+  // Both OMReferenceTarget1 and OMReferenceTarget2 share the same NLA.  This
+  // NLA should not be deleted.
   firrtl.hierpath @nla_0 [@NonLocalTrackers::@b, @B::@a, @A]
-  firrtl.module @A() attributes {annotations = [{circt.nonlocal = @nla_0, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 0}]} {}
+  // CHECK: firrtl.module @A
+  firrtl.module @A() attributes {annotations = [{circt.nonlocal = @nla_0, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 0}]} {
+    // CHECK-NEXT: %a = firrtl.wire sym @[[a_sym:[^ ]+]]
+    %a = firrtl.wire {annotations = [{circt.nonlocal = @nla_0, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 1}]} : !firrtl.uint<1>
+  }
   firrtl.module @B() {
     firrtl.instance a sym @a @A()
   }
@@ -211,18 +219,20 @@ firrtl.circuit "NonLocalTrackers" attributes {annotations = [{
     firrtl.instance b sym @b @B()
   }
 }
-// CHECK-LABEL: firrtl.circuit "NonLocalTrackers"
 // CHECK:       firrtl.instance a sym [[SYMA:@[a-zA-Z0-9_]+]]
 // CHECK:       firrtl.instance b sym [[SYMB:@[a-zA-Z0-9_]+]]
 // CHECK:       sv.verbatim
 // CHECK-SAME:           \22name\22: \22OMReferenceTarget1\22
 // CHECK-SAME{LITERAL}:  \22value\22: \22OMReferenceTarget:~NonLocalTrackers|{{0}}/{{1}}:{{2}}/{{3}}:{{4}}\22
+// CHECK-SAME:           \22name\22: \22OMReferenceTarget2\22
+// CHECK-SAME{LITERAL}:  \22value\22: \22OMReferenceTarget:~NonLocalTrackers|{{0}}/{{1}}:{{2}}/{{3}}:{{4}}>{{5}}\22
 // CHECK-SAME:  symbols = [
 // CHECK-SAME:    @NonLocalTrackers,
 // CHECK-SAME:    #hw.innerNameRef<@NonLocalTrackers::[[SYMB:@[a-zA-Z0-9_]+]]>,
 // CHECK-SAME:    @B,
 // CHECK-SAME:    #hw.innerNameRef<@B::[[SYMA:@[a-zA-Z0-9_]+]]>,
-// CHECK-SAME:    @A
+// CHECK-SAME:    @A,
+// CHECK-SAME:    #hw.innerNameRef<@A::@[[a_sym]]>
 // CHECK-SAME:  ]
 
 //===----------------------------------------------------------------------===//
@@ -287,7 +297,7 @@ firrtl.circuit "SRAMPaths" attributes {annotations = [{
   }
 }
 // CHECK-LABEL: firrtl.circuit "SRAMPaths" {
-// CHECK-NEXT:    firrtl.extmodule @MySRAM()
+// CHECK:         firrtl.extmodule @MySRAM()
 // CHECK-NEXT:    firrtl.module @Submodule() {
 // CHECK-NEXT:      firrtl.instance mem1 sym [[SYMMEM1:@[a-zA-Z0-9_]+]]
 // CHECK-SAME:        @MySRAM()
