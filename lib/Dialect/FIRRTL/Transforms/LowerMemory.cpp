@@ -240,9 +240,12 @@ void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
 
   auto leafSym = memModule.moduleNameAttr();
   auto leafAttr = hw::InnerRefAttr::get(wrapper.moduleNameAttr(), leafSym);
-
+  auto instRefAttr =
+      hw::InnerRefAttr::get(inst->getParentOfType<FModuleOp>().moduleNameAttr(),
+                            inst.getInnerNameAttr());
+  auto memModRefAttr = FlatSymbolRefAttr::get(memModule);
   // NLAs that we have already processed.
-  SmallPtrSet<Attribute, 8> processedNLAs;
+  llvm::SmallDenseMap<StringAttr, StringAttr> processedNLAs;
   auto nonlocalAttr = StringAttr::get(context, "circt.nonlocal");
   bool nlaUpdated = false;
   SmallVector<Annotation> newMemModAnnos;
@@ -254,27 +257,29 @@ void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
     if (!nlaSym)
       return false;
     // If we have already seen this NLA, don't re-process it.
-    if (!processedNLAs.insert(nlaSym).second)
-      return false;
+    auto newNLAIter = processedNLAs.find(nlaSym.getAttr());
+    StringAttr newNLAName;
+    if (newNLAIter == processedNLAs.end()) {
 
-    // Update the NLA path to have the additional wrapper module.
-    auto nla = dyn_cast<HierPathOp>(symbolTable->lookup(nlaSym.getAttr()));
-    auto namepath = nla.namepath().getValue();
-    SmallVector<Attribute> newNamepath(namepath.begin(), namepath.end());
-    if (!nla.isComponent()) {
-      newNamepath[newNamepath.size() - 1] = hw::InnerRefAttr::get(
-          inst->getParentOfType<FModuleOp>().moduleNameAttr(),
-          inst.getInnerNameAttr());
-    }
-    newNamepath.push_back(leafAttr);
-    newNamepath.push_back(FlatSymbolRefAttr::get(memModule));
-    nlaBuilder.setInsertionPointAfter(nla);
-    auto newNLA = cast<HierPathOp>(nlaBuilder.clone(*nla));
-    newNLA.sym_nameAttr(StringAttr::get(
-        context, circuitNamespace.newName(nla.getNameAttr().getValue())));
-    newNLA.namepathAttr(ArrayAttr::get(context, newNamepath));
-    anno.setMember("circt.nonlocal",
-                   FlatSymbolRefAttr::get(newNLA.getNameAttr()));
+      // Update the NLA path to have the additional wrapper module.
+      auto nla = dyn_cast<HierPathOp>(symbolTable->lookup(nlaSym.getAttr()));
+      auto namepath = nla.namepath().getValue();
+      SmallVector<Attribute> newNamepath(namepath.begin(), namepath.end());
+      if (!nla.isComponent())
+        newNamepath[newNamepath.size() - 1] = instRefAttr;
+
+      newNamepath.push_back(leafAttr);
+      newNamepath.push_back(memModRefAttr);
+      nlaBuilder.setInsertionPointAfter(nla);
+      auto newNLA = cast<HierPathOp>(nlaBuilder.clone(*nla));
+      newNLA.sym_nameAttr(StringAttr::get(
+          context, circuitNamespace.newName(nla.getNameAttr().getValue())));
+      newNLA.namepathAttr(ArrayAttr::get(context, newNamepath));
+      newNLAName = newNLA.getNameAttr();
+      processedNLAs[nlaSym.getAttr()] = newNLAName;
+    } else
+      newNLAName = newNLAIter->getSecond();
+    anno.setMember("circt.nonlocal", FlatSymbolRefAttr::get(newNLAName));
     newMemModAnnos.push_back(anno);
     nlaUpdated = true;
     return true;
