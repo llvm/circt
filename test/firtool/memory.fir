@@ -61,8 +61,6 @@ circuit Qux: %[[{
 
 
 ;CHECK-LABEL: hw.module @Qux
-;CHECK:    %[[memory_r_data:.+]] = sv.wire sym @__Qux__memory_r_data  : !hw.inout<i8>
-;CHECK:    %[[v0:.+]] = sv.read_inout %[[memory_r_data]]
 ;CHECK:    %[[memory_0:.+]] = sv.reg
 ;CHECK:    %[[memory_1:.+]] = sv.reg
 ;CHECK:    %[[memory_2:.+]] = sv.reg
@@ -72,11 +70,13 @@ circuit Qux: %[[{
 ;CHECK:    %[[v5:.+]] = sv.read_inout %[[addr]]
 ;CHECK:    %[[v6:.+]] = hw.array_create
 ;CHECK:    %[[v7:.+]] = hw.array_get %[[v6]][%[[v5]]]
+;CHECK:    %[[memory_r_data:.+]] = sv.wire sym @__Qux__memory_r_data  : !hw.inout<i8>
 ;CHECK:    sv.assign %[[memory_r_data]], %[[v7]] : i8
-;CHECK:    %[[memory_rw_rdata:.+]] = sv.wire sym @__Qux__memory_rw_rdata  : !hw.inout<i8>
-;CHECK:    %[[v8:.+]] = sv.read_inout %memory_rw_rdata : !hw.inout<i8>
+;CHECK:    %[[v0:.+]] = sv.read_inout %[[memory_r_data]]
 ;CHECK:    %[[v9:.+]] = hw.array_get %[[v6]][%rwAddr] : !hw.array<4xi8>
+;CHECK:    %[[memory_rw_rdata:.+]] = sv.wire sym @__Qux__memory_rw_rdata  : !hw.inout<i8>
 ;CHECK:    sv.assign %[[memory_rw_rdata]], %[[v9]] : i8
+;CHECK:    %[[v8:.+]] = sv.read_inout %memory_rw_rdata : !hw.inout<i8>
 ;CHECK:    sv.always posedge %clock {
 ;CHECK-NEXT:      sv.passign %[[en]], %rEn : i1
 ;CHECK-NEXT:      sv.passign %[[addr]], %rAddr : i2
