@@ -27,25 +27,39 @@ void Backedge::setValue(mlir::Value newValue) {
   set = true;
 }
 
-BackedgeBuilder::~BackedgeBuilder() {
+BackedgeBuilder::~BackedgeBuilder() { (void)clearOrEmitError(); }
+
+LogicalResult BackedgeBuilder::clearOrEmitError() {
+  unsigned numInUse = 0;
   for (Operation *op : edges) {
-    assert(op->use_empty() && "Backedge still in use");
+    if (!op->use_empty()) {
+      op->emitError("backedge of type `")
+          << op->getResult(0).getType() << "`still in use";
+      ++numInUse;
+      continue;
+    }
     if (rewriter)
       rewriter->eraseOp(op);
     else
       op->erase();
   }
+  edges.clear();
+  if (numInUse > 0)
+    mlir::emitRemark(loc, "abandoned ") << numInUse << " backedges";
+  return success(numInUse == 0);
 }
 
-Backedge::operator mlir::Value() { return value; }
+void BackedgeBuilder::abandon() { edges.clear(); }
 
 BackedgeBuilder::BackedgeBuilder(OpBuilder &builder, Location loc)
     : builder(builder), rewriter(nullptr), loc(loc) {}
 BackedgeBuilder::BackedgeBuilder(PatternRewriter &rewriter, Location loc)
     : builder(rewriter), rewriter(&rewriter), loc(loc) {}
-Backedge BackedgeBuilder::get(Type t) {
-  Operation *op =
-      builder.create<mlir::UnrealizedConversionCastOp>(loc, t, ValueRange{});
+Backedge BackedgeBuilder::get(Type t, mlir::LocationAttr optionalLoc) {
+  if (!optionalLoc)
+    optionalLoc = loc;
+  Operation *op = builder.create<mlir::UnrealizedConversionCastOp>(
+      optionalLoc, t, ValueRange{});
   edges.push_back(op);
   return Backedge(op);
 }

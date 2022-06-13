@@ -57,12 +57,14 @@ If you are installing PyCDE through `ninja install`, the libraries and Python mo
 
 ## Usage
 
+### Getting Started
+
 The following example demonstrates a simple module that adds two integers:
 
-```
+```python
 import pycde
 
-from circt.dialects import comb
+from pycde.dialects import comb
 
 
 @pycde.module
@@ -73,22 +75,99 @@ class AddInts:
 
     @pycde.generator
     def construct(mod):
-        mod.c = comb.AddOp.create(mod.a, mod.b)
+        mod.c = comb.AddOp(mod.a, mod.b)
 
 
-system = pycde.System([AddInts])
+system = pycde.System([AddInts], name="ExampleSystem")
 system.print()
 system.generate()
 system.print()
 system.emit_outputs()
 ```
 
-Modules are decorated with `@pycde.module`, and define their ports using `pycde.Input` and `pycde.Output`. To control how the body of the module is generated, decorate a method with `@pycde.generator`. The generator is passed an object of the module, and ports can be accessed through named attributes.
+### Modules, Generators, and Systems
 
-In order to work with modules, you must add them into a `pycde.System`. This is constructed by passing a list of modules. Calling the `generate` method will run the module(s) generators. Calling the `print_verilog` method will export the system to System Verilog.
+Modules are decorated with `@pycde.module`, and define their ports using `pycde.Input` and `pycde.Output`. To control how the body of the module is generated, decorate a method with `@pycde.generator`.
+
+The generator is passed an object representing the ports of the module, where each port can be accessed through named attributes according to port names. The value on an input port `a` of `mod` is accessed like `expr(mod.a)`. The value on an output port is assigned like `mod.c = expr`.
+
+In order to use `@pycde.module`s, you must add them into a `pycde.System`. This is constructed by passing a list of `@pycde.module`s, and optionally a name. The name defaults to `"PyCDESystem"`, and dictates the output directory for System Verilog files. Calling the `generate` method will run the module(s) generators. Calling the `emit_outputs` method will export the system to System Verilog.
 
 The above example will print out three times:
 
   1. The `AddInts` module with an empty body
   2. The `AddInts` module after its body has been generated
-  3. The `AddInts` module represented in System Verilog
+  3. The `AddInts` module represented in System Verilog, in `ExampleSystem/AddInts.sv`
+
+### Using CIRCT dialects
+
+Note that in the [Getting Started](#getting-started) example, we import `pycde.dialects` rather than `circt.dialects`. The `pycde.dialects` provide thin wrappers around the classes defined in `circt.dialects` and adapt them to [PyCDE Values](#pycde-values) by overriding each operation's constructor.
+
+### PyCDE Values
+
+PyCDE Values are how PyCDE supports named access to module input and output ports. They are also how PyCDE represents the operands and results of any operation imported from `pycde.dialects`. This allows PyCDE generators to stitch together instances of modules, external modules, and any operations from the CIRCT dialects.
+
+### Instantiating Modules
+
+Modules defined with `@pycde.module` can be included in other modules. The following example defines a module that instantiates the `AddInts` module defined in [Getting Started](#getting-started).
+
+```python
+
+@pycde.module
+class Top:
+    a = pycde.Input(pycde.types.i32)
+    b = pycde.Input(pycde.types.i32)
+    c = pycde.Output(pycde.types.i32)
+
+    @pycde.generator
+    def construct(mod):
+        add_ints = AddInts(a=mod.a, b=mod.b)
+        mod.c = add_ints.c
+
+
+system = pycde.System([Top], name="ExampleSystem")
+system.print()
+system.generate()
+system.print()
+system.emit_outputs()
+```
+
+The `Top` module in `ExampleSystem/Top.sv` instantiates the `AddInts` module we defined before.
+
+This demonstrates how to instantiate a module, as well as a more complex usage of [PyCDE Values](#pycde-values). The constructor of a `@pycde.module` expects named keyword arguments for each input port. These keyword arguments can be any PyCDE Values, and the above example uses module inputs. Objects of `@pycde.module` classes represent instances of the module, and support named access to output port values like `add_insts.c`. These output port values are PyCDE Values, and can be use to further connect modules or instantiate CIRCT dialect operations.
+
+### External Modules
+
+External modules are how PyCDE and CIRCT support interacting with existing System Verilog or Verilog modules. They are declared in PyCDE similarly to normal modules. The difference is external modules only contain a module interface but no generator for the implementation. The following example demonstrates using external modules.
+
+```python
+@pycde.externmodule("MyMultiplier")
+class MulInts:
+    a = pycde.Input(pycde.types.i32)
+    b = pycde.Input(pycde.types.i32)
+    c = pycde.Output(pycde.types.i32)
+
+@pycde.module
+class Top:
+    a = pycde.Input(pycde.types.i32)
+    b = pycde.Input(pycde.types.i32)
+    c = pycde.Output(pycde.types.i32)
+
+    @pycde.generator
+    def construct(mod):
+        add_ints = MulInts(a=mod.a, b=mod.b)
+        mod.c = add_ints.c
+
+
+system = pycde.System([Top], name="ExampleSystem")
+system.print()
+system.generate()
+system.print()
+system.emit_outputs()
+```
+
+The `Top` module in `ExampleSystem/Top.sv` instantiates the `MyMultiplier` external module.
+
+The `MyMultiplier` module is declared in the default output file, `ExampleSystem/ExampleSystem.sv`.
+
+External modules are decorated with `@pycde.externmodule`, and the decorator accepts a string name to use for the external module name. The ports are declared just like for `@pycde.module`, using `pycde.Input`, `pycde.Output`, and `pycde.types`. External modules are instantiated just like normal modules.

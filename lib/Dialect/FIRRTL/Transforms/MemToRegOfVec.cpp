@@ -30,21 +30,15 @@ using namespace circt;
 using namespace firrtl;
 
 namespace {
-static const char excludeMemToRegClass[] =
-    "sifive.enterprise.firrtl.ExcludeMemFromMemToRegOfVec";
 struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
   MemToRegOfVecPass(bool replSeqMem, bool ignoreReadEnable)
       : replSeqMem(replSeqMem), ignoreReadEnable(ignoreReadEnable){};
 
   void runOnOperation() override {
     auto circtOp = getOperation();
-    static const char dutAnnoClass[] =
-        "sifive.enterprise.firrtl.MarkDUTAnnotation";
-    static const char mem2regAnno[] =
-        "sifive.enterprise.firrtl.ConvertMemToRegOfVecAnnotation$";
     DenseSet<Operation *> dutModuleSet;
-
-    if (!AnnotationSet::removeAnnotations(circtOp, mem2regAnno))
+    if (!AnnotationSet::removeAnnotations(circtOp,
+                                          convertMemToRegOfVecAnnoClass))
       return;
     auto *body = circtOp.getBody();
 
@@ -71,7 +65,7 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
 
     mod.getBody()->walk([&](MemOp memOp) {
       LLVM_DEBUG(llvm::dbgs() << "\n Memory op:" << memOp);
-      if (AnnotationSet::removeAnnotations(memOp, excludeMemToRegClass))
+      if (AnnotationSet::removeAnnotations(memOp, excludeMemToRegAnnoClass))
         return;
 
       auto firMem = memOp.getSummary();

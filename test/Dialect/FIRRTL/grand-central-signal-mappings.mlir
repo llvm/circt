@@ -445,3 +445,126 @@ firrtl.circuit "Sub" attributes {
   // CHECK-NEXT:    %[[T4:.+]] = firrtl.verbatim.wire "Leaf.in"
   // CHECK-NEXT:    firrtl.force %[[T4]], %in_sink
 }
+
+// -----
+
+// Check remote-side handles targets needing new format hierpath's,
+// with and without path going through the DUT.
+
+// CHECK-LABEL: firrtl.circuit "MainWithnewNLA"
+firrtl.circuit "MainWithnewNLA" attributes {
+  annotations = [
+    {annotations = [],
+     circuit = "circuit empty :\0A  module empty :\0A\0A    skip\0A",
+     circuitPackage = "driving",
+     class = "sifive.enterprise.grandcentral.SignalDriverAnnotation",
+     id = 0 : i64,
+     isSubCircuit = false
+    }
+  ]} {
+  // Starting from DUT
+  firrtl.hierpath @nla_dut_rel [@DUT::@l, @Leaf]
+  // Not through DUT, describes multiple paths
+  firrtl.hierpath @nla_segment [@Mid::@l, @Leaf]
+  // Top to leaf, through the DUT
+  firrtl.hierpath @nla_top_thru_dut_to_w [@MainWithnewNLA::@dut, @DUT::@m, @Mid::@l, @Leaf]
+  firrtl.module private @Leaf(
+    in %in: !firrtl.uint<1> [{
+      circt.nonlocal = @nla_segment,
+      class = "sifive.enterprise.grandcentral.SignalDriverAnnotation",
+      dir = "source",
+      id = 0 : i64,
+      peer = "~Sub|Sub>in_source",
+      side = "remote",
+      targetId = 2 : i64
+    }, {
+      class = "sifive.enterprise.grandcentral.SignalDriverAnnotation",
+      dir = "sink",
+      id = 0 : i64,
+      peer = "~Sub|Sub>in_sink",
+      side = "remote",
+      targetId = 3 : i64
+    }],
+    out %out: !firrtl.uint<1>) attributes {
+      annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", id = 0 : i64}]
+    } {
+    %w = firrtl.wire {
+      annotations = [{
+        circt.nonlocal = @nla_top_thru_dut_to_w,
+        class = "sifive.enterprise.grandcentral.SignalDriverAnnotation",
+        dir = "source",
+        id = 0 : i64,
+        peer = "~Sub|Sub>w_source",
+        side = "remote",
+        targetId = 1 : i64
+      }, {
+        circt.nonlocal = @nla_dut_rel,
+        class = "sifive.enterprise.grandcentral.SignalDriverAnnotation",
+        dir = "sink",
+        id = 0 : i64,
+        peer = "~Sub|Sub>w_sink",
+        side = "remote",
+        targetId = 4 : i64}
+       ]} : !firrtl.uint<1>
+    // CHECK:  %w = firrtl.wire sym @w   : !firrtl.uint<1>
+    firrtl.strictconnect %w, %in : !firrtl.uint<1>
+    firrtl.strictconnect %out, %w : !firrtl.uint<1>
+  }
+  firrtl.module private @Mid(in %in: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
+    %l_in, %l_out = firrtl.instance l sym @l  @Leaf(in in: !firrtl.uint<1>, out out: !firrtl.uint<1>)
+    firrtl.strictconnect %l_in, %in : !firrtl.uint<1>
+    firrtl.strictconnect %out, %l_out : !firrtl.uint<1>
+  }
+  firrtl.module @MainWithnewNLA(in %in: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
+    %dut_in, %dut_out = firrtl.instance dut sym @dut  @DUT(in in: !firrtl.uint<1>, out out: !firrtl.uint<1>)
+    firrtl.strictconnect %dut_in, %in : !firrtl.uint<1>
+    firrtl.strictconnect %out, %dut_out : !firrtl.uint<1>
+    %m_in, %m_out = firrtl.instance m  @Mid(in in: !firrtl.uint<1>, out out: !firrtl.uint<1>)
+    firrtl.strictconnect %m_in, %in : !firrtl.uint<1>
+  }
+  firrtl.module private @DUT(in %in: !firrtl.uint<1>, out %out: !firrtl.uint<1>) attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
+    %l_in, %l_out = firrtl.instance l sym @l  @Leaf(in in: !firrtl.uint<1>, out out: !firrtl.uint<1>)
+    %m_in, %m_out = firrtl.instance m sym @m  @Mid(in in: !firrtl.uint<1>, out out: !firrtl.uint<1>)
+    firrtl.strictconnect %l_in, %in : !firrtl.uint<1>
+    firrtl.strictconnect %m_in, %in : !firrtl.uint<1>
+    %0 = firrtl.or %l_out, %m_out : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.strictconnect %out, %0 : !firrtl.uint<1>
+  }
+  // CHECK:      sv.verbatim "[
+  // CHECK-SAME:   {
+  // CHECK-SAME:     \22sinkTargets\22: [
+  // CHECK-SAME:       {
+  // CHECK-SAME{LITERAL}: \22_1\22: \22~{{0}}|{{1}}>in\22
+  // CHECK-SAME{LITERAL}: \22_2\22: \22~Sub|Sub>in_sink\22
+  // CHECK-SAME:       },
+  // CHECK-SAME:       {
+  // CHECK-SAME{LITERAL}: \22_1\22: \22~{{0}}|{{0}}/{{3}}:{{1}}>{{2}}\22,
+  // CHECK-SAME{LITERAL}: \22_2\22: \22~Sub|Sub>w_sink\22
+  // CHECK-SAME:       }
+  // CHECK-SAME:     ],
+  // CHECK-SAME:     \22sourceTargets\22: [
+  // CHECK-SAME:       {
+  // CHECK-SAME{LITERAL}: \22_1\22: \22~{{0}}|{{4}}/{{5}}:{{1}}>in\22,
+  // CHECK-SAME{LITERAL}: \22_2\22: \22~Sub|Sub>in_source\22
+  // CHECK-SAME:       },
+  // CHECK-SAME:       {
+  // CHECK-SAME{LITERAL}: \22_1\22: \22~{{0}}|{{0}}/{{6}}:{{4}}/{{5}}:{{1}}>{{2}}\22,
+  // CHECK-SAME{LITERAL}: \22_2\22: \22~Sub|Sub>w_source\22
+  // CHECK-SAME:       }
+  // CHECK-SAME:     ],
+  // CHECK-SAME:   }
+  // CHECK-SAME: ]"
+  // CHECK-SAME: {
+  // CHECK-SAME:   output_file =
+  // CHECK-SAME:     #hw.output_file<"sigdrive.json", excludeFromFileList>
+  // CHECK-SAME:   symbols = [
+  // CHECK-SAME:     @DUT,
+  // CHECK-SAME:     @Leaf,
+  // CHECK-SAME:     #hw.innerNameRef<@Leaf::@w>,
+  // CHECK-SAME:     #hw.innerNameRef<@DUT::@l>,
+  // CHECK-SAME:     @Mid,
+  // CHECK-SAME:     #hw.innerNameRef<@Mid::@l>,
+  // CHECK-SAME:     #hw.innerNameRef<@DUT::@m>
+  // CHECK-SAME:    ]
+  // CHECK-SAME: }
+}
