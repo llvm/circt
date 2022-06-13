@@ -239,11 +239,10 @@ void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
   // element.
 
   auto leafSym = memModule.moduleNameAttr();
-  auto leafAttr = hw::InnerRefAttr::get(wrapper.moduleNameAttr(), leafSym);
+  auto leafAttr = FlatSymbolRefAttr::get(wrapper.moduleNameAttr());
   auto instRefAttr =
       hw::InnerRefAttr::get(inst->getParentOfType<FModuleOp>().moduleNameAttr(),
                             inst.getInnerNameAttr());
-  auto memModRefAttr = FlatSymbolRefAttr::get(memModule);
   // NLAs that we have already processed.
   llvm::SmallDenseMap<StringAttr, StringAttr> processedNLAs;
   auto nonlocalAttr = StringAttr::get(context, "circt.nonlocal");
@@ -269,7 +268,6 @@ void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
         newNamepath[newNamepath.size() - 1] = instRefAttr;
 
       newNamepath.push_back(leafAttr);
-      newNamepath.push_back(memModRefAttr);
       nlaBuilder.setInsertionPointAfter(nla);
       auto newNLA = cast<HierPathOp>(nlaBuilder.clone(*nla));
       newNLA.sym_nameAttr(StringAttr::get(
@@ -280,15 +278,15 @@ void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
     } else
       newNLAName = newNLAIter->getSecond();
     anno.setMember("circt.nonlocal", FlatSymbolRefAttr::get(newNLAName));
-    newMemModAnnos.push_back(anno);
     nlaUpdated = true;
+    newMemModAnnos.push_back(anno);
     return true;
   });
   if (nlaUpdated) {
     memInst.inner_symAttr(leafSym);
-    AnnotationSet newAnnos(memModule);
+    AnnotationSet newAnnos(memInst);
     newAnnos.addAnnotations(newMemModAnnos);
-    newAnnos.applyToOperation(memModule);
+    newAnnos.applyToOperation(memInst);
   }
   mem->erase();
 }
