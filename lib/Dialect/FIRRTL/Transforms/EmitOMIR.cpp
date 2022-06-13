@@ -327,13 +327,6 @@ void EmitOMIRPass::runOnOperation() {
   if (anyFailures)
     return signalPassFailure();
 
-  // Delete the temporary NLAs.
-  for (auto nla : removeTempNLAs) {
-    LLVM_DEBUG(llvm::dbgs() << "Removing '" << nla << "'\n");
-    nlaTable->erase(nla);
-    nla.erase();
-  }
-
   removeTempNLAs.clear();
   // Remove the temp symbol from instances.
   for (auto *op : tempSymInstances)
