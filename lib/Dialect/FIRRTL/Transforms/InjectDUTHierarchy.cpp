@@ -227,7 +227,12 @@ void InjectDUTHierarchy::runOnOperation() {
       llvm::dbgs() << "  - " << FlatSymbolRefAttr::get(sym) << "\n";
   });
 
-  // Update NLAs involving the DUT.  There are three cases to consider:
+  // Update NLAs involving the DUT.
+  //
+  // NOTE: the _DUT_ is the new DUT and all the original DUT contents are put
+  // inside the DUT in the _wrapper_.
+  //
+  // There are three cases to consider:
   //   1. The DUT or a DUT port is a leaf ref.  Do nothing.
   //   2. The DUT is the root.  Update the root module to be the wrapper.
   //   3. The NLA passes through the DUT.  Remove the original InnerRef and
@@ -255,6 +260,9 @@ void InjectDUTHierarchy::runOnOperation() {
     // The path ends at the DUT.  This may be a reference path (ends in
     // hw::InnerRefAttr) or a module path (ends in FlatSymbolRefAttr).  There
     // are a number of patterns to disambiguate:
+    //
+    // NOTE: the _DUT_ is the new DUT and all the original DUT contents are put
+    // inside the DUT in the _wrapper_.
     //
     //   1. Reference path on port.  Do nothing.
     //   2. Reference path on component.  Add hierarchy
