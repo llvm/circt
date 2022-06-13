@@ -12,11 +12,12 @@
 
 #include "circt/Dialect/LLHD/IR/LLHDTypes.h"
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
+#include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "llvm/ADT/TypeSwitch.h"
 
-using namespace circt;
 using namespace circt::llhd;
+using namespace mlir;
 
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/LLHD/IR/LLHDTypes.cpp.inc"
