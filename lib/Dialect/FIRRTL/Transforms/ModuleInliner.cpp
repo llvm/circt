@@ -21,6 +21,7 @@
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BlockAndValueMapping.h"
+#include "mlir/IR/Threading.h"
 #include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/SetOperations.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -65,6 +66,13 @@ class MutableNLA {
   /// Indicates if the _original_ NLA is dead and should be deleted.  Updates
   /// may still need to be written if the newTops vector below is non-empty.
   bool dead = false;
+
+  /// Indicates if the NLA is only used to target a module
+  /// (i.e., no ports or operations use this HierPathOp).
+  /// This is needed to help determine when the HierPathOp is dead:
+  /// if we inline/flatten a module, NLA's targeting (only) that module
+  /// are now dead.
+  bool moduleOnly = false;
 
   /// Stores new roots for the NLA.  If this is non-empty, then it indicates
   /// that the NLA should be copied and re-topped using the roots stored here.
@@ -120,6 +128,9 @@ public:
   /// Set the state of the mutable NLA to indicate that the _original_ NLA
   /// should be removed when updates are applied.
   void markDead() { dead = true; }
+
+  /// Set the state of the mutable NLA to indicate the only target is a module.
+  void markModuleOnly() { moduleOnly = true; }
 
   /// Return the original NLA that this was pointing at.
   HierPathOp getNLA() { return nla; }
@@ -205,6 +216,7 @@ public:
                  << "    new:            " << *this << "\n"
                  << "    dead:           " << dead << "\n"
                  << "    isDead:         " << isDead() << "\n"
+                 << "    isModuleOnly:   " << isModuleOnly() << "\n"
                  << "    isLocal:        " << isLocal() << "\n"
                  << "    inlinedSymbols: [";
     llvm::interleaveComma(inlinedSymbols.getData(), llvm::errs(), [](auto a) {
@@ -298,6 +310,9 @@ public:
   ///   2. This NLA was flattened and its leaf reference is a Module.
   bool isDead() { return dead && newTops.empty(); }
 
+  /// Returns true if this NLA targets only a module.
+  bool isModuleOnly() { return moduleOnly; }
+
   /// Returns true if this NLA is local.  For this to be local, every module
   /// after the root (up to the flatten point or the end) must be inlined.  The
   /// root is never truly inlined as inlined as inlining the root just sets a
@@ -320,23 +335,23 @@ public:
     assert(symIdx.count(sym) && "module is not in the symIdx map");
     auto idx = symIdx[sym];
     inlinedSymbols.reset(idx);
-    // If we inlined the last module in the path and the NLA ended in a module,
-    // then this NLA is dead.
-    if (idx == size - 1 && nla.isModule())
+    // If we inlined the last module in the path and the NLA targets only that
+    // module, then this NLA is dead.
+    if (idx == size - 1 && moduleOnly)
       markDead();
   }
 
   /// Mark a module as flattened.  This has the effect of inlining all of its
   /// children.  Also mark the NLA was dead if the leaf reference of this NLA is
-  /// a module.
+  /// a module and the only target is a module.
   void flattenModule(FModuleOp module) {
     auto sym = module.getNameAttr();
     assert(symIdx.count(sym) && "module is not in the symIdx map");
     auto idx = symIdx[sym] - 1;
     flattenPoint = idx;
-    // If the leaf reference is a module and we're flattening the NLA, then the
-    // NLA must be dead.  Mark it as such.
-    if (nla.namepath()[size - 1].isa<FlatSymbolRefAttr>())
+    // If the NLA only targets a module and we're flattening the NLA,
+    // then the NLA must be dead.  Mark it as such.
+    if (moduleOnly)
       markDead();
   }
 
@@ -461,6 +476,9 @@ private:
 
   /// Inline any instances in the module which were marked for inlining.
   void inlineInstances(FModuleOp module);
+
+  /// Identify all module-only NLA's, marking their MutableNLA's accordingly.
+  void identifyNLAsTargetingOnlyModules();
 
   CircuitOp circuit;
   MLIRContext *context;
@@ -960,12 +978,67 @@ void Inliner::inlineInstances(FModuleOp parent) {
   }
 }
 
+void Inliner::identifyNLAsTargetingOnlyModules() {
+  DenseSet<FModuleOp> nlaTargetedModules;
+
+  // Identify candidate NLA's: those that end in a module
+  for (auto &[sym, mnla] : nlaMap) {
+    auto nla = mnla.getNLA();
+    if (nla.isModule())
+      nlaTargetedModules.insert(symbolTable.lookup<FModuleOp>(nla.leafMod()));
+  }
+
+  // Helper to scan leaf modules for users of NLAs, gathering by symbol names
+  auto scanForNLARefs = [&](FModuleOp mod) {
+    DenseSet<StringAttr> referencedNLASyms;
+    // Scan ports
+    for (unsigned i = 0, e = mod.getNumPorts(); i != e; ++i)
+      for (auto anno : AnnotationSet::forPort(mod, i))
+        if (auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal"))
+          referencedNLASyms.insert(sym.getAttr());
+
+    // Scan operations (and not the module itself):
+    mod.getBody()->walk([&](Operation *op) {
+      for (auto anno : AnnotationSet(op))
+        if (auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal"))
+          referencedNLASyms.insert(sym.getAttr());
+    });
+
+    return referencedNLASyms;
+  };
+
+  // Walk modules in parallel, scanning for references to NLA's
+  // Gather set of NLA's referenced by each module's ports/operations.
+
+  // Vector of modules and vector for storing results of each walk:
+  SmallVector<FModuleOp, 16> mods(nlaTargetedModules.begin(),
+                                  nlaTargetedModules.end());
+  SmallVector<DenseSet<StringAttr>, 16> refSets;
+  refSets.resize(nlaTargetedModules.size());
+  mlir::parallelForEachN(
+      circuit->getContext(), 0, nlaTargetedModules.size(),
+      [&](size_t index) { refSets[index] = scanForNLARefs(mods[index]); });
+
+  // Combine sets into single "is referenced by a port/operation" set
+  DenseSet<StringAttr> nonModOnlyNLAs;
+  for (auto &set : refSets)
+    nonModOnlyNLAs.insert(set.begin(), set.end());
+
+  // Mark NLA's that were not referenced as module-only
+  for (auto &[_, mnla] : nlaMap) {
+    auto nla = mnla.getNLA();
+    if (nla.isModule() && !nonModOnlyNLAs.count(nla.sym_nameAttr()))
+      mnla.markModuleOnly();
+  }
+}
+
 Inliner::Inliner(CircuitOp circuit)
     : circuit(circuit), context(circuit.getContext()), symbolTable(circuit) {}
 
 void Inliner::run() {
   CircuitNamespace circuitNamespace(circuit);
 
+  // Gather all NLA's, build information about the instance ops used:
   for (auto nla : circuit.getBody()->getOps<HierPathOp>()) {
     auto mnla = MutableNLA(nla, &circuitNamespace);
     nlaMap.insert({nla.sym_nameAttr(), mnla});
@@ -974,6 +1047,9 @@ void Inliner::run() {
       if (auto ref = p.dyn_cast<InnerRefAttr>())
         instOpHierPaths[ref].push_back(nla.sym_nameAttr());
   }
+  // Mark 'module-only' the NLA's that only target modules.
+  // These may be deleted when their module is inlined/flattened.
+  identifyNLAsTargetingOnlyModules();
 
   // Mark the top module as live, so it doesn't get deleted.
   for (auto module : circuit.getOps<FModuleLike>()) {
