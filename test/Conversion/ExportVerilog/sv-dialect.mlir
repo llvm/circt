@@ -112,7 +112,6 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
       sv.bpassign %wire42, %param_y : i42
     }
 
-    // CHECK:   (* compiler_defined_attr *)
     // CHECK-NEXT:   if (cond)
     // CHECK-NOT: begin
     sv.if %cond {
@@ -123,7 +122,7 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
 
       // CHECK-NEXT: $fwrite(32'h80000002, "Inlined! %x %x\n", 8'(val + 8'h2A), 8'(8'(val - 8'h2A) - 8'h2A));
       sv.fwrite %fd, "Inlined! %x %x\n"(%add, %sub) : i8, i8
-    } { "sv.attributes" = "compiler_defined_attr" }
+    }
 
     // begin/end required here to avoid else-confusion.
 
@@ -466,12 +465,11 @@ hw.module @reg_0(%in4: i4, %in8: i8) -> (a: i8, b: i8) {
   // CHECK-EMPTY:
   // CHECK-NEXT: (* dont_merge *)
   // CHECK-NEXT: reg [7:0]       myReg;
-  %myReg = sv.reg { "sv.attributes" = "dont_merge" } : !hw.inout<i8>
+  %myReg = sv.reg svattrs ["dont_merge"] : !hw.inout<i8>
 
-  // CHECK-NEXT: (* dont_merge *)
-  // CHECK-NEXT: (* dont_retime *)
+  // CHECK-NEXT: (* dont_merge, dont_retime *)
   // CHECK-NEXT: reg [41:0][7:0] myRegArray1;
-  %myRegArray1 = sv.reg { "sv.attributes" = ["dont_merge", "dont_retime"] } : !hw.inout<array<42 x i8>>
+  %myRegArray1 = sv.reg svattrs ["dont_merge", "dont_retime"] : !hw.inout<array<42 x i8>>
 
   // CHECK-EMPTY:
   sv.assign %myReg, %in8 : i8        // CHECK-NEXT: assign myReg = in8;

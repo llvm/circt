@@ -2464,7 +2464,7 @@ private:
   void
   emitExpression(Value exp, SmallPtrSet<Operation *, 8> &emittedExprs,
                  VerilogPrecedence parenthesizeIfLooserThan = LowestPrecedence);
-  void emitSVAttributes(Operation *op);
+  void emitSVAttributes(ArrayAttr svAttrs, Operation *op);
 
   using StmtVisitor::visitStmt;
   using Visitor::visitSV;
@@ -2596,21 +2596,23 @@ void StmtEmitter::emitExpression(Value exp,
 
 /// Emit SystemVerilog attributes attached to the statement op as dialect
 /// attributes.
-void StmtEmitter::emitSVAttributes(Operation *op) {
+void StmtEmitter::emitSVAttributes(ArrayAttr svAttrs, Operation *op) {
   // SystemVerilog 2017 Section 5.12.
-  if (Attribute svAttrs = op->getAttr("sv.attributes")) {
-    auto emitAttribute = [&](Attribute attr) {
-      if (auto strAttr = attr.dyn_cast<StringAttr>())
-        indent() << "(* " << strAttr.getValue() << " *)\n";
-      else
-        op->emitOpError("cannot emit SystemVerilog attribute");
-    };
-    if (auto arr = svAttrs.dyn_cast<ArrayAttr>())
-      for (Attribute attr : arr)
-        emitAttribute(attr);
+  if (!svAttrs)
+    return;
+  SmallVector<Attribute, 0> errorAttrs;
+
+  indent() << "(* ";
+  llvm::interleaveComma(svAttrs, os, [&](Attribute attr) {
+    if (auto strAttr = attr.dyn_cast<StringAttr>())
+      os << strAttr.getValue();
     else
-      emitAttribute(svAttrs);
-  }
+      errorAttrs.push_back(attr);
+  });
+  os << " *)\n";
+
+  for (Attribute errorAttr : errorAttrs)
+    op->emitOpError("cannot emit SystemVerilog attribute: ") << errorAttr;
 }
 
 void StmtEmitter::emitStatementExpression(Operation *op) {
@@ -3573,12 +3575,6 @@ void StmtEmitter::emitStatement(Operation *op) {
 
   ++numStatementsEmitted;
 
-  // Check that operation hasn't been declared already. If it has, the Verilog
-  // attributes were already emitted at the declaration site and they are not
-  // meaningful here. Otherwise emit them immediately before the statement.
-  if (!names.hasName(op))
-    emitSVAttributes(op);
-
   // Know where the start of this statement is in case any out-of-band precursor
   // statements need to be emitted.
   statementBeginning = rearrangableStream.getCursor();
@@ -3710,7 +3706,10 @@ void StmtEmitter::collectNamesEmitDecls(Block &block) {
 
     // If we have SV attributes attached to the op, those need to be emitted
     // first.
-    emitSVAttributes(op);
+    if (auto regOp = dyn_cast<RegOp>(op))
+      emitSVAttributes(regOp.svAttributesAttr(), op);
+    else if (auto wireOp = dyn_cast<WireOp>(op))
+      emitSVAttributes(wireOp.svAttributesAttr(), op);
 
     // Emit the leading word, like 'wire' or 'reg'.
     auto type = record.value.getType();
