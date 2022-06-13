@@ -239,12 +239,17 @@ firrtl.module @Annotations() attributes {annotations = [{class = "sifive.enterpr
 // Check that annotations are copied over to the instance.
 // CHECK-LABEL: firrtl.circuit "NonLocalAnnotation"
 firrtl.circuit "NonLocalAnnotation" {
+<<<<<<< HEAD
 
 // CHECK:  firrtl.hierpath @[[nla_0:.+]] [@NonLocalAnnotation::@dut, @DUT::@mem0, @mem0]
 firrtl.hierpath @nla0 [@NonLocalAnnotation::@dut, @DUT::@mem0]
 // CHECK:  firrtl.hierpath @[[nla_1:.+]] [@NonLocalAnnotation::@dut, @DUT::@mem1, @mem1]
 firrtl.hierpath @nla1 [@NonLocalAnnotation::@dut, @DUT]
 
+=======
+// CHECK:  firrtl.hierpath @[[nla_0:.+]] [@NonLocalAnnotation::@dut, @DUT::@sym, @mem0::@mem0_ext, @mem0_ext]
+firrtl.hierpath @nla [@NonLocalAnnotation::@dut, @DUT]
+>>>>>>> 36da8ca28... Reformat the code
 // CHECK: firrtl.module @NonLocalAnnotation()
 firrtl.module @NonLocalAnnotation()  {
   firrtl.instance dut sym @dut @DUT()
@@ -265,6 +270,7 @@ firrtl.module @DUT() {
 }
 
 // CHECK: firrtl.module @mem0
+<<<<<<< HEAD
 // CHECK:   firrtl.instance mem0_ext sym @mem0_ext
 // CHECK-SAME: {annotations = [{circt.nonlocal = @[[nla_0]], class = "test0"}]}
 // CHECK-SAME:  @mem0_ext(
@@ -274,4 +280,10 @@ firrtl.module @DUT() {
 // CHECK:   firrtl.instance mem0_ext sym @mem0_ext 
 // CHECK-SAME:  {annotations = [{circt.nonlocal = @[[nla_1]], class = "test1"}]}
 // CHECK-SAME:  @mem0_ext(
+=======
+// CHECK:   firrtl.instance mem0_ext sym @mem0_ext @mem0_ext
+// CHECK: }
+// CHECK-LABEL:   firrtl.memmodule @mem0_ext
+// CHECK-SAME: annotations = [{circt.nonlocal = @[[nla_0]], class = "test0"}, {circt.nonlocal = @[[nla_0]], class = "test2"}
+>>>>>>> 36da8ca28... Reformat the code
 }
