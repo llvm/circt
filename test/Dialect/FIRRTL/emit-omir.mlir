@@ -176,14 +176,14 @@ firrtl.circuit "LocalTrackers" attributes {annotations = [{
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }
 // CHECK-NEXT:  sv.verbatim
-// CHECK-SAME:  \22name\22: \22OMReferenceTarget1\22
-// CHECK-SAME:  \22value\22: \22OMReferenceTarget:~LocalTrackers|{{[{][{]0[}][}]}}\22
-// CHECK-SAME:  \22name\22: \22OMReferenceTarget2\22
-// CHECK-SAME:  \22value\22: \22OMReferenceTarget:~LocalTrackers|{{[{][{]0[}][}]}}>{{[{][{]1[}][}]}}\22
-// CHECK-SAME:  \22name\22: \22OMReferenceTarget3\22
-// CHECK-SAME:  \22value\22: \22OMReferenceTarget:~LocalTrackers|{{[{][{]2[}][}]}}>{{[{][{]3[}][}]}}\22
-// CHECK-SAME:  \22name\22: \22OMReferenceTarget4\22
-// CHECK-SAME:  \22value\22: \22OMReferenceTarget:~LocalTrackers|{{[{][{]2[}][}]}}>{{[{][{]4[}][}]}}\22
+// CHECK-SAME:           \22name\22: \22OMReferenceTarget1\22
+// CHECK-SAME{LITERAL}:  \22value\22: \22OMReferenceTarget:~LocalTrackers|{{0}}\22
+// CHECK-SAME:           \22name\22: \22OMReferenceTarget2\22
+// CHECK-SAME{LITERAL}:  \22value\22: \22OMReferenceTarget:~LocalTrackers|{{0}}>{{1}}\22
+// CHECK-SAME:           \22name\22: \22OMReferenceTarget3\22
+// CHECK-SAME{LITERAL}:  \22value\22: \22OMReferenceTarget:~LocalTrackers|{{2}}>{{3}}\22
+// CHECK-SAME:           \22name\22: \22OMReferenceTarget4\22
+// CHECK-SAME{LITERAL}:  \22value\22: \22OMReferenceTarget:~LocalTrackers|{{2}}>{{4}}\22
 // CHECK-SAME:  symbols = [
 // CHECK-SAME:    @A,
 // CHECK-SAME:    #hw.innerNameRef<@A::[[SYMC:@[a-zA-Z0-9_]+]]>,
@@ -215,8 +215,8 @@ firrtl.circuit "NonLocalTrackers" attributes {annotations = [{
 // CHECK:       firrtl.instance a sym [[SYMA:@[a-zA-Z0-9_]+]]
 // CHECK:       firrtl.instance b sym [[SYMB:@[a-zA-Z0-9_]+]]
 // CHECK:       sv.verbatim
-// CHECK-SAME:  \22name\22: \22OMReferenceTarget1\22
-// CHECK-SAME:  \22value\22: \22OMReferenceTarget:~NonLocalTrackers|{{[{][{]0[}][}]}}/{{[{][{]1[}][}]}}:{{[{][{]2[}][}]}}/{{[{][{]3[}][}]}}:{{[{][{]4[}][}]}}\22
+// CHECK-SAME:           \22name\22: \22OMReferenceTarget1\22
+// CHECK-SAME{LITERAL}:  \22value\22: \22OMReferenceTarget:~NonLocalTrackers|{{0}}/{{1}}:{{2}}/{{3}}:{{4}}\22
 // CHECK-SAME:  symbols = [
 // CHECK-SAME:    @NonLocalTrackers,
 // CHECK-SAME:    #hw.innerNameRef<@NonLocalTrackers::[[SYMB:@[a-zA-Z0-9_]+]]>,
@@ -303,23 +303,25 @@ firrtl.circuit "SRAMPaths" attributes {annotations = [{
 // CHECK-NEXT:  }
 // CHECK-NEXT:  sv.verbatim
 
-// CHECK-SAME:  \22id\22: \22OMID:0\22
-// CHECK-SAME:    \22name\22: \22omType\22
-// CHECK-SAME:    \22value\22: [
-// CHECK-SAME:      \22OMString:OMLazyModule\22
-// CHECK-SAME:      \22OMString:OMSRAM\22
-// CHECK-SAME:    ]
-// CHECK-SAME:    \22name\22: \22finalPath\22
-// CHECK-SAME:    \22value\22: \22OMMemberInstanceTarget:~SRAMPaths|{{[{][{]0[}][}]}}/{{[{][{]1[}][}]}}:{{[{][{]2[}][}]}}/{{[{][{]3[}][}]}}:{{[{][{]4[}][}]}}\22
+// CHECK-SAME:           \22id\22: \22OMID:0\22
+// CHECK-SAME:             \22name\22: \22omType\22
+// CHECK-SAME:             \22value\22: [
+// CHECK-SAME:               \22OMString:OMLazyModule\22
+// CHECK-SAME:               \22OMString:OMSRAM\22
+// CHECK-SAME:             ]
+// CHECK-SAME:              \22name\22: \22finalPath\22
+// CHECK-SAME{LITERAL}:    \22value\22: \22OMMemberInstanceTarget:~SRAMPaths|{{0}}/{{1}}:{{2}}/{{3}}:{{4}}\22
 
-// CHECK-SAME:  \22id\22: \22OMID:1\22
-// CHECK-SAME:    \22name\22: \22omType\22
-// CHECK-SAME:    \22value\22: [
-// CHECK-SAME:      \22OMString:OMLazyModule\22
-// CHECK-SAME:      \22OMString:OMSRAM\22
-// CHECK-SAME:    ]
-// CHECK-SAME:    \22name\22: \22finalPath\22
-// CHECK-SAME:    \22value\22: \22OMMemberInstanceTarget:~SRAMPaths|{{[{][{]0[}][}]}}/{{[{][{]1[}][}]}}:{{[{][{]2[}][}]}}/{{[{][{]5[}][}]}}:{{[^\\]+}}\22
+// CHECK-SAME:           \22id\22: \22OMID:1\22
+// CHECK-SAME:             \22name\22: \22omType\22
+// CHECK-SAME:             \22value\22: [
+// CHECK-SAME:               \22OMString:OMLazyModule\22
+// CHECK-SAME:               \22OMString:OMSRAM\22
+// CHECK-SAME:             ]
+// CHECK-SAME:             \22name\22: \22finalPath\22
+// CHECK-SAME{LITERAL}:    \22value\22: \22OMMemberInstanceTarget:~SRAMPaths|{{0}}/{{1}}:{{2}}/{{5}}:
+// CHECK-NOT:                {{.+}}
+// CHECK-SAME:               {{[^\\]+}}\22
 
 // CHECK-SAME:  symbols = [
 // CHECK-SAME:    @SRAMPaths,
@@ -396,6 +398,8 @@ firrtl.circuit "SRAMPathsWithNLA" attributes {annotations = [{
 // CHECK-SAME:             ]
 // CHECK-SAME:             \22name\22: \22finalPath\22
 // CHECK-SAME{LITERAL}:    \22value\22: \22OMMemberInstanceTarget:~SRAMPathsWithNLA|{{0}}/{{1}}:{{2}}/{{3}}:
+// CHECK-NOT:                {{.+}}
+// CHECK-SAME:               {{[^\\]+}}\22
 
 // CHECK-SAME:           id\22: \22OMID:2\22
 // CHECK-SAME:             \22name\22: \22omType\22
@@ -405,6 +409,8 @@ firrtl.circuit "SRAMPathsWithNLA" attributes {annotations = [{
 // CHECK-SAME:             ]
 // CHECK-SAME:             \22name\22: \22finalPath\22
 // CHECK-SAME{LITERAL}:    \22value\22: \22OMMemberInstanceTarget:~SRAMPathsWithNLA|{{0}}/{{1}}:{{2}}/{{4}}:
+// CHECK-NOT:                {{.+}}
+// CHECK-SAME:               {{[^\\]+}}\22
 
 // CHECK-SAME:  symbols = [
 // CHECK-SAME:    @SRAMPathsWithNLA,
@@ -508,39 +514,39 @@ firrtl.circuit "AddPorts" attributes {annotations = [{
 // CHECK:       %w = firrtl.wire sym [[SYMW:@[a-zA-Z0-9_]+]]
 // CHECK:       sv.verbatim
 
-// CHECK-SAME:  \22id\22: \22OMID:0\22
-// CHECK-SAME:    \22name\22: \22containingModule\22
-// CHECK-SAME:    \22value\22: \22OMInstanceTarget:~AddPorts|{{[{][{]0[}][}]}}\22
-// CHECK-SAME:    \22name\22: \22ports\22
-// CHECK-SAME:    \22value\22: [
-// CHECK-SAME:      {
-// CHECK-SAME:        \22ref\22: \22OMDontTouchedReferenceTarget:~AddPorts|{{[{][{]0[}][}]}}>{{[{][{]1[}][}]}}\22
-// CHECK-SAME:        \22direction\22: \22OMString:Input\22
-// CHECK-SAME:        \22width\22: \22OMBigInt:1d\22
-// CHECK-SAME:      }
-// CHECK-SAME:      {
-// CHECK-SAME:        \22ref\22: \22OMDontTouchedReferenceTarget:~AddPorts|{{[{][{]0[}][}]}}>{{[{][{]2[}][}]}}\22
-// CHECK-SAME:        \22direction\22: \22OMString:Output\22
-// CHECK-SAME:        \22width\22: \22OMBigInt:1f\22
-// CHECK-SAME:      }
-// CHECK-SAME:    ]
+// CHECK-SAME:           \22id\22: \22OMID:0\22
+// CHECK-SAME:             \22name\22: \22containingModule\22
+// CHECK-SAME{LITERAL}:    \22value\22: \22OMInstanceTarget:~AddPorts|{{0}}\22
+// CHECK-SAME:             \22name\22: \22ports\22
+// CHECK-SAME:             \22value\22: [
+// CHECK-SAME:               {
+// CHECK-SAME{LITERAL}:        \22ref\22: \22OMDontTouchedReferenceTarget:~AddPorts|{{0}}>{{1}}\22
+// CHECK-SAME:                 \22direction\22: \22OMString:Input\22
+// CHECK-SAME:                 \22width\22: \22OMBigInt:1d\22
+// CHECK-SAME:               }
+// CHECK-SAME:               {
+// CHECK-SAME{LITERAL}:        \22ref\22: \22OMDontTouchedReferenceTarget:~AddPorts|{{0}}>{{2}}\22
+// CHECK-SAME:                 \22direction\22: \22OMString:Output\22
+// CHECK-SAME:                 \22width\22: \22OMBigInt:1f\22
+// CHECK-SAME:               }
+// CHECK-SAME:             ]
 
-// CHECK-SAME:  \22id\22: \22OMID:1\22
-// CHECK-SAME:    \22name\22: \22containingModule\22
-// CHECK-SAME:    \22value\22: \22OMReferenceTarget:~AddPorts|{{[{][{]0[}][}]}}>{{[{][{]3[}][}]}}\22
-// CHECK-SAME:    \22name\22: \22ports\22
-// CHECK-SAME:    \22value\22: [
-// CHECK-SAME:      {
-// CHECK-SAME:        \22ref\22: \22OMDontTouchedReferenceTarget:~AddPorts|{{[{][{]0[}][}]}}>{{[{][{]1[}][}]}}\22
-// CHECK-SAME:        \22direction\22: \22OMString:Input\22
-// CHECK-SAME:        \22width\22: \22OMBigInt:1d\22
-// CHECK-SAME:      }
-// CHECK-SAME:      {
-// CHECK-SAME:        \22ref\22: \22OMDontTouchedReferenceTarget:~AddPorts|{{[{][{]0[}][}]}}>{{[{][{]2[}][}]}}\22
-// CHECK-SAME:        \22direction\22: \22OMString:Output\22
-// CHECK-SAME:        \22width\22: \22OMBigInt:1f\22
-// CHECK-SAME:      }
-// CHECK-SAME:    ]
+// CHECK-SAME:           \22id\22: \22OMID:1\22
+// CHECK-SAME:             \22name\22: \22containingModule\22
+// CHECK-SAME{LITERAL}:    \22value\22: \22OMReferenceTarget:~AddPorts|{{0}}>{{3}}\22
+// CHECK-SAME:             \22name\22: \22ports\22
+// CHECK-SAME:             \22value\22: [
+// CHECK-SAME:               {
+// CHECK-SAME{LITERAL}:        \22ref\22: \22OMDontTouchedReferenceTarget:~AddPorts|{{0}}>{{1}}\22
+// CHECK-SAME:                 \22direction\22: \22OMString:Input\22
+// CHECK-SAME:                 \22width\22: \22OMBigInt:1d\22
+// CHECK-SAME:               }
+// CHECK-SAME:               {
+// CHECK-SAME{LITERAL}:        \22ref\22: \22OMDontTouchedReferenceTarget:~AddPorts|{{0}}>{{2}}\22
+// CHECK-SAME:                 \22direction\22: \22OMString:Output\22
+// CHECK-SAME:                 \22width\22: \22OMBigInt:1f\22
+// CHECK-SAME:               }
+// CHECK-SAME:             ]
 
 // CHECK-SAME:  symbols = [
 // CHECK-SAME:    @AddPorts,
@@ -593,22 +599,22 @@ firrtl.circuit "AddPortsRelative" attributes {annotations = [{
 // CHECK-SAME:    out %y: !firrtl.uint<1> sym [[SYMY:@[a-zA-Z0-9_]+]]
 
 // CHECK:       sv.verbatim
-// CHECK-SAME:  \22id\22: \22OMID:0\22
-// CHECK-SAME:    \22name\22: \22containingModule\22
-// CHECK-SAME:    \22value\22: \22OMInstanceTarget:~DUT|{{[{][{]0[}][}]}}\22
-// CHECK-SAME:    \22name\22: \22ports\22
-// CHECK-SAME:    \22value\22: [
-// CHECK-SAME:      {
-// CHECK-SAME:        \22ref\22: \22OMDontTouchedReferenceTarget:~DUT|{{[{][{]0[}][}]}}>{{[{][{]1[}][}]}}\22
-// CHECK-SAME:        \22direction\22: \22OMString:Input\22
-// CHECK-SAME:        \22width\22: \22OMBigInt:1\22
-// CHECK-SAME:      }
-// CHECK-SAME:      {
-// CHECK-SAME:        \22ref\22: \22OMDontTouchedReferenceTarget:~DUT|{{[{][{]0[}][}]}}>{{[{][{]2[}][}]}}\22
-// CHECK-SAME:        \22direction\22: \22OMString:Output\22
-// CHECK-SAME:        \22width\22: \22OMBigInt:1\22
-// CHECK-SAME:      }
-// CHECK-SAME:    ]
+// CHECK-SAME:           \22id\22: \22OMID:0\22
+// CHECK-SAME:             \22name\22: \22containingModule\22
+// CHECK-SAME{LITERAL}:    \22value\22: \22OMInstanceTarget:~DUT|{{0}}\22
+// CHECK-SAME:             \22name\22: \22ports\22
+// CHECK-SAME:             \22value\22: [
+// CHECK-SAME:               {
+// CHECK-SAME{LITERAL}:        \22ref\22: \22OMDontTouchedReferenceTarget:~DUT|{{0}}>{{1}}\22
+// CHECK-SAME:                 \22direction\22: \22OMString:Input\22
+// CHECK-SAME:                 \22width\22: \22OMBigInt:1\22
+// CHECK-SAME:               }
+// CHECK-SAME:               {
+// CHECK-SAME{LITERAL}:        \22ref\22: \22OMDontTouchedReferenceTarget:~DUT|{{0}}>{{2}}\22
+// CHECK-SAME:                 \22direction\22: \22OMString:Output\22
+// CHECK-SAME:                 \22width\22: \22OMBigInt:1\22
+// CHECK-SAME:               }
+// CHECK-SAME:             ]
 
 // CHECK-SAME:  symbols = [
 // CHECK-SAME:    @DUT,
@@ -748,16 +754,16 @@ firrtl.circuit "FixPath"  attributes {annotations = [
     firrtl.instance d  @D()
   }
   // CHECK-LABEL: firrtl.circuit "FixPath"
-  // CHECK: firrtl.module @FixPath
-  // CHECK:    firrtl.instance d  @D()
-  // CHECK: sv.verbatim
-  // CHECK-SAME: name\22: \22dutInstance\22,\0A
-  // CHECK-SAME: OMMemberInstanceTarget:~FixPath|{{[{][{]0[}][}]}}/{{[{][{]1[}][}]}}:{{[{][{]2[}][}]}}
-  // CHECK-SAME: name\22: \22pwm\22,\0A
-  // CHECK-SAME: value\22: \22OMMemberInstanceTarget:~C|{{[{][{]2[}][}]}}>{{[{][{]3[}][}]}}\22\0A
-  // CHECK-SAME: name\22: \22power\22,\0A
-  // CHECK-SAME: value\22: \22OMMemberInstanceTarget:~C|{{[{][{]2[}][}]}}/{{[{][{]4[}][}]}}:{{[{][{]5[}][}]}}
-  // CHECK-SAME: name\22: \22d\22,\0A
-  // CHECK-SAME: value\22: \22OMMemberInstanceTarget:~FixPath|{{[{][{]5[}][}]}}\22\0A
-  // CHECK-SAME: {output_file = #hw.output_file<"omir.json", excludeFromFileList>, symbols = [@FixPath, #hw.innerNameRef<@FixPath::@c>, @C, #hw.innerNameRef<@C::@in>, #hw.innerNameRef<@C::@cd>, @D]}
+  // CHECK:         firrtl.module @FixPath
+  // CHECK:           firrtl.instance d  @D()
+  // CHECK:         sv.verbatim
+  // CHECK-SAME:               name\22: \22dutInstance\22,\0A
+  // CHECK-SAME{LITERAL}:      OMMemberInstanceTarget:~FixPath|{{0}}/{{1}}:{{2}}
+  // CHECK-SAME:               name\22: \22pwm\22,\0A
+  // CHECK-SAME{LITERAL}:      value\22: \22OMMemberInstanceTarget:~C|{{2}}>{{3}}\22\0A
+  // CHECK-SAME:               name\22: \22power\22,\0A
+  // CHECK-SAME{LITERAL}:      value\22: \22OMMemberInstanceTarget:~C|{{2}}/{{4}}:{{5}}
+  // CHECK-SAME:               name\22: \22d\22,\0A
+  // CHECK-SAME{LITERAL}:      value\22: \22OMMemberInstanceTarget:~FixPath|{{5}}\22\0A
+  // CHECK-SAME:      {output_file = #hw.output_file<"omir.json", excludeFromFileList>, symbols = [@FixPath, #hw.innerNameRef<@FixPath::@c>, @C, #hw.innerNameRef<@C::@in>, #hw.innerNameRef<@C::@cd>, @D]}
 }
