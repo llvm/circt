@@ -2366,4 +2366,16 @@ firrtl.module @NamePropagation(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, i
   firrtl.strictconnect %res2, %e : !firrtl.uint<2>
 }
 
+// Issue 3319: https://github.com/llvm/circt/issues/3319
+// CHECK-LABEL: @Foo3319
+firrtl.module @Foo3319(in %i: !firrtl.uint<1>, out %o : !firrtl.uint<1>) {
+  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+  %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+  %0 = firrtl.and %c0_ui1, %i : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  %n = firrtl.node  %0  : !firrtl.uint<1>
+  firrtl.strictconnect %o, %n : !firrtl.uint<1>
+  // CHECK: firrtl.strictconnect %o, %c0_ui1
+}
+
+
 }

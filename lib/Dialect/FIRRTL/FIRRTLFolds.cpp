@@ -1638,16 +1638,38 @@ struct FoldNodeName : public mlir::RewritePattern {
         !node.annotations().empty())
       return failure();
     auto *expr = node.input().getDefiningOp();
-    if (expr && !expr->hasAttr("name") && !isUselessName(name))
+    // Best effort
+    if (name && expr && !expr->hasAttr("name"))
       rewriter.updateRootInPlace(expr, [&] { expr->setAttr("name", name); });
+    // Make sure we don't revisit this node.  This is redundant with NodeBypass,
+    // but easier to do here.
     rewriter.replaceOp(node, node.input());
+    rewriter.eraseOp(node);
+    return success();
+  }
+};
+
+// Bypass nodes.
+struct NodeBypass : public mlir::RewritePattern {
+  NodeBypass(MLIRContext *context)
+      : RewritePattern(NodeOp::getOperationName(), 0, context) {}
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    auto node = cast<NodeOp>(op);
+    if (node.inner_sym() || !node.annotations().empty())
+      return failure();
+    rewriter.startRootUpdate(node);
+    node.replaceAllUsesWith(node.input());
+    rewriter.finalizeRootUpdate(node);
+    if (node.hasDroppableName())
+      rewriter.eraseOp(node);
     return success();
   }
 };
 
 void NodeOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                          MLIRContext *context) {
-  results.insert<FoldNodeName, patterns::DropNameNode>(context);
+  results.insert<NodeBypass, FoldNodeName, patterns::DropNameNode>(context);
 }
 
 void WireOp::getCanonicalizationPatterns(RewritePatternSet &results,
