@@ -3522,8 +3522,8 @@ LogicalResult StmtEmitter::visitSV(InterfaceModportOp op) {
 
   llvm::interleaveComma(op.ports(), os, [&](const Attribute &portAttr) {
     auto port = portAttr.cast<ModportStructAttr>();
-    os << stringifyEnum(port.direction().getValue()) << ' ';
-    auto signalDecl = state.symbolCache.getDefinition(port.signal());
+    os << stringifyEnum(port.getDirection().getValue()) << ' ';
+    auto signalDecl = state.symbolCache.getDefinition(port.getSignal());
     os << getSymOpName(signalDecl);
   });
 
