@@ -245,15 +245,17 @@ void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
   SmallPtrSet<Attribute, 8> processedNLAs;
   auto nonlocalAttr = StringAttr::get(context, "circt.nonlocal");
   bool nlaUpdated = false;
+  SmallVector<Annotation> newMemModAnnos;
+  OpBuilder nlaBuilder(context);
 
-  for (auto anno : AnnotationSet(mem)) {
+  AnnotationSet::removeAnnotations(memInst, [&](Annotation anno) -> bool {
     // We're only looking for non-local annotations.
     auto nlaSym = anno.getMember<FlatSymbolRefAttr>(nonlocalAttr);
     if (!nlaSym)
-      continue;
+      return false;
     // If we have already seen this NLA, don't re-process it.
     if (!processedNLAs.insert(nlaSym).second)
-      continue;
+      return false;
 
     // Update the NLA path to have the additional wrapper module.
     auto nla = dyn_cast<HierPathOp>(symbolTable->lookup(nlaSym.getAttr()));
@@ -265,12 +267,24 @@ void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
           inst.getInnerNameAttr());
     }
     newNamepath.push_back(leafAttr);
-    nla.namepathAttr(ArrayAttr::get(context, newNamepath));
+    newNamepath.push_back(FlatSymbolRefAttr::get(memModule));
+    nlaBuilder.setInsertionPointAfter(nla);
+    auto newNLA = cast<HierPathOp>(nlaBuilder.clone(*nla));
+    newNLA.sym_nameAttr(StringAttr::get(
+        context, circuitNamespace.newName(nla.getNameAttr().getValue())));
+    newNLA.namepathAttr(ArrayAttr::get(context, newNamepath));
+    anno.setMember("circt.nonlocal",
+                   FlatSymbolRefAttr::get(newNLA.getNameAttr()));
+    newMemModAnnos.push_back(anno);
     nlaUpdated = true;
-  }
-  if (nlaUpdated)
+    return true;
+  });
+  if (nlaUpdated) {
     memInst.inner_symAttr(leafSym);
-
+    AnnotationSet newAnnos(memModule);
+    newAnnos.addAnnotations(newMemModAnnos);
+    newAnnos.applyToOperation(memModule);
+  }
   mem->erase();
 }
 
