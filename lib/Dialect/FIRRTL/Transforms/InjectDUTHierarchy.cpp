@@ -18,6 +18,9 @@
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
+#include "llvm/Support/Debug.h"
+
+#define DEBUG_TYPE "firrtl-inject-dut-hier"
 
 using namespace circt;
 using namespace firrtl;
@@ -28,7 +31,43 @@ struct InjectDUTHierarchy : public InjectDUTHierarchyBase<InjectDUTHierarchy> {
 };
 } // namespace
 
+/// Add an extra level of hierarchy to a hierarchical path that places the
+/// wrapper instance after the DUT.  E.g., this is converting:
+///
+///   firrtl.hierpath [@Top::@dut, @DUT]
+///
+/// Int:
+///
+///   firrtl.hierpath [@Top::@dut, @DUT::@wrapper, @Wrapper]
+static void addHierarchy(HierPathOp path, FModuleOp dut,
+                         InstanceOp wrapperInst) {
+  auto namepath = path.namepath().getValue();
+
+  size_t nlaIdx = 0;
+  SmallVector<Attribute> newNamepath;
+  newNamepath.reserve(namepath.size() + 1);
+  while (path.modPart(nlaIdx) != dut.getNameAttr())
+    newNamepath.push_back(namepath[nlaIdx++]);
+  newNamepath.push_back(
+      hw::InnerRefAttr::get(dut.moduleNameAttr(), wrapperInst.inner_symAttr()));
+
+  // Add the extra level of hierarchy.
+  if (auto dutRef = namepath[nlaIdx].dyn_cast<hw::InnerRefAttr>())
+    newNamepath.push_back(hw::InnerRefAttr::get(
+        wrapperInst.moduleNameAttr().getAttr(), dutRef.getName()));
+  else
+    newNamepath.push_back(
+        FlatSymbolRefAttr::get(wrapperInst.moduleNameAttr().getAttr()));
+
+  // Add anything left over.
+  auto back = namepath.drop_front(nlaIdx + 1);
+  newNamepath.append(back.begin(), back.end());
+  path.namepathAttr(ArrayAttr::get(dut.getContext(), newNamepath));
+}
+
 void InjectDUTHierarchy::runOnOperation() {
+  LLVM_DEBUG(llvm::dbgs() << "===- Running InjectDUTHierarchyPass "
+                             "-----------------------------------------===\n");
 
   CircuitOp circuit = getOperation();
 
@@ -161,30 +200,54 @@ void InjectDUTHierarchy::runOnOperation() {
     b.create<ConnectOp>(b.getUnknownLoc(), lhs, rhs);
   }
 
-  // Get ready to update non-local annotations (NLAs).  This requires both an
-  // NLA table and knowledge of what the DUT's port symbols are.
-  auto &nlaTable = getAnalysis<NLATable>();
-  DenseSet<Attribute> dutPortSyms;
-  for (auto port : dut.getPorts()) {
-    if (!port.sym)
-      continue;
-    dutPortSyms.insert(port.sym);
+  // Compute a set of paths that are used _inside_ the wrapper.
+  DenseSet<StringAttr> dutPaths, dutPortSyms;
+  for (auto anno : AnnotationSet(dut)) {
+    auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal");
+    if (sym)
+      dutPaths.insert(sym.getAttr());
+  }
+  for (size_t i = 0, e = dut.getNumPorts(); i != e; ++i) {
+    auto portSym = dut.getPortSymbolAttr(i);
+    if (portSym && !portSym.getValue().empty())
+      dutPortSyms.insert(portSym);
+    for (auto anno : AnnotationSet::forPort(dut, i)) {
+      auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal");
+      if (sym)
+        dutPaths.insert(sym.getAttr());
+    }
   }
 
-  // Update NLAs involving the DUT.  There are three cases to consider:
+  LLVM_DEBUG({
+    llvm::dbgs() << "DUT Symbol Users:\n";
+    for (auto path : dutPaths)
+      llvm::dbgs() << "  - " << FlatSymbolRefAttr::get(path) << "\n";
+    llvm::dbgs() << "Port Symbols:\n";
+    for (auto sym : dutPortSyms)
+      llvm::dbgs() << "  - " << FlatSymbolRefAttr::get(sym) << "\n";
+  });
+
+  // Update NLAs involving the DUT.
+  //
+  // NOTE: the _DUT_ is the new DUT and all the original DUT contents are put
+  // inside the DUT in the _wrapper_.
+  //
+  // There are three cases to consider:
   //   1. The DUT or a DUT port is a leaf ref.  Do nothing.
   //   2. The DUT is the root.  Update the root module to be the wrapper.
   //   3. The NLA passes through the DUT.  Remove the original InnerRef and
   //      replace it with two InnerRefs: (1) on the DUT and (2) one the wrapper.
+  LLVM_DEBUG(llvm::dbgs() << "Processing hierarchical paths:\n");
+  auto &nlaTable = getAnalysis<NLATable>();
+  DenseMap<StringAttr, HierPathOp> dutRenames;
   for (auto nla : llvm::make_early_inc_range(nlaTable.lookup(dut))) {
-    // The leaf ref is the DUT or a DUT port.
-    if (nla.leafMod() == dut.moduleName())
-      if (nla.isModule() || dutPortSyms.contains(nla.ref()))
-        continue;
-
-    // The DUT is the root module.
+    LLVM_DEBUG(llvm::dbgs() << "  - " << nla << "\n");
     auto namepath = nla.namepath().getValue();
+
+    // The DUT is the root module.  Just update the root module to point at the
+    // wrapper.
     if (nla.root() == dut.getNameAttr()) {
+      assert(namepath.size() > 1 && "namepath size must be greater than one");
       SmallVector<Attribute> newNamepath{hw::InnerRefAttr::get(
           wrapper.getNameAttr(),
           namepath.front().cast<hw::InnerRefAttr>().getName())};
@@ -194,22 +257,66 @@ void InjectDUTHierarchy::runOnOperation() {
       continue;
     }
 
-    // The NLA passes through the DUT.
-    auto nlaIdx = std::distance(
-        namepath.begin(), llvm::find_if(namepath, [&](Attribute attr) {
-          return attr.cast<hw::InnerRefAttr>().getModule() ==
-                 dut.moduleNameAttr();
-        }));
-    auto front = namepath.take_front(nlaIdx);
-    auto dutRef = namepath[nlaIdx].cast<hw::InnerRefAttr>();
-    auto back = namepath.drop_front(nlaIdx + 1);
-    SmallVector<Attribute> newNamepath(front.begin(), front.end());
-    newNamepath.push_back(hw::InnerRefAttr::get(dut.moduleNameAttr(),
-                                                wrapperInst.inner_symAttr()));
-    newNamepath.push_back(
-        hw::InnerRefAttr::get(wrapper.moduleNameAttr(), dutRef.getName()));
-    newNamepath.append(back.begin(), back.end());
-    nla->setAttr("namepath", b.getArrayAttr(newNamepath));
+    // The path ends at the DUT.  This may be a reference path (ends in
+    // hw::InnerRefAttr) or a module path (ends in FlatSymbolRefAttr).  There
+    // are a number of patterns to disambiguate:
+    //
+    // NOTE: the _DUT_ is the new DUT and all the original DUT contents are put
+    // inside the DUT in the _wrapper_.
+    //
+    //   1. Reference path on port.  Do nothing.
+    //   2. Reference path on component.  Add hierarchy
+    //   3. Module path on DUT/DUT port.  Clone path, add hier to original path.
+    //   4. Module path on component.  Ad dhierarchy.
+    //
+    if (nla.leafMod() == dut.getNameAttr()) {
+      // Case (1): ref path targeting a port.  Do nothing.
+      if (nla.isComponent() && dutPortSyms.count(nla.ref()))
+        continue;
+
+      // Case (3): the module path is used by the DUT module or a port. Create a
+      // clone of the path and update dutRenames so that this path symbol will
+      // get updated for annotations on the DUT or on its ports.
+      if (nla.isModule() && dutPaths.contains(nla.sym_nameAttr())) {
+        OpBuilder::InsertionGuard guard(b);
+        b.setInsertionPoint(nla);
+        auto clone = cast<HierPathOp>(b.clone(*nla));
+        clone.sym_nameAttr(b.getStringAttr(
+            circuitNS.newName(clone.sym_nameAttr().getValue())));
+        dutRenames.insert({nla.sym_nameAttr(), clone});
+      }
+
+      // Cases (2), (3), and (4): fallthrough to add hierarchy to original path.
+    }
+
+    addHierarchy(nla, dut, wrapperInst);
+  }
+
+  SmallVector<Annotation> newAnnotations;
+  auto removeAndUpdateNLAs = [&](Annotation anno) -> bool {
+    auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal");
+    if (!sym)
+      return false;
+    if (!dutRenames.count(sym.getAttr()))
+      return false;
+    anno.setMember(
+        "circt.nonlocal",
+        FlatSymbolRefAttr::get(dutRenames[sym.getAttr()].sym_nameAttr()));
+    newAnnotations.push_back(anno);
+    return true;
+  };
+
+  // Replace any annotations on the DUT or DUT ports to use the cloned path.
+  AnnotationSet annotations(dut);
+  annotations.removeAnnotations(removeAndUpdateNLAs);
+  annotations.addAnnotations(newAnnotations);
+  annotations.applyToOperation(dut);
+  for (size_t i = 0, e = dut.getNumPorts(); i != e; ++i) {
+    newAnnotations.clear();
+    auto annotations = AnnotationSet::forPort(dut, i);
+    annotations.removeAnnotations(removeAndUpdateNLAs);
+    annotations.addAnnotations(newAnnotations);
+    annotations.applyToPort(dut, i);
   }
 }
 
