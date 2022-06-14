@@ -14,9 +14,8 @@
 
 using namespace circt::sv;
 
-MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(SystemVerilog, sv, SVDialect)
-
 void registerSVPasses() { registerPasses(); }
+MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(SystemVerilog, sv, SVDialect)
 
 bool svAttrIsASVAttributeAttr(MlirAttribute cAttr) {
   return unwrap(cAttr).isa<SVAttributeAttr>();
