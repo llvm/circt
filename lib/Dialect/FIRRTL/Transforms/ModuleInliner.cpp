@@ -394,6 +394,34 @@ static void mapResultsToWires(BlockAndValueMapping &mapper,
   }
 }
 
+/// Wrapper for llvm::parallelTransformReduce that performs the transform_reduce
+/// serially when MLIR multi-threading is disabled.
+/// Does not add a ParallelDiagnosticHandler like mlir::parallelForEach .
+template <class IterTy, class ResultTy, class ReduceFuncTy,
+          class TransformFuncTy>
+static ResultTy transformReduce(MLIRContext *context, IterTy Begin, IterTy End,
+                                ResultTy Init, ReduceFuncTy Reduce,
+                                TransformFuncTy Transform) {
+  // Parallel when enabled
+  if (context->isMultithreadingEnabled())
+    return llvm::parallelTransformReduce(Begin, End, Init, Reduce, Transform);
+
+  // Serial fallback (from llvm::parallelTransformReduce)
+  for (IterTy I = Begin; I != End; ++I)
+    Init = Reduce(std::move(Init), Transform(*I));
+  return std::move(Init);
+}
+
+/// Range wrapper
+template <class RangeTy, class ResultTy, class ReduceFuncTy,
+          class TransformFuncTy>
+static ResultTy transformReduce(MLIRContext *context, RangeTy &&R,
+                                ResultTy Init, ReduceFuncTy Reduce,
+                                TransformFuncTy Transform) {
+  return transformReduce(context, std::begin(R), std::end(R), Init, Reduce,
+                         Transform);
+}
+
 //===----------------------------------------------------------------------===//
 // Inliner
 //===----------------------------------------------------------------------===//
@@ -1015,10 +1043,11 @@ void Inliner::identifyNLAsTargetingOnlyModules() {
 
   // Walk modules in parallel, scanning for references to NLA's
   // Gather set of NLA's referenced by each module's ports/operations.
-  SmallVector<FModuleOp> mods(nlaTargetedModules.begin(),
-                                  nlaTargetedModules.end());
-  auto nonModOnlyNLAs = llvm::parallelTransformReduce(
-      mods, DenseSet<StringAttr>{}, mergeSets, scanForNLARefs);
+  auto nonModOnlyNLAs =
+      transformReduce(circuit->getContext(),
+                      SmallVector<FModuleOp, 0>(nlaTargetedModules.begin(),
+                                                nlaTargetedModules.end()),
+                      DenseSet<StringAttr>{}, mergeSets, scanForNLARefs);
 
   // Mark NLA's that were not referenced as module-only
   for (auto &[_, mnla] : nlaMap) {
