@@ -1730,8 +1730,8 @@ void RegResetOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                              MLIRContext *context) {
   results.insert<patterns::RegResetWithZeroReset,
                  patterns::RegResetWithInvalidReset,
-                 patterns::RegResetWithInvalidResetValue,
-                 FoldResetMux>(context);
+                 patterns::RegResetWithInvalidResetValue, FoldResetMux>(
+      context);
 }
 
 LogicalResult MemOp::canonicalize(MemOp op, PatternRewriter &rewriter) {
