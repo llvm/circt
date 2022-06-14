@@ -1650,7 +1650,6 @@ struct FoldNodeName : public mlir::RewritePattern {
     // Make sure we don't revisit this node.  This is redundant with NodeBypass,
     // but easier to do here.
     rewriter.replaceOp(node, node.input());
-    rewriter.eraseOp(node);
     return success();
   }
 };
