@@ -6,6 +6,7 @@ from mlir.ir import OpView, Attribute, StringAttr
 from circt.dialects import hw, sv
 import circt.support as support
 
+
 class IfDefOp:
 
   def __init__(self, cond: Attribute, *, loc=None, ip=None):
@@ -31,7 +32,7 @@ class WireOp:
     name = "wire" if not name else name
     OpView.__init__(
         self,
-        self.build_generic(attributes={"name" : StringAttr.get(name)},
+        self.build_generic(attributes={"name": StringAttr.get(name)},
                            results=[data_type],
                            operands=[],
                            successors=None,
@@ -53,10 +54,11 @@ class AssignOp:
   def create(dest, src):
     return sv.AssignOp(dest=dest, src=src)
 
+
 class ReadInOutOp:
-  
-    @staticmethod
-    def create(value):
-      value = support.get_value(value)
-      type = support.get_self_or_inner(value.type).element_type
-      return sv.ReadInOutOp(type, value)
+
+  @staticmethod
+  def create(value):
+    value = support.get_value(value)
+    type = support.get_self_or_inner(value.type).element_type
+    return sv.ReadInOutOp(type, value)

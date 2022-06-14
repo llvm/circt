@@ -109,6 +109,7 @@ class Value:
 class RegularValue(Value):
   pass
 
+
 class InOutValue(Value):
   # Maintain a caching of the read value.
   read_value = None
@@ -118,6 +119,7 @@ class InOutValue(Value):
     if self.read_value is None:
       self.read_value = Value(sv.ReadInOutOp.create(self).results[0])
     return self.read_value
+
 
 def _validate_idx(size: int, idx: Union[int, BitVectorValue]):
   """Validate that `idx` is a valid index into a bitvector or array."""

@@ -160,13 +160,16 @@ class Type(mlir.ir.Type):
     """Return the class which should be instantiated to create a Value."""
     return RegularValue
 
+
 class InOutType(Type):
+
   @property
   def element_type(self):
     return Type(self._type.element_type)
 
   def _get_value_class(self):
-      return InOutValue
+    return InOutValue
+
 
 class TypeAliasType(Type):
 
