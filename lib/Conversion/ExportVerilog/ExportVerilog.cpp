@@ -2340,7 +2340,8 @@ void NameCollector::collectNames(Block &block) {
   // Pre-pass loop to first add any names that could be the result of re-naming.
   // These constructs will have their names added regardless, and handling them
   // first ensures any out of line expressions won't trample on names selected
-  // by re-naming.
+  // by re-naming. This could be combined into one pass through the IR that
+  // collects a worklist of exprs to re-visit instead of the double traversal.
   for (auto &op : block) {
     if (auto instance = dyn_cast<InstanceOp>(op)) {
       names.addName(&op, getSymOpName(instance));
