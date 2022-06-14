@@ -21,11 +21,9 @@ class CompReg:
 
   @generator
   def build(ports):
-    compreg = seq.CompRegOp(types.i8,
-                            clk=ports.clk,
-                            input=ports.input,
-                            name="reg",
-                            sym_name="reg")
+    compreg = ports.input.reg(clk=ports.clk,
+                              name="reg",
+                              sv_attributes=["dont_merge"])
     ports.output = compreg
 
 
@@ -45,6 +43,7 @@ top_inst["reg"].place([(0, 0, 0), None, (0, 0, 2), (0, 0, 3), (0, 0, 4),
 mod.print()
 mod.emit_outputs()
 
+# CHECK: (* dont_merge *)
 # CHECK: reg [7:0] [[NAME:reg_.]];
 # CHECK: always_ff @(posedge clk)
 # CHECK: [[NAME]] <= {{.+}}

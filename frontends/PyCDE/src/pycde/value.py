@@ -42,11 +42,13 @@ class Value:
 
   _reg_name = re.compile(r"^(.*)__reg(\d+)$")
 
-  def reg(self, clk, rst=None, name=None, cycles=1):
+  def reg(self, clk, rst=None, name=None, cycles=1, sv_attributes=None):
     """Register this value, returning the delayed value.
     `clk`, `rst`: the clock and reset signals.
     `name`: name this register explicitly.
     `cycles`: number of registers to add."""
+    if sv_attributes is not None:
+      sv_attributes = [sv.SVAttributeAttr.get(attr) for attr in sv_attributes]
     from .dialects import seq
     if name is None:
       basename = None
@@ -73,7 +75,8 @@ class Value:
                             clk=clk,
                             reset=rst,
                             name=give_name,
-                            sym_name=give_name)
+                            sym_name=give_name,
+                            sv_attributes=sv_attributes)
       return reg
 
   @property
