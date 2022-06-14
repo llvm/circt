@@ -59,7 +59,7 @@ def InstanceOp : ReferableDeclOp<"instance", [HasParent<"firrtl::FModuleOp, firr
     /// Constructor when you have the target module in hand.
     OpBuilder<(ins "FModuleLike":$module,
                    "mlir::StringRef":$name,
-                   CArg<"NameKindEnum", "NameKindEnum::InterestingName">:$nameKind,
+                   CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
                    CArg<"ArrayRef<Attribute>", "{}">:$annotations,
                    CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
                    CArg<"bool","false">:$lowerToBind,
@@ -125,7 +125,7 @@ def MemOp : ReferableDeclOp<"mem"> {
                    "uint64_t":$depth, "RUWAttr":$ruw,
                    "ArrayRef<Attribute>":$portNames,
                    CArg<"StringRef", "{}">:$name,
-                   CArg<"NameKindEnum", "NameKindEnum::InterestingName">:$nameKind,
+                   CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
                    CArg<"ArrayRef<Attribute>", "{}">:$annotations,
                    CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
                    CArg<"StringAttr", "StringAttr()">:$inner_sym)>
@@ -210,7 +210,7 @@ def NodeOp : ReferableDeclOp<"node",
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$input,
                   CArg<"StringRef", "{}">:$name,
-                  CArg<"NameKindEnum", "NameKindEnum::InterestingName">:$nameKind,
+                  CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
                   CArg<"ArrayRef<Attribute>", "{}">:$annotations,
                   CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
       return build($_builder, $_state, elementType, input, name, nameKind,
@@ -245,7 +245,7 @@ def RegOp : ReferableDeclOp<"reg"> {
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$clockVal,
                    CArg<"StringRef", "{}">:$name,
-                   CArg<"NameKindEnum", "NameKindEnum::InterestingName">:$nameKind,
+                   CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
                    CArg<"ArrayRef<Attribute>","{}">:$annotations,
                    CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
       return build($_builder, $_state, elementType, clockVal, name,
@@ -281,7 +281,7 @@ def RegResetOp : ReferableDeclOp<"regreset"> {
     OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$clockVal,
                    "::mlir::Value":$resetSignal, "::mlir::Value":$resetValue,
                    CArg<"StringRef", "{}">:$name,
-                   CArg<"NameKindEnum", "NameKindEnum::InterestingName">:$nameKind,
+                   CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
                    CArg<"ArrayRef<Attribute>","{}">:$annotations,
                    CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
       return build($_builder, $_state, elementType, clockVal, resetSignal,
@@ -316,7 +316,7 @@ def WireOp : ReferableDeclOp<"wire"> {
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType,
                       CArg<"StringRef", "{}">:$name,
-                      CArg<"NameKindEnum", "NameKindEnum::InterestingName">:$nameKind,
+                      CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
                       CArg<"ArrayRef<Attribute>","{}">:$annotations,
                       CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
       return build($_builder, $_state, elementType, name, nameKind,

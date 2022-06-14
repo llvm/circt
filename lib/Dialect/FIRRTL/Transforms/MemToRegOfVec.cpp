@@ -387,7 +387,8 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
       // simpler to delete the memOp.
       auto wire = builder.create<WireOp>(
           result.getType(),
-          (memOp.name() + "_" + memOp.getPortName(index).getValue()).str());
+          (memOp.name() + "_" + memOp.getPortName(index).getValue()).str(),
+          memOp.nameKind());
       result.replaceAllUsesWith(wire.getResult());
       result = wire;
       // Create an access to all the common subfields.

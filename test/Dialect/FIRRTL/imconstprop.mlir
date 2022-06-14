@@ -32,7 +32,7 @@ firrtl.circuit "Test" {
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
 
     // Trivial wire constant propagation.
-    %someWire = firrtl.wire : !firrtl.uint<1>
+    %someWire = firrtl.wire interesting_name : !firrtl.uint<1>
     firrtl.connect %someWire, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
 
     // CHECK: %someWire = firrtl.wire
@@ -42,7 +42,7 @@ firrtl.circuit "Test" {
 
     // Trivial wire special constant propagation.
     %c0_clock = firrtl.specialconstant 0 : !firrtl.clock
-    %clockWire = firrtl.wire : !firrtl.clock
+    %clockWire = firrtl.wire interesting_name : !firrtl.clock
     firrtl.connect %clockWire, %c0_clock : !firrtl.clock, !firrtl.clock
 
     // CHECK: %clockWire = firrtl.wire

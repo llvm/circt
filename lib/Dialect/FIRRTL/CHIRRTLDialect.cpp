@@ -96,14 +96,14 @@ static ParseResult parseNameKind(OpAsmParser &parser,
 
   // Default is interesting name.
   result =
-      NameKindEnumAttr::get(parser.getContext(), NameKindEnum::InterestingName);
+      NameKindEnumAttr::get(parser.getContext(), NameKindEnum::DroppableName);
   return success();
 }
 
 static void printNameKind(OpAsmPrinter &p, Operation *op,
                           firrtl::NameKindEnumAttr attr,
                           ArrayRef<StringRef> extraElides = {}) {
-  if (attr.getValue() != NameKindEnum::InterestingName)
+  if (attr.getValue() != NameKindEnum::DroppableName)
     p << stringifyNameKindEnum(attr.getValue()) << ' ';
 }
 
