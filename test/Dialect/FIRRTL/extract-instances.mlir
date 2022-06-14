@@ -65,17 +65,27 @@ firrtl.circuit "ExtractBlackBoxesSimple" attributes {annotations = [{class = "fi
 
 // CHECK: firrtl.circuit "ExtractBlackBoxesSimple2"
 firrtl.circuit "ExtractBlackBoxesSimple2" attributes {annotations = [{class = "firrtl.transforms.BlackBoxTargetDirAnno", targetDir = "BlackBoxes"}]} {
-  // CHECK: firrtl.hierpath @nla_1{{.*}} [@ExtractBlackBoxesSimple2::@bb, @MyBlackBox]
-  // CHECK-NOT: firrtl.hierpath @nla_2
-  // CHECK-NOT: firrtl.hierpath @nla_3
-  firrtl.hierpath @nla_1 [@BBWrapper::@bb, @MyBlackBox]
-  firrtl.hierpath @nla_2 [@DUTModule::@mod, @BBWrapper::@bb]
-  firrtl.hierpath @nla_3 [@ExtractBlackBoxesSimple2::@dut, @DUTModule::@mod, @BBWrapper::@bb]
+  // Old style NLAs
+  firrtl.hierpath @nla_old1 [@DUTModule::@mod, @BBWrapper::@bb]
+  firrtl.hierpath @nla_old2 [@ExtractBlackBoxesSimple2::@dut, @DUTModule::@mod, @BBWrapper::@bb]
+  // New style NLAs on extracted instance
+  firrtl.hierpath @nla_on1 [@DUTModule::@mod, @BBWrapper]
+  firrtl.hierpath @nla_on2 [@ExtractBlackBoxesSimple2::@dut, @DUTModule::@mod, @BBWrapper]
+  // New style NLAs through extracted instance
+  firrtl.hierpath @nla_thru1 [@BBWrapper::@bb, @MyBlackBox]
+  firrtl.hierpath @nla_thru2 [@DUTModule::@mod, @BBWrapper::@bb, @MyBlackBox]
+  firrtl.hierpath @nla_thru3 [@ExtractBlackBoxesSimple2::@dut, @DUTModule::@mod, @BBWrapper::@bb, @MyBlackBox]
+  // CHECK: firrtl.hierpath [[THRU1:@nla_thru1]] [@ExtractBlackBoxesSimple2::@bb, @MyBlackBox]
+  // CHECK: firrtl.hierpath [[THRU2:@nla_thru2]] [@ExtractBlackBoxesSimple2::@bb, @MyBlackBox]
+  // CHECK: firrtl.hierpath [[THRU3:@nla_thru3]] [@ExtractBlackBoxesSimple2::@bb, @MyBlackBox]
+
   // Annotation on the extmodule itself
   // CHECK-LABEL: firrtl.extmodule private @MyBlackBox
   firrtl.extmodule private @MyBlackBox(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>) attributes {annotations = [
       {class = "sifive.enterprise.firrtl.ExtractBlackBoxAnnotation", filename = "BlackBoxes.txt", prefix = "prefix"},
-      {circt.nonlocal = @nla_1, class = "DummyA"}
+      {circt.nonlocal = @nla_thru1, class = "Thru1"},
+      {circt.nonlocal = @nla_thru2, class = "Thru2"},
+      {circt.nonlocal = @nla_thru3, class = "Thru3"}
     ], defname = "MyBlackBox"}
   // Annotation will be on the instance
   // CHECK-LABEL: firrtl.extmodule private @MyBlackBox2
@@ -90,8 +100,10 @@ firrtl.circuit "ExtractBlackBoxesSimple2" attributes {annotations = [{class = "f
     // CHECK-NOT: firrtl.instance bb @MyBlackBox
     // CHECK-NOT: firrtl.instance bb2 @MyBlackBox2
     %bb_in, %bb_out = firrtl.instance bb sym @bb {annotations = [
-        {circt.nonlocal = @nla_2, class = "DummyB"},
-        {circt.nonlocal = @nla_3, class = "DummyC"}
+        {circt.nonlocal = @nla_old1, class = "Old1"},
+        {circt.nonlocal = @nla_old2, class = "Old2"},
+        {circt.nonlocal = @nla_on1, class = "On1"},
+        {circt.nonlocal = @nla_on2, class = "On2"}
       ]} @MyBlackBox(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
     %bb2_in, %bb2_out = firrtl.instance bb2 {annotations = [{class = "sifive.enterprise.firrtl.ExtractBlackBoxAnnotation", filename = "BlackBoxes.txt", prefix = "prefix"}]} @MyBlackBox2(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
     // CHECK: firrtl.connect %out, %prefix_0_out
@@ -125,7 +137,7 @@ firrtl.circuit "ExtractBlackBoxesSimple2" attributes {annotations = [{class = "f
     // CHECK: %dut_in, %dut_out, %dut_prefix_0_in, %dut_prefix_0_out, %dut_prefix_1_in, %dut_prefix_1_out = firrtl.instance dut
     // CHECK-NOT: annotations =
     // CHECK-SAME: sym {{@.+}} @DUTModule
-    // CHECK-NEXT: %bb_in, %bb_out = firrtl.instance bb sym [[BB_SYM:@.+]] {annotations = [{class = "DummyB"}, {class = "DummyC"}]} @MyBlackBox
+    // CHECK-NEXT: %bb_in, %bb_out = firrtl.instance bb sym [[BB_SYM:@.+]] {annotations = [{class = "Old1"}, {class = "On1"}, {class = "Old2"}, {class = "On2"}]} @MyBlackBox
     // CHECK-NEXT: firrtl.strictconnect %bb_in, %dut_prefix_1_in
     // CHECK-NEXT: firrtl.strictconnect %dut_prefix_1_out, %bb_out
     // CHECK-NEXT: %bb2_in, %bb2_out = firrtl.instance bb2 sym [[BB2_SYM:@.+]] @MyBlackBox2
@@ -153,25 +165,43 @@ firrtl.circuit "ExtractBlackBoxesSimple2" attributes {annotations = [{class = "f
 
 // CHECK: firrtl.circuit "ExtractBlackBoxesIntoDUTSubmodule"
 firrtl.circuit "ExtractBlackBoxesIntoDUTSubmodule"  {
-  // CHECK-LABEL: firrtl.hierpath @nla_1 [
+  // CHECK-LABEL: firrtl.hierpath @nla_new_1 [
+  // CHECK-SAME:    @ExtractBlackBoxesIntoDUTSubmodule::@tb
+  // CHECK-SAME:    @TestHarness::@dut
+  // CHECK-SAME:    @DUTModule::@BlackBoxes
+  // CHECK-SAME:    @BlackBoxes
+  // CHECK-SAME:  ]
+  // CHECK-LABEL: firrtl.hierpath @nla_new_0 [
+  // CHECK-SAME:    @ExtractBlackBoxesIntoDUTSubmodule::@tb
+  // CHECK-SAME:    @TestHarness::@dut
+  // CHECK-SAME:    @DUTModule::@BlackBoxes
+  // CHECK-SAME:    @BlackBoxes
+  // CHECK-SAME:  ]
+  firrtl.hierpath @nla_new [
+    @ExtractBlackBoxesIntoDUTSubmodule::@tb,
+    @TestHarness::@dut,
+    @DUTModule::@mod,
+    @BBWrapper
+  ]
+  // CHECK-LABEL: firrtl.hierpath @nla_old1 [
   // CHECK-SAME:    @ExtractBlackBoxesIntoDUTSubmodule::@tb
   // CHECK-SAME:    @TestHarness::@dut
   // CHECK-SAME:    @DUTModule::@BlackBoxes
   // CHECK-SAME:    @BlackBoxes::@bb1
   // CHECK-SAME:  ]
-  firrtl.hierpath @nla_1 [
+  firrtl.hierpath @nla_old1 [
     @ExtractBlackBoxesIntoDUTSubmodule::@tb,
     @TestHarness::@dut,
     @DUTModule::@mod,
     @BBWrapper::@bb1
   ]
-  // CHECK-LABEL: firrtl.hierpath @nla_2 [
+  // CHECK-LABEL: firrtl.hierpath @nla_old2 [
   // CHECK-SAME:    @ExtractBlackBoxesIntoDUTSubmodule::@tb
   // CHECK-SAME:    @TestHarness::@dut
   // CHECK-SAME:    @DUTModule::@BlackBoxes
   // CHECK-SAME:    @BlackBoxes::@bb2
   // CHECK-SAME:  ]
-  firrtl.hierpath @nla_2 [
+  firrtl.hierpath @nla_old2 [
     @ExtractBlackBoxesIntoDUTSubmodule::@tb,
     @TestHarness::@dut,
     @DUTModule::@mod,
@@ -179,8 +209,8 @@ firrtl.circuit "ExtractBlackBoxesIntoDUTSubmodule"  {
   ]
   firrtl.extmodule private @MyBlackBox(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>) attributes {annotations = [{class = "sifive.enterprise.firrtl.ExtractBlackBoxAnnotation", dest = "BlackBoxes", filename = "BlackBoxes.txt", prefix = "bb"}], defname = "MyBlackBox"}
   firrtl.module private @BBWrapper(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
-    %bb1_in, %bb1_out = firrtl.instance bb1 sym @bb1 {annotations = [{circt.nonlocal = @nla_1, class = "Dummy1"}]} @MyBlackBox(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
-    %bb2_in, %bb2_out = firrtl.instance bb2 sym @bb2 {annotations = [{circt.nonlocal = @nla_2, class = "Dummy2"}]} @MyBlackBox(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
+    %bb1_in, %bb1_out = firrtl.instance bb1 sym @bb1 {annotations = [{circt.nonlocal = @nla_old1, class = "Dummy1"}, {circt.nonlocal = @nla_new, class = "Dummy3"}]} @MyBlackBox(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
+    %bb2_in, %bb2_out = firrtl.instance bb2 sym @bb2 {annotations = [{circt.nonlocal = @nla_old2, class = "Dummy2"}, {circt.nonlocal = @nla_new, class = "Dummy4"}]} @MyBlackBox(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
     firrtl.connect %out, %bb2_out : !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.connect %bb2_in, %bb1_out : !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.connect %bb1_in, %in : !firrtl.uint<8>, !firrtl.uint<8>
@@ -191,10 +221,10 @@ firrtl.circuit "ExtractBlackBoxesIntoDUTSubmodule"  {
   // CHECK-SAME:    in %bb_1_in: !firrtl.uint<8>
   // CHECK-SAME:    out %bb_1_out: !firrtl.uint<8>
   // CHECK-SAME:  ) {
-  // CHECK-NEXT:    %bb2_in, %bb2_out = firrtl.instance bb2 sym [[BB2_SYM:@.+]] {annotations = [{circt.nonlocal = @nla_2, class = "Dummy2"}]} @MyBlackBox(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
+  // CHECK-NEXT:    %bb2_in, %bb2_out = firrtl.instance bb2 sym [[BB2_SYM:@.+]] {annotations = [{circt.nonlocal = @nla_new_0, class = "Dummy4"}, {circt.nonlocal = @nla_old2, class = "Dummy2"}]} @MyBlackBox(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
   // CHECK-NEXT:    firrtl.strictconnect %bb2_in, %bb_0_in : !firrtl.uint<8>
   // CHECK-NEXT:    firrtl.strictconnect %bb_0_out, %bb2_out : !firrtl.uint<8>
-  // CHECK-NEXT:    %bb1_in, %bb1_out = firrtl.instance bb1 sym [[BB1_SYM:@.+]] {annotations = [{circt.nonlocal = @nla_1, class = "Dummy1"}]} @MyBlackBox(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
+  // CHECK-NEXT:    %bb1_in, %bb1_out = firrtl.instance bb1 sym [[BB1_SYM:@.+]] {annotations = [{circt.nonlocal = @nla_new_1, class = "Dummy3"}, {circt.nonlocal = @nla_old1, class = "Dummy1"}]} @MyBlackBox(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
   // CHECK-NEXT:    firrtl.strictconnect %bb1_in, %bb_1_in : !firrtl.uint<8>
   // CHECK-NEXT:    firrtl.strictconnect %bb_1_out, %bb1_out : !firrtl.uint<8>
   // CHECK-NEXT:  }
