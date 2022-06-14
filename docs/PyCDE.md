@@ -107,6 +107,47 @@ Note that in the [Getting Started](#getting-started) example, we import `pycde.d
 
 PyCDE Values are how PyCDE supports named access to module input and output ports. They are also how PyCDE represents the operands and results of any operation imported from `pycde.dialects`. This allows PyCDE generators to stitch together instances of modules, external modules, and any operations from the CIRCT dialects.
 
+#### ListValues and NumPy features
+
+PyCDE supports a subset of numpy array transformations (see `pycde/matrix.py`) that can be used to do complex reshaping and transformation of multidimensional arrays.
+
+The numpy functionality is provided by the `Matrix` class, which creates a view on top of existing SSA values. Users may choose to perform transformations directly on `ListValue`s:
+
+```python
+@module
+class M1:
+  in1 = Input(dim(types.i32, 4, 8))
+  out = Output(dim(types.i32, 2, 16))
+
+  @generator
+  def build(ports):
+    ports.out = ports.in1.transpose((1, 0)).reshape((16, 2))
+    # Under the hood, this resolves to
+    # Matrix(from_value=
+    #    Matrix(from_value=ports.in1).transpose((1,0)).to_circt())
+    #  .reshape(16, 2).to_circt()
+```
+
+or manually manage a `Matrix` object.
+
+```python
+@module
+class M1:
+  in1 = Input(dim(types.i32, 4, 8))
+  out = Output(dim(types.i32, 2, 16))
+
+  @generator
+  def build(ports):
+    m = Matrix(from_value=ports.in1).transpose((1, 0)).reshape((16, 2))
+    ports.out = m.to_circt()
+```
+
+Manually managing the Matrix object allows for postponing matrix materialization (`to_circt()`) until all transformations have been applied.
+In short, this allows us to do as many transformations as possible in software, before emitting IR.
+Note however, that this might reduce debugability of the generated hardware due to the lack of `sv.wire`s in between each matrix transformation.
+
+For further usage examples, see `PyCDE/test/tst_matrix.py`.
+
 ### Instantiating Modules
 
 Modules defined with `@pycde.module` can be included in other modules. The following example defines a module that instantiates the `AddInts` module defined in [Getting Started](#getting-started).

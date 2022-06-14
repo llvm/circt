@@ -137,28 +137,35 @@ def _validate_idx(size: int, idx: Union[int, BitVectorValue]):
                       f" Value, not {type(idx)}.")
 
 
+def get_slice_idxs(inner_dims, idxOrSlice: Union[int, slice]):
+  if isinstance(idxOrSlice, int):
+    s = slice(idxOrSlice, idxOrSlice + 1)
+  elif isinstance(idxOrSlice, slice):
+    if idxOrSlice.stop > inner_dims:
+      raise ValueError("Slice out-of-bounds")
+    s = idxOrSlice
+  else:
+    raise TypeError("Expected int or slice")
+
+  idxs = s.indices(inner_dims)
+  if idxs[2] != 1:
+    raise ValueError("Integer / bitvector slices do not support steps")
+  return idxs[0], idxs[1]
+
+
 class BitVectorValue(Value):
 
   @singledispatchmethod
   def __getitem__(self, idxOrSlice: Union[int, slice]) -> BitVectorValue:
-    if isinstance(idxOrSlice, int):
-      s = slice(idxOrSlice, idxOrSlice + 1)
-    elif isinstance(idxOrSlice, slice):
-      s = idxOrSlice
-    else:
-      raise TypeError("Expected int or slice")
-    idxs = s.indices(len(self))
-    if idxs[2] != 1:
-      raise ValueError("Integer / bitvector slices do not support steps")
-
+    lo, hi = get_slice_idxs(len(self), idxOrSlice)
     from .pycde_types import types
     from .dialects import comb
-    ret_type = types.int(idxs[1] - idxs[0])
+    ret_type = types.int(hi - lo)
 
     with get_user_loc():
-      ret = comb.ExtractOp(idxs[0], ret_type, self.value)
+      ret = comb.ExtractOp(lo, ret_type, self.value)
       if self.name is not None:
-        ret.name = f"{self.name}_{idxs[0]}upto{idxs[1]}"
+        ret.name = f"{self.name}_{lo}upto{hi}"
       return ret
 
   @__getitem__.register(Value)

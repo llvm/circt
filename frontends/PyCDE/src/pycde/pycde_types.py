@@ -198,12 +198,25 @@ class TypeAliasType(Type):
 class ArrayType(Type):
 
   @property
+  def inner_type(self):
+    if isinstance(self.element_type, ArrayType):
+      return self.element_type.inner_type
+    return self.element_type
+
+  @property
   def element_type(self):
     return Type(self._type.element_type)
 
   @property
   def size(self):
     return self._type.size
+
+  @property
+  def shape(self):
+    _shape = [self.size]
+    if isinstance(self.element_type, ArrayType):
+      _shape.extend(self.element_type.shape)
+    return _shape
 
   def __len__(self):
     return self.size
