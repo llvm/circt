@@ -137,16 +137,16 @@ buildNLA(CircuitOp circuit, size_t nlaSuffix,
   OpBuilder b(circuit.getBodyRegion());
   MLIRContext *ctxt = circuit.getContext();
   SmallVector<Attribute> insts;
-  for (auto &nla : nlas) {
+  for (size_t i = 0, e = nlas.size() - 1; i < e; ++i) {
+    auto &nla = nlas[i];
     // Assumption: Symbol name = Operation name.
     auto module = std::get<1>(nla);
     auto inst = std::get<2>(nla);
-    if (inst.empty())
-      insts.push_back(FlatSymbolRefAttr::get(ctxt, module));
-    else
-      insts.push_back(hw::InnerRefAttr::get(StringAttr::get(ctxt, module),
-                                            StringAttr::get(ctxt, inst)));
+    insts.push_back(hw::InnerRefAttr::get(StringAttr::get(ctxt, module),
+                                          StringAttr::get(ctxt, inst)));
   }
+  insts.push_back(FlatSymbolRefAttr::get(ctxt, std::get<1>(nlas.back())));
+
   auto instAttr = ArrayAttr::get(ctxt, insts);
   auto nla = b.create<HierPathOp>(circuit.getLoc(),
                                   "nla_" + std::to_string(nlaSuffix), instAttr);
