@@ -1663,11 +1663,14 @@ struct NodeBypass : public mlir::RewritePattern {
     auto node = cast<NodeOp>(op);
     if (node.inner_sym() || !node.annotations().empty())
       return failure();
+
+    // If node has a droppable name, hand over to `FoldNodeName` to propagate
+    // `name` attribute.
+    if (node.hasDroppableName())
+      return failure();
     rewriter.startRootUpdate(node);
     node.replaceAllUsesWith(node.input());
     rewriter.finalizeRootUpdate(node);
-    if (node.hasDroppableName())
-      rewriter.eraseOp(node);
     return success();
   }
 };

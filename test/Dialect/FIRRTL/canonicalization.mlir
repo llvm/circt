@@ -2362,8 +2362,14 @@ firrtl.module @NamePropagation(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, i
   // CHECK-NEXT: %e = firrtl.bits %c 1 to 0 {name = "e"}
   %1 = firrtl.bits %c 2 to 0 : (!firrtl.uint<4>) -> !firrtl.uint<3>
   %e = firrtl.bits %1 1 to 0 {name = "e"}: (!firrtl.uint<3>) -> !firrtl.uint<2>
-  // CHECK-NEXT: firrtl.strictconnect %res2, %e
-  firrtl.strictconnect %res2, %e : !firrtl.uint<2>
+  // CHECK-NEXT: firrtl.strictconnect %res1, %e
+  firrtl.strictconnect %res1, %e : !firrtl.uint<2>
+
+  // CHECK-NEXT: %name_node = firrtl.not %e {name = "name_node"} : (!firrtl.uint<2>) -> !firrtl.uint<2>
+  // CHECK-NEXT: firrtl.strictconnect %res2, %name_node
+  %2 = firrtl.not %e : (!firrtl.uint<2>) -> !firrtl.uint<2>
+  %name_node = firrtl.node droppable_name %2 : !firrtl.uint<2>
+  firrtl.strictconnect %res2, %name_node : !firrtl.uint<2>
 }
 
 // Issue 3319: https://github.com/llvm/circt/issues/3319
