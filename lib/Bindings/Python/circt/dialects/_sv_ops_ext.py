@@ -2,8 +2,8 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from mlir.ir import OpView, Attribute, StringAttr
-from circt.dialects import hw, sv
+from mlir.ir import ArrayAttr, Attribute, FlatSymbolRefAttr, OpView, StringAttr
+from circt.dialects import sv
 import circt.support as support
 
 
@@ -28,11 +28,22 @@ class IfDefOp:
 
 class WireOp:
 
-  def __init__(self, name, data_type, *, loc=None, ip=None):
-    name = "wire" if not name else name
+  def __init__(self,
+               data_type,
+               name,
+               *,
+               inner_sym=None,
+               svAttributes=None,
+               loc=None,
+               ip=None):
+    attributes = {"name": StringAttr.get(name)}
+    if inner_sym is not None:
+      attributes["inner_sym"] = FlatSymbolRefAttr.get(inner_sym)
+    if svAttributes is not None:
+      attributes["svAttributes"] = ArrayAttr.get(svAttributes)
     OpView.__init__(
         self,
-        self.build_generic(attributes={"name": StringAttr.get(name)},
+        self.build_generic(attributes=attributes,
                            results=[data_type],
                            operands=[],
                            successors=None,
@@ -40,12 +51,31 @@ class WireOp:
                            loc=loc,
                            ip=ip))
 
-  @staticmethod
-  def create(data_type, name=None):
-    if not isinstance(data_type, hw.InOutType):
-      data_type = hw.InOutType.get(data_type)
 
-    return sv.WireOp(name, data_type)
+class RegOp:
+
+  def __init__(self,
+               data_type,
+               name,
+               *,
+               inner_sym=None,
+               svAttributes=None,
+               loc=None,
+               ip=None):
+    attributes = {"name": StringAttr.get(name)}
+    if inner_sym is not None:
+      attributes["inner_sym"] = FlatSymbolRefAttr.get(inner_sym)
+    if svAttributes is not None:
+      attributes["svAttributes"] = ArrayAttr.get(svAttributes)
+    OpView.__init__(
+        self,
+        self.build_generic(attributes=attributes,
+                           results=[data_type],
+                           operands=[],
+                           successors=None,
+                           regions=0,
+                           loc=loc,
+                           ip=ip))
 
 
 class AssignOp:

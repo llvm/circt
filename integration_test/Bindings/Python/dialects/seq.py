@@ -5,7 +5,7 @@ import sys
 
 import circt
 from circt.support import connect
-from circt.dialects import hw, seq
+from circt.dialects import hw, seq, sv
 
 from mlir.ir import *
 from mlir.passmanager import PassManager
@@ -47,8 +47,12 @@ with Context() as ctx, Location.unknown():
       # CHECK: %FuBar = seq.compreg {{.+}}
       seq.reg(reg_input, module.clk, name="FuBar")
 
-      # CHECK: %reg1 = seq.compreg %[[INPUT_VAL]], %clk
-      reg1 = seq.CompRegOp.create(i32, clk=module.clk, name="reg1")
+      # CHECK: %reg1 = seq.compreg %[[INPUT_VAL]], %clk svattrs [#sv.attribute<"no_merge">] : i32
+      sv_attr = sv.SVAttributeAttr.get("no_merge")
+      reg1 = seq.CompRegOp.create(i32,
+                                  clk=module.clk,
+                                  name="reg1",
+                                  sv_attributes=[sv_attr])
       connect(reg1.input, reg_input)
 
       # CHECK: %reg2 = seq.compreg %[[INPUT_VAL]], %clk
@@ -78,6 +82,8 @@ with Context() as ctx, Location.unknown():
 
   pm = PassManager.parse("lower-seq-to-sv")
   pm.run(m)
+  # CHECK: (* no_merge *)
+  # CHECK: reg [31:0] reg1;
   # CHECK: always_ff @(posedge clk)
   # CHECK: my_reg <= {{.+}}
   circt.export_verilog(m, sys.stdout)

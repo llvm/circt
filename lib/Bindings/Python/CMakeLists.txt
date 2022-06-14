@@ -26,6 +26,7 @@ declare_mlir_python_extension(CIRCTBindingsPythonExtension.Core
     ESIModule.cpp
     HWModule.cpp
     MSFTModule.cpp
+    SVModule.cpp
   EMBED_CAPI_LINK_LIBS
     CIRCTCAPIComb
     CIRCTCAPIESI
