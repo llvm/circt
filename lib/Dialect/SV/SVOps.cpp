@@ -126,11 +126,13 @@ static void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
   if (namesDisagree)
     p.printOptionalAttrDict(op->getAttrs(),
                             {SymbolTable::getSymbolAttrName(),
-                             hw::InnerName::getInnerNameAttrName()});
+                             hw::InnerName::getInnerNameAttrName(),
+                             "svAttributes"});
   else
     p.printOptionalAttrDict(op->getAttrs(),
                             {"name", SymbolTable::getSymbolAttrName(),
-                             hw::InnerName::getInnerNameAttrName()});
+                             hw::InnerName::getInnerNameAttrName(),
+                             "svAttributes"});
 }
 
 //===----------------------------------------------------------------------===//
