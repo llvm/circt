@@ -192,7 +192,7 @@ sv.verbatim "{{0}}" { symbols = [@glbl_B_M1] }
 An IR for Hardware is different than an IR for Software in a very important way:
 while each function in a software program usually compiles into one blob of
 binary code no matter how many times it is called, each instance in a hardware
-design is typically fully instantiated, because different instance turn into
+design is typically fully instantiated, because different instances turn into
 different gates.  The consequence of this is that the instance tree is really a
 compression mechanism that is eventually elaborated away.
 
@@ -317,7 +317,7 @@ be different, because that would cause everything derived from them to be as
 well.
 
 On the other hand, we expect to support a lot of weird expressions over time (at
-least the full complement that Verilog supports) and canonicalize arbitrary
+least the full complement that Verilog supports) and canonicalizing arbitrary
 expressions in a predictable way is untenable.  As such, we support
 canonicalizing a fixed set of expressions predictably: more may be added in
 the future.
@@ -362,13 +362,13 @@ Note that `clog2(0)` is `0`, which follows the Verilog spec.
 
 Parameters are not [SSA values](https://en.wikipedia.org/wiki/Static_single_assignment_form), so they cannot directly be used within the body
 of the module.  Just like you use `hw.constant` to project a constant integer
-value into the SSA domain, you can use the `hw.param.value` to project an
+value into the SSA domain, you can use the `hw.param.value` to project a
 parameter expression, like so:
 
 ```mlir
 hw.module @M1<param1: i1>(%clock : i1, ...) {
   ...
-  %param1 = sv.param.value i1 = #hw.param.decl.ref<"param1">
+  %param1 = hw.param.value i1 = #hw.param.decl.ref<"param1">
   ...
     sv.if %param1 {  // Compile-time conditional on parameter.
       sv.fwrite "Only happens when the parameter is set\n"

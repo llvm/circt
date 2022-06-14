@@ -313,7 +313,7 @@ That said, it is a bad idea to *duplicate* operations to reduce widths: for
 example, it is better to have one large multiply with many users than to clone
 it because one user only needs some of the output bits.
 
-It is also beneficial to reduce widths, even if it adds a truncations or
+It is also beneficial to reduce widths, even if it adds truncations or
 extensions in the IR (because they are "just wires"). However, there are limits:
 any and-by-constant could be lowered to a concat of each bit principle,
 e.g. it is legal to turn `and(x, 9)` into `concat(x[3], 00, x[0])`.  Doing so is
