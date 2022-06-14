@@ -1,4 +1,5 @@
 // RUN: circt-opt %s -export-verilog -verify-diagnostics -o %t.mlir | FileCheck %s --strict-whitespace
+// RUN: circt-opt %s -export-verilog -o %t.mlir && cat %t.mlir | FileCheck %s --check-prefix=IR
 
 // CHECK-LABEL: // external module E
 hw.module.extern @E(%a: i1, %b: i1, %c: i1)
@@ -705,6 +706,14 @@ hw.module @instance_result_reuse_wires() -> (b: i3) {
   hw.output %read : i3
 }
 
+// IR: @namehint_variadic
+hw.module @namehint_variadic(%a: i3) -> (b: i3) {
+  // IR-NEXT: %0 = comb.add %a, %a : i3
+  // IR-NEXT: %1 = comb.add %a, %0 {sv.namehint = "bar"} : i3
+  // IR-NEXT: hw.output %1
+  %0 = comb.add %a, %a, %a { sv.namehint = "bar" } : i3
+  hw.output %0 : i3
+}
 
 hw.module.extern @ExternDestMod(%a: i1, %b: i2) -> (c: i3, d: i4)
 hw.module @InternalDestMod(%a: i1, %b: i3) {}
