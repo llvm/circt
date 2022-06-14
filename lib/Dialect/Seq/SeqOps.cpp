@@ -93,7 +93,7 @@ void CompRegOp::print(::mlir::OpAsmPrinter &p) {
     p << ", " << reset() << ", " << resetValue() << ' ';
 
   if (svAttributes()) {
-    p << "svattrs " << svAttributesAttr();
+    p << " svattrs " << svAttributesAttr();
     elidedAttrs.push_back("svAttributes");
   }
 

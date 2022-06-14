@@ -20,6 +20,17 @@ extern "C" {
 MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(SystemVerilog, sv);
 MLIR_CAPI_EXPORTED void registerSVPasses();
 
+//===----------------------------------------------------------------------===//
+// Attribute API.
+//===----------------------------------------------------------------------===//
+
+MLIR_CAPI_EXPORTED bool svAttrIsASVAttributeAttr(MlirAttribute);
+MLIR_CAPI_EXPORTED MlirAttribute svSVAttributeAttrGet(MlirContext cCtxt,
+                                                      MlirStringRef name,
+                                                      MlirStringRef expression);
+MLIR_CAPI_EXPORTED MlirStringRef svSVAttributeAttrGetName(MlirAttribute);
+MLIR_CAPI_EXPORTED MlirStringRef svSVAttributeAttrGetExpression(MlirAttribute);
+
 #ifdef __cplusplus
 }
 #endif

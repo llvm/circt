@@ -88,4 +88,6 @@ PYBIND11_MODULE(_circt, m) {
   circt::python::populateDialectMSFTSubmodule(msft);
   py::module hw = m.def_submodule("_hw", "HW API");
   circt::python::populateDialectHWSubmodule(hw);
+  py::module sv = m.def_submodule("_sv", "SV API");
+  circt::python::populateDialectSVSubmodule(sv);
 }
