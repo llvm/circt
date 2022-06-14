@@ -463,11 +463,13 @@ hw.module @reg_0(%in4: i4, %in8: i8) -> (a: i8, b: i8) {
   // CHECK-NEXT:                b);
 
   // CHECK-EMPTY:
+  // CHECK-NEXT: (* dont_merge *)
   // CHECK-NEXT: reg [7:0]       myReg;
-  %myReg = sv.reg : !hw.inout<i8>
+  %myReg = sv.reg svattrs [#sv.attribute<"dont_merge">] : !hw.inout<i8>
 
+  // CHECK-NEXT: (* dont_merge, dont_retime = true *)
   // CHECK-NEXT: reg [41:0][7:0] myRegArray1;
-  %myRegArray1 = sv.reg : !hw.inout<array<42 x i8>>
+  %myRegArray1 = sv.reg svattrs [#sv.attribute<"dont_merge">, #sv.attribute<"dont_retime"="true">] : !hw.inout<array<42 x i8>>
 
   // CHECK-EMPTY:
   sv.assign %myReg, %in8 : i8        // CHECK-NEXT: assign myReg = in8;
@@ -1062,7 +1064,9 @@ hw.module @verbatim_M1(%clock : i1, %cond : i1, %val : i8) {
   %c42 = hw.constant 42 : i8
   %reg1 = sv.reg sym @verbatim_reg1: !hw.inout<i8>
   %reg2 = sv.reg sym @verbatim_reg2: !hw.inout<i8>
-  %wire25 = sv.wire sym @verbatim_wireSym1 : !hw.inout<i23>
+  // CHECK:      (* dont_merge *)
+  // CHECK-NEXT: wire [22:0] wire25
+  %wire25 = sv.wire sym @verbatim_wireSym1 svattrs [#sv.attribute<"dont_merge">] : !hw.inout<i23>
   %add = comb.add %val, %c42 : i8
   %c42_2 = hw.constant 42 : i8
   %xor = comb.xor %val, %c42_2 : i8

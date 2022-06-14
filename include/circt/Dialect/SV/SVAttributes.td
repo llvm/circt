@@ -29,3 +29,30 @@ def MacroIdentAttr : AttrDef<SVDialect, "MacroIdent"> {
     ::llvm::StringRef getName() { return getIdent().getValue(); }
   }];
 }
+
+def SVAttributeAttr : AttrDef<SVDialect, "SVAttribute"> {
+  let summary = "a Verilog Attribute";
+  let mnemonic = "attribute";
+  let description = [{
+    This attribute is used to encode a Verilog _attribute_.  A Verilog attribute
+    (not to be confused with an LLVM or MLIR attribute) is a syntactic mechanism
+    for adding metadata to specific declarations, statements, and expressions in
+    the Verilog language.  _There are no "standard" attributes_.  Specific tools
+    define and handle their own attributes.
+
+    Verilog attributes have a mandatory name and an optional constant
+    expression.  This is encoded as a key (name) value (expression) pair.
+    Multiple attributes may be specified, either with multiple separate
+    attributes or by comman-separating name--expression pairs.
+
+    For more information, refer to Section 5.12 of the SystemVerilog (1800-2017)
+    specification.
+  }];
+  let parameters = (ins "::mlir::StringAttr":$name,
+                        OptionalParameter<"::mlir::StringAttr">:$expression);
+
+  let assemblyFormat = [{ `<` $name ( `=` $expression^ )? `>` }];
+}
+
+def SVAttributeArrayAttr :
+  TypedArrayAttrBase<SVAttributeAttr, "sv.attribute array attribute">;

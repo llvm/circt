@@ -2464,6 +2464,7 @@ private:
   void
   emitExpression(Value exp, SmallPtrSet<Operation *, 8> &emittedExprs,
                  VerilogPrecedence parenthesizeIfLooserThan = LowestPrecedence);
+  void emitSVAttributes(ArrayAttr svAttrs, Operation *op);
 
   using StmtVisitor::visitStmt;
   using Visitor::visitSV;
@@ -2591,6 +2592,23 @@ void StmtEmitter::emitExpression(Value exp,
   ExprEmitter(emitter, exprBuffer, emittedExprs, names)
       .emitExpression(exp, parenthesizeIfLooserThan);
   os.write(exprBuffer.data(), exprBuffer.size());
+}
+
+/// Emit SystemVerilog attributes attached to the statement op as dialect
+/// attributes.
+void StmtEmitter::emitSVAttributes(ArrayAttr svAttrs, Operation *op) {
+  // SystemVerilog 2017 Section 5.12.
+  if (!svAttrs)
+    return;
+
+  indent() << "(* ";
+  llvm::interleaveComma(svAttrs, os, [&](Attribute attr) {
+    auto svattr = attr.cast<SVAttributeAttr>();
+    os << svattr.getName().getValue();
+    if (svattr.getExpression())
+      os << " = " << svattr.getExpression().getValue();
+  });
+  os << " *)\n";
 }
 
 void StmtEmitter::emitStatementExpression(Operation *op) {
@@ -3681,6 +3699,13 @@ void StmtEmitter::collectNamesEmitDecls(Block &block) {
     auto *op = record.value.getDefiningOp();
     opsForLocation.clear();
     opsForLocation.insert(op);
+
+    // If we have SV attributes attached to the op, those need to be emitted
+    // first.
+    if (auto regOp = dyn_cast<RegOp>(op))
+      emitSVAttributes(regOp.svAttributesAttr(), op);
+    else if (auto wireOp = dyn_cast<WireOp>(op))
+      emitSVAttributes(wireOp.svAttributesAttr(), op);
 
     // Emit the leading word, like 'wire' or 'reg'.
     auto type = record.value.getType();
