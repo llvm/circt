@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from .support import get_user_loc, _obj_to_value_infer_type
 
-from circt.dialects import esi
+from circt.dialects import sv, esi
 import circt.support as support
 
 import mlir.ir as ir
@@ -108,6 +108,17 @@ class Value:
 
 class RegularValue(Value):
   pass
+
+
+class InOutValue(Value):
+  # Maintain a caching of the read value.
+  read_value = None
+
+  @property
+  def read(self):
+    if self.read_value is None:
+      self.read_value = Value(sv.ReadInOutOp.create(self).results[0])
+    return self.read_value
 
 
 def _validate_idx(size: int, idx: Union[int, BitVectorValue]):
