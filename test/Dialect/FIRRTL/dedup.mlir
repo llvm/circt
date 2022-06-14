@@ -109,13 +109,15 @@ firrtl.circuit "WhenOps" {
 // CHECK-LABEL: firrtl.circuit "Annotations"
 firrtl.circuit "Annotations" {
   // CHECK: firrtl.hierpath [[NLA3:@nla.*]] [@Annotations::@annotations1, @Annotations0]
-  // CHECK: firrtl.hierpath [[NLA2:@nla.*]] [@Annotations::@annotations0, @Annotations0::@e]
+  // CHECK: firrtl.hierpath [[NLA2:@nla.*]] [@Annotations::@annotations0, @Annotations0::@f]
   // CHECK: firrtl.hierpath [[NLA1:@nla.*]] [@Annotations::@annotations0, @Annotations0::@c]
   // CHECK: firrtl.hierpath [[NLA0:@nla.*]] [@Annotations::@annotations1, @Annotations0::@b]
   // CHECK: firrtl.hierpath @annos_nla0 [@Annotations::@annotations0, @Annotations0::@d]
   // CHECK: firrtl.hierpath @annos_nla1 [@Annotations::@annotations1, @Annotations0::@d]
+  // CHECK: firrtl.hierpath @annos_nla2 [@Annotations::@annotations0, @Annotations0]
   firrtl.hierpath @annos_nla0 [@Annotations::@annotations0, @Annotations0::@d]
   firrtl.hierpath @annos_nla1 [@Annotations::@annotations1, @Annotations1::@i]
+  firrtl.hierpath @annos_nla2 [@Annotations::@annotations0, @Annotations0]
 
   // CHECK: firrtl.module @Annotations0() attributes {annotations = [{circt.nonlocal = [[NLA3]], class = "one"}]}
   firrtl.module @Annotations0() {
@@ -135,9 +137,13 @@ firrtl.circuit "Annotations" {
     // CHECK: %d = firrtl.wire sym @d  {annotations = [{circt.nonlocal = @annos_nla1, class = "NonLocal"}, {circt.nonlocal = @annos_nla0, class = "NonLocal"}]}
     %d = firrtl.wire sym @d {annotations = [{circt.nonlocal = @annos_nla0, class = "NonLocal"}]} : !firrtl.uint<1>
 
+    // Same test as above but with the hiearchical path targeting the module.
+    // CHECK: %e = firrtl.wire {annotations = [{circt.nonlocal = @annos_nla3, class = "NonLocal"}, {circt.nonlocal = @annos_nla2, class = "NonLocal"}]}
+    %e = firrtl.wire {annotations = [{circt.nonlocal = @annos_nla2, class = "NonLocal"}]} : !firrtl.uint<1>
+
     // Subannotations should be handled correctly.
-    // CHECK: %e = firrtl.wire sym @e  {annotations = [#firrtl.subAnno<fieldID = 1, {circt.nonlocal = [[NLA2]], class = "subanno"}>]}
-    %e = firrtl.wire {annotations = [#firrtl.subAnno<fieldID = 1, {class = "subanno"}>]} : !firrtl.bundle<a: uint<1>>
+    // CHECK: %f = firrtl.wire sym @f {annotations = [#firrtl.subAnno<fieldID = 1, {circt.nonlocal = [[NLA2]], class = "subanno"}>]}
+    %f = firrtl.wire {annotations = [#firrtl.subAnno<fieldID = 1, {class = "subanno"}>]} : !firrtl.bundle<a: uint<1>>
   }
   // CHECK-NOT: firrtl.module @Annotations1
   firrtl.module @Annotations1() attributes {annotations = [{class = "one"}]} {
@@ -145,7 +151,8 @@ firrtl.circuit "Annotations" {
     %g = firrtl.wire {annotations = [{class = "one"}]} : !firrtl.uint<1>
     %h = firrtl.wire : !firrtl.uint<1>
     %i = firrtl.wire sym @i {annotations = [{circt.nonlocal = @annos_nla1, class = "NonLocal"}]} : !firrtl.uint<1>
-    %j = firrtl.wire : !firrtl.bundle<a: uint<1>>
+    %j = firrtl.wire {annotations = [{circt.nonlocal = @annos_nla3, class = "NonLocal"}]} : !firrtl.uint<1>
+    %k = firrtl.wire : !firrtl.bundle<a: uint<1>>
   }
   firrtl.module @Annotations() {
     // CHECK: firrtl.instance annotations0 sym @annotations0  @Annotations0()
