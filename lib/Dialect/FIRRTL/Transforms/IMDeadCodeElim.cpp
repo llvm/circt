@@ -1,4 +1,4 @@
-//===- IMDCE.cpp - Inter Module Dead Code Elimination -----------*- C++ -*-===//
+//===- IMDeadCodeElim.cpp - Intermodule Dead Code Elimination ---*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -16,7 +16,7 @@
 #include "llvm/ADT/TinyPtrVector.h"
 #include "llvm/Support/Debug.h"
 
-#define DEBUG_TYPE "firrtl-imdce"
+#define DEBUG_TYPE "firrtl-imdeadcodeelim"
 
 using namespace circt;
 using namespace firrtl;
@@ -35,18 +35,16 @@ static bool isDeletableWireOrRegOrNode(Operation *op) {
 }
 
 namespace {
-struct IMDCEPass : public IMDCEBase<IMDCEPass> {
+struct IMDeadCodeElimPass : public IMDeadCodeElimBase<IMDeadCodeElimPass> {
   void runOnOperation() override;
 
   void rewriteModuleSignature(FModuleOp module);
   void rewriteModuleBody(FModuleOp module);
 
   void markAlive(Value value) {
-    // If the value is already in `liveSet`, skip it.
-    if (liveSet.count(value))
-      return;
-    liveSet.insert(value);
-    worklist.push_back(value);
+    //  If the value is already in `liveSet`, skip it.
+    if (liveSet.insert(value).second)
+      worklist.push_back(value);
   }
 
   /// Return true if the value is known alive.
@@ -58,9 +56,11 @@ struct IMDCEPass : public IMDCEBase<IMDCEPass> {
   /// Return true if the value is assumed dead.
   bool isAssumedDead(Value value) const { return !isKnownAlive(value); }
 
+  /// Return true if the block is alive.
   bool isBlockExecutable(Block *block) const {
     return executableBlocks.count(block);
   }
+
   void visitUser(Operation *op);
   void visitValue(Value value);
   void visitConnect(FConnectLike connect);
@@ -73,7 +73,7 @@ struct IMDCEPass : public IMDCEBase<IMDCEPass> {
 
 private:
   /// The set of blocks that are known to execute, or are intrinsically alive.
-  SmallPtrSet<Block *, 16> executableBlocks;
+  DenseSet<Block *> executableBlocks;
 
   /// This keeps track of users the instance results that correspond to output
   /// ports.
@@ -88,20 +88,18 @@ private:
 };
 } // namespace
 
-void IMDCEPass::markWireOrRegOrNode(Operation *op) {
+void IMDeadCodeElimPass::markWireOrRegOrNode(Operation *op) {
   assert(isWireOrRegOrNode(op) && "only a wire, a reg or a node is expected");
-  auto resultValue = op->getResult(0);
-
   if (!isDeletableWireOrRegOrNode(op))
-    markAlive(resultValue);
+    markAlive(op->getResult(0));
 }
 
-void IMDCEPass::markMemOp(MemOp mem) {
+void IMDeadCodeElimPass::markMemOp(MemOp mem) {
   for (auto result : mem.getResults())
     markAlive(result);
 }
 
-void IMDCEPass::markUnknownSideEffectOp(Operation *op) {
+void IMDeadCodeElimPass::markUnknownSideEffectOp(Operation *op) {
   // For operations with side effects, pessimistically mark results and
   // operands as alive.
   for (auto result : op->getResults())
@@ -110,7 +108,7 @@ void IMDCEPass::markUnknownSideEffectOp(Operation *op) {
     markAlive(operand);
 }
 
-void IMDCEPass::visitUser(Operation *op) {
+void IMDeadCodeElimPass::visitUser(Operation *op) {
   LLVM_DEBUG(llvm::dbgs() << "Visit: " << *op << "\n");
   if (auto connectOp = dyn_cast<FConnectLike>(op))
     return visitConnect(connectOp);
@@ -118,16 +116,15 @@ void IMDCEPass::visitUser(Operation *op) {
     return visitSubelement(op);
 }
 
-void IMDCEPass::markInstanceOp(InstanceOp instance) {
-  // Get the module being reference.
+void IMDeadCodeElimPass::markInstanceOp(InstanceOp instance) {
+  // Get the module being referenced.
   Operation *op = instanceGraph->getReferencedModule(instance);
 
   // If this is an extmodule, just remember that any inputs and inouts are
   // alive.
   if (!isa<FModuleOp>(op)) {
     auto module = dyn_cast<FModuleLike>(op);
-    for (size_t resultNo = 0, e = instance.getNumResults(); resultNo != e;
-         ++resultNo) {
+    for (auto resultNo : llvm::seq(0u, instance.getNumResults())) {
       auto portVal = instance.getResult(resultNo);
       // If this is an output to the extmodule, we can ignore it.
       if (module.getPortDirection(resultNo) == Direction::Out)
@@ -153,19 +150,18 @@ void IMDCEPass::markInstanceOp(InstanceOp instance) {
     // from the body to this instance result's SSA value, so remember it.
     BlockArgument modulePortVal = fModule.getArgument(resultNo);
 
-    // Mark don't touch ports as alive.
-    if (hasDontTouch(modulePortVal)) {
-      markAlive(modulePortVal);
-      markAlive(instancePortVal);
-    }
-
     resultPortToInstanceResultMapping[modulePortVal].push_back(instancePortVal);
   }
 }
 
-void IMDCEPass::markBlockExecutable(Block *block) {
+void IMDeadCodeElimPass::markBlockExecutable(Block *block) {
   if (!executableBlocks.insert(block).second)
     return; // Already executable.
+
+  // Mark ports with don't touch as alive.
+  for (auto blockArg : block->getArguments())
+    if (hasDontTouch(blockArg))
+      markAlive(blockArg);
 
   for (auto &op : *block) {
     if (isWireOrRegOrNode(&op))
@@ -179,18 +175,20 @@ void IMDCEPass::markBlockExecutable(Block *block) {
       markMemOp(mem);
     else if (!mlir::MemoryEffectOpInterface::hasNoEffect(&op))
       markUnknownSideEffectOp(&op);
+
+    // TODO: Handle attach etc.
   }
 }
 
-void IMDCEPass::runOnOperation() {
+void IMDeadCodeElimPass::runOnOperation() {
   LLVM_DEBUG(llvm::dbgs() << "===----- Remove unused ports -----==="
                           << "\n");
   auto circuit = getOperation();
   instanceGraph = &getAnalysis<InstanceGraph>();
   for (auto module : circuit.getBody()->getOps<FModuleOp>()) {
+    // Mark the ports of public modules as alive.
     if (module.isPublic()) {
       markBlockExecutable(module.getBody());
-      // Mark the ports of public modules as alive.
       for (auto port : module.getBody()->getArguments())
         markAlive(port);
     }
@@ -198,12 +196,8 @@ void IMDCEPass::runOnOperation() {
 
   // If a value changed liveness then propagate liveness through its users and
   // definition.
-  while (!worklist.empty()) {
-    Value changedVal = worklist.pop_back_val();
-    visitValue(changedVal);
-    for (Operation *user : changedVal.getUsers())
-      visitUser(user);
-  }
+  while (!worklist.empty())
+    visitValue(worklist.pop_back_val());
 
   // Rewrite module signatures.
   for (auto module : circuit.getBody()->getOps<FModuleOp>())
@@ -215,10 +209,14 @@ void IMDCEPass::runOnOperation() {
                         [&](auto op) { rewriteModuleBody(op); });
 }
 
-void IMDCEPass::visitValue(Value value) {
+void IMDeadCodeElimPass::visitValue(Value value) {
   assert(isKnownAlive(value) && "only alive values reach here");
 
-  // Driving input ports propagates the liveness to each instance.
+  // Propagate liveness through users.
+  for (Operation *user : value.getUsers())
+    visitUser(user);
+
+  // Requiring an input port propagates the liveness to each instance.
   if (auto blockArg = value.dyn_cast<BlockArgument>()) {
     auto module = cast<FModuleOp>(blockArg.getParentBlock()->getParentOp());
     auto portDirection = module.getPortDirection(blockArg.getArgNumber());
@@ -231,8 +229,8 @@ void IMDCEPass::visitValue(Value value) {
     return;
   }
 
-  // Driving an instance argument port drives the corresponding argument of the
-  // referenced module.
+  // Marking an instance port as alive propagates to the corresponding port of
+  // the module.
   if (auto instance = value.getDefiningOp<InstanceOp>()) {
     auto instanceResult = value.cast<mlir::OpResult>();
     // Update the src, when it's an instance op.
@@ -252,22 +250,22 @@ void IMDCEPass::visitValue(Value value) {
       markAlive(operand);
 }
 
-void IMDCEPass::visitConnect(FConnectLike connect) {
+void IMDeadCodeElimPass::visitConnect(FConnectLike connect) {
   // If the dest is alive, mark the source value as alive.
   if (isKnownAlive(connect.dest()))
     markAlive(connect.src());
 }
 
-void IMDCEPass::visitSubelement(Operation *op) {
+void IMDeadCodeElimPass::visitSubelement(Operation *op) {
   if (isKnownAlive(op->getOperand(0)))
     markAlive(op->getResult(0));
 }
 
-void IMDCEPass::rewriteModuleBody(FModuleOp module) {
+void IMDeadCodeElimPass::rewriteModuleBody(FModuleOp module) {
   auto *body = module.getBody();
   // If the module is unreachable, just ignore it.
   // TODO: Erase this module from circuit op.
-  if (!executableBlocks.count(body))
+  if (!isBlockExecutable(body))
     return;
 
   // Walk the IR bottom-up when deleting operations.
@@ -296,10 +294,10 @@ void IMDCEPass::rewriteModuleBody(FModuleOp module) {
   }
 }
 
-void IMDCEPass::rewriteModuleSignature(FModuleOp module) {
+void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
   // If the module is unreachable, just ignore it.
   // TODO: Erase this module from circuit op.
-  if (!executableBlocks.count(module.getBody()))
+  if (!isBlockExecutable(module.getBody()))
     return;
 
   // Ports of public modules cannot be modified.
@@ -378,10 +376,8 @@ void IMDCEPass::rewriteModuleSignature(FModuleOp module) {
     ImplicitLocOpBuilder builder(instance.getLoc(), instance);
     // Since we will rewrite instance op, it is necessary to remove old instance
     // results from liveSet.
-    for (auto index : llvm::seq(0u, numOldPorts)) {
-      auto result = instance.getResult(index);
-      liveSet.erase(result);
-    }
+    for (auto oldResult : instance.getResults())
+      liveSet.erase(oldResult);
 
     // Replace old instance results with dummy wires.
     for (auto index : deadPortIndexes) {
@@ -407,6 +403,6 @@ void IMDCEPass::rewriteModuleSignature(FModuleOp module) {
   numRemovedPorts += deadPortIndexes.size();
 }
 
-std::unique_ptr<mlir::Pass> circt::firrtl::createIMDCEPass() {
-  return std::make_unique<IMDCEPass>();
+std::unique_ptr<mlir::Pass> circt::firrtl::createIMDeadCodeElimPass() {
+  return std::make_unique<IMDeadCodeElimPass>();
 }

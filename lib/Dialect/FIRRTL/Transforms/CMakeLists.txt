@@ -13,7 +13,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   GrandCentralTaps.cpp
   GrandCentralSignalMappings.cpp
   IMConstProp.cpp
-  IMDCE.cpp
+  IMDeadCodeElim.cpp
   InferResets.cpp
   InferReadWrite.cpp
   InferWidths.cpp

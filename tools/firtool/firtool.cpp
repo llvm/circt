@@ -241,9 +241,10 @@ static cl::opt<bool>
                     cl::desc("check combinational cycles on firrtl"),
                     cl::init(false), cl::cat(mainCategory));
 
-static cl::opt<bool> imdce("imdce",
-                           cl::desc("inter-module dead code elimination."),
-                           cl::init(true), cl::cat(mainCategory));
+static cl::opt<bool>
+    imdeadcodeelim("imdeadcodeelim",
+                   cl::desc("inter-module dead code elimination."),
+                   cl::init(true), cl::cat(mainCategory));
 
 static cl::opt<bool> mergeConnections(
     "merge-connections",
@@ -577,8 +578,8 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   if (!disableOptimization) {
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         createSimpleCanonicalizerPass());
-    if (imdce)
-      pm.nest<firrtl::CircuitOp>().addPass(firrtl::createIMDCEPass());
+    if (imdeadcodeelim)
+      pm.nest<firrtl::CircuitOp>().addPass(firrtl::createIMDeadCodeElimPass());
   }
 
   if (emitOMIR)

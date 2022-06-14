@@ -1,8 +1,8 @@
-// RUN: circt-opt -pass-pipeline='firrtl.circuit(firrtl-imdce)' --split-input-file  %s | FileCheck %s
+// RUN: circt-opt -pass-pipeline='firrtl.circuit(firrtl-imdeadcodeelim)' --split-input-file  %s | FileCheck %s
 firrtl.circuit "top" {
   // In `dead_module`, %source is connected to %dest through several dead operations such as
   // node, wire, reg or rgereset. %dest is also dead at any instantiation, so check that
-  // all operations are removed by IMDCE pass.
+  // all operations are removed by IMDeadCodeElim pass.
   // CHECK-LABEL: private @dead_module() {
   // CHECK-NEXT:  }
   firrtl.module private @dead_module(in %source: !firrtl.uint<1>, out %dest: !firrtl.uint<1>,
@@ -135,9 +135,9 @@ firrtl.circuit "UnusedOutput"  {
 
 // -----
 
-// Ensure that the "output_file" attribute isn't destroyed by IMDCE.
+// Ensure that the "output_file" attribute isn't destroyed by IMDeadCodeElim.
 // This matters for interactions between Grand Central (which sets these) and
-// IMDCE which may clone modules with stripped ports.
+// IMDeadCodeElim which may clone modules with stripped ports.
 //
 // CHECK-LABEL: "PreserveOutputFile"
 firrtl.circuit "PreserveOutputFile" {

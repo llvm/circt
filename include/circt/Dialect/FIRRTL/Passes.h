@@ -100,7 +100,7 @@ std::unique_ptr<mlir::Pass> createDropNamesPass();
 
 std::unique_ptr<mlir::Pass> createExtractInstancesPass();
 
-std::unique_ptr<mlir::Pass> createIMDCEPass();
+std::unique_ptr<mlir::Pass> createIMDeadCodeElimPass();
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION
