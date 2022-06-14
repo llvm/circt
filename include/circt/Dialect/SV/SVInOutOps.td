@@ -24,7 +24,7 @@ def WireOp : SVOp<"wire", [NonProceduralOp,
     }];
 
   let arguments = (ins StrAttr:$name, OptionalAttr<SymbolNameAttr>:$inner_sym,
-                       OptionalAttr<StrArrayAttr>:$svAttributes);
+                       OptionalAttr<SVAttributeArrayAttr>:$svAttributes);
   let results = (outs InOutType:$result);
 
   let skipDefaultBuilders = 1;
@@ -59,7 +59,7 @@ def RegOp : SVOp<"reg", [
      See SV Spec 6.8, pp100.
    }];
   let arguments = (ins StrAttr:$name, OptionalAttr<SymbolNameAttr>:$inner_sym,
-                       OptionalAttr<StrArrayAttr>:$svAttributes);
+                       OptionalAttr<SVAttributeArrayAttr>:$svAttributes);
   let results = (outs InOutType:$result);
 
   let skipDefaultBuilders = 1;

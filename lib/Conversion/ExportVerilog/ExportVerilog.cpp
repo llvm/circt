@@ -2600,19 +2600,15 @@ void StmtEmitter::emitSVAttributes(ArrayAttr svAttrs, Operation *op) {
   // SystemVerilog 2017 Section 5.12.
   if (!svAttrs)
     return;
-  SmallVector<Attribute, 0> errorAttrs;
 
   indent() << "(* ";
   llvm::interleaveComma(svAttrs, os, [&](Attribute attr) {
-    if (auto strAttr = attr.dyn_cast<StringAttr>())
-      os << strAttr.getValue();
-    else
-      errorAttrs.push_back(attr);
+    auto svattr = attr.cast<SVAttributeAttr>();
+    os << svattr.getName().getValue();
+    if (svattr.getExpression())
+      os << " = " << svattr.getExpression().getValue();
   });
   os << " *)\n";
-
-  for (Attribute errorAttr : errorAttrs)
-    op->emitOpError("cannot emit SystemVerilog attribute: ") << errorAttr;
 }
 
 void StmtEmitter::emitStatementExpression(Operation *op) {
