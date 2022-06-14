@@ -1645,10 +1645,8 @@ struct FoldNodeName : public mlir::RewritePattern {
       return failure();
     auto *expr = node.input().getDefiningOp();
     // Best effort
-    if (name && expr && !expr->hasAttr("name"))
+    if (name && !name.getValue().empty() && expr && !expr->hasAttr("name"))
       rewriter.updateRootInPlace(expr, [&] { expr->setAttr("name", name); });
-    // Make sure we don't revisit this node.  This is redundant with NodeBypass,
-    // but easier to do here.
     rewriter.replaceOp(node, node.input());
     return success();
   }
@@ -1661,25 +1659,18 @@ struct NodeBypass : public mlir::RewritePattern {
   LogicalResult matchAndRewrite(Operation *op,
                                 PatternRewriter &rewriter) const override {
     auto node = cast<NodeOp>(op);
-    if (node.inner_sym() || !node.annotations().empty())
+    if (node.inner_sym() || !node.annotations().empty() || node.use_empty())
       return failure();
     rewriter.startRootUpdate(node);
     node.replaceAllUsesWith(node.input());
     rewriter.finalizeRootUpdate(node);
-    if (node.hasDroppableName())
-      rewriter.eraseOp(node);
     return success();
   }
 };
 
 void NodeOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                          MLIRContext *context) {
-  results.insert<NodeBypass, FoldNodeName, patterns::DropNameNode>(context);
-}
-
-void WireOp::getCanonicalizationPatterns(RewritePatternSet &results,
-                                         MLIRContext *context) {
-  results.insert<patterns::DropNameWire>(context);
+  results.insert<NodeBypass, FoldNodeName>(context);
 }
 
 // A register with constant reset and all connection to either itself or the
@@ -1739,15 +1730,11 @@ void RegResetOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                              MLIRContext *context) {
   results.insert<patterns::RegResetWithZeroReset,
                  patterns::RegResetWithInvalidReset,
-                 patterns::RegResetWithInvalidResetValue,
-                 patterns::DropNameRegReset, FoldResetMux>(context);
+                 patterns::RegResetWithInvalidResetValue, FoldResetMux>(
+      context);
 }
 
 LogicalResult MemOp::canonicalize(MemOp op, PatternRewriter &rewriter) {
-  patterns::DropNameMem dnm(op.getContext());
-  if (succeeded(dnm.matchAndRewrite(op, rewriter)))
-    return success();
-
   // If memory has known, but zero width, eliminate it.
   if (op.getDataType().getBitWidthOrSentinel() != 0)
     return failure();
@@ -1842,10 +1829,6 @@ static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
 LogicalResult RegOp::canonicalize(RegOp op, PatternRewriter &rewriter) {
   if (!hasDontTouch(op.getOperation()) &&
       succeeded(foldHiddenReset(op, rewriter)))
-    return success();
-
-  patterns::DropNameReg dnr(op.getContext());
-  if (succeeded(dnr.matchAndRewrite(op, rewriter)))
     return success();
 
   return failure();
