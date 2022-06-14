@@ -106,11 +106,14 @@ circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar.a"},
     inst bar of Bar
 
     ; CHECK-LABEL: firrtl.circuit "Foo"
-    ; CHECK: firrtl.hierpath @nla_2 [@Foo::@bar, @Bar::@d]
-    ; CHECK: firrtl.hierpath @nla_1 [@Foo::@bar, @Bar::@b]
+    ; CHECK: firrtl.hierpath @nla_2 [@Foo::@bar, @Bar]
+    ; CHECK: firrtl.hierpath @nla_1 [@Foo::@bar, @Bar]
     ; CHECK: firrtl.module private @Bar
-    ; CHECK-SAME: sym @b [#firrtl.subAnno<fieldID = 2, {circt.nonlocal = @nla_1, three}>]
-    ; CHECK-NEXT:  %d = firrtl.wire sym @d
+    ; CHECK:      out %b
+    ; CHECK-NOT:  sym
+    ; CHECK-SAME: [#firrtl.subAnno<fieldID = 2, {circt.nonlocal = @nla_1, three}>]
+    ; CHECK-NEXT: %d = firrtl.wire
+    ; CHECK-NOT:  sym
     ; CHECK-SAME: {annotations = [#firrtl.subAnno<fieldID = 2, {circt.nonlocal = @nla_2, five}>]}
     ; CHECK-SAME: : !firrtl.bundle<baz: uint<1>, qux: uint<1>>
     ; CHECK: %bar_a, %bar_b, %bar_c = firrtl.instance bar
@@ -582,8 +585,8 @@ circuit memportAnno: %[[
       write-latency => 1
       read-under-write => undefined
 ; CHECK-LABEL: firrtl.circuit "memportAnno"  {
-; CHECK:        firrtl.hierpath @nla_1 [@memportAnno::@foo, @Foo::@memory]
-; CHECK:        %memory_w = firrtl.mem sym @memory interesting_name Undefined  {depth = 16 : i64, name = "memory", portAnnotations
+; CHECK:        firrtl.hierpath @nla_1 [@memportAnno::@foo, @Foo]
+; CHECK:        %memory_w = firrtl.mem {{.+}} Undefined {depth = 16 : i64, name = "memory", portAnnotations
 ; CHECK-SAME:   [{circt.nonlocal = @nla_1, class = "test"}]
 
 ; // -----
@@ -629,5 +632,5 @@ circuit instportAnno: %[[
     inst bar of Bar
 
 ; CHECK-LABEL: firrtl.circuit "instportAnno"
-; CHECK:        firrtl.hierpath @[[HIER:[^ ]+]] [@instportAnno::@bar, @Bar::@baz]
-; CHECK:        %baz_a = firrtl.instance baz sym @baz interesting_name @Baz(out a: !firrtl.uint<1> [{circt.nonlocal = @[[HIER]], class = "hello"}])
+; CHECK:        firrtl.hierpath @[[HIER:[^ ]+]] [@instportAnno::@bar, @Bar]
+; CHECK:        %baz_a = firrtl.instance baz interesting_name @Baz(out a: !firrtl.uint<1> [{circt.nonlocal = @[[HIER]], class = "hello"}])
