@@ -1394,10 +1394,16 @@ LogicalResult MultibitMuxOp::canonicalize(MultibitMuxOp op,
 //===----------------------------------------------------------------------===//
 
 /// Scan all the uses of the specified value, checking to see if there is
-/// exactly one connect that sets the value as its destination.  This returns
-/// the operation if found and if all the other users are "reads" from the
-/// value.
-static StrictConnectOp getSingleConnectUserOf(Value value) {
+/// exactly one connect that has the value as its destination. This returns the
+/// operation if found and if all the other users are "reads" from the value.
+/// Returns null if there are no connects, or multiple connects to the value, or
+/// if the value is involved in an `AttachOp`.
+///
+/// Note that this will simply return the connect, which is located *anywhere*
+/// after the definition of the value. Users of this function are likely
+/// interested in the source side of the returned connect, the definition of
+/// which does likely not dominate the original value.
+StrictConnectOp firrtl::getSingleConnectUserOf(Value value) {
   StrictConnectOp connect;
   for (Operation *user : value.getUsers()) {
     // If we see an attach, just conservatively fail.
