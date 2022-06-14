@@ -21,12 +21,12 @@
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BlockAndValueMapping.h"
-#include "mlir/IR/Threading.h"
 #include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/SetOperations.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/FormatVariadic.h"
+#include "llvm/Support/Parallel.h"
 
 #define DEBUG_TYPE "firrtl-inliner"
 
@@ -1007,22 +1007,18 @@ void Inliner::identifyNLAsTargetingOnlyModules() {
     return referencedNLASyms;
   };
 
+  // Reduction operator
+  auto mergeSets = [](auto &&a, auto &&b) {
+    a.insert(b.begin(), b.end());
+    return std::move(a);
+  };
+
   // Walk modules in parallel, scanning for references to NLA's
   // Gather set of NLA's referenced by each module's ports/operations.
-
-  // Vector of modules and vector for storing results of each walk:
-  SmallVector<FModuleOp, 16> mods(nlaTargetedModules.begin(),
+  SmallVector<FModuleOp> mods(nlaTargetedModules.begin(),
                                   nlaTargetedModules.end());
-  SmallVector<DenseSet<StringAttr>, 16> refSets;
-  refSets.resize(nlaTargetedModules.size());
-  mlir::parallelForEachN(
-      circuit->getContext(), 0, nlaTargetedModules.size(),
-      [&](size_t index) { refSets[index] = scanForNLARefs(mods[index]); });
-
-  // Combine sets into single "is referenced by a port/operation" set
-  DenseSet<StringAttr> nonModOnlyNLAs;
-  for (auto &set : refSets)
-    nonModOnlyNLAs.insert(set.begin(), set.end());
+  auto nonModOnlyNLAs = llvm::parallelTransformReduce(
+      mods, DenseSet<StringAttr>{}, mergeSets, scanForNLARefs);
 
   // Mark NLA's that were not referenced as module-only
   for (auto &[_, mnla] : nlaMap) {
