@@ -328,5 +328,4 @@ def WireOp : ReferableDeclOp<"wire"> {
     (`sym` $inner_sym^)? custom<NameKind>($nameKind)
     custom<ImplicitSSAName>(attr-dict) `:` qualified(type($result))
   }];
-  let hasCanonicalizer = true;
 }

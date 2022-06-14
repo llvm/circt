@@ -120,42 +120,4 @@ def GetWidthAsIntAttr : NativeCodeCall<
   "IntegerAttr::get(IntegerType::get($_builder.getContext(), 32, IntegerType::Signless), "
                     "$0.getType().cast<FIRRTLType>().getBitWidthOrSentinel())">;
 
-////////////////////////////////////////////////////////////////////////////////
-// Drop name if no symbol (DontTouch application) and name is a stylized
-// temporary name
-////////////////////////////////////////////////////////////////////////////////
-
-// node(x,name),!dnt -> node(x, "")
-def DropNameNode : Pat<
-  (NodeOp $x, $name, $nameKind, $annotations, $inner_sym),
-  (NodeOp $x, (GetEmptyString), (GetDroppableNameAttr), $annotations, $inner_sym),
-  [(uselessNameAttr $name), (NonEmptyAttr $name), (NullAttr $inner_sym)]>;
-
-// wire(name),!dnt -> wire("")
-def DropNameWire : Pat<
-  (WireOp $name, $nameKind, $annotations, $inner_sym),
-  (WireOp (GetEmptyString), (GetDroppableNameAttr), $annotations, $inner_sym),
-  [(uselessNameAttr $name), (NonEmptyAttr $name), (NullAttr $inner_sym)]>;
-
-// reg(clk, name),!dnt -> reg(clk, "")
-def DropNameReg : Pat<
-  (RegOp $clk, $name, $nameKind, $annotations, $inner_sym),
-  (RegOp $clk, (GetEmptyString), (GetDroppableNameAttr), $annotations, $inner_sym),
-  [(uselessNameAttr $name), (NonEmptyAttr $name), (NullAttr $inner_sym)]>;
-
-// regreset(clk, sig, val, name),!dnt -> regreset(clk, sig, val, "")
-def DropNameRegReset : Pat<
-  (RegResetOp $clk, $sig, $val, $name, $nameKind, $annotations, $inner_sym),
-  (RegResetOp $clk, $sig, $val, (GetEmptyString), (GetDroppableNameAttr),
-                    $annotations, $inner_sym),
-  [(uselessNameAttr $name), (NonEmptyAttr $name), (NullAttr $inner_sym)]>;
-
-// Mem(...,name),!dnt -> Mem(...x, "")
-def DropNameMem : Pat<
-  (MemOp $rd, $rw, $depth, $ruw, $portNames, $name, $nameKind, $annotations, $portAnno,
-                                             $inner_sym, $groupID),
-  (MemOp $rd, $rw, $depth, $ruw, $portNames, (GetEmptyString), (GetDroppableNameAttr),
-         $annotations, $portAnno, $inner_sym, $groupID),
-  [(uselessNameAttr $name), (NonEmptyAttr $name), (NullAttr $inner_sym)]>;
-
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLCANONICALIZATION_TD
