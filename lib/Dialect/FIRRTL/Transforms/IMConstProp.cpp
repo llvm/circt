@@ -273,9 +273,6 @@ private:
   /// The set of blocks that are known to execute, or are intrinsically live.
   SmallPtrSet<Block *, 16> executableBlocks;
 
-  /// A worklist containing blocks that need to be processed.
-  SmallVector<Block *, 64> blockWorklist;
-
   /// A worklist of values whose LatticeValue recently changed, indicating the
   /// users need to be reprocessed.
   SmallVector<Value, 64> changedLatticeValueWorklist;
