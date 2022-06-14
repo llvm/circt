@@ -1032,10 +1032,11 @@ void Inliner::identifyNLAsTargetingOnlyModules() {
     mod.getBody()->walk([&](Operation *op) {
       scanAnnos(AnnotationSet(op));
 
-      // Check MemOp ports, special case
-      if (auto mem = dyn_cast<MemOp>(op))
-        for (auto portAnnoAttr : mem.portAnnotations())
-          scanAnnos(AnnotationSet(portAnnoAttr.cast<ArrayAttr>()));
+      // Check MemOp and InstanceOp port annotations, special case
+      TypeSwitch<Operation *>(op).Case<MemOp, InstanceOp>([&](auto op) {
+        for (auto portAnnoAttr : op.portAnnotations())
+          scanAnnos(AnnotationSet(portAnnoAttr.template cast<ArrayAttr>()));
+      });
     });
 
     return referencedNLASyms;
