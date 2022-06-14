@@ -1420,6 +1420,16 @@ hw.module @Verilator3405(
   hw.output %out : i2
 }
 
+// CHECK-LABEL: module CollectNamesOrder
+hw.module @CollectNamesOrder(%in: i1) -> (out: i1) {
+  // CHECK: wire _GEN;
+  // CHECK: wire [[EXTRA_GEN:.+]] = {{.+}};
+  // CHECK: assign {{.+}} = [[EXTRA_GEN]]
+  %0 = comb.or %in, %in : i1
+  %1 = comb.or %0, %0 : i1
+  %foo = sv.wire {hw.verilogName = "_GEN" } : !hw.inout<i1>
+  hw.output %1 : i1
+}
 
 hw.module @bindInMod() {
   sv.bind #hw.innerNameRef<@remoteInstDut::@bindInst>

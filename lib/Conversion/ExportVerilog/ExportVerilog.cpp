@@ -2337,19 +2337,36 @@ void NameCollector::collectNames(Block &block) {
 
   SmallString<32> nameTmp;
 
-  // Loop over all of the results of all of the ops.  Anything that defines a
-  // value needs to be noticed.
+  // Pre-pass loop to first add any names that could be the result of re-naming.
+  // These constructs will have their names added regardless, and handling them
+  // first ensures any out of line expressions won't trample on names selected
+  // by re-naming. This could be combined into one pass through the IR that
+  // collects a worklist of exprs to re-visit instead of the double traversal.
   for (auto &op : block) {
-    // Instances have a instance name to recognize but we don't need to look
-    // at the result values and don't need to schedule them as valuesToEmit.
     if (auto instance = dyn_cast<InstanceOp>(op)) {
       names.addName(&op, getSymOpName(instance));
       continue;
     }
+
     if (auto interface = dyn_cast<InterfaceInstanceOp>(op)) {
       names.addName(interface.getResult(), getSymOpName(interface));
       continue;
     }
+
+    if (isa<WireOp, RegOp, LocalParamOp>(op)) {
+      names.addName(op.getResult(0), getSymOpName(&op));
+      continue;
+    }
+  }
+
+  // Loop over all of the results of all of the ops. Anything that defines a
+  // value needs to be noticed.
+  for (auto &op : block) {
+    // Instances have an instance name to recognize but we don't need to look
+    // at the result values and don't need to schedule them as valuesToEmit.
+    // They already had their names added in the first loop, and can be skipped.
+    if (isa<InstanceOp, InterfaceInstanceOp>(op))
+      continue;
 
     bool isExpr = isVerilogExpression(&op);
     bool isInlineExpr =
@@ -2394,12 +2411,6 @@ void NameCollector::collectNames(Block &block) {
                                       stringStream, op.getLoc());
       }
       maxTypeWidth = std::max(typeString.size(), maxTypeWidth);
-    }
-
-    // Notice and renamify named declarations.
-    if (isa<WireOp, RegOp, LocalParamOp>(op)) {
-      names.addName(op.getResult(0), getSymOpName(&op));
-      continue;
     }
 
     // Notice and renamify the labels on verification statements.
