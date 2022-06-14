@@ -1418,7 +1418,7 @@ hw.module @Verilator3405(
 
 // CHECK-LABEL: module CollectNamesOrder
 hw.module @CollectNamesOrder(%in: i1) -> (out: i1) {
-  // CHECK: wire [[ACTUAL_GEN:_GEN]];
+  // CHECK: wire _GEN;
   // CHECK: wire [[EXTRA_GEN:.+]] = {{.+}};
   // CHECK: assign {{.+}} = [[EXTRA_GEN]]
   %0 = comb.or %in, %in : i1
