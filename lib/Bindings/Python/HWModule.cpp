@@ -31,6 +31,15 @@ void circt::python::populateDialectHWSubmodule(py::module &m) {
 
   m.def("get_bitwidth", &hwGetBitWidth);
 
+  mlir_type_subclass(m, "InOutType", hwTypeIsAInOut)
+      .def_classmethod("get",
+                       [](py::object cls, MlirType innerType) {
+                         return cls(hwInOutTypeGet(innerType));
+                       })
+      .def_property_readonly("element_type", [](MlirType self) {
+        return hwInOutTypeGetElementType(self);
+      });
+
   mlir_type_subclass(m, "ArrayType", hwTypeIsAArrayType)
       .def_classmethod("get",
                        [](py::object cls, MlirType elementType, intptr_t size) {
