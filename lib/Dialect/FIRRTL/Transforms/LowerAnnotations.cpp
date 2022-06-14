@@ -103,14 +103,13 @@ static void addAnnotation(AnnoTarget ref, unsigned fieldIdx,
 static FlatSymbolRefAttr buildNLA(AnnoPathValue target, ApplyState &state) {
   OpBuilder b(state.circuit.getBodyRegion());
   SmallVector<Attribute> insts;
-  for (auto inst : target.instances)
+  for (auto inst : target.instances) {
     insts.push_back(OpAnnoTarget(inst).getNLAReference(
         state.getNamespace(inst->getParentOfType<FModuleLike>())));
+  }
 
-  auto module = dyn_cast<FModuleLike>(target.ref.getOp());
-  if (!module)
-    module = target.ref.getOp()->getParentOfType<FModuleLike>();
-  insts.push_back(target.ref.getNLAReference(state.getNamespace(module)));
+  insts.push_back(
+      FlatSymbolRefAttr::get(target.ref.getModule().moduleNameAttr()));
   auto instAttr = ArrayAttr::get(state.circuit.getContext(), insts);
   auto nla = b.create<HierPathOp>(state.circuit.getLoc(), "nla", instAttr);
   state.symTbl.insert(nla);
