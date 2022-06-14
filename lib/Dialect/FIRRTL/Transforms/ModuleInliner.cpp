@@ -1019,17 +1019,23 @@ void Inliner::identifyNLAsTargetingOnlyModules() {
   // Helper to scan leaf modules for users of NLAs, gathering by symbol names
   auto scanForNLARefs = [&](FModuleOp mod) {
     DenseSet<StringAttr> referencedNLASyms;
-    // Scan ports
-    for (unsigned i = 0, e = mod.getNumPorts(); i != e; ++i)
-      for (auto anno : AnnotationSet::forPort(mod, i))
+    auto scanAnnos = [&](const AnnotationSet &annos) {
+      for (auto anno : annos)
         if (auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal"))
           referencedNLASyms.insert(sym.getAttr());
+    };
+    // Scan ports
+    for (unsigned i = 0, e = mod.getNumPorts(); i != e; ++i)
+      scanAnnos(AnnotationSet::forPort(mod, i));
 
     // Scan operations (and not the module itself):
     mod.getBody()->walk([&](Operation *op) {
-      for (auto anno : AnnotationSet(op))
-        if (auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal"))
-          referencedNLASyms.insert(sym.getAttr());
+      scanAnnos(AnnotationSet(op));
+
+      // Check MemOp ports, special case
+      if (auto mem = dyn_cast<MemOp>(op))
+        for (auto portAnnoAttr : mem.portAnnotations())
+          scanAnnos(AnnotationSet(portAnnoAttr.cast<ArrayAttr>()));
     });
 
     return referencedNLASyms;
