@@ -1007,17 +1007,21 @@ void Inliner::inlineInstances(FModuleOp parent) {
 }
 
 void Inliner::identifyNLAsTargetingOnlyModules() {
-  DenseSet<FModuleOp> nlaTargetedModules;
+  DenseSet<Operation *> nlaTargetedModules;
 
   // Identify candidate NLA's: those that end in a module
   for (auto &[sym, mnla] : nlaMap) {
     auto nla = mnla.getNLA();
-    if (nla.isModule())
-      nlaTargetedModules.insert(symbolTable.lookup<FModuleOp>(nla.leafMod()));
+    if (nla.isModule()) {
+      auto mod = symbolTable.lookup<FModuleLike>(nla.leafMod());
+      assert(mod &&
+             "NLA ends in module reference but does not target FModuleLike?");
+      nlaTargetedModules.insert(mod);
+    }
   }
 
   // Helper to scan leaf modules for users of NLAs, gathering by symbol names
-  auto scanForNLARefs = [&](FModuleOp mod) {
+  auto scanForNLARefs = [&](FModuleLike mod) {
     DenseSet<StringAttr> referencedNLASyms;
     auto scanAnnos = [&](const AnnotationSet &annos) {
       for (auto anno : annos)
@@ -1029,7 +1033,10 @@ void Inliner::identifyNLAsTargetingOnlyModules() {
       scanAnnos(AnnotationSet::forPort(mod, i));
 
     // Scan operations (and not the module itself):
-    mod.getBody()->walk([&](Operation *op) {
+    // (Walk includes module for lack of simple/generic way to walk body only)
+    mod.walk([&](Operation *op) {
+      if (op == mod.getOperation())
+        return;
       scanAnnos(AnnotationSet(op));
 
       // Check MemOp and InstanceOp port annotations, special case
@@ -1050,11 +1057,11 @@ void Inliner::identifyNLAsTargetingOnlyModules() {
 
   // Walk modules in parallel, scanning for references to NLA's
   // Gather set of NLA's referenced by each module's ports/operations.
+  SmallVector<FModuleLike, 0> mods(nlaTargetedModules.begin(),
+                                   nlaTargetedModules.end());
   auto nonModOnlyNLAs =
-      transformReduce(circuit->getContext(),
-                      SmallVector<FModuleOp, 0>(nlaTargetedModules.begin(),
-                                                nlaTargetedModules.end()),
-                      DenseSet<StringAttr>{}, mergeSets, scanForNLARefs);
+      transformReduce(circuit->getContext(), mods, DenseSet<StringAttr>{},
+                      mergeSets, scanForNLARefs);
 
   // Mark NLA's that were not referenced as module-only
   for (auto &[_, mnla] : nlaMap) {
