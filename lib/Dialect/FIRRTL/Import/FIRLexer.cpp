@@ -148,8 +148,8 @@ std::string FIRToken::getRawStringValue(StringRef spelling) {
 //===----------------------------------------------------------------------===//
 
 static StringAttr getBufferNameIdentifier(const llvm::SourceMgr &sourceMgr,
-                                              MLIRContext *context,
-                                              unsigned bufferID) {
+                                          MLIRContext *context,
+                                          unsigned bufferID) {
   auto buffer = sourceMgr.getMemoryBuffer(bufferID);
   StringRef bufferName = buffer->getBufferIdentifier();
   if (bufferName.empty())
