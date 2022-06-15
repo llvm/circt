@@ -64,6 +64,7 @@ struct IMDeadCodeElimPass : public IMDeadCodeElimBase<IMDeadCodeElimPass> {
   void visitUser(Operation *op);
   void visitValue(Value value);
   void visitConnect(FConnectLike connect);
+  void visitAttach(AttachOp attach);
   void visitSubelement(Operation *op);
   void markBlockExecutable(Block *block);
   void markWireOrRegOrNode(Operation *op);
@@ -112,6 +113,8 @@ void IMDeadCodeElimPass::visitUser(Operation *op) {
   LLVM_DEBUG(llvm::dbgs() << "Visit: " << *op << "\n");
   if (auto connectOp = dyn_cast<FConnectLike>(op))
     return visitConnect(connectOp);
+  if (auto attachOp = dyn_cast<AttachOp>(op))
+    return visitAttach(attachOp);
   if (isa<SubfieldOp, SubindexOp, SubaccessOp>(op))
     return visitSubelement(op);
 }
@@ -168,8 +171,8 @@ void IMDeadCodeElimPass::markBlockExecutable(Block *block) {
       markWireOrRegOrNode(&op);
     else if (auto instance = dyn_cast<InstanceOp>(op))
       markInstanceOp(instance);
-    else if (isa<FConnectLike>(op))
-      // Skip connect op.
+    else if (isa<FConnectLike, AttachOp>(op))
+      // Skip connect and attach. These are handled by `visitUser`.
       continue;
     else if (auto mem = dyn_cast<MemOp>(op))
       markMemOp(mem);
@@ -254,6 +257,14 @@ void IMDeadCodeElimPass::visitConnect(FConnectLike connect) {
   // If the dest is alive, mark the source value as alive.
   if (isKnownAlive(connect.dest()))
     markAlive(connect.src());
+}
+
+void IMDeadCodeElimPass::visitAttach(AttachOp attach) {
+  // If attach op has an alive operand, mark all operands as alive.
+  if (llvm::any_of(attach.getOperands(),
+                   [&](Value value) { return isKnownAlive(value); }))
+    llvm::for_each(attach.getOperands(),
+                   [&](Value value) { markAlive(value); });
 }
 
 void IMDeadCodeElimPass::visitSubelement(Operation *op) {
