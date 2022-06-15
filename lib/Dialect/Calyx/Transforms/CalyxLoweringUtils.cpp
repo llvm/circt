@@ -402,7 +402,8 @@ FuncOpPartialLoweringPattern::partiallyLower(mlir::func::FuncOp funcOp,
   if (auto it = functionMapping.find(funcOp); it != functionMapping.end()) {
     componentOp = it->second;
     componentLoweringState =
-        programLoweringState.getState<ComponentLoweringStateInterface>(componentOp);
+        programLoweringState.getState<ComponentLoweringStateInterface>(
+            componentOp);
   }
 
   return partiallyLowerFuncToComp(funcOp, rewriter);
@@ -680,8 +681,7 @@ BuildReturnRegs::partiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
     rewriter.create<calyx::AssignOp>(
         funcOp->getLoc(),
         calyx::getComponentOutput(
-            getComponent(),
-            getState().getFuncOpResultMapping(argType.index())),
+            getComponent(), getState().getFuncOpResultMapping(argType.index())),
         reg.out());
   }
   return success();
