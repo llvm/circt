@@ -94,7 +94,7 @@ static ParseResult parseNameKind(OpAsmParser &parser,
     return success();
   }
 
-  // Default is interesting name.
+  // Default is droppable name.
   result =
       NameKindEnumAttr::get(parser.getContext(), NameKindEnum::DroppableName);
   return success();

@@ -206,14 +206,14 @@ firrtl.module @TestConnections(in %in0: !firrtl.uint<4>, in %in1: !firrtl.uint<4
 }
 }
 // CHECK-LABEL: firrtl.module @TestConnections(in %in0: !firrtl.uint<4>, in %in1: !firrtl.uint<4>, out %out0: !firrtl.uint<4>, out %out1: !firrtl.uint<4>) {
-// CHECK-NEXT:   %b_in0 = firrtl.wire interesting_name : !firrtl.uint<4>
-// CHECK-NEXT:   %b_in1 = firrtl.wire interesting_name : !firrtl.uint<4>
-// CHECK-NEXT:   %b_out0 = firrtl.wire interesting_name : !firrtl.uint<4>
-// CHECK-NEXT:   %b_out1 = firrtl.wire interesting_name : !firrtl.uint<4>
-// CHECK-NEXT:   %b_a_in0 = firrtl.wire interesting_name : !firrtl.uint<4>
-// CHECK-NEXT:   %b_a_in1 = firrtl.wire interesting_name : !firrtl.uint<4>
-// CHECK-NEXT:   %b_a_out0 = firrtl.wire interesting_name : !firrtl.uint<4>
-// CHECK-NEXT:   %b_a_out1 = firrtl.wire interesting_name : !firrtl.uint<4>
+// CHECK-NEXT:   %b_in0 = firrtl.wire  : !firrtl.uint<4>
+// CHECK-NEXT:   %b_in1 = firrtl.wire  : !firrtl.uint<4>
+// CHECK-NEXT:   %b_out0 = firrtl.wire  : !firrtl.uint<4>
+// CHECK-NEXT:   %b_out1 = firrtl.wire  : !firrtl.uint<4>
+// CHECK-NEXT:   %b_a_in0 = firrtl.wire  : !firrtl.uint<4>
+// CHECK-NEXT:   %b_a_in1 = firrtl.wire  : !firrtl.uint<4>
+// CHECK-NEXT:   %b_a_out0 = firrtl.wire  : !firrtl.uint<4>
+// CHECK-NEXT:   %b_a_out1 = firrtl.wire  : !firrtl.uint<4>
 // CHECK-NEXT:   %0 = firrtl.and %b_a_in0, %b_a_in1 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
 // CHECK-NEXT:   firrtl.connect %b_a_out0, %0 : !firrtl.uint<4>, !firrtl.uint<4>
 // CHECK-NEXT:   %1 = firrtl.and %b_a_in0, %b_a_in1 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
@@ -241,8 +241,8 @@ firrtl.module @TestBulkConnections(in %in0: !firrtl.bundle<a: uint<4>, b flip: u
   %i_in0, %i_out0 = firrtl.instance i @InlineMe0(in in0: !firrtl.bundle<a: uint<4>, b flip: uint<4>>, out out0: !firrtl.bundle<a: uint<4>, b flip: uint<4>>)
   firrtl.connect %i_in0, %in0 : !firrtl.bundle<a: uint<4>, b flip: uint<4>>, !firrtl.bundle<a: uint<4>, b flip: uint<4>>
   firrtl.connect %out0, %i_out0 : !firrtl.bundle<a: uint<4>, b flip: uint<4>>, !firrtl.bundle<a: uint<4>, b flip: uint<4>>
-// CHECK: %i_in0 = firrtl.wire interesting_name : !firrtl.bundle<a: uint<4>, b flip: uint<4>>
-// CHECK: %i_out0 = firrtl.wire interesting_name : !firrtl.bundle<a: uint<4>, b flip: uint<4>>
+// CHECK: %i_in0 = firrtl.wire  : !firrtl.bundle<a: uint<4>, b flip: uint<4>>
+// CHECK: %i_out0 = firrtl.wire  : !firrtl.bundle<a: uint<4>, b flip: uint<4>>
 // CHECK: firrtl.connect %i_out0, %i_in0 : !firrtl.bundle<a: uint<4>, b flip: uint<4>>, !firrtl.bundle<a: uint<4>, b flip: uint<4>>
 // CHECK: firrtl.connect %i_in0, %in0 : !firrtl.bundle<a: uint<4>, b flip: uint<4>>, !firrtl.bundle<a: uint<4>, b flip: uint<4>>
 // CHECK: firrtl.connect %out0, %i_out0 : !firrtl.bundle<a: uint<4>, b flip: uint<4>>, !firrtl.bundle<a: uint<4>, b flip: uint<4>>
@@ -508,7 +508,7 @@ firrtl.circuit "CollidingSymbolsPort" {
   ]} {}
   // CHECK-NEXT: firrtl.module private @Foo
   firrtl.module private @Foo() {
-    // CHECK-NEXT: firrtl.wire sym @[[BarbSym]] interesting_name {annotations = [{circt.nonlocal = @nla1, class = "nla1"}]}
+    // CHECK-NEXT: firrtl.wire sym @[[BarbSym]] {annotations = [{circt.nonlocal = @nla1, class = "nla1"}]}
     firrtl.instance bar sym @bar @Bar(in b: !firrtl.uint<1>)
     // CHECK-NEXT: firrtl.wire sym @b
     %colliding_b = firrtl.wire sym @b : !firrtl.uint<1>
@@ -574,7 +574,7 @@ firrtl.circuit "CollidingSymbolsNLAFixup" {
 
   // CHECK: firrtl.module @Bar()
   firrtl.module @Bar() {
-    // CHECK: %baz0_io = firrtl.wire sym @io interesting_name {annotations = [{circt.nonlocal = @nla0, class = "test"}]}
+    // CHECK: %baz0_io = firrtl.wire sym @io  {annotations = [{circt.nonlocal = @nla0, class = "test"}]}
     // CHECK: %baz0_w = firrtl.wire sym @w  {annotations = [{circt.nonlocal = @nla1, class = "test"}]}
     %0 = firrtl.instance baz0 sym @baz0 @Baz(out io : !firrtl.uint<1>)
 
