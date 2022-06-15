@@ -3,7 +3,7 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from mlir.ir import ArrayAttr, Attribute, FlatSymbolRefAttr, OpView, StringAttr
-from circt.dialects import sv
+from circt.dialects import sv, hw
 import circt.support as support
 
 
@@ -50,6 +50,12 @@ class WireOp:
                            regions=0,
                            loc=loc,
                            ip=ip))
+
+  @staticmethod
+  def create(data_type, name=None):
+    if not isinstance(data_type, hw.InOutType):
+      data_type = hw.InOutType.get(data_type)
+    return sv.WireOp(data_type, name)
 
 
 class RegOp:
