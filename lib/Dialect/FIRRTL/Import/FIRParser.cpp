@@ -3668,7 +3668,8 @@ FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
 
   // We parse the body of this module with its own lexer, enabling parallel
   // parsing with the rest of the other module bodies.
-  FIRLexer moduleBodyLexer(getLexer().getSourceMgr(), getContext());
+  FIRLexer moduleBodyLexer(getLexer().getSourceMgr(), getContext(),
+                           getLexer().getBufferID());
 
   // Reset the parser/lexer state back to right after the port list.
   deferredModule.lexerCursor.restore(moduleBodyLexer);
@@ -3906,17 +3907,16 @@ DoneParsing:
 mlir::OwningOpRef<mlir::ModuleOp>
 circt::firrtl::importFIRFile(SourceMgr &sourceMgr, MLIRContext *context,
                              mlir::TimingScope &ts, FIRParserOptions options) {
-  auto sourceBuf = sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID());
+  unsigned mainFileID = sourceMgr.getMainFileID();
+  auto sourceBuf = sourceMgr.getMemoryBuffer(mainFileID);
   SmallVector<const llvm::MemoryBuffer *> annotationsBufs;
   unsigned fileID = 1;
   for (unsigned e = options.numAnnotationFiles + 1; fileID < e; ++fileID)
-    annotationsBufs.push_back(
-        sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID() + fileID));
+    annotationsBufs.push_back(sourceMgr.getMemoryBuffer(mainFileID + fileID));
 
   SmallVector<const llvm::MemoryBuffer *> omirBufs;
   for (unsigned e = sourceMgr.getNumBuffers(); fileID < e; ++fileID)
-    omirBufs.push_back(
-        sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID() + fileID));
+    omirBufs.push_back(sourceMgr.getMemoryBuffer(mainFileID + fileID));
 
   context->loadDialect<CHIRRTLDialect>();
   context->loadDialect<FIRRTLDialect, hw::HWDialect>();
@@ -3926,7 +3926,7 @@ circt::firrtl::importFIRFile(SourceMgr &sourceMgr, MLIRContext *context,
       FileLineColLoc::get(context, sourceBuf->getBufferIdentifier(), /*line=*/0,
                           /*column=*/0)));
   SharedParserConstants state(context, options);
-  FIRLexer lexer(sourceMgr, context);
+  FIRLexer lexer(sourceMgr, context, mainFileID);
   if (FIRCircuitParser(state, lexer, *module)
           .parseCircuit(annotationsBufs, omirBufs, ts))
     return nullptr;
