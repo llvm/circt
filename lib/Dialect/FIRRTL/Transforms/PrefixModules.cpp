@@ -108,7 +108,7 @@ class PrefixModulesPass : public PrefixModulesBase<PrefixModulesPass> {
   /// This is a map from a module name to new prefixes to be applied.
   PrefixMap prefixMap;
 
-  /// Map prefix to identifier id.
+  /// Map prefix to group ID.
   /// Store strings in the map, they may not stay alive.
   llvm::StringMap<uint32_t> prefixIdMap;
 
