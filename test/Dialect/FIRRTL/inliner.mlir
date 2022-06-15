@@ -751,12 +751,14 @@ firrtl.circuit "Issue3334_flatten" {
   }
   firrtl.module @Issue3334_flatten() {
     firrtl.instance foo sym @foo @Foo()
+  }
+}
 
 firrtl.circuit "instNameRename"  {
   firrtl.hierpath @nla_5560 [@instNameRename::@bar0, @Bar0::@w, @Bar2::@w, @Bar1::@a]
-  // CHECK:  firrtl.hierpath @nla_5560 [@instNameRename::@w_1, @Bar2::@w, @Bar1::@a]
+  // CHECK:  firrtl.hierpath @nla_5560 [@instNameRename::@[[w_1:.+]], @Bar2::@w, @Bar1::@a]
   firrtl.hierpath @nla_5560_1 [@instNameRename::@bar1, @Bar0::@w, @Bar2::@w, @Bar1::@a]
-  // CHECK:  firrtl.hierpath @nla_5560_1 [@instNameRename::@w_2, @Bar2::@w, @Bar1::@a]
+  // CHECK:  firrtl.hierpath @nla_5560_1 [@instNameRename::@[[w_2:.+]], @Bar2::@w, @Bar1::@a]
 
   firrtl.module @Leaf() {
     %w = firrtl.wire   : !firrtl.uint<8>
@@ -776,6 +778,8 @@ firrtl.circuit "instNameRename"  {
     firrtl.instance no sym @no @Bar0()
     firrtl.instance bar0 sym @bar0  @Bar0()
     firrtl.instance bar1 sym @bar1  @Bar0()
+    // CHECK:  firrtl.instance bar0_leaf sym @[[w_1]]  @Bar2()
+    // CHECK:  firrtl.instance bar1_leaf sym @[[w_2]]  @Bar2()
 
     %w = firrtl.wire sym @w   : !firrtl.uint<8>
     %inv = firrtl.invalidvalue : !firrtl.uint<8>
