@@ -85,6 +85,34 @@ FirMemory getSummary(MemOp op) {
 namespace {
 struct LowerMemoryPass : public LowerMemoryBase<LowerMemoryPass> {
 
+  /// Get the cached namespace for a module.
+  ModuleNamespace &getModuleNamespace(FModuleLike module) {
+    return moduleNamespaces.try_emplace(module, module).first->second;
+  }
+
+  /// Returns an operation's `inner_sym`, adding one if necessary.
+  StringAttr getOrAddInnerSym(Operation *op) {
+    auto attr = op->getAttrOfType<StringAttr>("inner_sym");
+    if (attr)
+      return attr;
+    auto module = op->getParentOfType<FModuleOp>();
+    StringRef name = "sym";
+    if (auto nameAttr = op->getAttrOfType<StringAttr>("name"))
+      name = nameAttr.getValue();
+    name = getModuleNamespace(module).newName(name);
+    attr = StringAttr::get(op->getContext(), name);
+    op->setAttr("inner_sym", attr);
+    return attr;
+  }
+
+  /// Obtain an inner reference to an operation, possibly adding an `inner_sym`
+  /// to that operation.
+  hw::InnerRefAttr getInnerRefTo(Operation *op) {
+    return hw::InnerRefAttr::get(
+        SymbolTable::getSymbolName(op->getParentOfType<FModuleOp>()),
+        getOrAddInnerSym(op));
+  }
+
   SmallVector<PortInfo> getMemoryModulePorts(const FirMemory &mem);
   FMemModuleOp emitMemoryModule(MemOp op, const FirMemory &summary,
                                 const SmallVectorImpl<PortInfo> &ports);
@@ -99,6 +127,8 @@ struct LowerMemoryPass : public LowerMemoryBase<LowerMemoryPass> {
   LogicalResult runOnModule(FModuleOp module, bool shouldDedup);
   void runOnOperation() override;
 
+  /// Cached module namespaces.
+  DenseMap<Operation *, ModuleNamespace> moduleNamespaces;
   CircuitNamespace circuitNamespace;
   SymbolTable *symbolTable;
 
@@ -232,40 +262,60 @@ void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
 
   // Create an instance of the wrapper memory module, which will replace the
   // original mem op.
-  emitMemoryInstance(mem, wrapper, summary);
+  auto inst = emitMemoryInstance(mem, wrapper, summary);
 
   // We fixup the annotations here. We will be copying all annotations on to the
   // module op, so we have to fix up the NLA to have the module as the leaf
   // element.
 
   auto leafSym = memModule.moduleNameAttr();
-  auto leafAttr = hw::InnerRefAttr::get(wrapper.moduleNameAttr(), leafSym);
+  auto leafAttr = FlatSymbolRefAttr::get(wrapper.moduleNameAttr());
 
   // NLAs that we have already processed.
-  SmallPtrSet<Attribute, 8> processedNLAs;
+  llvm::SmallDenseMap<StringAttr, StringAttr> processedNLAs;
   auto nonlocalAttr = StringAttr::get(context, "circt.nonlocal");
   bool nlaUpdated = false;
+  SmallVector<Annotation> newMemModAnnos;
+  OpBuilder nlaBuilder(context);
 
-  for (auto anno : AnnotationSet(mem)) {
+  AnnotationSet::removeAnnotations(memInst, [&](Annotation anno) -> bool {
     // We're only looking for non-local annotations.
     auto nlaSym = anno.getMember<FlatSymbolRefAttr>(nonlocalAttr);
     if (!nlaSym)
-      continue;
+      return false;
     // If we have already seen this NLA, don't re-process it.
-    if (!processedNLAs.insert(nlaSym).second)
-      continue;
+    auto newNLAIter = processedNLAs.find(nlaSym.getAttr());
+    StringAttr newNLAName;
+    if (newNLAIter == processedNLAs.end()) {
 
-    // Update the NLA path to have the additional wrapper module.
-    auto nla = dyn_cast<HierPathOp>(symbolTable->lookup(nlaSym.getAttr()));
-    auto namepath = nla.namepath().getValue();
-    SmallVector<Attribute> newNamepath(namepath.begin(), namepath.end());
-    newNamepath.push_back(leafAttr);
-    nla.namepathAttr(ArrayAttr::get(context, newNamepath));
+      // Update the NLA path to have the additional wrapper module.
+      auto nla = dyn_cast<HierPathOp>(symbolTable->lookup(nlaSym.getAttr()));
+      auto namepath = nla.namepath().getValue();
+      SmallVector<Attribute> newNamepath(namepath.begin(), namepath.end());
+      if (!nla.isComponent())
+        newNamepath.back() = getInnerRefTo(inst);
+      newNamepath.push_back(leafAttr);
+
+      nlaBuilder.setInsertionPointAfter(nla);
+      auto newNLA = cast<HierPathOp>(nlaBuilder.clone(*nla));
+      newNLA.sym_nameAttr(StringAttr::get(
+          context, circuitNamespace.newName(nla.getNameAttr().getValue())));
+      newNLA.namepathAttr(ArrayAttr::get(context, newNamepath));
+      newNLAName = newNLA.getNameAttr();
+      processedNLAs[nlaSym.getAttr()] = newNLAName;
+    } else
+      newNLAName = newNLAIter->getSecond();
+    anno.setMember("circt.nonlocal", FlatSymbolRefAttr::get(newNLAName));
     nlaUpdated = true;
-  }
-  if (nlaUpdated)
+    newMemModAnnos.push_back(anno);
+    return true;
+  });
+  if (nlaUpdated) {
     memInst.inner_symAttr(leafSym);
-
+    AnnotationSet newAnnos(memInst);
+    newAnnos.addAnnotations(newMemModAnnos);
+    newAnnos.applyToOperation(memInst);
+  }
   mem->erase();
 }
 
