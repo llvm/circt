@@ -400,17 +400,17 @@ FuncOpPartialLoweringPattern::partiallyLower(mlir::func::FuncOp funcOp,
   // Initialize the component op references if a calyx::ComponentOp has been
   // created for the matched funcOp.
   if (auto it = functionMapping.find(funcOp); it != functionMapping.end()) {
-    calyx::ComponentOp op = it->second;
-    componentOp = &op;
+    componentOp = it->second;
     componentLoweringState =
-        programLoweringState.getState<ComponentLoweringStateInterface>(op);
+        programLoweringState.getState<ComponentLoweringStateInterface>(
+            componentOp);
   }
 
   return partiallyLowerFuncToComp(funcOp, rewriter);
 }
 
-calyx::ComponentOp *FuncOpPartialLoweringPattern::getComponent() const {
-  assert(componentOp != nullptr &&
+calyx::ComponentOp FuncOpPartialLoweringPattern::getComponent() const {
+  assert(componentOp &&
          "Component operation should be set during pattern construction");
   return componentOp;
 }
@@ -651,7 +651,7 @@ BuildBasicBlockRegs::partiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
       unsigned width = argType.getIntOrFloatBitWidth();
       std::string index = std::to_string(arg.index());
       std::string name = programState().blockName(block) + "_arg" + index;
-      auto reg = createRegister(arg.value().getLoc(), rewriter, *getComponent(),
+      auto reg = createRegister(arg.value().getLoc(), rewriter, getComponent(),
                                 width, name);
       getState().addBlockArgReg(block, reg, arg.index());
       arg.value().replaceAllUsesWith(reg.out());
@@ -674,15 +674,14 @@ BuildReturnRegs::partiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
     unsigned width = convArgType.getIntOrFloatBitWidth();
     std::string name = "ret_arg" + std::to_string(argType.index());
     auto reg =
-        createRegister(funcOp.getLoc(), rewriter, *getComponent(), width, name);
+        createRegister(funcOp.getLoc(), rewriter, getComponent(), width, name);
     getState().addReturnReg(reg, argType.index());
 
-    rewriter.setInsertionPointToStart(getComponent()->getWiresOp().getBody());
+    rewriter.setInsertionPointToStart(getComponent().getWiresOp().getBody());
     rewriter.create<calyx::AssignOp>(
         funcOp->getLoc(),
         calyx::getComponentOutput(
-            *getComponent(),
-            getState().getFuncOpResultMapping(argType.index())),
+            getComponent(), getState().getFuncOpResultMapping(argType.index())),
         reg.out());
   }
   return success();

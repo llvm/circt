@@ -510,7 +510,7 @@ public:
 
   /// Returns the component operation associated with the currently executing
   /// partial lowering.
-  calyx::ComponentOp *getComponent() const;
+  calyx::ComponentOp getComponent() const;
 
   // Returns the component state associated with the currently executing
   // partial lowering.
@@ -537,7 +537,7 @@ protected:
   DenseMap<mlir::func::FuncOp, calyx::ComponentOp> &functionMapping;
 
 private:
-  mutable ComponentOp *componentOp = nullptr;
+  mutable ComponentOp componentOp;
   mutable ComponentLoweringStateInterface *componentLoweringState = nullptr;
   ProgramLoweringState &programLoweringState;
 };
