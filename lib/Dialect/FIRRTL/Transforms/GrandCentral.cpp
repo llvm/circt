@@ -957,7 +957,7 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
     // non-local and local targets are totally equivalent.
     auto target = maybeTarget.getValue();
 
-    NamedAttrList elementIface, elementScattered, dontTouch;
+    NamedAttrList elementIface, elementScattered;
 
     // Populate the annotation for the interface element.
     elementIface.append("class", classAttr);
@@ -972,12 +972,8 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
     auto targetAttr = StringAttr::get(context, target);
     elementScattered.append("target", targetAttr);
 
-    dontTouch.append("class", StringAttr::get(context, dontTouchAnnoClass));
-    dontTouch.append("target", targetAttr);
-
     state.addToWorklistFn(
         DictionaryAttr::getWithSorted(context, elementScattered));
-    state.addToWorklistFn(DictionaryAttr::getWithSorted(context, dontTouch));
 
     return DictionaryAttr::getWithSorted(context, elementIface);
   }
