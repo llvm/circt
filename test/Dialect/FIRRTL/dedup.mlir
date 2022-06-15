@@ -496,3 +496,15 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
     firrtl.instance simple1 @Simple1()
   }
 }
+
+// Check that the following doesn't crash.
+// https://github.com/llvm/circt/issues/3360
+firrtl.circuit "Foo"  {
+  firrtl.module private @X() { }
+  firrtl.module private @Y() { }
+  firrtl.module @Foo() {
+    firrtl.instance x0 @X()
+    firrtl.instance y0 @Y()
+    firrtl.instance y1 @Y()
+  }
+}
