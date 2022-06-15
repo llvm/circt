@@ -2825,6 +2825,14 @@ ParseResult FIRStmtParser::parseInstance() {
       startTok.getLoc(), resultNamesAndTypes, moduleContext.targetsInModule);
 
   auto sym = getSymbolIfRequired(annotations.first, id);
+  // Also check for port annotations that may require adding a symbol
+  if (!sym)
+    for (auto portAnno : annotations.second.getAsRange<ArrayAttr>()) {
+      sym = getSymbolIfRequired(portAnno, id);
+      if (sym)
+        break;
+    }
+
   result = builder.create<InstanceOp>(
       referencedModule, id, inferNameKind(id), annotations.first.getValue(),
       annotations.second.getValue(), false, sym);

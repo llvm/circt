@@ -609,3 +609,25 @@ circuit RawAnnotations: %[[
     ; CHECK-SAME:      "circt.test"
     ; Check-SAME:      "circt.testNT"
     ; Check-SAME:      "circt.missing"
+
+
+; // -----
+
+; Test annotation targeting an instance port
+; https://github.com/llvm/circt/issues/3340
+circuit instportAnno: %[[
+  {"class":"hello","target":"~instportAnno|instportAnno/bar:Bar>baz.a"}
+]]
+  module Baz:
+    output a: UInt<1>
+    a is invalid
+
+  module Bar:
+    inst baz of Baz
+
+  module instportAnno:
+    inst bar of Bar
+
+; CHECK-LABEL: firrtl.circuit "instportAnno"
+; CHECK:        firrtl.hierpath @[[HIER:[^ ]+]] [@instportAnno::@bar, @Bar::@baz]
+; CHECK:        %baz_a = firrtl.instance baz sym @baz interesting_name @Baz(out a: !firrtl.uint<1> [{circt.nonlocal = @[[HIER]], class = "hello"}])
