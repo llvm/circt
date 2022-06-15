@@ -751,5 +751,23 @@ firrtl.circuit "Issue3334_flatten" {
   }
   firrtl.module @Issue3334_flatten() {
     firrtl.instance foo sym @foo @Foo()
+
+firrtl.circuit "instNameRename"  {
+  firrtl.hierpath @nla_5560 [@instNameRename::@bar0, @Bar0::@w, @Bar1::@a]
+  // CHECK: firrtl.hierpath @nla_5560 [@instNameRename::@[[w_0:.+]], @Bar1::@a]
+  firrtl.module @Leaf() {
+    %w = firrtl.wire   : !firrtl.uint<8>
+  }
+  firrtl.module @Bar1() {
+    firrtl.instance leaf sym @a  {annotations = [{circt.nonlocal = @nla_5560, class = "test0"}]} @Leaf()
+  }
+  firrtl.module @Bar0() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance leaf sym @w  @Bar1()
+  }
+  firrtl.module @instNameRename() {
+    firrtl.instance bar0 sym @bar0  @Bar0()
+    // CHECK: firrtl.instance bar0_leaf sym @[[w_0]]  @Bar1()
+    firrtl.instance bar1 sym @bar1  @Bar0()
+    %w = firrtl.wire sym @w   : !firrtl.uint<8>
   }
 }
