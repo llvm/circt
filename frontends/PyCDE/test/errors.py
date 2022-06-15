@@ -1,21 +1,18 @@
+# RUN: py-split-input-file %s | FileCheck %s
+
 from pycde.module import externmodule
 
-# RUN: %PYTHON% %s | FileCheck %s
 
-try:
+# CHECK: TypeError: Module parameter definitions cannot have *args
+@externmodule
+def foo(*args):
+  pass
 
-  @externmodule
-  def foo(*args):
-    pass
-except Exception as e:
-  print(e)
-  # CHECK: Module parameter definitions cannot have *args
 
-try:
+# -----
 
-  @externmodule
-  def bar(**kwargs):
-    pass
-except Exception as e:
-  print(e)
-  # CHECK: Module parameter definitions cannot have **kwargs
+
+# CHECK: TypeError: Module parameter definitions cannot have **kwargs
+@externmodule
+def bar(**kwargs):
+  pass
