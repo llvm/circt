@@ -629,6 +629,7 @@ void GrandCentralTapsPass::runOnOperation() {
       for (auto *use : instancePaths.instanceGraph[extModule]->uses())
         use->getInstance().erase();
       extModule.erase();
+      continue;
     }
 
     // Go through the module ports and collect the annotated ones.
