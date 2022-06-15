@@ -67,7 +67,6 @@ circuit Qux: %[[{
 ;CHECK:    %[[memory_1:.+]] = sv.reg
 ;CHECK:    %[[memory_2:.+]] = sv.reg
 ;CHECK:    %[[memory_3:.+]] = sv.reg
-;CHECK:    %[[en:.+]] = sv.reg
 ;CHECK:    %[[addr:.+]] = sv.reg
 ;CHECK:    %[[v5:.+]] = sv.read_inout %[[addr]]
 ;CHECK:    %[[v6:.+]] = hw.array_create
@@ -78,7 +77,6 @@ circuit Qux: %[[{
 ;CHECK:    %[[v9:.+]] = hw.array_get %[[v6]][%rwAddr] : !hw.array<4xi8>
 ;CHECK:    sv.assign %[[memory_rw_rdata]], %[[v9]] : i8
 ;CHECK:    sv.always posedge %clock {
-;CHECK-NEXT:      sv.passign %[[en]], %rEn : i1
 ;CHECK-NEXT:      sv.passign %[[addr]], %rAddr : i2
 ;CHECK-NEXT:      sv.passign %[[memory_0]]
 ;CHECK-NEXT:      sv.passign %[[memory_1]]

@@ -7,15 +7,15 @@ firrtl.circuit "top" {
   // CHECK-NEXT:  }
   firrtl.module private @dead_module(in %source: !firrtl.uint<1>, out %dest: !firrtl.uint<1>,
                                      in %clock:!firrtl.clock, in %reset:!firrtl.uint<1>) {
-    %dead_node = firrtl.node droppable_name %source: !firrtl.uint<1>
+    %dead_node = firrtl.node %source: !firrtl.uint<1>
 
-    %dead_wire = firrtl.wire droppable_name : !firrtl.uint<1>
+    %dead_wire = firrtl.wire : !firrtl.uint<1>
     firrtl.strictconnect %dead_wire, %dead_node : !firrtl.uint<1>
 
-    %dead_reg = firrtl.reg droppable_name %clock  : !firrtl.uint<1>
+    %dead_reg = firrtl.reg %clock : !firrtl.uint<1>
     firrtl.strictconnect %dead_reg, %dead_wire : !firrtl.uint<1>
 
-    %dead_reg_reset = firrtl.regreset droppable_name %clock, %reset, %dead_reg  : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+    %dead_reg_reset = firrtl.regreset %clock, %reset, %dead_reg  : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.strictconnect %dead_reg_reset, %dead_reg : !firrtl.uint<1>
 
     %not = firrtl.not %dead_reg_reset : (!firrtl.uint<1>) -> !firrtl.uint<1>
@@ -49,9 +49,9 @@ firrtl.circuit "top" {
   // CHECK-LABEL: firrtl.module @top(in %source: !firrtl.uint<1>, out %dest: !firrtl.uint<1>, in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
   firrtl.module @top(in %source: !firrtl.uint<1>, out %dest: !firrtl.uint<1>,
                      in %clock:!firrtl.clock, in %reset:!firrtl.uint<1>) {
-    // CHECK-NEXT: %tmp = firrtl.node droppable_name %source
+    // CHECK-NEXT: %tmp = firrtl.node %source
     // CHECK-NEXT: firrtl.strictconnect %dest, %tmp
-    %tmp = firrtl.node droppable_name %source: !firrtl.uint<1>
+    %tmp = firrtl.node %source: !firrtl.uint<1>
     firrtl.strictconnect %dest, %tmp : !firrtl.uint<1>
 
     // TODO: Remove instances of empty modules.
@@ -90,7 +90,7 @@ firrtl.circuit "top"  {
   // CHECK-LABEL: firrtl.module private @Child2() {
   // CHECK-NEXT:  }
   firrtl.module private @Child2(in %input: !firrtl.uint<1>, in %clock: !firrtl.clock, out %output: !firrtl.uint<1>) {
-    %r = firrtl.reg droppable_name %clock  : !firrtl.uint<1>
+    %r = firrtl.reg %clock  : !firrtl.uint<1>
     firrtl.strictconnect %r, %input : !firrtl.uint<1>
     firrtl.strictconnect %output, %r : !firrtl.uint<1>
   }
@@ -102,7 +102,7 @@ firrtl.circuit "top"  {
   firrtl.module @top(in %clock: !firrtl.clock, in %input: !firrtl.uint<1>) {
     %tile_input, %tile_output = firrtl.instance tile  @Child1(in input: !firrtl.uint<1>, out output: !firrtl.uint<1>)
     firrtl.strictconnect %tile_input, %input : !firrtl.uint<1>
-    %named = firrtl.node droppable_name  %tile_output  : !firrtl.uint<1>
+    %named = firrtl.node  %tile_output  : !firrtl.uint<1>
     %bar_input, %bar_clock, %bar_output = firrtl.instance bar  @Child2(in input: !firrtl.uint<1>, in clock: !firrtl.clock, out output: !firrtl.uint<1>)
     firrtl.strictconnect %bar_clock, %clock : !firrtl.clock
     firrtl.strictconnect %bar_input, %named : !firrtl.uint<1>
