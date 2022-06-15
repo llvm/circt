@@ -297,13 +297,6 @@ LogicalResult circt::firrtl::applyGCTDataTaps(AnnoPathValue target,
   auto *context = state.circuit.getContext();
   auto loc = state.circuit.getLoc();
 
-  auto dontTouch = [&](StringRef targetStr) {
-    NamedAttrList anno;
-    anno.append("class", StringAttr::get(context, dontTouchAnnoClass));
-    anno.append("target", StringAttr::get(context, targetStr));
-    state.addToWorklistFn(DictionaryAttr::get(context, anno));
-  };
-
   auto id = state.newID();
   NamedAttrList attrs;
   attrs.append("class", StringAttr::get(context, dataTapsBlackboxClass));
@@ -357,7 +350,6 @@ LogicalResult circt::firrtl::applyGCTDataTaps(AnnoPathValue target,
       source.append("target", StringAttr::get(context, sourceTarget));
 
       state.addToWorklistFn(DictionaryAttr::get(context, source));
-      dontTouch(sourceTarget);
 
       // Annotate the data tap module port.
       port.append("class", StringAttr::get(context, referenceKeyPortClass));

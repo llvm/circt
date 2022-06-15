@@ -236,7 +236,7 @@ firrtl.circuit "GCTInterface"  attributes {annotations = [{unrelatedAnnotation}]
 // members of the interface inside the parent.  Both port "a" and register
 // "r" should be annotated.
 // CHECK: firrtl.module @GCTInterface
-// CHECK-SAME: %a: !firrtl.uint<1> sym @a [
+// CHECK-SAME: %a: !firrtl.uint<1> [
 // CHECK-SAME:   {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
 // CHECK-SAME:    d = [[ID_port]] : i64}
 // CHECK-SAME: annotations = [
@@ -453,7 +453,7 @@ firrtl.circuit "GCTDataTap" attributes {rawAnnotations = [{
 // CHECK-SAME: ]
 
 // CHECK-LABEL: firrtl.module private @InnerMod
-// CHECK-NEXT: %w = firrtl.wire sym @w
+// CHECK-NEXT: %w = firrtl.wire
 // CHECK-SAME: annotations = [
 // CHECK-SAME:   {
 // CHECK-SAME:     circt.nonlocal = [[NLA]]
@@ -464,7 +464,7 @@ firrtl.circuit "GCTDataTap" attributes {rawAnnotations = [{
 // CHECK-SAME: ]
 
 // CHECK: firrtl.module @GCTDataTap
-// CHECK-LABEL: firrtl.reg sym @r
+// CHECK-LABEL: firrtl.reg
 // CHECk-SAME: annotations = [
 // CHECK-SAME:   {
 // CHECK-SAME:     class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.source"
@@ -475,10 +475,6 @@ firrtl.circuit "GCTDataTap" attributes {rawAnnotations = [{
 
 // CHECK-LABEL: firrtl.wire
 // CHECK-SAME: annotations = [
-// CHECK-SAME:   {
-// CHECK-SAME:     circt.fieldID = 1
-// CHECK-SAME:     class = "firrtl.transforms.DontTouchAnnotation"
-// CHECK-SAME:   }
 // CHECK-SAME:   {
 // CHECK-SAME:     circt.fieldID = 1
 // CHECK-SAME:     class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.source"
