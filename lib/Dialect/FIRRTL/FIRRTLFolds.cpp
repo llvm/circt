@@ -1433,7 +1433,7 @@ static LogicalResult canonicalizeSingleSetConnect(StrictConnectOp op,
   // Only support wire and reg for now.
   if (!isa<WireOp>(connectedDecl) && !isa<RegOp>(connectedDecl))
     return failure();
-  if (hasDontTouch(connectedDecl))
+  if (hasDontTouch(connectedDecl) || !AnnotationSet(connectedDecl).empty())
     return failure();
 
   // Only forward if the types exactly match and there is one connect.
