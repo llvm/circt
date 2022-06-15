@@ -85,6 +85,34 @@ FirMemory getSummary(MemOp op) {
 namespace {
 struct LowerMemoryPass : public LowerMemoryBase<LowerMemoryPass> {
 
+  /// Get the cached namespace for a module.
+  ModuleNamespace &getModuleNamespace(FModuleLike module) {
+    return moduleNamespaces.try_emplace(module, module).first->second;
+  }
+
+  /// Returns an operation's `inner_sym`, adding one if necessary.
+  StringAttr getOrAddInnerSym(Operation *op) {
+    auto attr = op->getAttrOfType<StringAttr>("inner_sym");
+    if (attr)
+      return attr;
+    auto module = op->getParentOfType<FModuleOp>();
+    StringRef name = "sym";
+    if (auto nameAttr = op->getAttrOfType<StringAttr>("name"))
+      name = nameAttr.getValue();
+    name = getModuleNamespace(module).newName(name);
+    attr = StringAttr::get(op->getContext(), name);
+    op->setAttr("inner_sym", attr);
+    return attr;
+  }
+
+  /// Obtain an inner reference to an operation, possibly adding an `inner_sym`
+  /// to that operation.
+  hw::InnerRefAttr getInnerRefTo(Operation *op) {
+    return hw::InnerRefAttr::get(
+        SymbolTable::getSymbolName(op->getParentOfType<FModuleOp>()),
+        getOrAddInnerSym(op));
+  }
+
   SmallVector<PortInfo> getMemoryModulePorts(const FirMemory &mem);
   FMemModuleOp emitMemoryModule(MemOp op, const FirMemory &summary,
                                 const SmallVectorImpl<PortInfo> &ports);
@@ -99,6 +127,8 @@ struct LowerMemoryPass : public LowerMemoryBase<LowerMemoryPass> {
   LogicalResult runOnModule(FModuleOp module, bool shouldDedup);
   void runOnOperation() override;
 
+  /// Cached module namespaces.
+  DenseMap<Operation *, ModuleNamespace> moduleNamespaces;
   CircuitNamespace circuitNamespace;
   SymbolTable *symbolTable;
 
@@ -240,9 +270,7 @@ void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
 
   auto leafSym = memModule.moduleNameAttr();
   auto leafAttr = FlatSymbolRefAttr::get(wrapper.moduleNameAttr());
-  auto instRefAttr =
-      hw::InnerRefAttr::get(inst->getParentOfType<FModuleOp>().moduleNameAttr(),
-                            inst.getInnerNameAttr());
+
   // NLAs that we have already processed.
   llvm::SmallDenseMap<StringAttr, StringAttr> processedNLAs;
   auto nonlocalAttr = StringAttr::get(context, "circt.nonlocal");
@@ -265,9 +293,9 @@ void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
       auto namepath = nla.namepath().getValue();
       SmallVector<Attribute> newNamepath(namepath.begin(), namepath.end());
       if (!nla.isComponent())
-        newNamepath[newNamepath.size() - 1] = instRefAttr;
-
+        newNamepath.back() = getInnerRefTo(inst);
       newNamepath.push_back(leafAttr);
+
       nlaBuilder.setInsertionPointAfter(nla);
       auto newNLA = cast<HierPathOp>(nlaBuilder.clone(*nla));
       newNLA.sym_nameAttr(StringAttr::get(
