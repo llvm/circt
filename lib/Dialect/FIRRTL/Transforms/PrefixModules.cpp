@@ -21,6 +21,7 @@
 #include "circt/Support/LLVM.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/PostOrderIterator.h"
+#include "llvm/ADT/StringMap.h"
 
 using namespace circt;
 using namespace firrtl;
@@ -107,7 +108,9 @@ class PrefixModulesPass : public PrefixModulesBase<PrefixModulesPass> {
   /// This is a map from a module name to new prefixes to be applied.
   PrefixMap prefixMap;
 
-  DenseMap<StringRef, uint32_t> prefixIdMap;
+  /// Map prefix to group ID.
+  /// Store strings in the map, they may not stay alive.
+  llvm::StringMap<uint32_t> prefixIdMap;
 
   /// A map of Grand Central interface ID to prefix.
   DenseMap<Attribute, std::string> interfacePrefixMap;
@@ -168,7 +171,7 @@ void PrefixModulesPass::renameModuleBody(std::string prefix, FModuleOp module) {
     groupID = prefixIdMap.size() + 1;
     prefixIdMap[prefix] = groupID;
   } else
-    groupID = iter->getSecond();
+    groupID = iter->second;
 
   // If we are renaming the body of this module, we need to mark that we have
   // changed the IR. If we are prefixing with the empty string, then nothing has
@@ -479,6 +482,7 @@ void PrefixModulesPass::runOnOperation() {
   prefixGrandCentralInterfaces();
 
   prefixMap.clear();
+  prefixIdMap.clear();
   interfacePrefixMap.clear();
   if (!anythingChanged)
     markAllAnalysesPreserved();
