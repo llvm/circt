@@ -711,3 +711,45 @@ firrtl.circuit "Inline2"  {
     firrtl.strictconnect %o, %bar_o : !firrtl.uint<1>
   }
 }
+
+// CHECK-LABEL: firrtl.circuit "Issue3334"
+firrtl.circuit "Issue3334" {
+  // CHECK: firrtl.hierpath @path_component_old
+  // CHECK: firrtl.hierpath @path_component_new
+  firrtl.hierpath @path_component_old [@Issue3334::@foo, @Foo::@bar1, @Bar::@b]
+  firrtl.hierpath @path_component_new [@Issue3334::@foo, @Foo::@bar1, @Bar]
+  firrtl.module private @Bar() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    %b = firrtl.wire sym @b {annotations = [
+      {circt.nonlocal = @path_component_old, "path_component_old"},
+      {circt.nonlocal = @path_component_new, "path_component_new"}
+    ]} : !firrtl.uint<1>
+  }
+  firrtl.module private @Foo() {
+    firrtl.instance bar1 sym @bar1 @Bar()
+    firrtl.instance bar2 sym @bar2 @Bar()
+  }
+  firrtl.module @Issue3334() {
+    firrtl.instance foo sym @foo @Foo()
+  }
+}
+
+// CHECK-LABEL: firrtl.circuit "Issue3334_flatten"
+firrtl.circuit "Issue3334_flatten" {
+  // CHECK: firrtl.hierpath @path_component_old
+  // CHECK: firrtl.hierpath @path_component_new
+  firrtl.hierpath @path_component_old [@Issue3334_flatten::@foo, @Foo::@bar1, @Bar::@b]
+  firrtl.hierpath @path_component_new [@Issue3334_flatten::@foo, @Foo::@bar1, @Bar]
+  firrtl.module private @Bar() {
+    %b = firrtl.wire sym @b {annotations = [
+      {circt.nonlocal = @path_component_old, "path_component_old"},
+      {circt.nonlocal = @path_component_new, "path_component_new"}
+    ]} : !firrtl.uint<1>
+  }
+  firrtl.module private @Foo() attributes {annotations = [{class = "firrtl.transforms.FlattenAnnotation"}]} {
+    firrtl.instance bar1 sym @bar1 @Bar()
+    firrtl.instance bar2 sym @bar2 @Bar()
+  }
+  firrtl.module @Issue3334_flatten() {
+    firrtl.instance foo sym @foo @Foo()
+  }
+}
