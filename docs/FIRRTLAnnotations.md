@@ -3,7 +3,7 @@
 The Scala FIRRTL Compiler (SFC) provides a mechanism to encode arbitrary
 metadata and associate it with zero or more "things" in a FIRRTL circuit.  This
 mechanism is an _Annotation_ and the association is described using one or more
-_Targets_.  Annotations should be viewed an extension to the FIRRTL IR
+_Targets_.  Annotations should be viewed as an extension to the FIRRTL IR
 specification, and can greatly affect the meaning and interpretation of the IR.
 
 Annotations are represented as a dictionary, with a "class" field which
@@ -192,13 +192,13 @@ to other MLIR operations, or dropped. A warning will be emitted if there are
 any unused annotations still in the circuit. For example, the `ModuleInliner`
 pass removes `firrtl.passes.InlineAnnotation` by inlining annotated modules or
 instances. JSON Annotations map to the builtin MLIR attributes. An annotation
-is implemented using a DictionaryAttr, which holds the class, target, any
+is implemented using a DictionaryAttr, which holds the class, target, and any
 annotation specific data.
 
 ## Annotations
 
 Annotations here are written in their JSON format. A "reference target"
-indicates that the annotation could target anything object in the hierarchy,
+indicates that the annotation could target any object in the hierarchy,
 although there may be further restrictions in the annotation.
 
 ### BlackBox
@@ -1416,7 +1416,7 @@ Example:
 
 ## Attributes in SV
 
-Some annotations transfrom into attributes consumed by non-FIRRTL passes.  This
+Some annotations transform into attributes consumed by non-FIRRTL passes.  This
 section describes well-defined attributes used by HW/SV passes.
 
 
@@ -1424,7 +1424,7 @@ section describes well-defined attributes used by HW/SV passes.
 
 Used by HWExportModuleHierarchy.  Signifies a root from which to dump the module
 hierarchy as a json file. This attribute is a list of files to output to, and
-has type `ArraAttr<OutputFileAttr>`.
+has type `ArrayAttr<OutputFileAttr>`.
 
 The exported JSON file encodes a recursive tree of module instances as JSON
 objects, with each object containing the following members:
