@@ -147,11 +147,11 @@ std::string FIRToken::getRawStringValue(StringRef spelling) {
 // FIRLexer
 //===----------------------------------------------------------------------===//
 
-static StringAttr getMainBufferNameIdentifier(const llvm::SourceMgr &sourceMgr,
+static StringAttr getBufferNameIdentifier(const llvm::SourceMgr &sourceMgr,
                                               MLIRContext *context,
                                               unsigned bufferID) {
-  auto mainBuffer = sourceMgr.getMemoryBuffer(bufferID);
-  StringRef bufferName = mainBuffer->getBufferIdentifier();
+  auto buffer = sourceMgr.getMemoryBuffer(bufferID);
+  StringRef bufferName = buffer->getBufferIdentifier();
   if (bufferName.empty())
     bufferName = "<unknown>";
   return StringAttr::get(context, bufferName);
@@ -161,7 +161,7 @@ FIRLexer::FIRLexer(const llvm::SourceMgr &sourceMgr, MLIRContext *context,
                    unsigned bufferID)
     : sourceMgr(sourceMgr), context(context), bufferID(bufferID),
       bufferNameIdentifier(
-          getMainBufferNameIdentifier(sourceMgr, context, bufferID)),
+          getBufferNameIdentifier(sourceMgr, context, bufferID)),
       curBuffer(sourceMgr.getMemoryBuffer(bufferID)->getBuffer()),
       curPtr(curBuffer.begin()),
       // Prime the first token.
