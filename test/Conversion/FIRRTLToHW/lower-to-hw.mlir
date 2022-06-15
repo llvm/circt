@@ -166,12 +166,12 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: %n1 = sv.wire
     // CHECK-NEXT: sv.assign %n1, %in2
     // CHECK-NEXT: sv.read_inout %n1
-    %n1 = firrtl.node %in2  {name = "n1"} : !firrtl.uint<2>
+    %n1 = firrtl.node interesting_name %in2 {name = "n1"} : !firrtl.uint<2>
     
     // CHECK-NEXT: [[WIRE:%n2]] = sv.wire sym @__Simple__n2 : !hw.inout<i2>
     // CHECK-NEXT: sv.assign [[WIRE]], %in2 : i2
     // CHECK-NEXT: sv.read_inout %n2
-    %n2 = firrtl.node %in2  {name = "n2", annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<2>
+    %n2 = firrtl.node interesting_name %in2  {name = "n2", annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<2>
 
     // Nodes with no names are just dropped.
     %22 = firrtl.node droppable_name %in2 {name = ""} : !firrtl.uint<2>

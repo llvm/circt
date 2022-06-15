@@ -298,7 +298,7 @@ circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[0]"},{"two":null,"target":"~F
     wire bar: {baz: UInt<1>, qux: UInt<1>}[2]
 
     ; CHECK-LABEL: module {
-    ; CHECK: %bar = firrtl.wire  {annotations =
+    ; CHECK: %bar = firrtl.wire interesting_name {annotations =
     ; CHECK-SAME: #firrtl.subAnno<fieldID = 1, {one}>
     ; CHECK-SAME: #firrtl.subAnno<fieldID = 5, {two}>
 
@@ -312,7 +312,7 @@ circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[0]"},{"two":null,"target":"~F
     reg bar: {baz: UInt<1>, qux: UInt<1>}[2], clock
 
     ; CHECK-LABEL: module {
-    ; CHECK: %bar = firrtl.reg %clock  {annotations =
+    ; CHECK: %bar = firrtl.reg interesting_name %clock {annotations =
     ; CHECK-SAME: #firrtl.subAnno<fieldID = 1, {one}>
     ; CHECK-SAME: #firrtl.subAnno<fieldID = 5, {two}>
 
@@ -331,7 +331,7 @@ circuit Foo: %[[{"a":null,"target":"~Foo|Foo>w[9]"}]]
     b <= w
 
     ; CHECK-LABEL: module {
-    ; CHECK: %w = firrtl.wire {annotations =
+    ; CHECK: %w = firrtl.wire interesting_name {annotations =
     ; CHECK-SAME: #firrtl.subAnno<fieldID = 10, {a}
 
 ; // -----
@@ -352,24 +352,24 @@ circuit Foo: %[[{"target": "~Foo|Foo>_T_0", "a": "a"},
     input reset : UInt<1>
     input clock : Clock
 
-    ; CHECK: %_T_0 = firrtl.wire droppable_name  {annotations = [{a = "a"}]}
+    ; CHECK: %_T_0 = firrtl.wire  {annotations = [{a = "a"}]}
     wire _T_0 : UInt<1>
     ; CHECK: %_T_1 = firrtl.node
     node _T_1 = _T_0
-    ; CHECK: %_T_2 = firrtl.reg droppable_name %clock  {annotations = [{a = "a"}]}
+    ; CHECK: %_T_2 = firrtl.reg %clock  {annotations = [{a = "a"}]}
     reg _T_2 : UInt<1>, clock
-    ; CHECK: %_T_3 = firrtl.regreset droppable_name {{.+}}  {annotations = [{a = "a"}]}
+    ; CHECK: %_T_3 = firrtl.regreset {{.+}}  {annotations = [{a = "a"}]}
     reg _T_3 : UInt<4>, clock with :
       reset => (reset, UInt<4>("h0"))
-    ; CHECK: %_T_4 = chirrtl.seqmem droppable_name Undefined {annotations = [{a = "a"}]}
+    ; CHECK: %_T_4 = chirrtl.seqmem Undefined {annotations = [{a = "a"}]}
     smem _T_4 : UInt<1>[9] [256]
-    ; CHECK: %_T_5 = chirrtl.combmem droppable_name {annotations = [{a = "a"}]}
+    ; CHECK: %_T_5 = chirrtl.combmem {annotations = [{a = "a"}]}
     cmem _T_5 : UInt<1>[9] [256]
     ; CHECK: chirrtl.memoryport {{.+}} {annotations = [{a = "a"}]
     infer mport _T_6 = _T_5[reset], clock
-    ; CHECK: firrtl.instance _T_7 droppable_name {annotations = [{a = "a"}]}
+    ; CHECK: firrtl.instance _T_7 {annotations = [{a = "a"}]}
     inst _T_7 of Bar
-    ; CHECK: firrtl.mem droppable_name Undefined  {annotations = [{a = "a"}]
+    ; CHECK: firrtl.mem Undefined  {annotations = [{a = "a"}]
     mem _T_8 :
         data-type => UInt<4>
         depth => 8
@@ -412,7 +412,7 @@ circuit Test : %[[
 ; CHECK: firrtl.module private @Example() attributes {
 ; CHECK-SAME: annotations = [{circt.nonlocal = @nla_1, class = "fake"}]
 ; CHECK: firrtl.module @Test()
-; CHECK:   firrtl.instance Test sym @Test @Example()
+; CHECK:   firrtl.instance Test sym @Test interesting_name @Example()
 
 ; // -----
 
@@ -431,9 +431,9 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Foo/bar:Bar/baz:Baz"}, {"b":"b","target"
 ; CHECK: firrtl.module private @Baz
 ; CHECK-SAME: annotations = [{a = "a", circt.nonlocal = @nla_1}, {b = "b", circt.nonlocal = @nla_2}]
 ; CHECK: firrtl.module private @Bar()
-; CHECK: firrtl.instance baz sym @baz @Baz()
+; CHECK: firrtl.instance baz sym @baz interesting_name @Baz()
 ; CHECK: firrtl.module @Foo()
-; CHECK: firrtl.instance bar sym @bar @Bar()
+; CHECK: firrtl.instance bar sym @bar interesting_name @Bar()
 
 ; // -----
 
@@ -583,7 +583,7 @@ circuit memportAnno: %[[
       read-under-write => undefined
 ; CHECK-LABEL: firrtl.circuit "memportAnno"  {
 ; CHECK:        firrtl.hierpath @nla_1 [@memportAnno::@foo, @Foo::@memory]
-; CHECK:        %memory_w = firrtl.mem sym @memory Undefined  {depth = 16 : i64, name = "memory", portAnnotations
+; CHECK:        %memory_w = firrtl.mem sym @memory interesting_name Undefined  {depth = 16 : i64, name = "memory", portAnnotations
 ; CHECK-SAME:   [{circt.nonlocal = @nla_1, class = "test"}]
 
 ; // -----

@@ -202,7 +202,7 @@ firrtl.module @SortedPorts(in %clock: !firrtl.clock, in %addr : !firrtl.uint<8>)
 
 // Check that annotations are preserved.
 firrtl.module @Annotations(in %clock: !firrtl.clock, in %addr : !firrtl.uint<8>) {
-  // CHECK: firrtl.mem Undefined 
+  // CHECK: firrtl.mem Undefined
   // CHECK-SAME: annotations = [{a = "a"}]
   // CHECK-SAME: portAnnotations = [
   // CHECK-SAME:   [{b = "b"}],
