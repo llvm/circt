@@ -1167,9 +1167,10 @@ class DedupPass : public DedupBase<DedupPass> {
     DenseMap<Attribute, StringAttr> dedupMap;
 
     // We must iterate the modules from the bottom up so that we can properly
-    // deduplicate the modules. We have to store the visit order first so that
-    // we can safely delete nodes as we go from the instance graph.
-    for (auto *node : llvm::post_order(&instanceGraph)) {
+    // deduplicate the modules. We use early increment so we can safely delete
+    // nodes from the instance graph as we iterate through it.
+    for (auto *node :
+         llvm::make_early_inc_range(llvm::post_order(&instanceGraph))) {
       auto module = cast<FModuleLike>(*node->getModule());
       auto moduleName = module.moduleNameAttr();
       // If the module is marked with NoDedup, just skip it.
