@@ -189,7 +189,7 @@ void InjectDUTHierarchy::runOnOperation() {
   ModuleNamespace dutNS(dut);
   auto wrapperInst = b.create<InstanceOp>(
       b.getUnknownLoc(), wrapper, wrapper.moduleName(),
-      NameKindEnum::InterestingName, ArrayRef<Attribute>{},
+      NameKindEnum::DroppableName, ArrayRef<Attribute>{},
       ArrayRef<Attribute>{}, false,
       b.getStringAttr(dutNS.newName(wrapper.moduleName())));
   for (auto pair : llvm::enumerate(wrapperInst.getResults())) {

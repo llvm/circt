@@ -883,7 +883,7 @@ void ExtractInstancesPass::groupInstances() {
     // This will essentially disconnect the extracted instances.
     builder.setInsertionPointToStart(parent.getBody());
     auto wrapperInst = builder.create<InstanceOp>(
-        wrapper.getLoc(), wrapper, wrapperName, NameKindEnum::InterestingName,
+        wrapper.getLoc(), wrapper, wrapperName, NameKindEnum::DroppableName,
         ArrayRef<Attribute>{},
         /*portAnnotations=*/ArrayRef<Attribute>{}, /*lowerToBind=*/false,
         wrapperInstName);

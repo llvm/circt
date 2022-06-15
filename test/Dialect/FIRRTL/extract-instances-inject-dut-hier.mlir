@@ -31,8 +31,8 @@ firrtl.circuit "ExtractClockGatesMultigrouping" attributes {annotations = [{clas
     // CHECK-NOT: firrtl.instance gate @EICG_wrapper
     %inst0_clock, %inst0_en = firrtl.instance inst0 @SomeModule(in clock: !firrtl.clock, in en: !firrtl.uint<1>)
     %inst1_clock, %inst1_en = firrtl.instance inst1 @SomeModule(in clock: !firrtl.clock, in en: !firrtl.uint<1>)
-    // CHECK: firrtl.instance ClockGatesGroup sym [[CLKGRP_SYM:@.+]] interesting_name @ClockGatesGroup
-    // CHECK: firrtl.instance InjectedSubmodule sym [[INJMOD_SYM:@.+]] interesting_name @InjectedSubmodule
+    // CHECK: firrtl.instance ClockGatesGroup sym [[CLKGRP_SYM:@.+]] @ClockGatesGroup
+    // CHECK: firrtl.instance InjectedSubmodule sym [[INJMOD_SYM:@.+]] @InjectedSubmodule
     firrtl.connect %inst0_clock, %clock : !firrtl.clock, !firrtl.clock
     firrtl.connect %inst1_clock, %clock : !firrtl.clock, !firrtl.clock
     firrtl.connect %inst0_en, %foo_en : !firrtl.uint<1>, !firrtl.uint<1>
