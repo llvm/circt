@@ -1394,10 +1394,16 @@ LogicalResult MultibitMuxOp::canonicalize(MultibitMuxOp op,
 //===----------------------------------------------------------------------===//
 
 /// Scan all the uses of the specified value, checking to see if there is
-/// exactly one connect that sets the value as its destination.  This returns
-/// the operation if found and if all the other users are "reads" from the
-/// value.
-static StrictConnectOp getSingleConnectUserOf(Value value) {
+/// exactly one connect that has the value as its destination. This returns the
+/// operation if found and if all the other users are "reads" from the value.
+/// Returns null if there are no connects, or multiple connects to the value, or
+/// if the value is involved in an `AttachOp`.
+///
+/// Note that this will simply return the connect, which is located *anywhere*
+/// after the definition of the value. Users of this function are likely
+/// interested in the source side of the returned connect, the definition of
+/// which does likely not dominate the original value.
+StrictConnectOp firrtl::getSingleConnectUserOf(Value value) {
   StrictConnectOp connect;
   for (Operation *user : value.getUsers()) {
     // If we see an attach, just conservatively fail.
@@ -1427,7 +1433,7 @@ static LogicalResult canonicalizeSingleSetConnect(StrictConnectOp op,
   // Only support wire and reg for now.
   if (!isa<WireOp>(connectedDecl) && !isa<RegOp>(connectedDecl))
     return failure();
-  if (hasDontTouch(connectedDecl))
+  if (hasDontTouch(connectedDecl) || !AnnotationSet(connectedDecl).empty())
     return failure();
 
   // Only forward if the types exactly match and there is one connect.
@@ -1638,21 +1644,33 @@ struct FoldNodeName : public mlir::RewritePattern {
         !node.annotations().empty())
       return failure();
     auto *expr = node.input().getDefiningOp();
-    if (expr && !expr->hasAttr("name") && !isUselessName(name))
+    // Best effort
+    if (name && !name.getValue().empty() && expr && !expr->hasAttr("name"))
       rewriter.updateRootInPlace(expr, [&] { expr->setAttr("name", name); });
     rewriter.replaceOp(node, node.input());
     return success();
   }
 };
 
+// Bypass nodes.
+struct NodeBypass : public mlir::RewritePattern {
+  NodeBypass(MLIRContext *context)
+      : RewritePattern(NodeOp::getOperationName(), 0, context) {}
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    auto node = cast<NodeOp>(op);
+    if (node.inner_sym() || !node.annotations().empty() || node.use_empty())
+      return failure();
+    rewriter.startRootUpdate(node);
+    node.replaceAllUsesWith(node.input());
+    rewriter.finalizeRootUpdate(node);
+    return success();
+  }
+};
+
 void NodeOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                          MLIRContext *context) {
-  results.insert<FoldNodeName, patterns::DropNameNode>(context);
-}
-
-void WireOp::getCanonicalizationPatterns(RewritePatternSet &results,
-                                         MLIRContext *context) {
-  results.insert<patterns::DropNameWire>(context);
+  results.insert<NodeBypass, FoldNodeName>(context);
 }
 
 // A register with constant reset and all connection to either itself or the
@@ -1712,15 +1730,11 @@ void RegResetOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                              MLIRContext *context) {
   results.insert<patterns::RegResetWithZeroReset,
                  patterns::RegResetWithInvalidReset,
-                 patterns::RegResetWithInvalidResetValue,
-                 patterns::DropNameRegReset, FoldResetMux>(context);
+                 patterns::RegResetWithInvalidResetValue, FoldResetMux>(
+      context);
 }
 
 LogicalResult MemOp::canonicalize(MemOp op, PatternRewriter &rewriter) {
-  patterns::DropNameMem dnm(op.getContext());
-  if (succeeded(dnm.matchAndRewrite(op, rewriter)))
-    return success();
-
   // If memory has known, but zero width, eliminate it.
   if (op.getDataType().getBitWidthOrSentinel() != 0)
     return failure();
@@ -1815,10 +1829,6 @@ static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
 LogicalResult RegOp::canonicalize(RegOp op, PatternRewriter &rewriter) {
   if (!hasDontTouch(op.getOperation()) &&
       succeeded(foldHiddenReset(op, rewriter)))
-    return success();
-
-  patterns::DropNameReg dnr(op.getContext());
-  if (succeeded(dnr.matchAndRewrite(op, rewriter)))
     return success();
 
   return failure();

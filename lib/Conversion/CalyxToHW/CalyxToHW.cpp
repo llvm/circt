@@ -399,7 +399,7 @@ private:
     auto resetValue = b.create<hw::ConstantOp>(source.getType(), 0);
     auto regName = b.getStringAttr(name);
     return b.create<CompRegOp>(source.getType(), source, clock, regName, reset,
-                               resetValue, regName);
+                               resetValue, regName, ArrayAttr());
   }
 
   std::string createName(StringRef instanceName, StringRef portName) const {

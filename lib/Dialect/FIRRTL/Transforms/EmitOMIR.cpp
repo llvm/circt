@@ -327,42 +327,6 @@ void EmitOMIRPass::runOnOperation() {
   if (anyFailures)
     return signalPassFailure();
 
-  // Delete the temporary NLAs. This requires us to visit all the nodes along
-  // the NLA's path and remove `circt.nonlocal` annotations referring to the
-  // NLA.
-  DenseSet<InstanceOp> instsToModify;
-  DenseSet<StringAttr> nlaSymNamesToDrop;
-
-  for (auto nla : removeTempNLAs) {
-    LLVM_DEBUG(llvm::dbgs() << "Removing '" << nla << "'\n");
-    nlaSymNamesToDrop.insert(nla.sym_nameAttr());
-    for (auto nameRef : nla.namepath()) {
-      if (auto innerRef = nameRef.dyn_cast<hw::InnerRefAttr>()) {
-        auto it = instancesByName.find(innerRef);
-        if (it == instancesByName.end())
-          continue;
-        instsToModify.insert(it->second);
-      }
-    }
-    nlaTable->erase(nla);
-    nla.erase();
-  }
-
-  for (auto instOp : instsToModify) {
-    AnnotationSet::removeAnnotations(instOp, [&](Annotation anno) {
-      auto match =
-          anno.isClass("circt.nonlocal") &&
-          nlaSymNamesToDrop.contains(
-              anno.getMember<FlatSymbolRefAttr>("circt.nonlocal").getAttr());
-      if (match)
-        LLVM_DEBUG(llvm::dbgs()
-                   << "Removing " << anno.getDict() << " from "
-                   << instOp->getParentOfType<FModuleOp>().getName() << "."
-                   << instOp.name() << "\n");
-      return match;
-    });
-  }
-
   removeTempNLAs.clear();
   // Remove the temp symbol from instances.
   for (auto *op : tempSymInstances)
@@ -386,20 +350,11 @@ void EmitOMIRPass::runOnOperation() {
 /// module of the circuit. Generates an error if any module along the path is
 /// instantiated multiple times.
 void EmitOMIRPass::makeTrackerAbsolute(Tracker &tracker) {
-  auto *context = &getContext();
   auto builder = OpBuilder::atBlockBegin(getOperation().getBody());
 
   // Pick a name for the NLA that doesn't collide with anything.
   auto opName = tracker.op->getAttrOfType<StringAttr>("name");
   auto nlaName = circuitNamespace->newName("omir_nla_" + opName.getValue());
-
-  // Assemble the NLA annotation to be put on all the operations participating
-  // in the path.
-  auto nlaAttr = builder.getDictionaryAttr({
-      builder.getNamedAttr("circt.nonlocal",
-                           FlatSymbolRefAttr::get(context, nlaName)),
-      builder.getNamedAttr("class", StringAttr::get(context, "circt.nonlocal")),
-  });
 
   // Get all the paths instantiating this module. If there is an NLA already
   // attached to this tracker, we use it as a base to disambiguate the path to
@@ -433,9 +388,6 @@ void EmitOMIRPass::makeTrackerAbsolute(Tracker &tracker) {
   // annotation to each instance participating in the path.
   SmallVector<Attribute> namepath;
   auto addToPath = [&](Operation *op, StringAttr name) {
-    AnnotationSet annos(op);
-    annos.addAnnotations(nlaAttr);
-    annos.applyToOperation(op);
     namepath.push_back(hw::InnerRefAttr::getFromOperation(
         op, name, op->getParentOfType<FModuleOp>().getNameAttr()));
   };

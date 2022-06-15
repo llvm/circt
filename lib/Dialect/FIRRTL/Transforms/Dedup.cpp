@@ -586,7 +586,8 @@ struct Deduper {
     for (auto pair : llvm::enumerate(module.getPortAnnotations()))
       for (auto anno : AnnotationSet(pair.value().cast<ArrayAttr>()))
         if (auto nlaRef = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal"))
-          targetMap[nlaRef.getAttr()] = PortAnnoTarget(module, pair.index());
+          targetMap[nlaRef.getAttr()].push_back(
+              PortAnnoTarget(module, pair.index()));
     // Record any annotations in the module body.
     module->walk([&](Operation *op) { recordAnnotations(op); });
   }
@@ -600,22 +601,23 @@ private:
 
   /// Record all targets which use an NLA.
   void recordAnnotations(Operation *op) {
-    for (auto anno : AnnotationSet(op)) {
-      if (auto nlaRef = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal")) {
-        targetMap[nlaRef.getAttr()] = OpAnnoTarget(op);
-      }
-    }
+    // Record annotations.
+    for (auto anno : AnnotationSet(op))
+      if (auto nlaRef = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal"))
+        targetMap[nlaRef.getAttr()].push_back(OpAnnoTarget(op));
 
-    // Record port annotations if this is a mem operation.
+    // Record port annotations only if this is a mem operation.
     auto mem = dyn_cast<MemOp>(op);
     if (!mem)
       return;
-    // Breadcrumbs don't appear on port annotations, so we can skip the
-    // class check that we have above.
+
+    // Record port annotations. Breadcrumbs don't appear on port annotations, so
+    // we can skip the class check that we have above.
     for (auto pair : llvm::enumerate(mem.portAnnotations()))
       for (auto anno : AnnotationSet(pair.value().cast<ArrayAttr>()))
         if (auto nlaRef = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal"))
-          targetMap[nlaRef.getAttr()] = PortAnnoTarget(mem, pair.index());
+          targetMap[nlaRef.getAttr()].push_back(
+              PortAnnoTarget(mem, pair.index()));
   }
 
   /// This deletes and replaces all instances of the "fromModule" with instances
@@ -663,7 +665,7 @@ private:
       auto nlaRef = FlatSymbolRefAttr::get(nlaName);
       nlas.push_back(nlaRef);
       nlaTable->addNLA(nla);
-      targetMap[nlaName] = to;
+      targetMap[nlaName].push_back(to);
     }
     return nlas;
   }
@@ -679,9 +681,11 @@ private:
                       to.getNLAReference(getNamespace(toModule)));
   }
 
-  /// Clone the annotation for each NLA in a list.
-  void cloneAnnotation(SmallVector<FlatSymbolRefAttr> &nlas, Annotation anno,
-                       ArrayRef<NamedAttribute> attributes,
+  /// Clone the annotation for each NLA in a list. The attribute list should
+  /// have a placeholder for the "circt.nonlocal" field, and `nonLocalIndex`
+  /// should be the index of this field.
+  void cloneAnnotation(SmallVectorImpl<FlatSymbolRefAttr> &nlas,
+                       Annotation anno, ArrayRef<NamedAttribute> attributes,
                        unsigned nonLocalIndex,
                        SmallVector<Annotation> &newAnnotations) {
     SmallVector<NamedAttribute> mutableAttributes(attributes.begin(),
@@ -690,6 +694,7 @@ private:
       // Add the new annotation.
       mutableAttributes[nonLocalIndex].setValue(nla);
       auto dict = DictionaryAttr::getWithSorted(context, mutableAttributes);
+      // The original annotation records if its a subannotation.
       anno.setDict(dict);
       newAnnotations.push_back(anno);
     }
@@ -713,38 +718,42 @@ private:
     auto fromName = fromModule.getNameAttr();
     // Create a copy of the current NLAs. We will be pushing and removing
     // NLAs from this op as we go.
-    auto nlas = nlaTable->lookup(fromModule.getNameAttr()).vec();
+    auto moduleNLAs = nlaTable->lookup(fromModule.getNameAttr()).vec();
     // Change the NLA to target the toModule.
     nlaTable->renameModuleAndInnerRef(toName, fromName, renameMap);
-    for (auto nla : nlas) {
+    for (auto nla : moduleNLAs) {
       auto elements = nla.namepath().getValue();
       // If we don't need to add more context, we're done here.
       if (nla.root() != toName)
         continue;
-      // We need to clone the annotation for each new NLA.
-      auto target = targetMap[nla.sym_nameAttr()];
-      assert(target && "Target of NLA never encountered.  All modules should "
-                       "be reachable from the top module.");
-      SmallVector<Attribute> namepath(elements.begin(), elements.end());
-      SmallVector<Annotation> newAnnotations;
-      auto nlas = createNLAs(toName, target, fromModule, namepath);
-      for (auto anno : target.getAnnotations()) {
-        // Find the non-local field of the annotation.
-        auto [it, found] = mlir::impl::findAttrSorted(anno.begin(), anno.end(),
-                                                      nonLocalString);
-        if (!found || it->getValue().cast<FlatSymbolRefAttr>().getAttr() !=
-                          nla.sym_nameAttr()) {
-          newAnnotations.push_back(anno);
-          continue;
+      // Replace the uses of the old NLA with the new NLAs.
+      for (auto target : targetMap[nla.sym_nameAttr()]) {
+        // Create the replacement NLAs.
+        SmallVector<Attribute> namepath(elements.begin(), elements.end());
+        auto nlaRefs = createNLAs(toName, target, fromModule, namepath);
+        // We have to clone any annotation which uses the old NLA for each new
+        // NLA. This array collects the new set of annotations.
+        SmallVector<Annotation> newAnnotations;
+        for (auto anno : target.getAnnotations()) {
+          // Find the non-local field of the annotation.
+          auto [it, found] = mlir::impl::findAttrSorted(
+              anno.begin(), anno.end(), nonLocalString);
+          // If this annotation doesn't use the target NLA, copy it with no
+          // changes.
+          if (!found || it->getValue().cast<FlatSymbolRefAttr>().getAttr() !=
+                            nla.sym_nameAttr()) {
+            newAnnotations.push_back(anno);
+            continue;
+          }
+          auto nonLocalIndex = std::distance(anno.begin(), it);
+          // Clone the annotation and add it to the list of new annotations.
+          cloneAnnotation(nlaRefs, anno, ArrayRef(anno.begin(), anno.end()),
+                          nonLocalIndex, newAnnotations);
         }
-        auto nonLocalIndex = std::distance(anno.begin(), it);
-        // We have to clone all the annotations referencing this op
-        // SmallVector<NamedAttribute> attributes(anno.begin(), anno.end());
-        cloneAnnotation(nlas, anno, ArrayRef(anno.begin(), anno.end()),
-                        nonLocalIndex, newAnnotations);
+        // Apply the new annotations to the operation.
+        AnnotationSet annotations(newAnnotations, context);
+        target.setAnnotations(annotations);
       }
-      AnnotationSet annotations(newAnnotations, context);
-      target.setAnnotations(annotations);
 
       // Erase the old NLA and remove it from all breadcrumbs.
       eraseNLA(nla);
@@ -787,7 +796,7 @@ private:
         // This annotation is already a non-local annotation. Record that this
         // operation uses that NLA and stop processing this annotation.
         auto nlaName = attr.getValue().cast<FlatSymbolRefAttr>().getAttr();
-        targetMap[nlaName] = from;
+        targetMap[nlaName].push_back(from);
         newAnnotations.push_back(anno);
         return;
       }
@@ -999,10 +1008,8 @@ private:
   /// We insert all NLAs to the beginning of this block.
   Block *nlaBlock;
 
-  // This maps an NLA to the operation or port that uses it. Since NLAs include
-  // the name of the leaf element, its only possible for the NLA to be used by a
-  // single op or port.
-  DenseMap<Attribute, AnnoTarget> targetMap;
+  // This maps an NLA to the operations and ports that uses it.
+  DenseMap<Attribute, std::vector<AnnoTarget>> targetMap;
 
   // Cached attributes for faster comparisons and attribute building.
   StringAttr nonLocalString;

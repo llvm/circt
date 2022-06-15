@@ -5,7 +5,7 @@
 from collections import OrderedDict
 
 from .value import (BitVectorValue, ChannelValue, ListValue, StructValue,
-                    RegularValue, Value)
+                    RegularValue, InOutValue, Value)
 
 import mlir.ir
 from circt.dialects import esi, hw, sv
@@ -31,6 +31,9 @@ class _Types:
             size: int,
             name: str = None) -> hw.ArrayType:
     return self.wrap(hw.ArrayType.get(inner, size), name)
+
+  def inout(self, inner: mlir.ir.Type):
+    return self.wrap(hw.InOutValue.get(inner))
 
   def channel(self, inner):
     return self.wrap(esi.ChannelType.get(inner))
@@ -125,6 +128,8 @@ class Type(mlir.ir.Type):
       ret = super().__new__(StructType)
     if isinstance(type, hw.TypeAliasType):
       ret = super().__new__(TypeAliasType)
+    if isinstance(type, hw.InOutType):
+      ret = super().__new__(InOutType)
     if isinstance(type, mlir.ir.IntegerType):
       ret = super().__new__(BitVectorType)
     if isinstance(type, esi.ChannelType):
@@ -154,6 +159,16 @@ class Type(mlir.ir.Type):
   def _get_value_class(self):
     """Return the class which should be instantiated to create a Value."""
     return RegularValue
+
+
+class InOutType(Type):
+
+  @property
+  def element_type(self):
+    return Type(self._type.element_type)
+
+  def _get_value_class(self):
+    return InOutValue
 
 
 class TypeAliasType(Type):

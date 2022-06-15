@@ -47,7 +47,8 @@ def CompRegOp : SeqOp<"compreg",
 
   let arguments = (ins AnyType:$input, I1:$clk, StrAttr:$name,
     Optional<I1>:$reset, Optional<AnyType>:$resetValue,
-    OptionalAttr<SymbolNameAttr>:$sym_name);
+    OptionalAttr<SymbolNameAttr>:$sym_name,
+    OptionalAttr<ArrayAttr>:$svAttributes);
   let results = (outs AnyType:$data);
   let hasCustomAssemblyFormat = 1;
 
@@ -55,7 +56,7 @@ def CompRegOp : SeqOp<"compreg",
     OpBuilder<(ins "Value":$input, "Value":$clk, "StringRef":$sym_name), [{
       return build($_builder, $_state, input.getType(),
                    input, clk, sym_name, Value(), Value(),
-                   StringAttr::get($_builder.getContext(), sym_name));
+                   StringAttr::get($_builder.getContext(), sym_name), {});
     }]>,
   ];
 }

@@ -85,7 +85,7 @@ assert(succeeded(checkRes));
 dumpAsDOT(prob, "sched-problem.dot");
 ```
 
-![Dump of example instance](/includes/img/sched-instance.svg)
+![Dump of example instance](https://circt.llvm.org/includes/img/sched-instance.svg)
 
 We use a simple list scheduler, available via the `Algorithms.h` header, to compute a solution for the instance.
 
@@ -104,7 +104,7 @@ assert(succeeded(verifRes));
 dumpAsDOT(prob, "sched-solution.dot");
 ```
 
-![Dump of example instance, including solution](/includes/img/sched-solution.svg)
+![Dump of example instance, including solution](https://circt.llvm.org/includes/img/sched-solution.svg)
 
 To inspect the solution programmatically, we can query the instance in the following way. Note that by convention, all getters in the problem classes return `Optional<T>` values, but as we have already verified that the start times for registered operations are set, we can directly dereference the values.
 

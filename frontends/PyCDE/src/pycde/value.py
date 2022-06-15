@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from .support import get_user_loc, _obj_to_value_infer_type
 
-from circt.dialects import esi
+from circt.dialects import sv, esi
 import circt.support as support
 
 import mlir.ir as ir
@@ -42,11 +42,13 @@ class Value:
 
   _reg_name = re.compile(r"^(.*)__reg(\d+)$")
 
-  def reg(self, clk, rst=None, name=None, cycles=1):
+  def reg(self, clk, rst=None, name=None, cycles=1, sv_attributes=None):
     """Register this value, returning the delayed value.
     `clk`, `rst`: the clock and reset signals.
     `name`: name this register explicitly.
     `cycles`: number of registers to add."""
+    if sv_attributes is not None:
+      sv_attributes = [sv.SVAttributeAttr.get(attr) for attr in sv_attributes]
     from .dialects import seq
     if name is None:
       basename = None
@@ -73,7 +75,8 @@ class Value:
                             clk=clk,
                             reset=rst,
                             name=give_name,
-                            sym_name=give_name)
+                            sym_name=give_name,
+                            sv_attributes=sv_attributes)
       return reg
 
   @property
@@ -108,6 +111,17 @@ class Value:
 
 class RegularValue(Value):
   pass
+
+
+class InOutValue(Value):
+  # Maintain a caching of the read value.
+  read_value = None
+
+  @property
+  def read(self):
+    if self.read_value is None:
+      self.read_value = Value(sv.ReadInOutOp.create(self).results[0])
+    return self.read_value
 
 
 def _validate_idx(size: int, idx: Union[int, BitVectorValue]):
@@ -296,9 +310,10 @@ def wrap_opviews_with_values(dialect, module_name):
           if isinstance(created, support.NamedValueOpView):
             created = created.opview
 
-          # Return a Value.
-          assert len(created.results) == 1
-          return Value(created.results[0])
+          # Return the wrapped values, if any.
+          converted_results = tuple(Value(res) for res in created.results)
+          return converted_results[0] if len(
+              converted_results) == 1 else converted_results
 
         return create
 

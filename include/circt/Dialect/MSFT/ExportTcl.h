@@ -16,6 +16,8 @@
 #include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/MSFT/MSFTOpInterfaces.h"
 #include "circt/Support/LLVM.h"
+
+#include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/StringRef.h"
 
 namespace circt {
@@ -30,13 +32,21 @@ public:
   LogicalResult emit(Operation *forMod, StringRef outputFile);
 
   Operation *getDefinition(FlatSymbolRefAttr);
+  const DenseSet<hw::GlobalRefOp> &getRefsUsed() { return refsUsed; }
+  void usedRef(hw::GlobalRefOp ref) { refsUsed.insert(ref); }
 
 private:
   mlir::ModuleOp topLevel;
 
   bool populated;
   hw::HWSymbolCache topLevelSymbols;
-  DenseMap<Operation *, SmallVector<DynInstDataOpInterface, 0>> tclOpsForMod;
+
+  /// Map Module operations to their top-level "instance" names. Map those
+  /// "instance" names to the lowered ops which get directly emitted as tcl.
+  DenseMap<Operation *,
+           llvm::MapVector<StringAttr, SmallVector<DynInstDataOpInterface, 0>>>
+      tclOpsForModInstance;
+  DenseSet<hw::GlobalRefOp> refsUsed;
 
   LogicalResult populate();
 };

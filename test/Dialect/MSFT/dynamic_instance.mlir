@@ -1,6 +1,6 @@
 // RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics
 // RUN: circt-opt %s --msft-lower-instances --verify-each | FileCheck %s
-// RUN: circt-opt %s --msft-lower-instances --lower-msft-to-hw --lower-seq-to-sv --msft-export-tcl=tops=shallow,deeper,reg --export-verilog | FileCheck %s --check-prefix=TCL
+// RUN: circt-opt %s --msft-lower-instances --lower-msft-to-hw --lower-seq-to-sv --msft-export-tcl=tops=shallow,deeper,reg --export-verilog -o %t.mlir | FileCheck %s --check-prefix=TCL
 
 msft.instance.hierarchy @deeper {
   msft.instance.dynamic @deeper::@branch {
@@ -25,13 +25,20 @@ msft.instance.hierarchy @shallow {
 // CHECK: hw.globalRef @instref_1 [#hw.innerNameRef<@shallow::@leaf>, #hw.innerNameRef<@leaf::@module>]
 // CHECK: msft.pd.location @instref_1 M20K x: 8 y: 19 n: 1 path : "|memBank2"
 
-msft.instance.hierarchy @reg {
+msft.instance.hierarchy @reg "foo" {
   msft.instance.dynamic @reg::@reg {
     msft.pd.reg_location i4 [*, <1,2,3>, <1,2,4>, <1,2,5>]
   }
 }
+msft.instance.hierarchy @reg "bar" {
+  msft.instance.dynamic @reg::@reg {
+    msft.pd.reg_location i4 [<3,4,5>, *, *, *]
+  }
+}
 // CHECK: hw.globalRef @instref_2 [#hw.innerNameRef<@reg::@reg>]
-// CHECK: msft.pd.reg_location ref @instref_2 i4 [*, <1, 2, 3>, <1, 2, 4>, <1, 2, 5>]
+// CHECK-DAG: msft.pd.reg_location ref @instref_2 i4 [*, <1, 2, 3>, <1, 2, 4>, <1, 2, 5>]
+// CHECK: hw.globalRef @instref_3 [#hw.innerNameRef<@reg::@reg>]
+// CHECK-DAG: msft.pd.reg_location ref @instref_3 i4 [<3, 4, 5>, *, *, *]
 
 
 
@@ -71,11 +78,14 @@ msft.module @deeper {} () -> () {
   msft.output
 }
 
-// TCL-LABEL: proc reg_0_config
 msft.module @reg {} (%input : i4, %clk : i1) -> () {
   %reg = seq.compreg sym @reg %input, %clk  : i4
-  // TCL: set_location_assignment FF_X1_Y2_N3 -to $parent|reg_1[1]
-  // TCL: set_location_assignment FF_X1_Y2_N4 -to $parent|reg_1[2]
-  // TCL: set_location_assignment FF_X1_Y2_N5 -to $parent|reg_1[3]
   msft.output
 }
+// TCL-LABEL: proc reg_0_foo_config
+// TCL: set_location_assignment FF_X1_Y2_N3 -to $parent|reg_1[1]
+// TCL: set_location_assignment FF_X1_Y2_N4 -to $parent|reg_1[2]
+// TCL: set_location_assignment FF_X1_Y2_N5 -to $parent|reg_1[3]
+
+// TCL-LABEL: proc reg_0_bar_config
+// TCL: set_location_assignment FF_X3_Y4_N5 -to $parent|reg_1[0]

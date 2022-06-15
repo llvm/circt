@@ -176,14 +176,14 @@ firrtl.circuit "LocalTrackers" attributes {annotations = [{
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }
 // CHECK-NEXT:  sv.verbatim
-// CHECK-SAME:  \22name\22: \22OMReferenceTarget1\22
-// CHECK-SAME:  \22value\22: \22OMReferenceTarget:~LocalTrackers|{{[{][{]0[}][}]}}\22
-// CHECK-SAME:  \22name\22: \22OMReferenceTarget2\22
-// CHECK-SAME:  \22value\22: \22OMReferenceTarget:~LocalTrackers|{{[{][{]0[}][}]}}>{{[{][{]1[}][}]}}\22
-// CHECK-SAME:  \22name\22: \22OMReferenceTarget3\22
-// CHECK-SAME:  \22value\22: \22OMReferenceTarget:~LocalTrackers|{{[{][{]2[}][}]}}>{{[{][{]3[}][}]}}\22
-// CHECK-SAME:  \22name\22: \22OMReferenceTarget4\22
-// CHECK-SAME:  \22value\22: \22OMReferenceTarget:~LocalTrackers|{{[{][{]2[}][}]}}>{{[{][{]4[}][}]}}\22
+// CHECK-SAME:           \22name\22: \22OMReferenceTarget1\22
+// CHECK-SAME{LITERAL}:  \22value\22: \22OMReferenceTarget:~LocalTrackers|{{0}}\22
+// CHECK-SAME:           \22name\22: \22OMReferenceTarget2\22
+// CHECK-SAME{LITERAL}:  \22value\22: \22OMReferenceTarget:~LocalTrackers|{{0}}>{{1}}\22
+// CHECK-SAME:           \22name\22: \22OMReferenceTarget3\22
+// CHECK-SAME{LITERAL}:  \22value\22: \22OMReferenceTarget:~LocalTrackers|{{2}}>{{3}}\22
+// CHECK-SAME:           \22name\22: \22OMReferenceTarget4\22
+// CHECK-SAME{LITERAL}:  \22value\22: \22OMReferenceTarget:~LocalTrackers|{{2}}>{{4}}\22
 // CHECK-SAME:  symbols = [
 // CHECK-SAME:    @A,
 // CHECK-SAME:    #hw.innerNameRef<@A::[[SYMC:@[a-zA-Z0-9_]+]]>,
@@ -196,33 +196,43 @@ firrtl.circuit "LocalTrackers" attributes {annotations = [{
 // Trackers as Non-Local Annotations
 //===----------------------------------------------------------------------===//
 
+// CHECK-LABEL: firrtl.circuit "NonLocalTrackers"
 firrtl.circuit "NonLocalTrackers" attributes {annotations = [{
   class = "freechips.rocketchip.objectmodel.OMIRAnnotation",
   nodes = [{info = #loc, id = "OMID:0", fields = {
-    OMReferenceTarget1 = {info = #loc, index = 1, id = "OMID:1", value = {omir.tracker, id = 0, type = "OMReferenceTarget"}}
+    OMReferenceTarget1 = {info = #loc, index = 1, id = "OMID:1", value = {omir.tracker, id = 0, type = "OMReferenceTarget"}},
+    OMReferenceTarget2 = {info = #loc, index = 2, id = "OMID:2", value = {omir.tracker, id = 1, type = "OMReferenceTarget"}}
   }}]
 }]} {
+  // Both OMReferenceTarget1 and OMReferenceTarget2 share the same NLA.  This
+  // NLA should not be deleted.
   firrtl.hierpath @nla_0 [@NonLocalTrackers::@b, @B::@a, @A]
-  firrtl.module @A() attributes {annotations = [{circt.nonlocal = @nla_0, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 0}]} {}
+  // CHECK: firrtl.module @A
+  firrtl.module @A() attributes {annotations = [{circt.nonlocal = @nla_0, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 0}]} {
+    // CHECK-NEXT: %a = firrtl.wire sym @[[a_sym:[^ ]+]]
+    %a = firrtl.wire {annotations = [{circt.nonlocal = @nla_0, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 1}]} : !firrtl.uint<1>
+  }
   firrtl.module @B() {
-    firrtl.instance a sym @a {annotations = [{circt.nonlocal = @nla_0, class = "circt.nonlocal"}]} @A()
+    firrtl.instance a sym @a @A()
   }
   firrtl.module @NonLocalTrackers() {
-    firrtl.instance b sym @b {annotations = [{circt.nonlocal = @nla_0, class = "circt.nonlocal"}]} @B()
+    firrtl.instance b sym @b @B()
   }
 }
-// CHECK-LABEL: firrtl.circuit "NonLocalTrackers"
 // CHECK:       firrtl.instance a sym [[SYMA:@[a-zA-Z0-9_]+]]
 // CHECK:       firrtl.instance b sym [[SYMB:@[a-zA-Z0-9_]+]]
 // CHECK:       sv.verbatim
-// CHECK-SAME:  \22name\22: \22OMReferenceTarget1\22
-// CHECK-SAME:  \22value\22: \22OMReferenceTarget:~NonLocalTrackers|{{[{][{]0[}][}]}}/{{[{][{]1[}][}]}}:{{[{][{]2[}][}]}}/{{[{][{]3[}][}]}}:{{[{][{]4[}][}]}}\22
+// CHECK-SAME:           \22name\22: \22OMReferenceTarget1\22
+// CHECK-SAME{LITERAL}:  \22value\22: \22OMReferenceTarget:~NonLocalTrackers|{{0}}/{{1}}:{{2}}/{{3}}:{{4}}\22
+// CHECK-SAME:           \22name\22: \22OMReferenceTarget2\22
+// CHECK-SAME{LITERAL}:  \22value\22: \22OMReferenceTarget:~NonLocalTrackers|{{0}}/{{1}}:{{2}}/{{3}}:{{4}}>{{5}}\22
 // CHECK-SAME:  symbols = [
 // CHECK-SAME:    @NonLocalTrackers,
 // CHECK-SAME:    #hw.innerNameRef<@NonLocalTrackers::[[SYMB:@[a-zA-Z0-9_]+]]>,
 // CHECK-SAME:    @B,
 // CHECK-SAME:    #hw.innerNameRef<@B::[[SYMA:@[a-zA-Z0-9_]+]]>,
-// CHECK-SAME:    @A
+// CHECK-SAME:    @A,
+// CHECK-SAME:    #hw.innerNameRef<@A::@[[a_sym]]>
 // CHECK-SAME:  ]
 
 //===----------------------------------------------------------------------===//
@@ -287,7 +297,7 @@ firrtl.circuit "SRAMPaths" attributes {annotations = [{
   }
 }
 // CHECK-LABEL: firrtl.circuit "SRAMPaths" {
-// CHECK-NEXT:    firrtl.extmodule @MySRAM()
+// CHECK:         firrtl.extmodule @MySRAM()
 // CHECK-NEXT:    firrtl.module @Submodule() {
 // CHECK-NEXT:      firrtl.instance mem1 sym [[SYMMEM1:@[a-zA-Z0-9_]+]]
 // CHECK-SAME:        @MySRAM()
@@ -303,23 +313,25 @@ firrtl.circuit "SRAMPaths" attributes {annotations = [{
 // CHECK-NEXT:  }
 // CHECK-NEXT:  sv.verbatim
 
-// CHECK-SAME:  \22id\22: \22OMID:0\22
-// CHECK-SAME:    \22name\22: \22omType\22
-// CHECK-SAME:    \22value\22: [
-// CHECK-SAME:      \22OMString:OMLazyModule\22
-// CHECK-SAME:      \22OMString:OMSRAM\22
-// CHECK-SAME:    ]
-// CHECK-SAME:    \22name\22: \22finalPath\22
-// CHECK-SAME:    \22value\22: \22OMMemberInstanceTarget:~SRAMPaths|{{[{][{]0[}][}]}}/{{[{][{]1[}][}]}}:{{[{][{]2[}][}]}}/{{[{][{]3[}][}]}}:{{[{][{]4[}][}]}}\22
+// CHECK-SAME:           \22id\22: \22OMID:0\22
+// CHECK-SAME:             \22name\22: \22omType\22
+// CHECK-SAME:             \22value\22: [
+// CHECK-SAME:               \22OMString:OMLazyModule\22
+// CHECK-SAME:               \22OMString:OMSRAM\22
+// CHECK-SAME:             ]
+// CHECK-SAME:              \22name\22: \22finalPath\22
+// CHECK-SAME{LITERAL}:    \22value\22: \22OMMemberInstanceTarget:~SRAMPaths|{{0}}/{{1}}:{{2}}/{{3}}:{{4}}\22
 
-// CHECK-SAME:  \22id\22: \22OMID:1\22
-// CHECK-SAME:    \22name\22: \22omType\22
-// CHECK-SAME:    \22value\22: [
-// CHECK-SAME:      \22OMString:OMLazyModule\22
-// CHECK-SAME:      \22OMString:OMSRAM\22
-// CHECK-SAME:    ]
-// CHECK-SAME:    \22name\22: \22finalPath\22
-// CHECK-SAME:    \22value\22: \22OMMemberInstanceTarget:~SRAMPaths|{{[{][{]0[}][}]}}/{{[{][{]1[}][}]}}:{{[{][{]2[}][}]}}/{{[{][{]5[}][}]}}:{{[^\\]+}}\22
+// CHECK-SAME:           \22id\22: \22OMID:1\22
+// CHECK-SAME:             \22name\22: \22omType\22
+// CHECK-SAME:             \22value\22: [
+// CHECK-SAME:               \22OMString:OMLazyModule\22
+// CHECK-SAME:               \22OMString:OMSRAM\22
+// CHECK-SAME:             ]
+// CHECK-SAME:             \22name\22: \22finalPath\22
+// CHECK-SAME{LITERAL}:    \22value\22: \22OMMemberInstanceTarget:~SRAMPaths|{{0}}/{{1}}:{{2}}/{{5}}:
+// CHECK-NOT:                {{.+}}
+// CHECK-SAME:               {{[^\\]+}}\22
 
 // CHECK-SAME:  symbols = [
 // CHECK-SAME:    @SRAMPaths,
@@ -334,6 +346,7 @@ firrtl.circuit "SRAMPaths" attributes {annotations = [{
 // Make SRAM Paths Absolute with existing absolute NLA (`SetOMIRSRAMPaths`)
 //===----------------------------------------------------------------------===//
 
+// CHECK-LABEL: firrtl.circuit "SRAMPathsWithNLA"
 firrtl.circuit "SRAMPathsWithNLA" attributes {annotations = [{
   class = "freechips.rocketchip.objectmodel.OMIRAnnotation",
   nodes = [
@@ -344,34 +357,77 @@ firrtl.circuit "SRAMPathsWithNLA" attributes {annotations = [{
         omType = {info = #loc, index = 0, value = ["OMString:OMLazyModule", "OMString:OMSRAM"]},
         finalPath = {info = #loc, index = 1, value = {omir.tracker, id = 1, type = "OMMemberReferenceTarget"}}
       }
+    },
+    {
+      info = #loc,
+      id = "OMID:2",
+      fields = {
+        omType = {info = #loc, index = 0, value = ["OMString:OMLazyModule", "OMString:OMSRAM"]},
+        finalPath = {info = #loc, index = 1, value = {omir.tracker, id = 2, type = "OMMemberReferenceTarget"}}
+      }
     }
   ]
 }]} {
-  firrtl.hierpath @nla [@SRAMPathsWithNLA::@s1, @Submodule::@m1]
+  firrtl.hierpath @nla_old [@SRAMPathsWithNLA::@s1, @Submodule::@mem]
+  firrtl.hierpath @nla_new [@SRAMPathsWithNLA::@s1, @Submodule]
   firrtl.module @Submodule() {
-    %mem2_port = firrtl.mem sym @m1 Undefined {annotations = [{circt.nonlocal = @nla, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 1}], depth = 8, name = "mem2", portNames = ["port"], readLatency = 0 : i32, writeLatency = 1 : i32 } : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: uint<42>>
+    %mem_port = firrtl.mem sym @mem Undefined {
+      annotations = [
+        {circt.nonlocal = @nla_old, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 1}
+      ],
+      depth = 8,
+      name = "mem",
+      portNames = ["port"],
+      readLatency = 0 : i32,
+      writeLatency = 1 : i32
+    } : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: uint<42>>
+    // CHECK: %mem2_port = firrtl.mem sym @[[mem2_sym:.+]] Undefined
+    %mem2_port = firrtl.mem Undefined {
+      annotations = [
+        {circt.nonlocal = @nla_new, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 2}
+      ],
+      depth = 8,
+      name = "mem2",
+      portNames = ["port"],
+      readLatency = 0 : i32,
+      writeLatency = 1 : i32
+    } : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: uint<42>>
   }
   firrtl.module @SRAMPathsWithNLA() {
-    firrtl.instance sub  sym @s1 {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}, {circt.nonlocal = @nla1, class = "circt.nonlocal"}]} @Submodule()
-    firrtl.instance sub1 sym @s2  @Submodule()
+    firrtl.instance sub sym @s1 @Submodule()
+    firrtl.instance sub1 sym @s2 @Submodule()
   }
 }
-// CHECK-LABEL: firrtl.circuit "SRAMPathsWithNLA"
-// CHECK:  sv.verbatim
-// CHECK-SAME:  id\22: \22OMID:1\22
-// CHECK-SAME:    \22name\22: \22omType\22
-// CHECK-SAME:    \22value\22: [
-// CHECK-SAME:      \22OMString:OMLazyModule\22
-// CHECK-SAME:      \22OMString:OMSRAM\22
-// CHECK-SAME:    ]
-// CHECK-SAME:    \22name\22: \22finalPath\22
-// CHECK-SAME:    \22value\22: \22OMMemberInstanceTarget:~SRAMPathsWithNLA|{{[{][{]0[}][}]}}/{{[{][{]1[}][}]}}:{{[{][{]2[}][}]}}/{{[{][{]3[}][}]}}:{{[^\\]+}}\22
+
+// CHECK:         sv.verbatim
+// CHECK-SAME:           id\22: \22OMID:1\22
+// CHECK-SAME:             \22name\22: \22omType\22
+// CHECK-SAME:             \22value\22: [
+// CHECK-SAME:               \22OMString:OMLazyModule\22
+// CHECK-SAME:               \22OMString:OMSRAM\22
+// CHECK-SAME:             ]
+// CHECK-SAME:             \22name\22: \22finalPath\22
+// CHECK-SAME{LITERAL}:    \22value\22: \22OMMemberInstanceTarget:~SRAMPathsWithNLA|{{0}}/{{1}}:{{2}}/{{3}}:
+// CHECK-NOT:                {{.+}}
+// CHECK-SAME:               {{[^\\]+}}\22
+
+// CHECK-SAME:           id\22: \22OMID:2\22
+// CHECK-SAME:             \22name\22: \22omType\22
+// CHECK-SAME:             \22value\22: [
+// CHECK-SAME:               \22OMString:OMLazyModule\22
+// CHECK-SAME:               \22OMString:OMSRAM\22
+// CHECK-SAME:             ]
+// CHECK-SAME:             \22name\22: \22finalPath\22
+// CHECK-SAME{LITERAL}:    \22value\22: \22OMMemberInstanceTarget:~SRAMPathsWithNLA|{{0}}/{{1}}:{{2}}/{{4}}:
+// CHECK-NOT:                {{.+}}
+// CHECK-SAME:               {{[^\\]+}}\22
 
 // CHECK-SAME:  symbols = [
 // CHECK-SAME:    @SRAMPathsWithNLA,
 // CHECK-SAME:    #hw.innerNameRef<@SRAMPathsWithNLA::[[SYMSUB:@[a-zA-Z0-9_]+]]>,
 // CHECK-SAME:    @Submodule,
-// CHECK-SAME:    #hw.innerNameRef<@Submodule::[[SYMMEM1:@[a-zA-Z0-9_]+]]>
+// CHECK-SAME:    #hw.innerNameRef<@Submodule::[[SYMMEM1:@[a-zA-Z0-9_]+]]>,
+// CHECK-SAME:    #hw.innerNameRef<@Submodule::@[[mem2_sym]]>
 // CHECK-SAME:  ]
 
 //===----------------------------------------------------------------------===//
@@ -397,7 +453,7 @@ firrtl.circuit "SRAMPathsWithNLA" attributes {annotations = [{
     firrtl.instance mem1 {annotations = [{circt.nonlocal = @nla, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 0}]} @MySRAM()
   }
   firrtl.module @SRAMPaths() {
-    firrtl.instance sub sym @sub {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}]} @Submodule()
+    firrtl.instance sub sym @sub @Submodule()
   }
   firrtl.module @SRAMPathsWithNLA() {
     firrtl.instance paths @SRAMPaths()
@@ -468,39 +524,39 @@ firrtl.circuit "AddPorts" attributes {annotations = [{
 // CHECK:       %w = firrtl.wire sym [[SYMW:@[a-zA-Z0-9_]+]]
 // CHECK:       sv.verbatim
 
-// CHECK-SAME:  \22id\22: \22OMID:0\22
-// CHECK-SAME:    \22name\22: \22containingModule\22
-// CHECK-SAME:    \22value\22: \22OMInstanceTarget:~AddPorts|{{[{][{]0[}][}]}}\22
-// CHECK-SAME:    \22name\22: \22ports\22
-// CHECK-SAME:    \22value\22: [
-// CHECK-SAME:      {
-// CHECK-SAME:        \22ref\22: \22OMDontTouchedReferenceTarget:~AddPorts|{{[{][{]0[}][}]}}>{{[{][{]1[}][}]}}\22
-// CHECK-SAME:        \22direction\22: \22OMString:Input\22
-// CHECK-SAME:        \22width\22: \22OMBigInt:1d\22
-// CHECK-SAME:      }
-// CHECK-SAME:      {
-// CHECK-SAME:        \22ref\22: \22OMDontTouchedReferenceTarget:~AddPorts|{{[{][{]0[}][}]}}>{{[{][{]2[}][}]}}\22
-// CHECK-SAME:        \22direction\22: \22OMString:Output\22
-// CHECK-SAME:        \22width\22: \22OMBigInt:1f\22
-// CHECK-SAME:      }
-// CHECK-SAME:    ]
+// CHECK-SAME:           \22id\22: \22OMID:0\22
+// CHECK-SAME:             \22name\22: \22containingModule\22
+// CHECK-SAME{LITERAL}:    \22value\22: \22OMInstanceTarget:~AddPorts|{{0}}\22
+// CHECK-SAME:             \22name\22: \22ports\22
+// CHECK-SAME:             \22value\22: [
+// CHECK-SAME:               {
+// CHECK-SAME{LITERAL}:        \22ref\22: \22OMDontTouchedReferenceTarget:~AddPorts|{{0}}>{{1}}\22
+// CHECK-SAME:                 \22direction\22: \22OMString:Input\22
+// CHECK-SAME:                 \22width\22: \22OMBigInt:1d\22
+// CHECK-SAME:               }
+// CHECK-SAME:               {
+// CHECK-SAME{LITERAL}:        \22ref\22: \22OMDontTouchedReferenceTarget:~AddPorts|{{0}}>{{2}}\22
+// CHECK-SAME:                 \22direction\22: \22OMString:Output\22
+// CHECK-SAME:                 \22width\22: \22OMBigInt:1f\22
+// CHECK-SAME:               }
+// CHECK-SAME:             ]
 
-// CHECK-SAME:  \22id\22: \22OMID:1\22
-// CHECK-SAME:    \22name\22: \22containingModule\22
-// CHECK-SAME:    \22value\22: \22OMReferenceTarget:~AddPorts|{{[{][{]0[}][}]}}>{{[{][{]3[}][}]}}\22
-// CHECK-SAME:    \22name\22: \22ports\22
-// CHECK-SAME:    \22value\22: [
-// CHECK-SAME:      {
-// CHECK-SAME:        \22ref\22: \22OMDontTouchedReferenceTarget:~AddPorts|{{[{][{]0[}][}]}}>{{[{][{]1[}][}]}}\22
-// CHECK-SAME:        \22direction\22: \22OMString:Input\22
-// CHECK-SAME:        \22width\22: \22OMBigInt:1d\22
-// CHECK-SAME:      }
-// CHECK-SAME:      {
-// CHECK-SAME:        \22ref\22: \22OMDontTouchedReferenceTarget:~AddPorts|{{[{][{]0[}][}]}}>{{[{][{]2[}][}]}}\22
-// CHECK-SAME:        \22direction\22: \22OMString:Output\22
-// CHECK-SAME:        \22width\22: \22OMBigInt:1f\22
-// CHECK-SAME:      }
-// CHECK-SAME:    ]
+// CHECK-SAME:           \22id\22: \22OMID:1\22
+// CHECK-SAME:             \22name\22: \22containingModule\22
+// CHECK-SAME{LITERAL}:    \22value\22: \22OMReferenceTarget:~AddPorts|{{0}}>{{3}}\22
+// CHECK-SAME:             \22name\22: \22ports\22
+// CHECK-SAME:             \22value\22: [
+// CHECK-SAME:               {
+// CHECK-SAME{LITERAL}:        \22ref\22: \22OMDontTouchedReferenceTarget:~AddPorts|{{0}}>{{1}}\22
+// CHECK-SAME:                 \22direction\22: \22OMString:Input\22
+// CHECK-SAME:                 \22width\22: \22OMBigInt:1d\22
+// CHECK-SAME:               }
+// CHECK-SAME:               {
+// CHECK-SAME{LITERAL}:        \22ref\22: \22OMDontTouchedReferenceTarget:~AddPorts|{{0}}>{{2}}\22
+// CHECK-SAME:                 \22direction\22: \22OMString:Output\22
+// CHECK-SAME:                 \22width\22: \22OMBigInt:1f\22
+// CHECK-SAME:               }
+// CHECK-SAME:             ]
 
 // CHECK-SAME:  symbols = [
 // CHECK-SAME:    @AddPorts,
@@ -553,22 +609,22 @@ firrtl.circuit "AddPortsRelative" attributes {annotations = [{
 // CHECK-SAME:    out %y: !firrtl.uint<1> sym [[SYMY:@[a-zA-Z0-9_]+]]
 
 // CHECK:       sv.verbatim
-// CHECK-SAME:  \22id\22: \22OMID:0\22
-// CHECK-SAME:    \22name\22: \22containingModule\22
-// CHECK-SAME:    \22value\22: \22OMInstanceTarget:~DUT|{{[{][{]0[}][}]}}\22
-// CHECK-SAME:    \22name\22: \22ports\22
-// CHECK-SAME:    \22value\22: [
-// CHECK-SAME:      {
-// CHECK-SAME:        \22ref\22: \22OMDontTouchedReferenceTarget:~DUT|{{[{][{]0[}][}]}}>{{[{][{]1[}][}]}}\22
-// CHECK-SAME:        \22direction\22: \22OMString:Input\22
-// CHECK-SAME:        \22width\22: \22OMBigInt:1\22
-// CHECK-SAME:      }
-// CHECK-SAME:      {
-// CHECK-SAME:        \22ref\22: \22OMDontTouchedReferenceTarget:~DUT|{{[{][{]0[}][}]}}>{{[{][{]2[}][}]}}\22
-// CHECK-SAME:        \22direction\22: \22OMString:Output\22
-// CHECK-SAME:        \22width\22: \22OMBigInt:1\22
-// CHECK-SAME:      }
-// CHECK-SAME:    ]
+// CHECK-SAME:           \22id\22: \22OMID:0\22
+// CHECK-SAME:             \22name\22: \22containingModule\22
+// CHECK-SAME{LITERAL}:    \22value\22: \22OMInstanceTarget:~DUT|{{0}}\22
+// CHECK-SAME:             \22name\22: \22ports\22
+// CHECK-SAME:             \22value\22: [
+// CHECK-SAME:               {
+// CHECK-SAME{LITERAL}:        \22ref\22: \22OMDontTouchedReferenceTarget:~DUT|{{0}}>{{1}}\22
+// CHECK-SAME:                 \22direction\22: \22OMString:Input\22
+// CHECK-SAME:                 \22width\22: \22OMBigInt:1\22
+// CHECK-SAME:               }
+// CHECK-SAME:               {
+// CHECK-SAME{LITERAL}:        \22ref\22: \22OMDontTouchedReferenceTarget:~DUT|{{0}}>{{2}}\22
+// CHECK-SAME:                 \22direction\22: \22OMString:Output\22
+// CHECK-SAME:                 \22width\22: \22OMBigInt:1\22
+// CHECK-SAME:               }
+// CHECK-SAME:             ]
 
 // CHECK-SAME:  symbols = [
 // CHECK-SAME:    @DUT,
@@ -645,32 +701,79 @@ firrtl.circuit "AddPortsRelative" attributes {annotations = [{
 //   }
 // ]
 
-firrtl.circuit "FixPath"  attributes 
-{annotations = [{class = "freechips.rocketchip.objectmodel.OMIRAnnotation", nodes = [{fields = {d = {index = 3 : i64, info = loc(unknown), value = {id = 3 : i64, omir.tracker, path = "~FixPath|D", type = "OMMemberInstanceTarget"}}, dutInstance = {index = 0 : i64, info = loc(unknown), value = {id = 0 : i64, omir.tracker, path = "~FixPath|FixPath/c:C", type = "OMMemberInstanceTarget"}}, power = {index = 2 : i64, info = loc(unknown), value = {id = 2 : i64, omir.tracker, path = "~FixPath|FixPath/c:C/cd:D", type = "OMMemberInstanceTarget"}}, pwm = {index = 1 : i64, info = loc(unknown), value = {id = 1 : i64, omir.tracker, path = "~FixPath|FixPath/c:C>in", type = "OMMemberInstanceTarget"}}}, id = "OMID:0", info = loc(unknown)}]}]} {
+firrtl.circuit "FixPath"  attributes {annotations = [
+  {class = "freechips.rocketchip.objectmodel.OMIRAnnotation",
+   nodes = [
+     {fields = {
+        d = {
+          index = 3 : i64,
+          info = loc(unknown),
+          value = {
+            id = 3 : i64,
+            omir.tracker,
+            path = "~FixPath|D",
+            type = "OMMemberInstanceTarget"}},
+        dutInstance = {
+          index = 0 : i64,
+          info = loc(unknown),
+          value = {
+            id = 0 : i64,
+            omir.tracker,
+            path = "~FixPath|FixPath/c:C",
+            type = "OMMemberInstanceTarget"}},
+        power = {
+          index = 2 : i64,
+          info = loc(unknown),
+          value = {
+            id = 2 : i64,
+            omir.tracker,
+            path = "~FixPath|FixPath/c:C/cd:D",
+            type = "OMMemberInstanceTarget"}},
+        pwm = {
+          index = 1 : i64,
+          info = loc(unknown),
+          value = {
+            id = 1 : i64,
+            omir.tracker,
+            path = "~FixPath|FixPath/c:C>in",
+            type = "OMMemberInstanceTarget"}}},
+      id = "OMID:0",
+      info = loc(unknown)}
+    ]}]} {
   firrtl.hierpath @nla_3 [@FixPath::@c, @C::@cd, @D]
   firrtl.hierpath @nla_2 [@FixPath::@c, @C::@in]
   firrtl.hierpath @nla_1 [@FixPath::@c, @C]
-  firrtl.module @C(in %in: !firrtl.uint<1> sym @in [{circt.nonlocal = @nla_2, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 1 : i64}]) attributes {annotations = [{circt.nonlocal = @nla_1, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 0 : i64}, {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
-    firrtl.instance cd sym @cd  {annotations = [{circt.nonlocal = @nla_3, class = "circt.nonlocal"}]} @D()
+  firrtl.module @C(
+    in %in: !firrtl.uint<1> sym @in [
+      {circt.nonlocal = @nla_2, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 1 : i64}
+    ]
+  ) attributes {annotations = [
+       {circt.nonlocal = @nla_1, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 0 : i64},
+       {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}
+     ]}
+  {
+    firrtl.instance cd sym @cd @D()
   }
-  firrtl.module @D() attributes {annotations = [{circt.nonlocal = @nla_3, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 2 : i64}, {class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 3 : i64}]} {
-  }
+  firrtl.module @D() attributes {annotations = [
+    {circt.nonlocal = @nla_3, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 2 : i64},
+    {class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 3 : i64}
+  ]} {}
   firrtl.module @FixPath(in %a: !firrtl.uint<1>) {
-    %c_in = firrtl.instance c sym @c  {annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}, {circt.nonlocal = @nla_2, class = "circt.nonlocal"}, {circt.nonlocal = @nla_3, class = "circt.nonlocal"}]} @C(in in: !firrtl.uint<1>)
+    %c_in = firrtl.instance c sym @c @C(in in: !firrtl.uint<1>)
     firrtl.connect %c_in, %a : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.instance d  @D()
   }
   // CHECK-LABEL: firrtl.circuit "FixPath"
-  // CHECK: firrtl.module @FixPath
-  // CHECK:    firrtl.instance d  @D()
-  // CHECK: sv.verbatim
-  // CHECK-SAME: name\22: \22dutInstance\22,\0A
-  // CHECK-SAME: OMMemberInstanceTarget:~FixPath|{{[{][{]0[}][}]}}/{{[{][{]1[}][}]}}:{{[{][{]2[}][}]}}
-  // CHECK-SAME: name\22: \22pwm\22,\0A
-  // CHECK-SAME: value\22: \22OMMemberInstanceTarget:~C|{{[{][{]2[}][}]}}>{{[{][{]3[}][}]}}\22\0A
-  // CHECK-SAME: name\22: \22power\22,\0A
-  // CHECK-SAME: value\22: \22OMMemberInstanceTarget:~C|{{[{][{]2[}][}]}}/{{[{][{]4[}][}]}}:{{[{][{]5[}][}]}}
-  // CHECK-SAME: name\22: \22d\22,\0A
-  // CHECK-SAME: value\22: \22OMMemberInstanceTarget:~FixPath|{{[{][{]5[}][}]}}\22\0A
-  // CHECK-SAME: {output_file = #hw.output_file<"omir.json", excludeFromFileList>, symbols = [@FixPath, #hw.innerNameRef<@FixPath::@c>, @C, #hw.innerNameRef<@C::@in>, #hw.innerNameRef<@C::@cd>, @D]}
+  // CHECK:         firrtl.module @FixPath
+  // CHECK:           firrtl.instance d  @D()
+  // CHECK:         sv.verbatim
+  // CHECK-SAME:               name\22: \22dutInstance\22,\0A
+  // CHECK-SAME{LITERAL}:      OMMemberInstanceTarget:~FixPath|{{0}}/{{1}}:{{2}}
+  // CHECK-SAME:               name\22: \22pwm\22,\0A
+  // CHECK-SAME{LITERAL}:      value\22: \22OMMemberInstanceTarget:~C|{{2}}>{{3}}\22\0A
+  // CHECK-SAME:               name\22: \22power\22,\0A
+  // CHECK-SAME{LITERAL}:      value\22: \22OMMemberInstanceTarget:~C|{{2}}/{{4}}:{{5}}
+  // CHECK-SAME:               name\22: \22d\22,\0A
+  // CHECK-SAME{LITERAL}:      value\22: \22OMMemberInstanceTarget:~FixPath|{{5}}\22\0A
+  // CHECK-SAME:      {output_file = #hw.output_file<"omir.json", excludeFromFileList>, symbols = [@FixPath, #hw.innerNameRef<@FixPath::@c>, @C, #hw.innerNameRef<@C::@in>, #hw.innerNameRef<@C::@cd>, @D]}
 }

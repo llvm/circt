@@ -34,7 +34,7 @@ static bool isDeletableWireOrReg(Operation *op) {
   if (auto wire = dyn_cast<WireOp>(op))
     if (!wire.hasDroppableName())
       return false;
-  return isWireOrReg(op) && !hasDontTouch(op);
+  return isWireOrReg(op) && AnnotationSet(op).empty() && !hasDontTouch(op);
 }
 
 //===----------------------------------------------------------------------===//
@@ -272,9 +272,6 @@ private:
 
   /// The set of blocks that are known to execute, or are intrinsically live.
   SmallPtrSet<Block *, 16> executableBlocks;
-
-  /// A worklist containing blocks that need to be processed.
-  SmallVector<Block *, 64> blockWorklist;
 
   /// A worklist of values whose LatticeValue recently changed, indicating the
   /// users need to be reprocessed.

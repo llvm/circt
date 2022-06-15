@@ -213,6 +213,8 @@ static Value lowerFullyAssociativeOp(Operation &op, OperandRange operands,
                                      SmallVector<Operation *> &newOps) {
   // save the top level name
   auto name = op.getAttr("sv.namehint");
+  if (name)
+    op.removeAttr("sv.namehint");
   Value lhs, rhs;
   switch (operands.size()) {
   case 0:

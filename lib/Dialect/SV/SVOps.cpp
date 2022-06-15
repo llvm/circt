@@ -126,11 +126,13 @@ static void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
   if (namesDisagree)
     p.printOptionalAttrDict(op->getAttrs(),
                             {SymbolTable::getSymbolAttrName(),
-                             hw::InnerName::getInnerNameAttrName()});
+                             hw::InnerName::getInnerNameAttrName(),
+                             "svAttributes"});
   else
     p.printOptionalAttrDict(op->getAttrs(),
                             {"name", SymbolTable::getSymbolAttrName(),
-                             hw::InnerName::getInnerNameAttrName()});
+                             hw::InnerName::getInnerNameAttrName(),
+                             "svAttributes"});
 }
 
 //===----------------------------------------------------------------------===//
@@ -979,7 +981,7 @@ static ParseResult parseModportStructs(OpAsmParser &parser,
       return failure();
 
     ports.push_back(ModportStructAttr::get(
-        direction.cast<ModportDirectionAttr>(), signal, context));
+        context, direction.cast<ModportDirectionAttr>(), signal));
     return success();
   };
   if (parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
@@ -995,9 +997,9 @@ static void printModportStructs(OpAsmPrinter &p, Operation *,
   p << "(";
   llvm::interleaveComma(portsAttr, p, [&](Attribute attr) {
     auto port = attr.cast<ModportStructAttr>();
-    p << stringifyEnum(port.direction().getValue());
+    p << stringifyEnum(port.getDirection().getValue());
     p << ' ';
-    p.printSymbolName(port.signal().getRootReference().getValue());
+    p.printSymbolName(port.getSignal().getRootReference().getValue());
   });
   p << ')';
 }
@@ -1019,10 +1021,10 @@ void InterfaceModportOp::build(OpBuilder &builder, OperationState &state,
       ModportDirectionAttr::get(ctxt, ModportDirection::output);
   for (auto input : inputs)
     directions.push_back(ModportStructAttr::get(
-        inputDir, SymbolRefAttr::get(ctxt, input), ctxt));
+        ctxt, inputDir, SymbolRefAttr::get(ctxt, input)));
   for (auto output : outputs)
     directions.push_back(ModportStructAttr::get(
-        outputDir, SymbolRefAttr::get(ctxt, output), ctxt));
+        ctxt, outputDir, SymbolRefAttr::get(ctxt, output)));
   build(builder, state, name, ArrayAttr::get(ctxt, directions));
 }
 

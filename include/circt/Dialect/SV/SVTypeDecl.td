@@ -121,14 +121,20 @@ def ModportDirection : I32EnumAttr<"ModportDirection",
 def ModportDirectionAttr : EnumAttr<SVDialect, ModportDirection,
   "modport_direction">;
 
-def ModportDirectionField : StructFieldAttr<"direction", ModportDirectionAttr>;
+class SV_Attr<string attrName, string attrMnemonic, list<Trait> traits = []>
+    : AttrDef<SVDialect, attrName, traits> {
+  let mnemonic = attrMnemonic;
+}
 
-def ModportSignalField : StructFieldAttr<"signal", FlatSymbolRefAttr>;
+def ModportStruct : SV_Attr<"ModportStruct", "mod_port"> {
+	let parameters = (ins
+                    ModportDirectionAttr:$direction,
+                    "mlir::FlatSymbolRefAttr":$signal);
 
-def ModportStructAttr : StructAttr<"ModportStructAttr", SVDialect,
-  [ModportDirectionField, ModportSignalField]>;
+  let assemblyFormat = "`<` struct(params) `>`";
+}
 
-def ModportStructArrayAttr : TypedArrayAttrBase<ModportStructAttr,
+def ModportStructArrayAttr : TypedArrayAttrBase<ModportStruct,
   "array of modport structs">;
 
 def InterfaceModportOp : SVOp<"interface.modport",

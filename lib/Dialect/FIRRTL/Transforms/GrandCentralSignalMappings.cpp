@@ -676,7 +676,6 @@ FailureOr<bool> GrandCentralSignalMappingsPass::emitUpdatedMappings(
       auto nla =
           cast<HierPathOp>(circuit.lookupSymbol(mapping.nlaSym.getAttr()));
       assert(!nla.namepath().empty());
-      assert(nla.isComponent());
 
       // Start from root of NLA, or from top/DUT if through it
       bool seenRoot = false;

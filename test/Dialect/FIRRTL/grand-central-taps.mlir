@@ -554,3 +554,12 @@ firrtl.circuit "Top" {
     firrtl.instance dut @DUT()
   }
 }
+// ---
+// The HierpathOps that should be updated to end on a module:
+//  firrtl.hierpath @nla_1 [@NLAGarbageCollection::@dut, @DUT::@submodule, @Submodule]
+//  firrtl.hierpath @nla_2 [@NLAGarbageCollection::@dut, @DUT::@submodule, @Submodule]
+//  firrtl.hierpath @nla_3 [@NLAGarbageCollection::@dut, @DUT::@submodule, @Submodule]
+//  firrtl.hierpath @nla_1 [@NLAUsedInWiring::@foo, @Foo]
+//  firrtl.hierpath @nla_2 [@NLAUsedInWiring::@foo, @Foo]
+//  firrtl.hierpath @nla_0 [@DUT::@submodule_1, @Submodule]
+//  firrtl.hierpath @nla [@DUT::@submodule_2, @Submodule]

@@ -185,10 +185,10 @@ hw.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
     }
   }
 
-  // CHECK-NEXT: %combWire = sv.reg : !hw.inout<i1>
-  %combWire = sv.reg : !hw.inout<i1>
-  // CHECK-NEXT: %selReg = sv.reg : !hw.inout<i10>
-  %selReg = sv.reg : !hw.inout<i10>
+  // CHECK-NEXT: %combWire = sv.reg svattrs [#sv.attribute<"dont_merge">] : !hw.inout<i1>
+  %combWire = sv.reg svattrs [#sv.attribute<"dont_merge">] : !hw.inout<i1>
+  // CHECK-NEXT: %selReg = sv.reg svattrs [#sv.attribute<"dont_merge">, #sv.attribute<"dont_retime" = "true">] : !hw.inout<i10>
+  %selReg = sv.reg svattrs [#sv.attribute<"dont_merge">, #sv.attribute<"dont_retime" ="true">] : !hw.inout<i10>
   // CHECK-NEXT: %combWire2 = sv.wire : !hw.inout<i1>
   %combWire2 = sv.wire : !hw.inout<i1>
   // CHECK-NEXT: %regForce = sv.reg : !hw.inout<i1>

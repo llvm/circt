@@ -2330,19 +2330,36 @@ void NameCollector::collectNames(Block &block) {
 
   SmallString<32> nameTmp;
 
-  // Loop over all of the results of all of the ops.  Anything that defines a
-  // value needs to be noticed.
+  // Pre-pass loop to first add any names that could be the result of re-naming.
+  // These constructs will have their names added regardless, and handling them
+  // first ensures any out of line expressions won't trample on names selected
+  // by re-naming. This could be combined into one pass through the IR that
+  // collects a worklist of exprs to re-visit instead of the double traversal.
   for (auto &op : block) {
-    // Instances have a instance name to recognize but we don't need to look
-    // at the result values and don't need to schedule them as valuesToEmit.
     if (auto instance = dyn_cast<InstanceOp>(op)) {
       names.addName(&op, getSymOpName(instance));
       continue;
     }
+
     if (auto interface = dyn_cast<InterfaceInstanceOp>(op)) {
       names.addName(interface.getResult(), getSymOpName(interface));
       continue;
     }
+
+    if (isa<WireOp, RegOp, LocalParamOp>(op)) {
+      names.addName(op.getResult(0), getSymOpName(&op));
+      continue;
+    }
+  }
+
+  // Loop over all of the results of all of the ops. Anything that defines a
+  // value needs to be noticed.
+  for (auto &op : block) {
+    // Instances have an instance name to recognize but we don't need to look
+    // at the result values and don't need to schedule them as valuesToEmit.
+    // They already had their names added in the first loop, and can be skipped.
+    if (isa<InstanceOp, InterfaceInstanceOp>(op))
+      continue;
 
     bool isExpr = isVerilogExpression(&op);
     bool isInlineExpr = isExpr && isExpressionEmittedInline(&op);
@@ -2386,12 +2403,6 @@ void NameCollector::collectNames(Block &block) {
                                       stringStream, op.getLoc());
       }
       maxTypeWidth = std::max(typeString.size(), maxTypeWidth);
-    }
-
-    // Notice and renamify named declarations.
-    if (isa<WireOp, RegOp, LocalParamOp>(op)) {
-      names.addName(op.getResult(0), getSymOpName(&op));
-      continue;
     }
 
     // Notice and renamify the labels on verification statements.
@@ -2456,6 +2467,7 @@ private:
   void
   emitExpression(Value exp, SmallPtrSet<Operation *, 8> &emittedExprs,
                  VerilogPrecedence parenthesizeIfLooserThan = LowestPrecedence);
+  void emitSVAttributes(ArrayAttr svAttrs, Operation *op);
 
   using StmtVisitor::visitStmt;
   using Visitor::visitSV;
@@ -2583,6 +2595,23 @@ void StmtEmitter::emitExpression(Value exp,
   ExprEmitter(emitter, exprBuffer, emittedExprs, names)
       .emitExpression(exp, parenthesizeIfLooserThan);
   os.write(exprBuffer.data(), exprBuffer.size());
+}
+
+/// Emit SystemVerilog attributes attached to the statement op as dialect
+/// attributes.
+void StmtEmitter::emitSVAttributes(ArrayAttr svAttrs, Operation *op) {
+  // SystemVerilog 2017 Section 5.12.
+  if (!svAttrs)
+    return;
+
+  indent() << "(* ";
+  llvm::interleaveComma(svAttrs, os, [&](Attribute attr) {
+    auto svattr = attr.cast<SVAttributeAttr>();
+    os << svattr.getName().getValue();
+    if (svattr.getExpression())
+      os << " = " << svattr.getExpression().getValue();
+  });
+  os << " *)\n";
 }
 
 void StmtEmitter::emitStatementExpression(Operation *op) {
@@ -3514,8 +3543,8 @@ LogicalResult StmtEmitter::visitSV(InterfaceModportOp op) {
 
   llvm::interleaveComma(op.ports(), os, [&](const Attribute &portAttr) {
     auto port = portAttr.cast<ModportStructAttr>();
-    os << stringifyEnum(port.direction().getValue()) << ' ';
-    auto signalDecl = state.symbolCache.getDefinition(port.signal());
+    os << stringifyEnum(port.getDirection().getValue()) << ' ';
+    auto signalDecl = state.symbolCache.getDefinition(port.getSignal());
     os << getSymOpName(signalDecl);
   });
 
@@ -3673,6 +3702,13 @@ void StmtEmitter::collectNamesEmitDecls(Block &block) {
     auto *op = record.value.getDefiningOp();
     opsForLocation.clear();
     opsForLocation.insert(op);
+
+    // If we have SV attributes attached to the op, those need to be emitted
+    // first.
+    if (auto regOp = dyn_cast<RegOp>(op))
+      emitSVAttributes(regOp.svAttributesAttr(), op);
+    else if (auto wireOp = dyn_cast<WireOp>(op))
+      emitSVAttributes(wireOp.svAttributesAttr(), op);
 
     // Emit the leading word, like 'wire' or 'reg'.
     auto type = record.value.getType();

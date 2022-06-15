@@ -87,10 +87,10 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     input a8 : Analog<8>          ; CHECK: in %a8: !firrtl.analog<8>,
     input ab : {x : Analog<1>}    ; CHECK: in %ab: !firrtl.bundle<x: analog<1>>)
 
-    ; CHECK: %_t = firrtl.wire droppable_name : !firrtl.vector<uint<1>, 12>
+    ; CHECK: %_t = firrtl.wire : !firrtl.vector<uint<1>, 12>
     wire _t : UInt<1>[12] @[Nodes.scala 370:76]
 
-    ; CHECK: %_t_2 = firrtl.wire droppable_name : !firrtl.vector<uint<1>, 12>
+    ; CHECK: %_t_2 = firrtl.wire : !firrtl.vector<uint<1>, 12>
     wire _t_2 : UInt<1>[12]
 
     ; CHECK: firrtl.strictconnect %_t, %_t_2 : !firrtl.vector<uint<1>, 12>
@@ -126,7 +126,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK-NOT: firrtl.strictconnect %reset
     reset is invalid
 
-    ; CHECK: %out_0 = firrtl.wire : !firrtl.bundle<member: bundle<0: bundle<clock: clock, reset: uint<1>>>>
+    ; CHECK: %out_0 = firrtl.wire interesting_name : !firrtl.bundle<member: bundle<0: bundle<clock: clock, reset: uint<1>>>>
     wire out_0 : { member : { 0 : { clock : Clock, reset : UInt<1>}}}
 
     ; CHECK: [[A:%.+]] = firrtl.subfield %out_0(0) : (!firrtl.bundle<member: bundle<0: bundle<clock: clock, reset: uint<1>>>>) -> !firrtl.bundle<0: bundle<clock: clock, reset: uint<1>>>
@@ -135,16 +135,16 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.strictconnect %auto, [[C]] : !firrtl.uint<1>
     auto <- out_0.member.0.reset @[Field 173:49]
 
-    ; CHECK: %_t_3 = firrtl.wire droppable_name : !firrtl.vector<uint<1>, 12>
+    ; CHECK: %_t_3 = firrtl.wire : !firrtl.vector<uint<1>, 12>
     ; CHECK: [[A:%.+]] = firrtl.subindex %_t_3[0] : !firrtl.vector<uint<1>, 12>
-    ; CHECK: %_t_4 = firrtl.wire droppable_name : !firrtl.vector<uint<1>, 12>
+    ; CHECK: %_t_4 = firrtl.wire : !firrtl.vector<uint<1>, 12>
     ; CHECK: [[B:%.+]] = firrtl.subindex %_t_4[0] : !firrtl.vector<uint<1>, 12>
     ; CHECK: firrtl.strictconnect [[A]], [[B]]
     wire _t_3 : UInt<1>[12] @[Nodes.scala 370:76]
     wire _t_4 : UInt<1>[12]
     _t_3[0] <= _t_4[0] @[Xbar.scala 21:44]
 
-    ; CHECK: %n1 = firrtl.node %i8 : !firrtl.uint<8>
+    ; CHECK: %n1 = firrtl.node interesting_name %i8 : !firrtl.uint<8>
     node n1 = i8
 
     ; CHECK: firrtl.add %reset, %reset : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
@@ -205,7 +205,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.asClock %reset_async : (!firrtl.asyncreset) -> !firrtl.clock
     node check_c5 = asClock(reset_async)
 
-    ; CHECK: firrtl.node %auto : !firrtl.uint<1>
+    ; CHECK: firrtl.node interesting_name %auto : !firrtl.uint<1>
     node check_output = auto
 
     ; CHECK: %c42_ui10 = firrtl.constant 42 : !firrtl.uint<10>
@@ -225,10 +225,10 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     when reset : _t <= _t_2 else : _t <- _t_2
 
     ; CHECK: firrtl.when %reset {
-    ; CHECK:   [[N4A:%.+]] = firrtl.node %_t_2
+    ; CHECK:   [[N4A:%.+]] = firrtl.node interesting_name %_t_2
     ; CHECK:   firrtl.strictconnect %_t, [[N4A]]
     ; CHECK: } else {
-    ; CHECK:   [[N4B:%.+]] = firrtl.node %_t_2
+    ; CHECK:   [[N4B:%.+]] = firrtl.node interesting_name %_t_2
     ; CHECK:   firrtl.strictconnect %_t, [[N4B]]
     ; CHECK: }
     when reset :
@@ -307,11 +307,11 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.mux(%reset, %i8, %{{.*}}) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint) -> !firrtl.uint
     node n8 = mux(reset, i8, UInt(4))
 
-    ; CHECK: %_t_2621 = firrtl.regreset droppable_name %clock, %reset, %{{.*}} : !firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>
+    ; CHECK: %_t_2621 = firrtl.regreset %clock, %reset, %{{.*}} : !firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>
     reg _t_2621 : UInt<4>, clock with :
       reset => (reset, UInt<4>("h0")) @[Edges.scala 230:27]
 
-    ; CHECK: %_t_1601 = firrtl.regreset droppable_name %clock, %reset, %{{.*}} : !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>
+    ; CHECK: %_t_1601 = firrtl.regreset %clock, %reset, %{{.*}} : !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>
     reg _t_1601 : UInt<2>, clock with :
       (reset => (reset, UInt<2>("h00"))) @[Edges.scala 230:27]
 
@@ -329,24 +329,24 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; The Scala implementation of FIRRTL prints registers without a reset value
     ; using the register name as the reset.  Make sure we handle this for
     ; compatibility.
-    ; CHECK: %_t_2622 = firrtl.reg droppable_name %clock : !firrtl.uint<4>
+    ; CHECK: %_t_2622 = firrtl.reg %clock : !firrtl.uint<4>
     reg _t_2622 : UInt<4>, clock with :
       reset => (UInt<1>("h0"), _t_2622)
 
-    ; CHECK: %xyz_in = firrtl.instance xyz @circuit(in in: !firrtl.uint<80>)
+    ; CHECK: %xyz_in = firrtl.instance xyz interesting_name @circuit(in in: !firrtl.uint<80>)
     inst xyz of circuit
     ; CHECK: [[PAD:%.*]] = firrtl.pad %i8, 80 : (!firrtl.uint<8>) -> !firrtl.uint<80>
     ; CHECK: firrtl.strictconnect %xyz_in, [[PAD]] : !firrtl.uint<80>
     xyz.in <= i8
 
-    ; CHECK: %myext_in, %myext_out = firrtl.instance myext @MyExtModule(in in: !firrtl.uint, out out: !firrtl.uint<8>)
+    ; CHECK: %myext_in, %myext_out = firrtl.instance myext interesting_name @MyExtModule(in in: !firrtl.uint, out out: !firrtl.uint<8>)
     inst myext of MyExtModule
     myext.in <= i8
     printf(clock, reset, "Something interesting! %x", myext.out)
 
     ; CHECK: firrtl.when %reset  {
     when reset :
-      ; CHECK: %reset_myext_in, %reset_myext_out = firrtl.instance reset_myext @MyExtModule(in in: !firrtl.uint, out out: !firrtl.uint<8>)
+      ; CHECK: %reset_myext_in, %reset_myext_out = firrtl.instance reset_myext interesting_name @MyExtModule(in in: !firrtl.uint, out out: !firrtl.uint<8>)
       inst reset_myext of MyExtModule
       reset_myext.in <= i8
     ; CHECK: }
@@ -357,7 +357,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.subaccess %_t[%auto] : !firrtl.vector<uint<1>, 12>, !firrtl.uint<1>
     auto <= _t[auto]
 
-    ; CHECK: %myMem = chirrtl.combmem : !chirrtl.cmemory<bundle<id: uint<4>, resp: uint<2>>, 8>
+    ; CHECK: %myMem = chirrtl.combmem interesting_name : !chirrtl.cmemory<bundle<id: uint<4>, resp: uint<2>>, 8>
     cmem myMem : { id : UInt<4>, resp : UInt<2>} [8] @[Decoupled.scala 209:24]
 
     ; CHECK: %memValue_data, %memValue_port = chirrtl.memoryport Infer %myMem {name = "memValue"} : (!chirrtl.cmemory<bundle<id: uint<4>, resp: uint<2>>, 8>) -> (!firrtl.bundle<id: uint<4>, resp: uint<2>>, !chirrtl.cmemoryport)
@@ -365,9 +365,9 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     infer mport memValue = myMem[i8], clock
     auto11 <= memValue.id
 
-    ; CHECK: %base_table_0 = chirrtl.seqmem Undefined : !chirrtl.cmemory<vector<uint<1>, 9>, 256>
+    ; CHECK: %base_table_0 = chirrtl.seqmem interesting_name Undefined : !chirrtl.cmemory<vector<uint<1>, 9>, 256>
     smem base_table_0 : UInt<1>[9] [256]
-    ; CHECK: %base_table_1 = chirrtl.seqmem Old : !chirrtl.cmemory<vector<uint<1>, 9>, 256>
+    ; CHECK: %base_table_1 = chirrtl.seqmem interesting_name Old : !chirrtl.cmemory<vector<uint<1>, 9>, 256>
     smem base_table_1 : UInt<1>[9] [256] old
 
     ; CHECK: %tableValue_data, %tableValue_port = chirrtl.memoryport Read %base_table_1 {name = "tableValue"} : (!chirrtl.cmemory<vector<uint<1>, 9>, 256>) -> (!firrtl.vector<uint<1>, 9>, !chirrtl.cmemoryport)
@@ -375,7 +375,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     read mport tableValue = base_table_1[i8], clock
 
     ; Check that we can handle large memory sizes.
-    ; CHECK: %testharness = chirrtl.seqmem Undefined : !chirrtl.cmemory<vector<uint<8>, 16>, 2147483648>
+    ; CHECK: %testharness = chirrtl.seqmem interesting_name Undefined : !chirrtl.cmemory<vector<uint<8>, 16>, 2147483648>
     smem testharness : UInt<8>[16][2147483648], undefined
 
     ; CHECK: firrtl.pad %i8, 10 : (!firrtl.uint<8>) -> !firrtl.uint<10>
@@ -388,7 +388,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     node n13 = not(auto)
 
 
-    ; CHECK: %_M__T_10, %_M__T_11, %_M__T_18 = firrtl.mem droppable_name Undefined {depth = 8 : i64, name = "_M", portNames = ["_T_10", "_T_11", "_T_18"]
+    ; CHECK: %_M__T_10, %_M__T_11, %_M__T_18 = firrtl.mem Undefined {depth = 8 : i64, name = "_M", portNames = ["_T_10", "_T_11", "_T_18"]
     ; CHECK-SAME: readLatency = 0 : i32, writeLatency = 1 : i32} :
     ; CHECK-SAME: !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: bundle<id: uint<4>>, mask: bundle<id: uint<1>>>,
     ; CHECK-SAME: !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: bundle<id: uint<4>>, mask: bundle<id: uint<1>>>,
@@ -435,19 +435,19 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     wire _t_6 : { flip b : { bits : { source : UInt<7> } } }
     node _t_8 = bits(_t_6.b.bits.source, 5, 0)
 
-    ; CHECK: %flip1 = firrtl.wire : !firrtl.bundle<x flip: bundle<a flip: uint>>
+    ; CHECK: %flip1 = firrtl.wire interesting_name : !firrtl.bundle<x flip: bundle<a flip: uint>>
     wire flip1 : { flip x : { flip a : UInt } }
-    ; CHECK: %flip2 = firrtl.wire : !firrtl.bundle<x flip: bundle<a flip: uint, b: analog>>
+    ; CHECK: %flip2 = firrtl.wire interesting_name : !firrtl.bundle<x flip: bundle<a flip: uint, b: analog>>
     wire flip2 : { flip x : { flip a : UInt, b: Analog } }
-    ; CHECK: %flip3 = firrtl.wire : !firrtl.bundle<x flip: bundle<a flip: uint, b flip: analog>>
+    ; CHECK: %flip3 = firrtl.wire interesting_name : !firrtl.bundle<x flip: bundle<a flip: uint, b flip: analog>>
     wire flip3 : { flip x : { flip a : UInt, flip b: Analog } }
-    ; CHECK: %flip4 = firrtl.wire : !firrtl.bundle<x flip: vector<bundle<a flip: uint>, 4>>
+    ; CHECK: %flip4 = firrtl.wire interesting_name : !firrtl.bundle<x flip: vector<bundle<a flip: uint>, 4>>
     wire flip4 : { flip x : { flip a : UInt }[4] }
 
 
   ; CHECK-LABEL: firrtl.module private @expr_stmt_ambiguity(
   module expr_stmt_ambiguity :
-    ; CHECK: %reg = firrtl.wire : !firrtl.uint
+    ; CHECK: %reg = firrtl.wire interesting_name : !firrtl.uint
     wire reg : UInt
     ; CHECK: firrtl.connect %reg,
     reg <= UInt(42)
@@ -460,7 +460,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
   ; CHECK-LABEL: firrtl.module private @expr_stmt_ambiguity2(
   module expr_stmt_ambiguity2 :
-    ; CHECK: firrtl.instance write @circuit
+    ; CHECK: firrtl.instance write interesting_name @circuit
     inst write of circuit
     ; CHECK: firrtl.connect %write_in
     write.in <= UInt(1)
@@ -501,7 +501,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; Memory ports should be declared in the scope of the cmemory, but should
     ; be enabled at the location of the mport.
 
-    ; CHECK: %memory = chirrtl.seqmem Undefined  : !chirrtl.cmemory<vector<uint<1>, 9>, 256>
+    ; CHECK: %memory = chirrtl.seqmem interesting_name Undefined  : !chirrtl.cmemory<vector<uint<1>, 9>, 256>
     smem memory : UInt<1>[9] [256]
 
     ; CHECK: %xyz0_data, %xyz0_port = chirrtl.memoryport Read %memory {name = "xyz0"} : (!chirrtl.cmemory<vector<uint<1>, 9>, 256>) -> (!firrtl.vector<uint<1>, 9>, !chirrtl.cmemoryport)
@@ -512,12 +512,12 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
       read mport xyz0 = memory[addr], clock
 
     ; CHECK: firrtl.when %cond  {
-    ; CHECK:    %n0 = firrtl.node %xyz0_data  : !firrtl.vector<uint<1>, 9>
+    ; CHECK:    %n0 = firrtl.node interesting_name %xyz0_data  : !firrtl.vector<uint<1>, 9>
     ; CHECK: }
     when cond :
       node n0 = xyz0
 
-    ; CHECK: %n1 = firrtl.node %xyz0_data  : !firrtl.vector<uint<1>, 9>
+    ; CHECK: %n1 = firrtl.node interesting_name %xyz0_data  : !firrtl.vector<uint<1>, 9>
     node n1 = xyz0
 
 
@@ -526,27 +526,27 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     input cond : UInt<1>
 
     ; CHECK: [[CST15:%.+]] = firrtl.constant 15 : !firrtl.uint<4>
-    ; CHECK: %a = firrtl.node [[CST15]]
+    ; CHECK: %a = firrtl.node interesting_name [[CST15]]
     node a = UInt<4>(15)
-    ; CHECK: %b = firrtl.node [[CST15]]
+    ; CHECK: %b = firrtl.node interesting_name [[CST15]]
     node b = UInt<4>(15)
 
     ;; Constants always get emitted to the top level.
     ; CHECK: [[CST7:%.+]] = firrtl.constant 7 : !firrtl.uint<4>
     ; CHECK: firrtl.when %cond {
     when cond :
-      ; CHECK: %c = firrtl.node [[CST15]]
+      ; CHECK: %c = firrtl.node interesting_name [[CST15]]
       node c = UInt<4>(15)
-      ; CHECK: %d = firrtl.node [[CST7]]
+      ; CHECK: %d = firrtl.node interesting_name [[CST7]]
       node d = UInt<4>(7)
       ; CHECK: firrtl.when %cond {
       when cond :
-        ; CHECK:  %e = firrtl.node [[CST7]]
+        ; CHECK:  %e = firrtl.node interesting_name [[CST7]]
         node e = UInt<4>(7)
     ; CHECK: }
     ; CHECK: }
 
-    ; CHECK:  %f = firrtl.node [[CST15]]
+    ; CHECK:  %f = firrtl.node interesting_name [[CST15]]
     node f = UInt<4>(15)
     node g = UInt<4>(7)
 
@@ -559,12 +559,12 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; Subfields always get emitted by their declarations.
     ; CHECK: [[SUB:%.+]] = firrtl.subfield %i(0)
 
-    ; CHECK: %n3 = firrtl.node [[SUB]]
+    ; CHECK: %n3 = firrtl.node interesting_name [[SUB]]
     node n3 = i.x
 
     ; CHECK: firrtl.when %cond {
     when cond:
-      ; CHECK: %n4 = firrtl.node [[SUB]]
+      ; CHECK: %n4 = firrtl.node interesting_name [[SUB]]
       node n4 = i.x
     ; CHECK: }
 
@@ -581,7 +581,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   module flip_one :
     input bf: { flip int_1 : UInt<1>, int_out : UInt<2>}
     ; CHECK: %0 = firrtl.subfield %bf(0)
-    ; CHECK: %_T = firrtl.node droppable_name %0
+    ; CHECK: %_T = firrtl.node %0
     node _T = bf.int_1
     ; CHECK: firrtl.when %_T {
     when _T :
@@ -600,7 +600,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
       reader => io_deq_bits_MPORT
       writer => MPORT
       read-under-write => undefined
-      ; CHECK: %bar_MPORT, %bar_io_deq_bits_MPORT = firrtl.mem Undefined {depth = 1 : i64, name = "bar", portNames = ["MPORT", "io_deq_bits_MPORT"], readLatency = 0 : i32, writeLatency = 1 : i32} :
+      ; CHECK: %bar_MPORT, %bar_io_deq_bits_MPORT = firrtl.mem interesting_name Undefined {depth = 1 : i64, name = "bar", portNames = ["MPORT", "io_deq_bits_MPORT"], readLatency = 0 : i32, writeLatency = 1 : i32} :
       ; CHECK: !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<3>, mask: uint<1>>,
       ; CHECK: !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<3>>
 
@@ -637,7 +637,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   ; CHECK-LABEL: firrtl.module private @analog_in_aggregate_node
   module analog_in_aggregate_node:
     input a: { a: UInt<1>, b: Analog<1>}
-    ; CHECK: %b = firrtl.node %a : !firrtl.bundle<a: uint<1>, b: analog<1>>
+    ; CHECK: %b = firrtl.node interesting_name %a : !firrtl.bundle<a: uint<1>, b: analog<1>>
     node b = a
 
   ; Check that a register clock sink is converted to passive
@@ -646,7 +646,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     input clkIn: Clock
     output clkOut: Clock
     clkOut <= clkIn
-    ; CHECK: firrtl.reg %clkOut
+    ; CHECK: firrtl.reg interesting_name %clkOut
     reg r: UInt<1>, clkOut
 
   ; Check that a register reset sink is converted to passive
@@ -655,7 +655,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     input clk: Clock
     output rst: UInt<1>
     rst is invalid
-    ; CHECK: firrtl.regreset %clk, %rst
+    ; CHECK: firrtl.regreset interesting_name %clk, %rst
     reg r: UInt<1>, clk with : (reset => (rst, UInt<1>(0)))
 
   ; Check that a register init sink is converted to passive
@@ -665,7 +665,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     input rst: UInt<1>
     output init: UInt<1>
     init is invalid
-    ; CHECK: firrtl.regreset %clk, %rst, %init
+    ; CHECK: firrtl.regreset interesting_name %clk, %rst, %init
     reg r: UInt<1>, clk with : (reset => (rst, init))
 
   ; https://github.com/llvm/circt/issues/492
@@ -783,7 +783,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     wire2 is invalid
 
     ; https://github.com/llvm/circt/issues/563
-    ; CHECK: %U0_in0, %U0_in1, %U0_out0, %U0_out1 = firrtl.instance U0 @mod_0_563
+    ; CHECK: %U0_in0, %U0_in1, %U0_out0, %U0_out1 = firrtl.instance U0 interesting_name @mod_0_563
     inst U0 of mod_0_563
 
     ; CHECK: [[INV:%.+]] = firrtl.invalidvalue
@@ -819,7 +819,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     input rEn: UInt<1>
     output rData: UInt<8>
 
-    ; CHECK: %mem_r = firrtl.mem Undefined {depth = 16 : i64, name = "mem", portNames = ["r"], readLatency = 2 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>
+    ; CHECK: %mem_r = firrtl.mem interesting_name Undefined {depth = 16 : i64, name = "mem", portNames = ["r"], readLatency = 2 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>
     mem mem:
       data-type => UInt<8>
       depth => 16
@@ -840,15 +840,15 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     input in2: UInt<42>
     input en: UInt<1>
 
-    ; CHECK: %out1 = firrtl.node %in1
+    ; CHECK: %out1 = firrtl.node interesting_name %in1
     node out1 = validif(en, in1)
 
-    ; CHECK: %out2 = firrtl.node %in2
+    ; CHECK: %out2 = firrtl.node interesting_name %in2
     node out2 = validif(en, in2)
 
     ; This is required for SFC compatibility.
     ; https://github.com/llvm/circt/issues/1186
-    ; CHECK: %out3 = firrtl.node %in1
+    ; CHECK: %out3 = firrtl.node interesting_name %in1
     node out3 = validif(UInt<1>(0), in1)
 
   ; Test that behavioral memory reads and writes both work and that flow checks

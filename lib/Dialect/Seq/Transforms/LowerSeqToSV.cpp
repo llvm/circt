@@ -49,6 +49,9 @@ public:
     if (reg.sym_name().hasValue())
       svReg.inner_symAttr(reg.sym_nameAttr());
 
+    if (reg.svAttributes())
+      svReg.svAttributesAttr(reg.svAttributesAttr());
+
     auto regVal = rewriter.create<sv::ReadInOutOp>(loc, svReg);
     if (reg.reset() && reg.resetValue()) {
       rewriter.create<sv::AlwaysFFOp>(

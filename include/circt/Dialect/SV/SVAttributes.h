@@ -17,6 +17,4 @@
 #define GET_ATTRDEF_CLASSES
 #include "circt/Dialect/SV/SVAttributes.h.inc"
 
-#include "circt/Dialect/SV/SVStructs.h.inc"
-
 #endif // CIRCT_DIALECT_SV_SVATTRIBUTES_H

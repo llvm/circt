@@ -32,7 +32,7 @@ firrtl.circuit "Test" {
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
 
     // Trivial wire constant propagation.
-    %someWire = firrtl.wire : !firrtl.uint<1>
+    %someWire = firrtl.wire interesting_name : !firrtl.uint<1>
     firrtl.connect %someWire, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
 
     // CHECK: %someWire = firrtl.wire
@@ -42,7 +42,7 @@ firrtl.circuit "Test" {
 
     // Trivial wire special constant propagation.
     %c0_clock = firrtl.specialconstant 0 : !firrtl.clock
-    %clockWire = firrtl.wire : !firrtl.clock
+    %clockWire = firrtl.wire interesting_name : !firrtl.clock
     firrtl.connect %clockWire, %c0_clock : !firrtl.clock, !firrtl.clock
 
     // CHECK: %clockWire = firrtl.wire
@@ -571,5 +571,22 @@ firrtl.circuit "dntOutput" {
   firrtl.module private @foo(out %b: !firrtl.uint<3> ) attributes {portSyms = ["dntSym1"] } {
     %const = firrtl.constant 1 : !firrtl.uint<3>
     firrtl.connect %b, %const : !firrtl.uint<3>, !firrtl.uint<3>
+  }
+}
+
+// -----
+
+// An annotation should block removal of a wire, but should not block constant
+// folding.
+//
+// CHECK-LABEL: "AnnotationsBlockRemoval"
+firrtl.circuit "AnnotationsBlockRemoval"  {
+  firrtl.module @AnnotationsBlockRemoval(out %b: !firrtl.uint<1>) {
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    // CHECK: %w = firrtl.wire
+    %w = firrtl.wire droppable_name {annotations = [{class = "foo"}]} : !firrtl.uint<1>
+    firrtl.strictconnect %w, %c1_ui1 : !firrtl.uint<1>
+    // CHECK: firrtl.strictconnect %b, %c1_ui1
+    firrtl.strictconnect %b, %w : !firrtl.uint<1>
   }
 }

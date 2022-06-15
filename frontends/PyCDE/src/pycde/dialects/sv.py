@@ -2,5 +2,7 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from ._sv_ops_gen import *
-from mlir._mlir_libs._circt._sv import *
+from ..value import wrap_opviews_with_values
+from circt.dialects import sv
+
+wrap_opviews_with_values(sv, __name__)

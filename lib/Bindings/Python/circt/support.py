@@ -105,6 +105,10 @@ def type_to_pytype(t) -> ir.Type:
   except ValueError:
     pass
   try:
+    return hw.InOutType(t)
+  except ValueError:
+    pass
+  try:
     return esi.ChannelType(t)
   except ValueError:
     pass
