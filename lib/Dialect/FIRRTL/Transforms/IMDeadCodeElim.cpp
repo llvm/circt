@@ -96,8 +96,9 @@ void IMDeadCodeElimPass::markWireOrRegOrNode(Operation *op) {
 }
 
 void IMDeadCodeElimPass::markMemOp(MemOp mem) {
-  for (auto result : mem.getResults())
-    markAlive(result);
+  if (hasDontTouch(mem))
+    for (auto result : mem.getResults())
+      markAlive(result);
 }
 
 void IMDeadCodeElimPass::markUnknownSideEffectOp(Operation *op) {
@@ -247,6 +248,15 @@ void IMDeadCodeElimPass::visitValue(Value value) {
     return markAlive(modulePortVal);
   }
 
+  // Special handling of memory port op.
+  if (auto mem = value.getDefiningOp<MemOp>()) {
+    auto port = value.cast<mlir::OpResult>();
+    // If a read port is alive, then mark all results as alive.
+    if (mem.getPortKind(port.getResultNumber()) != MemOp::PortKind::Write)
+      llvm::for_each(mem.getResults(),
+                     [&](Value result) { markAlive(result); });
+  }
+
   // If op is defined by an operation, mark its operands as alive.
   if (auto op = value.getDefiningOp())
     for (auto operand : op->getOperands())
@@ -293,6 +303,17 @@ void IMDeadCodeElimPass::rewriteModuleBody(FModuleOp module) {
     // Delete dead wires, regs and nodes.
     if (isWireOrRegOrNode(&op) && isAssumedDead(op.getResult(0))) {
       LLVM_DEBUG(llvm::dbgs() << "DEAD: " << op << "\n";);
+      // Users should be already removed.
+      assert(op.use_empty() && "no user");
+      op.erase();
+      continue;
+    }
+
+    if (auto mem = dyn_cast<MemOp>(&op)) {
+      // If all results are dead, we can delete the memery.
+      if (llvm::any_of(mem.getResults(),
+                       [&](Value result) { return isKnownAlive(result); }))
+        continue;
       // Users should be already removed.
       assert(op.use_empty() && "no user");
       op.erase();

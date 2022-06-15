@@ -34,29 +34,32 @@ firrtl.circuit "top" {
 
   }
 
-  // CHECK-LABEL: firrtl.module private @mem(in %source: !firrtl.uint<1>) {
-  firrtl.module private @mem(in %source: !firrtl.uint<1>) {
+  // CHECK-LABEL: firrtl.module private @mem(in %source: !firrtl.uint<1>, out %dest: !firrtl.sint<8>) {
+  firrtl.module private @mem(in %source: !firrtl.uint<1>, out %dest: !firrtl.sint<8>) {
     // CHECK-NEXT: %ReadMemory_read0 = firrtl.mem Undefined {depth = 16 : i64, name = "ReadMemory", portNames = ["read0"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<8>>
     %mem = firrtl.mem Undefined {depth = 16 : i64, name = "ReadMemory", portNames = ["read0"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<8>>
     // CHECK-NEXT: %0 = firrtl.subfield %ReadMemory_read0(0) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<8>>) -> !firrtl.uint<4>
     // CHECK-NEXT: firrtl.connect %0, %source : !firrtl.uint<4>, !firrtl.uint<1>
-    // CHECK-NEXT: }
+    // CHECK: }
     %0 = firrtl.subfield %mem(0) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<8>>) -> !firrtl.uint<4>
     firrtl.connect %0, %source : !firrtl.uint<4>, !firrtl.uint<1>
+
+    %read = firrtl.subfield %mem(3) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<8>>) -> !firrtl.sint<8>
+    firrtl.connect %dest, %read : !firrtl.sint<8>, !firrtl.sint<8>
   }
 
   // Ports of public modules should not be modified.
-  // CHECK-LABEL: firrtl.module @top(in %source: !firrtl.uint<1>, out %dest: !firrtl.uint<1>, in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
-  firrtl.module @top(in %source: !firrtl.uint<1>, out %dest: !firrtl.uint<1>,
+  // CHECK-LABEL: firrtl.module @top(in %source: !firrtl.uint<1>, out %dest1: !firrtl.uint<1>, out %dest2: !firrtl.sint<8>, in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
+  firrtl.module @top(in %source: !firrtl.uint<1>, out %dest1: !firrtl.uint<1>, out %dest2: !firrtl.sint<8>,
                      in %clock:!firrtl.clock, in %reset:!firrtl.uint<1>) {
     // CHECK-NEXT: %tmp = firrtl.node droppable_name %source
-    // CHECK-NEXT: firrtl.strictconnect %dest, %tmp
+    // CHECK-NEXT: firrtl.strictconnect %dest1, %tmp
     %tmp = firrtl.node droppable_name %source: !firrtl.uint<1>
-    firrtl.strictconnect %dest, %tmp : !firrtl.uint<1>
+    firrtl.strictconnect %dest1, %tmp : !firrtl.uint<1>
 
     // TODO: Remove instances of empty modules.
     // CHECK-NEXT: firrtl.instance dead_module  @dead_module()
-    %source1, %dest1, %clock1, %reset1  = firrtl.instance dead_module @dead_module(in source: !firrtl.uint<1>, out dest: !firrtl.uint<1>, in clock:!firrtl.clock, in reset:!firrtl.uint<1>)
+    %source1, %dummy, %clock1, %reset1  = firrtl.instance dead_module @dead_module(in source: !firrtl.uint<1>, out dest: !firrtl.uint<1>, in clock:!firrtl.clock, in reset:!firrtl.uint<1>)
     firrtl.strictconnect %source1, %source : !firrtl.uint<1>
     firrtl.strictconnect %clock1, %clock : !firrtl.clock
     firrtl.strictconnect %reset1, %reset : !firrtl.uint<1>
@@ -70,10 +73,12 @@ firrtl.circuit "top" {
     firrtl.strictconnect %testDontTouch_source, %source : !firrtl.uint<1>
     firrtl.strictconnect %dead, %source : !firrtl.uint<1>
 
-    // CHECK-NEXT: %mem_source = firrtl.instance mem @mem(in source: !firrtl.uint<1>)
-    // CHECK-NEXT: firrtl.strictconnect %mem_source, %source : !firrtl.uint<1>
-    %mem_source  = firrtl.instance mem @mem(in source: !firrtl.uint<1>)
+    // CHECK-NEXT: %mem_source, %mem_dest = firrtl.instance mem @mem(in source: !firrtl.uint<1>, out dest: !firrtl.sint<8>)
+    // CHECK-NEXT: firrtl.strictconnect %mem_source, %source
+    // CHECK-NEXT: firrtl.strictconnect %dest2, %mem_dest
+    %mem_source, %mem_dest  = firrtl.instance mem @mem(in source: !firrtl.uint<1>, out dest: !firrtl.sint<8>)
     firrtl.strictconnect %mem_source, %source : !firrtl.uint<1>
+    firrtl.strictconnect %dest2, %mem_dest : !firrtl.sint<8>
     // CHECK-NEXT: }
   }
 }
