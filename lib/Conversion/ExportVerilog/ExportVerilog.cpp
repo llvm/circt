@@ -3003,24 +3003,21 @@ LogicalResult StmtEmitter::visitSV(GenerateCaseOp op) {
   for (size_t i = 0, e = patterns.size(); i < e; ++i) {
     auto &region = regions[i];
     assert(region.hasOneBlock());
+    Attribute patternAttr = patterns[i];
 
     indent();
-    emitter.printParamValue(
-        patterns[i], os, VerilogPrecedence::LowestPrecedence,
-        [&]() { return op->emitOpError("invalid case value"); });
+    if (patternAttr.getType().isa<NoneType>())
+      os << "default";
+    else
+      emitter.printParamValue(
+          patternAttr, os, VerilogPrecedence::LowestPrecedence,
+          [&]() { return op->emitOpError("invalid case value"); });
+
     StringRef legalName = legalizeName(
         caseNames[i].cast<StringAttr>().getValue(), usedNames, nextGenID);
     os << ": begin: " << legalName << "\n";
     emitStatementBlock(region.getBlocks().front());
     indent() << "end: " << legalName << "\n";
-  }
-
-  // Emit the default block, if given.
-  if (!op.defaultRegion().empty()) {
-    assert(op.defaultRegion().hasOneBlock());
-    indent() << "default: begin: " << op.defaultLabel() << "\n";
-    emitStatementBlock(op.defaultRegion().getBlocks().front());
-    indent() << "end: " << op.defaultLabel() << "\n";
   }
 
   reduceIndent();

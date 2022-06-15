@@ -21,7 +21,7 @@ hw.module @Case1<NUM : i8> () -> () {
       case (1 : i64, "case1") {
         hw.instance "print1" @PrintPath() -> ()
       }
-      default ("dflt") {
+      case (none, "dflt") {
         hw.instance "printDflt" @PrintPath() -> ()
       }
     ]
@@ -40,9 +40,10 @@ hw.module @Case1<NUM : i8> () -> () {
 // CHECK-NEXT:        case (1 : i64, "case1") {
 // CHECK-NEXT:          hw.instance "print1" @PrintPath() -> ()
 // CHECK-NEXT:        }
-// CHECK-NEXT:        default("dflt") {
+// CHECK-NEXT:        case (none, "dflt") {
 // CHECK-NEXT:          hw.instance "printDflt" @PrintPath() -> ()
-// CHECK-NEXT:        }]
+// CHECK-NEXT:        }
+// CHECK-NEXT:        ]
 // CHECK-NEXT:    }
 
 // SV-LABEL: module Case1

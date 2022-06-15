@@ -1710,8 +1710,7 @@ LogicalResult GenerateCaseOp::verify() {
     usedNames.insert(nameStr.getValue());
   }
 
-  if (defaultRegion().empty() ^ !defaultLabel().hasValue())
-    return emitOpError("Must specify default region and label or neither");
+  // mlir::FailureOr<Type> condType = evaluateParametricType();
 
   return success();
 }

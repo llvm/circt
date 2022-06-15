@@ -35,16 +35,13 @@ def GenerateCaseOp : SVOp<"generate.case",
   let summary = "A 'case' statement inside of a generate block";
   let description = "See SystemVerilog 2017 27.5.";
 
-  let regions = (region MaxSizedRegion<1>:$defaultRegion,
-                        VariadicRegion<SizedRegion<1>>:$caseRegions);
+  let regions = (region VariadicRegion<SizedRegion<1>>:$caseRegions);
   let arguments = (ins AnyAttr:$cond,
-                       ArrayAttr:$casePatterns, ArrayAttr:$caseNames,
-                       OptionalAttr<StrAttr>:$defaultLabel);
+                       ArrayAttr:$casePatterns, ArrayAttr:$caseNames);
 
   let assemblyFormat = [{
     $cond attr-dict `[`
       custom<CaseRegions>($casePatterns, $caseNames, $caseRegions)
-      ( `default` `(` $defaultLabel `)` $defaultRegion^)?
     `]`
   }];
 
