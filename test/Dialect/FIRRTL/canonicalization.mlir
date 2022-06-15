@@ -2371,5 +2371,18 @@ firrtl.module @Foo3319(in %i: !firrtl.uint<1>, out %o : !firrtl.uint<1>) {
   // CHECK: firrtl.strictconnect %o, %c0_ui1
 }
 
+// Check that canonicalizeSingleSetConnect doesn't remove a wire with an
+// Annotation on it.
+//
+// CHECK-LABEL: @AnnotationsBlockRemoval
+firrtl.module @AnnotationsBlockRemoval(
+  in %a: !firrtl.uint<1>,
+  out %b: !firrtl.uint<1>
+) {
+  // CHECK: %w = firrtl.wire
+  %w = firrtl.wire droppable_name {annotations = [{class = "Foo"}]} : !firrtl.uint<1>
+  firrtl.strictconnect %w, %a : !firrtl.uint<1>
+  firrtl.strictconnect %b, %w : !firrtl.uint<1>
+}
 
 }

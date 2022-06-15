@@ -34,7 +34,7 @@ static bool isDeletableWireOrReg(Operation *op) {
   if (auto wire = dyn_cast<WireOp>(op))
     if (!wire.hasDroppableName())
       return false;
-  return isWireOrReg(op) && !hasDontTouch(op);
+  return isWireOrReg(op) && AnnotationSet(op).empty() && !hasDontTouch(op);
 }
 
 //===----------------------------------------------------------------------===//

@@ -573,3 +573,20 @@ firrtl.circuit "dntOutput" {
     firrtl.connect %b, %const : !firrtl.uint<3>, !firrtl.uint<3>
   }
 }
+
+// -----
+
+// An annotation should block removal of a wire, but should not block constant
+// folding.
+//
+// CHECK-LABEL: "AnnotationsBlockRemoval"
+firrtl.circuit "AnnotationsBlockRemoval"  {
+  firrtl.module @AnnotationsBlockRemoval(out %b: !firrtl.uint<1>) {
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    // CHECK: %w = firrtl.wire
+    %w = firrtl.wire droppable_name {annotations = [{class = "foo"}]} : !firrtl.uint<1>
+    firrtl.strictconnect %w, %c1_ui1 : !firrtl.uint<1>
+    // CHECK: firrtl.strictconnect %b, %c1_ui1
+    firrtl.strictconnect %b, %w : !firrtl.uint<1>
+  }
+}
