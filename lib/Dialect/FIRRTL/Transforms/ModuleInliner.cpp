@@ -373,7 +373,8 @@ public:
 
   void setInnerSym(Attribute module, StringAttr innerSym) {
     assert(symIdx.count(module) && "Mutable NLA did not contain symbol");
-    assert(!renames.count(module) && "Module already renamed");
+    // The innerRef can be renamed multiple times, so this entry can be
+    // over-written.
     renames.insert({module, innerSym});
   }
 };
