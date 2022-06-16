@@ -1,10 +1,8 @@
 # RUN: py-split-input-file %s | FileCheck %s
 
-# PSIF: HEADER START
 from pycde import System, Input, module, generator
 from pycde.pycde_types import types, dim
 from pycde.matrix import Matrix
-# PSIF: HEADER END
 
 # Missing assignment
 
