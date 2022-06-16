@@ -213,10 +213,8 @@ class Matrix(np.ndarray):
     if default_driver:
       if default_driver.type != self.pycde_dtype:
         raise ValueError(
-            f"Default driver {default_driver} is not of type {dtype}."
-        )
+            f"Default driver {default_driver} is not of type {dtype}.")
       self.assign_default_driver(default_driver)
-
 
     # Check that the entire matrix has been assigned. If not, an exception is
     # thrown.
