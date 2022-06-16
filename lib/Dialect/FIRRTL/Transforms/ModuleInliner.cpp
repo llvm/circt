@@ -745,7 +745,7 @@ void Inliner::cloneAndRename(
               // The HierPathOp name might not match, if it is duplicated after
               // being retopped. Get all the retopped HierPathOp names.
               for (auto renamedTops : nlaMap[old].getAdditionalSymbols())
-                if (old == renamedTops.getName())
+                if (renamedTops.getName() == nlaAtInlineLoc)
                   validHierPaths.push_back(old);
         }
     }
