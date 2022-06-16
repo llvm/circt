@@ -104,7 +104,7 @@ static void printNameKind(OpAsmPrinter &p, Operation *op,
                           firrtl::NameKindEnumAttr attr,
                           ArrayRef<StringRef> extraElides = {}) {
   if (attr.getValue() != NameKindEnum::DroppableName)
-    p << stringifyNameKindEnum(attr.getValue()) << ' ';
+    p << stringifyNameKindEnum(attr.getValue());
 }
 
 //===----------------------------------------------------------------------===//
