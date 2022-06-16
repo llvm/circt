@@ -215,17 +215,11 @@ void HandshakeLowering::setBlockEntryControl(Block *block, Value v) {
   blockEntryControlMap[block] = v;
 }
 
-/// Remove basic blocks inside the given FuncOp. This allows the result to be
-/// a valid graph region, since multi-basic block regions are not allowed to
-/// be graph regions currently.
-static void removeBasicBlocks(handshake::FuncOp funcOp) {
-  if (funcOp.isExternal())
-    return; // nothing to do, external funcOp.
-
-  auto &entryBlock = funcOp.getBody().front().getOperations();
+void handshake::removeBasicBlocks(Region &r) {
+  auto &entryBlock = r.front().getOperations();
 
   // Erase all TerminatorOp, and move ReturnOp to the end of entry block.
-  for (auto &block : funcOp) {
+  for (auto &block : r) {
     Operation &termOp = block.back();
     if (isa<handshake::TerminatorOp>(termOp))
       termOp.erase();
@@ -234,10 +228,10 @@ static void removeBasicBlocks(handshake::FuncOp funcOp) {
   }
 
   // Move all operations to entry block and erase other blocks.
-  for (auto &block : llvm::make_early_inc_range(llvm::drop_begin(funcOp, 1))) {
+  for (auto &block : llvm::make_early_inc_range(llvm::drop_begin(r, 1))) {
     entryBlock.splice(--entryBlock.end(), block.getOperations());
   }
-  for (auto &block : llvm::make_early_inc_range(llvm::drop_begin(funcOp, 1))) {
+  for (auto &block : llvm::make_early_inc_range(llvm::drop_begin(r, 1))) {
     block.clear();
     block.dropAllDefinedValueUses();
     for (size_t i = 0; i < block.getNumArguments(); i++) {
@@ -245,6 +239,13 @@ static void removeBasicBlocks(handshake::FuncOp funcOp) {
     }
     block.erase();
   }
+}
+
+void removeBasicBlocks(handshake::FuncOp funcOp) {
+  if (funcOp.isExternal())
+    return; // nothing to do, external funcOp.
+
+  removeBasicBlocks(funcOp.getBody());
 }
 
 static HandshakeLowering::BlockValues getBlockUses(Region &f) {

@@ -202,6 +202,11 @@ LogicalResult lowerRegion(HandshakeLowering &hl, bool sourceConstants,
   return success();
 }
 
+/// Remove basic blocks inside the given region. This allows the result to be
+/// a valid graph region, since multi-basic block regions are not allowed to
+/// be graph regions currently.
+void removeBasicBlocks(Region &r);
+
 } // namespace handshake
 
 std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>
