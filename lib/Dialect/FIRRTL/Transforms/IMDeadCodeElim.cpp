@@ -140,8 +140,7 @@ void IMDeadCodeElimPass::markInstanceOp(InstanceOp instance) {
 
   // Ok, it is a normal internal module reference so populate
   // resultPortToInstanceResultMapping.
-  for (size_t resultNo = 0, e = instance.getNumResults(); resultNo != e;
-       ++resultNo) {
+  for (auto resultNo : llvm::seq(0u, instance.getNumResults())) {
     auto instancePortVal = instance.getResult(resultNo);
 
     // Otherwise we have a result from the instance.  We need to forward results
@@ -280,8 +279,7 @@ void IMDeadCodeElimPass::rewriteModuleBody(FModuleOp module) {
     // Delete dead wires, regs and nodes.
     if (isWireOrRegOrNode(&op) && isAssumedDead(op.getResult(0))) {
       LLVM_DEBUG(llvm::dbgs() << "DEAD: " << op << "\n";);
-      // Users should be already removed.
-      assert(op.use_empty() && "no user");
+      assert(op.use_empty() && "users should be already removed");
       op.erase();
       continue;
     }
