@@ -174,7 +174,6 @@ class Matrix(np.ndarray):
     # - struct access for structs
     # This issue, however, is a more general one, since we don't currently
     # support lhs assignment of PyCDE Value's, which would be require for this.
-    # When these accesses occur, we should:
 
     # Infer the target shape based on the access to the numpy array.
     # circt_to_arr will then try to convert the value to this shape.
@@ -188,7 +187,7 @@ class Matrix(np.ndarray):
       raise ValueError(f"Unassigned sub-matrices: {unassigned}")
 
   def to_circt(self, create_wire=True, dtype=None):
-    """Materializes this matrix to CIRCT array_create operations.
+    """Materializes this matrix to a ListValue through hw.array_create operations.
     
     if 'create_wire' is True, the matrix will be materialized to an sv.wire operation
     and the returned value will be a read-only reference to the wire.
@@ -202,9 +201,13 @@ class Matrix(np.ndarray):
     if dtype == None:
       dtype = self.pycde_dtype
 
+    # Check that the entire matrix has been assigned. If not, an exception is
+    # thrown.
     self.check_is_fully_assigned()
 
     def build_subarray(lstOrVal):
+      # Recursively converts this matrix into ListValues through hw.array_create
+      # operations.
       if not isinstance(lstOrVal, BitVectorValue):
         subarrays = [build_subarray(v) for v in lstOrVal]
         return hw.ArrayCreateOp(subarrays)
