@@ -182,11 +182,16 @@ class Matrix(np.ndarray):
 
   def check_is_fully_assigned(self):
     """ Checks that all sub-matrices have been fully assigned. """
-    unassigned = np.where(self == None)
-    if len(unassigned[0]) > 0:
-      raise ValueError(f"Unassigned sub-matrices: {unassigned}")
+    unassigned = np.argwhere(self == None)
+    if len(unassigned) > 0:
+      raise ValueError(f"Unassigned sub-matrices: \n{unassigned}")
 
-  def to_circt(self, create_wire=True, dtype=None):
+  def assign_default_driver(self, value):
+    """Assigns a default driver to any unassigned value in the matrix"""
+    for arg in np.argwhere(self == None):
+      super().__setitem__(tuple(arg), value)
+
+  def to_circt(self, create_wire=True, dtype=None, default_driver=None):
     """Materializes this matrix to a ListValue through hw.array_create operations.
     
     if 'create_wire' is True, the matrix will be materialized to an sv.wire operation
@@ -194,12 +199,24 @@ class Matrix(np.ndarray):
     This wire acts as a barrier in CIRCT to prevent dataflow optimizations
     from reordering/optimizing the materialization of the matrix, which might
     reduce debugability.
+
+    If default_driver is set, any unassigned value will be assigned to this. The
+    default driver is expected to be of equal type as the dtype of this matrix.
+
     """
     if self.circt_output:
       return self.circt_output
 
     if dtype == None:
       dtype = self.pycde_dtype
+
+    if default_driver:
+      if default_driver.type != self.pycde_dtype:
+        raise ValueError(
+            f"Default driver {default_driver} is not of type {dtype}."
+        )
+      self.assign_default_driver(default_driver)
+
 
     # Check that the entire matrix has been assigned. If not, an exception is
     # thrown.
