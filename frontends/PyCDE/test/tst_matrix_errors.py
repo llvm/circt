@@ -36,7 +36,7 @@ class M1:
   @generator
   def build(ports):
     m = Matrix((32), dtype=types.i32, name='m1')
-    # CHECK: ValueError: Width mismatch between provided BitVectorValue and target shape.
+    # CHECK: ValueError: Width mismatch between provided BitVectorValue (i33) and target shape (i32).
     m[0] = ports.in1
 
 
@@ -71,7 +71,7 @@ class M1:
   @generator
   def build(ports):
     m = Matrix((32, 32), dtype=types.i1, name='m1')
-    # CHECK: ValueError: Width mismatch between provided BitVectorValue and target shape.
+    # CHECK: ValueError: Width mismatch between provided BitVectorValue (i31) and target shape ([32]i1).
     m[0] = ports.in1
 
 

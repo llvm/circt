@@ -26,9 +26,12 @@ class TargetShape:
   @property
   def type(self):
     if len(self.dims) != 0:
-      return dim(self.pycde_dtype, *self.dims)
+      return dim(self.dtype, *self.dims)
     else:
-      return self.pycde_dtype
+      return self.dtype
+
+  def __str__(self):
+    return str(self.type)
 
 
 class Matrix(np.ndarray):
@@ -36,7 +39,7 @@ class Matrix(np.ndarray):
   A PyCDE Matrix serves as a Numpy view of a multidimensional CIRCT array (ArrayType).
   The Matrix ensures that all assignments to itself have been properly converted
   to conform with insertion into the numpy array (circt_to_arr).
-  Once filles, a user can use all the usual numpy array operations on the Matrix.
+  Once filled, a user can treat the Matrix as a numpy array.
   The underlying CIRCT array is not materialized until to_circt is called.
   """
 
@@ -116,7 +119,8 @@ class Matrix(np.ndarray):
                            1) * target_shape.dtype.width
       if target_shape_bits != value.type.width:
         raise ValueError(
-            "Width mismatch between provided BitVectorValue and target shape.")
+            f"Width mismatch between provided BitVectorValue ({value.type}) and target shape ({target_shape.type})."
+        )
 
       # Extract to the target type
       n = len(value) / target_shape.dtype.width
