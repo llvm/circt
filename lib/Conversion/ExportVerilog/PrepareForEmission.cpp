@@ -17,10 +17,13 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "../PassDetail.h"
 #include "ExportVerilogInternals.h"
+#include "circt/Conversion/ExportVerilog.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Support/LoweringOptions.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/IR/Threading.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 
@@ -669,4 +672,29 @@ void ExportVerilog::prepareHWModule(Block &block,
       lowerUsersToTemporaryWire(op);
     }
   }
+}
+
+namespace {
+
+struct PrepareForEmissionPass
+    : public PrepareForEmissionBase<PrepareForEmissionPass> {
+  PrepareForEmissionPass() {}
+  void runOnOperation() override {
+    auto module = getOperation();
+    // Make sure LoweringOptions are applied to the module if it was overridden
+    // on the command line.
+    // TODO: This should be moved up to circt-opt and circt-translate.
+    applyLoweringCLOptions(module);
+    LoweringOptions options(module);
+
+    parallelForEach(module->getContext(), module.getOps<HWModuleOp>(),
+                    [&](HWModuleOp hwmodule) {
+                      prepareHWModule(*hwmodule.getBodyBlock(), options);
+                    });
+  }
+};
+} // end anonymous namespace
+
+std::unique_ptr<mlir::Pass> circt::createPrepareForEmissionPass() {
+  return std::make_unique<PrepareForEmissionPass>();
 }
