@@ -459,9 +459,13 @@ private:
   /// referring to some other path.
   bool doesNLAMatchCurrentPath(HierPathOp nla);
 
-  /// Rename an operation and unique any symbols it has.
-  void rename(StringRef prefix, Operation *op,
-              ModuleNamespace &moduleNamespace);
+  /// Rename an operation and unique any symbols it has. If the op is an
+  /// InstanceOp, then `validHierPaths` is the set of HierPaths that the
+  /// InstanceOp participates in. `validHierPaths` is required, since the
+  /// InstanceOp no longer contains the BreadCrumbs which indicated the
+  /// `HierPathOps` that it participates in.
+  void rename(StringRef prefix, Operation *op, ModuleNamespace &moduleNamespace,
+              SmallVector<StringAttr> &validHierPaths);
 
   /// Clone and rename an operation.
   void cloneAndRename(StringRef prefix, OpBuilder &b,
@@ -567,7 +571,8 @@ bool Inliner::doesNLAMatchCurrentPath(HierPathOp nla) {
 /// these are unique in the namespace.
 // NOLINTNEXTLINE(misc-no-recursion)
 void Inliner::rename(StringRef prefix, Operation *op,
-                     ModuleNamespace &moduleNamespace) {
+                     ModuleNamespace &moduleNamespace,
+                     SmallVector<StringAttr> &validHierPaths) {
   // Add a prefix to things that has a "name" attribute.  We don't prefix
   // memories since it will affect the name of the generated module.
   // TODO: We should find a way to prefix the instance of a memory module.
@@ -610,8 +615,7 @@ void Inliner::rename(StringRef prefix, Operation *op,
         // The InstanceOp is renamed, so move the HierPathOps to the new
         // InnerRefAttr.
         auto newInnerRef = InnerRefAttr::get(instanceParent, newSymAttr);
-        auto oldInnerRef = InnerRefAttr::get(instanceParent, oldInstSym);
-        instOpHierPaths[newInnerRef] = std::move(instOpHierPaths[oldInnerRef]);
+        instOpHierPaths[newInnerRef] = validHierPaths;
         // Update the innerSym for all the affected HierPathOps.
         for (auto nla : instOpHierPaths[newInnerRef]) {
           if (!nlaMap.count(nla))
@@ -619,6 +623,7 @@ void Inliner::rename(StringRef prefix, Operation *op,
           auto &mnla = nlaMap[nla];
           mnla.setInnerSym(moduleNamespace.module.moduleNameAttr(), newSymAttr);
         }
+        auto oldInnerRef = InnerRefAttr::get(instanceParent, oldInstSym);
         instOpHierPaths.erase(oldInnerRef);
       }
     }
@@ -628,7 +633,7 @@ void Inliner::rename(StringRef prefix, Operation *op,
   for (auto &region : op->getRegions())
     for (auto &block : region)
       for (auto &op : block)
-        rename(prefix, &op, moduleNamespace);
+        rename(prefix, &op, moduleNamespace, validHierPaths);
 }
 
 /// This function is used before inlining a module, to handle the conversion
@@ -711,16 +716,40 @@ void Inliner::cloneAndRename(
 
   // Clone and rename.
   auto *newOp = b.clone(op, mapper);
+  // List of HierPathOps that are valid based on the InstanceOp being inlined
+  // and the InstanceOp which is being replaced after inlining. That is the set
+  // of HierPathOps that is common between these two.
+  SmallVector<StringAttr> validHierPaths;
   if (auto instance = dyn_cast<InstanceOp>(&op))
     if (auto instSym = instance.inner_symAttr()) {
+      // Get the innerRef to the original InstanceOp that is being inlined here.
       auto oldInnerRef = InnerRefAttr::get(
           instance->getParentOfType<FModuleOp>().getNameAttr(), instSym);
-      auto newInnerRef =
-          InnerRefAttr::get(newOp->getParentOfType<FModuleOp>().getNameAttr(),
-                            cast<InstanceOp>(newOp).inner_symAttr());
-      instOpHierPaths[newInnerRef] = instOpHierPaths[oldInnerRef];
+      // Now get the currentPath, where this InstanceOp is being inlined.
+      auto &[inlineMod, inlineInst] = currentPath.back();
+      // Only the HierPathOps that participate at both the
+      // InstanceOp(`instance`) being inlined and at the place being
+      // inlined(inlineMod, inlineInst) must be valid after inlining.
+      if (inlineMod && inlineInst)
+        for (auto nlaAtInlineLoc : instOpHierPaths[InnerRefAttr::get(
+                 inlineMod.cast<StringAttr>(),
+                 inlineInst.cast<StringAttr>())]) {
+          // For all the HierPathOps that participate at the current path,
+          // inlining location.
+          for (auto old : instOpHierPaths[oldInnerRef])
+            // For all the HierPathOps that the instance being inlined
+            // participates in.
+            if (old == nlaAtInlineLoc)
+              validHierPaths.push_back(old);
+            else
+              // The HierPathOp name might not match, if it is duplicated after
+              // being retopped. Get all the retopped HierPathOp names.
+              for (auto renamedTops : nlaMap[old].getAdditionalSymbols())
+                if (renamedTops.getName() == nlaAtInlineLoc)
+                  validHierPaths.push_back(old);
+        }
     }
-  rename(prefix, newOp, moduleNamespace);
+  rename(prefix, newOp, moduleNamespace, validHierPaths);
   if (isa<InstanceOp>(&op)) {
     auto innerRef =
         InnerRefAttr::get(newOp->getParentOfType<FModuleOp>().getNameAttr(),
@@ -892,6 +921,33 @@ void Inliner::inlineInto(StringRef prefix, OpBuilder &b,
       }
     }
 
+    // The InstanceOp `instance` might not have a symbol, if it does not
+    // participate in any HierPathOp. But the reTop might add a symbol to it, if
+    // a HierPathOp is is added to this Op. If we're about to inline a module
+    // that contains a non-local annotation that starts at that module, then we
+    // need to both update the mutable NLA to indicate that this has a new top
+    // and add an annotation on the instance saying that this now participates
+    // in this new NLA.
+    DenseMap<Attribute, Attribute> symbolRenames;
+    if (!rootMap[target.getNameAttr()].empty()) {
+      for (auto sym : rootMap[target.getNameAttr()]) {
+        auto &mnla = nlaMap[sym];
+        sym = mnla.reTop(parent);
+        StringAttr instSym = instance.inner_symAttr();
+        if (!instSym) {
+          instSym = StringAttr::get(context,
+                                    moduleNamespace.newName(instance.name()));
+          instance.inner_symAttr(instSym);
+        }
+        instOpHierPaths[InnerRefAttr::get(moduleName, instSym)].push_back(
+            sym.cast<StringAttr>());
+        // TODO: Update any symbol renames which need to be used by the next
+        // call of inlineInto.  This will then check each instance and rename
+        // any symbols appropriately for that instance.
+        symbolRenames.insert({mnla.getNLA().getNameAttr(), sym});
+      }
+    }
+    // This must be done after the reTop, since it might introduce an innerSym.
     currentPath.emplace_back(moduleName, instance.inner_symAttr());
 
     // Create the wire mapping for results + ports.
@@ -899,22 +955,6 @@ void Inliner::inlineInto(StringRef prefix, OpBuilder &b,
     auto wires =
         mapPortsToWires(nestedPrefix, b, mapper, target, {}, moduleNamespace);
     mapResultsToWires(mapper, wires, instance);
-
-    // If we're about to inline a module that contains a non-local annotation
-    // that starts at that module, then we need to both update the mutable NLA
-    // to indicate that this has a new top and add an annotation on the instance
-    // saying that this now participates in this new NLA.
-    DenseMap<Attribute, Attribute> symbolRenames;
-    if (!rootMap[target.getNameAttr()].empty()) {
-      for (auto sym : rootMap[target.getNameAttr()]) {
-        auto &mnla = nlaMap[sym];
-        sym = mnla.reTop(parent);
-        // TODO: Update any symbol renames which need to be used by the next
-        // call of inlineInto.  This will then check each instance and rename
-        // any symbols appropriately for that instance.
-        symbolRenames.insert({mnla.getNLA().getNameAttr(), sym});
-      }
-    }
 
     // Inline the module, it can be marked as flatten and inline.
     if (toBeFlattened) {
@@ -968,8 +1008,30 @@ void Inliner::inlineInstances(FModuleOp parent) {
       }
     }
 
+    // The InstanceOp `instance` might not have a symbol, if it does not
+    // participate in any HierPathOp. But the reTop might add a symbol to it, if
+    // a HierPathOp is is added to this Op.
+    DenseMap<Attribute, Attribute> symbolRenames;
+    if (!rootMap[target.getNameAttr()].empty()) {
+      for (auto sym : rootMap[target.getNameAttr()]) {
+        auto &mnla = nlaMap[sym];
+        sym = mnla.reTop(parent);
+        StringAttr instSym = instance.inner_symAttr();
+        if (!instSym) {
+          instSym = StringAttr::get(context,
+                                    moduleNamespace.newName(instance.name()));
+          instance.inner_symAttr(instSym);
+        }
+        instOpHierPaths[InnerRefAttr::get(moduleName, instSym)].push_back(
+            sym.cast<StringAttr>());
+        // TODO: Update any symbol renames which need to be used by the next
+        // call of inlineInto.  This will then check each instance and rename
+        // any symbols appropriately for that instance.
+        symbolRenames.insert({mnla.getNLA().getNameAttr(), sym});
+      }
+    }
+    // This must be done after the reTop, since it might introduce an innerSym.
     currentPath.emplace_back(moduleName, instance.inner_symAttr());
-
     // Create the wire mapping for results + ports. We RAUW the results instead
     // of mapping them.
     BlockAndValueMapping mapper;
@@ -979,18 +1041,6 @@ void Inliner::inlineInstances(FModuleOp parent) {
         mapPortsToWires(nestedPrefix, b, mapper, target, {}, moduleNamespace);
     for (unsigned i = 0, e = instance.getNumResults(); i < e; ++i)
       instance.getResult(i).replaceAllUsesWith(wires[i]);
-
-    DenseMap<Attribute, Attribute> symbolRenames;
-    if (!rootMap[target.getNameAttr()].empty()) {
-      for (auto sym : rootMap[target.getNameAttr()]) {
-        auto &mnla = nlaMap[sym];
-        sym = mnla.reTop(parent);
-        // TODO: Update any symbol renames which need to be used by the next
-        // call of inlineInto.  This will then check each instance and rename
-        // any symbols appropriately for that instance.
-        symbolRenames.insert({mnla.getNLA().getNameAttr(), sym});
-      }
-    }
 
     // Inline the module, it can be marked as flatten and inline.
     if (toBeFlattened) {
