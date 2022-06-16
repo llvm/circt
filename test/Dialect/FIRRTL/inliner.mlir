@@ -755,18 +755,12 @@ firrtl.circuit "Issue3334_flatten" {
 }
 
 firrtl.circuit "instNameRename"  {
-  firrtl.hierpath @nla_5560 [@instNameRename::@bar0, @Bar0::@w, @Bar2::@w, @Bar1::@a]
-  // CHECK:  firrtl.hierpath @nla_5560 [@instNameRename::@[[w_1:.+]], @Bar2::@w, @Bar1::@a]
-  firrtl.hierpath @nla_5560_1 [@instNameRename::@bar1, @Bar0::@w, @Bar2::@w, @Bar1::@a]
-  // CHECK:  firrtl.hierpath @nla_5560_1 [@instNameRename::@[[w_2:.+]], @Bar2::@w, @Bar1::@a]
-
-  firrtl.module @Leaf() {
-    %w = firrtl.wire   : !firrtl.uint<8>
-    %inv = firrtl.invalidvalue : !firrtl.uint<8>
-    firrtl.strictconnect %w, %inv : !firrtl.uint<8>
-  }
+  firrtl.hierpath @nla_5560 [@instNameRename::@bar0, @Bar0::@w, @Bar2::@w, @Bar1]
+  // CHECK:  firrtl.hierpath @nla_5560 [@instNameRename::@[[w_1:.+]], @Bar2::@w, @Bar1]
+  firrtl.hierpath @nla_5560_1 [@instNameRename::@bar1, @Bar0::@w, @Bar2::@w, @Bar1]
+  // CHECK:  firrtl.hierpath @nla_5560_1 [@instNameRename::@[[w_2:.+]], @Bar2::@w, @Bar1]
   firrtl.module @Bar1() {
-    firrtl.instance leaf sym @a  {annotations = [{circt.nonlocal = @nla_5560, class = "test0"},{circt.nonlocal = @nla_5560_1, class = "test1"}]} @Leaf()
+    %w = firrtl.wire   {annotations = [{circt.nonlocal = @nla_5560, class = "test0"}, {circt.nonlocal = @nla_5560_1, class = "test1"}]} : !firrtl.uint<8>
   }
   firrtl.module @Bar2() {
     firrtl.instance leaf sym @w  @Bar1()
@@ -775,47 +769,11 @@ firrtl.circuit "instNameRename"  {
     firrtl.instance leaf sym @w  @Bar2()
   }
   firrtl.module @instNameRename() {
-    firrtl.instance no sym @no @Bar0()
+    firrtl.instance no sym @no  @Bar0()
     firrtl.instance bar0 sym @bar0  @Bar0()
     firrtl.instance bar1 sym @bar1  @Bar0()
     // CHECK:  firrtl.instance bar0_leaf sym @[[w_1]]  @Bar2()
     // CHECK:  firrtl.instance bar1_leaf sym @[[w_2]]  @Bar2()
-
     %w = firrtl.wire sym @w   : !firrtl.uint<8>
-    %inv = firrtl.invalidvalue : !firrtl.uint<8>
-    firrtl.strictconnect %w, %inv : !firrtl.uint<8>
-  }
-}
-
-firrtl.circuit "instNameRename"  {
-  firrtl.hierpath @nla_5560 [@instNameRename::@bar0, @Bar0::@w, @Bar2::@w, @Bar1::@a]
-  // CHECK:  firrtl.hierpath @nla_5560 [@instNameRename::@[[w_1:.+]], @Bar2::@w, @Bar1::@a]
-  firrtl.hierpath @nla_5560_1 [@instNameRename::@bar1, @Bar0::@w, @Bar2::@w, @Bar1::@a]
-  // CHECK:  firrtl.hierpath @nla_5560_1 [@instNameRename::@[[w_2:.+]], @Bar2::@w, @Bar1::@a]
-
-  firrtl.module @Leaf() {
-    %w = firrtl.wire   : !firrtl.uint<8>
-    %inv = firrtl.invalidvalue : !firrtl.uint<8>
-    firrtl.strictconnect %w, %inv : !firrtl.uint<8>
-  }
-  firrtl.module @Bar1() {
-    firrtl.instance leaf sym @a  {annotations = [{circt.nonlocal = @nla_5560, class = "test0"},{circt.nonlocal = @nla_5560_1, class = "test1"}]} @Leaf()
-  }
-  firrtl.module @Bar2() {
-    firrtl.instance leaf sym @w  @Bar1()
-  }
-  firrtl.module @Bar0() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
-    firrtl.instance leaf sym @w  @Bar2()
-  }
-  firrtl.module @instNameRename() {
-    firrtl.instance no sym @no @Bar0()
-    firrtl.instance bar0 sym @bar0  @Bar0()
-    firrtl.instance bar1 sym @bar1  @Bar0()
-    // CHECK:  firrtl.instance bar0_leaf sym @[[w_1]]  @Bar2()
-    // CHECK:  firrtl.instance bar1_leaf sym @[[w_2]]  @Bar2()
-
-    %w = firrtl.wire sym @w   : !firrtl.uint<8>
-    %inv = firrtl.invalidvalue : !firrtl.uint<8>
-    firrtl.strictconnect %w, %inv : !firrtl.uint<8>
   }
 }

@@ -462,7 +462,7 @@ private:
   /// Rename an operation and unique any symbols it has. If the op is an
   /// InstanceOp, then `validHierPaths` is the set of HierPaths that the
   /// InstanceOp participates in. `validHierPaths` is required, since the
-  /// InstanceOp no  longer contains the BreadCrumbs which indicated the
+  /// InstanceOp no longer contains the BreadCrumbs which indicated the
   /// `HierPathOps` that it participates in.
   void rename(StringRef prefix, Operation *op, ModuleNamespace &moduleNamespace,
               SmallVector<StringAttr> &validHierPaths);
