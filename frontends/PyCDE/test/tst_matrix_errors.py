@@ -10,7 +10,7 @@ from pycde.matrix import Matrix
 @module
 class M1:
   in1 = Input(types.i32)
-
+# 
   @generator
   def build(ports):
     m = Matrix((10), dtype=types.i32, name='m1')
