@@ -23,7 +23,7 @@ declare_mlir_python_sources(PyCDESources
     pycde/devicedb.py
     pycde/instance.py
     pycde/value.py
-    pycde/matrix.py
+    pycde/ndarray.py
 )
 
 add_mlir_python_modules(PyCDE
