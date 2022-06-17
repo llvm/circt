@@ -678,7 +678,8 @@ namespace {
 
 struct PrepareForEmissionPass
     : public PrepareForEmissionBase<PrepareForEmissionPass> {
-  PrepareForEmissionPass() {} void runOnOperation() override {
+  PrepareForEmissionPass() {}
+  void runOnOperation() override {
     HWModuleOp module = getOperation();
     LoweringOptions options = getLoweringCLIOption(
         cast<mlir::ModuleOp>(module->getParentOp()),
