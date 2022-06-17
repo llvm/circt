@@ -109,9 +109,9 @@ PyCDE Values are how PyCDE supports named access to module input and output port
 
 #### ListValues and NumPy features
 
-PyCDE supports a subset of numpy array transformations (see `pycde/matrix.py`) that can be used to do complex reshaping and transformation of multidimensional arrays.
+PyCDE supports a subset of numpy array transformations (see `pycde/ndarray.py`) that can be used to do complex reshaping and transformation of multidimensional arrays.
 
-The numpy functionality is provided by the `Matrix` class, which creates a view on top of existing SSA values. Users may choose to perform transformations directly on `ListValue`s:
+The numpy functionality is provided by the `NDArray` class, which creates a view on top of existing SSA values. Users may choose to perform transformations directly on `ListValue`s:
 
 ```python
 @module
@@ -128,7 +128,7 @@ class M1:
     #  .reshape(16, 2).to_circt()
 ```
 
-or manually manage a `Matrix` object.
+or manually manage a `NDArray` object.
 
 ```python
 @module
@@ -138,15 +138,15 @@ class M1:
 
   @generator
   def build(ports):
-    m = Matrix(from_value=ports.in1).transpose((1, 0)).reshape((16, 2))
+    m = NDArray(from_value=ports.in1).transpose((1, 0)).reshape((16, 2))
     ports.out = m.to_circt()
 ```
 
-Manually managing the Matrix object allows for postponing matrix materialization (`to_circt()`) until all transformations have been applied.
+Manually managing the NDArray object allows for postponing materialization (`to_circt()`) until all transformations have been applied.
 In short, this allows us to do as many transformations as possible in software, before emitting IR.
 Note however, that this might reduce debugability of the generated hardware due to the lack of `sv.wire`s in between each matrix transformation.
 
-For further usage examples, see `PyCDE/test/tst_matrix.py`.
+For further usage examples, see `PyCDE/test/test_ndarray.py`, and inspect `ListValue` in `pycde/value.py` for the full list of implemented numpy functions.
 
 ### Instantiating Modules
 
