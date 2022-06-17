@@ -14,6 +14,7 @@ import mlir.ir as ir
 from functools import singledispatchmethod
 from typing import Union
 import re
+import numpy as np
 
 
 class Value:
@@ -265,28 +266,41 @@ class ListValue(Value):
   """
 
   def transpose(self, *args, **kwargs):
-    from .matrix import Matrix
-    return Matrix(from_value=self).transpose(*args, **kwargs).to_circt()
+    from .ndarray import NDArray
+    return NDArray(from_value=self).transpose(*args, **kwargs).to_circt()
 
   def reshape(self, *args, **kwargs):
-    from .matrix import Matrix
-    return Matrix(from_value=self).reshape(*args, **kwargs).to_circt()
+    from .ndarray import NDArray
+    return NDArray(from_value=self).reshape(*args, **kwargs).to_circt()
 
   def flatten(self, *args, **kwargs):
-    from .matrix import Matrix
-    return Matrix(from_value=self).flatten(*args, **kwargs).to_circt()
+    from .ndarray import NDArray
+    return NDArray(from_value=self).flatten(*args, **kwargs).to_circt()
 
   def moveaxis(self, *args, **kwargs):
-    from .matrix import Matrix
-    return Matrix(from_value=self).moveaxis(*args, **kwargs).to_circt()
+    from .ndarray import NDArray
+    return NDArray(from_value=self).moveaxis(*args, **kwargs).to_circt()
 
   def rollaxis(self, *args, **kwargs):
-    from .matrix import Matrix
-    return Matrix(from_value=self).rollaxis(*args, **kwargs).to_circt()
+    from .ndarray import NDArray
+    return NDArray(from_value=self).rollaxis(*args, **kwargs).to_circt()
 
   def swapaxes(self, *args, **kwargs):
-    from .matrix import Matrix
-    return Matrix(from_value=self).swapaxes(*args, **kwargs).to_circt()
+    from .ndarray import NDArray
+    return NDArray(from_value=self).swapaxes(*args, **kwargs).to_circt()
+
+  def swapaxes(self, *args, **kwargs):
+    from .ndarray import NDArray
+    return NDArray(from_value=self).swapaxes(*args, **kwargs).to_circt()
+
+  def concatenate(self, arrays, axis=0):
+    from .ndarray import NDArray
+    return NDArray(from_value=np.concatenate(
+        NDArray.to_ndarrays([self] + list(arrays)), axis=axis)).to_circt()
+
+  def roll(self, shift, axis=None):
+    from .ndarray import NDArray
+    return np.roll(NDArray(from_value=self), shift=shift, axis=axis).to_circt()
 
 
 class StructValue(Value):

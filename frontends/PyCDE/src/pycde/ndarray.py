@@ -13,7 +13,7 @@ from typing import Union
 
 
 @dataclass
-class TargetShape:
+class _TargetShape:
   """
   A small helper class for representing shapes which might be n-dimensional
   matrices (len(dims) > 0) or unary types (len(dims) == 0).
@@ -37,7 +37,7 @@ class TargetShape:
     return str(self.type)
 
 
-class Matrix(np.ndarray):
+class NDArray(np.ndarray):
   """
   A PyCDE Matrix serves as a Numpy view of a multidimensional CIRCT array (ArrayType).
   The Matrix ensures that all assignments to itself have been properly converted
@@ -54,7 +54,7 @@ class Matrix(np.ndarray):
     See https://numpy.org/doc/stable/reference/arrays.classes.html#numpy.class.__array_finalize__
     """
     if obj is not None:
-      for slot in Matrix.__slots__:
+      for slot in NDArray.__slots__:
         setattr(self, slot, getattr(obj, slot))
 
   def __new__(cls,
@@ -81,17 +81,24 @@ class Matrix(np.ndarray):
 
     from pycde.value import ListValue
 
-    if bool(from_value) and bool(shape or dtype):
+    if (from_value is not None) and (shape is not None or dtype is not None):
       raise ValueError(
           "Must specify either shape and dtype, or initialize from a value, but not both."
       )
 
     if from_value is not None:
-      if not isinstance(from_value, ListValue):
-        raise TypeError("from_value must be a ListValue")
-      shape = from_value.type.shape
-      dtype = from_value.type.inner_type
-      name = from_value.name
+      if isinstance(from_value, ListValue):
+        shape = from_value.type.shape
+        dtype = from_value.type.inner_type
+        name = from_value.name
+      elif isinstance(from_value, np.ndarray):
+        shape = from_value.shape
+        # Sample the first element to infer the type. This assumes that the
+        # numpy array has already been filled.
+        dtype = from_value.item(0).type
+      else:
+        raise TypeError(
+            f"Cannot inititalize NDArray from value of type {type(from_value)}")
 
     # Initialize the underlying np.ndarray
     self = np.ndarray.__new__(cls, shape=shape, dtype=object)
@@ -106,12 +113,16 @@ class Matrix(np.ndarray):
     self.circt_output = None
 
     if from_value is not None:
-      # PyCDE and numpy do not play nicely when doing np.arr(Matrix._circt_to_arr(...))
-      # but individual assignments work.
-      target_shape = self._target_shape_for_idxs(0)
-      value_arr = Matrix._circt_to_arr(from_value, target_shape)
-      for i, v in enumerate(value_arr):
-        super().__setitem__(self, i, v)
+      if isinstance(from_value, ListValue):
+        # PyCDE and numpy do not play nicely when doing np.arr(Matrix._circt_to_arr(...))
+        # but individual assignments work.
+        target_shape = self._target_shape_for_idxs(0)
+        value_arr = NDArray._circt_to_arr(from_value, target_shape)
+        for i, v in enumerate(value_arr):
+          super().__setitem__(self, i, v)
+      elif isinstance(from_value, np.ndarray):
+        for i, v in enumerate(from_value):
+          super().__setitem__(self, i, v)
 
     return self
 
@@ -122,7 +133,7 @@ class Matrix(np.ndarray):
 
   @staticmethod
   def _circt_to_arr(value: Union[BitVectorValue, ListValue],
-                    target_shape: TargetShape):
+                    target_shape: _TargetShape):
     """Converts a CIRCT value into a numpy array."""
     from .value import (BitVectorValue, ListValue)
 
@@ -169,8 +180,20 @@ class Matrix(np.ndarray):
         # Pop the outer dimension of the target shape.
         inner_dims = target_shape.dims.copy()[1:]
         arr.append(
-            Matrix._circt_to_arr(value[i],
-                                 TargetShape(inner_dims, target_shape.dtype)))
+            NDArray._circt_to_arr(value[i],
+                                  _TargetShape(inner_dims, target_shape.dtype)))
+    elif isinstance(value, NDArray):
+      # Check that the shape is compatible and that we have an identical dtype.
+      if list(value.shape) != target_shape.dims:
+        raise ValueError(
+            f"Shape mismatch between provided NDArray ({value.shape}) and target shape ({target_shape.shape})."
+        )
+      if value.item(0).type != target_shape.dtype:
+        raise ValueError(
+            f"Dtype mismatch between provided NDArray ({value.item(0).type}) and target shape ({target_shape.dtype})."
+        )
+      # Compatible NDArray!
+      return value
     else:
       raise ValueError(f"Cannot convert value {value} to numpy array.")
 
@@ -184,7 +207,7 @@ class Matrix(np.ndarray):
     to a given matrix assignment should have.
     """
     target_v = self[idxs]
-    target_shape = TargetShape([], self.pycde_dtype)
+    target_shape = _TargetShape([], self.pycde_dtype)
     if isinstance(target_v, np.ndarray):
       target_shape.dims = list(target_v.shape)
     return target_shape
@@ -204,7 +227,7 @@ class Matrix(np.ndarray):
 
     # Infer the target shape based on the access to the numpy array.
     # circt_to_arr will then try to convert the value to this shape.
-    v = Matrix._circt_to_arr(value, self._target_shape_for_idxs(np_access))
+    v = NDArray._circt_to_arr(value, self._target_shape_for_idxs(np_access))
     super().__setitem__(np_access, v)
 
   def check_is_fully_assigned(self):
@@ -265,3 +288,18 @@ class Matrix(np.ndarray):
       self.circt_output = wire.read
 
     return self.circt_output
+
+  @staticmethod
+  def to_ndarrays(lst):
+    """
+    Ensures that all ListValues in a lst have been converted to ndarrays.
+    """
+    ndarrays = []
+    for l in lst:
+      if isinstance(l, ListValue):
+        ndarrays.append(NDArray(from_value=l))
+      else:
+        if not isinstance(l, np.ndarray):
+          raise ValueError(f"Expected NDArray or ListValue, got {type(l)}")
+        ndarrays.append(l)
+    return ndarrays

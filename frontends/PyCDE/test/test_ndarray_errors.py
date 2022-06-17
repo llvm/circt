@@ -2,7 +2,7 @@
 
 from pycde import System, Input, module, generator
 from pycde.pycde_types import types, dim
-from pycde.matrix import Matrix
+from pycde.ndarray import NDArray
 
 # Missing assignment
 
@@ -13,7 +13,7 @@ class M1:
 
   @generator
   def build(ports):
-    m = Matrix((10), dtype=types.i32, name='m1')
+    m = NDArray((10), dtype=types.i32, name='m1')
     for i in range(9):
       m[i] = ports.in1
     # CHECK: ValueError: Unassigned sub-matrices:
@@ -34,7 +34,7 @@ class M1:
 
   @generator
   def build(ports):
-    m = Matrix((32), dtype=types.i32, name='m1')
+    m = NDArray((32), dtype=types.i32, name='m1')
     # CHECK: ValueError: Width mismatch between provided BitVectorValue (i33) and target shape (i32).
     m[0] = ports.in1
 
@@ -53,7 +53,7 @@ class M1:
   @generator
   def build(ports):
     # CHECK: ValueError: Must specify either shape and dtype, or initialize from a value, but not both.
-    Matrix((10, 32), from_value=ports.in1, dtype=types.i1, name='m1')
+    NDArray((10, 32), from_value=ports.in1, dtype=types.i1, name='m1')
 
 
 System([M1]).generate()
@@ -69,7 +69,7 @@ class M1:
 
   @generator
   def build(ports):
-    m = Matrix((32, 32), dtype=types.i1, name='m1')
+    m = NDArray((32, 32), dtype=types.i1, name='m1')
     # CHECK: ValueError: Width mismatch between provided BitVectorValue (i31) and target shape ([32]i1).
     m[0] = ports.in1
 

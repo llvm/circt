@@ -2,13 +2,14 @@
 
 from pycde import System, Input, Output, module, generator
 
-from pycde.matrix import Matrix
+from pycde.ndarray import NDArray
 from pycde.dialects import hw
 from pycde.pycde_types import types, dim
+from pycde.value import ListValue
 
-# Matrix transposition via injected matrix on a ListValue
+# ndarray transposition via injected ndarray on a ListValue
 # Putting this as first test in case users use this file as a reference.
-# The majority of tests in this file uses the Matrix directly, but most users
+# The majority of tests in this file uses the ndarray directly, but most users
 # will probably want to use the Numpy features directly on the ListValue.
 
 
@@ -28,7 +29,7 @@ m1.print()
 
 # -----
 
-# Composing multiple matrix transformations
+# Composing multiple ndarray transformations
 
 
 @module
@@ -57,8 +58,8 @@ class M2:
 
   @generator
   def build(ports):
-    # a 32xi32 matrix.
-    m = Matrix((32,), dtype=types.i32, name='m2')
+    # a 32xi32 ndarray.
+    m = NDArray((32,), dtype=types.i32, name='m2')
     for i in range(16):
       m[i] = ports.in1
     m[16:32] = ports.in0
@@ -81,24 +82,24 @@ class M1:
 
   @generator
   def build(ports):
-    # a 32x32xi1 matrix.
+    # a 32x32xi1 ndarray.
     # A dtype of i32 is fairly expensive wrt. the size of the output IR, but
     # but allows for assigning indiviudal bits.
-    m = Matrix((32, 32), dtype=types.i1, name='m1')
+    m = NDArray((32, 32), dtype=types.i1, name='m1')
 
     # Assign individual bits to the first 32 bits.
     for i in range(32):
       m[0, i] = hw.ConstantOp(types.i1, 1)
 
-    # Fill the next 15 values with an i32. The Matrix knows how to convert
-    # from i32 to <32xi1> to comply with the matrix dtype.
+    # Fill the next 15 values with an i32. The ndarray knows how to convert
+    # from i32 to <32xi1> to comply with the ndarray dtype.
     for i in range(1, 16):
       m[i] = ports.in1
 
     # Fill the upportmost 16 rows with the input array of in0 : 16xi32
     m[16:32] = ports.in0
 
-    # We don't provide a method of reshaping the matrix wrt. its dtype.
+    # We don't provide a method of reshaping the ndarray wrt. its dtype.
     # that is: 32x32xi1 => 32xi32
     # This has massive overhead in the generated IR, and can be easily
     # achieved by a bitcast.
@@ -111,7 +112,7 @@ m1.print()
 
 # -----
 
-# Matrix from value
+# ndarray from value
 
 
 @module
@@ -121,7 +122,7 @@ class M1:
 
   @generator
   def build(ports):
-    m = Matrix(from_value=ports.in1, name='m1')
+    m = NDArray(from_value=ports.in1, name='m1')
     ports.out = m.to_circt()
 
 
@@ -141,8 +142,52 @@ class M1:
 
   @generator
   def build(ports):
-    m = Matrix(from_value=ports.in1, name='m1')
+    m = NDArray(from_value=ports.in1, name='m1')
     ports.out = m.to_circt(create_wire=False)
+
+
+m1 = System([M1])
+m1.generate()
+m1.print()
+
+# -----
+
+# Concatenation using both explicit NDArrays as well as ListValues.
+
+
+@module
+class M1:
+  in1 = Input(dim(types.i32, 10))
+  in2 = Input(dim(types.i32, 10))
+  in3 = Input(dim(types.i32, 10))
+  out = Output(dim(types.i32, 30))
+
+  @generator
+  def build(ports):
+    # Explicit ndarray.
+    m = NDArray(from_value=ports.in1, name='m1')
+    # Here we could do a sequence of transformations on 'm'...
+    # Finally, concatenate [in2, m, in3]
+    ports.out = ports.in2.concatenate((m, ports.in3))
+
+
+m1 = System([M1])
+m1.generate()
+m1.print()
+
+# -----
+
+# Rolling
+
+
+@module
+class M1:
+  in1 = Input(dim(types.i32, 10))
+  out = Output(dim(types.i32, 10))
+
+  @generator
+  def build(ports):
+    ports.out = ports.in1.roll(3)
 
 
 m1 = System([M1])
