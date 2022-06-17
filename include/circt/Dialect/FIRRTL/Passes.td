@@ -495,6 +495,10 @@ def DropName : Pass<"firrtl-drop-names", "firrtl::FModuleOp"> {
     ```
   }];
   let constructor = "circt::firrtl::createDropNamesPass()";
+  let statistics = [
+    Statistic<"numNamesConverted", "num-names-converted",
+      "Number of interesting names made droppable">,
+  ];
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD

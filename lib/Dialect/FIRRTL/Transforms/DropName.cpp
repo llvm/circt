@@ -20,10 +20,15 @@ using namespace firrtl;
 namespace {
 struct DropNamesPass : public DropNameBase<DropNamesPass> {
   void runOnOperation() override {
-    getOperation()->walk([](FNamableOp op) {
-      if (!op.hasDroppableName())
+    size_t changedNames = 0;
+    getOperation()->walk([&changedNames](FNamableOp op) {
+      if (!op.hasDroppableName()) {
+        ++changedNames;
         op.dropName();
+      }
     });
+
+    numNamesConverted += changedNames;
   }
 };
 
