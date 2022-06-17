@@ -289,10 +289,6 @@ class ListValue(Value):
     from .ndarray import NDArray
     return NDArray(from_value=self).swapaxes(*args, **kwargs).to_circt()
 
-  def swapaxes(self, *args, **kwargs):
-    from .ndarray import NDArray
-    return NDArray(from_value=self).swapaxes(*args, **kwargs).to_circt()
-
   def concatenate(self, arrays, axis=0):
     from .ndarray import NDArray
     return NDArray(from_value=np.concatenate(
