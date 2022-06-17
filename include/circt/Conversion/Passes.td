@@ -41,7 +41,7 @@ def AffineToStaticLogic : Pass<"convert-affine-to-staticlogic", "mlir::func::Fun
 // ExportVerilog and ExportSplitVerilog
 //===----------------------------------------------------------------------===//
 
-def PrepareForEmission : Pass<"prepare-for-emission", "mlir::ModuleOp"> {
+def PrepareForEmission : Pass<"prepare-for-emission", "hw::HWModuleOp"> {
   let summary = "Prepare IR for ExportVerilog";
   let description = [{
     This pass runs only PrepareForEmission logic for testing purpose.

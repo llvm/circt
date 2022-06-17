@@ -678,19 +678,12 @@ namespace {
 
 struct PrepareForEmissionPass
     : public PrepareForEmissionBase<PrepareForEmissionPass> {
-  PrepareForEmissionPass() {}
-  void runOnOperation() override {
-    auto module = getOperation();
-    // Make sure LoweringOptions are applied to the module if it was overridden
-    // on the command line.
-    // TODO: This should be moved up to circt-opt and circt-translate.
-    applyLoweringCLOptions(module);
-    LoweringOptions options(module);
-
-    parallelForEach(module->getContext(), module.getOps<HWModuleOp>(),
-                    [&](HWModuleOp hwmodule) {
-                      prepareHWModule(*hwmodule.getBodyBlock(), options);
-                    });
+  PrepareForEmissionPass() {} void runOnOperation() override {
+    HWModuleOp module = getOperation();
+    LoweringOptions options = getLoweringCLIOption(
+        cast<mlir::ModuleOp>(module->getParentOp()),
+        [&](llvm::Twine twine) { module.emitError(twine); });
+    prepareHWModule(*module.getBodyBlock(), options);
   }
 };
 } // end anonymous namespace
