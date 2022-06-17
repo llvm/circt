@@ -425,14 +425,15 @@ class ArrayCreateOp:
       raise ValueError("Cannot 'create' an array of length zero")
     vals = []
     type = None
-    for arg in elements:
+    for i, arg in enumerate(elements):
       arg_val = support.get_value(arg)
       vals.append(arg_val)
       if type is None:
         type = arg_val.type
       elif type != arg_val.type:
         raise TypeError(
-            "All arguments must be the same type to create an array")
+            f"Argument {i} has a different element type ({arg_val.type}) than the element type of the array ({type})"
+        )
     return hw.ArrayCreateOp(hw.ArrayType.get(type, len(vals)), vals)
 
 
@@ -443,7 +444,7 @@ class ArrayConcatOp:
     vals = []
     types = []
     element_type = None
-    for array in sub_arrays:
+    for i, array in enumerate(sub_arrays):
       array_value = support.get_value(array)
       array_type = support.type_to_pytype(array_value.type)
       if array_value is None or not isinstance(array_type, hw.ArrayType):
@@ -452,7 +453,9 @@ class ArrayConcatOp:
         element_type = array_type.element_type
       elif element_type != array_type.element_type:
         raise TypeError(
-            "All arguments must be the same type to concatenate arrays")
+            f"Argument {i} has a different element type ({element_type}) than the element type of the array ({array_type.element_type})"
+        )
+
       vals.append(array_value)
       types.append(array_type)
 
@@ -476,7 +479,9 @@ class StructCreateOp:
     else:
       result_type_inner = support.get_self_or_inner(result_type)
       if result_type_inner != struct_type:
-        raise TypeError("result_type must match generated struct")
+        raise TypeError(
+            f"result type:\n\t{result_type_inner}\nmust match generated struct type:\n\t{struct_type}"
+        )
 
     return hw.StructCreateOp(result_type,
                              [value for (_, value) in elem_name_values])
