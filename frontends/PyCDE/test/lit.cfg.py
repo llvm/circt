@@ -63,6 +63,13 @@ config.test_exec_root = os.path.join(config.circt_obj_root,
 # Tweak the PATH to include the tools dir.
 llvm_config.with_environment('PATH', config.llvm_tools_dir, append_path=True)
 
+tool_dirs = [
+    config.circt_tools_dir, config.mlir_tools_dir, config.llvm_tools_dir
+]
+tools = ['py-split-input-file']
+
+llvm_config.add_tool_substitutions(tools, tool_dirs)
+
 # Tweak the PYTHONPATH to include the binary dir.
 llvm_config.with_environment('PYTHONPATH', [
     os.path.join(config.circt_python_packages_dir, 'circt_core'),
