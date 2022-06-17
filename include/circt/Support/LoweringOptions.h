@@ -126,7 +126,8 @@ void applyLoweringCLOptions(ModuleOp module);
 /// Get a lowering option from CLI option or module op. This function first
 /// tries constructing a lowering option from cli, and if it failed, lowering
 /// option associated with `module` is used. This function doesn't change an
-/// attribute of `module` op so that it can be used by
+/// attribute of `module` so that it can be used by child operations of
+/// mlir::ModuleOp in multi-threading environment.
 LoweringOptions getLoweringCLIOption(ModuleOp module,
                                      LoweringOptions::ErrorHandlerT);
 } // namespace circt
