@@ -118,7 +118,6 @@ circuit test_mod : %[[{"a": "a"}]]
 ; MLIR-NEXT:    firrtl.strictconnect %multibitMux_a_1, %vec_1 : !firrtl.uint<1>
 ; MLIR-NEXT:    firrtl.strictconnect %multibitMux_a_2, %vec_2 : !firrtl.uint<1>
 ; MLIR-NEXT:    firrtl.strictconnect %multibitMux_sel, %b : !firrtl.uint<2>
-; MLIR-NEXT:    firrtl.instance unusedPortsMod interesting_name @UnusedPortsMod()
 
 ; ANNOTATIONS-LABEL: firrtl.module @test_mod
 ; ANNOTATIONS-SAME: info = "a ModuleTarget Annotation"
@@ -173,7 +172,6 @@ circuit test_mod : %[[{"a": "a"}]]
 ; VERILOG-NEXT:     .sel (b),
 ; VERILOG-NEXT:     .b   (out_multibitMux)
 ; VERILOG-NEXT:    );
-; VERILOG-NEXT:    UnusedPortsMod unusedPortsMod ();
 ; VERILOG:       endmodule
 
 ; Check that we canonicalize the HW output of lowering.
@@ -273,4 +271,3 @@ circuit test_mod : %[[{"a": "a"}]]
     input in : UInt<1>
     output out : UInt<1>
     out is invalid
-; VERILOG-LABEL: module UnusedPortsMod();
