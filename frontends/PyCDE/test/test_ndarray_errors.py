@@ -1,4 +1,4 @@
-# RUN: py-split-input-file %s | FileCheck %s
+# RUN: py-split-input-file.py %s | FileCheck %s
 
 from pycde import System, Input, module, generator
 from pycde.pycde_types import types, dim

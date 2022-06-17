@@ -1,4 +1,4 @@
-# RUN: py-split-input-file %s
+# RUN: py-split-input-file.py %s
 
 from pycde import System, Input, Output, module, generator
 

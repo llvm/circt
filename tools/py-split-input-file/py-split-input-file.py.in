@@ -7,7 +7,7 @@ which might have occured.
 """
 
 if len(sys.argv) != 2:
-  print("Usage: ./py-split-input-file <input_file>")
+  print("Usage: ./py-split-input-file.py <input_file>")
   sys.exit(1)
 input_file = sys.argv[1]
 

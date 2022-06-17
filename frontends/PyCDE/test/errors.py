@@ -1,4 +1,4 @@
-# RUN: py-split-input-file %s | FileCheck %s
+# RUN: py-split-input-file.py %s | FileCheck %s
 
 from pycde.module import externmodule
 
