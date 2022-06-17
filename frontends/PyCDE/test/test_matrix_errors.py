@@ -16,7 +16,8 @@ class M1:
     m = Matrix((10), dtype=types.i32, name='m1')
     for i in range(9):
       m[i] = ports.in1
-    # CHECK: ValueError: Unassigned sub-matrices: (array([9]),)
+    # CHECK: ValueError: Unassigned sub-matrices:
+    # CHECK: {{[[]}}{{[[]}}9{{[]]}}{{[]]}}
     m.to_circt()
 
 

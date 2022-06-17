@@ -255,6 +255,39 @@ class ListValue(Value):
   def __len__(self):
     return self.type.strip.size
 
+  """
+  Add a curated set of Numpy functions through the Matrix class.
+  This allows for directly manipulating the ListValues with numpy functionality.
+  Power-users who use the Matrix directly have access to all numpy functions.
+  In reality, it will only be a subset of the numpy array functions which are
+  safe to be used in the PyCDE context. Curating access at the level of ListValues
+  seems like a safe starting point.
+  """
+
+  def transpose(self, *args, **kwargs):
+    from .matrix import Matrix
+    return Matrix(from_value=self).transpose(*args, **kwargs).to_circt()
+
+  def reshape(self, *args, **kwargs):
+    from .matrix import Matrix
+    return Matrix(from_value=self).reshape(*args, **kwargs).to_circt()
+
+  def flatten(self, *args, **kwargs):
+    from .matrix import Matrix
+    return Matrix(from_value=self).flatten(*args, **kwargs).to_circt()
+
+  def moveaxis(self, *args, **kwargs):
+    from .matrix import Matrix
+    return Matrix(from_value=self).moveaxis(*args, **kwargs).to_circt()
+
+  def rollaxis(self, *args, **kwargs):
+    from .matrix import Matrix
+    return Matrix(from_value=self).rollaxis(*args, **kwargs).to_circt()
+
+  def swapaxes(self, *args, **kwargs):
+    from .matrix import Matrix
+    return Matrix(from_value=self).swapaxes(*args, **kwargs).to_circt()
+
 
 class StructValue(Value):
 

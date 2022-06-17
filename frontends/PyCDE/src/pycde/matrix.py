@@ -2,20 +2,23 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from .value import (BitVectorValue, ListValue)
+from .value import BitVectorValue, ListValue
 from .pycde_types import BitVectorType, dim
 from pycde.dialects import hw, sv
 import numpy as np
 import mlir.ir as ir
 from functools import lru_cache
 from dataclasses import dataclass
+from typing import Union
 
 
 @dataclass
 class TargetShape:
-  # The TargetShape class is a small helper class for representing shapes
-  # which might be n-dimensional matrices (len(dims) > 0) or unary types
-  # (len(dims) == 0).
+  """
+  A small helper class for representing shapes which might be n-dimensional
+  matrices (len(dims) > 0) or unary types (len(dims) == 0).
+  """
+
   dims: list
   dtype: type
 
@@ -43,24 +46,40 @@ class Matrix(np.ndarray):
   The underlying CIRCT array is not materialized until to_circt is called.
   """
 
+  __slots__ = ["name", "pycde_dtype", "circt_output"]
+
   def __array_finalize__(self, obj):
-    # Ensure Matrix-class attributes are propagated upon copying.
-    # see https://numpy.org/doc/stable/reference/arrays.classes.html#numpy.class.__array_finalize__
+    """
+    Ensure Matrix-class slots are propagated upon copying.
+    See https://numpy.org/doc/stable/reference/arrays.classes.html#numpy.class.__array_finalize__
+    """
     if obj is not None:
-      self.__dict__ = obj.__dict__
+      for slot in Matrix.__slots__:
+        setattr(self, slot, getattr(obj, slot))
 
   def __new__(cls,
               shape: list = None,
               dtype=None,
               name: str = None,
               from_value=None) -> None:
-    """Construct a matrix with the given shape and dtype.
+    """
+    Construct a matrix with the given shape and dtype.
     This is a __new__ function since np.ndarray does not have an __init__ function.
-      Args:
-        shape: A tuple of integers representing the shape of the matrix.
-        dtype: the inner type of the matrix. This is a PyCDE type - the Numpy
-               matrix contains 'object'-typed values.
-      """
+
+    Args:
+        shape (list, optional): A tuple of integers representing the shape of the matrix.
+        dtype (_type_, optional):
+          the inner type of the matrix. This is a PyCDE type - the Numpy
+          matrix contains 'object'-typed values.
+        from_value (_type_, optional):
+          A ListValue which this matrix should be initialized from.
+
+    Raises:
+        ValueError: _description_
+        TypeError: _description_
+    """
+
+    from pycde.value import ListValue
 
     if bool(from_value) and bool(shape or dtype):
       raise ValueError(
@@ -69,7 +88,7 @@ class Matrix(np.ndarray):
 
     if from_value is not None:
       if not isinstance(from_value, ListValue):
-        raise ValueError("from_value must be a ListValue")
+        raise TypeError("from_value must be a ListValue")
       shape = from_value.type.shape
       dtype = from_value.type.inner_type
       name = from_value.name
@@ -78,7 +97,7 @@ class Matrix(np.ndarray):
     self = np.ndarray.__new__(cls, shape=shape, dtype=object)
 
     if name is None:
-      name = "matrix"  # todo: require name?
+      name = "matrix"
     self.name = name
     self.pycde_dtype = dtype
 
@@ -87,26 +106,30 @@ class Matrix(np.ndarray):
     self.circt_output = None
 
     if from_value is not None:
-      # PyCDE and numpy do not play nicely when doing np.arr(self.circt_to_arr(...))
+      # PyCDE and numpy do not play nicely when doing np.arr(Matrix._circt_to_arr(...))
       # but individual assignments work.
-      target_shape = self.target_shape_for_idxs(0)
-      value_arr = self.circt_to_arr(from_value, target_shape)
+      target_shape = self._target_shape_for_idxs(0)
+      value_arr = Matrix._circt_to_arr(from_value, target_shape)
       for i, v in enumerate(value_arr):
         super().__setitem__(self, i, v)
 
     return self
 
   @lru_cache
-  def get_constant(self, value: int, width: int = 32):
+  def _get_constant(self, value: int, width: int = 32):
     """ Get an IR constant backed by a constant cache."""
     return hw.ConstantOp(ir.IntegerType.get_signless(width), value)
 
-  def circt_to_arr(self, value, target_shape):
+  @staticmethod
+  def _circt_to_arr(value: Union[BitVectorValue, ListValue],
+                    target_shape: TargetShape):
     """Converts a CIRCT value into a numpy array."""
+    from .value import (BitVectorValue, ListValue)
+
     if isinstance(value, BitVectorValue) and isinstance(target_shape.dtype,
                                                         BitVectorType):
-      # Direct match on the target shape, which is not an array?
-      if value.type == target_shape.dtype and target_shape.num_dims == 0:
+      # Direct match on the target shape?
+      if value.type == target_shape.type:
         return value
 
       # Is it feasible to extract values to the target shape?
@@ -115,8 +138,11 @@ class Matrix(np.ndarray):
             f"Cannot extract BitVectorValue of type {value.type} to a multi-dimensional array of type {target_shape.type}."
         )
 
-      target_shape_bits = (target_shape.dims[0] if len(target_shape.dims) else
-                           1) * target_shape.dtype.width
+      if len(target_shape.dims) == 0:
+        target_shape_bits = target_shape.dtype.width
+      else:
+        target_shape_bits = target_shape.dims[0] * target_shape.dtype.width
+
       if target_shape_bits != value.type.width:
         raise ValueError(
             f"Width mismatch between provided BitVectorValue ({value.type}) and target shape ({target_shape.type})."
@@ -143,15 +169,16 @@ class Matrix(np.ndarray):
         # Pop the outer dimension of the target shape.
         inner_dims = target_shape.dims.copy()[1:]
         arr.append(
-            self.circt_to_arr(value[i],
-                              TargetShape(inner_dims, target_shape.dtype)))
+            Matrix._circt_to_arr(value[i],
+                                 TargetShape(inner_dims, target_shape.dtype)))
     else:
       raise ValueError(f"Cannot convert value {value} to numpy array.")
 
     return arr
 
-  def target_shape_for_idxs(self, idxs):
-    """Get the TargetShape for the given indexing into the array.
+  def _target_shape_for_idxs(self, idxs):
+    """
+    Get the TargetShape for the given indexing into the array.
     
     This function can be used for determining the type that right-hand side values
     to a given matrix assignment should have.
@@ -177,7 +204,7 @@ class Matrix(np.ndarray):
 
     # Infer the target shape based on the access to the numpy array.
     # circt_to_arr will then try to convert the value to this shape.
-    v = self.circt_to_arr(value, self.target_shape_for_idxs(np_access))
+    v = Matrix._circt_to_arr(value, self._target_shape_for_idxs(np_access))
     super().__setitem__(np_access, v)
 
   def check_is_fully_assigned(self):
@@ -192,7 +219,8 @@ class Matrix(np.ndarray):
       super().__setitem__(tuple(arg), value)
 
   def to_circt(self, create_wire=True, dtype=None, default_driver=None):
-    """Materializes this matrix to a ListValue through hw.array_create operations.
+    """
+    Materializes this matrix to a ListValue through hw.array_create operations.
     
     if 'create_wire' is True, the matrix will be materialized to an sv.wire operation
     and the returned value will be a read-only reference to the wire.
@@ -202,7 +230,6 @@ class Matrix(np.ndarray):
 
     If default_driver is set, any unassigned value will be assigned to this. The
     default driver is expected to be of equal type as the dtype of this matrix.
-
     """
     if self.circt_output:
       return self.circt_output
@@ -221,6 +248,7 @@ class Matrix(np.ndarray):
     self.check_is_fully_assigned()
 
     def build_subarray(lstOrVal):
+      from .value import BitVectorValue
       # Recursively converts this matrix into ListValues through hw.array_create
       # operations.
       if not isinstance(lstOrVal, BitVectorValue):
@@ -237,28 +265,3 @@ class Matrix(np.ndarray):
       self.circt_output = wire.read
 
     return self.circt_output
-
-
-"""
-Inject a curated list of numpy functions into the ListValue class.
-This allows for directly manipulating the ListValues with numpy functionality.
-Power-users who use the Matrix directly have access to all numpy functions.
-In reality, it will only be a subset of the numpy array functions which are
-safe to be used in the PyCDE context. Curating access at the level of ListValues
-seems like a safe starting point.
-"""
-numpy_functions = [
-    "transpose", "reshape", "flatten", "moveaxis", "rollaxis", "swapaxes"
-]
-
-
-def apply_numpy_f_to_listvalue(f):
-
-  def wrapper(list_value, *args, **kwargs):
-    return getattr(Matrix(from_value=list_value), f)(*args, **kwargs).to_circt()
-
-  return wrapper
-
-
-for f in numpy_functions:
-  setattr(ListValue, f, apply_numpy_f_to_listvalue(f))
