@@ -845,14 +845,17 @@ int main(int argc, char **argv) {
   // Register passes before parsing command-line options, so that they are
   // available for use with options like `--mlir-print-ir-before`.
   {
-    // MLIR transforms
-    registerTransformsPasses();
+    // MLIR transforms:
+    // Don't use registerTransformsPasses, pulls in too much.
+    registerCSEPass();
+    registerCanonicalizerPass();
+    registerStripDebugInfoPass();
 
-    // Dialect passes
+    // Dialect passes:
     firrtl::registerPasses();
     sv::registerPasses();
 
-    // Export passes
+    // Export passes:
     registerExportSplitVerilogPass();
     registerExportVerilogPass();
   }
