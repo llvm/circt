@@ -15,7 +15,7 @@
 #define CIRCT_CONVERSION_SCFTOCALYX_SCFTOCALYX_H
 
 #include "circt/Support/LLVM.h"
-#include "mlir/Dialect/SCF/SCF.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include <memory>
 
 namespace circt {
