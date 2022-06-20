@@ -16,10 +16,10 @@ add_circt_dialect_library(CIRCTCalyxTransforms
   CIRCTHW
   CIRCTStaticLogicOps
   CIRCTSupport
-  MLIRArithmetic
-  MLIRFunc
+  MLIRArithmeticDialect
+  MLIRFuncDialect
   MLIRIR
   MLIRPass
-  MLIRSCF
+  MLIRSCFDialect
   MLIRTransformUtils
   )

@@ -10,9 +10,9 @@ add_circt_library(CIRCTHandshakeToFIRRTL
   CIRCTHandshakeTransforms
   MLIRIR
   MLIRPass
-  MLIRArithmetic
-  MLIRControlFlow
-  MLIRFunc
+  MLIRArithmeticDialect
+  MLIRControlFlowDialect
+  MLIRFuncDialect
   MLIRSupport
   MLIRTransforms
   )

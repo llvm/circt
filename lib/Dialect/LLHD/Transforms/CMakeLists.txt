@@ -12,6 +12,6 @@ add_circt_dialect_library(CIRCTLLHDTransforms
   LINK_LIBS PUBLIC
   CIRCTLLHD
   MLIRIR
-  MLIRFunc
+  MLIRFuncDialect
   MLIRTransformUtils
 )
