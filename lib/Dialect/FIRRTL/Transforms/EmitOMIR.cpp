@@ -417,6 +417,10 @@ void EmitOMIRPass::makeTrackerAbsolute(Tracker &tracker) {
       addToPath((*it)->getInstance(), ref.getName());
     }
   }
+
+  // TODO: Don't create NLA if namepath is empty
+  // (care needed to ensure this will be handled correctly elsewhere)
+
   // Add the op itself.
   namepath.push_back(hw::InnerRefAttr::getFromOperation(
       tracker.op, opName,
