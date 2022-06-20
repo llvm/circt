@@ -24,7 +24,7 @@ target_link_libraries(esi-tester
   MLIRSupport
   MLIRIR
   MLIROptLib
-  MLIRFunc
+  MLIRFuncDialect
   MLIRTransforms
-  MLIRLLVMIR
+  MLIRLLVMDialect
   )

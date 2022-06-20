@@ -48,12 +48,12 @@ target_link_libraries(circt-opt
 
   
   MLIRIR
-  MLIRLLVMIR
-  MLIRMemRef
+  MLIRLLVMDialect
+  MLIRMemRefDialect
   MLIROptLib
   MLIRParser
-  MLIRFunc
+  MLIRFuncDialect
   MLIRSupport
   MLIRTransforms
-  MLIRSCF
+  MLIRSCFDialect
   )

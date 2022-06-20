@@ -12,7 +12,7 @@ add_circt_dialect_library(CIRCTHandshake
   ${PROJECT_BINARY_DIR}/include
 
   LINK_LIBS PUBLIC
-  MLIRFunc
+  MLIRFuncDialect
   MLIRIR
 
   DEPENDS
