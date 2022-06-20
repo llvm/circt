@@ -634,8 +634,10 @@ void ExtractInstancesPass::extractInstances() {
       }
 
       // Inherit the old instance's extraction path.
+      extractionPaths.try_emplace(newInst); // (create entry first)
       auto &extractionPath = (extractionPaths[newInst] = extractionPaths[inst]);
       extractionPath.push_back(getInnerRefTo(newParentInst));
+      originalInstanceParents.try_emplace(newInst); // (create entry first)
       originalInstanceParents[newInst] = originalInstanceParents[inst];
       // Record the Nonlocal annotations that need to be applied to the new
       // Inst.
