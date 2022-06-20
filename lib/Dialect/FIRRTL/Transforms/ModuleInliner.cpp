@@ -396,7 +396,7 @@ static void mapResultsToWires(BlockAndValueMapping &mapper,
 
 /// Wrapper for llvm::parallelTransformReduce that performs the transform_reduce
 /// serially when MLIR multi-threading is disabled.
-/// Does not add a ParallelDiagnosticHandler like mlir::parallelForEachN.
+/// Does not add a ParallelDiagnosticHandler like mlir::parallelFor.
 template <class IterTy, class ResultTy, class ReduceFuncTy,
           class TransformFuncTy>
 static ResultTy transformReduce(MLIRContext *context, IterTy Begin, IterTy End,

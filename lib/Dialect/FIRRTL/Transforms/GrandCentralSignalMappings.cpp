@@ -435,7 +435,7 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
   SmallVector<ModuleMappingResult> results;
   results.resize(modules.size());
 
-  mlir::parallelForEachN(
+  mlir::parallelFor(
       circuit.getContext(), 0, modules.size(),
       [&modules, &results](size_t index) {
         ModuleSignalMappings mapper(modules[index]);
