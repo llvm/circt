@@ -24,14 +24,13 @@ def MachineOp : FSMOp<"machine", [FunctionOpInterface,
     includes a `$body` region that contains internal variables and states.
   }];
 
-  let arguments = (ins StrAttr:$sym_name, TypeAttr:$stateType,
-                       StrAttr:$initialState,
+  let arguments = (ins StrAttr:$sym_name, StrAttr:$initialState,
                        TypeAttrOf<FunctionType>:$function_type);
   let regions = (region SizedRegion<1>:$body);
 
   let builders = [
     OpBuilder<(ins "StringRef":$name, "StringRef":$initialState,
-      "Type":$stateType, "FunctionType":$function_type,
+      "FunctionType":$function_type,
       CArg<"ArrayRef<NamedAttribute>", "{}">:$attrs,
       CArg<"ArrayRef<DictionaryAttr>", "{}">:$argAttrs)>
   ];
