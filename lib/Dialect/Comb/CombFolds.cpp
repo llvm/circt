@@ -758,6 +758,40 @@ OpFoldResult AndOp::fold(ArrayRef<Attribute> constants) {
   return constFoldAssociativeOp(constants, hw::PEO::And);
 }
 
+/// returns a single common operand that all inputs of the operation `op` can
+/// be traced back to, or an empty `Value` if no such operand exists.
+///
+/// for example for `or(a[0], a[1], ..., a[n-1])` this function returns `a`
+/// (assuming the bit-width of `a` is `n`)
+template <typename Op>
+static Value getCommonOperand(Op op) {
+  auto inputs = op.inputs();
+
+  auto commonOperand = [&inputs](size_t index) -> Value {
+    if (auto extractOp = inputs[index].template getDefiningOp<ExtractOp>()) {
+      return extractOp.getOperand();
+    } else {
+      return Value();
+    }
+  };
+
+  Value source = commonOperand(0);
+
+  size_t size = inputs.size();
+
+  if (!source || size != source.getType().getIntOrFloatBitWidth()) {
+    return Value();
+  }
+
+  for (size_t i = 1; i != size; ++i) {
+    if (commonOperand(i) != source) {
+      return Value();
+    }
+  }
+
+  return source;
+}
+
 LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
   auto inputs = op.inputs();
   auto size = inputs.size();
@@ -891,6 +925,15 @@ LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
   // extracts only of and(...) -> and(extract()...)
   if (narrowOperationWidth(op, true, rewriter))
     return success();
+
+  // and(a[0], a[1], ..., a[n]) -> icmp eq(b, -1)
+  if (auto source = getCommonOperand(op)) {
+    auto cmpAgainst =
+        rewriter.create<hw::ConstantOp>(op.getLoc(), APInt::getAllOnes(size));
+    replaceOpWithNewOpAndCopyName<ICmpOp>(rewriter, op, ICmpPredicate::eq,
+                                          source, cmpAgainst);
+  }
+  return success();
 
   /// TODO: and(..., x, not(x)) -> and(..., 0) -- complement
   return failure();
@@ -1094,6 +1137,14 @@ LogicalResult OrOp::canonicalize(OrOp op, PatternRewriter &rewriter) {
   if (narrowOperationWidth(op, true, rewriter))
     return success();
 
+  // or(a[0], a[1], ..., a[n]) -> icmp ne(b, 0)
+  if (auto source = getCommonOperand(op)) {
+    auto cmpAgainst =
+        rewriter.create<hw::ConstantOp>(op.getLoc(), APInt::getZero(size));
+    replaceOpWithNewOpAndCopyName<ICmpOp>(rewriter, op, ICmpPredicate::ne,
+                                          source, cmpAgainst);
+  }
+
   /// TODO: or(..., x, not(x)) -> or(..., '1) -- complement
   return failure();
 }
@@ -1211,6 +1262,11 @@ LogicalResult XorOp::canonicalize(XorOp op, PatternRewriter &rewriter) {
   // extracts only of xor(...) -> xor(extract()...)
   if (narrowOperationWidth(op, true, rewriter))
     return success();
+
+  // xor(a[0], a[1], ..., a[n]) -> parity(b)
+  if (auto source = getCommonOperand(op)) {
+    replaceOpWithNewOpAndCopyName<ParityOp>(rewriter, op, source);
+  }
 
   return failure();
 }
