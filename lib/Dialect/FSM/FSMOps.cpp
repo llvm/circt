@@ -23,12 +23,11 @@ using namespace fsm;
 //===----------------------------------------------------------------------===//
 
 void MachineOp::build(OpBuilder &builder, OperationState &state, StringRef name,
-                      StringRef initialStateName, Type stateType,
-                      FunctionType type, ArrayRef<NamedAttribute> attrs,
+                      StringRef initialStateName, FunctionType type,
+                      ArrayRef<NamedAttribute> attrs,
                       ArrayRef<DictionaryAttr> argAttrs) {
   state.addAttribute(mlir::SymbolTable::getSymbolAttrName(),
                      builder.getStringAttr(name));
-  state.addAttribute("stateType", TypeAttr::get(stateType));
   state.addAttribute(getTypeAttrName(), TypeAttr::get(type));
   state.addAttribute("initialState",
                      StringAttr::get(state.getContext(), initialStateName));
@@ -109,9 +108,6 @@ LogicalResult MachineOp::verify() {
   // If this function is external there is nothing to do.
   if (isExternal())
     return success();
-
-  if (!stateType().isa<IntegerType>())
-    return emitOpError("state must be integer type");
 
   // Verify that the argument list of the function and the arg list of the entry
   // block line up.  The trait already verified that the number of arguments is

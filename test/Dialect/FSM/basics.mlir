@@ -1,6 +1,6 @@
 // RUN: circt-opt --split-input-file %s | FileCheck %s
 
-// CHECK: fsm.machine @foo(%arg0: i1) -> i1 attributes {initialState = "IDLE", stateType = i1} {
+// CHECK: fsm.machine @foo(%arg0: i1) -> i1 attributes {initialState = "IDLE"} {
 // CHECK:   %cnt = fsm.variable "cnt" {initValue = 0 : i16} : i16
 // CHECK:   fsm.state "IDLE" output  {
 // CHECK:     %true = arith.constant true
@@ -48,7 +48,7 @@
 // CHECK:   return
 // CHECK: }
 
-fsm.machine @foo(%arg0: i1) -> i1 attributes {initialState = "IDLE", stateType = i1} {
+fsm.machine @foo(%arg0: i1) -> i1 attributes {initialState = "IDLE"} {
   %cnt = fsm.variable "cnt" {initValue = 0 : i16} : i16
 
   fsm.state "IDLE" output  {
@@ -109,7 +109,7 @@ func.func @qux() {
 
 // Optional guard and action regions
 
-// CHECK:   fsm.machine @foo(%[[VAL_0:.*]]: i1) -> i1 attributes {initialState = "A", stateType = i1} {
+// CHECK:   fsm.machine @foo(%[[VAL_0:.*]]: i1) -> i1 attributes {initialState = "A"} {
 // CHECK:           %[[VAL_1:.*]] = fsm.variable "cnt" {initValue = 0 : i16} : i16
 // CHECK:           fsm.state "A" output {
 // CHECK:             fsm.output %[[VAL_0]] : i1
@@ -129,7 +129,7 @@ func.func @qux() {
 // CHECK:             fsm.transition @C
 // CHECK:           }
 // CHECK:         }
-fsm.machine @foo(%arg0: i1) -> i1 attributes {initialState = "A", stateType = i1} {
+fsm.machine @foo(%arg0: i1) -> i1 attributes {initialState = "A"} {
   %cnt = fsm.variable "cnt" {initValue = 0 : i16} : i16
 
   fsm.state "A" output  {
