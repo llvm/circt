@@ -26,9 +26,9 @@ firrtl.circuit "SubCircuit" attributes {
   // CHECK:         firrtl.force [[T2]], %clock_sink
   // CHECK:       }
   // CHECK-LABEL: firrtl.module @Foo
-  firrtl.module @Foo() attributes {annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", id = 0 : i64}]} {
-    %clock_source = firrtl.wire {annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", dir = "source", id = 0 : i64, peer = "~Main|Main>clock", side = "local", targetId = 0 : i64}]} : !firrtl.clock
-    %clock_sink = firrtl.wire {annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", dir = "sink", id = 0 : i64, peer = "~Main|Main>clock", side = "local", targetId = 1 : i64}]} : !firrtl.clock
+  firrtl.module @Foo() attributes {annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation.module", id = 0 : i64}]} {
+    %clock_source = firrtl.wire {annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation.target", dir = "source", id = 0 : i64, peer = "~Main|Main>clock", side = "local", targetId = 0 : i64}]} : !firrtl.clock
+    %clock_sink = firrtl.wire {annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation.target", dir = "sink", id = 0 : i64, peer = "~Main|Main>clock", side = "local", targetId = 1 : i64}]} : !firrtl.clock
     %ext_clockIn, %ext_clockOut = firrtl.instance ext @FooExtern(in clockIn: !firrtl.clock, out clockOut: !firrtl.clock)
     firrtl.connect %ext_clockIn, %clock_source : !firrtl.clock, !firrtl.clock
     firrtl.connect %clock_sink, %ext_clockOut : !firrtl.clock, !firrtl.clock
@@ -47,9 +47,9 @@ firrtl.circuit "SubCircuit" attributes {
   // CHECK:         firrtl.force [[T2]], %data_sink
   // CHECK:       }
   // CHECK-LABEL: firrtl.module @Bar
-  firrtl.module @Bar() attributes {annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", id = 1 : i64}]} {
-    %data_source = firrtl.wire {annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", dir = "source", id = 1 : i64, peer = "~Main|Main>dataOut.x.y.z", side = "local", targetId = 0 : i64}]} : !firrtl.uint<42>
-    %data_sink = firrtl.wire {annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", dir = "sink", id = 1 : i64, peer = "~Main|Main>dataIn.a.b.c", side = "local", targetId = 1 : i64}]} : !firrtl.uint<42>
+  firrtl.module @Bar() attributes {annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation.module", id = 1 : i64}]} {
+    %data_source = firrtl.wire {annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation.target", dir = "source", id = 1 : i64, peer = "~Main|Main>dataOut.x.y.z", side = "local", targetId = 0 : i64}]} : !firrtl.uint<42>
+    %data_sink = firrtl.wire {annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation.target", dir = "sink", id = 1 : i64, peer = "~Main|Main>dataIn.a.b.c", side = "local", targetId = 1 : i64}]} : !firrtl.uint<42>
     %ext_someInput, %ext_someOutput = firrtl.instance ext @BarExtern(in someInput: !firrtl.uint<42>, out someOutput: !firrtl.uint<42>)
     firrtl.connect %ext_someInput, %data_source : !firrtl.uint<42>, !firrtl.uint<42>
     firrtl.connect %data_sink, %ext_someOutput : !firrtl.uint<42>, !firrtl.uint<42>
@@ -69,9 +69,9 @@ firrtl.circuit "SubCircuit" attributes {
   // CHECK:       }
   // CHECK-LABEL: firrtl.module @Baz
   firrtl.module @Baz(
-    out %data_source: !firrtl.uint<42> [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", dir = "source", id = 2 : i64, peer = "~Main|Main/foo:MainA>dataOut", side = "local", targetId = 0 : i64}],
-    in %data_sink: !firrtl.uint<42> [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", dir = "sink", id = 2 : i64, peer = "~Main|Main/foo:MainA>dataIn", side = "local", targetId = 1 : i64}]
-  ) attributes {annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", id = 2 : i64}]} {
+    out %data_source: !firrtl.uint<42> [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation.target", dir = "source", id = 2 : i64, peer = "~Main|Main/foo:MainA>dataOut", side = "local", targetId = 0 : i64}],
+    in %data_sink: !firrtl.uint<42> [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation.target", dir = "sink", id = 2 : i64, peer = "~Main|Main/foo:MainA>dataIn", side = "local", targetId = 1 : i64}]
+  ) attributes {annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation.module", id = 2 : i64}]} {
     // CHECK: [[T1:%.+]], [[T2:%.+]] = firrtl.instance signal_mappings @Baz_signal_mappings
     // CHECK: firrtl.connect %data_source, [[T1]] :
     // CHECK: firrtl.connect [[T2]], %data_sink :
@@ -100,8 +100,8 @@ firrtl.circuit "signal_driver" attributes {
     class = "sifive.enterprise.grandcentral.SignalDriverAnnotation",
     isSubCircuit = true,
     id = 0 : i64}]} {
-  firrtl.module @signal_driver() attributes {annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", id = 0 : i64}]} {
-    %_w_sink = firrtl.wire sym @w_sink  {annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", dir = "sink", id = 0 : i64, peer = "~Foo|Bar>w", side = "local", targetId = 1 : i64}]} : !firrtl.uint<0>
+  firrtl.module @signal_driver() attributes {annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation.module", id = 0 : i64}]} {
+    %_w_sink = firrtl.wire sym @w_sink  {annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation.target", dir = "sink", id = 0 : i64, peer = "~Foo|Bar>w", side = "local", targetId = 1 : i64}]} : !firrtl.uint<0>
     %w_sink = firrtl.node sym @w_sink_0 %_w_sink  : !firrtl.uint<0>
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
     %0 = firrtl.tail %c1_ui1, 1 : (!firrtl.uint<1>) -> !firrtl.uint<0>
@@ -135,11 +135,11 @@ firrtl.circuit "GenerateJSON"  attributes {
        defname = "InlineExternalModule"}
   firrtl.module @GenerateJSON() attributes {
     annotations = [
-      {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation",
+      {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation.module",
        id = 0 : i64}]} {
     %source = firrtl.wire sym @source  {
       annotations = [
-        {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation",
+        {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation.target",
          dir = "source",
          id = 0 : i64,
          peer = "~SignalDrivingTop|SignalDrivingTop>_y",
@@ -189,8 +189,8 @@ firrtl.circuit "RemoveDrivers" attributes {
     isSubCircuit = true,
     id = 0 : i64}]} {
   // CHECK: firrtl.module @RemoveDrivers
-  firrtl.module @RemoveDrivers() attributes {annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", id = 0 : i64}]} {
-    %source = firrtl.wire sym @source  {annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", dir = "source", id = 0 : i64, peer = "~Foo|Bar>w", side = "local", targetId = 1 : i64}]} : !firrtl.uint<1>
+  firrtl.module @RemoveDrivers() attributes {annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation.module", id = 0 : i64}]} {
+    %source = firrtl.wire sym @source  {annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation.target", dir = "source", id = 0 : i64, peer = "~Foo|Bar>w", side = "local", targetId = 1 : i64}]} : !firrtl.uint<1>
     %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
     // CHECK-NOT: firrtl.strictconnect %source, %invalid_ui1
     firrtl.strictconnect %source, %invalid_ui1 : !firrtl.uint<1>
@@ -222,20 +222,20 @@ firrtl.circuit "AddWireToForcedPorts"  attributes {
   // CHECK: firrtl.module private @ForcedPort
   firrtl.module private @ForcedPort(
     in %in: !firrtl.uint<1> sym @in [
-      {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation",
+      {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation.target",
        dir = "sink",
        id = 0 : i64,
        peer = "~signal_driver|signal_driver>in_sink",
        side = "remote",
        targetId = 3 : i64}],
     out %out: !firrtl.uint<1> sym @out [
-      {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation",
+      {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation.target",
        dir = "sink",
        id = 0 : i64,
        peer = "~signal_driver|signal_driver>out_sink",
        side = "remote",
        targetId = 4 : i64}]) attributes {
-    annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", id = 0 : i64}]} {
+    annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation.module", id = 0 : i64}]} {
       // CHECK-NEXT: %[[buffer_wire:.+]] = firrtl.wire sym @{{.+}}
       // CHECK-NEXT: %[[port_wire:.+]] = firrtl.wire sym @{{.+}}
       // CHECK-NEXT: firrtl.strictconnect %out, %[[buffer_wire]]
@@ -247,7 +247,7 @@ firrtl.circuit "AddWireToForcedPorts"  attributes {
   // CHECK: firrtl.module @AddWireToForcedPorts
   firrtl.module @AddWireToForcedPorts(in %in: !firrtl.uint<1>, out %out: !firrtl.uint<1>) attributes {
     annotations = [
-      {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", id = 0 : i64}]} {
+      {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation.module", id = 0 : i64}]} {
     // CHECK-NEXT: firrtl.instance sub
     %sub_in, %sub_out = firrtl.instance sub  @ForcedPort(in in: !firrtl.uint<1>, out out: !firrtl.uint<1>)
     // CHECK-NEXT: %[[buffer_wire:.+]] = firrtl.wire sym @{{.+}} : !firrtl.uint<1>
@@ -287,14 +287,14 @@ firrtl.circuit "MainWithNLA" attributes {
   firrtl.module private @Leaf(
     in %in: !firrtl.uint<1> sym @in [{
       circt.nonlocal = @nla_segment,
-      class = "sifive.enterprise.grandcentral.SignalDriverAnnotation",
+      class = "sifive.enterprise.grandcentral.SignalDriverAnnotation.target",
       dir = "source",
       id = 0 : i64,
       peer = "~Sub|Sub>in_source",
       side = "remote",
       targetId = 2 : i64
     }, {
-      class = "sifive.enterprise.grandcentral.SignalDriverAnnotation",
+      class = "sifive.enterprise.grandcentral.SignalDriverAnnotation.target",
       dir = "sink",
       id = 0 : i64,
       peer = "~Sub|Sub>in_sink",
@@ -302,12 +302,12 @@ firrtl.circuit "MainWithNLA" attributes {
       targetId = 3 : i64
     }],
     out %out: !firrtl.uint<1>) attributes {
-      annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", id = 0 : i64}]
+      annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation.module", id = 0 : i64}]
     } {
     %w = firrtl.wire sym @w  {
       annotations = [{
         circt.nonlocal = @nla_top_thru_dut_to_w,
-        class = "sifive.enterprise.grandcentral.SignalDriverAnnotation",
+        class = "sifive.enterprise.grandcentral.SignalDriverAnnotation.target",
         dir = "source",
         id = 0 : i64,
         peer = "~Sub|Sub>w_source",
@@ -315,7 +315,7 @@ firrtl.circuit "MainWithNLA" attributes {
         targetId = 1 : i64
       }, {
         circt.nonlocal = @nla_dut_rel,
-        class = "sifive.enterprise.grandcentral.SignalDriverAnnotation",
+        class = "sifive.enterprise.grandcentral.SignalDriverAnnotation.target",
         dir = "sink",
         id = 0 : i64,
         peer = "~Sub|Sub>w_sink",
@@ -404,11 +404,11 @@ firrtl.circuit "Sub" attributes {
 
   firrtl.module @Sub() attributes {
     annotations = [
-      {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation",
+      {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation.module",
       id = 0 : i64}]} {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %w_source = firrtl.wire sym @w_source  {annotations = [{
-      class = "sifive.enterprise.grandcentral.SignalDriverAnnotation",
+      class = "sifive.enterprise.grandcentral.SignalDriverAnnotation.target",
       dir = "source",
       id = 0 : i64,
       peer = "~DUT|DUT/m:Mid/l:Leaf>w",
@@ -416,14 +416,14 @@ firrtl.circuit "Sub" attributes {
       targetId = 1 : i64}]} : !firrtl.uint<1>
     firrtl.strictconnect %w_source, %c0_ui1 : !firrtl.uint<1>
     %w_sink = firrtl.wire sym @w_sink  {annotations = [{
-      class = "sifive.enterprise.grandcentral.SignalDriverAnnotation",
+      class = "sifive.enterprise.grandcentral.SignalDriverAnnotation.target",
       dir = "sink",
       id = 0 : i64,
       peer = "~DUT|DUT/l:Leaf>w",
       side = "local",
       targetId = 2 : i64}]} : !firrtl.uint<1>
     %in_source = firrtl.wire sym @in_source  {annotations = [{
-      class = "sifive.enterprise.grandcentral.SignalDriverAnnotation",
+      class = "sifive.enterprise.grandcentral.SignalDriverAnnotation.target",
       dir = "source",
       id = 0 : i64,
       peer = "~DUT|Mid/l:Leaf>in",
@@ -431,7 +431,7 @@ firrtl.circuit "Sub" attributes {
       targetId = 3 : i64}]} : !firrtl.uint<1>
     firrtl.strictconnect %in_source, %c0_ui1 : !firrtl.uint<1>
     %in_sink = firrtl.wire sym @in_sink  {annotations = [{
-      class = "sifive.enterprise.grandcentral.SignalDriverAnnotation",
+      class = "sifive.enterprise.grandcentral.SignalDriverAnnotation.target",
       dir = "sink",
       id = 0 : i64,
       peer = "~DUT|Leaf>in",
@@ -481,14 +481,14 @@ firrtl.circuit "MainWithnewNLA" attributes {
   firrtl.module private @Leaf(
     in %in: !firrtl.uint<1> [{
       circt.nonlocal = @nla_segment,
-      class = "sifive.enterprise.grandcentral.SignalDriverAnnotation",
+      class = "sifive.enterprise.grandcentral.SignalDriverAnnotation.target",
       dir = "source",
       id = 0 : i64,
       peer = "~Sub|Sub>in_source",
       side = "remote",
       targetId = 2 : i64
     }, {
-      class = "sifive.enterprise.grandcentral.SignalDriverAnnotation",
+      class = "sifive.enterprise.grandcentral.SignalDriverAnnotation.target",
       dir = "sink",
       id = 0 : i64,
       peer = "~Sub|Sub>in_sink",
@@ -496,12 +496,12 @@ firrtl.circuit "MainWithnewNLA" attributes {
       targetId = 3 : i64
     }],
     out %out: !firrtl.uint<1>) attributes {
-      annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", id = 0 : i64}]
+      annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation.module", id = 0 : i64}]
     } {
     %w = firrtl.wire {
       annotations = [{
         circt.nonlocal = @nla_top_thru_dut_to_w,
-        class = "sifive.enterprise.grandcentral.SignalDriverAnnotation",
+        class = "sifive.enterprise.grandcentral.SignalDriverAnnotation.target",
         dir = "source",
         id = 0 : i64,
         peer = "~Sub|Sub>w_source",
@@ -509,7 +509,7 @@ firrtl.circuit "MainWithnewNLA" attributes {
         targetId = 1 : i64
       }, {
         circt.nonlocal = @nla_dut_rel,
-        class = "sifive.enterprise.grandcentral.SignalDriverAnnotation",
+        class = "sifive.enterprise.grandcentral.SignalDriverAnnotation.target",
         dir = "sink",
         id = 0 : i64,
         peer = "~Sub|Sub>w_sink",
