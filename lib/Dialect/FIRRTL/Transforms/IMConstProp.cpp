@@ -167,8 +167,8 @@ private:
 };
 } // end anonymous namespace
 
-llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
-                              const LatticeValue &lattice) {
+static llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
+                                     const LatticeValue &lattice) {
   if (lattice.isUnknown()) {
     return os << "<Unknown>";
   } else if (lattice.isOverdefined()) {
