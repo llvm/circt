@@ -10,7 +10,6 @@ add_circt_dialect_library(CIRCTMoore
   MLIRMooreIncGen
   CIRCTMooreAttributesIncGen
   CIRCTMooreEnumsIncGen
-  CIRCTMooreStructsIncGen
 
   LINK_COMPONENTS
   Support

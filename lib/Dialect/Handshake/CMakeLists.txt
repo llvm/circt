@@ -20,7 +20,6 @@ add_circt_dialect_library(CIRCTHandshake
   MLIRHandshakeCanonicalizationIncGen
   MLIRHandshakeAttributesIncGen
   MLIRHandshakeEnumsIncGen
-  MLIRHandshakeAttrsIncGen
   )
 
 add_subdirectory(Transforms)

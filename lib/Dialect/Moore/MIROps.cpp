@@ -63,4 +63,3 @@ static void printLValueType(OpAsmPrinter &p, Operation *, Type lValueType) {
 #define GET_OP_CLASSES
 #include "circt/Dialect/Moore/Moore.cpp.inc"
 #include "circt/Dialect/Moore/MooreEnums.cpp.inc"
-#include "circt/Dialect/Moore/MooreStructs.cpp.inc"

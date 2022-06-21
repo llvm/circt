@@ -14,11 +14,6 @@ mlir_tablegen(HandshakeAttributes.cpp.inc -gen-attrdef-defs -attrdefs-dialect=ha
 add_public_tablegen_target(MLIRHandshakeAttributesIncGen)
 add_dependencies(circt-headers MLIRHandshakeAttributesIncGen)
 
-mlir_tablegen(HandshakeAttrs.h.inc -gen-struct-attr-decls)
-mlir_tablegen(HandshakeAttrs.cpp.inc -gen-struct-attr-defs)
-add_public_tablegen_target(MLIRHandshakeAttrsIncGen)
-add_dependencies(circt-headers MLIRHandshakeAttrsIncGen)
-
 set(LLVM_TARGET_DEFINITIONS HandshakeCanonicalization.td)
 mlir_tablegen(HandshakeCanonicalization.h.inc -gen-rewriters)
 add_public_tablegen_target(MLIRHandshakeCanonicalizationIncGen)
