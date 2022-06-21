@@ -2,7 +2,7 @@
 
 This document describes various design points of the `sv` dialect, a common
 dialect that is typically used in conjunction with the `hw` and `comb` dialects.
-Please see the [RationaleHW.md](HW Dialect Rationale) for high level insight
+Please see the [HW Dialect Rationale](RationaleHW.md) for high level insight
 on how these work together.  This follows in the spirit of
 other [MLIR Rationale docs](https://mlir.llvm.org/docs/Rationale/).
 
