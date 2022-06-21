@@ -410,14 +410,17 @@ void IMConstPropPass::markRegResetOp(RegResetOp regReset) {
   auto srcValue = getExtendedLatticeValue(regReset.resetValue(),
                                           regReset.getType().cast<FIRRTLType>(),
                                           /*allowTruncation=*/true);
-  auto enable = getExtendedLatticeValue(regReset.resetSignal(),
-                                        regReset.getType().cast<FIRRTLType>(),
-                                        /*allowTruncation=*/true);
-  if (enable.isOverdefined() ||
-      (enable.isConstant() && !enable.getConstant().getValue().isZero()))
+  auto resetValue = getExtendedLatticeValue(
+      regReset.resetSignal(), regReset.getType().cast<FIRRTLType>(),
+      /*allowTruncation=*/true);
+  if (resetValue.isOverdefined() ||
+      (resetValue.isConstant() &&
+       !resetValue.getConstant().getValue().isZero()))
     mergeLatticeValue(regReset, srcValue);
 
-  if (enable.isConstant() && enable.getConstant().getValue().isZero())
+  // If the reset is a constant zero, the register is never initialized so merge
+  // invalid value.
+  if (resetValue.isConstant() && resetValue.getConstant().getValue().isZero())
     mergeLatticeValue(regReset, InvalidValueAttr::get(regReset.getType()));
 }
 
