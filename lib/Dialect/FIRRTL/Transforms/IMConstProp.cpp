@@ -31,9 +31,8 @@ static bool isAggregate(Operation *op) {
 
 /// Return true if this is a wire or register we're allowed to delete.
 static bool isDeletableWireOrReg(Operation *op) {
-  if (auto wire = dyn_cast<WireOp>(op))
-    if (!wire.hasDroppableName())
-      return false;
+  if (!hasDroppableName(op))
+    return false;
   return isWireOrReg(op) && AnnotationSet(op).empty() && !hasDontTouch(op);
 }
 
@@ -417,6 +416,9 @@ void IMConstPropPass::markRegResetOp(RegResetOp regReset) {
   if (enable.isOverdefined() ||
       (enable.isConstant() && !enable.getConstant().getValue().isZero()))
     mergeLatticeValue(regReset, srcValue);
+
+  if (enable.isConstant() && enable.getConstant().getValue().isZero())
+    mergeLatticeValue(regReset, InvalidValueAttr::get(regReset.getType()));
 }
 
 void IMConstPropPass::markMemOp(MemOp mem) {

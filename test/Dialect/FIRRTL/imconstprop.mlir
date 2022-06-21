@@ -590,3 +590,28 @@ firrtl.circuit "AnnotationsBlockRemoval"  {
     firrtl.strictconnect %b, %w : !firrtl.uint<1>
   }
 }
+
+// -----
+
+firrtl.circuit "Issue3372"  {
+  firrtl.module @Issue3372(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, out %value: !firrtl.uint<1>) {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %other_zero = firrtl.instance other interesting_name  @Other(out zero: !firrtl.uint<1>)
+    %shared = firrtl.regreset interesting_name %clock, %c0_ui1, %c1_ui1  : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.strictconnect %shared, %shared : !firrtl.uint<1>
+    %test = firrtl.wire interesting_name  : !firrtl.uint<1>
+    firrtl.strictconnect %test, %shared : !firrtl.uint<1>
+    firrtl.strictconnect %value, %invalid_ui1 : !firrtl.uint<1>
+    // CHECK:      %shared = firrtl.regreset interesting_name %clock, %c0_ui1, %c1_ui1
+    // CHECK-NEXT: firrtl.strictconnect %shared, %invalid_ui1
+    // CHECK-NEXT: %test = firrtl.wire interesting_name  : !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.strictconnect %test, %invalid_ui1
+    // CHECK-NEXT: firrtl.strictconnect %value, %invalid_ui1
+  }
+  firrtl.module private @Other(out %zero: !firrtl.uint<1>) {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    firrtl.strictconnect %zero, %c0_ui1 : !firrtl.uint<1>
+  }
+}
