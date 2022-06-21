@@ -288,20 +288,17 @@ def module(func_or_class):
   parameterized module."""
   if inspect.isclass(func_or_class):
     # If it's just a module class, we should wrap it immediately
-    mod = _module_base(func_or_class,
-                       None,
-                       generator_cb=generate_msft_module_op,
-                       create_cb=create_msft_module_op)
+    return _module_base(func_or_class,
+                        None,
+                        generator_cb=generate_msft_module_op,
+                        create_cb=create_msft_module_op)
   elif inspect.isfunction(func_or_class):
-    mod = _parameterized_module(func_or_class,
-                                None,
-                                generator_cb=generate_msft_module_op,
-                                create_cb=create_msft_module_op)
-  else:
-    raise TypeError(
-        "@module decorator must be on class or parameterization function")
-
-  return mod
+    return _parameterized_module(func_or_class,
+                                 None,
+                                 generator_cb=generate_msft_module_op,
+                                 create_cb=create_msft_module_op)
+  raise TypeError(
+      "@module decorator must be on class or parameterization function")
 
 
 def _get_module_cache_key(func,

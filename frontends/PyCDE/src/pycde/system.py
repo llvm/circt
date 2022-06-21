@@ -107,6 +107,7 @@ class System:
     install_func(op)
     # Add to the generation queue if the module has a generator callback.
     if hasattr(spec_mod, 'generator_cb') and spec_mod.generator_cb is not None:
+      assert callable(spec_mod.generator_cb)
       self._generate_queue.append(spec_mod)
       file_name = spec_mod.modcls.__name__ + ".sv"
       self.files.add(os.path.join(self._output_directory, file_name))
