@@ -35,7 +35,7 @@ circuit Top:
     ; CHECK:      endmodule
 
     ; CHECK:      module MyView_mapping();
-    ; CHECK-NEXT:   assign MyView.[[elementName:.+]] = Top.[[dutName]].[[wireName]]
+    ; CHECK-NEXT:   assign MyView.[[elementName:.+]] = DUT.[[wireName]]
     ; CHECK-NEXT: endmodule
 
     ; CHECK: interface MyInterface
