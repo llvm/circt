@@ -758,11 +758,11 @@ OpFoldResult AndOp::fold(ArrayRef<Attribute> constants) {
   return constFoldAssociativeOp(constants, hw::PEO::And);
 }
 
-/// returns a single common operand that all inputs of the operation `op` can
+/// Returns a single common operand that all inputs of the operation `op` can
 /// be traced back to, or an empty `Value` if no such operand exists.
 ///
-/// for example for `or(a[0], a[1], ..., a[n-1])` this function returns `a`
-/// (assuming the bit-width of `a` is `n`)
+/// For example for `or(a[0], a[1], ..., a[n-1])` this function returns `a`
+/// (assuming the bit-width of `a` is `n`).
 template <typename Op>
 static Value getCommonOperand(Op op) {
   if (!op.getType().isInteger(1))
