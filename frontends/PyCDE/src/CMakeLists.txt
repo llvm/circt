@@ -9,28 +9,30 @@
 declare_mlir_python_sources(PyCDESources
   ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
   SOURCES
-    pycde/__init__.py
-    pycde/pycde_types.py
-    pycde/dialects/__init__.py
-    pycde/dialects/msft.py
-    pycde/dialects/seq.py
-    pycde/dialects/hw.py
-    pycde/dialects/comb.py
-    pycde/dialects/sv.py
-    pycde/support.py
-    pycde/module.py
-    pycde/constructs.py
-    pycde/system.py
-    pycde/devicedb.py
-    pycde/instance.py
-    pycde/value.py
-    pycde/ndarray.py
-    pycde/testing.py
+  pycde/__init__.py
+  pycde/pycde_types.py
+  pycde/dialects/__init__.py
+  pycde/dialects/msft.py
+  pycde/dialects/seq.py
+  pycde/dialects/hw.py
+  pycde/dialects/comb.py
+  pycde/dialects/sv.py
+  pycde/dialects/fsm.py
+  pycde/support.py
+  pycde/module.py
+  pycde/constructs.py
+  pycde/system.py
+  pycde/devicedb.py
+  pycde/instance.py
+  pycde/value.py
+  pycde/ndarray.py
+  pycde/fsm.py
+  pycde/testing.py
 )
 
 add_mlir_python_modules(PyCDE
   ROOT_PREFIX "${CIRCT_PYTHON_PACKAGES_DIR}/pycde"
   INSTALL_PREFIX "python_packages/pycde"
   DECLARED_SOURCES
-    PyCDESources
+  PyCDESources
 )

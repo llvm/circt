@@ -279,12 +279,12 @@ class _SpecializedModule:
   def instantiate(self, instance_name: str, inputs: dict, loc):
     """Create a instance op."""
     if self.extern_name is None:
-      return self.circt_mod.create(instance_name, **inputs, loc=loc)
+      return self.circt_mod.instantiate(instance_name, **inputs, loc=loc)
     else:
-      return self.circt_mod.create(instance_name,
-                                   **inputs,
-                                   parameters=self.parameters,
-                                   loc=loc)
+      return self.circt_mod.instantiate(instance_name,
+                                        **inputs,
+                                        parameters=self.parameters,
+                                        loc=loc)
 
   def generate(self):
     """Fill in (generate) this module. Only supports a single generator
@@ -310,17 +310,21 @@ def module(func_or_class):
   function should be treated as a module parameterization function. In the
   latter case, the function must return a python class to be treated as the
   parameterized module."""
+  generate_cb = func_or_class.generator_cb if hasattr(
+      func_or_class, "generator_cb") else generate_msft_module_op
+  create_cb = func_or_class.create_cb if hasattr(
+      func_or_class, "create_cb") else create_msft_module_op
   if inspect.isclass(func_or_class):
     # If it's just a module class, we should wrap it immediately
     return _module_base(func_or_class,
                         None,
-                        generator_cb=generate_msft_module_op,
-                        create_cb=create_msft_module_op)
+                        generator_cb=generate_cb,
+                        create_cb=create_cb)
   elif inspect.isfunction(func_or_class):
     return _parameterized_module(func_or_class,
                                  None,
-                                 generator_cb=generate_msft_module_op,
-                                 create_cb=create_msft_module_op)
+                                 generator_cb=generate_cb,
+                                 create_cb=create_cb)
   raise TypeError(
       "@module decorator must be on class or parameterization function")
 
