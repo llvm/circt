@@ -765,6 +765,9 @@ OpFoldResult AndOp::fold(ArrayRef<Attribute> constants) {
 /// (assuming the bit-width of `a` is `n`)
 template <typename Op>
 static Value getCommonOperand(Op op) {
+  if (!op.getType().isInteger(1))
+    return Value();
+
   auto inputs = op.inputs();
 
   auto commonOperand = [&inputs](size_t index) -> Value {
