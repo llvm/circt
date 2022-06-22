@@ -138,17 +138,17 @@ def _validate_idx(size: int, idx: Union[int, BitVectorValue]):
                       f" Value, not {type(idx)}.")
 
 
-def get_slice_idxs(inner_dims, idxOrSlice: Union[int, slice]):
+def get_slice_bounds(size, idxOrSlice: Union[int, slice]):
   if isinstance(idxOrSlice, int):
     s = slice(idxOrSlice, idxOrSlice + 1)
   elif isinstance(idxOrSlice, slice):
-    if idxOrSlice.stop > inner_dims:
+    if idxOrSlice.stop and idxOrSlice.stop > size:
       raise ValueError("Slice out-of-bounds")
     s = idxOrSlice
   else:
     raise TypeError("Expected int or slice")
 
-  idxs = s.indices(inner_dims)
+  idxs = s.indices(size)
   if idxs[2] != 1:
     raise ValueError("Integer / bitvector slices do not support steps")
   return idxs[0], idxs[1]
@@ -158,7 +158,7 @@ class BitVectorValue(Value):
 
   @singledispatchmethod
   def __getitem__(self, idxOrSlice: Union[int, slice]) -> BitVectorValue:
-    lo, hi = get_slice_idxs(len(self), idxOrSlice)
+    lo, hi = get_slice_bounds(len(self), idxOrSlice)
     from .pycde_types import types
     from .dialects import comb
     ret_type = types.int(hi - lo)
