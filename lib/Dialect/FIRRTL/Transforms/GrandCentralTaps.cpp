@@ -556,11 +556,25 @@ class GrandCentralTapsPass : public GrandCentralTapsBase<GrandCentralTapsPass> {
   SymbolTable *circuitSymbols;
 };
 
+static StringAttr getModPart(Attribute pathSegment) {
+  return TypeSwitch<Attribute, StringAttr>(pathSegment)
+      .Case<FlatSymbolRefAttr>([](auto a) { return a.getAttr(); })
+      .Case<hw::InnerRefAttr>([](auto a) { return a.getModule(); });
+}
+
+static StringAttr getRefPart(Attribute pathSegment) {
+  return TypeSwitch<Attribute, StringAttr>(pathSegment)
+      .Case<FlatSymbolRefAttr>([](auto a) { return StringAttr{}; })
+      .Case<hw::InnerRefAttr>([](auto a) { return a.getName(); });
+}
+
 void GrandCentralTapsPass::runOnOperation() {
   auto circuitOp = getOperation();
   LLVM_DEBUG(llvm::dbgs() << "Running the GCT Data Taps pass\n");
   SymbolTable symtbl(circuitOp);
   circuitSymbols = &symtbl;
+  InnerSymbolTableCollection innerSymTblCol;
+  innerSymTblCol.populateTables(circuitOp);
 
   // Here's a rough idea of what the Scala code is doing:
   // - Gather the `source` of all `keys` of all `DataTapsAnnotation`s throughout
@@ -780,23 +794,33 @@ void GrandCentralTapsPass::runOnOperation() {
         // The code tries to come up with a relative path from the data tap
         // instance (path being the absolute path to that instance) to the
         // tapped thing (prefix being the path to the tapped port, wire, or
-        // memory) by calling stripCommonPrefix(prefix, path). Bug 2767 was
-        // caused because, the path in the NLA was not considered for this
-        // common prefix stripping (prefix is the path to the root of the NLA).
-        // This leads to overly pessimistic paths like
-        // Top.dut.submodule_1.bar.Memory[0], which should rather be
-        // DUT.submodule_1.bar.Memory[0]. To properly fix this, the path in the
-        // NLA should be inlined in the prefix such that it becomes part of the
-        // prefix stripping operation.
+        // memory) by calling stripCommonPrefix(prefix, path).  If the tapped
+        // thing includes an NLA, then the NLA path is appended to the rest of
+        // the path before the common prefix stripping is done.
 
         // Determine the shortest hierarchical prefix from this black box
         // instance to the tapped object.
-        Optional<InstancePath> shortestPrefix;
+        Optional<SmallVector<InstanceOp>> shortestPrefix;
         for (auto prefix : port.prefices) {
-          auto relative = stripCommonPrefix(prefix, path);
+
+          // Append the NLA path to the instance graph-determined path.
+          SmallVector<InstanceOp> prefixWithNLA(prefix.begin(), prefix.end());
+          if (port.nla) {
+            for (auto segment : port.nla.namepath().getValue().drop_back()) {
+              auto refPart = getRefPart(segment);
+              if (!refPart)
+                continue;
+              auto innerSymTbl = innerSymTblCol.getInnerSymbolTable(
+                  symtbl.lookup(getModPart(segment)));
+              prefixWithNLA.push_back(
+                  cast<InstanceOp>(innerSymTbl.lookup(refPart)));
+            }
+          }
+
+          auto relative = stripCommonPrefix(prefixWithNLA, path);
           if (!shortestPrefix.hasValue() ||
               relative.size() < shortestPrefix->size())
-            shortestPrefix = relative;
+            shortestPrefix.emplace(relative.begin(), relative.end());
         }
         if (!shortestPrefix.hasValue()) {
           LLVM_DEBUG(llvm::dbgs() << "  - Has no prefix, skipping\n");
@@ -845,8 +869,6 @@ void GrandCentralTapsPass::runOnOperation() {
             else
               leaf = getInnerRefTo(port.target.getOp());
           }
-          for (auto sym : namepath.getValue().drop_back())
-            addSymbol(sym);
           addSymbol(leaf);
         } else if (port.target.getOp()) {
           if (port.target.hasPort())

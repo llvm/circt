@@ -81,4 +81,4 @@ circuit TestHarness : %[[
 
 ; CHECK:     module DataTap
 ; CHECK-NOT: endmodule
-; CHECK:       assign _0 = TestHarness.system.test.signal;
+; CHECK:       assign _0 = Top.test.signal;
