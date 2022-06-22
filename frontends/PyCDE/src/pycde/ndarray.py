@@ -279,8 +279,10 @@ class NDArray(np.ndarray):
         return hw.ArrayCreateOp(subarrays)
       return lstOrVal
 
-    # Materialize the matrix
-    self.circt_output = build_subarray(self)
+    # Materialize the matrix. Flip the matrix before materialization to match
+    # SystemVerilog ordering.
+
+    self.circt_output = build_subarray(np.flip(self))
 
     if create_wire:
       wire = sv.WireOp(self.circt_output.type, self.name + "_wire")
