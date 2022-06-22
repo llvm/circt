@@ -781,21 +781,17 @@ static Value getCommonOperand(Op op) {
     return Value();
 
   // tracks the bits that were encountered
-  auto bits = APInt::getZero(size);
-  bits.setBit(sourceOp.lowBit());
+  auto bits = llvm::BitVector(size);
+  bits.set(sourceOp.lowBit());
 
   for (size_t i = 1; i != size; ++i) {
-    if (auto extractOp = inputs[i].template getDefiningOp<ExtractOp>()) {
-      if (extractOp.getOperand() != source)
-        return Value();
-
-      bits.setBit(extractOp.lowBit());
-    } else {
+    auto extractOp = inputs[i].template getDefiningOp<ExtractOp>();
+    if (!extractOp || extractOp.getOperand() != source)
       return Value();
-    }
+    bits.set(extractOp.lowBit());
   }
 
-  return bits.isAllOnes() ? source : Value();
+  return bits.all() ? source : Value();
 }
 
 LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
