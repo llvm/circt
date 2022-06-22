@@ -776,8 +776,10 @@ static Value getCommonOperand(Op op) {
     return Value();
   Value source = sourceOp.getOperand();
 
-  // fast path: the source bit-width does not match the size of the inputs
-  if (!source || size != source.getType().getIntOrFloatBitWidth())
+  // Fast path: the source bit-width is smaller than the width inputs.
+  // If the width is greater we might have a situation like `or(a[0], a[0], ...,
+  // a[n-1])`
+  if (size < source.getType().getIntOrFloatBitWidth())
     return Value();
 
   // tracks the bits that were encountered
