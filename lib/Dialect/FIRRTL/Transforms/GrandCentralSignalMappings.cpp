@@ -589,13 +589,13 @@ FailureOr<bool> GrandCentralSignalMappingsPass::emitUpdatedMappings(
                 mod.moduleName() + "_" + mod.getPortName(portIdx)));
         auto bufferWireName = builder.getStringAttr(moduleNamespace.newName(
             replacementWireName.getValue() + "_buffer"));
-        auto bufferWire = builder.create<WireOp>(
-            builder.getUnknownLoc(), port.getType(), bufferWireName,
-            NameKindEnum::InterestingName, builder.getArrayAttr({}),
-            bufferWireName);
+        auto bufferWire =
+            builder.create<WireOp>(builder.getUnknownLoc(), port.getType(),
+                                   bufferWireName, NameKindEnum::DroppableName,
+                                   builder.getArrayAttr({}), bufferWireName);
         auto replacementWire = builder.create<WireOp>(
             builder.getUnknownLoc(), port.getType(), replacementWireName,
-            NameKindEnum::InterestingName, builder.getArrayAttr({}),
+            NameKindEnum::DroppableName, builder.getArrayAttr({}),
             replacementWireName);
         port.replaceAllUsesWith(replacementWire);
         builder.create<StrictConnectOp>(builder.getUnknownLoc(), port,
