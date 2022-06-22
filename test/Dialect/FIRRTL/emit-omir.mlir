@@ -472,6 +472,41 @@ firrtl.circuit "SRAMPathsWithNLA" attributes {annotations = [{
 // CHECK-SAME: ]
 
 //===----------------------------------------------------------------------===//
+// Make SRAM Paths Absolute when SRAM is top-level (invalid for NLA)
+//===----------------------------------------------------------------------===//
+
+firrtl.circuit "SRAMPathsTopLevel" attributes {annotations = [{
+  class = "freechips.rocketchip.objectmodel.OMIRAnnotation",
+  nodes = [
+    {
+      info = #loc,
+      id = "OMID:0",
+      fields = {
+        omType = {info = #loc, index = 0, value = ["OMString:OMLazyModule", "OMString:OMSRAM"]},
+        finalPath = {info = #loc, index = 1, value = {omir.tracker, id = 0, type = "OMMemberReferenceTarget"}}
+      }
+    }
+  ]
+}]} {
+  firrtl.extmodule @MySRAM()
+  firrtl.module @SRAMPathsTopLevel() {
+    firrtl.instance mem1 {annotations = [{class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 0}]} @MySRAM()
+  }
+}
+
+// CHECK-LABEL: firrtl.circuit "SRAMPathsTopLevel"
+// CHECK:       firrtl.instance mem1 sym [[SYMMEM1:@[a-zA-Z0-9_]+]]
+
+// CHECK:       sv.verbatim
+// CHECK-SAME{LITERAL}:    \22value\22: \22OMMemberInstanceTarget:~SRAMPathsTopLevel|{{0}}/{{1}}:{{2}}\22
+
+// CHECK-SAME:  symbols = [
+// CHECK-SAME:    @SRAMPathsTopLevel,
+// CHECK-SAME:    #hw.innerNameRef<@SRAMPathsTopLevel::[[SYMMEM1:@[a-zA-Z0-9_]+]]>,
+// CHECK-SAME:    @MySRAM
+// CHECK-SAME:  ]
+
+//===----------------------------------------------------------------------===//
 // Add module port information to the OMIR (`SetOMIRPorts`)
 //===----------------------------------------------------------------------===//
 

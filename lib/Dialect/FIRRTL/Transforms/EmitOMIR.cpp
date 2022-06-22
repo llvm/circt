@@ -126,7 +126,8 @@ private:
   /// collected.
   SmallVector<Attribute> symbols;
   SmallDenseMap<Attribute, unsigned> symbolIndices;
-  /// Temporary `firrtl.nla` operations to be deleted at the end of the pass.
+  /// Temporary `firrtl.hierpath` operations to be deleted at the end of the
+  /// pass. Vector elements are unique.
   SmallVector<HierPathOp> removeTempNLAs;
   DenseMap<Operation *, ModuleNamespace> moduleNamespaces;
   /// Lookup table of instances by name and parent module.
@@ -293,7 +294,6 @@ void EmitOMIRPass::runOnOperation() {
           return true;
         }
         tracker.nla = cast<HierPathOp>(tmp);
-        removeTempNLAs.push_back(tracker.nla);
       }
       if (sramIDs.erase(tracker.id))
         makeTrackerAbsolute(tracker);
@@ -327,7 +327,14 @@ void EmitOMIRPass::runOnOperation() {
   if (anyFailures)
     return signalPassFailure();
 
+  // Drop temporary (and sometimes invalid) NLA's created during the pass:
+  for (auto nla : removeTempNLAs) {
+    LLVM_DEBUG(llvm::dbgs() << "Removing '" << nla << "'\n");
+    nlaTable->erase(nla);
+    nla.erase();
+  }
   removeTempNLAs.clear();
+
   // Remove the temp symbol from instances.
   for (auto *op : tempSymInstances)
     cast<InstanceOp>(op)->removeAttr("inner_sym");
@@ -410,6 +417,10 @@ void EmitOMIRPass::makeTrackerAbsolute(Tracker &tracker) {
       addToPath((*it)->getInstance(), ref.getName());
     }
   }
+
+  // TODO: Don't create NLA if namepath is empty
+  // (care needed to ensure this will be handled correctly elsewhere)
+
   // Add the op itself.
   namepath.push_back(hw::InnerRefAttr::getFromOperation(
       tracker.op, opName,
