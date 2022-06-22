@@ -780,7 +780,7 @@ static Value getCommonOperand(Op op) {
   if (!source || size != source.getType().getIntOrFloatBitWidth())
     return Value();
 
-  // tracks the bits that were encountered
+  // Tracks the bits that were encountered.
   auto bits = llvm::BitVector(size);
   bits.set(sourceOp.lowBit());
 
