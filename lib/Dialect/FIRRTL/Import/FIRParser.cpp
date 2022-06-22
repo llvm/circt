@@ -172,11 +172,6 @@ std::pair<bool, Optional<LocationAttr>> circt::firrtl::maybeStringToLocation(
   return {true, result};
 }
 
-static firrtl::NameKindEnum inferNameKind(StringRef name) {
-  return circt::firrtl::isUselessName(name) ? NameKindEnum::DroppableName
-                                            : NameKindEnum::InterestingName;
-}
-
 //===----------------------------------------------------------------------===//
 // SharedParserConstants
 //===----------------------------------------------------------------------===//
@@ -2833,8 +2828,8 @@ ParseResult FIRStmtParser::parseInstance() {
     }
 
   result = builder.create<InstanceOp>(
-      referencedModule, id, inferNameKind(id), annotations.first.getValue(),
-      annotations.second.getValue(), false, sym);
+      referencedModule, id, NameKindEnum::InterestingName,
+      annotations.first.getValue(), annotations.second.getValue(), false, sym);
 
   // Since we are implicitly unbundling the instance results, we need to keep
   // track of the mapping from bundle fields to results in the unbundledValues
@@ -2880,9 +2875,9 @@ ParseResult FIRStmtParser::parseCombMem() {
                                moduleContext.targetsInModule, type);
 
   auto sym = getSymbolIfRequired(annotations, id);
-  auto result = builder.create<CombMemOp>(vectorType.getElementType(),
-                                          vectorType.getNumElements(), id,
-                                          inferNameKind(id), annotations, sym);
+  auto result = builder.create<CombMemOp>(
+      vectorType.getElementType(), vectorType.getNumElements(), id,
+      NameKindEnum::InterestingName, annotations, sym);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -2918,9 +2913,9 @@ ParseResult FIRStmtParser::parseSeqMem() {
                                moduleContext.targetsInModule, type);
   auto sym = getSymbolIfRequired(annotations, id);
 
-  auto result = builder.create<SeqMemOp>(vectorType.getElementType(),
-                                         vectorType.getNumElements(), ruw, id,
-                                         inferNameKind(id), annotations, sym);
+  auto result = builder.create<SeqMemOp>(
+      vectorType.getElementType(), vectorType.getNumElements(), ruw, id,
+      NameKindEnum::InterestingName, annotations, sym);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -3059,7 +3054,7 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
     }
   result = builder.create<MemOp>(
       resultTypes, readLatency, writeLatency, depth, ruw,
-      builder.getArrayAttr(resultNames), id, inferNameKind(id),
+      builder.getArrayAttr(resultNames), id, NameKindEnum::InterestingName,
       annotations.first, annotations.second,
       sym ? InnerSymAttr::get(sym) : InnerSymAttr(), IntegerAttr());
 
@@ -3115,8 +3110,9 @@ ParseResult FIRStmtParser::parseNode() {
                                moduleContext.targetsInModule, initializerType);
 
   auto sym = getSymbolIfRequired(annotations, id);
-  auto result = builder.create<NodeOp>(initializer.getType(), initializer, id,
-                                       inferNameKind(id), annotations, sym);
+  auto result =
+      builder.create<NodeOp>(initializer.getType(), initializer, id,
+                             NameKindEnum::InterestingName, annotations, sym);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -3143,9 +3139,9 @@ ParseResult FIRStmtParser::parseWire() {
                                moduleContext.targetsInModule, type);
 
   auto sym = getSymbolIfRequired(annotations, id);
-  auto result =
-      builder.create<WireOp>(type, id, inferNameKind(id), annotations,
-                             sym ? InnerSymAttr::get(sym) : InnerSymAttr());
+  auto result = builder.create<WireOp>(
+      type, id, NameKindEnum::InterestingName, annotations,
+      sym ? InnerSymAttr::get(sym) : InnerSymAttr());
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -3238,12 +3234,12 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
   Value result;
   auto sym = getSymbolIfRequired(annotations, id);
   if (resetSignal)
-    result =
-        builder.create<RegResetOp>(type, clock, resetSignal, resetValue, id,
-                                   inferNameKind(id), annotations, sym);
+    result = builder.create<RegResetOp>(type, clock, resetSignal, resetValue,
+                                        id, NameKindEnum::InterestingName,
+                                        annotations, sym);
   else
-    result = builder.create<RegOp>(type, clock, id, inferNameKind(id),
-                                   annotations, sym);
+    result = builder.create<RegOp>(
+        type, clock, id, NameKindEnum::InterestingName, annotations, sym);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 

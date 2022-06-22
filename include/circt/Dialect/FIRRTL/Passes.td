@@ -507,8 +507,8 @@ def MemToRegOfVec : Pass<"firrtl-mem-to-reg-of-vec", "firrtl::CircuitOp"> {
 def DropName : Pass<"firrtl-drop-names", "firrtl::FModuleOp"> {
   let summary = "Drop interesting names";
   let description = [{
-    This pass changes names of namable ops to droppable so that
-    we can disable full name preservation. For example,
+    This pass changes names of namable ops to droppable so that we can disable
+    full name preservation. For example,
     before:
     ```mlir
     %a = firrtl.node interesting_name %input
@@ -519,6 +519,19 @@ def DropName : Pass<"firrtl-drop-names", "firrtl::FModuleOp"> {
     ```
   }];
   let constructor = "circt::firrtl::createDropNamesPass()";
+  let options = [
+    Option<"preserveMode", "preserve-values", "PreserveValues::PreserveMode", 
+           "PreserveValues::None", 
+           "specify the values which can be optimized away", [{
+            ::llvm::cl::values(
+              clEnumValN(PreserveValues::None, "none",
+                "Preserve no values"),
+              clEnumValN(PreserveValues::Named, "named",
+                "Preserve values with meaningful names"),
+              clEnumValN(PreserveValues::All, "all",
+                "Preserve all values"))
+           }]>
+  ];
   let statistics = [
     Statistic<"numNamesConverted", "num-names-converted",
       "Number of interesting names made droppable">,

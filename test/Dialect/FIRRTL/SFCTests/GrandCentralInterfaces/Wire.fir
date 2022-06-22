@@ -1,5 +1,5 @@
 ; RUN: firtool --firrtl-grand-central --verilog --annotation-file %S/Wire.anno.json --annotation-file %S/Extract.anno.json %s | FileCheck %s --check-prefixes CHECK,EXTRACT
-; RUN: firtool --firrtl-grand-central --verilog --annotation-file %S/Wire.anno.json %s | FileCheck %s --check-prefixes CHECK,NOEXTRACT
+; RUN: firtool --firrtl-grand-central --preserve-values=named --verilog --annotation-file %S/Wire.anno.json %s | FileCheck %s --check-prefixes CHECK,NOEXTRACT
 ; RUN: firtool --firrtl-grand-central --verilog --annotation-file %S/Wire.anno.json --annotation-file %S/Extract.anno.json %s --annotation-file %S/YAML.anno.json | FileCheck %s --check-prefixes YAML
 ; RUN: firtool --firrtl-grand-central --split-verilog --annotation-file %S/Wire.anno.json %s -o %t.folder > %t  && cat %t.folder/MyView_companion.sv | FileCheck %s --check-prefixes MYVIEW_COMPANION
 
@@ -221,7 +221,7 @@ circuit Top :
     ; EXTRACT:        module MyView_companion();
     ; EXTRACT:          Tap tap (
     ; EXTRACT-NEXT:       .b     (r),
-    ; EXTRACT-NEXT:       .clock (clock),
+    ; EXTRACT-NEXT:       .clock (_tap_clock),
     ; EXTRACT-NEXT:       .a     (_tap_a)
     ; EXTRACT-NEXT:     );
     ; EXTRACT-NEXT:     MyView_mapping MyView_mapping{{ *}}();

@@ -339,50 +339,6 @@ circuit Foo: %[[{"a":null,"target":"~Foo|Foo>w[9]"}]]
 
 ; // -----
 
-; Annotations should apply even when the target's name is dropped.
-circuit Foo: %[[{"target": "~Foo|Foo>_T_0", "a": "a"},
-                {"target": "~Foo|Foo>_T_1", "a": "a"},
-                {"target": "~Foo|Foo>_T_2", "a": "a"},
-                {"target": "~Foo|Foo>_T_3", "a": "a"},
-                {"target": "~Foo|Foo>_T_4", "a": "a"},
-                {"target": "~Foo|Foo>_T_5", "a": "a"},
-                {"target": "~Foo|Foo>_T_6", "a": "a"},
-                {"target": "~Foo|Foo>_T_7", "a": "a"},
-                {"target": "~Foo|Foo>_T_8", "a": "a"}]]
-  module Bar:
-    skip
-  module Foo:
-    input reset : UInt<1>
-    input clock : Clock
-
-    ; CHECK: %_T_0 = firrtl.wire  {annotations = [{a = "a"}]}
-    wire _T_0 : UInt<1>
-    ; CHECK: %_T_1 = firrtl.node
-    node _T_1 = _T_0
-    ; CHECK: %_T_2 = firrtl.reg %clock  {annotations = [{a = "a"}]}
-    reg _T_2 : UInt<1>, clock
-    ; CHECK: %_T_3 = firrtl.regreset {{.+}}  {annotations = [{a = "a"}]}
-    reg _T_3 : UInt<4>, clock with :
-      reset => (reset, UInt<4>("h0"))
-    ; CHECK: %_T_4 = chirrtl.seqmem Undefined {annotations = [{a = "a"}]}
-    smem _T_4 : UInt<1>[9] [256]
-    ; CHECK: %_T_5 = chirrtl.combmem {annotations = [{a = "a"}]}
-    cmem _T_5 : UInt<1>[9] [256]
-    ; CHECK: chirrtl.memoryport {{.+}} {annotations = [{a = "a"}]
-    infer mport _T_6 = _T_5[reset], clock
-    ; CHECK: firrtl.instance _T_7 {annotations = [{a = "a"}]}
-    inst _T_7 of Bar
-    ; CHECK: firrtl.mem Undefined  {annotations = [{a = "a"}]
-    mem _T_8 :
-        data-type => UInt<4>
-        depth => 8
-        writer => w
-        read-latency => 0
-        write-latency => 1
-        read-under-write => undefined
-
-; // -----
-
 ; Test that an annotated, anonymous node is preserved if annotated.  Normally,
 ; the FIRRTL parser will aggressively eliminate these.
 circuit AnnotationsBlockNodePruning: %[[
