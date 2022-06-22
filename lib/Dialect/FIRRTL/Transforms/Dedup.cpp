@@ -1187,9 +1187,10 @@ class DedupPass : public DedupBase<DedupPass> {
     // We must iterate the modules from the bottom up so that we can properly
     // deduplicate the modules. We copy the list of modules into a vector first
     // to avoid iterator invalidation while we mutate the instance graph.
-    std::vector<FModuleLike> modules;
-    for (auto *node : llvm::post_order(&instanceGraph))
-      modules.push_back(cast<FModuleLike>(*node->getModule()));
+    SmallVector<FModuleLike, 0> modules(
+        llvm::map_range(llvm::post_order(&instanceGraph), [](auto *node) {
+          return cast<FModuleLike>(*node->getModule());
+        }));
 
     for (auto module : modules) {
       auto moduleName = module.moduleNameAttr();
