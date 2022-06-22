@@ -55,7 +55,6 @@ Operation *buildESIWrapper(OpBuilder &b, Operation *mod,
 } // namespace esi
 } // namespace circt
 
-#include "circt/Dialect/ESI/ESIAttrs.h.inc"
 #include "circt/Dialect/ESI/ESIDialect.h.inc"
 
 #endif

@@ -10,16 +10,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-/// Define a struct with all the possible ChannelBuffer options
-def ChannelBufferOptions : StructAttr<"ChannelBufferOptions", ESI_Dialect, [
-    // 'Stages' is used to specify a specific number of cycles (pipeline stages)
-    // to use on this channel. Must be greater than 0.
-    StructFieldAttr<"stages", OptionalAttr< Confined<I64Attr, [IntMinValue<1>]> >>,
-
-    // Name assigned to a buffered connection.
-    StructFieldAttr<"name", OptionalAttr< StrAttr >>
-  ]>;
-
 def ChannelBuffer : ESI_Abstract_Op<"buffer", [NoSideEffect]> {
   let summary = "Control options for an ESI channel.";
   let description = [{
@@ -30,12 +20,18 @@ def ChannelBuffer : ESI_Abstract_Op<"buffer", [NoSideEffect]> {
     This operation is inserted on an ESI dataflow edge. It must exist
     previous to SystemVerilog emission but can be added in a lowering pass.
 
+    A `stages` attribute may be provided to specify a specific number of cycles
+    (pipeline stages) to use on this channel. Must be greater than 0.
+
+    A `name` attribute may be provided to assigned a name to a buffered
+    connection.
+
     Example:
 
     ```mlir
     %esiChan = hw.instance "sender" @Sender () : () -> (!esi.channel<i1>)
     // Allow automatic selection of options.
-    %bufferedChan = esi.buffer %esiChan { } : i1
+    %bufferedChan = esi.buffer %esiChan : i1
     hw.instance "recv" @Reciever (%bufferedChan) : (!esi.channel<i1>) -> ()
 
     // Alternatively, specify the number of stages.
@@ -44,7 +40,8 @@ def ChannelBuffer : ESI_Abstract_Op<"buffer", [NoSideEffect]> {
   }];
 
   let arguments = (ins I1:$clk, I1:$rstn, ChannelType:$input,
-    ChannelBufferOptions:$options);
+    OptionalAttr<Confined<I64Attr, [IntMinValue<1>]>>:$stages,
+    OptionalAttr<StrAttr>:$name);
   let results = (outs ChannelType:$output);
   let hasCustomAssemblyFormat = 1;
 }
