@@ -75,20 +75,17 @@ firrtl.circuit "InterfaceGroundType" attributes {
 
 // CHECK: firrtl.module @View_mapping
 // CHECK-SAME: output_file = #hw.output_file<"gct-dir/View_mapping.sv"
-// CHECK-NEXT: sv.verbatim "assign {{[{][{]0[}][}]}}.foo = {{[{][{]1[}][}]}}.{{[{][{]2[}][}]}}.{{[{][{]3[}][}]}};"
+// CHECK-NEXT: sv.verbatim "assign {{[{][{]0[}][}]}}.foo = {{[{][{]1[}][}]}}.{{[{][{]2[}][}]}};"
 // CHECK-SAME:   #hw.innerNameRef<@DUT::@__View_Foo__>
-// CHECK-SAME:   @InterfaceGroundType
-// CHECK-SAME:   #hw.innerNameRef<@InterfaceGroundType::@dut>
+// CHECK-SAME:   @DUT
 // CHECK-SAME:   #hw.innerNameRef<@DUT::@a>
-// CHECK-NEXT: sv.verbatim "assign {{[{][{]0[}][}]}}.bar = {{[{][{]1[}][}]}}.{{[{][{]2[}][}]}}.{{[{][{]3[}][}]}};"
+// CHECK-NEXT: sv.verbatim "assign {{[{][{]0[}][}]}}.bar = {{[{][{]1[}][}]}}.{{[{][{]2[}][}]}};"
 // CHECK-SAME:   #hw.innerNameRef<@DUT::@__View_Foo__>
-// CHECK-SAME:   @InterfaceGroundType
-// CHECK-SAME:   #hw.innerNameRef<@InterfaceGroundType::@dut>
+// CHECK-SAME:   @DUT
 // CHECK-SAME:   #hw.innerNameRef<@DUT::@b>
-// CHECK-NEXT: sv.verbatim "assign {{[{][{]0[}][}]}}.baz = {{[{][{]1[}][}]}}.{{[{][{]2[}][}]}}.{{[{][{]3[}][}]}}[1].d;"
+// CHECK-NEXT: sv.verbatim "assign {{[{][{]0[}][}]}}.baz = {{[{][{]1[}][}]}}.{{[{][{]2[}][}]}}[1].d;"
 // CHECK-SAME:   #hw.innerNameRef<@DUT::@__View_Foo__>
-// CHECK-SAME:   @InterfaceGroundType
-// CHECK-SAME:   #hw.innerNameRef<@InterfaceGroundType::@dut>
+// CHECK-SAME:   @DUT
 // CHECK-SAME:   #hw.innerNameRef<@DUT::@c>]
 
 // CHECK: sv.interface {
@@ -798,35 +795,29 @@ firrtl.circuit "NestedInterfaceVectorTypes" attributes {annotations = [
 
 // CHECK-LABEL: firrtl.circuit "NestedInterfaceVectorTypes"
 // CHECK:         firrtl.module @View_mapping
-// CHECK-NEXT:      sv.verbatim "assign {{[{][{]0[}][}]}}.bar[0][0] = {{[{][{]1[}][}]}}.{{[{][{]2[}][}]}}.{{[{][{]3[}][}]}};"
+// CHECK-NEXT:      sv.verbatim "assign {{[{][{]0[}][}]}}.bar[0][0] = {{[{][{]1[}][}]}}.{{[{][{]2[}][}]}};"
 // CHECK-SAME:        #hw.innerNameRef<@DUT::@__View_Foo__>
-// CHECK-SAME:        @NestedInterfaceVectorTypes
-// CHECK-SAME:        #hw.innerNameRef<@NestedInterfaceVectorTypes::@dut>
+// CHECK-SAME:        @DUT
 // CHECK-SAME:        #hw.innerNameRef<@DUT::@a0>
-// CHECK-NEXT:      sv.verbatim "assign {{[{][{]0[}][}]}}.bar[0][1] = {{[{][{]1[}][}]}}.{{[{][{]2[}][}]}}.{{[{][{]3[}][}]}};"
+// CHECK-NEXT:      sv.verbatim "assign {{[{][{]0[}][}]}}.bar[0][1] = {{[{][{]1[}][}]}}.{{[{][{]2[}][}]}};"
 // CHECK-SAME:        #hw.innerNameRef<@DUT::@__View_Foo__>
-// CHECK-SAME:        @NestedInterfaceVectorTypes
-// CHECK-SAME:        #hw.innerNameRef<@NestedInterfaceVectorTypes::@dut>
+// CHECK-SAME:        @DUT
 // CHECK-SAME:        #hw.innerNameRef<@DUT::@a1>
-// CHECK-NEXT:      sv.verbatim "assign {{[{][{]0[}][}]}}.bar[0][2] = {{[{][{]1[}][}]}}.{{[{][{]2[}][}]}}.{{[{][{]3[}][}]}};"
+// CHECK-NEXT:      sv.verbatim "assign {{[{][{]0[}][}]}}.bar[0][2] = {{[{][{]1[}][}]}}.{{[{][{]2[}][}]}};"
 // CHECK-SAME:        #hw.innerNameRef<@DUT::@__View_Foo__>
-// CHECK-SAME:        @NestedInterfaceVectorTypes
-// CHECK-SAME:        #hw.innerNameRef<@NestedInterfaceVectorTypes::@dut>
+// CHECK-SAME:        @DUT
 // CHECK-SAME:        #hw.innerNameRef<@DUT::@a2>
-// CHECK-NEXT:      sv.verbatim "assign {{[{][{]0[}][}]}}.bar[1][0] = {{[{][{]1[}][}]}}.{{[{][{]2[}][}]}}.{{[{][{]3[}][}]}};"
+// CHECK-NEXT:      sv.verbatim "assign {{[{][{]0[}][}]}}.bar[1][0] = {{[{][{]1[}][}]}}.{{[{][{]2[}][}]}};"
 // CHECK-SAME:        #hw.innerNameRef<@DUT::@__View_Foo__>
-// CHECK-SAME:        @NestedInterfaceVectorTypes
-// CHECK-SAME:        #hw.innerNameRef<@NestedInterfaceVectorTypes::@dut>
+// CHECK-SAME:        @DUT
 // CHECK-SAME:        #hw.innerNameRef<@DUT::@b0>
-// CHECK-NEXT:      sv.verbatim "assign {{[{][{]0[}][}]}}.bar[1][1] = {{[{][{]1[}][}]}}.{{[{][{]2[}][}]}}.{{[{][{]3[}][}]}};"
+// CHECK-NEXT:      sv.verbatim "assign {{[{][{]0[}][}]}}.bar[1][1] = {{[{][{]1[}][}]}}.{{[{][{]2[}][}]}};"
 // CHECK-SAME:        #hw.innerNameRef<@DUT::@__View_Foo__>
-// CHECK-SAME:        @NestedInterfaceVectorTypes
-// CHECK-SAME:        #hw.innerNameRef<@NestedInterfaceVectorTypes::@dut>
+// CHECK-SAME:        @DUT
 // CHECK-SAME:        #hw.innerNameRef<@DUT::@b1>
-// CHECK-NEXT:      sv.verbatim "assign {{[{][{]0[}][}]}}.bar[1][2] = {{[{][{]1[}][}]}}.{{[{][{]2[}][}]}}.{{[{][{]3[}][}]}};"
+// CHECK-NEXT:      sv.verbatim "assign {{[{][{]0[}][}]}}.bar[1][2] = {{[{][{]1[}][}]}}.{{[{][{]2[}][}]}};"
 // CHECK-SAME:        #hw.innerNameRef<@DUT::@__View_Foo__>
-// CHECK-SAME:        @NestedInterfaceVectorTypes
-// CHECK-SAME:        #hw.innerNameRef<@NestedInterfaceVectorTypes::@dut>
+// CHECK-SAME:        @DUT
 // CHECK-SAME:        #hw.innerNameRef<@DUT::@b2>
 // CHECK:         sv.interface {
 // CHECK-SAME:      @Foo
@@ -1027,30 +1018,27 @@ firrtl.circuit "DedupedPath" attributes {
 // CHECK:                  firrtl.module @DUT()
 // CHECK-NOT:                circt.nonlocal
 // CHECK:                  firrtl.module @DedupedPath
-// CHECK-NEXT:               firrtl.instance dut sym @[[dutSym:[a-zA-Z0-9]+]]
+// CHECK-NEXT:               firrtl.instance dut
+// CHECK-NOT:                  sym
 // CHECK:                  firrtl.module @MyView_mapping()
-// CHECK-NEXT{LITERAL}:      sv.verbatim "assign {{0}}.foo = {{1}}.{{2}}.{{3}}.{{4}};"
+// CHECK-NEXT{LITERAL}:      sv.verbatim "assign {{0}}.foo = {{1}}.{{2}}.{{3}};"
 // CHECK-SAME:                 symbols = [#hw.innerNameRef<@DUT::@__MyView_Foo__>,
-// CHECK-SAME:                   @DedupedPath,
-// CHECK-SAME:                   #hw.innerNameRef<@DedupedPath::@[[dutSym]]>,
+// CHECK-SAME:                   @DUT,
 // CHECK-SAME:                   #hw.innerNameRef<@DUT::@tile1>,
 // CHECK-SAME:                   #hw.innerNameRef<@Tile::@w>]
-// CHECK-NEXT{LITERAL}:      sv.verbatim "assign {{0}}.bar = {{1}}.{{2}}.{{3}}.{{4}};"
+// CHECK-NEXT{LITERAL}:      sv.verbatim "assign {{0}}.bar = {{1}}.{{2}}.{{3}};"
 // CHECK-SAME:                 symbols = [#hw.innerNameRef<@DUT::@__MyView_Foo__>,
-// CHECK-SAME:                   @DedupedPath,
-// CHECK-SAME:                   #hw.innerNameRef<@DedupedPath::@[[dutSym]]>,
+// CHECK-SAME:                   @DUT,
 // CHECK-SAME:                   #hw.innerNameRef<@DUT::@tile2>,
 // CHECK-SAME:                   #hw.innerNameRef<@Tile::@w>]
-// CHECK-NEXT{LITERAL}:      sv.verbatim "assign {{0}}.baz = {{1}}.{{2}}.{{3}}.{{4}};"
+// CHECK-NEXT{LITERAL}:      sv.verbatim "assign {{0}}.baz = {{1}}.{{2}}.{{3}};"
 // CHECK-SAME:                 symbols = [#hw.innerNameRef<@DUT::@__MyView_Foo__>,
-// CHECK-SAME:                   @DedupedPath,
-// CHECK-SAME:                   #hw.innerNameRef<@DedupedPath::@[[dutSym]]>,
+// CHECK-SAME:                   @DUT,
 // CHECK-SAME:                   #hw.innerNameRef<@DUT::@tile1>,
 // CHECK-SAME:                   #hw.innerNameRef<@Tile::@x>]
-// CHECK-NEXT{LITERAL}:      sv.verbatim "assign {{0}}.qux = {{1}}.{{2}}.{{3}}.{{4}};"
+// CHECK-NEXT{LITERAL}:      sv.verbatim "assign {{0}}.qux = {{1}}.{{2}}.{{3}};"
 // CHECK-SAME:                 symbols = [#hw.innerNameRef<@DUT::@__MyView_Foo__>,
-// CHECK-SAME:                   @DedupedPath,
-// CHECK-SAME:                   #hw.innerNameRef<@DedupedPath::@[[dutSym]]>,
+// CHECK-SAME:                   @DUT,
 // CHECK-SAME:                   #hw.innerNameRef<@DUT::@tile2>,
 // CHECK-SAME:                   #hw.innerNameRef<@Tile::@x>]
 
