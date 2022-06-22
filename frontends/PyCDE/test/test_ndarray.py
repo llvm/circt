@@ -1,4 +1,4 @@
-# RUN: %PYTHON% py-split-input-file.py %s
+# RUN: %PYTHON% py-split-input-file.py %s | FileCheck %s
 
 from pycde import System, Input, Output, module, generator
 
@@ -188,6 +188,46 @@ class M1:
   @generator
   def build(ports):
     ports.out = ports.in1.roll(3)
+
+
+m1 = System([M1])
+m1.generate()
+m1.print()
+
+# -----
+
+# CHECK-LABEL:   msft.module @M1 {} () -> (out: !hw.array<3xarray<3xi32>>) attributes {fileName = "M1.sv"} {
+# CHECK:           %[[VAL_0:.*]] = hw.constant 0 : i32
+# CHECK:           %[[VAL_1:.*]] = hw.constant 1 : i32
+# CHECK:           %[[VAL_2:.*]] = hw.constant 2 : i32
+# CHECK:           %[[VAL_3:.*]] = hw.constant 3 : i32
+# CHECK:           %[[VAL_4:.*]] = hw.constant 4 : i32
+# CHECK:           %[[VAL_5:.*]] = hw.constant 5 : i32
+# CHECK:           %[[VAL_6:.*]] = hw.constant 6 : i32
+# CHECK:           %[[VAL_7:.*]] = hw.constant 7 : i32
+# CHECK:           %[[VAL_8:.*]] = hw.constant 8 : i32
+# CHECK:           %[[VAL_9:.*]] = hw.array_create %[[VAL_8]], %[[VAL_7]], %[[VAL_6]] : i32
+# CHECK:           %[[VAL_10:.*]] = hw.array_create %[[VAL_5]], %[[VAL_4]], %[[VAL_3]] : i32
+# CHECK:           %[[VAL_11:.*]] = hw.array_create %[[VAL_2]], %[[VAL_1]], %[[VAL_0]] : i32
+# CHECK:           %[[VAL_12:.*]] = hw.array_create %[[VAL_9]], %[[VAL_10]], %[[VAL_11]] : !hw.array<3xi32>
+# CHECK:           %[[VAL_13:.*]] = sv.wire  : !hw.inout<array<3xarray<3xi32>>>
+# CHECK:           sv.assign %[[VAL_13]], %[[VAL_12]] : !hw.array<3xarray<3xi32>>
+# CHECK:           %[[VAL_14:.*]] = sv.read_inout %[[VAL_13]] : !hw.inout<array<3xarray<3xi32>>>
+# CHECK:           msft.output %[[VAL_14]] : !hw.array<3xarray<3xi32>>
+# CHECK:         }
+
+
+@module
+class M1:
+  out = Output(dim(types.i32, 3, 3))
+
+  @generator
+  def build(ports):
+    m = NDArray((3, 3), dtype=types.i32)
+    for i in range(3):
+      for j in range(3):
+        m[i][j] = types.i32(i * 3 + j)
+    ports.out = m.to_circt()
 
 
 m1 = System([M1])
