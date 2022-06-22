@@ -769,20 +769,20 @@ static Value getCommonOperand(Op op) {
     return Value();
 
   auto inputs = op.inputs();
-
-  auto sourceExtractOp = inputs[0].template getDefiningOp<ExtractOp>();
-  if (!sourceExtractOp)
-    return Value();
-
-  Value source = sourceExtractOp.getOperand();
-
   size_t size = inputs.size();
 
+  auto sourceOp = inputs[0].template getDefiningOp<ExtractOp>();
+  if (!sourceOp)
+    return Value();
+  Value source = sourceOp.getOperand();
+
+  // fast path: the source bit-width does not match the size of the inputs
   if (!source || size != source.getType().getIntOrFloatBitWidth())
     return Value();
 
+  // tracks the bits that were encountered
   auto bits = APInt::getZero(size);
-  bits.setBit(sourceExtractOp.lowBit());
+  bits.setBit(sourceOp.lowBit());
 
   for (size_t i = 1; i != size; ++i) {
     if (auto extractOp = inputs[i].template getDefiningOp<ExtractOp>()) {
