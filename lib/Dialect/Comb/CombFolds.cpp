@@ -770,26 +770,32 @@ static Value getCommonOperand(Op op) {
 
   auto inputs = op.inputs();
 
-  auto commonOperand = [&inputs](size_t index) -> Value {
-    if (auto extractOp = inputs[index].template getDefiningOp<ExtractOp>())
-      return extractOp.getOperand();
-    else
-      return Value();
-  };
+  auto sourceExtractOp = inputs[0].template getDefiningOp<ExtractOp>();
+  if (!sourceExtractOp)
+    return Value();
 
-  Value source = commonOperand(0);
+  Value source = sourceExtractOp.getOperand();
 
   size_t size = inputs.size();
 
   if (!source || size != source.getType().getIntOrFloatBitWidth())
     return Value();
 
+  auto bits = APInt::getZero(size);
+  bits.setBit(sourceExtractOp.lowBit());
+
   for (size_t i = 1; i != size; ++i) {
-    if (commonOperand(i) != source)
+    if (auto extractOp = inputs[i].template getDefiningOp<ExtractOp>()) {
+      if (extractOp.getOperand() != source)
+        return Value();
+
+      bits.setBit(extractOp.lowBit());
+    } else {
       return Value();
+    }
   }
 
-  return source;
+  return bits.isAllOnes() ? source : Value();
 }
 
 LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
