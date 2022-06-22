@@ -926,7 +926,7 @@ LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
   if (narrowOperationWidth(op, true, rewriter))
     return success();
 
-  // and(a[0], a[1], ..., a[n]) -> icmp eq(b, -1)
+  // and(a[0], a[1], ..., a[n]) -> icmp eq(a, -1)
   if (auto source = getCommonOperand(op)) {
     auto cmpAgainst =
         rewriter.create<hw::ConstantOp>(op.getLoc(), APInt::getAllOnes(size));
@@ -1137,7 +1137,7 @@ LogicalResult OrOp::canonicalize(OrOp op, PatternRewriter &rewriter) {
   if (narrowOperationWidth(op, true, rewriter))
     return success();
 
-  // or(a[0], a[1], ..., a[n]) -> icmp ne(b, 0)
+  // or(a[0], a[1], ..., a[n]) -> icmp ne(a, 0)
   if (auto source = getCommonOperand(op)) {
     auto cmpAgainst =
         rewriter.create<hw::ConstantOp>(op.getLoc(), APInt::getZero(size));
@@ -1263,7 +1263,7 @@ LogicalResult XorOp::canonicalize(XorOp op, PatternRewriter &rewriter) {
   if (narrowOperationWidth(op, true, rewriter))
     return success();
 
-  // xor(a[0], a[1], ..., a[n]) -> parity(b)
+  // xor(a[0], a[1], ..., a[n]) -> parity(a)
   if (auto source = getCommonOperand(op)) {
     replaceOpWithNewOpAndCopyName<ParityOp>(rewriter, op, source);
   }
