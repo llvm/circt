@@ -277,6 +277,8 @@ def FConnectLike : OpInterface<"FConnectLike"> {
   ];
 }
 
+def InnerRefNamespace : NativeOpTrait<"InnerRefNamespace">;
+
 def InnerSymbol : OpInterface<"InnerSymbolOpInterface"> {
   let description = [{
     This interface describes an operation that may define an
@@ -338,6 +340,23 @@ def InnerSymbol : OpInterface<"InnerSymbolOpInterface"> {
 }
 
 def InnerSymbolTable : NativeOpTrait<"InnerSymbolTable">;
+
+def InnerRefUserOpInterface : OpInterface<"InnerRefUserOpInterface"> {
+  let description = [{
+    This interface describes an operation that may use a `InnerRef`. This
+    interface allows for users of inner symbols to hook into verification and
+    other inner symbol related utilities that are either costly or otherwise
+    disallowed within a traditional operation.
+  }];
+  let cppNamespace = "::circt::firrtl";
+
+  let methods = [
+    InterfaceMethod<"Verify the inner ref uses held by this operation.",
+      "::mlir::LogicalResult", "verifyInnerRefs",
+      (ins "::circt::firrtl::InnerRefNamespace&":$ns)
+    >,
+  ];
+}
 
 def FNamableOp : OpInterface<"FNamableOp"> {
   let cppNamespace = "circt::firrtl";
