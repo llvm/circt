@@ -768,25 +768,22 @@ static Value getCommonOperand(Op op) {
   auto inputs = op.inputs();
 
   auto commonOperand = [&inputs](size_t index) -> Value {
-    if (auto extractOp = inputs[index].template getDefiningOp<ExtractOp>()) {
+    if (auto extractOp = inputs[index].template getDefiningOp<ExtractOp>())
       return extractOp.getOperand();
-    } else {
+    else
       return Value();
-    }
   };
 
   Value source = commonOperand(0);
 
   size_t size = inputs.size();
 
-  if (!source || size != source.getType().getIntOrFloatBitWidth()) {
+  if (!source || size != source.getType().getIntOrFloatBitWidth())
     return Value();
-  }
 
   for (size_t i = 1; i != size; ++i) {
-    if (commonOperand(i) != source) {
+    if (commonOperand(i) != source)
       return Value();
-    }
   }
 
   return source;
@@ -932,8 +929,8 @@ LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
         rewriter.create<hw::ConstantOp>(op.getLoc(), APInt::getAllOnes(size));
     replaceOpWithNewOpAndCopyName<ICmpOp>(rewriter, op, ICmpPredicate::eq,
                                           source, cmpAgainst);
+    return success();
   }
-  return success();
 
   /// TODO: and(..., x, not(x)) -> and(..., 0) -- complement
   return failure();
@@ -1143,6 +1140,7 @@ LogicalResult OrOp::canonicalize(OrOp op, PatternRewriter &rewriter) {
         rewriter.create<hw::ConstantOp>(op.getLoc(), APInt::getZero(size));
     replaceOpWithNewOpAndCopyName<ICmpOp>(rewriter, op, ICmpPredicate::ne,
                                           source, cmpAgainst);
+    return success();
   }
 
   /// TODO: or(..., x, not(x)) -> or(..., '1) -- complement
@@ -1266,6 +1264,7 @@ LogicalResult XorOp::canonicalize(XorOp op, PatternRewriter &rewriter) {
   // xor(a[0], a[1], ..., a[n]) -> parity(a)
   if (auto source = getCommonOperand(op)) {
     replaceOpWithNewOpAndCopyName<ParityOp>(rewriter, op, source);
+    return success();
   }
 
   return failure();
