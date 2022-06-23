@@ -213,3 +213,4 @@ def ProbeOp : FIRRTLOp<"probe"> {
 
   let assemblyFormat = "$inner_sym attr-dict ( `,` $operands^  `:` qualified(type($operands)))?";
 }
+
