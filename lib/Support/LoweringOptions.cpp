@@ -37,6 +37,7 @@ parseLocationInfoStyle(StringRef option) {
              option)
       .Case("plain", LoweringOptions::Plain)
       .Case("wrapInAtSquareBracket", LoweringOptions::WrapInAtSquareBracket)
+      .Case("none", LoweringOptions::None)
       .Default(llvm::None);
 }
 
@@ -81,7 +82,7 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
       if (auto style = parseLocationInfoStyle(option)) {
         locationInfoStyle = *style;
       } else {
-        errorHandler("expected 'plain' or 'wrapInAtSquareBracket'");
+        errorHandler("expected 'plain', 'wrapInAtSquareBracket', or 'none'");
       }
     } else if (option == "disallowPortDeclSharing") {
       disallowPortDeclSharing = true;
@@ -113,6 +114,8 @@ std::string LoweringOptions::toString() const {
     options += "emitReplicatedOpsToHeader,";
   if (locationInfoStyle == LocationInfoStyle::WrapInAtSquareBracket)
     options += "locationInfoStyle=wrapInAtSquareBracket,";
+  if (locationInfoStyle == LocationInfoStyle::None)
+    options += "locationInfoStyle=none,";
   if (disallowPortDeclSharing)
     options += "disallowPortDeclSharing,";
   if (printDebugInfo)
@@ -181,7 +184,7 @@ struct LoweringCLOptions {
           "maximumNumberOfTermsPerExpression=<n>, "
           "maximumNumberOfTermsInConcat=<n>, explicitBitcast, "
           "emitReplicatedOpsToHeader, "
-          "locationInfoStyle={plain,wrapInAtSquareBracket}, "
+          "locationInfoStyle={plain,wrapInAtSquareBracket,none}, "
           "disallowPortDeclSharing, printDebugInfo"),
       llvm::cl::value_desc("option")};
 };

@@ -104,8 +104,9 @@ struct LoweringOptions {
 
   /// This option controls emitted location information style.
   enum LocationInfoStyle {
-    Plain,                // Default.
-    WrapInAtSquareBracket // Wrap location info in @[..].
+    Plain,                 // Default.
+    WrapInAtSquareBracket, // Wrap location info in @[..].
+    None,                  // No location info comment.
   } locationInfoStyle = Plain;
 
   /// If true, every port is declared separately
