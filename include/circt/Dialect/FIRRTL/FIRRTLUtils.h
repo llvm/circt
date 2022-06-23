@@ -77,6 +77,17 @@ getOrAddInnerSym(Operation *op, StringRef nameHint, FModuleOp mod,
 hw::InnerRefAttr
 getInnerRefTo(Operation *op, StringRef nameHint,
               std::function<ModuleNamespace &(FModuleOp)> getNamespace);
+
+/// Returns a port's `inner_sym`, adding one if necessary.
+StringAttr
+getOrAddInnerSym(FModuleLike mod, size_t portIdx, StringRef nameHint,
+                 std::function<ModuleNamespace &(FModuleLike)> getNamespace);
+
+/// Obtain an inner reference to a port, possibly adding an `inner_sym`
+/// to the port.
+hw::InnerRefAttr
+getInnerRefTo(FModuleLike mod, size_t portIdx, StringRef nameHint,
+              std::function<ModuleNamespace &(FModuleLike)> getNamespace);
 } // namespace firrtl
 } // namespace circt
 

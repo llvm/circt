@@ -95,8 +95,6 @@ private:
     return addSymbol(SymbolTable::getSymbolName(op));
   }
 
-  /// Returns a port's `inner_sym`, adding one if necessary.
-  StringAttr getOrAddInnerSym(FModuleLike module, size_t portIdx);
   /// Obtain an inner reference to an operation, possibly adding an `inner_sym`
   /// to that operation.
   hw::InnerRefAttr getInnerRefTo(Operation *op);
@@ -856,16 +854,6 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
   jsonStream.value(target);
 }
 
-StringAttr EmitOMIRPass::getOrAddInnerSym(FModuleLike module, size_t portIdx) {
-  auto attr = module.getPortSymbolAttr(portIdx);
-  if (attr && !attr.getValue().empty())
-    return attr;
-  auto name = getModuleNamespace(module).newName("omir_sym");
-  attr = StringAttr::get(module.getContext(), name);
-  module.setPortSymbolAttr(portIdx, attr);
-  return attr;
-}
-
 hw::InnerRefAttr EmitOMIRPass::getInnerRefTo(Operation *op) {
   return ::getInnerRefTo(op, "omir_sym",
                          [&](FModuleOp module) -> ModuleNamespace & {
@@ -875,8 +863,10 @@ hw::InnerRefAttr EmitOMIRPass::getInnerRefTo(Operation *op) {
 
 hw::InnerRefAttr EmitOMIRPass::getInnerRefTo(FModuleLike module,
                                              size_t portIdx) {
-  return hw::InnerRefAttr::get(SymbolTable::getSymbolName(module),
-                               getOrAddInnerSym(module, portIdx));
+  return ::getInnerRefTo(module, portIdx, "omir_sym",
+                         [&](FModuleLike mod) -> ModuleNamespace & {
+                           return getModuleNamespace(mod);
+                         });
 }
 
 //===----------------------------------------------------------------------===//

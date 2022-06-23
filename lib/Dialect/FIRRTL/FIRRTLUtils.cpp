@@ -382,3 +382,33 @@ hw::InnerRefAttr circt::firrtl::getInnerRefTo(
       SymbolTable::getSymbolName(mod),
       getOrAddInnerSym(op, nameHint, mod, getNamespace));
 }
+
+/// Returns a port's `inner_sym`, adding one if necessary.
+StringAttr circt::firrtl::getOrAddInnerSym(
+    FModuleLike mod, size_t portIdx, StringRef nameHint,
+    std::function<ModuleNamespace &(FModuleLike)> getNamespace) {
+
+  auto attr = mod.getPortSymbolAttr(portIdx);
+  if (attr && !attr.getValue().empty())
+    return attr;
+  if (nameHint.empty()) {
+    if (auto name = mod.getPortNameAttr(portIdx))
+      nameHint = name;
+    else
+      nameHint = "sym";
+  }
+  auto name = getNamespace(mod).newName(nameHint);
+  attr = StringAttr::get(mod.getContext(), name);
+  mod.setPortSymbolAttr(portIdx, attr);
+  return attr;
+}
+
+/// Obtain an inner reference to a port, possibly adding an `inner_sym`
+/// to the port.
+hw::InnerRefAttr circt::firrtl::getInnerRefTo(
+    FModuleLike mod, size_t portIdx, StringRef nameHint,
+    std::function<ModuleNamespace &(FModuleLike)> getNamespace) {
+  return hw::InnerRefAttr::get(
+      SymbolTable::getSymbolName(mod),
+      getOrAddInnerSym(mod, portIdx, nameHint, getNamespace));
+}
