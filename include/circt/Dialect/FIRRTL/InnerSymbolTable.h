@@ -25,9 +25,6 @@ namespace firrtl {
 /// A table of inner symbols and their resolutions.
 class InnerSymbolTable {
 public:
-  /// Return the name of the attribute used for inner symbol names.
-  static StringRef getInnerSymbolAttrName() { return "inner_sym"; }
-
   /// Build an inner symbol table for the given operation.  The operation must
   /// have the InnerSymbolTable trait.
   explicit InnerSymbolTable(Operation *op);
@@ -52,14 +49,8 @@ public:
     return dyn_cast_or_null<T>(lookup(name));
   }
 
-  /// Get InnerSymbol for an operation.
-  static StringAttr getInnerSymbol(Operation *op);
-
   /// Return an InnerRef to the given operation which must be within this table.
   hw::InnerRefAttr getInnerRef(Operation *op);
-
-  /// Return an InnerRef to the given operation.
-  static hw::InnerRefAttr getInnerRefFor(Operation *op);
 
   /// Return an InnerRef for the given inner symbol, which must be valid.
   hw::InnerRefAttr getInnerRef(StringRef name) {
@@ -70,6 +61,15 @@ public:
   hw::InnerRefAttr getInnerRef(StringAttr name) {
     return getInnerRef(lookup(name));
   }
+
+  /// Return an InnerRef to the given operation.
+  static hw::InnerRefAttr getInnerRefFor(Operation *op);
+
+  /// Get InnerSymbol for an operation.
+  static StringAttr getInnerSymbol(Operation *op);
+
+  /// Return the name of the attribute used for inner symbol names.
+  static StringRef getInnerSymbolAttrName() { return "inner_sym"; }
 
 private:
   /// This is the operation this table is constructed for, which must have the
