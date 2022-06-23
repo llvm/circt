@@ -95,6 +95,7 @@ inline MemDirAttr &operator|=(MemDirAttr &lhs, MemDirAttr rhs) {
   return lhs;
 }
 
+/// Return the StringAttr for the inner_sym name, if it exists.
 inline StringAttr getInnerSymName(Operation *op) {
   return op->getAttrOfType<StringAttr>("inner_sym");
 }
