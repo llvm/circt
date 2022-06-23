@@ -1570,6 +1570,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitStmt(CoverOp op);
   LogicalResult visitStmt(AttachOp op);
   LogicalResult visitStmt(ProbeOp op);
+  LogicalResult visitStmt(XMROp op);
 
 private:
   /// The module we're lowering into.
@@ -4043,4 +4044,33 @@ LogicalResult FIRRTLLowering::visitStmt(ProbeOp op) {
   builder.create<hw::ProbeOp>(op.inner_sym(), operands);
 
   return success();
+}
+
+LogicalResult FIRRTLLowering::visitStmt(XMROp op) {
+  auto resultTy = lowerType(op.getType());
+  if (!resultTy)
+    return failure();
+  auto nla = circuitState.nlaTable->getNLA(op.hierPathSymAttr().getAttr());
+  if (!nla) {
+    return op.emitError("The HierPathOp cannot be found");
+  }
+
+  SmallVector<Attribute> namepath;
+  namepath.reserve(nla.namepath().size());
+  namepath.push_back(nla.namepath()[0].cast<hw::InnerRefAttr>().getModule());
+  for (unsigned i = 0, s = nla.namepath().size() - 1; i < s; ++i)
+    if (auto innerRef = nla.namepath()[i].dyn_cast<hw::InnerRefAttr>())
+      namepath.push_back(innerRef.getName());
+  auto leafRef = nla.namepath()[nla.namepath().size() - 1];
+  StringAttr terminal;
+  if (auto innerRef = leafRef.dyn_cast<hw::InnerRefAttr>())
+    terminal = innerRef.getName();
+  else
+    terminal = innerRef.getModule();
+
+  auto xmrOp = builder.create<sv::XMROp>(
+      sv::InOutType::get(op.getContext(), resultTy), UnitAttr(),
+      ArrayAttr::get(op.getContext(), namepath), terminal);
+
+  return setLoweringTo<sv::ReadInOutOp>(op, resultTy, xmrOp);
 }
