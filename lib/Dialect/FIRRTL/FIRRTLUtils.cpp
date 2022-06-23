@@ -351,3 +351,34 @@ Value circt::firrtl::getValueByFieldID(ImplicitLocOpBuilder builder,
   }
   return value;
 }
+
+/// Returns an operation's `inner_sym`, adding one if necessary.
+StringAttr circt::firrtl::getOrAddInnerSym(
+    Operation *op, StringRef nameHint, FModuleOp mod,
+    std::function<ModuleNamespace &(FModuleOp)> getNamespace) {
+  auto attr = getInnerSymName(op);
+  if (attr)
+    return attr;
+  if (nameHint.empty()) {
+    if (auto nameAttr = op->getAttrOfType<StringAttr>("name"))
+      nameHint = nameAttr.getValue();
+    else
+      nameHint = "sym";
+  }
+  auto name = getNamespace(mod).newName(nameHint);
+  attr = StringAttr::get(op->getContext(), name);
+  op->setAttr("inner_sym", attr);
+  return attr;
+}
+
+/// Obtain an inner reference to an operation, possibly adding an `inner_sym`
+/// to that operation.
+hw::InnerRefAttr circt::firrtl::getInnerRefTo(
+    Operation *op, StringRef nameHint,
+    std::function<ModuleNamespace &(FModuleOp)> getNamespace) {
+  auto mod = op->getParentOfType<FModuleOp>();
+  assert(mod && "must be an operation inside an FModuleOp");
+  return hw::InnerRefAttr::get(
+      SymbolTable::getSymbolName(mod),
+      getOrAddInnerSym(op, nameHint, mod, getNamespace));
+}

@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_FIRRTL_FIRRTLUTILS_H
 
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/Namespace.h"
 #include "mlir/IR/BuiltinOps.h"
 
 namespace circt {
@@ -66,6 +67,16 @@ std::string getFieldName(const FieldRef &fieldRef, bool &rootKnown);
 Value getValueByFieldID(ImplicitLocOpBuilder builder, Value value,
                         unsigned fieldID);
 
+/// Returns an operation's `inner_sym`, adding one if necessary.
+StringAttr
+getOrAddInnerSym(Operation *op, StringRef nameHint, FModuleOp mod,
+                 std::function<ModuleNamespace &(FModuleOp)> getNamespace);
+
+/// Obtain an inner reference to an operation, possibly adding an `inner_sym`
+/// to that operation.
+hw::InnerRefAttr
+getInnerRefTo(Operation *op, StringRef nameHint,
+              std::function<ModuleNamespace &(FModuleOp)> getNamespace);
 } // namespace firrtl
 } // namespace circt
 

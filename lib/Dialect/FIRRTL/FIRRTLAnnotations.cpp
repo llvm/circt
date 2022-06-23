@@ -596,19 +596,10 @@ void OpAnnoTarget::setAnnotations(AnnotationSet annotations) const {
 }
 
 StringAttr OpAnnoTarget::getInnerSym(ModuleNamespace &moduleNamespace) const {
-  auto *context = getOp()->getContext();
-  auto innerSym = getInnerSymName(getOp());
-  if (!innerSym) {
-    // Try to come up with a reasonable name.
-    StringRef name = "inner_sym";
-    auto nameAttr = getOp()->getAttrOfType<StringAttr>("name");
-    if (nameAttr && !nameAttr.getValue().empty())
-      name = nameAttr.getValue();
-    innerSym = StringAttr::get(context, moduleNamespace.newName(name));
-    getOp()->setAttr("inner_sym", innerSym);
-  }
-  assert(innerSym && "invalid inner_sym");
-  return innerSym;
+  return ::getOrAddInnerSym(getOp(), "", getOp()->getParentOfType<FModuleOp>(),
+                            [&moduleNamespace](FModuleOp) -> ModuleNamespace & {
+                              return moduleNamespace;
+                            });
 }
 
 Attribute
@@ -619,10 +610,10 @@ OpAnnoTarget::getNLAReference(ModuleNamespace &moduleNamespace) const {
     return FlatSymbolRefAttr::get(module.moduleNameAttr());
   }
   // Return an inner-ref to the target.
-  auto moduleName = getOp()->getParentOfType<FModuleLike>().moduleNameAttr();
-  auto innerSym = getInnerSym(moduleNamespace);
-  assert(moduleName && innerSym && "invalid NLA reference");
-  return hw::InnerRefAttr::get(moduleName, innerSym);
+  return ::getInnerRefTo(getOp(), "",
+                         [&moduleNamespace](FModuleOp) -> ModuleNamespace & {
+                           return moduleNamespace;
+                         });
 }
 
 FIRRTLType OpAnnoTarget::getType() const {

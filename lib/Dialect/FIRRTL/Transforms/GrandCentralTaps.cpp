@@ -17,6 +17,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
@@ -516,8 +517,6 @@ class GrandCentralTapsPass : public GrandCentralTapsBase<GrandCentralTapsPass> {
       deadNLAs.insert(sym.getAttr());
   }
 
-  /// Returns an operation's `inner_sym`, adding one if necessary.
-  StringAttr getOrAddInnerSym(Operation *op);
   /// Returns a port's `inner_sym`, adding one if necessary.
   StringAttr getOrAddInnerSym(FModuleLike module, size_t portIdx);
   /// Obtain an inner reference to an operation, possibly adding an `inner_sym`
@@ -1155,17 +1154,6 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
   llvm_unreachable("portAnnos is never populated with unsupported annos");
 }
 
-StringAttr GrandCentralTapsPass::getOrAddInnerSym(Operation *op) {
-  auto attr = getInnerSymName(op);
-  if (attr)
-    return attr;
-  auto module = op->getParentOfType<FModuleOp>();
-  auto name = getModuleNamespace(module).newName("gct_sym");
-  attr = StringAttr::get(op->getContext(), name);
-  op->setAttr("inner_sym", attr);
-  return attr;
-}
-
 StringAttr GrandCentralTapsPass::getOrAddInnerSym(FModuleLike module,
                                                   size_t portIdx) {
   auto attr = module.getPortSymbolAttr(portIdx);
@@ -1178,9 +1166,10 @@ StringAttr GrandCentralTapsPass::getOrAddInnerSym(FModuleLike module,
 }
 
 InnerRefAttr GrandCentralTapsPass::getInnerRefTo(Operation *op) {
-  return InnerRefAttr::get(
-      SymbolTable::getSymbolName(op->getParentOfType<FModuleOp>()),
-      getOrAddInnerSym(op));
+  return ::getInnerRefTo(op, "gct_sym",
+                         [&](FModuleOp mod) -> ModuleNamespace & {
+                           return getModuleNamespace(mod);
+                         });
 }
 
 InnerRefAttr GrandCentralTapsPass::getInnerRefTo(FModuleLike module,
