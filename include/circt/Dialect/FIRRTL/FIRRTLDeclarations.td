@@ -329,3 +329,20 @@ def WireOp : ReferableDeclOp<"wire"> {
     custom<ImplicitSSAName>(attr-dict) `:` qualified(type($result))
   }];
 }
+
+def XMROp : FIRRTLOp<"xmr", [
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+    HasParent<"firrtl::FModuleOp">]> {
+  let summary = "Encode a reference to a non-local net.";
+  let description = [{
+    This represents a non-local hierarchical name to a net, sometimes called a
+    cross-module reference. The hierarchical path is specified by a reference
+    to the symbol defined by a `HierPathOp`. Only downward reference is
+    allowed, hence the HierPathOp must be rooted at the module in which it is
+    used. The op verifier doesn't check if the result type of the XMROp matches
+    with the type of the remote net, but it is assumed that they match.
+  }];
+  let arguments = (ins FlatSymbolRefAttr:$hierPathSym);
+  let results = (outs FIRRTLType:$result);
+  let assemblyFormat = "$hierPathSym attr-dict `:` qualified(type($result))";
+}

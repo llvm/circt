@@ -3740,6 +3740,22 @@ ParseResult HierPathOp::parse(OpAsmParser &parser, OperationState &result) {
   return success();
 }
 
+LogicalResult XMROp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto thisMod = (*this)->getParentOfType<FModuleOp>();
+  auto referencedHierOp = symbolTable.lookupNearestSymbolFrom<HierPathOp>(
+      thisMod, hierPathSymAttr());
+  if (!referencedHierOp) {
+    return emitOpError("invalid HierPathOp symbol reference");
+  }
+  auto xmrRoot =
+      referencedHierOp.namepath()[0].cast<hw::InnerRefAttr>().getModule();
+  if (xmrRoot != thisMod.getNameAttr())
+    return emitOpError("must be rooted at the current module '" +
+                       thisMod.getNameAttr().getValue() +
+                       "' but HierPathOp rooted at `" + xmrRoot.getValue() +
+                       "'. Only downward reference is supported.");
+  return success();
+}
 //===----------------------------------------------------------------------===//
 // Various namers.
 //===----------------------------------------------------------------------===//

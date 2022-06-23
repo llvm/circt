@@ -822,3 +822,27 @@ firrtl.circuit "MismatchedRegister" {
 firrtl.circuit "private_main" {
   firrtl.module private @private_main() {}
 }
+
+// -----
+
+firrtl.circuit "XMRTop" {
+
+  firrtl.hierpath @nla_1 [@XMRTop::@test,@Aardvark::@test_1, @Zebra::@w]
+  firrtl.module @XMRTop() {
+    firrtl.instance test  sym @test @Aardvark()
+    firrtl.instance test2 @Zebra()
+    %1 = firrtl.xmr @nla_1 : !firrtl.uint<3>
+  }
+
+  firrtl.module @Aardvark() {
+    firrtl.instance test sym @test @Zebra()
+    firrtl.instance test1 sym @test_1 @Zebra()
+    
+    // expected-error @+1 {{must be rooted at the current module 'Aardvark' but HierPathOp rooted at `XMRTop'. Only downward reference is supported.}}
+    %1 = firrtl.xmr @nla_1 : !firrtl.uint<3>
+  }
+
+  firrtl.module @Zebra() {
+    %w = firrtl.wire sym @w : !firrtl.uint<3>
+  }
+}

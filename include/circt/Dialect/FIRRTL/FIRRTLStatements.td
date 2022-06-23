@@ -213,15 +213,3 @@ def ProbeOp : FIRRTLOp<"probe"> {
 
   let assemblyFormat = "$inner_sym attr-dict ( `,` $operands^  `:` qualified(type($operands)))?";
 }
-
-def XMROp : FIRRTLOp<"xmr", []> {
-  let summary = "Encode a reference to a non-local net.";
-  let description = [{
-    This represents a non-local hierarchical name to a net, sometimes called a
-    cross-module reference. The hierarchical path is specified by a reference
-    to the symbol defined by a `HierPathOp`.
-  }];
-  let arguments = (ins FlatSymbolRefAttr:$hierPathSym);
-  let results = (outs FIRRTLType:$result);
-  let assemblyFormat = "$hierPathSym attr-dict `:` qualified(type($result))";
-}
