@@ -1,6 +1,7 @@
 # RUN: %PYTHON% py-split-input-file.py %s | FileCheck %s
 
-from pycde import System, Input, Output, module, generator
+from pycde import Input, Output, generator
+from pycde.testing import unittestmodule
 
 from pycde.ndarray import NDArray
 from pycde.dialects import hw
@@ -13,7 +14,7 @@ from pycde.value import ListValue
 # will probably want to use the Numpy features directly on the ListValue.
 
 
-@module
+@unittestmodule()
 class M1:
   in1 = Input(dim(types.i32, 4, 8))
   out = Output(dim(types.i32, 8, 4))
@@ -23,16 +24,12 @@ class M1:
     ports.out = ports.in1.transpose((1, 0))
 
 
-m1 = System([M1])
-m1.generate()
-m1.print()
-
 # -----
 
 # Composing multiple ndarray transformations
 
 
-@module
+@unittestmodule()
 class M1:
   in1 = Input(dim(types.i32, 4, 8))
   out = Output(dim(types.i32, 2, 16))
@@ -42,14 +39,10 @@ class M1:
     ports.out = ports.in1.transpose((1, 0)).reshape((16, 2))
 
 
-m1 = System([M1])
-m1.generate()
-m1.print()
-
 # -----
 
 
-@module
+@unittestmodule()
 class M2:
   in0 = Input(dim(types.i32, 16))
   in1 = Input(types.i32)
@@ -67,14 +60,9 @@ class M2:
     ports.c = m.to_circt()
 
 
-m2 = System([M2])
-m2.generate()
-m2.print()
-
-
 # -----
-@module
-class M1:
+@unittestmodule()
+class M5:
   in0 = Input(dim(types.i32, 16))
   in1 = Input(types.i32)
   t_c = dim(types.i32, 16)
@@ -103,19 +91,15 @@ class M1:
     # that is: 32x32xi1 => 32xi32
     # This has massive overhead in the generated IR, and can be easily
     # achieved by a bitcast.
-    ports.c = hw.BitcastOp(M1.t_c, m.to_circt())
+    ports.c = hw.BitcastOp(M5.t_c, m.to_circt())
 
-
-m1 = System([M1])
-m1.generate()
-m1.print()
 
 # -----
 
 # ndarray from value
 
 
-@module
+@unittestmodule()
 class M1:
   in1 = Input(dim(types.i32, 10, 10))
   out = Output(dim(types.i32, 10, 10))
@@ -126,16 +110,12 @@ class M1:
     ports.out = m.to_circt()
 
 
-m1 = System([M1])
-m1.generate()
-m1.print()
-
 # -----
 
 # No barrier wire
 
 
-@module
+@unittestmodule()
 class M1:
   in1 = Input(dim(types.i32, 10))
   out = Output(dim(types.i32, 10))
@@ -146,16 +126,12 @@ class M1:
     ports.out = m.to_circt(create_wire=False)
 
 
-m1 = System([M1])
-m1.generate()
-m1.print()
-
 # -----
 
 # Concatenation using both explicit NDArrays as well as ListValues.
 
 
-@module
+@unittestmodule()
 class M1:
   in1 = Input(dim(types.i32, 10))
   in2 = Input(dim(types.i32, 10))
@@ -171,16 +147,12 @@ class M1:
     ports.out = ports.in2.concatenate((m, ports.in3))
 
 
-m1 = System([M1])
-m1.generate()
-m1.print()
-
 # -----
 
 # Rolling
 
 
-@module
+@unittestmodule()
 class M1:
   in1 = Input(dim(types.i32, 10))
   out = Output(dim(types.i32, 10))
@@ -189,10 +161,6 @@ class M1:
   def build(ports):
     ports.out = ports.in1.roll(3)
 
-
-m1 = System([M1])
-m1.generate()
-m1.print()
 
 # -----
 
@@ -217,7 +185,7 @@ m1.print()
 # CHECK:         }
 
 
-@module
+@unittestmodule()
 class M1:
   out = Output(dim(types.i32, 3, 3))
 
@@ -228,8 +196,3 @@ class M1:
       for j in range(3):
         m[i][j] = types.i32(i * 3 + j)
     ports.out = m.to_circt()
-
-
-m1 = System([M1])
-m1.generate()
-m1.print()

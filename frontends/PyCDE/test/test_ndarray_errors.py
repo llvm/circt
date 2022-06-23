@@ -1,13 +1,14 @@
 # RUN: %PYTHON% py-split-input-file.py %s | FileCheck %s
 
-from pycde import System, Input, module, generator
+from pycde import System, Input, generator
+from pycde.testing import unittestmodule
 from pycde.pycde_types import types, dim
 from pycde.ndarray import NDArray
 
 # Missing assignment
 
 
-@module
+@unittestmodule()
 class M1:
   in1 = Input(types.i32)
 
@@ -21,14 +22,12 @@ class M1:
     m.to_circt()
 
 
-System([M1]).generate()
-
 # -----
 
 # dtype mismatch
 
 
-@module
+@unittestmodule()
 class M1:
   in1 = Input(types.i33)
 
@@ -39,14 +38,12 @@ class M1:
     m[0] = ports.in1
 
 
-System([M1]).generate()
-
 # -----
 
 # Invalid constructor
 
 
-@module
+@unittestmodule()
 class M1:
   in1 = Input(dim(types.i32, 10))
 
@@ -56,14 +53,12 @@ class M1:
     NDArray((10, 32), from_value=ports.in1, dtype=types.i1, name='m1')
 
 
-System([M1]).generate()
-
 # -----
 
 # Cast mismatch
 
 
-@module
+@unittestmodule()
 class M1:
   in1 = Input(types.i31)
 
@@ -72,6 +67,3 @@ class M1:
     m = NDArray((32, 32), dtype=types.i1, name='m1')
     # CHECK: ValueError: Width mismatch between provided BitVectorValue (i31) and target shape ([32]i1).
     m[0] = ports.in1
-
-
-System([M1]).generate()
