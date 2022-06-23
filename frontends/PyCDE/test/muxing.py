@@ -1,7 +1,7 @@
 # RUN: %PYTHON% py-split-input-file.py %s | FileCheck %s
 
 from pycde import System, generator, dim, Input, Output, Value, types
-from pycde.testing import testmodule
+from pycde.testing import unittestmodule
 import sys
 
 
@@ -33,7 +33,7 @@ def array_from_tuple(*input):
 # CHECK:         msft.output [[R3]], [[R6]], [[R12]], [[R7]] : !hw.array<4xi3>, !hw.array<2xarray<4xi3>>, i1, !hw.array<3xarray<4xi3>>
 
 
-@testmodule()
+@unittestmodule()
 class ComplexMux:
 
   Clk = Input(dim(1))
@@ -71,7 +71,7 @@ class ComplexMux:
 # CHECK:          msft.output [[R6]], [[R8]], [[R4]] : !hw.array<2xarray<4xi8>>, !hw.array<2xarray<4xi8>>, i2
 
 
-@testmodule()
+@unittestmodule()
 class Slicing:
   In = Input(dim(8, 4, 5))
   Sel8 = Input(types.i8)

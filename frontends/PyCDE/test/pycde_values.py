@@ -2,10 +2,10 @@
 
 from pycde.dialects import comb, hw
 from pycde import dim, generator, Input, Output
-from pycde.testing import testmodule
+from pycde.testing import unittestmodule
 
 
-@testmodule(SIZE=4)
+@unittestmodule(SIZE=4)
 def MyModule(SIZE: int):
 
   class Mod:

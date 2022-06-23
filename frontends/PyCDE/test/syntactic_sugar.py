@@ -3,7 +3,7 @@
 from pycde import (Output, Input, module, generator, types, dim, System,
                    no_connect)
 from pycde.module import externmodule
-from pycde.testing import testmodule
+from pycde.testing import unittestmodule
 
 # CHECK-LABEL:  msft.module @Top {} () attributes {fileName = "Top.sv"} {
 # CHECK:    %c7_i12 = hw.constant 7 : i12
@@ -45,7 +45,7 @@ class StupidLegacy:
 BarType = types.struct({"foo": types.i12}, "bar")
 
 
-@testmodule()
+@unittestmodule()
 class Top:
 
   @generator
@@ -73,7 +73,7 @@ class Top:
 # CHECK:    msft.output [[REGR2]], [[REG1]], [[REG3]] : i32, i32, i32
 
 
-@testmodule()
+@unittestmodule()
 class ComplexPorts:
   clk = Input(types.i1)
   sel = Input(types.i2)

@@ -1,7 +1,7 @@
 # RUN: %PYTHON% py-split-input-file.py %s | FileCheck %s
 
 from pycde import Input, Output, generator
-from pycde.testing import testmodule
+from pycde.testing import unittestmodule
 
 from pycde.ndarray import NDArray
 from pycde.dialects import hw
@@ -14,7 +14,7 @@ from pycde.value import ListValue
 # will probably want to use the Numpy features directly on the ListValue.
 
 
-@testmodule()
+@unittestmodule()
 class M1:
   in1 = Input(dim(types.i32, 4, 8))
   out = Output(dim(types.i32, 8, 4))
@@ -29,7 +29,7 @@ class M1:
 # Composing multiple ndarray transformations
 
 
-@testmodule()
+@unittestmodule()
 class M1:
   in1 = Input(dim(types.i32, 4, 8))
   out = Output(dim(types.i32, 2, 16))
@@ -42,7 +42,7 @@ class M1:
 # -----
 
 
-@testmodule()
+@unittestmodule()
 class M2:
   in0 = Input(dim(types.i32, 16))
   in1 = Input(types.i32)
@@ -61,7 +61,7 @@ class M2:
 
 
 # -----
-@testmodule()
+@unittestmodule()
 class M5:
   in0 = Input(dim(types.i32, 16))
   in1 = Input(types.i32)
@@ -99,7 +99,7 @@ class M5:
 # ndarray from value
 
 
-@testmodule()
+@unittestmodule()
 class M1:
   in1 = Input(dim(types.i32, 10, 10))
   out = Output(dim(types.i32, 10, 10))
@@ -115,7 +115,7 @@ class M1:
 # No barrier wire
 
 
-@testmodule()
+@unittestmodule()
 class M1:
   in1 = Input(dim(types.i32, 10))
   out = Output(dim(types.i32, 10))
@@ -131,7 +131,7 @@ class M1:
 # Concatenation using both explicit NDArrays as well as ListValues.
 
 
-@testmodule()
+@unittestmodule()
 class M1:
   in1 = Input(dim(types.i32, 10))
   in2 = Input(dim(types.i32, 10))
@@ -152,7 +152,7 @@ class M1:
 # Rolling
 
 
-@testmodule()
+@unittestmodule()
 class M1:
   in1 = Input(dim(types.i32, 10))
   out = Output(dim(types.i32, 10))
@@ -185,7 +185,7 @@ class M1:
 # CHECK:         }
 
 
-@testmodule()
+@unittestmodule()
 class M1:
   out = Output(dim(types.i32, 3, 3))
 

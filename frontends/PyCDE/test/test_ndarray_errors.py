@@ -1,14 +1,14 @@
 # RUN: %PYTHON% py-split-input-file.py %s | FileCheck %s
 
 from pycde import System, Input, generator
-from pycde.testing import testmodule
+from pycde.testing import unittestmodule
 from pycde.pycde_types import types, dim
 from pycde.ndarray import NDArray
 
 # Missing assignment
 
 
-@testmodule()
+@unittestmodule()
 class M1:
   in1 = Input(types.i32)
 
@@ -27,7 +27,7 @@ class M1:
 # dtype mismatch
 
 
-@testmodule()
+@unittestmodule()
 class M1:
   in1 = Input(types.i33)
 
@@ -43,7 +43,7 @@ class M1:
 # Invalid constructor
 
 
-@testmodule()
+@unittestmodule()
 class M1:
   in1 = Input(dim(types.i32, 10))
 
@@ -58,7 +58,7 @@ class M1:
 # Cast mismatch
 
 
-@testmodule()
+@unittestmodule()
 class M1:
   in1 = Input(types.i31)
 

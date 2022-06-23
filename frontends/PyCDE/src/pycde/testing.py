@@ -4,11 +4,11 @@ import builtins
 import inspect
 
 
-def testmodule(generate=True,
-               print=True,
-               run_passes=False,
-               emit_outputs=False,
-               **kwargs):
+def unittestmodule(generate=True,
+                   print=True,
+                   run_passes=False,
+                   emit_outputs=False,
+                   **kwargs):
   """
   Like @module, but additionally performs system instantiation, generation,
   and printing to reduce boilerplate in tests.
@@ -25,7 +25,6 @@ def testmodule(generate=True,
 
     # Add the module to global scope in case it's referenced within the
     # module generator functions
-    #globals()[mod.__name__] = mod
     setattr(builtins, mod.__name__, mod)
 
     sys = System([mod])
