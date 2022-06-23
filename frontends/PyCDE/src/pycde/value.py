@@ -125,6 +125,8 @@ _current_clock_context = ContextVar("current_clock_context")
 
 
 class ClockValue(Value):
+  """A clock signal."""
+
   __slots__ = ["_old_token"]
 
   def __enter__(self):
