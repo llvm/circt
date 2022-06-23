@@ -55,6 +55,22 @@ public:
   /// Get InnerSymbol for an operation.
   static StringAttr getInnerSymbol(Operation *op);
 
+  /// Return an InnerRef to the given operation which must be within this table.
+  hw::InnerRefAttr getInnerRef(Operation *op);
+
+  /// Return an InnerRef to the given operation.
+  static hw::InnerRefAttr getInnerRefFor(Operation *op);
+
+  /// Return an InnerRef for the given inner symbol, which must be valid.
+  hw::InnerRefAttr getInnerRef(StringRef name) {
+    return getInnerRef(lookup(name));
+  }
+
+  /// Return an InnerRef for the given inner symbol, which must be valid.
+  hw::InnerRefAttr getInnerRef(StringAttr name) {
+    return getInnerRef(lookup(name));
+  }
+
 private:
   /// This is the operation this table is constructed for, which must have the
   /// InnerSymbolTable trait.

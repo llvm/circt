@@ -58,6 +58,19 @@ StringAttr InnerSymbolTable::getInnerSymbol(Operation *op) {
       InnerSymbolTable::getInnerSymbolAttrName());
 }
 
+/// Return an InnerRef to the given operation.
+hw::InnerRefAttr InnerSymbolTable::getInnerRef(Operation *op) {
+  assert(op->getParentWithTrait<OpTrait::InnerSymbolTable>() == innerSymTblOp);
+  return hw::InnerRefAttr::get(SymbolTable::getSymbolName(innerSymTblOp),
+                               getInnerSymbol(op));
+}
+hw::InnerRefAttr InnerSymbolTable::getInnerRefFor(Operation *op) {
+  return hw::InnerRefAttr::get(
+      SymbolTable::getSymbolName(
+          op->getParentWithTrait<OpTrait::InnerSymbolTable>()),
+      getInnerSymbol(op));
+}
+
 //===----------------------------------------------------------------------===//
 // InnerSymbolTableCollection
 //===----------------------------------------------------------------------===//
