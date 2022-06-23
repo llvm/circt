@@ -8,33 +8,66 @@ from mlir.ir import InsertionPoint
 from collections import defaultdict
 from functools import lru_cache
 
-from pycde.support import _obj_to_attribute
+from pycde.support import _obj_to_attribute, attributes_of_type
 from circt.support import connect
 
 
-class _Transition:
+class State:
 
-  __slots__ = ['from_state', 'to_state', 'condition']
+  __slots__ = ['initial', 'transitions', 'name', 'output']
 
-  def __init__(self,
-               from_state: str,
-               to_state: str,
-               condition: Callable = None):
-    if from_state is None or to_state is None:
-      raise ValueError("State and next state must be specified")
+  class Transition:
 
-    self.from_state = from_state
-    self.to_state = to_state
-    self.condition = condition
+    __slots__ = ['to_state', 'condition']
 
-  def emit(self, state_op, ports):
-    with InsertionPoint(state_op.transitions):
-      op = fsm.TransitionOp(self.to_state)
+    def __init__(self, to_state, condition: Callable = None):
+      if not isinstance(to_state, State):
+        raise ValueError(
+            f"to_state must be of State type but got {type(to_state)}")
 
-      # If a condition function was specified, execute it on the ports and
-      # assign the result as the guard of this transition.
-      if self.condition:
-        op.set_guard(lambda: self.condition(ports))
+      self.to_state = to_state
+      self.condition = condition
+
+    def _emit(self, state_op, ports):
+      with InsertionPoint(state_op.transitions):
+        op = fsm.TransitionOp(self.to_state.name)
+
+        # If a condition function was specified, execute it on the ports and
+        # assign the result as the guard of this transition.
+        if self.condition:
+          op.set_guard(lambda: self.condition(ports))
+
+  def __init__(self, initial=False):
+    self.initial = initial
+    self.transitions = []
+    self.name = None
+
+    # A handle to the output port indicating that this state is active.
+    self.output = None
+
+  def set_transitions(self, *transitions):
+    self.transitions = [State.Transition(*t) for t in transitions]
+
+  def _emit(self, spec_mod, ports):
+    # Create state op
+    assert self.name is not None
+    state_op = fsm.StateOp(self.name)
+
+    # Assign the current state as being active in the FSM output vector.
+    with InsertionPoint(state_op.output):
+      outputs = []
+      for (outport_it_name, _) in spec_mod.output_ports:
+        outputs.append(types.i1(outport_it_name == self.output.name))
+      fsm.OutputOp(*outputs)
+
+    # Emit outgoing transitions from this state.
+    for transition in self.transitions:
+      transition._emit(state_op, ports)
+
+
+def States(n):
+  """ Utility function to generate multiple states. """
+  return [State() for _ in range(n)]
 
 
 def create_fsm_machine_op(sys, mod: _SpecializedModule, symbol):
@@ -53,7 +86,7 @@ def create_fsm_machine_op(sys, mod: _SpecializedModule, symbol):
     attributes["reset_name"] = _obj_to_attribute(mod.modcls.reset_name)
 
   return fsm.MachineOp(symbol,
-                       mod.modcls.fsm_initial_state,
+                       mod.modcls._initial_state,
                        mod.input_ports,
                        mod.output_ports,
                        attributes=attributes,
@@ -67,31 +100,9 @@ def generate_fsm_machine_op(generate_obj: Generator,
   entry_block = spec_mod.circt_mod.body.blocks[0]
   ports = _GeneratorPortAccess(spec_mod)
 
-  # Cache true/false values in machine scope to avoid IR spam.
-  @lru_cache
-  def get_cached_bool(v):
-    with InsertionPoint(entry_block):
-      return types.i1(v)
-
-  # Prime the cache. This is a super minor nit, but being explicit about the
-  # ordering here ensures that %0 = False and %1 = True in the IR as well as
-  # constants being emitted before the FSM ops.
-  get_cached_bool(False)
-  get_cached_bool(True)
-
   with InsertionPoint(entry_block), generate_obj.loc:
-    for state, state_transitions in spec_mod.modcls.transitions.items():
-      # Create state op and assert the current state in its output vector.
-      state_op = fsm.StateOp(state)
-      with InsertionPoint(state_op.output):
-        outputs = []
-        for state_it in spec_mod.modcls.states:
-          outputs.append(get_cached_bool(state_it == state))
-        fsm.OutputOp(*outputs)
-
-      # Emit outgoing transitions from this state.
-      for transition in state_transitions:
-        transition.emit(state_op, ports)
+    for state in spec_mod.modcls.states:
+      state._emit(spec_mod, ports)
 
 
 def machine(clock: str = 'clk', reset: str = None):
@@ -111,12 +122,6 @@ def machine(clock: str = 'clk', reset: str = None):
 
     - A set of input ports:
         These can be of any type, and are used to drive the FSM.
-    - An `fsm_initial_state` variable:
-        A string denoting the name of the initial state of the FSM.
-    - An `fsm_transitions` variable:
-        A dictionary containing states and state transitions.
-        The dictionary is keyed by state names, and the values are lists of
-        transitions.
 
         Transitions can be specified either as a tuple of (next_state, condition)
         or as a single `next_state` string (unconditionally taken).
@@ -124,54 +129,41 @@ def machine(clock: str = 'clk', reset: str = None):
         the `ports` of a component, similar to the `@generator` decorator used
         elsewhere in PyCDE.
     """
-    states = None
-    transition_dict = None
+    states = {}
+    initial_state = None
+    for name, v in attributes_of_type(to_be_wrapped, State).items():
+      if name in states:
+        raise ValueError("Duplicate state name: {}".format(name))
+      v.name = name
+      states[name] = v
+      if v.initial:
+        if initial_state is not None:
+          raise ValueError(
+              f"Multiple initial states specified ({name}, {initial_state})")
+        initial_state = name
 
-    attr_dict = dir(to_be_wrapped)
+    if initial_state is None:
+      raise ValueError(
+          "No initial state specified, please create a state with `initial=True`"
+      )
 
-    if 'fsm_initial_state' not in attr_dict:
-      raise ValueError("fsm_initial_state must be defined")
-
-    if 'fsm_transitions' not in attr_dict:
-      raise ValueError("fsm_transitions must be defined")
-    transition_dict = to_be_wrapped.fsm_transitions
-
-    # Ensure state uniqueness.
-    states = list(transition_dict.keys())
-    if len(set(states)) != len(states):
-      raise ValueError("fsm_states must be unique.")
+    # At this point, the 'states' attribute should be considered an immutable,
+    # ordered list of states.
+    to_be_wrapped.states = states.values()
+    to_be_wrapped._initial_state = initial_state
 
     if len(states) == 0:
-      raise ValueError("fsm_states must be non-empty.")
+      raise ValueError("No States defined")
 
     # Add an output port for each state.
-    for state in states:
-      setattr(to_be_wrapped, 'is_' + state, Output(types.i1))
+    for state_name, state in states.items():
+      output_for_state = Output(types.i1)
+      setattr(to_be_wrapped, 'is_' + state_name, output_for_state)
+      state.output = output_for_state
 
     # Store requested clock and reset names.
     to_be_wrapped.clock_name = clock
     to_be_wrapped.reset_name = reset
-
-    # Create Transition objects.
-    transitions = defaultdict(lambda: [])
-    for from_state, transitionargs in transition_dict.items():
-      if isinstance(transitionargs, list):
-        for transition in transitionargs:
-          transitions[from_state].append(_Transition(from_state, *transition))
-      else:
-        transitions[from_state].append(_Transition(from_state, *transitionargs))
-
-    for _, to_states in transitions.items():
-      for transition in to_states:
-        if transition.from_state not in states:
-          raise ValueError("Invalid transition from state {}".format(
-              transition.from_state))
-        if transition.to_state not in states:
-          raise ValueError("Invalid transition to state {}".format(
-              transition.to_state))
-
-    to_be_wrapped.transitions = transitions
-    to_be_wrapped.states = states
 
     # Set module creation and generation callbacks.
     setattr(to_be_wrapped, 'create_cb', create_fsm_machine_op)

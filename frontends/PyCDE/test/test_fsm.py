@@ -25,27 +25,34 @@ from circt.support import connect
 class FSM:
   a = Input(types.i1)
   b = Input(types.i1)
+  c = Input(types.i1)
 
-  fsm_initial_state = 'A'
-  fsm_transitions = {
-      'A': ('B', lambda ports: ports.a),
-      'B': ('A', lambda ports: ports.b),
-  }
+  # States
+  A = fsm.State(initial=True)
+  (B, C) = fsm.States(2)
+
+  # Transitions
+  A.set_transitions((B, lambda ports: ports.a))
+  B.set_transitions((A, lambda ports: ports.b), (C,))
+  C.set_transitions((B, lambda ports: ports.a))
 
 
 @module
 class FSMUser:
   a = Input(types.i1)
   b = Input(types.i1)
+  c = Input(types.i1)
   clk = Input(types.i1)
   is_a = Output(types.i1)
   is_b = Output(types.i1)
+  is_c = Output(types.i1)
 
   @generator
   def construct(ports):
-    fsm = FSM(a=ports.a, b=ports.b, clock=ports.clk)
+    fsm = FSM(a=ports.a, b=ports.b, c=ports.c, clock=ports.clk)
     ports.is_a = fsm.is_A
     ports.is_b = fsm.is_B
+    ports.is_c = fsm.is_C
 
 
 system = System([FSMUser])
@@ -128,19 +135,14 @@ class F0:
     c3 = nand(ports.a, ports.c)
     return nand(c1, c2, c3)
 
-  fsm_initial_state = 'idle'
-  fsm_transitions = {
-      # Always taken transition
-      'idle':
-          'a',
-      # Transition using inline function
-      'a': ('b', lambda ports: ports.a),
-      # Transition using outlined function
-      'b': ('c', maj3),
-      # Multiple transitions
-      'c': [('idle', lambda ports: ports.c),
-            ('a', lambda ports: comb.XorOp(ports.b, types.i1(1)))],
-  }
+  idle = fsm.State(initial=True)
+  (A, B, C) = fsm.States(3)
+
+  idle.set_transitions((A,))
+  A.set_transitions((B, lambda ports: ports.a))
+  B.set_transitions((C, maj3))
+  C.set_transitions((idle, lambda ports: ports.c),
+                    (A, lambda ports: comb.XorOp(ports.b, types.i1(1))))
 
 
 system = System([F0])
