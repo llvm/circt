@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/FIRRTL/InnerSymbolTable.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.h"
 #include "mlir/IR/Threading.h"
 
