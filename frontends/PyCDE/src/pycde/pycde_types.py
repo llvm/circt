@@ -11,6 +11,8 @@ import mlir.ir
 from circt.dialects import esi, hw, sv
 import circt.support
 
+from typing import Union
+
 
 class _Types:
   """Python syntactic sugar to get types"""
@@ -109,36 +111,14 @@ class _Types:
 types = _Types()
 
 
-class Type(mlir.ir.Type):
+class PyCDEType(mlir.ir.Type):
   """PyCDE type hierarchy root class. Can wrap any MLIR/CIRCT type, but can only
   do anything useful with types for which subclasses exist."""
   __slots__ = ["_type"]
 
-  # Dummy __init__ as everything is done in __new__.
-  def __init__(self, type):
-    pass
-
-  def __new__(cls, type):
-    if isinstance(type, Type):
-      return type
-    type = circt.support.type_to_pytype(type)
-    if isinstance(type, hw.ArrayType):
-      ret = super().__new__(ArrayType)
-    if isinstance(type, hw.StructType):
-      ret = super().__new__(StructType)
-    if isinstance(type, hw.TypeAliasType):
-      ret = super().__new__(TypeAliasType)
-    if isinstance(type, hw.InOutType):
-      ret = super().__new__(InOutType)
-    if isinstance(type, mlir.ir.IntegerType):
-      ret = super().__new__(BitVectorType)
-    if isinstance(type, esi.ChannelType):
-      ret = super().__new__(ChannelType)
-    if ret is None:
-      ret = super().__new__(Type)
-    ret._type = type
-    super().__init__(ret, type)
-    return ret
+  def __init__(self, mlir_type: mlir.ir.Type):
+    super().__init__(mlir_type)
+    self._type = mlir_type
 
   @property
   def strip(self):
@@ -161,7 +141,26 @@ class Type(mlir.ir.Type):
     return RegularValue
 
 
-class InOutType(Type):
+def Type(type: Union[mlir.ir.Type, PyCDEType]):
+  if isinstance(type, PyCDEType):
+    return type
+  type = circt.support.type_to_pytype(type)
+  if isinstance(type, hw.ArrayType):
+    return ArrayType(type)
+  if isinstance(type, hw.StructType):
+    return StructType(type)
+  if isinstance(type, hw.TypeAliasType):
+    return TypeAliasType(type)
+  if isinstance(type, hw.InOutType):
+    return InOutType(type)
+  if isinstance(type, mlir.ir.IntegerType):
+    return BitVectorType(type)
+  if isinstance(type, esi.ChannelType):
+    return ChannelType(type)
+  return PyCDEType(type)
+
+
+class InOutType(PyCDEType):
 
   @property
   def element_type(self):
@@ -171,7 +170,7 @@ class InOutType(Type):
     return InOutValue
 
 
-class TypeAliasType(Type):
+class TypeAliasType(PyCDEType):
 
   @property
   def name(self):
@@ -195,7 +194,7 @@ class TypeAliasType(Type):
     return self(value)
 
 
-class ArrayType(Type):
+class ArrayType(PyCDEType):
 
   @property
   def inner_type(self):
@@ -228,7 +227,7 @@ class ArrayType(Type):
     return f"[{self.size}]{self.element_type}"
 
 
-class StructType(Type):
+class StructType(PyCDEType):
 
   @property
   def fields(self):
@@ -256,7 +255,7 @@ class StructType(Type):
     return ret
 
 
-class BitVectorType(Type):
+class BitVectorType(PyCDEType):
 
   @property
   def width(self):
@@ -266,12 +265,12 @@ class BitVectorType(Type):
     return BitVectorValue
 
 
-class ChannelType(Type):
+class ChannelType(PyCDEType):
   """An ESI channel type."""
 
   @property
   def inner_type(self):
-    return Type(self._type.inner)
+    return PyCDEType(self._type.inner)
 
   def _get_value_class(self):
     return ChannelValue
