@@ -4,8 +4,8 @@
 
 from collections import OrderedDict
 
-from .value import (BitVectorValue, ChannelValue, ListValue, StructValue,
-                    RegularValue, InOutValue, Value)
+from .value import (BitVectorValue, ChannelValue, ClockValue, ListValue,
+                    StructValue, RegularValue, InOutValue, Value)
 
 import mlir.ir
 from circt.dialects import esi, hw, sv
@@ -265,12 +265,23 @@ class BitVectorType(PyCDEType):
     return BitVectorValue
 
 
+class ClockType(PyCDEType):
+  """A special single bit to represent a clock. Can't do any special operations
+  on it, except enter it as a implicit clock block."""
+
+  def __init__(self):
+    super().__init__(mlir.ir.IntegerType.get_signless(1))
+
+  def _get_value_class(self):
+    return ClockValue
+
+
 class ChannelType(PyCDEType):
   """An ESI channel type."""
 
   @property
   def inner_type(self):
-    return PyCDEType(self._type.inner)
+    return Type(self._type.inner)
 
   def _get_value_class(self):
     return ChannelValue
