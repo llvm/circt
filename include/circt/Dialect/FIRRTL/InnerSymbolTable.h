@@ -62,9 +62,6 @@ public:
     return getInnerRef(lookup(name));
   }
 
-  /// Return an InnerRef to the given operation.
-  static hw::InnerRefAttr getInnerRefFor(Operation *op);
-
   /// Get InnerSymbol for an operation.
   static StringAttr getInnerSymbol(Operation *op);
 

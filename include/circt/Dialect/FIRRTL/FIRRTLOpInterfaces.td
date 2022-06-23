@@ -335,7 +335,11 @@ def InnerSymbol : OpInterface<"InnerSymbolOpInterface"> {
     InterfaceMethod<"Returns an InnerRef to this operation.  Walks to find parent.",
       "::circt::hw::InnerRefAttr", "getInnerRef", (ins), [{}],
       /*defaultImplementation=*/[{
-        return InnerSymbolTable::getInnerRefFor(this->getOperation());
+        auto *op = this->getOperation();
+        return hw::InnerRefAttr::get(
+            SymbolTable::getSymbolName(
+                op->template getParentWithTrait<OpTrait::InnerSymbolTable>()),
+            InnerSymbolTable::getInnerSymbol(op));
       }]
     >,
 
