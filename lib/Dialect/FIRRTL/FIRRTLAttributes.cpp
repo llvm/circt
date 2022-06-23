@@ -11,6 +11,7 @@
 
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
+#include "mlir/IR/SymbolTable.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include <iterator>
 
@@ -83,4 +84,25 @@ void ParamDeclAttr::print(AsmPrinter &p) const {
   if (getValue())
     p << " = " << getValue();
   p << ">";
+}
+
+//===----------------------------------------------------------------------===//
+// InnerSymAttr
+//===----------------------------------------------------------------------===//
+
+Attribute InnerSymAttr::parse(AsmParser &p, Type type) {
+  //  A sample IR, parse begins after `sym`.
+  //  %wire = firrtl.wire sym @wireSym<fieldID=1><sym_visibility="private"> :
+  StringAttr sym;
+  NamedAttrList dummyList;
+  if (p.parseSymbolName(sym, "dummy", dummyList))
+    return Attribute();
+  return InnerSymAttr::get(p.getContext(), sym);
+}
+
+void InnerSymAttr::print(AsmPrinter &p) const {
+  //  A sample IR, print begins after `sym`.
+  //  %wire = firrtl.wire sym @wireSym<fieldID=1><sym_visibility="private"> :
+
+  p << "@" << getSymName().getValue();
 }

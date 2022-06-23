@@ -292,7 +292,7 @@ void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
     return true;
   });
   if (nlaUpdated) {
-    memInst.inner_symAttr(leafSym);
+    memInst.inner_symAttr(InnerSymAttr::get(leafSym));
     AnnotationSet newAnnos(memInst);
     newAnnos.addAnnotations(newMemModAnnos);
     newAnnos.applyToOperation(memInst);
