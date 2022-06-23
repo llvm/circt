@@ -52,6 +52,12 @@ Operation *InnerSymbolTable::lookup(StringAttr name) const {
   return symbolTable.lookup(name);
 }
 
+/// Get InnerSymbol for an operation.
+StringAttr InnerSymbolTable::getInnerSymbol(Operation *op) {
+  return op->getAttrOfType<StringAttr>(
+      InnerSymbolTable::getInnerSymbolAttrName());
+}
+
 //===----------------------------------------------------------------------===//
 // InnerSymbolTableCollection
 //===----------------------------------------------------------------------===//

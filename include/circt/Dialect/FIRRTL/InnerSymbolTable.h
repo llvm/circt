@@ -52,6 +52,9 @@ public:
     return dyn_cast_or_null<T>(lookup(name));
   }
 
+  /// Get InnerSymbol for an operation.
+  static StringAttr getInnerSymbol(Operation *op);
+
 private:
   /// This is the operation this table is constructed for, which must have the
   /// InnerSymbolTable trait.
