@@ -32,6 +32,10 @@ public:
   /// have the InnerSymbolTable trait.
   explicit InnerSymbolTable(Operation *op);
 
+  /// Non-copyable
+  InnerSymbolTable(const InnerSymbolTable &) = delete;
+  InnerSymbolTable &operator=(InnerSymbolTable &) = delete;
+
   /// Look up a symbol with the specified name, returning null if no such
   /// name exists. Names never include the @ on them.
   Operation *lookup(StringRef name) const;
@@ -66,6 +70,10 @@ public:
   /// Populate tables in parallel for all InnerSymbolTable operations in the
   /// given InnerRefNamespace operation.
   void populateTables(Operation *innerRefNSOp);
+
+  explicit InnerSymbolTableCollection() = default;
+  InnerSymbolTableCollection(const InnerSymbolTableCollection &) = delete;
+  InnerSymbolTableCollection &operator=(InnerSymbolTableCollection &) = delete;
 
 private:
   /// This maps Operations to their InnnerSymbolTable's.
