@@ -1169,7 +1169,7 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
 }
 
 StringAttr GrandCentralTapsPass::getOrAddInnerSym(Operation *op) {
-  auto attr = op->getAttrOfType<StringAttr>("inner_sym");
+  auto attr = getInnerSymName(op);
   if (attr)
     return attr;
   auto module = op->getParentOfType<FModuleOp>();

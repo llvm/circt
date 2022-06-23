@@ -586,13 +586,13 @@ void Inliner::rename(StringRef prefix, Operation *op,
   // that they can be moved to the op after renaming.
   StringAttr instanceParent, oldInstSym;
   if (auto inst = dyn_cast<InstanceOp>(op))
-    if (auto instSym = inst.inner_symAttr()) {
+    if (auto instSym = getInnerSymName(inst)) {
       instanceParent = inst->getParentOfType<FModuleOp>().getNameAttr();
       oldInstSym = instSym;
     }
   // If the operation has an inner symbol, ensure that it is unique.  Record
   // renames for any NLAs that this participates in if the symbol was renamed.
-  if (auto sym = op->getAttrOfType<StringAttr>("inner_sym")) {
+  if (auto sym = getInnerSymName(op)) {
     auto newSym = moduleNamespace.newName(sym.getValue());
     if (newSym != sym.getValue()) {
       auto newSymAttr = StringAttr::get(op->getContext(), newSym);
@@ -721,7 +721,7 @@ void Inliner::cloneAndRename(
   // of HierPathOps that is common between these two.
   SmallVector<StringAttr> validHierPaths;
   if (auto instance = dyn_cast<InstanceOp>(&op))
-    if (auto instSym = instance.inner_symAttr()) {
+    if (auto instSym = getInnerSymName(instance)) {
       // Get the innerRef to the original InstanceOp that is being inlined here.
       auto oldInnerRef = InnerRefAttr::get(
           instance->getParentOfType<FModuleOp>().getNameAttr(), instSym);
@@ -753,7 +753,7 @@ void Inliner::cloneAndRename(
   if (isa<InstanceOp>(&op)) {
     auto innerRef =
         InnerRefAttr::get(newOp->getParentOfType<FModuleOp>().getNameAttr(),
-                          cast<InstanceOp>(newOp).inner_symAttr());
+                          getInnerSymName(newOp));
     SmallVector<StringAttr> &nlaList = instOpHierPaths[innerRef];
     // Now rename the Updated HierPathOps that this InstanceOp participates in.
     for (auto en : llvm::enumerate(nlaList)) {
@@ -806,7 +806,7 @@ void Inliner::flattenInto(StringRef prefix, OpBuilder &b,
     // Anything in this set will be made local during the recursive flattenInto
     // walk.
     llvm::set_union(localSymbols, rootMap[target.getNameAttr()]);
-    currentPath.emplace_back(moduleName, instance.inner_symAttr());
+    currentPath.emplace_back(moduleName, getInnerSymName(instance));
 
     // Create the wire mapping for results + ports.
     auto nestedPrefix = (prefix + instance.name() + "_").str();
@@ -838,7 +838,7 @@ void Inliner::flattenInstances(FModuleOp module) {
       liveModules.insert(targetModule);
       continue;
     }
-    if (auto instSym = instance.inner_symAttr()) {
+    if (auto instSym = getInnerSymName(instance)) {
       auto innerRef = InnerRefAttr::get(moduleName, instSym);
       // Preorder update of any non-local annotations this instance participates
       // in.  This needs to happen _before_ visiting modules so that internal
@@ -853,7 +853,7 @@ void Inliner::flattenInstances(FModuleOp module) {
     // walk.
     DenseSet<Attribute> localSymbols;
     llvm::set_union(localSymbols, rootMap[target.getNameAttr()]);
-    currentPath.emplace_back(moduleName, instance.inner_symAttr());
+    currentPath.emplace_back(moduleName, getInnerSymName(instance));
 
     // Create the wire mapping for results + ports. We RAUW the results instead
     // of mapping them.
@@ -908,7 +908,7 @@ void Inliner::inlineInto(StringRef prefix, OpBuilder &b,
     }
 
     auto toBeFlattened = shouldFlatten(target);
-    if (auto instSym = instance.inner_symAttr()) {
+    if (auto instSym = getInnerSymName(instance)) {
       auto innerRef = InnerRefAttr::get(moduleName, instSym);
       // Preorder update of any non-local annotations this instance participates
       // in.  This needs ot happen _before_ visiting modules so that internal
@@ -933,7 +933,7 @@ void Inliner::inlineInto(StringRef prefix, OpBuilder &b,
       for (auto sym : rootMap[target.getNameAttr()]) {
         auto &mnla = nlaMap[sym];
         sym = mnla.reTop(parent);
-        StringAttr instSym = instance.inner_symAttr();
+        StringAttr instSym = getInnerSymName(instance);
         if (!instSym) {
           instSym = StringAttr::get(context,
                                     moduleNamespace.newName(instance.name()));
@@ -948,7 +948,7 @@ void Inliner::inlineInto(StringRef prefix, OpBuilder &b,
       }
     }
     // This must be done after the reTop, since it might introduce an innerSym.
-    currentPath.emplace_back(moduleName, instance.inner_symAttr());
+    currentPath.emplace_back(moduleName, getInnerSymName(instance));
 
     // Create the wire mapping for results + ports.
     auto nestedPrefix = (prefix + instance.name() + "_").str();
@@ -995,7 +995,7 @@ void Inliner::inlineInstances(FModuleOp parent) {
     }
 
     auto toBeFlattened = shouldFlatten(target);
-    if (auto instSym = instance.inner_symAttr()) {
+    if (auto instSym = getInnerSymName(instance)) {
       auto innerRef = InnerRefAttr::get(moduleName, instSym);
       // Preorder update of any non-local annotations this instance participates
       // in.  This needs ot happen _before_ visiting modules so that internal
@@ -1016,7 +1016,7 @@ void Inliner::inlineInstances(FModuleOp parent) {
       for (auto sym : rootMap[target.getNameAttr()]) {
         auto &mnla = nlaMap[sym];
         sym = mnla.reTop(parent);
-        StringAttr instSym = instance.inner_symAttr();
+        StringAttr instSym = getInnerSymName(instance);
         if (!instSym) {
           instSym = StringAttr::get(context,
                                     moduleNamespace.newName(instance.name()));
@@ -1031,7 +1031,7 @@ void Inliner::inlineInstances(FModuleOp parent) {
       }
     }
     // This must be done after the reTop, since it might introduce an innerSym.
-    currentPath.emplace_back(moduleName, instance.inner_symAttr());
+    currentPath.emplace_back(moduleName, getInnerSymName(instance));
     // Create the wire mapping for results + ports. We RAUW the results instead
     // of mapping them.
     BlockAndValueMapping mapper;

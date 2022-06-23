@@ -621,7 +621,7 @@ FailureOr<bool> GrandCentralSignalMappingsPass::emitUpdatedMappings(
   SmallVector<Attribute> symbols;
   SmallDenseMap<Attribute, size_t> symMap;
   auto getOrAddInnerSym = [&](Operation *op) -> StringAttr {
-    auto attr = op->getAttrOfType<StringAttr>("inner_sym");
+    auto attr = getInnerSymName(op);
     if (attr)
       return attr;
     StringRef name = "sym";

@@ -68,7 +68,7 @@ public:
   /// Get the NLAs that the InstanceOp participates in, insert it to the
   /// DenseSet `nlas`.
   void getInstanceNLAs(InstanceOp inst, DenseSet<HierPathOp> &nlas) {
-    auto instSym = inst.inner_symAttr();
+    auto instSym = getInnerSymName(inst);
     // If there is no inner sym on the InstanceOp, then it does not participate
     // in any NLA.
     if (!instSym)
