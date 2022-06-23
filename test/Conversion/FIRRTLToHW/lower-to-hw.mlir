@@ -1580,11 +1580,14 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-LABEL: hw.module private @ForceNameSubmodule
   firrtl.hierpath @nla_1 [@ForceNameTop::@sym_foo, @ForceNameSubmodule]
   firrtl.hierpath @nla_2 [@ForceNameTop::@sym_bar, @ForceNameSubmodule]
+  firrtl.hierpath @nla_3 [@ForceNameTop::@sym_bar, @ForceNameSubmodule::@dummy1]
   firrtl.module private @ForceNameSubmodule() attributes {annotations = [
     {circt.nonlocal = @nla_2,
      class = "chisel3.util.experimental.ForceNameAnnotation", name = "Bar"},
     {circt.nonlocal = @nla_1,
-     class = "chisel3.util.experimental.ForceNameAnnotation", name = "Foo"}]} {}
+     class = "chisel3.util.experimental.ForceNameAnnotation", name = "Foo"}]} {
+        %dummy1 = firrtl.wire sym @dummy1 : !firrtl.uint<4>
+     }
   // CHECK: hw.module private @ForceNameTop
   firrtl.module private @ForceNameTop() {
     firrtl.instance foo sym @sym_foo
@@ -1595,6 +1598,13 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
       @ForceNameSubmodule()
     // CHECK:      hw.instance "foo" sym @sym_foo {{.+}} {hw.verilogName = "Foo"}
     // CHECK-NEXT: hw.instance "bar" sym @sym_bar {{.+}} {hw.verilogName = "Bar"}
+    %1 = firrtl.wire : !firrtl.uint<4>
+    %2 = firrtl.xmr @nla_3 : !firrtl.uint<4>
+    firrtl.connect %1, %2 : !firrtl.uint<4>, !firrtl.uint<4>
+    // CHECK: %0 = sv.wire  : !hw.inout<i4>
+    // CHECK: %1 = sv.xmr "ForceNameTop", "sym_bar", "dummy1" : !hw.inout<i4>
+    // CHECK: %2 = sv.read_inout %1 : !hw.inout<i4>
+    // CHECK: sv.assign %0, %2 : i4
   }
 
   // CHECK-LABEL: hw.module private @PreserveName
