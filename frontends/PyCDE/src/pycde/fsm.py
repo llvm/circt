@@ -147,6 +147,12 @@ def machine(clock: str = 'clk', reset: str = None):
           "No initial state specified, please create a state with `initial=True`"
       )
 
+    for name, v in attributes_of_type(to_be_wrapped, Input).items():
+      if v.type.width != 1:
+        raise ValueError(
+            f"Input port {name} has width {v.width}. For now, only i1 inputs are supported."
+        )
+
     # At this point, the 'states' attribute should be considered an immutable,
     # ordered list of states.
     to_be_wrapped.states = states.values()

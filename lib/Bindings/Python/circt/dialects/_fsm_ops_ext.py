@@ -79,7 +79,7 @@ class MachineOp:
     op = fsm.HWInstanceOp(outputs=self.type.results,
                           inputs=inputs,
                           sym_name=StringAttr.get(name),
-                          machine=self.sym_name,
+                          machine=FlatSymbolRefAttr.get(self.sym_name.value),
                           clock=clock.result,
                           reset=reset.result if reset else None,
                           loc=loc,
