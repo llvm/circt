@@ -390,6 +390,16 @@ def GrandCentral : Pass<"firrtl-grand-central", "CircuitOp"> {
 
   let constructor = "circt::firrtl::createGrandCentralPass()";
   let dependentDialects = ["circt::sv::SVDialect", "circt::hw::HWDialect"];
+  let statistics = [
+    Statistic<"numViews", "num-views-created",
+      "Number of top-level SystemVerilog interfaces that were created">,
+    Statistic<"numInterfaces", "num-interfaces-created",
+      "Number of SystemVerilog interfaces that were created">,
+    Statistic<"numXMRs", "num-xmrs-created",
+      "Number of SystemVerilog XMRs added">,
+    Statistic<"numAnnosRemoved", "num-annotations-removed",
+      "Number of annotations removed">
+  ];
 }
 
 def GrandCentralTaps : Pass<"firrtl-grand-central-taps", "firrtl::CircuitOp"> {
