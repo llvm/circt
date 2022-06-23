@@ -48,8 +48,8 @@ static void addHierarchy(HierPathOp path, FModuleOp dut,
   newNamepath.reserve(namepath.size() + 1);
   while (path.modPart(nlaIdx) != dut.getNameAttr())
     newNamepath.push_back(namepath[nlaIdx++]);
-  newNamepath.push_back(
-      hw::InnerRefAttr::get(dut.moduleNameAttr(), wrapperInst.inner_symAttr()));
+  newNamepath.push_back(hw::InnerRefAttr::get(dut.moduleNameAttr(),
+                                              getInnerSymName(wrapperInst)));
 
   // Add the extra level of hierarchy.
   if (auto dutRef = namepath[nlaIdx].dyn_cast<hw::InnerRefAttr>())

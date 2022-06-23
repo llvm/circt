@@ -95,6 +95,10 @@ inline MemDirAttr &operator|=(MemDirAttr &lhs, MemDirAttr rhs) {
   return lhs;
 }
 
+inline StringAttr getInnerSymName(Operation *op) {
+  return op->getAttrOfType<StringAttr>("inner_sym");
+}
+
 /// Check whether a block argument ("port") or the operation defining a value
 /// has a `DontTouch` annotation, or a symbol that should prevent certain types
 /// of canonicalizations.

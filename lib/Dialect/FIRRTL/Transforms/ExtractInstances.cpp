@@ -75,7 +75,7 @@ struct ExtractInstancesPass
 
   /// Returns an operation's `inner_sym`, adding one if necessary.
   StringAttr getOrAddInnerSym(Operation *op) {
-    auto attr = op->getAttrOfType<StringAttr>("inner_sym");
+    auto attr = getInnerSymName(op);
     if (attr)
       return attr;
     auto module = op->getParentOfType<FModuleOp>();
@@ -448,7 +448,7 @@ void ExtractInstancesPass::collectAnno(InstanceOp inst, Annotation anno) {
 /// was not found.
 static unsigned findInstanceInNLA(InstanceOp inst, HierPathOp nla) {
   unsigned nlaLen = nla.namepath().size();
-  auto instName = inst.inner_symAttr();
+  auto instName = getInnerSymName(inst);
   auto parentName = cast<FModuleOp>(inst->getParentOp()).moduleNameAttr();
   for (unsigned nlaIdx = 0; nlaIdx < nlaLen; ++nlaIdx) {
     auto refPart = nla.refPart(nlaIdx);
@@ -599,7 +599,7 @@ void ExtractInstancesPass::extractInstances() {
 
       // Ensure that the `inner_sym` of the instance is unique within the parent
       // module we're extracting it to.
-      if (auto instSym = inst.inner_symAttr()) {
+      if (auto instSym = getInnerSymName(inst)) {
         auto newName =
             getModuleNamespace(newParent).newName(instSym.getValue());
         if (newName != instSym.getValue())
@@ -673,7 +673,7 @@ void ExtractInstancesPass::extractInstances() {
           auto innerRef = nlaPath[nlaIdx - 1].dyn_cast<InnerRefAttr>();
           if (innerRef &&
               !(innerRef.getModule() == newParent.moduleNameAttr() &&
-                innerRef.getName() == newParentInst.inner_symAttr())) {
+                innerRef.getName() == getInnerSymName(newParentInst))) {
             LLVM_DEBUG(llvm::dbgs()
                        << "    - Ignored since NLA parent " << innerRef
                        << " does not pass through extraction parent\n");
@@ -766,7 +766,7 @@ void ExtractInstancesPass::extractInstances() {
             nlaPath[nlaIdx - 1].cast<InnerRefAttr>().getModule();
         Attribute newRef;
         if (nlaPath[nlaIdx].isa<InnerRefAttr>())
-          newRef = InnerRefAttr::get(parentName, newInst.inner_symAttr());
+          newRef = InnerRefAttr::get(parentName, getInnerSymName(newInst));
         else
           newRef = FlatSymbolRefAttr::get(parentName);
         LLVM_DEBUG(llvm::dbgs()

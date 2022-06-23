@@ -409,7 +409,7 @@ void EmitOMIRPass::makeTrackerAbsolute(Tracker &tracker) {
       // Find the instance referenced by the NLA.
       auto *node = instanceGraph->lookup(ref.getModule());
       auto it = llvm::find_if(*node, [&](hw::InstanceRecord *record) {
-        return cast<InstanceOp>(*record->getInstance()).inner_symAttr() ==
+        return getInnerSymName(cast<InstanceOp>(*record->getInstance())) ==
                ref.getName();
       });
       assert(it != node->end() &&
@@ -864,7 +864,7 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
 
 StringAttr EmitOMIRPass::getOrAddInnerSym(Operation *op) {
   tempSymInstances.erase(op);
-  auto attr = op->getAttrOfType<StringAttr>("inner_sym");
+  auto attr = getInnerSymName(op);
   if (attr)
     return attr;
   auto module = op->getParentOfType<FModuleOp>();

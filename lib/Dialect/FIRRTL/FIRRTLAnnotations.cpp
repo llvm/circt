@@ -14,6 +14,7 @@
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "mlir/IR/FunctionImplementation.h"
@@ -596,7 +597,7 @@ void OpAnnoTarget::setAnnotations(AnnotationSet annotations) const {
 
 StringAttr OpAnnoTarget::getInnerSym(ModuleNamespace &moduleNamespace) const {
   auto *context = getOp()->getContext();
-  auto innerSym = getOp()->getAttrOfType<StringAttr>("inner_sym");
+  auto innerSym = getInnerSymName(getOp());
   if (!innerSym) {
     // Try to come up with a reasonable name.
     StringRef name = "inner_sym";

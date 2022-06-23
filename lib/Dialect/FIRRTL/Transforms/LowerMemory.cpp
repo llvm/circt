@@ -92,7 +92,7 @@ struct LowerMemoryPass : public LowerMemoryBase<LowerMemoryPass> {
 
   /// Returns an operation's `inner_sym`, adding one if necessary.
   StringAttr getOrAddInnerSym(Operation *op) {
-    auto attr = op->getAttrOfType<StringAttr>("inner_sym");
+    auto attr = getInnerSymName(op);
     if (attr)
       return attr;
     auto module = op->getParentOfType<FModuleOp>();

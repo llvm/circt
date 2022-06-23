@@ -2441,7 +2441,7 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
     return setLowering(op, Value());
 
   // Name attr is required on sv.wire but optional on firrtl.wire.
-  auto symName = op.inner_symAttr();
+  StringAttr symName = getInnerSymName(op);
   auto name = op.nameAttr();
   if (AnnotationSet::removeAnnotations(
           op, "firrtl.transforms.DontTouchAnnotation") &&
@@ -2495,7 +2495,7 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
   // Node operations are logical noops, but may carry annotations or be
   // referred to through an inner name. If a don't touch is present, ensure
   // that we have a symbol name so we can keep the node as a wire.
-  auto symName = op.inner_symAttr();
+  auto symName = getInnerSymName(op);
   auto name = op.nameAttr();
   if (AnnotationSet::removeAnnotations(
           op, "firrtl.transforms.DontTouchAnnotation") &&
@@ -2732,7 +2732,7 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
     return setLowering(op, Value());
 
   // Add symbol if DontTouch annotation present.
-  auto symName = op.inner_symAttr();
+  auto symName = getInnerSymName(op);
   if (AnnotationSet::removeAnnotations(
           op, "firrtl.transforms.DontTouchAnnotation") &&
       !symName)
@@ -2762,7 +2762,7 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
   if (!clockVal || !resetSignal || !resetValue)
     return failure();
 
-  auto symName = op.inner_symAttr();
+  auto symName = getInnerSymName(op);
   if (AnnotationSet::removeAnnotations(
           op, "firrtl.transforms.DontTouchAnnotation") &&
       !symName)
@@ -3040,7 +3040,7 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
   // for it and generate a bind op.  Enter the bind into global
   // CircuitLoweringState so that this can be moved outside of module once
   // we're guaranteed to not be a parallel context.
-  StringAttr symbol = oldInstance.inner_symAttr();
+  StringAttr symbol = getInnerSymName(oldInstance);
   if (oldInstance.lowerToBind()) {
     if (!symbol)
       symbol = builder.getStringAttr("__" + oldInstance.name() + "__");

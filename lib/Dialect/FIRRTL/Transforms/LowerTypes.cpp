@@ -218,10 +218,9 @@ static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
                        op.ruw(), portNames, (op.name() + field.suffix).str(),
                        op.nameKind(), op.annotations().getValue(),
                        op.portAnnotations().getValue(), op.inner_symAttr());
-  if (op.inner_sym())
-    newMem.inner_symAttr(
-        StringAttr::get(b->getContext(), op.inner_symAttr().getValue() +
-                                             (op.name() + field.suffix)));
+  if (auto oldName = getInnerSymName(op))
+    newMem.inner_symAttr(StringAttr::get(
+        b->getContext(), oldName.getValue() + (op.name() + field.suffix)));
 
   SmallVector<Attribute> newAnnotations;
   for (size_t portIdx = 0, e = newMem.getNumResults(); portIdx < e; ++portIdx) {
@@ -558,7 +557,7 @@ bool TypeLoweringVisitor::lowerProducer(
   SmallString<16> loweredSymName;
   auto nameKindAttr = op->getAttrOfType<NameKindEnumAttr>(cache.nameKindAttr);
 
-  auto innerSymAttr = op->getAttrOfType<StringAttr>(cache.innerSymAttr);
+  auto innerSymAttr = getInnerSymName(op);
   if (innerSymAttr)
     loweredSymName = innerSymAttr.getValue();
   if (auto nameAttr = op->getAttrOfType<StringAttr>(cache.nameAttr))
@@ -1198,7 +1197,7 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
     endFields.push_back(resultTypes.size());
   }
 
-  auto sym = op.inner_symAttr();
+  auto sym = getInnerSymName(op);
 
   if (skip) {
     return false;

@@ -65,7 +65,7 @@ struct ModuleNamespace : public Namespace {
   /// Populate the namespace with the body of a module-like operation.
   void addBody(FModuleLike module) {
     module.walk([&](Operation *op) {
-      auto attr = op->getAttrOfType<StringAttr>("inner_sym");
+      auto attr = getInnerSymName(op);
       if (attr)
         nextIndex.insert({attr.getValue(), 0});
     });
