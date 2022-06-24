@@ -763,8 +763,7 @@ OpFoldResult AndOp::fold(ArrayRef<Attribute> constants) {
 ///
 /// Example: `and(x, y, x, z)` -> `and(x, y, z)`
 template <typename Op>
-static LogicalResult canonicalizeIdempotentInputs(Op op,
-                                                  PatternRewriter &rewriter) {
+static bool canonicalizeIdempotentInputs(Op op, PatternRewriter &rewriter) {
   auto inputs = op.inputs();
   llvm::DenseSet<Value> dedupedArguments;
   SmallVector<Value, 4> uniqueInputs;
@@ -777,10 +776,10 @@ static LogicalResult canonicalizeIdempotentInputs(Op op,
 
   if (uniqueInputs.size() < inputs.size()) {
     replaceOpWithNewOpAndCopyName<Op>(rewriter, op, op.getType(), uniqueInputs);
-    return success();
+    return true;
   }
 
-  return failure();
+  return false;
 }
 
 LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
@@ -790,7 +789,7 @@ LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
 
   // and(..., x, ..., x) -> and(..., x, ...) -- idempotent
   // Trivial and(x), and(x, x) cases are handled by [AndOp::fold] above.
-  if (size > 2 && canonicalizeIdempotentInputs(op, rewriter).succeeded())
+  if (size > 2 && canonicalizeIdempotentInputs(op, rewriter))
     return success();
 
   // Patterns for and with a constant on RHS.
@@ -1050,7 +1049,7 @@ LogicalResult OrOp::canonicalize(OrOp op, PatternRewriter &rewriter) {
 
   // or(..., x, ..., x, ...) -> or(..., x) -- idempotent
   // Trivial or(x), or(x, x) cases are handled by [OrOp::fold].
-  if (size > 2 && canonicalizeIdempotentInputs(op, rewriter).succeeded())
+  if (size > 2 && canonicalizeIdempotentInputs(op, rewriter))
     return success();
 
   // Patterns for and with a constant on RHS.
