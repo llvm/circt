@@ -167,6 +167,19 @@ private:
 };
 } // end anonymous namespace
 
+static llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
+                                     const LatticeValue &lattice) {
+  if (lattice.isUnknown()) {
+    return os << "<Unknown>";
+  } else if (lattice.isOverdefined()) {
+    return os << "<Overdefined>";
+  } else if (lattice.isInvalidValue()) {
+    return os << "<Invalid>";
+  } else {
+    return os << "<" << lattice.getConstant() << ">";
+  }
+}
+
 namespace {
 struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
   void runOnOperation() override;
@@ -249,8 +262,7 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
 
   /// Mark the given block as executable.
   void markBlockExecutable(Block *block);
-  void markWireOrUnresetableRegOp(Operation *wireOrReg);
-  void markRegResetOp(RegResetOp regReset);
+  void markWireRegOp(Operation *wireOrReg);
   void markMemOp(MemOp mem);
 
   void markInvalidValueOp(InvalidValueOp invalid);
@@ -260,6 +272,7 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
 
   void visitConnect(ConnectOp connect);
   void visitStrictConnect(StrictConnectOp connect);
+  void visitRegResetOp(RegResetOp regReset);
   void visitOperation(Operation *op);
 
 private:
@@ -369,8 +382,8 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
   for (auto &op : *block) {
 
     // Handle each of the special operations in the firrtl dialect.
-    if (isa<WireOp>(op) || isa<RegOp>(op))
-      markWireOrUnresetableRegOp(&op);
+    if (isWireOrReg(&op))
+      markWireRegOp(&op);
     else if (auto constant = dyn_cast<ConstantOp>(op))
       markConstantOp(constant);
     else if (auto specialConstant = dyn_cast<SpecialConstantOp>(op))
@@ -379,14 +392,12 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
       markInvalidValueOp(invalid);
     else if (auto instance = dyn_cast<InstanceOp>(op))
       markInstanceOp(instance);
-    else if (auto regReset = dyn_cast<RegResetOp>(op))
-      markRegResetOp(regReset);
     else if (auto mem = dyn_cast<MemOp>(op))
       markMemOp(mem);
   }
 }
 
-void IMConstPropPass::markWireOrUnresetableRegOp(Operation *wireOrReg) {
+void IMConstPropPass::markWireRegOp(Operation *wireOrReg) {
   // If the wire/reg has a non-ground type, then it is too complex for us to
   // handle, mark it as overdefined.
   // TODO: Eventually add a field-sensitive model.
@@ -396,26 +407,6 @@ void IMConstPropPass::markWireOrUnresetableRegOp(Operation *wireOrReg) {
 
   // Otherwise, this starts out as InvalidValue and is upgraded by connects.
   mergeLatticeValue(resultValue, InvalidValueAttr::get(resultValue.getType()));
-}
-
-void IMConstPropPass::markRegResetOp(RegResetOp regReset) {
-  // If the reg has a non-ground type, then it is too complex for us to handle,
-  // mark it as overdefined.
-  // TODO: Eventually add a field-sensitive model.
-  if (!regReset.getType().getPassiveType().isGround())
-    return markOverdefined(regReset);
-
-  // The reset value may be known - if so, merge it in if the enable is greater
-  // than invalid.
-  auto srcValue = getExtendedLatticeValue(regReset.resetValue(),
-                                          regReset.getType().cast<FIRRTLType>(),
-                                          /*allowTruncation=*/true);
-  auto enable = getExtendedLatticeValue(regReset.resetSignal(),
-                                        regReset.getType().cast<FIRRTLType>(),
-                                        /*allowTruncation=*/true);
-  if (enable.isOverdefined() ||
-      (enable.isConstant() && !enable.getConstant().getValue().isZero()))
-    mergeLatticeValue(regReset, srcValue);
 }
 
 void IMConstPropPass::markMemOp(MemOp mem) {
@@ -604,6 +595,27 @@ void IMConstPropPass::visitStrictConnect(StrictConnectOp connect) {
       << "strictconnect destination is here";
 }
 
+void IMConstPropPass::visitRegResetOp(RegResetOp regReset) {
+  // If the reg has a non-ground type, then it is too complex for us to handle,
+  // mark it as overdefined.
+  // TODO: Eventually add a field-sensitive model.
+  if (!regReset.getType().getPassiveType().isGround())
+    return markOverdefined(regReset);
+
+  // The reset value may be known - if so, merge it in if the enable is greater
+  // than invalid.
+  auto srcValue = getExtendedLatticeValue(regReset.resetValue(),
+                                          regReset.getType().cast<FIRRTLType>(),
+                                          /*allowTruncation=*/true);
+  auto enable = getExtendedLatticeValue(
+      regReset.resetSignal(),
+      regReset.resetSignal().getType().cast<FIRRTLType>(),
+      /*allowTruncation=*/true);
+  if (enable.isOverdefined() ||
+      (enable.isConstant() && !enable.getConstant().getValue().isZero()))
+    mergeLatticeValue(regReset, srcValue);
+}
+
 /// This method is invoked when an operand of the specified op changes its
 /// lattice value state and when the block containing the operation is first
 /// noticed as being alive.
@@ -617,7 +629,7 @@ void IMConstPropPass::visitOperation(Operation *op) {
   if (auto strictConnectOp = dyn_cast<StrictConnectOp>(op))
     return visitStrictConnect(strictConnectOp);
   if (auto regResetOp = dyn_cast<RegResetOp>(op))
-    return markRegResetOp(regResetOp);
+    return visitRegResetOp(regResetOp);
 
   // The clock operand of regop changing doesn't change its result value.
   if (isa<RegOp>(op))
