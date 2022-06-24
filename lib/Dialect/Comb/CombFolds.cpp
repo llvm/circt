@@ -758,6 +758,39 @@ OpFoldResult AndOp::fold(ArrayRef<Attribute> constants) {
   return constFoldAssociativeOp(constants, hw::PEO::And);
 }
 
+/// Returns a subset of the inputs of `op` where each input only occurs once.
+///
+/// Example: `and(x, y, z, x)` -> `x, y, z`
+template <typename Op>
+static SmallVector<Value> getUniqueInputs(Op op) {
+  llvm::DenseSet<Value> dedupedArguments;
+  SmallVector<Value, 4> uniqueOperands;
+
+  for (const auto input : op.inputs()) {
+    auto insertionResult = dedupedArguments.insert(input);
+    if (insertionResult.second) {
+      uniqueOperands.push_back(input);
+    }
+  }
+
+  return uniqueOperands;
+}
+
+/// Canonicalize an idempotent operation `op` so that only one input of any kind
+/// occurs.
+///
+/// Example: `and(x, y, x, z)` -> `and(x, y, z)`
+template <typename Op>
+static LogicalResult canonicalizeIdempotentInputs(Op op,
+                                                  PatternRewriter &rewriter) {
+  auto uniqueInputs = getUniqueInputs(op);
+  if (uniqueInputs.size() < op.inputs().size()) {
+    replaceOpWithNewOpAndCopyName<Op>(rewriter, op, op.getType(), uniqueInputs);
+    return success();
+  }
+  return failure();
+}
+
 LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
   auto inputs = op.inputs();
   auto size = inputs.size();
@@ -765,23 +798,8 @@ LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
 
   // and(..., x, ..., x) -> and(..., x, ...) -- idempotent
   // Trivial and(x), and(x, x) cases are handled by [AndOp::fold] above.
-  if (inputs.size() > 2) {
-    llvm::DenseSet<mlir::Value> dedupedArguments;
-    SmallVector<Value, 4> newOperands;
-
-    for (const auto input : inputs) {
-      auto insertionResult = dedupedArguments.insert(input);
-      if (insertionResult.second) {
-        newOperands.push_back(input);
-      }
-    }
-
-    if (newOperands.size() < inputs.size()) {
-      replaceOpWithNewOpAndCopyName<AndOp>(rewriter, op, op.getType(),
-                                           newOperands);
-      return success();
-    }
-  }
+  if (canonicalizeIdempotentInputs(op, rewriter).succeeded())
+    return success();
 
   // Patterns for and with a constant on RHS.
   APInt value;
@@ -1038,12 +1056,9 @@ LogicalResult OrOp::canonicalize(OrOp op, PatternRewriter &rewriter) {
   auto size = inputs.size();
   assert(size > 1 && "expected 2 or more operands");
 
-  // or(..., x, x) -> or(..., x) -- idempotent
-  if (inputs[size - 1] == inputs[size - 2]) {
-    replaceOpWithNewOpAndCopyName<OrOp>(rewriter, op, op.getType(),
-                                        inputs.drop_back());
+  // or(..., x, ..., x, ...) -> or(..., x) -- idempotent
+  if (canonicalizeIdempotentInputs(op, rewriter).succeeded())
     return success();
-  }
 
   // Patterns for and with a constant on RHS.
   APInt value;
@@ -1151,12 +1166,14 @@ LogicalResult XorOp::canonicalize(XorOp op, PatternRewriter &rewriter) {
   auto size = inputs.size();
   assert(size > 1 && "expected 2 or more operands");
 
-  // xor(..., x, x) -> xor (...) -- idempotent
-  if (inputs[size - 1] == inputs[size - 2]) {
+  auto uniqueInputs = getUniqueInputs(op);
+  // XOR is not idempotent, however duplicates fold to `0` which can be omitted
+  // as neutral element
+  if (uniqueInputs.size() < size) {
     assert(size > 2 &&
            "expected idempotent case for 2 elements handled already.");
     replaceOpWithNewOpAndCopyName<XorOp>(rewriter, op, op.getType(),
-                                         inputs.drop_back(/*n=*/2));
+                                         uniqueInputs);
     return success();
   }
 
