@@ -139,18 +139,18 @@ def machine(clock: str = 'clk', reset: str = None):
       if v.initial:
         if initial_state is not None:
           raise ValueError(
-              f"Multiple initial states specified ({name}, {initial_state})")
+              f"Multiple initial states specified ({name}, {initial_state}).")
         initial_state = name
 
     if initial_state is None:
       raise ValueError(
-          "No initial state specified, please create a state with `initial=True`"
+          "No initial state specified, please create a state with `initial=True`."
       )
 
     for name, v in attributes_of_type(to_be_wrapped, Input).items():
       if v.type.width != 1:
         raise ValueError(
-            f"Input port {name} has width {v.width}. For now, only i1 inputs are supported."
+            f"Input port {name} has width {v.type.width}. For now, FSMs only support i1 inputs."
         )
 
     # At this point, the 'states' attribute should be considered an immutable,

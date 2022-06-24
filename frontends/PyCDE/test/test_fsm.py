@@ -1,13 +1,10 @@
 # RUN: %PYTHON% py-split-input-file.py %s | FileCheck %s
 
-from re import A
-from pycde import System, Input, Output, module, generator, externmodule
-
+from pycde import System, Input, Output, generator
 from pycde.dialects import comb
 from pycde import fsm
-from pycde.pycde_types import types, dim
-
-from circt.support import connect
+from pycde.pycde_types import types
+from pycde.testing import unittestmodule
 
 # FSM instantiation example
 
@@ -37,7 +34,7 @@ class FSM:
   C.set_transitions((B, lambda ports: ports.a))
 
 
-@module
+@unittestmodule()
 class FSMUser:
   a = Input(types.i1)
   b = Input(types.i1)
@@ -54,10 +51,6 @@ class FSMUser:
     ports.is_b = fsm.is_B
     ports.is_c = fsm.is_C
 
-
-system = System([FSMUser])
-system.generate()
-system.print()
 
 # -----
 
