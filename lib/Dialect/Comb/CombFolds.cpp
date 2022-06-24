@@ -758,24 +758,6 @@ OpFoldResult AndOp::fold(ArrayRef<Attribute> constants) {
   return constFoldAssociativeOp(constants, hw::PEO::And);
 }
 
-/// Returns a subset of the inputs of `op` where each input only occurs once.
-///
-/// Example: `and(x, y, z, x)` -> `x, y, z`
-template <typename Op>
-static SmallVector<Value> getUniqueInputs(Op op) {
-  llvm::DenseSet<Value> dedupedArguments;
-  SmallVector<Value, 4> uniqueOperands;
-
-  for (const auto input : op.inputs()) {
-    auto insertionResult = dedupedArguments.insert(input);
-    if (insertionResult.second) {
-      uniqueOperands.push_back(input);
-    }
-  }
-
-  return uniqueOperands;
-}
-
 /// Canonicalize an idempotent operation `op` so that only one input of any kind
 /// occurs.
 ///
@@ -783,11 +765,22 @@ static SmallVector<Value> getUniqueInputs(Op op) {
 template <typename Op>
 static LogicalResult canonicalizeIdempotentInputs(Op op,
                                                   PatternRewriter &rewriter) {
-  auto uniqueInputs = getUniqueInputs(op);
-  if (uniqueInputs.size() < op.inputs().size()) {
+  auto inputs = op.inputs();
+  llvm::DenseSet<Value> dedupedArguments;
+  SmallVector<Value, 4> uniqueInputs;
+
+  for (const auto input : inputs) {
+    auto insertionResult = dedupedArguments.insert(input);
+    if (insertionResult.second) {
+      uniqueInputs.push_back(input);
+    }
+  }
+
+  if (uniqueInputs.size() < inputs.size()) {
     replaceOpWithNewOpAndCopyName<Op>(rewriter, op, op.getType(), uniqueInputs);
     return success();
   }
+
   return failure();
 }
 
@@ -1166,14 +1159,12 @@ LogicalResult XorOp::canonicalize(XorOp op, PatternRewriter &rewriter) {
   auto size = inputs.size();
   assert(size > 1 && "expected 2 or more operands");
 
-  auto uniqueInputs = getUniqueInputs(op);
-  // XOR is not idempotent, however duplicates fold to `0` which can be omitted
-  // as neutral element
-  if (uniqueInputs.size() < size) {
+  // xor(..., x, x) -> xor (...) -- idempotent
+  if (inputs[size - 1] == inputs[size - 2]) {
     assert(size > 2 &&
            "expected idempotent case for 2 elements handled already.");
     replaceOpWithNewOpAndCopyName<XorOp>(rewriter, op, op.getType(),
-                                         uniqueInputs);
+                                         inputs.drop_back(/*n=*/2));
     return success();
   }
 
