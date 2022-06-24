@@ -830,9 +830,14 @@ void GrandCentralTapsPass::runOnOperation() {
                    << "  - Shortest prefix " << *shortestPrefix << "\n");
 
         // Determine the module at which the hierarchical name should start.
-        Operation *opInRootModule =
-            shortestPrefix->empty() ? path.front() : shortestPrefix->front();
-        auto rootModule = opInRootModule->getParentOfType<FModuleLike>();
+        FModuleLike rootModule;
+        if (shortestPrefix->empty()) {
+          if (port.target.hasPort())
+            rootModule = cast<FModuleLike>(port.target.getOp());
+          else
+            rootModule = port.target.getOp()->getParentOfType<FModuleLike>();
+        } else
+          rootModule = shortestPrefix->front()->getParentOfType<FModuleLike>();
 
         SmallVector<Attribute> symbols;
         SmallString<128> hname;
@@ -847,36 +852,18 @@ void GrandCentralTapsPass::runOnOperation() {
         // Concatenate the prefix into a proper full hierarchical name.
         addSymbol(
             FlatSymbolRefAttr::get(SymbolTable::getSymbolName(rootModule)));
-        if (port.nla && shortestPrefix->empty() &&
-            port.nla.root() != rootModule.moduleNameAttr()) {
-          // This handles the case when nla is not considered for common prefix
-          // stripping.
-          auto rootMod = port.nla.root();
-          for (auto p : path) {
-            if (rootMod == p->getParentOfType<FModuleOp>().getNameAttr())
-              break;
-            addSymbol(getInnerRefTo(p));
-          }
-        }
         for (auto inst : shortestPrefix.getValue())
           addSymbol(getInnerRefTo(inst));
-        if (port.nla) {
-          auto namepath = port.nla.namepath();
-          Attribute leaf = namepath.getValue().back();
-          if (!leaf.isa<InnerRefAttr>()) {
-            if (port.target.hasPort())
-              leaf = getInnerRefTo(port.target.getOp(), port.target.getPort());
-            else
-              leaf = getInnerRefTo(port.target.getOp());
-          }
-          addSymbol(leaf);
-        } else if (port.target.getOp()) {
+
+        if (port.target.getOp()) {
+          Attribute leaf;
           if (port.target.hasPort())
-            addSymbol(
-                getInnerRefTo(port.target.getOp(), port.target.getPort()));
+            leaf = getInnerRefTo(port.target.getOp(), port.target.getPort());
           else
-            addSymbol(getInnerRefTo(port.target.getOp()));
+            leaf = getInnerRefTo(port.target.getOp());
+          addSymbol(leaf);
         }
+
         if (!port.suffix.empty()) {
           hname += '.';
           hname += port.suffix;

@@ -82,3 +82,124 @@ circuit TestHarness : %[[
 ; CHECK:     module DataTap
 ; CHECK-NOT: endmodule
 ; CHECK:       assign _0 = Top.test.signal;
+
+; // -----
+
+circuit Top : %[[
+  {
+    "class":"sifive.enterprise.grandcentral.DataTapsAnnotation",
+    "blackBox":"~Top|DataTap_Submodule",
+    "keys":[
+      {
+        "class":"sifive.enterprise.grandcentral.ReferenceDataTapKey",
+        "source":"~Top|Top/dut:DUT/submodule:Submodule>wire_Submodule",
+        "portName":"~Top|DataTap_Submodule>_0"
+      },
+      {
+        "class":"sifive.enterprise.grandcentral.ReferenceDataTapKey",
+        "source":"~Top|Top/dut:DUT>wire_DUT",
+        "portName":"~Top|DataTap_Submodule>_1"
+      },
+      {
+        "class":"sifive.enterprise.grandcentral.ReferenceDataTapKey",
+        "source":"~Top|Top>wire_Top",
+        "portName":"~Top|DataTap_Submodule>_2"
+      }
+    ]
+  },
+  {
+    "class":"sifive.enterprise.grandcentral.DataTapsAnnotation",
+    "blackBox":"~Top|DataTap_DUT",
+    "keys":[
+      {
+        "class":"sifive.enterprise.grandcentral.ReferenceDataTapKey",
+        "source":"~Top|Top/dut:DUT/submodule:Submodule>wire_Submodule",
+        "portName":"~Top|DataTap_DUT>_0"
+      },
+      {
+        "class":"sifive.enterprise.grandcentral.ReferenceDataTapKey",
+        "source":"~Top|Top/dut:DUT>wire_DUT",
+        "portName":"~Top|DataTap_DUT>_1"
+      },
+      {
+        "class":"sifive.enterprise.grandcentral.ReferenceDataTapKey",
+        "source":"~Top|Top>wire_Top",
+        "portName":"~Top|DataTap_DUT>_2"
+      }
+    ]
+  },
+  {
+    "class":"sifive.enterprise.grandcentral.DataTapsAnnotation",
+    "blackBox":"~Top|DataTap_Top",
+    "keys":[
+      {
+        "class":"sifive.enterprise.grandcentral.ReferenceDataTapKey",
+        "source":"~Top|Top/dut:DUT/submodule:Submodule>wire_Submodule",
+        "portName":"~Top|DataTap_Top>_0"
+      },
+      {
+        "class":"sifive.enterprise.grandcentral.ReferenceDataTapKey",
+        "source":"~Top|Top/dut:DUT>wire_DUT",
+        "portName":"~Top|DataTap_Top>_1"
+      },
+      {
+        "class":"sifive.enterprise.grandcentral.ReferenceDataTapKey",
+        "source":"~Top|Top>wire_Top",
+        "portName":"~Top|DataTap_Top>_2"
+      }
+    ]
+  }
+]]
+  extmodule DataTap_Submodule :
+    output _0 : UInt<1>
+    output _1 : UInt<1>
+    output _2 : UInt<1>
+
+  extmodule DataTap_DUT :
+    output _0 : UInt<1>
+    output _1 : UInt<1>
+    output _2 : UInt<1>
+
+  extmodule DataTap_Top :
+    output _0 : UInt<1>
+    output _1 : UInt<1>
+    output _2 : UInt<1>
+
+  module Submodule :
+
+    wire wire_Submodule: UInt<1>
+    wire_Submodule is invalid
+
+    inst tap of DataTap_Submodule
+
+  module DUT :
+
+    wire wire_DUT: UInt<1>
+    wire_DUT is invalid
+
+    inst submodule of Submodule
+
+    inst tap of DataTap_DUT
+
+  module Top :
+
+    wire wire_Top: UInt<1>
+    wire_Top is invalid
+
+    inst dut of DUT
+    inst tap of DataTap_Top
+
+    ; CHECK:      module DataTap_Submodule
+    ; CHECK:      assign _0 = Submodule.wire_Submodule
+    ; CHECK-NEXT: assign _1 = DUT.wire_DUT
+    ; CHECK-NEXT: assign _2 = Top.wire_Top
+
+    ; CHECK: module DataTap_DUT
+    ; CHECK:      assign _0 = DUT.submodule.wire_Submodule
+    ; CHECK-NEXT: assign _1 = DUT.wire_DUT
+    ; CHECK-NEXT: assign _2 = Top.wire_Top
+
+    ; CHECK: module DataTap_Top
+    ; CHECK:      assign _0 = Top.dut.submodule.wire_Submodule
+    ; CHECK-NEXT: assign _1 = Top.dut.wire_DUT
+    ; CHECK-NEXT: assign _2 = Top.wire_Top
