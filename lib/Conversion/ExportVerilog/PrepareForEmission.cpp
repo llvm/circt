@@ -677,7 +677,7 @@ void ExportVerilog::prepareHWModule(Block &block,
 namespace {
 
 struct TestPrepareForEmissionPass
-    : public PrepareForEmissionBase<TestPrepareForEmissionPass> {
+    : public TestPrepareForEmissionBase<TestPrepareForEmissionPass> {
   TestPrepareForEmissionPass() {}
   void runOnOperation() override {
     HWModuleOp module = getOperation();
