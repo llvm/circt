@@ -23,7 +23,6 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Support/LoweringOptions.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
-#include "mlir/IR/Threading.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 
