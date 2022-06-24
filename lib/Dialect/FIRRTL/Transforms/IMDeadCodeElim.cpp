@@ -207,10 +207,18 @@ void IMDeadCodeElimPass::runOnOperation() {
                         circuit.getBody()->getOps<FModuleOp>(),
                         [&](auto op) { rewriteModuleBody(op); });
 
-  // Erase empty modules. It is necessary to delete in the post order.
-  for (auto *node : llvm::make_early_inc_range(llvm::post_order(instanceGraph)))
-    if (auto module = dyn_cast_or_null<FModuleOp>(*node->getModule()))
-      eraseEmptyModule(module);
+  // Erase empty modules. To erase empty modules transitively, it is necessary
+  // to visit modules in the post order of instance graph.
+  // FIXME: We copy the list of modules into a vector first to avoid iterator
+  // invalidation while we mutate the instance graph. See issue 3387.
+  SmallVector<FModuleOp, 0> modules(llvm::make_filter_range(
+      llvm::map_range(
+          llvm::post_order(instanceGraph),
+          [](auto *node) { return dyn_cast<FModuleOp>(*node->getModule()); }),
+      [](auto module) { return module; }));
+
+  for (auto module : modules)
+    eraseEmptyModule(module);
 }
 
 void IMDeadCodeElimPass::visitValue(Value value) {
