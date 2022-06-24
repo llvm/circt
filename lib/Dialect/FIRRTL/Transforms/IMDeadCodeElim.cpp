@@ -425,10 +425,6 @@ void IMDeadCodeElimPass::eraseEmptyModule(FModuleOp module) {
       !module.annotations().empty())
     return;
 
-  // If there is "output_file" attribute, we don't delete the module.
-  if (module->hasAttr("output_file"))
-    return;
-
   // Ok, the module is empty. Delete instances unless they have symbols.
   LLVM_DEBUG(llvm::dbgs() << "Erase " << module.getName() << "\n");
 
