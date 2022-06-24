@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -prepare-for-emission --split-input-file | FileCheck %s
+// RUN: circt-opt %s -test-prepare-for-emission --split-input-file | FileCheck %s
 
 // CHECK: @namehint_variadic
 hw.module @namehint_variadic(%a: i3) -> (b: i3) {

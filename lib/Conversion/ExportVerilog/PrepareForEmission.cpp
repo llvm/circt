@@ -676,9 +676,9 @@ void ExportVerilog::prepareHWModule(Block &block,
 
 namespace {
 
-struct PrepareForEmissionPass
-    : public PrepareForEmissionBase<PrepareForEmissionPass> {
-  PrepareForEmissionPass() {}
+struct TestPrepareForEmissionPass
+    : public PrepareForEmissionBase<TestPrepareForEmissionPass> {
+  TestPrepareForEmissionPass() {}
   void runOnOperation() override {
     HWModuleOp module = getOperation();
     LoweringOptions options = getLoweringCLIOption(
@@ -689,6 +689,6 @@ struct PrepareForEmissionPass
 };
 } // end anonymous namespace
 
-std::unique_ptr<mlir::Pass> circt::createPrepareForEmissionPass() {
-  return std::make_unique<PrepareForEmissionPass>();
+std::unique_ptr<mlir::Pass> circt::createTestPrepareForEmissionPass() {
+  return std::make_unique<TestPrepareForEmissionPass>();
 }
