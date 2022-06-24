@@ -771,9 +771,8 @@ static LogicalResult canonicalizeIdempotentInputs(Op op,
 
   for (const auto input : inputs) {
     auto insertionResult = dedupedArguments.insert(input);
-    if (insertionResult.second) {
+    if (insertionResult.second)
       uniqueInputs.push_back(input);
-    }
   }
 
   if (uniqueInputs.size() < inputs.size()) {
