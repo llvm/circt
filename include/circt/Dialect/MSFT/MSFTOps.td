@@ -18,8 +18,14 @@ def InstanceOp : MSFTOp<"instance", [
                        FlatSymbolRefAttr:$moduleName,
                        Variadic<AnyType>:$inputs,
                        OptionalAttr<ParamDeclArrayAttr>:$parameters,
-                       OptionalAttr<SymbolRefAttr>:$targetDesignPartition);
+                       OptionalAttr<SymbolRefAttr>:$targetDesignPartition,
+                       OptionalAttr<AppIDAttr>:$appID);
   let results = (outs Variadic<AnyType>);
+
+  let builders = [
+    OpBuilder<(ins "ArrayRef<Type>":$resultTypes, "StringAttr":$sym_name,
+                   "FlatSymbolRefAttr":$moduleName, "ArrayRef<Value>":$inputs)>
+  ];
 
   let extraClassDeclaration = [{
     // Return the name of the specified result or empty string if it cannot be
@@ -48,7 +54,8 @@ def InstanceOp : MSFTOp<"instance", [
 
   /// sym keyword for optional symbol simplifies parsing
   let assemblyFormat = [{
-    $sym_name $moduleName `(` $inputs `)` custom<ParameterList>($parameters) attr-dict
+    $sym_name $moduleName `(` $inputs `)` custom<ParameterList>($parameters)
+       ( `(` `appid` $appID^ `)` )? attr-dict
       `:` functional-type($inputs, results)
   }];
 }
@@ -56,6 +63,10 @@ def InstanceOp : MSFTOp<"instance", [
 def OneOrNoBlocksRegion : Region<
   CPred<"::llvm::hasNItemsOrLess($_self, 1)">,
   "region with at most 1 block">;
+
+def AppIDArrayAttr : TypedArrayAttrBase<AppIDAttr, "Array of AppIDs"> {
+  // let constBuilderCall = "";
+}
 
 def MSFTModuleOp : MSFTOp<"module",
       [IsolatedFromAbove, FunctionOpInterface, Symbol, RegionKindInterface,
@@ -72,7 +83,8 @@ def MSFTModuleOp : MSFTOp<"module",
   let arguments = (ins
       StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
       DictionaryAttr:$parameters,
-      OptionalAttr<StrAttr>:$fileName);
+      OptionalAttr<StrAttr>:$fileName,
+      OptionalAttr<StrArrayAttr>:$childAppIDBases);
   let results = (outs);
   let regions = (region OneOrNoBlocksRegion:$body);
 

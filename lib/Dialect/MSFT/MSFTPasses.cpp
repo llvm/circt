@@ -1393,9 +1393,8 @@ MSFTModuleOp PartitionPass::partition(DesignPartitionOp partOp,
   SmallVector<Type> instRetTypes(
       llvm::map_range(newOutputs, [](Value v) { return v.getType(); }));
   auto partInst = OpBuilder(partOp).create<InstanceOp>(
-      loc, instRetTypes, partOp.getNameAttr(),
-      SymbolTable::getSymbolName(partMod), instInputs, ArrayAttr(),
-      SymbolRefAttr());
+      loc, instRetTypes, partOp.getNameAttr(), FlatSymbolRefAttr::get(partMod),
+      instInputs);
   moduleInstantiations[partMod].push_back(partInst);
 
   // And set the outputs properly.
@@ -1847,6 +1846,79 @@ std::unique_ptr<Pass> createLowerConstructsPass() {
 } // namespace msft
 } // namespace circt
 
+//===----------------------------------------------------------------------===//
+// Discover AppIDs pass
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct DiscoverAppIDsPass : public DiscoverAppIDsBase<DiscoverAppIDsPass>,
+                            PassCommon {
+  void runOnOperation() override;
+  void processMod(MSFTModuleOp);
+};
+} // anonymous namespace
+
+void DiscoverAppIDsPass::runOnOperation() {
+  ModuleOp topMod = getOperation();
+  topLevelSyms.addDefinitions(topMod);
+  if (failed(verifyInstances(topMod))) {
+    signalPassFailure();
+    return;
+  }
+
+  SmallVector<MSFTModuleOp> sortedMods;
+  getAndSortModules(topMod, sortedMods);
+
+  for (MSFTModuleOp mod : sortedMods)
+    processMod(mod);
+}
+
+void DiscoverAppIDsPass::processMod(MSFTModuleOp mod) {
+  SmallDenseMap<StringAttr, uint64_t> appBaseCounts;
+  SmallPtrSet<StringAttr, 32> localAppIDBases;
+  SmallDenseMap<AppIDAttr, InstanceOp> localAppIDs;
+
+  mod.walk([&](InstanceOp inst) {
+    if (inst.appID()) {
+      AppIDAttr appid = inst.appIDAttr();
+      if (localAppIDs.find(appid) != localAppIDs.end()) {
+        inst.emitOpError("Found multiple identical AppIDs in same module")
+                .attachNote(localAppIDs[appid].getLoc())
+            << "first AppID located here";
+        signalPassFailure();
+      }
+      localAppIDBases.insert(appid.getName());
+    }
+
+    auto targetMod = dyn_cast<MSFTModuleOp>(
+        topLevelSyms.getDefinition(inst.moduleNameAttr()));
+    if (targetMod && targetMod.childAppIDBases())
+      for (auto base : targetMod.childAppIDBasesAttr().getAsRange<StringAttr>())
+        appBaseCounts[base] += 1;
+  });
+
+  SmallVector<Attribute, 32> finalModBases;
+  for (auto baseCount : appBaseCounts)
+    if (baseCount.getSecond() == 1 &&
+        !localAppIDBases.contains(baseCount.getFirst()))
+      finalModBases.push_back(baseCount.getFirst());
+
+  for (StringAttr lclBase : localAppIDBases)
+    finalModBases.push_back(lclBase);
+
+  if (finalModBases.empty())
+    return;
+  ArrayAttr childrenBases = ArrayAttr::get(mod.getContext(), finalModBases);
+  mod.childAppIDBasesAttr(childrenBases);
+}
+
+namespace circt {
+namespace msft {
+std::unique_ptr<Pass> createDiscoverAppIDsPass() {
+  return std::make_unique<DiscoverAppIDsPass>();
+}
+} // namespace msft
+} // namespace circt
 namespace {
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/MSFT/MSFTPasses.h.inc"

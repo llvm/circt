@@ -226,3 +226,19 @@ MlirAttribute circtMSFTLocationVectorAttrGetElement(MlirAttribute attr,
                                                     intptr_t pos) {
   return wrap(unwrap(attr).cast<LocationVectorAttr>().getLocs()[pos]);
 }
+
+bool circtMSFTAttributeIsAnAppIDAttr(MlirAttribute attr) {
+  return unwrap(attr).isa<AppIDAttr>();
+}
+
+MlirAttribute circtMSFTAppIDAttrGet(MlirContext ctxt, MlirStringRef name,
+                                    uint64_t idx) {
+  return wrap(AppIDAttr::get(unwrap(ctxt),
+                             StringAttr::get(unwrap(ctxt), unwrap(name)), idx));
+}
+MlirStringRef circtMSFTAppIDAttrGetName(MlirAttribute attr) {
+  return wrap(unwrap(attr).cast<AppIDAttr>().getName().getValue());
+}
+uint64_t circtMSFTAppIDAttrGetIdx(MlirAttribute attr) {
+  return unwrap(attr).cast<AppIDAttr>().getIndex();
+}

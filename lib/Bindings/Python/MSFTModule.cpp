@@ -276,4 +276,22 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
       .def(py::init<CirctMSFTDirection, CirctMSFTDirection>(),
            py::arg("columns") = CirctMSFTDirection::NONE,
            py::arg("rows") = CirctMSFTDirection::NONE);
+
+  mlir_attribute_subclass(m, "AppIDAttr", circtMSFTAttributeIsAnAppIDAttr)
+      .def_classmethod(
+          "get",
+          [](py::object cls, std::string name, uint64_t idx, MlirContext ctxt) {
+            return cls(circtMSFTAppIDAttrGet(ctxt, wrap(name), idx));
+          },
+          "Create an AppID attribute", py::arg("cls"), py::arg("name"),
+          py::arg("idx"), py::arg("context") = py::none())
+      .def_property_readonly("name",
+                             [](MlirAttribute self) {
+                               StringRef name =
+                                   unwrap(circtMSFTAppIDAttrGetName(self));
+                               return std::string(name.data(), name.size());
+                             })
+      .def_property_readonly("idx", [](MlirAttribute self) {
+        return circtMSFTAppIDAttrGetIdx(self);
+      });
 }
