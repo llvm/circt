@@ -19,3 +19,14 @@ hw.module @Foo() -> () {
   hw.output
 } loc("dummy":1:1)
 }
+
+// -----
+
+module attributes {circt.loweringOptions = "locationInfoStyle=none"}{
+// CHECK: module Foo();
+// CHECK-NOT: //
+// CHECK-NEXT: endmodule
+hw.module @Foo() -> () {
+  hw.output
+} loc("dummy":1:1)
+}
