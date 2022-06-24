@@ -11,6 +11,7 @@ import circt.support as support
 
 import mlir.ir as ir
 
+from contextvars import ContextVar
 from functools import singledispatchmethod
 from typing import Union
 import re
@@ -43,13 +44,19 @@ class Value:
 
   _reg_name = re.compile(r"^(.*)__reg(\d+)$")
 
-  def reg(self, clk, rst=None, name=None, cycles=1, sv_attributes=None):
+  def reg(self, clk=None, rst=None, name=None, cycles=1, sv_attributes=None):
     """Register this value, returning the delayed value.
     `clk`, `rst`: the clock and reset signals.
     `name`: name this register explicitly.
     `cycles`: number of registers to add."""
+
+    if clk is None:
+      clk = ClockValue._get_current_clock_block()
+      if clk is None:
+        raise ValueError("If 'clk' not specified, must be in clock block")
     if sv_attributes is not None:
       sv_attributes = [sv.SVAttributeAttr.get(attr) for attr in sv_attributes]
+
     from .dialects import seq
     if name is None:
       basename = None
@@ -112,6 +119,27 @@ class Value:
 
 class RegularValue(Value):
   pass
+
+
+_current_clock_context = ContextVar("current_clock_context")
+
+
+class ClockValue(Value):
+  """A clock signal."""
+
+  __slots__ = ["_old_token"]
+
+  def __enter__(self):
+    self._old_token = _current_clock_context.set(self)
+
+  def __exit__(self, exc_type, exc_value, traceback):
+    if exc_value is not None:
+      return
+    _current_clock_context.reset(self._old_token)
+
+  @staticmethod
+  def _get_current_clock_block():
+    return _current_clock_context.get(None)
 
 
 class InOutValue(Value):

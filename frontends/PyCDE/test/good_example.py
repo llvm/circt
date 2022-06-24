@@ -4,7 +4,7 @@
 # This is intended to be a simple 'tutorial' example.  Run it as a test to
 # ensure that we keep it up to date (ensure it doesn't crash).
 
-from pycde import dim, module, generator, types, Input, Output
+from pycde import dim, module, generator, types, Clock, Input, Output
 import pycde
 
 import sys
@@ -12,7 +12,7 @@ import sys
 
 @module
 class Mux:
-  clk = Input(types.i1)
+  clk = Clock()
   data = Input(dim(8, 14))
   sel = Input(types.i4)
 
@@ -20,8 +20,8 @@ class Mux:
 
   @generator
   def build(ports):
-    sel_reg = ports.sel.reg(ports.clk)
-    ports.out = ports.data.reg(ports.clk)[sel_reg].reg(ports.clk)
+    sel_reg = ports.sel.reg()
+    ports.out = ports.data.reg()[sel_reg].reg()
 
 
 t = pycde.System([Mux], name="MuxDemo", output_directory=sys.argv[1])

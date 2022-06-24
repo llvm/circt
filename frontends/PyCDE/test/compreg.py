@@ -4,10 +4,9 @@
 # RUN: FileCheck %s --input-file %t/CompReg.tcl --check-prefix TCL
 
 import pycde
-from pycde import types, module, Input, Output
+from pycde import types, module, Clock, Input, Output
 from pycde.devicedb import LocationVector
 
-from pycde.dialects import seq
 from pycde.module import generator
 
 import sys
@@ -15,16 +14,15 @@ import sys
 
 @module
 class CompReg:
-  clk = Input(types.i1)
+  clk = Clock()
   input = Input(types.i8)
   output = Output(types.i8)
 
   @generator
   def build(ports):
-    compreg = ports.input.reg(clk=ports.clk,
-                              name="reg",
-                              sv_attributes=["dont_merge"])
-    ports.output = compreg
+    with ports.clk:
+      compreg = ports.input.reg(name="reg", sv_attributes=["dont_merge"])
+      ports.output = compreg
 
 
 mod = pycde.System([CompReg], name="CompReg", output_directory=sys.argv[1])

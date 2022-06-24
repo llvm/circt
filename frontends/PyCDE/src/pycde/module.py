@@ -4,12 +4,13 @@
 
 from __future__ import annotations
 from typing import Tuple, Union, Dict
+from pycde.pycde_types import ClockType
 
 from pycde.support import _obj_to_value
 
 from .support import (get_user_loc, _obj_to_attribute, OpOperandConnect,
                       create_type_string, create_const_zero)
-from .value import Value
+from .value import ClockValue, Value
 
 from circt import support
 from circt.dialects import esi, hw, msft
@@ -54,6 +55,13 @@ class OutputChannel(Output):
 
 class Input(ModuleDecl):
   """Create an RTL-level input port."""
+
+
+class Clock(Input):
+  """Create a clock input"""
+
+  def __init__(self, name: str = None):
+    super().__init__(mlir.ir.IntegerType.get_signless(1), name)
 
 
 class InputChannel(Input):
@@ -125,10 +133,22 @@ def generate_msft_module_op(generator: Generator, spec_mod: _SpecializedModule):
   with mlir.ir.InsertionPoint(
       entry_block), generator.loc, BackedgeBuilder(), bc:
     args = _GeneratorPortAccess(spec_mod)
+
+    # Enter clock block implicitly if only one clock given
+    clk = None
+    if len(spec_mod.clock_ports) == 1:
+      clk_port = list(spec_mod.clock_ports.values())[0]
+      val = entry_block.arguments[clk_port]
+      clk = ClockValue(val, ClockType())
+      clk.__enter__()
+
     outputs = generator.gen_func(args)
     if outputs is not None:
       raise ValueError("Generators must not return a value")
     create_output_op(args)
+
+    if clk is not None:
+      clk.__exit__(None, None, None)
 
 
 def create_msft_module_extern_op(sys, mod: _SpecializedModule, symbol):
@@ -159,9 +179,9 @@ class _SpecializedModule:
   only created if said module is instantiated."""
 
   __slots__ = [
-      "name", "generators", "modcls", "loc", "input_ports", "input_port_lookup",
-      "output_ports", "output_port_lookup", "parameters", "extern_name",
-      "create_cb", "generator_cb"
+      "name", "generators", "modcls", "loc", "clock_ports", "input_ports",
+      "input_port_lookup", "output_ports", "output_port_lookup", "parameters",
+      "extern_name", "create_cb", "generator_cb"
   ]
 
   def __init__(self,
@@ -200,6 +220,7 @@ class _SpecializedModule:
     self.output_port_lookup: Dict[str, int] = {}  # Used by 'BlockArgs' below.
     self.output_ports = []
     self.generators = {}
+    self.clock_ports: Dict[str, int] = {}
     for attr_name in dir(cls):
       if attr_name.startswith("_"):
         continue
@@ -215,6 +236,9 @@ class _SpecializedModule:
         self.output_port_lookup[attr_name] = len(self.output_ports) - 1
       elif isinstance(attr, Generator):
         self.generators[attr_name] = attr
+
+      if isinstance(attr, Clock):
+        self.clock_ports[attr.name] = len(self.input_ports) - 1
     self.add_accessors()
 
   def add_accessors(self):
@@ -562,6 +586,8 @@ class _GeneratorPortAccess:
       idx = self._mod.input_port_lookup[name]
       entry_block = self._mod.circt_mod.regions[0].blocks[0]
       val = entry_block.arguments[idx]
+      if name in self._mod.clock_ports:
+        return ClockValue(val, ClockType())
       return Value(val)
     if name in self._mod.output_port_lookup:
       if name not in self._output_values:
