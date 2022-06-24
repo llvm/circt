@@ -790,7 +790,7 @@ LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
 
   // and(..., x, ..., x) -> and(..., x, ...) -- idempotent
   // Trivial and(x), and(x, x) cases are handled by [AndOp::fold] above.
-  if (canonicalizeIdempotentInputs(op, rewriter).succeeded())
+  if (size > 2 && canonicalizeIdempotentInputs(op, rewriter).succeeded())
     return success();
 
   // Patterns for and with a constant on RHS.
@@ -1049,7 +1049,8 @@ LogicalResult OrOp::canonicalize(OrOp op, PatternRewriter &rewriter) {
   assert(size > 1 && "expected 2 or more operands");
 
   // or(..., x, ..., x, ...) -> or(..., x) -- idempotent
-  if (canonicalizeIdempotentInputs(op, rewriter).succeeded())
+  // Trivial or(x), or(x, x) cases are handled by [OrOp::fold].
+  if (size > 2 && canonicalizeIdempotentInputs(op, rewriter).succeeded())
     return success();
 
   // Patterns for and with a constant on RHS.
