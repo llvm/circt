@@ -136,13 +136,14 @@ firrtl.circuit "UnusedOutput"  {
 // CHECK-LABEL: "PreserveOutputFile"
 firrtl.circuit "PreserveOutputFile" {
   // CHECK-NEXT: firrtl.module {{.+}}@Sub
+  // CHECK-NOT:    %a
   // CHECK-SAME:   output_file
-  firrtl.module private @Sub(in %a: !firrtl.uint<1>) attributes {output_file = #hw.output_file<"hello">} {}
+  firrtl.module private @Sub(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1> sym @sym) attributes {output_file = #hw.output_file<"hello">} {}
   // CHECK: firrtl.module @PreserveOutputFile
   firrtl.module @PreserveOutputFile() {
     // CHECK-NEXT: firrtl.instance sub
     // CHECK-SAME: output_file
-    firrtl.instance sub {output_file = #hw.output_file<"hello">} @Sub(in a: !firrtl.uint<1>)
+    firrtl.instance sub {output_file = #hw.output_file<"hello">} @Sub(in a: !firrtl.uint<1>, in b: !firrtl.uint<1>)
   }
 }
 
