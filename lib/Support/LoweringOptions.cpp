@@ -207,3 +207,19 @@ void circt::applyLoweringCLOptions(ModuleOp module) {
     clOptions->loweringOptions.setAsAttribute(module);
   }
 }
+
+LoweringOptions
+circt::getLoweringCLIOption(mlir::ModuleOp module,
+                            LoweringOptions::ErrorHandlerT errorHandler) {
+  // If the command line options were not registered in the first place, use the
+  // lowering option associated with module op.
+  if (!clOptions.isConstructed() ||
+      !clOptions->loweringOptions.getNumOccurrences()) {
+    if (auto styleAttr = LoweringOptions::getAttributeFrom(module))
+      return LoweringOptions(styleAttr, errorHandler);
+    // If the module doesn't have a lowering option, then use the default value.
+    return LoweringOptions();
+  }
+
+  return clOptions->loweringOptions.getValue();
+}
