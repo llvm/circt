@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/SSP/SSPOps.h"
+#include "circt/Dialect/SSP/SSPAttributes.h"
 #include "circt/Support/LLVM.h"
 
 #include "mlir/IR/Builders.h"

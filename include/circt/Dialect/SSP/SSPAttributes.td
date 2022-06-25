@@ -10,8 +10,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-include "SSPPropertyInterfaces.td"
-
 def DependenceAttr : SSPAttribute<"Dependence"> {
   let description = [{
     An attribute to uniformly model def-use and auxiliary
