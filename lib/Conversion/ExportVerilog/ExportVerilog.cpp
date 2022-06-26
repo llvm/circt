@@ -598,9 +598,9 @@ static bool isExpressionUnableToInline(Operation *op) {
 /// Return true if this expression should be emitted inline into any statement
 /// that uses it.
 static bool isExpressionEmittedInline(Operation *op) {
-  // Never create a temporary which is only going to be assigned to an output
-  // port.
-  if (op->hasOneUse() && isa<hw::OutputOp>(*op->getUsers().begin()))
+  // Never create a temporary which is only going to be assigned.
+  if (op->hasOneUse() &&
+      isa<hw::OutputOp, sv::AssignOp>(*op->getUsers().begin()))
     return true;
 
   // If this operation has multiple uses, we can't generally inline it unless
