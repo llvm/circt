@@ -76,6 +76,12 @@ static bool shouldSpillWire(Operation &op, const LoweringOptions &options) {
       llvm::any_of(op.getResult(0).getUsers(), isConcat))
     return true;
 
+  // When `legalizeExpressionsAtPrepare` is true, legalize expressions that
+  // require temporary wires.
+  if (options.legalizeExpressionsAtPrepare &&
+      ExportVerilog::isExpressionUnableToInline(&op))
+    return true;
+
   return false;
 }
 
