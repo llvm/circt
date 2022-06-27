@@ -1876,25 +1876,27 @@ void DiscoverAppIDsPass::runOnOperation() {
 void DiscoverAppIDsPass::processMod(MSFTModuleOp mod) {
   SmallDenseMap<StringAttr, uint64_t> appBaseCounts;
   SmallPtrSet<StringAttr, 32> localAppIDBases;
-  SmallDenseMap<AppIDAttr, InstanceOp> localAppIDs;
+  SmallDenseMap<AppIDAttr, Operation *> localAppIDs;
 
-  mod.walk([&](InstanceOp inst) {
-    if (inst.appID()) {
-      AppIDAttr appid = inst.appIDAttr();
+  mod.walk([&](Operation *op) {
+    if (auto appid = op->getAttrOfType<AppIDAttr>("appid")) {
       if (localAppIDs.find(appid) != localAppIDs.end()) {
-        inst.emitOpError("Found multiple identical AppIDs in same module")
-                .attachNote(localAppIDs[appid].getLoc())
+        op->emitOpError("Found multiple identical AppIDs in same module")
+                .attachNote(localAppIDs[appid]->getLoc())
             << "first AppID located here";
         signalPassFailure();
       }
       localAppIDBases.insert(appid.getName());
     }
 
-    auto targetMod = dyn_cast<MSFTModuleOp>(
-        topLevelSyms.getDefinition(inst.moduleNameAttr()));
-    if (targetMod && targetMod.childAppIDBases())
-      for (auto base : targetMod.childAppIDBasesAttr().getAsRange<StringAttr>())
-        appBaseCounts[base] += 1;
+    if (auto inst = dyn_cast<InstanceOp>(op)) {
+      auto targetMod = dyn_cast<MSFTModuleOp>(
+          topLevelSyms.getDefinition(inst.moduleNameAttr()));
+      if (targetMod && targetMod.childAppIDBases())
+        for (auto base :
+             targetMod.childAppIDBasesAttr().getAsRange<StringAttr>())
+          appBaseCounts[base] += 1;
+    }
   });
 
   SmallVector<Attribute, 32> finalModBases;

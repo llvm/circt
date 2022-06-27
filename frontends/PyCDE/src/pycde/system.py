@@ -168,7 +168,11 @@ class System:
         m = self._generate_queue.pop()
         m.generate()
         i += 1
-    return len(self._generate_queue)
+    gen_left = len(self._generate_queue)
+    if gen_left == 0:
+      pm = mlir.passmanager.PassManager.parse("msft-discover-appids")
+      pm.run(self.mod)
+    return
 
   def get_instance(self,
                    mod_cls: object,

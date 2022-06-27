@@ -72,6 +72,16 @@ class InputChannel(Input):
     super().__init__(esi_type, name)
 
 
+class AppID(msft.AppIDAttr):
+
+  def __init__(self, name: str, idx: int):
+    super().__init__(self)
+
+  def __new__(self, name: str, idx: int):
+    appid = msft.AppIDAttr.get(name, idx)
+    return super().__new__(AppID, appid)
+
+
 def _create_module_name(name: str, params: mlir.ir.DictAttr):
   """Create a "reasonable" module name from a base name and a set of
   parameters. E.g. PolyComputeForCoeff_62_42_6."""
@@ -276,15 +286,17 @@ class _SpecializedModule:
     sys = System.current()
     return sys._op_cache.get_circt_mod(self)
 
-  def instantiate(self, instance_name: str, inputs: dict, loc):
+  def instantiate(self, instance_name: str, inputs: dict, appid: AppID, loc):
     """Create a instance op."""
     if self.extern_name is None:
-      return self.circt_mod.instantiate(instance_name, **inputs, loc=loc)
+      ret = self.circt_mod.create(instance_name, **inputs, loc=loc)
     else:
-      return self.circt_mod.instantiate(instance_name,
-                                        **inputs,
-                                        parameters=self.parameters,
-                                        loc=loc)
+      ret = self.circt_mod.create(instance_name,
+                                  **inputs,
+                                  parameters=self.parameters,
+                                  loc=loc)
+    ret.attributes["appid"] = appid
+    return ret
 
   def generate(self):
     """Fill in (generate) this module. Only supports a single generator
@@ -429,7 +441,11 @@ def _module_base(cls,
 
   class mod(cls):
 
-    def __init__(self, *args, partition: DesignPartition = None, **kwargs):
+    def __init__(self,
+                 *args,
+                 appid: AppID = None,
+                 partition: DesignPartition = None,
+                 **kwargs):
       """Scan the class and eventually instance for Input/Output members and
       treat the inputs as operands and outputs as results."""
       # Ensure the module has been created.
@@ -482,6 +498,7 @@ def _module_base(cls,
       # TODO: This is a held Operation*. Add a level of indirection.
       self._instantiation = mod._pycde_mod.instantiate(instance_name,
                                                        inputs,
+                                                       appid=appid,
                                                        loc=loc)
 
       op = self._instantiation.operation

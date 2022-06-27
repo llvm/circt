@@ -18,8 +18,7 @@ def InstanceOp : MSFTOp<"instance", [
                        FlatSymbolRefAttr:$moduleName,
                        Variadic<AnyType>:$inputs,
                        OptionalAttr<ParamDeclArrayAttr>:$parameters,
-                       OptionalAttr<SymbolRefAttr>:$targetDesignPartition,
-                       OptionalAttr<AppIDAttr>:$appID);
+                       OptionalAttr<SymbolRefAttr>:$targetDesignPartition);
   let results = (outs Variadic<AnyType>);
 
   let builders = [
@@ -55,8 +54,7 @@ def InstanceOp : MSFTOp<"instance", [
   /// sym keyword for optional symbol simplifies parsing
   let assemblyFormat = [{
     $sym_name $moduleName `(` $inputs `)` custom<ParameterList>($parameters)
-       ( `(` `appid` $appID^ `)` )? attr-dict
-      `:` functional-type($inputs, results)
+      attr-dict `:` functional-type($inputs, results)
   }];
 }
 

@@ -6,8 +6,8 @@
 // APPID-LABEL: msft.module @top {} () attributes {childAppIDBases = ["extern", "foo"]}
 // HWLOW-LABEL: hw.module @top
 msft.module @top {} () {
-  msft.instance @foo @Foo() (appid <"foo"[0]>) : () -> (i32)
-  // CHECK: %foo.x = msft.instance @foo @Foo() (appid <"foo"[0]>) : () -> i32
+  msft.instance @foo @Foo() {appid = #msft.appid<"foo"[0]>} : () -> (i32)
+  // CHECK: %foo.x = msft.instance @foo @Foo() {appid = #msft.appid<"foo"[0]>} : () -> i32
   // HWLOW: %foo.x = hw.instance "foo" sym @foo @Foo<__INST_HIER: none = #hw.param.expr.str.concat<#hw.param.decl.ref<"__INST_HIER">, ".foo">>() -> (x: i32)
 
   %true = hw.constant true
@@ -33,9 +33,9 @@ msft.module @UnGenerated { DEPTH = 3 } (%a: i1) -> (nameOfPortInSV: i1)
 // APPID-LABEL: msft.module @Foo {WIDTH = 1 : i64} () -> (x: i32) attributes {childAppIDBases = ["extern", "foo"]}
 msft.module @Foo { "WIDTH" = 1 } () -> (x: i32) {
   %true = hw.constant true
-  msft.instance @extern @Extern(%true)<param: i1 = false> (appid <"extern"[0]>) : (i1) -> i1
+  msft.instance @extern @Extern(%true)<param: i1 = false> {appid=#msft.appid<"extern"[0]>} : (i1) -> i1
   %c1_4 = hw.constant 1 : i4
-  msft.instance @b @B(%c1_4) (appid <"foo"[0]>) : (i4) -> i4
+  msft.instance @b @B(%c1_4) {appid=#msft.appid<"foo"[0]>} : (i4) -> i4
   %c0 = hw.constant 0 : i32
   msft.output %c0 : i32
 }

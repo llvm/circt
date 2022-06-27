@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import pycde
-from pycde import (Input, Output, module, externmodule, generator, types, dim)
+from pycde import (AppID, Input, Output, module, externmodule, generator, types)
 from pycde.dialects import comb, hw
 from circt.support import connect
 
@@ -92,7 +92,8 @@ class PolynomialSystem:
   def construct(ports):
     i32 = types.i32
     x = hw.ConstantOp(i32, 23)
-    poly = PolynomialCompute(Coefficients([62, 42, 6]))("example")
+    poly = PolynomialCompute(Coefficients([62, 42, 6]))("example",
+                                                        appid=AppID("poly", 0))
     connect(poly.x, x)
     PolynomialCompute(coefficients=Coefficients([62, 42, 6]))("example2",
                                                               x=poly.y)
