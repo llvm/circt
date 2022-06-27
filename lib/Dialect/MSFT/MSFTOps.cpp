@@ -176,6 +176,13 @@ InstanceOp::verifySignatureMatch(const hw::ModulePortInfo &ports) {
   return success();
 }
 
+void InstanceOp::build(OpBuilder &builder, OperationState &state,
+                       ArrayRef<Type> resultTypes, StringAttr sym_name,
+                       FlatSymbolRefAttr moduleName, ArrayRef<Value> inputs) {
+  build(builder, state, resultTypes, sym_name, moduleName, inputs, ArrayAttr(),
+        SymbolRefAttr());
+}
+
 /// Return an encapsulated set of information about input and output ports of
 /// the specified module or instance.  The input ports always come before the
 /// output ports in the list.
