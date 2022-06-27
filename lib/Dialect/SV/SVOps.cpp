@@ -1207,7 +1207,8 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
     if (!assign || write)
       return failure();
 
-    // If the assign op has SV attributes, we don't want to delete the assignment.
+    // If the assign op has SV attributes, we don't want to delete the
+    // assignment.
     if (assign.svAttributesAttr())
       return failure();
 
