@@ -119,7 +119,7 @@ poly.generate(iters=1)
 print("Printing...")
 poly.print()
 # CHECK-LABEL: msft.module @PolynomialSystem {} () -> (y: i32) attributes {fileName = "PolynomialSystem.sv"} {
-# CHECK:         %example.y = msft.instance @example @PolyComputeForCoeff_62_42_6(%c23_i32) : (i32) -> i32
+# CHECK:         %example.y = msft.instance @example @PolyComputeForCoeff_62_42_6(%c23_i32) {appid = #msft.appid<"poly"[0]>} : (i32) -> i32
 # CHECK:         %example2.y = msft.instance @example2 @PolyComputeForCoeff_62_42_6(%example.y) : (i32) -> i32
 # CHECK:         %example2_1.y = msft.instance @example2_1 @PolyComputeForCoeff_1_2_3_4_5(%example.y) : (i32) -> i32
 # CHECK:         %CoolPolynomialCompute.y = msft.instance @CoolPolynomialCompute @supercooldevice(%{{.+}}) : (i32) -> i32

@@ -72,14 +72,21 @@ class InputChannel(Input):
     super().__init__(esi_type, name)
 
 
-class AppID(msft.AppIDAttr):
+class AppID:
 
   def __init__(self, name: str, idx: int):
-    super().__init__(self)
+    self._appid = msft.AppIDAttr.get(name, idx)
 
-  def __new__(self, name: str, idx: int):
-    appid = msft.AppIDAttr.get(name, idx)
-    return super().__new__(AppID, appid)
+  @property
+  def name(self) -> str:
+    return self._appid.name
+
+  @property
+  def idx(self) -> int:
+    return self._appid.idx
+
+  def __str__(self) -> str:
+    return f"{self.name}[{self.idx}]"
 
 
 def _create_module_name(name: str, params: mlir.ir.DictAttr):
@@ -289,13 +296,14 @@ class _SpecializedModule:
   def instantiate(self, instance_name: str, inputs: dict, appid: AppID, loc):
     """Create a instance op."""
     if self.extern_name is None:
-      ret = self.circt_mod.create(instance_name, **inputs, loc=loc)
+      ret = self.circt_mod.instantiate(instance_name, **inputs, loc=loc)
     else:
-      ret = self.circt_mod.create(instance_name,
-                                  **inputs,
-                                  parameters=self.parameters,
-                                  loc=loc)
-    ret.attributes["appid"] = appid
+      ret = self.circt_mod.instantiate(instance_name,
+                                       **inputs,
+                                       parameters=self.parameters,
+                                       loc=loc)
+    if appid is not None:
+      ret.operation.attributes["appid"] = appid._appid
     return ret
 
   def generate(self):
