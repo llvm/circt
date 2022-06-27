@@ -495,8 +495,20 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(
     } else {
       annotation = opAttr.dyn_cast<DictionaryAttr>();
       if (annotations)
-        if (auto id = annotation.getAs<IntegerAttr>("circt.fieldID"))
+        // If this is an annotation targeting a field that uses a
+        // "circt.fieldID" as opposed to being encoded as a SubAnnotationAttr,
+        // then erase the "circt.fieldID" field.  All later logic (in this pass)
+        // assumes that SubAnnotationAttr is the single way of targeting a
+        // fieldID.
+        //
+        // TODO: Fully switch everything over to use "circt.fieldID" instead of
+        // SubAnnotationAttr.
+        if (auto id = annotation.getAs<IntegerAttr>("circt.fieldID")) {
           maybeFieldID = id.getInt();
+          Annotation anno(annotation);
+          anno.removeMember("circt.fieldID");
+          annotation = anno.getDict();
+        }
     }
     if (!maybeFieldID) {
       retval.push_back(
