@@ -15,6 +15,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotationHelper.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/NLATable.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
@@ -2195,20 +2196,6 @@ void GrandCentralPass::runOnOperation() {
   markAnalysesPreserved<NLATable>();
 }
 
-StringAttr GrandCentralPass::getOrAddInnerSym(Operation *op) {
-  auto attr = getInnerSymName(op);
-  if (attr)
-    return attr;
-  auto module = op->getParentOfType<FModuleOp>();
-  StringRef nameHint = "gct_sym";
-  if (auto attr = op->getAttrOfType<StringAttr>("name"))
-    nameHint = attr.getValue();
-  auto name = getModuleNamespace(module).newName(nameHint);
-  attr = StringAttr::get(op->getContext(), name);
-  op->setAttr("inner_sym", attr);
-  return attr;
-}
-
 StringAttr GrandCentralPass::getOrAddInnerSym(FModuleLike module,
                                               size_t portIdx) {
   auto attr = module.getPortSymbolAttr(portIdx);
@@ -2224,9 +2211,9 @@ StringAttr GrandCentralPass::getOrAddInnerSym(FModuleLike module,
 }
 
 hw::InnerRefAttr GrandCentralPass::getInnerRefTo(Operation *op) {
-  return hw::InnerRefAttr::get(
-      SymbolTable::getSymbolName(op->getParentOfType<FModuleOp>()),
-      getOrAddInnerSym(op));
+  return ::getInnerRefTo(op, "", [&](FModuleOp mod) -> ModuleNamespace & {
+    return getModuleNamespace(mod);
+  });
 }
 
 hw::InnerRefAttr GrandCentralPass::getInnerRefTo(FModuleLike module,

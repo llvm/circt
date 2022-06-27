@@ -12,6 +12,7 @@
 #include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
@@ -88,29 +89,6 @@ struct LowerMemoryPass : public LowerMemoryBase<LowerMemoryPass> {
   /// Get the cached namespace for a module.
   ModuleNamespace &getModuleNamespace(FModuleLike module) {
     return moduleNamespaces.try_emplace(module, module).first->second;
-  }
-
-  /// Returns an operation's `inner_sym`, adding one if necessary.
-  StringAttr getOrAddInnerSym(Operation *op) {
-    auto attr = getInnerSymName(op);
-    if (attr)
-      return attr;
-    auto module = op->getParentOfType<FModuleOp>();
-    StringRef name = "sym";
-    if (auto nameAttr = op->getAttrOfType<StringAttr>("name"))
-      name = nameAttr.getValue();
-    name = getModuleNamespace(module).newName(name);
-    attr = StringAttr::get(op->getContext(), name);
-    op->setAttr("inner_sym", attr);
-    return attr;
-  }
-
-  /// Obtain an inner reference to an operation, possibly adding an `inner_sym`
-  /// to that operation.
-  hw::InnerRefAttr getInnerRefTo(Operation *op) {
-    return hw::InnerRefAttr::get(
-        SymbolTable::getSymbolName(op->getParentOfType<FModuleOp>()),
-        getOrAddInnerSym(op));
   }
 
   SmallVector<PortInfo> getMemoryModulePorts(const FirMemory &mem);
@@ -293,7 +271,10 @@ void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
       auto namepath = nla.namepath().getValue();
       SmallVector<Attribute> newNamepath(namepath.begin(), namepath.end());
       if (!nla.isComponent())
-        newNamepath.back() = getInnerRefTo(inst);
+        newNamepath.back() =
+            getInnerRefTo(inst, "", [&](FModuleOp mod) -> ModuleNamespace & {
+              return getModuleNamespace(mod);
+            });
       newNamepath.push_back(leafAttr);
 
       nlaBuilder.setInsertionPointAfter(nla);

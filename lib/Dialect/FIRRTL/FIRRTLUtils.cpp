@@ -351,3 +351,64 @@ Value circt::firrtl::getValueByFieldID(ImplicitLocOpBuilder builder,
   }
   return value;
 }
+
+/// Returns an operation's `inner_sym`, adding one if necessary.
+StringAttr circt::firrtl::getOrAddInnerSym(
+    Operation *op, StringRef nameHint, FModuleOp mod,
+    std::function<ModuleNamespace &(FModuleOp)> getNamespace) {
+  auto attr = getInnerSymName(op);
+  if (attr)
+    return attr;
+  if (nameHint.empty()) {
+    if (auto nameAttr = op->getAttrOfType<StringAttr>("name"))
+      nameHint = nameAttr.getValue();
+    else
+      nameHint = "sym";
+  }
+  auto name = getNamespace(mod).newName(nameHint);
+  attr = StringAttr::get(op->getContext(), name);
+  op->setAttr("inner_sym", attr);
+  return attr;
+}
+
+/// Obtain an inner reference to an operation, possibly adding an `inner_sym`
+/// to that operation.
+hw::InnerRefAttr circt::firrtl::getInnerRefTo(
+    Operation *op, StringRef nameHint,
+    std::function<ModuleNamespace &(FModuleOp)> getNamespace) {
+  auto mod = op->getParentOfType<FModuleOp>();
+  assert(mod && "must be an operation inside an FModuleOp");
+  return hw::InnerRefAttr::get(
+      SymbolTable::getSymbolName(mod),
+      getOrAddInnerSym(op, nameHint, mod, getNamespace));
+}
+
+/// Returns a port's `inner_sym`, adding one if necessary.
+StringAttr circt::firrtl::getOrAddInnerSym(
+    FModuleLike mod, size_t portIdx, StringRef nameHint,
+    std::function<ModuleNamespace &(FModuleLike)> getNamespace) {
+
+  auto attr = mod.getPortSymbolAttr(portIdx);
+  if (attr && !attr.getValue().empty())
+    return attr;
+  if (nameHint.empty()) {
+    if (auto name = mod.getPortNameAttr(portIdx))
+      nameHint = name;
+    else
+      nameHint = "sym";
+  }
+  auto name = getNamespace(mod).newName(nameHint);
+  attr = StringAttr::get(mod.getContext(), name);
+  mod.setPortSymbolAttr(portIdx, attr);
+  return attr;
+}
+
+/// Obtain an inner reference to a port, possibly adding an `inner_sym`
+/// to the port.
+hw::InnerRefAttr circt::firrtl::getInnerRefTo(
+    FModuleLike mod, size_t portIdx, StringRef nameHint,
+    std::function<ModuleNamespace &(FModuleLike)> getNamespace) {
+  return hw::InnerRefAttr::get(
+      SymbolTable::getSymbolName(mod),
+      getOrAddInnerSym(mod, portIdx, nameHint, getNamespace));
+}

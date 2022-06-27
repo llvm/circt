@@ -14,6 +14,7 @@
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotationHelper.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/SV/SVOps.h"
@@ -620,19 +621,6 @@ FailureOr<bool> GrandCentralSignalMappingsPass::emitUpdatedMappings(
   // Helpers to emit XMR's for the mappings.
   SmallVector<Attribute> symbols;
   SmallDenseMap<Attribute, size_t> symMap;
-  auto getOrAddInnerSym = [&](Operation *op) -> StringAttr {
-    auto attr = getInnerSymName(op);
-    if (attr)
-      return attr;
-    StringRef name = "sym";
-    if (auto nameAttr = op->getAttrOfType<StringAttr>("name"))
-      name = nameAttr.getValue();
-    auto module = op->getParentOfType<FModuleOp>();
-    name = getModuleNamespace(module).newName(name);
-    attr = StringAttr::get(op->getContext(), name);
-    op->setAttr("inner_sym", attr);
-    return attr;
-  };
 
   auto getSymIdx = [&](Attribute symbol) {
     auto it = symMap.find(symbol);
@@ -665,11 +653,10 @@ FailureOr<bool> GrandCentralSignalMappingsPass::emitUpdatedMappings(
       // TODO: inner_sym for ports too
       target.name = mapping.localName;
     else
-      target.name = mkSymPlaceholder(
-          hw::InnerRefAttr::get(
-              SymbolTable::getSymbolName(module),
-              getOrAddInnerSym(mapping.localValue.getDefiningOp())),
-          nameStr);
+      target.name =
+          mkSymPlaceholder(::getInnerRefTo(mapping.localValue.getDefiningOp(),
+                                           "", getModuleNamespace),
+                           nameStr);
 
     // If there's an NLA, add instance path information.
     if (mapping.nlaSym) {

@@ -596,19 +596,10 @@ void OpAnnoTarget::setAnnotations(AnnotationSet annotations) const {
 }
 
 StringAttr OpAnnoTarget::getInnerSym(ModuleNamespace &moduleNamespace) const {
-  auto *context = getOp()->getContext();
-  auto innerSym = getInnerSymName(getOp());
-  if (!innerSym) {
-    // Try to come up with a reasonable name.
-    StringRef name = "inner_sym";
-    auto nameAttr = getOp()->getAttrOfType<StringAttr>("name");
-    if (nameAttr && !nameAttr.getValue().empty())
-      name = nameAttr.getValue();
-    innerSym = StringAttr::get(context, moduleNamespace.newName(name));
-    getOp()->setAttr("inner_sym", innerSym);
-  }
-  assert(innerSym && "invalid inner_sym");
-  return innerSym;
+  return ::getOrAddInnerSym(getOp(), "", getOp()->getParentOfType<FModuleOp>(),
+                            [&moduleNamespace](FModuleOp) -> ModuleNamespace & {
+                              return moduleNamespace;
+                            });
 }
 
 Attribute
@@ -619,10 +610,10 @@ OpAnnoTarget::getNLAReference(ModuleNamespace &moduleNamespace) const {
     return FlatSymbolRefAttr::get(module.moduleNameAttr());
   }
   // Return an inner-ref to the target.
-  auto moduleName = getOp()->getParentOfType<FModuleLike>().moduleNameAttr();
-  auto innerSym = getInnerSym(moduleNamespace);
-  assert(moduleName && innerSym && "invalid NLA reference");
-  return hw::InnerRefAttr::get(moduleName, innerSym);
+  return ::getInnerRefTo(getOp(), "",
+                         [&moduleNamespace](FModuleOp) -> ModuleNamespace & {
+                           return moduleNamespace;
+                         });
 }
 
 FIRRTLType OpAnnoTarget::getType() const {
@@ -657,50 +648,33 @@ void PortAnnoTarget::setAnnotations(AnnotationSet annotations) const {
 }
 
 StringAttr PortAnnoTarget::getInnerSym(ModuleNamespace &moduleNamespace) const {
-  auto *context = getOp()->getContext();
-
   // If this is not a module, we just need to get an inner_sym on the operation
   // itself.
-  if (!llvm::isa<FModuleLike>(getOp()))
-    return OpAnnoTarget(getOp()).getInnerSym(moduleNamespace);
-
-  auto portSyms = getOp()->getAttrOfType<ArrayAttr>("portSyms");
-  // If there is a valid sym, return it.
-  if (portSyms && !portSyms.empty())
-    if (auto innerSym = portSyms[getPortNo()].cast<StringAttr>())
-      if (!innerSym.strref().empty())
-        return innerSym;
-
-  // Create the new array.
-  SmallVector<Attribute> newSyms;
-  if (!portSyms || portSyms.empty())
-    newSyms.assign(getPortCount(getOp()), StringAttr::get(context, ""));
-  else
-    newSyms.assign(portSyms.begin(), portSyms.end());
-
-  // Try to come up with a reasonable name based on the port name.
-  StringRef name = "inner_sym";
-  if (auto portNames = getOp()->getAttrOfType<ArrayAttr>("portNames"))
-    name = portNames[getPortNo()].cast<StringAttr>().getValue();
-  else if (auto nameAttr = getOp()->getAttrOfType<StringAttr>("name"))
-    name = nameAttr.getValue();
-  auto innerSym = StringAttr::get(context, moduleNamespace.newName(name));
-
-  // Attach the inner sym.
-  newSyms[getPortNo()] = innerSym;
-  getOp()->setAttr("portSyms", ArrayAttr::get(context, newSyms));
-  return innerSym;
+  if (auto mod = ::llvm::dyn_cast<FModuleLike>(getOp()))
+    return ::getOrAddInnerSym(
+        mod, getPortNo(), "",
+        [&moduleNamespace](FModuleLike) -> ModuleNamespace & {
+          return moduleNamespace;
+        });
+  return ::getOrAddInnerSym(getOp(), "", getOp()->getParentOfType<FModuleOp>(),
+                            [&moduleNamespace](FModuleOp) -> ModuleNamespace & {
+                              return moduleNamespace;
+                            });
 }
 
 Attribute
 PortAnnoTarget::getNLAReference(ModuleNamespace &moduleNamespace) const {
   auto module = llvm::dyn_cast<FModuleLike>(getOp());
   if (!module)
-    module = getOp()->getParentOfType<FModuleLike>();
-  StringAttr moduleName = module.moduleNameAttr();
-  auto innerSym = getInnerSym(moduleNamespace);
-  assert(moduleName && innerSym && "invalid NLA reference");
-  return hw::InnerRefAttr::get(moduleName, innerSym);
+    return ::getInnerRefTo(getOp(), "",
+                           [&moduleNamespace](FModuleOp) -> ModuleNamespace & {
+                             return moduleNamespace;
+                           });
+
+  return ::getInnerRefTo(module, getPortNo(), "",
+                         [&moduleNamespace](FModuleLike) -> ModuleNamespace & {
+                           return moduleNamespace;
+                         });
 }
 
 FIRRTLType PortAnnoTarget::getType() const {
