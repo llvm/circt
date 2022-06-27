@@ -1866,6 +1866,7 @@ void DiscoverAppIDsPass::runOnOperation() {
     return;
   }
 
+  // Sort modules in partial order be use. Enables single-pass processing.
   SmallVector<MSFTModuleOp> sortedMods;
   getAndSortModules(topMod, sortedMods);
 
@@ -1873,13 +1874,16 @@ void DiscoverAppIDsPass::runOnOperation() {
     processMod(mod);
 }
 
+/// Find the AppIDs in a given module.
 void DiscoverAppIDsPass::processMod(MSFTModuleOp mod) {
   SmallDenseMap<StringAttr, uint64_t> appBaseCounts;
   SmallPtrSet<StringAttr, 32> localAppIDBases;
   SmallDenseMap<AppIDAttr, Operation *> localAppIDs;
 
   mod.walk([&](Operation *op) {
-    if (auto appid = op->getAttrOfType<AppIDAttr>("appid")) {
+    // If an operation has an "appid" dialect attribute, it is considered a
+    // "local" appid.
+    if (auto appid = op->getAttrOfType<AppIDAttr>("msft.appid")) {
       if (localAppIDs.find(appid) != localAppIDs.end()) {
         op->emitOpError("Found multiple identical AppIDs in same module")
                 .attachNote(localAppIDs[appid]->getLoc())
@@ -1889,6 +1893,8 @@ void DiscoverAppIDsPass::processMod(MSFTModuleOp mod) {
       localAppIDBases.insert(appid.getName());
     }
 
+    // Instance ops should expose their module's AppIDs recursively. Track the
+    // number of instances which contain a base name.
     if (auto inst = dyn_cast<InstanceOp>(op)) {
       auto targetMod = dyn_cast<MSFTModuleOp>(
           topLevelSyms.getDefinition(inst.moduleNameAttr()));
@@ -1899,12 +1905,17 @@ void DiscoverAppIDsPass::processMod(MSFTModuleOp mod) {
     }
   });
 
+  // Collect the list of AppID base names with which to annotate 'mod'.
   SmallVector<Attribute, 32> finalModBases;
   for (auto baseCount : appBaseCounts)
+    // If multiple instances expose the same base name, don't expose them
+    // through this module. If any of the instances expose basenames which are
+    // exposed locally, also don't expose them up.
     if (baseCount.getSecond() == 1 &&
         !localAppIDBases.contains(baseCount.getFirst()))
       finalModBases.push_back(baseCount.getFirst());
 
+  // Add all of the local base names.
   for (StringAttr lclBase : localAppIDBases)
     finalModBases.push_back(lclBase);
 

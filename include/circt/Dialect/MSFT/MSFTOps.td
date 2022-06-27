@@ -62,9 +62,7 @@ def OneOrNoBlocksRegion : Region<
   CPred<"::llvm::hasNItemsOrLess($_self, 1)">,
   "region with at most 1 block">;
 
-def AppIDArrayAttr : TypedArrayAttrBase<AppIDAttr, "Array of AppIDs"> {
-  // let constBuilderCall = "";
-}
+def AppIDArrayAttr : TypedArrayAttrBase<AppIDAttr, "Array of AppIDs">;
 
 def MSFTModuleOp : MSFTOp<"module",
       [IsolatedFromAbove, FunctionOpInterface, Symbol, RegionKindInterface,
