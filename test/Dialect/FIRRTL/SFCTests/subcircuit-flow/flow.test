@@ -56,8 +56,6 @@
 ; MAPPINGDEFAULT-NEXT:   output [41:0]   data_source_u,
 ; MAPPINGDEFAULT-NEXT:   output [9000:0] data_source_v);
 ; (Don't preserve mappings to values that don't exist)
-; MAPPINGDEFAULT-NOT:                    data_source_w_0
-; MAPPINGDEFAULT-NOT:                    data_source_w_1
 ; MAPPINGDEFAULT:       `ifndef VERILATOR
 ; MAPPINGDEFAULT-NEXT:   initial begin
 ; MAPPINGDEFAULT-NEXT:     force Foo.clock = clock_sink;
@@ -72,8 +70,6 @@
 ; MAPPINGDEFAULT-NEXT:   assign clock_source = Top.clock;
 ; MAPPINGDEFAULT-NEXT:   assign data_source_u = Foo.dataOut_x_y_z;
 ; MAPPINGDEFAULT-NEXT:   assign data_source_v = Foo.dataOut_w;
-; MAPPINGDEFAULT-NOT:           data_source_w_0
-; MAPPINGDEFAULT-NOT:           data_source_w_1
 ; MAPPINGDEFAULT-NEXT: endmodule
 
 ; MAPPINGINLINE-LABEL: module Sub_signal_mappings(
@@ -85,9 +81,6 @@
 ; MAPPINGINLINE-NEXT:   output          clock_source,
 ; MAPPINGINLINE-NEXT:   output [41:0]   data_source_u,
 ; MAPPINGINLINE-NEXT:   output [9000:0] data_source_v);
-; (Don't preserve mappings to values that don't exist)
-; MAPPINGINLINE-NOT:                    data_source_w_0
-; MAPPINGINLINE-NOT:                    data_source_w_1
 ; MAPPINGINLINE:       `ifndef VERILATOR
 ; MAPPINGINLINE-NEXT:   initial begin
 ; MAPPINGINLINE-NEXT:     force Top.foo_clock = clock_sink;
@@ -102,8 +95,4 @@
 ; MAPPINGINLINE-NEXT:   assign clock_source = Top.clock;
 ; MAPPINGINLINE-NEXT:   assign data_source_u = Top.foo_dataOut_x_y_z;
 ; MAPPINGINLINE-NEXT:   assign data_source_v = Top.foo_dataOut_w;
-; MAPPINGINLINE-NOT:           data_source_w_0
-; MAPPINGINLINE-NOT:           data_source_w_1
 ; MAPPINGINLINE-NEXT: endmodule
-
-
