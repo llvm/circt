@@ -232,13 +232,13 @@ bool circtMSFTAttributeIsAnAppIDAttr(MlirAttribute attr) {
 }
 
 MlirAttribute circtMSFTAppIDAttrGet(MlirContext ctxt, MlirStringRef name,
-                                    uint64_t idx) {
-  return wrap(AppIDAttr::get(unwrap(ctxt),
-                             StringAttr::get(unwrap(ctxt), unwrap(name)), idx));
+                                    uint64_t index) {
+  return wrap(AppIDAttr::get(
+      unwrap(ctxt), StringAttr::get(unwrap(ctxt), unwrap(name)), index));
 }
 MlirStringRef circtMSFTAppIDAttrGetName(MlirAttribute attr) {
   return wrap(unwrap(attr).cast<AppIDAttr>().getName().getValue());
 }
-uint64_t circtMSFTAppIDAttrGetIdx(MlirAttribute attr) {
+uint64_t circtMSFTAppIDAttrGetIndex(MlirAttribute attr) {
   return unwrap(attr).cast<AppIDAttr>().getIndex();
 }
