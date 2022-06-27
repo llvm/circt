@@ -259,3 +259,7 @@ with ir.Context() as ctx, ir.Location.unknown():
       "msft-lower-instances,lower-msft-to-hw,msft-export-tcl{tops=top}")
   pm.run(mod)
   circt.export_verilog(mod, sys.stdout)
+
+  appid1 = msft.AppIDAttr.get("foo", 4)
+  # CHECK: appid1: #msft.appid<"foo"[4]>, foo, 4
+  print(f"appid1: {appid1}, {appid1.name}, {appid1.index}")
