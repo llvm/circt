@@ -11,6 +11,8 @@ add_circt_conversion_library(CIRCTFSMToHW
     CIRCTComb
     CIRCTHW
     CIRCTFSM
+    CIRCTSeq
+    CIRCTSV
     CIRCTSupport
     MLIRTransforms
 )
