@@ -39,11 +39,11 @@ with ir.Context() as ctx, ir.Location.unknown():
       msft.OutputOp([])
 
   with ir.InsertionPoint.at_block_terminator(op.body.blocks[0]):
-    ext_inst = extmod.create("ext1")
+    ext_inst = extmod.instantiate("ext1")
 
   with ir.InsertionPoint.at_block_terminator(top.body.blocks[0]):
-    path = op.create("inst1")
-    minst = msft_mod.create("minst")
+    path = op.instantiate("inst1")
+    minst = msft_mod.instantiate("minst")
 
   # CHECK: #msft.physloc<M20K, 2, 6, 1>
   physAttr = msft.PhysLocationAttr.get(msft.M20K, x=2, y=6, num=1)
@@ -254,6 +254,7 @@ with ir.Context() as ctx, ir.Location.unknown():
 
   # CHECK: proc top_config { parent } {
   # CHECK:   set_location_assignment M20K_X2_Y6_N1 -to $parent|inst1|ext1|foo_subpath
+  print(mod)
   pm = mlir.passmanager.PassManager.parse(
       "msft-lower-instances,lower-msft-to-hw,msft-export-tcl{tops=top}")
   pm.run(mod)
