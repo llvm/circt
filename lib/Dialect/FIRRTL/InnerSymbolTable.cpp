@@ -31,10 +31,8 @@ InnerSymbolTable::InnerSymbolTable(Operation *op) {
   this->innerSymTblOp = op;
 
   // Walk the operation and add InnerSymbol's to the table.
-  StringAttr innerSymId = StringAttr::get(
-      op->getContext(), InnerSymbolTable::getInnerSymbolAttrName());
-  op->walk([&](Operation *symOp) {
-    auto attr = symOp->getAttrOfType<StringAttr>(innerSymId);
+  op->walk([&](InnerSymbolOpInterface symOp) {
+    auto attr = symOp.getInnerNameAttr();
     if (!attr)
       return;
     auto it = symbolTable.insert({attr, symOp});
@@ -54,8 +52,9 @@ Operation *InnerSymbolTable::lookup(StringAttr name) const {
 
 /// Get InnerSymbol for an operation.
 StringAttr InnerSymbolTable::getInnerSymbol(Operation *op) {
-  return op->getAttrOfType<StringAttr>(
-      InnerSymbolTable::getInnerSymbolAttrName());
+  if (auto innerSymOp = dyn_cast<InnerSymbolOpInterface>(op))
+    return innerSymOp.getInnerNameAttr();
+  return {};
 }
 
 /// Return an InnerRef to the given operation.
