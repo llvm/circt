@@ -25,7 +25,9 @@ def MachineOp : FSMOp<"machine", [FunctionOpInterface,
   }];
 
   let arguments = (ins StrAttr:$sym_name, StrAttr:$initialState,
-                       TypeAttrOf<FunctionType>:$function_type);
+                       TypeAttrOf<FunctionType>:$function_type,
+                       OptionalAttr<StrArrayAttr>:$argNames,
+                       OptionalAttr<StrArrayAttr>:$resNames);
   let regions = (region SizedRegion<1>:$body);
 
   let builders = [
@@ -45,6 +47,12 @@ def MachineOp : FSMOp<"machine", [FunctionOpInterface,
     /// Returns the type of this function.
     FunctionType getFunctionType() {
       return getFunctionTypeAttr().getValue().cast<FunctionType>();
+    }
+
+    /// Returns the number of states in this machhine.
+    size_t getNumStates() {
+      auto stateOps = getBody().getOps<fsm::StateOp>();
+      return std::distance(stateOps.begin(), stateOps.end());
     }
 
     /// Returns the argument types of this function.
@@ -112,7 +120,7 @@ def TriggerOp : FSMOp<"trigger", []> {
   let hasVerifier = 1;
 }
 
-def HWInstanceOp : FSMOp<"hw_instance", [Symbol, AttrSizedOperandSegments]> {
+def HWInstanceOp : FSMOp<"hw_instance", [Symbol]> {
   let summary = "Create a hardware-style instance of a state machine";
   let description = [{
     `fsm.hw_instance` represents a hardware-style instance of a state machine,
@@ -122,14 +130,12 @@ def HWInstanceOp : FSMOp<"hw_instance", [Symbol, AttrSizedOperandSegments]> {
   }];
 
   let arguments = (ins StrAttr:$sym_name, FlatSymbolRefAttr:$machine,
-                       Variadic<AnyType>:$inputs, Optional<AnyType>:$clock,
-                       Optional<AnyType>:$reset);
+                       Variadic<AnyType>:$inputs, I1:$clock, I1:$reset);
   let results = (outs Variadic<AnyType>:$outputs);
 
   let assemblyFormat = [{
-    $sym_name $machine attr-dict `(` $inputs `)` `:`
-    functional-type($inputs, $outputs) (`,` `clock` $clock^ `:` qualified(type($clock)))?
-    (`,` `reset` $reset^ `:` qualified(type($reset)))?
+    $sym_name $machine attr-dict `(` $inputs `)`
+    `,` `clock` $clock `,` `reset` $reset `:` functional-type($inputs, $outputs)
   }];
 
   let extraClassDeclaration = [{
