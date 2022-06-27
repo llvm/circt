@@ -340,21 +340,21 @@ firrtl.circuit "MainWithNLA" attributes {
   // CHECK-SAME:   {
   // CHECK-SAME:     \22sinkTargets\22: [
   // CHECK-SAME:       {
-  // CHECK-SAME{LITERAL}: \22_1\22: \22~{{0}}|{{1}}>in\22
+  // CHECK-SAME{LITERAL}: \22_1\22: \22~{{0}}|{{1}}>{{2}}\22
   // CHECK-SAME{LITERAL}: \22_2\22: \22~Sub|Sub>in_sink\22
   // CHECK-SAME:       },
   // CHECK-SAME:       {
-  // CHECK-SAME{LITERAL}: \22_1\22: \22~{{0}}|{{0}}/{{3}}:{{1}}>{{2}}\22,
+  // CHECK-SAME{LITERAL}: \22_1\22: \22~{{0}}|{{0}}/{{4}}:{{1}}>{{3}}\22,
   // CHECK-SAME{LITERAL}: \22_2\22: \22~Sub|Sub>w_sink\22
   // CHECK-SAME:       }
   // CHECK-SAME:     ],
   // CHECK-SAME:     \22sourceTargets\22: [
   // CHECK-SAME:       {
-  // CHECK-SAME{LITERAL}: \22_1\22: \22~{{0}}|{{4}}/{{5}}:{{1}}>in\22,
+  // CHECK-SAME{LITERAL}: \22_1\22: \22~{{0}}|{{5}}/{{6}}:{{1}}>{{2}}\22,
   // CHECK-SAME{LITERAL}: \22_2\22: \22~Sub|Sub>in_source\22
   // CHECK-SAME:       },
   // CHECK-SAME:       {
-  // CHECK-SAME{LITERAL}: \22_1\22: \22~{{0}}|{{0}}/{{6}}:{{4}}/{{5}}:{{1}}>{{2}}\22,
+  // CHECK-SAME{LITERAL}: \22_1\22: \22~{{0}}|{{0}}/{{7}}:{{5}}/{{6}}:{{1}}>{{3}}\22,
   // CHECK-SAME{LITERAL}: \22_2\22: \22~Sub|Sub>w_source\22
   // CHECK-SAME:       }
   // CHECK-SAME:     ],
@@ -366,6 +366,7 @@ firrtl.circuit "MainWithNLA" attributes {
   // CHECK-SAME:   symbols = [
   // CHECK-SAME:     @DUT,
   // CHECK-SAME:     @Leaf,
+  // CHECK-SAME:     #hw.innerNameRef<@Leaf::@in>,
   // CHECK-SAME:     #hw.innerNameRef<@Leaf::@w>,
   // CHECK-SAME:     #hw.innerNameRef<@DUT::@l>,
   // CHECK-SAME:     @Mid,
@@ -534,21 +535,21 @@ firrtl.circuit "MainWithnewNLA" attributes {
   // CHECK-SAME:   {
   // CHECK-SAME:     \22sinkTargets\22: [
   // CHECK-SAME:       {
-  // CHECK-SAME{LITERAL}: \22_1\22: \22~{{0}}|{{1}}>in\22
+  // CHECK-SAME{LITERAL}: \22_1\22: \22~{{0}}|{{1}}>{{2}}\22
   // CHECK-SAME{LITERAL}: \22_2\22: \22~Sub|Sub>in_sink\22
   // CHECK-SAME:       },
   // CHECK-SAME:       {
-  // CHECK-SAME{LITERAL}: \22_1\22: \22~{{0}}|{{0}}/{{3}}:{{1}}>{{2}}\22,
+  // CHECK-SAME{LITERAL}: \22_1\22: \22~{{0}}|{{0}}/{{4}}:{{1}}>{{3}}\22,
   // CHECK-SAME{LITERAL}: \22_2\22: \22~Sub|Sub>w_sink\22
   // CHECK-SAME:       }
   // CHECK-SAME:     ],
   // CHECK-SAME:     \22sourceTargets\22: [
   // CHECK-SAME:       {
-  // CHECK-SAME{LITERAL}: \22_1\22: \22~{{0}}|{{4}}/{{5}}:{{1}}>in\22,
+  // CHECK-SAME{LITERAL}: \22_1\22: \22~{{0}}|{{5}}/{{6}}:{{1}}>{{2}}\22,
   // CHECK-SAME{LITERAL}: \22_2\22: \22~Sub|Sub>in_source\22
   // CHECK-SAME:       },
   // CHECK-SAME:       {
-  // CHECK-SAME{LITERAL}: \22_1\22: \22~{{0}}|{{0}}/{{6}}:{{4}}/{{5}}:{{1}}>{{2}}\22,
+  // CHECK-SAME{LITERAL}: \22_1\22: \22~{{0}}|{{0}}/{{7}}:{{5}}/{{6}}:{{1}}>{{3}}\22,
   // CHECK-SAME{LITERAL}: \22_2\22: \22~Sub|Sub>w_source\22
   // CHECK-SAME:       }
   // CHECK-SAME:     ],
@@ -560,6 +561,7 @@ firrtl.circuit "MainWithnewNLA" attributes {
   // CHECK-SAME:   symbols = [
   // CHECK-SAME:     @DUT,
   // CHECK-SAME:     @Leaf,
+  // CHECK-SAME:     #hw.innerNameRef<@Leaf::@in>,
   // CHECK-SAME:     #hw.innerNameRef<@Leaf::@w>,
   // CHECK-SAME:     #hw.innerNameRef<@DUT::@l>,
   // CHECK-SAME:     @Mid,
