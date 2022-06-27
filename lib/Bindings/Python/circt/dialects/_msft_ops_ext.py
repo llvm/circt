@@ -91,7 +91,7 @@ class MSFTModuleOp(_hw_ext.ModuleLike):
                      loc=loc,
                      ip=ip)
 
-  def create(self, name: str, loc=None, ip=None, **kwargs):
+  def instantiate(self, name: str, loc=None, ip=None, **kwargs):
     return InstanceBuilder(self, name, kwargs, loc=loc, ip=ip)
 
   def add_entry_block(self):
@@ -116,13 +116,13 @@ class MSFTModuleOp(_hw_ext.ModuleLike):
 
 class MSFTModuleExternOp(_hw_ext.ModuleLike):
 
-  def create(self,
-             name: str,
-             parameters=None,
-             results=None,
-             loc=None,
-             ip=None,
-             **kwargs):
+  def instantiate(self,
+                  name: str,
+                  parameters=None,
+                  results=None,
+                  loc=None,
+                  ip=None,
+                  **kwargs):
     return InstanceBuilder(self,
                            name,
                            kwargs,

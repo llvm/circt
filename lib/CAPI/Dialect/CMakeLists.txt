@@ -8,6 +8,7 @@ set(LLVM_OPTIONAL_SOURCES
   Moore.cpp
   Seq.cpp
   SV.cpp
+  FSM.cpp
 )
 
 add_mlir_public_c_api_library(CIRCTCAPIComb
@@ -16,7 +17,7 @@ add_mlir_public_c_api_library(CIRCTCAPIComb
   LINK_LIBS PUBLIC
   MLIRCAPIIR
   CIRCTComb
-  )
+)
 
 add_mlir_public_c_api_library(CIRCTCAPIESI
   ESI.cpp
@@ -24,7 +25,7 @@ add_mlir_public_c_api_library(CIRCTCAPIESI
   LINK_LIBS PUBLIC
   MLIRCAPIIR
   CIRCTESI
-  )
+)
 
 add_mlir_public_c_api_library(CIRCTCAPIMSFT
   MSFT.cpp
@@ -36,7 +37,7 @@ add_mlir_public_c_api_library(CIRCTCAPIMSFT
   MLIRCAPIIR
   MLIRTransforms
   CIRCTMSFT
-  )
+)
 
 add_mlir_public_c_api_library(CIRCTCAPIHW
   HW.cpp
@@ -44,7 +45,7 @@ add_mlir_public_c_api_library(CIRCTCAPIHW
   LINK_LIBS PUBLIC
   MLIRCAPIIR
   CIRCTHW
-  )
+)
 
 add_mlir_public_c_api_library(CIRCTCAPILLHD
   LLHD.cpp
@@ -52,7 +53,7 @@ add_mlir_public_c_api_library(CIRCTCAPILLHD
   LINK_LIBS PUBLIC
   MLIRCAPIIR
   CIRCTLLHD
-  )
+)
 
 add_mlir_public_c_api_library(CIRCTCAPIMoore
   Moore.cpp
@@ -60,7 +61,7 @@ add_mlir_public_c_api_library(CIRCTCAPIMoore
   LINK_LIBS PUBLIC
   MLIRCAPIIR
   CIRCTMoore
-  )
+)
 
 add_mlir_public_c_api_library(CIRCTCAPISeq
   Seq.cpp
@@ -69,7 +70,7 @@ add_mlir_public_c_api_library(CIRCTCAPISeq
   MLIRCAPIIR
   CIRCTSeq
   CIRCTSeqTransforms
-  )
+)
 
 add_mlir_public_c_api_library(CIRCTCAPISV
   SV.cpp
@@ -78,4 +79,13 @@ add_mlir_public_c_api_library(CIRCTCAPISV
   MLIRCAPIIR
   CIRCTSV
   CIRCTSVTransforms
-  )
+)
+
+add_mlir_public_c_api_library(CIRCTCAPIFSM
+  FSM.cpp
+
+  LINK_LIBS PUBLIC
+  MLIRCAPIIR
+  CIRCTFSM
+  CIRCTFSMTransforms
+)

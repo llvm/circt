@@ -197,13 +197,13 @@ class ModuleLike:
         hw.ParamDeclAttr(a) for a in ArrayAttr(self.attributes["parameters"])
     ]
 
-  def create(self,
-             name: str,
-             parameters: Dict[str, object] = {},
-             results=None,
-             loc=None,
-             ip=None,
-             **kwargs):
+  def instantiate(self,
+                  name: str,
+                  parameters: Dict[str, object] = {},
+                  results=None,
+                  loc=None,
+                  ip=None,
+                  **kwargs):
     return InstanceBuilder(self,
                            name,
                            kwargs,

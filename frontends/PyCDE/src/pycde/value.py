@@ -362,7 +362,7 @@ class ChannelValue(Value):
     return Value(unwrap_op.rawOutput), Value(unwrap_op.valid)
 
 
-def wrap_opviews_with_values(dialect, module_name):
+def wrap_opviews_with_values(dialect, module_name, excluded=[]):
   """Wraps all of a dialect's OpView classes to have their create method return
      a PyCDE Value instead of an OpView. The wrapped classes are inserted into
      the provided module."""
@@ -372,7 +372,8 @@ def wrap_opviews_with_values(dialect, module_name):
   for attr in dir(dialect):
     cls = getattr(dialect, attr)
 
-    if isinstance(cls, type) and issubclass(cls, ir.OpView):
+    if attr not in excluded and isinstance(cls, type) and issubclass(
+        cls, ir.OpView):
 
       def specialize_create(cls):
 

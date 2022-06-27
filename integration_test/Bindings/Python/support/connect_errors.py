@@ -14,7 +14,7 @@ def build(top):
                         output_ports=[('y', types.i32)],
                         body_builder=lambda mod: {'y': mod.x})
   const = hw.ConstantOp.create(types.i32, 0)
-  inst = dummy.create("dummy_inst", x=const.result)
+  inst = dummy.instantiate("dummy_inst", x=const.result)
   try:
     # CHECK: cannot connect from source of type
     connect(inst.x, None)
