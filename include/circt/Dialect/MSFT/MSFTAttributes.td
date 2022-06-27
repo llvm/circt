@@ -73,3 +73,17 @@ def LocationVector : MSFT_Attr<"LocationVector"> {
   let hasCustomAssemblyFormat = 1;
   let genVerifyDecl = 1;
 }
+
+def AppIDAttr : MSFT_Attr<"AppID"> {
+  let summary = "An application relevant instance identifier";
+  let description = [{
+    Identifies an instance which is visible through multiple hierarchy levels.
+    Indended to make locating an instance easier in the instance hierarchy.
+  }];
+
+  let parameters = (ins "StringAttr":$name, "uint64_t":$index);
+  let mnemonic = "appid";
+  let assemblyFormat = [{
+    `<` $name `[` $index `]` `>`
+  }];
+}
