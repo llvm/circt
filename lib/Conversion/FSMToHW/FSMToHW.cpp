@@ -16,8 +16,6 @@
 #include "circt/Support/BackedgeBuilder.h"
 #include "llvm/ADT/TypeSwitch.h"
 
-#include "llvm/Support/Debug.h"
-
 using namespace mlir;
 using namespace circt;
 using namespace fsm;
