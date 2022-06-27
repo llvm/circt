@@ -140,8 +140,7 @@ def HWInstanceOp : FSMOp<"hw_instance", [Symbol, AttrSizedOperandSegments]> {
   let hasVerifier = 1;
 }
 
-def StateOp : FSMOp<"state", [HasParent<"MachineOp">, Symbol,
-       SingleBlockImplicitTerminator<"OutputOp">]> {
+def StateOp : FSMOp<"state", [HasParent<"MachineOp">, Symbol, NoTerminator]> {
   let summary = "Define a state of a machine";
   let description = [{
     `fsm.state` represents a state of a state machine. This op includes an
@@ -169,6 +168,7 @@ def StateOp : FSMOp<"state", [HasParent<"MachineOp">, Symbol,
   ];
 
   let skipDefaultBuilders = 1;
+  let hasVerifier = 1;
 }
 
 def OutputOp : FSMOp<"output", [HasParent<"StateOp">, ReturnLike, Terminator]> {
@@ -188,8 +188,7 @@ def OutputOp : FSMOp<"output", [HasParent<"StateOp">, ReturnLike, Terminator]> {
   let hasVerifier = 1;
 }
 
-def TransitionOp : FSMOp<"transition", [HasParent<"StateOp">,
-      SingleBlockImplicitTerminator<"ReturnOp">]> {
+def TransitionOp : FSMOp<"transition", [HasParent<"StateOp">, NoTerminator]> {
   let summary = "Define a transition of a state";
   let description = [{
     `fsm.transition` represents a transition of a state with a symbol reference
