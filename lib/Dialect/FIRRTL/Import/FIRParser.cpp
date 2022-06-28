@@ -1017,12 +1017,13 @@ ArrayAttr FIRParser::convertSubAnnotations(ArrayRef<Attribute> annotations,
       modAttr.push_back(attr);
     }
 
-    // Construct the SubAnnotationAttr for the annotation.
-    auto subAnnotation =
-        SubAnnotationAttr::get(constants.context, fieldID.getValue(),
-                               DictionaryAttr::get(constants.context, modAttr));
+    // Add a "circt.fieldID" field with the fieldID.
+    modAttr.append("circt.fieldID",
+                   IntegerAttr::get(IntegerType::get(constants.context, 64,
+                                                     IntegerType::Signless),
+                                    fieldID.getValue()));
 
-    annotationVec.push_back(subAnnotation);
+    annotationVec.push_back(DictionaryAttr::get(constants.context, modAttr));
   }
 
   return ArrayAttr::get(constants.context, annotationVec);

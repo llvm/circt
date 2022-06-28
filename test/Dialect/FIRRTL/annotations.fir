@@ -111,14 +111,14 @@ circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar.a"},
     ; CHECK: firrtl.module private @Bar
     ; CHECK:      out %b
     ; CHECK-NOT:  sym
-    ; CHECK-SAME: [#firrtl.subAnno<fieldID = 2, {circt.nonlocal = @nla_1, three}>]
+    ; CHECK-SAME: [{circt.fieldID = 2 : i64, circt.nonlocal = @nla_1, three}]
     ; CHECK-NEXT: %d = firrtl.wire
     ; CHECK-NOT:  sym
-    ; CHECK-SAME: {annotations = [#firrtl.subAnno<fieldID = 2, {circt.nonlocal = @nla_2, five}>]}
+    ; CHECK-SAME: {annotations = [{circt.fieldID = 2 : i64, circt.nonlocal = @nla_2, five}]}
     ; CHECK-SAME: : !firrtl.bundle<baz: uint<1>, qux: uint<1>>
     ; CHECK: %bar_a, %bar_b, %bar_c = firrtl.instance bar
     ; CHECK-SAME: [{one}],
-    ; CHECK-SAME: [#firrtl.subAnno<fieldID = 1, {two}>],
+    ; CHECK-SAME: [{circt.fieldID = 1 : i64, two}],
     ; CHECK-SAME: [{four}]
 
 ; // -----
@@ -170,8 +170,8 @@ circuit Foo: %[[{"a":null,"target":"~Foo|Foo>bar.r"},
     ; CHECK-LABEL: module {
     ; CHECK: firrtl.mem
     ; CHECK-SAME: portAnnotations = [
-    ; CHECK-SAME: [{a}, #firrtl.subAnno<fieldID = 5, {b}>],
-    ; CHECK-SAME: [#firrtl.subAnno<fieldID = 2, {c}>, #firrtl.subAnno<fieldID = 6, {d}>]
+    ; CHECK-SAME: [{a}, {b, circt.fieldID = 5 : i64}],
+    ; CHECK-SAME: [{c, circt.fieldID = 2 : i64}, {circt.fieldID = 6 : i64, d}]
 
 ; // -----
 
@@ -302,8 +302,8 @@ circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[0]"},{"two":null,"target":"~F
 
     ; CHECK-LABEL: module {
     ; CHECK: %bar = firrtl.wire interesting_name {annotations =
-    ; CHECK-SAME: #firrtl.subAnno<fieldID = 1, {one}>
-    ; CHECK-SAME: #firrtl.subAnno<fieldID = 5, {two}>
+    ; CHECK-SAME: {circt.fieldID = 1 : i64, one}
+    ; CHECK-SAME: {circt.fieldID = 5 : i64, two}
 
 
 ; // -----
@@ -316,8 +316,8 @@ circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[0]"},{"two":null,"target":"~F
 
     ; CHECK-LABEL: module {
     ; CHECK: %bar = firrtl.reg interesting_name %clock {annotations =
-    ; CHECK-SAME: #firrtl.subAnno<fieldID = 1, {one}>
-    ; CHECK-SAME: #firrtl.subAnno<fieldID = 5, {two}>
+    ; CHECK-SAME: {circt.fieldID = 1 : i64, one}
+    ; CHECK-SAME: {circt.fieldID = 5 : i64, two}
 
 ; // -----
 
@@ -335,7 +335,7 @@ circuit Foo: %[[{"a":null,"target":"~Foo|Foo>w[9]"}]]
 
     ; CHECK-LABEL: module {
     ; CHECK: %w = firrtl.wire interesting_name {annotations =
-    ; CHECK-SAME: #firrtl.subAnno<fieldID = 10, {a}
+    ; CHECK-SAME: {a, circt.fieldID = 10 : i64}
 
 ; // -----
 
