@@ -546,27 +546,69 @@ FailureOr<bool> GrandCentralSignalMappingsPass::emitUpdatedMappings(
 
   // (2) Find input ports that are sinks, insert wires at instantiation points
   auto *instanceGraph = &getAnalysis<InstanceGraph>();
-  DenseSet<unsigned> forcedInputPorts;
+  llvm::SmallVector<unsigned, 32> forcedInputPorts;
+  llvm::SmallVector<unsigned, 32> forcedOutputPorts;
   for (auto &[_, mod, mappings] : results) {
     // Walk mappings looking for module ports that are being driven,
     // and gather their indices for fixing up.
     forcedInputPorts.clear();
+    forcedOutputPorts.clear();
     for (auto &mapping : mappings) {
       if (mapping.dir == MappingDirection::DriveRemote /* Sink */) {
         if (auto blockArg = mapping.localValue.dyn_cast<BlockArgument>()) {
           auto portIdx = blockArg.getArgNumber();
+          // Port may be driven multiple times along different instance paths
           if (mod.getPortDirection(portIdx) == Direction::In) {
-            // Port may be driven multiple times along different instance paths
-            forcedInputPorts.insert(portIdx);
+            forcedInputPorts.push_back(portIdx);
+          } else {
+            forcedOutputPorts.push_back(portIdx);
           }
         }
       }
     }
+    llvm::sort(forcedInputPorts);
+    forcedInputPorts.erase(
+        std::unique(forcedInputPorts.begin(), forcedInputPorts.end()),
+        forcedInputPorts.end());
+    llvm::sort(forcedOutputPorts);
+    forcedOutputPorts.erase(
+        std::unique(forcedOutputPorts.begin(), forcedOutputPorts.end()),
+        forcedOutputPorts.end());
 
     // Find all instantiations of this module, and replace uses of each driven
     // port with a wire that's connected to a wire that is connected to the
     // port. This is done to cause an 'assign' to be created, disconnecting
     // the forced input port's net from its uses.
+    auto breakNet = [&](OpBuilder &builder, Value port,
+                        ModuleNamespace &moduleNamespace, StringRef portName) {
+      auto replacementWireName = builder.getStringAttr(
+          moduleNamespace.newName(mod.moduleName() + "_" + portName));
+      auto bufferWireName = builder.getStringAttr(
+          moduleNamespace.newName(replacementWireName.getValue() + "_buffer"));
+      auto bufferWire =
+          builder.create<WireOp>(builder.getUnknownLoc(), port.getType(),
+                                 bufferWireName, NameKindEnum::DroppableName,
+                                 builder.getArrayAttr({}), bufferWireName);
+      auto replacementWire = builder.create<WireOp>(
+          builder.getUnknownLoc(), port.getType(), replacementWireName,
+          NameKindEnum::DroppableName, builder.getArrayAttr({}),
+          replacementWireName);
+      port.replaceAllUsesWith(replacementWire);
+      builder.create<StrictConnectOp>(builder.getUnknownLoc(), port,
+                                      bufferWire);
+      builder.create<StrictConnectOp>(builder.getUnknownLoc(), bufferWire,
+                                      replacementWire);
+    };
+
+    if (!forcedOutputPorts.empty()) {
+      ModuleNamespace &moduleNamespace = getModuleNamespace(mod);
+      auto builder = OpBuilder::atBlockBegin(mod.getBody());
+      for (auto portIdx : forcedOutputPorts) {
+        auto port = mod.getArgument(portIdx);
+        breakNet(builder, port, moduleNamespace, mod.getPortName(portIdx));
+      }
+    }
+
     if (forcedInputPorts.empty())
       continue;
 
@@ -581,28 +623,10 @@ FailureOr<bool> GrandCentralSignalMappingsPass::emitUpdatedMappings(
 
       for (auto portIdx : forcedInputPorts) {
         auto port = inst->getResult(portIdx);
-
         // Create chain like:
         // port_result <= foo_dataIn_x_buffer
         // foo_dataIn_x_buffer <= foo_dataIn_x
-        auto replacementWireName =
-            builder.getStringAttr(moduleNamespace.newName(
-                mod.moduleName() + "_" + mod.getPortName(portIdx)));
-        auto bufferWireName = builder.getStringAttr(moduleNamespace.newName(
-            replacementWireName.getValue() + "_buffer"));
-        auto bufferWire =
-            builder.create<WireOp>(builder.getUnknownLoc(), port.getType(),
-                                   bufferWireName, NameKindEnum::DroppableName,
-                                   builder.getArrayAttr({}), bufferWireName);
-        auto replacementWire = builder.create<WireOp>(
-            builder.getUnknownLoc(), port.getType(), replacementWireName,
-            NameKindEnum::DroppableName, builder.getArrayAttr({}),
-            replacementWireName);
-        port.replaceAllUsesWith(replacementWire);
-        builder.create<StrictConnectOp>(builder.getUnknownLoc(), port,
-                                        bufferWire);
-        builder.create<StrictConnectOp>(builder.getUnknownLoc(), bufferWire,
-                                        replacementWire);
+        breakNet(builder, port, moduleNamespace, mod.getPortName(portIdx));
       }
     }
   }

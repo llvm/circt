@@ -199,19 +199,19 @@ firrtl.circuit "RemoveDrivers" attributes {
 
 // -----
 
-// Check that GCT-SM generates 2 dummy wires for any input ports which are
-// forced.  This is done to work around the way that SystemVerilog force
-// statements work.  If an input port is forced, this will force that entire
-// net.  If there is NOT a wire used at the connection of the input port, the
-// effect of the force can be extremely far-reaching.  The Scala-based FIRRTL
-// Compiler (SFC) _always_ emits a wire and never saw this problem.
-// Two wires are used so an 'assign' is created, which is what breaks the net.
-// Specifically, check the following things:
-//   1. An input port that is forced gets the 2 dummy wires.
-//   2. An output port that is forced does NOT get dummy wires.
+// Check that GCT-SM generates 2 dummy wires for any ports which are forced.
+// This is done to work around the way that SystemVerilog force statements
+// work.  If a port is forced, this will force that entire net.  If there is
+// NOT a wire used at the connection of the port, the effect of the force can
+// be extremely far-reaching.  The Scala-based FIRRTL Compiler (SFC) _always_
+// emits a wire and never saw this problem. Two wires are used so an 'assign'
+// is created, which is what breaks the net.
 //
-// CHECK-LABEL: firrtl.circuit "AddWireToForcedInputs"
-firrtl.circuit "AddWireToForcedInputs"  attributes {
+// For forced input ports, the buffer wires are created at the instantiation
+// site.  For forced output ports, the buffer wires are created inside the
+// module.
+// CHECK-LABEL: firrtl.circuit "AddWireToForcedPorts"
+firrtl.circuit "AddWireToForcedPorts"  attributes {
   annotations = [
     {annotations = [],
      circuit = "circuit empty :\0A  module empty :\0A\0A    skip\0A",
@@ -219,6 +219,7 @@ firrtl.circuit "AddWireToForcedInputs"  attributes {
      class = "sifive.enterprise.grandcentral.SignalDriverAnnotation",
      isSubCircuit = false,
      id = 0 : i64}]} {
+  // CHECK: firrtl.module private @ForcedPort
   firrtl.module private @ForcedPort(
     in %in: !firrtl.uint<1> sym @in [
       {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation",
@@ -234,15 +235,23 @@ firrtl.circuit "AddWireToForcedInputs"  attributes {
        peer = "~signal_driver|signal_driver>out_sink",
        side = "remote",
        targetId = 4 : i64}]) attributes {
-    annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", id = 0 : i64}]} {}
-  // CHECK: firrtl.module @AddWireToForcedInputs
-  firrtl.module @AddWireToForcedInputs(in %in: !firrtl.uint<1>, out %out: !firrtl.uint<1>) attributes {
+    annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", id = 0 : i64}]} {
+      // CHECK-NEXT: %[[buffer_wire:.+]] = firrtl.wire sym @{{.+}}
+      // CHECK-NEXT: %[[port_wire:.+]] = firrtl.wire sym @{{.+}}
+      // CHECK-NEXT: firrtl.strictconnect %out, %[[buffer_wire]]
+      // CHECK-NEXT: firrtl.strictconnect %[[buffer_wire]], %[[port_wire]]
+      // CHECK-NEXT: firrtl.strictconnect %[[port_wire]], %in
+      firrtl.strictconnect %out, %in : !firrtl.uint<1>
+      // CHECK-NEXT: }
+    }
+  // CHECK: firrtl.module @AddWireToForcedPorts
+  firrtl.module @AddWireToForcedPorts(in %in: !firrtl.uint<1>, out %out: !firrtl.uint<1>) attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", id = 0 : i64}]} {
     // CHECK-NEXT: firrtl.instance sub
     %sub_in, %sub_out = firrtl.instance sub  @ForcedPort(in in: !firrtl.uint<1>, out out: !firrtl.uint<1>)
-    // CHECK-NEXT: %[[buffer_wire:.+]] = firrtl.wire sym @[[buffer_wire_sym:.+]] : !firrtl.uint<1>
-    // CHECK-NEXT: %[[sub_in_wire:.+]] = firrtl.wire sym @[[sub_in_wire_sym:.+]] : !firrtl.uint<1>
+    // CHECK-NEXT: %[[buffer_wire:.+]] = firrtl.wire sym @{{.+}} : !firrtl.uint<1>
+    // CHECK-NEXT: %[[sub_in_wire:.+]] = firrtl.wire sym @{{.+}} : !firrtl.uint<1>
     // CHECK-NEXT: firrtl.strictconnect %sub_in, %[[buffer_wire]]
     // CHECK-NEXT: firrtl.strictconnect %[[buffer_wire]], %[[sub_in_wire]]
     // CHECK-NEXT: firrtl.strictconnect %[[sub_in_wire]], %in
