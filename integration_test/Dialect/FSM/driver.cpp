@@ -1,19 +1,11 @@
 #include "Vtop.h"
-#include "verilated_vcd_c.h"
+#include "verilated.h"
 #include <iostream>
 
 int main(int argc, char **argv) {
 
   Verilated::commandArgs(argc, argv);
-  const std::unique_ptr<VerilatedContext> contextp{new VerilatedContext};
   auto *tb = new Vtop;
-
-  // Setup tracing for ease-of-debugging in case this test eventually fails
-  // in CI.
-  Verilated::traceEverOn(true);
-  VerilatedVcdC *tfp = new VerilatedVcdC;
-  tb->trace(tfp, 1);
-  tfp->open("sim.vcd");
 
   // Post-reset start time.
   int t0 = 2;
@@ -25,7 +17,6 @@ int main(int argc, char **argv) {
     // Rising edge
     tb->clk = 1;
     tb->eval();
-    tfp->dump(i * 2);
 
     // Testbench
     tb->rst = i < t0;
@@ -56,9 +47,7 @@ int main(int argc, char **argv) {
     // Falling edge
     tb->clk = 0;
     tb->eval();
-    tfp->dump(i * 2 + 1);
   }
-  tfp->close();
 
   exit(EXIT_SUCCESS);
 }
