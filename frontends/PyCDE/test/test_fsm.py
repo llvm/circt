@@ -8,17 +8,17 @@ from pycde.testing import unittestmodule
 
 # FSM instantiation example
 
-# CHECK-LABEL: msft.module @FSMUser {} (%a: i1, %b: i1, %clk: i1) -> (is_a: i1, is_b: i1) attributes {fileName = "FSMUser.sv"} {
-# CHECK:         %FSM.is_A, %FSM.is_B = msft.instance @FSM @FSM(%a, %b, %clk)  : (i1, i1, i1) -> (i1, i1)
-# CHECK:         msft.output %FSM.is_A, %FSM.is_B : i1, i1
-# CHECK:       }
-# CHECK-LABEL: msft.module @FSM {} (%a: i1, %b: i1, %clock: i1) -> (is_A: i1, is_B: i1) attributes {fileName = "FSM.sv"} {
-# CHECK:         %0:2 = "fsm.hw_instance"(%a, %b, %clock) {machine = "FSM_impl", operand_segment_sizes = dense<[2, 1, 0]> : vector<3xi32>, sym_name = "FSM"} : (i1, i1, i1) -> (i1, i1)
-# CHECK:         msft.output %0#0, %0#1 : i1, i1
-# CHECK:       }
+# CHECK-LABEL:  msft.module @FSMUser {} (%a: i1, %b: i1, %c: i1, %clk: i1) -> (is_a: i1, is_b: i1, is_c: i1) attributes {fileName = "FSMUser.sv"} {
+# CHECK:          %FSM.is_A, %FSM.is_B, %FSM.is_C = msft.instance @FSM @FSM(%a, %b, %c, %clk)  : (i1, i1, i1, i1) -> (i1, i1, i1)
+# CHECK:          msft.output %FSM.is_A, %FSM.is_B, %FSM.is_C : i1, i1, i1
+# CHECK:        }
+# CHECK-LABEL:  msft.module @FSM {} (%a: i1, %b: i1, %c: i1, %clk: i1) -> (is_A: i1, is_B: i1, is_C: i1) attributes {fileName = "FSM.sv"} {
+# CHECK:          %0:3 = fsm.hw_instance "FSM_impl" @FSM_impl(%a, %b, %c) : (i1, i1, i1) -> (i1, i1, i1), clock %clk : i1
+# CHECK:          msft.output %0#0, %0#1, %0#2 : i1, i1, i1
+# CHECK:        }
 
 
-@fsm.machine(clock="clock")
+@fsm.machine()
 class FSM:
   a = Input(types.i1)
   b = Input(types.i1)
@@ -46,7 +46,7 @@ class FSMUser:
 
   @generator
   def construct(ports):
-    fsm = FSM(a=ports.a, b=ports.b, c=ports.c, clock=ports.clk)
+    fsm = FSM(a=ports.a, b=ports.b, c=ports.c, clk=ports.clk)
     ports.is_a = fsm.is_A
     ports.is_b = fsm.is_B
     ports.is_c = fsm.is_C
@@ -56,60 +56,67 @@ class FSMUser:
 
 # FSM state transitions example
 
-# CHECK: "fsm.machine"() ({
-# CHECK:   ^bb0(%arg0: i1, %arg1: i1, %arg2: i1):
-# CHECK:     %false = hw.constant false
-# CHECK:     %true = hw.constant true
-# CHECK:     "fsm.state"() ({
-# CHECK:       "fsm.output"(%true, %false, %false, %false) : (i1, i1, i1, i1) -> ()
-# CHECK:     }, {
-# CHECK:       "fsm.transition"() ({
-# CHECK:         "fsm.return"(%arg0) : (i1) -> ()
-# CHECK:       }, {
-# CHECK:       }) {nextState = @a} : () -> ()
-# CHECK:     }) {sym_name = "idle"} : () -> ()
-# CHECK:     "fsm.state"() ({
-# CHECK:       "fsm.output"(%false, %true, %false, %false) : (i1, i1, i1, i1) -> ()
-# CHECK:     }, {
-# CHECK:       "fsm.transition"() ({
-# CHECK:       }, {
-# CHECK:       }) {nextState = @b} : () -> ()
-# CHECK:     }) {sym_name = "a"} : () -> ()
-# CHECK:     "fsm.state"() ({
-# CHECK:       "fsm.output"(%false, %false, %true, %false) : (i1, i1, i1, i1) -> ()
-# CHECK:     }, {
-# CHECK:       "fsm.transition"() ({
-# CHECK:         %0 = comb.and %arg0, %arg1 : i1
-# CHECK:         %true_0 = hw.constant true
-# CHECK:         %1 = comb.xor %0, %true_0 : i1
-# CHECK:         %2 = comb.and %arg1, %arg2 : i1
-# CHECK:         %true_1 = hw.constant true
-# CHECK:         %3 = comb.xor %2, %true_1 : i1
-# CHECK:         %4 = comb.and %arg0, %arg2 : i1
-# CHECK:         %true_2 = hw.constant true
-# CHECK:         %5 = comb.xor %4, %true_2 : i1
-# CHECK:         %6 = comb.and %1, %3, %5 : i1
-# CHECK:         %true_3 = hw.constant true
-# CHECK:         %7 = comb.xor %6, %true_3 : i1
-# CHECK:         "fsm.return"(%7) : (i1) -> ()
-# CHECK:       }, {
-# CHECK:       }) {nextState = @c} : () -> ()
-# CHECK:     }) {sym_name = "b"} : () -> ()
-# CHECK:     "fsm.state"() ({
-# CHECK:       "fsm.output"(%false, %false, %false, %true) : (i1, i1, i1, i1) -> ()
-# CHECK:     }, {
-# CHECK:       "fsm.transition"() ({
-# CHECK:         "fsm.return"(%arg2) : (i1) -> ()
-# CHECK:       }, {
-# CHECK:       }) {nextState = @idle} : () -> ()
-# CHECK:       "fsm.transition"() ({
-# CHECK:         %true_0 = hw.constant true
-# CHECK:         %0 = comb.xor %arg1, %true_0 : i1
-# CHECK:         "fsm.return"(%0) : (i1) -> ()
-# CHECK:       }, {
-# CHECK:       }) {nextState = @a} : () -> ()
-# CHECK:     }) {sym_name = "c"} : () -> ()
-# CHECK:   }) {clock_name = "clock", function_type = (i1, i1, i1) -> (i1, i1, i1, i1), in_names = ["a", "b", "c"], initialState = "idle", out_names = ["is_a", "is_b", "is_c", "is_idle"], sym_name = "F0_impl"} : () -> ()
+# CHECK:      fsm.machine @F0_impl(%arg0: i1, %arg1: i1, %arg2: i1) -> (i1, i1, i1, i1) attributes {clock_name = "clock", in_names = ["a", "b", "c"], initialState = "idle", out_names = ["is_A", "is_B", "is_C", "is_idle"]} {
+# CHECK-NEXT:    fsm.state "A" output {
+# CHECK-NEXT:      %true = hw.constant true
+# CHECK-NEXT:      %false = hw.constant false
+# CHECK-NEXT:      %false_0 = hw.constant false
+# CHECK-NEXT:      %false_1 = hw.constant false
+# CHECK-NEXT:      fsm.output %true, %false, %false_0, %false_1 : i1, i1, i1, i1
+# CHECK-NEXT:    } transitions {
+# CHECK-NEXT:      fsm.transition @B guard {
+# CHECK-NEXT:        fsm.return %arg0
+# CHECK-NEXT:      }
+# CHECK-NEXT:    }
+# CHECK-NEXT:    fsm.state "B" output {
+# CHECK-NEXT:      %false = hw.constant false
+# CHECK-NEXT:      %true = hw.constant true
+# CHECK-NEXT:      %false_0 = hw.constant false
+# CHECK-NEXT:      %false_1 = hw.constant false
+# CHECK-NEXT:      fsm.output %false, %true, %false_0, %false_1 : i1, i1, i1, i1
+# CHECK-NEXT:    } transitions {
+# CHECK-NEXT:      fsm.transition @C guard {
+# CHECK-NEXT:        %0 = comb.and %arg0, %arg1 : i1
+# CHECK-NEXT:        %true = hw.constant true
+# CHECK-NEXT:        %1 = comb.xor %0, %true : i1
+# CHECK-NEXT:        %2 = comb.and %arg1, %arg2 : i1
+# CHECK-NEXT:        %true_0 = hw.constant true
+# CHECK-NEXT:        %3 = comb.xor %2, %true_0 : i1
+# CHECK-NEXT:        %4 = comb.and %arg0, %arg2 : i1
+# CHECK-NEXT:        %true_1 = hw.constant true
+# CHECK-NEXT:        %5 = comb.xor %4, %true_1 : i1
+# CHECK-NEXT:        %6 = comb.and %1, %3, %5 : i1
+# CHECK-NEXT:        %true_2 = hw.constant true
+# CHECK-NEXT:        %7 = comb.xor %6, %true_2 : i1
+# CHECK-NEXT:        fsm.return %7
+# CHECK-NEXT:      }
+# CHECK-NEXT:    }
+# CHECK-NEXT:    fsm.state "C" output {
+# CHECK-NEXT:      %false = hw.constant false
+# CHECK-NEXT:      %false_0 = hw.constant false
+# CHECK-NEXT:      %true = hw.constant true
+# CHECK-NEXT:      %false_1 = hw.constant false
+# CHECK-NEXT:      fsm.output %false, %false_0, %true, %false_1 : i1, i1, i1, i1
+# CHECK-NEXT:    } transitions {
+# CHECK-NEXT:      fsm.transition @idle guard {
+# CHECK-NEXT:        fsm.return %arg2
+# CHECK-NEXT:      }
+# CHECK-NEXT:      fsm.transition @A guard {
+# CHECK-NEXT:        %true = hw.constant true
+# CHECK-NEXT:        %0 = comb.xor %arg1, %true : i1
+# CHECK-NEXT:        fsm.return %0
+# CHECK-NEXT:      }
+# CHECK-NEXT:    }
+# CHECK-NEXT:    fsm.state "idle" output {
+# CHECK-NEXT:      %false = hw.constant false
+# CHECK-NEXT:      %false_0 = hw.constant false
+# CHECK-NEXT:      %false_1 = hw.constant false
+# CHECK-NEXT:      %true = hw.constant true
+# CHECK-NEXT:      fsm.output %false, %false_0, %false_1, %true : i1, i1, i1, i1
+# CHECK-NEXT:    } transitions {
+# CHECK-NEXT:      fsm.transition @A
+# CHECK-NEXT:    }
+# CHECK-NEXT:  }
 
 
 @fsm.machine(clock="clock")

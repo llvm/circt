@@ -525,9 +525,9 @@ FailureOr<bool> GrandCentralSignalMappingsPass::emitUpdatedMappings(
   //    (as replacements for the original annotations)
 
   // Helper to instantiate module namespaces as-needed
-  DenseMap<FModuleOp, ModuleNamespace> moduleNamespaces;
+  DenseMap<Operation *, ModuleNamespace> moduleNamespaces;
   auto getModuleNamespace =
-      [&moduleNamespaces](FModuleOp module) -> ModuleNamespace & {
+      [&moduleNamespaces](Operation *module) -> ModuleNamespace & {
     return moduleNamespaces.try_emplace(module, module).first->second;
   };
 
@@ -649,9 +649,11 @@ FailureOr<bool> GrandCentralSignalMappingsPass::emitUpdatedMappings(
     target.module = mkSymPlaceholder(FlatSymbolRefAttr::get(module), moduleStr);
     target.component = {};
 
-    if (mapping.localValue.isa<BlockArgument>())
-      // TODO: inner_sym for ports too
-      target.name = mapping.localName;
+    if (auto port = mapping.localValue.dyn_cast<BlockArgument>())
+      target.name = mkSymPlaceholder(
+          ::getInnerRefTo(module, port.getArgNumber(), mapping.localName,
+                          getModuleNamespace),
+          nameStr);
     else
       target.name =
           mkSymPlaceholder(::getInnerRefTo(mapping.localValue.getDefiningOp(),

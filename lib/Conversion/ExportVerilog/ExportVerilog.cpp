@@ -2670,6 +2670,10 @@ LogicalResult StmtEmitter::visitSV(AssignOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
+  // If we have SV attributes attached to the op, those need to be emitted
+  // first.
+  emitSVAttributes(op.svAttributesAttr(), op);
+
   indent() << "assign ";
   emitExpression(op.dest(), ops);
   os << " = ";

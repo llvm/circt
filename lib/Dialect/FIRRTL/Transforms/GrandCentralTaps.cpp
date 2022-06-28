@@ -809,7 +809,7 @@ void GrandCentralTapsPass::runOnOperation() {
               auto refPart = getRefPart(segment);
               if (!refPart)
                 continue;
-              auto innerSymTbl = innerSymTblCol.getInnerSymbolTable(
+              auto &innerSymTbl = innerSymTblCol.getInnerSymbolTable(
                   symtbl.lookup(getModPart(segment)));
               prefixWithNLA.push_back(
                   cast<InstanceOp>(innerSymTbl.lookup(refPart)));

@@ -8,6 +8,8 @@ firrtl.circuit "SFCCompatTests" {
   //
   // CHECK-LABEL: @InvalidValue
   firrtl.module @InvalidValue(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %d: !firrtl.uint<1>, out %q: !firrtl.uint<1>) {
+    // CHECK-NOT: invalid
+    %invalid_ui1_dead = firrtl.invalidvalue : !firrtl.uint<1>
     %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
     // CHECK: firrtl.reg %clock
     %r = firrtl.regreset %clock, %reset, %invalid_ui1  : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
