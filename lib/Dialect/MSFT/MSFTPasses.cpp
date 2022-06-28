@@ -1393,9 +1393,8 @@ MSFTModuleOp PartitionPass::partition(DesignPartitionOp partOp,
   SmallVector<Type> instRetTypes(
       llvm::map_range(newOutputs, [](Value v) { return v.getType(); }));
   auto partInst = OpBuilder(partOp).create<InstanceOp>(
-      loc, instRetTypes, partOp.getNameAttr(),
-      SymbolTable::getSymbolName(partMod), instInputs, ArrayAttr(),
-      SymbolRefAttr());
+      loc, instRetTypes, partOp.getNameAttr(), FlatSymbolRefAttr::get(partMod),
+      instInputs);
   moduleInstantiations[partMod].push_back(partInst);
 
   // And set the outputs properly.
@@ -1847,6 +1846,95 @@ std::unique_ptr<Pass> createLowerConstructsPass() {
 } // namespace msft
 } // namespace circt
 
+//===----------------------------------------------------------------------===//
+// Discover AppIDs pass
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct DiscoverAppIDsPass : public DiscoverAppIDsBase<DiscoverAppIDsPass>,
+                            PassCommon {
+  void runOnOperation() override;
+  void processMod(MSFTModuleOp);
+};
+} // anonymous namespace
+
+void DiscoverAppIDsPass::runOnOperation() {
+  ModuleOp topMod = getOperation();
+  topLevelSyms.addDefinitions(topMod);
+  if (failed(verifyInstances(topMod))) {
+    signalPassFailure();
+    return;
+  }
+
+  // Sort modules in partial order be use. Enables single-pass processing.
+  SmallVector<MSFTModuleOp> sortedMods;
+  getAndSortModules(topMod, sortedMods);
+
+  for (MSFTModuleOp mod : sortedMods)
+    processMod(mod);
+}
+
+/// Find the AppIDs in a given module.
+void DiscoverAppIDsPass::processMod(MSFTModuleOp mod) {
+  SmallDenseMap<StringAttr, uint64_t> appBaseCounts;
+  SmallPtrSet<StringAttr, 32> localAppIDBases;
+  SmallDenseMap<AppIDAttr, Operation *> localAppIDs;
+
+  mod.walk([&](Operation *op) {
+    // If an operation has an "appid" dialect attribute, it is considered a
+    // "local" appid.
+    if (auto appid = op->getAttrOfType<AppIDAttr>("msft.appid")) {
+      if (localAppIDs.find(appid) != localAppIDs.end()) {
+        op->emitOpError("Found multiple identical AppIDs in same module")
+                .attachNote(localAppIDs[appid]->getLoc())
+            << "first AppID located here";
+        signalPassFailure();
+      } else {
+        localAppIDs[appid] = op;
+      }
+      localAppIDBases.insert(appid.getName());
+    }
+
+    // Instance ops should expose their module's AppIDs recursively. Track the
+    // number of instances which contain a base name.
+    if (auto inst = dyn_cast<InstanceOp>(op)) {
+      auto targetMod = dyn_cast<MSFTModuleOp>(
+          topLevelSyms.getDefinition(inst.moduleNameAttr()));
+      if (targetMod && targetMod.childAppIDBases())
+        for (auto base :
+             targetMod.childAppIDBasesAttr().getAsRange<StringAttr>())
+          appBaseCounts[base] += 1;
+    }
+  });
+
+  // Collect the list of AppID base names with which to annotate 'mod'.
+  SmallVector<Attribute, 32> finalModBases;
+  for (auto baseCount : appBaseCounts) {
+    // If multiple instances expose the same base name, don't expose them
+    // through this module. If any of the instances expose basenames which are
+    // exposed locally, also don't expose them up.
+    if (baseCount.getSecond() == 1 &&
+        !localAppIDBases.contains(baseCount.getFirst()))
+      finalModBases.push_back(baseCount.getFirst());
+  }
+
+  // Add all of the local base names.
+  for (StringAttr lclBase : localAppIDBases)
+    finalModBases.push_back(lclBase);
+
+  if (finalModBases.empty())
+    return;
+  ArrayAttr childrenBases = ArrayAttr::get(mod.getContext(), finalModBases);
+  mod.childAppIDBasesAttr(childrenBases);
+}
+
+namespace circt {
+namespace msft {
+std::unique_ptr<Pass> createDiscoverAppIDsPass() {
+  return std::make_unique<DiscoverAppIDsPass>();
+}
+} // namespace msft
+} // namespace circt
 namespace {
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/MSFT/MSFTPasses.h.inc"
