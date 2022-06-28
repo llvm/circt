@@ -1889,6 +1889,8 @@ void DiscoverAppIDsPass::processMod(MSFTModuleOp mod) {
                 .attachNote(localAppIDs[appid]->getLoc())
             << "first AppID located here";
         signalPassFailure();
+      } else {
+        localAppIDs[appid] = op;
       }
       localAppIDBases.insert(appid.getName());
     }
@@ -1907,13 +1909,14 @@ void DiscoverAppIDsPass::processMod(MSFTModuleOp mod) {
 
   // Collect the list of AppID base names with which to annotate 'mod'.
   SmallVector<Attribute, 32> finalModBases;
-  for (auto baseCount : appBaseCounts)
+  for (auto baseCount : appBaseCounts) {
     // If multiple instances expose the same base name, don't expose them
     // through this module. If any of the instances expose basenames which are
     // exposed locally, also don't expose them up.
     if (baseCount.getSecond() == 1 &&
         !localAppIDBases.contains(baseCount.getFirst()))
       finalModBases.push_back(baseCount.getFirst());
+  }
 
   // Add all of the local base names.
   for (StringAttr lclBase : localAppIDBases)
