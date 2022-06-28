@@ -579,10 +579,10 @@ FailureOr<bool> GrandCentralSignalMappingsPass::emitUpdatedMappings(
     // port with a wire that's connected to a wire that is connected to the
     // port. This is done to cause an 'assign' to be created, disconnecting
     // the forced input port's net from its uses.
-    auto breakNet = [&](OpBuilder &builder, Value port,
+    auto breakNet = [modName = mod.moduleName()](OpBuilder &builder, Value port,
                         ModuleNamespace &moduleNamespace, StringRef portName) {
       auto replacementWireName = builder.getStringAttr(
-          moduleNamespace.newName(mod.moduleName() + "_" + portName));
+          moduleNamespace.newName(modName + "_" + portName));
       auto bufferWireName = builder.getStringAttr(
           moduleNamespace.newName(replacementWireName.getValue() + "_buffer"));
       auto bufferWire =
