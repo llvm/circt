@@ -103,9 +103,9 @@ constexpr const char *injectDUTHierarchyAnnoClass =
     "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation";
 
 // MemToRegOfVec Annotations
-static const char *convertMemToRegOfVecAnnoClass =
+constexpr const char *convertMemToRegOfVecAnnoClass =
     "sifive.enterprise.firrtl.ConvertMemToRegOfVecAnnotation$";
-static const char *excludeMemToRegAnnoClass =
+constexpr const char *excludeMemToRegAnnoClass =
     "sifive.enterprise.firrtl.ExcludeMemFromMemToRegOfVec";
 
 // Instance Extraction
