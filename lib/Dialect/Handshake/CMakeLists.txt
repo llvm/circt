@@ -12,7 +12,7 @@ add_circt_dialect_library(CIRCTHandshake
   ${PROJECT_BINARY_DIR}/include
 
   LINK_LIBS PUBLIC
-  MLIRFunc
+  MLIRFuncDialect
   MLIRIR
 
   DEPENDS
@@ -20,7 +20,6 @@ add_circt_dialect_library(CIRCTHandshake
   MLIRHandshakeCanonicalizationIncGen
   MLIRHandshakeAttributesIncGen
   MLIRHandshakeEnumsIncGen
-  MLIRHandshakeAttrsIncGen
   )
 
 add_subdirectory(Transforms)

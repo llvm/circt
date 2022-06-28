@@ -498,6 +498,8 @@ getLocationInfoAsStringImpl(const SmallPtrSet<Operation *, 8> &ops) {
 static std::string
 getLocationInfoAsString(const SmallPtrSet<Operation *, 8> &ops,
                         LoweringOptions::LocationInfoStyle style) {
+  if (style == LoweringOptions::LocationInfoStyle::None)
+    return "";
   auto str = getLocationInfoAsStringImpl(ops);
   // If the location information is empty, just return an empty string.
   if (str.empty())
@@ -507,6 +509,11 @@ getLocationInfoAsString(const SmallPtrSet<Operation *, 8> &ops,
     return str;
   case LoweringOptions::LocationInfoStyle::WrapInAtSquareBracket:
     return "@[" + str + ']';
+  // NOTE: We need this case to avoid a compiler warning regarding an unhandled
+  // switch case. Because we early return in the `None` case, this should be
+  // unreachable.
+  case LoweringOptions::LocationInfoStyle::None:
+    llvm_unreachable("`None` case handled in early return");
   }
 
   llvm_unreachable("all styles must be handled");
@@ -2662,6 +2669,10 @@ LogicalResult StmtEmitter::visitSV(AssignOp op) {
 
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
+
+  // If we have SV attributes attached to the op, those need to be emitted
+  // first.
+  emitSVAttributes(op.svAttributesAttr(), op);
 
   indent() << "assign ";
   emitExpression(op.dest(), ops);

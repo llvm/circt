@@ -186,10 +186,10 @@ firrtl.circuit "LocalTrackers" attributes {annotations = [{
 // CHECK-SAME{LITERAL}:  \22value\22: \22OMReferenceTarget:~LocalTrackers|{{2}}>{{4}}\22
 // CHECK-SAME:  symbols = [
 // CHECK-SAME:    @A,
-// CHECK-SAME:    #hw.innerNameRef<@A::[[SYMC:@[a-zA-Z0-9_]+]]>,
+// CHECK-SAME:    #hw.innerNameRef<@A::[[SYMC]]>,
 // CHECK-SAME:    @LocalTrackers,
-// CHECK-SAME:    #hw.innerNameRef<@LocalTrackers::[[SYMB:@[a-zA-Z0-9_]+]]>,
-// CHECK-SAME:    #hw.innerNameRef<@LocalTrackers::[[SYMA:@[a-zA-Z0-9_]+]]>
+// CHECK-SAME:    #hw.innerNameRef<@LocalTrackers::[[SYMB]]>,
+// CHECK-SAME:    #hw.innerNameRef<@LocalTrackers::[[SYMA]]>
 // CHECK-SAME:  ]
 
 //===----------------------------------------------------------------------===//
@@ -228,9 +228,9 @@ firrtl.circuit "NonLocalTrackers" attributes {annotations = [{
 // CHECK-SAME{LITERAL}:  \22value\22: \22OMReferenceTarget:~NonLocalTrackers|{{0}}/{{1}}:{{2}}/{{3}}:{{4}}>{{5}}\22
 // CHECK-SAME:  symbols = [
 // CHECK-SAME:    @NonLocalTrackers,
-// CHECK-SAME:    #hw.innerNameRef<@NonLocalTrackers::[[SYMB:@[a-zA-Z0-9_]+]]>,
+// CHECK-SAME:    #hw.innerNameRef<@NonLocalTrackers::[[SYMB]]>,
 // CHECK-SAME:    @B,
-// CHECK-SAME:    #hw.innerNameRef<@B::[[SYMA:@[a-zA-Z0-9_]+]]>,
+// CHECK-SAME:    #hw.innerNameRef<@B::[[SYMA]]>,
 // CHECK-SAME:    @A,
 // CHECK-SAME:    #hw.innerNameRef<@A::@[[a_sym]]>
 // CHECK-SAME:  ]
@@ -335,11 +335,11 @@ firrtl.circuit "SRAMPaths" attributes {annotations = [{
 
 // CHECK-SAME:  symbols = [
 // CHECK-SAME:    @SRAMPaths,
-// CHECK-SAME:    #hw.innerNameRef<@SRAMPaths::[[SYMSUB:@[a-zA-Z0-9_]+]]>,
+// CHECK-SAME:    #hw.innerNameRef<@SRAMPaths::[[SYMSUB]]>,
 // CHECK-SAME:    @Submodule,
-// CHECK-SAME:    #hw.innerNameRef<@Submodule::[[SYMMEM1:@[a-zA-Z0-9_]+]]>,
+// CHECK-SAME:    #hw.innerNameRef<@Submodule::[[SYMMEM1]]>,
 // CHECK-SAME:    @MySRAM,
-// CHECK-SAME:    #hw.innerNameRef<@Submodule::[[SYMMEM2:@[a-zA-Z0-9_]+]]>
+// CHECK-SAME:    #hw.innerNameRef<@Submodule::[[SYMMEM2]]>
 // CHECK-SAME:  ]
 
 //===----------------------------------------------------------------------===//
@@ -424,9 +424,9 @@ firrtl.circuit "SRAMPathsWithNLA" attributes {annotations = [{
 
 // CHECK-SAME:  symbols = [
 // CHECK-SAME:    @SRAMPathsWithNLA,
-// CHECK-SAME:    #hw.innerNameRef<@SRAMPathsWithNLA::[[SYMSUB:@[a-zA-Z0-9_]+]]>,
+// CHECK-SAME:    #hw.innerNameRef<@SRAMPathsWithNLA::@s1>,
 // CHECK-SAME:    @Submodule,
-// CHECK-SAME:    #hw.innerNameRef<@Submodule::[[SYMMEM1:@[a-zA-Z0-9_]+]]>,
+// CHECK-SAME:    #hw.innerNameRef<@Submodule::@mem>,
 // CHECK-SAME:    #hw.innerNameRef<@Submodule::@[[mem2_sym]]>
 // CHECK-SAME:  ]
 
@@ -463,13 +463,48 @@ firrtl.circuit "SRAMPathsWithNLA" attributes {annotations = [{
 // CHECK-LABEL: firrtl.circuit "SRAMPathsWithNLA"
 // CHECK:      symbols = [
 // CHECK-SAME:   @SRAMPathsWithNLA,
-// CHECK-SAME:   #hw.innerNameRef<@SRAMPathsWithNLA::@paths>,
+// CHECK-SAME:   #hw.innerNameRef<@SRAMPathsWithNLA::@omir_sym>,
 // CHECK-SAME:   @SRAMPaths,
 // CHECK-SAME:   #hw.innerNameRef<@SRAMPaths::@sub>,
 // CHECK-SAME:   @Submodule,
-// CHECK-SAME:   #hw.innerNameRef<@Submodule::@mem1>,
+// CHECK-SAME:   #hw.innerNameRef<@Submodule::@omir_sym>,
 // CHECK-SAME:   @MySRAM
 // CHECK-SAME: ]
+
+//===----------------------------------------------------------------------===//
+// Make SRAM Paths Absolute when SRAM is top-level (invalid for NLA)
+//===----------------------------------------------------------------------===//
+
+firrtl.circuit "SRAMPathsTopLevel" attributes {annotations = [{
+  class = "freechips.rocketchip.objectmodel.OMIRAnnotation",
+  nodes = [
+    {
+      info = #loc,
+      id = "OMID:0",
+      fields = {
+        omType = {info = #loc, index = 0, value = ["OMString:OMLazyModule", "OMString:OMSRAM"]},
+        finalPath = {info = #loc, index = 1, value = {omir.tracker, id = 0, type = "OMMemberReferenceTarget"}}
+      }
+    }
+  ]
+}]} {
+  firrtl.extmodule @MySRAM()
+  firrtl.module @SRAMPathsTopLevel() {
+    firrtl.instance mem1 {annotations = [{class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 0}]} @MySRAM()
+  }
+}
+
+// CHECK-LABEL: firrtl.circuit "SRAMPathsTopLevel"
+// CHECK:       firrtl.instance mem1 sym [[SYMMEM1:@[a-zA-Z0-9_]+]]
+
+// CHECK:       sv.verbatim
+// CHECK-SAME{LITERAL}:    \22value\22: \22OMMemberInstanceTarget:~SRAMPathsTopLevel|{{0}}/{{1}}:{{2}}\22
+
+// CHECK-SAME:  symbols = [
+// CHECK-SAME:    @SRAMPathsTopLevel,
+// CHECK-SAME:    #hw.innerNameRef<@SRAMPathsTopLevel::[[SYMMEM1]]>,
+// CHECK-SAME:    @MySRAM
+// CHECK-SAME:  ]
 
 //===----------------------------------------------------------------------===//
 // Add module port information to the OMIR (`SetOMIRPorts`)

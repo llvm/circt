@@ -10,6 +10,7 @@
 
 #include "circt-c/Dialect/Comb.h"
 #include "circt-c/Dialect/ESI.h"
+#include "circt-c/Dialect/FSM.h"
 #include "circt-c/Dialect/HW.h"
 #include "circt-c/Dialect/MSFT.h"
 #include "circt-c/Dialect/SV.h"
@@ -68,6 +69,10 @@ PYBIND11_MODULE(_circt, m) {
         MlirDialectHandle sv = mlirGetDialectHandle__sv__();
         mlirDialectHandleRegisterDialect(sv, context);
         mlirDialectHandleLoadDialect(sv, context);
+
+        MlirDialectHandle fsm = mlirGetDialectHandle__fsm__();
+        mlirDialectHandleRegisterDialect(fsm, context);
+        mlirDialectHandleLoadDialect(fsm, context);
       },
       "Register CIRCT dialects on a PyMlirContext.");
 

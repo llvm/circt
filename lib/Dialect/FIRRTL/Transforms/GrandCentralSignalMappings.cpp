@@ -14,6 +14,7 @@
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotationHelper.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/SV/SVOps.h"
@@ -435,7 +436,7 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
   SmallVector<ModuleMappingResult> results;
   results.resize(modules.size());
 
-  mlir::parallelForEachN(
+  mlir::parallelFor(
       circuit.getContext(), 0, modules.size(),
       [&modules, &results](size_t index) {
         ModuleSignalMappings mapper(modules[index]);
@@ -524,9 +525,9 @@ FailureOr<bool> GrandCentralSignalMappingsPass::emitUpdatedMappings(
   //    (as replacements for the original annotations)
 
   // Helper to instantiate module namespaces as-needed
-  DenseMap<FModuleOp, ModuleNamespace> moduleNamespaces;
+  DenseMap<Operation *, ModuleNamespace> moduleNamespaces;
   auto getModuleNamespace =
-      [&moduleNamespaces](FModuleOp module) -> ModuleNamespace & {
+      [&moduleNamespaces](Operation *module) -> ModuleNamespace & {
     return moduleNamespaces.try_emplace(module, module).first->second;
   };
 
@@ -589,13 +590,13 @@ FailureOr<bool> GrandCentralSignalMappingsPass::emitUpdatedMappings(
                 mod.moduleName() + "_" + mod.getPortName(portIdx)));
         auto bufferWireName = builder.getStringAttr(moduleNamespace.newName(
             replacementWireName.getValue() + "_buffer"));
-        auto bufferWire = builder.create<WireOp>(
-            builder.getUnknownLoc(), port.getType(), bufferWireName,
-            NameKindEnum::InterestingName, builder.getArrayAttr({}),
-            bufferWireName);
+        auto bufferWire =
+            builder.create<WireOp>(builder.getUnknownLoc(), port.getType(),
+                                   bufferWireName, NameKindEnum::DroppableName,
+                                   builder.getArrayAttr({}), bufferWireName);
         auto replacementWire = builder.create<WireOp>(
             builder.getUnknownLoc(), port.getType(), replacementWireName,
-            NameKindEnum::InterestingName, builder.getArrayAttr({}),
+            NameKindEnum::DroppableName, builder.getArrayAttr({}),
             replacementWireName);
         port.replaceAllUsesWith(replacementWire);
         builder.create<StrictConnectOp>(builder.getUnknownLoc(), port,
@@ -620,19 +621,6 @@ FailureOr<bool> GrandCentralSignalMappingsPass::emitUpdatedMappings(
   // Helpers to emit XMR's for the mappings.
   SmallVector<Attribute> symbols;
   SmallDenseMap<Attribute, size_t> symMap;
-  auto getOrAddInnerSym = [&](Operation *op) -> StringAttr {
-    auto attr = op->getAttrOfType<StringAttr>("inner_sym");
-    if (attr)
-      return attr;
-    StringRef name = "sym";
-    if (auto nameAttr = op->getAttrOfType<StringAttr>("name"))
-      name = nameAttr.getValue();
-    auto module = op->getParentOfType<FModuleOp>();
-    name = getModuleNamespace(module).newName(name);
-    attr = StringAttr::get(op->getContext(), name);
-    op->setAttr("inner_sym", attr);
-    return attr;
-  };
 
   auto getSymIdx = [&](Attribute symbol) {
     auto it = symMap.find(symbol);
@@ -661,15 +649,16 @@ FailureOr<bool> GrandCentralSignalMappingsPass::emitUpdatedMappings(
     target.module = mkSymPlaceholder(FlatSymbolRefAttr::get(module), moduleStr);
     target.component = {};
 
-    if (mapping.localValue.isa<BlockArgument>())
-      // TODO: inner_sym for ports too
-      target.name = mapping.localName;
-    else
+    if (auto port = mapping.localValue.dyn_cast<BlockArgument>())
       target.name = mkSymPlaceholder(
-          hw::InnerRefAttr::get(
-              SymbolTable::getSymbolName(module),
-              getOrAddInnerSym(mapping.localValue.getDefiningOp())),
+          ::getInnerRefTo(module, port.getArgNumber(), mapping.localName,
+                          getModuleNamespace),
           nameStr);
+    else
+      target.name =
+          mkSymPlaceholder(::getInnerRefTo(mapping.localValue.getDefiningOp(),
+                                           "", getModuleNamespace),
+                           nameStr);
 
     // If there's an NLA, add instance path information.
     if (mapping.nlaSym) {

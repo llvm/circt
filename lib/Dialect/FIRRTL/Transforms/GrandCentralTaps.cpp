@@ -17,6 +17,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
@@ -516,8 +517,6 @@ class GrandCentralTapsPass : public GrandCentralTapsBase<GrandCentralTapsPass> {
       deadNLAs.insert(sym.getAttr());
   }
 
-  /// Returns an operation's `inner_sym`, adding one if necessary.
-  StringAttr getOrAddInnerSym(Operation *op);
   /// Returns a port's `inner_sym`, adding one if necessary.
   StringAttr getOrAddInnerSym(FModuleLike module, size_t portIdx);
   /// Obtain an inner reference to an operation, possibly adding an `inner_sym`
@@ -556,11 +555,25 @@ class GrandCentralTapsPass : public GrandCentralTapsBase<GrandCentralTapsPass> {
   SymbolTable *circuitSymbols;
 };
 
+static StringAttr getModPart(Attribute pathSegment) {
+  return TypeSwitch<Attribute, StringAttr>(pathSegment)
+      .Case<FlatSymbolRefAttr>([](auto a) { return a.getAttr(); })
+      .Case<hw::InnerRefAttr>([](auto a) { return a.getModule(); });
+}
+
+static StringAttr getRefPart(Attribute pathSegment) {
+  return TypeSwitch<Attribute, StringAttr>(pathSegment)
+      .Case<FlatSymbolRefAttr>([](auto a) { return StringAttr{}; })
+      .Case<hw::InnerRefAttr>([](auto a) { return a.getName(); });
+}
+
 void GrandCentralTapsPass::runOnOperation() {
   auto circuitOp = getOperation();
   LLVM_DEBUG(llvm::dbgs() << "Running the GCT Data Taps pass\n");
   SymbolTable symtbl(circuitOp);
   circuitSymbols = &symtbl;
+  InnerSymbolTableCollection innerSymTblCol;
+  innerSymTblCol.populateTables(circuitOp);
 
   // Here's a rough idea of what the Scala code is doing:
   // - Gather the `source` of all `keys` of all `DataTapsAnnotation`s throughout
@@ -780,23 +793,33 @@ void GrandCentralTapsPass::runOnOperation() {
         // The code tries to come up with a relative path from the data tap
         // instance (path being the absolute path to that instance) to the
         // tapped thing (prefix being the path to the tapped port, wire, or
-        // memory) by calling stripCommonPrefix(prefix, path). Bug 2767 was
-        // caused because, the path in the NLA was not considered for this
-        // common prefix stripping (prefix is the path to the root of the NLA).
-        // This leads to overly pessimistic paths like
-        // Top.dut.submodule_1.bar.Memory[0], which should rather be
-        // DUT.submodule_1.bar.Memory[0]. To properly fix this, the path in the
-        // NLA should be inlined in the prefix such that it becomes part of the
-        // prefix stripping operation.
+        // memory) by calling stripCommonPrefix(prefix, path).  If the tapped
+        // thing includes an NLA, then the NLA path is appended to the rest of
+        // the path before the common prefix stripping is done.
 
         // Determine the shortest hierarchical prefix from this black box
         // instance to the tapped object.
-        Optional<InstancePath> shortestPrefix;
+        Optional<SmallVector<InstanceOp>> shortestPrefix;
         for (auto prefix : port.prefices) {
-          auto relative = stripCommonPrefix(prefix, path);
+
+          // Append the NLA path to the instance graph-determined path.
+          SmallVector<InstanceOp> prefixWithNLA(prefix.begin(), prefix.end());
+          if (port.nla) {
+            for (auto segment : port.nla.namepath().getValue().drop_back()) {
+              auto refPart = getRefPart(segment);
+              if (!refPart)
+                continue;
+              auto &innerSymTbl = innerSymTblCol.getInnerSymbolTable(
+                  symtbl.lookup(getModPart(segment)));
+              prefixWithNLA.push_back(
+                  cast<InstanceOp>(innerSymTbl.lookup(refPart)));
+            }
+          }
+
+          auto relative = stripCommonPrefix(prefixWithNLA, path);
           if (!shortestPrefix.hasValue() ||
               relative.size() < shortestPrefix->size())
-            shortestPrefix = relative;
+            shortestPrefix.emplace(relative.begin(), relative.end());
         }
         if (!shortestPrefix.hasValue()) {
           LLVM_DEBUG(llvm::dbgs() << "  - Has no prefix, skipping\n");
@@ -806,9 +829,14 @@ void GrandCentralTapsPass::runOnOperation() {
                    << "  - Shortest prefix " << *shortestPrefix << "\n");
 
         // Determine the module at which the hierarchical name should start.
-        Operation *opInRootModule =
-            shortestPrefix->empty() ? path.front() : shortestPrefix->front();
-        auto rootModule = opInRootModule->getParentOfType<FModuleLike>();
+        FModuleLike rootModule;
+        if (shortestPrefix->empty()) {
+          if (port.target.hasPort())
+            rootModule = cast<FModuleLike>(port.target.getOp());
+          else
+            rootModule = port.target.getOp()->getParentOfType<FModuleLike>();
+        } else
+          rootModule = shortestPrefix->front()->getParentOfType<FModuleLike>();
 
         SmallVector<Attribute> symbols;
         SmallString<128> hname;
@@ -823,38 +851,18 @@ void GrandCentralTapsPass::runOnOperation() {
         // Concatenate the prefix into a proper full hierarchical name.
         addSymbol(
             FlatSymbolRefAttr::get(SymbolTable::getSymbolName(rootModule)));
-        if (port.nla && shortestPrefix->empty() &&
-            port.nla.root() != rootModule.moduleNameAttr()) {
-          // This handles the case when nla is not considered for common prefix
-          // stripping.
-          auto rootMod = port.nla.root();
-          for (auto p : path) {
-            if (rootMod == p->getParentOfType<FModuleOp>().getNameAttr())
-              break;
-            addSymbol(getInnerRefTo(p));
-          }
-        }
         for (auto inst : shortestPrefix.getValue())
           addSymbol(getInnerRefTo(inst));
-        if (port.nla) {
-          auto namepath = port.nla.namepath();
-          Attribute leaf = namepath.getValue().back();
-          if (!leaf.isa<InnerRefAttr>()) {
-            if (port.target.hasPort())
-              leaf = getInnerRefTo(port.target.getOp(), port.target.getPort());
-            else
-              leaf = getInnerRefTo(port.target.getOp());
-          }
-          for (auto sym : namepath.getValue().drop_back())
-            addSymbol(sym);
-          addSymbol(leaf);
-        } else if (port.target.getOp()) {
+
+        if (port.target.getOp()) {
+          Attribute leaf;
           if (port.target.hasPort())
-            addSymbol(
-                getInnerRefTo(port.target.getOp(), port.target.getPort()));
+            leaf = getInnerRefTo(port.target.getOp(), port.target.getPort());
           else
-            addSymbol(getInnerRefTo(port.target.getOp()));
+            leaf = getInnerRefTo(port.target.getOp());
+          addSymbol(leaf);
         }
+
         if (!port.suffix.empty()) {
           hname += '.';
           hname += port.suffix;
@@ -1146,17 +1154,6 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
   llvm_unreachable("portAnnos is never populated with unsupported annos");
 }
 
-StringAttr GrandCentralTapsPass::getOrAddInnerSym(Operation *op) {
-  auto attr = op->getAttrOfType<StringAttr>("inner_sym");
-  if (attr)
-    return attr;
-  auto module = op->getParentOfType<FModuleOp>();
-  auto name = getModuleNamespace(module).newName("gct_sym");
-  attr = StringAttr::get(op->getContext(), name);
-  op->setAttr("inner_sym", attr);
-  return attr;
-}
-
 StringAttr GrandCentralTapsPass::getOrAddInnerSym(FModuleLike module,
                                                   size_t portIdx) {
   auto attr = module.getPortSymbolAttr(portIdx);
@@ -1169,9 +1166,10 @@ StringAttr GrandCentralTapsPass::getOrAddInnerSym(FModuleLike module,
 }
 
 InnerRefAttr GrandCentralTapsPass::getInnerRefTo(Operation *op) {
-  return InnerRefAttr::get(
-      SymbolTable::getSymbolName(op->getParentOfType<FModuleOp>()),
-      getOrAddInnerSym(op));
+  return ::getInnerRefTo(op, "gct_sym",
+                         [&](FModuleOp mod) -> ModuleNamespace & {
+                           return getModuleNamespace(mod);
+                         });
 }
 
 InnerRefAttr GrandCentralTapsPass::getInnerRefTo(FModuleLike module,

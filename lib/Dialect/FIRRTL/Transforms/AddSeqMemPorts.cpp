@@ -44,27 +44,12 @@ struct AddSeqMemPortsPass : public AddSeqMemPortsBase<AddSeqMemPortsPass> {
     return moduleNamespaces.try_emplace(module, module).first->second;
   }
 
-  /// Returns an operation's `inner_sym`, adding one if necessary.
-  StringAttr getOrAddInnerSym(Operation *op) {
-    auto attr = op->getAttrOfType<StringAttr>("inner_sym");
-    if (attr)
-      return attr;
-    auto module = op->getParentOfType<FModuleOp>();
-    StringRef name = "sym";
-    if (auto nameAttr = op->getAttrOfType<StringAttr>("name"))
-      name = nameAttr.getValue();
-    name = getModuleNamespace(module).newName(name);
-    attr = StringAttr::get(op->getContext(), name);
-    op->setAttr("inner_sym", attr);
-    return attr;
-  }
-
   /// Obtain an inner reference to an operation, possibly adding an `inner_sym`
   /// to that operation.
   hw::InnerRefAttr getInnerRefTo(Operation *op) {
-    return hw::InnerRefAttr::get(
-        SymbolTable::getSymbolName(op->getParentOfType<FModuleOp>()),
-        getOrAddInnerSym(op));
+    return ::getInnerRefTo(op, "", [&](FModuleOp mod) -> ModuleNamespace & {
+      return getModuleNamespace(mod);
+    });
   }
 
   /// This represents the collected information of the memories in a module.

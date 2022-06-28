@@ -21,15 +21,15 @@ set(ESI_LinkLibs
   CIRCTHW
   MLIRIR
   MLIRTransforms
-  MLIRControlFlow
-  MLIRFunc
-  MLIRArithmetic
+  MLIRControlFlowDialect
+  MLIRFuncDialect
+  MLIRArithmeticDialect
   MLIRTranslateLib
 )
 
 set(ESI_Deps
   ${ESI_LinkLibs}
-  MLIRESIEnumsIncGen
+  MLIRESITransformsIncGen
 )
 
 if(CapnProto_FOUND)
@@ -48,7 +48,7 @@ add_circt_dialect_library(CIRCTESI
   ${srcs}
 
   DEPENDS
-  MLIRESIEnumsIncGen
+  MLIRESITransformsIncGen
   ${ESI_Deps}
 
   LINK_COMPONENTS

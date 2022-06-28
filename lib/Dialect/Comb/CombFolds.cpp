@@ -11,6 +11,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
+#include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallBitVector.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/KnownBits.h"
@@ -794,6 +795,27 @@ static Value getCommonOperand(Op op) {
   return bits.all() ? source : Value();
 }
 
+/// Canonicalize an idempotent operation `op` so that only one input of any kind
+/// occurs.
+///
+/// Example: `and(x, y, x, z)` -> `and(x, y, z)`
+template <typename Op>
+static bool canonicalizeIdempotentInputs(Op op, PatternRewriter &rewriter) {
+  auto inputs = op.inputs();
+  llvm::SmallSetVector<Value, 8> uniqueInputs;
+
+  for (const auto input : inputs)
+    uniqueInputs.insert(input);
+
+  if (uniqueInputs.size() < inputs.size()) {
+    replaceOpWithNewOpAndCopyName<Op>(rewriter, op, op.getType(),
+                                      uniqueInputs.getArrayRef());
+    return true;
+  }
+
+  return false;
+}
+
 LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
   auto inputs = op.inputs();
   auto size = inputs.size();
@@ -801,23 +823,8 @@ LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
 
   // and(..., x, ..., x) -> and(..., x, ...) -- idempotent
   // Trivial and(x), and(x, x) cases are handled by [AndOp::fold] above.
-  if (inputs.size() > 2) {
-    llvm::DenseSet<mlir::Value> dedupedArguments;
-    SmallVector<Value, 4> newOperands;
-
-    for (const auto input : inputs) {
-      auto insertionResult = dedupedArguments.insert(input);
-      if (insertionResult.second) {
-        newOperands.push_back(input);
-      }
-    }
-
-    if (newOperands.size() < inputs.size()) {
-      replaceOpWithNewOpAndCopyName<AndOp>(rewriter, op, op.getType(),
-                                           newOperands);
-      return success();
-    }
-  }
+  if (size > 2 && canonicalizeIdempotentInputs(op, rewriter))
+    return success();
 
   // Patterns for and with a constant on RHS.
   APInt value;
@@ -1083,12 +1090,10 @@ LogicalResult OrOp::canonicalize(OrOp op, PatternRewriter &rewriter) {
   auto size = inputs.size();
   assert(size > 1 && "expected 2 or more operands");
 
-  // or(..., x, x) -> or(..., x) -- idempotent
-  if (inputs[size - 1] == inputs[size - 2]) {
-    replaceOpWithNewOpAndCopyName<OrOp>(rewriter, op, op.getType(),
-                                        inputs.drop_back());
+  // or(..., x, ..., x, ...) -> or(..., x) -- idempotent
+  // Trivial or(x), or(x, x) cases are handled by [OrOp::fold].
+  if (size > 2 && canonicalizeIdempotentInputs(op, rewriter))
     return success();
-  }
 
   // Patterns for and with a constant on RHS.
   APInt value;

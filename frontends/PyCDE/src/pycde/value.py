@@ -11,6 +11,7 @@ import circt.support as support
 
 import mlir.ir as ir
 
+from contextvars import ContextVar
 from functools import singledispatchmethod
 from typing import Union
 import re
@@ -43,13 +44,19 @@ class Value:
 
   _reg_name = re.compile(r"^(.*)__reg(\d+)$")
 
-  def reg(self, clk, rst=None, name=None, cycles=1, sv_attributes=None):
+  def reg(self, clk=None, rst=None, name=None, cycles=1, sv_attributes=None):
     """Register this value, returning the delayed value.
     `clk`, `rst`: the clock and reset signals.
     `name`: name this register explicitly.
     `cycles`: number of registers to add."""
+
+    if clk is None:
+      clk = ClockValue._get_current_clock_block()
+      if clk is None:
+        raise ValueError("If 'clk' not specified, must be in clock block")
     if sv_attributes is not None:
       sv_attributes = [sv.SVAttributeAttr.get(attr) for attr in sv_attributes]
+
     from .dialects import seq
     if name is None:
       basename = None
@@ -114,6 +121,27 @@ class RegularValue(Value):
   pass
 
 
+_current_clock_context = ContextVar("current_clock_context")
+
+
+class ClockValue(Value):
+  """A clock signal."""
+
+  __slots__ = ["_old_token"]
+
+  def __enter__(self):
+    self._old_token = _current_clock_context.set(self)
+
+  def __exit__(self, exc_type, exc_value, traceback):
+    if exc_value is not None:
+      return
+    _current_clock_context.reset(self._old_token)
+
+  @staticmethod
+  def _get_current_clock_block():
+    return _current_clock_context.get(None)
+
+
 class InOutValue(Value):
   # Maintain a caching of the read value.
   read_value = None
@@ -138,17 +166,17 @@ def _validate_idx(size: int, idx: Union[int, BitVectorValue]):
                       f" Value, not {type(idx)}.")
 
 
-def get_slice_idxs(inner_dims, idxOrSlice: Union[int, slice]):
+def get_slice_bounds(size, idxOrSlice: Union[int, slice]):
   if isinstance(idxOrSlice, int):
     s = slice(idxOrSlice, idxOrSlice + 1)
   elif isinstance(idxOrSlice, slice):
-    if idxOrSlice.stop > inner_dims:
+    if idxOrSlice.stop and idxOrSlice.stop > size:
       raise ValueError("Slice out-of-bounds")
     s = idxOrSlice
   else:
     raise TypeError("Expected int or slice")
 
-  idxs = s.indices(inner_dims)
+  idxs = s.indices(size)
   if idxs[2] != 1:
     raise ValueError("Integer / bitvector slices do not support steps")
   return idxs[0], idxs[1]
@@ -158,7 +186,7 @@ class BitVectorValue(Value):
 
   @singledispatchmethod
   def __getitem__(self, idxOrSlice: Union[int, slice]) -> BitVectorValue:
-    lo, hi = get_slice_idxs(len(self), idxOrSlice)
+    lo, hi = get_slice_bounds(len(self), idxOrSlice)
     from .pycde_types import types
     from .dialects import comb
     ret_type = types.int(hi - lo)
@@ -334,7 +362,7 @@ class ChannelValue(Value):
     return Value(unwrap_op.rawOutput), Value(unwrap_op.valid)
 
 
-def wrap_opviews_with_values(dialect, module_name):
+def wrap_opviews_with_values(dialect, module_name, excluded=[]):
   """Wraps all of a dialect's OpView classes to have their create method return
      a PyCDE Value instead of an OpView. The wrapped classes are inserted into
      the provided module."""
@@ -344,7 +372,8 @@ def wrap_opviews_with_values(dialect, module_name):
   for attr in dir(dialect):
     cls = getattr(dialect, attr)
 
-    if isinstance(cls, type) and issubclass(cls, ir.OpView):
+    if attr not in excluded and isinstance(cls, type) and issubclass(
+        cls, ir.OpView):
 
       def specialize_create(cls):
 

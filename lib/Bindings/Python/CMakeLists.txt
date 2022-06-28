@@ -35,6 +35,7 @@ declare_mlir_python_extension(CIRCTBindingsPythonExtension.Core
     CIRCTCAPISeq
     CIRCTCAPISV
     CIRCTCAPIExportVerilog
+    CIRCTCAPIFSM
   PRIVATE_LINK_LIBS
     ${_depends}
 )
@@ -113,6 +114,15 @@ declare_mlir_dialect_python_bindings(
     circt/dialects/sv.py
     circt/dialects/_sv_ops_ext.py
   DIALECT_NAME sv)
+
+declare_mlir_dialect_python_bindings(
+  ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
+  ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
+  TD_FILE circt/dialects/FSMOps.td
+  SOURCES
+    circt/dialects/fsm.py
+    circt/dialects/_fsm_ops_ext.py
+  DIALECT_NAME fsm)
 
 ################################################################################
 # Build composite binaries

@@ -14,7 +14,7 @@ add_circt_conversion_library(CIRCTLLHDToLLVM
   MLIRControlFlowToLLVM
   MLIRFuncToLLVM
   MLIRLLVMCommonConversion
-  MLIRVector
+  MLIRVectorDialect
   MLIRTransforms
   MLIRReconcileUnrealizedCasts
 )

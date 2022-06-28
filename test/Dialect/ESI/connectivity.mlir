@@ -26,11 +26,11 @@ hw.module @StructRcvr(%a: !esi.channel<!FooStruct>) {
 
 hw.module @test(%clk: i1, %rstn: i1) {
   %esiChan = hw.instance "sender" @Sender() -> (x: !esi.channel<i1>)
-  %bufferedChan = esi.buffer %clk, %rstn, %esiChan { } : i1
+  %bufferedChan = esi.buffer %clk, %rstn, %esiChan : i1
   hw.instance "recv" @Reciever (a: %bufferedChan: !esi.channel<i1>) -> ()
 
   // CHECK:  %sender.x = hw.instance "sender" @Sender() -> (x: !esi.channel<i1>)
-  // CHECK-NEXT:  %0 = esi.buffer %clk, %rstn, %sender.x {} : i1
+  // CHECK-NEXT:  %0 = esi.buffer %clk, %rstn, %sender.x : i1
   // CHECK-NEXT:  hw.instance "recv" @Reciever(a: %0: !esi.channel<i1>) -> ()
 
   %esiChan2 = hw.instance "sender" @Sender() -> (x: !esi.channel<i1>)

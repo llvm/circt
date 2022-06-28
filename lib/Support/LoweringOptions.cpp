@@ -37,6 +37,7 @@ parseLocationInfoStyle(StringRef option) {
              option)
       .Case("plain", LoweringOptions::Plain)
       .Case("wrapInAtSquareBracket", LoweringOptions::WrapInAtSquareBracket)
+      .Case("none", LoweringOptions::None)
       .Default(llvm::None);
 }
 
@@ -81,7 +82,7 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
       if (auto style = parseLocationInfoStyle(option)) {
         locationInfoStyle = *style;
       } else {
-        errorHandler("expected 'plain' or 'wrapInAtSquareBracket'");
+        errorHandler("expected 'plain', 'wrapInAtSquareBracket', or 'none'");
       }
     } else if (option == "disallowPortDeclSharing") {
       disallowPortDeclSharing = true;
@@ -113,6 +114,8 @@ std::string LoweringOptions::toString() const {
     options += "emitReplicatedOpsToHeader,";
   if (locationInfoStyle == LocationInfoStyle::WrapInAtSquareBracket)
     options += "locationInfoStyle=wrapInAtSquareBracket,";
+  if (locationInfoStyle == LocationInfoStyle::None)
+    options += "locationInfoStyle=none,";
   if (disallowPortDeclSharing)
     options += "disallowPortDeclSharing,";
   if (printDebugInfo)
@@ -181,7 +184,7 @@ struct LoweringCLOptions {
           "maximumNumberOfTermsPerExpression=<n>, "
           "maximumNumberOfTermsInConcat=<n>, explicitBitcast, "
           "emitReplicatedOpsToHeader, "
-          "locationInfoStyle={plain,wrapInAtSquareBracket}, "
+          "locationInfoStyle={plain,wrapInAtSquareBracket,none}, "
           "disallowPortDeclSharing, printDebugInfo"),
       llvm::cl::value_desc("option")};
 };
@@ -203,4 +206,20 @@ void circt::applyLoweringCLOptions(ModuleOp module) {
   if (clOptions->loweringOptions.getNumOccurrences()) {
     clOptions->loweringOptions.setAsAttribute(module);
   }
+}
+
+LoweringOptions
+circt::getLoweringCLIOption(mlir::ModuleOp module,
+                            LoweringOptions::ErrorHandlerT errorHandler) {
+  // If the command line options were not registered in the first place, use the
+  // lowering option associated with module op.
+  if (!clOptions.isConstructed() ||
+      !clOptions->loweringOptions.getNumOccurrences()) {
+    if (auto styleAttr = LoweringOptions::getAttributeFrom(module))
+      return LoweringOptions(styleAttr, errorHandler);
+    // If the module doesn't have a lowering option, then use the default value.
+    return LoweringOptions();
+  }
+
+  return clOptions->loweringOptions.getValue();
 }

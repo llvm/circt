@@ -22,7 +22,7 @@ with Context() as ctx, Location.unknown():
       constI2 = hw.ConstantOp(IntegerAttr.get(i2, 1))
       constI1 = hw.ConstantOp.create(i1, 1)
 
-      # CHECK: All arguments must be the same type to create an array
+      # CHECK: Argument 1 has a different element type (i32) than the element type of the array (i1)
       try:
         hw.ArrayCreateOp.create([constI1, constI32])
       except TypeError as e:

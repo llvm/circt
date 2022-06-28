@@ -41,6 +41,21 @@ def AffineToStaticLogic : Pass<"convert-affine-to-staticlogic", "mlir::func::Fun
 // ExportVerilog and ExportSplitVerilog
 //===----------------------------------------------------------------------===//
 
+def TestPrepareForEmission : Pass<"test-prepare-for-emission",
+                                  "hw::HWModuleOp"> {
+  let summary = "Prepare IR for ExportVerilog";
+  let description = [{
+    This pass runs only PrepareForEmission logic for testing purpose.
+    It is not necessary for users to run this pass explicitly since
+    ExportVerilog internally runs PrepareForEmission.
+  }];
+
+  let constructor = "createTestPrepareForEmissionPass()";
+  let dependentDialects = [
+    "circt::sv::SVDialect", "circt::comb::CombDialect", "circt::hw::HWDialect"
+  ];
+}
+
 def ExportVerilog : Pass<"export-verilog", "mlir::ModuleOp"> {
   let summary = "Emit the IR to a (System)Verilog file";
   let description = [{

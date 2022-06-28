@@ -176,3 +176,8 @@ def create_type_string(ty):
   if isinstance(ty, hw.ArrayType):
     return f"{ty.size}x" + create_type_string(ty.element_type)
   return str(ty)
+
+
+def attributes_of_type(o, T):
+  """Filter the attributes of an object 'o' to only those of type 'T'."""
+  return {a: getattr(o, a) for a in dir(o) if isinstance(getattr(o, a), T)}

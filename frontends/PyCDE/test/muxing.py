@@ -1,34 +1,12 @@
-# RUN: %PYTHON% %s %t 2>&1 | FileCheck %s
+# RUN: %PYTHON% py-split-input-file.py %s | FileCheck %s
 
-from pycde import module, System, generator, dim, Input, Output, Value, types
+from pycde import System, generator, dim, Input, Output, Value, types
+from pycde.testing import unittestmodule
 import sys
 
 
 def array_from_tuple(*input):
   return Value(input)
-
-
-@module
-class ComplexMux:
-
-  Clk = Input(dim(1))
-  In = Input(dim(3, 4, 5))
-  Sel = Input(dim(1))
-  Out = Output(dim(3, 4))
-  OutArr = Output(dim(3, 4, 2))
-  OutSlice = Output(dim(3, 4, 3))
-  OutInt = Output(types.i1)
-
-  @generator
-  def create(ports):
-    clk = ports.Clk
-    select_from = Value([ports.In[3].reg(clk).reg(clk, cycles=2), ports.In[1]])
-    ports.Out = select_from[ports.Sel]
-
-    ports.OutArr = array_from_tuple(ports.In[0], ports.In[1])
-    ports.OutSlice = ports.In[0:3]
-
-    ports.OutInt = ports.In[0][0][ports.Sel]
 
 
 # CHECK-LABEL: msft.module @ComplexMux {} (%Clk: i1, %In: !hw.array<5xarray<4xi3>>, %Sel: i1) -> (Out: !hw.array<4xi3>, OutArr: !hw.array<2xarray<4xi3>>, OutInt: i1, OutSlice: !hw.array<3xarray<4xi3>>)
@@ -55,7 +33,45 @@ class ComplexMux:
 # CHECK:         msft.output [[R3]], [[R6]], [[R12]], [[R7]] : !hw.array<4xi3>, !hw.array<2xarray<4xi3>>, i1, !hw.array<3xarray<4xi3>>
 
 
-@module
+@unittestmodule()
+class ComplexMux:
+
+  Clk = Input(dim(1))
+  In = Input(dim(3, 4, 5))
+  Sel = Input(dim(1))
+  Out = Output(dim(3, 4))
+  OutArr = Output(dim(3, 4, 2))
+  OutSlice = Output(dim(3, 4, 3))
+  OutInt = Output(types.i1)
+
+  @generator
+  def create(ports):
+    clk = ports.Clk
+    select_from = Value([ports.In[3].reg(clk).reg(clk, cycles=2), ports.In[1]])
+    ports.Out = select_from[ports.Sel]
+
+    ports.OutArr = array_from_tuple(ports.In[0], ports.In[1])
+    ports.OutSlice = ports.In[0:3]
+
+    ports.OutInt = ports.In[0][0][ports.Sel]
+
+
+# -----
+
+# CHECK-LABEL:  msft.module @Slicing {} (%In: !hw.array<5xarray<4xi8>>, %Sel2: i2, %Sel8: i8) -> (OutArrSlice2: !hw.array<2xarray<4xi8>>, OutArrSlice8: !hw.array<2xarray<4xi8>>, OutIntSlice: i2)
+# CHECK:          [[R0:%.+]] = hw.array_get %In[%c0_i3] {sv.namehint = "In__0"} : !hw.array<5xarray<4xi8>>
+# CHECK:          [[R1:%.+]] = hw.array_get %0[%c0_i2] {sv.namehint = "In__0__0"} : !hw.array<4xi8>
+# CHECK:          [[R2:%.+]] = comb.concat %c0_i6, %Sel2 : i6, i2
+# CHECK:          [[R3:%.+]] = comb.shru [[R1]], [[R2]] : i8
+# CHECK:          [[R4:%.+]] = comb.extract [[R3]] from 0 : (i8) -> i2
+# CHECK:          [[R5:%.+]] = comb.concat %false, %Sel2 : i1, i2
+# CHECK:          [[R6:%.+]] = hw.array_slice %In[[[R5]]] : (!hw.array<5xarray<4xi8>>) -> !hw.array<2xarray<4xi8>>
+# CHECK:          [[R7:%.+]] = comb.extract %Sel8 from 0 : (i8) -> i3
+# CHECK:          [[R8:%.+]] = hw.array_slice %In[[[R7]]] : (!hw.array<5xarray<4xi8>>) -> !hw.array<2xarray<4xi8>>
+# CHECK:          msft.output [[R6]], [[R8]], [[R4]] : !hw.array<2xarray<4xi8>>, !hw.array<2xarray<4xi8>>, i2
+
+
+@unittestmodule()
 class Slicing:
   In = Input(dim(8, 4, 5))
   Sel8 = Input(types.i8)
@@ -71,22 +87,3 @@ class Slicing:
     ports.OutIntSlice = i.slice(ports.Sel2, 2)
     ports.OutArrSlice2 = ports.In.slice(ports.Sel2, 2)
     ports.OutArrSlice8 = ports.In.slice(ports.Sel8, 2)
-
-
-# CHECK-LABEL:  msft.module @Slicing {} (%In: !hw.array<5xarray<4xi8>>, %Sel2: i2, %Sel8: i8) -> (OutArrSlice2: !hw.array<2xarray<4xi8>>, OutArrSlice8: !hw.array<2xarray<4xi8>>, OutIntSlice: i2)
-# CHECK:          [[R0:%.+]] = hw.array_get %In[%c0_i3] {sv.namehint = "In__0"} : !hw.array<5xarray<4xi8>>
-# CHECK:          [[R1:%.+]] = hw.array_get %0[%c0_i2] {sv.namehint = "In__0__0"} : !hw.array<4xi8>
-# CHECK:          [[R2:%.+]] = comb.concat %c0_i6, %Sel2 : i6, i2
-# CHECK:          [[R3:%.+]] = comb.shru [[R1]], [[R2]] : i8
-# CHECK:          [[R4:%.+]] = comb.extract [[R3]] from 0 : (i8) -> i2
-# CHECK:          [[R5:%.+]] = comb.concat %false, %Sel2 : i1, i2
-# CHECK:          [[R6:%.+]] = hw.array_slice %In[[[R5]]] : (!hw.array<5xarray<4xi8>>) -> !hw.array<2xarray<4xi8>>
-# CHECK:          [[R7:%.+]] = comb.extract %Sel8 from 0 : (i8) -> i3
-# CHECK:          [[R8:%.+]] = hw.array_slice %In[[[R7]]] : (!hw.array<5xarray<4xi8>>) -> !hw.array<2xarray<4xi8>>
-# CHECK:          msft.output [[R6]], [[R8]], [[R4]] : !hw.array<2xarray<4xi8>>, !hw.array<2xarray<4xi8>>, i2
-
-s = System([ComplexMux, Slicing], name="Muxing", output_directory=sys.argv[1])
-s.generate()
-s.print()
-
-s.emit_outputs()
