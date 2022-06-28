@@ -70,7 +70,8 @@ public:
 
 protected:
   // Creates a wired constant value in the module for the given encoded state
-  // and records the state value in the mappings.
+  // and records the state value in the mappings. An inner symbol is
+  // attached to the wire to avoid it being optimized away.
   void setEncoding(StateOp state, APInt v) {
     assert(stateToValue.find(state) == stateToValue.end() &&
            "state already encoded");
@@ -225,9 +226,7 @@ LogicalResult MachineOpConverter::dispatch() {
   auto reset =
       hwModuleOp.front().getArgument(hwModuleOp.front().getNumArguments() - 1);
 
-  // Build state encoding. We assign these to named SV wires to allow for
-  // propagating state names into the generated SV. An inner symbol is
-  // attached to the wire to avoid it being optimized away.
+  // Build state register.
   encoding = std::make_unique<BinaryStateEncoding>(b, machineOp, hwModuleOp);
   auto stateType = encoding->getStateType();
 
