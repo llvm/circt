@@ -11,6 +11,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
+#include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallBitVector.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/KnownBits.h"
@@ -765,17 +766,14 @@ OpFoldResult AndOp::fold(ArrayRef<Attribute> constants) {
 template <typename Op>
 static bool canonicalizeIdempotentInputs(Op op, PatternRewriter &rewriter) {
   auto inputs = op.inputs();
-  llvm::DenseSet<Value> dedupedArguments;
-  SmallVector<Value, 4> uniqueInputs;
+  llvm::SmallSetVector<Value, 8> uniqueInputs;
 
-  for (const auto input : inputs) {
-    auto insertionResult = dedupedArguments.insert(input);
-    if (insertionResult.second)
-      uniqueInputs.push_back(input);
-  }
+  for (const auto input : inputs)
+    uniqueInputs.insert(input);
 
   if (uniqueInputs.size() < inputs.size()) {
-    replaceOpWithNewOpAndCopyName<Op>(rewriter, op, op.getType(), uniqueInputs);
+    replaceOpWithNewOpAndCopyName<Op>(rewriter, op, op.getType(),
+                                      uniqueInputs.getArrayRef());
     return true;
   }
 
