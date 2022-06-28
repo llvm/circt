@@ -579,7 +579,8 @@ FailureOr<bool> GrandCentralSignalMappingsPass::emitUpdatedMappings(
     // Replace uses of each driven port with a wire that's connected to a wire
     // that is connected to the port. This is done to cause an 'assign' to be
     // created, disconnecting the forced port's net from its uses.
-    auto breakNet = [modName = mod.moduleName()](OpBuilder &builder, Value port,
+    auto breakNet = [modName = mod.moduleName()](
+                        OpBuilder &builder, Value port,
                         ModuleNamespace &moduleNamespace, StringRef portName) {
       // Create chain like:
       // port_result <= foo_dataIn_x_buffer
