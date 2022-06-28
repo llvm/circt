@@ -29,6 +29,7 @@ class UnParameterized:
     Nothing().name = "nothing_inst"
     r = mod.x.reg(mod.clk, appid=AppID("reg", 0))
     mod.y = r
+    # CHECK: r appid: reg[0]
     print(f"r appid: {r.appid}")
 
 
@@ -44,6 +45,14 @@ class Test:
     UnParameterized(clk=ports.clk, x=c1).name = "unparam"
 
 
+t = pycde.System([Test], name="Test", output_directory=sys.argv[1])
+t.generate(["construct"])
+t.print()
+# CHECK: msft.module @UnParameterized
+# CHECK-NOT: msft.module @UnParameterized
+Test.print()
+UnParameterized.print()
+
 # Set up the primitive locations. Errors out if location is placed but doesn't
 # exist.
 primdb = PrimitiveDB()
@@ -57,15 +66,6 @@ primdb.add(PhysLocation(PrimitiveType.DSP, 39, 25))
 
 print(PhysLocation(PrimitiveType.DSP, 39, 25))
 # CHECK: PhysLocation<PrimitiveType.DSP, x:39, y:25, num:0>
-
-# CHECK: msft.module @UnParameterized
-# CHECK-NOT: msft.module @UnParameterized
-t = pycde.System([Test], name="Test", output_directory=sys.argv[1])
-t.generate(["construct"])
-t.print()
-
-Test.print()
-UnParameterized.print()
 
 # CHECK-LABEL: === Hierarchy
 print("=== Hierarchy")
