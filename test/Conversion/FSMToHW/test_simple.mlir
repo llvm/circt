@@ -1,8 +1,7 @@
 
 // RUN: circt-opt -convert-fsm-to-hw %s | FileCheck %s
 
-// CHECK-LABEL: hw.module @top(
-// CHECK:         %a0: i1, %a1: i1, %clk: i1, %rst: i1) -> (r0: i8) {
+// CHECK:     hw.module @top(%a0: i1, %a1: i1, %clk: i1, %rst: i1) -> (r0: i8) {
 // CHECK-DAG:  %state_reg = seq.compreg %[[NEXT_STATE:.*]], %clk, %rst, %[[A_ENCODED:.*]]  : i2
 // CHECK-DAG:  %A = sv.wire sym @A  : !hw.inout<i2>
 // CHECK-DAG:  %[[A_ENCODING:.*]] = hw.constant 0 : i2

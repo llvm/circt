@@ -16,6 +16,8 @@
 #include "circt/Support/BackedgeBuilder.h"
 #include "llvm/ADT/TypeSwitch.h"
 
+#include <memory>
+
 using namespace mlir;
 using namespace circt;
 using namespace fsm;
@@ -43,6 +45,78 @@ static void getMachinePortInfo(SmallVectorImpl<hw::PortInfo> &ports,
   ports.push_back(reset);
 }
 
+namespace {
+
+class StateEncoding {
+  // An interface for handling state encoding.
+public:
+  StateEncoding(OpBuilder &b, MachineOp machine, hw::HWModuleOp hwModule)
+      : b(b), machine(machine), hwModule(hwModule) {}
+  virtual ~StateEncoding() {}
+
+  Value encode(StateOp state) {
+    auto it = stateToValue.find(state);
+    assert(it != stateToValue.end() && "state not found");
+    return it->second;
+  }
+  StateOp decode(Value value) {
+    auto it = valueToState.find(value);
+    assert(it != valueToState.end() && "encoded state not found");
+    return it->second;
+  }
+
+  // Returns the type which encodes the state values.
+  virtual IntegerType getStateType() = 0;
+
+protected:
+  // Creates a wired constant value in the module for the given encoded state
+  // and records the state value in the mappings.
+  void setEncoding(StateOp state, APInt v) {
+    assert(stateToValue.find(state) == stateToValue.end() &&
+           "state already encoded");
+
+    auto loc = machine.getLoc();
+    auto stateType = getStateType();
+    auto stateEncodingWire =
+        b.create<sv::WireOp>(loc, stateType, state.getNameAttr(),
+                             /*inner_sym=*/state.getNameAttr());
+    b.create<sv::AssignOp>(loc, stateEncodingWire,
+                           b.create<hw::ConstantOp>(loc, v));
+    Value encodedValue = b.create<sv::ReadInOutOp>(loc, stateEncodingWire);
+    stateToValue[state] = encodedValue;
+    valueToState[encodedValue] = state;
+  }
+
+  // A mapping between a StateOp and its corresponding encoded value.
+  SmallDenseMap<StateOp, Value> stateToValue;
+  // A mapping between an encoded value and its corresponding StateOp.
+  SmallDenseMap<Value, StateOp> valueToState;
+
+  OpBuilder &b;
+  MachineOp machine;
+  hw::HWModuleOp hwModule;
+};
+
+class BinaryStateEncoding : public StateEncoding {
+public:
+  BinaryStateEncoding(OpBuilder &b, MachineOp machine, hw::HWModuleOp hwModule)
+      : StateEncoding(b, machine, hwModule) {
+
+    // Dead simple integer encoding.
+    auto stateType = getStateType();
+    for (auto stateIt : llvm::enumerate(machine.getBody().getOps<StateOp>()))
+      setEncoding(stateIt.value(),
+                  APInt(stateType.getWidth(), stateIt.index()));
+  }
+
+  IntegerType getStateType() override {
+    return b.getIntegerType(llvm::Log2_64_Ceil(machine.getNumStates()));
+  }
+
+private:
+  IntegerType stateType;
+};
+
 class MachineOpConverter {
 public:
   MachineOpConverter(OpBuilder &builder, MachineOp machineOp)
@@ -58,6 +132,8 @@ private:
     llvm::SmallVector<Value> outputs;
   };
 
+  using StateConversionResults = DenseMap<StateOp, StateConversionResult>;
+
   // Converts a StateOp within this machine, and returns the value corresponding
   // to the next-state output of the op.
   FailureOr<StateConversionResult> convertState(StateOp state);
@@ -68,6 +144,12 @@ private:
   // state transition region.
   FailureOr<Value> convertTransitions(StateOp currentState,
                                       ArrayRef<TransitionOp> transitions);
+
+  // Returns the value that must be assigned to the hw output port of this
+  // machine for a given output port index.
+  Value getOutputAssignment(Location loc,
+                            StateConversionResults &stateConvResults,
+                            size_t portIndex);
 
   // Moves operations from 'block' into module scope, failing if any op were
   // deemed illegal. Returns the final op in the block if the op was a
@@ -93,14 +175,21 @@ private:
     }
     return nullptr;
   }
-  // A mapping between a StateOp and its corresponding encoded value.
-  SmallDenseMap<StateOp, Value> stateEncodeMap;
+
+  // A handle to the state encoder for this machine.
+  std::unique_ptr<StateEncoding> encoding;
+
+  // A deterministic ordering of the states in this machine.
+  llvm::SmallVector<StateOp> orderedStates;
 
   // A handle to the MachineOp being converted.
   MachineOp machineOp;
 
   // A handle to the HW ModuleOp being created.
   hw::HWModuleOp hwModuleOp;
+
+  // A handle to the state register of the machine.
+  seq::CompRegOp stateReg;
 
   OpBuilder &b;
 };
@@ -115,8 +204,6 @@ LogicalResult MachineOpConverter::dispatch() {
   auto loc = machineOp.getLoc();
   if (machineOp.getNumStates() < 2)
     return machineOp.emitOpError() << "expected at least 2 states.";
-  auto stateType =
-      b.getIntegerType(llvm::Log2_64_Ceil(machineOp.getNumStates()));
 
   // Get the port info of the machine and create a new HW module for it.
   SmallVector<hw::PortInfo, 16> ports;
@@ -138,29 +225,18 @@ LogicalResult MachineOpConverter::dispatch() {
   auto reset =
       hwModuleOp.front().getArgument(hwModuleOp.front().getNumArguments() - 1);
 
-  // Create the state register of the machine.
-  BackedgeBuilder bb(b, loc);
-  auto nextStateBackedge = bb.get(stateType);
-  auto defaultStateBackedge = bb.get(stateType);
-  auto stateReg = b.create<seq::CompRegOp>(
-      loc, stateType, nextStateBackedge, clock, "state_reg", reset,
-      defaultStateBackedge, nullptr, nullptr);
-
   // Build state encoding. We assign these to named SV wires to allow for
   // propagating state names into the generated SV. An inner symbol is
   // attached to the wire to avoid it being optimized away.
-  for (auto state : machineOp.front().getOps<fsm::StateOp>()) {
-    auto stateEncodingWire = b.create<sv::WireOp>(
-        loc, stateType, state.getNameAttr(), /*inner_sym=*/state.getNameAttr());
-    b.create<sv::AssignOp>(
-        loc, stateEncodingWire,
-        b.create<hw::ConstantOp>(
-            loc, APInt(stateType.getWidth(), stateEncodeMap.size())));
-    stateEncodeMap[state] = b.create<sv::ReadInOutOp>(loc, stateEncodingWire);
+  encoding = std::make_unique<BinaryStateEncoding>(b, machineOp, hwModuleOp);
+  auto stateType = encoding->getStateType();
 
-    if (machineOp.getInitialStateOp() == state)
-      defaultStateBackedge.setValue(stateEncodeMap[state]);
-  }
+  BackedgeBuilder bb(b, loc);
+  auto nextStateBackedge = bb.get(stateType);
+  stateReg = b.create<seq::CompRegOp>(
+      loc, stateType, nextStateBackedge, clock, "state_reg", reset,
+      /*reset value=*/encoding->encode(machineOp.getInitialStateOp()), nullptr,
+      nullptr);
 
   // Move any operations at the machine-level scope, excluding state ops, which
   // are handled separately.
@@ -172,12 +248,11 @@ LogicalResult MachineOpConverter::dispatch() {
 
   // Gather the states in a deterministic datastructure which will be used for
   // any subsequent iteration over states.
-  llvm::SmallVector<StateOp> orderedStates;
   llvm::SmallVector<Value> nextStateValues;
 
   // Convert states
-  DenseMap<StateOp, StateConversionResult> stateConvResults;
-  for (auto state : machineOp.front().getOps<fsm::StateOp>()) {
+  StateConversionResults stateConvResults;
+  for (auto state : machineOp.getBody().getOps<StateOp>()) {
     auto stateConvRes = convertState(state);
     if (failed(stateConvRes)) {
       bb.abandon();
@@ -190,36 +265,23 @@ LogicalResult MachineOpConverter::dispatch() {
   }
 
   // Create next-state mux.
+  // @todo: this assumes that stateReg is binary encoded. Encoding should
+  // give an option to mux between values based on a state, and then it is
+  // implementation defined how that muxing occurs.
   auto nextStateMux = b.create<hw::ArrayCreateOp>(loc, nextStateValues);
   nextStateMux->setAttr("sv.namehint", b.getStringAttr("next_state_mux"));
   auto nextState = b.create<hw::ArrayGetOp>(loc, nextStateMux, stateReg);
   nextState->setAttr("sv.namehint", b.getStringAttr("state_next"));
   nextStateBackedge.setValue(nextState);
 
-  // Create output muxes.
-  llvm::SmallVector<Value> outputMuxes;
-  llvm::SmallVector<llvm::SmallVector<Value, 4>, 4> outputPortValues(
-      machineOp.getNumResults());
-  for (auto &state : orderedStates) {
-    for (auto it : llvm::enumerate(stateConvResults[state].outputs))
-      outputPortValues[it.index()].insert(outputPortValues[it.index()].begin(),
-                                          it.value());
-  }
-
-  for (auto outputPortValueIt : llvm::enumerate(outputPortValues)) {
-    auto outputMuxValues =
-        b.create<hw::ArrayCreateOp>(loc, outputPortValueIt.value());
-    outputMuxValues->setAttr(
-        "sv.namehint",
-        b.getStringAttr("output_" + std::to_string(outputPortValueIt.index()) +
-                        "_mux"));
-    auto outputMux = b.create<hw::ArrayGetOp>(loc, outputMuxValues, stateReg);
-    outputMuxes.push_back(outputMux);
-  }
+  // Create output port assignments.
+  llvm::SmallVector<Value> outputValues;
+  for (size_t i = 0; i < machineOp.getNumResults(); i++)
+    outputValues.push_back(getOutputAssignment(loc, stateConvResults, i));
 
   // Delete the default created output op and replace it with the output muxes.
   auto *oldOutputOp = hwModuleOp.front().getTerminator();
-  b.create<hw::OutputOp>(loc, outputMuxes);
+  b.create<hw::OutputOp>(loc, outputValues);
   oldOutputOp->erase();
 
   // Erase the original machine op.
@@ -232,13 +294,13 @@ FailureOr<Value>
 MachineOpConverter::convertTransitions( // NOLINT(misc-no-recursion)
     StateOp currentState, ArrayRef<TransitionOp> transitions) {
   Value nextState;
-  if (transitions.empty())
+  if (transitions.empty()) {
     // Base case - transition to the current state.
-    nextState = stateEncodeMap[currentState];
-  else {
+    nextState = encoding->encode(currentState);
+  } else {
     // Recursive case - transition to a named state.
     auto transition = cast<fsm::TransitionOp>(transitions.front());
-    nextState = stateEncodeMap[transition.getNextState()];
+    nextState = encoding->encode(transition.getNextState());
     if (transition.hasGuard()) {
       // Not always taken; recurse and mux between the targeted next state and
       // the recursion result, selecting based on the provided guard.
@@ -257,6 +319,21 @@ MachineOpConverter::convertTransitions( // NOLINT(misc-no-recursion)
     }
   }
   return nextState;
+}
+
+Value MachineOpConverter::getOutputAssignment(
+    Location loc, StateConversionResults &convResults, size_t portIndex) {
+  llvm::SmallVector<Value, 4> outputPortValues;
+  for (auto &state : orderedStates)
+    outputPortValues.insert(outputPortValues.begin(),
+                            convResults[state].outputs[portIndex]);
+
+  auto outputMuxValues = b.create<hw::ArrayCreateOp>(loc, outputPortValues);
+  outputMuxValues->setAttr(
+      "sv.namehint",
+      b.getStringAttr("output_" + std::to_string(portIndex) + "_mux"));
+  auto outputMux = b.create<hw::ArrayGetOp>(loc, outputMuxValues, stateReg);
+  return outputMux;
 }
 
 FailureOr<MachineOpConverter::StateConversionResult>
@@ -281,7 +358,6 @@ MachineOpConverter::convertState(StateOp state) {
   return res;
 }
 
-namespace {
 struct FSMToHWPass : public ConvertFSMToHWBase<FSMToHWPass> {
   void runOnOperation() override {
     auto module = getOperation();
