@@ -113,9 +113,6 @@ public:
   IntegerType getStateType() override {
     return b.getIntegerType(llvm::Log2_64_Ceil(machine.getNumStates()));
   }
-
-private:
-  IntegerType stateType;
 };
 
 class MachineOpConverter {
