@@ -4,7 +4,7 @@
 # RUN: FileCheck %s --input-file %t/CompReg.tcl --check-prefix TCL
 
 import pycde
-from pycde import types, module, Clock, Input, Output
+from pycde import types, module, AppID, Clock, Input, Output
 from pycde.devicedb import LocationVector
 
 from pycde.module import generator
@@ -22,6 +22,7 @@ class CompReg:
   def build(ports):
     with ports.clk:
       compreg = ports.input.reg(name="reg", sv_attributes=["dont_merge"])
+      compreg.appid = AppID("reg", 0)
       ports.output = compreg
 
 

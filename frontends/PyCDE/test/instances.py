@@ -9,7 +9,8 @@ from pycde.devicedb import (PhysLocation, PrimitiveDB, PrimitiveType)
 
 import sys
 
-from pycde.instance import InstanceDoesNotExistError, Instance
+from pycde.instance import InstanceDoesNotExistError, Instance, RegInstance
+from pycde.module import AppID
 
 
 @pycde.externmodule
@@ -19,25 +20,28 @@ class Nothing:
 
 @pycde.module
 class UnParameterized:
+  clk = pycde.Clock()
   x = pycde.Input(pycde.types.i1)
   y = pycde.Output(pycde.types.i1)
 
   @pycde.generator
   def construct(mod):
     Nothing().name = "nothing_inst"
-    mod.y = mod.x
+    r = mod.x.reg(mod.clk, appid=AppID("reg", 0))
+    mod.y = r
+    print(f"r appid: {r.appid}")
 
 
 @pycde.module
 class Test:
-  inputs = []
-  outputs = []
+  clk = pycde.Clock()
 
   @pycde.generator
-  def build(_):
+  def build(ports):
     c1 = pycde.dialects.hw.ConstantOp(pycde.types.i1, 1)
-    UnParameterized(x=c1).name = "unparam"
-    UnParameterized(x=c1).name = "unparam"
+    c1.appid = AppID("c", 1)
+    UnParameterized(clk=ports.clk, x=c1).name = "unparam"
+    UnParameterized(clk=ports.clk, x=c1).name = "unparam"
 
 
 # Set up the primitive locations. Errors out if location is placed but doesn't
@@ -68,8 +72,10 @@ print("=== Hierarchy")
 # CHECK-NEXT: <instance: []>
 # CHECK-NEXT: <instance: [UnParameterized]>
 # CHECK-NEXT: <instance: [UnParameterized, Nothing]>
+# CHECK-NEXT: <instance: [UnParameterized, x__reg1]>
 # CHECK-NEXT: <instance: [UnParameterized_1]>
 # CHECK-NEXT: <instance: [UnParameterized_1, Nothing]>
+# CHECK-NEXT: <instance: [UnParameterized_1, x__reg1]>
 test_inst = t.get_instance(Test)
 t.createdb(primdb)
 test_inst.walk(lambda inst: print(inst))
@@ -110,12 +116,14 @@ test_inst["UnParameterized"].add_named_attribute("FOO", "OFF",
                                                  ["memory", "bank"])
 test_inst["UnParameterized"]["Nothing"].place(PrimitiveType.DSP, 39, 25, 0)
 
-test_inst.walk(lambda inst: print(inst, inst.locations))
+test_inst.walk(lambda inst: print(
+    inst, inst.locations if not isinstance(inst, RegInstance) else "None"))
 # CHECK-DAG: <instance: []> []
 # CHECK-DAG: <instance: [UnParameterized]> [(PhysLocation<PrimitiveType.M20K, x:15, y:25, num:0>, '|memory|bank')]
 # CHECK-DAG: <instance: [UnParameterized, Nothing]> [(PhysLocation<PrimitiveType.DSP, x:39, y:25, num:0>, None)]
 # CHECK-DAG: <instance: [UnParameterized_1]> [(PhysLocation<PrimitiveType.M20K, x:39, y:25, num:0>, '|memory|bank')]
 # CHECK-DAG: <instance: [UnParameterized_1, Nothing]> []
+# CHECK-DAG: <instance: [UnParameterized_1, x__reg1]>
 
 # TODO: add back anonymous reservations
 
@@ -135,7 +143,8 @@ assert t.placedb.get_instance_at(PhysLocation(PrimitiveType.M20K, 0, 0,
 print("=== Force-clean all the caches and test rebuilds")
 t._op_cache.release_ops()
 
-test_inst.walk(lambda inst: print(inst, inst.locations))
+test_inst.walk(lambda inst: print(
+    inst, inst.locations if not isinstance(inst, RegInstance) else "None"))
 # CHECK: <instance: []> []
 # CHECK: <instance: [UnParameterized]> [(PhysLocation<PrimitiveType.M20K, x:15, y:25, num:0>, '|memory|bank')]
 # CHECK: <instance: [UnParameterized, Nothing]> [(PhysLocation<PrimitiveType.DSP, x:39, y:25, num:0>, None)]

@@ -20,6 +20,7 @@ import mlir.ir
 
 import builtins
 from contextvars import ContextVar
+from functools import singledispatchmethod
 import inspect
 import sys
 
@@ -73,20 +74,26 @@ class InputChannel(Input):
 
 
 class AppID:
+  AttributeName = "msft.appid"
 
+  @singledispatchmethod
   def __init__(self, name: str, idx: int):
     self._appid = msft.AppIDAttr.get(name, idx)
+
+  @__init__.register(mlir.ir.Attribute)
+  def __init__mlir_attr(self, attr: mlir.ir.Attribute):
+    self._appid = msft.AppIDAttr(attr)
 
   @property
   def name(self) -> str:
     return self._appid.name
 
   @property
-  def idx(self) -> int:
-    return self._appid.idx
+  def index(self) -> int:
+    return self._appid.index
 
   def __str__(self) -> str:
-    return f"{self.name}[{self.idx}]"
+    return f"{self.name}[{self.index}]"
 
 
 def _create_module_name(name: str, params: mlir.ir.DictAttr):
@@ -303,7 +310,7 @@ class _SpecializedModule:
                                        parameters=self.parameters,
                                        loc=loc)
     if appid is not None:
-      ret.operation.attributes["appid"] = appid._appid
+      ret.operation.attributes[AppID.AttributeName] = appid._appid
     return ret
 
   def generate(self):
