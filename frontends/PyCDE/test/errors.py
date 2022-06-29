@@ -36,6 +36,19 @@ class ClkError:
 # -----
 
 
+@unittestmodule()
+class AppIDError:
+
+  @generator
+  def build(ports):
+    c = types.i32(4)
+    # CHECK: ValueError: AppIDs can only be attached to ops with symbols
+    c.appid = AppID("c", 0)
+
+
+# -----
+
+
 @module
 class Test:
   clk = Clock()
