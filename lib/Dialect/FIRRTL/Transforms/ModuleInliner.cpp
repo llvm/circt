@@ -756,7 +756,7 @@ void Inliner::cloneAndRename(
                           getInnerSymName(newOp));
     SmallVector<StringAttr> &nlaList = instOpHierPaths[innerRef];
     // Now rename the Updated HierPathOps that this InstanceOp participates in.
-    for (auto en : llvm::enumerate(nlaList)) {
+    for (const auto &en : llvm::enumerate(nlaList)) {
       auto oldNLA = en.value();
       if (auto newSym = symbolRenames.lookup(oldNLA))
         nlaList[en.index()] = newSym.cast<StringAttr>();

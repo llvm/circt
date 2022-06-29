@@ -191,7 +191,7 @@ void InjectDUTHierarchy::runOnOperation() {
       b.getUnknownLoc(), wrapper, wrapper.moduleName(),
       NameKindEnum::DroppableName, ArrayRef<Attribute>{}, ArrayRef<Attribute>{},
       false, b.getStringAttr(dutNS.newName(wrapper.moduleName())));
-  for (auto pair : llvm::enumerate(wrapperInst.getResults())) {
+  for (const auto &pair : llvm::enumerate(wrapperInst.getResults())) {
     Value lhs = dut.getArgument(pair.index());
     Value rhs = pair.value();
     if (dut.getPortDirection(pair.index()) == Direction::In)

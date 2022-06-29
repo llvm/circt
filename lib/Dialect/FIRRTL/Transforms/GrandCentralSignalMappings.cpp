@@ -865,7 +865,7 @@ FailureOr<bool> GrandCentralSignalMappingsPass::emitUpdatedMappings(
       bool usesTop = nla.hasModule(dut.moduleNameAttr());
       ArrayRef<Attribute> path = nla.namepath().getValue();
       stringStorage.resize(path.drop_back().size());
-      for (auto attr : llvm::enumerate(path.drop_back())) {
+      for (const auto &attr : llvm::enumerate(path.drop_back())) {
         auto ref = attr.value().cast<hw::InnerRefAttr>();
         if (usesTop && !seenRoot) {
           if (ref.getModule() == dut.moduleNameAttr())

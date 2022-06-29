@@ -576,7 +576,7 @@ void EmitOMIRPass::emitOptionalRTLPorts(DictionaryAttr node,
     jsonStream.attribute("info", buf);
     jsonStream.attribute("name", "ports");
     jsonStream.attributeArray("value", [&] {
-      for (auto port : llvm::enumerate(module.getPorts())) {
+      for (const auto &port : llvm::enumerate(module.getPorts())) {
         if (port.value().type.getBitWidthOrSentinel() == 0)
           continue;
         jsonStream.object([&] {

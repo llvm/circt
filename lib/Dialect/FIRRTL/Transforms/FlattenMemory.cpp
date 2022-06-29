@@ -150,7 +150,7 @@ struct FlattenMemoryPass : public FlattenMemoryBase<FlattenMemoryPass> {
             if ((name == "mask" || name == "wmask") &&
                 (maskWidths.size() != totalmaskWidths)) {
               Value catMasks;
-              for (auto m : llvm::enumerate(maskWidths)) {
+              for (const auto &m : llvm::enumerate(maskWidths)) {
                 // Get the mask bit.
                 auto mBit = builder.createOrFold<BitsPrimOp>(
                     realOldField, m.index(), m.index());
