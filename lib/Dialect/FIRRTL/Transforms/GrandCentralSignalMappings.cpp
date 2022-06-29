@@ -117,18 +117,155 @@ static T &operator<<(T &os, const SignalMapping &mapping) {
   return os;
 }
 
+//===----------------------------------------------------------------------===//
+// Code related to annotation handling
+//===----------------------------------------------------------------------===//
+
+LogicalResult circt::firrtl::applyGCTSignalMappings(AnnoPathValue target,
+                                                    DictionaryAttr anno,
+                                                    ApplyState &state) {
+  auto id = state.newID();
+  auto *context = state.circuit.getContext();
+  auto loc = state.circuit.getLoc();
+
+  // Rework the circuit-level annotation to no longer include the
+  // information we are scattering away anyway.
+  NamedAttrList fields;
+  auto annotationsAttr = tryGetAs<ArrayAttr>(anno, anno, "annotations", loc,
+                                             signalDriverAnnoClass);
+  auto circuitAttr =
+      tryGetAs<StringAttr>(anno, anno, "circuit", loc, signalDriverAnnoClass);
+  auto circuitPackageAttr = tryGetAs<StringAttr>(anno, anno, "circuitPackage",
+                                                 loc, signalDriverAnnoClass);
+  if (!annotationsAttr || !circuitAttr || !circuitPackageAttr)
+    return failure();
+  fields.append("class", StringAttr::get(context, signalDriverAnnoClass));
+  fields.append("id", id);
+  fields.append("annotations", annotationsAttr);
+  fields.append("circuit", circuitAttr);
+  fields.append("circuitPackage", circuitPackageAttr);
+
+  // Handle the source and sink targets.
+  auto sourcesAttr = tryGetAs<ArrayAttr>(anno, anno, "sourceTargets", loc,
+                                         signalDriverAnnoClass);
+  auto sinksAttr = tryGetAs<ArrayAttr>(anno, anno, "sinkTargets", loc,
+                                       signalDriverAnnoClass);
+  if (!sourcesAttr || !sinksAttr)
+    return failure();
+
+  // Add field indicating if we're the subcircuit or not.  Do this by looking at
+  // the first source or sink and seeing what its circuit target is.
+  DictionaryAttr firstSourceOrSink;
+  if (!sourcesAttr.empty())
+    firstSourceOrSink = sourcesAttr.begin()->dyn_cast<DictionaryAttr>();
+  else if (!sinksAttr.empty())
+    firstSourceOrSink = sinksAttr.begin()->dyn_cast<DictionaryAttr>();
+  else
+    return success();
+  if (!firstSourceOrSink)
+    return failure();
+  auto prefix = tryGetAs<StringAttr>(firstSourceOrSink, anno, "_1", loc,
+                                     signalDriverAnnoClass)
+                    .getValue();
+  bool isSubCircuit = !(prefix.consume_front("~") &&
+                        prefix.consume_front(state.circuit.name()) &&
+                        prefix.consume_front("|"));
+  fields.append("isSubCircuit", BoolAttr::get(context, isSubCircuit));
+
+  auto dontTouch = [&](StringRef targetStr) {
+    NamedAttrList anno;
+    anno.append("class", StringAttr::get(context, dontTouchAnnoClass));
+    anno.append("target", StringAttr::get(context, targetStr));
+    state.addToWorklistFn(DictionaryAttr::get(context, anno));
+  };
+
+  StringSet<> modules;
+  auto buildSourceOrSinkAnno = [&](Attribute attr,
+                                   bool isSource) -> DictionaryAttr {
+    auto dict = attr.dyn_cast<DictionaryAttr>();
+    if (!dict)
+      return {};
+    NamedAttrList fields;
+    fields.append("class",
+                  StringAttr::get(context, signalDriverTargetAnnoClass));
+    StringAttr targetAttr = tryGetAs<StringAttr>(
+        dict, dict, isSubCircuit ? "_2" : "_1", loc, signalDriverAnnoClass);
+    StringAttr peer = tryGetAs<StringAttr>(
+        dict, dict, isSubCircuit ? "_1" : "_2", loc, signalDriverAnnoClass);
+    if (!targetAttr || !peer)
+      return {};
+
+    auto target = tokenizePath(targetAttr);
+    if (!target)
+      return {};
+    target->component.clear();
+    target->name = "";
+    modules.insert(target->str());
+
+    auto targetId = state.newID();
+    fields.append("dir",
+                  StringAttr::get(context, isSource ? "source" : "sink"));
+    fields.append("id", id);
+    fields.append("peer", peer);
+    fields.append("side",
+                  StringAttr::get(context, isSubCircuit ? "local" : "remote"));
+    fields.append("target", targetAttr);
+    fields.append("targetId", targetId);
+
+    // TODO: Always applying DontTouchAnnotation to a target is too restrictive.
+    // This should only be necessary if this is a sink (which will produce a
+    // force) and we are in the circuit where the force will be applied.  Relax
+    // this restriction in the future.
+    dontTouch(targetAttr.getValue());
+
+    return DictionaryAttr::get(context, fields);
+  };
+
+  // Add any sinks or sources to the worklist for later processing.
+  for (auto attr : sourcesAttr) {
+    auto sourceAnno = buildSourceOrSinkAnno(attr, true);
+    if (!sourceAnno)
+      return failure();
+    state.addToWorklistFn(sourceAnno);
+  }
+  for (auto attr : sinksAttr) {
+    auto sinkAnno = buildSourceOrSinkAnno(attr, false);
+    if (!sinkAnno)
+      return failure();
+    state.addToWorklistFn(sinkAnno);
+  }
+
+  AnnotationSet annotations(state.circuit);
+  annotations.addAnnotations({DictionaryAttr::get(context, fields)});
+  annotations.applyToOperation(state.circuit);
+
+  for (auto &module : modules) {
+    NamedAttrList fields;
+    fields.append("class",
+                  StringAttr::get(context, signalDriverModuleAnnoClass));
+    fields.append("id", id);
+    fields.append("target", StringAttr::get(context, module.getKey()));
+    state.addToWorklistFn(DictionaryAttr::get(context, fields));
+  }
+
+  return success();
+}
+
 /// Analyze the `module` of this `ModuleSignalMappings` and generate the
 /// corresponding auxiliary `FModuleOp` with the necessary cross-module
 /// references and `ForceOp`s to probe and drive remote signals. This is
-/// dictated by the presence of `SignalDriverAnnotation` on the module and
-/// individual operations inside it.
-/// If the module is the "remote" (main) circuit, gather those mappings
-/// for use handling forced ports and creating updated mappings.
+/// dictated by the presence of `SignalDriverAnnotation.module` on the module
+/// and individual operations inside it. Anything targeted by a source/sink will
+/// show up with a `SignalDriverAnnotation.target`. Global circuit-level
+/// information lives in a circuit-level `SignalDriverAnnotation`.
+///
+/// If the module is the "remote" (main) circuit, gather those mappings for use
+/// handling forced ports and creating updated mappings.
 void ModuleSignalMappings::run() {
-  // Check whether this module has any `SignalDriverAnnotation`s. These indicate
-  // whether the module contains any operations with such annotations and
-  // requires processing.
-  if (!AnnotationSet::removeAnnotations(module, signalDriverAnnoClass)) {
+  // Check whether this module has any `SignalDriverAnnotation.module`s. These
+  // indicate whether the module contains any operations with such annotations
+  // and requires processing.
+  if (!AnnotationSet::removeAnnotations(module, signalDriverModuleAnnoClass)) {
     LLVM_DEBUG(llvm::dbgs() << "Skipping `" << module.getName()
                             << "` (has no annotations)\n");
     return;
@@ -136,21 +273,22 @@ void ModuleSignalMappings::run() {
   LLVM_DEBUG(llvm::dbgs() << "Running on module `" << module.getName()
                           << "`\n");
 
-  // Gather the signal driver annotations on the ports of this module.
+  // Gather the `SignalDriverAnnotation.target`s on the ports of this module.
   LLVM_DEBUG(llvm::dbgs() << "- Gather port annotations\n");
   AnnotationSet::removePortAnnotations(
       module, [&](unsigned i, Annotation anno) {
-        if (!anno.isClass(signalDriverAnnoClass))
+        if (!anno.isClass(signalDriverTargetAnnoClass))
           return false;
         addTarget(module.getArgument(i), anno);
         return true;
       });
 
-  // Gather the signal driver annotations of the operations within this module.
+  // Gather the `SignalDriverAnnotation.target`s of the operations within this
+  // module.
   LLVM_DEBUG(llvm::dbgs() << "- Gather operation annotations\n");
   module.walk([&](Operation *op) {
     AnnotationSet::removeAnnotations(op, [&](Annotation anno) {
-      if (!anno.isClass(signalDriverAnnoClass))
+      if (!anno.isClass(signalDriverTargetAnnoClass))
         return false;
       for (auto result : op->getResults())
         addTarget(result, anno);

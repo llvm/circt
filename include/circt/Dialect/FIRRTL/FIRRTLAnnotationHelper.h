@@ -175,10 +175,13 @@ LogicalResult applyGCTDataTaps(AnnoPathValue target, DictionaryAttr anno,
 LogicalResult applyGCTMemTaps(AnnoPathValue target, DictionaryAttr anno,
                               ApplyState &state);
 
-/// Implements the same behavior as DictionaryAttr::getAs<A> to return the value
-/// of a specific type associated with a key in a dictionary.  However, this is
-/// specialized to print a useful error message, specific to custom annotation
-/// process, on failure.
+LogicalResult applyGCTSignalMappings(AnnoPathValue target, DictionaryAttr anno,
+                                     ApplyState &state);
+
+/// Implements the same behavior as DictionaryAttr::getAs<A> to return the
+/// value of a specific type associated with a key in a dictionary. However,
+/// this is specialized to print a useful error message, specific to custom
+/// annotation process, on failure.
 template <typename A>
 A tryGetAs(DictionaryAttr &dict, const Attribute &root, StringRef key,
            Location loc, Twine className, Twine path = Twine()) {
