@@ -2130,11 +2130,7 @@ void GrandCentralPass::runOnOperation() {
         instance->getParentOfType<CircuitOp>().getBody());
     auto bind = builder.create<sv::BindInterfaceOp>(getOperation().getLoc(),
                                                     instanceSymbol);
-    bind->setAttr("output_file",
-                  hw::OutputFileAttr::getFromFilename(
-                      &getContext(),
-                      maybeExtractInfo.getValue().bindFilename.getValue(),
-                      /*excludeFromFileList=*/true));
+    bind->setAttr("output_file", iface.getValue()->getAttr("output_file"));
   }
 
   // If a `GrandCentralHierarchyFileAnnotation` was passed in, generate a YAML

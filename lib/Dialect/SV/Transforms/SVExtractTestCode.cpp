@@ -169,7 +169,7 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
   hw::OutputFileAttr fileName;
   if (path) {
     assert(path.isDirectory() && "output file directory must be specified");
-    auto fileName = hw::OutputFileAttr::getFromDirectoryAndFilename(
+    fileName = hw::OutputFileAttr::getFromDirectoryAndFilename(
         path.getContext(), path.getFilename().getValue(),
         newMod.getName() + ".sv", path.getExcludeFromFilelist().getValue(),
         path.getIncludeReplicatedOps().getValue());
