@@ -1202,7 +1202,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
   result.addAttribute("annotations", builder.getArrayAttr(annotations));
   result.addAttribute("lowerToBind", builder.getBoolAttr(lowerToBind));
   if (innerSym)
-    result.addAttribute("inner_sym", (innerSym));
+    result.addAttribute("inner_sym", innerSym);
   result.addAttribute("nameKind",
                       NameKindEnumAttr::get(builder.getContext(), nameKind));
 
@@ -1515,11 +1515,6 @@ ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
             innerSymAttr, ::mlir::Type{}, "inner_sym", result.attributes)) {
       return ::mlir::failure();
     }
-    // Parsing an optional symbol name doesn't fail, so no need to check the
-    // result.
-    //  (void)parser.parseOptionalSymbolName(
-    //      innerSymAttr, hw::InnerName::getInnerNameAttrName(),
-    //      result.attributes);
   }
   if (parseNameKind(parser, nameKind) ||
       parser.parseOptionalAttrDict(result.attributes) ||
