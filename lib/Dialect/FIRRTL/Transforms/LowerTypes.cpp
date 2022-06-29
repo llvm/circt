@@ -228,15 +228,17 @@ static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
     auto oldPortType = op.getResult(portIdx).getType().cast<BundleType>();
     SmallVector<Attribute> portAnno;
     for (auto attr : newMem.getPortAnnotation(portIdx)) {
-      if (auto subAnno = attr.dyn_cast<SubAnnotationAttr>()) {
-        auto targetIndex = oldPortType.getIndexForFieldID(subAnno.getFieldID());
+      Annotation anno(attr);
+      if (auto annoFieldID = anno.getFieldID()) {
+        auto targetIndex = oldPortType.getIndexForFieldID(annoFieldID);
 
         // Apply annotations to all elements if the target is the whole
         // sub-field.
-        if (subAnno.getFieldID() == oldPortType.getFieldID(targetIndex)) {
-          portAnno.push_back(SubAnnotationAttr::get(
-              b->getContext(), portType.getFieldID(targetIndex),
-              subAnno.getAnnotations()));
+        if (annoFieldID == oldPortType.getFieldID(targetIndex)) {
+          anno.setMember(
+              "circt.fieldID",
+              b->getI32IntegerAttr(portType.getFieldID(targetIndex)));
+          portAnno.push_back(anno.getDict());
           continue;
         }
 
@@ -247,15 +249,13 @@ static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
           // sub-field of the memory port, thus we need to add the fieldID of
           // `data` or `mask` sub-field to get the "real" fieldID.
           auto fieldID = field.fieldID + oldPortType.getFieldID(targetIndex);
-          if (subAnno.getFieldID() >= fieldID &&
-              subAnno.getFieldID() <= fieldID + field.type.getMaxFieldID()) {
-            // Create a new sub-annotation with a new field ID. Similarly, we
-            // need to add the fieldID of `data` or `mask` sub-field in the new
-            // memory port type here.
-            auto newFieldID = subAnno.getFieldID() - fieldID +
-                              portType.getFieldID(targetIndex);
-            portAnno.push_back(SubAnnotationAttr::get(
-                b->getContext(), newFieldID, subAnno.getAnnotations()));
+          if (annoFieldID >= fieldID &&
+              annoFieldID <= fieldID + field.type.getMaxFieldID()) {
+            // Set the field ID of the new annotation.
+            auto newFieldID =
+                annoFieldID - fieldID + portType.getFieldID(targetIndex);
+            anno.setMember("circt.fieldID", b->getI32IntegerAttr(newFieldID));
+            portAnno.push_back(anno.getDict());
           }
         }
       } else
@@ -531,8 +531,11 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(
 
     if (auto newFieldID = fieldID - field.fieldID) {
       // If the target is a subfield/subindex of the current field, create a
-      // new sub-annotation with a new field ID.
-      retval.push_back(SubAnnotationAttr::get(ctxt, newFieldID, annotation));
+      // new annotation with the correct circt.fieldID.
+      Annotation newAnno(annotation);
+      newAnno.setMember("circt.fieldID",
+                        builder->getI32IntegerAttr(newFieldID));
+      retval.push_back(newAnno.getDict());
       continue;
     }
     if (Annotation(opAttr).getClass() ==

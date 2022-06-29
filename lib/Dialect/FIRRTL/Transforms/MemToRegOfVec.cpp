@@ -354,6 +354,8 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
              i != e; ++i) {
           NamedAttrList newAnno;
           newAnno.append("class", anno.getMember("class"));
+          newAnno.append("circt.fieldID",
+                         builder.getI64IntegerAttr(vecType.getFieldID(i)));
           newAnno.append("id", anno.getMember("id"));
           if (auto nla = anno.getMember("circt.nonlocal"))
             newAnno.append("circt.nonlocal", nla);
@@ -361,9 +363,7 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
               "portID",
               IntegerAttr::get(IntegerType::get(builder.getContext(), 64), i));
 
-          regAnnotations.push_back(SubAnnotationAttr::get(
-              builder.getContext(), vecType.getFieldID(i),
-              builder.getDictionaryAttr(newAnno)));
+          regAnnotations.push_back(builder.getDictionaryAttr(newAnno));
         }
       } else
         regAnnotations.push_back(anno.getAttr());

@@ -777,8 +777,8 @@ circuit top : %[[
   ; CHECK:      firrtl.module private @a(
   ; CHECK-SAME:   in %i:
   ; CHECK-NOT:    out
-  ; CHECK-SAME:     [#firrtl.subAnno<fieldID = 1, {circt.nonlocal = @[[nla_2]], class = "nla2"}>,
-  ; CHECK-SAME:      #firrtl.subAnno<fieldID = 4, {circt.nonlocal = @[[nla_1]], class = "nla1"}>]
+  ; CHECK-SAME:     [{circt.fieldID = 1 : i64, circt.nonlocal = @[[nla_2]], class = "nla2"},
+  ; CHECK-SAME:      {circt.fieldID = 4 : i64, circt.nonlocal = @[[nla_1]], class = "nla1"}]
   module a:
     input i: {z: {y: {x: UInt<1>}}, a: UInt<1>}
     output o: {z: {y: {x: UInt<1>}}, a: UInt<1>}
