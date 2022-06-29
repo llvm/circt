@@ -85,9 +85,6 @@ print("=== Hierarchy")
 test_inst = t.get_instance(Test)
 test_inst.walk(lambda inst: print(inst))
 
-for ui in test_inst.unparam:
-  print(f"unparam: {ui}")
-
 reg = test_inst.unparam[0].reg[4]
 print(f"unparam[0].reg[4]: {reg}")
 # CHECK: unparam[0].reg[4]: <instance: [UnParameterized, Delay, x__reg1]>
