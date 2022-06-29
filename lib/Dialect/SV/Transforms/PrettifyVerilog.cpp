@@ -52,8 +52,11 @@ private:
   bool anythingChanged;
 };
 
-struct ReplaceConcatWithStreamPattern: public OpRewritePattern<comb::ConcatOp> {
-  ReplaceConcatWithStreamPattern(MLIRContext *context, PrettifyVerilogPass *pass): OpRewritePattern(context), pass(pass) {};
+struct ReplaceConcatWithStreamPattern
+    : public OpRewritePattern<comb::ConcatOp> {
+  ReplaceConcatWithStreamPattern(MLIRContext *context,
+                                 PrettifyVerilogPass *pass)
+      : OpRewritePattern(context), pass(pass){};
 
   using OpRewritePattern::OpRewritePattern;
 
@@ -70,7 +73,7 @@ struct ReplaceConcatWithStreamPattern: public OpRewritePattern<comb::ConcatOp> {
     auto sourceOp = inputs[0].getDefiningOp<comb::ExtractOp>();
     if (!sourceOp)
       return failure();
-    
+
     Value source = sourceOp.getOperand();
 
     // Fast path: the input size is not equal to the width of the source.
@@ -93,7 +96,8 @@ struct ReplaceConcatWithStreamPattern: public OpRewritePattern<comb::ConcatOp> {
       if (insertionOrder[i] != i)
         return failure();
     }
-    rewriter.replaceOpWithNewOp<sv::ReorderOp>(op, source.getType(), llvm::makeArrayRef(source));
+    rewriter.replaceOpWithNewOp<sv::ReorderOp>(op, source.getType(),
+                                               llvm::makeArrayRef(source));
     pass->markChanges();
     return success();
   }
