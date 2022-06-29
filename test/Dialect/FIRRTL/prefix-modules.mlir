@@ -271,10 +271,11 @@ firrtl.circuit "GCTDataMemTapsPrefix" {
   // CHECK-SAME:   defname = "BAR_MemTap"
   firrtl.extmodule @MemTap(
     out mem: !firrtl.vector<uint<1>, 1>
-      [#firrtl.subAnno<fieldID = 1, {
+      [{
+        circt.fieldID = 1 : i32,
         class = "sifive.enterprise.grandcentral.MemTapAnnotation.port",
         id = 0 : i64,
-        word = 0 : i64}>])
+        word = 0 : i64}])
     attributes {defname = "MemTap"}
   // Module DUT has a "FOO_" prefix.
   firrtl.module @DUT()
