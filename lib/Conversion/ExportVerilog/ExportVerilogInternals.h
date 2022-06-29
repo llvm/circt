@@ -288,11 +288,9 @@ static inline bool isConstantExpression(Operation *op) {
 /// MemoryEffects should be checked if a client cares.
 bool isVerilogExpression(Operation *op);
 
-/// Return true if we are unable to ever inline the specified operation.  This
-/// happens because not all Verilog expressions are composable, notably you
-/// can only use bit selects like x[4:6] on simple expressions, you cannot use
-/// expressions in the sensitivity list of always blocks, etc.
-bool isExpressionUnableToInline(Operation *op);
+/// Return true if this expression should be emitted inline into any statement
+/// that uses it.
+bool isExpressionEmittedInline(Operation *op);
 
 /// For each module we emit, do a prepass over the structure, pre-lowering and
 /// otherwise rewriting operations we don't want to emit.

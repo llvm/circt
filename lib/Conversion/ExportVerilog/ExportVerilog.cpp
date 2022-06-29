@@ -550,7 +550,7 @@ static bool isOkToBitSelectFrom(Value v) {
 /// happens because not all Verilog expressions are composable, notably you
 /// can only use bit selects like x[4:6] on simple expressions, you cannot use
 /// expressions in the sensitivity list of always blocks, etc.
-bool ExportVerilog::isExpressionUnableToInline(Operation *op) {
+static bool isExpressionUnableToInline(Operation *op) {
   if (auto cast = dyn_cast<BitcastOp>(op))
     if (!haveMatchingDims(cast.input().getType(), cast.result().getType(),
                           op->getLoc()))
@@ -597,7 +597,7 @@ bool ExportVerilog::isExpressionUnableToInline(Operation *op) {
 
 /// Return true if this expression should be emitted inline into any statement
 /// that uses it.
-static bool isExpressionEmittedInline(Operation *op) {
+bool ExportVerilog::isExpressionEmittedInline(Operation *op) {
   // Never create a temporary which is only going to be assigned to an output
   // port.
   if (op->hasOneUse() && isa<hw::OutputOp>(*op->getUsers().begin()))
