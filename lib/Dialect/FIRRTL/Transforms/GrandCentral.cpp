@@ -1883,20 +1883,18 @@ void GrandCentralPass::runOnOperation() {
                              op, cast<hw::HWModuleLike>(*dut)))
                 return true;
 
+              // Lower this instance to a bind later.
               instance.getValue()->setAttr("lowerToBind", trueAttr);
-              instance.getValue()->setAttr(
-                  "output_file",
-                  hw::OutputFileAttr::getFromFilename(
-                      &getContext(),
-                      maybeExtractInfo.getValue().bindFilename.getValue(),
-                      /*excludeFromFileList=*/true));
-              op->setAttr("output_file",
-                          hw::OutputFileAttr::getFromDirectoryAndFilename(
-                              &getContext(),
-                              maybeExtractInfo.getValue().directory.getValue(),
-                              op.getName() + ".sv",
-                              /*excludeFromFileList=*/true,
-                              /*includeReplicatedOps=*/true));
+
+              // Put the instance/bind and module in the same file.
+              auto outputFile = hw::OutputFileAttr::getFromDirectoryAndFilename(
+                  &getContext(),
+                  maybeExtractInfo.getValue().directory.getValue(),
+                  op.getName() + ".sv",
+                  /*excludeFromFileList=*/true,
+                  /*includeReplicatedOps=*/true);
+              instance.getValue()->setAttr("output_file", outputFile);
+              op->setAttr("output_file", outputFile);
 
               // Look for any blackboxes instantiated by the companion and mark
               // them for inclusion in the Grand Central extraction directory.

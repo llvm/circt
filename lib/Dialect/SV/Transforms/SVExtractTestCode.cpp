@@ -144,8 +144,8 @@ static StringRef getNameForPort(Value val, ArrayAttr modulePorts) {
 static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
                                          SetVector<Value> &inputs,
                                          BlockAndValueMapping &cutMap,
-                                         StringRef suffix, Attribute path,
-                                         Attribute fileName) {
+                                         StringRef suffix,
+                                         hw::OutputFileAttr path) {
   // Create the extracted module right next to the original one.
   OpBuilder b(op);
 
@@ -164,8 +164,18 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
   auto newMod = b.create<hw::HWModuleOp>(
       op.getLoc(),
       b.getStringAttr(getVerilogModuleNameAttr(op).getValue() + suffix), ports);
-  if (path)
-    newMod->setAttr("output_file", path);
+
+  // Construct the output file for this module and the bind.
+  hw::OutputFileAttr fileName;
+  if (path) {
+    assert(path.isDirectory() && "output file directory must be specified");
+    auto fileName = hw::OutputFileAttr::getFromDirectoryAndFilename(
+        path.getContext(), path.getFilename().getValue(),
+        newMod.getName() + ".sv", path.getExcludeFromFilelist().getValue(),
+        path.getIncludeReplicatedOps().getValue());
+  }
+  if (fileName)
+    newMod->setAttr("output_file", fileName);
   newMod.commentAttr(b.getStringAttr("VCS coverage exclude_file"));
 
   // Update the mapping from old values to cloned values
@@ -260,7 +270,7 @@ struct SVExtractTestCodeImplPass
 
 private:
   void doModule(hw::HWModuleOp module, std::function<bool(Operation *)> fn,
-                StringRef suffix, Attribute path, Attribute bindFile) {
+                StringRef suffix, hw::OutputFileAttr path) {
     bool hasError = false;
     // Find Operations of interest.
     SetVector<Operation *> roots;
@@ -294,8 +304,7 @@ private:
 
     // Make a module to contain the clone set, with arguments being the cut
     BlockAndValueMapping cutMap;
-    auto bmod =
-        createModuleForCut(module, inputs, cutMap, suffix, path, bindFile);
+    auto bmod = createModuleForCut(module, inputs, cutMap, suffix, path);
     // do the clone
     migrateOps(module, bmod, opsToClone, cutMap);
     // erase old operations of interest
@@ -315,12 +324,6 @@ void SVExtractTestCodeImplPass::runOnOperation() {
       top->getAttrOfType<hw::OutputFileAttr>("firrtl.extract.assume");
   auto coverDir =
       top->getAttrOfType<hw::OutputFileAttr>("firrtl.extract.cover");
-  auto assertBindFile =
-      top->getAttrOfType<hw::OutputFileAttr>("firrtl.extract.assert.bindfile");
-  auto assumeBindFile =
-      top->getAttrOfType<hw::OutputFileAttr>("firrtl.extract.assume.bindfile");
-  auto coverBindFile =
-      top->getAttrOfType<hw::OutputFileAttr>("firrtl.extract.cover.bindfile");
 
   hw::HWSymbolCache symCache;
   symCache.addDefinitions(top);
@@ -391,9 +394,9 @@ void SVExtractTestCodeImplPass::runOnOperation() {
         continue;
       }
 
-      doModule(rtlmod, isAssert, "_assert", assertDir, assertBindFile);
-      doModule(rtlmod, isAssume, "_assume", assumeDir, assumeBindFile);
-      doModule(rtlmod, isCover, "_cover", coverDir, coverBindFile);
+      doModule(rtlmod, isAssert, "_assert", assertDir);
+      doModule(rtlmod, isAssume, "_assume", assumeDir);
+      doModule(rtlmod, isCover, "_cover", coverDir);
     }
   }
   // We have to wait until all the instances are processed to clean up the
