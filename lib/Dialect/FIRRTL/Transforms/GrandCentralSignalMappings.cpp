@@ -213,7 +213,7 @@ LogicalResult circt::firrtl::applyGCTSignalMappings(AnnoPathValue target,
     fields.append("targetId", targetId);
 
     // TODO: Always applying DontTouchAnnotation to a target is too restrictive.
-    // This should only be necessary if this is a source (which will produce a
+    // This should only be necessary if this is a sink (which will produce a
     // force) and we are in the circuit where the force will be applied.  Relax
     // this restriction in the future.
     dontTouch(targetAttr.getValue());
