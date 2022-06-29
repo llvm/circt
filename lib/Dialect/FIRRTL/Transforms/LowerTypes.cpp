@@ -159,7 +159,7 @@ static bool isNotSubAccess(Operation *op) {
 static SmallVector<Operation *> getSAWritePath(Operation *op) {
   SmallVector<Operation *> retval;
   auto defOp = op->getOperand(0).getDefiningOp();
-  while (defOp && isa<SubfieldOp, SubindexOp, SubaccessOp>(defOp)) {
+  while (isa_and_nonnull<SubfieldOp, SubindexOp, SubaccessOp>(defOp)) {
     retval.push_back(defOp);
     defOp = defOp->getOperand(0).getDefiningOp();
   }
