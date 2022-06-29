@@ -52,6 +52,8 @@ public:
             StopOp, FinishOp, ExitOp,
             // Severity message tasks
             FatalOp, ErrorOp, WarningOp, InfoOp,
+            // Generate statements
+            GenerateOp, GenerateCaseOp,
             // Sampled value functiions
             SampledOp>([&](auto expr) -> ResultType {
           return thisCast->visitSV(expr, args...);
@@ -147,6 +149,10 @@ public:
   HANDLE(ErrorOp, Unhandled);
   HANDLE(WarningOp, Unhandled);
   HANDLE(InfoOp, Unhandled);
+
+  // Generate statements
+  HANDLE(GenerateOp, Unhandled);
+  HANDLE(GenerateCaseOp, Unhandled);
 
   // Sampled Value Functions
   HANDLE(SampledOp, Unhandled);

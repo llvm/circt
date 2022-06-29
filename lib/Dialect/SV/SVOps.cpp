@@ -1657,6 +1657,71 @@ void CoverConcurrentOp::getCanonicalizationPatterns(RewritePatternSet &results,
 }
 
 //===----------------------------------------------------------------------===//
+// SV generate ops
+//===----------------------------------------------------------------------===//
+
+/// Parse cases formatted like:
+///  case (pattern, "name") { ... }
+bool parseCaseRegions(OpAsmParser &p, ArrayAttr &patternsArray,
+                      ArrayAttr &caseNamesArray,
+                      SmallVectorImpl<std::unique_ptr<Region>> &caseRegions) {
+  SmallVector<Attribute> patterns;
+  SmallVector<Attribute> names;
+  while (!p.parseOptionalKeyword("case")) {
+    Attribute pattern;
+    StringAttr name;
+    std::unique_ptr<Region> region = std::make_unique<Region>();
+    if (p.parseLParen() || p.parseAttribute(pattern) || p.parseComma() ||
+        p.parseAttribute(name) || p.parseRParen() || p.parseRegion(*region))
+      return true;
+    patterns.push_back(pattern);
+    names.push_back(name);
+    if (region->empty())
+      region->push_back(new Block());
+    caseRegions.push_back(std::move(region));
+  }
+  patternsArray = p.getBuilder().getArrayAttr(patterns);
+  caseNamesArray = p.getBuilder().getArrayAttr(names);
+  return false;
+}
+
+/// Print cases formatted like:
+///  case (pattern, "name") { ... }
+void printCaseRegions(OpAsmPrinter &p, Operation *, ArrayAttr patternsArray,
+                      ArrayAttr namesArray,
+                      MutableArrayRef<Region> caseRegions) {
+  assert(patternsArray.size() == caseRegions.size());
+  assert(patternsArray.size() == namesArray.size());
+  for (size_t i = 0, e = caseRegions.size(); i < e; ++i) {
+    p.printNewline();
+    p << "case (" << patternsArray[i] << ", " << namesArray[i] << ") ";
+    p.printRegion(caseRegions[i]);
+  }
+  p.printNewline();
+}
+
+LogicalResult GenerateCaseOp::verify() {
+  size_t numPatterns = casePatterns().size();
+  if (caseRegions().size() != numPatterns || caseNames().size() != numPatterns)
+    return emitOpError(
+        "Size of caseRegions, patterns, and caseNames must match");
+
+  StringSet<> usedNames;
+  for (Attribute name : caseNames()) {
+    StringAttr nameStr = name.dyn_cast<StringAttr>();
+    if (!nameStr)
+      return emitOpError("caseNames must all be string attributes");
+    if (usedNames.contains(nameStr.getValue()))
+      return emitOpError("caseNames must be unique");
+    usedNames.insert(nameStr.getValue());
+  }
+
+  // mlir::FailureOr<Type> condType = evaluateParametricType();
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 

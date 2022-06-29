@@ -2538,6 +2538,9 @@ private:
   LogicalResult visitSV(WarningOp op);
   LogicalResult visitSV(InfoOp op);
 
+  LogicalResult visitSV(GenerateOp op);
+  LogicalResult visitSV(GenerateCaseOp op);
+
   void emitAssertionLabel(Operation *op, StringRef opName);
   void emitAssertionMessage(StringAttr message, ValueRange args,
                             SmallPtrSet<Operation *, 8> &ops,
@@ -2965,6 +2968,64 @@ LogicalResult StmtEmitter::visitSV(WarningOp op) {
 LogicalResult StmtEmitter::visitSV(InfoOp op) {
   return emitSeverityMessageTask(op, "$info", {}, op.messageAttr(),
                                  op.operands());
+}
+
+LogicalResult StmtEmitter::visitSV(GenerateOp op) {
+  indent() << "generate\n";
+  indent() << "begin: " << names.addName(op, op.sym_name()) << "\n";
+  addIndent();
+  emitStatementBlock(op.body().getBlocks().front());
+  reduceIndent();
+  indent() << "end: " << names.getName(op) << "\n";
+  indent() << "endgenerate\n";
+  return success();
+}
+
+LogicalResult StmtEmitter::visitSV(GenerateCaseOp op) {
+  indent() << "case (";
+  emitter.printParamValue(op.cond(), os, VerilogPrecedence::Selection, [&]() {
+    return op->emitOpError("invalid case parameter");
+  });
+  os << ")\n";
+
+  // Ensure that all of the per-case arrays are the same length.
+  ArrayAttr patterns = op.casePatterns();
+  ArrayAttr caseNames = op.caseNames();
+  MutableArrayRef<Region> regions = op.caseRegions();
+  assert(patterns.size() == regions.size());
+  assert(patterns.size() == caseNames.size());
+
+  addIndent();
+  // TODO: We'll probably need to store the legalized names somewhere for
+  // `verbose` formatting. Set up the infra for storing names recursively. Just
+  // store this locally for now.
+  llvm::StringSet<> usedNames;
+  size_t nextGenID = 0;
+
+  // Emit each case.
+  for (size_t i = 0, e = patterns.size(); i < e; ++i) {
+    auto &region = regions[i];
+    assert(region.hasOneBlock());
+    Attribute patternAttr = patterns[i];
+
+    indent();
+    if (patternAttr.getType().isa<NoneType>())
+      os << "default";
+    else
+      emitter.printParamValue(
+          patternAttr, os, VerilogPrecedence::LowestPrecedence,
+          [&]() { return op->emitOpError("invalid case value"); });
+
+    StringRef legalName = legalizeName(
+        caseNames[i].cast<StringAttr>().getValue(), usedNames, nextGenID);
+    os << ": begin: " << legalName << "\n";
+    emitStatementBlock(region.getBlocks().front());
+    indent() << "end: " << legalName << "\n";
+  }
+
+  reduceIndent();
+  indent() << "endcase\n";
+  return success();
 }
 
 /// Emit the `<label>:` portion of an immediate or concurrent verification
