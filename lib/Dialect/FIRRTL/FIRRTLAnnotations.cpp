@@ -450,6 +450,8 @@ void Annotation::setDict(DictionaryAttr dict) {
 unsigned Annotation::getFieldID() const {
   if (auto subAnno = attr.dyn_cast<SubAnnotationAttr>())
     return subAnno.getFieldID();
+  if (auto fieldID = getMember<IntegerAttr>("circt.fieldID"))
+    return fieldID.getInt();
   return 0;
 }
 
