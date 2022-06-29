@@ -49,7 +49,7 @@ using namespace firrtl;
 // Signal driver annotations are needed when processing both circuits:
 //
 // First the original annotations are used with the main circuit, in order to
-// emit extra wires around forced inputs and to emit updated annotations
+// emit extra wires around forced ports and to emit updated annotations
 // pointing to the values across naming or hierarchy changes performed.
 //
 // Second these updated annotations are used when processing the subcircuit
@@ -123,7 +123,7 @@ static T &operator<<(T &os, const SignalMapping &mapping) {
 /// dictated by the presence of `SignalDriverAnnotation` on the module and
 /// individual operations inside it.
 /// If the module is the "remote" (main) circuit, gather those mappings
-/// for use handling forced input ports and creating updated mappings.
+/// for use handling forced ports and creating updated mappings.
 void ModuleSignalMappings::run() {
   // Check whether this module has any `SignalDriverAnnotation`s. These indicate
   // whether the module contains any operations with such annotations and
@@ -348,8 +348,8 @@ struct ExtModules {
   SmallVector<FExtModuleOp> json;
 };
 
-/// Information gathered about mappings, used for identifying forced input ports
-/// and generating updated mappings for the remote side (main circuit).
+/// Information gathered about mappings, used for identifying forced ports and
+/// generating updated mappings for the remote side (main circuit).
 struct ModuleMappingResult {
   /// Were changes made that invalidate analyses?
   bool allAnalysesPreserved;
@@ -368,7 +368,7 @@ class GrandCentralSignalMappingsPass
                           StringRef outputFilename,
                           const ExtModules &extmodules);
 
-  /// Fixup forced input ports and emit updated mappings
+  /// Fixup forced ports and emit updated mappings.
   /// Used when processing the main (remote) circuit.
   FailureOr<bool>
   emitUpdatedMappings(CircuitOp circuit, StringAttr circuitPackage,
@@ -451,7 +451,7 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
 
   // If this is a subcircuit, then emit JSON information necessary to drive
   // SiFive tools.
-  // Otherwise handle any forced input ports and emit updated mappings.
+  // Otherwise handle any forced ports and emit updated mappings.
   if (isSubCircuit) {
     emitSubCircuitJSON(circuit, circuitPackage, outputFilename, extmodules);
   } else {
@@ -544,29 +544,75 @@ FailureOr<bool> GrandCentralSignalMappingsPass::emitUpdatedMappings(
     }
   }
 
-  // (2) Find input ports that are sinks, insert wires at instantiation points
+  // (2) Find ports that are sinks, insert buffer wires to break the net.
+  // Input ports are buffered at instantiation points, outputs in the module.
   auto *instanceGraph = &getAnalysis<InstanceGraph>();
-  DenseSet<unsigned> forcedInputPorts;
+  llvm::SmallVector<unsigned, 32> forcedInputPorts;
+  llvm::SmallVector<unsigned, 32> forcedOutputPorts;
   for (auto &[_, mod, mappings] : results) {
     // Walk mappings looking for module ports that are being driven,
     // and gather their indices for fixing up.
     forcedInputPorts.clear();
+    forcedOutputPorts.clear();
     for (auto &mapping : mappings) {
       if (mapping.dir == MappingDirection::DriveRemote /* Sink */) {
         if (auto blockArg = mapping.localValue.dyn_cast<BlockArgument>()) {
           auto portIdx = blockArg.getArgNumber();
+          // Port may be driven multiple times along different instance paths
           if (mod.getPortDirection(portIdx) == Direction::In) {
-            // Port may be driven multiple times along different instance paths
-            forcedInputPorts.insert(portIdx);
+            forcedInputPorts.push_back(portIdx);
+          } else {
+            forcedOutputPorts.push_back(portIdx);
           }
         }
       }
     }
+    llvm::sort(forcedInputPorts);
+    forcedInputPorts.erase(
+        std::unique(forcedInputPorts.begin(), forcedInputPorts.end()),
+        forcedInputPorts.end());
+    llvm::sort(forcedOutputPorts);
+    forcedOutputPorts.erase(
+        std::unique(forcedOutputPorts.begin(), forcedOutputPorts.end()),
+        forcedOutputPorts.end());
 
-    // Find all instantiations of this module, and replace uses of each driven
-    // port with a wire that's connected to a wire that is connected to the
-    // port. This is done to cause an 'assign' to be created, disconnecting
-    // the forced input port's net from its uses.
+    // Replace uses of each driven port with a wire that's connected to a wire
+    // that is connected to the port. This is done to cause an 'assign' to be
+    // created, disconnecting the forced port's net from its uses.
+    auto breakNet = [modName = mod.moduleName()](
+                        OpBuilder &builder, Value port,
+                        ModuleNamespace &moduleNamespace, StringRef portName) {
+      // Create chain like:
+      // port_result <= foo_dataIn_x_buffer
+      // foo_dataIn_x_buffer <= foo_dataIn_x
+      auto replacementWireName = builder.getStringAttr(
+          moduleNamespace.newName(modName + "_" + portName));
+      auto bufferWireName = builder.getStringAttr(
+          moduleNamespace.newName(replacementWireName.getValue() + "_buffer"));
+      auto bufferWire =
+          builder.create<WireOp>(builder.getUnknownLoc(), port.getType(),
+                                 bufferWireName, NameKindEnum::DroppableName,
+                                 builder.getArrayAttr({}), bufferWireName);
+      auto replacementWire = builder.create<WireOp>(
+          builder.getUnknownLoc(), port.getType(), replacementWireName,
+          NameKindEnum::DroppableName, builder.getArrayAttr({}),
+          replacementWireName);
+      port.replaceAllUsesWith(replacementWire);
+      builder.create<StrictConnectOp>(builder.getUnknownLoc(), port,
+                                      bufferWire);
+      builder.create<StrictConnectOp>(builder.getUnknownLoc(), bufferWire,
+                                      replacementWire);
+    };
+
+    if (!forcedOutputPorts.empty()) {
+      ModuleNamespace &moduleNamespace = getModuleNamespace(mod);
+      auto builder = OpBuilder::atBlockBegin(mod.getBody());
+      for (auto portIdx : forcedOutputPorts) {
+        auto port = mod.getArgument(portIdx);
+        breakNet(builder, port, moduleNamespace, mod.getPortName(portIdx));
+      }
+    }
+
     if (forcedInputPorts.empty())
       continue;
 
@@ -581,28 +627,7 @@ FailureOr<bool> GrandCentralSignalMappingsPass::emitUpdatedMappings(
 
       for (auto portIdx : forcedInputPorts) {
         auto port = inst->getResult(portIdx);
-
-        // Create chain like:
-        // port_result <= foo_dataIn_x_buffer
-        // foo_dataIn_x_buffer <= foo_dataIn_x
-        auto replacementWireName =
-            builder.getStringAttr(moduleNamespace.newName(
-                mod.moduleName() + "_" + mod.getPortName(portIdx)));
-        auto bufferWireName = builder.getStringAttr(moduleNamespace.newName(
-            replacementWireName.getValue() + "_buffer"));
-        auto bufferWire =
-            builder.create<WireOp>(builder.getUnknownLoc(), port.getType(),
-                                   bufferWireName, NameKindEnum::DroppableName,
-                                   builder.getArrayAttr({}), bufferWireName);
-        auto replacementWire = builder.create<WireOp>(
-            builder.getUnknownLoc(), port.getType(), replacementWireName,
-            NameKindEnum::DroppableName, builder.getArrayAttr({}),
-            replacementWireName);
-        port.replaceAllUsesWith(replacementWire);
-        builder.create<StrictConnectOp>(builder.getUnknownLoc(), port,
-                                        bufferWire);
-        builder.create<StrictConnectOp>(builder.getUnknownLoc(), bufferWire,
-                                        replacementWire);
+        breakNet(builder, port, moduleNamespace, mod.getPortName(portIdx));
       }
     }
   }
