@@ -574,11 +574,31 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
   SmallVector<ModuleMappingResult> results;
   results.resize(modules.size());
 
+  auto updateStats = [this](auto &mappings) {
+    size_t sources = 0, sinks = 0;
+    for (auto &mapping : mappings) {
+      if (mapping.dir == MappingDirection::ProbeRemote)
+        ++sources;
+      else
+        ++sinks;
+    }
+    if (sources)
+      numSources += sources;
+    if (sinks)
+      numSinks += sinks;
+    if (sources || sinks)
+      ++numModules;
+  };
+
   mlir::parallelFor(
       circuit.getContext(), 0, modules.size(),
-      [&modules, &results](size_t index) {
+      [&modules, &results, &updateStats](size_t index) {
         ModuleSignalMappings mapper(modules[index]);
         mapper.run();
+
+        // Update statistics
+        updateStats(mapper.mappings);
+
         results[index] = {
             mapper.allAnalysesPreserved, modules[index],
             SmallVector<SignalMapping>{llvm::make_filter_range(
@@ -742,9 +762,17 @@ FailureOr<bool> GrandCentralSignalMappingsPass::emitUpdatedMappings(
                                       replacementWire);
     };
 
+    // Update the forced ports statistics.
+    numForcedInputPorts += forcedInputPorts.size();
+    numForcedOutputPorts += forcedOutputPorts.size();
+
     if (!forcedOutputPorts.empty()) {
       ModuleNamespace &moduleNamespace = getModuleNamespace(mod);
       auto builder = OpBuilder::atBlockBegin(mod.getBody());
+
+      // Update statistic
+      numBufferWirePairsAdded += forcedOutputPorts.size();
+
       for (auto portIdx : forcedOutputPorts) {
         auto port = mod.getArgument(portIdx);
         breakNet(builder, port, moduleNamespace, mod.getPortName(portIdx));
@@ -762,6 +790,9 @@ FailureOr<bool> GrandCentralSignalMappingsPass::emitUpdatedMappings(
       builder.setInsertionPointAfter(inst);
       auto parentModule = inst->getParentOfType<FModuleOp>();
       ModuleNamespace &moduleNamespace = getModuleNamespace(parentModule);
+
+      // Update statistic
+      numBufferWirePairsAdded += forcedInputPorts.size();
 
       for (auto portIdx : forcedInputPorts) {
         auto port = inst->getResult(portIdx);

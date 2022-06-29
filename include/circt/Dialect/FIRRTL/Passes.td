@@ -405,6 +405,20 @@ def GrandCentralSignalMappings : Pass<"firrtl-grand-central-signal-mappings",
   let options = [Option<"outputFilename", "file", "std::string", "",
       "Output file for the JSON-serialized OMIR data">];
   let dependentDialects = ["sv::SVDialect", "circt::hw::HWDialect"];
+  let statistics = [
+    Statistic<"numBufferWirePairsAdded", "num-buffer-wire-pairs-added",
+      "Number of buffer wire pairs added to break nets around forced ports">,
+    Statistic<"numForcedInputPorts", "num-forced-input-ports",
+      "Number of input ports that will be forced (sinks)">,
+    Statistic<"numForcedOutputPorts", "num-forced-output-ports",
+      "Number of output ports that will be forced (sinks)">,
+    Statistic<"numModules", "num-modules",
+      "Number of modules with at least one source or sink">,
+    Statistic<"numSinks", "num-sinks",
+      "Number of sinks">,
+    Statistic<"numSources", "num-sources",
+      "Number of sources">
+  ];
 }
 
 def CheckCombCycles : Pass<"firrtl-check-comb-cycles", "firrtl::CircuitOp"> {
