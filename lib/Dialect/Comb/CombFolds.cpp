@@ -130,6 +130,10 @@ static bool tryFlatteningOperands(Operation *op, PatternRewriter &rewriter) {
     if (!flattenOp || flattenOp->getName() != op->getName())
       continue;
 
+    // Check for loops
+    if (flattenOp == op)
+      continue;
+
     // Don't duplicate logic when it has multiple uses.
     if (!inputs[i].hasOneUse()) {
       // We can fold a multi-use binary operation into this one if this allows a
@@ -1120,9 +1124,11 @@ OpFoldResult XorOp::fold(ArrayRef<Attribute> constants) {
     return inputs()[0];
 
   // xor(xor(x,1),1) -> x
+  // but not self loop
   if (isBinaryNot()) {
     Value subExpr;
-    if (matchPattern(getOperand(0), m_Complement(m_Any(&subExpr))))
+    if (matchPattern(getOperand(0), m_Complement(m_Any(&subExpr))) &&
+        subExpr != getResult())
       return subExpr;
   }
 

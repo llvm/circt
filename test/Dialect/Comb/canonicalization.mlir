@@ -1366,3 +1366,11 @@ hw.module @propagateNamehint(%x: i16) -> (o: i1) {
   %0 = comb.icmp eq %c0_i16, %x {sv.namehint = "hint"}: i16
   hw.output %0 : i1
 }
+
+// https://github.com/llvm/circt/issues/2546
+// CHECK-LABEL: @Issue2546
+hw.module @Issue2546() -> (b: i1) {
+  %true = hw.constant true
+  %0 = comb.xor %0, %true : i1
+  hw.output %0 : i1
+}
