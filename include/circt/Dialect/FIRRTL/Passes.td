@@ -30,6 +30,16 @@ def LowerFIRRTLAnnotations : Pass<"firrtl-lower-annotations", "firrtl::CircuitOp
       "Ignore unknown annotations.">
   ];
   let dependentDialects = ["hw::HWDialect"];
+  let statistics = [
+    Statistic<"numRawAnnotations", "num-raw-annos",
+      "Number of raw annotations on circuit">,
+    Statistic<"numAddedAnnos", "num-added-annos",
+       "Number of additional annotations">,
+    Statistic<"numAnnos", "num-annos",
+       "Total number of annotations processed">,
+    Statistic<"numUnhandled", "num-unhandled-annos",
+      "Number of unhandled annotations">,
+  ];
 }
 
 def LowerFIRRTLTypes : Pass<"firrtl-lower-types", "firrtl::CircuitOp"> {

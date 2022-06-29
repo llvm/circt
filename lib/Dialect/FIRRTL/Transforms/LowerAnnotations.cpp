@@ -361,10 +361,16 @@ LogicalResult LowerAnnotationsPass::applyAnnotation(DictionaryAttr anno,
     return state.circuit.emitError("Annotation without a class: ") << anno;
 
   // See if we handle the class
-  auto *record = getAnnotationHandler(annoClassVal, ignoreUnhandledAnno);
-  if (!record)
-    return mlir::emitWarning(state.circuit.getLoc())
-           << "Unhandled annotation: " << anno;
+  auto *record = getAnnotationHandler(annoClassVal, false);
+  if (!record) {
+    ++numUnhandled;
+    if (!ignoreUnhandledAnno)
+      return state.circuit->emitWarning("Unhandled annotation: ") << anno;
+
+    // Try again, requesting the fallback handler.
+    record = getAnnotationHandler(annoClassVal, ignoreUnhandledAnno);
+    assert(record);
+  }
 
   // Try to apply the annotation
   auto target = record->resolver(anno, state);
@@ -399,8 +405,11 @@ void LowerAnnotationsPass::runOnOperation() {
   // Grab the annotations.
   for (auto anno : annotations)
     worklistAttrs.push_back(anno.cast<DictionaryAttr>());
+
   size_t numFailures = 0;
+  size_t numAdded = 0;
   auto addToWorklist = [&](DictionaryAttr anno) {
+    ++numAdded;
     worklistAttrs.push_back(anno);
   };
   ApplyState state{circuit, modules, addToWorklist};
@@ -410,6 +419,12 @@ void LowerAnnotationsPass::runOnOperation() {
     if (applyAnnotation(attr, state).failed())
       ++numFailures;
   }
+
+  // Update statistics
+  numRawAnnotations += annotations.size();
+  numAddedAnnos += numAdded;
+  numAnnos += numAdded + annotations.size();
+
   if (numFailures)
     signalPassFailure();
 }
