@@ -251,9 +251,7 @@ static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
           auto fieldID = field.fieldID + oldPortType.getFieldID(targetIndex);
           if (annoFieldID >= fieldID &&
               annoFieldID <= fieldID + field.type.getMaxFieldID()) {
-            // Create a new sub-annotation with a new field ID. Similarly, we
-            // need to add the fieldID of `data` or `mask` sub-field in the new
-            // memory port type here.
+            // Set the field ID of the new annotation.
             auto newFieldID =
                 annoFieldID - fieldID + portType.getFieldID(targetIndex);
             anno.setMember("circt.fieldID", b->getI32IntegerAttr(newFieldID));
@@ -533,7 +531,7 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(
 
     if (auto newFieldID = fieldID - field.fieldID) {
       // If the target is a subfield/subindex of the current field, create a
-      // new sub-annotation with a new field ID.
+      // new annotation with the correct circt.fieldID.
       Annotation newAnno(annotation);
       newAnno.setMember("circt.fieldID",
                         builder->getI32IntegerAttr(newFieldID));
