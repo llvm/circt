@@ -100,7 +100,8 @@ static void addAnnotation(AnnoTarget ref, unsigned fieldIdx,
 
 /// Make an anchor for a non-local annotation.  Use the expanded path to build
 /// the module and name list in the anchor.
-static FlatSymbolRefAttr buildNLA(AnnoPathValue target, ApplyState &state) {
+static FlatSymbolRefAttr buildNLA(const AnnoPathValue &target,
+                                  ApplyState &state) {
   OpBuilder b(state.circuit.getBodyRegion());
   SmallVector<Attribute> insts;
   for (auto inst : target.instances) {
@@ -120,7 +121,7 @@ static FlatSymbolRefAttr buildNLA(AnnoPathValue target, ApplyState &state) {
 /// along the instance path.  Returns symbol name used to anchor annotations to
 /// path.
 // FIXME: uniq annotation chain links
-static FlatSymbolRefAttr scatterNonLocalPath(AnnoPathValue target,
+static FlatSymbolRefAttr scatterNonLocalPath(const AnnoPathValue &target,
                                              ApplyState &state) {
 
   FlatSymbolRefAttr sym = buildNLA(target, state);
@@ -191,7 +192,7 @@ static Optional<AnnoPathValue> tryResolve(DictionaryAttr anno,
 
 /// An applier which puts the annotation on the target and drops the 'target'
 /// field from the annotaiton.  Optionally handles non-local annotations.
-static LogicalResult applyWithoutTargetImpl(AnnoPathValue target,
+static LogicalResult applyWithoutTargetImpl(const AnnoPathValue &target,
                                             DictionaryAttr anno,
                                             ApplyState &state,
                                             bool allowNonLocal) {
@@ -223,7 +224,7 @@ static LogicalResult applyWithoutTargetImpl(AnnoPathValue target,
 /// field from the annotaiton.  Optionally handles non-local annotations.
 /// Ensures the target resolves to an expected type of operation.
 template <bool allowNonLocal, typename T, typename... Tr>
-static LogicalResult applyWithoutTarget(AnnoPathValue target,
+static LogicalResult applyWithoutTarget(const AnnoPathValue &target,
                                         DictionaryAttr anno,
                                         ApplyState &state) {
   if (!target.isOpOfType<T, Tr...>())
@@ -234,7 +235,7 @@ static LogicalResult applyWithoutTarget(AnnoPathValue target,
 /// An applier which puts the annotation on the target and drops the 'target'
 /// field from the annotaiton.  Optionally handles non-local annotations.
 template <bool allowNonLocal = false>
-static LogicalResult applyWithoutTarget(AnnoPathValue target,
+static LogicalResult applyWithoutTarget(const AnnoPathValue &target,
                                         DictionaryAttr anno,
                                         ApplyState &state) {
   return applyWithoutTargetImpl(target, anno, state, allowNonLocal);
@@ -243,8 +244,8 @@ static LogicalResult applyWithoutTarget(AnnoPathValue target,
 /// Apply a DontTouchAnnotation to the circuit.  For almost all operations, this
 /// just adds a symbol.  For CHIRRTL memory ports, this preserves the
 /// annotation.
-static LogicalResult applyDontTouch(AnnoPathValue target, DictionaryAttr anno,
-                                    ApplyState &state) {
+static LogicalResult applyDontTouch(const AnnoPathValue &target,
+                                    DictionaryAttr anno, ApplyState &state) {
 
   // A DontTouchAnnotation is only allowed to be placed on a ReferenceTarget.
   // If this winds up on a module. then it indicates that the original
@@ -274,7 +275,8 @@ namespace {
 struct AnnoRecord {
   llvm::function_ref<Optional<AnnoPathValue>(DictionaryAttr, ApplyState &)>
       resolver;
-  llvm::function_ref<LogicalResult(AnnoPathValue, DictionaryAttr, ApplyState &)>
+  llvm::function_ref<LogicalResult(const AnnoPathValue &, DictionaryAttr,
+                                   ApplyState &)>
       applier;
 };
 } // end anonymous namespace

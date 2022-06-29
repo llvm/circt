@@ -121,7 +121,7 @@ static T &operator<<(T &os, const SignalMapping &mapping) {
 // Code related to annotation handling
 //===----------------------------------------------------------------------===//
 
-LogicalResult circt::firrtl::applyGCTSignalMappings(AnnoPathValue target,
+LogicalResult circt::firrtl::applyGCTSignalMappings(const AnnoPathValue &target,
                                                     DictionaryAttr anno,
                                                     ApplyState &state) {
   auto id = state.newID();
