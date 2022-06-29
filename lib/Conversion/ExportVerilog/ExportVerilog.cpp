@@ -233,7 +233,7 @@ bool ExportVerilog::isVerilogExpression(Operation *op) {
   // These are SV dialect expressions.
   if (isa<ReadInOutOp, ArrayIndexInOutOp, IndexedPartSelectInOutOp,
           StructFieldInOutOp, IndexedPartSelectOp, ParamValueOp, XMROp,
-          SampledOp>(op))
+          SampledOp, EnumConstantOp>(op))
     return true;
 
   // All HW combinational logic ops and SV expression ops are Verilog
@@ -282,7 +282,7 @@ static void getTypeDims(SmallVectorImpl<Attribute> &dims, Type type,
     return getTypeDims(dims, inout.getElementType(), loc);
   if (auto uarray = hw::type_dyn_cast<hw::UnpackedArrayType>(type))
     return getTypeDims(dims, uarray.getElementType(), loc);
-  if (hw::type_isa<InterfaceType>(type) || hw::type_isa<StructType>(type))
+  if (hw::type_isa<InterfaceType, StructType, EnumType>(type))
     return;
 
   mlir::emitError(loc, "value has an unsupported verilog type ") << type;
@@ -352,6 +352,8 @@ static StringRef getVerilogDeclWord(Operation *op,
     auto elementType =
         op->getResult(0).getType().cast<InOutType>().getElementType();
     if (elementType.isa<StructType>())
+      return "";
+    if (elementType.isa<EnumType>())
       return "";
     if (auto innerType = elementType.dyn_cast<ArrayType>()) {
       while (innerType.getElementType().isa<ArrayType>())
@@ -1239,6 +1241,15 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
                                    implicitIntType, singleBitDefaultType,
                                    emitter);
       })
+      .Case<EnumType>([&](EnumType enumType) {
+        os << "enum {";
+        llvm::interleaveComma(enumType.getFields(), os,
+                              [&](Attribute enumerator) {
+                                os << enumerator.cast<StringAttr>().getValue();
+                              });
+        os << "}";
+        return true;
+      })
       .Case<StructType>([&](StructType structType) {
         if (structType.getElements().empty()) {
           if (!implicitIntType)
@@ -1657,6 +1668,7 @@ private:
   SubExprInfo visitTypeOp(StructCreateOp op);
   SubExprInfo visitTypeOp(StructExtractOp op);
   SubExprInfo visitTypeOp(StructInjectOp op);
+  SubExprInfo visitTypeOp(EnumConstantOp op);
 
   // Comb Dialect Operations
   using CombinationalVisitor::visitComb;
@@ -2270,6 +2282,11 @@ SubExprInfo ExprEmitter::visitTypeOp(StructInjectOp op) {
         }
       });
   os << '}';
+  return {Selection, IsUnsigned};
+}
+
+SubExprInfo ExprEmitter::visitTypeOp(EnumConstantOp op) {
+  os << op.enumerator().getValue().getValue();
   return {Selection, IsUnsigned};
 }
 
@@ -3334,18 +3351,22 @@ LogicalResult StmtEmitter::visitSV(CaseOp op) {
   emitLocationInfoAndNewLine(ops);
 
   addIndent();
-  for (auto caseInfo : op.getCases()) {
-    auto pattern = caseInfo.pattern;
+  for (auto &caseInfo : op.getCases()) {
+    auto &pattern = caseInfo.pattern;
 
-    if (pattern.isDefault())
-      indent() << "default";
-    else {
-      // TODO: We could emit in hex if/when the size is a multiple of 4 and
-      // there are no x's crossing nibble boundaries.
-      indent() << pattern.getWidth() << "'b";
-      for (size_t bit = 0, e = pattern.getWidth(); bit != e; ++bit)
-        os << getLetter(pattern.getBit(e - bit - 1));
-    }
+    llvm::TypeSwitch<CasePattern *>(pattern.get())
+        .Case<CaseBitPattern>([&](auto bitPattern) {
+          // TODO: We could emit in hex if/when the size is a multiple of 4 and
+          // there are no x's crossing nibble boundaries.
+          indent() << bitPattern->getWidth() << "'b";
+          for (size_t bit = 0, e = bitPattern->getWidth(); bit != e; ++bit)
+            os << getLetter(bitPattern->getBit(e - bit - 1));
+        })
+        .Case<CaseEnumPattern>(
+            [&](auto enumPattern) { indent() << enumPattern->getEnumValue(); })
+        .Case<CaseDefaultPattern>([&](auto) { indent() << "default"; })
+        .Default([&](auto) { llvm_unreachable("unhandled case pattern"); });
+
     os << ":";
     emitBlockAsStatement(caseInfo.block, emptyOps);
   }

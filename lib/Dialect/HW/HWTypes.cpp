@@ -61,7 +61,7 @@ bool circt::hw::isHWIntegerType(mlir::Type type) {
 /// hardware but not marker types like InOutType.
 bool circt::hw::isHWValueType(Type type) {
   // Signless and signed integer types are both valid.
-  if (type.isa<IntegerType>() || type.isa<IntType>())
+  if (type.isa<IntegerType, IntType, EnumType>())
     return true;
 
   if (auto array = type.dyn_cast<ArrayType>())
@@ -308,6 +308,45 @@ Type UnionType::getFieldType(mlir::StringRef fieldName) {
     if (field.name == fieldName)
       return field.type;
   return Type();
+}
+
+//===----------------------------------------------------------------------===//
+// Enum Type
+//===----------------------------------------------------------------------===//
+
+Type EnumType::parse(AsmParser &p) {
+  llvm::SmallVector<Attribute> enumerators;
+
+  if (p.parseLess() || p.parseCommaSeparatedList([&]() {
+        StringRef name;
+        if (p.parseKeyword(&name))
+          return failure();
+        enumerators.push_back(StringAttr::get(p.getContext(), name));
+        return success();
+      }) ||
+      p.parseGreater())
+    return Type();
+
+  return get(p.getContext(), ArrayAttr::get(p.getContext(), enumerators));
+}
+
+void EnumType::print(AsmPrinter &p) const {
+  p << '<';
+  llvm::interleaveComma(getFields(), p, [&](Attribute enumerator) {
+    p << enumerator.cast<StringAttr>().getValue();
+  });
+  p << ">";
+}
+
+bool EnumType::contains(mlir::StringRef field) {
+  return indexOf(field).hasValue();
+}
+
+Optional<size_t> EnumType::indexOf(mlir::StringRef field) {
+  for (auto it : llvm::enumerate(getFields()))
+    if (it.value().cast<StringAttr>().getValue() == field)
+      return it.index();
+  return {};
 }
 
 //===----------------------------------------------------------------------===//

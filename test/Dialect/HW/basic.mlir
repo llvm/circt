@@ -105,6 +105,8 @@ hw.module @test1(%arg0: i3, %arg1: i1, %arg2: !hw.array<1000xi8>) -> (result: i5
   %arr2 = hw.array_create %small1, %small2, %add : i19
   // CHECK-NEXT: = hw.array_concat [[ARR1]], [[ARR2]] : !hw.array<2xi19>, !hw.array<3xi19>
   %bigArray = hw.array_concat %arrCreated, %arr2 : !hw.array<2 x i19>, !hw.array<3 x i19>
+  // CHECK-NEXT: %A = hw.enum.constant #hw.enum.value<A, !hw.enum<A, B, C>>
+  %A_enum = hw.enum.constant #hw.enum.value<A, !hw.enum<A, B, C>>
 
   // CHECK-NEXT:    hw.output [[RES8]] : i50
   hw.output %result : i50

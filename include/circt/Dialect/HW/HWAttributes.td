@@ -264,6 +264,32 @@ def ParamExprAttr : AttrDef<HWDialect, "ParamExpr"> {
   let hasCustomAssemblyFormat = 1;
 }
 
+// An attribute to indicate an enumeration value.
+def EnumValueAttr : AttrDef<HWDialect, "EnumValue"> {
+  let summary = "Enumeration value attribute";
+  let description = [{
+    This attribute represents a value of an enumeration.
+    
+    Examples:
+    ```mlir
+      #hw.enum.value<A, !hw.enum<A, B, C>>
+    ```
+  }];
+  let mnemonic = "enum.value";
+  let parameters = (ins "::mlir::StringAttr":$value, "::mlir::TypeAttr":$type);
+
+  // Force all clients to go through our custom builder so we can check
+  // whether the requested enum value is part of the provided enum type.
+  let skipDefaultBuilders = 1;
+  let hasCustomAssemblyFormat = 1;
+
+  let extraClassDeclaration = [{
+    /// Builds a new EnumValueAttr of the provided value.
+    /// This will fail if the value is not a member of the provided enum type.
+    static Attribute get(::mlir::Location loc, ::mlir::StringAttr value, circt::hw::EnumType type);
+  }];
+}
+
 
 let cppNamespace = "circt::hw" in {
 def WUW_Undefined : I32EnumAttrCase<"Undefined", 0>;

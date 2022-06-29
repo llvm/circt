@@ -959,6 +959,36 @@ hw.module @ConstantDefBeforeUse() {
   }
 }
 
+
+// CHECK-LABEL: module AnFSM
+// CHECK:   enum {A, B, C} reg_0;
+// CHECK:   always @(posedge clock) begin
+// CHECK:     case (reg_0)
+// CHECK:       A:
+// CHECK:         reg_0 <= B;
+// CHECK:       B:
+// CHECK:         reg_0 <= C;
+// CHECK:       default:
+// CHECK:         reg_0 <= A;
+// CHECK:     endcase
+// CHECK:   end
+
+hw.module @AnFSM(%clock : i1) {
+  %reg = sv.reg : !hw.inout<!hw.enum<A, B, C>>
+  %reg_read = sv.read_inout %reg : !hw.inout<!hw.enum<A, B, C>>
+  
+  %A = hw.enum.constant #hw.enum.value<A, !hw.enum<A, B, C>>
+  %B = hw.enum.constant #hw.enum.value<B, !hw.enum<A, B, C>>
+  %C = hw.enum.constant #hw.enum.value<C, !hw.enum<A, B, C>>
+
+  sv.always posedge %clock {
+    sv.case case %reg_read : !hw.enum<A, B, C>
+      case A : { sv.passign %reg, %B : !hw.enum<A, B, C> }
+      case B : { sv.passign %reg, %C : !hw.enum<A, B, C> }
+      default : { sv.passign %reg, %A : !hw.enum<A, B, C> }
+  }
+}
+
 // Constants defined after use in non-procedural regions should be moved to the
 // top of the block.
 // CHECK-LABEL: module ConstantDefAfterUse

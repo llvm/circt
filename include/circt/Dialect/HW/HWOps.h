@@ -28,6 +28,8 @@
 namespace circt {
 namespace hw {
 
+class EnumValueAttr;
+
 /// A module port direction.
 enum class PortDirection {
   INPUT = 1,

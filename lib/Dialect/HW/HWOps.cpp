@@ -1714,6 +1714,31 @@ void ArrayConcatOp::build(OpBuilder &b, OperationState &state,
 }
 
 //===----------------------------------------------------------------------===//
+// EnumConstantOp
+//===----------------------------------------------------------------------===//
+
+ParseResult EnumConstantOp::parse(OpAsmParser &parser, OperationState &result) {
+  EnumValueAttr value;
+  if (parser.parseAttribute(value))
+    return failure();
+
+  result.addAttribute("enumerator", value);
+  result.addTypes(value.getType().getValue());
+
+  return success();
+}
+
+void EnumConstantOp::print(OpAsmPrinter &p) {
+  p << " ";
+  p.printAttribute(enumerator());
+}
+
+void EnumConstantOp::getAsmResultNames(
+    function_ref<void(Value, StringRef)> setNameFn) {
+  setNameFn(getResult(), enumerator().getValue().str());
+}
+
+//===----------------------------------------------------------------------===//
 // StructCreateOp
 //===----------------------------------------------------------------------===//
 

@@ -329,3 +329,11 @@ module {
 
 // expected-error @+1 {{unsupported dimension kind in hw.array}}
 hw.module @bab<param: i32, N: i32> ( %array2d: !hw.array<i3 x i4>) {}
+
+// -----
+
+hw.module @foo() {
+  // expected-error @+1 {{enum value 'D' is not a member of enum type '!hw.enum<A, B, C>'}}
+  %0 = hw.enum.constant #hw.enum.value<D, !hw.enum<A, B, C>>
+  hw.output
+}

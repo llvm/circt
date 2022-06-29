@@ -15,6 +15,7 @@
 namespace circt {
 namespace hw {
 class PEOAttr;
+class EnumType;
 enum class PEO : uint32_t;
 
 // Eventually move this to an op trait
