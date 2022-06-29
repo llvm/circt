@@ -19,6 +19,23 @@ class Nothing:
 
 
 @pycde.module
+class Delay:
+  clk = pycde.Clock()
+  x = pycde.Input(pycde.types.i1)
+  y = pycde.Output(pycde.types.i1)
+
+  @pycde.generator
+  def construct(mod):
+    r = mod.x.reg(mod.clk, appid=AppID("reg", 0))
+    mod.y = r
+    # CHECK: r appid: reg[0]
+    print(f"r appid: {r.appid}")
+    r.appid = AppID("reg", 4)
+    # CHECK: r appid: reg[4]
+    print(f"r appid: {r.appid}")
+
+
+@pycde.module
 class UnParameterized:
   clk = pycde.Clock()
   x = pycde.Input(pycde.types.i1)
@@ -27,10 +44,7 @@ class UnParameterized:
   @pycde.generator
   def construct(mod):
     Nothing().name = "nothing_inst"
-    r = mod.x.reg(mod.clk, appid=AppID("reg", 0))
-    mod.y = r
-    # CHECK: r appid: reg[0]
-    print(f"r appid: {r.appid}")
+    mod.y = Delay(clk=mod.clk, x=mod.x).y
 
 
 @pycde.module
@@ -40,9 +54,10 @@ class Test:
   @pycde.generator
   def build(ports):
     c1 = pycde.dialects.hw.ConstantOp(pycde.types.i1, 1)
-    c1.appid = AppID("c", 1)
-    UnParameterized(clk=ports.clk, x=c1).name = "unparam"
-    UnParameterized(clk=ports.clk, x=c1).name = "unparam"
+    UnParameterized(clk=ports.clk, x=c1, appid=AppID("unparam",
+                                                     0)).name = "unparam"
+    UnParameterized(clk=ports.clk, x=c1, appid=AppID("unparam",
+                                                     1)).name = "unparam"
 
 
 t = pycde.System([Test], name="Test", output_directory=sys.argv[1])
@@ -52,6 +67,30 @@ t.print()
 # CHECK-NOT: msft.module @UnParameterized
 Test.print()
 UnParameterized.print()
+
+print(PhysLocation(PrimitiveType.DSP, 39, 25))
+# CHECK: PhysLocation<PrimitiveType.DSP, x:39, y:25, num:0>
+
+# CHECK-LABEL: === Hierarchy
+print("=== Hierarchy")
+# CHECK-NEXT: <instance: []>
+# CHECK-NEXT: <instance: [UnParameterized]>
+# CHECK-NEXT: <instance: [UnParameterized, Nothing]>
+# CHECK-NEXT: <instance: [UnParameterized, Delay]>
+# CHECK-NEXT: <instance: [UnParameterized, Delay, x__reg1]>
+# CHECK-NEXT: <instance: [UnParameterized_1]>
+# CHECK-NEXT: <instance: [UnParameterized_1, Nothing]>
+# CHECK-NEXT: <instance: [UnParameterized_1, Delay]>
+# CHECK-NEXT: <instance: [UnParameterized_1, Delay, x__reg1]>
+test_inst = t.get_instance(Test)
+test_inst.walk(lambda inst: print(inst))
+
+for ui in test_inst.unparam:
+  print(f"unparam: {ui}")
+
+reg = test_inst.unparam[0].reg[4]
+print(f"unparam[0].reg[4]: {reg}")
+# CHECK: unparam[0].reg[4]: <instance: [UnParameterized, Delay, x__reg1]>
 
 # Set up the primitive locations. Errors out if location is placed but doesn't
 # exist.
@@ -63,22 +102,7 @@ primdb.add_coords("DSP", 0, 10)
 primdb.add_coords(PrimitiveType.DSP, 1, 12)
 primdb.add_coords(PrimitiveType.DSP, 39, 90)
 primdb.add(PhysLocation(PrimitiveType.DSP, 39, 25))
-
-print(PhysLocation(PrimitiveType.DSP, 39, 25))
-# CHECK: PhysLocation<PrimitiveType.DSP, x:39, y:25, num:0>
-
-# CHECK-LABEL: === Hierarchy
-print("=== Hierarchy")
-# CHECK-NEXT: <instance: []>
-# CHECK-NEXT: <instance: [UnParameterized]>
-# CHECK-NEXT: <instance: [UnParameterized, Nothing]>
-# CHECK-NEXT: <instance: [UnParameterized, x__reg1]>
-# CHECK-NEXT: <instance: [UnParameterized_1]>
-# CHECK-NEXT: <instance: [UnParameterized_1, Nothing]>
-# CHECK-NEXT: <instance: [UnParameterized_1, x__reg1]>
-test_inst = t.get_instance(Test)
 t.createdb(primdb)
-test_inst.walk(lambda inst: print(inst))
 
 # CHECK-LABEL: === Placements
 print("=== Placements")
@@ -123,7 +147,7 @@ test_inst.walk(lambda inst: print(
 # CHECK-DAG: <instance: [UnParameterized, Nothing]> [(PhysLocation<PrimitiveType.DSP, x:39, y:25, num:0>, None)]
 # CHECK-DAG: <instance: [UnParameterized_1]> [(PhysLocation<PrimitiveType.M20K, x:39, y:25, num:0>, '|memory|bank')]
 # CHECK-DAG: <instance: [UnParameterized_1, Nothing]> []
-# CHECK-DAG: <instance: [UnParameterized_1, x__reg1]>
+# CHECK-DAG: <instance: [UnParameterized_1, Delay, x__reg1]>
 
 # TODO: add back anonymous reservations
 
