@@ -92,9 +92,11 @@ constexpr const char *extractGrandCentralClass =
 constexpr const char *signalDriverAnnoClass =
     "sifive.enterprise.grandcentral.SignalDriverAnnotation";
 constexpr const char *signalDriverTargetAnnoClass =
-    "sifive.enterprise.grandcentral.SignalDriverAnnotation.target";
+    "sifive.enterprise.grandcentral.SignalDriverAnnotation.target"; // not in
+                                                                    // SFC
 constexpr const char *signalDriverModuleAnnoClass =
-    "sifive.enterprise.grandcentral.SignalDriverAnnotation.module";
+    "sifive.enterprise.grandcentral.SignalDriverAnnotation.module"; // not in
+                                                                    // SFC
 constexpr const char *moduleReplacementAnnoClass =
     "sifive.enterprise.grandcentral.ModuleReplacementAnnotation";
 

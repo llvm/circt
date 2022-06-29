@@ -156,10 +156,14 @@ LogicalResult circt::firrtl::applyGCTSignalMappings(AnnoPathValue target,
   // Add field indicating if we're the subcircuit or not.  Do this by looking at
   // the first source or sink and seeing what its circuit target is.
   DictionaryAttr firstSourceOrSink;
-  if (sourcesAttr)
+  if (!sourcesAttr.empty())
     firstSourceOrSink = sourcesAttr.begin()->dyn_cast<DictionaryAttr>();
-  else
+  else if (!sinksAttr.empty())
     firstSourceOrSink = sinksAttr.begin()->dyn_cast<DictionaryAttr>();
+  else
+    return success();
+  if (!firstSourceOrSink)
+    return failure();
   auto prefix = tryGetAs<StringAttr>(firstSourceOrSink, anno, "_1", loc,
                                      signalDriverAnnoClass)
                     .getValue();
@@ -188,14 +192,14 @@ LogicalResult circt::firrtl::applyGCTSignalMappings(AnnoPathValue target,
         dict, dict, isSubCircuit ? "_2" : "_1", loc, signalDriverAnnoClass);
     StringAttr peer = tryGetAs<StringAttr>(
         dict, dict, isSubCircuit ? "_1" : "_2", loc, signalDriverAnnoClass);
-    if (!targetAttr)
+    if (!targetAttr || !peer)
       return {};
 
     auto target = tokenizePath(targetAttr);
     if (!target)
       return {};
     target->component.clear();
-    target->name = target->name.drop_front(target->name.size());
+    target->name = "";
     modules.insert(target->str());
 
     auto targetId = state.newID();
@@ -225,10 +229,10 @@ LogicalResult circt::firrtl::applyGCTSignalMappings(AnnoPathValue target,
     state.addToWorklistFn(sourceAnno);
   }
   for (auto attr : sinksAttr) {
-    auto sourceAnno = buildSourceOrSinkAnno(attr, false);
-    if (!sourceAnno)
+    auto sinkAnno = buildSourceOrSinkAnno(attr, false);
+    if (!sinkAnno)
       return failure();
-    state.addToWorklistFn(sourceAnno);
+    state.addToWorklistFn(sinkAnno);
   }
 
   AnnotationSet annotations(state.circuit);
@@ -250,14 +254,17 @@ LogicalResult circt::firrtl::applyGCTSignalMappings(AnnoPathValue target,
 /// Analyze the `module` of this `ModuleSignalMappings` and generate the
 /// corresponding auxiliary `FModuleOp` with the necessary cross-module
 /// references and `ForceOp`s to probe and drive remote signals. This is
-/// dictated by the presence of `SignalDriverAnnotation` on the module and
-/// individual operations inside it.
-/// If the module is the "remote" (main) circuit, gather those mappings
-/// for use handling forced ports and creating updated mappings.
+/// dictated by the presence of `SignalDriverAnnotation.module` on the module
+/// and individual operations inside it. Anything targeted by a source/sink will
+/// show up with a `SignalDriverAnnotation.target`. Global circuit-level
+/// information lives in a circuit-level `SignalDriverAnnotation`.
+///
+/// If the module is the "remote" (main) circuit, gather those mappings for use
+/// handling forced ports and creating updated mappings.
 void ModuleSignalMappings::run() {
-  // Check whether this module has any `SignalDriverAnnotation`s. These indicate
-  // whether the module contains any operations with such annotations and
-  // requires processing.
+  // Check whether this module has any `SignalDriverAnnotation.module`s. These
+  // indicate whether the module contains any operations with such annotations
+  // and requires processing.
   if (!AnnotationSet::removeAnnotations(module, signalDriverModuleAnnoClass)) {
     LLVM_DEBUG(llvm::dbgs() << "Skipping `" << module.getName()
                             << "` (has no annotations)\n");
@@ -266,7 +273,7 @@ void ModuleSignalMappings::run() {
   LLVM_DEBUG(llvm::dbgs() << "Running on module `" << module.getName()
                           << "`\n");
 
-  // Gather the signal driver annotations on the ports of this module.
+  // Gather the `SignalDriverAnnotation.target`s on the ports of this module.
   LLVM_DEBUG(llvm::dbgs() << "- Gather port annotations\n");
   AnnotationSet::removePortAnnotations(
       module, [&](unsigned i, Annotation anno) {
@@ -276,7 +283,8 @@ void ModuleSignalMappings::run() {
         return true;
       });
 
-  // Gather the signal driver annotations of the operations within this module.
+  // Gather the `SignalDriverAnnotation.target`s of the operations within this
+  // module.
   LLVM_DEBUG(llvm::dbgs() << "- Gather operation annotations\n");
   module.walk([&](Operation *op) {
     AnnotationSet::removeAnnotations(op, [&](Annotation anno) {
