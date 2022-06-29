@@ -752,7 +752,8 @@ private:
   // Builds the loop exit network. This detects the conditional operands used in
   // each of the exit blocks, matches their parity with the convention used to
   // prime the loop register, and assigns it to the loop priming register input.
-  void buildExitNetwork(Block *loopHeader, const std::set<ExitPair> &exitPairs,
+  void buildExitNetwork(Block *loopHeader,
+                        const llvm::SmallSet<ExitPair, 2> &exitPairs,
                         BufferOp loopPrimingRegister,
                         Backedge &loopPrimingInput);
 
@@ -956,10 +957,9 @@ BufferOp LoopNetworkRewriter::buildContinueNetwork(Block *loopHeader,
   return primingRegister;
 }
 
-void LoopNetworkRewriter::buildExitNetwork(Block *loopHeader,
-                                           const std::set<ExitPair> &exitPairs,
-                                           BufferOp loopPrimingRegister,
-                                           Backedge &loopPrimingInput) {
+void LoopNetworkRewriter::buildExitNetwork(
+    Block *loopHeader, const llvm::SmallSet<ExitPair, 2> &exitPairs,
+    BufferOp loopPrimingRegister, Backedge &loopPrimingInput) {
   auto loc = loopPrimingRegister.getLoc();
 
   // Iterate over the exit pairs to gather up the condition signals that need to
@@ -1006,7 +1006,7 @@ LogicalResult LoopNetworkRewriter::processOuterLoop(Location loc,
                                                     LoopInfo &loopInfo) {
   // We determine the exit pairs of the loop; this is the in-loop nodes
   // which branch off to the exit nodes.
-  std::set<ExitPair> exitPairs;
+  llvm::SmallSet<ExitPair, 2> exitPairs;
   for (auto *exitNode : loopInfo.exitBlocks) {
     for (auto *pred : exitNode->getPredecessors()) {
       // is the predecessor inside the loop?
