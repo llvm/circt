@@ -690,9 +690,9 @@ static LogicalResult collectLoopInfo(Block *entry, DominanceInfo &domInfo,
                   "form of control flow, exiting.";
     }
   }
-  bool isLoop = !loopInfo.loopLatches.empty();
-  if (isLoop) {
-    loopInfo.isValid = true;
+
+  loopInfo.isValid = !loopInfo.loopLatches.empty();
+  if (loopInfo.isValid) {
     loopInfo.loopHeader = entry;
 
     // Exit blocks are the blocks that control is transfered to after exiting
