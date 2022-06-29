@@ -154,8 +154,6 @@ static cl::opt<bool> imconstprop(
         "Enable intermodule constant propagation and dead code elimination"),
     cl::init(true), cl::cat(mainCategory));
 
-// TODO: this pass is temporarily off by default, while we migrate over to the
-// new memory lowering pipeline.
 static cl::opt<bool> lowerMemory("lower-memory",
                                  cl::desc("run the lower-memory pass"),
                                  cl::init(true), cl::cat(mainCategory));
@@ -239,7 +237,7 @@ static cl::opt<bool> exportModuleHierarchy(
 static cl::opt<bool>
     checkCombCycles("firrtl-check-comb-cycles",
                     cl::desc("check combinational cycles on firrtl"),
-                    cl::init(false), cl::cat(mainCategory));
+                    cl::init(true), cl::cat(mainCategory));
 
 static cl::opt<bool>
     imdeadcodeelim("imdeadcodeelim",

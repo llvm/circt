@@ -1383,3 +1383,11 @@ hw.module @extractToReductionOps(%a: i1, %b: i2) -> (c: i1, d: i1, e: i1) {
 
   hw.output %2, %3, %4 : i1, i1, i1
 }
+
+// https://github.com/llvm/circt/issues/2546
+// CHECK-LABEL: @Issue2546
+hw.module @Issue2546() -> (b: i1) {
+  %true = hw.constant true
+  %0 = comb.xor %0, %true : i1
+  hw.output %0 : i1
+}

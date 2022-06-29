@@ -593,7 +593,8 @@ void ExtractInstancesPass::extractInstances() {
         auto newName =
             getModuleNamespace(newParent).newName(instSym.getValue());
         if (newName != instSym.getValue())
-          newInst.inner_symAttr(StringAttr::get(&getContext(), newName));
+          newInst.inner_symAttr(
+              InnerSymAttr::get(StringAttr::get(&getContext(), newName)));
       }
 
       // Add the moved instance and hook it up to the added ports.

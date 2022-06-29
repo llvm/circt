@@ -110,7 +110,7 @@ def CombMemOp : CHIRRTLOp<"combmem", [HasCustomSSAName, FNamableOp]> {
     write latency of 1 and a read latency of 0.
   }];
   let arguments = (ins StrAttr:$name, NameKindAttr:$nameKind,
-                       AnnotationArrayAttr:$annotations, OptionalAttr<SymbolNameAttr>:$inner_sym);
+                       AnnotationArrayAttr:$annotations, OptionalAttr<InnerSymAttr>:$inner_sym);
   let results = (outs CMemoryType:$result);
   let assemblyFormat = [{(`sym` $inner_sym^)? custom<NameKind>($nameKind)
                          custom<CombMemOp>(attr-dict) `:` qualified(type($result))}];
@@ -129,7 +129,7 @@ def SeqMemOp : CHIRRTLOp<"seqmem", [HasCustomSSAName, FNamableOp]> {
   }];
   let arguments = (ins RUWAttr:$ruw, StrAttr:$name, NameKindAttr:$nameKind,
                        AnnotationArrayAttr:$annotations,
-                       OptionalAttr<SymbolNameAttr>:$inner_sym);
+                       OptionalAttr<InnerSymAttr>:$inner_sym);
   let results = (outs CMemoryType:$result);
   let assemblyFormat = [{(`sym` $inner_sym^)? custom<NameKind>($nameKind) $ruw
                          custom<SeqMemOp>(attr-dict) `:` qualified(type($result))}];

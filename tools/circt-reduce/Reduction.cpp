@@ -794,7 +794,8 @@ struct NodeSymbolRemover : public Reduction {
 
   bool match(Operation *op) override {
     if (auto nodeOp = dyn_cast<firrtl::NodeOp>(op))
-      return nodeOp.inner_sym() && !nodeOp.inner_sym().getValue().empty();
+      return nodeOp.inner_sym() &&
+             !nodeOp.inner_sym()->getSymName().getValue().empty();
     return false;
   }
 

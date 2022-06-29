@@ -3056,10 +3056,11 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
       if (sym)
         break;
     }
-  result = builder.create<MemOp>(resultTypes, readLatency, writeLatency, depth,
-                                 ruw, builder.getArrayAttr(resultNames), id,
-                                 inferNameKind(id), annotations.first,
-                                 annotations.second, sym, IntegerAttr());
+  result = builder.create<MemOp>(
+      resultTypes, readLatency, writeLatency, depth, ruw,
+      builder.getArrayAttr(resultNames), id, inferNameKind(id),
+      annotations.first, annotations.second,
+      sym ? InnerSymAttr::get(sym) : InnerSymAttr(), IntegerAttr());
 
   UnbundledValueEntry unbundledValueEntry;
   unbundledValueEntry.reserve(result.getNumResults());
@@ -3142,7 +3143,8 @@ ParseResult FIRStmtParser::parseWire() {
 
   auto sym = getSymbolIfRequired(annotations, id);
   auto result =
-      builder.create<WireOp>(type, id, inferNameKind(id), annotations, sym);
+      builder.create<WireOp>(type, id, inferNameKind(id), annotations,
+                             sym ? InnerSymAttr::get(sym) : InnerSymAttr());
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 

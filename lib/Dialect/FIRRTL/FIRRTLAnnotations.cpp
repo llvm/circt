@@ -24,12 +24,6 @@
 using namespace circt;
 using namespace firrtl;
 
-static size_t getPortCount(Operation *op) {
-  if (auto module = dyn_cast<FModuleLike>(op))
-    return module.getNumPorts();
-  return op->getNumResults();
-}
-
 static ArrayAttr getAnnotationsFrom(Operation *op) {
   if (auto annots = op->getAttrOfType<ArrayAttr>(getAnnotationAttrName()))
     return annots;

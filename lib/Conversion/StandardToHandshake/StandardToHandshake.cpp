@@ -37,6 +37,7 @@
 #include "mlir/Support/LLVM.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/Passes.h"
+#include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -660,7 +661,63 @@ static bool isReachable(Block *from, Block *to) {
 }
 
 namespace {
+/// Container that holds information about a cfg loop.
+struct LoopInfo {
+  Block *loopHeader;
+  llvm::SmallSet<Block *, 2> loopLatches;
+  llvm::SmallSet<Block *, 4> inLoop;
+  llvm::SmallSet<Block *, 2> exitBlocks;
+  bool isValid;
+};
+} // namespace
 
+/// Helper that checks if entry is a loop header. If it is, it collects
+/// additional information about the loop for further processing.
+static LogicalResult collectLoopInfo(Block *entry, DominanceInfo &domInfo,
+                                     LoopInfo &loopInfo) {
+  for (auto *backedge : entry->getPredecessors()) {
+    bool dominates = domInfo.dominates(entry, backedge);
+    bool formsLoop = isReachable(entry, backedge);
+    if (formsLoop) {
+      if (dominates)
+        loopInfo.loopLatches.insert(backedge);
+      else
+        return entry->getParentOp()->emitError()
+               << "Non-canonical loop structures detected; a potential "
+                  "loop header has backedges not dominated by the loop "
+                  "header. This indicates that the loop has multiple entry "
+                  "points. Handshake lowering does not yet support this "
+                  "form of control flow, exiting.";
+    }
+  }
+
+  loopInfo.isValid = !loopInfo.loopLatches.empty();
+  if (loopInfo.isValid) {
+    loopInfo.loopHeader = entry;
+
+    // Exit blocks are the blocks that control is transfered to after exiting
+    // the loop. This is essentially determining the strongly connected
+    // components with the loop header. We perform a BFS from the loop header,
+    // and if the loop header is reachable from the block, it is within the
+    // loop.
+    blockBFS(entry, [&](Block *currBlock) {
+      if (isReachable(currBlock, entry)) {
+        loopInfo.inLoop.insert(currBlock);
+        return BFSNextState::Continue;
+      }
+      loopInfo.exitBlocks.insert(currBlock);
+      return BFSNextState::SkipSuccessors;
+    });
+
+    assert(loopInfo.inLoop.size() >= 2 && "A loop must have at least 2 blocks");
+    assert(loopInfo.exitBlocks.size() != 0 &&
+           "A loop must have an exit block...?");
+  }
+
+  return success();
+}
+
+namespace {
 // This function creates the loop 'continue' and 'exit' network around backedges
 // in the CFG.
 // We don't have a standard dialect based LoopInfo utility in MLIR
@@ -680,8 +737,7 @@ private:
   // An exit pair is a pair of <in loop block, outside loop block> that
   // indicates where control leaves a loop.
   using ExitPair = std::pair<Block *, Block *>;
-  LogicalResult processOuterLoop(Location loc, Block *loopHeader,
-                                 Block *loopLatch);
+  LogicalResult processOuterLoop(Location loc, LoopInfo &loopInfo);
 
   // Builds the loop continue network in between the loop header and its loop
   // latch. The loop continuation network will replace the existing control
@@ -696,7 +752,8 @@ private:
   // Builds the loop exit network. This detects the conditional operands used in
   // each of the exit blocks, matches their parity with the convention used to
   // prime the loop register, and assigns it to the loop priming register input.
-  void buildExitNetwork(Block *loopHeader, const std::set<ExitPair> &exitPairs,
+  void buildExitNetwork(Block *loopHeader,
+                        const llvm::SmallSet<ExitPair, 2> &exitPairs,
                         BufferOp loopPrimingRegister,
                         Backedge &loopPrimingInput);
 
@@ -735,26 +792,13 @@ LoopNetworkRewriter::processRegion(Region &r,
       llvm::copy_if(currBlock->getSuccessors(), std::back_inserter(queue),
                     [&](Block *block) { return !visited.count(block); });
     } else {
-      // Figure out which predecessors are loop latches
-      std::set<Block *> loopLatches;
-      for (auto *backedge : currBlock->getPredecessors()) {
-        bool dominates = domInfo.dominates(currBlock, backedge);
-        bool isLoop = isReachable(currBlock, backedge);
-        if (isLoop) {
-          if (dominates)
-            loopLatches.insert(backedge);
-          else
-            return op->emitError()
-                   << "Non-canonical loop structures detected; a potential "
-                      "loop header has backedges not dominated by the loop "
-                      "header. This indicates that the loop has multiple entry "
-                      "points. Handshake lowering does not yet support this "
-                      "form of control flow, exiting.";
-        }
-      }
+      // Check if currBlock starts a loop
+      LoopInfo loopInfo;
+      if (failed(collectLoopInfo(currBlock, domInfo, loopInfo)))
+        return failure();
 
-      if (!loopLatches.empty()) {
-        if (loopLatches.size() > 1)
+      if (loopInfo.isValid) {
+        if (loopInfo.loopLatches.size() > 1)
           return emitError(op->getLoc()) << "Multiple loop latches detected "
                                             "(backedges from within the loop "
                                             "to the loop header). Loop task "
@@ -762,8 +806,7 @@ LoopNetworkRewriter::processRegion(Region &r,
                                             "loops with unified loop latches.";
 
         // This is the start of an outer loop - go process!
-        if (failed(processOuterLoop(op->getLoc(), currBlock,
-                                    *loopLatches.begin())))
+        if (failed(processOuterLoop(op->getLoc(), loopInfo)))
           return failure();
       }
     }
@@ -914,10 +957,9 @@ BufferOp LoopNetworkRewriter::buildContinueNetwork(Block *loopHeader,
   return primingRegister;
 }
 
-void LoopNetworkRewriter::buildExitNetwork(Block *loopHeader,
-                                           const std::set<ExitPair> &exitPairs,
-                                           BufferOp loopPrimingRegister,
-                                           Backedge &loopPrimingInput) {
+void LoopNetworkRewriter::buildExitNetwork(
+    Block *loopHeader, const llvm::SmallSet<ExitPair, 2> &exitPairs,
+    BufferOp loopPrimingRegister, Backedge &loopPrimingInput) {
   auto loc = loopPrimingRegister.getLoc();
 
   // Iterate over the exit pairs to gather up the condition signals that need to
@@ -961,34 +1003,14 @@ void LoopNetworkRewriter::buildExitNetwork(Block *loopHeader,
 }
 
 LogicalResult LoopNetworkRewriter::processOuterLoop(Location loc,
-                                                    Block *loopHeader,
-                                                    Block *loopLatch) {
-  // To build the exit network, we need to determine the exit blocks of the
-  // loop, as well as all blocks contained within the loop. Exit blocks are the
-  // blocks that control is transfered to after exiting the loop. This is
-  // essentially determining the strongly connected components with the loop
-  // header. We perform a BFS from the loop header, and if the loop header is
-  // reachable the block, it is within the loop.
-  SetVector<Block *> inLoop, exitBlocks;
-  blockBFS(loopHeader, [&](Block *currBlock) {
-    if (isReachable(currBlock, loopHeader)) {
-      inLoop.insert(currBlock);
-      return BFSNextState::Continue;
-    }
-    exitBlocks.insert(currBlock);
-    return BFSNextState::SkipSuccessors;
-  });
-
-  assert(inLoop.size() >= 2 && "A loop must have at least 2 blocks");
-  assert(exitBlocks.size() != 0 && "A loop must have an exit block...?");
-
-  // Then we determine the exit pairs of the loop; this is the in-loop nodes
+                                                    LoopInfo &loopInfo) {
+  // We determine the exit pairs of the loop; this is the in-loop nodes
   // which branch off to the exit nodes.
-  std::set<ExitPair> exitPairs;
-  for (auto *exitNode : exitBlocks) {
+  llvm::SmallSet<ExitPair, 2> exitPairs;
+  for (auto *exitNode : loopInfo.exitBlocks) {
     for (auto *pred : exitNode->getPredecessors()) {
       // is the predecessor inside the loop?
-      if (!inLoop.contains(pred))
+      if (!loopInfo.inLoop.contains(pred))
         continue;
 
       ExitPair condPair = {pred, exitNode};
@@ -1006,17 +1028,18 @@ LogicalResult LoopNetworkRewriter::processOuterLoop(Location loc,
            << "Multiple exits detected within a loop. Loop task pipelining is "
               "only supported for loops with unified loop exit blocks.";
 
-  BackedgeBuilder bebuilder(*rewriter, loopHeader->front().getLoc());
+  BackedgeBuilder bebuilder(*rewriter, loopInfo.loopHeader->front().getLoc());
 
   // Build the loop continue network. Loop continuation is triggered solely by
   // backedges to the header.
   auto loopPrimingRegisterInput = bebuilder.get(rewriter->getI1Type());
   auto loopPrimingRegister =
-      buildContinueNetwork(loopHeader, loopLatch, loopPrimingRegisterInput);
+      buildContinueNetwork(loopInfo.loopHeader, *loopInfo.loopLatches.begin(),
+                           loopPrimingRegisterInput);
 
   // Build the loop exit network. Loop exiting is driven solely by exit pairs
   // from the loop.
-  buildExitNetwork(loopHeader, exitPairs, loopPrimingRegister,
+  buildExitNetwork(loopInfo.loopHeader, exitPairs, loopPrimingRegister,
                    loopPrimingRegisterInput);
 
   // Finally, we must reprime the BFS in processFunction; it must skip all
@@ -1024,8 +1047,8 @@ LogicalResult LoopNetworkRewriter::processOuterLoop(Location loc,
   // network that we just built- and restart from the exitBlocks - since they
   // are guaranteed to be outside of the loop, but more loops may be
   // downstream of these blocks.
-  llvm::copy(inLoop, std::inserter(visited, visited.begin()));
-  llvm::copy_if(exitBlocks, std::back_inserter(queue),
+  llvm::copy(loopInfo.inLoop, std::inserter(visited, visited.begin()));
+  llvm::copy_if(loopInfo.exitBlocks, std::back_inserter(queue),
                 [&](Block *exitBlock) { return !visited.count(exitBlock); });
   return success();
 }

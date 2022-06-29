@@ -315,8 +315,12 @@ def InnerSymbol : OpInterface<"InnerSymbolOpInterface"> {
     InterfaceMethod<"Returns the name of this inner symbol.",
       "StringAttr", "getInnerNameAttr", (ins), [{}],
       /*defaultImplementation=*/[{
-        return this->getOperation()->template getAttrOfType<StringAttr>(
+        StringAttr symName;
+        auto attr = this->getOperation()->template getAttrOfType<InnerSymAttr>(
             circt::firrtl::InnerSymbolTable::getInnerSymbolAttrName());
+        if (attr)
+          symName = attr.getSymName();
+        return symName;
       }]
     >,
     InterfaceMethod<"Returns the name of this inner symbol.",
@@ -330,7 +334,7 @@ def InnerSymbol : OpInterface<"InnerSymbolOpInterface"> {
       "void", "setInnerSymbol", (ins "StringAttr":$name), [{}],
       /*defaultImplementation=*/[{
         this->getOperation()->setAttr(
-            InnerSymbolTable::getInnerSymbolAttrName(), name);
+            InnerSymbolTable::getInnerSymbolAttrName(), InnerSymAttr::get(name));
       }]
     >,
     InterfaceMethod<"Returns an InnerRef to this operation.  Must have inner symbol.",
