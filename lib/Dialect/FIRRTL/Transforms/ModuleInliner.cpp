@@ -596,7 +596,7 @@ void Inliner::rename(StringRef prefix, Operation *op,
     auto newSym = moduleNamespace.newName(sym.getValue());
     if (newSym != sym.getValue()) {
       auto newSymAttr = StringAttr::get(op->getContext(), newSym);
-      op->setAttr("inner_sym", newSymAttr);
+      op->setAttr("inner_sym", InnerSymAttr::get(newSymAttr));
       for (Annotation anno : AnnotationSet(op)) {
         auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal");
         if (!sym)
@@ -937,7 +937,7 @@ void Inliner::inlineInto(StringRef prefix, OpBuilder &b,
         if (!instSym) {
           instSym = StringAttr::get(context,
                                     moduleNamespace.newName(instance.name()));
-          instance.inner_symAttr(instSym);
+          instance.inner_symAttr(InnerSymAttr::get(instSym));
         }
         instOpHierPaths[InnerRefAttr::get(moduleName, instSym)].push_back(
             sym.cast<StringAttr>());
@@ -1020,7 +1020,7 @@ void Inliner::inlineInstances(FModuleOp parent) {
         if (!instSym) {
           instSym = StringAttr::get(context,
                                     moduleNamespace.newName(instance.name()));
-          instance.inner_symAttr(instSym);
+          instance.inner_symAttr(InnerSymAttr::get(instSym));
         }
         instOpHierPaths[InnerRefAttr::get(moduleName, instSym)].push_back(
             sym.cast<StringAttr>());

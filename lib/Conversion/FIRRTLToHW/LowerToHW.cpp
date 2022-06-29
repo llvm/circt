@@ -2959,7 +2959,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       operands, builder.getArrayAttr(argNames),
       builder.getArrayAttr(resultNames),
       /*parameters=*/builder.getArrayAttr({}),
-      /*sym_name=*/op.inner_symAttr());
+      /*sym_name=*/getInnerSymName(op));
   // Update all users of the result of read ports
   for (auto &ret : returnHolder)
     (void)setLowering(ret.first->getResult(0), inst.getResult(ret.second));

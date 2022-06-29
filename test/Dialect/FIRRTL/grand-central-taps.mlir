@@ -354,7 +354,7 @@ firrtl.circuit "NLAGarbageCollection" {
     %bar_out_MPORT_clk = firrtl.wire  : !firrtl.clock
     %bar_0 = firrtl.reg sym @bar_0 %bar_out_MPORT_clk  {annotations = [{circt.nonlocal = @nla_3, class = "sifive.enterprise.grandcentral.MemTapAnnotation.source", id = 0 : i64, portID = 0 : i64}]} : !firrtl.uint<1>
     // CHECK:  %bar_0 = firrtl.reg sym @[[bar_0:.+]] %bar_out_MPORT_clk  : !firrtl.uint<1>
-    %bar_out_MPORT = firrtl.mem sym Undefined {
+    %bar_out_MPORT = firrtl.mem Undefined {
       depth = 1 : i64,
       name = "bar",
       portNames = ["out_MPORT"],

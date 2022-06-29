@@ -219,8 +219,8 @@ static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
                        op.nameKind(), op.annotations().getValue(),
                        op.portAnnotations().getValue(), op.inner_symAttr());
   if (auto oldName = getInnerSymName(op))
-    newMem.inner_symAttr(StringAttr::get(
-        b->getContext(), oldName.getValue() + (op.name() + field.suffix)));
+    newMem.inner_symAttr(InnerSymAttr::get(StringAttr::get(
+        b->getContext(), oldName.getValue() + (op.name() + field.suffix))));
 
   SmallVector<Attribute> newAnnotations;
   for (size_t portIdx = 0, e = newMem.getNumResults(); portIdx < e; ++portIdx) {
@@ -607,7 +607,7 @@ bool TypeLoweringVisitor::lowerProducer(
     // Carry over the inner_sym name, if present.
     if (needsSym || op->hasAttr(cache.innerSymAttr)) {
       auto newName = StringAttr::get(context, loweredSymName);
-      newOp->setAttr(cache.innerSymAttr, newName);
+      newOp->setAttr(cache.innerSymAttr, InnerSymAttr::get(newName));
       assert(!loweredSymName.empty());
 
       // If this operation has an inner symbol, then update the origSymbols
@@ -1223,7 +1223,8 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
       resultTypes, op.moduleNameAttr(), op.nameAttr(), op.nameKindAttr(),
       direction::packAttribute(context, newDirs),
       builder->getArrayAttr(newNames), op.annotations(),
-      builder->getArrayAttr(newPortAnno), op.lowerToBindAttr(), sym);
+      builder->getArrayAttr(newPortAnno), op.lowerToBindAttr(),
+      sym ? InnerSymAttr::get(sym) : InnerSymAttr());
 
   SmallVector<Value> lowered;
   for (size_t aggIndex = 0, eAgg = op.getNumResults(); aggIndex != eAgg;
@@ -1424,8 +1425,7 @@ void LowerTypesPass::runOnOperation() {
             .Case<OpAnnoTarget>([&](OpAnnoTarget target) {
               auto *op = target.getOp();
               newNamepath.push_back(hw::InnerRefAttr::get(
-                  target.getModule().moduleNameAttr(),
-                  op->getAttrOfType<StringAttr>(cache.innerSymAttr)));
+                  target.getModule().moduleNameAttr(), getInnerSymName(op)));
               newPath = builder.create<HierPathOp>(
                   newSym, builder.getArrayAttr(newNamepath));
               AnnotationSet annotations(op);
