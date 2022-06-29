@@ -209,3 +209,41 @@ def SampledOp : SVOp<"system.sampled", [SameOperandsAndResultType]> {
   let results = (outs AnyType:$sampledValue);
   let assemblyFormat = "$expression attr-dict `:` qualified(type($expression))";
 }
+
+def ReorderOp: SVOp<"reorder", [InferTypeOpInterface, NoSideEffect]> {
+  let summary = "Reverse the order of bits";
+  let description = [{
+    The reorder operation is equivalent to a Verilog stream operation
+    when the results of that stream are immediately concatenated.
+
+    This method is used to reverse the order of bits
+
+    Example:
+    ````
+    %3 = sv.reorder %0, %1, %2 : i2, i1, i5
+    ````
+  }];
+
+  let assemblyFormat = "$inputs attr-dict `:` qualified(type($inputs))";
+
+  let arguments = (ins Variadic<HWIntegerType>:$inputs);
+  let results = (outs HWIntegerType:$result);
+
+  let builders = [
+    OpBuilder<(ins "Value":$lhs, "Value":$rhs), [{
+      return build($_builder, $_state, ValueRange{lhs, rhs});
+    }]>,
+    OpBuilder<(ins "Value":$hd, "ValueRange":$tl)>,
+  ];
+
+  let extraClassDeclaration = [{
+    /// Infer the return types of this operation.
+    static LogicalResult inferReturnTypes(MLIRContext *context,
+                                          Optional<Location> loc,
+                                          ValueRange operands,
+                                          DictionaryAttr attrs,
+                                          mlir::RegionRange regions,
+                                          SmallVectorImpl<Type> &results);
+  }];
+
+}
