@@ -192,4 +192,9 @@ firrtl.module @ProbeTest(in %in1 : !firrtl.uint<2>, in %in2 : !firrtl.uint<3>, o
   firrtl.probe @foobar, %in1, %in2, %out3, %w1, %w2, %someNode : !firrtl.uint<2>, !firrtl.uint<3>, !firrtl.uint<3>, !firrtl.uint<4>, !firrtl.uint<4>, !firrtl.uint<2>
 }
 
+// CHECK-LABEL: firrtl.module @InnerSymAttr
+firrtl.module @InnerSymAttr() {
+  %w = firrtl.wire sym [<@w,2,public>,<@x,1,private>,<@syh,4,public>] : !firrtl.bundle<a: uint<1>, b: uint<1>, c: uint<1>, d: uint<1>>
+  // CHECK: %w = firrtl.wire sym [<@x,1,private>, <@w,2,public>, <@syh,4,public>]
+}
 }
