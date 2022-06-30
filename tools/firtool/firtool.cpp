@@ -387,7 +387,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
               Optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
   // Add the annotation file if one was explicitly specified.
   unsigned numAnnotationFiles = 0;
-  for (auto inputAnnotationFilename : inputAnnotationFilenames) {
+  for (const auto &inputAnnotationFilename : inputAnnotationFilenames) {
     std::string annotationFilenameDetermined;
     if (!sourceMgr.AddIncludeFile(inputAnnotationFilename, llvm::SMLoc(),
                                   annotationFilenameDetermined)) {
@@ -399,7 +399,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     ++numAnnotationFiles;
   }
 
-  for (auto file : inputOMIRFilenames) {
+  for (const auto &file : inputOMIRFilenames) {
     std::string filename;
     if (!sourceMgr.AddIncludeFile(file, llvm::SMLoc(), filename)) {
       llvm::errs() << "cannot open input annotation file '" << file
