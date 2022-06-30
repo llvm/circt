@@ -729,7 +729,7 @@ bool TypeLoweringVisitor::lowerArg(FModuleLike module, size_t argIndex,
                 isModuleAllowedToPreserveAggregate(module)))
     return false;
 
-  for (auto field : llvm::enumerate(fieldTypes)) {
+  for (const auto &field : llvm::enumerate(fieldTypes)) {
     auto newValue = addArg(module, 1 + argIndex + field.index(), argsRemoved,
                            srcType, field.value(), newArgs[argIndex]);
     newArgs.insert(newArgs.begin() + 1 + argIndex + field.index(),
@@ -788,7 +788,7 @@ bool TypeLoweringVisitor::visitStmt(ConnectOp op) {
     return false;
 
   // Loop over the leaf aggregates.
-  for (auto field : llvm::enumerate(fields)) {
+  for (const auto &field : llvm::enumerate(fields)) {
     Value src = getSubWhatever(op.src(), field.index());
     Value dest = getSubWhatever(op.dest(), field.index());
     if (field.value().isOutput)
@@ -812,7 +812,7 @@ bool TypeLoweringVisitor::visitStmt(StrictConnectOp op) {
     return false;
 
   // Loop over the leaf aggregates.
-  for (auto field : llvm::enumerate(fields)) {
+  for (const auto &field : llvm::enumerate(fields)) {
     Value src = getSubWhatever(op.src(), field.index());
     Value dest = getSubWhatever(op.dest(), field.index());
     if (field.value().isOutput)
@@ -1120,7 +1120,7 @@ bool TypeLoweringVisitor::visitExpr(BitCastOp op) {
     size_t uptoBits = 0;
     // Loop over the leaf aggregates and concat each of them to get a UInt.
     // Bitcast the fields to handle nested aggregate types.
-    for (auto field : llvm::enumerate(fields)) {
+    for (const auto &field : llvm::enumerate(fields)) {
       auto fieldBitwidth = getBitWidth(field.value().type).getValue();
       // Ignore zero width fields, like empty bundles.
       if (fieldBitwidth == 0)

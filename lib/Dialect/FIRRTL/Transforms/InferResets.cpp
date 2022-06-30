@@ -600,7 +600,7 @@ static unsigned getFieldID(FVectorType type) { return 1; }
 static unsigned getIndexForFieldID(BundleType type, unsigned fieldID) {
   assert(type.getNumElements() && "Bundle must have >0 fields");
   --fieldID;
-  for (auto e : llvm::enumerate(type.getElements())) {
+  for (const auto &e : llvm::enumerate(type.getElements())) {
     auto numSubfields = getMaxFieldID(e.value().type) + 1;
     if (fieldID < numSubfields)
       return e.index();
@@ -796,7 +796,7 @@ void InferResetsPass::traceResets(InstanceOp inst) {
 
   // Establish a connection between the instance ports and module ports.
   auto dirs = module.getPortDirections();
-  for (auto it : llvm::enumerate(inst.getResults())) {
+  for (const auto &it : llvm::enumerate(inst.getResults())) {
     auto dir = module.getPortDirection(it.index());
     Value dstPort = module.getArgument(it.index());
     Value srcPort = it.value();
