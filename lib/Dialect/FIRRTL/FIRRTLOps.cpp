@@ -1512,7 +1512,8 @@ ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
     return failure();
   if (succeeded(parser.parseOptionalKeyword("sym"))) {
     if (parser.parseCustomAttributeWithFallback(
-            innerSymAttr, ::mlir::Type{}, "inner_sym", result.attributes)) {
+            innerSymAttr, ::mlir::Type{},
+            InnerSymbolTable::getInnerSymbolAttrName(), result.attributes)) {
       return ::mlir::failure();
     }
   }

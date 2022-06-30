@@ -223,10 +223,10 @@ def NameKindEnumImpl: I32EnumAttr<"NameKindEnum", "name kind",
 def NameKindAttr: EnumAttr<FIRRTLDialect, NameKindEnumImpl, "name_kind">;
 
 def InnerSymAttr : AttrDef<FIRRTLDialect, "InnerSym"> {
-  let summary = "Defines the properties of an inner_sym attribute.";
+  let summary = "Inner symbol definition";
   let description = [{
     Defines the properties of an inner_sym attribute. Currently this only has
-    the symbol name. But the plan is to extend it to include perField symbols
+    the symbol name. But the plan is to extend it to include per field symbols
     and visibility.
   }];
   let mnemonic = "innerSym";
