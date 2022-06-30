@@ -16,10 +16,20 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
   // CHECK: localparam [41:0] param_y = param1;
   %param_y = sv.localparam : i42 { value = #hw.param.decl.ref<"param1">: i42 }
 
+  // CHECK: logic {{.*}} [7:0]  logic_op;
+  // CHECK: assign logic_op = val;
+  %logic_op = sv.logic : !hw.inout<i8>
+  sv.assign %logic_op, %val: i8
+
   // CHECK:      always @(posedge clock) begin
   sv.always posedge %clock {
+    // CHECK-NEXT: logic [7:0] logic_op_procedural;
+    // CHECK-EMPTY:
     // CHECK-NEXT: force forceWire = cond;
     sv.force %forceWire, %cond : i1
+    %logic_op_procedural = sv.logic : !hw.inout<i8>
+    // CHECK-NEXT: logic_op_procedural <= val;
+    sv.passign %logic_op_procedural, %val: i8
   // CHECK-NEXT:   `ifndef SYNTHESIS
     sv.ifdef.procedural "SYNTHESIS" {
     } else {

@@ -270,6 +270,29 @@ LogicalResult RegOp::canonicalize(RegOp op, PatternRewriter &rewriter) {
 }
 
 //===----------------------------------------------------------------------===//
+// LogicOp
+//===----------------------------------------------------------------------===//
+
+void LogicOp::build(OpBuilder &builder, OperationState &odsState,
+                    Type elementType, StringAttr name, StringAttr sym_name) {
+  if (!name)
+    name = builder.getStringAttr("");
+  odsState.addAttribute("name", name);
+  if (sym_name)
+    odsState.addAttribute(hw::InnerName::getInnerNameAttrName(), sym_name);
+  odsState.addTypes(hw::InOutType::get(elementType));
+}
+
+/// Suggest a name for each result value based on the saved result names
+/// attribute.
+void LogicOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  // If the logic has an optional 'name' attribute, use it.
+  auto nameAttr = (*this)->getAttrOfType<StringAttr>("name");
+  if (!nameAttr.getValue().empty())
+    setNameFn(getResult(), nameAttr.getValue());
+}
+
+//===----------------------------------------------------------------------===//
 // Control flow like-operations
 //===----------------------------------------------------------------------===//
 
