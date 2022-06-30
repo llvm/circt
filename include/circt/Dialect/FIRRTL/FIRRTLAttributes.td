@@ -19,30 +19,8 @@ include "mlir/IR/EnumAttr.td"
 // FIRRTL Annotations Definition
 //===----------------------------------------------------------------------===//
 
-def AnnotationArrayAttr: ArrayAttrBase<
-    And<[
-      // Guarantee this is an ArrayAttr first
-      CPred<"$_self.isa<::mlir::ArrayAttr>()">,
-      // Guarantee all elements are DictionaryAttr or SubAnnotationAttr
-      CPred<"::llvm::all_of($_self.cast<::mlir::ArrayAttr>(), "
-            "[&](::mlir::Attribute attr) { return attr.isa<"
-            "::mlir::DictionaryAttr,"
-            "::circt::firrtl::SubAnnotationAttr>();})">]>,
-    "Annotation array attribute"> {
-  let constBuilderCall = "$_builder.getArrayAttr($0)";
-}
-
-def SubAnnotationAttr : AttrDef<FIRRTLDialect, "SubAnnotation"> {
-  let summary = "An Annotation that targets part of what it's attached to";
-  let description = [{
-    An Annotation that is only applicable to part of what it is attached to.
-    This uses a field ID to indicate to which field it is applicable.
-  }];
-  let mnemonic = "subAnno";
-  let parameters = (ins "int64_t":$fieldID, "DictionaryAttr":$annotations);
-
-  let assemblyFormat = "`<` `fieldID` `=` $fieldID `,` $annotations `>`";
-}
+def AnnotationArrayAttr
+  : TypedArrayAttrBase<DictionaryAttr, "Annotation array attribute">;
 
 def PortAnnotationsAttr : ArrayAttrBase<
     And<[
