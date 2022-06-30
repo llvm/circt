@@ -437,9 +437,7 @@ DictionaryAttr Annotation::getDict() const {
   return attr.cast<DictionaryAttr>();
 }
 
-void Annotation::setDict(DictionaryAttr dict) {
-  attr = dict;
-}
+void Annotation::setDict(DictionaryAttr dict) { attr = dict; }
 
 unsigned Annotation::getFieldID() const {
   if (auto fieldID = getMember<IntegerAttr>("circt.fieldID"))
