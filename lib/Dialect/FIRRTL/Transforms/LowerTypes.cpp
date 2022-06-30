@@ -490,34 +490,21 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(
   for (auto opAttr : annotations) {
     Optional<int64_t> maybeFieldID = None;
     DictionaryAttr annotation;
-    if (auto subAnno = opAttr.dyn_cast<SubAnnotationAttr>()) {
-      maybeFieldID = subAnno.getFieldID();
-      annotation = subAnno.getAnnotations();
-    } else {
-      annotation = opAttr.dyn_cast<DictionaryAttr>();
-      if (annotations)
-        // If this is an annotation targeting a field that uses a
-        // "circt.fieldID" as opposed to being encoded as a SubAnnotationAttr,
-        // then erase the "circt.fieldID" field.  All later logic (in this pass)
-        // assumes that SubAnnotationAttr is the single way of targeting a
-        // fieldID.
-        //
-        // TODO: Fully switch everything over to use "circt.fieldID" instead of
-        // SubAnnotationAttr.
-        if (auto id = annotation.getAs<IntegerAttr>("circt.fieldID")) {
-          maybeFieldID = id.getInt();
-          Annotation anno(annotation);
-          anno.removeMember("circt.fieldID");
-          annotation = anno.getDict();
-        }
-    }
+    annotation = opAttr.dyn_cast<DictionaryAttr>();
+    if (annotations)
+      // Erase the circt.fieldID.  If this is needed later, it will be re-added.
+      if (auto id = annotation.getAs<IntegerAttr>("circt.fieldID")) {
+        maybeFieldID = id.getInt();
+        Annotation anno(annotation);
+        anno.removeMember("circt.fieldID");
+        annotation = anno.getDict();
+      }
     if (!maybeFieldID) {
       retval.push_back(
           updateAnnotationFieldID(ctxt, opAttr, field.fieldID, cache.i64ty));
       continue;
     }
     auto fieldID = maybeFieldID.getValue();
-    /* subAnno handling... */
     // Check whether the annotation falls into the range of the current field.
     if (fieldID != 0 &&
         !(fieldID >= field.fieldID &&
@@ -860,8 +847,8 @@ bool TypeLoweringVisitor::visitDecl(MemOp op) {
     oldPorts.push_back(wire);
     result.replaceAllUsesWith(wire.getResult());
   }
-  // If subannotations present on aggregate fields, we cannot flatten the
-  // memory. It must be split into one memory per aggregate field.
+  // If annotations targeting fields of an aggregate are present, we cannot
+  // flatten the memory. It must be split into one memory per aggregate field.
   // Do not overwrite the pass flag!
 
   // Memory for each field

@@ -376,8 +376,8 @@ struct FIRParser {
   /// aggregate type, "{foo: UInt<1>, bar: UInt<1>}[2]", tokens "[0].foo" will
   /// be converted to a field ID range of [2, 2]; tokens "[1]" will be converted
   /// to [4, 6]. The generated field ID range will then be attached to the
-  /// firrtl::subAnnotationAttr in order to indicate the applicable fields of an
-  /// annotation.
+  /// annotation in a "circt.fieldID" field in order to indicate the applicable
+  /// fields of an annotation.
   Optional<unsigned> getFieldIDFromTokens(ArrayAttr tokens, SMLoc loc,
                                           Type type);
 
@@ -903,8 +903,8 @@ ParseResult FIRParser::parseOptionalRUW(RUWAttr &result) {
 /// Convert the input "tokens" to a range of field IDs. Considering a FIRRTL
 /// aggregate type, "{foo: UInt<1>, bar: UInt<1>}[2]", tokens "[0].foo" will be
 /// converted to a field ID range of [2, 2]; tokens "[1]" will be converted to
-/// [4, 6]. The generated field ID range will then be attached to the
-/// firrtl::subAnnotationAttr in order to indicate the applicable fields of an
+/// [4, 6]. The generated field ID range will then be attached to the annotation
+/// in a "circt.fieldID" field to indicate the applicable fields of an
 /// annotation.
 Optional<unsigned> FIRParser::getFieldIDFromTokens(ArrayAttr tokens, SMLoc loc,
                                                    Type type) {
@@ -1511,7 +1511,7 @@ static bool needsSymbol(ArrayAttr &annotations) {
   // Subfield annotations.
   for (Attribute attr : annotations) {
     // Ensure it is a valid annotation.
-    if (!attr.isa<SubAnnotationAttr, DictionaryAttr>())
+    if (!attr.isa<DictionaryAttr>())
       continue;
     Annotation anno(attr);
     // Check if it is a DontTouch annotation that applies to all subfields in

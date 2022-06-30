@@ -434,22 +434,12 @@ bool AnnotationSet::removePortAnnotations(
 //===----------------------------------------------------------------------===//
 
 DictionaryAttr Annotation::getDict() const {
-  if (auto subAnno = attr.dyn_cast<SubAnnotationAttr>())
-    return subAnno.getAnnotations();
   return attr.cast<DictionaryAttr>();
 }
 
-void Annotation::setDict(DictionaryAttr dict) {
-  if (auto subAnno = attr.dyn_cast<SubAnnotationAttr>())
-    attr = SubAnnotationAttr::get(subAnno.getContext(), subAnno.getFieldID(),
-                                  dict);
-  else
-    attr = dict;
-}
+void Annotation::setDict(DictionaryAttr dict) { attr = dict; }
 
 unsigned Annotation::getFieldID() const {
-  if (auto subAnno = attr.dyn_cast<SubAnnotationAttr>())
-    return subAnno.getFieldID();
   if (auto fieldID = getMember<IntegerAttr>("circt.fieldID"))
     return fieldID.getInt();
   return 0;
