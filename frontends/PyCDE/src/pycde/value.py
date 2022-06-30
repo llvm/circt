@@ -13,7 +13,7 @@ import mlir.ir as ir
 
 from contextvars import ContextVar
 from functools import singledispatchmethod
-from typing import Union
+from typing import Optional, Union
 import re
 import numpy as np
 
@@ -44,7 +44,13 @@ class Value:
 
   _reg_name = re.compile(r"^(.*)__reg(\d+)$")
 
-  def reg(self, clk=None, rst=None, name=None, cycles=1, sv_attributes=None):
+  def reg(self,
+          clk=None,
+          rst=None,
+          name=None,
+          cycles=1,
+          sv_attributes=None,
+          appid=None):
     """Register this value, returning the delayed value.
     `clk`, `rst`: the clock and reset signals.
     `name`: name this register explicitly.
@@ -85,6 +91,8 @@ class Value:
                             name=give_name,
                             sym_name=give_name,
                             sv_attributes=sv_attributes)
+      if appid is not None:
+        reg.appid = appid
       return reg
 
   @property
@@ -115,6 +123,21 @@ class Value:
       owner.attributes[self._namehint_attrname] = ir.StringAttr.get(new)
     else:
       self._name = new
+
+  @property
+  def appid(self) -> Optional[object]:  # Optional AppID.
+    from .module import AppID
+    owner = self.value.owner
+    if AppID.AttributeName in owner.attributes:
+      return AppID(owner.attributes[AppID.AttributeName])
+    return None
+
+  @appid.setter
+  def appid(self, appid) -> None:
+    if "sym_name" not in self.value.owner.attributes:
+      raise ValueError("AppIDs can only be attached to ops with symbols")
+    from .module import AppID
+    self.value.owner.attributes[AppID.AttributeName] = appid._appid
 
 
 class RegularValue(Value):
