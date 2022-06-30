@@ -9,3 +9,13 @@
 // This defines HW arithmetic operations.
 //
 //===----------------------------------------------------------------------===//
+
+include "mlir/IR/OpAsmInterface.td"
+
+
+// Dummy op (for now) to trigger dialect document generation.
+def HWArith_CastOp : HWArithOp<"cast">,
+    Arguments<(ins AnyType:$in)>,
+    Results<(outs AnyType:$out)> {
+  let assemblyFormat = "$in attr-dict `:` type($in) `to` type($out)";
+}
