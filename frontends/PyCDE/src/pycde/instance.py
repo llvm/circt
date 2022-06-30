@@ -3,7 +3,7 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from __future__ import annotations
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, Iterator, List, Optional, Tuple, Union
 
 from circt.dialects import msft, seq
 
@@ -90,6 +90,16 @@ class Instance:
     assert self.symbol is not None, \
            "If symbol is None, name() needs to be overridden"
     return ir.StringAttr(self.symbol).value
+
+  @property
+  def appid(self) -> Optional[AppID]:
+    """Get the appid assigned to this instance or None if one was not assigned
+    during generation."""
+    static_op = self._op_cache.get_sym_ops_in_module(
+        self.inside_of)[self.symbol]
+    if AppID.AttributeName in static_op.attributes:
+      return AppID(static_op.attributes[AppID.AttributeName])
+    return None
 
 
 class ModuleInstance(Instance):
@@ -208,7 +218,7 @@ class _AppIDInstance:
     self.owner_instance = owner_instance
     self.appid_name = appid_name
 
-  def __getitem__(self, index: int) -> Instance:
+  def _search(self) -> Iterator[AppID, Instance]:
     inner_sym_ops = self.owner_instance._op_cache.get_sym_ops_in_module(
         self.owner_instance.tgt_mod)
     for child in self.owner_instance._children().values():
@@ -218,7 +228,8 @@ class _AppIDInstance:
         child_appid_inst = getattr(child, self.appid_name)
         if not isinstance(child_appid_inst, _AppIDInstance):
           continue
-        return child_appid_inst[index]
+        for c in child_appid_inst._search():
+          yield c
 
       # Check if the AppID is local, then return the instance if it is.
       instance_op = inner_sym_ops[child.symbol]
@@ -227,12 +238,21 @@ class _AppIDInstance:
           # This is the only way to test that a certain attribute is a certain
           # attribute type. *Sigh*.
           appid = msft.AppIDAttr(instance_op.attributes[AppID.AttributeName])
-          if appid.name == self.appid_name and appid.index == index:
-            return child
+          if appid.name == self.appid_name:
+            yield (appid, child)
         except ValueError:
           pass
 
+  def __getitem__(self, index: int) -> Instance:
+    for (appid, child) in self._search():
+      if appid.index == index:
+        return child
+
     raise IndexError(f"{self.appid_name}[{index}] not found")
+
+  def __iter__(self) -> Iterator[Instance]:
+    for (_, child) in self._search():
+      yield child
 
 
 class RegInstance(Instance):

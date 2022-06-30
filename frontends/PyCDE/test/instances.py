@@ -87,7 +87,17 @@ test_inst.walk(lambda inst: print(inst))
 
 reg = test_inst.unparam[0].reg[4]
 print(f"unparam[0].reg[4]: {reg}")
-# CHECK: unparam[0].reg[4]: <instance: [UnParameterized, Delay, x__reg1]>
+# CHECK-NEXT: unparam[0].reg[4]: <instance: [UnParameterized, Delay, x__reg1]>
+print(f"unparam[0].reg[4] appid: {reg.appid}")
+# CHECK-NEXT: unparam[0].reg[4] appid: reg[4]
+
+for u in test_inst.unparam:
+  print(f"unparam list item: {u}")
+  print(f"unparam list item appid: {u.appid}")
+# CHECK-NEXT: unparam list item: <instance: [UnParameterized]>
+# CHECK-NEXT: unparam list item appid: unparam[0]
+# CHECK-NEXT: unparam list item: <instance: [UnParameterized_1]>
+# CHECK-NEXT: unparam list item appid: unparam[1]
 
 # Set up the primitive locations. Errors out if location is placed but doesn't
 # exist.
