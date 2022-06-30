@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/HWArith/HWArithDialect.h"
+#include "circt/Dialect/HWArith/HWArithOps.h"
 #include "mlir/IR/DialectImplementation.h"
 
 using namespace circt;
