@@ -1026,7 +1026,7 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
   return None;
 }
 
-LogicalResult circt::firrtl::applyGCTView(AnnoPathValue target,
+LogicalResult circt::firrtl::applyGCTView(const AnnoPathValue &target,
                                           DictionaryAttr anno,
                                           ApplyState &state) {
 

@@ -291,7 +291,7 @@ static FailureOr<Literal> parseIntegerLiteral(MLIRContext *context,
 // A Literal is a FIRRTL IR literal serialized to a string.  For now, just
 // store the string.
 // TODO: Parse the literal string into a UInt or SInt literal.
-LogicalResult circt::firrtl::applyGCTDataTaps(AnnoPathValue target,
+LogicalResult circt::firrtl::applyGCTDataTaps(const AnnoPathValue &target,
                                               DictionaryAttr anno,
                                               ApplyState &state) {
 
@@ -427,7 +427,7 @@ LogicalResult circt::firrtl::applyGCTDataTaps(AnnoPathValue target,
   return success();
 }
 
-LogicalResult circt::firrtl::applyGCTMemTaps(AnnoPathValue target,
+LogicalResult circt::firrtl::applyGCTMemTaps(const AnnoPathValue &target,
                                              DictionaryAttr anno,
                                              ApplyState &state) {
 
