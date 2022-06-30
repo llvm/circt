@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_SSP_SSPATTRIBUTES_H
 
 #include "circt/Dialect/SSP/SSPDialect.h"
+#include "circt/Scheduling/Problems.h"
 
 #define GET_ATTRDEF_CLASSES
 #include "circt/Dialect/SSP/SSPAttributes.h.inc"

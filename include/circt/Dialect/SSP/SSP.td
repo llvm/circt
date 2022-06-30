@@ -36,12 +36,6 @@ def SSPDialect : Dialect {
   }];
 }
 
-class SSPAttribute<string name, list<Trait> traits = []> :
-  AttrDef<SSPDialect, name, traits>;
-
-class SSPOp<string mnemonic, list<Trait> traits = []> :
-  Op<SSPDialect, mnemonic, traits>;
-
 include "circt/Dialect/SSP/SSPAttributes.td"
 include "circt/Dialect/SSP/SSPOps.td"
 

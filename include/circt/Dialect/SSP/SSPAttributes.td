@@ -10,7 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-def DependenceAttr : SSPAttribute<"Dependence"> {
+def DependenceAttr : AttrDef<SSPDialect, "Dependence"> {
   let description = [{
     An attribute to uniformly model def-use and auxiliary
     [dependences](https://circt.llvm.org/docs/Scheduling/#components) as well as
@@ -21,14 +21,49 @@ def DependenceAttr : SSPAttribute<"Dependence"> {
 
   let parameters = (ins OptionalParameter<"::mlir::IntegerAttr">:$operandIdx,
                         OptionalParameter<"::mlir::FlatSymbolRefAttr">:$sourceRef,
-                        "::mlir::DictionaryAttr":$properties);
+                        OptionalParameter<"::mlir::ArrayAttr">:$properties);
 
   let mnemonic = "dependence";
   let assemblyFormat = [{
-    `<` (`defuse` $operandIdx^)? (`auxiliary` $sourceRef^)? `,` $properties `>`
+    `<` (`defuse` $operandIdx^)? (`auxiliary` $sourceRef^)? (`,` $properties^)? `>`
   }];
   let genVerifyDecl = 1;
 }
 
 def DependenceArrayAttr
   : TypedArrayAttrBase<DependenceAttr, "dependence array attribute">;
+
+//===----------------------------------------------------------------------===//
+// Property definitions for in-tree problems
+//===----------------------------------------------------------------------===//
+
+include "PropertyBase.td"
+
+// Problem
+def LinkedOperatorType : OperationProperty<SSPDialect,
+  "LinkedOperatorType", "::mlir::FlatSymbolRefAttr", "::circt::scheduling::Problem"> {
+  let extraClassDeclaration = [{
+    void setInProblem(}] # problemClassName # [{ &prob, ::mlir::Operation *op) {
+      prob.set}] # propertyName # [{(op, getValue().getLeafReference());
+    }
+    static ::mlir::Attribute getFromProblem(}] # problemClassName # [{ &prob, ::mlir::Operation *op, ::mlir::MLIRContext *ctx) {
+      if (auto value = prob.get}] # propertyName # [{(op))
+        return }] # cppClassName # [{::get(ctx, ::mlir::FlatSymbolRefAttr::get(ctx, *value));
+      return {};
+    }
+  }];
+}
+def StartTime : OperationProperty<SSPDialect,
+  "StartTime", "unsigned", "::circt::scheduling::Problem">;
+def Latency : OperatorTypeProperty<SSPDialect,
+  "Latency", "unsigned", "::circt::scheduling::Problem">;
+
+// CyclicProblem
+def Distance : DependenceProperty<SSPDialect,
+  "Distance", "unsigned", "::circt::scheduling::CyclicProblem">;
+def InitiationInterval : InstanceProperty<SSPDialect,
+  "InitiationInterval", "unsigned", "::circt::scheduling::CyclicProblem">;
+
+// SharedOperatorsProblem
+def Limit : OperatorTypeProperty<SSPDialect,
+  "Limit", "unsigned", "::circt::scheduling::SharedOperatorsProblem">;

@@ -38,11 +38,11 @@ ParseResult OperationOp::parse(OpAsmParser &parser, OperationState &result) {
   auto parseDependenceSourceWithAttrDict = [&]() -> ParseResult {
     llvm::SMLoc loc = parser.getCurrentLocation();
     IntegerAttr operandIdx;
-    FlatSymbolRefAttr sourceOp;
-    DictionaryAttr properties;
+    FlatSymbolRefAttr sourceRef;
+    ArrayAttr properties;
 
     // Try to parse a symbol reference first...
-    if (!parser.parseOptionalAttribute(sourceOp).hasValue()) {
+    if (!parser.parseOptionalAttribute(sourceRef).hasValue()) {
       // ...and if that fails, attempt to parse an SSA operand.
       OpAsmParser::UnresolvedOperand operand;
       if (failed(parser.parseOperand(operand)))
@@ -52,12 +52,11 @@ ParseResult OperationOp::parse(OpAsmParser &parser, OperationState &result) {
       unresolvedOperands.push_back(operand);
     }
 
-    NamedAttrList attrDict;
-    if (succeeded(parser.parseOptionalAttrDict(attrDict)))
-      properties = builder.getDictionaryAttr(attrDict);
+    // Parse the properties, if present.
+    parser.parseOptionalAttribute(properties);
 
     dependences.push_back(DependenceAttr::get(builder.getContext(), operandIdx,
-                                              sourceOp, properties));
+                                              sourceRef, properties));
     return success();
   };
 
@@ -69,6 +68,12 @@ ParseResult OperationOp::parse(OpAsmParser &parser, OperationState &result) {
                       builder.getArrayAttr(dependences));
 
   // Properties
+  ArrayAttr properties;
+  parser.parseOptionalAttribute(properties);
+  if (properties)
+    result.addAttribute(builder.getStringAttr("properties"), properties);
+
+  // Parse default attr-dict
   (void)parser.parseOptionalAttrDict(result.attributes);
 
   // Resolve operands
@@ -100,14 +105,24 @@ void OperationOp::print(OpAsmPrinter &p) {
     else if (auto operandIdx = dep.getOperandIdx())
       p.printOperand(getOperand(operandIdx.getValue().getZExtValue()));
 
-    p.printOptionalAttrDict(dep.getProperties().getValue());
+    if (auto properties = dep.getProperties()) {
+      p << ' ';
+      p.printAttribute(properties);
+    }
   });
   p << ')';
 
   // Properties
+  if (auto properties = getProperties()) {
+    p << ' ';
+    p.printAttribute(properties.getValue());
+  }
+
+  // Default attr-dict
   SmallVector<StringRef> elidedAttrs = {
       SymbolTable::getSymbolAttrName(),
-      OperationOp::getDependencesAttrName().getValue()};
+      OperationOp::getDependencesAttrName().getValue(),
+      OperationOp::getPropertiesAttrName().getValue()};
   p.printOptionalAttrDict((*this)->getAttrs(), elidedAttrs);
 }
 
