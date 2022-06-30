@@ -32,9 +32,9 @@ def OFIRDialect : Dialect {
 
   let extraClassDeclaration = [{
     /// Register all FIRRTL types.
-    //void registerTypes();
+    void registerTypes();
     /// Register all attributes.
-    //void registerAttributes();
+    void registerAttributes();
   }];
 }
 

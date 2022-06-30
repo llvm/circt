@@ -25,6 +25,7 @@
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
 #include "circt/Dialect/MSFT/MSFTDialect.h"
 #include "circt/Dialect/Moore/MooreDialect.h"
+#include "circt/Dialect/OFIR/OFIRDialect.h"
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Dialect/StaticLogic/StaticLogic.h"
@@ -41,6 +42,7 @@ inline void registerAllDialects(mlir::DialectRegistry &registry) {
     comb::CombDialect,
     esi::ESIDialect,
     firrtl::FIRRTLDialect,
+    ofir::OFIRDialect,
     fsm::FSMDialect,
     handshake::HandshakeDialect,
     llhd::LLHDDialect,

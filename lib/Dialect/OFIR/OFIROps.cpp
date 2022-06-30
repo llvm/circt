@@ -10,24 +10,71 @@
 //
 //===----------------------------------------------------------------------===//
 
-//#include "circt/Dialect/OFIR/OFIROps.h"
+#include "circt/Dialect/OFIR/OFIROps.h"
 //#include "circt/Dialect/OFIR/OFIRAnnotations.h"
 //#include "circt/Dialect/OFIR/OFIRAttributes.h"
 //#include "circt/Dialect/OFIR/OFIRTypes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/DialectImplementation.h"
-#include "mlir/IR/FunctionImplementation.h"
-#include "mlir/IR/PatternMatch.h"
-#include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/DenseSet.h"
-#include "llvm/ADT/STLExtras.h"
-#include "llvm/ADT/StringExtras.h"
-#include "llvm/ADT/TypeSwitch.h"
-#include "llvm/Support/FormatVariadic.h"
 
-//using namespace circt;
-//using namespace ofir;
+using namespace circt;
+using namespace ofir;
+
+void ClassOp::print(OpAsmPrinter &p) {
+  p << " ";
+    // Print the visibility of the module.
+  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  if (auto visibility = (*this)->getAttrOfType<StringAttr>(visibilityAttrName))
+    p << visibility.getValue() << ' ';
+
+  // Print the operation and the function name.
+  p.printSymbolName(getName());
+
+  SmallVector<StringRef, 4> omittedAttrs = {
+      "sym_name", visibilityAttrName, "subTypeOf"};
+
+  p.printOptionalAttrDictWithKeyword((*this)->getAttrs(), omittedAttrs);
+
+  Region &fbody = body();
+  if (!fbody.empty()) {
+    p << " ";
+    p.printRegion(fbody, /*printEntryBlockArgs=*/false,
+                  /*printBlockTerminators=*/true);
+  }
+}
+
+ParseResult ClassOp::parse(OpAsmParser &parser, OperationState &result) {
+  auto *context = result.getContext();
+  auto &builder = parser.getBuilder();
+
+  // Parse the visibility attribute.
+  (void)mlir::impl::parseOptionalVisibilityKeyword(parser, result.attributes);
+
+  // Parse the name as a symbol.
+  StringAttr nameAttr;
+  if (parser.parseSymbolName(nameAttr, ::mlir::SymbolTable::getSymbolAttrName(),
+                             result.attributes))
+    return failure();
+
+  ArrayAttr subtypes;
+  if (parser.parseAttribute(subtypes, "subTypeOf", result.attributes))
+    return failure();
+
+  // If module attributes are present, parse them.
+  if (parser.parseOptionalAttrDictWithKeyword(result.attributes))
+    return failure();
+
+  // Parse the optional function body.
+  auto *body = result.addRegion();
+
+  if (parser.parseRegion(*body, {}))
+    return failure();
+  if (body->empty())
+    body->push_back(new Block());
+  return success();
+
+}
 
 //===----------------------------------------------------------------------===//
 // TblGen Generated Logic.

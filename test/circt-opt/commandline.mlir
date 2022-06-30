@@ -22,6 +22,7 @@
 // DIALECT-NEXT: memref
 // DIALECT-NEXT: moore
 // DIALECT-NEXT: msft
+// DIALECT-NEXT: ofir
 // DIALECT-NEXT: scf
 // DIALECT-NEXT: seq
 // DIALECT-NEXT: staticlogic

@@ -9,3 +9,19 @@
 // This describes the OFIR Class and Module MLIR ops.
 //
 //===----------------------------------------------------------------------===//
+
+def ClassOp : OFIROp<"class", [IsolatedFromAbove, Symbol, SingleBlock,
+NoTerminator, HasParent<"firrtl::CircuitOp">]> {
+  let summary = "OFIR Class";
+  let  description = [{
+    The "ofir.class" operation represents a class in OFIR, including a list of
+   properties, subtypeing relationships, and inheritance.
+  }];
+  let arguments = (ins StrAttr:$sym_name, ArrayAttr:$subTypeOf);
+  let results = (outs);
+  let regions = (region SizedRegion<1>:$body);
+
+  let hasCustomAssemblyFormat = 1;
+
+}
+

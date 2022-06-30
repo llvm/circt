@@ -12,7 +12,7 @@
 
 #include "circt/Dialect/OFIR/OFIRDialect.h"
 #include "circt/Dialect/OFIR/OFIRAttributes.h"
-//#include "circt/Dialect/OFIR/OFIROps.h"
+#include "circt/Dialect/OFIR/OFIROps.h"
 //#include "circt/Support/FieldRef.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "llvm/ADT/APSInt.h"
@@ -25,6 +25,9 @@ using namespace ofir;
 //===----------------------------------------------------------------------===//
 // Dialect specification.
 //===----------------------------------------------------------------------===//
+
+// Pull in the dialect definition.
+#include "circt/Dialect/OFIR/OFIRDialect.cpp.inc"
 
 void OFIRDialect::initialize() {
   // Register types and attributes.
@@ -51,7 +54,28 @@ Operation *OFIRDialect::materializeConstant(OpBuilder &builder,
   return nullptr;
 }
 
+void OFIRDialect::printAttribute(Attribute attr, DialectAsmPrinter &p) const {
+//  if (succeeded(generatedAttributePrinter(attr, p)))
+//    return;
+  llvm_unreachable("Unexpected attribute");
+}
+
+Attribute OFIRDialect::parseAttribute(DialectAsmParser &p, Type type) const {
+  p.emitError(p.getNameLoc(), "Unexpected hw attribute");
+  return {};
+}
+
+
+/// Print a type registered to this dialect.
+void OFIRDialect::printType(Type type, DialectAsmPrinter &os) const {
+  abort();
+}
+
+/// Parse a type registered to this dialect.
+Type OFIRDialect::parseType(DialectAsmParser &parser) const {
+  return Type();
+}
+
+
 // Provide implementations for the enums we use.
 //#include "circt/Dialect/OFIR/OFIREnums.cpp.inc"
-
-#include "circt/Dialect/OFIR/OFIRDialect.cpp.inc"
