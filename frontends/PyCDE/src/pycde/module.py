@@ -560,7 +560,8 @@ class _BlockContext:
 
   @staticmethod
   def current() -> _BlockContext:
-    """Get the top-most context in the stack created by `with _BlockContext()`."""
+    """Get the top-most context in the stack created by `with
+    _BlockContext()`."""
     bb = _current_block_context.get(None)
     assert bb is not None
     return bb

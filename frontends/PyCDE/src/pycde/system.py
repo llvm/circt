@@ -261,8 +261,8 @@ class _OpCache:
     num_ops_live = ir.Context.current._clear_live_operations()
     if num_ops_live > 0:
       sys.stderr.write(
-          f"Warning: something is holding references to {num_ops_live} MLIR ops\n"
-      )
+          f"Warning: something is holding references to {num_ops_live} " +
+          " MLIR ops\n")
 
   @property
   def symbols(self):

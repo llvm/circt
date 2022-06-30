@@ -312,8 +312,8 @@ class ListValue(Value):
   This allows for directly manipulating the ListValues with numpy functionality.
   Power-users who use the Matrix directly have access to all numpy functions.
   In reality, it will only be a subset of the numpy array functions which are
-  safe to be used in the PyCDE context. Curating access at the level of ListValues
-  seems like a safe starting point.
+  safe to be used in the PyCDE context. Curating access at the level of
+  ListValues seems like a safe starting point.
   """
 
   def transpose(self, *args, **kwargs):
