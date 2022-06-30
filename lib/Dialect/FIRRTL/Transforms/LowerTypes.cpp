@@ -159,7 +159,7 @@ static bool isNotSubAccess(Operation *op) {
 static SmallVector<Operation *> getSAWritePath(Operation *op) {
   SmallVector<Operation *> retval;
   auto defOp = op->getOperand(0).getDefiningOp();
-  while (defOp && isa<SubfieldOp, SubindexOp, SubaccessOp>(defOp)) {
+  while (isa_and_nonnull<SubfieldOp, SubindexOp, SubaccessOp>(defOp)) {
     retval.push_back(defOp);
     defOp = defOp->getOperand(0).getDefiningOp();
   }
@@ -348,7 +348,8 @@ private:
   void lowerSAWritePath(Operation *, ArrayRef<Operation *> writePath);
   bool lowerProducer(
       Operation *op,
-      llvm::function_ref<Operation *(FlatBundleFieldEntry, ArrayAttr)> clone);
+      llvm::function_ref<Operation *(const FlatBundleFieldEntry &, ArrayAttr)>
+          clone);
   /// Copy annotations from \p annotations to \p loweredAttrs, except
   /// annotations with "target" key, that do not match the field suffix. Also if
   /// the target contains a DontTouch, remove it and set the flag.
@@ -558,7 +559,8 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(
 
 bool TypeLoweringVisitor::lowerProducer(
     Operation *op,
-    llvm::function_ref<Operation *(FlatBundleFieldEntry, ArrayAttr)> clone) {
+    llvm::function_ref<Operation *(const FlatBundleFieldEntry &, ArrayAttr)>
+        clone) {
   // If this is not a bundle, there is nothing to do.
   auto srcType = op->getResult(0).getType().cast<FIRRTLType>();
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
@@ -863,7 +865,7 @@ bool TypeLoweringVisitor::visitDecl(MemOp op) {
   // Do not overwrite the pass flag!
 
   // Memory for each field
-  for (auto field : fields)
+  for (const auto &field : fields)
     newMemories.push_back(cloneMemWithNewType(builder, op, field));
   // Hook up the new memories to the wires the old memory was replaced with.
   for (size_t index = 0, rend = op.getNumResults(); index < rend; ++index) {
@@ -877,7 +879,7 @@ bool TypeLoweringVisitor::visitDecl(MemOp op) {
       // go both directions, depending on the port direction.
       if (name == "data" || name == "mask" || name == "wdata" ||
           name == "wmask" || name == "rdata") {
-        for (auto field : fields) {
+        for (const auto &field : fields) {
           auto realOldField = getSubWhatever(oldField, field.index);
           auto newField = getSubWhatever(
               newMemories[field.index].getResult(index), fieldIndex);
@@ -1042,7 +1044,8 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
 
 /// Lower a wire op with a bundle to multiple non-bundled wires.
 bool TypeLoweringVisitor::visitDecl(WireOp op) {
-  auto clone = [&](FlatBundleFieldEntry field, ArrayAttr attrs) -> Operation * {
+  auto clone = [&](const FlatBundleFieldEntry &field,
+                   ArrayAttr attrs) -> Operation * {
     return builder->create<WireOp>(field.type, "", NameKindEnum::DroppableName,
                                    attrs, StringAttr{});
   };
@@ -1051,7 +1054,8 @@ bool TypeLoweringVisitor::visitDecl(WireOp op) {
 
 /// Lower a reg op with a bundle to multiple non-bundled regs.
 bool TypeLoweringVisitor::visitDecl(RegOp op) {
-  auto clone = [&](FlatBundleFieldEntry field, ArrayAttr attrs) -> Operation * {
+  auto clone = [&](const FlatBundleFieldEntry &field,
+                   ArrayAttr attrs) -> Operation * {
     return builder->create<RegOp>(field.type, op.clockVal(), "",
                                   NameKindEnum::DroppableName, attrs,
                                   StringAttr{});
@@ -1061,7 +1065,8 @@ bool TypeLoweringVisitor::visitDecl(RegOp op) {
 
 /// Lower a reg op with a bundle to multiple non-bundled regs.
 bool TypeLoweringVisitor::visitDecl(RegResetOp op) {
-  auto clone = [&](FlatBundleFieldEntry field, ArrayAttr attrs) -> Operation * {
+  auto clone = [&](const FlatBundleFieldEntry &field,
+                   ArrayAttr attrs) -> Operation * {
     auto resetVal = getSubWhatever(op.resetValue(), field.index);
     return builder->create<RegResetOp>(
         field.type, op.clockVal(), op.resetSignal(), resetVal, "",
@@ -1072,7 +1077,8 @@ bool TypeLoweringVisitor::visitDecl(RegResetOp op) {
 
 /// Lower a wire op with a bundle to multiple non-bundled wires.
 bool TypeLoweringVisitor::visitDecl(NodeOp op) {
-  auto clone = [&](FlatBundleFieldEntry field, ArrayAttr attrs) -> Operation * {
+  auto clone = [&](const FlatBundleFieldEntry &field,
+                   ArrayAttr attrs) -> Operation * {
     auto input = getSubWhatever(op.input(), field.index);
     return builder->create<NodeOp>(field.type, input, "",
                                    NameKindEnum::DroppableName, attrs,
@@ -1083,7 +1089,8 @@ bool TypeLoweringVisitor::visitDecl(NodeOp op) {
 
 /// Lower an InvalidValue op with a bundle to multiple non-bundled InvalidOps.
 bool TypeLoweringVisitor::visitExpr(InvalidValueOp op) {
-  auto clone = [&](FlatBundleFieldEntry field, ArrayAttr attrs) -> Operation * {
+  auto clone = [&](const FlatBundleFieldEntry &field,
+                   ArrayAttr attrs) -> Operation * {
     return builder->create<InvalidValueOp>(field.type);
   };
   return lowerProducer(op, clone);
@@ -1091,7 +1098,8 @@ bool TypeLoweringVisitor::visitExpr(InvalidValueOp op) {
 
 // Expand muxes of aggregates
 bool TypeLoweringVisitor::visitExpr(MuxPrimOp op) {
-  auto clone = [&](FlatBundleFieldEntry field, ArrayAttr attrs) -> Operation * {
+  auto clone = [&](const FlatBundleFieldEntry &field,
+                   ArrayAttr attrs) -> Operation * {
     auto high = getSubWhatever(op.high(), field.index);
     auto low = getSubWhatever(op.low(), field.index);
     return builder->create<MuxPrimOp>(op.sel(), high, low);
@@ -1101,7 +1109,8 @@ bool TypeLoweringVisitor::visitExpr(MuxPrimOp op) {
 
 // Expand UnrealizedConversionCastOp of aggregates
 bool TypeLoweringVisitor::visitExpr(mlir::UnrealizedConversionCastOp op) {
-  auto clone = [&](FlatBundleFieldEntry field, ArrayAttr attrs) -> Operation * {
+  auto clone = [&](const FlatBundleFieldEntry &field,
+                   ArrayAttr attrs) -> Operation * {
     auto input = getSubWhatever(op.getOperand(0), field.index);
     return builder->create<mlir::UnrealizedConversionCastOp>(field.type, input);
   };
@@ -1145,7 +1154,7 @@ bool TypeLoweringVisitor::visitExpr(BitCastOp op) {
   if (op.getResult().getType().isa<BundleType, FVectorType>()) {
     // uptoBits is used to keep track of the bits that have been extracted.
     size_t uptoBits = 0;
-    auto clone = [&](FlatBundleFieldEntry field,
+    auto clone = [&](const FlatBundleFieldEntry &field,
                      ArrayAttr attrs) -> Operation * {
       // All the fields must have valid bitwidth, a requirement for BitCastOp.
       auto fieldBits = getBitWidth(field.type).getValue();
@@ -1199,7 +1208,7 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
       auto oldName = op.getPortNameStr(i);
       auto oldDir = op.getPortDirection(i);
       // Store the flat type for the new bundle type.
-      for (auto field : fieldTypes) {
+      for (const auto &field : fieldTypes) {
         newDirs.push_back(direction::get((unsigned)oldDir ^ field.isOutput));
         newNames.push_back(builder->getStringAttr(oldName + field.suffix));
         resultTypes.push_back(field.type);
@@ -1278,7 +1287,8 @@ bool TypeLoweringVisitor::visitExpr(SubaccessOp op) {
 }
 
 bool TypeLoweringVisitor::visitExpr(MultibitMuxOp op) {
-  auto clone = [&](FlatBundleFieldEntry field, ArrayAttr attrs) -> Operation * {
+  auto clone = [&](const FlatBundleFieldEntry &field,
+                   ArrayAttr attrs) -> Operation * {
     SmallVector<Value> newInputs;
     newInputs.reserve(op.inputs().size());
     for (auto input : op.inputs()) {
@@ -1337,7 +1347,7 @@ void LowerTypesPass::runOnOperation() {
 
     std::lock_guard<std::mutex> lg(nlaAppendLock);
     // This section updates shared data structures using a lock.
-    for (auto keyValue : tl.getRenames()) {
+    for (const auto &keyValue : tl.getRenames()) {
       innerRefRenames.insert(keyValue);
     }
 
