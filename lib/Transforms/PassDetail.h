@@ -27,6 +27,14 @@ class MemRefDialect;
 } // end namespace memref
 } // end namespace mlir
 
+namespace cf {
+class ControlFlowDialect;
+} // namespace cf
+
+namespace func {
+class FuncDialect;
+} // namespace func
+
 namespace circt {
 #define GEN_PASS_CLASSES
 #include "circt/Transforms/Passes.h.inc"
