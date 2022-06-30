@@ -367,8 +367,6 @@ static StringRef getVerilogDeclWord(Operation *op,
   }
   if (isa<WireOp>(op))
     return "wire";
-  if (isa<LogicOp>(op))
-    return "logic";
   if (isa<ConstantOp, LocalParamOp, ParamValueOp>(op))
     return "localparam";
 
@@ -379,6 +377,17 @@ static StringRef getVerilogDeclWord(Operation *op,
   // If 'op' is in a module, output 'wire'. If 'op' is in a procedural block,
   // fall through to default.
   bool isProcedural = op->getParentOp()->hasTrait<ProceduralRegion>();
+
+  if (isa<LogicOp>(op)) {
+    // If the logic op is defined in a procedural region, add 'automatic'
+    // keyword. If the op has a struct type, 'logic' keyword is already emitted
+    // within a struct type definition (e.g. struct packed {logic foo;}). So we
+    // should not emit extra 'logic'.
+    bool hasStruct = hasStructType(op->getResult(0).getType());
+    if (isProcedural)
+      return hasStruct ? "automatic" : "automatic logic";
+    return hasStruct ? "" : "logic";
+  }
 
   if (!isProcedural)
     return "wire";
