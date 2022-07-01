@@ -63,7 +63,7 @@ def InsertMergeBlocks : Pass<"insert-merge-blocks", "::mlir::ModuleOp"> {
     Ignores loops and irregular control flow.
   }];
   let constructor = "circt::createInsertMergeBlocksPass()";
-  let dependentDialects = ["cf::ControlFlowDialect", "func::FuncDialect"];
+  let dependentDialects = ["mlir::cf::ControlFlowDialect", "mlir::func::FuncDialect"];
 }
 
 #endif // CIRCT_TRANSFORMS_PASSES

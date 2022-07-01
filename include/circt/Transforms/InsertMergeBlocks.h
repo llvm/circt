@@ -9,10 +9,8 @@
 #ifndef CIRCT_TRANSFORMS_INSERTMERGEBLOCKS_H
 #define CIRCT_TRANSFORMS_INSERTMERGEBLOCKS_H
 
-#include "mlir/IR/Region.h"
 #include "mlir/Transforms/DialectConversion.h"
 
-namespace mlir {
 namespace circt {
 
 /// Insert additional blocks that serve as counterparts to the blocks that
@@ -20,10 +18,10 @@ namespace circt {
 /// The resulting merge block tree is guaranteed to be a binary tree.
 ///
 /// This transformation does not affect any blocks that are part of a loop.
-LogicalResult insertExplicitMergeBlocks(Region &r,
-                                        ConversionPatternRewriter &rewriter);
+mlir::LogicalResult
+insertExplicitMergeBlocks(mlir::Region &r,
+                          mlir::ConversionPatternRewriter &rewriter);
 
 } // namespace circt
-} // namespace mlir
 
 #endif // CIRCT_TRANSFORMS_INSERTMERGEBLOCKS_H

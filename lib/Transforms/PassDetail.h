@@ -25,7 +25,6 @@ void registerDialect(DialectRegistry &registry);
 namespace memref {
 class MemRefDialect;
 } // end namespace memref
-} // end namespace mlir
 
 namespace cf {
 class ControlFlowDialect;
@@ -34,6 +33,7 @@ class ControlFlowDialect;
 namespace func {
 class FuncDialect;
 } // namespace func
+} // end namespace mlir
 
 namespace circt {
 #define GEN_PASS_CLASSES
