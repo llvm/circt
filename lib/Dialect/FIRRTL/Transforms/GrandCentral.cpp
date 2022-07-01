@@ -1262,6 +1262,7 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
             uloc,
             StringAttr::get(&getContext(), "assign " + path.getString() + ";"),
             ValueRange{}, ArrayAttr::get(&getContext(), path.getSymbols()));
+        ++numXMRs;
         return true;
       })
       .Case<AugmentedVectorTypeAttr>([&](auto vector) {
@@ -1399,6 +1400,7 @@ GrandCentralPass::traverseBundle(AugmentedBundleTypeAttr bundle, IntegerAttr id,
   auto loc = getOperation().getLoc();
   auto iFaceName = getNamespace().newName(getInterfaceName(prefix, bundle));
   iface = builder.create<sv::InterfaceOp>(loc, iFaceName);
+  ++numInterfaces;
   if (dut &&
       !instancePaths->instanceGraph.isAncestor(companionIDMap[id].companion,
                                                cast<hw::HWModuleLike>(*dut)) &&
@@ -1518,6 +1520,7 @@ void GrandCentralPass::runOnOperation() {
   AnnotationSet::removeAnnotations(circuitOp, [&](Annotation anno) {
     if (anno.isClass("sifive.enterprise.grandcentral.AugmentedBundleType")) {
       worklist.push_back(anno);
+      ++numAnnosRemoved;
       return true;
     }
     if (anno.isClass(extractGrandCentralClass)) {
@@ -1563,6 +1566,7 @@ void GrandCentralPass::runOnOperation() {
       }
 
       maybeHierarchyFileYAML = filename;
+      ++numAnnosRemoved;
       return true;
     }
     if (anno.isClass(
@@ -1585,6 +1589,7 @@ void GrandCentralPass::runOnOperation() {
       }
 
       interfacePrefix = prefix.getValue();
+      ++numAnnosRemoved;
       return true;
     }
     if (anno.isClass(testbenchDirAnnoClass)) {
@@ -1743,6 +1748,7 @@ void GrandCentralPass::runOnOperation() {
                 {op.getResult(), annotation.getFieldID()}, sym};
             if (sym)
               deadNLAs.insert(sym.getAttr());
+            ++numAnnosRemoved;
             return true;
           });
         })
@@ -1802,6 +1808,7 @@ void GrandCentralPass::runOnOperation() {
                     {op.getArgument(i), annotation.getFieldID()}, sym};
                 if (sym)
                   deadNLAs.insert(sym.getAttr());
+                ++numAnnosRemoved;
                 return true;
               });
 
@@ -1879,14 +1886,18 @@ void GrandCentralPass::runOnOperation() {
 
               // If no extraction info was provided, exit.  Otherwise, setup the
               // lone instance of the companion to be lowered as a bind.
-              if (!maybeExtractInfo)
+              if (!maybeExtractInfo) {
+                ++numAnnosRemoved;
                 return true;
+              }
 
               // If the companion is instantiated above the DUT, then don't
               // extract it.
               if (dut && !instancePaths->instanceGraph.isAncestor(
-                             op, cast<hw::HWModuleLike>(*dut)))
+                             op, cast<hw::HWModuleLike>(*dut))) {
+                ++numAnnosRemoved;
                 return true;
+              }
 
               instance.getValue()->setAttr("lowerToBind", trueAttr);
               instance.getValue()->setAttr(
@@ -1937,6 +1948,7 @@ void GrandCentralPass::runOnOperation() {
                 }
               }
 
+              ++numAnnosRemoved;
               return true;
             }
 
@@ -1953,6 +1965,7 @@ void GrandCentralPass::runOnOperation() {
               }
 
               parentIDMap[id] = {instance, cast<FModuleOp>(op)};
+              ++numAnnosRemoved;
               return true;
             }
 
@@ -2110,6 +2123,7 @@ void GrandCentralPass::runOnOperation() {
       removalError = true;
       continue;
     }
+    ++numViews;
 
     interfaceVec.push_back(iface.getValue());
 
@@ -2186,7 +2200,9 @@ void GrandCentralPass::runOnOperation() {
       auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal");
       if (!sym)
         return false;
-      return deadNLAs.count(sym.getAttr());
+      bool remove = deadNLAs.count(sym.getAttr());
+      numAnnosRemoved += remove;
+      return remove;
     };
 
     // Visit module bodies to remove any dead NLA breadcrumbs.
