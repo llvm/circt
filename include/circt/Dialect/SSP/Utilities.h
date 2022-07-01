@@ -32,6 +32,8 @@ template <typename ProblemT, typename OperationPropertyT,
           typename... OperationPropertyTs>
 void loadOperationProperties(ProblemT &prob, Operation *op,
                              ArrayAttr propsAttr) {
+  if (!propsAttr)
+    return;
   for (auto prop : propsAttr) {
     TypeSwitch<Attribute>(prop)
         .Case<OperationPropertyT, OperationPropertyTs...>(
@@ -45,6 +47,8 @@ template <typename ProblemT, typename OperatorTypePropertyT,
           typename... OperatorTypePropertyTs>
 void loadOperatorTypeProperties(ProblemT &prob, OperatorType opr,
                                 ArrayAttr propsAttr) {
+  if (!propsAttr)
+    return;
   for (auto prop : propsAttr) {
     TypeSwitch<Attribute>(prop)
         .Case<OperatorTypePropertyT, OperatorTypePropertyTs...>(
@@ -58,6 +62,8 @@ template <typename ProblemT, typename DependencePropertyT,
           typename... DependencePropertyTs>
 void loadDependenceProperties(ProblemT &prob, Dependence dep,
                               ArrayAttr propsAttr) {
+  if (!propsAttr)
+    return;
   for (auto prop : propsAttr) {
     TypeSwitch<Attribute>(prop)
         .Case<DependencePropertyT, DependencePropertyTs...>(
@@ -70,6 +76,8 @@ void loadInstanceProperties(ProblemT &, ArrayAttr) {}
 template <typename ProblemT, typename InstancePropertyT,
           typename... InstancePropertyTs>
 void loadInstanceProperties(ProblemT &prob, ArrayAttr propsAttr) {
+  if (!propsAttr)
+    return;
   for (auto prop : propsAttr) {
     TypeSwitch<Attribute>(prop).Case<InstancePropertyT, InstancePropertyTs...>(
         [&](auto p) { p.setInProblem(prob); });
@@ -117,9 +125,8 @@ ProblemT loadProblem(InstanceOp instOp,
       assert(succeeded(res));
       (void)res;
 
-      if (auto propsAttr = depAttr.getProperties())
-        loadDependenceProperties<ProblemT, DependencePropertyTs...>(prob, dep,
-                                                                    propsAttr);
+      loadDependenceProperties<ProblemT, DependencePropertyTs...>(
+          prob, dep, depAttr.getProperties());
     }
   });
 

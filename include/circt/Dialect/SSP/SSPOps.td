@@ -24,7 +24,23 @@ def InstanceOp : SSPOp<"instance",
 
   let arguments = (ins StrAttr:$instanceName, StrAttr:$problemName, OptionalAttr<ArrayAttr>:$properties);
   let regions = (region SizedRegion<1>: $body);
-  let assemblyFormat = "$instanceName `of` $problemName $properties $body attr-dict";
+  let assemblyFormat = "$instanceName `of` $problemName ($properties^)? $body attr-dict";
+  
+  let skipDefaultBuilders = true;
+  let builders = [
+    OpBuilder<(ins "::llvm::StringRef":$instanceName,
+                   "::llvm::StringRef":$problemName,
+                   CArg<"::mlir::ArrayAttr", "::mlir::ArrayAttr()">:$properties), [{
+      $_state.addAttribute($_builder.getStringAttr("instanceName"),
+                           $_builder.getStringAttr(instanceName));
+      $_state.addAttribute($_builder.getStringAttr("problemName"),
+                           $_builder.getStringAttr(problemName));
+      if (properties)
+        $_state.addAttribute($_builder.getStringAttr("properties"), properties);
+      ::mlir::Region* region = $_state.addRegion();
+      region->push_back(new ::mlir::Block());
+    }]>
+  ];
 }
 
 def OperatorTypeOp : SSPOp<"operator_type",
@@ -33,7 +49,7 @@ def OperatorTypeOp : SSPOp<"operator_type",
   let description = [{ TODO }];
 
   let arguments = (ins SymbolNameAttr:$sym_name, OptionalAttr<ArrayAttr>:$properties);
-  let assemblyFormat = "$sym_name $properties attr-dict";
+  let assemblyFormat = "$sym_name ($properties^)? attr-dict";
 }
 
 def OperationOp : SSPOp<"operation",
