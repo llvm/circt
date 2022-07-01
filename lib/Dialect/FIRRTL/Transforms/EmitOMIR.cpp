@@ -361,7 +361,6 @@ scatterOMField(Attribute original, const Attribute root, unsigned index,
   auto maybeLoc =
       maybeStringToLocation(infoAttr.getValue(), false, locatorFilenameCache,
                             fileLineColLocCache, ctx);
-  llvm::errs() << maybeLoc.second << "\n";
   mlir::LocationAttr infoLoc;
   if (maybeLoc.first)
     infoLoc = maybeLoc.second.getValue();
