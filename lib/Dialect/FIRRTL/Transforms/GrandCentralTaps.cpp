@@ -108,6 +108,9 @@ struct PortWiring {
   Literal literal;
   /// The non-local anchor further specifying where to connect.
   HierPathOp nla;
+  /// True if the tapped target is known to be zero-width.  This indicates that
+  /// the port should not be wired.  The port will be removed by LowerToHW.
+  bool zeroWidth = false;
 
   PortWiring() : target(nullptr) {}
 };
@@ -504,7 +507,15 @@ class GrandCentralTapsPass : public GrandCentralTapsBase<GrandCentralTapsPass> {
     auto key = getKey(anno);
     annos.insert({key, anno});
     assert(!tappedPorts.count(key) && "ambiguous tap annotation");
-    tappedPorts.insert({key, port});
+    auto portWidth = cast<FModuleLike>(port.first)
+                         .getPortType(port.second)
+                         .getBitWidthOrSentinel();
+    // If the port width is non-zero, process it normally.  Otherwise, record it
+    // as being zero-width.
+    if (portWidth)
+      tappedPorts.insert({key, port});
+    else
+      zeroWidthTaps.insert(key);
     if (auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal"))
       deadNLAs.insert(sym.getAttr());
   }
@@ -512,7 +523,14 @@ class GrandCentralTapsPass : public GrandCentralTapsBase<GrandCentralTapsPass> {
     auto key = getKey(anno);
     annos.insert({key, anno});
     assert(!tappedOps.count(key) && "ambiguous tap annotation");
-    tappedOps.insert({key, op});
+    // If the port width is targeting a module (e.g., a blackbox) or if it has a
+    // non-zero width, process it normally.  Otherwise, record it as being
+    // zero-width.
+    if (isa<FModuleLike>(op) ||
+        op->getResult(0).getType().cast<FIRRTLType>().getBitWidthOrSentinel())
+      tappedOps.insert({key, op});
+    else
+      zeroWidthTaps.insert(key);
     if (auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal"))
       deadNLAs.insert(sym.getAttr());
   }
@@ -537,6 +555,7 @@ class GrandCentralTapsPass : public GrandCentralTapsBase<GrandCentralTapsPass> {
 
   DenseMap<Key, Annotation> annos;
   DenseMap<Key, Operation *> tappedOps;
+  DenseSet<Key> zeroWidthTaps;
   DenseMap<Key, Port> tappedPorts;
   SmallVector<PortWiring, 8> portWiring;
 
@@ -777,6 +796,10 @@ void GrandCentralTapsPass::runOnOperation() {
       // Connect the output ports to the appropriate tapped object.
       for (auto port : portWiring) {
         LLVM_DEBUG(llvm::dbgs() << "- Wiring up port " << port.portNum << "\n");
+
+        // Ignore the port if it is marked for deletion.
+        if (port.zeroWidth)
+          continue;
 
         // Handle literals. We send the literal string off to the FIRParser to
         // translate into whatever ops are necessary. This yields a handle on
@@ -1019,6 +1042,13 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
         wiring.prefices =
             instancePaths.getAbsolutePaths(op->getParentOfType<FModuleOp>());
       wiring.target = PortWiring::Target(op);
+      portWiring.push_back(std::move(wiring));
+      return;
+    }
+
+    // If the port is zero-width, then mark it as
+    if (zeroWidthTaps.contains(key)) {
+      wiring.zeroWidth = true;
       portWiring.push_back(std::move(wiring));
       return;
     }
