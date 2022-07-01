@@ -506,7 +506,7 @@ firrtl.circuit "TopLevel" {
   firrtl.module private @AnnotationsWithFieldIdWireOp() {
     %foo = firrtl.wire {annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation"}]} : !firrtl.uint<1>
     %bar = firrtl.wire {annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation"}]} : !firrtl.bundle<a: vector<uint<1>, 2>, b: uint<1>>
-    %baz = firrtl.wire {annotations = [#firrtl.subAnno<fieldID = 2, {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation"}>]} : !firrtl.bundle<a: uint<1>, b: vector<uint<1>, 2>>
+    %baz = firrtl.wire {annotations = [{circt.fieldID = 2 : i32, class = "sifive.enterprise.grandcentral.SignalDriverAnnotation"}]} : !firrtl.bundle<a: uint<1>, b: vector<uint<1>, 2>>
   }
   // CHECK: %foo = firrtl.wire
   // CHECK-SAME: {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation"}
@@ -523,7 +523,7 @@ firrtl.circuit "TopLevel" {
   // CHECK: %baz_b_1 = firrtl.wire
   // CHECK-SAME: {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", fieldID = 2 : i64}
   // AGGREGATE:  %baz = firrtl.wire
-  // AGGREGATE-SAME: {annotations = [#firrtl.subAnno<fieldID = 2, {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation"}>]}
+  // AGGREGATE-SAME: {annotations = [{circt.fieldID = 2 : i32, class = "sifive.enterprise.grandcentral.SignalDriverAnnotation"}]}
 
 // Test that Reg/RegResetOp Annotations are copied to lowered registers.
   // CHECK-LABEL: firrtl.module private @AnnotationsRegOp
@@ -573,7 +573,10 @@ firrtl.circuit "TopLevel" {
 // Test that subfield annotations on wire are lowred to appropriate instance based on fieldID.
   // CHECK-LABEL: firrtl.module private @AnnotationsBundle
   firrtl.module private @AnnotationsBundle() {
-    %bar = firrtl.wire  {annotations = [#firrtl.subAnno<fieldID = 3, {one}>, #firrtl.subAnno<fieldID = 5, {two}>]} : !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
+    %bar = firrtl.wire  {annotations = [
+      {circt.fieldID = 3, one},
+      {circt.fieldID = 5, two}
+    ]} : !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
 
       // TODO: Enable this
       // CHECK: %bar_0_baz = firrtl.wire  : !firrtl.uint<1>
@@ -581,7 +584,9 @@ firrtl.circuit "TopLevel" {
       // CHECK: %bar_1_baz = firrtl.wire {annotations = [{two}]} : !firrtl.uint<1>
       // CHECK: %bar_1_qux = firrtl.wire  : !firrtl.uint<1>
 
-    %quux = firrtl.wire  {annotations = [#firrtl.subAnno<fieldID = 0, {zero}>]} : !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
+    %quux = firrtl.wire  {annotations = [
+      {circt.fieldID = 0, zero}
+    ]} : !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
       // CHECK: %quux_0_baz = firrtl.wire {annotations = [{zero}]} : !firrtl.uint<1>
       // CHECK: %quux_0_qux = firrtl.wire {annotations = [{zero}]} : !firrtl.uint<1>
       // CHECK: %quux_1_baz = firrtl.wire {annotations = [{zero}]} : !firrtl.uint<1>
@@ -591,7 +596,10 @@ firrtl.circuit "TopLevel" {
 // Test that subfield annotations on reg are lowred to appropriate instance based on fieldID.
  // CHECK-LABEL: firrtl.module private @AnnotationsBundle2
   firrtl.module private @AnnotationsBundle2(in %clock: !firrtl.clock) {
-    %bar = firrtl.reg %clock  {annotations = [#firrtl.subAnno<fieldID = 3, {one}>, #firrtl.subAnno<fieldID = 5, {two}>]} : !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
+    %bar = firrtl.reg %clock  {annotations = [
+      {circt.fieldID = 3, one},
+      {circt.fieldID = 5, two}
+    ]} : !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
 
     // TODO: Enable this
     // CHECK: %bar_0_baz = firrtl.reg %clock  : !firrtl.uint<1>
@@ -605,7 +613,12 @@ firrtl.circuit "TopLevel" {
 
  // CHECK-LABEL: firrtl.module private @AnnotationsBundle3
   firrtl.module private @AnnotationsBundle3(in %clock: !firrtl.clock) {
-    %bar = firrtl.reg %clock  {annotations = [#firrtl.subAnno<fieldID = 6, {one}>, #firrtl.subAnno<fieldID = 12, {two}>, #firrtl.subAnno<fieldID = 8, {three}>]} : !firrtl.vector<bundle<baz: vector<uint<1>, 2>, qux: vector<uint<1>, 2>, yes: bundle<a: uint<1>, b: uint<1>>>, 2>
+    %bar = firrtl.reg %clock  {
+      annotations = [
+        {circt.fieldID = 6, one},
+        {circt.fieldID = 12, two},
+        {circt.fieldID = 8, three}
+      ]} : !firrtl.vector<bundle<baz: vector<uint<1>, 2>, qux: vector<uint<1>, 2>, yes: bundle<a: uint<1>, b: uint<1>>>, 2>
 
     // TODO: Enable this
     // CHECK: %bar_0_baz_0 = firrtl.reg %clock  : !firrtl.uint<1>
@@ -743,9 +756,9 @@ firrtl.circuit "TopLevel" {
 // matching fieldIDs.
     // The annotation should be copied to just a.a.  The firrtl.hello arg
     // attribute should be copied to each new port.
-    firrtl.module private @PortBundle(in %a: !firrtl.bundle<a: uint<1>, b flip: uint<1>> [#firrtl.subAnno<fieldID = 1, {a}>]) {}
+    firrtl.module private @PortBundle(in %a: !firrtl.bundle<a: uint<1>, b flip: uint<1>> [{circt.fieldID = 1, a}]) {}
     // CHECK-LABEL: firrtl.module private @PortBundle
-    // CHECK-COUNT-1: [{a}]
+    // CHECK-SAME:    in %a_a: !firrtl.uint<1> [{a}]
 
 // circuit Foo:
 //   module Foo:
@@ -926,7 +939,10 @@ firrtl.circuit "TopLevel" {
   // CHECK-LABEL firrtl.module private @Foo3
   firrtl.module private @Foo3() {
     // CHECK: in a: !firrtl.uint<1> [{one}], out b_baz: !firrtl.uint<1> [{two}], out b_qux: !firrtl.uint<1>
-    %bar_a, %bar_b = firrtl.instance bar @Bar3(in a: !firrtl.uint<1> [{one}], out b: !firrtl.bundle<baz: uint<1>, qux: uint<1>> [#firrtl.subAnno<fieldID = 1, {two}>])
+    %bar_a, %bar_b = firrtl.instance bar @Bar3(
+      in a: !firrtl.uint<1> [{one}],
+      out b: !firrtl.bundle<baz: uint<1>, qux: uint<1>> [{circt.fieldID = 1, two}]
+    )
   }
 
 
@@ -942,21 +958,21 @@ firrtl.circuit "TopLevel" {
   firrtl.module private @Foo4() {
     // CHECK: firrtl.mem
     // CHECK-SAME: portAnnotations = [
-    // CHECK-SAME: [{a}, #firrtl.subAnno<fieldID = 4, {b}>],
-    // CHECK-SAME: [#firrtl.subAnno<fieldID = 2, {c}>]
-    // CHECK-SAME: [#firrtl.subAnno<fieldID = 4, {e}>, #firrtl.subAnno<fieldID = 7, {f}>]
+    // CHECK-SAME: [{a}, {b, circt.fieldID = 4 : i32}],
+    // CHECK-SAME: [{c, circt.fieldID = 2 : i32}]
+    // CHECK-SAME: [{circt.fieldID = 4 : i32, e}, {circt.fieldID = 7 : i32, f}]
 
     // CHECK: firrtl.mem
     // CHECK-SAME: portAnnotations = [
-    // CHECK-SAME: [{a}, #firrtl.subAnno<fieldID = 4, {b}>],
-    // CHECK-SAME: [#firrtl.subAnno<fieldID = 2, {c}>, #firrtl.subAnno<fieldID = 4, {d}>]
-    // CHECK-SAME: [#firrtl.subAnno<fieldID = 4, {e}>]
+    // CHECK-SAME: [{a}, {b, circt.fieldID = 4 : i32}],
+    // CHECK-SAME: [{c, circt.fieldID = 2 : i32}, {circt.fieldID = 4 : i32, d}]
+    // CHECK-SAME: [{circt.fieldID = 4 : i32, e}]
 
     %bar_r, %bar_w, %bar_rw = firrtl.mem Undefined  {depth = 16 : i64, name = "bar",
         portAnnotations = [
-          [{a}, #firrtl.subAnno<fieldID = 4, {b}>],
-          [#firrtl.subAnno<fieldID = 2, {c}>, #firrtl.subAnno<fieldID = 6, {d}>],
-          [#firrtl.subAnno<fieldID = 4, {e}>, #firrtl.subAnno<fieldID = 12, {f}>]
+          [{a}, {circt.fieldID = 4 : i32, b}],
+          [{circt.fieldID = 2 : i32, c}, {circt.fieldID = 6 : i32, d}],
+          [{circt.fieldID = 4 : i32, e}, {circt.fieldID = 12 : i32, f}]
         ],
         portNames = ["r", "w", "rw"], readLatency = 0 : i32, writeLatency = 1 : i32} :
         !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: bundle<baz: uint<8>, qux: uint<8>>>,
@@ -1071,17 +1087,17 @@ firrtl.circuit "NLALowering" {
     // bundle has annotations reusing the same NLA, the DontTouch should get dropped.
     %bundle = firrtl.wire sym @b {
       annotations = [
-        #firrtl.subAnno<fieldID = 2, {circt.nonlocal = @nla_b, class = "test" }>,
-        #firrtl.subAnno<fieldID = 2, {circt.nonlocal = @nla_b, class = "firrtl.transforms.DontTouchAnnotation"}>,
-        #firrtl.subAnno<fieldID = 3, {circt.nonlocal = @nla_b, B}>,
-        #firrtl.subAnno<fieldID = 3, {circt.nonlocal = @nla_b, A}>,
-        #firrtl.subAnno<fieldID = 3, {circt.nonlocal = @nla_b, class = "firrtl.transforms.DontTouchAnnotation"}>
+        {circt.fieldID = 2 : i32, circt.nonlocal = @nla_b, class = "test" },
+        {circt.fieldID = 2 : i32, circt.nonlocal = @nla_b, class = "firrtl.transforms.DontTouchAnnotation"},
+        {circt.fieldID = 3 : i32, circt.nonlocal = @nla_b, B},
+        {circt.fieldID = 3 : i32, circt.nonlocal = @nla_b, A},
+        {circt.fieldID = 3 : i32, circt.nonlocal = @nla_b, class = "firrtl.transforms.DontTouchAnnotation"}
       ]
     } : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>
     %bundle2 = firrtl.wire sym @b2 {
       annotations = [
-        #firrtl.subAnno<fieldID = 3, {circt.nonlocal = @nla_b2, class = "firrtl.transforms.DontTouchAnnotation"}>,
-        #firrtl.subAnno<fieldID = 2, {circt.nonlocal = @nla_b2, class = "firrtl.transforms.DontTouchAnnotation"}>
+        {circt.fieldID = 3 : i32, circt.nonlocal = @nla_b2, class = "firrtl.transforms.DontTouchAnnotation"},
+        {circt.fieldID = 2 : i32, circt.nonlocal = @nla_b2, class = "firrtl.transforms.DontTouchAnnotation"}
       ]
     } : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>
     // CHECK:   %bundle_valid = firrtl.wire sym @b_valid : !firrtl.uint<1>
@@ -1108,10 +1124,10 @@ firrtl.circuit "NLALoweringNewSymbol" {
   firrtl.module private @testBundle_Bar(
     in %a: !firrtl.uint<1>,
     out %b: !firrtl.bundle<baz: uint<1>, qux: uint<1>, data: uint<2>> sym @b [
-      #firrtl.subAnno<fieldID = 3, {circt.nonlocal = @lowernla_1, class = "firrtl.transforms.DontTouchAnnotation"}>,
-      #firrtl.subAnno<fieldID = 1, {circt.nonlocal = @lowernla_1, A}>,
-      #firrtl.subAnno<fieldID = 1, {circt.nonlocal = @lowernla_1, B}>,
-      #firrtl.subAnno<fieldID = 2, {circt.nonlocal = @lowernla_1, C}>
+      {circt.fieldID = 3 : i32, circt.nonlocal = @lowernla_1, class = "firrtl.transforms.DontTouchAnnotation"},
+      {circt.fieldID = 1 : i32, circt.nonlocal = @lowernla_1, A},
+      {circt.fieldID = 1 : i32, circt.nonlocal = @lowernla_1, B},
+      {circt.fieldID = 2 : i32, circt.nonlocal = @lowernla_1, C}
     ],
     out %c: !firrtl.uint<1>) {
     // CHECK-LABEL: firrtl.module private @testBundle_Bar
@@ -1120,9 +1136,9 @@ firrtl.circuit "NLALoweringNewSymbol" {
     // CHECK-SAME: out %b_data: !firrtl.uint<2> sym @b_data,
     %d = firrtl.wire sym @d {
       annotations = [
-        #firrtl.subAnno<fieldID = 0, {circt.nonlocal = @lowernla_2, A }>,
-        #firrtl.subAnno<fieldID = 2, {circt.nonlocal = @lowernla_2, B}>,
-        #firrtl.subAnno<fieldID = 0, {circt.nonlocal = @lowernla_2, C}>,
+        {circt.fieldID = 0 : i32, circt.nonlocal = @lowernla_2, A },
+        {circt.fieldID = 2 : i32, circt.nonlocal = @lowernla_2, B},
+        {circt.fieldID = 0 : i32, circt.nonlocal = @lowernla_2, C},
         {D, circt.nonlocal = @lowernla_2}
       ]
     } : !firrtl.bundle<baz: uint<1>, qux: uint<1>>
@@ -1139,7 +1155,7 @@ firrtl.circuit "NLALoweringNewSymbol" {
       in a: !firrtl.uint<1> [{one}],
       out b: !firrtl.bundle<baz: uint<1>,
       qux: uint<1>,
-      data: uint<2>> [#firrtl.subAnno<fieldID = 1, {two}>],
+      data: uint<2>> [{circt.fieldID = 1 : i32, two}],
       out c: !firrtl.uint<1> [{four}]
     )
   }
@@ -1195,7 +1211,7 @@ firrtl.circuit "SymbolCollision" {
   // CHECK-SAME: in %a_foo: !firrtl.uint<1> sym @a_foo
   // CHECK-SAME: in %b_foo: !firrtl.uint<1> sym @b_foo
   firrtl.module @SymbolCollision(
-    in %a: !firrtl.bundle<foo: uint<1>> [#firrtl.subAnno<fieldID=1, {circt.nonlocal = @foo}>],
-    in %b: !firrtl.bundle<foo: uint<1>> [#firrtl.subAnno<fieldID=1, {circt.nonlocal = @bar}>]) {
+    in %a: !firrtl.bundle<foo: uint<1>> [{circt.fieldID = 1 : i32, circt.nonlocal = @foo}],
+    in %b: !firrtl.bundle<foo: uint<1>> [{circt.fieldID = 1 : i32, circt.nonlocal = @bar}]) {
   }
 }

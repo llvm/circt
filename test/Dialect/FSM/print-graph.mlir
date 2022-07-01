@@ -8,7 +8,7 @@
 // CHECK: [[BUSY]] ->
 // CHECK: variables [shape=record,label="Variables|%c1_i16 = arith.constant 1 : i16\n%c0_i16 = arith.constant 0 : i16\n%false = arith.constant false\n%c256_i16 = arith.constant 256 : i16\n%true = arith.constant true\n%cnt = fsm.variable \"cnt\" \{initValue = 0 : i16\} : i16"]}
 
-fsm.machine @foo(%arg0: i1) -> i1 attributes {initialState = "IDLE", stateType = i1} {
+fsm.machine @foo(%arg0: i1) -> i1 attributes {initialState = "IDLE"} {
   %c1_i16 = arith.constant 1 : i16
   %c0_i16 = arith.constant 0 : i16
   %false = arith.constant false

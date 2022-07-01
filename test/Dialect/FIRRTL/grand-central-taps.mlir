@@ -354,7 +354,7 @@ firrtl.circuit "NLAGarbageCollection" {
     %bar_out_MPORT_clk = firrtl.wire  : !firrtl.clock
     %bar_0 = firrtl.reg sym @bar_0 %bar_out_MPORT_clk  {annotations = [{circt.nonlocal = @nla_3, class = "sifive.enterprise.grandcentral.MemTapAnnotation.source", id = 0 : i64, portID = 0 : i64}]} : !firrtl.uint<1>
     // CHECK:  %bar_0 = firrtl.reg sym @[[bar_0:.+]] %bar_out_MPORT_clk  : !firrtl.uint<1>
-    %bar_out_MPORT = firrtl.mem sym Undefined {
+    %bar_out_MPORT = firrtl.mem Undefined {
       depth = 1 : i64,
       name = "bar",
       portNames = ["out_MPORT"],
@@ -529,12 +529,12 @@ firrtl.circuit "Top" {
   }
 
   // CHECK-LABEL: firrtl.module @MemTap_1_impl_0
-  // CHECK-NEXT{LITERAL}: firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}.{{3}}"
-  // CHECK-SAME: symbols = [@Top, #hw.innerNameRef<@Top::@dut>, #hw.innerNameRef<@DUT::@submodule_1>, #hw.innerNameRef<@Submodule::@[[bar_0]]>]
+  // CHECK-NEXT{LITERAL}: firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}"
+  // CHECK-SAME: symbols = [@DUT, #hw.innerNameRef<@DUT::@submodule_1>, #hw.innerNameRef<@Submodule::@[[bar_0]]>]
   firrtl.extmodule @MemTap_1(out mem_0: !firrtl.uint<1> [{class = "sifive.enterprise.grandcentral.MemTapAnnotation.port", id = 0 : i64, portID = 0 : i64}]) attributes {defname = "MemTap"}
   // CHECK-LABEL: firrtl.module @MemTap_2_impl_0
-  // CHECK-NEXT{LITERAL}: firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}.{{3}}"
-  // CHECK-SAME: symbols = [@Top, #hw.innerNameRef<@Top::@dut>, #hw.innerNameRef<@DUT::@submodule_2>, #hw.innerNameRef<@Submodule::@[[bar_0]]>]
+  // CHECK-NEXT{LITERAL}: firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}"
+  // CHECK-SAME: symbols = [@DUT, #hw.innerNameRef<@DUT::@submodule_2>, #hw.innerNameRef<@Submodule::@[[bar_0]]>]
   firrtl.extmodule @MemTap_2(out mem_0: !firrtl.uint<1> [{class = "sifive.enterprise.grandcentral.MemTapAnnotation.port", id = 1 : i64, portID = 0 : i64}]) attributes {defname = "MemTap"}
 }
 

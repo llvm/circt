@@ -138,30 +138,38 @@ hw.module @andCancel(%a: i4, %b : i4) -> (o1: i4, o2: i4) {
 }
 
 
-// CHECK-LABEL: hw.module @andDedup1(%arg0: i7, %arg1: i7)
-hw.module @andDedup1(%arg0: i7, %arg1: i7) -> (result: i7) {
+// CHECK-LABEL: hw.module @idempotentDeduped1(%arg0: i7, %arg1: i7)
+hw.module @idempotentDeduped1(%arg0: i7, %arg1: i7) -> (resAnd: i7, resOr: i7) {
 // CHECK-NEXT:    %0 = comb.and %arg0, %arg1 : i7
-// CHECK-NEXT:    hw.output %0 : i7
+// CHECK-NEXT:    %1 = comb.or %arg0, %arg1 : i7
+// CHECK-NEXT:    hw.output %0, %1 : i7, i7
   %0 = comb.and %arg0    : i7
   %1 = comb.and %0, %arg1: i7
-  hw.output %1 : i7
+  %2 = comb.or %arg0    : i7
+  %3 = comb.or %0, %arg1: i7
+  hw.output %1, %3 : i7, i7
 }
 
-// CHECK-LABEL: hw.module @andDedup2(%arg0: i7, %arg1: i7)
-hw.module @andDedup2(%arg0: i7, %arg1: i7) -> (result: i7) {
+// CHECK-LABEL: hw.module @idempotentDeduped2(%arg0: i7, %arg1: i7)
+hw.module @idempotentDeduped2(%arg0: i7, %arg1: i7) -> (resAnd: i7, resOr: i7) {
 // CHECK-NEXT:    %0 = comb.and %arg0, %arg1 : i7
-// CHECK-NEXT:    hw.output %0 : i7
+// CHECK-NEXT:    %1 = comb.or %arg0, %arg1 : i7
+// CHECK-NEXT:    hw.output %0, %1 : i7, i7
   %0 = comb.and %arg0, %arg0: i7
   %1 = comb.and %0, %arg1: i7
-  hw.output %1 : i7
+  %2 = comb.or %arg0, %arg0: i7
+  %3 = comb.or %0, %arg1: i7
+  hw.output %1, %3 : i7, i7
 }
 
-// CHECK-LABEL: hw.module @andDedupLong(%arg0: i7, %arg1: i7, %arg2: i7)
-hw.module @andDedupLong(%arg0: i7, %arg1: i7, %arg2: i7) -> (result: i7) {
+// CHECK-LABEL: hw.module @dedupLong(%arg0: i7, %arg1: i7, %arg2: i7)
+hw.module @dedupLong(%arg0: i7, %arg1: i7, %arg2: i7) -> (resAnd: i7, resOr: i7) {
 // CHECK-NEXT:    %0 = comb.and %arg0, %arg1, %arg2 : i7
-// CHECK-NEXT:    hw.output %0 : i7
+// CHECK-NEXT:    %1 = comb.or %arg0, %arg1, %arg2 : i7
+// CHECK-NEXT:    hw.output %0, %1 : i7, i7
   %0 = comb.and %arg0, %arg1, %arg2, %arg0: i7
-  hw.output %0 : i7
+  %1 = comb.or %arg0, %arg1, %arg2, %arg0: i7
+  hw.output %0, %1 : i7, i7
 }
 
 // CHECK-LABEL: hw.module @orExclusiveConcats
@@ -1356,5 +1364,13 @@ hw.module @propagateNamehint(%x: i16) -> (o: i1) {
   // swap %x and %c0_i16
   // CHECK: %0 = comb.icmp eq %x, %c0_i16 {sv.namehint = "hint"}
   %0 = comb.icmp eq %c0_i16, %x {sv.namehint = "hint"}: i16
+  hw.output %0 : i1
+}
+
+// https://github.com/llvm/circt/issues/2546
+// CHECK-LABEL: @Issue2546
+hw.module @Issue2546() -> (b: i1) {
+  %true = hw.constant true
+  %0 = comb.xor %0, %true : i1
   hw.output %0 : i1
 }

@@ -6,9 +6,11 @@
 #
 # ===-----------------------------------------------------------------------===//
 
-set(SOURCES py-split-input-file)
+set(SOURCES py-split-input-file.py)
+
 foreach(file IN ITEMS ${SOURCES})
   configure_file(${file}.in ${CIRCT_TOOLS_DIR}/${file})
   list(APPEND OUTPUTS ${CIRCT_TOOLS_DIR}/${file})
 endforeach()
+
 add_custom_target(py-split-input-file SOURCES ${OUTPUTS})

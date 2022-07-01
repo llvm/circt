@@ -18,7 +18,7 @@ set(SCHEDULING_SOURCES
 
 set(SCHEDULING_LIBS
   MLIRIR
-  MLIRFunc
+  MLIRFuncDialect
   MLIRSupport
   )
 

@@ -205,39 +205,10 @@ void getAsmBlockArgumentNamesImpl(Operation *op, mlir::Region &region,
   }
 }
 
-static InstanceOp getInstance(FModuleOp mod, StringAttr name) {
-  for (auto i : mod.getOps<InstanceOp>())
-    if (i.inner_symAttr() == name)
-      return i;
-  return {};
-}
-
-static InstanceOp getInstance(mlir::SymbolTable &symtbl,
-                              hw::InnerRefAttr name) {
-  auto mod = symtbl.lookup<FModuleOp>(name.getModule());
-  if (!mod)
-    return {};
-  return getInstance(mod, name.getName());
-}
-
 static bool hasPortNamed(FModuleLike op, StringAttr name) {
   return llvm::any_of(op.getPortSymbols(), [name](Attribute pname) {
     return pname.cast<StringAttr>() == name;
   });
-}
-
-static bool hasValNamed(FModuleLike op, StringAttr name) {
-  bool retval = false;
-  op.walk([name, &retval](Operation *op) {
-    auto attr = op->getAttrOfType<StringAttr>("inner_sym");
-    if (attr == name) {
-      retval = true;
-      return WalkResult::interrupt();
-    }
-    return WalkResult::advance();
-    ;
-  });
-  return retval;
 }
 
 /// A forward declaration for `NameKind` attribute parser.
@@ -1207,6 +1178,19 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
                        ArrayRef<Attribute> annotations,
                        ArrayRef<Attribute> portAnnotations, bool lowerToBind,
                        StringAttr innerSym) {
+  build(builder, result, resultTypes, moduleName, name, nameKind,
+        portDirections, portNames, annotations, portAnnotations, lowerToBind,
+        innerSym ? InnerSymAttr::get(innerSym) : InnerSymAttr());
+}
+
+void InstanceOp::build(OpBuilder &builder, OperationState &result,
+                       TypeRange resultTypes, StringRef moduleName,
+                       StringRef name, NameKindEnum nameKind,
+                       ArrayRef<Direction> portDirections,
+                       ArrayRef<Attribute> portNames,
+                       ArrayRef<Attribute> annotations,
+                       ArrayRef<Attribute> portAnnotations, bool lowerToBind,
+                       InnerSymAttr innerSym) {
   result.addTypes(resultTypes);
   result.addAttribute("moduleName",
                       SymbolRefAttr::get(builder.getContext(), moduleName));
@@ -1263,7 +1247,8 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
       NameKindEnumAttr::get(builder.getContext(), nameKind),
       module.getPortDirectionsAttr(), module.getPortNamesAttr(),
       builder.getArrayAttr(annotations), portAnnotationsAttr,
-      builder.getBoolAttr(lowerToBind), innerSym);
+      builder.getBoolAttr(lowerToBind),
+      innerSym ? InnerSymAttr::get(innerSym) : InnerSymAttr());
 }
 
 /// Builds a new `InstanceOp` with the ports listed in `portIndices` erased, and
@@ -1477,7 +1462,7 @@ void InstanceOp::print(OpAsmPrinter &p) {
   p.printKeywordOrString(name());
   if (auto attr = inner_symAttr()) {
     p << " sym ";
-    p.printSymbolName(attr.getValue());
+    p.printSymbolName(attr.getSymName());
   }
   if (nameKindAttr().getValue() != NameKindEnum::DroppableName)
     p << ' ' << stringifyNameKindEnum(nameKindAttr().getValue());
@@ -1513,7 +1498,7 @@ ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
   auto &resultAttrs = result.attributes;
 
   std::string name;
-  StringAttr innerSymAttr;
+  InnerSymAttr innerSymAttr;
   FlatSymbolRefAttr moduleName;
   SmallVector<OpAsmParser::Argument> entryArgs;
   SmallVector<Direction, 4> portDirections;
@@ -1526,10 +1511,11 @@ ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
   if (parser.parseKeywordOrString(&name))
     return failure();
   if (succeeded(parser.parseOptionalKeyword("sym"))) {
-    // Parsing an optional symbol name doesn't fail, so no need to check the
-    // result.
-    (void)parser.parseOptionalSymbolName(
-        innerSymAttr, hw::InnerName::getInnerNameAttrName(), result.attributes);
+    if (parser.parseCustomAttributeWithFallback(
+            innerSymAttr, ::mlir::Type{},
+            InnerSymbolTable::getInnerSymbolAttrName(), result.attributes)) {
+      return ::mlir::failure();
+    }
   }
   if (parseNameKind(parser, nameKind) ||
       parser.parseOptionalAttrDict(result.attributes) ||
@@ -1586,7 +1572,7 @@ void MemOp::build(OpBuilder &builder, OperationState &result,
                   uint32_t writeLatency, uint64_t depth, RUWAttr ruw,
                   ArrayRef<Attribute> portNames, StringRef name,
                   NameKindEnum nameKind, ArrayRef<Attribute> annotations,
-                  ArrayRef<Attribute> portAnnotations, StringAttr innerSym) {
+                  ArrayRef<Attribute> portAnnotations, InnerSymAttr innerSym) {
   result.addAttribute(
       "readLatency",
       builder.getIntegerAttr(builder.getIntegerType(32), readLatency));
@@ -1615,6 +1601,17 @@ void MemOp::build(OpBuilder &builder, OperationState &result,
     result.addAttribute("portAnnotations",
                         builder.getArrayAttr(portAnnotations));
   }
+}
+
+void MemOp::build(OpBuilder &builder, OperationState &result,
+                  TypeRange resultTypes, uint32_t readLatency,
+                  uint32_t writeLatency, uint64_t depth, RUWAttr ruw,
+                  ArrayRef<Attribute> portNames, StringRef name,
+                  NameKindEnum nameKind, ArrayRef<Attribute> annotations,
+                  ArrayRef<Attribute> portAnnotations, StringAttr innerSym) {
+  build(builder, result, resultTypes, readLatency, writeLatency, depth, ruw,
+        portNames, name, nameKind, annotations, portAnnotations,
+        innerSym ? InnerSymAttr::get(innerSym) : InnerSymAttr());
 }
 
 ArrayAttr MemOp::getPortAnnotation(unsigned portIdx) {
@@ -3664,11 +3661,7 @@ bool HierPathOp::isComponent() { return (bool)ref(); }
 // 6. The last element of the namepath, can be an InnerRefAttr on either a
 // module port or a declaration inside the module.
 // 7. The last element of the namepath can also be a module symbol.
-LogicalResult
-HierPathOp::verifySymbolUses(mlir::SymbolTableCollection &symtblC) {
-  Operation *op = *this;
-  CircuitOp cop = op->getParentOfType<CircuitOp>();
-  auto &symtbl = symtblC.getSymbolTable(cop);
+LogicalResult HierPathOp::verifyInnerRefs(InnerRefNamespace &ns) {
   if (namepath().size() <= 1)
     return emitOpError()
            << "the instance path cannot be empty/single element, it "
@@ -3686,7 +3679,7 @@ HierPathOp::verifySymbolUses(mlir::SymbolTableCollection &symtblC) {
       return emitOpError() << "instance path is incorrect. Expected module: "
                            << expectedModuleName
                            << " instead found: " << innerRef.getModule();
-    InstanceOp instOp = getInstance(symtbl, innerRef);
+    InstanceOp instOp = ns.lookup<InstanceOp>(innerRef);
     if (!instOp)
       return emitOpError() << " module: " << innerRef.getModule()
                            << " does not contain any instance with symbol: "
@@ -3696,10 +3689,9 @@ HierPathOp::verifySymbolUses(mlir::SymbolTableCollection &symtblC) {
   // The instance path has been verified. Now verify the last element.
   auto leafRef = namepath()[namepath().size() - 1];
   if (auto innerRef = leafRef.dyn_cast<hw::InnerRefAttr>()) {
-    auto *fmod = symtbl.lookup(innerRef.getModule());
+    auto *fmod = ns.symTable.lookup(innerRef.getModule());
     auto mod = cast<FModuleLike>(fmod);
-    if (!hasPortNamed(mod, innerRef.getName()) &&
-        !hasValNamed(mod, innerRef.getName())) {
+    if (!hasPortNamed(mod, innerRef.getName()) && !ns.lookup(innerRef)) {
       return emitOpError() << " operation with symbol: " << innerRef
                            << " was not found ";
     }

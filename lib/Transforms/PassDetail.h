@@ -25,12 +25,12 @@ void registerDialect(DialectRegistry &registry);
 namespace memref {
 class MemRefDialect;
 } // end namespace memref
+} // end namespace mlir
 
 namespace circt {
 #define GEN_PASS_CLASSES
 #include "circt/Transforms/Passes.h.inc"
 
 } // namespace circt
-} // end namespace mlir
 
 #endif // TRANSFORMS_PASSDETAIL_H

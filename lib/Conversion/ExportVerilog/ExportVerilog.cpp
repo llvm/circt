@@ -282,7 +282,7 @@ static void getTypeDims(SmallVectorImpl<Attribute> &dims, Type type,
     return getTypeDims(dims, inout.getElementType(), loc);
   if (auto uarray = hw::type_dyn_cast<hw::UnpackedArrayType>(type))
     return getTypeDims(dims, uarray.getElementType(), loc);
-  if (hw::type_isa<InterfaceType>(type) || hw::type_isa<StructType>(type))
+  if (hw::type_isa<InterfaceType, StructType>(type))
     return;
 
   mlir::emitError(loc, "value has an unsupported verilog type ") << type;
@@ -498,6 +498,8 @@ getLocationInfoAsStringImpl(const SmallPtrSet<Operation *, 8> &ops) {
 static std::string
 getLocationInfoAsString(const SmallPtrSet<Operation *, 8> &ops,
                         LoweringOptions::LocationInfoStyle style) {
+  if (style == LoweringOptions::LocationInfoStyle::None)
+    return "";
   auto str = getLocationInfoAsStringImpl(ops);
   // If the location information is empty, just return an empty string.
   if (str.empty())
@@ -507,6 +509,11 @@ getLocationInfoAsString(const SmallPtrSet<Operation *, 8> &ops,
     return str;
   case LoweringOptions::LocationInfoStyle::WrapInAtSquareBracket:
     return "@[" + str + ']';
+  // NOTE: We need this case to avoid a compiler warning regarding an unhandled
+  // switch case. Because we early return in the `None` case, this should be
+  // unreachable.
+  case LoweringOptions::LocationInfoStyle::None:
+    llvm_unreachable("`None` case handled in early return");
   }
 
   llvm_unreachable("all styles must be handled");
@@ -590,7 +597,7 @@ static bool isExpressionUnableToInline(Operation *op) {
 
 /// Return true if this expression should be emitted inline into any statement
 /// that uses it.
-static bool isExpressionEmittedInline(Operation *op) {
+bool ExportVerilog::isExpressionEmittedInline(Operation *op) {
   // Never create a temporary which is only going to be assigned to an output
   // port.
   if (op->hasOneUse() && isa<hw::OutputOp>(*op->getUsers().begin()))
@@ -2531,6 +2538,9 @@ private:
   LogicalResult visitSV(WarningOp op);
   LogicalResult visitSV(InfoOp op);
 
+  LogicalResult visitSV(GenerateOp op);
+  LogicalResult visitSV(GenerateCaseOp op);
+
   void emitAssertionLabel(Operation *op, StringRef opName);
   void emitAssertionMessage(StringAttr message, ValueRange args,
                             SmallPtrSet<Operation *, 8> &ops,
@@ -2662,6 +2672,10 @@ LogicalResult StmtEmitter::visitSV(AssignOp op) {
 
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
+
+  // If we have SV attributes attached to the op, those need to be emitted
+  // first.
+  emitSVAttributes(op.svAttributesAttr(), op);
 
   indent() << "assign ";
   emitExpression(op.dest(), ops);
@@ -2954,6 +2968,64 @@ LogicalResult StmtEmitter::visitSV(WarningOp op) {
 LogicalResult StmtEmitter::visitSV(InfoOp op) {
   return emitSeverityMessageTask(op, "$info", {}, op.messageAttr(),
                                  op.operands());
+}
+
+LogicalResult StmtEmitter::visitSV(GenerateOp op) {
+  indent() << "generate\n";
+  indent() << "begin: " << names.addName(op, op.sym_name()) << "\n";
+  addIndent();
+  emitStatementBlock(op.body().getBlocks().front());
+  reduceIndent();
+  indent() << "end: " << names.getName(op) << "\n";
+  indent() << "endgenerate\n";
+  return success();
+}
+
+LogicalResult StmtEmitter::visitSV(GenerateCaseOp op) {
+  indent() << "case (";
+  emitter.printParamValue(op.cond(), os, VerilogPrecedence::Selection, [&]() {
+    return op->emitOpError("invalid case parameter");
+  });
+  os << ")\n";
+
+  // Ensure that all of the per-case arrays are the same length.
+  ArrayAttr patterns = op.casePatterns();
+  ArrayAttr caseNames = op.caseNames();
+  MutableArrayRef<Region> regions = op.caseRegions();
+  assert(patterns.size() == regions.size());
+  assert(patterns.size() == caseNames.size());
+
+  addIndent();
+  // TODO: We'll probably need to store the legalized names somewhere for
+  // `verbose` formatting. Set up the infra for storing names recursively. Just
+  // store this locally for now.
+  llvm::StringSet<> usedNames;
+  size_t nextGenID = 0;
+
+  // Emit each case.
+  for (size_t i = 0, e = patterns.size(); i < e; ++i) {
+    auto &region = regions[i];
+    assert(region.hasOneBlock());
+    Attribute patternAttr = patterns[i];
+
+    indent();
+    if (patternAttr.getType().isa<NoneType>())
+      os << "default";
+    else
+      emitter.printParamValue(
+          patternAttr, os, VerilogPrecedence::LowestPrecedence,
+          [&]() { return op->emitOpError("invalid case value"); });
+
+    StringRef legalName = legalizeName(
+        caseNames[i].cast<StringAttr>().getValue(), usedNames, nextGenID);
+    os << ": begin: " << legalName << "\n";
+    emitStatementBlock(region.getBlocks().front());
+    indent() << "end: " << legalName << "\n";
+  }
+
+  reduceIndent();
+  indent() << "endcase\n";
+  return success();
 }
 
 /// Emit the `<label>:` portion of an immediate or concurrent verification

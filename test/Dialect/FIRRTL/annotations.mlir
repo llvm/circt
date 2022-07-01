@@ -540,3 +540,69 @@ firrtl.circuit "GCTMemTap" attributes {rawAnnotations = [{
 // CHECK-SAME:     id = [[ID]]
 // CHECK-SAME:   }
 // CHECK-SAME: ]
+
+// -----
+
+firrtl.circuit "Sub"  attributes {
+  rawAnnotations = [
+    {
+      annotations = [],
+      circuit = "",
+      circuitPackage = "other",
+      class = "sifive.enterprise.grandcentral.SignalDriverAnnotation",
+      sinkTargets = [
+        {_1 = "~Top|Foo>clock", _2 = "~Sub|Sub>clockSink"},
+        {_1 = "~Top|Foo>dataIn.a.b.c", _2 = "~Sub|Sub>dataSink.u"},
+        {_1 = "~Top|Foo>dataIn.d", _2 = "~Sub|Sub>dataSink.v"},
+        {_1 = "~Top|Foo>dataIn.e", _2 = "~Sub|Sub>dataSink.w"}
+      ],
+      sourceTargets = [
+        {_1 = "~Top|Top>clock", _2 = "~Sub|Sub>clockSource"},
+        {_1 = "~Top|Foo>dataOut.x.y.z", _2 = "~Sub|Sub>dataSource.u"},
+        {_1 = "~Top|Foo>dataOut.w", _2 = "~Sub|Sub>dataSource.v"},
+        {_1 = "~Top|Foo>dataOut.p", _2 = "~Sub|Sub>dataSource.w"}
+      ]
+    }
+  ]
+} {
+  firrtl.extmodule private @SubExtern(
+    in clockIn: !firrtl.clock,
+    out clockOut: !firrtl.clock,
+    in someInput: !firrtl.bundle<u: uint<42>, v: uint<9001>, w: vector<uint<1>, 2>>, out someOutput: !firrtl.bundle<u: uint<42>, v: uint<9001>, w: vector<uint<1>, 2>>
+  )
+  firrtl.module @Sub() {
+    %clockSource = firrtl.wire interesting_name  : !firrtl.clock
+    %clockSink = firrtl.wire interesting_name  : !firrtl.clock
+    %dataSource = firrtl.wire interesting_name  : !firrtl.bundle<u: uint<42>, v: uint<9001>, w: vector<uint<1>, 2>>
+    %dataSink = firrtl.wire interesting_name  : !firrtl.bundle<u: uint<42>, v: uint<9001>, w: vector<uint<1>, 2>>
+    %ext_clockIn, %ext_clockOut, %ext_someInput, %ext_someOutput = firrtl.instance ext interesting_name  @SubExtern(in clockIn: !firrtl.clock, out clockOut: !firrtl.clock, in someInput: !firrtl.bundle<u: uint<42>, v: uint<9001>, w: vector<uint<1>, 2>>, out someOutput: !firrtl.bundle<u: uint<42>, v: uint<9001>, w: vector<uint<1>, 2>>)
+    firrtl.strictconnect %ext_clockIn, %clockSource : !firrtl.clock
+    firrtl.strictconnect %ext_someInput, %dataSource : !firrtl.bundle<u: uint<42>, v: uint<9001>, w: vector<uint<1>, 2>>
+    firrtl.strictconnect %clockSink, %ext_clockOut : !firrtl.clock
+    firrtl.strictconnect %dataSink, %ext_someOutput : !firrtl.bundle<u: uint<42>, v: uint<9001>, w: vector<uint<1>, 2>>
+  }
+}
+
+// CHECK-LABEL: firrtl.circuit "Sub"
+// CHECK-SAME:    {annotations = [], circuit = "", circuitPackage = "other", class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", id = [[id:[0-9]+]] : i64, isSubCircuit = true}
+//
+// CHECK:         firrtl.module @Sub()
+// CHECK-SAME:      {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation.module", id = [[id]] : i64}
+// CHECK-NEXT:      %clockSource = firrtl.wire sym @[[_:[^ ]+]]
+// CHECK-SAME:        {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation.target", dir = "source", id = [[id]] : i64, peer = "~Top|Top>clock", side = "local", targetId = {{[0-9]+}} : i64}
+// CHECK-NEXT:      %clockSink = firrtl.wire sym @[[_:[^ ]+]]
+// CHECK-SAME:        {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation.target", dir = "sink", id = [[id]] : i64, peer = "~Top|Foo>clock", side = "local", targetId = {{[0-9]+}} : i64}
+// CHECK-NEXT:      %dataSource = firrtl.wire
+// CHECK-SAME:        {circt.fieldID = 3 : i32, class = "sifive.enterprise.grandcentral.SignalDriverAnnotation.target", dir = "source", id = [[id]] : i64, peer = "~Top|Foo>dataOut.p", side = "local", targetId = {{[0-9]+}} : i64}
+// CHECK-SAME:        {circt.fieldID = 3 : i32, class = "firrtl.transforms.DontTouchAnnotation"}
+// CHECK-SAME:        {circt.fieldID = 2 : i32, class = "sifive.enterprise.grandcentral.SignalDriverAnnotation.target", dir = "source", id = [[id]] : i64, peer = "~Top|Foo>dataOut.w", side = "local", targetId = {{[0-9]+}} : i64}
+// CHECK-SAME:        {circt.fieldID = 2 : i32, class = "firrtl.transforms.DontTouchAnnotation"}
+// CHECK-SAME:        {circt.fieldID = 1 : i32, class = "sifive.enterprise.grandcentral.SignalDriverAnnotation.target", dir = "source", id = [[id]] : i64, peer = "~Top|Foo>dataOut.x.y.z", side = "local", targetId = {{[0-9]+}} : i64}
+// CHECK-SAME:        {circt.fieldID = 1 : i32, class = "firrtl.transforms.DontTouchAnnotation"}
+// CHECK-NEXT:      %dataSink = firrtl.wire
+// CHECK-SAME:        {circt.fieldID = 3 : i32, class = "sifive.enterprise.grandcentral.SignalDriverAnnotation.target", dir = "sink", id = [[id]] : i64, peer = "~Top|Foo>dataIn.e", side = "local", targetId = {{[0-9]+}} : i64}
+// CHECK-SAME:        {circt.fieldID = 3 : i32, class = "firrtl.transforms.DontTouchAnnotation"}
+// CHECK-SAME:        {circt.fieldID = 2 : i32, class = "sifive.enterprise.grandcentral.SignalDriverAnnotation.target", dir = "sink", id = [[id]] : i64, peer = "~Top|Foo>dataIn.d", side = "local", targetId = {{[0-9]+}} : i64}
+// CHECK-SAME:        {circt.fieldID = 2 : i32, class = "firrtl.transforms.DontTouchAnnotation"}
+// CHECK-SAME:        {circt.fieldID = 1 : i32, class = "sifive.enterprise.grandcentral.SignalDriverAnnotation.target", dir = "sink", id = [[id]] : i64, peer = "~Top|Foo>dataIn.a.b.c", side = "local", targetId = {{[0-9]+}} : i64}
+// CHECK-SAME:        {circt.fieldID = 1 : i32, class = "firrtl.transforms.DontTouchAnnotation"}

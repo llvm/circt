@@ -91,7 +91,7 @@ class MSFTModuleOp(_hw_ext.ModuleLike):
                      loc=loc,
                      ip=ip)
 
-  def create(self, name: str, loc=None, ip=None, **kwargs):
+  def instantiate(self, name: str, loc=None, ip=None, **kwargs):
     return InstanceBuilder(self, name, kwargs, loc=loc, ip=ip)
 
   def add_entry_block(self):
@@ -113,16 +113,25 @@ class MSFTModuleOp(_hw_ext.ModuleLike):
         for p in _ir.DictAttr(self.attributes["parameters"])
     ]
 
+  @property
+  def childAppIDBases(self):
+    if "childAppIDBases" not in self.attributes:
+      return None
+    bases = self.attributes["childAppIDBases"]
+    if bases is None:
+      return None
+    return [_ir.StringAttr(n) for n in _ir.ArrayAttr(bases)]
+
 
 class MSFTModuleExternOp(_hw_ext.ModuleLike):
 
-  def create(self,
-             name: str,
-             parameters=None,
-             results=None,
-             loc=None,
-             ip=None,
-             **kwargs):
+  def instantiate(self,
+                  name: str,
+                  parameters=None,
+                  results=None,
+                  loc=None,
+                  ip=None,
+                  **kwargs):
     return InstanceBuilder(self,
                            name,
                            kwargs,

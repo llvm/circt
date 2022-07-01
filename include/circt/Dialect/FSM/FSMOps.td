@@ -24,14 +24,13 @@ def MachineOp : FSMOp<"machine", [FunctionOpInterface,
     includes a `$body` region that contains internal variables and states.
   }];
 
-  let arguments = (ins StrAttr:$sym_name, TypeAttr:$stateType,
-                       StrAttr:$initialState,
+  let arguments = (ins StrAttr:$sym_name, StrAttr:$initialState,
                        TypeAttrOf<FunctionType>:$function_type);
   let regions = (region SizedRegion<1>:$body);
 
   let builders = [
     OpBuilder<(ins "StringRef":$name, "StringRef":$initialState,
-      "Type":$stateType, "FunctionType":$function_type,
+      "FunctionType":$function_type,
       CArg<"ArrayRef<NamedAttribute>", "{}">:$attrs,
       CArg<"ArrayRef<DictionaryAttr>", "{}">:$argAttrs)>
   ];
@@ -141,8 +140,7 @@ def HWInstanceOp : FSMOp<"hw_instance", [Symbol, AttrSizedOperandSegments]> {
   let hasVerifier = 1;
 }
 
-def StateOp : FSMOp<"state", [HasParent<"MachineOp">, Symbol,
-       SingleBlockImplicitTerminator<"OutputOp">]> {
+def StateOp : FSMOp<"state", [HasParent<"MachineOp">, Symbol, NoTerminator]> {
   let summary = "Define a state of a machine";
   let description = [{
     `fsm.state` represents a state of a state machine. This op includes an
@@ -170,6 +168,7 @@ def StateOp : FSMOp<"state", [HasParent<"MachineOp">, Symbol,
   ];
 
   let skipDefaultBuilders = 1;
+  let hasVerifier = 1;
 }
 
 def OutputOp : FSMOp<"output", [HasParent<"StateOp">, ReturnLike, Terminator]> {
@@ -189,8 +188,7 @@ def OutputOp : FSMOp<"output", [HasParent<"StateOp">, ReturnLike, Terminator]> {
   let hasVerifier = 1;
 }
 
-def TransitionOp : FSMOp<"transition", [HasParent<"StateOp">,
-      SingleBlockImplicitTerminator<"ReturnOp">]> {
+def TransitionOp : FSMOp<"transition", [HasParent<"StateOp">, NoTerminator]> {
   let summary = "Define a transition of a state";
   let description = [{
     `fsm.transition` represents a transition of a state with a symbol reference

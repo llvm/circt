@@ -91,6 +91,12 @@ constexpr const char *extractGrandCentralClass =
     "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation";
 constexpr const char *signalDriverAnnoClass =
     "sifive.enterprise.grandcentral.SignalDriverAnnotation";
+constexpr const char *signalDriverTargetAnnoClass =
+    "sifive.enterprise.grandcentral.SignalDriverAnnotation.target"; // not in
+                                                                    // SFC
+constexpr const char *signalDriverModuleAnnoClass =
+    "sifive.enterprise.grandcentral.SignalDriverAnnotation.module"; // not in
+                                                                    // SFC
 constexpr const char *moduleReplacementAnnoClass =
     "sifive.enterprise.grandcentral.ModuleReplacementAnnotation";
 
@@ -103,9 +109,9 @@ constexpr const char *injectDUTHierarchyAnnoClass =
     "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation";
 
 // MemToRegOfVec Annotations
-static const char *convertMemToRegOfVecAnnoClass =
+constexpr const char *convertMemToRegOfVecAnnoClass =
     "sifive.enterprise.firrtl.ConvertMemToRegOfVecAnnotation$";
-static const char *excludeMemToRegAnnoClass =
+constexpr const char *excludeMemToRegAnnoClass =
     "sifive.enterprise.firrtl.ExcludeMemFromMemToRegOfVec";
 
 // Instance Extraction

@@ -15,6 +15,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotationHelper.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/NLATable.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
@@ -1025,7 +1026,7 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
   return None;
 }
 
-LogicalResult circt::firrtl::applyGCTView(AnnoPathValue target,
+LogicalResult circt::firrtl::applyGCTView(const AnnoPathValue &target,
                                           DictionaryAttr anno,
                                           ApplyState &state) {
 
@@ -1146,10 +1147,16 @@ Optional<Attribute> GrandCentralPass::fromAttr(Attribute attr) {
   return None;
 }
 
+static StringAttr getModPart(Attribute pathSegment) {
+  return TypeSwitch<Attribute, StringAttr>(pathSegment)
+      .Case<FlatSymbolRefAttr>([](auto a) { return a.getAttr(); })
+      .Case<hw::InnerRefAttr>([](auto a) { return a.getModule(); });
+}
+
 bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
                                      VerbatimBuilder &path) {
   return TypeSwitch<Attribute, bool>(field)
-      .Case<AugmentedGroundTypeAttr>([&](auto ground) {
+      .Case<AugmentedGroundTypeAttr>([&](AugmentedGroundTypeAttr ground) {
         auto [fieldRef, sym] = leafMap.lookup(ground.getID());
         HierPathOp nla;
         if (sym)
@@ -1161,39 +1168,46 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
         auto builder =
             OpBuilder::atBlockEnd(companionIDMap.lookup(id).mapping.getBody());
 
-        // The enclosing module is either the module where the leaf lives or its
-        // the root of the NLA.  After computing this, the enclosing module
-        // should be singly-instantiated.
-        FModuleLike enclosing;
-        if (!nla)
-          enclosing = getEnclosingModule(leafValue, sym);
-        else
-          enclosing = getSymbolTable().lookup<FModuleOp>(nla.root());
-
-        auto srcPaths = instancePaths->getAbsolutePaths(enclosing);
-        assert(srcPaths.size() == 1 &&
-               "Unable to handle multiply instantiated companions");
-
-        // Add the root module.
-        path += " = ";
-        path += FlatSymbolRefAttr::get(SymbolTable::getSymbolName(
-            srcPaths[0].empty()
-                ? enclosing
-                : srcPaths[0][0]->getParentOfType<FModuleLike>()));
-
-        // Add the source path from the enclosing module to the root.
-        for (auto inst : srcPaths[0]) {
-          path += '.';
-          path += getInnerRefTo(inst);
+        // Populate a hierarchical path to the leaf.  For an NLA this is just
+        // the namepath of the associated hierarchical path.  For a local
+        // annotation, this is computed from the instance path.
+        SmallVector<Attribute> fullLeafPath;
+        if (nla) {
+          fullLeafPath.append(nla.namepath().begin(), nla.namepath().end());
+        } else {
+          FModuleLike enclosing = getEnclosingModule(leafValue, sym);
+          auto enclosingPaths = instancePaths->getAbsolutePaths(enclosing);
+          assert(enclosingPaths.size() == 1 &&
+                 "Unable to handle multiply instantiated companions");
+          if (enclosingPaths.size() != 1)
+            return false;
+          StringAttr root =
+              instancePaths->instanceGraph.getTopLevelModule().moduleNameAttr();
+          for (auto segment : enclosingPaths[0]) {
+            fullLeafPath.push_back(getInnerRefTo(segment));
+            root = segment.moduleNameAttr().getAttr();
+          }
+          fullLeafPath.push_back(FlatSymbolRefAttr::get(root));
         }
 
-        // If this is an NLA, append the path from the enclosing module down to
-        // the module that contains the NLA.
-        if (nla)
-          for (size_t i = 0, e = nla.namepath().size() - 1; i != e; ++i) {
-            path += '.';
-            path += nla.namepath()[i];
+        // Compute the lowest common ancestor (LCA) of the leaf path and the
+        // parent module.  This enables the generated XMR to be as short as
+        // possible while not losing specificity.
+        ArrayRef<Attribute> minimalLeafPath(fullLeafPath);
+        StringAttr parentNameAttr =
+            parentIDMap.lookup(id).second.moduleNameAttr();
+        minimalLeafPath = minimalLeafPath.drop_until(
+            [&](Attribute attr) { return getModPart(attr) == parentNameAttr; });
+
+        // Generate the path from the LCA to the module that contains the leaf.
+        path += " = ";
+        path += FlatSymbolRefAttr::get(getModPart(minimalLeafPath.front()));
+        if (minimalLeafPath.size() > 0) {
+          for (auto segment : minimalLeafPath.drop_back()) {
+            path += ".";
+            path += segment;
           }
+        }
 
         // Add the leaf value to the path.
         auto uloc = builder.getUnknownLoc();
@@ -2182,20 +2196,6 @@ void GrandCentralPass::runOnOperation() {
   markAnalysesPreserved<NLATable>();
 }
 
-StringAttr GrandCentralPass::getOrAddInnerSym(Operation *op) {
-  auto attr = op->getAttrOfType<StringAttr>("inner_sym");
-  if (attr)
-    return attr;
-  auto module = op->getParentOfType<FModuleOp>();
-  StringRef nameHint = "gct_sym";
-  if (auto attr = op->getAttrOfType<StringAttr>("name"))
-    nameHint = attr.getValue();
-  auto name = getModuleNamespace(module).newName(nameHint);
-  attr = StringAttr::get(op->getContext(), name);
-  op->setAttr("inner_sym", attr);
-  return attr;
-}
-
 StringAttr GrandCentralPass::getOrAddInnerSym(FModuleLike module,
                                               size_t portIdx) {
   auto attr = module.getPortSymbolAttr(portIdx);
@@ -2211,9 +2211,9 @@ StringAttr GrandCentralPass::getOrAddInnerSym(FModuleLike module,
 }
 
 hw::InnerRefAttr GrandCentralPass::getInnerRefTo(Operation *op) {
-  return hw::InnerRefAttr::get(
-      SymbolTable::getSymbolName(op->getParentOfType<FModuleOp>()),
-      getOrAddInnerSym(op));
+  return ::getInnerRefTo(op, "", [&](FModuleOp mod) -> ModuleNamespace & {
+    return getModuleNamespace(mod);
+  });
 }
 
 hw::InnerRefAttr GrandCentralPass::getInnerRefTo(FModuleLike module,

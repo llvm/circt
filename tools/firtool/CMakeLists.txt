@@ -18,6 +18,6 @@ target_link_libraries(firtool PRIVATE
   MLIRSupport
   MLIRIR
   MLIROptLib
-  MLIRFunc
+  MLIRFuncDialect
   MLIRTransforms
   )

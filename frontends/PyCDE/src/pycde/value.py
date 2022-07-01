@@ -11,9 +11,11 @@ import circt.support as support
 
 import mlir.ir as ir
 
+from contextvars import ContextVar
 from functools import singledispatchmethod
-from typing import Union
+from typing import Optional, Union
 import re
+import numpy as np
 
 
 class Value:
@@ -42,13 +44,25 @@ class Value:
 
   _reg_name = re.compile(r"^(.*)__reg(\d+)$")
 
-  def reg(self, clk, rst=None, name=None, cycles=1, sv_attributes=None):
+  def reg(self,
+          clk=None,
+          rst=None,
+          name=None,
+          cycles=1,
+          sv_attributes=None,
+          appid=None):
     """Register this value, returning the delayed value.
     `clk`, `rst`: the clock and reset signals.
     `name`: name this register explicitly.
     `cycles`: number of registers to add."""
+
+    if clk is None:
+      clk = ClockValue._get_current_clock_block()
+      if clk is None:
+        raise ValueError("If 'clk' not specified, must be in clock block")
     if sv_attributes is not None:
       sv_attributes = [sv.SVAttributeAttr.get(attr) for attr in sv_attributes]
+
     from .dialects import seq
     if name is None:
       basename = None
@@ -77,6 +91,8 @@ class Value:
                             name=give_name,
                             sym_name=give_name,
                             sv_attributes=sv_attributes)
+      if appid is not None:
+        reg.appid = appid
       return reg
 
   @property
@@ -108,9 +124,45 @@ class Value:
     else:
       self._name = new
 
+  @property
+  def appid(self) -> Optional[object]:  # Optional AppID.
+    from .module import AppID
+    owner = self.value.owner
+    if AppID.AttributeName in owner.attributes:
+      return AppID(owner.attributes[AppID.AttributeName])
+    return None
+
+  @appid.setter
+  def appid(self, appid) -> None:
+    if "sym_name" not in self.value.owner.attributes:
+      raise ValueError("AppIDs can only be attached to ops with symbols")
+    from .module import AppID
+    self.value.owner.attributes[AppID.AttributeName] = appid._appid
+
 
 class RegularValue(Value):
   pass
+
+
+_current_clock_context = ContextVar("current_clock_context")
+
+
+class ClockValue(Value):
+  """A clock signal."""
+
+  __slots__ = ["_old_token"]
+
+  def __enter__(self):
+    self._old_token = _current_clock_context.set(self)
+
+  def __exit__(self, exc_type, exc_value, traceback):
+    if exc_value is not None:
+      return
+    _current_clock_context.reset(self._old_token)
+
+  @staticmethod
+  def _get_current_clock_block():
+    return _current_clock_context.get(None)
 
 
 class InOutValue(Value):
@@ -137,28 +189,35 @@ def _validate_idx(size: int, idx: Union[int, BitVectorValue]):
                       f" Value, not {type(idx)}.")
 
 
+def get_slice_bounds(size, idxOrSlice: Union[int, slice]):
+  if isinstance(idxOrSlice, int):
+    s = slice(idxOrSlice, idxOrSlice + 1)
+  elif isinstance(idxOrSlice, slice):
+    if idxOrSlice.stop and idxOrSlice.stop > size:
+      raise ValueError("Slice out-of-bounds")
+    s = idxOrSlice
+  else:
+    raise TypeError("Expected int or slice")
+
+  idxs = s.indices(size)
+  if idxs[2] != 1:
+    raise ValueError("Integer / bitvector slices do not support steps")
+  return idxs[0], idxs[1]
+
+
 class BitVectorValue(Value):
 
   @singledispatchmethod
   def __getitem__(self, idxOrSlice: Union[int, slice]) -> BitVectorValue:
-    if isinstance(idxOrSlice, int):
-      s = slice(idxOrSlice, idxOrSlice + 1)
-    elif isinstance(idxOrSlice, slice):
-      s = idxOrSlice
-    else:
-      raise TypeError("Expected int or slice")
-    idxs = s.indices(len(self))
-    if idxs[2] != 1:
-      raise ValueError("Integer / bitvector slices do not support steps")
-
+    lo, hi = get_slice_bounds(len(self), idxOrSlice)
     from .pycde_types import types
     from .dialects import comb
-    ret_type = types.int(idxs[1] - idxs[0])
+    ret_type = types.int(hi - lo)
 
     with get_user_loc():
-      ret = comb.ExtractOp(idxs[0], ret_type, self.value)
+      ret = comb.ExtractOp(lo, ret_type, self.value)
       if self.name is not None:
-        ret.name = f"{self.name}_{idxs[0]}upto{idxs[1]}"
+        ret.name = f"{self.name}_{lo}upto{hi}"
       return ret
 
   @__getitem__.register(Value)
@@ -248,6 +307,48 @@ class ListValue(Value):
   def __len__(self):
     return self.type.strip.size
 
+  """
+  Add a curated set of Numpy functions through the Matrix class.
+  This allows for directly manipulating the ListValues with numpy functionality.
+  Power-users who use the Matrix directly have access to all numpy functions.
+  In reality, it will only be a subset of the numpy array functions which are
+  safe to be used in the PyCDE context. Curating access at the level of
+  ListValues seems like a safe starting point.
+  """
+
+  def transpose(self, *args, **kwargs):
+    from .ndarray import NDArray
+    return NDArray(from_value=self).transpose(*args, **kwargs).to_circt()
+
+  def reshape(self, *args, **kwargs):
+    from .ndarray import NDArray
+    return NDArray(from_value=self).reshape(*args, **kwargs).to_circt()
+
+  def flatten(self, *args, **kwargs):
+    from .ndarray import NDArray
+    return NDArray(from_value=self).flatten(*args, **kwargs).to_circt()
+
+  def moveaxis(self, *args, **kwargs):
+    from .ndarray import NDArray
+    return NDArray(from_value=self).moveaxis(*args, **kwargs).to_circt()
+
+  def rollaxis(self, *args, **kwargs):
+    from .ndarray import NDArray
+    return NDArray(from_value=self).rollaxis(*args, **kwargs).to_circt()
+
+  def swapaxes(self, *args, **kwargs):
+    from .ndarray import NDArray
+    return NDArray(from_value=self).swapaxes(*args, **kwargs).to_circt()
+
+  def concatenate(self, arrays, axis=0):
+    from .ndarray import NDArray
+    return NDArray(from_value=np.concatenate(
+        NDArray.to_ndarrays([self] + list(arrays)), axis=axis)).to_circt()
+
+  def roll(self, shift, axis=None):
+    from .ndarray import NDArray
+    return np.roll(NDArray(from_value=self), shift=shift, axis=axis).to_circt()
+
 
 class StructValue(Value):
 
@@ -284,7 +385,7 @@ class ChannelValue(Value):
     return Value(unwrap_op.rawOutput), Value(unwrap_op.valid)
 
 
-def wrap_opviews_with_values(dialect, module_name):
+def wrap_opviews_with_values(dialect, module_name, excluded=[]):
   """Wraps all of a dialect's OpView classes to have their create method return
      a PyCDE Value instead of an OpView. The wrapped classes are inserted into
      the provided module."""
@@ -294,7 +395,8 @@ def wrap_opviews_with_values(dialect, module_name):
   for attr in dir(dialect):
     cls = getattr(dialect, attr)
 
-    if isinstance(cls, type) and issubclass(cls, ir.OpView):
+    if attr not in excluded and isinstance(cls, type) and issubclass(
+        cls, ir.OpView):
 
       def specialize_create(cls):
 

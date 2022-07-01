@@ -288,6 +288,10 @@ static inline bool isConstantExpression(Operation *op) {
 /// MemoryEffects should be checked if a client cares.
 bool isVerilogExpression(Operation *op);
 
+/// Return true if this expression should be emitted inline into any statement
+/// that uses it.
+bool isExpressionEmittedInline(Operation *op);
+
 /// For each module we emit, do a prepass over the structure, pre-lowering and
 /// otherwise rewriting operations we don't want to emit.
 void prepareHWModule(Block &block, const LoweringOptions &options);

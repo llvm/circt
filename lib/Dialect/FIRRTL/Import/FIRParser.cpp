@@ -172,11 +172,6 @@ std::pair<bool, Optional<LocationAttr>> circt::firrtl::maybeStringToLocation(
   return {true, result};
 }
 
-static firrtl::NameKindEnum inferNameKind(StringRef name) {
-  return circt::firrtl::isUselessName(name) ? NameKindEnum::DroppableName
-                                            : NameKindEnum::InterestingName;
-}
-
 //===----------------------------------------------------------------------===//
 // SharedParserConstants
 //===----------------------------------------------------------------------===//
@@ -376,8 +371,8 @@ struct FIRParser {
   /// aggregate type, "{foo: UInt<1>, bar: UInt<1>}[2]", tokens "[0].foo" will
   /// be converted to a field ID range of [2, 2]; tokens "[1]" will be converted
   /// to [4, 6]. The generated field ID range will then be attached to the
-  /// firrtl::subAnnotationAttr in order to indicate the applicable fields of an
-  /// annotation.
+  /// annotation in a "circt.fieldID" field in order to indicate the applicable
+  /// fields of an annotation.
   Optional<unsigned> getFieldIDFromTokens(ArrayAttr tokens, SMLoc loc,
                                           Type type);
 
@@ -903,8 +898,8 @@ ParseResult FIRParser::parseOptionalRUW(RUWAttr &result) {
 /// Convert the input "tokens" to a range of field IDs. Considering a FIRRTL
 /// aggregate type, "{foo: UInt<1>, bar: UInt<1>}[2]", tokens "[0].foo" will be
 /// converted to a field ID range of [2, 2]; tokens "[1]" will be converted to
-/// [4, 6]. The generated field ID range will then be attached to the
-/// firrtl::subAnnotationAttr in order to indicate the applicable fields of an
+/// [4, 6]. The generated field ID range will then be attached to the annotation
+/// in a "circt.fieldID" field to indicate the applicable fields of an
 /// annotation.
 Optional<unsigned> FIRParser::getFieldIDFromTokens(ArrayAttr tokens, SMLoc loc,
                                                    Type type) {
@@ -1017,12 +1012,13 @@ ArrayAttr FIRParser::convertSubAnnotations(ArrayRef<Attribute> annotations,
       modAttr.push_back(attr);
     }
 
-    // Construct the SubAnnotationAttr for the annotation.
-    auto subAnnotation =
-        SubAnnotationAttr::get(constants.context, fieldID.getValue(),
-                               DictionaryAttr::get(constants.context, modAttr));
+    // Add a "circt.fieldID" field with the fieldID.
+    modAttr.append("circt.fieldID",
+                   IntegerAttr::get(IntegerType::get(constants.context, 64,
+                                                     IntegerType::Signless),
+                                    fieldID.getValue()));
 
-    annotationVec.push_back(subAnnotation);
+    annotationVec.push_back(DictionaryAttr::get(constants.context, modAttr));
   }
 
   return ArrayAttr::get(constants.context, annotationVec);
@@ -1510,7 +1506,7 @@ static bool needsSymbol(ArrayAttr &annotations) {
   // Subfield annotations.
   for (Attribute attr : annotations) {
     // Ensure it is a valid annotation.
-    if (!attr.isa<SubAnnotationAttr, DictionaryAttr>())
+    if (!attr.isa<DictionaryAttr>())
       continue;
     Annotation anno(attr);
     // Check if it is a DontTouch annotation that applies to all subfields in
@@ -2832,8 +2828,8 @@ ParseResult FIRStmtParser::parseInstance() {
     }
 
   result = builder.create<InstanceOp>(
-      referencedModule, id, inferNameKind(id), annotations.first.getValue(),
-      annotations.second.getValue(), false, sym);
+      referencedModule, id, NameKindEnum::InterestingName,
+      annotations.first.getValue(), annotations.second.getValue(), false, sym);
 
   // Since we are implicitly unbundling the instance results, we need to keep
   // track of the mapping from bundle fields to results in the unbundledValues
@@ -2879,9 +2875,9 @@ ParseResult FIRStmtParser::parseCombMem() {
                                moduleContext.targetsInModule, type);
 
   auto sym = getSymbolIfRequired(annotations, id);
-  auto result = builder.create<CombMemOp>(vectorType.getElementType(),
-                                          vectorType.getNumElements(), id,
-                                          inferNameKind(id), annotations, sym);
+  auto result = builder.create<CombMemOp>(
+      vectorType.getElementType(), vectorType.getNumElements(), id,
+      NameKindEnum::InterestingName, annotations, sym);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -2917,9 +2913,9 @@ ParseResult FIRStmtParser::parseSeqMem() {
                                moduleContext.targetsInModule, type);
   auto sym = getSymbolIfRequired(annotations, id);
 
-  auto result = builder.create<SeqMemOp>(vectorType.getElementType(),
-                                         vectorType.getNumElements(), ruw, id,
-                                         inferNameKind(id), annotations, sym);
+  auto result = builder.create<SeqMemOp>(
+      vectorType.getElementType(), vectorType.getNumElements(), ruw, id,
+      NameKindEnum::InterestingName, annotations, sym);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -3056,10 +3052,11 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
       if (sym)
         break;
     }
-  result = builder.create<MemOp>(resultTypes, readLatency, writeLatency, depth,
-                                 ruw, builder.getArrayAttr(resultNames), id,
-                                 inferNameKind(id), annotations.first,
-                                 annotations.second, sym, IntegerAttr());
+  result = builder.create<MemOp>(
+      resultTypes, readLatency, writeLatency, depth, ruw,
+      builder.getArrayAttr(resultNames), id, NameKindEnum::InterestingName,
+      annotations.first, annotations.second,
+      sym ? InnerSymAttr::get(sym) : InnerSymAttr(), IntegerAttr());
 
   UnbundledValueEntry unbundledValueEntry;
   unbundledValueEntry.reserve(result.getNumResults());
@@ -3113,8 +3110,9 @@ ParseResult FIRStmtParser::parseNode() {
                                moduleContext.targetsInModule, initializerType);
 
   auto sym = getSymbolIfRequired(annotations, id);
-  auto result = builder.create<NodeOp>(initializer.getType(), initializer, id,
-                                       inferNameKind(id), annotations, sym);
+  auto result =
+      builder.create<NodeOp>(initializer.getType(), initializer, id,
+                             NameKindEnum::InterestingName, annotations, sym);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -3141,8 +3139,9 @@ ParseResult FIRStmtParser::parseWire() {
                                moduleContext.targetsInModule, type);
 
   auto sym = getSymbolIfRequired(annotations, id);
-  auto result =
-      builder.create<WireOp>(type, id, inferNameKind(id), annotations, sym);
+  auto result = builder.create<WireOp>(
+      type, id, NameKindEnum::InterestingName, annotations,
+      sym ? InnerSymAttr::get(sym) : InnerSymAttr());
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -3235,12 +3234,12 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
   Value result;
   auto sym = getSymbolIfRequired(annotations, id);
   if (resetSignal)
-    result =
-        builder.create<RegResetOp>(type, clock, resetSignal, resetValue, id,
-                                   inferNameKind(id), annotations, sym);
+    result = builder.create<RegResetOp>(type, clock, resetSignal, resetValue,
+                                        id, NameKindEnum::InterestingName,
+                                        annotations, sym);
   else
-    result = builder.create<RegOp>(type, clock, id, inferNameKind(id),
-                                   annotations, sym);
+    result = builder.create<RegOp>(
+        type, clock, id, NameKindEnum::InterestingName, annotations, sym);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 

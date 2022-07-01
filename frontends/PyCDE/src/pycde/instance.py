@@ -3,12 +3,13 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from __future__ import annotations
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, Iterator, List, Optional, Tuple, Union
 
-from circt.dialects import hw, msft, seq
+from circt.dialects import msft, seq
 
 import mlir.ir as ir
-from pycde.devicedb import LocationVector, PhysLocation, PrimitiveType
+from pycde.devicedb import LocationVector
+from pycde.module import AppID
 
 
 class Instance:
@@ -90,6 +91,16 @@ class Instance:
            "If symbol is None, name() needs to be overridden"
     return ir.StringAttr(self.symbol).value
 
+  @property
+  def appid(self) -> Optional[AppID]:
+    """Get the appid assigned to this instance or None if one was not assigned
+    during generation."""
+    static_op = self._op_cache.get_sym_ops_in_module(
+        self.inside_of)[self.symbol]
+    if AppID.AttributeName in static_op.attributes:
+      return AppID(static_op.attributes[AppID.AttributeName])
+    return None
+
 
 class ModuleInstance(Instance):
   """Instance specialization for modules. Since they are the only thing which
@@ -97,13 +108,26 @@ class ModuleInstance(Instance):
 
   from .module import _SpecializedModule
 
-  __slots__ = ["tgt_mod", "_child_cache"]
-
   def __init__(self, parent: Instance, instance_sym: Optional[ir.Attribute],
                inside_of: _SpecializedModule, tgt_mod: _SpecializedModule):
     super().__init__(parent, inside_of, instance_sym)
     self.tgt_mod = tgt_mod
     self._child_cache: Dict[ir.StringAttr, Instance] = None
+    self._add_appids()
+
+  def _add_appids(self):
+    """Implicitly add members for each AppID which is contained by this
+    instance."""
+    with self.root.system:
+      circt_mod = self.tgt_mod.circt_mod
+    if not isinstance(circt_mod,
+                      msft.MSFTModuleOp) or circt_mod.childAppIDBases is None:
+      return
+    for name in [n.value for n in circt_mod.childAppIDBases]:
+      if hasattr(self, name):
+        continue
+      self.__slots__.append(name)
+      setattr(self, name, _AppIDInstance(self, name))
 
   def _create_instance(self, static_op: ir.Operation) -> Instance:
     """Create a new `Instance` which is a child of `parent` in the instance
@@ -185,6 +209,52 @@ class ModuleInstance(Instance):
     ]
 
 
+class _AppIDInstance:
+  """Helper class to provide accessors to AppID'd instances."""
+
+  __slots__ = ["owner_instance", "appid_name"]
+
+  def __init__(self, owner_instance: ModuleInstance, appid_name: str):
+    self.owner_instance = owner_instance
+    self.appid_name = appid_name
+
+  def _search(self) -> Iterator[AppID, Instance]:
+    inner_sym_ops = self.owner_instance._op_cache.get_sym_ops_in_module(
+        self.owner_instance.tgt_mod)
+    for child in self.owner_instance._children().values():
+      # "Look through" instance hierarchy levels if the child has an AppID
+      # accessor for our name.
+      if hasattr(child, self.appid_name):
+        child_appid_inst = getattr(child, self.appid_name)
+        if not isinstance(child_appid_inst, _AppIDInstance):
+          continue
+        for c in child_appid_inst._search():
+          yield c
+
+      # Check if the AppID is local, then return the instance if it is.
+      instance_op = inner_sym_ops[child.symbol]
+      if AppID.AttributeName in instance_op.attributes:
+        try:
+          # This is the only way to test that a certain attribute is a certain
+          # attribute type. *Sigh*.
+          appid = msft.AppIDAttr(instance_op.attributes[AppID.AttributeName])
+          if appid.name == self.appid_name:
+            yield (appid, child)
+        except ValueError:
+          pass
+
+  def __getitem__(self, index: int) -> Instance:
+    for (appid, child) in self._search():
+      if appid.index == index:
+        return child
+
+    raise IndexError(f"{self.appid_name}[{index}] not found")
+
+  def __iter__(self) -> Iterator[Instance]:
+    for (_, child) in self._search():
+      yield child
+
+
 class RegInstance(Instance):
   """Instance specialization for registers."""
 
@@ -217,8 +287,6 @@ class InstanceHierarchyRoot(ModuleInstance):
   """
   import pycde.system as cdesys
   from .module import _SpecializedModule
-
-  __slots__ = ["instance_name", "system"]
 
   def __init__(self, module: _SpecializedModule, instance_name: str,
                sys: cdesys.System):

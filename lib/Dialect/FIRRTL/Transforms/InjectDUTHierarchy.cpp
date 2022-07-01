@@ -48,8 +48,8 @@ static void addHierarchy(HierPathOp path, FModuleOp dut,
   newNamepath.reserve(namepath.size() + 1);
   while (path.modPart(nlaIdx) != dut.getNameAttr())
     newNamepath.push_back(namepath[nlaIdx++]);
-  newNamepath.push_back(
-      hw::InnerRefAttr::get(dut.moduleNameAttr(), wrapperInst.inner_symAttr()));
+  newNamepath.push_back(hw::InnerRefAttr::get(dut.moduleNameAttr(),
+                                              getInnerSymName(wrapperInst)));
 
   // Add the extra level of hierarchy.
   if (auto dutRef = namepath[nlaIdx].dyn_cast<hw::InnerRefAttr>())
@@ -191,7 +191,7 @@ void InjectDUTHierarchy::runOnOperation() {
       b.getUnknownLoc(), wrapper, wrapper.moduleName(),
       NameKindEnum::DroppableName, ArrayRef<Attribute>{}, ArrayRef<Attribute>{},
       false, b.getStringAttr(dutNS.newName(wrapper.moduleName())));
-  for (auto pair : llvm::enumerate(wrapperInst.getResults())) {
+  for (const auto &pair : llvm::enumerate(wrapperInst.getResults())) {
     Value lhs = dut.getArgument(pair.index());
     Value rhs = pair.value();
     if (dut.getPortDirection(pair.index()) == Direction::In)

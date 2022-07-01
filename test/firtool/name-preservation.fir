@@ -1,4 +1,4 @@
-; RUN: firtool %s | FileCheck %s 
+; RUN: firtool --preserve-values=named %s | FileCheck %s 
 
 circuit Foo:
   ; CHECK-LABEL: module Foo

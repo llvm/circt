@@ -9,8 +9,8 @@ add_circt_dialect_library(CIRCTFSM
 
   LINK_LIBS PUBLIC
   MLIRIR
-  MLIRFunc
-  MLIRArithmetic
+  MLIRFuncDialect
+  MLIRArithmeticDialect
   )
 
 add_subdirectory(Transforms)

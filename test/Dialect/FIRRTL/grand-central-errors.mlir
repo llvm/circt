@@ -256,8 +256,8 @@ firrtl.circuit "InvalidFieldID" attributes {
     %a = firrtl.wire {
       annotations = [
         {a},
-        #firrtl.subAnno<fieldID = 3, {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
-                        id = 1 : i64}>]} : !firrtl.vector<uint<2>, 1>
+        {circt.fieldID = 3 : i32, class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 1 : i64}
+      ]} : !firrtl.vector<uint<2>, 1>
     firrtl.instance View_companion @View_companion()
   }
   firrtl.module @InvalidFieldID() {

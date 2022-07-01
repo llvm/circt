@@ -17,7 +17,9 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "../PassDetail.h"
 #include "ExportVerilogInternals.h"
+#include "circt/Conversion/ExportVerilog.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Support/LoweringOptions.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -72,6 +74,11 @@ static bool shouldSpillWire(Operation &op, const LoweringOptions &options) {
   if (op.getNumOperands() > options.maximumNumberOfTermsInConcat &&
       op.getNumResults() == 1 &&
       llvm::any_of(op.getResult(0).getUsers(), isConcat))
+    return true;
+
+  // When `spillWiresAtPrepare` is true, spill temporary wires if necessary.
+  if (options.spillWiresAtPrepare &&
+      !ExportVerilog::isExpressionEmittedInline(&op))
     return true;
 
   return false;
@@ -669,4 +676,23 @@ void ExportVerilog::prepareHWModule(Block &block,
       lowerUsersToTemporaryWire(op);
     }
   }
+}
+
+namespace {
+
+struct TestPrepareForEmissionPass
+    : public TestPrepareForEmissionBase<TestPrepareForEmissionPass> {
+  TestPrepareForEmissionPass() {}
+  void runOnOperation() override {
+    HWModuleOp module = getOperation();
+    LoweringOptions options = getLoweringCLIOption(
+        cast<mlir::ModuleOp>(module->getParentOp()),
+        [&](llvm::Twine twine) { module.emitError(twine); });
+    prepareHWModule(*module.getBodyBlock(), options);
+  }
+};
+} // end anonymous namespace
+
+std::unique_ptr<mlir::Pass> circt::createTestPrepareForEmissionPass() {
+  return std::make_unique<TestPrepareForEmissionPass>();
 }

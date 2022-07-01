@@ -3,64 +3,7 @@
 from pycde import (Output, Input, module, generator, types, dim, System,
                    no_connect)
 from pycde.module import externmodule
-
-
-@module
-class Taps:
-  taps = Output(dim(8, 3))
-
-  @generator
-  def build(ports):
-    ports.taps = [203, 100, 23]
-
-
-@externmodule
-class StupidLegacy:
-  ignore = Input(dim(1, 4))
-
-
-BarType = types.struct({"foo": types.i12}, "bar")
-
-
-@module
-class Top:
-
-  @generator
-  def build(_):
-    types.struct({"foo": types.i12})({"foo": 7})
-    dim(types.i8, 2)([42, 45])
-    types.i8(5)
-
-    BarType({"foo": 7})
-
-    Taps()
-    StupidLegacy(ignore=no_connect)
-
-
-@module
-class ComplexPorts:
-  clk = Input(types.i1)
-  sel = Input(types.i2)
-  data_in = Input(dim(32, 3))
-  struct_data_in = Input(types.struct({"foo": types.i36}))
-
-  a = Output(types.i32)
-  b = Output(types.i32)
-  c = Output(types.i32)
-
-  @generator
-  def build(ports):
-    assert len(ports.data_in) == 3
-    ports.set_all_ports({
-        'a': ports.data_in[0].reg(ports.clk).reg(ports.clk),
-        'b': ports.data_in[ports.sel],
-        'c': ports.struct_data_in.foo[:-4]
-    })
-
-
-top = System([Top])
-top.generate()
-top.print()
+from pycde.testing import unittestmodule
 
 # CHECK-LABEL:  msft.module @Top {} () attributes {fileName = "Top.sv"} {
 # CHECK:    %c7_i12 = hw.constant 7 : i12
@@ -84,9 +27,41 @@ top.print()
 # CHECK:    msft.output [[R0]] : !hw.array<3xi8>
 # CHECK:  msft.module.extern @StupidLegacy(%ignore: !hw.array<4xi1>) attributes {verilogName = "StupidLegacy"}
 
-sys = System([ComplexPorts])
-sys.generate()
-sys.print()
+
+@module
+class Taps:
+  taps = Output(dim(8, 3))
+
+  @generator
+  def build(ports):
+    ports.taps = [203, 100, 23]
+
+
+@externmodule
+class StupidLegacy:
+  ignore = Input(dim(1, 4))
+
+
+BarType = types.struct({"foo": types.i12}, "bar")
+
+
+@unittestmodule()
+class Top:
+
+  @generator
+  def build(_):
+    types.struct({"foo": types.i12})({"foo": 7})
+    dim(types.i8, 2)([42, 45])
+    types.i8(5)
+
+    BarType({"foo": 7})
+
+    Taps()
+    StupidLegacy(ignore=no_connect)
+
+
+# -----
+
 # CHECK:  msft.module @ComplexPorts {} (%clk: i1, %data_in: !hw.array<3xi32>, %sel: i2, %struct_data_in: !hw.struct<foo: i36>) -> (a: i32, b: i32, c: i32)
 # CHECK:    %c0_i2 = hw.constant 0 : i2
 # CHECK:    [[REG0:%.+]] = hw.array_get %data_in[%c0_i2] {sv.namehint = "data_in__0"} : !hw.array<3xi32>
@@ -96,3 +71,24 @@ sys.print()
 # CHECK:    [[REG2:%.+]] = hw.struct_extract %struct_data_in["foo"] {sv.namehint = "struct_data_in__foo"} : !hw.struct<foo: i36>
 # CHECK:    [[REG3:%.+]] = comb.extract [[REG2]] from 0 {sv.namehint = "struct_data_in__foo_0upto32"} : (i36) -> i32
 # CHECK:    msft.output [[REGR2]], [[REG1]], [[REG3]] : i32, i32, i32
+
+
+@unittestmodule()
+class ComplexPorts:
+  clk = Input(types.i1)
+  sel = Input(types.i2)
+  data_in = Input(dim(32, 3))
+  struct_data_in = Input(types.struct({"foo": types.i36}))
+
+  a = Output(types.i32)
+  b = Output(types.i32)
+  c = Output(types.i32)
+
+  @generator
+  def build(ports):
+    assert len(ports.data_in) == 3
+    ports.set_all_ports({
+        'a': ports.data_in[0].reg(ports.clk).reg(ports.clk),
+        'b': ports.data_in[ports.sel],
+        'c': ports.struct_data_in.foo[:-4]
+    })

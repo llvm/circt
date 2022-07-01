@@ -295,18 +295,17 @@ LogicalResult ChannelBufferLowering::matchAndRewrite(
     ConversionPatternRewriter &rewriter) const {
   auto loc = buffer.getLoc();
 
-  ChannelBufferOptions opts = buffer.options();
   auto type = buffer.getType();
 
   // Expand 'abstract' buffer into 'physical' stages.
-  auto stages = opts.stages();
+  auto stages = buffer.stagesAttr();
   uint64_t numStages = 1;
   if (stages) {
     // Guaranteed positive by the parser.
     numStages = stages.getValue().getLimitedValue();
   }
   Value input = buffer.input();
-  StringAttr bufferName = buffer.options().name();
+  StringAttr bufferName = buffer.nameAttr();
   for (uint64_t i = 0; i < numStages; ++i) {
     // Create the stages, connecting them up as we build.
     auto stage = rewriter.create<PipelineStage>(loc, type, buffer.clk(),

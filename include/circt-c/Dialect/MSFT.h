@@ -60,6 +60,13 @@ intptr_t circtMSFTLocationVectorAttrGetNumElements(MlirAttribute);
 MLIR_CAPI_EXPORTED MlirAttribute
 circtMSFTLocationVectorAttrGetElement(MlirAttribute attr, intptr_t pos);
 
+MLIR_CAPI_EXPORTED bool circtMSFTAttributeIsAnAppIDAttr(MlirAttribute);
+MLIR_CAPI_EXPORTED
+MlirAttribute circtMSFTAppIDAttrGet(MlirContext, MlirStringRef name,
+                                    uint64_t index);
+MLIR_CAPI_EXPORTED MlirStringRef circtMSFTAppIDAttrGetName(MlirAttribute attr);
+MLIR_CAPI_EXPORTED uint64_t circtMSFTAppIDAttrGetIndex(MlirAttribute attr);
+
 //===----------------------------------------------------------------------===//
 // PrimitiveDB.
 //===----------------------------------------------------------------------===//

@@ -1,11 +1,11 @@
 # RUN: %PYTHON% %s | FileCheck %s
 
-import pycde
 from pycde.dialects import comb, hw
-from pycde import dim, module, generator, Input, Output
+from pycde import dim, generator, Input, Output
+from pycde.testing import unittestmodule
 
 
-@module
+@unittestmodule(SIZE=4)
 def MyModule(SIZE: int):
 
   class Mod:
@@ -26,9 +26,3 @@ def MyModule(SIZE: int):
       mod.out = hw.BitcastOp(dim(SIZE), combined)
 
   return Mod
-
-
-mymod = MyModule(4)
-module = pycde.System([mymod], name="mymod")
-module.generate()
-module.print()

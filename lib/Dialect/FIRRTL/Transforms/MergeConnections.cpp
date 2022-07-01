@@ -202,7 +202,7 @@ bool MergeConnection::peelConnect(StrictConnectOp connect) {
 
     // Otherwise, we concat all values and cast them into the aggregate type.
     Value accumulate;
-    for (auto e : llvm::enumerate(operands)) {
+    for (const auto &e : llvm::enumerate(operands)) {
       // Erase connections except for subConnections[index] since it must be
       // erased at the top-level loop.
       if (e.index() != index)

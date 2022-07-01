@@ -34,12 +34,6 @@ ParseResult ChannelBuffer::parse(OpAsmParser &parser, OperationState &result) {
                               /*delimiter=*/OpAsmParser::Delimiter::None))
     return failure();
 
-  ChannelBufferOptions optionsAttr;
-  if (parser.parseAttribute(optionsAttr,
-                            parser.getBuilder().getType<NoneType>(), "options",
-                            result.attributes))
-    return failure();
-
   Type innerOutputType;
   if (parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
       parser.parseType(innerOutputType))
@@ -57,8 +51,7 @@ ParseResult ChannelBuffer::parse(OpAsmParser &parser, OperationState &result) {
 
 void ChannelBuffer::print(OpAsmPrinter &p) {
   p << " " << clk() << ", " << rstn() << ", " << input() << " ";
-  p.printAttributeWithoutType(options());
-  p.printOptionalAttrDict((*this)->getAttrs(), /*elidedAttrs=*/{"options"});
+  p.printOptionalAttrDict((*this)->getAttrs());
   p << " : " << output().getType().cast<ChannelPort>().getInner();
 }
 

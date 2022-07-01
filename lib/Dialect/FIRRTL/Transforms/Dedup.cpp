@@ -589,7 +589,7 @@ struct Deduper {
     // Record any annotations on the module.
     recordAnnotations(module);
     // Record port annotations.
-    for (auto pair : llvm::enumerate(module.getPortAnnotations()))
+    for (const auto &pair : llvm::enumerate(module.getPortAnnotations()))
       for (auto anno : AnnotationSet(pair.value().cast<ArrayAttr>()))
         if (auto nlaRef = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal"))
           targetMap[nlaRef.getAttr()].push_back(
@@ -619,7 +619,7 @@ private:
 
     // Record port annotations. Breadcrumbs don't appear on port annotations, so
     // we can skip the class check that we have above.
-    for (auto pair : llvm::enumerate(mem.portAnnotations()))
+    for (const auto &pair : llvm::enumerate(mem.portAnnotations()))
       for (auto anno : AnnotationSet(pair.value().cast<ArrayAttr>()))
         if (auto nlaRef = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal"))
           targetMap[nlaRef.getAttr()].push_back(
@@ -794,7 +794,7 @@ private:
     // into the correct spot if its not already a non-local annotation.
     SmallVector<NamedAttribute> attributes;
     int nonLocalIndex = -1;
-    for (auto val : llvm::enumerate(anno)) {
+    for (const auto &val : llvm::enumerate(anno)) {
       auto attr = val.value();
       // Is this field "circt.nonlocal"?
       auto compare = attr.getName().compare(nonLocalString);
@@ -868,7 +868,7 @@ private:
     auto index = getNextHandledIndex();
 
     // Merge annotations from the other op, skipping the ones already handled.
-    for (auto pair : llvm::enumerate(toAnnos)) {
+    for (const auto &pair : llvm::enumerate(toAnnos)) {
       // If its already handled, skip it.
       if (pair.index() == index) {
         index = getNextHandledIndex();
@@ -922,7 +922,7 @@ private:
                         Operation *from) {
     // If the "from" operation has an inner_sym, we need to make sure the
     // "to" operation also has an `inner_sym` and then record the renaming.
-    if (auto fromSym = from->getAttrOfType<StringAttr>("inner_sym")) {
+    if (auto fromSym = getInnerSymName(from)) {
       auto toSym = OpAnnoTarget(to).getInnerSym(getNamespace(toModule));
       renameMap[fromSym] = toSym;
     }
@@ -1185,11 +1185,14 @@ class DedupPass : public DedupBase<DedupPass> {
     DenseMap<Attribute, StringAttr> dedupMap;
 
     // We must iterate the modules from the bottom up so that we can properly
-    // deduplicate the modules. We use early increment so we can safely delete
-    // nodes from the instance graph as we iterate through it.
-    for (auto *node :
-         llvm::make_early_inc_range(llvm::post_order(&instanceGraph))) {
-      auto module = cast<FModuleLike>(*node->getModule());
+    // deduplicate the modules. We copy the list of modules into a vector first
+    // to avoid iterator invalidation while we mutate the instance graph.
+    SmallVector<FModuleLike, 0> modules(
+        llvm::map_range(llvm::post_order(&instanceGraph), [](auto *node) {
+          return cast<FModuleLike>(*node->getModule());
+        }));
+
+    for (auto module : modules) {
       auto moduleName = module.moduleNameAttr();
       // If the module is marked with NoDedup, just skip it.
       if (AnnotationSet(module).hasAnnotation(noDedupClass)) {

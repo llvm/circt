@@ -104,8 +104,9 @@ struct LoweringOptions {
 
   /// This option controls emitted location information style.
   enum LocationInfoStyle {
-    Plain,                // Default.
-    WrapInAtSquareBracket // Wrap location info in @[..].
+    Plain,                 // Default.
+    WrapInAtSquareBracket, // Wrap location info in @[..].
+    None,                  // No location info comment.
   } locationInfoStyle = Plain;
 
   /// If true, every port is declared separately
@@ -115,6 +116,13 @@ struct LoweringOptions {
 
   /// Print debug info.
   bool printDebugInfo = false;
+
+  /// If true, verilog expression legalization is performed at
+  /// PrepareForEmission via IR mutation. This means temporary wires are
+  /// explicitly spilled to wire ops instead of implicilty being spilled at
+  /// emission. Once ExportVerilog simplification is completed, this feature
+  /// shoiuld be enabled by default.
+  bool spillWiresAtPrepare = false;
 };
 
 /// Register commandline options for the verilog emitter.
@@ -123,6 +131,13 @@ void registerLoweringCLOptions();
 /// Apply any command line specified style options to the mlir module.
 void applyLoweringCLOptions(ModuleOp module);
 
+/// Get a lowering option from CLI option or module op. This function first
+/// tries constructing a lowering option from cli, and if it failed, lowering
+/// option associated with `module` is used. This function doesn't change an
+/// attribute of `module` so that it can be used by child operations of
+/// mlir::ModuleOp in multi-threading environment.
+LoweringOptions getLoweringCLIOption(ModuleOp module,
+                                     LoweringOptions::ErrorHandlerT);
 } // namespace circt
 
 #endif // CIRCT_SUPPORT_LOWERINGOPTIONS_H
