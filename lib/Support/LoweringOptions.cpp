@@ -88,10 +88,20 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
       disallowPortDeclSharing = true;
     } else if (option == "printDebugInfo") {
       printDebugInfo = true;
+    } else if (option == "spillWiresAtPrepare") {
+      spillWiresAtPrepare = true;
     } else {
       errorHandler(llvm::Twine("unknown style option \'") + option + "\'");
       // We continue parsing options after a failure.
     }
+  }
+
+  if (spillWiresAtPrepare && !disallowLocalVariables) {
+    // FIXME: Currently we cannot spill temporaries in procedural regions. Hence
+    // `spillWiresAtPrepare` must be used together with
+    // `disallowLocalVariables`.
+    errorHandler(llvm::Twine(
+        "`spillWiresAtPrepare` must be used with `disallowLocalVariables`"));
   }
 }
 
@@ -120,6 +130,8 @@ std::string LoweringOptions::toString() const {
     options += "disallowPortDeclSharing,";
   if (printDebugInfo)
     options += "printDebugInfo,";
+  if (spillWiresAtPrepare)
+    options += "spillWiresAtPrepare,";
 
   if (emittedLineLength != DEFAULT_LINE_LENGTH)
     options += "emittedLineLength=" + std::to_string(emittedLineLength) + ',';
