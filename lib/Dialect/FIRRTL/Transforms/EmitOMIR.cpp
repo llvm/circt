@@ -12,6 +12,8 @@
 
 #include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
+#include "circt/Dialect/FIRRTL/FIRParser.h"
+#include "circt/Dialect/FIRRTL/FIRRTLAnnotationHelper.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/NLATable.h"
@@ -21,6 +23,7 @@
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/JSON.h"
 #include <functional>
@@ -168,6 +171,337 @@ static IntegerAttr isOMSRAM(Attribute &node) {
               return id;
   }
   return {};
+}
+
+//===----------------------------------------------------------------------===//
+// Code related to handling OMIR annotations
+//===----------------------------------------------------------------------===//
+
+/// Recursively walk Object Model IR and convert FIRRTL targets to identifiers
+/// while scattering trackers into the newAnnotations argument.
+///
+/// Object Model IR consists of a type hierarchy built around recursive arrays
+/// and dictionaries whose leaves are "string-encoded types".  This is an Object
+/// Model-specific construct that puts type information alongside a value.
+/// Concretely, these look like:
+///
+///     'OM' type ':' value
+///
+/// This function is only concerned with unpacking types whose values are FIRRTL
+/// targets.  This is because these need to be kept up-to-date with
+/// modifications made to the circuit whereas other types are just passing
+/// through CIRCT.
+///
+/// At a later time this understanding may be expanded or Object Model IR may
+/// become its own Dialect.  At this time, this function is trying to do as
+/// minimal work as possible to just validate that the OMIR looks okay without
+/// doing lots of unnecessary unpacking/repacking of string-encoded types.
+static Optional<Attribute> scatterOMIR(Attribute original, ApplyState &state) {
+  auto *ctx = original.getContext();
+
+  // Convert a string-encoded type to a dictionary that includes the type
+  // information and an identifier derived from the current annotationID.  Then
+  // increment the annotationID.  Return the constructed dictionary.
+  auto addID = [&](StringRef tpe, StringRef path,
+                   IntegerAttr id) -> DictionaryAttr {
+    NamedAttrList fields;
+    fields.append("id", id);
+    fields.append("omir.tracker", UnitAttr::get(ctx));
+    fields.append("path", StringAttr::get(ctx, path));
+    fields.append("type", StringAttr::get(ctx, tpe));
+    return DictionaryAttr::getWithSorted(ctx, fields);
+  };
+
+  return TypeSwitch<Attribute, Optional<Attribute>>(original)
+      // Most strings in the Object Model are actually string-encoded types.
+      // These are types which look like: "<type>:<value>".  This code will
+      // examine all strings, parse them into type and value, and then either
+      // store them in their unpacked state (and possibly scatter trackers into
+      // the circuit), store them in their packed state (because CIRCT is not
+      // expected to care about them right now), or error if we see them
+      // (because they should not exist and are expected to serialize to a
+      // different format).
+      .Case<StringAttr>([&](StringAttr str) -> Optional<Attribute> {
+        // Unpack the string into type and value.
+        StringRef tpe, value;
+        std::tie(tpe, value) = str.getValue().split(":");
+
+        // These are string-encoded types that are targets in the circuit.
+        // These require annotations to be scattered for them.  Replace their
+        // target with an ID and scatter a tracker.
+        if (tpe == "OMReferenceTarget" || tpe == "OMMemberReferenceTarget" ||
+            tpe == "OMMemberInstanceTarget" || tpe == "OMInstanceTarget" ||
+            tpe == "OMDontTouchedReferenceTarget") {
+          auto idAttr = state.newID();
+          NamedAttrList tracker;
+          tracker.append("class", StringAttr::get(ctx, omirTrackerAnnoClass));
+          tracker.append("id", idAttr);
+          tracker.append("target", StringAttr::get(ctx, value));
+
+          state.addToWorklistFn(DictionaryAttr::get(ctx, tracker));
+
+          return addID(tpe, value, idAttr);
+        }
+
+        // The following are types that may exist, but we do not unbox them.  At
+        // a later time, we may want to change this behavior and unbox these if
+        // we wind up building out an Object Model dialect:
+        if (isOMIRStringEncodedPassthrough(tpe))
+          return str;
+
+        // The following types are not expected to exist because they have
+        // serializations to JSON types or are removed during serialization.
+        // Hence, any of the following types are NOT expected to exist and we
+        // error if we see them.  These are explicitly specified as opposed to
+        // being handled in the "unknown" catch-all case below because we want
+        // to provide a good error message that a user may be doing something
+        // very weird.
+        if (tpe == "OMMap" || tpe == "OMArray" || tpe == "OMBoolean" ||
+            tpe == "OMInt" || tpe == "OMDouble" || tpe == "OMFrozenTarget") {
+          auto diag =
+              mlir::emitError(state.circuit.getLoc())
+              << "found known string-encoded OMIR type \"" << tpe
+              << "\", but this type should not be seen as it has a defined "
+                 "serialization format that does NOT use a string-encoded type";
+          diag.attachNote()
+              << "the problematic OMIR is reproduced here: " << original;
+          return None;
+        }
+
+        // This is a catch-all for any unknown types.
+        auto diag = mlir::emitError(state.circuit.getLoc())
+                    << "found unknown string-encoded OMIR type \"" << tpe
+                    << "\" (Did you misspell it?  Is CIRCT missing an Object "
+                       "Model OMIR type?)";
+        diag.attachNote() << "the problematic OMIR is reproduced here: "
+                          << original;
+        return None;
+      })
+      // For an array, just recurse into each element and rewrite the array with
+      // the results.
+      .Case<ArrayAttr>([&](ArrayAttr arr) -> Optional<Attribute> {
+        SmallVector<Attribute> newArr;
+        for (auto element : arr) {
+          auto newElement = scatterOMIR(element, state);
+          if (!newElement)
+            return None;
+          newArr.push_back(newElement.getValue());
+        }
+        return ArrayAttr::get(ctx, newArr);
+      })
+      // For a dictionary, recurse into each value and rewrite the key/value
+      // pairs.
+      .Case<DictionaryAttr>([&](DictionaryAttr dict) -> Optional<Attribute> {
+        NamedAttrList newAttrs;
+        for (auto pairs : dict) {
+          auto maybeValue = scatterOMIR(pairs.getValue(), state);
+          if (!maybeValue)
+            return None;
+          newAttrs.append(pairs.getName(), maybeValue.getValue());
+        }
+        return DictionaryAttr::get(ctx, newAttrs);
+      })
+      // These attributes are all expected.  They are OMIR types, but do not
+      // have string-encodings (hence why these should error if we see them as
+      // strings).
+      .Case</* OMBoolean */ BoolAttr, /* OMDouble */ FloatAttr,
+            /* OMInt */ IntegerAttr>(
+          [](auto passThrough) { return passThrough; })
+      // Error if we see anything else.
+      .Default([&](auto) -> Optional<Attribute> {
+        auto diag = mlir::emitError(state.circuit.getLoc())
+                    << "found unexpected MLIR attribute \"" << original
+                    << "\" while trying to scatter OMIR";
+        return None;
+      });
+}
+
+/// Convert an Object Model Field into an optional pair of a string key and a
+/// dictionary attribute.  Expand internal source locator strings to location
+/// attributes.  Scatter any FIRRTL targets into the circuit. If this is an
+/// illegal Object Model Field return None.
+///
+/// Each Object Model Field consists of three mandatory members with
+/// the following names and types:
+///
+///   - "info": Source Locator String
+///   - "name": String
+///   - "value": Object Model IR
+///
+/// The key is the "name" and the dictionary consists of the "info" and "value"
+/// members.  Each value is recursively traversed to scatter any FIRRTL targets
+/// that may be used inside it.
+///
+/// This conversion from an object (dictionary) to key--value pair is safe
+/// because each Object Model Field in an Object Model Node must have a unique
+/// "name".  Anything else is illegal Object Model.
+static Optional<std::pair<StringRef, DictionaryAttr>>
+scatterOMField(Attribute original, const Attribute root, unsigned index,
+               ApplyState &state) {
+  // The input attribute must be a dictionary.
+  DictionaryAttr dict = original.dyn_cast<DictionaryAttr>();
+  if (!dict) {
+    llvm::errs() << "OMField is not a dictionary, but should be: " << original
+                 << "\n";
+    return None;
+  }
+
+  auto loc = state.circuit.getLoc();
+  auto *ctx = state.circuit.getContext();
+
+  // Generate an arbitrary identifier to use for caching when using
+  // `maybeStringToLocation`.
+  StringAttr locatorFilenameCache = StringAttr::get(ctx, ".");
+  FileLineColLoc fileLineColLocCache;
+
+  // Convert location from a string to a location attribute.
+  auto infoAttr = tryGetAs<StringAttr>(dict, root, "info", loc, omirAnnoClass);
+  if (!infoAttr)
+    return None;
+  auto maybeLoc =
+      maybeStringToLocation(infoAttr.getValue(), false, locatorFilenameCache,
+                            fileLineColLocCache, ctx);
+  llvm::errs() << maybeLoc.second << "\n";
+  mlir::LocationAttr infoLoc;
+  if (maybeLoc.first)
+    infoLoc = maybeLoc.second.getValue();
+  else
+    infoLoc = UnknownLoc::get(ctx);
+
+  // Extract the name attribute.
+  auto nameAttr = tryGetAs<StringAttr>(dict, root, "name", loc, omirAnnoClass);
+  if (!nameAttr)
+    return None;
+
+  // The value attribute is unstructured and just copied over.
+  auto valueAttr = tryGetAs<Attribute>(dict, root, "value", loc, omirAnnoClass);
+  if (!valueAttr)
+    return None;
+  auto newValue = scatterOMIR(valueAttr, state);
+  if (!newValue)
+    return None;
+
+  NamedAttrList values;
+  // We add the index if one was provided.  This can be used later to
+  // reconstruct the order of the original array.
+  values.append("index", IntegerAttr::get(IntegerType::get(ctx, 64), index));
+  values.append("info", infoLoc);
+  values.append("value", newValue.getValue());
+
+  return {{nameAttr.getValue(), DictionaryAttr::getWithSorted(ctx, values)}};
+}
+
+/// Convert an Object Model Node to an optional dictionary, convert source
+/// locator strings to location attributes, and scatter FIRRTL targets into the
+/// circuit.  If this is an illegal Object Model Node, then return None.
+///
+/// An Object Model Node is expected to look like:
+///
+///   - "info": Source Locator String
+///   - "id": String-encoded integer ('OMID' ':' Integer)
+///   - "fields": Array<Object>
+///
+/// The "fields" member may be absent.  If so, then construct an empty array.
+static Optional<DictionaryAttr>
+scatterOMNode(Attribute original, const Attribute root, ApplyState &state) {
+
+  auto loc = state.circuit.getLoc();
+
+  /// The input attribute must be a dictionary.
+  DictionaryAttr dict = original.dyn_cast<DictionaryAttr>();
+  if (!dict) {
+    llvm::errs() << "OMNode is not a dictionary, but should be: " << original
+                 << "\n";
+    return None;
+  }
+
+  NamedAttrList omnode;
+  auto *ctx = state.circuit.getContext();
+
+  // Generate an arbitrary identifier to use for caching when using
+  // `maybeStringToLocation`.
+  StringAttr locatorFilenameCache = StringAttr::get(ctx, ".");
+  FileLineColLoc fileLineColLocCache;
+
+  // Convert the location from a string to a location attribute.
+  auto infoAttr = tryGetAs<StringAttr>(dict, root, "info", loc, omirAnnoClass);
+  if (!infoAttr)
+    return None;
+  auto maybeLoc =
+      maybeStringToLocation(infoAttr.getValue(), false, locatorFilenameCache,
+                            fileLineColLocCache, ctx);
+  mlir::LocationAttr infoLoc;
+  if (maybeLoc.first)
+    infoLoc = maybeLoc.second.getValue();
+  else
+    infoLoc = UnknownLoc::get(ctx);
+
+  // Extract the OMID.  Don't parse this, just leave it as a string.
+  auto idAttr = tryGetAs<StringAttr>(dict, root, "id", loc, omirAnnoClass);
+  if (!idAttr)
+    return None;
+
+  // Convert the fields from an ArrayAttr to a DictionaryAttr keyed by their
+  // "name".  If no fields member exists, then just create an empty dictionary.
+  // Note that this is safe to construct because all fields must have unique
+  // "name" members relative to each other.
+  auto maybeFields = dict.getAs<ArrayAttr>("fields");
+  DictionaryAttr fields;
+  if (!maybeFields)
+    fields = DictionaryAttr::get(ctx);
+  else {
+    auto fieldAttr = maybeFields.getValue();
+    NamedAttrList fieldAttrs;
+    for (size_t i = 0, e = fieldAttr.size(); i != e; ++i) {
+      auto field = fieldAttr[i];
+      if (auto newField = scatterOMField(field, root, i, state)) {
+        fieldAttrs.append(newField.getValue().first,
+                          newField.getValue().second);
+        continue;
+      }
+      return None;
+    }
+    fields = DictionaryAttr::get(ctx, fieldAttrs);
+  }
+
+  omnode.append("fields", fields);
+  omnode.append("id", idAttr);
+  omnode.append("info", infoLoc);
+
+  return DictionaryAttr::getWithSorted(ctx, omnode);
+}
+
+/// Main entry point to handle scattering of an OMIRAnnotation.  Return the
+/// modified optional attribute on success and None on failure.  Any scattered
+/// annotations will be added to the reference argument `newAnnotations`.
+LogicalResult circt::firrtl::applyOMIR(const AnnoPathValue &target,
+                                       DictionaryAttr anno, ApplyState &state) {
+
+  auto loc = state.circuit.getLoc();
+
+  auto nodes = tryGetAs<ArrayAttr>(anno, anno, "nodes", loc, omirAnnoClass);
+  if (!nodes)
+    return failure();
+
+  SmallVector<Attribute> newNodes;
+  for (auto node : nodes) {
+    auto newNode = scatterOMNode(node, anno, state);
+    if (!newNode)
+      return failure();
+    newNodes.push_back(newNode.getValue());
+  }
+
+  auto *ctx = state.circuit.getContext();
+
+  NamedAttrList newAnnotation;
+  newAnnotation.append("class", StringAttr::get(ctx, omirAnnoClass));
+  newAnnotation.append("nodes", ArrayAttr::get(ctx, newNodes));
+
+  AnnotationSet annotations(state.circuit);
+  annotations.addAnnotations(DictionaryAttr::get(ctx, newAnnotation));
+  annotations.applyToOperation(state.circuit);
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -353,7 +687,11 @@ void EmitOMIRPass::makeTrackerAbsolute(Tracker &tracker) {
   auto builder = OpBuilder::atBlockBegin(getOperation().getBody());
 
   // Pick a name for the NLA that doesn't collide with anything.
-  auto opName = tracker.op->getAttrOfType<StringAttr>("name");
+  StringAttr opName;
+  if (auto module = dyn_cast<FModuleLike>(tracker.op))
+    opName = module.moduleNameAttr();
+  else
+    opName = tracker.op->getAttrOfType<StringAttr>("name");
   auto nlaName = circuitNamespace->newName("omir_nla_" + opName.getValue());
 
   // Get all the paths instantiating this module. If there is an NLA already
@@ -414,7 +752,10 @@ void EmitOMIRPass::makeTrackerAbsolute(Tracker &tracker) {
   // (care needed to ensure this will be handled correctly elsewhere)
 
   // Add the op itself.
-  namepath.push_back(getInnerRefTo(tracker.op));
+  if (auto module = dyn_cast<FModuleLike>(tracker.op))
+    namepath.push_back(FlatSymbolRefAttr::get(module.moduleNameAttr()));
+  else
+    namepath.push_back(getInnerRefTo(tracker.op));
 
   // Add the NLA to the tracker and mark it to be deleted later.
   tracker.nla = builder.create<HierPathOp>(builder.getUnknownLoc(),
@@ -816,10 +1157,10 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
     componentName = getInnerRefTo(tracker.op);
     LLVM_DEBUG(llvm::dbgs() << "Marking OMIR-targeted " << componentName
                             << " as dont-touch\n");
-  } else if (auto mod = dyn_cast<FModuleOp>(tracker.op)) {
+  } else if (auto mod = dyn_cast<FModuleLike>(tracker.op)) {
     if (tracker.portNo >= 0)
       componentName = getInnerRefTo(mod, tracker.portNo);
-  } else if (!isa<FModuleOp>(tracker.op)) {
+  } else if (!isa<FModuleLike>(tracker.op)) {
     tracker.op->emitError("invalid target for `") << type << "` OMIR";
     anyFailures = true;
     return jsonStream.value("<error>");

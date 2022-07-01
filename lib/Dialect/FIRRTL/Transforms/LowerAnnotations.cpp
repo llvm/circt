@@ -312,6 +312,9 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
     {signalDriverAnnoClass, {noResolve, applyGCTSignalMappings}},
     {signalDriverTargetAnnoClass, {stdResolve, applyWithoutTarget<true>}},
     {signalDriverModuleAnnoClass, {stdResolve, applyWithoutTarget<true>}},
+    // OMIR Annotations
+    {omirAnnoClass, {noResolve, applyOMIR}},
+    {omirTrackerAnnoClass, {stdResolve, applyWithoutTarget<true>}},
     // Miscellaneous Annotations
     {dontTouchAnnoClass, {stdResolve, applyDontTouch}}
 
