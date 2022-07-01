@@ -88,6 +88,20 @@ getOrAddInnerSym(FModuleLike mod, size_t portIdx, StringRef nameHint,
 hw::InnerRefAttr
 getInnerRefTo(FModuleLike mod, size_t portIdx, StringRef nameHint,
               std::function<ModuleNamespace &(FModuleLike)> getNamespace);
+
+//===----------------------------------------------------------------------===//
+// Parser-related utilities
+//
+// These cannot always be relegated to the parser and sometimes need to be
+// available for passes.  This has specifically come up for Annotation lowering
+// where there is FIRRTL stuff that needs to be parsed out of an annotation.
+//===----------------------------------------------------------------------===//
+
+/// Parse a string that may encode a FIRRTL location into a LocationAttr.
+std::pair<bool, Optional<mlir::LocationAttr>> maybeStringToLocation(
+    StringRef spelling, bool skipParsing, StringAttr &locatorFilenameCache,
+    FileLineColLoc &fileLineColLocCache, MLIRContext *context);
+
 } // namespace firrtl
 } // namespace circt
 
