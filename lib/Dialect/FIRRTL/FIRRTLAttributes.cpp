@@ -113,10 +113,9 @@ void InnerSymPropertiesAttr::print(AsmPrinter &p) const {
 }
 
 StringAttr InnerSymAttr::getSymName() {
-  auto it  =
-      llvm::find_if(getProps(), [&](InnerSymPropertiesAttr p) {
-        return (p.getFieldID() == 0);
-      });
+  auto it = llvm::find_if(getProps(), [&](InnerSymPropertiesAttr p) {
+    return (p.getFieldID() == 0);
+  });
   if (it != getProps().end())
     return it->getName();
   return {};

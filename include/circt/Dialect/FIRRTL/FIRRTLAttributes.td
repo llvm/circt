@@ -221,7 +221,7 @@ def InnerSymAttr : AttrDef<FIRRTLDialect, "InnerSym"> {
   let summary = "Inner symbol definition";
   let description = [{
     Defines the properties of an inner_sym attribute. It specifies the symbol
-    name, and symbol visibility for each field ID. For any ground types,
+    name and symbol visibility for each field ID. For any ground types,
     there are no subfields and the field ID is 0. For aggregate types, a
     unique field ID is assigned to each field by visiting them in a 
     depth-first pre-order. The custom assembly format ensures that for ground
