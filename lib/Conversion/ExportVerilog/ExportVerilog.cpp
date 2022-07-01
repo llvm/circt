@@ -157,8 +157,8 @@ static bool isDuplicatableExpression(Operation *op) {
 }
 
 /// Return the verilog name of the operations that can define a symbol.
-/// Except for <WireOp, RegOp, LocalParamOp, InstanceOp>, check global state
-/// `getDeclarationVerilogName` for them.
+/// Except for <WireOp, RegOp, LogicOp, LocalParamOp, InstanceOp>, check global
+/// state `getDeclarationVerilogName` for them.
 static StringRef getSymOpName(Operation *symOp) {
   // Typeswitch of operation types which can define a symbol.
   // If legalizeNames has renamed it, then the attribute must be set.
@@ -378,6 +378,17 @@ static StringRef getVerilogDeclWord(Operation *op,
   // fall through to default.
   bool isProcedural = op->getParentOp()->hasTrait<ProceduralRegion>();
 
+  if (isa<LogicOp>(op)) {
+    // If the logic op is defined in a procedural region, add 'automatic'
+    // keyword. If the op has a struct type, 'logic' keyword is already emitted
+    // within a struct type definition (e.g. struct packed {logic foo;}). So we
+    // should not emit extra 'logic'.
+    bool hasStruct = hasStructType(op->getResult(0).getType());
+    if (isProcedural)
+      return hasStruct ? "automatic" : "automatic logic";
+    return hasStruct ? "" : "logic";
+  }
+
   if (!isProcedural)
     return "wire";
 
@@ -530,7 +541,8 @@ static bool isOkToBitSelectFrom(Value v) {
   // Uses of a wire or register can be done inline.
   if (auto read = v.getDefiningOp<ReadInOutOp>()) {
     if (read.input().getDefiningOp<WireOp>() ||
-        read.input().getDefiningOp<RegOp>())
+        read.input().getDefiningOp<RegOp>() ||
+        read.input().getDefiningOp<LogicOp>())
       return true;
   }
 
@@ -656,7 +668,7 @@ struct ModuleNameManager {
   StringRef getName(Value value) { return getName(ValueOrOp(value)); }
   StringRef getName(Operation *op) {
     // If RegOp or WireOp, then result has the name.
-    if (isa<sv::WireOp, sv::RegOp>(op))
+    if (isa<sv::WireOp, sv::RegOp, sv::LogicOp>(op))
       return getName(op->getResult(0));
     return getName(ValueOrOp(op));
   }
@@ -665,7 +677,7 @@ struct ModuleNameManager {
 
   bool hasName(Operation *op) {
     // If RegOp or WireOp, then result has the name.
-    if (isa<sv::WireOp, sv::RegOp>(op))
+    if (isa<sv::WireOp, sv::RegOp, sv::LogicOp>(op))
       return nameTable.count(op->getResult(0));
     return nameTable.count(ValueOrOp(op));
   }
@@ -1012,8 +1024,8 @@ StringAttr EmitterBase::inferStructuralNameForTemporary(Value expr) {
     result = StringAttr::get(expr.getContext(), name);
 
   } else if (auto *op = expr.getDefiningOp()) {
-    // Uses of a wire or register can be done inline.
-    if (isa<WireOp, RegOp>(op)) {
+    // Uses of a wire, register or logic can be done inline.
+    if (isa<WireOp, RegOp, LogicOp>(op)) {
       StringRef name = getSymOpName(op);
       result = StringAttr::get(expr.getContext(), name);
 
@@ -2353,7 +2365,7 @@ void NameCollector::collectNames(Block &block) {
       continue;
     }
 
-    if (isa<WireOp, RegOp, LocalParamOp>(op)) {
+    if (isa<WireOp, RegOp, LogicOp, LocalParamOp>(op)) {
       names.addName(op.getResult(0), getSymOpName(&op));
       continue;
     }
@@ -2494,6 +2506,7 @@ private:
 
   LogicalResult visitSV(WireOp op) { return emitNoop(); }
   LogicalResult visitSV(RegOp op) { return emitNoop(); }
+  LogicalResult visitSV(LogicOp op) { return emitNoop(); }
   LogicalResult visitSV(LocalParamOp op) { return emitNoop(); }
   LogicalResult visitSV(AssignOp op);
   LogicalResult visitSV(BPAssignOp op);
@@ -3996,7 +4009,7 @@ StringRef ModuleEmitter::getNameRemotely(Value value,
     auto *wireInput = readinout.input().getDefiningOp();
     if (!wireInput)
       return {};
-    if (isa<WireOp, RegOp>(wireInput))
+    if (isa<WireOp, RegOp, LogicOp>(wireInput))
       return getSymOpName(wireInput);
   }
 
@@ -4008,7 +4021,7 @@ StringRef ModuleEmitter::getNameRemotely(Value value,
         continue;
       Value drivenOnto = user->getOperand(0);
       Operation *drivenOntoOp = drivenOnto.getDefiningOp();
-      if (isa<WireOp, RegOp>(drivenOntoOp))
+      if (isa<WireOp, RegOp, LogicOp>(drivenOntoOp))
         return getSymOpName(drivenOntoOp);
     }
   }
