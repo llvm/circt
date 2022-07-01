@@ -3602,6 +3602,8 @@ LogicalResult StmtEmitter::visitSV(InterfaceOp op) {
 
 LogicalResult StmtEmitter::visitSV(InterfaceSignalOp op) {
   indent();
+  if (isZeroBitType(op.type()))
+    os << "// ";
   emitter.printPackedType(stripUnpackedTypes(op.type()), os, op->getLoc(),
                           false);
   os << ' ' << getSymOpName(op);
