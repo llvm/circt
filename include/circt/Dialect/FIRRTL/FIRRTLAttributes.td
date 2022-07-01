@@ -214,7 +214,8 @@ def InnerSymProperties : AttrDef<FIRRTLDialect, "InnerSymProperties"> {
     }]>
   ];
   let hasCustomAssemblyFormat = 1;
-  //let assemblyFormat = "`<` `@` $name `,` $fieldID `,` $sym_visibility `>`";
+  // The assembly format is as follows:
+  // "`<` `@` $name `,` $fieldID `,` $sym_visibility `>`";
 }
 
 def InnerSymAttr : AttrDef<FIRRTLDialect, "InnerSym"> {
@@ -241,6 +242,8 @@ def InnerSymAttr : AttrDef<FIRRTLDialect, "InnerSym"> {
   }];
 
   let hasCustomAssemblyFormat = 1;
+  // Example format:
+  // firrtl.wire sym [<@x,1,private>, <@w,2,public>, <@syh,4,public>]
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLATTRIBUTES_TD

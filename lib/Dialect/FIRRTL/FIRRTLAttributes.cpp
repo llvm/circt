@@ -150,12 +150,14 @@ Attribute InnerSymAttr::parse(AsmParser &parser, Type type) {
 
 void InnerSymAttr::print(AsmPrinter &p) const {
 
-  if (auto sym = const_cast<InnerSymAttr *>(this)->getSymName()) {
-    p << "@" << sym.getValue();
-    if (getProps().size() == 1)
-      return;
+  auto props = getProps();
+  if (props.size() == 1 &&
+      props[0].getSymVisibility().getValue().equals("public") &&
+      props[0].getFieldID() == 0) {
+    p << "@" << props[0].getName().getValue();
+    return;
   }
-  auto names = getProps().vec();
+  auto names = props.vec();
 
   std::sort(names.begin(), names.end(),
             [&](InnerSymPropertiesAttr a, InnerSymPropertiesAttr b) {
