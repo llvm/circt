@@ -282,7 +282,7 @@ static void getTypeDims(SmallVectorImpl<Attribute> &dims, Type type,
     return getTypeDims(dims, inout.getElementType(), loc);
   if (auto uarray = hw::type_dyn_cast<hw::UnpackedArrayType>(type))
     return getTypeDims(dims, uarray.getElementType(), loc);
-  if (hw::type_isa<InterfaceType>(type) || hw::type_isa<StructType>(type))
+  if (hw::type_isa<InterfaceType, StructType>(type))
     return;
 
   mlir::emitError(loc, "value has an unsupported verilog type ") << type;
