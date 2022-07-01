@@ -210,11 +210,28 @@ circuit Top :
     ; EXTRACT-NEXT:     Wire/firrtl/gct/BlackBox_DUTAndGCT.v
     ; EXTRACT-NEXT:     Wire/firrtl/gct/BlackBox_GCT.v
 
-    ; EXTRACT:        FILE "Wire/firrtl/bindings.sv"
-    ; EXTRACT-NOT:    FILE
+    ; EXTRACT:        FILE "Wire/firrtl/gct/MyInterface.sv"
+    ; NOEXTRACT-NOT:  FILE {{.*}}/MyInterface.sv
     ; EXTRACT:        bind DUT MyInterface MyView{{ *}}(.*);
-    ; EXTRACT:        bind DUT MyView_companion MyView_companion{{ *}}();
-    ; NOEXTRACT-NOT:  FILE "Wire/firrtl/bindings.sv"
+    ; EXTRACT:        interface MyInterface;
+    ; EXTRACT-NEXT:     // a wire called 'uint'
+    ; EXTRACT-NEXT:     logic uint;
+    ; EXTRACT-NEXT:     // a vector called 'vec'
+    ; EXTRACT-NEXT:     logic vec[0:1];
+    ; EXTRACT-NEXT:     // a 2D vector called 'multivec'
+    ; EXTRACT-NEXT:     logic multivec[0:1][0:2];
+    ; EXTRACT-NEXT:     // a vector of a bundle
+    ; EXTRACT-NEXT:     VecOfBundle vecOfBundle[2]();
+    ; EXTRACT-NEXT:     // another bundle
+    ; EXTRACT-NEXT:     OtherOther otherOther();
+    ; EXTRACT-NEXT:     // a wire called 'uint' in the submodule
+    ; EXTRACT-NEXT:     logic sub_uint;
+    ; EXTRACT-NEXT:     // a vector called 'vec' in the submodule
+    ; EXTRACT-NEXT:     logic sub_vec[0:1];
+    ; EXTRACT-NEXT:     // a vector of a bundle in the submodule with a
+    ; EXTRACT-NEXT:     // multiline comment
+    ; EXTRACT-NEXT:     Sub_vecOfBundle sub_vecOfBundle[2]();
+    ; EXTRACT-NEXT:   endinterface
 
     ; EXTRACT:        FILE "Wire/firrtl/gct/MyView_companion.sv"
     ; NOEXTRACT-NOT:  FILE {{.*}}/MyView_companion.sv
@@ -226,6 +243,7 @@ circuit Top :
     ; EXTRACT-NEXT:     );
     ; EXTRACT-NEXT:     MyView_mapping MyView_mapping{{ *}}();
     ; EXTRACT-NEXT:   endmodule
+    ; EXTRACT:        bind DUT MyView_companion MyView_companion{{ *}}();
 
     ; EXTRACT:        FILE "Wire/firrtl/gct/MyView_mapping.sv"
     ; NOEXTRACT-NOT:  FILE {{.*}}/MyView_mapping.sv
@@ -254,27 +272,25 @@ circuit Top :
     ; CHECK-NEXT:       assign MyView.sub_vecOfBundle[1].uint = DUT.submodule.w_vecOfBundle_1_uint;
     ; CHECK:          endmodule
 
-    ; EXTRACT:        FILE "Wire/firrtl/gct/MyInterface.sv"
-    ; NOEXTRACT-NOT:  FILE {{.*}}/MyInterface.sv
-    ; CHECK:          interface MyInterface;
-    ; CHECK-NEXT:       // a wire called 'uint'
-    ; CHECK-NEXT:       logic uint;
-    ; CHECK-NEXT:       // a vector called 'vec'
-    ; CHECK-NEXT:       logic vec[0:1];
-    ; CHECK-NEXT:       // a 2D vector called 'multivec'
-    ; CHECK-NEXT:       logic multivec[0:1][0:2];
-    ; CHECK-NEXT:       // a vector of a bundle
-    ; CHECK-NEXT:       VecOfBundle vecOfBundle[2]();
-    ; CHECK-NEXT:       // another bundle
-    ; CHECK-NEXT:       OtherOther otherOther();
-    ; CHECK-NEXT:       // a wire called 'uint' in the submodule
-    ; CHECK-NEXT:       logic sub_uint;
-    ; CHECK-NEXT:       // a vector called 'vec' in the submodule
-    ; CHECK-NEXT:       logic sub_vec[0:1];
-    ; CHECK-NEXT:       // a vector of a bundle in the submodule with a
-    ; CHECK-NEXT:       // multiline comment
-    ; CHECK-NEXT:       Sub_vecOfBundle sub_vecOfBundle[2]();
-    ; CHECK-NEXT:     endinterface
+    ; NOEXTRACT:      interface MyInterface;
+    ; NOEXTRACT-NEXT:   // a wire called 'uint'
+    ; NOEXTRACT-NEXT:   logic uint;
+    ; NOEXTRACT-NEXT:   // a vector called 'vec'
+    ; NOEXTRACT-NEXT:   logic vec[0:1];
+    ; NOEXTRACT-NEXT:   // a 2D vector called 'multivec'
+    ; NOEXTRACT-NEXT:   logic multivec[0:1][0:2];
+    ; NOEXTRACT-NEXT:   // a vector of a bundle
+    ; NOEXTRACT-NEXT:   VecOfBundle vecOfBundle[2]();
+    ; NOEXTRACT-NEXT:   // another bundle
+    ; NOEXTRACT-NEXT:   OtherOther otherOther();
+    ; NOEXTRACT-NEXT:   // a wire called 'uint' in the submodule
+    ; NOEXTRACT-NEXT:   logic sub_uint;
+    ; NOEXTRACT-NEXT:   // a vector called 'vec' in the submodule
+    ; NOEXTRACT-NEXT:   logic sub_vec[0:1];
+    ; NOEXTRACT-NEXT:   // a vector of a bundle in the submodule with a
+    ; NOEXTRACT-NEXT:   // multiline comment
+    ; NOEXTRACT-NEXT:   Sub_vecOfBundle sub_vecOfBundle[2]();
+    ; NOEXTRACT-NEXT: endinterface
 
     ; EXTRACT:        FILE "Wire/firrtl/gct/VecOfBundle.sv"
     ; NOEXTRACT-NOT:  FILE {{.*}}/VecOfBundle.sv

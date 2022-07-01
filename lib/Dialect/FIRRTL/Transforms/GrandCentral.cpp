@@ -513,11 +513,6 @@ struct ExtractionInfo {
   /// The directory where Grand Central generated collateral (modules,
   /// interfaces, etc.) will be written.
   StringAttr directory = {};
-
-  /// The name of the file where any binds will be written.  This will be placed
-  /// in the same output area as normal compilation output, e.g., output
-  /// Verilog.  This has no relation to the `directory` member.
-  StringAttr bindFilename = {};
 };
 
 /// Stores information about the companion module of a GrandCentral view.
@@ -1503,7 +1498,7 @@ void GrandCentralPass::runOnOperation() {
 
   // Look at the circuit annotaitons to do two things:
   //
-  // 1. Determine extraction information (directory and filename).
+  // 1. Determine extraction information (directory).
   // 2. Populate a worklist of all annotations that encode interfaces.
   //
   // Remove annotations encoding interfaces, but leave extraction information as
@@ -1524,17 +1519,16 @@ void GrandCentralPass::runOnOperation() {
       }
 
       auto directory = anno.getMember<StringAttr>("directory");
-      auto filename = anno.getMember<StringAttr>("filename");
-      if (!directory || !filename) {
+      if (!directory) {
         emitCircuitError()
             << "contained an invalid 'ExtractGrandCentralAnnotation' that does "
-               "not contain 'directory' and 'filename' fields: "
+               "not contain 'directory' field: "
             << anno.getDict();
         removalError = true;
         return false;
       }
 
-      maybeExtractInfo = {directory, filename};
+      maybeExtractInfo = {directory};
       // Do not delete this annotation.  Extraction info may be needed later.
       return false;
     }
@@ -1617,8 +1611,6 @@ void GrandCentralPass::runOnOperation() {
     llvm::dbgs() << "Extraction Info:\n";
     if (maybeExtractInfo)
       llvm::dbgs() << "  directory: " << maybeExtractInfo.getValue().directory
-                   << "\n"
-                   << "  filename: " << maybeExtractInfo.getValue().bindFilename
                    << "\n";
     else
       llvm::dbgs() << "  <none>\n";

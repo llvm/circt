@@ -203,15 +203,6 @@ static void moveVerifAnno(ModuleOp top, AnnotationSet &annos,
         hw::OutputFileAttr::getAsDirectory(ctx, dir.getValue(), true, true));
     top->setAttrs(old);
   }
-  if (auto file = anno.getMember<StringAttr>("filename")) {
-    SmallVector<NamedAttribute> old;
-    for (auto i : top->getAttrs())
-      old.push_back(i);
-    old.emplace_back(StringAttr::get(ctx, attrBase + ".bindfile"),
-                     hw::OutputFileAttr::getFromFilename(
-                         ctx, file.getValue(), /*excludeFromFileList=*/true));
-    top->setAttrs(old);
-  }
 }
 
 static SmallVector<FirMemory>

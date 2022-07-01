@@ -1,7 +1,6 @@
 [
   {
     "class":"sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
-    "directory":"",
-    "filename":"bindings.sv"
+    "directory":""
   }
 ]
