@@ -1168,6 +1168,12 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
         auto builder =
             OpBuilder::atBlockEnd(companionIDMap.lookup(id).mapping.getBody());
 
+        FIRRTLType tpe = leafValue.getType().cast<FIRRTLType>();
+
+        // If the type is zero-width then do not emit an XMR.
+        if (!tpe.getBitWidthOrSentinel())
+          return true;
+
         // Populate a hierarchical path to the leaf.  For an NLA this is just
         // the namepath of the associated hierarchical path.  For a local
         // annotation, this is computed from the instance path.
@@ -1219,7 +1225,6 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
           path += getInnerRefTo(leafValue.getDefiningOp());
         }
 
-        FIRRTLType tpe = leafValue.getType().cast<FIRRTLType>();
         if (fieldID > tpe.getMaxFieldID()) {
           leafValue.getDefiningOp()->emitError()
               << "subannotation with fieldID=" << fieldID
