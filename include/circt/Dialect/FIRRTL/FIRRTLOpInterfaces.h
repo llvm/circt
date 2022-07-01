@@ -17,6 +17,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
+#include "circt/Dialect/FIRRTL/InnerSymbolTable.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "mlir/IR/Attributes.h"
@@ -68,72 +69,6 @@ LogicalResult verifyModuleLikeOpInterface(FModuleLike module);
 namespace detail {
 LogicalResult verifyInnerRefs(Operation *op);
 } // namespace detail
-
-/// A table of inner symbols and their resolutions.
-class InnerSymbolTable {
-public:
-  /// Return the name of the attribute used for inner symbol names.
-  static StringRef getInnerSymbolAttrName() { return "inner_sym"; }
-
-  /// Build an inner symbol table for the given operation.  The operation must
-  /// have the InnerSymbolTable trait.
-  explicit InnerSymbolTable(Operation *op);
-
-  /// Look up a symbol with the specified name, returning null if no such
-  /// name exists. Names never include the @ on them.
-  Operation *lookup(StringRef name) const;
-  template <typename T>
-  T lookup(StringRef name) const {
-    return dyn_cast_or_null<T>(lookup(name));
-  }
-
-  /// Look up a symbol with the specified name, returning null if no such
-  /// name exists. Names never include the @ on them.
-  Operation *lookup(StringAttr name) const;
-  template <typename T>
-  T lookup(StringAttr name) const {
-    return dyn_cast_or_null<T>(lookup(name));
-  }
-
-private:
-  /// This is the operation this table is constructed for, which must have the
-  /// InnerSymbolTable trait.
-  Operation *innerSymTblOp;
-
-  /// This maps names to operations with that inner symbol.
-  DenseMap<StringAttr, Operation *> symbolTable;
-};
-
-/// This class represents a collection of InnerSymbolTable's.
-class InnerSymbolTableCollection {
-public:
-  /// Get or create the InnerSymbolTable for the specified operation.
-  InnerSymbolTable &getInnerSymbolTable(Operation *op);
-
-  /// Populate tables in parallel for all InnerSymbolTable operations in the
-  /// given InnerRefNamespace operation.
-  void populateTables(Operation *innerRefNSOp);
-
-private:
-  /// This maps Operations to their InnnerSymbolTable's.
-  DenseMap<Operation *, std::unique_ptr<InnerSymbolTable>> symbolTables;
-};
-
-/// This class represents the namespace in which InnerRef's can be resolved.
-struct InnerRefNamespace {
-  SymbolTable &symTable;
-  InnerSymbolTableCollection &innerSymTables;
-
-  /// Resolve the InnerRef to its target within this namespace, returning null
-  /// if no such name exists.
-  ///
-  /// Note that some InnerRef's target ports and must be handled separately.
-  Operation *lookup(hw::InnerRefAttr inner);
-  template <typename T>
-  T lookup(hw::InnerRefAttr inner) {
-    return dyn_cast_or_null<T>(lookup(inner));
-  }
-};
 
 } // namespace firrtl
 } // namespace circt

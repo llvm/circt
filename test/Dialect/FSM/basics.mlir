@@ -8,7 +8,7 @@
 // CHECK:   } transitions  {
 // CHECK:     fsm.transition @BUSY guard  {
 // CHECK:       fsm.return %arg0
-// CHECK:     } action  {
+// CHECK:     } action {
 // CHECK:       %c256_i16 = arith.constant 256 : i16
 // CHECK:       fsm.update %cnt, %c256_i16 : i16
 // CHECK:     }
@@ -21,7 +21,7 @@
 // CHECK:       %c0_i16 = arith.constant 0 : i16
 // CHECK:       %0 = arith.cmpi ne, %cnt, %c0_i16 : i16
 // CHECK:       fsm.return %0
-// CHECK:     } action  {
+// CHECK:     } action {
 // CHECK:       %c1_i16 = arith.constant 1 : i16
 // CHECK:       %0 = arith.subi %cnt, %c1_i16 : i16
 // CHECK:       fsm.update %cnt, %0 : i16
@@ -30,7 +30,6 @@
 // CHECK:       %c0_i16 = arith.constant 0 : i16
 // CHECK:       %0 = arith.cmpi eq, %cnt, %c0_i16 : i16
 // CHECK:       fsm.return %0
-// CHECK:     } action  {
 // CHECK:     }
 // CHECK:   }
 // CHECK: }
@@ -114,14 +113,12 @@ func.func @qux() {
 // CHECK:           fsm.state "A" output {
 // CHECK:             fsm.output %[[VAL_0]] : i1
 // CHECK:           } transitions {
-// CHECK:             fsm.transition @A action {
-// CHECK:             }
+// CHECK:             fsm.transition @A
 // CHECK:           }
 // CHECK:           fsm.state "B" output {
 // CHECK:             fsm.output %[[VAL_0]] : i1
 // CHECK:           } transitions {
-// CHECK:             fsm.transition @B guard {
-// CHECK:             }
+// CHECK:             fsm.transition @B
 // CHECK:           }
 // CHECK:           fsm.state "C" output {
 // CHECK:             fsm.output %[[VAL_0]] : i1

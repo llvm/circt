@@ -20,6 +20,7 @@ import mlir.ir
 
 import builtins
 from contextvars import ContextVar
+from functools import singledispatchmethod
 import inspect
 import sys
 
@@ -70,6 +71,29 @@ class InputChannel(Input):
   def __init__(self, type: mlir.ir.Type, name: str = None):
     esi_type = esi.ChannelType.get(type)
     super().__init__(esi_type, name)
+
+
+class AppID:
+  AttributeName = "msft.appid"
+
+  @singledispatchmethod
+  def __init__(self, name: str, idx: int):
+    self._appid = msft.AppIDAttr.get(name, idx)
+
+  @__init__.register(mlir.ir.Attribute)
+  def __init__mlir_attr(self, attr: mlir.ir.Attribute):
+    self._appid = msft.AppIDAttr(attr)
+
+  @property
+  def name(self) -> str:
+    return self._appid.name
+
+  @property
+  def index(self) -> int:
+    return self._appid.index
+
+  def __str__(self) -> str:
+    return f"{self.name}[{self.index}]"
 
 
 def _create_module_name(name: str, params: mlir.ir.DictAttr):
@@ -276,15 +300,18 @@ class _SpecializedModule:
     sys = System.current()
     return sys._op_cache.get_circt_mod(self)
 
-  def instantiate(self, instance_name: str, inputs: dict, loc):
+  def instantiate(self, instance_name: str, inputs: dict, appid: AppID, loc):
     """Create a instance op."""
     if self.extern_name is None:
-      return self.circt_mod.create(instance_name, **inputs, loc=loc)
+      ret = self.circt_mod.instantiate(instance_name, **inputs, loc=loc)
     else:
-      return self.circt_mod.create(instance_name,
-                                   **inputs,
-                                   parameters=self.parameters,
-                                   loc=loc)
+      ret = self.circt_mod.instantiate(instance_name,
+                                       **inputs,
+                                       parameters=self.parameters,
+                                       loc=loc)
+    if appid is not None:
+      ret.operation.attributes[AppID.AttributeName] = appid._appid
+    return ret
 
   def generate(self):
     """Fill in (generate) this module. Only supports a single generator
@@ -310,17 +337,21 @@ def module(func_or_class):
   function should be treated as a module parameterization function. In the
   latter case, the function must return a python class to be treated as the
   parameterized module."""
+  generate_cb = func_or_class.generator_cb if hasattr(
+      func_or_class, "generator_cb") else generate_msft_module_op
+  create_cb = func_or_class.create_cb if hasattr(
+      func_or_class, "create_cb") else create_msft_module_op
   if inspect.isclass(func_or_class):
     # If it's just a module class, we should wrap it immediately
     return _module_base(func_or_class,
                         None,
-                        generator_cb=generate_msft_module_op,
-                        create_cb=create_msft_module_op)
+                        generator_cb=generate_cb,
+                        create_cb=create_cb)
   elif inspect.isfunction(func_or_class):
     return _parameterized_module(func_or_class,
                                  None,
-                                 generator_cb=generate_msft_module_op,
-                                 create_cb=create_msft_module_op)
+                                 generator_cb=generate_cb,
+                                 create_cb=create_cb)
   raise TypeError(
       "@module decorator must be on class or parameterization function")
 
@@ -425,7 +456,11 @@ def _module_base(cls,
 
   class mod(cls):
 
-    def __init__(self, *args, partition: DesignPartition = None, **kwargs):
+    def __init__(self,
+                 *args,
+                 appid: AppID = None,
+                 partition: DesignPartition = None,
+                 **kwargs):
       """Scan the class and eventually instance for Input/Output members and
       treat the inputs as operands and outputs as results."""
       # Ensure the module has been created.
@@ -478,6 +513,7 @@ def _module_base(cls,
       # TODO: This is a held Operation*. Add a level of indirection.
       self._instantiation = mod._pycde_mod.instantiate(instance_name,
                                                        inputs,
+                                                       appid=appid,
                                                        loc=loc)
 
       op = self._instantiation.operation
@@ -524,7 +560,8 @@ class _BlockContext:
 
   @staticmethod
   def current() -> _BlockContext:
-    """Get the top-most context in the stack created by `with _BlockContext()`."""
+    """Get the top-most context in the stack created by `with
+    _BlockContext()`."""
     bb = _current_block_context.get(None)
     assert bb is not None
     return bb

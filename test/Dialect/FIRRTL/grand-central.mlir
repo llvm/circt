@@ -45,8 +45,8 @@ firrtl.circuit "InterfaceGroundType" attributes {
        id = 2 : i64}]} : !firrtl.uint<4>
     %c = firrtl.wire  {annotations = [
       {a},
-      #firrtl.subAnno<fieldID = 4, {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
-                                    id = 3 : i64}>]} : !firrtl.vector<bundle<d: uint<2>>, 2>
+      {circt.fieldID = 4 : i32, class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 3 : i64}
+    ]} : !firrtl.vector<bundle<d: uint<2>>, 2>
     firrtl.instance View_companion @View_companion()
   }
   firrtl.module @InterfaceGroundType() {
@@ -577,9 +577,11 @@ firrtl.circuit "BindInterfaceTest"  attributes {
         type = "parent"
       }],
       portAnnotations = [[
-        #firrtl.subAnno<fieldID = 0, {
+        {
+          circt.fieldID = 0 : i32,
           class = "sifive.enterprise.grandcentral.AugmentedGroundType",
-          id = 1 : i64}>
+          id = 1 : i64
+        }
       ], []
       ]
     }
@@ -964,24 +966,32 @@ firrtl.circuit "DedupedPath" attributes {
   firrtl.module @Tile() {
     %w = firrtl.wire sym @w {
       annotations = [
-        #firrtl.subAnno<fieldID = 0, {
+        {
+          circt.fieldID = 0 : i32,
           circt.nonlocal = @nla,
           class = "sifive.enterprise.grandcentral.AugmentedGroundType",
-          id = 2 : i64}>,
-        #firrtl.subAnno<fieldID = 0, {
+          id = 2 : i64
+        },
+        {
+          circt.fieldID = 0 : i32,
           circt.nonlocal = @nla_0,
           class = "sifive.enterprise.grandcentral.AugmentedGroundType",
-          id = 1 : i64}>]} : !firrtl.uint<8>
+          id = 1 : i64
+        }]} : !firrtl.uint<8>
     %x = firrtl.wire {
       annotations = [
-        #firrtl.subAnno<fieldID = 0, {
+        {
+          circt.fieldID = 0 : i32,
           circt.nonlocal = @nla_new_0,
           class = "sifive.enterprise.grandcentral.AugmentedGroundType",
-          id = 3 : i64}>,
-        #firrtl.subAnno<fieldID = 0, {
+          id = 3 : i64
+        },
+        {
+          circt.fieldID = 0 : i32,
           circt.nonlocal = @nla_new_1,
           class = "sifive.enterprise.grandcentral.AugmentedGroundType",
-          id = 4 : i64}>]} : !firrtl.uint<8>
+          id = 4 : i64
+        }]} : !firrtl.uint<8>
   }
   firrtl.module @MyView_companion() attributes {
     annotations = [

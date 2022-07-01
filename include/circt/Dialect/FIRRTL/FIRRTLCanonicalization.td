@@ -35,7 +35,6 @@ def EmptyAttrDict : Constraint<CPred<"$0.empty()">>;
 def GetDroppableNameAttr : NativeCodeCall<
   "NameKindEnumAttr::get($_builder.getContext(), NameKindEnum::DroppableName) ">;
 def NonEmptyAttr : Constraint<CPred<"!$0.getValue().empty()">>;
-def uselessNameAttr : Constraint<CPred<"isUselessName($0.getValue())">>;
 def NullAttr : Constraint<CPred<"!$0">>;
 
 // Constraint that enforces equal types

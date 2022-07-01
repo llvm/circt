@@ -13,6 +13,7 @@
 #include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/NLATable.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
@@ -94,10 +95,6 @@ private:
     return addSymbol(SymbolTable::getSymbolName(op));
   }
 
-  /// Returns an operation's `inner_sym`, adding one if necessary.
-  StringAttr getOrAddInnerSym(Operation *op);
-  /// Returns a port's `inner_sym`, adding one if necessary.
-  StringAttr getOrAddInnerSym(FModuleLike module, size_t portIdx);
   /// Obtain an inner reference to an operation, possibly adding an `inner_sym`
   /// to that operation.
   hw::InnerRefAttr getInnerRefTo(Operation *op);
@@ -264,14 +261,10 @@ void EmitOMIRPass::runOnOperation() {
     if (auto instOp = dyn_cast<InstanceOp>(op)) {
       // This instance does not have a symbol, but we are adding one. Remove it
       // after the pass.
-      if (!op->getAttrOfType<StringAttr>("inner_sym"))
+      if (!op->getAttr(InnerSymbolTable::getInnerSymbolAttrName()))
         tempSymInstances.insert(instOp);
 
-      instancesByName.insert(
-          {hw::InnerRefAttr::getFromOperation(
-               op, instOp.nameAttr(),
-               op->getParentOfType<FModuleOp>().getNameAttr()),
-           instOp});
+      instancesByName.insert({getInnerRefTo(op), instOp});
     }
     auto setTracker = [&](int portNo, Annotation anno) {
       if (!anno.isClass(omirTrackerAnnoClass))
@@ -395,8 +388,7 @@ void EmitOMIRPass::makeTrackerAbsolute(Tracker &tracker) {
   // annotation to each instance participating in the path.
   SmallVector<Attribute> namepath;
   auto addToPath = [&](Operation *op, StringAttr name) {
-    namepath.push_back(hw::InnerRefAttr::getFromOperation(
-        op, name, op->getParentOfType<FModuleOp>().getNameAttr()));
+    namepath.push_back(getInnerRefTo(op));
   };
   // Add the path up to where the NLA starts.
   for (InstanceOp inst : paths[0])
@@ -422,9 +414,7 @@ void EmitOMIRPass::makeTrackerAbsolute(Tracker &tracker) {
   // (care needed to ensure this will be handled correctly elsewhere)
 
   // Add the op itself.
-  namepath.push_back(hw::InnerRefAttr::getFromOperation(
-      tracker.op, opName,
-      tracker.op->getParentOfType<FModuleOp>().getNameAttr()));
+  namepath.push_back(getInnerRefTo(tracker.op));
 
   // Add the NLA to the tracker and mark it to be deleted later.
   tracker.nla = builder.create<HierPathOp>(builder.getUnknownLoc(),
@@ -586,7 +576,7 @@ void EmitOMIRPass::emitOptionalRTLPorts(DictionaryAttr node,
     jsonStream.attribute("info", buf);
     jsonStream.attribute("name", "ports");
     jsonStream.attributeArray("value", [&] {
-      for (auto port : llvm::enumerate(module.getPorts())) {
+      for (const auto &port : llvm::enumerate(module.getPorts())) {
         if (port.value().type.getBitWidthOrSentinel() == 0)
           continue;
         jsonStream.object([&] {
@@ -799,6 +789,7 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
         LLVM_DEBUG(llvm::dbgs() << "Marking NLA-participating instance "
                                 << innerRef.getName() << " in module "
                                 << modName << " as dont-touch\n");
+        tempSymInstances.erase(instOp);
         instName = getInnerRefTo(instOp);
       }
     }
@@ -821,6 +812,7 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
   // specifically refer to.
   hw::InnerRefAttr componentName;
   if (isa<WireOp, RegOp, RegResetOp, InstanceOp, NodeOp, MemOp>(tracker.op)) {
+    tempSymInstances.erase(tracker.op);
     componentName = getInnerRefTo(tracker.op);
     LLVM_DEBUG(llvm::dbgs() << "Marking OMIR-targeted " << componentName
                             << " as dont-touch\n");
@@ -862,39 +854,19 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
   jsonStream.value(target);
 }
 
-StringAttr EmitOMIRPass::getOrAddInnerSym(Operation *op) {
-  tempSymInstances.erase(op);
-  auto attr = getInnerSymName(op);
-  if (attr)
-    return attr;
-  auto module = op->getParentOfType<FModuleOp>();
-  // TODO: Cache the module namespace.
-  auto name = getModuleNamespace(module).newName("omir_sym");
-  attr = StringAttr::get(op->getContext(), name);
-  op->setAttr("inner_sym", attr);
-  return attr;
-}
-
-StringAttr EmitOMIRPass::getOrAddInnerSym(FModuleLike module, size_t portIdx) {
-  auto attr = module.getPortSymbolAttr(portIdx);
-  if (attr && !attr.getValue().empty())
-    return attr;
-  auto name = getModuleNamespace(module).newName("omir_sym");
-  attr = StringAttr::get(module.getContext(), name);
-  module.setPortSymbolAttr(portIdx, attr);
-  return attr;
-}
-
 hw::InnerRefAttr EmitOMIRPass::getInnerRefTo(Operation *op) {
-  return hw::InnerRefAttr::get(
-      SymbolTable::getSymbolName(op->getParentOfType<FModuleOp>()),
-      getOrAddInnerSym(op));
+  return ::getInnerRefTo(op, "omir_sym",
+                         [&](FModuleOp module) -> ModuleNamespace & {
+                           return getModuleNamespace(module);
+                         });
 }
 
 hw::InnerRefAttr EmitOMIRPass::getInnerRefTo(FModuleLike module,
                                              size_t portIdx) {
-  return hw::InnerRefAttr::get(SymbolTable::getSymbolName(module),
-                               getOrAddInnerSym(module, portIdx));
+  return ::getInnerRefTo(module, portIdx, "omir_sym",
+                         [&](FModuleLike mod) -> ModuleNamespace & {
+                           return getModuleNamespace(mod);
+                         });
 }
 
 //===----------------------------------------------------------------------===//

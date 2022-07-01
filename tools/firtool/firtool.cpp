@@ -132,6 +132,17 @@ static cl::opt<bool> preservePublicTypes(
     cl::desc("force to lower ports of toplevel and external modules"),
     cl::init(true), cl::cat(mainCategory));
 
+static cl::opt<firrtl::PreserveValues::PreserveMode>
+    preserveMode("preserve-values",
+                 cl::desc("specify the values which can be optimized away"),
+                 cl::values(clEnumValN(firrtl::PreserveValues::None, "none",
+                                       "Preserve no values"),
+                            clEnumValN(firrtl::PreserveValues::Named, "named",
+                                       "Preserve values with meaningful names"),
+                            clEnumValN(firrtl::PreserveValues::All, "all",
+                                       "Preserve all values")),
+                 cl::init(firrtl::PreserveValues::None), cl::cat(mainCategory));
+
 static cl::opt<std::string>
     replSeqMemCircuit("repl-seq-mem-circuit",
                       cl::desc("circuit root for seq mem metadata"),
@@ -154,8 +165,6 @@ static cl::opt<bool> imconstprop(
         "Enable intermodule constant propagation and dead code elimination"),
     cl::init(true), cl::cat(mainCategory));
 
-// TODO: this pass is temporarily off by default, while we migrate over to the
-// new memory lowering pipeline.
 static cl::opt<bool> lowerMemory("lower-memory",
                                  cl::desc("run the lower-memory pass"),
                                  cl::init(true), cl::cat(mainCategory));
@@ -239,7 +248,7 @@ static cl::opt<bool> exportModuleHierarchy(
 static cl::opt<bool>
     checkCombCycles("firrtl-check-comb-cycles",
                     cl::desc("check combinational cycles on firrtl"),
-                    cl::init(false), cl::cat(mainCategory));
+                    cl::init(true), cl::cat(mainCategory));
 
 static cl::opt<bool>
     imdeadcodeelim("imdeadcodeelim",
@@ -330,11 +339,6 @@ static cl::opt<bool> stripDebugInfo(
     cl::desc("Disable source locator information in output Verilog"),
     cl::init(false), cl::cat(mainCategory));
 
-static cl::opt<bool> dropName(
-    "drop-names",
-    cl::desc("Disable full name preservation by dropping interesting names"),
-    cl::init(false), cl::cat(mainCategory));
-
 /// Create a simple canonicalizer pass.
 static std::unique_ptr<Pass> createSimpleCanonicalizerPass() {
   mlir::GreedyRewriteConfig config;
@@ -389,7 +393,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
               Optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
   // Add the annotation file if one was explicitly specified.
   unsigned numAnnotationFiles = 0;
-  for (auto inputAnnotationFilename : inputAnnotationFilenames) {
+  for (const auto &inputAnnotationFilename : inputAnnotationFilenames) {
     std::string annotationFilenameDetermined;
     if (!sourceMgr.AddIncludeFile(inputAnnotationFilename, llvm::SMLoc(),
                                   annotationFilenameDetermined)) {
@@ -401,7 +405,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     ++numAnnotationFiles;
   }
 
-  for (auto file : inputOMIRFilenames) {
+  for (const auto &file : inputOMIRFilenames) {
     std::string filename;
     if (!sourceMgr.AddIncludeFile(file, llvm::SMLoc(), filename)) {
       llvm::errs() << "cannot open input annotation file '" << file
@@ -463,9 +467,8 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
       disableAnnotationsUnknown, disableAnnotationsClassless));
 
   // TODO: Move this to the O1 pipeline.
-  if (dropName)
-    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
-        firrtl::createDropNamesPass());
+  pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+      firrtl::createDropNamesPass(preserveMode));
 
   if (!disableOptimization)
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
@@ -566,12 +569,8 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   pm.nest<firrtl::CircuitOp>().addPass(
       firrtl::createBlackBoxReaderPass(blackBoxRoot));
 
-  // Drop names introduced by middle-end passes (e.g. GrandCentral).
-  // TODO: Move this to the O1 pipeline.
-  if (dropName)
-    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
-        firrtl::createDropNamesPass());
-
+  pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+      firrtl::createDropNamesPass(preserveMode));
   // The above passes, IMConstProp in particular, introduce additional
   // canonicalization opportunities that we should pick up here before we
   // proceed to output-specific pipelines.

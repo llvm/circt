@@ -254,7 +254,7 @@ public:
   void visitDecl(InstanceOp op) {
     // Track any instance inputs which need to be connected to for init
     // coverage.
-    for (auto result : llvm::enumerate(op.results()))
+    for (const auto &result : llvm::enumerate(op.results()))
       if (op.getPortDirection(result.index()) == Direction::Out)
         declareSinks(result.value(), Flow::Source);
       else
@@ -550,7 +550,7 @@ private:
 /// this will return failure and leave the IR in an inconsistent state.
 bool ModuleVisitor::run(FModuleOp module) {
   // Track any results (flipped arguments) of the module for init coverage.
-  for (auto it : llvm::enumerate(module.getArguments())) {
+  for (const auto &it : llvm::enumerate(module.getArguments())) {
     auto flow = module.getPortDirection(it.index()) == Direction::In
                     ? Flow::Source
                     : Flow::Sink;

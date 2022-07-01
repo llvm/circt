@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/FIRRTL/InnerSymbolTable.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.h"
 #include "mlir/IR/Threading.h"
 
@@ -30,10 +31,8 @@ InnerSymbolTable::InnerSymbolTable(Operation *op) {
   this->innerSymTblOp = op;
 
   // Walk the operation and add InnerSymbol's to the table.
-  StringAttr innerSymId = StringAttr::get(
-      op->getContext(), InnerSymbolTable::getInnerSymbolAttrName());
-  op->walk([&](Operation *symOp) {
-    auto attr = symOp->getAttrOfType<StringAttr>(innerSymId);
+  op->walk([&](InnerSymbolOpInterface symOp) {
+    auto attr = symOp.getInnerNameAttr();
     if (!attr)
       return;
     auto it = symbolTable.insert({attr, symOp});
@@ -49,6 +48,20 @@ Operation *InnerSymbolTable::lookup(StringRef name) const {
 }
 Operation *InnerSymbolTable::lookup(StringAttr name) const {
   return symbolTable.lookup(name);
+}
+
+/// Get InnerSymbol for an operation.
+StringAttr InnerSymbolTable::getInnerSymbol(Operation *op) {
+  if (auto innerSymOp = dyn_cast<InnerSymbolOpInterface>(op))
+    return innerSymOp.getInnerNameAttr();
+  return {};
+}
+
+/// Return an InnerRef to the given operation.
+hw::InnerRefAttr InnerSymbolTable::getInnerRef(Operation *op) {
+  assert(op->getParentWithTrait<OpTrait::InnerSymbolTable>() == innerSymTblOp);
+  return hw::InnerRefAttr::get(SymbolTable::getSymbolName(innerSymTblOp),
+                               getInnerSymbol(op));
 }
 
 //===----------------------------------------------------------------------===//

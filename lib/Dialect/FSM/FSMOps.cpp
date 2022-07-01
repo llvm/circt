@@ -211,11 +211,10 @@ LogicalResult HWInstanceOp::verify() { return verifyCallerTypes(*this); }
 void StateOp::build(OpBuilder &builder, OperationState &state,
                     StringRef stateName) {
   Region *output = state.addRegion();
+  output->push_back(new Block());
   Region *transitions = state.addRegion();
+  transitions->push_back(new Block());
   state.addAttribute("sym_name", builder.getStringAttr(stateName));
-
-  ensureTerminator(*output, builder, state.location);
-  ensureTerminator(*transitions, builder, state.location);
 }
 
 SetVector<StateOp> StateOp::getNextStates() {
@@ -242,6 +241,15 @@ LogicalResult StateOp::canonicalize(StateOp op, PatternRewriter &rewriter) {
     rewriter.eraseOp(transition);
 
   return failure(transitionsToErase.empty());
+}
+
+LogicalResult StateOp::verify() {
+  // Ensure that the output block has a single OutputOp terminator.
+  Block *outputBlock = &output().front();
+  if (outputBlock->empty() || !isa<fsm::OutputOp>(outputBlock->back()))
+    return emitOpError("output block must have a single OutputOp terminator");
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -272,12 +280,11 @@ LogicalResult OutputOp::verify() {
 void TransitionOp::build(OpBuilder &builder, OperationState &state,
                          StringRef nextState) {
   Region *guard = state.addRegion();
+  guard->push_back(new Block());
   Region *action = state.addRegion();
+  action->push_back(new Block());
   state.addAttribute("nextState",
                      FlatSymbolRefAttr::get(builder.getStringAttr(nextState)));
-
-  ensureTerminator(*guard, builder, state.location);
-  ensureTerminator(*action, builder, state.location);
 }
 
 void TransitionOp::build(OpBuilder &builder, OperationState &state,
@@ -340,9 +347,12 @@ LogicalResult TransitionOp::verify() {
     return emitOpError("cannot find the definition of the next state `")
            << nextState() << "`";
 
-  // Verify the action region.
-  if (hasAction() && action().front().getTerminator()->getNumOperands() != 0)
-    return emitOpError("action region must not return any value");
+  // Verify the action region, if present.
+  if (hasGuard()) {
+    if (guard().front().empty() ||
+        !isa_and_nonnull<fsm::ReturnOp>(&guard().front().back()))
+      return emitOpError("guard region must terminate with a ReturnOp");
+  }
 
   // Verify the transition is located in the correct region.
   if ((*this)->getParentRegion() != &getCurrentState().transitions())

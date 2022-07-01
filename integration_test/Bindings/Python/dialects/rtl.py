@@ -81,23 +81,23 @@ with Context() as ctx, Location.unknown():
     # CHECK-LABEL: hw.module @instance_builder_tests
     def instance_builder_body(module):
       # CHECK: %[[INST1_RESULT:.+]] = hw.instance "inst1" @one_output()
-      inst1 = one_output.create("inst1")
+      inst1 = one_output.instantiate("inst1")
 
       # CHECK: hw.instance "inst2" @one_input<BANKS: i32 = 5>(a: %[[INST1_RESULT]]: i32)
-      one_input.create("inst2", a=inst1.a)
+      one_input.instantiate("inst2", a=inst1.a)
 
       # CHECK: hw.instance "inst4" @two_inputs(a: %[[INST1_RESULT]]: i32, b: %[[INST1_RESULT]]: i32)
-      inst4 = two_inputs.create("inst4", a=inst1.a)
+      inst4 = two_inputs.instantiate("inst4", a=inst1.a)
       connect(inst4.b, inst1.a)
 
       # CHECK: %[[INST5_RESULT:.+]] = hw.instance "inst5" @MyWidget(my_input: %[[INST5_RESULT]]: i32)
-      inst5 = op.create("inst5")
+      inst5 = op.instantiate("inst5")
       connect(inst5.my_input, inst5.my_output)
 
       # CHECK: hw.instance "inst6" @one_input<BANKS: i32 = 2>(a:
-      one_input.create("inst6",
-                       a=inst1.a,
-                       parameters={"BANKS": IntegerAttr.get(i32, 2)})
+      one_input.instantiate("inst6",
+                            a=inst1.a,
+                            parameters={"BANKS": IntegerAttr.get(i32, 2)})
 
     instance_builder_tests = hw.HWModuleOp(name="instance_builder_tests",
                                            body_builder=instance_builder_body)

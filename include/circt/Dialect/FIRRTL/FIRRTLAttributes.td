@@ -19,36 +19,14 @@ include "mlir/IR/EnumAttr.td"
 // FIRRTL Annotations Definition
 //===----------------------------------------------------------------------===//
 
-def AnnotationArrayAttr: ArrayAttrBase<
-    And<[
-      // Guarantee this is an ArrayAttr first
-      CPred<"$_self.isa<::mlir::ArrayAttr>()">,
-      // Guarantee all elements are DictionaryAttr or SubAnnotationAttr
-      CPred<"::llvm::all_of($_self.cast<::mlir::ArrayAttr>(), "
-            "[&](::mlir::Attribute attr) { return attr.isa<"
-            "::mlir::DictionaryAttr,"
-            "::circt::firrtl::SubAnnotationAttr>();})">]>,
-    "Annotation array attribute"> {
-  let constBuilderCall = "$_builder.getArrayAttr($0)";
-}
-
-def SubAnnotationAttr : AttrDef<FIRRTLDialect, "SubAnnotation"> {
-  let summary = "An Annotation that targets part of what it's attached to";
-  let description = [{
-    An Annotation that is only applicable to part of what it is attached to.
-    This uses a field ID to indicate to which field it is applicable.
-  }];
-  let mnemonic = "subAnno";
-  let parameters = (ins "int64_t":$fieldID, "DictionaryAttr":$annotations);
-
-  let assemblyFormat = "`<` `fieldID` `=` $fieldID `,` $annotations `>`";
-}
+def AnnotationArrayAttr
+  : TypedArrayAttrBase<DictionaryAttr, "Annotation array attribute">;
 
 def PortAnnotationsAttr : ArrayAttrBase<
     And<[
       // Guarantee this is an ArrayAttr first
       CPred<"$_self.isa<::mlir::ArrayAttr>()">,
-      // Guarantee all elements are DictionaryAttr or SubAnnotationAttr
+      // Guarantee all elements are an array or a dictionary.
       CPred<"::llvm::all_of($_self.cast<::mlir::ArrayAttr>(), "
             "[&](::mlir::Attribute attr) { return attr.isa<"
             "::mlir::ArrayAttr,"
@@ -221,5 +199,23 @@ def NameKindEnumImpl: I32EnumAttr<"NameKindEnum", "name kind",
 }
 
 def NameKindAttr: EnumAttr<FIRRTLDialect, NameKindEnumImpl, "name_kind">;
+
+def InnerSymAttr : AttrDef<FIRRTLDialect, "InnerSym"> {
+  let summary = "Inner symbol definition";
+  let description = [{
+    Defines the properties of an inner_sym attribute. Currently this only has
+    the symbol name. But the plan is to extend it to include per field symbols
+    and visibility.
+  }];
+  let mnemonic = "innerSym";
+  let parameters = (ins "::mlir::StringAttr":$symName);
+  let builders = [
+    AttrBuilderWithInferredContext<(ins "::mlir::StringAttr":$sym),[{
+      return get(sym.getContext(), sym);
+    }]>
+  ];
+
+  let hasCustomAssemblyFormat = 1;
+}
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLATTRIBUTES_TD

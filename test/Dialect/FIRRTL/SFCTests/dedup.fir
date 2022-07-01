@@ -18,7 +18,7 @@
 circuit Top :
   ; CHECK: firrtl.module @Top
   module Top :
-    ; CHECK-COUNT-2: firrtl.instance {{a(1|2)}} {{.+}} @A(
+    ; CHECK-COUNT-2: firrtl.instance {{a(1|2)}} @A(
     inst a1 of A
     inst a2 of A_
   module A :
@@ -37,13 +37,13 @@ circuit Top :
 circuit Top :
   ; CHECK: firrtl.module @Top
   module Top :
-    ; CHECK-NEXT-COUNT-2: firrtl.instance {{a(1|2)}} {{.+}} @A(
+    ; CHECK-NEXT-COUNT-2: firrtl.instance {{a(1|2)}} @A(
     inst a1 of A
     inst a2 of A_
   ; CHECK: firrtl.module private @A
   module A :
     output x: UInt<1>
-    ; CHECK: firrtl.instance b {{.+}} @B(
+    ; CHECK: firrtl.instance b @B(
     inst b of B
     x <= b.x
   module A_ :
@@ -67,8 +67,8 @@ circuit Top :
 circuit Top :
   ; CHECK: firrtl.module @Top
   module Top :
-    ; CHECK: firrtl.instance a1 {{.+}} @A(
-    ; CHECK: firrtl.instance a2 {{.+}} @A(
+    ; CHECK: firrtl.instance a1 @A(
+    ; CHECK: firrtl.instance a2 @A(
     inst a1 of A
     inst a2 of A_
   module A : @[yy 2:2]
@@ -96,7 +96,7 @@ circuit Top :
 circuit Top :
   ; CHECK: firrtl.module @Top
   module Top :
-    ; CHECK-NEXT-COUNT-2: firrtl.instance {{a(1|2)}} {{.+}} @A(
+    ; CHECK-NEXT-COUNT-2: firrtl.instance {{a(1|2)}} @A(
     inst a1 of A
     inst a2 of A_
   module A : @[yy 2:2]
@@ -116,14 +116,14 @@ circuit Top :
   ; CHECK: firrtl.module @Top
   module Top :
     output out: UInt<1>
-    ; CHECK-NEXT-COUNT-2: firrtl.instance {{a(1|2)}} {{.+}} @A(
+    ; CHECK-NEXT-COUNT-2: firrtl.instance {{a(1|2)}} @A(
     inst a1 of A
     inst a2 of A_
     out <= and(a1.x, a2.y)
   ; CHECK: firrtl.module private @A
   module A : @[yy 2:2]
     output x: UInt<1> @[yy 2:2]
-    ; CHECK-NEXT: firrtl.instance b {{.+}} @B(
+    ; CHECK-NEXT: firrtl.instance b @B(
     inst b of B
     x <= b.u
   module A_ : @[xx 1:1]
@@ -150,8 +150,8 @@ circuit Top :
   ; CHECK: firrtl.module @Top
   module Top :
     output out: UInt<1>
-    ; CHECK-NEXT: firrtl.instance a1 {{.+}} @A(
-    ; CHECK-NEXT: firrtl.instance a2 {{.+}} @A_(
+    ; CHECK-NEXT: firrtl.instance a1 @A(
+    ; CHECK-NEXT: firrtl.instance a2 @A_(
     inst a1 of A
     inst a2 of A_
     out <= and(a1.x, a2.y)
@@ -183,8 +183,8 @@ circuit Top :
   ; CHECK: firrtl.module @Top
   module Top :
     output out: UInt<1>
-    ; CHECK-NEXT: firrtl.instance a1 {{.+}} @A(
-    ; CHECK-NEXT: firrtl.instance a2 {{.+}} @A_(
+    ; CHECK-NEXT: firrtl.instance a1 @A(
+    ; CHECK-NEXT: firrtl.instance a2 @A_(
     inst a1 of A
     inst a2 of A_
     out <= and(a1.x, a2.y)
@@ -228,8 +228,8 @@ circuit FooAndBarModule :
   ; CHECK: firrtl.module @FooAndBarModule
   module FooAndBarModule :
     output io : {foo : {flip foo : UInt<1>, fuzz : UInt<1>}, bar : {flip bar : UInt<1>, buzz : UInt<1>}}
-    ; CHECK: firrtl.instance foo {{.+}} @FooModule
-    ; CHECK: firrtl.instance bar {{.+}} @FooModule
+    ; CHECK: firrtl.instance foo @FooModule
+    ; CHECK: firrtl.instance bar @FooModule
     inst foo of FooModule
     inst bar of BarModule
     io.foo <- foo.io
@@ -252,7 +252,7 @@ circuit FooAndBarModule :
   ; CHECK: firrtl.module @FooAndBarModule
   module FooAndBarModule :
     output io : {foo : {flip foo : UInt<1>, fuzz : UInt<1>}, bar : {flip foo : UInt<1>, fuzz : UInt<1>}}
-    ; CHECK-NEXT-COUNT-2: firrtl.instance {{(foo|bar)}} {{.+}} @FooModule
+    ; CHECK-NEXT-COUNT-2: firrtl.instance {{(foo|bar)}} @FooModule
     inst foo of FooModule
     inst bar of BarModule
     io.foo <= foo.io
@@ -265,7 +265,7 @@ circuit FooAndBarModule :
 circuit Top :
   ; CHECK: firrtl.module @Top
   module Top :
-    ; CHECK-NEXT-COUNT-2: firrtl.instance {{a(1|2)}} {{.+}} @A(
+    ; CHECK-NEXT-COUNT-2: firrtl.instance {{a(1|2)}} @A(
     inst a1 of A
     inst a2 of A_
   module A :
@@ -293,7 +293,7 @@ circuit Top :
 circuit Top :
   ; CHECK: firrtl.module @Top
   module Top :
-    ; CHECK-NEXT-COUNT-2: firrtl.instance {{a(1|2)}} {{.+}} @A(
+    ; CHECK-NEXT-COUNT-2: firrtl.instance {{a(1|2)}} @A(
     inst a1 of A
     inst a2 of A_
   module A :
@@ -321,8 +321,8 @@ circuit Top : %[[
 ]]
   ; CHECK: firrtl.hierpath @[[nlaSym:[_a-zA-Z0-9]+]] [@Top::@[[a1Sym:[_a-zA-Z0-9]+]], @A]
   ; CHECK: firrtl.module @Top
-  ; CHECK-NEXT: firrtl.instance a1 sym @[[a1Sym]] {{.+}} @A(
-  ; CHECK-NEXT: firrtl.instance a2 {{.+}} @A(
+  ; CHECK-NEXT: firrtl.instance a1 sym @[[a1Sym]] @A(
+  ; CHECK-NEXT: firrtl.instance a2 @A(
   module Top :
     inst a1 of A
     inst a2 of A_
@@ -357,8 +357,8 @@ circuit Top : %[[
   ; CHECK: firrtl.hierpath @[[nlaSym1:[_a-zA-Z0-9]+]] [@Top::@[[a1Sym:[_a-zA-Z0-9]+]], @A]
   ; CHECK: firrtl.hierpath @[[nlaSym2:[_a-zA-Z0-9]+]] [@Top::@[[a2Sym:[_a-zA-Z0-9]+]], @A]
   ; CHECK: firrtl.module @Top
-  ; CHECK-NEXT: firrtl.instance a1 sym @[[a1Sym]] {{.+}} @A(
-  ; CHECK-NEXT: firrtl.instance a2 sym @[[a2Sym]] {{.+}} @A(
+  ; CHECK-NEXT: firrtl.instance a1 sym @[[a1Sym]] @A(
+  ; CHECK-NEXT: firrtl.instance a2 sym @[[a2Sym]] @A(
   module Top :
     inst a1 of A
     inst a2 of A_
@@ -456,9 +456,9 @@ circuit Top : %[[
   ; CHECK: firrtl.hierpath @[[nla_1:[_a-zA-Z0-9]+]] [@Top::@[[aSym]], @A::@[[bSym]], @B]
   ; CHECK: firrtl.module @Top
   module Top :
-    ; CHECK-NEXT: firrtl.instance a sym @[[aSym]] {{.+}} @A()
+    ; CHECK-NEXT: firrtl.instance a sym @[[aSym]] @A()
     inst a of A
-    ; CHECK-NEXT: firrtl.instance a_ sym @[[a_Sym]] {{.+}} @A()
+    ; CHECK-NEXT: firrtl.instance a_ sym @[[a_Sym]] @A()
     inst a_ of A_
   ; CHECK: firrtl.module private @A
   module A :
@@ -777,8 +777,8 @@ circuit top : %[[
   ; CHECK:      firrtl.module private @a(
   ; CHECK-SAME:   in %i:
   ; CHECK-NOT:    out
-  ; CHECK-SAME:     [#firrtl.subAnno<fieldID = 1, {circt.nonlocal = @[[nla_2]], class = "nla2"}>,
-  ; CHECK-SAME:      #firrtl.subAnno<fieldID = 4, {circt.nonlocal = @[[nla_1]], class = "nla1"}>]
+  ; CHECK-SAME:     [{circt.fieldID = 1 : i64, circt.nonlocal = @[[nla_2]], class = "nla2"},
+  ; CHECK-SAME:      {circt.fieldID = 4 : i64, circt.nonlocal = @[[nla_1]], class = "nla1"}]
   module a:
     input i: {z: {y: {x: UInt<1>}}, a: UInt<1>}
     output o: {z: {y: {x: UInt<1>}}, a: UInt<1>}

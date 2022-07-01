@@ -150,7 +150,7 @@ def _infer_type(x):
     list_types = [_infer_type(i) for i in x]
     list_type = list_types[0]
     if not all([i == list_type for i in list_types]):
-      raise ValueError(f"CIRCT array must be homogenous, unlike object")
+      raise ValueError("CIRCT array must be homogenous, unlike object")
     return types.array(list_type, len(x))
   if isinstance(x, int):
     raise ValueError(f"Cannot infer width of {x}")
@@ -176,3 +176,8 @@ def create_type_string(ty):
   if isinstance(ty, hw.ArrayType):
     return f"{ty.size}x" + create_type_string(ty.element_type)
   return str(ty)
+
+
+def attributes_of_type(o, T):
+  """Filter the attributes of an object 'o' to only those of type 'T'."""
+  return {a: getattr(o, a) for a in dir(o) if isinstance(getattr(o, a), T)}
