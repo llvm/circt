@@ -19,8 +19,7 @@ firrtl.circuit "InterfaceGroundType" attributes {
      id = 0 : i64,
      name = "View"},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
-     directory = "gct-dir",
-     filename = "gct-dir/bindings.sv"}]} {
+     directory = "gct-dir"}]} {
   firrtl.module @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
@@ -116,8 +115,7 @@ firrtl.circuit "InterfaceVectorType" attributes {
       id = 0 : i64,
       name = "View"},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
-     directory = "gct-dir",
-     filename = "gct-dir/bindings.sv"}]} {
+     directory = "gct-dir"}]} {
   firrtl.module @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
@@ -194,8 +192,7 @@ firrtl.circuit "InterfaceBundleType" attributes {
      id = 0 : i64,
      name = "View"},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
-     directory = "gct-dir",
-     filename = "gct-dir/bindings.sv"}]}  {
+     directory = "gct-dir"}]}  {
   firrtl.module @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
@@ -328,8 +325,7 @@ firrtl.circuit "VecOfVec" attributes {
       id = 0 : i64,
       name = "View"},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
-     directory = "gct-dir",
-     filename = "gct-dir/bindings.sv"}]} {
+     directory = "gct-dir"}]} {
   firrtl.module @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
@@ -381,8 +377,7 @@ firrtl.circuit "InterfaceNode" attributes {
      id = 0 : i64,
      name = "View"},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
-     directory = "gct-dir",
-     filename = "gct-dir/bindings.sv"}]} {
+     directory = "gct-dir"}]} {
   firrtl.module @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
@@ -443,8 +438,7 @@ firrtl.circuit "InterfacePort" attributes {
      id = 0 : i64,
      name = "View"},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
-     directory = "gct-dir",
-     filename = "gct-dir/bindings.sv"}]} {
+     directory = "gct-dir"}]} {
   firrtl.module @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
@@ -505,8 +499,7 @@ firrtl.circuit "UnsupportedTypes" attributes {
      id = 0 : i64,
      name = "View"},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
-     directory = "gct-dir",
-     filename = "gct-dir/bindings.sv"}]} {
+     directory = "gct-dir"}]} {
   firrtl.module @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
@@ -558,8 +551,7 @@ firrtl.circuit "BindInterfaceTest"  attributes {
     name = "View"
   },
   {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
-     directory = "gct-dir",
-     filename = "gct-dir/bindings.sv"}]} {
+     directory = "gct-dir"}]} {
   firrtl.module @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
@@ -640,8 +632,7 @@ firrtl.circuit "MultipleGroundTypeInterfaces" attributes {
      id = 2 : i64,
      name = "View2"},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
-     directory = "gct-dir",
-     filename = "gct-dir/bindings.sv"}]} {
+     directory = "gct-dir"}]} {
   firrtl.module @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
@@ -769,8 +760,7 @@ firrtl.circuit "NestedInterfaceVectorTypes" attributes {annotations = [
   },
   {
     class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
-    directory = "gct-dir",
-    filename = "gct-dir/bindings.sv"
+    directory = "gct-dir"
   }
 ]} {
 
@@ -864,8 +854,7 @@ firrtl.circuit "VerbatimTypesInVector" attributes {annotations = [
   },
   {
     class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
-    directory = "gct-dir",
-    filename = "gct-dir/bindings.sv"
+    directory = "gct-dir"
   }
 ]} {
 
@@ -903,8 +892,7 @@ firrtl.circuit "ParentIsMainModule" attributes {
      id = 0 : i64,
      name = "View"},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
-     directory = "gct-dir",
-     filename = "gct-dir/bindings.sv"}]} {
+     directory = "gct-dir"}]} {
   firrtl.module @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
@@ -1062,8 +1050,7 @@ firrtl.circuit "BlackBoxDirectoryBehavior" attributes {
      id = 0 : i64,
      name = "View"},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
-     directory = "gct-dir",
-     filename = "gct-dir/bindings.sv"}]} {
+     directory = "gct-dir"}]} {
   firrtl.extmodule @BlackBox_DUT() attributes {annotations = [{class = "firrtl.transforms.BlackBoxInlineAnno", name = "DUTOnly.v", text = ""}]}
   firrtl.extmodule @BlackBox_GCT() attributes {annotations = [{class = "firrtl.transforms.BlackBoxInlineAnno", name = "GCTOnly.v", text = ""}]}
   firrtl.extmodule @BlackBox_DUTAndGCT() attributes {annotations = [{class = "firrtl.transforms.BlackBoxInlineAnno", name = "DUTAndGCT.v", text = ""}]}
@@ -1119,8 +1106,7 @@ firrtl.circuit "InterfaceInTestHarness" attributes {
      id = 0 : i64,
      name = "View"},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
-     directory = "gct-dir",
-     filename = "gct-dir/bindings.sv"},
+     directory = "gct-dir"},
     {class = "sifive.enterprise.firrtl.TestBenchDirAnnotation",
      dirname = "testbenchDir"}]} {
   firrtl.module @View_companion() attributes {
@@ -1235,8 +1221,7 @@ firrtl.circuit "YAMLOutputEmptyInterface" attributes {
      id = 0 : i64,
      name = "View"},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
-     directory = "gct-dir",
-     filename = "gct-dir/bindings.sv"},
+     directory = "gct-dir"},
     {class = "sifive.enterprise.grandcentral.GrandCentralHierarchyFileAnnotation",
      filename = "gct-dir/gct.yaml"}]} {
   firrtl.module @View_companion() attributes {
@@ -1284,8 +1269,7 @@ firrtl.circuit "YAMLOutputTwoInterfaces" attributes {
      id = 1 : i64,
      name = "View2"},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
-     directory = "gct-dir",
-     filename = "gct-dir/bindings.sv"},
+     directory = "gct-dir"},
     {class = "sifive.enterprise.grandcentral.GrandCentralHierarchyFileAnnotation",
      filename = "gct-dir/gct.yaml"}]} {
   firrtl.module @View_companion() attributes {
@@ -1341,8 +1325,7 @@ firrtl.circuit "YAMLOutputScalarField" attributes {
      id = 0 : i64,
      name = "View"},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
-     directory = "gct-dir",
-     filename = "gct-dir/bindings.sv"},
+     directory = "gct-dir"},
     {class = "sifive.enterprise.grandcentral.GrandCentralHierarchyFileAnnotation",
      filename = "gct-dir/gct.yaml"}]} {
   firrtl.module @View_companion() attributes {
@@ -1410,8 +1393,7 @@ firrtl.circuit "YAMLOutputVectorField" attributes {
      id = 0 : i64,
      name = "View"},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
-     directory = "gct-dir",
-     filename = "gct-dir/bindings.sv"},
+     directory = "gct-dir"},
     {class = "sifive.enterprise.grandcentral.GrandCentralHierarchyFileAnnotation",
      filename = "gct-dir/gct.yaml"}]} {
   firrtl.module @View_companion() attributes {
@@ -1466,8 +1448,7 @@ firrtl.circuit "YAMLOutputInstance" attributes {
      id = 0 : i64,
      name = "View"},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
-     directory = "gct-dir",
-     filename = "gct-dir/bindings.sv"},
+     directory = "gct-dir"},
     {class = "sifive.enterprise.grandcentral.GrandCentralHierarchyFileAnnotation",
      filename = "gct-dir/gct.yaml"}]} {
   firrtl.module @View_companion() attributes {

@@ -6,7 +6,7 @@
 // CHECK-NOT: attributes
 // CHECK-NEXT: hw.module.extern @foo_assert
 // CHECK-NOT: attributes
-// CHECK: hw.module @issue1246_assert(%clock: i1) attributes {comment = "VCS coverage exclude_file", output_file = #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>}
+// CHECK: hw.module @issue1246_assert(%clock: i1) attributes {comment = "VCS coverage exclude_file", output_file = #hw.output_file<"dir3/issue1246_assert.sv", excludeFromFileList, includeReplicatedOps>}
 // CHECK: sv.assert
 // CHECK: sv.error "Assertion failed"
 // CHECK: sv.error "assert:"
@@ -29,10 +29,10 @@
 // CHECK-NOT: foo_assert
 // CHECK-NOT: foo_assume
 // CHECK-NOT: foo_cover
-// CHECK: sv.bind <@issue1246::@__ETC_issue1246_assert>
-// CHECK: sv.bind <@issue1246::@__ETC_issue1246_assume> {output_file = #hw.output_file<"file4", excludeFromFileList>}
+// CHECK: sv.bind <@issue1246::@__ETC_issue1246_assert> {output_file = #hw.output_file<"dir3/issue1246_assert.sv", excludeFromFileList, includeReplicatedOps>}
+// CHECK: sv.bind <@issue1246::@__ETC_issue1246_assume>
 // CHECK: sv.bind <@issue1246::@__ETC_issue1246_cover>
-module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>, firrtl.extract.assume.bindfile = #hw.output_file<"file4", excludeFromFileList>} {
+module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>} {
   hw.module.extern @foo_cover(%a : i1) attributes {"firrtl.extract.cover.extra"}
   hw.module.extern @foo_assume(%a : i1) attributes {"firrtl.extract.assume.extra"}
   hw.module.extern @foo_assert(%a : i1) attributes {"firrtl.extract.assert.extra"}

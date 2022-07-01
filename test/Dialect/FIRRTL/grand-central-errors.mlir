@@ -9,11 +9,9 @@ firrtl.circuit "MoreThanOneExtractGrandCentralAnnotation" attributes {
        {name = "foo",
         tpe = "sifive.enterprise.grandcentral.AugmentedGroundType"}]},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
-     directory = "gct-dir",
-     filename = "gct-dir/bindings.sv"},
+     directory = "gct-dir"},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
-     directory = "gct-dir",
-     filename = "gct-dir/bindings.sv"}] } {
+     directory = "gct-dir"}] } {
   firrtl.module @MoreThanOneExtractGrandCentralAnnotation() {}
 }
 
@@ -29,8 +27,7 @@ firrtl.circuit "NonGroundType" attributes {
         name = "foo"}],
      id = 0 : i64},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
-     directory = "gct-dir",
-     filename = "gct-dir/bindings.sv"}]} {
+     directory = "gct-dir"}]} {
   firrtl.module @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
@@ -65,8 +62,7 @@ firrtl.circuit "NonGroundType" attributes {
   annotations = [
     {class = "sifive.enterprise.grandcentral.AugmentedBundleType"},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
-     directory = "gct-dir",
-     filename = "gct-dir/bindings.sv"}]} {
+     directory = "gct-dir"}]} {
   firrtl.module @NonGroundType() {}
 }
 
@@ -81,8 +77,7 @@ firrtl.circuit "Foo" attributes {
         id = 1 : i64}],
      id = 0 : i64},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
-     directory = "gct-dir",
-     filename = "gct-dir/bindings.sv"}]}  {
+     directory = "gct-dir"}]}  {
   firrtl.module @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
@@ -121,8 +116,7 @@ firrtl.circuit "Foo" attributes {
         name = "foo"}],
      id = 0 : i64},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
-     directory = "gct-dir",
-     filename = "gct-dir/bindings.sv"}]}  {
+     directory = "gct-dir"}]}  {
   firrtl.module @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
@@ -167,8 +161,7 @@ firrtl.circuit "Foo" attributes {
         name = "baz"}],
      id = 0 : i64},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
-     directory = "gct-dir",
-     filename = "gct-dir/bindings.sv"}]}  {
+     directory = "gct-dir"}]}  {
   firrtl.module @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
@@ -199,8 +192,7 @@ firrtl.circuit "multiInstance2" attributes {
      id = 0 : i64,
      name = "View"},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
-     directory = "gct-dir",
-     filename = "gct-dir/bindings.sv"}]} {
+     directory = "gct-dir"}]} {
   firrtl.module @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
