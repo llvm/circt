@@ -21,7 +21,7 @@ def HWArithDialect : Dialect {
 
   let summary = "Types and operations for the HWArith dialect";
   let description = [{
-    This dialect defined the `HWArith` dialect, modeling bit-width aware
+    This dialect defines the `HWArith` dialect, modeling bit-width aware
     arithmetic operations.
   }];
 }
