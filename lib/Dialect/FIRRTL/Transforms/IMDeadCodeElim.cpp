@@ -434,7 +434,7 @@ void IMDeadCodeElimPass::eraseEmptyModule(FModuleOp module) {
   bool existsInstanceWithSymbol = false;
   for (auto *use : llvm::make_early_inc_range(instanceGraphNode->uses())) {
     auto instance = cast<InstanceOp>(use->getInstance());
-    if (instance.inner_sym() && !instance.inner_sym().getValue().empty()) {
+    if (instance.inner_sym()) {
       existsInstanceWithSymbol = true;
       continue;
     }
