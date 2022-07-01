@@ -10,13 +10,13 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
   %fd = hw.constant 0x80000002 : i32
 
   %c11_i42 = hw.constant 11: i42
-  // CHECK: localparam [41:0] {{.*}} param_x = 42'd11;
+  // CHECK: localparam [41:0]{{ *}} param_x = 42'd11;
   %param_x = sv.localparam : i42 { value = 11: i42 }
 
-  // CHECK: localparam [41:0] {{.*}} param_y = param1;
+  // CHECK: localparam [41:0]{{ *}} param_y = param1;
   %param_y = sv.localparam : i42 { value = #hw.param.decl.ref<"param1">: i42 }
 
-  // CHECK:       logic {{.*}} [7:0] {{.*}} logic_op;
+  // CHECK:       logic{{ *}} [7:0]{{ *}} logic_op;
   // CHECK-NEXT:  struct packed {logic b; } logic_op_struct;
   // CHECK: assign logic_op = val;
   %logic_op = sv.logic : !hw.inout<i8>
