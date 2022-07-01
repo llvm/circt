@@ -1,6 +1,6 @@
 [
   {
-    "class":"sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
-    "directory":""
+    "class": "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
+    "directory": ""
   }
 ]

@@ -1,6 +1,6 @@
 [
   {
-    "class":"sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
-    "directory":"Wire/firrtl/gct"
+    "class": "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
+    "directory": "Wire/firrtl/gct"
   }
 ]
