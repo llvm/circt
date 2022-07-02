@@ -1174,6 +1174,32 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
         if (!tpe.getBitWidthOrSentinel())
           return true;
 
+        // Generate the path from the LCA to the module that contains the leaf.
+        path += " = ";
+
+        // There are two posisibilites for what this is tapping:
+        //   1. This is a constant that will be synced into the mappings file.
+        //   2. This is something else and we need an XMR.
+        // Handle case (1) here and exit.  Handle case (2) following.
+        auto uloc = builder.getUnknownLoc();
+        auto driver = getDriverFromConnect(leafValue);
+        if (driver) {
+          if (auto constant =
+                  dyn_cast_or_null<ConstantOp>(driver.getDefiningOp())) {
+            path.append(Twine(constant.value().getBitWidth()));
+            path += "'h";
+            SmallString<32> valueStr;
+            constant.value().toStringUnsigned(valueStr, 16);
+            path.append(valueStr);
+            builder.create<sv::VerbatimOp>(
+                uloc,
+                StringAttr::get(&getContext(),
+                                "assign " + path.getString() + ";"),
+                ValueRange{}, ArrayAttr::get(&getContext(), path.getSymbols()));
+            return true;
+          }
+        }
+
         // Populate a hierarchical path to the leaf.  For an NLA this is just
         // the namepath of the associated hierarchical path.  For a local
         // annotation, this is computed from the instance path.
@@ -1205,8 +1231,6 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
         minimalLeafPath = minimalLeafPath.drop_until(
             [&](Attribute attr) { return getModPart(attr) == parentNameAttr; });
 
-        // Generate the path from the LCA to the module that contains the leaf.
-        path += " = ";
         path += FlatSymbolRefAttr::get(getModPart(minimalLeafPath.front()));
         if (minimalLeafPath.size() > 0) {
           for (auto segment : minimalLeafPath.drop_back()) {
@@ -1216,7 +1240,6 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
         }
 
         // Add the leaf value to the path.
-        auto uloc = builder.getUnknownLoc();
         path += '.';
         if (auto blockArg = leafValue.dyn_cast<BlockArgument>()) {
           auto module = cast<FModuleOp>(blockArg.getOwner()->getParentOp());
