@@ -204,5 +204,58 @@ LogicalResult UnwrapSVInterface::verify() {
   return verifySVInterface(*this, modportType, chanType);
 }
 
+template <class OpType>
+static OpType getPortDecl(Operation *op, SymbolTableCollection &symbolTable,
+                          hw::InnerRefAttr servicePort) {
+  ModuleOp top = op->getParentOfType<mlir::ModuleOp>();
+  SymbolTable topSyms = symbolTable.getSymbolTable(top);
+
+  StringAttr modName = servicePort.getModule();
+  ServiceDeclOp serviceDeclOp = topSyms.lookup<ServiceDeclOp>(modName);
+  if (!serviceDeclOp) {
+    op->emitOpError("Cannot find module ") << modName;
+    return {};
+  }
+
+  StringAttr innerSym = servicePort.getName();
+  for (auto portDecl : serviceDeclOp.getOps<OpType>())
+    if (portDecl.inner_symAttr() == innerSym)
+      return portDecl;
+  op->emitOpError("Cannot find port named ") << innerSym;
+  return {};
+}
+
+LogicalResult RequestToClientConnection::verifySymbolUses(
+    SymbolTableCollection &symbolTable) {
+  ToClientOp portDecl =
+      getPortDecl<ToClientOp>(*this, symbolTable, servicePort());
+  if (!portDecl)
+    return failure();
+
+  auto *ctxt = getContext();
+  if (portDecl.type() != ChannelPort::get(ctxt, AnyType::get(ctxt)) &&
+      portDecl.type() != receiving().getType())
+    return emitOpError("Result type does not match port type ")
+           << portDecl.type();
+
+  return success();
+}
+
+LogicalResult RequestToServerConnection::verifySymbolUses(
+    SymbolTableCollection &symbolTable) {
+  ToServerOp portDecl =
+      getPortDecl<ToServerOp>(*this, symbolTable, servicePort());
+  if (!portDecl)
+    return failure();
+
+  auto *ctxt = getContext();
+  if (portDecl.type() != ChannelPort::get(ctxt, AnyType::get(ctxt)) &&
+      portDecl.type() != sending().getType())
+    return emitOpError("Sending type does not match port type ")
+           << portDecl.type();
+
+  return success();
+}
+
 #define GET_OP_CLASSES
 #include "circt/Dialect/ESI/ESI.cpp.inc"
