@@ -1302,6 +1302,17 @@ void ESItoHWPass::runOnOperation() {
     signalPassFailure();
 }
 
+//===----------------------------------------------------------------------===//
+// Wire up services pass.
+//===----------------------------------------------------------------------===//
+
+namespace {
+/// Run all the physical lowerings.
+struct ESIWireServicesPass : public ESIWireServicesBase<ESIWireServicesPass> {
+  void runOnOperation() override;
+};
+} // anonymous namespace
+
 namespace circt {
 namespace esi {
 std::unique_ptr<OperationPass<ModuleOp>> createESIPhysicalLoweringPass() {
@@ -1313,7 +1324,9 @@ std::unique_ptr<OperationPass<ModuleOp>> createESIPortLoweringPass() {
 std::unique_ptr<OperationPass<ModuleOp>> createESItoHWPass() {
   return std::make_unique<ESItoHWPass>();
 }
-
+std::unique_ptr<OperationPass<ModuleOp>> createESIWireServicesPass() {
+  return std::make_unique<ESItoHWPass>();
+}
 } // namespace esi
 } // namespace circt
 

@@ -7,6 +7,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "circt/Dialect/HW/HWTypes.td"
+
 def ServiceDeclOp : ESI_Op<"service.decl",
           [SingleBlock, NoTerminator, HasParent<"::mlir::ModuleOp">, Symbol]> {
   let summary = "An ESI service interface declaration";
@@ -78,27 +80,29 @@ def ToClientOp : ESI_Op<"service.to_client",
 
   let arguments = (ins SymbolNameAttr:$inner_sym, TypeAttr:$type);
   let assemblyFormat = [{
-    $inner_sym attr-dict `:` $type
+    $inner_sym  attr-dict `:` $type
   }];
 }
 
-def RequestToServerConnection : ESI_Op<"service.req.to_server"> {
+def RequestToServerConnection : ESI_Op<"service.req.to_server", [
+        DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let summary = "Request a connection to send data";
 
-  let arguments = (ins SymbolNameAttr:$service_name,
-                       ChannelType:$sending, StrAttr:$connName);
+  let arguments = (ins HWInnerRefAttr:$servicePort, 
+                       ChannelType:$sending, StrAttr:$clientName);
   let assemblyFormat = [{
-    $sending `->` $service_name `(` $connName `)` attr-dict
-      `:` type($sending)
+    $sending `->` $servicePort `(` $clientName`)` attr-dict `:` type($sending)
   }];
 }
 
-def RequestToClientConnection : ESI_Op<"service.req.to_client"> {
+def RequestToClientConnection : ESI_Op<"service.req.to_client", [
+        DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let summary = "Request a connection to receive data";
 
-  let arguments = (ins SymbolNameAttr:$service_name, StrAttr:$connName);
+  let arguments = (ins HWInnerRefAttr:$servicePort,
+                       StrAttr:$clientName);
   let results = (outs ChannelType:$receiving);
   let assemblyFormat = [{
-    $service_name `(` $connName `)` attr-dict `:` type($receiving)
+    $servicePort `(` $clientName `)` attr-dict `:` type($receiving)
   }];
 }
