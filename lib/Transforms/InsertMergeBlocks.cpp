@@ -1,4 +1,4 @@
-//===- FlattenMemRefs.cpp - MemRef flattening pass --------------*- C++ -*-===//
+//===- InsertMergeBlocks.cpp - Insert Merge Blocks --------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -20,7 +20,7 @@
 using namespace mlir;
 using namespace circt;
 
-static int getNumPredecessors(Block *block) {
+static size_t getNumPredecessors(Block *block) {
   return std::distance(block->getPredecessors().begin(),
                        block->getPredecessors().end());
 }
