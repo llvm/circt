@@ -6,6 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/MSFT/MSFTPasses.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
@@ -528,24 +529,15 @@ std::unique_ptr<Pass> createExportTclPass() {
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct PassCommon {
+struct MSFTPassCommon : PassCommon {
 protected:
-  SymbolCache topLevelSyms;
-  DenseMap<MSFTModuleOp, SmallVector<InstanceOp, 1>> moduleInstantiations;
-
-  LogicalResult verifyInstances(ModuleOp topMod);
-
-  // Find all the modules and use the partial order of the instantiation DAG
-  // to sort them. If we use this order when "bubbling" up operations, we
-  // guarantee one-pass completeness. As a side-effect, populate the module to
-  // instantiation sites mapping.
-  //
-  // Assumption (unchecked): there is not a cycle in the instantiation graph.
-  void getAndSortModules(ModuleOp topMod, SmallVectorImpl<MSFTModuleOp> &mods);
-  void getAndSortModulesVisitor(MSFTModuleOp mod,
-                                SmallVectorImpl<MSFTModuleOp> &mods,
-                                DenseSet<MSFTModuleOp> &modsSeen);
-
+  /// Update all the instantiations of 'mod' to match the port list. For any
+  /// output ports which survived, automatically map the result according to
+  /// `newToOldResultMap`. Calls 'getOperandsFunc' with the new instance op, the
+  /// old instance op, and expects the operand vector to return filled.
+  /// `getOperandsFunc` can (and often does) modify other operations. The update
+  /// call deletes the original instance op, so all references are invalidated
+  /// after this call.
   SmallVector<InstanceOp, 1> &updateInstances(
       MSFTModuleOp mod, ArrayRef<unsigned> newToOldResultMap,
       llvm::function_ref<void(InstanceOp, InstanceOp, SmallVectorImpl<Value> &)>
@@ -566,14 +558,7 @@ static bool isWireManipulationOp(Operation *op) {
              hw::ConstantOp>(op);
 }
 
-/// Update all the instantiations of 'mod' to match the port list. For any
-/// output ports which survived, automatically map the result according to
-/// `newToOldResultMap`. Calls 'getOperandsFunc' with the new instance op, the
-/// old instance op, and expects the operand vector to return filled.
-/// `getOperandsFunc` can (and often does) modify other operations. The update
-/// call deletes the original instance op, so all references are invalidated
-/// after this call.
-SmallVector<InstanceOp, 1> &PassCommon::updateInstances(
+SmallVector<InstanceOp, 1> &MSFTPassCommon::updateInstances(
     MSFTModuleOp mod, ArrayRef<unsigned> newToOldResultMap,
     llvm::function_ref<void(InstanceOp, InstanceOp, SmallVectorImpl<Value> &)>
         getOperandsFunc) {
@@ -647,7 +632,7 @@ LogicalResult PassCommon::verifyInstances(mlir::ModuleOp mod) {
 }
 
 namespace {
-struct PartitionPass : public PartitionBase<PartitionPass>, PassCommon {
+struct PartitionPass : public PartitionBase<PartitionPass>, MSFTPassCommon {
   void runOnOperation() override;
 
 private:
@@ -1427,7 +1412,8 @@ std::unique_ptr<Pass> createPartitionPass() {
 } // namespace circt
 
 namespace {
-struct WireCleanupPass : public WireCleanupBase<WireCleanupPass>, PassCommon {
+struct WireCleanupPass : public WireCleanupBase<WireCleanupPass>,
+                         MSFTPassCommon {
   void runOnOperation() override;
 };
 } // anonymous namespace
@@ -1455,7 +1441,7 @@ void WireCleanupPass::runOnOperation() {
 }
 
 /// Remove outputs driven by the same value.
-void PassCommon::dedupOutputs(MSFTModuleOp mod) {
+void MSFTPassCommon::dedupOutputs(MSFTModuleOp mod) {
   Block *body = mod.getBodyBlock();
   Operation *terminator = body->getTerminator();
 
@@ -1487,7 +1473,7 @@ void PassCommon::dedupOutputs(MSFTModuleOp mod) {
 }
 
 /// Push up any wires which are simply passed-through.
-void PassCommon::bubbleWiresUp(MSFTModuleOp mod) {
+void MSFTPassCommon::bubbleWiresUp(MSFTModuleOp mod) {
   Block *body = mod.getBodyBlock();
   Operation *terminator = body->getTerminator();
   hw::ModulePortInfo ports = mod.getPorts();
@@ -1552,7 +1538,7 @@ void PassCommon::bubbleWiresUp(MSFTModuleOp mod) {
   updateInstances(mod, newToOldResult, setPassthroughsGetOperands);
 }
 
-void PassCommon::dedupInputs(MSFTModuleOp mod) {
+void MSFTPassCommon::dedupInputs(MSFTModuleOp mod) {
   auto instantiations = moduleInstantiations[mod];
   // TODO: remove this limitation. This would involve looking at the common
   // loopbacks for all the instances.
@@ -1602,7 +1588,7 @@ void PassCommon::dedupInputs(MSFTModuleOp mod) {
 }
 
 /// Sink all the instance connections which are loops.
-void PassCommon::sinkWiresDown(MSFTModuleOp mod) {
+void MSFTPassCommon::sinkWiresDown(MSFTModuleOp mod) {
   auto instantiations = moduleInstantiations[mod];
   // TODO: remove this limitation. This would involve looking at the common
   // loopbacks for all the instances.

@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
+// RUN: circt-opt %s | circt-opt | FileCheck %s
 
 esi.service.decl @HostComms {
   esi.service.to_server @Send : !esi.channel<!esi.any>
