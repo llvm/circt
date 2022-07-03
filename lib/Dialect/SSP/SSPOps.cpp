@@ -55,8 +55,10 @@ ParseResult OperationOp::parse(OpAsmParser &parser, OperationState &result) {
     // Parse the properties, if present.
     parser.parseOptionalAttribute(properties);
 
-    dependences.push_back(DependenceAttr::get(builder.getContext(), operandIdx,
-                                              sourceRef, properties));
+    // No need to explicitly store SSA deps without properties.
+    if (sourceRef || properties)
+      dependences.push_back(DependenceAttr::get(
+          builder.getContext(), operandIdx, sourceRef, properties));
     return success();
   };
 
@@ -64,8 +66,9 @@ ParseResult OperationOp::parse(OpAsmParser &parser, OperationState &result) {
                                      parseDependenceSourceWithAttrDict))
     return failure();
 
-  result.addAttribute(builder.getStringAttr("dependences"),
-                      builder.getArrayAttr(dependences));
+  if (!dependences.empty())
+    result.addAttribute(builder.getStringAttr("dependences"),
+                        builder.getArrayAttr(dependences));
 
   // Properties
   ArrayAttr properties;
@@ -95,27 +98,47 @@ void OperationOp::print(OpAsmPrinter &p) {
   p << ' ';
   p.printSymbolName(getSymName());
 
-  // Dependences
+  // Dependences = SSA operands + other OperationOps via symbol references.
+  // Emitted format looks like this:
+  // (%0, %1 [#ssp.some_property<42>, ...], %2, ...,
+  //  @op0, @op1 [#ssp.some_property<17>, ...], ...)
+  SmallVector<DependenceAttr> defUseDeps(getNumOperands()), auxDeps;
+  if (ArrayAttr dependences = getDependencesAttr()) {
+    for (auto dep : dependences.getAsRange<DependenceAttr>()) {
+      if (dep.getSourceRef())
+        auxDeps.push_back(dep);
+      else if (IntegerAttr operandIdx = dep.getOperandIdx())
+        defUseDeps[operandIdx.getInt()] = dep;
+      else
+        llvm_unreachable("Malformed dependence attribute");
+    }
+  }
+
   p << '(';
-  llvm::interleaveComma(getDependences(), p, [&](Attribute attr) {
-    DependenceAttr dep = attr.cast<DependenceAttr>();
-
-    if (auto sourceRef = dep.getSourceRef())
-      p << sourceRef;
-    else if (auto operandIdx = dep.getOperandIdx())
-      p.printOperand(getOperand(operandIdx.getValue().getZExtValue()));
-
-    if (auto properties = dep.getProperties()) {
+  llvm::interleaveComma((*this)->getOpOperands(), p, [&](OpOperand &operand) {
+    p.printOperand(operand.get());
+    if (DependenceAttr dep = defUseDeps[operand.getOperandNumber()]) {
       p << ' ';
-      p.printAttribute(properties);
+      p.printAttribute(dep.getProperties());
     }
   });
+  if (!auxDeps.empty()) {
+    if (!defUseDeps.empty())
+      p << ", ";
+    llvm::interleaveComma(auxDeps, p, [&](DependenceAttr dep) {
+      p.printAttribute(dep.getSourceRef());
+      if (ArrayAttr depProps = dep.getProperties()) {
+        p << ' ';
+        p.printAttribute(depProps);
+      }
+    });
+  }
   p << ')';
 
   // Properties
-  if (auto properties = getProperties()) {
+  if (ArrayAttr properties = getPropertiesAttr()) {
     p << ' ';
-    p.printAttribute(properties.getValue());
+    p.printAttribute(properties);
   }
 
   // Default attr-dict
@@ -127,23 +150,27 @@ void OperationOp::print(OpAsmPrinter &p) {
 }
 
 LogicalResult OperationOp::verify() {
-  // TODO: better check that all SSA operands have an associated DependenceAttr.
-  if (getDependences().size() < getNumOperands())
-    return emitOpError("has malformed `dependences` attribute");
+  // TODO: check that dependences' SSA operand numbers are in range, sorted, and
+  // aux deps are at the end.
   return success();
 }
 
 LogicalResult
 OperationOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  for (auto dep : getDependences().getAsRange<DependenceAttr>()) {
-    if (auto sourceRef = dep.getSourceRef()) {
-      Operation *sourceOp =
-          symbolTable.lookupNearestSymbolFrom(*this, sourceRef);
-      if (!sourceOp || !isa<OperationOp>(sourceOp))
-        return emitOpError("references invalid source operation: ")
-               << sourceRef;
-    }
+  ArrayAttr dependences = getDependencesAttr();
+  if (!dependences)
+    return success();
+
+  for (auto dep : dependences.getAsRange<DependenceAttr>()) {
+    FlatSymbolRefAttr sourceRef = dep.getSourceRef();
+    if (!sourceRef)
+      continue;
+
+    Operation *sourceOp = symbolTable.lookupNearestSymbolFrom(*this, sourceRef);
+    if (!sourceOp || !isa<OperationOp>(sourceOp))
+      return emitOpError("references invalid source operation: ") << sourceRef;
   }
+
   return success();
 }
 

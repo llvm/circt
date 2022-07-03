@@ -60,7 +60,7 @@ def OperationOp : SSPOp<"operation",
 
   let arguments = (ins SymbolNameAttr:$sym_name,
                        Variadic<NoneType>:$operands,
-                       DependenceArrayAttr:$dependences,
+                       OptionalAttr<DependenceArrayAttr>:$dependences,
                        OptionalAttr<ArrayAttr>:$properties);
   let results = (outs Variadic<NoneType>:$results);
 

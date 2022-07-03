@@ -32,11 +32,10 @@ template <typename ProblemT>
 void loadOperationProperties(ProblemT &, Operation *, ArrayAttr) {}
 template <typename ProblemT, typename OperationPropertyT,
           typename... OperationPropertyTs>
-void loadOperationProperties(ProblemT &prob, Operation *op,
-                             ArrayAttr propsAttr) {
-  if (!propsAttr)
+void loadOperationProperties(ProblemT &prob, Operation *op, ArrayAttr props) {
+  if (!props)
     return;
-  for (auto prop : propsAttr) {
+  for (auto prop : props) {
     TypeSwitch<Attribute>(prop)
         .Case<OperationPropertyT, OperationPropertyTs...>(
             [&](auto p) { p.setInProblem(prob, op); });
@@ -48,10 +47,10 @@ void loadOperatorTypeProperties(ProblemT &, OperatorType, ArrayAttr) {}
 template <typename ProblemT, typename OperatorTypePropertyT,
           typename... OperatorTypePropertyTs>
 void loadOperatorTypeProperties(ProblemT &prob, OperatorType opr,
-                                ArrayAttr propsAttr) {
-  if (!propsAttr)
+                                ArrayAttr props) {
+  if (!props)
     return;
-  for (auto prop : propsAttr) {
+  for (auto prop : props) {
     TypeSwitch<Attribute>(prop)
         .Case<OperatorTypePropertyT, OperatorTypePropertyTs...>(
             [&](auto p) { p.setInProblem(prob, opr); });
@@ -62,11 +61,10 @@ template <typename ProblemT>
 void loadDependenceProperties(ProblemT &, Dependence, ArrayAttr) {}
 template <typename ProblemT, typename DependencePropertyT,
           typename... DependencePropertyTs>
-void loadDependenceProperties(ProblemT &prob, Dependence dep,
-                              ArrayAttr propsAttr) {
-  if (!propsAttr)
+void loadDependenceProperties(ProblemT &prob, Dependence dep, ArrayAttr props) {
+  if (!props)
     return;
-  for (auto prop : propsAttr) {
+  for (auto prop : props) {
     TypeSwitch<Attribute>(prop)
         .Case<DependencePropertyT, DependencePropertyTs...>(
             [&](auto p) { p.setInProblem(prob, dep); });
@@ -77,10 +75,10 @@ template <typename ProblemT>
 void loadInstanceProperties(ProblemT &, ArrayAttr) {}
 template <typename ProblemT, typename InstancePropertyT,
           typename... InstancePropertyTs>
-void loadInstanceProperties(ProblemT &prob, ArrayAttr propsAttr) {
-  if (!propsAttr)
+void loadInstanceProperties(ProblemT &prob, ArrayAttr props) {
+  if (!props)
     return;
-  for (auto prop : propsAttr) {
+  for (auto prop : props) {
     TypeSwitch<Attribute>(prop).Case<InstancePropertyT, InstancePropertyTs...>(
         [&](auto p) { p.setInProblem(prob); });
   }
@@ -111,7 +109,11 @@ ProblemT loadProblem(InstanceOp instOp,
     loadOperationProperties<ProblemT, OperationPropertyTs...>(
         prob, opOp, opOp.getPropertiesAttr());
 
-    for (auto depAttr : opOp.getDependences().getAsRange<DependenceAttr>()) {
+    ArrayAttr depsAttr = opOp.getDependencesAttr();
+    if (!depsAttr)
+      return;
+
+    for (auto depAttr : depsAttr.getAsRange<DependenceAttr>()) {
       Dependence dep;
       if (FlatSymbolRefAttr sourceRef = depAttr.getSourceRef()) {
         Operation *sourceOp = SymbolTable::lookupSymbolIn(instOp, sourceRef);
