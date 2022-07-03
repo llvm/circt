@@ -25,15 +25,6 @@ using namespace ssp;
 #define GET_ATTRDEF_CLASSES
 #include "circt/Dialect/SSP/SSPAttributes.cpp.inc"
 
-LogicalResult
-DependenceAttr::verify(function_ref<InFlightDiagnostic()> emitError,
-                       IntegerAttr operandIdx, FlatSymbolRefAttr sourceRef,
-                       ArrayAttr properties) {
-  if ((operandIdx && sourceRef) || (!operandIdx && !sourceRef))
-    return emitError() << "Must either be an `ssa` or an `aux` dependence.";
-  return success();
-}
-
 void SSPDialect::registerAttributes() {
   addAttributes<
 #define GET_ATTRDEF_LIST

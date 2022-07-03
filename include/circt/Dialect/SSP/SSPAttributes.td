@@ -19,15 +19,14 @@ def DependenceAttr : AttrDef<SSPDialect, "Dependence"> {
     and as such is supposed to be hidden by the custom parser/printer.
   }];
 
-  let parameters = (ins OptionalParameter<"::mlir::IntegerAttr">:$operandIdx,
+  let parameters = (ins "unsigned":$operandIdx,
                         OptionalParameter<"::mlir::FlatSymbolRefAttr">:$sourceRef,
                         OptionalParameter<"::mlir::ArrayAttr">:$properties);
 
   let mnemonic = "dependence";
   let assemblyFormat = [{
-    `<` (`defuse` $operandIdx^)? (`auxiliary` $sourceRef^)? (`,` $properties^)? `>`
+    `<` $operandIdx (`,` $sourceRef^)? (`,` $properties^)? `>`
   }];
-  let genVerifyDecl = 1;
 }
 
 def DependenceArrayAttr

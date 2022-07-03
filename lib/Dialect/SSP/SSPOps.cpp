@@ -35,9 +35,9 @@ ParseResult OperationOp::parse(OpAsmParser &parser, OperationState &result) {
   // Dependences
   SmallVector<OpAsmParser::UnresolvedOperand> unresolvedOperands;
   SmallVector<Attribute> dependences;
+  unsigned operandIdx = 0;
   auto parseDependenceSourceWithAttrDict = [&]() -> ParseResult {
     llvm::SMLoc loc = parser.getCurrentLocation();
-    IntegerAttr operandIdx;
     FlatSymbolRefAttr sourceRef;
     ArrayAttr properties;
 
@@ -48,7 +48,6 @@ ParseResult OperationOp::parse(OpAsmParser &parser, OperationState &result) {
       if (failed(parser.parseOperand(operand)))
         return parser.emitError(loc, "expected SSA value or symbol reference");
 
-      operandIdx = builder.getI64IntegerAttr(unresolvedOperands.size());
       unresolvedOperands.push_back(operand);
     }
 
@@ -59,6 +58,8 @@ ParseResult OperationOp::parse(OpAsmParser &parser, OperationState &result) {
     if (sourceRef || properties)
       dependences.push_back(DependenceAttr::get(
           builder.getContext(), operandIdx, sourceRef, properties));
+
+    ++operandIdx;
     return success();
   };
 
@@ -107,10 +108,8 @@ void OperationOp::print(OpAsmPrinter &p) {
     for (auto dep : dependences.getAsRange<DependenceAttr>()) {
       if (dep.getSourceRef())
         auxDeps.push_back(dep);
-      else if (IntegerAttr operandIdx = dep.getOperandIdx())
-        defUseDeps[operandIdx.getInt()] = dep;
       else
-        llvm_unreachable("Malformed dependence attribute");
+        defUseDeps[dep.getOperandIdx()] = dep;
     }
   }
 
@@ -150,8 +149,41 @@ void OperationOp::print(OpAsmPrinter &p) {
 }
 
 LogicalResult OperationOp::verify() {
-  // TODO: check that dependences' SSA operand numbers are in range, sorted, and
-  // aux deps are at the end.
+  ArrayAttr dependences = getDependencesAttr();
+  if (!dependences)
+    return success();
+
+  int nOperands = getNumOperands();
+  int lastIdx = -1;
+  for (auto dep : dependences.getAsRange<DependenceAttr>()) {
+    int idx = dep.getOperandIdx();
+    FlatSymbolRefAttr sourceRef = dep.getSourceRef();
+
+    if (!sourceRef) {
+      // Def-use deps use the index to refer to one of the SSA operands.
+      if (idx >= nOperands)
+        return emitError(
+            "Operand index is out of bounds for def-use dependence attribute");
+
+      // Indices may be sparse, but shall be sorted and unique.
+      if (idx <= lastIdx)
+        return emitError("Def-use operand indices in dependence attribute are "
+                         "not monotonically increasing");
+    } else {
+      // Auxiliary deps are expected to follow the def-use deps (if present),
+      // and hence use indices >= #operands.
+      if (idx < nOperands)
+        return emitError() << "Auxiliary dependence from " << sourceRef
+                           << " is interleaved with SSA operands";
+
+      // Indices shall be consecutive (special case: the first aux dep)
+      if (!((idx == lastIdx + 1) || (idx > lastIdx && idx == nOperands)))
+        return emitError("Auxiliary operand indices in dependence attribute "
+                         "are not consecutive");
+    }
+
+    lastIdx = idx;
+  }
   return success();
 }
 

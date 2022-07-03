@@ -119,10 +119,8 @@ ProblemT loadProblem(InstanceOp instOp,
         Operation *sourceOp = SymbolTable::lookupSymbolIn(instOp, sourceRef);
         assert(sourceOp);
         dep = Dependence(sourceOp, opOp);
-      } else if (IntegerAttr operandIdx = depAttr.getOperandIdx())
-        dep = Dependence(&opOp->getOpOperand(operandIdx.getInt()));
-      else
-        llvm_unreachable("Malformed dependence attribute");
+      } else
+        dep = Dependence(&opOp->getOpOperand(depAttr.getOperandIdx()));
 
       // Make sure the dependence (and its endpoints) are registered.
       LogicalResult res = prob.insertDependence(dep);
