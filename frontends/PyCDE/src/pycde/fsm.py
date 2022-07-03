@@ -1,12 +1,10 @@
-from pycde import System, Input, Output, module, generator
+from pycde import Input, Output, module, generator
 from pycde.module import _SpecializedModule, Generator, _GeneratorPortAccess
 from pycde.dialects import fsm
 from pycde.pycde_types import types
 from typing import Callable
 
 from mlir.ir import InsertionPoint
-from collections import defaultdict
-from functools import lru_cache
 
 from pycde.support import _obj_to_attribute, attributes_of_type
 from circt.support import connect

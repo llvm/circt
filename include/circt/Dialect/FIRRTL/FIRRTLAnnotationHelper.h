@@ -166,17 +166,17 @@ private:
   unsigned annotationID = 0;
 };
 
-LogicalResult applyGCTView(AnnoPathValue target, DictionaryAttr anno,
+LogicalResult applyGCTView(const AnnoPathValue &target, DictionaryAttr anno,
                            ApplyState &state);
 
-LogicalResult applyGCTDataTaps(AnnoPathValue target, DictionaryAttr anno,
+LogicalResult applyGCTDataTaps(const AnnoPathValue &target, DictionaryAttr anno,
                                ApplyState &state);
 
-LogicalResult applyGCTMemTaps(AnnoPathValue target, DictionaryAttr anno,
+LogicalResult applyGCTMemTaps(const AnnoPathValue &target, DictionaryAttr anno,
                               ApplyState &state);
 
-LogicalResult applyGCTSignalMappings(AnnoPathValue target, DictionaryAttr anno,
-                                     ApplyState &state);
+LogicalResult applyGCTSignalMappings(const AnnoPathValue &target,
+                                     DictionaryAttr anno, ApplyState &state);
 
 /// Implements the same behavior as DictionaryAttr::getAs<A> to return the
 /// value of a specific type associated with a key in a dictionary. However,

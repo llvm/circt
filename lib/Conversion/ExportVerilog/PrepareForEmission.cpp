@@ -76,6 +76,11 @@ static bool shouldSpillWire(Operation &op, const LoweringOptions &options) {
       llvm::any_of(op.getResult(0).getUsers(), isConcat))
     return true;
 
+  // When `spillWiresAtPrepare` is true, spill temporary wires if necessary.
+  if (options.spillWiresAtPrepare &&
+      !ExportVerilog::isExpressionEmittedInline(&op))
+    return true;
+
   return false;
 }
 

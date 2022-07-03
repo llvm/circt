@@ -126,8 +126,6 @@ struct NLARemover {
     } else if (auto array = anno.dyn_cast<ArrayAttr>()) {
       for (auto attr : array)
         markNLAsInAnnotation(attr);
-    } else if (auto subAnno = anno.dyn_cast<firrtl::SubAnnotationAttr>()) {
-      markNLAsInAnnotation(subAnno.getAnnotations());
     }
   }
 

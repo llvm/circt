@@ -309,7 +309,7 @@ Optional<AnnoPathValue> firrtl::resolvePath(StringRef rawPath,
 
 void AnnoTargetCache::gatherTargets(FModuleLike mod) {
   // Add ports
-  for (auto p : llvm::enumerate(mod.getPorts()))
+  for (const auto &p : llvm::enumerate(mod.getPorts()))
     targets.insert({p.value().name, PortAnnoTarget(mod, p.index())});
 
   // And named things

@@ -83,6 +83,14 @@ with Context() as ctx, Location.unknown():
   # CHECK: #hw.param.decl<"param2": i32>
   print(pdecl)
 
+  # CHECK: #hw.param.decl.ref<"param2"> : i32
+  pdeclref = hw.ParamDeclRefAttr.get(ctx, "param2")
+  print(pdeclref)
+
+  # CHECK: !hw.int<#hw.param.decl.ref<"param2">>
+  pinttype = hw.ParamIntType.get_from_param(ctx, pdeclref)
+  print(pinttype)
+
   pverbatim = hw.ParamVerbatimAttr.get(StringAttr.get("this is verbatim"))
   # CHECK: #hw.param.verbatim<"this is verbatim">
   print(pverbatim)

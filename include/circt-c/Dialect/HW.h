@@ -65,6 +65,9 @@ MLIR_CAPI_EXPORTED bool hwTypeIsAStructType(MlirType);
 /// If the type is an HW type alias.
 MLIR_CAPI_EXPORTED bool hwTypeIsATypeAliasType(MlirType);
 
+/// If the type is an HW int.
+MLIR_CAPI_EXPORTED bool hwTypeIsAIntType(MlirType);
+
 /// Creates a fixed-size HW array type in the context associated with element
 MLIR_CAPI_EXPORTED MlirType hwArrayTypeGet(MlirType element, size_t size);
 
@@ -87,6 +90,10 @@ MLIR_CAPI_EXPORTED MlirType hwStructTypeGet(MlirContext ctx,
 
 MLIR_CAPI_EXPORTED MlirType hwStructTypeGetField(MlirType structType,
                                                  MlirStringRef fieldName);
+
+MLIR_CAPI_EXPORTED MlirType hwParamIntTypeGet(MlirAttribute parameter);
+
+MLIR_CAPI_EXPORTED MlirAttribute hwParamIntTypeGetWidthAttr(MlirType);
 
 MLIR_CAPI_EXPORTED HWStructFieldInfo
 hwStructTypeGetFieldNum(MlirType structType, unsigned idx);
@@ -124,6 +131,12 @@ MLIR_CAPI_EXPORTED MlirAttribute hwParamDeclAttrGet(MlirStringRef name,
 MLIR_CAPI_EXPORTED MlirStringRef hwParamDeclAttrGetName(MlirAttribute decl);
 MLIR_CAPI_EXPORTED MlirAttribute hwParamDeclAttrGetType(MlirAttribute decl);
 MLIR_CAPI_EXPORTED MlirAttribute hwParamDeclAttrGetValue(MlirAttribute decl);
+
+MLIR_CAPI_EXPORTED bool hwAttrIsAParamDeclRefAttr(MlirAttribute);
+MLIR_CAPI_EXPORTED MlirAttribute hwParamDeclRefAttrGet(MlirContext ctx,
+                                                       MlirStringRef cName);
+MLIR_CAPI_EXPORTED MlirStringRef hwParamDeclRefAttrGetName(MlirAttribute decl);
+MLIR_CAPI_EXPORTED MlirType hwParamDeclRefAttrGetType(MlirAttribute decl);
 
 MLIR_CAPI_EXPORTED bool hwAttrIsAParamVerbatimAttr(MlirAttribute);
 MLIR_CAPI_EXPORTED MlirAttribute hwParamVerbatimAttrGet(MlirAttribute text);

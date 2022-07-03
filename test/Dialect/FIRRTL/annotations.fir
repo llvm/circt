@@ -111,14 +111,14 @@ circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar.a"},
     ; CHECK: firrtl.module private @Bar
     ; CHECK:      out %b
     ; CHECK-NOT:  sym
-    ; CHECK-SAME: [#firrtl.subAnno<fieldID = 2, {circt.nonlocal = @nla_1, three}>]
+    ; CHECK-SAME: [{circt.fieldID = 2 : i64, circt.nonlocal = @nla_1, three}]
     ; CHECK-NEXT: %d = firrtl.wire
     ; CHECK-NOT:  sym
-    ; CHECK-SAME: {annotations = [#firrtl.subAnno<fieldID = 2, {circt.nonlocal = @nla_2, five}>]}
+    ; CHECK-SAME: {annotations = [{circt.fieldID = 2 : i64, circt.nonlocal = @nla_2, five}]}
     ; CHECK-SAME: : !firrtl.bundle<baz: uint<1>, qux: uint<1>>
     ; CHECK: %bar_a, %bar_b, %bar_c = firrtl.instance bar
     ; CHECK-SAME: [{one}],
-    ; CHECK-SAME: [#firrtl.subAnno<fieldID = 1, {two}>],
+    ; CHECK-SAME: [{circt.fieldID = 1 : i64, two}],
     ; CHECK-SAME: [{four}]
 
 ; // -----
@@ -170,8 +170,8 @@ circuit Foo: %[[{"a":null,"target":"~Foo|Foo>bar.r"},
     ; CHECK-LABEL: module {
     ; CHECK: firrtl.mem
     ; CHECK-SAME: portAnnotations = [
-    ; CHECK-SAME: [{a}, #firrtl.subAnno<fieldID = 5, {b}>],
-    ; CHECK-SAME: [#firrtl.subAnno<fieldID = 2, {c}>, #firrtl.subAnno<fieldID = 6, {d}>]
+    ; CHECK-SAME: [{a}, {b, circt.fieldID = 5 : i64}],
+    ; CHECK-SAME: [{c, circt.fieldID = 2 : i64}, {circt.fieldID = 6 : i64, d}]
 
 ; // -----
 
@@ -302,8 +302,8 @@ circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[0]"},{"two":null,"target":"~F
 
     ; CHECK-LABEL: module {
     ; CHECK: %bar = firrtl.wire interesting_name {annotations =
-    ; CHECK-SAME: #firrtl.subAnno<fieldID = 1, {one}>
-    ; CHECK-SAME: #firrtl.subAnno<fieldID = 5, {two}>
+    ; CHECK-SAME: {circt.fieldID = 1 : i64, one}
+    ; CHECK-SAME: {circt.fieldID = 5 : i64, two}
 
 
 ; // -----
@@ -316,8 +316,8 @@ circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[0]"},{"two":null,"target":"~F
 
     ; CHECK-LABEL: module {
     ; CHECK: %bar = firrtl.reg interesting_name %clock {annotations =
-    ; CHECK-SAME: #firrtl.subAnno<fieldID = 1, {one}>
-    ; CHECK-SAME: #firrtl.subAnno<fieldID = 5, {two}>
+    ; CHECK-SAME: {circt.fieldID = 1 : i64, one}
+    ; CHECK-SAME: {circt.fieldID = 5 : i64, two}
 
 ; // -----
 
@@ -335,51 +335,7 @@ circuit Foo: %[[{"a":null,"target":"~Foo|Foo>w[9]"}]]
 
     ; CHECK-LABEL: module {
     ; CHECK: %w = firrtl.wire interesting_name {annotations =
-    ; CHECK-SAME: #firrtl.subAnno<fieldID = 10, {a}
-
-; // -----
-
-; Annotations should apply even when the target's name is dropped.
-circuit Foo: %[[{"target": "~Foo|Foo>_T_0", "a": "a"},
-                {"target": "~Foo|Foo>_T_1", "a": "a"},
-                {"target": "~Foo|Foo>_T_2", "a": "a"},
-                {"target": "~Foo|Foo>_T_3", "a": "a"},
-                {"target": "~Foo|Foo>_T_4", "a": "a"},
-                {"target": "~Foo|Foo>_T_5", "a": "a"},
-                {"target": "~Foo|Foo>_T_6", "a": "a"},
-                {"target": "~Foo|Foo>_T_7", "a": "a"},
-                {"target": "~Foo|Foo>_T_8", "a": "a"}]]
-  module Bar:
-    skip
-  module Foo:
-    input reset : UInt<1>
-    input clock : Clock
-
-    ; CHECK: %_T_0 = firrtl.wire  {annotations = [{a = "a"}]}
-    wire _T_0 : UInt<1>
-    ; CHECK: %_T_1 = firrtl.node
-    node _T_1 = _T_0
-    ; CHECK: %_T_2 = firrtl.reg %clock  {annotations = [{a = "a"}]}
-    reg _T_2 : UInt<1>, clock
-    ; CHECK: %_T_3 = firrtl.regreset {{.+}}  {annotations = [{a = "a"}]}
-    reg _T_3 : UInt<4>, clock with :
-      reset => (reset, UInt<4>("h0"))
-    ; CHECK: %_T_4 = chirrtl.seqmem Undefined {annotations = [{a = "a"}]}
-    smem _T_4 : UInt<1>[9] [256]
-    ; CHECK: %_T_5 = chirrtl.combmem {annotations = [{a = "a"}]}
-    cmem _T_5 : UInt<1>[9] [256]
-    ; CHECK: chirrtl.memoryport {{.+}} {annotations = [{a = "a"}]
-    infer mport _T_6 = _T_5[reset], clock
-    ; CHECK: firrtl.instance _T_7 {annotations = [{a = "a"}]}
-    inst _T_7 of Bar
-    ; CHECK: firrtl.mem Undefined  {annotations = [{a = "a"}]
-    mem _T_8 :
-        data-type => UInt<4>
-        depth => 8
-        writer => w
-        read-latency => 0
-        write-latency => 1
-        read-under-write => undefined
+    ; CHECK-SAME: {a, circt.fieldID = 10 : i64}
 
 ; // -----
 

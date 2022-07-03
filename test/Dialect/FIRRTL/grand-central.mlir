@@ -45,8 +45,8 @@ firrtl.circuit "InterfaceGroundType" attributes {
        id = 2 : i64}]} : !firrtl.uint<4>
     %c = firrtl.wire  {annotations = [
       {a},
-      #firrtl.subAnno<fieldID = 4, {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
-                                    id = 3 : i64}>]} : !firrtl.vector<bundle<d: uint<2>>, 2>
+      {circt.fieldID = 4 : i32, class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 3 : i64}
+    ]} : !firrtl.vector<bundle<d: uint<2>>, 2>
     firrtl.instance View_companion @View_companion()
   }
   firrtl.module @InterfaceGroundType() {
@@ -577,9 +577,11 @@ firrtl.circuit "BindInterfaceTest"  attributes {
         type = "parent"
       }],
       portAnnotations = [[
-        #firrtl.subAnno<fieldID = 0, {
+        {
+          circt.fieldID = 0 : i32,
           class = "sifive.enterprise.grandcentral.AugmentedGroundType",
-          id = 1 : i64}>
+          id = 1 : i64
+        }
       ], []
       ]
     }
@@ -964,24 +966,32 @@ firrtl.circuit "DedupedPath" attributes {
   firrtl.module @Tile() {
     %w = firrtl.wire sym @w {
       annotations = [
-        #firrtl.subAnno<fieldID = 0, {
+        {
+          circt.fieldID = 0 : i32,
           circt.nonlocal = @nla,
           class = "sifive.enterprise.grandcentral.AugmentedGroundType",
-          id = 2 : i64}>,
-        #firrtl.subAnno<fieldID = 0, {
+          id = 2 : i64
+        },
+        {
+          circt.fieldID = 0 : i32,
           circt.nonlocal = @nla_0,
           class = "sifive.enterprise.grandcentral.AugmentedGroundType",
-          id = 1 : i64}>]} : !firrtl.uint<8>
+          id = 1 : i64
+        }]} : !firrtl.uint<8>
     %x = firrtl.wire {
       annotations = [
-        #firrtl.subAnno<fieldID = 0, {
+        {
+          circt.fieldID = 0 : i32,
           circt.nonlocal = @nla_new_0,
           class = "sifive.enterprise.grandcentral.AugmentedGroundType",
-          id = 3 : i64}>,
-        #firrtl.subAnno<fieldID = 0, {
+          id = 3 : i64
+        },
+        {
+          circt.fieldID = 0 : i32,
           circt.nonlocal = @nla_new_1,
           class = "sifive.enterprise.grandcentral.AugmentedGroundType",
-          id = 4 : i64}>]} : !firrtl.uint<8>
+          id = 4 : i64
+        }]} : !firrtl.uint<8>
   }
   firrtl.module @MyView_companion() attributes {
     annotations = [
@@ -1157,6 +1167,63 @@ firrtl.circuit "InterfaceInTestHarness" attributes {
 // CHECK-NEXT:  }
 // CHECK:       sv.interface
 // CHECK-SAME:    output_file = #hw.output_file<"testbenchDir/Foo.sv", excludeFromFileList>
+
+// -----
+
+firrtl.circuit "ZeroWidth" attributes {annotations = [
+  {
+    class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+    defName = "MyInterface",
+    elements = [
+      {
+        class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+        description = "a zero-width port",
+        id = 1 : i64,
+        name = "ground"
+      }
+    ],
+    id = 0 : i64,
+    name = "MyView"
+  }
+]} {
+  firrtl.module private @MyView_companion() attributes {annotations = [
+    {
+      class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
+      id = 0 : i64,
+      name = "MyView",
+      type = "companion"
+    }
+  ]} {}
+  firrtl.module @ZeroWidth() attributes {annotations = [
+    {
+      class = "sifive.enterprise.grandcentral.ViewAnnotation.parent",
+      id = 0 : i64,
+      name = "MyView",
+      type = "parent"
+    }
+  ]} {
+    %w = firrtl.wire {annotations = [
+      {
+        class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+        id = 1 : i64
+      }
+    ]} : !firrtl.uint<0>
+    %invalid_ui0 = firrtl.invalidvalue : !firrtl.uint<0>
+    firrtl.strictconnect %w, %invalid_ui0 : !firrtl.uint<0>
+    firrtl.instance MyView_companion @MyView_companion()
+  }
+}
+
+// Check that a view of a zero-width thing produces a comment in the output and
+// not XMR.
+//
+// CHECK-LABEL: firrtl.module @MyView_mapping() {
+// CHECK-NOT:     sv.verbatim
+// CHECK-NEXT:  }
+//
+// CHECK-LABEL: sv.interface @MyInterface
+// CHECK-NEXT:    sv.verbatim "// a zero-width port"
+// CHECK-NEXT:    sv.interface.signal @ground : i0
 
 // -----
 

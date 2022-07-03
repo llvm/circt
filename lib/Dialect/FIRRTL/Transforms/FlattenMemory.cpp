@@ -38,8 +38,7 @@ struct FlattenMemoryPass : public FlattenMemoryBase<FlattenMemoryPass> {
     auto hasSubAnno = [&](MemOp op) -> bool {
       for (size_t portIdx = 0, e = op.getNumResults(); portIdx < e; ++portIdx)
         for (auto attr : op.getPortAnnotation(portIdx))
-          if (attr.isa<SubAnnotationAttr>() ||
-              attr.cast<DictionaryAttr>().get("circt.fieldID"))
+          if (attr.cast<DictionaryAttr>().get("circt.fieldID"))
             return true;
 
       return false;
@@ -150,7 +149,7 @@ struct FlattenMemoryPass : public FlattenMemoryBase<FlattenMemoryPass> {
             if ((name == "mask" || name == "wmask") &&
                 (maskWidths.size() != totalmaskWidths)) {
               Value catMasks;
-              for (auto m : llvm::enumerate(maskWidths)) {
+              for (const auto &m : llvm::enumerate(maskWidths)) {
                 // Get the mask bit.
                 auto mBit = builder.createOrFold<BitsPrimOp>(
                     realOldField, m.index(), m.index());

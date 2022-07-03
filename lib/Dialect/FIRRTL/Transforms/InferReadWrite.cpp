@@ -56,7 +56,7 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
       Value rClock, wClock;
       // The memory has exactly two ports.
       SmallVector<Value> portTerms[2];
-      for (auto portIt : llvm::enumerate(memOp.results())) {
+      for (const auto &portIt : llvm::enumerate(memOp.results())) {
         // Get the port value.
         Value portVal = portIt.value();
         // Get the port kind.
@@ -158,7 +158,7 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
       // WriteMode = WriteEnable.
       builder.create<StrictConnectOp>(wmode, wEnWire);
       // Now iterate over the original memory read and write ports.
-      for (auto portIt : llvm::enumerate(memOp.results())) {
+      for (const auto &portIt : llvm::enumerate(memOp.results())) {
         // Get the port value.
         Value portVal = portIt.value();
         // Get the port kind.
@@ -297,7 +297,7 @@ private:
 
     // Iterate over all results, and check if the mask field of the result is
     // connected to a multi-bit constant 1.
-    for (auto portIt : llvm::enumerate(memOp.results())) {
+    for (const auto &portIt : llvm::enumerate(memOp.results())) {
       // Read ports donot have the mask field.
       if (memOp.getPortKind(portIt.index()) == MemOp::PortKind::Read)
         continue;
@@ -343,7 +343,7 @@ private:
           memOp.nameKind(), memOp.annotations().getValue(),
           memOp.portAnnotations().getValue(), memOp.inner_symAttr());
       // Now replace the result of old memory with the new one.
-      for (auto portIt : llvm::enumerate(memOp.results())) {
+      for (const auto &portIt : llvm::enumerate(memOp.results())) {
         // Old result.
         Value oldPort = portIt.value();
         // New result.

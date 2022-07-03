@@ -150,7 +150,7 @@ def _infer_type(x):
     list_types = [_infer_type(i) for i in x]
     list_type = list_types[0]
     if not all([i == list_type for i in list_types]):
-      raise ValueError(f"CIRCT array must be homogenous, unlike object")
+      raise ValueError("CIRCT array must be homogenous, unlike object")
     return types.array(list_type, len(x))
   if isinstance(x, int):
     raise ValueError(f"Cannot infer width of {x}")

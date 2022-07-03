@@ -60,7 +60,7 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
   SmallVector<llvm::Optional<APSInt>> outputPortConstants;
   auto ports = module.getPorts();
 
-  for (auto e : llvm::enumerate(ports)) {
+  for (const auto &e : llvm::enumerate(ports)) {
     unsigned index = e.index();
     auto port = e.value();
     auto arg = module.getArgument(index);

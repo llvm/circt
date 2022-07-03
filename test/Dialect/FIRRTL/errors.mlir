@@ -743,7 +743,7 @@ firrtl.circuit "fallBackName" {
   }
 
   firrtl.module @Zebra(){
-    %bundle = firrtl.wire  sym @bundle {annotations = [#firrtl<"subAnno<fieldID = 2, {circt.nonlocal = @nla, class =\"test\" }>">]}: !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>
+    %bundle = firrtl.wire  sym @bundle {annotations = [{circt.fieldID = 2 : i32, circt.nonlocal = @nla, class ="test"}]}: !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>
   }
 }
 
@@ -752,10 +752,10 @@ firrtl.circuit "fallBackName" {
 firrtl.circuit "Foo"   {
   // expected-error @+1 {{operation with symbol: #hw.innerNameRef<@Bar::@b> was not found}}
   firrtl.hierpath @nla_1 [@Foo::@bar, @Bar::@b]
-  firrtl.module @Bar(in %a: !firrtl.uint<1>, out %b: !firrtl.bundle<baz: uint<1>, qux: uint<1>> [#firrtl.subAnno<fieldID = 2, {circt.nonlocal = @nla_1, three}>], out %c: !firrtl.uint<1>) {
+  firrtl.module @Bar(in %a: !firrtl.uint<1>, out %b: !firrtl.bundle<baz: uint<1>, qux: uint<1>> [{circt.fieldID = 2 : i32, circt.nonlocal = @nla_1, three}], out %c: !firrtl.uint<1>) {
   }
   firrtl.module @Foo() {
-    %bar_a, %bar_b, %bar_c = firrtl.instance bar sym @bar  @Bar(in a: !firrtl.uint<1> [{one}], out b: !firrtl.bundle<baz: uint<1>, qux: uint<1>> [#firrtl.subAnno<fieldID = 1, {two}>], out c: !firrtl.uint<1> [{four}])
+    %bar_a, %bar_b, %bar_c = firrtl.instance bar sym @bar  @Bar(in a: !firrtl.uint<1> [{one}], out b: !firrtl.bundle<baz: uint<1>, qux: uint<1>> [{circt.fieldID = 1 : i32, two}], out c: !firrtl.uint<1> [{four}])
   }
 }
 
