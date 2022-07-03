@@ -2119,7 +2119,7 @@ SubExprInfo ExprEmitter::visitSV(LStreamPackOp op) {
     os << op.slice();
   os << "{";
   llvm::interleaveComma(op.inputs(), os,
-                         [&](Value v) { emitSubExpr(v, LowestPrecedence); });
+                        [&](Value v) { emitSubExpr(v, LowestPrecedence); });
   os << "}}";
   return {Unary, IsUnsigned};
 }
