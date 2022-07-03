@@ -1769,7 +1769,7 @@ LogicalResult LStreamPackOp::verify() {
 }
 
 void LStreamPackOp::build(OpBuilder &builder, OperationState &result, Value hd,
-                     ValueRange tl) {
+                          ValueRange tl) {
   result.addOperands(ValueRange{hd});
   result.addOperands(tl);
   unsigned hdWidth = hd.getType().cast<IntegerType>().getWidth();
@@ -1777,11 +1777,11 @@ void LStreamPackOp::build(OpBuilder &builder, OperationState &result, Value hd,
 }
 
 LogicalResult LStreamPackOp::inferReturnTypes(MLIRContext *context,
-                                         Optional<Location> loc,
-                                         ValueRange operands,
-                                         DictionaryAttr attrs,
-                                         mlir::RegionRange regions,
-                                         SmallVectorImpl<Type> &results) {
+                                              Optional<Location> loc,
+                                              ValueRange operands,
+                                              DictionaryAttr attrs,
+                                              mlir::RegionRange regions,
+                                              SmallVectorImpl<Type> &results) {
   unsigned resultWidth = getTotalWidth(operands);
   results.push_back(IntegerType::get(context, resultWidth));
   return success();
