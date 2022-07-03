@@ -18,6 +18,8 @@
 #include "circt/Dialect/SSP/SSPOps.h"
 #include "circt/Scheduling/Problems.h"
 
+#include "mlir/IR/ImplicitLocOpBuilder.h"
+
 #include "llvm/ADT/TypeSwitch.h"
 
 namespace circt {
@@ -131,6 +133,74 @@ ProblemT loadProblem(InstanceOp instOp,
   });
 
   return prob;
+}
+
+template <typename ProblemT, typename... OperationPropertyTs>
+ArrayAttr saveOperationProperties(ProblemT &prob, Operation *op,
+                                  ImplicitLocOpBuilder &b) {
+  SmallVector<Attribute> props;
+  Attribute prop;
+  ((prop = OperationPropertyTs::getFromProblem(prob, op, b.getContext()),
+    prop ? props.push_back(prop) : (void)prop),
+   ...);
+  return props.empty() ? ArrayAttr() : b.getArrayAttr(props);
+}
+
+template <typename ProblemT, typename... OperatorTypePropertyTs>
+ArrayAttr saveOperatorTypeProperties(ProblemT &prob, OperatorType opr,
+                                     ImplicitLocOpBuilder &b) {
+  SmallVector<Attribute> props;
+  Attribute prop;
+  ((prop = OperatorTypePropertyTs::getFromProblem(prob, opr, b.getContext()),
+    prop ? props.push_back(prop) : (void)prop),
+   ...);
+  return props.empty() ? ArrayAttr() : b.getArrayAttr(props);
+}
+
+template <typename ProblemT, typename... DependencePropertyTs>
+ArrayAttr saveDependenceProperties(ProblemT &prob, Dependence dep,
+                                   ImplicitLocOpBuilder &b) {
+  SmallVector<Attribute> props;
+  Attribute prop;
+  ((prop = DependencePropertyTs::getFromProblem(prob, dep, b.getContext()),
+    prop ? props.push_back(prop) : (void)prop),
+   ...);
+  return props.empty() ? ArrayAttr() : b.getArrayAttr(props);
+}
+
+template <typename ProblemT, typename... InstancePropertyTs>
+ArrayAttr saveInstanceProperties(ProblemT &prob, ImplicitLocOpBuilder &b) {
+  SmallVector<Attribute> props;
+  Attribute prop;
+  ((prop = InstancePropertyTs::getFromProblem(prob, b.getContext()),
+    prop ? props.push_back(prop) : (void)prop),
+   ...);
+  return props.empty() ? ArrayAttr() : b.getArrayAttr(props);
+}
+
+template <typename ProblemT, typename... OperationPropertyTs,
+          typename... OperatorTypePropertyTs, typename... DependencePropertyTs,
+          typename... InstancePropertyTs>
+InstanceOp
+saveProblem(ProblemT &prob, StringRef instanceName, StringRef problemName,
+            std::tuple<OperationPropertyTs...> opProps,
+            std::tuple<OperatorTypePropertyTs...> oprProps,
+            std::tuple<DependencePropertyTs...> depProps,
+            std::tuple<InstancePropertyTs...> instProps, OpBuilder &builder) {
+  ImplicitLocOpBuilder b(builder.getUnknownLoc(), builder);
+
+  auto instOp = b.create<ssp::InstanceOp>(
+      instanceName, problemName,
+      saveInstanceProperties<ProblemT, InstancePropertyTs...>(prob, b));
+
+  b.setInsertionPointToStart(&instOp.getBody().getBlocks().front());
+
+  for (auto opr : prob.getOperatorTypes())
+    b.create<OperatorTypeOp>(
+        opr, saveOperatorTypeProperties<ProblemT, OperatorTypePropertyTs...>(
+                 prob, opr, b));
+
+  return instOp;
 }
 
 } // namespace ssp
