@@ -1744,6 +1744,10 @@ LogicalResult GenerateCaseOp::verify() {
   return success();
 }
 
+//===----------------------------------------------------------------------===//
+// Streaming Op.
+//===----------------------------------------------------------------------===//
+
 static unsigned getTotalWidth(ValueRange inputs) {
   unsigned resultWidth = 0;
   for (auto input : inputs) {
