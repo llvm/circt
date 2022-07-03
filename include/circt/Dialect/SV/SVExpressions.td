@@ -209,3 +209,44 @@ def SampledOp : SVOp<"system.sampled", [SameOperandsAndResultType]> {
   let results = (outs AnyType:$sampledValue);
   let assemblyFormat = "$expression attr-dict `:` qualified(type($expression))";
 }
+
+// The operators LStreamUnpackOp, RStreamPackOp, RStreamUnpackOp could also be added
+// when the demand arises
+def LStreamPackOp: SVOp<"lstream_pack", [InferTypeOpInterface, NoSideEffect]> {
+  let summary = "The System Verilog stream expression using the left-stream operator";
+  let description = [{
+    The Left-Streaming Pack Operator corrstponds to the `{<<[n]{...}}` System Verilog
+    operator (See section 11.4.14 of the Verilog 2017 Standard for more).
+
+    This operator takes a variadic amount of inputs, streams them in chunks of size
+    `slice`, re-orders that stream going from right-to-left.
+
+    It is legal for the result width not to be an integer multiple of the size of the slice.
+    In that case, the last block has fewer bits than the slice.
+  }];
+
+  // This operation also accepts other 'streamable' types, i.e. structs, queues, 
+  // dynamically sized arrays, e.t.c. For now, only accept a subset of types
+  // where this operation is actually used for.
+  let arguments = (ins Variadic<HWIntegerType>:$inputs, I32Attr:$slice);
+  let results = (outs HWIntegerType:$result);
+
+  let assemblyFormat = "$inputs `slice` $slice attr-dict `:` qualified(type($inputs))";
+
+  let builders = [
+    OpBuilder<(ins "Value":$lhs, "Value":$rhs), [{
+      return build($_builder, $_state, ValueRange{lhs, rhs});
+    }]>,
+    OpBuilder<(ins "Value":$hd, "ValueRange":$tl)>,
+  ];
+
+  let extraClassDeclaration = [{
+    /// Infer the return types of this operation.
+    static LogicalResult inferReturnTypes(MLIRContext *context,
+                                          Optional<Location> loc,
+                                          ValueRange operands,
+                                          DictionaryAttr attrs,
+                                          mlir::RegionRange regions,
+                                          SmallVectorImpl<Type> &results);
+  }];
+}

@@ -29,8 +29,8 @@ using namespace sv;
 /// Return true if the specified operation is an expression.
 bool sv::isExpression(Operation *op) {
   return isa<VerbatimExprOp, VerbatimExprSEOp, GetModportOp,
-             ReadInterfaceSignalOp, ConstantXOp, ConstantZOp, MacroRefExprOp>(
-      op);
+             ReadInterfaceSignalOp, ConstantXOp, ConstantZOp, MacroRefExprOp, 
+             LStreamPackOp>(op);
 }
 
 LogicalResult sv::verifyInProceduralRegion(Operation *op) {
@@ -1741,6 +1741,20 @@ LogicalResult GenerateCaseOp::verify() {
 
   // mlir::FailureOr<Type> condType = evaluateParametricType();
 
+  return success();
+}
+
+LogicalResult LStreamPackOp::inferReturnTypes(MLIRContext *context,
+                                          Optional<Location> loc,
+                                          ValueRange operands,
+                                          DictionaryAttr attrs,
+                                          mlir::RegionRange regions,
+                                          SmallVectorImpl<Type> &results) {
+  unsigned resultWidth = 0;
+  for (auto input : operands) {
+    resultWidth += input.getType().cast<IntegerType>().getWidth();
+  }
+  results.push_back(IntegerType::get(context, resultWidth));
   return success();
 }
 
