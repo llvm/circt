@@ -231,6 +231,8 @@ def LStreamPackOp: SVOp<"lstream_pack", [InferTypeOpInterface, NoSideEffect]> {
   let arguments = (ins Variadic<HWIntegerType>:$inputs, I32Attr:$slice);
   let results = (outs HWIntegerType:$result);
 
+  let hasVerifier = 1;
+
   let assemblyFormat = "$inputs `slice` $slice attr-dict `:` qualified(type($inputs))";
 
   let builders = [

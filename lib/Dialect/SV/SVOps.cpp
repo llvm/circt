@@ -1744,16 +1744,41 @@ LogicalResult GenerateCaseOp::verify() {
   return success();
 }
 
-LogicalResult LStreamPackOp::inferReturnTypes(MLIRContext *context,
-                                              Optional<Location> loc,
-                                              ValueRange operands,
-                                              DictionaryAttr attrs,
-                                              mlir::RegionRange regions,
-                                              SmallVectorImpl<Type> &results) {
+static unsigned getTotalWidth(ValueRange inputs) {
   unsigned resultWidth = 0;
-  for (auto input : operands) {
+  for (auto input : inputs) {
     resultWidth += input.getType().cast<IntegerType>().getWidth();
   }
+  return resultWidth;
+}
+
+LogicalResult LStreamPackOp::verify() {
+  unsigned tyWidth = getType().getWidth();
+  unsigned operandsTotalWidth = getTotalWidth(inputs());
+  if (tyWidth != operandsTotalWidth)
+    return emitOpError("ConcatOp requires operands total width to "
+                       "match type width. operands "
+                       "totalWidth is")
+           << operandsTotalWidth << ", but concatOp type width is " << tyWidth;
+
+  return success();
+}
+
+void LStreamPackOp::build(OpBuilder &builder, OperationState &result, Value hd,
+                     ValueRange tl) {
+  result.addOperands(ValueRange{hd});
+  result.addOperands(tl);
+  unsigned hdWidth = hd.getType().cast<IntegerType>().getWidth();
+  result.addTypes(builder.getIntegerType(getTotalWidth(tl) + hdWidth));
+}
+
+LogicalResult LStreamPackOp::inferReturnTypes(MLIRContext *context,
+                                         Optional<Location> loc,
+                                         ValueRange operands,
+                                         DictionaryAttr attrs,
+                                         mlir::RegionRange regions,
+                                         SmallVectorImpl<Type> &results) {
+  unsigned resultWidth = getTotalWidth(operands);
   results.push_back(IntegerType::get(context, resultWidth));
   return success();
 }
