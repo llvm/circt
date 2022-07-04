@@ -149,7 +149,7 @@ def StateOp : FSMOp<"state", [HasParent<"MachineOp">, Symbol, NoTerminator]> {
     contains all the transitions of this state.
   }];
 
-  let arguments = (ins StrAttr:$sym_name);
+  let arguments = (ins SymbolNameAttr:$sym_name);
   let regions = (region SizedRegion<1>:$output, SizedRegion<1>:$transitions);
 
   let hasCanonicalizeMethod = true;
