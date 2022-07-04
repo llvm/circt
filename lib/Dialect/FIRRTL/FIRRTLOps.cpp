@@ -1200,7 +1200,8 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
       direction::packAttribute(builder.getContext(), portDirections));
   result.addAttribute("portNames", builder.getArrayAttr(portNames));
   result.addAttribute("annotations", builder.getArrayAttr(annotations));
-  result.addAttribute("lowerToBind", builder.getBoolAttr(lowerToBind));
+  if (lowerToBind)
+    result.addAttribute("lowerToBind", builder.getUnitAttr());
   if (innerSym)
     result.addAttribute("inner_sym", innerSym);
   result.addAttribute("nameKind",
@@ -1247,7 +1248,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
       NameKindEnumAttr::get(builder.getContext(), nameKind),
       module.getPortDirectionsAttr(), module.getPortNamesAttr(),
       builder.getArrayAttr(annotations), portAnnotationsAttr,
-      builder.getBoolAttr(lowerToBind),
+      lowerToBind ? builder.getUnitAttr() : UnitAttr(),
       innerSym ? InnerSymAttr::get(innerSym) : InnerSymAttr());
 }
 
@@ -1473,8 +1474,6 @@ void InstanceOp::print(OpAsmPrinter &p) {
                                             "portDirections", "portNames",
                                             "portTypes",      "portAnnotations",
                                             "inner_sym",      "nameKind"};
-  if (!lowerToBind())
-    omittedAttrs.push_back("lowerToBind");
   if (annotations().empty())
     omittedAttrs.push_back("annotations");
   p.printOptionalAttrDict((*this)->getAttrs(), omittedAttrs);
@@ -1545,8 +1544,6 @@ ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
   // empty and false, respectively.
   if (!resultAttrs.get("annotations"))
     resultAttrs.append("annotations", parser.getBuilder().getArrayAttr({}));
-  if (!resultAttrs.get("lowerToBind"))
-    resultAttrs.append("lowerToBind", parser.getBuilder().getBoolAttr(false));
 
   // Add result types.
   result.types.reserve(portTypes.size());
