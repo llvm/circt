@@ -1714,6 +1714,36 @@ void ArrayConcatOp::build(OpBuilder &b, OperationState &state,
 }
 
 //===----------------------------------------------------------------------===//
+// EnumConstantOp
+//===----------------------------------------------------------------------===//
+
+ParseResult EnumConstantOp::parse(OpAsmParser &parser, OperationState &result) {
+  EnumFieldAttr value;
+  if (parser.parseAttribute(value))
+    return failure();
+
+  result.addAttribute("field", value);
+  result.addTypes(value.getType().getValue());
+
+  return success();
+}
+
+void EnumConstantOp::print(OpAsmPrinter &p) {
+  p << " ";
+  p.printAttribute(field());
+}
+
+void EnumConstantOp::getAsmResultNames(
+    function_ref<void(Value, StringRef)> setNameFn) {
+  setNameFn(getResult(), field().getField().str());
+}
+
+OpFoldResult EnumConstantOp::fold(ArrayRef<Attribute> constants) {
+  assert(constants.empty() && "constant has no operands");
+  return fieldAttr();
+}
+
+//===----------------------------------------------------------------------===//
 // StructCreateOp
 //===----------------------------------------------------------------------===//
 
