@@ -279,6 +279,81 @@ saveProblem(ProblemT &prob, StringAttr instanceName, StringAttr problemName,
   return instOp;
 }
 
+template <typename ProblemT>
+struct Default {};
+
+template <typename ProblemT>
+ProblemT loadProblem(InstanceOp instOp) {
+  return loadProblem<ProblemT>(instOp, Default<ProblemT>::operationProperties,
+                               Default<ProblemT>::operatorTypeProperties,
+                               Default<ProblemT>::dependenceProperties,
+                               Default<ProblemT>::instanceProperties);
+}
+
+template <typename ProblemT>
+InstanceOp saveProblem(ProblemT &prob, StringAttr instanceName,
+                       StringAttr problemName,
+                       std::function<StringAttr(Operation *)> operationNameFn,
+                       OpBuilder &builder) {
+  return saveProblem<ProblemT>(prob, instanceName, problemName, operationNameFn,
+                               Default<ProblemT>::operationProperties,
+                               Default<ProblemT>::operatorTypeProperties,
+                               Default<ProblemT>::dependenceProperties,
+                               Default<ProblemT>::instanceProperties, builder);
+}
+
+//===----------------------------------------------------------------------===//
+// Default property tuples for the built-in problems
+//===----------------------------------------------------------------------===//
+
+template <>
+struct Default<scheduling::Problem> {
+  static constexpr auto operationProperties =
+      std::make_tuple(LinkedOperatorTypeAttr(), StartTimeAttr());
+  static constexpr auto operatorTypeProperties = std::make_tuple(LatencyAttr());
+  static constexpr auto dependenceProperties = std::make_tuple();
+  static constexpr auto instanceProperties = std::make_tuple();
+};
+
+template <>
+struct Default<scheduling::CyclicProblem> {
+  static constexpr auto operationProperties =
+      Default<scheduling::Problem>::operationProperties;
+  static constexpr auto operatorTypeProperties =
+      Default<scheduling::Problem>::operatorTypeProperties;
+  static constexpr auto dependenceProperties =
+      std::tuple_cat(Default<scheduling::Problem>::dependenceProperties,
+                     std::make_tuple(DistanceAttr()));
+  static constexpr auto instanceProperties =
+      std::tuple_cat(Default<scheduling::Problem>::instanceProperties,
+                     std::make_tuple(InitiationIntervalAttr()));
+};
+
+template <>
+struct Default<scheduling::SharedOperatorsProblem> {
+  static constexpr auto operationProperties =
+      Default<scheduling::Problem>::operationProperties;
+  static constexpr auto operatorTypeProperties =
+      std::tuple_cat(Default<scheduling::Problem>::operatorTypeProperties,
+                     std::make_tuple(LimitAttr()));
+  static constexpr auto dependenceProperties =
+      Default<scheduling::Problem>::dependenceProperties;
+  static constexpr auto instanceProperties =
+      Default<scheduling::Problem>::instanceProperties;
+};
+
+template <>
+struct Default<scheduling::ModuloProblem> {
+  static constexpr auto operationProperties =
+      Default<scheduling::Problem>::operationProperties;
+  static constexpr auto operatorTypeProperties =
+      Default<scheduling::SharedOperatorsProblem>::operatorTypeProperties;
+  static constexpr auto dependenceProperties =
+      Default<scheduling::CyclicProblem>::dependenceProperties;
+  static constexpr auto instanceProperties =
+      Default<scheduling::CyclicProblem>::instanceProperties;
+};
+
 } // namespace ssp
 } // namespace circt
 
