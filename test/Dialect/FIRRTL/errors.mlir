@@ -675,7 +675,7 @@ firrtl.hierpath @NLA1 []
 firrtl.hierpath @NLA2 [@LowerToBind::@s1]
 firrtl.module @InstanceLowerToBind() {}
 firrtl.module @LowerToBind() {
-  firrtl.instance foo sym @s1 {lowerToBind = true} @InstanceLowerToBind()
+  firrtl.instance foo sym @s1 {lowerToBind} @InstanceLowerToBind()
 }
 }
 

@@ -1899,7 +1899,8 @@ void GrandCentralPass::runOnOperation() {
                 return true;
               }
 
-              instance.getValue()->setAttr("lowerToBind", trueAttr);
+              instance.getValue()->setAttr("lowerToBind",
+                                           builder.getUnitAttr());
               instance.getValue()->setAttr(
                   "output_file",
                   hw::OutputFileAttr::getFromFilename(
