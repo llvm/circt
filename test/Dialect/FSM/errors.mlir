@@ -66,3 +66,18 @@ fsm.machine @foo(%arg0: i1) -> i1 attributes {initialState = "IDLE"} {
     }
   }
 }
+
+// -----
+
+// expected-error @+1 {{'fsm.machine' op number of machine arguments (1) does not match the provided number of argument names (2)}}
+fsm.machine @foo(%arg0: i1) -> i1 attributes {initialState = "IDLE", argNames = ["in0", "in1"]} {
+  fsm.state "IDLE" output {} transitions {}
+}
+
+// -----
+
+// expected-error @+1 {{'fsm.machine' op number of machine results (1) does not match the provided number of result names (2)}}
+fsm.machine @foo(%arg0: i1) -> i1 attributes {initialState = "IDLE", resNames = ["out0", "out1"]} {
+  fsm.state "IDLE" output {} transitions {}
+}
+

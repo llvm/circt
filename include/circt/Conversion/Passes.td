@@ -148,6 +148,17 @@ def CalyxToHW : Pass<"lower-calyx-to-hw", "mlir::ModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
+// FSMToSV
+//===----------------------------------------------------------------------===//
+
+def ConvertFSMToSV : Pass<"convert-fsm-to-sv", "mlir::ModuleOp"> {
+  let summary = "Convert FSM to HW";
+  let constructor = "circt::createConvertFSMToSVPass()";
+  let dependentDialects = ["circt::hw::HWDialect", "circt::comb::CombDialect",
+                           "circt::seq::SeqDialect", "circt::sv::SVDialect"];
+}
+
+//===----------------------------------------------------------------------===//
 // FIRRTLToHW
 //===----------------------------------------------------------------------===//
 
