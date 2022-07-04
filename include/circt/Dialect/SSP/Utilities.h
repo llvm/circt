@@ -17,10 +17,14 @@
 #include "circt/Dialect/SSP/SSPAttributes.h"
 #include "circt/Dialect/SSP/SSPOps.h"
 #include "circt/Scheduling/Problems.h"
+#include "circt/Support/ValueMapper.h"
 
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/TypeSwitch.h"
+
+#include <functional>
 
 namespace circt {
 namespace ssp {
@@ -104,11 +108,16 @@ ProblemT loadProblem(InstanceOp instOp,
         prob, opr, oprOp.getPropertiesAttr());
   });
 
+  // Register all operations first, in order to retain their original order.
   instOp.walk([&](OperationOp opOp) {
     prob.insertOperation(opOp);
     loadOperationProperties<ProblemT, OperationPropertyTs...>(
         prob, opOp, opOp.getPropertiesAttr());
+  });
 
+  // Then walk them again, and load auxiliary dependences as well as any
+  // dependence properties.
+  instOp.walk([&](OperationOp opOp) {
     ArrayAttr depsAttr = opOp.getDependencesAttr();
     if (!depsAttr)
       return;
@@ -119,13 +128,11 @@ ProblemT loadProblem(InstanceOp instOp,
         Operation *sourceOp = SymbolTable::lookupSymbolIn(instOp, sourceRef);
         assert(sourceOp);
         dep = Dependence(sourceOp, opOp);
+        LogicalResult res = prob.insertDependence(dep);
+        assert(succeeded(res));
+        (void)res;
       } else
         dep = Dependence(&opOp->getOpOperand(depAttr.getOperandIdx()));
-
-      // Make sure the dependence (and its endpoints) are registered.
-      LogicalResult res = prob.insertDependence(dep);
-      assert(succeeded(res));
-      (void)res;
 
       loadDependenceProperties<ProblemT, DependencePropertyTs...>(
           prob, dep, depAttr.getProperties());
@@ -182,23 +189,92 @@ template <typename ProblemT, typename... OperationPropertyTs,
           typename... OperatorTypePropertyTs, typename... DependencePropertyTs,
           typename... InstancePropertyTs>
 InstanceOp
-saveProblem(ProblemT &prob, StringRef instanceName, StringRef problemName,
+saveProblem(ProblemT &prob, StringAttr instanceName, StringAttr problemName,
+            std::function<StringAttr(Operation *)> operationNameFn,
             std::tuple<OperationPropertyTs...> opProps,
             std::tuple<OperatorTypePropertyTs...> oprProps,
             std::tuple<DependencePropertyTs...> depProps,
             std::tuple<InstancePropertyTs...> instProps, OpBuilder &builder) {
   ImplicitLocOpBuilder b(builder.getUnknownLoc(), builder);
 
+  // Set up instance.
   auto instOp = b.create<ssp::InstanceOp>(
       instanceName, problemName,
       saveInstanceProperties<ProblemT, InstancePropertyTs...>(prob, b));
 
   b.setInsertionPointToStart(&instOp.getBody().getBlocks().front());
 
+  // Emit operator types.
   for (auto opr : prob.getOperatorTypes())
     b.create<OperatorTypeOp>(
         opr, saveOperatorTypeProperties<ProblemT, OperatorTypePropertyTs...>(
                  prob, opr, b));
+
+  // Determine which operations act as source ops for auxiliary dependences, and
+  // therefore need a name. Also, honor names provided by the client.
+  DenseMap<Operation *, StringAttr> opNames;
+  for (auto *op : prob.getOperations()) {
+    if (StringAttr providedName = operationNameFn(op))
+      opNames[op] = providedName;
+
+    for (auto &dep : prob.getDependences(op)) {
+      Operation *src = dep.getSource();
+      if (!dep.isAuxiliary() || opNames.count(src))
+        continue;
+      if (StringAttr providedName = operationNameFn(src)) {
+        opNames[src] = providedName;
+        continue;
+      }
+      opNames[src] = b.getStringAttr(Twine("Op") + Twine(opNames.size()));
+    }
+  }
+
+  // Construct operations and model their dependences.
+  BackedgeBuilder backedgeBuilder(b, b.getLoc());
+  ValueMapper v(&backedgeBuilder);
+  for (auto *op : prob.getOperations()) {
+    // Construct the `dependences attribute`. It contains `DependenceAttr` for
+    // def-use deps _with_ properties, and all aux deps.
+    ArrayAttr dependences;
+    SmallVector<Attribute> depAttrs;
+    unsigned auxOperandIdx = op->getNumOperands();
+    for (auto &dep : prob.getDependences(op)) {
+      ArrayAttr depProps =
+          saveDependenceProperties<ProblemT, DependencePropertyTs...>(prob, dep,
+                                                                      b);
+      if (dep.isDefUse() && depProps) {
+        auto depAttr = b.getAttr<DependenceAttr>(*dep.getDestinationIndex(),
+                                                 FlatSymbolRefAttr(), depProps);
+        depAttrs.push_back(depAttr);
+        continue;
+      }
+
+      if (!dep.isAuxiliary())
+        continue;
+
+      auto sourceOpName = opNames.lookup(dep.getSource());
+      assert(sourceOpName);
+      auto sourceRef = b.getAttr<FlatSymbolRefAttr>(sourceOpName);
+      auto depAttr =
+          b.getAttr<DependenceAttr>(auxOperandIdx, sourceRef, depProps);
+      depAttrs.push_back(depAttr);
+      ++auxOperandIdx;
+    }
+    if (!depAttrs.empty())
+      dependences = b.getArrayAttr(depAttrs);
+
+    // Delegate to helper to construct the `properties` attribute.
+    ArrayAttr properties =
+        saveOperationProperties<ProblemT, OperationPropertyTs...>(prob, op, b);
+
+    // Finally, create the `OperationOp` and inform the value mapper.
+    // NB: sym_name, dependences and properties are optional attributes, so
+    // passing potentially unitialized String/ArrayAttrs is intentional here.
+    auto opOp =
+        b.create<OperationOp>(op->getNumResults(), v.get(op->getOperands()),
+                              opNames.lookup(op), dependences, properties);
+    v.set(op->getResults(), opOp->getResults());
+  }
 
   return instOp;
 }

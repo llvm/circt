@@ -28,13 +28,11 @@ def InstanceOp : SSPOp<"instance",
   
   let skipDefaultBuilders = true;
   let builders = [
-    OpBuilder<(ins "::llvm::StringRef":$instanceName,
-                   "::llvm::StringRef":$problemName,
+    OpBuilder<(ins "::mlir::StringAttr":$instanceName,
+                   "::mlir::StringAttr":$problemName,
                    CArg<"::mlir::ArrayAttr", "::mlir::ArrayAttr()">:$properties), [{
-      $_state.addAttribute($_builder.getStringAttr("instanceName"),
-                           $_builder.getStringAttr(instanceName));
-      $_state.addAttribute($_builder.getStringAttr("problemName"),
-                           $_builder.getStringAttr(problemName));
+      $_state.addAttribute($_builder.getStringAttr("instanceName"), instanceName);
+      $_state.addAttribute($_builder.getStringAttr("problemName"), problemName);
       if (properties)
         $_state.addAttribute($_builder.getStringAttr("properties"), properties);
       ::mlir::Region* region = $_state.addRegion();
@@ -58,12 +56,34 @@ def OperationOp : SSPOp<"operation",
   let summary = "Vertex in the dependence graph";
   let description = [{ TODO }];
 
-  let arguments = (ins SymbolNameAttr:$sym_name,
-                       Variadic<NoneType>:$operands,
+  let arguments = (ins Variadic<NoneType>:$operands,
+                       OptionalAttr<SymbolNameAttr>:$sym_name,
                        OptionalAttr<DependenceArrayAttr>:$dependences,
                        OptionalAttr<ArrayAttr>:$properties);
   let results = (outs Variadic<NoneType>:$results);
 
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
+
+  let extraClassDeclaration = [{
+    bool isOptionalSymbol() { return true; }
+  }];
+
+  let skipDefaultBuilders = true;
+  let builders = [
+    OpBuilder<(ins "unsigned":$numResults,
+                   "::mlir::ValueRange":$operands,
+                   CArg<"::mlir::StringAttr", "::mlir::StringAttr()">:$sym_name,
+                   CArg<"::mlir::ArrayAttr", "::mlir::ArrayAttr()">:$dependences,
+                   CArg<"::mlir::ArrayAttr", "::mlir::ArrayAttr()">:$properties), [{
+      $_state.addTypes(::llvm::SmallVector<::mlir::Type>(numResults, $_builder.getNoneType()));
+      $_state.addOperands(operands);
+      if (sym_name)
+        $_state.addAttribute(::mlir::SymbolTable::getSymbolAttrName(), sym_name);
+      if (dependences)
+        $_state.addAttribute($_builder.getStringAttr("dependences"), dependences);
+      if (properties)
+        $_state.addAttribute($_builder.getStringAttr("properties"), properties);
+    }]>
+  ];
 }

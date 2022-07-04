@@ -28,9 +28,8 @@ ParseResult OperationOp::parse(OpAsmParser &parser, OperationState &result) {
 
   // (Scheduling) operation's name
   StringAttr opName;
-  if (parser.parseSymbolName(opName, SymbolTable::getSymbolAttrName(),
-                             result.attributes))
-    return failure();
+  (void)parser.parseOptionalSymbolName(opName, SymbolTable::getSymbolAttrName(),
+                                       result.attributes);
 
   // Dependences
   SmallVector<OpAsmParser::UnresolvedOperand> unresolvedOperands;
@@ -56,8 +55,8 @@ ParseResult OperationOp::parse(OpAsmParser &parser, OperationState &result) {
 
     // No need to explicitly store SSA deps without properties.
     if (sourceRef || properties)
-      dependences.push_back(DependenceAttr::get(
-          builder.getContext(), operandIdx, sourceRef, properties));
+      dependences.push_back(
+          builder.getAttr<DependenceAttr>(operandIdx, sourceRef, properties));
 
     ++operandIdx;
     return success();
@@ -96,8 +95,10 @@ ParseResult OperationOp::parse(OpAsmParser &parser, OperationState &result) {
 
 void OperationOp::print(OpAsmPrinter &p) {
   // (Scheduling) operation's name
-  p << ' ';
-  p.printSymbolName(getSymName());
+  if (StringAttr symName = getSymNameAttr()) {
+    p << ' ';
+    p.printSymbolName(symName);
+  }
 
   // Dependences = SSA operands + other OperationOps via symbol references.
   // Emitted format looks like this:

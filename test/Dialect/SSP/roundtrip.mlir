@@ -24,14 +24,14 @@ ssp.instance "canis14_fig2" of "ModuloProblem" [#ssp.InitiationInterval<3>] {
 // CHECK: ssp.instance "no properties" of "IncompleteProblem" {
 // CHECK:   ssp.operator_type @NoProps
 // CHECK:   %[[op_0:.*]] = ssp.operation @Op0()
-// CHECK:   ssp.operation @Op1(%[[op_0]])
-// CHECK:   ssp.operation @Op2(@Op0)
-// CHECK:   ssp.operation @Op3(%[[op_0]], @Op0)
+// CHECK:   ssp.operation(%[[op_0]])
+// CHECK:   ssp.operation(@Op0)
+// CHECK:   ssp.operation(%[[op_0]], @Op0)
 // CHECK: }
 ssp.instance "no properties" of "IncompleteProblem" {
   ssp.operator_type @NoProps
   %0 = ssp.operation @Op0()
-  ssp.operation @Op1(%0)
-  ssp.operation @Op2(@Op0)
-  ssp.operation @Op3(%0, @Op0)
+  ssp.operation(%0)
+  ssp.operation(@Op0)
+  ssp.operation(%0, @Op0)
 }
