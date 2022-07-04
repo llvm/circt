@@ -29,6 +29,7 @@
 #include "circt/Support/LLVM.h"
 #include "circt/Support/LoweringOptions.h"
 #include "circt/Support/Path.h"
+#include "circt/Support/SVAttributes.h"
 #include "circt/Support/Version.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -1578,6 +1579,10 @@ private:
 
   void formatOutBuffer();
 
+  /// Emit SystemVerilog attributes attached to the expression op as dialect
+  /// attributes.
+  void emitSVAttributes(Operation *op);
+
   SubExprInfo visitUnhandledExpr(Operation *op);
   SubExprInfo visitInvalidComb(Operation *op) {
     return dispatchTypeOpVisitor(op);
@@ -1635,6 +1640,8 @@ private:
 
   // Noop cast operators.
   SubExprInfo visitSV(ReadInOutOp op) {
+    if (hasSVAttributes(op))
+      emitError(op, "SV attributes emission is unimplemented for the op");
     return emitSubExpr(op->getOperand(0), LowestPrecedence);
   }
   SubExprInfo visitSV(ArrayIndexInOutOp op);
@@ -1746,6 +1753,9 @@ private:
 SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
                                     const char *syntax,
                                     unsigned emitBinaryFlags) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
   if (emitBinaryFlags & EB_ForceResultSigned)
     os << "$signed(";
   auto operandSignReq =
@@ -1809,9 +1819,31 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
 
 SubExprInfo ExprEmitter::emitUnary(Operation *op, const char *syntax,
                                    bool resultAlwaysUnsigned) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
   os << syntax;
   auto signedness = emitSubExpr(op->getOperand(0), Selection).signedness;
   return {Unary, resultAlwaysUnsigned ? IsUnsigned : signedness};
+}
+
+/// Emit SystemVerilog attributes attached to the expression op as dialect
+/// attributes.
+void ExprEmitter::emitSVAttributes(Operation *op) {
+  // SystemVerilog 2017 Section 5.12.
+  auto svAttrs = getSVAttributes(op);
+  if (!svAttrs)
+    return;
+
+  os << " (* ";
+  llvm::interleaveComma(svAttrs.cast<mlir::ArrayAttr>(), os,
+                        [&](Attribute attr) {
+                          auto svattr = attr.cast<SVAttributeAttr>();
+                          os << svattr.getName().getValue();
+                          if (svattr.getExpression())
+                            os << " = " << svattr.getExpression().getValue();
+                        });
+  os << " *)";
 }
 
 /// This function split the output buffer into multiple lines if the emitted
@@ -2034,6 +2066,9 @@ SubExprInfo ExprEmitter::visitComb(ICmpOp op) {
 }
 
 SubExprInfo ExprEmitter::visitComb(ExtractOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
   unsigned loBit = op.lowBit();
   unsigned hiBit = loBit + op.getType().getWidth() - 1;
 
@@ -2055,12 +2090,18 @@ SubExprInfo ExprEmitter::visitComb(ExtractOp op) {
 }
 
 SubExprInfo ExprEmitter::visitSV(GetModportOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
   auto decl = op.getReferencedDecl(state.symbolCache);
   os << names.getName(op.iface()) << '.' << getSymOpName(decl);
   return {Selection, IsUnsigned};
 }
 
 SubExprInfo ExprEmitter::visitSV(ReadInterfaceSignalOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
   auto decl = op.getReferencedDecl(state.symbolCache);
 
   os << names.getName(op.iface()) << '.' << getSymOpName(decl);
@@ -2068,6 +2109,9 @@ SubExprInfo ExprEmitter::visitSV(ReadInterfaceSignalOp op) {
 }
 
 SubExprInfo ExprEmitter::visitSV(XMROp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
   if (op.isRooted())
     os << "$root.";
   for (auto s : op.path())
@@ -2077,6 +2121,9 @@ SubExprInfo ExprEmitter::visitSV(XMROp op) {
 }
 
 SubExprInfo ExprEmitter::visitVerbatimExprOp(Operation *op, ArrayAttr symbols) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
   emitTextWithSubstitutions(
       op->getAttrOfType<StringAttr>("string").getValue(), op,
       [&](Value operand) { emitSubExpr(operand, LowestPrecedence); }, symbols,
@@ -2086,21 +2133,33 @@ SubExprInfo ExprEmitter::visitVerbatimExprOp(Operation *op, ArrayAttr symbols) {
 }
 
 SubExprInfo ExprEmitter::visitSV(MacroRefExprOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
   os << "`" << op.ident().getName();
   return {LowestPrecedence, IsUnsigned};
 }
 
 SubExprInfo ExprEmitter::visitSV(ConstantXOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
   os << op.getWidth() << "'bx";
   return {Unary, IsUnsigned};
 }
 
 SubExprInfo ExprEmitter::visitSV(ConstantZOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
   os << op.getWidth() << "'bz";
   return {Unary, IsUnsigned};
 }
 
 SubExprInfo ExprEmitter::visitTypeOp(ConstantOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
   bool isNegated = false;
   const APInt &value = op.getValue();
   // If this is a negative signed number and not MININT (e.g. -128), then print
@@ -2130,6 +2189,9 @@ SubExprInfo ExprEmitter::visitTypeOp(ConstantOp op) {
 }
 
 SubExprInfo ExprEmitter::visitTypeOp(ParamValueOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
   return emitter.printParamValue(op.value(), os, [&]() {
     return op->emitOpError("invalid parameter use");
   });
@@ -2138,6 +2200,9 @@ SubExprInfo ExprEmitter::visitTypeOp(ParamValueOp op) {
 // 11.5.1 "Vector bit-select and part-select addressing" allows a '+:' syntax
 // for slicing operations.
 SubExprInfo ExprEmitter::visitTypeOp(ArraySliceOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
   auto arrayPrec = emitSubExpr(op.input(), Selection);
 
   unsigned dstWidth = type_cast<ArrayType>(op.getType()).getSize();
@@ -2152,11 +2217,15 @@ SubExprInfo ExprEmitter::visitTypeOp(ArrayGetOp op) {
   os << '[';
   emitSubExpr(op.index(), LowestPrecedence);
   os << ']';
+  emitSVAttributes(op);
   return {Selection, IsUnsigned};
 }
 
 // Syntax from: section 5.11 "Array literals".
 SubExprInfo ExprEmitter::visitTypeOp(ArrayCreateOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
   os << '{';
   llvm::interleaveComma(op.inputs(), os, [&](Value operand) {
     os << "{";
@@ -2168,6 +2237,9 @@ SubExprInfo ExprEmitter::visitTypeOp(ArrayCreateOp op) {
 }
 
 SubExprInfo ExprEmitter::visitTypeOp(ArrayConcatOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
   os << '{';
   llvm::interleaveComma(op.getOperands(), os,
                         [&](Value v) { emitSubExpr(v, LowestPrecedence); });
@@ -2176,6 +2248,9 @@ SubExprInfo ExprEmitter::visitTypeOp(ArrayConcatOp op) {
 }
 
 SubExprInfo ExprEmitter::visitSV(ArrayIndexInOutOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
   auto arrayPrec = emitSubExpr(op.input(), Selection);
   os << '[';
   emitSubExpr(op.index(), LowestPrecedence);
@@ -2184,6 +2259,9 @@ SubExprInfo ExprEmitter::visitSV(ArrayIndexInOutOp op) {
 }
 
 SubExprInfo ExprEmitter::visitSV(IndexedPartSelectInOutOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
   auto prec = emitSubExpr(op.input(), Selection);
   os << '[';
   emitSubExpr(op.base(), LowestPrecedence);
@@ -2196,6 +2274,9 @@ SubExprInfo ExprEmitter::visitSV(IndexedPartSelectInOutOp op) {
 }
 
 SubExprInfo ExprEmitter::visitSV(IndexedPartSelectOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
   auto info = emitSubExpr(op.input(), LowestPrecedence);
   os << '[';
   emitSubExpr(op.base(), LowestPrecedence);
@@ -2209,12 +2290,18 @@ SubExprInfo ExprEmitter::visitSV(IndexedPartSelectOp op) {
 }
 
 SubExprInfo ExprEmitter::visitSV(StructFieldInOutOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
   auto prec = emitSubExpr(op.input(), Selection);
   os << '.' << emitter.getVerilogStructFieldName(op.fieldAttr());
   return {Selection, prec.signedness};
 }
 
 SubExprInfo ExprEmitter::visitSV(SampledOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
   os << "$sampled(";
   auto info = emitSubExpr(op.expression(), LowestPrecedence);
   os << ")";
@@ -2222,6 +2309,9 @@ SubExprInfo ExprEmitter::visitSV(SampledOp op) {
 }
 
 SubExprInfo ExprEmitter::visitComb(MuxOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
   // The ?: operator is right associative.
   emitSubExpr(op.cond(), VerilogPrecedence(Conditional - 1));
   os << " ? ";
@@ -2238,6 +2328,9 @@ SubExprInfo ExprEmitter::visitComb(MuxOp op) {
 }
 
 SubExprInfo ExprEmitter::visitTypeOp(StructCreateOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
   StructType stype = op.getType();
   os << "'{";
   size_t i = 0;
@@ -2251,12 +2344,18 @@ SubExprInfo ExprEmitter::visitTypeOp(StructCreateOp op) {
 }
 
 SubExprInfo ExprEmitter::visitTypeOp(StructExtractOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
   emitSubExpr(op.input(), Selection);
   os << '.' << emitter.getVerilogStructFieldName(op.fieldAttr());
   return {Selection, IsUnsigned};
 }
 
 SubExprInfo ExprEmitter::visitTypeOp(StructInjectOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
   StructType stype = op.getType().cast<StructType>();
   os << "'{";
   llvm::interleaveComma(
@@ -2474,7 +2573,7 @@ private:
   void
   emitExpression(Value exp, SmallPtrSet<Operation *, 8> &emittedExprs,
                  VerilogPrecedence parenthesizeIfLooserThan = LowestPrecedence);
-  void emitSVAttributes(ArrayAttr svAttrs, Operation *op);
+  void emitSVAttributes(Operation *op);
 
   using StmtVisitor::visitStmt;
   using Visitor::visitSV;
@@ -2609,18 +2708,20 @@ void StmtEmitter::emitExpression(Value exp,
 
 /// Emit SystemVerilog attributes attached to the statement op as dialect
 /// attributes.
-void StmtEmitter::emitSVAttributes(ArrayAttr svAttrs, Operation *op) {
+void StmtEmitter::emitSVAttributes(Operation *op) {
   // SystemVerilog 2017 Section 5.12.
+  auto svAttrs = getSVAttributes(op);
   if (!svAttrs)
     return;
 
   indent() << "(* ";
-  llvm::interleaveComma(svAttrs, os, [&](Attribute attr) {
-    auto svattr = attr.cast<SVAttributeAttr>();
-    os << svattr.getName().getValue();
-    if (svattr.getExpression())
-      os << " = " << svattr.getExpression().getValue();
-  });
+  llvm::interleaveComma(svAttrs.cast<mlir::ArrayAttr>(), os,
+                        [&](Attribute attr) {
+                          auto svattr = attr.cast<SVAttributeAttr>();
+                          os << svattr.getName().getValue();
+                          if (svattr.getExpression())
+                            os << " = " << svattr.getExpression().getValue();
+                        });
   os << " *)\n";
 }
 
@@ -2670,12 +2771,11 @@ LogicalResult StmtEmitter::visitSV(AssignOp op) {
   if (emitter.assignsInlined.count(op))
     return success();
 
+  // Emit SV attributes. See Spec 12.3.
+  emitSVAttributes(op);
+
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
-
-  // If we have SV attributes attached to the op, those need to be emitted
-  // first.
-  emitSVAttributes(op.svAttributesAttr(), op);
 
   indent() << "assign ";
   emitExpression(op.dest(), ops);
@@ -2687,6 +2787,9 @@ LogicalResult StmtEmitter::visitSV(AssignOp op) {
 }
 
 LogicalResult StmtEmitter::visitSV(BPAssignOp op) {
+  // Emit SV attributes. See Spec 12.3.
+  emitSVAttributes(op);
+
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
@@ -2700,6 +2803,9 @@ LogicalResult StmtEmitter::visitSV(BPAssignOp op) {
 }
 
 LogicalResult StmtEmitter::visitSV(PAssignOp op) {
+  // Emit SV attributes. See Spec 12.3.
+  emitSVAttributes(op);
+
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
@@ -2713,6 +2819,9 @@ LogicalResult StmtEmitter::visitSV(PAssignOp op) {
 }
 
 LogicalResult StmtEmitter::visitSV(ForceOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
@@ -2726,6 +2835,9 @@ LogicalResult StmtEmitter::visitSV(ForceOp op) {
 }
 
 LogicalResult StmtEmitter::visitSV(ReleaseOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
@@ -2737,6 +2849,9 @@ LogicalResult StmtEmitter::visitSV(ReleaseOp op) {
 }
 
 LogicalResult StmtEmitter::visitSV(AliasOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
@@ -2749,6 +2864,9 @@ LogicalResult StmtEmitter::visitSV(AliasOp op) {
 }
 
 LogicalResult StmtEmitter::visitSV(InterfaceInstanceOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
   StringRef prefix = "";
   if (op->hasAttr("doNotPrint")) {
     prefix = "// ";
@@ -2810,6 +2928,9 @@ LogicalResult StmtEmitter::visitStmt(TypeScopeOp op) {
 }
 
 LogicalResult StmtEmitter::visitStmt(TypedeclOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
   os << "typedef ";
   emitter.printPackedType(stripUnpackedTypes(op.type()), os, op.getLoc(),
                           false);
@@ -2820,6 +2941,9 @@ LogicalResult StmtEmitter::visitStmt(TypedeclOp op) {
 }
 
 LogicalResult StmtEmitter::visitSV(FWriteOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
@@ -2841,6 +2965,9 @@ LogicalResult StmtEmitter::visitSV(FWriteOp op) {
 }
 
 LogicalResult StmtEmitter::visitSV(VerbatimOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
@@ -2885,6 +3012,9 @@ LogicalResult StmtEmitter::visitSV(VerbatimOp op) {
 LogicalResult
 StmtEmitter::emitSimulationControlTask(Operation *op, StringRef taskName,
                                        Optional<unsigned> verbosity) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
   indent() << taskName;
@@ -2914,6 +3044,9 @@ LogicalResult StmtEmitter::emitSeverityMessageTask(Operation *op,
                                                    Optional<unsigned> verbosity,
                                                    StringAttr message,
                                                    ValueRange operands) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
   indent() << taskName;
@@ -2971,6 +3104,9 @@ LogicalResult StmtEmitter::visitSV(InfoOp op) {
 }
 
 LogicalResult StmtEmitter::visitSV(GenerateOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
   indent() << "generate\n";
   indent() << "begin: " << names.addName(op, op.sym_name()) << "\n";
   addIndent();
@@ -2982,6 +3118,9 @@ LogicalResult StmtEmitter::visitSV(GenerateOp op) {
 }
 
 LogicalResult StmtEmitter::visitSV(GenerateCaseOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
   indent() << "case (";
   emitter.printParamValue(op.cond(), os, VerilogPrecedence::Selection, [&]() {
     return op->emitOpError("invalid case parameter");
@@ -3060,6 +3199,9 @@ void StmtEmitter::emitAssertionMessage(StringAttr message, ValueRange args,
 
 template <typename Op>
 LogicalResult StmtEmitter::emitImmediateAssertion(Op op, StringRef opName) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
   indent();
@@ -3098,6 +3240,9 @@ LogicalResult StmtEmitter::visitSV(CoverOp op) {
 
 template <typename Op>
 LogicalResult StmtEmitter::emitConcurrentAssertion(Op op, StringRef opName) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
   indent();
@@ -3126,6 +3271,9 @@ LogicalResult StmtEmitter::visitSV(CoverConcurrentOp op) {
 }
 
 LogicalResult StmtEmitter::emitIfDef(Operation *op, MacroIdentAttr cond) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
   StringRef ident = cond.getName();
 
   bool hasEmptyThen = op->getRegion(0).front().empty();
@@ -3206,6 +3354,9 @@ LogicalResult StmtEmitter::visitSV(OrderedOutputOp ooop) {
 }
 
 LogicalResult StmtEmitter::visitSV(IfOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
@@ -3251,6 +3402,9 @@ LogicalResult StmtEmitter::visitSV(IfOp op) {
 }
 
 LogicalResult StmtEmitter::visitSV(AlwaysOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
@@ -3301,6 +3455,9 @@ LogicalResult StmtEmitter::visitSV(AlwaysOp op) {
 }
 
 LogicalResult StmtEmitter::visitSV(AlwaysCombOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
@@ -3314,6 +3471,9 @@ LogicalResult StmtEmitter::visitSV(AlwaysCombOp op) {
 }
 
 LogicalResult StmtEmitter::visitSV(AlwaysFFOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
@@ -3364,6 +3524,9 @@ LogicalResult StmtEmitter::visitSV(AlwaysFFOp op) {
 }
 
 LogicalResult StmtEmitter::visitSV(InitialOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
@@ -3373,6 +3536,9 @@ LogicalResult StmtEmitter::visitSV(InitialOp op) {
 }
 
 LogicalResult StmtEmitter::visitSV(CaseOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
   SmallPtrSet<Operation *, 8> ops, emptyOps;
   ops.insert(op);
   indent();
@@ -3593,6 +3759,9 @@ LogicalResult StmtEmitter::visitSV(BindOp op) {
 }
 
 LogicalResult StmtEmitter::visitSV(InterfaceOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
   os << "interface " << getSymOpName(op) << ";\n";
   // FIXME: Don't emit the body of this as general statements, they aren't!
   emitStatementBlock(*op.getBodyBlock());
@@ -3601,6 +3770,9 @@ LogicalResult StmtEmitter::visitSV(InterfaceOp op) {
 }
 
 LogicalResult StmtEmitter::visitSV(InterfaceSignalOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
   indent();
   if (isZeroBitType(op.type()))
     os << "// ";
@@ -3780,9 +3952,9 @@ void StmtEmitter::collectNamesEmitDecls(Block &block) {
     // If we have SV attributes attached to the op, those need to be emitted
     // first.
     if (auto regOp = dyn_cast<RegOp>(op))
-      emitSVAttributes(regOp.svAttributesAttr(), op);
+      emitSVAttributes(op);
     else if (auto wireOp = dyn_cast<WireOp>(op))
-      emitSVAttributes(wireOp.svAttributesAttr(), op);
+      emitSVAttributes(op);
 
     // Emit the leading word, like 'wire' or 'reg'.
     auto type = record.value.getType();
@@ -3831,8 +4003,10 @@ void StmtEmitter::collectNamesEmitDecls(Block &block) {
       emitter.expressionsEmittedIntoDecl.insert(op);
     }
 
+    // Inline assigned constant op into wire declarations unless the assignment
+    // has SV attributes.
     auto [constOp, assignOp] = isSingleConstantAssign(op);
-    if (constOp) {
+    if (constOp && !hasSVAttributes(assignOp)) {
       os << " = ";
       emitExpression(constOp, opsForLocation, ForceEmitMultiUse);
       emitter.assignsInlined.insert(assignOp);
@@ -3898,6 +4072,9 @@ void ModuleEmitter::emitHWGeneratedModule(HWModuleGeneratedOp module) {
 // regs, or ports, with legalized names, so we can lookup up the names through
 // the IR.
 void ModuleEmitter::emitBind(BindOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
   InstanceOp inst = op.getReferencedInstance(&state.symbolCache);
 
   HWModuleOp parentMod = inst->getParentOfType<hw::HWModuleOp>();
@@ -4020,6 +4197,9 @@ StringRef ModuleEmitter::getNameRemotely(Value value,
 }
 
 void ModuleEmitter::emitBindInterface(BindInterfaceOp bind) {
+  if (hasSVAttributes(bind))
+    emitError(bind, "SV attributes emission is unimplemented for the op");
+
   auto instance = bind.getReferencedInstance(&state.symbolCache);
   auto instantiator = instance->getParentOfType<HWModuleOp>().getName();
   auto *interface = bind->getParentOfType<ModuleOp>().lookupSymbol(
@@ -4056,6 +4236,9 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
   moduleOpSet.insert(module);
 
   emitComment(module.commentAttr());
+
+  if (hasSVAttributes(module))
+    emitError(module, "SV attributes emission is unimplemented for the op");
 
   os << "module " << getVerilogModuleName(module);
 

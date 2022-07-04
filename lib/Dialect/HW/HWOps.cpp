@@ -17,6 +17,7 @@
 #include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/HW/HWVisitors.h"
 #include "circt/Dialect/HW/ModuleImplementation.h"
+#include "circt/Support/SVAttributes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/PatternMatch.h"
@@ -251,6 +252,10 @@ void ConstantOp::getAsmResultNames(
 }
 
 OpFoldResult ConstantOp::fold(ArrayRef<Attribute> constants) {
+  // Block if op has SV attributes.
+  if (hasSVAttributes(*this))
+    return {};
+
   assert(constants.empty() && "constant has no operands");
   return valueAttr();
 }
@@ -280,6 +285,10 @@ LogicalResult ParamValueOp::verify() {
 }
 
 OpFoldResult ParamValueOp::fold(ArrayRef<Attribute> constants) {
+  // Block if op has SV attributes.
+  if (hasSVAttributes(*this))
+    return {};
+
   assert(constants.empty() && "hw.param.value has no operands");
   return valueAttr();
 }
@@ -1853,6 +1862,10 @@ void StructExtractOp::build(OpBuilder &builder, OperationState &odsState,
 
 // A struct extract of a struct create -> corresponding struct create operand.
 OpFoldResult StructExtractOp::fold(ArrayRef<Attribute> operands) {
+  // Block if op has SV attributes.
+  if (hasSVAttributes(*this))
+    return {};
+
   auto structCreate = dyn_cast_or_null<StructCreateOp>(input().getDefiningOp());
   if (!structCreate)
     return {};
@@ -1973,6 +1986,10 @@ void ArrayGetOp::build(OpBuilder &builder, OperationState &result, Value input,
 // An array_get of an array_create with a constant index can just be the
 // array_create operand at the constant index.
 OpFoldResult ArrayGetOp::fold(ArrayRef<Attribute> operands) {
+  // Block if op has SV attributes.
+  if (hasSVAttributes(*this))
+    return {};
+
   auto inputCreate = dyn_cast_or_null<ArrayCreateOp>(input().getDefiningOp());
   if (!inputCreate)
     return {};
@@ -2001,6 +2018,10 @@ StringRef TypedeclOp::getPreferredName() {
 //===----------------------------------------------------------------------===//
 
 OpFoldResult BitcastOp::fold(ArrayRef<Attribute> operands) {
+  // Block if op has SV attributes.
+  if (hasSVAttributes(*this))
+    return {};
+
   // Identity.
   // bitcast(%a) : A -> A ==> %a
   if (getOperand().getType() == getType())
@@ -2010,6 +2031,10 @@ OpFoldResult BitcastOp::fold(ArrayRef<Attribute> operands) {
 }
 
 LogicalResult BitcastOp::canonicalize(BitcastOp op, PatternRewriter &rewriter) {
+  // Block if op has SV attributes.
+  if (hasSVAttributes(op))
+    return failure();
+
   // Composition.
   // %b = bitcast(%a) : A -> B
   //      bitcast(%b) : B -> C

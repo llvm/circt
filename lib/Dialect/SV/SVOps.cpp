@@ -16,6 +16,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/HW/HWTypes.h"
+#include "circt/Support/SVAttributes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/PatternMatch.h"
@@ -251,6 +252,10 @@ void RegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 // If this reg is only written to, delete the reg and all writers.
 LogicalResult RegOp::canonicalize(RegOp op, PatternRewriter &rewriter) {
+  // Block if op has SV attributes.
+  if (hasSVAttributes(op))
+    return failure();
+
   // If the reg has a symbol, then we can't delete it.
   if (op.inner_symAttr())
     return failure();
@@ -312,6 +317,10 @@ void IfDefOp::build(OpBuilder &builder, OperationState &result,
 // If both thenRegion and elseRegion are empty, erase op.
 template <class Op>
 static LogicalResult canonicalizeIfDefLike(Op op, PatternRewriter &rewriter) {
+  // Block if op has SV attributes.
+  if (hasSVAttributes(op))
+    return failure();
+
   if (!op.getThenBlock()->empty())
     return failure();
 
@@ -323,6 +332,10 @@ static LogicalResult canonicalizeIfDefLike(Op op, PatternRewriter &rewriter) {
 }
 
 LogicalResult IfDefOp::canonicalize(IfDefOp op, PatternRewriter &rewriter) {
+  // Block if op has SV attributes.
+  if (hasSVAttributes(op))
+    return failure();
+
   return canonicalizeIfDefLike(op, rewriter);
 }
 
@@ -347,6 +360,10 @@ void IfDefProceduralOp::build(OpBuilder &builder, OperationState &result,
 
 LogicalResult IfDefProceduralOp::canonicalize(IfDefProceduralOp op,
                                               PatternRewriter &rewriter) {
+  // Block if op has SV attributes.
+  if (hasSVAttributes(op))
+    return failure();
+
   return canonicalizeIfDefLike(op, rewriter);
 }
 
@@ -384,6 +401,10 @@ static void replaceOpWithRegion(PatternRewriter &rewriter, Operation *op,
 }
 
 LogicalResult IfOp::canonicalize(IfOp op, PatternRewriter &rewriter) {
+  // Block if op has SV attributes.
+  if (hasSVAttributes(op))
+    return failure();
+
   if (auto constant = op.cond().getDefiningOp<hw::ConstantOp>()) {
 
     if (constant.getValue().isAllOnesValue())
@@ -859,6 +880,10 @@ void CaseOp::build(OpBuilder &builder, OperationState &result,
 
 // Strength reduce case styles based on the bit patterns.
 LogicalResult CaseOp::canonicalize(CaseOp op, PatternRewriter &rewriter) {
+  // Block if op has SV attributes.
+  if (hasSVAttributes(op))
+    return failure();
+
   if (op.caseStyle() == CaseStmtType::CaseStmt)
     return failure();
 
@@ -1185,6 +1210,10 @@ void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 // If this wire is only written to, delete the wire and all writers.
 LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
+  // Block if op has SV attributes.
+  if (hasSVAttributes(wire))
+    return failure();
+
   // If the wire has a symbol, then we can't delete it.
   if (wire.inner_symAttr())
     return failure();
@@ -1209,7 +1238,7 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
 
     // If the assign op has SV attributes, we don't want to delete the
     // assignment.
-    if (assign.svAttributesAttr())
+    if (circt::hasSVAttributes(assign))
       return failure();
 
     write = assign;
@@ -1313,6 +1342,10 @@ LogicalResult IndexedPartSelectInOutOp::verify() {
 }
 
 OpFoldResult IndexedPartSelectInOutOp::fold(ArrayRef<Attribute> constants) {
+  // Block if op has SV attributes.
+  if (hasSVAttributes(*this))
+    return {};
+
   if (getType() == input().getType())
     return input();
   return {};
@@ -1396,6 +1429,10 @@ LogicalResult AliasOp::verify() {
 // Don't assign a register's value to itself, conditionally assign the new value
 // instead.
 LogicalResult PAssignOp::canonicalize(PAssignOp op, PatternRewriter &rewriter) {
+  // Block if op has SV attributes.
+  if (hasSVAttributes(op))
+    return failure();
+
   auto mux = op.src().getDefiningOp<comb::MuxOp>();
   if (!mux)
     return failure();
@@ -1616,6 +1653,10 @@ static LogicalResult eraseIfZeroOrNotZero(Operation *op, Value value,
 template <class Op, bool EraseIfZero = false>
 static LogicalResult canonicalizeImmediateVerifOp(Op op,
                                                   PatternRewriter &rewriter) {
+  // Block if op has SV attributes.
+  if (hasSVAttributes(op))
+    return failure();
+
   return eraseIfZeroOrNotZero(op, op.expression(), rewriter, EraseIfZero);
 }
 
@@ -1637,6 +1678,10 @@ void CoverOp::getCanonicalizationPatterns(RewritePatternSet &results,
 template <class Op, bool EraseIfZero = false>
 static LogicalResult canonicalizeConcurrentVerifOp(Op op,
                                                    PatternRewriter &rewriter) {
+  // Block if op has SV attributes.
+  if (hasSVAttributes(op))
+    return failure();
+
   return eraseIfZeroOrNotZero(op, op.property(), rewriter, EraseIfZero);
 }
 

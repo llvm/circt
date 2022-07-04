@@ -53,6 +53,3 @@ def SVAttributeAttr : AttrDef<SVDialect, "SVAttribute"> {
 
   let assemblyFormat = [{ `<` $name ( `=` $expression^ )? `>` }];
 }
-
-def SVAttributeArrayAttr :
-  TypedArrayAttrBase<SVAttributeAttr, "sv.attribute array attribute">;

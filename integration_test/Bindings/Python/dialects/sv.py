@@ -23,11 +23,12 @@ with ir.Context() as ctx, ir.Location.unknown() as loc:
 
   m = ir.Module.create()
   with ir.InsertionPoint(m.body):
-
-    wire_op = sv.WireOp(i1_inout, "wire1", svAttributes=[sv_attr])
+    wire_op = sv.WireOp(i1_inout, "wire1")
+    wire_op.attributes["sv.attributes"] = ir.ArrayAttr.get([sv_attr])
     print(wire_op)
-    # CHECK: %wire1 = sv.wire  svattrs [#sv.attribute<"no_merge">] : !hw.inout<i1>
+    # CHECK: %wire1 = sv.wire {sv.attributes = [#sv.attribute<"no_merge">]} : !hw.inout<i1>
 
-    reg_op = sv.RegOp(i1_inout, "reg1", svAttributes=[sv_attr])
+    reg_op = sv.RegOp(i1_inout, "reg1")
+    reg_op.attributes["sv.attributes"] = ir.ArrayAttr.get([sv_attr])
     print(reg_op)
-    # CHECK: %reg1 = sv.reg  svattrs [#sv.attribute<"no_merge">] : !hw.inout<i1>
+    # CHECK: %reg1 = sv.reg  {sv.attributes = [#sv.attribute<"no_merge">]} : !hw.inout<i1>

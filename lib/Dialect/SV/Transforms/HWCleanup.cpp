@@ -16,6 +16,7 @@
 #include "PassDetail.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVPasses.h"
+#include "circt/Support/SVAttributes.h"
 
 using namespace circt;
 
@@ -103,6 +104,9 @@ private:
   /// Inline all regions from the second operation into the first and delete the
   /// second operation.
   void mergeOperationsIntoFrom(Operation *op1, Operation *op2) {
+    // If either op1 or op2 has SV attributues, we cannot merge the ops.
+    if (hasSVAttributes(op1) || hasSVAttributes(op2))
+      return;
     assert(op1 != op2 && "Cannot merge an op into itself");
     for (size_t i = 0, e = op1->getNumRegions(); i != e; ++i)
       mergeRegions(&op1->getRegion(i), &op2->getRegion(i));
