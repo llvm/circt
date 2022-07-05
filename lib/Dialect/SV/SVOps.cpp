@@ -1760,7 +1760,7 @@ LogicalResult LStreamPackOp::verify() {
   unsigned tyWidth = getType().getWidth();
   unsigned operandsTotalWidth = getTotalWidth(inputs());
   if (tyWidth != operandsTotalWidth)
-    return emitOpError("ConcatOp requires operands total width to "
+    return emitOpError("LStreamPack requires operands total width to "
                        "match type width. operands "
                        "totalWidth is")
            << operandsTotalWidth << ", but concatOp type width is " << tyWidth;
@@ -1768,13 +1768,13 @@ LogicalResult LStreamPackOp::verify() {
   return success();
 }
 
-void LStreamPackOp::build(OpBuilder &builder, OperationState &result, Value hd,
+/* void LStreamPackOp::build(OpBuilder &builder, OperationState &result, Value hd,
                           ValueRange tl) {
   result.addOperands(ValueRange{hd});
   result.addOperands(tl);
   unsigned hdWidth = hd.getType().cast<IntegerType>().getWidth();
   result.addTypes(builder.getIntegerType(getTotalWidth(tl) + hdWidth));
-}
+} */
 
 LogicalResult LStreamPackOp::inferReturnTypes(MLIRContext *context,
                                               Optional<Location> loc,

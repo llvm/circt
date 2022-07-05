@@ -235,13 +235,6 @@ def LStreamPackOp: SVOp<"lstream_pack", [InferTypeOpInterface, NoSideEffect]> {
 
   let assemblyFormat = "$inputs `slice` $slice attr-dict `:` qualified(type($inputs))";
 
-  let builders = [
-    OpBuilder<(ins "Value":$lhs, "Value":$rhs), [{
-      return build($_builder, $_state, ValueRange{lhs, rhs});
-    }]>,
-    OpBuilder<(ins "Value":$hd, "ValueRange":$tl)>,
-  ];
-
   let extraClassDeclaration = [{
     /// Infer the return types of this operation.
     static LogicalResult inferReturnTypes(MLIRContext *context,
