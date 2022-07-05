@@ -158,6 +158,15 @@ hw.module @assert_canonicalization(%clock: i1) {
   sv.cover.concurrent posedge %clock, %false
 }
 
+
+// CHECK-LABEL: hw.module @svAttrPreventsCanonicalization(%arg0: i1) {
+hw.module @svAttrPreventsCanonicalization(%arg0: i1) {
+  %0 = sv.wire : !hw.inout<i1>
+  // CHECK:      %0 = sv.wire : !hw.inout<i1>
+  // CHECK-NEXT: sv.assign %0, %arg0 svattrs [#sv.attribute<"attr">] : i1
+  sv.assign %0, %arg0 svattrs [#sv.attribute<"attr">] : i1
+}
+
 // CHECK-LABEL: @case_stmt
 hw.module @case_stmt(%arg: i3) {
   %fd = hw.constant 0x80000002 : i32

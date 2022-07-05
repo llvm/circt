@@ -168,11 +168,19 @@ class System:
         m = self._generate_queue.pop()
         m.generate()
         i += 1
-    return len(self._generate_queue)
+
+    # Run passes which must get run between generation and instance hierarch
+    # browsing.
+    gen_left = len(self._generate_queue)
+    if gen_left == 0:
+      pm = mlir.passmanager.PassManager.parse("msft-discover-appids")
+      pm.run(self.mod)
+    return
 
   def get_instance(self,
                    mod_cls: object,
                    instance_name: str = None) -> InstanceHierarchyRoot:
+    assert len(self._generate_queue) == 0, "Ungenerated modules left"
     mod = mod_cls._pycde_mod
     key = (mod, instance_name)
     if key not in self._instance_roots:
@@ -253,8 +261,8 @@ class _OpCache:
     num_ops_live = ir.Context.current._clear_live_operations()
     if num_ops_live > 0:
       sys.stderr.write(
-          f"Warning: something is holding references to {num_ops_live} MLIR ops\n"
-      )
+          f"Warning: something is holding references to {num_ops_live} " +
+          " MLIR ops\n")
 
   @property
   def symbols(self):

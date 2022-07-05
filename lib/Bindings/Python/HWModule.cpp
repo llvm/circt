@@ -51,6 +51,16 @@ void circt::python::populateDialectHWSubmodule(py::module &m) {
       .def_property_readonly(
           "size", [](MlirType self) { return hwArrayTypeGetSize(self); });
 
+  mlir_type_subclass(m, "ParamIntType", hwTypeIsAIntType)
+      .def_classmethod(
+          "get_from_param",
+          [](py::object cls, MlirContext ctx, MlirAttribute param) {
+            return cls(hwParamIntTypeGet(param));
+          })
+      .def_property_readonly("width", [](MlirType self) {
+        return hwParamIntTypeGetWidthAttr(self);
+      });
+
   mlir_type_subclass(m, "StructType", hwTypeIsAStructType)
       .def_classmethod(
           "get",
@@ -140,6 +150,21 @@ void circt::python::populateDialectHWSubmodule(py::module &m) {
           [](MlirAttribute self) { return hwParamDeclAttrGetType(self); })
       .def_property_readonly("name", [](MlirAttribute self) {
         MlirStringRef cStr = hwParamDeclAttrGetName(self);
+        return std::string(cStr.data, cStr.length);
+      });
+
+  mlir_attribute_subclass(m, "ParamDeclRefAttr", hwAttrIsAParamDeclRefAttr)
+      .def_classmethod(
+          "get",
+          [](py::object cls, MlirContext ctx, std::string name) {
+            return cls(hwParamDeclRefAttrGet(
+                ctx, mlirStringRefCreateFromCString(name.c_str())));
+          })
+      .def_property_readonly(
+          "param_type",
+          [](MlirAttribute self) { return hwParamDeclRefAttrGetType(self); })
+      .def_property_readonly("name", [](MlirAttribute self) {
+        MlirStringRef cStr = hwParamDeclRefAttrGetName(self);
         return std::string(cStr.data, cStr.length);
       });
 

@@ -63,25 +63,25 @@ int64_t getBitWidth(mlir::Type type);
 /// false on known InOut types, rather than any unknown types.
 bool hasHWInOutType(mlir::Type type);
 
-template <typename BaseTy>
+template <typename... BaseTy>
 bool type_isa(Type type) {
   // First check if the type is the requested type.
-  if (type.isa<BaseTy>())
+  if (type.isa<BaseTy...>())
     return true;
 
   // Then check if it is a type alias wrapping the requested type.
   if (auto alias = type.dyn_cast<TypeAliasType>())
-    return alias.getInnerType().isa<BaseTy>();
+    return alias.getInnerType().isa<BaseTy...>();
 
   return false;
 }
 
 // type_isa for a nullable argument.
-template <typename BaseTy>
+template <typename... BaseTy>
 bool type_isa_and_nonnull(Type type) { // NOLINT(readability-identifier-naming)
   if (!type)
     return false;
-  return type_isa<BaseTy>(type);
+  return type_isa<BaseTy...>(type);
 }
 
 template <typename BaseTy>

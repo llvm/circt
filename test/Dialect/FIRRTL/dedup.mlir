@@ -125,8 +125,8 @@ firrtl.circuit "Annotations" {
     %e = firrtl.wire {annotations = [{circt.nonlocal = @annos_nla2, class = "NonLocal"}]} : !firrtl.uint<1>
 
     // Subannotations should be handled correctly.
-    // CHECK: %f = firrtl.wire {annotations = [#firrtl.subAnno<fieldID = 1, {circt.nonlocal = [[NLA0]], class = "subanno"}>]}
-    %f = firrtl.wire {annotations = [#firrtl.subAnno<fieldID = 1, {class = "subanno"}>]} : !firrtl.bundle<a: uint<1>>
+    // CHECK: %f = firrtl.wire {annotations = [{circt.fieldID = 1 : i32, circt.nonlocal = [[NLA0]], class = "subanno"}]}
+    %f = firrtl.wire {annotations = [{circt.fieldID = 1 : i32, class = "subanno"}]} : !firrtl.bundle<a: uint<1>>
   }
   // CHECK-NOT: firrtl.module @Annotations1
   firrtl.module @Annotations1() attributes {annotations = [{class = "one"}]} {

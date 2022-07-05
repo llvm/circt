@@ -208,3 +208,37 @@ def StructFieldInOutOp : SVOp<"struct_field_inout",
   }];
 
 }
+
+def LogicOp : SVOp<"logic", [DeclareOpInterfaceMethods<OpAsmOpInterface,
+                                                       ["getAsmResultNames"]>]> {
+  let summary = "Define a logic";
+  let description = [{
+    Declare a SystemVerilog Variable Declaration of 'logic' type.
+    See SV Spec 6.8, pp100.
+    }];
+
+  let arguments = (ins StrAttr:$name, OptionalAttr<SymbolNameAttr>:$inner_sym);
+  let results = (outs InOutType:$result);
+
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<(ins "::mlir::Type":$elementType,
+                      CArg<"StringAttr", "StringAttr()">:$name,
+                      CArg<"StringAttr", "StringAttr()">:$inner_sym)>,
+    OpBuilder<(ins "::mlir::Type":$elementType, CArg<"StringRef">:$name), [{
+      return build($_builder, $_state, elementType,
+                   $_builder.getStringAttr(name));
+    }]>
+  ];
+
+  let assemblyFormat = [{
+    (`sym` $inner_sym^)? custom<ImplicitSSAName>(attr-dict) `:`
+                                                qualified(type($result))
+  }];
+
+  let extraClassDeclaration = [{
+    Type getElementType() {
+      return result().getType().cast<InOutType>().getElementType();
+    }
+  }];
+}

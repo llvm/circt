@@ -11,7 +11,7 @@ from circt.esi import types
 def build(mod, dummy_mod):
   # CHECK: %[[C0:.+]] = hw.constant 0
   const = hw.ConstantOp.create(types.i32, 0)
-  inst = dummy_mod.create("d")
+  inst = dummy_mod.instantiate("d")
   connect(inst.x, inst.y)
   connect(inst.x, const)
   connect(inst.x, const.result)

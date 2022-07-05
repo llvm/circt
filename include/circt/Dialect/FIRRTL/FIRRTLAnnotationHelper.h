@@ -166,19 +166,22 @@ private:
   unsigned annotationID = 0;
 };
 
-LogicalResult applyGCTView(AnnoPathValue target, DictionaryAttr anno,
+LogicalResult applyGCTView(const AnnoPathValue &target, DictionaryAttr anno,
                            ApplyState &state);
 
-LogicalResult applyGCTDataTaps(AnnoPathValue target, DictionaryAttr anno,
+LogicalResult applyGCTDataTaps(const AnnoPathValue &target, DictionaryAttr anno,
                                ApplyState &state);
 
-LogicalResult applyGCTMemTaps(AnnoPathValue target, DictionaryAttr anno,
+LogicalResult applyGCTMemTaps(const AnnoPathValue &target, DictionaryAttr anno,
                               ApplyState &state);
 
-/// Implements the same behavior as DictionaryAttr::getAs<A> to return the value
-/// of a specific type associated with a key in a dictionary.  However, this is
-/// specialized to print a useful error message, specific to custom annotation
-/// process, on failure.
+LogicalResult applyGCTSignalMappings(const AnnoPathValue &target,
+                                     DictionaryAttr anno, ApplyState &state);
+
+/// Implements the same behavior as DictionaryAttr::getAs<A> to return the
+/// value of a specific type associated with a key in a dictionary. However,
+/// this is specialized to print a useful error message, specific to custom
+/// annotation process, on failure.
 template <typename A>
 A tryGetAs(DictionaryAttr &dict, const Attribute &root, StringRef key,
            Location loc, Twine className, Twine path = Twine()) {

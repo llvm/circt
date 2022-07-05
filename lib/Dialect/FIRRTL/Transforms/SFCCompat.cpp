@@ -88,9 +88,11 @@ void SFCCompatPass::runOnOperation() {
 
   // Convert all invalid values to zero.
   for (auto inv : invalidOps) {
-    // Skip invalids which have no uses.
-    if (inv->getUses().empty())
+    // Delete invalids which have no uses.
+    if (inv->getUses().empty()) {
+      inv->erase();
       continue;
+    }
     ImplicitLocOpBuilder builder(inv.getLoc(), inv);
     Value replacement =
         TypeSwitch<FIRRTLType, Value>(inv.getType())

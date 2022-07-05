@@ -30,6 +30,16 @@ def LowerFIRRTLAnnotations : Pass<"firrtl-lower-annotations", "firrtl::CircuitOp
       "Ignore unknown annotations.">
   ];
   let dependentDialects = ["hw::HWDialect"];
+  let statistics = [
+    Statistic<"numRawAnnotations", "num-raw-annos",
+      "Number of raw annotations on circuit">,
+    Statistic<"numAddedAnnos", "num-added-annos",
+       "Number of additional annotations">,
+    Statistic<"numAnnos", "num-annos",
+       "Total number of annotations processed">,
+    Statistic<"numUnhandled", "num-unhandled-annos",
+      "Number of unhandled annotations">,
+  ];
 }
 
 def LowerFIRRTLTypes : Pass<"firrtl-lower-types", "firrtl::CircuitOp"> {
@@ -380,6 +390,16 @@ def GrandCentral : Pass<"firrtl-grand-central", "CircuitOp"> {
 
   let constructor = "circt::firrtl::createGrandCentralPass()";
   let dependentDialects = ["circt::sv::SVDialect", "circt::hw::HWDialect"];
+  let statistics = [
+    Statistic<"numViews", "num-views-created",
+      "Number of top-level SystemVerilog interfaces that were created">,
+    Statistic<"numInterfaces", "num-interfaces-created",
+      "Number of SystemVerilog interfaces that were created">,
+    Statistic<"numXMRs", "num-xmrs-created",
+      "Number of SystemVerilog XMRs added">,
+    Statistic<"numAnnosRemoved", "num-annotations-removed",
+      "Number of annotations removed">
+  ];
 }
 
 def GrandCentralTaps : Pass<"firrtl-grand-central-taps", "firrtl::CircuitOp"> {
@@ -395,6 +415,20 @@ def GrandCentralSignalMappings : Pass<"firrtl-grand-central-signal-mappings",
   let options = [Option<"outputFilename", "file", "std::string", "",
       "Output file for the JSON-serialized OMIR data">];
   let dependentDialects = ["sv::SVDialect", "circt::hw::HWDialect"];
+  let statistics = [
+    Statistic<"numBufferWirePairsAdded", "num-buffer-wire-pairs-added",
+      "Number of buffer wire pairs added to break nets around forced ports">,
+    Statistic<"numForcedInputPorts", "num-forced-input-ports",
+      "Number of input ports that will be forced (sinks)">,
+    Statistic<"numForcedOutputPorts", "num-forced-output-ports",
+      "Number of output ports that will be forced (sinks)">,
+    Statistic<"numModules", "num-modules",
+      "Number of modules with at least one source or sink">,
+    Statistic<"numSinks", "num-sinks",
+      "Number of sinks">,
+    Statistic<"numSources", "num-sources",
+      "Number of sources">
+  ];
 }
 
 def CheckCombCycles : Pass<"firrtl-check-comb-cycles", "firrtl::CircuitOp"> {
@@ -483,8 +517,8 @@ def MemToRegOfVec : Pass<"firrtl-mem-to-reg-of-vec", "firrtl::CircuitOp"> {
 def DropName : Pass<"firrtl-drop-names", "firrtl::FModuleOp"> {
   let summary = "Drop interesting names";
   let description = [{
-    This pass changes names of namable ops to droppable so that
-    we can disable full name preservation. For example,
+    This pass changes names of namable ops to droppable so that we can disable
+    full name preservation. For example,
     before:
     ```mlir
     %a = firrtl.node interesting_name %input
@@ -495,6 +529,19 @@ def DropName : Pass<"firrtl-drop-names", "firrtl::FModuleOp"> {
     ```
   }];
   let constructor = "circt::firrtl::createDropNamesPass()";
+  let options = [
+    Option<"preserveMode", "preserve-values", "PreserveValues::PreserveMode", 
+           "PreserveValues::None", 
+           "specify the values which can be optimized away", [{
+            ::llvm::cl::values(
+              clEnumValN(PreserveValues::None, "none",
+                "Preserve no values"),
+              clEnumValN(PreserveValues::Named, "named",
+                "Preserve values with meaningful names"),
+              clEnumValN(PreserveValues::All, "all",
+                "Preserve all values"))
+           }]>
+  ];
   let statistics = [
     Statistic<"numNamesConverted", "num-names-converted",
       "Number of interesting names made droppable">,

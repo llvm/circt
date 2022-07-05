@@ -126,8 +126,6 @@ struct NLARemover {
     } else if (auto array = anno.dyn_cast<ArrayAttr>()) {
       for (auto attr : array)
         markNLAsInAnnotation(attr);
-    } else if (auto subAnno = anno.dyn_cast<firrtl::SubAnnotationAttr>()) {
-      markNLAsInAnnotation(subAnno.getAnnotations());
     }
   }
 
@@ -794,7 +792,8 @@ struct NodeSymbolRemover : public Reduction {
 
   bool match(Operation *op) override {
     if (auto nodeOp = dyn_cast<firrtl::NodeOp>(op))
-      return nodeOp.inner_sym() && !nodeOp.inner_sym().getValue().empty();
+      return nodeOp.inner_sym() &&
+             !nodeOp.inner_sym()->getSymName().getValue().empty();
     return false;
   }
 

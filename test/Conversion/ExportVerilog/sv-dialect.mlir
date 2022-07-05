@@ -10,16 +10,31 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
   %fd = hw.constant 0x80000002 : i32
 
   %c11_i42 = hw.constant 11: i42
-  // CHECK: localparam [41:0] param_x = 42'd11;
+  // CHECK: localparam [41:0]{{ *}} param_x = 42'd11;
   %param_x = sv.localparam : i42 { value = 11: i42 }
 
-  // CHECK: localparam [41:0] param_y = param1;
+  // CHECK: localparam [41:0]{{ *}} param_y = param1;
   %param_y = sv.localparam : i42 { value = #hw.param.decl.ref<"param1">: i42 }
+
+  // CHECK:       logic{{ *}} [7:0]{{ *}} logic_op;
+  // CHECK-NEXT:  struct packed {logic b; } logic_op_struct;
+  // CHECK: assign logic_op = val;
+  %logic_op = sv.logic : !hw.inout<i8>
+  %logic_op_struct = sv.logic : !hw.inout<struct<b: i1>>
+  sv.assign %logic_op, %val: i8
 
   // CHECK:      always @(posedge clock) begin
   sv.always posedge %clock {
+    // CHECK-NEXT: automatic logic [7:0]                     logic_op_procedural;
+    // CHECK-NEXT: automatic       struct packed {logic b; } logic_op_struct_procedural
+    // CHECK-EMPTY:
     // CHECK-NEXT: force forceWire = cond;
     sv.force %forceWire, %cond : i1
+    %logic_op_procedural = sv.logic : !hw.inout<i8>
+    %logic_op_struct_procedural = sv.logic : !hw.inout<struct<b: i1>>
+
+    // CHECK-NEXT: logic_op_procedural = val;
+    sv.bpassign %logic_op_procedural, %val: i8
   // CHECK-NEXT:   `ifndef SYNTHESIS
     sv.ifdef.procedural "SYNTHESIS" {
     } else {
@@ -472,7 +487,9 @@ hw.module @reg_0(%in4: i4, %in8: i8) -> (a: i8, b: i8) {
   %myRegArray1 = sv.reg svattrs [#sv.attribute<"dont_merge">, #sv.attribute<"dont_retime"="true">] : !hw.inout<array<42 x i8>>
 
   // CHECK-EMPTY:
-  sv.assign %myReg, %in8 : i8        // CHECK-NEXT: assign myReg = in8;
+  // CHECK-NEXT: (* assign_attr *)
+  // CHECK-NEXT: assign myReg = in8;
+  sv.assign %myReg, %in8 svattrs [#sv.attribute<"assign_attr">] : i8
 
   %subscript1 = sv.array_index_inout %myRegArray1[%in4] : !hw.inout<array<42 x i8>>, i4
   sv.assign %subscript1, %in8 : i8   // CHECK-NEXT: assign myRegArray1[in4] = in8;

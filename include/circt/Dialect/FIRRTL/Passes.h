@@ -96,7 +96,23 @@ createMergeConnectionsPass(bool enableAggressiveMerging = false);
 
 std::unique_ptr<mlir::Pass> createInjectDUTHierarchyPass();
 
-std::unique_ptr<mlir::Pass> createDropNamesPass();
+/// Configure which values will be explicitly preserved by the DropNames pass.
+namespace PreserveValues {
+enum PreserveMode {
+  /// Don't explicitly preserve any named values. Every named operation could
+  /// be optimized away by the compiler.
+  None,
+  // Explicitly preserved values with meaningful names.  If a name begins with
+  // an "_" it is not considered meaningful.
+  Named,
+  // Explicitly preserve all values.  No named operation should be optimized
+  // away by the compiler.
+  All,
+};
+}
+
+std::unique_ptr<mlir::Pass>
+createDropNamesPass(PreserveValues::PreserveMode mode = PreserveValues::None);
 
 std::unique_ptr<mlir::Pass> createExtractInstancesPass();
 

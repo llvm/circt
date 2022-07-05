@@ -814,7 +814,7 @@ FIRRTLType BundleType::getPassiveType() {
 }
 
 llvm::Optional<unsigned> BundleType::getElementIndex(StringAttr name) {
-  for (auto it : llvm::enumerate(getElements())) {
+  for (const auto &it : llvm::enumerate(getElements())) {
     auto element = it.value();
     if (element.name == name) {
       return unsigned(it.index());
@@ -824,7 +824,7 @@ llvm::Optional<unsigned> BundleType::getElementIndex(StringAttr name) {
 }
 
 llvm::Optional<unsigned> BundleType::getElementIndex(StringRef name) {
-  for (auto it : llvm::enumerate(getElements())) {
+  for (const auto &it : llvm::enumerate(getElements())) {
     auto element = it.value();
     if (element.name.getValue() == name) {
       return unsigned(it.index());

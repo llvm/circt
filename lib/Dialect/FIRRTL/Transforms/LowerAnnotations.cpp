@@ -100,7 +100,8 @@ static void addAnnotation(AnnoTarget ref, unsigned fieldIdx,
 
 /// Make an anchor for a non-local annotation.  Use the expanded path to build
 /// the module and name list in the anchor.
-static FlatSymbolRefAttr buildNLA(AnnoPathValue target, ApplyState &state) {
+static FlatSymbolRefAttr buildNLA(const AnnoPathValue &target,
+                                  ApplyState &state) {
   OpBuilder b(state.circuit.getBodyRegion());
   SmallVector<Attribute> insts;
   for (auto inst : target.instances) {
@@ -120,7 +121,7 @@ static FlatSymbolRefAttr buildNLA(AnnoPathValue target, ApplyState &state) {
 /// along the instance path.  Returns symbol name used to anchor annotations to
 /// path.
 // FIXME: uniq annotation chain links
-static FlatSymbolRefAttr scatterNonLocalPath(AnnoPathValue target,
+static FlatSymbolRefAttr scatterNonLocalPath(const AnnoPathValue &target,
                                              ApplyState &state) {
 
   FlatSymbolRefAttr sym = buildNLA(target, state);
@@ -191,7 +192,7 @@ static Optional<AnnoPathValue> tryResolve(DictionaryAttr anno,
 
 /// An applier which puts the annotation on the target and drops the 'target'
 /// field from the annotaiton.  Optionally handles non-local annotations.
-static LogicalResult applyWithoutTargetImpl(AnnoPathValue target,
+static LogicalResult applyWithoutTargetImpl(const AnnoPathValue &target,
                                             DictionaryAttr anno,
                                             ApplyState &state,
                                             bool allowNonLocal) {
@@ -223,7 +224,7 @@ static LogicalResult applyWithoutTargetImpl(AnnoPathValue target,
 /// field from the annotaiton.  Optionally handles non-local annotations.
 /// Ensures the target resolves to an expected type of operation.
 template <bool allowNonLocal, typename T, typename... Tr>
-static LogicalResult applyWithoutTarget(AnnoPathValue target,
+static LogicalResult applyWithoutTarget(const AnnoPathValue &target,
                                         DictionaryAttr anno,
                                         ApplyState &state) {
   if (!target.isOpOfType<T, Tr...>())
@@ -234,7 +235,7 @@ static LogicalResult applyWithoutTarget(AnnoPathValue target,
 /// An applier which puts the annotation on the target and drops the 'target'
 /// field from the annotaiton.  Optionally handles non-local annotations.
 template <bool allowNonLocal = false>
-static LogicalResult applyWithoutTarget(AnnoPathValue target,
+static LogicalResult applyWithoutTarget(const AnnoPathValue &target,
                                         DictionaryAttr anno,
                                         ApplyState &state) {
   return applyWithoutTargetImpl(target, anno, state, allowNonLocal);
@@ -243,8 +244,8 @@ static LogicalResult applyWithoutTarget(AnnoPathValue target,
 /// Apply a DontTouchAnnotation to the circuit.  For almost all operations, this
 /// just adds a symbol.  For CHIRRTL memory ports, this preserves the
 /// annotation.
-static LogicalResult applyDontTouch(AnnoPathValue target, DictionaryAttr anno,
-                                    ApplyState &state) {
+static LogicalResult applyDontTouch(const AnnoPathValue &target,
+                                    DictionaryAttr anno, ApplyState &state) {
 
   // A DontTouchAnnotation is only allowed to be placed on a ReferenceTarget.
   // If this winds up on a module. then it indicates that the original
@@ -274,7 +275,8 @@ namespace {
 struct AnnoRecord {
   llvm::function_ref<Optional<AnnoPathValue>(DictionaryAttr, ApplyState &)>
       resolver;
-  llvm::function_ref<LogicalResult(AnnoPathValue, DictionaryAttr, ApplyState &)>
+  llvm::function_ref<LogicalResult(const AnnoPathValue &, DictionaryAttr,
+                                   ApplyState &)>
       applier;
 };
 } // end anonymous namespace
@@ -306,6 +308,10 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
     {memTapSourceClass, {stdResolve, applyWithoutTarget<true>}},
     {memTapPortClass, {stdResolve, applyWithoutTarget<true>}},
     {memTapBlackboxClass, {stdResolve, applyWithoutTarget<true>}},
+    // Grand Central Signal Mapping Annotations
+    {signalDriverAnnoClass, {noResolve, applyGCTSignalMappings}},
+    {signalDriverTargetAnnoClass, {stdResolve, applyWithoutTarget<true>}},
+    {signalDriverModuleAnnoClass, {stdResolve, applyWithoutTarget<true>}},
     // Miscellaneous Annotations
     {dontTouchAnnoClass, {stdResolve, applyDontTouch}}
 
@@ -357,10 +363,16 @@ LogicalResult LowerAnnotationsPass::applyAnnotation(DictionaryAttr anno,
     return state.circuit.emitError("Annotation without a class: ") << anno;
 
   // See if we handle the class
-  auto *record = getAnnotationHandler(annoClassVal, ignoreUnhandledAnno);
-  if (!record)
-    return mlir::emitWarning(state.circuit.getLoc())
-           << "Unhandled annotation: " << anno;
+  auto *record = getAnnotationHandler(annoClassVal, false);
+  if (!record) {
+    ++numUnhandled;
+    if (!ignoreUnhandledAnno)
+      return state.circuit->emitWarning("Unhandled annotation: ") << anno;
+
+    // Try again, requesting the fallback handler.
+    record = getAnnotationHandler(annoClassVal, ignoreUnhandledAnno);
+    assert(record);
+  }
 
   // Try to apply the annotation
   auto target = record->resolver(anno, state);
@@ -395,8 +407,11 @@ void LowerAnnotationsPass::runOnOperation() {
   // Grab the annotations.
   for (auto anno : annotations)
     worklistAttrs.push_back(anno.cast<DictionaryAttr>());
+
   size_t numFailures = 0;
+  size_t numAdded = 0;
   auto addToWorklist = [&](DictionaryAttr anno) {
+    ++numAdded;
     worklistAttrs.push_back(anno);
   };
   ApplyState state{circuit, modules, addToWorklist};
@@ -406,6 +421,12 @@ void LowerAnnotationsPass::runOnOperation() {
     if (applyAnnotation(attr, state).failed())
       ++numFailures;
   }
+
+  // Update statistics
+  numRawAnnotations += annotations.size();
+  numAddedAnnos += numAdded;
+  numAnnos += numAdded + annotations.size();
+
   if (numFailures)
     signalPassFailure();
 }

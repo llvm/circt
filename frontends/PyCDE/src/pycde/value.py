@@ -13,7 +13,7 @@ import mlir.ir as ir
 
 from contextvars import ContextVar
 from functools import singledispatchmethod
-from typing import Union
+from typing import Optional, Union
 import re
 import numpy as np
 
@@ -44,7 +44,13 @@ class Value:
 
   _reg_name = re.compile(r"^(.*)__reg(\d+)$")
 
-  def reg(self, clk=None, rst=None, name=None, cycles=1, sv_attributes=None):
+  def reg(self,
+          clk=None,
+          rst=None,
+          name=None,
+          cycles=1,
+          sv_attributes=None,
+          appid=None):
     """Register this value, returning the delayed value.
     `clk`, `rst`: the clock and reset signals.
     `name`: name this register explicitly.
@@ -85,6 +91,8 @@ class Value:
                             name=give_name,
                             sym_name=give_name,
                             sv_attributes=sv_attributes)
+      if appid is not None:
+        reg.appid = appid
       return reg
 
   @property
@@ -115,6 +123,21 @@ class Value:
       owner.attributes[self._namehint_attrname] = ir.StringAttr.get(new)
     else:
       self._name = new
+
+  @property
+  def appid(self) -> Optional[object]:  # Optional AppID.
+    from .module import AppID
+    owner = self.value.owner
+    if AppID.AttributeName in owner.attributes:
+      return AppID(owner.attributes[AppID.AttributeName])
+    return None
+
+  @appid.setter
+  def appid(self, appid) -> None:
+    if "sym_name" not in self.value.owner.attributes:
+      raise ValueError("AppIDs can only be attached to ops with symbols")
+    from .module import AppID
+    self.value.owner.attributes[AppID.AttributeName] = appid._appid
 
 
 class RegularValue(Value):
@@ -289,8 +312,8 @@ class ListValue(Value):
   This allows for directly manipulating the ListValues with numpy functionality.
   Power-users who use the Matrix directly have access to all numpy functions.
   In reality, it will only be a subset of the numpy array functions which are
-  safe to be used in the PyCDE context. Curating access at the level of ListValues
-  seems like a safe starting point.
+  safe to be used in the PyCDE context. Curating access at the level of
+  ListValues seems like a safe starting point.
   """
 
   def transpose(self, *args, **kwargs):
@@ -362,7 +385,7 @@ class ChannelValue(Value):
     return Value(unwrap_op.rawOutput), Value(unwrap_op.valid)
 
 
-def wrap_opviews_with_values(dialect, module_name):
+def wrap_opviews_with_values(dialect, module_name, excluded=[]):
   """Wraps all of a dialect's OpView classes to have their create method return
      a PyCDE Value instead of an OpView. The wrapped classes are inserted into
      the provided module."""
@@ -372,7 +395,8 @@ def wrap_opviews_with_values(dialect, module_name):
   for attr in dir(dialect):
     cls = getattr(dialect, attr)
 
-    if isinstance(cls, type) and issubclass(cls, ir.OpView):
+    if attr not in excluded and isinstance(cls, type) and issubclass(
+        cls, ir.OpView):
 
       def specialize_create(cls):
 

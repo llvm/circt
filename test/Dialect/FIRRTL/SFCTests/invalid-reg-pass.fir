@@ -1,4 +1,4 @@
-; RUN: firtool -split-input-file -drop-names -verilog %s | FileCheck %s
+; RUN: firtool -split-input-file -verilog %s | FileCheck %s
 
 ; This test checks register removal behavior for situations where the register
 ; is invalidated _through a primitive operation_.  This is intended to tease out

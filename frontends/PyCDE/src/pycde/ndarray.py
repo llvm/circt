@@ -39,10 +39,10 @@ class _TargetShape:
 
 class NDArray(np.ndarray):
   """
-  A PyCDE Matrix serves as a Numpy view of a multidimensional CIRCT array (ArrayType).
-  The Matrix ensures that all assignments to itself have been properly converted
-  to conform with insertion into the numpy array (circt_to_arr).
-  Once filled, a user can treat the Matrix as a numpy array.
+  A PyCDE Matrix serves as a Numpy view of a multidimensional CIRCT array
+  (ArrayType).  The Matrix ensures that all assignments to itself have been
+  properly converted to conform with insertion into the numpy array
+  (circt_to_arr).  Once filled, a user can treat the Matrix as a numpy array.
   The underlying CIRCT array is not materialized until to_circt is called.
   """
 

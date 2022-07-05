@@ -2,18 +2,18 @@
 
 // CHECK: fsm.machine @foo(%arg0: i1) -> i1 attributes {initialState = "IDLE"} {
 // CHECK:   %cnt = fsm.variable "cnt" {initValue = 0 : i16} : i16
-// CHECK:   fsm.state "IDLE" output  {
+// CHECK:   fsm.state @IDLE output  {
 // CHECK:     %true = arith.constant true
 // CHECK:     fsm.output %true : i1
 // CHECK:   } transitions  {
 // CHECK:     fsm.transition @BUSY guard  {
 // CHECK:       fsm.return %arg0
-// CHECK:     } action  {
+// CHECK:     } action {
 // CHECK:       %c256_i16 = arith.constant 256 : i16
 // CHECK:       fsm.update %cnt, %c256_i16 : i16
 // CHECK:     }
 // CHECK:   }
-// CHECK:   fsm.state "BUSY" output  {
+// CHECK:   fsm.state @BUSY output  {
 // CHECK:     %false = arith.constant false
 // CHECK:     fsm.output %false : i1
 // CHECK:   } transitions  {
@@ -21,7 +21,7 @@
 // CHECK:       %c0_i16 = arith.constant 0 : i16
 // CHECK:       %0 = arith.cmpi ne, %cnt, %c0_i16 : i16
 // CHECK:       fsm.return %0
-// CHECK:     } action  {
+// CHECK:     } action {
 // CHECK:       %c1_i16 = arith.constant 1 : i16
 // CHECK:       %0 = arith.subi %cnt, %c1_i16 : i16
 // CHECK:       fsm.update %cnt, %0 : i16
@@ -30,7 +30,6 @@
 // CHECK:       %c0_i16 = arith.constant 0 : i16
 // CHECK:       %0 = arith.cmpi eq, %cnt, %c0_i16 : i16
 // CHECK:       fsm.return %0
-// CHECK:     } action  {
 // CHECK:     }
 // CHECK:   }
 // CHECK: }
@@ -51,7 +50,7 @@
 fsm.machine @foo(%arg0: i1) -> i1 attributes {initialState = "IDLE"} {
   %cnt = fsm.variable "cnt" {initValue = 0 : i16} : i16
 
-  fsm.state "IDLE" output  {
+  fsm.state @IDLE output  {
     %true = arith.constant true
     fsm.output %true : i1
   } transitions  {
@@ -64,7 +63,7 @@ fsm.machine @foo(%arg0: i1) -> i1 attributes {initialState = "IDLE"} {
     }
   }
 
-  fsm.state "BUSY" output  {
+  fsm.state @BUSY output  {
     %false = arith.constant false
     fsm.output %false : i1
   } transitions  {
@@ -111,19 +110,17 @@ func.func @qux() {
 
 // CHECK:   fsm.machine @foo(%[[VAL_0:.*]]: i1) -> i1 attributes {initialState = "A"} {
 // CHECK:           %[[VAL_1:.*]] = fsm.variable "cnt" {initValue = 0 : i16} : i16
-// CHECK:           fsm.state "A" output {
+// CHECK:           fsm.state @A output {
 // CHECK:             fsm.output %[[VAL_0]] : i1
 // CHECK:           } transitions {
-// CHECK:             fsm.transition @A action {
-// CHECK:             }
+// CHECK:             fsm.transition @A
 // CHECK:           }
-// CHECK:           fsm.state "B" output {
+// CHECK:           fsm.state @B output {
 // CHECK:             fsm.output %[[VAL_0]] : i1
 // CHECK:           } transitions {
-// CHECK:             fsm.transition @B guard {
-// CHECK:             }
+// CHECK:             fsm.transition @B
 // CHECK:           }
-// CHECK:           fsm.state "C" output {
+// CHECK:           fsm.state @C output {
 // CHECK:             fsm.output %[[VAL_0]] : i1
 // CHECK:           } transitions {
 // CHECK:             fsm.transition @C
@@ -132,20 +129,20 @@ func.func @qux() {
 fsm.machine @foo(%arg0: i1) -> i1 attributes {initialState = "A"} {
   %cnt = fsm.variable "cnt" {initValue = 0 : i16} : i16
 
-  fsm.state "A" output  {
+  fsm.state @A output  {
     fsm.output %arg0 : i1
   } transitions {
     fsm.transition @A action  {
     }
   }
 
-  fsm.state "B" output  {
+  fsm.state @B output  {
     fsm.output %arg0 : i1
   } transitions {
     fsm.transition @B guard {}
   }
 
-  fsm.state "C" output  {
+  fsm.state @C output  {
     fsm.output %arg0 : i1
   } transitions {
     fsm.transition @C

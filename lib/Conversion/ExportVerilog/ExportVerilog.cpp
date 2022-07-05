@@ -157,8 +157,8 @@ static bool isDuplicatableExpression(Operation *op) {
 }
 
 /// Return the verilog name of the operations that can define a symbol.
-/// Except for <WireOp, RegOp, LocalParamOp, InstanceOp>, check global state
-/// `getDeclarationVerilogName` for them.
+/// Except for <WireOp, RegOp, LogicOp, LocalParamOp, InstanceOp>, check global
+/// state `getDeclarationVerilogName` for them.
 static StringRef getSymOpName(Operation *symOp) {
   // Typeswitch of operation types which can define a symbol.
   // If legalizeNames has renamed it, then the attribute must be set.
@@ -282,7 +282,7 @@ static void getTypeDims(SmallVectorImpl<Attribute> &dims, Type type,
     return getTypeDims(dims, inout.getElementType(), loc);
   if (auto uarray = hw::type_dyn_cast<hw::UnpackedArrayType>(type))
     return getTypeDims(dims, uarray.getElementType(), loc);
-  if (hw::type_isa<InterfaceType>(type) || hw::type_isa<StructType>(type))
+  if (hw::type_isa<InterfaceType, StructType>(type))
     return;
 
   mlir::emitError(loc, "value has an unsupported verilog type ") << type;
@@ -377,6 +377,17 @@ static StringRef getVerilogDeclWord(Operation *op,
   // If 'op' is in a module, output 'wire'. If 'op' is in a procedural block,
   // fall through to default.
   bool isProcedural = op->getParentOp()->hasTrait<ProceduralRegion>();
+
+  if (isa<LogicOp>(op)) {
+    // If the logic op is defined in a procedural region, add 'automatic'
+    // keyword. If the op has a struct type, 'logic' keyword is already emitted
+    // within a struct type definition (e.g. struct packed {logic foo;}). So we
+    // should not emit extra 'logic'.
+    bool hasStruct = hasStructType(op->getResult(0).getType());
+    if (isProcedural)
+      return hasStruct ? "automatic" : "automatic logic";
+    return hasStruct ? "" : "logic";
+  }
 
   if (!isProcedural)
     return "wire";
@@ -530,7 +541,8 @@ static bool isOkToBitSelectFrom(Value v) {
   // Uses of a wire or register can be done inline.
   if (auto read = v.getDefiningOp<ReadInOutOp>()) {
     if (read.input().getDefiningOp<WireOp>() ||
-        read.input().getDefiningOp<RegOp>())
+        read.input().getDefiningOp<RegOp>() ||
+        read.input().getDefiningOp<LogicOp>())
       return true;
   }
 
@@ -597,7 +609,7 @@ static bool isExpressionUnableToInline(Operation *op) {
 
 /// Return true if this expression should be emitted inline into any statement
 /// that uses it.
-static bool isExpressionEmittedInline(Operation *op) {
+bool ExportVerilog::isExpressionEmittedInline(Operation *op) {
   // Never create a temporary which is only going to be assigned to an output
   // port.
   if (op->hasOneUse() && isa<hw::OutputOp>(*op->getUsers().begin()))
@@ -656,7 +668,7 @@ struct ModuleNameManager {
   StringRef getName(Value value) { return getName(ValueOrOp(value)); }
   StringRef getName(Operation *op) {
     // If RegOp or WireOp, then result has the name.
-    if (isa<sv::WireOp, sv::RegOp>(op))
+    if (isa<sv::WireOp, sv::RegOp, sv::LogicOp>(op))
       return getName(op->getResult(0));
     return getName(ValueOrOp(op));
   }
@@ -665,7 +677,7 @@ struct ModuleNameManager {
 
   bool hasName(Operation *op) {
     // If RegOp or WireOp, then result has the name.
-    if (isa<sv::WireOp, sv::RegOp>(op))
+    if (isa<sv::WireOp, sv::RegOp, sv::LogicOp>(op))
       return nameTable.count(op->getResult(0));
     return nameTable.count(ValueOrOp(op));
   }
@@ -1012,8 +1024,8 @@ StringAttr EmitterBase::inferStructuralNameForTemporary(Value expr) {
     result = StringAttr::get(expr.getContext(), name);
 
   } else if (auto *op = expr.getDefiningOp()) {
-    // Uses of a wire or register can be done inline.
-    if (isa<WireOp, RegOp>(op)) {
+    // Uses of a wire, register or logic can be done inline.
+    if (isa<WireOp, RegOp, LogicOp>(op)) {
       StringRef name = getSymOpName(op);
       result = StringAttr::get(expr.getContext(), name);
 
@@ -2353,7 +2365,7 @@ void NameCollector::collectNames(Block &block) {
       continue;
     }
 
-    if (isa<WireOp, RegOp, LocalParamOp>(op)) {
+    if (isa<WireOp, RegOp, LogicOp, LocalParamOp>(op)) {
       names.addName(op.getResult(0), getSymOpName(&op));
       continue;
     }
@@ -2494,6 +2506,7 @@ private:
 
   LogicalResult visitSV(WireOp op) { return emitNoop(); }
   LogicalResult visitSV(RegOp op) { return emitNoop(); }
+  LogicalResult visitSV(LogicOp op) { return emitNoop(); }
   LogicalResult visitSV(LocalParamOp op) { return emitNoop(); }
   LogicalResult visitSV(AssignOp op);
   LogicalResult visitSV(BPAssignOp op);
@@ -2537,6 +2550,9 @@ private:
   LogicalResult visitSV(ErrorOp op);
   LogicalResult visitSV(WarningOp op);
   LogicalResult visitSV(InfoOp op);
+
+  LogicalResult visitSV(GenerateOp op);
+  LogicalResult visitSV(GenerateCaseOp op);
 
   void emitAssertionLabel(Operation *op, StringRef opName);
   void emitAssertionMessage(StringAttr message, ValueRange args,
@@ -2669,6 +2685,10 @@ LogicalResult StmtEmitter::visitSV(AssignOp op) {
 
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
+
+  // If we have SV attributes attached to the op, those need to be emitted
+  // first.
+  emitSVAttributes(op.svAttributesAttr(), op);
 
   indent() << "assign ";
   emitExpression(op.dest(), ops);
@@ -2961,6 +2981,64 @@ LogicalResult StmtEmitter::visitSV(WarningOp op) {
 LogicalResult StmtEmitter::visitSV(InfoOp op) {
   return emitSeverityMessageTask(op, "$info", {}, op.messageAttr(),
                                  op.operands());
+}
+
+LogicalResult StmtEmitter::visitSV(GenerateOp op) {
+  indent() << "generate\n";
+  indent() << "begin: " << names.addName(op, op.sym_name()) << "\n";
+  addIndent();
+  emitStatementBlock(op.body().getBlocks().front());
+  reduceIndent();
+  indent() << "end: " << names.getName(op) << "\n";
+  indent() << "endgenerate\n";
+  return success();
+}
+
+LogicalResult StmtEmitter::visitSV(GenerateCaseOp op) {
+  indent() << "case (";
+  emitter.printParamValue(op.cond(), os, VerilogPrecedence::Selection, [&]() {
+    return op->emitOpError("invalid case parameter");
+  });
+  os << ")\n";
+
+  // Ensure that all of the per-case arrays are the same length.
+  ArrayAttr patterns = op.casePatterns();
+  ArrayAttr caseNames = op.caseNames();
+  MutableArrayRef<Region> regions = op.caseRegions();
+  assert(patterns.size() == regions.size());
+  assert(patterns.size() == caseNames.size());
+
+  addIndent();
+  // TODO: We'll probably need to store the legalized names somewhere for
+  // `verbose` formatting. Set up the infra for storing names recursively. Just
+  // store this locally for now.
+  llvm::StringSet<> usedNames;
+  size_t nextGenID = 0;
+
+  // Emit each case.
+  for (size_t i = 0, e = patterns.size(); i < e; ++i) {
+    auto &region = regions[i];
+    assert(region.hasOneBlock());
+    Attribute patternAttr = patterns[i];
+
+    indent();
+    if (patternAttr.getType().isa<NoneType>())
+      os << "default";
+    else
+      emitter.printParamValue(
+          patternAttr, os, VerilogPrecedence::LowestPrecedence,
+          [&]() { return op->emitOpError("invalid case value"); });
+
+    StringRef legalName = legalizeName(
+        caseNames[i].cast<StringAttr>().getValue(), usedNames, nextGenID);
+    os << ": begin: " << legalName << "\n";
+    emitStatementBlock(region.getBlocks().front());
+    indent() << "end: " << legalName << "\n";
+  }
+
+  reduceIndent();
+  indent() << "endcase\n";
+  return success();
 }
 
 /// Emit the `<label>:` portion of an immediate or concurrent verification
@@ -3537,6 +3615,8 @@ LogicalResult StmtEmitter::visitSV(InterfaceOp op) {
 
 LogicalResult StmtEmitter::visitSV(InterfaceSignalOp op) {
   indent();
+  if (isZeroBitType(op.type()))
+    os << "// ";
   emitter.printPackedType(stripUnpackedTypes(op.type()), os, op->getLoc(),
                           false);
   os << ' ' << getSymOpName(op);
@@ -3929,7 +4009,7 @@ StringRef ModuleEmitter::getNameRemotely(Value value,
     auto *wireInput = readinout.input().getDefiningOp();
     if (!wireInput)
       return {};
-    if (isa<WireOp, RegOp>(wireInput))
+    if (isa<WireOp, RegOp, LogicOp>(wireInput))
       return getSymOpName(wireInput);
   }
 
@@ -3941,7 +4021,7 @@ StringRef ModuleEmitter::getNameRemotely(Value value,
         continue;
       Value drivenOnto = user->getOperand(0);
       Operation *drivenOntoOp = drivenOnto.getDefiningOp();
-      if (isa<WireOp, RegOp>(drivenOntoOp))
+      if (isa<WireOp, RegOp, LogicOp>(drivenOntoOp))
         return getSymOpName(drivenOntoOp);
     }
   }

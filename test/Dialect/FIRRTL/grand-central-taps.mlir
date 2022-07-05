@@ -354,7 +354,7 @@ firrtl.circuit "NLAGarbageCollection" {
     %bar_out_MPORT_clk = firrtl.wire  : !firrtl.clock
     %bar_0 = firrtl.reg sym @bar_0 %bar_out_MPORT_clk  {annotations = [{circt.nonlocal = @nla_3, class = "sifive.enterprise.grandcentral.MemTapAnnotation.source", id = 0 : i64, portID = 0 : i64}]} : !firrtl.uint<1>
     // CHECK:  %bar_0 = firrtl.reg sym @[[bar_0:.+]] %bar_out_MPORT_clk  : !firrtl.uint<1>
-    %bar_out_MPORT = firrtl.mem sym Undefined {
+    %bar_out_MPORT = firrtl.mem Undefined {
       depth = 1 : i64,
       name = "bar",
       portNames = ["out_MPORT"],
@@ -563,3 +563,49 @@ firrtl.circuit "Top" {
 //  firrtl.hierpath @nla_2 [@NLAUsedInWiring::@foo, @Foo]
 //  firrtl.hierpath @nla_0 [@DUT::@submodule_1, @Submodule]
 //  firrtl.hierpath @nla [@DUT::@submodule_2, @Submodule]
+
+// -----
+
+// Check that zero-width data taps are no-ops.  These should generate no XMRs.
+//
+firrtl.circuit "Top"  {
+  firrtl.extmodule private @DataTap(
+    out _0: !firrtl.uint<0> [
+      {
+        class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.port",
+        id = 0 : i64,
+        portID = 1 : i64
+      }
+    ],
+    out _1: !firrtl.uint<0> [
+      {
+        class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.port",
+        id = 0 : i64,
+        portID = 2 : i64
+      }
+    ]) attributes {annotations = [
+      {class = "sifive.enterprise.grandcentral.DataTapsAnnotation.blackbox"}
+    ]}
+  firrtl.module @Top(
+    out %p: !firrtl.uint<0> [
+      {
+        class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.source",
+        id = 0 : i64,
+        portID = 2 : i64
+      }
+    ]) {
+    %w = firrtl.wire {annotations = [
+      {
+        class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.source",
+        id = 0 : i64,
+        portID = 1 : i64
+      }
+    ]} : !firrtl.uint<0>
+    %tap_0, %tap_1 = firrtl.instance tap @DataTap(
+      out _0: !firrtl.uint<0>,
+      out _1: !firrtl.uint<0>
+    )
+  }
+}
+
+// CHECK-NOT: firrtl.verbatim.expr

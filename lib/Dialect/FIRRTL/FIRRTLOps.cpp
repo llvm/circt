@@ -1178,6 +1178,19 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
                        ArrayRef<Attribute> annotations,
                        ArrayRef<Attribute> portAnnotations, bool lowerToBind,
                        StringAttr innerSym) {
+  build(builder, result, resultTypes, moduleName, name, nameKind,
+        portDirections, portNames, annotations, portAnnotations, lowerToBind,
+        innerSym ? InnerSymAttr::get(innerSym) : InnerSymAttr());
+}
+
+void InstanceOp::build(OpBuilder &builder, OperationState &result,
+                       TypeRange resultTypes, StringRef moduleName,
+                       StringRef name, NameKindEnum nameKind,
+                       ArrayRef<Direction> portDirections,
+                       ArrayRef<Attribute> portNames,
+                       ArrayRef<Attribute> annotations,
+                       ArrayRef<Attribute> portAnnotations, bool lowerToBind,
+                       InnerSymAttr innerSym) {
   result.addTypes(resultTypes);
   result.addAttribute("moduleName",
                       SymbolRefAttr::get(builder.getContext(), moduleName));
@@ -1187,7 +1200,8 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
       direction::packAttribute(builder.getContext(), portDirections));
   result.addAttribute("portNames", builder.getArrayAttr(portNames));
   result.addAttribute("annotations", builder.getArrayAttr(annotations));
-  result.addAttribute("lowerToBind", builder.getBoolAttr(lowerToBind));
+  if (lowerToBind)
+    result.addAttribute("lowerToBind", builder.getUnitAttr());
   if (innerSym)
     result.addAttribute("inner_sym", innerSym);
   result.addAttribute("nameKind",
@@ -1234,7 +1248,8 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
       NameKindEnumAttr::get(builder.getContext(), nameKind),
       module.getPortDirectionsAttr(), module.getPortNamesAttr(),
       builder.getArrayAttr(annotations), portAnnotationsAttr,
-      builder.getBoolAttr(lowerToBind), innerSym);
+      lowerToBind ? builder.getUnitAttr() : UnitAttr(),
+      innerSym ? InnerSymAttr::get(innerSym) : InnerSymAttr());
 }
 
 /// Builds a new `InstanceOp` with the ports listed in `portIndices` erased, and
@@ -1448,7 +1463,7 @@ void InstanceOp::print(OpAsmPrinter &p) {
   p.printKeywordOrString(name());
   if (auto attr = inner_symAttr()) {
     p << " sym ";
-    p.printSymbolName(attr.getValue());
+    p.printSymbolName(attr.getSymName());
   }
   if (nameKindAttr().getValue() != NameKindEnum::DroppableName)
     p << ' ' << stringifyNameKindEnum(nameKindAttr().getValue());
@@ -1459,8 +1474,6 @@ void InstanceOp::print(OpAsmPrinter &p) {
                                             "portDirections", "portNames",
                                             "portTypes",      "portAnnotations",
                                             "inner_sym",      "nameKind"};
-  if (!lowerToBind())
-    omittedAttrs.push_back("lowerToBind");
   if (annotations().empty())
     omittedAttrs.push_back("annotations");
   p.printOptionalAttrDict((*this)->getAttrs(), omittedAttrs);
@@ -1484,7 +1497,7 @@ ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
   auto &resultAttrs = result.attributes;
 
   std::string name;
-  StringAttr innerSymAttr;
+  InnerSymAttr innerSymAttr;
   FlatSymbolRefAttr moduleName;
   SmallVector<OpAsmParser::Argument> entryArgs;
   SmallVector<Direction, 4> portDirections;
@@ -1497,10 +1510,11 @@ ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
   if (parser.parseKeywordOrString(&name))
     return failure();
   if (succeeded(parser.parseOptionalKeyword("sym"))) {
-    // Parsing an optional symbol name doesn't fail, so no need to check the
-    // result.
-    (void)parser.parseOptionalSymbolName(
-        innerSymAttr, hw::InnerName::getInnerNameAttrName(), result.attributes);
+    if (parser.parseCustomAttributeWithFallback(
+            innerSymAttr, ::mlir::Type{},
+            InnerSymbolTable::getInnerSymbolAttrName(), result.attributes)) {
+      return ::mlir::failure();
+    }
   }
   if (parseNameKind(parser, nameKind) ||
       parser.parseOptionalAttrDict(result.attributes) ||
@@ -1530,8 +1544,6 @@ ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
   // empty and false, respectively.
   if (!resultAttrs.get("annotations"))
     resultAttrs.append("annotations", parser.getBuilder().getArrayAttr({}));
-  if (!resultAttrs.get("lowerToBind"))
-    resultAttrs.append("lowerToBind", parser.getBuilder().getBoolAttr(false));
 
   // Add result types.
   result.types.reserve(portTypes.size());
@@ -1557,7 +1569,7 @@ void MemOp::build(OpBuilder &builder, OperationState &result,
                   uint32_t writeLatency, uint64_t depth, RUWAttr ruw,
                   ArrayRef<Attribute> portNames, StringRef name,
                   NameKindEnum nameKind, ArrayRef<Attribute> annotations,
-                  ArrayRef<Attribute> portAnnotations, StringAttr innerSym) {
+                  ArrayRef<Attribute> portAnnotations, InnerSymAttr innerSym) {
   result.addAttribute(
       "readLatency",
       builder.getIntegerAttr(builder.getIntegerType(32), readLatency));
@@ -1586,6 +1598,17 @@ void MemOp::build(OpBuilder &builder, OperationState &result,
     result.addAttribute("portAnnotations",
                         builder.getArrayAttr(portAnnotations));
   }
+}
+
+void MemOp::build(OpBuilder &builder, OperationState &result,
+                  TypeRange resultTypes, uint32_t readLatency,
+                  uint32_t writeLatency, uint64_t depth, RUWAttr ruw,
+                  ArrayRef<Attribute> portNames, StringRef name,
+                  NameKindEnum nameKind, ArrayRef<Attribute> annotations,
+                  ArrayRef<Attribute> portAnnotations, StringAttr innerSym) {
+  build(builder, result, resultTypes, readLatency, writeLatency, depth, ruw,
+        portNames, name, nameKind, annotations, portAnnotations,
+        innerSym ? InnerSymAttr::get(innerSym) : InnerSymAttr());
 }
 
 ArrayAttr MemOp::getPortAnnotation(unsigned portIdx) {

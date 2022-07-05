@@ -589,7 +589,7 @@ struct Deduper {
     // Record any annotations on the module.
     recordAnnotations(module);
     // Record port annotations.
-    for (auto pair : llvm::enumerate(module.getPortAnnotations()))
+    for (const auto &pair : llvm::enumerate(module.getPortAnnotations()))
       for (auto anno : AnnotationSet(pair.value().cast<ArrayAttr>()))
         if (auto nlaRef = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal"))
           targetMap[nlaRef.getAttr()].push_back(
@@ -619,7 +619,7 @@ private:
 
     // Record port annotations. Breadcrumbs don't appear on port annotations, so
     // we can skip the class check that we have above.
-    for (auto pair : llvm::enumerate(mem.portAnnotations()))
+    for (const auto &pair : llvm::enumerate(mem.portAnnotations()))
       for (auto anno : AnnotationSet(pair.value().cast<ArrayAttr>()))
         if (auto nlaRef = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal"))
           targetMap[nlaRef.getAttr()].push_back(
@@ -794,7 +794,7 @@ private:
     // into the correct spot if its not already a non-local annotation.
     SmallVector<NamedAttribute> attributes;
     int nonLocalIndex = -1;
-    for (auto val : llvm::enumerate(anno)) {
+    for (const auto &val : llvm::enumerate(anno)) {
       auto attr = val.value();
       // Is this field "circt.nonlocal"?
       auto compare = attr.getName().compare(nonLocalString);
@@ -868,7 +868,7 @@ private:
     auto index = getNextHandledIndex();
 
     // Merge annotations from the other op, skipping the ones already handled.
-    for (auto pair : llvm::enumerate(toAnnos)) {
+    for (const auto &pair : llvm::enumerate(toAnnos)) {
       // If its already handled, skip it.
       if (pair.index() == index) {
         index = getNextHandledIndex();

@@ -68,7 +68,7 @@ LogicalResult circt::firrtl::verifyModuleLikeOpInterface(FModuleLike module) {
       return module.emitOpError(
           "requires port annotations be array attributes");
     if (llvm::any_of(arrayAttr.getValue(), [](Attribute attr) {
-          return !attr.isa<DictionaryAttr, SubAnnotationAttr>();
+          return !attr.isa<DictionaryAttr>();
         }))
       return module.emitOpError(
           "annotations must be dictionaries or subannotations");

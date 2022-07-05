@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_FIRRTL_FIRRTLUTILS_H
 
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/Namespace.h"
 #include "mlir/IR/BuiltinOps.h"
 
 namespace circt {
@@ -65,6 +66,41 @@ std::string getFieldName(const FieldRef &fieldRef, bool &rootKnown);
 
 Value getValueByFieldID(ImplicitLocOpBuilder builder, Value value,
                         unsigned fieldID);
+
+/// Returns an operation's `inner_sym`, adding one if necessary.
+StringAttr
+getOrAddInnerSym(Operation *op, StringRef nameHint, FModuleOp mod,
+                 std::function<ModuleNamespace &(FModuleOp)> getNamespace);
+
+/// Obtain an inner reference to an operation, possibly adding an `inner_sym`
+/// to that operation.
+hw::InnerRefAttr
+getInnerRefTo(Operation *op, StringRef nameHint,
+              std::function<ModuleNamespace &(FModuleOp)> getNamespace);
+
+/// Returns a port's `inner_sym`, adding one if necessary.
+StringAttr
+getOrAddInnerSym(FModuleLike mod, size_t portIdx, StringRef nameHint,
+                 std::function<ModuleNamespace &(FModuleLike)> getNamespace);
+
+/// Obtain an inner reference to a port, possibly adding an `inner_sym`
+/// to the port.
+hw::InnerRefAttr
+getInnerRefTo(FModuleLike mod, size_t portIdx, StringRef nameHint,
+              std::function<ModuleNamespace &(FModuleLike)> getNamespace);
+
+//===----------------------------------------------------------------------===//
+// Parser-related utilities
+//
+// These cannot always be relegated to the parser and sometimes need to be
+// available for passes.  This has specifically come up for Annotation lowering
+// where there is FIRRTL stuff that needs to be parsed out of an annotation.
+//===----------------------------------------------------------------------===//
+
+/// Parse a string that may encode a FIRRTL location into a LocationAttr.
+std::pair<bool, Optional<mlir::LocationAttr>> maybeStringToLocation(
+    StringRef spelling, bool skipParsing, StringAttr &locatorFilenameCache,
+    FileLineColLoc &fileLineColLocCache, MLIRContext *context);
 
 } // namespace firrtl
 } // namespace circt

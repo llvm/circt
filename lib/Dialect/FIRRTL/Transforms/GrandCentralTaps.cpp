@@ -17,6 +17,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
@@ -107,6 +108,9 @@ struct PortWiring {
   Literal literal;
   /// The non-local anchor further specifying where to connect.
   HierPathOp nla;
+  /// True if the tapped target is known to be zero-width.  This indicates that
+  /// the port should not be wired.  The port will be removed by LowerToHW.
+  bool zeroWidth = false;
 
   PortWiring() : target(nullptr) {}
 };
@@ -290,7 +294,7 @@ static FailureOr<Literal> parseIntegerLiteral(MLIRContext *context,
 // A Literal is a FIRRTL IR literal serialized to a string.  For now, just
 // store the string.
 // TODO: Parse the literal string into a UInt or SInt literal.
-LogicalResult circt::firrtl::applyGCTDataTaps(AnnoPathValue target,
+LogicalResult circt::firrtl::applyGCTDataTaps(const AnnoPathValue &target,
                                               DictionaryAttr anno,
                                               ApplyState &state) {
 
@@ -426,7 +430,7 @@ LogicalResult circt::firrtl::applyGCTDataTaps(AnnoPathValue target,
   return success();
 }
 
-LogicalResult circt::firrtl::applyGCTMemTaps(AnnoPathValue target,
+LogicalResult circt::firrtl::applyGCTMemTaps(const AnnoPathValue &target,
                                              DictionaryAttr anno,
                                              ApplyState &state) {
 
@@ -503,7 +507,15 @@ class GrandCentralTapsPass : public GrandCentralTapsBase<GrandCentralTapsPass> {
     auto key = getKey(anno);
     annos.insert({key, anno});
     assert(!tappedPorts.count(key) && "ambiguous tap annotation");
-    tappedPorts.insert({key, port});
+    auto portWidth = cast<FModuleLike>(port.first)
+                         .getPortType(port.second)
+                         .getBitWidthOrSentinel();
+    // If the port width is non-zero, process it normally.  Otherwise, record it
+    // as being zero-width.
+    if (portWidth)
+      tappedPorts.insert({key, port});
+    else
+      zeroWidthTaps.insert(key);
     if (auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal"))
       deadNLAs.insert(sym.getAttr());
   }
@@ -511,13 +523,18 @@ class GrandCentralTapsPass : public GrandCentralTapsBase<GrandCentralTapsPass> {
     auto key = getKey(anno);
     annos.insert({key, anno});
     assert(!tappedOps.count(key) && "ambiguous tap annotation");
-    tappedOps.insert({key, op});
+    // If the port width is targeting a module (e.g., a blackbox) or if it has a
+    // non-zero width, process it normally.  Otherwise, record it as being
+    // zero-width.
+    if (isa<FModuleLike>(op) ||
+        op->getResult(0).getType().cast<FIRRTLType>().getBitWidthOrSentinel())
+      tappedOps.insert({key, op});
+    else
+      zeroWidthTaps.insert(key);
     if (auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal"))
       deadNLAs.insert(sym.getAttr());
   }
 
-  /// Returns an operation's `inner_sym`, adding one if necessary.
-  StringAttr getOrAddInnerSym(Operation *op);
   /// Returns a port's `inner_sym`, adding one if necessary.
   StringAttr getOrAddInnerSym(FModuleLike module, size_t portIdx);
   /// Obtain an inner reference to an operation, possibly adding an `inner_sym`
@@ -538,6 +555,7 @@ class GrandCentralTapsPass : public GrandCentralTapsBase<GrandCentralTapsPass> {
 
   DenseMap<Key, Annotation> annos;
   DenseMap<Key, Operation *> tappedOps;
+  DenseSet<Key> zeroWidthTaps;
   DenseMap<Key, Port> tappedPorts;
   SmallVector<PortWiring, 8> portWiring;
 
@@ -779,6 +797,10 @@ void GrandCentralTapsPass::runOnOperation() {
       for (auto port : portWiring) {
         LLVM_DEBUG(llvm::dbgs() << "- Wiring up port " << port.portNum << "\n");
 
+        // Ignore the port if it is marked for deletion.
+        if (port.zeroWidth)
+          continue;
+
         // Handle literals. We send the literal string off to the FIRParser to
         // translate into whatever ops are necessary. This yields a handle on
         // value we're supposed to drive.
@@ -810,7 +832,7 @@ void GrandCentralTapsPass::runOnOperation() {
               auto refPart = getRefPart(segment);
               if (!refPart)
                 continue;
-              auto innerSymTbl = innerSymTblCol.getInnerSymbolTable(
+              auto &innerSymTbl = innerSymTblCol.getInnerSymbolTable(
                   symtbl.lookup(getModPart(segment)));
               prefixWithNLA.push_back(
                   cast<InstanceOp>(innerSymTbl.lookup(refPart)));
@@ -1024,6 +1046,13 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
       return;
     }
 
+    // If the port is zero-width, then mark it as
+    if (zeroWidthTaps.contains(key)) {
+      wiring.zeroWidth = true;
+      portWiring.push_back(std::move(wiring));
+      return;
+    }
+
     // The annotation scattering must have placed this annotation on some
     // target operation or block argument, which we should have picked up in
     // the tapped args or ops maps.
@@ -1155,17 +1184,6 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
   llvm_unreachable("portAnnos is never populated with unsupported annos");
 }
 
-StringAttr GrandCentralTapsPass::getOrAddInnerSym(Operation *op) {
-  auto attr = getInnerSymName(op);
-  if (attr)
-    return attr;
-  auto module = op->getParentOfType<FModuleOp>();
-  auto name = getModuleNamespace(module).newName("gct_sym");
-  attr = StringAttr::get(op->getContext(), name);
-  op->setAttr("inner_sym", attr);
-  return attr;
-}
-
 StringAttr GrandCentralTapsPass::getOrAddInnerSym(FModuleLike module,
                                                   size_t portIdx) {
   auto attr = module.getPortSymbolAttr(portIdx);
@@ -1178,9 +1196,10 @@ StringAttr GrandCentralTapsPass::getOrAddInnerSym(FModuleLike module,
 }
 
 InnerRefAttr GrandCentralTapsPass::getInnerRefTo(Operation *op) {
-  return InnerRefAttr::get(
-      SymbolTable::getSymbolName(op->getParentOfType<FModuleOp>()),
-      getOrAddInnerSym(op));
+  return ::getInnerRefTo(op, "gct_sym",
+                         [&](FModuleOp mod) -> ModuleNamespace & {
+                           return getModuleNamespace(mod);
+                         });
 }
 
 InnerRefAttr GrandCentralTapsPass::getInnerRefTo(FModuleLike module,
