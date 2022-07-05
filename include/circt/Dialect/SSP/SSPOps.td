@@ -71,7 +71,7 @@ def OperationOp : SSPOp<"operation",
   let hasVerifier = 1;
 
   let extraClassDeclaration = [{
-    bool isOptionalSymbol() { return true; }
+    static bool isOptionalSymbol() { return true; }
   }];
 
   let skipDefaultBuilders = true;
