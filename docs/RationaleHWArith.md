@@ -12,7 +12,7 @@ This document describes the various design points of the HWArith dialect, a dial
 ## Introduction
 
 The `hwarith` dialect provides a collection of operations that define typical integer arithmetic operations which are bitwidth aware.
-This bitwidth awareness is expressed through return type inference rules that, based on the types of an operation and its input operands, infers the type of the result operand.
+This bitwidth awareness is expressed through return type inference rules that, based on the types of an operation and its input operands, infers the type of the result operand. Importantly, for the initial implementation of this dialect, we do not allow types with uninferred width in the IR. A user is expected to iteratively build operations, expect operation return types, and use this to further construct IR.
 
 In general, the bit width inference rules are designed to model SystemVerilog semantics. However, unlike SystemVerilog, the aim of this dialect is to provide a strongly-typed hardware arithmetic library with the width inference rules for every operator explained in a clear and understandable way to avoid ambiguity.
 
@@ -29,10 +29,10 @@ Below we try to capture some common questions on the capabilities of such a dial
     * 0-width values might arise from arithmetic rules which reduce the bit width of an expression wrt. the operands to that expression. One case where such rules _may_ apply is in the implementation of modulo operations.  
     We refrain from adding support at this point in time, since support for 0-width values in the remainder of the RTL dialects is, at time of writing, lacking/undefined. Once support is added in these downstream dialects, 0-width support in `hwarith` should be reconsidered.
 * **Q:** Does this support width inferred types?
-    * Relying on width inference is relevant when referencing results of other width-inferred value. Without this, a user/frontend must itself know and apply width inference rules before generating the IR. Having width-inferred types will be convenient not only for generating IR, but also to leave room for width inference rules and optimizations to apply recursively. As an example:
+    * Relying on width inference is relevant when referencing results of other width-inferred value. Without this, a user/frontend must itself know and apply width inference rules while generating the IR (either explicitly, or implicitly, through op builders). Having width-inferred types will be convenient not only for generating IR, but also to leave room for width inference rules and optimizations to apply recursively. As an example:
     ```mlir
-    %1 = hwarith.add %a, %b : ui4, ui4
-    %2 = hwarith.add %c, %1 : ui3, ui // %1 is an unsigned integer of inferred width
+    %1 = hwarith.add %a, %b : (ui4, ui4) -> (un) // %1 is an unsigned integer of inferred width
+    %2 = hwarith.add %c, %1 : (ui3, ui) -> (un)
     ```
     We see merit in having inferred width types, but recognize that the work required to get this right is non-trivial and will require significant effort. Once need arises, and resources are available, we find width inferred types to be a valuable contribution to the dialect, but it will not be part of the initial implementation.
 * **Q:** Does this support user-provided/alternative rules?
@@ -47,12 +47,12 @@ Below we try to capture some common questions on the capabilities of such a dial
 The core capability of the dialect is the bit width inference rules implemented for each operation. These define the semantics for how arithmetic overflow is to be handled both with respect to the width and signedness of operation results, as well as how this is communicated to a `comb` lowering.
 
 **TODO**: elaborate once operators are provided.
-* `hwarith.add %0, %1 : #l0, #l1`:
-* `hwarith.sub %0, %1 : #l0, #l1`:
-* `hwarith.mul %0, %1 : #l0, #l1`:
-* `hwarith.div %0, %1 : #l0, #l1`:
-* `hwarith.mod %0, %1 : #l0, #l1`:
-* `hwarith.cast %0    : #l0, #l1`: 
+* `hwarith.add %0, %1 : (#l0, #l1) -> (#l2)`:
+* `hwarith.sub %0, %1 : (#l0, #l1) -> (#l2)`:
+* `hwarith.mul %0, %1 : (#l0, #l1) -> (#l2)`:
+* `hwarith.div %0, %1 : (#l0, #l1) -> (#l2)`:
+* `hwarith.mod %0, %1 : (#l0, #l1) -> (#l2)`:
+* `hwarith.cast %0 : (#l0) -> (#l2)`: 
 
 
 ## Lowering
@@ -62,7 +62,7 @@ The general lowering style of the dialect operations consists of padding the ope
 For instance, given `%res = hwarith.add %lhs, %rhs` and a rule stating `w(res)` = `max(w(lhs), w(rhs)) + 1` the lowering would be:
 
 ```mlir
-%res = hwarith.add %lhs, %rhs : ui3, ui4
+%res = hwarith.add %lhs, %rhs : (ui3, ui4) -> (ui5)
 
 // lowers to
 %z2 = hw.constant 0 : i2
