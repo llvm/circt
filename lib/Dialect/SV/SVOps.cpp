@@ -1768,14 +1768,6 @@ LogicalResult LStreamPackOp::verify() {
   return success();
 }
 
-/* void LStreamPackOp::build(OpBuilder &builder, OperationState &result, Value hd,
-                          ValueRange tl) {
-  result.addOperands(ValueRange{hd});
-  result.addOperands(tl);
-  unsigned hdWidth = hd.getType().cast<IntegerType>().getWidth();
-  result.addTypes(builder.getIntegerType(getTotalWidth(tl) + hdWidth));
-} */
-
 LogicalResult LStreamPackOp::inferReturnTypes(MLIRContext *context,
                                               Optional<Location> loc,
                                               ValueRange operands,
