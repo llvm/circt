@@ -201,7 +201,7 @@ OperationOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 
     Operation *sourceOp = symbolTable.lookupNearestSymbolFrom(*this, sourceRef);
     if (!sourceOp || !isa<OperationOp>(sourceOp))
-      return emitOpError("references invalid source operation: ") << sourceRef;
+      return emitError("references invalid source operation: ") << sourceRef;
   }
 
   return success();

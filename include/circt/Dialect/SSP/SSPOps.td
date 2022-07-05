@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/RegionKindInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
 
@@ -17,7 +18,7 @@ class SSPOp<string mnemonic, list<Trait> traits = []> :
   Op<SSPDialect, mnemonic, traits>;
 
 def InstanceOp : SSPOp<"instance",
-    [IsolatedFromAbove, SymbolTable, NoRegionArguments]
+    [IsolatedFromAbove, SymbolTable, NoRegionArguments, OpAsmOpInterface]
     # GraphRegionNoTerminator.traits> {
   let summary = "Instance of a static scheduling problem";
   let description = [{ TODO }];
@@ -26,6 +27,10 @@ def InstanceOp : SSPOp<"instance",
   let regions = (region SizedRegion<1>: $body);
   let assemblyFormat = "$instanceName `of` $problemName ($properties^)? $body attr-dict";
   
+  let extraClassDeclaration = [{
+    static ::llvm::StringRef getDefaultDialect() { return "ssp"; }
+  }];
+
   let skipDefaultBuilders = true;
   let builders = [
     OpBuilder<(ins "::mlir::StringAttr":$instanceName,
