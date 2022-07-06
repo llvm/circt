@@ -26,6 +26,22 @@ using namespace circt::ssp;
 ParseResult OperationOp::parse(OpAsmParser &parser, OperationState &result) {
   auto &builder = parser.getBuilder();
 
+  // Special handling for the linked operator type property
+  SmallVector<Attribute> alreadyParsed;
+
+  if (parser.parseLess())
+    return failure();
+
+  FlatSymbolRefAttr oprRef;
+  auto parseSymbolResult = parser.parseOptionalAttribute(oprRef);
+  if (parseSymbolResult.hasValue()) {
+    assert(succeeded(*parseSymbolResult));
+    alreadyParsed.push_back(builder.getAttr<LinkedOperatorTypeAttr>(oprRef));
+  }
+
+  if (parser.parseGreater())
+    return failure();
+
   // (Scheduling) operation's name
   StringAttr opName;
   (void)parser.parseOptionalSymbolName(opName, SymbolTable::getSymbolAttrName(),
@@ -75,7 +91,8 @@ ParseResult OperationOp::parse(OpAsmParser &parser, OperationState &result) {
 
   // Properties
   ArrayAttr properties;
-  auto parsePropertiesResult = parseOptionalPropertyArray(properties, parser);
+  auto parsePropertiesResult =
+      parseOptionalPropertyArray(properties, parser, alreadyParsed);
   if (parsePropertiesResult.hasValue()) {
     if (failed(*parsePropertiesResult))
       return failure();
@@ -100,6 +117,23 @@ ParseResult OperationOp::parse(OpAsmParser &parser, OperationState &result) {
 }
 
 void OperationOp::print(OpAsmPrinter &p) {
+  // Special handling for the linked operator type
+  SmallVector<Attribute> alreadyPrinted;
+
+  p << '<';
+  if (ArrayAttr properties = getPropertiesAttr()) {
+    auto it =
+        std::find_if(properties.begin(), properties.end(), [](Attribute a) {
+          return a.isa<LinkedOperatorTypeAttr>();
+        });
+    if (it != properties.end()) {
+      auto opr = (*it).dyn_cast<LinkedOperatorTypeAttr>();
+      p.printAttribute(opr.getValue());
+      alreadyPrinted.push_back(opr);
+    }
+  }
+  p << '>';
+
   // (Scheduling) operation's name
   if (StringAttr symName = getSymNameAttr()) {
     p << ' ';
@@ -144,7 +178,7 @@ void OperationOp::print(OpAsmPrinter &p) {
   // Properties
   if (ArrayAttr properties = getPropertiesAttr()) {
     p << ' ';
-    printPropertyArray(properties, p);
+    printPropertyArray(properties, p, alreadyPrinted);
   }
 
   // Default attr-dict

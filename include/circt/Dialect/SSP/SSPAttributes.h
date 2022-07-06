@@ -24,9 +24,11 @@
 namespace circt {
 namespace ssp {
 
-mlir::OptionalParseResult parseOptionalPropertyArray(ArrayAttr &attr,
-                                                     AsmParser &parser);
-void printPropertyArray(ArrayAttr attr, AsmPrinter &p);
+mlir::OptionalParseResult
+parseOptionalPropertyArray(ArrayAttr &attr, AsmParser &parser,
+                           ArrayRef<Attribute> alreadyParsed = {});
+void printPropertyArray(ArrayAttr attr, AsmPrinter &p,
+                        ArrayRef<Attribute> alreadyPrinted = {});
 
 } // namespace ssp
 } // namespace circt

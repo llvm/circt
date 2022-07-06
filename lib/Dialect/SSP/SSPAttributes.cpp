@@ -17,6 +17,7 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
 
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;
@@ -32,12 +33,22 @@ void SSPDialect::registerAttributes() {
       >();
 }
 
-mlir::OptionalParseResult ssp::parseOptionalPropertyArray(ArrayAttr &attr,
-                                                          AsmParser &parser) {
-  if (parser.parseOptionalLSquare())
+mlir::OptionalParseResult
+ssp::parseOptionalPropertyArray(ArrayAttr &attr, AsmParser &parser,
+                                ArrayRef<Attribute> alreadyParsed) {
+  auto &builder = parser.getBuilder();
+
+  if (parser.parseOptionalLSquare()) {
+    if (!alreadyParsed.empty()) {
+      attr = builder.getArrayAttr(alreadyParsed);
+      return success();
+    }
     return {};
+  }
 
   SmallVector<Attribute> elements;
+  elements.append(alreadyParsed.begin(), alreadyParsed.end());
+
   auto parseListResult = parser.parseCommaSeparatedList([&]() -> ParseResult {
     StringRef mnemonic;
     Attribute elem;
@@ -65,13 +76,21 @@ mlir::OptionalParseResult ssp::parseOptionalPropertyArray(ArrayAttr &attr,
   if (parseListResult || parser.parseRSquare())
     return failure();
 
-  attr = parser.getBuilder().getArrayAttr(elements);
+  attr = builder.getArrayAttr(elements);
   return success();
 }
 
-void ssp::printPropertyArray(ArrayAttr attr, AsmPrinter &p) {
+void ssp::printPropertyArray(ArrayAttr attr, AsmPrinter &p,
+                             ArrayRef<Attribute> alreadyPrinted) {
+  auto elementsToPrint =
+      llvm::make_filter_range(attr.getAsRange<Attribute>(), [&](Attribute a) {
+        return !llvm::is_contained(alreadyPrinted, a);
+      });
+  if (elementsToPrint.empty())
+    return;
+
   p << '[';
-  llvm::interleaveComma(attr.getAsRange<Attribute>(), p, [&](Attribute elem) {
+  llvm::interleaveComma(elementsToPrint, p, [&](Attribute elem) {
     // Try to emit the shortform for the built-in SSP property attributes, and
     // if that fails, fall back to the generic form.
     if (failed(generatedAttributePrinter(elem, p)))
