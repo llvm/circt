@@ -50,20 +50,6 @@ circuit Foo: %[[{"a":"a"},]]]
 
 ; // -----
 
-; A custom annotation fails to parse because it is missing fields
-
-; expected-error @+2 {{did not contain required key}}
-; expected-note @+1 {{}}
-circuit Foo: %[[
-  {
-    "class":"freechips.rocketchip.objectmodel.OMIRAnnotation"
-  }
-]]
-  module Foo:
-    skip
-
-; // -----
-
 ; An empty target should report an error (and not crash)
 
 
