@@ -348,6 +348,10 @@ class NamedValueOpView:
       value = self.opview.results[index]
       return OpOperand(self.opview.operation, index, value, self)
 
+    # Forward "attributes" attribute from the operation.
+    if name == "attributes":
+      return self.opview.operation.attributes
+
     # If we fell through to here, the name isn't a result.
     raise AttributeError(f"unknown port name {name}")
 
