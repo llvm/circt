@@ -31,3 +31,51 @@ void SSPDialect::registerAttributes() {
 #include "circt/Dialect/SSP/SSPAttributes.cpp.inc"
       >();
 }
+
+mlir::OptionalParseResult ssp::parseOptionalPropertyArray(ArrayAttr &attr,
+                                                          AsmParser &parser) {
+  if (parser.parseOptionalLSquare())
+    return {};
+
+  SmallVector<Attribute> elements;
+  auto parseListResult = parser.parseCommaSeparatedList([&]() -> ParseResult {
+    StringRef mnemonic;
+    Attribute elem;
+    if (parser.parseOptionalKeyword(&mnemonic)) {
+      // not a short-form SSP attribute, delegate to the generic machinery.
+      if (parser.parseAttribute(elem))
+        return failure();
+
+      elements.push_back(elem);
+      return success();
+    }
+
+    // Try to parse one of the built-in SSP property attributes.
+    auto parseElemResult =
+        generatedAttributeParser(parser, mnemonic, Type(), elem);
+    if (!parseElemResult.hasValue() || failed(*parseElemResult))
+      return parser.emitError(
+          parser.getCurrentLocation(),
+          "carries unknown or malformed shortform property");
+
+    elements.push_back(elem);
+    return success();
+  });
+
+  if (parseListResult || parser.parseRSquare())
+    return failure();
+
+  attr = parser.getBuilder().getArrayAttr(elements);
+  return success();
+}
+
+void ssp::printPropertyArray(ArrayAttr attr, AsmPrinter &p) {
+  p << '[';
+  llvm::interleaveComma(attr.getAsRange<Attribute>(), p, [&](Attribute elem) {
+    // Try to emit the shortform for the built-in SSP property attributes, and
+    // if that fails, fall back to the generic form.
+    if (failed(generatedAttributePrinter(elem, p)))
+      p.printAttribute(attr);
+  });
+  p << ']';
+}

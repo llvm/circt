@@ -41,6 +41,7 @@ include "PropertyBase.td"
 // Problem
 def LinkedOperatorType : OperationProperty<SSPDialect,
   "LinkedOperatorType", "::mlir::FlatSymbolRefAttr", "::circt::scheduling::Problem"> {
+  let mnemonic = "opr";
   let extraClassDeclaration = [{
     void setInProblem(}] # problemClassName # [{ &prob, ::mlir::Operation *op) {
       prob.set}] # propertyName # [{(op, getValue().getLeafReference());
@@ -53,16 +54,26 @@ def LinkedOperatorType : OperationProperty<SSPDialect,
   }];
 }
 def StartTime : OperationProperty<SSPDialect,
-  "StartTime", "unsigned", "::circt::scheduling::Problem">;
+  "StartTime", "unsigned", "::circt::scheduling::Problem"> {
+  let mnemonic = "t";
+}
 def Latency : OperatorTypeProperty<SSPDialect,
-  "Latency", "unsigned", "::circt::scheduling::Problem">;
+  "Latency", "unsigned", "::circt::scheduling::Problem"> {
+  let mnemonic = "latency";
+}
 
 // CyclicProblem
 def Distance : DependenceProperty<SSPDialect,
-  "Distance", "unsigned", "::circt::scheduling::CyclicProblem">;
+  "Distance", "unsigned", "::circt::scheduling::CyclicProblem"> {
+  let mnemonic = "dist";
+}
 def InitiationInterval : InstanceProperty<SSPDialect,
-  "InitiationInterval", "unsigned", "::circt::scheduling::CyclicProblem">;
+  "InitiationInterval", "unsigned", "::circt::scheduling::CyclicProblem"> {
+  let mnemonic = "II";
+}
 
 // SharedOperatorsProblem
 def Limit : OperatorTypeProperty<SSPDialect,
-  "Limit", "unsigned", "::circt::scheduling::SharedOperatorsProblem">;
+  "Limit", "unsigned", "::circt::scheduling::SharedOperatorsProblem"> {
+  let mnemonic = "limit";
+}

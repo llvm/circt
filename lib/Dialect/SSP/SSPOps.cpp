@@ -40,18 +40,21 @@ ParseResult OperationOp::parse(OpAsmParser &parser, OperationState &result) {
     FlatSymbolRefAttr sourceRef;
     ArrayAttr properties;
 
-    // Try to parse a symbol reference first...
-    if (!parser.parseOptionalAttribute(sourceRef).hasValue()) {
-      // ...and if that fails, attempt to parse an SSA operand.
+    // Try to parse either symbol reference...
+    auto parseSymbolResult = parser.parseOptionalAttribute(sourceRef);
+    if (parseSymbolResult.hasValue())
+      assert(succeeded(*parseSymbolResult));
+    else {
+      // ...or an SSA operand.
       OpAsmParser::UnresolvedOperand operand;
-      if (failed(parser.parseOperand(operand)))
+      if (parser.parseOperand(operand))
         return parser.emitError(loc, "expected SSA value or symbol reference");
 
       unresolvedOperands.push_back(operand);
     }
 
     // Parse the properties, if present.
-    parser.parseOptionalAttribute(properties);
+    parseOptionalPropertyArray(properties, parser);
 
     // No need to explicitly store SSA deps without properties.
     if (sourceRef || properties)
@@ -72,9 +75,12 @@ ParseResult OperationOp::parse(OpAsmParser &parser, OperationState &result) {
 
   // Properties
   ArrayAttr properties;
-  parser.parseOptionalAttribute(properties);
-  if (properties)
+  auto parsePropertiesResult = parseOptionalPropertyArray(properties, parser);
+  if (parsePropertiesResult.hasValue()) {
+    if (failed(*parsePropertiesResult))
+      return failure();
     result.addAttribute(builder.getStringAttr("properties"), properties);
+  }
 
   // Parse default attr-dict
   (void)parser.parseOptionalAttrDict(result.attributes);
@@ -129,7 +135,7 @@ void OperationOp::print(OpAsmPrinter &p) {
       p.printAttribute(dep.getSourceRef());
       if (ArrayAttr depProps = dep.getProperties()) {
         p << ' ';
-        p.printAttribute(depProps);
+        printPropertyArray(depProps, p);
       }
     });
   }
@@ -138,7 +144,7 @@ void OperationOp::print(OpAsmPrinter &p) {
   // Properties
   if (ArrayAttr properties = getPropertiesAttr()) {
     p << ' ';
-    p.printAttribute(properties);
+    printPropertyArray(properties, p);
   }
 
   // Default attr-dict
@@ -205,6 +211,23 @@ OperationOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   }
 
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// Wrappers for the `custom<Properties>` ODS directive.
+//===----------------------------------------------------------------------===//
+
+static ParseResult parseProperties(OpAsmParser &parser, ArrayAttr &attr) {
+  auto result = parseOptionalPropertyArray(attr, parser);
+  if (!result.hasValue() || succeeded(*result))
+    return success();
+  return failure();
+}
+
+static void printProperties(OpAsmPrinter &p, Operation *op, ArrayAttr attr) {
+  if (!attr)
+    return;
+  printPropertyArray(attr, p);
 }
 
 //===----------------------------------------------------------------------===//

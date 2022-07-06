@@ -25,7 +25,7 @@ def InstanceOp : SSPOp<"instance",
 
   let arguments = (ins StrAttr:$instanceName, StrAttr:$problemName, OptionalAttr<ArrayAttr>:$properties);
   let regions = (region SizedRegion<1>: $body);
-  let assemblyFormat = "$instanceName `of` $problemName ($properties^)? $body attr-dict";
+  let assemblyFormat = "$instanceName `of` $problemName custom<Properties>($properties) $body attr-dict";
   
   let extraClassDeclaration = [{
     static ::llvm::StringRef getDefaultDialect() { return "ssp"; }
@@ -52,7 +52,7 @@ def OperatorTypeOp : SSPOp<"operator_type",
   let description = [{ TODO }];
 
   let arguments = (ins SymbolNameAttr:$sym_name, OptionalAttr<ArrayAttr>:$properties);
-  let assemblyFormat = "$sym_name ($properties^)? attr-dict";
+  let assemblyFormat = "$sym_name custom<Properties>($properties) attr-dict";
 }
 
 def OperationOp : SSPOp<"operation",

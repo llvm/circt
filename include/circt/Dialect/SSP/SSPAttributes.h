@@ -16,7 +16,19 @@
 #include "circt/Dialect/SSP/SSPDialect.h"
 #include "circt/Scheduling/Problems.h"
 
+#include "mlir/IR/OpImplementation.h"
+
 #define GET_ATTRDEF_CLASSES
 #include "circt/Dialect/SSP/SSPAttributes.h.inc"
+
+namespace circt {
+namespace ssp {
+
+mlir::OptionalParseResult parseOptionalPropertyArray(ArrayAttr &attr,
+                                                     AsmParser &parser);
+void printPropertyArray(ArrayAttr attr, AsmPrinter &p);
+
+} // namespace ssp
+} // namespace circt
 
 #endif // CIRCT_DIALECT_SSP_SSPATTRIBUTES_H
