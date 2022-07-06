@@ -467,9 +467,6 @@ firrtl.circuit "NLAUsedInWiring"  {
       id = 0 : i64,
       portID = 1 : i64
     }]} : !firrtl.uint<1>
-    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    firrtl.connect %g, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-    firrtl.connect %f, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
   }
 
   firrtl.module @NLAUsedInWiring() {
@@ -484,8 +481,6 @@ firrtl.circuit "NLAUsedInWiring"  {
       portID = 3 : i64
     }]} : !firrtl.uint<1>
     %dataTap_b, %dataTap_c, %dataTap_d = firrtl.instance dataTap @DataTap(out b: !firrtl.uint<1>, out c: !firrtl.uint<1>, out d: !firrtl.uint<1>)
-    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    firrtl.connect %k, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
 

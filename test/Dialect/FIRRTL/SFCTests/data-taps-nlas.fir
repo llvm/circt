@@ -1,6 +1,10 @@
 ; RUN: firtool --firrtl-grand-central --verilog --split-input-file %s | FileCheck %s
 ; See https://github.com/llvm/circt/issues/2691
 
+; A number of tests use an invalidated wire with a DontTouchAnnotation to block
+; constant sinking into the XMR.  This is to ensure that the test can check a
+; valid XMR as opposed to "assign foo = 1'h0".
+
 circuit Top : %[[{
   "class": "sifive.enterprise.grandcentral.DataTapsAnnotation",
   "blackBox": "~Top|DataTap",
@@ -20,7 +24,13 @@ circuit Top : %[[{
       "source": "~Top|Top>k",
       "portName": "~Top|DataTap>d"
     }
-]}]]
+]}, {
+  "class": "firrtl.transforms.DontTouchAnnotation",
+  "target": "~Top|Foo>inv"
+}, {
+  "class": "firrtl.transforms.DontTouchAnnotation",
+  "target": "~Top|Top>inv"
+}]]
   extmodule DataTap :
     output b : UInt<1>
     output c : UInt<1>
@@ -29,19 +39,23 @@ circuit Top : %[[{
 
   module Foo :
     output g : UInt<1>
+    wire inv: UInt<1>
+    inv is invalid
     wire f : UInt<1>
-    g is invalid
-    f is invalid
+    g <= inv
+    f <= inv
 
   module Top:
     inst foo of Foo
     inst bar of Foo
     inst dataTap of DataTap
+    wire inv: UInt<1>
+    inv is invalid
     wire k : UInt<1>
-    k is invalid
+    k <= inv
 
 ; CHECK: module DataTap_impl_0(
-; CHECK:   output b, 
+; CHECK:   output b,
 ; CHECK:          c,
 ; CHECK:          d
 ; CHECK: );
@@ -63,6 +77,10 @@ circuit TestHarness : %[[
         "portName":"~TestHarness|DataTap>_0"
       }
     ]
+  },
+  {
+    "class": "firrtl.transforms.DontTouchAnnotation",
+    "target": "~TestHarness|Test>inv"
   }
 ]]
   module TestHarness :
@@ -76,8 +94,10 @@ circuit TestHarness : %[[
   module Companion :
     inst DataTap of DataTap
   module Test :
+    wire inv: UInt<1>
+    inv is invalid
     wire signal : UInt<8>
-    signal is invalid
+    signal <= inv
 
 ; CHECK:     module DataTap
 ; CHECK-NOT: endmodule
@@ -193,6 +213,18 @@ circuit Top : %[[
         "portName":"~Top|DataTap_Top>_5"
       }
     ]
+  },
+  {
+    "class": "firrtl.transforms.DontTouchAnnotation",
+    "target": "~Top|Submodule>inv"
+  },
+  {
+    "class": "firrtl.transforms.DontTouchAnnotation",
+    "target": "~Top|DUT>inv"
+  },
+  {
+    "class": "firrtl.transforms.DontTouchAnnotation",
+    "target": "~Top|Top>inv"
   }
 ]]
   extmodule DataTap_Submodule :
@@ -224,8 +256,11 @@ circuit Top : %[[
     output port_Submodule: UInt<1>
     port_Submodule is invalid
 
+    wire inv: UInt<1>
+    inv is invalid
+
     wire wire_Submodule: UInt<1>
-    wire_Submodule is invalid
+    wire_Submodule <= inv
 
     inst tap of DataTap_Submodule
 
@@ -233,8 +268,11 @@ circuit Top : %[[
     output port_DUT: UInt<1>
     port_DUT is invalid
 
+    wire inv: UInt<1>
+    inv is invalid
+
     wire wire_DUT: UInt<1>
-    wire_DUT is invalid
+    wire_DUT <= inv
 
     inst submodule of Submodule
 
@@ -244,8 +282,11 @@ circuit Top : %[[
     output port_Top : UInt<1>
     port_Top is invalid
 
+    wire inv: UInt<1>
+    inv is invalid
+
     wire wire_Top: UInt<1>
-    wire_Top is invalid
+    wire_Top <= inv
 
     inst dut of DUT
     inst tap of DataTap_Top
