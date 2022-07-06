@@ -566,9 +566,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-NEXT: hw.module private @bindTest()
   firrtl.module private @bindTest() {
     // CHECK: hw.instance "baz" sym @[[bazSymbol]] @bar
-    %baz = firrtl.instance baz {lowerToBind = true} @bar(in io_cpu_flush: !firrtl.uint<1>)
+    %baz = firrtl.instance baz {lowerToBind} @bar(in io_cpu_flush: !firrtl.uint<1>)
     // CHECK: hw.instance "qux" sym @[[quxSymbol]] @bar
-    %qux = firrtl.instance qux {lowerToBind = true, output_file = #hw.output_file<"outputDir/bindings.sv", excludeFromFileList>} @bar(in io_cpu_flush: !firrtl.uint<1>)
+    %qux = firrtl.instance qux {lowerToBind, output_file = #hw.output_file<"outputDir/bindings.sv", excludeFromFileList>} @bar(in io_cpu_flush: !firrtl.uint<1>)
   }
 
 

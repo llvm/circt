@@ -169,6 +169,42 @@ FileListAttr FileListAttr::getFromFilename(MLIRContext *context,
 }
 
 //===----------------------------------------------------------------------===//
+// EnumFieldAttr
+//===----------------------------------------------------------------------===//
+
+Attribute EnumFieldAttr::parse(AsmParser &p, Type) {
+  StringRef field;
+  Type type;
+  if (p.parseLess() || p.parseKeyword(&field) || p.parseComma() ||
+      p.parseType(type) || p.parseGreater())
+    return Attribute();
+  return EnumFieldAttr::get(p.getEncodedSourceLoc(p.getCurrentLocation()),
+                            StringAttr::get(p.getContext(), field), type);
+}
+
+void EnumFieldAttr::print(AsmPrinter &p) const {
+  p << "<" << getField().getValue() << ", ";
+  p.printType(getType().getValue());
+  p << ">";
+}
+
+EnumFieldAttr EnumFieldAttr::get(Location loc, StringAttr value,
+                                 mlir::Type type) {
+  if (!hw::isHWEnumType(type))
+    emitError(loc) << "expected enum type";
+
+  // Check whether the provided value is a member of the enum type.
+  EnumType enumType = getCanonicalType(type).cast<EnumType>();
+  if (!enumType.contains(value.getValue())) {
+    emitError(loc) << "enum value '" << value.getValue()
+                   << "' is not a member of enum type " << enumType;
+    return nullptr;
+  }
+
+  return Base::get(value.getContext(), value, TypeAttr::get(type));
+}
+
+//===----------------------------------------------------------------------===//
 // InnerRefAttr
 //===----------------------------------------------------------------------===//
 

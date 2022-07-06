@@ -10,16 +10,31 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
   %fd = hw.constant 0x80000002 : i32
 
   %c11_i42 = hw.constant 11: i42
-  // CHECK: localparam [41:0] param_x = 42'd11;
+  // CHECK: localparam [41:0]{{ *}} param_x = 42'd11;
   %param_x = sv.localparam : i42 { value = 11: i42 }
 
-  // CHECK: localparam [41:0] param_y = param1;
+  // CHECK: localparam [41:0]{{ *}} param_y = param1;
   %param_y = sv.localparam : i42 { value = #hw.param.decl.ref<"param1">: i42 }
+
+  // CHECK:       logic{{ *}} [7:0]{{ *}} logic_op;
+  // CHECK-NEXT:  struct packed {logic b; } logic_op_struct;
+  // CHECK: assign logic_op = val;
+  %logic_op = sv.logic : !hw.inout<i8>
+  %logic_op_struct = sv.logic : !hw.inout<struct<b: i1>>
+  sv.assign %logic_op, %val: i8
 
   // CHECK:      always @(posedge clock) begin
   sv.always posedge %clock {
+    // CHECK-NEXT: automatic logic [7:0]                     logic_op_procedural;
+    // CHECK-NEXT: automatic       struct packed {logic b; } logic_op_struct_procedural
+    // CHECK-EMPTY:
     // CHECK-NEXT: force forceWire = cond;
     sv.force %forceWire, %cond : i1
+    %logic_op_procedural = sv.logic : !hw.inout<i8>
+    %logic_op_struct_procedural = sv.logic : !hw.inout<struct<b: i1>>
+
+    // CHECK-NEXT: logic_op_procedural = val;
+    sv.bpassign %logic_op_procedural, %val: i8
   // CHECK-NEXT:   `ifndef SYNTHESIS
     sv.ifdef.procedural "SYNTHESIS" {
     } else {

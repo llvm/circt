@@ -25,6 +25,7 @@
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Support/LoweringOptions.h"
 #include "circt/Support/Version.h"
+#include "circt/Transforms/Passes.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -334,6 +335,11 @@ static cl::opt<bool>
                           cl::desc("Log executions of toplevel module passes"),
                           cl::init(false), cl::cat(mainCategory));
 
+static cl::opt<bool> stripFirDebugInfo(
+    "strip-fir-debug-info",
+    cl::desc("Disable source fir locator information in output Verilog"),
+    cl::init(true), cl::cat(mainCategory));
+
 static cl::opt<bool> stripDebugInfo(
     "strip-debug-info",
     cl::desc("Disable source locator information in output Verilog"),
@@ -640,6 +646,14 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
       auto &modulePM = exportPm.nest<hw::HWModuleOp>();
       modulePM.addPass(sv::createPrettifyVerilogPass());
     }
+
+    if (stripFirDebugInfo)
+      exportPm.addPass(
+          circt::createStripDebugInfoWithPredPass([](mlir::Location loc) {
+            if (auto fileLoc = loc.dyn_cast<FileLineColLoc>())
+              return fileLoc.getFilename().getValue().endswith(".fir");
+            return false;
+          }));
 
     if (stripDebugInfo)
       exportPm.addPass(mlir::createStripDebugInfoPass());

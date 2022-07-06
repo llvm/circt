@@ -2,7 +2,7 @@
 ; RUN: firtool %s --format=fir --ir-fir --annotation-file %s.anno.json,%s.anno.1.json | circt-opt | FileCheck %s --check-prefix=ANNOTATIONS
 ; RUN: firtool %s --format=fir --ir-fir --annotation-file %s.anno.json --annotation-file %s.anno.1.json | circt-opt | FileCheck %s --check-prefix=ANNOTATIONS
 ; RUN: firtool %s --format=fir --ir-hw | circt-opt | FileCheck %s --check-prefix=MLIRLOWER
-; RUN: firtool %s --format=fir -verilog |             FileCheck %s --check-prefix=VERILOG
+; RUN: firtool %s --format=fir -verilog | FileCheck %s --check-prefix=VERILOG
 ; RUN: firtool %s --annotation-file %s.anno.json,%s.anno.1.json --parse-only | FileCheck %s --check-prefix=ANNOTATIONS
 ; RUN: firtool %s --omir-file %s.omir.anno.json --parse-only | FileCheck %s --check-prefix=OMIR
 ; RUN: firtool %s --omir-file %s.omir.anno.json --output-omir meta.omir.json --verilog | FileCheck %s --check-prefix=OMIROUT
@@ -125,6 +125,8 @@ circuit test_mod : %[[{"a": "a"}]]
 ; ANNOTATIONS-SAME: info = "a ModuleName Annotation"
 
 ; VERILOG-LABEL: module test_mod(
+; Check that a fir location is stripped.
+; VERILOG-NOT:   .fir
 ; VERILOG-NEXT:    input        clock,
 ; VERILOG-NEXT:                 a,
 ; VERILOG-NEXT:    input  [1:0] b,

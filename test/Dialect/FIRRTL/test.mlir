@@ -174,10 +174,10 @@ firrtl.module @VerbatimExpr() {
 }
 
 // CHECK-LABL: @LowerToBind
-// CHECK: firrtl.instance foo sym @s1 {lowerToBind = true} @InstanceLowerToBind()
+// CHECK: firrtl.instance foo sym @s1 {lowerToBind} @InstanceLowerToBind()
 firrtl.module @InstanceLowerToBind() {}
 firrtl.module @LowerToBind() {
-  firrtl.instance foo sym @s1 {lowerToBind = true} @InstanceLowerToBind()
+  firrtl.instance foo sym @s1 {lowerToBind} @InstanceLowerToBind()
 }
 
 // CHECK-LABEL: @ProbeTest
