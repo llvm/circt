@@ -1718,19 +1718,28 @@ void ArrayConcatOp::build(OpBuilder &b, OperationState &state,
 //===----------------------------------------------------------------------===//
 
 ParseResult EnumConstantOp::parse(OpAsmParser &parser, OperationState &result) {
-  EnumFieldAttr value;
-  if (parser.parseAttribute(value))
+  hw::EnumType type;
+  StringRef field;
+
+  auto loc = parser.getEncodedSourceLoc(parser.getCurrentLocation());
+  if (parser.parseKeyword(&field) || parser.parseColonType(type))
     return failure();
 
-  result.addAttribute("field", value);
-  result.addTypes(value.getType().getValue());
+  auto fieldAttr = EnumFieldAttr::get(
+      loc, StringAttr::get(parser.getContext(), field), type);
+
+  if (!fieldAttr)
+    return failure();
+
+  result.addAttribute("field", fieldAttr);
+  result.addTypes(type);
 
   return success();
 }
 
 void EnumConstantOp::print(OpAsmPrinter &p) {
-  p << " ";
-  p.printAttribute(field());
+  p << " " << field().getField().getValue() << " : "
+    << field().getType().getValue();
 }
 
 void EnumConstantOp::getAsmResultNames(

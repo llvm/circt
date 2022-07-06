@@ -1074,7 +1074,7 @@ hw.module @struct_extract1(%a0: i3, %a1: i5) -> (r0: i3) {
 // Ensure that canonicalizer works with hw.enum.constant.
 
 hw.module @enum_constant() -> () {
-  %0 = hw.enum.constant #hw.enum.field<A, !hw.enum<A, B, C>>
+  %0 = hw.enum.constant A : !hw.enum<A, B, C>
 }
 
 

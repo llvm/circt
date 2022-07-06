@@ -90,7 +90,7 @@ def EnumConstantOp : HWOp<"enum.constant", [NoSideEffect, ConstantLike,
     The enum.constant operation produces an enumeration value of the specified
     enum value attribute.
     ```
-      %0 = hw.enum.constant #hw.enum.value<A, !hw.enum<A, B, C>>
+      %0 = hw.enum.constant A : !hw.enum<A, B, C>
     ```
     }];
 
