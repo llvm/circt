@@ -25,7 +25,7 @@ static void updateLocIfChanged(OpOrBlockArgument *op, Location newLoc) {
 namespace {
 struct StripDebugInfoWithPred
     : public circt::StripDebugInfoWithPredBase<StripDebugInfoWithPred> {
-  StripDebugInfoWithPred(std::function<bool(mlir::Location)> pred)
+  StripDebugInfoWithPred(const std::function<bool(mlir::Location)>& pred)
       : pred(pred) {}
   void runOnOperation() override;
 
