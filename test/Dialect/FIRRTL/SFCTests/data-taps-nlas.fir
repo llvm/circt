@@ -71,7 +71,7 @@ circuit TestHarness : %[[
     inst test of Test
     inst Companion of Companion
   extmodule DataTap :
-    output _0 : UInt<1>
+    output _0 : UInt<8>
     defname = DataTap
   module Companion :
     inst DataTap of DataTap
