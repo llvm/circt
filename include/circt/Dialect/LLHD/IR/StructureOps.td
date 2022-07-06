@@ -77,7 +77,7 @@ def LLHD_EntityOp : LLHD_Op<"entity", [
     using mlir::detail::FunctionOpInterfaceTrait<EntityOp>::getBody;
 
     /// Return the block corresponding to the region.
-    Block *getBodyBlock() { return &body().front(); }
+    Block *getBodyBlock() { return &getBody().front(); }
   }];
 }
 
@@ -195,7 +195,6 @@ def LLHD_InstOp : LLHD_Op<"inst", [
   }];
 
   let extraClassDeclaration = [{
-    StringRef getCallee() { return callee(); }
     FunctionType getCalleeType();
 
     /// Get the argument operands to the called function.

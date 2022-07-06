@@ -96,7 +96,7 @@ struct ConvertOutput : public OpConversionPattern<hw::OutputOp> {
     auto entity = output->getParentOfType<EntityOp>();
     if (!entity)
       return rewriter.notifyMatchFailure(output, "parent was not an EntityOp");
-    size_t numInputs = entity.ins();
+    size_t numInputs = entity.getIns();
 
     // Drive the results from the mapped operands.
     Value delta;
@@ -110,7 +110,7 @@ struct ConvertOutput : public OpConversionPattern<hw::OutputOp> {
 
       // Look through probes on the source side and use the signal directly.
       if (auto prb = src.getDefiningOp<PrbOp>())
-        src = prb.signal();
+        src = prb.getSignal();
 
       // No work needed if they already are the same.
       if (src == dest)
@@ -160,7 +160,7 @@ struct ConvertInstance : public OpConversionPattern<InstanceOp> {
 
       // Look through probes and use the signal directly.
       if (auto prb = arg.getDefiningOp<PrbOp>()) {
-        arguments.push_back(prb.signal());
+        arguments.push_back(prb.getSignal());
         continue;
       }
 
@@ -214,7 +214,7 @@ struct ConvertInstance : public OpConversionPattern<InstanceOp> {
           auto entity = instance->getParentOfType<EntityOp>();
           if (!entity)
             continue;
-          sig = entity.getArgument(entity.ins() + use.getOperandNumber());
+          sig = entity.getArgument(entity.getIns() + use.getOperandNumber());
           break;
         }
       }
