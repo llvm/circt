@@ -915,25 +915,6 @@ bool circt::firrtl::scatterCustomAnnotations(
   // Mutable store of new annotations produced.
   llvm::StringMap<llvm::SmallVector<Attribute>> newAnnotations;
 
-  /// Return a new identifier that can be used to link scattered annotations
-  /// together.  This mutates the by-reference parameter annotationID.
-  auto newID = [&]() {
-    return IntegerAttr::get(IntegerType::get(context, 64), annotationID++);
-  };
-
-  /// Add a don't touch annotation for a target.
-  auto addDontTouch = [&](StringRef target,
-                          Optional<ArrayAttr> subfields = {}) {
-    NamedAttrList fields;
-    fields.append(
-        "class",
-        StringAttr::get(context, "firrtl.transforms.DontTouchAnnotation"));
-    if (subfields)
-      fields.append("target", *subfields);
-    newAnnotations[target].push_back(
-        DictionaryAttr::getWithSorted(context, fields));
-  };
-
   // Loop over all non-specific annotations that target "~".
   //
   //
