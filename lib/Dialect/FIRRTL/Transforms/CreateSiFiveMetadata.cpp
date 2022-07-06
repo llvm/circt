@@ -150,7 +150,7 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
             auto parentModule = inst->getParentOfType<FModuleOp>();
             if (dutMod == parentModule)
               hierName = parentModule.getName().str();
-            hierName = hierName + "." + inst.name().str();
+            hierName = (Twine(hierName) + "." + inst.name()).str();
           }
           hierNames.push_back(hierName);
           jsonStream.value(hierName);
