@@ -538,10 +538,12 @@ protected:
   /// `getOperandsFunc` can (and often does) modify other operations. The update
   /// call deletes the original instance op, so all references are invalidated
   /// after this call.
-  SmallVector<InstanceOp, 1> &updateInstances(
+  SmallVector<InstanceOp, 1> updateInstances(
       MSFTModuleOp mod, ArrayRef<unsigned> newToOldResultMap,
       llvm::function_ref<void(InstanceOp, InstanceOp, SmallVectorImpl<Value> &)>
           getOperandsFunc);
+
+  void getAndSortModules(ModuleOp topMod, SmallVectorImpl<MSFTModuleOp> &mods);
 
   void bubbleWiresUp(MSFTModuleOp mod);
   void dedupOutputs(MSFTModuleOp mod);
@@ -558,14 +560,22 @@ static bool isWireManipulationOp(Operation *op) {
              hw::ConstantOp>(op);
 }
 
-SmallVector<InstanceOp, 1> &MSFTPassCommon::updateInstances(
+SmallVector<InstanceOp, 1> MSFTPassCommon::updateInstances(
     MSFTModuleOp mod, ArrayRef<unsigned> newToOldResultMap,
     llvm::function_ref<void(InstanceOp, InstanceOp, SmallVectorImpl<Value> &)>
         getOperandsFunc) {
 
-  SmallVector<InstanceOp, 1> newInstances;
-  for (InstanceOp inst : moduleInstantiations[mod]) {
-    assert(inst->getParentOp());
+  SmallVector<hw::HWInstanceLike, 1> newInstances;
+  SmallVector<InstanceOp, 1> newMsftInstances;
+  for (hw::HWInstanceLike instLike : moduleInstantiations[mod]) {
+    assert(instLike->getParentOp());
+    // auto inst = dyn_cast<InstanceOp>(instLike);
+    InstanceOp inst;
+    if (!inst) {
+      instLike.emitWarning("Can not update hw.instance ops");
+      continue;
+    }
+
     OpBuilder b(inst);
     auto newInst = b.create<InstanceOp>(inst.getLoc(), mod.getResultTypes(),
                                         inst.getOperands(), inst->getAttrs());
@@ -580,23 +590,25 @@ SmallVector<InstanceOp, 1> &MSFTPassCommon::updateInstances(
             .replaceAllUsesWith(newInst.getResult(oldResult.index()));
 
     newInstances.push_back(newInst);
+    newMsftInstances.push_back(newInst);
     inst->dropAllUses();
     inst->erase();
   }
   moduleInstantiations[mod].swap(newInstances);
-  return moduleInstantiations[mod];
+  return newMsftInstances;
 }
 
 // Run a post-order DFS.
-void PassCommon::getAndSortModulesVisitor(MSFTModuleOp mod,
-                                          SmallVectorImpl<MSFTModuleOp> &mods,
-                                          DenseSet<MSFTModuleOp> &modsSeen) {
+void PassCommon::getAndSortModulesVisitor(
+    hw::HWModuleLike mod, SmallVectorImpl<hw::HWModuleLike> &mods,
+    DenseSet<hw::HWModuleLike> &modsSeen) {
   if (modsSeen.contains(mod))
     return;
   modsSeen.insert(mod);
 
-  mod.walk([&](InstanceOp inst) {
-    Operation *modOp = topLevelSyms.getDefinition(inst.moduleNameAttr());
+  mod.walk([&](hw::HWInstanceLike inst) {
+    Operation *modOp =
+        topLevelSyms.getDefinition(inst.referencedModuleNameAttr());
     auto mod = dyn_cast_or_null<MSFTModuleOp>(modOp);
     if (!mod)
       return;
@@ -608,9 +620,9 @@ void PassCommon::getAndSortModulesVisitor(MSFTModuleOp mod,
 }
 
 void PassCommon::getAndSortModules(ModuleOp topMod,
-                                   SmallVectorImpl<MSFTModuleOp> &mods) {
+                                   SmallVectorImpl<hw::HWModuleLike> &mods) {
   // Add here _before_ we go deeper to prevent infinite recursion.
-  DenseSet<MSFTModuleOp> modsSeen;
+  DenseSet<hw::HWModuleLike> modsSeen;
   mods.clear();
   moduleInstantiations.clear();
   topMod.walk(
@@ -1539,12 +1551,14 @@ void MSFTPassCommon::bubbleWiresUp(MSFTModuleOp mod) {
 }
 
 void MSFTPassCommon::dedupInputs(MSFTModuleOp mod) {
-  auto instantiations = moduleInstantiations[mod];
+  const auto &instantiations = moduleInstantiations[mod];
   // TODO: remove this limitation. This would involve looking at the common
   // loopbacks for all the instances.
   if (instantiations.size() != 1)
     return;
-  InstanceOp inst = instantiations[0];
+  InstanceOp inst = dyn_cast<InstanceOp>(instantiations[0]);
+  if (!inst)
+    return;
 
   // Find all the arguments which are driven by the same signal. Remap them
   // appropriately within the module, and mark that input port for deletion.
@@ -1575,8 +1589,7 @@ void MSFTPassCommon::dedupInputs(MSFTModuleOp mod) {
       if (!argsToErase.test(argNum))
         newOperands.push_back(oldInst.getOperand(argNum));
   };
-  instantiations = updateInstances(mod, remappedResults, getOperands);
-  inst = instantiations[0];
+  inst = updateInstances(mod, remappedResults, getOperands)[0];
 
   SmallVector<Attribute, 32> newArgNames;
   std::string buff;
@@ -1589,12 +1602,14 @@ void MSFTPassCommon::dedupInputs(MSFTModuleOp mod) {
 
 /// Sink all the instance connections which are loops.
 void MSFTPassCommon::sinkWiresDown(MSFTModuleOp mod) {
-  auto instantiations = moduleInstantiations[mod];
+  const auto &instantiations = moduleInstantiations[mod];
   // TODO: remove this limitation. This would involve looking at the common
   // loopbacks for all the instances.
   if (instantiations.size() != 1)
     return;
-  InstanceOp inst = instantiations[0];
+  InstanceOp inst = dyn_cast<InstanceOp>(instantiations[0]);
+  if (!inst)
+    return;
 
   // Find all the "loopback" connections in the instantiation. Populate
   // 'inputToOutputLoopback' with a mapping of input port to output port which
@@ -1838,7 +1853,7 @@ std::unique_ptr<Pass> createLowerConstructsPass() {
 
 namespace {
 struct DiscoverAppIDsPass : public DiscoverAppIDsBase<DiscoverAppIDsPass>,
-                            PassCommon {
+                            MSFTPassCommon {
   void runOnOperation() override;
   void processMod(MSFTModuleOp);
 };

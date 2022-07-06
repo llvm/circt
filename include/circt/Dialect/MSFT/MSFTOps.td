@@ -6,11 +6,14 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "circt/Dialect/HW/HWOpInterfaces.td"
+
 def InstanceOp : MSFTOp<"instance", [
         Symbol,
         ParentOneOf<["MSFTModuleOp"]>,
         DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
-        DeclareOpInterfaceMethods<SymbolUserOpInterface>
+        DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+        DeclareOpInterfaceMethods<HWInstanceLike>
     ]> {
   let summary = "Instantiate a module";
 
@@ -68,7 +71,8 @@ def MSFTModuleOp : MSFTOp<"module",
       [IsolatedFromAbove, FunctionOpInterface, Symbol, RegionKindInterface,
        HasParent<"mlir::ModuleOp">,
        SingleBlockImplicitTerminator<"OutputOp">,
-       OpAsmOpInterface]>{
+       OpAsmOpInterface,
+       DeclareOpInterfaceMethods<HWModuleLike>]>{
   let summary = "MSFT HW Module";
   let description = [{
     A lot like `hw.module`, but with a few differences:
