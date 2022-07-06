@@ -5,8 +5,8 @@ llvm::StringRef svAttr = "sv.attributes";
 
 bool circt::hasSVAttributes(mlir::Operation *op) { return op->hasAttr(svAttr); }
 
-mlir::Attribute circt::getSVAttributes(mlir::Operation *op) {
-  return op->getAttr(svAttr);
+mlir::ArrayAttr circt::getSVAttributes(mlir::Operation *op) {
+  return op->getAttrOfType<mlir::ArrayAttr>(svAttr);
 }
 
 void circt::setSVAttributes(mlir::Operation *op, mlir::Attribute attr) {
