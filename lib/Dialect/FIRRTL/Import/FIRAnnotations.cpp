@@ -557,59 +557,6 @@ bool circt::firrtl::fromOMIRJSON(json::Value &value, StringRef circuitTarget,
   return true;
 }
 
-/// Convert known custom FIRRTL Annotations with compound targets to multiple
-/// attributes that are attached to IR operations where they have semantic
-/// meaning.  This rewrites the input \p annotationMap to convert non-specific
-/// Annotations targeting "~" to those targeting something more specific if
-/// possible.
-bool circt::firrtl::scatterCustomAnnotations(
-    llvm::StringMap<ArrayAttr> &annotationMap, CircuitOp circuit,
-    unsigned &annotationID, Location loc, size_t &nlaNumber) {
-  MLIRContext *context = circuit.getContext();
-
-  // Exit if no anotations exist that target "~". Also ensure a spurious entry
-  // is not created in the map.
-  if (!annotationMap.count("~"))
-    return true;
-  // This adds an entry "~" to the map.
-  auto nonSpecificAnnotations = annotationMap["~"];
-
-  // Mutable store of new annotations produced.
-  llvm::StringMap<llvm::SmallVector<Attribute>> newAnnotations;
-
-  // Loop over all non-specific annotations that target "~".
-  //
-  //
-  for (auto a : nonSpecificAnnotations) {
-    auto dict = a.cast<DictionaryAttr>();
-    StringAttr classAttr = dict.getAs<StringAttr>("class");
-    // If the annotation doesn't have a "class" field, then we can't handle it.
-    // Just copy it over.
-    if (!classAttr) {
-      newAnnotations["~"].push_back(a);
-      continue;
-    }
-
-    // Just copy over any annotation we don't understand.
-    newAnnotations["~"].push_back(a);
-  }
-
-  // Delete all the old CircuitTarget annotations.
-  annotationMap.erase("~");
-
-  // Convert the mutable Annotation map to a SmallVector<ArrayAttr>.
-  for (auto a : newAnnotations.keys()) {
-    // If multiple annotations on a single object, then append it.
-    if (annotationMap.count(a))
-      for (auto attr : annotationMap[a])
-        newAnnotations[a].push_back(attr);
-
-    annotationMap[a] = ArrayAttr::get(context, newAnnotations[a]);
-  }
-
-  return true;
-}
-
 /// Deserialize a JSON value into FIRRTL Annotations.  Annotations are
 /// represented as a Target-keyed arrays of attributes.  The input JSON value is
 /// checked, at runtime, to be an array of objects.  Returns true if successful,
