@@ -89,19 +89,85 @@ void ParamDeclAttr::print(AsmPrinter &p) const {
 // InnerSymAttr
 //===----------------------------------------------------------------------===//
 
-Attribute InnerSymAttr::parse(AsmParser &p, Type type) {
-  //  A sample IR, parse begins after `sym`.
-  //  %wire = firrtl.wire sym @wireSym<fieldID=1><sym_visibility="private"> :
+Attribute InnerSymPropertiesAttr::parse(AsmParser &parser, Type type) {
+  StringAttr name;
+  NamedAttrList dummyList;
+  int64_t fieldId = 0;
+  StringRef visibility;
+  if (parser.parseLess() || parser.parseSymbolName(name, "name", dummyList) ||
+      parser.parseComma() || parser.parseInteger(fieldId) ||
+      parser.parseComma() ||
+      parser.parseOptionalKeyword(&visibility,
+                                  {"public", "private", "nested"}) ||
+      parser.parseGreater())
+    return Attribute();
+  StringAttr visibilityAttr = parser.getBuilder().getStringAttr(visibility);
+
+  return InnerSymPropertiesAttr::get(parser.getContext(), name, fieldId,
+                                     visibilityAttr);
+}
+
+void InnerSymPropertiesAttr::print(AsmPrinter &p) const {
+  p << "<@" << getName().getValue() << "," << getFieldID() << ","
+    << getSymVisibility().getValue() << ">";
+}
+
+StringAttr InnerSymAttr::getSymName() {
+  auto it = llvm::find_if(getProps(), [&](InnerSymPropertiesAttr p) {
+    return (p.getFieldID() == 0);
+  });
+  if (it != getProps().end())
+    return it->getName();
+  return {};
+}
+
+Attribute InnerSymAttr::parse(AsmParser &parser, Type type) {
   StringAttr sym;
   NamedAttrList dummyList;
-  if (p.parseSymbolName(sym, "dummy", dummyList))
+  SmallVector<InnerSymPropertiesAttr, 4> names;
+  if (!parser.parseOptionalSymbolName(sym, "dummy", dummyList))
+    names.push_back(InnerSymPropertiesAttr::get(sym));
+  else if (parser.parseCommaSeparatedList(
+               OpAsmParser::Delimiter::Square, [&]() -> ParseResult {
+                 InnerSymPropertiesAttr prop;
+                 if (parser.parseCustomAttributeWithFallback(
+                         prop, mlir::Type{}, "dummy", dummyList))
+                   return failure();
+
+                 names.push_back(prop);
+
+                 return success();
+               }))
     return Attribute();
-  return InnerSymAttr::get(p.getContext(), sym);
+
+  std::sort(names.begin(), names.end(),
+            [&](InnerSymPropertiesAttr a, InnerSymPropertiesAttr b) {
+              return a.getFieldID() < b.getFieldID();
+            });
+
+  return InnerSymAttr::get(parser.getContext(), names);
 }
 
 void InnerSymAttr::print(AsmPrinter &p) const {
-  //  A sample IR, print begins after `sym`.
-  //  %wire = firrtl.wire sym @wireSym<fieldID=1><sym_visibility="private"> :
 
-  p << "@" << getSymName().getValue();
+  auto props = getProps();
+  if (props.size() == 1 &&
+      props[0].getSymVisibility().getValue().equals("public") &&
+      props[0].getFieldID() == 0) {
+    p << "@" << props[0].getName().getValue();
+    return;
+  }
+  auto names = props.vec();
+
+  std::sort(names.begin(), names.end(),
+            [&](InnerSymPropertiesAttr a, InnerSymPropertiesAttr b) {
+              return a.getFieldID() < b.getFieldID();
+            });
+  p << "[";
+  llvm::interleaveComma(names, p, [&](InnerSymPropertiesAttr attr) {
+    attr.print(p);
+    // p << "<@" << attr.getName().getValue() << "," << attr.getFieldID() << ","
+    //   << attr.getSymVisibility().getValue() << ">";
+  });
+  p << "]";
 }
