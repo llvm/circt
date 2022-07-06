@@ -97,8 +97,6 @@ constexpr const char *signalDriverTargetAnnoClass =
 constexpr const char *signalDriverModuleAnnoClass =
     "sifive.enterprise.grandcentral.SignalDriverAnnotation.module"; // not in
                                                                     // SFC
-constexpr const char *moduleReplacementAnnoClass =
-    "sifive.enterprise.grandcentral.ModuleReplacementAnnotation";
 
 // SiFive specific Annotations
 constexpr const char *dutAnnoClass =

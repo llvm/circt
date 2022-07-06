@@ -395,55 +395,6 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Foo/bar:Bar/baz:Baz"}, {"b":"b","target"
 ; CHECK: firrtl.instance bar sym @bar interesting_name @Bar()
 
 ; // -----
-
-; Grand Central's ModuleReplacementAnnotation is properly scattered to the circuit
-; and the targeted operations.
-
-circuit Top : %[[{
-  "class": "sifive.enterprise.grandcentral.ModuleReplacementAnnotation",
-  "targets": [
-    "~Top|Top/child:Child",
-    "~Top|Top/childWrapper:ChildWrapper/child:Child"
-  ],
-  "circuit": "",
-  "annotations": ["foo", "bar"],
-  "circuitPackage": "other",
-  "dontTouches":[
-    "~Top|Child>in",
-    "~Top|Child>out"
-  ]
-}]]
-  module ChildWrapper :
-    input in : UInt<123>
-    output out : UInt<456>
-
-    inst child of Child
-    child.in <= in
-    out <= child.out
-
-  extmodule Child :
-    input in : UInt<123>
-    output out : UInt<456>
-
-  module Top :
-    inst child of Child
-    inst childWrapper of ChildWrapper
-
-; CHECK-LABEL: firrtl.circuit "Top"
-; CHECK-SAME: {annotations = ["foo", "bar"], circuit = "", circuitPackage = "other", class = "sifive.enterprise.grandcentral.ModuleReplacementAnnotation", id = [[ID:.+]] : i64}
-
-; CHECK: %child_in, %child_out = firrtl.instance child
-
-; CHECK: firrtl.extmodule private @Child(
-; CHECK-SAME:   in in: !firrtl.uint<123> sym @in,
-; CHECK-SAME:   out out: !firrtl.uint<456> sym @out
-; CHECK-SAME: )
-; CHECK-SAME: attributes {annotations = [
-; CHECK-SAME:   {circt.nonlocal = @nla_1, id = [[ID]] : i64},
-; CHECK-SAME:   {circt.nonlocal = @nla_2, id = [[ID]] : i64}
-; CHECK-SAME: ]}
-
-; // -----
 ;
 ; A numeric "class" shouldn't crash the parser.
 
