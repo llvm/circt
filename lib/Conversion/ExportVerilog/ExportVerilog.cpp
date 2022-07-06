@@ -612,7 +612,8 @@ static bool isExpressionUnableToInline(Operation *op) {
 bool ExportVerilog::isExpressionEmittedInline(Operation *op) {
   // Never create a temporary which is only going to be assigned to an output
   // port.
-  if (op->hasOneUse() && isa<hw::OutputOp>(*op->getUsers().begin()))
+  if (op->hasOneUse() &&
+      isa<hw::OutputOp, sv::AssignOp>(*op->getUsers().begin()))
     return true;
 
   // If this operation has multiple uses, we can't generally inline it unless

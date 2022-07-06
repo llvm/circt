@@ -671,6 +671,16 @@ hw.module @StrurctExtractInline(%a: !hw.struct<v: i1>) -> (b: i1, c: i1) {
   hw.output %0, %0 : i1, i1
 }
 
+// CHECK-LABEL: NoExtraTemporaryWireForAssign
+hw.module @NoExtraTemporaryWireForAssign(%a: i2, %b: i4) {
+  // CHECK: wire struct packed {logic [1:0] foo; logic [3:0] bar; } _GEN;
+  // CHECK-EMPTY:
+  // CHECK-NEXT: assign _GEN = '{foo: a, bar: b};
+  %0 = hw.struct_create (%a, %b) : !hw.struct<foo: i2, bar: i4>
+  %1 = sv.wire : !hw.inout<!hw.struct<foo: i2, bar: i4>>
+  sv.assign %1, %0: !hw.struct<foo: i2, bar: i4>
+}
+
 hw.module.extern @DifferentResultMod() -> (out1: i1, out2: i2)
 
 // CHECK-LABEL: module out_of_order_multi_result(
