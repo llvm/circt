@@ -17,7 +17,7 @@ firrtl.circuit "Foo" {
     // Skip %x1_x to trigger a "sink not fully initialized" warning
     firrtl.connect %y, %x0_y : !firrtl.uint<1>, !firrtl.uint<1>
   }
-  // CHECK-NOT: firrtl.odule @FooBar
+  // CHECK-NOT: firrtl.module @FooBar
   firrtl.module @FooBar(in %x: !firrtl.uint<1>, out %y: !firrtl.uint<1>) {
     firrtl.connect %y, %x : !firrtl.uint<1>, !firrtl.uint<1>
   }
