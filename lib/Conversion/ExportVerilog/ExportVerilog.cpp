@@ -645,6 +645,20 @@ static IfOp findNestedElseIf(Block *elseBlock) {
   return ifOp;
 }
 
+/// Emit SystemVerilog attributes.
+static void emitSVAttributesImpl(llvm::raw_ostream &os,
+                                 mlir::Attribute svAttrs) {
+  os << "(* ";
+  llvm::interleaveComma(svAttrs.cast<mlir::ArrayAttr>(), os,
+                        [&](Attribute attr) {
+                          auto svattr = attr.cast<SVAttributeAttr>();
+                          os << svattr.getName().getValue();
+                          if (svattr.getExpression())
+                            os << " = " << svattr.getExpression().getValue();
+                        });
+  os << " *)";
+}
+
 //===----------------------------------------------------------------------===//
 // ModuleNameManager Implementation
 //===----------------------------------------------------------------------===//
@@ -1848,15 +1862,8 @@ void ExprEmitter::emitSVAttributes(Operation *op) {
   if (!svAttrs)
     return;
 
-  os << " (* ";
-  llvm::interleaveComma(svAttrs.cast<mlir::ArrayAttr>(), os,
-                        [&](Attribute attr) {
-                          auto svattr = attr.cast<SVAttributeAttr>();
-                          os << svattr.getName().getValue();
-                          if (svattr.getExpression())
-                            os << " = " << svattr.getExpression().getValue();
-                        });
-  os << " *)";
+  os << ' ';
+  emitSVAttributesImpl(os, svAttrs);
 }
 
 /// This function split the output buffer into multiple lines if the emitted
@@ -2728,15 +2735,9 @@ void StmtEmitter::emitSVAttributes(Operation *op) {
   if (!svAttrs)
     return;
 
-  indent() << "(* ";
-  llvm::interleaveComma(svAttrs.cast<mlir::ArrayAttr>(), os,
-                        [&](Attribute attr) {
-                          auto svattr = attr.cast<SVAttributeAttr>();
-                          os << svattr.getName().getValue();
-                          if (svattr.getExpression())
-                            os << " = " << svattr.getExpression().getValue();
-                        });
-  os << " *)\n";
+  indent();
+  emitSVAttributesImpl(os, svAttrs);
+  os << '\n';
 }
 
 void StmtEmitter::emitStatementExpression(Operation *op) {
