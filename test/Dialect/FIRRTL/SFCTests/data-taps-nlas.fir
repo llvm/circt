@@ -5,32 +5,37 @@
 ; constant sinking into the XMR.  This is to ensure that the test can check a
 ; valid XMR as opposed to "assign foo = 1'h0".
 
-circuit Top : %[[{
-  "class": "sifive.enterprise.grandcentral.DataTapsAnnotation",
-  "blackBox": "~Top|DataTap",
-  "keys": [
-    {
-      "class": "sifive.enterprise.grandcentral.ReferenceDataTapKey",
-      "source": "~Top|Top/foo:Foo>f",
-      "portName": "~Top|DataTap>b"
-    },
-    {
-      "class": "sifive.enterprise.grandcentral.ReferenceDataTapKey",
-      "source": "~Top|Top/foo:Foo>g",
-      "portName": "~Top|DataTap>c"
-    },
-    {
-      "class": "sifive.enterprise.grandcentral.ReferenceDataTapKey",
-      "source": "~Top|Top>k",
-      "portName": "~Top|DataTap>d"
-    }
-]}, {
-  "class": "firrtl.transforms.DontTouchAnnotation",
-  "target": "~Top|Foo>inv"
-}, {
-  "class": "firrtl.transforms.DontTouchAnnotation",
-  "target": "~Top|Top>inv"
-}]]
+circuit Top : %[[
+  {
+    "class": "sifive.enterprise.grandcentral.DataTapsAnnotation",
+    "blackBox": "~Top|DataTap",
+    "keys": [
+      {
+        "class": "sifive.enterprise.grandcentral.ReferenceDataTapKey",
+        "source": "~Top|Top/foo:Foo>f",
+        "portName": "~Top|DataTap>b"
+      },
+      {
+        "class": "sifive.enterprise.grandcentral.ReferenceDataTapKey",
+        "source": "~Top|Top/foo:Foo>g",
+        "portName": "~Top|DataTap>c"
+      },
+      {
+        "class": "sifive.enterprise.grandcentral.ReferenceDataTapKey",
+        "source": "~Top|Top>k",
+        "portName": "~Top|DataTap>d"
+      }
+    ]
+  },
+  {
+    "class": "firrtl.transforms.DontTouchAnnotation",
+    "target": "~Top|Foo>inv"
+  },
+  {
+    "class": "firrtl.transforms.DontTouchAnnotation",
+    "target": "~Top|Top>inv"
+  }
+]]
   extmodule DataTap :
     output b : UInt<1>
     output c : UInt<1>
