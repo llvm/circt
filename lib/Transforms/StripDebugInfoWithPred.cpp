@@ -10,10 +10,17 @@
 #include "circt/Transforms/Passes.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Operation.h"
+#include "mlir/IR/Threading.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/SmallVector.h"
 
 using namespace mlir;
+
+template <typename OpOrBlockArgument>
+static void updateLocIfChanged(OpOrBlockArgument *op, Location newLoc) {
+  if (op->getLoc() != newLoc)
+    op->setLoc(newLoc);
+}
 
 namespace {
 struct StripDebugInfoWithPred
