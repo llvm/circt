@@ -1,4 +1,4 @@
-#include "circt/Support/SVAttributes.h"
+#include "circt/Dialect/SV/External/SVAttributes.h"
 #include "mlir/IR/Operation.h"
 
 llvm::StringRef svAttr = "sv.attributes";

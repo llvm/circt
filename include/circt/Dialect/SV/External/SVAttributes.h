@@ -1,5 +1,5 @@
-#ifndef CIRCT_SUPPORT_SV_ATTRIBUTES_H
-#define CIRCT_SUPPORT_SV_ATTRIBUTES_H
+#ifndef CIRCT_DIALECT_SV_EXTERNAL_SVATTRIBUTES_H
+#define CIRCT_DIALECT_SV_EXTERNAL_SVATTRIBUTES_H
 #include "circt/Support/LLVM.h"
 
 namespace circt {
@@ -11,4 +11,4 @@ void setSVAttributes(mlir::Operation *op, mlir::Attribute);
 
 } // namespace circt
 
-#endif // CIRCT_SUPPORT_SV_ATTRIBUTES_H
+#endif // CIRCT_DIALECT_SV_EXTERNAL_SVATTRIBUTES_H
