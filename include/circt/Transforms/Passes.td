@@ -45,7 +45,7 @@ def StripDebugInfoWithPred : Pass<"strip-debuginfo-with-pred", "::mlir::ModuleOp
     This pass extends mlir::StrinpDebugInfoPass to selectively strip locations with a
     given predicate.
   }];
-  let constructor = "circt::createStripDebugInfoWithPredPass()";
+  let constructor = "circt::createStripDebugInfoWithPredPass({})";
   let options = [
     Option<"dropSuffix", "drop-suffix", "std::string",
            /*default=*/"",

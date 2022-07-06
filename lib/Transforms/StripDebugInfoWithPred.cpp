@@ -19,7 +19,7 @@ namespace {
 struct StripDebugInfoWithPred
     : public circt::StripDebugInfoWithPredBase<StripDebugInfoWithPred> {
   StripDebugInfoWithPred(std::function<bool(mlir::Location)> pred)
-      : pred(std::move(pred)) {}
+      : pred(pred) {}
   void runOnOperation() override;
 
   // Return stripped location for the given `loc`.
@@ -41,7 +41,7 @@ struct StripDebugInfoWithPred
   }
 
 private:
-  std::function<bool(mlir::Location)> pred = {};
+  std::function<bool(mlir::Location)> pred;
 };
 } // namespace
 
@@ -62,25 +62,24 @@ void StripDebugInfoWithPred::runOnOperation() {
     return;
   }
 
-  // TODO: Consider parallelize this.
-  getOperation().walk([&](Operation *op) {
-    op->setLoc(getStrippedLoc(op->getLoc()));
+  parallelForEach(
+      &getContext(), getOperation().getOps(), [&](Operation &toplevelOp) {
+        toplevelOp.walk([&](Operation *op) {
+          updateLocIfChanged(op, getStrippedLoc(op->getLoc()));
 
-    // Strip block arguments debug info.
-    for (Region &region : op->getRegions()) {
-      for (Block &block : region.getBlocks()) {
-        for (BlockArgument &arg : block.getArguments()) {
-          arg.setLoc(getStrippedLoc(arg.getLoc()));
-        }
-      }
-    }
-  });
+          // Strip block arguments debug info.
+          for (Region &region : op->getRegions())
+            for (Block &block : region.getBlocks())
+              for (BlockArgument &arg : block.getArguments())
+                updateLocIfChanged(&arg, getStrippedLoc(arg.getLoc()));
+        });
+      });
 }
 
 namespace circt {
 /// Creates a pass to strip debug information from a function.
-std::unique_ptr<Pass>
-createStripDebugInfoWithPredPass(std::function<bool(mlir::Location)> pred) {
-  return std::make_unique<StripDebugInfoWithPred>(std::move(pred));
+std::unique_ptr<Pass> createStripDebugInfoWithPredPass(
+    const std::function<bool(mlir::Location)> &pred) {
+  return std::make_unique<StripDebugInfoWithPred>(pred);
 }
 } // namespace circt
