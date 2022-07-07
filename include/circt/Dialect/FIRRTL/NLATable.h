@@ -24,12 +24,12 @@ namespace firrtl {
 /// This table tracks nlas and what modules participate in them.
 ///
 /// To use this class, retrieve a cached copy from the analysis manager:
-///   auto &nlaTable = getAnalysis<NLTATable>(getOperation());
+///   auto &nlaTable = getAnalysis<NLATable>(getOperation());
 class NLATable {
 
 public:
   /// Create a new NLA table of a circuit. This must be called on a FIRRTL
-  /// CircuitOp or MLIR ModuleOp. To esnure that the analysis does not return
+  /// CircuitOp or MLIR ModuleOp. To ensure that the analysis does not return
   /// stale data while a pass is running, it should be kept up-to-date when
   /// modules are added or renamed and NLAs are updated.
   explicit NLATable(Operation *operation);

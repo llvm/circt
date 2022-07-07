@@ -154,7 +154,7 @@ private:
   HWModuleLike module;
 
   /// List of instance operations in this module.  This member owns the
-  /// InstanceRecords, which may be pointed to by other InstanceGraohNode's use
+  /// InstanceRecords, which may be pointed to by other InstanceGraphNode's use
   /// lists.
   InstanceList instances;
 
@@ -322,7 +322,7 @@ struct llvm::GraphTraits<circt::hw::InstanceGraphBase *>
   }
 };
 
-// Graph traits for DOT labelling.
+// Graph traits for DOT labeling.
 template <>
 struct llvm::DOTGraphTraits<circt::hw::InstanceGraphBase *>
     : public llvm::DefaultDOTGraphTraits {

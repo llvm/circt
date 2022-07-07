@@ -14,7 +14,7 @@ include "mlir/IR/OpBase.td"
 
 def FModuleLike : OpInterface<"FModuleLike"> {
   let cppNamespace = "circt::firrtl";
-  let description = "Provide common  module information.";
+  let description = "Provide common module information.";
   let methods = [
 
     //===------------------------------------------------------------------===//
