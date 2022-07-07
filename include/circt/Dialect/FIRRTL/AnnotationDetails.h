@@ -40,6 +40,10 @@ constexpr const char *omirFileAnnoClass =
 constexpr const char *omirTrackerAnnoClass =
     "freechips.rocketchip.objectmodel.OMIRTracker";
 
+constexpr const char *blackBoxInlineAnnoClass =
+    "firrtl.transforms.BlackBoxInlineAnno";
+constexpr const char *blackBoxPathAnnoClass =
+    "firrtl.transforms.BlackBoxPathAnno";
 constexpr const char *blackBoxTargetDirAnnoClass =
     "firrtl.transforms.BlackBoxTargetDirAnno";
 constexpr const char *blackBoxResourceFileNameAnnoClass =

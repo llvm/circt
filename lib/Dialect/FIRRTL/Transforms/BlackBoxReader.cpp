@@ -234,15 +234,12 @@ void BlackBoxReaderPass::runOnOperation() {
 /// annotation (even if it was incomplete) and should be removed from the op.
 bool BlackBoxReaderPass::runOnAnnotation(Operation *op, Annotation anno,
                                          OpBuilder &builder, bool isCover) {
-  StringRef inlineAnnoClass = "firrtl.transforms.BlackBoxInlineAnno";
-  StringRef pathAnnoClass = "firrtl.transforms.BlackBoxPathAnno";
-
   // Handle inline annotation.
-  if (anno.isClass(inlineAnnoClass)) {
+  if (anno.isClass(blackBoxInlineAnnoClass)) {
     auto name = anno.getMember<StringAttr>("name");
     auto text = anno.getMember<StringAttr>("text");
     if (!name || !text) {
-      op->emitError(inlineAnnoClass)
+      op->emitError(blackBoxInlineAnnoClass)
           << " annotation missing \"name\" or \"text\" attribute";
       signalPassFailure();
       return true;
@@ -263,10 +260,11 @@ bool BlackBoxReaderPass::runOnAnnotation(Operation *op, Annotation anno,
   }
 
   // Handle path annotation.
-  if (anno.isClass(pathAnnoClass)) {
+  if (anno.isClass(blackBoxPathAnnoClass)) {
     auto path = anno.getMember<StringAttr>("path");
     if (!path) {
-      op->emitError(pathAnnoClass) << " annotation missing \"path\" attribute";
+      op->emitError(blackBoxPathAnnoClass)
+          << " annotation missing \"path\" attribute";
       signalPassFailure();
       return true;
     }
