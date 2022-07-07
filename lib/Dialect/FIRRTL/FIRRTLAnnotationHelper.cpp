@@ -65,7 +65,7 @@ static FailureOr<unsigned> findVectorElement(Operation *op, Type type,
   auto vec = type.dyn_cast<FVectorType>();
   if (!vec) {
     op->emitError("index access '")
-        << index << "' into non-vector type '" << vec << "'";
+        << index << "' into non-vector type '" << type << "'";
     return failure();
   }
   return index;
