@@ -25,7 +25,7 @@ firrtl.circuit "Aggregates" attributes {rawAnnotations = [
 // CHECK: firrtl.hierpath @nla [@FooNL::@baz, @BazNL::@bar, @BarNL]
 // CHECK: firrtl.module @BarNL
 // CHECK: %w = firrtl.wire sym @w {annotations = [{circt.nonlocal = @nla_0, class = "circt.test", nl = "nl"}]}
-// CHECK: %w2 = firrtl.wire sym @w2 {annotations = [{circt.fieldID = 5 : i32, circt.nonlocal = @nla, class = "circt.test", nl = "nl2"}]} : !firrtl.bundle<a: uint, b: vector<uint, 4>>
+// CHECK: %w2 = firrtl.wire sym @w2 {annotations = [{circt.fieldID = 5 : i32, circt.nonlocal = @nla_1, class = "circt.test", nl = "nl2"}]} : !firrtl.bundle<a: uint, b: vector<uint, 4>>
 // CHECK: firrtl.instance bar sym @bar @BarNL()
 // CHECK: firrtl.instance baz sym @baz @BazNL()
 // CHECK: firrtl.module @FooL
