@@ -861,6 +861,63 @@ struct NodeSymbolRemover : public Reduction {
   std::string getName() const override { return "node-symbol-remover"; }
 };
 
+/// A sample reduction pattern that eagerly inlines instances.
+struct EagerInliner : public Reduction {
+  void beforeReduction(mlir::ModuleOp op) override {
+    symbols.clear();
+    nlaRemover.clear();
+  }
+  void afterReduction(mlir::ModuleOp op) override { nlaRemover.remove(op); }
+
+  bool match(Operation *op) override {
+    auto instOp = dyn_cast<firrtl::InstanceOp>(op);
+    if (!instOp)
+      return false;
+    auto tableOp = SymbolTable::getNearestSymbolTable(instOp);
+    auto moduleOp = instOp.getReferencedModule(symbols.getSymbolTable(tableOp));
+    if (!isa<firrtl::FModuleOp>(moduleOp))
+      return false;
+    return symbols.getSymbolUserMap(tableOp).getUsers(moduleOp).size() == 1;
+  }
+
+  LogicalResult rewrite(Operation *op) override {
+    auto instOp = cast<firrtl::InstanceOp>(op);
+    LLVM_DEBUG(llvm::dbgs() << "Inlining instance `" << instOp.name() << "`\n");
+    SmallVector<Value> argReplacements;
+    ImplicitLocOpBuilder builder(instOp.getLoc(), instOp);
+    for (unsigned i = 0, e = instOp.getNumResults(); i != e; ++i) {
+      auto result = instOp.getResult(i);
+      auto name = builder.getStringAttr(Twine(instOp.name()) + "_" +
+                                        instOp.getPortNameStr(i));
+      auto wire = builder.create<firrtl::WireOp>(
+          result.getType(), name, firrtl::NameKindEnum::DroppableName,
+          instOp.getPortAnnotation(i), StringAttr{});
+      result.replaceAllUsesWith(wire);
+      argReplacements.push_back(wire);
+    }
+    auto tableOp = SymbolTable::getNearestSymbolTable(instOp);
+    auto moduleOp = cast<firrtl::FModuleOp>(
+        instOp.getReferencedModule(symbols.getSymbolTable(tableOp)));
+    for (auto &op : llvm::make_early_inc_range(*moduleOp.getBody())) {
+      op.remove();
+      builder.insert(&op);
+      for (auto &operand : op.getOpOperands())
+        if (auto blockArg = operand.get().dyn_cast<BlockArgument>())
+          operand.set(argReplacements[blockArg.getArgNumber()]);
+    }
+    nlaRemover.markNLAsInOperation(instOp);
+    instOp->erase();
+    moduleOp->erase();
+    return success();
+  }
+
+  std::string getName() const override { return "eager-inliner"; }
+  bool acceptSizeIncrease() const override { return true; }
+
+  SymbolCache symbols;
+  NLARemover nlaRemover;
+};
+
 //===----------------------------------------------------------------------===//
 // Reduction Registration
 //===----------------------------------------------------------------------===//
@@ -888,6 +945,7 @@ void circt::createAllReductions(
   add(std::make_unique<ModuleExternalizer>());
   add(std::make_unique<InstanceStubber>());
   add(std::make_unique<MemoryStubber>());
+  add(std::make_unique<EagerInliner>());
   add(std::make_unique<PassReduction>(
       context, firrtl::createLowerFIRRTLTypesPass(), true, true));
   add(std::make_unique<PassReduction>(context, firrtl::createExpandWhensPass(),
