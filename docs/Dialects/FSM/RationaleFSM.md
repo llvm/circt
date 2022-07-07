@@ -24,7 +24,7 @@ with the following features:
 internal variables of an FSM, allowing convenient analysis and transformation.
 2. Provide a target-agnostic representation of FSM, allowing the state machine
 to be instantiated and attached to other dialects from different domains.
-3. By cooperating with two conversion passes, FSMToHW and FSMToStandard, allow
+3. By cooperating with two conversion passes, FSMToSV and FSMToStandard, allow
 to lower the FSM abstraction into HW+Comb+SV (Hardware) and Standard+SCF+MemRef
 (Software) dialects for the purposes of simulation, code generation, etc.
 
