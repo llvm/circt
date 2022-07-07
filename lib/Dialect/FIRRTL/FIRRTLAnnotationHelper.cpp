@@ -221,6 +221,10 @@ Optional<AnnoPathValue> firrtl::resolveEntities(TokenAnnoTarget path,
     auto target = instance.getReferencedModule(symTbl);
     if (component.empty()) {
       ref = OpAnnoTarget(instance.getReferencedModule(symTbl));
+    } else if (component.front().isIndex) {
+      circuit->emitError() << "illegal target '" << path.str()
+                           << "' indexes into an instance";
+      return {};
     } else {
       auto field = component.front().name;
       ref = AnnoTarget();

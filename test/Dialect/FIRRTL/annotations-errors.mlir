@@ -15,6 +15,24 @@ firrtl.circuit "Foo"  attributes {rawAnnotations = [
 
 // -----
 
+// A target that does a subindex of an instance should be illegal.
+//
+// expected-error @+2 {{illegal target '~Foo|Foo>bar[0]' indexes into an instance}}
+// expected-error @+1 {{Unable to resolve target of annotation}}
+firrtl.circuit "Foo"  attributes {rawAnnotations = [
+  {
+    class = "circt.test",
+    target = "~Foo|Foo>bar[0]"
+  }
+]} {
+  firrtl.module @Bar() {}
+  firrtl.module @Foo() {
+    firrtl.instance bar @Bar()
+  }
+}
+
+// -----
+
 // expected-error @+1 {{Unable to apply annotation}}
 firrtl.circuit "LocalOnlyAnnotation" attributes {
   rawAnnotations = [
