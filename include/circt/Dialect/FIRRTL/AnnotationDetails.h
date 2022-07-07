@@ -60,6 +60,7 @@ static const char *verifBlackBoxAnnoClass =
     "freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation";
 static const char *metadataDirectoryAttrName =
     "sifive.enterprise.firrtl.MetadataDirAnnotation";
+static const char *noDedupAnnoClass = "firrtl.transforms.NoDedupAnnotation";
 
 // Grand Central Annotations
 constexpr const char *serializedViewAnnoClass =
