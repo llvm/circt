@@ -1147,8 +1147,13 @@ Operation *InstanceOp::getReferencedModule(const HWSymbolCache *cache) {
 
 LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto *module = symbolTable.lookupNearestSymbolFrom(*this, moduleNameAttr());
-  if (module == nullptr)
+  if (module == nullptr) {
+    auto parentModule = (*this)->getParentOfType<ModuleOp>();
+    module = parentModule.lookupSymbol(moduleNameAttr());
+  }
+  if (module == nullptr) {
     return emitError("Cannot find module definition '") << moduleName() << "'";
+  }
 
   // It must be some sort of module.
   if (!isAnyModule(module))

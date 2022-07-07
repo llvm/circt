@@ -253,7 +253,7 @@ FailureOr<Operation *>
 MachineOpConverter::moveOps(Block *block,
                             llvm::function_ref<bool(Operation *)> exclude) {
   for (auto &op : llvm::make_early_inc_range(*block)) {
-    if (!isa<comb::CombDialect, hw::HWDialect, fsm::FSMDialect>(
+    if (!isa<comb::CombDialect, hw::HWDialect, fsm::FSMDialect, circt::sv::SVDialect>(
             op.getDialect()))
       return op.emitOpError()
              << "is unsupported (op from the "
