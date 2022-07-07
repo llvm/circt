@@ -22,4 +22,3 @@ add_circt_dialect_library(CIRCTSV
 add_dependencies(circt-headers MLIRSVIncGen)
 
 add_subdirectory(Transforms)
-add_subdirectory(External)

@@ -26,6 +26,18 @@ using namespace circt::sv;
 
 #include "circt/Dialect/SV/SVEnums.cpp.inc"
 
+llvm::StringRef svAttr = "sv.attributes";
+
+bool circt::hasSVAttributes(mlir::Operation *op) { return op->hasAttr(svAttr); }
+
+mlir::ArrayAttr circt::getSVAttributes(mlir::Operation *op) {
+  return op->getAttrOfType<mlir::ArrayAttr>(svAttr);
+}
+
+void circt::setSVAttributes(mlir::Operation *op, mlir::Attribute attr) {
+  return op->setAttr(svAttr, attr);
+}
+
 void SVDialect::registerAttributes() {
   addAttributes<
 #define GET_ATTRDEF_LIST

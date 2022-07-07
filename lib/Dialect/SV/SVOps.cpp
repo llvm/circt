@@ -16,7 +16,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/HW/HWTypes.h"
-#include "circt/Dialect/SV/External/SVAttributes.h"
+#include "circt/Dialect/SV/SVAttributes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/PatternMatch.h"
@@ -340,10 +340,6 @@ void IfDefOp::build(OpBuilder &builder, OperationState &result,
 // If both thenRegion and elseRegion are empty, erase op.
 template <class Op>
 static LogicalResult canonicalizeIfDefLike(Op op, PatternRewriter &rewriter) {
-  // Block if op has SV attributes.
-  if (hasSVAttributes(op))
-    return failure();
-
   if (!op.getThenBlock()->empty())
     return failure();
 
@@ -355,10 +351,6 @@ static LogicalResult canonicalizeIfDefLike(Op op, PatternRewriter &rewriter) {
 }
 
 LogicalResult IfDefOp::canonicalize(IfDefOp op, PatternRewriter &rewriter) {
-  // Block if op has SV attributes.
-  if (hasSVAttributes(op))
-    return failure();
-
   return canonicalizeIfDefLike(op, rewriter);
 }
 
@@ -383,10 +375,6 @@ void IfDefProceduralOp::build(OpBuilder &builder, OperationState &result,
 
 LogicalResult IfDefProceduralOp::canonicalize(IfDefProceduralOp op,
                                               PatternRewriter &rewriter) {
-  // Block if op has SV attributes.
-  if (hasSVAttributes(op))
-    return failure();
-
   return canonicalizeIfDefLike(op, rewriter);
 }
 
@@ -903,10 +891,6 @@ void CaseOp::build(OpBuilder &builder, OperationState &result,
 
 // Strength reduce case styles based on the bit patterns.
 LogicalResult CaseOp::canonicalize(CaseOp op, PatternRewriter &rewriter) {
-  // Block if op has SV attributes.
-  if (hasSVAttributes(op))
-    return failure();
-
   if (op.caseStyle() == CaseStmtType::CaseStmt)
     return failure();
 
@@ -1261,7 +1245,7 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
 
     // If the assign op has SV attributes, we don't want to delete the
     // assignment.
-    if (circt::hasSVAttributes(assign))
+    if (hasSVAttributes(assign))
       return failure();
 
     write = assign;
@@ -1365,10 +1349,6 @@ LogicalResult IndexedPartSelectInOutOp::verify() {
 }
 
 OpFoldResult IndexedPartSelectInOutOp::fold(ArrayRef<Attribute> constants) {
-  // Block if op has SV attributes.
-  if (hasSVAttributes(*this))
-    return {};
-
   if (getType() == input().getType())
     return input();
   return {};
@@ -1676,10 +1656,6 @@ static LogicalResult eraseIfZeroOrNotZero(Operation *op, Value value,
 template <class Op, bool EraseIfZero = false>
 static LogicalResult canonicalizeImmediateVerifOp(Op op,
                                                   PatternRewriter &rewriter) {
-  // Block if op has SV attributes.
-  if (hasSVAttributes(op))
-    return failure();
-
   return eraseIfZeroOrNotZero(op, op.expression(), rewriter, EraseIfZero);
 }
 
@@ -1701,10 +1677,6 @@ void CoverOp::getCanonicalizationPatterns(RewritePatternSet &results,
 template <class Op, bool EraseIfZero = false>
 static LogicalResult canonicalizeConcurrentVerifOp(Op op,
                                                    PatternRewriter &rewriter) {
-  // Block if op has SV attributes.
-  if (hasSVAttributes(op))
-    return failure();
-
   return eraseIfZeroOrNotZero(op, op.property(), rewriter, EraseIfZero);
 }
 

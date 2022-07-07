@@ -9,7 +9,6 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
-#include "circt/Dialect/SV/External/SVAttributes.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/SetVector.h"
@@ -245,10 +244,6 @@ static bool narrowOperationWidth(OpTy op, bool narrowTrailingBits,
 //===----------------------------------------------------------------------===//
 
 OpFoldResult ReplicateOp::fold(ArrayRef<Attribute> constants) {
-  // Block if op has SV attributes.
-  if (hasSVAttributes(*this))
-    return {};
-
   // Replicate one time -> noop.
   if (getType().getWidth() == input().getType().getIntOrFloatBitWidth())
     return input();
@@ -272,19 +267,11 @@ OpFoldResult ReplicateOp::fold(ArrayRef<Attribute> constants) {
 
 LogicalResult ReplicateOp::canonicalize(ReplicateOp op,
                                         PatternRewriter &rewriter) {
-  // Block if op has SV attributes.
-  if (hasSVAttributes(op))
-    return failure();
-
   // TODO.
   return failure();
 }
 
 OpFoldResult ParityOp::fold(ArrayRef<Attribute> constants) {
-  // Block if op has SV attributes.
-  if (hasSVAttributes(*this))
-    return {};
-
   // Constant fold.
   if (auto input = constants[0].dyn_cast_or_null<IntegerAttr>())
     return getIntAttr(APInt(1, input.getValue().countPopulation() & 1),
@@ -311,10 +298,6 @@ static Attribute constFoldBinaryOp(ArrayRef<Attribute> operands,
 }
 
 OpFoldResult ShlOp::fold(ArrayRef<Attribute> operands) {
-  // Block if op has SV attributes.
-  if (hasSVAttributes(*this))
-    return {};
-
   if (auto rhs = operands[1].dyn_cast_or_null<IntegerAttr>()) {
     unsigned shift = rhs.getValue().getZExtValue();
     unsigned width = getType().getIntOrFloatBitWidth();
@@ -328,10 +311,6 @@ OpFoldResult ShlOp::fold(ArrayRef<Attribute> operands) {
 }
 
 LogicalResult ShlOp::canonicalize(ShlOp op, PatternRewriter &rewriter) {
-  // Block if op has SV attributes.
-  if (hasSVAttributes(op))
-    return failure();
-
   // ShlOp(x, cst) -> Concat(Extract(x), zeros)
   APInt value;
   if (!matchPattern(op.rhs(), m_RConstant(value)))
@@ -356,10 +335,6 @@ LogicalResult ShlOp::canonicalize(ShlOp op, PatternRewriter &rewriter) {
 }
 
 OpFoldResult ShrUOp::fold(ArrayRef<Attribute> operands) {
-  // Block if op has SV attributes.
-  if (hasSVAttributes(*this))
-    return {};
-
   if (auto rhs = operands[1].dyn_cast_or_null<IntegerAttr>()) {
     unsigned shift = rhs.getValue().getZExtValue();
     if (shift == 0)
@@ -373,10 +348,6 @@ OpFoldResult ShrUOp::fold(ArrayRef<Attribute> operands) {
 }
 
 LogicalResult ShrUOp::canonicalize(ShrUOp op, PatternRewriter &rewriter) {
-  // Block if op has SV attributes.
-  if (hasSVAttributes(op))
-    return failure();
-
   // ShrUOp(x, cst) -> Concat(zeros, Extract(x))
   APInt value;
   if (!matchPattern(op.rhs(), m_RConstant(value)))
@@ -401,10 +372,6 @@ LogicalResult ShrUOp::canonicalize(ShrUOp op, PatternRewriter &rewriter) {
 }
 
 OpFoldResult ShrSOp::fold(ArrayRef<Attribute> operands) {
-  // Block if op has SV attributes.
-  if (hasSVAttributes(*this))
-    return {};
-
   if (auto rhs = operands[1].dyn_cast_or_null<IntegerAttr>()) {
     if (rhs.getValue().getZExtValue() == 0)
       return getOperand(0);
@@ -413,10 +380,6 @@ OpFoldResult ShrSOp::fold(ArrayRef<Attribute> operands) {
 }
 
 LogicalResult ShrSOp::canonicalize(ShrSOp op, PatternRewriter &rewriter) {
-  // Block if op has SV attributes.
-  if (hasSVAttributes(op))
-    return failure();
-
   // ShrSOp(x, cst) -> Concat(replicate(extract(x, topbit)),extract(x))
   APInt value;
   if (!matchPattern(op.rhs(), m_RConstant(value)))
@@ -446,10 +409,6 @@ LogicalResult ShrSOp::canonicalize(ShrSOp op, PatternRewriter &rewriter) {
 //===----------------------------------------------------------------------===//
 
 OpFoldResult ExtractOp::fold(ArrayRef<Attribute> constants) {
-  // Block if op has SV attributes.
-  if (hasSVAttributes(*this))
-    return {};
-
   // If we are extracting the entire input, then return it.
   if (input().getType() == getType())
     return input();
@@ -578,10 +537,6 @@ static bool extractFromReplicate(ExtractOp op, ReplicateOp replicate,
 }
 
 LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
-  // Block if op has SV attributes.
-  if (hasSVAttributes(op))
-    return failure();
-
   auto *inputOp = op.input().getDefiningOp();
 
   // If the extracted bits are all known, then return the result.
@@ -774,10 +729,6 @@ static bool canonicalizeLogicalCstWithConcat(Operation *logicalOp,
 }
 
 OpFoldResult AndOp::fold(ArrayRef<Attribute> constants) {
-  // Block if op has SV attributes.
-  if (hasSVAttributes(*this))
-    return {};
-
   APInt value = APInt::getAllOnes(getType().getWidth());
 
   // and(x, 01, 10) -> 00 -- annulment.
@@ -834,10 +785,6 @@ static bool canonicalizeIdempotentInputs(Op op, PatternRewriter &rewriter) {
 }
 
 LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
-  // Block if op has SV attributes.
-  if (hasSVAttributes(op))
-    return failure();
-
   auto inputs = op.inputs();
   auto size = inputs.size();
   assert(size > 1 && "expected 2 or more operands, `fold` should handle this");
@@ -961,10 +908,6 @@ LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
 }
 
 OpFoldResult OrOp::fold(ArrayRef<Attribute> constants) {
-  // Block if op has SV attributes.
-  if (hasSVAttributes(*this))
-    return {};
-
   auto value = APInt::getZero(getType().getWidth());
 
   // or(x, 10, 01) -> 11
@@ -1102,10 +1045,6 @@ static bool canonicalizeOrOfConcatsWithCstOperands(OrOp op, size_t concatIdx1,
 }
 
 LogicalResult OrOp::canonicalize(OrOp op, PatternRewriter &rewriter) {
-  // Block if op has SV attributes.
-  if (hasSVAttributes(op))
-    return failure();
-
   auto inputs = op.inputs();
   auto size = inputs.size();
   assert(size > 1 && "expected 2 or more operands");
@@ -1169,10 +1108,6 @@ LogicalResult OrOp::canonicalize(OrOp op, PatternRewriter &rewriter) {
 }
 
 OpFoldResult XorOp::fold(ArrayRef<Attribute> constants) {
-  // Block if op has SV attributes.
-  if (hasSVAttributes(*this))
-    return {};
-
   auto size = inputs().size();
 
   // xor(x) -> x -- noop
@@ -1223,10 +1158,6 @@ static void canonicalizeXorIcmpTrue(XorOp op, unsigned icmpOperand,
 }
 
 LogicalResult XorOp::canonicalize(XorOp op, PatternRewriter &rewriter) {
-  // Block if op has SV attributes.
-  if (hasSVAttributes(op))
-    return failure();
-
   auto inputs = op.inputs();
   auto size = inputs.size();
   assert(size > 1 && "expected 2 or more operands");
@@ -1296,10 +1227,6 @@ LogicalResult XorOp::canonicalize(XorOp op, PatternRewriter &rewriter) {
 }
 
 OpFoldResult SubOp::fold(ArrayRef<Attribute> constants) {
-  // Block if op has SV attributes.
-  if (hasSVAttributes(*this))
-    return {};
-
   // sub(x - x) -> 0
   if (rhs() == lhs())
     return getIntAttr(APInt::getZero(lhs().getType().getIntOrFloatBitWidth()),
@@ -1327,10 +1254,6 @@ OpFoldResult SubOp::fold(ArrayRef<Attribute> constants) {
 }
 
 LogicalResult SubOp::canonicalize(SubOp op, PatternRewriter &rewriter) {
-  // Block if op has SV attributes.
-  if (hasSVAttributes(op))
-    return failure();
-
   // sub(x, cst) -> add(x, -cst)
   APInt value;
   if (matchPattern(op.rhs(), m_RConstant(value))) {
@@ -1347,10 +1270,6 @@ LogicalResult SubOp::canonicalize(SubOp op, PatternRewriter &rewriter) {
 }
 
 OpFoldResult AddOp::fold(ArrayRef<Attribute> constants) {
-  // Block if op has SV attributes.
-  if (hasSVAttributes(*this))
-    return {};
-
   auto size = inputs().size();
 
   // add(x) -> x -- noop
@@ -1362,10 +1281,6 @@ OpFoldResult AddOp::fold(ArrayRef<Attribute> constants) {
 }
 
 LogicalResult AddOp::canonicalize(AddOp op, PatternRewriter &rewriter) {
-  // Block if op has SV attributes.
-  if (hasSVAttributes(op))
-    return failure();
-
   auto inputs = op.inputs();
   auto size = inputs.size();
   assert(size > 1 && "expected 2 or more operands");
@@ -1453,10 +1368,6 @@ LogicalResult AddOp::canonicalize(AddOp op, PatternRewriter &rewriter) {
 }
 
 OpFoldResult MulOp::fold(ArrayRef<Attribute> constants) {
-  // Block if op has SV attributes.
-  if (hasSVAttributes(*this))
-    return {};
-
   auto size = inputs().size();
 
   // mul(x) -> x -- noop
@@ -1480,10 +1391,6 @@ OpFoldResult MulOp::fold(ArrayRef<Attribute> constants) {
 }
 
 LogicalResult MulOp::canonicalize(MulOp op, PatternRewriter &rewriter) {
-  // Block if op has SV attributes.
-  if (hasSVAttributes(op))
-    return failure();
-
   auto inputs = op.inputs();
   auto size = inputs.size();
   assert(size > 1 && "expected 2 or more operands");
@@ -1547,18 +1454,10 @@ static OpFoldResult foldDiv(Op op, ArrayRef<Attribute> constants) {
 }
 
 OpFoldResult DivUOp::fold(ArrayRef<Attribute> constants) {
-  // Block if op has SV attributes.
-  if (hasSVAttributes(*this))
-    return {};
-
   return foldDiv<DivUOp, /*isSigned=*/false>(*this, constants);
 }
 
 OpFoldResult DivSOp::fold(ArrayRef<Attribute> constants) {
-  // Block if op has SV attributes.
-  if (hasSVAttributes(*this))
-    return {};
-
   return foldDiv<DivSOp, /*isSigned=*/true>(*this, constants);
 }
 
@@ -1586,18 +1485,10 @@ static OpFoldResult foldMod(Op op, ArrayRef<Attribute> constants) {
 }
 
 OpFoldResult ModUOp::fold(ArrayRef<Attribute> constants) {
-  // Block if op has SV attributes.
-  if (hasSVAttributes(*this))
-    return {};
-
   return foldMod<ModUOp, /*isSigned=*/false>(*this, constants);
 }
 
 OpFoldResult ModSOp::fold(ArrayRef<Attribute> constants) {
-  // Block if op has SV attributes.
-  if (hasSVAttributes(*this))
-    return {};
-
   return foldMod<ModSOp, /*isSigned=*/true>(*this, constants);
 }
 //===----------------------------------------------------------------------===//
@@ -1606,10 +1497,6 @@ OpFoldResult ModSOp::fold(ArrayRef<Attribute> constants) {
 
 // Constant folding
 OpFoldResult ConcatOp::fold(ArrayRef<Attribute> constants) {
-  // Block if op has SV attributes.
-  if (hasSVAttributes(*this))
-    return {};
-
   if (getNumOperands() == 1)
     return getOperand(0);
 
@@ -1634,10 +1521,6 @@ OpFoldResult ConcatOp::fold(ArrayRef<Attribute> constants) {
 }
 
 LogicalResult ConcatOp::canonicalize(ConcatOp op, PatternRewriter &rewriter) {
-  // Block if op has SV attributes.
-  if (hasSVAttributes(op))
-    return failure();
-
   auto inputs = op.inputs();
   auto size = inputs.size();
   assert(size > 1 && "expected 2 or more operands");
@@ -1756,10 +1639,6 @@ LogicalResult ConcatOp::canonicalize(ConcatOp op, PatternRewriter &rewriter) {
 //===----------------------------------------------------------------------===//
 
 OpFoldResult MuxOp::fold(ArrayRef<Attribute> constants) {
-  // Block if op has SV attributes.
-  if (hasSVAttributes(*this))
-    return {};
-
   // mux (c, b, b) -> b
   if (trueValue() == falseValue())
     return trueValue();
@@ -2171,10 +2050,6 @@ static bool foldCommonMuxOperation(MuxOp mux, Operation *trueOp,
 }
 
 LogicalResult MuxOp::canonicalize(MuxOp op, PatternRewriter &rewriter) {
-  // Block if op has SV attributes.
-  if (hasSVAttributes(op))
-    return failure();
-
   APInt value;
 
   if (matchPattern(op.trueValue(), m_RConstant(value))) {
@@ -2405,10 +2280,6 @@ static bool applyCmpPredicateToEqualOperands(ICmpPredicate predicate) {
 }
 
 OpFoldResult ICmpOp::fold(ArrayRef<Attribute> constants) {
-  // Block if op has SV attributes.
-  if (hasSVAttributes(*this))
-    return {};
-
   // gt a, a -> false
   // gte a, a -> true
   if (lhs() == rhs()) {
@@ -2678,10 +2549,6 @@ static void combineEqualityICmpWithXorOfConstant(ICmpOp cmpOp, XorOp xorOp,
 }
 
 LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
-  // Block if op has SV attributes.
-  if (hasSVAttributes(op))
-    return failure();
-
   APInt lhs, rhs;
 
   // icmp 1, x -> icmp x, 1

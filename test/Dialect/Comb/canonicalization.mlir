@@ -1374,24 +1374,3 @@ hw.module @Issue2546() -> (b: i1) {
   %0 = comb.xor %0, %true : i1
   hw.output %0 : i1
 }
-
-// CHECK-LABEL: @SVAttributes
-hw.module @SVAttributes(%a:i1, %c:i1, %d: i1) -> (b: i1, e: i1, f: i1) {
-  %true = hw.constant true
-  // Block folds if there are SV attributes.
-  // CHECK: comb.xor %true, %true {sv.attributes = [#sv.attribute<"foo">]}
-  %0 = comb.xor %true, %true {sv.attributes=[#sv.attribute<"foo">]} : i1
-
-  %1 = comb.add %a, %c : i1
-  // Don't canonicalize if the root op has SV attributes.
-  // CHECK: comb.add %1, %d {sv.attributes = [#sv.attribute<"bar">]}
-  %2 = comb.add %1, %d {sv.attributes=[#sv.attribute<"bar">]} : i1
-
-  // It is ok to drop SV attributes if the associated op %3 gets dead by
-  // other canonicalizers.
-  // CHECK-NOT: baz
-  // CHECK: %3 = comb.add %a, %c, %d : i1
-  %3 = comb.add %a, %c {sv.attributes=[#sv.attribute<"baz">]} : i1
-  %4 = comb.add %3, %d : i1
-  hw.output %0, %2, %4 : i1, i1, i1
-}

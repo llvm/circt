@@ -15,7 +15,7 @@
 
 #include "PassDetail.h"
 #include "circt/Dialect/HW/HWOps.h"
-#include "circt/Dialect/SV/External/SVAttributes.h"
+#include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Dialect/SV/SVPasses.h"
 
 using namespace circt;

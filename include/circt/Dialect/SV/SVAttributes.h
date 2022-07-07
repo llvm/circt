@@ -14,6 +14,15 @@
 
 #include "circt/Dialect/SV/SVEnums.h.inc"
 
+namespace circt {
+
+/// Helper functions to handle SV attributes.
+bool hasSVAttributes(mlir::Operation *op);
+mlir::ArrayAttr getSVAttributes(mlir::Operation *op);
+void setSVAttributes(mlir::Operation *op, mlir::Attribute);
+
+} // namespace circt
+
 #define GET_ATTRDEF_CLASSES
 #include "circt/Dialect/SV/SVAttributes.h.inc"
 
