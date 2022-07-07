@@ -265,6 +265,19 @@ def ConvertHWToLLHD : Pass<"convert-hw-to-llhd", "mlir::ModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
+// HWToSystemC
+//===----------------------------------------------------------------------===//
+
+def ConvertHWToSystemC : Pass<"convert-hw-to-systemc", "mlir::ModuleOp"> {
+  let summary = "Convert HW to SystemC";
+  let description = [{
+    This pass translates a HW design into an equivalent SystemC design.
+  }];
+  let constructor = "circt::createConvertHWToSystemCPass()";
+  let dependentDialects = ["systemc::SystemCDialect"];
+}
+
+//===----------------------------------------------------------------------===//
 // StandardToHandshake
 //===----------------------------------------------------------------------===//
 
