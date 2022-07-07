@@ -253,16 +253,18 @@ static Value lowerFullyAssociativeOp(Operation &op, OperandRange operands,
 
 /// When we find that an operation is used before it is defined in a graph
 /// region, we emit an explicit wire to resolve the issue.
-static void lowerUsersToTemporaryWire(Operation &op) {
+static void lowerUsersToTemporaryWire(Operation &op,
+                                      bool isProceduralRegion = false) {
   Block *block = op.getBlock();
   auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), block);
 
   auto createWireForResult = [&](Value result, StringAttr name) {
     Value newWire;
-    if (name)
-      newWire = builder.create<WireOp>(result.getType(), name);
+    // If the op is in a procedural region, use logic op.
+    if (isProceduralRegion)
+      newWire = builder.create<LogicOp>(result.getType(), name);
     else
-      newWire = builder.create<WireOp>(result.getType());
+      newWire = builder.create<WireOp>(result.getType(), name);
 
     while (!result.use_empty()) {
       auto newWireRead = builder.create<ReadInOutOp>(newWire);
@@ -270,7 +272,11 @@ static void lowerUsersToTemporaryWire(Operation &op) {
       use.set(newWireRead);
       newWireRead->moveBefore(use.getOwner());
     }
-    auto connect = builder.create<AssignOp>(newWire, result);
+    Operation *connect;
+    if (isProceduralRegion)
+      connect = builder.create<BPAssignOp>(newWire, result);
+    else
+      connect = builder.create<AssignOp>(newWire, result);
     connect->moveAfter(&op);
   };
 
@@ -562,18 +568,26 @@ void ExportVerilog::prepareHWModule(Block &block,
 
     // If this expression is deemed worth spilling into a wire, do it here.
     if (shouldSpillWire(op, options)) {
-      // If we're not in a procedural region, or we are, but we can hoist out of
-      // it, we are good to generate a wire.
-      if (!isProceduralRegion ||
-          (isProceduralRegion && hoistNonSideEffectExpr(&op))) {
-        lowerUsersToTemporaryWire(op);
+      if (options.disallowLocalVariables) {
+        // If we're not in a procedural region, or we are, but we can hoist out
+        // of it, we are good to generate a wire.
+        if (!isProceduralRegion ||
+            (isProceduralRegion && hoistNonSideEffectExpr(&op))) {
+          // If op is moved to a non-procedural region, create a temporary wire.
+          if (!op.getParentOp()->hasTrait<ProceduralRegion>())
+            lowerUsersToTemporaryWire(op);
 
-        // If we're in a procedural region, we move on to the next op in the
-        // block. The expression splitting and canonicalization below will
-        // happen after we recurse back up. If we're not in a procedural region,
-        // the expression can continue being worked on.
-        if (isProceduralRegion)
-          continue;
+          // If we're in a procedural region, we move on to the next op in the
+          // block. The expression splitting and canonicalization below will
+          // happen after we recurse back up. If we're not in a procedural
+          // region, the expression can continue being worked on.
+          if (isProceduralRegion)
+            continue;
+        }
+      } else {
+        // If `disallowLocalVariables` is not enabled, we can spill the
+        // expression to automatic logic declarations.
+        lowerUsersToTemporaryWire(op, isProceduralRegion);
       }
     }
 
