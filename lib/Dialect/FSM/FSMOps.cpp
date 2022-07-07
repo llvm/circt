@@ -132,22 +132,18 @@ LogicalResult MachineOp::verify() {
     return emitOpError("initial state '" + initialState() +
                        "' was not defined in the machine");
 
-  if (argNames()) {
-    if (argNames().getValue().size() != getArgumentTypes().size())
-      return emitOpError(llvm::formatv("number of machine arguments ({0}) does "
-                                       "not match the provided number "
-                                       "of argument names ({1})",
-                                       getArgumentTypes().size(),
-                                       argNames().getValue().size()));
-  }
+  if (argNames() && argNames().getValue().size() != getArgumentTypes().size())
+    return emitOpError(llvm::formatv("number of machine arguments ({0}) does "
+                                     "not match the provided number "
+                                     "of argument names ({1})",
+                                     getArgumentTypes().size(),
+                                     argNames().getValue().size()));
 
-  if (resNames()) {
-    if (resNames().getValue().size() != getResultTypes().size())
-      return emitOpError(llvm::formatv(
-          "number of machine results ({0}) does not match the provided number "
-          "of result names ({1})",
-          getResultTypes().size(), resNames().getValue().size()));
-  }
+  if (resNames() && resNames().getValue().size() != getResultTypes().size())
+    return emitOpError(llvm::formatv(
+        "number of machine results ({0}) does not match the provided number "
+        "of result names ({1})",
+        getResultTypes().size(), resNames().getValue().size()));
 
   return success();
 }
