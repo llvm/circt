@@ -159,6 +159,15 @@ static LogicalResult execute(MLIRContext &context) {
   auto bestSize = initialTest.getSize();
   VERBOSE(llvm::errs() << "Initial module has size " << bestSize << "\n");
 
+  // Mechanism to write over the previous summary line, if it was the last
+  // thing written to errs.
+  size_t errsPosAfterLastSummary = 0;
+  auto clearSummary = [&] {
+    if (llvm::errs().tell() != errsPosAfterLastSummary)
+      return;
+    llvm::errs() << "\e[1A\e[2K"; // move up one line ("1A"), clear line ("2K")
+  };
+
   // Iteratively reduce the input module by applying the current reduction
   // pattern to successively smaller subsets of the operations until we find one
   // that retains the interesting behavior.
@@ -172,11 +181,15 @@ static LogicalResult execute(MLIRContext &context) {
       ++patternIdx;
       continue;
     }
-    VERBOSE(llvm::errs() << "Trying reduction `" << pattern.getName() << "`\n");
+    VERBOSE({
+      clearSummary();
+      llvm::errs() << "Trying reduction `" << pattern.getName() << "`\n";
+    });
     size_t rangeBase = 0;
     size_t rangeLength = -1;
     bool patternDidReduce = false;
     bool allDidReduce = true;
+
     while (rangeLength > 0) {
       // Apply the pattern to the subset of operations selected by `rangeBase`
       // and `rangeLength`.
@@ -193,7 +206,10 @@ static LogicalResult execute(MLIRContext &context) {
       });
       pattern.afterReduction(*newModule);
       if (opIdx == 0) {
-        VERBOSE(llvm::errs() << "- No more ops where the pattern applies\n");
+        VERBOSE({
+          clearSummary();
+          llvm::errs() << "- No more ops where the pattern applies\n";
+        });
         break;
       }
 
@@ -201,9 +217,13 @@ static LogicalResult execute(MLIRContext &context) {
       VERBOSE({
         size_t boundLength = std::min(rangeLength, opIdx);
         size_t numDone = rangeBase / boundLength + 1;
-        size_t numTotal = opIdx / boundLength;
+        size_t numTotal = (opIdx + boundLength - 1) / boundLength;
+        clearSummary();
         llvm::errs() << "  [" << numDone << "/" << numTotal << "; "
-                     << (numDone * 100 / numTotal) << "%]\r";
+                     << (numDone * 100 / numTotal) << "%; " << opIdx << " ops, "
+                     << boundLength << " at once; " << pattern.getName()
+                     << "]\n";
+        errsPosAfterLastSummary = llvm::errs().tell();
       });
 
       // Check if this reduced module is still interesting, and its overall size
@@ -222,8 +242,10 @@ static LogicalResult execute(MLIRContext &context) {
         // have created additional opportunities.
         patternDidReduce = true;
         bestSize = test.getSize();
-        VERBOSE(llvm::errs()
-                << "- Accepting module of size " << bestSize << "\n");
+        VERBOSE({
+          clearSummary();
+          llvm::errs() << "- Accepting module of size " << bestSize << "\n";
+        });
         module = std::move(newModule);
 
         // We leave `rangeBase` and `rangeLength` untouched in this case. This
@@ -259,9 +281,12 @@ static LogicalResult execute(MLIRContext &context) {
         } else {
           rangeLength = std::min(rangeLength, opIdx) / 2;
           rangeBase = 0;
-          if (rangeLength > 0)
-            VERBOSE(llvm::errs()
-                    << "- Trying " << rangeLength << " ops at once\n");
+          if (rangeLength > 0) {
+            VERBOSE({
+              clearSummary();
+              llvm::errs() << "- Trying " << rangeLength << " ops at once\n";
+            });
+          }
         }
       }
     }
@@ -275,8 +300,11 @@ static LogicalResult execute(MLIRContext &context) {
     // pattern again, since we might have uncovered additional reduction
     // opportunities. Otherwise we just keep going to try the next pattern.
     if (patternDidReduce && patternIdx > 0) {
-      VERBOSE(llvm::errs() << "- Reduction `" << pattern.getName()
-                           << "` was successful, starting at the top\n\n");
+      VERBOSE({
+        clearSummary();
+        llvm::errs() << "- Reduction `" << pattern.getName()
+                     << "` was successful, starting at the top\n\n";
+      });
       patternIdx = 0;
     } else {
       ++patternIdx;
@@ -284,6 +312,7 @@ static LogicalResult execute(MLIRContext &context) {
   }
 
   // Write the reduced test case to the output.
+  clearSummary();
   VERBOSE(llvm::errs() << "All reduction strategies exhausted\n");
   VERBOSE(llvm::errs() << "Final size: " << bestSize << " ("
                        << (100 - bestSize * 100 / initialTest.getSize())
