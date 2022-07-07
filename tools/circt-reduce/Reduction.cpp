@@ -669,6 +669,61 @@ struct ExtmoduleInstanceRemover : public Reduction {
   NLARemover nlaRemover;
 };
 
+/// A sample reduction pattern that pushes connected values through wires.
+struct ConnectForwarder : public Reduction {
+  void beforeReduction(mlir::ModuleOp op) override { opsToErase.clear(); }
+  void afterReduction(mlir::ModuleOp op) override {
+    for (auto *op : opsToErase)
+      op->dropAllReferences();
+    for (auto *op : opsToErase)
+      op->erase();
+  }
+
+  bool match(Operation *op) override {
+    if (!isa<firrtl::FConnectLike>(op))
+      return false;
+    auto dest = op->getOperand(0);
+    auto src = op->getOperand(1);
+    auto *destOp = dest.getDefiningOp();
+    auto *srcOp = src.getDefiningOp();
+    if (dest == src)
+      return false;
+
+    // Ensure that the destination is something we should be able to forward
+    // through.
+    if (!isa_and_nonnull<firrtl::WireOp>(destOp))
+      return false;
+
+    // Ensure that the destination is connected to only once, and all uses of
+    // the connection occur after the definition of the source.
+    unsigned numConnects = 0;
+    for (auto &use : dest.getUses()) {
+      auto *op = use.getOwner();
+      if (use.getOperandNumber() == 0 && isa<firrtl::FConnectLike>(op)) {
+        if (++numConnects > 1)
+          return false;
+        continue;
+      }
+      if (srcOp && !srcOp->isBeforeInBlock(op))
+        return false;
+    }
+
+    return true;
+  }
+
+  LogicalResult rewrite(Operation *op) override {
+    auto dest = op->getOperand(0);
+    dest.replaceAllUsesWith(op->getOperand(1));
+    opsToErase.insert(dest.getDefiningOp());
+    opsToErase.insert(op);
+    return success();
+  }
+
+  std::string getName() const override { return "connect-forwarder"; }
+
+  llvm::DenseSet<Operation *> opsToErase;
+};
+
 /// A sample reduction pattern that replaces a single-use wire and register with
 /// an operand of the source value of the connection.
 template <unsigned OpNum>
@@ -846,6 +901,7 @@ void circt::createAllReductions(
       context, firrtl::createRemoveUnusedPortsPass(/*ignoreDontTouch=*/true)));
   add(std::make_unique<PassReduction>(context, createCSEPass()));
   add(std::make_unique<NodeSymbolRemover>());
+  add(std::make_unique<ConnectForwarder>());
   add(std::make_unique<ConnectInvalidator>());
   add(std::make_unique<Constantifier>());
   add(std::make_unique<OperandForwarder<0>>());
