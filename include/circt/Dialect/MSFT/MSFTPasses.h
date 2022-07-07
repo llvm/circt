@@ -15,6 +15,7 @@
 
 #include "circt/Dialect/MSFT/MSFTOps.h"
 
+#include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/LLVM.h"
 
@@ -30,7 +31,8 @@ void registerMSFTPasses();
 struct PassCommon {
 protected:
   SymbolCache topLevelSyms;
-  DenseMap<MSFTModuleOp, SmallVector<InstanceOp, 1>> moduleInstantiations;
+  DenseMap<Operation *, SmallVector<hw::HWInstanceLike, 1>>
+      moduleInstantiations;
 
   LogicalResult verifyInstances(ModuleOp topMod);
 
@@ -40,10 +42,11 @@ protected:
   // instantiation sites mapping.
   //
   // Assumption (unchecked): there is not a cycle in the instantiation graph.
-  void getAndSortModules(ModuleOp topMod, SmallVectorImpl<MSFTModuleOp> &mods);
-  void getAndSortModulesVisitor(MSFTModuleOp mod,
-                                SmallVectorImpl<MSFTModuleOp> &mods,
-                                DenseSet<MSFTModuleOp> &modsSeen);
+  void getAndSortModules(ModuleOp topMod,
+                         SmallVectorImpl<hw::HWModuleLike> &mods);
+  void getAndSortModulesVisitor(hw::HWModuleLike mod,
+                                SmallVectorImpl<hw::HWModuleLike> &mods,
+                                DenseSet<Operation *> &modsSeen);
 };
 } // namespace msft
 } // namespace circt
