@@ -89,9 +89,10 @@ def RequestToServerConnection : ESI_Op<"service.req.to_server", [
   let summary = "Request a connection to send data";
 
   let arguments = (ins HWInnerRefAttr:$servicePort, 
-                       ChannelType:$sending, StrAttr:$clientName);
+                       ChannelType:$sending, StrArrayAttr:$clientNamePath);
   let assemblyFormat = [{
-    $sending `->` $servicePort `(` $clientName`)` attr-dict `:` type($sending)
+    $sending `->` $servicePort `(` $clientNamePath `)`
+      attr-dict `:` type($sending)
   }];
 }
 
@@ -100,9 +101,9 @@ def RequestToClientConnection : ESI_Op<"service.req.to_client", [
   let summary = "Request a connection to receive data";
 
   let arguments = (ins HWInnerRefAttr:$servicePort,
-                       StrAttr:$clientName);
+                       StrArrayAttr:$clientNamePath);
   let results = (outs ChannelType:$receiving);
   let assemblyFormat = [{
-    $servicePort `(` $clientName `)` attr-dict `:` type($receiving)
+    $servicePort `(` $clientNamePath `)` attr-dict `:` type($receiving)
   }];
 }
