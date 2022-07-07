@@ -108,6 +108,8 @@ constexpr const char *internalKeySourceClass =
                                                                     // SFC
 constexpr const char *extractGrandCentralClass =
     "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation";
+constexpr const char *grandCentralHierarchyFileAnnoClass =
+    "sifive.enterprise.grandcentral.GrandCentralHierarchyFileAnnotation";
 constexpr const char *signalDriverAnnoClass =
     "sifive.enterprise.grandcentral.SignalDriverAnnotation";
 constexpr const char *signalDriverTargetAnnoClass =

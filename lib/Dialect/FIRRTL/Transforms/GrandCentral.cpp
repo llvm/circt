@@ -1546,8 +1546,7 @@ void GrandCentralPass::runOnOperation() {
       // Do not delete this annotation.  Extraction info may be needed later.
       return false;
     }
-    if (anno.isClass("sifive.enterprise.grandcentral."
-                     "GrandCentralHierarchyFileAnnotation")) {
+    if (anno.isClass(grandCentralHierarchyFileAnnoClass)) {
       if (maybeHierarchyFileYAML.hasValue()) {
         emitCircuitError("more than one 'GrandCentralHierarchyFileAnnotation' "
                          "was found, but zero or one may be provided");
