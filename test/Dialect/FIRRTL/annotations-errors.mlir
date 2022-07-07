@@ -1,5 +1,20 @@
 // RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl-lower-annotations)' -split-input-file %s -verify-diagnostics
 
+// An empty target string should be illegal.
+//
+// expected-error @+2 {{Cannot tokenize annotation path}}
+// expected-error @+1 {{Unable to resolve target of annotation}}
+firrtl.circuit "Foo"  attributes {rawAnnotations = [
+  {
+    class = "circt.test",
+    target = ""
+  }
+]} {
+  firrtl.module @Foo() {}
+}
+
+// -----
+
 // expected-error @+1 {{Unable to apply annotation}}
 firrtl.circuit "LocalOnlyAnnotation" attributes {
   rawAnnotations = [

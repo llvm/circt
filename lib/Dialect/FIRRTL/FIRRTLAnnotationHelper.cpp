@@ -251,6 +251,9 @@ Optional<AnnoPathValue> firrtl::resolveEntities(TokenAnnoTarget path,
 /// split a target string into it constituent parts.  This is the primary parser
 /// for targets.
 Optional<TokenAnnoTarget> firrtl::tokenizePath(StringRef origTarget) {
+  // An empty string is not a legal target.
+  if (origTarget.empty())
+    return {};
   StringRef target = origTarget;
   TokenAnnoTarget retval;
   std::tie(retval.circuit, target) = target.split('|');
