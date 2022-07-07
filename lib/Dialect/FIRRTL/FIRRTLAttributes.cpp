@@ -121,6 +121,13 @@ StringAttr InnerSymAttr::getSymName() {
   return {};
 }
 
+bool InnerSymAttr::all_of_props(
+    std::function<bool(InnerSymPropertiesAttr)> func) {
+  return llvm::all_of(getImpl()->props, func);
+}
+
+size_t InnerSymAttr::numSymbols() { return getImpl()->props.size(); }
+
 Attribute InnerSymAttr::parse(AsmParser &parser, Type type) {
   StringAttr sym;
   NamedAttrList dummyList;
