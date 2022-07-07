@@ -1181,7 +1181,6 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
         //   1. This is a constant that will be synced into the mappings file.
         //   2. This is something else and we need an XMR.
         // Handle case (1) here and exit.  Handle case (2) following.
-        auto uloc = builder.getUnknownLoc();
         auto driver = getDriverFromConnect(leafValue);
         if (driver) {
           if (auto constant =
@@ -1192,7 +1191,7 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
             constant.value().toStringUnsigned(valueStr, 16);
             path.append(valueStr);
             builder.create<sv::VerbatimOp>(
-                uloc,
+                constant.getLoc(),
                 StringAttr::get(&getContext(),
                                 "assign " + path.getString() + ";"),
                 ValueRange{}, ArrayAttr::get(&getContext(), path.getSymbols()));
@@ -1240,6 +1239,7 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
         }
 
         // Add the leaf value to the path.
+        auto uloc = builder.getUnknownLoc();
         path += '.';
         if (auto blockArg = leafValue.dyn_cast<BlockArgument>()) {
           auto module = cast<FModuleOp>(blockArg.getOwner()->getParentOp());
