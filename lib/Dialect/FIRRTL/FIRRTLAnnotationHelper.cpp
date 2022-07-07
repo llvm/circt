@@ -77,7 +77,6 @@ static FailureOr<unsigned> findFieldID(AnnoTarget &ref,
     return 0;
 
   auto *op = ref.getOp();
-  auto type = ref.getType();
   auto fieldIdx = 0;
   // The first field for some ops refers to expanded return values.
   if (isa<MemOp>(ref.getOp())) {
@@ -86,6 +85,7 @@ static FailureOr<unsigned> findFieldID(AnnoTarget &ref,
     tokens = tokens.drop_front();
   }
 
+  auto type = ref.getType();
   for (auto token : tokens) {
     if (token.isIndex) {
       auto result = findVectorElement(op, type, token.name);
