@@ -9,6 +9,7 @@
 #include "circt/Dialect/MSFT/MSFTAttributes.h"
 #include "circt/Dialect/MSFT/MSFTDialect.h"
 #include "circt/Dialect/MSFT/MSFTOps.h"
+#include "circt/Dialect/MSFT/MSFTPasses.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/CAPI/IR.h"
 #include "mlir/CAPI/Registration.h"
