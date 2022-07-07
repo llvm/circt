@@ -982,17 +982,17 @@ void OrderedOutputOp::build(OpBuilder &builder, OperationState &result,
 
 LogicalResult BPAssignOp::verify() {
   if (isa<sv::WireOp>(dest().getDefiningOp()))
-    return emitOpError("Verilog disallows procedural assignment to a net "
-                       "type (did you intend "
-                       "to use a variable type, e.g., sv.reg?)");
+    return emitOpError(
+        "Verilog disallows procedural assignment to a net type (did you intend "
+        "to use a variable type, e.g., sv.reg?)");
   return success();
 }
 
 LogicalResult PAssignOp::verify() {
   if (isa<sv::WireOp>(dest().getDefiningOp()))
-    return emitOpError("Verilog disallows procedural assignment to a net "
-                       "type (did you intend "
-                       "to use a variable type, e.g., sv.reg?)");
+    return emitOpError(
+        "Verilog disallows procedural assignment to a net type (did you intend "
+        "to use a variable type, e.g., sv.reg?)");
   return success();
 }
 
@@ -1264,8 +1264,8 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
 
     // Otherwise must be an assign, and we must not have seen a write yet.
     auto assign = dyn_cast<sv::AssignOp>(user);
-    // Either the wire has more than one write or another kind of Op (other
-    // than AssignOp and ReadInOutOp), then can't optimize.
+    // Either the wire has more than one write or another kind of Op (other than
+    // AssignOp and ReadInOutOp), then can't optimize.
     if (!assign || write)
       return failure();
 
@@ -1455,8 +1455,8 @@ LogicalResult AliasOp::verify() {
 //===----------------------------------------------------------------------===//
 
 // reg s <= cond ? val : s simplification.
-// Don't assign a register's value to itself, conditionally assign the new
-// value instead.
+// Don't assign a register's value to itself, conditionally assign the new value
+// instead.
 LogicalResult PAssignOp::canonicalize(PAssignOp op, PatternRewriter &rewriter) {
   auto mux = op.src().getDefiningOp<comb::MuxOp>();
   if (!mux)
@@ -1714,8 +1714,8 @@ void AssumeConcurrentOp::getCanonicalizationPatterns(RewritePatternSet &results,
 
 void CoverConcurrentOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                                     MLIRContext *context) {
-  results.add(canonicalizeConcurrentVerifOp<CoverConcurrentOp,
-                                            /* EraseIfZero */ true>);
+  results.add(
+      canonicalizeConcurrentVerifOp<CoverConcurrentOp, /* EraseIfZero */ true>);
 }
 
 //===----------------------------------------------------------------------===//
