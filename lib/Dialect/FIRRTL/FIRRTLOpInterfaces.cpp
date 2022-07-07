@@ -126,7 +126,7 @@ LogicalResult circt::firrtl::verifyInnerSymAttr(Operation *op) {
     // fieldID=0.
     if (isa.numSymbols() > 1 || !isa.getSymName()) {
       op->emitOpError("cannot assign symbols to non-zero field id, for ops "
-                      "with multiple results");
+                      "with zero or multiple results");
       return failure();
     }
     return success();

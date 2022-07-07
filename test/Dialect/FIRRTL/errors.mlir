@@ -847,17 +847,27 @@ firrtl.circuit "Parent" {
     %w = firrtl.wire sym @w : !firrtl.uint<1>
   }
   firrtl.module @Parent() {
-    // expected-error @+1 {{cannot assign symbols to non-zero field id, for ops with multiple results}}
+    // expected-error @+1 {{cannot assign symbols to non-zero field id, for ops with zero or multiple results}}
     firrtl.instance child sym [<@w3,1,public>,<@w3,2,private>,<@syh2,0,public>] @Child()
   }
 }
 
 // -----
 
-
 firrtl.circuit "Foo" {
   firrtl.module @Foo() {
   // expected-error @+1 {{field id:'1' is greater than the maximum field id:'0'}}
     %m = firrtl.mem sym [<@w3,1,public>,<@w3,2,private>,<@syh2,0,public>] Undefined {depth = 32 : i64, name = "m", portNames = ["rw"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<>
+  }
+}
+
+// -----
+
+firrtl.circuit "Foo"   {
+  firrtl.module @Bar(in %a: !firrtl.uint<1>, out %b: !firrtl.bundle<baz: uint<1>, qux: uint<1>>, out %c: !firrtl.uint<1>) {
+  }
+  firrtl.module @Foo() {
+    // expected-error @+1 {{cannot assign symbols to non-zero field id, for ops with zero or multiple results}}
+    %bar_a, %bar_b, %bar_c = firrtl.instance bar sym [<@w3,1,public>,<@w3,2,private>,<@syh2,0,public>] @Bar(in a: !firrtl.uint<1> [{one}], out b: !firrtl.bundle<baz: uint<1>, qux: uint<1>> [{circt.fieldID = 1 : i32, two}], out c: !firrtl.uint<1> [{four}])
   }
 }
