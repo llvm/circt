@@ -822,3 +822,42 @@ firrtl.circuit "MismatchedRegister" {
 firrtl.circuit "private_main" {
   firrtl.module private @private_main() {}
 }
+
+// -----
+
+firrtl.circuit "InnerSymAttr" {
+  firrtl.module @InnerSymAttr() {
+    // expected-error @+1 {{cannot assign multiple symbol names to the field id:'2'}}
+    %w3 = firrtl.wire sym [<@w3,2,public>,<@x2,2,private>,<@syh2,0,public>] : !firrtl.bundle<a: uint<1>, b: uint<1>, c: uint<1>, d: uint<1>>
+  }
+}
+
+// -----
+
+firrtl.circuit "InnerSymAttr2" {
+  firrtl.module @InnerSymAttr2() {
+    // expected-error @+1 {{cannot reuse symbol name:'w3'}}
+    %w4 = firrtl.wire sym [<@w3,1,public>,<@w3,2,private>,<@syh2,0,public>] : !firrtl.bundle<a: uint<1>, b: uint<1>, c: uint<1>, d: uint<1>>
+  }
+}
+
+// -----
+firrtl.circuit "Parent" {
+  firrtl.module @Child() {
+    %w = firrtl.wire sym @w : !firrtl.uint<1>
+  }
+  firrtl.module @Parent() {
+    // expected-error @+1 {{cannot assign symbols to non-zero field id, for ops with multiple results}}
+    firrtl.instance child sym [<@w3,1,public>,<@w3,2,private>,<@syh2,0,public>] @Child()
+  }
+}
+
+// -----
+
+
+firrtl.circuit "Foo" {
+  firrtl.module @Foo() {
+  // expected-error @+1 {{field id:'1' is greater than the maximum field id:'0'}}
+    %m = firrtl.mem sym [<@w3,1,public>,<@w3,2,private>,<@syh2,0,public>] Undefined {depth = 32 : i64, name = "m", portNames = ["rw"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<>
+  }
+}
