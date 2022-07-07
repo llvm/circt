@@ -1001,7 +1001,7 @@ hw.module @AnFSM(%clock : i1) {
   sv.always posedge %clock {
     sv.case case %reg_read : !hw.enum<A, B, C>
       case A : { sv.passign %reg, %B : !hw.enum<A, B, C> }
-      case B : { sv.passign %reg, %C : !hw.enum<A, B, C> }
+       case B : { sv.passign %reg, %C : !hw.enum<A, B, C> }
       default : { sv.passign %reg, %A : !hw.enum<A, B, C> }
   }
 }

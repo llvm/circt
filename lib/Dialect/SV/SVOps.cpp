@@ -698,7 +698,7 @@ auto CaseOp::getCases() -> SmallVector<CaseInfo, 4> {
                             &getRegion(nextRegion++).front()});
         })
         .Default([](auto) {
-          llvm_unreachable("invalid case pattern attribute type");
+          assert(false && "invalid case pattern attribute type");
         });
   }
 
@@ -747,9 +747,8 @@ ParseResult CaseOp::parse(OpAsmParser &parser, OperationState &result) {
 
   // Check the integer type.
   hw::EnumType enumType = condType.dyn_cast<hw::EnumType>();
-  bool isEnumCase = static_cast<bool>(enumType);
   unsigned condWidth = 0;
-  if (!isEnumCase) {
+  if (!enumType) {
     if (!result.operands[0].getType().isSignlessInteger())
       return parser.emitError(loc, "condition must have signless integer type");
     condWidth = condType.getIntOrFloatBitWidth();
@@ -764,7 +763,7 @@ ParseResult CaseOp::parse(OpAsmParser &parser, OperationState &result) {
     } else if (failed(parser.parseOptionalKeyword("case"))) {
       // Not default or case, must be the end of the cases.
       break;
-    } else if (isEnumCase) {
+    } else if (enumType) {
       // Enumerated case; parse the case value.
       StringRef caseVal;
 
@@ -867,7 +866,7 @@ void CaseOp::print(OpAsmPrinter &p) {
           p << "case " << enumPattern->getFieldValue();
         })
         .Case<CaseDefaultPattern>([&](auto) { p << "default"; })
-        .Default([&](auto) { llvm_unreachable("unhandled case pattern"); });
+        .Default([&](auto) { assert(false && "unhandled case pattern"); });
 
     p << ": ";
     p.printRegion(*caseInfo.block->getParent(), /*printEntryBlockArgs=*/false,
@@ -921,21 +920,17 @@ LogicalResult CaseOp::canonicalize(CaseOp op, PatternRewriter &rewriter) {
 
   auto caseInfo = op.getCases();
   bool noXZ = llvm::all_of(caseInfo, [](const CaseInfo &ci) {
-    if (isa<CaseDefaultPattern>(ci.pattern))
-      return true;
-
-    return !cast<CaseBitPattern>(ci.pattern.get())->hasX() &&
-           !cast<CaseBitPattern>(ci.pattern.get())->hasZ();
+    return !ci.pattern.get()->hasX() && !ci.pattern.get()->hasZ();
   });
   bool noX = llvm::all_of(caseInfo, [](const CaseInfo &ci) {
     if (isa<CaseDefaultPattern>(ci.pattern))
       return true;
-    return !cast<CaseBitPattern>(ci.pattern.get())->hasX();
+    return !ci.pattern.get()->hasX();
   });
   bool noZ = llvm::all_of(caseInfo, [](const CaseInfo &ci) {
     if (isa<CaseDefaultPattern>(ci.pattern))
       return true;
-    return !cast<CaseBitPattern>(ci.pattern.get())->hasZ();
+    return !ci.pattern.get()->hasZ();
   });
 
   if (op.caseStyle() == CaseStmtType::CaseXStmt) {

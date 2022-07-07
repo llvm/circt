@@ -3443,7 +3443,7 @@ LogicalResult StmtEmitter::visitSV(CaseOp op) {
         .Case<CaseEnumPattern>(
             [&](auto enumPattern) { indent() << enumPattern->getFieldValue(); })
         .Case<CaseDefaultPattern>([&](auto) { indent() << "default"; })
-        .Default([&](auto) { llvm_unreachable("unhandled case pattern"); });
+        .Default([&](auto) { assert(false && "unhandled case pattern"); });
 
     os << ":";
     emitBlockAsStatement(caseInfo.block, emptyOps);

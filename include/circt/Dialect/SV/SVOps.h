@@ -53,6 +53,12 @@ public:
   virtual ~CasePattern() {}
   CasePatternKind getKind() const { return kind; }
 
+  /// Return true if this pattern has an X.
+  virtual bool hasX() const { return false; }
+
+  /// Return true if this pattern has an Z.
+  virtual bool hasZ() const { return false; }
+
   virtual Attribute attr() const = 0;
 
 private:
@@ -88,11 +94,8 @@ public:
   /// Return the specified bit, bit 0 is the least significant bit.
   CasePatternBit getBit(size_t bitNumber) const;
 
-  /// Return true if this pattern has an X.
-  bool hasX() const;
-
-  /// Return true if this pattern has an Z.
-  bool hasZ() const;
+  bool hasX() const override;
+  bool hasZ() const override;
 
   Attribute attr() const override { return intAttr; }
 
