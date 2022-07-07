@@ -2,10 +2,40 @@
 
 firrtl.circuit "MyModule" {
 
+ofir.module @TM
+  <in %param1 : !firrtl.uint<5>, out %param2 : !firrtl.uint<5> >
+  (in %in : !firrtl.uint<paramref<param1> >, out %out : !firrtl.paramref<param2> ) {
+    %1 = firrtl.constant 0 : !firrtl.uint
+    %2 = firrtl.add %1, %param1 : !firrtl.uint
+    firrtl.connect %prop1, %2
+  } {
 
-ofir.class @T1 [] {
-  
+  }
+
+
+ofir.class @T1 <%p1: !firrtl.uint<3>, %p2: !firrtl.string> {
+  ofir.property someflag  : !firrt.uint<3>;
+  ofir.property otherflag : !firrt.uint<4>;
+  ofir.property boolport : !ofir.port<in, !firrtl.uint<1> >
+  ofir.property portlist : !ofir.portlist<
+                             in a : !firrtl.uint<1>,
+                             out b : !firrtl.uint<2>
+                             >
+
+
+  %n = ofir.decl
+  ofir.instance @T2()
+
+  ofir.logic(@portlist, )
 }
+
+ofir.module @mod<p1 : !firrtl.uint<4> >
+                (
+                  in %in : !firrtl.uint<4>,
+                  out %out : !firrtl.uint<4>
+                ) {
+
+                }
 
 firrtl.module @mod() { }
 firrtl.extmodule @extmod()
