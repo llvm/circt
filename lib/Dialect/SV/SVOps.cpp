@@ -630,29 +630,24 @@ char sv::getLetter(CasePatternBit bit) {
 }
 
 /// Return the specified bit, bit 0 is the least significant bit.
-auto CasePattern::getBit(size_t bitNumber) const -> CasePatternBit {
-  return CasePatternBit(unsigned(attr.getValue()[bitNumber * 2]) +
-                        2 * unsigned(attr.getValue()[bitNumber * 2 + 1]));
+auto CaseBitPattern::getBit(size_t bitNumber) const -> CasePatternBit {
+  return CasePatternBit(unsigned(intAttr.getValue()[bitNumber * 2]) +
+                        2 * unsigned(intAttr.getValue()[bitNumber * 2 + 1]));
 }
 
-bool CasePattern::isDefault() const {
-  return attr.getValue().getBitWidth() % 2;
-}
-
-bool CasePattern::hasX() const {
+bool CaseBitPattern::hasX() const {
   for (size_t i = 0, e = getWidth(); i != e; ++i)
     if (getBit(i) == CasePatternBit::AnyX)
       return true;
   return false;
 }
 
-bool CasePattern::hasZ() const {
+bool CaseBitPattern::hasZ() const {
   for (size_t i = 0, e = getWidth(); i != e; ++i)
     if (getBit(i) == CasePatternBit::AnyZ)
       return true;
   return false;
 }
-
 static SmallVector<CasePatternBit> getPatternBitsForValue(const APInt &value) {
   SmallVector<CasePatternBit> result;
   result.reserve(value.getBitWidth());
@@ -662,30 +657,25 @@ static SmallVector<CasePatternBit> getPatternBitsForValue(const APInt &value) {
   return result;
 }
 
-// Get a CasePattern from a specified list of PatternBits.  Bits are
+// Get a CaseBitPattern from a specified list of PatternBits.  Bits are
 // specified in most least significant order - element zero is the least
 // significant bit.
-CasePattern::CasePattern(const APInt &value, MLIRContext *context)
-    : CasePattern(getPatternBitsForValue(value), context) {}
+CaseBitPattern::CaseBitPattern(const APInt &value, MLIRContext *context)
+    : CaseBitPattern(getPatternBitsForValue(value), context) {}
 
-CasePattern::CasePattern(size_t width, DefaultPatternTag,
-                         MLIRContext *context) {
-  APInt pattern(width * 2 + 1, 0);
-  auto patternType = IntegerType::get(context, width * 2 + 1);
-  attr = IntegerAttr::get(patternType, pattern);
-}
-
-// Get a CasePattern from a specified list of PatternBits.  Bits are
+// Get a CaseBitPattern from a specified list of PatternBits.  Bits are
 // specified in most least significant order - element zero is the least
 // significant bit.
-CasePattern::CasePattern(ArrayRef<CasePatternBit> bits, MLIRContext *context) {
+CaseBitPattern::CaseBitPattern(ArrayRef<CasePatternBit> bits,
+                               MLIRContext *context)
+    : CasePattern(CPK_bit) {
   APInt pattern(bits.size() * 2, 0);
   for (auto elt : llvm::reverse(bits)) {
     pattern <<= 2;
     pattern |= unsigned(elt);
   }
   auto patternType = IntegerType::get(context, bits.size() * 2);
-  attr = IntegerAttr::get(patternType, pattern);
+  intAttr = IntegerAttr::get(patternType, pattern);
 }
 
 auto CaseOp::getCases() -> SmallVector<CaseInfo, 4> {
@@ -694,11 +684,29 @@ auto CaseOp::getCases() -> SmallVector<CaseInfo, 4> {
          "case pattern / region count mismatch");
   size_t nextRegion = 0;
   for (auto elt : casePatterns()) {
-    result.push_back({CasePattern(elt.cast<IntegerAttr>()),
-                      &getRegion(nextRegion++).front()});
+    llvm::TypeSwitch<Attribute>(elt)
+        .Case<hw::EnumFieldAttr>([&](auto enumAttr) {
+          result.push_back({std::make_unique<CaseEnumPattern>(enumAttr),
+                            &getRegion(nextRegion++).front()});
+        })
+        .Case<IntegerAttr>([&](auto intAttr) {
+          result.push_back({std::make_unique<CaseBitPattern>(intAttr),
+                            &getRegion(nextRegion++).front()});
+        })
+        .Case<CaseDefaultPattern::AttrType>([&](auto) {
+          result.push_back({std::make_unique<CaseDefaultPattern>(getContext()),
+                            &getRegion(nextRegion++).front()});
+        })
+        .Default([](auto) {
+          assert(false && "invalid case pattern attribute type");
+        });
   }
 
   return result;
+}
+
+StringRef CaseEnumPattern::getFieldValue() const {
+  return enumAttr.cast<hw::EnumFieldAttr>().getField();
 }
 
 /// Parse case op.
@@ -738,23 +746,40 @@ ParseResult CaseOp::parse(OpAsmParser &parser, OperationState &result) {
     return failure();
 
   // Check the integer type.
-  if (!result.operands[0].getType().isSignlessInteger())
-    return parser.emitError(loc, "condition must have signless integer type");
-  auto condWidth = condType.getIntOrFloatBitWidth();
+  hw::EnumType enumType = condType.dyn_cast<hw::EnumType>();
+  unsigned condWidth = 0;
+  if (!enumType) {
+    if (!result.operands[0].getType().isSignlessInteger())
+      return parser.emitError(loc, "condition must have signless integer type");
+    condWidth = condType.getIntOrFloatBitWidth();
+  }
 
   // Parse all the cases.
   SmallVector<Attribute> casePatterns;
   SmallVector<CasePatternBit, 16> caseBits;
-  bool defaultElem = false;
   while (1) {
     if (succeeded(parser.parseOptionalKeyword("default"))) {
-      // Fill the pattern with Any.
-      defaultElem = true;
+      casePatterns.push_back(CaseDefaultPattern(parser.getContext()).attr());
     } else if (failed(parser.parseOptionalKeyword("case"))) {
       // Not default or case, must be the end of the cases.
       break;
+    } else if (enumType) {
+      // Enumerated case; parse the case value.
+      StringRef caseVal;
+
+      if (parser.parseKeyword(&caseVal))
+        return failure();
+
+      if (!enumType.contains(caseVal))
+        return parser.emitError(loc)
+               << "case value '" + caseVal + "' is not a member of enum type "
+               << enumType;
+      casePatterns.push_back(
+          hw::EnumFieldAttr::get(parser.getEncodedSourceLoc(loc),
+                                 builder.getStringAttr(caseVal), enumType));
     } else {
-      // Parse the pattern.  It always starts with b, so it is an MLIR keyword.
+      // Parse the pattern.  It always starts with b, so it is an MLIR
+      // keyword.
       StringRef caseVal;
       loc = parser.getCurrentLocation();
       if (parser.parseKeyword(&caseVal))
@@ -794,14 +819,11 @@ ParseResult CaseOp::parse(OpAsmParser &parser, OperationState &result) {
       // High zeros may be missing.
       if (caseBits.size() < condWidth)
         caseBits.append(condWidth - caseBits.size(), CasePatternBit::Zero);
-    }
 
-    auto resultPattern =
-        defaultElem ? CasePattern(condWidth, CasePattern::DefaultPatternTag(),
-                                  builder.getContext())
-                    : CasePattern(caseBits, builder.getContext());
-    casePatterns.push_back(resultPattern.attr);
-    caseBits.clear();
+      auto resultPattern = CaseBitPattern(caseBits, builder.getContext());
+      casePatterns.push_back(resultPattern.attr());
+      caseBits.clear();
+    }
 
     // Parse the case body.
     auto caseRegion = std::make_unique<Region>();
@@ -830,16 +852,21 @@ void CaseOp::print(OpAsmPrinter &p) {
       (*this)->getAttrs(),
       /*elidedAttrs=*/{"casePatterns", "caseStyle", "validationQualifier"});
 
-  for (auto caseInfo : getCases()) {
+  for (auto &caseInfo : getCases()) {
     p.printNewline();
-    auto pattern = caseInfo.pattern;
-    if (pattern.isDefault()) {
-      p << "default";
-    } else {
-      p << "case b";
-      for (size_t i = 0, e = pattern.getWidth(); i != e; ++i)
-        p << getLetter(pattern.getBit(e - i - 1));
-    }
+    auto &pattern = caseInfo.pattern;
+
+    llvm::TypeSwitch<CasePattern *>(pattern.get())
+        .Case<CaseBitPattern>([&](auto bitPattern) {
+          p << "case b";
+          for (size_t bit = 0, e = bitPattern->getWidth(); bit != e; ++bit)
+            p << getLetter(bitPattern->getBit(e - bit - 1));
+        })
+        .Case<CaseEnumPattern>([&](auto enumPattern) {
+          p << "case " << enumPattern->getFieldValue();
+        })
+        .Case<CaseDefaultPattern>([&](auto) { p << "default"; })
+        .Default([&](auto) { assert(false && "unhandled case pattern"); });
 
     p << ": ";
     p.printRegion(*caseInfo.block->getParent(), /*printEntryBlockArgs=*/false,
@@ -848,6 +875,10 @@ void CaseOp::print(OpAsmPrinter &p) {
 }
 
 LogicalResult CaseOp::verify() {
+  if (!(hw::isHWIntegerType(cond().getType()) ||
+        cond().getType().isa<hw::EnumType>()))
+    return emitError("condition must have either integer or enum type");
+
   // Ensure that the number of regions and number of case values match.
   if (casePatterns().size() != getNumRegions())
     return emitOpError("case pattern / region count mismatch");
@@ -856,11 +887,11 @@ LogicalResult CaseOp::verify() {
 
 /// This ctor allows you to build a CaseZ with some number of cases, getting
 /// a callback for each case.
-void CaseOp::build(OpBuilder &builder, OperationState &result,
-                   CaseStmtType caseStyle,
-                   ValidationQualifierTypeEnum validationQualifier, Value cond,
-                   size_t numCases,
-                   std::function<CasePattern(size_t)> caseCtor) {
+void CaseOp::build(
+    OpBuilder &builder, OperationState &result, CaseStmtType caseStyle,
+    ValidationQualifierTypeEnum validationQualifier, Value cond,
+    size_t numCases,
+    std::function<std::unique_ptr<CasePattern>(size_t)> caseCtor) {
   result.addOperands(cond);
   result.addAttribute("caseStyle",
                       CaseStmtTypeAttr::get(builder.getContext(), caseStyle));
@@ -874,7 +905,7 @@ void CaseOp::build(OpBuilder &builder, OperationState &result,
   // Fill in the cases with the callback.
   for (size_t i = 0, e = numCases; i != e; ++i) {
     builder.createBlock(result.addRegion());
-    casePatterns.push_back(caseCtor(i).attr);
+    casePatterns.push_back(caseCtor(i)->attr());
   }
 
   result.addAttribute("casePatterns", builder.getArrayAttr(casePatterns));
@@ -884,15 +915,23 @@ void CaseOp::build(OpBuilder &builder, OperationState &result,
 LogicalResult CaseOp::canonicalize(CaseOp op, PatternRewriter &rewriter) {
   if (op.caseStyle() == CaseStmtType::CaseStmt)
     return failure();
+  if (op.cond().getType().isa<hw::EnumType>())
+    return failure();
 
   auto caseInfo = op.getCases();
   bool noXZ = llvm::all_of(caseInfo, [](const CaseInfo &ci) {
-    return !ci.pattern.hasX() && !ci.pattern.hasZ();
+    return !ci.pattern.get()->hasX() && !ci.pattern.get()->hasZ();
   });
-  bool noX = llvm::all_of(
-      caseInfo, [](const CaseInfo &ci) { return !ci.pattern.hasX(); });
-  bool noZ = llvm::all_of(
-      caseInfo, [](const CaseInfo &ci) { return !ci.pattern.hasZ(); });
+  bool noX = llvm::all_of(caseInfo, [](const CaseInfo &ci) {
+    if (isa<CaseDefaultPattern>(ci.pattern))
+      return true;
+    return !ci.pattern.get()->hasX();
+  });
+  bool noZ = llvm::all_of(caseInfo, [](const CaseInfo &ci) {
+    if (isa<CaseDefaultPattern>(ci.pattern))
+      return true;
+    return !ci.pattern.get()->hasZ();
+  });
 
   if (op.caseStyle() == CaseStmtType::CaseXStmt) {
     if (noXZ) {
