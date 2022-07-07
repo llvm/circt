@@ -30,6 +30,8 @@ constexpr const char *rawAnnotations = "rawAnnotations";
 
 constexpr const char *dontTouchAnnoClass =
     "firrtl.transforms.DontTouchAnnotation";
+constexpr const char *forceNameAnnoClass =
+    "chisel3.util.experimental.ForceNameAnnotation";
 
 constexpr const char *omirAnnoClass =
     "freechips.rocketchip.objectmodel.OMIRAnnotation";
@@ -42,10 +44,22 @@ constexpr const char *blackBoxTargetDirAnnoClass =
     "firrtl.transforms.BlackBoxTargetDirAnno";
 constexpr const char *blackBoxResourceFileNameAnnoClass =
     "firrtl.transforms.BlackBoxResourceFileNameAnno";
+constexpr const char *extractAssertAnnoClass =
+    "sifive.enterprise.firrtl.ExtractAssertionsAnnotation";
+constexpr const char *extractAssumeAnnoClass =
+    "sifive.enterprise.firrtl.ExtractAssumptionsAnnotation";
 constexpr const char *extractCoverageAnnoClass =
     "sifive.enterprise.firrtl.ExtractCoverageAnnotation";
 constexpr const char *testBenchDirAnnoClass =
     "sifive.enterprise.firrtl.TestBenchDirAnnotation";
+constexpr const char *moduleHierAnnoClass =
+    "sifive.enterprise.firrtl.ModuleHierarchyAnnotation";
+constexpr const char *testHarnessHierAnnoClass =
+    "sifive.enterprise.firrtl.TestHarnessHierarchyAnnotation";
+static const char *verifBlackBoxAnnoClass =
+    "freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation";
+static const char *metadataDirectoryAttrName =
+    "sifive.enterprise.firrtl.MetadataDirAnnotation";
 
 // Grand Central Annotations
 constexpr const char *serializedViewAnnoClass =

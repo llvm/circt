@@ -43,28 +43,9 @@ using namespace firrtl;
 using circt::comb::ICmpPredicate;
 using hw::PortDirection;
 
-static const char assertAnnoClass[] =
-    "sifive.enterprise.firrtl.ExtractAssertionsAnnotation";
-static const char assumeAnnoClass[] =
-    "sifive.enterprise.firrtl.ExtractAssumptionsAnnotation";
-static const char coverAnnoClass[] =
-    "sifive.enterprise.firrtl.ExtractCoverageAnnotation";
-static const char moduleHierAnnoClass[] =
-    "sifive.enterprise.firrtl.ModuleHierarchyAnnotation";
-static const char testHarnessHierAnnoClass[] =
-    "sifive.enterprise.firrtl.TestHarnessHierarchyAnnotation";
-static const char verifBBClass[] =
-    "freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation";
-static const char forceNameClass[] =
-    "chisel3.util.experimental.ForceNameAnnotation";
-
 /// Attribute that indicates that the module hierarchy starting at the
 /// annotated module should be dumped to a file.
 static const char moduleHierarchyFileAttrName[] = "firrtl.moduleHierarchyFile";
-
-/// Attribute that indicates where some json files should be dumped.
-static const char metadataDirectoryAttrName[] =
-    "sifive.enterprise.firrtl.MetadataDirAnnotation";
 
 /// Given a FIRRTL type, return the corresponding type for the HW dialect.
 /// This returns a null type if it cannot be lowered.
@@ -418,16 +399,17 @@ void CircuitLoweringState::processRemainingAnnotations(
             "sifive.enterprise.firrtl.ScalaClassAnnotation", dutAnnoClass,
             metadataDirectoryAttrName,
             "sifive.enterprise.firrtl.ElaborationArtefactsDirectory",
-            "sifive.enterprise.firrtl.TestBenchDirAnnotation",
+            testBenchDirAnnoClass,
             "sifive.enterprise.grandcentral.phases.SubCircuitsTargetDirectory",
             // This annotation is used to mark which external modules are
             // imported blackboxes from the BlackBoxReader pass.
             "firrtl.transforms.BlackBox",
             // This annotation is used by several GrandCentral passes.
-            "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
+            extractGrandCentralClass,
             // The following will be handled while lowering the verification
             // ops.
-            assertAnnoClass, assumeAnnoClass, coverAnnoClass,
+            extractAssertAnnoClass, extractAssumeAnnoClass,
+            extractCoverageAnnoClass,
             // The following will be handled after lowering FModule ops, since
             // they are still needed on the circuit until after lowering
             // FModules.
@@ -511,14 +493,14 @@ void FIRRTLModuleLowering::runOnOperation() {
   SmallVector<FModuleOp, 32> modulesToProcess;
 
   AnnotationSet circuitAnno(circuit);
-  moveVerifAnno(getOperation(), circuitAnno, assertAnnoClass,
+  moveVerifAnno(getOperation(), circuitAnno, extractAssertAnnoClass,
                 "firrtl.extract.assert");
-  moveVerifAnno(getOperation(), circuitAnno, assumeAnnoClass,
+  moveVerifAnno(getOperation(), circuitAnno, extractAssumeAnnoClass,
                 "firrtl.extract.assume");
-  moveVerifAnno(getOperation(), circuitAnno, coverAnnoClass,
+  moveVerifAnno(getOperation(), circuitAnno, extractCoverageAnnoClass,
                 "firrtl.extract.cover");
-  circuitAnno.removeAnnotationsWithClass(assertAnnoClass, assumeAnnoClass,
-                                         coverAnnoClass);
+  circuitAnno.removeAnnotationsWithClass(
+      extractAssertAnnoClass, extractAssumeAnnoClass, extractCoverageAnnoClass);
 
   state.processRemainingAnnotations(circuit, circuitAnno);
   // Iterate through each operation in the circuit body, transforming any
@@ -996,7 +978,7 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
   bool hasOutputPort =
       llvm::any_of(firrtlPorts, [&](auto p) { return p.isOutput(); });
   if (!hasOutputPort &&
-      AnnotationSet::removeAnnotations(oldModule, verifBBClass) &&
+      AnnotationSet::removeAnnotations(oldModule, verifBlackBoxAnnoClass) &&
       loweringState.isInDUT(oldModule))
     newModule->setAttr("firrtl.extract.cover.extra", builder.getUnitAttr());
 
@@ -1052,7 +1034,7 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
   // Transform module annotations
   AnnotationSet annos(oldModule);
 
-  if (annos.removeAnnotation(verifBBClass))
+  if (annos.removeAnnotation(verifBlackBoxAnnoClass))
     newModule->setAttr("firrtl.extract.cover.extra", builder.getUnitAttr());
 
   // If this is in the test harness, make sure it goes to the test directory.
@@ -1067,7 +1049,7 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
   bool failed = false;
   // Remove ForceNameAnnotations by generating verilogNames on instances.
   annos.removeAnnotations([&](Annotation anno) {
-    if (!anno.isClass(forceNameClass))
+    if (!anno.isClass(forceNameAnnoClass))
       return false;
 
     auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal");
@@ -1078,7 +1060,7 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
     // a local annotation.
     if (!sym) {
       auto diag = oldModule.emitOpError()
-                  << "contains a '" << forceNameClass
+                  << "contains a '" << forceNameAnnoClass
                   << "' that is not a non-local annotation";
       diag.attachNote() << "the erroneous annotation is '" << anno.getDict()
                         << "'\n";
@@ -1092,7 +1074,7 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
     // TODO: handle this with annotation verification.
     if (!nla) {
       auto diag = oldModule.emitOpError()
-                  << "contains a '" << forceNameClass
+                  << "contains a '" << forceNameAnnoClass
                   << "' whose non-local symbol, '" << sym
                   << "' does not exist in the circuit";
       diag.attachNote() << "the erroneous annotation is '" << anno.getDict();
@@ -1114,7 +1096,7 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
     if (!inserted.second &&
         (anno.getMember("name") != (inserted.first->second))) {
       auto diag = oldModule.emitError()
-                  << "contained multiple '" << forceNameClass
+                  << "contained multiple '" << forceNameAnnoClass
                   << "' with different names: " << inserted.first->second
                   << " was not " << anno.getMember("name");
       diag.attachNote() << "the erroneous annotation is '" << anno.getDict()
