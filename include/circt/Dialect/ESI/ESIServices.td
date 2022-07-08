@@ -55,12 +55,26 @@ def ServiceInstanceOp : ESI_Op<"service.instance"> {
 
   let arguments = (ins FlatSymbolRefAttr:$service_symbol,
                        StrAttr:$identifier,
-                       Variadic<AnyType>:$inputs,
-                       OptionalAttr<FlatSymbolRefAttr>:$conn_requests);
+                       Variadic<AnyType>:$inputs);
   let results = (outs Variadic<AnyType>);
   let assemblyFormat = [{
     $identifier $service_symbol `(` $inputs `)` attr-dict
       `:` functional-type($inputs, results)
+  }];
+}
+
+def ServiceImplementReqOp : ESI_Op<"service.impl_req"> {
+  let summary = "Request for a service to be implemented";
+  let arguments = (ins FlatSymbolRefAttr:$service_symbol,
+                       StrAttr:$identifier,
+                       Variadic<AnyType>:$inputs);
+  let results = (outs Variadic<AnyType>);
+  let regions = (region SizedRegion<1>:$portReqs);
+
+  let assemblyFormat = [{
+    $identifier $service_symbol `(` $inputs `)` attr-dict
+      `:` functional-type($inputs, results)
+      $portReqs
   }];
 }
 

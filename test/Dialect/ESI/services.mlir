@@ -1,4 +1,5 @@
 // RUN: circt-opt %s | circt-opt | FileCheck %s
+// RUN: circt-opt %s --esi-connect-services | circt-opt | FileCheck %s --check-prefix=CONN
 
 esi.service.decl @HostComms {
   esi.service.to_server @Send : !esi.channel<!esi.any>
@@ -16,6 +17,11 @@ hw.module @Top (%clk: i1) -> () {
 // CHECK:         esi.service.instance "topComms" @HostComms(%clk) : (i1) -> ()
 // CHECK:         hw.instance "m1" @Loopback(clk: %clk: i1) -> ()
 
+// CONN-LABEL: hw.module @Top(%clk: i1, %m1.loopback_tohw: !esi.channel<i8>) -> (m1.loopback_fromhw: !esi.channel<i8>) {
+// CONN:         esi.service.instance "topComms" @HostComms(%clk) : (i1) -> ()
+// CONN:         %m1.loopback_fromhw = hw.instance "m1" @Loopback(clk: %clk: i1, loopback_tohw: %m1.loopback_tohw: !esi.channel<i8>) -> (loopback_fromhw: !esi.channel<i8>)
+// CONN:         hw.output %m1.loopback_fromhw : !esi.channel<i8>
+
 hw.module @Loopback (%clk: i1) -> () {
   %dataIn = esi.service.req.to_client <@HostComms::@Recv> (["loopback_tohw"]) : !esi.channel<i8>
   esi.service.req.to_server %dataIn -> <@HostComms::@Send> (["loopback_fromhw"]) : !esi.channel<i8>
@@ -23,3 +29,6 @@ hw.module @Loopback (%clk: i1) -> () {
 // CHECK-LABEL: hw.module @Loopback(%clk: i1) {
 // CHECK:         %0 = esi.service.req.to_client <@HostComms::@Recv>(["loopback_tohw"]) : !esi.channel<i8>
 // CHECK:         esi.service.req.to_server %0 -> <@HostComms::@Send>(["loopback_fromhw"]) : !esi.channel<i8>
+
+// CONN-LABEL: hw.module @Loopback(%clk: i1, %loopback_tohw: !esi.channel<i8>) -> (loopback_fromhw: !esi.channel<i8>) {
+// CONN:         hw.output %loopback_tohw : !esi.channel<i8>
