@@ -19,6 +19,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   InferWidths.cpp
   InjectDUTHierarchy.cpp
   LowerAnnotations.cpp
+  LowerBitindex.cpp
   LowerCHIRRTL.cpp
   LowerMemory.cpp
   LowerTypes.cpp

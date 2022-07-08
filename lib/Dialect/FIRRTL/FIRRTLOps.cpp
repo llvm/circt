@@ -128,7 +128,7 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
         return foldFlow(op.input(),
                         op.isFieldFlipped() ? swap() : accumulatedFlow);
       })
-      .Case<SubindexOp, SubaccessOp>(
+      .Case<SubindexOp, SubaccessOp, BitindexOp>(
           [&](auto op) { return foldFlow(op.input(), accumulatedFlow); })
       // Registers, Wires, and behavioral memory ports are always Duplex.
       .Case<RegOp, RegResetOp, WireOp, MemoryPortOp>(
@@ -2504,6 +2504,7 @@ FIRRTLType BitindexOp::inferReturnType(ValueRange operands,
       getAttr<IntegerAttr>(attrs, "index").getValue().getZExtValue();
 
   if (auto intType = inType.dyn_cast<IntType>()) {
+    // TODO: fix warning about signedness
     if (fieldIdx < intType.getWidthOrSentinel())
       return UIntType::get(inType.getContext(), 1);
     if (loc)
