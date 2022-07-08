@@ -7,6 +7,7 @@
 set(srcs
     HWArithDialect.cpp
     HWArithOps.cpp
+    HWArithTypes.cpp
 )
 
 add_circt_dialect_library(CIRCTHWArith

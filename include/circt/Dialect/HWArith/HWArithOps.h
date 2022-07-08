@@ -14,7 +14,9 @@
 #define CIRCT_DIALECT_HWARITH_OPS_H
 
 #include "circt/Dialect/HWArith/HWArithDialect.h"
+#include "circt/Support/LLVM.h"
 #include "mlir/IR/OpImplementation.h"
+#include "mlir/Interfaces/SideEffectInterfaces.h"
 
 #define GET_OP_CLASSES
 #include "circt/Dialect/HWArith/HWArith.h.inc"

@@ -1,0 +1,37 @@
+// RUN: circt-opt %s -split-input-file -verify-diagnostics
+
+module {
+  %c1_1 = arith.constant 1 : i1
+  // expected-error @+1 {{'hwarith.add' op operand #0 must be an arbitrary precision integer with signedness semantics, but got 'i1'}}
+  %0 = hwarith.add %c1_1, %c1_1 : (i1, i1) -> i2
+}
+
+// -----
+
+module {
+  %c1_1 = hwarith.constant 1 : ui1
+  // expected-error @+1 {{'hwarith.add' op result #0 must be an arbitrary precision integer with signedness semantics, but got 'i2'}}
+  %0 = hwarith.add %c1_1, %c1_1 : (ui1, ui1) -> i2
+}
+
+// -----
+
+module {
+  %c1_1 = hwarith.constant 1 : ui1
+  // expected-error @+1 {{expected result type: 'ui2' but 'ui3' was specified}}
+  %0 = hwarith.add %c1_1, %c1_1 : (ui1, ui1) -> ui3
+}
+
+// -----
+
+module {
+  // expected-error @+1 {{'hwarith.constant' op result #0 must be an arbitrary precision integer with signedness semantics, but got 'i1'}}
+  %c1_1 = hwarith.constant 1 : i1
+}
+
+// -----
+
+module {
+  // expected-error @+1 {{'hwarith.constant' op result #0 must be an arbitrary precision integer with signedness semantics, but got 'ui0'}}
+  %c1_1 = hwarith.constant 0 : ui0
+}
