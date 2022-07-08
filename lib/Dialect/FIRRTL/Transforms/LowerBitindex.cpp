@@ -16,6 +16,9 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Parallel.h"
+#include "mlir/IR/ImplicitLocOpBuilder.h"
+
+#include <iostream>
 
 #define DEBUG_TYPE "firrtl-lower-bitindex"
 
@@ -31,12 +34,19 @@ struct LowerBitindex : public LowerBitindexBase<LowerBitindex> {
     LLVM_DEBUG(
         llvm::dbgs() << "===- Running LowerBitindex Pass "
                         "------------------------------------------------===\n");
-    std::vector<FModuleLike> ops;
 
-    llvm::for_each(getOperation().getBody()->getOperations(), [&](Operation &op) {
-      if (auto module = dyn_cast<FModuleLike>(op))
-        ops.push_back(module);
-    });
+    auto circuit = getOperation();
+    for (auto module : circuit.getBody()->getOps<FModuleOp>()) {
+      auto *body = module.getBody();
+      for (auto bitindex : body->getOps<BitindexOp>()) {
+        ImplicitLocOpBuilder builder(bitindex.getLoc(), bitindex.getContext());
+        auto bits = builder.create<BitsPrimOp>(bitindex.getResult().getType(), bitindex.input(), bitindex.index(), bitindex.index());
+        bitindex.replaceAllUsesWith(bits.getResult());
+        bitindex.erase();
+        // auto builder = OpBuilder::atBlockBegin(body);
+        // builder.create<BitsPrimOp>(bitindex.getType(), bitindex.index(), bitindex.index());
+      }
+    }
   }
 };
 
