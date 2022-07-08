@@ -5,10 +5,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-//
-// This file defines the MSFT MLIR dialect.
-//
-//===----------------------------------------------------------------------===//
 
 #ifndef CIRCT_DIALECT_MSFT_MSFTPASSES_H
 #define CIRCT_DIALECT_MSFT_MSFTPASSES_H
@@ -17,11 +13,6 @@
 
 #include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "circt/Dialect/HW/HWOps.h"
-#include "circt/Support/LLVM.h"
-
-#include "mlir/IR/BuiltinAttributes.h"
-
-#include <functional>
 
 namespace circt {
 namespace msft {
