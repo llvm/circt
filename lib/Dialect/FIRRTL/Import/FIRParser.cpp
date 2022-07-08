@@ -1824,10 +1824,20 @@ ParseResult FIRStmtParser::parsePostFixIntSubscript(Value &result) {
   // builder (https://llvm.discourse.group/t/3504).
   NamedAttribute attrs = {getConstants().indexIdentifier,
                           builder.getI32IntegerAttr(indexNo)};
-  auto resultType = SubindexOp::inferReturnType({result}, attrs, {});
+  bool bitindex = BitindexOp::isBitIndex({result}, attrs, {});
+  FIRRTLType resultType;
+  if (bitindex) {
+    resultType = BitindexOp::inferReturnType({result}, attrs, {});
+  } else {
+    resultType = SubindexOp::inferReturnType({result}, attrs, {});
+  }
   if (!resultType) {
     // Emit the error at the right location.  translateLocation is expensive.
-    (void)SubindexOp::inferReturnType({result}, attrs, translateLocation(loc));
+    if (bitindex) {
+      (void)BitindexOp::inferReturnType({result}, attrs, translateLocation(loc));
+    } else {
+      (void)SubindexOp::inferReturnType({result}, attrs, translateLocation(loc));
+    }
     return failure();
   }
 
@@ -1843,6 +1853,12 @@ ParseResult FIRStmtParser::parsePostFixIntSubscript(Value &result) {
   locationProcessor.setLoc(loc);
   OpBuilder::InsertionGuard guard(builder);
   builder.setInsertionPointAfterValue(result);
+  if (bitindex) {
+    auto op = builder.create<BitindexOp>(resultType, result, attrs);
+    value = op.getResult();
+    result = value;
+    return success();
+  }
   auto op = builder.create<SubindexOp>(resultType, result, attrs);
 
   // Insert the newly creatd operation into the cache.

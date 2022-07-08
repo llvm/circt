@@ -2489,6 +2489,35 @@ FIRRTLType SubindexOp::inferReturnType(ValueRange operands,
   return {};
 }
 
+bool BitindexOp::isBitIndex(ValueRange operands,
+                            ArrayRef<NamedAttribute> attrs,
+                            Optional<Location> loc) {
+  auto inType = operands[0].getType();
+  return inType.isa<IntType>();
+}
+
+FIRRTLType BitindexOp::inferReturnType(ValueRange operands,
+                                       ArrayRef<NamedAttribute> attrs,
+                                       Optional<Location> loc) {
+  auto inType = operands[0].getType();
+  auto fieldIdx =
+      getAttr<IntegerAttr>(attrs, "index").getValue().getZExtValue();
+
+  if (auto intType = inType.dyn_cast<IntType>()) {
+    if (fieldIdx < intType.getWidthOrSentinel())
+      return UIntType::get(inType.getContext(), 1);
+    if (loc)
+      mlir::emitError(*loc, "out of range index '")
+          << fieldIdx << "' in int type " << inType;
+    return {};
+  }
+
+  if (loc)
+    mlir::emitError(*loc, "bitindex requires UInt or SInt");
+
+  return{};
+}
+
 FIRRTLType SubaccessOp::inferReturnType(ValueRange operands,
                                         ArrayRef<NamedAttribute> attrs,
                                         Optional<Location> loc) {
@@ -3893,6 +3922,10 @@ void SubfieldOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 void SubindexOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+
+void BitindexOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 

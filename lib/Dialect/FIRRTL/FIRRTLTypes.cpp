@@ -625,6 +625,13 @@ Type firrtl::getVectorElementType(Type array) {
   return vectorType.getElementType();
 }
 
+Type firrtl::getSubindexElementType(Type array) {
+  if (array.isa<UIntType>() || array.isa<SIntType>()) {
+    return UIntType::get(array.getContext(), 1);
+  }
+  return firrtl::getVectorElementType(array);
+}
+
 /// Return the passiver version of a firrtl type
 /// top level for ODS constraint usage
 Type firrtl::getPassiveType(Type anyFIRRTLType) {

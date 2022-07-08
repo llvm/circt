@@ -152,6 +152,7 @@ bool areTypesWeaklyEquivalent(FIRRTLType destType, FIRRTLType srcType,
 bool isTypeLarger(FIRRTLType dstType, FIRRTLType srcType);
 
 mlir::Type getVectorElementType(mlir::Type array);
+mlir::Type getSubindexElementType(mlir::Type array);
 mlir::Type getPassiveType(mlir::Type anyFIRRTLType);
 
 //===----------------------------------------------------------------------===//

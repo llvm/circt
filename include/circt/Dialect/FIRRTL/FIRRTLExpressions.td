@@ -180,6 +180,38 @@ def SubfieldOp : FIRRTLExprOp<"subfield"> {
   let hasVerifier = 1;
 }
 
+class BitIndexConstraint<string value, string resultValue>
+  : TypesMatchWith<"type should be element of vector type",
+                   value, resultValue,
+                   "firrtl::getSubindexElementType($_self)">;
+
+def BitindexOp : FIRRTLExprOp<"bitindex", [
+    BitIndexConstraint<"input", "result">
+  ]> {
+  let summary = "Extract a bit from a UInt or SInt";
+  let description = [{
+    The bitindex expression statically refers, by index, to a bit
+    of an expression with an integer type. The index must be a non-negative
+    integer and cannot be equal to or exceed the length of the vector it
+    indexes.
+    ```
+      %result = firrtl.bitindex %input[index] : t1
+    ```
+    }];
+
+  let arguments = (ins FIRRTLType:$input, I32Attr:$index);
+  let results = (outs FIRRTLType:$result);
+
+  let assemblyFormat =
+     "$input `[` $index `]` attr-dict `:` qualified(type($input))";
+
+  let firrtlExtraClassDeclaration = [{
+    static bool isBitIndex(ValueRange operands,
+                              ArrayRef<NamedAttribute> attrs,
+                              Optional<Location> loc);
+  }];
+}
+
 class IndexConstraint<string value, string resultValue>
   : TypesMatchWith<"type should be element of vector type",
                    value, resultValue,
