@@ -339,20 +339,6 @@ circuit Foo: %[[{"a":null,"target":"~Foo|Foo>w[9]"}]]
 
 ; // -----
 
-; Test that an annotated, anonymous node is preserved if annotated.  Normally,
-; the FIRRTL parser will aggressively eliminate these.
-circuit AnnotationsBlockNodePruning: %[[
-  {"a": null, "target": "~AnnotationsBlockNodePruning|AnnotationsBlockNodePruning>_T"}
-]]
-  module AnnotationsBlockNodePruning:
-    input a: UInt<1>
-    node _T = not(a)
-
-    ; CHECK-LABEL: firrtl.module @AnnotationsBlockNodePruning
-    ; CHECK: firrtl.node
-
-; // -----
-
 ; A module with an instance in its body which has the same name as the module
 ; itself should not cause issues attaching annotations.
 ; https://github.com/llvm/circt/issues/2709
