@@ -3138,12 +3138,8 @@ struct FIRCircuitParser : public FIRParser {
                mlir::TimingScope &ts);
 
 private:
-  /// Add annotations from a string to the internal annotation map.  Report
-  /// errors using a provided source manager location and with a provided error
-  /// message
-  ParseResult importAnnotations(CircuitOp circuit, SMLoc loc,
-                                StringRef circuitTarget,
-                                StringRef annotationsStr, size_t &nlaNumber);
+  /// Extract Annotations from a JSON-encoded Annotation array string and add
+  /// them to a vector of attributes.
   ParseResult importAnnotationsRaw(SMLoc loc, StringRef circuitTarget,
                                    StringRef annotationsStr,
                                    SmallVector<Attribute> &attrs);
@@ -3202,51 +3198,6 @@ FIRCircuitParser::importAnnotationsRaw(SMLoc loc, StringRef circuitTarget,
     root.printErrorContext(annotations.get(), s);
     diag.attachNote() << jsonErrorMessage;
     return failure();
-  }
-
-  return success();
-}
-
-ParseResult FIRCircuitParser::importAnnotations(CircuitOp circuit, SMLoc loc,
-                                                StringRef circuitTarget,
-                                                StringRef annotationsStr,
-                                                size_t &nlaNumber) {
-
-  auto annotations = json::parse(annotationsStr);
-  if (auto err = annotations.takeError()) {
-    handleAllErrors(std::move(err), [&](const json::ParseError &a) {
-      auto diag = emitError(loc, "Failed to parse JSON Annotations");
-      diag.attachNote() << a.message();
-    });
-    return failure();
-  }
-
-  json::Path::Root root;
-  llvm::StringMap<ArrayAttr> thisAnnotationMap;
-  if (!fromJSON(annotations.get(), circuitTarget, thisAnnotationMap, root,
-                circuit, nlaNumber)) {
-    auto diag = emitError(loc, "Invalid/unsupported annotation format");
-    std::string jsonErrorMessage =
-        "See inline comments for problem area in JSON:\n";
-    llvm::raw_string_ostream s(jsonErrorMessage);
-    root.printErrorContext(annotations.get(), s);
-    diag.attachNote() << jsonErrorMessage;
-    return failure();
-  }
-
-  // Merge the attributes we just parsed into the global set we're accumulating.
-  llvm::StringMap<ArrayAttr> &resultAnnoMap = getConstants().annotationMap;
-  for (auto &thisEntry : thisAnnotationMap) {
-    auto &existing = resultAnnoMap[thisEntry.getKey()];
-    if (!existing) {
-      existing = thisEntry.getValue();
-      continue;
-    }
-
-    SmallVector<Attribute> annotationVec(existing.begin(), existing.end());
-    annotationVec.append(thisEntry.getValue().begin(),
-                         thisEntry.getValue().end());
-    existing = ArrayAttr::get(getContext(), annotationVec);
   }
 
   return success();
