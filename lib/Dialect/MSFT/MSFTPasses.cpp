@@ -638,10 +638,6 @@ void PassCommon::getAndSortModules(ModuleOp topMod,
   topMod.walk([&](hw::HWModuleLike mod) {
     getAndSortModulesVisitor(mod, mods, modsSeen);
   });
-  llvm::errs() << "=== mods sorted\n";
-  for (auto m : mods)
-    llvm::errs() << m << "\n";
-  llvm::errs() << "=== end mods sorted\n";
 }
 
 LogicalResult PassCommon::verifyInstances(mlir::ModuleOp mod) {
