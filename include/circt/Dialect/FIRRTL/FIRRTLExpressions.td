@@ -181,9 +181,9 @@ def SubfieldOp : FIRRTLExprOp<"subfield"> {
 }
 
 class BitIndexConstraint<string value, string resultValue>
-  : TypesMatchWith<"type should be element of vector type",
+  : TypesMatchWith<"type should be UInt or SInt",
                    value, resultValue,
-                   "firrtl::getSubindexElementType($_self)">;
+                   "firrtl::getBitindexElementType($_self)">;
 
 def BitindexOp : FIRRTLExprOp<"bitindex", [
     BitIndexConstraint<"input", "result">
