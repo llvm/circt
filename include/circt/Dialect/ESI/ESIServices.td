@@ -39,7 +39,7 @@ def ServiceInstanceOp : ESI_Op<"service.instance"> {
 
   let description = [{
     Instantiate a service adhering to a service declaration interface.
-    
+
     A pass collects all of the connection requests to the service this op
     implements from the containing modules' descendants (in the instance
     hierarchy). It bubbles them all up to the module containing this op,
@@ -88,7 +88,7 @@ def RequestToServerConnection : ESI_Op<"service.req.to_server", [
         DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let summary = "Request a connection to send data";
 
-  let arguments = (ins HWInnerRefAttr:$servicePort, 
+  let arguments = (ins HWInnerRefAttr:$servicePort,
                        ChannelType:$sending, StrArrayAttr:$clientNamePath);
   let assemblyFormat = [{
     $sending `->` $servicePort `(` $clientNamePath `)`

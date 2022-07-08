@@ -608,10 +608,10 @@ void PassCommon::getAndSortModulesVisitor(
   mod.walk([&](hw::HWInstanceLike inst) {
     Operation *modOp =
         topLevelSyms.getDefinition(inst.referencedModuleNameAttr());
-    if (!isa_and_nonnull<hw::HWModuleLike>(modOp))
-      return;
+    assert(modOp);
     moduleInstantiations[modOp].push_back(inst);
-    getAndSortModulesVisitor(mod, mods, modsSeen);
+    if (auto modLike = dyn_cast<hw::HWModuleLike>(modOp))
+      getAndSortModulesVisitor(modLike, mods, modsSeen);
   });
 
   mods.push_back(mod);
@@ -638,6 +638,10 @@ void PassCommon::getAndSortModules(ModuleOp topMod,
   topMod.walk([&](hw::HWModuleLike mod) {
     getAndSortModulesVisitor(mod, mods, modsSeen);
   });
+  llvm::errs() << "=== mods sorted\n";
+  for (auto m : mods)
+    llvm::errs() << m << "\n";
+  llvm::errs() << "=== end mods sorted\n";
 }
 
 LogicalResult PassCommon::verifyInstances(mlir::ModuleOp mod) {
