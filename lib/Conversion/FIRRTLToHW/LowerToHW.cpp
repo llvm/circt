@@ -440,9 +440,9 @@ private:
   hw::HWModuleExternOp lowerExtModule(FExtModuleOp oldModule,
                                       Block *topLevelModule,
                                       CircuitLoweringState &loweringState);
-  hw::HWModuleExternOp lowerMemModule(FMemModuleOp oldModule,
-                                      Block *topLevelModule,
-                                      CircuitLoweringState &loweringState);
+  hw::HWModuleGeneratedOp lowerMemModule(FMemModuleOp oldModule,
+                                         Block *topLevelModule,
+                                         CircuitLoweringState &loweringState);
 
   LogicalResult lowerModuleBody(FModuleOp oldModule,
                                 CircuitLoweringState &loweringState);
@@ -987,10 +987,11 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
   return newModule;
 }
 
-hw::HWModuleExternOp
+hw::HWModuleGeneratedOp
 FIRRTLModuleLowering::lowerMemModule(FMemModuleOp oldModule,
                                      Block *topLevelModule,
                                      CircuitLoweringState &loweringState) {
+  static FlatSymbolRefAttr memorySchema;
   // Map the ports over, lowering their types as we go.
   SmallVector<PortInfo> firrtlPorts = oldModule.getPorts();
   SmallVector<hw::PortInfo, 8> ports;
@@ -999,9 +1000,37 @@ FIRRTLModuleLowering::lowerMemModule(FMemModuleOp oldModule,
 
   // Build the new hw.module op.
   auto builder = OpBuilder::atBlockEnd(topLevelModule);
-  auto newModule = builder.create<hw::HWModuleExternOp>(
-      oldModule.getLoc(), oldModule.moduleNameAttr(), ports,
-      oldModule.moduleNameAttr());
+  if (!memorySchema) {
+    std::array<StringRef, 9> schemaFields = {
+        "depth",       "numReadPorts", "numWritePorts", "numReadWritePorts",
+        "readLatency", "writeLatency", "width",         "maskGran",
+        "extraPorts"};
+    auto schemaFieldsAttr = builder.getStrArrayAttr(schemaFields);
+    auto namesp = CircuitNamespace(loweringState.circuitOp);
+    auto schema = builder.create<hw::HWGeneratorSchemaOp>(
+        oldModule.getLoc(), namesp.newName("FIRRTLSeqMemSchema"),
+        "FIRRTL_Seq_Memory", schemaFieldsAttr);
+    memorySchema = SymbolRefAttr::get(schema);
+  }
+  // Mask granularity is the number of data bits that each mask bit can
+  // guard. By default it is equal to the data bitwidth.
+  auto maskGran = oldModule.isMasked()
+                      ? oldModule.dataWidth() / oldModule.maskBits()
+                      : oldModule.dataWidth();
+  NamedAttribute genAttrs[] = {
+      builder.getNamedAttr("depth", oldModule.depthAttr()),
+      builder.getNamedAttr("numReadPorts", oldModule.numReadPortsAttr()),
+      builder.getNamedAttr("numWritePorts", oldModule.numWritePortsAttr()),
+      builder.getNamedAttr("numReadWritePorts",
+                           oldModule.numReadWritePortsAttr()),
+      builder.getNamedAttr("readLatency", oldModule.readLatencyAttr()),
+      builder.getNamedAttr("writeLatency", oldModule.writeLatencyAttr()),
+      builder.getNamedAttr("width", oldModule.dataWidthAttr()),
+      builder.getNamedAttr("maskGran", builder.getUI32IntegerAttr(maskGran)),
+      builder.getNamedAttr("extraPorts", oldModule.extraPortsAttr())};
+  auto newModule = builder.create<hw::HWModuleGeneratedOp>(
+      oldModule.getLoc(), memorySchema, oldModule.moduleNameAttr(), ports,
+      oldModule.moduleNameAttr(), ArrayAttr(), genAttrs);
   loweringState.processRemainingAnnotations(oldModule,
                                             AnnotationSet(oldModule));
   return newModule;
