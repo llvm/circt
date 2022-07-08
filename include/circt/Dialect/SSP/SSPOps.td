@@ -45,9 +45,12 @@ def InstanceOp : SSPOp<"instance",
     ```
   }];
 
-  let arguments = (ins StrAttr:$instanceName, StrAttr:$problemName, OptionalAttr<ArrayAttr>:$properties);
+  let arguments = (ins StrAttr:$instanceName, StrAttr:$problemName,
+                       OptionalAttr<ArrayAttr>:$properties);
   let regions = (region SizedRegion<1>: $body);
-  let assemblyFormat = "$instanceName `of` $problemName custom<Properties>($properties) $body attr-dict";
+  let assemblyFormat = [{
+    $instanceName `of` $problemName custom<Properties>($properties)$body attr-dict
+  }];
   
   let extraClassDeclaration = [{
     static ::llvm::StringRef getDefaultDialect() { return "ssp"; }

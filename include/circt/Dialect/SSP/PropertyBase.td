@@ -47,7 +47,8 @@ class OperationProperty<Dialect dialect, string name, string type, string proble
     void setInProblem(}] # problemClassName # [{ &prob, ::mlir::Operation *op) {
       prob.set}] # propertyName # [{(op, getValue());
     }
-    static ::mlir::Attribute getFromProblem(}] # problemClassName # [{ &prob, ::mlir::Operation *op, ::mlir::MLIRContext *ctx) {
+    static ::mlir::Attribute getFromProblem(}] # problemClassName # [{ &prob,
+                                            ::mlir::Operation *op, ::mlir::MLIRContext *ctx) {
       if (auto value = prob.get}] # propertyName # [{(op))
         return }] # cppClassName # [{::get(ctx, *value);
       return {};
@@ -59,10 +60,13 @@ class OperatorTypeProperty<Dialect dialect, string name, string type, string pro
                            list<Trait> traits = []>
     : PropertyBase<dialect, name, type, problem, traits> {
   let extraClassDeclaration = [{
-    void setInProblem(}] # problemClassName # [{ &prob, ::circt::scheduling::Problem::OperatorType opr) {
+    void setInProblem(}] # problemClassName # [{ &prob,
+                      ::circt::scheduling::Problem::OperatorType opr) {
       prob.set}] # propertyName # [{(opr, getValue());
     }
-    static ::mlir::Attribute getFromProblem(}] # problemClassName # [{ &prob, ::circt::scheduling::Problem::OperatorType opr, ::mlir::MLIRContext *ctx) {
+    static ::mlir::Attribute getFromProblem(}] # problemClassName # [{ &prob,
+                                            ::circt::scheduling::Problem::OperatorType opr,
+                                            ::mlir::MLIRContext *ctx) {
       if (auto value = prob.get}] # propertyName # [{(opr))
         return }] # cppClassName # [{::get(ctx, *value);
       return {};
@@ -74,10 +78,13 @@ class DependenceProperty<Dialect dialect, string name, string type, string probl
                          list<Trait> traits = []>
     : PropertyBase<dialect, name, type, problem, traits> {
   let extraClassDeclaration = [{
-    void setInProblem(}] # problemClassName # [{ &prob, ::circt::scheduling::Problem::Dependence dep) {
+    void setInProblem(}] # problemClassName # [{ &prob,
+                      ::circt::scheduling::Problem::Dependence dep) {
       prob.set}] # propertyName # [{(dep, getValue());
     }
-    static ::mlir::Attribute getFromProblem(}] # problemClassName # [{ &prob, ::circt::scheduling::Problem::Dependence dep, ::mlir::MLIRContext *ctx) {
+    static ::mlir::Attribute getFromProblem(}] # problemClassName # [{ &prob,
+                                            ::circt::scheduling::Problem::Dependence dep,
+                                            ::mlir::MLIRContext *ctx) {
       if (auto value = prob.get}] # propertyName # [{(dep))
         return }] # cppClassName # [{::get(ctx, *value);
       return {};
@@ -92,7 +99,8 @@ class InstanceProperty<Dialect dialect, string name, string type, string problem
     void setInProblem(}] # problemClassName # [{ &prob) {
       prob.set}] # propertyName # [{(getValue());
     }
-    static ::mlir::Attribute getFromProblem(}] # problemClassName # [{ &prob, ::mlir::MLIRContext *ctx) {
+    static ::mlir::Attribute getFromProblem(}] # problemClassName # [{ &prob,
+                                            ::mlir::MLIRContext *ctx) {
       if (auto value = prob.get}] # propertyName # [{())
         return }] # cppClassName # [{::get(ctx, *value);
       return {};
