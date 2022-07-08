@@ -118,5 +118,5 @@ circuit Foo : %[[
 ; CHECK:        firrtl.memmodule @prefix1_mem
 ; CHECK:        firrtl.memmodule @prefix2_mem
 
-; HW-LABEL: hw.module.extern @prefix1_mem
-; HW-LABEL: hw.module.extern @prefix2_mem
+; HW-LABEL: hw.module.generated @prefix1_mem
+; HW-LABEL: hw.module.generated @prefix2_mem
