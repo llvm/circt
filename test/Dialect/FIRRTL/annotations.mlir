@@ -3,6 +3,612 @@
 // circt.test copies the annotation to the target
 // circt.testNT puts the targetless annotation on the circuit
 
+// Annotations targeting the circuit work.
+//
+// CHECK-LABEL: firrtl.circuit "Foo"
+// CHECK-SAME:    annotations =
+// CHECK-SAME:      {class = "circt.testNT", data = "NoTarget"}
+// CHECK-SAME:      {class = "circt.test", data = "Target"}
+// CHECK-SAME:      {class = "circt.test", data = "CircuitName"}
+// CHECK-NOT:     rawAnnotations
+firrtl.circuit "Foo" attributes {rawAnnotations = [
+  {
+    class = "circt.testNT",
+    data = "NoTarget"
+  },
+  {
+    class = "circt.test",
+    data = "Target",
+    target = "~Foo"
+  },
+  {
+    class = "circt.test",
+    data = "CircuitName",
+    target = "Foo"
+  }
+]} {
+  firrtl.module @Foo() {}
+}
+
+// -----
+
+// Annotations targeting modules or external modules work.
+//
+// CHECK-LABEL: firrtl.circuit "Foo"
+// CHECK-NOT:     rawAnnotations
+firrtl.circuit "Foo" attributes {rawAnnotations = [
+  {
+    class = "circt.test",
+    data = "Target",
+    target = "~Foo|Foo"
+  },
+  {
+    class = "circt.test",
+    data = "ModuleName",
+    target = "Foo.Foo"
+  },
+    {
+    class = "circt.test",
+    data = "ExtModule Target",
+    target = "~Foo|Blackbox"
+  }
+]} {
+  // CHECK:      firrtl.module @Foo
+  // CHECK-SAME:   annotations =
+  // CHECK-SAME:     {class = "circt.test", data = "Target"}
+  // CHECK-SAME:     {class = "circt.test", data = "ModuleName"}
+  firrtl.module @Foo() {}
+  // CHECK:      firrtl.extmodule @Blackbox
+  // CHECK-SAME:   annotations =
+  // CHECK-SAME:     {class = "circt.test", data = "ExtModule Target"}
+  firrtl.extmodule @Blackbox()
+}
+
+// -----
+
+// Annotations targeting instances should create NLAs on the module.
+//
+// CHECK-LABEL: firrtl.circuit "Foo"
+// CHECK-NOT:     rawAnnotations
+// CHECK-NEXT:    firrtl.hierpath @[[nla_c:[^ ]+]] [@Foo::@[[bar_sym:[^ ]+]], @Bar]
+// CHECK-NEXT:    firrtl.hierpath @[[nla_b:[^ ]+]] [@Foo::@[[bar_sym]],       @Bar]
+// CHECK-NEXT:    firrtl.hierpath @[[nla_a:[^ ]+]] [@Foo::@[[bar_sym]],       @Bar]
+firrtl.circuit "Foo" attributes {rawAnnotations = [
+  {
+    class = "circt.test",
+    data = "a",
+    target = "~Foo|Foo>bar"
+  },
+  {
+    class = "circt.test",
+    data = "b",
+    target = "Foo.Foo.bar"
+  },
+  {
+    class = "circt.test",
+    data = "c",
+    target = "~Foo|Foo/bar:Bar"
+  }
+]} {
+  // CHECK-NEXT: firrtl.module @Bar()
+  // CHECK-SAME:   annotations =
+  // CHECK-SAME:     {circt.nonlocal = @[[nla_a]], class = "circt.test", data = "a"}
+  // CHECK-SAME:     {circt.nonlocal = @[[nla_b]], class = "circt.test", data = "b"}
+  // CHECK-SAME:     {circt.nonlocal = @[[nla_c]], class = "circt.test", data = "c"}
+  firrtl.module @Bar() {}
+  // CHECK: firrtl.module @Foo
+  firrtl.module @Foo() {
+    // CHECK-NEXT: firrtl.instance bar sym @[[bar_sym]]
+    firrtl.instance bar @Bar()
+  }
+}
+
+// -----
+
+// Test result annotations of InstanceOp.
+//
+// Must add inner_sym, if any subfield of a bundle type has nonlocal anchor.
+// Otherwise, the nla will be illegal, without any inner_sym.
+// Test on port and wire.
+//
+// CHECK-LABEL: firrtl.circuit "Foo"
+// CHECK-NOT:     rawAnnotations
+// CHECK-NEXT:    firrtl.hierpath @[[nla_4:[^ ]+]] [@Foo::@[[bar_sym:[^ ]+]], @Bar]
+// CHECK-NEXT:    firrtl.hierpath @[[nla_3:[^ ]+]] [@Foo::@[[bar_sym:[^ ]+]], @Bar]
+// CHECK-NEXT:    firrtl.hierpath @[[nla_2:[^ ]+]] [@Foo::@[[bar_sym:[^ ]+]], @Bar]
+// CHECK-NEXT:    firrtl.hierpath @[[nla_1:[^ ]+]] [@Foo::@[[bar_sym:[^ ]+]], @Bar]
+// CHECK-NEXT:    firrtl.hierpath @[[nla_0:[^ ]+]] [@Foo::@[[bar_sym:[^ ]+]], @Bar]
+firrtl.circuit "Foo" attributes {rawAnnotations = [
+  {
+    class = "circt.test",
+    data = 0,
+    target = "~Foo|Foo>bar.a"
+  },
+  {
+    class = "circt.test",
+    data = 1,
+    target = "~Foo|Foo>bar.b.baz"
+  },
+  {
+    class = "circt.test",
+    data = 2,
+    target = "~Foo|Foo/bar:Bar>b.qux"
+  },
+  {
+    class = "circt.test",
+    data = 3,
+    target = "~Foo|Foo/bar:Bar>d.qux"
+  },
+  {
+    class = "circt.test",
+    data = 4,
+    target = "Foo.Foo.bar.c"
+  }
+]} {
+  // CHECK-NEXT: firrtl.module @Bar
+  // CHECK-SAME:   in %a
+  // CHECK-SAME:     {circt.nonlocal = @[[nla_0]], class = "circt.test", data = 0 : i64}
+  // CHECK-SAME:   out %b
+  // CHECK-SAME:     {circt.fieldID = 1 : i32, circt.nonlocal = @[[nla_1]], class = "circt.test", data = 1 : i64}
+  // CHECK-SAME:     {circt.fieldID = 2 : i32, circt.nonlocal = @[[nla_2]], class = "circt.test", data = 2 : i64}
+  // CHECK-SAME:   out %c
+  // CHECK-SAME:     {circt.nonlocal = @[[nla_4]], class = "circt.test", data = 4 : i64}
+  firrtl.module @Bar(
+    in %a: !firrtl.uint<1>,
+    out %b: !firrtl.bundle<baz: uint<1>, qux: uint<1>>,
+    out %c: !firrtl.uint<1>
+  ) {
+    // CHECK-NEXT: %d = firrtl.wire
+    // CHECK-NOT:    sym
+    // CHECK-SAME:   {circt.fieldID = 2 : i32, circt.nonlocal = @[[nla_3]], class = "circt.test", data = 3 : i64}
+    %d = firrtl.wire : !firrtl.bundle<baz: uint<1>, qux: uint<1>>
+  }
+  // CHECK: firrtl.module @Foo
+  firrtl.module @Foo() {
+    // CHECK-NEXT: firrtl.instance bar sym @[[bar_sym]]
+    %bar_a, %bar_b, %bar_c = firrtl.instance bar @Bar(
+      in a: !firrtl.uint<1>,
+      out b: !firrtl.bundle<baz: uint<1>, qux: uint<1>>,
+      out c: !firrtl.uint<1>
+    )
+  }
+}
+
+// -----
+
+// A ReferenceTarget/ComponentName pointing at a Foo should work.
+//
+// CHECK-LABEL: firrtl.circuit "Foo"
+// CHECK-NOT:     rawAnnotations
+firrtl.circuit "Foo"  attributes {rawAnnotations = [
+  {
+    class = "circt.test",
+    data = "a",
+    target = "~Foo|Foo>bar"
+  },
+  {
+    class = "circt.test",
+    data = "b",
+    target = "Foo.Foo.bar"
+  }
+]} {
+  // CHECK: firrtl.module @Foo
+  firrtl.module @Foo() {
+    // CHECK-NEXT: chirrtl.combmem
+    // CHECK-SAME:   {class = "circt.test", data = "a"}
+    // CHECK-SAME:   {class = "circt.test", data = "b"}
+    %bar = chirrtl.combmem : !chirrtl.cmemory<uint<1>, 8>
+  }
+}
+
+// -----
+
+// A ReferenceTarget/ComponentName pointing at a memory should work.
+//
+// CHECK-LABEL: firrtl.circuit "Foo"
+// CHECK-NOT:     rawAnnotations
+firrtl.circuit "Foo" attributes {rawAnnotations = [
+  {
+    class = "circt.test",
+    data = "a",
+    target = "~Foo|Foo>bar"
+  },
+  {
+    class = "circt.test",
+    data = "b",
+    target = "Foo.Foo.bar"
+  }
+]} {
+  // CHECK: firrtl.module @Foo
+  firrtl.module @Foo() {
+    // CHECK-NEXT: firrtl.mem
+    // CHECK-SAME:   {class = "circt.test", data = "a"}
+    // CHECK-SAME:   {class = "circt.test", data = "b"}
+    %bar_r = firrtl.mem Undefined {
+       depth = 16 : i64,
+       name = "bar",
+       portNames = ["r"],
+       readLatency = 0 : i32,
+       writeLatency = 1 : i32
+     } : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>
+  }
+}
+
+// -----
+
+// Test result annotations of MemOp.
+//
+// CHECK-LABEL: firrtl.circuit "Foo"
+// CHECK-NOT:     rawAnnotations
+firrtl.circuit "Foo" attributes {rawAnnotations = [
+  {
+    class = "circt.test",
+    data = "a",
+    target = "~Foo|Foo>bar.r"
+  }
+  ,
+  {
+    class = "circt.test",
+    data = "b",
+    target = "~Foo|Foo>bar.r.data.baz"
+  }
+  ,
+  {
+    class = "circt.test",
+    data = "c",
+    target = "~Foo|Foo>bar.w.en"
+  }
+  ,
+  {
+    class = "circt.test",
+    data = "d",
+    target = "~Foo|Foo>bar.w.data.qux"
+  }
+]} {
+  // CHECK: firrtl.module @Foo
+  firrtl.module @Foo() {
+    // CHECK-NEXT: firrtl.mem
+    // CHECK-SAME:   portAnnotations =
+    // CHECK-SAME:     [{class = "circt.test", data = "a"}, {circt.fieldID = 5 : i32, class = "circt.test", data = "b"}]
+    // CHECK-SAME:     [{circt.fieldID = 2 : i32, class = "circt.test", data = "c"}, {circt.fieldID = 6 : i32, class = "circt.test", data = "d"}]
+    %bar_r, %bar_w = firrtl.mem interesting_name Undefined {
+      depth = 16 : i64,
+      name = "bar",
+      portNames = ["r", "w"],
+      readLatency = 0 : i32,
+      writeLatency = 1 : i32
+    } : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: bundle<baz: uint<8>, qux: uint<8>>>,
+        !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: bundle<baz: uint<8>, qux: uint<8>>, mask: bundle<baz: uint<1>, qux: uint<1>>>
+  }
+}
+
+// -----
+
+// A ReferenceTarget/ComponentName pointing at a node should work.  This
+// shouldn't crash if the node is in a nested block.
+//
+// CHECK-LABEL: firrtl.circuit "Foo"
+firrtl.circuit "Foo" attributes {rawAnnotations = [
+  {
+    class = "circt.test",
+    data = "a",
+    target = "~Foo|Foo>bar"
+  },
+  {
+    class = "circt.test",
+    data = "b",
+    target = "Foo.Foo.baz"
+  }
+]} {
+  firrtl.module @Foo(
+    in %clock: !firrtl.clock,
+    in %cond_0: !firrtl.uint<1>,
+    in %cond_1: !firrtl.uint<1>
+  ) {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %bar = firrtl.node %c0_ui1  : !firrtl.uint<1>
+    firrtl.when %cond_0 {
+      firrtl.when %cond_1 {
+        %baz = firrtl.node %c0_ui1  : !firrtl.uint<1>
+      }
+    }
+  }
+}
+
+// CHECK:      firrtl.module @Foo
+// CHECK:        %bar = firrtl.node
+// CHECK-SAME:     annotations = [{class = "circt.test", data = "a"}
+// CHECK:        %baz = firrtl.node
+// CHECK-SAME:     annotations = [{class = "circt.test", data = "b"}]
+
+// -----
+
+// A ReferenceTarget/ComponentName pointing at a wire should work.
+//
+// CHECK-LABEL: firrtl.circuit "Foo"
+firrtl.circuit "Foo" attributes {rawAnnotations = [
+  {
+    class = "circt.test",
+    data = "a",
+    target = "~Foo|Foo>bar"
+  },
+  {
+    class = "circt.test",
+    data = "b",
+    target = "Foo.Foo.bar"
+  }
+]} {
+  firrtl.module @Foo() {
+    %bar = firrtl.wire : !firrtl.uint<1>
+  }
+}
+
+// CHECK:      %bar = firrtl.wire
+// CHECK-SAME:   annotations = [{class = "circt.test", data = "a"}, {class = "circt.test", data = "b"}]
+
+// -----
+
+// A ReferenceTarget/ComponentName pointing at a register should work.
+//
+// CHECK-LABEL: firrtl.circuit "Foo"
+firrtl.circuit "Foo" attributes {rawAnnotations = [
+  {
+    class = "circt.test",
+    data = "a",
+    target = "~Foo|Foo>bar"
+  },
+  {
+    class = "circt.test",
+    data = "b",
+    target = "Foo.Foo.baz"
+  }
+]} {
+  firrtl.module @Foo(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
+    %bar = firrtl.reg %clock  : !firrtl.uint<1>
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %baz = firrtl.regreset %clock, %reset, %c0_ui1  : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+  }
+}
+
+// CHECK:      %bar = firrtl.reg
+// CHECK-SAME:   annotations = [{class = "circt.test", data = "a"}]
+// CHECK:      %baz = firrtl.regreset
+// CHECK-SAME:   annotations = [{class = "circt.test", data = "b"}]
+
+// -----
+
+// A ReferenceTarget/ComponentName pointing at an SeqMem should work.
+//
+// CHECK-LABEL: firrtl.circuit "Foo"
+firrtl.circuit "Foo" attributes {rawAnnotations = [
+  {
+    class = "circt.test",
+    data = "a",
+    target = "~Foo|Foo>bar"
+  },
+  {
+    class = "circt.test",
+    data = "b",
+    target = "Foo.Foo.bar"
+  }
+]} {
+  firrtl.module @Foo() {
+    %bar = chirrtl.seqmem Undefined : !chirrtl.cmemory<uint<1>, 8>
+  }
+}
+
+// CHECK:      chirrtl.seqmem
+// CHECK-SAME:   annotations = [{class = "circt.test", data = "a"}, {class = "circt.test", data = "b"}]
+
+// -----
+
+// Subfield/Subindex annotations should be parsed correctly on wires
+//
+// CHECK-LABEL: firrtl.circuit "Foo"
+firrtl.circuit "Foo" attributes {rawAnnotations = [
+  {
+    class = "circt.test",
+    data = "one",
+    target = "~Foo|Foo>bar[0]"
+  },
+  {
+    class = "circt.test",
+    data = "two",
+    target = "~Foo|Foo>bar[1].baz"
+  }
+]} {
+  firrtl.module @Foo() {
+    %bar = firrtl.wire : !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
+  }
+}
+
+// CHECK:      %bar = firrtl.wire {annotations =
+// CHECK-SAME:   {circt.fieldID = 1 : i32, class = "circt.test", data = "one"}
+// CHECK-SAME:   {circt.fieldID = 5 : i32, class = "circt.test", data = "two"}
+
+// -----
+
+// Subfield/Subindex annotations should be parsed correctly on registers
+//
+// CHECK-LABEL: firrtl.circuit "Foo"
+firrtl.circuit "Foo" attributes {rawAnnotations = [
+  {
+    class = "circt.test",
+    data = "one",
+    target = "~Foo|Foo>bar[0]"
+  },
+  {
+    class = "circt.test",
+    target = "~Foo|Foo>bar[1].baz",
+    data = "two"
+  }
+]} {
+  firrtl.module @Foo(in %clock: !firrtl.clock) {
+    %bar = firrtl.reg %clock : !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
+  }
+}
+
+// CHECK:      %bar = firrtl.reg %clock {annotations =
+// CHECK-SAME:   {circt.fieldID = 1 : i32, class = "circt.test", data = "one"}
+// CHECK-SAME:   {circt.fieldID = 5 : i32, class = "circt.test", data = "two"}
+
+// -----
+
+// Subindices should not get sign-extended and cause problems.  This circuit has
+// caused bugs in the past.
+//
+// CHECK-LABEL: firrtl.circuit "Foo"
+firrtl.circuit "Foo" attributes {rawAnnotations = [
+  {
+    class = "circt.test",
+    data = "a",
+    target = "~Foo|Foo>w[9]"
+  }
+]} {
+  firrtl.module @Foo() {
+    %w = firrtl.wire  : !firrtl.vector<uint<1>, 18>
+  }
+}
+
+// CHECK:      %w = firrtl.wire {annotations =
+// CHECK-SAME:   {circt.fieldID = 10 : i32, class = "circt.test", data = "a"}
+
+// -----
+
+// A ReferenceTarget/ComponentName pointing at a module/extmodule port should
+// work.
+//
+// CHECK-LABEL: firrtl.circuit "Foo"
+firrtl.circuit "Foo" attributes {rawAnnotations = [
+  {
+    class = "circt.test",
+    data = "a",
+    target = "~Foo|Bar>bar"
+  },
+  {
+    class = "circt.test",
+    data = "b",
+    target = "Foo.Foo.foo"
+  }
+]} {
+  firrtl.extmodule @Bar(in bar: !firrtl.uint<1>)
+  firrtl.module @Foo(in %foo: !firrtl.uint<1>) {
+    %bar_bar = firrtl.instance bar  @Bar(in bar: !firrtl.uint<1>)
+    firrtl.strictconnect %bar_bar, %foo : !firrtl.uint<1>
+  }
+}
+
+// CHECK:      firrtl.extmodule @Bar
+// CHECK-SAME:   [[_:.+]] [{class = "circt.test", data = "a"}]
+// CHECK:      firrtl.module @Foo
+// CHECK-SAME:   %foo: [[_:.+]] [{class = "circt.test", data = "b"}]
+
+// -----
+
+// A module with an instance in its body which has the same name as the module
+// itself should not cause issues attaching annotations.
+// https://github.com/llvm/circt/issues/2709
+firrtl.circuit "Foo" attributes {rawAnnotations = [
+  {
+    class = "circt.test",
+    target = "~Foo|Foo/Foo:Example"
+  }
+]} {
+  firrtl.module @Example() {}
+  firrtl.module @Foo() {
+    firrtl.instance Foo @Example()
+  }
+}
+
+// CHECK-LABEL:  firrtl.circuit "Foo"
+// CHECK:          firrtl.hierpath @[[nla:[^ ]+]] [@Foo::@Foo, @Example]
+// CHECK:          firrtl.module @Example() attributes {
+// CHECK-SAME:       annotations = [{circt.nonlocal = @[[nla]], class = "circt.test"}]
+// CHECK:          firrtl.module @Foo()
+// CHECK:            firrtl.instance Foo sym @Foo @Example()
+
+// -----
+
+// Multiple non-local Annotations are supported.
+firrtl.circuit "Foo" attributes {rawAnnotations = [
+  {class = "circt.test", data = "a", target = "~Foo|Foo/bar:Bar/baz:Baz"},
+  {class = "circt.test", data = "b", target = "~Foo|Foo/bar:Bar/baz:Baz"}
+]} {
+  firrtl.module @Baz() {}
+  firrtl.module @Bar() {
+    firrtl.instance baz @Baz()
+  }
+  firrtl.module @Foo() {
+    firrtl.instance bar @Bar()
+  }
+}
+// CHECK-LABEL: firrtl.circuit "Foo"
+// CHECK:         firrtl.hierpath @[[nla_b:[^ ]+]] [@Foo::@bar, @Bar::@baz, @Baz]
+// CHECK:         firrtl.hierpath @[[nla_a:[^ ]+]] [@Foo::@bar, @Bar::@baz, @Baz]
+// CHECK:         firrtl.module @Baz
+// CHECK-SAME:      annotations = [{circt.nonlocal = @[[nla_a]], class = "circt.test", data = "a"}, {circt.nonlocal = @[[nla_b]], class = "circt.test", data = "b"}]
+// CHECK:         firrtl.module @Bar()
+// CHECK:           firrtl.instance baz sym @baz @Baz()
+// CHECK:           firrtl.module @Foo()
+// CHECK:           firrtl.instance bar sym @bar @Bar()
+
+// -----
+
+firrtl.circuit "memportAnno"  attributes {rawAnnotations = [
+  {
+    class = "circt.test",
+    target = "~memportAnno|memportAnno/foo:Foo>memory.w"
+  }
+]} {
+  firrtl.module @memportAnno() {
+    firrtl.instance foo @Foo()
+  }
+  firrtl.module @Foo() {
+    %memory_w = firrtl.mem Undefined {
+      depth = 16 : i64,
+      name = "memory",
+      portNames = ["w"],
+      readLatency = 1 : i32,
+      writeLatency = 1 : i32
+    } : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
+  }
+}
+
+// CHECK-LABEL: firrtl.circuit "memportAnno"  {
+// CHECK:        firrtl.hierpath @nla [@memportAnno::@foo, @Foo]
+// CHECK:        %memory_w = firrtl.mem Undefined {depth = 16 : i64, name = "memory", portAnnotations
+// CHECK-SAME:   [{circt.nonlocal = @nla, class = "circt.test"}]
+
+// -----
+
+// Test annotation targeting an instance port
+// https://github.com/llvm/circt/issues/3340
+firrtl.circuit "instportAnno" attributes {rawAnnotations = [
+  {
+    class = "circt.test",
+    target = "~instportAnno|instportAnno/bar:Bar>baz.a"
+  }
+]} {
+  firrtl.module @Baz(out %a: !firrtl.uint<1>) {
+    %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
+    firrtl.strictconnect %a, %invalid_ui1 : !firrtl.uint<1>
+  }
+  firrtl.module @Bar() {
+    %baz_a = firrtl.instance baz @Baz(out a: !firrtl.uint<1>)
+  }
+  firrtl.module @instportAnno() {
+    firrtl.instance bar @Bar()
+  }
+}
+
+// CHECK-LABEL: firrtl.circuit "instportAnno"
+// CHECK:        firrtl.hierpath @[[HIER:[^ ]+]] [@instportAnno::@bar, @Bar::@baz, @Baz]
+// CHECK:        firrtl.module @Baz
+// CHECK-SAME:     {circt.nonlocal = @[[HIER]], class = "circt.test"}
+
+// -----
+
+// CHECK-LABEL: firrtl.circuit "Aggregates"
 firrtl.circuit "Aggregates" attributes {rawAnnotations = [
   {class = "circt.test", target = "~Aggregates|Aggregates>vector[1][1][1]"},
   {class = "circt.test", target = "~Aggregates|Aggregates>bundle.a.b.c"}
