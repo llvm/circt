@@ -392,7 +392,7 @@ void CircuitLoweringState::processRemainingAnnotations(
             // should have consumed and processed these into an attribute on the
             // output.
             "sifive.enterprise.firrtl.DontObfuscateModuleAnnotation",
-            "firrtl.transforms.NoDedupAnnotation",
+            noDedupAnnoClass,
             // The following are inspected (but not consumed) by FIRRTL/GCT
             // passes that have all run by now. Since no one is responsible for
             // consuming these, they will linger around and can be ignored.

@@ -1042,6 +1042,15 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
         wiring.prefices =
             instancePaths.getAbsolutePaths(op->getParentOfType<FModuleOp>());
       wiring.target = PortWiring::Target(op);
+
+      // If the tapped operation is trivially driven by a constant, set
+      // information about the literal so that this can later be used instead of
+      // an XMR.
+      if (auto driver = getDriverFromConnect(op->getResult(0)))
+        if (auto constant =
+                dyn_cast_or_null<ConstantOp>(driver.getDefiningOp()))
+          wiring.literal = {constant.valueAttr(), constant.getType()};
+
       portWiring.push_back(std::move(wiring));
       return;
     }

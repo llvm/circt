@@ -437,3 +437,25 @@ circuit Top : %[[
     ; CHECK:      assign _3 = Top.dut.submodule.port_Submodule
     ; CHECK-NEXT: assign _4 = Top.dut.port_DUT
     ; CHECK-NEXT: assign _5 = Top.port_Top
+
+; // -----
+
+circuit ConstantSinking : %[[
+  {
+    "class": "sifive.enterprise.grandcentral.DataTapsAnnotation",
+    "blackBox": "~ConstantSinking|DataTap",
+    "keys": [
+      {
+        "class": "sifive.enterprise.grandcentral.ReferenceDataTapKey",
+        "source": "~ConstantSinking|ConstantSinking>w",
+        "portName": "~ConstantSinking|DataTap>a"
+      }
+    ]
+  }
+]]
+  extmodule DataTap :
+    output a : UInt<1>
+
+  module ConstantSinking:
+    inst dataTap of DataTap
+    node w = UInt<1>(1)

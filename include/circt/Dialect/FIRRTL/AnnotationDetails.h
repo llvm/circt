@@ -40,6 +40,10 @@ constexpr const char *omirFileAnnoClass =
 constexpr const char *omirTrackerAnnoClass =
     "freechips.rocketchip.objectmodel.OMIRTracker";
 
+constexpr const char *blackBoxInlineAnnoClass =
+    "firrtl.transforms.BlackBoxInlineAnno";
+constexpr const char *blackBoxPathAnnoClass =
+    "firrtl.transforms.BlackBoxPathAnno";
 constexpr const char *blackBoxTargetDirAnnoClass =
     "firrtl.transforms.BlackBoxTargetDirAnno";
 constexpr const char *blackBoxResourceFileNameAnnoClass =
@@ -60,6 +64,7 @@ static const char *verifBlackBoxAnnoClass =
     "freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation";
 static const char *metadataDirectoryAttrName =
     "sifive.enterprise.firrtl.MetadataDirAnnotation";
+static const char *noDedupAnnoClass = "firrtl.transforms.NoDedupAnnotation";
 
 // Grand Central Annotations
 constexpr const char *serializedViewAnnoClass =
@@ -103,6 +108,8 @@ constexpr const char *internalKeySourceClass =
                                                                     // SFC
 constexpr const char *extractGrandCentralClass =
     "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation";
+constexpr const char *grandCentralHierarchyFileAnnoClass =
+    "sifive.enterprise.grandcentral.GrandCentralHierarchyFileAnnotation";
 constexpr const char *signalDriverAnnoClass =
     "sifive.enterprise.grandcentral.SignalDriverAnnotation";
 constexpr const char *signalDriverTargetAnnoClass =

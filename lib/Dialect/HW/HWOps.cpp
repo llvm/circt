@@ -1718,7 +1718,10 @@ void ArrayConcatOp::build(OpBuilder &b, OperationState &state,
 //===----------------------------------------------------------------------===//
 
 ParseResult EnumConstantOp::parse(OpAsmParser &parser, OperationState &result) {
-  hw::EnumType type;
+  // Parse a Type instead of an EnumType since the type might be a type alias.
+  // The validity of the canonical type is checked during construction of the
+  // EnumFieldAttr.
+  Type type;
   StringRef field;
 
   auto loc = parser.getEncodedSourceLoc(parser.getCurrentLocation());

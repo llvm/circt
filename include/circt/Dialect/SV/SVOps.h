@@ -13,6 +13,7 @@
 #ifndef CIRCT_DIALECT_SV_OPS_H
 #define CIRCT_DIALECT_SV_OPS_H
 
+#include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/SV/SVTypes.h"
@@ -44,44 +45,97 @@ enum class CasePatternBit { Zero = 0, One = 1, AnyX = 2, AnyZ = 3 };
 char getLetter(CasePatternBit bit);
 
 // This is provides convenient access to encode and decode a pattern.
-struct CasePattern {
-  IntegerAttr attr;
+class CasePattern {
 
-  struct DefaultPatternTag {};
+public:
+  enum CasePatternKind { CPK_bit, CPK_enum, CPK_default };
+  CasePattern(CasePatternKind kind) : kind(kind) {}
+  virtual ~CasePattern() {}
+  CasePatternKind getKind() const { return kind; }
 
+  /// Return true if this pattern has an X.
+  virtual bool hasX() const { return false; }
+
+  /// Return true if this pattern has an Z.
+  virtual bool hasZ() const { return false; }
+
+  virtual Attribute attr() const = 0;
+
+private:
+  const CasePatternKind kind;
+};
+
+class CaseDefaultPattern : public CasePattern {
+public:
+  using AttrType = mlir::UnitAttr;
+  CaseDefaultPattern(MLIRContext *ctx)
+      : CasePattern(CasePatternKind::CPK_default) {
+    unitAttr = AttrType::get(ctx);
+  }
+
+  Attribute attr() const override { return unitAttr; }
+
+  static bool classof(const CasePattern *S) {
+    return S->getKind() == CPK_default;
+  }
+
+private:
+  // The default pattern is recognized by a UnitAttr. This is needed since we
+  // need to be able to determine the pattern type of a case based on an
+  // attribute attached to the sv.case op.
+  UnitAttr unitAttr;
+};
+
+class CaseBitPattern : public CasePattern {
+public:
   // Return the number of bits in the pattern.
-  size_t getWidth() const { return attr.getValue().getBitWidth() / 2; }
+  size_t getWidth() const { return intAttr.getValue().getBitWidth() / 2; }
 
   /// Return the specified bit, bit 0 is the least significant bit.
   CasePatternBit getBit(size_t bitNumber) const;
 
-  /// Return true if this pattern always matches.
-  bool isDefault() const;
+  bool hasX() const override;
+  bool hasZ() const override;
 
-  /// Return true if this pattern has an X.
-  bool hasX() const;
-
-  /// Return true if this pattern has an Z.
-  bool hasZ() const;
+  Attribute attr() const override { return intAttr; }
 
   /// Get a CasePattern from a specified list of CasePatternBit.  Bits are
   /// specified in most least significant order - element zero is the least
   /// significant bit.
-  CasePattern(ArrayRef<CasePatternBit> bits, MLIRContext *context);
+  CaseBitPattern(ArrayRef<CasePatternBit> bits, MLIRContext *context);
 
   /// Get a CasePattern for the specified constant value.
-  CasePattern(const APInt &value, MLIRContext *context);
+  CaseBitPattern(const APInt &value, MLIRContext *context);
 
   /// Get a CasePattern with a correctly encoded attribute.
-  CasePattern(IntegerAttr attr) : attr(attr) {}
+  CaseBitPattern(IntegerAttr attr) : CasePattern(CPK_bit), intAttr(attr) {}
 
-  /// Get a CasePattern of a default for the specified width.
-  CasePattern(size_t width, DefaultPatternTag, MLIRContext *context);
+  static bool classof(const CasePattern *S) { return S->getKind() == CPK_bit; }
+
+private:
+  IntegerAttr intAttr;
+};
+
+class CaseEnumPattern : public CasePattern {
+public:
+  // Get a CasePattern for the specified enum value attribute.
+  CaseEnumPattern(hw::EnumFieldAttr attr)
+      : CasePattern(CPK_enum), enumAttr(attr) {}
+
+  // Return the named value of this enumeration.
+  StringRef getFieldValue() const;
+
+  Attribute attr() const override { return enumAttr; }
+
+  static bool classof(const CasePattern *S) { return S->getKind() == CPK_enum; }
+
+private:
+  hw::EnumFieldAttr enumAttr;
 };
 
 // This provides information about one case.
 struct CaseInfo {
-  CasePattern pattern;
+  std::unique_ptr<CasePattern> pattern;
   Block *block;
 };
 

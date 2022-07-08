@@ -407,8 +407,10 @@ void LowerAnnotationsPass::runOnOperation() {
     return;
   circuit->removeAttr(rawAnnotations);
 
-  // Grab the annotations.
-  for (auto anno : annotations)
+  // Populate the worklist in reverse order.  This has the effect of causing
+  // annotations to be processed in the order in which they appear in the
+  // original JSON.
+  for (auto anno : llvm::reverse(annotations.getValue()))
     worklistAttrs.push_back(anno.cast<DictionaryAttr>());
 
   size_t numFailures = 0;

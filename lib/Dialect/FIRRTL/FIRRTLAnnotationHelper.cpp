@@ -65,7 +65,7 @@ static FailureOr<unsigned> findVectorElement(Operation *op, Type type,
   auto vec = type.dyn_cast<FVectorType>();
   if (!vec) {
     op->emitError("index access '")
-        << index << "' into non-vector type '" << vec << "'";
+        << index << "' into non-vector type '" << type << "'";
     return failure();
   }
   return index;
@@ -77,7 +77,6 @@ static FailureOr<unsigned> findFieldID(AnnoTarget &ref,
     return 0;
 
   auto *op = ref.getOp();
-  auto type = ref.getType();
   auto fieldIdx = 0;
   // The first field for some ops refers to expanded return values.
   if (isa<MemOp>(ref.getOp())) {
@@ -86,6 +85,7 @@ static FailureOr<unsigned> findFieldID(AnnoTarget &ref,
     tokens = tokens.drop_front();
   }
 
+  auto type = ref.getType();
   for (auto token : tokens) {
     if (token.isIndex) {
       auto result = findVectorElement(op, type, token.name);
@@ -221,6 +221,10 @@ Optional<AnnoPathValue> firrtl::resolveEntities(TokenAnnoTarget path,
     auto target = instance.getReferencedModule(symTbl);
     if (component.empty()) {
       ref = OpAnnoTarget(instance.getReferencedModule(symTbl));
+    } else if (component.front().isIndex) {
+      circuit->emitError() << "illegal target '" << path.str()
+                           << "' indexes into an instance";
+      return {};
     } else {
       auto field = component.front().name;
       ref = AnnoTarget();
@@ -251,6 +255,9 @@ Optional<AnnoPathValue> firrtl::resolveEntities(TokenAnnoTarget path,
 /// split a target string into it constituent parts.  This is the primary parser
 /// for targets.
 Optional<TokenAnnoTarget> firrtl::tokenizePath(StringRef origTarget) {
+  // An empty string is not a legal target.
+  if (origTarget.empty())
+    return {};
   StringRef target = origTarget;
   TokenAnnoTarget retval;
   std::tie(retval.circuit, target) = target.split('|');
