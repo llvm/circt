@@ -314,10 +314,42 @@ static void reduceXor(ImplicitLocOpBuilder &builder, Value &into, Value value) {
 /// invalidation, module externalization, and wire stripping
 struct InstanceStubber : public Reduction {
   void beforeReduction(mlir::ModuleOp op) override {
+    erasedInsts.clear();
+    erasedModules.clear();
     symbols.clear();
     nlaRemover.clear();
   }
-  void afterReduction(mlir::ModuleOp op) override { nlaRemover.remove(op); }
+  void afterReduction(mlir::ModuleOp op) override {
+    // Look into deleted modules to find additional instances that are no longer
+    // instantiated anywhere.
+    SmallVector<Operation *> worklist;
+    auto deadInsts = erasedInsts;
+    for (auto *op : erasedModules)
+      worklist.push_back(op);
+    while (!worklist.empty()) {
+      auto *op = worklist.pop_back_val();
+      auto *tableOp = SymbolTable::getNearestSymbolTable(op);
+      op->walk([&](firrtl::InstanceOp instOp) {
+        auto moduleOp =
+            instOp.getReferencedModule(symbols.getSymbolTable(tableOp));
+        deadInsts.insert(instOp);
+        if (llvm::all_of(
+                symbols.getSymbolUserMap(tableOp).getUsers(moduleOp),
+                [&](Operation *user) { return deadInsts.contains(user); })) {
+          LLVM_DEBUG(llvm::dbgs() << "- Removing transitively unused module `"
+                                  << moduleOp.moduleName() << "`\n");
+          erasedModules.insert(moduleOp);
+          worklist.push_back(moduleOp);
+        }
+      });
+    }
+
+    for (auto *op : erasedInsts)
+      op->erase();
+    for (auto *op : erasedModules)
+      op->erase();
+    nlaRemover.remove(op);
+  }
 
   bool match(Operation *op) override { return isa<firrtl::InstanceOp>(op); }
 
@@ -340,11 +372,13 @@ struct InstanceStubber : public Reduction {
     auto tableOp = SymbolTable::getNearestSymbolTable(instOp);
     auto moduleOp = instOp.getReferencedModule(symbols.getSymbolTable(tableOp));
     nlaRemover.markNLAsInOperation(instOp);
-    instOp->erase();
-    if (symbols.getSymbolUserMap(tableOp).useEmpty(moduleOp)) {
+    erasedInsts.insert(instOp);
+    if (llvm::all_of(
+            symbols.getSymbolUserMap(tableOp).getUsers(moduleOp),
+            [&](Operation *user) { return erasedInsts.contains(user); })) {
       LLVM_DEBUG(llvm::dbgs() << "- Removing now unused module `"
                               << moduleOp.moduleName() << "`\n");
-      moduleOp->erase();
+      erasedModules.insert(moduleOp);
     }
     return success();
   }
@@ -354,6 +388,8 @@ struct InstanceStubber : public Reduction {
 
   SymbolCache symbols;
   NLARemover nlaRemover;
+  llvm::DenseSet<Operation *> erasedInsts;
+  llvm::DenseSet<Operation *> erasedModules;
 };
 
 /// A sample reduction pattern that maps `firrtl.mem` to a set of invalidated
