@@ -88,6 +88,43 @@ def ExportSplitVerilog : Pass<"export-split-verilog", "mlir::ModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
+// ExportSystemC and ExportSplitSystemC
+//===----------------------------------------------------------------------===//
+
+def ExportSystemC : Pass<"export-systemc", "mlir::ModuleOp"> {
+  let summary = "Emit the IR to a SystemC C++ file";
+  let description = [{
+    This pass generates SystemC code for the current design. It outputs
+    the entire design to a single output stream.
+  }];
+
+  let constructor = "createExportSystemCPass()";
+  let dependentDialects = [
+    "circt::comb::CombDialect", "circt::hw::HWDialect",
+    "circt::systemc::SystemCDialect"
+  ];
+}
+
+def ExportSplitSystemC : Pass<"export-split-systemc", "mlir::ModuleOp"> {
+  let summary = "Emit the IR to a directory of SystemC C++ files";
+  let description = [{
+    This pass generates SystemC code for the current design. It creates a new
+    header file for every module in the design.
+  }];
+
+  let constructor = "createExportSplitSystemCPass()";
+  let dependentDialects = [
+    "circt::comb::CombDialect", "circt::hw::HWDialect",
+    "circt::systemc::SystemCDialect"
+  ];
+
+  let options = [
+    Option<"directoryName", "dir-name", "std::string",
+            "", "Directory to emit into">
+   ];
+}
+
+//===----------------------------------------------------------------------===//
 // SCFToCalyx
 //===----------------------------------------------------------------------===//
 
