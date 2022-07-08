@@ -3923,7 +3923,7 @@ void ModuleEmitter::emitHWExternModule(HWModuleExternOp module) {
 
 void ModuleEmitter::emitHWGeneratedModule(HWModuleGeneratedOp module) {
   auto verilogName = module.getVerilogModuleNameAttr();
-  os << "// external generated module " << verilogName.getValue() << "\n\n";
+  os << "// external module " << verilogName.getValue() << "\n\n";
 }
 
 // This may be called in the top-level, not just in an hw.module.  Thus we can't
@@ -4420,7 +4420,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
           else
             rootFile.ops.push_back(info);
         })
-        .Case<HWModuleExternOp>([&](HWModuleExternOp op) {
+        .Case<HWModuleExternOp, HWModuleGeneratedOp>([&](auto op) {
           // Build the IR cache.
           symbolCache.addDefinition(op.getNameAttr(), op);
           collectPorts(op);
