@@ -37,7 +37,8 @@ using namespace circt;
 // Options
 //===----------------------------------------------------------------------===//
 
-static cl::OptionCategory mainCategory("circt-reduce Options");
+static cl::OptionCategory mainCategory("Reduction Options");
+static cl::OptionCategory granularityCategory("Granularity Control Options");
 
 static cl::opt<std::string> inputFilename(cl::Positional,
                                           cl::desc("<input file>"),
@@ -85,6 +86,30 @@ static cl::list<std::string>
 static cl::opt<bool> verbose("v", cl::init(true),
                              cl::desc("Print reduction progress to stderr"),
                              cl::cat(mainCategory));
+
+static cl::opt<unsigned>
+    maxChunks("max-chunks", cl::init(0),
+              cl::desc("Stop increasing granularity beyond this number of "
+                       "chunks (granularity upper bound)"),
+              cl::cat(granularityCategory));
+
+static cl::opt<unsigned> minChunks(
+    "min-chunks", cl::init(0),
+    cl::desc(
+        "Initial granularity in number of chunks (granularity lower bound)"),
+    cl::cat(granularityCategory));
+
+static cl::opt<unsigned>
+    maxChunkSize("max-chunk-size", cl::init(0),
+                 cl::desc("Initial granularity in number of ops per chunk "
+                          "(granularity lower bound)"),
+                 cl::cat(granularityCategory));
+
+static cl::opt<unsigned>
+    minChunkSize("min-chunk-size", cl::init(0),
+                 cl::desc("Stop increasing granularity below this number of "
+                          "ops per chunk (granularity upper bound)"),
+                 cl::cat(granularityCategory));
 
 //===----------------------------------------------------------------------===//
 // Tool Implementation
@@ -191,6 +216,11 @@ static LogicalResult execute(MLIRContext &context) {
     bool allDidReduce = true;
 
     while (rangeLength > 0) {
+      // Limit the number of ops processed at once to the value requested by the
+      // user.
+      if (maxChunkSize > 0)
+        rangeLength = std::min<size_t>(rangeLength, maxChunkSize);
+
       // Apply the pattern to the subset of operations selected by `rangeBase`
       // and `rangeLength`.
       size_t opIdx = 0;
@@ -212,6 +242,12 @@ static LogicalResult execute(MLIRContext &context) {
         });
         break;
       }
+
+      // Reduce the chunk size to achieve the minimum number of chunks requested
+      // by the user.
+      if (minChunks > 0)
+        rangeLength = std::min<size_t>(rangeLength,
+                                       std::max<size_t>(opIdx / minChunks, 1));
 
       // Show some progress indication.
       VERBOSE({
@@ -281,6 +317,18 @@ static LogicalResult execute(MLIRContext &context) {
         } else {
           rangeLength = std::min(rangeLength, opIdx) / 2;
           rangeBase = 0;
+
+          // Stop increasing granularity if the number of ops processed at once
+          // has fallen below the lower limit set by the user.
+          if (rangeLength < minChunkSize)
+            rangeLength = 0;
+
+          // Stop increasing granularity if the number of chunks has increased
+          // beyond the upper limit set by the user.
+          if (rangeLength > 0 && maxChunks > 0 &&
+              (opIdx + rangeLength - 1) / rangeLength > maxChunks)
+            rangeLength = 0;
+
           if (rangeLength > 0) {
             VERBOSE({
               clearSummary();
@@ -326,13 +374,12 @@ static LogicalResult execute(MLIRContext &context) {
 int main(int argc, char **argv) {
   llvm::InitLLVM y(argc, argv);
 
-  // Hide default LLVM options, other than for this tool.
-  // MLIR options are added below.
-  cl::HideUnrelatedOptions(mainCategory);
-
-  // Parse the command line options provided by the user.
+  // Register and hide default LLVM options, other than for this tool.
   registerMLIRContextCLOptions();
   registerAsmPrinterCLOptions();
+  cl::HideUnrelatedOptions({&mainCategory, &granularityCategory});
+
+  // Parse the command line options provided by the user.
   cl::ParseCommandLineOptions(argc, argv, "CIRCT test case reduction tool\n");
 
   // Register all the dialects and create a context to work wtih.
