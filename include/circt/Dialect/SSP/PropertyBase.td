@@ -17,6 +17,12 @@
 include "mlir/IR/AttrTypeBase.td"
 include "mlir/IR/OpBase.td"
 
+// Base class for MLIR attributes representing properties (in the scheduling
+// infra's sense) on the SSP dialect's ops. The general idea here is that all
+// property attributes inherit from one of the subclasses below, so that their
+// implementations gain `setInProblem` and `getFromProblem` methods which then
+// directly call the corresponding getter/setters on the concrete problem
+// class.
 class PropertyBase<Dialect dialect,
                    string name, string type,
                    string problem,
@@ -27,9 +33,7 @@ class PropertyBase<Dialect dialect,
   string propertyType = type;
   string problemClassName = problem;
 
-  let description = [{
-    Models the "}] # propertyName # [{" property in }] # problemClassName # [{.
-  }];
+  let summary = "Models the `" # propertyName # "` property in `" # problemClassName # "`.";
 
   let parameters = (ins propertyType:$value);
   let mnemonic = propertyName;

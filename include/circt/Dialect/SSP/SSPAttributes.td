@@ -10,7 +10,12 @@
 //
 //===----------------------------------------------------------------------===//
 
+//===----------------------------------------------------------------------===//
+// Dialect attributes
+//===----------------------------------------------------------------------===//
+
 def DependenceAttr : AttrDef<SSPDialect, "Dependence"> {
+  let summary = "Internal representation of dependence edges.";
   let description = [{
     An attribute to uniformly model def-use and auxiliary
     [dependences](https://circt.llvm.org/docs/Scheduling/#components) as well as
@@ -42,6 +47,8 @@ include "PropertyBase.td"
 def LinkedOperatorType : OperationProperty<SSPDialect,
   "LinkedOperatorType", "::mlir::FlatSymbolRefAttr", "::circt::scheduling::Problem"> {
   let mnemonic = "opr";
+  // Need to override the default implementation because to (un)wrap the
+  // StringAttr from/for the symbol reference
   let extraClassDeclaration = [{
     void setInProblem(}] # problemClassName # [{ &prob, ::mlir::Operation *op) {
       prob.set}] # propertyName # [{(op, getValue().getLeafReference());

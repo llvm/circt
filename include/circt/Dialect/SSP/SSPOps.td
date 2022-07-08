@@ -20,8 +20,30 @@ class SSPOp<string mnemonic, list<Trait> traits = []> :
 def InstanceOp : SSPOp<"instance",
     [IsolatedFromAbove, SymbolTable, NoRegionArguments, OpAsmOpInterface]
     # GraphRegionNoTerminator.traits> {
-  let summary = "Instance of a static scheduling problem";
-  let description = [{ TODO }];
+  let summary = "Instance of a static scheduling problem.";
+  let description = [{
+    This operation represents an instance of a static scheduling problem. The
+    dependence graph is comprised of `ssp.OperationOp`s (vertices) and a
+    combination of MLIR value uses and symbol references (edges). The
+    characteristics of the target architecture/IR (onto which the source graph
+    is scheduled) are encoded by `ssp.OperatorTypeOp`s. The instance and its
+    components can carry properties, i.e. special MLIR attributes inheriting
+    from the TableGen classes in `PropertyBase.td`. The `ssp` dialect provides
+    attribute definitions (and short-form pretty-printing) for CIRCT's built-in
+    scheduling problems.
+    
+    **Example**
+    ```mlir
+    ssp.instance "canis14_fig2" of "ModuloProblem" [II<3>] {
+      operator_type @MemPort [latency<1>, limit<1>]
+      operator_type @Add [latency<1>]
+      %0 = operation<@MemPort> @load_A(@store_A [dist<1>]) [t<2>]
+      %1 = operation<@MemPort> @load_B() [t<0>]
+      %2 = operation<@Add> @add(%0, %1) [t<3>]
+      operation<@MemPort> @store_A(%2) [t<4>]
+    }
+    ```
+  }];
 
   let arguments = (ins StrAttr:$instanceName, StrAttr:$problemName, OptionalAttr<ArrayAttr>:$properties);
   let regions = (region SizedRegion<1>: $body);
@@ -48,8 +70,16 @@ def InstanceOp : SSPOp<"instance",
 
 def OperatorTypeOp : SSPOp<"operator_type",
     [Symbol, HasParent<"InstanceOp">]> {
-  let summary = "Abstraction of the target architecture";
-  let description = [{ TODO }];
+  let summary = "Abstraction of the target architecture/IR.";
+  let description = [{
+    This operation represents an operator type, which can be augmented with a
+    set of problem-specific properties, and is identified through a unique name.
+
+    **Example**
+    ```mlir
+    operator_type @MemPort [latency<1>, limit<1>]
+    ```
+  }];
 
   let arguments = (ins SymbolNameAttr:$sym_name, OptionalAttr<ArrayAttr>:$properties);
   let assemblyFormat = "$sym_name custom<Properties>($properties) attr-dict";
@@ -58,8 +88,39 @@ def OperatorTypeOp : SSPOp<"operator_type",
 def OperationOp : SSPOp<"operation",
     [Symbol, HasParent<"InstanceOp">,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
-  let summary = "Vertex in the dependence graph";
-  let description = [{ TODO }];
+  let summary = "Vertex and incoming edges in the dependence graph.";
+  let description = [{
+    This MLIR operation represents an operation (in the terminology of CIRCT's
+    scheduling infra) in a scheduling problem, or in other words, a vertex in
+    the surrounding instance's dependence graph. In addition, it also encodes
+    the operation's incoming dependences. In order to faithfully reproduce the
+    internal modeling in the scheduling infrastructure, these dependence edges
+    are either encoded as MLIR operands (def-use dependences) or symbol
+    references (auxiliary dependences). To that end, `ssp.OperationOp`s can
+    optionally be named, and accept/produce an arbitrary number of
+    operands/results. The operation and the incoming dependences can carry
+    properties.
+
+    The `linkedOperatorType` property in the root `Problem` class is central to
+    the problem models, because it links operations to their properties in the
+    target IR. Therefore, the referenced operator type symbol is parsed/printed
+    right after the operation keyword in the custom assembly syntax.
+
+    **Examples**
+    ```mlir
+    // unnamed, only def-use dependences
+    %2 = operation<@Add>(%0, %1)
+
+    // unnamed, multiple results
+    %5:2 = operation<@Div>(%3, %4) // multiple results
+    
+    // named, mix of def-use and auxiliary dependences
+    operation<@MemPort> @store_A(%2, @store_B, @load_A)
+    
+    // dependence properties
+    operation<@Barrier>(%2 [dist<1>], %5#1, @store_A [dist<3>])
+    ```
+  }];
 
   let arguments = (ins Variadic<NoneType>:$operands,
                        OptionalAttr<SymbolNameAttr>:$sym_name,

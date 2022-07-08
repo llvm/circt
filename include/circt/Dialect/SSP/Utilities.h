@@ -32,6 +32,10 @@ namespace ssp {
 using OperatorType = scheduling::Problem::OperatorType;
 using Dependence = scheduling::Problem::Dependence;
 
+//===----------------------------------------------------------------------===//
+// ssp.InstanceOp -> circt::scheduling::Problem (or subclasses)
+//===----------------------------------------------------------------------===//
+
 template <typename ProblemT>
 void loadOperationProperties(ProblemT &, Operation *, ArrayAttr) {}
 template <typename ProblemT, typename OperationPropertyT,
@@ -88,6 +92,22 @@ void loadInstanceProperties(ProblemT &prob, ArrayAttr props) {
   }
 }
 
+/// Construct an instance of \p ProblemT from \p instOp, and attempt to set
+/// properties from the given attribute classes. The attribute tuples are used
+/// solely for grouping/inferring the template parameter packs. The tuple
+/// elements may therefore be unitialized objects. The template instantiation
+/// fails if properties are incompatible with \p ProblemT.
+///
+/// Example: To load an instance of the `circt::scheduling::CyclicProblem` with
+/// all its input and solution properties, call this as follows:
+///
+/// ```
+/// loadProblem<CyclicProblem>(instOp,
+///   std::make_tuple(LinkedOperatorTypeAttr(), StartTimeAttr()),
+///   std::make_tuple(LatencyAttr()),
+///   std::make_tuple(DistanceAttr()),
+///   std::make_tuple(InitiationIntervalAttr()));
+/// ```
 template <typename ProblemT, typename... OperationPropertyTs,
           typename... OperatorTypePropertyTs, typename... DependencePropertyTs,
           typename... InstancePropertyTs>
@@ -142,6 +162,10 @@ ProblemT loadProblem(InstanceOp instOp,
   return prob;
 }
 
+//===----------------------------------------------------------------------===//
+// circt::scheduling::Problem (or subclasses) -> ssp.InstanceOp
+//===----------------------------------------------------------------------===//
+
 template <typename ProblemT, typename... OperationPropertyTs>
 ArrayAttr saveOperationProperties(ProblemT &prob, Operation *op,
                                   ImplicitLocOpBuilder &b) {
@@ -185,6 +209,32 @@ ArrayAttr saveInstanceProperties(ProblemT &prob, ImplicitLocOpBuilder &b) {
   return props.empty() ? ArrayAttr() : b.getArrayAttr(props);
 }
 
+/// Construct an `InstanceOp` from a given \p ProblemT instance, and
+/// create/attach attributes of the given classes for the corresponding
+/// properties on the scheduling problem. The returned `InstanceOp` uses the
+/// given \p instanceName and \p problemName. `OperationOp`s are created
+/// unnamed, unless they represent the source operation in an auxiliary
+/// dependence, or the \p operationNameFn callback returns a non-null
+/// `StringAttr` with the desired name. The attribute tuples are used
+/// solely for grouping/inferring the template parameter packs. The tuple
+/// elements may therefore be unitialized objects. The template instantiation
+/// fails if properties are incompatible with \p ProblemT.
+///
+/// Example: To save an instance of the `circt::scheduling::CyclicProblem` with
+/// all its input and solution properties, and reyling on default operation
+/// names, call this as follows:
+///
+/// ```
+/// saveProblem<CyclicProblem>(prob,
+///   builder.getStringAttr("my_instance"),
+///   builder.getStringAttr("CyclicProblem"),
+///   [](Operation *) { return StringAttr(); },
+///   std::make_tuple(LinkedOperatorTypeAttr(), StartTimeAttr()),
+///   std::make_tuple(LatencyAttr()),
+///   std::make_tuple(DistanceAttr()),
+///   std::make_tuple(InitiationIntervalAttr()),
+///   builder);
+/// ```
 template <typename ProblemT, typename... OperationPropertyTs,
           typename... OperatorTypePropertyTs, typename... DependencePropertyTs,
           typename... InstancePropertyTs>
@@ -279,9 +329,24 @@ saveProblem(ProblemT &prob, StringAttr instanceName, StringAttr problemName,
   return instOp;
 }
 
+/// Dummy struct to query a problem's default properties (i.e. all input and
+/// solution properties). Specializations shall provide the following
+/// definitions:
+///
+/// ```
+/// static constexpr auto operationProperties = std::make_tuple(...);
+/// static constexpr auto operatorTypeProperties = std::make_tuple(...);
+/// static constexpr auto dependenceProperties = std::make_tuple(...);
+/// static constexpr auto instanceProperties = std::make_tuple(...);
+/// ```
 template <typename ProblemT>
 struct Default {};
 
+/// Construct an instance of \p ProblemT from \p instOp, and attempt to set all
+/// of the problem class' properties.
+///
+/// Relies on the specialization of template `circt::ssp::Default` for \p
+/// ProblemT.
 template <typename ProblemT>
 ProblemT loadProblem(InstanceOp instOp) {
   return loadProblem<ProblemT>(instOp, Default<ProblemT>::operationProperties,
@@ -290,6 +355,11 @@ ProblemT loadProblem(InstanceOp instOp) {
                                Default<ProblemT>::instanceProperties);
 }
 
+/// Construct an `InstanceOp` from a given \p ProblemT instance, and
+/// create/attach attributes for all of the problem class' properties.
+///
+/// Relies on the specialization of template `circt::ssp::Default` for \p
+/// ProblemT.
 template <typename ProblemT>
 InstanceOp saveProblem(ProblemT &prob, StringAttr instanceName,
                        StringAttr problemName,
