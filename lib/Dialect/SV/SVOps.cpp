@@ -1783,6 +1783,12 @@ LogicalResult GenerateCaseOp::verify() {
   return success();
 }
 
+ModportStructAttr ModportStructAttr::get(MLIRContext *context,
+                                         ModportDirection direction,
+                                         FlatSymbolRefAttr signal) {
+  return get(context, ModportDirectionAttr::get(context, direction), signal);
+}
+
 //===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
