@@ -15,11 +15,9 @@
 #include "circt/Dialect/ESI/ESITypes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
-#include "circt/Dialect/MSFT/MSFTPasses.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Support/BackedgeBuilder.h"
 #include "circt/Support/LLVM.h"
-
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -1304,161 +1302,6 @@ void ESItoHWPass::runOnOperation() {
     signalPassFailure();
 }
 
-//===----------------------------------------------------------------------===//
-// Wire up services pass.
-//===----------------------------------------------------------------------===//
-
-namespace {
-/// Run all the physical lowerings.
-struct ESIConnectServicesPass
-    : public ESIConnectServicesBase<ESIConnectServicesPass>,
-      msft::PassCommon {
-  void runOnOperation() override;
-
-  LogicalResult process(hw::HWModuleLike);
-};
-} // anonymous namespace
-
-void ESIConnectServicesPass::runOnOperation() {
-  ModuleOp outerMod = getOperation();
-  topLevelSyms.addDefinitions(outerMod);
-  if (failed(verifyInstances(outerMod))) {
-    signalPassFailure();
-    return;
-  }
-
-  // Get a partially-ordered list of modules based on the instantiation DAG.
-  SmallVector<hw::HWModuleLike, 64> sortedMods;
-  getAndSortModules(outerMod, sortedMods);
-
-  for (auto mod : sortedMods)
-    if (failed(process(mod))) {
-      signalPassFailure();
-      return;
-    }
-}
-
-LogicalResult ESIConnectServicesPass::process(hw::HWModuleLike mod) {
-  auto ctxt = mod.getContext();
-  Block &modBlock = mod->getRegion(0).front();
-  Operation *modTerminator = modBlock.getTerminator();
-
-  unsigned inputCounter = getModuleNumInputs(mod);
-  SmallVector<std::pair<unsigned, hw::PortInfo>> newInputs;
-  SmallVector<RequestToClientConnection, 4> toClientReqs;
-
-  unsigned outputCounter = getModuleNumOutputs(mod);
-  SmallVector<std::pair<unsigned, hw::PortInfo>> newOutputs;
-  SmallVector<RequestToServerConnection, 4> toServerReqs;
-
-  auto getPortName = [](ArrayAttr namePath) {
-    std::string portName;
-    llvm::raw_string_ostream nameOS(portName);
-    llvm::interleave(
-        namePath.getValue(), nameOS,
-        [&](Attribute attr) { nameOS << attr.cast<StringAttr>().getValue(); },
-        ".");
-    return nameOS.str();
-  };
-
-  mod.walk([&](Operation *op) {
-    if (auto toClient = dyn_cast<RequestToClientConnection>(op)) {
-      newInputs.push_back(std::make_pair(
-          inputCounter,
-          hw::PortInfo{
-              StringAttr::get(ctxt, getPortName(toClient.clientNamePath())),
-              hw::PortDirection::INPUT, toClient.getType(), inputCounter}));
-      ++inputCounter;
-      toClientReqs.push_back(toClient);
-      toClient.replaceAllUsesWith(modBlock.addArgument(
-          toClient.receiving().getType(), toClient.getLoc()));
-    } else if (auto toServer = dyn_cast<RequestToServerConnection>(op)) {
-      newOutputs.push_back(std::make_pair(
-          outputCounter,
-          hw::PortInfo{
-              StringAttr::get(ctxt, getPortName(toServer.clientNamePath())),
-              hw::PortDirection::OUTPUT, toServer.sending().getType(),
-              outputCounter}));
-      ++outputCounter;
-      toServerReqs.push_back(toServer);
-      modTerminator->insertOperands(modTerminator->getNumOperands(),
-                                    toServer.sending());
-    }
-  });
-
-  if (toClientReqs.empty())
-    return success();
-
-  auto prependNamePart = [&](ArrayAttr namePath, StringAttr part) {
-    SmallVector<Attribute, 8> newNamePath;
-    newNamePath.push_back(part);
-    newNamePath.append(namePath.begin(), namePath.end());
-    return ArrayAttr::get(namePath.getContext(), newNamePath);
-  };
-
-  SmallVector<hw::HWInstanceLike, 1> newModuleInstantiations;
-  for (auto inst : moduleInstantiations[mod]) {
-    OpBuilder b(inst);
-
-    auto hwInst = dyn_cast<hw::InstanceOp>(inst.getOperation());
-    if (!hwInst)
-      return inst.emitError(
-          "ESI service connections currently only support hw.instances");
-
-    SmallVector<Attribute, 16> newArgNames(hwInst.argNames().begin(),
-                                           hwInst.argNames().end());
-    SmallVector<Value, 16> newOperands(hwInst.getOperands().begin(),
-                                       hwInst.getOperands().end());
-    SmallVector<Type, 16> newResultTypes(hwInst.getResultTypes().begin(),
-                                         hwInst.getResultTypes().end());
-    SmallVector<Attribute, 16> newResultNames(hwInst.resultNames().begin(),
-                                              hwInst.resultNames().end());
-
-    for (auto [toClient, newPort] : llvm::zip(toClientReqs, newInputs)) {
-      auto instToClient = cast<RequestToClientConnection>(b.clone(*toClient));
-      instToClient.clientNamePathAttr(prependNamePart(
-          toClient.clientNamePath(), hwInst.instanceNameAttr()));
-      newArgNames.push_back(newPort.second.name);
-      newOperands.push_back(instToClient.receiving());
-    }
-
-    for (auto newPort : newOutputs) {
-      newResultNames.push_back(newPort.second.name);
-      newResultTypes.push_back(newPort.second.type);
-    }
-
-    auto newHWInst = b.create<hw::InstanceOp>(
-        hwInst.getLoc(), newResultTypes, hwInst.instanceNameAttr(),
-        hwInst.moduleNameAttr(), newOperands, b.getArrayAttr(newArgNames),
-        b.getArrayAttr(newResultNames), hwInst.parametersAttr(),
-        hwInst.inner_symAttr());
-    newHWInst->setDialectAttrs(hwInst->getDialectAttrs());
-    newModuleInstantiations.push_back(newHWInst);
-
-    for (auto [newV, oldV] :
-         llvm::zip(newHWInst.getResults(), hwInst.getResults()))
-      oldV.replaceAllUsesWith(newV);
-
-    for (auto [toServer, newPort] : llvm::zip(toServerReqs, newOutputs)) {
-      auto instToServer = cast<RequestToServerConnection>(b.clone(*toServer));
-      instToServer.clientNamePathAttr(prependNamePart(
-          toServer.clientNamePath(), hwInst.instanceNameAttr()));
-      instToServer->setOperand(0, newHWInst->getResult(newPort.first));
-    }
-  }
-
-  moduleInstantiations[mod].swap(newModuleInstantiations);
-  for (auto oldInst : newModuleInstantiations)
-    oldInst->erase();
-
-  hw::modifyModulePorts(mod, newInputs, newOutputs, {}, {});
-  for (auto toClient : toClientReqs)
-    toClient.erase();
-  for (auto toServer : toServerReqs)
-    toServer.erase();
-  return success();
-}
-
 namespace circt {
 namespace esi {
 std::unique_ptr<OperationPass<ModuleOp>> createESIPhysicalLoweringPass() {
@@ -1470,9 +1313,7 @@ std::unique_ptr<OperationPass<ModuleOp>> createESIPortLoweringPass() {
 std::unique_ptr<OperationPass<ModuleOp>> createESItoHWPass() {
   return std::make_unique<ESItoHWPass>();
 }
-std::unique_ptr<OperationPass<ModuleOp>> createESIConnectServicesPass() {
-  return std::make_unique<ESIConnectServicesPass>();
-}
+
 } // namespace esi
 } // namespace circt
 

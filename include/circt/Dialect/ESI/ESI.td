@@ -16,7 +16,6 @@
 
 include "mlir/IR/AttrTypeBase.td"
 include "mlir/IR/OpBase.td"
-include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
 def ESI_Dialect : Dialect {
@@ -50,7 +49,6 @@ class ESI_Physical_Op<string mnemonic, list<Trait> traits = []> :
 include "circt/Dialect/ESI/ESIPorts.td"
 include "circt/Dialect/ESI/ESITypes.td"
 include "circt/Dialect/ESI/ESIOps.td"
-include "circt/Dialect/ESI/ESIServices.td"
 include "circt/Dialect/ESI/ESIPasses.td"
 
 #endif // ESI_TD
