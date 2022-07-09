@@ -1591,8 +1591,7 @@ void GrandCentralPass::runOnOperation() {
       ++numAnnosRemoved;
       return true;
     }
-    if (anno.isClass(
-            "sifive.enterprise.grandcentral.PrefixInterfacesAnnotation")) {
+    if (anno.isClass(prefixInterfacesAnnoClass)) {
       if (!interfacePrefix.empty()) {
         emitCircuitError("more than one 'PrefixInterfacesAnnotation' was "
                          "found, but zero or one may be provided");

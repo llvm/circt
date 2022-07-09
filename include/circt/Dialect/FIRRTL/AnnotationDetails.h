@@ -81,6 +81,8 @@ constexpr const char *companionAnnoClass =
     "sifive.enterprise.grandcentral.ViewAnnotation.companion"; // not in SFC
 constexpr const char *parentAnnoClass =
     "sifive.enterprise.grandcentral.ViewAnnotation.parent"; // not in SFC
+constexpr const char *prefixInterfacesAnnoClass =
+    "sifive.enterprise.grandcentral.PrefixInterfacesAnnotation";
 constexpr const char *augmentedGroundTypeClass =
     "sifive.enterprise.grandcentral.AugmentedGroundType"; // not an annotation
 constexpr const char *dataTapsClass =
