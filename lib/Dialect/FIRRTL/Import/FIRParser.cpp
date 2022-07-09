@@ -3631,16 +3631,20 @@ ParseResult FIRCircuitParser::parseCircuit(
   // first to place any annotations from an annotation file *after* the inline
   // annotations.  While arbitrary, this makes the annotation file have
   // "append" semantics.
+  SmallVector<Attribute> annos;
   if (!inlineAnnotations.empty())
-    if (importAnnotations(circuit, inlineAnnotationsLoc, circuitTarget,
-                          inlineAnnotations, nlaNumber))
+    if (importAnnotationsRaw(inlineAnnotationsLoc, circuitTarget,
+                             inlineAnnotations, annos))
       return failure();
 
   // Deal with the annotation file if one was specified
   for (auto *annotationsBuf : annotationsBufs)
-    if (importAnnotations(circuit, info.getFIRLoc(), circuitTarget,
-                          annotationsBuf->getBuffer(), nlaNumber))
+    if (importAnnotationsRaw(inlineAnnotationsLoc, circuitTarget,
+                             annotationsBuf->getBuffer(), annos))
       return failure();
+
+  if (!annos.empty())
+    getConstants().annotationMap[rawAnnotations] = b.getArrayAttr(annos);
 
   // Process OMIR files as annotations with a class of
   // "freechips.rocketchip.objectmodel.OMNode"
