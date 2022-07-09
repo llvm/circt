@@ -49,11 +49,18 @@ void LowerBitIndexPass::runOnOperation() {
   for (auto var : variables) {
     auto *defn = var.getDefiningOp();
     auto mod = getOperation();
-    ImplicitLocOpBuilder builder(mod->getLoc(), mod.getContext());
+    llvm::StringRef name = "port.bitindex.wrapper";
+    ImplicitLocOpBuilder builder(var.getLoc(), var.getContext());
     builder.setInsertionPointToStart(mod.getBody());
     if (defn) {
+      name = "local.bitindex.wrapper";
       builder.setLoc(defn->getLoc());
       builder.setInsertionPointAfter(defn);
+      if (auto wireOp = dyn_cast<WireOp>(defn)) {
+        name = wireOp.name();
+      } else if (auto regOp = dyn_cast<RegOp>(defn)) {
+        name = regOp.name();
+      }
     }
     if (auto i = var.getType().dyn_cast<IntType>()) {
       if (!i.hasWidth()) {
@@ -61,7 +68,7 @@ void LowerBitIndexPass::runOnOperation() {
         return;
       }
       auto w = i.getWidth().getValue();
-      auto wire = builder.create<WireOp>(FVectorType::get(UIntType::get(var.getContext(), 1), w));
+      auto wire = builder.create<WireOp>(FVectorType::get(UIntType::get(var.getContext(), 1), w), name);
 
       for (auto &use : var.getUses()) {
         auto *op = use.getOwner();
