@@ -267,6 +267,13 @@ static LogicalResult applyDontTouch(const AnnoPathValue &target,
   return success();
 }
 
+/// Just drop the annotation.  This is intended for Annotations which are known,
+/// but can be safely ignored.
+static LogicalResult drop(const AnnoPathValue &target, DictionaryAttr anno,
+                          ApplyState &state) {
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // Driving table
 //===----------------------------------------------------------------------===//
@@ -279,6 +286,22 @@ struct AnnoRecord {
                                    ApplyState &)>
       applier;
 };
+
+/// Resolution and application of a "firrtl.annotations.NoTargetAnnotation".
+/// This should be used for any Annotation which does not apply to anything in
+/// the FIRRTL Circuit, i.e., an Annotation which has no target.  Historically,
+/// NoTargetAnnotations were used to control the Scala FIRRTL Compiler (SFC) or
+/// its passes, e.g., to set the output directory or to turn on a pass.
+/// Examplesof these in the SFC are "firrtl.options.TargetDirAnnotation" to set
+/// the output directory or "firrtl.stage.RunFIRRTLTransformAnnotation" to
+/// casuse the SFC to schedule a specified pass.  Instead of leaving these
+/// floating or attaching them to the top-level MLIR module (which is a purer
+/// interpretation of "no target"), we choose to attach them to the Circuit even
+/// they do not "apply" to the Circuit.  This gives later passes a common place,
+/// the Circuit, to search for these control Annotations.
+static AnnoRecord NoTargetAnnotation = {noResolve,
+                                        applyWithoutTarget<false, CircuitOp>};
+
 } // end anonymous namespace
 
 static const llvm::StringMap<AnnoRecord> annotationRecords{{
@@ -289,6 +312,8 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
     {"circt.testNT", {noResolve, applyWithoutTarget<>}},
     {"circt.missing", {tryResolve, applyWithoutTarget<>}},
     // Grand Central Views/Interfaces Annotations
+    {extractGrandCentralClass, NoTargetAnnotation},
+    {grandCentralHierarchyFileAnnoClass, NoTargetAnnotation},
     {serializedViewAnnoClass, {noResolve, applyGCTView}},
     {viewAnnoClass, {noResolve, applyGCTView}},
     {companionAnnoClass, {stdResolve, applyWithoutTarget<>}},
@@ -315,8 +340,49 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
     // OMIR Annotations
     {omirAnnoClass, {noResolve, applyOMIR}},
     {omirTrackerAnnoClass, {stdResolve, applyWithoutTarget<true>}},
+    {omirFileAnnoClass, NoTargetAnnotation},
     // Miscellaneous Annotations
-    {dontTouchAnnoClass, {stdResolve, applyDontTouch}}
+    {dontTouchAnnoClass, {stdResolve, applyDontTouch}},
+    {prefixModulesAnnoClass,
+     {stdResolve,
+      applyWithoutTarget<true, FModuleOp, FExtModuleOp, InstanceOp>}},
+    {dutAnnoClass, {stdResolve, applyWithoutTarget<false, FModuleOp>}},
+    {extractSeqMemsAnnoClass, NoTargetAnnotation},
+    {injectDUTHierarchyAnnoClass, NoTargetAnnotation},
+    {convertMemToRegOfVecAnnoClass, NoTargetAnnotation},
+    {sitestBlackBoxAnnoClass, NoTargetAnnotation},
+    {enumComponentAnnoClass, {noResolve, drop}},
+    {enumDefAnnoClass, {noResolve, drop}},
+    {enumVecAnnoClass, {noResolve, drop}},
+    {forceNameAnnoClass,
+     {stdResolve, applyWithoutTarget<true, FModuleOp, FExtModuleOp>}},
+    {flattenAnnoClass, {stdResolve, applyWithoutTarget<false, FModuleOp>}},
+    {inlineAnnoClass, {stdResolve, applyWithoutTarget<false, FModuleOp>}},
+    {noDedupAnnoClass,
+     {stdResolve, applyWithoutTarget<false, FModuleOp, FExtModuleOp>}},
+    {blackBoxInlineAnnoClass,
+     {stdResolve, applyWithoutTarget<false, FExtModuleOp>}},
+    {dontObfuscateModuleAnnoClass,
+     {stdResolve, applyWithoutTarget<false, FModuleOp>}},
+    {verifBlackBoxAnnoClass,
+     {stdResolve, applyWithoutTarget<false, FExtModuleOp>}},
+    {elaborationArtefactsDirectoryAnnoClass, NoTargetAnnotation},
+    {subCircuitsTargetDirectoryAnnoClass, NoTargetAnnotation},
+    {retimeModulesFileAnnoClass, NoTargetAnnotation},
+    {retimeModuleAnnoClass,
+     {stdResolve, applyWithoutTarget<false, FModuleOp, FExtModuleOp>}},
+    {metadataDirectoryAttrName, NoTargetAnnotation},
+    {moduleHierAnnoClass, NoTargetAnnotation},
+    {sitestTestHarnessBlackBoxAnnoClass, NoTargetAnnotation},
+    {testBenchDirAnnoClass, NoTargetAnnotation},
+    {testHarnessHierAnnoClass, NoTargetAnnotation},
+    {testHarnessPathAnnoClass, NoTargetAnnotation},
+    {prefixInterfacesAnnoClass, NoTargetAnnotation},
+    {subCircuitDirAnnotation, NoTargetAnnotation},
+    {extractAssertAnnoClass, NoTargetAnnotation},
+    {extractAssumeAnnoClass, NoTargetAnnotation},
+    {extractCoverageAnnoClass, NoTargetAnnotation},
+    {dftTestModeEnableAnnoClass, {stdResolve, applyWithoutTarget<true>}}
 
 }};
 
