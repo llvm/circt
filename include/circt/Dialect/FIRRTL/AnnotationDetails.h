@@ -128,6 +128,12 @@ constexpr const char *testbenchDirAnnoClass =
     "sifive.enterprise.firrtl.TestBenchDirAnnotation";
 constexpr const char *injectDUTHierarchyAnnoClass =
     "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation";
+constexpr const char *dontObfuscateModuleAnnoClass =
+    "sifive.enterprise.firrtl.DontObfuscateModuleAnnotation";
+constexpr const char *elaborationArtefactsDirectoryAnnoClass =
+    "sifive.enterprise.firrtl.ElaborationArtefactsDirectory";
+constexpr const char *subCircuitsTargetDirectoryAnnoClass =
+    "sifive.enterprise.grandcentral.phases.SubCircuitsTargetDirectory";
 
 // MemToRegOfVec Annotations
 constexpr const char *convertMemToRegOfVecAnnoClass =
