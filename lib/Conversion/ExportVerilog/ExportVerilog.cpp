@@ -2121,7 +2121,7 @@ SubExprInfo ExprEmitter::visitSV(LStreamPackOp op) {
   llvm::interleaveComma(op.inputs(), os,
                         [&](Value v) { emitSubExpr(v, LowestPrecedence); });
   os << "}}";
-  return {Unary, IsUnsigned};
+  return {Symbol, IsUnsigned};
 }
 
 SubExprInfo ExprEmitter::visitTypeOp(ConstantOp op) {
