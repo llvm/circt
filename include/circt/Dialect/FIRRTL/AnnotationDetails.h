@@ -30,6 +30,12 @@ constexpr const char *rawAnnotations = "rawAnnotations";
 
 constexpr const char *dontTouchAnnoClass =
     "firrtl.transforms.DontTouchAnnotation";
+constexpr const char *enumComponentAnnoClass =
+    "chisel3.experimental.EnumAnnotations$EnumComponentAnnotation";
+constexpr const char *enumDefAnnoClass =
+    "chisel3.experimental.EnumAnnotations$EnumDefAnnotation";
+constexpr const char *enumVecAnnoClass =
+    "chisel3.experimental.EnumAnnotations$EnumVecAnnotation";
 constexpr const char *forceNameAnnoClass =
     "chisel3.util.experimental.ForceNameAnnotation";
 constexpr const char *flattenAnnoClass = "firrtl.transforms.FlattenAnnotation";
@@ -148,6 +154,10 @@ constexpr const char *elaborationArtefactsDirectoryAnnoClass =
     "sifive.enterprise.firrtl.ElaborationArtefactsDirectory";
 constexpr const char *subCircuitsTargetDirectoryAnnoClass =
     "sifive.enterprise.grandcentral.phases.SubCircuitsTargetDirectory";
+constexpr const char *testHarnessPathAnnoClass =
+    "sifive.enterprise.firrtl.TestHarnessPathAnnotation";
+constexpr const char *subCircuitDirAnnotation =
+    "sifive.enterprise.grandcentral.SubCircuitDirAnnotation";
 
 // MemToRegOfVec Annotations
 constexpr const char *convertMemToRegOfVecAnnoClass =
