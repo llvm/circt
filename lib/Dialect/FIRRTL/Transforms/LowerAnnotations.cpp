@@ -363,14 +363,16 @@ LogicalResult LowerAnnotationsPass::applyAnnotation(DictionaryAttr anno,
   else if (ignoreClasslessAnno)
     annoClassVal = "circt.missing";
   else
-    return state.circuit.emitError("Annotation without a class: ") << anno;
+    return mlir::emitError(state.circuit.getLoc())
+           << "Annotation without a class: " << anno;
 
   // See if we handle the class
   auto *record = getAnnotationHandler(annoClassVal, false);
   if (!record) {
     ++numUnhandled;
     if (!ignoreUnhandledAnno)
-      return state.circuit->emitWarning("Unhandled annotation: ") << anno;
+      return mlir::emitWarning(state.circuit.getLoc())
+             << "Unhandled annotation: " << anno;
 
     // Try again, requesting the fallback handler.
     record = getAnnotationHandler(annoClassVal, ignoreUnhandledAnno);
