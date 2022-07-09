@@ -35,55 +35,69 @@ void LowerBitIndexPass::runOnOperation() {
       llvm::dbgs() << "===- Running LowerBitIndex Pass "
                       "------------------------------------------------===\n");
 
-  SmallVector<BitindexOp> dests;
-  SmallVector<BitindexOp> srcs;
+  DenseSet<Value> variables;
+
   for (auto bitindex : llvm::make_early_inc_range(getOperation().getOps<BitindexOp>())) {
-    for (auto &use : bitindex->getUses()) {
-      auto *op = use.getOwner();
-      if ((isa<ConnectOp>(op) && dyn_cast<ConnectOp>(op).dest() == bitindex) ||
-          (isa<StrictConnectOp>(op) && dyn_cast<StrictConnectOp>(op).dest() == bitindex)) {
-        dests.push_back(bitindex);
-      } else if ((isa<ConnectOp>(op) && dyn_cast<ConnectOp>(op).src() == bitindex) ||
-          (isa<StrictConnectOp>(op) && dyn_cast<StrictConnectOp>(op).src() == bitindex)) {
-        auto bitsOp = OpBuilder(op).create<BitsPrimOp>(
-          op->getLoc(),
-          bitindex.getResult().getType(),
-          bitindex.input(), bitindex.index(), bitindex.index()
-        );
-        use.set(bitsOp);
-        srcs.push_back(bitindex);
-      }
+    if (bitindex->getUses().empty()) {
+      bitindex.erase();
+      continue;
     }
+    variables.insert(bitindex.input());
   }
 
-  for (auto op : dests) {
-    auto *defn = op.input().getDefiningOp();
-    auto mod = op->getParentOfType<FModuleOp>();
+  // make a new wire for each dest-bitindexed variable
+  for (auto var : variables) {
+    auto *defn = var.getDefiningOp();
+    auto mod = getOperation();
     ImplicitLocOpBuilder builder(mod->getLoc(), mod.getContext());
     builder.setInsertionPointToStart(mod.getBody());
     if (defn) {
+      builder.setLoc(defn->getLoc());
       builder.setInsertionPointAfter(defn);
     }
-    if (auto i = op.input().getType().dyn_cast<IntType>()) {
+    if (auto i = var.getType().dyn_cast<IntType>()) {
       if (!i.hasWidth()) {
         signalPassFailure();
         return;
       }
       auto w = i.getWidth().getValue();
-      auto wire = builder.create<WireOp>(FVectorType::get(UIntType::get(op.getContext(), 1), w));
+      auto wire = builder.create<WireOp>(FVectorType::get(UIntType::get(var.getContext(), 1), w));
       Value prev = builder.create<SubindexOp>(wire, 0);
       for (int i = 1; i < w; i++) {
         Value subidx = builder.create<SubindexOp>(wire, i);
         Value cat = builder.create<CatPrimOp>(subidx, prev);
         prev = cat;
       }
-      builder.create<StrictConnectOp>(op.input(), prev);
+
+      for (auto &use : var.getUses()) {
+        auto *op = use.getOwner();
+        if (auto connect = dyn_cast<StrictConnectOp>(op)) {
+          if (var == connect.dest()) {
+            ImplicitLocOpBuilder builder(connect.getLoc(), connect);
+            for (int i = 0; i < w; i++) {
+              Value bitsOp = builder.create<BitsPrimOp>(connect.src(), i, i);
+              Value subidxOp = builder.create<SubindexOp>(wire, i);
+              builder.create<StrictConnectOp>(subidxOp, bitsOp);
+            }
+            connect.erase();
+          }
+        }
+      }
+
+      // connect here after replacing all other connects
+      builder.create<StrictConnectOp>(var, prev);
+
+      for (auto &use : var.getUses()) {
+        auto *op = use.getOwner();
+        if (auto bitindex = dyn_cast<BitindexOp>(op)) {
+          ImplicitLocOpBuilder builder(bitindex.getLoc(), bitindex);
+          Value subidx = builder.create<SubindexOp>(wire, bitindex.index());
+          bitindex.replaceAllUsesWith(subidx);
+          bitindex.erase();
+        }
+      }
     }
   }
-
-  // if (bitindex->getUses().empty()) {
-  //   bitindex->erase();
-  // }
 }
 
 } // end anonymous namespace
