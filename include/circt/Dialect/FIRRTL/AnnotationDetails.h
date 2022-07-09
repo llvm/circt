@@ -60,6 +60,10 @@ constexpr const char *moduleHierAnnoClass =
     "sifive.enterprise.firrtl.ModuleHierarchyAnnotation";
 constexpr const char *testHarnessHierAnnoClass =
     "sifive.enterprise.firrtl.TestHarnessHierarchyAnnotation";
+constexpr const char *retimeModulesFileAnnoClass =
+    "sifive.enterprise.firrtl.RetimeModulesAnnotation";
+constexpr const char *retimeModuleAnnoClass =
+    "freechips.rocketchip.util.RetimeModuleAnnotation";
 static const char *verifBlackBoxAnnoClass =
     "freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation";
 static const char *metadataDirectoryAttrName =
@@ -128,8 +132,14 @@ constexpr const char *testbenchDirAnnoClass =
     "sifive.enterprise.firrtl.TestBenchDirAnnotation";
 constexpr const char *injectDUTHierarchyAnnoClass =
     "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation";
+constexpr const char *sitestBlackBoxAnnoClass =
+    "sifive.enterprise.firrtl.SitestBlackBoxAnnotation";
+constexpr const char *sitestTestHarnessBlackBoxAnnoClass =
+    "sifive.enterprise.firrtl.SitestTestHarnessBlackBoxAnnotation";
 constexpr const char *dontObfuscateModuleAnnoClass =
     "sifive.enterprise.firrtl.DontObfuscateModuleAnnotation";
+constexpr const char *scalaClassAnnoClass =
+    "sifive.enterprise.firrtl.ScalaClassAnnotation";
 constexpr const char *elaborationArtefactsDirectoryAnnoClass =
     "sifive.enterprise.firrtl.ElaborationArtefactsDirectory";
 constexpr const char *subCircuitsTargetDirectoryAnnoClass =
