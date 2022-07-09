@@ -62,12 +62,6 @@ void LowerBitIndexPass::runOnOperation() {
       }
       auto w = i.getWidth().getValue();
       auto wire = builder.create<WireOp>(FVectorType::get(UIntType::get(var.getContext(), 1), w));
-      Value prev = builder.create<SubindexOp>(wire, 0);
-      for (int i = 1; i < w; i++) {
-        Value subidx = builder.create<SubindexOp>(wire, i);
-        Value cat = builder.create<CatPrimOp>(subidx, prev);
-        prev = cat;
-      }
 
       for (auto &use : var.getUses()) {
         auto *op = use.getOwner();
@@ -84,6 +78,12 @@ void LowerBitIndexPass::runOnOperation() {
         }
       }
 
+      Value prev = builder.create<SubindexOp>(wire, 0);
+      for (int i = 1; i < w; i++) {
+        Value subidx = builder.create<SubindexOp>(wire, i);
+        Value cat = builder.create<CatPrimOp>(subidx, prev);
+        prev = cat;
+      }
       // connect here after replacing all other connects
       builder.create<StrictConnectOp>(var, prev);
 
@@ -94,6 +94,16 @@ void LowerBitIndexPass::runOnOperation() {
           Value subidx = builder.create<SubindexOp>(wire, bitindex.index());
           bitindex.replaceAllUsesWith(subidx);
           bitindex.erase();
+        } else if (auto bits = dyn_cast<BitsPrimOp>(op)) {
+          ImplicitLocOpBuilder builder(bits.getLoc(), bits);
+          Value prev = builder.create<SubindexOp>(wire, bits.lo());
+          for (unsigned i = bits.lo()+1; i < bits.hi(); i++) {
+            Value subidx = builder.create<SubindexOp>(wire, i);
+            Value cat = builder.create<CatPrimOp>(subidx, prev);
+            prev = cat;
+          }
+          bits.replaceAllUsesWith(prev);
+          bits.erase();
         }
       }
     }
