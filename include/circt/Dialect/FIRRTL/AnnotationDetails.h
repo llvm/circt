@@ -136,6 +136,8 @@ constexpr const char *sitestBlackBoxAnnoClass =
     "sifive.enterprise.firrtl.SitestBlackBoxAnnotation";
 constexpr const char *sitestTestHarnessBlackBoxAnnoClass =
     "sifive.enterprise.firrtl.SitestTestHarnessBlackBoxAnnotation";
+constexpr const char *prefixModulesAnnoClass =
+    "sifive.enterprise.firrtl.NestedPrefixModulesAnnotation";
 constexpr const char *dontObfuscateModuleAnnoClass =
     "sifive.enterprise.firrtl.DontObfuscateModuleAnnotation";
 constexpr const char *scalaClassAnnoClass =
