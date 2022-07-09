@@ -35,6 +35,26 @@ def ServiceDeclOp : ESI_Op<"service.decl",
   }];
 }
 
+def ToServerOp : ESI_Op<"service.to_server",
+                        [HasParent<"::circt::esi::ServiceDeclOp">]> {
+  let summary = "An ESI service port headed to the service";
+
+  let arguments = (ins SymbolNameAttr:$inner_sym, TypeAttr:$type);
+  let assemblyFormat = [{
+    $inner_sym attr-dict `:` $type
+  }];
+}
+
+def ToClientOp : ESI_Op<"service.to_client",
+                        [HasParent<"::circt::esi::ServiceDeclOp">]> {
+  let summary = "An ESI service port headed to a particular client";
+
+  let arguments = (ins SymbolNameAttr:$inner_sym, TypeAttr:$type);
+  let assemblyFormat = [{
+    $inner_sym  attr-dict `:` $type
+  }];
+}
+
 def ServiceInstanceOp : ESI_Op<"service.instance"> {
   let summary = "Instantiate a server module";
   let description = [{
@@ -60,26 +80,6 @@ def ServiceInstanceOp : ESI_Op<"service.instance"> {
   let assemblyFormat = [{
     $identifier $service_symbol `(` $inputs `)` attr-dict
       `:` functional-type($inputs, results)
-  }];
-}
-
-def ToServerOp : ESI_Op<"service.to_server",
-                        [HasParent<"::circt::esi::ServiceDeclOp">]> {
-  let summary = "An ESI service port headed to the service";
-
-  let arguments = (ins SymbolNameAttr:$inner_sym, TypeAttr:$type);
-  let assemblyFormat = [{
-    $inner_sym attr-dict `:` $type
-  }];
-}
-
-def ToClientOp : ESI_Op<"service.to_client",
-                        [HasParent<"::circt::esi::ServiceDeclOp">]> {
-  let summary = "An ESI service port headed to a particular client";
-
-  let arguments = (ins SymbolNameAttr:$inner_sym, TypeAttr:$type);
-  let assemblyFormat = [{
-    $inner_sym  attr-dict `:` $type
   }];
 }
 
