@@ -1316,6 +1316,10 @@ struct ESIConnectServicesPass
   void runOnOperation() override;
 
   LogicalResult process(hw::HWModuleLike);
+  LogicalResult surfaceReqs(hw::HWModuleLike,
+                            ArrayRef<RequestToClientConnection>,
+                            ArrayRef<RequestToServerConnection>);
+  LogicalResult replaceInst(ServiceInstanceOp, Block *portReqs);
 };
 } // anonymous namespace
 
@@ -1331,6 +1335,7 @@ void ESIConnectServicesPass::runOnOperation() {
   SmallVector<hw::HWModuleLike, 64> sortedMods;
   getAndSortModules(outerMod, sortedMods);
 
+  // Process each module.
   for (auto mod : sortedMods)
     if (failed(process(mod))) {
       signalPassFailure();
@@ -1339,17 +1344,93 @@ void ESIConnectServicesPass::runOnOperation() {
 }
 
 LogicalResult ESIConnectServicesPass::process(hw::HWModuleLike mod) {
+  Block &modBlock = mod->getRegion(0).front();
+
+  DenseMap<SymbolRefAttr, Block *> localImplReqs;
+  for (auto instOp : modBlock.getOps<ServiceInstanceOp>())
+    localImplReqs[instOp.service_symbolAttr()] = new Block();
+
+  SmallVector<RequestToClientConnection, 4> nonLocalToClientReqs;
+  mod.walk([&](RequestToClientConnection req) {
+    auto service = req.servicePortAttr().getModuleRef();
+    auto implOpF = localImplReqs.find(service);
+    if (implOpF == localImplReqs.end())
+      nonLocalToClientReqs.push_back(req);
+    else
+      req->moveBefore(implOpF->second, implOpF->second->end());
+  });
+
+  SmallVector<RequestToServerConnection, 4> nonLocalToServerReqs;
+  mod.walk([&](RequestToServerConnection req) {
+    auto service = req.servicePortAttr().getModuleRef();
+    auto implOpF = localImplReqs.find(service);
+    if (implOpF == localImplReqs.end())
+      nonLocalToServerReqs.push_back(req);
+    else
+      req->moveBefore(implOpF->second, implOpF->second->end());
+  });
+
+  for (auto instOp :
+       llvm::make_early_inc_range(modBlock.getOps<ServiceInstanceOp>())) {
+    Block *portReqs = localImplReqs[instOp.service_symbolAttr()];
+    if (failed(replaceInst(instOp, portReqs)))
+      return failure();
+  }
+
+  if (nonLocalToClientReqs.empty() && nonLocalToServerReqs.empty())
+    return success();
+
+  return surfaceReqs(mod, nonLocalToClientReqs, nonLocalToServerReqs);
+}
+
+LogicalResult ESIConnectServicesPass::replaceInst(ServiceInstanceOp instOp,
+                                                  Block *portReqs) {
+  assert(portReqs);
+
+  SmallVector<Type, 8> resultTypes(instOp.getResultTypes().begin(),
+                                   instOp.getResultTypes().end());
+  for (auto toClient : portReqs->getOps<RequestToClientConnection>())
+    resultTypes.push_back(toClient.receiving().getType());
+
+  SmallVector<Value, 8> operands(instOp.getOperands().begin(),
+                                 instOp.getOperands().end());
+  for (auto toServer : portReqs->getOps<RequestToServerConnection>()) {
+    Value sending = toServer.sending();
+    operands.push_back(sending);
+    toServer.sendingMutable().assign(
+        portReqs->addArgument(sending.getType(), toServer.getLoc()));
+  }
+
+  OpBuilder b(instOp);
+  auto implOp = b.create<ServiceImplementReqOp>(
+      instOp.getLoc(), resultTypes, instOp.service_symbolAttr(),
+      instOp.identifierAttr(), operands);
+  implOp.portReqs().push_back(portReqs);
+
+  for (auto [n, o] : llvm::zip(implOp.getResults(), instOp.getResults()))
+    o.replaceAllUsesWith(n);
+
+  unsigned instOpNumResults = instOp.getNumResults();
+  for (auto e : llvm::enumerate(portReqs->getOps<RequestToClientConnection>()))
+    e.value().receiving().replaceAllUsesWith(
+        implOp.getResult(e.index() + instOpNumResults));
+
+  instOp.erase();
+  return success();
+}
+
+LogicalResult ESIConnectServicesPass::surfaceReqs(
+    hw::HWModuleLike mod, ArrayRef<RequestToClientConnection> toClientReqs,
+    ArrayRef<RequestToServerConnection> toServerReqs) {
   auto ctxt = mod.getContext();
   Block &modBlock = mod->getRegion(0).front();
   Operation *modTerminator = modBlock.getTerminator();
 
   unsigned inputCounter = getModuleNumInputs(mod);
   SmallVector<std::pair<unsigned, hw::PortInfo>> newInputs;
-  SmallVector<RequestToClientConnection, 4> toClientReqs;
 
   unsigned outputCounter = getModuleNumOutputs(mod);
   SmallVector<std::pair<unsigned, hw::PortInfo>> newOutputs;
-  SmallVector<RequestToServerConnection, 4> toServerReqs;
 
   auto getPortName = [](ArrayAttr namePath) {
     std::string portName;
@@ -1361,30 +1442,27 @@ LogicalResult ESIConnectServicesPass::process(hw::HWModuleLike mod) {
     return nameOS.str();
   };
 
-  mod.walk([&](Operation *op) {
-    if (auto toClient = dyn_cast<RequestToClientConnection>(op)) {
-      newInputs.push_back(std::make_pair(
-          inputCounter,
-          hw::PortInfo{
-              StringAttr::get(ctxt, getPortName(toClient.clientNamePath())),
-              hw::PortDirection::INPUT, toClient.getType(), inputCounter}));
-      ++inputCounter;
-      toClientReqs.push_back(toClient);
-      toClient.replaceAllUsesWith(modBlock.addArgument(
-          toClient.receiving().getType(), toClient.getLoc()));
-    } else if (auto toServer = dyn_cast<RequestToServerConnection>(op)) {
-      newOutputs.push_back(std::make_pair(
-          outputCounter,
-          hw::PortInfo{
-              StringAttr::get(ctxt, getPortName(toServer.clientNamePath())),
-              hw::PortDirection::OUTPUT, toServer.sending().getType(),
-              outputCounter}));
-      ++outputCounter;
-      toServerReqs.push_back(toServer);
-      modTerminator->insertOperands(modTerminator->getNumOperands(),
-                                    toServer.sending());
-    }
-  });
+  for (auto toClient : toClientReqs) {
+    newInputs.push_back(std::make_pair(
+        inputCounter,
+        hw::PortInfo{
+            StringAttr::get(ctxt, getPortName(toClient.clientNamePath())),
+            hw::PortDirection::INPUT, toClient.getType(), inputCounter}));
+    ++inputCounter;
+    toClient.replaceAllUsesWith(modBlock.addArgument(
+        toClient.receiving().getType(), toClient.getLoc()));
+  }
+  for (auto toServer : toServerReqs) {
+    newOutputs.push_back(std::make_pair(
+        outputCounter,
+        hw::PortInfo{
+            StringAttr::get(ctxt, getPortName(toServer.clientNamePath())),
+            hw::PortDirection::OUTPUT, toServer.sending().getType(),
+            outputCounter}));
+    ++outputCounter;
+    modTerminator->insertOperands(modTerminator->getNumOperands(),
+                                  toServer.sending());
+  }
 
   if (toClientReqs.empty())
     return success();
@@ -1417,7 +1495,7 @@ LogicalResult ESIConnectServicesPass::process(hw::HWModuleLike mod) {
     for (auto [toClient, newPort] : llvm::zip(toClientReqs, newInputs)) {
       auto instToClient = cast<RequestToClientConnection>(b.clone(*toClient));
       instToClient.clientNamePathAttr(prependNamePart(
-          toClient.clientNamePath(), hwInst.instanceNameAttr()));
+          instToClient.clientNamePath(), hwInst.instanceNameAttr()));
       newArgNames.push_back(newPort.second.name);
       newOperands.push_back(instToClient.receiving());
     }
@@ -1442,7 +1520,7 @@ LogicalResult ESIConnectServicesPass::process(hw::HWModuleLike mod) {
     for (auto [toServer, newPort] : llvm::zip(toServerReqs, newOutputs)) {
       auto instToServer = cast<RequestToServerConnection>(b.clone(*toServer));
       instToServer.clientNamePathAttr(prependNamePart(
-          toServer.clientNamePath(), hwInst.instanceNameAttr()));
+          instToServer.clientNamePath(), hwInst.instanceNameAttr()));
       instToServer->setOperand(0, newHWInst->getResult(newPort.first));
     }
   }

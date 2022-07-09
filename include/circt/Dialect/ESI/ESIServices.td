@@ -8,6 +8,7 @@
 //===----------------------------------------------------------------------===//
 
 include "circt/Dialect/HW/HWTypes.td"
+include "mlir/IR/RegionKindInterface.td"
 
 def ServiceDeclOp : ESI_Op<"service.decl",
           [SingleBlock, NoTerminator, HasParent<"::mlir::ModuleOp">, Symbol]> {
@@ -63,12 +64,12 @@ def ServiceInstanceOp : ESI_Op<"service.instance"> {
   }];
 }
 
-def ServiceImplementReqOp : ESI_Op<"service.impl_req"> {
+def ServiceImplementReqOp : ESI_Op<"service.impl_req", [NoTerminator]> {
   let summary = "Request for a service to be implemented";
   let arguments = (ins FlatSymbolRefAttr:$service_symbol,
                        StrAttr:$identifier,
                        Variadic<AnyType>:$inputs);
-  let results = (outs Variadic<AnyType>);
+  let results = (outs Variadic<AnyType>:$outputs);
   let regions = (region SizedRegion<1>:$portReqs);
 
   let assemblyFormat = [{

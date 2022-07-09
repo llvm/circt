@@ -19,6 +19,7 @@
 #include "circt/Dialect/HW/HWAttributes.h"
 
 #include "mlir/IR/OpImplementation.h"
+#include "mlir/IR/RegionKindInterface.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
 #define GET_OP_CLASSES
