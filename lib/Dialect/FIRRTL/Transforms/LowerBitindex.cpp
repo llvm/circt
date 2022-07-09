@@ -69,7 +69,15 @@ void LowerBitIndexPass::runOnOperation() {
         signalPassFailure();
         return;
       }
-      builder.create<WireOp>(FVectorType::get(UIntType::get(op.getContext(), 1), i.getWidthOrSentinel()));
+      auto w = i.getWidth().getValue();
+      auto wire = builder.create<WireOp>(FVectorType::get(UIntType::get(op.getContext(), 1), w));
+      Value prev = builder.create<SubindexOp>(wire, 0);
+      for (int i = 1; i < w; i++) {
+        Value subidx = builder.create<SubindexOp>(wire, i);
+        Value cat = builder.create<CatPrimOp>(subidx, prev);
+        prev = cat;
+      }
+      builder.create<StrictConnectOp>(op.input(), prev);
     }
   }
 
