@@ -18,6 +18,8 @@
 #include "llvm/Support/Parallel.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 
+#include <iostream>
+
 #define DEBUG_TYPE "firrtl-lower-bitindex"
 
 using namespace circt;
@@ -33,21 +35,47 @@ void LowerBitIndexPass::runOnOperation() {
       llvm::dbgs() << "===- Running LowerBitIndex Pass "
                       "------------------------------------------------===\n");
 
+  SmallVector<BitindexOp> dests;
+  SmallVector<BitindexOp> srcs;
   for (auto bitindex : llvm::make_early_inc_range(getOperation().getOps<BitindexOp>())) {
-    if (bitindex->getUses().empty()) {
-      bitindex->erase();
-      continue;
-    }
-    auto drivers = make_filter_range(bitindex->getUsers(), [&](Operation *op) {
-      if (auto connectOp = dyn_cast<ConnectOp>(op)) {
-
+    for (auto &use : bitindex->getUses()) {
+      auto *op = use.getOwner();
+      if ((isa<ConnectOp>(op) && dyn_cast<ConnectOp>(op).dest() == bitindex) ||
+          (isa<StrictConnectOp>(op) && dyn_cast<StrictConnectOp>(op).dest() == bitindex)) {
+        dests.push_back(bitindex);
+      } else if ((isa<ConnectOp>(op) && dyn_cast<ConnectOp>(op).src() == bitindex) ||
+          (isa<StrictConnectOp>(op) && dyn_cast<StrictConnectOp>(op).src() == bitindex)) {
+        auto bitsOp = OpBuilder(op).create<BitsPrimOp>(
+          op->getLoc(),
+          bitindex.getResult().getType(),
+          bitindex.input(), bitindex.index(), bitindex.index()
+        );
+        use.set(bitsOp);
+        srcs.push_back(bitindex);
       }
-    });
-    ImplicitLocOpBuilder builder(bitindex.getLoc(), bitindex);
-    Value replacement = builder.create<BitsPrimOp>(bitindex.getResult().getType(), bitindex.input(), bitindex.index(), bitindex.index());
-    bitindex.replaceAllUsesWith(replacement);
-    bitindex.erase();
+    }
   }
+
+  for (auto op : dests) {
+    auto *defn = op.input().getDefiningOp();
+    auto mod = op->getParentOfType<FModuleOp>();
+    ImplicitLocOpBuilder builder(mod->getLoc(), mod.getContext());
+    builder.setInsertionPointToStart(mod.getBody());
+    if (defn) {
+      builder.setInsertionPointAfter(defn);
+    }
+    if (auto i = op.input().getType().dyn_cast<IntType>()) {
+      if (!i.hasWidth()) {
+        signalPassFailure();
+        return;
+      }
+      builder.create<WireOp>(FVectorType::get(UIntType::get(op.getContext(), 1), i.getWidthOrSentinel()));
+    }
+  }
+
+  // if (bitindex->getUses().empty()) {
+  //   bitindex->erase();
+  // }
 }
 
 } // end anonymous namespace
