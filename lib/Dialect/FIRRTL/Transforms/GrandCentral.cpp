@@ -1614,7 +1614,7 @@ void GrandCentralPass::runOnOperation() {
       ++numAnnosRemoved;
       return true;
     }
-    if (anno.isClass(testbenchDirAnnoClass)) {
+    if (anno.isClass(testBenchDirAnnoClass)) {
       testbenchDir = anno.getMember<StringAttr>("dirname");
       return false;
     }

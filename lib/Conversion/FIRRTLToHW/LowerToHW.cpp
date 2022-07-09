@@ -246,7 +246,7 @@ struct CircuitLoweringState {
 
     // Get the testbench output directory.
     if (auto tbAnno =
-            AnnotationSet(circuitOp).getAnnotation(testbenchDirAnnoClass)) {
+            AnnotationSet(circuitOp).getAnnotation(testBenchDirAnnoClass)) {
       auto dirName = tbAnno.getMember<StringAttr>("dirname");
       testBenchDirectory = hw::OutputFileAttr::getAsDirectory(
           context, dirName.getValue(), false, true);

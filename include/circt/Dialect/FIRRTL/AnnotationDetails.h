@@ -128,8 +128,6 @@ constexpr const char *signalDriverModuleAnnoClass =
 // SiFive specific Annotations
 constexpr const char *dutAnnoClass =
     "sifive.enterprise.firrtl.MarkDUTAnnotation";
-constexpr const char *testbenchDirAnnoClass =
-    "sifive.enterprise.firrtl.TestBenchDirAnnotation";
 constexpr const char *injectDUTHierarchyAnnoClass =
     "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation";
 constexpr const char *sitestBlackBoxAnnoClass =
