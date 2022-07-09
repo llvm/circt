@@ -204,9 +204,11 @@ LogicalResult UnwrapSVInterface::verify() {
   return verifySVInterface(*this, modportType, chanType);
 }
 
+/// Get the port declaration op for the specified service decl, port name.
 template <class OpType>
-static OpType getPortDecl(Operation *op, SymbolTableCollection &symbolTable,
-                          hw::InnerRefAttr servicePort) {
+static OpType getServicePortDecl(Operation *op,
+                                 SymbolTableCollection &symbolTable,
+                                 hw::InnerRefAttr servicePort) {
   ModuleOp top = op->getParentOfType<mlir::ModuleOp>();
   SymbolTable topSyms = symbolTable.getSymbolTable(top);
 
@@ -225,36 +227,33 @@ static OpType getPortDecl(Operation *op, SymbolTableCollection &symbolTable,
   return {};
 }
 
-LogicalResult RequestToClientConnection::verifySymbolUses(
-    SymbolTableCollection &symbolTable) {
-  ToClientOp portDecl =
-      getPortDecl<ToClientOp>(*this, symbolTable, servicePort());
+/// Check that the type of a given service request matches the services port
+/// type.
+template <class PortTypeOp, class OpType>
+static LogicalResult
+reqPortMatches(OpType op, SymbolTableCollection &symbolTable, Type t) {
+  auto portDecl =
+      getServicePortDecl<PortTypeOp>(op, symbolTable, op.servicePort());
   if (!portDecl)
     return failure();
 
-  auto *ctxt = getContext();
-  if (portDecl.type() != ChannelPort::get(ctxt, AnyType::get(ctxt)) &&
-      portDecl.type() != receiving().getType())
-    return emitOpError("Result type does not match port type ")
+  auto *ctxt = op.getContext();
+  if (portDecl.type() != t &&
+      portDecl.type() != ChannelPort::get(ctxt, AnyType::get(ctxt)))
+    return op.emitOpError("Request type does not match port type ")
            << portDecl.type();
 
   return success();
 }
 
+LogicalResult RequestToClientConnection::verifySymbolUses(
+    SymbolTableCollection &symbolTable) {
+  return reqPortMatches<ToClientOp>(*this, symbolTable, receiving().getType());
+}
+
 LogicalResult RequestToServerConnection::verifySymbolUses(
     SymbolTableCollection &symbolTable) {
-  ToServerOp portDecl =
-      getPortDecl<ToServerOp>(*this, symbolTable, servicePort());
-  if (!portDecl)
-    return failure();
-
-  auto *ctxt = getContext();
-  if (portDecl.type() != ChannelPort::get(ctxt, AnyType::get(ctxt)) &&
-      portDecl.type() != sending().getType())
-    return emitOpError("Sending type does not match port type ")
-           << portDecl.type();
-
-  return success();
+  return reqPortMatches<ToServerOp>(*this, symbolTable, sending().getType());
 }
 
 #define GET_OP_CLASSES
