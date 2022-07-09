@@ -37,45 +37,29 @@ def ServiceDeclOp : ESI_Op<"service.decl",
 
 def ServiceInstanceOp : ESI_Op<"service.instance"> {
   let summary = "Instantiate a server module";
-
   let description = [{
     Instantiate a service adhering to a service declaration interface.
 
     A pass collects all of the connection requests to the service this op
     implements from the containing modules' descendants (in the instance
     hierarchy). It bubbles them all up to the module containing this op,
-    creating the necessary ESI channels as it moves them. It fills in
-    `conn_requests` with the inner_syms of each connection request.
-
-    Some later lowering is responsible for combining this op and all of the
-    referenced connection request ops with a concrete implementation.
+    creating the necessary ESI channel ports, groups them appropriately, then
+    replaces this op with a `service.impl_req`.
 
     Since implementing the server will usually need "normal" I/O, `inputs` and
     `results` act like normal `hw.instance` ports.
+
+    $identifier is used by frontends to specify or remember the type of
+    implementation to use for this service.
   }];
 
   let arguments = (ins FlatSymbolRefAttr:$service_symbol,
-                       StrAttr:$identifier,
+                       AnyAttr:$identifier,
                        Variadic<AnyType>:$inputs);
   let results = (outs Variadic<AnyType>);
   let assemblyFormat = [{
     $identifier $service_symbol `(` $inputs `)` attr-dict
       `:` functional-type($inputs, results)
-  }];
-}
-
-def ServiceImplementReqOp : ESI_Op<"service.impl_req", [NoTerminator]> {
-  let summary = "Request for a service to be implemented";
-  let arguments = (ins FlatSymbolRefAttr:$service_symbol,
-                       StrAttr:$identifier,
-                       Variadic<AnyType>:$inputs);
-  let results = (outs Variadic<AnyType>:$outputs);
-  let regions = (region SizedRegion<1>:$portReqs);
-
-  let assemblyFormat = [{
-    $identifier $service_symbol `(` $inputs `)` attr-dict
-      `:` functional-type($inputs, results)
-      $portReqs
   }];
 }
 
@@ -96,6 +80,32 @@ def ToClientOp : ESI_Op<"service.to_client",
   let arguments = (ins SymbolNameAttr:$inner_sym, TypeAttr:$type);
   let assemblyFormat = [{
     $inner_sym  attr-dict `:` $type
+  }];
+}
+
+def ServiceImplementReqOp : ESI_Op<"service.impl_req", [NoTerminator]> {
+  let summary = "Request for a service to be implemented";
+  let description = [{
+    The connect services pass replaces `service.instance`s with this op. The
+    `portReqs` region is the set of connection requests which need to be
+    implemented for this service instance. Channels to/from the requests have
+    been added to the operands/results of this op and consumers/producers have
+    been redirected.
+
+    Some other pass or frontend is expected to replace this op with an actual
+    implementation.
+  }];
+
+  let arguments = (ins FlatSymbolRefAttr:$service_symbol,
+                       AnyAttr:$identifier,
+                       Variadic<AnyType>:$inputs);
+  let results = (outs Variadic<AnyType>:$outputs);
+  let regions = (region SizedRegion<1>:$portReqs);
+
+  let assemblyFormat = [{
+    $identifier $service_symbol `(` $inputs `)` attr-dict
+      `:` functional-type($inputs, results)
+      $portReqs
   }];
 }
 
