@@ -32,6 +32,8 @@ constexpr const char *dontTouchAnnoClass =
     "firrtl.transforms.DontTouchAnnotation";
 constexpr const char *forceNameAnnoClass =
     "chisel3.util.experimental.ForceNameAnnotation";
+constexpr const char *flattenAnnoClass = "firrtl.transforms.FlattenAnnotation";
+constexpr const char *inlineAnnoClass = "firrtl.passes.InlineAnnotation";
 
 constexpr const char *omirAnnoClass =
     "freechips.rocketchip.objectmodel.OMIRAnnotation";
