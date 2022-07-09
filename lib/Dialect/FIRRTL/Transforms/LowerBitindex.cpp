@@ -18,8 +18,6 @@
 #include "llvm/Support/Parallel.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 
-#include <iostream>
-
 #define DEBUG_TYPE "firrtl-lower-bitindex"
 
 using namespace circt;
@@ -37,6 +35,7 @@ void LowerBitIndexPass::runOnOperation() {
 
   DenseSet<Value> variables;
 
+  // collect all values that are used as input to a bitindex
   for (auto bitindex : llvm::make_early_inc_range(getOperation().getOps<BitindexOp>())) {
     if (bitindex->getUses().empty()) {
       bitindex.erase();
@@ -45,33 +44,39 @@ void LowerBitIndexPass::runOnOperation() {
     variables.insert(bitindex.input());
   }
 
-  // make a new wire for each dest-bitindexed variable
+  // make a new wire for each bitindexed value
   for (auto var : variables) {
     auto *defn = var.getDefiningOp();
-    auto mod = getOperation();
-    llvm::StringRef name = "port.bitindex.wrapper";
-    ImplicitLocOpBuilder builder(var.getLoc(), var.getContext());
-    builder.setInsertionPointToStart(mod.getBody());
-    if (defn) {
-      name = "local.bitindex.wrapper";
-      builder.setLoc(defn->getLoc());
-      builder.setInsertionPointAfter(defn);
-      if (auto wireOp = dyn_cast<WireOp>(defn)) {
-        name = wireOp.name();
-      } else if (auto regOp = dyn_cast<RegOp>(defn)) {
-        name = regOp.name();
-      }
+    llvm::StringRef name;
+    ImplicitLocOpBuilder builder(var.getLoc(), var);
+    if (auto mod = dyn_cast<FModuleOp>(defn)) {
+        name = "port.bitindex.wrapper";
+        builder.setInsertionPointToStart(mod.getBody());
+    } else {
+        name = "local.bitindex.wrapper";
+        builder.setInsertionPointAfter(defn);
+        // improve the name if it was defined as a wire or reg
+        if (auto wireOp = dyn_cast<WireOp>(defn)) {
+          name = wireOp.name();
+        } else if (auto regOp = dyn_cast<RegOp>(defn)) {
+          name = regOp.name();
+        }
     }
+    // must be an int type to be the input to a bitindex
     if (auto i = var.getType().dyn_cast<IntType>()) {
+      // must have defined width
       if (!i.hasWidth()) {
         signalPassFailure();
         return;
       }
       auto w = i.getWidth().getValue();
+      // wrapper wire that is a UInt<1>[var.width]
       auto wire = builder.create<WireOp>(FVectorType::get(UIntType::get(var.getContext(), 1), w), name);
 
-      for (auto &use : var.getUses()) {
-        auto *op = use.getOwner();
+      // for every use of var replace any connection to it with a connection
+      // that assigns each individual bit of the src to the dest
+      for (auto *op : var.getUsers()) {
+        // transforms `var <= src` to `wire[i] <= bits(src, i, i)` 0 <= i < w
         if (auto connect = dyn_cast<StrictConnectOp>(op)) {
           if (var == connect.dest()) {
             ImplicitLocOpBuilder builder(connect.getLoc(), connect);
@@ -85,6 +90,8 @@ void LowerBitIndexPass::runOnOperation() {
         }
       }
 
+      // constructs the full concatenation of wire and assigns it to var:
+      // var <= cat(..., cat(wire[2], cat(wire[1], wire[0])))
       Value prev = builder.create<SubindexOp>(wire, 0);
       for (int i = 1; i < w; i++) {
         Value subidx = builder.create<SubindexOp>(wire, i);
@@ -94,14 +101,16 @@ void LowerBitIndexPass::runOnOperation() {
       // connect here after replacing all other connects
       builder.create<StrictConnectOp>(var, prev);
 
-      for (auto &use : var.getUses()) {
-        auto *op = use.getOwner();
+      for (auto *op : var.getUsers()) {
         if (auto bitindex = dyn_cast<BitindexOp>(op)) {
+          // replaces any occurrence of `var[n] <= ...` with `wire[n] <= ...`
           ImplicitLocOpBuilder builder(bitindex.getLoc(), bitindex);
           Value subidx = builder.create<SubindexOp>(wire, bitindex.index());
           bitindex.replaceAllUsesWith(subidx);
           bitindex.erase();
         } else if (auto bits = dyn_cast<BitsPrimOp>(op)) {
+          // replaces any occurrence of `bits(var, hi, lo)` with
+          // `cat(wire[hi], cat(..., wire[lo]))`
           ImplicitLocOpBuilder builder(bits.getLoc(), bits);
           Value prev = builder.create<SubindexOp>(wire, bits.lo());
           for (unsigned i = bits.lo()+1; i < bits.hi(); i++) {
