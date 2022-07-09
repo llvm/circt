@@ -18,41 +18,41 @@
 #include "llvm/Support/Parallel.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 
-#include <iostream>
-
 #define DEBUG_TYPE "firrtl-lower-bitindex"
 
 using namespace circt;
 using namespace firrtl;
 
 namespace {
-struct LowerBitindex : public LowerBitindexBase<LowerBitindex> {
-  LowerBitindex() {
-  }
-
-  void runOnOperation() override {
-    LLVM_DEBUG(
-        llvm::dbgs() << "===- Running LowerBitindex Pass "
-                        "------------------------------------------------===\n");
-
-    auto circuit = getOperation();
-    for (auto module : circuit.getBody()->getOps<FModuleOp>()) {
-      auto *body = module.getBody();
-      for (auto bitindex : body->getOps<BitindexOp>()) {
-        ImplicitLocOpBuilder builder(bitindex.getLoc(), bitindex.getContext());
-        auto bits = builder.create<BitsPrimOp>(bitindex.getResult().getType(), bitindex.input(), bitindex.index(), bitindex.index());
-        bitindex.replaceAllUsesWith(bits.getResult());
-        bitindex.erase();
-        // auto builder = OpBuilder::atBlockBegin(body);
-        // builder.create<BitsPrimOp>(bitindex.getType(), bitindex.index(), bitindex.index());
-      }
-    }
-  }
+struct LowerBitIndexPass : public LowerBitindexBase<LowerBitIndexPass> {
+  void runOnOperation() override;
 };
+
+void LowerBitIndexPass::runOnOperation() {
+  LLVM_DEBUG(
+      llvm::dbgs() << "===- Running LowerBitIndex Pass "
+                      "------------------------------------------------===\n");
+
+  for (auto bitindex : llvm::make_early_inc_range(getOperation().getOps<BitindexOp>())) {
+    if (bitindex->getUses().empty()) {
+      bitindex->erase();
+      continue;
+    }
+    auto drivers = make_filter_range(bitindex->getUsers(), [&](Operation *op) {
+      if (auto connectOp = dyn_cast<ConnectOp>(op)) {
+
+      }
+    });
+    ImplicitLocOpBuilder builder(bitindex.getLoc(), bitindex);
+    Value replacement = builder.create<BitsPrimOp>(bitindex.getResult().getType(), bitindex.input(), bitindex.index(), bitindex.index());
+    bitindex.replaceAllUsesWith(replacement);
+    bitindex.erase();
+  }
+}
 
 } // end anonymous namespace
 
 std::unique_ptr<mlir::Pass>
 circt::firrtl::createLowerBitindexPass() {
-  return std::make_unique<LowerBitindex>();
+  return std::make_unique<LowerBitIndexPass>();
 }

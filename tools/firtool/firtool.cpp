@@ -463,7 +463,8 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     pm.addInstrumentation(std::make_unique<FirtoolPassInstrumentation>());
   applyPassManagerCLOptions(pm);
 
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerBitindexPass());
+  auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
+  modulePM.addPass(firrtl::createLowerBitindexPass());
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerFIRRTLAnnotationsPass(
       disableAnnotationsUnknown, disableAnnotationsClassless));

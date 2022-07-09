@@ -89,7 +89,7 @@ bool firrtl::isDuplexValue(Value val) {
   if (!op)
     return false;
   return TypeSwitch<Operation *, bool>(op)
-      .Case<SubfieldOp, SubindexOp, SubaccessOp>(
+      .Case<SubfieldOp, SubindexOp, SubaccessOp, BitindexOp>(
           [](auto op) { return isDuplexValue(op.input()); })
       .Case<RegOp, RegResetOp, WireOp>([](auto) { return true; })
       .Default([](auto) { return false; });
@@ -128,10 +128,10 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
         return foldFlow(op.input(),
                         op.isFieldFlipped() ? swap() : accumulatedFlow);
       })
-      .Case<SubindexOp, SubaccessOp, BitindexOp>(
+      .Case<SubindexOp, SubaccessOp>(
           [&](auto op) { return foldFlow(op.input(), accumulatedFlow); })
       // Registers, Wires, and behavioral memory ports are always Duplex.
-      .Case<RegOp, RegResetOp, WireOp, MemoryPortOp>(
+      .Case<RegOp, RegResetOp, WireOp, MemoryPortOp, BitindexOp>(
           [](auto) { return Flow::Duplex; })
       .Case<InstanceOp>([&](auto inst) {
         auto resultNo = val.cast<OpResult>().getResultNumber();
@@ -153,7 +153,7 @@ DeclKind firrtl::getDeclarationKind(Value val) {
 
   return TypeSwitch<Operation *, DeclKind>(op)
       .Case<InstanceOp>([](auto) { return DeclKind::Instance; })
-      .Case<SubfieldOp, SubindexOp, SubaccessOp>(
+      .Case<SubfieldOp, SubindexOp, SubaccessOp, BitindexOp>(
           [](auto op) { return getDeclarationKind(op.input()); })
       .Default([](auto) { return DeclKind::Other; });
 }

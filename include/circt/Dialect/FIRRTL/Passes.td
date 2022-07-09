@@ -42,19 +42,6 @@ def LowerFIRRTLAnnotations : Pass<"firrtl-lower-annotations", "firrtl::CircuitOp
   ];
 }
 
-def LowerBitindex : Pass<"firrtl-lower-bitindex", "firrtl::CircuitOp"> {
-  let summary = "Lower bitindex operations to subindex operations";
-  let description = [{
-    Lower bitindex operations to subindex operations. Int types that are
-    accessed via a bitindex are wrapped with vec types with subindex
-    operations.
-  }];
-  let constructor = "circt::firrtl::createLowerBitindexPass()";
-  let options = [
-  ];
-  let dependentDialects = ["hw::HWDialect"];
-}
-
 def LowerFIRRTLTypes : Pass<"firrtl-lower-types", "firrtl::CircuitOp"> {
   let summary = "Lower FIRRTL types to ground types";
   let description = [{
@@ -459,6 +446,11 @@ def CheckCombCycles : Pass<"firrtl-check-comb-cycles", "firrtl::CircuitOp"> {
 def SFCCompat : Pass<"firrtl-sfc-compat", "firrtl::FModuleOp"> {
   let summary = "Perform SFC Compatibility fixes";
   let constructor = "circt::firrtl::createSFCCompatPass()";
+}
+
+def LowerBitindex : Pass<"firrtl-lower-bitindex", "firrtl::FModuleOp"> {
+  let summary = "Lower bitindex operations to subindex operations";
+  let constructor = "circt::firrtl::createLowerBitindexPass()";
 }
 
 def MergeConnections : Pass<"merge-connections", "firrtl::FModuleOp"> {
