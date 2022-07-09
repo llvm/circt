@@ -366,10 +366,9 @@ bool BlackBoxReaderPass::isDut(Operation *module) {
   auto iter = dutModuleMap.find(module);
   if (iter != dutModuleMap.end())
     return iter->getSecond();
-  const StringRef dutAnno = "sifive.enterprise.firrtl.MarkDUTAnnotation";
   AnnotationSet annos(module);
   // Any module with the dutAnno, is the DUT.
-  if (annos.hasAnnotation(dutAnno)) {
+  if (annos.hasAnnotation(dutAnnoClass)) {
     dutModuleMap[module] = true;
     return true;
   }

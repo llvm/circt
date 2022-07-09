@@ -10,6 +10,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
@@ -27,8 +28,6 @@
 
 using namespace circt;
 using namespace firrtl;
-
-static const char dutAnnoClass[] = "sifive.enterprise.firrtl.MarkDUTAnnotation";
 
 // Extract all the relevant attributes from the MemOp and return the FirMemory.
 FirMemory getSummary(MemOp op) {
