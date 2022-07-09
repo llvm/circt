@@ -65,6 +65,8 @@ static const char *verifBlackBoxAnnoClass =
 static const char *metadataDirectoryAttrName =
     "sifive.enterprise.firrtl.MetadataDirAnnotation";
 static const char *noDedupAnnoClass = "firrtl.transforms.NoDedupAnnotation";
+static const char *dftTestModeEnableAnnoClass =
+    "sifive.enterprise.firrtl.DFTTestModeEnableAnnotation";
 
 // Grand Central Annotations
 constexpr const char *serializedViewAnnoClass =
