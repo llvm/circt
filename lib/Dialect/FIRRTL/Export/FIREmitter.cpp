@@ -88,6 +88,7 @@ struct Emitter {
   void emitExpression(SubfieldOp op);
   void emitExpression(SubindexOp op);
   void emitExpression(SubaccessOp op);
+  void emitExpression(BitindexOp op);
 
   void emitPrimExpr(StringRef mnemonic, Operation *op,
                     ArrayRef<uint32_t> attrs = {});
@@ -625,6 +626,7 @@ void Emitter::emitExpression(Value value) {
       .Case<
           // Basic expressions
           ConstantOp, SpecialConstantOp, SubfieldOp, SubindexOp, SubaccessOp,
+          BitindexOp,
           // Binary
           AddPrimOp, SubPrimOp, MulPrimOp, DivPrimOp, RemPrimOp, AndPrimOp,
           OrPrimOp, XorPrimOp, LEQPrimOp, LTPrimOp, GEQPrimOp, GTPrimOp,
@@ -679,6 +681,11 @@ void Emitter::emitExpression(SubaccessOp op) {
   os << "[";
   emitExpression(op.index());
   os << "]";
+}
+
+void Emitter::emitExpression(BitindexOp op) {
+  emitExpression(op.input());
+  os << "[" << op.index() << "]";
 }
 
 void Emitter::emitPrimExpr(StringRef mnemonic, Operation *op,

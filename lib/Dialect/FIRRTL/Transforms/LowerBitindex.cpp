@@ -48,7 +48,7 @@ void LowerBitIndexPass::runOnOperation() {
   for (auto var : variables) {
     auto *defn = var.getDefiningOp();
     llvm::StringRef name;
-    ImplicitLocOpBuilder builder(var.getLoc(), var);
+    ImplicitLocOpBuilder builder(var.getLoc(), var.getContext());
     if (auto mod = dyn_cast<FModuleOp>(defn)) {
         name = "port.bitindex.wrapper";
         builder.setInsertionPointToStart(mod.getBody());
