@@ -94,49 +94,6 @@ func.func @invert_if(%arg0: i1) {
   return
 }
 
-// CHECK-LABEL: func @mux_to_cond_assign_f
-// CHECK-NEXT:    %r = sv.reg  : !hw.inout<i2>
-// CHECK-NEXT:    sv.alwaysff(posedge %arg0)  {
-// CHECK-NEXT:      sv.if %arg1  {
-// CHECK-NEXT:        sv.passign %r, %arg2 : i2
-// CHECK-NEXT:      }
-// CHECK-NEXT:    }
-// CHECK-NEXT:    return
-// CHECK-NEXT:  }
-func.func @mux_to_cond_assign_f(%clock: i1, %c: i1, %data: i2) {
-  %r = sv.reg  : !hw.inout<i2>
-  %1 = sv.read_inout %r : !hw.inout<i2>
-  %0 = comb.mux %c, %data, %1 : i2
-  sv.alwaysff(posedge %clock)  {
-    sv.passign %r, %0 : i2
-  }
-  return
-}
-
-// CHECK-LABEL: func @mux_to_cond_assign_t
-// CHECK-NEXT:    %true = hw.constant true
-// CHECK-NEXT:    %r = sv.reg  : !hw.inout<i2>
-// CHECK-NEXT:    %r3 = sv.reg  sym @r3 : !hw.inout<i2>
-// CHECK-NEXT:    sv.alwaysff(posedge %arg0)  {
-// CHECK-NEXT:      %0 = comb.xor %arg1, %true : i1
-// CHECK-NEXT:      sv.if %0  {
-// CHECK-NEXT:        sv.passign %r, %arg2 : i2
-// CHECK-NEXT:      }
-// CHECK-NEXT:    }
-// CHECK-NEXT:    return
-// CHECK-NEXT:  }
-func.func @mux_to_cond_assign_t(%clock: i1, %c: i1, %data: i2) {
-  %r = sv.reg  : !hw.inout<i2>
-  %r2 = sv.reg  : !hw.inout<i2>
-  %r3 = sv.reg sym @r3 : !hw.inout<i2>
-  %1 = sv.read_inout %r : !hw.inout<i2>
-  %0 = comb.mux %c, %1, %data : i2
-  sv.alwaysff(posedge %clock)  {
-    sv.passign %r, %0 : i2
-  }
-  return
-}
-
 // CHECK-LABEL; @immediate_assert_canonicalization
 hw.module @assert_canonicalization(%clock: i1) {
   %true = hw.constant 1 : i1

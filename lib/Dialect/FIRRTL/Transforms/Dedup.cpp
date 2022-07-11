@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
@@ -199,8 +200,7 @@ private:
 struct Equivalence {
   Equivalence(MLIRContext *context, InstanceGraph &instanceGraph)
       : instanceGraph(instanceGraph) {
-    noDedupClass =
-        StringAttr::get(context, "firrtl.transforms.NoDedupAnnotation");
+    noDedupClass = StringAttr::get(context, noDedupAnnoClass);
     portTypesAttr = StringAttr::get(context, "portTypes");
     nonessentialAttributes.insert(StringAttr::get(context, "annotations"));
     nonessentialAttributes.insert(StringAttr::get(context, "name"));
@@ -1172,8 +1172,7 @@ class DedupPass : public DedupBase<DedupPass> {
     auto anythingChanged = false;
 
     // Modules annotated with this should not be considered for deduplication.
-    auto noDedupClass =
-        StringAttr::get(context, "firrtl.transforms.NoDedupAnnotation");
+    auto noDedupClass = StringAttr::get(context, noDedupAnnoClass);
 
     // A map of all the module hashes that we have calculated so far.
     llvm::DenseMap<std::array<uint8_t, 32>, Operation *, SHA256HashDenseMapInfo>

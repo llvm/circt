@@ -383,12 +383,12 @@ public:
     // is circuit or module op.
     if (isa<firrtl::CircuitOp, mlir::ModuleOp>(op)) {
       auto &os = llvm::errs();
-      auto elpased = duration<double>(TimePoint::clock::now() -
+      auto elapsed = duration<double>(TimePoint::clock::now() -
                                       timePoints.pop_back_val()) /
                      seconds(1);
       os << "[firtool] ";
       os.indent(2 * --level);
-      os << "-- Done in " << llvm::format("%.3f", elpased) << " sec\n";
+      os << "-- Done in " << llvm::format("%.3f", elapsed) << " sec\n";
     }
   }
 };
@@ -446,10 +446,10 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     return failure();
 
   if (verbosePassExecutions) {
-    auto elpased = std::chrono::duration<double>(
+    auto elapsed = std::chrono::duration<double>(
                        llvm::sys::TimePoint<>::clock::now() - parseStartTime) /
                    std::chrono::seconds(1);
-    llvm::errs() << "[firtool] -- Done in " << llvm::format("%.3f", elpased)
+    llvm::errs() << "[firtool] -- Done in " << llvm::format("%.3f", elapsed)
                  << " sec\n";
   }
 

@@ -560,7 +560,7 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
   for (auto op : circuit.body().getOps<FModuleLike>()) {
     if (auto *extModule = dyn_cast<FExtModuleOp>(&op)) {
       AnnotationSet annotations(*extModule);
-      if (annotations.hasAnnotation("firrtl.transforms.BlackBoxInlineAnno")) {
+      if (annotations.hasAnnotation(blackBoxInlineAnnoClass)) {
         extmodules.vsrc.push_back(*extModule);
         continue;
       }

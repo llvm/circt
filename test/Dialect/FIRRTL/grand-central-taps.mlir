@@ -595,3 +595,42 @@ firrtl.circuit "Top"  {
 }
 
 // CHECK-NOT: firrtl.verbatim.expr
+
+// -----
+
+// Check that constants are sunk into XMRs and symbols are not unnecessarily
+// created.
+//
+// CHECK-LABEL: "ConstantSinking"
+firrtl.circuit "ConstantSinking"  {
+  // CHECK:      firrtl.module @DataTap
+  // CHECK-NEXT:   %[[one:.+]] = firrtl.constant 1
+  // CHECK-NEXT:   firrtl.connect %a, %[[one]]
+  firrtl.extmodule private @DataTap(
+    out a: !firrtl.uint<1> [
+      {
+        class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.port",
+        id = 0 : i64,
+        portID = 1 : i64
+      }
+    ]) attributes {annotations = [
+      {
+        class = "sifive.enterprise.grandcentral.DataTapsAnnotation.blackbox"
+      }
+    ]}
+  // CHECK: firrtl.module @ConstantSinking
+  firrtl.module @ConstantSinking() {
+    %dataTap_a = firrtl.instance dataTap interesting_name  @DataTap(out a: !firrtl.uint<1>)
+    // CHECK:    %w = firrtl.wire
+    // CHECK-NOT   sym
+    %w = firrtl.wire {annotations = [
+      {
+        class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.source",
+        id = 0 : i64,
+        portID = 1 : i64
+      }
+    ]} : !firrtl.uint<1>
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    firrtl.strictconnect %w, %c1_ui1 : !firrtl.uint<1>
+  }
+}

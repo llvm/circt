@@ -315,7 +315,7 @@ circuit Top :
 ; CHECK-LABEL: firrtl.circuit "Top"
 circuit Top : %[[
   {
-    "class":"hello",
+    "class":"circt.test",
     "target":"Top.A.b"
   }
 ]]
@@ -328,7 +328,7 @@ circuit Top : %[[
     inst a2 of A_
   module A :
     output x: UInt<1>
-    ; CHECk-NEXT: firrtl.wire {annotations = [{circt.nonlocal = @[[nlaSym]], class = "hello"}]}
+    ; CHECk-NEXT: firrtl.wire {annotations = [{circt.nonlocal = @[[nlaSym]], class = "circt.test"}]}
     wire b: UInt<1>
     b is invalid
     x <= b
@@ -346,11 +346,13 @@ circuit Top : %[[
 ; CHECK-LABEL: firrtl.circuit "Top"
 circuit Top : %[[
   {
-    "class":"hello",
+    "class":"circt.test",
+    "data":"hello",
     "target":"Top.A.b"
   },
   {
-    "class":"world",
+    "class":"circt.test",
+    "data":"world",
     "target":"~Top|A_>b"
   }
 ]]
@@ -364,7 +366,7 @@ circuit Top : %[[
     inst a2 of A_
   module A :
     output x: UInt<1>
-    ; CHECk-NEXT: firrtl.wire {annotations = [{circt.nonlocal = @[[nlaSym1]], class = "world"}, {circt.nonlocal = @[[nlaSym2]], class = "hello"}]}
+    ; CHECk-NEXT: firrtl.wire {annotations = [{circt.nonlocal = @[[nlaSym1]], class = "circt.test", data = "world"}, {circt.nonlocal = @[[nlaSym2]], class = "circt.test", data = "hello"}]}
     wire b: UInt<1>
     b is invalid
     x <= b
@@ -384,11 +386,13 @@ circuit Top : %[[
 ; CHECK-LABEL: firrtl.circuit "Top"
 circuit Top : %[[
   {
-    "class":"hello",
+    "class":"circt.test",
+    "data":"hello",
     "target":"~Top|A>a"
   },
   {
-    "class":"hello",
+    "class":"circt.test",
+    "data":"hello",
     "target":"~Top|A_>b"
   }
 ]]
@@ -402,7 +406,7 @@ circuit Top : %[[
   module A :
     input x: UInt<1>
     output y: UInt<1>
-    ; CHECK: firrtl.node {{.+}} {annotations = [{class = "hello"}]}
+    ; CHECK: firrtl.node {{.+}} {annotations = [{class = "circt.test", data = "hello"}]}
     node a = add(x, UInt(1))
     y <= add(a, a)
   module A_ :
@@ -434,19 +438,23 @@ circuit main:
 ; CHECK-LABEL: firrtl.circuit "Top"
 circuit Top : %[[
   {
-    "class":"B",
+    "class":"circt.test",
+    "data":"B",
     "target":"~Top|Top/a:A/b:B"
   },
   {
-    "class":"B.foo",
+    "class":"circt.test",
+    "data":"B.foo",
     "target":"~Top|Top/a:A/b:B>foo"
   },
   {
-    "class":"B_",
+    "class":"circt.test",
+    "data":"B_",
     "target":"~Top|Top/a_:A_/b_:B_"
   },
   {
-    "class":"B_.bar",
+    "class":"circt.test",
+    "data":"B_.bar",
     "target":"~Top|Top/a_:A_/b_:B_>bar"
   }
 ]]
@@ -469,12 +477,12 @@ circuit Top : %[[
   module A_ :
     inst b_ of B_
   ; CHECK: firrtl.module private @B
-  ; CHECK-SAME: {circt.nonlocal = @[[nla_3]], class = "B_"}
-  ; CHECK-SAME: {circt.nonlocal = @[[nla_1]], class = "B"}
+  ; CHECK-SAME: {circt.nonlocal = @[[nla_3]], class = "circt.test", data = "B_"}
+  ; CHECK-SAME: {circt.nonlocal = @[[nla_1]], class = "circt.test", data = "B"}
   module B :
     ; CHECK: firrtl.node
-    ; CHECK-SAME: {circt.nonlocal = @[[nla_4]], class = "B_.bar"}
-    ; CHECK-SAME: {circt.nonlocal = @[[nla_2]], class = "B.foo"}
+    ; CHECK-SAME: {circt.nonlocal = @[[nla_4]], class = "circt.test", data = "B_.bar"}
+    ; CHECK-SAME: {circt.nonlocal = @[[nla_2]], class = "circt.test", data = "B.foo"}
     node foo = UInt<1>(0)
   ; CHECK-NOT: firrtl.module private @B_
   module B_ :
@@ -491,19 +499,23 @@ circuit Top : %[[
 ; CHECK-LABEL: firrtl.circuit "Top"
 circuit Top : %[[
   {
-    "class":"one",
+    "class":"circt.test",
+    "data":"one",
     "target":"~Top|Top/a:A/b:B/c:C/d:D"
   },
   {
-    "class":"one",
+    "class":"circt.test",
+    "data":"one",
     "target":"~Top|Top/a:A/b:B/c:C/d:D>foo"
   },
   {
-    "class":"two",
+    "class":"circt.test",
+    "data":"two",
     "target":"~Top|Top/a_:A_/b_:B_/c_:C_/d_:D_"
   },
   {
-    "class":"two",
+    "class":"circt.test",
+    "data":"two",
     "target":"~Top|Top/a_:A_/b_:B_/c_:C_/d_:D_>bar"
   }
 ]]
@@ -584,51 +596,63 @@ circuit Top : %[[
 ; CHECK-LABEL: firrtl.circuit "Top"
 circuit Top : %[[
   {
-    "class":"nla1",
+    "class":"circt.test",
+    "data":"nla1",
     "target":"~Top|Top/b:B"
   },
   {
-    "class":"nla2",
+    "class":"circt.test",
+    "data":"nla2",
     "target":"~Top|Top/b_:B_"
   },
   {
-    "class":"nla3",
+    "class":"circt.test",
+    "data":"nla3",
     "target":"~Top|Top/a1:A/b_:B_"
   },
   {
-    "class":"nla4",
+    "class":"circt.test",
+    "data":"nla4",
     "target":"~Top|Top/a2:A/b_:B_"
   },
   {
-    "class":"nla5",
+    "class":"circt.test",
+    "data":"nla5",
     "target":"~Top|Top/a1:A/b:B"
   },
   {
-    "class":"nla6",
+    "class":"circt.test",
+    "data":"nla6",
     "target":"~Top|Top/a2:A/b:B"
   },
   {
-    "class":"nla7",
+    "class":"circt.test",
+    "data":"nla7",
     "target":"~Top|Top/b:B/c:C"
   },
   {
-    "class":"nla8",
+    "class":"circt.test",
+    "data":"nla8",
     "target":"~Top|Top/b_:B_/c:C"
   },
   {
-    "class":"nla9",
+    "class":"circt.test",
+    "data":"nla9",
     "target":"~Top|Top/a1:A/b_:B_/c:C"
   },
   {
-    "class":"nla10",
+    "class":"circt.test",
+    "data":"nla10",
     "target":"~Top|Top/a2:A/b_:B_/c:C"
   },
   {
-    "class":"nla11",
+    "class":"circt.test",
+    "data":"nla11",
     "target":"~Top|Top/a1:A/b:B/c:C"
   },
   {
-    "class":"nla12",
+    "class":"circt.test",
+    "data":"nla12",
     "target":"~Top|Top/a2:A/b:B/c:C"
   }
 ]]
@@ -707,24 +731,24 @@ circuit Top : %[[
     inst b_ of B_
 
   ; CHECK:        firrtl.module private @B()
-  ; CHECK-SAME:     [{circt.nonlocal = @[[nla_2]], class = "nla2"},
-  ; CHECK-SAME:      {circt.nonlocal = @[[nla_3]], class = "nla3"},
-  ; CHECK-SAME:      {circt.nonlocal = @[[nla_4]], class = "nla4"},
-  ; CHECK-SAME:      {circt.nonlocal = @[[nla_1]], class = "nla1"},
-  ; CHECK-SAME:      {circt.nonlocal = @[[nla_5]], class = "nla5"},
-  ; CHECK-SAME:      {circt.nonlocal = @[[nla_6]], class = "nla6"}]
+  ; CHECK-SAME:     [{circt.nonlocal = @[[nla_2]], class = "circt.test", data = "nla2"},
+  ; CHECK-SAME:      {circt.nonlocal = @[[nla_3]], class = "circt.test", data = "nla3"},
+  ; CHECK-SAME:      {circt.nonlocal = @[[nla_4]], class = "circt.test", data = "nla4"},
+  ; CHECK-SAME:      {circt.nonlocal = @[[nla_1]], class = "circt.test", data = "nla1"},
+  ; CHECK-SAME:      {circt.nonlocal = @[[nla_5]], class = "circt.test", data = "nla5"},
+  ; CHECK-SAME:      {circt.nonlocal = @[[nla_6]], class = "circt.test", data = "nla6"}]
   module B :
     ; CHECK-NEXT:   firrtl.instance c sym @[[BcSym]]
     ; CHECK-SAME:     @C()
     inst c of C
 
   ; CHECK:        firrtl.module private @C()
-  ; CHECK-SAME:     [{circt.nonlocal = @[[nla_7]], class = "nla7"},
-  ; CHECK-SAME:      {circt.nonlocal = @[[nla_8]], class = "nla8"},
-  ; CHECK-SAME:      {circt.nonlocal = @[[nla_9]], class = "nla9"},
-  ; CHECK-SAME:      {circt.nonlocal = @[[nla_10]], class = "nla10"},
-  ; CHECK-SAME:      {circt.nonlocal = @[[nla_11]], class = "nla11"},
-  ; CHECK-SAME:      {circt.nonlocal = @[[nla_12]], class = "nla12"}]
+  ; CHECK-SAME:     [{circt.nonlocal = @[[nla_7]], class = "circt.test", data = "nla7"},
+  ; CHECK-SAME:      {circt.nonlocal = @[[nla_8]], class = "circt.test", data = "nla8"},
+  ; CHECK-SAME:      {circt.nonlocal = @[[nla_9]], class = "circt.test", data = "nla9"},
+  ; CHECK-SAME:      {circt.nonlocal = @[[nla_10]], class = "circt.test", data = "nla10"},
+  ; CHECK-SAME:      {circt.nonlocal = @[[nla_11]], class = "circt.test", data = "nla11"},
+  ; CHECK-SAME:      {circt.nonlocal = @[[nla_12]], class = "circt.test", data = "nla12"}]
   module C :
     skip
 
@@ -743,11 +767,13 @@ circuit Top : %[[
 ; CHECK-LABEL: firrtl.circuit "top"
 circuit top : %[[
   {
-    "class":"nla1",
+    "class":"circt.test",
+    "data":"nla1",
     "target":"~top|a>i.a"
   },
   {
-    "class":"nla2",
+    "class":"circt.test",
+    "data":"nla2",
     "target":"~top|b>q.a"
   }
 ]]
@@ -777,8 +803,8 @@ circuit top : %[[
   ; CHECK:      firrtl.module private @a(
   ; CHECK-SAME:   in %i:
   ; CHECK-NOT:    out
-  ; CHECK-SAME:     [{circt.fieldID = 1 : i64, circt.nonlocal = @[[nla_2]], class = "nla2"},
-  ; CHECK-SAME:      {circt.fieldID = 4 : i64, circt.nonlocal = @[[nla_1]], class = "nla1"}]
+  ; CHECK-SAME:     [{circt.fieldID = 1 : i32, circt.nonlocal = @[[nla_2]], class = "circt.test", data = "nla2"},
+  ; CHECK-SAME:      {circt.fieldID = 4 : i32, circt.nonlocal = @[[nla_1]], class = "circt.test", data = "nla1"}]
   module a:
     input i: {z: {y: {x: UInt<1>}}, a: UInt<1>}
     output o: {z: {y: {x: UInt<1>}}, a: UInt<1>}

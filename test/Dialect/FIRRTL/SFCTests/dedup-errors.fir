@@ -14,7 +14,7 @@
 ; CHECK-LABEL: firrtl.circuit "Top"
 circuit Top : %[[
   {
-    "class": "hello",
+    "class": "circt.test",
      "target": "Top.Top.a2.y",
      "pin": "pin"
   }
@@ -25,7 +25,7 @@ circuit Top : %[[
     ; CHECK: inst a1 of A
     ; CHECK-NOT: SourceAnnotation
     ; CHECK: inst a2 of A
-    ; CHECK-SAME: [{class = "hello", pin = "pin"}]
+    ; CHECK-SAME: [{class = "circt.test", pin = "pin"}]
     inst a1 of A
     inst a2 of A_
     out <= and(a1.x, a2.y)

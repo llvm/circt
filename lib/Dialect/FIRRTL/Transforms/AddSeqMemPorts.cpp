@@ -129,8 +129,8 @@ LogicalResult AddSeqMemPortsPass::processAnnos(CircuitOp circuit) {
   auto loc = circuit.getLoc();
 
   // Find the metadata directory.
-  auto dirAnno = AnnotationSet(circuit).getAnnotation(
-      "sifive.enterprise.firrtl.MetadataDirAnnotation");
+  auto dirAnno =
+      AnnotationSet(circuit).getAnnotation(metadataDirectoryAttrName);
   StringRef metadataDir = "metadata";
   if (dirAnno) {
     auto dir = dirAnno.getMember<StringAttr>("dirname");

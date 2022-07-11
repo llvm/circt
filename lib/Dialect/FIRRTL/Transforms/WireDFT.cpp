@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
@@ -91,10 +92,6 @@ lowestCommonAncestor(InstanceGraphNode *top,
   return currentLCA;
 }
 
-static const char dutClass[] = "sifive.enterprise.firrtl.MarkDUTAnnotation";
-static const char dftEnableClass[] =
-    "sifive.enterprise.firrtl.DFTTestModeEnableAnnotation";
-
 namespace {
 class WireDFTPass : public WireDFTBase<WireDFTPass> {
   void runOnOperation() override;
@@ -123,7 +120,7 @@ void WireDFTPass::runOnOperation() {
 
     // Check if this module is the DUT.
     AnnotationSet annos(module);
-    if (annos.hasAnnotation(dutClass)) {
+    if (annos.hasAnnotation(dutAnnoClass)) {
       // Check if we already found the DUT.
       if (dut) {
         auto diag = module->emitError("more than one module marked DUT");
@@ -140,7 +137,7 @@ void WireDFTPass::runOnOperation() {
                                                      Annotation anno) {
       // If we have already encountered an error or this is not the right
       // annotation kind, continue.
-      if (error || !anno.isClass(dftEnableClass))
+      if (error || !anno.isClass(dftTestModeEnableAnnoClass))
         return false;
       // If we have already found a DFT enable, emit an error.
       if (enableSignal) {
@@ -166,7 +163,7 @@ void WireDFTPass::runOnOperation() {
       AnnotationSet::removeAnnotations(op, [&](Annotation anno) {
         // If we have already encountered an error or this is not the right
         // annotation kind, continue.
-        if (error || !anno.isClass(dftEnableClass))
+        if (error || !anno.isClass(dftTestModeEnableAnnoClass))
           return false;
         if (enableSignal) {
           auto diag =
