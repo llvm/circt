@@ -161,7 +161,8 @@ The item of `sv.attributes` must be an ArrayAttr whose elements are `sv.attribut
 Currently, SV attributes don't block most optimizations; therefore, users
 should not expect that sv attributes always appear in the output verilog.
 However, in the future, we might have to re-consider blocking every optimization
- for operations with SV attributes.
+for operations with SV attributes.
+
 Example,
 
 ```mlir
