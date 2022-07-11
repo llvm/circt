@@ -105,7 +105,7 @@ private:
   /// second operation.
   void mergeOperationsIntoFrom(Operation *op1, Operation *op2) {
     // If either op1 or op2 has SV attributues, we cannot merge the ops.
-    if (hasSVAttributes(op1) || hasSVAttributes(op2))
+    if (sv::hasSVAttributes(op1) || sv::hasSVAttributes(op2))
       return;
     assert(op1 != op2 && "Cannot merge an op into itself");
     for (size_t i = 0, e = op1->getNumRegions(); i != e; ++i)

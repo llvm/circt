@@ -50,8 +50,8 @@ public:
     if (reg.sym_name().hasValue())
       svReg.inner_symAttr(reg.sym_nameAttr());
 
-    if (auto attribute = circt::getSVAttributes(reg))
-      circt::setSVAttributes(svReg, attribute);
+    if (auto attribute = circt::sv::getSVAttributes(reg))
+      circt::sv::setSVAttributes(svReg, attribute);
 
     auto regVal = rewriter.create<sv::ReadInOutOp>(loc, svReg);
     if (reg.reset() && reg.resetValue()) {
