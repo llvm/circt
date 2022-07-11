@@ -43,9 +43,7 @@ void HWDialect::registerAttributes() {
 Attribute HWDialect::parseAttribute(DialectAsmParser &p, Type type) const {
   StringRef attrName;
   Attribute attr;
-  if (p.parseKeyword(&attrName))
-    return Attribute();
-  auto parseResult = generatedAttributeParser(p, attrName, type, attr);
+  auto parseResult = generatedAttributeParser(p, &attrName, type, attr);
   if (parseResult.hasValue())
     return attr;
 

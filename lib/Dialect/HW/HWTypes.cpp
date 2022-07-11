@@ -171,9 +171,7 @@ static ParseResult parseHWElementType(Type &result, AsmParser &p) {
       typeString.startswith("uarray<") || typeString.startswith("struct<") ||
       typeString.startswith("typealias<") || typeString.startswith("int<")) {
     llvm::StringRef mnemonic;
-    if (p.parseKeyword(&mnemonic))
-      llvm_unreachable("should have an array or inout keyword here");
-    auto parseResult = generatedTypeParser(p, mnemonic, result);
+    auto parseResult = generatedTypeParser(p, &mnemonic, result);
     return parseResult.hasValue() ? success() : failure();
   }
 
