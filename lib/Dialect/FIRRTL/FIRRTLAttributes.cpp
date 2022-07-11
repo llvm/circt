@@ -112,14 +112,17 @@ void InnerSymPropertiesAttr::print(AsmPrinter &p) const {
     << getSymVisibility().getValue() << ">";
 }
 
-StringAttr InnerSymAttr::getSymName() {
-  auto it = llvm::find_if(getProps(), [&](InnerSymPropertiesAttr p) {
-    return (p.getFieldID() == 0);
-  });
+StringAttr InnerSymAttr::getSymIfExists(unsigned fieldId) {
+  auto it =
+      llvm::find_if(getImpl()->props, [&](const InnerSymPropertiesAttr &p) {
+        return p.getFieldID() == fieldId;
+      });
   if (it != getProps().end())
     return it->getName();
   return {};
 }
+
+StringAttr InnerSymAttr::getSymName() { return getSymIfExists(0); }
 
 bool InnerSymAttr::all_of_props(
     std::function<bool(InnerSymPropertiesAttr)> func) {
