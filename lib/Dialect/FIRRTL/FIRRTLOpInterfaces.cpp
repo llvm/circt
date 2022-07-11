@@ -112,12 +112,8 @@ LogicalResult circt::firrtl::verifyModuleLikeOpInterface(FModuleLike module) {
   return success();
 }
 
-LogicalResult circt::firrtl::verifyInnerSymAttr(Operation *op) {
-  auto innerSymOp = dyn_cast<InnerSymbolOpInterface>(op);
-  // If not an InnerSymbolOpInterface then ignore.
-  if (!innerSymOp)
-    return success();
-  auto isa = innerSymOp.getInnerSymAttr();
+LogicalResult circt::firrtl::verifyInnerSymAttr(InnerSymbolOpInterface op) {
+  auto isa = op.getInnerSymAttr();
   // If does not have any inner sym then ignore.
   if (!isa)
     return success();
