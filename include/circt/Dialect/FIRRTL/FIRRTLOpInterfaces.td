@@ -346,9 +346,18 @@ def InnerSymbol : OpInterface<"InnerSymbolOpInterface"> {
             InnerSymbolTable::getInnerSymbol(op));
       }]
     >,
-
+    InterfaceMethod<"Returns the InnerSymAttr.",
+      "InnerSymAttr", "getInnerSymAttr", (ins), [{}],
+      /*defaultImplementation=*/[{
+        return this->getOperation()->template getAttrOfType<InnerSymAttr>(
+              circt::firrtl::InnerSymbolTable::getInnerSymbolAttrName());
+      }]
+    >,
   ];
 
+  let verify = [{
+    return verifyInnerSymAttr(op);
+  }];
 }
 
 def InnerSymbolTable : NativeOpTrait<"InnerSymbolTable">;
