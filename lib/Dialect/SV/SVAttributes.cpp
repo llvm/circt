@@ -39,6 +39,19 @@ void circt::sv::setSVAttributes(mlir::Operation *op, mlir::Attribute attr) {
   return op->setAttr(sv::SVAttributeAttr::getSVAttributesAttrName(), attr);
 }
 
+void circt::sv::setSVAttributes(mlir::Operation *op,
+                                llvm::ArrayRef<llvm::StringRef> attributes) {
+  llvm::SmallVector<mlir::Attribute> svAttrs;
+  svAttrs.reserve(attributes.size());
+  auto context = op->getContext();
+  for (auto str : attributes)
+    svAttrs.push_back(SVAttributeAttr::get(
+        op->getContext(), StringAttr::get(op->getContext(), str),
+        StringAttr()));
+
+  setSVAttributes(op, mlir::ArrayAttr::get(context, svAttrs));
+}
+
 void SVDialect::registerAttributes() {
   addAttributes<
 #define GET_ATTRDEF_LIST

@@ -21,6 +21,8 @@ namespace sv {
 bool hasSVAttributes(mlir::Operation *op);
 mlir::ArrayAttr getSVAttributes(mlir::Operation *op);
 void setSVAttributes(mlir::Operation *op, mlir::Attribute);
+void setSVAttributes(mlir::Operation *op,
+                     llvm::ArrayRef<llvm::StringRef> attributes);
 
 } // namespace sv
 

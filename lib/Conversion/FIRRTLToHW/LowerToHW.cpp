@@ -25,6 +25,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/HW/Namespace.h"
+#include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Support/BackedgeBuilder.h"
 #include "circt/Support/Namespace.h"
@@ -3480,8 +3481,25 @@ LogicalResult FIRRTLLowering::visitExpr(MultibitMuxOp op) {
       return failure();
     loweredInputs.push_back(lowered);
   }
+
+  // We lower multbit mux into array indexing with vendor pragmas in the
+  // following form. SV attributes are used to attach pragamas.
+  //
+  // wire GEN;
+  // (* synopsys infer_mux_override *)
+  // assign GEN = array[index] (* cadence map_to_mux *);
+
   Value array = builder.create<hw::ArrayCreateOp>(loweredInputs);
-  Value inBoundsRead = builder.create<hw::ArrayGetOp>(array, index);
+  auto valWire = builder.create<sv::WireOp>(lowerType(op.getType()));
+  auto arrayGet = builder.create<hw::ArrayGetOp>(array, index);
+  // Add "cadence map_to_mux" to the array_get op.
+  circt::sv::setSVAttributes(arrayGet, {"cadence map_to_mux"});
+
+  auto assign = builder.create<sv::AssignOp>(valWire, arrayGet);
+  // Add "synopsys infer_mux_override" to the assignment op.
+  circt::sv::setSVAttributes(assign, {"synopsys infer_mux_override"});
+
+  Value inBoundsRead = builder.create<sv::ReadInOutOp>(valWire);
 
   // If the multi-bit mux can never have an out-of-bounds read, then lower it
   // into a HW multi-bit mux.
