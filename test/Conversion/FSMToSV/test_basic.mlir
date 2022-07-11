@@ -60,9 +60,9 @@ hw.module @top(%arg0: i1, %arg1: i1, %clk : i1, %rst : i1) -> (out: i8) {
 // CHECK-NEXT:        sv.bpassign %output_1, %c42_i8 : i8
 // CHECK-NEXT:      }
 // CHECK-NEXT:    }
-// CHECK-NEXT:    %next_state = sv.logic  : !hw.inout<typealias<@top_enum_typedecls::@top_state_t, !hw.enum<A, B>>>
-// CHECK-NEXT:    %output_0 = sv.logic  : !hw.inout<i8>
-// CHECK-NEXT:    %output_1 = sv.logic  : !hw.inout<i8>
+// CHECK-NEXT:    %next_state = sv.reg  : !hw.inout<typealias<@top_enum_typedecls::@top_state_t, !hw.enum<A, B>>>
+// CHECK-NEXT:    %output_0 = sv.reg  : !hw.inout<i8>
+// CHECK-NEXT:    %output_1 = sv.reg  : !hw.inout<i8>
 // CHECK-NEXT:    %4 = sv.read_inout %next_state : !hw.inout<typealias<@top_enum_typedecls::@top_state_t, !hw.enum<A, B>>>
 // CHECK-NEXT:    %5 = sv.read_inout %output_0 : !hw.inout<i8>
 // CHECK-NEXT:    %6 = sv.read_inout %output_1 : !hw.inout<i8>

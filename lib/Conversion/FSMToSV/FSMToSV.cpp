@@ -321,7 +321,7 @@ llvm::SmallVector<Value> MachineOpConverter::buildStateCaseMux(
     if (nameF)
       name = nameF(idx);
 
-    auto dst = b.create<sv::LogicOp>(loc, valueType, name);
+    auto dst = b.create<sv::RegOp>(loc, valueType, name);
     OpBuilder::InsertionGuard g(b);
     for (auto [caseInfo, stateOp] :
          llvm::zip(caseMux.getCases(), orderedStates)) {
