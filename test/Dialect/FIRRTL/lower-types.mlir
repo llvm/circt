@@ -1215,3 +1215,16 @@ firrtl.circuit "SymbolCollision" {
     in %b: !firrtl.bundle<foo: uint<1>> [{circt.fieldID = 1 : i32, circt.nonlocal = @bar}]) {
   }
 }
+
+// Check that we don't lose the DontTouchAnnotation when it is not the last
+// annotation in the list of annotations.
+// https://github.com/llvm/circt/issues/3504
+// CHECK-LABEL: firrtl.circuit "DontTouch"
+firrtl.circuit "DontTouch" {
+  // CHECK: in %port_field: !firrtl.uint<1> sym @port_field [{class = "Test"}]
+  firrtl.module @DontTouch (in %port: !firrtl.bundle<field: uint<1>> [
+    {circt.fieldID = 1 : i32, class = "firrtl.transforms.DontTouchAnnotation"},
+    {circt.fieldID = 1 : i32, class = "Test"}
+  ]) {
+ }
+}
