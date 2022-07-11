@@ -16,8 +16,6 @@
 #include "circt/Support/BackedgeBuilder.h"
 #include "llvm/ADT/TypeSwitch.h"
 
-#include "llvm/Support/Debug.h"
-
 #include <memory>
 
 using namespace mlir;
@@ -25,10 +23,17 @@ using namespace circt;
 using namespace fsm;
 
 /// Get the port info of a FSM machine. Clock and reset port are also added.
-static void getMachinePortInfo(SmallVectorImpl<hw::PortInfo> &ports,
-                               MachineOp machine, OpBuilder &b) {
+namespace {
+struct ClkRstIdxs {
+  size_t clockIdx;
+  size_t resetIdx;
+};
+} // namespace
+static ClkRstIdxs getMachinePortInfo(SmallVectorImpl<hw::PortInfo> &ports,
+                                     MachineOp machine, OpBuilder &b) {
   // Get the port info of the machine inputs and outputs.
   machine.getHWPortInfo(ports);
+  ClkRstIdxs specialPorts;
 
   // Add clock port.
   hw::PortInfo clock;
@@ -37,6 +42,7 @@ static void getMachinePortInfo(SmallVectorImpl<hw::PortInfo> &ports,
   clock.type = b.getI1Type();
   clock.argNum = machine.getNumArguments();
   ports.push_back(clock);
+  specialPorts.clockIdx = clock.argNum;
 
   // Add reset port.
   hw::PortInfo reset;
@@ -45,6 +51,9 @@ static void getMachinePortInfo(SmallVectorImpl<hw::PortInfo> &ports,
   reset.type = b.getI1Type();
   reset.argNum = machine.getNumArguments() + 1;
   ports.push_back(reset);
+  specialPorts.resetIdx = reset.argNum;
+
+  return specialPorts;
 }
 
 namespace {
@@ -180,6 +189,24 @@ public:
   MachineOpConverter(OpBuilder &builder, MachineOp machineOp)
       : machineOp(machineOp), b(builder) {}
 
+  // Converts the machine op to a hardware module.
+  // 1. Creates a HWModuleOp for the machine op, with the same I/O as the FSM +
+  // clk/reset ports.
+  // 2. Creates a state register + encodings for the states visible in the
+  // machine.
+  // 3. Iterates over all states in the machine
+  //  3.1. Moves all `comb` logic into the body of the HW module
+  //  3.2. Records the SSA value(s) associated to the output ports in the state
+  //  3.3. iterates of the transitions of the state
+  //    3.3.1. Moves all `comb` logic in the transition guard/action regions to
+  //            the body of the HW module.
+  //    3.3.2. Creates a case pattern for the transition guard
+  //  3.4. Creates a next-state value for the state based on the transition
+  //  guards.
+  // 4. Assigns next-state values for the states in a case statement on the
+  // state reg.
+  // 5. Assigns the current-state outputs for the states in a case statement
+  // on the state reg.
   LogicalResult dispatch();
 
 private:
@@ -294,7 +321,7 @@ llvm::SmallVector<Value> MachineOpConverter::buildStateCaseMux(
     if (nameF)
       name = nameF(idx);
 
-    auto dst = b.create<sv::RegOp>(loc, valueType, name);
+    auto dst = b.create<sv::LogicOp>(loc, valueType, name);
     OpBuilder::InsertionGuard g(b);
     for (auto [caseInfo, stateOp] :
          llvm::zip(caseMux.getCases(), orderedStates)) {
@@ -310,7 +337,7 @@ llvm::SmallVector<Value> MachineOpConverter::buildStateCaseMux(
 LogicalResult MachineOpConverter::dispatch() {
   if (auto varOps = machineOp.front().getOps<VariableOp>(); !varOps.empty())
     return (*varOps.begin())->emitOpError()
-           << "FSM variables not yet supported for HW "
+           << "FSM variables not yet supported for SV "
               "lowering.";
 
   b.setInsertionPoint(machineOp);
@@ -318,9 +345,9 @@ LogicalResult MachineOpConverter::dispatch() {
   if (machineOp.getNumStates() < 2)
     return machineOp.emitOpError() << "expected at least 2 states.";
 
-  // Get the port info of the machine and create a new HW module for it.
+  // 1) Get the port info of the machine and create a new HW module for it.
   SmallVector<hw::PortInfo, 16> ports;
-  getMachinePortInfo(ports, machineOp, b);
+  auto clkRstIdxs = getMachinePortInfo(ports, machineOp, b);
   hwModuleOp = b.create<hw::HWModuleOp>(loc, machineOp.sym_nameAttr(), ports);
   b.setInsertionPointToStart(&hwModuleOp.front());
 
@@ -333,12 +360,10 @@ LogicalResult MachineOpConverter::dispatch() {
     machineArg.replaceAllUsesWith(hwModuleArg);
   }
 
-  auto clock =
-      hwModuleOp.front().getArgument(hwModuleOp.front().getNumArguments() - 2);
-  auto reset =
-      hwModuleOp.front().getArgument(hwModuleOp.front().getNumArguments() - 1);
+  auto clock = hwModuleOp.front().getArgument(clkRstIdxs.clockIdx);
+  auto reset = hwModuleOp.front().getArgument(clkRstIdxs.resetIdx);
 
-  // Build state register.
+  // 2) Build state register.
   encoding = std::make_unique<EnumStateEncoding>(b, machineOp, hwModuleOp);
   auto stateType = encoding->getStateType();
 
@@ -357,7 +382,7 @@ LogicalResult MachineOpConverter::dispatch() {
     return failure();
   }
 
-  // Convert states and gather their next state values
+  // 3) Convert states and record their next-state value.
   StateConversionResults stateConvResults;
   for (auto state : machineOp.getBody().getOps<StateOp>()) {
     auto stateConvRes = convertState(state);
@@ -370,13 +395,10 @@ LogicalResult MachineOpConverter::dispatch() {
     nextStateFromState[state] = stateConvRes.getValue().nextState;
   }
 
-  // Next-state maps for each
+  // 4/5) Create next-state maps for each output and the next-state signal in a
+  // format suitable for creating a case mux.
   llvm::SmallVector<llvm::SmallDenseMap<StateOp, Value>, 4> nextStateMaps;
-
-  // Create next-state mux.
   nextStateMaps.push_back(nextStateFromState);
-
-  // Create output port muxes.
   for (size_t portIndex = 0; portIndex < machineOp.getNumResults();
        portIndex++) {
     auto &nsmap = nextStateMaps.emplace_back();
@@ -476,17 +498,19 @@ FailureOr<MachineOpConverter::StateConversionResult>
 MachineOpConverter::convertState(StateOp state) {
   MachineOpConverter::StateConversionResult res;
 
-  // Convert the output region by moving the operations into the module scope
-  // and gathering the operands of the output op.
+  // 3.1) Convert the output region by moving the operations into the module
+  // scope and gathering the operands of the output op.
   auto outputOpRes = moveOps(&state.output().front());
   if (failed(outputOpRes))
     return failure();
 
   OutputOp outputOp = cast<fsm::OutputOp>(outputOpRes.getValue());
-  res.outputs = outputOp.getOperands();
+  res.outputs = outputOp.getOperands(); // 3.2
 
   auto transitions = llvm::SmallVector<TransitionOp>(
       state.transitions().getOps<TransitionOp>());
+  // 3.3, 3.4) Convert the transitions and record the next-state value
+  // derived from the transitions being selected in a priority-encoded manner.
   auto nextStateRes = convertTransitions(state, transitions);
   if (failed(nextStateRes))
     return failure();
@@ -495,44 +519,44 @@ MachineOpConverter::convertState(StateOp state) {
 }
 
 struct FSMToSVPass : public ConvertFSMToSVBase<FSMToSVPass> {
-  void runOnOperation() override {
-    auto module = getOperation();
-    auto b = OpBuilder(module);
-    SmallVector<Operation *, 16> opToErase;
+  void runOnOperation() override;
+};
 
-    // Traverse all machines and convert.
-    for (auto machine :
-         llvm::make_early_inc_range(module.getOps<MachineOp>())) {
-      MachineOpConverter converter(b, machine);
+void FSMToSVPass::runOnOperation() {
+  auto module = getOperation();
+  auto b = OpBuilder(module);
+  SmallVector<Operation *, 16> opToErase;
 
-      if (failed(converter.dispatch())) {
-        signalPassFailure();
-        return;
-      }
-    }
+  // Traverse all machines and convert.
+  for (auto machine : llvm::make_early_inc_range(module.getOps<MachineOp>())) {
+    MachineOpConverter converter(b, machine);
 
-    // Traverse all machine instances and convert to hw instances.
-    for (auto hwModule : module.getOps<hw::HWModuleOp>()) {
-      for (auto instance :
-           llvm::make_early_inc_range(hwModule.getOps<fsm::HWInstanceOp>())) {
-        auto fsmHWModule =
-            module.lookupSymbol<hw::HWModuleOp>(instance.machine());
-        assert(fsmHWModule &&
-               "FSM machine should have been converted to a hw.module");
-
-        b.setInsertionPoint(instance);
-        llvm::SmallVector<Value, 4> operands;
-        llvm::transform(instance.getOperands(), std::back_inserter(operands),
-                        [&](auto operand) { return operand; });
-        auto hwInstance = b.create<hw::InstanceOp>(
-            instance.getLoc(), fsmHWModule, b.getStringAttr(instance.getName()),
-            operands, nullptr);
-        instance.replaceAllUsesWith(hwInstance);
-        instance.erase();
-      }
+    if (failed(converter.dispatch())) {
+      signalPassFailure();
+      return;
     }
   }
-};
+
+  // Traverse all machine instances and convert to hw instances.
+  llvm::SmallVector<HWInstanceOp> instances;
+  module.walk([&](HWInstanceOp instance) { instances.push_back(instance); });
+  for (auto instance : instances) {
+    auto fsmHWModule = module.lookupSymbol<hw::HWModuleOp>(instance.machine());
+    assert(fsmHWModule &&
+           "FSM machine should have been converted to a hw.module");
+
+    b.setInsertionPoint(instance);
+    llvm::SmallVector<Value, 4> operands;
+    llvm::transform(instance.getOperands(), std::back_inserter(operands),
+                    [&](auto operand) { return operand; });
+    auto hwInstance = b.create<hw::InstanceOp>(
+        instance.getLoc(), fsmHWModule, b.getStringAttr(instance.getName()),
+        operands, nullptr);
+    instance.replaceAllUsesWith(hwInstance);
+    instance.erase();
+  }
+}
+
 } // end anonymous namespace
 
 std::unique_ptr<mlir::Pass> circt::createConvertFSMToSVPass() {

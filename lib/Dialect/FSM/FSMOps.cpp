@@ -133,17 +133,20 @@ LogicalResult MachineOp::verify() {
                        "' was not defined in the machine");
 
   if (argNames() && argNames().getValue().size() != getArgumentTypes().size())
-    return emitOpError(llvm::formatv("number of machine arguments ({0}) does "
-                                     "not match the provided number "
-                                     "of argument names ({1})",
-                                     getArgumentTypes().size(),
-                                     argNames().getValue().size()));
+    return emitOpError() << "number of machine arguments ("
+                         << getArgumentTypes().size()
+                         << ") does "
+                            "not match the provided number "
+                            "of argument names ("
+                         << argNames().getValue().size() << ")";
 
   if (resNames() && resNames().getValue().size() != getResultTypes().size())
-    return emitOpError(llvm::formatv(
-        "number of machine results ({0}) does not match the provided number "
-        "of result names ({1})",
-        getResultTypes().size(), resNames().getValue().size()));
+    return emitOpError() << "number of machine results ("
+                         << getResultTypes().size()
+                         << ") does "
+                            "not match the provided number "
+                            "of result names ("
+                         << resNames().getValue().size() << ")";
 
   return success();
 }
