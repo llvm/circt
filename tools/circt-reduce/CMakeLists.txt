@@ -3,9 +3,9 @@ set(LLVM_LINK_COMPONENTS
 )
 
 add_llvm_tool(circt-reduce
-  circt-reduce.cpp
-  Reduction.cpp
-  Tester.cpp
+ circt-reduce.cpp
+ Reduction.cpp
+ Tester.cpp
 )
 llvm_update_compile_flags(circt-reduce)
 target_link_libraries(circt-reduce
