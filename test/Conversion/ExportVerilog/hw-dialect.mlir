@@ -77,7 +77,7 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
   // make tests brittle. This line breaking does not mean your change is no
   // good! You'll just have to find a new place for `sv.namehint`.
   %elem2d = hw.array_get %array2d[%a] { sv.namehint="array2d_idx_0_name" } : !hw.array<12 x array<10xi4>>
-  %37 = hw.array_get %elem2d[%b] : !hw.array<10xi4>
+  %37 = hw.array_get %elem2d[%b] {sv.attributes=[#sv.attribute<"svAttr">]}: !hw.array<10xi4>
 
   %36 = comb.replicate %a : (i4) -> i12
 
@@ -183,7 +183,7 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
 // CHECK-NEXT:   assign r34 = ~a;
 // CHECK-NEXT:   assign r35 = cond ? [[WIRE0]][a +: 3] : [[WIRE0]][b +: 3];
 // CHECK-NEXT:   assign r36 = {3{a}};
-// CHECK-NEXT:   assign r37 = [[WIRE2]][b];
+// CHECK-NEXT:   assign r37 = [[WIRE2]][b] (* svAttr *);
 // CHECK-NEXT:   assign r38 = {[[WIRE1]], [[WIRE1]]};
 // CHECK-NEXT:   assign r40 = '{foo: structA.foo, bar: a};
 // CHECK-NEXT:   assign r41 = '{foo: [[WIRE3]].foo, bar: b};

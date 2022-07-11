@@ -120,8 +120,8 @@ hw.module @assert_canonicalization(%clock: i1) {
 hw.module @svAttrPreventsCanonicalization(%arg0: i1) {
   %0 = sv.wire : !hw.inout<i1>
   // CHECK:      %0 = sv.wire : !hw.inout<i1>
-  // CHECK-NEXT: sv.assign %0, %arg0 svattrs [#sv.attribute<"attr">] : i1
-  sv.assign %0, %arg0 svattrs [#sv.attribute<"attr">] : i1
+  // CHECK-NEXT: sv.assign %0, %arg0 {sv.attributes = [#sv.attribute<"attr">]} : i1
+  sv.assign %0, %arg0 {sv.attributes = [#sv.attribute<"attr">]} : i1
 }
 
 // CHECK-LABEL: @case_stmt

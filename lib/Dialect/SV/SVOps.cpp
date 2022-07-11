@@ -16,6 +16,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/HW/HWTypes.h"
+#include "circt/Dialect/SV/SVAttributes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/PatternMatch.h"
@@ -251,6 +252,10 @@ void RegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 // If this reg is only written to, delete the reg and all writers.
 LogicalResult RegOp::canonicalize(RegOp op, PatternRewriter &rewriter) {
+  // Block if op has SV attributes.
+  if (hasSVAttributes(op))
+    return failure();
+
   // If the reg has a symbol, then we can't delete it.
   if (op.inner_symAttr())
     return failure();
@@ -407,6 +412,10 @@ static void replaceOpWithRegion(PatternRewriter &rewriter, Operation *op,
 }
 
 LogicalResult IfOp::canonicalize(IfOp op, PatternRewriter &rewriter) {
+  // Block if op has SV attributes.
+  if (hasSVAttributes(op))
+    return failure();
+
   if (auto constant = op.cond().getDefiningOp<hw::ConstantOp>()) {
 
     if (constant.getValue().isAllOnesValue())
@@ -1247,6 +1256,10 @@ void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 // If this wire is only written to, delete the wire and all writers.
 LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
+  // Block if op has SV attributes.
+  if (hasSVAttributes(wire))
+    return failure();
+
   // If the wire has a symbol, then we can't delete it.
   if (wire.inner_symAttr())
     return failure();
@@ -1271,7 +1284,7 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
 
     // If the assign op has SV attributes, we don't want to delete the
     // assignment.
-    if (assign.svAttributesAttr())
+    if (hasSVAttributes(assign))
       return failure();
 
     write = assign;

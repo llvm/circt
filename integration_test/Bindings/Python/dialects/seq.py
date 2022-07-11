@@ -47,13 +47,11 @@ with Context() as ctx, Location.unknown():
       # CHECK: %FuBar = seq.compreg {{.+}}
       seq.reg(reg_input, module.clk, name="FuBar")
 
-      # CHECK: %reg1 = seq.compreg %[[INPUT_VAL]], %clk svattrs [#sv.attribute<"no_merge">] {foo} : i32
+      # CHECK: %reg1 = seq.compreg %[[INPUT_VAL]], %clk {sv.attributes = [#sv.attribute<"no_merge">]} : i32
       sv_attr = sv.SVAttributeAttr.get("no_merge")
-      reg1 = seq.CompRegOp.create(i32,
-                                  clk=module.clk,
-                                  name="reg1",
-                                  sv_attributes=[sv_attr])
-      reg1.attributes["foo"] = UnitAttr.get()
+      reg1 = seq.CompRegOp.create(i32, clk=module.clk, name="reg1")
+
+      reg1.attributes["sv.attributes"] = ArrayAttr.get([sv_attr])
       connect(reg1.input, reg_input)
 
       # CHECK: %reg2 = seq.compreg %[[INPUT_VAL]], %clk

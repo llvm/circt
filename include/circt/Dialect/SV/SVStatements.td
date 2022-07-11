@@ -394,15 +394,9 @@ def AssignOp : SVOp<"assign", [InOutTypeConstraint<"src", "dest">,
     A SystemVerilog assignment statement 'x = y;'.
     These occur in module scope.  See SV Spec 10.3.2.
   }];
-  let arguments = (ins InOutType:$dest, InOutElementType:$src,
-                  OptionalAttr<SVAttributeArrayAttr>:$svAttributes);
+  let arguments = (ins InOutType:$dest, InOutElementType:$src);
   let results = (outs);
-  let assemblyFormat = [{$dest `,` $src (`svattrs` $svAttributes^)? attr-dict
-                       `:` qualified(type($src))}];
-  let builders = [
-    OpBuilder<(ins "::mlir::Value":$dest, "::mlir::Value":$src),
-      "return build($_builder, $_state, dest, src, ArrayAttr());">
-  ];
+  let assemblyFormat = "$dest `,` $src attr-dict `:` qualified(type($src))";
 }
 
 def BPAssignOp : SVOp<"bpassign", [InOutTypeConstraint<"src", "dest">,

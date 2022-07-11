@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Dialect/Seq/SeqPasses.h"
@@ -49,8 +50,8 @@ public:
     if (reg.sym_name().hasValue())
       svReg.inner_symAttr(reg.sym_nameAttr());
 
-    if (reg.svAttributes())
-      svReg.svAttributesAttr(reg.svAttributesAttr());
+    if (auto attribute = circt::sv::getSVAttributes(reg))
+      circt::sv::setSVAttributes(svReg, attribute);
 
     auto regVal = rewriter.create<sv::ReadInOutOp>(loc, svReg);
     if (reg.reset() && reg.resetValue()) {
