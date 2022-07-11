@@ -29,6 +29,7 @@ digraph G {
     MSFT [URL="https://circt.llvm.org/docs/Dialects/MSFT/"]
     ESI [URL="https://circt.llvm.org/docs/Dialects/ESI/"]
     FSM [URL="https://circt.llvm.org/docs/Dialects/FSM/"]
+    HWArith [URL="https://circt.llvm.org/docs/Dialects/HWArith/"]
 
     // Invisible node to make space for RTL cluster's incoming edges.
     space_above_RTL [style = invis, label=""]
@@ -85,7 +86,7 @@ digraph G {
 
   // Things that lower into a subset of the RTL-like dialects. Cluster these
   // together to avoid a massive clutter.
-  {FIRRTL FSM ESI MSFT} -> HW [lhead=cluster_RTL]
+  {FIRRTL FSM ESI MSFT HWArith} -> HW [lhead=cluster_RTL]
   Seq -> SV
   HW -> LLHD
   Comb -> ExportVerilog
@@ -109,6 +110,7 @@ digraph G {
   PyFile -> PyCDE
   PyCDE -> ESI [style=dashed]
   PyCDE -> MSFT
+  PyCDE -> HWArith
   Scheduling -> MSFT [dir=both, style=dashed]
 
   // ====== Some fake edges to coerce a good layout ======
@@ -119,7 +121,7 @@ digraph G {
 
   // Leave one rank free above the RTL cluster to improve routing of incoming
   // edges.
-  {FIRRTL FSM ESI MSFT} -> space_above_RTL [weight=999, style=invis]
+  {FIRRTL FSM ESI MSFT HWArith} -> space_above_RTL [weight=999, style=invis]
   space_above_RTL -> {Seq HW Comb} [lhead=cluster_RTL, weight=999, style=invis]
 
   // Fix the following sink nodes below the CIRCT cluster
