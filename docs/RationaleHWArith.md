@@ -1,7 +1,7 @@
 # HW Arith Dialect Rationale
 
 This document describes the various design points of the HWArith dialect, a
-dialect that is used to represent bitwidth aware arithmetic. This follows in the
+dialect that is used to represent bitwidth extending arithmetic. This follows in the
 spirit of other [MLIR Rationale docs](https://mlir.llvm.org/docs/Rationale/).
 
 - [HW Arith Dialect Rationale](#hw-arith-dialect-rationale)
@@ -13,8 +13,8 @@ spirit of other [MLIR Rationale docs](https://mlir.llvm.org/docs/Rationale/).
 ## Introduction
 
 The `hwarith` dialect provides a collection of operations that define typical
-integer arithmetic operations which are bitwidth aware. This bitwidth awareness
-is expressed through return type inference rules that, based on the types of an
+integer arithmetic operations which are bitwidth extending. These semantics
+are expressed through return type inference rules that, based on the types of an
 operation and its input operands, infers the type of the result operand.
 Importantly, for the initial implementation of this dialect, we do not allow
 types with uninferred width in the IR. A user is expected to iteratively build
@@ -80,7 +80,7 @@ dialect, and how we've addressed/think about the issue.
 * **Q:** What about fixed point operations?
     * Fixed point operations and values may eventually be relevant in an
       `hwarith` context. However, the immediate needs of this dialect is to
-      provide bitwidth-aware arithmetic for integer values.
+      provide bitwidth-extending arithmetic for integer values.
 * **Q:** What about floating point operations?
     * As above, with the additional consideration that handling floating point
       operations in hardware usually involves inferring external IP. Considering
