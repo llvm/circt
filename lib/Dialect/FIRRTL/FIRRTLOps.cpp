@@ -89,7 +89,7 @@ bool firrtl::isDuplexValue(Value val) {
   if (!op)
     return false;
   return TypeSwitch<Operation *, bool>(op)
-      .Case<SubfieldOp, SubindexOp, SubaccessOp, BitindexOp>(
+      .Case<SubfieldOp, SubindexOp, SubaccessOp>(
           [](auto op) { return isDuplexValue(op.input()); })
       .Case<RegOp, RegResetOp, WireOp>([](auto) { return true; })
       .Default([](auto) { return false; });
@@ -155,7 +155,7 @@ DeclKind firrtl::getDeclarationKind(Value val) {
 
   return TypeSwitch<Operation *, DeclKind>(op)
       .Case<InstanceOp>([](auto) { return DeclKind::Instance; })
-      .Case<SubfieldOp, SubindexOp, SubaccessOp, BitindexOp>(
+      .Case<SubfieldOp, SubindexOp, SubaccessOp>(
           [](auto op) { return getDeclarationKind(op.input()); })
       .Default([](auto) { return DeclKind::Other; });
 }
@@ -2507,7 +2507,7 @@ FIRRTLType BitindexOp::inferReturnType(ValueRange operands,
 
   if (auto intType = inType.dyn_cast<IntType>()) {
     // TODO: fix warning about signedness
-    if (fieldIdx < intType.getWidthOrSentinel())
+    if ((int) fieldIdx < intType.getWidthOrSentinel())
       return UIntType::get(inType.getContext(), 1);
     if (loc)
       mlir::emitError(*loc, "out of range index '")
