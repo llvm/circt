@@ -133,7 +133,7 @@ circuit invalid_bits :
   module invalid_bits:
      input a: UInt<8>
      output b: UInt<4>
-     ; expected-error@+1 {{high must be equal or greater than low, but got high = 4, low = 7}};
+     ; expected-error @+1 {{high must be equal or greater than low, but got high = 4, low = 7}}
      b <= bits(a, 4, 7)
 
 ;// -----
