@@ -395,12 +395,12 @@ void CircuitLoweringState::processRemainingAnnotations(
             // The following are inspected (but not consumed) by FIRRTL/GCT
             // passes that have all run by now. Since no one is responsible for
             // consuming these, they will linger around and can be ignored.
-            "sifive.enterprise.firrtl.ScalaClassAnnotation", dutAnnoClass,
-            metadataDirectoryAttrName, elaborationArtefactsDirectoryAnnoClass,
-            testBenchDirAnnoClass, subCircuitsTargetDirectoryAnnoClass,
+            scalaClassAnnoClass, dutAnnoClass, metadataDirectoryAttrName,
+            elaborationArtefactsDirectoryAnnoClass, testBenchDirAnnoClass,
+            subCircuitsTargetDirectoryAnnoClass,
             // This annotation is used to mark which external modules are
             // imported blackboxes from the BlackBoxReader pass.
-            "firrtl.transforms.BlackBox",
+            blackBoxAnnoClass,
             // This annotation is used by several GrandCentral passes.
             extractGrandCentralClass,
             // The following will be handled while lowering the verification
@@ -2422,9 +2422,7 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
   // Name attr is required on sv.wire but optional on firrtl.wire.
   StringAttr symName = getInnerSymName(op);
   auto name = op.nameAttr();
-  if (AnnotationSet::removeAnnotations(
-          op, "firrtl.transforms.DontTouchAnnotation") &&
-      !symName) {
+  if (AnnotationSet::removeAnnotations(op, dontTouchAnnoClass) && !symName) {
     auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
     // Prepend the name of the module to make the symbol name unique in the
     // symbol table, it is already unique in the module. Checking if the name
@@ -2712,9 +2710,7 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
 
   // Add symbol if DontTouch annotation present.
   auto symName = getInnerSymName(op);
-  if (AnnotationSet::removeAnnotations(
-          op, "firrtl.transforms.DontTouchAnnotation") &&
-      !symName)
+  if (AnnotationSet::removeAnnotations(op, dontTouchAnnoClass) && !symName)
     symName = op.nameAttr();
   auto regResult =
       builder.create<sv::RegOp>(resultType, op.nameAttr(), symName);
@@ -2742,9 +2738,7 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
     return failure();
 
   auto symName = getInnerSymName(op);
-  if (AnnotationSet::removeAnnotations(
-          op, "firrtl.transforms.DontTouchAnnotation") &&
-      !symName)
+  if (AnnotationSet::removeAnnotations(op, dontTouchAnnoClass) && !symName)
     symName = op.nameAttr();
   auto regResult =
       builder.create<sv::RegOp>(resultType, op.nameAttr(), symName);

@@ -163,13 +163,12 @@ void BlackBoxReaderPass::runOnOperation() {
     if (!isa<FModuleOp>(op) && !isa<FExtModuleOp>(op))
       continue;
 
-    StringRef verifBBClass =
-        "freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation";
     SmallVector<Attribute, 4> filteredAnnos;
     auto annos = AnnotationSet(&op);
-    // If the cover directory is set and it has the verifBBClass annotation,
-    // then output directory should be cover dir.
-    auto isCover = !coverDir.empty() && annos.hasAnnotation(verifBBClass);
+    // If the cover directory is set and it has the verifBlackBoxAnnoClass
+    // annotation, then output directory should be cover dir.
+    auto isCover =
+        !coverDir.empty() && annos.hasAnnotation(verifBlackBoxAnnoClass);
     for (auto anno : annos) {
       if (runOnAnnotation(&op, anno, builder, isCover))
         // Since the annotation was consumed, add a `BlackBox` annotation to
@@ -177,7 +176,7 @@ void BlackBoxReaderPass::runOnOperation() {
         // annotations. This is useful for metadata generation.
         filteredAnnos.push_back(builder.getDictionaryAttr(
             {{builder.getStringAttr("class"),
-              builder.getStringAttr("firrtl.transforms.BlackBox")}}));
+              builder.getStringAttr(blackBoxAnnoClass)}}));
       else
         filteredAnnos.push_back(anno.getDict());
     }

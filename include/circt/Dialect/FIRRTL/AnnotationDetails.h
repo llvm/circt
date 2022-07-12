@@ -56,6 +56,8 @@ constexpr const char *blackBoxTargetDirAnnoClass =
     "firrtl.transforms.BlackBoxTargetDirAnno";
 constexpr const char *blackBoxResourceFileNameAnnoClass =
     "firrtl.transforms.BlackBoxResourceFileNameAnno";
+constexpr const char *blackBoxAnnoClass =
+    "firrtl.transforms.BlackBox"; // Not in SFC
 constexpr const char *mustDedupAnnoClass =
     "firrtl.transforms.MustDeduplicateAnnotation";
 constexpr const char *runFIRRTLTransformAnnoClass =
@@ -97,6 +99,8 @@ constexpr const char *prefixInterfacesAnnoClass =
     "sifive.enterprise.grandcentral.PrefixInterfacesAnnotation";
 constexpr const char *augmentedGroundTypeClass =
     "sifive.enterprise.grandcentral.AugmentedGroundType"; // not an annotation
+constexpr const char *augmentedBundleTypeClass =
+    "sifive.enterprise.grandcentral.AugmentedBundleType"; // not an annotation
 constexpr const char *dataTapsClass =
     "sifive.enterprise.grandcentral.DataTapsAnnotation";
 constexpr const char *dataTapsBlackboxClass =
