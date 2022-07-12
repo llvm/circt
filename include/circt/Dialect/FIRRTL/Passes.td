@@ -143,6 +143,9 @@ def AddSeqMemPorts : Pass<"firrtl-add-seqmem-ports", "firrtl::CircuitOp"> {
   }];
   let constructor = "circt::firrtl::createAddSeqMemPortsPass()";
   let dependentDialects = ["sv::SVDialect", "hw::HWDialect"];
+  let statistics = [
+    Statistic<"numAddedPorts", "num-added-ports", "Number of extra ports added">,
+  ];
 }
 
 def CreateSiFiveMetadata : Pass<"firrtl-emit-metadata", "firrtl::CircuitOp"> {
