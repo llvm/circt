@@ -16,10 +16,11 @@
 
 namespace circt {
 namespace sv {
+class SVAttributesAttr;
 
 /// Helper functions to handle SV attributes.
 bool hasSVAttributes(mlir::Operation *op);
-mlir::ArrayAttr getSVAttributes(mlir::Operation *op);
+SVAttributesAttr getSVAttributes(mlir::Operation *op);
 void setSVAttributes(mlir::Operation *op, mlir::Attribute);
 
 } // namespace sv

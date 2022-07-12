@@ -30,8 +30,8 @@ bool circt::sv::hasSVAttributes(mlir::Operation *op) {
   return op->hasAttr(sv::SVAttributeAttr::getSVAttributesAttrName());
 }
 
-mlir::ArrayAttr circt::sv::getSVAttributes(mlir::Operation *op) {
-  return op->getAttrOfType<mlir::ArrayAttr>(
+sv::SVAttributesAttr circt::sv::getSVAttributes(mlir::Operation *op) {
+  return op->getAttrOfType<sv::SVAttributesAttr>(
       sv::SVAttributeAttr::getSVAttributesAttrName());
 }
 

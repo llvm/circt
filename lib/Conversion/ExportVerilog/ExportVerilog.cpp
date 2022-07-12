@@ -649,15 +649,17 @@ static IfOp findNestedElseIf(Block *elseBlock) {
 
 /// Emit SystemVerilog attributes.
 static void emitSVAttributesImpl(llvm::raw_ostream &os,
-                                 mlir::ArrayAttr svAttrs) {
-  os << "(* ";
-  llvm::interleaveComma(svAttrs, os, [&](Attribute attr) {
+                                 sv::SVAttributesAttr svAttrs) {
+  auto body = svAttrs.getAttributes();
+  auto emitAsComments = svAttrs.getEmitAsComments().getValue();
+  os << (emitAsComments ? "/* " : "(* ");
+  llvm::interleaveComma(body, os, [&](Attribute attr) {
     auto svattr = attr.cast<SVAttributeAttr>();
     os << svattr.getName().getValue();
     if (svattr.getExpression())
       os << " = " << svattr.getExpression().getValue();
   });
-  os << " *)";
+  os << (emitAsComments ? " */" : " *)");
 }
 
 //===----------------------------------------------------------------------===//
