@@ -126,6 +126,15 @@ void LowerBitIndexPass::runOnOperation() {
           bits.erase();
         }
       }
+      if (isa_and_nonnull<RegOp>(defn)) {
+        ImplicitLocOpBuilder builder(defn->getLoc(), defn);
+        builder.setInsertionPointAfter(wire);
+        for (int i = 0; i < w; i++) {
+          Value bitsOp = builder.create<BitsPrimOp>(var, i, i);
+          Value subidxOp = builder.create<SubindexOp>(wire, i);
+          builder.create<StrictConnectOp>(subidxOp, bitsOp);
+        }
+      }
     }
   }
 }
