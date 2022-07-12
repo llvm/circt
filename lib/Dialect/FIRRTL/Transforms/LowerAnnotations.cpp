@@ -386,7 +386,8 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
     {runFIRRTLTransformAnnoClass, {noResolve, drop}},
     {mustDedupAnnoClass, NoTargetAnnotation},
     {addSeqMemPortAnnoClass, NoTargetAnnotation},
-    {addSeqMemPortsFileAnnoClass, NoTargetAnnotation}
+    {addSeqMemPortsFileAnnoClass, NoTargetAnnotation},
+    {extractClockGatesAnnoClass, NoTargetAnnotation}
 
 }};
 
