@@ -383,7 +383,8 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
     {extractAssumeAnnoClass, NoTargetAnnotation},
     {extractCoverageAnnoClass, NoTargetAnnotation},
     {dftTestModeEnableAnnoClass, {stdResolve, applyWithoutTarget<true>}},
-    {runFIRRTLTransformAnnoClass, {noResolve, drop}}
+    {runFIRRTLTransformAnnoClass, {noResolve, drop}},
+    {mustDedupAnnoClass, NoTargetAnnotation}
 
 }};
 
