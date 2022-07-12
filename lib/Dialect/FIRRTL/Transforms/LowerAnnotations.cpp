@@ -387,7 +387,9 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
     {mustDedupAnnoClass, NoTargetAnnotation},
     {addSeqMemPortAnnoClass, NoTargetAnnotation},
     {addSeqMemPortsFileAnnoClass, NoTargetAnnotation},
-    {extractClockGatesAnnoClass, NoTargetAnnotation}
+    {extractClockGatesAnnoClass, NoTargetAnnotation},
+    {fullAsyncResetAnnoClass, {stdResolve, applyWithoutTarget<true>}},
+    {ignoreFullAsyncResetAnnoClass, {stdResolve, applyWithoutTarget<true, FModuleOp>}}
 
 }};
 
