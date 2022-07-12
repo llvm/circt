@@ -1,6 +1,5 @@
 //===- ESIServices.td - ESI services ops -------------------*- tablegen -*-===//
 //
-//
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
@@ -78,7 +77,7 @@ def ServiceInstanceOp : ESI_Op<"service.instance"> {
                        Variadic<AnyType>:$inputs);
   let results = (outs Variadic<AnyType>);
   let assemblyFormat = [{
-    $identifier $service_symbol `(` $inputs `)` attr-dict
+    $service_symbol `impl` `as` $identifier `(` $inputs `)` attr-dict
       `:` functional-type($inputs, results)
   }];
 }
@@ -103,7 +102,7 @@ def ServiceImplementReqOp : ESI_Op<"service.impl_req", [NoTerminator]> {
   let regions = (region SizedRegion<1>:$portReqs);
 
   let assemblyFormat = [{
-    $identifier $service_symbol `(` $inputs `)` attr-dict
+    $service_symbol `impl` `as` $identifier `(` $inputs `)` attr-dict
       `:` functional-type($inputs, results)
       $portReqs
   }];

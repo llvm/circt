@@ -9,12 +9,12 @@ esi.service.decl @HostComms {
 // CHECK:         esi.service.to_client @Recv : !esi.channel<i8>
 
 hw.module @Top (%clk: i1) -> (chksum: i8) {
-  %c = esi.service.instance "topComms" @HostComms (%clk) : (i1) -> (i8)
+  %c = esi.service.instance @HostComms impl as  "topComms" (%clk) : (i1) -> (i8)
   hw.instance "m1" @Loopback (clk: %clk: i1) -> ()
   hw.output %c : i8
 }
 // CHECK-LABEL: hw.module @Top(%clk: i1) -> (chksum: i8) {
-// CHECK:         %0 = esi.service.instance "topComms" @HostComms(%clk) : (i1) -> i8
+// CHECK:         %0 = esi.service.instance @HostComms impl as "topComms"(%clk) : (i1) -> i8
 // CHECK:         hw.instance "m1" @Loopback(clk: %clk: i1) -> ()
 
 hw.module @Loopback (%clk: i1) -> () {

@@ -53,11 +53,19 @@ esi.service.decl @HostComms {
 
 hw.module @Loopback (%clk: i1) -> () {
   %dataIn = esi.service.req.to_client <@HostComms::@Recv> (["loopback_tohw"]) : !esi.channel<i32>
-  // expected-error @+1 {{Request type does not match port type '!esi.channel<i16>'}}
+  // expected-error @+1 {{'esi.service.req.to_server' op Request type does not match port type '!esi.channel<i16>'}}
   esi.service.req.to_server %dataIn -> <@HostComms::@Send> (["loopback_fromhw"]) : !esi.channel<i32>
 }
 
+// -----
 
+esi.service.decl @HostComms {
+}
+
+hw.module @Loopback (%clk: i1) -> () {
+  // expected-error @+1 {{'esi.service.req.to_client' op Cannot find port named "Recv"}}
+  %dataIn = esi.service.req.to_client <@HostComms::@Recv> (["loopback_tohw"]) : !esi.channel<i32>
+}
 // -----
 
 esi.service.decl @HostComms {
@@ -65,7 +73,7 @@ esi.service.decl @HostComms {
 }
 
 hw.module @Loopback (%clk: i1) -> () {
-  // expected-error @+1 {{Request type does not match port type '!esi.channel<i8>'}}
+  // expected-error @+1 {{'esi.service.req.to_client' op Request type does not match port type '!esi.channel<i8>'}}
   %dataIn = esi.service.req.to_client <@HostComms::@Recv> (["loopback_tohw"]) : !esi.channel<i32>
 }
 
