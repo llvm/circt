@@ -162,6 +162,12 @@ constexpr const char *testHarnessPathAnnoClass =
     "sifive.enterprise.firrtl.TestHarnessPathAnnotation";
 constexpr const char *subCircuitDirAnnotation =
     "sifive.enterprise.grandcentral.SubCircuitDirAnnotation";
+/// Annotation that marks a reset (port or wire) and domain.
+constexpr const char *fullAsyncResetAnnoClass =
+    "sifive.enterprise.firrtl.FullAsyncResetAnnotation";
+/// Annotation that marks a module as not belonging to any reset domain.
+static constexpr const char *ignoreFullAsyncResetAnnoClass =
+    "sifive.enterprise.firrtl.IgnoreFullAsyncResetAnnotation";
 
 // MemToRegOfVec Annotations
 constexpr const char *convertMemToRegOfVecAnnoClass =

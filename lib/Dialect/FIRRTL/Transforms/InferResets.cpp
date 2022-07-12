@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
@@ -1152,14 +1153,6 @@ bool InferResetsPass::updateReset(FieldRef field, FIRRTLType resetType) {
 // Reset Annotations
 //===----------------------------------------------------------------------===//
 
-/// Annotation that marks a reset (port or wire) and domain.
-static constexpr const char *resetAnno =
-    "sifive.enterprise.firrtl.FullAsyncResetAnnotation";
-
-/// Annotation that marks a module as not belonging to any reset domain.
-static constexpr const char *ignoreAnno =
-    "sifive.enterprise.firrtl.IgnoreFullAsyncResetAnnotation";
-
 LogicalResult InferResetsPass::collectAnnos(CircuitOp circuit) {
   LLVM_DEBUG(
       llvm::dbgs() << "\n===----- Gather async reset annotations -----===\n\n");
@@ -1181,12 +1174,12 @@ LogicalResult InferResetsPass::collectAnnos(FModuleOp module) {
   AnnotationSet moduleAnnos(module);
   if (!moduleAnnos.empty()) {
     moduleAnnos.removeAnnotations([&](Annotation anno) {
-      if (anno.isClass(ignoreAnno)) {
+      if (anno.isClass(ignoreFullAsyncResetAnnoClass)) {
         ignore = true;
         conflictingAnnos.insert({anno, module.getLoc()});
         return true;
       }
-      if (anno.isClass(resetAnno)) {
+      if (anno.isClass(fullAsyncResetAnnoClass)) {
         anyFailed = true;
         module.emitError("'FullAsyncResetAnnotation' cannot target module; "
                          "must target port or wire/node instead");
@@ -1204,12 +1197,12 @@ LogicalResult InferResetsPass::collectAnnos(FModuleOp module) {
   AnnotationSet::removePortAnnotations(module, [&](unsigned argNum,
                                                    Annotation anno) {
     Value arg = module.getArgument(argNum);
-    if (anno.isClass(resetAnno)) {
+    if (anno.isClass(fullAsyncResetAnnoClass)) {
       reset = arg;
       conflictingAnnos.insert({anno, reset.getLoc()});
       return true;
     }
-    if (anno.isClass(ignoreAnno)) {
+    if (anno.isClass(ignoreFullAsyncResetAnnoClass)) {
       anyFailed = true;
       mlir::emitError(arg.getLoc(),
                       "'IgnoreFullAsyncResetAnnotation' cannot target port; "
@@ -1226,7 +1219,8 @@ LogicalResult InferResetsPass::collectAnnos(FModuleOp module) {
     AnnotationSet::removeAnnotations(op, [&](Annotation anno) {
       // Reset annotations must target wire/node ops.
       if (!isa<WireOp, NodeOp>(op)) {
-        if (anno.isClass(resetAnno, ignoreAnno)) {
+        if (anno.isClass(fullAsyncResetAnnoClass,
+                         ignoreFullAsyncResetAnnoClass)) {
           anyFailed = true;
           op->emitError(
               "reset annotations must target module, port, or wire/node");
@@ -1237,12 +1231,12 @@ LogicalResult InferResetsPass::collectAnnos(FModuleOp module) {
 
       // At this point we know that we have a WireOp/NodeOp. Process the reset
       // annotations.
-      if (anno.isClass(resetAnno)) {
+      if (anno.isClass(fullAsyncResetAnnoClass)) {
         reset = op->getResult(0);
         conflictingAnnos.insert({anno, reset.getLoc()});
         return true;
       }
-      if (anno.isClass(ignoreAnno)) {
+      if (anno.isClass(ignoreFullAsyncResetAnnoClass)) {
         anyFailed = true;
         op->emitError(
             "'IgnoreFullAsyncResetAnnotation' cannot target wire/node; must "
