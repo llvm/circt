@@ -174,7 +174,9 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
   }
 
   for (size_t i = 0; i < mem.numReadWritePorts; ++i) {
-    auto numStages = std::max(mem.readLatency, mem.writeLatency) - 1;
+    auto numReadStages = mem.readLatency;
+    auto numWriteStages = mem.writeLatency - 1;
+    auto numCommonStages = std::min(numReadStages, numWriteStages);
     Value addr = op.body().getArgument(inArg++);
     Value en = op.body().getArgument(inArg++);
     Value clock = op.body().getArgument(inArg++);
@@ -188,14 +190,33 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
     else
       wmaskBits = b.create<ConstantOp>(b.getIntegerAttr(en.getType(), 1));
 
-    // Add pipeline stages
-    addr = addPipelineStages(b, moduleNamespace, numStages, clock, addr);
-    en = addPipelineStages(b, moduleNamespace, numStages, clock, en);
-    wmode = addPipelineStages(b, moduleNamespace, numStages, clock, wmode);
-    wdataIn = addPipelineStages(b, moduleNamespace, numStages, clock, wdataIn);
+    // Add common pipeline stages.
+    addr = addPipelineStages(b, moduleNamespace, numCommonStages, clock, addr);
+    en = addPipelineStages(b, moduleNamespace, numCommonStages, clock, en);
+    wmode =
+        addPipelineStages(b, moduleNamespace, numCommonStages, clock, wmode);
+
+    // Add read-only pipeline stages.
+    auto read_addr = addPipelineStages(
+        b, moduleNamespace, numReadStages - numCommonStages, clock, addr);
+    auto read_en = addPipelineStages(
+        b, moduleNamespace, numReadStages - numCommonStages, clock, en);
+    auto read_wmode = addPipelineStages(
+        b, moduleNamespace, numReadStages - numCommonStages, clock, wmode);
+
+    // Add write-only pipeline stages.
+    auto write_addr = addPipelineStages(
+        b, moduleNamespace, numWriteStages - numCommonStages, clock, addr);
+    auto write_en = addPipelineStages(
+        b, moduleNamespace, numWriteStages - numCommonStages, clock, en);
+    auto write_wmode = addPipelineStages(
+        b, moduleNamespace, numWriteStages - numCommonStages, clock, wmode);
+    wdataIn =
+        addPipelineStages(b, moduleNamespace, numWriteStages, clock, wdataIn);
     if (isMasked)
-      wmaskBits =
-          addPipelineStages(b, moduleNamespace, numStages, clock, wmaskBits);
+      wmaskBits = addPipelineStages(b, moduleNamespace, numWriteStages, clock,
+                                    wmaskBits);
+
     SmallVector<Value, 4> maskValues(maskBits);
     SmallVector<Value, 4> dataValues(maskBits);
     // For multi-bit mask, extract corresponding write data bits of
@@ -213,10 +234,10 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
 
     // Read logic.
     Value rcond = b.createOrFold<comb::AndOp>(
-        en, b.createOrFold<comb::ICmpOp>(
-                comb::ICmpPredicate::eq, wmode,
-                b.createOrFold<ConstantOp>(wmode.getType(), 0)));
-    Value slotReg = b.create<sv::ArrayIndexInOutOp>(reg, addr);
+        read_en, b.createOrFold<comb::ICmpOp>(
+                     comb::ICmpPredicate::eq, read_wmode,
+                     b.createOrFold<ConstantOp>(read_wmode.getType(), 0)));
+    Value slotReg = b.create<sv::ArrayIndexInOutOp>(reg, read_addr);
     Value slot = b.create<sv::ReadInOutOp>(slotReg);
     Value x = b.create<sv::ConstantXOp>(slot.getType());
     b.create<sv::AssignOp>(rWire, b.create<comb::MuxOp>(rcond, slot, x));
@@ -225,8 +246,9 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
     for (auto wmask : llvm::enumerate(maskValues)) {
       b.create<sv::AlwaysOp>(sv::EventControl::AtPosEdge, clock, [&]() {
         auto wcond = b.createOrFold<comb::AndOp>(
-            en, b.createOrFold<comb::AndOp>(wmask.value(), wmode));
+            write_en, b.createOrFold<comb::AndOp>(wmask.value(), write_wmode));
         b.create<sv::IfOp>(wcond, [&]() {
+          Value slotReg = b.create<sv::ArrayIndexInOutOp>(reg, write_addr);
           b.create<sv::PAssignOp>(
               b.createOrFold<sv::IndexedPartSelectInOutOp>(
                   slotReg,
