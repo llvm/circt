@@ -33,19 +33,11 @@ namespace firrtl {
 class CircuitOp;
 class PrintFOp;
 
-bool fromJSON(llvm::json::Value &value, StringRef circuitTarget,
-              llvm::StringMap<ArrayAttr> &annotationMap, llvm::json::Path path,
-              CircuitOp circuit, size_t &nlaNumber);
-
 /// Convert a JSON value containing OMIR JSON (an array of OMNodes), convert
 /// this to an OMIRAnnotation, and add it to a mutable `annotationMap` argument.
 bool fromOMIRJSON(llvm::json::Value &value, StringRef circuitTarget,
                   llvm::StringMap<ArrayAttr> &annotationMap,
                   llvm::json::Path path, MLIRContext *context);
-
-bool scatterCustomAnnotations(llvm::StringMap<ArrayAttr> &annotationMap,
-                              CircuitOp circuit, unsigned &annotationID,
-                              Location loc, size_t &nlaNumber);
 
 bool fromJSONRaw(llvm::json::Value &value, StringRef circuitTarget,
                  SmallVectorImpl<Attribute> &attrs, llvm::json::Path path,

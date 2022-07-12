@@ -200,22 +200,57 @@ def NameKindEnumImpl: I32EnumAttr<"NameKindEnum", "name kind",
 
 def NameKindAttr: EnumAttr<FIRRTLDialect, NameKindEnumImpl, "name_kind">;
 
+def InnerSymProperties : AttrDef<FIRRTLDialect, "InnerSymProperties"> {
+  let mnemonic = "innerSymProps";
+  let parameters = (ins
+         "StringAttr":$name,
+         DefaultValuedParameter<"int64_t", "0">:$fieldID,
+         DefaultValuedParameter<"::mlir::StringAttr", "public">:$sym_visibility
+                     );
+  let builders = [
+    AttrBuilderWithInferredContext<(ins "::mlir::StringAttr":$sym),[{
+      return get(sym.getContext(), sym, 0,
+                        StringAttr::get(sym.getContext(), "public") );
+    }]>
+  ];
+  let hasCustomAssemblyFormat = 1;
+  // The assembly format is as follows:
+  // "`<` `@` $name `,` $fieldID `,` $sym_visibility `>`";
+}
+
 def InnerSymAttr : AttrDef<FIRRTLDialect, "InnerSym"> {
   let summary = "Inner symbol definition";
   let description = [{
-    Defines the properties of an inner_sym attribute. Currently this only has
-    the symbol name. But the plan is to extend it to include per field symbols
-    and visibility.
+    Defines the properties of an inner_sym attribute. It specifies the symbol
+    name and symbol visibility for each field ID. For any ground types,
+    there are no subfields and the field ID is 0. For aggregate types, a
+    unique field ID is assigned to each field by visiting them in a 
+    depth-first pre-order. The custom assembly format ensures that for ground
+    types, only `@<sym_name>` is printed.
   }];
   let mnemonic = "innerSym";
-  let parameters = (ins "::mlir::StringAttr":$symName);
+  let parameters = (ins ArrayRefParameter<"InnerSymPropertiesAttr">:$props);
   let builders = [
     AttrBuilderWithInferredContext<(ins "::mlir::StringAttr":$sym),[{
-      return get(sym.getContext(), sym);
+      return get(sym.getContext(), 
+      {InnerSymPropertiesAttr::get(sym.getContext(), sym, 0,
+                        StringAttr::get(sym.getContext(), "public"))});
     }]>
   ];
+  let extraClassDeclaration = [{
+    /// Get the inner sym name for fieldID, if it exists.
+    StringAttr getSymIfExists(unsigned fieldID);
+    /// Get the inner sym name for fieldID=0, if it exists.
+    StringAttr getSymName();
+    /// Check if all the elements of props satisfy the predicate lambda.
+    bool all_of_props(std::function<bool (InnerSymPropertiesAttr)>) ;
+    /// Get the number of inner symbols defined.
+    size_t numSymbols() ;
+  }];
 
   let hasCustomAssemblyFormat = 1;
+  // Example format:
+  // firrtl.wire sym [<@x,1,private>, <@w,2,public>, <@syh,4,public>]
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLATTRIBUTES_TD

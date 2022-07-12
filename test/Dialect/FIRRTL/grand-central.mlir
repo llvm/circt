@@ -1170,6 +1170,117 @@ firrtl.circuit "InterfaceInTestHarness" attributes {
 
 // -----
 
+firrtl.circuit "ZeroWidth" attributes {annotations = [
+  {
+    class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+    defName = "MyInterface",
+    elements = [
+      {
+        class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+        description = "a zero-width port",
+        id = 1 : i64,
+        name = "ground"
+      }
+    ],
+    id = 0 : i64,
+    name = "MyView"
+  }
+]} {
+  firrtl.module private @MyView_companion() attributes {annotations = [
+    {
+      class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
+      id = 0 : i64,
+      name = "MyView",
+      type = "companion"
+    }
+  ]} {}
+  firrtl.module @ZeroWidth() attributes {annotations = [
+    {
+      class = "sifive.enterprise.grandcentral.ViewAnnotation.parent",
+      id = 0 : i64,
+      name = "MyView",
+      type = "parent"
+    }
+  ]} {
+    %w = firrtl.wire {annotations = [
+      {
+        class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+        id = 1 : i64
+      }
+    ]} : !firrtl.uint<0>
+    %invalid_ui0 = firrtl.invalidvalue : !firrtl.uint<0>
+    firrtl.strictconnect %w, %invalid_ui0 : !firrtl.uint<0>
+    firrtl.instance MyView_companion @MyView_companion()
+  }
+}
+
+// Check that a view of a zero-width thing produces a comment in the output and
+// not XMR.
+//
+// CHECK-LABEL: firrtl.module @MyView_mapping() {
+// CHECK-NOT:     sv.verbatim
+// CHECK-NEXT:  }
+//
+// CHECK-LABEL: sv.interface @MyInterface
+// CHECK-NEXT:    sv.verbatim "// a zero-width port"
+// CHECK-NEXT:    sv.interface.signal @ground : i0
+
+// -----
+
+firrtl.circuit "ZeroWidth" attributes {annotations = [
+  {
+    class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+    defName = "MyInterface",
+    elements = [
+      {
+        class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+        id = 1 : i64,
+        name = "ground"
+      }
+    ],
+    id = 0 : i64,
+    name = "MyView"
+  }
+]} {
+  firrtl.module private @MyView_companion() attributes {annotations = [
+    {
+      class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
+      id = 0 : i64,
+      name = "MyView",
+      type = "companion"
+    }
+  ]} {}
+  firrtl.module @ZeroWidth() attributes {annotations = [
+    {
+      class = "sifive.enterprise.grandcentral.ViewAnnotation.parent",
+      id = 0 : i64,
+      name = "MyView",
+      type = "parent"
+    }
+  ]} {
+    %w = firrtl.wire {annotations = [
+      {
+        class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+        id = 1 : i64
+      }
+    ]} : !firrtl.uint<1>
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    firrtl.strictconnect %w, %c1_ui1 : !firrtl.uint<1>
+    firrtl.instance MyView_companion @MyView_companion()
+  }
+}
+
+// Check that a constant is sunk into the interface mapping module and that no
+// symbol is created on the viewed component.
+//
+// CHECK-LABEL:         firrtl.circuit "ZeroWidth"
+// CHECK:                 firrtl.module @ZeroWidth()
+// CHECK-NEXT:            %w = firrtl.wire : !firrtl.uint<1>
+// CHECK:                 firrtl.module @MyView_mapping()
+// CHECK-NEXT{LITERAL}:     sv.verbatim "assign {{0}}.ground = 1'h1;
+
+// -----
+
 firrtl.circuit "YAMLOutputEmptyInterface" attributes {
   annotations = [
     {class = "sifive.enterprise.grandcentral.AugmentedBundleType",

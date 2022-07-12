@@ -50,129 +50,6 @@ using mlir::LocationAttr;
 namespace json = llvm::json;
 
 //===----------------------------------------------------------------------===//
-// Parser-related utilities
-//===----------------------------------------------------------------------===//
-
-std::pair<bool, Optional<LocationAttr>> circt::firrtl::maybeStringToLocation(
-    StringRef spelling, bool skipParsing, StringAttr &locatorFilenameCache,
-    FileLineColLoc &fileLineColLocCache, MLIRContext *context) {
-  // The spelling of the token looks something like "@[Decoupled.scala 221:8]".
-  if (!spelling.startswith("@[") || !spelling.endswith("]"))
-    return {false, None};
-
-  spelling = spelling.drop_front(2).drop_back(1);
-
-  // Decode the locator in "spelling", returning the filename and filling in
-  // lineNo and colNo on success.  On failure, this returns an empty filename.
-  auto decodeLocator = [&](StringRef input, unsigned &resultLineNo,
-                           unsigned &resultColNo) -> StringRef {
-    // Split at the last space.
-    auto spaceLoc = input.find_last_of(' ');
-    if (spaceLoc == StringRef::npos)
-      return {};
-
-    auto filename = input.take_front(spaceLoc);
-    auto lineAndColumn = input.drop_front(spaceLoc + 1);
-
-    // Decode the line/column.  If the colon is missing, then it will be empty
-    // here.
-    StringRef lineStr, colStr;
-    std::tie(lineStr, colStr) = lineAndColumn.split(':');
-
-    // Decode the line number and the column number if present.
-    if (lineStr.getAsInteger(10, resultLineNo))
-      return {};
-    if (!colStr.empty()) {
-      if (colStr.front() != '{') {
-        if (colStr.getAsInteger(10, resultColNo))
-          return {};
-      } else {
-        // compound locator, just parse the first part for now
-        if (colStr.drop_front().split(',').first.getAsInteger(10, resultColNo))
-          return {};
-      }
-    }
-    return filename;
-  };
-
-  // Decode the locator spelling, reporting an error if it is malformed.
-  unsigned lineNo = 0, columnNo = 0;
-  StringRef filename = decodeLocator(spelling, lineNo, columnNo);
-  if (filename.empty())
-    return {false, None};
-
-  // If info locators are ignored, don't actually apply them.  We still do all
-  // the verification above though.
-  if (skipParsing)
-    return {true, None};
-
-  /// Return an FileLineColLoc for the specified location, but use a bit of
-  /// caching to reduce thrasing the MLIRContext.
-  auto getFileLineColLoc = [&](StringRef filename, unsigned lineNo,
-                               unsigned columnNo) -> FileLineColLoc {
-    // Check our single-entry cache for this filename.
-    StringAttr filenameId = locatorFilenameCache;
-    if (filenameId.str() != filename) {
-      // We missed!  Get the right identifier.
-      locatorFilenameCache = filenameId = StringAttr::get(context, filename);
-
-      // If we miss in the filename cache, we also miss in the FileLineColLoc
-      // cache.
-      return fileLineColLocCache =
-                 FileLineColLoc::get(filenameId, lineNo, columnNo);
-    }
-
-    // If we hit the filename cache, check the FileLineColLoc cache.
-    auto result = fileLineColLocCache;
-    if (result && result.getLine() == lineNo && result.getColumn() == columnNo)
-      return result;
-
-    return fileLineColLocCache =
-               FileLineColLoc::get(filenameId, lineNo, columnNo);
-  };
-
-  // Compound locators will be combined with spaces, like:
-  //  @[Foo.scala 123:4 Bar.scala 309:14]
-  // and at this point will be parsed as a-long-string-with-two-spaces at
-  // 309:14.   We'd like to parse this into two things and represent it as an
-  // MLIR fused locator, but we want to be conservatively safe for filenames
-  // that have a space in it.  As such, we are careful to make sure we can
-  // decode the filename/loc of the result.  If so, we accumulate results,
-  // backward, in this vector.
-  SmallVector<Location> extraLocs;
-  auto spaceLoc = filename.find_last_of(' ');
-  while (spaceLoc != StringRef::npos) {
-    // Try decoding the thing before the space.  Validates that there is another
-    // space and that the file/line can be decoded in that substring.
-    unsigned nextLineNo = 0, nextColumnNo = 0;
-    auto nextFilename =
-        decodeLocator(filename.take_front(spaceLoc), nextLineNo, nextColumnNo);
-
-    // On failure we didn't have a joined locator.
-    if (nextFilename.empty())
-      break;
-
-    // On success, remember what we already parsed (Bar.Scala / 309:14), and
-    // move on to the next chunk.
-    auto loc =
-        getFileLineColLoc(filename.drop_front(spaceLoc + 1), lineNo, columnNo);
-    extraLocs.push_back(loc);
-    filename = nextFilename;
-    lineNo = nextLineNo;
-    columnNo = nextColumnNo;
-    spaceLoc = filename.find_last_of(' ');
-  }
-
-  LocationAttr result = getFileLineColLoc(filename, lineNo, columnNo);
-  if (!extraLocs.empty()) {
-    extraLocs.push_back(result);
-    std::reverse(extraLocs.begin(), extraLocs.end());
-    result = FusedLoc::get(context, extraLocs);
-  }
-  return {true, result};
-}
-
-//===----------------------------------------------------------------------===//
 // SharedParserConstants
 //===----------------------------------------------------------------------===//
 
@@ -3261,12 +3138,8 @@ struct FIRCircuitParser : public FIRParser {
                mlir::TimingScope &ts);
 
 private:
-  /// Add annotations from a string to the internal annotation map.  Report
-  /// errors using a provided source manager location and with a provided error
-  /// message
-  ParseResult importAnnotations(CircuitOp circuit, SMLoc loc,
-                                StringRef circuitTarget,
-                                StringRef annotationsStr, size_t &nlaNumber);
+  /// Extract Annotations from a JSON-encoded Annotation array string and add
+  /// them to a vector of attributes.
   ParseResult importAnnotationsRaw(SMLoc loc, StringRef circuitTarget,
                                    StringRef annotationsStr,
                                    SmallVector<Attribute> &attrs);
@@ -3297,10 +3170,6 @@ private:
 
   SmallVector<DeferredModuleToParse, 0> deferredModules;
   ModuleOp mlirModule;
-
-  /// A global identifier that can be used to link multiple annotations
-  /// together.  This should be incremented on use.
-  unsigned annotationID = 0;
 };
 
 } // end anonymous namespace
@@ -3334,55 +3203,6 @@ FIRCircuitParser::importAnnotationsRaw(SMLoc loc, StringRef circuitTarget,
   return success();
 }
 
-ParseResult FIRCircuitParser::importAnnotations(CircuitOp circuit, SMLoc loc,
-                                                StringRef circuitTarget,
-                                                StringRef annotationsStr,
-                                                size_t &nlaNumber) {
-
-  auto annotations = json::parse(annotationsStr);
-  if (auto err = annotations.takeError()) {
-    handleAllErrors(std::move(err), [&](const json::ParseError &a) {
-      auto diag = emitError(loc, "Failed to parse JSON Annotations");
-      diag.attachNote() << a.message();
-    });
-    return failure();
-  }
-
-  json::Path::Root root;
-  llvm::StringMap<ArrayAttr> thisAnnotationMap;
-  if (!fromJSON(annotations.get(), circuitTarget, thisAnnotationMap, root,
-                circuit, nlaNumber)) {
-    auto diag = emitError(loc, "Invalid/unsupported annotation format");
-    std::string jsonErrorMessage =
-        "See inline comments for problem area in JSON:\n";
-    llvm::raw_string_ostream s(jsonErrorMessage);
-    root.printErrorContext(annotations.get(), s);
-    diag.attachNote() << jsonErrorMessage;
-    return failure();
-  }
-
-  if (!scatterCustomAnnotations(thisAnnotationMap, circuit, annotationID,
-                                translateLocation(loc), nlaNumber))
-    return failure();
-
-  // Merge the attributes we just parsed into the global set we're accumulating.
-  llvm::StringMap<ArrayAttr> &resultAnnoMap = getConstants().annotationMap;
-  for (auto &thisEntry : thisAnnotationMap) {
-    auto &existing = resultAnnoMap[thisEntry.getKey()];
-    if (!existing) {
-      existing = thisEntry.getValue();
-      continue;
-    }
-
-    SmallVector<Attribute> annotationVec(existing.begin(), existing.end());
-    annotationVec.append(thisEntry.getValue().begin(),
-                         thisEntry.getValue().end());
-    existing = ArrayAttr::get(getContext(), annotationVec);
-  }
-
-  return success();
-}
-
 ParseResult FIRCircuitParser::importOMIR(CircuitOp circuit, SMLoc loc,
                                          StringRef circuitTarget,
                                          StringRef annotationsStr,
@@ -3409,10 +3229,6 @@ ParseResult FIRCircuitParser::importOMIR(CircuitOp circuit, SMLoc loc,
     diag.attachNote() << jsonErrorMessage;
     return failure();
   }
-
-  if (!scatterCustomAnnotations(thisAnnotationMap, circuit, annotationID,
-                                translateLocation(loc), nlaNumber))
-    return failure();
 
   // Merge the attributes we just parsed into the global set we're accumulating.
   llvm::StringMap<ArrayAttr> &resultAnnoMap = getConstants().annotationMap;
@@ -3766,16 +3582,20 @@ ParseResult FIRCircuitParser::parseCircuit(
   // first to place any annotations from an annotation file *after* the inline
   // annotations.  While arbitrary, this makes the annotation file have
   // "append" semantics.
+  SmallVector<Attribute> annos;
   if (!inlineAnnotations.empty())
-    if (importAnnotations(circuit, inlineAnnotationsLoc, circuitTarget,
-                          inlineAnnotations, nlaNumber))
+    if (importAnnotationsRaw(inlineAnnotationsLoc, circuitTarget,
+                             inlineAnnotations, annos))
       return failure();
 
   // Deal with the annotation file if one was specified
   for (auto *annotationsBuf : annotationsBufs)
-    if (importAnnotations(circuit, info.getFIRLoc(), circuitTarget,
-                          annotationsBuf->getBuffer(), nlaNumber))
+    if (importAnnotationsRaw(inlineAnnotationsLoc, circuitTarget,
+                             annotationsBuf->getBuffer(), annos))
       return failure();
+
+  if (!annos.empty())
+    getConstants().annotationMap[rawAnnotations] = b.getArrayAttr(annos);
 
   // Process OMIR files as annotations with a class of
   // "freechips.rocketchip.objectmodel.OMNode"

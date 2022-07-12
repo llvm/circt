@@ -41,9 +41,15 @@ struct FieldInfo {
 namespace circt {
 namespace hw {
 
+// Returns the canonical type of a HW type (inner type of a type alias).
+mlir::Type getCanonicalType(mlir::Type type);
+
 /// Return true if the specified type is a value HW Integer type.  This checks
 /// that it is a signless standard dialect type and that it isn't zero bits.
 bool isHWIntegerType(mlir::Type type);
+
+/// Return true if the specified type is a HW Enum type.
+bool isHWEnumType(mlir::Type type);
 
 /// Return true if the specified type can be used as an HW value type, that is
 /// the set of types that can be composed together to represent synthesized,

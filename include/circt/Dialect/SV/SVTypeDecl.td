@@ -116,6 +116,7 @@ def ModportDirection : I32EnumAttr<"ModportDirection",
   "Defines direction in a modport",
   [ModportDirectionInput, ModportDirectionOutput, ModportDirectionInOut]> {
   let genSpecializedAttr = 0;
+  let cppNamespace = "::circt::sv";
 }
 
 def ModportDirectionAttr : EnumAttr<SVDialect, ModportDirection,
@@ -132,6 +133,10 @@ def ModportStruct : SV_Attr<"ModportStruct", "mod_port"> {
                     "mlir::FlatSymbolRefAttr":$signal);
 
   let assemblyFormat = "`<` struct(params) `>`";
+
+  let builders = [
+    AttrOrTypeBuilder<(ins "ModportDirection":$dir, "mlir::FlatSymbolRefAttr":$sig)>
+  ];
 }
 
 def ModportStructArrayAttr : TypedArrayAttrBase<ModportStruct,

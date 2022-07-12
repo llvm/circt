@@ -14,6 +14,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "llvm/ADT/SmallBitVector.h"
 #include "llvm/ADT/StringRef.h"
 
 using namespace mlir;
@@ -108,6 +109,51 @@ LogicalResult circt::firrtl::verifyModuleLikeOpInterface(FModuleLike module) {
           "block argument types should match signature types");
   }
 
+  return success();
+}
+
+LogicalResult circt::firrtl::verifyInnerSymAttr(InnerSymbolOpInterface op) {
+  auto isa = op.getInnerSymAttr();
+  // If does not have any inner sym then ignore.
+  if (!isa)
+    return success();
+  if (op->getNumResults() != 1) {
+    // If more than one results, then the inner sym can only be specified on
+    // fieldID=0.
+    if (isa.numSymbols() > 1 || !isa.getSymName()) {
+      op->emitOpError("cannot assign symbols to non-zero field id, for ops "
+                      "with zero or multiple results");
+      return failure();
+    }
+    return success();
+  }
+  auto maxFields = op->getResultTypes()[0].cast<FIRRTLType>().getMaxFieldID();
+  SmallBitVector indices(maxFields + 1);
+  SmallPtrSet<Attribute, 8> symNames;
+  // Ensure fieldID and symbol names are unique.
+  auto uniqSyms = [&](InnerSymPropertiesAttr p) {
+    if (maxFields < p.getFieldID()) {
+      op->emitOpError("field id:'" + Twine(p.getFieldID()) +
+                      "' is greater than the maximum field id:'" +
+                      Twine(maxFields) + "'");
+      return false;
+    }
+    if (indices.test(p.getFieldID())) {
+      op->emitOpError("cannot assign multiple symbol names to the field id:'" +
+                      Twine(p.getFieldID()) + "'");
+      return false;
+    }
+    indices.set(p.getFieldID());
+    auto it = symNames.insert(p.getName());
+    if (!it.second) {
+      op->emitOpError("cannot reuse symbol name:'" + p.getName().getValue() +
+                      "'");
+      return false;
+    }
+    return true;
+  };
+  if (!isa.all_of_props(uniqSyms))
+    return failure();
   return success();
 }
 

@@ -21,6 +21,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FSM/FSMOps.h"
 #include "circt/Dialect/HW/HWDialect.h"
+#include "circt/Dialect/HWArith/HWArithDialect.h"
 #include "circt/Dialect/Handshake/HandshakeDialect.h"
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
 #include "circt/Dialect/MSFT/MSFTDialect.h"
@@ -49,7 +50,8 @@ inline void registerAllDialects(mlir::DialectRegistry &registry) {
     hw::HWDialect,
     seq::SeqDialect,
     staticlogic::StaticLogicDialect,
-    sv::SVDialect
+    sv::SVDialect,
+    hwarith::HWArithDialect
   >();
   // clang-format on
 }

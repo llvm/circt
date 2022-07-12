@@ -1071,6 +1071,13 @@ hw.module @struct_extract1(%a0: i3, %a1: i5) -> (r0: i3) {
   hw.output %r0 : i3
 }
 
+// Ensure that canonicalizer works with hw.enum.constant.
+
+hw.module @enum_constant() -> () {
+  %0 = hw.enum.constant A : !hw.enum<A, B, C>
+}
+
+
 // == Begin: test cases from LowerToHW ==
 
 // CHECK-LABEL:  hw.module @instance_ooo(%arg0: i2, %arg1: i2, %arg2: i3) -> (out0: i8) {

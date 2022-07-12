@@ -204,5 +204,57 @@ LogicalResult UnwrapSVInterface::verify() {
   return verifySVInterface(*this, modportType, chanType);
 }
 
+/// Get the port declaration op for the specified service decl, port name.
+template <class OpType>
+static OpType getServicePortDecl(Operation *op,
+                                 SymbolTableCollection &symbolTable,
+                                 hw::InnerRefAttr servicePort) {
+  ModuleOp top = op->getParentOfType<mlir::ModuleOp>();
+  SymbolTable topSyms = symbolTable.getSymbolTable(top);
+
+  StringAttr modName = servicePort.getModule();
+  ServiceDeclOp serviceDeclOp = topSyms.lookup<ServiceDeclOp>(modName);
+  if (!serviceDeclOp) {
+    op->emitOpError("Cannot find module ") << modName;
+    return {};
+  }
+
+  StringAttr innerSym = servicePort.getName();
+  for (auto portDecl : serviceDeclOp.getOps<OpType>())
+    if (portDecl.inner_symAttr() == innerSym)
+      return portDecl;
+  op->emitOpError("Cannot find port named ") << innerSym;
+  return {};
+}
+
+/// Check that the type of a given service request matches the services port
+/// type.
+template <class PortTypeOp, class OpType>
+static LogicalResult
+reqPortMatches(OpType op, SymbolTableCollection &symbolTable, Type t) {
+  auto portDecl =
+      getServicePortDecl<PortTypeOp>(op, symbolTable, op.servicePort());
+  if (!portDecl)
+    return failure();
+
+  auto *ctxt = op.getContext();
+  if (portDecl.type() != t &&
+      portDecl.type() != ChannelPort::get(ctxt, AnyType::get(ctxt)))
+    return op.emitOpError("Request type does not match port type ")
+           << portDecl.type();
+
+  return success();
+}
+
+LogicalResult RequestToClientConnection::verifySymbolUses(
+    SymbolTableCollection &symbolTable) {
+  return reqPortMatches<ToClientOp>(*this, symbolTable, receiving().getType());
+}
+
+LogicalResult RequestToServerConnection::verifySymbolUses(
+    SymbolTableCollection &symbolTable) {
+  return reqPortMatches<ToServerOp>(*this, symbolTable, sending().getType());
+}
+
 #define GET_OP_CLASSES
 #include "circt/Dialect/ESI/ESI.cpp.inc"

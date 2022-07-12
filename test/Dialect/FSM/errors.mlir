@@ -10,7 +10,7 @@ fsm.machine @foo(%arg0: i1) -> i1 attributes {initialState = "IDLE"} {}
 fsm.machine @foo(%arg0: i1) -> i1 attributes {initialState = "IDLE"} {
   %cnt = fsm.variable "cnt" {initValue = 0 : i16} : i16
 
-  fsm.state "IDLE" output  {
+  fsm.state @IDLE output  {
     %true = arith.constant true
 // expected-error @+1 {{'fsm.output' op operand types must match the machine output types}}
     fsm.output %true, %true : i1, i1
@@ -25,7 +25,7 @@ fsm.machine @foo(%arg0: i1) -> i1 attributes {initialState = "IDLE"} {
   %cnt = fsm.variable "cnt" {initValue = 0 : i16} : i16
 
   // expected-error @+1 {{'fsm.state' op output block must have a single OutputOp terminator}}
-  fsm.state "IDLE" output  {
+  fsm.state @IDLE output  {
     %true = arith.constant true
   } transitions {
     fsm.transition @IDLE
@@ -38,7 +38,7 @@ fsm.machine @foo(%arg0: i1) -> i1 attributes {initialState = "IDLE"} {
 fsm.machine @foo(%arg0: i1) -> i1 attributes {initialState = "IDLE"} {
   %cnt = fsm.variable "cnt" {initValue = 0 : i16} : i16
 
-  fsm.state "IDLE" output  {
+  fsm.state @IDLE output  {
     %true = arith.constant true
     fsm.output %true : i1
   } transitions {
@@ -54,7 +54,7 @@ fsm.machine @foo(%arg0: i1) -> i1 attributes {initialState = "IDLE"} {
 fsm.machine @foo(%arg0: i1) -> i1 attributes {initialState = "IDLE"} {
   %cnt = fsm.variable "cnt" {initValue = 0 : i16} : i16
 
-  fsm.state "IDLE" output  {
+  fsm.state @IDLE output  {
     %true = arith.constant true
     fsm.output %true : i1
   } transitions {

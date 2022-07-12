@@ -314,10 +314,42 @@ static void reduceXor(ImplicitLocOpBuilder &builder, Value &into, Value value) {
 /// invalidation, module externalization, and wire stripping
 struct InstanceStubber : public Reduction {
   void beforeReduction(mlir::ModuleOp op) override {
+    erasedInsts.clear();
+    erasedModules.clear();
     symbols.clear();
     nlaRemover.clear();
   }
-  void afterReduction(mlir::ModuleOp op) override { nlaRemover.remove(op); }
+  void afterReduction(mlir::ModuleOp op) override {
+    // Look into deleted modules to find additional instances that are no longer
+    // instantiated anywhere.
+    SmallVector<Operation *> worklist;
+    auto deadInsts = erasedInsts;
+    for (auto *op : erasedModules)
+      worklist.push_back(op);
+    while (!worklist.empty()) {
+      auto *op = worklist.pop_back_val();
+      auto *tableOp = SymbolTable::getNearestSymbolTable(op);
+      op->walk([&](firrtl::InstanceOp instOp) {
+        auto moduleOp =
+            instOp.getReferencedModule(symbols.getSymbolTable(tableOp));
+        deadInsts.insert(instOp);
+        if (llvm::all_of(
+                symbols.getSymbolUserMap(tableOp).getUsers(moduleOp),
+                [&](Operation *user) { return deadInsts.contains(user); })) {
+          LLVM_DEBUG(llvm::dbgs() << "- Removing transitively unused module `"
+                                  << moduleOp.moduleName() << "`\n");
+          erasedModules.insert(moduleOp);
+          worklist.push_back(moduleOp);
+        }
+      });
+    }
+
+    for (auto *op : erasedInsts)
+      op->erase();
+    for (auto *op : erasedModules)
+      op->erase();
+    nlaRemover.remove(op);
+  }
 
   bool match(Operation *op) override { return isa<firrtl::InstanceOp>(op); }
 
@@ -340,11 +372,13 @@ struct InstanceStubber : public Reduction {
     auto tableOp = SymbolTable::getNearestSymbolTable(instOp);
     auto moduleOp = instOp.getReferencedModule(symbols.getSymbolTable(tableOp));
     nlaRemover.markNLAsInOperation(instOp);
-    instOp->erase();
-    if (symbols.getSymbolUserMap(tableOp).useEmpty(moduleOp)) {
+    erasedInsts.insert(instOp);
+    if (llvm::all_of(
+            symbols.getSymbolUserMap(tableOp).getUsers(moduleOp),
+            [&](Operation *user) { return erasedInsts.contains(user); })) {
       LLVM_DEBUG(llvm::dbgs() << "- Removing now unused module `"
                               << moduleOp.moduleName() << "`\n");
-      moduleOp->erase();
+      erasedModules.insert(moduleOp);
     }
     return success();
   }
@@ -354,6 +388,8 @@ struct InstanceStubber : public Reduction {
 
   SymbolCache symbols;
   NLARemover nlaRemover;
+  llvm::DenseSet<Operation *> erasedInsts;
+  llvm::DenseSet<Operation *> erasedModules;
 };
 
 /// A sample reduction pattern that maps `firrtl.mem` to a set of invalidated
@@ -669,6 +705,61 @@ struct ExtmoduleInstanceRemover : public Reduction {
   NLARemover nlaRemover;
 };
 
+/// A sample reduction pattern that pushes connected values through wires.
+struct ConnectForwarder : public Reduction {
+  void beforeReduction(mlir::ModuleOp op) override { opsToErase.clear(); }
+  void afterReduction(mlir::ModuleOp op) override {
+    for (auto *op : opsToErase)
+      op->dropAllReferences();
+    for (auto *op : opsToErase)
+      op->erase();
+  }
+
+  bool match(Operation *op) override {
+    if (!isa<firrtl::FConnectLike>(op))
+      return false;
+    auto dest = op->getOperand(0);
+    auto src = op->getOperand(1);
+    auto *destOp = dest.getDefiningOp();
+    auto *srcOp = src.getDefiningOp();
+    if (dest == src)
+      return false;
+
+    // Ensure that the destination is something we should be able to forward
+    // through.
+    if (!isa_and_nonnull<firrtl::WireOp>(destOp))
+      return false;
+
+    // Ensure that the destination is connected to only once, and all uses of
+    // the connection occur after the definition of the source.
+    unsigned numConnects = 0;
+    for (auto &use : dest.getUses()) {
+      auto *op = use.getOwner();
+      if (use.getOperandNumber() == 0 && isa<firrtl::FConnectLike>(op)) {
+        if (++numConnects > 1)
+          return false;
+        continue;
+      }
+      if (srcOp && !srcOp->isBeforeInBlock(op))
+        return false;
+    }
+
+    return true;
+  }
+
+  LogicalResult rewrite(Operation *op) override {
+    auto dest = op->getOperand(0);
+    dest.replaceAllUsesWith(op->getOperand(1));
+    opsToErase.insert(dest.getDefiningOp());
+    opsToErase.insert(op);
+    return success();
+  }
+
+  std::string getName() const override { return "connect-forwarder"; }
+
+  llvm::DenseSet<Operation *> opsToErase;
+};
+
 /// A sample reduction pattern that replaces a single-use wire and register with
 /// an operand of the source value of the connection.
 template <unsigned OpNum>
@@ -806,6 +897,63 @@ struct NodeSymbolRemover : public Reduction {
   std::string getName() const override { return "node-symbol-remover"; }
 };
 
+/// A sample reduction pattern that eagerly inlines instances.
+struct EagerInliner : public Reduction {
+  void beforeReduction(mlir::ModuleOp op) override {
+    symbols.clear();
+    nlaRemover.clear();
+  }
+  void afterReduction(mlir::ModuleOp op) override { nlaRemover.remove(op); }
+
+  bool match(Operation *op) override {
+    auto instOp = dyn_cast<firrtl::InstanceOp>(op);
+    if (!instOp)
+      return false;
+    auto tableOp = SymbolTable::getNearestSymbolTable(instOp);
+    auto moduleOp = instOp.getReferencedModule(symbols.getSymbolTable(tableOp));
+    if (!isa<firrtl::FModuleOp>(moduleOp))
+      return false;
+    return symbols.getSymbolUserMap(tableOp).getUsers(moduleOp).size() == 1;
+  }
+
+  LogicalResult rewrite(Operation *op) override {
+    auto instOp = cast<firrtl::InstanceOp>(op);
+    LLVM_DEBUG(llvm::dbgs() << "Inlining instance `" << instOp.name() << "`\n");
+    SmallVector<Value> argReplacements;
+    ImplicitLocOpBuilder builder(instOp.getLoc(), instOp);
+    for (unsigned i = 0, e = instOp.getNumResults(); i != e; ++i) {
+      auto result = instOp.getResult(i);
+      auto name = builder.getStringAttr(Twine(instOp.name()) + "_" +
+                                        instOp.getPortNameStr(i));
+      auto wire = builder.create<firrtl::WireOp>(
+          result.getType(), name, firrtl::NameKindEnum::DroppableName,
+          instOp.getPortAnnotation(i), StringAttr{});
+      result.replaceAllUsesWith(wire);
+      argReplacements.push_back(wire);
+    }
+    auto tableOp = SymbolTable::getNearestSymbolTable(instOp);
+    auto moduleOp = cast<firrtl::FModuleOp>(
+        instOp.getReferencedModule(symbols.getSymbolTable(tableOp)));
+    for (auto &op : llvm::make_early_inc_range(*moduleOp.getBody())) {
+      op.remove();
+      builder.insert(&op);
+      for (auto &operand : op.getOpOperands())
+        if (auto blockArg = operand.get().dyn_cast<BlockArgument>())
+          operand.set(argReplacements[blockArg.getArgNumber()]);
+    }
+    nlaRemover.markNLAsInOperation(instOp);
+    instOp->erase();
+    moduleOp->erase();
+    return success();
+  }
+
+  std::string getName() const override { return "eager-inliner"; }
+  bool acceptSizeIncrease() const override { return true; }
+
+  SymbolCache symbols;
+  NLARemover nlaRemover;
+};
+
 //===----------------------------------------------------------------------===//
 // Reduction Registration
 //===----------------------------------------------------------------------===//
@@ -833,6 +981,7 @@ void circt::createAllReductions(
   add(std::make_unique<ModuleExternalizer>());
   add(std::make_unique<InstanceStubber>());
   add(std::make_unique<MemoryStubber>());
+  add(std::make_unique<EagerInliner>());
   add(std::make_unique<PassReduction>(
       context, firrtl::createLowerFIRRTLTypesPass(), true, true));
   add(std::make_unique<PassReduction>(context, firrtl::createExpandWhensPass(),
@@ -846,6 +995,7 @@ void circt::createAllReductions(
       context, firrtl::createRemoveUnusedPortsPass(/*ignoreDontTouch=*/true)));
   add(std::make_unique<PassReduction>(context, createCSEPass()));
   add(std::make_unique<NodeSymbolRemover>());
+  add(std::make_unique<ConnectForwarder>());
   add(std::make_unique<ConnectInvalidator>());
   add(std::make_unique<Constantifier>());
   add(std::make_unique<OperandForwarder<0>>());

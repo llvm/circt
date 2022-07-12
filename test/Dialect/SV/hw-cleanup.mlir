@@ -336,3 +336,18 @@ hw.module @nested_regions() {
     }
   }
 }
+
+// CHECK-LABEL: hw.module @sv_attributes(
+hw.module @sv_attributes() {
+  %fd = hw.constant 0x80000002 : i32
+  // Check that initials are not merged.
+  // CHECK: sv.initial
+  // CHECK: sv.initial
+  sv.initial  {
+    sv.fwrite %fd, "A"
+  } {sv.attributes = #sv.attribute<"dont merge">}
+
+  sv.initial  {
+    sv.fwrite %fd, "B"
+  } {sv.attributes = #sv.attribute<"dont merge">}
+}

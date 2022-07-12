@@ -15,6 +15,7 @@ other [MLIR Rationale docs](https://mlir.llvm.org/docs/Rationale/).
   - [Expressions](#expressions)
     - [Verbatim op](#verbatim-op)
   - [Cost Model](#cost-model)
+  - [SV Dialect Attributes](#sv-dialect-attributes)
 
 ## Introduction to the `sv` dialect
 
@@ -145,3 +146,30 @@ sv.verbatim "MACRO({{0}}, {{1}} reg={{4}}, {{3}})"
 The SV dialect is primarily designed for human consumption, not machines.  As
 such, transformations should aim to reduce redundancy, eliminate useless
 constructs (e.g. eliminate empty ifdef and if blocks), etc.
+
+## SV Dialect attributes
+
+### `sv.namehint`
+
+TODO.
+
+### `sv.attribute` and `sv.attributes`
+`sv.attribute` is used to encode Verilog _attribute_ that annotates metadata
+to verilog constructs. See more detail in the `sv.attribute` definition.
+We encode SV attributes into attr-dict with the key `sv.attributes`.
+The item of `sv.attributes` must be an ArrayAttr whose elements are `sv.attribute`.
+Currently, SV attributes don't block most optimizations; therefore, users
+should not expect that sv attributes always appear in the output verilog.
+However, in the future, we might have to re-consider blocking every optimization
+for operations with SV attributes.
+
+Example,
+
+```mlir
+%0 = sv.wire { sv.attributes = [#sv.attribute<"foo">,
+                                   #sv.attribute<"bar"="baz">]}
+
+==>
+(* foo, bar = baz *)
+wire GEN;
+```

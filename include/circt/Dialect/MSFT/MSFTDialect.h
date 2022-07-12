@@ -23,12 +23,6 @@
 
 #include <functional>
 
-namespace circt {
-namespace msft {
-void registerMSFTPasses();
-} // namespace msft
-} // namespace circt
-
 #include "circt/Dialect/MSFT/MSFTDialect.h.inc"
 #include "circt/Dialect/MSFT/MSFTEnums.h.inc"
 

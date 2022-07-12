@@ -17,7 +17,7 @@ include "mlir/IR/OpBase.td"
 
 def HWModuleLike : OpInterface<"HWModuleLike"> {
   let cppNamespace = "circt::hw";
-  let description = "Provide common  module information.";
+  let description = "Provide common module information.";
 
   let methods = [
     InterfaceMethod<"Check whether the module is publicly visible",

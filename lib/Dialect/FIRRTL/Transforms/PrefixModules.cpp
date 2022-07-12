@@ -59,8 +59,7 @@ static PrefixInfo getPrefixInfo(Operation *module) {
   AnnotationSet annotations(module);
 
   // Get the annotation from the module.
-  auto anno = annotations.getAnnotation(
-      "sifive.enterprise.firrtl.NestedPrefixModulesAnnotation");
+  auto anno = annotations.getAnnotation(prefixModulesAnnoClass);
   if (!anno)
     return {"", false};
 
@@ -250,8 +249,7 @@ void PrefixModulesPass::renameModule(FModuleOp module) {
   auto innerPrefix = prefixInfo.prefix;
 
   // Remove the annotation from the module.
-  AnnotationSet::removeAnnotations(
-      module, "sifive.enterprise.firrtl.NestedPrefixModulesAnnotation");
+  AnnotationSet::removeAnnotations(module, prefixModulesAnnoClass);
 
   // We only add the annotated prefix to the module name if it is inclusive.
   auto moduleName = module.getName().str();

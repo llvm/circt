@@ -467,9 +467,6 @@ firrtl.circuit "NLAUsedInWiring"  {
       id = 0 : i64,
       portID = 1 : i64
     }]} : !firrtl.uint<1>
-    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    firrtl.connect %g, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-    firrtl.connect %f, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
   }
 
   firrtl.module @NLAUsedInWiring() {
@@ -484,8 +481,6 @@ firrtl.circuit "NLAUsedInWiring"  {
       portID = 3 : i64
     }]} : !firrtl.uint<1>
     %dataTap_b, %dataTap_c, %dataTap_d = firrtl.instance dataTap @DataTap(out b: !firrtl.uint<1>, out c: !firrtl.uint<1>, out d: !firrtl.uint<1>)
-    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    firrtl.connect %k, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
 
@@ -554,12 +549,88 @@ firrtl.circuit "Top" {
     firrtl.instance dut @DUT()
   }
 }
-// ---
-// The HierpathOps that should be updated to end on a module:
-//  firrtl.hierpath @nla_1 [@NLAGarbageCollection::@dut, @DUT::@submodule, @Submodule]
-//  firrtl.hierpath @nla_2 [@NLAGarbageCollection::@dut, @DUT::@submodule, @Submodule]
-//  firrtl.hierpath @nla_3 [@NLAGarbageCollection::@dut, @DUT::@submodule, @Submodule]
-//  firrtl.hierpath @nla_1 [@NLAUsedInWiring::@foo, @Foo]
-//  firrtl.hierpath @nla_2 [@NLAUsedInWiring::@foo, @Foo]
-//  firrtl.hierpath @nla_0 [@DUT::@submodule_1, @Submodule]
-//  firrtl.hierpath @nla [@DUT::@submodule_2, @Submodule]
+
+// -----
+
+// Check that zero-width data taps are no-ops.  These should generate no XMRs.
+//
+firrtl.circuit "Top"  {
+  firrtl.extmodule private @DataTap(
+    out _0: !firrtl.uint<0> [
+      {
+        class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.port",
+        id = 0 : i64,
+        portID = 1 : i64
+      }
+    ],
+    out _1: !firrtl.uint<0> [
+      {
+        class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.port",
+        id = 0 : i64,
+        portID = 2 : i64
+      }
+    ]) attributes {annotations = [
+      {class = "sifive.enterprise.grandcentral.DataTapsAnnotation.blackbox"}
+    ]}
+  firrtl.module @Top(
+    out %p: !firrtl.uint<0> [
+      {
+        class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.source",
+        id = 0 : i64,
+        portID = 2 : i64
+      }
+    ]) {
+    %w = firrtl.wire {annotations = [
+      {
+        class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.source",
+        id = 0 : i64,
+        portID = 1 : i64
+      }
+    ]} : !firrtl.uint<0>
+    %tap_0, %tap_1 = firrtl.instance tap @DataTap(
+      out _0: !firrtl.uint<0>,
+      out _1: !firrtl.uint<0>
+    )
+  }
+}
+
+// CHECK-NOT: firrtl.verbatim.expr
+
+// -----
+
+// Check that constants are sunk into XMRs and symbols are not unnecessarily
+// created.
+//
+// CHECK-LABEL: "ConstantSinking"
+firrtl.circuit "ConstantSinking"  {
+  // CHECK:      firrtl.module @DataTap
+  // CHECK-NEXT:   %[[one:.+]] = firrtl.constant 1
+  // CHECK-NEXT:   firrtl.connect %a, %[[one]]
+  firrtl.extmodule private @DataTap(
+    out a: !firrtl.uint<1> [
+      {
+        class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.port",
+        id = 0 : i64,
+        portID = 1 : i64
+      }
+    ]) attributes {annotations = [
+      {
+        class = "sifive.enterprise.grandcentral.DataTapsAnnotation.blackbox"
+      }
+    ]}
+  // CHECK: firrtl.module @ConstantSinking
+  firrtl.module @ConstantSinking() {
+    %dataTap_a = firrtl.instance dataTap interesting_name  @DataTap(out a: !firrtl.uint<1>)
+    // CHECK:    %w = firrtl.wire
+    // CHECK-NOT   sym
+    %w = firrtl.wire {annotations = [
+      {
+        class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.source",
+        id = 0 : i64,
+        portID = 1 : i64
+      }
+    ]} : !firrtl.uint<1>
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    firrtl.strictconnect %w, %c1_ui1 : !firrtl.uint<1>
+  }
+}

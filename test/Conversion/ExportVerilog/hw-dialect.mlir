@@ -77,7 +77,7 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
   // make tests brittle. This line breaking does not mean your change is no
   // good! You'll just have to find a new place for `sv.namehint`.
   %elem2d = hw.array_get %array2d[%a] { sv.namehint="array2d_idx_0_name" } : !hw.array<12 x array<10xi4>>
-  %37 = hw.array_get %elem2d[%b] : !hw.array<10xi4>
+  %37 = hw.array_get %elem2d[%b] {sv.attributes=[#sv.attribute<"svAttr">]}: !hw.array<10xi4>
 
   %36 = comb.replicate %a : (i4) -> i12
 
@@ -183,7 +183,7 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
 // CHECK-NEXT:   assign r34 = ~a;
 // CHECK-NEXT:   assign r35 = cond ? [[WIRE0]][a +: 3] : [[WIRE0]][b +: 3];
 // CHECK-NEXT:   assign r36 = {3{a}};
-// CHECK-NEXT:   assign r37 = [[WIRE2]][b];
+// CHECK-NEXT:   assign r37 = [[WIRE2]][b] (* svAttr *);
 // CHECK-NEXT:   assign r38 = {[[WIRE1]], [[WIRE1]]};
 // CHECK-NEXT:   assign r40 = '{foo: structA.foo, bar: a};
 // CHECK-NEXT:   assign r41 = '{foo: [[WIRE3]].foo, bar: b};
@@ -669,6 +669,16 @@ hw.module @StrurctExtractInline(%a: !hw.struct<v: i1>) -> (b: i1, c: i1) {
   // CHECK:      assign b = a.v;
   // CHECK-NEXT: assign c = a.v;
   hw.output %0, %0 : i1, i1
+}
+
+// CHECK-LABEL: NoExtraTemporaryWireForAssign
+hw.module @NoExtraTemporaryWireForAssign(%a: i2, %b: i4) {
+  // CHECK: wire struct packed {logic [1:0] foo; logic [3:0] bar; } _GEN;
+  // CHECK-EMPTY:
+  // CHECK-NEXT: assign _GEN = '{foo: a, bar: b};
+  %0 = hw.struct_create (%a, %b) : !hw.struct<foo: i2, bar: i4>
+  %1 = sv.wire : !hw.inout<!hw.struct<foo: i2, bar: i4>>
+  sv.assign %1, %0: !hw.struct<foo: i2, bar: i4>
 }
 
 hw.module.extern @DifferentResultMod() -> (out1: i1, out2: i2)

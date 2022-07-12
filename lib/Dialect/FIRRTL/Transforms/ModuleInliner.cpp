@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
@@ -768,11 +769,11 @@ void Inliner::cloneAndRename(
 }
 
 bool Inliner::shouldFlatten(Operation *op) {
-  return AnnotationSet(op).hasAnnotation("firrtl.transforms.FlattenAnnotation");
+  return AnnotationSet(op).hasAnnotation(flattenAnnoClass);
 }
 
 bool Inliner::shouldInline(Operation *op) {
-  return AnnotationSet(op).hasAnnotation("firrtl.passes.InlineAnnotation");
+  return AnnotationSet(op).hasAnnotation(inlineAnnoClass);
 }
 
 // NOLINTNEXTLINE(misc-no-recursion)
@@ -1157,8 +1158,7 @@ void Inliner::run() {
       // Delete the flatten annotation, the transform was performed.
       // Even if visited again in our walk (for inlining),
       // we've just flattened it and so the annotation is no longer needed.
-      AnnotationSet::removeAnnotations(module,
-                                       "firrtl.transforms.FlattenAnnotation");
+      AnnotationSet::removeAnnotations(module, flattenAnnoClass);
     } else {
       inlineInstances(module);
     }
@@ -1181,7 +1181,7 @@ void Inliner::run() {
     if (shouldInline(mod)) {
       assert(cast<hw::HWModuleLike>(*mod).isPublic() &&
              "non-public module with inline annotation still present");
-      AnnotationSet::removeAnnotations(mod, "firrtl.passes.InlineAnnotation");
+      AnnotationSet::removeAnnotations(mod, inlineAnnoClass);
     }
     assert(!shouldFlatten(mod) && "flatten annotation found on live module");
   }

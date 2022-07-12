@@ -10,6 +10,9 @@ module {
   // CHECK:         modport data_in(input data, input valid, output ready);
   // CHECK:         modport data_out(output data, output valid, input ready);
   // CHECK:         MACRO(data, valid, ready -- data_in)
+  // CHECK:         // logic /*Zero Width*/ zeroGround;
+  // CHECK:         // logic [3:0]/*Zero Width*/ zeroArray;
+  // CHECK:         // logic /*Zero Width*/ zeroUArray[0:3];
   // CHECK:       endinterface
   // CHECK-EMPTY:
   sv.interface @data_vr {
@@ -22,6 +25,9 @@ module {
     sv.interface.modport @data_out (output @data, output @valid, input @ready)
     sv.verbatim  "//MACRO({{0}}, {{1}}, {{2}} -- {{3}})"
                     {symbols = [@data, @valid, @ready, @data_in]}
+    sv.interface.signal @zeroGround : i0
+    sv.interface.signal @zeroArray : !hw.array<4xi0>
+    sv.interface.signal @zeroUArray : !hw.uarray<4xi0>
   }
 
   // CHECK-LABEL: interface struct_vr;
@@ -117,7 +123,7 @@ module {
   }
   // CHECK-LABEL: module structs(
   // CHECK-NOT: wire [383:0] _tmp =
-  // CHECK: wire struct packed {logic [383:0] foo; } _GEN_2
+  // CHECK: wire struct packed {logic [383:0] foo; } _GEN
   // CHECK: endmodule
   hw.module @structs(%clk: i1, %rstn: i1) {
     %0 = sv.interface.instance {name = "iface"} : !sv.interface<@IValidReady_Struct>

@@ -352,10 +352,10 @@ def CaseOp : SVOp<"case", [SingleBlock, NoTerminator, NoRegionArguments,
   let regions = (region VariadicRegion<SizedRegion<1>>:$caseRegions);
   let arguments = (ins DefaultValuedAttr<CaseStmtTypeAttr,
                                          "CaseStmtType::CaseStmt">:$caseStyle,
-                       HWIntegerType:$cond, ArrayAttr:$casePatterns,
+                       AnyType:$cond, ArrayAttr:$casePatterns,
                        DefaultValuedAttr<ValidationQualifierTypeAttr,
                        "ValidationQualifierTypeEnum::ValidationQualifierPlain">:
-                       $validationQualifier);
+                      $validationQualifier);
   let results = (outs);
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
@@ -367,9 +367,9 @@ def CaseOp : SVOp<"case", [SingleBlock, NoTerminator, NoRegionArguments,
     OpBuilder<(ins "CaseStmtType":$caseStyle,
                    "ValidationQualifierTypeEnum":$validationQualifier,
                    "Value":$cond, "size_t":$numCases,
-                   "std::function<CasePattern(size_t)>":$caseCtor)>,
+                   "std::function<std::unique_ptr<CasePattern>(size_t)>":$caseCtor)>,
     OpBuilder<(ins "CaseStmtType":$caseStyle, "Value":$cond, "size_t":$numCases,
-               "std::function<CasePattern(size_t)>":$caseCtor), [{
+               "std::function<std::unique_ptr<CasePattern>(size_t)>":$caseCtor), [{
       build($_builder, $_state, caseStyle,
             ValidationQualifierTypeEnum::ValidationQualifierPlain, cond,  numCases,
             caseCtor);
@@ -394,15 +394,9 @@ def AssignOp : SVOp<"assign", [InOutTypeConstraint<"src", "dest">,
     A SystemVerilog assignment statement 'x = y;'.
     These occur in module scope.  See SV Spec 10.3.2.
   }];
-  let arguments = (ins InOutType:$dest, InOutElementType:$src,
-                  OptionalAttr<SVAttributeArrayAttr>:$svAttributes);
+  let arguments = (ins InOutType:$dest, InOutElementType:$src);
   let results = (outs);
-  let assemblyFormat = [{$dest `,` $src (`svattrs` $svAttributes^)? attr-dict
-                       `:` qualified(type($src))}];
-  let builders = [
-    OpBuilder<(ins "::mlir::Value":$dest, "::mlir::Value":$src),
-      "return build($_builder, $_state, dest, src, ArrayAttr());">
-  ];
+  let assemblyFormat = "$dest `,` $src attr-dict `:` qualified(type($src))";
 }
 
 def BPAssignOp : SVOp<"bpassign", [InOutTypeConstraint<"src", "dest">,
@@ -427,7 +421,6 @@ def PAssignOp : SVOp<"passign", [InOutTypeConstraint<"src", "dest">,
     These occur in initial, always, task, and function blocks.  The statement
     can be scheduled without blocking procedural flow.  See SV Spec 10.4.2.
   }];
-  let hasCanonicalizeMethod = true;
   let arguments = (ins InOutType:$dest, InOutElementType:$src);
   let results = (outs);
   let assemblyFormat = "$dest `,` $src  attr-dict `:` qualified(type($src))";

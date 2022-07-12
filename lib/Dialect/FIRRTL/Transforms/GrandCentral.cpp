@@ -1168,6 +1168,37 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
         auto builder =
             OpBuilder::atBlockEnd(companionIDMap.lookup(id).mapping.getBody());
 
+        FIRRTLType tpe = leafValue.getType().cast<FIRRTLType>();
+
+        // If the type is zero-width then do not emit an XMR.
+        if (!tpe.getBitWidthOrSentinel())
+          return true;
+
+        // Generate the path from the LCA to the module that contains the leaf.
+        path += " = ";
+
+        // There are two posisibilites for what this is tapping:
+        //   1. This is a constant that will be synced into the mappings file.
+        //   2. This is something else and we need an XMR.
+        // Handle case (1) here and exit.  Handle case (2) following.
+        auto driver = getDriverFromConnect(leafValue);
+        if (driver) {
+          if (auto constant =
+                  dyn_cast_or_null<ConstantOp>(driver.getDefiningOp())) {
+            path.append(Twine(constant.value().getBitWidth()));
+            path += "'h";
+            SmallString<32> valueStr;
+            constant.value().toStringUnsigned(valueStr, 16);
+            path.append(valueStr);
+            builder.create<sv::VerbatimOp>(
+                constant.getLoc(),
+                StringAttr::get(&getContext(),
+                                "assign " + path.getString() + ";"),
+                ValueRange{}, ArrayAttr::get(&getContext(), path.getSymbols()));
+            return true;
+          }
+        }
+
         // Populate a hierarchical path to the leaf.  For an NLA this is just
         // the namepath of the associated hierarchical path.  For a local
         // annotation, this is computed from the instance path.
@@ -1199,8 +1230,6 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
         minimalLeafPath = minimalLeafPath.drop_until(
             [&](Attribute attr) { return getModPart(attr) == parentNameAttr; });
 
-        // Generate the path from the LCA to the module that contains the leaf.
-        path += " = ";
         path += FlatSymbolRefAttr::get(getModPart(minimalLeafPath.front()));
         if (minimalLeafPath.size() > 0) {
           for (auto segment : minimalLeafPath.drop_back()) {
@@ -1219,7 +1248,6 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
           path += getInnerRefTo(leafValue.getDefiningOp());
         }
 
-        FIRRTLType tpe = leafValue.getType().cast<FIRRTLType>();
         if (fieldID > tpe.getMaxFieldID()) {
           leafValue.getDefiningOp()->emitError()
               << "subannotation with fieldID=" << fieldID
@@ -1257,6 +1285,7 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
             uloc,
             StringAttr::get(&getContext(), "assign " + path.getString() + ";"),
             ValueRange{}, ArrayAttr::get(&getContext(), path.getSymbols()));
+        ++numXMRs;
         return true;
       })
       .Case<AugmentedVectorTypeAttr>([&](auto vector) {
@@ -1394,6 +1423,7 @@ GrandCentralPass::traverseBundle(AugmentedBundleTypeAttr bundle, IntegerAttr id,
   auto loc = getOperation().getLoc();
   auto iFaceName = getNamespace().newName(getInterfaceName(prefix, bundle));
   iface = builder.create<sv::InterfaceOp>(loc, iFaceName);
+  ++numInterfaces;
   if (dut &&
       !instancePaths->instanceGraph.isAncestor(companionIDMap[id].companion,
                                                cast<hw::HWModuleLike>(*dut)) &&
@@ -1513,6 +1543,7 @@ void GrandCentralPass::runOnOperation() {
   AnnotationSet::removeAnnotations(circuitOp, [&](Annotation anno) {
     if (anno.isClass("sifive.enterprise.grandcentral.AugmentedBundleType")) {
       worklist.push_back(anno);
+      ++numAnnosRemoved;
       return true;
     }
     if (anno.isClass(extractGrandCentralClass)) {
@@ -1538,8 +1569,7 @@ void GrandCentralPass::runOnOperation() {
       // Do not delete this annotation.  Extraction info may be needed later.
       return false;
     }
-    if (anno.isClass("sifive.enterprise.grandcentral."
-                     "GrandCentralHierarchyFileAnnotation")) {
+    if (anno.isClass(grandCentralHierarchyFileAnnoClass)) {
       if (maybeHierarchyFileYAML.hasValue()) {
         emitCircuitError("more than one 'GrandCentralHierarchyFileAnnotation' "
                          "was found, but zero or one may be provided");
@@ -1558,10 +1588,10 @@ void GrandCentralPass::runOnOperation() {
       }
 
       maybeHierarchyFileYAML = filename;
+      ++numAnnosRemoved;
       return true;
     }
-    if (anno.isClass(
-            "sifive.enterprise.grandcentral.PrefixInterfacesAnnotation")) {
+    if (anno.isClass(prefixInterfacesAnnoClass)) {
       if (!interfacePrefix.empty()) {
         emitCircuitError("more than one 'PrefixInterfacesAnnotation' was "
                          "found, but zero or one may be provided");
@@ -1580,9 +1610,10 @@ void GrandCentralPass::runOnOperation() {
       }
 
       interfacePrefix = prefix.getValue();
+      ++numAnnosRemoved;
       return true;
     }
-    if (anno.isClass(testbenchDirAnnoClass)) {
+    if (anno.isClass(testBenchDirAnnoClass)) {
       testbenchDir = anno.getMember<StringAttr>("dirname");
       return false;
     }
@@ -1738,6 +1769,7 @@ void GrandCentralPass::runOnOperation() {
                 {op.getResult(), annotation.getFieldID()}, sym};
             if (sym)
               deadNLAs.insert(sym.getAttr());
+            ++numAnnosRemoved;
             return true;
           });
         })
@@ -1797,6 +1829,7 @@ void GrandCentralPass::runOnOperation() {
                     {op.getArgument(i), annotation.getFieldID()}, sym};
                 if (sym)
                   deadNLAs.insert(sym.getAttr());
+                ++numAnnosRemoved;
                 return true;
               });
 
@@ -1874,16 +1907,21 @@ void GrandCentralPass::runOnOperation() {
 
               // If no extraction info was provided, exit.  Otherwise, setup the
               // lone instance of the companion to be lowered as a bind.
-              if (!maybeExtractInfo)
+              if (!maybeExtractInfo) {
+                ++numAnnosRemoved;
                 return true;
+              }
 
               // If the companion is instantiated above the DUT, then don't
               // extract it.
               if (dut && !instancePaths->instanceGraph.isAncestor(
-                             op, cast<hw::HWModuleLike>(*dut)))
+                             op, cast<hw::HWModuleLike>(*dut))) {
+                ++numAnnosRemoved;
                 return true;
+              }
 
-              instance.getValue()->setAttr("lowerToBind", trueAttr);
+              instance.getValue()->setAttr("lowerToBind",
+                                           builder.getUnitAttr());
               instance.getValue()->setAttr(
                   "output_file",
                   hw::OutputFileAttr::getFromFilename(
@@ -1916,8 +1954,8 @@ void GrandCentralPass::runOnOperation() {
                   }
                   auto subExtMod = cast<FExtModuleOp>(sub);
                   for (auto anno : AnnotationSet(subExtMod)) {
-                    if (!anno.isClass("firrtl.transforms.BlackBoxInlineAnno") &&
-                        !anno.isClass("firrtl.transforms.BlackBoxPathAnno"))
+                    if (!anno.isClass(blackBoxInlineAnnoClass) &&
+                        !anno.isClass(blackBoxPathAnnoClass))
                       continue;
                     if (subExtMod->hasAttr("output_file"))
                       break;
@@ -1932,6 +1970,7 @@ void GrandCentralPass::runOnOperation() {
                 }
               }
 
+              ++numAnnosRemoved;
               return true;
             }
 
@@ -1948,6 +1987,7 @@ void GrandCentralPass::runOnOperation() {
               }
 
               parentIDMap[id] = {instance, cast<FModuleOp>(op)};
+              ++numAnnosRemoved;
               return true;
             }
 
@@ -2105,6 +2145,7 @@ void GrandCentralPass::runOnOperation() {
       removalError = true;
       continue;
     }
+    ++numViews;
 
     interfaceVec.push_back(iface.getValue());
 
@@ -2181,7 +2222,9 @@ void GrandCentralPass::runOnOperation() {
       auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal");
       if (!sym)
         return false;
-      return deadNLAs.count(sym.getAttr());
+      bool remove = deadNLAs.count(sym.getAttr());
+      numAnnosRemoved += remove;
+      return remove;
     };
 
     // Visit module bodies to remove any dead NLA breadcrumbs.

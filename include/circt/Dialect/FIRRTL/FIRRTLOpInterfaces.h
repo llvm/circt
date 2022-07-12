@@ -66,6 +66,10 @@ struct PortInfo {
 /// Verification hook for verifying module like operations.
 LogicalResult verifyModuleLikeOpInterface(FModuleLike module);
 
+class InnerSymbolOpInterface;
+/// Verification hook for verifying InnerSym Attribute.
+LogicalResult verifyInnerSymAttr(InnerSymbolOpInterface op);
+
 namespace detail {
 LogicalResult verifyInnerRefs(Operation *op);
 } // namespace detail
