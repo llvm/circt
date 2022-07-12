@@ -2506,9 +2506,9 @@ FIRRTLType BitindexOp::inferReturnType(ValueRange operands,
       getAttr<IntegerAttr>(attrs, "index").getValue().getZExtValue();
 
   if (auto intType = inType.dyn_cast<IntType>()) {
-    // TODO: fix warning about signedness
-    if ((int) fieldIdx < intType.getWidthOrSentinel())
-      return UIntType::get(inType.getContext(), 1);
+    if ((int) fieldIdx < intType.getWidthOrSentinel()) {
+        return UIntType::get(inType.getContext(), 1);
+    }
     if (loc)
       mlir::emitError(*loc, "out of range index '")
           << fieldIdx << "' in int type " << inType;

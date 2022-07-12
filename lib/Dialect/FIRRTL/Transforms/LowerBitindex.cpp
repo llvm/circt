@@ -99,6 +99,9 @@ void LowerBitIndexPass::runOnOperation() {
         Value cat = builder.create<CatPrimOp>(subidx, prev);
         prev = cat;
       }
+      if (i.isa<SIntType>()) {
+        prev = builder.create<AsSIntPrimOp>(prev);
+      }
       // connect here after replacing all other connects
       builder.create<StrictConnectOp>(var, prev);
 

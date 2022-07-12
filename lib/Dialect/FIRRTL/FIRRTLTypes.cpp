@@ -626,7 +626,7 @@ Type firrtl::getVectorElementType(Type array) {
 }
 
 Type firrtl::getBitindexElementType(Type array) {
-  if (array.isa<UIntType>() || array.isa<SIntType>()) {
+  if (array.isa<IntType>()) {
     return UIntType::get(array.getContext(), 1);
   }
   return Type();
