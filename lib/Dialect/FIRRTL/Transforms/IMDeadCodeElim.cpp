@@ -272,6 +272,7 @@ void IMDeadCodeElimPass::rewriteModuleBody(FModuleOp module) {
       if (isAssumedDead(connect.dest())) {
         LLVM_DEBUG(llvm::dbgs() << "DEAD: " << connect << "\n";);
         connect.erase();
+        ++numErasedOps;
       }
       continue;
     }
@@ -281,12 +282,15 @@ void IMDeadCodeElimPass::rewriteModuleBody(FModuleOp module) {
       LLVM_DEBUG(llvm::dbgs() << "DEAD: " << op << "\n";);
       assert(op.use_empty() && "users should be already removed");
       op.erase();
+      ++numErasedOps;
       continue;
     }
 
     // Remove non-sideeffect op using `isOpTriviallyDead`.
-    if (mlir::isOpTriviallyDead(&op))
+    if (mlir::isOpTriviallyDead(&op)) {
       op.erase();
+      ++numErasedOps;
+    }
   }
 }
 
