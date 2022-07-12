@@ -842,6 +842,24 @@ int main(int argc, char **argv) {
   // MLIR options are added below.
   cl::HideUnrelatedOptions(mainCategory);
 
+  // Register passes before parsing command-line options, so that they are
+  // available for use with options like `--mlir-print-ir-before`.
+  {
+    // MLIR transforms:
+    // Don't use registerTransformsPasses, pulls in too much.
+    registerCSEPass();
+    registerCanonicalizerPass();
+    registerStripDebugInfoPass();
+
+    // Dialect passes:
+    firrtl::registerPasses();
+    sv::registerPasses();
+
+    // Export passes:
+    registerExportSplitVerilogPass();
+    registerExportVerilogPass();
+  }
+
   // Register any pass manager command line options.
   registerMLIRContextCLOptions();
   registerPassManagerCLOptions();
