@@ -19,7 +19,7 @@ def LowerFIRRTLAnnotations : Pass<"firrtl-lower-annotations", "firrtl::CircuitOp
   let summary = "Lower FIRRTL annotations to usable entities";
   let description = [{
     Lower FIRRTL annotations to usable forms.  FIRRTL annotations are a big bag
-    of semi-structured, irregular json.  This pass normalizes all supported
+    of semi-structured, irregular JSON.  This pass normalizes all supported
     annotations and annotation paths.
   }];
   let constructor = "circt::firrtl::createLowerFIRRTLAnnotationsPass()";
@@ -46,12 +46,11 @@ def LowerFIRRTLTypes : Pass<"firrtl-lower-types", "firrtl::CircuitOp"> {
   let summary = "Lower FIRRTL types to ground types";
   let description = [{
     Lower aggregate FIRRTL types to ground types.  Memories, ports, wires, etc
-    are split appart by elements of aggregate types.  The only aggregate types
+    are split apart by elements of aggregate types.  The only aggregate types
     which exist after this pass are memory ports, though memory data types are
     split.
 
-    Connect and partial connect expansion and canonicalization happen in this
-    pass.
+    Connect and expansion and canonicalization happen in this pass.
   }];
   let constructor = "circt::firrtl::createLowerFIRRTLTypesPass()";
   let options = [
@@ -94,7 +93,7 @@ def RemoveUnusedPorts : Pass<"firrtl-remove-unused-ports", "firrtl::CircuitOp"> 
 def IMDeadCodeElim : Pass<"firrtl-imdeadcodeelim", "firrtl::CircuitOp"> {
   let summary = "Intermodule dead code elimination";
   let description = [{
-    This pass performs inter-module liveness anaysis and deletes dead code
+    This pass performs inter-module liveness analysis and deletes dead code
     aggressively. A value is considered as alive if it is connected to a port
     of public modules or a value with a symbol. We first populate alive values
     into a set, and then propagate the liveness by looking at their dataflow.
@@ -300,10 +299,10 @@ def InferResets : Pass<"firrtl-infer-resets", "firrtl::CircuitOp"> {
 def BlackBoxReader : Pass<"firrtl-blackbox-reader", "CircuitOp"> {
   let summary = "Load source files for black boxes into the IR";
   let description = [{
-    This pass handles reads the Verilog source files for black boxes and adds
-    them as `sv.verbatim.file` operations into the IR. Later passes can then
-    write these files back to disk to ensure that they can be accessed by other
-    tools down the line in a well-known location. Supports inline and path
+    This pass reads the Verilog source files for black boxes and adds them as
+    `sv.verbatim.file` operations into the IR. Later passes can then write
+    these files back to disk to ensure that they can be accessed by other tools
+    down the line in a well-known location. Supports inline and path
     annotations for black box source files.
 
     The supported `firrtl.circuit` annotations are:
@@ -460,7 +459,7 @@ def MergeConnections : Pass<"merge-connections", "firrtl::FModuleOp"> {
 def InferReadWrite : Pass<"firrtl-infer-rw", "firrtl::FModuleOp"> {
   let summary = "Infer the read-write memory port";
   let description = [{
-    This pass merges the read and write ports of a memory, based a simple
+    This pass merges the read and write ports of a memory, using a simple
     module-scoped heuristic. The heuristic checks if the read and write enable
     conditions are mutually exclusive.
     The heuristic tries to break up the read enable and write enable logic into an
