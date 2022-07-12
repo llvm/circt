@@ -28,6 +28,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
@@ -172,7 +173,7 @@ static SmallVector<Operation *> getSAWritePath(Operation *op) {
 /// Returns whether the given annotation requires precise tracking of the field
 /// ID as it gets replicated across lowered operations.
 static bool isAnnotationSensitiveToFieldID(Annotation anno) {
-  return anno.isClass("sifive.enterprise.grandcentral.SignalDriverAnnotation");
+  return anno.isClass(signalDriverAnnoClass);
 }
 
 /// If an annotation on one operation is replicated across multiple IR
@@ -526,8 +527,7 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(
       retval.push_back(newAnno.getDict());
       continue;
     }
-    if (Annotation(opAttr).getClass() ==
-        "firrtl.transforms.DontTouchAnnotation") {
+    if (Annotation(opAttr).isClass(dontTouchAnnoClass)) {
       // This is intended to cover the case of a non-local DontTouchAnnotation
       // (which is represented as an annotation) being converted to a symbol on
       // a ground type.  This code will, however, also lower any local

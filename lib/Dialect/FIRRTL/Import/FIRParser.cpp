@@ -1388,8 +1388,7 @@ static bool needsSymbol(ArrayAttr &annotations) {
     Annotation anno(attr);
     // Check if it is a DontTouch annotation that applies to all subfields in
     // case of a bundle. getFieldID returns 0 if it is not a SubAnno.
-    if (anno.getFieldID() == 0 &&
-        anno.isClass("firrtl.transforms.DontTouchAnnotation")) {
+    if (anno.getFieldID() == 0 && anno.isClass(dontTouchAnnoClass)) {
       needsSymbol = true;
       // Ignore the annotation.
       continue;

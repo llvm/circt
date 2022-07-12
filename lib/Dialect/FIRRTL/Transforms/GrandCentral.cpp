@@ -1541,7 +1541,7 @@ void GrandCentralPass::runOnOperation() {
   SmallVector<Annotation> worklist;
   bool removalError = false;
   AnnotationSet::removeAnnotations(circuitOp, [&](Annotation anno) {
-    if (anno.isClass("sifive.enterprise.grandcentral.AugmentedBundleType")) {
+    if (anno.isClass(augmentedBundleTypeClass)) {
       worklist.push_back(anno);
       ++numAnnosRemoved;
       return true;
@@ -1757,8 +1757,7 @@ void GrandCentralPass::runOnOperation() {
     TypeSwitch<Operation *>(op)
         .Case<RegOp, RegResetOp, WireOp, NodeOp>([&](auto op) {
           AnnotationSet::removeAnnotations(op, [&](Annotation annotation) {
-            if (!annotation.isClass(
-                    "sifive.enterprise.grandcentral.AugmentedGroundType"))
+            if (!annotation.isClass(augmentedGroundTypeClass))
               return false;
             auto maybeID = getID(op, annotation);
             if (!maybeID)
@@ -1777,8 +1776,7 @@ void GrandCentralPass::runOnOperation() {
         .Case<InstanceOp>([&](auto op) {
           AnnotationSet::removePortAnnotations(op, [&](unsigned i,
                                                        Annotation annotation) {
-            if (!annotation.isClass(
-                    "sifive.enterprise.grandcentral.AugmentedGroundType"))
+            if (!annotation.isClass(augmentedGroundTypeClass))
               return false;
             op.emitOpError()
                 << "is marked as an interface element, but this should be "
@@ -1789,8 +1787,7 @@ void GrandCentralPass::runOnOperation() {
         })
         .Case<MemOp>([&](auto op) {
           AnnotationSet::removeAnnotations(op, [&](Annotation annotation) {
-            if (!annotation.isClass(
-                    "sifive.enterprise.grandcentral.AugmentedGroundType"))
+            if (!annotation.isClass(augmentedGroundTypeClass))
               return false;
             op.emitOpError()
                 << "is marked as an interface element, but this does not make "
@@ -1801,8 +1798,7 @@ void GrandCentralPass::runOnOperation() {
           });
           AnnotationSet::removePortAnnotations(
               op, [&](unsigned i, Annotation annotation) {
-                if (!annotation.isClass(
-                        "sifive.enterprise.grandcentral.AugmentedGroundType"))
+                if (!annotation.isClass(augmentedGroundTypeClass))
                   return false;
                 op.emitOpError()
                     << "has port '" << i
@@ -1817,8 +1813,7 @@ void GrandCentralPass::runOnOperation() {
           // Handle annotations on the ports.
           AnnotationSet::removePortAnnotations(
               op, [&](unsigned i, Annotation annotation) {
-                if (!annotation.isClass(
-                        "sifive.enterprise.grandcentral.AugmentedGroundType"))
+                if (!annotation.isClass(augmentedGroundTypeClass))
                   return false;
                 auto maybeID = getID(op, annotation);
                 if (!maybeID)

@@ -415,7 +415,7 @@ void PrefixModulesPass::prefixGrandCentralInterfaces() {
     // Only mutate this annotation if it is an AugmentedBundleType and
     // interfacePrefixMap has prefix information for it.
     StringRef prefix;
-    if (anno.isClass("sifive.enterprise.grandcentral.AugmentedBundleType")) {
+    if (anno.isClass(augmentedBundleTypeClass)) {
       if (auto id = anno.getMember<IntegerAttr>("id"))
         prefix = interfacePrefixMap[id];
     }

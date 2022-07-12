@@ -321,10 +321,10 @@ LogicalResult CreateSiFiveMetadataPass::emitSitestBlackboxMetadata() {
   // Any extmodule with these annotations or one of these ScalaClass classes
   // should be excluded from the blackbox list.
   std::array<StringRef, 3> classBlackList = {
-      "freechips.rocketchip.util.BlackBoxedROM", "chisel3.shim.CloneModule",
+      "freechips.rocketchip.util.BlackBoxedROM",
       "sifive.enterprise.grandcentral.MemTap"};
   std::array<StringRef, 6> blackListedAnnos = {
-      "firrtl.transforms.BlackBox",
+      blackBoxAnnoClass,
       blackBoxInlineAnnoClass,
       blackBoxPathAnnoClass,
       dataTapsBlackboxClass,
