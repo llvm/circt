@@ -56,6 +56,8 @@ constexpr const char *blackBoxTargetDirAnnoClass =
     "firrtl.transforms.BlackBoxTargetDirAnno";
 constexpr const char *blackBoxResourceFileNameAnnoClass =
     "firrtl.transforms.BlackBoxResourceFileNameAnno";
+constexpr const char *mustDedupAnnoClass =
+    "firrtl.transforms.MustDeduplicateAnnotation";
 constexpr const char *runFIRRTLTransformAnnoClass =
     "firrtl.stage.RunFirrtlTransformAnnotation";
 constexpr const char *extractAssertAnnoClass =

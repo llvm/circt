@@ -1255,7 +1255,7 @@ class DedupPass : public DedupBase<DedupPass> {
       // If we have already failed, don't process any more annotations.
       if (failed)
         return false;
-      if (!annotation.isClass("firrtl.transforms.MustDeduplicateAnnotation"))
+      if (!annotation.isClass(mustDedupAnnoClass))
         return false;
       auto modules = annotation.getMember<ArrayAttr>("modules");
       if (!modules) {
