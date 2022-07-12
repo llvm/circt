@@ -387,6 +387,7 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
     {mustDedupAnnoClass, NoTargetAnnotation},
     {addSeqMemPortAnnoClass, NoTargetAnnotation},
     {addSeqMemPortsFileAnnoClass, NoTargetAnnotation}
+
 }};
 
 /// Lookup a record for a given annotation class.  Optionally, returns the
