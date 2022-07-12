@@ -84,6 +84,30 @@ static void getBackwardSliceSimple(Operation *rootOp,
   backwardSlice.remove(rootOp);
 }
 
+// Reimplemented and simplified from SliceAnalysis to use a worklist rather than
+// recursion and not consider nested regions. Also accepts a clone set
+// representing a backward dataflow slice. As soon as a use is found outside the
+// backward slice, return false. Otherwise, the whole forward slice is contained
+// in the backward slice, and return true.
+static bool getForwardSliceSimple(Operation *rootOp,
+                                  SetVector<Operation *> &opsToClone,
+                                  SetVector<Operation *> &forwardSlice) {
+  SmallVector<Operation *> worklist;
+  worklist.push_back(rootOp);
+
+  while (!worklist.empty()) {
+    Operation *op = worklist.pop_back_val();
+    forwardSlice.insert(op);
+    for (auto *user : op->getUsers()) {
+      if (!opsToClone.contains(user))
+        return false;
+      worklist.push_back(user);
+    }
+  }
+
+  return true;
+}
+
 // Compute the dataflow for a set of ops.
 static void dataflowSlice(SetVector<Operation *> &ops,
                           SetVector<Operation *> &results) {
@@ -127,6 +151,49 @@ static SetVector<Operation *> computeCloneSet(SetVector<Operation *> &roots) {
   results.insert(blocks.begin(), blocks.end());
 
   return results;
+}
+
+// Find instances that only feed the clone set, and add them if possible. This
+// also returns a list of ops that should be erased, which includes such
+// instances and their forward dataflow slices.
+static void addInstancesToCloneSet(SetVector<Value> &inputs,
+                                   SetVector<Operation *> &opsToClone,
+                                   SmallPtrSetImpl<Operation *> &opsToErase) {
+  // Track inputs to remove, which come from instances that will be cloned.
+  SmallVector<Value> inputsToRemove;
+
+  // Check each input into the clone set.
+  for (auto value : inputs) {
+    // Check if the input comes from an instance.
+    auto *definingOp = value.getDefiningOp();
+    if (isa_and_nonnull<hw::InstanceOp>(definingOp) &&
+        !opsToClone.contains(definingOp)) {
+      // Compute the instance's forward slice. If it wasn't fully contained in
+      // the clone set, move along.
+      SetVector<Operation *> forwardSlice;
+      if (!getForwardSliceSimple(definingOp, opsToClone, forwardSlice))
+        continue;
+
+      // Add the instance to the clone set and mark the input to be removed from
+      // the input set.
+      opsToClone.insert(definingOp);
+      inputsToRemove.push_back(value);
+
+      // Mark the instance and its forward dataflow to be erased from the pass.
+      // Normally, ops in the clone set are canonicalized away later, but for
+      // this case, we have to proactively erase them. The instances must be
+      // erased because we can't canonicalize away instanes with unused inputs
+      // in general. The forward dataflow must be erased because the instance is
+      // being erased, and we can't leave null operands after this pass.
+      opsToErase.insert(definingOp);
+      for (auto *forwardOp : forwardSlice)
+        opsToErase.insert(forwardOp);
+    }
+  }
+
+  // Remove any inputs marked for removal.
+  for (auto v : inputsToRemove)
+    inputs.remove(v);
 }
 
 static StringRef getNameForPort(Value val, ArrayAttr modulePorts) {
@@ -374,6 +441,8 @@ private:
 
     // Find the data-flow and structural ops to clone.  Result includes roots.
     auto opsToClone = computeCloneSet(roots);
+    numOpsExtracted += opsToClone.size();
+
     // Find the dataflow into the clone set
     SetVector<Value> inputs;
     for (auto op : opsToClone)
@@ -382,6 +451,11 @@ private:
         if (!opsToClone.count(argOp))
           inputs.insert(arg);
       }
+
+    // Find instances that only feed the clone set, and add them if possible.
+    SmallPtrSet<Operation *, 32> opsToErase;
+    addInstancesToCloneSet(inputs, opsToClone, opsToErase);
+    numOpsErased += opsToErase.size();
 
     // Make a module to contain the clone set, with arguments being the cut
     BlockAndValueMapping cutMap;
@@ -392,6 +466,13 @@ private:
     // erase old operations of interest
     for (auto op : roots)
       op->erase();
+
+    // Erase any instances that were extracted, and their forward dataflow.
+    for (auto *op : opsToErase) {
+      op->dropAllUses();
+      op->erase();
+    }
+
     // Move any old modules that are test code only to the test code area.
     maybeMoveToTestCode(module, testBenchDir, bindFile, instanceGraph);
   }

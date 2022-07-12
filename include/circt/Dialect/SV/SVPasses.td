@@ -112,6 +112,10 @@ def SVExtractTestCode : Pass<"sv-extract-test-code", "ModuleOp"> {
 
   let constructor = "circt::sv::createSVExtractTestCodePass()";
   let dependentDialects = ["circt::sv::SVDialect"];
+  let statistics = [
+    Statistic<"numOpsExtracted", "num-ops-extracted", "Number of ops extracted">,
+    Statistic<"numOpsErased", "num-ops-erased", "Number of ops erased">
+  ];
 }
 
 def SVTraceIVerilog : Pass<"sv-trace-iverilog", "hw::HWModuleOp"> {
