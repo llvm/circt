@@ -116,3 +116,12 @@ emission. At the same time, it is not possible to not model any C++ at all,
 because when only modeling SystemC specific constructs, the gap for
 ExportSystemC to bridge would be too big (we want the printer to be as simple
 as possible).
+
+**Q: Why does `systemc.module` have a graph region rather than a SSACFG region?**
+
+It contains a single graph region to allow flexible positioning of the fields,
+constructor and methods to support different ordering styles (fields at top
+or bottom, methods to be registered with SC_METHOD positioned after the
+constructor, etc.) without requiring any logic in ExportSystemC. Program code
+to change the emission style can thus be written as part of the lowering from
+HW, as a pre-emission transformation, or anywhere else.

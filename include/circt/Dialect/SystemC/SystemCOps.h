@@ -13,13 +13,15 @@
 #ifndef CIRCT_DIALECT_SYSTEMC_SYSTEMCOPS_H
 #define CIRCT_DIALECT_SYSTEMC_SYSTEMCOPS_H
 
+#include "circt/Dialect/SystemC/SystemCAttributes.h"
 #include "circt/Dialect/SystemC/SystemCDialect.h"
 #include "circt/Dialect/SystemC/SystemCTypes.h"
-#include "mlir/IR/OpImplementation.h"
+#include "circt/Support/LLVM.h"
+#include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/FunctionInterfaces.h"
+#include "mlir/Interfaces/CallInterfaces.h"
 
 #define GET_OP_CLASSES
-#include "circt/Dialect/SystemC/SystemCEnums.h.inc"
-// Clang format shouldn't reorder these headers.
 #include "circt/Dialect/SystemC/SystemC.h.inc"
 
 #endif // CIRCT_DIALECT_SYSTEMC_SYSTEMCOPS_H
