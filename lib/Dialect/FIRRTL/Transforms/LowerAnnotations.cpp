@@ -384,7 +384,9 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
     {extractCoverageAnnoClass, NoTargetAnnotation},
     {dftTestModeEnableAnnoClass, {stdResolve, applyWithoutTarget<true>}},
     {runFIRRTLTransformAnnoClass, {noResolve, drop}},
-    {mustDedupAnnoClass, NoTargetAnnotation}
+    {mustDedupAnnoClass, NoTargetAnnotation},
+    {addSeqMemPortAnnoClass, NoTargetAnnotation},
+    {addSeqMemPortsFileAnnoClass, NoTargetAnnotation}
 
 }};
 

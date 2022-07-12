@@ -145,11 +145,11 @@ LogicalResult AddSeqMemPortsPass::processAnnos(CircuitOp circuit) {
   AnnotationSet::removeAnnotations(circuit, [&](Annotation anno) {
     if (error)
       return false;
-    if (anno.isClass("sifive.enterprise.firrtl.AddSeqMemPortAnnotation")) {
+    if (anno.isClass(addSeqMemPortAnnoClass)) {
       error = failed(processAddPortAnno(loc, anno));
       return true;
     }
-    if (anno.isClass("sifive.enterprise.firrtl.AddSeqMemPortsFileAnnotation")) {
+    if (anno.isClass(addSeqMemPortsFileAnnoClass)) {
       error = failed(processFileAnno(loc, metadataDir, anno));
       return true;
     }

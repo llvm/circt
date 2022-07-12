@@ -183,6 +183,12 @@ constexpr const char *extractClockGatesAnnoClass =
 constexpr const char *extractSeqMemsAnnoClass =
     "sifive.enterprise.firrtl.ExtractSeqMemsFileAnnotation";
 
+// AddSeqMemPort Annotations
+constexpr const char *addSeqMemPortAnnoClass =
+    "sifive.enterprise.firrtl.AddSeqMemPortAnnotation";
+constexpr const char *addSeqMemPortsFileAnnoClass =
+    "sifive.enterprise.firrtl.AddSeqMemPortsFileAnnotation";
+
 } // namespace firrtl
 } // namespace circt
 
