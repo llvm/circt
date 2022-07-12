@@ -127,7 +127,7 @@ class IVerilogHandler:
         f.write(line)
 
 
-def testbench(pycde_mod, simulator="icarus"):
+def testbench(pycde_mod, simulator="iverilog"):
   """
   Decorator class for defining a class as a PyCDE testbench.
   'pycde_mod' is the PyCDE module under test.

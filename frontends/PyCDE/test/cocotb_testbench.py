@@ -76,7 +76,7 @@ class RegAddTester:
     clock = cocotb.clock.Clock(ports.clk, 10, units="us")
     cocotb.start_soon(clock.start())  # Start the clock
 
-    # Manual reset, the FF resert isn't getting emitted in the sv...
+    # Manual "reset", the FF reset isn't getting emitted in the sv...
     ports.in1.value = 0
     ports.in2.value = 0
     await FallingEdge(ports.clk)
