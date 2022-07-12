@@ -3596,12 +3596,17 @@ ParseResult FIRCircuitParser::parseCircuit(
   if (!annos.empty())
     getConstants().annotationMap[rawAnnotations] = b.getArrayAttr(annos);
 
+  parseAnnotationTimer.stop();
+  auto parseOMIRTimer = ts.nest("Parse OMIR");
+
   // Process OMIR files as annotations with a class of
   // "freechips.rocketchip.objectmodel.OMNode"
   for (auto *omirBuf : omirBufs)
     if (importOMIR(circuit, info.getFIRLoc(), circuitTarget,
                    omirBuf->getBuffer(), nlaNumber))
       return failure();
+
+  parseOMIRTimer.stop();
 
   // Get annotations associated with this circuit. These are either:
   //   1. Annotations with no target (which we use "~" to identify)
@@ -3615,8 +3620,6 @@ ParseResult FIRCircuitParser::parseCircuit(
     auto extraAnnos = getConstants().annotationMap.lookup(rawAnnotations);
     circuit->setAttr(rawAnnotations, extraAnnos);
   }
-
-  parseAnnotationTimer.stop();
 
   // A timer to get execution time of module parsing.
   auto parseTimer = ts.nest("Parse modules");
