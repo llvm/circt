@@ -527,7 +527,7 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(
       retval.push_back(newAnno.getDict());
       continue;
     }
-    if (Annotation(opAttr).getClass() == dontTouchAnnoClass) {
+    if (Annotation(opAttr).isClass(dontTouchAnnoClass)) {
       // This is intended to cover the case of a non-local DontTouchAnnotation
       // (which is represented as an annotation) being converted to a symbol on
       // a ground type.  This code will, however, also lower any local
