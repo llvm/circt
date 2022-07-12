@@ -76,12 +76,12 @@ constexpr const char *retimeModulesFileAnnoClass =
     "sifive.enterprise.firrtl.RetimeModulesAnnotation";
 constexpr const char *retimeModuleAnnoClass =
     "freechips.rocketchip.util.RetimeModuleAnnotation";
-static const char *verifBlackBoxAnnoClass =
+constexpr const char *verifBlackBoxAnnoClass =
     "freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation";
-static const char *metadataDirectoryAttrName =
+constexpr const char *metadataDirectoryAttrName =
     "sifive.enterprise.firrtl.MetadataDirAnnotation";
-static const char *noDedupAnnoClass = "firrtl.transforms.NoDedupAnnotation";
-static const char *dftTestModeEnableAnnoClass =
+constexpr const char *noDedupAnnoClass = "firrtl.transforms.NoDedupAnnotation";
+constexpr const char *dftTestModeEnableAnnoClass =
     "sifive.enterprise.firrtl.DFTTestModeEnableAnnotation";
 
 // Grand Central Annotations
@@ -166,7 +166,7 @@ constexpr const char *subCircuitDirAnnotation =
 constexpr const char *fullAsyncResetAnnoClass =
     "sifive.enterprise.firrtl.FullAsyncResetAnnotation";
 /// Annotation that marks a module as not belonging to any reset domain.
-static constexpr const char *ignoreFullAsyncResetAnnoClass =
+constexpr const char *ignoreFullAsyncResetAnnoClass =
     "sifive.enterprise.firrtl.IgnoreFullAsyncResetAnnotation";
 
 // MemToRegOfVec Annotations
