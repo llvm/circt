@@ -14,11 +14,11 @@ def unittestmodule(generate=True,
                    emit_outputs=False,
                    **kwargs):
   """
-    Like @module, but additionally performs system instantiation, generation,
-    and printing to reduce boilerplate in tests.
-    In case of wrapping a function, @testmodule accepts kwargs which are passed
-    to the function as arguments.
-    """
+  Like @module, but additionally performs system instantiation, generation,
+  and printing to reduce boilerplate in tests.
+  In case of wrapping a function, @testmodule accepts kwargs which are passed
+  to the function as arguments.
+  """
 
   def testmodule_inner(func_or_class):
     mod = module(func_or_class)
