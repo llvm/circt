@@ -29,6 +29,7 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/SymbolTable.h"
 #include "mlir/Parser/Parser.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassInstrumentation.h"
@@ -43,6 +44,7 @@
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/Path.h"
+#include "llvm/Support/Regex.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/ToolOutputFile.h"
 
@@ -330,6 +332,11 @@ static cl::opt<std::string> blackBoxRootPath(
     cl::desc("Optional path to use as the root of black box annotations"),
     cl::value_desc("path"), cl::init(""), cl::cat(mainCategory));
 
+static cl::opt<std::string>
+    printModule("print-module-after-all",
+                cl::desc("dumps a module if it matches the regex"),
+                cl::init(""), cl::cat(mainCategory));
+
 static cl::opt<bool>
     verbosePassExecutions("verbose-pass-executions",
                           cl::desc("Log executions of toplevel module passes"),
@@ -392,6 +399,35 @@ public:
     }
   }
 };
+
+namespace {
+/// This instrumentation dumps any module which matches the regex after each
+/// pass runs.
+struct PrintModuleInstrumentation : public mlir::PassInstrumentation {
+  PrintModuleInstrumentation(std::string regex) : regex(regex) {}
+
+  void runAfterPass(Pass *pass, Operation *op) override {
+    // TODO: This is way too fragile, but the OpToOpPassAdaptor class is hidden.
+    if (pass->getName() == "mlir::detail::OpToOpPassAdaptor")
+      return;
+
+    // Recurse if this operation is a symbol table. This should handle circuit
+    // operations inside of MLIR modules.
+    if (op->hasTrait<OpTrait::SymbolTable>())
+      for (auto &subOp : op->getRegion(0).getOps())
+        runAfterPass(pass, &subOp);
+
+    auto name = op->getAttrOfType<StringAttr>("sym_name");
+    if (name && regex.match(name.getValue())) {
+      llvm::errs() << "// -----// IR Dump After " << pass->getName() << "\n";
+      op->dump();
+    }
+  }
+
+private:
+  llvm::Regex regex;
+};
+} // end anonymous namespace
 
 /// Process a single buffer of the input.
 static LogicalResult
@@ -465,8 +501,14 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   PassManager pm(&context);
   pm.enableVerifier(verifyPasses);
   pm.enableTiming(ts);
+
   if (verbosePassExecutions)
     pm.addInstrumentation(std::make_unique<FirtoolPassInstrumentation>());
+
+  if (!printModule.empty())
+    pm.addInstrumentation(
+        std::make_unique<PrintModuleInstrumentation>(printModule));
+
   applyPassManagerCLOptions(pm);
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerFIRRTLAnnotationsPass(
