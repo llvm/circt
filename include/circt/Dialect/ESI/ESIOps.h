@@ -16,6 +16,8 @@
 #include "circt/Dialect/ESI/ESIDialect.h"
 #include "circt/Dialect/ESI/ESITypes.h"
 
+#include "circt/Dialect/HW/HWAttributes.h"
+
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
