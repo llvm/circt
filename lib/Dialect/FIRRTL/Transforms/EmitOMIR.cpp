@@ -631,7 +631,7 @@ void EmitOMIRPass::runOnOperation() {
         op, std::bind(setTracker, -1, std::placeholders::_1));
     if (auto modOp = dyn_cast<FModuleOp>(op)) {
       AnnotationSet annos(modOp.annotations());
-      if (!annos.hasAnnotation("sifive.enterprise.firrtl.MarkDUTAnnotation"))
+      if (!annos.hasAnnotation(dutAnnoClass))
         return;
       dutModuleName = modOp.getNameAttr();
     }

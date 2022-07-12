@@ -23,8 +23,7 @@ def WireOp : SVOp<"wire", [NonProceduralOp,
      See SV Spec 6.7, pp97.
     }];
 
-  let arguments = (ins StrAttr:$name, OptionalAttr<SymbolNameAttr>:$inner_sym,
-                       OptionalAttr<SVAttributeArrayAttr>:$svAttributes);
+  let arguments = (ins StrAttr:$name, OptionalAttr<SymbolNameAttr>:$inner_sym);
   let results = (outs InOutType:$result);
 
   let skipDefaultBuilders = 1;
@@ -39,8 +38,7 @@ def WireOp : SVOp<"wire", [NonProceduralOp,
   ];
 
   let assemblyFormat = [{
-    (`sym` $inner_sym^)? custom<ImplicitSSAName>(attr-dict)
-    (`svattrs` $svAttributes^)? `:` qualified(type($result))
+    (`sym` $inner_sym^)? custom<ImplicitSSAName>(attr-dict) `:` qualified(type($result))
   }];
   let hasCanonicalizeMethod = true;
 
@@ -58,8 +56,7 @@ def RegOp : SVOp<"reg", [
      Declare a SystemVerilog Variable Declaration of 'reg' type.
      See SV Spec 6.8, pp100.
    }];
-  let arguments = (ins StrAttr:$name, OptionalAttr<SymbolNameAttr>:$inner_sym,
-                       OptionalAttr<SVAttributeArrayAttr>:$svAttributes);
+  let arguments = (ins StrAttr:$name, OptionalAttr<SymbolNameAttr>:$inner_sym);
   let results = (outs InOutType:$result);
 
   let skipDefaultBuilders = 1;
@@ -72,7 +69,7 @@ def RegOp : SVOp<"reg", [
   // We handle the name in a custom way, so we use a customer parser/printer.
   let assemblyFormat = [{
     (`sym` $inner_sym^)? custom<ImplicitSSAName>(attr-dict)
-    (`svattrs` $svAttributes^)? `:` qualified(type($result))
+     `:` qualified(type($result))
   }];
   let hasCanonicalizeMethod = true;
 

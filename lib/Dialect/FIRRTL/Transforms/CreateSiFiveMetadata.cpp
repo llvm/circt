@@ -27,10 +27,6 @@
 using namespace circt;
 using namespace firrtl;
 
-/// Attribute that indicates where some json files should be dumped.
-static const char metadataDirectoryAnnoClass[] =
-    "sifive.enterprise.firrtl.MetadataDirAnnotation";
-
 namespace {
 class CreateSiFiveMetadataPass
     : public CreateSiFiveMetadataBase<CreateSiFiveMetadataPass> {
@@ -190,7 +186,7 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
   auto *context = &getContext();
   auto builder = OpBuilder::atBlockEnd(circuitOp.getBody());
   AnnotationSet annos(circuitOp);
-  auto dirAnno = annos.getAnnotation(metadataDirectoryAnnoClass);
+  auto dirAnno = annos.getAnnotation(metadataDirectoryAttrName);
   StringRef metadataDir = "metadata";
   if (dirAnno)
     if (auto dir = dirAnno.getMember<StringAttr>("dirname"))
@@ -273,19 +269,12 @@ static LogicalResult removeAnnotationWithFilename(Operation *op,
 /// all as a JSON array.
 LogicalResult CreateSiFiveMetadataPass::emitRetimeModulesMetadata() {
 
-  // Circuit level annotation.
-  auto *outputFileNameAnnotation =
-      "sifive.enterprise.firrtl.RetimeModulesAnnotation";
-  // Per module annotation.
-  auto *retimeModuleAnnoClass =
-      "freechips.rocketchip.util.RetimeModuleAnnotation";
-
   auto *context = &getContext();
   auto circuitOp = getOperation();
 
   // Get the filename, removing the annotation from the circuit.
   StringRef filename;
-  if (failed(removeAnnotationWithFilename(circuitOp, outputFileNameAnnotation,
+  if (failed(removeAnnotationWithFilename(circuitOp, retimeModulesFileAnnoClass,
                                           filename)))
     return failure();
 
@@ -328,14 +317,9 @@ LogicalResult CreateSiFiveMetadataPass::emitRetimeModulesMetadata() {
 /// This function finds all external modules which will need to be generated for
 /// the test harness to run.
 LogicalResult CreateSiFiveMetadataPass::emitSitestBlackboxMetadata() {
-  auto *dutBlackboxAnnoClass =
-      "sifive.enterprise.firrtl.SitestBlackBoxAnnotation";
-  auto *testBlackboxAnnoClass =
-      "sifive.enterprise.firrtl.SitestTestHarnessBlackBoxAnnotation";
 
   // Any extmodule with these annotations or one of these ScalaClass classes
   // should be excluded from the blackbox list.
-  auto *scalaClassAnnoClass = "sifive.enterprise.firrtl.ScalaClassAnnotation";
   std::array<StringRef, 3> classBlackList = {
       "freechips.rocketchip.util.BlackBoxedROM", "chisel3.shim.CloneModule",
       "sifive.enterprise.grandcentral.MemTap"};
@@ -352,10 +336,10 @@ LogicalResult CreateSiFiveMetadataPass::emitSitestBlackboxMetadata() {
 
   // Get the filenames from the annotations.
   StringRef dutFilename, testFilename;
-  if (failed(removeAnnotationWithFilename(circuitOp, dutBlackboxAnnoClass,
+  if (failed(removeAnnotationWithFilename(circuitOp, sitestBlackBoxAnnoClass,
                                           dutFilename)) ||
-      failed(removeAnnotationWithFilename(circuitOp, testBlackboxAnnoClass,
-                                          testFilename)))
+      failed(removeAnnotationWithFilename(
+          circuitOp, sitestTestHarnessBlackBoxAnnoClass, testFilename)))
     return failure();
 
   // If we don't have either annotation, no need to run this pass.

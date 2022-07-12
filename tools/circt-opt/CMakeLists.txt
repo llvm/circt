@@ -44,9 +44,9 @@ target_link_libraries(circt-opt
   CIRCTStaticLogicToCalyx
   CIRCTSV
   CIRCTSVTransforms
+  CIRCTHWArith
   CIRCTTransforms
 
-  
   MLIRIR
   MLIRLLVMDialect
   MLIRMemRefDialect
@@ -56,4 +56,4 @@ target_link_libraries(circt-opt
   MLIRSupport
   MLIRTransforms
   MLIRSCFDialect
-  )
+)

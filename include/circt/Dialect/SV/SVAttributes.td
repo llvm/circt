@@ -45,6 +45,11 @@ def SVAttributeAttr : AttrDef<SVDialect, "SVAttribute"> {
     Multiple attributes may be specified, either with multiple separate
     attributes or by comman-separating name--expression pairs.
 
+    Currently, SV attributes don't block most optimizations; therefore, users should
+    not expect that sv attributes always appear in the output verilog.
+    However, we must block optimizations that updating ops in-place
+    since it is mostly invalid to transfer SV attributes one to another.
+
     For more information, refer to Section 5.12 of the SystemVerilog (1800-2017)
     specification.
   }];
@@ -52,7 +57,8 @@ def SVAttributeAttr : AttrDef<SVDialect, "SVAttribute"> {
                         OptionalParameter<"::mlir::StringAttr">:$expression);
 
   let assemblyFormat = [{ `<` $name ( `=` $expression^ )? `>` }];
+  let extraClassDeclaration = [{
+    static inline llvm::StringRef
+        getSVAttributesAttrName() { return "sv.attributes"; }
+  }];
 }
-
-def SVAttributeArrayAttr :
-  TypedArrayAttrBase<SVAttributeAttr, "sv.attribute array attribute">;

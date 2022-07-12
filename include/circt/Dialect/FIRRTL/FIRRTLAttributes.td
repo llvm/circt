@@ -238,7 +238,14 @@ def InnerSymAttr : AttrDef<FIRRTLDialect, "InnerSym"> {
     }]>
   ];
   let extraClassDeclaration = [{
+    /// Get the inner sym name for fieldID, if it exists.
+    StringAttr getSymIfExists(unsigned fieldID);
+    /// Get the inner sym name for fieldID=0, if it exists.
     StringAttr getSymName();
+    /// Check if all the elements of props satisfy the predicate lambda.
+    bool all_of_props(std::function<bool (InnerSymPropertiesAttr)>) ;
+    /// Get the number of inner symbols defined.
+    size_t numSymbols() ;
   }];
 
   let hasCustomAssemblyFormat = 1;

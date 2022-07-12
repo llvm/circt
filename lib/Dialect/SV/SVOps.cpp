@@ -16,6 +16,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/HW/HWTypes.h"
+#include "circt/Dialect/SV/SVAttributes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/PatternMatch.h"
@@ -251,6 +252,10 @@ void RegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 // If this reg is only written to, delete the reg and all writers.
 LogicalResult RegOp::canonicalize(RegOp op, PatternRewriter &rewriter) {
+  // Block if op has SV attributes.
+  if (hasSVAttributes(op))
+    return failure();
+
   // If the reg has a symbol, then we can't delete it.
   if (op.inner_symAttr())
     return failure();
@@ -407,6 +412,10 @@ static void replaceOpWithRegion(PatternRewriter &rewriter, Operation *op,
 }
 
 LogicalResult IfOp::canonicalize(IfOp op, PatternRewriter &rewriter) {
+  // Block if op has SV attributes.
+  if (hasSVAttributes(op))
+    return failure();
+
   if (auto constant = op.cond().getDefiningOp<hw::ConstantOp>()) {
 
     if (constant.getValue().isAllOnesValue())
@@ -1247,6 +1256,10 @@ void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 // If this wire is only written to, delete the wire and all writers.
 LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
+  // Block if op has SV attributes.
+  if (hasSVAttributes(wire))
+    return failure();
+
   // If the wire has a symbol, then we can't delete it.
   if (wire.inner_symAttr())
     return failure();
@@ -1271,7 +1284,7 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
 
     // If the assign op has SV attributes, we don't want to delete the
     // assignment.
-    if (assign.svAttributesAttr())
+    if (hasSVAttributes(assign))
       return failure();
 
     write = assign;
@@ -1447,60 +1460,6 @@ LogicalResult AliasOp::verify() {
   if (operands().size() < 2)
     return emitOpError("alias must have at least two operands");
 
-  return success();
-}
-
-//===----------------------------------------------------------------------===//
-// PAssignOp
-//===----------------------------------------------------------------------===//
-
-// reg s <= cond ? val : s simplification.
-// Don't assign a register's value to itself, conditionally assign the new value
-// instead.
-LogicalResult PAssignOp::canonicalize(PAssignOp op, PatternRewriter &rewriter) {
-  auto mux = op.src().getDefiningOp<comb::MuxOp>();
-  if (!mux)
-    return failure();
-
-  auto reg = dyn_cast<sv::RegOp>(op.dest().getDefiningOp());
-  if (!reg)
-    return failure();
-
-  bool trueBranch; // did we find the register on the true branch?
-  auto tvread = mux.trueValue().getDefiningOp<sv::ReadInOutOp>();
-  auto fvread = mux.falseValue().getDefiningOp<sv::ReadInOutOp>();
-  if (tvread && reg == tvread.input().getDefiningOp<sv::RegOp>())
-    trueBranch = true;
-  else if (fvread && reg == fvread.input().getDefiningOp<sv::RegOp>())
-    trueBranch = false;
-  else
-    return failure();
-
-  // Check that this is the only write of the register
-  for (auto &use : reg->getUses()) {
-    if (isa<ReadInOutOp>(use.getOwner()))
-      continue;
-    if (use.getOwner() == op)
-      continue;
-    return failure();
-  }
-
-  // Replace a non-blocking procedural assign in a procedural region with a
-  // conditional procedural assign.  We've ensured that this is the only write
-  // of the register.
-  if (trueBranch) {
-    auto cond = comb::createOrFoldNot(mux.getLoc(), mux.cond(), rewriter);
-    rewriter.create<sv::IfOp>(mux.getLoc(), cond, [&]() {
-      rewriter.create<PAssignOp>(op.getLoc(), reg, mux.falseValue());
-    });
-  } else {
-    rewriter.create<sv::IfOp>(mux.getLoc(), mux.cond(), [&]() {
-      rewriter.create<PAssignOp>(op.getLoc(), reg, mux.trueValue());
-    });
-  }
-
-  // Remove the wire.
-  rewriter.eraseOp(op);
   return success();
 }
 
@@ -1781,6 +1740,12 @@ LogicalResult GenerateCaseOp::verify() {
   // mlir::FailureOr<Type> condType = evaluateParametricType();
 
   return success();
+}
+
+ModportStructAttr ModportStructAttr::get(MLIRContext *context,
+                                         ModportDirection direction,
+                                         FlatSymbolRefAttr signal) {
+  return get(context, ModportDirectionAttr::get(context, direction), signal);
 }
 
 //===----------------------------------------------------------------------===//

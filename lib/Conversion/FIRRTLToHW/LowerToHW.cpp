@@ -246,7 +246,7 @@ struct CircuitLoweringState {
 
     // Get the testbench output directory.
     if (auto tbAnno =
-            AnnotationSet(circuitOp).getAnnotation(testbenchDirAnnoClass)) {
+            AnnotationSet(circuitOp).getAnnotation(testBenchDirAnnoClass)) {
       auto dirName = tbAnno.getMember<StringAttr>("dirname");
       testBenchDirectory = hw::OutputFileAttr::getAsDirectory(
           context, dirName.getValue(), false, true);
@@ -391,16 +391,13 @@ void CircuitLoweringState::processRemainingAnnotations(
             // If the accompanying pass runs on the HW dialect, then LowerToHW
             // should have consumed and processed these into an attribute on the
             // output.
-            "sifive.enterprise.firrtl.DontObfuscateModuleAnnotation",
-            noDedupAnnoClass,
+            dontObfuscateModuleAnnoClass, noDedupAnnoClass,
             // The following are inspected (but not consumed) by FIRRTL/GCT
             // passes that have all run by now. Since no one is responsible for
             // consuming these, they will linger around and can be ignored.
             "sifive.enterprise.firrtl.ScalaClassAnnotation", dutAnnoClass,
-            metadataDirectoryAttrName,
-            "sifive.enterprise.firrtl.ElaborationArtefactsDirectory",
-            testBenchDirAnnoClass,
-            "sifive.enterprise.grandcentral.phases.SubCircuitsTargetDirectory",
+            metadataDirectoryAttrName, elaborationArtefactsDirectoryAnnoClass,
+            testBenchDirAnnoClass, subCircuitsTargetDirectoryAnnoClass,
             // This annotation is used to mark which external modules are
             // imported blackboxes from the BlackBoxReader pass.
             "firrtl.transforms.BlackBox",

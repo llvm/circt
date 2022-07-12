@@ -49,12 +49,6 @@ ParseResult CompRegOp::parse(OpAsmParser &parser, OperationState &result) {
     return parser.emitError(loc, "too many operands");
   }
 
-  if (succeeded(parser.parseOptionalKeyword("svattrs"))) {
-    ArrayAttr svattrs;
-    if (parser.parseAttribute(svattrs, "svAttributes", result.attributes))
-      return failure();
-  }
-
   Type ty;
   if (parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
       parser.parseType(ty))
@@ -91,11 +85,6 @@ void CompRegOp::print(::mlir::OpAsmPrinter &p) {
   p << ' ' << input() << ", " << clk();
   if (reset())
     p << ", " << reset() << ", " << resetValue() << ' ';
-
-  if (svAttributes()) {
-    p << " svattrs " << svAttributesAttr();
-    elidedAttrs.push_back("svAttributes");
-  }
 
   // Determine if 'name' can be elided.
   if (name().empty()) {

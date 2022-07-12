@@ -30,8 +30,16 @@ constexpr const char *rawAnnotations = "rawAnnotations";
 
 constexpr const char *dontTouchAnnoClass =
     "firrtl.transforms.DontTouchAnnotation";
+constexpr const char *enumComponentAnnoClass =
+    "chisel3.experimental.EnumAnnotations$EnumComponentAnnotation";
+constexpr const char *enumDefAnnoClass =
+    "chisel3.experimental.EnumAnnotations$EnumDefAnnotation";
+constexpr const char *enumVecAnnoClass =
+    "chisel3.experimental.EnumAnnotations$EnumVecAnnotation";
 constexpr const char *forceNameAnnoClass =
     "chisel3.util.experimental.ForceNameAnnotation";
+constexpr const char *flattenAnnoClass = "firrtl.transforms.FlattenAnnotation";
+constexpr const char *inlineAnnoClass = "firrtl.passes.InlineAnnotation";
 
 constexpr const char *omirAnnoClass =
     "freechips.rocketchip.objectmodel.OMIRAnnotation";
@@ -60,11 +68,17 @@ constexpr const char *moduleHierAnnoClass =
     "sifive.enterprise.firrtl.ModuleHierarchyAnnotation";
 constexpr const char *testHarnessHierAnnoClass =
     "sifive.enterprise.firrtl.TestHarnessHierarchyAnnotation";
+constexpr const char *retimeModulesFileAnnoClass =
+    "sifive.enterprise.firrtl.RetimeModulesAnnotation";
+constexpr const char *retimeModuleAnnoClass =
+    "freechips.rocketchip.util.RetimeModuleAnnotation";
 static const char *verifBlackBoxAnnoClass =
     "freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation";
 static const char *metadataDirectoryAttrName =
     "sifive.enterprise.firrtl.MetadataDirAnnotation";
 static const char *noDedupAnnoClass = "firrtl.transforms.NoDedupAnnotation";
+static const char *dftTestModeEnableAnnoClass =
+    "sifive.enterprise.firrtl.DFTTestModeEnableAnnotation";
 
 // Grand Central Annotations
 constexpr const char *serializedViewAnnoClass =
@@ -75,6 +89,8 @@ constexpr const char *companionAnnoClass =
     "sifive.enterprise.grandcentral.ViewAnnotation.companion"; // not in SFC
 constexpr const char *parentAnnoClass =
     "sifive.enterprise.grandcentral.ViewAnnotation.parent"; // not in SFC
+constexpr const char *prefixInterfacesAnnoClass =
+    "sifive.enterprise.grandcentral.PrefixInterfacesAnnotation";
 constexpr const char *augmentedGroundTypeClass =
     "sifive.enterprise.grandcentral.AugmentedGroundType"; // not an annotation
 constexpr const char *dataTapsClass =
@@ -122,10 +138,26 @@ constexpr const char *signalDriverModuleAnnoClass =
 // SiFive specific Annotations
 constexpr const char *dutAnnoClass =
     "sifive.enterprise.firrtl.MarkDUTAnnotation";
-constexpr const char *testbenchDirAnnoClass =
-    "sifive.enterprise.firrtl.TestBenchDirAnnotation";
 constexpr const char *injectDUTHierarchyAnnoClass =
     "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation";
+constexpr const char *sitestBlackBoxAnnoClass =
+    "sifive.enterprise.firrtl.SitestBlackBoxAnnotation";
+constexpr const char *sitestTestHarnessBlackBoxAnnoClass =
+    "sifive.enterprise.firrtl.SitestTestHarnessBlackBoxAnnotation";
+constexpr const char *prefixModulesAnnoClass =
+    "sifive.enterprise.firrtl.NestedPrefixModulesAnnotation";
+constexpr const char *dontObfuscateModuleAnnoClass =
+    "sifive.enterprise.firrtl.DontObfuscateModuleAnnotation";
+constexpr const char *scalaClassAnnoClass =
+    "sifive.enterprise.firrtl.ScalaClassAnnotation";
+constexpr const char *elaborationArtefactsDirectoryAnnoClass =
+    "sifive.enterprise.firrtl.ElaborationArtefactsDirectory";
+constexpr const char *subCircuitsTargetDirectoryAnnoClass =
+    "sifive.enterprise.grandcentral.phases.SubCircuitsTargetDirectory";
+constexpr const char *testHarnessPathAnnoClass =
+    "sifive.enterprise.firrtl.TestHarnessPathAnnotation";
+constexpr const char *subCircuitDirAnnotation =
+    "sifive.enterprise.grandcentral.SubCircuitDirAnnotation";
 
 // MemToRegOfVec Annotations
 constexpr const char *convertMemToRegOfVecAnnoClass =

@@ -161,8 +161,8 @@ Optional<AnnoPathValue> firrtl::resolveEntities(TokenAnnoTarget path,
                                                 CircuitTargetCache &cache) {
   // Validate circuit name.
   if (!path.circuit.empty() && circuit.name() != path.circuit) {
-    circuit->emitError("circuit name doesn't match annotation '")
-        << path.circuit << '\'';
+    mlir::emitError(circuit.getLoc())
+        << "circuit name doesn't match annotation '" << path.circuit << '\'';
     return {};
   }
   // Circuit only target.
@@ -177,13 +177,14 @@ Optional<AnnoPathValue> firrtl::resolveEntities(TokenAnnoTarget path,
   for (auto p : path.instances) {
     auto mod = symTbl.lookup<FModuleOp>(p.first);
     if (!mod) {
-      circuit->emitError("module doesn't exist '") << p.first << '\'';
+      mlir::emitError(circuit.getLoc())
+          << "module doesn't exist '" << p.first << '\'';
       return {};
     }
     auto resolved = cache.lookup(mod, p.second);
     if (!resolved || !isa<InstanceOp>(resolved.getOp())) {
-      circuit.emitError("cannot find instance '")
-          << p.second << "' in '" << mod.getName() << "'";
+      mlir::emitError(circuit.getLoc()) << "cannot find instance '" << p.second
+                                        << "' in '" << mod.getName() << "'";
       return {};
     }
     instances.push_back(cast<InstanceOp>(resolved.getOp()));
@@ -191,7 +192,8 @@ Optional<AnnoPathValue> firrtl::resolveEntities(TokenAnnoTarget path,
   // The final module is where the named target is (or is the named target).
   auto mod = symTbl.lookup<FModuleLike>(path.module);
   if (!mod) {
-    circuit->emitError("module doesn't exist '") << path.module << '\'';
+    mlir::emitError(circuit.getLoc())
+        << "module doesn't exist '" << path.module << '\'';
     return {};
   }
   AnnoTarget ref;
@@ -201,8 +203,8 @@ Optional<AnnoPathValue> firrtl::resolveEntities(TokenAnnoTarget path,
   } else {
     ref = cache.lookup(mod, path.name);
     if (!ref) {
-      circuit->emitError("cannot find name '")
-          << path.name << "' in " << mod.moduleName();
+      mlir::emitError(circuit.getLoc())
+          << "cannot find name '" << path.name << "' in " << mod.moduleName();
       return {};
     }
   }
@@ -222,8 +224,8 @@ Optional<AnnoPathValue> firrtl::resolveEntities(TokenAnnoTarget path,
     if (component.empty()) {
       ref = OpAnnoTarget(instance.getReferencedModule(symTbl));
     } else if (component.front().isIndex) {
-      circuit->emitError() << "illegal target '" << path.str()
-                           << "' indexes into an instance";
+      mlir::emitError(circuit.getLoc())
+          << "illegal target '" << path.str() << "' indexes into an instance";
       return {};
     } else {
       auto field = component.front().name;
@@ -234,8 +236,9 @@ Optional<AnnoPathValue> firrtl::resolveEntities(TokenAnnoTarget path,
           break;
         }
       if (!ref) {
-        circuit->emitError("!cannot find port '")
-            << field << "' in module " << target.moduleName();
+        mlir::emitError(circuit.getLoc())
+            << "!cannot find port '" << field << "' in module "
+            << target.moduleName();
         return {};
       }
       component = component.drop_front();
@@ -303,7 +306,8 @@ Optional<AnnoPathValue> firrtl::resolvePath(StringRef rawPath,
 
   auto tokens = tokenizePath(path);
   if (!tokens) {
-    circuit->emitError("Cannot tokenize annotation path ") << rawPath;
+    mlir::emitError(circuit.getLoc())
+        << "Cannot tokenize annotation path " << rawPath;
     return {};
   }
 

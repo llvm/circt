@@ -1,6 +1,5 @@
 //===- ESIServices.td - ESI services ops -------------------*- tablegen -*-===//
 //
-//
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
@@ -35,6 +34,26 @@ def ServiceDeclOp : ESI_Op<"service.decl",
   }];
 }
 
+def ToServerOp : ESI_Op<"service.to_server",
+                        [HasParent<"::circt::esi::ServiceDeclOp">]> {
+  let summary = "An ESI service port headed to the service";
+
+  let arguments = (ins SymbolNameAttr:$inner_sym, TypeAttr:$type);
+  let assemblyFormat = [{
+    $inner_sym attr-dict `:` $type
+  }];
+}
+
+def ToClientOp : ESI_Op<"service.to_client",
+                        [HasParent<"::circt::esi::ServiceDeclOp">]> {
+  let summary = "An ESI service port headed to a particular client";
+
+  let arguments = (ins SymbolNameAttr:$inner_sym, TypeAttr:$type);
+  let assemblyFormat = [{
+    $inner_sym  attr-dict `:` $type
+  }];
+}
+
 def ServiceInstanceOp : ESI_Op<"service.instance"> {
   let summary = "Instantiate a server module";
   let description = [{
@@ -58,28 +77,8 @@ def ServiceInstanceOp : ESI_Op<"service.instance"> {
                        Variadic<AnyType>:$inputs);
   let results = (outs Variadic<AnyType>);
   let assemblyFormat = [{
-    $identifier $service_symbol `(` $inputs `)` attr-dict
+    $service_symbol `impl` `as` $identifier `(` $inputs `)` attr-dict
       `:` functional-type($inputs, results)
-  }];
-}
-
-def ToServerOp : ESI_Op<"service.to_server",
-                        [HasParent<"::circt::esi::ServiceDeclOp">]> {
-  let summary = "An ESI service port headed to the service";
-
-  let arguments = (ins SymbolNameAttr:$inner_sym, TypeAttr:$type);
-  let assemblyFormat = [{
-    $inner_sym attr-dict `:` $type
-  }];
-}
-
-def ToClientOp : ESI_Op<"service.to_client",
-                        [HasParent<"::circt::esi::ServiceDeclOp">]> {
-  let summary = "An ESI service port headed to a particular client";
-
-  let arguments = (ins SymbolNameAttr:$inner_sym, TypeAttr:$type);
-  let assemblyFormat = [{
-    $inner_sym  attr-dict `:` $type
   }];
 }
 
@@ -103,7 +102,7 @@ def ServiceImplementReqOp : ESI_Op<"service.impl_req", [NoTerminator]> {
   let regions = (region SizedRegion<1>:$portReqs);
 
   let assemblyFormat = [{
-    $identifier $service_symbol `(` $inputs `)` attr-dict
+    $service_symbol `impl` `as` $identifier `(` $inputs `)` attr-dict
       `:` functional-type($inputs, results)
       $portReqs
   }];

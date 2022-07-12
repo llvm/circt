@@ -812,7 +812,8 @@ protected:
 
 /// A packed unsized dimension, like `[]`.
 class PackedUnsizedDim : public Type::TypeBase<PackedUnsizedDim, PackedDim,
-                                               detail::UnsizedDimStorage> {
+                                               detail::UnsizedDimStorage,
+                                               ::mlir::TypeTrait::IsMutable> {
 public:
   static PackedUnsizedDim get(PackedType inner);
 
@@ -822,8 +823,9 @@ protected:
 };
 
 /// A packed range dimension, like `[a:b]`.
-class PackedRangeDim : public Type::TypeBase<PackedRangeDim, PackedDim,
-                                             detail::RangeDimStorage> {
+class PackedRangeDim
+    : public Type::TypeBase<PackedRangeDim, PackedDim, detail::RangeDimStorage,
+                            ::mlir::TypeTrait::IsMutable> {
 public:
   static PackedRangeDim get(PackedType inner, Range range);
 
@@ -895,7 +897,8 @@ protected:
 /// An unpacked unsized dimension, like `[]`.
 class UnpackedUnsizedDim
     : public Type::TypeBase<UnpackedUnsizedDim, UnpackedDim,
-                            detail::UnsizedDimStorage> {
+                            detail::UnsizedDimStorage,
+                            ::mlir::TypeTrait::IsMutable> {
 public:
   static UnpackedUnsizedDim get(UnpackedType inner);
 
@@ -906,7 +909,8 @@ protected:
 
 /// An unpacked array dimension, like `[a]`.
 class UnpackedArrayDim : public Type::TypeBase<UnpackedArrayDim, UnpackedDim,
-                                               detail::SizedDimStorage> {
+                                               detail::SizedDimStorage,
+                                               ::mlir::TypeTrait::IsMutable> {
 public:
   static UnpackedArrayDim get(UnpackedType inner, unsigned size);
 
@@ -920,7 +924,8 @@ protected:
 
 /// An unpacked range dimension, like `[a:b]`.
 class UnpackedRangeDim : public Type::TypeBase<UnpackedRangeDim, UnpackedDim,
-                                               detail::RangeDimStorage> {
+                                               detail::RangeDimStorage,
+                                               ::mlir::TypeTrait::IsMutable> {
 public:
   static UnpackedRangeDim get(UnpackedType inner, Range range);
 
@@ -956,7 +961,8 @@ protected:
 ///
 /// See IEEE 1800-2017 §7.8 "Associative arrays".
 class UnpackedAssocDim : public Type::TypeBase<UnpackedAssocDim, UnpackedDim,
-                                               detail::AssocDimStorage> {
+                                               detail::AssocDimStorage,
+                                               ::mlir::TypeTrait::IsMutable> {
 public:
   static UnpackedAssocDim get(UnpackedType inner, UnpackedType indexType = {});
 
@@ -971,7 +977,8 @@ protected:
 
 /// An unpacked queue dimension with optional bound, like `[$]` or `[$:a]`.
 class UnpackedQueueDim : public Type::TypeBase<UnpackedQueueDim, UnpackedDim,
-                                               detail::SizedDimStorage> {
+                                               detail::SizedDimStorage,
+                                               ::mlir::TypeTrait::IsMutable> {
 public:
   static UnpackedQueueDim get(UnpackedType inner,
                               Optional<unsigned> bound = {});
@@ -1105,7 +1112,8 @@ inline llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
 
 /// A packed struct.
 class PackedStructType : public Type::TypeBase<PackedStructType, PackedType,
-                                               detail::StructTypeStorage> {
+                                               detail::StructTypeStorage,
+                                               ::mlir::TypeTrait::IsMutable> {
 public:
   static PackedStructType get(StructKind kind, ArrayRef<StructMember> members,
                               StringAttr name, Location loc,
@@ -1140,7 +1148,8 @@ protected:
 /// An unpacked struct.
 class UnpackedStructType
     : public Type::TypeBase<UnpackedStructType, UnpackedType,
-                            detail::StructTypeStorage> {
+                            detail::StructTypeStorage,
+                            ::mlir::TypeTrait::IsMutable> {
 public:
   static UnpackedStructType get(StructKind kind, ArrayRef<StructMember> members,
                                 StringAttr name, Location loc);
