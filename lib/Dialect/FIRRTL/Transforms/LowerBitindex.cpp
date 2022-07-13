@@ -34,7 +34,7 @@ void LowerBitIndexPass::runOnOperation() {
       llvm::dbgs() << "===- Running LowerBitIndex Pass "
                       "------------------------------------------------===\n");
 
-  DenseSet<Value> variables;
+  DenseSet<Value> values;
 
   // collect all values that are used as input to a bitindex
   for (auto bitindex :
@@ -43,49 +43,48 @@ void LowerBitIndexPass::runOnOperation() {
       bitindex.erase();
       continue;
     }
-    variables.insert(bitindex.input());
+    values.insert(bitindex.input());
   }
 
   // make a new wire for each bitindexed value
-  for (auto var : variables) {
-    auto *defn = var.getDefiningOp();
+  for (auto val : values) {
+    auto *defn = val.getDefiningOp();
     llvm::StringRef name;
-    ImplicitLocOpBuilder builder(var.getLoc(), var.getContext());
-    if (!defn) {
+    ImplicitLocOpBuilder builder(val.getLoc(), val.getContext());
+    if (auto blockArg = val.dyn_cast<BlockArgument>()) {
       auto mod = getOperation();
-      name = "port.bitindex.wrapper";
       builder.setInsertionPointToStart(mod.getBody());
-      if (auto blockArg = var.dyn_cast<BlockArgument>()) {
-        name = mod.getPortName(blockArg.getArgNumber());
-      }
+      name = mod.getPortName(blockArg.getArgNumber());
     } else {
-      name = "local.bitindex.wrapper";
       builder.setInsertionPointAfter(defn);
       // improve the name if it was defined as a wire or reg
       if (auto wireOp = dyn_cast<WireOp>(defn)) {
         name = wireOp.name();
       } else if (auto regOp = dyn_cast<RegOp>(defn)) {
         name = regOp.name();
+      } else if (auto regResetOp = dyn_cast<RegResetOp>(defn)) {
+        name = regResetOp.name();
       }
     }
+
     // must be an int type to be the input to a bitindex
-    if (auto i = var.getType().dyn_cast<IntType>()) {
+    if (auto i = val.getType().dyn_cast<IntType>()) {
       // must have defined width
       if (!i.hasWidth()) {
         signalPassFailure();
         return;
       }
       auto w = i.getWidth().getValue();
-      // wrapper wire that is a UInt<1>[var.width]
+      // wrapper wire that is a UInt<1>[val.width]
       auto wire = builder.create<WireOp>(
-          FVectorType::get(UIntType::get(var.getContext(), 1), w), name);
+          FVectorType::get(UIntType::get(val.getContext(), 1), w), name);
 
-      // for every use of var replace any connection to it with a connection
+      // for every use of val replace any connection to it with a connection
       // that assigns each individual bit of the src to the dest
-      for (auto *op : var.getUsers()) {
-        // transforms `var <= src` to `wire[i] <= bits(src, i, i)` 0 <= i < w
+      for (auto *op : val.getUsers()) {
+        // transforms `val <= src` to `wire[i] <= bits(src, i, i)` 0 <= i < w
         if (auto connect = dyn_cast<StrictConnectOp>(op)) {
-          if (var == connect.dest()) {
+          if (val == connect.dest()) {
             ImplicitLocOpBuilder builder(connect.getLoc(), connect);
             for (int i = 0; i < w; i++) {
               Value bitsOp = builder.create<BitsPrimOp>(connect.src(), i, i);
@@ -97,29 +96,30 @@ void LowerBitIndexPass::runOnOperation() {
         }
       }
 
-      // constructs the full concatenation of wire and assigns it to var:
-      // var <= cat(..., cat(wire[2], cat(wire[1], wire[0])))
+      // constructs the full concatenation of wire and connects it to val:
+      // val <= cat(..., cat(wire[2], cat(wire[1], wire[0])))
       Value prev = builder.create<SubindexOp>(wire, 0);
       for (int i = 1; i < w; i++) {
         Value subidx = builder.create<SubindexOp>(wire, i);
         Value cat = builder.create<CatPrimOp>(subidx, prev);
         prev = cat;
       }
+      // cast back to SInt if necessary to connect to val
       if (i.isa<SIntType>()) {
         prev = builder.create<AsSIntPrimOp>(prev);
       }
       // connect here after replacing all other connects
-      builder.create<StrictConnectOp>(var, prev);
+      builder.create<StrictConnectOp>(val, prev);
 
-      for (auto *op : var.getUsers()) {
+      for (auto *op : val.getUsers()) {
         if (auto bitindex = dyn_cast<BitindexOp>(op)) {
-          // replaces any occurrence of `var[n] <= ...` with `wire[n] <= ...`
+          // replaces any occurrence of `val[n] <= ...` with `wire[n] <= ...`
           ImplicitLocOpBuilder builder(bitindex.getLoc(), bitindex);
           Value subidx = builder.create<SubindexOp>(wire, bitindex.index());
           bitindex.replaceAllUsesWith(subidx);
           bitindex.erase();
         } else if (auto bits = dyn_cast<BitsPrimOp>(op)) {
-          // replaces any occurrence of `bits(var, hi, lo)` with
+          // replaces any occurrence of `bits(val, hi, lo)` with
           // `cat(wire[hi], cat(..., wire[lo]))`
           ImplicitLocOpBuilder builder(bits.getLoc(), bits);
           Value prev = builder.create<SubindexOp>(wire, bits.lo());
@@ -133,12 +133,14 @@ void LowerBitIndexPass::runOnOperation() {
         }
       }
       // if the bit-indexed value is a register then we need to wire it up to
-      // preserve its value by doing `wire[i] <= bits(var, i, i)`
+      // preserve its value by doing `wire[i] <= bits(val, i, i)`
       if (isa_and_nonnull<RegOp>(defn) || isa_and_nonnull<RegResetOp>(defn)) {
         ImplicitLocOpBuilder builder(defn->getLoc(), defn);
+        // this must be done immediately after the wrapper wire declaration to
+        // properly follow last-connect semantics
         builder.setInsertionPointAfter(wire);
         for (int i = 0; i < w; i++) {
-          Value bitsOp = builder.create<BitsPrimOp>(var, i, i);
+          Value bitsOp = builder.create<BitsPrimOp>(val, i, i);
           Value subidxOp = builder.create<SubindexOp>(wire, i);
           builder.create<StrictConnectOp>(subidxOp, bitsOp);
         }
