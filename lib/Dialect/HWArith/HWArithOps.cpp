@@ -52,7 +52,7 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
 // AddOp
 //===----------------------------------------------------------------------===//
 
-unsigned inferAddResultType(IntegerType::SignednessSemantics &signedness,
+static unsigned inferAddResultType(IntegerType::SignednessSemantics &signedness,
                             IntegerType lhs, IntegerType rhs) {
   // the result width is never less than max(w1, w2) + 1
   unsigned resultWidth = std::max(lhs.getWidth(), rhs.getWidth()) + 1;
@@ -92,7 +92,6 @@ IntegerType AddOp::inferReturnType(MLIRContext *context, IntegerType lhs,
 
 IntegerType SubOp::inferReturnType(MLIRContext *context, IntegerType lhs,
                                    IntegerType rhs) {
-
   // The result type rules are identical to the ones for an addition
   // With one exception: all results are signed!
   IntegerType::SignednessSemantics signedness;
@@ -120,10 +119,9 @@ getSignedInheritedSignedness(IntegerType lhs, IntegerType rhs) {
 
 IntegerType MulOp::inferReturnType(MLIRContext *context, IntegerType lhs,
                                    IntegerType rhs) {
-
   // the result width stays the same no matter the signedness
-  const unsigned resultWidth = lhs.getWidth() + rhs.getWidth();
-  const IntegerType::SignednessSemantics signedness =
+  unsigned resultWidth = lhs.getWidth() + rhs.getWidth();
+  IntegerType::SignednessSemantics signedness =
       getSignedInheritedSignedness(lhs, rhs);
 
   return IntegerType::get(context, resultWidth, signedness);
@@ -135,7 +133,6 @@ IntegerType MulOp::inferReturnType(MLIRContext *context, IntegerType lhs,
 
 IntegerType DivOp::inferReturnType(MLIRContext *context, IntegerType lhs,
                                    IntegerType rhs) {
-
   // The result width is always at least as large as the bit width of lhs
   unsigned resultWidth = lhs.getWidth();
 
@@ -143,7 +140,7 @@ IntegerType DivOp::inferReturnType(MLIRContext *context, IntegerType lhs,
   if (rhs.isSigned())
     ++resultWidth;
 
-  const IntegerType::SignednessSemantics signedness =
+  IntegerType::SignednessSemantics signedness =
       getSignedInheritedSignedness(lhs, rhs);
 
   return IntegerType::get(context, resultWidth, signedness);

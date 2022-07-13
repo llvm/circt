@@ -16,10 +16,12 @@
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/HWArith/HWArithTypes.h.inc"
 
-namespace circt::hwarith {
+namespace circt {
+namespace hwarith {
 
 bool isHWArithIntegerType(::mlir::Type type);
 
-} // namespace circt::hwarith
+} // namespace hwarith
+} // namespace circt
 
 #endif
