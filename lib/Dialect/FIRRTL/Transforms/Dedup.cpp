@@ -1211,7 +1211,7 @@ class DedupPass : public DedupBase<DedupPass> {
         // Record the group ID of the other module.
         dedupMap[moduleName] = original.moduleNameAttr();
         deduper.dedup(original, module);
-        erasedModules++;
+        ++erasedModules;
         anythingChanged = true;
         continue;
       }
