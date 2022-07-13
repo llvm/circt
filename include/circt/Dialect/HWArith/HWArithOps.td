@@ -86,8 +86,8 @@ def AddOp : BinOp<"add", [Commutative]> {
     
     | LHS type | RHS type | Result type                              |
     | :------- | :------- | :--------------------------------------- |
-    | `ui<a>`  | `ui<b>`  | `ui<r>`, *r* = max(*a* + 1, *b* + 1)     |
-    | `si<a>`  | `si<b>`  | `si<r>`, *r* = max(*a* + 1, *b* + 1)     |
+    | `ui<a>`  | `ui<b>`  | `ui<r>`, *r* = max(*a*, *b*) + 1         |
+    | `si<a>`  | `si<b>`  | `si<r>`, *r* = max(*a*, *b*) + 1         |
     | `ui<a>`  | `si<b>`  | `si<r>`, *r* = *a* + 2 **if** *a* ≥ *b*  |
     |          |          | `si<r>`, *r* = *b* + 1 **if** *a* < *b*  |
     | `si<a>`  | `ui<b>`  | Same as `ui<b> + si<a>`                  |
@@ -111,8 +111,8 @@ def SubOp : BinOp<"sub"> {
     
     | LHS type | RHS type | Result type                              |
     | :------- | :------- | :--------------------------------------- |
-    | `ui<a>`  | `ui<b>`  | `si<r>`, *r* = max(*a* + 1, *b* + 1)     |
-    | `si<a>`  | `si<b>`  | `si<r>`, *r* = max(*a* + 1, *b* + 1)     |
+    | `ui<a>`  | `ui<b>`  | `si<r>`, *r* = max(*a*, *b*) + 1         |
+    | `si<a>`  | `si<b>`  | `si<r>`, *r* = max(*a*, *b*) + 1         |
     | `ui<a>`  | `si<b>`  | `si<r>`, *r* = *a* + 2 **if** *a* ≥ *b*  |
     |          |          | `si<r>`, *r* = *b* + 1 **if** *a* < *b*  |
     | `si<a>`  | `ui<b>`  | Same as `ui<b> - si<a>`                  |

@@ -96,9 +96,9 @@ as well as how this is communicated to a `comb` lowering.
 
 ### Preliminaries
 
-The MLIR `ui<a>` types represents values in the interval *[0, 2^a - 1]*. Its
-signed counterpart, `si<b>`, represents values in the interval *[-2^(b-1),
-2^(b-1) - 1]*. For example, `ui4` covers values between *0* and *15*, whereas
+The MLIR `ui<w>` types represents values in the interval *[0, 2^w - 1]*. Its
+signed counterpart, `si<w>`, represents values in the interval *[-2^(w-1),
+2^(w-1) - 1]*. For example, `ui4` covers values between *0* and *15*, whereas
 `si4` ranges from *-8* to *7*. For a given bit-width, the unsigned and the
 signed type contain the same number of values, but the represented interval is
 shifted by half the interval's size.
@@ -114,21 +114,21 @@ shifted by half the interval's size.
 -8       0      7      15   
 ```
 
-We use the notation `UI_MIN<k>`, `UI_MAX<k>`, `SI_MIN<k>` and `SI_MAX<k>` to
+We use the notation `UI_MIN<w>`, `UI_MAX<w>`, `SI_MIN<w>` and `SI_MAX<w>` to
 denote the smallest and largest values representable by an unsigned/signed type
 of the given bit-width. For example, `UI_MAX<4>` = *15*, and `SI_MIN<4>` = *-8*.
 
-The following relations for all `k > 0` are handy:
+The following relations for all `w > 0` are handy:
 ```
-UI_MIN<k>     = 0
-2 * UI_MAX<k> = 2^(k+1) - 2
-UI_MAX<k+1>   = 2 * UI_MAX<k> + 1 
+UI_MIN<w>     = 0
+2 * UI_MAX<w> = 2^(w+1) - 2
+UI_MAX<w+1>   = 2 * UI_MAX<w> + 1 
 
-SI_MIN<k>     < 0
-2 * SI_MIN<k> = -2^k
-SI_MIN<k+1>   = 2 * SI_MIN<k>
-2 * SI_MAX<k> = 2^k - 2
-SI_MAX<k+1>   = 2 * SI_MAX<k> + 1
+SI_MIN<w>     < 0
+2 * SI_MIN<w> = -2^w
+SI_MIN<w+1>   = 2 * SI_MIN<w>
+2 * SI_MAX<w> = 2^w - 2
+SI_MAX<w+1>   = 2 * SI_MAX<w> + 1
 ```
 
 The following result type inference rules are chosen to prevent a loss of
@@ -143,8 +143,8 @@ be signed.
 
 |   | LHS type | RHS type | Result type                                |
 | - | :------- | :------- | :----------------------------------------- |
-|(U)| `ui<a>`  | `ui<b>`  | `ui<r>`, *r* = max(*a* + 1, *b* + 1)     |
-|(S)| `si<a>`  | `si<b>`  | `si<r>`, *r* = max(*a* + 1, *b* + 1)       |
+|(U)| `ui<a>`  | `ui<b>`  | `ui<r>`, *r* = max(*a*, *b*) + 1           |
+|(S)| `si<a>`  | `si<b>`  | `si<r>`, *r* = max(*a*, *b*) + 1           |
 |(M)| `ui<a>`  | `si<b>`  | `si<r>`, *r* = *a* + 2 **if** *a* ≥ *b*    |
 |   |          |          | `si<r>`, *r* = *b* + 1 **if** *a* < *b*    |
 |(M)| `si<a>`  | `ui<b>`  | Same as `ui<b> + si<a>`                    |
@@ -154,7 +154,6 @@ be signed.
 Result value range: `[0 + 0, UI_MAX<a> + UI_MAX<b>]`
 
 W.l.o.g., let `ui<b>` be the wider type. Then the following inequalities hold:
-
 ```
 UI_MAX<b> < UI_MAX<a> + UI_MAX<b> ≤ 2 * UI_MAX<b> ≤ UI_MAX<b+1>
 ```
@@ -170,7 +169,6 @@ Result value range: `[SI_MIN<a> + SI_MIN<b>, SI_MAX<a> + SI_MAX<b>]`
 
 We apply the same reasoning as in (U). W.l.o.g., let `si<b>` be the wider type.
 Then the following inequalities hold:
-
 ```
 SI_MIN<b> > SI_MIN<a> + SI_MIN<b> ≥ 2 * SI_MIN<b> ≥ SI_MIN<b+1>
 SI_MAX<b> < SI_MAX<a> + SI_MAX<b> ≤ 2 * SI_MAX<b> ≤ SI_MAX<b+1>
@@ -184,8 +182,8 @@ Example:
 #### Mixed addition (M)
 
 The result type must be signed, as the addition of a positive and a negative
-value may yield a negative result. Let us consider `ui<a> + si<b>`; the flipped
-case `si<a> + ui<b>` follows analogously. We distinguish two situations:
+value may yield a negative result. Due to commutativity, we only consider
+`ui<a> + si<b>`. We distinguish two situations:
 
 * `a ≥ b`, i.e. the unsigned operand's width is greater or equal the signed
 operand's width.
@@ -211,8 +209,8 @@ Examples:
 
 |   | LHS type | RHS type | Result type                              |
 | - | :------- | :------- | :--------------------------------------- |
-|(U)| `ui<a>`  | `ui<b>`  | `si<r>`, *r* = max(*a* + 1, *b* + 1)     |
-|(S)| `si<a>`  | `si<b>`  | `si<r>`, *r* = max(*a* + 1, *b* + 1)     |
+|(U)| `ui<a>`  | `ui<b>`  | `si<r>`, *r* = max(*a*, *b*) + 1         |
+|(S)| `si<a>`  | `si<b>`  | `si<r>`, *r* = max(*a*, *b*) + 1         |
 |(M)| `ui<a>`  | `si<b>`  | `si<r>`, *r* = *a* + 2 **if** *a* ≥ *b*  |
 |   |          |          | `si<r>`, *r* = *b* + 1 **if** *a* < *b*  |
 |(M)| `si<a>`  | `ui<b>`  | Same as `ui<b> - si<a>`                  |
@@ -221,7 +219,10 @@ Examples:
 
 Result value range: `[0 - UI_MAX<b>, UI_MAX<a> - 0]`
 
-As the result can be negative, the result type must be signed. `-UI_MAX<b>` is covered by `si<b+1>`, and `UI_MAX<a>` is covered by `si<a+1>`, so the narrowest type capable of representing both extremal values is `si<r>` with *r* = max(*a* + 1, *b* + 1).
+As the result can be negative, the result type must be signed. `-UI_MAX<b>` is
+covered by `si<b+1>`, and `UI_MAX<a>` is covered by `si<a+1>`, so the narrowest
+type capable of representing both extremal values is `si<r>` with
+*r* = max(*a*, *b*) + 1.
 
 Example:
 ```mlir
@@ -241,7 +242,6 @@ We rewrite the value range and then appy the same reasoning as for the
 ```
 
 W.l.o.g., let `si<b>` be the wider type. Then the following inequalities hold:
-
 ```
 SI_MIN<b> > SI_MIN<a> + SI_MIN<b> + 1 ≥ 2 * SI_MIN<b> + 1 ≥ SI_MIN<b+1>
 SI_MAX<b> < SI_MAX<a> + SI_MAX<b> + 1 ≤ 2 * SI_MAX<b> + 1 ≤ SI_MAX<b+1>
@@ -284,7 +284,8 @@ UI_MAX<a> * UI_MAX<b> = (2^a - 1) * (2^b - 1)
                       ≤ 2^(a + b) - 1 = UI_MAX<a+b>
 ```
 
-The result type cannot be smaller than `ui<a+b>`, as the following counter-example shows:
+The result type cannot be smaller than `ui<a+b>`, as the following
+counter-example shows:
 ```
 UI_MAX<3> * UI_MAX<4> = 7 * 15 = 105 > UI_MAX<3+4-1>
 ```
@@ -302,7 +303,6 @@ Result value range:
 With the same reasoning as in (U), we know that `si<a+b>` is the narrowest type
 to accommodate `SI_MAX<a> * SI_MAX<b>`. This type also covers the negative
 extremal value (w.l.o.g. let `si<b>` be the wider type here):
-
 ```
 SI_MIN<a> * SI_MAX<b> = -2^(a-1) * (2^(b-1) - 1)
                       = -2^(a + b - 2) + 2^(a-1)
@@ -323,7 +323,6 @@ Result value range: `[UI_MAX<a> * SI_MIN<b>, UI_MAX<a> * SI_MAX<b>]`
 
 Analogously to the previous cases, the result type must be at least *a* + *b*
 bits wide:
-
 ```
 UI_MAX<a> * SI_MIN<b> = (2^a - 1) * -2^(b-1)
                       = -2^(a + b - 1) + 2^(b-1)
@@ -336,7 +335,6 @@ UI_MAX<a> * SI_MAX<b> = (2^a - 1) * (2^(b-1) - 1)
 
 Again, we cannot choose a narrower type according to the following
 counter-example:
-
 ```
 UI_MAX<3> * SI_MAX<4> = 7 * 7 = 49 ≥ SI_MAX<3+4-1>
 ```
