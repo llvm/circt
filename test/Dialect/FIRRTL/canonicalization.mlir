@@ -2385,4 +2385,19 @@ firrtl.module @AnnotationsBlockRemoval(
   firrtl.strictconnect %b, %w : !firrtl.uint<1>
 }
 
+// CHECK-LABEL: firrtl.module private @Verification({{.+}}) {
+// CHECK-NEXT:  }
+firrtl.module private @Verification(in %clock: !firrtl.clock, in %p: !firrtl.uint<1>) {
+  %c0 = firrtl.constant 0 : !firrtl.uint<1>
+  %c1 = firrtl.constant 1 : !firrtl.uint<1>
+  // Never enabled.
+  firrtl.assert %clock, %p, %c0, "assert0"
+  firrtl.assume %clock, %p, %c0, "assume0"
+  firrtl.cover %clock, %p, %c0, "cover0"
+  // Never fired.
+  firrtl.assert %clock, %c1, %p, "assert1"
+  firrtl.assume %clock, %c1, %p, "assume1"
+  firrtl.cover %clock, %c0, %p, "cover0"
+}
+
 }
