@@ -287,10 +287,14 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %61 = firrtl.multibit_mux %17, %55, %55, %55 : !firrtl.uint<1>, !firrtl.sint<1>
     // CHECK:      %[[ZEXT_INDEX:.+]] = comb.concat %false, {{.*}} : i1, i1
     // CHECK-NEXT: %[[ARRAY:.+]] = hw.array_create %false, %false, %false
+    // CHECK-NEXT: %[[WIRE:.+]] = sv.wire
     // CHECK-NEXT: %[[ARRAY_GET:.+]] = hw.array_get %[[ARRAY]][%[[ZEXT_INDEX]]]
+    // CHECK-NEXT{LITERAL}: sv.verbatim "assign {{0}} = {{1}} /* cadence map_to_mux */; /* synopsys infer_mux_override */"
+    // CHECK-SAME: (%[[WIRE]], %[[ARRAY_GET]])
+    // CHECK-NEXT: %[[READ_WIRE:.+]] = sv.read_inout %[[WIRE]] : !hw.inout<i1>
     // CHECK-NEXT: %[[ARRAY_ZEROTH:.+]] = hw.array_get %[[ARRAY]][%c0_i2]
     // CHECK-NEXT: %[[IS_OOB:.+]] = comb.icmp uge %[[ZEXT_INDEX]], %c-1_i2
-    // CHECK-NEXT: %[[GUARDED:.+]] = comb.mux %[[IS_OOB]], %[[ARRAY_ZEROTH]], %[[ARRAY_GET]]
+    // CHECK-NEXT: %[[GUARDED:.+]] = comb.mux %[[IS_OOB]], %[[ARRAY_ZEROTH]], %[[READ_WIRE]]
     // CHECK: hw.output %false, %[[GUARDED]] : i1, i1
     firrtl.connect %out2, %61 : !firrtl.sint<1>, !firrtl.sint<1>
   }
@@ -1609,11 +1613,15 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %0 = firrtl.multibit_mux %index, %source_2, %source_1, %source_0 : !firrtl.uint<2>, !firrtl.uint<1>
     firrtl.connect %sink, %0 : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK:      %0 = hw.array_create %source_2, %source_1, %source_0 : i1
-    // CHECK-NEXT: %1 = hw.array_get %0[%index] : !hw.array<3xi1>
-    // CHECK-NEXT: %2 = hw.array_get %0[%c0_i2]
-    // CHECK-NEXT: %3 = comb.icmp uge %index, %c-1_i2
-    // CHECK-NEXT: %4 = comb.mux %3, %2, %1
-    // CHECK-NEXT: hw.output %4 : i1
+    // CHECK-NEXT: %1 = sv.wire : !hw.inout<i1>
+    // CHECK-NEXT: %2 = hw.array_get %0[%index] : !hw.array<3xi1>
+    // CHECK-NEXT{LITERAL}: sv.verbatim "assign {{0}} = {{1}} /* cadence map_to_mux */; /* synopsys infer_mux_override */"
+    // CHECK-SAME: (%1, %2)
+    // CHECK-NEXT: %3 = sv.read_inout %1 : !hw.inout<i1>
+    // CHECK-NEXT: %4 = hw.array_get %0[%c0_i2]
+    // CHECK-NEXT: %5 = comb.icmp uge %index, %c-1_i2
+    // CHECK-NEXT: %6 = comb.mux %5, %4, %3
+    // CHECK-NEXT: hw.output %6 : i1
   }
 
   firrtl.module private @inferUnmaskedMemory(in %clock: !firrtl.clock, in %rAddr: !firrtl.uint<4>, in %rEn: !firrtl.uint<1>, out %rData: !firrtl.uint<8>, in %wMask: !firrtl.uint<1>, in %wData: !firrtl.uint<8>) {
