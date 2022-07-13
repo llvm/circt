@@ -191,7 +191,7 @@ static Optional<AnnoPathValue> tryResolve(DictionaryAttr anno,
 //===----------------------------------------------------------------------===//
 
 /// An applier which puts the annotation on the target and drops the 'target'
-/// field from the annotaiton.  Optionally handles non-local annotations.
+/// field from the annotation.  Optionally handles non-local annotations.
 static LogicalResult applyWithoutTargetImpl(const AnnoPathValue &target,
                                             DictionaryAttr anno,
                                             ApplyState &state,
@@ -350,6 +350,8 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
     {extractSeqMemsAnnoClass, NoTargetAnnotation},
     {injectDUTHierarchyAnnoClass, NoTargetAnnotation},
     {convertMemToRegOfVecAnnoClass, NoTargetAnnotation},
+    {excludeMemToRegAnnoClass,
+     {stdResolve, applyWithoutTarget<true, MemOp, CombMemOp>}},
     {sitestBlackBoxAnnoClass, NoTargetAnnotation},
     {enumComponentAnnoClass, {noResolve, drop}},
     {enumDefAnnoClass, {noResolve, drop}},
