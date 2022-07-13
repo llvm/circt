@@ -5,7 +5,7 @@ firrtl.circuit "Test"  {
 // CHECK-LABEL: firrtl.module @Test1
 firrtl.module @Test1(in %x: !firrtl.uint<4>, in %y: !firrtl.uint<1>, in %en: !firrtl.uint<1>, out %out: !firrtl.uint<4>) {
 
-  // CHECK: [[WRAPPER:%.+]] = firrtl.wire   : !firrtl.vector<uint<1>, 4>
+  // CHECK: [[WRAPPER:%.+]] = firrtl.wire{{.*}}   : !firrtl.vector<uint<1>, 4>
   // CHECK: %0 = firrtl.subindex [[WRAPPER]][0] : !firrtl.vector<uint<1>, 4>
   // CHECK: %1 = firrtl.subindex [[WRAPPER]][1] : !firrtl.vector<uint<1>, 4>
   // CHECK: %2 = firrtl.cat %1, %0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
@@ -26,7 +26,7 @@ firrtl.module @Test1(in %x: !firrtl.uint<4>, in %y: !firrtl.uint<1>, in %en: !fi
 firrtl.module @Test2(in %clock: !firrtl.clock, in %x: !firrtl.uint<4>, in %y: !firrtl.uint<1>, in %en: !firrtl.uint<1>, out %out: !firrtl.uint<4>) {
 
   // CHECK: %r = firrtl.reg interesting_name %clock  : !firrtl.uint<4>
-  // CHECK: %r_0 = firrtl.wire   {name = "r"} : !firrtl.vector<uint<1>, 4>
+  // CHECK: %r_0 = firrtl.wire{{.*}}   {name = "r"} : !firrtl.vector<uint<1>, 4>
   // CHECK: %0 = firrtl.bits %r 0 to 0 : (!firrtl.uint<4>) -> !firrtl.uint<1>
   // CHECK: %1 = firrtl.subindex %r_0[0] : !firrtl.vector<uint<1>, 4>
   // CHECK: firrtl.strictconnect %1, %0 : !firrtl.uint<1>
@@ -68,7 +68,7 @@ firrtl.module @Test2(in %clock: !firrtl.clock, in %x: !firrtl.uint<4>, in %y: !f
 
 // CHECK-LABEL: firrtl.module @Test
 firrtl.module @Test(in %x: !firrtl.uint<4>, in %y: !firrtl.uint<1>, in %en: !firrtl.uint<1>, out %out: !firrtl.uint<4>) {
-  // CHECK: [[WRAPPER:%.+]] = firrtl.wire   : !firrtl.vector<uint<1>, 4>
+  // CHECK: [[WRAPPER:%.+]] = firrtl.wire{{.*}}   : !firrtl.vector<uint<1>, 4>
   // CHECK: %0 = firrtl.subindex [[WRAPPER]][0] : !firrtl.vector<uint<1>, 4>
   // CHECK: %1 = firrtl.subindex [[WRAPPER]][1] : !firrtl.vector<uint<1>, 4>
   // CHECK: %2 = firrtl.cat %1, %0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
@@ -102,7 +102,7 @@ firrtl.module @Test(in %x: !firrtl.uint<4>, in %y: !firrtl.uint<1>, in %en: !fir
 // CHECK-LABEL: firrtl.module @Test4
 firrtl.module @Test4(in %x: !firrtl.uint<4>, in %y: !firrtl.uint<1>, in %en: !firrtl.uint<1>, out %out: !firrtl.uint<4>) {
 
-  // CHECK: [[WRAPPER:%.+]] = firrtl.wire   : !firrtl.vector<uint<1>, 4>
+  // CHECK: [[WRAPPER:%.+]] = firrtl.wire{{.*}}   : !firrtl.vector<uint<1>, 4>
   // CHECK: %0 = firrtl.subindex [[WRAPPER]][0] : !firrtl.vector<uint<1>, 4>
   // CHECK: %1 = firrtl.subindex [[WRAPPER]][1] : !firrtl.vector<uint<1>, 4>
   // CHECK: %2 = firrtl.cat %1, %0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
@@ -137,7 +137,7 @@ firrtl.module @Test4(in %x: !firrtl.uint<4>, in %y: !firrtl.uint<1>, in %en: !fi
 // CHECK-LABEL: firrtl.module @Test5
 firrtl.module @Test5(in %x: !firrtl.uint<4>, in %y: !firrtl.uint<1>, in %en: !firrtl.uint<1>, in %en_2: !firrtl.uint<1>, out %out: !firrtl.uint<4>) {
 
-  // CHECK: [[WRAPPER:%.+]] = firrtl.wire   : !firrtl.vector<uint<1>, 4>
+  // CHECK: [[WRAPPER:%.+]] = firrtl.wire{{.*}}   : !firrtl.vector<uint<1>, 4>
   // CHECK: %0 = firrtl.subindex [[WRAPPER]][0] : !firrtl.vector<uint<1>, 4>
   // CHECK: %1 = firrtl.subindex [[WRAPPER]][1] : !firrtl.vector<uint<1>, 4>
   // CHECK: %2 = firrtl.cat %1, %0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
@@ -193,7 +193,7 @@ firrtl.module @Test5(in %x: !firrtl.uint<4>, in %y: !firrtl.uint<1>, in %en: !fi
 // CHECK-LABEL: firrtl.module @Test6
 firrtl.module @Test6(in %x: !firrtl.uint<4>, in %y: !firrtl.uint<4>, out %out: !firrtl.uint<4>) {
 
-  // CHECK: [[WRAPPER:%.+]] = firrtl.wire   : !firrtl.vector<uint<1>, 4>
+  // CHECK: [[WRAPPER:%.+]] = firrtl.wire{{.*}}   : !firrtl.vector<uint<1>, 4>
   // CHECK: %0 = firrtl.subindex [[WRAPPER]][0] : !firrtl.vector<uint<1>, 4>
   // CHECK: %1 = firrtl.subindex [[WRAPPER]][1] : !firrtl.vector<uint<1>, 4>
   // CHECK: %2 = firrtl.cat %1, %0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>

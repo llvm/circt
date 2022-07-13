@@ -55,6 +55,9 @@ void LowerBitIndexPass::runOnOperation() {
       auto mod = getOperation();
       name = "port.bitindex.wrapper";
       builder.setInsertionPointToStart(mod.getBody());
+      if (auto blockArg = var.dyn_cast<BlockArgument>()) {
+        name = mod.getPortName(blockArg.getArgNumber());
+      }
     } else {
       name = "local.bitindex.wrapper";
       builder.setInsertionPointAfter(defn);
@@ -129,7 +132,9 @@ void LowerBitIndexPass::runOnOperation() {
           bits.erase();
         }
       }
-      if (isa_and_nonnull<RegOp>(defn)) {
+      // if the bit-indexed value is a register then we need to wire it up to
+      // preserve its value by doing `wire[i] <= bits(var, i, i)`
+      if (isa_and_nonnull<RegOp>(defn) || isa_and_nonnull<RegResetOp>(defn)) {
         ImplicitLocOpBuilder builder(defn->getLoc(), defn);
         builder.setInsertionPointAfter(wire);
         for (int i = 0; i < w; i++) {
