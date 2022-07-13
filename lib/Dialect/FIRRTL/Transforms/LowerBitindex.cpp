@@ -1,4 +1,5 @@
-//===- LowerBitindex.cpp - Lower Bitindex  -----------------------------------------===//
+//===- LowerBitindex.cpp - Lower Bitindex
+//-----------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -14,9 +15,9 @@
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Parallel.h"
-#include "mlir/IR/ImplicitLocOpBuilder.h"
 
 #define DEBUG_TYPE "firrtl-lower-bitindex"
 
@@ -36,7 +37,8 @@ void LowerBitIndexPass::runOnOperation() {
   DenseSet<Value> variables;
 
   // collect all values that are used as input to a bitindex
-  for (auto bitindex : llvm::make_early_inc_range(getOperation().getOps<BitindexOp>())) {
+  for (auto bitindex :
+       llvm::make_early_inc_range(getOperation().getOps<BitindexOp>())) {
     if (bitindex->getUses().empty()) {
       bitindex.erase();
       continue;
@@ -50,18 +52,18 @@ void LowerBitIndexPass::runOnOperation() {
     llvm::StringRef name;
     ImplicitLocOpBuilder builder(var.getLoc(), var.getContext());
     if (!defn) {
-        auto mod = getOperation();
-        name = "port.bitindex.wrapper";
-        builder.setInsertionPointToStart(mod.getBody());
+      auto mod = getOperation();
+      name = "port.bitindex.wrapper";
+      builder.setInsertionPointToStart(mod.getBody());
     } else {
-        name = "local.bitindex.wrapper";
-        builder.setInsertionPointAfter(defn);
-        // improve the name if it was defined as a wire or reg
-        if (auto wireOp = dyn_cast<WireOp>(defn)) {
-          name = wireOp.name();
-        } else if (auto regOp = dyn_cast<RegOp>(defn)) {
-          name = regOp.name();
-        }
+      name = "local.bitindex.wrapper";
+      builder.setInsertionPointAfter(defn);
+      // improve the name if it was defined as a wire or reg
+      if (auto wireOp = dyn_cast<WireOp>(defn)) {
+        name = wireOp.name();
+      } else if (auto regOp = dyn_cast<RegOp>(defn)) {
+        name = regOp.name();
+      }
     }
     // must be an int type to be the input to a bitindex
     if (auto i = var.getType().dyn_cast<IntType>()) {
@@ -72,7 +74,8 @@ void LowerBitIndexPass::runOnOperation() {
       }
       auto w = i.getWidth().getValue();
       // wrapper wire that is a UInt<1>[var.width]
-      auto wire = builder.create<WireOp>(FVectorType::get(UIntType::get(var.getContext(), 1), w), name);
+      auto wire = builder.create<WireOp>(
+          FVectorType::get(UIntType::get(var.getContext(), 1), w), name);
 
       // for every use of var replace any connection to it with a connection
       // that assigns each individual bit of the src to the dest
@@ -117,7 +120,7 @@ void LowerBitIndexPass::runOnOperation() {
           // `cat(wire[hi], cat(..., wire[lo]))`
           ImplicitLocOpBuilder builder(bits.getLoc(), bits);
           Value prev = builder.create<SubindexOp>(wire, bits.lo());
-          for (unsigned i = bits.lo()+1; i < bits.hi(); i++) {
+          for (unsigned i = bits.lo() + 1; i < bits.hi(); i++) {
             Value subidx = builder.create<SubindexOp>(wire, i);
             Value cat = builder.create<CatPrimOp>(subidx, prev);
             prev = cat;
@@ -141,7 +144,6 @@ void LowerBitIndexPass::runOnOperation() {
 
 } // end anonymous namespace
 
-std::unique_ptr<mlir::Pass>
-circt::firrtl::createLowerBitindexPass() {
+std::unique_ptr<mlir::Pass> circt::firrtl::createLowerBitindexPass() {
   return std::make_unique<LowerBitIndexPass>();
 }

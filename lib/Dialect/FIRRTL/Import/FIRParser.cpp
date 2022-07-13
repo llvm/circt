@@ -1834,9 +1834,11 @@ ParseResult FIRStmtParser::parsePostFixIntSubscript(Value &result) {
   if (!resultType) {
     // Emit the error at the right location.  translateLocation is expensive.
     if (bitindex) {
-      (void)BitindexOp::inferReturnType({result}, attrs, translateLocation(loc));
+      (void)BitindexOp::inferReturnType({result}, attrs,
+                                        translateLocation(loc));
     } else {
-      (void)SubindexOp::inferReturnType({result}, attrs, translateLocation(loc));
+      (void)SubindexOp::inferReturnType({result}, attrs,
+                                        translateLocation(loc));
     }
     return failure();
   }

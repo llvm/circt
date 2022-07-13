@@ -128,8 +128,7 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
         return foldFlow(op.input(),
                         op.isFieldFlipped() ? swap() : accumulatedFlow);
       })
-      .Case<BitindexOp>(
-          [](auto) { return Flow::Sink; })
+      .Case<BitindexOp>([](auto) { return Flow::Sink; })
       .Case<SubindexOp, SubaccessOp>(
           [&](auto op) { return foldFlow(op.input(), accumulatedFlow); })
       // Registers, Wires, and behavioral memory ports are always Duplex.
@@ -2491,8 +2490,7 @@ FIRRTLType SubindexOp::inferReturnType(ValueRange operands,
   return {};
 }
 
-bool BitindexOp::isBitIndex(ValueRange operands,
-                            ArrayRef<NamedAttribute> attrs,
+bool BitindexOp::isBitIndex(ValueRange operands, ArrayRef<NamedAttribute> attrs,
                             Optional<Location> loc) {
   auto inType = operands[0].getType();
   return inType.isa<IntType>();
@@ -2506,8 +2504,8 @@ FIRRTLType BitindexOp::inferReturnType(ValueRange operands,
       getAttr<IntegerAttr>(attrs, "index").getValue().getZExtValue();
 
   if (auto intType = inType.dyn_cast<IntType>()) {
-    if ((int) fieldIdx < intType.getWidthOrSentinel()) {
-        return UIntType::get(inType.getContext(), 1);
+    if ((int)fieldIdx < intType.getWidthOrSentinel()) {
+      return UIntType::get(inType.getContext(), 1);
     }
     if (loc)
       mlir::emitError(*loc, "out of range index '")
@@ -2518,7 +2516,7 @@ FIRRTLType BitindexOp::inferReturnType(ValueRange operands,
   if (loc)
     mlir::emitError(*loc, "bitindex requires UInt or SInt");
 
-  return{};
+  return {};
 }
 
 FIRRTLType SubaccessOp::inferReturnType(ValueRange operands,

@@ -207,8 +207,8 @@ def BitindexOp : FIRRTLExprOp<"bitindex", [
 
   let firrtlExtraClassDeclaration = [{
     static bool isBitIndex(ValueRange operands,
-                              ArrayRef<NamedAttribute> attrs,
-                              Optional<Location> loc);
+                           ArrayRef<NamedAttribute> attrs,
+                           Optional<Location> loc);
   }];
 }
 
