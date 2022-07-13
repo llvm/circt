@@ -183,6 +183,12 @@ def LowerMemory : Pass<"firrtl-lower-memory", "firrtl::CircuitOp"> {
     This pass lowers FIRRTL memory operations to generated modules.
   }];
   let constructor = "circt::firrtl::createLowerMemoryPass()";
+  let statistics = [
+    Statistic<"numCreatedMemModules", "num-created-mem-modules",
+      "Number of modules created">,
+    Statistic<"numLoweredMems", "num-lowered-mems",
+      "Number of memories lowered">,
+  ];
 }
 
 def WireDFT : Pass<"firrtl-dft", "firrtl::CircuitOp"> {
