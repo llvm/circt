@@ -496,6 +496,10 @@ def InferReadWrite : Pass<"firrtl-infer-rw", "firrtl::FModuleOp"> {
     looking for a situation where the read/write is the complement of the write/read.
   }];
   let constructor = "circt::firrtl::createInferReadWritePass()";
+  let statistics = [
+    Statistic<"numRWPortMemoriesInferred", "num-rw-port-mems-inferred",
+      "Number of memories inferred to use RW port">,
+  ];
 }
 
 def InjectDUTHierarchy : Pass<"firrtl-inject-dut-hier", "firrtl::CircuitOp"> {
