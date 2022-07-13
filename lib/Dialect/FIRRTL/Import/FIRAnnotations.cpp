@@ -21,6 +21,7 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/OperationSupport.h"
+#include "mlir/IR/Threading.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -94,104 +95,39 @@ bool circt::firrtl::fromOMIRJSON(json::Value &value, StringRef circuitTarget,
                                  json::Path path, MLIRContext *context) {
   // The JSON value must be an array of objects.  Anything else is reported as
   // invalid.
+  llvm::errs() << "start get array\n";
   auto *array = value.getAsArray();
+  llvm::errs() << "stop get array\n";
   if (!array) {
     path.report(
         "Expected OMIR to be an array of nodes, but found something else.");
     return false;
   }
 
-  // Build a mutable map of Target to Annotation.
   SmallVector<Attribute> omnodes;
-  for (size_t i = 0, e = (*array).size(); i != e; ++i) {
+  auto parse = [&](size_t i) {
     auto *object = (*array)[i].getAsObject();
     auto p = path.index(i);
     if (!object) {
       p.report("Expected OMIR to be an array of objects, but found an array of "
                "something else.");
-      return false;
+      return failure();
     }
 
-    // Manually built up OMNode.
-    NamedAttrList omnode;
+    omnodes[i] = convertJSONToAttribute(context, (*array)[i], path);
 
-    // Validate that this looks like an OMNode.  This should have three fields:
-    //   - "info": String
-    //   - "id": String that starts with "OMID:"
-    //   - "fields": Array<Object>
-    // Fields is optional and is a dictionary encoded as an array of objects:
-    //   - "info": String
-    //   - "name": String
-    //   - "value": JSON
-    // The dictionary is keyed by the "name" member and the array of fields is
-    // guaranteed to not have collisions of the "name" key.
-    auto maybeInfo = object->getString("info");
-    if (!maybeInfo) {
-      p.report("OMNode missing mandatory member \"info\" with type \"string\"");
-      return false;
-    }
-    auto maybeID = object->getString("id");
-    if (!maybeID || !maybeID.getValue().startswith("OMID:")) {
-      p.report("OMNode missing mandatory member \"id\" with type \"string\" "
-               "that starts with \"OMID:\"");
-      return false;
-    }
-    auto *maybeFields = object->get("fields");
-    if (maybeFields && !maybeFields->getAsArray()) {
-      p.report("OMNode has \"fields\" member with incorrect type (expected "
-               "\"array\")");
-      return false;
-    }
-    Attribute fields;
-    if (!maybeFields)
-      fields = DictionaryAttr::get(context, {});
-    else {
-      auto array = *maybeFields->getAsArray();
-      NamedAttrList fieldAttrs;
-      for (size_t i = 0, e = array.size(); i != e; ++i) {
-        auto *field = array[i].getAsObject();
-        auto pI = p.field("fields").index(i);
-        if (!field) {
-          pI.report("OMNode has field that is not an \"object\"");
-          return false;
-        }
-        auto maybeInfo = field->getString("info");
-        if (!maybeInfo) {
-          pI.report(
-              "OMField missing mandatory member \"info\" with type \"string\"");
-          return false;
-        }
-        auto maybeName = field->getString("name");
-        if (!maybeName) {
-          pI.report(
-              "OMField missing mandatory member \"name\" with type \"string\"");
-          return false;
-        }
-        auto *maybeValue = field->get("value");
-        if (!maybeValue) {
-          pI.report("OMField missing mandatory member \"value\"");
-          return false;
-        }
-        NamedAttrList values;
-        values.append("info", StringAttr::get(context, maybeInfo.getValue()));
-        values.append("value", convertJSONToAttribute(context, *maybeValue,
-                                                      pI.field("value")));
-        fieldAttrs.append(maybeName.getValue(),
-                          DictionaryAttr::get(context, values));
-      }
-      fields = DictionaryAttr::get(context, fieldAttrs);
-    }
+    return success();
+  };
 
-    omnode.append("info", StringAttr::get(context, maybeInfo.getValue()));
-    omnode.append("id", convertJSONToAttribute(context, *object->get("id"),
-                                               p.field("id")));
-    omnode.append("fields", fields);
-    omnodes.push_back(DictionaryAttr::get(context, omnode));
-  }
-
+  llvm::errs() << array->size() << "\n";
+  omnodes.resize(array->size());
   NamedAttrList omirAnnoFields;
   omirAnnoFields.append("class", StringAttr::get(context, omirAnnoClass));
-  omirAnnoFields.append("nodes", convertJSONToAttribute(context, value, path));
+  llvm::errs() << "parallel start\n";
+  if (failed(mlir::failableParallelForEachN(context, 0, array->size(), parse)))
+    return false;
+  llvm::errs() << "parallel start\n";
+  omirAnnoFields.append("nodes", ArrayAttr::get(context, omnodes));
 
   DictionaryAttr omirAnno = DictionaryAttr::get(context, omirAnnoFields);
 
@@ -228,14 +164,16 @@ bool circt::firrtl::fromJSONRaw(json::Value &value, StringRef circuitTarget,
     return false;
   }
 
-  // Build an array of annotations.
-  for (size_t i = 0, e = (*array).size(); i != e; ++i) {
-    auto object = (*array)[i].getAsObject();
+  size_t offset = attrs.size();
+  auto parse = [&](size_t i) {
+    SmallVector<Attribute> foo;
+
+    auto *object = (*array)[i].getAsObject();
     auto p = path.index(i);
     if (!object) {
       p.report("Expected annotations to be an array of objects, but found an "
                "array of something else.");
-      return false;
+      return failure();
     }
 
     // Build up the Attribute to represent the Annotation
@@ -246,11 +184,16 @@ bool circt::firrtl::fromJSONRaw(json::Value &value, StringRef circuitTarget,
         metadata.append(field.first, value);
         continue;
       }
-      return false;
+      return failure();
     }
 
-    attrs.push_back(DictionaryAttr::get(context, metadata));
-  }
+    attrs[offset + i] = DictionaryAttr::get(context, metadata);
+    return success();
+  };
+
+  attrs.resize(offset + array->size());
+  if (failed(mlir::failableParallelForEachN(context, 0, array->size(), parse)))
+    return false;
 
   return true;
 }
