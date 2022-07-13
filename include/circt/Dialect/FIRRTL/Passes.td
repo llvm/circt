@@ -171,6 +171,10 @@ def FlattenMemory : Pass<"firrtl-flatten-memory", "firrtl::FModuleOp"> {
     appropriate bitcasts to access the data.
   }];
   let constructor = "circt::firrtl::createFlattenMemoryPass()";
+  let statistics = [
+    Statistic<"numFlattenedMems", "num-flatten-mems",
+      "Number of memories flattened">,
+  ];
 }
 
 def LowerMemory : Pass<"firrtl-lower-memory", "firrtl::CircuitOp"> {

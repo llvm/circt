@@ -173,6 +173,7 @@ struct FlattenMemoryPass : public FlattenMemoryBase<FlattenMemoryPass> {
           }
         }
       }
+      ++numFlattenedMems;
       memOp.erase();
       return;
     });
