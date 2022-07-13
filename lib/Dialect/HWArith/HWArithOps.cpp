@@ -147,6 +147,34 @@ IntegerType DivOp::inferReturnType(MLIRContext *context, IntegerType lhs,
 }
 
 //===----------------------------------------------------------------------===//
+// Utility
+//===----------------------------------------------------------------------===//
+
+namespace circt {
+namespace hwarith {
+
+template <typename Op>
+static LogicalResult verifyBinOp(Op binOp) {
+  auto ops = binOp.inputs();
+  if (ops.size() != 2)
+    return binOp.emitError() << "expected 2 operands but got " << ops.size();
+
+  auto lhs = ops[0];
+  auto rhs = ops[1];
+  auto gotType = binOp.getResult().getType();
+  auto expectedType = Op::inferReturnType(
+      binOp.getContext(), lhs.getType().template cast<IntegerType>(),
+      rhs.getType().template cast<IntegerType>());
+  if (gotType != expectedType)
+    return binOp.emitError() << "expected result type: " << expectedType
+                             << " but " << gotType << " was specified";
+  return success();
+}
+
+} // namespace hwarith
+} // namespace circt
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 

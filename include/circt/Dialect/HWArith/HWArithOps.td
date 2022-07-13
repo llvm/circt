@@ -57,22 +57,7 @@ class BinOp<string mnemonic, list<Trait> traits = []> :
   }];
 
   let extraClassDefinition = [{
-    LogicalResult $cppClass::verify() {
-      auto ops = inputs();
-      if (ops.size() != 2)
-        return emitError() << "expected 2 operands but got " << ops.size();
-
-      auto lhs = ops[0];
-      auto rhs = ops[1];
-      auto gotType = getResult().getType();
-      auto expectedType =
-          inferReturnType(getContext(), lhs.getType().cast<IntegerType>(),
-                          rhs.getType().cast<IntegerType>());
-      if (gotType != expectedType)
-        return emitError() << "expected result type: " << expectedType << " but "
-                          << gotType << " was specified";
-      return success();
-    }
+    LogicalResult $cppClass::verify() { return hwarith::verifyBinOp(*this); }
   }];
 }
 
