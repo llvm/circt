@@ -41,16 +41,10 @@ struct IMDeadCodeElimPass : public IMDeadCodeElimBase<IMDeadCodeElimPass> {
   void rewriteModuleBody(FModuleOp module);
   void eraseEmptyModule(FModuleOp module);
 
-  void markModuleAlive(FModuleOp module) { liveModules.insert(module); }
-
   void markAlive(Value value) {
     //  If the value is already in `liveSet`, skip it.
-    if (liveSet.insert(value).second) {
-      FModuleOp module = value.getParentRegion()->getParentOfType<FModuleOp>();
-      assert(module && "a parent module should be found");
-      markModuleAlive(module);
+    if (liveSet.insert(value).second)
       worklist.push_back(value);
-    }
   }
 
   /// Return true if the value is known alive.
@@ -64,14 +58,14 @@ struct IMDeadCodeElimPass : public IMDeadCodeElimBase<IMDeadCodeElimPass> {
 
   /// Return true if the block is alive.
   bool isBlockExecutable(Block *block) const {
-    return populatedBlocks.count(block);
+    return executableBlocks.count(block);
   }
 
   void visitUser(Operation *op);
   void visitValue(Value value);
   void visitConnect(FConnectLike connect);
   void visitSubelement(Operation *op);
-  void populateModuleBody(Block *block);
+  void markBlockExecutable(Block *block);
   void markWireOrRegOrNode(Operation *op);
   void markMemOp(MemOp op);
   void markInstanceOp(InstanceOp instanceOp);
@@ -79,7 +73,7 @@ struct IMDeadCodeElimPass : public IMDeadCodeElimBase<IMDeadCodeElimPass> {
 
 private:
   /// The set of blocks that are known to execute, or are intrinsically alive.
-  DenseSet<Block *> populatedBlocks;
+  DenseSet<Block *> executableBlocks;
 
   /// This keeps track of users the instance results that correspond to output
   /// ports.
@@ -91,9 +85,6 @@ private:
   /// users need to be reprocessed.
   SmallVector<Value, 64> worklist;
   llvm::DenseSet<Value> liveSet;
-
-  /// A set of modules known to be alive.
-  llvm::DenseSet<FModuleOp> liveModules;
 };
 } // namespace
 
@@ -115,7 +106,6 @@ void IMDeadCodeElimPass::markUnknownSideEffectOp(Operation *op) {
     markAlive(result);
   for (auto operand : op->getOperands())
     markAlive(operand);
-  markModuleAlive(op->getParentOfType<FModuleOp>());
 }
 
 void IMDeadCodeElimPass::visitUser(Operation *op) {
@@ -148,7 +138,7 @@ void IMDeadCodeElimPass::markInstanceOp(InstanceOp instance) {
 
   // Otherwise this is a defined module.
   auto fModule = cast<FModuleOp>(op);
-  populateModuleBody(fModule.getBody());
+  markBlockExecutable(fModule.getBody());
 
   // Ok, it is a normal internal module reference so populate
   // resultPortToInstanceResultMapping.
@@ -163,9 +153,9 @@ void IMDeadCodeElimPass::markInstanceOp(InstanceOp instance) {
   }
 }
 
-void IMDeadCodeElimPass::populateModuleBody(Block *block) {
-  if (!populatedBlocks.insert(block).second)
-    return; // Already populated.
+void IMDeadCodeElimPass::markBlockExecutable(Block *block) {
+  if (!executableBlocks.insert(block).second)
+    return; // Already executable.
 
   // Mark ports with don't touch as alive.
   for (auto blockArg : block->getArguments())
@@ -197,8 +187,7 @@ void IMDeadCodeElimPass::runOnOperation() {
   for (auto module : circuit.getBody()->getOps<FModuleOp>()) {
     // Mark the ports of public modules as alive.
     if (module.isPublic()) {
-      populateModuleBody(module.getBody());
-      markModuleAlive(module);
+      markBlockExecutable(module.getBody());
       for (auto port : module.getBody()->getArguments())
         markAlive(port);
     }
@@ -218,9 +207,17 @@ void IMDeadCodeElimPass::runOnOperation() {
                         circuit.getBody()->getOps<FModuleOp>(),
                         [&](auto op) { rewriteModuleBody(op); });
 
-  // Erase empty modules.
-  for (auto module :
-       llvm::make_early_inc_range(circuit.getBody()->getOps<FModuleOp>()))
+  // Erase empty modules. To erase empty modules transitively, it is necessary
+  // to visit modules in the post order of instance graph.
+  // FIXME: We copy the list of modules into a vector first to avoid iterator
+  // invalidation while we mutate the instance graph. See issue 3387.
+  SmallVector<FModuleOp, 0> modules(llvm::make_filter_range(
+      llvm::map_range(
+          llvm::post_order(instanceGraph),
+          [](auto *node) { return dyn_cast<FModuleOp>(*node->getModule()); }),
+      [](auto module) { return module; }));
+
+  for (auto module : modules)
     eraseEmptyModule(module);
 }
 
@@ -424,7 +421,8 @@ void IMDeadCodeElimPass::eraseEmptyModule(FModuleOp module) {
 
   // If the module doesn't have arguments, operations or annotations, we
   // consider it to be dead.
-  if (liveModules.count(module) || !module.annotations().empty())
+  if (!module.getBody()->args_empty() || !module.getBody()->empty() ||
+      !module.annotations().empty())
     return;
 
   // Ok, the module is empty. Delete instances unless they have symbols.
