@@ -1,7 +1,7 @@
 // RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
 
-// CHECK-LABEL: @test1 {
-module @test1 {
+// CHECK-LABEL: @test1() {
+hw.module @test1() {
   // CHECK: %0 = hwarith.constant 0 : ui1
   // CHECK: %1 = hwarith.constant 1 : ui1
   // CHECK: %2 = hwarith.constant 2 : ui2
