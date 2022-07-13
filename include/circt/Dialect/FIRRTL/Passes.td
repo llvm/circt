@@ -293,6 +293,14 @@ def LowerCHIRRTLPass : Pass<"firrtl-lower-chirrtl", "firrtl::FModuleOp"> {
 
   }];
   let constructor = "circt::firrtl::createLowerCHIRRTLPass()";
+  let statistics = [
+    Statistic<"numCreatedMems", "num-created-mems",
+      "Number of memories created">,
+    Statistic<"numLoweredMems", "num-lowered-mems",
+      "Number of memories lowered">,
+    Statistic<"numPortlessMems", "num-portless-mems",
+      "Number of memories dropped as having no valid ports">,
+  ];
 }
 
 def InferWidths : Pass<"firrtl-infer-widths", "firrtl::CircuitOp"> {

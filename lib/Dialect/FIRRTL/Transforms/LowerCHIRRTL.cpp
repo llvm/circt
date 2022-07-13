@@ -274,6 +274,7 @@ void LowerCHIRRTLPass::replaceMem(Operation *cmem, StringRef name,
   // We have several early breaks in this function, so we record the CHIRRTL
   // memory for deletion here.
   opsToDelete.push_back(cmem);
+  ++numLoweredMems;
 
   auto cmemType = cmem->getResult(0).getType().cast<CMemoryType>();
   auto depth = cmemType.getNumElements();
@@ -308,8 +309,10 @@ void LowerCHIRRTLPass::replaceMem(Operation *cmem, StringRef name,
   }
 
   // If there are no valid memory ports, don't create a memory.
-  if (ports.empty())
+  if (ports.empty()) {
+    ++numPortlessMems;
     return;
+  }
 
   // Canonicalize the ports into alphabetical order.
   llvm::array_pod_sort(ports.begin(), ports.end(),
@@ -342,6 +345,7 @@ void LowerCHIRRTLPass::replaceMem(Operation *cmem, StringRef name,
       IntegerAttr());
   if (auto innerSym = cmem->getAttr("inner_sym"))
     memory->setAttr("inner_sym", innerSym);
+  ++numCreatedMems;
 
   // Process each memory port, initializing the memory port and inferring when
   // to set the enable signal high.
