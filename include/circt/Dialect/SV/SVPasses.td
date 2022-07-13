@@ -51,6 +51,8 @@ def PrettifyVerilog : Pass<"prettify-verilog", "hw::HWModuleOp"> {
   }];
 
   let constructor = "circt::sv::createPrettifyVerilogPass()";
+
+  let dependentDialects = ["circt::sv::SVDialect"];
 }
 
 def HWStubExternalModules : Pass<"hw-stub-external-modules",

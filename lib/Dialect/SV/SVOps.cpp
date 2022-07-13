@@ -30,8 +30,8 @@ using namespace sv;
 /// Return true if the specified operation is an expression.
 bool sv::isExpression(Operation *op) {
   return isa<VerbatimExprOp, VerbatimExprSEOp, GetModportOp,
-             ReadInterfaceSignalOp, ConstantXOp, ConstantZOp, MacroRefExprOp>(
-      op);
+             ReadInterfaceSignalOp, ConstantXOp, ConstantZOp, MacroRefExprOp,
+             ReorderOp>(op);
 }
 
 LogicalResult sv::verifyInProceduralRegion(Operation *op) {
@@ -1675,6 +1675,20 @@ void CoverConcurrentOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                                     MLIRContext *context) {
   results.add(
       canonicalizeConcurrentVerifOp<CoverConcurrentOp, /* EraseIfZero */ true>);
+}
+
+LogicalResult ReorderOp::inferReturnTypes(MLIRContext *context,
+                                          Optional<Location> loc,
+                                          ValueRange operands,
+                                          DictionaryAttr attrs,
+                                          mlir::RegionRange regions,
+                                          SmallVectorImpl<Type> &results) {
+  unsigned resultWidth = 0;
+  for (auto input : operands) {
+    resultWidth += input.getType().cast<IntegerType>().getWidth();
+  }
+  results.push_back(IntegerType::get(context, resultWidth));
+  return success();
 }
 
 //===----------------------------------------------------------------------===//

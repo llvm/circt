@@ -240,3 +240,14 @@ hw.module @unary_sink_no_duplicate(%arg0: i4) -> (result: i4) {
   %r = comb.concat %a, %b, %c : i1, i1, i2
   hw.output %r : i4
 }
+
+// CHECK-LABEL: exportStream
+hw.module @exportStream(%arg: i4) -> (o: i4) {
+  %0 = comb.extract %arg from 0 : (i4) -> i1
+  %1 = comb.extract %arg from 1 : (i4) -> i1
+  %2 = comb.extract %arg from 2 : (i4) -> i1
+  %3 = comb.extract %arg from 3 : (i4) -> i1
+  %4 = comb.concat %0, %1, %2, %3 : i1, i1, i1, i1
+  // CHECK: %4 = sv.reorder %arg : i4
+  hw.output %4 : i4
+}

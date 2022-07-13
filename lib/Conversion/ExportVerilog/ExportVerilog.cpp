@@ -1674,6 +1674,7 @@ private:
   SubExprInfo visitSV(MacroRefExprOp op);
   SubExprInfo visitSV(ConstantXOp op);
   SubExprInfo visitSV(ConstantZOp op);
+  SubExprInfo visitSV(ReorderOp op);
 
   // Noop cast operators.
   SubExprInfo visitSV(ReadInOutOp op) {
@@ -2184,6 +2185,14 @@ SubExprInfo ExprEmitter::visitSV(ConstantZOp op) {
     emitError(op, "SV attributes emission is unimplemented for the op");
 
   os << op.getWidth() << "'bz";
+  return {Unary, IsUnsigned};
+}
+
+SubExprInfo ExprEmitter::visitSV(ReorderOp op) {
+  os << "{<<{";
+  llvm::interleaveComma(op.inputs(), os,
+                        [&](Value v) { emitSubExpr(v, LowestPrecedence); });
+  os << "}}";
   return {Unary, IsUnsigned};
 }
 

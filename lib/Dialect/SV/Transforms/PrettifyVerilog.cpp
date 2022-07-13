@@ -22,8 +22,11 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVPasses.h"
+#include "circt/Support/LoweringOptions.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Matchers.h"
+#include "mlir/IR/PatternMatch.h"
+#include "mlir/Transforms/DialectConversion.h"
 
 using namespace circt;
 
@@ -36,15 +39,73 @@ struct PrettifyVerilogPass
     : public sv::PrettifyVerilogBase<PrettifyVerilogPass> {
   void runOnOperation() override;
 
+  void markChanges() { anythingChanged = true; }
+
 private:
   void processPostOrder(Block &block);
   bool prettifyUnaryOperator(Operation *op);
   void sinkOrCloneOpToUses(Operation *op);
   void sinkExpression(Operation *op);
   void useNamedOperands(Operation *op, DenseMap<Value, Operation *> &pipeMap);
+  void replaceConcatWithStream(Operation *op);
 
   bool anythingChanged;
 };
+
+struct ReplaceConcatWithStreamPattern
+    : public OpRewritePattern<comb::ConcatOp> {
+  ReplaceConcatWithStreamPattern(MLIRContext *context,
+                                 PrettifyVerilogPass *pass)
+      : OpRewritePattern(context), pass(pass){};
+
+  using OpRewritePattern::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(comb::ConcatOp op,
+                                PatternRewriter &rewriter) const override {
+    auto inputs = op.inputs();
+    auto size = inputs.size();
+    // Do not change anything that has less than 3 inputs since it confuses
+    // more than it helps
+    if (inputs.size() < 3) {
+      return failure();
+    }
+
+    auto sourceOp = inputs[0].getDefiningOp<comb::ExtractOp>();
+    if (!sourceOp)
+      return failure();
+
+    Value source = sourceOp.getOperand();
+
+    // Fast path: the input size is not equal to the width of the source.
+    if (size != source.getType().getIntOrFloatBitWidth())
+      return failure();
+
+    // Tracks the order of the bits that were extracted
+    SmallVector<size_t> insertionOrder(size);
+    insertionOrder[0] = sourceOp.lowBit();
+
+    for (size_t i = 1; i != size; ++i) {
+      auto extractOp = inputs[i].getDefiningOp<comb::ExtractOp>();
+      if (!extractOp || extractOp.getOperand() != source)
+        return failure();
+      insertionOrder[i] = extractOp.lowBit();
+    }
+
+    // Check if the insertion is reversed, return if it isn't
+    for (size_t i = 0; i < size; ++i) {
+      if (insertionOrder[i] != i)
+        return failure();
+    }
+    rewriter.replaceOpWithNewOp<sv::ReorderOp>(op, source.getType(),
+                                               llvm::makeArrayRef(source));
+    pass->markChanges();
+    return success();
+  }
+
+private:
+  PrettifyVerilogPass *pass;
+};
+
 } // end anonymous namespace
 
 /// Return true if this is something that will get printed as a unary operator
@@ -302,6 +363,16 @@ void PrettifyVerilogPass::runOnOperation() {
   // Keeps track if anything changed during this pass, used to determine if
   // the analyses were preserved.
   anythingChanged = false;
+
+  ConversionTarget target(getContext());
+  target.addLegalOp<sv::ReorderOp>();
+
+  RewritePatternSet patterns(&getContext());
+
+  patterns.insert<ReplaceConcatWithStreamPattern>(&getContext(), this);
+
+  if (failed(applyPartialConversion(thisModule, target, std::move(patterns))))
+    signalPassFailure();
 
   // Walk the operations in post-order, transforming any that are interesting.
   processPostOrder(*thisModule.getBodyBlock());
