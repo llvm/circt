@@ -3485,14 +3485,14 @@ LogicalResult FIRRTLLowering::visitExpr(MultibitMuxOp op) {
   // following form.
   //
   // wire GEN;
-  // (* synopsys infer_mux_override *)
-  // assign GEN = array[index] (* cadence map_to_mux *);
+  // assign GEN = array[index] /* cadence map_to_mux */;
+  // /* synopsys infer_mux_override */
 
   Value array = builder.create<hw::ArrayCreateOp>(loweredInputs);
   auto valWire = builder.create<sv::WireOp>(lowerType(op.getType()));
   auto arrayGet = builder.create<hw::ArrayGetOp>(array, index);
 
-  // FIXME: We currently use verbatim op to add pragams.  Use comment attributes
+  // FIXME: We currently use verbatim op to add pragams. Use comment attributes
   // once they are supported.
   builder.create<sv::VerbatimOp>(
       arrayGet.getLoc(),
