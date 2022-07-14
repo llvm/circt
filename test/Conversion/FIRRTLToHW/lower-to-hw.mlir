@@ -1656,4 +1656,12 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   firrtl.module private @eliminateSingleOutputConnects(in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
     firrtl.strictconnect %b, %a : !firrtl.uint<1>
   }
+  
+  // Check that modules with comments are lowered.
+  // CHECK-LABEL: hw.module private @Commented() attributes {
+  // CHECK-SAME:      comment = "this module is commented"
+  // CHECK-SAME:  }
+  firrtl.module private @Commented() attributes {
+      comment = "this module is commented"
+  } {}
 }

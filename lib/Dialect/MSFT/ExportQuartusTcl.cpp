@@ -133,7 +133,7 @@ void TclOutputState::emitInnerRefPart(hw::InnerRefAttr innerRef) {
 void TclOutputState::emitPath(hw::GlobalRefOp ref,
                               Optional<StringRef> subpath) {
   // Traverse each part of the path.
-  auto parts = ref.namepathAttr().getAsRange<hw::InnerRefAttr>();
+  auto parts = ref.getNamepathAttr().getAsRange<hw::InnerRefAttr>();
   auto lastPart = std::prev(parts.end());
   for (auto part : parts) {
     emitInnerRefPart(part);

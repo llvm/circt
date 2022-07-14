@@ -42,7 +42,7 @@ bool ExportVerilog::isSimpleReadOrPort(Value v) {
   auto read = dyn_cast<ReadInOutOp>(vOp);
   if (!read)
     return false;
-  auto readSrc = read.input().getDefiningOp();
+  auto readSrc = read.getInput().getDefiningOp();
   if (!readSrc)
     return false;
   return isa<WireOp, RegOp>(readSrc);
@@ -333,7 +333,7 @@ static bool rewriteSideEffectingExpr(Operation *op) {
   // Check to see if this is already rewritten.
   if (op->hasOneUse()) {
     if (auto assign = dyn_cast<BPAssignOp>(*op->user_begin()))
-      if (assign.dest().getDefiningOp<RegOp>())
+      if (assign.getDest().getDefiningOp<RegOp>())
         return false;
   }
 
@@ -444,15 +444,15 @@ static void reuseExistingInOut(Operation *op) {
   if (!assign || uses.empty())
     return;
 
-  if (auto *cop = assign.src().getDefiningOp())
+  if (auto *cop = assign.getSrc().getDefiningOp())
     if (isa<ConstantOp>(cop))
       return;
 
   // Replace all saved uses with a read from the assigned destination.
-  ImplicitLocOpBuilder builder(assign.dest().getLoc(), op->getContext());
+  ImplicitLocOpBuilder builder(assign.getDest().getLoc(), op->getContext());
   for (OpOperand *use : uses) {
     builder.setInsertionPoint(use->getOwner());
-    auto read = builder.create<ReadInOutOp>(assign.dest());
+    auto read = builder.create<ReadInOutOp>(assign.getDest());
     use->set(read);
   }
 }
@@ -516,13 +516,13 @@ void ExportVerilog::prepareHWModule(Block &block,
         lowerAlwaysInlineOperation(newWireRead);
       };
       if (auto always = dyn_cast<AlwaysOp>(op)) {
-        for (auto clock : always.clocks())
+        for (auto clock : always.getClocks())
           enforceWire(clock);
         continue;
       }
       if (auto always = dyn_cast<AlwaysFFOp>(op)) {
-        enforceWire(always.clock());
-        if (auto reset = always.reset())
+        enforceWire(always.getClock());
+        if (auto reset = always.getReset())
           enforceWire(reset);
         continue;
       }
@@ -664,7 +664,7 @@ void ExportVerilog::prepareHWModule(Block &block,
       // If this is a an operation reading from a declaration, move it up,
       // along with the corresponding declaration.
       if (auto readInOut = dyn_cast<ReadInOutOp>(op)) {
-        auto *def = readInOut.input().getDefiningOp();
+        auto *def = readInOut.getInput().getDefiningOp();
         if (isMovableDeclaration(def)) {
           op.moveBefore(&block.front());
           def->moveBefore(&block.front());

@@ -171,7 +171,7 @@ FMemModuleOp
 LowerMemoryPass::emitMemoryModule(MemOp op, const FirMemory &mem,
                                   const SmallVectorImpl<PortInfo> &ports) {
   // Get a non-colliding name for the memory module, and update the summary.
-  auto newName = circuitNamespace.newName(mem.modName.getValue(), "_ext");
+  auto newName = circuitNamespace.newName(mem.modName.getValue(), "ext");
   auto moduleName = StringAttr::get(&getContext(), newName);
 
   // Insert the memory module at the bottom of the circuit.

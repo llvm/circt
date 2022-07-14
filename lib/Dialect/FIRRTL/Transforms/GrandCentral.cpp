@@ -166,7 +166,7 @@ struct MappingContextTraits<DescribedSignal, Context> {
     /// Construct a `Field` from a `DescribedSignal` (an `sv::InterfaceSignalOp`
     /// with an optional description).
     Field(IO &io, DescribedSignal &op)
-        : name(op.signal.sym_nameAttr().getValue()) {
+        : name(op.signal.getSymNameAttr().getValue()) {
 
       // Convert the description from a `StringAttr` (which may be null) to an
       // `Optional<StringRef>`.  This aligns exactly with the YAML
@@ -192,7 +192,7 @@ struct MappingContextTraits<DescribedSignal, Context> {
       // Do this by repeatedly unwrapping unpacked array types until you get to
       // the underlying type.  The dimensions need to be reversed as this
       // unwrapping happens in reverse order of the final representation.
-      auto tpe = op.signal.type();
+      auto tpe = op.signal.getType();
       while (auto vector = tpe.dyn_cast<hw::UnpackedArrayType>()) {
         dimensions.push_back(vector.getSize());
         tpe = vector.getElementType();
@@ -334,7 +334,7 @@ struct MappingContextTraits<sv::InterfaceOp, Context> {
               // This is a descripton.  Update the mutable description and
               // continue;
               if (tpe.getValue() == "description") {
-                description = op.stringAttr();
+                description = op.getStringAttr();
                 return;
               }
 
@@ -1439,8 +1439,9 @@ GrandCentralPass::traverseBundle(AugmentedBundleTypeAttr bundle, IntegerAttr id,
                        &getContext(), getOutputDirectory().getValue(),
                        iFaceName + ".sv",
                        /*excludFromFileList=*/true));
+  iface.setCommentAttr(builder.getStringAttr("VCS coverage exclude_file"));
 
-  builder.setInsertionPointToEnd(cast<sv::InterfaceOp>(iface).getBody());
+  builder.setInsertionPointToEnd(cast<sv::InterfaceOp>(iface).getBodyBlock());
 
   for (auto element : bundle.getElements()) {
     auto field = fromAttr(element);
@@ -1885,6 +1886,8 @@ void GrandCentralPass::runOnOperation() {
                         &getContext(), getOutputDirectory().getValue(),
                         mapping.getName() + ".sv",
                         /*excludeFromFilelist=*/true));
+              mapping->setAttr("comment", builder.getStringAttr(
+                                              "VCS coverage exclude_file"));
               companionIDMap[id] = {name.getValue(), op, mapping};
 
               // Instantiate the mapping module inside the companion.  Keep the
@@ -1930,6 +1933,8 @@ void GrandCentralPass::runOnOperation() {
                               op.getName() + ".sv",
                               /*excludeFromFileList=*/true,
                               /*includeReplicatedOps=*/true));
+              op->setAttr("comment",
+                          builder.getStringAttr("VCS coverage exclude_file"));
 
               // Look for any blackboxes instantiated by the companion and mark
               // them for inclusion in the Grand Central extraction directory.

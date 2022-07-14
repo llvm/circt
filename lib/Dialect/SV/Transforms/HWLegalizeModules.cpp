@@ -57,12 +57,12 @@ private:
 /// otherwise.
 Operation *HWLegalizeModulesPass::tryLoweringArrayGet(hw::ArrayGetOp getOp) {
   // If the operand is an array_create, then we can lower this into a casez.
-  auto createOp = getOp.input().getDefiningOp<hw::ArrayCreateOp>();
+  auto createOp = getOp.getInput().getDefiningOp<hw::ArrayCreateOp>();
   if (!createOp)
     return nullptr;
 
   // array_get(idx, array_create(a,b,c,d)) ==> casez(idx).
-  Value index = getOp.index();
+  Value index = getOp.getIndex();
 
   // Create the wire for the result of the casez in the hw.module.
   OpBuilder builder(&thisHWModule.getBodyBlock()->front());

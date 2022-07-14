@@ -94,11 +94,318 @@ for each operation. These define the semantics for how arithmetic overflow is to
 be handled both with respect to the width and signedness of operation results,
 as well as how this is communicated to a `comb` lowering.
 
+### Preliminaries
+
+The MLIR `ui<w>` types represents values in the interval *[0, 2^w - 1]*. Its
+signed counterpart, `si<w>`, represents values in the interval *[-2^(w-1),
+2^(w-1) - 1]*. For example, `ui4` covers values between *0* and *15*, whereas
+`si4` ranges from *-8* to *7*. For a given bit-width, the unsigned and the
+signed type contain the same number of values, but the represented interval is
+shifted by half the interval's size.
+
+```
+         │                  
+         ├──────────────┐   
+         │     ui4      │   
+ ┌───────┼──────┬───────┘   
+ │     si4      │           
+ └───────┼──────┘           
+─────────┴─────────────────▶
+-8       0      7      15   
+```
+
+We use the notation `UI_MIN<w>`, `UI_MAX<w>`, `SI_MIN<w>` and `SI_MAX<w>` to
+denote the smallest and largest values representable by an unsigned/signed type
+of the given bit-width. For example, `UI_MAX<4>` = *15*, and `SI_MIN<4>` = *-8*.
+
+The following relations for all `w > 0` are handy:
+```
+UI_MIN<w>     = 0
+2 * UI_MAX<w> = 2^(w+1) - 2
+UI_MAX<w+1>   = 2 * UI_MAX<w> + 1 
+
+SI_MIN<w>     < 0
+2 * SI_MIN<w> = -2^w
+SI_MIN<w+1>   = 2 * SI_MIN<w>
+2 * SI_MAX<w> = 2^w - 2
+SI_MAX<w+1>   = 2 * SI_MAX<w> + 1
+```
+
+The following result type inference rules are chosen to prevent a loss of
+precision and sign information associated with over- and underflows. The
+reasoning usually takes the smallest and largest possible result values into
+account. For example, if the result can be negative, then the result type must
+be signed.
+
+### Addition
+
+#### Overview
+
+|   | LHS type | RHS type | Result type                                |
+| - | :------- | :------- | :----------------------------------------- |
+|(U)| `ui<a>`  | `ui<b>`  | `ui<r>`, *r* = max(*a*, *b*) + 1           |
+|(S)| `si<a>`  | `si<b>`  | `si<r>`, *r* = max(*a*, *b*) + 1           |
+|(M)| `ui<a>`  | `si<b>`  | `si<r>`, *r* = *a* + 2 **if** *a* ≥ *b*    |
+|   |          |          | `si<r>`, *r* = *b* + 1 **if** *a* < *b*    |
+|(M)| `si<a>`  | `ui<b>`  | Same as `ui<b> + si<a>`                    |
+
+#### Unsigned addition (U)
+
+Result value range: `[0 + 0, UI_MAX<a> + UI_MAX<b>]`
+
+W.l.o.g., let `ui<b>` be the wider type. Then the following inequalities hold:
+```
+UI_MAX<b> < UI_MAX<a> + UI_MAX<b> ≤ 2 * UI_MAX<b> ≤ UI_MAX<b+1>
+```
+
+Example:
+```mlir
+%0 = hwarith.add %10, %11 : (ui3, ui4) -> ui5
+```
+
+#### Signed addition (S)
+
+Result value range: `[SI_MIN<a> + SI_MIN<b>, SI_MAX<a> + SI_MAX<b>]`
+
+We apply the same reasoning as in (U). W.l.o.g., let `si<b>` be the wider type.
+Then the following inequalities hold:
+```
+SI_MIN<b> > SI_MIN<a> + SI_MIN<b> ≥ 2 * SI_MIN<b> ≥ SI_MIN<b+1>
+SI_MAX<b> < SI_MAX<a> + SI_MAX<b> ≤ 2 * SI_MAX<b> ≤ SI_MAX<b+1>
+```
+
+Example:
+```mlir
+%1 = hwarith.add %12, %13 : (si3, si3) -> si4
+```
+
+#### Mixed addition (M)
+
+The result type must be signed, as the addition of a positive and a negative
+value may yield a negative result. Due to commutativity, we only consider
+`ui<a> + si<b>`. We distinguish two situations:
+
+* `a ≥ b`, i.e. the unsigned operand's width is greater or equal the signed
+operand's width.
+
+    The smallest signed type to represent all values of `ui<a>` is `si<a+1>`.
+    We know that `a + 1 > b`, and derive from (S) that the result type must be
+    `si<(a+1) + 1>` = `si<a+2>`.
+
+* `a < b`, i.e. the unsigned operand's width is stricly less than the signed
+operand's width.
+
+    As `a + 1 ≤ b`, the result via (S) is `si<b+1>`.
+
+Examples:
+```mlir
+%2 = hwarith.add %14, %15 : (ui3, si4) -> si5
+%3 = hwarith.add %16, %17 : (si4, ui6) -> si8
+```
+
+### Subtraction
+
+#### Overview
+
+|   | LHS type | RHS type | Result type                              |
+| - | :------- | :------- | :--------------------------------------- |
+|(U)| `ui<a>`  | `ui<b>`  | `si<r>`, *r* = max(*a*, *b*) + 1         |
+|(S)| `si<a>`  | `si<b>`  | `si<r>`, *r* = max(*a*, *b*) + 1         |
+|(M)| `ui<a>`  | `si<b>`  | `si<r>`, *r* = *a* + 2 **if** *a* ≥ *b*  |
+|   |          |          | `si<r>`, *r* = *b* + 1 **if** *a* < *b*  |
+|(M)| `si<a>`  | `ui<b>`  | Same as `ui<b> - si<a>`                  |
+
+#### Unsigned subtraction (U)
+
+Result value range: `[0 - UI_MAX<b>, UI_MAX<a> - 0]`
+
+As the result can be negative, the result type must be signed. `-UI_MAX<b>` is
+covered by `si<b+1>`, and `UI_MAX<a>` is covered by `si<a+1>`, so the narrowest
+type capable of representing both extremal values is `si<r>` with
+*r* = max(*a*, *b*) + 1.
+
+Example:
+```mlir
+%0 = hwarith.sub %10, %11 : (ui3, ui4) -> si5
+```
+
+#### Signed subtraction (S)
+
+Result value range: `[SI_MIN<a> - SI_MAX<b>, SI_MAX<a> - SI_MIN<b>]`
+
+We rewrite the value range and then appy the same reasoning as for the
+[signed addition](#signed-addition-S):
+```
+  [SI_MIN<a> - SI_MAX<b>, SI_MAX<a> - SI_MIN<b>]
+= [SI_MIN<a> + -2^(b-1) + 1, SI_MAX<a> + 2^(b-1)]
+= [SI_MIN<a> + SI_MIN<b> + 1, SI_MAX<a> + SI_MAX<b> + 1]
+```
+
+W.l.o.g., let `si<b>` be the wider type. Then the following inequalities hold:
+```
+SI_MIN<b> > SI_MIN<a> + SI_MIN<b> + 1 ≥ 2 * SI_MIN<b> + 1 ≥ SI_MIN<b+1>
+SI_MAX<b> < SI_MAX<a> + SI_MAX<b> + 1 ≤ 2 * SI_MAX<b> + 1 ≤ SI_MAX<b+1>
+```
+
+Example:
+```mlir
+%1 = hwarith.sub %12, %13 : (si3, si3) -> si4
+```
+
+### Mixed subtraction (M)
+
+See [mixed addition](#mixed-addition-M).
+
+Examples:
+```mlir
+%2 = hwarith.sub %14, %15 : (ui3, si4) -> si5
+%3 = hwarith.sub %16, %17 : (si4, ui6) -> si8
+```
+
+### Multiplication
+
+#### Overview
+
+|   | LHS type | RHS type | Result type                              |
+| - | :------- | :------- | :--------------------------------------- |
+|(U)| `ui<a>`  | `ui<b>`  | `ui<r>`, *r* = *a* + *b*                 |
+|(S)| `si<a>`  | `si<b>`  | `si<r>`, *r* = *a* + *b*                 |
+|(M)| `ui<a>`  | `si<b>`  | `si<r>`, *r* = *a* + *b*                 |
+|(M)| `si<a>`  | `ui<b>`  | `si<r>`, *r* = *a* + *b*                 |
+
+#### Unsigned multiplication (U)
+
+Result value range: `[0 * 0, UI_MAX<a> * UI_MAX<b>]`
+
+The result type must be at least *a* + *b bits wide:
+```
+UI_MAX<a> * UI_MAX<b> = (2^a - 1) * (2^b - 1)
+                      = 2^(a + b) - 2^a - 2^b + 1 
+                      ≤ 2^(a + b) - 1 = UI_MAX<a+b>
+```
+
+The result type cannot be smaller than `ui<a+b>`, as the following
+counter-example shows:
+```
+UI_MAX<3> * UI_MAX<4> = 7 * 15 = 105 > UI_MAX<3+4-1>
+```
+
+Example:
+```mlir
+%0 = hwarith.mul %10, %11 : (ui3, ui4) -> ui7
+```
+
+#### Signed multiplication (S)
+
+Result value range:
+`[min(SI_MIN<a> * SI_MAX<b>, SI_MAX<a> * SI_MIN<b>), SI_MAX<a> * SI_MAX<b>]`
+
+With the same reasoning as in (U), we know that `si<a+b>` is the narrowest type
+to accommodate `SI_MAX<a> * SI_MAX<b>`. This type also covers the negative
+extremal value (w.l.o.g. let `si<b>` be the wider type here):
+```
+SI_MIN<a> * SI_MAX<b> = -2^(a-1) * (2^(b-1) - 1)
+                      = -2^(a + b - 2) + 2^(a-1)
+                      ≥ -2^(a + b - 1) = SI_MIN<a+b>
+```
+
+Example:
+```mlir
+%1 = hwarith.mul %12, %13 : (si3, si3) -> si6
+```
+
+#### Mixed multiplication (M)
+
+The result type must be signed. Let us consider `ui<a> * si<b>`; the flipped
+case `si<a> * ui<b>` follows analogously.
+
+Result value range: `[UI_MAX<a> * SI_MIN<b>, UI_MAX<a> * SI_MAX<b>]`
+
+Analogously to the previous cases, the result type must be at least *a* + *b*
+bits wide:
+```
+UI_MAX<a> * SI_MIN<b> = (2^a - 1) * -2^(b-1)
+                      = -2^(a + b - 1) + 2^(b-1)
+                      ≥ 2^(a + b - 1) = SI_MIN<a+b>
+
+UI_MAX<a> * SI_MAX<b> = (2^a - 1) * (2^(b-1) - 1)
+                      = 2^(a + b - 1) - 2^a - 2^(b-1) + 1
+                      ≤ 2^(a + b - 1) - 1 = SI_MAX<a+b>
+```
+
+Again, we cannot choose a narrower type according to the following
+counter-example:
+```
+UI_MAX<3> * SI_MAX<4> = 7 * 7 = 49 ≥ SI_MAX<3+4-1>
+```
+
+Example:
+```mlir
+%2 = hwarith.mul %14, %15 : (si3, ui5) -> si8
+```
+
+### Division
+
+#### Overview
+
+|    | LHS type | RHS type | Result type                              |
+| -- | :------- | :------- | :--------------------------------------- |
+|(U) | `ui<a>`  | `ui<b>`  | `ui<r>`, *r* = *a*                       |
+|(S) | `si<a>`  | `si<b>`  | `si<r>`, *r* = *a* + 1                   |
+|(M1)| `ui<a>`  | `si<b>`  | `si<r>`, *r* = *a* + 1                   |
+|(M2)| `si<a>`  | `ui<b>`  | `si<r>`, *r* = *a*                       |
+
+#### Unsigned division (U)
+
+Result value range: `[0 / 1, UI_MAX<a> / 1]`
+
+The result is also less or equal the dividend, so the result type is `ui<a>`.
+
+Example:
+```mlir
+%0 = hwarith.div %10, %11 : (ui3, ui4) -> ui3
+```
+
+#### Signed division (S)
+
+Result value range: `[SI_MIN<a> / 1, SI_MIN<a> / -1]`
+
+`- SI_MIN<a>` is not convered by `si<a>`, so we have to widen the result type to
+`si<a+1>`.
+
+Example:
+```mlir
+%1 = hwarith.div %12, %13 : (si3, si3) -> si4
+```
+
+#### Division with signed divisor (M1)
+
+If at least one operand is signed, then the result type must be signed as well.
+
+Result value range: `[UI_MAX<a> / -1, UI_MAX<a> / 1]`
+
+The result type must be `si<a+1>` in order to accommodate `UI_MAX<a>`.
+
+Example:
+```mlir
+%2 = hwarith.div %14, %15 : (ui3, si4) -> si4
+```
+
+#### Division with signed dividend (M2)
+
+If at least one operand is signed, then the result type must be signed as well.
+
+Result value range: `[SI_MIN<a> / 1, SI_MAX<a> / 1]`]
+
+The type of the dividend, `si<a>`, already covers the entire result value range.
+
+Example:
+```mlir
+%3 = hwarith.div %16, %17 : (si4, ui6) -> si4
+```
+
+### Additional operators
 **TODO**: elaborate once operators are provided.
-* `hwarith.add %0, %1 : (#l0, #l1) -> (#l2)`:
-* `hwarith.sub %0, %1 : (#l0, #l1) -> (#l2)`:
-* `hwarith.mul %0, %1 : (#l0, #l1) -> (#l2)`:
-* `hwarith.div %0, %1 : (#l0, #l1) -> (#l2)`:
 * `hwarith.mod %0, %1 : (#l0, #l1) -> (#l2)`:
 * `hwarith.cast %0 : (#l0) -> (#l2)`: 
 

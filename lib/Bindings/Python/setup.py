@@ -62,7 +62,7 @@ class CMakeBuild(build_py):
     cmake_install_dir = os.path.join(cmake_build_dir, "..", "install")
     llvm_dir = os.getenv("CIRCT_LLVM_DIR")
     if not llvm_dir:
-      llvm_dir = os.path.join(circt_dir, "llvm")
+      llvm_dir = os.path.join(circt_dir, "llvm", "llvm")
     cmake_args = [
         "-DCMAKE_BUILD_TYPE=Release",  # not used on MSVC, but no harm
         "-DCMAKE_INSTALL_PREFIX={}".format(os.path.abspath(cmake_install_dir)),

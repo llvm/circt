@@ -174,7 +174,7 @@ void HWCleanupPass::runOnGraphRegion(Region &region) {
 
     // Merge graph ifdefs anywhere in the module.
     if (auto ifdefOp = dyn_cast<sv::IfDefOp>(op)) {
-      auto *&entry = ifdefOps[ifdefOp.condAttr()];
+      auto *&entry = ifdefOps[ifdefOp.getCondAttr()];
       if (entry)
         mergeOperationsIntoFrom(ifdefOp, entry);
 
@@ -218,7 +218,7 @@ void HWCleanupPass::runOnProceduralRegion(Region &region) {
     if (auto ifdef = dyn_cast<sv::IfDefProceduralOp>(op)) {
       if (auto prevIfDef =
               dyn_cast_or_null<sv::IfDefProceduralOp>(lastSideEffectingOp)) {
-        if (ifdef.cond() == prevIfDef.cond()) {
+        if (ifdef.getCond() == prevIfDef.getCond()) {
           // We know that there are no side effective operations between the
           // two, so merge the first one into this one.
           mergeOperationsIntoFrom(ifdef, prevIfDef);
@@ -229,7 +229,7 @@ void HWCleanupPass::runOnProceduralRegion(Region &region) {
     // Merge 'if' operations with the same condition.
     if (auto ifop = dyn_cast<sv::IfOp>(op)) {
       if (auto prevIf = dyn_cast_or_null<sv::IfOp>(lastSideEffectingOp)) {
-        if (ifop.cond() == prevIf.cond()) {
+        if (ifop.getCond() == prevIf.getCond()) {
           // We know that there are no side effective operations between the
           // two, so merge the first one into this one.
           mergeOperationsIntoFrom(ifop, prevIf);

@@ -63,8 +63,8 @@ def LLHD_ShlOp : LLHD_Op<"shl", [
   }];
 
   let extraClassDeclaration = [{
-    unsigned getBaseWidth()  { return getLLHDTypeWidth(base().getType()); }
-    unsigned getHiddenWidth() { return getLLHDTypeWidth(hidden().getType()); }
+    unsigned getBaseWidth()  { return getLLHDTypeWidth(getBase().getType()); }
+    unsigned getHiddenWidth() { return getLLHDTypeWidth(getHidden().getType()); }
   }];
 
   let hasFolder = 1;
@@ -123,8 +123,8 @@ def LLHD_ShrOp : LLHD_Op<"shr", [
   }];
 
   let extraClassDeclaration = [{
-    unsigned getBaseWidth()  { return getLLHDTypeWidth(base().getType()); }
-    unsigned getHiddenWidth() { return getLLHDTypeWidth(hidden().getType()); }
+    unsigned getBaseWidth()  { return getLLHDTypeWidth(getBase().getType()); }
+    unsigned getHiddenWidth() { return getLLHDTypeWidth(getHidden().getType()); }
   }];
 
   let hasFolder = 1;
