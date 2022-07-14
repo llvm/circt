@@ -122,6 +122,8 @@ class VerifOp<string mnemonic, list<Trait> traits = []> :
     DefaultValuedAttr<EventControlAttr,"EventControl::AtPosEdge">:$eventControl
   );
 
+  let hasCanonicalizer = true;
+
   let assemblyFormat = [{
     $clock `,` $predicate `,` $enable `,`
     $message (`(` $operands^ `)` `:` qualified(type($operands)))?

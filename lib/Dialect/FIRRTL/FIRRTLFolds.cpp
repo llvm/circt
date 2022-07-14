@@ -1833,3 +1833,52 @@ LogicalResult RegOp::canonicalize(RegOp op, PatternRewriter &rewriter) {
 
   return failure();
 }
+
+//===----------------------------------------------------------------------===//
+// Verification Ops.
+//===----------------------------------------------------------------------===//
+
+static LogicalResult eraseIfZeroOrNotZero(Operation *op, Value predicate,
+                                          Value enable,
+                                          PatternRewriter &rewriter,
+                                          bool eraseIfZero) {
+  // If the verification op is never enabled, delete it.
+  if (auto constant = enable.getDefiningOp<firrtl::ConstantOp>()) {
+    if (constant.value().isZero()) {
+      rewriter.eraseOp(op);
+      return success();
+    }
+  }
+
+  // If the verification op is never triggered, delete it.
+  if (auto constant = predicate.getDefiningOp<firrtl::ConstantOp>()) {
+    if (constant.value().isZero() == eraseIfZero) {
+      rewriter.eraseOp(op);
+      return success();
+    }
+  }
+
+  return failure();
+}
+
+template <class Op, bool EraseIfZero = false>
+static LogicalResult canonicalizeImmediateVerifOp(Op op,
+                                                  PatternRewriter &rewriter) {
+  return eraseIfZeroOrNotZero(op, op.predicate(), op.enable(), rewriter,
+                              EraseIfZero);
+}
+
+void AssertOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                           MLIRContext *context) {
+  results.add(canonicalizeImmediateVerifOp<AssertOp>);
+}
+
+void AssumeOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                           MLIRContext *context) {
+  results.add(canonicalizeImmediateVerifOp<AssumeOp>);
+}
+
+void CoverOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                          MLIRContext *context) {
+  results.add(canonicalizeImmediateVerifOp<CoverOp, /* EraseIfZero = */ true>);
+}
