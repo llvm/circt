@@ -73,8 +73,8 @@ static KnownBits computeKnownBits(Value v, unsigned depth) {
 
   // `mux(cond, x, y)` is the intersection of the known bits of `x` and `y`.
   if (auto muxOp = dyn_cast<MuxOp>(op)) {
-    auto lhs = computeKnownBits(muxOp.trueValue(), depth + 1);
-    auto rhs = computeKnownBits(muxOp.falseValue(), depth + 1);
+    auto lhs = computeKnownBits(muxOp.getTrueValue(), depth + 1);
+    auto rhs = computeKnownBits(muxOp.getFalseValue(), depth + 1);
     return KnownBits::commonBits(lhs, rhs);
   }
 

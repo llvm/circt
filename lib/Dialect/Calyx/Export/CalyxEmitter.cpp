@@ -360,7 +360,7 @@ private:
   /// Helper function for emitting combinational operations.
   template <typename CombinationalOp>
   void emitCombinationalValue(CombinationalOp op, StringRef logicalSymbol) {
-    auto inputs = op.inputs();
+    auto inputs = op.getInputs();
     os << LParen();
     for (size_t i = 0, e = inputs.size(); i != e; ++i) {
       emitValue(inputs[i], /*isIndented=*/false);
@@ -411,7 +411,7 @@ private:
           // The LHS is the value to be negated, and the RHS is a constant with
           // all ones (guaranteed by isBinaryNot).
           os << exclamationMark();
-          emitValue(op.inputs()[0], /*isIndented=*/false);
+          emitValue(op.getInputs()[0], /*isIndented=*/false);
         })
         .Default(
             [&](auto op) { emitOpError(op, "not supported for emission"); });

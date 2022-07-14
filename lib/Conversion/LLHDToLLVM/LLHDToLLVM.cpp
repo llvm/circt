@@ -2004,7 +2004,7 @@ struct CombParityOpConversion : public ConvertToLLVMPattern {
     auto parityOp = cast<comb::ParityOp>(op);
 
     auto popCount =
-        rewriter.create<LLVM::CtPopOp>(op->getLoc(), parityOp.input());
+        rewriter.create<LLVM::CtPopOp>(op->getLoc(), parityOp.getInput());
     rewriter.replaceOpWithNewOp<LLVM::TruncOp>(
         op, IntegerType::get(rewriter.getContext(), 1), popCount);
 
@@ -2295,18 +2295,18 @@ struct CombExtractOpConversion : public ConvertToLLVMPattern {
   matchAndRewrite(Operation *op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const override {
     auto extractOp = cast<comb::ExtractOp>(op);
-    mlir::Value valueToTrunc = extractOp.input();
-    mlir::Type type = extractOp.input().getType();
+    mlir::Value valueToTrunc = extractOp.getInput();
+    mlir::Type type = extractOp.getInput().getType();
 
-    if (extractOp.lowBit() != 0) {
+    if (extractOp.getLowBit() != 0) {
       mlir::Value amt = rewriter.create<LLVM::ConstantOp>(
-          op->getLoc(), type, extractOp.lowBitAttr());
+          op->getLoc(), type, extractOp.getLowBitAttr());
       valueToTrunc = rewriter.create<LLVM::LShrOp>(op->getLoc(), type,
-                                                   extractOp.input(), amt);
+                                                   extractOp.getInput(), amt);
     }
 
-    rewriter.replaceOpWithNewOp<LLVM::TruncOp>(op, extractOp.result().getType(),
-                                               valueToTrunc);
+    rewriter.replaceOpWithNewOp<LLVM::TruncOp>(
+        op, extractOp.getResult().getType(), valueToTrunc);
     return success();
   }
 };
@@ -2521,7 +2521,7 @@ struct CombConcatOpConversion : public ConvertToLLVMPattern {
                   ConversionPatternRewriter &rewriter) const override {
     auto concatOp = cast<comb::ConcatOp>(op);
     auto numOperands = concatOp->getNumOperands();
-    mlir::Type type = concatOp.result().getType();
+    mlir::Type type = concatOp.getResult().getType();
 
     unsigned nextInsertion = type.getIntOrFloatBitWidth();
     auto aggregate = rewriter

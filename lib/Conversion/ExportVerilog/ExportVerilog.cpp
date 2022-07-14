@@ -1071,18 +1071,18 @@ StringAttr EmitterBase::inferStructuralNameForTemporary(Value expr) {
           // If this is an extract from a namable object, derive a name from it.
           .Case([&result, this](ExtractOp extract) {
             if (auto operandName =
-                    inferStructuralNameForTemporary(extract.input())) {
+                    inferStructuralNameForTemporary(extract.getInput())) {
               unsigned numBits = extract.getType().getWidth();
               if (numBits == 1)
                 result = StringAttr::get(extract.getContext(),
                                          operandName.strref() + "_" +
-                                             Twine(extract.lowBit()));
+                                             Twine(extract.getLowBit()));
               else
-                result =
-                    StringAttr::get(extract.getContext(),
-                                    operandName.strref() + "_" +
-                                        Twine(extract.lowBit() + numBits - 1) +
-                                        "to" + Twine(extract.lowBit()));
+                result = StringAttr::get(
+                    extract.getContext(),
+                    operandName.strref() + "_" +
+                        Twine(extract.getLowBit() + numBits - 1) + "to" +
+                        Twine(extract.getLowBit()));
             }
           });
       // TODO: handle other common patterns.
@@ -2077,7 +2077,7 @@ SubExprInfo ExprEmitter::visitComb(ICmpOp op) {
       // Unsigned Comparisons
       RequireUnsigned, RequireUnsigned, RequireUnsigned, RequireUnsigned};
 
-  auto pred = static_cast<uint64_t>(op.predicate());
+  auto pred = static_cast<uint64_t>(op.getPredicate());
   assert(pred < sizeof(symop) / sizeof(symop[0]));
 
   // Lower "== -1" to Reduction And.
@@ -2100,17 +2100,18 @@ SubExprInfo ExprEmitter::visitComb(ExtractOp op) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
-  unsigned loBit = op.lowBit();
+  unsigned loBit = op.getLowBit();
   unsigned hiBit = loBit + op.getType().getWidth() - 1;
 
-  auto x = emitSubExpr(op.input(), LowestPrecedence);
+  auto x = emitSubExpr(op.getInput(), LowestPrecedence);
   assert((x.precedence == Symbol ||
-          (x.precedence == Selection && isOkToBitSelectFrom(op.input()))) &&
+          (x.precedence == Selection && isOkToBitSelectFrom(op.getInput()))) &&
          "should be handled by isExpressionUnableToInline");
 
   // If we're extracting the whole input, just return it.  This is valid but
   // non-canonical IR, and we don't want to generate invalid Verilog.
-  if (loBit == 0 && op.input().getType().getIntOrFloatBitWidth() == hiBit + 1)
+  if (loBit == 0 &&
+      op.getInput().getType().getIntOrFloatBitWidth() == hiBit + 1)
     return x;
 
   os << '[' << hiBit;
@@ -2344,12 +2345,12 @@ SubExprInfo ExprEmitter::visitComb(MuxOp op) {
     emitError(op, "SV attributes emission is unimplemented for the op");
 
   // The ?: operator is right associative.
-  emitSubExpr(op.cond(), VerilogPrecedence(Conditional - 1));
+  emitSubExpr(op.getCond(), VerilogPrecedence(Conditional - 1));
   os << " ? ";
   auto lhsInfo =
-      emitSubExpr(op.trueValue(), VerilogPrecedence(Conditional - 1));
+      emitSubExpr(op.getTrueValue(), VerilogPrecedence(Conditional - 1));
   os << " : ";
-  auto rhsInfo = emitSubExpr(op.falseValue(), Conditional);
+  auto rhsInfo = emitSubExpr(op.getFalseValue(), Conditional);
 
   SubExprSignResult signedness = IsUnsigned;
   if (lhsInfo.signedness == IsSigned && rhsInfo.signedness == IsSigned)
