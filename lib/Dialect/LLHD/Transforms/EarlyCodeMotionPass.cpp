@@ -46,7 +46,7 @@ void EarlyCodeMotionPass::runOnOperation() {
   SmallPtrSet<Block *, 32> workDone;
   SmallPtrSet<Block *, 32> workPending;
 
-  Block &entryBlock = proc.body().front();
+  Block &entryBlock = proc.getBody().front();
   workPending.insert(&entryBlock);
   entryDistance.insert(std::make_pair(&entryBlock, 0));
 
