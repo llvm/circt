@@ -14,39 +14,13 @@
 /// the module-like operations.
 class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
     HWOp<mnemonic, traits # [
-      DeclareOpInterfaceMethods<HWModuleLike>, FunctionOpInterface, Symbol,
+      DeclareOpInterfaceMethods<HWModuleLike>,
+      DeclareOpInterfaceMethods<HWMutableModuleLike>,
+      FunctionOpInterface, Symbol,
       OpAsmOpInterface, HasParent<"mlir::ModuleOp">]> {
   /// Additional class declarations inside the module op.
   code extraModuleClassDeclaration = ?;
-
-  let extraClassDeclaration = extraModuleClassDeclaration # [{
-    /// Insert and remove input and output ports of this module. Does not modify
-    /// the block arguments of the module body. The insertion and removal
-    /// indices must be in ascending order. The indices refer to the port
-    /// positions before any insertion or removal occurs. Ports inserted at the
-    /// same index will appear in the module in the same order as they were
-    /// listed in the insertion arrays.
-    void modifyPorts(
-      ArrayRef<std::pair<unsigned, PortInfo>> insertInputs,
-      ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs,
-      ArrayRef<unsigned> eraseInputs,
-      ArrayRef<unsigned> eraseOutputs
-    );
-
-    /// Insert ports into the module. Does not modify the block arguments of the
-    /// module body.
-    void insertPorts(
-      ArrayRef<std::pair<unsigned, PortInfo>> insertInputs,
-      ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs
-    ) { modifyPorts(insertInputs, insertOutputs, {}, {}); }
-
-    /// Erase ports from the module. Does not modify the block arguments of the
-    /// module body.
-    void erasePorts(
-      ArrayRef<unsigned> eraseInputs,
-      ArrayRef<unsigned> eraseOutputs
-    ) { modifyPorts({}, {}, eraseInputs, eraseOutputs); }
-  }];
+  let extraClassDeclaration = extraModuleClassDeclaration;
 }
 
 def HWModuleOp : HWModuleOpBase<"module",
