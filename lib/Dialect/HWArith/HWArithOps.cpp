@@ -177,7 +177,7 @@ LogicalResult DivOp::inferReturnTypes(MLIRContext *context,
 namespace circt {
 namespace hwarith {
 
-static LogicalResult verifyBinOp(Operation* binOp) {
+static LogicalResult verifyBinOp(Operation *binOp) {
   auto ops = binOp->getOperands();
   if (ops.size() != 2)
     return binOp->emitError() << "expected 2 operands but got " << ops.size();
