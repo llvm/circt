@@ -492,6 +492,17 @@ OpFoldResult AndPrimOp::fold(ArrayRef<Attribute> operands) {
       return lhs();
   }
 
+  if (auto lhsCst = getConstant(operands[0])) {
+    /// and(0, x) -> 0
+    if (lhsCst->isZero() && lhs().getType() == getType())
+      return getIntZerosAttr(getType());
+
+    /// and(-1, x) -> x
+    if (lhsCst->isAllOnes() && lhs().getType() == getType() &&
+        rhs().getType() == getType())
+      return rhs();
+  }
+
   /// and(x, x) -> x
   if (lhs() == rhs() && rhs().getType() == getType())
     return rhs();
@@ -511,6 +522,17 @@ OpFoldResult OrPrimOp::fold(ArrayRef<Attribute> operands) {
     if (rhsCst.getValue().isAllOnes() && rhs().getType() == getType() &&
         lhs().getType() == getType())
       return rhs();
+  }
+
+  if (auto lhsCst = getConstant(operands[0])) {
+    /// or(0, x) -> x
+    if (lhsCst.getValue().isZero() && rhs().getType() == getType())
+      return rhs();
+
+    /// or(-1, x) -> -1
+    if (lhsCst.getValue().isAllOnes() && lhs().getType() == getType() &&
+        rhs().getType() == getType())
+      return lhs();
   }
 
   /// or(x, x) -> x
