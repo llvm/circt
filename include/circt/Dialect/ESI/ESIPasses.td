@@ -16,6 +16,12 @@
 
 include "mlir/Pass/PassBase.td"
 
+def ESIConnectServices : Pass<"esi-connect-services", "mlir::ModuleOp"> {
+  let summary = "Connect up ESI service requests to service providers";
+  let constructor = "circt::esi::createESIConnectServicesPass()";
+  let dependentDialects = ["circt::hw::HWDialect"];
+}
+
 def LowerESIToPhysical: Pass<"lower-esi-to-physical", "mlir::ModuleOp"> {
   let summary = "Lower ESI abstract Ops to ESI physical ops.";
   let constructor = "circt::esi::createESIPhysicalLoweringPass()";
