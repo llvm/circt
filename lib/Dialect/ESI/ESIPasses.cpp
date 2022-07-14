@@ -711,7 +711,7 @@ static std::string &constructInstanceName(Value operand, InterfaceOp iface,
                                           std::string &name) {
   llvm::raw_string_ostream s(name);
   // Drop the "IValidReady_" part of the interface name.
-  s << llvm::toLower(iface.sym_name()[12]) << iface.sym_name().substr(13);
+  s << llvm::toLower(iface.getSymName()[12]) << iface.getSymName().substr(13);
 
   // Indicate to where the source is connected.
   if (operand.hasOneUse()) {
@@ -1035,7 +1035,7 @@ WrapInterfaceLower::matchAndRewrite(WrapSVInterface wrap, OpAdaptor adaptor,
   if (!sinkModport)
     return failure();
   auto ifaceInstance =
-      dyn_cast<InterfaceInstanceOp>(sinkModport.iface().getDefiningOp());
+      dyn_cast<InterfaceInstanceOp>(sinkModport.getIface().getDefiningOp());
   if (!ifaceInstance)
     return failure();
 
@@ -1079,7 +1079,7 @@ LogicalResult UnwrapInterfaceLower::matchAndRewrite(
   if (!sourceModport)
     return failure();
   auto ifaceInstance =
-      dyn_cast<InterfaceInstanceOp>(sourceModport.iface().getDefiningOp());
+      dyn_cast<InterfaceInstanceOp>(sourceModport.getIface().getDefiningOp());
   if (!ifaceInstance)
     return failure();
 

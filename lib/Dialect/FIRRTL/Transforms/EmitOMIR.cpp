@@ -674,7 +674,7 @@ void EmitOMIRPass::runOnOperation() {
   auto fileAttr = hw::OutputFileAttr::getFromFilename(
       context, *outputFilename, /*excludeFromFilelist=*/true, false);
   verbatimOp->setAttr("output_file", fileAttr);
-  verbatimOp.symbolsAttr(ArrayAttr::get(context, symbols));
+  verbatimOp.setSymbolsAttr(ArrayAttr::get(context, symbols));
 
   markAnalysesPreserved<NLATable>();
 }

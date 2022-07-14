@@ -173,7 +173,7 @@ void VerbatimExprSEOp::getAsmResultNames(
 
 void MacroRefExprOp::getAsmResultNames(
     function_ref<void(Value, StringRef)> setNameFn) {
-  setNameFn(getResult(), ident().getName());
+  setNameFn(getResult(), getIdent().getName());
 }
 
 //===----------------------------------------------------------------------===//
@@ -224,7 +224,7 @@ void LocalParamOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 LogicalResult LocalParamOp::verify() {
   // Verify that this is a valid parameter value.
   return hw::checkParameterInContext(
-      value(), (*this)->getParentOfType<hw::HWModuleOp>(), *this);
+      getValue(), (*this)->getParentOfType<hw::HWModuleOp>(), *this);
 }
 
 //===----------------------------------------------------------------------===//
@@ -257,7 +257,7 @@ LogicalResult RegOp::canonicalize(RegOp op, PatternRewriter &rewriter) {
     return failure();
 
   // If the reg has a symbol, then we can't delete it.
-  if (op.inner_symAttr())
+  if (op.getInnerSymAttr())
     return failure();
   // Check that all operations on the wire are sv.assigns. All other wire
   // operations will have been handled by other canonicalization.
@@ -416,12 +416,12 @@ LogicalResult IfOp::canonicalize(IfOp op, PatternRewriter &rewriter) {
   if (hasSVAttributes(op))
     return failure();
 
-  if (auto constant = op.cond().getDefiningOp<hw::ConstantOp>()) {
+  if (auto constant = op.getCond().getDefiningOp<hw::ConstantOp>()) {
 
     if (constant.getValue().isAllOnesValue())
-      replaceOpWithRegion(rewriter, op, op.thenRegion());
-    else if (!op.elseRegion().empty())
-      replaceOpWithRegion(rewriter, op, op.elseRegion());
+      replaceOpWithRegion(rewriter, op, op.getThenRegion());
+    else if (!op.getElseRegion().empty())
+      replaceOpWithRegion(rewriter, op, op.getElseRegion());
 
     rewriter.eraseOp(op);
 
@@ -442,7 +442,7 @@ LogicalResult IfOp::canonicalize(IfOp op, PatternRewriter &rewriter) {
 
   // Otherwise, invert the condition and move the 'else' block to the 'then'
   // region.
-  auto cond = comb::createOrFoldNot(op.getLoc(), op.cond(), rewriter);
+  auto cond = comb::createOrFoldNot(op.getLoc(), op.getCond(), rewriter);
   op.setOperand(cond);
 
   auto *thenBlock = op.getThenBlock(), *elseBlock = op.getElseBlock();
@@ -459,7 +459,7 @@ LogicalResult IfOp::canonicalize(IfOp op, PatternRewriter &rewriter) {
 //===----------------------------------------------------------------------===//
 
 AlwaysOp::Condition AlwaysOp::getCondition(size_t idx) {
-  return Condition{EventControl(events()[idx].cast<IntegerAttr>().getInt()),
+  return Condition{EventControl(getEvents()[idx].cast<IntegerAttr>().getInt()),
                    getOperand(idx)};
 }
 
@@ -487,7 +487,7 @@ void AlwaysOp::build(OpBuilder &builder, OperationState &result,
 
 /// Ensure that the symbol being instantiated exists and is an InterfaceOp.
 LogicalResult AlwaysOp::verify() {
-  if (events().size() != getNumOperands())
+  if (getEvents().size() != getNumOperands())
     return emitError("different number of operands and events");
   return success();
 }
@@ -689,10 +689,10 @@ CaseBitPattern::CaseBitPattern(ArrayRef<CasePatternBit> bits,
 
 auto CaseOp::getCases() -> SmallVector<CaseInfo, 4> {
   SmallVector<CaseInfo, 4> result;
-  assert(casePatterns().size() == getNumRegions() &&
+  assert(getCasePatterns().size() == getNumRegions() &&
          "case pattern / region count mismatch");
   size_t nextRegion = 0;
-  for (auto elt : casePatterns()) {
+  for (auto elt : getCasePatterns()) {
     llvm::TypeSwitch<Attribute>(elt)
         .Case<hw::EnumFieldAttr>([&](auto enumAttr) {
           result.push_back({std::make_unique<CaseEnumPattern>(enumAttr),
@@ -847,16 +847,16 @@ ParseResult CaseOp::parse(OpAsmParser &parser, OperationState &result) {
 
 void CaseOp::print(OpAsmPrinter &p) {
   p << ' ';
-  if (caseStyle() == CaseStmtType::CaseXStmt)
+  if (getCaseStyle() == CaseStmtType::CaseXStmt)
     p << "casex ";
-  else if (caseStyle() == CaseStmtType::CaseZStmt)
+  else if (getCaseStyle() == CaseStmtType::CaseZStmt)
     p << "casez ";
 
-  if (validationQualifier() !=
+  if (getValidationQualifier() !=
       ValidationQualifierTypeEnum::ValidationQualifierPlain)
-    p << stringifyValidationQualifierTypeEnum(validationQualifier()) << ' ';
+    p << stringifyValidationQualifierTypeEnum(getValidationQualifier()) << ' ';
 
-  p << cond() << " : " << cond().getType();
+  p << getCond() << " : " << getCond().getType();
   p.printOptionalAttrDict(
       (*this)->getAttrs(),
       /*elidedAttrs=*/{"casePatterns", "caseStyle", "validationQualifier"});
@@ -884,12 +884,12 @@ void CaseOp::print(OpAsmPrinter &p) {
 }
 
 LogicalResult CaseOp::verify() {
-  if (!(hw::isHWIntegerType(cond().getType()) ||
-        cond().getType().isa<hw::EnumType>()))
+  if (!(hw::isHWIntegerType(getCond().getType()) ||
+        getCond().getType().isa<hw::EnumType>()))
     return emitError("condition must have either integer or enum type");
 
   // Ensure that the number of regions and number of case values match.
-  if (casePatterns().size() != getNumRegions())
+  if (getCasePatterns().size() != getNumRegions())
     return emitOpError("case pattern / region count mismatch");
   return success();
 }
@@ -922,9 +922,9 @@ void CaseOp::build(
 
 // Strength reduce case styles based on the bit patterns.
 LogicalResult CaseOp::canonicalize(CaseOp op, PatternRewriter &rewriter) {
-  if (op.caseStyle() == CaseStmtType::CaseStmt)
+  if (op.getCaseStyle() == CaseStmtType::CaseStmt)
     return failure();
-  if (op.cond().getType().isa<hw::EnumType>())
+  if (op.getCond().getType().isa<hw::EnumType>())
     return failure();
 
   auto caseInfo = op.getCases();
@@ -942,26 +942,26 @@ LogicalResult CaseOp::canonicalize(CaseOp op, PatternRewriter &rewriter) {
     return !ci.pattern.get()->hasZ();
   });
 
-  if (op.caseStyle() == CaseStmtType::CaseXStmt) {
+  if (op.getCaseStyle() == CaseStmtType::CaseXStmt) {
     if (noXZ) {
       rewriter.updateRootInPlace(op, [&]() {
-        op.caseStyleAttr(
+        op.setCaseStyleAttr(
             CaseStmtTypeAttr::get(op.getContext(), CaseStmtType::CaseStmt));
       });
       return success();
     }
     if (noX) {
       rewriter.updateRootInPlace(op, [&]() {
-        op.caseStyleAttr(
+        op.setCaseStyleAttr(
             CaseStmtTypeAttr::get(op.getContext(), CaseStmtType::CaseZStmt));
       });
       return success();
     }
   }
 
-  if (op.caseStyle() == CaseStmtType::CaseZStmt && noZ) {
+  if (op.getCaseStyle() == CaseStmtType::CaseZStmt && noZ) {
     rewriter.updateRootInPlace(op, [&]() {
-      op.caseStyleAttr(
+      op.setCaseStyleAttr(
           CaseStmtTypeAttr::get(op.getContext(), CaseStmtType::CaseStmt));
     });
     return success();
@@ -990,7 +990,7 @@ void OrderedOutputOp::build(OpBuilder &builder, OperationState &result,
 //===----------------------------------------------------------------------===//
 
 LogicalResult BPAssignOp::verify() {
-  if (isa<sv::WireOp>(dest().getDefiningOp()))
+  if (isa<sv::WireOp>(getDest().getDefiningOp()))
     return emitOpError(
         "Verilog disallows procedural assignment to a net type (did you intend "
         "to use a variable type, e.g., sv.reg?)");
@@ -998,7 +998,7 @@ LogicalResult BPAssignOp::verify() {
 }
 
 LogicalResult PAssignOp::verify() {
-  if (isa<sv::WireOp>(dest().getDefiningOp()))
+  if (isa<sv::WireOp>(getDest().getDefiningOp()))
     return emitOpError(
         "Verilog disallows procedural assignment to a net type (did you intend "
         "to use a variable type, e.g., sv.reg?)");
@@ -1026,14 +1026,14 @@ ModportType InterfaceOp::getModportType(StringRef modportName) {
   auto *ctxt = getContext();
   return ModportType::get(
       getContext(),
-      SymbolRefAttr::get(ctxt, sym_name(),
+      SymbolRefAttr::get(ctxt, getSymName(),
                          {SymbolRefAttr::get(ctxt, modportName)}));
 }
 
 Type InterfaceOp::getSignalType(StringRef signalName) {
   InterfaceSignalOp signal = lookupSymbol<InterfaceSignalOp>(signalName);
   assert(signal && "Interface signal symbol not found.");
-  return signal.type();
+  return signal.getType();
 }
 
 static ParseResult parseModportStructs(OpAsmParser &parser,
@@ -1149,7 +1149,8 @@ void GetModportOp::build(OpBuilder &builder, OperationState &state, Value value,
 /// IR.
 InterfaceModportOp
 GetModportOp::getReferencedDecl(const hw::HWSymbolCache &cache) {
-  return dyn_cast_or_null<InterfaceModportOp>(cache.getDefinition(fieldAttr()));
+  return dyn_cast_or_null<InterfaceModportOp>(
+      cache.getDefinition(getFieldAttr()));
 }
 
 void ReadInterfaceSignalOp::build(OpBuilder &builder, OperationState &state,
@@ -1169,7 +1170,7 @@ void ReadInterfaceSignalOp::build(OpBuilder &builder, OperationState &state,
 InterfaceSignalOp
 ReadInterfaceSignalOp::getReferencedDecl(const hw::HWSymbolCache &cache) {
   return dyn_cast_or_null<InterfaceSignalOp>(
-      cache.getDefinition(signalNameAttr()));
+      cache.getDefinition(getSignalNameAttr()));
 }
 
 ParseResult parseIfaceTypeAndSignal(OpAsmParser &p, Type &ifaceTy,
@@ -1223,11 +1224,11 @@ InterfaceInstanceOp::getReferencedInterface(const hw::HWSymbolCache *cache) {
 }
 
 LogicalResult AssignInterfaceSignalOp::verify() {
-  return verifySignalExists(iface(), signalNameAttr());
+  return verifySignalExists(getIface(), getSignalNameAttr());
 }
 
 LogicalResult ReadInterfaceSignalOp::verify() {
-  return verifySignalExists(iface(), signalNameAttr());
+  return verifySignalExists(getIface(), getSignalNameAttr());
 }
 
 //===----------------------------------------------------------------------===//
@@ -1261,7 +1262,7 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
     return failure();
 
   // If the wire has a symbol, then we can't delete it.
-  if (wire.inner_symAttr())
+  if (wire.getInnerSymAttr())
     return failure();
 
   // Wires have inout type, so they'll have assigns and read_inout operations
@@ -1297,7 +1298,7 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
         wire.getLoc(),
         wire.getResult().getType().cast<InOutType>().getElementType());
   } else if (isa<hw::HWModuleOp>(write->getParentOp()))
-    connected = write.src();
+    connected = write.getSrc();
   else
     // If the write is happening at the module level then we don't have any
     // use-before-def checking to do, so we only handle that for now.
@@ -1363,9 +1364,9 @@ LogicalResult IndexedPartSelectInOutOp::inferReturnTypes(
 
 LogicalResult IndexedPartSelectInOutOp::verify() {
   unsigned inputWidth = 0, resultWidth = 0;
-  auto opWidth = width();
+  auto opWidth = getWidth();
 
-  if (auto i = input()
+  if (auto i = getInput()
                    .getType()
                    .cast<InOutType>()
                    .getElementType()
@@ -1388,8 +1389,8 @@ LogicalResult IndexedPartSelectInOutOp::verify() {
 }
 
 OpFoldResult IndexedPartSelectInOutOp::fold(ArrayRef<Attribute> constants) {
-  if (getType() == input().getType())
-    return input();
+  if (getType() == getInput().getType())
+    return getInput();
   return {};
 }
 
@@ -1418,10 +1419,10 @@ LogicalResult IndexedPartSelectOp::inferReturnTypes(
 }
 
 LogicalResult IndexedPartSelectOp::verify() {
-  auto opWidth = width();
+  auto opWidth = getWidth();
 
   unsigned resultWidth = getType().cast<IntegerType>().getWidth();
-  unsigned inputWidth = input().getType().cast<IntegerType>().getWidth();
+  unsigned inputWidth = getInput().getType().cast<IntegerType>().getWidth();
 
   if (opWidth > inputWidth)
     return emitError("slice width should not be greater than input width");
@@ -1473,8 +1474,8 @@ template <class Op>
 static Op findInstanceSymbolInBlock(StringAttr name, Block *body) {
   for (auto &op : llvm::reverse(body->getOperations())) {
     if (auto instance = dyn_cast<Op>(op)) {
-      if (instance.inner_sym() &&
-          instance.inner_sym().getValue() == name.getValue())
+      if (instance.getInnerSym() &&
+          instance.getInnerSym().getValue() == name.getValue())
         return instance;
     }
 
@@ -1494,7 +1495,7 @@ static Op findInstanceSymbolInBlock(StringAttr name, Block *body) {
 hw::InstanceOp BindOp::getReferencedInstance(const hw::HWSymbolCache *cache) {
   // If we have a cache, directly look up the referenced instance.
   if (cache) {
-    auto result = cache->getInnerDefinition(instance());
+    auto result = cache->getInnerDefinition(getInstance());
     return cast<hw::InstanceOp>(result.getOp());
   }
 
@@ -1504,12 +1505,12 @@ hw::InstanceOp BindOp::getReferencedInstance(const hw::HWSymbolCache *cache) {
     return {};
 
   auto hwModule = dyn_cast_or_null<hw::HWModuleOp>(
-      topLevelModuleOp.lookupSymbol(instance().getModule()));
+      topLevelModuleOp.lookupSymbol(getInstance().getModule()));
   if (!hwModule)
     return {};
 
   // ... then look up the instance within it.
-  return findInstanceSymbolInBlock<hw::InstanceOp>(instance().getName(),
+  return findInstanceSymbolInBlock<hw::InstanceOp>(getInstance().getName(),
                                                    hwModule.getBodyBlock());
 }
 
@@ -1517,16 +1518,16 @@ hw::InstanceOp BindOp::getReferencedInstance(const hw::HWSymbolCache *cache) {
 LogicalResult BindOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto module = (*this)->getParentOfType<mlir::ModuleOp>();
   auto hwModule = dyn_cast_or_null<hw::HWModuleOp>(
-      symbolTable.lookupSymbolIn(module, instance().getModule()));
+      symbolTable.lookupSymbolIn(module, getInstance().getModule()));
   if (!hwModule)
     return emitError("Referenced module doesn't exist ")
-           << instance().getModule() << "::" << instance().getName();
+           << getInstance().getModule() << "::" << getInstance().getName();
 
   auto inst = findInstanceSymbolInBlock<hw::InstanceOp>(
-      instance().getName(), hwModule.getBodyBlock());
+      getInstance().getName(), hwModule.getBodyBlock());
   if (!inst)
     return emitError("Referenced instance doesn't exist ")
-           << instance().getModule() << "::" << instance().getName();
+           << getInstance().getModule() << "::" << getInstance().getName();
   if (!inst->getAttr("doNotPrint"))
     return emitError("Referenced instance isn't marked as doNotPrint");
   return success();
@@ -1546,7 +1547,7 @@ sv::InterfaceInstanceOp
 BindInterfaceOp::getReferencedInstance(const hw::HWSymbolCache *cache) {
   // If we have a cache, directly look up the referenced instance.
   if (cache) {
-    auto result = cache->getInnerDefinition(instance());
+    auto result = cache->getInnerDefinition(getInstance());
     return cast<sv::InterfaceInstanceOp>(result.getOp());
   }
 
@@ -1555,29 +1556,29 @@ BindInterfaceOp::getReferencedInstance(const hw::HWSymbolCache *cache) {
   if (!symbolTable)
     return {};
   auto *parentOp =
-      lookupSymbolInNested(symbolTable, instance().getModule().getValue());
+      lookupSymbolInNested(symbolTable, getInstance().getModule().getValue());
   if (!parentOp)
     return {};
 
   // ... then look up the instance within it.
   return findInstanceSymbolInBlock<sv::InterfaceInstanceOp>(
-      instance().getName(), &parentOp->getRegion(0).front());
+      getInstance().getName(), &parentOp->getRegion(0).front());
 }
 
 /// Ensure that the symbol being instantiated exists and is an InterfaceOp.
 LogicalResult
 BindInterfaceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto parentOp =
-      symbolTable.lookupNearestSymbolFrom(*this, instance().getModule());
+      symbolTable.lookupNearestSymbolFrom(*this, getInstance().getModule());
   if (!parentOp)
     return emitError("Referenced module doesn't exist ")
-           << instance().getModule() << "::" << instance().getName();
+           << getInstance().getModule() << "::" << getInstance().getName();
 
   auto inst = findInstanceSymbolInBlock<sv::InterfaceInstanceOp>(
-      instance().getName(), &parentOp->getRegion(0).front());
+      getInstance().getName(), &parentOp->getRegion(0).front());
   if (!inst)
     return emitError("Referenced interface doesn't exist ")
-           << instance().getModule() << "::" << instance().getName();
+           << getInstance().getModule() << "::" << getInstance().getName();
   if (!inst->getAttr("doNotPrint"))
     return emitError("Referenced interface isn't marked as doNotPrint");
   return success();
@@ -1637,7 +1638,7 @@ static LogicalResult eraseIfZeroOrNotZero(Operation *op, Value value,
 template <class Op, bool EraseIfZero = false>
 static LogicalResult canonicalizeImmediateVerifOp(Op op,
                                                   PatternRewriter &rewriter) {
-  return eraseIfZeroOrNotZero(op, op.expression(), rewriter, EraseIfZero);
+  return eraseIfZeroOrNotZero(op, op.getExpression(), rewriter, EraseIfZero);
 }
 
 void AssertOp::getCanonicalizationPatterns(RewritePatternSet &results,
@@ -1658,7 +1659,7 @@ void CoverOp::getCanonicalizationPatterns(RewritePatternSet &results,
 template <class Op, bool EraseIfZero = false>
 static LogicalResult canonicalizeConcurrentVerifOp(Op op,
                                                    PatternRewriter &rewriter) {
-  return eraseIfZeroOrNotZero(op, op.property(), rewriter, EraseIfZero);
+  return eraseIfZeroOrNotZero(op, op.getProperty(), rewriter, EraseIfZero);
 }
 
 void AssertConcurrentOp::getCanonicalizationPatterns(RewritePatternSet &results,
@@ -1722,13 +1723,14 @@ void printCaseRegions(OpAsmPrinter &p, Operation *, ArrayAttr patternsArray,
 }
 
 LogicalResult GenerateCaseOp::verify() {
-  size_t numPatterns = casePatterns().size();
-  if (caseRegions().size() != numPatterns || caseNames().size() != numPatterns)
+  size_t numPatterns = getCasePatterns().size();
+  if (getCaseRegions().size() != numPatterns ||
+      getCaseNames().size() != numPatterns)
     return emitOpError(
         "Size of caseRegions, patterns, and caseNames must match");
 
   StringSet<> usedNames;
-  for (Attribute name : caseNames()) {
+  for (Attribute name : getCaseNames()) {
     StringAttr nameStr = name.dyn_cast<StringAttr>();
     if (!nameStr)
       return emitOpError("caseNames must all be string attributes");

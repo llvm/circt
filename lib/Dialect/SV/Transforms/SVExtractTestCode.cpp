@@ -128,10 +128,10 @@ static SetVector<Operation *> computeCloneSet(SetVector<Operation *> &roots) {
 
 static StringRef getNameForPort(Value val, ArrayAttr modulePorts) {
   if (auto readinout = dyn_cast_or_null<ReadInOutOp>(val.getDefiningOp())) {
-    if (auto wire = dyn_cast<WireOp>(readinout.input().getDefiningOp()))
-      return wire.name();
-    if (auto reg = dyn_cast<RegOp>(readinout.input().getDefiningOp()))
-      return reg.name();
+    if (auto wire = dyn_cast<WireOp>(readinout.getInput().getDefiningOp()))
+      return wire.getName();
+    if (auto reg = dyn_cast<RegOp>(readinout.getInput().getDefiningOp()))
+      return reg.getName();
   } else if (auto bv = val.dyn_cast<BlockArgument>()) {
     return modulePorts[bv.getArgNumber()].cast<StringAttr>().getValue();
   }
@@ -338,7 +338,7 @@ void SVExtractTestCodeImplPass::runOnOperation() {
     // ErrorOp. So we have to check message contents whether they encode
     // verifications. See FIRParserAsserts for more details.
     if (auto error = dyn_cast<ErrorOp>(op)) {
-      if (auto message = error.message())
+      if (auto message = error.getMessage())
         return message.getValue().startswith("assert:") ||
                message.getValue().startswith("Assertion failed") ||
                message.getValue().startswith("assertNotX:") ||

@@ -166,7 +166,7 @@ static Type getEsiDataType(circt::sv::InterfaceOp iface) {
   auto dataSig = iface.lookupSymbol<InterfaceSignalOp>("data");
   if (!dataSig)
     return Type();
-  return dataSig.type();
+  return dataSig.getType();
 }
 
 /// Verify that the modport type of 'modportArg' points to an interface which

@@ -1708,7 +1708,7 @@ void FIRRTLLowering::optimizeTemporaryWire(sv::WireOp wire) {
   if (!isa<hw::HWModuleOp>(write->getParentOp()))
     return;
 
-  auto connected = write.src();
+  auto connected = write.getSrc();
 
   // Ok, we can do this.  Replace all the reads with the connected value.
   for (auto read : reads) {
@@ -2187,10 +2187,10 @@ void FIRRTLLowering::addToAlwaysBlock(sv::EventControl clockEdge, Value clock,
 
   if (reset) {
     assert(insideIfOp && "reset body must be initialized before");
-    runWithInsertionPointAtEndOfBlock(resetBody, insideIfOp.thenRegion());
-    runWithInsertionPointAtEndOfBlock(body, insideIfOp.elseRegion());
+    runWithInsertionPointAtEndOfBlock(resetBody, insideIfOp.getThenRegion());
+    runWithInsertionPointAtEndOfBlock(body, insideIfOp.getElseRegion());
   } else {
-    runWithInsertionPointAtEndOfBlock(body, alwaysOp.body());
+    runWithInsertionPointAtEndOfBlock(body, alwaysOp.getBody());
   }
 
   // Move the earlier always block(s) down to where the last would have been
@@ -2206,8 +2206,8 @@ void FIRRTLLowering::addToIfDefBlock(StringRef cond,
   auto condAttr = builder.getStringAttr(cond);
   auto op = ifdefBlocks.lookup({builder.getBlock(), condAttr});
   if (op) {
-    runWithInsertionPointAtEndOfBlock(thenCtor, op.thenRegion());
-    runWithInsertionPointAtEndOfBlock(elseCtor, op.elseRegion());
+    runWithInsertionPointAtEndOfBlock(thenCtor, op.getThenRegion());
+    runWithInsertionPointAtEndOfBlock(elseCtor, op.getElseRegion());
 
     // Move the earlier #ifdef block(s) down to where the last would have been
     // inserted.  This ensures that any values used by the #ifdef blocks are
@@ -2238,7 +2238,7 @@ void FIRRTLLowering::addToOrderedBlock(std::function<void(void)> body) {
 void FIRRTLLowering::addToInitialBlock(std::function<void(void)> body) {
   auto op = initialBlocks.lookup(builder.getBlock());
   if (op) {
-    runWithInsertionPointAtEndOfBlock(body, op.body());
+    runWithInsertionPointAtEndOfBlock(body, op.getBody());
 
     // Move the earlier initial block(s) down to where the last would have
     // been inserted.  This ensures that any values used by the initial blocks
@@ -2257,9 +2257,9 @@ void FIRRTLLowering::addToIfDefProceduralBlock(
   auto insertIt = builder.getInsertionPoint();
   if (insertIt != builder.getBlock()->begin())
     if (auto ifdef = dyn_cast<sv::IfDefProceduralOp>(*--insertIt)) {
-      if (ifdef.cond().getIdent() == cond) {
-        runWithInsertionPointAtEndOfBlock(thenCtor, ifdef.thenRegion());
-        runWithInsertionPointAtEndOfBlock(elseCtor, ifdef.elseRegion());
+      if (ifdef.getCond().getIdent() == cond) {
+        runWithInsertionPointAtEndOfBlock(thenCtor, ifdef.getThenRegion());
+        runWithInsertionPointAtEndOfBlock(elseCtor, ifdef.getElseRegion());
         return;
       }
     }
@@ -2275,9 +2275,9 @@ void FIRRTLLowering::addIfProceduralBlock(Value cond,
   auto insertIt = builder.getInsertionPoint();
   if (insertIt != builder.getBlock()->begin())
     if (auto ifOp = dyn_cast<sv::IfOp>(*--insertIt)) {
-      if (ifOp.cond() == cond) {
-        runWithInsertionPointAtEndOfBlock(thenCtor, ifOp.thenRegion());
-        runWithInsertionPointAtEndOfBlock(elseCtor, ifOp.elseRegion());
+      if (ifOp.getCond() == cond) {
+        runWithInsertionPointAtEndOfBlock(thenCtor, ifOp.getThenRegion());
+        runWithInsertionPointAtEndOfBlock(elseCtor, ifOp.getElseRegion());
         return;
       }
     }
@@ -2521,9 +2521,9 @@ void FIRRTLLowering::initializeRegister(
   auto regDef = cast<sv::RegOp>(reg.getDefiningOp());
   if (!regDef->hasAttrOfType<StringAttr>("inner_sym"))
     regDef->setAttr("inner_sym", builder.getStringAttr(moduleNamespace.newName(
-                                     Twine("__") + regDef.name() + "__")));
+                                     Twine("__") + regDef.getName() + "__")));
   auto regDefSym =
-      hw::InnerRefAttr::get(theModule.getNameAttr(), regDef.inner_symAttr());
+      hw::InnerRefAttr::get(theModule.getNameAttr(), regDef.getInnerSymAttr());
 
   // Construct and return a new reference to `RANDOM.  It is always a 32-bit
   // unsigned expression.  Calls to $random have side effects, so we use
@@ -2543,8 +2543,8 @@ void FIRRTLLowering::initializeRegister(
 
     builder.create<sv::VerbatimOp>(
         builder.getStringAttr(Twine("{{0}} = {`RANDOM};")), ValueRange{},
-        builder.getArrayAttr({hw::InnerRefAttr::get(theModule.getNameAttr(),
-                                                    randReg.inner_symAttr())}));
+        builder.getArrayAttr({hw::InnerRefAttr::get(
+            theModule.getNameAttr(), randReg.getInnerSymAttr())}));
 
     return randReg.getResult();
   };
@@ -2564,7 +2564,7 @@ void FIRRTLLowering::initializeRegister(
       auto reg = cast<sv::RegOp>(randomValueAndRemain.first.getDefiningOp());
 
       auto symbol =
-          hw::InnerRefAttr::get(theModule.getNameAttr(), reg.inner_symAttr());
+          hw::InnerRefAttr::get(theModule.getNameAttr(), reg.getInnerSymAttr());
       unsigned low = randomWidth - randomValueAndRemain.second;
       unsigned high = randomWidth - 1;
       if (width <= randomValueAndRemain.second)
@@ -2670,7 +2670,7 @@ void FIRRTLLowering::initializeRegister(
         if (!op)
           op = builder.create<sv::IfDefProceduralOp>("RANDOMIZE_REG_INIT",
                                                      [&]() {});
-        runWithInsertionPointAtEndOfBlock(randomInit, op.thenRegion());
+        runWithInsertionPointAtEndOfBlock(randomInit, op.getThenRegion());
 
         // If the register is async reset, we need to insert extra
         // initialization in post-randomization so that we can set the reset
@@ -2687,7 +2687,7 @@ void FIRRTLLowering::initializeRegister(
 
           runWithInsertionPointAtEndOfBlock(
               [&]() { builder.create<sv::BPAssignOp>(reg, resetValue); },
-              op.thenRegion());
+              op.getThenRegion());
         }
       });
 

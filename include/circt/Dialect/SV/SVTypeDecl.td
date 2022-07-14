@@ -52,12 +52,12 @@ def InterfaceOp : SVOp<"interface",
   ];
 
   let extraClassDeclaration = [{
-    Block *getBodyBlock() { return &body().front(); }
+    Block *getBodyBlock() { return &getBody().front(); }
 
     ModportType getModportType(::llvm::StringRef);
     InterfaceType getInterfaceType() {
       return InterfaceType::get(getContext(),
-        ::mlir::SymbolRefAttr::get(getContext(), sym_name()));
+        ::mlir::SymbolRefAttr::get(getContext(), getSymName()));
     }
     Type getSignalType(StringRef signalName);
 
