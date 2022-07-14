@@ -35,7 +35,7 @@ def HWModuleLike : OpInterface<"HWModuleLike"> {
     InterfaceMethod<"Get the module name",
     "::mlir::StringAttr", "moduleNameAttr", (ins),
     /*methodBody=*/[{}],
-    /*defaultImplementation=*/[{ return $_op.getNameAttr(); }]>
+    /*defaultImplementation=*/[{ return $_op.getNameAttr(); }]>,
   ];
 
   let verify = [{
@@ -89,7 +89,10 @@ def HWMutableModuleLike : OpInterface<"HWMutableModuleLike"> {
     "void", "modifyPorts", (ins
       "ArrayRef<std::pair<unsigned, circt::hw::PortInfo>>":$insertInputs,
       "ArrayRef<std::pair<unsigned, circt::hw::PortInfo>>":$insertOutputs,
-      "ArrayRef<unsigned>":$eraseInputs, "ArrayRef<unsigned>":$eraseOutputs)>,
+      "ArrayRef<unsigned>":$eraseInputs, "ArrayRef<unsigned>":$eraseOutputs),
+    /*methodBody=*/[{
+      $_op.modifyPorts(insertInputs, insertOutputs, eraseInputs, eraseOutputs);
+    }]>,
 
     /// Insert ports into the module. Does not modify the block arguments of the
     /// module body.

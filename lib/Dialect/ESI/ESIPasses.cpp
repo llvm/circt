@@ -1519,14 +1519,10 @@ LogicalResult ESIConnectServicesPass::surfaceReqs(
     OpBuilder b(inst);
 
     // Assemble lists for the new instance op. Seed it with the existing values.
-    SmallVector<Attribute, 16> newArgNames(mod.getArgNames().begin(),
-                                           mod.getArgNames().end());
     SmallVector<Value, 16> newOperands(inst->getOperands().begin(),
                                        inst->getOperands().end());
     SmallVector<Type, 16> newResultTypes(inst->getResultTypes().begin(),
                                          inst->getResultTypes().end());
-    SmallVector<Attribute, 16> newResultNames(mod.getResultNames().begin(),
-                                              mod.getResultNames().end());
 
     // Add new inputs for the new to_client requests and clone the request into
     // the module containing `inst`.
@@ -1541,15 +1537,14 @@ LogicalResult ESIConnectServicesPass::surfaceReqs(
     for (auto newPort : newOutputs)
       newResultTypes.push_back(newPort.second.type);
 
-    // Create a replacement instance.
+    // Create a replacement instance of the same operation type.
     SmallVector<NamedAttribute> newAttrs;
     for (auto attr : inst->getAttrs()) {
       if (attr.getName() == argsAttrName)
-        newAttrs.push_back(
-            b.getNamedAttr(argsAttrName, b.getArrayAttr(newArgNames)));
+        newAttrs.push_back(b.getNamedAttr(argsAttrName, mod.getArgNames()));
       else if (attr.getName() == resultsAttrName)
         newAttrs.push_back(
-            b.getNamedAttr(resultsAttrName, b.getArrayAttr(newResultNames)));
+            b.getNamedAttr(resultsAttrName, mod.getResultNames()));
       else
         newAttrs.push_back(attr);
     }
