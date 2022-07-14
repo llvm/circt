@@ -675,7 +675,22 @@ def XMRGet : FIRRTLOp<"xmr.get", [
     "ref", "result", "$_self.cast<RefType>().getType()"> ]> {
   let summary = "FIRRTL XMR Get";
   let description = [{
-    Describe me!
+    Resolve a remote reference (XMR) for reading/writing.
+    If an XMR is emitted for this reference, it will be here.
+  }];
+  let arguments = (ins RefType:$ref);
+  let results = (outs FIRRTLType:$result);
+
+  let assemblyFormat = "$ref attr-dict `:` qualified(type($ref))";
+}
+
+def XMREnd : FIRRTLOp<"xmr.end", [
+  TypesMatchWith<"result should be reference base type",
+    "ref", "result", "$_self.cast<RefType>().getType()"> ]> {
+  let summary = "FIRRTL XMR End";
+  let description = [{
+    Endpoint of remote reference (XMR), read or written from
+    the firrtl.xmr.get end.
   }];
   let arguments = (ins RefType:$ref);
   let results = (outs FIRRTLType:$result);
