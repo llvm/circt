@@ -76,38 +76,38 @@ ParseResult CompRegOp::parse(OpAsmParser &parser, OperationState &result) {
 
 void CompRegOp::print(::mlir::OpAsmPrinter &p) {
   SmallVector<StringRef> elidedAttrs;
-  if (sym_name().hasValue()) {
+  if (getSymName().hasValue()) {
     elidedAttrs.push_back("sym_name");
     p << ' ' << "sym ";
-    p.printSymbolName(*sym_name());
+    p.printSymbolName(*getSymName());
   }
 
-  p << ' ' << input() << ", " << clk();
-  if (reset())
-    p << ", " << reset() << ", " << resetValue() << ' ';
+  p << ' ' << getInput() << ", " << getClk();
+  if (getReset())
+    p << ", " << getReset() << ", " << getResetValue() << ' ';
 
   // Determine if 'name' can be elided.
-  if (name().empty()) {
+  if (getName().empty()) {
     elidedAttrs.push_back("name");
   } else {
     SmallString<32> resultNameStr;
     llvm::raw_svector_ostream tmpStream(resultNameStr);
-    p.printOperand(data(), tmpStream);
+    p.printOperand(getData(), tmpStream);
     auto actualName = tmpStream.str().drop_front();
-    if (actualName == name())
+    if (actualName == getName())
       elidedAttrs.push_back("name");
   }
 
   p.printOptionalAttrDict((*this)->getAttrs(), elidedAttrs);
-  p << " : " << input().getType();
+  p << " : " << getInput().getType();
 }
 
 /// Suggest a name for each result value based on the saved result names
 /// attribute.
 void CompRegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   // If the wire has an optional 'name' attribute, use it.
-  if (!name().empty())
-    setNameFn(getResult(), name());
+  if (!getName().empty())
+    setNameFn(getResult(), getName());
 }
 
 //===----------------------------------------------------------------------===//

@@ -42,30 +42,31 @@ public:
     Location loc = reg.getLoc();
 
     auto svReg = rewriter.create<sv::RegOp>(loc, reg.getResult().getType(),
-                                            reg.nameAttr());
+                                            reg.getNameAttr());
     svReg->setDialectAttrs(reg->getDialectAttrs());
 
     // If the seq::CompRegOp has an inner_sym attribute, set this for the
     // sv::RegOp inner_sym attribute.
-    if (reg.sym_name().hasValue())
-      svReg.inner_symAttr(reg.sym_nameAttr());
+    if (reg.getSymName().hasValue())
+      svReg.inner_symAttr(reg.getSymNameAttr());
 
     if (auto attribute = circt::sv::getSVAttributes(reg))
       circt::sv::setSVAttributes(svReg, attribute);
 
     auto regVal = rewriter.create<sv::ReadInOutOp>(loc, svReg);
-    if (reg.reset() && reg.resetValue()) {
+    if (reg.getReset() && reg.getResetValue()) {
       rewriter.create<sv::AlwaysFFOp>(
-          loc, sv::EventControl::AtPosEdge, reg.clk(), ResetType::SyncReset,
-          sv::EventControl::AtPosEdge, reg.reset(),
-          [&]() { rewriter.create<sv::PAssignOp>(loc, svReg, reg.input()); },
+          loc, sv::EventControl::AtPosEdge, reg.getClk(), ResetType::SyncReset,
+          sv::EventControl::AtPosEdge, reg.getReset(),
+          [&]() { rewriter.create<sv::PAssignOp>(loc, svReg, reg.getInput()); },
           [&]() {
-            rewriter.create<sv::PAssignOp>(loc, svReg, reg.resetValue());
+            rewriter.create<sv::PAssignOp>(loc, svReg, reg.getResetValue());
           });
     } else {
       rewriter.create<sv::AlwaysFFOp>(
-          loc, sv::EventControl::AtPosEdge, reg.clk(),
-          [&]() { rewriter.create<sv::PAssignOp>(loc, svReg, reg.input()); });
+          loc, sv::EventControl::AtPosEdge, reg.getClk(), [&]() {
+            rewriter.create<sv::PAssignOp>(loc, svReg, reg.getInput());
+          });
     }
 
     rewriter.replaceOp(reg, {regVal});

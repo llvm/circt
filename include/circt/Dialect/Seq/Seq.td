@@ -30,6 +30,8 @@ def SeqDialect : Dialect {
 
   let hasConstantMaterializer = 1;
   let cppNamespace = "::circt::seq";
+  
+  int emitAccessorPrefix = kEmitAccessorPrefix_Prefixed;
 }
 
 // Base class for the operation in this dialect.
