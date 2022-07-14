@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_HWARITH_HWARITHOPS_TD
 
 include "mlir/IR/OpAsmInterface.td"
+include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
 def ConstantOp : HWArithOp<"constant",
@@ -41,7 +42,7 @@ def ConstantOp : HWArithOp<"constant",
 
 // Base class for binary operators.
 class BinOp<string mnemonic, list<Trait> traits = []> :
-      HWArithOp<mnemonic, traits # [NoSideEffect]> {
+      HWArithOp<mnemonic, traits # [NoSideEffect, InferTypeOpInterface]> {
   let arguments = (ins Variadic<HWArithIntegerType>:$inputs);
   let results = (outs HWArithIntegerType:$result);
 
@@ -51,9 +52,13 @@ class BinOp<string mnemonic, list<Trait> traits = []> :
   let hasVerifier = 1;
 
   let extraClassDeclaration = [{
-    /// Infer the return type of this operation.
-    static IntegerType inferReturnType(MLIRContext * context, IntegerType lhs,
-                                       IntegerType rhs);
+    /// Infer the return types of this operation.
+    static LogicalResult inferReturnTypes(MLIRContext *context,
+                                          Optional<Location> loc,
+                                          ValueRange operands,
+                                          DictionaryAttr attrs,
+                                          mlir::RegionRange regions,
+                                          SmallVectorImpl<Type> &results);
   }];
 
   let extraClassDefinition = [{

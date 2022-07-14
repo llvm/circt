@@ -78,27 +78,39 @@ static unsigned inferAddResultType(IntegerType::SignednessSemantics &signedness,
   return resultWidth;
 }
 
-IntegerType AddOp::inferReturnType(MLIRContext *context, IntegerType lhs,
-                                   IntegerType rhs) {
+LogicalResult AddOp::inferReturnTypes(MLIRContext *context,
+                                      Optional<Location> loc,
+                                      ValueRange operands, DictionaryAttr attrs,
+                                      mlir::RegionRange regions,
+                                      SmallVectorImpl<Type> &results) {
+  auto lhs = operands[0].getType().cast<IntegerType>();
+  auto rhs = operands[1].getType().cast<IntegerType>();
   IntegerType::SignednessSemantics signedness;
   unsigned resultWidth = inferAddResultType(signedness, lhs, rhs);
 
-  return IntegerType::get(context, resultWidth, signedness);
+  results.push_back(IntegerType::get(context, resultWidth, signedness));
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
 // SubOp
 //===----------------------------------------------------------------------===//
 
-IntegerType SubOp::inferReturnType(MLIRContext *context, IntegerType lhs,
-                                   IntegerType rhs) {
+LogicalResult SubOp::inferReturnTypes(MLIRContext *context,
+                                      Optional<Location> loc,
+                                      ValueRange operands, DictionaryAttr attrs,
+                                      mlir::RegionRange regions,
+                                      SmallVectorImpl<Type> &results) {
+  auto lhs = operands[0].getType().cast<IntegerType>();
+  auto rhs = operands[1].getType().cast<IntegerType>();
   // The result type rules are identical to the ones for an addition
   // With one exception: all results are signed!
   IntegerType::SignednessSemantics signedness;
   unsigned resultWidth = inferAddResultType(signedness, lhs, rhs);
   signedness = IntegerType::Signed;
 
-  return IntegerType::get(context, resultWidth, signedness);
+  results.push_back(IntegerType::get(context, resultWidth, signedness));
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -117,22 +129,33 @@ getSignedInheritedSignedness(IntegerType lhs, IntegerType rhs) {
   }
 }
 
-IntegerType MulOp::inferReturnType(MLIRContext *context, IntegerType lhs,
-                                   IntegerType rhs) {
+LogicalResult MulOp::inferReturnTypes(MLIRContext *context,
+                                      Optional<Location> loc,
+                                      ValueRange operands, DictionaryAttr attrs,
+                                      mlir::RegionRange regions,
+                                      SmallVectorImpl<Type> &results) {
+  auto lhs = operands[0].getType().cast<IntegerType>();
+  auto rhs = operands[1].getType().cast<IntegerType>();
   // the result width stays the same no matter the signedness
   unsigned resultWidth = lhs.getWidth() + rhs.getWidth();
   IntegerType::SignednessSemantics signedness =
       getSignedInheritedSignedness(lhs, rhs);
 
-  return IntegerType::get(context, resultWidth, signedness);
+  results.push_back(IntegerType::get(context, resultWidth, signedness));
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
 // DivOp
 //===----------------------------------------------------------------------===//
 
-IntegerType DivOp::inferReturnType(MLIRContext *context, IntegerType lhs,
-                                   IntegerType rhs) {
+LogicalResult DivOp::inferReturnTypes(MLIRContext *context,
+                                      Optional<Location> loc,
+                                      ValueRange operands, DictionaryAttr attrs,
+                                      mlir::RegionRange regions,
+                                      SmallVectorImpl<Type> &results) {
+  auto lhs = operands[0].getType().cast<IntegerType>();
+  auto rhs = operands[1].getType().cast<IntegerType>();
   // The result width is always at least as large as the bit width of lhs
   unsigned resultWidth = lhs.getWidth();
 
@@ -143,7 +166,8 @@ IntegerType DivOp::inferReturnType(MLIRContext *context, IntegerType lhs,
   IntegerType::SignednessSemantics signedness =
       getSignedInheritedSignedness(lhs, rhs);
 
-  return IntegerType::get(context, resultWidth, signedness);
+  results.push_back(IntegerType::get(context, resultWidth, signedness));
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -153,21 +177,11 @@ IntegerType DivOp::inferReturnType(MLIRContext *context, IntegerType lhs,
 namespace circt {
 namespace hwarith {
 
-template <typename Op>
-static LogicalResult verifyBinOp(Op binOp) {
-  auto ops = binOp.inputs();
+static LogicalResult verifyBinOp(Operation* binOp) {
+  auto ops = binOp->getOperands();
   if (ops.size() != 2)
-    return binOp.emitError() << "expected 2 operands but got " << ops.size();
+    return binOp->emitError() << "expected 2 operands but got " << ops.size();
 
-  auto lhs = ops[0];
-  auto rhs = ops[1];
-  auto gotType = binOp.getResult().getType();
-  auto expectedType = Op::inferReturnType(
-      binOp.getContext(), lhs.getType().template cast<IntegerType>(),
-      rhs.getType().template cast<IntegerType>());
-  if (gotType != expectedType)
-    return binOp.emitError() << "expected result type: " << expectedType
-                             << " but " << gotType << " was specified";
   return success();
 }
 

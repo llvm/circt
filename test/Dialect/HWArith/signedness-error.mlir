@@ -18,7 +18,7 @@ hw.module @signlessResult() {
 
 hw.module @wrongResultWidth() {
   %c1_1 = hwarith.constant 1 : ui1
-  // expected-error @+1 {{expected result type: 'ui2' but 'ui3' was specified}}
+  // expected-error @+1 {{'hwarith.add' op inferred type(s) 'ui2' are incompatible with return type(s) of operation 'ui3'}}
   %0 = hwarith.add %c1_1, %c1_1 : (ui1, ui1) -> ui3
 }
 

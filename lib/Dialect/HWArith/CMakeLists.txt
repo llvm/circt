@@ -23,4 +23,5 @@ add_circt_dialect_library(CIRCTHWArith
 
     LINK_LIBS PUBLIC
     MLIRIR
+    MLIRInferTypeOpInterface
 )

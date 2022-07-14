@@ -16,6 +16,7 @@
 #include "circt/Dialect/HWArith/HWArithDialect.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/OpImplementation.h"
+#include "mlir/Interfaces/InferTypeOpInterface.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
 #define GET_OP_CLASSES
