@@ -1842,7 +1842,7 @@ static LogicalResult eraseIfZeroOrNotZero(Operation *op, Value predicate,
                                           Value enable,
                                           PatternRewriter &rewriter,
                                           bool eraseIfZero) {
-  // If the assertion is never enabled, delete it.
+  // If the verification op is never enabled, delete it.
   if (auto constant = enable.getDefiningOp<firrtl::ConstantOp>()) {
     if (constant.value().isZero()) {
       rewriter.eraseOp(op);
@@ -1850,7 +1850,7 @@ static LogicalResult eraseIfZeroOrNotZero(Operation *op, Value predicate,
     }
   }
 
-  // If the assertion is never triggered, delete it.
+  // If the verification op is never triggered, delete it.
   if (auto constant = predicate.getDefiningOp<firrtl::ConstantOp>()) {
     if (constant.value().isZero() == eraseIfZero) {
       rewriter.eraseOp(op);
