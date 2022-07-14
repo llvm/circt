@@ -773,6 +773,8 @@ void GrandCentralTapsPass::runOnOperation() {
                       hw::OutputFileAttr::getFromDirectoryAndFilename(
                           &getContext(), maybeExtractDirectory.getValue(),
                           impl.getName() + ".sv"));
+      impl->setAttr("comment",
+                    builder.getStringAttr("VCS coverage exclude_file"));
       builder.setInsertionPointToEnd(impl.getBody());
 
       // Connect the output ports to the appropriate tapped object.

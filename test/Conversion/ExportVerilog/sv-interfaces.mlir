@@ -136,4 +136,8 @@ module {
     // CHECK-NEXT: struct packed {logic repeat_0; } data;
   }
 
+  // CHECK-LABEL: // interface with a comment
+  // CHECK-NEXT:  interface interfaceWithComment
+  sv.interface @interfaceWithComment
+    attributes {comment = "interface with a comment"} {}
 }

@@ -1408,6 +1408,7 @@ GrandCentralPass::traverseBundle(AugmentedBundleTypeAttr bundle, IntegerAttr id,
                        &getContext(), getOutputDirectory().getValue(),
                        iFaceName + ".sv",
                        /*excludFromFileList=*/true));
+  iface.commentAttr(builder.getStringAttr("VCS coverage exclude_file"));
 
   builder.setInsertionPointToEnd(cast<sv::InterfaceOp>(iface).getBody());
 
@@ -1856,6 +1857,8 @@ void GrandCentralPass::runOnOperation() {
                         &getContext(), getOutputDirectory().getValue(),
                         mapping.getName() + ".sv",
                         /*excludeFromFilelist=*/true));
+              mapping->setAttr("comment", builder.getStringAttr(
+                                              "VCS coverage exclude_file"));
               companionIDMap[id] = {name.getValue(), op, mapping};
 
               // Instantiate the mapping module inside the companion.  Keep the
@@ -1896,6 +1899,8 @@ void GrandCentralPass::runOnOperation() {
                               op.getName() + ".sv",
                               /*excludeFromFileList=*/true,
                               /*includeReplicatedOps=*/true));
+              op->setAttr("comment",
+                          builder.getStringAttr("VCS coverage exclude_file"));
 
               // Look for any blackboxes instantiated by the companion and mark
               // them for inclusion in the Grand Central extraction directory.
