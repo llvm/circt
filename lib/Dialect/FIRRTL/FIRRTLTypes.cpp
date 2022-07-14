@@ -321,6 +321,7 @@ unsigned RecursiveTypeProperties::toFlags() const {
 
 /// Return true if this is a 'ground' type, aka a non-aggregate type.
 bool FIRRTLType::isGround() {
+  // TODO: RefType
   return TypeSwitch<FIRRTLType, bool>(*this)
       .Case<ClockType, ResetType, AsyncResetType, SIntType, UIntType,
             AnalogType>([](Type) { return true; })
@@ -349,6 +350,7 @@ RecursiveTypeProperties FIRRTLType::getRecursiveTypeProperties() {
       .Case<FVectorType>([](FVectorType vectorType) {
         return vectorType.getRecursiveTypeProperties();
       })
+      // TODO: RefType (maybe in above cases)
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
         return RecursiveTypeProperties{};
@@ -1102,6 +1104,7 @@ llvm::Optional<int64_t> firrtl::getBitWidth(FIRRTLType type) {
             return llvm::Optional<int64_t>(None);
         })
         .Case<ClockType, ResetType, AsyncResetType>([](Type) { return 1; })
+        // TODO: RefType
         .Default([&](auto t) { return llvm::Optional<int64_t>(None); });
   };
   return getWidth(type);
