@@ -383,7 +383,7 @@ void ESIPortsPass::runOnOperation() {
 
   // Find all instances and update them.
   top.walk([&externModsMutated, this](InstanceOp inst) {
-    auto mapIter = externModsMutated.find(inst.moduleName());
+    auto mapIter = externModsMutated.find(inst.getModuleName());
     if (mapIter != externModsMutated.end())
       updateInstance(mapIter->second, inst);
   });
@@ -397,7 +397,7 @@ void ESIPortsPass::runOnOperation() {
 
   // Find all instances and update them.
   top.walk([&modsMutated, this](InstanceOp inst) {
-    auto mapIter = modsMutated.find(inst.moduleName());
+    auto mapIter = modsMutated.find(inst.getModuleName());
     if (mapIter != modsMutated.end())
       updateInstance(mapIter->second, inst);
   });
@@ -586,8 +586,9 @@ void ESIPortsPass::updateInstance(HWModuleOp mod, InstanceOp inst) {
   // -----
   // Clone the instance.
   b.setInsertionPointAfter(inst);
-  auto newInst = b.create<InstanceOp>(mod, inst.instanceNameAttr(), newOperands,
-                                      inst.parameters(), inst.inner_symAttr());
+  auto newInst =
+      b.create<InstanceOp>(mod, inst.getInstanceNameAttr(), newOperands,
+                           inst.getParameters(), inst.getInnerSymAttr());
 
   // -----
   // Wrap the results back into ESI channels and connect up all the ready
@@ -834,9 +835,9 @@ void ESIPortsPass::updateInstance(HWModuleExternOp mod, InstanceOp inst) {
   }
 
   // Create the new instance!
-  InstanceOp newInst =
-      instBuilder.create<InstanceOp>(mod, inst.instanceNameAttr(), newOperands,
-                                     inst.parameters(), inst.inner_symAttr());
+  InstanceOp newInst = instBuilder.create<InstanceOp>(
+      mod, inst.getInstanceNameAttr(), newOperands, inst.getParameters(),
+      inst.getInnerSymAttr());
 
   // Go through the old list of non-ESI result values, and replace them with the
   // new non-ESI results.
@@ -1518,21 +1519,21 @@ LogicalResult ESIConnectServicesPass::surfaceReqs(
           "ESI service connections currently only support hw.instances");
 
     // Assemble lists for the new instance op. Seed it with the existing values.
-    SmallVector<Attribute, 16> newArgNames(hwInst.argNames().begin(),
-                                           hwInst.argNames().end());
+    SmallVector<Attribute, 16> newArgNames(hwInst.getArgNames().begin(),
+                                           hwInst.getArgNames().end());
     SmallVector<Value, 16> newOperands(hwInst.getOperands().begin(),
                                        hwInst.getOperands().end());
     SmallVector<Type, 16> newResultTypes(hwInst.getResultTypes().begin(),
                                          hwInst.getResultTypes().end());
-    SmallVector<Attribute, 16> newResultNames(hwInst.resultNames().begin(),
-                                              hwInst.resultNames().end());
+    SmallVector<Attribute, 16> newResultNames(hwInst.getResultNames().begin(),
+                                              hwInst.getResultNames().end());
 
     // Add new inputs for the new to_client requests and clone the request into
     // the module containing `inst`.
     for (auto [toClient, newPort] : llvm::zip(toClientReqs, newInputs)) {
       auto instToClient = cast<RequestToClientConnection>(b.clone(*toClient));
       instToClient.clientNamePathAttr(prependNamePart(
-          instToClient.clientNamePath(), hwInst.instanceNameAttr()));
+          instToClient.clientNamePath(), hwInst.getInstanceNameAttr()));
       newArgNames.push_back(newPort.second.name);
       newOperands.push_back(instToClient.receiving());
     }
@@ -1545,10 +1546,10 @@ LogicalResult ESIConnectServicesPass::surfaceReqs(
 
     // Create a replacement instance.
     auto newHWInst = b.create<hw::InstanceOp>(
-        hwInst.getLoc(), newResultTypes, hwInst.instanceNameAttr(),
-        hwInst.moduleNameAttr(), newOperands, b.getArrayAttr(newArgNames),
-        b.getArrayAttr(newResultNames), hwInst.parametersAttr(),
-        hwInst.inner_symAttr());
+        hwInst.getLoc(), newResultTypes, hwInst.getInstanceNameAttr(),
+        hwInst.getModuleNameAttr(), newOperands, b.getArrayAttr(newArgNames),
+        b.getArrayAttr(newResultNames), hwInst.getParametersAttr(),
+        hwInst.getInnerSymAttr());
     newHWInst->setDialectAttrs(hwInst->getDialectAttrs());
     newModuleInstantiations.push_back(newHWInst);
 
@@ -1562,7 +1563,7 @@ LogicalResult ESIConnectServicesPass::surfaceReqs(
     for (auto [toServer, newPort] : llvm::zip(toServerReqs, newOutputs)) {
       auto instToServer = cast<RequestToServerConnection>(b.clone(*toServer));
       instToServer.clientNamePathAttr(prependNamePart(
-          instToServer.clientNamePath(), hwInst.instanceNameAttr()));
+          instToServer.clientNamePath(), hwInst.getInstanceNameAttr()));
       instToServer->setOperand(0, newHWInst->getResult(outputCounter++));
     }
   }

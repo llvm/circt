@@ -40,11 +40,6 @@ def ConstantOp
     /// Build a ConstantOp from a prebuilt attribute.
     OpBuilder<(ins "IntegerAttr":$value)>
   ];
-  let extraClassDeclaration = [{
-    APInt getValue() {
-      return (*this)->getAttrOfType<IntegerAttr>("value").getValue();
-    }
-  }];
   let hasFolder = true;
   let hasVerifier = 1;
 }

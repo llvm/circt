@@ -75,7 +75,7 @@ void HWGeneratorCalloutPass::processGenerator(
 
   // Ignore the generator op if the schema does not match the user specified
   // schema name from command line "-schema-name"
-  if (genSchema.descriptor().str() != schemaName)
+  if (genSchema.getDescriptor().str() != schemaName)
     return;
 
   SmallVector<std::string> generatorArgs;
@@ -93,7 +93,7 @@ void HWGeneratorCalloutPass::processGenerator(
   // Iterate over all the attributes in the schema.
   // Assumption: All the options required by the generator program must be
   // present in the schema.
-  for (auto attr : genSchema.requiredAttrs()) {
+  for (auto attr : genSchema.getRequiredAttrs()) {
     auto sAttr = attr.cast<StringAttr>();
     // Get the port name from schema.
     StringRef portName = sAttr.getValue();

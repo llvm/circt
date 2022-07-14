@@ -152,7 +152,7 @@ static bool isDuplicatableExpression(Operation *op) {
 
   // We only inline array_get with a constant index.
   if (auto array = dyn_cast<hw::ArrayGetOp>(op))
-    return array.index().getDefiningOp<ConstantOp>();
+    return array.getIndex().getDefiningOp<ConstantOp>();
 
   return false;
 }
@@ -567,7 +567,7 @@ static bool isOkToBitSelectFrom(Value v) {
 /// expressions in the sensitivity list of always blocks, etc.
 static bool isExpressionUnableToInline(Operation *op) {
   if (auto cast = dyn_cast<BitcastOp>(op))
-    if (!haveMatchingDims(cast.input().getType(), cast.result().getType(),
+    if (!haveMatchingDims(cast.getInput().getType(), cast.getResult().getType(),
                           op->getLoc()))
       // Bitcasts rely on the type being assigned to, so we cannot inline.
       return true;
@@ -1312,7 +1312,7 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
           mlir::emitError(loc, "unresolvable type reference");
           return false;
         }
-        if (typedecl.type() != typeRef.getInnerType()) {
+        if (typedecl.getType() != typeRef.getInnerType()) {
           mlir::emitError(loc, "declared type did not match aliased type");
           return false;
         }
@@ -2058,12 +2058,12 @@ SubExprInfo ExprEmitter::visitTypeOp(BitcastOp op) {
   // their dimensions don't match. SystemVerilog uses the wire declaration to
   // know what type this value is being casted to.
   Type toType = op.getType();
-  if (!haveMatchingDims(toType, op.input().getType(), op.getLoc())) {
+  if (!haveMatchingDims(toType, op.getInput().getType(), op.getLoc())) {
     os << "/*cast(bit";
     emitter.emitTypeDims(toType, op.getLoc(), os);
     os << ")*/";
   }
-  return emitSubExpr(op.input(), LowestPrecedence);
+  return emitSubExpr(op.getInput(), LowestPrecedence);
 }
 
 SubExprInfo ExprEmitter::visitComb(ICmpOp op) {
@@ -2223,7 +2223,7 @@ SubExprInfo ExprEmitter::visitTypeOp(ParamValueOp op) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
-  return emitter.printParamValue(op.value(), os, [&]() {
+  return emitter.printParamValue(op.getValue(), os, [&]() {
     return op->emitOpError("invalid parameter use");
   });
 }
@@ -2234,19 +2234,19 @@ SubExprInfo ExprEmitter::visitTypeOp(ArraySliceOp op) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
-  auto arrayPrec = emitSubExpr(op.input(), Selection);
+  auto arrayPrec = emitSubExpr(op.getInput(), Selection);
 
   unsigned dstWidth = type_cast<ArrayType>(op.getType()).getSize();
   os << '[';
-  emitSubExpr(op.lowIndex(), LowestPrecedence);
+  emitSubExpr(op.getLowIndex(), LowestPrecedence);
   os << " +: " << dstWidth << ']';
   return {Selection, arrayPrec.signedness};
 }
 
 SubExprInfo ExprEmitter::visitTypeOp(ArrayGetOp op) {
-  emitSubExpr(op.input(), Selection);
+  emitSubExpr(op.getInput(), Selection);
   os << '[';
-  emitSubExpr(op.index(), LowestPrecedence);
+  emitSubExpr(op.getIndex(), LowestPrecedence);
   os << ']';
   emitSVAttributes(op);
   return {Selection, IsUnsigned};
@@ -2258,7 +2258,7 @@ SubExprInfo ExprEmitter::visitTypeOp(ArrayCreateOp op) {
     emitError(op, "SV attributes emission is unimplemented for the op");
 
   os << '{';
-  llvm::interleaveComma(op.inputs(), os, [&](Value operand) {
+  llvm::interleaveComma(op.getInputs(), os, [&](Value operand) {
     os << "{";
     emitSubExpr(operand, LowestPrecedence);
     os << "}";
@@ -2378,8 +2378,8 @@ SubExprInfo ExprEmitter::visitTypeOp(StructExtractOp op) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
-  emitSubExpr(op.input(), Selection);
-  os << '.' << emitter.getVerilogStructFieldName(op.fieldAttr());
+  emitSubExpr(op.getInput(), Selection);
+  os << '.' << emitter.getVerilogStructFieldName(op.getFieldAttr());
   return {Selection, IsUnsigned};
 }
 
@@ -2392,10 +2392,10 @@ SubExprInfo ExprEmitter::visitTypeOp(StructInjectOp op) {
   llvm::interleaveComma(
       stype.getElements(), os, [&](const StructType::FieldInfo &field) {
         os << emitter.getVerilogStructFieldName(field.name) << ": ";
-        if (field.name == op.field()) {
-          emitSubExpr(op.newValue(), Selection);
+        if (field.name == op.getField()) {
+          emitSubExpr(op.getNewValue(), Selection);
         } else {
-          emitSubExpr(op.input(), Selection);
+          emitSubExpr(op.getInput(), Selection);
           os << '.' << field.name.getValue();
         }
       });
@@ -2404,7 +2404,7 @@ SubExprInfo ExprEmitter::visitTypeOp(StructInjectOp op) {
 }
 
 SubExprInfo ExprEmitter::visitTypeOp(EnumConstantOp op) {
-  os << op.field().getField().getValue();
+  os << op.getField().getField().getValue();
   return {Selection, IsUnsigned};
 }
 
@@ -2963,10 +2963,10 @@ LogicalResult StmtEmitter::visitStmt(TypedeclOp op) {
     emitError(op, "SV attributes emission is unimplemented for the op");
 
   os << "typedef ";
-  emitter.printPackedType(stripUnpackedTypes(op.type()), os, op.getLoc(),
+  emitter.printPackedType(stripUnpackedTypes(op.getType()), os, op.getLoc(),
                           false);
   os << ' ' << op.getPreferredName();
-  emitter.printUnpackedTypePostfix(op.type(), os);
+  emitter.printUnpackedTypePostfix(op.getType(), os);
   os << ";\n";
   return success();
 }
@@ -3638,12 +3638,12 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   indent() << getVerilogModuleName(moduleOp);
 
   // If this is a parameterized module, then emit the parameters.
-  if (!op.parameters().empty()) {
+  if (!op.getParameters().empty()) {
     // All the parameters may be defaulted -- don't print out an empty list if
     // so.
     bool printed = false;
     for (auto params :
-         llvm::zip(op.parameters(),
+         llvm::zip(op.getParameters(),
                    moduleOp->getAttrOfType<ArrayAttr>("parameters"))) {
       auto param = std::get<0>(params).cast<ParamDeclAttr>();
       auto modParam = std::get<1>(params).cast<ParamDeclAttr>();
@@ -3689,7 +3689,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   };
 
   // Emit the argument and result ports.
-  auto opArgs = op.inputs();
+  auto opArgs = op.getInputs();
   auto opResults = op.getResults();
   bool isFirst = true; // True until we print a port.
   bool isZeroWidth = false;
@@ -4134,7 +4134,7 @@ void ModuleEmitter::emitBind(BindOp op) {
   }
 
   // Emit the argument and result ports.
-  auto opArgs = inst.inputs();
+  auto opArgs = inst.getInputs();
   auto opResults = inst.getResults();
   bool isFirst = true; // True until we print a port.
   for (auto &elt : childPortInfo) {
@@ -4261,7 +4261,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
   }
 
   // Add all parameters to the name table.
-  for (auto param : module.parameters()) {
+  for (auto param : module.getParameters()) {
     // Add the name to the name table so any conflicting wires are renamed.
     StringRef verilogName = state.globalNames.getParameterVerilogName(
         module, param.cast<ParamDeclAttr>().getName());
@@ -4271,7 +4271,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
   SmallPtrSet<Operation *, 8> moduleOpSet;
   moduleOpSet.insert(module);
 
-  emitComment(module.commentAttr());
+  emitComment(module.getCommentAttr());
 
   if (hasSVAttributes(module))
     emitError(module, "SV attributes emission is unimplemented for the op");
@@ -4279,7 +4279,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
   os << "module " << getVerilogModuleName(module);
 
   // If we have any parameters, print them on their own line.
-  if (!module.parameters().empty()) {
+  if (!module.getParameters().empty()) {
     os << "\n  #(";
 
     auto printParamType = [&](Type type, Attribute defaultValue,
@@ -4319,7 +4319,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
     // Determine the max width of the parameter types so things are lined up.
     size_t maxTypeWidth = 0;
     SmallString<8> scratch;
-    for (auto param : module.parameters()) {
+    for (auto param : module.getParameters()) {
       auto paramAttr = param.cast<ParamDeclAttr>();
       // Measure the type length by printing it to a temporary string.
       printParamType(paramAttr.getType().getValue(), paramAttr.getValue(),
@@ -4331,7 +4331,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
       maxTypeWidth += 1;
 
     llvm::interleave(
-        module.parameters(), os,
+        module.getParameters(), os,
         [&](Attribute param) {
           auto paramAttr = param.cast<ParamDeclAttr>();
           auto defaultValue = paramAttr.getValue(); // may be null if absent.

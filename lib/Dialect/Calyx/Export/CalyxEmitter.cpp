@@ -392,7 +392,7 @@ private:
         .Case<hw::ConstantOp>([&](auto op) {
           // A constant is defined as <bit-width>'<base><value>, where the base
           // is `b` (binary), `o` (octal), `h` hexadecimal, or `d` (decimal).
-          APInt value = op.value();
+          APInt value = op.getValue();
 
           (isIndented ? indent() : os)
               << std::to_string(value.getBitWidth()) << apostrophe() << "d";

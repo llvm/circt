@@ -115,7 +115,7 @@ def HWModuleOp : HWModuleOpBase<"module",
 
     // TODO(mlir): FunctionLike shouldn't produce a getBody() helper, it is
     // squatting on the name.
-    Block *getBodyBlock() { return &body().front(); }
+    Block *getBodyBlock() { return &getBody().front(); }
 
     // Get the module's symbolic name as StringAttr.
     StringAttr getNameAttr() {
@@ -430,12 +430,12 @@ def InstanceOp : HWOp<"instance", [
 
     /// Change the names of all the input ports.
     void setArgumentNames(ArrayAttr names) {
-      argNamesAttr(names);
+      setArgNamesAttr(names);
     }
 
     /// Change the names of all the result ports.
     void setResultNames(ArrayAttr names) {
-      resultNamesAttr(names);
+      setResultNamesAttr(names);
     }
 
     /// Lookup the module or extmodule for the symbol.  This returns null on
@@ -444,12 +444,12 @@ def InstanceOp : HWOp<"instance", [
 
     /// Get the instances's name.
     StringAttr getName() {
-      return instanceNameAttr();
+      return getInstanceNameAttr();
     }
 
     /// Set the instance's name.
     void setName(StringAttr name) {
-      instanceNameAttr(name);
+      setInstanceNameAttr(name);
     }
 
     //===------------------------------------------------------------------===//

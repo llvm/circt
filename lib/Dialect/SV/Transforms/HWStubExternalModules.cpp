@@ -38,7 +38,7 @@ void HWStubExternalModulesPass::runOnOperation() {
       hw::ModulePortInfo ports = module.getPorts();
       auto nameAttr = module.getNameAttr();
       auto newModule = builder.create<hw::HWModuleOp>(
-          module.getLoc(), nameAttr, ports, module.parameters());
+          module.getLoc(), nameAttr, ports, module.getParameters());
       auto outputOp = newModule.getBodyBlock()->getTerminator();
       OpBuilder innerBuilder(outputOp);
       SmallVector<Value, 8> outputs;

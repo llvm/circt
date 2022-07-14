@@ -146,9 +146,9 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
 
   size_t inArg = 0;
   for (size_t i = 0; i < mem.numReadPorts; ++i) {
-    Value addr = op.body().getArgument(inArg++);
-    Value en = op.body().getArgument(inArg++);
-    Value clock = op.body().getArgument(inArg++);
+    Value addr = op.getBody().getArgument(inArg++);
+    Value en = op.getBody().getArgument(inArg++);
+    Value clock = op.getBody().getArgument(inArg++);
     // Add pipeline stages
     if (ignoreReadEnableMem) {
       for (size_t j = 0, e = mem.readLatency; j != e; ++j) {
@@ -177,16 +177,16 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
     auto numReadStages = mem.readLatency;
     auto numWriteStages = mem.writeLatency - 1;
     auto numCommonStages = std::min(numReadStages, numWriteStages);
-    Value addr = op.body().getArgument(inArg++);
-    Value en = op.body().getArgument(inArg++);
-    Value clock = op.body().getArgument(inArg++);
-    Value wmode = op.body().getArgument(inArg++);
-    Value wdataIn = op.body().getArgument(inArg++);
+    Value addr = op.getBody().getArgument(inArg++);
+    Value en = op.getBody().getArgument(inArg++);
+    Value clock = op.getBody().getArgument(inArg++);
+    Value wmode = op.getBody().getArgument(inArg++);
+    Value wdataIn = op.getBody().getArgument(inArg++);
     Value wmaskBits;
     // There are no input mask ports, if maskBits =1. Create a dummy true value
     // for mask.
     if (isMasked)
-      wmaskBits = op.body().getArgument(inArg++);
+      wmaskBits = op.getBody().getArgument(inArg++);
     else
       wmaskBits = b.create<ConstantOp>(b.getIntegerAttr(en.getType(), 1));
 
@@ -265,15 +265,15 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
   DenseMap<unsigned, Operation *> writeProcesses;
   for (size_t i = 0; i < mem.numWritePorts; ++i) {
     auto numStages = mem.writeLatency - 1;
-    Value addr = op.body().getArgument(inArg++);
-    Value en = op.body().getArgument(inArg++);
-    Value clock = op.body().getArgument(inArg++);
-    Value wdataIn = op.body().getArgument(inArg++);
+    Value addr = op.getBody().getArgument(inArg++);
+    Value en = op.getBody().getArgument(inArg++);
+    Value clock = op.getBody().getArgument(inArg++);
+    Value wdataIn = op.getBody().getArgument(inArg++);
     Value wmaskBits;
     // There are no input mask ports, if maskBits =1. Create a dummy true value
     // for mask.
     if (isMasked)
-      wmaskBits = op.body().getArgument(inArg++);
+      wmaskBits = op.getBody().getArgument(inArg++);
     else
       wmaskBits = b.create<ConstantOp>(b.getIntegerAttr(en.getType(), 1));
     // Add pipeline stages
@@ -486,11 +486,11 @@ void HWMemSimImplPass::runOnOperation() {
   for (auto op :
        llvm::make_early_inc_range(topModule->getOps<HWModuleGeneratedOp>())) {
     auto oldModule = cast<HWModuleGeneratedOp>(op);
-    auto gen = oldModule.generatorKind();
+    auto gen = oldModule.getGeneratorKind();
     auto genOp = cast<HWGeneratorSchemaOp>(
         SymbolTable::lookupSymbolIn(getOperation(), gen));
 
-    if (genOp.descriptor() == "FIRRTL_Memory") {
+    if (genOp.getDescriptor() == "FIRRTL_Memory") {
       auto mem = analyzeMemOp(oldModule);
 
       OpBuilder builder(oldModule);
@@ -511,7 +511,7 @@ void HWMemSimImplPass::runOnOperation() {
             oldModule.getLoc(), nameAttr, oldModule.getPorts());
         if (auto outdir = oldModule->getAttr("output_file"))
           newModule->setAttr("output_file", outdir);
-        newModule.commentAttr(
+        newModule.setCommentAttr(
             builder.getStringAttr("VCS coverage exclude_file"));
 
         HWMemSimImpl(getContext(), replSeqMem, ignoreReadEnableMem)
