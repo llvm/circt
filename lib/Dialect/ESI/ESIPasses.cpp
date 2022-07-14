@@ -1323,10 +1323,12 @@ struct ESIConnectServicesPass
   LogicalResult surfaceReqs(hw::HWModuleLike,
                             ArrayRef<RequestToClientConnection>,
                             ArrayRef<RequestToServerConnection>);
+
   /// For any service which is "local" (provides the requested service) in a
   /// module, replace it with a ServiceImplementOp. Said op is to be replaced
   /// with an instantiation by a generator.
   LogicalResult replaceInst(ServiceInstanceOp, Block *portReqs);
+
   /// Figure out which requests are "local" vs need to be surfaced. Call
   /// 'surfaceReqs' and/or 'replaceInst' as appropriate.
   LogicalResult process(hw::HWModuleLike);
@@ -1342,6 +1344,9 @@ void ESIConnectServicesPass::runOnOperation() {
   }
 
   // Get a partially-ordered list of modules based on the instantiation DAG.
+  // It's _very_ important that we process modules before their instantiations
+  // so that the modules where they're instantiated correctly process the
+  // surfaced connections.
   SmallVector<hw::HWModuleLike, 64> sortedMods;
   getAndSortModules(outerMod, sortedMods);
 
@@ -1426,7 +1431,7 @@ LogicalResult ESIConnectServicesPass::replaceInst(ServiceInstanceOp instOp,
   auto implOp = b.create<ServiceImplementReqOp>(
       instOp.getLoc(), resultTypes, instOp.service_symbolAttr(),
       instOp.identifierAttr(), operands);
-  implOp->setDialectAttrs(implOp->getDialectAttrs());
+  implOp->setDialectAttrs(instOp->getDialectAttrs());
   implOp.portReqs().push_back(portReqs);
 
   // Update the users.
