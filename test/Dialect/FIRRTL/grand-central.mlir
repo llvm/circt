@@ -88,9 +88,9 @@ firrtl.circuit "InterfaceGroundType" attributes {
 // CHECK-SAME:   @DUT
 // CHECK-SAME:   #hw.innerNameRef<@DUT::@c>]
 
-// CHECK: sv.interface {
+// CHECK: sv.interface @Foo
+// CHECK-SAME: comment = "VCS coverage exclude_file"
 // CHECK-SAME: output_file = #hw.output_file<"gct-dir/Foo.sv"
-// CHECK-SAME: @Foo
 // CHECK-NEXT: sv.verbatim "// description of foo"
 // CHECK-NEXT: sv.interface.signal @foo : i2
 // CHECK-NEXT: sv.verbatim "// multi\0A// line\0A// description\0A// of\0A// bar"
@@ -167,9 +167,9 @@ firrtl.circuit "InterfaceVectorType" attributes {
 // CHECK: %a_1 = firrtl.regreset
 // CHECK-SAME: annotations = [{a}]
 
-// CHECK: sv.interface {
+// CHECK: sv.interface @Foo
+// CHECK-SAME: comment = "VCS coverage exclude_file"
 // CHECK-SAME: output_file = #hw.output_file<"gct-dir/Foo.sv"
-// CHECK-SAME: @Foo
 // CHECK-NEXT: sv.verbatim "// description of foo"
 // CHECK-NEXT: sv.interface.signal @foo : !hw.uarray<2xi1>
 
@@ -240,15 +240,15 @@ firrtl.circuit "InterfaceBundleType" attributes {
 // CHECK: %y = firrtl.wire
 // CHECK-SAME: annotations = [{a}]
 
-// CHECK: sv.interface {
+// CHECK: sv.interface @Foo
+// CHECK-SAME: comment = "VCS coverage exclude_file"
 // CHECK-SAME: output_file = #hw.output_file<"gct-dir/Foo.sv"
-// CHECK-SAME: @Foo
 // CHECK-NEXT: sv.verbatim "// description of Bar"
 // CHECK-NEXT: Bar bar();
 
-// CHECK: sv.interface {
+// CHECK: sv.interface @Bar
+// CHECK-SAME: comment = "VCS coverage exclude_file"
 // CHECK-SAME: output_file = #hw.output_file<"gct-dir/Bar.sv"
-// CHECK-SAME: @Bar
 // CHECK-NEXT: sv.interface.signal @b : i2
 // CHECK-NEXT: sv.interface.signal @a : i1
 
@@ -364,7 +364,7 @@ firrtl.circuit "VecOfVec" attributes {
 // CHECK-NEXT:    assign {{[{][{]0[}][}]}}.foo[0][1]
 // CHECK-SAME:      #hw.innerNameRef<@DUT::@__View_Foo__>
 
-// CHECK:      sv.interface {{.+}} @Foo
+// CHECK:      sv.interface @Foo
 // CHECK:        sv.interface.signal @foo : !hw.uarray<1xuarray<2xi3>>
 
 // -----
@@ -423,9 +423,9 @@ firrtl.circuit "InterfaceNode" attributes {
 // CHECK: firrtl.node
 // CHECK-SAME: annotations = [{a}]
 
-// CHECK: sv.interface {
+// CHECK: sv.interface @Foo
+// CHECK-SAME: comment = "VCS coverage exclude_file"
 // CHECK-SAME: output_file = #hw.output_file<"gct-dir/Foo.sv"
-// CHECK-SAME: @Foo
 // CHECK-NEXT: sv.verbatim "// some expression"
 // CHECK-NEXT: sv.interface.signal @foo : i2
 
@@ -480,9 +480,9 @@ firrtl.circuit "InterfacePort" attributes {
 // CHECK: firrtl.module @DUT
 // CHECK-SAME: %a: !firrtl.uint<4> sym @a [{a}]
 
-// CHECK: sv.interface {
+// CHECK: sv.interface @Foo
+// CHECK-SAME: comment = "VCS coverage exclude_file"
 // CHECK-SAME: output_file = #hw.output_file<"gct-dir/Foo.sv"
-// CHECK-SAME: @Foo
 // CHECK-NEXT: sv.verbatim "// description of foo"
 // CHECK-NEXT: sv.interface.signal @foo : i4
 
@@ -535,9 +535,9 @@ firrtl.circuit "UnsupportedTypes" attributes {
 // CHECK-NOT: class = "sifive.enterprise.grandcentral.AugmentedBundleType"
 // CHECK-SAME: {
 
-// CHECK: sv.interface {
+// CHECK: sv.interface @Foo
+// CHECK-SAME: comment = "VCS coverage exclude_file"
 // CHECK-SAME: output_file = #hw.output_file<"gct-dir/Foo.sv"
-// CHECK-SAME: @Foo
 // CHECK-NEXT: sv.verbatim "// <unsupported string type> string;"
 // CHECK-NEXT: sv.verbatim "// <unsupported boolean type> boolean;"
 // CHECK-NEXT: sv.verbatim "// <unsupported integer type> integer;"
@@ -614,9 +614,9 @@ firrtl.circuit "BindInterfaceTest"  attributes {
 // CHECK-SAME: doNotPrint = true
 
 // The interface is added.
-// CHECK: sv.interface {
+// CHECK: sv.interface @InterfaceName
+// CHECK-SAME: comment = "VCS coverage exclude_file"
 // CHECK-SAME: output_file = #hw.output_file<"gct-dir/InterfaceName.sv"
-// CHECK-SAME: @InterfaceName
 // CHECK-NEXT: sv.interface.signal @_a : i8
 
 // -----
@@ -678,13 +678,13 @@ firrtl.circuit "MultipleGroundTypeInterfaces" attributes {
   }
 }
 
-// CHECK: sv.interface {
+// CHECK: sv.interface @Foo
+// CHECK-SAME: comment = "VCS coverage exclude_file"
 // CHECK-SAME: output_file = #hw.output_file<"gct-dir/Foo.sv"
-// CHECK-SAME: @Foo
 
-// CHECK: sv.interface {
+// CHECK: sv.interface @Bar
+// CHECK-SAME: comment = "VCS coverage exclude_file"
 // CHECK-SAME: output_file = #hw.output_file<"gct-dir/Bar.sv"
-// CHECK-SAME: @Bar
 
 // -----
 
@@ -725,7 +725,7 @@ firrtl.circuit "PrefixInterfacesAnnotation"
 // CHECK-NOT:     sifive.enterprise.grandcentral.PrefixInterfacesAnnotation
 
 // Interface "Foo" is prefixed.
-// CHECK:       sv.interface @PREFIX_Foo {
+// CHECK:       sv.interface @PREFIX_Foo
 // Interface "Bar" is prefixed, but not its name.
 // CHECK-NEXT:    PREFIX_Bar bar()
 
@@ -821,8 +821,7 @@ firrtl.circuit "NestedInterfaceVectorTypes" attributes {annotations = [
 // CHECK-SAME:        #hw.innerNameRef<@DUT::@__View_Foo__>
 // CHECK-SAME:        @DUT
 // CHECK-SAME:        #hw.innerNameRef<@DUT::@b2>
-// CHECK:         sv.interface {
-// CHECK-SAME:      @Foo
+// CHECK:         sv.interface @Foo
 // CHECK-NEXT:      sv.verbatim "// description of bar"
 // CHECK-NEXT:      sv.interface.signal @bar : !hw.uarray<2xuarray<3xi1>>
 
@@ -885,8 +884,7 @@ firrtl.circuit "VerbatimTypesInVector" attributes {annotations = [
 }
 
 // CHECK-LABEL: firrtl.circuit "VerbatimTypesInVector"
-// CHECK:         sv.interface {
-// CHECK-SAME:      @Foo
+// CHECK:         sv.interface @Foo
 // CHECK-NEXT:      sv.verbatim "// description of bar"
 // CHECK-NEXT:      sv.verbatim "// <unsupported string type> bar[2][3];"
 
@@ -1217,7 +1215,7 @@ firrtl.circuit "ZeroWidth" attributes {annotations = [
 // Check that a view of a zero-width thing produces a comment in the output and
 // not XMR.
 //
-// CHECK-LABEL: firrtl.module @MyView_mapping() {
+// CHECK-LABEL: firrtl.module @MyView_mapping() {{.+}} {
 // CHECK-NOT:     sv.verbatim
 // CHECK-NEXT:  }
 //

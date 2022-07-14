@@ -1022,6 +1022,8 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
       builder.create<hw::HWModuleOp>(oldModule.getLoc(), nameAttr, ports);
   if (auto outputFile = oldModule->getAttr("output_file"))
     newModule->setAttr("output_file", outputFile);
+  if (auto comment = oldModule->getAttrOfType<StringAttr>("comment"))
+    newModule.commentAttr(comment);
 
   // If the circuit has an entry point, set all other modules private.
   // Otherwise, mark all modules as public.

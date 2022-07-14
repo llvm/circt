@@ -3797,6 +3797,7 @@ LogicalResult StmtEmitter::visitSV(InterfaceOp op) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
+  emitComment(op.commentAttr());
   os << "interface " << getSymOpName(op) << ";\n";
   // FIXME: Don't emit the body of this as general statements, they aren't!
   emitStatementBlock(*op.getBodyBlock());
