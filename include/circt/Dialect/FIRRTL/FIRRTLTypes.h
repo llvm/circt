@@ -24,6 +24,7 @@ struct WidthTypeStorage;
 struct BundleTypeStorage;
 struct VectorTypeStorage;
 struct CMemoryTypeStorage;
+struct RefTypeStorage;
 } // namespace detail.
 
 class ClockType;
@@ -34,6 +35,7 @@ class UIntType;
 class AnalogType;
 class BundleType;
 class FVectorType;
+class RefType;
 
 /// A collection of bits indicating the recursive properties of a type.
 struct RecursiveTypeProperties {
@@ -416,6 +418,24 @@ public:
   /// Returns the new id and whether the id is in the given child.
   std::pair<size_t, bool> rootChildFieldID(size_t fieldID, size_t index);
 };
+
+
+//===----------------------------------------------------------------------===//
+// XMR Ref Type
+//===----------------------------------------------------------------------===//
+
+class RefType : public FIRRTLType::TypeBase<RefType, FIRRTLType, detail::RefTypeStorage> {
+public:
+  using Base::Base;
+  static FIRRTLType get(FIRRTLType type);
+
+  /// Return the underlying type.
+  FIRRTLType getType();
+};
+
+//===----------------------------------------------------------------------===//
+// Type helpers
+//===----------------------------------------------------------------------===//
 
 // Get the bit width for this type, return None  if unknown. Unlike
 // getBitWidthOrSentinel(), this can recursively compute the bitwidth of
