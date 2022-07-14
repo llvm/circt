@@ -123,10 +123,11 @@ static bool isVectorType(FIRRTLType type) {
 /// Return true if we can preserve the type.
 static bool isPreservableAggregateType(Type type,
                                        PreserveAggregate::PreserveMode mode) {
-  auto firrtlType = type.cast<FIRRTLType>();
+  // Return false if no aggregate value is preserved.
   if (mode == PreserveAggregate::None)
     return false;
 
+  auto firrtlType = type.cast<FIRRTLType>();
   // We can a preserve the type iff (i) the type is not passive, (ii) the type
   // doesn't contain analog and (iii) type don't contain zero bitwidth.
   if (!firrtlType.isPassive() || firrtlType.containsAnalog() ||
