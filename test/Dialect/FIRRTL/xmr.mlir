@@ -12,7 +12,7 @@
 
 firrtl.circuit "xmr" {
   firrtl.module private @Test(in %x: !firrtl.ref<uint<2>>) {
-    // %e = firrtl.xmr.end %x : !firrtl.ref<uint<2>>;
+    %e = firrtl.xmr.end %x : !firrtl.ref<uint<2>>
   }
   firrtl.module @xmr() {
     %test_x = firrtl.instance test @Test(in x: !firrtl.ref<uint<2>>)
