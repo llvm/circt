@@ -1321,7 +1321,7 @@ struct ESIConnectServicesPass
   /// "Bubble up" the specified requests to all of the instantiations of the
   /// module specified. Create and connect up ports to tunnel the ESI channels
   /// through.
-  LogicalResult surfaceReqs(hw::HWModuleLike,
+  LogicalResult surfaceReqs(hw::HWMutableModuleLike,
                             ArrayRef<RequestToClientConnection>,
                             ArrayRef<RequestToServerConnection>);
 
@@ -1332,7 +1332,7 @@ struct ESIConnectServicesPass
 
   /// Figure out which requests are "local" vs need to be surfaced. Call
   /// 'surfaceReqs' and/or 'replaceInst' as appropriate.
-  LogicalResult process(hw::HWModuleLike);
+  LogicalResult process(hw::HWMutableModuleLike);
 };
 } // anonymous namespace
 
@@ -1352,14 +1352,17 @@ void ESIConnectServicesPass::runOnOperation() {
   getAndSortModules(outerMod, sortedMods);
 
   // Process each module.
-  for (auto mod : sortedMods)
-    if (failed(process(mod))) {
+  for (auto mod : sortedMods) {
+    hw::HWMutableModuleLike mutableMod =
+        dyn_cast<hw::HWMutableModuleLike>(*mod);
+    if (mutableMod && failed(process(mutableMod))) {
       signalPassFailure();
       return;
     }
+  }
 }
 
-LogicalResult ESIConnectServicesPass::process(hw::HWModuleLike mod) {
+LogicalResult ESIConnectServicesPass::process(hw::HWMutableModuleLike mod) {
   Block &modBlock = mod->getRegion(0).front();
 
   // Index the local services and create blocks in which to put the requests.
@@ -1448,16 +1451,17 @@ LogicalResult ESIConnectServicesPass::replaceInst(ServiceInstanceOp instOp,
 }
 
 LogicalResult ESIConnectServicesPass::surfaceReqs(
-    hw::HWModuleLike mod, ArrayRef<RequestToClientConnection> toClientReqs,
+    hw::HWMutableModuleLike mod,
+    ArrayRef<RequestToClientConnection> toClientReqs,
     ArrayRef<RequestToServerConnection> toServerReqs) {
   auto ctxt = mod.getContext();
   Block &modBlock = mod->getRegion(0).front();
   Operation *modTerminator = modBlock.getTerminator();
 
   // Track initial operand/result counts and the new IO.
-  unsigned origNumInputs = getModuleNumInputs(mod);
+  unsigned origNumInputs = mod.getNumInputs();
   SmallVector<std::pair<unsigned, hw::PortInfo>> newInputs;
-  unsigned origNumOutputs = getModuleNumOutputs(mod);
+  unsigned origNumOutputs = mod.getNumOutputs();
   SmallVector<std::pair<unsigned, hw::PortInfo>> newOutputs;
 
   // Assemble a port name from an array.
@@ -1497,73 +1501,71 @@ LogicalResult ESIConnectServicesPass::surfaceReqs(
                                   toServer.sending());
   }
 
-  // Modify the module ports.
-  hw::modifyModulePorts(mod, newInputs, newOutputs, {}, {});
+  // Insert new module ESI ports.
+  mod.insertPorts(newInputs, newOutputs);
 
   // Prepend a name to the instance tracking array.
-  auto prependNamePart = [&](ArrayAttr namePath, StringAttr part) {
+  auto prependNamePart = [&](ArrayAttr namePath, StringRef part) {
     SmallVector<Attribute, 8> newNamePath;
-    newNamePath.push_back(part);
+    newNamePath.push_back(StringAttr::get(namePath.getContext(), part));
     newNamePath.append(namePath.begin(), namePath.end());
     return ArrayAttr::get(namePath.getContext(), newNamePath);
   };
 
   // Update the module instantiations.
   SmallVector<hw::HWInstanceLike, 1> newModuleInstantiations;
+  StringAttr argsAttrName = StringAttr::get(ctxt, "argNames");
+  StringAttr resultsAttrName = StringAttr::get(ctxt, "resultNames");
   for (auto inst : moduleInstantiations[mod]) {
     OpBuilder b(inst);
 
-    auto hwInst = dyn_cast<hw::InstanceOp>(inst.getOperation());
-    if (!hwInst)
-      return inst.emitError(
-          "ESI service connections currently only support hw.instances");
-
     // Assemble lists for the new instance op. Seed it with the existing values.
-    SmallVector<Attribute, 16> newArgNames(hwInst.getArgNames().begin(),
-                                           hwInst.getArgNames().end());
-    SmallVector<Value, 16> newOperands(hwInst.getOperands().begin(),
-                                       hwInst.getOperands().end());
-    SmallVector<Type, 16> newResultTypes(hwInst.getResultTypes().begin(),
-                                         hwInst.getResultTypes().end());
-    SmallVector<Attribute, 16> newResultNames(hwInst.getResultNames().begin(),
-                                              hwInst.getResultNames().end());
+    SmallVector<Value, 16> newOperands(inst->getOperands().begin(),
+                                       inst->getOperands().end());
+    SmallVector<Type, 16> newResultTypes(inst->getResultTypes().begin(),
+                                         inst->getResultTypes().end());
 
     // Add new inputs for the new to_client requests and clone the request into
     // the module containing `inst`.
     for (auto [toClient, newPort] : llvm::zip(toClientReqs, newInputs)) {
       auto instToClient = cast<RequestToClientConnection>(b.clone(*toClient));
-      instToClient.clientNamePathAttr(prependNamePart(
-          instToClient.clientNamePath(), hwInst.getInstanceNameAttr()));
-      newArgNames.push_back(newPort.second.name);
+      instToClient.clientNamePathAttr(
+          prependNamePart(instToClient.clientNamePath(), inst.instanceName()));
       newOperands.push_back(instToClient.receiving());
     }
 
     // Append the results for the to_server requests.
-    for (auto newPort : newOutputs) {
-      newResultNames.push_back(newPort.second.name);
+    for (auto newPort : newOutputs)
       newResultTypes.push_back(newPort.second.type);
-    }
 
-    // Create a replacement instance.
-    auto newHWInst = b.create<hw::InstanceOp>(
-        hwInst.getLoc(), newResultTypes, hwInst.getInstanceNameAttr(),
-        hwInst.getModuleNameAttr(), newOperands, b.getArrayAttr(newArgNames),
-        b.getArrayAttr(newResultNames), hwInst.getParametersAttr(),
-        hwInst.getInnerSymAttr());
-    newHWInst->setDialectAttrs(hwInst->getDialectAttrs());
+    // Create a replacement instance of the same operation type.
+    SmallVector<NamedAttribute> newAttrs;
+    for (auto attr : inst->getAttrs()) {
+      if (attr.getName() == argsAttrName)
+        newAttrs.push_back(b.getNamedAttr(argsAttrName, mod.getArgNames()));
+      else if (attr.getName() == resultsAttrName)
+        newAttrs.push_back(
+            b.getNamedAttr(resultsAttrName, mod.getResultNames()));
+      else
+        newAttrs.push_back(attr);
+    }
+    auto newHWInst = b.insert(
+        Operation::create(inst->getLoc(), inst->getName(), newResultTypes,
+                          newOperands, b.getDictionaryAttr(newAttrs),
+                          inst->getSuccessors(), inst->getRegions()));
     newModuleInstantiations.push_back(newHWInst);
 
     // Replace all uses of the instance being replaced.
     for (auto [newV, oldV] :
-         llvm::zip(newHWInst.getResults(), hwInst.getResults()))
+         llvm::zip(newHWInst->getResults(), inst->getResults()))
       oldV.replaceAllUsesWith(newV);
 
     // Clone the to_server requests and wire them up to the new instance.
     outputCounter = origNumOutputs;
     for (auto [toServer, newPort] : llvm::zip(toServerReqs, newOutputs)) {
       auto instToServer = cast<RequestToServerConnection>(b.clone(*toServer));
-      instToServer.clientNamePathAttr(prependNamePart(
-          instToServer.clientNamePath(), hwInst.getInstanceNameAttr()));
+      instToServer.clientNamePathAttr(
+          prependNamePart(instToServer.clientNamePath(), inst.instanceName()));
       instToServer->setOperand(0, newHWInst->getResult(outputCounter++));
     }
   }

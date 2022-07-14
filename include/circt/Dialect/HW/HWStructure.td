@@ -14,7 +14,9 @@
 /// the module-like operations.
 class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
     HWOp<mnemonic, traits # [
-      DeclareOpInterfaceMethods<HWModuleLike>, FunctionOpInterface, Symbol,
+      DeclareOpInterfaceMethods<HWModuleLike>,
+      DeclareOpInterfaceMethods<HWMutableModuleLike>,
+      FunctionOpInterface, Symbol,
       OpAsmOpInterface, HasParent<"mlir::ModuleOp">]> {
   /// Additional class declarations inside the module op.
   code extraModuleClassDeclaration = ?;
@@ -32,20 +34,6 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
       ArrayRef<unsigned> eraseInputs,
       ArrayRef<unsigned> eraseOutputs
     );
-
-    /// Insert ports into the module. Does not modify the block arguments of the
-    /// module body.
-    void insertPorts(
-      ArrayRef<std::pair<unsigned, PortInfo>> insertInputs,
-      ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs
-    ) { modifyPorts(insertInputs, insertOutputs, {}, {}); }
-
-    /// Erase ports from the module. Does not modify the block arguments of the
-    /// module body.
-    void erasePorts(
-      ArrayRef<unsigned> eraseInputs,
-      ArrayRef<unsigned> eraseOutputs
-    ) { modifyPorts({}, {}, eraseInputs, eraseOutputs); }
   }];
 }
 
