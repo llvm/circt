@@ -88,7 +88,7 @@ struct ConstantIntMatcher {
   ConstantIntMatcher(APInt &value) : value(value) {}
   bool match(Operation *op) {
     if (auto cst = dyn_cast<hw::ConstantOp>(op)) {
-      value = cst.value();
+      value = cst.getValue();
       return true;
     }
     return false;

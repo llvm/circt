@@ -1023,7 +1023,7 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
   if (auto outputFile = oldModule->getAttr("output_file"))
     newModule->setAttr("output_file", outputFile);
   if (auto comment = oldModule->getAttrOfType<StringAttr>("comment"))
-    newModule.commentAttr(comment);
+    newModule.setCommentAttr(comment);
 
   // If the circuit has an entry point, set all other modules private.
   // Otherwise, mark all modules as public.
@@ -1042,7 +1042,8 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
       newModule->setAttr("output_file", testBenchDir);
       newModule->setAttr("firrtl.extract.do_not_extract",
                          builder.getUnitAttr());
-      newModule.commentAttr(builder.getStringAttr("VCS coverage exclude_file"));
+      newModule.setCommentAttr(
+          builder.getStringAttr("VCS coverage exclude_file"));
     }
 
   bool failed = false;
@@ -1251,7 +1252,7 @@ FIRRTLModuleLowering::lowerModuleBody(FModuleOp oldModule,
   if (!newModule)
     return success();
 
-  ImplicitLocOpBuilder bodyBuilder(oldModule.getLoc(), newModule.body());
+  ImplicitLocOpBuilder bodyBuilder(oldModule.getLoc(), newModule.getBody());
 
   // Use a placeholder instruction be a cursor that indicates where we want to
   // move the new function body to.  This is important because we insert some
@@ -1283,7 +1284,7 @@ FIRRTLModuleLowering::lowerModuleBody(FModuleOp oldModule,
     if (!port.isOutput() && !isZeroWidth) {
       // Inputs and InOuts are modeled as arguments in the result, so we can
       // just map them over.  We model zero bit outputs as inouts.
-      Value newArg = newModule.body().getArgument(nextNewArg++);
+      Value newArg = newModule.getBody().getArgument(nextNewArg++);
 
       // Cast the argument to the old type, reintroducing sign information in
       // the hw.module body.
@@ -2048,7 +2049,7 @@ LogicalResult FIRRTLLowering::setPossiblyFoldedLowering(Value orig,
   // If this is a constant, check to see if we have it in our unique mapping:
   // it could have come from folding an operation.
   if (auto cst = dyn_cast_or_null<hw::ConstantOp>(result.getDefiningOp())) {
-    auto &entry = hwConstantMap[cst.valueAttr()];
+    auto &entry = hwConstantMap[cst.getValueAttr()];
     if (entry == cst) {
       // We're already using an entry in the constant map, nothing to do.
     } else if (entry) {
@@ -3036,10 +3037,10 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
   if (oldInstance.lowerToBind())
     newInstance->setAttr("doNotPrint", builder.getBoolAttr(true));
 
-  if (newInstance.inner_symAttr())
+  if (newInstance.getInnerSymAttr())
     if (auto forceName = circuitState.instanceForceNames.lookup(
             {cast<hw::HWModuleOp>(newInstance->getParentOp()).getNameAttr(),
-             newInstance.inner_symAttr()}))
+             newInstance.getInnerSymAttr()}))
       newInstance->setAttr("hw.verilogName", forceName);
 
   // Now that we have the new hw.instance, we need to remap all of the users

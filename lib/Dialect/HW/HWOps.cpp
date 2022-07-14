@@ -183,7 +183,7 @@ StringAttr hw::getResultSym(Operation *op, unsigned i) {
 
 void ConstantOp::print(OpAsmPrinter &p) {
   p << " ";
-  p.printAttribute(valueAttr());
+  p.printAttribute(getValueAttr());
   p.printOptionalAttrDict((*this)->getAttrs(), /*elidedAttrs=*/{"value"});
 }
 
@@ -200,7 +200,7 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
 
 LogicalResult ConstantOp::verify() {
   // If the result type has a bitwidth, then the attribute must match its width.
-  if (value().getBitWidth() != getType().getWidth())
+  if (getValue().getBitWidth() != getType().getWidth())
     return emitError(
         "hw.constant attribute bitwidth doesn't match return type");
 
@@ -252,7 +252,7 @@ void ConstantOp::getAsmResultNames(
 
 OpFoldResult ConstantOp::fold(ArrayRef<Attribute> constants) {
   assert(constants.empty() && "constant has no operands");
-  return valueAttr();
+  return getValueAttr();
 }
 
 //===----------------------------------------------------------------------===//
@@ -276,12 +276,12 @@ static void printParamValue(OpAsmPrinter &p, Operation *, Attribute value,
 LogicalResult ParamValueOp::verify() {
   // Check that the attribute expression is valid in this module.
   return checkParameterInContext(
-      value(), (*this)->getParentOfType<hw::HWModuleOp>(), *this);
+      getValue(), (*this)->getParentOfType<hw::HWModuleOp>(), *this);
 }
 
 OpFoldResult ParamValueOp::fold(ArrayRef<Attribute> constants) {
   assert(constants.empty() && "hw.param.value has no operands");
-  return valueAttr();
+  return getValueAttr();
 }
 
 //===----------------------------------------------------------------------===//
@@ -587,14 +587,14 @@ void HWModuleOp::modifyPorts(
 /// here.  This is typically the symbol, but can be overridden with the
 /// verilogName attribute.
 StringAttr HWModuleExternOp::getVerilogModuleNameAttr() {
-  if (auto vName = verilogNameAttr())
+  if (auto vName = getVerilogNameAttr())
     return vName;
 
   return (*this)->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName());
 }
 
 StringAttr HWModuleGeneratedOp::getVerilogModuleNameAttr() {
-  if (auto vName = verilogNameAttr()) {
+  if (auto vName = getVerilogNameAttr()) {
     return vName;
   }
   return (*this)->getAttrOfType<StringAttr>(
@@ -938,7 +938,7 @@ static void printModuleOp(OpAsmPrinter &p, Operation *op,
   p.printSymbolName(SymbolTable::getSymbolName(op).getValue());
   if (modKind == GenMod) {
     p << ", ";
-    p.printSymbolName(cast<HWModuleGeneratedOp>(op).generatorKind());
+    p.printSymbolName(cast<HWModuleGeneratedOp>(op).getGeneratorKind());
   }
 
   // Print the parameter list if present.
@@ -1071,17 +1071,17 @@ void HWModuleExternOp::getAsmBlockArgumentNames(
 /// invalid IR.
 Operation *HWModuleGeneratedOp::getGeneratorKindOp() {
   auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
-  return topLevelModuleOp.lookupSymbol(generatorKind());
+  return topLevelModuleOp.lookupSymbol(getGeneratorKind());
 }
 
 LogicalResult
 HWModuleGeneratedOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto *referencedKind =
-      symbolTable.lookupNearestSymbolFrom(*this, generatorKindAttr());
+      symbolTable.lookupNearestSymbolFrom(*this, getGeneratorKindAttr());
 
   if (referencedKind == nullptr)
     return emitError("Cannot find generator definition '")
-           << generatorKind() << "'";
+           << getGeneratorKind() << "'";
 
   if (!isa<HWGeneratorSchemaOp>(referencedKind))
     return emitError("Symbol resolved to '")
@@ -1089,7 +1089,7 @@ HWModuleGeneratedOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
            << "' which is not a HWGeneratorSchemaOp";
 
   auto referencedKindOp = dyn_cast<HWGeneratorSchemaOp>(referencedKind);
-  auto paramRef = referencedKindOp.requiredAttrs();
+  auto paramRef = referencedKindOp.getRequiredAttrs();
   auto dict = (*this)->getAttrDictionary();
   for (auto str : paramRef) {
     auto strAttr = str.dyn_cast<StringAttr>();
@@ -1138,22 +1138,24 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
 /// invalid IR.
 Operation *InstanceOp::getReferencedModule(const HWSymbolCache *cache) {
   if (cache)
-    if (auto *result = cache->getDefinition(moduleNameAttr()))
+    if (auto *result = cache->getDefinition(getModuleNameAttr()))
       return result;
 
   auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
-  return topLevelModuleOp.lookupSymbol(moduleName());
+  return topLevelModuleOp.lookupSymbol(getModuleName());
 }
 
 LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  auto *module = symbolTable.lookupNearestSymbolFrom(*this, moduleNameAttr());
+  auto *module =
+      symbolTable.lookupNearestSymbolFrom(*this, getModuleNameAttr());
   if (module == nullptr)
-    return emitError("Cannot find module definition '") << moduleName() << "'";
+    return emitError("Cannot find module definition '")
+           << getModuleName() << "'";
 
   // It must be some sort of module.
   if (!isAnyModule(module))
     return emitError("symbol reference '")
-           << moduleName() << "' isn't a module";
+           << getModuleName() << "' isn't a module";
 
   // Check that input and result types are consistent with the referenced
   // module.
@@ -1168,7 +1170,7 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   };
 
   // Make sure our port and result names match.
-  ArrayAttr argNames = argNamesAttr();
+  ArrayAttr argNames = getArgNamesAttr();
   ArrayAttr modArgNames = module->getAttrOfType<ArrayAttr>("argNames");
 
   // Check operand types first.
@@ -1188,8 +1190,8 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     });
 
   for (size_t i = 0; i != numOperands; ++i) {
-    auto expectedType =
-        evaluateParametricType(getLoc(), parameters(), expectedOperandTypes[i]);
+    auto expectedType = evaluateParametricType(getLoc(), getParameters(),
+                                               expectedOperandTypes[i]);
     if (failed(expectedType))
       return emitError([&](auto &diag) {
         diag << "failed to resolve parametric input of instantiated module";
@@ -1212,7 +1214,7 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   // Check result types and labels.
   auto numResults = getOperation()->getNumResults();
   auto expectedResultTypes = getModuleType(module).getResults();
-  ArrayAttr resultNames = resultNamesAttr();
+  ArrayAttr resultNames = getResultNamesAttr();
   ArrayAttr modResultNames = module->getAttrOfType<ArrayAttr>("resultNames");
 
   if (expectedResultTypes.size() != numResults)
@@ -1227,8 +1229,8 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     });
 
   for (size_t i = 0; i != numResults; ++i) {
-    auto expectedType =
-        evaluateParametricType(getLoc(), parameters(), expectedResultTypes[i]);
+    auto expectedType = evaluateParametricType(getLoc(), getParameters(),
+                                               expectedResultTypes[i]);
     if (failed(expectedType))
       return emitError([&](auto &diag) {
         diag << "failed to resolve parametric input of instantiated module";
@@ -1248,7 +1250,7 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   }
 
   // Check parameters match up.
-  ArrayAttr parameters = this->parameters();
+  ArrayAttr parameters = this->getParameters();
   ArrayAttr modParameters = module->getAttrOfType<ArrayAttr>("parameters");
   auto numParameters = parameters.size();
   if (numParameters != modParameters.size())
@@ -1286,7 +1288,7 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 LogicalResult InstanceOp::verify() {
   // Check that all the parameter values specified to the instance are
   // structurally valid.
-  for (auto param : parameters()) {
+  for (auto param : getParameters()) {
     auto paramAttr = param.cast<ParamDeclAttr>();
     auto value = paramAttr.getValue();
     // The SymbolUses verifier which checks that this exists may not have been
@@ -1309,7 +1311,7 @@ LogicalResult InstanceOp::verify() {
 ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
   auto *context = result.getContext();
   StringAttr instanceNameAttr;
-  StringAttr sym_nameAttr;
+  StringAttr symNameAttr;
   FlatSymbolRefAttr moduleNameAttr;
   SmallVector<OpAsmParser::UnresolvedOperand, 4> inputsOperands;
   SmallVector<Type> inputsTypes;
@@ -1325,7 +1327,7 @@ ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
     // Parsing an optional symbol name doesn't fail, so no need to check the
     // result.
     (void)parser.parseOptionalSymbolName(
-        sym_nameAttr, InnerName::getInnerNameAttrName(), result.attributes);
+        symNameAttr, InnerName::getInnerNameAttrName(), result.attributes);
   }
 
   auto parseInputPort = [&]() -> ParseResult {
@@ -1391,16 +1393,16 @@ void InstanceOp::print(OpAsmPrinter &p) {
   };
 
   p << ' ';
-  p.printAttributeWithoutType(instanceNameAttr());
-  if (auto attr = inner_symAttr()) {
+  p.printAttributeWithoutType(getInstanceNameAttr());
+  if (auto attr = getInnerSymAttr()) {
     p << " sym ";
     p.printSymbolName(attr.getValue());
   }
   p << ' ';
-  p.printAttributeWithoutType(moduleNameAttr());
-  printParameterList(parameters(), p);
+  p.printAttributeWithoutType(getModuleNameAttr());
+  printParameterList(getParameters(), p);
   p << '(';
-  llvm::interleaveComma(inputs(), p, [&](Value op) {
+  llvm::interleaveComma(getInputs(), p, [&](Value op) {
     printPortName(nextInputPort, portInfo.inputs);
     p << op << ": " << op.getType();
   });
@@ -1419,7 +1421,7 @@ void InstanceOp::print(OpAsmPrinter &p) {
 /// Return the name of the specified input port or null if it cannot be
 /// determined.
 StringAttr InstanceOp::getArgumentName(size_t idx) {
-  auto names = argNames();
+  auto names = getArgNames();
   // Tolerate malformed IR here to enable debug printing etc.
   if (names && idx < names.size())
     return names[idx].cast<StringAttr>();
@@ -1429,7 +1431,7 @@ StringAttr InstanceOp::getArgumentName(size_t idx) {
 /// Return the name of the specified result or null if it cannot be
 /// determined.
 StringAttr InstanceOp::getResultName(size_t idx) {
-  auto names = resultNames();
+  auto names = getResultNames();
   // Tolerate malformed IR here to enable debug printing etc.
   if (names && idx < names.size())
     return names[idx].cast<StringAttr>();
@@ -1438,7 +1440,7 @@ StringAttr InstanceOp::getResultName(size_t idx) {
 
 /// Change the name of the specified input port.
 void InstanceOp::setArgumentName(size_t i, StringAttr name) {
-  auto names = argNames();
+  auto names = getArgNames();
   SmallVector<Attribute> newNames(names.begin(), names.end());
   if (newNames[i] == name)
     return;
@@ -1448,7 +1450,7 @@ void InstanceOp::setArgumentName(size_t i, StringAttr name) {
 
 /// Change the name of the specified output port.
 void InstanceOp::setResultName(size_t i, StringAttr name) {
-  auto names = resultNames();
+  auto names = getResultNames();
   SmallVector<Attribute> newNames(names.begin(), names.end());
   if (newNames[i] == name)
     return;
@@ -1513,7 +1515,7 @@ LogicalResult
 GlobalRefOp::verifySymbolUses(mlir::SymbolTableCollection &symTables) {
   Operation *parent = (*this)->getParentOp();
   SymbolTable &symTable = symTables.getSymbolTable(parent);
-  StringAttr symNameAttr = (*this).sym_nameAttr();
+  StringAttr symNameAttr = (*this).getSymNameAttr();
   auto hasGlobalRef = [&](Attribute attr) -> bool {
     if (!attr)
       return false;
@@ -1524,7 +1526,7 @@ GlobalRefOp::verifySymbolUses(mlir::SymbolTableCollection &symTables) {
   };
   // For all inner refs in the namepath, ensure they have a corresponding
   // GlobalRefAttr to this GlobalRefOp.
-  for (auto innerRef : namepath().getAsRange<hw::InnerRefAttr>()) {
+  for (auto innerRef : getNamepath().getAsRange<hw::InnerRefAttr>()) {
     StringAttr modName = innerRef.getModule();
     StringAttr innerSym = innerRef.getName();
     Operation *mod = symTable.lookup(modName);
@@ -1627,9 +1629,9 @@ ParseResult ArrayCreateOp::parse(OpAsmParser &parser, OperationState &result) {
 
 void ArrayCreateOp::print(OpAsmPrinter &p) {
   p << " ";
-  p.printOperands(inputs());
+  p.printOperands(getInputs());
   p.printOptionalAttrDict((*this)->getAttrs());
-  p << " : " << inputs()[0].getType();
+  p << " : " << getInputs()[0].getType();
 }
 
 void ArrayCreateOp::build(OpBuilder &b, OperationState &state,
@@ -1645,15 +1647,15 @@ void ArrayCreateOp::build(OpBuilder &b, OperationState &state,
 
 LogicalResult ArrayCreateOp::verify() {
   unsigned returnSize = getType().cast<ArrayType>().getSize();
-  if (inputs().size() != returnSize)
+  if (getInputs().size() != returnSize)
     return failure();
   return success();
 }
 
 LogicalResult ArraySliceOp::verify() {
-  unsigned inputSize = type_cast<ArrayType>(input().getType()).getSize();
+  unsigned inputSize = type_cast<ArrayType>(getInput().getType()).getSize();
   if (llvm::Log2_64_Ceil(inputSize) !=
-      lowIndex().getType().getIntOrFloatBitWidth())
+      getLowIndex().getType().getIntOrFloatBitWidth())
     return emitOpError(
         "ArraySlice: index width must match clog2 of array size");
   return success();
@@ -1741,18 +1743,18 @@ ParseResult EnumConstantOp::parse(OpAsmParser &parser, OperationState &result) {
 }
 
 void EnumConstantOp::print(OpAsmPrinter &p) {
-  p << " " << field().getField().getValue() << " : "
-    << field().getType().getValue();
+  p << " " << getField().getField().getValue() << " : "
+    << getField().getType().getValue();
 }
 
 void EnumConstantOp::getAsmResultNames(
     function_ref<void(Value, StringRef)> setNameFn) {
-  setNameFn(getResult(), field().getField().str());
+  setNameFn(getResult(), getField().getField().str());
 }
 
 OpFoldResult EnumConstantOp::fold(ArrayRef<Attribute> constants) {
   assert(constants.empty() && "constant has no operands");
-  return fieldAttr();
+  return getFieldAttr();
 }
 
 //===----------------------------------------------------------------------===//
@@ -1786,7 +1788,7 @@ ParseResult StructCreateOp::parse(OpAsmParser &parser, OperationState &result) {
 
 void StructCreateOp::print(OpAsmPrinter &printer) {
   printer << " (";
-  printer.printOperands(input());
+  printer.printOperands(getInput());
   printer << ")";
   printer.printOptionalAttrDict((*this)->getAttrs());
   printer << " : " << getType();
@@ -1821,9 +1823,9 @@ ParseResult StructExplodeOp::parse(OpAsmParser &parser,
 
 void StructExplodeOp::print(OpAsmPrinter &printer) {
   printer << " ";
-  printer.printOperand(input());
+  printer.printOperand(getInput());
   printer.printOptionalAttrDict((*this)->getAttrs());
-  printer << " : " << input().getType();
+  printer << " : " << getInput().getType();
 }
 
 //===----------------------------------------------------------------------===//
@@ -1866,10 +1868,10 @@ static ParseResult parseExtractOp(OpAsmParser &parser, OperationState &result) {
 template <typename AggType>
 static void printExtractOp(OpAsmPrinter &printer, AggType op) {
   printer << " ";
-  printer.printOperand(op.input());
-  printer << "[\"" << op.field() << "\"]";
+  printer.printOperand(op.getInput());
+  printer << "[\"" << op.getField() << "\"]";
   printer.printOptionalAttrDict(op->getAttrs(), {"field"});
-  printer << " : " << op.input().getType();
+  printer << " : " << op.getInput().getType();
 }
 
 ParseResult StructExtractOp::parse(OpAsmParser &parser,
@@ -1895,13 +1897,14 @@ void StructExtractOp::build(OpBuilder &builder, OperationState &odsState,
 
 // A struct extract of a struct create -> corresponding struct create operand.
 OpFoldResult StructExtractOp::fold(ArrayRef<Attribute> operands) {
-  auto structCreate = dyn_cast_or_null<StructCreateOp>(input().getDefiningOp());
+  auto structCreate =
+      dyn_cast_or_null<StructCreateOp>(getInput().getDefiningOp());
   if (!structCreate)
     return {};
-  auto ty = type_cast<StructType>(input().getType());
+  auto ty = type_cast<StructType>(getInput().getType());
   if (!ty)
     return {};
-  if (auto idx = ty.getFieldIndex(field()))
+  if (auto idx = ty.getFieldIndex(getField()))
     return structCreate.getOperand(*idx);
   return {};
 }
@@ -1942,11 +1945,11 @@ ParseResult StructInjectOp::parse(OpAsmParser &parser, OperationState &result) {
 
 void StructInjectOp::print(OpAsmPrinter &printer) {
   printer << " ";
-  printer.printOperand(input());
-  printer << "[\"" << field() << "\"], ";
-  printer.printOperand(newValue());
+  printer.printOperand(getInput());
+  printer << "[\"" << getField() << "\"], ";
+  printer.printOperand(getNewValue());
   printer.printOptionalAttrDict((*this)->getAttrs(), {"field"});
-  printer << " : " << input().getType();
+  printer << " : " << getInput().getType();
 }
 
 //===----------------------------------------------------------------------===//
@@ -1984,8 +1987,8 @@ ParseResult UnionCreateOp::parse(OpAsmParser &parser, OperationState &result) {
 }
 
 void UnionCreateOp::print(OpAsmPrinter &printer) {
-  printer << " \"" << field() << "\", ";
-  printer.printOperand(input());
+  printer << " \"" << getField() << "\", ";
+  printer.printOperand(getInput());
   printer.printOptionalAttrDict((*this)->getAttrs(), {"field"});
   printer << " : " << getType();
 }
@@ -2015,7 +2018,8 @@ void ArrayGetOp::build(OpBuilder &builder, OperationState &result, Value input,
 // An array_get of an array_create with a constant index can just be the
 // array_create operand at the constant index.
 OpFoldResult ArrayGetOp::fold(ArrayRef<Attribute> operands) {
-  auto inputCreate = dyn_cast_or_null<ArrayCreateOp>(input().getDefiningOp());
+  auto inputCreate =
+      dyn_cast_or_null<ArrayCreateOp>(getInput().getDefiningOp());
   if (!inputCreate)
     return {};
 
@@ -2024,7 +2028,7 @@ OpFoldResult ArrayGetOp::fold(ArrayRef<Attribute> operands) {
     return {};
 
   uint64_t idx = constIdx.getValue().getLimitedValue();
-  auto createInputs = inputCreate.inputs();
+  auto createInputs = inputCreate.getInputs();
   if (idx >= createInputs.size())
     return {};
   return createInputs[createInputs.size() - idx - 1];
@@ -2035,7 +2039,7 @@ OpFoldResult ArrayGetOp::fold(ArrayRef<Attribute> operands) {
 //===----------------------------------------------------------------------===//
 
 StringRef TypedeclOp::getPreferredName() {
-  return verilogName().getValueOr(getName());
+  return getVerilogName().getValueOr(getName());
 }
 
 //===----------------------------------------------------------------------===//
@@ -2056,17 +2060,18 @@ LogicalResult BitcastOp::canonicalize(BitcastOp op, PatternRewriter &rewriter) {
   // %b = bitcast(%a) : A -> B
   //      bitcast(%b) : B -> C
   // ===> bitcast(%a) : A -> C
-  auto inputBitcast = dyn_cast_or_null<BitcastOp>(op.input().getDefiningOp());
+  auto inputBitcast =
+      dyn_cast_or_null<BitcastOp>(op.getInput().getDefiningOp());
   if (!inputBitcast)
     return failure();
   auto bitcast = rewriter.createOrFold<BitcastOp>(op.getLoc(), op.getType(),
-                                                  inputBitcast.input());
+                                                  inputBitcast.getInput());
   rewriter.replaceOp(op, bitcast);
   return success();
 }
 
 LogicalResult BitcastOp::verify() {
-  if (getBitWidth(input().getType()) != getBitWidth(result().getType()))
+  if (getBitWidth(getInput().getType()) != getBitWidth(getResult().getType()))
     return this->emitOpError("Bitwidth of input must match result");
   return success();
 }
