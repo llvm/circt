@@ -2391,20 +2391,19 @@ firrtl.module @Verification(in %clock: !firrtl.clock, in %p: !firrtl.uint<1>) {
   %c1 = firrtl.constant 1 : !firrtl.uint<1>
 
   // Never enabled.
-  // CHECK-NOT: firrtl.assert %clock, %p, %c0, "assert0"
+  // CHECK-NOT: firrtl.assert
   firrtl.assert %clock, %p, %c0, "assert0"
-  // CHECK-NOT: firrtl.assume %clock, %p, %c0, "assume0"
+  // CHECK-NOT: firrtl.assume
   firrtl.assume %clock, %p, %c0, "assume0"
-  // CHECK-NOT: firrtl.cover %clock, %p, %c0, "cover0"
+  // CHECK-NOT: firrtl.cover
   firrtl.cover %clock, %p, %c0, "cover0"
 
   // Never fired.
-  // CHECK-NOT: firrtl.assert %clock, %c1, %p, "assert1"
+  // CHECK-NOT: firrtl.assert
   firrtl.assert %clock, %c1, %p, "assert1"
-  // CHECK-NOT: firrtl.assume %clock, %c1, %p, "assume1"
+  // CHECK-NOT: firrtl.assume
   firrtl.assume %clock, %c1, %p, "assume1"
-  // CHECK-NOT: firrtl.cover %clock, %c0, %p, "cover0"
+  // CHECK-NOT: firrtl.cover
   firrtl.cover %clock, %c0, %p, "cover0"
 }
-
 }
