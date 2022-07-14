@@ -1,4 +1,5 @@
-// RUN: circt-opt -hw-memory-sim %s | FileCheck %s
+// RUN: circt-opt --hw-memory-sim %s | FileCheck %s --check-prefix=CHECK --check-prefix=CHECK-BOTH --check-prefix=CHECK-PRE
+// RUN: circt-opt --hw-memory-sim=read-latency-is-propagation-delay %s | FileCheck %s --check-prefix=CHECK-BOTH --check-prefix=CHECK-POST
 
 hw.generator.schema @FIRRTLMem, "FIRRTL_Memory", ["depth", "numReadPorts", "numWritePorts", "numReadWritePorts", "readLatency", "writeLatency", "width", "readUnderWrite", "writeUnderWrite", "writeClockIDs"]
 
@@ -71,32 +72,26 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0_0, @FIRRTLMem(%ro_addr_0: i4, %
 //CHECK-LABEL: @FIRRTLMem_1_1_1_16_10_0_1_0_0
 //CHECK-SAME:  attributes {comment = "VCS coverage exclude_file"}
 //CHECK:       %Memory = sv.reg  : !hw.inout<uarray<10xi16>>
+//CHECK-NEXT:  %true = hw.constant true
+//CHECK-NEXT:  %[[rwrcondpre:.+]] = comb.xor %rw_wmode_0, %true
+//CHECK-NEXT:  %[[rwrcond:.+]] = comb.and %rw_en_0, %[[rwrcondpre]]
+//CHECK-NEXT:  %[[rwwcond:.+]] = comb.and %rw_en_0, %rw_wmode_0
 //CHECK-NEXT:  %[[rslot:.+]] = sv.array_index_inout %Memory[%ro_addr_0]
 //CHECK-NEXT:  %[[read:.+]] = sv.read_inout %[[rslot]]
 //CHECK-NEXT:  %[[x:.+]] = sv.constantX
 //CHECK-NEXT:  %[[readres:.+]] = comb.mux %ro_en_0, %[[read]], %[[x]]
-//CHECK-NEXT:  %true = hw.constant true
-//CHECK-NEXT:  %[[rwtmp:.+]] = sv.wire
-//CHECK-NEXT:  %[[rwres:.+]] = sv.read_inout %[[rwtmp]]
-//CHECK-NEXT:  %false = hw.constant false
-//CHECK-NEXT:  %[[rwrcondpre:.+]] = comb.icmp eq %rw_wmode_0, %false
-//CHECK-NEXT:  %[[rwrcond:.+]] = comb.and %rw_en_0, %[[rwrcondpre]]
 //CHECK-NEXT:  %[[rwrslot:.+]] = sv.array_index_inout %Memory[%rw_addr_0]
 //CHECK-NEXT:  %[[rwdata:.+]] = sv.read_inout %[[rwrslot]] :
 //CHECK-NEXT:  %[[x2:.+]] = sv.constantX
 //CHECK-NEXT:  %[[rwdata2:.+]] = comb.mux %[[rwrcond]], %[[rwdata]], %[[x2]]
-//CHECK-NEXT:  sv.assign %[[rwtmp]], %[[rwdata2:.+]]
-//CHECK-NEXT:    sv.always posedge %rw_clock_0 {
-//CHECK-NEXT:      %[[rwwcondpre:.+]] = comb.and %true, %rw_wmode_0
-//CHECK-NEXT:      %[[rwwcond:.+]] = comb.and %rw_en_0, %[[rwwcondpre]]
-//CHECK-NEXT:      sv.if %[[rwwcond]]  {
-//CHECK-NEXT:        %[[rwwslot:.+]] = sv.array_index_inout %Memory[%rw_addr_0]
-//CHECK-NEXT:        %[[c0_i32:.+]] = hw.constant 0 : i32
-//CHECK-NEXT:        sv.passign %[[rwwslot]], %rw_wdata_0
-//CHECK-NEXT:      }
+//CHECK:       sv.always posedge %rw_clock_0 {
+//CHECK-NEXT:    sv.if %[[rwwcond]]  {
+//CHECK-NEXT:      %[[rwwslot:.+]] = sv.array_index_inout %Memory[%rw_addr_0]
+//CHECK-NEXT:      %[[c0_i32:.+]] = hw.constant 0 : i32
+//CHECK-NEXT:      sv.passign %[[rwwslot]], %rw_wdata_0
 //CHECK-NEXT:    }
-//CHECK-NEXT:  %true_1 = hw.constant true
-//CHECK-NEXT:  sv.always posedge %wo_clock_0 {
+//CHECK-NEXT:  }
+//CHECK:       sv.always posedge %wo_clock_0 {
 //CHECK-NEXT:    sv.if %wo_en_0 {
 //CHECK-NEXT:      %[[wslot:.+]] = sv.array_index_inout %Memory[%wo_addr_0]
 //CHECK-NEXT:      %[[c0_i32:.+]] = hw.constant 0 : i32
@@ -125,27 +120,30 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0_0, @FIRRTLMem(%ro_addr_0: i4, %
 //CHECK-NEXT:      }
 //CHECK-NEXT:    }
 //CHECK-NEXT:  }
-//CHECK-NEXT:  hw.output %[[readres]], %[[rwres]]
+//CHECK-NEXT:  hw.output %[[readres]], %[[rwdata2]]
 
 hw.module.generated @FIRRTLMem_1_1_1_16_10_2_4_0_0, @FIRRTLMem(%ro_addr_0: i4, %ro_en_0: i1, %ro_clock_0: i1,%rw_addr_0: i4, %rw_en_0: i1,  %rw_clock_0: i1, %rw_wmode_0: i1, %rw_wdata_0: i16, %wo_addr_0: i4, %wo_en_0: i1, %wo_clock_0: i1, %wo_data_0: i16) -> (ro_data_0: i16, rw_rdata_0: i16) attributes {depth = 10 : i64, numReadPorts = 1 : ui32, numReadWritePorts = 1 : ui32, numWritePorts = 1 : ui32, readLatency = 2 : ui32, readUnderWrite = 0 : ui32, width = 16 : ui32, writeClockIDs = [], writeLatency = 4 : ui32, writeUnderWrite = 0 : i32}
 
 //CHECK-LABEL: @FIRRTLMem_1_1_1_16_10_2_4_0_0
 //COM: This produces a lot of output, we check one field's pipeline
 //CHECK:         %Memory = sv.reg  : !hw.inout<uarray<10xi16>>
+//CHECK:         sv.always posedge %rw_clock_0 {
+//CHECK:         [[ADDR_0:%.+]] = sv.reg {{.+}} : !hw.inout<i4>
+//CHECK-NEXT:    [[ADDR_1:%.+]] = sv.reg {{.+}} : !hw.inout<i4>
 //CHECK-NEXT:    [[EN_0:%.+]] = sv.reg {{.+}} : !hw.inout<i1>
 //CHECK-NEXT:    [[EN_1:%.+]] = sv.reg {{.+}} : !hw.inout<i1>
-//CHECK-NEXT:    [[ADDR_0:%.+]] = sv.reg {{.+}} : !hw.inout<i4>
-//CHECK-NEXT:    [[ADDR_1:%.+]] = sv.reg {{.+}} : !hw.inout<i4>
-//CHECK-NEXT:    sv.always posedge %ro_clock_0 {
+//CHECK:         sv.always posedge %ro_clock_0 {
+//CHECK-NEXT:      sv.if %ro_en_0 {
+//CHECK-NEXT:        sv.passign [[ADDR_0]], %ro_addr_0 : i4
+//CHECK-NEXT:      }
+//CHECK-NEXT:      [[ADDR_0R:%.+]] = sv.read_inout [[ADDR_0]] : !hw.inout<i4>
+//CHECK-NEXT:      sv.passign [[ADDR_1]], [[ADDR_0R]] : i4
 //CHECK-NEXT:      sv.passign [[EN_0]], %ro_en_0 : i1
 //CHECK-NEXT:      [[EN_0R:%.+]] = sv.read_inout [[EN_0]] : !hw.inout<i1>
 //CHECK-NEXT:      sv.passign [[EN_1]], [[EN_0R]] : i1
-//CHECK-NEXT:      sv.passign [[ADDR_0]], %ro_addr_0 : i4
-//CHECK-NEXT:      [[ADDR_0R:%.+]] = sv.read_inout [[ADDR_0]] : !hw.inout<i4>
-//CHECK-NEXT:      sv.passign [[ADDR_1]], [[ADDR_0R]] : i4
 //CHECK-NEXT:    }
-//CHECK-NEXT:    [[EN_1R:%.+]] = sv.read_inout [[EN_1]] : !hw.inout<i1>
 //CHECK-NEXT:    [[ADDR_1R:%.+]] = sv.read_inout [[ADDR_1]] : !hw.inout<i4>
+//CHECK-NEXT:    [[EN_1R:%.+]] = sv.read_inout [[EN_1]] : !hw.inout<i1>
 //CHECK-NEXT:    {{%.+}} = sv.array_index_inout %Memory[[[ADDR_1R]]] : !hw.inout<uarray<10xi16>>, i4
 
 hw.module.generated @FIRRTLMemOneAlways, @FIRRTLMem( %wo_addr_0: i4, %wo_en_0: i1, %wo_clock_0: i1,%wo_data_0: i8, %wo_addr_1: i4,  %wo_en_1: i1, %wo_clock_1: i1, %wo_data_1: i8) attributes {depth = 16 : i64, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 2 : ui32, readLatency = 1 : ui32, readUnderWrite = 0 : ui32, width = 8 : ui32, writeClockIDs = [0 : i32, 0 : i32], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
@@ -240,14 +238,14 @@ numReadPorts = 1 : ui32, numReadWritePorts = 1 : ui32,maskGran = 8 :ui32, numWri
 // CHECK:    %[[Memory0:.+]] = sv.reg  : !hw.inout<uarray<10xi16>>
 // CHECK:    %[[v8:.+]] = sv.array_index_inout %[[Memory0]][%[[v7:.+]]] :
 // CHECK:    %[[v12:.+]] = sv.read_inout %[[v8]] : !hw.inout<i16>
+// CHECK:    %[[v52:.+]] = sv.array_index_inout %[[Memory0]][%[[v19:.+]]] :
+// CHECK:    %[[v56:.+]] = sv.read_inout %[[v52]] :
 // CHECK:    sv.always posedge %rw_clock_0 {
 // CHECK:      sv.passign %[[v38:.+]], %rw_wmask_0 : i2
 // CHECK:    %[[v44:.+]] = comb.extract %[[v43:.+]] from 0 : (i2) -> i1
 // CHECK:    %[[v45:.+]] = comb.extract %[[v37:.+]] from 0 : (i16) -> i8
 // CHECK:    %[[v46:.+]] = comb.extract %[[v43]] from 1 : (i2) -> i1
 // CHECK:    %[[v47:.+]] = comb.extract %[[v37]] from 8 : (i16) -> i8
-// CHECK:    %[[v52:.+]] = sv.array_index_inout %[[Memory0]][%[[v19:.+]]] :
-// CHECK:    %[[v56:.+]] = sv.read_inout %[[v52]] :
 // CHECK:    sv.always posedge %wo_clock_0 {
 // CHECK:      sv.passign %[[v70:.+]], %wo_data_0 : i16
 // CHECK:      sv.passign %[[v76:.+]], %wo_mask_0 : i2
@@ -283,100 +281,178 @@ hw.module.generated @PR2769, @FIRRTLMem(%ro_addr_0: i4, %ro_en_0: i1, %ro_clock_
 // CHECK-NEXT{LITERAL}: sv.verbatim "for (initvar = 0; initvar < 10; initvar = initvar + 1) begin\0A  {{0}} = {{`RANDOM}, {`RANDOM}, {`RANDOM}, {`RANDOM}, {`RANDOM}};\0A  Memory[initvar] = {{0}}[144:0];\0Aend"
 hw.module.generated @RandomizeWeirdWidths, @FIRRTLMem(%ro_addr_0: i4, %ro_en_0: i1, %ro_clock_0: i1,%rw_addr_0: i4, %rw_en_0: i1,  %rw_clock_0: i1, %rw_wmode_0: i1, %rw_wdata_0: i145, %wo_addr_0: i4, %wo_en_0: i1, %wo_clock_0: i1, %wo_data_0: i145) -> (ro_data_0: i145, rw_rdata_0: i145) attributes {depth = 10 : i64, numReadPorts = 1 : ui32, numReadWritePorts = 1 : ui32, numWritePorts = 1 : ui32, readLatency = 2 : ui32, readUnderWrite = 0 : ui32, width = 145 : ui32, writeClockIDs = [], writeLatency = 4 : ui32, writeUnderWrite = 0 : i32}
 
+//===----------------------------------------------------------------------===//
 // CHECK-LABEL: hw.module @ReadWriteWithHighReadLatency
+//===----------------------------------------------------------------------===//
+
 hw.module.generated @ReadWriteWithHighReadLatency, @FIRRTLMem(%rw_addr: i4, %rw_en: i1,  %rw_clock: i1, %rw_wmode: i1, %rw_wdata: i16) -> (rw_rdata: i16) attributes {depth = 16 : i64, numReadPorts = 0 : ui32, numReadWritePorts = 1 : ui32, numWritePorts = 0 : ui32, readLatency = 4 : ui32, readUnderWrite = 0 : ui32, width = 16 : ui32, writeClockIDs = [], writeLatency = 3 : ui32, writeUnderWrite = 0 : i32}
-// CHECK: [[MEM:%.+]] = sv.reg : !hw.inout<uarray
+
+// CHECK-BOTH: [[MEM:%.+]] = sv.reg : !hw.inout<uarray
 
 // Common pipeline stages (2x)
-// CHECK: sv.passign [[ADDR_0:%.+]], %rw_addr
-// CHECK: [[ADDR_0R:%.+]] = sv.read_inout [[ADDR_0]]
-// CHECK: sv.passign [[ADDR_1:%.+]], [[ADDR_0R]]
+// - addr
+// CHECK-PRE: sv.passign [[ADDR_0:%.+]], %rw_addr
+// CHECK-PRE: [[ADDR_0R:%.+]] = sv.read_inout [[ADDR_0]]
+// CHECK-PRE: sv.passign [[ADDR_1:%.+]], [[ADDR_0R]]
+// - wmode
+// CHECK-PRE: sv.passign [[WMODE_0:%.+]], %rw_wmode
+// CHECK-PRE: [[WMODE_0R:%.+]] = sv.read_inout [[WMODE_0]]
+// CHECK-PRE: sv.passign [[WMODE_1:%.+]], [[WMODE_0R]]
+// - en
+// CHECK-PRE: sv.passign [[EN_0:%.+]], %rw_en
+// CHECK-PRE: [[EN_0R:%.+]] = sv.read_inout [[EN_0]]
+// CHECK-PRE: sv.passign [[EN_1:%.+]], [[EN_0R]]
 
-// CHECK: sv.passign [[EN_0:%.+]], %rw_en
-// CHECK: [[EN_0R:%.+]] = sv.read_inout [[EN_0]]
-// CHECK: sv.passign [[EN_1:%.+]], [[EN_0R]]
+// CHECK-PRE: [[ADDR_1R:%.+]] = sv.read_inout [[ADDR_1]]
+// CHECK-PRE: [[WMODE_1R:%.+]] = sv.read_inout [[WMODE_1]]
+// CHECK-PRE: [[EN_1R:%.+]] = sv.read_inout [[EN_1]]
 
-// CHECK: sv.passign [[WMODE_0:%.+]], %rw_wmode
-// CHECK: [[WMODE_0R:%.+]] = sv.read_inout [[WMODE_0]]
-// CHECK: sv.passign [[WMODE_1:%.+]], [[WMODE_0R]]
+// Merging of `wmode` into read and write `en`
+// CHECK-PRE: [[WMODE_1R_INV:%.+]] = comb.xor [[WMODE_1R]], %true
+// CHECK-PRE: [[READ_EN_1R:%.+]] = comb.and [[EN_1R]], [[WMODE_1R_INV]]
+// CHECK-PRE: [[WRITE_EN_1R:%.+]] = comb.and [[EN_1R]], [[WMODE_1R]]
 
-// CHECK: [[ADDR_1R:%.+]] = sv.read_inout [[ADDR_1]]
-// CHECK: [[EN_1R:%.+]] = sv.read_inout [[EN_1]]
-// CHECK: [[WMODE_1R:%.+]] = sv.read_inout [[WMODE_1]]
+// Read port: Additional pipeline stages (2x)
+// - addr
+// CHECK-PRE: sv.passign [[READ_ADDR_2:%.+]], [[ADDR_1R]]
+// CHECK-PRE: [[READ_ADDR_2R:%.+]] = sv.read_inout [[READ_ADDR_2]]
+// CHECK-PRE: sv.passign [[READ_ADDR_3:%.+]], [[READ_ADDR_2R]]
+// - en
+// CHECK-PRE: sv.passign [[READ_EN_2:%.+]], [[READ_EN_1R]]
+// CHECK-PRE: [[READ_EN_2R:%.+]] = sv.read_inout [[READ_EN_2]]
+// CHECK-PRE: sv.passign [[READ_EN_3:%.+]], [[READ_EN_2R]]
 
-// Additional read pipeline stages (2x)
-// CHECK: sv.passign [[READ_ADDR_2:%.+]], [[ADDR_1R]]
-// CHECK: [[READ_ADDR_2R:%.+]] = sv.read_inout [[READ_ADDR_2]]
-// CHECK: sv.passign [[READ_ADDR_3:%.+]], [[READ_ADDR_2R]]
-
-// CHECK: sv.passign [[READ_EN_2:%.+]], [[EN_1R]]
-// CHECK: [[READ_EN_2R:%.+]] = sv.read_inout [[READ_EN_2]]
-// CHECK: sv.passign [[READ_EN_3:%.+]], [[READ_EN_2R]]
-
-// CHECK: sv.passign [[READ_WMODE_2:%.+]], [[WMODE_1R]]
-// CHECK: [[READ_WMODE_2R:%.+]] = sv.read_inout [[READ_WMODE_2]]
-// CHECK: sv.passign [[READ_WMODE_3:%.+]], [[READ_WMODE_2R]]
-
-// CHECK: [[READ_ADDR_3R:%.+]] = sv.read_inout [[READ_ADDR_3]]
-// CHECK: [[READ_EN_3R:%.+]] = sv.read_inout [[READ_EN_3]]
-// CHECK: [[READ_WMODE_3R:%.+]] = sv.read_inout [[READ_WMODE_3]]
+// CHECK-PRE: [[READ_ADDR_3R:%.+]] = sv.read_inout [[READ_ADDR_3]]
+// CHECK-PRE: [[READ_EN_3R:%.+]] = sv.read_inout [[READ_EN_3]]
 
 // Read port
-// CHECK: [[RMODE:%.+]] = comb.icmp eq [[READ_WMODE_3R]], %false
-// CHECK: [[RCOND:%.+]] = comb.and [[READ_EN_3R]], [[RMODE]]
-// CHECK: [[RPTR:%.+]] = sv.array_index_inout [[MEM]][[[READ_ADDR_3R]]]
+// CHECK-PRE: [[RPTR:%.+]] = sv.array_index_inout [[MEM]][[[READ_ADDR_3R]]]
+// CHECK-PRE: [[RDATA_RAW:%.+]] = sv.read_inout [[RPTR]]
+// CHECK-PRE: [[X:%.+]] = sv.constantX
+// CHECK-PRE: [[RDATA:%.+]] = comb.mux [[READ_EN_3R]], [[RDATA_RAW]], [[X]]
 
 // Write port
-// CHECK: sv.always
-// CHECK: [[TMP:%.+]] = comb.and %true, [[WMODE_1R]]
-// CHECK: [[WCOND:%.+]] comb.and [[EN_1R]], [[TMP]]
-// CHECK: [[WPTR:%.+]] = sv.array_index_inout [[MEM]][[[ADDR_1R]]]
+// CHECK-PRE: [[WPTR:%.+]] = sv.array_index_inout [[MEM]][[[ADDR_1R]]]
 
+// CHECK-PRE: hw.output [[RDATA]]
+
+//===----------------------------------------------------------------------===//
 // CHECK-LABEL: hw.module @ReadWriteWithHighWriteLatency
+//===----------------------------------------------------------------------===//
+
 hw.module.generated @ReadWriteWithHighWriteLatency, @FIRRTLMem(%rw_addr: i4, %rw_en: i1,  %rw_clock: i1, %rw_wmode: i1, %rw_wdata: i16) -> (rw_rdata: i16) attributes {depth = 16 : i64, numReadPorts = 0 : ui32, numReadWritePorts = 1 : ui32, numWritePorts = 0 : ui32, readLatency = 2 : ui32, readUnderWrite = 0 : ui32, width = 16 : ui32, writeClockIDs = [], writeLatency = 5 : ui32, writeUnderWrite = 0 : i32}
-// CHECK: [[MEM:%.+]] = sv.reg : !hw.inout<uarray
+
+// CHECK-BOTH: [[MEM:%.+]] = sv.reg : !hw.inout<uarray
 
 // Common pipeline stages (2x)
-// CHECK: sv.passign [[ADDR_0:%.+]], %rw_addr
-// CHECK: [[ADDR_0R:%.+]] = sv.read_inout [[ADDR_0]]
-// CHECK: sv.passign [[ADDR_1:%.+]], [[ADDR_0R]]
+// - addr
+// CHECK-PRE: sv.passign [[ADDR_0:%.+]], %rw_addr
+// CHECK-PRE: [[ADDR_0R:%.+]] = sv.read_inout [[ADDR_0]]
+// CHECK-PRE: sv.passign [[ADDR_1:%.+]], [[ADDR_0R]]
+// - wmode
+// CHECK-PRE: sv.passign [[WMODE_0:%.+]], %rw_wmode
+// CHECK-PRE: [[WMODE_0R:%.+]] = sv.read_inout [[WMODE_0]]
+// CHECK-PRE: sv.passign [[WMODE_1:%.+]], [[WMODE_0R]]
+// - en
+// CHECK-PRE: sv.passign [[EN_0:%.+]], %rw_en
+// CHECK-PRE: [[EN_0R:%.+]] = sv.read_inout [[EN_0]]
+// CHECK-PRE: sv.passign [[EN_1:%.+]], [[EN_0R]]
 
-// CHECK: sv.passign [[EN_0:%.+]], %rw_en
-// CHECK: [[EN_0R:%.+]] = sv.read_inout [[EN_0]]
-// CHECK: sv.passign [[EN_1:%.+]], [[EN_0R]]
+// CHECK-PRE: [[ADDR_1R:%.+]] = sv.read_inout [[ADDR_1]]
+// CHECK-PRE: [[WMODE_1R:%.+]] = sv.read_inout [[WMODE_1]]
+// CHECK-PRE: [[EN_1R:%.+]] = sv.read_inout [[EN_1]]
 
-// CHECK: sv.passign [[WMODE_0:%.+]], %rw_wmode
-// CHECK: [[WMODE_0R:%.+]] = sv.read_inout [[WMODE_0]]
-// CHECK: sv.passign [[WMODE_1:%.+]], [[WMODE_0R]]
-
-// CHECK: [[ADDR_1R:%.+]] = sv.read_inout [[ADDR_1]]
-// CHECK: [[EN_1R:%.+]] = sv.read_inout [[EN_1]]
-// CHECK: [[WMODE_1R:%.+]] = sv.read_inout [[WMODE_1]]
-
-// Additional write pipeline stages (2x)
-// CHECK: sv.passign [[WRITE_ADDR_2:%.+]], [[ADDR_1R]]
-// CHECK: [[WRITE_ADDR_2R:%.+]] = sv.read_inout [[WRITE_ADDR_2]]
-// CHECK: sv.passign [[WRITE_ADDR_3:%.+]], [[WRITE_ADDR_2R]]
-
-// CHECK: sv.passign [[WRITE_EN_2:%.+]], [[EN_1R]]
-// CHECK: [[WRITE_EN_2R:%.+]] = sv.read_inout [[WRITE_EN_2]]
-// CHECK: sv.passign [[WRITE_EN_3:%.+]], [[WRITE_EN_2R]]
-
-// CHECK: sv.passign [[WRITE_WMODE_2:%.+]], [[WMODE_1R]]
-// CHECK: [[WRITE_WMODE_2R:%.+]] = sv.read_inout [[WRITE_WMODE_2]]
-// CHECK: sv.passign [[WRITE_WMODE_3:%.+]], [[WRITE_WMODE_2R]]
-
-// CHECK: [[WRITE_ADDR_3R:%.+]] = sv.read_inout [[WRITE_ADDR_3]]
-// CHECK: [[WRITE_EN_3R:%.+]] = sv.read_inout [[WRITE_EN_3]]
-// CHECK: [[WRITE_WMODE_3R:%.+]] = sv.read_inout [[WRITE_WMODE_3]]
+// Merging of `wmode` into read and write `en`
+// CHECK-PRE: [[WMODE_1R_INV:%.+]] = comb.xor [[WMODE_1R]], %true
+// CHECK-PRE: [[READ_EN_1R:%.+]] = comb.and [[EN_1R]], [[WMODE_1R_INV]]
+// CHECK-PRE: [[WRITE_EN_1R:%.+]] = comb.and [[EN_1R]], [[WMODE_1R]]
 
 // Read port
-// CHECK: [[RMODE:%.+]] = comb.icmp eq [[WMODE_1R]], %false
-// CHECK: [[RCOND:%.+]] = comb.and [[EN_1R]], [[RMODE]]
-// CHECK: [[RPTR:%.+]] = sv.array_index_inout [[MEM]][[[ADDR_1R]]]
+// CHECK-PRE: [[RPTR:%.+]] = sv.array_index_inout [[MEM]][[[ADDR_1R]]]
+// CHECK-PRE: [[RDATA_RAW:%.+]] = sv.read_inout [[RPTR]]
+// CHECK-PRE: [[X:%.+]] = sv.constantX
+// CHECK-PRE: [[RDATA:%.+]] = comb.mux [[READ_EN_1R]], [[RDATA_RAW]], [[X]]
+
+// Write port: Additional write pipeline stages (2x for addr/en, 4x for wdata)
+// - addr
+// CHECK-PRE: sv.passign [[WRITE_ADDR_2:%.+]], [[ADDR_1R]]
+// CHECK-PRE: [[WRITE_ADDR_2R:%.+]] = sv.read_inout [[WRITE_ADDR_2]]
+// CHECK-PRE: sv.passign [[WRITE_ADDR_3:%.+]], [[WRITE_ADDR_2R]]
+// - en
+// CHECK-PRE: sv.passign [[WRITE_EN_2:%.+]], [[WRITE_EN_1R]]
+// CHECK-PRE: [[WRITE_EN_2R:%.+]] = sv.read_inout [[WRITE_EN_2]]
+// CHECK-PRE: sv.passign [[WRITE_EN_3:%.+]], [[WRITE_EN_2R]]
+// - wdata
+// CHECK-PRE: sv.passign [[WDATA_0:%.+]], %rw_wdata
+// CHECK-PRE: [[WDATA_0R:%.+]] = sv.read_inout [[WDATA_0]]
+// CHECK-PRE: sv.passign [[WDATA_1:%.+]], [[WDATA_0R]]
+// CHECK-PRE: [[WDATA_1R:%.+]] = sv.read_inout [[WDATA_1]]
+// CHECK-PRE: sv.passign [[WDATA_2:%.+]], [[WDATA_1R]]
+// CHECK-PRE: [[WDATA_2R:%.+]] = sv.read_inout [[WDATA_2]]
+// CHECK-PRE: sv.passign [[WDATA_3:%.+]], [[WDATA_2R]]
+// - wmask (omitted; constant true)
+
+// CHECK-PRE: [[WRITE_ADDR_3R:%.+]] = sv.read_inout [[WRITE_ADDR_3]]
+// CHECK-PRE: [[WRITE_EN_3R:%.+]] = sv.read_inout [[WRITE_EN_3]]
+// CHECK-PRE: [[WDATA_3R:%.+]] = sv.read_inout [[WDATA_3]]
 
 // Write port
-// CHECK: sv.always
-// CHECK: [[TMP:%.+]] = comb.and %true, [[WRITE_WMODE_3R]]
-// CHECK: [[WCOND:%.+]] comb.and [[WRITE_EN_3R]], [[TMP]]
-// CHECK: [[WPTR:%.+]] = sv.array_index_inout [[MEM]][[[WRITE_ADDR_3R]]]
+// CHECK-PRE: [[WPTR:%.+]] = sv.array_index_inout [[MEM]][[[WRITE_ADDR_3R]]]
+
+// CHECK-PRE: hw.output [[RDATA]]
+
+//===----------------------------------------------------------------------===//
+// CHECK-BOTH-LABEL: hw.module @ReadPreVsPostArrayLatency
+//===----------------------------------------------------------------------===//
+
+hw.module.generated @ReadPreVsPostArrayLatency, @FIRRTLMem(%rw_addr: i4, %rw_en: i1,  %rw_clock: i1, %rw_wmode: i1, %rw_wdata: i16) -> (rw_rdata: i16) attributes {depth = 16 : i64, numReadPorts = 0 : ui32, numReadWritePorts = 1 : ui32, numWritePorts = 0 : ui32, readLatency = 2 : ui32, readUnderWrite = 0 : ui32, width = 16 : ui32, writeClockIDs = [], writeLatency = 1 : ui32, writeUnderWrite = 0 : i32}
+
+// CHECK-BOTH: [[MEM:%.+]] = sv.reg : !hw.inout<uarray
+
+
+// Merging of `wmode` into read and write `en`
+// CHECK-BOTH: [[WMODE_INV:%.+]] = comb.xor %rw_wmode, %true
+// CHECK-BOTH: [[READ_EN:%.+]] = comb.and %rw_en, [[WMODE_INV]]
+// CHECK-BOTH: [[WRITE_EN:%.+]] = comb.and %rw_en, %rw_wmode
+
+// === Pre-array latency version ===
+
+// Pre-array latency pipeline stages
+// - addr
+// CHECK-PRE: sv.passign [[ADDR_0:%.+]], %rw_addr
+// CHECK-PRE: [[ADDR_0R:%.+]] = sv.read_inout [[ADDR_0]]
+// CHECK-PRE: sv.passign [[ADDR_1:%.+]], [[ADDR_0R]]
+// - en
+// CHECK-PRE: sv.passign [[EN_0:%.+]], [[READ_EN]]
+// CHECK-PRE: [[EN_0R:%.+]] = sv.read_inout [[EN_0]]
+// CHECK-PRE: sv.passign [[EN_1:%.+]], [[EN_0R]]
+
+// CHECK-PRE: [[ADDR_1R:%.+]] = sv.read_inout [[ADDR_1]]
+// CHECK-PRE: [[EN_1R:%.+]] = sv.read_inout [[EN_1]]
+
+// Read port
+// CHECK-PRE: [[RPTR:%.+]] = sv.array_index_inout [[MEM]][[[ADDR_1R]]]
+// CHECK-PRE: [[RDATA_RAW:%.+]] = sv.read_inout [[RPTR]]
+// CHECK-PRE: [[X:%.+]] = sv.constantX
+// CHECK-PRE: [[RDATA:%.+]] = comb.mux [[EN_1R]], [[RDATA_RAW]], [[X]]
+
+// === Post-array latency version ===
+
+// Read port
+// CHECK-POST: [[RPTR:%.+]] = sv.array_index_inout [[MEM]][%rw_addr]
+// CHECK-POST: [[RDATA_RAW:%.+]] = sv.read_inout [[RPTR]]
+// CHECK-POST: [[X:%.+]] = sv.constantX
+// CHECK-POST: [[RDATA_0R:%.+]] = comb.mux [[READ_EN]], [[RDATA_RAW]], [[X]]
+
+// Post-array latency pipeline stages
+// - rdata
+// CHECK-POST: sv.passign [[RDATA_1:%.+]], [[RDATA_0R]]
+// CHECK-POST: [[RDATA_1R:%.+]] = sv.read_inout [[RDATA_1]]
+// CHECK-POST: sv.passign [[RDATA_1:%.+]], [[RDATA_1R]]
+
+// CHECK-POST: [[RDATA:%.+]] = sv.read_inout [[RDATA_1]]
+
+// Write port
+// CHECK-PRE: [[WPTR:%.+]] = sv.array_index_inout [[MEM]][%rw_addr]
+
+// CHECK-BOTH: hw.output [[RDATA]]

@@ -160,6 +160,12 @@ static cl::opt<bool>
                                  "assigning X on read disable"),
                         cl::init(false), cl::cat(mainCategory));
 
+static cl::opt<bool> memoryReadLatencyIsPropagationDelay(
+    "mem-read-latency-is-propagation-delay",
+    cl::desc("Treat memory read latency as a propagation delay instead of an "
+             "address decoding delay"),
+    cl::init(false), cl::cat(mainCategory));
+
 static cl::opt<bool> imconstprop(
     "imconstprop",
     cl::desc(
@@ -606,7 +612,9 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
         modulePM.addPass(createSimpleCanonicalizerPass());
       }
     } else {
-      pm.addPass(sv::createHWMemSimImplPass(replSeqMem, ignoreReadEnableMem));
+      pm.addPass(
+          sv::createHWMemSimImplPass(replSeqMem, ignoreReadEnableMem,
+                                     memoryReadLatencyIsPropagationDelay));
 
       if (extractTestCode)
         pm.addPass(sv::createSVExtractTestCodePass());

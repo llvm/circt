@@ -47,6 +47,7 @@ namespace {
 
 class HWMemSimImpl {
   bool ignoreReadEnableMem;
+  bool readLatencyIsPropagationDelay;
 
   SmallVector<sv::RegOp> registers;
 
@@ -56,8 +57,9 @@ class HWMemSimImpl {
   sv::AlwaysOp lastPipelineAlwaysOp;
 
 public:
-  HWMemSimImpl(bool ignoreReadEnableMem)
-      : ignoreReadEnableMem(ignoreReadEnableMem) {}
+  HWMemSimImpl(bool ignoreReadEnableMem, bool readLatencyIsPropagationDelay)
+      : ignoreReadEnableMem(ignoreReadEnableMem),
+        readLatencyIsPropagationDelay(readLatencyIsPropagationDelay) {}
 
   void generateMemory(HWModuleOp op, FirMemory mem);
 };
@@ -66,6 +68,7 @@ struct HWMemSimImplPass : public sv::HWMemSimImplBase<HWMemSimImplPass> {
   void runOnOperation() override;
 
   using sv::HWMemSimImplBase<HWMemSimImplPass>::ignoreReadEnableMem;
+  using sv::HWMemSimImplBase<HWMemSimImplPass>::readLatencyIsPropagationDelay;
   using sv::HWMemSimImplBase<HWMemSimImplPass>::replSeqMem;
 };
 
@@ -169,6 +172,7 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
     mem.maskGran = mem.dataWidth;
   auto maskBits = mem.dataWidth / mem.maskGran;
   bool isMasked = maskBits > 1;
+
   // Each mask bit controls mask-granularity number of data bits.
   auto dataType = b.getIntegerType(mem.dataWidth);
 
@@ -176,201 +180,219 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
   Value reg = b.create<sv::RegOp>(UnpackedArrayType::get(dataType, mem.depth),
                                   b.getStringAttr("Memory"));
 
-  SmallVector<Value, 4> outputs;
+  // Determine the read and write latencies for the memory. We split the read
+  // latency into a pre-array and post-array part: the pre-array part controls
+  // after how many cycles the actual contents in the storage array are read,
+  // and the post-array part controls how long it takes for the content read
+  // from the storage array to appear at the output. Physically speaking ,the
+  // pre delay models address decoding and word selection delays, while the post
+  // delay models the time it takes for the sense amplifiers to probe a value
+  // off the storage bits and propagate it to the output. The write latency
+  // consists of just the pre part, since there is no sensing and output
+  // propagation that happens.
+  //
+  // Another way to look at this is that the pre and post delays control how the
+  // memory behaves for read-under-write accesses. If a read has a pre-array
+  // latency of 4 cycles, it will see writes that land in the storage array in
+  // the 4 cycles *after* the read is issued, which is when the pre delay
+  // expires and the contents of the storage array are probed.
+  //
+  // CAVEAT(fschuiki): In the memories originally derived from the Scala FIRRTL
+  // implementation the read latency is modeled purely as a pre-array delay.
+  // However most SRAMs I've seen in the wild have predominantly a post-array
+  // delay where the sense amps are active, while the pre-array delay of the
+  // address decoding and word selection is pretty much instantaneous. So I
+  // suspect what we actually want is to use the FIRRTL `readLatency` parameter
+  // for the post-array delay, but this requires lots of checking to see if
+  // something breaks. For the time being the latency-is-post-delay modeling is
+  // gated behind a pass option such that we maintain the original behaviour and
+  // can do some opt-in checks.
+  unsigned writeLatency = mem.writeLatency;
+  unsigned readPreLatency = mem.readLatency;
+  unsigned readPostLatency = 0;
+  if (readLatencyIsPropagationDelay)
+    std::swap(readPreLatency, readPostLatency);
 
+  // Determine the read and write ports for the memory.
+  struct ReadPort {
+    Value addr;
+    Value en;
+    Value clock;
+    unsigned preStagesToAdd;
+    unsigned postStagesToAdd;
+  };
+
+  struct WritePort {
+    Value addr;
+    Value en;
+    Value clock;
+    Value wdata;
+    Value wmask;
+    unsigned stagesToAdd;
+  };
+
+  SmallVector<ReadPort> readPorts;
+  SmallVector<WritePort> writePorts;
+  auto i1Type = b.getI1Type();
   size_t inArg = 0;
+
+  // Handle read ports.
   for (size_t i = 0; i < mem.numReadPorts; ++i) {
     Value addr = op.getBody().getArgument(inArg++);
     Value en = op.getBody().getArgument(inArg++);
     Value clock = op.getBody().getArgument(inArg++);
-    // Add pipeline stages
-    if (ignoreReadEnableMem) {
-      for (size_t j = 0, e = mem.readLatency; j != e; ++j) {
-        auto enLast = en;
-        if (j < e - 1)
-          en = addPipelineStages(b, moduleNamespace, 1, clock, en);
-        addr = addPipelineStages(b, moduleNamespace, 1, clock, addr, enLast);
-      }
-    } else {
-      en = addPipelineStages(b, moduleNamespace, mem.readLatency, clock, en);
-      addr =
-          addPipelineStages(b, moduleNamespace, mem.readLatency, clock, addr);
-    }
-
-    // Read Logic
-    Value rdata =
-        b.create<sv::ReadInOutOp>(b.create<sv::ArrayIndexInOutOp>(reg, addr));
-    if (!ignoreReadEnableMem) {
-      Value x = b.create<sv::ConstantXOp>(rdata.getType());
-      rdata = b.create<comb::MuxOp>(en, rdata, x);
-    }
-    outputs.push_back(rdata);
+    readPorts.push_back({addr, en, clock, readPreLatency, readPostLatency});
   }
 
+  // Handle read-write ports.
   for (size_t i = 0; i < mem.numReadWritePorts; ++i) {
-    auto numReadStages = mem.readLatency;
-    auto numWriteStages = mem.writeLatency - 1;
-    auto numCommonStages = std::min(numReadStages, numWriteStages);
     Value addr = op.getBody().getArgument(inArg++);
     Value en = op.getBody().getArgument(inArg++);
     Value clock = op.getBody().getArgument(inArg++);
     Value wmode = op.getBody().getArgument(inArg++);
-    Value wdataIn = op.getBody().getArgument(inArg++);
-    Value wmaskBits;
-    // There are no input mask ports, if maskBits =1. Create a dummy true value
-    // for mask.
-    if (isMasked)
-      wmaskBits = op.getBody().getArgument(inArg++);
-    else
-      wmaskBits = b.create<ConstantOp>(b.getIntegerAttr(en.getType(), 1));
+    Value wdata = op.getBody().getArgument(inArg++);
+    Value wmask = isMasked ? op.getBody().getArgument(inArg++) : Value{};
 
-    // Add common pipeline stages.
-    addr = addPipelineStages(b, moduleNamespace, numCommonStages, clock, addr);
-    en = addPipelineStages(b, moduleNamespace, numCommonStages, clock, en);
+    // As an optimization, create common pipeline registers for the latency
+    // shared among the read and write part of the port.
+    auto commonLatency = std::min(readPreLatency, writeLatency - 1);
+    addr =
+        addPipelineStages(b, moduleNamespace, commonLatency, clock, addr, en);
     wmode =
-        addPipelineStages(b, moduleNamespace, numCommonStages, clock, wmode);
+        addPipelineStages(b, moduleNamespace, commonLatency, clock, wmode, en);
+    en = addPipelineStages(b, moduleNamespace, commonLatency, clock, en);
 
-    // Add read-only pipeline stages.
-    auto read_addr = addPipelineStages(
-        b, moduleNamespace, numReadStages - numCommonStages, clock, addr);
-    auto read_en = addPipelineStages(
-        b, moduleNamespace, numReadStages - numCommonStages, clock, en);
-    auto read_wmode = addPipelineStages(
-        b, moduleNamespace, numReadStages - numCommonStages, clock, wmode);
-
-    // Add write-only pipeline stages.
-    auto write_addr = addPipelineStages(
-        b, moduleNamespace, numWriteStages - numCommonStages, clock, addr);
-    auto write_en = addPipelineStages(
-        b, moduleNamespace, numWriteStages - numCommonStages, clock, en);
-    auto write_wmode = addPipelineStages(
-        b, moduleNamespace, numWriteStages - numCommonStages, clock, wmode);
-    wdataIn =
-        addPipelineStages(b, moduleNamespace, numWriteStages, clock, wdataIn);
-    if (isMasked)
-      wmaskBits = addPipelineStages(b, moduleNamespace, numWriteStages, clock,
-                                    wmaskBits);
-
-    SmallVector<Value, 4> maskValues(maskBits);
-    SmallVector<Value, 4> dataValues(maskBits);
-    // For multi-bit mask, extract corresponding write data bits of
-    // mask-granularity size each. Each of the extracted data bits will be
-    // written to a register, gaurded by the corresponding mask bit.
-    for (size_t i = 0; i < maskBits; ++i) {
-      maskValues[i] = b.createOrFold<comb::ExtractOp>(wmaskBits, i, 1);
-      dataValues[i] = b.createOrFold<comb::ExtractOp>(wdataIn, i * mem.maskGran,
-                                                      mem.maskGran);
-    }
-
-    // wire to store read result
-    auto rWire = b.create<sv::WireOp>(wdataIn.getType());
-    Value rdata = b.create<sv::ReadInOutOp>(rWire);
-
-    // Read logic.
-    Value rcond = b.createOrFold<comb::AndOp>(
-        read_en, b.createOrFold<comb::ICmpOp>(
-                     comb::ICmpPredicate::eq, read_wmode,
-                     b.createOrFold<ConstantOp>(read_wmode.getType(), 0)));
-    Value slotReg = b.create<sv::ArrayIndexInOutOp>(reg, read_addr);
-    Value slot = b.create<sv::ReadInOutOp>(slotReg);
-    Value x = b.create<sv::ConstantXOp>(slot.getType());
-    b.create<sv::AssignOp>(rWire, b.create<comb::MuxOp>(rcond, slot, x));
-
-    // Write logic gaurded by the corresponding mask bit.
-    for (auto wmask : llvm::enumerate(maskValues)) {
-      b.create<sv::AlwaysOp>(sv::EventControl::AtPosEdge, clock, [&]() {
-        auto wcond = b.createOrFold<comb::AndOp>(
-            write_en, b.createOrFold<comb::AndOp>(wmask.value(), write_wmode));
-        b.create<sv::IfOp>(wcond, [&]() {
-          Value slotReg = b.create<sv::ArrayIndexInOutOp>(reg, write_addr);
-          b.create<sv::PAssignOp>(
-              b.createOrFold<sv::IndexedPartSelectInOutOp>(
-                  slotReg,
-                  b.createOrFold<ConstantOp>(b.getIntegerType(32),
-                                             wmask.index() * mem.maskGran),
-                  mem.maskGran),
-              dataValues[wmask.index()]);
-        });
-      });
-    }
-    outputs.push_back(rdata);
+    // Fold the wmode into the enable condition on the read and write paths.
+    Value wmodeInv =
+        b.createOrFold<comb::XorOp>(wmode, b.create<ConstantOp>(i1Type, 1));
+    Value readEn = b.createOrFold<comb::AndOp>(en, wmodeInv);
+    Value writeEn = b.createOrFold<comb::AndOp>(en, wmode);
+    readPorts.push_back(
+        {addr, readEn, clock, readPreLatency - commonLatency, readPostLatency});
+    writePorts.push_back(
+        {addr, writeEn, clock, wdata, wmask, writeLatency - 1 - commonLatency});
   }
 
-  DenseMap<unsigned, Operation *> writeProcesses;
+  // Handle write ports.
   for (size_t i = 0; i < mem.numWritePorts; ++i) {
-    auto numStages = mem.writeLatency - 1;
     Value addr = op.getBody().getArgument(inArg++);
     Value en = op.getBody().getArgument(inArg++);
     Value clock = op.getBody().getArgument(inArg++);
-    Value wdataIn = op.getBody().getArgument(inArg++);
-    Value wmaskBits;
-    // There are no input mask ports, if maskBits =1. Create a dummy true value
-    // for mask.
-    if (isMasked)
-      wmaskBits = op.getBody().getArgument(inArg++);
-    else
-      wmaskBits = b.create<ConstantOp>(b.getIntegerAttr(en.getType(), 1));
-    // Add pipeline stages
-    addr = addPipelineStages(b, moduleNamespace, numStages, clock, addr);
-    en = addPipelineStages(b, moduleNamespace, numStages, clock, en);
-    wdataIn = addPipelineStages(b, moduleNamespace, numStages, clock, wdataIn);
-    if (isMasked)
-      wmaskBits =
-          addPipelineStages(b, moduleNamespace, numStages, clock, wmaskBits);
+    Value wdata = op.getBody().getArgument(inArg++);
+    Value wmask = isMasked ? op.getBody().getArgument(inArg++) : Value{};
+    writePorts.push_back({addr, en, clock, wdata, wmask, writeLatency - 1});
+  }
 
-    SmallVector<Value, 4> maskValues(maskBits);
-    SmallVector<Value, 4> dataValues(maskBits);
+  // Create the logic for read ports.
+  SmallVector<Value, 4> outputs;
+  for (auto &port : readPorts) {
+    // Add the remaining pre-array delay stages which model the latency until
+    // the access to the underlying data array happens.
+    auto addr = addPipelineStages(b, moduleNamespace, port.preStagesToAdd,
+                                  port.clock, port.addr, port.en);
+    auto en = addPipelineStages(b, moduleNamespace, port.preStagesToAdd,
+                                port.clock, port.en);
+
+    // Actually probe the array.
+    Value rdata = b.create<sv::ArrayIndexInOutOp>(reg, addr);
+    rdata = b.create<sv::ReadInOutOp>(rdata);
+
+    // Inject `X` when reading is disabled. This makes simulations fail more
+    // obviously if a design inadvertently relies on an SRAM's output during its
+    // disabled state, which is generally undefined.
+    if (!ignoreReadEnableMem) {
+      Value x = b.create<sv::ConstantXOp>(rdata.getType());
+      rdata = b.create<comb::MuxOp>(en, rdata, x);
+    }
+
+    // Add the post-array delay stages which model the latency from the array
+    // through bit lines, sense amplifiers, and output buffer/registers. If we
+    // are supposed to ignore read enables (and hold onto the current value
+    // instead of propagating an `X`), we can use the enable signal to prevent
+    // any updates from propagating through the pipeline. Otherwise we don't
+    // gate the pipeline stages such that the `X` always properly propagates.
+    rdata =
+        addPipelineStages(b, moduleNamespace, port.postStagesToAdd, port.clock,
+                          rdata, ignoreReadEnableMem ? en : Value{});
+    outputs.push_back(rdata);
+  }
+
+  // Create the logic for write ports.
+  DenseMap<unsigned, Operation *> writeProcesses;
+  for (auto &it : llvm::enumerate(writePorts)) {
+    auto &port = it.value();
+    auto portIdx = it.index();
+    // Add the remaining delay stages which model the latency until the access
+    // to the underlying data array happens. (Only `addr` and `en` already have
+    // pipeline stages inserted, because they are potentially shared with a read
+    // port; `wdata`/`wmask` require the full pipeline still.)
+    auto addr = addPipelineStages(b, moduleNamespace, port.stagesToAdd,
+                                  port.clock, port.addr, port.en);
+    auto en = addPipelineStages(b, moduleNamespace, port.stagesToAdd,
+                                port.clock, port.en);
+    auto wdata = addPipelineStages(b, moduleNamespace, writeLatency - 1,
+                                   port.clock, port.wdata, port.en);
+    auto wmask = port.wmask
+                     ? addPipelineStages(b, moduleNamespace, writeLatency - 1,
+                                         port.clock, port.wmask, port.en)
+                     : Value{};
+
+    // If the memory doesn't have a mask, create a constant 1 for convenience.
+    if (!wmask)
+      wmask = b.create<ConstantOp>(i1Type, 1);
+
     // For multi-bit mask, extract corresponding write data bits of
     // mask-granularity size each. Each of the extracted data bits will be
     // written to a register, gaurded by the corresponding mask bit.
+    SmallVector<Value, 4> maskValues(maskBits);
+    SmallVector<Value, 4> dataValues(maskBits);
     for (size_t i = 0; i < maskBits; ++i) {
-      maskValues[i] = b.createOrFold<comb::ExtractOp>(wmaskBits, i, 1);
-      dataValues[i] = b.createOrFold<comb::ExtractOp>(wdataIn, i * mem.maskGran,
+      maskValues[i] = b.createOrFold<comb::ExtractOp>(wmask, i, 1);
+      dataValues[i] = b.createOrFold<comb::ExtractOp>(wdata, i * mem.maskGran,
                                                       mem.maskGran);
     }
-    // Build write port logic.
+
+    // A helper function to build the logic that writes to the memory array.
     auto writeLogic = [&] {
-      // For each register, create the connections to write the corresponding
-      // data into it.
       for (auto wmask : llvm::enumerate(maskValues)) {
-        // Guard by corresponding mask bit.
         auto wcond = b.createOrFold<comb::AndOp>(en, wmask.value());
         b.create<sv::IfOp>(wcond, [&]() {
-          auto slot = b.create<sv::ArrayIndexInOutOp>(reg, addr);
-          b.create<sv::PAssignOp>(
-              b.createOrFold<sv::IndexedPartSelectInOutOp>(
-                  slot,
-                  b.createOrFold<ConstantOp>(b.getIntegerType(32),
-                                             wmask.index() * mem.maskGran),
-                  mem.maskGran),
-              dataValues[wmask.index()]);
+          auto wordPtr = b.create<sv::ArrayIndexInOutOp>(reg, addr);
+          auto sliceOffset = b.create<ConstantOp>(b.getIntegerType(32),
+                                                  wmask.index() * mem.maskGran);
+          auto slicePtr = b.createOrFold<sv::IndexedPartSelectInOutOp>(
+              wordPtr, sliceOffset, mem.maskGran);
+          b.create<sv::PAssignOp>(slicePtr, dataValues[wmask.index()]);
         });
       }
     };
 
-    // Build a new always block with write port logic.
+    // A helper function that builds a new `always` block with write logic.
     auto alwaysBlock = [&] {
-      return b.create<sv::AlwaysOp>(sv::EventControl::AtPosEdge, clock,
+      return b.create<sv::AlwaysOp>(sv::EventControl::AtPosEdge, port.clock,
                                     [&]() { writeLogic(); });
     };
 
+    // Implement the write logic depending on the desired WUW behaviour.
     switch (mem.writeUnderWrite) {
-    // Undefined write order:  lower each write port into a separate always
-    // block.
     case WUW::Undefined:
+      // Undefined write order:  lower each write port into a separate always
+      // block.
       alwaysBlock();
       break;
-    // Port-ordered write order:  lower each write port into an always block
-    // based on its clock ID.
     case WUW::PortOrder:
+      // Port-ordered write order:  lower each write port into a single always
+      // block based on its clock ID, such that conflicting writes resolve in
+      // the order the writes are listed in the block, with the last one
+      // winning.
       if (auto *existingAlwaysBlock =
-              writeProcesses.lookup(mem.writeClockIDs[i])) {
+              writeProcesses.lookup(mem.writeClockIDs[portIdx])) {
         OpBuilder::InsertionGuard guard(b);
         b.setInsertionPointToEnd(
             cast<sv::AlwaysOp>(existingAlwaysBlock).getBodyBlock());
         writeLogic();
       } else {
-        writeProcesses[i] = alwaysBlock();
+        writeProcesses[portIdx] = alwaysBlock();
       }
     }
   }
@@ -548,7 +570,8 @@ void HWMemSimImplPass::runOnOperation() {
         newModule.setCommentAttr(
             builder.getStringAttr("VCS coverage exclude_file"));
 
-        HWMemSimImpl(ignoreReadEnableMem).generateMemory(newModule, mem);
+        HWMemSimImpl(ignoreReadEnableMem, readLatencyIsPropagationDelay)
+            .generateMemory(newModule, mem);
       }
 
       oldModule.erase();
@@ -561,9 +584,11 @@ void HWMemSimImplPass::runOnOperation() {
 }
 
 std::unique_ptr<Pass>
-circt::sv::createHWMemSimImplPass(bool replSeqMem, bool ignoreReadEnableMem) {
+circt::sv::createHWMemSimImplPass(bool replSeqMem, bool ignoreReadEnableMem,
+                                  bool readLatencyIsPropagationDelay) {
   auto pass = std::make_unique<HWMemSimImplPass>();
   pass->replSeqMem = replSeqMem;
   pass->ignoreReadEnableMem = ignoreReadEnableMem;
+  pass->readLatencyIsPropagationDelay = readLatencyIsPropagationDelay;
   return pass;
 }

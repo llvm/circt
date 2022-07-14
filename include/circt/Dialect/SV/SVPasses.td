@@ -94,11 +94,13 @@ def HWMemSimImpl : Pass<"hw-memory-sim", "ModuleOp"> {
   let dependentDialects = ["circt::sv::SVDialect"];
 
   let options = [
-    Option<"replSeqMem", "repl-seq-mem", "bool",
-                "false", "Prepare seq mems for macro replacement">,
-    Option<"ignoreReadEnableMem", "ignore-read-enable-mem", "bool",
-                "false",
-    "ignore the read enable signal, instead of assigning X on read disable">
+    Option<"replSeqMem", "repl-seq-mem", "bool", "false",
+      "Prepare seq mems for macro replacement">,
+    Option<"ignoreReadEnableMem", "ignore-read-enable-mem", "bool", "false",
+      "Ignore the read enable signal, instead of assigning X on read disable">,
+    Option<"readLatencyIsPropagationDelay", "read-latency-is-propagation-delay",
+      "bool", "false", "Treat read latency as a propagation delay instead of "
+      "an address decoding delay">
    ];
 }
 
