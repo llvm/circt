@@ -600,7 +600,8 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     pm.nest<firrtl::CircuitOp>().addPass(
         firrtl::createEmitOMIRPass(omirOutFile));
 
-  if (!disableOptimization && preserveAggregate && mergeConnections)
+  if (!disableOptimization &&
+      preserveAggregate != firrtl::PreserveAggregate::None && mergeConnections)
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         firrtl::createMergeConnectionsPass(mergeConnectionsAgggresively));
 
