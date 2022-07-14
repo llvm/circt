@@ -46,7 +46,6 @@ struct FirMemory {
 namespace {
 
 class HWMemSimImpl {
-  MLIRContext &ctx;
   bool ignoreReadEnableMem;
 
   SmallVector<sv::RegOp> registers;
@@ -56,8 +55,8 @@ class HWMemSimImpl {
                           Value clock, Value data, Value gate = {});
 
 public:
-  HWMemSimImpl(MLIRContext &ctx, bool replSeqMem, bool ignoreReadEnableMem)
-      : ctx(ctx), ignoreReadEnableMem(ignoreReadEnableMem) {}
+  HWMemSimImpl(bool ignoreReadEnableMem)
+      : ignoreReadEnableMem(ignoreReadEnableMem) {}
 
   void generateMemory(HWModuleOp op, FirMemory mem);
 };
@@ -65,12 +64,10 @@ public:
 struct HWMemSimImplPass : public sv::HWMemSimImplBase<HWMemSimImplPass> {
   void runOnOperation() override;
 
-public:
-  HWMemSimImplPass(bool e, bool ignoreEn) {
-    replSeqMem = e;
-    ignoreReadEnableMem = ignoreEn;
-  }
+  using sv::HWMemSimImplBase<HWMemSimImplPass>::ignoreReadEnableMem;
+  using sv::HWMemSimImplBase<HWMemSimImplPass>::replSeqMem;
 };
+
 } // end anonymous namespace
 
 static FirMemory analyzeMemOp(HWModuleGeneratedOp op) {
@@ -126,7 +123,7 @@ Value HWMemSimImpl::addPipelineStages(ImplicitLocOpBuilder &b,
 }
 
 void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
-  ImplicitLocOpBuilder b(UnknownLoc::get(&ctx), op.getBody());
+  ImplicitLocOpBuilder b(op.getLoc(), op.getBody());
 
   ModuleNamespace moduleNamespace(op);
 
@@ -514,7 +511,7 @@ void HWMemSimImplPass::runOnOperation() {
         newModule.setCommentAttr(
             builder.getStringAttr("VCS coverage exclude_file"));
 
-        HWMemSimImpl(getContext(), replSeqMem, ignoreReadEnableMem)
+        HWMemSimImpl(ignoreReadEnableMem)
             .generateMemory(newModule, mem);
       }
 
@@ -527,7 +524,10 @@ void HWMemSimImplPass::runOnOperation() {
     markAllAnalysesPreserved();
 }
 
-std::unique_ptr<Pass> circt::sv::createHWMemSimImplPass(bool replSeqMem,
-                                                        bool ignoreReadEnable) {
-  return std::make_unique<HWMemSimImplPass>(replSeqMem, ignoreReadEnable);
+std::unique_ptr<Pass>
+circt::sv::createHWMemSimImplPass(bool replSeqMem, bool ignoreReadEnableMem) {
+  auto pass = std::make_unique<HWMemSimImplPass>();
+  pass->replSeqMem = replSeqMem;
+  pass->ignoreReadEnableMem = ignoreReadEnableMem;
+  return pass;
 }
