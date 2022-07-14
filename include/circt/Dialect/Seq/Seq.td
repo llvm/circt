@@ -62,4 +62,69 @@ def CompRegOp : SeqOp<"compreg",
   ];
 }
 
+def FirRegOp : SeqOp<"firreg",
+    [NoSideEffect, AllTypesMatch<["next", "data"/*, "resetValue"*/]>,
+     SameVariadicOperandSize,
+     DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
+      // AllTypesMatch doesn't work with Optional types yet.
+
+  let summary = "Register with preset and sync or async reset";
+  let description = [{
+    `firreg` represents registers originating from FIRRTL after the lowering
+    of the IR to HW.  The register is used as an intermediary in the process
+    of lowering to SystemVerilog to facilitate optimisation at the HW level,
+    compactly representing a register with a single operation instead of
+    composing it from register definitions, always blocks and if statements.
+
+    The `data` output of the register accesses the value it stores.  On the
+    rising edge of the `clk` input, the register takes a new value provided
+    by the `next` signal.  Optionally, the register can also be provided with
+    a synchronous or an asynchronous `reset` signal and `resetValue`, as shown
+    in the example below.
+
+    ```
+    %name = seq.firreg %next clock %clk [ sym @sym ]
+        [ reset (sync|async) %reset, %value ] : type
+    ```
+
+    Implicitly, all registers are pre-set to a randomized value.
+
+    A register implementing a counter starting at 0 from reset can be defined
+    as follows:
+
+    ```
+    %zero = hw.constant 0 : i32
+    %reg = seq.firreg %next clock %clk reset sync %reset, %zero : i32
+    %one = hw.constant 1 : i32
+    %next = comb.add %zero, %one : i32
+    ```
+  }];
+
+  let arguments = (ins AnyType:$next, I1:$clk, StrAttr:$name,
+                       OptionalAttr<SymbolNameAttr>:$inner_sym,
+                       Optional<I1>:$reset, Optional<AnyType>:$resetValue,
+                       UnitAttr:$isAsync);
+  let results = (outs AnyType:$data);
+
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<(ins "Value":$next, "Value":$clk,
+                   "StringAttr":$name,
+                   CArg<"StringAttr", "{}">:$inner_sym)>,
+    OpBuilder<(ins "Value":$next, "Value":$clk,
+                   "StringAttr":$name,
+                   "Value":$reset, "Value":$resetValue,
+                   CArg<"StringAttr", "{}">:$inner_sym,
+                   CArg<"bool", "false">:$isAsync)>
+  ];
+
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+
+  let extraClassDeclaration = [{
+    /// Check whether the register has a reset value.
+    bool hasReset() { return !!getReset(); }
+  }];
+}
+
 #endif // SEQ_TD
