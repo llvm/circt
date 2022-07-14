@@ -53,6 +53,7 @@ class HWMemSimImpl {
   Value addPipelineStages(ImplicitLocOpBuilder &b,
                           ModuleNamespace &moduleNamespace, size_t stages,
                           Value clock, Value data, Value gate = {});
+  sv::AlwaysOp lastPipelineAlwaysOp;
 
 public:
   HWMemSimImpl(bool ignoreReadEnableMem)
@@ -95,6 +96,19 @@ static FirMemory analyzeMemOp(HWModuleGeneratedOp op) {
   return mem;
 }
 
+/// A helper that returns true if a value definition (or block argument) is
+/// visible to another operation, either because it's a block argument or
+/// because the defining op is before that other op.
+static bool valueDefinedBeforeOp(Value value, Operation *op) {
+  Operation *valueOp = value.getDefiningOp();
+  Block *valueBlock =
+      valueOp ? valueOp->getBlock() : value.cast<BlockArgument>().getOwner();
+  while (op->getBlock() && op->getBlock() != valueBlock)
+    op = op->getParentOp();
+  return valueBlock == op->getBlock() &&
+         (!valueOp || valueOp->isBeforeInBlock(op));
+};
+
 Value HWMemSimImpl::addPipelineStages(ImplicitLocOpBuilder &b,
                                       ModuleNamespace &moduleNamespace,
                                       size_t stages, Value clock, Value data,
@@ -102,23 +116,46 @@ Value HWMemSimImpl::addPipelineStages(ImplicitLocOpBuilder &b,
   if (!stages)
     return data;
 
-  while (stages--) {
-    auto reg =
-        b.create<sv::RegOp>(data.getType(), StringAttr{},
-                            b.getStringAttr(moduleNamespace.newName("_GEN")));
-    registers.push_back(reg);
+  // Try to reuse the previous always block. This is only possible if the clocks
+  // agree and the data and gate all dominate the always block.
+  auto alwaysOp = lastPipelineAlwaysOp;
+  if (alwaysOp) {
+    if (alwaysOp.getClocks() != ValueRange{clock} ||
+        !valueDefinedBeforeOp(data, alwaysOp) ||
+        (gate && !valueDefinedBeforeOp(gate, alwaysOp)))
+      alwaysOp = {};
+  }
+  if (!alwaysOp)
+    alwaysOp = b.create<sv::AlwaysOp>(sv::EventControl::AtPosEdge, clock);
 
-    // pipeline stage
-    b.create<sv::AlwaysOp>(sv::EventControl::AtPosEdge, clock, [&]() {
-      if (gate) {
-        b.create<sv::IfOp>(gate, [&]() { b.create<sv::PAssignOp>(reg, data); });
-      } else {
-        b.create<sv::PAssignOp>(reg, data);
-      }
-    });
-    data = b.create<sv::ReadInOutOp>(reg);
+  // Add the necessary registers.
+  auto savedIP = b.saveInsertionPoint();
+  SmallVector<sv::RegOp> regs;
+  b.setInsertionPoint(alwaysOp);
+  for (unsigned i = 0; i < stages; ++i) {
+    auto regName = b.getStringAttr(moduleNamespace.newName("_GEN"));
+    auto reg = b.create<sv::RegOp>(data.getType(), StringAttr{}, regName);
+    regs.push_back(reg);
+    registers.push_back(reg);
   }
 
+  // Populate the assignments in the always block.
+  b.setInsertionPointToEnd(alwaysOp.getBodyBlock());
+  for (unsigned i = 0; i < stages; ++i) {
+    if (i > 0)
+      data = b.create<sv::ReadInOutOp>(data);
+    auto emitAssign = [&] { b.create<sv::PAssignOp>(regs[i], data); };
+    if (gate)
+      b.create<sv::IfOp>(gate, [&]() { emitAssign(); });
+    else
+      emitAssign();
+    data = regs[i];
+    gate = {};
+  }
+  b.restoreInsertionPoint(savedIP);
+  data = b.create<sv::ReadInOutOp>(data);
+
+  lastPipelineAlwaysOp = alwaysOp;
   return data;
 }
 
