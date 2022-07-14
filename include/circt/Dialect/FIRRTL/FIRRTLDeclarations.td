@@ -84,12 +84,12 @@ def InstanceOp : ReferableDeclOp<"instance", [HasParent<"firrtl::FModuleOp, firr
 
     /// Return the port direction for the specified result number.
     Direction getPortDirection(size_t resultNo) {
-      return direction::get(portDirections()[resultNo]);
+      return direction::get(getPortDirections()[resultNo]);
     }
 
     /// Return the port name for the specified result number.
     StringAttr getPortName(size_t resultNo) {
-      return portNames()[resultNo].cast<StringAttr>();
+      return getPortNames()[resultNo].cast<StringAttr>();
     }
     StringRef getPortNameStr(size_t resultNo) {
       return getPortName(resultNo).getValue();

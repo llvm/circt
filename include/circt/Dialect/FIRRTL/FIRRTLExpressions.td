@@ -172,8 +172,8 @@ def SubfieldOp : FIRRTLExprOp<"subfield"> {
 
     /// Return a `FieldRef` to the accessed field.
     FieldRef getAccessedField() {
-      return FieldRef(input(), input().getType().cast<BundleType>()
-                                      .getFieldID(fieldIndex()));
+      return FieldRef(getInput(), getInput().getType().cast<BundleType>()
+                                            .getFieldID(getFieldIndex()));
     }
   }];
 
@@ -209,8 +209,8 @@ def SubindexOp : FIRRTLExprOp<"subindex", [
   let firrtlExtraClassDeclaration = [{
     /// Return a `FieldRef` to the accessed field.
     FieldRef getAccessedField() {
-      return FieldRef(input(), input().getType().cast<FVectorType>()
-                                      .getFieldID(index()));
+      return FieldRef(getInput(), getInput().getType().cast<FVectorType>()
+                                            .getFieldID(getIndex()));
     }
   }];
 }

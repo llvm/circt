@@ -159,7 +159,7 @@ void BlackBoxReaderPass::runOnOperation() {
   auto builder = OpBuilder::atBlockEnd(circuitOp->getBlock());
 
   // Gather the relevant annotations on all modules in the circuit.
-  for (auto &op : *circuitOp.getBody()) {
+  for (auto &op : *circuitOp.getBodyBlock()) {
     if (!isa<FModuleOp>(op) && !isa<FExtModuleOp>(op))
       continue;
 

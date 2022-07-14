@@ -139,25 +139,25 @@ LogicalResult MemoryPortOp::inferReturnTypes(MLIRContext *context,
 LogicalResult MemoryPortOp::verify() {
   // MemoryPorts require exactly 1 access. Right now there are no other
   // operations that could be using that value due to the types.
-  if (!port().hasOneUse())
+  if (!getPort().hasOneUse())
     return emitOpError("port should be used by a chirrtl.memoryport.access");
   return success();
 }
 
 MemoryPortAccessOp MemoryPortOp::getAccess() {
-  auto uses = port().use_begin();
-  if (uses == port().use_end())
+  auto uses = getPort().use_begin();
+  if (uses == getPort().use_end())
     return {};
   return cast<MemoryPortAccessOp>(uses->getOwner());
 }
 
 void MemoryPortOp::getAsmResultNames(
     function_ref<void(Value, StringRef)> setNameFn) {
-  StringRef base = name();
+  StringRef base = getName();
   if (base.empty())
     base = "memport";
-  setNameFn(data(), (base + "_data").str());
-  setNameFn(port(), (base + "_port").str());
+  setNameFn(getData(), (base + "_data").str());
+  setNameFn(getPort(), (base + "_port").str());
 }
 
 static ParseResult parseMemoryPortOp(OpAsmParser &parser,
@@ -206,7 +206,7 @@ void CombMemOp::build(OpBuilder &builder, OperationState &result,
 }
 
 void CombMemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  setNameFn(getResult(), name());
+  setNameFn(getResult(), getName());
 }
 
 //===----------------------------------------------------------------------===//
@@ -234,7 +234,7 @@ void SeqMemOp::build(OpBuilder &builder, OperationState &result,
 }
 
 void SeqMemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  setNameFn(getResult(), name());
+  setNameFn(getResult(), getName());
 }
 
 //===----------------------------------------------------------------------===//

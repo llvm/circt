@@ -50,7 +50,7 @@ template <typename T>
 static T &operator<<(T &os, InstancePathRef path) {
   os << "$root";
   for (InstanceOp inst : path)
-    os << "/" << inst.name() << ":" << inst.moduleName();
+    os << "/" << inst.getName() << ":" << inst.getModuleName();
   return os;
 }
 
@@ -59,7 +59,7 @@ static StringRef getTail(InstancePathRef path) {
   if (path.empty())
     return "$root";
   auto last = path.back();
-  return last.name();
+  return last.getName();
 }
 #endif
 
@@ -183,17 +183,18 @@ static bool insertResetMux(ImplicitLocOpBuilder &builder, Value target,
         // Insert a mux on the value connected to the target:
         // connect(dst, src) -> connect(dst, mux(reset, resetValue, src))
         .Case<ConnectOp, StrictConnectOp>([&](auto op) {
-          if (op.dest() != target)
+          if (op.getDest() != target)
             return;
           LLVM_DEBUG(llvm::dbgs() << "  - Insert mux into " << op << "\n");
-          auto muxOp = builder.create<MuxPrimOp>(reset, resetValue, op.src());
-          op.srcMutable().assign(muxOp);
+          auto muxOp =
+              builder.create<MuxPrimOp>(reset, resetValue, op.getSrc());
+          op.getSrcMutable().assign(muxOp);
           resetValueUsed = true;
         })
         // Look through subfields.
         .Case<SubfieldOp>([&](auto op) {
           auto resetSubValue =
-              builder.create<SubfieldOp>(resetValue, op.fieldIndexAttr());
+              builder.create<SubfieldOp>(resetValue, op.getFieldIndexAttr());
           if (insertResetMux(builder, op, reset, resetSubValue))
             resetValueUsed = true;
           else
@@ -202,7 +203,7 @@ static bool insertResetMux(ImplicitLocOpBuilder &builder, Value target,
         // Look through subindices.
         .Case<SubindexOp>([&](auto op) {
           auto resetSubValue =
-              builder.create<SubindexOp>(resetValue, op.indexAttr());
+              builder.create<SubindexOp>(resetValue, op.getIndexAttr());
           if (insertResetMux(builder, op, reset, resetSubValue))
             resetValueUsed = true;
           else
@@ -210,10 +211,10 @@ static bool insertResetMux(ImplicitLocOpBuilder &builder, Value target,
         })
         // Look through subaccesses.
         .Case<SubaccessOp>([&](auto op) {
-          if (op.input() != target)
+          if (op.getInput() != target)
             return;
           auto resetSubValue =
-              builder.create<SubaccessOp>(resetValue, op.index());
+              builder.create<SubaccessOp>(resetValue, op.getIndex());
           if (insertResetMux(builder, op, reset, resetSubValue))
             resetValueUsed = true;
           else
@@ -653,14 +654,14 @@ static bool getDeclName(Value value, SmallString<32> &string) {
   auto *op = value.getDefiningOp();
   return TypeSwitch<Operation *, bool>(op)
       .Case<InstanceOp, MemOp>([&](auto op) {
-        string += op.name();
+        string += op.getName();
         string += ".";
         string +=
             op.getPortName(value.cast<OpResult>().getResultNumber()).getValue();
         return true;
       })
       .Case<WireOp, RegOp, RegResetOp>([&](auto op) {
-        string += op.name();
+        string += op.getName();
         return true;
       })
       .Default([](auto) { return false; });
@@ -729,8 +730,9 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
       llvm::dbgs() << "\n===----- Tracing uninferred resets -----===\n\n");
   circuit.walk([&](Operation *op) {
     TypeSwitch<Operation *>(op)
-        .Case<ConnectOp, StrictConnectOp>(
-            [&](auto op) { traceResets(op.dest(), op.src(), op.getLoc()); })
+        .Case<ConnectOp, StrictConnectOp>([&](auto op) {
+          traceResets(op.getDest(), op.getSrc(), op.getLoc());
+        })
 
         .Case<InstanceOp>([&](auto op) { traceResets(op); })
 
@@ -759,10 +761,10 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
 
         .Case<SubfieldOp>([&](auto op) {
           // Associate the input bundle's resets with the output field's resets.
-          auto bundleType = op.input().getType().template cast<BundleType>();
-          auto index = op.fieldIndex();
+          auto bundleType = op.getInput().getType().template cast<BundleType>();
+          auto index = op.getFieldIndex();
           traceResets(op.getType(), op.getResult(), 0,
-                      bundleType.getElements()[index].type, op.input(),
+                      bundleType.getElements()[index].type, op.getInput(),
                       getFieldID(bundleType, index), op.getLoc());
         })
 
@@ -778,9 +780,10 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
           // connected. However for the sake of type inference, this is
           // indistinguishable from them having to share the same type (namely
           // the vector element type).
-          auto vectorType = op.input().getType().template cast<FVectorType>();
+          auto vectorType =
+              op.getInput().getType().template cast<FVectorType>();
           traceResets(op.getType(), op.getResult(), 0,
-                      vectorType.getElementType(), op.input(),
+                      vectorType.getElementType(), op.getInput(),
                       getFieldID(vectorType), op.getLoc());
         });
   });
@@ -793,7 +796,7 @@ void InferResetsPass::traceResets(InstanceOp inst) {
   auto module = dyn_cast<FModuleOp>(*instanceGraph->getReferencedModule(inst));
   if (!module)
     return;
-  LLVM_DEBUG(llvm::dbgs() << "Visiting instance " << inst.name() << "\n");
+  LLVM_DEBUG(llvm::dbgs() << "Visiting instance " << inst.getName() << "\n");
 
   // Establish a connection between the instance ports and module ports.
   auto dirs = module.getPortDirections();
@@ -1336,7 +1339,7 @@ LogicalResult InferResetsPass::buildDomains(CircuitOp circuit) {
       else {
         note << "instance '";
         llvm::interleave(
-            path, [&](InstanceOp inst) { note << inst.name(); },
+            path, [&](InstanceOp inst) { note << inst.getName(); },
             [&]() { note << "/"; });
         note << "'";
       }
@@ -1566,14 +1569,14 @@ LogicalResult InferResetsPass::implementAsyncReset(FModuleOp module,
       // If the node can't be moved because its input doesn't dominate the
       // target location, convert it to a wire.
       auto nodeOp = dyn_cast<NodeOp>(resetOp);
-      if (nodeOp && !dom.dominates(nodeOp.input(), opsToUpdate[0])) {
+      if (nodeOp && !dom.dominates(nodeOp.getInput(), opsToUpdate[0])) {
         LLVM_DEBUG(llvm::dbgs()
                    << "- Promoting node to wire for move: " << nodeOp << "\n");
         ImplicitLocOpBuilder builder(nodeOp.getLoc(), nodeOp);
         auto wireOp = builder.create<WireOp>(
-            nodeOp.getType(), nodeOp.nameAttr(), nodeOp.nameKind(),
-            nodeOp.annotationsAttr(), nodeOp.inner_symAttr());
-        builder.create<StrictConnectOp>(wireOp, nodeOp.input());
+            nodeOp.getType(), nodeOp.getNameAttr(), nodeOp.getNameKind(),
+            nodeOp.getAnnotationsAttr(), nodeOp.getInnerSymAttr());
+        builder.create<StrictConnectOp>(wireOp, nodeOp.getInput());
         nodeOp->replaceAllUsesWith(wireOp);
         nodeOp.erase();
         resetOp = wireOp;
@@ -1641,7 +1644,8 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
     auto &domain = domainIt->second.back().first;
     if (!domain.reset)
       return;
-    LLVM_DEBUG(llvm::dbgs() << "- Update instance '" << instOp.name() << "'\n");
+    LLVM_DEBUG(llvm::dbgs()
+               << "- Update instance '" << instOp.getName() << "'\n");
 
     // If needed, add a reset port to the instance.
     Value instReset;
@@ -1686,8 +1690,9 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
     LLVM_DEBUG(llvm::dbgs() << "- Adding async reset to " << regOp << "\n");
     auto zero = createZeroValue(builder, regOp.getType());
     auto newRegOp = builder.create<RegResetOp>(
-        regOp.getType(), regOp.clockVal(), actualReset, zero, regOp.nameAttr(),
-        regOp.nameKindAttr(), regOp.annotations(), regOp.inner_symAttr());
+        regOp.getType(), regOp.getClockVal(), actualReset, zero,
+        regOp.getNameAttr(), regOp.getNameKindAttr(), regOp.getAnnotations(),
+        regOp.getInnerSymAttr());
     regOp.getResult().replaceAllUsesWith(newRegOp);
     regOp->erase();
     return;
@@ -1696,7 +1701,7 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
   // Handle registers with reset.
   if (auto regOp = dyn_cast<RegResetOp>(op)) {
     // If the register already has an async reset, leave it untouched.
-    if (regOp.resetSignal().getType().isa<AsyncResetType>()) {
+    if (regOp.getResetSignal().getType().isa<AsyncResetType>()) {
       LLVM_DEBUG(llvm::dbgs()
                  << "- Skipping (has async reset) " << regOp << "\n");
       // The following performs the logic of `CheckResets` in the original Scala
@@ -1707,8 +1712,8 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
     }
     LLVM_DEBUG(llvm::dbgs() << "- Updating reset of " << regOp << "\n");
 
-    auto reset = regOp.resetSignal();
-    auto value = regOp.resetValue();
+    auto reset = regOp.getResetSignal();
+    auto value = regOp.getResetValue();
 
     // If we arrive here, the register has a sync reset. In order to add an
     // async reset, we have to move the sync reset into a mux in front of the
@@ -1721,14 +1726,15 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
     // Replace the existing reset with the async reset.
     builder.setInsertionPoint(regOp);
     auto zero = createZeroValue(builder, regOp.getType());
-    regOp.resetSignalMutable().assign(actualReset);
-    regOp.resetValueMutable().assign(zero);
+    regOp.getResetSignalMutable().assign(actualReset);
+    regOp.getResetValueMutable().assign(zero);
   }
 }
 
 LogicalResult InferResetsPass::verifyNoAbstractReset() {
   bool hasAbstractResetPorts = false;
-  for (FModuleLike module : getOperation().getBody()->getOps<FModuleLike>()) {
+  for (FModuleLike module :
+       getOperation().getBodyBlock()->getOps<FModuleLike>()) {
     for (PortInfo port : module.getPorts()) {
       if (port.type.isa<ResetType>()) {
         module->emitOpError()

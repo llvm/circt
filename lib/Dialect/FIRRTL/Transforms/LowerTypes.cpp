@@ -150,8 +150,8 @@ static bool isNotSubAccess(Operation *op) {
   SubaccessOp sao = dyn_cast<SubaccessOp>(op);
   if (!sao)
     return true;
-  ConstantOp arg = dyn_cast_or_null<ConstantOp>(sao.index().getDefiningOp());
-  if (arg && sao.input().getType().cast<FVectorType>().getNumElements() != 0)
+  ConstantOp arg = dyn_cast_or_null<ConstantOp>(sao.getIndex().getDefiningOp());
+  if (arg && sao.getInput().getType().cast<FVectorType>().getNumElements() != 0)
     return true;
   return false;
 }
@@ -209,19 +209,20 @@ static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
   auto oldPorts = op.getPorts();
   for (size_t portIdx = 0, e = oldPorts.size(); portIdx < e; ++portIdx) {
     auto port = oldPorts[portIdx];
-    ports.push_back(MemOp::getTypeForPort(op.depth(), field.type, port.second));
+    ports.push_back(
+        MemOp::getTypeForPort(op.getDepth(), field.type, port.second));
     portNames.push_back(port.first);
   }
 
   // It's easier to duplicate the old annotations, then fix and filter them.
-  auto newMem =
-      b->create<MemOp>(ports, op.readLatency(), op.writeLatency(), op.depth(),
-                       op.ruw(), portNames, (op.name() + field.suffix).str(),
-                       op.nameKind(), op.annotations().getValue(),
-                       op.portAnnotations().getValue(), op.inner_symAttr());
+  auto newMem = b->create<MemOp>(
+      ports, op.getReadLatency(), op.getWriteLatency(), op.getDepth(),
+      op.getRuw(), portNames, (op.getName() + field.suffix).str(),
+      op.getNameKind(), op.getAnnotations().getValue(),
+      op.getPortAnnotations().getValue(), op.getInnerSymAttr());
   if (auto oldName = getInnerSymName(op))
-    newMem.inner_symAttr(InnerSymAttr::get(StringAttr::get(
-        b->getContext(), oldName.getValue() + (op.name() + field.suffix))));
+    newMem.setInnerSymAttr(InnerSymAttr::get(StringAttr::get(
+        b->getContext(), oldName.getValue() + (op.getName() + field.suffix))));
 
   SmallVector<Attribute> newAnnotations;
   for (size_t portIdx = 0, e = newMem.getNumResults(); portIdx < e; ++portIdx) {
@@ -626,12 +627,12 @@ bool TypeLoweringVisitor::lowerProducer(
 void TypeLoweringVisitor::processUsers(Value val, ArrayRef<Value> mapping) {
   for (auto user : llvm::make_early_inc_range(val.getUsers())) {
     if (SubindexOp sio = dyn_cast<SubindexOp>(user)) {
-      Value repl = mapping[sio.index()];
+      Value repl = mapping[sio.getIndex()];
       sio.replaceAllUsesWith(repl);
       sio.erase();
     } else if (SubfieldOp sfo = dyn_cast<SubfieldOp>(user)) {
       // Get the input bundle type.
-      Value repl = mapping[sfo.fieldIndex()];
+      Value repl = mapping[sfo.getFieldIndex()];
       sfo.replaceAllUsesWith(repl);
       sfo.erase();
     } else {
@@ -658,7 +659,7 @@ TypeLoweringVisitor::addArg(Operation *module, unsigned insertPt,
                             FlatBundleFieldEntry field, PortInfo &oldArg) {
   Value newValue;
   if (auto mod = dyn_cast<FModuleOp>(module)) {
-    Block *body = mod.getBody();
+    Block *body = mod.getBodyBlock();
     // Append the new argument.
     newValue = body->insertArgument(insertPt, field.type, oldArg.loc);
   }
@@ -732,11 +733,11 @@ bool TypeLoweringVisitor::lowerArg(FModuleLike module, size_t argIndex,
 static Value cloneAccess(ImplicitLocOpBuilder *builder, Operation *op,
                          Value rhs) {
   if (auto rop = dyn_cast<SubfieldOp>(op))
-    return builder->create<SubfieldOp>(rhs, rop.fieldIndex());
+    return builder->create<SubfieldOp>(rhs, rop.getFieldIndex());
   if (auto rop = dyn_cast<SubindexOp>(op))
-    return builder->create<SubindexOp>(rhs, rop.index());
+    return builder->create<SubindexOp>(rhs, rop.getIndex());
   if (auto rop = dyn_cast<SubaccessOp>(op))
-    return builder->create<SubaccessOp>(rhs, rop.index());
+    return builder->create<SubaccessOp>(rhs, rop.getIndex());
   op->emitError("Unknown accessor");
   return nullptr;
 }
@@ -744,17 +745,17 @@ static Value cloneAccess(ImplicitLocOpBuilder *builder, Operation *op,
 void TypeLoweringVisitor::lowerSAWritePath(Operation *op,
                                            ArrayRef<Operation *> writePath) {
   SubaccessOp sao = cast<SubaccessOp>(writePath.back());
-  auto saoType = sao.input().getType().cast<FVectorType>();
+  auto saoType = sao.getInput().getType().cast<FVectorType>();
   auto selectWidth = llvm::Log2_64_Ceil(saoType.getNumElements());
 
   for (size_t index = 0, e = saoType.getNumElements(); index < e; ++index) {
     auto cond = builder->create<EQPrimOp>(
-        sao.index(),
+        sao.getIndex(),
         builder->createOrFold<ConstantOp>(UIntType::get(context, selectWidth),
                                           APInt(selectWidth, index)));
     builder->create<WhenOp>(cond, false, [&]() {
       // Recreate the write Path
-      Value leaf = builder->create<SubindexOp>(sao.input(), index);
+      Value leaf = builder->create<SubindexOp>(sao.getInput(), index);
       for (int i = writePath.size() - 2; i >= 0; --i)
         leaf = cloneAccess(builder, writePath[i], leaf);
 
@@ -772,14 +773,14 @@ bool TypeLoweringVisitor::visitStmt(ConnectOp op) {
   SmallVector<FlatBundleFieldEntry> fields;
 
   // We have to expand connections even if the aggregate preservation is true.
-  if (!peelType(op.dest().getType(), fields,
+  if (!peelType(op.getDest().getType(), fields,
                 /* allowedToPreserveAggregate */ false))
     return false;
 
   // Loop over the leaf aggregates.
   for (const auto &field : llvm::enumerate(fields)) {
-    Value src = getSubWhatever(op.src(), field.index());
-    Value dest = getSubWhatever(op.dest(), field.index());
+    Value src = getSubWhatever(op.getSrc(), field.index());
+    Value dest = getSubWhatever(op.getDest(), field.index());
     if (field.value().isOutput)
       std::swap(src, dest);
     emitConnect(*builder, dest, src);
@@ -796,14 +797,14 @@ bool TypeLoweringVisitor::visitStmt(StrictConnectOp op) {
   SmallVector<FlatBundleFieldEntry> fields;
 
   // We have to expand connections even if the aggregate preservation is true.
-  if (!peelType(op.dest().getType(), fields,
+  if (!peelType(op.getDest().getType(), fields,
                 /* allowedToPreserveAggregate */ false))
     return false;
 
   // Loop over the leaf aggregates.
   for (const auto &field : llvm::enumerate(fields)) {
-    Value src = getSubWhatever(op.src(), field.index());
-    Value dest = getSubWhatever(op.dest(), field.index());
+    Value src = getSubWhatever(op.getSrc(), field.index());
+    Value dest = getSubWhatever(op.getDest(), field.index());
     if (field.value().isOutput)
       std::swap(src, dest);
     builder->create<StrictConnectOp>(dest, src);
@@ -843,7 +844,7 @@ bool TypeLoweringVisitor::visitDecl(MemOp op) {
     auto result = op.getResult(index);
     auto wire = builder->create<WireOp>(
         result.getType(),
-        (op.name() + "_" + op.getPortName(index).getValue()).str());
+        (op.getName() + "_" + op.getPortName(index).getValue()).str());
     oldPorts.push_back(wire);
     result.replaceAllUsesWith(wire.getResult());
   }
@@ -958,7 +959,7 @@ bool TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
 }
 
 bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
-  auto *body = module.getBody();
+  auto *body = module.getBodyBlock();
 
   ImplicitLocOpBuilder theBuilder(module.getLoc(), context);
   builder = &theBuilder;
@@ -1043,7 +1044,7 @@ bool TypeLoweringVisitor::visitDecl(WireOp op) {
 bool TypeLoweringVisitor::visitDecl(RegOp op) {
   auto clone = [&](const FlatBundleFieldEntry &field,
                    ArrayAttr attrs) -> Operation * {
-    return builder->create<RegOp>(field.type, op.clockVal(), "",
+    return builder->create<RegOp>(field.type, op.getClockVal(), "",
                                   NameKindEnum::DroppableName, attrs,
                                   StringAttr{});
   };
@@ -1054,9 +1055,9 @@ bool TypeLoweringVisitor::visitDecl(RegOp op) {
 bool TypeLoweringVisitor::visitDecl(RegResetOp op) {
   auto clone = [&](const FlatBundleFieldEntry &field,
                    ArrayAttr attrs) -> Operation * {
-    auto resetVal = getSubWhatever(op.resetValue(), field.index);
+    auto resetVal = getSubWhatever(op.getResetValue(), field.index);
     return builder->create<RegResetOp>(
-        field.type, op.clockVal(), op.resetSignal(), resetVal, "",
+        field.type, op.getClockVal(), op.getResetSignal(), resetVal, "",
         NameKindEnum::DroppableName, attrs, StringAttr{});
   };
   return lowerProducer(op, clone);
@@ -1066,7 +1067,7 @@ bool TypeLoweringVisitor::visitDecl(RegResetOp op) {
 bool TypeLoweringVisitor::visitDecl(NodeOp op) {
   auto clone = [&](const FlatBundleFieldEntry &field,
                    ArrayAttr attrs) -> Operation * {
-    auto input = getSubWhatever(op.input(), field.index);
+    auto input = getSubWhatever(op.getInput(), field.index);
     return builder->create<NodeOp>(field.type, input, "",
                                    NameKindEnum::DroppableName, attrs,
                                    StringAttr{});
@@ -1087,9 +1088,9 @@ bool TypeLoweringVisitor::visitExpr(InvalidValueOp op) {
 bool TypeLoweringVisitor::visitExpr(MuxPrimOp op) {
   auto clone = [&](const FlatBundleFieldEntry &field,
                    ArrayAttr attrs) -> Operation * {
-    auto high = getSubWhatever(op.high(), field.index);
-    auto low = getSubWhatever(op.low(), field.index);
-    return builder->create<MuxPrimOp>(op.sel(), high, low);
+    auto high = getSubWhatever(op.getHigh(), field.index);
+    auto low = getSubWhatever(op.getLow(), field.index);
+    return builder->create<MuxPrimOp>(op.getSel(), high, low);
   };
   return lowerProducer(op, clone);
 }
@@ -1106,12 +1107,12 @@ bool TypeLoweringVisitor::visitExpr(mlir::UnrealizedConversionCastOp op) {
 
 // Expand BitCastOp of aggregates
 bool TypeLoweringVisitor::visitExpr(BitCastOp op) {
-  Value srcLoweredVal = op.input();
+  Value srcLoweredVal = op.getInput();
   // If the input is of aggregate type, then cat all the leaf fields to form a
   // UInt type result. That is, first bitcast the aggregate type to a UInt.
   // Attempt to get the bundle types.
   SmallVector<FlatBundleFieldEntry> fields;
-  if (peelType(op.input().getType(), fields,
+  if (peelType(op.getInput().getType(), fields,
                /* allowedToPreserveAggregate */ false)) {
     size_t uptoBits = 0;
     // Loop over the leaf aggregates and concat each of them to get a UInt.
@@ -1121,7 +1122,7 @@ bool TypeLoweringVisitor::visitExpr(BitCastOp op) {
       // Ignore zero width fields, like empty bundles.
       if (fieldBitwidth == 0)
         continue;
-      Value src = getSubWhatever(op.input(), field.index());
+      Value src = getSubWhatever(op.getInput(), field.index());
       // The src could be an aggregate type, bitcast it to a UInt type.
       src = builder->createOrFold<BitCastOp>(
           UIntType::get(context, fieldBitwidth), src);
@@ -1171,7 +1172,7 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
   bool skip = true;
   SmallVector<Type, 8> resultTypes;
   SmallVector<int64_t, 8> endFields; // Compressed sparse row encoding
-  auto oldPortAnno = op.portAnnotations();
+  auto oldPortAnno = op.getPortAnnotations();
   SmallVector<Direction> newDirs;
   SmallVector<Attribute> newNames;
   SmallVector<Attribute> newPortAnno;
@@ -1216,13 +1217,13 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
   if (!sym || sym.getValue().empty())
     if (needsSymbol)
       sym = StringAttr::get(builder->getContext(),
-                            "sym" + op.nameAttr().getValue());
+                            "sym" + op.getNameAttr().getValue());
   // FIXME: annotation update
   auto newInstance = builder->create<InstanceOp>(
-      resultTypes, op.moduleNameAttr(), op.nameAttr(), op.nameKindAttr(),
-      direction::packAttribute(context, newDirs),
-      builder->getArrayAttr(newNames), op.annotations(),
-      builder->getArrayAttr(newPortAnno), op.lowerToBindAttr(),
+      resultTypes, op.getModuleNameAttr(), op.getNameAttr(),
+      op.getNameKindAttr(), direction::packAttribute(context, newDirs),
+      builder->getArrayAttr(newNames), op.getAnnotations(),
+      builder->getArrayAttr(newPortAnno), op.getLowerToBindAttr(),
       sym ? InnerSymAttr::get(sym) : InnerSymAttr());
 
   SmallVector<Value> lowered;
@@ -1243,7 +1244,7 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
 }
 
 bool TypeLoweringVisitor::visitExpr(SubaccessOp op) {
-  auto input = op.input();
+  auto input = op.getInput();
   auto vType = input.getType().cast<FVectorType>();
 
   // Check for empty vectors
@@ -1255,9 +1256,9 @@ bool TypeLoweringVisitor::visitExpr(SubaccessOp op) {
 
   // Check for constant instances
   if (ConstantOp arg =
-          dyn_cast_or_null<ConstantOp>(op.index().getDefiningOp())) {
-    auto sio =
-        builder->create<SubindexOp>(op.input(), arg.value().getExtValue());
+          dyn_cast_or_null<ConstantOp>(op.getIndex().getDefiningOp())) {
+    auto sio = builder->create<SubindexOp>(op.getInput(),
+                                           arg.getValue().getExtValue());
     op.replaceAllUsesWith(sio.getResult());
     return true;
   }
@@ -1268,7 +1269,7 @@ bool TypeLoweringVisitor::visitExpr(SubaccessOp op) {
   for (int index = vType.getNumElements() - 1; index >= 0; index--)
     inputs.push_back(builder->create<SubindexOp>(input, index));
 
-  Value multibitMux = builder->create<MultibitMuxOp>(op.index(), inputs);
+  Value multibitMux = builder->create<MultibitMuxOp>(op.getIndex(), inputs);
   op.replaceAllUsesWith(multibitMux);
   return true;
 }
@@ -1277,12 +1278,12 @@ bool TypeLoweringVisitor::visitExpr(MultibitMuxOp op) {
   auto clone = [&](const FlatBundleFieldEntry &field,
                    ArrayAttr attrs) -> Operation * {
     SmallVector<Value> newInputs;
-    newInputs.reserve(op.inputs().size());
-    for (auto input : op.inputs()) {
+    newInputs.reserve(op.getInputs().size());
+    for (auto input : op.getInputs()) {
       auto inputSub = getSubWhatever(input, field.index);
       newInputs.push_back(inputSub);
     }
-    return builder->create<MultibitMuxOp>(op.index(), newInputs);
+    return builder->create<MultibitMuxOp>(op.getIndex(), newInputs);
   };
   return lowerProducer(op, clone);
 }
@@ -1313,11 +1314,13 @@ void LowerTypesPass::runOnOperation() {
   AttrCache cache(&getContext());
 
   // Record all operations in the circuit.
-  llvm::for_each(getOperation().getBody()->getOperations(), [&](Operation &op) {
-    // Creating a map of all ops in the circt, but only modules are relevant.
-    if (auto module = dyn_cast<FModuleLike>(op))
-      ops.push_back(module);
-  });
+  llvm::for_each(getOperation().getBodyBlock()->getOperations(),
+                 [&](Operation &op) {
+                   // Creating a map of all ops in the circt, but only modules
+                   // are relevant.
+                   if (auto module = dyn_cast<FModuleLike>(op))
+                     ops.push_back(module);
+                 });
   auto *nlaTable = &getAnalysis<NLATable>();
 
   LLVM_DEBUG(llvm::dbgs() << "Recording Inner Symbol Renames:\n");
@@ -1378,13 +1381,13 @@ void LowerTypesPass::runOnOperation() {
       // Skip this hierarchical path if it targets the wrong InnerRefAttr.
       // (This also covers the case of not visiting any NLAs which end at
       // modules and do not target something inside the module.)
-      if (oldRef != path.namepath().getValue().back())
+      if (oldRef != path.getNamepath().getValue().back())
         continue;
 
       // Split the old hierarchical path into one hierarchical path for each new
       // InnerRefAttr.  Update the symbols in any NLAs which use the old
       // InnerRefAttr to the correct new InnerRefAttr.
-      auto namepath = path.namepath().getValue();
+      auto namepath = path.getNamepath().getValue();
       // Grab the old namepath.  We reuse all but the last element of this.
       SmallVector<Attribute> newNamepath{namepath.begin(), namepath.end()};
       ImplicitLocOpBuilder builder(path.getLoc(), path);

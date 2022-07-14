@@ -127,13 +127,13 @@ public:
   /// Get the destination value from a connection.  This supports any operation
   /// which is capable of driving a value.
   static Value getDestinationValue(Operation *op) {
-    return cast<FConnectLike>(op).dest();
+    return cast<FConnectLike>(op).getDest();
   }
 
   /// Get the source value from a connection. This supports any operation which
   /// is capable of driving a value.
   static Value getConnectedValue(Operation *op) {
-    return cast<FConnectLike>(op).src();
+    return cast<FConnectLike>(op).getSrc();
   }
 
   /// For every leaf field in the sink, record that it exists and should be
@@ -205,7 +205,7 @@ public:
     return b.create<ConnectOp>(loc, dest, newValue);
   }
 
-  void visitDecl(WireOp op) { declareSinks(op.result(), Flow::Duplex); }
+  void visitDecl(WireOp op) { declareSinks(op.getResult(), Flow::Duplex); }
 
   /// Take an aggregate value and construct ground subelements recursively.
   /// And then apply function `fn`.
@@ -237,7 +237,7 @@ public:
       auto connect = builder.create<ConnectOp>(value.getLoc(), value, value);
       driverMap[getFieldRefFromValue(value)] = connect;
     };
-    foreachSubelement(builder, op.result(), fn);
+    foreachSubelement(builder, op.getResult(), fn);
   }
 
   void visitDecl(RegResetOp op) {
@@ -248,13 +248,13 @@ public:
       auto connect = builder.create<ConnectOp>(value.getLoc(), value, value);
       driverMap[getFieldRefFromValue(value)] = connect;
     };
-    foreachSubelement(builder, op.result(), fn);
+    foreachSubelement(builder, op.getResult(), fn);
   }
 
   void visitDecl(InstanceOp op) {
     // Track any instance inputs which need to be connected to for init
     // coverage.
-    for (const auto &result : llvm::enumerate(op.results()))
+    for (const auto &result : llvm::enumerate(op.getResults()))
       if (op.getPortDirection(result.index()) == Direction::Out)
         declareSinks(result.value(), Flow::Source);
       else
@@ -263,16 +263,16 @@ public:
 
   void visitDecl(MemOp op) {
     // Track any memory inputs which require connections.
-    for (auto result : op.results())
+    for (auto result : op.getResults())
       declareSinks(result, Flow::Sink);
   }
 
   void visitStmt(ConnectOp op) {
-    setLastConnect(getFieldRefFromValue(op.dest()), op);
+    setLastConnect(getFieldRefFromValue(op.getDest()), op);
   }
 
   void visitStmt(StrictConnectOp op) {
-    setLastConnect(getFieldRefFromValue(op.dest()), op);
+    setLastConnect(getFieldRefFromValue(op.getDest()), op);
   }
 
   void processWhenOp(WhenOp whenOp, Value outerCondition);
@@ -439,23 +439,23 @@ void WhenOpVisitor::process(Block &block) {
 }
 
 void WhenOpVisitor::visitStmt(PrintFOp op) {
-  op.condMutable().assign(andWithCondition(op, op.cond()));
+  op.getCondMutable().assign(andWithCondition(op, op.getCond()));
 }
 
 void WhenOpVisitor::visitStmt(StopOp op) {
-  op.condMutable().assign(andWithCondition(op, op.cond()));
+  op.getCondMutable().assign(andWithCondition(op, op.getCond()));
 }
 
 void WhenOpVisitor::visitStmt(AssertOp op) {
-  op.enableMutable().assign(andWithCondition(op, op.enable()));
+  op.getEnableMutable().assign(andWithCondition(op, op.getEnable()));
 }
 
 void WhenOpVisitor::visitStmt(AssumeOp op) {
-  op.enableMutable().assign(andWithCondition(op, op.enable()));
+  op.getEnableMutable().assign(andWithCondition(op, op.getEnable()));
 }
 
 void WhenOpVisitor::visitStmt(CoverOp op) {
-  op.enableMutable().assign(andWithCondition(op, op.enable()));
+  op.getEnableMutable().assign(andWithCondition(op, op.getEnable()));
 }
 
 void WhenOpVisitor::visitStmt(WhenOp whenOp) {
@@ -473,7 +473,7 @@ void LastConnectResolver<ConcreteT>::processWhenOp(WhenOp whenOp,
   OpBuilder b(whenOp);
   auto loc = whenOp.getLoc();
   Block *parentBlock = whenOp->getBlock();
-  auto condition = whenOp.condition();
+  auto condition = whenOp.getCondition();
   auto ui1Type = condition.getType();
 
   // Process both sides of the the WhenOp, fixing up all simulation
@@ -482,7 +482,7 @@ void LastConnectResolver<ConcreteT>::processWhenOp(WhenOp whenOp,
 
   // Process the `then` block. If we are already in a whenblock, the we need to
   // conjoin ('and') the outer conditions.
-  auto thenCondition = whenOp.condition();
+  auto thenCondition = whenOp.getCondition();
   if (outerCondition)
     thenCondition =
         b.createOrFold<AndPrimOp>(loc, ui1Type, outerCondition, thenCondition);
@@ -558,18 +558,18 @@ bool ModuleVisitor::run(FModuleOp module) {
   }
 
   // Process the body of the module.
-  for (auto &op : llvm::make_early_inc_range(*module.getBody())) {
+  for (auto &op : llvm::make_early_inc_range(*module.getBodyBlock())) {
     dispatchVisitor(&op);
   }
   return anythingChanged;
 }
 
 void ModuleVisitor::visitStmt(ConnectOp op) {
-  anythingChanged |= setLastConnect(getFieldRefFromValue(op.dest()), op);
+  anythingChanged |= setLastConnect(getFieldRefFromValue(op.getDest()), op);
 }
 
 void ModuleVisitor::visitStmt(StrictConnectOp op) {
-  anythingChanged |= setLastConnect(getFieldRefFromValue(op.dest()), op);
+  anythingChanged |= setLastConnect(getFieldRefFromValue(op.getDest()), op);
 }
 
 void ModuleVisitor::visitStmt(WhenOp whenOp) {

@@ -93,13 +93,17 @@ struct Emitter {
                     ArrayRef<uint32_t> attrs = {});
 
   void emitExpression(BitsPrimOp op) {
-    emitPrimExpr("bits", op, {op.hi(), op.lo()});
+    emitPrimExpr("bits", op, {op.getHi(), op.getLo()});
   }
-  void emitExpression(HeadPrimOp op) { emitPrimExpr("head", op, op.amount()); }
-  void emitExpression(TailPrimOp op) { emitPrimExpr("tail", op, op.amount()); }
-  void emitExpression(PadPrimOp op) { emitPrimExpr("pad", op, op.amount()); }
-  void emitExpression(ShlPrimOp op) { emitPrimExpr("shl", op, op.amount()); }
-  void emitExpression(ShrPrimOp op) { emitPrimExpr("shr", op, op.amount()); }
+  void emitExpression(HeadPrimOp op) {
+    emitPrimExpr("head", op, op.getAmount());
+  }
+  void emitExpression(TailPrimOp op) {
+    emitPrimExpr("tail", op, op.getAmount());
+  }
+  void emitExpression(PadPrimOp op) { emitPrimExpr("pad", op, op.getAmount()); }
+  void emitExpression(ShlPrimOp op) { emitPrimExpr("shl", op, op.getAmount()); }
+  void emitExpression(ShrPrimOp op) { emitPrimExpr("shr", op, op.getAmount()); }
 
   // Funnel all ops without attrs into `emitPrimExpr`.
 #define HANDLE(OPTYPE, MNEMONIC)                                               \
@@ -208,9 +212,9 @@ LogicalResult Emitter::finalize() { return failure(encounteredError); }
 /// Emit an entire circuit.
 void Emitter::emitCircuit(CircuitOp op) {
   circuitNamespace.add(op);
-  indent() << "circuit " << op.name() << " :\n";
+  indent() << "circuit " << op.getName() << " :\n";
   addIndent();
-  for (auto &bodyOp : *op.getBody()) {
+  for (auto &bodyOp : *op.getBodyBlock()) {
     if (encounteredError)
       break;
     TypeSwitch<Operation *>(&bodyOp)
@@ -234,11 +238,11 @@ void Emitter::emitModule(FModuleOp op) {
   // Emit the ports.
   auto ports = op.getPorts();
   emitModulePorts(ports, op.getArguments());
-  if (!ports.empty() && !op.getBody()->empty())
+  if (!ports.empty() && !op.getBodyBlock()->empty())
     os << "\n";
 
   // Emit the module body.
-  emitStatementsInBlock(*op.getBody());
+  emitStatementsInBlock(*op.getBodyBlock());
 
   reduceIndent();
   valueNames.clear();
@@ -255,11 +259,11 @@ void Emitter::emitModule(FExtModuleOp op) {
   emitModulePorts(ports);
 
   // Emit the optional `defname`.
-  if (op.defname() && !op.defname()->empty())
-    indent() << "defname = " << op.defname() << "\n";
+  if (op.getDefname() && !op.getDefname()->empty())
+    indent() << "defname = " << op.getDefname() << "\n";
 
   // Emit the parameters.
-  for (auto param : llvm::map_range(op.parameters(), [](Attribute attr) {
+  for (auto param : llvm::map_range(op.getParameters(), [](Attribute attr) {
          return attr.cast<ParamDeclAttr>();
        })) {
     indent() << "parameter " << param.getName().getValue() << " = ";
@@ -328,7 +332,7 @@ void Emitter::emitStatementsInBlock(Block &block) {
 
 void Emitter::emitStatement(WhenOp op, bool noIndent) {
   (noIndent ? os : indent()) << "when ";
-  emitExpression(op.condition());
+  emitExpression(op.getCondition());
   os << " :";
   emitLocationAndNewLine(op);
   addIndent();
@@ -355,51 +359,51 @@ void Emitter::emitStatement(WhenOp op, bool noIndent) {
 }
 
 void Emitter::emitStatement(WireOp op) {
-  addValueName(op, op.nameAttr());
-  indent() << "wire " << op.name() << " : ";
+  addValueName(op, op.getNameAttr());
+  indent() << "wire " << op.getName() << " : ";
   emitType(op.getType());
   emitLocationAndNewLine(op);
 }
 
 void Emitter::emitStatement(RegOp op) {
-  addValueName(op, op.nameAttr());
-  indent() << "reg " << op.name() << " : ";
+  addValueName(op, op.getNameAttr());
+  indent() << "reg " << op.getName() << " : ";
   emitType(op.getType());
   os << ", ";
-  emitExpression(op.clockVal());
+  emitExpression(op.getClockVal());
   emitLocationAndNewLine(op);
 }
 
 void Emitter::emitStatement(RegResetOp op) {
-  addValueName(op, op.nameAttr());
-  indent() << "reg " << op.name() << " : ";
+  addValueName(op, op.getNameAttr());
+  indent() << "reg " << op.getName() << " : ";
   emitType(op.getType());
   os << ", ";
-  emitExpression(op.clockVal());
+  emitExpression(op.getClockVal());
   os << " with :\n";
   indent() << "  reset => (";
-  emitExpression(op.resetSignal());
+  emitExpression(op.getResetSignal());
   os << ", ";
-  emitExpression(op.resetValue());
+  emitExpression(op.getResetValue());
   os << ")";
   emitLocationAndNewLine(op);
 }
 
 void Emitter::emitStatement(NodeOp op) {
-  addValueName(op, op.nameAttr());
-  indent() << "node " << op.name() << " = ";
-  emitExpression(op.input());
+  addValueName(op, op.getNameAttr());
+  indent() << "node " << op.getName() << " = ";
+  emitExpression(op.getInput());
   emitLocationAndNewLine(op);
 }
 
 void Emitter::emitStatement(StopOp op) {
   indent() << "stop(";
-  emitExpression(op.clock());
+  emitExpression(op.getClock());
   os << ", ";
-  emitExpression(op.cond());
-  os << ", " << op.exitCode() << ")";
-  if (!op.name().empty()) {
-    os << " : " << op.name();
+  emitExpression(op.getCond());
+  os << ", " << op.getExitCode() << ")";
+  if (!op.getName().empty()) {
+    os << " : " << op.getName();
   }
   emitLocationAndNewLine(op);
 }
@@ -411,19 +415,19 @@ void Emitter::emitStatement(SkipOp op) {
 
 void Emitter::emitStatement(PrintFOp op) {
   indent() << "printf(";
-  emitExpression(op.clock());
+  emitExpression(op.getClock());
   os << ", ";
-  emitExpression(op.cond());
+  emitExpression(op.getCond());
   os << ", \"";
-  os.write_escaped(op.formatString());
+  os.write_escaped(op.getFormatString());
   os << "\"";
   for (auto operand : op.operands()) {
     os << ", ";
     emitExpression(operand);
   }
   os << ")";
-  if (!op.name().empty()) {
-    os << " : " << op.name();
+  if (!op.getName().empty()) {
+    os << " : " << op.getName();
   }
   emitLocationAndNewLine(op);
 }
@@ -431,52 +435,52 @@ void Emitter::emitStatement(PrintFOp op) {
 template <class T>
 void Emitter::emitVerifStatement(T op, StringRef mnemonic) {
   indent() << mnemonic << "(";
-  emitExpression(op.clock());
+  emitExpression(op.getClock());
   os << ", ";
-  emitExpression(op.predicate());
+  emitExpression(op.getPredicate());
   os << ", ";
-  emitExpression(op.enable());
+  emitExpression(op.getEnable());
   os << ", \"";
-  os.write_escaped(op.message());
+  os.write_escaped(op.getMessage());
   os << "\"";
   os << ")";
-  if (!op.name().empty()) {
-    os << " : " << op.name();
+  if (!op.getName().empty()) {
+    os << " : " << op.getName();
   }
   emitLocationAndNewLine(op);
 }
 
 void Emitter::emitStatement(ConnectOp op) {
   indent();
-  emitExpression(op.dest());
-  if (op.src().getDefiningOp<InvalidValueOp>()) {
+  emitExpression(op.getDest());
+  if (op.getSrc().getDefiningOp<InvalidValueOp>()) {
     os << " is invalid";
   } else {
     os << " <= ";
-    emitExpression(op.src());
+    emitExpression(op.getSrc());
   }
   emitLocationAndNewLine(op);
 }
 
 void Emitter::emitStatement(StrictConnectOp op) {
   indent();
-  emitExpression(op.dest());
-  if (op.src().getDefiningOp<InvalidValueOp>()) {
+  emitExpression(op.getDest());
+  if (op.getSrc().getDefiningOp<InvalidValueOp>()) {
     os << " is invalid";
   } else {
     os << " <= ";
-    emitExpression(op.src());
+    emitExpression(op.getSrc());
   }
   emitLocationAndNewLine(op);
 }
 
 void Emitter::emitStatement(InstanceOp op) {
-  indent() << "inst " << op.name() << " of " << op.moduleName();
+  indent() << "inst " << op.getName() << " of " << op.getModuleName();
   emitLocationAndNewLine(op);
 
   // Make sure we have a name like `<inst>.<port>` for each of the instance
   // result values.
-  SmallString<16> portName(op.name());
+  SmallString<16> portName(op.getName());
   portName.push_back('.');
   unsigned baseLen = portName.size();
   for (unsigned i = 0, e = op.getNumResults(); i < e; ++i) {
@@ -495,25 +499,25 @@ void Emitter::emitStatement(AttachOp op) {
 }
 
 void Emitter::emitStatement(MemOp op) {
-  SmallString<16> portName(op.name());
+  SmallString<16> portName(op.getName());
   portName.push_back('.');
   auto portNameBaseLen = portName.size();
-  for (auto result : llvm::zip(op.getResults(), op.portNames())) {
+  for (auto result : llvm::zip(op.getResults(), op.getPortNames())) {
     portName.resize(portNameBaseLen);
     portName.append(std::get<1>(result).cast<StringAttr>().getValue());
     addValueName(std::get<0>(result), portName);
   }
 
-  indent() << "mem " << op.name() << " :";
+  indent() << "mem " << op.getName() << " :";
   emitLocationAndNewLine(op);
   addIndent();
 
   indent() << "data-type => ";
   emitType(op.getDataType());
   os << "\n";
-  indent() << "depth => " << op.depth() << "\n";
-  indent() << "read-latency => " << op.readLatency() << "\n";
-  indent() << "write-latency => " << op.writeLatency() << "\n";
+  indent() << "depth => " << op.getDepth() << "\n";
+  indent() << "read-latency => " << op.getReadLatency() << "\n";
+  indent() << "write-latency => " << op.getWriteLatency() << "\n";
 
   SmallString<16> reader, writer, readwriter;
   for (std::pair<StringAttr, MemOp::PortKind> port : op.getPorts()) {
@@ -542,53 +546,53 @@ void Emitter::emitStatement(MemOp op) {
     indent() << "readwriter => " << readwriter << "\n";
 
   indent() << "read-under-write => ";
-  emitAttribute(op.ruw());
+  emitAttribute(op.getRuw());
   os << "\n";
 
   reduceIndent();
 }
 
 void Emitter::emitStatement(SeqMemOp op) {
-  indent() << "smem " << op.name() << " : ";
+  indent() << "smem " << op.getName() << " : ";
   emitType(op.getType());
   os << " ";
-  emitAttribute(op.ruw());
+  emitAttribute(op.getRuw());
   emitLocationAndNewLine(op);
 }
 
 void Emitter::emitStatement(CombMemOp op) {
-  indent() << "cmem " << op.name() << " : ";
+  indent() << "cmem " << op.getName() << " : ";
   emitType(op.getType());
   emitLocationAndNewLine(op);
 }
 
 void Emitter::emitStatement(MemoryPortOp op) {
   // Nothing to output for this operation.
-  addValueName(op.data(), op.name());
+  addValueName(op.getData(), op.getName());
 }
 
 void Emitter::emitStatement(MemoryPortAccessOp op) {
   indent();
 
   // Print the port direction and name.
-  auto port = cast<MemoryPortOp>(op.port().getDefiningOp());
-  emitAttribute(port.direction());
-  os << " mport " << port.name() << " = ";
+  auto port = cast<MemoryPortOp>(op.getPort().getDefiningOp());
+  emitAttribute(port.getDirection());
+  os << " mport " << port.getName() << " = ";
 
   // Print the memory name.
-  auto *mem = port.memory().getDefiningOp();
+  auto *mem = port.getMemory().getDefiningOp();
   if (auto seqMem = dyn_cast<SeqMemOp>(mem))
-    os << seqMem.name();
+    os << seqMem.getName();
   else
-    os << cast<CombMemOp>(mem).name();
+    os << cast<CombMemOp>(mem).getName();
 
   // Print the address.
   os << "[";
-  emitExpression(op.index());
+  emitExpression(op.getIndex());
   os << "], ";
 
   // Print the clock.
-  emitExpression(op.clock());
+  emitExpression(op.getClock());
 
   emitLocationAndNewLine(op);
 }
@@ -644,11 +648,11 @@ void Emitter::emitExpression(Value value) {
 void Emitter::emitExpression(ConstantOp op) {
   emitType(op.getType());
   // TODO: Add option to control base-2/8/10/16 output here.
-  os << "(" << op.value() << ")";
+  os << "(" << op.getValue() << ")";
 }
 
 void Emitter::emitExpression(SpecialConstantOp op) {
-  auto emitInner = [&]() { os << "UInt<1>(" << op.value() << ")"; };
+  auto emitInner = [&]() { os << "UInt<1>(" << op.getValue() << ")"; };
   TypeSwitch<FIRRTLType>(op.getType().cast<FIRRTLType>())
       .Case<ClockType>([&](auto type) {
         os << "asClock(";
@@ -664,20 +668,20 @@ void Emitter::emitExpression(SpecialConstantOp op) {
 }
 
 void Emitter::emitExpression(SubfieldOp op) {
-  auto type = op.input().getType().cast<BundleType>();
-  emitExpression(op.input());
-  os << "." << type.getElementName(op.fieldIndex());
+  auto type = op.getInput().getType().cast<BundleType>();
+  emitExpression(op.getInput());
+  os << "." << type.getElementName(op.getFieldIndex());
 }
 
 void Emitter::emitExpression(SubindexOp op) {
-  emitExpression(op.input());
-  os << "[" << op.index() << "]";
+  emitExpression(op.getInput());
+  os << "[" << op.getIndex() << "]";
 }
 
 void Emitter::emitExpression(SubaccessOp op) {
-  emitExpression(op.input());
+  emitExpression(op.getInput());
   os << "[";
-  emitExpression(op.index());
+  emitExpression(op.getIndex());
   os << "]";
 }
 

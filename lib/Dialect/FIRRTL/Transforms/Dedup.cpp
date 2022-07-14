@@ -414,8 +414,8 @@ struct Equivalence {
 
   // NOLINTNEXTLINE(misc-no-recursion)
   LogicalResult check(InFlightDiagnostic &diag, InstanceOp a, InstanceOp b) {
-    auto aName = a.moduleNameAttr().getAttr();
-    auto bName = b.moduleNameAttr().getAttr();
+    auto aName = a.getModuleNameAttr().getAttr();
+    auto bName = b.getModuleNameAttr().getAttr();
     // If the modules instantiate are different we will want to know why the
     // sub module did not dedupliate. This code recursively checks the child
     // module.
@@ -552,7 +552,7 @@ struct Deduper {
           NLATable *nlaTable, CircuitOp circuit)
       : context(circuit->getContext()), instanceGraph(instanceGraph),
         symbolTable(symbolTable), nlaTable(nlaTable),
-        nlaBlock(circuit.getBody()),
+        nlaBlock(circuit.getBodyBlock()),
         nonLocalString(StringAttr::get(context, "circt.nonlocal")),
         classString(StringAttr::get(context, "class")) {}
 
@@ -619,7 +619,7 @@ private:
 
     // Record port annotations. Breadcrumbs don't appear on port annotations, so
     // we can skip the class check that we have above.
-    for (const auto &pair : llvm::enumerate(mem.portAnnotations()))
+    for (const auto &pair : llvm::enumerate(mem.getPortAnnotations()))
       for (auto anno : AnnotationSet(pair.value().cast<ArrayAttr>()))
         if (auto nlaRef = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal"))
           targetMap[nlaRef.getAttr()].push_back(
@@ -635,8 +635,8 @@ private:
     auto toModuleRef = FlatSymbolRefAttr::get(toModule.moduleNameAttr());
     for (auto *oldInstRec : llvm::make_early_inc_range(fromNode->uses())) {
       auto inst = ::cast<InstanceOp>(*oldInstRec->getInstance());
-      inst.moduleNameAttr(toModuleRef);
-      inst.portNamesAttr(toModule.getPortNamesAttr());
+      inst.setModuleNameAttr(toModuleRef);
+      inst.setPortNamesAttr(toModule.getPortNamesAttr());
       oldInstRec->getParent()->addInstance(inst, toNode);
       oldInstRec->erase();
     }
@@ -725,7 +725,7 @@ private:
     // Change the NLA to target the toModule.
     nlaTable->renameModuleAndInnerRef(toName, fromName, renameMap);
     for (auto nla : moduleNLAs) {
-      auto elements = nla.namepath().getValue();
+      auto elements = nla.getNamepath().getValue();
       // If we don't need to add more context, we're done here.
       if (nla.root() != toName)
         continue;
@@ -733,7 +733,7 @@ private:
       SmallVector<Attribute> namepath(elements.begin(), elements.end());
       auto nlaRefs = createNLAs(toName, fromModule, namepath);
       // Replace the uses of the old NLA with the new NLAs.
-      for (auto target : targetMap[nla.sym_nameAttr()]) {
+      for (auto target : targetMap[nla.getSymNameAttr()]) {
         // We have to clone any annotation which uses the old NLA for each new
         // NLA. This array collects the new set of annotations.
         SmallVector<Annotation> newAnnotations;
@@ -744,7 +744,7 @@ private:
           // If this annotation doesn't use the target NLA, copy it with no
           // changes.
           if (!found || it->getValue().cast<FlatSymbolRefAttr>().getAttr() !=
-                            nla.sym_nameAttr()) {
+                            nla.getSymNameAttr()) {
             newAnnotations.push_back(anno);
             continue;
           }
@@ -1072,7 +1072,7 @@ void fixupConnect(ImplicitLocOpBuilder &builder, Value dst, Value src) {
 template <typename T>
 void fixupConnect(T connect) {
   ImplicitLocOpBuilder builder(connect.getLoc(), connect);
-  fixupConnect<T>(builder, connect.dest(), connect.src());
+  fixupConnect<T>(builder, connect.getDest(), connect.getSrc());
   connect->erase();
 }
 
@@ -1093,7 +1093,7 @@ void fixupReferences(Value oldValue, Type newType) {
     for (auto *op : llvm::make_early_inc_range(oldValue.getUsers())) {
       if (auto subfield = dyn_cast<SubfieldOp>(op)) {
         // Rewrite a subfield op to return the correct type.
-        auto index = subfield.fieldIndex();
+        auto index = subfield.getFieldIndex();
         auto result = subfield.getResult();
         auto newResultType = newType.cast<BundleType>().getElementType(index);
         workList.emplace_back(result, newResultType);

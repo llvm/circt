@@ -41,7 +41,7 @@ struct InjectDUTHierarchy : public InjectDUTHierarchyBase<InjectDUTHierarchy> {
 ///   firrtl.hierpath [@Top::@dut, @DUT::@wrapper, @Wrapper]
 static void addHierarchy(HierPathOp path, FModuleOp dut,
                          InstanceOp wrapperInst) {
-  auto namepath = path.namepath().getValue();
+  auto namepath = path.getNamepath().getValue();
 
   size_t nlaIdx = 0;
   SmallVector<Attribute> newNamepath;
@@ -54,15 +54,15 @@ static void addHierarchy(HierPathOp path, FModuleOp dut,
   // Add the extra level of hierarchy.
   if (auto dutRef = namepath[nlaIdx].dyn_cast<hw::InnerRefAttr>())
     newNamepath.push_back(hw::InnerRefAttr::get(
-        wrapperInst.moduleNameAttr().getAttr(), dutRef.getName()));
+        wrapperInst.getModuleNameAttr().getAttr(), dutRef.getName()));
   else
     newNamepath.push_back(
-        FlatSymbolRefAttr::get(wrapperInst.moduleNameAttr().getAttr()));
+        FlatSymbolRefAttr::get(wrapperInst.getModuleNameAttr().getAttr()));
 
   // Add anything left over.
   auto back = namepath.drop_front(nlaIdx + 1);
   newNamepath.append(back.begin(), back.end());
-  path.namepathAttr(ArrayAttr::get(dut.getContext(), newNamepath));
+  path.setNamepathAttr(ArrayAttr::get(dut.getContext(), newNamepath));
 }
 
 void InjectDUTHierarchy::runOnOperation() {
@@ -168,7 +168,7 @@ void InjectDUTHierarchy::runOnOperation() {
   {
     b.setInsertionPointAfter(dut);
     auto newDUT = b.create<FModuleOp>(dut.getLoc(), dut.getNameAttr(),
-                                      dut.getPorts(), dut.annotations());
+                                      dut.getPorts(), dut.getAnnotations());
 
     SymbolTable::setSymbolVisibility(newDUT, dut.getVisibility());
     dut.setName(b.getStringAttr(circuitNS.newName(wrapperName.getValue())));
@@ -185,7 +185,7 @@ void InjectDUTHierarchy::runOnOperation() {
   }
 
   // Instantiate the wrapper inside the DUT and wire it up.
-  b.setInsertionPointToStart(dut.getBody());
+  b.setInsertionPointToStart(dut.getBodyBlock());
   ModuleNamespace dutNS(dut);
   auto wrapperInst = b.create<InstanceOp>(
       b.getUnknownLoc(), wrapper, wrapper.moduleName(),
@@ -241,7 +241,7 @@ void InjectDUTHierarchy::runOnOperation() {
   DenseMap<StringAttr, HierPathOp> dutRenames;
   for (auto nla : llvm::make_early_inc_range(nlaTable.lookup(dut))) {
     LLVM_DEBUG(llvm::dbgs() << "  - " << nla << "\n");
-    auto namepath = nla.namepath().getValue();
+    auto namepath = nla.getNamepath().getValue();
 
     // The DUT is the root module.  Just update the root module to point at the
     // wrapper.
@@ -276,13 +276,13 @@ void InjectDUTHierarchy::runOnOperation() {
       // Case (3): the module path is used by the DUT module or a port. Create a
       // clone of the path and update dutRenames so that this path symbol will
       // get updated for annotations on the DUT or on its ports.
-      if (nla.isModule() && dutPaths.contains(nla.sym_nameAttr())) {
+      if (nla.isModule() && dutPaths.contains(nla.getSymNameAttr())) {
         OpBuilder::InsertionGuard guard(b);
         b.setInsertionPoint(nla);
         auto clone = cast<HierPathOp>(b.clone(*nla));
-        clone.sym_nameAttr(b.getStringAttr(
-            circuitNS.newName(clone.sym_nameAttr().getValue())));
-        dutRenames.insert({nla.sym_nameAttr(), clone});
+        clone.setSymNameAttr(b.getStringAttr(
+            circuitNS.newName(clone.getSymNameAttr().getValue())));
+        dutRenames.insert({nla.getSymNameAttr(), clone});
       }
 
       // Cases (2), (3), and (4): fallthrough to add hierarchy to original path.
@@ -300,7 +300,7 @@ void InjectDUTHierarchy::runOnOperation() {
       return false;
     anno.setMember(
         "circt.nonlocal",
-        FlatSymbolRefAttr::get(dutRenames[sym.getAttr()].sym_nameAttr()));
+        FlatSymbolRefAttr::get(dutRenames[sym.getAttr()].getSymNameAttr()));
     newAnnotations.push_back(anno);
     return true;
   };

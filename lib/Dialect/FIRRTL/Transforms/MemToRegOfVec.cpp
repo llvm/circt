@@ -40,7 +40,7 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
     if (!AnnotationSet::removeAnnotations(circtOp,
                                           convertMemToRegOfVecAnnoClass))
       return;
-    auto *body = circtOp.getBody();
+    auto *body = circtOp.getBodyBlock();
 
     // Find the device under test and create a set of all modules underneath it.
     auto it = llvm::find_if(*body, [&](Operation &op) -> bool {
@@ -63,7 +63,7 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
 
   void runOnModule(FModuleOp mod) {
 
-    mod.getBody()->walk([&](MemOp memOp) {
+    mod.getBodyBlock()->walk([&](MemOp memOp) {
       LLVM_DEBUG(llvm::dbgs() << "\n Memory op:" << memOp);
       if (AnnotationSet::removeAnnotations(memOp, excludeMemToRegAnnoClass))
         return;
@@ -369,7 +369,7 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
       } else
         regAnnotations.push_back(anno.getAttr());
     }
-    op.annotationsAttr(builder.getArrayAttr(regAnnotations));
+    op.setAnnotationsAttr(builder.getArrayAttr(regAnnotations));
   }
 
   /// Generate the logic for implementing the memory using Registers.
@@ -378,7 +378,7 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
     moduleNamespace.add(memOp->getParentOfType<FModuleOp>());
     auto dataType = memOp.getDataType();
 
-    auto innerSym = memOp.inner_sym();
+    auto innerSym = memOp.getInnerSym();
 
     RegOp regOfVec = {};
     for (size_t index = 0, rend = memOp.getNumResults(); index < rend;
@@ -388,8 +388,8 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
       // simpler to delete the memOp.
       auto wire = builder.create<WireOp>(
           result.getType(),
-          (memOp.name() + "_" + memOp.getPortName(index).getValue()).str(),
-          memOp.nameKind());
+          (memOp.getName() + "_" + memOp.getPortName(index).getValue()).str(),
+          memOp.getNameKind());
       result.replaceAllUsesWith(wire.getResult());
       result = wire;
       // Create an access to all the common subfields.
@@ -401,13 +401,13 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
       if (!regOfVec) {
         // Create the register corresponding to the memory.
         regOfVec = builder.create<RegOp>(
-            FVectorType::get(dataType, firMem.depth), clk, memOp.nameAttr());
+            FVectorType::get(dataType, firMem.depth), clk, memOp.getNameAttr());
 
         // Copy all the memory annotations.
-        if (!memOp.annotationsAttr().empty())
-          scatterMemTapAnno(regOfVec, memOp.annotationsAttr(), builder);
+        if (!memOp.getAnnotationsAttr().empty())
+          scatterMemTapAnno(regOfVec, memOp.getAnnotationsAttr(), builder);
         if (innerSym)
-          regOfVec.inner_symAttr(memOp.inner_symAttr());
+          regOfVec.setInnerSymAttr(memOp.getInnerSymAttr());
       }
       auto portKind = memOp.getPortKind(index);
       if (portKind == MemOp::PortKind::Read) {

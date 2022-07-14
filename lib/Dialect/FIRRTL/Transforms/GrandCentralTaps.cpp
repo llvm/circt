@@ -639,7 +639,7 @@ void GrandCentralTapsPass::runOnOperation() {
   // expanded.
   SmallVector<AnnotatedExtModule, 4> modules;
   for (auto extModule : llvm::make_early_inc_range(
-           circuitOp.getBody()->getOps<FExtModuleOp>())) {
+           circuitOp.getBodyBlock()->getOps<FExtModuleOp>())) {
 
     // If the external module indicates that it is a data or mem tap, but does
     // not actually contain any taps (it has no ports), then delete the module
@@ -744,7 +744,7 @@ void GrandCentralTapsPass::runOnOperation() {
         for (auto path : wiring.prefices) {
           llvm::dbgs() << "  - " << path;
           if (wiring.nla)
-            llvm::dbgs() << "." << wiring.nla.namepathAttr();
+            llvm::dbgs() << "." << wiring.nla.getNamepathAttr();
           if (!wiring.suffix.empty())
             llvm::dbgs() << " $ " << wiring.suffix;
           llvm::dbgs() << "\n";
@@ -793,7 +793,7 @@ void GrandCentralTapsPass::runOnOperation() {
                           impl.getName() + ".sv"));
       impl->setAttr("comment",
                     builder.getStringAttr("VCS coverage exclude_file"));
-      builder.setInsertionPointToEnd(impl.getBody());
+      builder.setInsertionPointToEnd(impl.getBodyBlock());
 
       // Connect the output ports to the appropriate tapped object.
       for (auto port : portWiring) {
@@ -830,7 +830,7 @@ void GrandCentralTapsPass::runOnOperation() {
           // Append the NLA path to the instance graph-determined path.
           SmallVector<InstanceOp> prefixWithNLA(prefix.begin(), prefix.end());
           if (port.nla) {
-            for (auto segment : port.nla.namepath().getValue().drop_back()) {
+            for (auto segment : port.nla.getNamepath().getValue().drop_back()) {
               auto refPart = getRefPart(segment);
               if (!refPart)
                 continue;
@@ -925,7 +925,7 @@ void GrandCentralTapsPass::runOnOperation() {
 
   // Garbage collect NLAs which were removed.
   for (auto &op :
-       llvm::make_early_inc_range(circuitOp.getBody()->getOperations())) {
+       llvm::make_early_inc_range(circuitOp.getBodyBlock()->getOperations())) {
     // Remove NLA anchors whose leaf annotations were removed.
     if (auto nla = dyn_cast<HierPathOp>(op)) {
       if (deadNLAs.contains(nla.getNameAttr()))
@@ -1051,7 +1051,7 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
       if (auto driver = getDriverFromConnect(op->getResult(0)))
         if (auto constant =
                 dyn_cast_or_null<ConstantOp>(driver.getDefiningOp()))
-          wiring.literal = {constant.valueAttr(), constant.getType()};
+          wiring.literal = {constant.getValueAttr(), constant.getType()};
 
       portWiring.push_back(std::move(wiring));
       return;

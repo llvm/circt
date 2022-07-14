@@ -92,8 +92,8 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
         outputPortConstants.push_back(None);
       } else if (llvm::all_of(instanceGraphNode->uses(), portIsUnused)) {
         // Replace the port with a wire if it is unused.
-        auto builder =
-            ImplicitLocOpBuilder::atBlockBegin(arg.getLoc(), module.getBody());
+        auto builder = ImplicitLocOpBuilder::atBlockBegin(
+            arg.getLoc(), module.getBodyBlock());
         auto wire = builder.create<WireOp>(arg.getType());
         arg.replaceAllUsesWith(wire);
         outputPortConstants.push_back(None);
@@ -104,12 +104,12 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
         auto connectLike = dyn_cast<FConnectLike>(op);
         if (!connectLike)
           continue;
-        auto *srcOp = connectLike.src().getDefiningOp();
+        auto *srcOp = connectLike.getSrc().getDefiningOp();
         if (!isa_and_nonnull<InvalidValueOp, ConstantOp>(srcOp))
           continue;
 
         if (auto constant = dyn_cast<ConstantOp>(srcOp))
-          outputPortConstants.push_back(constant.value());
+          outputPortConstants.push_back(constant.getValue());
         else {
           assert(isa<InvalidValueOp>(srcOp) && "only expect invalid");
           outputPortConstants.push_back(None);
@@ -157,7 +157,7 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
         // used as temporary wires. In that case, we cannot erase connections.
         bool onlyWritten = llvm::all_of(result.getUsers(), [&](Operation *op) {
           if (auto connect = dyn_cast<FConnectLike>(op))
-            return connect.dest() == result;
+            return connect.getDest() == result;
           return false;
         });
 

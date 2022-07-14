@@ -1165,8 +1165,8 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
         unsigned fieldID = fieldRef.getFieldID();
         assert(leafValue && "leafValue not found");
 
-        auto builder =
-            OpBuilder::atBlockEnd(companionIDMap.lookup(id).mapping.getBody());
+        auto builder = OpBuilder::atBlockEnd(
+            companionIDMap.lookup(id).mapping.getBodyBlock());
 
         FIRRTLType tpe = leafValue.getType().cast<FIRRTLType>();
 
@@ -1185,10 +1185,10 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
         if (driver) {
           if (auto constant =
                   dyn_cast_or_null<ConstantOp>(driver.getDefiningOp())) {
-            path.append(Twine(constant.value().getBitWidth()));
+            path.append(Twine(constant.getValue().getBitWidth()));
             path += "'h";
             SmallString<32> valueStr;
-            constant.value().toStringUnsigned(valueStr, 16);
+            constant.getValue().toStringUnsigned(valueStr, 16);
             path.append(valueStr);
             builder.create<sv::VerbatimOp>(
                 constant.getLoc(),
@@ -1204,7 +1204,8 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
         // annotation, this is computed from the instance path.
         SmallVector<Attribute> fullLeafPath;
         if (nla) {
-          fullLeafPath.append(nla.namepath().begin(), nla.namepath().end());
+          fullLeafPath.append(nla.getNamepath().begin(),
+                              nla.getNamepath().end());
         } else {
           FModuleLike enclosing = getEnclosingModule(leafValue, sym);
           auto enclosingPaths = instancePaths->getAbsolutePaths(enclosing);
@@ -1216,7 +1217,7 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
               instancePaths->instanceGraph.getTopLevelModule().moduleNameAttr();
           for (auto segment : enclosingPaths[0]) {
             fullLeafPath.push_back(getInnerRefTo(segment));
-            root = segment.moduleNameAttr().getAttr();
+            root = segment.getModuleNameAttr().getAttr();
           }
           fullLeafPath.push_back(FlatSymbolRefAttr::get(root));
         }
@@ -1417,9 +1418,9 @@ Optional<TypeSum> GrandCentralPass::computeField(Attribute field,
 Optional<sv::InterfaceOp>
 GrandCentralPass::traverseBundle(AugmentedBundleTypeAttr bundle, IntegerAttr id,
                                  StringAttr prefix, VerbatimBuilder &path) {
-  auto builder = OpBuilder::atBlockEnd(getOperation().getBody());
+  auto builder = OpBuilder::atBlockEnd(getOperation().getBodyBlock());
   sv::InterfaceOp iface;
-  builder.setInsertionPointToEnd(getOperation().getBody());
+  builder.setInsertionPointToEnd(getOperation().getBodyBlock());
   auto loc = getOperation().getLoc();
   auto iFaceName = getNamespace().newName(getInterfaceName(prefix, bundle));
   iface = builder.create<sv::InterfaceOp>(loc, iFaceName);
@@ -1520,7 +1521,7 @@ FModuleLike GrandCentralPass::getEnclosingModule(Value value,
   auto *op = value.getDefiningOp();
   if (InstanceOp instance = dyn_cast<InstanceOp>(op))
     return getSymbolTable().lookup<FModuleOp>(
-        instance.moduleNameAttr().getValue());
+        instance.getModuleNameAttr().getValue());
 
   return op->getParentOfType<FModuleOp>();
 }
@@ -1684,7 +1685,7 @@ void GrandCentralPass::runOnOperation() {
     OpBuilder builder(circuitOp);
     SmallVector<sv::InterfaceOp, 0> interfaceVec;
     yamlize(yout, interfaceVec, true, yamlContext);
-    builder.setInsertionPointToStart(circuitOp.getBody());
+    builder.setInsertionPointToStart(circuitOp.getBodyBlock());
     builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), yamlString)
         ->setAttr("output_file",
                   hw::OutputFileAttr::getFromFilename(
@@ -1699,7 +1700,7 @@ void GrandCentralPass::runOnOperation() {
   // necessary because interfaces and interface instances are created.
   // Instances link to their definitions via symbols and we don't want to
   // break this.
-  auto builder = OpBuilder::atBlockEnd(circuitOp.getBody());
+  auto builder = OpBuilder::atBlockEnd(circuitOp.getBodyBlock());
 
   // Maybe get an "id" from an Annotation.  Generate error messages on the op if
   // no "id" exists.
@@ -1871,7 +1872,7 @@ void GrandCentralPass::runOnOperation() {
             //      known, then anything in the test harness will not be
             //      extracted.
             if (tpe.getValue() == "companion") {
-              builder.setInsertionPointToEnd(circuitOp.getBody());
+              builder.setInsertionPointToEnd(circuitOp.getBodyBlock());
 
               // Create the mapping module.
               auto mappingName =
@@ -1892,7 +1893,7 @@ void GrandCentralPass::runOnOperation() {
 
               // Instantiate the mapping module inside the companion.  Keep the
               // instance graph up-to-date with this new instantiation.
-              builder.setInsertionPointToEnd(op.getBody());
+              builder.setInsertionPointToEnd(op.getBodyBlock());
               instancePaths->instanceGraph[op]->addInstance(
                   builder.create<InstanceOp>(circuitOp.getLoc(), mapping,
                                              mapping.getName()),
@@ -2053,7 +2054,7 @@ void GrandCentralPass::runOnOperation() {
       auto value = parentIDMap.lookup(id);
       StringRef name;
       if (value.first)
-        name = value.first.getValue().name();
+        name = value.first.getValue().getName();
       else
         name = value.second.getName();
       llvm::dbgs() << "  - " << id.getValue() << ": " << name << ":"
@@ -2150,7 +2151,7 @@ void GrandCentralPass::runOnOperation() {
     interfaceVec.push_back(iface.getValue());
 
     // Instantiate the interface inside the parent.
-    builder.setInsertionPointToEnd(parentModule.getBody());
+    builder.setInsertionPointToEnd(parentModule.getBodyBlock());
     auto instance = builder.create<sv::InterfaceInstanceOp>(
         getOperation().getLoc(), iface.getValue().getInterfaceType(),
         companionIDMap.lookup(bundle.getID()).name,
@@ -2170,7 +2171,7 @@ void GrandCentralPass::runOnOperation() {
 
     instance->setAttr("doNotPrint", trueAttr);
     builder.setInsertionPointToStart(
-        instance->getParentOfType<CircuitOp>().getBody());
+        instance->getParentOfType<CircuitOp>().getBodyBlock());
     auto bind = builder.create<sv::BindInterfaceOp>(getOperation().getLoc(),
                                                     instanceSymbol);
     bind->setAttr("output_file",
@@ -2190,7 +2191,7 @@ void GrandCentralPass::runOnOperation() {
     llvm::yaml::Output yout(stream);
     yamlize(yout, interfaceVec, true, yamlContext);
 
-    builder.setInsertionPointToStart(circuitOp.getBody());
+    builder.setInsertionPointToStart(circuitOp.getBodyBlock());
     builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), yamlString)
         ->setAttr("output_file",
                   hw::OutputFileAttr::getFromFilename(
@@ -2203,11 +2204,11 @@ void GrandCentralPass::runOnOperation() {
   // Garbage collect dead NLAs.
   auto symTable = getSymbolTable();
   for (auto &op :
-       llvm::make_early_inc_range(circuitOp.getBody()->getOperations())) {
+       llvm::make_early_inc_range(circuitOp.getBodyBlock()->getOperations())) {
 
     // Remove NLA operations.
     if (auto nla = dyn_cast<HierPathOp>(op)) {
-      if (deadNLAs.count(nla.sym_nameAttr())) {
+      if (deadNLAs.count(nla.getSymNameAttr())) {
         nlaTable->erase(nla);
         symTable.erase(nla);
       }
@@ -2228,7 +2229,7 @@ void GrandCentralPass::runOnOperation() {
     };
 
     // Visit module bodies to remove any dead NLA breadcrumbs.
-    for (auto op : fmodule.getBody()->getOps<InstanceOp>())
+    for (auto op : fmodule.getBodyBlock()->getOps<InstanceOp>())
       AnnotationSet::removeAnnotations(op, isDead);
   }
 

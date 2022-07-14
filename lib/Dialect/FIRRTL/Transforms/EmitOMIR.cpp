@@ -630,7 +630,7 @@ void EmitOMIRPass::runOnOperation() {
     AnnotationSet::removeAnnotations(
         op, std::bind(setTracker, -1, std::placeholders::_1));
     if (auto modOp = dyn_cast<FModuleOp>(op)) {
-      AnnotationSet annos(modOp.annotations());
+      AnnotationSet annos(modOp.getAnnotations());
       if (!annos.hasAnnotation(dutAnnoClass))
         return;
       dutModuleName = modOp.getNameAttr();
@@ -683,7 +683,7 @@ void EmitOMIRPass::runOnOperation() {
 /// module of the circuit. Generates an error if any module along the path is
 /// instantiated multiple times.
 void EmitOMIRPass::makeTrackerAbsolute(Tracker &tracker) {
-  auto builder = OpBuilder::atBlockBegin(getOperation().getBody());
+  auto builder = OpBuilder::atBlockBegin(getOperation().getBodyBlock());
 
   // Pick a name for the NLA that doesn't collide with anything.
   StringAttr opName;
@@ -729,10 +729,10 @@ void EmitOMIRPass::makeTrackerAbsolute(Tracker &tracker) {
   };
   // Add the path up to where the NLA starts.
   for (InstanceOp inst : paths[0])
-    addToPath(inst, inst.nameAttr());
+    addToPath(inst, inst.getNameAttr());
   // Add the path from the NLA to the op.
   if (tracker.nla) {
-    auto path = tracker.nla.namepath().getValue();
+    auto path = tracker.nla.getNamepath().getValue();
     for (auto attr : path.drop_back()) {
       auto ref = attr.cast<hw::InnerRefAttr>();
       // Find the instance referenced by the NLA.
@@ -926,7 +926,7 @@ void EmitOMIRPass::emitOptionalRTLPorts(DictionaryAttr node,
             // If module is DUT, then root the target relative to the DUT.
             buf.append(module.moduleName());
           } else {
-            buf.append(getOperation().name());
+            buf.append(getOperation().getName());
           }
           buf.push_back('|');
           buf.append(addSymbol(module));
@@ -1083,14 +1083,14 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
   // Serialize the target circuit first.
   SmallString<64> target(type);
   target.append(":~");
-  target.append(getOperation().name());
+  target.append(getOperation().getName());
   target.push_back('|');
 
   // Serialize the local or non-local module/instance hierarchy path.
   if (tracker.nla) {
     bool notFirst = false;
     hw::InnerRefAttr instName;
-    for (auto nameRef : tracker.nla.namepath()) {
+    for (auto nameRef : tracker.nla.getNamepath()) {
       StringAttr modName;
       if (auto innerRef = nameRef.dyn_cast<hw::InnerRefAttr>())
         modName = innerRef.getModule();
@@ -1175,7 +1175,7 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
           target.push_back('/');
           target.append(addSymbol(componentName));
           target.push_back(':');
-          target.append(addSymbol(instOp.moduleNameAttr()));
+          target.append(addSymbol(instOp.getModuleNameAttr()));
           return;
         }
         if (auto memOp = dyn_cast<MemOp>(tracker.op)) {

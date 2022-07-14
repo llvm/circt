@@ -44,7 +44,7 @@ static void legalizeFModule(FModuleOp moduleOp) {
   SmallVector<Operation *, 8> connectOps;
   moduleOp.walk([&](ConnectOp op) { connectOps.push_back(op); });
   for (auto op : connectOps)
-    op->moveBefore(&moduleOp.getBody()->back());
+    op->moveBefore(&moduleOp.getBodyBlock()->back());
 }
 
 /// Return the number of bits needed to index the given number of values.
@@ -507,7 +507,7 @@ static Value createMuxTree(ArrayRef<Value> inputs, Value select,
           retVal = builder
                        .create<MuxPrimOp>(insertLoc, muxDataType, layerSelect,
                                           upperTree, lowerTree)
-                       .result();
+                       .getResult();
         }
         return retVal;
       };
@@ -704,8 +704,8 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
                              "firrtl.transforms.FlattenAnnotation"))})));
   }
 
-  rewriter.inlineRegionBefore(funcOp.body(), topModuleOp.body(),
-                              topModuleOp.body().end());
+  rewriter.inlineRegionBefore(funcOp.body(), topModuleOp.getBody(),
+                              topModuleOp.getBody().end());
 
   // In the following section, we manually merge the two regions and manually
   // replace arguments. This is an alternative to using rewriter.mergeBlocks; we
@@ -714,7 +714,7 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
 
   // Merge the second block (inlined from funcOp) of the top-module into the
   // entry block.
-  auto &blockIterator = topModuleOp.body().getBlocks();
+  auto &blockIterator = topModuleOp.getBody().getBlocks();
   Block *entryBlock = &blockIterator.front();
   Block *secondBlock = &*std::next(blockIterator.begin());
 
@@ -2010,9 +2010,9 @@ FModuleOp buildInnerFIFO(CircuitOp circuit, StringRef moduleName,
   ports.push_back({strAttr("reset"), builder.getType<UIntType>(1),
                    Direction::In, StringAttr{}, loc});
 
-  builder.setInsertionPointToStart(circuit.getBody());
+  builder.setInsertionPointToStart(circuit.getBodyBlock());
   auto moduleOp = builder.create<FModuleOp>(strAttr(moduleName), ports);
-  builder.setInsertionPointToStart(moduleOp.getBody());
+  builder.setInsertionPointToStart(moduleOp.getBodyBlock());
 
   // Unpack module arguments.
   int portIdx = 0;
@@ -2913,7 +2913,7 @@ static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
     unsigned numIns = oldOp->getNumOperands();
     unsigned numArgs = numIns + oldOp->getNumResults();
 
-    auto topArgs = topModuleOp.getBody()->getArguments();
+    auto topArgs = topModuleOp.getBodyBlock()->getArguments();
     auto firstClock = std::find_if(topArgs.begin(), topArgs.end(),
                                    [](BlockArgument &arg) -> bool {
                                      return arg.getType().isa<ClockType>();
@@ -3003,7 +3003,7 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
   LogicalResult
   matchAndRewrite(handshake::FuncOp funcOp, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.setInsertionPointToStart(circuitOp.getBody());
+    rewriter.setInsertionPointToStart(circuitOp.getBodyBlock());
     auto topModuleOp =
         createTopModuleOp(funcOp, /*numClocks=*/1, rewriter, setFlattenAttr);
 
@@ -3024,7 +3024,7 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
     };
 
     // Traverse and convert each operation in funcOp.
-    for (Operation &op : *topModuleOp.getBody()) {
+    for (Operation &op : *topModuleOp.getBodyBlock()) {
       if (isa<handshake::ReturnOp>(op))
         convertReturnOp(&op, topModuleOp, funcOp, rewriter);
 
@@ -3038,7 +3038,7 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
           subModuleOp = createSubModuleOp(topModuleOp, &op, rewriter);
 
           Location insertLoc = subModuleOp.getLoc();
-          auto *bodyBlock = subModuleOp.getBody();
+          auto *bodyBlock = subModuleOp.getBodyBlock();
           rewriter.setInsertionPoint(bodyBlock, bodyBlock->end());
 
           ValueVectorList portList =

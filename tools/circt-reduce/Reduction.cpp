@@ -192,7 +192,7 @@ struct ModuleExternalizer : public Reduction {
     builder.create<firrtl::FExtModuleOp>(
         module->getLoc(),
         module->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName()),
-        module.getPorts(), StringRef(), module.annotationsAttr());
+        module.getPorts(), StringRef(), module.getAnnotationsAttr());
     module->erase();
     return success();
   }
@@ -355,12 +355,13 @@ struct InstanceStubber : public Reduction {
 
   LogicalResult rewrite(Operation *op) override {
     auto instOp = cast<firrtl::InstanceOp>(op);
-    LLVM_DEBUG(llvm::dbgs() << "Stubbing instance `" << instOp.name() << "`\n");
+    LLVM_DEBUG(llvm::dbgs()
+               << "Stubbing instance `" << instOp.getName() << "`\n");
     ImplicitLocOpBuilder builder(instOp.getLoc(), instOp);
     SmallDenseMap<Type, Value, 8> invalidCache;
     for (unsigned i = 0, e = instOp.getNumResults(); i != e; ++i) {
       auto result = instOp.getResult(i);
-      auto name = builder.getStringAttr(Twine(instOp.name()) + "_" +
+      auto name = builder.getStringAttr(Twine(instOp.getName()) + "_" +
                                         instOp.getPortNameStr(i));
       auto wire = builder.create<firrtl::WireOp>(
           result.getType(), name, firrtl::NameKindEnum::DroppableName,
@@ -400,14 +401,14 @@ struct MemoryStubber : public Reduction {
   bool match(Operation *op) override { return isa<firrtl::MemOp>(op); }
   LogicalResult rewrite(Operation *op) override {
     auto memOp = cast<firrtl::MemOp>(op);
-    LLVM_DEBUG(llvm::dbgs() << "Stubbing memory `" << memOp.name() << "`\n");
+    LLVM_DEBUG(llvm::dbgs() << "Stubbing memory `" << memOp.getName() << "`\n");
     ImplicitLocOpBuilder builder(memOp.getLoc(), memOp);
     SmallDenseMap<Type, Value, 8> invalidCache;
     Value xorInputs;
     SmallVector<Value> outputs;
     for (unsigned i = 0, e = memOp.getNumResults(); i != e; ++i) {
       auto result = memOp.getResult(i);
-      auto name = builder.getStringAttr(Twine(memOp.name()) + "_" +
+      auto name = builder.getStringAttr(Twine(memOp.getName()) + "_" +
                                         memOp.getPortNameStr(i));
       auto wire = builder.create<firrtl::WireOp>(
           result.getType(), name, firrtl::NameKindEnum::DroppableName,
@@ -643,7 +644,7 @@ struct RootPortPruner : public Reduction {
     auto circuit = module->getParentOfType<firrtl::CircuitOp>();
     if (!circuit)
       return false;
-    return circuit.nameAttr() == module.getNameAttr();
+    return circuit.getNameAttr() == module.getNameAttr();
   }
   LogicalResult rewrite(Operation *op) override {
     assert(match(op));
@@ -686,7 +687,7 @@ struct ExtmoduleInstanceRemover : public Reduction {
     SmallVector<Value> replacementWires;
     for (firrtl::PortInfo info : portInfo) {
       auto wire = builder.create<firrtl::WireOp>(
-          info.type, (Twine(instOp.name()) + "_" + info.getName()).str());
+          info.type, (Twine(instOp.getName()) + "_" + info.getName()).str());
       if (info.isOutput()) {
         auto inv = builder.create<firrtl::InvalidValueOp>(info.type);
         builder.create<firrtl::ConnectOp>(wire, inv);
@@ -798,7 +799,7 @@ struct ConnectSourceOperandForwarder : public Reduction {
     Value newDest;
     if (auto wire = dyn_cast<firrtl::WireOp>(destOp))
       newDest = builder.create<firrtl::WireOp>(forwardedOperand.getType(),
-                                               wire.name());
+                                               wire.getName());
     else {
       auto regName = destOp->getAttrOfType<StringAttr>("name");
       // We can promote the register into a wire but we wouldn't do here because
@@ -883,8 +884,8 @@ struct NodeSymbolRemover : public Reduction {
 
   bool match(Operation *op) override {
     if (auto nodeOp = dyn_cast<firrtl::NodeOp>(op))
-      return nodeOp.inner_sym() &&
-             !nodeOp.inner_sym()->getSymName().getValue().empty();
+      return nodeOp.getInnerSym() &&
+             !nodeOp.getInnerSym()->getSymName().getValue().empty();
     return false;
   }
 
@@ -918,12 +919,13 @@ struct EagerInliner : public Reduction {
 
   LogicalResult rewrite(Operation *op) override {
     auto instOp = cast<firrtl::InstanceOp>(op);
-    LLVM_DEBUG(llvm::dbgs() << "Inlining instance `" << instOp.name() << "`\n");
+    LLVM_DEBUG(llvm::dbgs()
+               << "Inlining instance `" << instOp.getName() << "`\n");
     SmallVector<Value> argReplacements;
     ImplicitLocOpBuilder builder(instOp.getLoc(), instOp);
     for (unsigned i = 0, e = instOp.getNumResults(); i != e; ++i) {
       auto result = instOp.getResult(i);
-      auto name = builder.getStringAttr(Twine(instOp.name()) + "_" +
+      auto name = builder.getStringAttr(Twine(instOp.getName()) + "_" +
                                         instOp.getPortNameStr(i));
       auto wire = builder.create<firrtl::WireOp>(
           result.getType(), name, firrtl::NameKindEnum::DroppableName,
@@ -934,7 +936,7 @@ struct EagerInliner : public Reduction {
     auto tableOp = SymbolTable::getNearestSymbolTable(instOp);
     auto moduleOp = cast<firrtl::FModuleOp>(
         instOp.getReferencedModule(symbols.getSymbolTable(tableOp)));
-    for (auto &op : llvm::make_early_inc_range(*moduleOp.getBody())) {
+    for (auto &op : llvm::make_early_inc_range(*moduleOp.getBodyBlock())) {
       op.remove();
       builder.insert(&op);
       for (auto &operand : op.getOpOperands())

@@ -138,7 +138,7 @@ void IMDeadCodeElimPass::markInstanceOp(InstanceOp instance) {
 
   // Otherwise this is a defined module.
   auto fModule = cast<FModuleOp>(op);
-  markBlockExecutable(fModule.getBody());
+  markBlockExecutable(fModule.getBodyBlock());
 
   // Ok, it is a normal internal module reference so populate
   // resultPortToInstanceResultMapping.
@@ -184,11 +184,11 @@ void IMDeadCodeElimPass::runOnOperation() {
                           << "\n");
   auto circuit = getOperation();
   instanceGraph = &getAnalysis<InstanceGraph>();
-  for (auto module : circuit.getBody()->getOps<FModuleOp>()) {
+  for (auto module : circuit.getBodyBlock()->getOps<FModuleOp>()) {
     // Mark the ports of public modules as alive.
     if (module.isPublic()) {
-      markBlockExecutable(module.getBody());
-      for (auto port : module.getBody()->getArguments())
+      markBlockExecutable(module.getBodyBlock());
+      for (auto port : module.getBodyBlock()->getArguments())
         markAlive(port);
     }
   }
@@ -199,12 +199,12 @@ void IMDeadCodeElimPass::runOnOperation() {
     visitValue(worklist.pop_back_val());
 
   // Rewrite module signatures.
-  for (auto module : circuit.getBody()->getOps<FModuleOp>())
+  for (auto module : circuit.getBodyBlock()->getOps<FModuleOp>())
     rewriteModuleSignature(module);
 
   // Rewrite module bodies parallelly.
   mlir::parallelForEach(circuit.getContext(),
-                        circuit.getBody()->getOps<FModuleOp>(),
+                        circuit.getBodyBlock()->getOps<FModuleOp>(),
                         [&](auto op) { rewriteModuleBody(op); });
 
   // Erase empty modules. To erase empty modules transitively, it is necessary
@@ -264,8 +264,8 @@ void IMDeadCodeElimPass::visitValue(Value value) {
 
 void IMDeadCodeElimPass::visitConnect(FConnectLike connect) {
   // If the dest is alive, mark the source value as alive.
-  if (isKnownAlive(connect.dest()))
-    markAlive(connect.src());
+  if (isKnownAlive(connect.getDest()))
+    markAlive(connect.getSrc());
 }
 
 void IMDeadCodeElimPass::visitSubelement(Operation *op) {
@@ -274,7 +274,7 @@ void IMDeadCodeElimPass::visitSubelement(Operation *op) {
 }
 
 void IMDeadCodeElimPass::rewriteModuleBody(FModuleOp module) {
-  auto *body = module.getBody();
+  auto *body = module.getBodyBlock();
   // If the module is unreachable, just ignore it.
   // TODO: Erase this module from circuit op.
   if (!isBlockExecutable(body))
@@ -284,7 +284,7 @@ void IMDeadCodeElimPass::rewriteModuleBody(FModuleOp module) {
   for (auto &op : llvm::make_early_inc_range(llvm::reverse(*body))) {
     // Connects to values that we found to be dead can be dropped.
     if (auto connect = dyn_cast<FConnectLike>(op)) {
-      if (isAssumedDead(connect.dest())) {
+      if (isAssumedDead(connect.getDest())) {
         LLVM_DEBUG(llvm::dbgs() << "DEAD: " << connect << "\n";);
         connect.erase();
         ++numErasedOps;
@@ -312,7 +312,7 @@ void IMDeadCodeElimPass::rewriteModuleBody(FModuleOp module) {
 void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
   // If the module is unreachable, just ignore it.
   // TODO: Erase this module from circuit op.
-  if (!isBlockExecutable(module.getBody()))
+  if (!isBlockExecutable(module.getBodyBlock()))
     return;
 
   // Ports of public modules cannot be modified.
@@ -327,7 +327,7 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
   unsigned numOldPorts = module.getNumPorts();
 
   ImplicitLocOpBuilder builder(module.getLoc(), module.getContext());
-  builder.setInsertionPointToStart(module.getBody());
+  builder.setInsertionPointToStart(module.getBodyBlock());
 
   for (auto index : llvm::seq(0u, numOldPorts)) {
     auto argument = module.getArgument(index);
@@ -425,8 +425,8 @@ void IMDeadCodeElimPass::eraseEmptyModule(FModuleOp module) {
 
   // If the module doesn't have arguments, operations or annotations, we
   // consider it to be dead.
-  if (!module.getBody()->args_empty() || !module.getBody()->empty() ||
-      !module.annotations().empty())
+  if (!module.getBodyBlock()->args_empty() || !module.getBodyBlock()->empty() ||
+      !module.getAnnotations().empty())
     return;
 
   // Ok, the module is empty. Delete instances unless they have symbols.
@@ -438,7 +438,7 @@ void IMDeadCodeElimPass::eraseEmptyModule(FModuleOp module) {
   bool existsInstanceWithSymbol = false;
   for (auto *use : llvm::make_early_inc_range(instanceGraphNode->uses())) {
     auto instance = cast<InstanceOp>(use->getInstance());
-    if (instance.inner_sym()) {
+    if (instance.getInnerSym()) {
       existsInstanceWithSymbol = true;
       continue;
     }

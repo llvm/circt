@@ -3510,7 +3510,8 @@ FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
       return failure();
   }
 
-  FIRStmtParser stmtParser(*moduleOp.getBody(), moduleContext, modNameSpace);
+  FIRStmtParser stmtParser(*moduleOp.getBodyBlock(), moduleContext,
+                           modNameSpace);
 
   // Parse the moduleBlock.
   auto result = stmtParser.parseSimpleStmtBlock(deferredModule.indent);
@@ -3710,8 +3711,8 @@ DoneParsing:
              << "no modules found, circuit must contain one or more modules";
     }
     return mlir::emitError(circuit.getLoc())
-           << "no main module found, circuit '" << circuit.name()
-           << "' must contain a module named '" << circuit.name() << "'";
+           << "no main module found, circuit '" << circuit.getName()
+           << "' must contain a module named '" << circuit.getName() << "'";
   }
 
   // If the circuit has an entry point that is not an external module, set the

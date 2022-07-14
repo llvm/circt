@@ -111,7 +111,7 @@ void WireDFTPass::runOnOperation() {
 
   // Walk all modules looking for the DUT module and the annotated enable
   // signal.
-  for (auto &op : *circuit.getBody()) {
+  for (auto &op : *circuit.getBodyBlock()) {
     auto module = dyn_cast<FModuleOp>(op);
 
     // If this isn't a regular module, continue.
@@ -150,7 +150,7 @@ void WireDFTPass::runOnOperation() {
       // Grab the enable value and remove the annotation.
       enableSignal =
           getValueByFieldID(ImplicitLocOpBuilder::atBlockBegin(
-                                module->getLoc(), module.getBody()),
+                                module->getLoc(), module.getBodyBlock()),
                             module.getArgument(i), anno.getFieldID());
       enableModule = module;
       return true;
@@ -269,8 +269,8 @@ void WireDFTPass::runOnOperation() {
     auto module = cast<FModuleOp>(*node->getModule());
     unsigned portNo = module.getNumPorts();
     module.insertPorts({{portNo, portInfo}});
-    auto builder =
-        ImplicitLocOpBuilder::atBlockEnd(module.getLoc(), module.getBody());
+    auto builder = ImplicitLocOpBuilder::atBlockEnd(module.getLoc(),
+                                                    module.getBodyBlock());
     builder.create<ConnectOp>(module.getArgument(portNo), signal);
 
     // Add an output port to the instance of this module.
@@ -316,8 +316,8 @@ void WireDFTPass::runOnOperation() {
       auto *parent = instanceNode->getParent();
       auto module = cast<FModuleOp>(*parent->getModule());
       auto signal = getSignal(parent);
-      auto builder =
-          ImplicitLocOpBuilder::atBlockEnd(module->getLoc(), module.getBody());
+      auto builder = ImplicitLocOpBuilder::atBlockEnd(module->getLoc(),
+                                                      module.getBodyBlock());
       builder.create<ConnectOp>(clone.getResult(portNo), signal);
     }
 
@@ -328,8 +328,8 @@ void WireDFTPass::runOnOperation() {
   for (auto *instance : clockGates) {
     auto *parent = instance->getParent();
     auto module = cast<FModuleOp>(*parent->getModule());
-    auto builder =
-        ImplicitLocOpBuilder::atBlockEnd(module->getLoc(), module.getBody());
+    auto builder = ImplicitLocOpBuilder::atBlockEnd(module->getLoc(),
+                                                    module.getBodyBlock());
     // Hard coded port result number; the clock gate test_en port is 1.
     auto testEnPortNo = 1;
     builder.create<ConnectOp>(

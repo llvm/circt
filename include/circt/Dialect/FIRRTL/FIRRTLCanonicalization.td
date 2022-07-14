@@ -49,9 +49,9 @@ def KnownWidth : Constraint<CPred<[{
 /// Constraint that matches a zero ConstantOp or SpecialConstantOp.
 def ZeroConstantOp : Constraint<Or<[
   CPred<"$0.getDefiningOp<ConstantOp>() &&"
-        "$0.getDefiningOp<ConstantOp>().value().isZero()">,
+        "$0.getDefiningOp<ConstantOp>().getValue().isZero()">,
   CPred<"$0.getDefiningOp<SpecialConstantOp>() &&"
-        "$0.getDefiningOp<SpecialConstantOp>().value() == false">
+        "$0.getDefiningOp<SpecialConstantOp>().getValue() == false">
 ]>>;
 
 def GetEmptyString : NativeCodeCall<

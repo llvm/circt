@@ -249,15 +249,15 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
   // printOp.clock()` below since they are not CSEd.
   if (opIt != opEnd) {
     auto stopOp = dyn_cast<StopOp>(*opIt++);
-    if (!stopOp || opIt != opEnd || stopOp.clock() != printOp.clock() ||
-        stopOp.cond() != printOp.cond())
+    if (!stopOp || opIt != opEnd || stopOp.getClock() != printOp.getClock() ||
+        stopOp.getCond() != printOp.getCond())
       return success();
     stopOp.erase();
   }
 
   // Detect if we're dealing with a verification statement, and what flavor of
   // statement it is.
-  auto fmt = printOp.formatString();
+  auto fmt = printOp.getFormatString();
   VerifFlavor flavor;
   if (fmt.contains("[verif-library-assert]"))
     flavor = VerifFlavor::VerifLibAssert;
@@ -284,21 +284,21 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
   //     node N = eq(cond, UInt<1>(0))
   //     when N:
   //       printf(clock, enable, ...)
-  Value flippedCond = whenStmt.condition();
+  Value flippedCond = whenStmt.getCondition();
   if (auto node = flippedCond.getDefiningOp<NodeOp>())
-    flippedCond = node.input();
+    flippedCond = node.getInput();
   if (auto notOp = flippedCond.getDefiningOp<NotPrimOp>()) {
-    flippedCond = notOp.input();
+    flippedCond = notOp.getInput();
   } else if (auto eqOp = flippedCond.getDefiningOp<EQPrimOp>()) {
     auto isConst0 = [](Value v) {
       if (auto constOp = v.getDefiningOp<ConstantOp>())
-        return constOp.value().isZero();
+        return constOp.getValue().isZero();
       return false;
     };
-    if (isConst0(eqOp.lhs()))
-      flippedCond = eqOp.rhs();
-    else if (isConst0(eqOp.rhs()))
-      flippedCond = eqOp.lhs();
+    if (isConst0(eqOp.getLhs()))
+      flippedCond = eqOp.getRhs();
+    else if (isConst0(eqOp.getRhs()))
+      flippedCond = eqOp.getLhs();
     else
       flippedCond = {};
   } else {
@@ -316,9 +316,9 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
     for (const auto &user : flippedCond.getUsers()) {
       TypeSwitch<Operation *>(user).Case<AssertOp, AssumeOp, CoverOp>(
           [&](auto op) {
-            if (op.clock() == printOp.clock() &&
-                op.enable() == printOp.cond() &&
-                op.predicate() == flippedCond && !op.isConcurrent())
+            if (op.getClock() == printOp.getClock() &&
+                op.getEnable() == printOp.getCond() &&
+                op.getPredicate() == flippedCond && !op.getIsConcurrent())
               opsToErase.insert(op);
           });
     }
@@ -392,7 +392,7 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
     // practice the Scala impl of ExtractTestCode just discards that `%d` label
     // and replaces it with `notX`. Also prepare the condition to be checked
     // here.
-    Value predicate = whenStmt.condition();
+    Value predicate = whenStmt.getCondition();
     if (flavor != VerifFlavor::Cover)
       predicate = builder.create<NotPrimOp>(predicate);
     if (flavor == VerifFlavor::AssertNotX) {
@@ -426,13 +426,13 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
           << "printf-encoded assertion has format string arguments which may "
              "cause lint warnings";
     if (flavor == VerifFlavor::Assert || flavor == VerifFlavor::AssertNotX)
-      builder.create<AssertOp>(printOp.clock(), predicate, printOp.cond(),
+      builder.create<AssertOp>(printOp.getClock(), predicate, printOp.getCond(),
                                message, args, label, true);
     else if (flavor == VerifFlavor::Assume)
-      builder.create<AssumeOp>(printOp.clock(), predicate, printOp.cond(),
+      builder.create<AssumeOp>(printOp.getClock(), predicate, printOp.getCond(),
                                message, args, label, true);
     else // VerifFlavor::Cover
-      builder.create<CoverOp>(printOp.clock(), predicate, printOp.cond(),
+      builder.create<CoverOp>(printOp.getClock(), predicate, printOp.getCond(),
                               message, args, label, true);
     printOp.erase();
     break;
@@ -441,8 +441,8 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
     // Handle the case of builtin Chisel assertions.
   case VerifFlavor::ChiselAssert: {
     auto op = builder.create<AssertOp>(
-        printOp.clock(), builder.create<NotPrimOp>(whenStmt.condition()),
-        printOp.cond(), fmt, printOp.operands(), "chisel3_builtin", true);
+        printOp.getClock(), builder.create<NotPrimOp>(whenStmt.getCondition()),
+        printOp.getCond(), fmt, printOp.operands(), "chisel3_builtin", true);
     op->setAttr("format", StringAttr::get(context, "ifElseFatal"));
     printOp.erase();
     break;
@@ -507,7 +507,7 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
         }))
       return failure();
 
-    Value predicate = whenStmt.condition();
+    Value predicate = whenStmt.getCondition();
     predicate = builder.create<NotPrimOp>(
         predicate); // assertion triggers when predicate fails
     switch (predMod) {
@@ -586,11 +586,13 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
     // TODO: The "ifElseFatal" variant isn't actually a concurrent assertion,
     // but downstream logic assumes that isConcurrent is set.
     if (flavor == VerifFlavor::VerifLibAssert)
-      op = builder.create<AssertOp>(printOp.clock(), predicate, printOp.cond(),
-                                    message, printOp.operands(), label, true);
+      op = builder.create<AssertOp>(printOp.getClock(), predicate,
+                                    printOp.getCond(), message,
+                                    printOp.operands(), label, true);
     else // VerifFlavor::VerifLibAssume
-      op = builder.create<AssumeOp>(printOp.clock(), predicate, printOp.cond(),
-                                    message, printOp.operands(), label, true);
+      op = builder.create<AssumeOp>(printOp.getClock(), predicate,
+                                    printOp.getCond(), message,
+                                    printOp.operands(), label, true);
     printOp.erase();
 
     // Attach additional attributes extracted from the JSON object.

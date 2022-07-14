@@ -169,8 +169,8 @@ def WhenOp : FIRRTLOp<"when", [SingleBlock, NoTerminator, NoRegionArguments,
   let extraClassDeclaration = [{
 
     Block &getThenBlock() {
-      assert(!thenRegion().empty() && "Unexpected empty 'then' region.");
-      return thenRegion().front();
+      assert(!getThenRegion().empty() && "Unexpected empty 'then' region.");
+      return getThenRegion().front();
     }
 
     OpBuilder getThenBodyBuilder() {
@@ -179,14 +179,14 @@ def WhenOp : FIRRTLOp<"when", [SingleBlock, NoTerminator, NoRegionArguments,
     }
 
     bool hasElseRegion() {
-      return !elseRegion().empty();
+      return !getElseRegion().empty();
     }
 
     void createElseRegion();
 
     Block &getElseBlock() {
       assert(hasElseRegion() && "Unexpected empty 'else' region.");
-      return elseRegion().front();
+      return getElseRegion().front();
     }
 
     OpBuilder getElseBodyBuilder() {

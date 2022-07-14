@@ -78,7 +78,7 @@ public:
     // module. This should contain the NLAs that this InstanceOp participates
     // in.
     commonNLAs(inst->getParentOfType<FModuleOp>().getNameAttr(),
-               inst.moduleNameAttr().getAttr(), nlas);
+               inst.getModuleNameAttr().getAttr(), nlas);
     // Handle the case when there are more than one Instances for the same
     // target module. Getting the `commonNLA`, in that case is not enough,
     // remove the NLAs that donot have the InstanceOp as the innerSym.

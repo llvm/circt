@@ -88,9 +88,9 @@ struct ExtractInstancesPass
                                      ArrayRef<Attribute> newPath) {
     OpBuilder builder(pathOp);
     auto newPathOp = builder.cloneWithoutRegions(pathOp);
-    newPathOp.sym_nameAttr(
-        builder.getStringAttr(circuitNamespace.newName(newPathOp.sym_name())));
-    newPathOp.namepathAttr(builder.getArrayAttr(newPath));
+    newPathOp.setSymNameAttr(builder.getStringAttr(
+        circuitNamespace.newName(newPathOp.getSymName())));
+    newPathOp.setNamepathAttr(builder.getArrayAttr(newPath));
     return newPathOp;
   }
 
@@ -287,7 +287,7 @@ void ExtractInstancesPass::collectAnnos() {
     AnnotationSet::removeAnnotations(inst, [&](Annotation anno) {
       if (!isAnnoInteresting(anno))
         return false;
-      LLVM_DEBUG(llvm::dbgs() << "Annotated instance `" << inst.name()
+      LLVM_DEBUG(llvm::dbgs() << "Annotated instance `" << inst.getName()
                               << "`:\n  " << anno.getDict() << "\n");
       instAnnos.push_back(anno);
       return true;
@@ -300,7 +300,7 @@ void ExtractInstancesPass::collectAnnos() {
     // Ensure there are no conflicting annotations.
     if (instAnnos.size() > 1) {
       auto d = inst.emitError("multiple extraction annotations on instance `")
-               << inst.name() << "`";
+               << inst.getName() << "`";
       d.attachNote(inst.getLoc()) << "instance has the following annotations, "
                                      "but at most one is allowed:";
       for (auto anno : instAnnos)
@@ -337,7 +337,7 @@ void ExtractInstancesPass::collectAnnos() {
   if (!clkgateFileName.empty()) {
     auto clkgateDefNameAttr = StringAttr::get(&getContext(), "EICG_wrapper");
     for (auto module : circuit.getOps<FExtModuleOp>()) {
-      if (module.defnameAttr() != clkgateDefNameAttr)
+      if (module.getDefnameAttr() != clkgateDefNameAttr)
         continue;
       LLVM_DEBUG(llvm::dbgs()
                  << "Clock gate `" << module.moduleName() << "`\n");
@@ -357,7 +357,7 @@ void ExtractInstancesPass::collectAnnos() {
           LLVM_DEBUG(llvm::dbgs()
                      << "- Marking `"
                      << inst->getParentOfType<FModuleLike>().moduleName() << "."
-                     << inst.name() << "`\n");
+                     << inst.getName() << "`\n");
           extractionWorklist.push_back({inst, info});
         }
       }
@@ -386,7 +386,7 @@ void ExtractInstancesPass::collectAnnos() {
           LLVM_DEBUG(llvm::dbgs()
                      << "- Marking `"
                      << inst->getParentOfType<FModuleLike>().moduleName() << "."
-                     << inst.name() << "`\n");
+                     << inst.getName() << "`\n");
           extractionWorklist.push_back({inst, info});
         }
       }
@@ -397,7 +397,7 @@ void ExtractInstancesPass::collectAnnos() {
 /// Process an extraction annotation on an instance into a corresponding
 /// `ExtractionInfo` and a spot on the worklist for later moving things around.
 void ExtractInstancesPass::collectAnno(InstanceOp inst, Annotation anno) {
-  LLVM_DEBUG(llvm::dbgs() << "Processing instance `" << inst.name() << "` "
+  LLVM_DEBUG(llvm::dbgs() << "Processing instance `" << inst.getName() << "` "
                           << anno.getDict() << "\n");
 
   auto getStringOrError = [&](StringRef member) {
@@ -437,7 +437,7 @@ void ExtractInstancesPass::collectAnno(InstanceOp inst, Annotation anno) {
 /// position within the NLA's path, or the length of the path if the instances
 /// was not found.
 static unsigned findInstanceInNLA(InstanceOp inst, HierPathOp nla) {
-  unsigned nlaLen = nla.namepath().size();
+  unsigned nlaLen = nla.getNamepath().size();
   auto instName = getInnerSymName(inst);
   auto parentName = cast<FModuleOp>(inst->getParentOp()).moduleNameAttr();
   for (unsigned nlaIdx = 0; nlaIdx < nlaLen; ++nlaIdx) {
@@ -564,7 +564,7 @@ void ExtractInstancesPass::extractInstances() {
     SmallVector<HierPathOp> sortedInstanceNLAs(instanceNLAs.begin(),
                                                instanceNLAs.end());
     llvm::sort(sortedInstanceNLAs,
-               [](auto a, auto b) { return a.sym_name() < b.sym_name(); });
+               [](auto a, auto b) { return a.getSymName() < b.getSymName(); });
 
     // Move the original instance one level up such that it is right next to
     // the instances of the parent module, and wire the instance ports up to
@@ -593,7 +593,7 @@ void ExtractInstancesPass::extractInstances() {
         auto newName =
             getModuleNamespace(newParent).newName(instSym.getValue());
         if (newName != instSym.getValue())
-          newInst.inner_symAttr(
+          newInst.setInnerSymAttr(
               InnerSymAttr::get(StringAttr::get(&getContext(), newName)));
       }
 
@@ -640,8 +640,8 @@ void ExtractInstancesPass::extractInstances() {
 
         // Find the position of the instance in the NLA path. This is going to
         // be the position at which we have to modify the NLA.
-        SmallVector<Attribute> nlaPath(nla.namepath().begin(),
-                                       nla.namepath().end());
+        SmallVector<Attribute> nlaPath(nla.getNamepath().begin(),
+                                       nla.getNamepath().end());
         unsigned nlaIdx = findInstanceInNLA(inst, nla);
 
         // Handle the case where the instance no longer shows up in the NLA's
@@ -697,7 +697,7 @@ void ExtractInstancesPass::extractInstances() {
             // instantiated once, and we therefore are not creating multiple
             // instances through the extraction.
             nlaTable.erase(nla);
-            nla.namepathAttr(builder.getArrayAttr(nlaPath));
+            nla.setNamepathAttr(builder.getArrayAttr(nlaPath));
             for (auto anno : instNonlocalAnnos.lookup(nla))
               newInstNonlocalAnnos.push_back(anno);
             nlaTable.addNLA(nla);
@@ -708,7 +708,7 @@ void ExtractInstancesPass::extractInstances() {
             auto newNla = cloneWithNewNameAndPath(nla, nlaPath);
             for (auto anno : instNonlocalAnnos.lookup(nla)) {
               anno.setMember("circt.nonlocal",
-                             FlatSymbolRefAttr::get(newNla.sym_nameAttr()));
+                             FlatSymbolRefAttr::get(newNla.getSymNameAttr()));
               newInstNonlocalAnnos.push_back(anno);
             }
 
@@ -776,11 +776,11 @@ void ExtractInstancesPass::extractInstances() {
           LLVM_DEBUG(llvm::dbgs() << "    - Created " << newNla << "\n");
           for (auto anno : instNonlocalAnnos.lookup(nla)) {
             anno.setMember("circt.nonlocal",
-                           FlatSymbolRefAttr::get(newNla.sym_nameAttr()));
+                           FlatSymbolRefAttr::get(newNla.getSymNameAttr()));
             newInstNonlocalAnnos.push_back(anno);
           }
         } else {
-          nla.namepathAttr(builder.getArrayAttr(nlaPath));
+          nla.setNamepathAttr(builder.getArrayAttr(nlaPath));
           LLVM_DEBUG(llvm::dbgs() << "    - Modified to " << nla << "\n");
           for (auto anno : instNonlocalAnnos.lookup(nla))
             newInstNonlocalAnnos.push_back(anno);
@@ -896,8 +896,8 @@ void ExtractInstancesPass::groupInstances() {
 
         // Find the position of the instance in the NLA path. This is going to
         // be the position at which we have to modify the NLA.
-        SmallVector<Attribute> nlaPath(nla.namepath().begin(),
-                                       nla.namepath().end());
+        SmallVector<Attribute> nlaPath(nla.getNamepath().begin(),
+                                       nla.getNamepath().end());
         unsigned nlaIdx = findInstanceInNLA(inst, nla);
         assert(nlaIdx < nlaPath.size() && "instance not found in its own NLA");
         LLVM_DEBUG(llvm::dbgs() << "    - Position " << nlaIdx << "\n");
@@ -918,7 +918,7 @@ void ExtractInstancesPass::groupInstances() {
         // CAVEAT: This is likely to conflict with additional users of `nla`
         // that have nothing to do with this instance. Might need some NLATable
         // machinery at some point to allow for these things to be updated.
-        nla.namepathAttr(builder.getArrayAttr(nlaPath));
+        nla.setNamepathAttr(builder.getArrayAttr(nlaPath));
         LLVM_DEBUG(llvm::dbgs() << "    - Modified to " << nla << "\n");
         // Add the NLA to the wrapper module.
         nlaTable.addNLAtoModule(nla, wrapperNameAttr);
@@ -932,7 +932,7 @@ void ExtractInstancesPass::groupInstances() {
     // Instantiate the wrapper module in the parent and replace uses of the
     // extracted instances' ports with the corresponding wrapper module ports.
     // This will essentially disconnect the extracted instances.
-    builder.setInsertionPointToStart(parent.getBody());
+    builder.setInsertionPointToStart(parent.getBodyBlock());
     auto wrapperInst = builder.create<InstanceOp>(
         wrapper.getLoc(), wrapper, wrapperName, NameKindEnum::DroppableName,
         ArrayRef<Attribute>{},
@@ -946,7 +946,7 @@ void ExtractInstancesPass::groupInstances() {
     // Move all instances into the wrapper module and wire them up to the
     // wrapper ports.
     portIdx = 0;
-    builder.setInsertionPointToStart(wrapper.getBody());
+    builder.setInsertionPointToStart(wrapper.getBodyBlock());
     for (auto inst : insts) {
       inst->remove();
       builder.insert(inst);
@@ -967,7 +967,7 @@ void ExtractInstancesPass::groupInstances() {
 /// instance per line in the form `<prefix> -> <original-path>`.
 void ExtractInstancesPass::createTraceFiles() {
   LLVM_DEBUG(llvm::dbgs() << "\nGenerating trace files\n");
-  auto builder = OpBuilder::atBlockEnd(getOperation().getBody());
+  auto builder = OpBuilder::atBlockEnd(getOperation().getBodyBlock());
 
   // Group the extracted instances by their trace file name.
   SmallDenseMap<StringRef, SmallVector<InstanceOp>> instsByTraceFile;
@@ -1002,18 +1002,18 @@ void ExtractInstancesPass::createTraceFiles() {
     for (auto inst : insts) {
       StringRef prefix(instPrefices[inst]);
       if (prefix.empty()) {
-        LLVM_DEBUG(llvm::dbgs() << "  - Skipping `" << inst.name()
+        LLVM_DEBUG(llvm::dbgs() << "  - Skipping `" << inst.getName()
                                 << "` since it has no extraction prefix\n");
         continue;
       }
       ArrayRef<InnerRefAttr> path(extractionPaths[inst]);
       if (path.empty()) {
-        LLVM_DEBUG(llvm::dbgs() << "  - Skipping `" << inst.name()
+        LLVM_DEBUG(llvm::dbgs() << "  - Skipping `" << inst.getName()
                                 << "` since it has not been moved\n");
         continue;
       }
       LLVM_DEBUG(llvm::dbgs()
-                 << "  - " << prefix << ": " << inst.name() << "\n");
+                 << "  - " << prefix << ": " << inst.getName() << "\n");
       os << prefix << " -> ";
 
       // HACK: To match the Scala implementation, we strip all non-DUT modules

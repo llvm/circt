@@ -139,9 +139,9 @@ IntegerAttr circt::firrtl::getIntZerosAttr(Type type) {
 Value circt::firrtl::getDriverFromConnect(Value val) {
   for (auto *user : val.getUsers()) {
     if (auto connect = dyn_cast<FConnectLike>(user)) {
-      if (connect.dest() != val)
+      if (connect.getDest() != val)
         continue;
-      return connect.src();
+      return connect.getSrc();
     }
   }
   return nullptr;
@@ -160,9 +160,9 @@ Value circt::firrtl::getModuleScopedDriver(Value val, bool lookThroughWires,
   auto updateVal = [&](Value thisVal) {
     for (auto *user : thisVal.getUsers()) {
       if (auto connect = dyn_cast<FConnectLike>(user)) {
-        if (connect.dest() != val)
+        if (connect.getDest() != val)
           continue;
-        val = connect.src();
+        val = connect.getSrc();
         return;
       }
     }
@@ -202,7 +202,7 @@ Value circt::firrtl::getModuleScopedDriver(Value val, bool lookThroughWires,
 
     // If told to look through nodes, continue from the node input.
     if (lookThroughNodes && isa<NodeOp>(op)) {
-      val = cast<NodeOp>(op).input();
+      val = cast<NodeOp>(op).getInput();
       continue;
     }
 
@@ -247,15 +247,15 @@ FieldRef circt::firrtl::getFieldRefFromValue(Value value) {
       break;
 
     if (auto subfieldOp = dyn_cast<SubfieldOp>(op)) {
-      value = subfieldOp.input();
+      value = subfieldOp.getInput();
       auto bundleType = value.getType().cast<BundleType>();
       // Rebase the current index on the parent field's index.
-      id += bundleType.getFieldID(subfieldOp.fieldIndex());
+      id += bundleType.getFieldID(subfieldOp.getFieldIndex());
     } else if (auto subindexOp = dyn_cast<SubindexOp>(op)) {
-      value = subindexOp.input();
+      value = subindexOp.getInput();
       auto vecType = value.getType().cast<FVectorType>();
       // Rebase the current index on the parent field's index.
-      id += vecType.getFieldID(subindexOp.index());
+      id += vecType.getFieldID(subindexOp.getIndex());
     } else {
       break;
     }
@@ -276,12 +276,13 @@ static void getDeclName(Value value, SmallString<64> &string) {
   auto *op = value.getDefiningOp();
   TypeSwitch<Operation *>(op)
       .Case<InstanceOp, MemOp>([&](auto op) {
-        string += op.name();
+        string += op.getName();
         string += ".";
         string +=
             op.getPortName(value.cast<OpResult>().getResultNumber()).getValue();
       })
-      .Case<WireOp, RegOp, RegResetOp>([&](auto op) { string += op.name(); });
+      .Case<WireOp, RegOp, RegResetOp>(
+          [&](auto op) { string += op.getName(); });
 }
 
 std::string circt::firrtl::getFieldName(const FieldRef &fieldRef) {

@@ -24,7 +24,7 @@ using llvm::StringRef;
 // a return value.
 static LogicalResult updateExpandedPort(StringRef field, AnnoTarget &ref) {
   if (auto mem = dyn_cast<MemOp>(ref.getOp()))
-    for (size_t p = 0, pe = mem.portNames().size(); p < pe; ++p)
+    for (size_t p = 0, pe = mem.getPortNames().size(); p < pe; ++p)
       if (mem.getPortNameStr(p) == field) {
         ref = PortAnnoTarget(mem, p);
         return success();
@@ -160,7 +160,7 @@ Optional<AnnoPathValue> firrtl::resolveEntities(TokenAnnoTarget path,
                                                 SymbolTable &symTbl,
                                                 CircuitTargetCache &cache) {
   // Validate circuit name.
-  if (!path.circuit.empty() && circuit.name() != path.circuit) {
+  if (!path.circuit.empty() && circuit.getName() != path.circuit) {
     mlir::emitError(circuit.getLoc())
         << "circuit name doesn't match annotation '" << path.circuit << '\'';
     return {};
@@ -329,7 +329,7 @@ void AnnoTargetCache::gatherTargets(FModuleLike mod) {
         .Case<InstanceOp, MemOp, NodeOp, RegOp, RegResetOp, WireOp, CombMemOp,
               SeqMemOp, MemoryPortOp>([&](auto op) {
           // To be safe, check attribute and non-empty name before adding.
-          if (auto name = op.nameAttr(); name && !name.getValue().empty())
+          if (auto name = op.getNameAttr(); name && !name.getValue().empty())
             targets.insert({name, OpAnnoTarget(op)});
         });
   });

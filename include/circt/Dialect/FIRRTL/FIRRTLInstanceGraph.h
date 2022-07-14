@@ -56,7 +56,7 @@ template <typename T>
 inline static T &formatInstancePath(T &into, const InstancePath &path) {
   into << "$root";
   for (auto inst : path)
-    into << "/" << inst.name() << ":" << inst.moduleName();
+    into << "/" << inst.getName() << ":" << inst.getModuleName();
   return into;
 }
 
