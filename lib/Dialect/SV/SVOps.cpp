@@ -884,8 +884,8 @@ void CaseOp::print(OpAsmPrinter &p) {
 }
 
 LogicalResult CaseOp::verify() {
-  if (!(hw::isHWIntegerType(cond().getType()) ||
-        hw::isHWEnumType(cond().getType())))
+  if (!(hw::isHWIntegerType(getCond().getType()) ||
+        hw::isHWEnumType(getCond().getType())))
     return emitError("condition must have either integer or enum type");
 
   // Ensure that the number of regions and number of case values match.

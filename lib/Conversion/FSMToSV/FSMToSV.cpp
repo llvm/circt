@@ -59,31 +59,23 @@ static ClkRstIdxs getMachinePortInfo(SmallVectorImpl<hw::PortInfo> &ports,
 namespace {
 
 class StateEncoding {
-  // An interface for handling state encoding. The interface is designed to
+  // An class for handling state encoding. The class is designed to
   // abstract away how states are selected in case patterns, referred to as
   // values, and used as selection signals for muxes.
 
 public:
-  StateEncoding(OpBuilder &b, MachineOp machine, hw::HWModuleOp hwModule)
-      : b(b), machine(machine), hwModule(hwModule) {}
-  virtual ~StateEncoding() {}
+  StateEncoding(OpBuilder &b, MachineOp machine, hw::HWModuleOp hwModule);
 
-  Value encode(StateOp state) {
-    auto it = stateToValue.find(state);
-    assert(it != stateToValue.end() && "state not found");
-    return it->second;
-  }
-  StateOp decode(Value value) {
-    auto it = valueToState.find(value);
-    assert(it != valueToState.end() && "encoded state not found");
-    return it->second;
-  }
+  // Get the encoded value for a state.
+  Value encode(StateOp state);
+  // Get the state corresponding to an encoded value.
+  StateOp decode(Value value);
 
   // Returns the type which encodes the state values.
-  virtual Type getStateType() = 0;
+  Type getStateType() { return stateType; }
 
   // Returns a case pattern which matches the provided state.
-  virtual std::unique_ptr<sv::CasePattern> getCasePattern(StateOp state) = 0;
+  std::unique_ptr<sv::CasePattern> getCasePattern(StateOp state);
 
 protected:
   // Creates a constant value in the module for the given encoded state
@@ -92,25 +84,7 @@ protected:
   // The constant can optionally be assigned behind a sv wire - doing so at this
   // point ensures that constants don't end up behind "_GEN#" wires in the
   // module.
-  void setEncoding(StateOp state, Value v, bool wire = false) {
-    assert(stateToValue.find(state) == stateToValue.end() &&
-           "state already encoded");
-
-    Value encodedValue;
-    if (wire) {
-      auto loc = machine.getLoc();
-      auto stateType = getStateType();
-      auto stateEncodingWire = b.create<sv::WireOp>(
-          loc, stateType, b.getStringAttr("to_" + state.getName()),
-          /*inner_sym=*/state.getNameAttr());
-      b.create<sv::AssignOp>(loc, stateEncodingWire, v);
-      encodedValue = b.create<sv::ReadInOutOp>(loc, stateEncodingWire);
-    } else
-      encodedValue = v;
-    stateToValue[state] = encodedValue;
-    valueToState[encodedValue] = state;
-    valueToSrcValue[encodedValue] = v;
-  }
+  void setEncoding(StateOp state, Value v, bool wire = false);
 
   // A mapping between a StateOp and its corresponding encoded value.
   SmallDenseMap<StateOp, Value> stateToValue;
@@ -121,68 +95,96 @@ protected:
   // A mapping between an encoded value and the source value in the IR.
   SmallDenseMap<Value, Value> valueToSrcValue;
 
+  // The enum type for the states.
+  Type stateType;
+
   OpBuilder &b;
   MachineOp machine;
   hw::HWModuleOp hwModule;
 };
 
-class EnumStateEncoding : public StateEncoding {
-public:
-  EnumStateEncoding(OpBuilder &b, MachineOp machine, hw::HWModuleOp hwModule)
-      : StateEncoding(b, machine, hwModule) {
+StateEncoding::StateEncoding(OpBuilder &b, MachineOp machine,
+                             hw::HWModuleOp hwModule)
+    : b(b), machine(machine), hwModule(hwModule) {
+  Location loc = machine.getLoc();
+  llvm::SmallVector<Attribute> stateNames;
 
-    Location loc = machine.getLoc();
-    llvm::SmallVector<Attribute> stateNames;
+  for (auto state : machine.getBody().getOps<StateOp>())
+    stateNames.push_back(b.getStringAttr(state.getName()));
 
-    for (auto state : machine.getBody().getOps<StateOp>())
-      stateNames.push_back(b.getStringAttr(state.getName()));
+  // Create an enum typedef for the states.
+  Type rawEnumType =
+      hw::EnumType::get(b.getContext(), b.getArrayAttr(stateNames));
 
-    // Create an enum typedef for the states.
-    Type rawEnumType =
-        hw::EnumType::get(b.getContext(), b.getArrayAttr(stateNames));
+  OpBuilder::InsertionGuard guard(b);
+  b.setInsertionPoint(hwModule);
+  auto typeScope = b.create<hw::TypeScopeOp>(
+      loc, b.getStringAttr(hwModule.getName() + "_enum_typedecls"));
+  typeScope.getBodyRegion().push_back(new Block());
 
-    OpBuilder::InsertionGuard guard(b);
-    b.setInsertionPoint(hwModule);
-    auto typeScope = b.create<hw::TypeScopeOp>(
-        loc, b.getStringAttr(hwModule.getName() + "_enum_typedecls"));
-    typeScope.getBodyRegion().push_back(new Block());
+  b.setInsertionPointToStart(&typeScope.getBodyRegion().front());
+  auto typedeclEnumType = b.create<hw::TypedeclOp>(
+      loc, b.getStringAttr(hwModule.getName() + "_state_t"),
+      TypeAttr::get(rawEnumType), nullptr);
 
-    b.setInsertionPointToStart(typeScope.getBody());
-    auto typedeclEnumType = b.create<hw::TypedeclOp>(
-        loc, b.getStringAttr(hwModule.getName() + "_state_t"),
-        TypeAttr::get(rawEnumType), nullptr);
+  stateType = hw::TypeAliasType::get(
+      SymbolRefAttr::get(typeScope.sym_nameAttr(),
+                         {FlatSymbolRefAttr::get(typedeclEnumType)}),
+      rawEnumType);
 
-    stateType = hw::TypeAliasType::get(
-        SymbolRefAttr::get(typeScope.sym_nameAttr(),
-                           {FlatSymbolRefAttr::get(typedeclEnumType)}),
-        rawEnumType);
-
-    // And create enum values for the states
-    b.setInsertionPointToStart(&hwModule.getBody().front());
-    for (auto state : machine.getBody().getOps<StateOp>()) {
-      auto fieldAttr = hw::EnumFieldAttr::get(
-          loc, b.getStringAttr(state.getName()), stateType);
-      auto enumConstantOp = b.create<hw::EnumConstantOp>(
-          loc, fieldAttr.getType().getValue(), fieldAttr);
-      setEncoding(state, enumConstantOp,
-                  /*wire=*/true);
-    }
+  // And create enum values for the states
+  b.setInsertionPointToStart(&hwModule.getBody().front());
+  for (auto state : machine.getBody().getOps<StateOp>()) {
+    auto fieldAttr = hw::EnumFieldAttr::get(
+        loc, b.getStringAttr(state.getName()), stateType);
+    auto enumConstantOp = b.create<hw::EnumConstantOp>(
+        loc, fieldAttr.getType().getValue(), fieldAttr);
+    setEncoding(state, enumConstantOp,
+                /*wire=*/true);
   }
+}
 
-  std::unique_ptr<sv::CasePattern> getCasePattern(StateOp state) override {
-    // Get the field attribute for the state - fetch it through the encoding.
-    auto fieldAttr =
-        cast<hw::EnumConstantOp>(valueToSrcValue[encode(state)].getDefiningOp())
-            .fieldAttr();
-    return std::make_unique<sv::CaseEnumPattern>(fieldAttr);
-  }
+// Get the encoded value for a state.
+Value StateEncoding::encode(StateOp state) {
+  auto it = stateToValue.find(state);
+  assert(it != stateToValue.end() && "state not found");
+  return it->second;
+}
+// Get the state corresponding to an encoded value.
+StateOp StateEncoding::decode(Value value) {
+  auto it = valueToState.find(value);
+  assert(it != valueToState.end() && "encoded state not found");
+  return it->second;
+}
 
-  Type getStateType() override { return stateType; }
+// Returns a case pattern which matches the provided state.
+std::unique_ptr<sv::CasePattern> StateEncoding::getCasePattern(StateOp state) {
+  // Get the field attribute for the state - fetch it through the encoding.
+  auto fieldAttr =
+      cast<hw::EnumConstantOp>(valueToSrcValue[encode(state)].getDefiningOp())
+          .fieldAttr();
+  return std::make_unique<sv::CaseEnumPattern>(fieldAttr);
+}
 
-private:
-  // The enum type for the states.
-  Type stateType;
-};
+void StateEncoding::setEncoding(StateOp state, Value v, bool wire) {
+  assert(stateToValue.find(state) == stateToValue.end() &&
+         "state already encoded");
+
+  Value encodedValue;
+  if (wire) {
+    auto loc = machine.getLoc();
+    auto stateType = getStateType();
+    auto stateEncodingWire = b.create<sv::WireOp>(
+        loc, stateType, b.getStringAttr("to_" + state.getName()),
+        /*inner_sym=*/state.getNameAttr());
+    b.create<sv::AssignOp>(loc, stateEncodingWire, v);
+    encodedValue = b.create<sv::ReadInOutOp>(loc, stateEncodingWire);
+  } else
+    encodedValue = v;
+  stateToValue[state] = encodedValue;
+  valueToState[encodedValue] = state;
+  valueToSrcValue[encodedValue] = v;
+}
 
 class MachineOpConverter {
 public:
@@ -364,15 +366,14 @@ LogicalResult MachineOpConverter::dispatch() {
   auto reset = hwModuleOp.front().getArgument(clkRstIdxs.resetIdx);
 
   // 2) Build state register.
-  encoding = std::make_unique<EnumStateEncoding>(b, machineOp, hwModuleOp);
+  encoding = std::make_unique<StateEncoding>(b, machineOp, hwModuleOp);
   auto stateType = encoding->getStateType();
 
   BackedgeBuilder bb(b, loc);
   auto nextStateBackedge = bb.get(stateType);
   stateReg = b.create<seq::CompRegOp>(
       loc, stateType, nextStateBackedge, clock, "state_reg", reset,
-      /*reset value=*/encoding->encode(machineOp.getInitialStateOp()), nullptr,
-      nullptr);
+      /*reset value=*/encoding->encode(machineOp.getInitialStateOp()), nullptr);
 
   // Move any operations at the machine-level scope, excluding state ops, which
   // are handled separately.
