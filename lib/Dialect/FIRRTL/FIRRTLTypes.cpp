@@ -350,7 +350,10 @@ RecursiveTypeProperties FIRRTLType::getRecursiveTypeProperties() {
       .Case<FVectorType>([](FVectorType vectorType) {
         return vectorType.getRecursiveTypeProperties();
       })
-      // TODO: RefType (maybe in above cases)
+      .Case<RefType>([](auto type) {
+        // Forward properties of underlying type.
+        return type.getType().getRecursiveTypeProperties();
+      })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
         return RecursiveTypeProperties{};
