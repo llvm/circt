@@ -91,19 +91,6 @@ public:
   void lower();
 
 private:
-  /// Cache for constants.
-  DenseMap<APInt, Value> constants;
-
-  Value getConstant(const APInt &v) {
-    auto it = constants.try_emplace(v, Value{});
-    if (it.second) {
-      auto builder = ImplicitLocOpBuilder::atBlockBegin(module.getLoc(),
-                                                        module.getBodyBlock());
-      it.first->second = builder.create<hw::ConstantOp>(v);
-    }
-    return it.first->second;
-  }
-
   using AsyncResetSignal = std::pair<Value, Value>;
 
   std::pair<sv::RegOp, llvm::Optional<AsyncResetSignal>> lower(FirRegOp reg);

@@ -446,5 +446,3 @@ hw.module @issue1594(%clock: i1, %reset: i1, %a: i1) -> (b: i1) {
   // CHECK: hw.output
   hw.output %r : i1
 }
-
-
