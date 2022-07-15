@@ -2366,9 +2366,20 @@ firrtl.module @Foo3319(in %i: !firrtl.uint<1>, out %o : !firrtl.uint<1>) {
   %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
   %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
   %0 = firrtl.and %c0_ui1, %i : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-  %n = firrtl.node  %0  : !firrtl.uint<1>
+  // CHECK: %n = firrtl.node interesting_name %c0_ui1
+  %n = firrtl.node interesting_name %0  : !firrtl.uint<1>
+  // CHECK: firrtl.strictconnect %o, %n
   firrtl.strictconnect %o, %n : !firrtl.uint<1>
-  // CHECK: firrtl.strictconnect %o, %c0_ui1
+}
+
+// CHECK-LABEL: @WireByPass
+firrtl.module @WireByPass(in %i: !firrtl.uint<1>, out %o : !firrtl.uint<1>) {
+  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+  %n = firrtl.wire interesting_name : !firrtl.uint<1>
+  // CHECK: firrtl.strictconnect %n, %c0_ui1
+  firrtl.strictconnect %n, %c0_ui1 : !firrtl.uint<1>
+  // CHECK: firrtl.strictconnect %o, %n
+  firrtl.strictconnect %o, %n : !firrtl.uint<1>
 }
 
 // Check that canonicalizeSingleSetConnect doesn't remove a wire with an

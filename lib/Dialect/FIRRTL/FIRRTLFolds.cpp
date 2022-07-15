@@ -1433,7 +1433,8 @@ static LogicalResult canonicalizeSingleSetConnect(StrictConnectOp op,
   // Only support wire and reg for now.
   if (!isa<WireOp>(connectedDecl) && !isa<RegOp>(connectedDecl))
     return failure();
-  if (hasDontTouch(connectedDecl) || !AnnotationSet(connectedDecl).empty())
+  if (hasDontTouch(connectedDecl) || !AnnotationSet(connectedDecl).empty() ||
+      !hasDroppableName(connectedDecl))
     return failure();
 
   // Only forward if the types exactly match and there is one connect.
@@ -1485,21 +1486,12 @@ static LogicalResult canonicalizeSingleSetConnect(StrictConnectOp op,
     }
   }
 
-  if (hasDroppableName(connectedDecl)) {
-    // Replace all things *using* the decl with the constant/port, and
-    // remove the declaration.
-    replaceOpAndCopyName(rewriter, connectedDecl, replacement);
+  // Replace all things *using* the decl with the constant/port, and
+  // remove the declaration.
+  replaceOpAndCopyName(rewriter, connectedDecl, replacement);
 
-    // Remove the connect
-    rewriter.eraseOp(op);
-  } else {
-    // bypass the decl, but keep it around
-    rewriter.startRootUpdate(connectedDecl);
-    connectedDecl->replaceAllUsesWith(ArrayRef{replacement});
-    op->setOperand(0, connectedDecl->getResult(0));
-    rewriter.finalizeRootUpdate(connectedDecl);
-  }
-
+  // Remove the connect
+  rewriter.eraseOp(op);
   return success();
 }
 
@@ -1652,25 +1644,9 @@ struct FoldNodeName : public mlir::RewritePattern {
   }
 };
 
-// Bypass nodes.
-struct NodeBypass : public mlir::RewritePattern {
-  NodeBypass(MLIRContext *context)
-      : RewritePattern(NodeOp::getOperationName(), 0, context) {}
-  LogicalResult matchAndRewrite(Operation *op,
-                                PatternRewriter &rewriter) const override {
-    auto node = cast<NodeOp>(op);
-    if (node.inner_sym() || !node.annotations().empty() || node.use_empty())
-      return failure();
-    rewriter.startRootUpdate(node);
-    node.replaceAllUsesWith(node.input());
-    rewriter.finalizeRootUpdate(node);
-    return success();
-  }
-};
-
 void NodeOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                          MLIRContext *context) {
-  results.insert<NodeBypass, FoldNodeName>(context);
+  results.insert<FoldNodeName>(context);
 }
 
 // A register with constant reset and all connection to either itself or the
