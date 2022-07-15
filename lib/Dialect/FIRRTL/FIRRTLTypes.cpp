@@ -325,7 +325,7 @@ bool FIRRTLType::isGround() {
   return TypeSwitch<FIRRTLType, bool>(*this)
       .Case<ClockType, ResetType, AsyncResetType, SIntType, UIntType,
             AnalogType>([](Type) { return true; })
-      .Case<BundleType, FVectorType>([](Type) { return false; })
+      .Case<BundleType, FVectorType, RefType /* XXX: revisit! */>([](Type) { return false; })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
         return false;
