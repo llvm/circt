@@ -650,7 +650,7 @@ def BitCastOp: FIRRTLOp<"bitcast", [NoSideEffect]> {
 // TODO: Finish me, just enough to poke at RefType
 // TODO: result = ref.getType()
 // InferTypeOpInterface
-def XMRGet : FIRRTLOp<"xmr.get", [
+def XMRGetOp : FIRRTLOp<"xmr.get", [
   TypesMatchWith<"result should be reference base type",
     "ref", "result", "$_self.cast<RefType>().getType()"> ]> {
   let summary = "FIRRTL XMR Get";
@@ -664,7 +664,7 @@ def XMRGet : FIRRTLOp<"xmr.get", [
   let assemblyFormat = "$ref attr-dict `:` qualified(type($ref))";
 }
 
-def XMREnd : FIRRTLOp<"xmr.end", [
+def XMREndOp : FIRRTLOp<"xmr.end", [
   TypesMatchWith<"result should be reference base type",
     "ref", "result", "$_self.cast<RefType>().getType()"> ]> {
   let summary = "FIRRTL XMR End";
