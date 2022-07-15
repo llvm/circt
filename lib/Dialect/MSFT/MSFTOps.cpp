@@ -316,6 +316,15 @@ SmallVector<unsigned> MSFTModuleOp::removePorts(llvm::BitVector inputs,
   return newToOldResultMap;
 }
 
+void MSFTModuleOp::modifyPorts(
+    llvm::ArrayRef<std::pair<unsigned int, circt::hw::PortInfo>> insertInputs,
+    llvm::ArrayRef<std::pair<unsigned int, circt::hw::PortInfo>> insertOutputs,
+    llvm::ArrayRef<unsigned int> eraseInputs,
+    llvm::ArrayRef<unsigned int> eraseOutputs) {
+  hw::modifyModulePorts(*this, insertInputs, insertOutputs, eraseInputs,
+                        eraseOutputs);
+}
+
 // Copied nearly exactly from hwops.cpp.
 // TODO: Unify code once a `ModuleLike` op interface exists.
 static void buildModule(OpBuilder &builder, OperationState &result,

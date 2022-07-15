@@ -72,7 +72,8 @@ def MSFTModuleOp : MSFTOp<"module",
        HasParent<"mlir::ModuleOp">,
        SingleBlockImplicitTerminator<"OutputOp">,
        OpAsmOpInterface,
-       DeclareOpInterfaceMethods<HWModuleLike>]>{
+       DeclareOpInterfaceMethods<HWModuleLike>,
+       DeclareOpInterfaceMethods<HWMutableModuleLike>]>{
   let summary = "MSFT HW Module";
   let description = [{
     A lot like `hw.module`, but with a few differences:
@@ -105,6 +106,12 @@ def MSFTModuleOp : MSFTOp<"module",
 
     // Decode information about the input and output ports on this module.
     ::circt::hw::ModulePortInfo getPorts();
+
+    // Insert and remove ports.
+    void modifyPorts(
+      ArrayRef<std::pair<unsigned, circt::hw::PortInfo>> insertInputs,
+      ArrayRef<std::pair<unsigned, circt::hw::PortInfo>> insertOutputs,
+      ArrayRef<unsigned> eraseInputs, ArrayRef<unsigned> eraseOutputs);
 
     // Adds input and output ports. Returns a list of new block arguments for
     // the new inputs.
