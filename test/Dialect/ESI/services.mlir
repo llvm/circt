@@ -90,3 +90,25 @@ hw.module @Producer(%clk: i1) -> () {
   %dataIn, %rdy = esi.wrap.vr %data, %valid : i8
   esi.service.req.to_server %dataIn -> <@HostComms::@Send> (["producedMsgChan"]) : !esi.channel<i8>
 }
+
+// CONN-LABEL: msft.module @MsTop {} (%clk: i1) -> (chksum: i8)
+// CONN:         [[r1:%.+]]:2 = esi.service.impl_req @HostComms impl as "topComms"(%clk, %m1.loopback_fromhw) : (i1, !esi.channel<i8>) -> (i8, !esi.channel<i8>) {
+// CONN:         ^bb0(%arg0: !esi.channel<i8>):
+// CONN:           [[r2:%.+]] = esi.service.req.to_client <@HostComms::@Recv>(["m1", "loopback_tohw"]) : !esi.channel<i8>
+// CONN:           esi.service.req.to_server %arg0 -> <@HostComms::@Send>(["m1", "loopback_fromhw"]) : !esi.channel<i8>
+// CONN:         }
+// CONN:         %m1.loopback_fromhw = msft.instance @m1 @MsLoopback(%clk, [[r1]]#1) : (i1, !esi.channel<i8>) -> !esi.channel<i8>
+// CONN:         msft.output [[r1]]#0 : i8
+msft.module @MsTop {} (%clk: i1) -> (chksum: i8) {
+  %c = esi.service.instance @HostComms impl as  "topComms" (%clk) : (i1) -> (i8)
+  msft.instance @m1 @MsLoopback (%clk) : (i1) -> ()
+  msft.output %c : i8
+}
+
+// CONN-LABEL: msft.module @MsLoopback {} (%clk: i1, %loopback_tohw: !esi.channel<i8>) -> (loopback_fromhw: !esi.channel<i8>)
+// CONN:         msft.output %loopback_tohw : !esi.channel<i8>
+msft.module @MsLoopback {} (%clk: i1) -> () {
+  %dataIn = esi.service.req.to_client <@HostComms::@Recv> (["loopback_tohw"]) : !esi.channel<i8>
+  esi.service.req.to_server %dataIn -> <@HostComms::@Send> (["loopback_fromhw"]) : !esi.channel<i8>
+  msft.output
+}
