@@ -140,6 +140,9 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
         return swap();
       })
       .Case<MemOp>([&](auto op) { return swap(); })
+      .Case<XMRGetOp,XMREndOp>([&](auto op) {
+          return foldFlow(op.ref(), accumulatedFlow);
+      })
       // Anything else acts like a universal source.
       .Default([&](auto) { return accumulatedFlow; });
 }

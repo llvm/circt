@@ -31,8 +31,7 @@ firrtl.circuit "DUT" {
     %view_in, %view_out = firrtl.instance MyView_companion @MyView_companion(in ref_in1: !firrtl.ref<uint<1>>, out ref_out1: !firrtl.ref<uint<1>>)
 
     %view_in_end = firrtl.xmr.end %view_in : !firrtl.ref<uint<1>>
-    // TODO: error: connect has invalid flow: the destination expression has source flow, expected sink or duplex flow
-    // firrtl.strictconnect %view_in_end, %w : !firrtl.uint<1>
+    firrtl.strictconnect %view_in_end, %w : !firrtl.uint<1>
     %iface = sv.interface.instance sym @__MyView_MyInterface__  : !sv.interface<@MyInterface>
     // Sink of XMR
     %view_out_end = firrtl.xmr.end %view_out : !firrtl.ref<uint<1>>
@@ -53,8 +52,7 @@ firrtl.circuit "DUT" {
   firrtl.module @MyView_mapping(in %ref_in1: !firrtl.ref<uint<1>>, out %ref_out1: !firrtl.ref<uint<1>>) {
     %0 = firrtl.xmr.get %ref_in1 : !firrtl.ref<uint<1>>
     %1 = firrtl.xmr.get %ref_out1 : !firrtl.ref<uint<1>>
-    // TODO: error: connect has invalid flow: the destination expression has source flow, expected sink or duplex flow
-    // firrtl.strictconnect %1, %0 : !firrtl.uint<1>
+    firrtl.strictconnect %1, %0 : !firrtl.uint<1>
   }
   sv.interface @MyInterface {
     sv.verbatim "// a wire called 'bool'" {symbols = []}
@@ -77,7 +75,6 @@ firrtl.circuit "Foo" {
 
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     %0 = firrtl.xmr.get %bar_a : !firrtl.ref<uint<1>>
-    // TODO: error: connect has invalid flow: the destination expression has source flow, expected sink or duplex flow
-    // firrtl.strictconnect %0, %zero : !firrtl.uint<1>
+    firrtl.strictconnect %0, %zero : !firrtl.uint<1>
   }
 }
