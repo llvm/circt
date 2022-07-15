@@ -321,11 +321,11 @@ unsigned RecursiveTypeProperties::toFlags() const {
 
 /// Return true if this is a 'ground' type, aka a non-aggregate type.
 bool FIRRTLType::isGround() {
-  // TODO: RefType
   return TypeSwitch<FIRRTLType, bool>(*this)
       .Case<ClockType, ResetType, AsyncResetType, SIntType, UIntType,
             AnalogType>([](Type) { return true; })
-      .Case<BundleType, FVectorType, RefType /* XXX: revisit! */>([](Type) { return false; })
+      .Case<BundleType, FVectorType>([](Type) { return false; })
+      .Case<RefType>([](auto type) { return type.getType().isGround(); })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
         return false;
