@@ -144,6 +144,10 @@ firrtl.module @And(in %in: !firrtl.uint<4>,
   %2 = firrtl.and %in, %c1_ui0 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
   firrtl.connect %out, %2 : !firrtl.uint<4>, !firrtl.uint<4>
 
+  // CHECK: firrtl.strictconnect %out, %c0_ui4
+  %inv_2 = firrtl.and %c1_ui0, %in : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  firrtl.connect %out, %inv_2 : !firrtl.uint<4>, !firrtl.uint<4>
+
   // CHECK: firrtl.strictconnect %out, %in
   %3 = firrtl.and %in, %in : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
   firrtl.connect %out, %3 : !firrtl.uint<4>, !firrtl.uint<4>
@@ -198,6 +202,10 @@ firrtl.module @Or(in %in: !firrtl.uint<4>,
   %c1_ui0 = firrtl.constant 0 : !firrtl.uint<4>
   %2 = firrtl.or %in, %c1_ui0 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
   firrtl.connect %out, %2 : !firrtl.uint<4>, !firrtl.uint<4>
+
+  // CHECK: firrtl.strictconnect %out, %in
+  %inv_2 = firrtl.or %c1_ui0, %in : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  firrtl.connect %out, %inv_2 : !firrtl.uint<4>, !firrtl.uint<4>
 
   // CHECK: firrtl.strictconnect %out, %in
   %3 = firrtl.or %in, %in : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
