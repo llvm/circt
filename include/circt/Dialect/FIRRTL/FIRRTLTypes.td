@@ -67,7 +67,8 @@ def PassiveType : DialectType<FIRRTLDialect,
   CPred<"$_self.isa<FIRRTLType>() && $_self.cast<FIRRTLType>().isPassive()">,
   "a passive type (contain no flips)", "::circt::firrtl::FIRRTLType">;
 
-def RefType : DialectType<FIRRTLDialect, CPred<"$_self.isa<RefType>()">,
+def RefType : DialectType<FIRRTLDialect,
+   CPred<"$_self.isa<RefType>() && $_self.cast<RefType>().getType().isGround()">,
   "reference type", "::circt::firrtl::RefType">;
 
 //===----------------------------------------------------------------------===//
