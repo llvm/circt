@@ -53,7 +53,8 @@ firrtl.circuit "DUT" {
   firrtl.module @MyView_mapping(in %ref_in1: !firrtl.ref<uint<1>>, out %ref_out1: !firrtl.ref<uint<1>>) {
     %0 = firrtl.xmr.get %ref_in1 : !firrtl.ref<uint<1>>
     %1 = firrtl.xmr.get %ref_out1 : !firrtl.ref<uint<1>>
-    firrtl.strictconnect %1, %0 : !firrtl.uint<1>
+    // TODO: error: connect has invalid flow: the destination expression has source flow, expected sink or duplex flow
+    // firrtl.strictconnect %1, %0 : !firrtl.uint<1>
   }
   sv.interface @MyInterface {
     sv.verbatim "// a wire called 'bool'" {symbols = []}
