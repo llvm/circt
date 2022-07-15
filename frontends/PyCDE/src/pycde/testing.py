@@ -5,6 +5,7 @@ import inspect
 from pathlib import Path
 import subprocess
 import inspect
+import re
 
 
 def unittestmodule(generate=True,
@@ -99,32 +100,26 @@ def gen_cocotb_testfile(tests):
 class IVerilogHandler:
   """ Class for handling icarus-verilog specific commands and patching."""
 
+  def __init__(self):
+    # Ensure that iverilog is available in path and it is at least iverilog v11
+    try:
+      out = subprocess.check_output(["iverilog", "-V"])
+    except subprocess.CalledProcessError:
+      raise Exception("iverilog not found in path")
+
+    # find the 'Icarus Verilog version #' string and extract the version number
+    # using a regex
+    ver_re = r"Icarus Verilog version (\d+\.\d+)"
+    ver_match = re.search(ver_re, out.decode("utf-8"))
+    if ver_match is None:
+      raise Exception("Could not find Icarus Verilog version")
+    ver = ver_match.group(1)
+    if float(ver) < 11:
+      raise Exception(f"Icarus Verilog version must be >= 11, got {ver}")
+
   @property
   def sim_name(self):
     return "icarus"
-
-  def fix_sv(self, filename):
-    """
-    Icarus verilog requires the following fixups to get a reasonable subset of
-    generated stuff to simulate:
-    - Replace all always_# in the output file with 'always'
-    - Add a default parameter to the __INST_HIER parameter.
-    """
-    patterns = {
-        "always_comb": "always",
-        "always_latch": "always",
-        "always_ff": "always",
-        # need a default value for parameters, else it's considered a syntax error by iverilog
-        "parameter __INST_HIER": "parameter __INST_HIER=0"
-    }
-
-    with open(filename, "r") as f:
-      lines = f.readlines()
-    with open(filename, "w") as f:
-      for line in lines:
-        for pattern, replacement in patterns.items():
-          line = line.replace(pattern, replacement)
-        f.write(line)
 
 
 def testbench(pycde_mod, simulator="iverilog"):
@@ -142,10 +137,13 @@ def testbench(pycde_mod, simulator="iverilog"):
     raise Exception(
         "'make' is not available, and is required to run cocotb tests.")
 
-  if simulator == "iverilog":
-    simhandler = IVerilogHandler()
-  else:
-    raise Exception(f"Unknown simulator: {simulator}")
+  try:
+    if simulator == "iverilog":
+      simhandler = IVerilogHandler()
+    else:
+      raise Exception(f"Unknown simulator: {simulator}")
+  except Exception as e:
+    raise Exception(f"Failed to initialize simulator handler: {e}")
 
   def testbenchmodule_inner(tb_class):
     sys = System([pycde_mod])
@@ -166,10 +164,6 @@ def testbench(pycde_mod, simulator="iverilog"):
         for a in dir(tb_class)
         if getattr(getattr(tb_class, a), "_testbench", False)
     ]
-
-    # Do simulator-specific patching of the generated .sv files.
-    for mod_file in sys.mod_files:
-      simhandler.fix_sv(mod_file)
 
     # Generate the cocotb test file.
     testfile_path = Path(sys._output_directory, f"{testmodule}.py")
