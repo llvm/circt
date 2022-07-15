@@ -511,8 +511,7 @@ void HWMemSimImplPass::runOnOperation() {
         newModule.setCommentAttr(
             builder.getStringAttr("VCS coverage exclude_file"));
 
-        HWMemSimImpl(ignoreReadEnableMem)
-            .generateMemory(newModule, mem);
+        HWMemSimImpl(ignoreReadEnableMem).generateMemory(newModule, mem);
       }
 
       oldModule.erase();
