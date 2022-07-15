@@ -310,7 +310,7 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
     {"circt.test", {stdResolve, applyWithoutTarget<true>}},
     {"circt.testLocalOnly", {stdResolve, applyWithoutTarget<>}},
     {"circt.testNT", {noResolve, applyWithoutTarget<>}},
-    {"circt.missing", {tryResolve, applyWithoutTarget<>}},
+    {"circt.missing", {tryResolve, applyWithoutTarget<true>}},
     // Grand Central Views/Interfaces Annotations
     {extractGrandCentralClass, NoTargetAnnotation},
     {grandCentralHierarchyFileAnnoClass, NoTargetAnnotation},
