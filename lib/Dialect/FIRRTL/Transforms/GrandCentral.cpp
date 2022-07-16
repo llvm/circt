@@ -334,7 +334,7 @@ struct MappingContextTraits<sv::InterfaceOp, Context> {
               // This is a descripton.  Update the mutable description and
               // continue;
               if (tpe.getValue() == "description") {
-                description = op.getStringAttr();
+                description = op.getFormatStringAttr();
                 return;
               }
 

@@ -475,10 +475,10 @@ def AliasOp : SVOp<"alias"> {
     bits within a net.  Aliases always have at least two operands.
   }];
 
-  let arguments = (ins Variadic<InOutType>:$operands);
+  let arguments = (ins Variadic<InOutType>:$aliases);
   let results = (outs);
 
-  let assemblyFormat = "$operands attr-dict `:` qualified(type($operands))";
+  let assemblyFormat = "$aliases attr-dict `:` qualified(type($aliases))";
 
   // Verify that we have at least two operands.
   let hasVerifier = 1;
@@ -487,11 +487,15 @@ def AliasOp : SVOp<"alias"> {
 def FWriteOp : SVOp<"fwrite", [ProceduralOp]> {
   let summary = "'$fwrite' statement";
 
-  let arguments = (ins I32:$fd, StrAttr:$string, Variadic<AnyType>:$operands);
+  let arguments = (ins I32:$fd,
+                       StrAttr:$format_string,
+                       Variadic<AnyType>:$substitutions);
   let results = (outs);
 
-  let assemblyFormat =
-    "$fd `,` $string attr-dict (`(` $operands^ `)` `:` qualified(type($operands)))?";
+  let assemblyFormat = [{
+    $fd `,` $format_string attr-dict (`(` $substitutions^ `)` `:`
+    qualified(type($substitutions)))?
+  }];
 }
 
 def VerbatimOp : SVOp<"verbatim"> {
@@ -501,19 +505,21 @@ def VerbatimOp : SVOp<"verbatim"> {
 
     sv.verbatim allows operand substitutions with {{0}} syntax.
   }];
-  let arguments = (ins StrAttr:$string, Variadic<AnyType>:$operands,
+  let arguments = (ins StrAttr:$format_string, Variadic<AnyType>:$substitutions,
                   DefaultValuedAttr<NameRefArrayAttr,"{}">:$symbols);
 
-  let assemblyFormat =
-    "$string (`(` $operands^ `)` `:` qualified(type($operands)))? attr-dict";
+  let assemblyFormat = [{
+    $format_string (`(` $substitutions^ `)` `:`
+    qualified(type($substitutions)))? attr-dict
+  }];
 
   let builders = [
-    OpBuilder<(ins "Twine":$string),
+    OpBuilder<(ins "Twine":$formatString),
                  "build(odsBuilder, odsState, "
-                 "odsBuilder.getStringAttr(string), ValueRange{},"
+                 "odsBuilder.getStringAttr(formatString), ValueRange{},"
                  "odsBuilder.getArrayAttr({}));">,
-    OpBuilder<(ins "StringAttr":$string),
-                 "build(odsBuilder, odsState, string, ValueRange{},"
+    OpBuilder<(ins "StringAttr":$formatString),
+                 "build(odsBuilder, odsState, formatString, ValueRange{},"
                  "odsBuilder.getArrayAttr({}));">
   ];
 }
@@ -640,11 +646,11 @@ def FatalOp : SVOp<"fatal", [ProceduralOp]> {
   }];
   let arguments = (ins
     VerbosityIntAttr:$verbosity,
-    OptionalAttr<StrAttr>:$message, Variadic<AnyType>:$operands);
+    OptionalAttr<StrAttr>:$message, Variadic<AnyType>:$substitutions);
   let assemblyFormat = [{
     $verbosity
-    (`,` $message^ (`(` $operands^ `)` `:` qualified(type($operands)))?)?
-    attr-dict
+    (`,` $message^ (`(` $substitutions^ `)` `:`
+    qualified(type($substitutions)))?)? attr-dict
   }];
   let builders = [
     OpBuilder<(ins CArg<VerbosityIntAttr.returnType,"1">:$verbosity),
@@ -663,9 +669,9 @@ class NonfatalMessageOp<string mnemonic, list<Trait> traits = []> :
     interpolated into the message string.
   }];
   let arguments = (ins
-    OptionalAttr<StrAttr>:$message, Variadic<AnyType>:$operands);
+    OptionalAttr<StrAttr>:$message, Variadic<AnyType>:$substitutions);
   let assemblyFormat = [{
-    ($message^ (`(` $operands^ `)` `:` qualified(type($operands)))?)?
+    ($message^ (`(` $substitutions^ `)` `:` qualified(type($substitutions)))?)?
     attr-dict
   }];
   let builders = [

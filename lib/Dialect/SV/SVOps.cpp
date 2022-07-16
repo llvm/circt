@@ -148,7 +148,7 @@ getVerbatimExprAsmResultNames(Operation *op,
   // string up to a weird character (like a paren) and currently ignore
   // parenthesized expressions.
   auto isOkCharacter = [](char c) { return llvm::isAlnum(c) || c == '_'; };
-  auto name = op->getAttrOfType<StringAttr>("string").getValue();
+  auto name = op->getAttrOfType<StringAttr>("format_string").getValue();
   // Ignore a leading ` in macro name.
   if (name.startswith("`"))
     name = name.drop_front();
@@ -1458,7 +1458,7 @@ LogicalResult StructFieldInOutOp::inferReturnTypes(
 
 LogicalResult AliasOp::verify() {
   // Must have at least two operands.
-  if (operands().size() < 2)
+  if (getAliases().size() < 2)
     return emitOpError("alias must have at least two operands");
 
   return success();

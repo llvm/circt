@@ -128,7 +128,7 @@ static bool isDuplicatableNullaryExpression(Operation *op) {
   // inline.
   if (isa<VerbatimExprOp>(op)) {
     if (op->getNumOperands() == 0 &&
-        op->getAttrOfType<StringAttr>("string").getValue().size() <= 32)
+        op->getAttrOfType<StringAttr>("format_string").getValue().size() <= 32)
       return true;
   }
 
@@ -579,7 +579,7 @@ static bool isExpressionUnableToInline(Operation *op) {
 
   // Verbatim with a long string should be emitted as an out-of-line declration.
   if (auto verbatim = dyn_cast<VerbatimExprOp>(op))
-    if (verbatim.getString().size() > 32)
+    if (verbatim.getFormatString().size() > 32)
       return true;
 
   // Scan the users of the operation to see if any of them need this to be
@@ -2157,7 +2157,7 @@ SubExprInfo ExprEmitter::visitVerbatimExprOp(Operation *op, ArrayAttr symbols) {
     emitError(op, "SV attributes emission is unimplemented for the op");
 
   emitTextWithSubstitutions(
-      op->getAttrOfType<StringAttr>("string").getValue(), op,
+      op->getAttrOfType<StringAttr>("format_string").getValue(), op,
       [&](Value operand) { emitSubExpr(operand, LowestPrecedence); }, symbols,
       names);
 
@@ -2985,10 +2985,10 @@ LogicalResult StmtEmitter::visitSV(FWriteOp op) {
   emitExpression(op.getFd(), ops);
 
   os << ", \"";
-  os.write_escaped(op.getString());
+  os.write_escaped(op.getFormatString());
   os << '"';
 
-  for (auto operand : op.operands()) {
+  for (auto operand : op.getSubstitutions()) {
     os << ", ";
     emitExpression(operand, ops);
   }
@@ -3005,7 +3005,7 @@ LogicalResult StmtEmitter::visitSV(VerbatimOp op) {
   ops.insert(op);
 
   // Drop an extraneous \n off the end of the string if present.
-  StringRef string = op.getString();
+  StringRef string = op.getFormatString();
   if (string.endswith("\n"))
     string = string.drop_back();
 
@@ -3118,22 +3118,22 @@ LogicalResult StmtEmitter::emitSeverityMessageTask(Operation *op,
 
 LogicalResult StmtEmitter::visitSV(FatalOp op) {
   return emitSeverityMessageTask(op, "$fatal", op.getVerbosity(),
-                                 op.getMessageAttr(), op.operands());
+                                 op.getMessageAttr(), op.getSubstitutions());
 }
 
 LogicalResult StmtEmitter::visitSV(ErrorOp op) {
   return emitSeverityMessageTask(op, "$error", {}, op.getMessageAttr(),
-                                 op.operands());
+                                 op.getSubstitutions());
 }
 
 LogicalResult StmtEmitter::visitSV(WarningOp op) {
   return emitSeverityMessageTask(op, "$warning", {}, op.getMessageAttr(),
-                                 op.operands());
+                                 op.getSubstitutions());
 }
 
 LogicalResult StmtEmitter::visitSV(InfoOp op) {
   return emitSeverityMessageTask(op, "$info", {}, op.getMessageAttr(),
-                                 op.operands());
+                                 op.getSubstitutions());
 }
 
 LogicalResult StmtEmitter::visitSV(GenerateOp op) {
@@ -3253,7 +3253,7 @@ LogicalResult StmtEmitter::emitImmediateAssertion(Op op, StringRef opName) {
   os << "(";
   emitExpression(op.getExpression(), ops);
   os << ")";
-  emitAssertionMessage(op.getMessageAttr(), op.operands(), ops);
+  emitAssertionMessage(op.getMessageAttr(), op.getSubstitutions(), ops);
   os << ";";
   emitLocationInfoAndNewLine(ops);
   return success();
@@ -3286,7 +3286,7 @@ LogicalResult StmtEmitter::emitConcurrentAssertion(Op op, StringRef opName) {
   os << ") ";
   emitExpression(op.getProperty(), ops);
   os << ")";
-  emitAssertionMessage(op.getMessageAttr(), op.operands(), ops, true);
+  emitAssertionMessage(op.getMessageAttr(), op.getSubstitutions(), ops, true);
   os << ";";
   emitLocationInfoAndNewLine(ops);
   return success();
