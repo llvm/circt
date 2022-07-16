@@ -128,7 +128,7 @@ StateEncoding::StateEncoding(OpBuilder &b, MachineOp machine,
       TypeAttr::get(rawEnumType), nullptr);
 
   stateType = hw::TypeAliasType::get(
-      SymbolRefAttr::get(typeScope.sym_nameAttr(),
+      SymbolRefAttr::get(typeScope.getSymNameAttr(),
                          {FlatSymbolRefAttr::get(typedeclEnumType)}),
       rawEnumType);
 
@@ -162,7 +162,7 @@ std::unique_ptr<sv::CasePattern> StateEncoding::getCasePattern(StateOp state) {
   // Get the field attribute for the state - fetch it through the encoding.
   auto fieldAttr =
       cast<hw::EnumConstantOp>(valueToSrcValue[encode(state)].getDefiningOp())
-          .fieldAttr();
+          .getFieldAttr();
   return std::make_unique<sv::CaseEnumPattern>(fieldAttr);
 }
 
