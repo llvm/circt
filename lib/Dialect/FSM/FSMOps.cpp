@@ -13,6 +13,7 @@
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/PatternMatch.h"
+#include "llvm/Support/FormatVariadic.h"
 
 using namespace mlir;
 using namespace circt;
@@ -59,7 +60,10 @@ void MachineOp::getHWPortInfo(SmallVectorImpl<hw::PortInfo> &ports) {
 
   for (unsigned i = 0, e = machineType.getNumInputs(); i < e; ++i) {
     hw::PortInfo port;
-    port.name = builder.getStringAttr("in" + std::to_string(i));
+    if (argNames())
+      port.name = argNames().getValue()[i].cast<StringAttr>();
+    else
+      port.name = builder.getStringAttr("in" + std::to_string(i));
     port.direction = circt::hw::PortDirection::INPUT;
     port.type = machineType.getInput(i);
     port.argNum = i;
@@ -68,7 +72,10 @@ void MachineOp::getHWPortInfo(SmallVectorImpl<hw::PortInfo> &ports) {
 
   for (unsigned i = 0, e = machineType.getNumResults(); i < e; ++i) {
     hw::PortInfo port;
-    port.name = builder.getStringAttr("out" + std::to_string(i));
+    if (resNames())
+      port.name = resNames().getValue()[i].cast<StringAttr>();
+    else
+      port.name = builder.getStringAttr("out" + std::to_string(i));
     port.direction = circt::hw::PortDirection::OUTPUT;
     port.type = machineType.getResult(i);
     port.argNum = i;
@@ -124,6 +131,22 @@ LogicalResult MachineOp::verify() {
   if (!getInitialStateOp())
     return emitOpError("initial state '" + initialState() +
                        "' was not defined in the machine");
+
+  if (argNames() && argNames().getValue().size() != getArgumentTypes().size())
+    return emitOpError() << "number of machine arguments ("
+                         << getArgumentTypes().size()
+                         << ") does "
+                            "not match the provided number "
+                            "of argument names ("
+                         << argNames().getValue().size() << ")";
+
+  if (resNames() && resNames().getValue().size() != getResultTypes().size())
+    return emitOpError() << "number of machine results ("
+                         << getResultTypes().size()
+                         << ") does "
+                            "not match the provided number "
+                            "of result names ("
+                         << resNames().getValue().size() << ")";
 
   return success();
 }

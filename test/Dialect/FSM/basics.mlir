@@ -35,7 +35,7 @@
 // CHECK: }
 // CHECK: hw.module @bar(%clk: i1, %rst_n: i1) {
 // CHECK:   %true = hw.constant true
-// CHECK:   %0 = fsm.hw_instance "foo_inst" @foo(%true) : (i1) -> i1, clock %clk : i1, reset %rst_n : i1
+// CHECK:   %0 = fsm.hw_instance "foo_inst" @foo(%true), clock %clk, reset %rst_n : (i1) -> i1
 // CHECK:   hw.output
 // CHECK: }
 // CHECK: func @qux() {
@@ -91,7 +91,7 @@ fsm.machine @foo(%arg0: i1) -> i1 attributes {initialState = "IDLE"} {
 // Hardware-style instantiation.
 hw.module @bar(%clk: i1, %rst_n: i1) {
   %in = hw.constant true
-  %out = fsm.hw_instance "foo_inst" @foo(%in) : (i1) -> i1, clock %clk : i1, reset %rst_n : i1
+  %out = fsm.hw_instance "foo_inst" @foo(%in), clock %clk, reset %rst_n : (i1) -> i1
 }
 
 // Software-style instantiation and triggering.

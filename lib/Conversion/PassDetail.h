@@ -90,6 +90,10 @@ namespace sv {
 class SVDialect;
 } // namespace sv
 
+namespace fsm {
+class FSMDialect;
+} // namespace fsm
+
 // Generate the classes which represent the passes
 #define GEN_PASS_CLASSES
 #include "circt/Conversion/Passes.h.inc"
