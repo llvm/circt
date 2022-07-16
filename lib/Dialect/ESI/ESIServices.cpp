@@ -54,6 +54,15 @@ LogicalResult instantiateCosimEndpoints(ServiceImplementReqOp req) {
   Value rst = req.getOperand(1);
   uint64_t epIdCtr = 0;
 
+  auto toStringAttr = [&](ArrayAttr strArr) {
+    std::string buff;
+    llvm::raw_string_ostream os(buff);
+    llvm::interleave(llvm::map_range(strArr.getAsRange<StringAttr>(),
+                                     [](StringAttr s) { return s.getValue(); }),
+                     os, ".");
+    return StringAttr::get(ctxt, os.str());
+  };
+
   unsigned clientReqIdx = 0;
   for (auto toClientReq :
        llvm::make_early_inc_range(req.getOps<RequestToClientConnection>())) {
@@ -62,6 +71,7 @@ LogicalResult instantiateCosimEndpoints(ServiceImplementReqOp req) {
     auto cosim = b.create<CosimEndpoint>(toClientReq.getLoc(),
                                          toClientReq.receiving().getType(), clk,
                                          rst, cosimIn, ++epIdCtr);
+    cosim->setAttr("name", toStringAttr(toClientReq.clientNamePath()));
     req.getResult(clientReqIdx).replaceAllUsesWith(cosim.recv());
     toClientReq.erase();
     ++clientReqIdx;
@@ -73,9 +83,11 @@ LogicalResult instantiateCosimEndpoints(ServiceImplementReqOp req) {
 
   for (auto toServerReq :
        llvm::make_early_inc_range(req.getOps<RequestToServerConnection>())) {
-    b.create<CosimEndpoint>(toServerReq.getLoc(),
-                            ChannelPort::get(ctxt, b.getI1Type()), clk, rst,
-                            argMap.lookup(toServerReq.sending()), ++epIdCtr);
+    auto cosim = b.create<CosimEndpoint>(
+        toServerReq.getLoc(), ChannelPort::get(ctxt, b.getI1Type()), clk, rst,
+        argMap.lookup(toServerReq.sending()), ++epIdCtr);
+
+    cosim->setAttr("name", toStringAttr(toServerReq.clientNamePath()));
     toServerReq.erase();
   }
 
