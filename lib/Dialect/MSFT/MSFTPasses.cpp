@@ -310,7 +310,8 @@ ModuleOpLowering::matchAndRewrite(MSFTModuleOp mod, OpAdaptor adaptor,
   }
 
   ArrayAttr params = rewriter.getArrayAttr({hw::ParamDeclAttr::get(
-      rewriter.getStringAttr("__INST_HIER"), rewriter.getNoneType())});
+      rewriter.getStringAttr("__INST_HIER"),
+      rewriter.getStringAttr("INSTANTIATE_WITH_INSTANCE_PATH"))});
   auto hwmod = rewriter.replaceOpWithNewOp<hw::HWModuleOp>(
       mod, mod.getNameAttr(), mod.getPorts(), params);
   rewriter.eraseBlock(hwmod.getBodyBlock());

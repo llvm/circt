@@ -18,7 +18,7 @@ msft.module @top {} () {
 }
 
 // CHECK-LABEL: msft.module @B {WIDTH = 1 : i64} (%a: i4) -> (nameOfPortInSV: i4) attributes {fileName = "b.sv"} {
-// HWLOW-LABEL: hw.module @B<__INST_HIER: none>(%a: i4) -> (nameOfPortInSV: i4) attributes {output_file = #hw.output_file<"b.sv", includeReplicatedOps>} {
+// HWLOW-LABEL: hw.module @B<__INST_HIER: none = "INSTANTIATE_WITH_INSTANCE_PATH">(%a: i4) -> (nameOfPortInSV: i4) attributes {output_file = #hw.output_file<"b.sv", includeReplicatedOps>} {
 msft.module @B { "WIDTH" = 1 } (%a: i4) -> (nameOfPortInSV: i4) attributes {fileName = "b.sv"} {
   %0 = comb.add %a, %a : i4
   // CHECK: comb.add %a, %a : i4
