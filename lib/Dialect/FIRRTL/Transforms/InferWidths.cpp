@@ -1421,10 +1421,10 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         // Attach connects multiple analog signals together. All signals must
         // have the same bit width. Signals without bit width inherit from the
         // other signals.
-        if (op.operands().empty())
+        if (op.getAttached().empty())
           return;
-        auto prev = op.operands()[0];
-        for (auto operand : op.operands().drop_front()) {
+        auto prev = op.getAttached()[0];
+        for (auto operand : op.getAttached().drop_front()) {
           auto e1 = getExpr(prev);
           auto e2 = getExpr(operand);
           constrainTypes(e1, e2);

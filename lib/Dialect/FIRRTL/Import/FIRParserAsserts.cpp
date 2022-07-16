@@ -397,13 +397,13 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
       predicate = builder.create<NotPrimOp>(predicate);
     if (flavor == VerifFlavor::AssertNotX) {
       label = "notX";
-      if (printOp.operands().size() != 1) {
+      if (printOp.getSubstitutions().size() != 1) {
         printOp.emitError("printf-encoded assertNotX requires one operand");
         return failure();
       }
       // Construct a `!whenCond | (value !== 1'bx)` predicate.
       Value notCond = predicate;
-      predicate = builder.create<XorRPrimOp>(printOp.operands()[0]);
+      predicate = builder.create<XorRPrimOp>(printOp.getSubstitutions()[0]);
       predicate = builder.create<VerbatimExprOp>(UIntType::get(context, 1),
                                                  "{{0}} !== 1'bx", predicate);
       predicate = builder.create<OrPrimOp>(notCond, predicate);
@@ -419,8 +419,8 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
     // TODO: Sanitize the label by replacing whitespace with "_" as done in the
     // Scala impl of ExtractTestCode.
     ValueRange args;
-    if (printOp.operands().size())
-      args = printOp.operands().drop_front();
+    if (printOp.getSubstitutions().size())
+      args = printOp.getSubstitutions().drop_front();
     if (args.size())
       printOp.emitWarning()
           << "printf-encoded assertion has format string arguments which may "
@@ -442,7 +442,8 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
   case VerifFlavor::ChiselAssert: {
     auto op = builder.create<AssertOp>(
         printOp.getClock(), builder.create<NotPrimOp>(whenStmt.getCondition()),
-        printOp.getCond(), fmt, printOp.operands(), "chisel3_builtin", true);
+        printOp.getCond(), fmt, printOp.getSubstitutions(), "chisel3_builtin",
+        true);
     op->setAttr("format", StringAttr::get(context, "ifElseFatal"));
     printOp.erase();
     break;
@@ -588,11 +589,11 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
     if (flavor == VerifFlavor::VerifLibAssert)
       op = builder.create<AssertOp>(printOp.getClock(), predicate,
                                     printOp.getCond(), message,
-                                    printOp.operands(), label, true);
+                                    printOp.getSubstitutions(), label, true);
     else // VerifFlavor::VerifLibAssume
       op = builder.create<AssumeOp>(printOp.getClock(), predicate,
                                     printOp.getCond(), message,
-                                    printOp.operands(), label, true);
+                                    printOp.getSubstitutions(), label, true);
     printOp.erase();
 
     // Attach additional attributes extracted from the JSON object.

@@ -561,20 +561,20 @@ def VerbatimExprOp : FIRRTLOp<"verbatim.expr",
     `firrtl.verbatim.expr` allows operand substitutions with `{{0}}` syntax.
   }];
 
-  let arguments = (ins StrAttr:$text, Variadic<AnyType>:$operands,
+  let arguments = (ins StrAttr:$text, Variadic<AnyType>:$substitutions,
                        DefaultValuedAttr<NameRefArrayAttr,"{}">:$symbols);
   let results = (outs FIRRTLType:$result);
   let assemblyFormat = [{
-    $text (`(` $operands^ `)`)?
-    `:` functional-type($operands, $result) attr-dict
+    $text (`(` $substitutions^ `)`)?
+    `:` functional-type($substitutions, $result) attr-dict
   }];
 
   let builders = [
     OpBuilder<(ins "Type":$resultType, "Twine":$text,
-                   CArg<"ValueRange", "{}">:$operands,
+                   CArg<"ValueRange", "{}">:$substitutions,
                    CArg<"ArrayRef<Attribute>", "{}">:$symbols), [{
       build(odsBuilder, odsState, resultType, odsBuilder.getStringAttr(text),
-            operands, odsBuilder.getArrayAttr(symbols));
+            substitutions, odsBuilder.getArrayAttr(symbols));
     }]>
   ];
 }
@@ -595,20 +595,20 @@ def VerbatimWireOp : FIRRTLOp<"verbatim.wire",
     `firrtl.verbatim.wire` allows operand substitutions with `{{0}}` syntax.
   }];
 
-  let arguments = (ins StrAttr:$text, Variadic<AnyType>:$operands,
+  let arguments = (ins StrAttr:$text, Variadic<AnyType>:$substitutions,
                        DefaultValuedAttr<NameRefArrayAttr,"{}">:$symbols);
   let results = (outs FIRRTLType:$result);
   let assemblyFormat = [{
-    $text (`(` $operands^ `)`)?
-    `:` functional-type($operands, $result) attr-dict
+    $text (`(` $substitutions^ `)`)?
+    `:` functional-type($substitutions, $result) attr-dict
   }];
 
   let builders = [
     OpBuilder<(ins "Type":$resultType, "Twine":$text,
-                   CArg<"ValueRange", "{}">:$operands,
+                   CArg<"ValueRange", "{}">:$substitutions,
                    CArg<"ArrayRef<Attribute>", "{}">:$symbols), [{
       build(odsBuilder, odsState, resultType, odsBuilder.getStringAttr(text),
-            operands, odsBuilder.getArrayAttr(symbols));
+            substitutions, odsBuilder.getArrayAttr(symbols));
     }]>
   ];
 }

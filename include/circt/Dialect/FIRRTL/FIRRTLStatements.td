@@ -13,10 +13,10 @@
 def AttachOp : FIRRTLOp<"attach"> {
   let summary = "Analog Attach Statement";
 
-  let arguments = (ins Variadic<AnalogType>:$operands);
+  let arguments = (ins Variadic<AnalogType>:$attached);
   let results = (outs);
 
-  let assemblyFormat = "$operands attr-dict `:` qualified(type($operands))";
+  let assemblyFormat = "$attached attr-dict `:` qualified(type($attached))";
 
   let hasCanonicalizeMethod = true;
 }
@@ -63,12 +63,12 @@ def PrintFOp : FIRRTLOp<"printf"> {
   let summary = "Formatted Print Statement";
 
   let arguments = (ins ClockType:$clock, UInt1Type:$cond, StrAttr:$formatString,
-                       Variadic<FIRRTLType>:$operands, StrAttr:$name);
+                       Variadic<FIRRTLType>:$substitutions, StrAttr:$name);
   let results = (outs);
 
   let assemblyFormat = [{
     $clock `,` $cond `,` $formatString custom<PrintfAttrs>(attr-dict)
-    (`(` $operands^ `)` `:` qualified(type($operands)))?
+    (`(` $substitutions^ `)` `:` qualified(type($substitutions)))?
   }];
 }
 
@@ -116,7 +116,7 @@ class VerifOp<string mnemonic, list<Trait> traits = []> :
     UInt1Type:$predicate,
     UInt1Type:$enable,
     StrAttr:$message,
-    Variadic<AnyType>:$operands,
+    Variadic<AnyType>:$substitutions,
     StrAttr:$name,
     DefaultValuedAttr<BoolAttr,"false">:$isConcurrent,
     DefaultValuedAttr<EventControlAttr,"EventControl::AtPosEdge">:$eventControl
@@ -126,7 +126,7 @@ class VerifOp<string mnemonic, list<Trait> traits = []> :
 
   let assemblyFormat = [{
     $clock `,` $predicate `,` $enable `,`
-    $message (`(` $operands^ `)` `:` qualified(type($operands)))?
+    $message (`(` $substitutions^ `)` `:` qualified(type($substitutions)))?
     custom<VerifAttrs>(attr-dict)
   }];
 }
@@ -210,9 +210,9 @@ def ProbeOp : FIRRTLOp<"probe"> {
   let description = [{
     Captures values without binding to any accidental name.
   }];
-  let arguments = (ins SymbolNameAttr:$inner_sym, Variadic<FIRRTLType>:$operands);
+  let arguments = (ins SymbolNameAttr:$inner_sym, Variadic<FIRRTLType>:$captured);
   let results = (outs);
 
-  let assemblyFormat = "$inner_sym attr-dict ( `,` $operands^  `:` qualified(type($operands)))?";
+  let assemblyFormat = "$inner_sym attr-dict ( `,` $captured^  `:` qualified(type($captured)))?";
 }
 

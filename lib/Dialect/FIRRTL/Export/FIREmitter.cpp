@@ -421,7 +421,7 @@ void Emitter::emitStatement(PrintFOp op) {
   os << ", \"";
   os.write_escaped(op.getFormatString());
   os << "\"";
-  for (auto operand : op.operands()) {
+  for (auto operand : op.getSubstitutions()) {
     os << ", ";
     emitExpression(operand);
   }

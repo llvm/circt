@@ -2453,8 +2453,8 @@ LogicalResult FIRRTLLowering::visitDecl(VerbatimWireOp op) {
   resultTy = sv::InOutType::get(op.getContext(), resultTy);
 
   SmallVector<Value, 4> operands;
-  operands.reserve(op.operands().size());
-  for (auto operand : op.operands()) {
+  operands.reserve(op.getSubstitutions().size());
+  for (auto operand : op.getSubstitutions()) {
     auto lowered = getLoweredValue(operand);
     if (!lowered)
       return failure();
@@ -3533,8 +3533,8 @@ LogicalResult FIRRTLLowering::visitExpr(VerbatimExprOp op) {
     return failure();
 
   SmallVector<Value, 4> operands;
-  operands.reserve(op.operands().size());
-  for (auto operand : op.operands()) {
+  operands.reserve(op.getSubstitutions().size());
+  for (auto operand : op.getSubstitutions()) {
     auto lowered = getLoweredValue(operand);
     if (!lowered)
       return failure();
@@ -3687,8 +3687,8 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
     return failure();
 
   SmallVector<Value, 4> operands;
-  operands.reserve(op.operands().size());
-  for (auto operand : op.operands()) {
+  operands.reserve(op.getSubstitutions().size());
+  for (auto operand : op.getSubstitutions()) {
     operands.push_back(getLoweredValue(operand));
     if (!operands.back()) {
       // If this is a zero bit operand, just pass a one bit zero.
@@ -3955,7 +3955,7 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
 LogicalResult FIRRTLLowering::visitStmt(AssertOp op) {
   return lowerVerificationStatement(
       op, "assert__", op.getClock(), op.getPredicate(), op.getEnable(),
-      op.getMessageAttr(), op.operands(), op.getNameAttr(),
+      op.getMessageAttr(), op.getSubstitutions(), op.getNameAttr(),
       op.getIsConcurrent(), op.getEventControl());
 }
 
@@ -3963,7 +3963,7 @@ LogicalResult FIRRTLLowering::visitStmt(AssertOp op) {
 LogicalResult FIRRTLLowering::visitStmt(AssumeOp op) {
   return lowerVerificationStatement(
       op, "assume__", op.getClock(), op.getPredicate(), op.getEnable(),
-      op.getMessageAttr(), op.operands(), op.getNameAttr(),
+      op.getMessageAttr(), op.getSubstitutions(), op.getNameAttr(),
       op.getIsConcurrent(), op.getEventControl());
 }
 
@@ -3971,17 +3971,17 @@ LogicalResult FIRRTLLowering::visitStmt(AssumeOp op) {
 LogicalResult FIRRTLLowering::visitStmt(CoverOp op) {
   return lowerVerificationStatement(
       op, "cover__", op.getClock(), op.getPredicate(), op.getEnable(),
-      op.getMessageAttr(), op.operands(), op.getNameAttr(),
+      op.getMessageAttr(), op.getSubstitutions(), op.getNameAttr(),
       op.getIsConcurrent(), op.getEventControl());
 }
 
 LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {
   // Don't emit anything for a zero or one operand attach.
-  if (op.operands().size() < 2)
+  if (op.getAttached().size() < 2)
     return success();
 
   SmallVector<Value, 4> inoutValues;
-  for (auto v : op.operands()) {
+  for (auto v : op.getAttached()) {
     inoutValues.push_back(getPossiblyInoutLoweredValue(v));
     if (!inoutValues.back()) {
       // Ignore zero bit values.
@@ -4031,8 +4031,8 @@ LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {
 
 LogicalResult FIRRTLLowering::visitStmt(ProbeOp op) {
   SmallVector<Value, 4> operands;
-  operands.reserve(op.operands().size());
-  for (auto operand : op.operands()) {
+  operands.reserve(op.getCaptured().size());
+  for (auto operand : op.getCaptured()) {
     operands.push_back(getLoweredValue(operand));
     if (!operands.back()) {
       // If this is a zero bit operand, just pass a one bit zero.
