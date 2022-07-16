@@ -460,13 +460,13 @@ def OutputOp : HWOp<"output", [Terminator, HasParent<"HWModuleOp">,
     to put on the output ports.
   }];
 
-  let arguments = (ins Variadic<AnyType>:$operands);
+  let arguments = (ins Variadic<AnyType>:$outputs);
 
   let builders = [
     OpBuilder<(ins), "build($_builder, $_state, llvm::None);">
   ];
 
-  let assemblyFormat = "attr-dict ($operands^ `:` qualified(type($operands)))?";
+  let assemblyFormat = "attr-dict ($outputs^ `:` qualified(type($outputs)))?";
 
   let hasVerifier = 1;
 }
@@ -497,9 +497,11 @@ def ProbeOp : HWOp<"probe", []> {
   }];
 
   let arguments = (ins SymbolNameAttr:$inner_sym,
-                       Variadic<AnyType>:$operands);
+                       Variadic<AnyType>:$captured);
   let results = (outs);
 
-  let assemblyFormat = "$inner_sym attr-dict (`,` $operands^ `:` qualified(type($operands)))?";
+  let assemblyFormat = [{
+    $inner_sym attr-dict (`,` $captured^ `:` qualified(type($captured)))?
+  }];
 
 }
