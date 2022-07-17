@@ -12,9 +12,9 @@
 
 #include "circt/Conversion/HWArithToHW.h"
 #include "../PassDetail.h"
-#include "circt/Dialect/HWArith/HWArithOps.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HWArith/HWArithOps.h"
 
 using namespace llvm;
 using namespace mlir;
