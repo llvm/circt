@@ -14,7 +14,6 @@
 #include "circt/Dialect/MSFT/MSFTDialect.h"
 #include "mlir-c/IR.h"
 #include "mlir-c/Pass.h"
-#include "mlir-c/Registration.h"
 
 #ifdef __cplusplus
 extern "C" {
