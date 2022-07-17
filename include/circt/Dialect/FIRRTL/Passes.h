@@ -35,7 +35,7 @@ enum PreserveMode {
   /// compatible with SFC.
   None,
 
-  /// Preserve only 1d vectors (e.g. UInt<2>[3]).
+  /// Preserve only 1d vectors of ground type (e.g. UInt<2>[3]).
   OneDimVec,
 
   /// Preserve only vectors (e.g. UInt<2>[3][3]).

@@ -100,7 +100,7 @@ static bool hasZeroBitWidth(FIRRTLType type) {
       });
 }
 
-/// Return true if the type is 1d vector.
+/// Return true if the type is a 1d vector type or ground type.
 static bool isOneDimVectorType(FIRRTLType type) {
   return TypeSwitch<FIRRTLType, bool>(type)
       .Case<BundleType>([&](auto bundle) { return false; })
@@ -110,14 +110,14 @@ static bool isOneDimVectorType(FIRRTLType type) {
       .Default([](auto groundType) { return true; });
 }
 
-/// Return true if the type is a (possibly nested) vector type.
-static bool isVectorType(FIRRTLType type) {
+/// Return true if the type has a bundle type as subtype.
+static bool containsBundleType(FIRRTLType type) {
   return TypeSwitch<FIRRTLType, bool>(type)
-      .Case<BundleType>([&](auto bundle) { return false; })
+      .Case<BundleType>([&](auto bundle) { return true; })
       .Case<FVectorType>([&](FVectorType vector) {
-        return isVectorType(vector.getElementType());
+        return containsBundleType(vector.getElementType());
       })
-      .Default([](auto groundType) { return true; });
+      .Default([](auto groundType) { return false; });
 }
 
 /// Return true if we can preserve the type.
@@ -140,7 +140,7 @@ static bool isPreservableAggregateType(Type type,
   case PreserveAggregate::OneDimVec:
     return isOneDimVectorType(firrtlType);
   case PreserveAggregate::Vec:
-    return isVectorType(firrtlType);
+    return !containsBundleType(firrtlType);
   default:
     llvm_unreachable("unexpected mode");
   }
