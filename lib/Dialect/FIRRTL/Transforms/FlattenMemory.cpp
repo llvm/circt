@@ -43,7 +43,7 @@ struct FlattenMemoryPass : public FlattenMemoryBase<FlattenMemoryPass> {
 
       return false;
     };
-    getOperation().getBody()->walk([&](MemOp memOp) {
+    getOperation().getBodyBlock()->walk([&](MemOp memOp) {
       LLVM_DEBUG(llvm::dbgs() << "\n Memory:" << memOp);
       // The vector of leaf elements type after flattening the data.
       SmallVector<IntType> flatMemType;
@@ -92,23 +92,25 @@ struct FlattenMemoryPass : public FlattenMemoryBase<FlattenMemoryPass> {
       auto opPorts = memOp.getPorts();
       for (size_t portIdx = 0, e = opPorts.size(); portIdx < e; ++portIdx) {
         auto port = opPorts[portIdx];
-        ports.push_back(MemOp::getTypeForPort(memOp.depth(), flatType,
+        ports.push_back(MemOp::getTypeForPort(memOp.getDepth(), flatType,
                                               port.second, totalmaskWidths));
         portNames.push_back(port.first);
       }
 
       auto flatMem = builder.create<MemOp>(
-          ports, memOp.readLatency(), memOp.writeLatency(), memOp.depth(),
-          memOp.ruw(), builder.getArrayAttr(portNames), memOp.nameAttr(),
-          memOp.nameKind(), memOp.annotations(), memOp.portAnnotations(),
-          memOp.inner_symAttr(), memOp.groupIDAttr());
+          ports, memOp.getReadLatency(), memOp.getWriteLatency(),
+          memOp.getDepth(), memOp.getRuw(), builder.getArrayAttr(portNames),
+          memOp.getNameAttr(), memOp.getNameKind(), memOp.getAnnotations(),
+          memOp.getPortAnnotations(), memOp.getInnerSymAttr(),
+          memOp.getGroupIDAttr());
       // Hook up the new memory to the wires the old memory was replaced with.
       for (size_t index = 0, rend = memOp.getNumResults(); index < rend;
            ++index) {
         auto result = memOp.getResult(index);
         auto wire = builder.create<WireOp>(
             result.getType(),
-            (memOp.name() + "_" + memOp.getPortName(index).getValue()).str());
+            (memOp.getName() + "_" + memOp.getPortName(index).getValue())
+                .str());
         result.replaceAllUsesWith(wire.getResult());
         result = wire;
         auto newResult = flatMem.getResult(index);

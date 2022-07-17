@@ -37,12 +37,13 @@ def InterfaceOp : SVOp<"interface",
   }];
 
   let arguments = (ins
-    SymbolNameAttr:$sym_name
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$comment
   );
 
   let regions = (region SizedRegion<1>:$body);
 
-  let assemblyFormat = "attr-dict $sym_name $body";
+  let assemblyFormat = "$sym_name attr-dict-with-keyword $body";
 
   let skipDefaultBuilders = 1;
   let builders = [
@@ -51,12 +52,12 @@ def InterfaceOp : SVOp<"interface",
   ];
 
   let extraClassDeclaration = [{
-    Block *getBodyBlock() { return &body().front(); }
+    Block *getBodyBlock() { return &getBody().front(); }
 
     ModportType getModportType(::llvm::StringRef);
     InterfaceType getInterfaceType() {
       return InterfaceType::get(getContext(),
-        ::mlir::SymbolRefAttr::get(getContext(), sym_name()));
+        ::mlir::SymbolRefAttr::get(getContext(), getSymName()));
     }
     Type getSignalType(StringRef signalName);
 

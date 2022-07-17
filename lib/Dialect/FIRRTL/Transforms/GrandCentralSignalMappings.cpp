@@ -168,7 +168,7 @@ LogicalResult circt::firrtl::applyGCTSignalMappings(const AnnoPathValue &target,
                                      signalDriverAnnoClass)
                     .getValue();
   bool isSubCircuit = !(prefix.consume_front("~") &&
-                        prefix.consume_front(state.circuit.name()) &&
+                        prefix.consume_front(state.circuit.getName()) &&
                         prefix.consume_front("|"));
   fields.append("isSubCircuit", BoolAttr::get(context, isSubCircuit));
 
@@ -306,7 +306,7 @@ void ModuleSignalMappings::run() {
     if (mapping.dir == MappingDirection::ProbeRemote) {
       for (auto &use : llvm::make_early_inc_range(mapping.localValue.getUses()))
         if (auto connect = dyn_cast<FConnectLike>(use.getOwner()))
-          if (connect.dest() == mapping.localValue) {
+          if (connect.getDest() == mapping.localValue) {
             connect.erase();
             allAnalysesPreserved = false;
           };
@@ -397,7 +397,7 @@ FModuleOp ModuleSignalMappings::emitMappingsModule() {
       StringAttr::get(module.getContext(), mappingsModuleName), ports);
 
   // Generate the connect and force statements inside the module.
-  builder.setInsertionPointToStart(mappingsModule.getBody());
+  builder.setInsertionPointToStart(mappingsModule.getBodyBlock());
   unsigned portIdx = 0;
   for (auto &mapping : localMappings) {
     // TODO: Actually generate a proper XMR here. For now just do some textual
@@ -458,7 +458,7 @@ void ModuleSignalMappings::instantiateMappingsModule(FModuleOp mappingsModule) {
                           << "`\n");
   // Create the actual module.
   auto builder =
-      ImplicitLocOpBuilder::atBlockEnd(module.getLoc(), module.getBody());
+      ImplicitLocOpBuilder::atBlockEnd(module.getLoc(), module.getBodyBlock());
   auto inst = builder.create<InstanceOp>(mappingsModule, "signal_mappings");
 
   // Generate the connections to and from the instance.
@@ -557,7 +557,7 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
   SmallVector<FModuleOp> modules;
   ExtModules extmodules;
 
-  for (auto op : circuit.body().getOps<FModuleLike>()) {
+  for (auto op : circuit.getBody().getOps<FModuleLike>()) {
     if (auto *extModule = dyn_cast<FExtModuleOp>(&op)) {
       AnnotationSet annotations(*extModule);
       if (annotations.hasAnnotation(blackBoxInlineAnnoClass)) {
@@ -633,7 +633,7 @@ void GrandCentralSignalMappingsPass::emitSubCircuitJSON(
     j.attributeObject("vendor", [&]() {
       j.attributeObject("vcs", [&]() {
         j.attributeArray("vsrcs", [&]() {
-          for (FModuleOp module : circuit.body().getOps<FModuleOp>()) {
+          for (FModuleOp module : circuit.getBody().getOps<FModuleOp>()) {
             SmallVector<char> file(outputFilename.begin(),
                                    outputFilename.end());
             llvm::sys::fs::make_absolute(file);
@@ -662,7 +662,7 @@ void GrandCentralSignalMappingsPass::emitSubCircuitJSON(
         j.value((Twine(extModule.moduleName()) + ".json").str());
     });
   });
-  auto b = OpBuilder::atBlockEnd(circuit.getBody());
+  auto b = OpBuilder::atBlockEnd(circuit.getBodyBlock());
   auto jsonOp = b.create<sv::VerbatimOp>(b.getUnknownLoc(), jsonString);
   jsonOp->setAttr(
       "output_file",
@@ -768,7 +768,7 @@ FailureOr<bool> GrandCentralSignalMappingsPass::emitUpdatedMappings(
 
     if (!forcedOutputPorts.empty()) {
       ModuleNamespace &moduleNamespace = getModuleNamespace(mod);
-      auto builder = OpBuilder::atBlockBegin(mod.getBody());
+      auto builder = OpBuilder::atBlockBegin(mod.getBodyBlock());
 
       // Update statistic
       numBufferWirePairsAdded += forcedOutputPorts.size();
@@ -806,7 +806,7 @@ FailureOr<bool> GrandCentralSignalMappingsPass::emitUpdatedMappings(
   // For instance path references, determine where to start.
   // This is either the main module or the DUT if any.
   auto dut = circuit.getMainModule();
-  for (auto op : circuit.body().getOps<FModuleOp>())
+  for (auto op : circuit.getBody().getOps<FModuleOp>())
     if (AnnotationSet(op).hasAnnotation(dutAnnoClass)) {
       dut = op;
       break;
@@ -858,12 +858,12 @@ FailureOr<bool> GrandCentralSignalMappingsPass::emitUpdatedMappings(
     if (mapping.nlaSym) {
       auto nla =
           cast<HierPathOp>(circuit.lookupSymbol(mapping.nlaSym.getAttr()));
-      assert(!nla.namepath().empty());
+      assert(!nla.getNamepath().empty());
 
       // Start from root of NLA, or from top/DUT if through it
       bool seenRoot = false;
       bool usesTop = nla.hasModule(dut.moduleNameAttr());
-      ArrayRef<Attribute> path = nla.namepath().getValue();
+      ArrayRef<Attribute> path = nla.getNamepath().getValue();
       stringStorage.resize(path.drop_back().size());
       for (const auto &attr : llvm::enumerate(path.drop_back())) {
         auto ref = attr.value().cast<hw::InnerRefAttr>();
@@ -931,7 +931,7 @@ FailureOr<bool> GrandCentralSignalMappingsPass::emitUpdatedMappings(
         j.attribute("circuitPackage", circuitPackage.getValue());
     });
   });
-  auto b = OpBuilder::atBlockEnd(circuit.getBody());
+  auto b = OpBuilder::atBlockEnd(circuit.getBodyBlock());
   auto jsonOp = b.create<sv::VerbatimOp>(b.getUnknownLoc(), jsonString,
                                          ValueRange{}, b.getArrayAttr(symbols));
   // TODO: plumb option to specify path/name?

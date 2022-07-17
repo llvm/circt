@@ -28,80 +28,10 @@ using namespace hw;
 using namespace comb;
 
 //===----------------------------------------------------------------------===//
-// HW to LLHD Conversion Pass
+// Convert structure operations
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct HWToLLHDPass : public ConvertHWToLLHDBase<HWToLLHDPass> {
-  void runOnOperation() override;
-};
-
-/// A helper type converter class that automatically populates the relevant
-/// materializations and type conversions for converting HW to LLHD.
-struct HWToLLHDTypeConverter : public TypeConverter {
-  HWToLLHDTypeConverter();
-};
-} // namespace
-
-/// Create a HW to LLHD conversion pass.
-std::unique_ptr<OperationPass<ModuleOp>> circt::createConvertHWToLLHDPass() {
-  return std::make_unique<HWToLLHDPass>();
-}
-
-/// Forward declare conversion patterns.
-struct ConvertHWModule;
-struct ConvertOutput;
-struct ConvertInstance;
-
-/// This is the main entrypoint for the HW to LLHD conversion pass.
-void HWToLLHDPass::runOnOperation() {
-  MLIRContext &context = getContext();
-  ModuleOp module = getOperation();
-
-  // Mark the HW structure ops as illegal such that they get rewritten.
-  ConversionTarget target(context);
-  target.addLegalDialect<LLHDDialect>();
-  target.addLegalDialect<CombDialect>();
-  target.addLegalOp<ConstantOp>();
-  target.addIllegalOp<HWModuleOp>();
-  target.addIllegalOp<hw::OutputOp>();
-  target.addIllegalOp<InstanceOp>();
-
-  // Rewrite `hw.module`, `hw.output`, and `hw.instance`.
-  HWToLLHDTypeConverter typeConverter;
-  RewritePatternSet patterns(&context);
-  mlir::populateFunctionOpInterfaceTypeConversionPattern<HWModuleOp>(
-      patterns, typeConverter);
-  patterns.add<ConvertHWModule>(&context);
-  patterns.add<ConvertInstance>(&context);
-  patterns.add<ConvertOutput>(&context);
-  if (failed(applyPartialConversion(module, target, std::move(patterns))))
-    signalPassFailure();
-}
-
-//===----------------------------------------------------------------------===//
-// TypeConverter conversions and materializations
-//===----------------------------------------------------------------------===//
-
-HWToLLHDTypeConverter::HWToLLHDTypeConverter() {
-  // Convert any type by just wrapping it in `SigType`.
-  addConversion([](Type type) { return SigType::get(type); });
-
-  // Mark `SigType` legal by converting it to itself.
-  addConversion([](SigType type) { return type; });
-
-  // Materialze probes when arguments are converted from any type to `SigType`.
-  addSourceMaterialization(
-      [](OpBuilder &builder, Type type, ValueRange values, Location loc) {
-        assert(values.size() == 1);
-        auto op = builder.create<PrbOp>(loc, type, values[0]);
-        return op.getResult();
-      });
-}
-
-//===----------------------------------------------------------------------===//
-// Convert structure operations
-//===----------------------------------------------------------------------===//
 
 /// This works on each HW module, creates corresponding entities, moves the
 /// bodies of the modules into the entities, and converts the bodies.
@@ -166,7 +96,7 @@ struct ConvertOutput : public OpConversionPattern<hw::OutputOp> {
     auto entity = output->getParentOfType<EntityOp>();
     if (!entity)
       return rewriter.notifyMatchFailure(output, "parent was not an EntityOp");
-    size_t numInputs = entity.ins();
+    size_t numInputs = entity.getIns();
 
     // Drive the results from the mapped operands.
     Value delta;
@@ -180,7 +110,7 @@ struct ConvertOutput : public OpConversionPattern<hw::OutputOp> {
 
       // Look through probes on the source side and use the signal directly.
       if (auto prb = src.getDefiningOp<PrbOp>())
-        src = prb.signal();
+        src = prb.getSignal();
 
       // No work needed if they already are the same.
       if (src == dest)
@@ -230,7 +160,7 @@ struct ConvertInstance : public OpConversionPattern<InstanceOp> {
 
       // Look through probes and use the signal directly.
       if (auto prb = arg.getDefiningOp<PrbOp>()) {
-        arguments.push_back(prb.signal());
+        arguments.push_back(prb.getSignal());
         continue;
       }
 
@@ -284,7 +214,7 @@ struct ConvertInstance : public OpConversionPattern<InstanceOp> {
           auto entity = instance->getParentOfType<EntityOp>();
           if (!entity)
             continue;
-          sig = entity.getArgument(entity.ins() + use.getOperandNumber());
+          sig = entity.getArgument(entity.getIns() + use.getOperandNumber());
           break;
         }
       }
@@ -325,9 +255,78 @@ struct ConvertInstance : public OpConversionPattern<InstanceOp> {
     // original instance for replacement with the new values probed from the
     // signals attached to the LLHD instance.
     rewriter.create<InstOp>(instance.getLoc(), instance.instanceName(),
-                            instance.moduleName(), arguments, resultSigs);
+                            instance.getModuleName(), arguments, resultSigs);
     rewriter.replaceOp(instance, resultValues);
 
     return success();
   }
 };
+
+} // namespace
+
+//===----------------------------------------------------------------------===//
+// HW to LLHD Conversion Pass
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct HWToLLHDPass : public ConvertHWToLLHDBase<HWToLLHDPass> {
+  void runOnOperation() override;
+};
+
+/// A helper type converter class that automatically populates the relevant
+/// materializations and type conversions for converting HW to LLHD.
+struct HWToLLHDTypeConverter : public TypeConverter {
+  HWToLLHDTypeConverter();
+};
+} // namespace
+
+/// Create a HW to LLHD conversion pass.
+std::unique_ptr<OperationPass<ModuleOp>> circt::createConvertHWToLLHDPass() {
+  return std::make_unique<HWToLLHDPass>();
+}
+
+/// This is the main entrypoint for the HW to LLHD conversion pass.
+void HWToLLHDPass::runOnOperation() {
+  MLIRContext &context = getContext();
+  ModuleOp module = getOperation();
+
+  // Mark the HW structure ops as illegal such that they get rewritten.
+  ConversionTarget target(context);
+  target.addLegalDialect<LLHDDialect>();
+  target.addLegalDialect<CombDialect>();
+  target.addLegalOp<ConstantOp>();
+  target.addIllegalOp<HWModuleOp>();
+  target.addIllegalOp<hw::OutputOp>();
+  target.addIllegalOp<InstanceOp>();
+
+  // Rewrite `hw.module`, `hw.output`, and `hw.instance`.
+  HWToLLHDTypeConverter typeConverter;
+  RewritePatternSet patterns(&context);
+  mlir::populateFunctionOpInterfaceTypeConversionPattern<HWModuleOp>(
+      patterns, typeConverter);
+  patterns.add<ConvertHWModule>(&context);
+  patterns.add<ConvertInstance>(&context);
+  patterns.add<ConvertOutput>(&context);
+  if (failed(applyPartialConversion(module, target, std::move(patterns))))
+    signalPassFailure();
+}
+
+//===----------------------------------------------------------------------===//
+// TypeConverter conversions and materializations
+//===----------------------------------------------------------------------===//
+
+HWToLLHDTypeConverter::HWToLLHDTypeConverter() {
+  // Convert any type by just wrapping it in `SigType`.
+  addConversion([](Type type) { return SigType::get(type); });
+
+  // Mark `SigType` legal by converting it to itself.
+  addConversion([](SigType type) { return type; });
+
+  // Materialze probes when arguments are converted from any type to `SigType`.
+  addSourceMaterialization(
+      [](OpBuilder &builder, Type type, ValueRange values, Location loc) {
+        assert(values.size() == 1);
+        auto op = builder.create<PrbOp>(loc, type, values[0]);
+        return op.getResult();
+      });
+}

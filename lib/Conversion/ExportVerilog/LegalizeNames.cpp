@@ -179,7 +179,7 @@ void GlobalNameResolver::legalizeModuleNames(HWModuleOp module) {
   }
 
   // Legalize the parameter names.
-  for (auto param : module.parameters()) {
+  for (auto param : module.getParameters()) {
     auto paramAttr = param.cast<ParamDeclAttr>();
     auto newName = nameResolver.getLegalName(paramAttr.getName());
     if (newName != paramAttr.getName().getValue())

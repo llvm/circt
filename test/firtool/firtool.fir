@@ -126,7 +126,6 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
 ; MLIR-NEXT:    firrtl.strictconnect %multibitMux_a_1, %vec_1 : !firrtl.uint<1>
 ; MLIR-NEXT:    firrtl.strictconnect %multibitMux_a_2, %vec_2 : !firrtl.uint<1>
 ; MLIR-NEXT:    firrtl.strictconnect %multibitMux_sel, %b : !firrtl.uint<2>
-; MLIR-NEXT:    firrtl.instance unusedPortsMod @UnusedPortsMod()
 
 ; ANNOTATIONS-LABEL: firrtl.module @test_mod
 ; ANNOTATIONS-SAME: {class = "circt.test", info = "a ModuleTarget Annotation"}
@@ -183,7 +182,6 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
 ; VERILOG-NEXT:     .sel (b),
 ; VERILOG-NEXT:     .b   (out_multibitMux)
 ; VERILOG-NEXT:    );
-; VERILOG-NEXT:    UnusedPortsMod unusedPortsMod ();
 ; VERILOG:       endmodule
 
 ; Check that we canonicalize the HW output of lowering.
@@ -276,11 +274,14 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
     output b : UInt<1>
     b <= a[sel]
 ; VERILOG-LABEL: module MultibitMux(
-; VERILOG-CHECK: wire [2:0] [[T:.*]] = {{a_2}, {a_1}, {a_0}};
-; VERILOG-CHECK-NEXT: assign b = [[T]][sel];
+; VERILOG:       wire [[T1:.*]];
+; VERILOG-EMPTY:
+; VERILOG-NEXT:  wire [2:0] [[T2:.*]] =
+; VERILOG-SAME{LITERAL}: {{a_2}, {a_1}, {a_0}};
+; VERILOG-NEXT:  assign [[T1]] = [[T2]][sel] /* cadence map_to_mux */; /* synopsys infer_mux_override */
+; VERILOG-NEXT:  assign b = &sel ? a_0 : [[T1]];
 
   module UnusedPortsMod :
     input in : UInt<1>
     output out : UInt<1>
     out is invalid
-; VERILOG-LABEL: module UnusedPortsMod();

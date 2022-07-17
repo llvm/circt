@@ -36,6 +36,7 @@ def MSFTDialect : Dialect {
 
   let hasConstantMaterializer = 1;
   let useDefaultAttributePrinterParser = 1;
+  int emitAccessorPrefix = kEmitAccessorPrefix_Both;
 
   let extraClassDeclaration = [{
     /// Register all MSFT attributes.

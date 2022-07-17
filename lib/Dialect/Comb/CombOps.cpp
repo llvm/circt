@@ -133,7 +133,7 @@ ICmpPredicate ICmpOp::getNegatedPredicate(ICmpPredicate predicate) {
 /// Return true if this is an equality test with -1, which is a "reduction
 /// and" operation in Verilog.
 bool ICmpOp::isEqualAllOnes() {
-  if (predicate() != ICmpPredicate::eq)
+  if (getPredicate() != ICmpPredicate::eq)
     return false;
 
   if (auto op1 =
@@ -145,7 +145,7 @@ bool ICmpOp::isEqualAllOnes() {
 /// Return true if this is a not equal test with 0, which is a "reduction
 /// or" operation in Verilog.
 bool ICmpOp::isNotEqualZero() {
-  if (predicate() != ICmpPredicate::ne)
+  if (getPredicate() != ICmpPredicate::ne)
     return false;
 
   if (auto op1 =
@@ -222,7 +222,7 @@ static unsigned getTotalWidth(ValueRange inputs) {
 
 LogicalResult ConcatOp::verify() {
   unsigned tyWidth = getType().getWidth();
-  unsigned operandsTotalWidth = getTotalWidth(inputs());
+  unsigned operandsTotalWidth = getTotalWidth(getInputs());
   if (tyWidth != operandsTotalWidth)
     return emitOpError("ConcatOp requires operands total width to "
                        "match type width. operands "
@@ -256,9 +256,9 @@ LogicalResult ConcatOp::inferReturnTypes(MLIRContext *context,
 //===----------------------------------------------------------------------===//
 
 LogicalResult ExtractOp::verify() {
-  unsigned srcWidth = input().getType().cast<IntegerType>().getWidth();
+  unsigned srcWidth = getInput().getType().cast<IntegerType>().getWidth();
   unsigned dstWidth = getType().getWidth();
-  if (lowBit() >= srcWidth || srcWidth - lowBit() < dstWidth)
+  if (getLowBit() >= srcWidth || srcWidth - getLowBit() < dstWidth)
     return emitOpError("from bit too large for input"), failure();
 
   return success();

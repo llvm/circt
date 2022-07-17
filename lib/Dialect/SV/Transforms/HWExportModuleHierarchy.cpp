@@ -42,7 +42,7 @@ struct HWExportModuleHierarchyPass
 /// Recursively print the module hierarchy as serialized as JSON.
 static void printHierarchy(hw::InstanceOp &inst, SymbolTable &symbolTable,
                            llvm::json::OStream &j) {
-  auto moduleOp = symbolTable.lookup(inst.moduleNameAttr().getValue());
+  auto moduleOp = symbolTable.lookup(inst.getModuleNameAttr().getValue());
 
   j.object([&] {
     j.attribute("instance_name", inst.instanceName());

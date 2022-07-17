@@ -10,14 +10,17 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "PassDetails.h"
+
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/ESI/ESIOps.h"
+#include "circt/Dialect/ESI/ESIServices.h"
 #include "circt/Dialect/ESI/ESITypes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Support/BackedgeBuilder.h"
-#include "circt/Support/LLVM.h"
+
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -32,13 +35,6 @@
 #ifdef CAPNP
 #include "capnp/ESICapnp.h"
 #endif
-
-namespace circt {
-namespace esi {
-#define GEN_PASS_CLASSES
-#include "circt/Dialect/ESI/ESIPasses.h.inc"
-} // namespace esi
-} // namespace circt
 
 using namespace circt;
 using namespace circt::comb;
@@ -381,7 +377,7 @@ void ESIPortsPass::runOnOperation() {
 
   // Find all instances and update them.
   top.walk([&externModsMutated, this](InstanceOp inst) {
-    auto mapIter = externModsMutated.find(inst.moduleName());
+    auto mapIter = externModsMutated.find(inst.getModuleName());
     if (mapIter != externModsMutated.end())
       updateInstance(mapIter->second, inst);
   });
@@ -395,7 +391,7 @@ void ESIPortsPass::runOnOperation() {
 
   // Find all instances and update them.
   top.walk([&modsMutated, this](InstanceOp inst) {
-    auto mapIter = modsMutated.find(inst.moduleName());
+    auto mapIter = modsMutated.find(inst.getModuleName());
     if (mapIter != modsMutated.end())
       updateInstance(mapIter->second, inst);
   });
@@ -584,8 +580,9 @@ void ESIPortsPass::updateInstance(HWModuleOp mod, InstanceOp inst) {
   // -----
   // Clone the instance.
   b.setInsertionPointAfter(inst);
-  auto newInst = b.create<InstanceOp>(mod, inst.instanceNameAttr(), newOperands,
-                                      inst.parameters(), inst.inner_symAttr());
+  auto newInst =
+      b.create<InstanceOp>(mod, inst.getInstanceNameAttr(), newOperands,
+                           inst.getParameters(), inst.getInnerSymAttr());
 
   // -----
   // Wrap the results back into ESI channels and connect up all the ready
@@ -708,7 +705,7 @@ static std::string &constructInstanceName(Value operand, InterfaceOp iface,
                                           std::string &name) {
   llvm::raw_string_ostream s(name);
   // Drop the "IValidReady_" part of the interface name.
-  s << llvm::toLower(iface.sym_name()[12]) << iface.sym_name().substr(13);
+  s << llvm::toLower(iface.getSymName()[12]) << iface.getSymName().substr(13);
 
   // Indicate to where the source is connected.
   if (operand.hasOneUse()) {
@@ -832,9 +829,9 @@ void ESIPortsPass::updateInstance(HWModuleExternOp mod, InstanceOp inst) {
   }
 
   // Create the new instance!
-  InstanceOp newInst =
-      instBuilder.create<InstanceOp>(mod, inst.instanceNameAttr(), newOperands,
-                                     inst.parameters(), inst.inner_symAttr());
+  InstanceOp newInst = instBuilder.create<InstanceOp>(
+      mod, inst.getInstanceNameAttr(), newOperands, inst.getParameters(),
+      inst.getInnerSymAttr());
 
   // Go through the old list of non-ESI result values, and replace them with the
   // new non-ESI results.
@@ -1032,7 +1029,7 @@ WrapInterfaceLower::matchAndRewrite(WrapSVInterface wrap, OpAdaptor adaptor,
   if (!sinkModport)
     return failure();
   auto ifaceInstance =
-      dyn_cast<InterfaceInstanceOp>(sinkModport.iface().getDefiningOp());
+      dyn_cast<InterfaceInstanceOp>(sinkModport.getIface().getDefiningOp());
   if (!ifaceInstance)
     return failure();
 
@@ -1076,7 +1073,7 @@ LogicalResult UnwrapInterfaceLower::matchAndRewrite(
   if (!sourceModport)
     return failure();
   auto ifaceInstance =
-      dyn_cast<InterfaceInstanceOp>(sourceModport.iface().getDefiningOp());
+      dyn_cast<InterfaceInstanceOp>(sourceModport.getIface().getDefiningOp());
   if (!ifaceInstance)
     return failure();
 
@@ -1313,7 +1310,6 @@ std::unique_ptr<OperationPass<ModuleOp>> createESIPortLoweringPass() {
 std::unique_ptr<OperationPass<ModuleOp>> createESItoHWPass() {
   return std::make_unique<ESItoHWPass>();
 }
-
 } // namespace esi
 } // namespace circt
 

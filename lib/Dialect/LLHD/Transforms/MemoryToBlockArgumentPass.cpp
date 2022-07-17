@@ -65,7 +65,7 @@ static void getDFClosure(SmallVectorImpl<Block *> &initialSet, Operation *op,
 static void addBlockOperandToTerminator(Operation *terminator,
                                         Block *successsor, Value toAppend) {
   if (auto wait = dyn_cast<llhd::WaitOp>(terminator)) {
-    wait.destOpsMutable().append(toAppend);
+    wait.getDestOpsMutable().append(toAppend);
   } else if (auto br = dyn_cast<mlir::cf::BranchOp>(terminator)) {
     br.getDestOperandsMutable().append(toAppend);
   } else if (auto condBr = dyn_cast<mlir::cf::CondBranchOp>(terminator)) {
@@ -99,7 +99,7 @@ void MemoryToBlockArgumentPass::runOnOperation() {
   // considered.
   SmallVector<Value, 16> vars;
   for (llhd::VarOp var : operation->getRegion(0).getOps<llhd::VarOp>()) {
-    vars.push_back(var.result());
+    vars.push_back(var.getResult());
   }
 
   // Don't consider variables that are used in other operations than load and
@@ -119,7 +119,7 @@ void MemoryToBlockArgumentPass::runOnOperation() {
     defBlocks.push_back(
         var.getDefiningOp<llhd::VarOp>().getOperation()->getBlock());
     operation->walk([&](llhd::StoreOp op) {
-      if (op.pointer() == var)
+      if (op.getPointer() == var)
         defBlocks.push_back(op.getOperation()->getBlock());
     });
     // Remove duplicates from the list
@@ -191,8 +191,8 @@ void MemoryToBlockArgumentPass::runOnOperation() {
         // Update currStoredValue at every store operation that stores to the
         // variable we are currently considering
         if (auto store = dyn_cast<llhd::StoreOp>(op)) {
-          if (store.pointer() == var) {
-            currStoredValue = store.value();
+          if (store.getPointer() == var) {
+            currStoredValue = store.getValue();
             op = std::prev(op);
             store.getOperation()->dropAllReferences();
             store.erase();
@@ -201,15 +201,15 @@ void MemoryToBlockArgumentPass::runOnOperation() {
           // operation that created the variable we are currently considering,
           // note that before that currStoredValue is uninitialized
         } else if (auto varOp = dyn_cast<llhd::VarOp>(op)) {
-          if (varOp.result() == var)
-            currStoredValue = varOp.init();
+          if (varOp.getResult() == var)
+            currStoredValue = varOp.getInit();
           // Replace the value returned by a load from the variable we are
           // currently considering with the currStoredValue and delete the load
           // operation
         } else if (auto load = dyn_cast<llhd::LoadOp>(op)) {
-          if (load.pointer() == var && currStoredValue) {
+          if (load.getPointer() == var && currStoredValue) {
             op = std::prev(op);
-            load.result().replaceAllUsesWith(currStoredValue);
+            load.getResult().replaceAllUsesWith(currStoredValue);
             load.getOperation()->dropAllReferences();
             load.erase();
           }

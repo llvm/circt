@@ -176,13 +176,13 @@ void AddSeqMemPortsPass::processMemModule(FMemModuleOp mem) {
     extraPorts.emplace_back(portIndex, p);
   mem.insertPorts(extraPorts);
   // Attach the extraPorts metadata.
-  mem.extraPortsAttr(extraPortsAttr);
+  mem.setExtraPortsAttr(extraPortsAttr);
 }
 
 LogicalResult AddSeqMemPortsPass::processModule(FModuleOp module) {
   auto *context = &getContext();
   // Insert the new port connections at the end of the module.
-  auto builder = OpBuilder::atBlockEnd(module.getBody());
+  auto builder = OpBuilder::atBlockEnd(module.getBodyBlock());
   auto &memInfo = memInfoMap[module];
   auto &extraPorts = memInfo.extraPorts;
   // List of ports added to submodules which must be connected to this module's
@@ -192,7 +192,7 @@ LogicalResult AddSeqMemPortsPass::processModule(FModuleOp module) {
   // The base index to use when adding ports to the current module.
   unsigned firstPortIndex = module.getNumPorts();
 
-  for (auto &op : llvm::make_early_inc_range(*module.getBody())) {
+  for (auto &op : llvm::make_early_inc_range(*module.getBodyBlock())) {
     if (auto inst = dyn_cast<InstanceOp>(op)) {
       auto submodule = instanceGraph->getReferencedModule(inst);
       auto &subMemInfo = memInfoMap[submodule];
@@ -270,7 +270,7 @@ LogicalResult AddSeqMemPortsPass::processModule(FModuleOp module) {
 void AddSeqMemPortsPass::createOutputFile(hw::HWModuleLike module) {
   // Insert the verbatim at the bottom of the circuit.
   auto circuit = getOperation();
-  auto builder = OpBuilder::atBlockEnd(circuit.getBody());
+  auto builder = OpBuilder::atBlockEnd(circuit.getBodyBlock());
 
   // Output buffer.
   std::string buffer;

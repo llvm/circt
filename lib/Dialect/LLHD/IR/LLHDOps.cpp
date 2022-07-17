@@ -191,7 +191,7 @@ static bool sameKindArbitraryWidth(Type lhsType, Type rhsType) {
 
 OpFoldResult llhd::ConstantTimeOp::fold(ArrayRef<Attribute> operands) {
   assert(operands.empty() && "const has no operands");
-  return valueAttr();
+  return getValueAttr();
 }
 
 void llhd::ConstantTimeOp::build(OpBuilder &builder, OperationState &result,
@@ -208,8 +208,8 @@ void llhd::ConstantTimeOp::build(OpBuilder &builder, OperationState &result,
 
 OpFoldResult llhd::ShlOp::fold(ArrayRef<Attribute> operands) {
   /// llhd.shl(base, hidden, 0) -> base
-  if (matchPattern(amount(), m_Zero()))
-    return base();
+  if (matchPattern(getAmount(), m_Zero()))
+    return getBase();
 
   return constFoldTernaryOp<IntegerAttr>(
       operands, [](APInt base, APInt hidden, APInt amt) {
@@ -225,8 +225,8 @@ OpFoldResult llhd::ShlOp::fold(ArrayRef<Attribute> operands) {
 
 OpFoldResult llhd::ShrOp::fold(ArrayRef<Attribute> operands) {
   /// llhd.shl(base, hidden, 0) -> base
-  if (matchPattern(amount(), m_Zero()))
-    return base();
+  if (matchPattern(getAmount(), m_Zero()))
+    return getBase();
 
   return constFoldTernaryOp<IntegerAttr>(
       operands, [](APInt base, APInt hidden, APInt amt) {
@@ -248,9 +248,9 @@ static OpFoldResult foldSigPtrExtractOp(Op op, ArrayRef<Attribute> operands) {
     return nullptr;
 
   // llhd.sig.extract(input, 0) with inputWidth == resultWidth => input
-  if (op.resultWidth() == op.inputWidth() &&
+  if (op.getResultWidth() == op.getInputWidth() &&
       operands[1].cast<IntegerAttr>().getValue().isZero())
-    return op.input();
+    return op.getInput();
 
   return nullptr;
 }
@@ -274,9 +274,9 @@ static OpFoldResult foldSigPtrArraySliceOp(Op op,
     return nullptr;
 
   // llhd.sig.array_slice(input, 0) with inputWidth == resultWidth => input
-  if (op.resultWidth() == op.inputWidth() &&
+  if (op.getResultWidth() == op.getInputWidth() &&
       operands[1].cast<IntegerAttr>().getValue().isZero())
-    return op.input();
+    return op.getInput();
 
   return nullptr;
 }
@@ -294,25 +294,25 @@ static LogicalResult canonicalizeSigPtrArraySliceOp(Op op,
                                                     PatternRewriter &rewriter) {
   IntegerAttr amountAttr, indexAttr;
 
-  if (!matchPattern(op.lowIndex(), m_Constant(&indexAttr)))
+  if (!matchPattern(op.getLowIndex(), m_Constant(&indexAttr)))
     return failure();
 
   // llhd.sig.array_slice(llhd.shr(hidden, base, constant amt), constant index)
   //   with amt + index + sliceWidth <= baseWidth
   //   => llhd.sig.array_slice(base, amt + index)
-  if (matchPattern(op.input(),
+  if (matchPattern(op.getInput(),
                    m_Op<llhd::ShrOp>(matchers::m_Any(), matchers::m_Any(),
                                      m_Constant(&amountAttr)))) {
     uint64_t amount = amountAttr.getValue().getZExtValue();
     uint64_t index = indexAttr.getValue().getZExtValue();
-    auto shrOp = op.input().template getDefiningOp<llhd::ShrOp>();
+    auto shrOp = op.getInput().template getDefiningOp<llhd::ShrOp>();
     unsigned baseWidth = shrOp.getBaseWidth();
 
-    if (amount + index + op.resultWidth() <= baseWidth) {
-      op.inputMutable().assign(shrOp.base());
+    if (amount + index + op.getResultWidth() <= baseWidth) {
+      op.getInputMutable().assign(shrOp.getBase());
       Value newIndex = rewriter.create<hw::ConstantOp>(
           op->getLoc(), amountAttr.getValue() + indexAttr.getValue());
-      op.lowIndexMutable().assign(newIndex);
+      op.getLowIndexMutable().assign(newIndex);
 
       return success();
     }
@@ -321,12 +321,13 @@ static LogicalResult canonicalizeSigPtrArraySliceOp(Op op,
   // llhd.sig.array_slice(llhd.sig.array_slice(target, a), b)
   //   => llhd.sig.array_slice(target, a+b)
   IntegerAttr a;
-  if (matchPattern(op.input(), m_Op<Op>(matchers::m_Any(), m_Constant(&a)))) {
-    auto sliceOp = op.input().template getDefiningOp<Op>();
-    op.inputMutable().assign(sliceOp.input());
+  if (matchPattern(op.getInput(),
+                   m_Op<Op>(matchers::m_Any(), m_Constant(&a)))) {
+    auto sliceOp = op.getInput().template getDefiningOp<Op>();
+    op.getInputMutable().assign(sliceOp.getInput());
     Value newIndex = rewriter.create<hw::ConstantOp>(
         op->getLoc(), a.getValue() + indexAttr.getValue());
-    op.lowIndexMutable().assign(newIndex);
+    op.getLowIndexMutable().assign(newIndex);
 
     return success();
   }
@@ -353,8 +354,8 @@ static LogicalResult canonicalizeSigPtrArrayGetOp(Op op,
                                                   PatternRewriter &rewriter) {
   // llhd.sig.array_get(llhd.shr(hidden, base, constant amt), constant index)
   IntegerAttr indexAttr, amountAttr;
-  if (matchPattern(op.index(), m_Constant(&indexAttr)) &&
-      matchPattern(op.input(),
+  if (matchPattern(op.getIndex(), m_Constant(&indexAttr)) &&
+      matchPattern(op.getInput(),
                    m_Op<llhd::ShrOp>(matchers::m_Any(), matchers::m_Any(),
                                      m_Constant(&amountAttr)))) {
     // Use APInt for index to keep the original bitwidth, zero-extend amount to
@@ -362,17 +363,17 @@ static LogicalResult canonicalizeSigPtrArrayGetOp(Op op,
     // of index
     APInt index = indexAttr.getValue();
     uint64_t amount = amountAttr.getValue().getZExtValue();
-    auto shrOp = op.input().template getDefiningOp<llhd::ShrOp>();
+    auto shrOp = op.getInput().template getDefiningOp<llhd::ShrOp>();
     unsigned baseWidth = shrOp.getBaseWidth();
     unsigned hiddenWidth = shrOp.getHiddenWidth();
 
     // with amt + index < baseWidth
     //   => llhd.sig.array_get(base, amt + index)
     if (amount + index.getZExtValue() < baseWidth) {
-      op.inputMutable().assign(shrOp.base());
+      op.getInputMutable().assign(shrOp.getBase());
       Value newIndex =
           rewriter.create<hw::ConstantOp>(op->getLoc(), amount + index);
-      op.indexMutable().assign(newIndex);
+      op.getIndexMutable().assign(newIndex);
 
       return success();
     }
@@ -380,10 +381,10 @@ static LogicalResult canonicalizeSigPtrArrayGetOp(Op op,
     // with amt + index >= baseWidth && amt + index < baseWidth + hiddenWidth
     //   => llhd.sig.array_get(hidden, amt + index - baseWidth)
     if (amount + index.getZExtValue() < baseWidth + hiddenWidth) {
-      op.inputMutable().assign(shrOp.hidden());
+      op.getInputMutable().assign(shrOp.getHidden());
       Value newIndex = rewriter.create<hw::ConstantOp>(
           op->getLoc(), amount + index - baseWidth);
-      op.indexMutable().assign(newIndex);
+      op.getIndexMutable().assign(newIndex);
 
       return success();
     }
@@ -453,11 +454,11 @@ LogicalResult llhd::PtrStructExtractOp::inferReturnTypes(
 
 LogicalResult llhd::DrvOp::fold(ArrayRef<Attribute> operands,
                                 SmallVectorImpl<OpFoldResult> &result) {
-  if (!enable())
+  if (!getEnable())
     return failure();
 
-  if (matchPattern(enable(), m_One())) {
-    enableMutable().clear();
+  if (matchPattern(getEnable(), m_One())) {
+    getEnableMutable().clear();
     return success();
   }
 
@@ -466,10 +467,10 @@ LogicalResult llhd::DrvOp::fold(ArrayRef<Attribute> operands,
 
 LogicalResult llhd::DrvOp::canonicalize(llhd::DrvOp op,
                                         PatternRewriter &rewriter) {
-  if (!op.enable())
+  if (!op.getEnable())
     return failure();
 
-  if (matchPattern(op.enable(), m_Zero())) {
+  if (matchPattern(op.getEnable(), m_Zero())) {
     rewriter.eraseOp(op);
     return success();
   }
@@ -484,7 +485,7 @@ LogicalResult llhd::DrvOp::canonicalize(llhd::DrvOp op,
 // Implement this operation for the BranchOpInterface
 SuccessorOperands llhd::WaitOp::getSuccessorOperands(unsigned index) {
   assert(index == 0 && "invalid successor index");
-  return SuccessorOperands(destOpsMutable());
+  return SuccessorOperands(getDestOpsMutable());
 }
 
 //===----------------------------------------------------------------------===//
@@ -576,14 +577,14 @@ static void printArgumentList(OpAsmPrinter &printer,
 
 void llhd::EntityOp::print(OpAsmPrinter &printer) {
   std::vector<BlockArgument> ins, outs;
-  uint64_t nIns = insAttr().getInt();
-  for (uint64_t i = 0; i < body().front().getArguments().size(); ++i) {
+  uint64_t nIns = getInsAttr().getInt();
+  for (uint64_t i = 0; i < getBody().front().getArguments().size(); ++i) {
     // no furter verification for the attribute type is required, already
     // handled by verify.
     if (i < nIns) {
-      ins.push_back(body().front().getArguments()[i]);
+      ins.push_back(getBody().front().getArguments()[i]);
     } else {
-      outs.push_back(body().front().getArguments()[i]);
+      outs.push_back(getBody().front().getArguments()[i]);
     }
   }
   auto entityName =
@@ -601,12 +602,12 @@ void llhd::EntityOp::print(OpAsmPrinter &printer) {
       /*elidedAttrs =*/{SymbolTable::getSymbolAttrName(),
                         llhd::EntityOp::getTypeAttrName(), "ins"});
   printer << " ";
-  printer.printRegion(body(), false, false);
+  printer.printRegion(getBody(), false, false);
 }
 
 LogicalResult llhd::EntityOp::verify() {
   uint64_t numArgs = getNumArguments();
-  uint64_t nIns = insAttr().getInt();
+  uint64_t nIns = getInsAttr().getInt();
   // check that there is at most one flag for each argument
   if (numArgs < nIns) {
     return emitError(
@@ -647,23 +648,23 @@ LogicalResult circt::llhd::EntityOp::verifyBody() {
   auto walkResult = walk([&sigSet, &instSet](Operation *op) -> WalkResult {
     return TypeSwitch<Operation *, WalkResult>(op)
         .Case<SigOp>([&](auto sigOp) -> WalkResult {
-          if (!sigSet.insert(sigOp.name()).second)
+          if (!sigSet.insert(sigOp.getName()).second)
             return sigOp.emitError("redefinition of signal named '")
-                   << sigOp.name() << "'!";
+                   << sigOp.getName() << "'!";
 
           return success();
         })
         .Case<OutputOp>([&](auto outputOp) -> WalkResult {
-          if (outputOp.name() && !sigSet.insert(*outputOp.name()).second)
+          if (outputOp.getName() && !sigSet.insert(*outputOp.getName()).second)
             return outputOp.emitError("redefinition of signal named '")
-                   << *outputOp.name() << "'!";
+                   << *outputOp.getName() << "'!";
 
           return success();
         })
         .Case<InstOp>([&](auto instOp) -> WalkResult {
-          if (!instSet.insert(instOp.name()).second)
+          if (!instSet.insert(instOp.getName()).second)
             return instOp.emitError("redefinition of instance named '")
-                   << instOp.name() << "'!";
+                   << instOp.getName() << "'!";
 
           return success();
         })
@@ -709,7 +710,7 @@ LogicalResult llhd::ProcOp::verify() {
   // Check that the ins attribute is smaller or equal the number of
   // arguments
   uint64_t numArgs = getNumArguments();
-  uint64_t numIns = insAttr().getInt();
+  uint64_t numIns = getInsAttr().getInt();
   if (numArgs < numIns) {
     return emitOpError(
                "Cannot have more inputs than arguments, expected at most ")
@@ -837,9 +838,9 @@ void llhd::ProcOp::print(OpAsmPrinter &printer) {
   printer << ' ';
   printer.printSymbolName(getName());
   printProcArguments(printer, getOperation(), type.getInputs(),
-                     insAttr().getInt());
+                     getInsAttr().getInt());
   printer << " ";
-  printer.printRegion(body(), false, true);
+  printer.printRegion(getBody(), false, true);
 }
 
 Region *llhd::ProcOp::getCallableRegion() {
@@ -865,7 +866,7 @@ LogicalResult llhd::InstOp::verify() {
   if (proc) {
     auto type = proc.getFunctionType();
 
-    if (proc.ins() != inputs().size())
+    if (proc.getIns() != getInputs().size())
       return emitOpError("incorrect number of inputs for proc instantiation");
 
     if (type.getNumInputs() != getNumOperands())
@@ -885,7 +886,7 @@ LogicalResult llhd::InstOp::verify() {
   if (entity) {
     auto type = entity.getFunctionType();
 
-    if (entity.ins() != inputs().size())
+    if (entity.getIns() != getInputs().size())
       return emitOpError("incorrect number of inputs for entity instantiation");
 
     if (type.getNumInputs() != getNumOperands())
@@ -906,7 +907,7 @@ LogicalResult llhd::InstOp::verify() {
   if (module) {
     auto type = module.getFunctionType();
 
-    if (type.getNumInputs() != inputs().size())
+    if (type.getNumInputs() != getInputs().size())
       return emitOpError(
           "incorrect number of inputs for hw.module instantiation");
 
@@ -949,7 +950,7 @@ FunctionType llhd::InstOp::getCalleeType() {
 
 LogicalResult llhd::ConnectOp::canonicalize(llhd::ConnectOp op,
                                             PatternRewriter &rewriter) {
-  if (op.lhs() == op.rhs())
+  if (op.getLhs() == op.getRhs())
     rewriter.eraseOp(op);
   return success();
 }
@@ -1050,59 +1051,59 @@ ParseResult llhd::RegOp::parse(OpAsmParser &parser, OperationState &result) {
 }
 
 void llhd::RegOp::print(OpAsmPrinter &printer) {
-  printer << " " << signal();
-  for (size_t i = 0, e = values().size(); i < e; ++i) {
+  printer << " " << getSignal();
+  for (size_t i = 0, e = getValues().size(); i < e; ++i) {
     Optional<llhd::RegMode> mode = llhd::symbolizeRegMode(
-        modes().getValue()[i].cast<IntegerAttr>().getInt());
+        getModes().getValue()[i].cast<IntegerAttr>().getInt());
     if (!mode) {
       emitError("invalid RegMode");
       return;
     }
-    printer << ", (" << values()[i] << ", \""
-            << llhd::stringifyRegMode(mode.getValue()) << "\" " << triggers()[i]
-            << " after " << delays()[i];
+    printer << ", (" << getValues()[i] << ", \""
+            << llhd::stringifyRegMode(mode.getValue()) << "\" "
+            << getTriggers()[i] << " after " << getDelays()[i];
     if (hasGate(i))
       printer << " if " << getGateAt(i);
-    printer << " : " << values()[i].getType() << ")";
+    printer << " : " << getValues()[i].getType() << ")";
   }
   printer.printOptionalAttrDict((*this)->getAttrs(),
                                 {"modes", "gateMask", "operand_segment_sizes"});
-  printer << " : " << signal().getType();
+  printer << " : " << getSignal().getType();
 }
 
 LogicalResult llhd::RegOp::verify() {
   // At least one trigger has to be present
-  if (triggers().size() < 1)
+  if (getTriggers().size() < 1)
     return emitError("At least one trigger quadruple has to be present.");
 
   // Values variadic operand must have the same size as the triggers variadic
-  if (values().size() != triggers().size())
+  if (getValues().size() != getTriggers().size())
     return emitOpError("Number of 'values' is not equal to the number of "
                        "'triggers', got ")
-           << values().size() << " modes, but " << triggers().size()
+           << getValues().size() << " modes, but " << getTriggers().size()
            << " triggers!";
 
   // Delay variadic operand must have the same size as the triggers variadic
-  if (delays().size() != triggers().size())
+  if (getDelays().size() != getTriggers().size())
     return emitOpError("Number of 'delays' is not equal to the number of "
                        "'triggers', got ")
-           << delays().size() << " modes, but " << triggers().size()
+           << getDelays().size() << " modes, but " << getTriggers().size()
            << " triggers!";
 
   // Array Attribute of RegModes must have the same number of elements as the
   // variadics
-  if (modes().size() != triggers().size())
+  if (getModes().size() != getTriggers().size())
     return emitOpError("Number of 'modes' is not equal to the number of "
                        "'triggers', got ")
-           << modes().size() << " modes, but " << triggers().size()
+           << getModes().size() << " modes, but " << getTriggers().size()
            << " triggers!";
 
   // Array Attribute 'gateMask' must have the same number of elements as the
   // triggers and values variadics
-  if (gateMask().size() != triggers().size())
+  if (getGateMask().size() != getTriggers().size())
     return emitOpError("Size of 'gateMask' is not equal to the size of "
                        "'triggers', got ")
-           << gateMask().size() << " modes, but " << triggers().size()
+           << getGateMask().size() << " modes, but " << getTriggers().size()
            << " triggers!";
 
   // Number of non-zero elements in 'gateMask' has to be the same as the size
@@ -1110,7 +1111,7 @@ LogicalResult llhd::RegOp::verify() {
   // only once and in increasing order
   unsigned counter = 0;
   unsigned prevElement = 0;
-  for (Attribute maskElem : gateMask().getValue()) {
+  for (Attribute maskElem : getGateMask().getValue()) {
     int64_t val = maskElem.cast<IntegerAttr>().getInt();
     if (val < 0)
       return emitError("Element in 'gateMask' must not be negative!");
@@ -1123,16 +1124,16 @@ LogicalResult llhd::RegOp::verify() {
           "(may have zeros in-between).");
     counter++;
   }
-  if (gates().size() != counter)
+  if (getGates().size() != counter)
     return emitError("The number of non-zero elements in 'gateMask' and the "
                      "size of the 'gates' variadic have to match.");
 
   // Each value must be either the same type as the 'signal' or the underlying
   // type of the 'signal'
-  for (auto val : values()) {
-    if (val.getType() != signal().getType() &&
+  for (auto val : getValues()) {
+    if (val.getType() != getSignal().getType() &&
         val.getType() !=
-            signal().getType().cast<llhd::SigType>().getUnderlyingType()) {
+            getSignal().getType().cast<llhd::SigType>().getUnderlyingType()) {
       return emitOpError(
           "type of each 'value' has to be either the same as the "
           "type of 'signal' or the underlying type of 'signal'");

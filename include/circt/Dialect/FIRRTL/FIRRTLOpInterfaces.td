@@ -271,9 +271,9 @@ def FConnectLike : OpInterface<"FConnectLike"> {
 
   let methods = [
     InterfaceMethod<"Return a destination of connection.",
-    "Value", "dest", (ins)>,
+    "Value", "getDest", (ins)>,
     InterfaceMethod<"Return a source of connection.",
-    "Value", "src", (ins)>,
+    "Value", "getSrc", (ins)>,
   ];
 }
 

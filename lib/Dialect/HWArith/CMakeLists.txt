@@ -7,6 +7,7 @@
 set(srcs
     HWArithDialect.cpp
     HWArithOps.cpp
+    HWArithTypes.cpp
 )
 
 add_circt_dialect_library(CIRCTHWArith
@@ -22,4 +23,5 @@ add_circt_dialect_library(CIRCTHWArith
 
     LINK_LIBS PUBLIC
     MLIRIR
+    MLIRInferTypeOpInterface
 )

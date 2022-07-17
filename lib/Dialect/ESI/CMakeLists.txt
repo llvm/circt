@@ -10,6 +10,7 @@ set(srcs
   ESIFolds.cpp
   ESIOps.cpp
   ESIPasses.cpp
+  ESIServices.cpp
   ESITranslations.cpp
   ESITypes.cpp
 )
@@ -17,6 +18,7 @@ set(srcs
 set(ESI_LinkLibs
   CIRCTSupport
   CIRCTComb
+  CIRCTMSFT
   CIRCTSV
   CIRCTHW
   MLIRIR

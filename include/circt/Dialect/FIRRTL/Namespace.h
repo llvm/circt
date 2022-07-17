@@ -29,7 +29,7 @@ struct CircuitNamespace : public Namespace {
   /// composed of any operation in the first level of the circuit that contains
   /// a symbol.
   void add(CircuitOp circuit) {
-    for (auto &op : *circuit.getBody())
+    for (auto &op : *circuit.getBodyBlock())
       if (auto symbol = op.getAttrOfType<mlir::StringAttr>(
               SymbolTable::getSymbolAttrName()))
         nextIndex.insert({symbol.getValue(), 0});

@@ -69,56 +69,56 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
                                llvm::json::OStream &jsonStream,
                                std::string &seqMemConfStr) {
     // Get the memory data width.
-    auto width = mem.dataWidth();
+    auto width = mem.getDataWidth();
     // Metadata needs to be printed for memories which are candidates for
     // macro replacement. The requirements for macro replacement::
     // 1. read latency and write latency of one.
     // 2. only one readwrite port or write port.
     // 3. zero or one read port.
     // 4. undefined read-under-write behavior.
-    if (!((mem.readLatency() == 1 && mem.writeLatency() == 1) &&
-          (mem.numWritePorts() + mem.numReadWritePorts() == 1) &&
-          (mem.numReadPorts() <= 1) && width > 0))
+    if (!((mem.getReadLatency() == 1 && mem.getWriteLatency() == 1) &&
+          (mem.getNumWritePorts() + mem.getNumReadWritePorts() == 1) &&
+          (mem.getNumReadPorts() <= 1) && width > 0))
       return;
 
     // Compute the mask granularity.
     auto isMasked = mem.isMasked();
-    auto maskGran = width / mem.maskBits();
+    auto maskGran = width / mem.getMaskBits();
     // Now create the config string for the memory.
     std::string portStr;
-    if (mem.numWritePorts() && isMasked)
+    if (mem.getNumWritePorts() && isMasked)
       portStr += "mwrite";
-    else if (mem.numWritePorts())
+    else if (mem.getNumWritePorts())
       portStr += "write";
-    if (mem.numReadPorts()) {
+    if (mem.getNumReadPorts()) {
       if (!portStr.empty())
         portStr += ",";
       portStr += "read";
     }
-    if (mem.numReadWritePorts() && isMasked)
+    if (mem.getNumReadWritePorts() && isMasked)
       portStr = "mrw";
-    else if (mem.numReadWritePorts())
+    else if (mem.getNumReadWritePorts())
       portStr = "rw";
     auto memExtName = mem.getName();
     auto maskGranStr =
         !isMasked ? "" : " mask_gran " + std::to_string(maskGran);
     seqMemConfStr = (StringRef(seqMemConfStr) + "name " + memExtName +
-                     " depth " + Twine(mem.depth()) + " width " + Twine(width) +
-                     " ports " + portStr + maskGranStr + "\n")
+                     " depth " + Twine(mem.getDepth()) + " width " +
+                     Twine(width) + " ports " + portStr + maskGranStr + "\n")
                         .str();
     // This adds a Json array element entry corresponding to this memory.
     jsonStream.object([&] {
       jsonStream.attribute("module_name", memExtName);
-      jsonStream.attribute("depth", (int64_t)mem.depth());
+      jsonStream.attribute("depth", (int64_t)mem.getDepth());
       jsonStream.attribute("width", (int64_t)width);
       jsonStream.attribute("masked", isMasked);
-      jsonStream.attribute("read", mem.numReadPorts() > 0);
-      jsonStream.attribute("write", mem.numWritePorts() > 0);
-      jsonStream.attribute("readwrite", mem.numReadWritePorts() > 0);
+      jsonStream.attribute("read", mem.getNumReadPorts() > 0);
+      jsonStream.attribute("write", mem.getNumWritePorts() > 0);
+      jsonStream.attribute("readwrite", mem.getNumReadWritePorts() > 0);
       if (isMasked)
         jsonStream.attribute("mask_granularity", (int64_t)maskGran);
       jsonStream.attributeArray("extra_ports", [&] {
-        for (auto attr : mem.extraPorts()) {
+        for (auto attr : mem.getExtraPorts()) {
           jsonStream.object([&] {
             auto port = attr.cast<DictionaryAttr>();
             auto name = port.getAs<StringAttr>("name").getValue();
@@ -146,7 +146,7 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
             auto parentModule = inst->getParentOfType<FModuleOp>();
             if (dutMod == parentModule)
               hierName = parentModule.getName().str();
-            hierName = (Twine(hierName) + "." + inst.name()).str();
+            hierName = (Twine(hierName) + "." + inst.getName()).str();
           }
           hierNames.push_back(hierName);
           jsonStream.value(hierName);
@@ -184,7 +184,7 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
   });
 
   auto *context = &getContext();
-  auto builder = OpBuilder::atBlockEnd(circuitOp.getBody());
+  auto builder = OpBuilder::atBlockEnd(circuitOp.getBodyBlock());
   AnnotationSet annos(circuitOp);
   auto dirAnno = annos.getAnnotation(metadataDirectoryAttrName);
   StringRef metadataDir = "metadata";
@@ -291,7 +291,7 @@ LogicalResult CreateSiFiveMetadataPass::emitRetimeModulesMetadata() {
   SmallVector<Attribute> symbols;
   SmallString<3> placeholder;
   j.array([&] {
-    for (auto module : circuitOp.getBody()->getOps<FModuleLike>()) {
+    for (auto module : circuitOp.getBodyBlock()->getOps<FModuleLike>()) {
       // The annotation has no supplemental information, just remove it.
       if (!AnnotationSet::removeAnnotations(module, retimeModuleAnnoClass))
         continue;
@@ -304,7 +304,7 @@ LogicalResult CreateSiFiveMetadataPass::emitRetimeModulesMetadata() {
   });
 
   // Put the retime information in a verbatim operation.
-  auto builder = OpBuilder::atBlockEnd(circuitOp.getBody());
+  auto builder = OpBuilder::atBlockEnd(circuitOp.getBodyBlock());
   auto verbatimOp = builder.create<sv::VerbatimOp>(
       builder.getUnknownLoc(), buffer, ValueRange(),
       builder.getArrayAttr(symbols));
@@ -351,10 +351,10 @@ LogicalResult CreateSiFiveMetadataPass::emitSitestBlackboxMetadata() {
   // depending on if theyre in the DUT or the test harness.
   SmallVector<StringRef> dutModules;
   SmallVector<StringRef> testModules;
-  for (auto extModule : circuitOp.getBody()->getOps<FExtModuleOp>()) {
+  for (auto extModule : circuitOp.getBodyBlock()->getOps<FExtModuleOp>()) {
     // If the module doesn't have a defname, then we can't record it properly.
     // Just skip it.
-    if (!extModule.defname())
+    if (!extModule.getDefname())
       continue;
 
     // If its a generated blackbox, skip it.
@@ -374,9 +374,9 @@ LogicalResult CreateSiFiveMetadataPass::emitSitestBlackboxMetadata() {
 
     // Record the defname of the module.
     if (dutModuleSet.contains(extModule)) {
-      dutModules.push_back(*extModule.defname());
+      dutModules.push_back(*extModule.getDefname());
     } else {
-      testModules.push_back(*extModule.defname());
+      testModules.push_back(*extModule.getDefname());
     }
   }
 
@@ -400,7 +400,7 @@ LogicalResult CreateSiFiveMetadataPass::emitSitestBlackboxMetadata() {
         j.value(name);
     });
 
-    auto *body = circuitOp.getBody();
+    auto *body = circuitOp.getBodyBlock();
     // Put the information in a verbatim operation.
     auto builder = OpBuilder::atBlockEnd(body);
     auto verbatimOp =
@@ -423,7 +423,7 @@ void CreateSiFiveMetadataPass::getDependentDialects(
 
 void CreateSiFiveMetadataPass::runOnOperation() {
   auto circuitOp = getOperation();
-  auto *body = circuitOp.getBody();
+  auto *body = circuitOp.getBodyBlock();
 
   // Find the device under test and create a set of all modules underneath it.
   auto it = llvm::find_if(*body, [&](Operation &op) -> bool {

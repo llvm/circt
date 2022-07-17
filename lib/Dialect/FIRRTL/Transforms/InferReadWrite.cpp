@@ -44,19 +44,19 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
     ModuleNamespace modNamespace(getOperation());
     SmallVector<Operation *> opsToErase;
     for (MemOp memOp : llvm::make_early_inc_range(
-             getOperation().getBody()->getOps<MemOp>())) {
+             getOperation().getBodyBlock()->getOps<MemOp>())) {
       inferUnmasked(memOp, opsToErase);
       size_t nReads, nWrites, nRWs;
       memOp.getNumPorts(nReads, nWrites, nRWs);
       // Run the analysis only for Seq memories (latency=1) and a single read
       // and write ports.
       if (!(nReads == 1 && nWrites == 1 && nRWs == 0) ||
-          !(memOp.readLatency() == 1 && memOp.writeLatency() == 1))
+          !(memOp.getReadLatency() == 1 && memOp.getWriteLatency() == 1))
         continue;
       Value rClock, wClock;
       // The memory has exactly two ports.
       SmallVector<Value> portTerms[2];
-      for (const auto &portIt : llvm::enumerate(memOp.results())) {
+      for (const auto &portIt : llvm::enumerate(memOp.getResults())) {
         // Get the port value.
         Value portVal = portIt.value();
         // Get the port kind.
@@ -66,8 +66,9 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
         for (Operation *u : portVal.getUsers())
           if (auto sf = dyn_cast<SubfieldOp>(u)) {
             // Get the field name.
-            auto fName = sf.input().getType().cast<BundleType>().getElementName(
-                sf.fieldIndex());
+            auto fName =
+                sf.getInput().getType().cast<BundleType>().getElementName(
+                    sf.getFieldIndex());
             // If this is the enable field, record the product terms(the And
             // expression tree).
             if (fName.equals("en"))
@@ -110,23 +111,24 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
           StringAttr::get(memOp.getContext(), modNamespace.newName("rw")));
       // Set the type of the rw port.
       resultTypes.push_back(MemOp::getTypeForPort(
-          memOp.depth(), memOp.getDataType(), MemOp::PortKind::ReadWrite,
+          memOp.getDepth(), memOp.getDataType(), MemOp::PortKind::ReadWrite,
           memOp.getMaskBits()));
       SmallVector<Attribute> portAtts;
       // Append the annotations from the two ports.
-      if (!memOp.portAnnotations()[0].cast<ArrayAttr>().empty())
-        portAtts.push_back(memOp.portAnnotations()[0]);
-      if (!memOp.portAnnotations()[1].cast<ArrayAttr>().empty())
-        portAtts.push_back(memOp.portAnnotations()[1]);
+      if (!memOp.getPortAnnotations()[0].cast<ArrayAttr>().empty())
+        portAtts.push_back(memOp.getPortAnnotations()[0]);
+      if (!memOp.getPortAnnotations()[1].cast<ArrayAttr>().empty())
+        portAtts.push_back(memOp.getPortAnnotations()[1]);
       ImplicitLocOpBuilder builder(memOp.getLoc(), memOp);
       portAnnotations.push_back(builder.getArrayAttr(portAtts));
       // Create the new rw memory.
       auto rwMem = builder.create<MemOp>(
-          resultTypes, memOp.readLatency(), memOp.writeLatency(), memOp.depth(),
-          RUWAttr::Undefined, builder.getArrayAttr(resultNames),
-          memOp.nameAttr(), memOp.nameKind(), memOp.annotations(),
-          builder.getArrayAttr(portAnnotations), memOp.inner_symAttr(),
-          memOp.groupIDAttr());
+          resultTypes, memOp.getReadLatency(), memOp.getWriteLatency(),
+          memOp.getDepth(), RUWAttr::Undefined,
+          builder.getArrayAttr(resultNames), memOp.getNameAttr(),
+          memOp.getNameKind(), memOp.getAnnotations(),
+          builder.getArrayAttr(portAnnotations), memOp.getInnerSymAttr(),
+          memOp.getGroupIDAttr());
       auto rwPort = rwMem->getResult(0);
       // Create the subfield access to all fields of the port.
       // The addr should be connected to read/write address depending on the
@@ -158,7 +160,7 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
       // WriteMode = WriteEnable.
       builder.create<StrictConnectOp>(wmode, wEnWire);
       // Now iterate over the original memory read and write ports.
-      for (const auto &portIt : llvm::enumerate(memOp.results())) {
+      for (const auto &portIt : llvm::enumerate(memOp.getResults())) {
         // Get the port value.
         Value portVal = portIt.value();
         // Get the port kind.
@@ -169,8 +171,8 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
         for (Operation *u : portVal.getUsers())
           if (auto sf = dyn_cast<SubfieldOp>(u)) {
             StringRef fName =
-                sf.input().getType().cast<BundleType>().getElementName(
-                    sf.fieldIndex());
+                sf.getInput().getType().cast<BundleType>().getElementName(
+                    sf.getFieldIndex());
             Value repl;
             if (readPort)
               repl = llvm::StringSwitch<Value>(fName)
@@ -202,8 +204,8 @@ private:
   Value getConnectSrc(Value dst) {
     for (auto *c : dst.getUsers())
       if (auto connect = dyn_cast<FConnectLike>(c))
-        if (connect.dest() == dst)
-          return connect.src();
+        if (connect.getDest() == dst)
+          return connect.getSrc();
 
     return nullptr;
   }
@@ -246,7 +248,7 @@ private:
       if (term.isa<BlockArgument>())
         continue;
       TypeSwitch<Operation *>(term.getDefiningOp())
-          .Case<NodeOp>([&](auto n) { worklist.push_back(n.input()); })
+          .Case<NodeOp>([&](auto n) { worklist.push_back(n.getInput()); })
           .Case<AndPrimOp>([&](AndPrimOp andOp) {
             worklist.push_back(andOp.getOperand(0));
             worklist.push_back(andOp.getOperand(1));
@@ -255,11 +257,11 @@ private:
             // Check for the pattern when low is 0, which is equivalent to (sel
             // & high)
             // term = mux (sel, high, 0) => term = sel & high
-            if (ConstantOp cLow =
-                    dyn_cast_or_null<ConstantOp>(muxOp.low().getDefiningOp()))
-              if (cLow.value().isZero()) {
-                worklist.push_back(muxOp.sel());
-                worklist.push_back(muxOp.high());
+            if (ConstantOp cLow = dyn_cast_or_null<ConstantOp>(
+                    muxOp.getLow().getDefiningOp()))
+              if (cLow.getValue().isZero()) {
+                worklist.push_back(muxOp.getSel());
+                worklist.push_back(muxOp.getHigh());
               }
           })
           .Default([&](auto) {
@@ -281,11 +283,11 @@ private:
       for (auto t2 : prodTerms[1]) {
         // Return true if t1 is a Not of t2.
         if (!t1.isa<BlockArgument>() && isa<NotPrimOp>(t1.getDefiningOp()))
-          if (cast<NotPrimOp>(t1.getDefiningOp()).input() == t2)
+          if (cast<NotPrimOp>(t1.getDefiningOp()).getInput() == t2)
             return true;
         // Else Return true if t2 is a Not of t1.
         if (!t2.isa<BlockArgument>() && isa<NotPrimOp>(t2.getDefiningOp()))
-          if (cast<NotPrimOp>(t2.getDefiningOp()).input() == t1)
+          if (cast<NotPrimOp>(t2.getDefiningOp()).getInput() == t1)
             return true;
       }
 
@@ -297,7 +299,7 @@ private:
 
     // Iterate over all results, and check if the mask field of the result is
     // connected to a multi-bit constant 1.
-    for (const auto &portIt : llvm::enumerate(memOp.results())) {
+    for (const auto &portIt : llvm::enumerate(memOp.getResults())) {
       // Read ports donot have the mask field.
       if (memOp.getPortKind(portIt.index()) == MemOp::PortKind::Read)
         continue;
@@ -306,12 +308,13 @@ private:
       for (Operation *u : portVal.getUsers())
         if (auto sf = dyn_cast<SubfieldOp>(u)) {
           // Get the field name.
-          auto fName = sf.input().getType().cast<BundleType>().getElementName(
-              sf.fieldIndex());
+          auto fName =
+              sf.getInput().getType().cast<BundleType>().getElementName(
+                  sf.getFieldIndex());
           // Check if this is the mask field.
           if (fName.contains("mask")) {
             // Already 1 bit, nothing to do.
-            if (sf.result()
+            if (sf.getResult()
                     .getType()
                     .cast<FIRRTLType>()
                     .getBitWidthOrSentinel() == 1)
@@ -320,7 +323,7 @@ private:
             // If, a constant 1, then we can replace with unMasked memory.
             if (auto maskVal = getConnectSrc(sf))
               if (auto constVal = dyn_cast<ConstantOp>(maskVal.getDefiningOp()))
-                if (constVal.value().isAllOnes())
+                if (constVal.getValue().isAllOnes())
                   isMasked = false;
           }
         }
@@ -333,17 +336,18 @@ private:
       SmallVector<Type, 4> resultTypes;
       for (size_t i = 0, e = memOp.getNumResults(); i != e; ++i)
         resultTypes.push_back(
-            MemOp::getTypeForPort(memOp.depth(), memOp.getDataType(),
+            MemOp::getTypeForPort(memOp.getDepth(), memOp.getDataType(),
                                   memOp.getPortKind(i), /*maskBits=*/1));
 
       // Copy everything from old memory, except the result type.
       auto newMem = builder.create<MemOp>(
-          resultTypes, memOp.readLatency(), memOp.writeLatency(), memOp.depth(),
-          memOp.ruw(), memOp.portNames().getValue(), memOp.nameAttr(),
-          memOp.nameKind(), memOp.annotations().getValue(),
-          memOp.portAnnotations().getValue(), memOp.inner_symAttr());
+          resultTypes, memOp.getReadLatency(), memOp.getWriteLatency(),
+          memOp.getDepth(), memOp.getRuw(), memOp.getPortNames().getValue(),
+          memOp.getNameAttr(), memOp.getNameKind(),
+          memOp.getAnnotations().getValue(),
+          memOp.getPortAnnotations().getValue(), memOp.getInnerSymAttr());
       // Now replace the result of old memory with the new one.
-      for (const auto &portIt : llvm::enumerate(memOp.results())) {
+      for (const auto &portIt : llvm::enumerate(memOp.getResults())) {
         // Old result.
         Value oldPort = portIt.value();
         // New result.
@@ -356,9 +360,11 @@ private:
         // Otherwise, all fields can be blindly replaced, except mask field.
         for (Operation *u : oldPort.getUsers()) {
           auto oldRes = dyn_cast<SubfieldOp>(u);
-          auto sf = builder.create<SubfieldOp>(newPortVal, oldRes.fieldIndex());
-          auto fName = sf.input().getType().cast<BundleType>().getElementName(
-              sf.fieldIndex());
+          auto sf =
+              builder.create<SubfieldOp>(newPortVal, oldRes.getFieldIndex());
+          auto fName =
+              sf.getInput().getType().cast<BundleType>().getElementName(
+                  sf.getFieldIndex());
           // Replace all mask fields with a one bit constant 1.
           // Replace all other fields with the new port.
           if (fName.contains("mask")) {

@@ -77,7 +77,7 @@ class ChildIterator
   void skipToNextValidChild() {
     auto isChild = [&]() {
       if (auto connect = dyn_cast<FConnectLike>(childIt->getOwner()))
-        return childIt->get() == connect.src();
+        return childIt->get() == connect.getSrc();
       return childIt->getOwner()->getNumResults() > 0;
     };
     while (childIt != childEnd && !isChild())
@@ -106,7 +106,7 @@ public:
   Value operator*() {
     assert(!isAtEnd() && "dereferencing the end iterator");
     if (auto connect = dyn_cast<FConnectLike>(childIt->getOwner()))
-      return connect.dest();
+      return connect.getDest();
     return childIt->getOwner()->getResult(0);
   }
 
@@ -232,19 +232,19 @@ public:
     if (end)
       return;
 
-    auto memory = subfield.input().getDefiningOp<MemOp>();
+    auto memory = subfield.getInput().getDefiningOp<MemOp>();
     if (!memory) {
       subfield->emitOpError("input must be a port of a MemOp, please run "
                             "-firrtl-lower-types first");
       return;
     }
 
-    if (memory.readLatency() != 0)
+    if (memory.getReadLatency() != 0)
       return;
 
-    auto portKind =
-        memory.getPortKind(subfield.input().cast<OpResult>().getResultNumber());
-    auto subfieldIndex = subfield.fieldIndex();
+    auto portKind = memory.getPortKind(
+        subfield.getInput().cast<OpResult>().getResultNumber());
+    auto subfieldIndex = subfield.getFieldIndex();
     // Combinational path exists only when the current subfield is `addr`.
     if (!(portKind == MemOp::PortKind::Read &&
           subfieldIndex == (unsigned)ReadPortSubfield::addr) &&
@@ -254,7 +254,7 @@ public:
 
     // Only `data` or `rdata` subfield is combinationally connected to `addr`
     // subfield. Find the corresponding subfield op.
-    for (auto user : subfield.input().getUsers()) {
+    for (auto user : subfield.getInput().getUsers()) {
       auto currentSubfield = dyn_cast<SubfieldOp>(user);
       if (!currentSubfield) {
         user->emitOpError("MemOp must be used by SubfieldOp, please run "
@@ -262,13 +262,13 @@ public:
         return;
       }
 
-      auto index = currentSubfield.fieldIndex();
+      auto index = currentSubfield.getFieldIndex();
       if ((portKind == MemOp::PortKind::Read &&
            index == (unsigned)ReadPortSubfield::data) ||
           (portKind == MemOp::PortKind::ReadWrite &&
            index == (unsigned)ReadWritePortSubfield::rdata)) {
-        child = ChildIterator(currentSubfield.result());
-        dataPort = currentSubfield.result();
+        child = ChildIterator(currentSubfield.getResult());
+        dataPort = currentSubfield.getResult();
         return;
       }
     }
@@ -313,7 +313,7 @@ public:
   Node operator*() {
     assert(connect != node.context->connects.end() &&
            "dereferencing the end iterator");
-    return Node((*connect).dest(), node.context);
+    return Node((*connect).getDest(), node.context);
   }
 
   bool operator==(const DummySourceNodeIterator &rhs) const {
@@ -539,7 +539,7 @@ void dumpPath(SmallVector<Node> &path, SmallString<16> &instancePath,
         .Case<WireOp, RegOp, RegResetOp>(
             // For operations which declare signals, we simply print signal
             // names.
-            [&](auto op) { attachInfo() << op.name(); })
+            [&](auto op) { attachInfo() << op.getName(); })
         .Case<InstanceOp, SubfieldOp>([&](auto op) {
           // If the op is InstanceOp or SubfieldOp, it is necessary to
           // investigate the next value since output values do not expilicty
@@ -559,7 +559,7 @@ void dumpPath(SmallVector<Node> &path, SmallString<16> &instancePath,
               auto outputPort =
                   std::get<InstanceNodeIterator>(iterImpl).getPortNumber();
               if (isCycleEnd)
-                attachInfo() << instance.name() << "."
+                attachInfo() << instance.getName() << "."
                              << instance.getPortName(inputPort).str();
               else
                 dumpPathBetweenModulePorts(instancePath, instance, inputPort,
@@ -596,7 +596,7 @@ void dumpPathBetweenModulePorts(SmallString<16> &instancePath,
     return;
   unsigned instancePathSize = instancePath.size();
   instancePath += ".";
-  instancePath += instance.name();
+  instancePath += instance.getName();
   auto start = Node(module.getArgument(inputPort), context);
   auto end = Node(module.getArgument(outputPort), context);
   llvm::DenseMap<Node, Node> previousNode;

@@ -3,8 +3,7 @@ firrtl.circuit "top" {
   // In `dead_module`, %source is connected to %dest through several dead operations such as
   // node, wire, reg or rgereset. %dest is also dead at any instantiation, so check that
   // all operations are removed by IMDeadCodeElim pass.
-  // CHECK-LABEL: private @dead_module() {
-  // CHECK-NEXT:  }
+  // CHECK-NOT: @dead_module
   firrtl.module private @dead_module(in %source: !firrtl.uint<1>, out %dest: !firrtl.uint<1>,
                                      in %clock:!firrtl.clock, in %reset:!firrtl.uint<1>) {
     %dead_node = firrtl.node %source: !firrtl.uint<1>
@@ -54,8 +53,7 @@ firrtl.circuit "top" {
     %tmp = firrtl.node %source: !firrtl.uint<1>
     firrtl.strictconnect %dest, %tmp : !firrtl.uint<1>
 
-    // TODO: Remove instances of empty modules.
-    // CHECK-NEXT: firrtl.instance dead_module  @dead_module()
+    // CHECK-NOT: @dead_module
     %source1, %dest1, %clock1, %reset1  = firrtl.instance dead_module @dead_module(in source: !firrtl.uint<1>, out dest: !firrtl.uint<1>, in clock:!firrtl.clock, in reset:!firrtl.uint<1>)
     firrtl.strictconnect %source1, %source : !firrtl.uint<1>
     firrtl.strictconnect %clock1, %clock : !firrtl.clock
@@ -82,13 +80,11 @@ firrtl.circuit "top" {
 
 // Check that it's possible to analyze complex dependency across different modules.
 firrtl.circuit "top"  {
-  // CHECK-LABEL: firrtl.module private @Child1() {
-  // CHECK-NEXT:  }
+  // CHECK-NOT: @Child1
   firrtl.module private @Child1(in %input: !firrtl.uint<1>, out %output: !firrtl.uint<1>) {
     firrtl.strictconnect %output, %input : !firrtl.uint<1>
   }
-  // CHECK-LABEL: firrtl.module private @Child2() {
-  // CHECK-NEXT:  }
+  // CHECK-NOT: @Child2
   firrtl.module private @Child2(in %input: !firrtl.uint<1>, in %clock: !firrtl.clock, out %output: !firrtl.uint<1>) {
     %r = firrtl.reg %clock  : !firrtl.uint<1>
     firrtl.strictconnect %r, %input : !firrtl.uint<1>
@@ -96,8 +92,6 @@ firrtl.circuit "top"  {
   }
 
   // CHECK-LABEL: firrtl.module @top(in %clock: !firrtl.clock, in %input: !firrtl.uint<1>) {
-  // CHECK-NEXT:    firrtl.instance tile  @Child1()
-  // CHECK-NEXT:    firrtl.instance bar  @Child2()
   // CHECK-NEXT:  }
   firrtl.module @top(in %clock: !firrtl.clock, in %input: !firrtl.uint<1>) {
     %tile_input, %tile_output = firrtl.instance tile  @Child1(in input: !firrtl.uint<1>, out output: !firrtl.uint<1>)
@@ -142,12 +136,29 @@ firrtl.circuit "UnusedOutput"  {
 // CHECK-LABEL: "PreserveOutputFile"
 firrtl.circuit "PreserveOutputFile" {
   // CHECK-NEXT: firrtl.module {{.+}}@Sub
+  // CHECK-NOT:    %a
   // CHECK-SAME:   output_file
-  firrtl.module private @Sub(in %a: !firrtl.uint<1>) attributes {output_file = #hw.output_file<"hello">} {}
+  firrtl.module private @Sub(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1> sym @sym) attributes {output_file = #hw.output_file<"hello">} {}
   // CHECK: firrtl.module @PreserveOutputFile
   firrtl.module @PreserveOutputFile() {
     // CHECK-NEXT: firrtl.instance sub
     // CHECK-SAME: output_file
-    firrtl.instance sub {output_file = #hw.output_file<"hello">} @Sub(in a: !firrtl.uint<1>)
+    firrtl.instance sub {output_file = #hw.output_file<"hello">} @Sub(in a: !firrtl.uint<1>, in b: !firrtl.uint<1>)
+  }
+}
+
+// -----
+
+// CHECK-LABEL: "DeleteEmptyModule"
+firrtl.circuit "DeleteEmptyModule" {
+  // Don't delete @Sub because instance `sub1` has a symbol.
+  // CHECK: firrtl.module private @Sub
+  firrtl.module private @Sub(in %a: !firrtl.uint<1>)  {}
+  // CHECK: firrtl.module @DeleteEmptyModule
+  firrtl.module @DeleteEmptyModule() {
+    // CHECK-NEXT: firrtl.instance sub1 sym @Foo @Sub()
+    firrtl.instance sub1 sym @Foo @Sub(in a: !firrtl.uint<1>)
+    // CHECK-NOT: sub2
+    firrtl.instance sub2 @Sub(in a: !firrtl.uint<1>)
   }
 }

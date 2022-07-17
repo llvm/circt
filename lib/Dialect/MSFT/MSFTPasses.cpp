@@ -310,7 +310,8 @@ ModuleOpLowering::matchAndRewrite(MSFTModuleOp mod, OpAdaptor adaptor,
   }
 
   ArrayAttr params = rewriter.getArrayAttr({hw::ParamDeclAttr::get(
-      rewriter.getStringAttr("__INST_HIER"), rewriter.getNoneType())});
+      rewriter.getStringAttr("__INST_HIER"),
+      rewriter.getStringAttr("INSTANTIATE_WITH_INSTANCE_PATH"))});
   auto hwmod = rewriter.replaceOpWithNewOp<hw::HWModuleOp>(
       mod, mod.getNameAttr(), mod.getPorts(), params);
   rewriter.eraseBlock(hwmod.getBodyBlock());
@@ -921,7 +922,7 @@ static StringRef getValueName(Value v, const SymbolCache &syms,
   }
   if (auto constOp = dyn_cast<hw::ConstantOp>(defOp)) {
     buff.clear();
-    llvm::raw_string_ostream(buff) << "c" << constOp.value();
+    llvm::raw_string_ostream(buff) << "c" << constOp.getValue();
     return buff;
   }
 
@@ -995,7 +996,7 @@ void PartitionPass::bubbleUpGlobalRefs(
     auto globalRefOp = dyn_cast_or_null<hw::GlobalRefOp>(
         topLevelSyms.getDefinition(refSymbol));
     assert(globalRefOp && "symbol must reference a GlobalRefOp");
-    auto oldPath = globalRefOp.namepath().getValue();
+    auto oldPath = globalRefOp.getNamepath().getValue();
     assert(!oldPath.empty());
 
     // If the path already points to the target design partition, we are done.
@@ -1041,7 +1042,7 @@ void PartitionPass::bubbleUpGlobalRefs(
 
     // Update the path on the GlobalRefOp.
     auto newPathAttr = ArrayAttr::get(op->getContext(), newPath);
-    globalRefOp.namepathAttr(newPathAttr);
+    globalRefOp.setNamepathAttr(newPathAttr);
 
     refsMoved.insert(globalRef);
   }
@@ -1061,7 +1062,7 @@ void PartitionPass::pushDownGlobalRefs(
     auto globalRefOp = dyn_cast_or_null<hw::GlobalRefOp>(
         topLevelSyms.getDefinition(refSymbol));
     assert(globalRefOp && "symbol must reference a GlobalRefOp");
-    auto oldPath = globalRefOp.namepath().getValue();
+    auto oldPath = globalRefOp.getNamepath().getValue();
     assert(!oldPath.empty());
 
     // Get the module containing the partition and the partition's name.
@@ -1110,7 +1111,7 @@ void PartitionPass::pushDownGlobalRefs(
 
     // Update the path on the GlobalRefOp.
     auto newPathAttr = ArrayAttr::get(op->getContext(), newPath);
-    globalRefOp.namepathAttr(newPathAttr);
+    globalRefOp.setNamepathAttr(newPathAttr);
 
     // Ensure the part instance will have this GlobalRefAttr.
     // global refs if not.

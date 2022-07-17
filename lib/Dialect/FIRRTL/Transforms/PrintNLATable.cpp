@@ -25,13 +25,13 @@ struct PrintNLATablePass : public PrintNLATableBase<PrintNLATablePass> {
     auto &nlaTable = getAnalysis<NLATable>();
     markAllAnalysesPreserved();
 
-    for (auto &mop : *cast<CircuitOp>(circuitOp).getBody()) {
+    for (auto &mop : *cast<CircuitOp>(circuitOp).getBodyBlock()) {
       auto mod = dyn_cast<FModuleLike>(mop);
       if (!mod)
         continue;
       os << mod.moduleName() << ": ";
       for (auto nla : nlaTable.lookup(mod))
-        os << nla.sym_name() << ", ";
+        os << nla.getSymName() << ", ";
       os << '\n';
     }
   }

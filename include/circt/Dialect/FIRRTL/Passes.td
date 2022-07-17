@@ -107,6 +107,7 @@ def IMDeadCodeElim : Pass<"firrtl-imdeadcodeelim", "firrtl::CircuitOp"> {
   }];
   let constructor = "circt::firrtl::createIMDeadCodeElimPass()";
   let statistics = [
+    Statistic<"numErasedOps", "num-erased-ops", "Number of operations erased">,
     Statistic<"numRemovedPorts", "num-removed-ports", "Number of ports erased">,
   ];
 }
