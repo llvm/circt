@@ -148,7 +148,7 @@ def generate_msft_module_op(generator: Generator, spec_mod: _SpecializedModule):
       else:
         outputs.append(args._output_values[name])
     if len(unconnected_ports) > 0:
-      raise support.UnconnectedSignalError(unconnected_ports)
+      raise support.UnconnectedSignalError(spec_mod.name, unconnected_ports)
 
     msft.OutputOp([o.value for o in outputs])
 
