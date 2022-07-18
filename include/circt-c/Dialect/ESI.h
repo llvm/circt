@@ -11,7 +11,7 @@
 #ifndef CIRCT_C_DIALECT_ESI_H
 #define CIRCT_C_DIALECT_ESI_H
 
-#include "mlir-c/Registration.h"
+#include "mlir-c/IR.h"
 
 #ifdef __cplusplus
 extern "C" {

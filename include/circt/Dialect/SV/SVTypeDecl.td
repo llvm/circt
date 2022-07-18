@@ -130,7 +130,7 @@ class SV_Attr<string attrName, string attrMnemonic, list<Trait> traits = []>
 
 def ModportStruct : SV_Attr<"ModportStruct", "mod_port"> {
 	let parameters = (ins
-                    ModportDirectionAttr:$direction,
+                    "::circt::sv::ModportDirectionAttr":$direction,
                     "mlir::FlatSymbolRefAttr":$signal);
 
   let assemblyFormat = "`<` struct(params) `>`";

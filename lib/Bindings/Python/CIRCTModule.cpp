@@ -18,7 +18,7 @@
 #include "circt-c/Dialect/Seq.h"
 #include "circt-c/ExportVerilog.h"
 #include "mlir-c/Bindings/Python/Interop.h"
-#include "mlir-c/Registration.h"
+#include "mlir-c/IR.h"
 #include "mlir/Bindings/Python/PybindAdaptors.h"
 
 #include "llvm-c/ErrorHandling.h"

@@ -1549,10 +1549,7 @@ static ParseResult parseMooreType(DialectAsmParser &parser, Subset subset,
                                   Type &type) {
   llvm::SMLoc loc = parser.getCurrentLocation();
   StringRef mnemonic;
-  if (parser.parseKeyword(&mnemonic))
-    return failure();
-
-  OptionalParseResult result = generatedTypeParser(parser, mnemonic, type);
+  OptionalParseResult result = generatedTypeParser(parser, &mnemonic, type);
   if (result.hasValue())
     return result.getValue();
 
