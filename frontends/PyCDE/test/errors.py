@@ -65,3 +65,30 @@ t.generate()
 inst = t.get_instance(Test)
 # CHECK: reg[8] not found
 inst.reg[8]
+
+# -----
+
+
+@unittestmodule()
+class OperatorError:
+  a = Input(types.i32)
+  b = Input(types.si32)
+
+  @generator
+  def build(ports):
+    # CHECK: Operator '+' is not supported on signless values. LHS operand should be cast .asSInt()/.asUInt().
+    ports.a + ports.b
+
+
+# -----
+
+
+@unittestmodule()
+class OperatorError2:
+  a = Input(types.i32)
+  b = Input(types.si32)
+
+  @generator
+  def build(ports):
+    # CHECK: Operator '+' is not supported on signless values. RHS operand should be cast .asSInt()/.asUInt().
+    ports.b + ports.a
