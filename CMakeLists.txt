@@ -338,6 +338,19 @@ if (IVERILOG_DISABLE)
 else()
   find_program(IVERILOG_PATH "iverilog")
   if(EXISTS ${IVERILOG_PATH})
+    # Find iverilog version.
+    execute_process(COMMAND ${IVERILOG_PATH} -V
+      OUTPUT_VARIABLE IVERILOG_VERSION)
+
+    string(REGEX MATCH "Icarus Verilog version (([0-9]+)\.([0-9]+)) \.*"
+      MATCH ${IVERILOG_VERSION})
+    
+    if (${CMAKE_MATCH_1} LESS 11.0)
+      message(FATAL_ERROR "CIRCT only supports Icarus Verilog version 11.0 and up. \
+                           Found version: ${CMAKE_MATCH_1}. You can disable \
+                           the Icarus Verilog tests with '-DIVERILOG_DISABLE=ON'.")
+      set(IVERILOG_PATH "")
+    endif()
     message(STATUS "Found iverilog at ${IVERILOG_PATH}.")
   else()
     set(IVERILOG_PATH "")
