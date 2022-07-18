@@ -178,7 +178,7 @@ class BackedgeBuilder(AbstractContextManager):
     def __init__(self,
                  creator,
                  type: ir.Type,
-                 port_name: str,
+                 backedge_name: str,
                  op_view,
                  instance_of: ir.Operation,
                  loc: ir.Location = None):
@@ -186,7 +186,7 @@ class BackedgeBuilder(AbstractContextManager):
       self.dummy_op = ir.Operation.create("TemporaryBackedge", [type], loc=loc)
       self.instance_of = instance_of
       self.op_view = op_view
-      self.port_name = port_name
+      self.port_name = backedge_name
       self.erased = False
 
     @property
@@ -236,7 +236,7 @@ class BackedgeBuilder(AbstractContextManager):
     errors = []
     for edge in list(self.edges):
       # TODO: Make this use `UnconnectedSignalError`.
-      msg = "Port:       " + edge.port_name + "\n"
+      msg = "Backedge:   " + edge.port_name + "\n"
       if edge.instance_of is not None:
         msg += "InstanceOf: " + str(edge.instance_of).split(" {")[0] + "\n"
       if edge.op_view is not None:
@@ -245,7 +245,7 @@ class BackedgeBuilder(AbstractContextManager):
       errors.append(msg)
 
     if errors:
-      errors.insert(0, "Uninitialized ports remain in circuit!")
+      errors.insert(0, "Uninitialized backedges remain in circuit!")
       raise RuntimeError("\n".join(errors))
 
 
