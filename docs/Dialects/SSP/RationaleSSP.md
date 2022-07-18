@@ -60,16 +60,26 @@ affine.store %7, %0[0] : memref<1xi32>
 
 ### Benchmarking
 
+Scheduling is a hard combinatorial optimization problem that can be solved by a variety of approaches, ranging from fast heuristics to exact formulations in mathematical frameworks such as integer linear programs capable of computing provably optimal solutions. It is therefore important to evaluate scheduler implementations beyond just functional correctness testing, i.e. to assess the scheduler's runtime and scalability, as well as the solution quality, on sets of representative benchmark instances.
+
+With the SSP dialect, such instances can be saved directly from synthesis flows using CIRCT's scheduling infrastructure, or emitted in the textual MLIR format by third-party tools. As the SSP IR is self-contained, it would even be viable to store problem instances originating from out-of-tree or proprietary flows, as their source and target IRs would not be required to load and schedule a problem instance in a benchmark harness.
+
 ### Rapid prototyping
 
-
-
-
+The SSP dialect also provides a path towards automatically generated Python bindings for the scheduling infrastructure, which will ease the prototyping of new scheduling clients and problem definitions.
 
 ### Q&A
-- Do I need it?
-- Why not Capnproto
-## Naming
+- **Q:** Do I have to do a dialect conversion to and from this dialect to schedule something?
+
+  No, use the C++ API, i.e. the problem classes and scheduler entrypoints in `circt::scheduling`, directly! This dialect is a one-way street in terms of dialect conversion, and only intended to load and store problem instances for the use-cases listed above.
+
+- **Q:** Why don't you use something like Cap'nProto to (de)serialize the problem instances?
+
+  Textual MLIR is reasonably easy to write by hand, which is important for test-cases, and we need MLIR operations anyways, because the scheduling infrastructure builds on top of the MLIR def-use graph to represent its dependence graphs.
+
+- **Q:** `OperationOp` doesn't seem like a great name.
+
+  No, you're right. However, the SSP dialect uses the same terminology as the scheduling infrastructure, so any changes would have to originate there.
 
 ## Representation of problem components
 
