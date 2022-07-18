@@ -1,3 +1,3 @@
 # 'hwarith' Dialect
 
-[include "Dialects/hwarith.md"]
+[include "Dialects/HWArith.md"]
