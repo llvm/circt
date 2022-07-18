@@ -8,7 +8,6 @@ target_link_libraries(circt-capi-ir-test
   PRIVATE
   ${dialect_libs}
 
-  MLIRCAPIRegistration
   CIRCTCAPIComb
   CIRCTCAPIHW
   CIRCTCAPISeq
