@@ -100,22 +100,59 @@ static bool hasZeroBitWidth(FIRRTLType type) {
       });
 }
 
-/// Return true if we can preserve the aggregate type. We can a preserve the
-/// type iff (i) the type is not passive, (ii) the type doesn't contain analog
-/// and (iii) type don't contain zero bitwidth.
-static bool isPreservableAggregateType(Type type) {
+/// Return true if the type is a 1d vector type or ground type.
+static bool isOneDimVectorType(FIRRTLType type) {
+  return TypeSwitch<FIRRTLType, bool>(type)
+      .Case<BundleType>([&](auto bundle) { return false; })
+      .Case<FVectorType>([&](FVectorType vector) {
+        return vector.getElementType().isGround();
+      })
+      .Default([](auto groundType) { return true; });
+}
+
+/// Return true if the type has a bundle type as subtype.
+static bool containsBundleType(FIRRTLType type) {
+  return TypeSwitch<FIRRTLType, bool>(type)
+      .Case<BundleType>([&](auto bundle) { return true; })
+      .Case<FVectorType>([&](FVectorType vector) {
+        return containsBundleType(vector.getElementType());
+      })
+      .Default([](auto groundType) { return false; });
+}
+
+/// Return true if we can preserve the type.
+static bool isPreservableAggregateType(Type type,
+                                       PreserveAggregate::PreserveMode mode) {
+  // Return false if no aggregate value is preserved.
+  if (mode == PreserveAggregate::None)
+    return false;
+
   auto firrtlType = type.cast<FIRRTLType>();
-  return firrtlType.isPassive() && !firrtlType.containsAnalog() &&
-         !hasZeroBitWidth(firrtlType);
+  // We can a preserve the type iff (i) the type is not passive, (ii) the type
+  // doesn't contain analog and (iii) type don't contain zero bitwidth.
+  if (!firrtlType.isPassive() || firrtlType.containsAnalog() ||
+      hasZeroBitWidth(firrtlType))
+    return false;
+
+  switch (mode) {
+  case PreserveAggregate::All:
+    return true;
+  case PreserveAggregate::OneDimVec:
+    return isOneDimVectorType(firrtlType);
+  case PreserveAggregate::Vec:
+    return !containsBundleType(firrtlType);
+  default:
+    llvm_unreachable("unexpected mode");
+  }
 }
 
 /// Peel one layer of an aggregate type into its components.  Type may be
 /// complex, but empty, in which case fields is empty, but the return is true.
 static bool peelType(Type type, SmallVectorImpl<FlatBundleFieldEntry> &fields,
-                     bool allowedToPreserveAggregate = false) {
+                     PreserveAggregate::PreserveMode mode) {
   // If the aggregate preservation is enabled and the type is preservable,
   // then just return.
-  if (allowedToPreserveAggregate && isPreservableAggregateType(type))
+  if (isPreservableAggregateType(type, mode))
     return false;
 
   return TypeSwitch<Type, bool>(type)
@@ -298,10 +335,11 @@ struct AttrCache {
 // not.
 struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
 
-  TypeLoweringVisitor(MLIRContext *context, bool preserveAggregate,
+  TypeLoweringVisitor(MLIRContext *context,
+                      PreserveAggregate::PreserveMode preserveAggregate,
                       bool preservePublicTypes, SymbolTable &symTbl,
                       const AttrCache &cache)
-      : context(context), preserveAggregate(preserveAggregate),
+      : context(context), aggregatePreservationMode(preserveAggregate),
         preservePublicTypes(preservePublicTypes), symTbl(symTbl), cache(cache) {
   }
   using FIRRTLVisitor<TypeLoweringVisitor, bool>::visitDecl;
@@ -359,7 +397,8 @@ private:
                               FIRRTLType srcType, FlatBundleFieldEntry field,
                               bool &needsSym, StringRef sym);
 
-  bool isModuleAllowedToPreserveAggregate(FModuleLike moduleLike);
+  PreserveAggregate::PreserveMode
+  getPreservatinoModeForModule(FModuleLike moduleLike);
   Value getSubWhatever(Value val, size_t index);
 
   size_t uniqueIdx = 0;
@@ -370,9 +409,8 @@ private:
 
   MLIRContext *context;
 
-  /// Not to lower passive aggregate types as much as possible if this flag is
-  /// enabled.
-  bool preserveAggregate;
+  /// Aggregate preservation mode.
+  PreserveAggregate::PreserveMode aggregatePreservationMode;
 
   /// Exteranal modules and toplevel modules should have lowered types if this
   /// flag is enabled.
@@ -416,23 +454,16 @@ private:
 };
 } // namespace
 
-/// Return true if we can preserve the arguments of the given module.
-/// Exteranal modules and toplevel modules are sometimes assumed to have lowered
-/// types.
-bool TypeLoweringVisitor::isModuleAllowedToPreserveAggregate(
-    FModuleLike module) {
+/// Return aggregate preservation mode for the module. If the module has a
+/// public linkage, then it is not allowed to preserve aggregate values on ports
+/// unless `preservePublicTypes` flag is disabled.
+PreserveAggregate::PreserveMode
+TypeLoweringVisitor::getPreservatinoModeForModule(FModuleLike module) {
 
-  if (!preserveAggregate)
-    return false;
-
-  // If it is not forced to lower toplevel and external modules, it's ok to
-  // preserve.
-  if (!preservePublicTypes)
-    return true;
-
-  if (isa<FExtModuleOp>(module))
-    return false;
-  return !cast<hw::HWModuleLike>(*module).isPublic();
+  if (aggregatePreservationMode != PreserveAggregate::None &&
+      preservePublicTypes && cast<hw::HWModuleLike>(*module).isPublic())
+    return PreserveAggregate::None;
+  return aggregatePreservationMode;
 }
 
 Value TypeLoweringVisitor::getSubWhatever(Value val, size_t index) {
@@ -553,7 +584,7 @@ bool TypeLoweringVisitor::lowerProducer(
   auto srcType = op->getResult(0).getType().cast<FIRRTLType>();
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
 
-  if (!peelType(srcType, fieldTypes, preserveAggregate))
+  if (!peelType(srcType, fieldTypes, aggregatePreservationMode))
     return false;
 
   SmallVector<Value> lowered;
@@ -715,8 +746,7 @@ bool TypeLoweringVisitor::lowerArg(FModuleLike module, size_t argIndex,
   // Flatten any bundle types.
   SmallVector<FlatBundleFieldEntry> fieldTypes;
   auto srcType = newArgs[argIndex].type.cast<FIRRTLType>();
-  if (!peelType(srcType, fieldTypes,
-                isModuleAllowedToPreserveAggregate(module)))
+  if (!peelType(srcType, fieldTypes, getPreservatinoModeForModule(module)))
     return false;
 
   for (const auto &field : llvm::enumerate(fieldTypes)) {
@@ -773,8 +803,7 @@ bool TypeLoweringVisitor::visitStmt(ConnectOp op) {
   SmallVector<FlatBundleFieldEntry> fields;
 
   // We have to expand connections even if the aggregate preservation is true.
-  if (!peelType(op.getDest().getType(), fields,
-                /* allowedToPreserveAggregate */ false))
+  if (!peelType(op.getDest().getType(), fields, PreserveAggregate::None))
     return false;
 
   // Loop over the leaf aggregates.
@@ -797,8 +826,7 @@ bool TypeLoweringVisitor::visitStmt(StrictConnectOp op) {
   SmallVector<FlatBundleFieldEntry> fields;
 
   // We have to expand connections even if the aggregate preservation is true.
-  if (!peelType(op.getDest().getType(), fields,
-                /* allowedToPreserveAggregate */ false))
+  if (!peelType(op.getDest().getType(), fields, PreserveAggregate::None))
     return false;
 
   // Loop over the leaf aggregates.
@@ -833,7 +861,7 @@ bool TypeLoweringVisitor::visitDecl(MemOp op) {
   SmallVector<FlatBundleFieldEntry> fields;
 
   // MemOp should have ground types so we can't preserve aggregates.
-  if (!peelType(op.getDataType(), fields, false))
+  if (!peelType(op.getDataType(), fields, PreserveAggregate::None))
     return false;
 
   SmallVector<MemOp> newMemories;
@@ -1112,8 +1140,7 @@ bool TypeLoweringVisitor::visitExpr(BitCastOp op) {
   // UInt type result. That is, first bitcast the aggregate type to a UInt.
   // Attempt to get the bundle types.
   SmallVector<FlatBundleFieldEntry> fields;
-  if (peelType(op.getInput().getType(), fields,
-               /* allowedToPreserveAggregate */ false)) {
+  if (peelType(op.getInput().getType(), fields, PreserveAggregate::None)) {
     size_t uptoBits = 0;
     // Loop over the leaf aggregates and concat each of them to get a UInt.
     // Bitcast the fields to handle nested aggregate types.
@@ -1176,8 +1203,8 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
   SmallVector<Direction> newDirs;
   SmallVector<Attribute> newNames;
   SmallVector<Attribute> newPortAnno;
-  bool allowedToPreserveAggregate =
-      isModuleAllowedToPreserveAggregate(op.getReferencedModule(symTbl));
+  PreserveAggregate::PreserveMode mode =
+      getPreservatinoModeForModule(op.getReferencedModule(symTbl));
 
   endFields.push_back(0);
   bool needsSymbol = false;
@@ -1186,7 +1213,7 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
 
     // Flatten any nested bundle types the usual way.
     SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-    if (!peelType(srcType, fieldTypes, allowedToPreserveAggregate)) {
+    if (!peelType(srcType, fieldTypes, mode)) {
       newDirs.push_back(op.getPortDirection(i));
       newNames.push_back(op.getPortName(i));
       resultTypes.push_back(srcType);
@@ -1294,7 +1321,9 @@ bool TypeLoweringVisitor::visitExpr(MultibitMuxOp op) {
 
 namespace {
 struct LowerTypesPass : public LowerFIRRTLTypesBase<LowerTypesPass> {
-  LowerTypesPass(bool preserveAggregateFlag, bool preservePublicTypesFlag) {
+  LowerTypesPass(
+      circt::firrtl::PreserveAggregate::PreserveMode preserveAggregateFlag,
+      bool preservePublicTypesFlag) {
     preserveAggregate = preserveAggregateFlag;
     preservePublicTypes = preservePublicTypesFlag;
   }
@@ -1463,9 +1492,8 @@ void LowerTypesPass::runOnOperation() {
 
 /// This is the pass constructor.
 std::unique_ptr<mlir::Pass>
-circt::firrtl::createLowerFIRRTLTypesPass(bool preserveAggregate,
+circt::firrtl::createLowerFIRRTLTypesPass(PreserveAggregate::PreserveMode mode,
                                           bool preservePublicTypes) {
 
-  return std::make_unique<LowerTypesPass>(preserveAggregate,
-                                          preservePublicTypes);
+  return std::make_unique<LowerTypesPass>(mode, preservePublicTypes);
 }

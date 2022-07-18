@@ -128,10 +128,20 @@ static cl::opt<bool> replSeqMem(
         "replace the seq mem for macro replacement and emit relevant metadata"),
     cl::init(false), cl::cat(mainCategory));
 
-static cl::opt<bool>
-    preserveAggregate("preserve-aggregate",
-                      cl::desc("preserve aggregate types in lower types"),
-                      cl::init(false), cl::cat(mainCategory));
+static cl::opt<circt::firrtl::PreserveAggregate::PreserveMode>
+    preserveAggregate(
+        "preserve-aggregate", cl::desc("Specify input file format:"),
+        llvm::cl::values(clEnumValN(circt::firrtl::PreserveAggregate::None,
+                                    "none", "Preserve no aggregate"),
+                         clEnumValN(circt::firrtl::PreserveAggregate::OneDimVec,
+                                    "1d-vec",
+                                    "Preserve only 1d vectors of ground type"),
+                         clEnumValN(circt::firrtl::PreserveAggregate::Vec,
+                                    "vec", "Preserve only vectors"),
+                         clEnumValN(circt::firrtl::PreserveAggregate::All,
+                                    "all", "Preserve vectors and bundles")),
+        cl::init(circt::firrtl::PreserveAggregate::None),
+        cl::cat(mainCategory));
 
 static cl::opt<bool> preservePublicTypes(
     "preserve-public-types",
@@ -596,7 +606,8 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     pm.nest<firrtl::CircuitOp>().addPass(
         firrtl::createEmitOMIRPass(omirOutFile));
 
-  if (!disableOptimization && preserveAggregate && mergeConnections)
+  if (!disableOptimization &&
+      preserveAggregate != firrtl::PreserveAggregate::None && mergeConnections)
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         firrtl::createMergeConnectionsPass(mergeConnectionsAgggresively));
 

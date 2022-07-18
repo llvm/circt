@@ -28,9 +28,27 @@ std::unique_ptr<mlir::Pass>
 createLowerFIRRTLAnnotationsPass(bool ignoreUnhandledAnnotations = false,
                                  bool ignoreClasslessAnnotations = false);
 
-std::unique_ptr<mlir::Pass>
-createLowerFIRRTLTypesPass(bool preserveAggregate = false,
-                           bool preservePublicTypes = true);
+/// Configure which aggregate values will be preserved by the LowerTypes pass.
+namespace PreserveAggregate {
+enum PreserveMode {
+  /// Don't preserve aggregate at all. This has been default behaivor and
+  /// compatible with SFC.
+  None,
+
+  /// Preserve only 1d vectors of ground type (e.g. UInt<2>[3]).
+  OneDimVec,
+
+  /// Preserve only vectors (e.g. UInt<2>[3][3]).
+  Vec,
+
+  /// Preserve all aggregate values.
+  All,
+};
+}
+
+std::unique_ptr<mlir::Pass> createLowerFIRRTLTypesPass(
+    PreserveAggregate::PreserveMode mode = PreserveAggregate::None,
+    bool preservePublicTypes = true);
 
 std::unique_ptr<mlir::Pass> createLowerBundleVectorTypesPass();
 
