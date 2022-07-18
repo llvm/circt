@@ -1,6 +1,6 @@
 // REQUIRES: verilator
 // RUN: circt-opt %s --convert-fsm-to-sv --canonicalize --lower-seq-to-sv --export-verilog -o %t2.mlir > %t1.sv
-// RUN: circt-rtl-sim.py %t1.sv %S/driver.cpp | FileCheck %s
+// RUN: circt-rtl-sim.py %t1.sv %S/driver.cpp --no-default-driver | FileCheck %s
 // CHECK: out: A
 // CHECK: out: B
 // CHECK: out: B
