@@ -4,6 +4,7 @@ set(LLVM_OPTIONAL_SOURCES
   ESI.cpp
   MSFT.cpp
   HW.cpp
+  HWArith.cpp
   LLHD.cpp
   Moore.cpp
   Seq.cpp
@@ -89,4 +90,12 @@ add_mlir_public_c_api_library(CIRCTCAPIFSM
   CIRCTFSM
   CIRCTFSMTransforms
   CIRCTFSMToSV
+)
+
+add_mlir_public_c_api_library(CIRCTCAPIHWArith
+  HWArith.cpp
+
+  LINK_LIBS PUBLIC
+  MLIRCAPIIR
+  CIRCTHWArith
 )
