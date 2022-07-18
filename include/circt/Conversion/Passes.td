@@ -236,6 +236,19 @@ def ConvertLLHDToLLVM : Pass<"convert-llhd-to-llvm", "mlir::ModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
+// HWArithToHW
+//===----------------------------------------------------------------------===//
+
+def HWArithToHW : Pass<"lower-hwarith-to-hw", "mlir::ModuleOp"> {
+  let summary = "Lower HWArith to HW/Comb";
+  let description = [{
+    This pass lowers HWArith to HW/Comb.
+  }];
+  let constructor = "circt::createHWArithToHWPass()";
+  let dependentDialects = ["hw::HWDialect", "comb::CombDialect"];
+}
+
+//===----------------------------------------------------------------------===//
 // HWToLLHD
 //===----------------------------------------------------------------------===//
 

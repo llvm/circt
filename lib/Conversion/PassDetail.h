@@ -78,6 +78,10 @@ class HWDialect;
 class HWModuleOp;
 } // namespace hw
 
+namespace hwarith {
+class HWArithDialect;
+} // namespace hwarith
+
 namespace staticlogic {
 class StaticLogicDialect;
 } // namespace staticlogic

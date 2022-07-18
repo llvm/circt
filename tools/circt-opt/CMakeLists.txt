@@ -32,6 +32,8 @@ target_link_libraries(circt-opt
   CIRCTMooreToCore
   CIRCTMSFT
   CIRCTHW
+  CIRCTHWArith
+  CIRCTHWArithToHW
   CIRCTHWToLLHD
   CIRCTHWTransforms
   CIRCTSCFToCalyx
@@ -45,7 +47,6 @@ target_link_libraries(circt-opt
   CIRCTStaticLogicToCalyx
   CIRCTSV
   CIRCTSVTransforms
-  CIRCTHWArith
   CIRCTTransforms
 
   MLIRIR
