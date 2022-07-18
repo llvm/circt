@@ -42,3 +42,10 @@ class AddOp:
 @BinaryOp
 class MulOp:
   pass
+
+
+class CastOp:
+
+  @classmethod
+  def create(cls, value, result_type):
+    return cls(result_type, value)

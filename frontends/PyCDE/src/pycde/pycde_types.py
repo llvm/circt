@@ -5,7 +5,8 @@
 from collections import OrderedDict
 
 from .value import (BitVectorValue, ChannelValue, ClockValue, ListValue,
-                    StructValue, RegularValue, InOutValue, Value)
+                    SignedBitVectorValue, UnsignedBitVectorValue, StructValue,
+                    RegularValue, InOutValue, Value)
 
 import mlir.ir
 from circt.dialects import esi, hw, sv
@@ -158,7 +159,12 @@ def Type(type: Union[mlir.ir.Type, PyCDEType]):
   if isinstance(type, hw.InOutType):
     return InOutType(type)
   if isinstance(type, mlir.ir.IntegerType):
-    return BitVectorType(type)
+    if type.is_signed:
+      return SignedBitVectorType(type)
+    elif type.is_unsigned:
+      return UnsignedBitVectorType(type)
+    else:
+      return BitVectorType(type)
   if isinstance(type, esi.ChannelType):
     return ChannelType(type)
   return PyCDEType(type)
@@ -267,6 +273,18 @@ class BitVectorType(PyCDEType):
 
   def _get_value_class(self):
     return BitVectorValue
+
+
+class SignedBitVectorType(BitVectorType):
+
+  def _get_value_class(self):
+    return SignedBitVectorValue
+
+
+class UnsignedBitVectorType(BitVectorType):
+
+  def _get_value_class(self):
+    return UnsignedBitVectorValue
 
 
 class ClockType(PyCDEType):

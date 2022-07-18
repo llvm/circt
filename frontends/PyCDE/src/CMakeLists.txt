@@ -18,6 +18,7 @@ declare_mlir_python_sources(PyCDESources
   pycde/dialects/comb.py
   pycde/dialects/sv.py
   pycde/dialects/fsm.py
+  pycde/dialects/hwarith.py
   pycde/support.py
   pycde/module.py
   pycde/constructs.py
