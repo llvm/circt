@@ -143,6 +143,9 @@ def AddSeqMemPorts : Pass<"firrtl-add-seqmem-ports", "firrtl::CircuitOp"> {
   }];
   let constructor = "circt::firrtl::createAddSeqMemPortsPass()";
   let dependentDialects = ["sv::SVDialect", "hw::HWDialect"];
+  let statistics = [
+    Statistic<"numAddedPorts", "num-added-ports", "Number of extra ports added">,
+  ];
 }
 
 def CreateSiFiveMetadata : Pass<"firrtl-emit-metadata", "firrtl::CircuitOp"> {
@@ -168,6 +171,10 @@ def FlattenMemory : Pass<"firrtl-flatten-memory", "firrtl::FModuleOp"> {
     appropriate bitcasts to access the data.
   }];
   let constructor = "circt::firrtl::createFlattenMemoryPass()";
+  let statistics = [
+    Statistic<"numFlattenedMems", "num-flatten-mems",
+      "Number of memories flattened">,
+  ];
 }
 
 def LowerMemory : Pass<"firrtl-lower-memory", "firrtl::CircuitOp"> {
@@ -176,6 +183,12 @@ def LowerMemory : Pass<"firrtl-lower-memory", "firrtl::CircuitOp"> {
     This pass lowers FIRRTL memory operations to generated modules.
   }];
   let constructor = "circt::firrtl::createLowerMemoryPass()";
+  let statistics = [
+    Statistic<"numCreatedMemModules", "num-created-mem-modules",
+      "Number of modules created">,
+    Statistic<"numLoweredMems", "num-lowered-mems",
+      "Number of memories lowered">,
+  ];
 }
 
 def WireDFT : Pass<"firrtl-dft", "firrtl::CircuitOp"> {
@@ -280,6 +293,14 @@ def LowerCHIRRTLPass : Pass<"firrtl-lower-chirrtl", "firrtl::FModuleOp"> {
 
   }];
   let constructor = "circt::firrtl::createLowerCHIRRTLPass()";
+  let statistics = [
+    Statistic<"numCreatedMems", "num-created-mems",
+      "Number of memories created">,
+    Statistic<"numLoweredMems", "num-lowered-mems",
+      "Number of memories lowered">,
+    Statistic<"numPortlessMems", "num-portless-mems",
+      "Number of memories dropped as having no valid ports">,
+  ];
 }
 
 def InferWidths : Pass<"firrtl-infer-widths", "firrtl::CircuitOp"> {
@@ -475,6 +496,10 @@ def InferReadWrite : Pass<"firrtl-infer-rw", "firrtl::FModuleOp"> {
     looking for a situation where the read/write is the complement of the write/read.
   }];
   let constructor = "circt::firrtl::createInferReadWritePass()";
+  let statistics = [
+    Statistic<"numRWPortMemoriesInferred", "num-rw-port-mems-inferred",
+      "Number of memories inferred to use RW port">,
+  ];
 }
 
 def InjectDUTHierarchy : Pass<"firrtl-inject-dut-hier", "firrtl::CircuitOp"> {
@@ -519,6 +544,10 @@ def MemToRegOfVec : Pass<"firrtl-mem-to-reg-of-vec", "firrtl::CircuitOp"> {
     "ignore the read enable signal, instead of assigning X on read disable">
    ];
   let constructor = "circt::firrtl::createMemToRegOfVecPass()";
+  let statistics = [
+    Statistic<"numConvertedMems", "num-converted-mems",
+      "Number of memories converted to registers">,
+  ];
 }
 
 def DropName : Pass<"firrtl-drop-names", "firrtl::FModuleOp"> {

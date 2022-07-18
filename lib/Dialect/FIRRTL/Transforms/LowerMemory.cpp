@@ -176,6 +176,7 @@ LowerMemoryPass::emitMemoryModule(MemOp op, const FirMemory &mem,
 
   // Insert the memory module at the bottom of the circuit.
   auto b = OpBuilder::atBlockEnd(getOperation().getBodyBlock());
+  ++numCreatedMemModules;
   return b.create<FMemModuleOp>(mem.loc, moduleName, ports, mem.numReadPorts,
                                 mem.numWritePorts, mem.numReadWritePorts,
                                 mem.dataWidth, mem.maskBits, mem.readLatency,
@@ -297,6 +298,7 @@ void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
     newAnnos.applyToOperation(memInst);
   }
   mem->erase();
+  ++numLoweredMems;
 }
 
 static SmallVector<SubfieldOp> getAllFieldAccesses(Value structValue,

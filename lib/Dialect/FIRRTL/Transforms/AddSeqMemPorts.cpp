@@ -359,6 +359,9 @@ void AddSeqMemPortsPass::runOnOperation() {
 
   // If there are no user ports, don't do anything.
   if (userPorts.size() > 0) {
+    // Update ports statistic.
+    numAddedPorts += userPorts.size();
+
     // Visit the nodes in post-order.
     for (auto *node : llvm::post_order(dutNode)) {
       auto op = node->getModule();

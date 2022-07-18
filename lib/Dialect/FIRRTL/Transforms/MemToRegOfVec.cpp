@@ -82,6 +82,7 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
         return;
 
       generateMemory(memOp, firMem);
+      ++numConvertedMems;
       memOp.erase();
     });
   }
