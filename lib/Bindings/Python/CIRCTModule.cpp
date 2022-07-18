@@ -12,6 +12,7 @@
 #include "circt-c/Dialect/ESI.h"
 #include "circt-c/Dialect/FSM.h"
 #include "circt-c/Dialect/HW.h"
+#include "circt-c/Dialect/HWArith.h"
 #include "circt-c/Dialect/MSFT.h"
 #include "circt-c/Dialect/SV.h"
 #include "circt-c/Dialect/Seq.h"
@@ -62,6 +63,10 @@ PYBIND11_MODULE(_circt, m) {
         MlirDialectHandle hw = mlirGetDialectHandle__hw__();
         mlirDialectHandleRegisterDialect(hw, context);
         mlirDialectHandleLoadDialect(hw, context);
+
+        MlirDialectHandle hwarith = mlirGetDialectHandle__hwarith__();
+        mlirDialectHandleRegisterDialect(hwarith, context);
+        mlirDialectHandleLoadDialect(hwarith, context);
 
         MlirDialectHandle seq = mlirGetDialectHandle__seq__();
         mlirDialectHandleRegisterDialect(seq, context);

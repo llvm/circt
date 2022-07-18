@@ -32,6 +32,7 @@ declare_mlir_python_extension(CIRCTBindingsPythonExtension.Core
     CIRCTCAPIESI
     CIRCTCAPIMSFT
     CIRCTCAPIHW
+    CIRCTCAPIHWArith
     CIRCTCAPISeq
     CIRCTCAPISV
     CIRCTCAPIExportVerilog
@@ -123,6 +124,15 @@ declare_mlir_dialect_python_bindings(
     circt/dialects/fsm.py
     circt/dialects/_fsm_ops_ext.py
   DIALECT_NAME fsm)
+
+declare_mlir_dialect_python_bindings(
+  ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
+  ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
+  TD_FILE circt/dialects/HWArithOps.td
+  SOURCES
+    circt/dialects/hwarith.py
+    circt/dialects/_hwarith_ops_ext.py
+  DIALECT_NAME hwarith)
 
 ################################################################################
 # Build composite binaries
