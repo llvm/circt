@@ -100,6 +100,7 @@ private:
     case calyx::Direction::Output:
       return hw::PortDirection::OUTPUT;
     }
+    llvm_unreachable("unknown direction");
   }
 };
 
