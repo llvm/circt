@@ -258,9 +258,11 @@ struct CircuitLoweringState {
   std::atomic<bool> used_RANDOMIZE_GARBAGE_ASSIGN{false};
 
   CircuitLoweringState(CircuitOp circuitOp, bool enableAnnotationWarning,
+                       bool emitChiselAssertsAsSVA,
                        InstanceGraph *instanceGraph, NLATable *nlaTable)
       : circuitOp(circuitOp), instanceGraph(instanceGraph),
-        enableAnnotationWarning(enableAnnotationWarning), nlaTable(nlaTable) {
+        enableAnnotationWarning(enableAnnotationWarning),
+        emitChiselAssertsAsSVA(emitChiselAssertsAsSVA), nlaTable(nlaTable) {
     auto *context = circuitOp.getContext();
 
     // Get the testbench output directory.
@@ -352,6 +354,8 @@ private:
   StringSet<> pendingAnnotations;
   const bool enableAnnotationWarning;
   std::mutex annotationPrintingMtx;
+
+  const bool emitChiselAssertsAsSVA;
 
   // Records any sv::BindOps that are found during the course of execution.
   // This is unsafe to access directly and should only be used through addBind.
@@ -446,6 +450,7 @@ struct FIRRTLModuleLowering : public LowerFIRRTLToHWBase<FIRRTLModuleLowering> {
 
   void runOnOperation() override;
   void setEnableAnnotationWarning() { enableAnnotationWarning = true; }
+  void setEmitChiselAssertAsSVA() { emitChiselAssertsAsSVA = true; }
 
 private:
   void lowerFileHeader(CircuitOp op, CircuitLoweringState &loweringState);
@@ -475,10 +480,13 @@ private:
 
 /// This is the pass constructor.
 std::unique_ptr<mlir::Pass>
-circt::createLowerFIRRTLToHWPass(bool enableAnnotationWarning) {
+circt::createLowerFIRRTLToHWPass(bool enableAnnotationWarning,
+                                 bool emitChiselAssertsAsSVA) {
   auto pass = std::make_unique<FIRRTLModuleLowering>();
   if (enableAnnotationWarning)
     pass->setEnableAnnotationWarning();
+  if (emitChiselAssertsAsSVA)
+    pass->setEmitChiselAssertAsSVA();
   return pass;
 }
 
@@ -504,9 +512,9 @@ void FIRRTLModuleLowering::runOnOperation() {
 
   // Keep track of the mapping from old to new modules.  The result may be null
   // if lowering failed.
-  CircuitLoweringState state(circuit, enableAnnotationWarning,
-                             &getAnalysis<InstanceGraph>(),
-                             &getAnalysis<NLATable>());
+  CircuitLoweringState state(
+      circuit, enableAnnotationWarning, emitChiselAssertsAsSVA,
+      &getAnalysis<InstanceGraph>(), &getAnalysis<NLATable>());
 
   SmallVector<FModuleOp, 32> modulesToProcess;
 
@@ -3855,7 +3863,8 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
       // "ifElseFatal" variant is special cased because this isn't actually a
       // concurrent assertion.
       auto format = op->getAttrOfType<StringAttr>("format");
-      if (isConcurrent && (!format || format.getValue() != "ifElseFatal"))
+      if (isConcurrent && (!format || format.getValue() != "ifElseFatal" ||
+                           circuitState.emitChiselAssertsAsSVA))
         loweredValue = builder.create<sv::SampledOp>(loweredValue);
       messageOps.push_back(loweredValue);
     }
@@ -3882,7 +3891,8 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
     // TODO: This should *not* be part of the op, but rather a lowering
     // option that the user of this pass can choose.
     auto format = op->template getAttrOfType<StringAttr>("format");
-    if (format && format.getValue() == "ifElseFatal") {
+    if (format && (format.getValue() == "ifElseFatal" &&
+                   !circuitState.emitChiselAssertsAsSVA)) {
       predicate = comb::createOrFoldNot(predicate, builder);
       predicate = builder.createOrFold<comb::AndOp>(enable, predicate);
       addToIfDefBlock("SYNTHESIS", {}, [&]() {

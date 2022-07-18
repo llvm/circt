@@ -147,7 +147,9 @@ def LowerFIRRTLToHW : Pass<"lower-firrtl-to-hw", "mlir::ModuleOp"> {
   let options = [
     Option<"enableAnnotationWarning", "warn-on-unprocessed-annotations",
            "bool", "false",
-    "Emit warnings on unprocessed annotations during lower-to-hw pass">
+    "Emit warnings on unprocessed annotations during lower-to-hw pass">,
+    Option<"emitChiselAssertsAsSVA", "emit-chisel-asserts-as-sva",
+           "bool", "false","Convert all Chisel asserts to SVA">
   ];
 }
 
