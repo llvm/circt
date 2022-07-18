@@ -360,6 +360,26 @@ static cl::opt<bool> stripDebugInfo(
     cl::desc("Disable source locator information in output Verilog"),
     cl::init(false), cl::cat(mainCategory));
 
+// Build mode options.
+enum BuildMode { BuildModeDebug, BuildModeRelease };
+static cl::opt<BuildMode> buildMode(
+    "O", cl::desc("Controls how much optimization should be performed"),
+    cl::values(clEnumValN(BuildModeDebug, "debug",
+                          "compile with only necessary optimizations"),
+               clEnumValN(BuildModeRelease, "release",
+                          "compile with optimizations")),
+    cl::init(BuildModeRelease), cl::cat(mainCategory),
+    cl::callback([](const BuildMode &buildMode) {
+      switch (buildMode) {
+      case BuildModeDebug:
+        preserveMode = firrtl::PreserveValues::Named;
+        break;
+      case BuildModeRelease:
+        preserveMode = firrtl::PreserveValues::None;
+        break;
+      }
+    }));
+
 /// Create a simple canonicalizer pass.
 static std::unique_ptr<Pass> createSimpleCanonicalizerPass() {
   mlir::GreedyRewriteConfig config;
