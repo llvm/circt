@@ -80,8 +80,7 @@ def create_fsm_machine_op(sys, mod: _SpecializedModule, symbol):
 
   # Add attributes for clock and reset names.
   attributes["clock_name"] = _obj_to_attribute(mod.modcls.clock_name)
-  if mod.modcls.reset_name:
-    attributes["reset_name"] = _obj_to_attribute(mod.modcls.reset_name)
+  attributes["reset_name"] = _obj_to_attribute(mod.modcls.reset_name)
 
   return fsm.MachineOp(symbol,
                        mod.modcls._initial_state,
@@ -103,7 +102,7 @@ def generate_fsm_machine_op(generate_obj: Generator,
       state._emit(spec_mod, ports)
 
 
-def machine(clock: str = 'clk', reset: str = None):
+def machine(clock: str = 'clk', reset: str = 'rst'):
   """
   Top-level FSM decorator which gives the user the option specify port
   names for the clock and (optional) reset signal.

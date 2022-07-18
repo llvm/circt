@@ -8,12 +8,12 @@ from pycde.testing import unittestmodule
 
 # FSM instantiation example
 
-# CHECK-LABEL:  msft.module @FSMUser {} (%a: i1, %b: i1, %c: i1, %clk: i1) -> (is_a: i1, is_b: i1, is_c: i1) attributes {fileName = "FSMUser.sv"} {
-# CHECK:          %FSM.is_A, %FSM.is_B, %FSM.is_C = msft.instance @FSM @FSM(%a, %b, %c, %clk)  : (i1, i1, i1, i1) -> (i1, i1, i1)
+# CHECK-LABEL:  msft.module @FSMUser {} (%a: i1, %b: i1, %c: i1, %clk: i1, %rst: i1) -> (is_a: i1, is_b: i1, is_c: i1) attributes {fileName = "FSMUser.sv"} {
+# CHECK:          %FSM.is_A, %FSM.is_B, %FSM.is_C = msft.instance @FSM @FSM(%a, %b, %c, %clk, %rst)  : (i1, i1, i1, i1, i1) -> (i1, i1, i1)
 # CHECK:          msft.output %FSM.is_A, %FSM.is_B, %FSM.is_C : i1, i1, i1
 # CHECK:        }
-# CHECK-LABEL:  msft.module @FSM {} (%a: i1, %b: i1, %c: i1, %clk: i1) -> (is_A: i1, is_B: i1, is_C: i1) attributes {fileName = "FSM.sv"} {
-# CHECK:          %0:3 = fsm.hw_instance "FSM_impl" @FSM_impl(%a, %b, %c) : (i1, i1, i1) -> (i1, i1, i1), clock %clk : i1
+# CHECK-LABEL:  msft.module @FSM {} (%a: i1, %b: i1, %c: i1, %clk: i1, %rst: i1) -> (is_A: i1, is_B: i1, is_C: i1) attributes {fileName = "FSM.sv"} {
+# CHECK:          %0:3 = fsm.hw_instance "FSM_impl" @FSM_impl(%a, %b, %c), clock %clk, reset %rst : (i1, i1, i1) -> (i1, i1, i1)
 # CHECK:          msft.output %0#0, %0#1, %0#2 : i1, i1, i1
 # CHECK:        }
 
@@ -40,13 +40,14 @@ class FSMUser:
   b = Input(types.i1)
   c = Input(types.i1)
   clk = Input(types.i1)
+  rst = Input(types.i1)
   is_a = Output(types.i1)
   is_b = Output(types.i1)
   is_c = Output(types.i1)
 
   @generator
   def construct(ports):
-    fsm = FSM(a=ports.a, b=ports.b, c=ports.c, clk=ports.clk)
+    fsm = FSM(a=ports.a, b=ports.b, c=ports.c, clk=ports.clk, rst=ports.rst)
     ports.is_a = fsm.is_A
     ports.is_b = fsm.is_B
     ports.is_c = fsm.is_C
@@ -56,8 +57,8 @@ class FSMUser:
 
 # FSM state transitions example
 
-# CHECK:      fsm.machine @F0_impl(%arg0: i1, %arg1: i1, %arg2: i1) -> (i1, i1, i1, i1) attributes {clock_name = "clock", in_names = ["a", "b", "c"], initialState = "idle", out_names = ["is_A", "is_B", "is_C", "is_idle"]} {
-# CHECK-NEXT:    fsm.state "A" output {
+# CHECK:      fsm.machine @F0_impl(%arg0: i1, %arg1: i1, %arg2: i1) -> (i1, i1, i1, i1) attributes {clock_name = "clock", in_names = ["a", "b", "c"], initialState = "idle", out_names = ["is_A", "is_B", "is_C", "is_idle"], reset_name = "rst"} {
+# CHECK-NEXT:    fsm.state @A output {
 # CHECK-NEXT:      %true = hw.constant true
 # CHECK-NEXT:      %false = hw.constant false
 # CHECK-NEXT:      %false_0 = hw.constant false
@@ -68,7 +69,7 @@ class FSMUser:
 # CHECK-NEXT:        fsm.return %arg0
 # CHECK-NEXT:      }
 # CHECK-NEXT:    }
-# CHECK-NEXT:    fsm.state "B" output {
+# CHECK-NEXT:    fsm.state @B output {
 # CHECK-NEXT:      %false = hw.constant false
 # CHECK-NEXT:      %true = hw.constant true
 # CHECK-NEXT:      %false_0 = hw.constant false
@@ -91,7 +92,7 @@ class FSMUser:
 # CHECK-NEXT:        fsm.return %7
 # CHECK-NEXT:      }
 # CHECK-NEXT:    }
-# CHECK-NEXT:    fsm.state "C" output {
+# CHECK-NEXT:    fsm.state @C output {
 # CHECK-NEXT:      %false = hw.constant false
 # CHECK-NEXT:      %false_0 = hw.constant false
 # CHECK-NEXT:      %true = hw.constant true
@@ -107,7 +108,7 @@ class FSMUser:
 # CHECK-NEXT:        fsm.return %0
 # CHECK-NEXT:      }
 # CHECK-NEXT:    }
-# CHECK-NEXT:    fsm.state "idle" output {
+# CHECK-NEXT:    fsm.state @idle output {
 # CHECK-NEXT:      %false = hw.constant false
 # CHECK-NEXT:      %false_0 = hw.constant false
 # CHECK-NEXT:      %false_1 = hw.constant false
