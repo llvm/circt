@@ -60,8 +60,6 @@ class Value:
       clk = ClockValue._get_current_clock_block()
       if clk is None:
         raise ValueError("If 'clk' not specified, must be in clock block")
-    if sv_attributes is not None:
-      sv_attributes = [sv.SVAttributeAttr.get(attr) for attr in sv_attributes]
 
     from .dialects import seq
     if name is None:
@@ -89,8 +87,10 @@ class Value:
                             clk=clk,
                             reset=rst,
                             name=give_name,
-                            sym_name=give_name,
-                            sv_attributes=sv_attributes)
+                            sym_name=give_name)
+      if sv_attributes is not None:
+        reg.value.owner.attributes["sv.attributes"] = ir.ArrayAttr.get(
+            [sv.SVAttributeAttr.get(attr) for attr in sv_attributes])
       if appid is not None:
         reg.appid = appid
       return reg

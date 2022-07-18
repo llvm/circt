@@ -48,7 +48,7 @@ t.run_passes()
 
 print("=== Final mlir dump")
 t.print()
-# CHECK-LABEL: hw.module @Top<__INST_HIER: none>(%clk: i1, %col_data: !hw.array<2xi8>, %row_data: !hw.array<3xi8>) -> (out: !hw.array<3xarray<2xi8>>)
+# CHECK-LABEL: hw.module @Top<__INST_HIER: none = "INSTANTIATE_WITH_INSTANCE_PATH">(%clk: i1, %col_data: !hw.array<2xi8>, %row_data: !hw.array<3xi8>) -> (out: !hw.array<3xarray<2xi8>>)
 # CHECK:         %sum__reg1_0_0 = sv.reg sym @sum__reg1  : !hw.inout<i8>
 # CHECK:         sv.read_inout %sum__reg1_0_0 : !hw.inout<i8>
 

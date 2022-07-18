@@ -143,11 +143,11 @@ poly.print()
 # CHECK: %example2.y = hw.instance "example2" sym @example2 @PolyComputeForCoeff_62_42_6<__INST_HIER: none = #hw.param.expr.str.concat<#hw.param.decl.ref<"__INST_HIER">, ".example2">>(x: %[[EXAMPLE_Y]]: i32) -> (y: i32)
 # CHECK: hw.instance "example2_1" sym @example2_1 @PolyComputeForCoeff_1_2_3_4_5<__INST_HIER: none = #hw.param.expr.str.concat<#hw.param.decl.ref<"__INST_HIER">, ".example2_1">>(x: %[[EXAMPLE_Y]]: i32)
 # CHECK: %CoolPolynomialCompute.y = hw.instance "CoolPolynomialCompute" sym @CoolPolynomialCompute @supercooldevice(x: %c23_i32{{.*}}: i32) -> (y: i32)
-# CHECK-LABEL: hw.module @PolyComputeForCoeff_62_42_6<__INST_HIER: none>(%x: i32) -> (y: i32)
+# CHECK-LABEL: hw.module @PolyComputeForCoeff_62_42_6<__INST_HIER: none = "INSTANTIATE_WITH_INSTANCE_PATH">(%x: i32) -> (y: i32)
 # CHECK: hw.constant 62
 # CHECK: hw.constant 42
 # CHECK: hw.constant 6
-# CHECK-LABEL: hw.module @PolyComputeForCoeff_1_2_3_4_5<__INST_HIER: none>(%x: i32)
+# CHECK-LABEL: hw.module @PolyComputeForCoeff_1_2_3_4_5<__INST_HIER: none = "INSTANTIATE_WITH_INSTANCE_PATH">(%x: i32)
 # CHECK: hw.constant 1
 # CHECK: hw.constant 2
 # CHECK: hw.constant 3
