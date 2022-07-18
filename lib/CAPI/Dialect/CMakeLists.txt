@@ -88,4 +88,5 @@ add_mlir_public_c_api_library(CIRCTCAPIFSM
   MLIRCAPIIR
   CIRCTFSM
   CIRCTFSMTransforms
+  CIRCTFSMToSV
 )
