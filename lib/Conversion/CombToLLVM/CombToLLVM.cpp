@@ -214,3 +214,100 @@ using CombShrSOpConversion =
     OneToOneConvertToLLVMPattern<comb::ShrSOp, LLVM::AShrOp>;
 
 } // namespace
+
+//===----------------------------------------------------------------------===//
+// Pass initialization
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct CombToLLVMLoweringPass
+    : public ConvertCombToLLVMBase<CombToLLVMLoweringPass> {
+  void runOnOperation() override;
+};
+} // namespace
+
+void circt::populateCombToLLVMConversionPatterns(LLVMTypeConverter &converter,
+                                                 RewritePatternSet &patterns,
+                                                 size_t &sigCounter,
+                                                 size_t &regCounter) {
+  MLIRContext *ctx = converter.getDialect()->getContext();
+
+  // Extract conversion patterns.
+  patterns.add<CombExtractOpConversion, CombConcatOpConversion>(ctx, converter);
+
+  // Bitwise conversion patterns.
+  patterns.add<CombParityOpConversion>(
+      ctx, converter);
+  patterns.add<AndOpConversion, OrOpConversion, XorOpConversion>(converter);
+  patterns.add<CombShlOpConversion, CombShrUOpConversion, CombShrSOpConversion>(converter);
+
+  // Arithmetic conversion patterns.
+  patterns.add<CombAddOpConversion, CombSubOpConversion, CombMulOpConversion,
+               CombDivUOpConversion, CombDivSOpConversion, CombModUOpConversion,
+               CombModSOpConversion, CombICmpOpConversion, CombMuxOpConversion>(
+      converter);
+
+}
+
+//TODO: Update for Comb
+void CombToLLVMLoweringPass::runOnOperation() {
+  // Keep a counter to infer a signal's index in his entity's signal table.
+  size_t sigCounter = 0;
+
+  // Keep a counter to infer a reg's index in his entity.
+  size_t regCounter = 0;
+
+  RewritePatternSet patterns(&getContext());
+  auto converter = mlir::LLVMTypeConverter(&getContext());
+  converter.addConversion(
+      [&](SigType sig) { return convertSigType(sig, converter); });
+  converter.addConversion(
+      [&](TimeType time) { return convertTimeType(time, converter); });
+  converter.addConversion(
+      [&](PtrType ptr) { return convertPtrType(ptr, converter); });
+  converter.addConversion(
+      [&](hw::ArrayType arr) { return convertArrayType(arr, converter); });
+  converter.addConversion(
+      [&](hw::StructType tup) { return convertStructType(tup, converter); });
+
+  // Apply a partial conversion first, lowering only the instances, to generate
+  // the init function.
+  patterns.add<InstOpConversion>(&getContext(), converter);
+
+  LLVMConversionTarget target(getContext());
+  target.addIllegalOp<InstOp>();
+  target.addLegalOp<UnrealizedConversionCastOp>();
+  cf::populateControlFlowToLLVMConversionPatterns(converter, patterns);
+
+  // Apply the partial conversion.
+  if (failed(
+          applyPartialConversion(getOperation(), target, std::move(patterns))))
+    signalPassFailure();
+  patterns.clear();
+
+  // Setup the full conversion.
+  populateFuncToLLVMConversionPatterns(converter, patterns);
+  populateLLHDToLLVMConversionPatterns(converter, patterns, sigCounter,
+                                       regCounter);
+
+  target.addLegalDialect<LLVM::LLVMDialect>();
+  target.addLegalOp<ModuleOp>();
+
+  // Apply a full conversion to remove unrealized conversion casts.
+  if (failed(applyFullConversion(getOperation(), target, std::move(patterns))))
+    signalPassFailure();
+
+  patterns.clear();
+
+  mlir::populateReconcileUnrealizedCastsPatterns(patterns);
+  target.addIllegalOp<UnrealizedConversionCastOp>();
+
+  // Apply the full conversion.
+  if (failed(applyFullConversion(getOperation(), target, std::move(patterns))))
+    signalPassFailure();
+}
+
+/// Create an Comb to LLVM conversion pass.
+std::unique_ptr<OperationPass<ModuleOp>> circt::createConvertCombToLLVMPass() {
+  return std::make_unique<CombToLLVMLoweringPass>();
+}

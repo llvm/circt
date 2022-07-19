@@ -2006,29 +2006,12 @@ void circt::populateLLHDToLLVMConversionPatterns(LLVMTypeConverter &converter,
   MLIRContext *ctx = converter.getDialect()->getContext();
 
   // Value creation conversion patterns.
-  patterns.add<ConstantTimeOpConversion, HWConstantOpConversion>(ctx,
-                                                                 converter);
-  patterns.add<HWArrayCreateOpConversion, HWStructCreateOpConversion>(
-      converter);
+  patterns.add<ConstantTimeOpConversion>(ctx, converter);
 
   // Extract conversion patterns.
   patterns.add<SigExtractOpConversion, SigArraySliceOpConversion,
                SigArrayGetOpConversion, SigStructExtractOpConversion>(
       converter);
-
-  patterns.add<CombExtractOpConversion, CombConcatOpConversion>(ctx, converter);
-
-  // Bitwise conversion patterns.
-  patterns.add<CombParityOpConversion>(ctx, converter);
-  patterns.add<AndOpConversion, OrOpConversion, XorOpConversion>(converter);
-  patterns.add<CombShlOpConversion, CombShrUOpConversion, CombShrSOpConversion,
-               BitcastOpConversion>(converter);
-
-  // Arithmetic conversion patterns.
-  patterns.add<CombAddOpConversion, CombSubOpConversion, CombMulOpConversion,
-               CombDivUOpConversion, CombDivSOpConversion, CombModUOpConversion,
-               CombModSOpConversion, CombICmpOpConversion, CombMuxOpConversion,
-               CombReplicateOpConversion>(converter);
 
   // Unit conversion patterns.
   patterns.add<ProcOpConversion, WaitOpConversion, HaltOpConversion>(ctx,
@@ -2044,9 +2027,6 @@ void circt::populateLLHDToLLVMConversionPatterns(LLVMTypeConverter &converter,
   patterns.add<VarOpConversion, StoreOpConversion>(ctx, converter);
   patterns.add<LoadOpConversion>(converter);
 
-  patterns.add<ArrayGetOpConversion, ArraySliceOpConversion,
-               ArrayConcatOpConversion, StructExtractOpConversion,
-               StructInjectOpConversion>(converter);
 }
 
 void LLHDToLLVMLoweringPass::runOnOperation() {
