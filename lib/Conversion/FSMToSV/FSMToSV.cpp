@@ -17,6 +17,7 @@
 #include "llvm/ADT/TypeSwitch.h"
 
 #include <memory>
+#include <variant>
 
 using namespace mlir;
 using namespace circt;
@@ -232,11 +233,6 @@ private:
   FailureOr<Value> convertTransitions(StateOp currentState,
                                       ArrayRef<TransitionOp> transitions);
 
-  // Returns the value that must be assigned to the hw output ports of this
-  // machine.
-  llvm::SmallVector<Value>
-  getOutputAssignments(StateConversionResults &stateConvResults);
-
   // Moves operations from 'block' into module scope, failing if any op were
   // deemed illegal. Returns the final op in the block if the op was a
   // terminator. An optional 'exclude' filer can be provided to dynamically
@@ -245,17 +241,31 @@ private:
   moveOps(Block *block,
           llvm::function_ref<bool(Operation *)> exclude = nullptr);
 
-  // Build a SV case-based combinational mux the values provided in
-  // 'stateToValue' to a retured wire.
-  // 'stateToValue' being a list implies that multiple muxes can be emitted at
-  // once, avoiding bloating the IR with a case statement for every muxed value.
-  // A wire is returned for each srcMap provided.
-  // 'nameF' can be provided to specify the name of the output wire created for
-  // each source map.
-  llvm::SmallVector<Value>
-  buildStateCaseMux(Location loc, Value sel,
-                    llvm::ArrayRef<llvm::SmallDenseMap<StateOp, Value>> srcMaps,
-                    llvm::function_ref<StringAttr(size_t)> nameF = {});
+  struct CaseMuxItem;
+  using StateCaseMapping =
+      llvm::SmallDenseMap<StateOp,
+                          std::variant<Value, std::shared_ptr<CaseMuxItem>>>;
+  struct CaseMuxItem {
+    // The target wire to be assigned.
+    sv::RegOp wire;
+
+    // The case select signal to be used.
+    Value select;
+
+    // A mapping between a state and an assignment within that state.
+    // An assignment can either be a value or a nested CaseMuxItem. The latter
+    // case will create nested case statements.
+    StateCaseMapping assignmentInState;
+
+    // An optional default value to be assigned before the case statement, if
+    // the case is not fully specified for all states.
+    Optional<Value> defaultValue = {};
+  };
+
+  // Build an SV-based case mux for the given assignments. Assignments are
+  // merged into the same case statement. Caller is expected to ensure that the
+  // insertion point is within an `always_...` block.
+  void buildStateCaseMux(llvm::MutableArrayRef<CaseMuxItem> assignments);
 
   // A handle to the state encoder for this machine.
   std::unique_ptr<StateEncoding> encoding;
@@ -263,8 +273,17 @@ private:
   // A deterministic ordering of the states in this machine.
   llvm::SmallVector<StateOp> orderedStates;
 
-  // A mapping from a state op to its next-state value.
-  llvm::SmallDenseMap<StateOp, Value> nextStateFromState;
+  // A mapping from a fsm.variable op to its register.
+  llvm::SmallDenseMap<VariableOp, seq::CompRegOp> variableToRegister;
+
+  // A mapping from a state to variable updates performed during outgoing state
+  // transitions.
+  llvm::SmallDenseMap<
+      /*currentState*/ StateOp,
+      llvm::SmallDenseMap<
+          /*targetState*/ StateOp,
+          llvm::DenseMap</*targetVariable*/ VariableOp, /*targetValue*/ Value>>>
+      stateToVariableUpdates;
 
   // A handle to the MachineOp being converted.
   MachineOp machineOp;
@@ -299,49 +318,56 @@ MachineOpConverter::moveOps(Block *block,
   return nullptr;
 }
 
-llvm::SmallVector<Value> MachineOpConverter::buildStateCaseMux(
-    Location loc, Value sel,
-    llvm::ArrayRef<llvm::SmallDenseMap<StateOp, Value>> srcMaps,
-    llvm::function_ref<StringAttr(size_t)> nameF) {
+void MachineOpConverter::buildStateCaseMux(
+    llvm::MutableArrayRef<CaseMuxItem> assignments) {
+
+  // Gather the select signal. All assignments are expected to use the same
+  // select signal.
+  Value select = assignments.front().select;
+  assert(llvm::all_of(
+             assignments,
+             [&](const CaseMuxItem &item) { return item.select == select; }) &&
+         "All assignments must use the same select signal.");
+
   sv::CaseOp caseMux;
-  auto caseMuxCtor = [&]() {
-    caseMux = b.create<sv::CaseOp>(loc, CaseStmtType::CaseStmt, sel,
-                                   /*numCases=*/machineOp.getNumStates(),
-                                   [&](size_t caseIdx) {
-                                     StateOp state = orderedStates[caseIdx];
-                                     return encoding->getCasePattern(state);
-                                   });
-  };
-  b.create<sv::AlwaysCombOp>(loc, caseMuxCtor);
+  // Default assignments.
+  for (auto &assignment : assignments) {
+    if (assignment.defaultValue)
+      b.create<sv::BPAssignOp>(assignment.wire.getLoc(), assignment.wire,
+                               *assignment.defaultValue);
+  }
 
-  llvm::SmallVector<Value> dsts;
-  // note: cannot use llvm::enumerate, makes the underlying iterator const.
-  size_t idx = 0;
-  for (auto srcMap : srcMaps) {
-    auto valueType = srcMap.begin()->second.getType();
-    StringAttr name;
-    if (nameF)
-      name = nameF(idx);
+  // Case assignments.
+  caseMux = b.create<sv::CaseOp>(
+      machineOp.getLoc(), CaseStmtType::CaseStmt, select,
+      /*numCases=*/machineOp.getNumStates(), [&](size_t caseIdx) {
+        StateOp state = orderedStates[caseIdx];
+        return encoding->getCasePattern(state);
+      });
 
-    auto dst = b.create<sv::RegOp>(loc, valueType, name);
+  // Create case assignments.
+  for (auto assignment : assignments) {
     OpBuilder::InsertionGuard g(b);
     for (auto [caseInfo, stateOp] :
          llvm::zip(caseMux.getCases(), orderedStates)) {
+      auto assignmentInState = assignment.assignmentInState.find(stateOp);
+      if (assignmentInState == assignment.assignmentInState.end())
+        continue;
       b.setInsertionPointToEnd(caseInfo.block);
-      b.create<sv::BPAssignOp>(loc, dst, srcMap[stateOp]);
+      if (auto v = std::get_if<Value>(&assignmentInState->second); v) {
+        b.create<sv::BPAssignOp>(machineOp.getLoc(), assignment.wire, *v);
+      } else {
+        // Nested case statement.
+        llvm::SmallVector<CaseMuxItem, 4> nestedAssignments;
+        nestedAssignments.push_back(
+            *std::get<std::shared_ptr<CaseMuxItem>>(assignmentInState->second));
+        buildStateCaseMux(nestedAssignments);
+      }
     }
-    dsts.push_back(dst);
-    idx++;
   }
-  return dsts;
 }
 
 LogicalResult MachineOpConverter::dispatch() {
-  if (auto varOps = machineOp.front().getOps<VariableOp>(); !varOps.empty())
-    return (*varOps.begin())->emitOpError()
-           << "FSM variables not yet supported for SV "
-              "lowering.";
-
   b.setInsertionPoint(machineOp);
   auto loc = machineOp.getLoc();
   if (machineOp.getNumStates() < 2)
@@ -365,66 +391,146 @@ LogicalResult MachineOpConverter::dispatch() {
   auto clock = hwModuleOp.front().getArgument(clkRstIdxs.clockIdx);
   auto reset = hwModuleOp.front().getArgument(clkRstIdxs.resetIdx);
 
-  // 2) Build state register.
+  // 2) Build state and variable registers.
   encoding = std::make_unique<StateEncoding>(b, machineOp, hwModuleOp);
   auto stateType = encoding->getStateType();
 
-  BackedgeBuilder bb(b, loc);
-  auto nextStateBackedge = bb.get(stateType);
+  auto nextStateWire =
+      b.create<sv::RegOp>(loc, stateType, b.getStringAttr("state_next"));
+  auto nextStateWireRead = b.create<sv::ReadInOutOp>(loc, nextStateWire);
   stateReg = b.create<seq::CompRegOp>(
-      loc, stateType, nextStateBackedge, clock, "state_reg", reset,
+      loc, stateType, nextStateWireRead, clock, "state_reg", reset,
       /*reset value=*/encoding->encode(machineOp.getInitialStateOp()), nullptr);
+
+  llvm::DenseMap<VariableOp, sv::RegOp> variableNextStateWires;
+  for (auto variableOp : machineOp.front().getOps<fsm::VariableOp>()) {
+    auto initValueAttr = variableOp.initValueAttr().dyn_cast<IntegerAttr>();
+    if (!initValueAttr)
+      return variableOp.emitOpError() << "expected an integer attribute "
+                                         "for the initial value.";
+    Type varType = variableOp.getType();
+    auto varLoc = variableOp.getLoc();
+    auto varNextState = b.create<sv::RegOp>(
+        varLoc, varType, b.getStringAttr(variableOp.name() + "_next"));
+    auto varResetVal = b.create<hw::ConstantOp>(varLoc, initValueAttr);
+    auto variableReg = b.create<seq::CompRegOp>(
+        varLoc, varType, b.create<sv::ReadInOutOp>(varLoc, varNextState), clock,
+        b.getStringAttr(variableOp.name() + "_reg"), reset, varResetVal,
+        nullptr);
+    variableToRegister[variableOp] = variableReg;
+    variableNextStateWires[variableOp] = varNextState;
+    // Postpone value replacement until all logic has been created.
+    // fsm::UpdateOp's require their target variables to refer to a
+    // fsm::VariableOp - if this is not the case, they'll throw an assert.
+  }
 
   // Move any operations at the machine-level scope, excluding state ops, which
   // are handled separately.
-  if (failed(moveOps(&machineOp.front(),
-                     [](Operation *op) { return isa<fsm::StateOp>(op); }))) {
-    bb.abandon();
+  if (failed(moveOps(&machineOp.front(), [](Operation *op) {
+        return isa<fsm::StateOp, fsm::VariableOp>(op);
+      })))
     return failure();
-  }
 
-  // 3) Convert states and record their next-state value.
+  // 3) Convert states and record their next-state value assignments.
+  StateCaseMapping nextStateFromState;
   StateConversionResults stateConvResults;
   for (auto state : machineOp.getBody().getOps<StateOp>()) {
     auto stateConvRes = convertState(state);
-    if (failed(stateConvRes)) {
-      bb.abandon();
+    if (failed(stateConvRes))
       return failure();
-    }
+
     stateConvResults[state] = stateConvRes.getValue();
     orderedStates.push_back(state);
-    nextStateFromState[state] = stateConvRes.getValue().nextState;
+    nextStateFromState[state] = {stateConvRes.getValue().nextState};
   }
 
-  // 4/5) Create next-state maps for each output and the next-state signal in a
-  // format suitable for creating a case mux.
-  llvm::SmallVector<llvm::SmallDenseMap<StateOp, Value>, 4> nextStateMaps;
-  nextStateMaps.push_back(nextStateFromState);
+  // 4/5) Create next-state assignments for each output.
+  llvm::SmallVector<CaseMuxItem, 4> outputCaseAssignments;
   for (size_t portIndex = 0; portIndex < machineOp.getNumResults();
        portIndex++) {
-    auto &nsmap = nextStateMaps.emplace_back();
+    auto outputPort = hwModuleOp.getOutputPort(portIndex);
+    auto outputPortType = outputPort.type;
+    CaseMuxItem outputAssignment;
+    outputAssignment.wire = b.create<sv::RegOp>(
+        machineOp.getLoc(), outputPortType,
+        b.getStringAttr("output_" + std::to_string(portIndex)));
+    outputAssignment.select = stateReg;
     for (auto &state : orderedStates)
-      nsmap[state] = stateConvResults[state].outputs[portIndex];
+      outputAssignment.assignmentInState[state] = {
+          stateConvResults[state].outputs[portIndex]};
+
+    outputCaseAssignments.push_back(outputAssignment);
   }
 
-  // Materialize the case mux. We do this in a single call to have a single
-  // always_comb block.
-  auto stateCaseMuxes = buildStateCaseMux(
-      machineOp.getLoc(), stateReg, nextStateMaps, [&](size_t idx) {
-        if (idx == 0)
-          return b.getStringAttr("next_state");
+  // Create next-state maps for the FSM variables.
+  llvm::DenseMap<VariableOp, CaseMuxItem> variableCaseMuxItems;
+  for (auto &[currentState, it] : stateToVariableUpdates) {
+    for (auto &[targetState, it2] : it) {
+      for (auto &[variableOp, targetValue] : it2) {
+        auto caseMuxItemIt = variableCaseMuxItems.find(variableOp);
+        if (caseMuxItemIt == variableCaseMuxItems.end()) {
+          // First time seeing this variable. Initialize the outer case
+          // statement. The outer case has a default assignment to the current
+          // value of the variable register.
+          variableCaseMuxItems[variableOp];
+          caseMuxItemIt = variableCaseMuxItems.find(variableOp);
+          assert(variableOp);
+          assert(variableNextStateWires.count(variableOp));
+          caseMuxItemIt->second.wire = variableNextStateWires[variableOp];
+          caseMuxItemIt->second.select = stateReg;
+          caseMuxItemIt->second.defaultValue =
+              variableToRegister[variableOp].getResult();
+        }
 
-        return b.getStringAttr("output_" + std::to_string(idx - 1));
-      });
+        if (!std::get_if<std::shared_ptr<CaseMuxItem>>(
+                &caseMuxItemIt->second.assignmentInState[currentState])) {
+          // Initialize the inner case statement. This is an inner case within
+          // the current state, switching on the next-state value.
+          CaseMuxItem innerCaseMuxItem;
+          innerCaseMuxItem.wire = caseMuxItemIt->second.wire;
+          innerCaseMuxItem.select = nextStateWireRead;
+          caseMuxItemIt->second.assignmentInState[currentState] = {
+              std::make_shared<CaseMuxItem>(innerCaseMuxItem)};
+        }
 
-  nextStateBackedge.setValue(b.create<sv::ReadInOutOp>(loc, stateCaseMuxes[0]));
+        // Append to the nested case mux for the variable, with a case select
+        // on the next-state signal.
+        // Append an assignment in the case that nextState == targetState.
+        auto &innerCaseMuxItem = std::get<std::shared_ptr<CaseMuxItem>>(
+            caseMuxItemIt->second.assignmentInState[currentState]);
+        innerCaseMuxItem->assignmentInState[targetState] = {targetValue};
+      }
+    }
+  }
 
+  // Materialize the case mux.
+  llvm::SmallVector<CaseMuxItem, 4> nextStateCaseAssignments;
+  nextStateCaseAssignments.push_back(
+      CaseMuxItem{nextStateWire, stateReg, nextStateFromState});
+  for (auto &[_, caseMuxItem] : variableCaseMuxItems)
+    nextStateCaseAssignments.push_back(caseMuxItem);
+  nextStateCaseAssignments.append(outputCaseAssignments.begin(),
+                                  outputCaseAssignments.end());
+
+  {
+    auto alwaysCombOp = b.create<sv::AlwaysCombOp>(loc);
+    OpBuilder::InsertionGuard g(b);
+    b.setInsertionPointToStart(alwaysCombOp.getBodyBlock());
+    buildStateCaseMux(nextStateCaseAssignments);
+  }
+
+  // Replace variable values with their register counterparts.
+  for (auto &[variableOp, variableReg] : variableToRegister)
+    variableOp.getResult().replaceAllUsesWith(variableReg);
+
+  // Assing output ports.
   llvm::SmallVector<Value> outputPortAssignments;
-  for (auto outputMux : llvm::makeArrayRef(stateCaseMuxes).drop_front())
+  for (auto outputAssignment : outputCaseAssignments)
     outputPortAssignments.push_back(
-        b.create<sv::ReadInOutOp>(machineOp.getLoc(), outputMux));
+        b.create<sv::ReadInOutOp>(machineOp.getLoc(), outputAssignment.wire));
 
-  // Delete the default created output op and replace it with the output muxes.
+  // Delete the default created output op and replace it with the output
+  // muxes.
   auto *oldOutputOp = hwModuleOp.front().getTerminator();
   b.create<hw::OutputOp>(loc, outputPortAssignments);
   oldOutputOp->erase();
@@ -440,12 +546,36 @@ MachineOpConverter::convertTransitions( // NOLINT(misc-no-recursion)
     StateOp currentState, ArrayRef<TransitionOp> transitions) {
   Value nextState;
   if (transitions.empty()) {
-    // Base case - transition to the current state.
+    // Base case
+    // State: transition to the current state.
     nextState = encoding->encode(currentState);
   } else {
     // Recursive case - transition to a named state.
     auto transition = cast<fsm::TransitionOp>(transitions.front());
     nextState = encoding->encode(transition.getNextState());
+
+    // Action conversion
+    if (transition.hasAction()) {
+      // Move any ops from the action region to the general scope, excluding
+      // variable update ops.
+      auto actionMoveOpsRes =
+          moveOps(&transition.action().front(),
+                  [](Operation *op) { return isa<fsm::UpdateOp>(op); });
+      if (failed(actionMoveOpsRes))
+        return failure();
+
+      // Gather variable updates during the action.
+      DenseMap<fsm::VariableOp, Value> variableUpdates;
+      for (auto updateOp : transition.action().getOps<fsm::UpdateOp>()) {
+        VariableOp variableOp = updateOp.getVariable();
+        variableUpdates[variableOp] = updateOp.value();
+      }
+
+      stateToVariableUpdates[currentState][transition.getNextState()] =
+          variableUpdates;
+    }
+
+    // Guard conversion
     if (transition.hasGuard()) {
       // Not always taken; recurse and mux between the targeted next state and
       // the recursion result, selecting based on the provided guard.
@@ -466,33 +596,6 @@ MachineOpConverter::convertTransitions( // NOLINT(misc-no-recursion)
 
   assert(nextState && "next state should be defined");
   return nextState;
-}
-
-llvm::SmallVector<Value>
-MachineOpConverter::getOutputAssignments(StateConversionResults &convResults) {
-
-  // One for each output port.
-  llvm::SmallVector<llvm::SmallDenseMap<StateOp, Value>> outputPortValues(
-      machineOp.getNumResults());
-  for (auto &state : orderedStates) {
-    for (size_t portIndex = 0; portIndex < machineOp.getNumResults();
-         portIndex++)
-      outputPortValues[portIndex][state] =
-          convResults[state].outputs[portIndex];
-  }
-
-  llvm::SmallVector<Value> outputPortAssignments;
-
-  auto outputMuxes = buildStateCaseMux(
-      machineOp.getLoc(), stateReg, outputPortValues, [&](size_t idx) {
-        return b.getStringAttr("output_" + std::to_string(idx));
-      });
-
-  for (auto outputMux : outputMuxes)
-    outputPortAssignments.push_back(
-        b.create<sv::ReadInOutOp>(machineOp.getLoc(), outputMux));
-
-  return outputPortAssignments;
 }
 
 FailureOr<MachineOpConverter::StateConversionResult>
