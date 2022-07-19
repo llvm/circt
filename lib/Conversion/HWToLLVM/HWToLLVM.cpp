@@ -419,6 +419,29 @@ struct HWStructCreateOpConversion
 } // namespace
 
 //===----------------------------------------------------------------------===//
+// Type conversions
+//===----------------------------------------------------------------------===//
+
+static Type convertArrayType(hw::ArrayType type, LLVMTypeConverter &converter) {
+  auto elementTy = converter.convertType(type.getElementType());
+  return LLVM::LLVMArrayType::get(elementTy, type.getSize());
+}
+
+static Type convertStructType(hw::StructType type,
+                              LLVMTypeConverter &converter) {
+  llvm::SmallVector<Type, 8> elements;
+  mlir::SmallVector<mlir::Type> types;
+  type.getInnerTypes(types);
+
+  for (int i = 0, e = types.size(); i < e; ++i)
+    elements.push_back(converter.convertType(
+        types[HWToLLVMEndianessConverter::convertToLLVMEndianess(type, i)]));
+
+  return LLVM::LLVMStructType::getLiteral(&converter.getContext(), elements);
+}
+
+
+//===----------------------------------------------------------------------===//
 // Pass initialization
 //===----------------------------------------------------------------------===//
 
@@ -460,22 +483,11 @@ void HWToLLVMLoweringPass::runOnOperation() {
   RewritePatternSet patterns(&getContext());
   auto converter = mlir::LLVMTypeConverter(&getContext());
   converter.addConversion(
-      [&](SigType sig) { return convertSigType(sig, converter); });
-  converter.addConversion(
-      [&](TimeType time) { return convertTimeType(time, converter); });
-  converter.addConversion(
-      [&](PtrType ptr) { return convertPtrType(ptr, converter); });
-  converter.addConversion(
       [&](hw::ArrayType arr) { return convertArrayType(arr, converter); });
   converter.addConversion(
       [&](hw::StructType tup) { return convertStructType(tup, converter); });
 
-  // Apply a partial conversion first, lowering only the instances, to generate
-  // the init function.
-  patterns.add<InstOpConversion>(&getContext(), converter);
-
   LLVMConversionTarget target(getContext());
-  target.addIllegalOp<InstOp>();
   target.addLegalOp<UnrealizedConversionCastOp>();
   cf::populateControlFlowToLLVMConversionPatterns(converter, patterns);
 
@@ -487,7 +499,7 @@ void HWToLLVMLoweringPass::runOnOperation() {
 
   // Setup the full conversion.
   populateFuncToLLVMConversionPatterns(converter, patterns);
-  populateLLHDToLLVMConversionPatterns(converter, patterns, sigCounter,
+  populateHWToLLVMConversionPatterns(converter, patterns, sigCounter,
                                        regCounter);
 
   target.addLegalDialect<LLVM::LLVMDialect>();

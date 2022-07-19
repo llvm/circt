@@ -257,24 +257,8 @@ void CombToLLVMLoweringPass::runOnOperation() {
   size_t regCounter = 0;
 
   RewritePatternSet patterns(&getContext());
-  auto converter = mlir::LLVMTypeConverter(&getContext());
-  converter.addConversion(
-      [&](SigType sig) { return convertSigType(sig, converter); });
-  converter.addConversion(
-      [&](TimeType time) { return convertTimeType(time, converter); });
-  converter.addConversion(
-      [&](PtrType ptr) { return convertPtrType(ptr, converter); });
-  converter.addConversion(
-      [&](hw::ArrayType arr) { return convertArrayType(arr, converter); });
-  converter.addConversion(
-      [&](hw::StructType tup) { return convertStructType(tup, converter); });
-
-  // Apply a partial conversion first, lowering only the instances, to generate
-  // the init function.
-  patterns.add<InstOpConversion>(&getContext(), converter);
 
   LLVMConversionTarget target(getContext());
-  target.addIllegalOp<InstOp>();
   target.addLegalOp<UnrealizedConversionCastOp>();
   cf::populateControlFlowToLLVMConversionPatterns(converter, patterns);
 
@@ -286,7 +270,7 @@ void CombToLLVMLoweringPass::runOnOperation() {
 
   // Setup the full conversion.
   populateFuncToLLVMConversionPatterns(converter, patterns);
-  populateLLHDToLLVMConversionPatterns(converter, patterns, sigCounter,
+  populateCombToLLVMConversionPatterns(converter, patterns, sigCounter,
                                        regCounter);
 
   target.addLegalDialect<LLVM::LLVMDialect>();
