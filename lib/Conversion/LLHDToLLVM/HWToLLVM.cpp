@@ -37,6 +37,22 @@ using namespace circt;
 using namespace circt::llhd;
 
 //===----------------------------------------------------------------------===//
+// Helpers
+//===----------------------------------------------------------------------===//
+
+/// Create a zext operation by one bit on the given value. This is useful when
+/// passing unsigned indexes to a GEP instruction, which treats indexes as
+/// signed values, to avoid unexpected "sign overflows".
+
+static Value zextByOne(Location loc, ConversionPatternRewriter &rewriter,
+                       Value value) {
+  auto valueTy = value.getType();
+  auto zextTy = IntegerType::get(valueTy.getContext(),
+                                 valueTy.getIntOrFloatBitWidth() + 1);
+  return rewriter.create<LLVM::ZExtOp>(loc, zextTy, value);
+}
+
+//===----------------------------------------------------------------------===//
 // Extraction operation conversions
 //===----------------------------------------------------------------------===//
 
