@@ -64,9 +64,15 @@ def SVAttributeAttr : AttrDef<SVDialect, "SVAttribute"> {
 }
 
 def SVAttributesAttr : AttrDef<SVDialect, "SVAttributes"> {
-  let summary = "a Verilog Attribute";
+  let summary = "a container of system verilog attributes";
   let mnemonic = "attributes";
   let description = [{
+    This attribute is used to store SV attributes. The `attributes` field
+    represents SV attributes we want to annotate. The `emitAsComments` field
+    controls its emission style: SV spec defines the syntax of SV attributes as
+    `(* identifier (= identifer)? *)`. However, unfortunately many vendor-specific
+    pragmas violate the syntax and they are intended to be attached as comments.
+    Hence we emit given attributes as comments if `emitAsComments` field is true.
   }];
   let parameters = (ins "mlir::ArrayAttr":$attributes,
                       DefaultValuedParameter<"mlir::BoolAttr",
