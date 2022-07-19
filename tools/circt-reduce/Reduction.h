@@ -48,8 +48,11 @@ struct Reduction {
   /// reductions before the resulting module is tried for interestingness.
   virtual void afterReduction(mlir::ModuleOp) {}
 
-  /// Check if the reduction can apply to a specific operation.
-  virtual bool match(mlir::Operation *op) = 0;
+  /// Check if the reduction can apply to a specific operation. Returns a
+  /// benefit measure where a higher number means that applying the pattern
+  /// leads to a bigger reduction and zero means that the patten does not
+  /// match and thus cannot be applied at all.
+  virtual uint64_t match(mlir::Operation *op) = 0;
 
   /// Apply the reduction to a specific operation. If the returned result
   /// indicates that the application failed, the resulting module is treated the
@@ -87,7 +90,7 @@ struct Reduction {
 struct PassReduction : public Reduction {
   PassReduction(mlir::MLIRContext *context, std::unique_ptr<mlir::Pass> pass,
                 bool canIncreaseSize = false, bool oneShot = false);
-  bool match(mlir::Operation *op) override;
+  uint64_t match(mlir::Operation *op) override;
   mlir::LogicalResult rewrite(mlir::Operation *op) override;
   std::string getName() const override;
   bool acceptSizeIncrease() const override { return canIncreaseSize; }
