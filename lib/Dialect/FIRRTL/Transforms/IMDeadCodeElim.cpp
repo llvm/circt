@@ -452,6 +452,7 @@ void IMDeadCodeElimPass::eraseEmptyModule(FModuleOp module) {
 
   instanceGraph->erase(instanceGraphNode);
   module.erase();
+  ++numErasedModules;
 }
 
 std::unique_ptr<mlir::Pass> circt::firrtl::createIMDeadCodeElimPass() {
