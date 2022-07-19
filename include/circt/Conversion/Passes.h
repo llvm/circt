@@ -20,6 +20,7 @@
 #include "circt/Conversion/FSMToSV.h"
 #include "circt/Conversion/HWArithToHW.h"
 #include "circt/Conversion/HWToLLHD.h"
+#include "circt/Conversion/HWToSystemC.h"
 #include "circt/Conversion/HandshakeToFIRRTL.h"
 #include "circt/Conversion/HandshakeToHW.h"
 #include "circt/Conversion/LLHDToLLVM.h"

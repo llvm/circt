@@ -30,6 +30,7 @@ digraph G {
     ESI [URL="https://circt.llvm.org/docs/Dialects/ESI/"]
     FSM [URL="https://circt.llvm.org/docs/Dialects/FSM/"]
     HWArith [URL="https://circt.llvm.org/docs/Dialects/HWArith/"]
+    SystemC [URL="https://circt.llvm.org/docs/Dialects/SystemC/"]
 
     // Invisible node to make space for RTL cluster's incoming edges.
     space_above_RTL [style = invis, label=""]
@@ -46,7 +47,7 @@ digraph G {
     // Internal tools
     subgraph internal_tools{
       node [fillcolor="#fdc086"]
-      FIRRTLParser llhd_sim
+      FIRRTLParser llhd_sim ExportSystemC
       ExportVerilog [URL="https://circt.llvm.org/docs/VerilogGeneration/"]
       PyCDE [URL="https://circt.llvm.org/docs/PyCDE/"]
       Scheduling [URL="https://circt.llvm.org/docs/Scheduling/"]
@@ -90,12 +91,15 @@ digraph G {
   Seq -> SV
   HW -> LLHD
   Comb -> ExportVerilog
+  HW -> SystemC
 
   // Tool flows
   Scheduling -> StaticLogic [dir=both]
   Chisel -> FIRFile
   FIRFile -> FIRRTLParser
   FIRRTLParser -> FIRRTL
+  {SystemC, Comb} -> ExportSystemC
+  ExportSystemC -> CPPFile
   {HW SV} -> ExportVerilog
   SVVHDL -> Moore [weight=999]
   Moore -> LLHD
