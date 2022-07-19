@@ -21,3 +21,14 @@ ssp.instance "error3" of "Problem" {
   // expected-error @+1 {{Auxiliary dependence from @Op0 is interleaved with SSA operands}}
   operation<> @Op2(@Op0, %0)
 }
+
+// -----
+
+// expected-error @+1 {{custom op 'ssp.instance' carries unknown shortform property: unknown}}
+ssp.instance "error4" of "Problem" [unknown<>] {}
+
+// -----
+
+// expected-error @+2 {{custom op 'ssp.instance' expected integer value}}
+// expected-error @+1 {{custom op 'ssp.instance' failed to parse InitiationInterval parameter 'value' which is to be a `unsigned`}}
+ssp.instance "error5" of "Problem" [II<"not-an-integer">] {}

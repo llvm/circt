@@ -50,11 +50,12 @@ ssp::parseOptionalPropertyArray(ArrayAttr &attr, AsmParser &parser,
   elements.append(alreadyParsed.begin(), alreadyParsed.end());
 
   auto parseListResult = parser.parseCommaSeparatedList([&]() -> ParseResult {
-    StringRef mnemonic;
     Attribute elem;
-    if (parser.parseOptionalKeyword(&mnemonic)) {
-      // not a short-form SSP attribute, delegate to the generic machinery.
-      if (parser.parseAttribute(elem))
+
+    // Try to parse a generic attribute.
+    auto parseGenericAttrResult = parser.parseOptionalAttribute(elem);
+    if (parseGenericAttrResult.hasValue()) {
+      if (failed(*parseGenericAttrResult))
         return failure();
 
       elements.push_back(elem);
@@ -62,12 +63,17 @@ ssp::parseOptionalPropertyArray(ArrayAttr &attr, AsmParser &parser,
     }
 
     // Try to parse one of the built-in SSP property attributes.
-    auto parseElemResult =
-        generatedAttributeParser(parser, mnemonic, Type(), elem);
-    if (!parseElemResult.hasValue() || failed(*parseElemResult))
-      return parser.emitError(
-          parser.getCurrentLocation(),
-          "carries unknown or malformed shortform property");
+    StringRef mnemonic;
+    auto parseShortformAttrResult =
+        generatedAttributeParser(parser, &mnemonic, Type(), elem);
+
+    if (!parseShortformAttrResult.hasValue())
+      return parser.emitError(parser.getCurrentLocation(),
+                              "carries unknown shortform property: ")
+             << mnemonic;
+
+    if (failed(*parseShortformAttrResult))
+      return failure();
 
     elements.push_back(elem);
     return success();
