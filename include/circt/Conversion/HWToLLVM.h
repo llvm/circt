@@ -25,34 +25,10 @@ namespace circt {
 
 class HWToLLVMEndianessConverter {
 public:
-  static uint32_t convertToLLVMEndianess(Type type, uint32_t index) {
-    // This is hardcoded for little endian machines for now.
-    return TypeSwitch<Type, uint32_t>(type)
-        .Case<hw::ArrayType>(
-            [&](hw::ArrayType ty) { return ty.getSize() - index - 1; })
-        .Case<hw::StructType>([&](hw::StructType ty) {
-          return ty.getElements().size() - index - 1;
-        });
-  }
+  static uint32_t convertToLLVMEndianess(Type type, uint32_t index);
 
   static uint32_t llvmIndexOfStructField(hw::StructType type,
-                                         StringRef fieldName) {
-    auto fieldIter = type.getElements();
-    size_t index = 0;
-
-    for (const auto *iter = fieldIter.begin(); iter != fieldIter.end();
-         ++iter) {
-      if (iter->name == fieldName) {
-        return convertToLLVMEndianess(type, index);
-      }
-      ++index;
-    }
-
-    // Verifier of StructExtractOp has to ensure that the field name is indeed
-    // present.
-    llvm_unreachable("Field name attribute of hw::StructExtractOp invalid");
-    return 0;
-  }
+                                         StringRef fieldName);
 };
 
 /// Get the HW to LLVM conversion patterns.
