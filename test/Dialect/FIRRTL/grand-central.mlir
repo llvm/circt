@@ -62,19 +62,6 @@ firrtl.circuit "InterfaceGroundType" attributes {
 
 // CHECK: firrtl.module @View_companion
 // CHECK-SAME: output_file = #hw.output_file<"gct-dir/View_companion.sv"
-// CHECK-NEXT: firrtl.instance View_mapping @View_mapping
-
-// All Grand Central annotations are removed from the wires.
-// CHECK: firrtl.module @DUT
-// CHECK: %a = firrtl.wire
-// CHECK-SAME: annotations = [{a}]
-// CHECK: %b = firrtl.wire
-// CHECK-SAME: annotations = [{a}]
-// CHECK: %c = firrtl.wire
-// CHECK-SAME: annotations = [{a}]
-
-// CHECK: firrtl.module @View_mapping
-// CHECK-SAME: output_file = #hw.output_file<"gct-dir/View_mapping.sv"
 // CHECK-NEXT: sv.verbatim "assign {{[{][{]0[}][}]}}.foo = {{[{][{]1[}][}]}}.{{[{][{]2[}][}]}};"
 // CHECK-SAME:   #hw.innerNameRef<@DUT::@__View_Foo__>
 // CHECK-SAME:   @DUT
@@ -87,6 +74,15 @@ firrtl.circuit "InterfaceGroundType" attributes {
 // CHECK-SAME:   #hw.innerNameRef<@DUT::@__View_Foo__>
 // CHECK-SAME:   @DUT
 // CHECK-SAME:   #hw.innerNameRef<@DUT::@c>]
+
+// All Grand Central annotations are removed from the wires.
+// CHECK: firrtl.module @DUT
+// CHECK: %a = firrtl.wire
+// CHECK-SAME: annotations = [{a}]
+// CHECK: %b = firrtl.wire
+// CHECK-SAME: annotations = [{a}]
+// CHECK: %c = firrtl.wire
+// CHECK-SAME: annotations = [{a}]
 
 // CHECK: sv.interface @Foo
 // CHECK-SAME: comment = "VCS coverage exclude_file"
@@ -158,7 +154,6 @@ firrtl.circuit "InterfaceVectorType" attributes {
 
 // CHECK: firrtl.module @View_companion
 // CHECK-SAME: output_file = #hw.output_file<"gct-dir/View_companion.sv"
-// CHECK-NEXT: firrtl.instance View_mapping @View_mapping
 
 // All Grand Central annotations are removed from the registers.
 // CHECK: firrtl.module @DUT
@@ -358,7 +353,7 @@ firrtl.circuit "VecOfVec" attributes {
 
 // CHECK-LABEL: firrtl.circuit "VecOfVec"
 
-// CHECK:      firrtl.module @View_mapping
+// CHECK:      firrtl.module @View_companion
 // CHECK-NEXT:    assign {{[{][{]0[}][}]}}.foo[0][0]
 // CHECK-SAME:      #hw.innerNameRef<@DUT::@__View_Foo__>
 // CHECK-NEXT:    assign {{[{][{]0[}][}]}}.foo[0][1]
@@ -796,7 +791,7 @@ firrtl.circuit "NestedInterfaceVectorTypes" attributes {annotations = [
 }
 
 // CHECK-LABEL: firrtl.circuit "NestedInterfaceVectorTypes"
-// CHECK:         firrtl.module @View_mapping
+// CHECK:         firrtl.module @View_companion
 // CHECK-NEXT:      sv.verbatim "assign {{[{][{]0[}][}]}}.bar[0][0] = {{[{][{]1[}][}]}}.{{[{][{]2[}][}]}};"
 // CHECK-SAME:        #hw.innerNameRef<@DUT::@__View_Foo__>
 // CHECK-SAME:        @DUT
@@ -928,7 +923,7 @@ firrtl.circuit "ParentIsMainModule" attributes {
 // Check that this doesn't error out and that the XMR is generated correctly.
 //
 // CHECK-LABEL: firrtl.circuit "ParentIsMainModule"
-// CHECK:       firrtl.module @View_mapping
+// CHECK:       firrtl.module @View_companion
 // CHECK-NEXT:    sv.verbatim "assign {{[{][{]0[}][}]}}.foo = {{[{][{]1[}][}]}}.{{[{][{]2[}][}]}};"
 // CHECK-SAME:      #hw.innerNameRef<@ParentIsMainModule::@__View_Foo__>
 // CHECK-SAME:      @ParentIsMainModule
@@ -1023,12 +1018,7 @@ firrtl.circuit "DedupedPath" attributes {
 // CHECK-NOT:              firrtl.hierpath
 // CHECK-NEXT:             firrtl.module @Tile()
 // CHECK-NOT:                circt.nonlocal
-// CHECK:                  firrtl.module @DUT()
-// CHECK-NOT:                circt.nonlocal
-// CHECK:                  firrtl.module @DedupedPath
-// CHECK-NEXT:               firrtl.instance dut
-// CHECK-NOT:                  sym
-// CHECK:                  firrtl.module @MyView_mapping()
+// CHECK:                  firrtl.module @MyView_companion
 // CHECK-NEXT{LITERAL}:      sv.verbatim "assign {{0}}.foo = {{1}}.{{2}}.{{3}};"
 // CHECK-SAME:                 symbols = [#hw.innerNameRef<@DUT::@__MyView_Foo__>,
 // CHECK-SAME:                   @DUT,
@@ -1049,6 +1039,11 @@ firrtl.circuit "DedupedPath" attributes {
 // CHECK-SAME:                   @DUT,
 // CHECK-SAME:                   #hw.innerNameRef<@DUT::@tile2>,
 // CHECK-SAME:                   #hw.innerNameRef<@Tile::@x>]
+// CHECK:                  firrtl.module @DUT()
+// CHECK-NOT:                circt.nonlocal
+// CHECK:                  firrtl.module @DedupedPath
+// CHECK-NEXT:               firrtl.instance dut
+// CHECK-NOT:                  sym
 
 // -----
 
@@ -1215,7 +1210,9 @@ firrtl.circuit "ZeroWidth" attributes {annotations = [
 // Check that a view of a zero-width thing produces a comment in the output and
 // not XMR.
 //
-// CHECK-LABEL: firrtl.module @MyView_mapping() {{.+}} {
+// CHECK-LABEL: firrtl.circuit "ZeroWidth"
+//
+// CHECK:       firrtl.module private @MyView_companion() {
 // CHECK-NOT:     sv.verbatim
 // CHECK-NEXT:  }
 //
@@ -1272,10 +1269,10 @@ firrtl.circuit "ZeroWidth" attributes {annotations = [
 // symbol is created on the viewed component.
 //
 // CHECK-LABEL:         firrtl.circuit "ZeroWidth"
+// CHECK:                 firrtl.module private @MyView_companion()
+// CHECK-NEXT{LITERAL}:     sv.verbatim "assign {{0}}.ground = 1'h1;
 // CHECK:                 firrtl.module @ZeroWidth()
 // CHECK-NEXT:            %w = firrtl.wire : !firrtl.uint<1>
-// CHECK:                 firrtl.module @MyView_mapping()
-// CHECK-NEXT{LITERAL}:     sv.verbatim "assign {{0}}.ground = 1'h1;
 
 // -----
 

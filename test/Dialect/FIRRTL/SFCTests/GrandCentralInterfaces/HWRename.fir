@@ -26,17 +26,17 @@ circuit Top:
     signed.a <= a
     b <= signed.b
 
+    ; CHECK:      module Companion();
+    ; CHECK-NEXT:   assign MyView.[[elementName:.+]] = DUT.[[wireName:.+]];
+    ; CHECK-NEXT: endmodule
+
     ; CHECK:      module DUT
-    ; CHECK:        wire [[wireName:.+]];
+    ; CHECK:        wire [[wireName]];
     ; CHECK:      endmodule
 
     ; CHECK:      module Top
     ; CHECK:        DUT [[dutName:.+]] (
     ; CHECK:      endmodule
-
-    ; CHECK:      module MyView_mapping();
-    ; CHECK-NEXT:   assign MyView.[[elementName:.+]] = DUT.[[wireName]]
-    ; CHECK-NEXT: endmodule
 
     ; CHECK: interface MyInterface
     ; CHECK-NEXT:   logic [[elementName]]

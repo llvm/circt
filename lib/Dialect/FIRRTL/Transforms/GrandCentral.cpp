@@ -525,8 +525,6 @@ struct CompanionInfo {
   StringRef name;
 
   FModuleOp companion;
-
-  FModuleOp mapping;
 };
 
 /// Stores a reference to a ground type and an optional NLA associated with
@@ -1166,7 +1164,7 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
         assert(leafValue && "leafValue not found");
 
         auto builder = OpBuilder::atBlockEnd(
-            companionIDMap.lookup(id).mapping.getBodyBlock());
+            companionIDMap.lookup(id).companion.getBodyBlock());
 
         FIRRTLType tpe = leafValue.getType().cast<FIRRTLType>();
 
@@ -1874,30 +1872,7 @@ void GrandCentralPass::runOnOperation() {
             if (tpe.getValue() == "companion") {
               builder.setInsertionPointToEnd(circuitOp.getBodyBlock());
 
-              // Create the mapping module.
-              auto mappingName =
-                  getNamespace().newName(name.getValue() + "_mapping");
-              auto mapping = builder.create<FModuleOp>(
-                  circuitOp.getLoc(), builder.getStringAttr(mappingName),
-                  ArrayRef<PortInfo>());
-              if (maybeExtractInfo)
-                mapping->setAttr(
-                    "output_file",
-                    hw::OutputFileAttr::getFromDirectoryAndFilename(
-                        &getContext(), getOutputDirectory().getValue(),
-                        mapping.getName() + ".sv",
-                        /*excludeFromFilelist=*/true));
-              mapping->setAttr("comment", builder.getStringAttr(
-                                              "VCS coverage exclude_file"));
-              companionIDMap[id] = {name.getValue(), op, mapping};
-
-              // Instantiate the mapping module inside the companion.  Keep the
-              // instance graph up-to-date with this new instantiation.
-              builder.setInsertionPointToEnd(op.getBodyBlock());
-              instancePaths->instanceGraph[op]->addInstance(
-                  builder.create<InstanceOp>(circuitOp.getLoc(), mapping,
-                                             mapping.getName()),
-                  instancePathCache.instanceGraph.addModule(mapping));
+              companionIDMap[id] = {name.getValue(), op};
 
               // Assert that the companion is instantiated once and only once.
               auto instance = exactlyOneInstance(op, "companion");
@@ -1940,7 +1915,7 @@ void GrandCentralPass::runOnOperation() {
               // Look for any blackboxes instantiated by the companion and mark
               // them for inclusion in the Grand Central extraction directory.
               SmallVector<FModuleOp> modules({op});
-              DenseSet<Operation *> bboxes, visited({op, mapping});
+              DenseSet<Operation *> bboxes, visited({op});
               while (!modules.empty()) {
                 auto mod = modules.pop_back_val();
                 visited.insert(mod);

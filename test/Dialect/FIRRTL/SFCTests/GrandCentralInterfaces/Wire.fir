@@ -183,12 +183,33 @@ circuit Top :
     out.uint <= dut.out.uint
 
     ; NOEXTRACT:      module MyView_companion();
+    ; NOEXTRACT:        assign MyView.uint = DUT.w_uint;
+    ; NOEXTRACT-NEXT:   assign MyView.vec[0] = DUT.w_vec_0;
+    ; NOEXTRACT-NEXT:   assign MyView.vec[1] = DUT.w_vec_1;
+    ; NOEXTRACT-NEXT:   assign MyView.multivec[0][0] = DUT.w_multivec_0_0;
+    ; NOEXTRACT-NEXT:   assign MyView.multivec[0][1] = DUT.w_multivec_0_1;
+    ; NOEXTRACT-NEXT:   assign MyView.multivec[0][2] = DUT.w_multivec_0_2;
+    ; NOEXTRACT-NEXT:   assign MyView.multivec[1][0] = DUT.w_multivec_1_0;
+    ; NOEXTRACT-NEXT:   assign MyView.multivec[1][1] = DUT.w_multivec_1_1;
+    ; NOEXTRACT-NEXT:   assign MyView.multivec[1][2] = DUT.w_multivec_1_2;
+    ; NOEXTRACT-NEXT:   assign MyView.vecOfBundle[0].sint = DUT.w_vecOfBundle_0_sint;
+    ; NOEXTRACT-NEXT:   assign MyView.vecOfBundle[0].uint = DUT.w_vecOfBundle_0_uint;
+    ; NOEXTRACT-NEXT:   assign MyView.vecOfBundle[1].sint = DUT.w_vecOfBundle_1_sint;
+    ; NOEXTRACT-NEXT:   assign MyView.vecOfBundle[1].uint = DUT.w_vecOfBundle_1_uint;
+    ; NOEXTRACT-NEXT:   assign MyView.otherOther.other.sint = DUT.w_otherOther_other_sint;
+    ; NOEXTRACT-NEXT:   assign MyView.otherOther.other.uint = DUT.w_otherOther_other_uint;
+    ; NOEXTRACT-NEXT:   assign MyView.sub_uint = DUT.submodule.w_uint;
+    ; NOEXTRACT-NEXT:   assign MyView.sub_vec[0] = DUT.submodule.w_vec_0;
+    ; NOEXTRACT-NEXT:   assign MyView.sub_vec[1] = DUT.submodule.w_vec_1;
+    ; NOEXTRACT-NEXT:   assign MyView.sub_vecOfBundle[0].sint = DUT.submodule.w_vecOfBundle_0_sint;
+    ; NOEXTRACT-NEXT:   assign MyView.sub_vecOfBundle[0].uint = DUT.submodule.w_vecOfBundle_0_uint;
+    ; NOEXTRACT-NEXT:   assign MyView.sub_vecOfBundle[1].sint = DUT.submodule.w_vecOfBundle_1_sint;
+    ; NOEXTRACT-NEXT:   assign MyView.sub_vecOfBundle[1].uint = DUT.submodule.w_vecOfBundle_1_uint;
     ; NOEXTRACT:        Tap tap (
     ; NOEXTRACT-NEXT:     .b     (r),
     ; NOEXTRACT-NEXT:     .clock (clock),
     ; NOEXTRACT-NEXT:     .a     (_tap_a)
     ; NOEXTRACT-NEXT:   );
-    ; NOEXTRACT-NEXT:   MyView_mapping MyView_mapping{{ *}}();
     ; NOEXTRACT-NEXT: endmodule
 
     ; CHECK:          module DUT
@@ -219,40 +240,34 @@ circuit Top :
     ; EXTRACT:        FILE "Wire/firrtl/gct/MyView_companion.sv"
     ; NOEXTRACT-NOT:  FILE {{.*}}/MyView_companion.sv
     ; EXTRACT:        module MyView_companion();
+    ; EXTRACT:          assign MyView.uint = DUT.w_uint;
+    ; EXTRACT-NEXT:     assign MyView.vec[0] = DUT.w_vec_0;
+    ; EXTRACT-NEXT:     assign MyView.vec[1] = DUT.w_vec_1;
+    ; EXTRACT-NEXT:     assign MyView.multivec[0][0] = DUT.w_multivec_0_0;
+    ; EXTRACT-NEXT:     assign MyView.multivec[0][1] = DUT.w_multivec_0_1;
+    ; EXTRACT-NEXT:     assign MyView.multivec[0][2] = DUT.w_multivec_0_2;
+    ; EXTRACT-NEXT:     assign MyView.multivec[1][0] = DUT.w_multivec_1_0;
+    ; EXTRACT-NEXT:     assign MyView.multivec[1][1] = DUT.w_multivec_1_1;
+    ; EXTRACT-NEXT:     assign MyView.multivec[1][2] = DUT.w_multivec_1_2;
+    ; EXTRACT-NEXT:     assign MyView.vecOfBundle[0].sint = DUT.w_vecOfBundle_0_sint;
+    ; EXTRACT-NEXT:     assign MyView.vecOfBundle[0].uint = DUT.w_vecOfBundle_0_uint;
+    ; EXTRACT-NEXT:     assign MyView.vecOfBundle[1].sint = DUT.w_vecOfBundle_1_sint;
+    ; EXTRACT-NEXT:     assign MyView.vecOfBundle[1].uint = DUT.w_vecOfBundle_1_uint;
+    ; EXTRACT-NEXT:     assign MyView.otherOther.other.sint = DUT.w_otherOther_other_sint;
+    ; EXTRACT-NEXT:     assign MyView.otherOther.other.uint = DUT.w_otherOther_other_uint;
+    ; EXTRACT-NEXT:     assign MyView.sub_uint = DUT.submodule.w_uint;
+    ; EXTRACT-NEXT:     assign MyView.sub_vec[0] = DUT.submodule.w_vec_0;
+    ; EXTRACT-NEXT:     assign MyView.sub_vec[1] = DUT.submodule.w_vec_1;
+    ; EXTRACT-NEXT:     assign MyView.sub_vecOfBundle[0].sint = DUT.submodule.w_vecOfBundle_0_sint;
+    ; EXTRACT-NEXT:     assign MyView.sub_vecOfBundle[0].uint = DUT.submodule.w_vecOfBundle_0_uint;
+    ; EXTRACT-NEXT:     assign MyView.sub_vecOfBundle[1].sint = DUT.submodule.w_vecOfBundle_1_sint;
+    ; EXTRACT-NEXT:     assign MyView.sub_vecOfBundle[1].uint = DUT.submodule.w_vecOfBundle_1_uint;
     ; EXTRACT:          Tap tap (
     ; EXTRACT-NEXT:       .b     (r),
     ; EXTRACT-NEXT:       .clock (_tap_clock),
     ; EXTRACT-NEXT:       .a     (_tap_a)
     ; EXTRACT-NEXT:     );
-    ; EXTRACT-NEXT:     MyView_mapping MyView_mapping{{ *}}();
     ; EXTRACT-NEXT:   endmodule
-
-    ; EXTRACT:        FILE "Wire/firrtl/gct/MyView_mapping.sv"
-    ; NOEXTRACT-NOT:  FILE {{.*}}/MyView_mapping.sv
-    ; CHECK:          module MyView_mapping();
-    ; CHECK-NEXT:       assign MyView.uint = DUT.w_uint;
-    ; CHECK-NEXT:       assign MyView.vec[0] = DUT.w_vec_0;
-    ; CHECK-NEXT:       assign MyView.vec[1] = DUT.w_vec_1;
-    ; CHECK-NEXT:       assign MyView.multivec[0][0] = DUT.w_multivec_0_0;
-    ; CHECK-NEXT:       assign MyView.multivec[0][1] = DUT.w_multivec_0_1;
-    ; CHECK-NEXT:       assign MyView.multivec[0][2] = DUT.w_multivec_0_2;
-    ; CHECK-NEXT:       assign MyView.multivec[1][0] = DUT.w_multivec_1_0;
-    ; CHECK-NEXT:       assign MyView.multivec[1][1] = DUT.w_multivec_1_1;
-    ; CHECK-NEXT:       assign MyView.multivec[1][2] = DUT.w_multivec_1_2;
-    ; CHECK-NEXT:       assign MyView.vecOfBundle[0].sint = DUT.w_vecOfBundle_0_sint;
-    ; CHECK-NEXT:       assign MyView.vecOfBundle[0].uint = DUT.w_vecOfBundle_0_uint;
-    ; CHECK-NEXT:       assign MyView.vecOfBundle[1].sint = DUT.w_vecOfBundle_1_sint;
-    ; CHECK-NEXT:       assign MyView.vecOfBundle[1].uint = DUT.w_vecOfBundle_1_uint;
-    ; CHECK-NEXT:       assign MyView.otherOther.other.sint = DUT.w_otherOther_other_sint;
-    ; CHECK-NEXT:       assign MyView.otherOther.other.uint = DUT.w_otherOther_other_uint;
-    ; CHECK-NEXT:       assign MyView.sub_uint = DUT.submodule.w_uint;
-    ; CHECK-NEXT:       assign MyView.sub_vec[0] = DUT.submodule.w_vec_0;
-    ; CHECK-NEXT:       assign MyView.sub_vec[1] = DUT.submodule.w_vec_1;
-    ; CHECK-NEXT:       assign MyView.sub_vecOfBundle[0].sint = DUT.submodule.w_vecOfBundle_0_sint;
-    ; CHECK-NEXT:       assign MyView.sub_vecOfBundle[0].uint = DUT.submodule.w_vecOfBundle_0_uint;
-    ; CHECK-NEXT:       assign MyView.sub_vecOfBundle[1].sint = DUT.submodule.w_vecOfBundle_1_sint;
-    ; CHECK-NEXT:       assign MyView.sub_vecOfBundle[1].uint = DUT.submodule.w_vecOfBundle_1_uint;
-    ; CHECK:          endmodule
 
     ; EXTRACT:        FILE "Wire/firrtl/gct/MyInterface.sv"
     ; NOEXTRACT-NOT:  FILE {{.*}}/MyInterface.sv
