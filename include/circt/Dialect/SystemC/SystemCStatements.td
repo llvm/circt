@@ -10,10 +10,3 @@
 //
 //===----------------------------------------------------------------------===//
 
-
-def CtorOp : SystemCOp<"ctor", [SingleBlock, NoTerminator]> {
-  let summary = "A constructor definition.";
-
-  let regions = (region SizedRegion<1>:$body);
-  let assemblyFormat = "$body attr-dict";
-}

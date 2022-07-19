@@ -28,5 +28,6 @@ include "circt/Dialect/SystemC/SystemCTypesImpl.td"
 include "circt/Dialect/SystemC/SystemCTypes.td"
 include "circt/Dialect/SystemC/SystemCExpressions.td"
 include "circt/Dialect/SystemC/SystemCStatements.td"
+include "circt/Dialect/SystemC/SystemCStructure.td"
 
 #endif // CIRCT_DIALECT_SYSTEMC_SYSTEMC

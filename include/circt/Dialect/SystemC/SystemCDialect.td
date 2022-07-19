@@ -19,7 +19,7 @@ def SystemCDialect : Dialect {
   let summary = "Types and operations for the SystemC dialect";
   let description = [{
     This dialect defines the `systemc` dialect, which represents various
-    constructs of the SystemC C++-library useful for emission.
+    constructs of the SystemC library (IEEE 1666-2011) useful for emission.
   }];
   let cppNamespace = "::circt::systemc";
   let extraClassDeclaration = [{
