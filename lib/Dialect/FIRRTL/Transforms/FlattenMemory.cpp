@@ -204,7 +204,7 @@ private:
           })
           .Default([&](auto) { return false; });
     };
-    if (flatten(type))
+    if (flatten(type) && !results.empty())
       return true;
     return false;
   }
