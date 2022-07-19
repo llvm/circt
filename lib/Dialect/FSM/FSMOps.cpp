@@ -421,6 +421,16 @@ LogicalResult UpdateOp::verify() {
           (*this)->getParentRegion()))
     return emitOpError("must only be located in the action region");
 
+  auto transition = (*this)->getParentOfType<TransitionOp>();
+  for (auto otherUpdateOp : transition.action().getOps<UpdateOp>()) {
+    if (otherUpdateOp == *this)
+      continue;
+    if (otherUpdateOp.getVariable() == getVariable())
+      return otherUpdateOp.emitOpError(
+          "multiple updates to the same variable within a single action region "
+          "is disallowed");
+  }
+
   return success();
 }
 

@@ -81,3 +81,20 @@ fsm.machine @foo(%arg0: i1) -> i1 attributes {initialState = "IDLE", resNames = 
   fsm.state @IDLE output {} transitions {}
 }
 
+// -----
+
+fsm.machine @foo(%arg0: i1) -> () attributes {initialState = "A"} {
+  %cnt = fsm.variable "cnt" {initValue = 0 : i16} : i16
+
+  fsm.state @A output  {
+    fsm.output
+  } transitions {
+    fsm.transition @A action {
+      %c1 = hw.constant 1 : i16
+      %add1 = comb.add %cnt, %c1 : i16
+      fsm.update %cnt, %add1 : i16
+      // expected-error@+1 {{'fsm.update' op multiple updates to the same variable within a single action region is disallowed}}
+      fsm.update %cnt, %add1 : i16
+    }
+  }
+}
