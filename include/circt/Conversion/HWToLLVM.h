@@ -14,9 +14,9 @@
 #ifndef CIRCT_CONVERSION_HWTOLLVM_HWTOLLVM_H
 #define CIRCT_CONVERSION_HWTOLLVM_HWTOLLVM_H
 
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/LLVM.h"
 #include <memory>
-#include "circt/Dialect/HW/HWOps.h"
 
 namespace mlir {
 class LLVMTypeConverter;

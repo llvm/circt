@@ -40,34 +40,36 @@ using namespace circt::llhd;
 // Endianess Converter
 //===----------------------------------------------------------------------===//
 
-  uint32_t circt::HWToLLVMEndianessConverter::convertToLLVMEndianess(Type type, uint32_t index) {
-    // This is hardcoded for little endian machines for now.
-    return TypeSwitch<Type, uint32_t>(type)
-        .Case<hw::ArrayType>(
-            [&](hw::ArrayType ty) { return ty.getSize() - index - 1; })
-        .Case<hw::StructType>([&](hw::StructType ty) {
-          return ty.getElements().size() - index - 1;
-        });
-  }
+uint32_t
+circt::HWToLLVMEndianessConverter::convertToLLVMEndianess(Type type,
+                                                          uint32_t index) {
+  // This is hardcoded for little endian machines for now.
+  return TypeSwitch<Type, uint32_t>(type)
+      .Case<hw::ArrayType>(
+          [&](hw::ArrayType ty) { return ty.getSize() - index - 1; })
+      .Case<hw::StructType>([&](hw::StructType ty) {
+        return ty.getElements().size() - index - 1;
+      });
+}
 
-  uint32_t circt::HWToLLVMEndianessConverter::llvmIndexOfStructField(hw::StructType type,
-                                         StringRef fieldName) {
-    auto fieldIter = type.getElements();
-    size_t index = 0;
+uint32_t
+circt::HWToLLVMEndianessConverter::llvmIndexOfStructField(hw::StructType type,
+                                                          StringRef fieldName) {
+  auto fieldIter = type.getElements();
+  size_t index = 0;
 
-    for (const auto *iter = fieldIter.begin(); iter != fieldIter.end();
-         ++iter) {
-      if (iter->name == fieldName) {
-        return HWToLLVMEndianessConverter::convertToLLVMEndianess(type, index);
-      }
-      ++index;
+  for (const auto *iter = fieldIter.begin(); iter != fieldIter.end(); ++iter) {
+    if (iter->name == fieldName) {
+      return HWToLLVMEndianessConverter::convertToLLVMEndianess(type, index);
     }
-
-    // Verifier of StructExtractOp has to ensure that the field name is indeed
-    // present.
-    llvm_unreachable("Field name attribute of hw::StructExtractOp invalid");
-    return 0;
+    ++index;
   }
+
+  // Verifier of StructExtractOp has to ensure that the field name is indeed
+  // present.
+  llvm_unreachable("Field name attribute of hw::StructExtractOp invalid");
+  return 0;
+}
 
 //===----------------------------------------------------------------------===//
 // Helpers
@@ -203,7 +205,6 @@ struct ArraySliceOpConversion
 };
 } // namespace
 
-
 //===----------------------------------------------------------------------===//
 // Insertion operations conversion
 //===----------------------------------------------------------------------===//
@@ -223,9 +224,9 @@ struct StructInjectOpConversion
     Type inputTy = typeConverter->convertType(op.getInput().getType());
     Type resultTy = typeConverter->convertType(op.getResult().getType());
 
-    uint32_t fieldIndex =
-        HWToLLVMEndianessConverter::llvmIndexOfStructField(op.getInput().getType().cast<hw::StructType>(),
-                               op.getFieldAttr().getValue());
+    uint32_t fieldIndex = HWToLLVMEndianessConverter::llvmIndexOfStructField(
+        op.getInput().getType().cast<hw::StructType>(),
+        op.getFieldAttr().getValue());
     IntegerAttr indexAttr = rewriter.getI32IntegerAttr(fieldIndex);
 
     Value castInput = typeConverter->materializeTargetConversion(
@@ -239,8 +240,6 @@ struct StructInjectOpConversion
   }
 };
 } // namespace
-
-
 
 //===----------------------------------------------------------------------===//
 // Concat operations conversion
@@ -371,7 +370,8 @@ struct HWArrayCreateOpConversion
     Value arr = rewriter.create<LLVM::UndefOp>(op->getLoc(), arrayTy);
     for (size_t i = 0, e = op.getInputs().size(); i < e; ++i) {
       Value input =
-          op.getInputs()[HWToLLVMEndianessConverter::convertToLLVMEndianess(op.getResult().getType(), i)];
+          op.getInputs()[HWToLLVMEndianessConverter::convertToLLVMEndianess(
+              op.getResult().getType(), i)];
       Value castInput = typeConverter->materializeTargetConversion(
           rewriter, op->getLoc(), typeConverter->convertType(input.getType()),
           input);
@@ -403,7 +403,8 @@ struct HWStructCreateOpConversion
     for (size_t i = 0, e = resTy.cast<LLVM::LLVMStructType>().getBody().size();
          i < e; ++i) {
       Value input =
-          op.getInput()[HWToLLVMEndianessConverter::convertToLLVMEndianess(op.getResult().getType(), i)];
+          op.getInput()[HWToLLVMEndianessConverter::convertToLLVMEndianess(
+              op.getResult().getType(), i)];
       Value castInput = typeConverter->materializeTargetConversion(
           rewriter, op->getLoc(), typeConverter->convertType(input.getType()),
           input);
@@ -422,16 +423,15 @@ struct HWStructCreateOpConversion
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct HWToLLVMLoweringPass
-    : public ConvertHWToLLVMBase<HWToLLVMLoweringPass> {
+struct HWToLLVMLoweringPass : public ConvertHWToLLVMBase<HWToLLVMLoweringPass> {
   void runOnOperation() override;
 };
 } // namespace
 
 void circt::populateHWToLLVMConversionPatterns(LLVMTypeConverter &converter,
-                                                 RewritePatternSet &patterns,
-                                                 size_t &sigCounter,
-                                                 size_t &regCounter) {
+                                               RewritePatternSet &patterns,
+                                               size_t &sigCounter,
+                                               size_t &regCounter) {
   MLIRContext *ctx = converter.getDialect()->getContext();
 
   // Value creation conversion patterns.
@@ -447,11 +447,9 @@ void circt::populateHWToLLVMConversionPatterns(LLVMTypeConverter &converter,
   patterns.add<ArrayGetOpConversion, ArraySliceOpConversion,
                ArrayConcatOpConversion, StructExtractOpConversion,
                StructInjectOpConversion>(converter);
-
-
 }
 
-//TODO: Update for HW
+// TODO: Update for HW
 void HWToLLVMLoweringPass::runOnOperation() {
   // Keep a counter to infer a signal's index in his entity's signal table.
   size_t sigCounter = 0;

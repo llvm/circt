@@ -11,8 +11,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/LLHDToLLVM.h"
-#include "circt/Conversion/HWToLLVM.h"
 #include "../PassDetail.h"
+#include "circt/Conversion/HWToLLVM.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
@@ -642,8 +642,8 @@ static Type convertStructType(hw::StructType type,
   type.getInnerTypes(types);
 
   for (int i = 0, e = types.size(); i < e; ++i)
-    elements.push_back(
-        converter.convertType(types[HWToLLVMEndianessConverter::convertToLLVMEndianess(type, i)]));
+    elements.push_back(converter.convertType(
+        types[HWToLLVMEndianessConverter::convertToLLVMEndianess(type, i)]));
 
   return LLVM::LLVMStructType::getLiteral(&converter.getContext(), elements);
 }
@@ -1792,8 +1792,6 @@ struct ConstantTimeOpConversion : public ConvertToLLVMPattern {
 };
 } // namespace
 
-
-
 //===----------------------------------------------------------------------===//
 // Extraction operation conversions
 //===----------------------------------------------------------------------===//
@@ -1885,7 +1883,8 @@ struct SigStructExtractOpConversion
         getSignalDetail(rewriter, &getDialect(), op->getLoc(), castInput,
                         /*extractIndices=*/true);
 
-    uint32_t index = HWToLLVMEndianessConverter::llvmIndexOfStructField(op.getStructType(), op.getField());
+    uint32_t index = HWToLLVMEndianessConverter::llvmIndexOfStructField(
+        op.getStructType(), op.getField());
 
     auto indexC = rewriter.create<LLVM::ConstantOp>(
         op->getLoc(), rewriter.getI32Type(), rewriter.getI32IntegerAttr(index));
@@ -2026,7 +2025,6 @@ void circt::populateLLHDToLLVMConversionPatterns(LLVMTypeConverter &converter,
   // Memory conversion patterns.
   patterns.add<VarOpConversion, StoreOpConversion>(ctx, converter);
   patterns.add<LoadOpConversion>(converter);
-
 }
 
 void LLHDToLLVMLoweringPass::runOnOperation() {

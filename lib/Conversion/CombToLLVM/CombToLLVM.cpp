@@ -236,20 +236,19 @@ void circt::populateCombToLLVMConversionPatterns(LLVMTypeConverter &converter,
   patterns.add<CombExtractOpConversion, CombConcatOpConversion>(ctx, converter);
 
   // Bitwise conversion patterns.
-  patterns.add<CombParityOpConversion>(
-      ctx, converter);
+  patterns.add<CombParityOpConversion>(ctx, converter);
   patterns.add<AndOpConversion, OrOpConversion, XorOpConversion>(converter);
-  patterns.add<CombShlOpConversion, CombShrUOpConversion, CombShrSOpConversion>(converter);
+  patterns.add<CombShlOpConversion, CombShrUOpConversion, CombShrSOpConversion>(
+      converter);
 
   // Arithmetic conversion patterns.
   patterns.add<CombAddOpConversion, CombSubOpConversion, CombMulOpConversion,
                CombDivUOpConversion, CombDivSOpConversion, CombModUOpConversion,
                CombModSOpConversion, CombICmpOpConversion, CombMuxOpConversion>(
       converter);
-
 }
 
-//TODO: Update for Comb
+// TODO: Update for Comb
 void CombToLLVMLoweringPass::runOnOperation() {
   // Keep a counter to infer a signal's index in his entity's signal table.
   size_t sigCounter = 0;
