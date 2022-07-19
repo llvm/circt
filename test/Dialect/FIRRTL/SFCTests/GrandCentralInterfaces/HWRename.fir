@@ -27,6 +27,7 @@ circuit Top:
     b <= signed.b
 
     ; CHECK:      module Companion();
+    ; CHECK-NEXT:   MyInterface MyView();
     ; CHECK-NEXT:   assign MyView.[[elementName:.+]] = DUT.[[wireName:.+]];
     ; CHECK-NEXT: endmodule
 

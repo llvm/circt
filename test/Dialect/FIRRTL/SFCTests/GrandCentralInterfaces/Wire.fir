@@ -183,6 +183,7 @@ circuit Top :
     out.uint <= dut.out.uint
 
     ; NOEXTRACT:      module MyView_companion();
+    ; NOEXTRACT:        MyInterface MyView();
     ; NOEXTRACT:        assign MyView.uint = DUT.w_uint;
     ; NOEXTRACT-NEXT:   assign MyView.vec[0] = DUT.w_vec_0;
     ; NOEXTRACT-NEXT:   assign MyView.vec[1] = DUT.w_vec_1;
@@ -214,8 +215,6 @@ circuit Top :
 
     ; CHECK:          module DUT
     ; CHECK-NOT:      endmodule
-    ; EXTRACT:          // MyInterface MyView();
-    ; NOEXTRACT:        {{^ *}}MyInterface MyView();
     ; EXTRACT:          /* This instance is elsewhere emitted as a bind statement.
     ; EXTRACT-NEXT:        MyView_companion MyView_companion
     ; EXTRACT-NEXT:     */
@@ -231,15 +230,10 @@ circuit Top :
     ; EXTRACT-NEXT:     Wire/firrtl/gct/BlackBox_DUTAndGCT.v
     ; EXTRACT-NEXT:     Wire/firrtl/gct/BlackBox_GCT.v
 
-    ; EXTRACT:        FILE "Wire/firrtl/bindings.sv"
-    ; EXTRACT-NOT:    FILE
-    ; EXTRACT:        bind DUT MyInterface MyView{{ *}}(.*);
-    ; EXTRACT:        bind DUT MyView_companion MyView_companion{{ *}}();
-    ; NOEXTRACT-NOT:  FILE "Wire/firrtl/bindings.sv"
-
     ; EXTRACT:        FILE "Wire/firrtl/gct/MyView_companion.sv"
     ; NOEXTRACT-NOT:  FILE {{.*}}/MyView_companion.sv
     ; EXTRACT:        module MyView_companion();
+    ; EXTRACT:          MyInterface MyView();
     ; EXTRACT:          assign MyView.uint = DUT.w_uint;
     ; EXTRACT-NEXT:     assign MyView.vec[0] = DUT.w_vec_0;
     ; EXTRACT-NEXT:     assign MyView.vec[1] = DUT.w_vec_1;
@@ -268,6 +262,11 @@ circuit Top :
     ; EXTRACT-NEXT:       .a     (_tap_a)
     ; EXTRACT-NEXT:     );
     ; EXTRACT-NEXT:   endmodule
+
+    ; EXTRACT:        FILE "Wire/firrtl/bindings.sv"
+    ; EXTRACT-NOT:    FILE
+    ; EXTRACT:        bind DUT MyView_companion MyView_companion{{ *}}();
+    ; NOEXTRACT-NOT:  FILE "Wire/firrtl/bindings.sv"
 
     ; EXTRACT:        FILE "Wire/firrtl/gct/MyInterface.sv"
     ; NOEXTRACT-NOT:  FILE {{.*}}/MyInterface.sv

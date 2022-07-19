@@ -1752,7 +1752,6 @@ void GrandCentralPass::runOnOperation() {
   /// Annotations are removed as they are discovered and if they are not
   /// malformed.
   removalError = false;
-  auto trueAttr = builder.getBoolAttr(true);
   circuitOp.walk([&](Operation *op) {
     TypeSwitch<Operation *>(op)
         .Case<RegOp, RegResetOp, WireOp, NodeOp>([&](auto op) {
@@ -2100,7 +2099,7 @@ void GrandCentralPass::runOnOperation() {
 
     // Decide on a symbol name to use for the interface instance. This is needed
     // in `traverseBundle` as a placeholder for the connect operations.
-    auto parentModule = parentIDMap.lookup(bundle.getID()).second;
+    auto companionModule = companionIDMap.lookup(bundle.getID()).companion;
     auto symbolName = getNamespace().newName(
         "__" + companionIDMap.lookup(bundle.getID()).name + "_" +
         getInterfaceName(bundle.getPrefix(), bundle) + "__");
@@ -2110,7 +2109,7 @@ void GrandCentralPass::runOnOperation() {
     // is malformed in some way).  A good error message is generated inside
     // `traverseBundle` or the functions it calls.
     auto instanceSymbol =
-        hw::InnerRefAttr::get(SymbolTable::getSymbolName(parentModule),
+        hw::InnerRefAttr::get(SymbolTable::getSymbolName(companionModule),
                               StringAttr::get(&getContext(), symbolName));
     VerbatimBuilder::Base verbatimData;
     VerbatimBuilder verbatim(verbatimData);
@@ -2126,8 +2125,8 @@ void GrandCentralPass::runOnOperation() {
     interfaceVec.push_back(iface.getValue());
 
     // Instantiate the interface inside the parent.
-    builder.setInsertionPointToEnd(parentModule.getBodyBlock());
-    auto instance = builder.create<sv::InterfaceInstanceOp>(
+    builder.setInsertionPointToStart(companionModule.getBodyBlock());
+    builder.create<sv::InterfaceInstanceOp>(
         getOperation().getLoc(), iface.getValue().getInterfaceType(),
         companionIDMap.lookup(bundle.getID()).name,
         builder.getStringAttr(symbolName));
@@ -2143,17 +2142,6 @@ void GrandCentralPass::runOnOperation() {
                    companionIDMap[bundle.getID()].companion,
                    cast<hw::HWModuleLike>(*dut)))
       continue;
-
-    instance->setAttr("doNotPrint", trueAttr);
-    builder.setInsertionPointToStart(
-        instance->getParentOfType<CircuitOp>().getBodyBlock());
-    auto bind = builder.create<sv::BindInterfaceOp>(getOperation().getLoc(),
-                                                    instanceSymbol);
-    bind->setAttr("output_file",
-                  hw::OutputFileAttr::getFromFilename(
-                      &getContext(),
-                      maybeExtractInfo.getValue().bindFilename.getValue(),
-                      /*excludeFromFileList=*/true));
   }
 
   // If a `GrandCentralHierarchyFileAnnotation` was passed in, generate a YAML
