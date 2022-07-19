@@ -1824,7 +1824,7 @@ ParseResult FIRStmtParser::parsePostFixIntSubscript(Value &result) {
   // builder (https://llvm.discourse.group/t/3504).
   NamedAttribute attrs = {getConstants().indexIdentifier,
                           builder.getI32IntegerAttr(indexNo)};
-  bool bitindex = BitindexOp::isBitIndex({result}, attrs, {});
+  bool bitindex = result.getType().isa<IntType>();
   FIRRTLType resultType;
   if (bitindex) {
     resultType = BitindexOp::inferReturnType({result}, attrs, {});

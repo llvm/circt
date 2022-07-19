@@ -204,12 +204,6 @@ def BitindexOp : FIRRTLExprOp<"bitindex", [
 
   let assemblyFormat =
      "$input `[` $index `]` attr-dict `:` qualified(type($input))";
-
-  let firrtlExtraClassDeclaration = [{
-    static bool isBitIndex(ValueRange operands,
-                           ArrayRef<NamedAttribute> attrs,
-                           Optional<Location> loc);
-  }];
 }
 
 class IndexConstraint<string value, string resultValue>

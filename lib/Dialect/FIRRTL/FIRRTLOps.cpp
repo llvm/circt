@@ -2490,12 +2490,6 @@ FIRRTLType SubindexOp::inferReturnType(ValueRange operands,
   return {};
 }
 
-bool BitindexOp::isBitIndex(ValueRange operands, ArrayRef<NamedAttribute> attrs,
-                            Optional<Location> loc) {
-  auto inType = operands[0].getType();
-  return inType.isa<IntType>();
-}
-
 FIRRTLType BitindexOp::inferReturnType(ValueRange operands,
                                        ArrayRef<NamedAttribute> attrs,
                                        Optional<Location> loc) {
