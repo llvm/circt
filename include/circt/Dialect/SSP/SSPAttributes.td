@@ -30,7 +30,7 @@ def DependenceAttr : AttrDef<SSPDialect, "Dependence"> {
 
   let mnemonic = "dependence";
   let assemblyFormat = [{
-    `<` $operandIdx (`,` $sourceRef^)? (`,` $properties^)? `>`
+    `<` $operandIdx (`,` $sourceRef^)? (`:` $properties^)? `>`
   }];
 }
 
