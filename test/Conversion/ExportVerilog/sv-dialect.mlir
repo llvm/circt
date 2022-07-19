@@ -489,7 +489,7 @@ hw.module @reg_0(%in4: i4, %in8: i8) -> (a: i8, b: i8) {
   // CHECK-EMPTY:
   // CHECK-NEXT: /* assign_attr */
   // CHECK-NEXT: assign myReg = in8;
-  sv.assign %myReg, %in8 {sv.attributes = #sv.attributes<[#sv.attribute<"assign_attr">], comments = true>} : i8
+  sv.assign %myReg, %in8 {sv.attributes = #sv.attributes<[#sv.attribute<"assign_attr">], emitAsComments>} : i8
 
   %subscript1 = sv.array_index_inout %myRegArray1[%in4] : !hw.inout<array<42 x i8>>, i4
   sv.assign %subscript1, %in8 : i8   // CHECK-NEXT: assign myRegArray1[in4] = in8;

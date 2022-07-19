@@ -71,7 +71,5 @@ def SVAttributesAttr : AttrDef<SVDialect, "SVAttributes"> {
   let parameters = (ins "mlir::ArrayAttr":$attributes,
                       DefaultValuedParameter<"mlir::BoolAttr",
                       "mlir::BoolAttr::get($_ctxt, false)">:$emitAsComments);
-  // TODO: <$attributes, emitAsComments> would be nicer syntax.
-  let assemblyFormat = [{ `<` $attributes
-                          (`,` `comments` `=` $emitAsComments^)?  `>` }];
+  let hasCustomAssemblyFormat = true;
 }
