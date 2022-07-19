@@ -12,3 +12,5 @@
 
 class SSPOp<string mnemonic, list<Trait> traits = []> :
   Op<SSPDialect, mnemonic, traits>;
+
+def DummyOp : SSPOp<"dummy">;
