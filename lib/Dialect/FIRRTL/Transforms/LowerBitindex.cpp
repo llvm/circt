@@ -9,6 +9,22 @@
 //
 // This file defines the LowerBitindex pass.
 //
+// The lowering algorithm looks for all values that are bit-indexed. For each
+// such value `val`, it creates a new wire `v_wire` that is a vector
+// `UInt<1>[val.width]`.
+// Then it makes the following transformations:
+//
+// * `val <= e` becomes `v_wire[i] <= bits(e, i, i)` for all `i` up to `val.width`
+// * `val[n] <= e` becomes `v_wire[n] <= e`.
+// * `bits(val, hi, lo)` becomes `cat(v_wire[hi], v_wire[hi-1], ..., v_wire[lo])`.
+//
+// Then it connects the concatenation of the vector v_wire to the variable (`val <=
+// cat(v_wire[n], v_wire[n-1], ..., v_wire[0])` where `n` is `val.width-1`).
+//
+// If the bit-indexed value is a register, the pass additionally creates
+// state-preserving connections `v_wire[i] <= bits(val, i, i)` just after the
+// definition of `v_wire`.
+//
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
