@@ -40,9 +40,7 @@ using namespace circt::llhd;
 // Endianess Converter
 //===----------------------------------------------------------------------===//
 
-class HWToLLVMEndianessConverter {
-public:
-  static uint32_t convertToLLVMEndianess(Type type, uint32_t index) {
+  uint32_t circt::HWToLLVMEndianessConverter::convertToLLVMEndianess(Type type, uint32_t index) {
     // This is hardcoded for little endian machines for now.
     return TypeSwitch<Type, uint32_t>(type)
         .Case<hw::ArrayType>(
@@ -52,7 +50,7 @@ public:
         });
   }
 
-  static uint32_t llvmIndexOfStructField(hw::StructType type,
+  uint32_t circt::HWToLLVMEndianessConverter::llvmIndexOfStructField(hw::StructType type,
                                          StringRef fieldName) {
     auto fieldIter = type.getElements();
     size_t index = 0;
@@ -70,7 +68,6 @@ public:
     llvm_unreachable("Field name attribute of hw::StructExtractOp invalid");
     return 0;
   }
-};
 
 //===----------------------------------------------------------------------===//
 // Helpers
