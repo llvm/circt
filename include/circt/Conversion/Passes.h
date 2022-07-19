@@ -15,6 +15,7 @@
 
 #include "circt/Conversion/AffineToStaticLogic.h"
 #include "circt/Conversion/CalyxToHW.h"
+#include "circt/Conversion/ExportSystemC.h"
 #include "circt/Conversion/ExportVerilog.h"
 #include "circt/Conversion/FIRRTLToHW.h"
 #include "circt/Conversion/FSMToSV.h"
