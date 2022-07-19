@@ -29,6 +29,8 @@ target_link_libraries(circt-opt
   CIRCTHandshakeTransforms
   CIRCTLLHD
   CIRCTLLHDToLLVM
+  CIRCTHWToLLVM
+  CIRCTCombToLLVM
   CIRCTLLHDTransforms
   CIRCTMoore
   CIRCTMooreToCore
