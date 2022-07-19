@@ -419,3 +419,100 @@ struct HWStructCreateOpConversion
   }
 };
 } // namespace
+
+//===----------------------------------------------------------------------===//
+// Pass initialization
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct HWToLLVMLoweringPass
+    : public ConvertHWToLLVMBase<HWToLLVMLoweringPass> {
+  void runOnOperation() override;
+};
+} // namespace
+
+void circt::populateHWToLLVMConversionPatterns(LLVMTypeConverter &converter,
+                                                 RewritePatternSet &patterns,
+                                                 size_t &sigCounter,
+                                                 size_t &regCounter) {
+  MLIRContext *ctx = converter.getDialect()->getContext();
+
+  // Value creation conversion patterns.
+  patterns.add<HWConstantOpConversion>(ctx, converter);
+  patterns.add<HWArrayCreateOpConversion, HWStructCreateOpConversion>(
+      converter);
+
+  // Bitwise conversion patterns.
+  patterns.add<BitcastOpConversion>(converter);
+
+  // Memory conversion patterns.
+
+  patterns.add<ArrayGetOpConversion, ArraySliceOpConversion,
+               ArrayConcatOpConversion, StructExtractOpConversion,
+               StructInjectOpConversion>(converter);
+
+
+}
+
+//TODO: Update for HW
+void HWToLLVMLoweringPass::runOnOperation() {
+  // Keep a counter to infer a signal's index in his entity's signal table.
+  size_t sigCounter = 0;
+
+  // Keep a counter to infer a reg's index in his entity.
+  size_t regCounter = 0;
+
+  RewritePatternSet patterns(&getContext());
+  auto converter = mlir::LLVMTypeConverter(&getContext());
+  converter.addConversion(
+      [&](SigType sig) { return convertSigType(sig, converter); });
+  converter.addConversion(
+      [&](TimeType time) { return convertTimeType(time, converter); });
+  converter.addConversion(
+      [&](PtrType ptr) { return convertPtrType(ptr, converter); });
+  converter.addConversion(
+      [&](hw::ArrayType arr) { return convertArrayType(arr, converter); });
+  converter.addConversion(
+      [&](hw::StructType tup) { return convertStructType(tup, converter); });
+
+  // Apply a partial conversion first, lowering only the instances, to generate
+  // the init function.
+  patterns.add<InstOpConversion>(&getContext(), converter);
+
+  LLVMConversionTarget target(getContext());
+  target.addIllegalOp<InstOp>();
+  target.addLegalOp<UnrealizedConversionCastOp>();
+  cf::populateControlFlowToLLVMConversionPatterns(converter, patterns);
+
+  // Apply the partial conversion.
+  if (failed(
+          applyPartialConversion(getOperation(), target, std::move(patterns))))
+    signalPassFailure();
+  patterns.clear();
+
+  // Setup the full conversion.
+  populateFuncToLLVMConversionPatterns(converter, patterns);
+  populateLLHDToLLVMConversionPatterns(converter, patterns, sigCounter,
+                                       regCounter);
+
+  target.addLegalDialect<LLVM::LLVMDialect>();
+  target.addLegalOp<ModuleOp>();
+
+  // Apply a full conversion to remove unrealized conversion casts.
+  if (failed(applyFullConversion(getOperation(), target, std::move(patterns))))
+    signalPassFailure();
+
+  patterns.clear();
+
+  mlir::populateReconcileUnrealizedCastsPatterns(patterns);
+  target.addIllegalOp<UnrealizedConversionCastOp>();
+
+  // Apply the full conversion.
+  if (failed(applyFullConversion(getOperation(), target, std::move(patterns))))
+    signalPassFailure();
+}
+
+/// Create an HW to LLVM conversion pass.
+std::unique_ptr<OperationPass<ModuleOp>> circt::createConvertHWToLLVMPass() {
+  return std::make_unique<HWToLLVMLoweringPass>();
+}
