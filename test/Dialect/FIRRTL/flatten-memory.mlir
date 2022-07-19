@@ -147,4 +147,9 @@ firrtl.module @MemoryRWSplit(in %clock: !firrtl.clock, in %rwEn: !firrtl.uint<1>
     // CHECK:  %[[v15:.+]] = firrtl.subfield %ram_MPORT_1(4) : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: bundle<a: uint<0>, b: uint<20>>, mask: bundle<a: uint<1>, b: uint<1>>>) -> !firrtl.bundle<a: uint<1>, b: uint<1>>
     firrtl.connect %3, %io : !firrtl.bundle<a: uint<0>, b: uint<20>>, !firrtl.bundle<a: uint<0>, b: uint<20>>
   }
+
+  firrtl.module @ZeroBitMem(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %io: !firrtl.bundle<a: uint<0>, b: uint<20>>) {
+    %ram_MPORT = firrtl.mem Undefined  {depth = 1 : i64, groupID = 1 : ui32, name = "ram", portNames = ["MPORT"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: bundle<>, mask: bundle<>>
+    // CHECK: %ram_MPORT = firrtl.mem Undefined  {depth = 1 : i64, groupID = 1 : ui32, name = "ram", portNames = ["MPORT"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: bundle<>, mask: bundle<>>
+  }
 }
