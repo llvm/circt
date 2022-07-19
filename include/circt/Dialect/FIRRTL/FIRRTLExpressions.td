@@ -667,9 +667,6 @@ def BitCastOp: FIRRTLOp<"bitcast", [NoSideEffect]> {
 // XMR
 //===----------------------------------------------------------------------===//
 
-// TODO: Finish me, just enough to poke at RefType
-// TODO: result = ref.getType()
-// InferTypeOpInterface
 def XMRGetOp : FIRRTLOp<"xmr.get", [
   TypesMatchWith<"result should be reference base type",
     "ref", "result", "$_self.cast<RefType>().getType()"> ]> {
@@ -684,16 +681,29 @@ def XMRGetOp : FIRRTLOp<"xmr.get", [
   let assemblyFormat = "$ref attr-dict `:` qualified(type($ref))";
 }
 
-def XMREndOp : FIRRTLOp<"xmr.end", [
+def XMRReadOp : FIRRTLOp<"xmr.read", [
   TypesMatchWith<"result should be reference base type",
     "ref", "result", "$_self.cast<RefType>().getType()"> ]> {
-  let summary = "FIRRTL XMR End";
+  let summary = "FIRRTL XMR Read";
   let description = [{
-    Endpoint of remote reference (XMR), read or written from
-    the firrtl.xmr.get end.
+    Endpoint of remote reference (XMR), read from
+    the firrtl.xmr.get op.
   }];
-  let arguments = (ins RefType:$ref);
-  let results = (outs FIRRTLType:$result);
+  let arguments = (ins RefType:$ref, FIRRTLType:$result);
 
-  let assemblyFormat = "$ref attr-dict `:` qualified(type($ref))";
+  let assemblyFormat = "$ref `,` $result attr-dict `:` qualified(type($ref))";
+}
+
+def XMRWriteOp : FIRRTLOp<"xmr.write", [
+  TypesMatchWith<"result should be reference base type",
+    "ref", "result", "$_self.cast<RefType>().getType()"> ]> {
+  let summary = "FIRRTL XMR Write";
+  let description = [{
+    Endpoint of remote reference (XMR), written from
+    the firrtl.xmr.get end. This should override any
+    other write to $result.
+  }];
+  let arguments = (ins FIRRTLType:$result, RefType:$ref);
+
+  let assemblyFormat = "$result `,` $ref attr-dict `:` qualified(type($ref))";
 }

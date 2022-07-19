@@ -12,7 +12,8 @@
 
 firrtl.circuit "xmr" {
   firrtl.module private @Test(in %x: !firrtl.ref<uint<2>>) {
-    %e = firrtl.xmr.end %x : !firrtl.ref<uint<2>>
+    %w = firrtl.wire : !firrtl.uint<2>
+    firrtl.xmr.write %w, %x : !firrtl.ref<uint<2>>
   }
   firrtl.module @xmr() {
     %test_x = firrtl.instance test @Test(in x: !firrtl.ref<uint<2>>)
@@ -30,12 +31,12 @@ firrtl.circuit "DUT" {
 
     %view_in, %view_out = firrtl.instance MyView_companion @MyView_companion(in ref_in1: !firrtl.ref<uint<1>>, out ref_out1: !firrtl.ref<uint<1>>)
 
-    %view_in_end = firrtl.xmr.end %view_in : !firrtl.ref<uint<1>>
-    firrtl.strictconnect %view_in_end, %w : !firrtl.uint<1>
+    firrtl.xmr.read %view_in, %w : !firrtl.ref<uint<1>>
     %iface = sv.interface.instance sym @__MyView_MyInterface__  : !sv.interface<@MyInterface>
-    // Sink of XMR
-    %view_out_end = firrtl.xmr.end %view_out : !firrtl.ref<uint<1>>
-    sv.interface.signal.assign %iface(@MyInterface::@bool) = %view_out_end : !firrtl.uint<1>
+
+    %w2 = firrtl.wire sym @w2 : !firrtl.uint<1>
+    firrtl.xmr.write %w2, %view_out : !firrtl.ref<uint<1>>
+
     // firrtl.strictconnect %view_out_end, %iface : !firrtl.uint<1>>
   }
 
@@ -67,8 +68,7 @@ firrtl.circuit "DUT" {
 firrtl.circuit "Foo" {
   firrtl.module @Bar(in %_a: !firrtl.ref<uint<1>>) {
     %a = firrtl.wire : !firrtl.uint<1>
-    %0 = firrtl.xmr.end %_a : !firrtl.ref<uint<1>>
-    firrtl.strictconnect %a, %0 : !firrtl.uint<1>
+    firrtl.xmr.write %a, %_a : !firrtl.ref<uint<1>>
   }
   firrtl.module @Foo() {
     %bar_a = firrtl.instance bar @Bar(in _a: !firrtl.ref<uint<1>>)

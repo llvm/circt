@@ -1033,15 +1033,14 @@ std::pair<size_t, bool> FVectorType::rootChildFieldID(size_t fieldID,
 namespace circt {
 namespace firrtl {
 namespace detail {
-struct RefTypeStorage: mlir::TypeStorage {
+struct RefTypeStorage : mlir::TypeStorage {
   using KeyTy = FIRRTLType;
 
   RefTypeStorage(KeyTy value) : value(value) {}
 
   bool operator==(const KeyTy &key) const { return key == value; }
 
-  static RefTypeStorage *construct(TypeStorageAllocator &allocator,
-                                      KeyTy key) {
+  static RefTypeStorage *construct(TypeStorageAllocator &allocator, KeyTy key) {
     return new (allocator.allocate<RefTypeStorage>()) RefTypeStorage(key);
   }
 
@@ -1056,9 +1055,7 @@ auto RefType::get(FIRRTLType type) -> FIRRTLType {
   return Base::get(type.getContext(), type);
 }
 
-auto RefType::getType() -> FIRRTLType {
-  return getImpl()->value;
-}
+auto RefType::getType() -> FIRRTLType { return getImpl()->value; }
 
 //===----------------------------------------------------------------------===//
 // FIRRTLDialect

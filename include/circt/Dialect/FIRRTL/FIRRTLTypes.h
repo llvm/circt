@@ -419,12 +419,12 @@ public:
   std::pair<size_t, bool> rootChildFieldID(size_t fieldID, size_t index);
 };
 
-
 //===----------------------------------------------------------------------===//
 // XMR Ref Type
 //===----------------------------------------------------------------------===//
 
-class RefType : public FIRRTLType::TypeBase<RefType, FIRRTLType, detail::RefTypeStorage> {
+class RefType
+    : public FIRRTLType::TypeBase<RefType, FIRRTLType, detail::RefTypeStorage> {
 public:
   using Base::Base;
   static FIRRTLType get(FIRRTLType type);
