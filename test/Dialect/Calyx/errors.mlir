@@ -863,3 +863,57 @@ module attributes {calyx.entrypoint = "main"} {
     }
   }
 }
+
+// -----
+module attributes {calyx.entrypoint = "A"} {
+  hw.module.extern @params<WIDTH: i32>(%in: !hw.int<#hw.param.decl.ref<"WIDTH">>, %clk: i1 {calyx.clk}, %go: i1 {calyx.go = 1}) -> (out: !hw.int<#hw.param.decl.ref<"WIDTH">>, done: i1 {calyx.done}) attributes {filename = "test.v"}
+
+  calyx.component @A(%in_0: i32, %in_1: i32, %go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%out_0: i32, %out_1: i32, %done: i1 {done}) {
+    %c1_1 = hw.constant 1 : i1
+    // expected-error @+1 {{'calyx.primitive' op has the wrong number of parameters; expected: 1 but got 0}}
+    %params.in, %params.clk, %params.go, %params.out, %params.done = calyx.primitive @params_0 of @params : i32, i1, i1, i32, i1
+
+    calyx.wires {
+      calyx.assign %done = %c1_1 : i1
+      calyx.assign %params.in = %in_0 : i32
+      calyx.assign %out_0 = %params.out : i32
+    }
+    calyx.control {}
+  } {static = 1}
+}
+
+// -----
+module attributes {calyx.entrypoint = "A"} {
+  hw.module.extern @params<WIDTH: i32>(%in: !hw.int<#hw.param.decl.ref<"WIDTH">>, %clk: i1 {calyx.clk}, %go: i1 {calyx.go = 1}) -> (out: !hw.int<#hw.param.decl.ref<"WIDTH">>, done: i1 {calyx.done}) attributes {filename = "test.v"}
+
+  calyx.component @A(%in_0: i32, %in_1: i32, %go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%out_0: i32, %out_1: i32, %done: i1 {done}) {
+    %c1_1 = hw.constant 1 : i1
+    // expected-error @+1 {{'calyx.primitive' op parameter #0 should have name "WIDTH" but has name "TEST"}}
+    %params.in, %params.clk, %params.go, %params.out, %params.done = calyx.primitive @params_0 of @params<TEST: i32 = 1> : i32, i1, i1, i32, i1
+
+    calyx.wires {
+      calyx.assign %done = %c1_1 : i1
+      calyx.assign %params.in = %in_0 : i32
+      calyx.assign %out_0 = %params.out : i32
+    }
+    calyx.control {}
+  } {static = 1}
+}
+
+// -----
+module attributes {calyx.entrypoint = "A"} {
+  hw.module.extern @params<WIDTH: i32>(%in: !hw.int<#hw.param.decl.ref<"TEST">>, %clk: i1 {calyx.clk}, %go: i1 {calyx.go = 1}) -> (out: !hw.int<#hw.param.decl.ref<"WIDTH">>, done: i1 {calyx.done}) attributes {filename = "test.v"}
+
+  calyx.component @A(%in_0: i32, %in_1: i32, %go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%out_0: i32, %out_1: i32, %done: i1 {done}) {
+    %c1_1 = hw.constant 1 : i1
+    // expected-error @+1 {{Could not find parameter TEST in the provided parameters for the expression!}}
+    %params.in, %params.clk, %params.go, %params.out, %params.done = calyx.primitive @params_0 of @params<WIDTH: i32 = 1> : i32, i1, i1, i32, i1
+
+    calyx.wires {
+      calyx.assign %done = %c1_1 : i1
+      calyx.assign %params.in = %in_0 : i32
+      calyx.assign %out_0 = %params.out : i32
+    }
+    calyx.control {}
+  } {static = 1}
+}
