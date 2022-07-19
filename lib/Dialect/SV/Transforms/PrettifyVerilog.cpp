@@ -307,7 +307,7 @@ void PrettifyVerilogPass::sinkOrCloneOpToUses(Operation *op) {
   }
   // If this op is no longer used, drop it.
   if (op->use_empty()) {
-    op->erase();
+    toDelete.insert(op);
     anythingChanged = true;
   }
 }
