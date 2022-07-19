@@ -630,23 +630,7 @@ static Type convertPtrType(PtrType type, LLVMTypeConverter &converter) {
       converter.convertType(type.getUnderlyingType()));
 }
 
-static Type convertArrayType(hw::ArrayType type, LLVMTypeConverter &converter) {
-  auto elementTy = converter.convertType(type.getElementType());
-  return LLVM::LLVMArrayType::get(elementTy, type.getSize());
-}
 
-static Type convertStructType(hw::StructType type,
-                              LLVMTypeConverter &converter) {
-  llvm::SmallVector<Type, 8> elements;
-  mlir::SmallVector<mlir::Type> types;
-  type.getInnerTypes(types);
-
-  for (int i = 0, e = types.size(); i < e; ++i)
-    elements.push_back(converter.convertType(
-        types[HWToLLVMEndianessConverter::convertToLLVMEndianess(type, i)]));
-
-  return LLVM::LLVMStructType::getLiteral(&converter.getContext(), elements);
-}
 //===----------------------------------------------------------------------===//
 // Unit conversions
 //===----------------------------------------------------------------------===//
@@ -2042,10 +2026,6 @@ void LLHDToLLVMLoweringPass::runOnOperation() {
       [&](TimeType time) { return convertTimeType(time, converter); });
   converter.addConversion(
       [&](PtrType ptr) { return convertPtrType(ptr, converter); });
-  converter.addConversion(
-      [&](hw::ArrayType arr) { return convertArrayType(arr, converter); });
-  converter.addConversion(
-      [&](hw::StructType tup) { return convertStructType(tup, converter); });
 
   // Apply a partial conversion first, lowering only the instances, to generate
   // the init function.
