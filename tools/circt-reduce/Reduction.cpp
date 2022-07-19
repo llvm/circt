@@ -653,7 +653,8 @@ struct RootPortPruner : public Reduction {
     for (unsigned i = 0, e = module.getNumPorts(); i != e; ++i) {
       if (onlyInvalidated(module.getArgument(i))) {
         dropPorts.push_back(i);
-        for (auto user : module.getArgument(i).getUsers())
+        for (auto *user :
+             llvm::make_early_inc_range(module.getArgument(i).getUsers()))
           user->erase();
       }
     }
