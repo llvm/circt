@@ -136,8 +136,6 @@ void FirRegOp::build(OpBuilder &builder, OperationState &result, Value input,
   result.addOperands(clk);
 
   result.addAttribute(getNameAttrName(result.name), name);
-  result.addAttribute(getIsAsyncAttrName(result.name),
-                      builder.getBoolAttr(false));
 
   if (innerSym)
     result.addAttribute(getInnerSymAttrName(result.name), innerSym);
@@ -157,8 +155,8 @@ void FirRegOp::build(OpBuilder &builder, OperationState &result, Value input,
   result.addOperands(resetValue);
 
   result.addAttribute(getNameAttrName(result.name), name);
-  result.addAttribute(getIsAsyncAttrName(result.name),
-                      builder.getBoolAttr(isAsync));
+  if (isAsync)
+    result.addAttribute(getIsAsyncAttrName(result.name), builder.getUnitAttr());
 
   if (innerSym)
     result.addAttribute(getInnerSymAttrName(result.name), innerSym);

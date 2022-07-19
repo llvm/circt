@@ -167,17 +167,16 @@ private:
 };
 } // end anonymous namespace
 
+LLVM_ATTRIBUTE_USED
 static llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
                                      const LatticeValue &lattice) {
-  if (lattice.isUnknown()) {
+  if (lattice.isUnknown())
     return os << "<Unknown>";
-  } else if (lattice.isOverdefined()) {
+  if (lattice.isOverdefined())
     return os << "<Overdefined>";
-  } else if (lattice.isInvalidValue()) {
+  if (lattice.isInvalidValue())
     return os << "<Invalid>";
-  } else {
-    return os << "<" << lattice.getConstant() << ">";
-  }
+  return os << "<" << lattice.getConstant() << ">";
 }
 
 namespace {

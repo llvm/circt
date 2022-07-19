@@ -27,3 +27,4 @@
 // DIALECT-NEXT: seq
 // DIALECT-NEXT: staticlogic
 // DIALECT-NEXT: sv
+// DIALECT-NEXT: systemc

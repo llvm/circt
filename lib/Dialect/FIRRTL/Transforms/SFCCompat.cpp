@@ -53,6 +53,14 @@ void SFCCompatPass::runOnOperation() {
     if (!reg)
       continue;
 
+    // Skip if the reg has an aggregate type.
+    // TODO: Support aggregate types.
+    if (reg.getType().isa<FVectorType, BundleType>()) {
+      reg.emitWarning() << "Aggregate values are not supported by SFCCompat "
+                           "pass. This may result in incorrect results";
+      continue;
+    }
+
     // If the `RegResetOp` has an invalidated initialization, then replace it
     // with a `RegOp`.
     if (isModuleScopedDrivenBy<InvalidValueOp>(reg.getResetValue(), true, false,

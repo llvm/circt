@@ -787,11 +787,7 @@ LoopNetworkRewriter::processRegion(Region &r,
     queue.pop_front();
     visited.insert(currBlock);
 
-    if (!hasMultiplePredecessors(currBlock)) {
-      // Not a loop header;
-      llvm::copy_if(currBlock->getSuccessors(), std::back_inserter(queue),
-                    [&](Block *block) { return !visited.count(block); });
-    } else {
+    if (hasMultiplePredecessors(currBlock)) {
       // Check if currBlock starts a loop
       LoopInfo loopInfo;
       if (failed(collectLoopInfo(currBlock, domInfo, loopInfo)))
@@ -808,8 +804,13 @@ LoopNetworkRewriter::processRegion(Region &r,
         // This is the start of an outer loop - go process!
         if (failed(processOuterLoop(op->getLoc(), loopInfo)))
           return failure();
+
+        continue;
       }
     }
+    // Not a loop header;
+    llvm::copy_if(currBlock->getSuccessors(), std::back_inserter(queue),
+                  [&](Block *block) { return !visited.count(block); });
   }
 
   return success();
