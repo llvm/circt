@@ -392,7 +392,8 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
     {extractClockGatesAnnoClass, NoTargetAnnotation},
     {fullAsyncResetAnnoClass, {stdResolve, applyWithoutTarget<true>}},
     {ignoreFullAsyncResetAnnoClass,
-     {stdResolve, applyWithoutTarget<true, FModuleOp>}}
+     {stdResolve, applyWithoutTarget<true, FModuleOp>}},
+    {decodeTableAnnotation, {noResolve, drop}}
 
 }};
 
