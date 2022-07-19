@@ -23,6 +23,7 @@ target_link_libraries(circt-reduce
   CIRCTHWTransforms
   CIRCTScheduling
   CIRCTSeq
+  CIRCTSSP
   CIRCTStaticLogicOps
   CIRCTHWArith
   CIRCTSV
