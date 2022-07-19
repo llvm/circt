@@ -81,16 +81,26 @@ The SSP dialect also provides a path towards automatically generated Python bind
 
   No, you're right. However, the SSP dialect uses the same terminology as the scheduling infrastructure, so any changes would have to originate there.
 
-## Representation of problem components
+## Rationale for selected design points
 
-### Instance
+### InstanceOp has a single graph region
 
-### Operator type
+The `InstanceOp`'s region serves as the container for the problem instance's operator types and dependence graph, which may be cyclic and therefore requires a graph region. We considered using separate regions for operator types and the graph, however, the `InstanceOp` has to provide a symbol table, and the `SymbolTable` trait enforces single-region ops.
 
-### Operation
+### Use of SSA operands _and_ symbol references to encode dependences
 
-### Dependence
+This is required to faithfully reproduce the internal modeling in the scheduling infrastructure, which distinguishes def-use (result to operand, tied to MLIR SSA graph) and auxiliary (op to op, stored explicitly) dependences. To represent the former, the `OperationOp` produces an arbitrary number of `NoneType`-typed results, and accepts an arbitrary number of operands, thus spanning a def-use graph. Auxiliary dependences are encoded as symbol uses, which reference the name of the dependence's source `OperationOp`.
+
+### No attribute interface for scheduling properties
+
+Properties are represented by dialect attributes inheriting from the base classes in `PropertyBase.td`, which include `extraClassDeclaration`s for `setInProblem(...)` and `getFromProblem(...)` methods that directly interact with the C++ problem class. In order to get/set a certain property, a reference to the concrete class is required, e.g.: a `CyclicProblem &` if we want to set a dependence's `distance` property.
+
+A more obvious design would be to make these methods part of an attribute interface. However, then the methods could only accept a `Problem &`, which cannot be statically downcasted to the concrete class due to the use of virtual multiple inheritance in the problem class hierarchy. If the inheritance model were to change in the scheduling infrastructure, the use of attribute interfaces should be reconsidered.
 
 ## Import/export
 
+The `circt/Dialect/SSP/Utilities.h` header defines methods to convert between `ssp.InstanceOp`s and `circt::scheduling::Problem` instances. These utilities use template parameters for the problem class and the property attribute classes, allowing client code to load/save an instance of a certain problem class with the given properties (but ignoring others). Incompatible properties (e.g. `distance` on a base `Problem`, or `initiationInterval` on an operation) will be caught at compile time as errors in the template instantiation. Note that convenience versions that simply load/save all properties known in the given problem class are provided as well.
+
 ## Extensibility
+
+A key feature of the scheduling infrastructure is its extensibility. New problem definitions in out-of-tree projects have to define attributes inheriting from the property base classes in one of their own dialects. Due to the heavy use of templates in the import/export utilities, these additional attributes are supported uniformly alongside the built-in property attributes. The only difference is that the SSP dialect provides short-form pretty printing for its own properties, whereas externally-defined properties fall back to the generic dialect attribute syntax.
