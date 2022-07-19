@@ -58,7 +58,7 @@ using namespace circt::llhd;
     for (const auto *iter = fieldIter.begin(); iter != fieldIter.end();
          ++iter) {
       if (iter->name == fieldName) {
-        return convertToLLVMEndianess(type, index);
+        return HWToLLVMEndianessConverter::convertToLLVMEndianess(type, index);
       }
       ++index;
     }
@@ -104,7 +104,7 @@ struct StructExtractOpConversion
     Type inputTy = typeConverter->convertType(op.getInput().getType());
     Type resultTy = typeConverter->convertType(op.getResult().getType());
 
-    uint32_t fieldIndex = llvmIndexOfStructField(
+    uint32_t fieldIndex = HWToLLVMEndianessConverter::llvmIndexOfStructField(
         op.getInput().getType().cast<hw::StructType>(), op.getField());
     IntegerAttr indexAttr = rewriter.getI32IntegerAttr(fieldIndex);
 
@@ -224,7 +224,7 @@ struct StructInjectOpConversion
     Type resultTy = typeConverter->convertType(op.getResult().getType());
 
     uint32_t fieldIndex =
-        llvmIndexOfStructField(op.getInput().getType().cast<hw::StructType>(),
+        HWToLLVMEndianessConverter::llvmIndexOfStructField(op.getInput().getType().cast<hw::StructType>(),
                                op.getFieldAttr().getValue());
     IntegerAttr indexAttr = rewriter.getI32IntegerAttr(fieldIndex);
 
@@ -371,7 +371,7 @@ struct HWArrayCreateOpConversion
     Value arr = rewriter.create<LLVM::UndefOp>(op->getLoc(), arrayTy);
     for (size_t i = 0, e = op.getInputs().size(); i < e; ++i) {
       Value input =
-          op.getInputs()[convertToLLVMEndianess(op.getResult().getType(), i)];
+          op.getInputs()[HWToLLVMEndianessConverter::convertToLLVMEndianess(op.getResult().getType(), i)];
       Value castInput = typeConverter->materializeTargetConversion(
           rewriter, op->getLoc(), typeConverter->convertType(input.getType()),
           input);
@@ -403,7 +403,7 @@ struct HWStructCreateOpConversion
     for (size_t i = 0, e = resTy.cast<LLVM::LLVMStructType>().getBody().size();
          i < e; ++i) {
       Value input =
-          op.getInput()[convertToLLVMEndianess(op.getResult().getType(), i)];
+          op.getInput()[HWToLLVMEndianessConverter::convertToLLVMEndianess(op.getResult().getType(), i)];
       Value castInput = typeConverter->materializeTargetConversion(
           rewriter, op->getLoc(), typeConverter->convertType(input.getType()),
           input);
