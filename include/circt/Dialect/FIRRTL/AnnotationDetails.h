@@ -38,6 +38,8 @@ constexpr const char *enumVecAnnoClass =
     "chisel3.experimental.EnumAnnotations$EnumVecAnnotation";
 constexpr const char *forceNameAnnoClass =
     "chisel3.util.experimental.ForceNameAnnotation";
+constexpr const char *decodeTableAnnotation =
+    "chisel3.util.experimental.decode.DecodeTableAnnotation";
 constexpr const char *flattenAnnoClass = "firrtl.transforms.FlattenAnnotation";
 constexpr const char *inlineAnnoClass = "firrtl.passes.InlineAnnotation";
 
