@@ -226,14 +226,22 @@ static LogicalResult execute(MLIRContext &context) {
       size_t opIdx = 0;
       mlir::OwningOpRef<mlir::ModuleOp> newModule = module->clone();
       pattern.beforeReduction(*newModule);
+      SmallVector<std::pair<Operation *, uint64_t>, 16> opBenefits;
       newModule->walk([&](Operation *op) {
-        if (!pattern.match(op))
-          return;
-        auto i = opIdx++;
-        if (i < rangeBase || i - rangeBase >= rangeLength)
-          return;
-        (void)pattern.rewrite(op);
+        uint64_t benefit = pattern.match(op);
+        if (benefit > 0) {
+          opIdx++;
+          opBenefits.push_back(std::make_pair(op, benefit));
+        }
       });
+      std::sort(opBenefits.begin(), opBenefits.end(),
+                [](auto a, auto b) { return a.second > b.second; });
+      for (size_t i = rangeBase;
+           i < rangeBase + rangeLength && i < opBenefits.size(); i++) {
+        auto *op = opBenefits[i].first;
+        if (pattern.match(op))
+          (void)pattern.rewrite(op);
+      }
       pattern.afterReduction(*newModule);
       if (opIdx == 0) {
         VERBOSE({

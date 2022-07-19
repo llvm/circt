@@ -9,7 +9,7 @@ firrtl.circuit "Foo" {
   firrtl.module @FooFooBar(in %x: !firrtl.uint<1>, out %y: !firrtl.uint<1>) {
     firrtl.connect %y, %x : !firrtl.uint<1>, !firrtl.uint<1>
   }
-  // CHECK: firrtl.module @FooFoo
+  // CHECK-NOT: firrtl.module @FooFoo
   firrtl.module @FooFoo(in %x: !firrtl.uint<1>, out %y: !firrtl.uint<1>) {
     %x0_x, %x0_y = firrtl.instance x0 @FooFooFoo(in x: !firrtl.uint<1>, out y: !firrtl.uint<1>)
     %x1_x, %x1_y = firrtl.instance x1 @FooFooBar(in x: !firrtl.uint<1>, out y: !firrtl.uint<1>)
@@ -21,7 +21,7 @@ firrtl.circuit "Foo" {
   firrtl.module @FooBar(in %x: !firrtl.uint<1>, out %y: !firrtl.uint<1>) {
     firrtl.connect %y, %x : !firrtl.uint<1>, !firrtl.uint<1>
   }
-  // CHECK: firrtl.extmodule @Foo
+  // CHECK: firrtl.module @Foo
   firrtl.module @Foo(in %x: !firrtl.uint<1>, out %y: !firrtl.uint<1>) {
     %x0_x, %x0_y = firrtl.instance x0 @FooFoo(in x: !firrtl.uint<1>, out y: !firrtl.uint<1>)
     %x1_x, %x1_y = firrtl.instance x1 @FooBar(in x: !firrtl.uint<1>, out y: !firrtl.uint<1>)
