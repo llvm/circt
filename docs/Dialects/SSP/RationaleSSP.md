@@ -1,21 +1,34 @@
 # SSP Dialect Rationale
 
 This document describes various design points of the SSP dialect, why they are
-the way they are, and current status.  This follows in the spirit of other
-[MLIR Rationale docs](https://mlir.llvm.org/docs/Rationale/).
+the way they are, and current status.  This follows in the spirit of other [MLIR
+Rationale docs](https://mlir.llvm.org/docs/Rationale/).
 
 ## Introduction
 
-CIRCT's [scheduling infrastructure](https://circt.llvm.org/docs/Scheduling/) is lightweight and dialect-agnostic, in order to fit into any lowering flow with a need for static scheduling. However, it lacks an import/export format for storing and exchanging problem instances. The SSP ("**S**tatic **S**cheduling **P**roblems") dialect fills that role by defining an IR that captures problem instances 
+CIRCT's [scheduling infrastructure](https://circt.llvm.org/docs/Scheduling/) is
+lightweight and dialect-agnostic, in order to fit into any lowering flow with a
+need for static scheduling. However, it lacks an import/export format for
+storing and exchanging problem instances. The SSP ("**S**tatic **S**cheduling
+**P**roblems") dialect fills that role by defining an IR that captures problem
+instances 
 - in full fidelity,
 - in a concise syntax,
 - and independent of any other "host" dialect.
 
-The SSP dialect's main use-cases are [testing](#testing), [benchmarking](#benchmarking) and [rapid-prototyping](#rapid-prototyping). It is strictly a companion to the existing scheduling infrastructure, and clients (HLS flows etc.) are advised to use the C++ APIs directly.
+The SSP dialect's main use-cases are [testing](#testing),
+[benchmarking](#benchmarking) and [rapid-prototyping](#rapid-prototyping). It is
+strictly a companion to the existing scheduling infrastructure, and clients (HLS
+flows etc.) are advised to use the C++ APIs directly.
 
 ### Testing
 
-In order to test the scheduling infrastructure's problem definitions (in particular, their input checkers/solution verifiers) and algorithm implementations, a "host" IR to store problem instances is needed. To that end, the test-cases started out with a mix of standard and unregistered operations, and heavy use of generic attributes, as shown in the following example (note especially the index-based specification of auxiliary dependences):
+In order to test the scheduling infrastructure's problem definitions (in
+particular, their input checkers/solution verifiers) and algorithm
+implementations, a "host" IR to store problem instances is needed. To that end,
+the test-cases started out with a mix of standard and unregistered operations,
+and heavy use of generic attributes, as shown in the following example (note
+especially the index-based specification of auxiliary dependences):
 
 ```mlir
 func.func @canis14_fig2() attributes {
@@ -48,7 +61,9 @@ ssp.instance "canis14_fig2" of "ModuloProblem" [II<3>] {
 }
 ```
 
-Emitting an SSP dump is also useful to test that an conversion pass correctly constructs the scheduling problem, e.g. checking that it contains a memory dependence to another operation:
+Emitting an SSP dump is also useful to test that an conversion pass correctly
+constructs the scheduling problem, e.g. checking that it contains a memory
+dependence to another operation:
 
 ```mlir
 // CHECK: operation<@{{.*}}>(%0, @[[store_1]])
@@ -60,47 +75,104 @@ affine.store %7, %0[0] : memref<1xi32>
 
 ### Benchmarking
 
-Scheduling is a hard combinatorial optimization problem that can be solved by a variety of approaches, ranging from fast heuristics to exact formulations in mathematical frameworks such as integer linear programs capable of computing provably optimal solutions. It is therefore important to evaluate scheduler implementations beyond just functional correctness testing, i.e. to assess the scheduler's runtime and scalability, as well as the solution quality, on sets of representative benchmark instances.
+Scheduling is a hard combinatorial optimization problem that can be solved by a
+variety of approaches, ranging from fast heuristics to exact formulations in
+mathematical frameworks such as integer linear programs capable of computing
+provably optimal solutions. It is therefore important to evaluate scheduler
+implementations beyond just functional correctness testing, i.e. to assess the
+scheduler's runtime and scalability, as well as the solution quality, on sets of
+representative benchmark instances.
 
-With the SSP dialect, such instances can be saved directly from synthesis flows using CIRCT's scheduling infrastructure, or emitted in the textual MLIR format by third-party tools. As the SSP IR is self-contained, it would even be viable to store problem instances originating from out-of-tree or proprietary flows, as their source and target IRs would not be required to load and schedule a problem instance in a benchmark harness.
+With the SSP dialect, such instances can be saved directly from synthesis flows
+using CIRCT's scheduling infrastructure, or emitted in the textual MLIR format
+by third-party tools. As the SSP IR is self-contained, it would even be viable
+to store problem instances originating from out-of-tree or proprietary flows, as
+their source and target IRs would not be required to load and schedule a problem
+instance in a benchmark harness.
 
 ### Rapid prototyping
 
-The SSP dialect also provides a path towards automatically generated Python bindings for the scheduling infrastructure, which will ease the prototyping of new scheduling clients and problem definitions.
+The SSP dialect also provides a path towards automatically generated Python
+bindings for the scheduling infrastructure, which will ease the prototyping of
+new scheduling clients and problem definitions.
 
 ### Q&A
-- **Q:** Do I have to do a dialect conversion to and from this dialect to schedule something?
+- **Q:** Do I have to do a dialect conversion to and from this dialect to
+schedule something?
 
-  No, use the C++ API, i.e. the problem classes and scheduler entrypoints in `circt::scheduling`, directly! This dialect is a one-way street in terms of dialect conversion, and only intended to load and store problem instances for the use-cases listed above.
+  No, use the C++ API, i.e. the problem classes and scheduler entrypoints in
+  `circt::scheduling`, directly! This dialect is a one-way street in terms of
+  dialect conversion, and only intended to load and store problem instances for
+  the use-cases listed above.
 
-- **Q:** Why don't you use something like Cap'nProto to (de)serialize the problem instances?
+- **Q:** Why don't you use something like Cap'nProto to (de)serialize the
+problem instances?
 
-  Textual MLIR is reasonably easy to write by hand, which is important for test-cases, and we need MLIR operations anyways, because the scheduling infrastructure builds on top of the MLIR def-use graph to represent its dependence graphs.
+  Textual MLIR is reasonably easy to write by hand, which is important for
+  test-cases, and we need MLIR operations anyways, because the scheduling
+  infrastructure builds on top of the MLIR def-use graph to represent its
+  dependence graphs.
 
 - **Q:** `OperationOp` doesn't seem like a great name.
 
-  No, you're right. However, the SSP dialect uses the same terminology as the scheduling infrastructure, so any changes would have to originate there.
+  No, you're right. However, the SSP dialect uses the same terminology as the
+  scheduling infrastructure, so any changes would have to originate there.
 
 ## Rationale for selected design points
 
 ### InstanceOp has a single graph region
 
-The `InstanceOp`'s region serves as the container for the problem instance's operator types and dependence graph, which may be cyclic and therefore requires a graph region. We considered using separate regions for operator types and the graph, however, the `InstanceOp` has to provide a symbol table, and the `SymbolTable` trait enforces single-region ops.
+The `InstanceOp`'s region serves as the container for the problem instance's
+operator types and dependence graph, which may be cyclic and therefore requires
+a graph region. We considered using separate regions for operator types and the
+graph, however, the `InstanceOp` has to provide a symbol table, and the
+`SymbolTable` trait enforces single-region ops.
 
 ### Use of SSA operands _and_ symbol references to encode dependences
 
-This is required to faithfully reproduce the internal modeling in the scheduling infrastructure, which distinguishes def-use (result to operand, tied to MLIR SSA graph) and auxiliary (op to op, stored explicitly) dependences. To represent the former, the `OperationOp` produces an arbitrary number of `NoneType`-typed results, and accepts an arbitrary number of operands, thus spanning a def-use graph. Auxiliary dependences are encoded as symbol uses, which reference the name of the dependence's source `OperationOp`.
+This is required to faithfully reproduce the internal modeling in the scheduling
+infrastructure, which distinguishes def-use (result to operand, tied to MLIR SSA
+graph) and auxiliary (op to op, stored explicitly) dependences. To represent the
+former, the `OperationOp` produces an arbitrary number of `NoneType`-typed
+results, and accepts an arbitrary number of operands, thus spanning a def-use
+graph. Auxiliary dependences are encoded as symbol uses, which reference the
+name of the dependence's source `OperationOp`.
 
 ### No attribute interface for scheduling properties
 
-Properties are represented by dialect attributes inheriting from the base classes in `PropertyBase.td`, which include `extraClassDeclaration`s for `setInProblem(...)` and `getFromProblem(...)` methods that directly interact with the C++ problem class. In order to get/set a certain property, a reference to the concrete class is required, e.g.: a `CyclicProblem &` if we want to set a dependence's `distance` property.
+Properties are represented by dialect attributes inheriting from the base
+classes in `PropertyBase.td`, which include `extraClassDeclaration`s for
+`setInProblem(...)` and `getFromProblem(...)` methods that directly interact
+with the C++ problem class. In order to get/set a certain property, a reference
+to the concrete class is required, e.g.: a `CyclicProblem &` if we want to set a
+dependence's `distance` property.
 
-A more obvious design would be to make these methods part of an attribute interface. However, then the methods could only accept a `Problem &`, which cannot be statically downcasted to the concrete class due to the use of virtual multiple inheritance in the problem class hierarchy. If the inheritance model were to change in the scheduling infrastructure, the use of attribute interfaces should be reconsidered.
+A more obvious design would be to make these methods part of an attribute
+interface. However, then the methods could only accept a `Problem &`, which
+cannot be statically downcasted to the concrete class due to the use of virtual
+multiple inheritance in the problem class hierarchy. If the inheritance model
+were to change in the scheduling infrastructure, the use of attribute interfaces
+should be reconsidered.
 
 ## Import/export
 
-The `circt/Dialect/SSP/Utilities.h` header defines methods to convert between `ssp.InstanceOp`s and `circt::scheduling::Problem` instances. These utilities use template parameters for the problem class and the property attribute classes, allowing client code to load/save an instance of a certain problem class with the given properties (but ignoring others). Incompatible properties (e.g. `distance` on a base `Problem`, or `initiationInterval` on an operation) will be caught at compile time as errors in the template instantiation. Note that convenience versions that simply load/save all properties known in the given problem class are provided as well.
+The `circt/Dialect/SSP/Utilities.h` header defines methods to convert between
+`ssp.InstanceOp`s and `circt::scheduling::Problem` instances. These utilities
+use template parameters for the problem class and the property attribute
+classes, allowing client code to load/save an instance of a certain problem
+class with the given properties (but ignoring others). Incompatible properties
+(e.g. `distance` on a base `Problem`, or `initiationInterval` on an operation)
+will be caught at compile time as errors in the template instantiation. Note
+that convenience versions that simply load/save all properties known in the
+given problem class are provided as well.
 
 ## Extensibility
 
-A key feature of the scheduling infrastructure is its extensibility. New problem definitions in out-of-tree projects have to define attributes inheriting from the property base classes in one of their own dialects. Due to the heavy use of templates in the import/export utilities, these additional attributes are supported uniformly alongside the built-in property attributes. The only difference is that the SSP dialect provides short-form pretty printing for its own properties, whereas externally-defined properties fall back to the generic dialect attribute syntax.
+A key feature of the scheduling infrastructure is its extensibility. New problem
+definitions in out-of-tree projects have to define attributes inheriting from
+the property base classes in one of their own dialects. Due to the heavy use of
+templates in the import/export utilities, these additional attributes are
+supported uniformly alongside the built-in property attributes. The only
+difference is that the SSP dialect provides short-form pretty printing for its
+own properties, whereas externally-defined properties fall back to the generic
+dialect attribute syntax.
