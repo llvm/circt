@@ -16,6 +16,7 @@
 
 #include "circt/Support/LLVM.h"
 #include <memory>
+#include "circt/Dialect/HW/HWOps.h"
 
 namespace mlir {
 class LLVMTypeConverter;

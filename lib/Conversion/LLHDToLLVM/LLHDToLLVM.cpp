@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/LLHDToLLVM.h"
+#include "circt/Conversion/HWToLLVM.h"
 #include "../PassDetail.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
@@ -642,7 +643,7 @@ static Type convertStructType(hw::StructType type,
 
   for (int i = 0, e = types.size(); i < e; ++i)
     elements.push_back(
-        converter.convertType(types[convertToLLVMEndianess(type, i)]));
+        converter.convertType(types[HWToLLVMEndianessConverter::convertToLLVMEndianess(type, i)]));
 
   return LLVM::LLVMStructType::getLiteral(&converter.getContext(), elements);
 }
@@ -1884,7 +1885,7 @@ struct SigStructExtractOpConversion
         getSignalDetail(rewriter, &getDialect(), op->getLoc(), castInput,
                         /*extractIndices=*/true);
 
-    uint32_t index = llvmIndexOfStructField(op.getStructType(), op.getField());
+    uint32_t index = HWToLLVMEndianessConverter::llvmIndexOfStructField(op.getStructType(), op.getField());
 
     auto indexC = rewriter.create<LLVM::ConstantOp>(
         op->getLoc(), rewriter.getI32Type(), rewriter.getI32IntegerAttr(index));

@@ -1,7 +1,5 @@
 add_circt_conversion_library(CIRCTLLHDToLLVM
   LLHDToLLVM.cpp
-  HWToLLVM.cpp
-  CombToLLVM.cpp
 
 
   DEPENDS
