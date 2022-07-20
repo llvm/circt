@@ -12,8 +12,8 @@
 
 #include "circt/Conversion/LLHDToLLVM.h"
 #include "../PassDetail.h"
-#include "circt/Conversion/HWToLLVM.h"
 #include "circt/Conversion/CombToLLVM.h"
+#include "circt/Conversion/HWToLLVM.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
@@ -611,7 +611,6 @@ static Type convertPtrType(PtrType type, LLVMTypeConverter &converter) {
   return LLVM::LLVMPointerType::get(
       converter.convertType(type.getUnderlyingType()));
 }
-
 
 //===----------------------------------------------------------------------===//
 // Unit conversions
@@ -2146,7 +2145,6 @@ void LLHDToLLVMLoweringPass::runOnOperation() {
   // Also populate with HW type conversions
   populateLLHDToLLVMTypeConversions(converter);
 
-
   // Apply a partial conversion first, lowering only the instances, to generate
   // the init function.
   patterns.add<InstOpConversion>(&getContext(), converter);
@@ -2171,8 +2169,6 @@ void LLHDToLLVMLoweringPass::runOnOperation() {
 
   populateHWToLLVMConversionPatterns(converter, patterns);
   populateCombToLLVMConversionPatterns(converter, patterns);
-
-
 
   target.addLegalDialect<LLVM::LLVMDialect>();
   target.addLegalOp<ModuleOp>();
