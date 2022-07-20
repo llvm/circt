@@ -567,10 +567,7 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(
       needsSym = true;
       continue;
     }
-    // We are keeping the annotation.  If the anotation is non-local and this is
-    // a ground type (this won't be further lowered) then generate a symbol.
-    if (isGroundType && annotation.getAs<FlatSymbolRefAttr>("circt.nonlocal"))
-      needsSym = true;
+
     retval.push_back(annotation);
   }
   return ArrayAttr::get(ctxt, retval);
