@@ -248,6 +248,9 @@ static LogicalResult buildMergeBlocks(Block *currBlock,
       it = preds.insert(mergeBlock).first;
     }
   }
+  if (predsToConsider.size() != 0)
+    return currBlock->getParentOp()->emitError(
+        "irregular control flow is not yet supported");
   return success();
 }
 
