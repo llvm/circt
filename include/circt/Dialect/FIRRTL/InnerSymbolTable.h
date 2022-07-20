@@ -22,6 +22,56 @@
 namespace circt {
 namespace firrtl {
 
+/// The target of an inner symbol, the entity the symbol is a handle for.
+class InnerSymTarget {
+public:
+  /// Default constructor, invalid.
+  /* implicit */ InnerSymTarget() { assert(!*this); }
+
+  /// Target an operation, and optionally a field (=0 means the op itself).
+  explicit InnerSymTarget(Operation *op, size_t fieldID = 0)
+      : op(op), portIdx(invalidPort), fieldID(fieldID) {}
+
+  /// Target a port, and optionally a field (=0 means the port itself).
+  /// Operation should be an FModuleLike.
+  explicit InnerSymTarget(size_t portIdx, Operation *op, size_t fieldID = 0)
+      : op(op), portIdx(portIdx), fieldID(fieldID) {}
+
+  /// Create a target for a field, given a target to a base.
+  explicit InnerSymTarget(const InnerSymTarget &base, size_t fieldID)
+      : op(base.op), portIdx(base.portIdx), fieldID(fieldID) {
+    assert(base.fieldID == 0);
+  }
+
+  InnerSymTarget(const InnerSymTarget &) = default;
+  InnerSymTarget(InnerSymTarget &&) = default;
+
+  InnerSymTarget &operator=(InnerSymTarget &&) = default;
+  InnerSymTarget &operator=(const InnerSymTarget &) = default;
+
+  // All targets must involve a valid op.
+  operator bool() const { return op; }
+
+  // Accessors
+  auto getField() { return fieldID; }
+  Operation *getOp() { return op; }
+  auto getPort() {
+    assert(isPort());
+    return portIdx;
+  }
+
+  // Classification
+  bool isField() { return fieldID != 0; }
+  bool isPort() { return portIdx != invalidPort; }
+  bool isOpOnly() { return !isPort() && !isField(); }
+
+private:
+  Operation *op = nullptr;
+  size_t portIdx = 0;
+  size_t fieldID = 0;
+  static constexpr size_t invalidPort = ~size_t{0};
+};
+
 /// A table of inner symbols and their resolutions.
 class InnerSymbolTable {
 public:
