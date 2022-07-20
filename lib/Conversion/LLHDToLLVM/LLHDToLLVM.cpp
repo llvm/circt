@@ -13,6 +13,7 @@
 #include "circt/Conversion/LLHDToLLVM.h"
 #include "../PassDetail.h"
 #include "circt/Conversion/HWToLLVM.h"
+#include "circt/Conversion/CombToLLVM.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
@@ -2031,6 +2032,10 @@ void LLHDToLLVMLoweringPass::runOnOperation() {
   auto converter = mlir::LLVMTypeConverter(&getContext());
   populateLLHDToLLVMTypeConversions(converter);
 
+  // Also populate with HW type conversions
+  populateLLHDToLLVMTypeConversions(converter);
+
+
   // Apply a partial conversion first, lowering only the instances, to generate
   // the init function.
   patterns.add<InstOpConversion>(&getContext(), converter);
@@ -2051,6 +2056,13 @@ void LLHDToLLVMLoweringPass::runOnOperation() {
   populateFuncToLLVMConversionPatterns(converter, patterns);
   populateLLHDToLLVMConversionPatterns(converter, patterns, sigCounter,
                                        regCounter);
+
+  // Populate with HW and Comb conversion patterns
+
+  populateHWToLLVMConversionPatterns(converter, patterns);
+  populateCombToLLVMConversionPatterns(converter, patterns);
+
+
 
   target.addLegalDialect<LLVM::LLVMDialect>();
   target.addLegalOp<ModuleOp>();

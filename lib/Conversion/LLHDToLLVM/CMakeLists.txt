@@ -1,6 +1,7 @@
 add_circt_conversion_library(CIRCTLLHDToLLVM
   LLHDToLLVM.cpp
   ../HWToLLVM/HWToLLVM.cpp
+  ../CombToLLVM/CombToLLVM.cpp
 
   DEPENDS
   CIRCTConversionPassIncGen
