@@ -63,13 +63,14 @@ void circt::python::populateDialectSVSubmodule(py::module &m) {
              MlirContext ctxt) {
             return cls(svSVAttributesAttrGet(ctxt, attributes, emitAsComments));
           },
-          "Create SV attributes", py::arg(), py::arg("attributes"),
+          "Create SV attributes attr", py::arg(), py::arg("attributes"),
           py::arg("emit_as_comments") = py::none(),
           py::arg("ctxt") = py::none())
       .def_property_readonly("attributes",
                              [](MlirAttribute self) {
                                return svSVAttributesAttrGetAttributes(self);
                              })
-      .def_property_readonly("emit_as_comments",
-                             [](MlirAttribute self) { return false; });
+      .def_property_readonly("emit_as_comments", [](MlirAttribute self) {
+        return svSVAttributesAttrGetEmitAsComments(self);
+      });
 }

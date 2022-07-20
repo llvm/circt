@@ -37,7 +37,7 @@ MLIR_CAPI_EXPORTED MlirAttribute svSVAttributesAttrGet(MlirContext cCtxt,
                                                        bool emitAsComments);
 MLIR_CAPI_EXPORTED MlirAttribute svSVAttributesAttrGetAttributes(MlirAttribute);
 MLIR_CAPI_EXPORTED
-bool svSVAttributeAttrGetEmitAsComments(MlirAttribute);
+bool svSVAttributesAttrGetEmitAsComments(MlirAttribute);
 
 #ifdef __cplusplus
 }
