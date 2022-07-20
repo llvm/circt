@@ -676,7 +676,8 @@ def XMRGetOp : FIRRTLOp<"xmr.get", [RefTypeConstraint<"ref","result">]> {
   let summary = "FIRRTL XMR Get";
   let description = [{
     Resolve a remote reference (XMR) for reading/writing.
-    If an XMR is emitted for this reference, it will be here.
+    If an XMR is emitted for this reference, it will be at the location
+    of this operation.
   }];
   let arguments = (ins RefType:$ref);
   let results = (outs FIRRTLType:$result);
