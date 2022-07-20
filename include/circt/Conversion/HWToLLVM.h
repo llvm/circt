@@ -34,8 +34,7 @@ public:
 
 /// Get the HW to LLVM conversion patterns.
 void populateHWToLLVMConversionPatterns(mlir::LLVMTypeConverter &converter,
-                                        RewritePatternSet &patterns,
-                                        size_t &sigCounter, size_t &regCounter);
+                                        RewritePatternSet &patterns);
 
 /// Create an HW to LLVM conversion pass.
 std::unique_ptr<OperationPass<ModuleOp>> createConvertHWToLLVMPass();

@@ -452,9 +452,7 @@ struct HWToLLVMLoweringPass : public ConvertHWToLLVMBase<HWToLLVMLoweringPass> {
 } // namespace
 
 void circt::populateHWToLLVMConversionPatterns(LLVMTypeConverter &converter,
-                                               RewritePatternSet &patterns,
-                                               size_t &sigCounter,
-                                               size_t &regCounter) {
+                                               RewritePatternSet &patterns) {
   MLIRContext *ctx = converter.getDialect()->getContext();
 
   // Value creation conversion patterns.
@@ -472,13 +470,7 @@ void circt::populateHWToLLVMConversionPatterns(LLVMTypeConverter &converter,
                StructInjectOpConversion>(converter);
 }
 
-// TODO: Update for HW
 void HWToLLVMLoweringPass::runOnOperation() {
-  // Keep a counter to infer a signal's index in his entity's signal table.
-  size_t sigCounter = 0;
-
-  // Keep a counter to infer a reg's index in his entity.
-  size_t regCounter = 0;
 
   RewritePatternSet patterns(&getContext());
   auto converter = mlir::LLVMTypeConverter(&getContext());
@@ -489,32 +481,16 @@ void HWToLLVMLoweringPass::runOnOperation() {
 
   LLVMConversionTarget target(getContext());
   target.addLegalOp<UnrealizedConversionCastOp>();
+
+  // Setup the conversion.
   cf::populateControlFlowToLLVMConversionPatterns(converter, patterns);
-
-  // Apply the partial conversion.
-  if (failed(
-          applyPartialConversion(getOperation(), target, std::move(patterns))))
-    signalPassFailure();
-  patterns.clear();
-
-  // Setup the full conversion.
   populateFuncToLLVMConversionPatterns(converter, patterns);
-  populateHWToLLVMConversionPatterns(converter, patterns, sigCounter,
-                                       regCounter);
+  populateHWToLLVMConversionPatterns(converter, patterns);
 
   target.addLegalDialect<LLVM::LLVMDialect>();
   target.addLegalOp<ModuleOp>();
 
   // Apply a full conversion to remove unrealized conversion casts.
-  if (failed(applyFullConversion(getOperation(), target, std::move(patterns))))
-    signalPassFailure();
-
-  patterns.clear();
-
-  mlir::populateReconcileUnrealizedCastsPatterns(patterns);
-  target.addIllegalOp<UnrealizedConversionCastOp>();
-
-  // Apply the full conversion.
   if (failed(applyFullConversion(getOperation(), target, std::move(patterns))))
     signalPassFailure();
 }

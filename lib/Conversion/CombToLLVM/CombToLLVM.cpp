@@ -227,9 +227,7 @@ struct CombToLLVMLoweringPass
 } // namespace
 
 void circt::populateCombToLLVMConversionPatterns(LLVMTypeConverter &converter,
-                                                 RewritePatternSet &patterns,
-                                                 size_t &sigCounter,
-                                                 size_t &regCounter) {
+                                                 RewritePatternSet &patterns) {
   MLIRContext *ctx = converter.getDialect()->getContext();
 
   // Extract conversion patterns.
@@ -250,43 +248,22 @@ void circt::populateCombToLLVMConversionPatterns(LLVMTypeConverter &converter,
 
 // TODO: Update for Comb
 void CombToLLVMLoweringPass::runOnOperation() {
-  // Keep a counter to infer a signal's index in his entity's signal table.
-  size_t sigCounter = 0;
-
-  // Keep a counter to infer a reg's index in his entity.
-  size_t regCounter = 0;
 
   RewritePatternSet patterns(&getContext());
   auto converter = mlir::LLVMTypeConverter(&getContext());
 
   LLVMConversionTarget target(getContext());
   target.addLegalOp<UnrealizedConversionCastOp>();
+
+  // Setup the conversion.
   cf::populateControlFlowToLLVMConversionPatterns(converter, patterns);
-
-  // Apply the partial conversion.
-  if (failed(
-          applyPartialConversion(getOperation(), target, std::move(patterns))))
-    signalPassFailure();
-  patterns.clear();
-
-  // Setup the full conversion.
   populateFuncToLLVMConversionPatterns(converter, patterns);
-  populateCombToLLVMConversionPatterns(converter, patterns, sigCounter,
-                                       regCounter);
+  populateCombToLLVMConversionPatterns(converter, patterns);
 
   target.addLegalDialect<LLVM::LLVMDialect>();
   target.addLegalOp<ModuleOp>();
 
   // Apply a full conversion to remove unrealized conversion casts.
-  if (failed(applyFullConversion(getOperation(), target, std::move(patterns))))
-    signalPassFailure();
-
-  patterns.clear();
-
-  mlir::populateReconcileUnrealizedCastsPatterns(patterns);
-  target.addIllegalOp<UnrealizedConversionCastOp>();
-
-  // Apply the full conversion.
   if (failed(applyFullConversion(getOperation(), target, std::move(patterns))))
     signalPassFailure();
 }
