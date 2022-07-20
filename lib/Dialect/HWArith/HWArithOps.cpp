@@ -29,7 +29,7 @@ LogicalResult CastOp::verify() {
   bool isOutSignless = !isHWArithIntegerType(outType);
 
   if (isInSignless && isOutSignless)
-    return emitError("at least one type needs to be a HWArithIntergerType");
+    return emitError("at least one type needs to carry sign semantics (ui/si)");
 
   if (isInSignless) {
     unsigned inBitWidth = inType.getIntOrFloatBitWidth();
