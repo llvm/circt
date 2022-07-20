@@ -435,7 +435,7 @@ As an alternative to the proposed *all-in-one* cast op, we considered
 implementing a set of ops with distinct concerns, for example, an op for
 bitcasting between types of the same bitwidth, an op to implementing the
 truncation and two ops for the different bit extension types. Yet, considering
-that `HWArith` is currently intended as short-lived dialect, being immediately
+that `HWArith` is currently intended as a short-lived dialect, being immediately
 lowered to `comb`, no obvious benefits emerge. This could also significantly
 increase the code redundancy during IR generation as well as when lowering to
 `comb`.
