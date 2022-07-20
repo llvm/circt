@@ -1,9 +1,8 @@
 // RUN: circt-translate --export-calyx --verify-diagnostics %s | FileCheck %s --strict-whitespace
 
-module attributes {calyx.metadata = ["location1", "location2"]} {
+module attributes {calyx.metadata = ["location1", "location2"], calyx.entrypoint = "main"} {
 
-// CHECK: import "primitives/core.futil";
-calyx.program "main" {
+  // CHECK: import "primitives/core.futil";
   // CHECK-LABEL: component A<"static"=1>(in: 32, @go go: 1, @clk clk: 1, @reset reset: 1) -> (out: 32, @done done: 1) {
   calyx.component @A(%in: i32, %go: i1 {go = 1}, %clk: i1 {clk = 1}, %reset: i1 {reset = 1}) -> (%out: i32, %done: i1 {done = 1}) {
     %c1_1 = hw.constant 1 : i1
@@ -199,7 +198,6 @@ calyx.program "main" {
       }
     }
   }
-}
 
 // CHECK-LABEL: metadata #{
 // CHECK-NEXT:  0: location1

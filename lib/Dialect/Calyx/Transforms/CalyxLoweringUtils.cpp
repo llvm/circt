@@ -320,23 +320,23 @@ unsigned ComponentLoweringStateInterface::getFuncOpResultMapping(
 }
 
 //===----------------------------------------------------------------------===//
-// ProgramLoweringState
+// CalyxLoweringState
 //===----------------------------------------------------------------------===//
 
-ProgramLoweringState::ProgramLoweringState(calyx::ProgramOp program,
-                                           StringRef topLevelFunction)
-    : topLevelFunction(topLevelFunction), program(program) {}
+CalyxLoweringState::CalyxLoweringState(mlir::ModuleOp module,
+                                       StringRef topLevelFunction)
+    : topLevelFunction(topLevelFunction), module(module) {}
 
-calyx::ProgramOp ProgramLoweringState::getProgram() {
-  assert(program.getOperation() != nullptr);
-  return program;
+mlir::ModuleOp CalyxLoweringState::getModule() {
+  assert(module.getOperation() != nullptr);
+  return module;
 }
 
-StringRef ProgramLoweringState::getTopLevelFunction() const {
+StringRef CalyxLoweringState::getTopLevelFunction() const {
   return topLevelFunction;
 }
 
-std::string ProgramLoweringState::blockName(Block *b) {
+std::string CalyxLoweringState::blockName(Block *b) {
   std::string blockName = irName(*b);
   blockName.erase(std::remove(blockName.begin(), blockName.end(), '^'),
                   blockName.end());
@@ -348,38 +348,18 @@ std::string ProgramLoweringState::blockName(Block *b) {
 //===----------------------------------------------------------------------===//
 
 ModuleOpConversion::ModuleOpConversion(MLIRContext *context,
-                                       StringRef topLevelFunction,
-                                       calyx::ProgramOp *programOpOutput)
+                                       StringRef topLevelFunction)
     : OpRewritePattern<mlir::ModuleOp>(context),
-      programOpOutput(programOpOutput), topLevelFunction(topLevelFunction) {
-  assert(programOpOutput->getOperation() == nullptr &&
-         "this function will set programOpOutput post module conversion");
-}
+      topLevelFunction(topLevelFunction) {}
 
 LogicalResult
 ModuleOpConversion::matchAndRewrite(mlir::ModuleOp moduleOp,
                                     PatternRewriter &rewriter) const {
-  if (!moduleOp.getOps<calyx::ProgramOp>().empty())
+  if (moduleOp->hasAttr("calyx.entrypoint"))
     return failure();
 
-  rewriter.updateRootInPlace(moduleOp, [&] {
-    // Create ProgramOp
-    rewriter.setInsertionPointAfter(moduleOp);
-    auto programOp = rewriter.create<calyx::ProgramOp>(
-        moduleOp.getLoc(), StringAttr::get(getContext(), topLevelFunction));
-
-    // Inline the module body region
-    rewriter.inlineRegionBefore(moduleOp.getBodyRegion(),
-                                programOp.getBodyRegion(),
-                                programOp.getBodyRegion().end());
-
-    // Inlining the body region also removes ^bb0 from the module body
-    // region, so recreate that, before finally inserting the programOp
-    auto *moduleBlock = rewriter.createBlock(&moduleOp.getBodyRegion());
-    rewriter.setInsertionPointToStart(moduleBlock);
-    rewriter.insert(programOp);
-    *programOpOutput = programOp;
-  });
+  moduleOp->setAttr("calyx.entrypoint",
+                    rewriter.getStringAttr(topLevelFunction));
   return success();
 }
 
@@ -390,9 +370,9 @@ ModuleOpConversion::matchAndRewrite(mlir::ModuleOp moduleOp,
 FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern(
     MLIRContext *context, LogicalResult &resRef,
     DenseMap<mlir::func::FuncOp, calyx::ComponentOp> &map,
-    calyx::ProgramLoweringState &state)
+    calyx::CalyxLoweringState &state)
     : PartialLoweringPattern(context, resRef), functionMapping(map),
-      programLoweringState(state) {}
+      calyxLoweringState(state) {}
 
 LogicalResult
 FuncOpPartialLoweringPattern::partiallyLower(mlir::func::FuncOp funcOp,
@@ -402,7 +382,7 @@ FuncOpPartialLoweringPattern::partiallyLower(mlir::func::FuncOp funcOp,
   if (auto it = functionMapping.find(funcOp); it != functionMapping.end()) {
     componentOp = it->second;
     componentLoweringState =
-        programLoweringState.getState<ComponentLoweringStateInterface>(
+        calyxLoweringState.getState<ComponentLoweringStateInterface>(
             componentOp);
   }
 
@@ -415,8 +395,8 @@ calyx::ComponentOp FuncOpPartialLoweringPattern::getComponent() const {
   return componentOp;
 }
 
-ProgramLoweringState &FuncOpPartialLoweringPattern::programState() const {
-  return programLoweringState;
+CalyxLoweringState &FuncOpPartialLoweringPattern::loweringState() const {
+  return calyxLoweringState;
 }
 
 //===----------------------------------------------------------------------===//
@@ -520,14 +500,14 @@ EliminateUnusedCombGroups::matchAndRewrite(calyx::CombGroupOp combGroupOp,
 //===----------------------------------------------------------------------===//
 
 InlineCombGroups::InlineCombGroups(MLIRContext *context, LogicalResult &resRef,
-                                   calyx::ProgramLoweringState &pls)
-    : PartialLoweringPattern(context, resRef), pls(pls) {}
+                                   calyx::CalyxLoweringState &cls)
+    : PartialLoweringPattern(context, resRef), cls(cls) {}
 
 LogicalResult
 InlineCombGroups::partiallyLower(calyx::GroupInterface originGroup,
                                  PatternRewriter &rewriter) const {
   auto component = originGroup->getParentOfType<calyx::ComponentOp>();
-  ComponentLoweringStateInterface *state = pls.getState(component);
+  ComponentLoweringStateInterface *state = cls.getState(component);
 
   // Filter groups which are not part of the control schedule.
   if (SymbolTable::symbolKnownUseEmpty(originGroup.symName(),
@@ -599,7 +579,7 @@ void InlineCombGroups::recurseInlineCombGroups(
 LogicalResult
 RewriteMemoryAccesses::partiallyLower(calyx::AssignOp assignOp,
                                       PatternRewriter &rewriter) const {
-  auto *state = pls.getState(assignOp->getParentOfType<calyx::ComponentOp>());
+  auto *state = cls.getState(assignOp->getParentOfType<calyx::ComponentOp>());
 
   Value dest = assignOp.dest();
   if (!state->isInputPortOfMemory(dest).hasValue())
@@ -650,7 +630,7 @@ BuildBasicBlockRegs::partiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
       assert(argType.isa<IntegerType>() && "unsupported block argument type");
       unsigned width = argType.getIntOrFloatBitWidth();
       std::string index = std::to_string(arg.index());
-      std::string name = programState().blockName(block) + "_arg" + index;
+      std::string name = loweringState().blockName(block) + "_arg" + index;
       auto reg = createRegister(arg.value().getLoc(), rewriter, getComponent(),
                                 width, name);
       getState().addBlockArgReg(block, reg, arg.index());
