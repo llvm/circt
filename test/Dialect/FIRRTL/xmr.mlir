@@ -78,3 +78,19 @@ firrtl.circuit "Foo" {
     firrtl.strictconnect %0, %zero : !firrtl.uint<1>
   }
 }
+
+// -----
+
+// "Example 2"
+firrtl.circuit "Foo" {
+  firrtl.module @Bar(out %_a: !firrtl.ref<uint<1>>) {
+    %zero = firrtl.constant 0 : !firrtl.uint<1>
+    firrtl.xmr.read %_a, %zero : !firrtl.ref<uint<1>>
+  }
+  firrtl.module @Foo() {
+    %bar_a = firrtl.instance bar @Bar(out _a: !firrtl.ref<uint<1>>)
+    %a = firrtl.wire : !firrtl.uint<1>
+    %0 = firrtl.xmr.get %bar_a : !firrtl.ref<uint<1>>
+    firrtl.strictconnect %a, %0 : !firrtl.uint<1>
+  }
+}
