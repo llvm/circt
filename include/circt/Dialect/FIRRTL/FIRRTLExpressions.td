@@ -664,7 +664,7 @@ def BitCastOp: FIRRTLOp<"bitcast", [NoSideEffect]> {
 }
 
 //===----------------------------------------------------------------------===//
-// XMR
+// Cross Module Reference (XMR) Operations
 //===----------------------------------------------------------------------===//
 
 def XMRGetOp : FIRRTLOp<"xmr.get", [
