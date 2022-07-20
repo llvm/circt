@@ -1656,7 +1656,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   firrtl.module private @eliminateSingleOutputConnects(in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
     firrtl.strictconnect %b, %a : !firrtl.uint<1>
   }
-  
+
   // Check that modules with comments are lowered.
   // CHECK-LABEL: hw.module private @Commented() attributes {
   // CHECK-SAME:      comment = "this module is commented"
@@ -1664,4 +1664,14 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   firrtl.module private @Commented() attributes {
       comment = "this module is commented"
   } {}
+
+  // CHECK-LABEL: hw.module @preLoweredOps
+  firrtl.module @preLoweredOps() {
+    // CHECK-NEXT: %0 = builtin.unrealized_conversion_cast to f32
+    // CHECK-NEXT: %1 = arith.addf %0, %0 : f32
+    // CHECK-NEXT: builtin.unrealized_conversion_cast %1 : f32 to index
+    %0 = builtin.unrealized_conversion_cast to f32
+    %1 = arith.addf %0, %0 : f32
+    builtin.unrealized_conversion_cast %1 : f32 to index
+  }
 }

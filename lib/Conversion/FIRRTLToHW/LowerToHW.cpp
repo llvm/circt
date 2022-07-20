@@ -1766,11 +1766,17 @@ static LogicalResult handleZeroBit(Value failedOperand,
 /// unknown width integers.  This returns hw::inout type values if present, it
 /// does not implicitly read from them.
 Value FIRRTLLowering::getPossiblyInoutLoweredValue(Value value) {
-  assert(value.getType().isa<FIRRTLType>() &&
-         "Should only lower FIRRTL operands");
+  // Block arguments are considered lowered.
+  if (value.isa<BlockArgument>())
+    return value;
+
   // If we lowered this value, then return the lowered value, otherwise fail.
-  auto it = valueMapping.find(value);
-  return it != valueMapping.end() ? it->second : Value();
+  if (auto lowering = valueMapping.lookup(value)) {
+    assert(!lowering.getType().isa<FIRRTLType>() &&
+           "Lowered value should be a non-FIRRTL value");
+    return lowering;
+  }
+  return Value();
 }
 
 /// Return the lowered value corresponding to the specified original value.
@@ -2018,26 +2024,28 @@ Value FIRRTLLowering::getLoweredAndExtOrTruncValue(Value value, Type destType) {
 /// value.
 ///
 LogicalResult FIRRTLLowering::setLowering(Value orig, Value result) {
-  assert(orig.getType().isa<FIRRTLType>() &&
-         (!result || !result.getType().isa<FIRRTLType>()) &&
-         "Lowering didn't turn a FIRRTL value into a non-FIRRTL value");
+  if (auto origType = orig.getType().dyn_cast<FIRRTLType>()) {
+    assert((!result || !result.getType().isa<FIRRTLType>()) &&
+           "Lowering didn't turn a FIRRTL value into a non-FIRRTL value");
 
 #ifndef NDEBUG
-  auto srcWidth = orig.getType()
-                      .cast<FIRRTLType>()
-                      .getPassiveType()
-                      .getBitWidthOrSentinel();
+    auto srcWidth =
+        origType.cast<FIRRTLType>().getPassiveType().getBitWidthOrSentinel();
 
-  // Caller should pass null value iff this was a zero bit value.
-  if (srcWidth != -1) {
-    if (result)
-      assert((srcWidth != 0) &&
-             "Lowering produced value for zero width source");
-    else
-      assert((srcWidth == 0) &&
-             "Lowering produced null value but source wasn't zero width");
-  }
+    // Caller should pass null value iff this was a zero bit value.
+    if (srcWidth != -1) {
+      if (result)
+        assert((srcWidth != 0) &&
+               "Lowering produced value for zero width source");
+      else
+        assert((srcWidth == 0) &&
+               "Lowering produced null value but source wasn't zero width");
+    }
 #endif
+  } else {
+    assert(result && "Lowering of foreign type produced null value");
+  }
+
   auto &slot = valueMapping[orig];
   if (slot) {
     auto backedgeIt = backedges.find(slot);
@@ -2306,13 +2314,16 @@ void FIRRTLLowering::addIfProceduralBlock(Value cond,
 ///
 FIRRTLLowering::UnloweredOpResult
 FIRRTLLowering::handleUnloweredOp(Operation *op) {
-  // Scan the operand list for the operation to see if none were lowered.  In
-  // that case the operation must be something lowered to HW already, e.g.
-  // the hw.output operation.  This is success for us because it is already
-  // lowered.
-  if (llvm::all_of(op->getOpOperands(), [&](auto &operand) -> bool {
-        return !valueMapping.count(operand.get());
-      })) {
+  // Simply pass through non-FIRRTL operations and consider them already
+  // lowered. This allows us to handled partially lowered inputs, and also allow
+  // other FIRRTL operations to spawn additional already-lowered operations,
+  // like `hw.output`.
+  if (!isa<FIRRTLDialect>(op->getDialect())) {
+    for (auto &operand : op->getOpOperands())
+      if (auto lowered = getPossiblyInoutLoweredValue(operand.get()))
+        operand.set(lowered);
+    for (auto result : op->getResults())
+      (void)setLowering(result, result);
     return AlreadyLowered;
   }
 
@@ -3086,6 +3097,10 @@ LogicalResult FIRRTLLowering::lowerNoopCast(Operation *op) {
 }
 
 LogicalResult FIRRTLLowering::visitExpr(mlir::UnrealizedConversionCastOp op) {
+  // General lowering for non-unary casts.
+  if (op.getNumOperands() != 1 || op.getNumResults() != 1)
+    return failure();
+
   auto operand = op.getOperand(0);
   auto result = op.getResult(0);
 
@@ -3093,18 +3108,15 @@ LogicalResult FIRRTLLowering::visitExpr(mlir::UnrealizedConversionCastOp op) {
   if (operand.getType().isa<FIRRTLType>() && result.getType().isa<FIRRTLType>())
     return lowerNoopCast(op);
 
-  // Conversions from standard integer types to FIRRTL types are lowered as
-  // the input operand.
-  if (auto opIntType = operand.getType().dyn_cast<IntegerType>()) {
-    if (opIntType.getWidth() != 0)
-      return setLowering(result, operand);
-    else
-      return setLowering(result, Value());
+  // other -> FIRRTL
+  // other -> other
+  if (!operand.getType().isa<FIRRTLType>()) {
+    if (result.getType().isa<FIRRTLType>())
+      return setLowering(result, getPossiblyInoutLoweredValue(operand));
+    return failure(); // general foreign op lowering for other -> other
   }
 
-  if (!operand.getType().isa<FIRRTLType>())
-    return setLowering(result, operand);
-
+  // FIRRTL -> other
   // Otherwise must be a conversion from FIRRTL type to standard type.
   auto lowered_result = getLoweredValue(operand);
   if (!lowered_result) {
