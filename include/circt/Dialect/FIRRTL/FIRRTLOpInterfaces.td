@@ -261,6 +261,9 @@ def FModuleLike : OpInterface<"FModuleLike"> {
     static_assert(
         ConcreteOp::template hasTrait<::circt::hw::HWModuleLike::Trait>(),
         "expected operation to be also be a hardware module");
+    static_assert(
+        ConcreteOp::template hasTrait<OpTrait::InnerSymbolTable>(),
+        "expected operation to be an inner symbol table");
     return verifyModuleLikeOpInterface(op);
   }];
 }

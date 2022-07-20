@@ -111,11 +111,6 @@ public:
         ConcreteType::template hasTrait<::mlir::SymbolOpInterface::Trait>(),
         "expected operation to define a Symbol");
 
-    if (op->getNumRegions() != 1)
-      return op->emitError("expected operation to have a single region");
-    if (!op->getRegion(0).hasOneBlock())
-      return op->emitError("expected operation to have a single block");
-
     // InnerSymbolTable's must be directly nested within an InnerRefNamespace.
     auto *parent = op->getParentOp();
     if (!parent || !parent->hasTrait<InnerRefNamespace>())
