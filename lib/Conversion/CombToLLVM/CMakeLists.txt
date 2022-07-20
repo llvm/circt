@@ -1,4 +1,4 @@
-add_circt_conversion_library(CIRCTCOMBToLLVM
+add_circt_conversion_library(CIRCTCombToLLVM
   CombToLLVM.cpp
 
 
