@@ -440,7 +440,6 @@ static Type convertStructType(hw::StructType type,
   return LLVM::LLVMStructType::getLiteral(&converter.getContext(), elements);
 }
 
-
 //===----------------------------------------------------------------------===//
 // Pass initialization
 //===----------------------------------------------------------------------===//
