@@ -667,9 +667,12 @@ def BitCastOp: FIRRTLOp<"bitcast", [NoSideEffect]> {
 // Cross Module Reference (XMR) Operations
 //===----------------------------------------------------------------------===//
 
-def XMRGetOp : FIRRTLOp<"xmr.get", [
-  TypesMatchWith<"result should be reference base type",
-    "ref", "result", "$_self.cast<RefType>().getType()"> ]> {
+class RefTypeConstraint<string ref, string base>
+  : TypesMatchWith<"reference base type should match",
+                   ref, base,
+                   "$_self.cast<RefType>().getType()">;
+
+def XMRGetOp : FIRRTLOp<"xmr.get", [RefTypeConstraint<"ref","result">]> {
   let summary = "FIRRTL XMR Get";
   let description = [{
     Resolve a remote reference (XMR) for reading/writing.
@@ -682,9 +685,7 @@ def XMRGetOp : FIRRTLOp<"xmr.get", [
   let assemblyFormat = "$ref attr-dict `:` qualified(type($ref))";
 }
 
-def XMRReadOp : FIRRTLOp<"xmr.read", [
-  TypesMatchWith<"result should be reference base type",
-    "ref", "result", "$_self.cast<RefType>().getType()"> ]> {
+def XMRReadOp : FIRRTLOp<"xmr.read", [RefTypeConstraint<"ref","result">]> {
   let summary = "FIRRTL XMR Read";
   let description = [{
     Endpoint of remote reference (XMR), read from
@@ -695,9 +696,7 @@ def XMRReadOp : FIRRTLOp<"xmr.read", [
   let assemblyFormat = "$ref `,` $result attr-dict `:` qualified(type($ref))";
 }
 
-def XMRWriteOp : FIRRTLOp<"xmr.write", [
-  TypesMatchWith<"result should be reference base type",
-    "ref", "result", "$_self.cast<RefType>().getType()"> ]> {
+def XMRWriteOp : FIRRTLOp<"xmr.write", [RefTypeConstraint<"ref","result">]> {
   let summary = "FIRRTL XMR Write";
   let description = [{
     Endpoint of remote reference (XMR), written from
