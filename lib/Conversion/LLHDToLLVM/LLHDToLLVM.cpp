@@ -2143,7 +2143,7 @@ void LLHDToLLVMLoweringPass::runOnOperation() {
   populateLLHDToLLVMTypeConversions(converter);
 
   // Also populate with HW type conversions
-  populateLLHDToLLVMTypeConversions(converter);
+  populateHWToLLVMTypeConversions(converter);
 
   // Apply a partial conversion first, lowering only the instances, to generate
   // the init function.
