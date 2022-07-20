@@ -449,7 +449,7 @@ increase the code redundancy during IR generation as well as when lowering to
 |(S) | `si<a>`    | `ui<b>`/`si<b>`/`i<b>` | sign-extension **if** *b* ≥ *a*   |
 |    |            |                        | truncation **if** *b* < *a*       |
 |(I) | `i<a>`     | `ui<b>`/`si<b>`        | truncation **if** *b* **≤** *a*   |
-|    | `i<a>`     | `ui<b>`/`si<b>`        | prohibited **if** *b* > *a*       |
+|    | `i<a>`     | `ui<b>`/`si<b>`        | prohibited **if** *b* > *a* because of the ambiguity whether a sign or a zero extension is required |
 
 #### Examples
 
