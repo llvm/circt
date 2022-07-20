@@ -519,7 +519,6 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(
   SmallVector<Attribute> retval;
   if (!annotations || annotations.empty())
     return ArrayAttr::get(ctxt, retval);
-  bool isGroundType = field.type.isGround();
   for (auto opAttr : annotations) {
     Optional<int64_t> maybeFieldID = None;
     DictionaryAttr annotation;
