@@ -69,9 +69,9 @@ static LogicalResult changeBranchTarget(Block *block, Block *oldDest,
 static Block *buildMergeBlock(Block *b1, Block *b2, Block *oldSucc,
                               ConversionPatternRewriter &rewriter) {
   auto blockArgTypes = oldSucc->getArgumentTypes();
+  SmallVector<Location> argLocs(blockArgTypes.size(), rewriter.getUnknownLoc());
 
-  Block *res =
-      rewriter.createBlock(oldSucc, blockArgTypes, rewriter.getUnknownLoc());
+  Block *res = rewriter.createBlock(oldSucc, blockArgTypes, argLocs);
   rewriter.create<cf::BranchOp>(rewriter.getUnknownLoc(), oldSucc,
                                 res->getArguments());
 
@@ -83,9 +83,9 @@ static Block *buildMergeBlock(Block *b1, Block *b2, Block *oldSucc,
   return res;
 }
 
-using SplitBlockMap = DenseMap<Block *, SmallVector<Block *>>;
+// TODO This is in fact used for other things as well
+using BlockToBlocksMap = DenseMap<Block *, SmallVector<Block *>>;
 
-using PredMap = DenseMap<Block *, size_t>;
 namespace {
 /// A dual CFG that contracts cycles and irregular subgraphs into single logical
 /// blocks.
@@ -105,8 +105,8 @@ struct DualGraph {
   Region &r;
   ControlFlowLoopAnalysis &loopAnalysis;
 
-  DenseMap<Block *, SmallVector<Block *>> succMap;
-  PredMap predCnts;
+  BlockToBlocksMap succMap;
+  DenseMap<Block *, size_t> predCnts;
 };
 } // namespace
 
@@ -179,7 +179,7 @@ void DualGraph::getPredecessors(Block *b, SmallVectorImpl<Block *> &res) {
   }
 }
 
-static Block *getLastSplitBlock(SplitBlockMap &map, Block *block,
+static Block *getLastSplitBlock(BlockToBlocksMap &map, Block *block,
                                 DualGraph &graph) {
   auto it = map.find(block);
   if (it == map.end()) {
@@ -199,7 +199,7 @@ static Block *getLastSplitBlock(SplitBlockMap &map, Block *block,
 
 /// Builds a binary merge block tree for the predecessors of currBlock.
 static LogicalResult buildMergeBlocks(Block *currBlock,
-                                      SplitBlockMap &prevSplitBlocks,
+                                      BlockToBlocksMap &prevSplitBlocks,
                                       Block *predDom,
                                       ConversionPatternRewriter &rewriter,
                                       DualGraph &graph) {
@@ -300,9 +300,10 @@ circt::insertExplicitMergeBlocks(Region &r,
 
   // Counts the amount of predecessors remaining, if it reaches 0, insert into
   // queue.
-  PredMap predsToVisit = graph.predCnts;
+  auto predsToVisit = graph.predCnts;
 
-  SplitBlockMap prevSplitBlocks;
+  // Contains a list of split blocks
+  BlockToBlocksMap prevSplitBlocks;
   prevSplitBlocks.try_emplace(entry, SmallVector<Block *>());
 
   while (!queue.empty()) {
@@ -330,9 +331,9 @@ circt::insertExplicitMergeBlocks(Region &r,
         return failure();
 
       // The predDom has similar properties as a normal predecessor, thus we can
-      // just copy its split block information.
+      // just copy its split block information without the last entry.
       SmallVector<Block *> predDomOut = prevSplitBlocks.lookup(predDom);
-      llvm::copy(predDomOut, std::back_inserter(currOut));
+      llvm::copy(llvm::drop_end(predDomOut), std::back_inserter(currOut));
     } else if (!preds.empty()) {
       Block *pred = preds.front();
       SmallVector<Block *> &predOut = prevSplitBlocks.find(pred)->getSecond();

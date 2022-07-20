@@ -60,7 +60,7 @@ def InsertMergeBlocks : Pass<"insert-merge-blocks", "::mlir::ModuleOp"> {
     The order the successors are merged together mirrors the order the different
     control paths were created.
 
-    Ignores loops and irregular control flow.
+    Treats loops and sub-CFGs with irregular control flow like single blocks.
   }];
   let constructor = "circt::createInsertMergeBlocksPass()";
   let dependentDialects = ["mlir::cf::ControlFlowDialect", "mlir::func::FuncDialect"];

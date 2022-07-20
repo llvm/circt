@@ -107,6 +107,44 @@ cf.br ^3(%val2: i64)
 
 // -----
 
+// CHECK-LABEL: func.func @multiple_blocks_needed(%arg0: i1) {
+// CHECK-NEXT:    cf.cond_br %arg0, ^bb1, ^bb4
+// CHECK-NEXT:  ^bb1:  // pred: ^bb0
+// CHECK-NEXT:    cf.cond_br %arg0, ^bb2, ^bb3
+// CHECK-NEXT:  ^bb2:  // pred: ^bb1
+// CHECK-NEXT:    cf.br ^bb3
+// CHECK-NEXT:  ^bb3:  // 2 preds: ^bb1, ^bb2
+// CHECK-NEXT:    cf.br ^bb4
+// CHECK-NEXT:  ^bb4:  // 2 preds: ^bb0, ^bb3
+// CHECK-NEXT:    cf.cond_br %arg0, ^bb5, ^bb8
+// CHECK-NEXT:  ^bb5:  // pred: ^bb4
+// CHECK-NEXT:    cf.cond_br %arg0, ^bb6, ^bb7
+// CHECK-NEXT:  ^bb6:  // pred: ^bb5
+// CHECK-NEXT:    cf.br ^bb7
+// CHECK-NEXT:  ^bb7:  // 2 preds: ^bb5, ^bb6
+// CHECK-NEXT:    cf.br ^bb8
+// CHECK-NEXT:  ^bb8:  // 2 preds: ^bb4, ^bb7
+// CHECK-NEXT:    return
+// CHECK-NEXT:  }
+
+func.func @multiple_blocks_needed(%cond: i1) {
+  cf.cond_br %cond, ^1, ^3
+^1:
+  cf.cond_br %cond, ^2, ^3
+^2:
+  cf.br ^3
+^3:
+  cf.cond_br %cond, ^4, ^end
+^4:
+  cf.cond_br %cond, ^5, ^end
+^5:
+  cf.br ^end
+^end:
+  return
+}
+
+// -----
+
 // CHECK-LABEL: func.func @simple_loop(%{{.*}}: i64) {
 // CHECK-NEXT:    %{{.*}} = arith.constant 1 : i64
 // CHECK-NEXT:    cf.br ^[[BB1:.*]](%{{.*}} : i64)

@@ -17,7 +17,8 @@ namespace circt {
 /// diverged the control flow.
 /// The resulting merge block tree is guaranteed to be a binary tree.
 ///
-/// This transformation does not affect any blocks that are part of a loop.
+/// This transformation does treat loops like a single block and thus does not
+/// affect them.
 mlir::LogicalResult
 insertExplicitMergeBlocks(mlir::Region &r,
                           mlir::ConversionPatternRewriter &rewriter);
