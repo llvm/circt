@@ -1211,8 +1211,10 @@ firrtl.circuit "SymbolCollision" {
   // CHECK-SAME: in %a_foo: !firrtl.uint<1> sym @a_foo
   // CHECK-SAME: in %b_foo: !firrtl.uint<1> sym @b_foo
   firrtl.module @SymbolCollision(
-    in %a: !firrtl.bundle<foo: uint<1>> [{circt.fieldID = 1 : i32, circt.nonlocal = @foo}],
-    in %b: !firrtl.bundle<foo: uint<1>> [{circt.fieldID = 1 : i32, circt.nonlocal = @bar}]) {
+    in %a: !firrtl.bundle<foo: uint<1>> [{circt.fieldID = 1 : i32,
+        circt.nonlocal = @foo, class = "firrtl.transforms.DontTouchAnnotation"}],
+    in %b: !firrtl.bundle<foo: uint<1>> [{circt.fieldID = 1 : i32,
+        circt.nonlocal = @bar, class = "firrtl.transforms.DontTouchAnnotation"}]) {
   }
 }
 
@@ -1227,4 +1229,19 @@ firrtl.circuit "DontTouch" {
     {circt.fieldID = 1 : i32, class = "Test"}
   ]) {
  }
+}
+
+// Check that we don't create symbols for non-local annotations.
+firrtl.circuit "Foo"  {
+  firrtl.hierpath @nla [@Foo::@bar, @Bar]
+  // CHECK:       firrtl.module private @Bar(in %a_b:
+  // CHECK-SAME:    !firrtl.uint<1> [{circt.nonlocal = @nla, class = "circt.test"}])
+  firrtl.module private @Bar(in %a: !firrtl.bundle<b: uint<1>>
+      [{circt.fieldID = 1 : i32, circt.nonlocal = @nla, class = "circt.test"}]) {
+  }
+  firrtl.module @Foo() {
+    %bar_a = firrtl.instance bar sym @bar @Bar(in a: !firrtl.bundle<b: uint<1>>)
+    %invalid = firrtl.invalidvalue : !firrtl.bundle<b: uint<1>>
+    firrtl.strictconnect %bar_a, %invalid : !firrtl.bundle<b: uint<1>>
+  }
 }

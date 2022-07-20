@@ -519,7 +519,6 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(
   SmallVector<Attribute> retval;
   if (!annotations || annotations.empty())
     return ArrayAttr::get(ctxt, retval);
-  bool isGroundType = field.type.isGround();
   for (auto opAttr : annotations) {
     Optional<int64_t> maybeFieldID = None;
     DictionaryAttr annotation;
@@ -567,10 +566,7 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(
       needsSym = true;
       continue;
     }
-    // We are keeping the annotation.  If the anotation is non-local and this is
-    // a ground type (this won't be further lowered) then generate a symbol.
-    if (isGroundType && annotation.getAs<FlatSymbolRefAttr>("circt.nonlocal"))
-      needsSym = true;
+
     retval.push_back(annotation);
   }
   return ArrayAttr::get(ctxt, retval);
