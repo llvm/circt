@@ -32,6 +32,9 @@ public:
                                          StringRef fieldName);
 };
 
+// Get the HW to LLVM type conversions
+void populateHWToLLVMTypeConversions(mlir::LLVMTypeConverter &converter);
+
 /// Get the HW to LLVM conversion patterns.
 void populateHWToLLVMConversionPatterns(mlir::LLVMTypeConverter &converter,
                                         RewritePatternSet &patterns);
