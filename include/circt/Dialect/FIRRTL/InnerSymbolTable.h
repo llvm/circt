@@ -83,24 +83,32 @@ public:
   InnerSymbolTable(const InnerSymbolTable &) = delete;
   InnerSymbolTable &operator=(InnerSymbolTable &) = delete;
 
+  /// Look up a symbol with the specified name, returning empty InnerSymTarget
+  /// if no such name exists. Names never include the @ on them.
+  InnerSymTarget lookup(StringRef name) const;
+  InnerSymTarget lookup(StringAttr name) const;
+
   /// Look up a symbol with the specified name, returning null if no such
-  /// name exists. Names never include the @ on them.
-  Operation *lookup(StringRef name) const;
+  /// name exists or doesn't target just an operation.
+  Operation *lookupOp(StringRef name) const;
   template <typename T>
-  T lookup(StringRef name) const {
-    return dyn_cast_or_null<T>(lookup(name));
+  T lookupOp(StringRef name) const {
+    return dyn_cast_or_null<T>(lookupOp(name));
   }
 
   /// Look up a symbol with the specified name, returning null if no such
-  /// name exists. Names never include the @ on them.
-  Operation *lookup(StringAttr name) const;
+  /// name exists or doesn't target just an operation.
+  Operation *lookupOp(StringAttr name) const;
   template <typename T>
-  T lookup(StringAttr name) const {
-    return dyn_cast_or_null<T>(lookup(name));
+  T lookupOp(StringAttr name) const {
+    return dyn_cast_or_null<T>(lookupOp(name));
   }
 
   /// Return an InnerRef to the given operation which must be within this table.
   hw::InnerRefAttr getInnerRef(Operation *op);
+
+  /// Return an InnerRef to the given target which must be within this table.
+  hw::InnerRefAttr getInnerRef(InnerSymTarget target);
 
   /// Return an InnerRef for the given inner symbol, which must be valid.
   hw::InnerRefAttr getInnerRef(StringRef name) {
@@ -115,6 +123,9 @@ public:
   /// Get InnerSymbol for an operation.
   static StringAttr getInnerSymbol(Operation *op);
 
+  /// Get InnerSymbol for a target.
+  static StringAttr getInnerSymbol(InnerSymTarget target);
+
   /// Return the name of the attribute used for inner symbol names.
   static StringRef getInnerSymbolAttrName() { return "inner_sym"; }
 
@@ -124,7 +135,7 @@ private:
   Operation *innerSymTblOp;
 
   /// This maps names to operations with that inner symbol.
-  DenseMap<StringAttr, Operation *> symbolTable;
+  DenseMap<StringAttr, InnerSymTarget> symbolTable;
 };
 
 /// This class represents a collection of InnerSymbolTable's.
@@ -151,14 +162,17 @@ struct InnerRefNamespace {
   SymbolTable &symTable;
   InnerSymbolTableCollection &innerSymTables;
 
-  /// Resolve the InnerRef to its target within this namespace, returning null
-  /// if no such name exists.
-  ///
-  /// Note that some InnerRef's target ports and must be handled separately.
-  Operation *lookup(hw::InnerRefAttr inner);
+  /// Resolve the InnerRef to its target within this namespace, returning empty
+  /// target if no such name exists.
+  InnerSymTarget lookup(hw::InnerRefAttr inner);
+
+  /// Resolve the InnerRef to its target within this namespace, returning
+  /// empty target if no such name exists or it's not an operation.
+  /// Template type can be used to limit results to specified op type.
+  Operation *lookupOp(hw::InnerRefAttr inner);
   template <typename T>
-  T lookup(hw::InnerRefAttr inner) {
-    return dyn_cast_or_null<T>(lookup(inner));
+  T lookupOp(hw::InnerRefAttr inner) {
+    return dyn_cast_or_null<T>(lookupOp(inner));
   }
 };
 

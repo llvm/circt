@@ -41,13 +41,25 @@ InnerSymbolTable::InnerSymbolTable(Operation *op) {
   });
 }
 
-/// Look up a symbol with the specified name, returning null if no such name
-/// exists. Names never include the @ on them.
-Operation *InnerSymbolTable::lookup(StringRef name) const {
+/// Look up a symbol with the specified name, returning empty InnerSymTarget if
+/// no such name exists. Names never include the @ on them.
+InnerSymTarget InnerSymbolTable::lookup(StringRef name) const {
   return lookup(StringAttr::get(innerSymTblOp->getContext(), name));
 }
-Operation *InnerSymbolTable::lookup(StringAttr name) const {
+InnerSymTarget InnerSymbolTable::lookup(StringAttr name) const {
   return symbolTable.lookup(name);
+}
+
+/// Look up a symbol with the specified name, returning null if no such
+/// name exists or doesn't target just an operation.
+Operation *InnerSymbolTable::lookupOp(StringRef name) const {
+  return lookupOp(StringAttr::get(innerSymTblOp->getContext(), name));
+}
+Operation *InnerSymbolTable::lookupOp(StringAttr name) const {
+  auto result = lookup(name);
+  if (result.isOpOnly())
+    return result.getOp();
+  return nullptr;
 }
 
 /// Get InnerSymbol for an operation.
@@ -57,11 +69,45 @@ StringAttr InnerSymbolTable::getInnerSymbol(Operation *op) {
   return {};
 }
 
+/// Get InnerSymbol for a target.  Be robust to queries on unexpected
+/// operations to avoid users needing to know the details.
+StringAttr InnerSymbolTable::getInnerSymbol(InnerSymTarget target) {
+  // Assert on misuse, but try to handle queries otherwise.
+  assert(target);
+
+  InnerSymAttr base;
+  if (target.isPort()) {
+    auto mod = dyn_cast<FModuleLike>(target.getOp());
+    if (!mod)
+      return {};
+    assert(target.getPort() < mod.getNumPorts());
+    // TODO: update this when ports support per-field symbols
+    // base = mod.getPortSymbolAttr(target.getPort());
+    return mod.getPortSymbolAttr(target.getPort());
+  } else {
+    // InnerSymbols only supported if op implements the interface.
+    auto symOp = dyn_cast<InnerSymbolOpInterface>(target.getOp());
+    if (!symOp)
+      return {};
+    base = symOp.getInnerSymAttr();
+  }
+
+  return base.getSymIfExists(target.getField());
+}
+
 /// Return an InnerRef to the given operation.
 hw::InnerRefAttr InnerSymbolTable::getInnerRef(Operation *op) {
   assert(op->getParentWithTrait<OpTrait::InnerSymbolTable>() == innerSymTblOp);
   return hw::InnerRefAttr::get(SymbolTable::getSymbolName(innerSymTblOp),
                                getInnerSymbol(op));
+}
+
+hw::InnerRefAttr InnerSymbolTable::getInnerRef(InnerSymTarget target) {
+  assert(target.getOp() == innerSymTblOp ||
+         target.getOp()->getParentWithTrait<OpTrait::InnerSymbolTable>() ==
+             innerSymTblOp);
+  return hw::InnerRefAttr::get(SymbolTable::getSymbolName(innerSymTblOp),
+                               getInnerSymbol(target));
 }
 
 //===----------------------------------------------------------------------===//
@@ -105,10 +151,16 @@ void InnerSymbolTableCollection::populateTables(Operation *innerRefNSOp) {
 // InnerRefNamespace
 //===----------------------------------------------------------------------===//
 
-Operation *InnerRefNamespace::lookup(hw::InnerRefAttr inner) {
+InnerSymTarget InnerRefNamespace::lookup(hw::InnerRefAttr inner) {
   auto *mod = symTable.lookup(inner.getModule());
   assert(mod->hasTrait<mlir::OpTrait::InnerSymbolTable>());
   return innerSymTables.getInnerSymbolTable(mod).lookup(inner.getName());
+}
+
+Operation *InnerRefNamespace::lookupOp(hw::InnerRefAttr inner) {
+  auto *mod = symTable.lookup(inner.getModule());
+  assert(mod->hasTrait<mlir::OpTrait::InnerSymbolTable>());
+  return innerSymTables.getInnerSymbolTable(mod).lookupOp(inner.getName());
 }
 
 //===----------------------------------------------------------------------===//
