@@ -30,14 +30,41 @@ InnerSymbolTable::InnerSymbolTable(Operation *op) {
   // Save the operation this table is for.
   this->innerSymTblOp = op;
 
-  // Walk the operation and add InnerSymbol's to the table.
-  op->walk([&](InnerSymbolOpInterface symOp) {
-    auto attr = symOp.getInnerNameAttr();
-    if (!attr)
-      return;
-    auto it = symbolTable.insert({attr, symOp});
-    (void)it;
+  auto addSym = [&](StringAttr name, InnerSymTarget target) {
+    assert(name && !name.getValue().empty());
+    auto it = symbolTable.insert({name, target});
+    if (!it.second) {
+      auto orig = symbolTable.lookup(name);
+      (target.getOp()->emitError("duplicate symbol @") << name << " found")
+              .attachNote(orig.getOp()->getLoc())
+          << " symbol also found within this operation";
+      // TODO: rework so can indicate failure to caller, for use in verif/etc?
+    }
     assert(it.second && "repeated symbol found");
+  };
+  auto addSyms = [&](InnerSymAttr symAttr, InnerSymTarget baseTarget) {
+    if (!symAttr)
+      return;
+    assert(baseTarget.getField() == 0);
+    for (const auto &symProp : symAttr.getProps()) {
+      addSym(symProp.getName(),
+             InnerSymTarget(baseTarget, symProp.getFieldID()));
+    }
+  };
+
+  // Walk the operation and add InnerSymbolTarget's to the table.
+  op->walk([&](Operation *curOp) {
+    if (auto symOp = dyn_cast<InnerSymbolOpInterface>(curOp))
+      addSyms(symOp.getInnerSymAttr(), InnerSymTarget(symOp));
+
+    // Check for ports
+    // TODO: investigate why/confirm ports having empty-string symbols is normal
+    // TODO: Add fields per port, once they work that way (use addSyms)
+    if (auto mod = dyn_cast<FModuleLike>(curOp)) {
+      for (const auto &p : llvm::enumerate(mod.getPorts()))
+        if (auto sym = p.value().sym; sym && !sym.getValue().empty())
+          addSym(p.value().sym, InnerSymTarget(p.index(), curOp));
+    }
   });
 }
 
