@@ -8,6 +8,7 @@
 
 #include "circt/Transforms/InsertMergeBlocks.h"
 #include "PassDetail.h"
+#include "circt/Analysis/ControlFlowLoopAnalysis.h"
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/LLVMCommon/Pattern.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
@@ -19,6 +20,7 @@
 
 using namespace mlir;
 using namespace circt;
+using namespace circt::analysis;
 
 static size_t getNumPredecessors(Block *block) {
   return std::distance(block->getPredecessors().begin(),
@@ -83,8 +85,112 @@ static Block *buildMergeBlock(Block *b1, Block *b2, Block *oldSucc,
 
 using SplitBlockMap = DenseMap<Block *, SmallVector<Block *>>;
 
-static Block *getLastSplitBlock(SplitBlockMap &map, Block *block) {
-  SmallVector<Block *> vec = map.lookup(block);
+using PredMap = DenseMap<Block *, size_t>;
+namespace {
+/// A dual CFG that contracts cycles and irregular subgraphs into single logical
+/// blocks.
+struct DualGraph {
+  DualGraph(Region &r, ControlFlowLoopAnalysis &loopAnalysis);
+
+  size_t getNumPredecessors(Block *b) { return predCnts.lookup(b); }
+  void getPredecessors(Block *b, SmallVectorImpl<Block *> &res);
+
+  size_t getNumSuccessors(Block *b) { return succMap.lookup(b).size(); }
+  ArrayRef<Block *> getSuccessors(Block *b) {
+    return succMap.find(b)->getSecond();
+  }
+
+  Block *lookupHeaderBlock(Block *block);
+
+  Region &r;
+  ControlFlowLoopAnalysis &loopAnalysis;
+
+  DenseMap<Block *, SmallVector<Block *>> succMap;
+  PredMap predCnts;
+};
+} // namespace
+
+DualGraph::DualGraph(Region &r, ControlFlowLoopAnalysis &loopAnalysis)
+    : r(r), loopAnalysis(loopAnalysis), succMap(), predCnts() {
+  for (Block &b : r) {
+    if (!loopAnalysis.isLoopHeader(&b) && loopAnalysis.isLoopElement(&b))
+      continue;
+
+    SmallVector<Block *> succs;
+
+    // NOTE: This assumes that there is only one exitting node, i.e., not
+    // two blocks from the same loop can be predecessors of one block
+    unsigned predCnt = 0;
+    if (loopAnalysis.isLoopHeader(&b)) {
+      LoopInfo *info = loopAnalysis.getLoopInfoForHeader(&b);
+      for (auto *pred : b.getPredecessors())
+        if (!info->inLoop.contains(pred))
+          predCnt++;
+
+      llvm::copy(info->exitBlocks, std::back_inserter(succs));
+    } else {
+      // TODO fix naming
+      predCnt = ::getNumPredecessors(&b);
+      llvm::copy(b.getSuccessors(), std::back_inserter(succs));
+    }
+    predCnts.try_emplace(&b, predCnt);
+    succMap.try_emplace(&b, std::move(succs));
+  }
+}
+
+Block *DualGraph::lookupHeaderBlock(Block *block) {
+  // assumes that block is part of a loop
+  LoopInfo *info = loopAnalysis.getLoopInfo(block);
+  assert(info != nullptr);
+  return info->loopHeader;
+}
+
+// TODO refactor
+void DualGraph::getPredecessors(Block *b, SmallVectorImpl<Block *> &res) {
+  assert((loopAnalysis.isLoopHeader(b) || !loopAnalysis.isLoopElement(b)) &&
+         "can only get predecessors of blocks in the graph");
+
+  if (loopAnalysis.isLoopHeader(b)) {
+    LoopInfo *info = loopAnalysis.getLoopInfo(b);
+
+    for (auto *pred : b->getPredecessors()) {
+      if (info->inLoop.contains(pred))
+        continue;
+
+      if (loopAnalysis.isLoopElement(pred)) {
+        // push back other loop header
+        res.push_back(loopAnalysis.getLoopInfo(pred)->loopHeader);
+        continue;
+      }
+      res.push_back(pred);
+    }
+
+    return;
+  }
+
+  for (auto *pred : b->getPredecessors()) {
+    if (!loopAnalysis.isLoopElement(pred)) {
+      res.push_back(pred);
+      continue;
+    }
+
+    // NOTE: This will break down once multiple exit nodes are allowed
+    res.push_back(loopAnalysis.getLoopInfo(pred)->loopHeader);
+  }
+}
+
+static Block *getLastSplitBlock(SplitBlockMap &map, Block *block,
+                                DualGraph &graph) {
+  auto it = map.find(block);
+  if (it == map.end()) {
+    // if the block isn't part of the dual graph, we have to use the entry block
+    // to the contracted region
+    block = graph.lookupHeaderBlock(block);
+    it = map.find(block);
+  }
+  assert(it != map.end() &&
+         "expect block to have an entry in the split block map");
+  SmallVector<Block *> &vec = it->getSecond();
   if (vec.empty())
     return nullptr;
 
@@ -95,7 +201,8 @@ static Block *getLastSplitBlock(SplitBlockMap &map, Block *block) {
 static LogicalResult buildMergeBlocks(Block *currBlock,
                                       SplitBlockMap &prevSplitBlocks,
                                       Block *predDom,
-                                      ConversionPatternRewriter &rewriter) {
+                                      ConversionPatternRewriter &rewriter,
+                                      DualGraph &graph) {
   llvm::SmallPtrSet<Block *, 4> preds;
   preds.insert(currBlock->getPredecessors().begin(),
                currBlock->getPredecessors().end());
@@ -104,9 +211,9 @@ static LogicalResult buildMergeBlocks(Block *currBlock,
 
   while (!preds.empty()) {
     Block *pred;
-    for (auto it = preds.begin(), end = preds.end(); it != end;
-         pred = *(it++)) {
-      Block *splitBlock = getLastSplitBlock(prevSplitBlocks, pred);
+    for (auto it = preds.begin(), end = preds.end(); it != end; ++it) {
+      pred = *it;
+      Block *splitBlock = getLastSplitBlock(prevSplitBlocks, pred, graph);
       if (splitBlock == predDom) {
         // Needs no additional merge block
         preds.erase(pred);
@@ -114,11 +221,14 @@ static LogicalResult buildMergeBlocks(Block *currBlock,
       }
 
       if (predsToConsider.count(splitBlock) == 0) {
+        // no other block with the same split block was found yet, so just store
+        // it and continue
         predsToConsider.try_emplace(splitBlock, pred);
         preds.erase(pred);
         continue;
       }
 
+      // Found a pair, so insert a new merge block for them
       Block *other = predsToConsider.lookup(splitBlock);
       predsToConsider.erase(splitBlock);
       preds.erase(pred);
@@ -141,6 +251,22 @@ static LogicalResult buildMergeBlocks(Block *currBlock,
   return success();
 }
 
+static LogicalResult preconditionCheck(Region &r,
+                                       ControlFlowLoopAnalysis &analysis) {
+  for (auto &info : analysis.topLevelLoops)
+    if (info.exitBlocks.size() > 1)
+      return r.getParentOp()->emitError(
+          "multiple exit nodes are not yet supported");
+
+  return success();
+}
+
+static void setupQueue(DualGraph &graph, SmallVector<Block *> &queue) {
+  for (auto it : graph.predCnts)
+    if (it.second == 0)
+      queue.push_back(it.first);
+}
+
 /// Insert additional blocks that serve as counterparts to the blocks that
 /// diverged the control flow.
 /// The resulting merge block tree is guaranteed to be a binary tree.
@@ -152,27 +278,29 @@ circt::insertExplicitMergeBlocks(Region &r,
   // TODO relax these assumptions
   // Assumptions for now
   // - No unstructured control flow
-  // - No loops
-
-  // List approach
 
   Block *entry = &r.front();
   DominanceInfo domInfo(r.getParentOp());
   PostDominanceInfo postDomInfo(r.getParentOp());
 
+  ControlFlowLoopAnalysis loopAnalysis(r);
+  if (failed(loopAnalysis.analyzeRegion()))
+    return failure();
+
+  if (failed(preconditionCheck(r, loopAnalysis)))
+    return failure();
+
   // Traversing the graph in topological order
   SmallVector<Block *> queue;
 
+  // Holds the graph that contains the relevant blocks. It for example contracts
+  // loops into one block to preserve a DAG structure.
+  DualGraph graph(r, loopAnalysis);
+  setupQueue(graph, queue);
+
   // Counts the amount of predecessors remaining, if it reaches 0, insert into
   // queue.
-  DenseMap<Block *, unsigned> predsToVisit;
-  for (Block &b : r) {
-    // TODO changes for loops
-    unsigned predCnt = getNumPredecessors(&b);
-    predsToVisit.try_emplace(&b, predCnt);
-    if (predCnt == 0)
-      queue.push_back(&b);
-  }
+  PredMap predsToVisit = graph.predCnts;
 
   SplitBlockMap prevSplitBlocks;
   prevSplitBlocks.try_emplace(entry, SmallVector<Block *>());
@@ -185,42 +313,29 @@ circt::insertExplicitMergeBlocks(Region &r,
         prevSplitBlocks.try_emplace(currBlock, SmallVector<Block *>()).first;
     SmallVector<Block *> &currOut = it->getSecond();
 
-    bool isMergeBlock = getNumPredecessors(currBlock) > 1;
-    bool isSplitBlock = currBlock->getNumSuccessors() > 1;
+    bool isMergeBlock = graph.getNumPredecessors(currBlock) > 1;
+    bool isSplitBlock = graph.getNumSuccessors(currBlock) > 1;
+
+    SmallVector<Block *> preds;
+    graph.getPredecessors(currBlock, preds);
 
     if (isMergeBlock) {
       Block *predDom = currBlock;
-      for (auto *pred : currBlock->getPredecessors()) {
+      for (auto *pred : preds) {
         predDom = domInfo.findNearestCommonDominator(predDom, pred);
       }
 
-      if (failed(
-              buildMergeBlocks(currBlock, prevSplitBlocks, predDom, rewriter)))
+      if (failed(buildMergeBlocks(currBlock, prevSplitBlocks, predDom, rewriter,
+                                  graph)))
         return failure();
 
-      // Have to search manually through all predecessors, as the old ones are
-      // still listed. This is due to the rewriter not materializing the
-      // changes.
-      SmallPtrSet<Block *, 2> remainingPreds;
-      for (Block *pred : currBlock->getPredecessors()) {
-        if (getLastSplitBlock(prevSplitBlocks, pred) == predDom)
-          remainingPreds.insert(pred);
-      }
-
-      assert(remainingPreds.size() == 2);
-
-      auto predIt = remainingPreds.begin();
-      Block *pred0 = *predIt;
-      Block *pred1 = *(++predIt);
-
-      SmallVector<Block *> pred0Out = prevSplitBlocks.lookup(pred0);
-      SmallVector<Block *> pred1Out = prevSplitBlocks.lookup(pred1);
-      assert(pred0Out == pred1Out);
-
-      llvm::copy(llvm::drop_end(pred0Out), std::back_inserter(currOut));
-    } else {
-      Block *pred = currBlock->getSinglePredecessor();
-      SmallVector<Block *> predOut = prevSplitBlocks.lookup(pred);
+      // The predDom has similar properties as a normal predecessor, thus we can
+      // just copy its split block information.
+      SmallVector<Block *> predDomOut = prevSplitBlocks.lookup(predDom);
+      llvm::copy(predDomOut, std::back_inserter(currOut));
+    } else if (!preds.empty()) {
+      Block *pred = preds.front();
+      SmallVector<Block *> &predOut = prevSplitBlocks.find(pred)->getSecond();
       llvm::copy(predOut, std::back_inserter(currOut));
     }
 
@@ -228,9 +343,11 @@ circt::insertExplicitMergeBlocks(Region &r,
       currOut.push_back(currBlock);
     }
 
-    for (auto *succ : currBlock->getSuccessors()) {
+    for (auto *succ : graph.getSuccessors(currBlock)) {
       auto it = predsToVisit.find(succ);
       unsigned val = --(it->getSecond());
+      // Pushing the block on the queue once all it's successors were visited
+      // ensures a topological traversal.
       if (val == 0)
         queue.push_back(succ);
     }
