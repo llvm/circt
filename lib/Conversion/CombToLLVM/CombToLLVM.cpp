@@ -116,6 +116,51 @@ struct CombConcatOpConversion : public ConvertToLLVMPattern {
 } // namespace
 
 //===----------------------------------------------------------------------===//
+// Bitwise conversions
+//===----------------------------------------------------------------------===//
+
+namespace {
+template <typename SourceOp, typename TargetOp>
+class VariadicOpConversion : public ConvertOpToLLVMPattern<SourceOp> {
+public:
+  using OpAdaptor = typename SourceOp::Adaptor;
+  using ConvertOpToLLVMPattern<SourceOp>::ConvertOpToLLVMPattern;
+  using Super = VariadicOpConversion<SourceOp, TargetOp>;
+
+  LogicalResult
+  matchAndRewrite(SourceOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+
+    size_t numOperands = op.getOperands().size();
+    // All operands have the same type.
+    Type type = op.getOperandTypes().front();
+    auto replacement = op.getOperand(0);
+
+    for (unsigned i = 1; i < numOperands; i++) {
+      replacement = rewriter.create<TargetOp>(op.getLoc(), type, replacement,
+                                              op.getOperand(i));
+    }
+
+    rewriter.replaceOp(op, replacement);
+
+    return success();
+  }
+};
+
+using AndOpConversion = VariadicOpConversion<comb::AndOp, LLVM::AndOp>;
+using OrOpConversion = VariadicOpConversion<comb::OrOp, LLVM::OrOp>;
+using XorOpConversion = VariadicOpConversion<comb::XorOp, LLVM::XOrOp>;
+
+using CombShlOpConversion =
+    OneToOneConvertToLLVMPattern<comb::ShlOp, LLVM::ShlOp>;
+using CombShrUOpConversion =
+    OneToOneConvertToLLVMPattern<comb::ShrUOp, LLVM::LShrOp>;
+using CombShrSOpConversion =
+    OneToOneConvertToLLVMPattern<comb::ShrSOp, LLVM::AShrOp>;
+
+} // namespace
+
+//===----------------------------------------------------------------------===//
 // Arithmetic conversions
 //===----------------------------------------------------------------------===//
 
@@ -171,51 +216,6 @@ struct CombParityOpConversion : public ConvertToLLVMPattern {
 } // namespace
 
 //===----------------------------------------------------------------------===//
-// Bitwise conversions
-//===----------------------------------------------------------------------===//
-
-namespace {
-template <typename SourceOp, typename TargetOp>
-class VariadicOpConversion : public ConvertOpToLLVMPattern<SourceOp> {
-public:
-  using OpAdaptor = typename SourceOp::Adaptor;
-  using ConvertOpToLLVMPattern<SourceOp>::ConvertOpToLLVMPattern;
-  using Super = VariadicOpConversion<SourceOp, TargetOp>;
-
-  LogicalResult
-  matchAndRewrite(SourceOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-
-    size_t numOperands = op.getOperands().size();
-    // All operands have the same type.
-    Type type = op.getOperandTypes().front();
-    auto replacement = op.getOperand(0);
-
-    for (unsigned i = 1; i < numOperands; i++) {
-      replacement = rewriter.create<TargetOp>(op.getLoc(), type, replacement,
-                                              op.getOperand(i));
-    }
-
-    rewriter.replaceOp(op, replacement);
-
-    return success();
-  }
-};
-
-using AndOpConversion = VariadicOpConversion<comb::AndOp, LLVM::AndOp>;
-using OrOpConversion = VariadicOpConversion<comb::OrOp, LLVM::OrOp>;
-using XorOpConversion = VariadicOpConversion<comb::XorOp, LLVM::XOrOp>;
-
-using CombShlOpConversion =
-    OneToOneConvertToLLVMPattern<comb::ShlOp, LLVM::ShlOp>;
-using CombShrUOpConversion =
-    OneToOneConvertToLLVMPattern<comb::ShrUOp, LLVM::LShrOp>;
-using CombShrSOpConversion =
-    OneToOneConvertToLLVMPattern<comb::ShrSOp, LLVM::AShrOp>;
-
-} // namespace
-
-//===----------------------------------------------------------------------===//
 // Pass initialization
 //===----------------------------------------------------------------------===//
 
@@ -257,6 +257,7 @@ void CombToLLVMLoweringPass::runOnOperation() {
   size_t regCounter = 0;
 
   RewritePatternSet patterns(&getContext());
+  auto converter = mlir::LLVMTypeConverter(&getContext());
 
   LLVMConversionTarget target(getContext());
   target.addLegalOp<UnrealizedConversionCastOp>();
