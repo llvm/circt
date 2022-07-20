@@ -48,9 +48,9 @@ firrtl.circuit "Top"   {
   }
 
   // Make sure that %a, %b and %c are not erased because they have an annotation or a symbol.
-  // CHECK-LABEL: firrtl.module private @Foo(in %a: !firrtl.uint<1> sym @dntSym, in %b: !firrtl.uint<1> [{a = "a"}], out %c: !firrtl.uint<1> sym @dntSym)
+  // CHECK-LABEL: firrtl.module private @Foo(in %a: !firrtl.uint<1> sym @dntSym, in %b: !firrtl.uint<1> [{a = "a"}], out %c: !firrtl.uint<1> sym @dntSym2)
   firrtl.module private @Foo(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>) attributes {
-    portAnnotations = [[], [{a = "a"}], []], portSyms = ["dntSym", "", "dntSym"]}
+    portAnnotations = [[], [{a = "a"}], []], portSyms = ["dntSym", "", "dntSym2"]}
   {
     // CHECK: firrtl.connect %c, %{{invalid_ui1.*}}
     %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
@@ -119,9 +119,9 @@ firrtl.circuit "Top"   {
   }
 
   // Make sure that %a, %b and %c are not erased because they have an annotation or a symbol.
-  // CHECK-LABEL: firrtl.module private @Foo(in %a: !firrtl.uint<1> sym @dntSym, in %b: !firrtl.uint<1> [{a = "a"}], out %c: !firrtl.uint<1> sym @dntSym)
+  // CHECK-LABEL: firrtl.module private @Foo(in %a: !firrtl.uint<1> sym @dntSym, in %b: !firrtl.uint<1> [{a = "a"}], out %c: !firrtl.uint<1> sym @dntSym2)
   firrtl.module private @Foo(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>) attributes {
-    portAnnotations = [[], [{a = "a"}], []], portSyms = ["dntSym", "", "dntSym"]}
+    portAnnotations = [[], [{a = "a"}], []], portSyms = ["dntSym", "", "dntSym2"]}
   {
     // CHECK: firrtl.strictconnect %c, %{{invalid_ui1.*}}
     %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
