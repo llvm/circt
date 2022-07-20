@@ -2122,6 +2122,15 @@ void circt::populateLLHDToLLVMConversionPatterns(LLVMTypeConverter &converter,
   patterns.add<LoadOpConversion>(converter);
 }
 
+void circt::populateLLHDToLLVMTypeConversions(LLVMTypeConverter &converter) {
+  converter.addConversion(
+      [&](SigType sig) { return convertSigType(sig, converter); });
+  converter.addConversion(
+      [&](TimeType time) { return convertTimeType(time, converter); });
+  converter.addConversion(
+      [&](PtrType ptr) { return convertPtrType(ptr, converter); });
+}
+
 void LLHDToLLVMLoweringPass::runOnOperation() {
   // Keep a counter to infer a signal's index in his entity's signal table.
   size_t sigCounter = 0;
@@ -2131,12 +2140,7 @@ void LLHDToLLVMLoweringPass::runOnOperation() {
 
   RewritePatternSet patterns(&getContext());
   auto converter = mlir::LLVMTypeConverter(&getContext());
-  converter.addConversion(
-      [&](SigType sig) { return convertSigType(sig, converter); });
-  converter.addConversion(
-      [&](TimeType time) { return convertTimeType(time, converter); });
-  converter.addConversion(
-      [&](PtrType ptr) { return convertPtrType(ptr, converter); });
+  populateLLHDToLLVMTypeConversions(converter);
 
   // Apply a partial conversion first, lowering only the instances, to generate
   // the init function.

@@ -470,14 +470,18 @@ void circt::populateHWToLLVMConversionPatterns(LLVMTypeConverter &converter,
                StructInjectOpConversion>(converter);
 }
 
-void HWToLLVMLoweringPass::runOnOperation() {
-
-  RewritePatternSet patterns(&getContext());
-  auto converter = mlir::LLVMTypeConverter(&getContext());
+void circt::populateHWToLLVMTypeConversions(LLVMTypeConverter &converter) {
   converter.addConversion(
       [&](hw::ArrayType arr) { return convertArrayType(arr, converter); });
   converter.addConversion(
       [&](hw::StructType tup) { return convertStructType(tup, converter); });
+}
+
+void HWToLLVMLoweringPass::runOnOperation() {
+
+  RewritePatternSet patterns(&getContext());
+  auto converter = mlir::LLVMTypeConverter(&getContext());
+  populateHWToLLVMTypeConversions(converter);
 
   LLVMConversionTarget target(getContext());
   target.addLegalOp<UnrealizedConversionCastOp>();
