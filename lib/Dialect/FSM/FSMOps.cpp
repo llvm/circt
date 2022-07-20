@@ -233,8 +233,11 @@ LogicalResult HWInstanceOp::verify() { return verifyCallerTypes(*this); }
 
 void StateOp::build(OpBuilder &builder, OperationState &state,
                     StringRef stateName) {
+  OpBuilder::InsertionGuard guard(builder);
   Region *output = state.addRegion();
   output->push_back(new Block());
+  builder.setInsertionPointToEnd(&output->back());
+  builder.create<fsm::OutputOp>(state.location);
   Region *transitions = state.addRegion();
   transitions->push_back(new Block());
   state.addAttribute("sym_name", builder.getStringAttr(stateName));
@@ -302,10 +305,8 @@ LogicalResult OutputOp::verify() {
 
 void TransitionOp::build(OpBuilder &builder, OperationState &state,
                          StringRef nextState) {
-  Region *guard = state.addRegion();
-  guard->push_back(new Block());
-  Region *action = state.addRegion();
-  action->push_back(new Block());
+  state.addRegion(); // guard
+  state.addRegion(); // action
   state.addAttribute("nextState",
                      FlatSymbolRefAttr::get(builder.getStringAttr(nextState)));
 }
@@ -313,6 +314,23 @@ void TransitionOp::build(OpBuilder &builder, OperationState &state,
 void TransitionOp::build(OpBuilder &builder, OperationState &state,
                          StateOp nextState) {
   build(builder, state, nextState.getName());
+}
+
+Block *TransitionOp::ensureGuard(OpBuilder &builder) {
+  if (guard().empty()) {
+    OpBuilder::InsertionGuard g(builder);
+    auto *block = new Block();
+    guard().push_back(block);
+    builder.setInsertionPointToStart(block);
+    builder.create<fsm::ReturnOp>(getLoc());
+  }
+  return &guard().front();
+}
+
+Block *TransitionOp::ensureAction(OpBuilder &builder) {
+  if (action().empty())
+    action().push_back(new Block());
+  return &action().front();
 }
 
 /// Lookup the next state for the symbol. This returns null on invalid IR.

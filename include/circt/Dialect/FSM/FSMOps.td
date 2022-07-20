@@ -240,6 +240,12 @@ def TransitionOp : FSMOp<"transition", [HasParent<"StateOp">, NoTerminator]> {
 
     /// Returns true if this transition is always taken.
     bool isAlwaysTaken();
+
+    /// Ensures that this transition has a guard region.
+    Block* ensureGuard(OpBuilder& builder);
+
+    /// Ensures that this transition has an action region.
+    Block* ensureAction(OpBuilder& builder);
   }];
 
   let builders = [
