@@ -558,6 +558,9 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     }
   }
 
+  pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+      firrtl::createRandomizeRegisterInitPass());
+
   if (checkCombCycles)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCheckCombCyclesPass());
 
