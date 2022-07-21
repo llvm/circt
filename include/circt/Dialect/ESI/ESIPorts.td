@@ -38,6 +38,14 @@ def Channel : ESI_Port<"Channel"> {
   let parameters = (ins "Type":$inner);
 
   let assemblyFormat = "`<` $inner `>`";
+
+  let extraClassDeclaration = [{
+    /// Returns true if this channel carries a data value.
+    bool hasData() {
+      return !getInner().isa<mlir::NoneType>();
+    }
+  }];
+
 }
 
 def ChannelType :
@@ -47,7 +55,10 @@ def ChannelType :
 //=========
 // Operations on ports.
 
-def WrapValidReady : ESI_Op<"wrap.vr", [NoSideEffect]> {
+def WrapValidReady : ESI_Op<"wrap.vr", [
+    NoSideEffect,
+    DeclareOpInterfaceMethods<ChannelOpInterface>
+  ]> {
   let summary = "Wrap a value into an ESI port";
   let description = [{
     Wrapping a value into an ESI port type allows modules to send values down
@@ -55,17 +66,22 @@ def WrapValidReady : ESI_Op<"wrap.vr", [NoSideEffect]> {
     ready signal from the other end of the channel.
   }];
 
-  let arguments = (ins AnyType:$rawInput, I1:$valid);
+  let arguments = (ins Optional<AnyType>:$rawInput, I1:$valid);
   let results = (outs ChannelType:$chanOutput, I1:$ready);
   let hasCustomAssemblyFormat = 1;
   let hasFolder = 1;
 
   let builders = [
+    // If $data == Value(), an !esi.channel<none> is returned. Else,
+    // an !esi.channel<$data.getType()> is returned.
     OpBuilder<(ins "mlir::Value":$data, "mlir::Value":$valid)>
   ];
 }
 
-def UnwrapValidReady : ESI_Op<"unwrap.vr", [NoSideEffect]> {
+def UnwrapValidReady : ESI_Op<"unwrap.vr", [
+    NoSideEffect,
+    DeclareOpInterfaceMethods<ChannelOpInterface>
+  ]> {
   let summary = "Unwrap a value from an ESI port";
   let description = [{
     Unwrapping a value allows operations on the contained value. Unwrap the
@@ -74,18 +90,31 @@ def UnwrapValidReady : ESI_Op<"unwrap.vr", [NoSideEffect]> {
   }];
 
   let arguments = (ins ChannelType:$chanInput, I1:$ready);
-  let results = (outs AnyType:$rawOutput, I1:$valid);
+  let results = (outs Variadic<AnyType>:$rawOutput, I1:$valid);
   let hasCustomAssemblyFormat = 1;
+  let skipDefaultBuilders = 1;
 
   let builders = [
     OpBuilder<(ins "mlir::Value":$inChan, "mlir::Value":$ready)>
   ];
+
+  let extraClassDeclaration = [{
+    /// Returns the raw output of this operation, assuming that the channel
+    /// carries data.
+    mlir::Value getRawOutput() {
+      assert(hasData() && "Operation does not have a data value");
+      return rawOutput().front();
+    }
+  }];
 }
 
 def ModportType:
   Type<CPred<"$_self.isa<::circt::sv::ModportType>()">, "sv.interface">;
 
-def WrapSVInterface: ESI_Op<"wrap.iface", [NoSideEffect]> {
+def WrapSVInterface: ESI_Op<"wrap.iface", [
+    NoSideEffect,
+    DeclareOpInterfaceMethods<ChannelOpInterface>
+  ]> {
   let summary = "Wrap an SV interface into an ESI port";
   let description = [{
     Wrap a SystemVerilog interface into an ESI channel. Interface MUST look
@@ -103,7 +132,9 @@ def WrapSVInterface: ESI_Op<"wrap.iface", [NoSideEffect]> {
   let hasVerifier = 1;
 }
 
-def UnwrapSVInterface : ESI_Op<"unwrap.iface", []> {
+def UnwrapSVInterface : ESI_Op<"unwrap.iface", [
+    DeclareOpInterfaceMethods<ChannelOpInterface>
+  ]> {
   let summary = "Unwrap an SV interface from an ESI port";
   let description = [{
     Unwrap an ESI channel into a SystemVerilog interface containing valid,

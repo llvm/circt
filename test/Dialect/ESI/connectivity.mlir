@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
+// RUN: circt-opt %s -verify-diagnostics -split-input-file | circt-opt -verify-diagnostics | FileCheck %s
 
 hw.module @Sender() -> (x: !esi.channel<i1>) {
   %0 = arith.constant 0 : i1
@@ -81,4 +81,22 @@ hw.module @testIfaceWrap() {
   // CHECK-NEXT:     hw.instance "ifaceRcvr" @IFaceRcvr(x: %5: !sv.modport<@IData::@Sink>) -> ()
   // CHECK-NEXT:     %6 = sv.modport.get %4 @Sink : !sv.interface<@IData> -> !sv.modport<@IData::@Source>
   // CHECK-NEXT:     esi.unwrap.iface %3 into %6 : (!esi.channel<i32>, !sv.modport<@IData::@Source>)
+}
+
+// -----
+
+// CHECK:      hw.module @NoneTyped(%a: !esi.channel<none>, %clk: i1, %rstn: i1) -> (x: !esi.channel<none>) {
+// CHECK-NEXT:   %0 = esi.buffer %clk, %rstn, %a  : none
+// CHECK-NEXT:   %1 = esi.stage %clk, %rstn, %0  : none
+// CHECK-NEXT:   %valid = esi.unwrap.vr %1, %ready : none
+// CHECK-NEXT:   %chanOutput, %ready = esi.wrap.vr %valid : none
+// CHECK-NEXT:   hw.output %chanOutput : !esi.channel<none>
+// CHECK-NEXT: }
+
+hw.module @NoneTyped(%a: !esi.channel<none>, %clk : i1, %rstn : i1) -> (x: !esi.channel<none>) {
+  %bufferedA = esi.buffer %clk, %rstn, %a : none
+  %stagedA = esi.stage %clk, %rstn, %bufferedA : none
+  %valid = esi.unwrap.vr %stagedA, %rcvrRdy : none
+  %ch, %rcvrRdy = esi.wrap.vr %valid : none
+  hw.output %ch : !esi.channel<none>
 }
