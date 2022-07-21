@@ -676,8 +676,20 @@ class RefSingleUserConstraint<string ref>
   : PredOpTrait<"reference port operand cannot be reused by any other op",
                 CPred<"$" # ref # ".hasOneUse()">>;
 
+class RefInstancePortConstraint<string ref>
+  : PredOpTrait<"it cannot have module port as an operand because it implies"
+  " upward reference XMR, which are not supported."
+  " The reference operand must be a port from firrtl.instance",
+                CPred<"!($" # ref # ".isa<BlockArgument>())">>;
+
+class RefPortConstraint<string ref>
+  : PredOpTrait<"reference port operand can only be a module or instance port",
+                CPred<"($" # ref # ".isa<BlockArgument>()"
+                " || (isa<InstanceOp>($" # ref # ".getDefiningOp())))">>;
+
 def XMRGetOp : FIRRTLOp<"xmr.get", [RefTypeConstraint<"ref","result">,
-                                    RefSingleUserConstraint<"ref">]> {
+                                    RefSingleUserConstraint<"ref">,
+                                    RefInstancePortConstraint<"ref">]> {
   let summary = "FIRRTL XMR Get";
   let description = [{
     Resolve a remote reference (XMR) for reading/writing.
@@ -691,7 +703,8 @@ def XMRGetOp : FIRRTLOp<"xmr.get", [RefTypeConstraint<"ref","result">,
 }
 
 def XMRReadOp : FIRRTLOp<"xmr.read", [RefTypeConstraint<"ref","result">,
-                                    RefSingleUserConstraint<"ref">]> {
+                                    RefSingleUserConstraint<"ref">,
+                                    RefPortConstraint<"ref">]> {
   let summary = "FIRRTL XMR Read";
   let description = [{
     Endpoint of remote reference (XMR), read from
@@ -703,7 +716,8 @@ def XMRReadOp : FIRRTLOp<"xmr.read", [RefTypeConstraint<"ref","result">,
 }
 
 def XMRWriteOp : FIRRTLOp<"xmr.write", [RefTypeConstraint<"ref","result">,
-                                    RefSingleUserConstraint<"ref">]> {
+                                    RefSingleUserConstraint<"ref">,
+                                    RefPortConstraint<"ref">]> {
   let summary = "FIRRTL XMR Write";
   let description = [{
     Endpoint of remote reference (XMR), written from

@@ -23,43 +23,41 @@ firrtl.circuit "xmr" {
 
 // -----
 
-// From design doc
-
-firrtl.circuit "DUT" {
-  firrtl.module @DUT() {
-    %w = firrtl.wire sym @w : !firrtl.uint<1>
-
-    %view_in, %view_out = firrtl.instance MyView_companion @MyView_companion(in ref_in1: !firrtl.ref<uint<1>>, out ref_out1: !firrtl.ref<uint<1>>)
-
-    firrtl.xmr.read %view_in, %w : !firrtl.ref<uint<1>>
-    %iface = sv.interface.instance sym @__MyView_MyInterface__  : !sv.interface<@MyInterface>
-
-    %w2 = firrtl.wire sym @w2 : !firrtl.uint<1>
-    firrtl.xmr.write %w2, %view_out : !firrtl.ref<uint<1>>
-
-    // firrtl.strictconnect %view_out_end, %iface : !firrtl.uint<1>>
-  }
-
-  firrtl.module private @MyView_companion (in %ref_in1: !firrtl.ref<uint<1>>, out %ref_out1: !firrtl.ref<uint<1>>) {
-    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    %_WIRE = firrtl.wire sym @_WIRE : !firrtl.uint<1>
-    firrtl.strictconnect %_WIRE, %c0_ui1 : !firrtl.uint<1>
-
-    %view_in, %view_out = firrtl.instance MyView_mapping @MyView_mapping(in ref_in1: !firrtl.ref<uint<1>>, out ref_out1: !firrtl.ref<uint<1>>)
-    firrtl.strictconnect %view_in, %ref_in1 : !firrtl.ref<uint<1>>
-    firrtl.strictconnect %ref_out1, %view_out : !firrtl.ref<uint<1>>
-  }
-
-  firrtl.module @MyView_mapping(in %ref_in1: !firrtl.ref<uint<1>>, out %ref_out1: !firrtl.ref<uint<1>>) {
-    %0 = firrtl.xmr.get %ref_in1 : !firrtl.ref<uint<1>>
-    %1 = firrtl.xmr.get %ref_out1 : !firrtl.ref<uint<1>>
-    firrtl.strictconnect %1, %0 : !firrtl.uint<1>
-  }
-  sv.interface @MyInterface {
-    sv.verbatim "// a wire called 'bool'" {symbols = []}
-    sv.interface.signal @bool : i1
-  }
-}
+//firrtl.circuit "DUT" {
+//  firrtl.module @DUT() {
+//    %w = firrtl.wire sym @w : !firrtl.uint<1>
+//
+//    %view_in, %view_out = firrtl.instance MyView_companion @MyView_companion(in ref_in1: !firrtl.ref<uint<1>>, out ref_out1: !firrtl.ref<uint<1>>)
+//
+//    firrtl.xmr.read %view_in, %w : !firrtl.ref<uint<1>>
+//    %iface = sv.interface.instance sym @__MyView_MyInterface__  : !sv.interface<@MyInterface>
+//
+//    %w2 = firrtl.wire sym @w2 : !firrtl.uint<1>
+//    firrtl.xmr.write %w2, %view_out : !firrtl.ref<uint<1>>
+//
+//    // firrtl.strictconnect %view_out_end, %iface : !firrtl.uint<1>>
+//  }
+//
+//  firrtl.module private @MyView_companion (in %ref_in1: !firrtl.ref<uint<1>>, out %ref_out1: !firrtl.ref<uint<1>>) {
+//    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+//    %_WIRE = firrtl.wire sym @_WIRE : !firrtl.uint<1>
+//    firrtl.strictconnect %_WIRE, %c0_ui1 : !firrtl.uint<1>
+//
+//    %view_in, %view_out = firrtl.instance MyView_mapping @MyView_mapping(in ref_in1: !firrtl.ref<uint<1>>, out ref_out1: !firrtl.ref<uint<1>>)
+//    firrtl.strictconnect %view_in, %ref_in1 : !firrtl.ref<uint<1>>
+//    firrtl.strictconnect %ref_out1, %view_out : !firrtl.ref<uint<1>>
+//  }
+//
+//  firrtl.module @MyView_mapping(in %ref_in1: !firrtl.ref<uint<1>>, out %ref_out1: !firrtl.ref<uint<1>>) {
+//    %0 = firrtl.xmr.get %ref_in1 : !firrtl.ref<uint<1>>
+//    %1 = firrtl.xmr.get %ref_out1 : !firrtl.ref<uint<1>>
+//    firrtl.strictconnect %1, %0 : !firrtl.uint<1>
+//  }
+//  sv.interface @MyInterface {
+//    sv.verbatim "// a wire called 'bool'" {symbols = []}
+//    sv.interface.signal @bool : i1
+//  }
+//}
 
 // -----
 

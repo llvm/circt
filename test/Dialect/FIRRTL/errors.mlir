@@ -905,6 +905,7 @@ firrtl.circuit "DupSymField" {
 }
 
 // -----
+// Check single usage of reference ports
 firrtl.circuit "Foo" {
   firrtl.module @Bar(in %_a: !firrtl.ref<uint<1>>) {
     %a = firrtl.wire : !firrtl.uint<1>
@@ -918,5 +919,27 @@ firrtl.circuit "Foo" {
     %0 = firrtl.xmr.get %bar_a : !firrtl.ref<uint<1>>
     firrtl.strictconnect %0, %zero : !firrtl.uint<1>
     firrtl.strictconnect %fa, %bar_a : !firrtl.ref<uint<1>>
+  }
+}
+
+// -----
+// Check upward reference XMRs
+
+firrtl.circuit "MyView_mapping" {
+  firrtl.module @MyView_mapping(in %ref_in1: !firrtl.ref<uint<1>>) {
+    // expected-error @+1 {{'firrtl.xmr.get' op failed to verify that it cannot have module port as an operand because it implies upward reference XMR, which are not supported. The reference operand must be a port from firrtl.instance}}
+    %0 = firrtl.xmr.get %ref_in1 : !firrtl.ref<uint<1>>
+  }
+}
+
+// -----
+// Incorrect connections
+
+firrtl.circuit "MyView" {
+  firrtl.module @MyView() {
+    %ref_in1 = firrtl.wire : !firrtl.ref<uint<1>>
+    %in1 = firrtl.wire : !firrtl.uint<1>
+    // expected-error @+1 {{that reference port operand can only be a module or instance port}}
+    firrtl.xmr.read  %ref_in1, %in1 : !firrtl.ref<uint<1>>
   }
 }
