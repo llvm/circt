@@ -914,7 +914,7 @@ firrtl.circuit "Foo" {
     %bar_a = firrtl.instance bar @Bar(in _a: !firrtl.ref<uint<1>>)
 
     %zero = firrtl.constant 0 : !firrtl.uint<1>
-    // expected-error @+1 {{the Ref port operand cannot be reused by any other operation}}
+    // expected-error @+1 {{reference port operand cannot be reused by any other op}}
     %0 = firrtl.xmr.get %bar_a : !firrtl.ref<uint<1>>
     firrtl.strictconnect %0, %zero : !firrtl.uint<1>
     firrtl.strictconnect %fa, %bar_a : !firrtl.ref<uint<1>>
