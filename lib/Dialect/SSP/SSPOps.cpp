@@ -20,6 +20,30 @@ using namespace circt;
 using namespace circt::ssp;
 
 //===----------------------------------------------------------------------===//
+// InstanceOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult InstanceOp::verify() {
+  auto &ops = getBodyBlock()->getOperations();
+  auto it = ops.begin();
+  if (ops.size() != 2 || !isa<OperatorLibraryOp>(*it) ||
+      !isa<DependenceGraphOp>(*(++it)))
+    return emitOpError()
+           << "must contain exactly one 'library' op and one 'graph' op";
+
+  return success();
+}
+
+// The verifier checks that exactly one of each of the container ops is present.
+OperatorLibraryOp InstanceOp::getOperatorLibrary() {
+  return *getOps<OperatorLibraryOp>().begin();
+}
+
+DependenceGraphOp InstanceOp::getDependenceGraph() {
+  return *getOps<DependenceGraphOp>().begin();
+}
+
+//===----------------------------------------------------------------------===//
 // OperationOp
 //===----------------------------------------------------------------------===//
 
@@ -230,19 +254,38 @@ LogicalResult OperationOp::verify() {
 
 LogicalResult
 OperationOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  ArrayAttr dependences = getDependencesAttr();
-  if (!dependences)
-    return success();
+  auto instanceOp = (*this)->getParentOfType<InstanceOp>();
+  auto libraryOp = instanceOp.getOperatorLibrary();
+  auto graphOp = instanceOp.getDependenceGraph();
 
-  for (auto dep : dependences.getAsRange<DependenceAttr>()) {
-    FlatSymbolRefAttr sourceRef = dep.getSourceRef();
-    if (!sourceRef)
-      continue;
+  // Verify that all auxiliary dependences reference valid named operations
+  // inside the dependence graph.
+  if (ArrayAttr dependences = getDependencesAttr())
+    for (auto dep : dependences.getAsRange<DependenceAttr>()) {
+      FlatSymbolRefAttr sourceRef = dep.getSourceRef();
+      if (!sourceRef)
+        continue;
 
-    Operation *sourceOp = symbolTable.lookupNearestSymbolFrom(*this, sourceRef);
-    if (!sourceOp || !isa<OperationOp>(sourceOp))
-      return emitError("references invalid source operation: ") << sourceRef;
-  }
+      Operation *sourceOp = symbolTable.lookupSymbolIn(graphOp, sourceRef);
+      if (!sourceOp || !isa<OperationOp>(sourceOp))
+        return emitError(
+                   "Auxiliary dependence references invalid source operation: ")
+               << sourceRef;
+    }
+
+  // If a linkedOperatorType property is present, verify that it references a
+  // valid operator type.
+  if (ArrayAttr properties = getPropertiesAttr())
+    for (auto prop : properties.getAsRange<Attribute>())
+      if (auto linkedOpr = prop.dyn_cast<LinkedOperatorTypeAttr>()) {
+        FlatSymbolRefAttr oprRef = linkedOpr.getValue();
+        Operation *oprOp = symbolTable.lookupSymbolIn(libraryOp, oprRef);
+        if (!oprOp || !isa<OperatorTypeOp>(oprOp))
+          return emitError("Linked operator type property references invalid "
+                           "operator type: ")
+                 << oprRef;
+        break;
+      }
 
   return success();
 }

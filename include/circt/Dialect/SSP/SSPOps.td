@@ -18,8 +18,8 @@ class SSPOp<string mnemonic, list<Trait> traits = []> :
   Op<SSPDialect, mnemonic, traits>;
 
 def InstanceOp : SSPOp<"instance",
-    [IsolatedFromAbove, SymbolTable, NoRegionArguments, OpAsmOpInterface]
-    # GraphRegionNoTerminator.traits> {
+    [NoRegionArguments, SingleBlock, NoTerminator,
+     IsolatedFromAbove, OpAsmOpInterface]> {
   let summary = "Instance of a static scheduling problem.";
   let description = [{
     This operation represents an instance of a static scheduling problem. The
@@ -47,13 +47,25 @@ def InstanceOp : SSPOp<"instance",
 
   let arguments = (ins StrAttr:$instanceName, StrAttr:$problemName,
                        OptionalAttr<ArrayAttr>:$properties);
-  let regions = (region SizedRegion<1>: $body);
+  let regions = (region SizedRegion<1>:$body);
   let assemblyFormat = [{
-    $instanceName `of` $problemName custom<Properties>($properties)$body attr-dict
+    $instanceName `of` $problemName custom<Properties>($properties) $body attr-dict
   }];
   
+  let hasVerifier = true;
+
   let extraClassDeclaration = [{
+    // OpAsmOpInterface
     static ::llvm::StringRef getDefaultDialect() { return "ssp"; }
+
+    // Convenience
+    ::mlir::Block *getBodyBlock() {
+      return &getBody().getBlocks().front();
+    }
+
+    // Access to container ops
+    ::circt::ssp::OperatorLibraryOp getOperatorLibrary();
+    ::circt::ssp::DependenceGraphOp getDependenceGraph();
   }];
 
   let skipDefaultBuilders = true;
@@ -71,8 +83,42 @@ def InstanceOp : SSPOp<"instance",
   ];
 }
 
+class ContainerOp<string mnemonic, list<Trait> traits = []>
+    : SSPOp<mnemonic, traits # [NoRegionArguments, SingleBlock, NoTerminator,
+     SymbolTable, OpAsmOpInterface, HasParent<"InstanceOp">]> {
+  let regions = (region SizedRegion<1>:$body);
+  let assemblyFormat = "$body attr-dict";
+
+  let extraClassDeclaration = [{
+    // OpAsmOpInterface
+    static ::llvm::StringRef getDefaultDialect() { return "ssp"; }
+
+    // Convenience
+    ::mlir::Block *getBodyBlock() {
+      return &getBody().getBlocks().front();
+    }
+  }];
+
+  let skipDefaultBuilders = true;
+  let builders = [
+    OpBuilder<(ins ), [{
+      ::mlir::Region* region = $_state.addRegion();
+      region->push_back(new ::mlir::Block());
+    }]>
+  ];
+}
+
+def OperatorLibraryOp : ContainerOp<"library"> {
+  let summary = "Container for operator types.";
+}
+
+def DependenceGraphOp : ContainerOp<"graph",
+    [RegionKindInterface, HasOnlyGraphRegion]> {
+  let summary = "Container for (scheduling) operations";
+}
+
 def OperatorTypeOp : SSPOp<"operator_type",
-    [Symbol, HasParent<"InstanceOp">]> {
+    [Symbol, HasParent<"OperatorLibraryOp">]> {
   let summary = "Abstraction of the target architecture/IR.";
   let description = [{
     This operation represents an operator type, which can be augmented with a
@@ -89,7 +135,7 @@ def OperatorTypeOp : SSPOp<"operator_type",
 }
 
 def OperationOp : SSPOp<"operation",
-    [Symbol, HasParent<"InstanceOp">,
+    [Symbol, HasParent<"DependenceGraphOp">,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let summary = "Vertex and incoming edges in the dependence graph.";
   let description = [{
@@ -131,10 +177,11 @@ def OperationOp : SSPOp<"operation",
                        OptionalAttr<ArrayAttr>:$properties);
   let results = (outs Variadic<NoneType>:$results);
 
-  let hasCustomAssemblyFormat = 1;
-  let hasVerifier = 1;
+  let hasCustomAssemblyFormat = true;
+  let hasVerifier = true;
 
   let extraClassDeclaration = [{
+    // SymbolUserOpInterface
     static bool isOptionalSymbol() { return true; }
   }];
 

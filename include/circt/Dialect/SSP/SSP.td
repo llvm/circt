@@ -29,7 +29,7 @@ def SSPDialect : Dialect {
   let cppNamespace = "::circt::ssp";
   let emitAccessorPrefix = kEmitAccessorPrefix_Prefixed;
 
-  let useDefaultAttributePrinterParser = 1;
+  let useDefaultAttributePrinterParser = true;
   let extraClassDeclaration = [{
     /// Register all SSP attributes.
     void registerAttributes();

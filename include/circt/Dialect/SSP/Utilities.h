@@ -121,7 +121,7 @@ ProblemT loadProblem(InstanceOp instOp,
   loadInstanceProperties<ProblemT, InstancePropertyTs...>(
       prob, instOp.getPropertiesAttr());
 
-  instOp.walk([&](OperatorTypeOp oprOp) {
+  instOp.getOperatorLibrary().walk([&](OperatorTypeOp oprOp) {
     OperatorType opr = oprOp.getNameAttr();
     prob.insertOperatorType(opr);
     loadOperatorTypeProperties<ProblemT, OperatorTypePropertyTs...>(
@@ -129,7 +129,8 @@ ProblemT loadProblem(InstanceOp instOp,
   });
 
   // Register all operations first, in order to retain their original order.
-  instOp.walk([&](OperationOp opOp) {
+  auto graphOp = instOp.getDependenceGraph();
+  graphOp.walk([&](OperationOp opOp) {
     prob.insertOperation(opOp);
     loadOperationProperties<ProblemT, OperationPropertyTs...>(
         prob, opOp, opOp.getPropertiesAttr());
@@ -137,7 +138,7 @@ ProblemT loadProblem(InstanceOp instOp,
 
   // Then walk them again, and load auxiliary dependences as well as any
   // dependence properties.
-  instOp.walk([&](OperationOp opOp) {
+  graphOp.walk([&](OperationOp opOp) {
     ArrayAttr depsAttr = opOp.getDependencesAttr();
     if (!depsAttr)
       return;
@@ -145,7 +146,7 @@ ProblemT loadProblem(InstanceOp instOp,
     for (auto depAttr : depsAttr.getAsRange<DependenceAttr>()) {
       Dependence dep;
       if (FlatSymbolRefAttr sourceRef = depAttr.getSourceRef()) {
-        Operation *sourceOp = SymbolTable::lookupSymbolIn(instOp, sourceRef);
+        Operation *sourceOp = SymbolTable::lookupSymbolIn(graphOp, sourceRef);
         assert(sourceOp);
         dep = Dependence(sourceOp, opOp);
         LogicalResult res = prob.insertDependence(dep);
@@ -248,13 +249,15 @@ saveProblem(ProblemT &prob, StringAttr instanceName, StringAttr problemName,
   ImplicitLocOpBuilder b(builder.getUnknownLoc(), builder);
 
   // Set up instance.
-  auto instOp = b.create<ssp::InstanceOp>(
+  auto instOp = b.create<InstanceOp>(
       instanceName, problemName,
       saveInstanceProperties<ProblemT, InstancePropertyTs...>(prob, b));
 
-  b.setInsertionPointToStart(&instOp.getBody().getBlocks().front());
-
   // Emit operator types.
+  b.setInsertionPointToEnd(instOp.getBodyBlock());
+  auto libraryOp = b.create<OperatorLibraryOp>();
+  b.setInsertionPointToStart(libraryOp.getBodyBlock());
+
   for (auto opr : prob.getOperatorTypes())
     b.create<OperatorTypeOp>(
         opr, saveOperatorTypeProperties<ProblemT, OperatorTypePropertyTs...>(
@@ -280,6 +283,10 @@ saveProblem(ProblemT &prob, StringAttr instanceName, StringAttr problemName,
   }
 
   // Construct operations and model their dependences.
+  b.setInsertionPointToEnd(instOp.getBodyBlock());
+  auto graphOp = b.create<DependenceGraphOp>();
+  b.setInsertionPointToStart(graphOp.getBodyBlock());
+
   BackedgeBuilder backedgeBuilder(b, b.getLoc());
   ValueMapper v(&backedgeBuilder);
   for (auto *op : prob.getOperations()) {
