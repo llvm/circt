@@ -3683,8 +3683,7 @@ LogicalResult HierPathOp::verifyInnerRefs(InnerRefNamespace &ns) {
   // The instance path has been verified. Now verify the last element.
   auto leafRef = getNamepath()[getNamepath().size() - 1];
   if (auto innerRef = leafRef.dyn_cast<hw::InnerRefAttr>()) {
-    auto target = ns.lookup(innerRef);
-    if (!target) {
+    if (!ns.lookup(innerRef)) {
       return emitOpError() << " operation with symbol: " << innerRef
                            << " was not found ";
     }
