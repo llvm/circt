@@ -442,14 +442,18 @@ increase the code redundancy during IR generation as well as when lowering to
 
 #### Overview
 
-|    | Input type | Result type            | Behavior                          |
-| -- | :--------- | :--------------------- | :-------------------------------- |
-|(U) | `ui<a>`    | `ui<b>`/`si<b>`/`i<b>` | zero-extension **if** *b* ≥ *a*   |
-|    |            |                        | truncation **if** *b* < *a*       |
-|(S) | `si<a>`    | `ui<b>`/`si<b>`/`i<b>` | sign-extension **if** *b* ≥ *a*   |
-|    |            |                        | truncation **if** *b* < *a*       |
-|(I) | `i<a>`     | `ui<b>`/`si<b>`        | truncation **if** *b* **≤** *a*   |
-|    | `i<a>`     | `ui<b>`/`si<b>`        | prohibited **if** *b* > *a* because of the ambiguity whether a sign or a zero extension is required |
+|    | Input type | Result type            | Behavior                                 |
+| -- | :--------- | :--------------------- | :--------------------------------------- |
+|(U) | `ui<a>`    | `ui<b>`/`si<b>`/`i<b>` | zero-extension **if** *b* ≥ *a*          |
+|    |            |                        | truncation **if** *b* < *a*              |
+|(S) | `si<a>`    | `ui<b>`/`si<b>`/`i<b>` | sign-extension **if** *b* ≥ *a*          |
+|    |            |                        | truncation **if** *b* < *a*              |
+|(I) | `i<a>`     | `ui<b>`/`si<b>`        | truncation **if** *b* **≤** *a*          |
+|    | `i<a>`     | `ui<b>`/`si<b>`        | prohibited<sup>†</sup> **if** *b* > *a*  |
+
+†\) prohibited because of the ambiguity whether a sign or a zero extension is
+required.
+
 
 #### Examples
 

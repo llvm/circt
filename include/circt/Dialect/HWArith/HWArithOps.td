@@ -175,14 +175,17 @@ def HWArith_CastOp : HWArithOp<"cast", [NoSideEffect]> {
     arbitrary bitwidth. However, at least one of them needs to be a
     HWArithIntegerType.
 
-    | Input type | Result type            | Behavior                          |
-    | :--------- | :--------------------- | :-------------------------------- |
-    | `ui<a>`    | `ui<b>`/`si<b>`/`i<b>` | zero-extension **if** *b* ≥ *a*   |
-    |            |                        | truncation **if** *b* < *a*       |
-    | `si<a>`    | `ui<b>`/`si<b>`/`i<b>` | sign-extension **if** *b* ≥ *a*   |
-    |            |                        | truncation **if** *b* < *a*       |
-    | `i<a>`     | `ui<b>`/`si<b>`        | truncation **if** *b* **≤** *a*   |
-    | `i<a>`     | `ui<b>`/`si<b>`        | prohibited **if** *b* > *a* because of the ambiguity whether a sign or a zero extension is required |
+    | Input type | Result type            | Behavior                                |
+    | :--------- | :--------------------- | :-------------------------------------- |
+    | `ui<a>`    | `ui<b>`/`si<b>`/`i<b>` | zero-extension **if** *b* ≥ *a*         |
+    |            |                        | truncation **if** *b* < *a*             |
+    | `si<a>`    | `ui<b>`/`si<b>`/`i<b>` | sign-extension **if** *b* ≥ *a*         |
+    |            |                        | truncation **if** *b* < *a*             |
+    | `i<a>`     | `ui<b>`/`si<b>`        | truncation **if** *b* **≤** *a*         |
+    | `i<a>`     | `ui<b>`/`si<b>`        | prohibited<sup>†</sup> **if** *b* > *a* |
+
+    †\) prohibited because of the ambiguity whether a sign or a zero extension
+    is required.
 
     Examples:
     ```mlir
