@@ -164,4 +164,41 @@ def DivOp : BinOp<"div"> {
   }];
 }
 
+def HWArith_CastOp : HWArithOp<"cast", [NoSideEffect]> {
+  let arguments = (ins AnyInteger:$in);
+  let results = (outs AnyInteger:$out);
+
+  let summary = "Signedness-aware cast.";
+  let description = [{
+    The `cast` operation takes one operand and returns one result. Both, the
+    result type and the operand type can be of any scalar integer type with
+    arbitrary bitwidth. However, at least one of them needs to be a
+    HWArithIntegerType.
+
+    | Input type | Result type            | Behavior                                |
+    | :--------- | :--------------------- | :-------------------------------------- |
+    | `ui<a>`    | `ui<b>`/`si<b>`/`i<b>` | zero-extension **if** *b* ≥ *a*         |
+    |            |                        | truncation **if** *b* < *a*             |
+    | `si<a>`    | `ui<b>`/`si<b>`/`i<b>` | sign-extension **if** *b* ≥ *a*         |
+    |            |                        | truncation **if** *b* < *a*             |
+    | `i<a>`     | `ui<b>`/`si<b>`        | truncation **if** *b* **≤** *a*         |
+    | `i<a>`     | `ui<b>`/`si<b>`        | prohibited<sup>†</sup> **if** *b* > *a* |
+
+    †\) prohibited because of the ambiguity whether a sign or a zero extension
+    is required.
+
+    Examples:
+    ```mlir
+    %0 = hwarith.cast %10 : (ui3) -> si5
+    %1 = hwarith.cast %11 : (si3) -> si4
+    %2 = hwarith.cast %12 : (si7) -> ui4
+    %3 = hwarith.cast %13 : (i7) -> si5
+    %3 = hwarith.cast %13 : (si14) -> i4
+    ```
+  }];
+  let assemblyFormat = "$in attr-dict `:` functional-type($in, $out)";
+
+  let hasVerifier = 1;
+}
+
 #endif // CIRCT_DIALECT_HWARITH_HWARITHOPS_TD

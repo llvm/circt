@@ -19,6 +19,29 @@ using namespace circt;
 using namespace hwarith;
 
 //===----------------------------------------------------------------------===//
+// CastOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult CastOp::verify() {
+  auto inType = in().getType();
+  auto outType = out().getType();
+  bool isInSignless = !isHWArithIntegerType(inType);
+  bool isOutSignless = !isHWArithIntegerType(outType);
+
+  if (isInSignless && isOutSignless)
+    return emitError("at least one type needs to carry sign semantics (ui/si)");
+
+  if (isInSignless) {
+    unsigned inBitWidth = inType.getIntOrFloatBitWidth();
+    unsigned outBitWidth = outType.getIntOrFloatBitWidth();
+    if (inBitWidth < outBitWidth)
+      return emitError("bit extension is undefined for a signless type");
+  }
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // ConstantOp
 //===----------------------------------------------------------------------===//
 
