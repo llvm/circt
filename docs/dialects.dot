@@ -83,7 +83,7 @@ digraph G {
   Arith -> {Handshake Calyx} [ltail=cluster_std_arith_dialect]
 
   Handshake -> FIRRTL
-  Calyx -> FSM [style=dashed]
+  Calyx -> FSM
 
   // Things that lower into a subset of the RTL-like dialects. Cluster these
   // together to avoid a massive clutter.
@@ -115,6 +115,7 @@ digraph G {
   PyCDE -> ESI [style=dashed]
   PyCDE -> MSFT
   PyCDE -> HWArith
+  PyCDE -> FSM
   Scheduling -> MSFT [dir=both, style=dashed]
 
   // ====== Some fake edges to coerce a good layout ======
