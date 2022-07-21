@@ -677,6 +677,7 @@ def XMRGetOp : FIRRTLOp<"xmr.get", [
   }];
   let arguments = (ins RefType:$ref);
   let results = (outs FIRRTLType:$result);
+  let hasVerifier = 1;
 
   let assemblyFormat = "$ref attr-dict `:` qualified(type($ref))";
 }

@@ -903,3 +903,20 @@ firrtl.circuit "DupSymField" {
     %w3 = firrtl.wire sym [<@x,1,public>] : !firrtl.vector<uint<1>,1>
   }
 }
+
+// -----
+firrtl.circuit "Foo" {
+  firrtl.module @Bar(in %_a: !firrtl.ref<uint<1>>) {
+    %a = firrtl.wire : !firrtl.uint<1>
+    firrtl.xmr.write %a, %_a : !firrtl.ref<uint<1>>
+  }
+  firrtl.module @Foo(in %fa: !firrtl.ref<uint<1>>) {
+    %bar_a = firrtl.instance bar @Bar(in _a: !firrtl.ref<uint<1>>)
+
+    %zero = firrtl.constant 0 : !firrtl.uint<1>
+    // expected-error @+1 {{the Ref port operand cannot be reused by any other operation}}
+    %0 = firrtl.xmr.get %bar_a : !firrtl.ref<uint<1>>
+    firrtl.strictconnect %0, %zero : !firrtl.uint<1>
+    firrtl.strictconnect %fa, %bar_a : !firrtl.ref<uint<1>>
+  }
+}

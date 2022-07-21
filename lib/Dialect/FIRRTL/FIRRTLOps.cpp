@@ -3915,6 +3915,20 @@ void XorRPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 //===----------------------------------------------------------------------===//
+// XMR Verifiers.
+//===----------------------------------------------------------------------===//
+
+LogicalResult XMRGetOp::verify() {
+  auto refPort = getRef();
+  if (!refPort.hasOneUse()) {
+    emitOpError(
+        "the Ref port operand cannot be reused by any other operations");
+    return failure();
+  }
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // TblGen Generated Logic.
 //===----------------------------------------------------------------------===//
 
