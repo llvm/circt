@@ -65,9 +65,9 @@ private:
   LogicalResult visit(StateOp currentState, IfOp, StateOp nextState);
   LogicalResult visit(StateOp currentState, WhileOp, StateOp nextState);
 
-  /// StateScopeGuards represent unique state name scopes generated from pushing
-  /// states onto the state stack. The guard carries a unique name as well as
-  /// managing the lifetime of suffixes on the state stack.
+  /// Represents unique state name scopes generated from pushing states onto
+  /// the state stack. The guard carries a unique name as well as managing the
+  /// lifetime of suffixes on the state stack.
   struct StateScopeGuard {
   public:
     StateScopeGuard(CompileFSMVisitor &visitor, StringRef name,
@@ -95,7 +95,7 @@ private:
     llvm::raw_string_ostream ss(name);
     llvm::interleave(
         stateStack, ss, [&](const auto &it) { ss << it; }, "_");
-    name += "_" + suffix.str();
+    ss << "_" << suffix.str();
     return StateScopeGuard(*this, ns.newName(name), suffix);
   }
 
@@ -155,12 +155,10 @@ LogicalResult CompileFSMVisitor::visit(StateOp currentState, IfOp ifOp,
     return failure();
 
   // Else branch.
-  FailureOr<Value> elseRes;
-  if (ifOp.elseBodyExists()) {
-    if (failed(lowerBranch(ifOp.cond(), "else", /*invert=*/true,
-                           &ifOp.getElseBody()->front())))
-      return failure();
-  }
+  if (ifOp.elseBodyExists() &&
+      failed(lowerBranch(ifOp.cond(), "else", /*invert=*/true,
+                         &ifOp.getElseBody()->front())))
+    return failure();
 
   return success();
 }
@@ -176,8 +174,6 @@ LogicalResult CompileFSMVisitor::visit(StateOp currentState, SeqOp seqOp,
 
   // Iterate over the operations within the sequence. We do this in reverse
   // order to ensure that we always know the next state.
-  // Note: not using llvm::enumerate here since it isnt a bidirectional
-  // iterator.
   StateOp currentOpNextState = nextState;
   int n = seqOps.size() - 1;
   for (auto &op : llvm::reverse(*seqOp.getBody())) {
@@ -291,8 +287,9 @@ void CalyxToFSMPass::runOnOperation() {
   // ComponentOp. This makes for an intermediate step, which allows for
   // outlining the FSM (materializing FSM I/O) at a later point.
   auto funcType = FunctionType::get(&getContext(), {}, {});
-  auto machine = builder.create<MachineOp>(ctrlOp.getLoc(), "control",
-                                           "fsm_entry", funcType);
+  auto machine =
+      builder.create<MachineOp>(ctrlOp.getLoc(), /*name=*/"control",
+                                /*initialState=*/"fsm_entry", funcType);
   auto graph = FSMGraph(machine);
 
   SymbolCache sc;
@@ -307,9 +304,7 @@ void CalyxToFSMPass::runOnOperation() {
           ->getState();
 
   auto visitor = CompileFSMVisitor(sc, graph);
-  auto res = visitor.dispatch(entryState, &topLevelCtrlOp, exitState);
-
-  if (failed(res)) {
+  if (failed(visitor.dispatch(entryState, &topLevelCtrlOp, exitState))) {
     signalPassFailure();
     return;
   }
