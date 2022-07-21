@@ -78,8 +78,6 @@ static Block *buildMergeBlock(Block *b1, Block *b2, Block *oldSucc,
   return res;
 }
 
-using BlockToBlocksMap = DenseMap<Block *, SmallVector<Block *>>;
-
 namespace {
 /// A dual CFG that contracts cycles into single logical blocks.
 struct DualGraph {
@@ -102,7 +100,7 @@ private:
   Region &r;
   ControlFlowLoopAnalysis &loopAnalysis;
 
-  BlockToBlocksMap succMap;
+  DenseMap<Block *, SmallVector<Block *>> succMap;
   DenseMap<Block *, size_t> predCnts;
 };
 } // namespace
@@ -161,23 +159,21 @@ void DualGraph::getPredecessors(Block *b, SmallVectorImpl<Block *> &res) {
   }
 }
 
-static Block *getLastSplitBlock(BlockToBlocksMap &map, Block *b,
-                                DualGraph &graph) {
-  b = graph.lookupDualBlock(b);
-  auto it = map.find(b);
-  assert(it != map.end() &&
-         "expect block to have an entry in the split block map");
-
-  SmallVector<Block *> &vec = it->getSecond();
-  if (vec.empty())
-    return nullptr;
-
-  return vec.back();
-}
+namespace {
+using BlockToBlockMap = DenseMap<Block *, Block *>;
+/// A helper class to store the split block information gathered during analysis
+/// of the CFG.
+struct SplitInfo {
+  /// Points to the last split block that dominates the block.
+  BlockToBlockMap in;
+  /// Either points to the last split block or to itself, if the block itself is
+  /// a split block.
+  BlockToBlockMap out;
+};
+} // namespace
 
 /// Builds a binary merge block tree for the predecessors of currBlock.
-static LogicalResult buildMergeBlocks(Block *currBlock,
-                                      BlockToBlocksMap &prevSplitBlocks,
+static LogicalResult buildMergeBlocks(Block *currBlock, SplitInfo &splitInfo,
                                       Block *predDom,
                                       ConversionPatternRewriter &rewriter,
                                       DualGraph &graph) {
@@ -187,13 +183,10 @@ static LogicalResult buildMergeBlocks(Block *currBlock,
   // Map from split blocks to blocks that descend from it.
   DenseMap<Block *, Block *> predsToConsider;
 
-  // TODO check again if we can drop the list in favor of a block to block map
-  // style structure. It seems that we are only interested in the last split
-  // block and potentially the split block of the split block.
   while (!preds.empty()) {
     Block *pred = preds.back();
     preds.pop_back();
-    Block *splitBlock = getLastSplitBlock(prevSplitBlocks, pred, graph);
+    Block *splitBlock = splitInfo.out.lookup(graph.lookupDualBlock(pred));
     if (splitBlock == predDom)
       // Needs no additional merge block
       continue;
@@ -214,12 +207,10 @@ static LogicalResult buildMergeBlocks(Block *currBlock,
       return failure();
 
     // update info for the newly created block
-    auto prevSplitIt =
-        prevSplitBlocks.try_emplace(mergeBlock, SmallVector<Block *>()).first;
-    SmallVector<Block *> &mergeBlockOut = prevSplitIt->getSecond();
-
-    llvm::copy(llvm::drop_end(prevSplitBlocks.lookup(pred)),
-               std::back_inserter(mergeBlockOut));
+    Block *splitIn = splitInfo.in.lookup(splitBlock);
+    splitInfo.in.try_emplace(mergeBlock, splitIn);
+    // only one succ, so out = in
+    splitInfo.out.try_emplace(mergeBlock, splitIn);
 
     preds.push_back(mergeBlock);
   }
@@ -279,17 +270,16 @@ circt::insertExplicitMergeBlocks(Region &r,
   auto predsToVisit = graph.getPredCountMapCopy();
   setupStack(predsToVisit, stack);
 
-  // Contains a list of split blocks
-  BlockToBlocksMap prevSplitBlocks;
-  prevSplitBlocks.try_emplace(entry, SmallVector<Block *>());
+  // Similar to a dataflow analysis
+  SplitInfo splitInfo;
+  splitInfo.in.try_emplace(entry, nullptr);
 
   while (!stack.empty()) {
     Block *currBlock = stack.back();
     stack.pop_back();
 
-    auto it =
-        prevSplitBlocks.try_emplace(currBlock, SmallVector<Block *>()).first;
-    SmallVector<Block *> &currOut = it->getSecond();
+    Block *in;
+    Block *out;
 
     bool isMergeBlock = graph.getNumPredecessors(currBlock) > 1;
     bool isSplitBlock = graph.getNumSuccessors(currBlock) > 1;
@@ -303,23 +293,27 @@ circt::insertExplicitMergeBlocks(Region &r,
         predDom = domInfo.findNearestCommonDominator(predDom, pred);
       }
 
-      if (failed(buildMergeBlocks(currBlock, prevSplitBlocks, predDom, rewriter,
-                                  graph)))
+      if (failed(
+              buildMergeBlocks(currBlock, splitInfo, predDom, rewriter, graph)))
         return failure();
 
-      // The predDom has similar properties as a normal predecessor, thus we can
-      // just copy its split block information without the last entry.
-      SmallVector<Block *> predDomOut = prevSplitBlocks.lookup(predDom);
-      llvm::copy(llvm::drop_end(predDomOut), std::back_inserter(currOut));
+      // The predDom has similar properties as a normal predecessor, so we can
+      // just use its IN info
+      in = splitInfo.in.lookup(predDom);
     } else if (!preds.empty()) {
       Block *pred = preds.front();
-      SmallVector<Block *> &predOut = prevSplitBlocks.find(pred)->getSecond();
-      llvm::copy(predOut, std::back_inserter(currOut));
+
+      in = splitInfo.out.lookup(pred);
     }
 
     if (isSplitBlock) {
-      currOut.push_back(currBlock);
+      out = currBlock;
+    } else {
+      out = in;
     }
+
+    splitInfo.in.try_emplace(currBlock, in);
+    splitInfo.out.try_emplace(currBlock, out);
 
     for (auto *succ : graph.getSuccessors(currBlock)) {
       auto it = predsToVisit.find(succ);
