@@ -130,9 +130,10 @@ hw::InnerRefAttr InnerSymbolTable::getInnerRef(Operation *op) {
 }
 
 hw::InnerRefAttr InnerSymbolTable::getInnerRef(InnerSymTarget target) {
-  assert(target.getOp() == innerSymTblOp ||
-         target.getOp()->getParentWithTrait<OpTrait::InnerSymbolTable>() ==
-             innerSymTblOp);
+  assert(target.isPort() && target.getOp() == innerSymTblOp ||
+         !target.isPort() &&
+             target.getOp()->getParentWithTrait<OpTrait::InnerSymbolTable>() ==
+                 innerSymTblOp);
   return hw::InnerRefAttr::get(SymbolTable::getSymbolName(innerSymTblOp),
                                getInnerSymbol(target));
 }
