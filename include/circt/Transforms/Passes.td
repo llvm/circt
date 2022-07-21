@@ -53,17 +53,4 @@ def StripDebugInfoWithPred : Pass<"strip-debuginfo-with-pred", "::mlir::ModuleOp
            "intended to be used for testing."> ];
 }
 
-def InsertMergeBlocks : Pass<"insert-merge-blocks", "::mlir::ModuleOp"> {
-  let summary = "Insert explicit merge blocks";
-  let description = [{
-    Inserts additional merge blocks for each block with more than two successors.
-    The order the successors are merged together mirrors the order the different
-    control paths were created.
-
-    Treats loops and sub-CFGs with irregular control flow like single blocks.
-  }];
-  let constructor = "circt::createInsertMergeBlocksPass()";
-  let dependentDialects = ["mlir::cf::ControlFlowDialect", "mlir::func::FuncDialect"];
-}
-
 #endif // CIRCT_TRANSFORMS_PASSES

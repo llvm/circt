@@ -6,9 +6,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Transforms/InsertMergeBlocks.h"
-#include "PassDetail.h"
+#include "../PassDetail.h"
 #include "circt/Analysis/ControlFlowLoopAnalysis.h"
+#include "circt/Conversion/StandardToHandshake.h"
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/LLVMCommon/Pattern.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
@@ -183,8 +183,7 @@ static LogicalResult buildMergeBlocks(Block *currBlock, SplitInfo &splitInfo,
   DenseMap<Block *, Block *> predsToConsider;
 
   while (!preds.empty()) {
-    Block *pred = preds.back();
-    preds.pop_back();
+    Block *pred = preds.pop_back_val();
     Block *splitBlock = splitInfo.out.lookup(graph.lookupDualBlock(pred));
     if (splitBlock == predDom)
       // Needs no additional merge block, as this directly descends from the
@@ -239,9 +238,8 @@ static LogicalResult preconditionCheck(Region &r,
 /// treats a loop as one logical block.
 /// Irregular control flow is not supported and results in a failed
 /// transformation.
-LogicalResult
-circt::insertExplicitMergeBlocks(Region &r,
-                                 ConversionPatternRewriter &rewriter) {
+LogicalResult circt::insertMergeBlocks(Region &r,
+                                       ConversionPatternRewriter &rewriter) {
   Block *entry = &r.front();
   DominanceInfo domInfo(r.getParentOp());
 
@@ -267,8 +265,7 @@ circt::insertExplicitMergeBlocks(Region &r,
   splitInfo.in.try_emplace(entry, nullptr);
 
   while (!stack.empty()) {
-    Block *currBlock = stack.back();
-    stack.pop_back();
+    Block *currBlock = stack.pop_back_val();
 
     Block *in;
     Block *out;
@@ -336,7 +333,7 @@ struct FuncOpPattern : public OpConversionPattern<func::FuncOp> {
     rewriter.startRootUpdate(op);
 
     if (!op.isExternal())
-      if (failed(insertExplicitMergeBlocks(op.getRegion(), rewriter)))
+      if (failed(insertMergeBlocks(op.getRegion(), rewriter)))
         return failure();
 
     rewriter.finalizeRootUpdate(op);
