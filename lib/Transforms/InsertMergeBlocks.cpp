@@ -23,7 +23,7 @@ using namespace circt;
 using namespace circt::analysis;
 
 /// Replaces the branching to oldDest of with an equivalent operation that
-/// instead branches to newDest
+/// instead branches to newDest.
 static LogicalResult changeBranchTarget(Block *block, Block *oldDest,
                                         Block *newDest,
                                         ConversionPatternRewriter &rewriter) {
@@ -43,7 +43,7 @@ static LogicalResult changeBranchTarget(Block *block, Block *oldDest,
         Block *trueDest = condBr.getTrueDest();
         Block *falseDest = condBr.getFalseDest();
 
-        // change to the correct destination
+        // Change to the correct destination.
         if (trueDest == oldDest)
           trueDest = newDest;
 
@@ -111,12 +111,12 @@ DualGraph::DualGraph(Region &r, ControlFlowLoopAnalysis &loopAnalysis)
     if (!loopAnalysis.isLoopHeader(&b) && loopAnalysis.isLoopElement(&b))
       continue;
 
-    // Create and get new succ map entry for the current block
+    // Create and get a new succ map entry for the current block.
     SmallVector<Block *> &succs =
         succMap.try_emplace(&b, SmallVector<Block *>()).first->getSecond();
 
     // NOTE: This assumes that there is only one exitting node, i.e., not
-    // two blocks from the same loop can be predecessors of one block
+    // two blocks from the same loop can be predecessors of one block.
     unsigned predCnt = 0;
     LoopInfo *info = loopAnalysis.getLoopInfoForHeader(&b);
     for (auto *pred : b.getPredecessors())
@@ -149,9 +149,8 @@ void DualGraph::getPredecessors(Block *b, SmallVectorImpl<Block *> &res) {
     if (info && info->inLoop.contains(pred))
       continue;
 
-    // NOTE: This will break down once multiple exit nodes are allowed
+    // NOTE: This will break down once multiple exit nodes are allowed.
     if (loopAnalysis.isLoopElement(pred)) {
-      // push back other loop header
       res.push_back(loopAnalysis.getLoopInfo(pred)->loopHeader);
       continue;
     }
@@ -188,17 +187,18 @@ static LogicalResult buildMergeBlocks(Block *currBlock, SplitInfo &splitInfo,
     preds.pop_back();
     Block *splitBlock = splitInfo.out.lookup(graph.lookupDualBlock(pred));
     if (splitBlock == predDom)
-      // Needs no additional merge block
+      // Needs no additional merge block, as this directly descends from the
+      // correct split block.
       continue;
 
     if (predsToConsider.count(splitBlock) == 0) {
-      // no other block with the same split block was found yet, so just store
-      // it and continue
+      // No other block with the same split block was found yet, so just store
+      // it and wait for a match.
       predsToConsider.try_emplace(splitBlock, pred);
       continue;
     }
 
-    // Found a pair, so insert a new merge block for them
+    // Found a pair, so insert a new merge block for them.
     Block *other = predsToConsider.lookup(splitBlock);
     predsToConsider.erase(splitBlock);
 
@@ -206,10 +206,10 @@ static LogicalResult buildMergeBlocks(Block *currBlock, SplitInfo &splitInfo,
     if (!mergeBlock)
       return failure();
 
-    // update info for the newly created block
+    // Update info for the newly created block.
     Block *splitIn = splitInfo.in.lookup(splitBlock);
     splitInfo.in.try_emplace(mergeBlock, splitIn);
-    // only one succ, so out = in
+    // By construction, this block has only one successor, therefore, out == in.
     splitInfo.out.try_emplace(mergeBlock, splitIn);
 
     preds.push_back(mergeBlock);
@@ -220,6 +220,7 @@ static LogicalResult buildMergeBlocks(Block *currBlock, SplitInfo &splitInfo,
   return success();
 }
 
+/// Checks preconditions of this transformation.
 static LogicalResult preconditionCheck(Region &r,
                                        ControlFlowLoopAnalysis &analysis) {
   for (auto &info : analysis.topLevelLoops)
@@ -228,13 +229,6 @@ static LogicalResult preconditionCheck(Region &r,
           "multiple exit nodes are not yet supported");
 
   return success();
-}
-
-static void setupStack(DenseMap<Block *, size_t> &predCntMap,
-                       SmallVector<Block *> &stack) {
-  for (auto it : predCntMap)
-    if (it.second == 0)
-      stack.push_back(it.first);
 }
 
 /// Insert additional blocks that serve as counterparts to the blocks that
@@ -258,19 +252,17 @@ circt::insertExplicitMergeBlocks(Region &r,
   if (failed(preconditionCheck(r, loopAnalysis)))
     return failure();
 
-  // Traversing the graph in topological order
+  // Traversing the graph in topological order can be simply done with a stack.
   SmallVector<Block *> stack;
+  stack.push_back(entry);
 
   // Holds the graph that contains the relevant blocks. It for example contracts
   // loops into one block to preserve a DAG structure.
   DualGraph graph(r, loopAnalysis);
 
-  // Counts the amount of predecessors remaining, if it reaches 0, insert into
-  // stack.
+  // Counts the amount of predecessors remaining.
   auto predsToVisit = graph.getPredCountMapCopy();
-  setupStack(predsToVisit, stack);
 
-  // Similar to a dataflow analysis
   SplitInfo splitInfo;
   splitInfo.in.try_emplace(entry, nullptr);
 
@@ -297,8 +289,9 @@ circt::insertExplicitMergeBlocks(Region &r,
               buildMergeBlocks(currBlock, splitInfo, predDom, rewriter, graph)))
         return failure();
 
-      // The predDom has similar properties as a normal predecessor, so we can
-      // just use its IN info
+      // The sub-CFG created by the predDom (split block) and the current merge
+      // block can logically be treated like a single block, thus their "in"s
+      // are the same.
       in = splitInfo.in.lookup(predDom);
     } else if (!preds.empty()) {
       Block *pred = preds.front();
@@ -347,8 +340,6 @@ struct FuncOpPattern : public OpConversionPattern<func::FuncOp> {
         return failure();
 
     rewriter.finalizeRootUpdate(op);
-
-    // Insert this function into the set of processed functions
     rewrittenFuncs.insert(op);
 
     return success();
@@ -364,7 +355,7 @@ public:
   void runOnOperation() override {
     auto *ctx = &getContext();
     RewritePatternSet patterns(ctx);
-    // Remembers traversed functions to only apply the conversion once
+    // Remembers traversed functions to only apply the conversion once.
     PtrSet rewrittenFuncs;
     patterns.add<FuncOpPattern>(rewrittenFuncs, ctx);
 
