@@ -306,6 +306,38 @@ static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
   return newMem;
 }
 
+/// Return a pair of an inner symbol and annotations in
+/// `annotations` that is associated with aggregate values or arguments.
+static std::pair<InnerSymAttr, ArrayAttr>
+getInnerSymbolAndAnnotations(ArrayAttr annotations,
+                             SmallString<16> baseSymName) {
+  SmallVector<Attribute> newAnnotations;
+  SmallVector<InnerSymPropertiesAttr> fieldSymbols;
+  auto context = annotations.getContext();
+  for (auto opAttr : annotations) {
+    unsigned fieldID = 0;
+    auto annotation = opAttr.dyn_cast<DictionaryAttr>();
+    if (auto id = annotation.getAs<IntegerAttr>("circt.fieldID"))
+      fieldID = id.getInt();
+
+    if (Annotation(opAttr).isClass(dontTouchAnnoClass)) {
+      auto fieldSymName =
+          baseSymName + (Twine("_subfield_") + Twine(fieldID)).str();
+      fieldSymbols.push_back(InnerSymPropertiesAttr::get(
+          context, StringAttr::get(context, fieldSymName), fieldID,
+          StringAttr::get(context, "public")));
+      continue;
+    }
+
+    newAnnotations.push_back(opAttr);
+  }
+  InnerSymAttr innerSym;
+  if (!fieldSymbols.empty())
+    innerSym = InnerSymAttr::get(context, fieldSymbols);
+
+  return {innerSym, ArrayAttr::get(context, newAnnotations)};
+}
+
 //===----------------------------------------------------------------------===//
 // Module Type Lowering
 //===----------------------------------------------------------------------===//
@@ -582,9 +614,9 @@ bool TypeLoweringVisitor::lowerProducer(
         clone) {
   // If this is not a bundle, there is nothing to do.
   auto srcType = op->getResult(0).getType().cast<FIRRTLType>();
-  SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
 
-  if (!peelType(srcType, fieldTypes, aggregatePreservationMode))
+  // If the type is a ground type, there is nothing to do.
+  if (srcType.isGround())
     return false;
 
   SmallVector<Value> lowered;
@@ -605,6 +637,26 @@ bool TypeLoweringVisitor::lowerProducer(
   auto baseNameLen = loweredName.size();
   auto baseSymNameLen = loweredSymName.size();
   auto oldAnno = op->getAttr("annotations").dyn_cast_or_null<ArrayAttr>();
+
+  SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
+  if (!peelType(srcType, fieldTypes, aggregatePreservationMode)) {
+    // If the type is not aggregate, just return false.
+    assert(!srcType.isGround() && "ground type should be already returned");
+
+    // The op has a preservable aggregate type. Inspect annotations and attach
+    // field sensitive symbols if necessary.
+    if (oldAnno) {
+      auto [innerSym, newAnnotations] =
+          getInnerSymbolAndAnnotations(oldAnno, loweredSymName);
+      if (innerSym && !op->hasAttr(cache.innerSymAttr))
+        op->setAttr(cache.innerSymAttr, innerSym);
+
+      // Update annotations.
+      op->setAttr("annotations", newAnnotations);
+    }
+
+    return false;
+  }
 
   for (auto field : fieldTypes) {
     if (!loweredName.empty()) {

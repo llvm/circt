@@ -17,4 +17,15 @@ firrtl.circuit "TopLevel" {
   // 1D_VEC: @Foo(in %a_a_0: !firrtl.vector<uint<1>, 2>, in %a_a_1: !firrtl.vector<uint<1>, 2>)
   firrtl.module private @Foo(in %a: !firrtl.bundle<a: vector<vector<uint<1>, 2>, 2>>) {
   }
+
+  // CHECK-LABEL: FieldSensitiveSymbolsOnOps
+  firrtl.module @FieldSensitiveSymbolsOnOps(in %in: !firrtl.bundle<b: uint<1>, c: bundle<d: uint<1>>, e: uint<1>>) {
+    // CHECK-NEXT:  %a = firrtl.wire sym [<@a_subfield_1,1,public>, <@a_subfield_2,2,public>]
+    // CHECK-SAME: {circt.fieldID = 0 : i32, class = "circt.test"}
+    %a = firrtl.wire  {annotations = [{circt.fieldID = 1 : i32, class = "firrtl.transforms.DontTouchAnnotation"},
+                                      {circt.fieldID = 2 : i32, class = "firrtl.transforms.DontTouchAnnotation"},
+                                      {circt.fieldID = 0 : i32, class = "circt.test"}]}
+                                      : !firrtl.bundle<b: uint<1>, c: bundle<d: uint<1>>, e: uint<1>>
+    firrtl.strictconnect %a, %in : !firrtl.bundle<b: uint<1>, c: bundle<d: uint<1>>, e: uint<1>>
+  }
 }
