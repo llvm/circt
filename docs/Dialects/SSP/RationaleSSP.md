@@ -50,14 +50,18 @@ Here is the same test-case encoded in the SSP dialect:
 
 ```mlir
 ssp.instance "canis14_fig2" of "ModuloProblem" [II<3>] {
-  operator_type @MemPort [latency<1>, limit<1>]
-  operator_type @Add [latency<1>]
-  operator_type @Implicit [latency<0>]
-  %0 = operation<@MemPort>(@store_A [dist<1>]) [t<2>]
-  %1 = operation<@MemPort>() [t<0>]
-  %2 = operation<@Add>(%0, %1) [t<3>]
-  operation<@MemPort> @store_A(%2) [t<4>]
-  operation<@Implicit>(@store_A) [t<5>]
+  library {
+    operator_type @MemPort [latency<1>, limit<1>]
+    operator_type @Add [latency<1>]
+    operator_type @Implicit [latency<0>]
+  }
+  graph {
+    %0 = operation<@MemPort>(@store_A [dist<1>]) [t<2>]
+    %1 = operation<@MemPort>() [t<0>]
+    %2 = operation<@Add>(%0, %1) [t<3>]
+    operation<@MemPort> @store_A(%2) [t<4>]
+    operation<@Implicit>(@store_A) [t<5>]
+  }
 }
 ```
 
