@@ -256,8 +256,6 @@ void CombToLLVMLoweringPass::runOnOperation() {
   target.addLegalOp<UnrealizedConversionCastOp>();
 
   // Setup the conversion.
-  cf::populateControlFlowToLLVMConversionPatterns(converter, patterns);
-  populateFuncToLLVMConversionPatterns(converter, patterns);
   populateCombToLLVMConversionPatterns(converter, patterns);
 
   target.addLegalDialect<LLVM::LLVMDialect>();
