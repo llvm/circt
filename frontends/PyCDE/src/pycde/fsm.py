@@ -251,7 +251,7 @@ def fsm_wrapper_class(fsm_mod, fsm_name, clock, reset=None):
   return fsm_hw_mod
 
 
-def gen_fsm(transitions, name="MyFSM"):
+def gen_fsm(transitions: dict, name: str = "MyFSM"):
   """
   Generate a FSM from a dictionary of states and their transitions.
 
@@ -296,17 +296,15 @@ def gen_fsm(transitions, name="MyFSM"):
   for (state, state_transitions) in transitions.items():
     currentStateAttr = ensure_state(state, initial)
     if not type(state_transitions) is list:
-      raise Exception(f"Transitions for state '{state}' must be a list")
+      raise TypeError(f"Transitions for state '{state}' must be a list")
 
     for transition in state_transitions:
       guard_port = None
-      try:
-        # Guarded transition
+      if isinstance(transition, tuple):
         (nextState, guard_port) = transition
-      except:
-        # Unguarded transition
+      else:
         if not type(transition) is str:
-          raise Exception(
+          raise TypeError(
               f"Transition for state '{state}' must be of the form 'nextstate' or ('nextstate', 'guard')"
           )
         nextState = transition
