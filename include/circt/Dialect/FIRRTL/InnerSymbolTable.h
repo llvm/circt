@@ -46,12 +46,6 @@ public:
   InnerSymTarget(const InnerSymTarget &) = default;
   InnerSymTarget(InnerSymTarget &&) = default;
 
-  InnerSymTarget &operator=(InnerSymTarget &&) = default;
-  InnerSymTarget &operator=(const InnerSymTarget &) = default;
-
-  // All targets must involve a valid op.
-  operator bool() const { return op; }
-
   // Accessors
   auto getField() { return fieldID; }
   Operation *getOp() { return op; }
@@ -66,10 +60,27 @@ public:
   bool isOpOnly() { return !isPort() && !isField(); }
 
 private:
+  auto asTuple() const { return std::tie(op, portIdx, fieldID); }
   Operation *op = nullptr;
   size_t portIdx = 0;
   size_t fieldID = 0;
   static constexpr size_t invalidPort = ~size_t{0};
+
+public:
+  // Comparison operators
+  bool operator<(const InnerSymTarget &rhs) const {
+    return asTuple() < rhs.asTuple();
+  }
+  bool operator==(const InnerSymTarget &rhs) const {
+    return asTuple() == rhs.asTuple();
+  }
+
+  // Assignment
+  InnerSymTarget &operator=(InnerSymTarget &&) = default;
+  InnerSymTarget &operator=(const InnerSymTarget &) = default;
+
+  // All targets must involve a valid op.
+  operator bool() const { return op; }
 };
 
 /// A table of inner symbols and their resolutions.
