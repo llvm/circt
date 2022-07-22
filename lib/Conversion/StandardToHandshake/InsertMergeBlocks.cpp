@@ -37,8 +37,6 @@ static LogicalResult changeBranchTarget(Block *block, Block *oldDest,
       })
       .Case<cf::CondBranchOp>([&](auto condBr) {
         auto cond = condBr.getCondition();
-        ValueRange trueOperands = condBr.getTrueOperands();
-        ValueRange falseOperands = condBr.getFalseOperands();
 
         Block *trueDest = condBr.getTrueDest();
         Block *falseDest = condBr.getFalseDest();
@@ -51,7 +49,8 @@ static LogicalResult changeBranchTarget(Block *block, Block *oldDest,
           falseDest = newDest;
 
         rewriter.replaceOpWithNewOp<cf::CondBranchOp>(
-            condBr, cond, trueDest, trueOperands, falseDest, falseOperands);
+            condBr, cond, trueDest, condBr.getTrueOperands(), falseDest,
+            condBr.getFalseOperands());
         return success();
       })
       .Default([&](Operation *op) {
@@ -61,8 +60,8 @@ static LogicalResult changeBranchTarget(Block *block, Block *oldDest,
 
 /// Creates a new intermediate block that b1 and b2 branch to. The new block
 /// branches to their common successor oldSucc.
-static Block *buildMergeBlock(Block *b1, Block *b2, Block *oldSucc,
-                              ConversionPatternRewriter &rewriter) {
+static FailureOr<Block *> buildMergeBlock(Block *b1, Block *b2, Block *oldSucc,
+                                          ConversionPatternRewriter &rewriter) {
   auto blockArgTypes = oldSucc->getArgumentTypes();
   SmallVector<Location> argLocs(blockArgTypes.size(), rewriter.getUnknownLoc());
 
@@ -71,9 +70,9 @@ static Block *buildMergeBlock(Block *b1, Block *b2, Block *oldSucc,
                                 res->getArguments());
 
   if (failed(changeBranchTarget(b1, oldSucc, res, rewriter)))
-    return nullptr;
+    return failure();
   if (failed(changeBranchTarget(b2, oldSucc, res, rewriter)))
-    return nullptr;
+    return failure();
 
   return res;
 }
@@ -115,7 +114,7 @@ DualGraph::DualGraph(Region &r, ControlFlowLoopAnalysis &loopAnalysis)
     SmallVector<Block *> &succs =
         succMap.try_emplace(&b, SmallVector<Block *>()).first->getSecond();
 
-    // NOTE: This assumes that there is only one exitting node, i.e., not
+    // NOTE: This assumes that there is only one exiting node, i.e., not
     // two blocks from the same loop can be predecessors of one block.
     unsigned predCnt = 0;
     LoopInfo *info = loopAnalysis.getLoopInfoForHeader(&b);
@@ -123,11 +122,10 @@ DualGraph::DualGraph(Region &r, ControlFlowLoopAnalysis &loopAnalysis)
       if (!info || !info->inLoop.contains(pred))
         predCnt++;
 
-    if (loopAnalysis.isLoopHeader(&b)) {
+    if (loopAnalysis.isLoopHeader(&b))
       llvm::copy(info->exitBlocks, std::back_inserter(succs));
-    } else {
+    else
       llvm::copy(b.getSuccessors(), std::back_inserter(succs));
-    }
 
     predCnts.try_emplace(&b, predCnt);
   }
@@ -149,9 +147,11 @@ void DualGraph::getPredecessors(Block *b, SmallVectorImpl<Block *> &res) {
     if (info && info->inLoop.contains(pred))
       continue;
 
-    // NOTE: This will break down once multiple exit nodes are allowed.
     if (loopAnalysis.isLoopElement(pred)) {
-      res.push_back(loopAnalysis.getLoopInfo(pred)->loopHeader);
+      auto *info = loopAnalysis.getLoopInfo(pred);
+      assert(info->exitBlocks.size() == 1 &&
+             "multiple exit nodes are not yet supported");
+      res.push_back(info->loopHeader);
       continue;
     }
     res.push_back(pred);
@@ -201,17 +201,18 @@ static LogicalResult buildMergeBlocks(Block *currBlock, SplitInfo &splitInfo,
     Block *other = predsToConsider.lookup(splitBlock);
     predsToConsider.erase(splitBlock);
 
-    Block *mergeBlock = buildMergeBlock(pred, other, currBlock, rewriter);
-    if (!mergeBlock)
+    FailureOr<Block *> mergeBlock =
+        buildMergeBlock(pred, other, currBlock, rewriter);
+    if (failed(mergeBlock))
       return failure();
 
     // Update info for the newly created block.
     Block *splitIn = splitInfo.in.lookup(splitBlock);
-    splitInfo.in.try_emplace(mergeBlock, splitIn);
+    splitInfo.in.try_emplace(mergeBlock.getValue(), splitIn);
     // By construction, this block has only one successor, therefore, out == in.
-    splitInfo.out.try_emplace(mergeBlock, splitIn);
+    splitInfo.out.try_emplace(mergeBlock.getValue(), splitIn);
 
-    preds.push_back(mergeBlock);
+    preds.push_back(mergeBlock.getValue());
   }
   if (predsToConsider.size() != 0)
     return currBlock->getParentOp()->emitError(
@@ -262,13 +263,12 @@ LogicalResult circt::insertMergeBlocks(Region &r,
   auto predsToVisit = graph.getPredCountMapCopy();
 
   SplitInfo splitInfo;
-  splitInfo.in.try_emplace(entry, nullptr);
 
   while (!stack.empty()) {
     Block *currBlock = stack.pop_back_val();
 
-    Block *in;
-    Block *out;
+    Block *in = nullptr;
+    Block *out = nullptr;
 
     bool isMergeBlock = graph.getNumPredecessors(currBlock) > 1;
     bool isSplitBlock = graph.getNumSuccessors(currBlock) > 1;
@@ -296,11 +296,10 @@ LogicalResult circt::insertMergeBlocks(Region &r,
       in = splitInfo.out.lookup(pred);
     }
 
-    if (isSplitBlock) {
+    if (isSplitBlock)
       out = currBlock;
-    } else {
+    else
       out = in;
-    }
 
     splitInfo.in.try_emplace(currBlock, in);
     splitInfo.out.try_emplace(currBlock, out);
