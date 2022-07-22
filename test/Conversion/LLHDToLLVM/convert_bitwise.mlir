@@ -47,43 +47,6 @@ func.func @convert_bitwise_i32_variadic(%arg0 : i32, %arg1 : i32, %arg2 : i32) {
   return
 }
 
-// CHECK-LABEL: convert_shl_i5_i2_i2
-// CHECK-SAME: %[[BASE:.*]]: i5,
-// CHECK-SAME: %[[HIDDEN:.*]]: i2,
-// CHECK-SAME: %[[AMOUNT:.*]]: i2
-func.func @convert_shl_i5_i2_i2(%base : i5, %hidden : i2, %amount : i2) {
-  // CHECK-NEXT: %[[ZEXTB:.*]] = llvm.zext %[[BASE]] : i5 to i7
-  // CHECK-NEXT: %[[ZEXTH:.*]] = llvm.zext %[[HIDDEN]] : i2 to i7
-  // CHECK-NEXT: %[[ZEXTA:.*]] = llvm.zext %[[AMOUNT]] : i2 to i7
-  // CHECK-NEXT: %[[HDNW:.*]] = llvm.mlir.constant(2 : i7) : i7
-  // CHECK-NEXT: %[[SHB:.*]] = llvm.shl %[[ZEXTB]], %[[HDNW]] : i7
-  // CHECK-NEXT: %[[COMB:.*]] = llvm.or %[[SHB]], %[[ZEXTH]] : i7
-  // CHECK-NEXT: %[[SA:.*]] = llvm.sub %[[HDNW]], %[[ZEXTA]] : i7
-  // CHECK-NEXT: %[[SH:.*]] = llvm.lshr %[[COMB]], %[[SA]] : i7
-  // CHECK-NEXT: %{{.*}} = llvm.trunc %[[SH]] : i7 to i5
-  %0 = llhd.shl %base, %hidden, %amount : (i5, i2, i2) -> i5
-
-  return
-}
-
-// CHECK-LABEL: convert_shr_i5_i2_i2
-// CHECK-SAME: %[[BASE:.*]]: i5,
-// CHECK-SAME: %[[HIDDEN:.*]]: i2,
-// CHECK-SAME: %[[AMOUNT:.*]]: i2
-func.func @convert_shr_i5_i2_i2(%base : i5, %hidden : i2, %amount : i2) {
-  // CHECK-NEXT: %[[ZEXTB:.*]] = llvm.zext %[[BASE]] : i5 to i7
-  // CHECK-NEXT: %[[ZEXTH:.*]] = llvm.zext %[[HIDDEN]] : i2 to i7
-  // CHECK-NEXT: %[[ZEXTA:.*]] = llvm.zext %[[AMOUNT]] : i2 to i7
-  // CHECK-NEXT: %[[BASEW:.*]] = llvm.mlir.constant(5 : i7) : i7
-  // CHECK-NEXT: %[[SHH:.*]] = llvm.shl %[[ZEXTH]], %[[BASEW]] : i7
-  // CHECK-NEXT: %[[COMB:.*]] = llvm.or %[[SHH]], %[[ZEXTB]] : i7
-  // CHECK-NEXT: %[[SH:.*]] = llvm.lshr %[[COMB]], %[[ZEXTA]] : i7
-  // CHECK-NEXT: %{{.*}} = llvm.trunc %[[SH]] : i7 to i5
-  %0 = llhd.shr %base, %hidden, %amount : (i5, i2, i2) -> i5
-
-  return
-}
-
 // CHECK-LABEL: llvm.func @convert_comb_shift
 func.func @convert_comb_shift(%arg0: i32, %arg1: i32, %arg2: i1) -> i32 {
 

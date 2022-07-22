@@ -156,32 +156,6 @@ Type circt::llhd::getLLHDElementType(Type type) {
 }
 
 //===---------------------------------------------------------------------===//
-// LLHD Trait Helper Functions
-//===---------------------------------------------------------------------===//
-
-static bool sameKindArbitraryWidth(Type lhsType, Type rhsType) {
-  if (lhsType.getTypeID() != rhsType.getTypeID())
-    return false;
-
-  if (auto sig = lhsType.dyn_cast<llhd::SigType>())
-    return sameKindArbitraryWidth(
-        sig.getUnderlyingType(),
-        rhsType.cast<llhd::SigType>().getUnderlyingType());
-  if (auto ptr = lhsType.dyn_cast<llhd::PtrType>())
-    return sameKindArbitraryWidth(
-        ptr.getUnderlyingType(),
-        rhsType.cast<llhd::PtrType>().getUnderlyingType());
-
-  if (auto array = lhsType.dyn_cast<hw::ArrayType>())
-    return array.getElementType() ==
-           rhsType.cast<hw::ArrayType>().getElementType();
-
-  return (!lhsType.isa<ShapedType>() ||
-          (lhsType.cast<ShapedType>().getElementType() ==
-           rhsType.cast<ShapedType>().getElementType()));
-}
-
-//===---------------------------------------------------------------------===//
 // LLHD Operations
 //===---------------------------------------------------------------------===//
 
@@ -200,41 +174,6 @@ void llhd::ConstantTimeOp::build(OpBuilder &builder, OperationState &result,
   auto *ctx = builder.getContext();
   auto attr = TimeAttr::get(ctx, time, timeUnit, delta, epsilon);
   return build(builder, result, TimeType::get(ctx), attr);
-}
-
-//===----------------------------------------------------------------------===//
-// ShlOp
-//===----------------------------------------------------------------------===//
-
-OpFoldResult llhd::ShlOp::fold(ArrayRef<Attribute> operands) {
-  /// llhd.shl(base, hidden, 0) -> base
-  if (matchPattern(getAmount(), m_Zero()))
-    return getBase();
-
-  return constFoldTernaryOp<IntegerAttr>(
-      operands, [](APInt base, APInt hidden, APInt amt) {
-        base <<= amt;
-        base += hidden.getHiBits(amt.getZExtValue());
-        return base;
-      });
-}
-
-//===----------------------------------------------------------------------===//
-// ShrOp
-//===----------------------------------------------------------------------===//
-
-OpFoldResult llhd::ShrOp::fold(ArrayRef<Attribute> operands) {
-  /// llhd.shl(base, hidden, 0) -> base
-  if (matchPattern(getAmount(), m_Zero()))
-    return getBase();
-
-  return constFoldTernaryOp<IntegerAttr>(
-      operands, [](APInt base, APInt hidden, APInt amt) {
-        base = base.getHiBits(base.getBitWidth() - amt.getZExtValue());
-        hidden = hidden.getLoBits(amt.getZExtValue());
-        hidden <<= base.getBitWidth() - amt.getZExtValue();
-        return base + hidden;
-      });
 }
 
 //===----------------------------------------------------------------------===//
@@ -292,31 +231,9 @@ OpFoldResult llhd::PtrArraySliceOp::fold(ArrayRef<Attribute> operands) {
 template <class Op>
 static LogicalResult canonicalizeSigPtrArraySliceOp(Op op,
                                                     PatternRewriter &rewriter) {
-  IntegerAttr amountAttr, indexAttr;
-
+  IntegerAttr indexAttr;
   if (!matchPattern(op.getLowIndex(), m_Constant(&indexAttr)))
     return failure();
-
-  // llhd.sig.array_slice(llhd.shr(hidden, base, constant amt), constant index)
-  //   with amt + index + sliceWidth <= baseWidth
-  //   => llhd.sig.array_slice(base, amt + index)
-  if (matchPattern(op.getInput(),
-                   m_Op<llhd::ShrOp>(matchers::m_Any(), matchers::m_Any(),
-                                     m_Constant(&amountAttr)))) {
-    uint64_t amount = amountAttr.getValue().getZExtValue();
-    uint64_t index = indexAttr.getValue().getZExtValue();
-    auto shrOp = op.getInput().template getDefiningOp<llhd::ShrOp>();
-    unsigned baseWidth = shrOp.getBaseWidth();
-
-    if (amount + index + op.getResultWidth() <= baseWidth) {
-      op.getInputMutable().assign(shrOp.getBase());
-      Value newIndex = rewriter.create<hw::ConstantOp>(
-          op->getLoc(), amountAttr.getValue() + indexAttr.getValue());
-      op.getLowIndexMutable().assign(newIndex);
-
-      return success();
-    }
-  }
 
   // llhd.sig.array_slice(llhd.sig.array_slice(target, a), b)
   //   => llhd.sig.array_slice(target, a+b)
@@ -343,64 +260,6 @@ LogicalResult llhd::SigArraySliceOp::canonicalize(llhd::SigArraySliceOp op,
 LogicalResult llhd::PtrArraySliceOp::canonicalize(llhd::PtrArraySliceOp op,
                                                   PatternRewriter &rewriter) {
   return canonicalizeSigPtrArraySliceOp(op, rewriter);
-}
-
-//===----------------------------------------------------------------------===//
-// SigArrayGetOp and PtrArrayGetOp
-//===----------------------------------------------------------------------===//
-
-template <class Op>
-static LogicalResult canonicalizeSigPtrArrayGetOp(Op op,
-                                                  PatternRewriter &rewriter) {
-  // llhd.sig.array_get(llhd.shr(hidden, base, constant amt), constant index)
-  IntegerAttr indexAttr, amountAttr;
-  if (matchPattern(op.getIndex(), m_Constant(&indexAttr)) &&
-      matchPattern(op.getInput(),
-                   m_Op<llhd::ShrOp>(matchers::m_Any(), matchers::m_Any(),
-                                     m_Constant(&amountAttr)))) {
-    // Use APInt for index to keep the original bitwidth, zero-extend amount to
-    // add it to index without requiring the same bitwidth and using the width
-    // of index
-    APInt index = indexAttr.getValue();
-    uint64_t amount = amountAttr.getValue().getZExtValue();
-    auto shrOp = op.getInput().template getDefiningOp<llhd::ShrOp>();
-    unsigned baseWidth = shrOp.getBaseWidth();
-    unsigned hiddenWidth = shrOp.getHiddenWidth();
-
-    // with amt + index < baseWidth
-    //   => llhd.sig.array_get(base, amt + index)
-    if (amount + index.getZExtValue() < baseWidth) {
-      op.getInputMutable().assign(shrOp.getBase());
-      Value newIndex =
-          rewriter.create<hw::ConstantOp>(op->getLoc(), amount + index);
-      op.getIndexMutable().assign(newIndex);
-
-      return success();
-    }
-
-    // with amt + index >= baseWidth && amt + index < baseWidth + hiddenWidth
-    //   => llhd.sig.array_get(hidden, amt + index - baseWidth)
-    if (amount + index.getZExtValue() < baseWidth + hiddenWidth) {
-      op.getInputMutable().assign(shrOp.getHidden());
-      Value newIndex = rewriter.create<hw::ConstantOp>(
-          op->getLoc(), amount + index - baseWidth);
-      op.getIndexMutable().assign(newIndex);
-
-      return success();
-    }
-  }
-
-  return failure();
-}
-
-LogicalResult llhd::SigArrayGetOp::canonicalize(llhd::SigArrayGetOp op,
-                                                PatternRewriter &rewriter) {
-  return canonicalizeSigPtrArrayGetOp(op, rewriter);
-}
-
-LogicalResult llhd::PtrArrayGetOp::canonicalize(llhd::PtrArrayGetOp op,
-                                                PatternRewriter &rewriter) {
-  return canonicalizeSigPtrArrayGetOp(op, rewriter);
 }
 
 //===----------------------------------------------------------------------===//
