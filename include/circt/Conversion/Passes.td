@@ -342,7 +342,7 @@ def InsertMergeBlocks : Pass<"insert-merge-blocks", "::mlir::ModuleOp"> {
   let description = [{
     This pass inserts additional merge blocks for each block with more than
     two successors. A merge block is a block that only contains one operation,
-    a terminator, and has two successors.
+    a terminator, and has two predecessors.
     The order successors are merged together mirrors the order different control
     paths are created. Thus, each block with two successors will have a corresponding
     merge block.

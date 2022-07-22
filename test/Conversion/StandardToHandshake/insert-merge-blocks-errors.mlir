@@ -39,7 +39,7 @@ func.func @irregular_cfg_three_preds(%cond: i1) {
 // -----
 
 // expected-error @+2 {{failed to legalize operation}}
-// expected-error @+1 {{multiple exit nodes are not yet supported}}
+// expected-error @+1 {{multiple exit blocks are not yet supported}}
 func.func @multiple_exit_blocks(%cond: i1) {
   cf.br ^1
 ^1:

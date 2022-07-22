@@ -150,7 +150,7 @@ void DualGraph::getPredecessors(Block *b, SmallVectorImpl<Block *> &res) {
     if (loopAnalysis.isLoopElement(pred)) {
       auto *info = loopAnalysis.getLoopInfo(pred);
       assert(info->exitBlocks.size() == 1 &&
-             "multiple exit nodes are not yet supported");
+             "multiple exit blocks are not yet supported");
       res.push_back(info->loopHeader);
       continue;
     }
@@ -226,7 +226,7 @@ static LogicalResult preconditionCheck(Region &r,
   for (auto &info : analysis.topLevelLoops)
     if (info.exitBlocks.size() > 1)
       return r.getParentOp()->emitError(
-          "multiple exit nodes are not yet supported");
+          "multiple exit blocks are not yet supported");
 
   return success();
 }
