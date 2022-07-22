@@ -47,17 +47,17 @@ public:
   InnerSymTarget(InnerSymTarget &&) = default;
 
   // Accessors
-  auto getField() { return fieldID; }
-  Operation *getOp() { return op; }
-  auto getPort() {
+  auto getField() const { return fieldID; }
+  Operation *getOp() const { return op; }
+  auto getPort() const {
     assert(isPort());
     return portIdx;
   }
 
   // Classification
-  bool isField() { return fieldID != 0; }
-  bool isPort() { return portIdx != invalidPort; }
-  bool isOpOnly() { return !isPort() && !isField(); }
+  bool isField() const { return fieldID != 0; }
+  bool isPort() const { return portIdx != invalidPort; }
+  bool isOpOnly() const { return !isPort() && !isField(); }
 
 private:
   auto asTuple() const { return std::tie(op, portIdx, fieldID); }
