@@ -66,14 +66,12 @@ def WrapValidReady : ESI_Op<"wrap.vr", [
     ready signal from the other end of the channel.
   }];
 
-  let arguments = (ins Optional<AnyType>:$rawInput, I1:$valid);
+  let arguments = (ins AnyType:$rawInput, I1:$valid);
   let results = (outs ChannelType:$chanOutput, I1:$ready);
   let hasCustomAssemblyFormat = 1;
   let hasFolder = 1;
 
   let builders = [
-    // If $data == Value(), an !esi.channel<none> is returned. Else,
-    // an !esi.channel<$data.getType()> is returned.
     OpBuilder<(ins "mlir::Value":$data, "mlir::Value":$valid)>
   ];
 }
@@ -90,22 +88,12 @@ def UnwrapValidReady : ESI_Op<"unwrap.vr", [
   }];
 
   let arguments = (ins ChannelType:$chanInput, I1:$ready);
-  let results = (outs Variadic<AnyType>:$rawOutput, I1:$valid);
+  let results = (outs AnyType:$rawOutput, I1:$valid);
   let hasCustomAssemblyFormat = 1;
-  let skipDefaultBuilders = 1;
 
   let builders = [
     OpBuilder<(ins "mlir::Value":$inChan, "mlir::Value":$ready)>
   ];
-
-  let extraClassDeclaration = [{
-    /// Returns the raw output of this operation, assuming that the channel
-    /// carries data.
-    mlir::Value getRawOutput() {
-      assert(hasData() && "Operation does not have a data value");
-      return rawOutput().front();
-    }
-  }];
 }
 
 def ModportType:

@@ -130,3 +130,23 @@ def NullSourceOp : ESI_Physical_Op<"null", [NoSideEffect]> {
 
   let assemblyFormat = [{ attr-dict `:` qualified(type($out)) }];
 }
+
+def NoneSourceOp : ESI_Physical_Op<"none", [NoSideEffect]> {
+  let summary = [{"
+    An op which produces a 'none'-typed value, used in conjunction.
+    with data-less channels.
+  "}];
+
+  let arguments = (ins);
+  let results = (outs NoneType:$out);
+
+  let assemblyFormat = [{ attr-dict `:` qualified(type($out)) }];
+
+  let builders = [
+    OpBuilder<(ins), [{
+      $_state.addTypes($_builder.getNoneType());
+    }]>
+  ];
+
+
+}

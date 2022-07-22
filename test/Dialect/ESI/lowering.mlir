@@ -119,7 +119,8 @@ hw.module @test_constant(%arg0: !esi.channel<i1>, %clock: i1, %reset: i1) -> (ou
 // HW:       }
 hw.module @NoneTyped(%a: !esi.channel<none>, %clk: i1, %rstn: i1) -> (x: !esi.channel<none>) {
   %0 = esi.buffer %clk, %rstn, %a  : none
-  %valid = esi.unwrap.vr %0, %ready : none
-  %chanOutput, %ready = esi.wrap.vr %valid : none
+  %noneValue, %valid = esi.unwrap.vr %0, %ready : none
+  %noneV2 = esi.none : none
+  %chanOutput, %ready = esi.wrap.vr %noneV2, %valid : none
   hw.output %chanOutput : !esi.channel<none>
 }

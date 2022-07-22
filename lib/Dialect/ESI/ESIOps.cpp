@@ -96,56 +96,33 @@ Value PipelineStage::anyChannel() { return input(); }
 ParseResult WrapValidReady::parse(OpAsmParser &parser, OperationState &result) {
   llvm::SMLoc inputOperandsLoc = parser.getCurrentLocation();
 
+  llvm::SmallVector<OpAsmParser::UnresolvedOperand, 2> opList;
   Type innerOutputType;
-  llvm::SmallVector<OpAsmParser::UnresolvedOperand, 2> opList(2);
-
-  // If 1 operand is provided, this is a data-less channel. Else, expect 2
-  // operands.
-  if (parser.parseOperand(opList[0]))
-    return failure();
-
-  bool hasData = !(parser.parseOptionalComma() ||
-                   !parser.parseOptionalOperand(opList[1]).hasValue());
-  if (!hasData)
-    opList.erase(opList.end() - 1);
-
-  if (parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+  if (parser.parseOperandList(opList, 2, OpAsmParser::Delimiter::None) ||
+      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
       parser.parseType(innerOutputType))
     return failure();
 
-  llvm::SmallVector<Type, 2> operandTypes;
-  if (hasData)
-    operandTypes.push_back(innerOutputType);
-  else
-    innerOutputType = NoneType::get(parser.getContext());
-
+  auto boolType = parser.getBuilder().getI1Type();
   auto outputType =
       ChannelPort::get(parser.getBuilder().getContext(), innerOutputType);
-  result.addTypes({outputType});
-
-  auto boolType = parser.getBuilder().getI1Type();
-  operandTypes.push_back(boolType);
-  result.addTypes({boolType});
-  if (parser.resolveOperands(opList, operandTypes, inputOperandsLoc,
-                             result.operands))
+  result.addTypes({outputType, boolType});
+  if (parser.resolveOperands(opList, {innerOutputType, boolType},
+                             inputOperandsLoc, result.operands))
     return failure();
   return success();
 }
 
 void WrapValidReady::print(OpAsmPrinter &p) {
-  p << " ";
-  if (hasData())
-    p << rawInput() << ", ";
-  p << valid();
+  p << " " << rawInput() << ", " << valid();
   p.printOptionalAttrDict((*this)->getAttrs());
   p << " : " << innerType();
 }
 
 void WrapValidReady::build(OpBuilder &b, OperationState &state, Value data,
                            Value valid) {
-  Type innerTy = data ? data.getType() : NoneType::get(state.getContext());
-  build(b, state, ChannelPort::get(state.getContext(), innerTy), b.getI1Type(),
-        data, valid);
+  build(b, state, ChannelPort::get(state.getContext(), data.getType()),
+        b.getI1Type(), data, valid);
 }
 
 ParseResult UnwrapValidReady::parse(OpAsmParser &parser,
@@ -164,32 +141,25 @@ ParseResult UnwrapValidReady::parse(OpAsmParser &parser,
 
   auto boolType = parser.getBuilder().getI1Type();
 
-  if (inputType.hasData())
-    result.addTypes({inputType.getInner()});
-
-  result.addTypes({boolType});
+  result.addTypes({inputType.getInner(), boolType});
   if (parser.resolveOperands(opList, {inputType, boolType}, inputOperandsLoc,
                              result.operands))
     return failure();
   return success();
 }
 
-Value WrapValidReady::anyChannel() { return chanOutput(); }
-
 void UnwrapValidReady::print(OpAsmPrinter &p) {
   p << " " << chanInput() << ", " << ready();
   p.printOptionalAttrDict((*this)->getAttrs());
-  p << " : " << innerType();
+  p << " : " << rawOutput().getType();
 }
+
+Value WrapValidReady::anyChannel() { return chanOutput(); }
 
 void UnwrapValidReady::build(OpBuilder &b, OperationState &state, Value inChan,
                              Value ready) {
   auto inChanType = inChan.getType().cast<ChannelPort>();
-  state.addOperands(inChan);
-  state.addOperands(ready);
-  if (inChanType.hasData())
-    state.addTypes(inChanType.getInner());
-  state.addTypes(b.getI1Type());
+  build(b, state, inChanType.getInner(), b.getI1Type(), inChan, ready);
 }
 
 Value UnwrapValidReady::anyChannel() { return chanInput(); }

@@ -410,8 +410,6 @@ void ESIPortsPass::runOnOperation() {
   });
 
   build = nullptr;
-
-  top.dump();
 }
 
 /// Return a attribute with the specified suffix appended.
@@ -462,7 +460,12 @@ bool ESIPortsPass::updateFunc(HWModuleOp mod) {
       newArgNames.push_back(argNameAttr);
       data = mod.front().insertArgument(blockArgNum++, chanTy.getInner(),
                                         mod.getArgument(argNum).getLoc());
+    } else {
+      // This is a data-less channel - need to create a none-typed SSA value
+      // to feed into wrapvr.
+      data = modBuilder.create<esi::NoneSourceOp>();
     }
+
     newArgTypes.push_back(i1);
     newArgNames.push_back(appendToRtlName(argNameAttr, "_valid"));
     Value valid = mod.front().insertArgument(blockArgNum++, i1,
@@ -505,7 +508,7 @@ bool ESIPortsPass::updateFunc(HWModuleOp mod) {
         i1, modBuilder.getUnknownLoc()); // Ready block arg.
     auto unwrap = modBuilder.create<UnwrapValidReady>(oldOutputValue, ready);
     if (unwrap.hasData()) {
-      newOutputOperands.push_back(unwrap.getRawOutput());
+      newOutputOperands.push_back(unwrap.rawOutput());
       newResultTypes.push_back(chanTy.getInner()); // Raw data.
       newResultNames.push_back(oldResultName);
     }
@@ -565,7 +568,7 @@ void ESIPortsPass::updateInstance(HWModuleOp mod, InstanceOp inst) {
     auto ready = beb.get(i1);
     inputReadysToConnect.push_back(ready);
     auto unwrap = b.create<UnwrapValidReady>(operand, ready);
-    newOperands.push_back(unwrap.getRawOutput());
+    newOperands.push_back(unwrap.rawOutput());
     newOperands.push_back(unwrap.valid());
   }
 
@@ -910,7 +913,7 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
   circt::Backedge stageReady = back.get(rewriter.getI1Type());
   llvm::SmallVector<Value> operands = {stage.clk(), stage.rstn()};
   if (stage.hasData())
-    operands.push_back(unwrap.getRawOutput());
+    operands.push_back(unwrap.rawOutput());
   operands.push_back(unwrap.valid());
   operands.push_back(stageReady);
   auto stageInst = rewriter.create<InstanceOp>(loc, stageModule, pipeStageName,
@@ -919,8 +922,16 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
 
   // Set a_ready (from the unwrap) back edge correctly to its output from stage.
   wrapReady.setValue(stageInstResults[0]);
-  Value x = unwrap.hasData() ? stageInstResults[1] : Value();
-  Value xValid = stageInstResults[unwrap.hasData() ? 2 : 1];
+  Value x, xValid;
+  if (stage.hasData()) {
+    x = stageInstResults[1];
+    xValid = stageInstResults[2];
+  } else {
+    // This is a data-less channel - need to create a none-typed SSA value
+    // to feed into wrapvr.
+    x = rewriter.create<esi::NoneSourceOp>(loc);
+    xValid = stageInstResults[1];
+  }
 
   // Wrap up the output of the HW stage module.
   auto wrap = rewriter.create<WrapValidReady>(loc, chPort, rewriter.getI1Type(),
@@ -965,6 +976,26 @@ LogicalResult NullSourceOpLowering::matchAndRewrite(
 }
 
 namespace {
+struct RemoveNoneSourceOp : public OpConversionPattern<NoneSourceOp> {
+public:
+  RemoveNoneSourceOp(MLIRContext *ctxt) : OpConversionPattern(ctxt) {}
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(NoneSourceOp nullop, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override;
+};
+
+LogicalResult
+RemoveNoneSourceOp::matchAndRewrite(NoneSourceOp noneOp, OpAdaptor adaptor,
+                                    ConversionPatternRewriter &rewriter) const {
+  rewriter.eraseOp(noneOp);
+  return success();
+}
+
+} // anonymous namespace
+
+namespace {
 /// Eliminate back-to-back wrap-unwraps to reduce the number of ESI channels.
 struct RemoveWrapUnwrap : public ConversionPattern {
 public:
@@ -985,11 +1016,8 @@ public:
             wrap, "This conversion only supports wrap-unwrap back-to-back. "
                   "Could not find 'unwrap'.");
 
-      if (wrap.hasData()) {
-        data = operands[0];
-        valid = operands[1];
-      } else
-        valid = operands[0];
+      data = operands[0];
+      valid = operands[1];
       ready = unwrap.ready();
     } else if (unwrap) {
       wrap = dyn_cast<WrapValidReady>(operands[0].getDefiningOp());
@@ -999,8 +1027,7 @@ public:
             "This conversion only supports wrap-unwrap back-to-back. "
             "Could not find 'wrap'.");
       valid = wrap.valid();
-      if (wrap.hasData())
-        data = wrap.rawInput();
+      data = wrap.rawInput();
       ready = operands[1];
     } else {
       return failure();
@@ -1012,10 +1039,7 @@ public:
              "Wrap didn't have exactly one use.";
       });
     rewriter.replaceOp(wrap, {nullptr, ready});
-    if (data)
-      rewriter.replaceOp(unwrap, {data, valid});
-    else
-      rewriter.replaceOp(unwrap, {valid});
+    rewriter.replaceOp(unwrap, {data, valid});
     return success();
   }
 };
@@ -1063,6 +1087,11 @@ WrapInterfaceLower::matchAndRewrite(WrapSVInterface wrap, OpAdaptor adaptor,
   if (wrap.hasData())
     dataSignal = rewriter.create<ReadInterfaceSignalOp>(loc, ifaceInstance,
                                                         ESIHWBuilder::dataStr);
+  else {
+    // This is a data-less channel - need to create a none-typed SSA value
+    // to feed into wrapvr.
+    dataSignal = rewriter.create<esi::NoneSourceOp>(loc);
+  }
   auto wrapVR = rewriter.create<WrapValidReady>(loc, dataSignal, validSignal);
   rewriter.create<AssignInterfaceSignalOp>(
       loc, ifaceInstance, ESIHWBuilder::readyStr, wrapVR.ready());
@@ -1112,7 +1141,7 @@ LogicalResult UnwrapInterfaceLower::matchAndRewrite(
 
   if (unwrap.hasData())
     rewriter.create<AssignInterfaceSignalOp>(
-        loc, ifaceInstance, ESIHWBuilder::dataStr, unwrapVR.getRawOutput());
+        loc, ifaceInstance, ESIHWBuilder::dataStr, unwrapVR.rawOutput());
   rewriter.eraseOp(unwrap);
   return success();
 }
@@ -1184,9 +1213,8 @@ CosimLowering::matchAndRewrite(CosimEndpoint ep, OpAdaptor adaptor,
   auto sendReady = bb.get(rewriter.getI1Type());
   UnwrapValidReady unwrapSend =
       rewriter.create<UnwrapValidReady>(loc, send, sendReady);
-  auto encodeData = rewriter.create<CapnpEncode>(loc, egestBitArrayType, clk,
-                                                 unwrapSend.valid(),
-                                                 unwrapSend.getRawOutput());
+  auto encodeData = rewriter.create<CapnpEncode>(
+      loc, egestBitArrayType, clk, unwrapSend.valid(), unwrapSend.rawOutput());
 
   // Get information necessary for injest path.
   auto recvReady = bb.get(rewriter.getI1Type());
@@ -1294,6 +1322,7 @@ void ESItoHWPass::runOnOperation() {
   pass1Target.addLegalDialect<SVDialect>();
   pass1Target.addLegalOp<WrapValidReady, UnwrapValidReady>();
   pass1Target.addLegalOp<CapnpDecode, CapnpEncode>();
+  pass1Target.addLegalOp<NoneSourceOp>();
 
   pass1Target.addIllegalOp<WrapSVInterface, UnwrapSVInterface>();
   pass1Target.addIllegalOp<PipelineStage>();
@@ -1324,6 +1353,7 @@ void ESItoHWPass::runOnOperation() {
   pass2Patterns.insert<RemoveWrapUnwrap>(ctxt);
   pass2Patterns.insert<EncoderLowering>(ctxt);
   pass2Patterns.insert<DecoderLowering>(ctxt);
+  pass2Patterns.insert<RemoveNoneSourceOp>(ctxt);
   if (failed(
           applyPartialConversion(top, pass2Target, std::move(pass2Patterns))))
     signalPassFailure();

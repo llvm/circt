@@ -278,7 +278,7 @@ circt::esi::buildESIWrapper(OpBuilder &b, Operation *pearl,
     Backedge ready = bb.get(modBuilder.getI1Type());
     backedges.insert(std::make_pair(esiPort->second.ready.argNum, ready));
     auto unwrap = modBuilder.create<UnwrapValidReady>(arg, ready);
-    pearlOperands[esiPort->second.data.argNum] = unwrap.getRawOutput();
+    pearlOperands[esiPort->second.data.argNum] = unwrap.rawOutput();
     pearlOperands[esiPort->second.valid.argNum] = unwrap.valid();
   }
 
