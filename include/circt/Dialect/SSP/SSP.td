@@ -22,8 +22,10 @@ def SSPDialect : Dialect {
   let description = [{
     A dialect to abstractly represent instances and solutions of [static
     scheduling problems](https://circt.llvm.org/docs/Scheduling/), intended as
-    an import/export format for rapid prototyping, benchmarking, and testing of
-    problem definitions and algorithm implementations.
+    an import/export format for testing, benchmarking, and rapid prototyping of
+    problem definitions and algorithm implementations. See the
+    [rationale](https://circt.llvm.org/docs/Dialects/SSP/RationaleSSP/) for more
+    information.
   }];
 
   let cppNamespace = "::circt::ssp";
