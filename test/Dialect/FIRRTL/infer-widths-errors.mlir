@@ -116,3 +116,14 @@ firrtl.circuit "Foo"  {
     firrtl.connect %w, %0 : !firrtl.bundle<x: uint>, !firrtl.bundle<x: uint>
   }
 }
+
+// -----
+// Only using frozen module instances prevents any width inference from ocurring
+firrtl.circuit "OnlyUsesFrozenInstances"  {
+  // expected-error @+1 {{uninferred width: port "in" is unconstrained}}
+  firrtl.module @UninferredWidth(in %in: !firrtl.uint) {}
+  firrtl.module @OnlyUsesFrozenInstances(in %knownIn: !firrtl.uint<4>) {
+    %frozenIn = firrtl.instance frozenInst {frozen} @UninferredWidth(in in: !firrtl.uint)
+    firrtl.connect %frozenIn, %knownIn : !firrtl.uint, !firrtl.uint<4>
+  }
+}

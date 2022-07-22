@@ -269,6 +269,21 @@ using ResetNetwork = llvm::iterator_range<
 /// Whether a reset is sync or async.
 enum class ResetKind { Async, Sync };
 
+/// Indicates which side of a connection is frozen
+enum class FrozenConnectionSide { None, Source, Destination };
+
+/// Flips the direction of a frozen connection side
+FrozenConnectionSide flip(FrozenConnectionSide side) {
+  switch (side) {
+  case FrozenConnectionSide::None:
+    return FrozenConnectionSide::None;
+  case FrozenConnectionSide::Source:
+    return FrozenConnectionSide::Destination;
+  case FrozenConnectionSide::Destination:
+    return FrozenConnectionSide::Source;
+  }
+}
+
 } // namespace
 
 namespace llvm {
@@ -419,13 +434,16 @@ struct InferResetsPass : public InferResetsBase<InferResetsPass> {
 
   void traceResets(CircuitOp circuit);
   void traceResets(InstanceOp inst);
-  void traceResets(Value dst, Value src, Location loc);
+  void traceResets(Value dst, Value src, Location loc,
+                   FrozenConnectionSide frozenSide);
   void traceResets(Value value);
   void traceResets(FIRRTLType dstType, Value dst, unsigned dstID,
-                   FIRRTLType srcType, Value src, unsigned srcID, Location loc);
+                   FIRRTLType srcType, Value src, unsigned srcID, Location loc,
+                   FrozenConnectionSide frozenSide);
 
   LogicalResult inferAndUpdateResets();
-  FailureOr<ResetKind> inferReset(ResetNetwork net);
+  FailureOr<ResetKind> inferReset(ResetNetwork net,
+                                  ArrayRef<ResetKind> frozenSourceKinds);
   LogicalResult updateReset(ResetNetwork net, ResetKind kind);
   bool updateReset(FieldRef field, FIRRTLType resetType);
 
@@ -479,6 +497,13 @@ struct InferResetsPass : public InferResetsBase<InferResetsPass> {
   /// A map of all connects to and from a reset.
   DenseMap<ResetSignal, ResetDrives> resetDrives;
 
+  /// A map of reset network leaders to inferred reset kind.
+  DenseMap<ResetSignal, ResetKind> inferredResets;
+
+  /// Mutual maps of frozen and dependent reset connection sides.
+  DenseMap<ResetSignal, SmallDenseSet<ResetSignal>> frozenSidesToDependents;
+  DenseMap<ResetSignal, SmallDenseSet<ResetSignal>> dependentsToFrozenSides;
+
   /// The annotated reset for a module. A null value indicates that the module
   /// is explicitly annotated with `ignore`. Otherwise the port/wire/node
   /// annotated as reset within the module is stored.
@@ -498,6 +523,9 @@ void InferResetsPass::runOnOperation() {
   runOnOperationInner();
   resetClasses = llvm::EquivalenceClasses<ResetSignal>();
   resetDrives.clear();
+  inferredResets.clear();
+  frozenSidesToDependents.clear();
+  dependentsToFrozenSides.clear();
   annotatedResets.clear();
   domains.clear();
   markAnalysesPreserved<InstanceGraph>();
@@ -731,7 +759,8 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
   circuit.walk([&](Operation *op) {
     TypeSwitch<Operation *>(op)
         .Case<ConnectOp, StrictConnectOp>([&](auto op) {
-          traceResets(op.getDest(), op.getSrc(), op.getLoc());
+          traceResets(op.getDest(), op.getSrc(), op.getLoc(),
+                      FrozenConnectionSide::None);
         })
 
         .Case<InstanceOp>([&](auto op) { traceResets(op); })
@@ -765,7 +794,8 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
           auto index = op.getFieldIndex();
           traceResets(op.getType(), op.getResult(), 0,
                       bundleType.getElements()[index].type, op.getInput(),
-                      getFieldID(bundleType, index), op.getLoc());
+                      getFieldID(bundleType, index), op.getLoc(),
+                      FrozenConnectionSide::None);
         })
 
         .Case<SubindexOp, SubaccessOp>([&](auto op) {
@@ -784,7 +814,8 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
               op.getInput().getType().template cast<FVectorType>();
           traceResets(op.getType(), op.getResult(), 0,
                       vectorType.getElementType(), op.getInput(),
-                      getFieldID(vectorType), op.getLoc());
+                      getFieldID(vectorType), op.getLoc(),
+                      FrozenConnectionSide::None);
         });
   });
 }
@@ -798,32 +829,42 @@ void InferResetsPass::traceResets(InstanceOp inst) {
     return;
   LLVM_DEBUG(llvm::dbgs() << "Visiting instance " << inst.getName() << "\n");
 
+  // Frozen instances only allow unidirectional inference outward from the
+  // instance
+  FrozenConnectionSide frozenSide = inst.getFrozen()
+                                        ? FrozenConnectionSide::Destination
+                                        : FrozenConnectionSide::None;
+
   // Establish a connection between the instance ports and module ports.
   auto dirs = module.getPortDirections();
   for (const auto &it : llvm::enumerate(inst.getResults())) {
     auto dir = module.getPortDirection(it.index());
     Value dstPort = module.getArgument(it.index());
     Value srcPort = it.value();
-    if (dir == Direction::Out)
+    if (dir == Direction::Out) {
       std::swap(dstPort, srcPort);
-    traceResets(dstPort, srcPort, it.value().getLoc());
+      frozenSide = flip(frozenSide);
+    }
+    traceResets(dstPort, srcPort, it.value().getLoc(), frozenSide);
   }
 }
 
 /// Analyze a connect of one (possibly aggregate) value to another.
 /// Each drive involving a `ResetType` is recorded.
-void InferResetsPass::traceResets(Value dst, Value src, Location loc) {
+void InferResetsPass::traceResets(Value dst, Value src, Location loc,
+                                  FrozenConnectionSide frozenSide) {
   // Analyze the actual connection.
   auto dstType = dst.getType().cast<FIRRTLType>();
   auto srcType = src.getType().cast<FIRRTLType>();
-  traceResets(dstType, dst, 0, srcType, src, 0, loc);
+  traceResets(dstType, dst, 0, srcType, src, 0, loc, frozenSide);
 }
 
 /// Analyze a connect of one (possibly aggregate) value to another.
 /// Each drive involving a `ResetType` is recorded.
 void InferResetsPass::traceResets(FIRRTLType dstType, Value dst, unsigned dstID,
                                   FIRRTLType srcType, Value src, unsigned srcID,
-                                  Location loc) {
+                                  Location loc,
+                                  FrozenConnectionSide frozenSide) {
   if (auto dstBundle = dstType.dyn_cast<BundleType>()) {
     auto srcBundle = srcType.cast<BundleType>();
     for (unsigned dstIdx = 0, e = dstBundle.getNumElements(); dstIdx < e;
@@ -837,11 +878,11 @@ void InferResetsPass::traceResets(FIRRTLType dstType, Value dst, unsigned dstID,
       if (dstElt.isFlip) {
         traceResets(srcElt.type, src, srcID + getFieldID(srcBundle, *srcIdx),
                     dstElt.type, dst, dstID + getFieldID(dstBundle, dstIdx),
-                    loc);
+                    loc, flip(frozenSide));
       } else {
         traceResets(dstElt.type, dst, dstID + getFieldID(dstBundle, dstIdx),
                     srcElt.type, src, srcID + getFieldID(srcBundle, *srcIdx),
-                    loc);
+                    loc, frozenSide);
       }
     }
     return;
@@ -864,7 +905,7 @@ void InferResetsPass::traceResets(FIRRTLType dstType, Value dst, unsigned dstID,
     // the field ID and make sure in `updateType` that we handle vectors
     // accordingly.
     traceResets(dstElType, dst, dstID + getFieldID(dstVector), srcElType, src,
-                srcID + getFieldID(srcVector), loc);
+                srcID + getFieldID(srcVector), loc, frozenSide);
     return;
   }
 
@@ -873,8 +914,10 @@ void InferResetsPass::traceResets(FIRRTLType dstType, Value dst, unsigned dstID,
       FieldRef dstField(dst, dstID);
       FieldRef srcField(src, srcID);
       LLVM_DEBUG(llvm::dbgs()
-                 << "Visiting driver '" << dstField << "' = '" << srcField
-                 << "' (" << dstType << " = " << srcType << ")\n");
+                 << "Visiting "
+                 << (frozenSide != FrozenConnectionSide::None ? "frozen " : "")
+                 << "driver '" << dstField << "' = '" << srcField << "' ("
+                 << dstType << " = " << srcType << ")\n");
 
       // Determine the leaders for the dst and src reset networks before we make
       // the connection. This will allow us to later detect if dst got merged
@@ -884,6 +927,21 @@ void InferResetsPass::traceResets(FIRRTLType dstType, Value dst, unsigned dstID,
       ResetSignal srcLeader =
           *resetClasses.findLeader(resetClasses.insert({srcField, srcType}));
 
+      // If this is a frozen connection, keep the networks separate and track
+      // depedencies
+      switch (frozenSide) {
+      case FrozenConnectionSide::None:
+        break;
+      case FrozenConnectionSide::Source:
+        frozenSidesToDependents[srcLeader].insert(dstLeader);
+        dependentsToFrozenSides[dstLeader].insert(srcLeader);
+        return;
+      case FrozenConnectionSide::Destination:
+        frozenSidesToDependents[dstLeader].insert(srcLeader);
+        dependentsToFrozenSides[srcLeader].insert(dstLeader);
+        return;
+      }
+
       // Unify the two reset networks.
       ResetSignal unionLeader = *resetClasses.unionSets(dstLeader, srcLeader);
       assert(unionLeader == dstLeader || unionLeader == srcLeader);
@@ -891,14 +949,49 @@ void InferResetsPass::traceResets(FIRRTLType dstType, Value dst, unsigned dstID,
       // If dst got merged into src, append dst's drives to src's, or vice
       // versa. Also, remove dst's or src's entry in resetDrives, because they
       // will never come up as a leader again.
+      // Also update frozen connection dependency tracking as needed.
       if (dstLeader != srcLeader) {
+        auto mergedLeader = unionLeader == dstLeader ? srcLeader : dstLeader;
         auto &unionDrives = resetDrives[unionLeader]; // needed before finds
-        auto mergedDrivesIt =
-            resetDrives.find(unionLeader == dstLeader ? srcLeader : dstLeader);
+        auto &unionFrozenSides = dependentsToFrozenSides[unionLeader];
+        auto &unionDependents = frozenSidesToDependents[unionLeader];
+        auto mergedDrivesIt = resetDrives.find(mergedLeader);
+        auto mergedFrozenSidesIt = dependentsToFrozenSides.find(mergedLeader);
+        auto mergedDependentsIt = frozenSidesToDependents.find(mergedLeader);
+
         if (mergedDrivesIt != resetDrives.end()) {
           unionDrives.append(mergedDrivesIt->second);
           resetDrives.erase(mergedDrivesIt);
         }
+
+        // Update tracking of frozen sides connected to the merged leader
+        if (mergedFrozenSidesIt != dependentsToFrozenSides.end()) {
+          for (auto frozenSide : mergedFrozenSidesIt->second) {
+            auto &dependents = frozenSidesToDependents[frozenSide];
+            dependents.erase(mergedLeader);
+            dependents.insert(unionLeader);
+          }
+          unionFrozenSides.insert(mergedFrozenSidesIt->second.begin(),
+                                  mergedFrozenSidesIt->second.end());
+        }
+
+        // Update tracking of frozen-dependent sides connected to the merged
+        // leader
+        if (mergedDependentsIt != frozenSidesToDependents.end()) {
+          for (auto dependent : mergedDependentsIt->second) {
+            auto &frozenSides = dependentsToFrozenSides[dependent];
+            frozenSides.erase(mergedLeader);
+            frozenSides.insert(unionLeader);
+          }
+          unionDependents.insert(mergedDependentsIt->second.begin(),
+                                 mergedDependentsIt->second.end());
+        }
+
+        if (mergedFrozenSidesIt != dependentsToFrozenSides.end())
+          dependentsToFrozenSides.erase(mergedFrozenSidesIt);
+
+        if (mergedDependentsIt != frozenSidesToDependents.end())
+          frozenSidesToDependents.erase(mergedDependentsIt);
       }
 
       // Keep note of this drive so we can point the user at the right location
@@ -918,26 +1011,65 @@ void InferResetsPass::traceResets(FIRRTLType dstType, Value dst, unsigned dstID,
 
 LogicalResult InferResetsPass::inferAndUpdateResets() {
   LLVM_DEBUG(llvm::dbgs() << "\n===----- Infer reset types -----===\n\n");
+  SmallVector<ResetNetwork> uninferredNetworks;
   for (auto it = resetClasses.begin(), end = resetClasses.end(); it != end;
        ++it) {
     if (!it->isLeader())
       continue;
     ResetNetwork net = llvm::make_range(resetClasses.member_begin(it),
                                         resetClasses.member_end());
+    uninferredNetworks.push_back(net);
+  }
 
-    // Infer whether this should be a sync or async reset.
-    auto kind = inferReset(net);
-    if (failed(kind))
-      return failure();
+  SmallVector<ResetNetwork> nextUninferredNetworks;
+  while (!uninferredNetworks.empty()) {
+    for (auto net : uninferredNetworks) {
+      SmallVector<ResetKind> frozenSideKinds;
+      auto frozenSidesIt = dependentsToFrozenSides.find(*net.begin());
+      if (frozenSidesIt != dependentsToFrozenSides.end()) {
+        bool hasUninferredDependencies = false;
+        for (auto source : frozenSidesIt->second) {
+          auto inferredIt = inferredResets.find(source);
+          if (inferredIt != inferredResets.end()) {
+            frozenSideKinds.push_back(inferredIt->second);
+          } else {
+            hasUninferredDependencies = true;
+            break;
+          }
+        }
+        if (hasUninferredDependencies) {
+          nextUninferredNetworks.push_back(net);
+          continue;
+        }
+      }
 
-    // Update the types in the IR to match the inferred kind.
-    if (failed(updateReset(net, *kind)))
+      // Infer whether this should be a sync or async reset.
+      auto kind = inferReset(net, frozenSideKinds);
+      if (failed(kind))
+        return failure();
+
+      // Track the inferred reset for this network
+      inferredResets[*net.begin()] = *kind;
+
+      // Update the types in the IR to match the inferred kind.
+      if (failed(updateReset(net, *kind)))
+        return failure();
+    }
+
+    if (nextUninferredNetworks.size() == uninferredNetworks.size()) {
+      getOperation().emitError("Circular dependency in reset inference");
       return failure();
+    }
+
+    uninferredNetworks = std::move(nextUninferredNetworks);
+    nextUninferredNetworks.clear();
   }
   return success();
 }
 
-FailureOr<ResetKind> InferResetsPass::inferReset(ResetNetwork net) {
+FailureOr<ResetKind>
+InferResetsPass::inferReset(ResetNetwork net,
+                            ArrayRef<ResetKind> frozenSourceKinds) {
   LLVM_DEBUG(llvm::dbgs() << "Inferring reset network with "
                           << std::distance(net.begin(), net.end())
                           << " nodes\n");
@@ -946,6 +1078,19 @@ FailureOr<ResetKind> InferResetsPass::inferReset(ResetNetwork net) {
   unsigned asyncDrives = 0;
   unsigned syncDrives = 0;
   unsigned invalidDrives = 0;
+
+  // Track votes from frozen sources
+  for (ResetKind kind : frozenSourceKinds) {
+    switch (kind) {
+    case ResetKind::Async:
+      ++asyncDrives;
+      break;
+    case ResetKind::Sync:
+      ++syncDrives;
+      break;
+    }
+  }
+
   for (ResetSignal signal : net) {
     // Keep track of whether this signal contributes a vote for async or sync.
     if (signal.type.isa<AsyncResetType>())

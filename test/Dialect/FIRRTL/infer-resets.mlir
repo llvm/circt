@@ -401,7 +401,7 @@ firrtl.circuit "Top" {
     firrtl.connect %1, %in : !firrtl.uint<8>, !firrtl.uint<8>
 
     // Factoring of sync reset into mux works through subaccess op.
-    // CHECK: %reg6 = firrtl.regreset %clock, %extraReset, %14 
+    // CHECK: %reg6 = firrtl.regreset %clock, %extraReset, %14
     // CHECK: %16 = firrtl.mux(%init, %reset6, %reg6)
     // CHECK: firrtl.connect %reg6, %16
     // CHECK: %17 = firrtl.subaccess %reset6[%in]
@@ -798,5 +798,47 @@ firrtl.circuit "ZeroVec"  {
   firrtl.module @ZeroVec(in %a: !firrtl.bundle<x: vector<reset, 0>>, out %b: !firrtl.bundle<x: vector<reset, 0>>) {
     firrtl.connect %b, %a : !firrtl.bundle<x: vector<reset, 0>>, !firrtl.bundle<x: vector<reset, 0>>
     // CHECK-NEXT: firrtl.connect %b, %a : !firrtl.bundle<x: vector<uint<1>, 0>>, !firrtl.bundle<x: vector<uint<1>, 0>>
+  }
+}
+
+// -----
+
+// Frozen instances should not affect reset inference of the instantiated module
+// CHECK-LABEL: firrtl.module @HasInferredReset
+// CHECK-SAME: in %reset: !firrtl.asyncreset
+// CHECK-LABEL: firrtl.module @UsesFrozenReset
+// CHECK-SAME: in %knownReset: !firrtl.asyncreset
+// CHECK-SAME: in %inferredReset: !firrtl.asyncreset
+firrtl.circuit "UsesFrozenReset" {
+  firrtl.module @HasInferredReset(in %reset: !firrtl.reset) {}
+  firrtl.module @UsesFrozenReset(in %knownReset: !firrtl.asyncreset, in %inferredReset: !firrtl.reset) {
+    %instReset = firrtl.instance inst @HasInferredReset(in reset: !firrtl.reset)
+    %frozenInstReset = firrtl.instance frozenInst {frozen} @HasInferredReset(in reset: !firrtl.reset)
+    firrtl.connect %instReset, %knownReset : !firrtl.reset, !firrtl.asyncreset
+    firrtl.connect %frozenInstReset, %inferredReset : !firrtl.reset, !firrtl.reset
+  }
+
+  // CHECK-LABEL: firrtl.module @HasInferredResetOut
+  // CHECK-SAME: out %reset: !firrtl.uint<1>
+  // CHECK-LABEL: firrtl.module @UsesFrozenResetOut
+  // CHECK-SAME: out %inferredReset: !firrtl.uint<1>
+  firrtl.module @HasInferredResetOut(out %reset: !firrtl.reset) {
+    %c1 = firrtl.constant 1 : !firrtl.uint<1>
+    firrtl.connect %reset, %c1 : !firrtl.reset, !firrtl.uint<1>
+  }
+  firrtl.module @UsesFrozenResetOut(out %inferredReset: !firrtl.reset) {
+    //%instReset = firrtl.instance inst @HasInferredReset(out reset: !firrtl.reset)
+    %frozenInstReset = firrtl.instance frozenInst {frozen} @HasInferredResetOut(out reset: !firrtl.reset)
+    firrtl.connect %inferredReset, %frozenInstReset : !firrtl.reset, !firrtl.reset
+  }
+
+  firrtl.module @HasInferredFlipReset(out %foo: !firrtl.bundle<reset flip: reset>) {}
+  firrtl.module @UsesFrozenFlipReset(in %knownReset: !firrtl.asyncreset, in %inferredReset: !firrtl.reset) {
+    %instFoo = firrtl.instance inst @HasInferredFlipReset(out foo: !firrtl.bundle<reset flip: reset>)
+    %frozenInstFoo = firrtl.instance frozenInst {frozen} @HasInferredFlipReset(out foo: !firrtl.bundle<reset flip: reset>)
+    %instReset = firrtl.subfield %instFoo(0) : (!firrtl.bundle<reset flip: reset>) -> !firrtl.reset
+    %frozenInstReset = firrtl.subfield %frozenInstFoo(0) : (!firrtl.bundle<reset flip: reset>) -> !firrtl.reset
+    firrtl.connect %instReset, %knownReset : !firrtl.reset, !firrtl.asyncreset
+    firrtl.connect %frozenInstReset, %inferredReset : !firrtl.reset, !firrtl.reset
   }
 }

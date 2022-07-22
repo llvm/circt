@@ -1171,10 +1171,10 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
                        ArrayRef<Attribute> portNames,
                        ArrayRef<Attribute> annotations,
                        ArrayRef<Attribute> portAnnotations, bool lowerToBind,
-                       StringAttr innerSym) {
+                       bool frozen, StringAttr innerSym) {
   build(builder, result, resultTypes, moduleName, name, nameKind,
         portDirections, portNames, annotations, portAnnotations, lowerToBind,
-        innerSym ? InnerSymAttr::get(innerSym) : InnerSymAttr());
+        frozen, innerSym ? InnerSymAttr::get(innerSym) : InnerSymAttr());
 }
 
 void InstanceOp::build(OpBuilder &builder, OperationState &result,
@@ -1184,7 +1184,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
                        ArrayRef<Attribute> portNames,
                        ArrayRef<Attribute> annotations,
                        ArrayRef<Attribute> portAnnotations, bool lowerToBind,
-                       InnerSymAttr innerSym) {
+                       bool frozen, InnerSymAttr innerSym) {
   result.addTypes(resultTypes);
   result.addAttribute("moduleName",
                       SymbolRefAttr::get(builder.getContext(), moduleName));
@@ -1196,6 +1196,8 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
   result.addAttribute("annotations", builder.getArrayAttr(annotations));
   if (lowerToBind)
     result.addAttribute("lowerToBind", builder.getUnitAttr());
+  if (frozen)
+    result.addAttribute("frozen", builder.getUnitAttr());
   if (innerSym)
     result.addAttribute("inner_sym", innerSym);
   result.addAttribute("nameKind",
@@ -1217,7 +1219,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
                        FModuleLike module, StringRef name,
                        NameKindEnum nameKind, ArrayRef<Attribute> annotations,
                        ArrayRef<Attribute> portAnnotations, bool lowerToBind,
-                       StringAttr innerSym) {
+                       bool frozen, StringAttr innerSym) {
 
   // Gather the result types.
   SmallVector<Type> resultTypes;
@@ -1243,6 +1245,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
       module.getPortDirectionsAttr(), module.getPortNamesAttr(),
       builder.getArrayAttr(annotations), portAnnotationsAttr,
       lowerToBind ? builder.getUnitAttr() : UnitAttr(),
+      frozen ? builder.getUnitAttr() : UnitAttr(),
       innerSym ? InnerSymAttr::get(innerSym) : InnerSymAttr());
 }
 
@@ -1265,7 +1268,7 @@ InstanceOp InstanceOp::erasePorts(OpBuilder &builder,
   auto newOp = builder.create<InstanceOp>(
       getLoc(), newResultTypes, getModuleName(), getName(), getNameKind(),
       newPortDirections, newPortNames, getAnnotations().getValue(),
-      newPortAnnotations, getLowerToBind(), getInnerSymAttr());
+      newPortAnnotations, getLowerToBind(), getFrozen(), getInnerSymAttr());
 
   SmallDenseSet<unsigned> portSet(portIndices.begin(), portIndices.end());
   for (unsigned oldIdx = 0, newIdx = 0, numOldPorts = getNumResults();
@@ -1339,7 +1342,7 @@ InstanceOp::cloneAndInsertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
   return OpBuilder(*this).create<InstanceOp>(
       getLoc(), newPortTypes, getModuleName(), getName(), getNameKind(),
       newPortDirections, newPortNames, getAnnotations().getValue(),
-      newPortAnnos, getLowerToBind(), getInnerSymAttr());
+      newPortAnnos, getLowerToBind(), getFrozen(), getInnerSymAttr());
 }
 
 LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {

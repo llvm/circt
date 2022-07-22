@@ -44,7 +44,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     parameter DEFAULT = 0
     parameter WIDTH = 32
     parameter DEPTH = 32.42
-    
+
   ; Check that integers are extended to 32 bits if they are smaller.
   ; CHECK-LABEL: firrtl.extmodule private @IntegerParamsModule
   extmodule IntegerParamsModule :
@@ -98,7 +98,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
     ; CHECK: firrtl.strictconnect %_t, %_t_2
     _t <- _t_2
-    
+
     ; CHECK: [[a0:%.+]] = firrtl.subfield %bundleWithAnalog(0)
     ; CHECK: [[a1:%.+]] = firrtl.subfield %bundleWithAnalog(0)
     ; CHECK: firrtl.attach [[a1]], [[a0]]
@@ -111,7 +111,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
     ; CHECK-NOT: firrtl.attach %a1
     a1 is invalid
-    
+
     ; CHECK-NOT: firrtl.attach %ab
     ab is invalid
 
@@ -735,7 +735,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
   module CheckInvalids_out1 :
     output out1 : { a : UInt<1>, b : UInt<1> }
-    ; CHECK: [[INV:%.+]] = firrtl.invalidvalue : !firrtl.bundle<a: uint<1>, b: uint<1>> 
+    ; CHECK: [[INV:%.+]] = firrtl.invalidvalue : !firrtl.bundle<a: uint<1>, b: uint<1>>
     ; CHECK: firrtl.strictconnect %out1, [[INV]]
     out1 is invalid
 
@@ -788,7 +788,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
     ; CHECK: [[INV:%.+]] = firrtl.invalidvalue
     ; CHECK: firrtl.strictconnect %U0_in0, [[INV]]
-    ; CHECK: [[INV:%.+]] = firrtl.invalidvalue : !firrtl.bundle<a: uint<5>> 
+    ; CHECK: [[INV:%.+]] = firrtl.invalidvalue : !firrtl.bundle<a: uint<5>>
     ; CHECK: firrtl.strictconnect %U0_in1, [[INV]]
     U0 is invalid
 
@@ -1118,3 +1118,15 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     smem testharness : UInt<8>[16] [34359738368]
     node w_addr = UInt<36>(42) @[Cat.scala 31:58]
     write mport MPORT = testharness[w_addr], clock
+
+  module FreezableModule :
+    input in: UInt
+
+  module UsesFrozenInstance :
+    input in: UInt<2>
+    ; CHECK: %instance_in = firrtl.instance instance interesting_name @FreezableModule(in in: !firrtl.uint)
+    ; CHECK-NEXT: %frozenInstance_in = firrtl.instance frozenInstance interesting_name {frozen} @FreezableModule(in in: !firrtl.uint)
+    inst instance of FreezableModule
+    inst frozenInstance of frozen FreezableModule
+    instance.in <= in
+    frozenInstance.in <= in

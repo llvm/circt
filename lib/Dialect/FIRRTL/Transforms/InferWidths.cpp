@@ -1098,8 +1098,10 @@ public:
 
   /// Assign the constraint expressions of the fields in the `src` argument as
   /// the expressions for the `dst` argument. Both fields must be of the given
-  /// `type`.
-  void unifyTypes(FieldRef lhs, FieldRef rhs, FIRRTLType type);
+  /// `type`. If `frozen` is `true`, the field expressions are kept distinct
+  /// such that additional constraints on `lhs` don't affect `rhs`.
+  void unifyTypes(FieldRef lhs, FieldRef rhs, FIRRTLType type,
+                  bool frozen = false);
 
   /// Get the expr associated with the value.  The value must be a non-aggregate
   /// type.
@@ -1453,13 +1455,16 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
           mappingFailed = true;
           return;
         }
+
+        bool frozen = op.getFrozen();
         // Simply look up the free variables created for the instantiated
         // module's ports, and use them for instance port wires. This way,
         // constraints imposed onto the ports of the instance will transparently
         // apply to the ports of the instantiated module.
         for (auto it : llvm::zip(op->getResults(), module.getArguments())) {
           unifyTypes(FieldRef(std::get<0>(it), 0), FieldRef(std::get<1>(it), 0),
-                     std::get<0>(it).getType().template cast<FIRRTLType>());
+                     std::get<0>(it).getType().template cast<FIRRTLType>(),
+                     frozen);
         }
       })
 
@@ -1644,7 +1649,10 @@ void InferenceMapping::constrainTypes(Expr *larger, Expr *smaller) {
 
 /// Assign the constraint expressions of the fields in the `src` argument as the
 /// expressions for the `dst` argument. Both fields must be of the given `type`.
-void InferenceMapping::unifyTypes(FieldRef lhs, FieldRef rhs, FIRRTLType type) {
+/// If `frozen` is `true`, the field expressions are kept distinct such that
+/// additional constraints on `lhs` don't affect `rhs`.
+void InferenceMapping::unifyTypes(FieldRef lhs, FieldRef rhs, FIRRTLType type,
+                                  bool frozen) {
   // Fast path for `unifyTypes(x, x, _)`.
   if (lhs == rhs)
     return;
@@ -1657,12 +1665,16 @@ void InferenceMapping::unifyTypes(FieldRef lhs, FieldRef rhs, FIRRTLType type) {
       // Leaf element, unify the fields!
       FieldRef lhsFieldRef(lhs.getValue(), lhs.getFieldID() + fieldID);
       FieldRef rhsFieldRef(rhs.getValue(), rhs.getFieldID() + fieldID);
-      LLVM_DEBUG(llvm::dbgs() << "Unify " << getFieldName(lhsFieldRef) << " = "
-                              << getFieldName(rhsFieldRef) << "\n");
+      LLVM_DEBUG(llvm::dbgs()
+                 << (frozen ? "Freeze " : "Unify ") << getFieldName(lhsFieldRef)
+                 << " = " << getFieldName(rhsFieldRef) << "\n");
       // Abandon variables becoming unconstrainable by the unification.
       if (auto *var = dyn_cast_or_null<VarExpr>(getExprOrNull(lhsFieldRef)))
         solver.addGeqConstraint(var, solver.known(0));
-      setExpr(lhsFieldRef, getExpr(rhsFieldRef));
+      auto *expr = getExpr(rhsFieldRef);
+      if (frozen)
+        expr = solver.id(expr);
+      setExpr(lhsFieldRef, expr);
       fieldID++;
     } else if (auto bundleType = type.dyn_cast<BundleType>()) {
       fieldID++;
@@ -1949,13 +1961,19 @@ FIRRTLType InferenceTypeUpdate::updateType(FieldRef fieldRef, FIRRTLType type) {
   // Get the inferred width.
   Expr *expr = mapping.getExprOrNull(fieldRef);
   if (!expr || !expr->solution) {
-    // It should not be possible to arrive at an uninferred width at this point.
-    // In case the constraints are not resolvable, checks before the calls to
-    // `updateType` must have already caught the issues and aborted the pass
-    // early. Might turn this into an assert later.
-    anyFailed = true;
-    mlir::emitError(value.getLoc(), "width should have been inferred");
-    return type;
+    // If this is an `IdExpr`, use its solution
+    if (auto *idExpr = dyn_cast<IdExpr>(expr);
+        idExpr && idExpr->arg->solution.has_value()) {
+      expr = idExpr->arg;
+    } else {
+      // It should not be possible to arrive at an uninferred width at this
+      // point. In case the constraints are not resolvable, checks before the
+      // calls to `updateType` must have already caught the issues and aborted
+      // the pass early. Might turn this into an assert later.
+      anyFailed = true;
+      mlir::emitError(value.getLoc(), "width should have been inferred");
+      return type;
+    }
   }
   int32_t solution = *expr->solution;
   assert(solution >= 0); // The solver infers variables to be 0 or greater.

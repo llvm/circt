@@ -190,7 +190,7 @@ void InjectDUTHierarchy::runOnOperation() {
   auto wrapperInst = b.create<InstanceOp>(
       b.getUnknownLoc(), wrapper, wrapper.moduleName(),
       NameKindEnum::DroppableName, ArrayRef<Attribute>{}, ArrayRef<Attribute>{},
-      false, b.getStringAttr(dutNS.newName(wrapper.moduleName())));
+      false, false, b.getStringAttr(dutNS.newName(wrapper.moduleName())));
   for (const auto &pair : llvm::enumerate(wrapperInst.getResults())) {
     Value lhs = dut.getArgument(pair.index());
     Value rhs = pair.value();

@@ -800,5 +800,26 @@ firrtl.circuit "Foo" {
     firrtl.connect %a, %2 : !firrtl.uint, !firrtl.uint
   }
 
+  // Frozen instances should not affect width inference of the instantiated module
+  // CHECK-LABEL: @FreezablePassthrough
+  // CHECK-SAME: in %in: !firrtl.uint<2>
+  // CHECK-SAME: out %out: !firrtl.uint<2>
+  firrtl.module @FreezablePassthrough(in %in: !firrtl.uint, out %out: !firrtl.uint) {
+    firrtl.connect %out, %in : !firrtl.uint, !firrtl.uint
+  }
+
+  firrtl.module @UsesFreezablePassthrough(
+      in %narrowIn: !firrtl.uint<2>,
+      out %narrowOut: !firrtl.uint<2>,
+      in %wideIn: !firrtl.uint<4>,
+      out %inferredOut: !firrtl.uint) {
+    %instIn, %instOut = firrtl.instance inst @FreezablePassthrough(in in: !firrtl.uint, out out: !firrtl.uint)
+    %frozenInstIn, %frozenInstOut = firrtl.instance frozenInst {frozen} @FreezablePassthrough(in in: !firrtl.uint, out out: !firrtl.uint)
+    firrtl.connect %instIn, %narrowIn : !firrtl.uint, !firrtl.uint<2>
+    firrtl.connect %narrowOut, %instOut : !firrtl.uint<2>, !firrtl.uint
+    firrtl.connect %frozenInstIn, %wideIn : !firrtl.uint, !firrtl.uint<4>
+    firrtl.connect %inferredOut, %frozenInstOut : !firrtl.uint, !firrtl.uint
+  }
+
   firrtl.module @Foo() {}
 }

@@ -20,7 +20,7 @@ class ReferableDeclOp<string mnemonic, list<Trait> traits = []> :
 }
 
 def InstanceOp : ReferableDeclOp<"instance", [HasParent<"firrtl::FModuleOp, firrtl::WhenOp">,
-    DeclareOpInterfaceMethods<SymbolUserOpInterface>, 
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>,
     DeclareOpInterfaceMethods<HWInstanceLike, ["instanceName"]>]> {
   let summary = "Instantiate an instance of a module";
   let description = [{
@@ -38,6 +38,7 @@ def InstanceOp : ReferableDeclOp<"instance", [HasParent<"firrtl::FModuleOp, firr
                        AnnotationArrayAttr:$annotations,
                        PortAnnotationsAttr:$portAnnotations,
                        UnitAttr:$lowerToBind,
+                       UnitAttr:$frozen,
                        OptionalAttr<InnerSymAttr>:$inner_sym);
 
   let results = (outs Variadic<FIRRTLType>:$results);
@@ -54,6 +55,7 @@ def InstanceOp : ReferableDeclOp<"instance", [HasParent<"firrtl::FModuleOp, firr
                    CArg<"ArrayRef<Attribute>", "{}">:$annotations,
                    CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
                    CArg<"bool","false">:$lowerToBind,
+                   CArg<"bool","false">:$frozen,
                    CArg<"StringAttr", "StringAttr()">:$inner_sym)>,
     OpBuilder<(ins "::mlir::TypeRange":$resultTypes,
                    "::mlir::StringRef":$moduleName,
@@ -64,6 +66,7 @@ def InstanceOp : ReferableDeclOp<"instance", [HasParent<"firrtl::FModuleOp, firr
                    "ArrayRef<Attribute>":$annotations,
                    "ArrayRef<Attribute>":$portAnnotations,
                    "bool":$lowerToBind,
+                   "bool":$frozen,
                    "InnerSymAttr":$inner_sym)>,
 
     /// Constructor when you have the target module in hand.
@@ -73,6 +76,7 @@ def InstanceOp : ReferableDeclOp<"instance", [HasParent<"firrtl::FModuleOp, firr
                    CArg<"ArrayRef<Attribute>", "{}">:$annotations,
                    CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
                    CArg<"bool","false">:$lowerToBind,
+                   CArg<"bool","false">:$frozen,
                    CArg<"StringAttr", "StringAttr()">:$inner_sym)>
   ];
 

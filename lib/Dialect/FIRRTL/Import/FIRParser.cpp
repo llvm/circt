@@ -2640,7 +2640,7 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs) {
 //===-------------------------------
 // FIRStmtParser Declaration Parsing
 
-/// instance ::= 'inst' id 'of' id info?
+/// instance ::= 'inst' id 'of' 'frozen'? id info?
 ParseResult FIRStmtParser::parseInstance() {
   auto startTok = consumeToken(FIRToken::kw_inst);
 
@@ -2651,9 +2651,13 @@ ParseResult FIRStmtParser::parseInstance() {
 
   StringRef id;
   StringRef moduleName;
+  bool frozen = false;
   if (parseId(id, "expected instance name") ||
-      parseToken(FIRToken::kw_of, "expected 'of' in instance") ||
-      parseId(moduleName, "expected module name") || parseOptionalInfo())
+      parseToken(FIRToken::kw_of, "expected 'of' in instance"))
+    return failure();
+  if (consumeIf(FIRToken::kw_frozen))
+    frozen = true;
+  if (parseId(moduleName, "expected module name") || parseOptionalInfo())
     return failure();
 
   locationProcessor.setLoc(startTok.getLoc());
@@ -2703,7 +2707,8 @@ ParseResult FIRStmtParser::parseInstance() {
 
   result = builder.create<InstanceOp>(
       referencedModule, id, NameKindEnum::InterestingName,
-      annotations.first.getValue(), annotations.second.getValue(), false, sym);
+      annotations.first.getValue(), annotations.second.getValue(), false,
+      frozen, sym);
 
   // Since we are implicitly unbundling the instance results, we need to keep
   // track of the mapping from bundle fields to results in the unbundledValues

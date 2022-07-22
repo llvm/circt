@@ -230,3 +230,14 @@ firrtl.circuit "UninferredReset" {
   // expected-error @+1 {{contains an abstract reset type after InferResets}}
   firrtl.module @UninferredReset(in %reset: !firrtl.reset) {}
 }
+
+// -----
+
+firrtl.circuit "OnlyUsesFrozenInstances" {
+  // expected-error @+1 {{reset network never driven with concrete type}}
+  firrtl.module @UninferredReset(in %reset: !firrtl.reset) {}
+  firrtl.module @OnlyUsesFrozenInstances(in %knownReset: !firrtl.asyncreset) {
+    %frozenReset = firrtl.instance frozenInst {frozen} @UninferredReset(in reset: !firrtl.reset)
+    firrtl.connect %frozenReset, %knownReset : !firrtl.reset, !firrtl.asyncreset
+  }
+}
