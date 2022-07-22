@@ -365,6 +365,24 @@ def HandshakeRemoveBlock : Pass<"handshake-remove-block-structure", "handshake::
   let constructor = "circt::createHandshakeRemoveBlockPass()";
 }
 
+def InsertMergeBlocks : Pass<"insert-merge-blocks", "::mlir::ModuleOp"> {
+  let summary = "Insert explicit merge blocks";
+  let description = [{
+    This pass inserts additional merge blocks for each block with more than
+    two successors. A merge block is a block that only contains one operation,
+    a terminator, and has two predecessors.
+    The order successors are merged together mirrors the order different control
+    paths are created. Thus, each block with two successors will have a corresponding
+    merge block.
+
+    This pass brings the CFG into a canonical form for further transformations.
+
+    Treats loops and sub-CFGs with irregular control flow like single blocks.
+  }];
+  let constructor = "circt::createInsertMergeBlocksPass()";
+  let dependentDialects = ["mlir::cf::ControlFlowDialect", "mlir::func::FuncDialect"];
+}
+
 //===----------------------------------------------------------------------===//
 // StandardToStaticLogic
 //===----------------------------------------------------------------------===//
