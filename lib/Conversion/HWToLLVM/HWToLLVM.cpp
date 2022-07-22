@@ -486,8 +486,6 @@ void HWToLLVMLoweringPass::runOnOperation() {
   target.addLegalOp<UnrealizedConversionCastOp>();
 
   // Setup the conversion.
-  cf::populateControlFlowToLLVMConversionPatterns(converter, patterns);
-  populateFuncToLLVMConversionPatterns(converter, patterns);
   populateHWToLLVMConversionPatterns(converter, patterns);
 
   target.addLegalDialect<LLVM::LLVMDialect>();
