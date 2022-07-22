@@ -104,30 +104,6 @@ public:
     return dyn_cast_or_null<T>(lookupOp(name));
   }
 
-  /// Return an InnerRef to the given operation, or null attribute if the
-  /// operation does not have an inner symbol already.
-  hw::InnerRefAttr getInnerRef(Operation *op);
-
-  /// Return an InnerRef to the given target, or null attribute if the
-  /// target does not have an inner symbol already.
-  hw::InnerRefAttr getInnerRef(InnerSymTarget target);
-
-  /// Return an InnerRef for the given inner symbol, or null attribute
-  /// if the name is not a valid inner symbol in this table.
-  hw::InnerRefAttr getInnerRef(StringRef name) {
-    if (auto target = lookup(name))
-      return getInnerRef(target);
-    return hw::InnerRefAttr();
-  }
-
-  /// Return an InnerRef for the given inner symbol, or null attribute
-  /// if the name is not a valid inner symbol in this table.
-  hw::InnerRefAttr getInnerRef(StringAttr name) {
-    if (auto target = lookup(name))
-      return getInnerRef(target);
-    return hw::InnerRefAttr();
-  }
-
   /// Get InnerSymbol for an operation.
   static StringAttr getInnerSymbol(Operation *op);
 

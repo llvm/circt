@@ -126,26 +126,6 @@ StringAttr InnerSymbolTable::getInnerSymbol(InnerSymTarget target) {
   return base.getSymIfExists(target.getField());
 }
 
-/// Return an InnerRef to the given operation.
-hw::InnerRefAttr InnerSymbolTable::getInnerRef(Operation *op) {
-  assert(op->getParentWithTrait<OpTrait::InnerSymbolTable>() == innerSymTblOp);
-  if (auto sym = getInnerSymbol(op))
-    return hw::InnerRefAttr::get(SymbolTable::getSymbolName(innerSymTblOp),
-                                 sym);
-  return hw::InnerRefAttr();
-}
-
-hw::InnerRefAttr InnerSymbolTable::getInnerRef(InnerSymTarget target) {
-  assert(target.isPort() && target.getOp() == innerSymTblOp ||
-         !target.isPort() &&
-             target.getOp()->getParentWithTrait<OpTrait::InnerSymbolTable>() ==
-                 innerSymTblOp);
-  if (auto sym = getInnerSymbol(target))
-    return hw::InnerRefAttr::get(SymbolTable::getSymbolName(innerSymTblOp),
-                                 sym);
-  return hw::InnerRefAttr();
-}
-
 //===----------------------------------------------------------------------===//
 // InnerSymbolTableCollection
 //===----------------------------------------------------------------------===//
