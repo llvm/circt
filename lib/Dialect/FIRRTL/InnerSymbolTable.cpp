@@ -13,6 +13,9 @@
 #include "circt/Dialect/FIRRTL/InnerSymbolTable.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.h"
 #include "mlir/IR/Threading.h"
+#include "llvm/Support/Debug.h"
+
+#define DEBUG_TYPE "ist"
 
 using namespace circt;
 using namespace firrtl;
@@ -25,12 +28,17 @@ namespace firrtl {
 //===----------------------------------------------------------------------===//
 
 InnerSymbolTable::InnerSymbolTable(Operation *op) {
+  using llvm::dbgs;
+  LLVM_DEBUG(dbgs() << "===----- InnerSymbolTable -----===\n";
+             dbgs() << "Constructing table for @"
+                    << SymbolTable::getSymbolName(op) << "\n");
   assert(op->hasTrait<OpTrait::InnerSymbolTable>() &&
          "expected operation to have InnerSymbolTable trait");
   // Save the operation this table is for.
   this->innerSymTblOp = op;
 
   auto addSym = [&](StringAttr name, InnerSymTarget target) {
+    LLVM_DEBUG(dbgs() << " - @" << name << " -> " << target << "\n");
     assert(name && !name.getValue().empty());
     auto it = symbolTable.insert({name, target});
     if (!it.second) {

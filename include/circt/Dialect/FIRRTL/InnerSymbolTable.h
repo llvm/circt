@@ -17,6 +17,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
+#include "mlir/IR/SymbolTable.h"
 #include "llvm/ADT/StringRef.h"
 
 namespace circt {
@@ -173,6 +174,24 @@ struct InnerRefNamespace {
     return dyn_cast_or_null<T>(lookupOp(inner));
   }
 };
+
+/// Printing InnerSymTarget's.
+template <typename OS>
+OS &operator<<(OS &os, const InnerSymTarget &target) {
+  if (!target)
+    return os << "<invalid target>";
+
+  if (target.isField())
+    os << "field " << target.getField() << " of ";
+
+  if (target.isPort())
+    os << "<port " << target.getPort() << " on @"
+       << SymbolTable::getSymbolName(target.getOp()) << ">";
+  else
+    os << "<op " << *target.getOp() << ">";
+
+  return os;
+}
 
 } // namespace firrtl
 } // namespace circt
