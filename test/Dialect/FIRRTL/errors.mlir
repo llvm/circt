@@ -943,3 +943,37 @@ firrtl.circuit "MyView" {
     firrtl.xmr.read  %ref_in1, %in1 : !firrtl.ref<uint<1>>
   }
 }
+
+// -----
+// Check upward reference XMRs
+
+firrtl.circuit "func2" {
+  firrtl.module @func2(in %ref_in1: !firrtl.ref<uint<1>>, out %ref_out: !firrtl.ref<uint<1>>) {
+    // expected-error @+1 {{connect has invalid flow for Ref type ports: the source expression "ref_in1" and destination expression "ref_out" both have same port kind, expected Module port to Instance connections only}}
+    firrtl.strictconnect %ref_out, %ref_in1 : !firrtl.ref<uint<1>>
+  }
+}
+
+// -----
+// Check flow semantics for xmr.write
+
+firrtl.circuit "Foo" {
+  // expected-note @+1 {{source was defined here}}
+  firrtl.module @Foo(out %_a: !firrtl.ref<uint<1>>) {
+    %a = firrtl.wire : !firrtl.uint<1>
+    // expected-error @+1 {{connect has invalid flow: the source expression "_a" has sink flow, expected source or duplex flow}}
+    firrtl.xmr.write %a, %_a : !firrtl.ref<uint<1>>
+  }
+}
+
+// -----
+// Check flow semantics for xmr.read
+
+firrtl.circuit "Foo" {
+  // expected-note @+1 {{destination was defined here}}
+  firrtl.module @Foo(in  %_a: !firrtl.ref<uint<1>>) {
+    %a = firrtl.wire : !firrtl.uint<1>
+    // expected-error @+1 {{connect has invalid flow: the destination expression "_a" has source flow, expected sink or duplex flow}}
+    firrtl.xmr.read %_a, %a : !firrtl.ref<uint<1>>
+  }
+}

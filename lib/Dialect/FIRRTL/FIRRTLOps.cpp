@@ -2049,7 +2049,10 @@ void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 // Statements
 //===----------------------------------------------------------------------===//
 
-static LogicalResult checkConnectFlow(Operation *connect) {
+static LogicalResult checkConnectFlow(Operation *connect,
+                                      bool disallowOutputPortSink = false) {
+  // The disallowOutputPortSink flag can be enabled to disallow reads from
+  // module/instance output ports.
   Value dst = connect->getOperand(0);
   Value src = connect->getOperand(1);
 
@@ -2058,7 +2061,8 @@ static LogicalResult checkConnectFlow(Operation *connect) {
   if (foldFlow(src) == Flow::Sink) {
     // A sink that is a port output or instance input used as a source is okay.
     auto kind = getDeclarationKind(src);
-    if (kind != DeclKind::Port && kind != DeclKind::Instance) {
+    if (disallowOutputPortSink ||
+        (kind != DeclKind::Port && kind != DeclKind::Instance)) {
       auto srcRef = getFieldRefFromValue(src);
       bool rootKnown;
       auto srcName = getFieldName(srcRef, rootKnown);
@@ -2081,6 +2085,33 @@ static LogicalResult checkConnectFlow(Operation *connect) {
     diag << "has source flow, expected sink or duplex flow";
     return diag.attachNote(dstRef.getLoc())
            << "the destination was defined here";
+  }
+
+  // If the connect is for RefType, implement the constraint for downward only
+  // references. We cannot connect
+  //  1. an input reference port to the output reference port.
+  //  2. instance reference results to each other.
+  //  This means, the connect can only be used for forwarding RefType module
+  //  ports to Instance ports.
+  if (dst.getType().isa<RefType>() &&
+      getDeclarationKind(src) == getDeclarationKind(dst)) {
+    auto srcRef = getFieldRefFromValue(src);
+    bool rootKnown;
+    auto srcName = getFieldName(srcRef, rootKnown);
+    auto diag = emitError(connect->getLoc());
+    diag << "connect has invalid flow for Ref type ports: the source "
+            "expression ";
+    if (rootKnown)
+      diag << "\"" << srcName << "\" ";
+    diag << "and destination expression ";
+    auto dstRef = getFieldRefFromValue(dst);
+    bool dstRootKnown;
+    auto dstName = getFieldName(dstRef, dstRootKnown);
+    if (dstRootKnown)
+      diag << "\"" << dstName << "\" ";
+    diag << "both have same port kind, expected Module port to Instance "
+            "connections only";
+    return diag;
   }
   return success();
 }
@@ -3912,6 +3943,24 @@ void XorPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 void XorRPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
+}
+
+//===----------------------------------------------------------------------===//
+// TblGen Generated Logic.
+//===----------------------------------------------------------------------===//
+LogicalResult XMRReadOp::verify() {
+  // Check that the flows make sense.
+  if (failed(checkConnectFlow(*this)))
+    return failure();
+
+  return success();
+}
+
+LogicalResult XMRWriteOp::verify() {
+  // Check that the flows make sense.
+  if (failed(checkConnectFlow(*this, true)))
+    return failure();
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
