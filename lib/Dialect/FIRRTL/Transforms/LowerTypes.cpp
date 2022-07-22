@@ -558,15 +558,6 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(
       retval.push_back(newAnno.getDict());
       continue;
     }
-    if (Annotation(opAttr).isClass(dontTouchAnnoClass)) {
-      // This is intended to cover the case of a non-local DontTouchAnnotation
-      // (which is represented as an annotation) being converted to a symbol on
-      // a ground type.  This code will, however, also lower any local
-      // DontTouchAnnotation (even though this should not exist at this point).
-      needsSym = true;
-      continue;
-    }
-
     retval.push_back(annotation);
   }
   return ArrayAttr::get(ctxt, retval);
@@ -611,12 +602,13 @@ bool TypeLoweringVisitor::lowerProducer(
       loweredSymName.resize(baseSymNameLen);
       loweredSymName += field.suffix;
     }
-    bool needsSym = false;
 
     // For all annotations on the parent op, filter them based on the target
     // attribute.
+    bool needsSym = false;
     ArrayAttr loweredAttrs = filterAnnotations(context, oldAnno, srcType, field,
                                                needsSym, loweredSymName);
+    assert(!needsSym && "never need symbols for operations");
     auto *newOp = clone(field, loweredAttrs);
 
     // Carry over the name, if present.
@@ -624,25 +616,23 @@ bool TypeLoweringVisitor::lowerProducer(
       newOp->setAttr(cache.nameAttr, StringAttr::get(context, loweredName));
     if (nameKindAttr)
       newOp->setAttr(cache.nameKindAttr, nameKindAttr);
-    // Carry over the inner_sym name, if present.
-    if (needsSym || op->hasAttr(cache.innerSymAttr)) {
-      auto newName = StringAttr::get(context, loweredSymName);
-      newOp->setAttr(cache.innerSymAttr, InnerSymAttr::get(newName));
-      assert(!loweredSymName.empty());
-
-      // If this operation has an inner symbol, then update the origSymbols
-      // disjoint set to make sure that all derived symbols are associated with
-      // the original symbol.
-      if (innerSymAttr) {
-        origSymbols.unionSets(innerSymAttr.getValue(), newName.getValue());
-        if (field.type.isGround()) {
-          auto module = op->getParentOfType<FModuleOp>();
-          auto key = origSymbols.findLeader(innerSymAttr.getValue());
-          StringAttr keyAttr = StringAttr::get(module.getContext(), *key);
-          innerRefRenames[hw::InnerRefAttr::get(module.getNameAttr(), keyAttr)]
-              .push_back(OpAnnoTarget(newOp));
-        }
+    // Carry over the inner_sym, if present.
+    if (op->hasAttr(cache.innerSymAttr)) {
+      auto innerSym = op->getAttrOfType<InnerSymAttr>(cache.innerSymAttr);
+      llvm::SmallVector<InnerSymPropertiesAttr> newProps;
+      for (auto prop : innerSym.getProps()) {
+        auto fieldID = prop.getFieldID();
+        assert(fieldID != 0);
+        if (!(fieldID >= field.fieldID &&
+              fieldID <= field.fieldID + field.type.getMaxFieldID()))
+          continue;
+        newProps.push_back(InnerSymPropertiesAttr::get(
+            context, prop.getName(), fieldID - field.fieldID,
+            prop.getSymVisibility()));
       }
+      if (!newProps.empty())
+        newOp->setAttr(cache.innerSymAttr,
+                       InnerSymAttr::get(innerSym.getContext(), newProps));
     }
     lowered.push_back(newOp->getResult(0));
   }

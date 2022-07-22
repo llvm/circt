@@ -281,7 +281,7 @@ static void getDeclName(Value value, SmallString<64> &string) {
         string +=
             op.getPortName(value.cast<OpResult>().getResultNumber()).getValue();
       })
-      .Case<WireOp, RegOp, RegResetOp>(
+      .Case<WireOp, RegOp, RegResetOp, NodeOp>(
           [&](auto op) { string += op.getName(); });
 }
 

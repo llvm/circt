@@ -1061,6 +1061,7 @@ firrtl.module private @is1436_FOO() {
 
 firrtl.circuit "NLALowering" {
   // Check if the NLA is updated with the new lowered symbol on a field element.
+  // Can we assume that there is no such hierpath?
   firrtl.hierpath @nla_b [@fallBackName::@test, @Aardvark::@test, @NLALowering::@b]
   // CHECK:      firrtl.hierpath @nla_b [@fallBackName::@test, @Aardvark::@test, @NLALowering::@b_valid]
   // CHECK-NEXT: firrtl.hierpath @nla_b_0 [@fallBackName::@test, @Aardvark::@test, @NLALowering::@b_ready]
@@ -1084,22 +1085,15 @@ firrtl.circuit "NLALowering" {
 
   // CHECK-LABEL: firrtl.module @NLALowering()
   firrtl.module @NLALowering() attributes {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}]}{
-    // bundle has annotations reusing the same NLA, the DontTouch should get dropped.
-    %bundle = firrtl.wire sym @b {
+    // bundle has annotations reusing the same NLA.
+    %bundle = firrtl.wire sym [<@b_valid,2,public>, <@b_data,3,public>] {
       annotations = [
         {circt.fieldID = 2 : i32, circt.nonlocal = @nla_b, class = "test" },
-        {circt.fieldID = 2 : i32, circt.nonlocal = @nla_b, class = "firrtl.transforms.DontTouchAnnotation"},
         {circt.fieldID = 3 : i32, circt.nonlocal = @nla_b, B},
-        {circt.fieldID = 3 : i32, circt.nonlocal = @nla_b, A},
-        {circt.fieldID = 3 : i32, circt.nonlocal = @nla_b, class = "firrtl.transforms.DontTouchAnnotation"}
+        {circt.fieldID = 3 : i32, circt.nonlocal = @nla_b, A}
       ]
     } : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>
-    %bundle2 = firrtl.wire sym @b2 {
-      annotations = [
-        {circt.fieldID = 3 : i32, circt.nonlocal = @nla_b2, class = "firrtl.transforms.DontTouchAnnotation"},
-        {circt.fieldID = 2 : i32, circt.nonlocal = @nla_b2, class = "firrtl.transforms.DontTouchAnnotation"}
-      ]
-    } : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>
+    %bundle2 = firrtl.wire sym [<@b2_valid,2,public>, <@b2_data,3,public>] : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>
     // CHECK:   %bundle_valid = firrtl.wire sym @b_valid : !firrtl.uint<1>
     // Note that same NLA is reused. But this depends on the order of the annotations, if DontTouch was earlier in the list, it would be dropped and a new NLA would be created.
     // CHECK-NEXT:   %bundle_ready = firrtl.wire sym @b_ready {annotations = [{circt.nonlocal = @nla_b_0, class = "test"}]} : !firrtl.uint<1>

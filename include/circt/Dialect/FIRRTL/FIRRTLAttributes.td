@@ -208,8 +208,10 @@ def InnerSymProperties : AttrDef<FIRRTLDialect, "InnerSymProperties"> {
          DefaultValuedParameter<"::mlir::StringAttr", "public">:$sym_visibility
                      );
   let builders = [
-    AttrBuilderWithInferredContext<(ins "::mlir::StringAttr":$sym),[{
-      return get(sym.getContext(), sym, 0,
+    AttrBuilderWithInferredContext<(ins "::mlir::StringAttr":$sym,
+                                        CArg<"unsigned", "0">:$fieldID
+    ),[{
+      return get(sym.getContext(), sym, fieldID,
                         StringAttr::get(sym.getContext(), "public") );
     }]>
   ];
@@ -231,9 +233,10 @@ def InnerSymAttr : AttrDef<FIRRTLDialect, "InnerSym"> {
   let mnemonic = "innerSym";
   let parameters = (ins ArrayRefParameter<"InnerSymPropertiesAttr">:$props);
   let builders = [
-    AttrBuilderWithInferredContext<(ins "::mlir::StringAttr":$sym),[{
+    AttrBuilderWithInferredContext<(ins "::mlir::StringAttr":$sym,
+                                        CArg<"unsigned", "0">:$fieldID),[{
       return get(sym.getContext(), 
-      {InnerSymPropertiesAttr::get(sym.getContext(), sym, 0,
+      {InnerSymPropertiesAttr::get(sym.getContext(), sym, fieldID,
                         StringAttr::get(sym.getContext(), "public"))});
     }]>
   ];

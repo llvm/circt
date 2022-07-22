@@ -20,6 +20,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
@@ -241,6 +242,29 @@ static LogicalResult applyWithoutTarget(const AnnoPathValue &target,
   return applyWithoutTargetImpl(target, anno, state, allowNonLocal);
 }
 
+static void visitSub(unsigned &id, FIRRTLType type,
+                     std::function<void(unsigned)> fn) {
+  TypeSwitch<FIRRTLType>(type)
+      .template Case<BundleType>([&](BundleType bundle) {
+        for (auto i : llvm::seq(0u, (unsigned)bundle.getNumElements())) {
+          ++id;
+          visitSub(id, bundle.getElementType(i), fn);
+        }
+      })
+      .template Case<FVectorType>([&](FVectorType vector) {
+        for (auto i : llvm::seq((size_t)0, vector.getNumElements())) {
+          ++id;
+          visitSub(id, vector.getElementType(), fn);
+        }
+      })
+      .Default([&](auto) { fn(id); });
+}
+
+static void visit(unsigned id, FIRRTLType type,
+                  std::function<void(unsigned)> fn) {
+  visitSub(id, type, fn);
+}
+
 /// Apply a DontTouchAnnotation to the circuit.  For almost all operations, this
 /// just adds a symbol.  For CHIRRTL memory ports, this preserves the
 /// annotation.
@@ -258,12 +282,43 @@ static LogicalResult applyDontTouch(const AnnoPathValue &target,
     return failure();
   }
 
-  // If the annotation is on a MemoryPortOp or if the annotation is on part of
-  // an aggregate, then keep the DontTouchAnnotation around.
-  if (isa<chirrtl::MemoryPortOp>(target.ref.getOp()) || target.fieldIdx)
+  if (isa<chirrtl::MemoryPortOp>(target.ref.getOp()) ||
+      target.ref.dyn_cast<PortAnnoTarget>())
     return applyWithoutTarget<true>(target, anno, state);
 
-  target.ref.getInnerSym(state.getNamespace(target.ref.getModule()));
+  if (isa<chirrtl::SeqMemOp, chirrtl::CombMemOp, firrtl::InstanceOp,
+          firrtl::MemOp>(target.ref.getOp())) {
+    assert(target.fieldIdx == 0);
+    target.ref.getInnerSym(state.getNamespace(target.ref.getModule()));
+    return success();
+  }
+
+  auto context = target.ref.getOp()->getContext();
+  auto op = target.ref.getOp();
+  InnerSymAttr innerSym = op->getAttrOfType<InnerSymAttr>(
+      InnerSymbolTable::getInnerSymbolAttrName());
+
+  SmallVector<InnerSymPropertiesAttr> props;
+  if (innerSym)
+    props.append(innerSym.getProps().begin(), innerSym.getProps().end());
+
+  auto type = target.ref.getOp()
+                  ->getResult(0)
+                  .getType()
+                  .cast<FIRRTLType>()
+                  .getFinalTypeByFieldID(target.fieldIdx);
+
+  auto fn = [&](unsigned id) {
+    if (!innerSym || innerSym.getSymIfExists(id))
+      props.push_back(InnerSymPropertiesAttr::get(
+          StringAttr::get(
+              context,
+              state.getNamespace(target.ref.getModule()).newName("dontTouch")),
+          id));
+  };
+  visit(target.fieldIdx, type, fn);
+  op->setAttr(InnerSymbolTable::getInnerSymbolAttrName(),
+              InnerSymAttr::get(context, props));
   return success();
 }
 
