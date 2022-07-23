@@ -491,8 +491,8 @@ void HWToLLVMLoweringPass::runOnOperation() {
   target.addLegalDialect<LLVM::LLVMDialect>();
   target.addLegalOp<ModuleOp>();
 
-  // Apply a full conversion to remove unrealized conversion casts.
-  if (failed(applyFullConversion(getOperation(), target, std::move(patterns))))
+  // Apply the partial conversion.
+  if (failed(applyPartialConversion(getOperation(), target, std::move(patterns))))
     signalPassFailure();
 }
 

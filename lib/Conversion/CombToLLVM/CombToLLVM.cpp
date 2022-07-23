@@ -262,7 +262,7 @@ void CombToLLVMLoweringPass::runOnOperation() {
   target.addLegalOp<ModuleOp>();
 
   // Apply a full conversion to remove unrealized conversion casts.
-  if (failed(applyFullConversion(getOperation(), target, std::move(patterns))))
+  if (failed(applyPartialConversion(getOperation(), target, std::move(patterns))))
     signalPassFailure();
 }
 
