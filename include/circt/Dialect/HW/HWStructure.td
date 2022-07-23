@@ -428,7 +428,7 @@ def InstanceOp : HWOp<"instance", [
 
     /// Lookup the module or extmodule for the symbol.  This returns null on
     /// invalid IR.
-    Operation *getReferencedModule(const HWSymbolCache *cache = nullptr);
+    Operation *getReferencedModule(const HWSymbolCache *cache);
 
     /// Get the instances's name.
     StringAttr getName() {

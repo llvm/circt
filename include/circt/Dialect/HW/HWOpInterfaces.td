@@ -138,6 +138,11 @@ def HWInstanceLike : OpInterface<"HWInstanceLike"> {
     "::mlir::StringAttr", "referencedModuleNameAttr", (ins),
     /*methodBody=*/[{}],
     /*defaultImplementation=*/[{ return $_op.getModuleNameAttr().getAttr(); }]>,
+
+    InterfaceMethod<"Get the referenced module",
+    "::mlir::Operation *", "getReferencedModule", (ins),
+    /*methodBody=*/[{}],
+    /*defaultImplementation=*/[{}]>,
   ];
 }
 
