@@ -492,7 +492,8 @@ void HWToLLVMLoweringPass::runOnOperation() {
   target.addLegalOp<ModuleOp>();
 
   // Apply the partial conversion.
-  if (failed(applyPartialConversion(getOperation(), target, std::move(patterns))))
+  if (failed(
+          applyPartialConversion(getOperation(), target, std::move(patterns))))
     signalPassFailure();
 }
 
