@@ -36,7 +36,7 @@ struct PortInfo {
   StringAttr name;
   FIRRTLType type;
   Direction direction;
-  StringAttr sym = {};
+  InnerSymAttr sym = {};
   Location loc = UnknownLoc::get(type.getContext());
   AnnotationSet annotations = AnnotationSet(type.getContext());
 
@@ -61,6 +61,28 @@ struct PortInfo {
   /// Return true if this is an inout port.  This will be true if the port
   /// contains either bi-directional signals or analog types.
   bool isInOut() { return !isOutput() && !isInput(); }
+
+  /// Default constructors
+  PortInfo(StringAttr name, FIRRTLType type, Direction dir)
+      : name(name), type(type), direction(dir) {}
+  PortInfo(StringAttr name, FIRRTLType type, Direction dir, StringAttr symName)
+      : name(name), type(type), direction(dir) {
+    sym = InnerSymAttr::get(symName);
+  };
+  PortInfo(StringAttr name, FIRRTLType type, Direction dir, StringAttr symName,
+           Location loc)
+      : name(name), type(type), direction(dir), loc(loc) {
+    sym = symName ? InnerSymAttr::get(symName) : InnerSymAttr();
+  };
+  PortInfo(StringAttr name, FIRRTLType type, Direction dir, StringAttr symName,
+           Location loc, AnnotationSet annos)
+      : name(name), type(type), direction(dir), loc(loc), annotations(annos) {
+    sym = symName ? InnerSymAttr::get(symName) : InnerSymAttr();
+  };
+  PortInfo(StringAttr name, FIRRTLType type, Direction dir,
+           InnerSymAttr symName, Location loc, AnnotationSet annos)
+      : name(name), type(type), direction(dir), sym(symName), loc(loc),
+        annotations(annos) {}
 };
 
 /// Verification hook for verifying module like operations.
