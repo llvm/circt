@@ -36,11 +36,11 @@ LogicalResult ServiceGeneratorDispatcher::generate(ServiceImplementReqOp req) {
     lookupGen = create(req.getContext());
   }
 
-  auto genF = lookupGen->find(req.identifierAttr());
+  auto genF = lookupGen->find(req.impl_typeAttr());
   if (genF == lookupGen->end()) {
     if (failIfNotFound)
       return req.emitOpError("Could not find service generator for attribute '")
-             << req.identifierAttr() << "'";
+             << req.impl_typeAttr() << "'";
     return success();
   }
   return genF->second(req);
@@ -52,14 +52,26 @@ LogicalResult instantiateCosimEndpoints(ServiceImplementReqOp req) {
   Block *portReqs = &req.portReqs().getBlocks().front();
   Value clk = req.getOperand(0);
   Value rst = req.getOperand(1);
-  uint64_t epIdCtr = 0;
+  uint64_t epIdCtr = 1000; // Default EpID counter.
+  if (req.impl_opts()) {
+    auto opts = req.impl_opts()->getValue();
+    for (auto nameAttr : opts) {
+      if (nameAttr.getName().getValue() == "EpID_start") {
+        auto epAttr = nameAttr.getValue().dyn_cast<IntegerAttr>();
+        if (!epAttr)
+          return req.emitOpError("incorrect type for option 'EpID_start'");
+        epIdCtr = epAttr.getInt();
+      } else {
+        return req.emitOpError("did not recognize option name ")
+               << nameAttr.getName();
+      }
+    }
+  }
 
   auto toStringAttr = [&](ArrayAttr strArr) {
     std::string buff;
     llvm::raw_string_ostream os(buff);
-    llvm::interleave(llvm::map_range(strArr.getAsRange<StringAttr>(),
-                                     [](StringAttr s) { return s.getValue(); }),
-                     os, ".");
+    llvm::interleave(strArr.getAsValueRange<StringAttr>(), os, ".");
     return StringAttr::get(ctxt, os.str());
   };
 
@@ -166,6 +178,17 @@ void ESIConnectServicesPass::runOnOperation() {
       return;
     }
   }
+
+  // By now, we should be done with all of the service declarations so we should
+  // delete them.
+  DenseSet<StringAttr> stillUsed;
+  outerMod.walk([&](ServiceImplementReqOp req) {
+    stillUsed.insert(StringAttr::get(req.getContext(), req.service_symbol()));
+  });
+  outerMod.walk([&](ServiceDeclOp decl) {
+    if (!stillUsed.contains(decl.sym_nameAttr()))
+      decl.erase();
+  });
 }
 
 LogicalResult ESIConnectServicesPass::process(hw::HWMutableModuleLike mod) {
@@ -247,7 +270,7 @@ LogicalResult ESIConnectServicesPass::replaceInst(ServiceInstanceOp instOp,
   OpBuilder b(instOp);
   auto implOp = b.create<ServiceImplementReqOp>(
       instOp.getLoc(), resultTypes, instOp.service_symbolAttr(),
-      instOp.identifierAttr(), operands);
+      instOp.impl_typeAttr(), instOp.impl_optsAttr(), operands);
   implOp->setDialectAttrs(instOp->getDialectAttrs());
   implOp.portReqs().push_back(portReqs);
 
