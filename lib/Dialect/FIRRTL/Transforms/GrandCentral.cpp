@@ -2195,20 +2195,6 @@ void GrandCentralPass::runOnOperation() {
   markAnalysesPreserved<NLATable>();
 }
 
-StringAttr GrandCentralPass::getOrAddInnerSym(FModuleLike module,
-                                              size_t portIdx) {
-  auto attr = module.getPortSymbolAttr(portIdx);
-  if (attr && !attr.getValue().empty())
-    return attr;
-  StringRef nameHint = "gct_sym";
-  if (auto attr = module.getPortNameAttr(portIdx))
-    nameHint = attr.getValue();
-  auto name = getModuleNamespace(module).newName(nameHint);
-  attr = StringAttr::get(module.getContext(), name);
-  module.setPortSymbolAttr(portIdx, attr);
-  return attr;
-}
-
 hw::InnerRefAttr GrandCentralPass::getInnerRefTo(Operation *op) {
   return ::getInnerRefTo(op, "", [&](FModuleOp mod) -> ModuleNamespace & {
     return getModuleNamespace(mod);
@@ -2217,8 +2203,10 @@ hw::InnerRefAttr GrandCentralPass::getInnerRefTo(Operation *op) {
 
 hw::InnerRefAttr GrandCentralPass::getInnerRefTo(FModuleLike module,
                                                  size_t portIdx) {
-  return hw::InnerRefAttr::get(SymbolTable::getSymbolName(module),
-                               getOrAddInnerSym(module, portIdx));
+  return ::getInnerRefTo(module, portIdx, "",
+                         [&](FModuleLike mod) -> ModuleNamespace & {
+                           return getModuleNamespace(mod);
+                         });
 }
 
 //===----------------------------------------------------------------------===//

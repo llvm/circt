@@ -390,8 +390,8 @@ StringAttr circt::firrtl::getOrAddInnerSym(
     std::function<ModuleNamespace &(FModuleLike)> getNamespace) {
 
   auto attr = mod.getPortSymbolAttr(portIdx);
-  if (attr && !attr.getValue().empty())
-    return attr;
+  if (attr)
+    return attr.getSymName();
   if (nameHint.empty()) {
     if (auto name = mod.getPortNameAttr(portIdx))
       nameHint = name;
@@ -399,9 +399,9 @@ StringAttr circt::firrtl::getOrAddInnerSym(
       nameHint = "sym";
   }
   auto name = getNamespace(mod).newName(nameHint);
-  attr = StringAttr::get(mod.getContext(), name);
-  mod.setPortSymbolAttr(portIdx, attr);
-  return attr;
+  auto sAttr = StringAttr::get(mod.getContext(), name);
+  mod.setPortSymbolAttr(portIdx, sAttr);
+  return sAttr;
 }
 
 /// Obtain an inner reference to a port, possibly adding an `inner_sym`

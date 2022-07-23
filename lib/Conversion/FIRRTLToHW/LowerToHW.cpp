@@ -915,7 +915,8 @@ LogicalResult FIRRTLModuleLowering::lowerPorts(
     hw::PortInfo hwPort;
     hwPort.name = firrtlPort.name;
     hwPort.type = lowerType(firrtlPort.type);
-    hwPort.sym = firrtlPort.sym;
+    hwPort.sym = firrtlPort.sym ? firrtlPort.sym.getSymName()
+                                : StringAttr::get(moduleOp->getContext(), "");
 
     // We can't lower all types, so make sure to cleanly reject them.
     if (!hwPort.type) {
