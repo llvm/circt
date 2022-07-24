@@ -313,7 +313,7 @@ def InnerSymbol : OpInterface<"InnerSymbolOpInterface"> {
   let cppNamespace = "::circt::firrtl";
   let methods = [
     InterfaceMethod<"Returns the name of this inner symbol.",
-      "StringAttr", "getInnerNameAttr", (ins), [{}],
+      "::mlir::StringAttr", "getInnerNameAttr", (ins), [{}],
       /*defaultImplementation=*/[{
         if (auto attr =
               this->getOperation()->template getAttrOfType<InnerSymAttr>(
@@ -323,14 +323,14 @@ def InnerSymbol : OpInterface<"InnerSymbolOpInterface"> {
       }]
     >,
     InterfaceMethod<"Returns the name of this inner symbol.",
-      "Optional<StringRef>", "getInnerName", (ins), [{}],
+      "Optional<::mlir::StringRef>", "getInnerName", (ins), [{}],
       /*defaultImplementation=*/[{
         auto attr = this->getInnerNameAttr();
         return attr ? Optional<StringRef>(attr.getValue()) : None;
       }]
     >,
     InterfaceMethod<"Sets the name of this inner symbol.",
-      "void", "setInnerSymbol", (ins "StringAttr":$name), [{}],
+      "void", "setInnerSymbol", (ins "::mlir::StringAttr":$name), [{}],
       /*defaultImplementation=*/[{
         this->getOperation()->setAttr(
             InnerSymbolTable::getInnerSymbolAttrName(), InnerSymAttr::get(name));
@@ -347,7 +347,7 @@ def InnerSymbol : OpInterface<"InnerSymbolOpInterface"> {
       }]
     >,
     InterfaceMethod<"Returns the InnerSymAttr.",
-      "InnerSymAttr", "getInnerSymAttr", (ins), [{}],
+      "::circt::firrtl::InnerSymAttr", "getInnerSymAttr", (ins), [{}],
       /*defaultImplementation=*/[{
         return this->getOperation()->template getAttrOfType<InnerSymAttr>(
               circt::firrtl::InnerSymbolTable::getInnerSymbolAttrName());
