@@ -2419,7 +2419,7 @@ struct CombConcatOpConversion : public ConvertToLLVMPattern {
 } // namespace
 
 namespace {
-/// Lower an ArrayConcatOp operation to the LLVM dialect.
+/// Lower a comb::ReplicateOp operation to the LLVM dialect.
 struct CombReplicateOpConversion
     : public ConvertOpToLLVMPattern<comb::ReplicateOp> {
   using ConvertOpToLLVMPattern<comb::ReplicateOp>::ConvertOpToLLVMPattern;
