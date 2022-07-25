@@ -41,3 +41,26 @@ MlirStringRef svSVAttributeAttrGetExpression(MlirAttribute cAttr) {
     return wrap(expr.getValue());
   return {nullptr, 0};
 }
+
+bool svAttrIsASVAttributesAttr(MlirAttribute cAttr) {
+  return unwrap(cAttr).isa<SVAttributesAttr>();
+}
+
+MlirAttribute svSVAttributesAttrGet(MlirContext cCtxt, MlirAttribute attributes,
+                                    bool emitAsComments) {
+  mlir::MLIRContext *ctxt = unwrap(cCtxt);
+  return wrap(SVAttributesAttr::get(ctxt,
+                                    unwrap(attributes).cast<mlir::ArrayAttr>(),
+                                    mlir::BoolAttr::get(ctxt, emitAsComments)));
+}
+
+MlirAttribute svSVAttributesAttrGetAttributes(MlirAttribute attributes) {
+  return wrap(unwrap(attributes).cast<SVAttributesAttr>().getAttributes());
+}
+
+bool svSVAttributesAttrGetEmitAsComments(MlirAttribute attributes) {
+  return unwrap(attributes)
+      .cast<SVAttributesAttr>()
+      .getEmitAsComments()
+      .getValue();
+}
