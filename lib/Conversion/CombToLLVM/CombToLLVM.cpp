@@ -260,8 +260,7 @@ void circt::populateCombToLLVMConversionPatterns(LLVMTypeConverter &converter,
   patterns.add<CombAddOpConversion, CombSubOpConversion, CombMulOpConversion,
                CombDivUOpConversion, CombDivSOpConversion, CombModUOpConversion,
                CombModSOpConversion, CombICmpOpConversion, CombMuxOpConversion,
-               CombReplicateOpConversion>(
-      converter);
+               CombReplicateOpConversion>(converter);
 }
 
 // TODO: Update for Comb
