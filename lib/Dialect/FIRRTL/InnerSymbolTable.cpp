@@ -102,27 +102,25 @@ StringAttr InnerSymbolTable::getInnerSymbol(InnerSymTarget target) {
   // Assert on misuse, but try to handle queries otherwise.
   assert(target);
 
-  InnerSymAttr base;
   if (target.isPort()) {
     auto mod = dyn_cast<FModuleLike>(target.getOp());
     if (!mod)
       return {};
     assert(target.getPort() < mod.getNumPorts());
     // TODO: update this when ports support per-field symbols
-    // base = mod.getPortSymbolAttr(target.getPort());
     auto sym = mod.getPortSymbolAttr(target.getPort());
     // Workaround quirk with empty string for no symbol on ports.
     if (sym && sym.getValue().empty())
       return {};
     return sym;
-  } else {
-    // InnerSymbols only supported if op implements the interface.
-    auto symOp = dyn_cast<InnerSymbolOpInterface>(target.getOp());
-    if (!symOp)
-      return {};
-    base = symOp.getInnerSymAttr();
   }
 
+  // InnerSymbols only supported if op implements the interface.
+  auto symOp = dyn_cast<InnerSymbolOpInterface>(target.getOp());
+  if (!symOp)
+    return {};
+
+  auto base = symOp.getInnerSymAttr();
   return base.getSymIfExists(target.getField());
 }
 
