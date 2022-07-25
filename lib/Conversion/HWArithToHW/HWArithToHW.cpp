@@ -91,7 +91,7 @@ struct DivOpLowering : public OpConversionPattern<DivOp> {
     auto rhsType = op.getOperand(1).getType().template cast<IntegerType>();
     auto targetType = op.result().getType().template cast<IntegerType>();
 
-    // comb.div* needs identical bitwidths for its operands and their result.
+    // comb.div* needs identical bitwidths for its operands and its result.
     // Hence, we need to calculate the minimal bitwidth that can be used to
     // represent the result as well as the operands without precision or sign
     // loss. The target size only depends on LHS and already handles the edge
