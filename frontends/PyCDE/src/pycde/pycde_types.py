@@ -48,6 +48,10 @@ class _Types:
       return self.wrap(hw.StructType.get(members), name)
     raise TypeError("Expected either list or dict.")
 
+  @property
+  def any(self):
+    return self.wrap(esi.AnyType.get())
+
   def wrap(self, type, name=None):
     if name is not None:
       type = self._create_alias(type, name)

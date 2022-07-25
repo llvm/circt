@@ -3,6 +3,7 @@
 
 import pycde
 from pycde import (Input, InputChannel, OutputChannel, module, generator, types)
+from pycde import esi
 
 
 @module
@@ -34,6 +35,7 @@ class Top:
   def construct(ports):
     p = Producer(clk=ports.clk)
     Consumer(clk=ports.clk, int_in=p.const_out)
+    esi.Cosim()
 
 
 s = pycde.System([Top], name="EsiSys")

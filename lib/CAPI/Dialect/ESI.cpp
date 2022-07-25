@@ -40,6 +40,13 @@ MlirType circtESIChannelGetInner(MlirType channelType) {
   return wrap(unwrap(channelType).cast<ChannelPort>().getInner());
 }
 
+bool circtESITypeIsAnAnyType(MlirType type) {
+  return unwrap(type).isa<AnyType>();
+}
+MlirType circtESIAnyTypeGet(MlirContext ctxt) {
+  return wrap(AnyType::get(unwrap(ctxt)));
+}
+
 MlirOperation circtESIWrapModule(MlirOperation cModOp, long numPorts,
                                  const MlirStringRef *ports) {
   mlir::Operation *modOp = unwrap(cModOp);
