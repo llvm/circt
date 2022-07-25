@@ -138,3 +138,74 @@ bool InstanceGraphBase::isAncestor(HWModuleLike child, HWModuleLike parent) {
   }
   return false;
 }
+
+FailureOr<InstanceGraphNode *> InstanceGraphBase::getInferredTopLevelNode() {
+  if (inferredTopLevelNode)
+    return inferredTopLevelNode;
+
+  /// Topologically sort the instance graph.
+  llvm::SetVector<InstanceGraphNode *> visited, marked;
+  llvm::SetVector<InstanceGraphNode *> candidateTopLevel(this->begin(),
+                                                         this->end());
+  SmallVector<InstanceGraphNode *> cycleTrace;
+
+  // Recursion function; returns true if a cycle was detected.
+  std::function<bool(InstanceGraphNode *, SmallVector<InstanceGraphNode *>)>
+      cycleUtil =
+          [&](InstanceGraphNode *node, SmallVector<InstanceGraphNode *> trace) {
+            if (visited.contains(node))
+              return false;
+            trace.push_back(node);
+            if (marked.contains(node)) {
+              // Cycle detected.
+              cycleTrace = trace;
+              return true;
+            }
+            marked.insert(node);
+            for (auto use : *node) {
+              InstanceGraphNode *targetModule = use->getTarget();
+              candidateTopLevel.remove(targetModule);
+              if (cycleUtil(targetModule, trace))
+                return true; // Cycle detected.
+            }
+            marked.remove(node);
+            visited.insert(node);
+            return false;
+          };
+
+  bool cyclic = false;
+  for (auto moduleIt : *this) {
+    if (visited.contains(moduleIt))
+      continue;
+
+    cyclic |= cycleUtil(moduleIt, {});
+    if (cyclic)
+      break;
+  }
+
+  if (cyclic) {
+    auto err = getParent()->emitOpError();
+    err << "cannot deduce top level module - cycle "
+           "detected in instance graph (";
+    llvm::interleave(
+        cycleTrace, err,
+        [&](auto node) { err << node->getModule().moduleName(); }, "->");
+    err << ").";
+    return err;
+  }
+  assert(!candidateTopLevel.empty() &&
+         "if non-cyclic, there should be at least 1 candidate top level");
+
+  if (candidateTopLevel.size() > 1) {
+    auto err = getParent()->emitOpError();
+    err << "multiple candidate top-level modules detected (";
+    llvm::interleaveComma(candidateTopLevel, err, [&](auto topLevel) {
+      err << topLevel->getModule().moduleName();
+    });
+    err << ").";
+    return err;
+  }
+
+  inferredTopLevelNode = *candidateTopLevel.begin();
+  return inferredTopLevelNode;
+}
