@@ -87,7 +87,8 @@ struct DivOpLowering : public OpConversionPattern<DivOp> {
   matchAndRewrite(DivOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
-    auto lhsType = op.getOperand(0).getType().template cast<IntegerType>();
+    auto isLhsTypeSigned =
+        op.getOperand(0).getType().template cast<IntegerType>().isSigned();
     auto rhsType = op.getOperand(1).getType().template cast<IntegerType>();
     auto targetType = op.result().getType().template cast<IntegerType>();
 
@@ -107,7 +108,7 @@ struct DivOpLowering : public OpConversionPattern<DivOp> {
 
     // Extend the operands
     Value lhsValue = extendTypeWidth(rewriter, loc, adaptor.inputs()[0],
-                                     extendSize, lhsType.isSigned());
+                                     extendSize, isLhsTypeSigned);
     Value rhsValue = extendTypeWidth(rewriter, loc, adaptor.inputs()[1],
                                      extendSize, rhsType.isSigned());
 
@@ -137,19 +138,20 @@ struct CastOpLowering : public OpConversionPattern<CastOp> {
   matchAndRewrite(CastOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto sourceType = op.in().getType().cast<IntegerType>();
-    auto targetType = op.out().getType().cast<IntegerType>();
+    auto sourceWidth = sourceType.getWidth();
+    bool isSourceTypeSigned = sourceType.isSigned();
+    auto targetWidth = op.out().getType().cast<IntegerType>().getWidth();
 
     Value replaceValue;
-    if (sourceType.getWidth() == targetType.getWidth()) {
+    if (sourceWidth == targetWidth) {
       // the width does not change, we are done here and can directly use the
       // lowering input value
       replaceValue = adaptor.in();
-    } else if (sourceType.getWidth() < targetType.getWidth()) {
+    } else if (sourceWidth < targetWidth) {
       // bit extensions needed, the type of extension required is determined by
       // the source type only!
-      replaceValue =
-          extendTypeWidth(rewriter, op.getLoc(), adaptor.in(),
-                          targetType.getWidth(), sourceType.isSigned());
+      replaceValue = extendTypeWidth(rewriter, op.getLoc(), adaptor.in(),
+                                     targetWidth, isSourceTypeSigned);
     } else {
       // bit truncation needed
       replaceValue = extractBits(rewriter, op.getLoc(), adaptor.in(),
@@ -174,15 +176,17 @@ struct BinaryOpLowering : public OpConversionPattern<BinOp> {
   matchAndRewrite(BinOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
-    auto lhsType = op.getOperand(0).getType().template cast<IntegerType>();
-    auto rhsType = op.getOperand(1).getType().template cast<IntegerType>();
+    auto isLhsTypeSigned =
+        op.getOperand(0).getType().template cast<IntegerType>().isSigned();
+    auto isRhsTypeSigned =
+        op.getOperand(1).getType().template cast<IntegerType>().isSigned();
     auto targetWidth =
         op.result().getType().template cast<IntegerType>().getWidth();
 
     Value lhsValue = extendTypeWidth(rewriter, loc, adaptor.inputs()[0],
-                                     targetWidth, lhsType.isSigned());
+                                     targetWidth, isLhsTypeSigned);
     Value rhsValue = extendTypeWidth(rewriter, loc, adaptor.inputs()[1],
-                                     targetWidth, rhsType.isSigned());
+                                     targetWidth, isRhsTypeSigned);
     rewriter.replaceOpWithNewOp<ReplaceOp>(op, lhsValue, rhsValue);
     return success();
   }
