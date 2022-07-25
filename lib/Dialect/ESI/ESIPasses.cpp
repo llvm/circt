@@ -458,8 +458,9 @@ bool ESIPortsPass::updateFunc(HWModuleOp mod) {
     if (chanTy.hasData()) {
       newArgTypes.push_back(chanTy.getInner());
       newArgNames.push_back(argNameAttr);
-      data = mod.front().insertArgument(blockArgNum++, chanTy.getInner(),
+      data = mod.front().insertArgument(blockArgNum, chanTy.getInner(),
                                         mod.getArgument(argNum).getLoc());
+      ++blockArgNum;
     } else {
       // This is a data-less channel - need to create a none-typed SSA value
       // to feed into wrapvr.
@@ -468,15 +469,17 @@ bool ESIPortsPass::updateFunc(HWModuleOp mod) {
 
     newArgTypes.push_back(i1);
     newArgNames.push_back(appendToRtlName(argNameAttr, "_valid"));
-    Value valid = mod.front().insertArgument(blockArgNum++, i1,
+    Value valid = mod.front().insertArgument(blockArgNum, i1,
                                              mod.getArgument(argNum).getLoc());
+    ++blockArgNum;
     // Build the ESI wrap operation to translate the lowered signals to what
     // they were. (A later pass takes care of eliminating the ESI ops.)
     auto wrap = modBuilder.create<WrapValidReady>(data, valid);
     // Replace uses of the old ESI port argument with the new one from the wrap.
     mod.front().getArgument(blockArgNum).replaceAllUsesWith(wrap.chanOutput());
     // Delete the ESI port block argument.
-    mod.front().eraseArgument(blockArgNum--);
+    mod.front().eraseArgument(blockArgNum);
+    --blockArgNum;
     newReadySignals.push_back(
         std::make_pair(wrap.ready(), appendToRtlName(argNameAttr, "_ready")));
     updated = true;
@@ -1340,8 +1343,6 @@ void ESItoHWPass::runOnOperation() {
   if (failed(
           applyPartialConversion(top, pass1Target, std::move(pass1Patterns))))
     signalPassFailure();
-
-  top.dump();
 
   ConversionTarget pass2Target(*ctxt);
   pass2Target.addLegalDialect<CombDialect>();

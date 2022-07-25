@@ -18,10 +18,8 @@ def ChannelOpInterface : OpInterface<"ChannelOpInterface"> {
 
   let methods = [
     InterfaceMethod<
-      [{"Returns any value of this operation that carries data semantics.
-         This value is only used for inspection purposes and may therefore point
-         to either in or outputs of an operation."}],
-      "mlir::Value", "anyChannel"
+      [{"Returns the channel type of this operation."}],
+      "circt::esi::ChannelPort", "channelType"
     >,
     InterfaceMethod<
         "Returns true if this channel carries data.",
@@ -30,7 +28,7 @@ def ChannelOpInterface : OpInterface<"ChannelOpInterface"> {
         (ins),
         /*methodBody=*/"",
         /*defaultImplementation=*/[{
-          return $_op.anyChannel().getType().template cast<circt::esi::ChannelPort>().hasData();
+          return $_op.channelType().hasData();
         }]>,
     InterfaceMethod<
         [{"Returns the inner type of this channel. This will be the type of the
@@ -43,7 +41,7 @@ def ChannelOpInterface : OpInterface<"ChannelOpInterface"> {
         /*defaultImplementation=*/[{
           if(!$_op.hasData())
             return mlir::NoneType::get($_op.getContext());
-          return $_op.anyChannel().getType().template cast<circt::esi::ChannelPort>().getInner();
+          return $_op.channelType().getInner();
         }]>
   ];
 }

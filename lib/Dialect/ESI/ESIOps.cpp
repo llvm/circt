@@ -55,7 +55,9 @@ void ChannelBuffer::print(OpAsmPrinter &p) {
   p << " : " << innerType();
 }
 
-Value ChannelBuffer::anyChannel() { return input(); }
+circt::esi::ChannelPort ChannelBuffer::channelType() {
+  return input().getType().cast<circt::esi::ChannelPort>();
+}
 
 //===----------------------------------------------------------------------===//
 // PipelineStage functions.
@@ -87,7 +89,9 @@ void PipelineStage::print(OpAsmPrinter &p) {
   p << " : " << innerType();
 }
 
-Value PipelineStage::anyChannel() { return input(); }
+circt::esi::ChannelPort PipelineStage::channelType() {
+  return input().getType().cast<circt::esi::ChannelPort>();
+}
 
 //===----------------------------------------------------------------------===//
 // Wrap / unwrap.
@@ -154,7 +158,9 @@ void UnwrapValidReady::print(OpAsmPrinter &p) {
   p << " : " << rawOutput().getType();
 }
 
-Value WrapValidReady::anyChannel() { return chanOutput(); }
+circt::esi::ChannelPort WrapValidReady::channelType() {
+  return chanOutput().getType().cast<circt::esi::ChannelPort>();
+}
 
 void UnwrapValidReady::build(OpBuilder &b, OperationState &state, Value inChan,
                              Value ready) {
@@ -162,7 +168,9 @@ void UnwrapValidReady::build(OpBuilder &b, OperationState &state, Value inChan,
   build(b, state, inChanType.getInner(), b.getI1Type(), inChan, ready);
 }
 
-Value UnwrapValidReady::anyChannel() { return chanInput(); }
+circt::esi::ChannelPort UnwrapValidReady::channelType() {
+  return chanInput().getType().cast<circt::esi::ChannelPort>();
+}
 
 /// If 'iface' looks like an ESI interface, return the inner data type.
 static Type getEsiDataType(circt::sv::InterfaceOp iface) {
@@ -206,7 +214,9 @@ LogicalResult WrapSVInterface::verify() {
   return verifySVInterface(*this, modportType, chanType);
 }
 
-Value WrapSVInterface::anyChannel() { return output(); }
+circt::esi::ChannelPort WrapSVInterface::channelType() {
+  return output().getType().cast<circt::esi::ChannelPort>();
+}
 
 LogicalResult UnwrapSVInterface::verify() {
   auto modportType = interfaceSource().getType().cast<circt::sv::ModportType>();
@@ -214,7 +224,9 @@ LogicalResult UnwrapSVInterface::verify() {
   return verifySVInterface(*this, modportType, chanType);
 }
 
-Value UnwrapSVInterface::anyChannel() { return chanInput(); }
+circt::esi::ChannelPort UnwrapSVInterface::channelType() {
+  return chanInput().getType().cast<circt::esi::ChannelPort>();
+}
 
 /// Get the port declaration op for the specified service decl, port name.
 template <class OpType>
