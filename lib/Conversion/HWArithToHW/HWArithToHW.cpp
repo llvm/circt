@@ -25,6 +25,7 @@ using namespace hwarith;
 // Utility functions
 //===----------------------------------------------------------------------===//
 
+// Extract a bit range, specified via start bit and width, from a given value.
 static Value extractBits(OpBuilder &builder, Location loc, Value value,
                          unsigned startBit, unsigned bitWidth) {
   SmallVector<Value, 1> result;
@@ -32,6 +33,8 @@ static Value extractBits(OpBuilder &builder, Location loc, Value value,
   return result[0];
 }
 
+// Perform the specified bit-extension (either sign- or zero-extension) for a
+// given value to a desired target width.
 static Value extendTypeWidth(OpBuilder &builder, Location loc, Value value,
                              unsigned targetWidth, bool signExtension) {
   unsigned sourceWidth = value.getType().getIntOrFloatBitWidth();
