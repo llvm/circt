@@ -977,3 +977,17 @@ firrtl.circuit "Foo" {
     firrtl.xmr.read %_a, %a : !firrtl.ref<uint<1>>
   }
 }
+
+// -----
+// Check flow semantics for xmr.write
+
+firrtl.circuit "Bar" {
+  firrtl.module @Bar(in %_a: !firrtl.ref<uint<1>>) {
+    %a = firrtl.wire : !firrtl.uint<1>
+    %b = firrtl.wire : !firrtl.uint<1>
+    // expected-error @+1 {{xmr write result "a" cannot be used as the destination of a connect}}
+    firrtl.xmr.write %a, %_a : !firrtl.ref<uint<1>>
+    // expected-note @+1 {{the connect was defined here}}
+    firrtl.strictconnect %a, %b : !firrtl.uint<1>
+  }
+}

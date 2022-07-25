@@ -3960,6 +3960,26 @@ LogicalResult XMRWriteOp::verify() {
   // Check that the flows make sense.
   if (failed(checkConnectFlow(*this, true)))
     return failure();
+  // The result of the xmr write op cannot be used as the destination of any
+  // connect op in the module.
+  Value res = getResult();
+  if (res.hasOneUse())
+    return success();
+  for (auto u : res.getUsers())
+    if (auto cLike = dyn_cast<FConnectLike>(u)) {
+      if (cLike.getDest() != res)
+        continue;
+      auto resRef = getFieldRefFromValue(res);
+      bool rootKnown;
+      auto resName = getFieldName(resRef, rootKnown);
+      auto diag = emitError();
+      diag << "xmr write result ";
+      if (rootKnown)
+        diag << "\"" << resName << "\" ";
+      diag << "cannot be used as the destination of a connect";
+      return diag.attachNote(cLike.getLoc()) << "the connect was defined here";
+    }
+
   return success();
 }
 
