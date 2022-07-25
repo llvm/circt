@@ -156,7 +156,7 @@ def StateOp : FSMOp<"state", [HasParent<"MachineOp">, Symbol, NoTerminator]> {
   }];
 
   let arguments = (ins SymbolNameAttr:$sym_name);
-  let regions = (region SizedRegion<1>:$output, SizedRegion<1>:$transitions);
+  let regions = (region AnyRegion:$output, AnyRegion:$transitions);
 
   let hasCanonicalizeMethod = true;
 

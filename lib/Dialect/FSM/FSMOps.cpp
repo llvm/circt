@@ -270,10 +270,12 @@ LogicalResult StateOp::canonicalize(StateOp op, PatternRewriter &rewriter) {
 }
 
 LogicalResult StateOp::verify() {
-  // Ensure that the output block has a single OutputOp terminator.
-  Block *outputBlock = &output().front();
-  if (outputBlock->empty() || !isa<fsm::OutputOp>(outputBlock->back()))
-    return emitOpError("output block must have a single OutputOp terminator");
+  if (!output().empty()) {
+    // Ensure that the output block has a single OutputOp terminator.
+    Block *outputBlock = &output().front();
+    if (outputBlock->empty() || !isa<fsm::OutputOp>(outputBlock->back()))
+      return emitOpError("output block must have a single OutputOp terminator");
+  }
 
   return success();
 }

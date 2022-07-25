@@ -1,4 +1,18 @@
-// RUN: circt-opt --split-input-file %s | FileCheck %s
+// RUN: circt-opt --split-input-file %s | circt-opt --split-input-file | FileCheck %s
+
+// CHECK: fsm.machine @foo(%arg0: i1) -> i1 attributes {initialState = "IDLE"} {
+// CHECK:   fsm.state @IDLE output {
+// CHECK:   } transitions {
+// CHECK:   }
+// CHECK: }
+
+fsm.machine @foo(%arg0: i1) -> i1 attributes {initialState = "IDLE"} {
+  fsm.state @IDLE output  {
+  } transitions  {
+  }
+}
+
+// -----
 
 // CHECK: fsm.machine @foo(%arg0: i1) -> i1 attributes {initialState = "IDLE"} {
 // CHECK:   %cnt = fsm.variable "cnt" {initValue = 0 : i16} : i16
