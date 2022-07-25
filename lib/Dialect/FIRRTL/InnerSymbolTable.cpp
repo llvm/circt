@@ -47,8 +47,8 @@ InnerSymbolTable::InnerSymbolTable(Operation *op) {
       return;
     assert(baseTarget.getField() == 0);
     for (const auto &symProp : symAttr.getProps()) {
-      addSym(symProp.getName(),
-             InnerSymTarget(baseTarget, symProp.getFieldID()));
+      addSym(symProp.getName(), InnerSymTarget::getTargetForSubfield(
+                                    baseTarget, symProp.getFieldID()));
     }
   };
 

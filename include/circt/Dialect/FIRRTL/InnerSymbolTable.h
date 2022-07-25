@@ -37,10 +37,13 @@ public:
   explicit InnerSymTarget(size_t portIdx, Operation *op, size_t fieldID = 0)
       : op(op), portIdx(portIdx), fieldID(fieldID) {}
 
-  /// Create a target for a field, given a target to a base.
-  explicit InnerSymTarget(const InnerSymTarget &base, size_t fieldID)
-      : op(base.op), portIdx(base.portIdx), fieldID(fieldID) {
-    assert(base.fieldID == 0);
+  /// Return a target to the specified field within the given base.
+  /// FieldID is relative to the specified base target.
+  static InnerSymTarget getTargetForSubfield(const InnerSymTarget &base,
+                                             size_t fieldID) {
+    if (base.isPort())
+      return InnerSymTarget(base.portIdx, base.op, base.fieldID + fieldID);
+    return InnerSymTarget(base.op, base.fieldID + fieldID);
   }
 
   InnerSymTarget(const InnerSymTarget &) = default;
