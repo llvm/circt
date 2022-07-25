@@ -35,6 +35,7 @@ def SCModuleOp : SystemCOp<"module", [
 
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
+  let hasRegionVerifier = 1;
 
   let extraClassDeclaration = [{
     // Implement RegionKindInterface.

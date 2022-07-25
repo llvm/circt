@@ -15,6 +15,7 @@
 
 #include "circt/Dialect/SystemC/SystemCAttributes.h"
 #include "circt/Dialect/SystemC/SystemCDialect.h"
+#include "circt/Dialect/SystemC/SystemCOpInterfaces.h"
 #include "circt/Dialect/SystemC/SystemCTypes.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinOps.h"

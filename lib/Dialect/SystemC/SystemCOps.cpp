@@ -17,6 +17,19 @@ using namespace circt;
 using namespace circt::systemc;
 
 //===----------------------------------------------------------------------===//
+// ImplicitSSAName Custom Directive
+//===----------------------------------------------------------------------===//
+
+static ParseResult parseImplicitSSAName(OpAsmParser &parser,
+                                        StringAttr &nameAttr) {
+  nameAttr = parser.getBuilder().getStringAttr(parser.getResultName(0).first);
+  return success();
+}
+
+static void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
+                                 StringAttr nameAttr) {}
+
+//===----------------------------------------------------------------------===//
 // SCModuleOp
 //===----------------------------------------------------------------------===//
 
@@ -171,6 +184,51 @@ LogicalResult SCModuleOp::verify() {
   }
 
   return success();
+}
+
+LogicalResult SCModuleOp::verifyRegions() {
+  DenseSet<StringRef> memberNames;
+  DenseSet<StringRef> localNames;
+
+  for (Attribute arg : getPortNames()) {
+    StringRef argName = arg.cast<StringAttr>().getValue();
+
+    if (memberNames.contains(argName))
+      return emitOpError("module port names must be unique");
+
+    memberNames.insert(argName);
+  }
+
+  WalkResult result = walk<mlir::WalkOrder::PreOrder>([&](Operation *op) {
+    if (isa<SCModuleOp>(op->getParentOp()))
+      localNames.clear();
+
+    if (auto nameDeclOp = dyn_cast<SystemCNameDeclOp>(op)) {
+      StringRef name = nameDeclOp.getName();
+      if (memberNames.contains(name) || localNames.contains(name))
+        return WalkResult::interrupt();
+
+      if (isa<SCModuleOp>(op->getParentOp()))
+        memberNames.insert(name);
+      else
+        localNames.insert(name);
+    }
+
+    return WalkResult::advance();
+  });
+
+  if (result.wasInterrupted())
+    return emitOpError("declared names must be unique");
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// SignalOp
+//===----------------------------------------------------------------------===//
+
+void SignalOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getSignal(), getName());
 }
 
 //===----------------------------------------------------------------------===//
