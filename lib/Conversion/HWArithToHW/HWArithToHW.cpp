@@ -44,7 +44,8 @@ static Value extendTypeWidth(OpBuilder &builder, Location loc, Value value,
   // https://circt.llvm.org/docs/Dialects/Comb/RationaleComb/#no-complement-negate-zext-sext-operators
   if (signExtension) {
     // Sign extension
-    Value highBit = extractBits(builder, loc, value, sourceWidth - 1, 1);
+    Value highBit = extractBits(
+        builder, loc, value, sourceWidth - 1 /* startBit */, 1 /* bitWidth */);
     SmallVector<Value, 1> result;
     builder.createOrFold<comb::ReplicateOp>(result, loc, highBit,
                                             extensionLength);
@@ -120,7 +121,8 @@ struct DivOpLowering : public OpConversionPattern<DivOp> {
 
     // finally truncate back to the expected result size!
     Value truncateResult =
-        extractBits(rewriter, loc, divResult, 0, targetType.getWidth());
+        extractBits(rewriter, loc, divResult, 0 /* startBit */,
+                    targetType.getWidth() /* bitWidth */);
     rewriter.replaceOp(op, truncateResult);
 
     return success();
@@ -151,8 +153,8 @@ struct CastOpLowering : public OpConversionPattern<CastOp> {
                           targetType.getWidth(), sourceType.isSigned());
     } else {
       // bit truncation needed
-      replaceValue = extractBits(rewriter, op.getLoc(), adaptor.in(), 0,
-                                 targetType.getWidth());
+      replaceValue = extractBits(rewriter, op.getLoc(), adaptor.in(),
+                                 0 /* startBit */, targetWidth /* bitWidth */);
     }
     rewriter.replaceOp(op, replaceValue);
 
