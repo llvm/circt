@@ -1,13 +1,3 @@
-// For now, just checking very basic cases parse properly.
-
-// Lots of checking around RefType likely warranted:
-// * firrtl.ref<uint> -- handling?
-// 
-// Errors:
-// * nested ref
-// * Use anywhere other than handful of approved places
-// * use in an aggregate type (bundle/vector/etc)
-
 // RUN: circt-opt %s -split-input-file
 
 firrtl.circuit "xmr" {
@@ -57,13 +47,12 @@ firrtl.circuit "DUT" {
 // -----
 
 // "Example 1"
-
-firrtl.circuit "Foo" {
+firrtl.circuit "SimpleWrite" {
   firrtl.module @Bar(in %_a: !firrtl.ref<uint<1>>) {
     %a = firrtl.wire : !firrtl.uint<1>
     firrtl.xmr.write %a, %_a : !firrtl.ref<uint<1>>
   }
-  firrtl.module @Foo() {
+  firrtl.module @SimpleWrite() {
     %bar_a = firrtl.instance bar @Bar(in _a: !firrtl.ref<uint<1>>)
 
     %zero = firrtl.constant 0 : !firrtl.uint<1>
@@ -75,12 +64,12 @@ firrtl.circuit "Foo" {
 // -----
 
 // "Example 2"
-firrtl.circuit "Foo" {
+firrtl.circuit "SimpleRead" {
   firrtl.module @Bar(out %_a: !firrtl.ref<uint<1>>) {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     firrtl.xmr.read %_a, %zero : !firrtl.ref<uint<1>>
   }
-  firrtl.module @Foo() {
+  firrtl.module @SimpleRead() {
     %bar_a = firrtl.instance bar @Bar(out _a: !firrtl.ref<uint<1>>)
     %a = firrtl.wire : !firrtl.uint<1>
     %0 = firrtl.xmr.get %bar_a : !firrtl.ref<uint<1>>
@@ -90,14 +79,12 @@ firrtl.circuit "Foo" {
 
 // -----
 
-// "Example 1"
-
-firrtl.circuit "Foo" {
+firrtl.circuit "UnconnectedRef" {
   firrtl.module @Bar(in %_a: !firrtl.ref<uint<1>>) {
     %a = firrtl.wire : !firrtl.uint<1>
     firrtl.xmr.write %a, %_a : !firrtl.ref<uint<1>>
   }
-  firrtl.module @Foo() {
+  firrtl.module @UnconnectedRef() {
     %bar_a = firrtl.instance bar1 @Bar(in _a: !firrtl.ref<uint<1>>)
     // bar_b is unconnected.
     %bar_b = firrtl.instance bar2 @Bar(in _a: !firrtl.ref<uint<1>>)
@@ -110,8 +97,7 @@ firrtl.circuit "Foo" {
 
 // -----
 
-// "Example 2"
-firrtl.circuit "Foo" {
+firrtl.circuit "ForwardToInstance" {
   firrtl.module @Bar2(out %_a: !firrtl.ref<uint<1>>) {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     firrtl.xmr.read %_a, %zero : !firrtl.ref<uint<1>>
@@ -120,7 +106,7 @@ firrtl.circuit "Foo" {
     %bar_2 = firrtl.instance bar @Bar2(out _a: !firrtl.ref<uint<1>>)
     firrtl.strictconnect %_a, %bar_2 : !firrtl.ref<uint<1>>
   }
-  firrtl.module @Foo() {
+  firrtl.module @ForwardToInstance() {
     %bar_a = firrtl.instance bar @Bar(out _a: !firrtl.ref<uint<1>>)
     %a = firrtl.wire : !firrtl.uint<1>
     %0 = firrtl.xmr.get %bar_a : !firrtl.ref<uint<1>>
