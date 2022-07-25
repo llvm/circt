@@ -38,7 +38,7 @@ using namespace circt::llhd;
 
 //===----------------------------------------------------------------------===//
 // Extraction operation conversions
-//===----------------------------------------------------------------------===//
+//===----------------------------------------------------------------Comb------===//
 
 namespace {
 /// Convert a comb::ExtractOp to LLVM dialect.
@@ -110,6 +110,23 @@ struct CombConcatOpConversion : public ConvertToLLVMPattern {
     }
 
     rewriter.replaceOp(op, aggregate);
+    return success();
+  }
+};
+} // namespace
+
+namespace {
+/// Lower a comb::ReplicateOp operation to the LLVM dialect.
+struct CombReplicateOpConversion
+    : public ConvertOpToLLVMPattern<comb::ReplicateOp> {
+  using ConvertOpToLLVMPattern<comb::ReplicateOp>::ConvertOpToLLVMPattern;
+
+  LogicalResult
+  matchAndRewrite(comb::ReplicateOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+
+    std::vector<Value> inputs(op.getMultiple(), op.getInput());
+    rewriter.replaceOpWithNewOp<comb::ConcatOp>(op, inputs);
     return success();
   }
 };
