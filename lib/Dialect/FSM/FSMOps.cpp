@@ -225,6 +225,8 @@ LogicalResult TriggerOp::verify() { return verifyCallerTypes(*this); }
 // HWInstanceOp
 //===----------------------------------------------------------------------===//
 
+Operation *HWInstanceOp::getReferencedModule() { return getMachine(); }
+
 /// Lookup the machine for the symbol.  This returns null on invalid IR.
 MachineOp HWInstanceOp::getMachine() {
   auto module = (*this)->getParentOfType<ModuleOp>();
