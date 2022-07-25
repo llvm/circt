@@ -32,12 +32,14 @@ ServiceGeneratorDispatcher ServiceGeneratorDispatcher::defaultDispatcher() {
 }
 
 LogicalResult ServiceGeneratorDispatcher::generate(ServiceImplementReqOp req) {
-  if (!lookupGen.hasValue()) {
-    lookupGen = create(req.getContext());
-  }
+  // Create the lookup table lazily.
+  if (!lookupTable.hasValue())
+    lookupTable = create(req.getContext());
 
-  auto genF = lookupGen->find(req.impl_typeAttr());
-  if (genF == lookupGen->end()) {
+  // Lookup based on 'impl_type' attribute and pass through the generate request
+  // if found.
+  auto genF = lookupTable->find(req.impl_typeAttr());
+  if (genF == lookupTable->end()) {
     if (failIfNotFound)
       return req.emitOpError("Could not find service generator for attribute '")
              << req.impl_typeAttr() << "'";
@@ -46,12 +48,15 @@ LogicalResult ServiceGeneratorDispatcher::generate(ServiceImplementReqOp req) {
   return genF->second(req);
 }
 
-LogicalResult instantiateCosimEndpoints(ServiceImplementReqOp req) {
+/// The generator for the "cosim" impl_type.
+static LogicalResult instantiateCosimEndpoints(ServiceImplementReqOp req) {
   auto *ctxt = req.getContext();
   OpBuilder b(req);
   Block *portReqs = &req.portReqs().getBlocks().front();
   Value clk = req.getOperand(0);
   Value rst = req.getOperand(1);
+
+  // Determine which EndpointID this generator should start with.
   uint64_t epIdCtr = 1000; // Default EpID counter.
   if (req.impl_opts()) {
     auto opts = req.impl_opts()->getValue();
@@ -68,6 +73,7 @@ LogicalResult instantiateCosimEndpoints(ServiceImplementReqOp req) {
     }
   }
 
+  // Assemble the name to use for an endpoint.
   auto toStringAttr = [&](ArrayAttr strArr) {
     std::string buff;
     llvm::raw_string_ostream os(buff);
@@ -75,6 +81,7 @@ LogicalResult instantiateCosimEndpoints(ServiceImplementReqOp req) {
     return StringAttr::get(ctxt, os.str());
   };
 
+  // Create Cosim endpoints for the incoming data requests.
   unsigned clientReqIdx = 0;
   for (auto toClientReq :
        llvm::make_early_inc_range(req.getOps<RequestToClientConnection>())) {
@@ -89,20 +96,23 @@ LogicalResult instantiateCosimEndpoints(ServiceImplementReqOp req) {
     ++clientReqIdx;
   }
 
+  // Since outgoing data gets passed in through block args, we need to translate
+  // internal Values (with the block) to the external Values driving them.
   BlockAndValueMapping argMap;
   for (unsigned i = 0, e = portReqs->getArguments().size(); i < e; ++i)
     argMap.map(portReqs->getArgument(i), req->getOperand(i + 2));
 
+  // Create output Cosim endpoints.
   for (auto toServerReq :
        llvm::make_early_inc_range(req.getOps<RequestToServerConnection>())) {
     auto cosim = b.create<CosimEndpoint>(
         toServerReq.getLoc(), ChannelPort::get(ctxt, b.getI1Type()), clk, rst,
         argMap.lookup(toServerReq.sending()), ++epIdCtr);
-
     cosim->setAttr("name", toStringAttr(toServerReq.clientNamePath()));
     toServerReq.erase();
   }
 
+  // Erase the generation request.
   req.erase();
   return success();
 }
@@ -155,7 +165,6 @@ private:
 
 void ESIConnectServicesPass::runOnOperation() {
   ModuleOp outerMod = getOperation();
-
   topLevelSyms.addDefinitions(outerMod);
   if (failed(verifyInstances(outerMod))) {
     signalPassFailure();
