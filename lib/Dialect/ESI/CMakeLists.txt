@@ -32,6 +32,7 @@ set(ESI_LinkLibs
 set(ESI_Deps
   ${ESI_LinkLibs}
   MLIRESITransformsIncGen
+  MLIRESIInterfacesIncGen
 )
 
 if(CapnProto_FOUND)
