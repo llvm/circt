@@ -161,7 +161,7 @@ def StateOp : FSMOp<"state", [HasParent<"MachineOp">, Symbol, NoTerminator]> {
   let hasCanonicalizeMethod = true;
 
   let assemblyFormat = [{
-    $sym_name attr-dict `output` $output `transitions` $transitions
+    $sym_name attr-dict (`output` $output^)? (`transitions` $transitions^)?
   }];
 
   let extraClassDeclaration = [{

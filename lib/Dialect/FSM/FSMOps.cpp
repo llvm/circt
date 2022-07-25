@@ -270,6 +270,12 @@ LogicalResult StateOp::canonicalize(StateOp op, PatternRewriter &rewriter) {
 }
 
 LogicalResult StateOp::verify() {
+  MachineOp parent = getOperation()->getParentOfType<MachineOp>();
+
+  if (parent.getNumResults() != 0 && (output().empty()))
+    return emitOpError("state must have a non-empty output region when the "
+                       "machine has results.");
+
   if (!output().empty()) {
     // Ensure that the output block has a single OutputOp terminator.
     Block *outputBlock = &output().front();
