@@ -64,7 +64,7 @@ def SVAttributeAttr : AttrDef<SVDialect, "SVAttribute"> {
 }
 
 def SVAttributesAttr : AttrDef<SVDialect, "SVAttributes"> {
-  let summary = "a container of system verilog attributes";
+  let summary = "A container of system verilog attributes";
   let mnemonic = "attributes";
   let description = [{
     This attribute is used to store SV attributes. The `attributes` field
