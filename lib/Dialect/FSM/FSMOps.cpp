@@ -52,18 +52,27 @@ StateOp MachineOp::getInitialStateOp() {
   return dyn_cast_or_null<StateOp>(lookupSymbol(initialState()));
 }
 
+StringAttr MachineOp::getArgName(size_t i) {
+  if (argNames())
+    return argNames().getValue()[i].cast<StringAttr>();
+  else
+    return StringAttr::get(getContext(), "in" + std::to_string(i));
+}
+
+StringAttr MachineOp::getResName(size_t i) {
+  if (resNames())
+    return resNames().getValue()[i].cast<StringAttr>();
+  else
+    return StringAttr::get(getContext(), "out" + std::to_string(i));
+}
+
 /// Get the port information of the machine.
 void MachineOp::getHWPortInfo(SmallVectorImpl<hw::PortInfo> &ports) {
   ports.clear();
   auto machineType = getFunctionType();
-  auto builder = Builder(*this);
-
   for (unsigned i = 0, e = machineType.getNumInputs(); i < e; ++i) {
     hw::PortInfo port;
-    if (argNames())
-      port.name = argNames().getValue()[i].cast<StringAttr>();
-    else
-      port.name = builder.getStringAttr("in" + std::to_string(i));
+    port.name = getArgName(i);
     port.direction = circt::hw::PortDirection::INPUT;
     port.type = machineType.getInput(i);
     port.argNum = i;
@@ -72,10 +81,7 @@ void MachineOp::getHWPortInfo(SmallVectorImpl<hw::PortInfo> &ports) {
 
   for (unsigned i = 0, e = machineType.getNumResults(); i < e; ++i) {
     hw::PortInfo port;
-    if (resNames())
-      port.name = resNames().getValue()[i].cast<StringAttr>();
-    else
-      port.name = builder.getStringAttr("out" + std::to_string(i));
+    port.name = getResName(i);
     port.direction = circt::hw::PortDirection::OUTPUT;
     port.type = machineType.getResult(i);
     port.argNum = i;
@@ -284,6 +290,17 @@ LogicalResult StateOp::verify() {
   }
 
   return success();
+}
+
+Block *StateOp::ensureOutput(OpBuilder &builder) {
+  if (output().empty()) {
+    OpBuilder::InsertionGuard g(builder);
+    auto *block = new Block();
+    output().push_back(block);
+    builder.setInsertionPointToStart(block);
+    builder.create<fsm::OutputOp>(getLoc());
+  }
+  return &output().front();
 }
 
 //===----------------------------------------------------------------------===//
