@@ -25,17 +25,15 @@ using namespace hwarith;
 // Utility functions
 //===----------------------------------------------------------------------===//
 
-static Value extractBits(ConversionPatternRewriter &rewriter, Location loc,
-                         Value value, unsigned startBit, unsigned bitWidth) {
+static Value extractBits(OpBuilder &builder, Location loc, Value value,
+                         unsigned startBit, unsigned bitWidth) {
   SmallVector<Value, 1> result;
-  rewriter.createOrFold<comb::ExtractOp>(result, loc, value, startBit,
-                                         bitWidth);
+  builder.createOrFold<comb::ExtractOp>(result, loc, value, startBit, bitWidth);
   return result[0];
 }
 
-static Value extendTypeWidth(ConversionPatternRewriter &rewriter, Location loc,
-                             Value value, unsigned targetWidth,
-                             bool signExtension) {
+static Value extendTypeWidth(OpBuilder &builder, Location loc, Value value,
+                             unsigned targetWidth, bool signExtension) {
   unsigned sourceWidth = value.getType().getIntOrFloatBitWidth();
   unsigned extensionLength = targetWidth - sourceWidth;
 
@@ -46,19 +44,19 @@ static Value extendTypeWidth(ConversionPatternRewriter &rewriter, Location loc,
   // https://circt.llvm.org/docs/Dialects/Comb/RationaleComb/#no-complement-negate-zext-sext-operators
   if (signExtension) {
     // Sign extension
-    Value highBit = extractBits(rewriter, loc, value, sourceWidth - 1, 1);
+    Value highBit = extractBits(builder, loc, value, sourceWidth - 1, 1);
     SmallVector<Value, 1> result;
-    rewriter.createOrFold<comb::ReplicateOp>(result, loc, highBit,
-                                             extensionLength);
+    builder.createOrFold<comb::ReplicateOp>(result, loc, highBit,
+                                            extensionLength);
     extensionBits = result[0];
   } else {
     // Zero extension
-    extensionBits = rewriter
+    extensionBits = builder
                         .create<hw::ConstantOp>(
-                            loc, rewriter.getIntegerType(extensionLength), 0)
+                            loc, builder.getIntegerType(extensionLength), 0)
                         ->getOpResult(0);
   }
-  return rewriter.create<comb::ConcatOp>(loc, extensionBits, value)
+  return builder.create<comb::ConcatOp>(loc, extensionBits, value)
       ->getOpResult(0);
 }
 
