@@ -1157,7 +1157,7 @@ void FMemModuleOp::getAsmBlockArgumentNames(
 
 /// Lookup the module or extmodule for the symbol.  This returns null on
 /// invalid IR.
-FModuleLike InstanceOp::getReferencedModule() {
+Operation *InstanceOp::getReferencedModule() {
   auto circuit = (*this)->getParentOfType<CircuitOp>();
   if (!circuit)
     return nullptr;

@@ -1145,6 +1145,10 @@ Operation *InstanceOp::getReferencedModule(const HWSymbolCache *cache) {
   return topLevelModuleOp.lookupSymbol(getModuleName());
 }
 
+Operation *InstanceOp::getReferencedModule() {
+  return getReferencedModule(/*cache=*/nullptr);
+}
+
 LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto *module =
       symbolTable.lookupNearestSymbolFrom(*this, getModuleNameAttr());

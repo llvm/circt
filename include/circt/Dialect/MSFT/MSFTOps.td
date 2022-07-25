@@ -34,10 +34,6 @@ def InstanceOp : MSFTOp<"instance", [
     // determined.
     StringAttr getResultName(size_t i);
 
-    /// Lookup the module or extmodule for the symbol.  This returns null on
-    /// invalid IR.
-    Operation *getReferencedModule();
-
     /// Instance name is the same as the symbol name. This may change in the
     /// future.
     StringRef instanceName() {
