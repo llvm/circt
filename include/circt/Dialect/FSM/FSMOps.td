@@ -12,11 +12,14 @@
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
+include "circt/Dialect/HW/HWOpInterfaces.td"
 
 def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>;
 
-def MachineOp : FSMOp<"machine", [FunctionOpInterface,
-      Symbol, SymbolTable, NoTerminator]> {
+def MachineOp : FSMOp<"machine", [
+      FunctionOpInterface,
+      Symbol, SymbolTable, NoTerminator,
+      HWModuleLike]> {
   let summary = "Define a finite-state machine";
   let description = [{
     `fsm.machine` represents a finite-state machine, including a machine name,
@@ -70,6 +73,12 @@ def MachineOp : FSMOp<"machine", [FunctionOpInterface,
                            "' attribute of function type");
       return success();
     }
+
+    /// Return the name of the i'th input to this machine.
+    StringAttr getArgName(size_t i);
+
+    /// Return the name of the i'th result of this machine.
+    StringAttr getResName(size_t i);
   }];
 
   let skipDefaultBuilders = 1;
@@ -120,7 +129,10 @@ def TriggerOp : FSMOp<"trigger", []> {
   let hasVerifier = 1;
 }
 
-def HWInstanceOp : FSMOp<"hw_instance", [Symbol]> {
+def HWInstanceOp : FSMOp<"hw_instance", [
+    Symbol,
+    DeclareOpInterfaceMethods<HWInstanceLike>
+  ]> {
   let summary = "Create a hardware-style instance of a state machine";
   let description = [{
     `fsm.hw_instance` represents a hardware-style instance of a state machine,
@@ -141,6 +153,22 @@ def HWInstanceOp : FSMOp<"hw_instance", [Symbol]> {
   let extraClassDeclaration = [{
     /// Lookup the machine for the symbol. This returns null on invalid IR.
     MachineOp getMachine();
+
+    /// Module name is the same as the machine name.
+    StringRef getModuleName() {
+      return machine();
+    }
+    FlatSymbolRefAttr getModuleNameAttr() {
+      return machineAttr();
+    }
+
+    // HWInstanceLike interface
+    StringRef getInstanceName() {
+      return sym_name();
+    }
+    StringAttr getInstanceNameAttr() {
+      return sym_nameAttr();
+    }
   }];
 
   let hasVerifier = 1;
@@ -167,6 +195,18 @@ def StateOp : FSMOp<"state", [HasParent<"MachineOp">, Symbol, NoTerminator]> {
   let extraClassDeclaration = [{
     /// Returns all possible next states from this state.
     llvm::SetVector<StateOp> getNextStates();
+
+    /// Returns the OutputOp of this state.
+    OutputOp getOutputOp() {
+      auto outputOp = output().getOps<fsm::OutputOp>();
+      assert(!outputOp.empty() &&
+           "Expected an fsm.output op inside the state output region");
+      return *outputOp.begin();
+    }
+
+    /// Ensures that this state has an output region with an output operation.
+    /// Returns the inner block of the output region.
+    Block* ensureOutput(OpBuilder& builder);
   }];
 
   let builders = [
