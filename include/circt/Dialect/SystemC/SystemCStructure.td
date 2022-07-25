@@ -38,7 +38,9 @@ def SCModuleOp : SystemCOp<"module", [
 
   let extraClassDeclaration = [{
     // Implement RegionKindInterface.
-    static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph;}
+    static RegionKind getRegionKind(unsigned index) { 
+      return RegionKind::Graph;
+    }
 
     /// Returns the type of this function.
     mlir::FunctionType getFunctionType() {
