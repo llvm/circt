@@ -86,8 +86,8 @@ struct DivOpLowering : public OpConversionPattern<DivOp> {
   matchAndRewrite(DivOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
-    auto lhsType = op.inputs()[0].getType().template cast<IntegerType>();
-    auto rhsType = op.inputs()[1].getType().template cast<IntegerType>();
+    auto lhsType = op.getOperand(0).getType().template cast<IntegerType>();
+    auto rhsType = op.getOperand(1).getType().template cast<IntegerType>();
     auto targetType = op.result().getType().template cast<IntegerType>();
 
     // comb.div* needs identical bitwidths for its operands and their result.
@@ -173,8 +173,8 @@ struct BinaryOpLowering : public OpConversionPattern<BinOp> {
   matchAndRewrite(BinOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
-    auto lhsType = op.inputs()[0].getType().template cast<IntegerType>();
-    auto rhsType = op.inputs()[1].getType().template cast<IntegerType>();
+    auto lhsType = op.getOperand(0).getType().template cast<IntegerType>();
+    auto rhsType = op.getOperand(1).getType().template cast<IntegerType>();
     auto targetType = op.result().getType().template cast<IntegerType>();
 
     Value lhsValue = extendTypeWidth(rewriter, loc, adaptor.inputs()[0],
