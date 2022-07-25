@@ -38,8 +38,8 @@ class TestCase;
 /// individual MLIR module.
 class Tester {
 public:
-  Tester(llvm::StringRef testScript,
-         llvm::ArrayRef<std::string> testScriptArgs);
+  Tester(llvm::StringRef testScript, llvm::ArrayRef<std::string> testScriptArgs,
+         bool testMustFail);
 
   /// Runs the interestingness testing script on a MLIR test case file. Returns
   /// true if the interesting behavior is present in the test case or false
@@ -62,6 +62,10 @@ private:
 
   /// Additional arguments to pass to `testScript`.
   llvm::ArrayRef<std::string> testScriptArgs;
+
+  /// Consider the testcase to be interesting if it fails rather than on exit
+  /// code 0.
+  bool testMustFail;
 };
 
 /// A single test case to be run by a tester.

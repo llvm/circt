@@ -1,4 +1,4 @@
-// RUN: circt-reduce %s --test %S/test.sh --test-arg cat --test-arg "%anotherWire = firrtl.node" --keep-best=0 --include node-symbol-remover | FileCheck %s
+// RUN: circt-reduce %s --test %S/test.sh --test-arg cat --test-arg "%anotherWire = firrtl.node" --keep-best=0 --include node-symbol-remover --test-must-fail | FileCheck %s
 
 firrtl.circuit "Foo" {
   // CHECK: firrtl.module @Foo
