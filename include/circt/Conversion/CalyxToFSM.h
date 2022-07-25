@@ -26,11 +26,13 @@ class Pass;
 namespace circt {
 
 namespace calyxToFSM {
+// Entry and exit state names of the Calyx control program in the FSM.
 static constexpr std::string_view sEntryStateName = "fsm_entry";
 static constexpr std::string_view sExitStateName = "fsm_exit";
 } // namespace calyxToFSM
 
 std::unique_ptr<mlir::Pass> createCalyxToFSMPass();
+std::unique_ptr<mlir::Pass> createMaterializeCalyxToFSMPass();
 
 } // namespace circt
 
