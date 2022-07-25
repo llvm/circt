@@ -205,12 +205,6 @@ void getAsmBlockArgumentNamesImpl(Operation *op, mlir::Region &region,
   }
 }
 
-static bool hasPortNamed(FModuleLike op, StringAttr name) {
-  return llvm::any_of(op.getPortSymbols(), [name](Attribute pname) {
-    return pname.cast<StringAttr>() == name;
-  });
-}
-
 /// A forward declaration for `NameKind` attribute parser.
 static ParseResult parseNameKind(OpAsmParser &parser,
                                  firrtl::NameKindEnumAttr &result);
@@ -3679,7 +3673,7 @@ LogicalResult HierPathOp::verifyInnerRefs(InnerRefNamespace &ns) {
       return emitOpError() << "instance path is incorrect. Expected module: "
                            << expectedModuleName
                            << " instead found: " << innerRef.getModule();
-    InstanceOp instOp = ns.lookup<InstanceOp>(innerRef);
+    InstanceOp instOp = ns.lookupOp<InstanceOp>(innerRef);
     if (!instOp)
       return emitOpError() << " module: " << innerRef.getModule()
                            << " does not contain any instance with symbol: "
@@ -3689,9 +3683,7 @@ LogicalResult HierPathOp::verifyInnerRefs(InnerRefNamespace &ns) {
   // The instance path has been verified. Now verify the last element.
   auto leafRef = getNamepath()[getNamepath().size() - 1];
   if (auto innerRef = leafRef.dyn_cast<hw::InnerRefAttr>()) {
-    auto *fmod = ns.symTable.lookup(innerRef.getModule());
-    auto mod = cast<FModuleLike>(fmod);
-    if (!hasPortNamed(mod, innerRef.getName()) && !ns.lookup(innerRef)) {
+    if (!ns.lookup(innerRef)) {
       return emitOpError() << " operation with symbol: " << innerRef
                            << " was not found ";
     }

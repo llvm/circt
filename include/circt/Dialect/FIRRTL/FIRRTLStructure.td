@@ -110,7 +110,7 @@ def FModuleOp : FIRRTLOp<"module", [IsolatedFromAbove, Symbol, SingleBlock,
 
 def FExtModuleOp : FIRRTLOp<"extmodule",
       [IsolatedFromAbove, Symbol, HasParent<"CircuitOp">, OpAsmOpInterface,
-       DeclareOpInterfaceMethods<FModuleLike>,
+       DeclareOpInterfaceMethods<FModuleLike>, InnerSymbolTable,
        DeclareOpInterfaceMethods<HWModuleLike>]> {
   let summary = "FIRRTL extmodule";
   let description = [{
@@ -145,7 +145,7 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
 
 def FMemModuleOp : FIRRTLOp<"memmodule",
       [IsolatedFromAbove, Symbol, HasParent<"CircuitOp">, OpAsmOpInterface,
-       DeclareOpInterfaceMethods<FModuleLike>,
+       DeclareOpInterfaceMethods<FModuleLike>, InnerSymbolTable,
        DeclareOpInterfaceMethods<HWModuleLike>]> {
   let summary = "FIRRTL Generated Module";
   let description = [{

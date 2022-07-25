@@ -17,10 +17,75 @@
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
+#include "mlir/IR/SymbolTable.h"
 #include "llvm/ADT/StringRef.h"
 
 namespace circt {
 namespace firrtl {
+
+/// The target of an inner symbol, the entity the symbol is a handle for.
+class InnerSymTarget {
+public:
+  /// Default constructor, invalid.
+  /* implicit */ InnerSymTarget() { assert(!*this); }
+
+  /// Target an operation, and optionally a field (=0 means the op itself).
+  explicit InnerSymTarget(Operation *op, size_t fieldID = 0)
+      : op(op), portIdx(invalidPort), fieldID(fieldID) {}
+
+  /// Target a port, and optionally a field (=0 means the port itself).
+  /// Operation should be an FModuleLike.
+  explicit InnerSymTarget(size_t portIdx, Operation *op, size_t fieldID = 0)
+      : op(op), portIdx(portIdx), fieldID(fieldID) {}
+
+  /// Return a target to the specified field within the given base.
+  /// FieldID is relative to the specified base target.
+  static InnerSymTarget getTargetForSubfield(const InnerSymTarget &base,
+                                             size_t fieldID) {
+    if (base.isPort())
+      return InnerSymTarget(base.portIdx, base.op, base.fieldID + fieldID);
+    return InnerSymTarget(base.op, base.fieldID + fieldID);
+  }
+
+  InnerSymTarget(const InnerSymTarget &) = default;
+  InnerSymTarget(InnerSymTarget &&) = default;
+
+  // Accessors
+  auto getField() const { return fieldID; }
+  Operation *getOp() const { return op; }
+  auto getPort() const {
+    assert(isPort());
+    return portIdx;
+  }
+
+  // Classification
+  bool isField() const { return fieldID != 0; }
+  bool isPort() const { return portIdx != invalidPort; }
+  bool isOpOnly() const { return !isPort() && !isField(); }
+
+private:
+  auto asTuple() const { return std::tie(op, portIdx, fieldID); }
+  Operation *op = nullptr;
+  size_t portIdx = 0;
+  size_t fieldID = 0;
+  static constexpr size_t invalidPort = ~size_t{0};
+
+public:
+  // Comparison operators
+  bool operator<(const InnerSymTarget &rhs) const {
+    return asTuple() < rhs.asTuple();
+  }
+  bool operator==(const InnerSymTarget &rhs) const {
+    return asTuple() == rhs.asTuple();
+  }
+
+  // Assignment
+  InnerSymTarget &operator=(InnerSymTarget &&) = default;
+  InnerSymTarget &operator=(const InnerSymTarget &) = default;
+
+  // All targets must involve a valid op.
+  operator bool() const { return op; }
+};
 
 /// A table of inner symbols and their resolutions.
 class InnerSymbolTable {
@@ -33,37 +98,32 @@ public:
   InnerSymbolTable(const InnerSymbolTable &) = delete;
   InnerSymbolTable &operator=(InnerSymbolTable &) = delete;
 
-  /// Look up a symbol with the specified name, returning null if no such
-  /// name exists. Names never include the @ on them.
-  Operation *lookup(StringRef name) const;
-  template <typename T>
-  T lookup(StringRef name) const {
-    return dyn_cast_or_null<T>(lookup(name));
-  }
+  /// Look up a symbol with the specified name, returning empty InnerSymTarget
+  /// if no such name exists. Names never include the @ on them.
+  InnerSymTarget lookup(StringRef name) const;
+  InnerSymTarget lookup(StringAttr name) const;
 
   /// Look up a symbol with the specified name, returning null if no such
-  /// name exists. Names never include the @ on them.
-  Operation *lookup(StringAttr name) const;
+  /// name exists or doesn't target just an operation.
+  Operation *lookupOp(StringRef name) const;
   template <typename T>
-  T lookup(StringAttr name) const {
-    return dyn_cast_or_null<T>(lookup(name));
+  T lookupOp(StringRef name) const {
+    return dyn_cast_or_null<T>(lookupOp(name));
   }
 
-  /// Return an InnerRef to the given operation which must be within this table.
-  hw::InnerRefAttr getInnerRef(Operation *op);
-
-  /// Return an InnerRef for the given inner symbol, which must be valid.
-  hw::InnerRefAttr getInnerRef(StringRef name) {
-    return getInnerRef(lookup(name));
-  }
-
-  /// Return an InnerRef for the given inner symbol, which must be valid.
-  hw::InnerRefAttr getInnerRef(StringAttr name) {
-    return getInnerRef(lookup(name));
+  /// Look up a symbol with the specified name, returning null if no such
+  /// name exists or doesn't target just an operation.
+  Operation *lookupOp(StringAttr name) const;
+  template <typename T>
+  T lookupOp(StringAttr name) const {
+    return dyn_cast_or_null<T>(lookupOp(name));
   }
 
   /// Get InnerSymbol for an operation.
   static StringAttr getInnerSymbol(Operation *op);
+
+  /// Get InnerSymbol for a target.
+  static StringAttr getInnerSymbol(InnerSymTarget target);
 
   /// Return the name of the attribute used for inner symbol names.
   static StringRef getInnerSymbolAttrName() { return "inner_sym"; }
@@ -74,7 +134,7 @@ private:
   Operation *innerSymTblOp;
 
   /// This maps names to operations with that inner symbol.
-  DenseMap<StringAttr, Operation *> symbolTable;
+  DenseMap<StringAttr, InnerSymTarget> symbolTable;
 };
 
 /// This class represents a collection of InnerSymbolTable's.
@@ -101,16 +161,37 @@ struct InnerRefNamespace {
   SymbolTable &symTable;
   InnerSymbolTableCollection &innerSymTables;
 
-  /// Resolve the InnerRef to its target within this namespace, returning null
-  /// if no such name exists.
-  ///
-  /// Note that some InnerRef's target ports and must be handled separately.
-  Operation *lookup(hw::InnerRefAttr inner);
+  /// Resolve the InnerRef to its target within this namespace, returning empty
+  /// target if no such name exists.
+  InnerSymTarget lookup(hw::InnerRefAttr inner);
+
+  /// Resolve the InnerRef to its target within this namespace, returning
+  /// empty target if no such name exists or it's not an operation.
+  /// Template type can be used to limit results to specified op type.
+  Operation *lookupOp(hw::InnerRefAttr inner);
   template <typename T>
-  T lookup(hw::InnerRefAttr inner) {
-    return dyn_cast_or_null<T>(lookup(inner));
+  T lookupOp(hw::InnerRefAttr inner) {
+    return dyn_cast_or_null<T>(lookupOp(inner));
   }
 };
+
+/// Printing InnerSymTarget's.
+template <typename OS>
+OS &operator<<(OS &os, const InnerSymTarget &target) {
+  if (!target)
+    return os << "<invalid target>";
+
+  if (target.isField())
+    os << "field " << target.getField() << " of ";
+
+  if (target.isPort())
+    os << "<port " << target.getPort() << " on @"
+       << SymbolTable::getSymbolName(target.getOp()) << ">";
+  else
+    os << "<op " << *target.getOp() << ">";
+
+  return os;
+}
 
 } // namespace firrtl
 } // namespace circt

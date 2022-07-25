@@ -25,10 +25,10 @@ firrtl.circuit "top" {
   // symbol so check  that `%source` is preserved too.
   // CHECK-LABEL: firrtl.module private @dontTouch(in %dontTouch: !firrtl.uint<1> sym @sym, in %source: !firrtl.uint<1>) {
   firrtl.module private @dontTouch(in %dontTouch: !firrtl.uint<1> sym @sym, in %source: !firrtl.uint<1>, in %dead: !firrtl.uint<1>) {
-    // CHECK-NEXT: %sym_wire = firrtl.wire sym @sym   : !firrtl.uint<1>
+    // CHECK-NEXT: %sym_wire = firrtl.wire sym @sym2   : !firrtl.uint<1>
     // CHECK-NEXT: firrtl.strictconnect %sym_wire, %source : !firrtl.uint<1>
     // CHECK-NEXT: }
-    %sym_wire = firrtl.wire sym @sym : !firrtl.uint<1>
+    %sym_wire = firrtl.wire sym @sym2 : !firrtl.uint<1>
     firrtl.strictconnect %sym_wire, %source : !firrtl.uint<1>
 
   }
