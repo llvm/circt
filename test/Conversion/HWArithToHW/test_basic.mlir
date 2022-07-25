@@ -3,7 +3,6 @@
 // CHECK: hw.module @constant() -> (out: i32) {
 // CHECK:   %c0_i32 = hw.constant 0 : i32
 // CHECK:   hw.output %c0_i32 : i32
-// CHECK: }
 
 hw.module @constant() -> (out: i32) {
   %0 = hwarith.constant 0 : si32
@@ -62,7 +61,6 @@ hw.module @add(%op0: i32, %op1: i32) -> (sisi: i32, siui: i32, uisi: i32, uiui: 
 // CHECK:   hw.output %18, %19, %20, %21 : i32, i32, i32, i32
   hw.output %sisiOut, %siuiOut, %uisiOut, %uiuiOut : i32, i32, i32, i32
 }
-// CHECK: }
 
 // -----
 
@@ -115,7 +113,6 @@ hw.module @sub(%op0: i32, %op1: i32) -> (sisi: i32, siui: i32, uisi: i32, uiui: 
 // CHECK:   hw.output %18, %19, %20, %21 : i32, i32, i32, i32
   hw.output %sisiOut, %siuiOut, %uisiOut, %uiuiOut : i32, i32, i32, i32
 }
-// CHECK: }
 
 // -----
 
@@ -171,7 +168,6 @@ hw.module @mul(%op0: i32, %op1: i32) -> (sisi: i32, siui: i32, uisi: i32, uiui: 
 // CHECK:  hw.output %20, %21, %22, %23 : i32, i32, i32, i32
   hw.output %sisiOut, %siuiOut, %uisiOut, %uiuiOut : i32, i32, i32, i32
 }
-// CHECK: }
 
 // -----
 
@@ -217,4 +213,3 @@ hw.module @div(%op0: i32, %op1: i32) -> (sisi: i32, siui: i32, uisi: i32, uiui: 
 // CHECK:   hw.output %15, %9, %16, %14 : i32, i32, i32, i32
   hw.output %sisiOut, %siuiOut, %uisiOut, %uiuiOut : i32, i32, i32, i32
 }
-// CHECK: }
