@@ -44,8 +44,8 @@ static Value extendTypeWidth(OpBuilder &builder, Location loc, Value value,
   // https://circt.llvm.org/docs/Dialects/Comb/RationaleComb/#no-complement-negate-zext-sext-operators
   if (signExtension) {
     // Sign extension
-    Value highBit = extractBits(
-        builder, loc, value, sourceWidth - 1 /* startBit */, 1 /* bitWidth */);
+    Value highBit = extractBits(builder, loc, value,
+                                /*startBit=*/sourceWidth - 1, /*bitWidth=*/1);
     SmallVector<Value, 1> result;
     builder.createOrFold<comb::ReplicateOp>(result, loc, highBit,
                                             extensionLength);
@@ -120,9 +120,8 @@ struct DivOpLowering : public OpConversionPattern<DivOp> {
                       ->getOpResult(0);
 
     // finally truncate back to the expected result size!
-    Value truncateResult =
-        extractBits(rewriter, loc, divResult, 0 /* startBit */,
-                    targetType.getWidth() /* bitWidth */);
+    Value truncateResult = extractBits(rewriter, loc, divResult, /*startBit=*/0,
+                                       /*bitWidth=*/targetType.getWidth());
     rewriter.replaceOp(op, truncateResult);
 
     return success();
@@ -154,7 +153,7 @@ struct CastOpLowering : public OpConversionPattern<CastOp> {
     } else {
       // bit truncation needed
       replaceValue = extractBits(rewriter, op.getLoc(), adaptor.in(),
-                                 0 /* startBit */, targetWidth /* bitWidth */);
+                                 /*startBit=*/0, /*bitWidth=*/targetWidth);
     }
     rewriter.replaceOp(op, replaceValue);
 
@@ -177,12 +176,13 @@ struct BinaryOpLowering : public OpConversionPattern<BinOp> {
     auto loc = op.getLoc();
     auto lhsType = op.getOperand(0).getType().template cast<IntegerType>();
     auto rhsType = op.getOperand(1).getType().template cast<IntegerType>();
-    auto targetType = op.result().getType().template cast<IntegerType>();
+    auto targetWidth =
+        op.result().getType().template cast<IntegerType>().getWidth();
 
     Value lhsValue = extendTypeWidth(rewriter, loc, adaptor.inputs()[0],
-                                     targetType.getWidth(), lhsType.isSigned());
+                                     targetWidth, lhsType.isSigned());
     Value rhsValue = extendTypeWidth(rewriter, loc, adaptor.inputs()[1],
-                                     targetType.getWidth(), rhsType.isSigned());
+                                     targetWidth, rhsType.isSigned());
     rewriter.replaceOpWithNewOp<ReplaceOp>(op, lhsValue, rhsValue);
     return success();
   }
