@@ -579,8 +579,7 @@ void GrandCentralTapsPass::runOnOperation() {
   LLVM_DEBUG(llvm::dbgs() << "Running the GCT Data Taps pass\n");
   SymbolTable symtbl(circuitOp);
   circuitSymbols = &symtbl;
-  InnerSymbolTableCollection innerSymTblCol;
-  innerSymTblCol.populateTables(circuitOp);
+  InnerSymbolTableCollection innerSymTblCol(circuitOp);
   InnerRefNamespace innerRefNS{symtbl, innerSymTblCol};
 
   // Here's a rough idea of what the Scala code is doing:
