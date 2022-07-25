@@ -2445,6 +2445,23 @@ struct CombConcatOpConversion : public ConvertToLLVMPattern {
 };
 } // namespace
 
+namespace {
+/// Lower a comb::ReplicateOp operation to the LLVM dialect.
+struct CombReplicateOpConversion
+    : public ConvertOpToLLVMPattern<comb::ReplicateOp> {
+  using ConvertOpToLLVMPattern<comb::ReplicateOp>::ConvertOpToLLVMPattern;
+
+  LogicalResult
+  matchAndRewrite(comb::ReplicateOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+
+    std::vector<Value> inputs(op.getMultiple(), op.getInput());
+    rewriter.replaceOpWithNewOp<comb::ConcatOp>(op, inputs);
+    return success();
+  }
+};
+} // namespace
+
 //===----------------------------------------------------------------------===//
 // Memory operations
 //===----------------------------------------------------------------------===//
@@ -2538,8 +2555,8 @@ void circt::populateLLHDToLLVMConversionPatterns(LLVMTypeConverter &converter,
   // Arithmetic conversion patterns.
   patterns.add<CombAddOpConversion, CombSubOpConversion, CombMulOpConversion,
                CombDivUOpConversion, CombDivSOpConversion, CombModUOpConversion,
-               CombModSOpConversion, CombICmpOpConversion, CombMuxOpConversion>(
-      converter);
+               CombModSOpConversion, CombICmpOpConversion, CombMuxOpConversion,
+               CombReplicateOpConversion>(converter);
 
   // Unit conversion patterns.
   patterns.add<ProcOpConversion, WaitOpConversion, HaltOpConversion>(ctx,
