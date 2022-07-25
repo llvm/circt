@@ -38,7 +38,7 @@ using namespace circt::llhd;
 
 //===----------------------------------------------------------------------===//
 // Extraction operation conversions
-//===----------------------------------------------------------------Comb------===//
+//===----------------------------------------------------------------------===//
 
 namespace {
 /// Convert a comb::ExtractOp to LLVM dialect.
@@ -259,7 +259,8 @@ void circt::populateCombToLLVMConversionPatterns(LLVMTypeConverter &converter,
   // Arithmetic conversion patterns.
   patterns.add<CombAddOpConversion, CombSubOpConversion, CombMulOpConversion,
                CombDivUOpConversion, CombDivSOpConversion, CombModUOpConversion,
-               CombModSOpConversion, CombICmpOpConversion, CombMuxOpConversion>(
+               CombModSOpConversion, CombICmpOpConversion, CombMuxOpConversion,
+               CombReplicateOpConversion>(
       converter);
 }
 
