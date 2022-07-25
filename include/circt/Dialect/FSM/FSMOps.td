@@ -141,12 +141,12 @@ def HWInstanceOp : FSMOp<"hw_instance", [
     machine.
   }];
 
-  let arguments = (ins StrAttr:$instanceName, FlatSymbolRefAttr:$machine,
+  let arguments = (ins StrAttr:$sym_name, FlatSymbolRefAttr:$machine,
                        Variadic<AnyType>:$inputs, I1:$clock, I1:$reset);
   let results = (outs Variadic<AnyType>:$outputs);
 
   let assemblyFormat = [{
-    $instanceName $machine attr-dict `(` $inputs `)`
+    $sym_name $machine attr-dict `(` $inputs `)`
     `,` `clock` $clock `,` `reset` $reset `:` functional-type($inputs, $outputs)
   }];
 
@@ -160,6 +160,14 @@ def HWInstanceOp : FSMOp<"hw_instance", [
     }
     FlatSymbolRefAttr getModuleNameAttr() {
       return machineAttr();
+    }
+
+    // HWInstanceLike interface
+    StringRef getInstanceName() {
+      return sym_name();
+    }
+    StringAttr getInstanceNameAttr() {
+      return sym_nameAttr();
     }
   }];
 
