@@ -25,6 +25,7 @@
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/Matchers.h"
+#include "mlir/Support/LogicalResult.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/ADT/TypeSwitch.h"
 
@@ -227,7 +228,7 @@ private:
   TGroupOp createGroupForOp(PatternRewriter &rewriter, Operation *op) const {
     Block *block = op->getBlock();
     auto groupName = getState<ComponentLoweringState>().getUniqueName(
-        programState().blockName(block));
+        loweringState().blockName(block));
     return calyx::createGroup<TGroupOp>(
         rewriter, getState<ComponentLoweringState>().getComponentOp(),
         op->getLoc(), groupName);
@@ -492,8 +493,8 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
     if (succOperands.empty())
       continue;
     // Create operand passing group
-    std::string groupName = programState().blockName(srcBlock) + "_to_" +
-                            programState().blockName(succBlock.value());
+    std::string groupName = loweringState().blockName(srcBlock) + "_to_" +
+                            loweringState().blockName(succBlock.value());
     auto groupOp = calyx::createGroup<calyx::GroupOp>(rewriter, getComponent(),
                                                       brOp.getLoc(), groupName);
     // Fetch block argument registers associated with the basic block
@@ -772,7 +773,7 @@ struct FuncOpConversion : public calyx::FuncOpPartialLoweringPattern {
 
     /// Store the function-to-component mapping.
     functionMapping[funcOp] = compOp;
-    auto *compState = programState().getState<ComponentLoweringState>(compOp);
+    auto *compState = loweringState().getState<ComponentLoweringState>(compOp);
     compState->setFuncOpResultMapping(funcOpResultMapping);
 
     /// Rewrite funcOp SSA argument values to the CompOp arguments.
@@ -843,8 +844,8 @@ class BuildWhileGroups : public calyx::FuncOpPartialLoweringPattern {
         auto condOp = scfWhileOp.getConditionOp().getArgs()[barg.index()];
         if (barg.value() != condOp) {
           res = whileOp.getOperation()->emitError()
-                << programState().irName(barg.value())
-                << " != " << programState().irName(condOp)
+                << loweringState().irName(barg.value())
+                << " != " << loweringState().irName(condOp)
                 << "do-while loops not supported; expected iter-args to "
                    "remain untransformed in the 'before' region of the "
                    "scf.while op.";
@@ -1172,13 +1173,11 @@ public:
     Strategy strategy;
   };
 
-  //// Creates a new Calyx program with the contents of the source module
-  /// inlined within.
+  //// Labels the entry point of a Calyx program.
   /// Furthermore, this function performs validation on the input function,
   /// to ensure that we've implemented the capabilities necessary to convert
   /// it.
-  LogicalResult createProgram(StringRef topLevelFunction,
-                              calyx::ProgramOp *programOpOut) {
+  LogicalResult labelEntryPoint(StringRef topLevelFunction) {
     // Program legalization - the partial conversion driver will not run
     // unless some pattern is provided - provide a dummy pattern.
     struct DummyPattern : public OpRewritePattern<mlir::ModuleOp> {
@@ -1216,8 +1215,8 @@ public:
 
     // Program conversion
     RewritePatternSet conversionPatterns(&getContext());
-    conversionPatterns.add<calyx::ModuleOpConversion>(
-        &getContext(), topLevelFunction, programOpOut);
+    conversionPatterns.add<calyx::ModuleOpConversion>(&getContext(),
+                                                      topLevelFunction);
     return applyOpPatternsAndFold(getOperation(),
                                   std::move(conversionPatterns));
   }
@@ -1266,7 +1265,7 @@ public:
 
 private:
   LogicalResult partialPatternRes;
-  std::shared_ptr<calyx::ProgramLoweringState> loweringState = nullptr;
+  std::shared_ptr<calyx::CalyxLoweringState> loweringState = nullptr;
 };
 
 void SCFToCalyxPass::runOnOperation() {
@@ -1281,16 +1280,12 @@ void SCFToCalyxPass::runOnOperation() {
   }
 
   /// Start conversion
-  calyx::ProgramOp programOp;
-  if (failed(createProgram(topLevelFunction, &programOp))) {
+  if (failed(labelEntryPoint(topLevelFunction))) {
     signalPassFailure();
     return;
   }
-  assert(programOp.getOperation() != nullptr &&
-         "programOp should have been set during module "
-         "conversion, if module conversion succeeded.");
-  loweringState = std::make_shared<calyx::ProgramLoweringState>(
-      programOp, topLevelFunction);
+  loweringState = std::make_shared<calyx::CalyxLoweringState>(getOperation(),
+                                                              topLevelFunction);
 
   /// --------------------------------------------------------------------------
   /// If you are a developer, it may be helpful to add a

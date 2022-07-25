@@ -29,35 +29,8 @@ def UndefinedOp : CalyxOp<"undef", [
   let assemblyFormat = "attr-dict `:` qualified(type($res))";
 }
 
-def ProgramOp : CalyxContainer<"program", [
-    IsolatedFromAbove,
-    SymbolTable /* contains ComponentOp names. */
-  ]> {
-  let summary = "Calyx Program";
-  let description = [{
-    The "calyx.program" operation represents an overall Calyx
-    program, containing a list of Calyx components. This must
-    include an entry-point component.
-
-      ```mlir
-      calyx.program "main" { ... }
-      ```
-  }];
-  let arguments = (ins StrAttr:$entryPointName);
-
-  let extraClassDeclaration = [{
-    /// Returns the entry-point component into the
-    /// Calyx program.
-    ComponentOp getEntryPointComponent() {
-      return lookupSymbol<ComponentOp>(entryPointName());
-    }
-  }];
-  let assemblyFormat = "$entryPointName $body attr-dict";
-  let hasVerifier = 1;
-}
-
 def ComponentOp : CalyxOp<"component", [
-    HasParent<"ProgramOp">,
+    HasParent<"mlir::ModuleOp">,
     SymbolTable, /* contains Cell names. */
     Symbol,
     FunctionOpInterface,

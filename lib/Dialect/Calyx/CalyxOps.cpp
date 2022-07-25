@@ -315,18 +315,6 @@ static void eraseControlWithGroupAndConditional(OpTy op,
 }
 
 //===----------------------------------------------------------------------===//
-// ProgramOp
-//===----------------------------------------------------------------------===//
-
-LogicalResult ProgramOp::verify() {
-  if (getEntryPointComponent() == nullptr)
-    return emitOpError() << "has undefined entry-point component: \""
-                         << entryPointName() << "\".";
-
-  return success();
-}
-
-//===----------------------------------------------------------------------===//
 // ComponentOp
 //===----------------------------------------------------------------------===//
 
@@ -1187,11 +1175,11 @@ void AssignOp::print(OpAsmPrinter &p) {
 /// Lookup the component for the symbol. This returns null on
 /// invalid IR.
 ComponentOp InstanceOp::getReferencedComponent() {
-  auto program = (*this)->getParentOfType<ProgramOp>();
-  if (!program)
+  auto module = (*this)->getParentOfType<ModuleOp>();
+  if (!module)
     return nullptr;
 
-  return program.lookupSymbol<ComponentOp>(componentName());
+  return module.lookupSymbol<ComponentOp>(componentName());
 }
 
 /// Verifies the port information in comparison with the referenced component
@@ -1199,8 +1187,9 @@ ComponentOp InstanceOp::getReferencedComponent() {
 /// referenced component twice.
 static LogicalResult verifyInstanceOpType(InstanceOp instance,
                                           ComponentOp referencedComponent) {
-  auto program = instance->getParentOfType<ProgramOp>();
-  StringRef entryPointName = program.entryPointName();
+  auto module = instance->getParentOfType<ModuleOp>();
+  StringRef entryPointName =
+      module->getAttrOfType<StringAttr>("calyx.entrypoint");
   if (instance.componentName() == entryPointName)
     return instance.emitOpError()
            << "cannot reference the entry-point component: '" << entryPointName
@@ -1230,15 +1219,15 @@ static LogicalResult verifyInstanceOpType(InstanceOp instance,
 
 LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   Operation *op = *this;
-  auto program = op->getParentOfType<ProgramOp>();
+  auto module = op->getParentOfType<ModuleOp>();
   Operation *referencedComponent =
-      symbolTable.lookupNearestSymbolFrom(program, componentNameAttr());
+      symbolTable.lookupNearestSymbolFrom(module, componentNameAttr());
   if (referencedComponent == nullptr)
     return emitError() << "referencing component: '" << componentName()
                        << "', which does not exist.";
 
   Operation *shadowedComponentName =
-      symbolTable.lookupNearestSymbolFrom(program, sym_nameAttr());
+      symbolTable.lookupNearestSymbolFrom(module, sym_nameAttr());
   if (shadowedComponentName != nullptr)
     return emitError() << "instance symbol: '" << instanceName()
                        << "' is already a symbol for another component.";
