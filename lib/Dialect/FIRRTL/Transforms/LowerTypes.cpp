@@ -96,7 +96,7 @@ static bool hasZeroBitWidth(FIRRTLType type) {
         return hasZeroBitWidth(vector.getElementType());
       })
       .Default([](auto groundType) {
-        return firrtl::getBitWidth(groundType).getValueOr(0) == 0;
+        return firrtl::getBitWidth(groundType).value_or(0) == 0;
       });
 }
 

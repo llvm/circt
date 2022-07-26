@@ -353,7 +353,7 @@ LogicalResult ModuleExternOpLowering::matchAndRewrite(
     MSFTModuleExternOp mod, OpAdaptor adaptor,
     ConversionPatternRewriter &rewriter) const {
   auto hwMod = rewriter.replaceOpWithNewOp<hw::HWModuleExternOp>(
-      mod, mod.getNameAttr(), mod.getPorts(), mod.verilogName().getValueOr(""),
+      mod, mod.getNameAttr(), mod.getPorts(), mod.verilogName().value_or(""),
       mod.parameters());
 
   if (!outputFile.empty()) {

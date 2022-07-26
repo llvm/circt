@@ -282,7 +282,7 @@ inferReturnTypesOfStructExtractOp(MLIRContext *context, Optional<Location> loc,
                                     .cast<StringAttr>()
                                     .getValue());
   if (!type) {
-    context->getDiagEngine().emit(loc.getValueOr(UnknownLoc()),
+    context->getDiagEngine().emit(loc.value_or(UnknownLoc()),
                                   DiagnosticSeverity::Error)
         << "invalid field name specified";
     return failure();

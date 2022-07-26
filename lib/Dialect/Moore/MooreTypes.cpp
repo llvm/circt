@@ -476,9 +476,9 @@ Optional<IntType::Kind> IntType::getKindFromDomainAndSize(Domain domain,
 }
 
 IntType IntType::get(MLIRContext *context, Kind kind, Optional<Sign> sign) {
-  return Base::get(context, detail::IntTypeStorage::pack(
-                                kind, sign.getValueOr(getDefaultSign(kind)),
-                                sign.hasValue()));
+  return Base::get(
+      context, detail::IntTypeStorage::pack(
+                   kind, sign.value_or(getDefaultSign(kind)), sign.hasValue()));
 }
 
 IntType::Kind IntType::getKind() const { return getImpl()->kind; }
@@ -929,7 +929,7 @@ UnpackedType UnpackedAssocDim::getIndexType() const {
 
 UnpackedQueueDim UnpackedQueueDim::get(UnpackedType inner,
                                        Optional<unsigned> bound) {
-  auto type = Base::get(inner.getContext(), inner, bound.getValueOr(-1));
+  auto type = Base::get(inner.getContext(), inner, bound.value_or(-1));
   type.getImpl()->finalize<UnpackedQueueDim>(type, bound);
   return type;
 }
@@ -1121,7 +1121,7 @@ PackedStructType PackedStructType::get(StructKind kind,
          "packed struct members must be packed");
   return Base::get(loc.getContext(),
                    detail::StructTypeStorage::pack(
-                       kind, sign.getValueOr(Sign::Unsigned), sign.hasValue()),
+                       kind, sign.value_or(Sign::Unsigned), sign.hasValue()),
                    members, name, loc);
 }
 
