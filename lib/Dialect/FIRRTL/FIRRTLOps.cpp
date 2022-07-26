@@ -205,12 +205,6 @@ void getAsmBlockArgumentNamesImpl(Operation *op, mlir::Region &region,
   }
 }
 
-static bool hasPortNamed(FModuleLike op, StringAttr name) {
-  return llvm::any_of(op.getPortSymbols(), [name](Attribute pname) {
-    return pname && pname.cast<InnerSymAttr>().hasSymNamed(name);
-  });
-}
-
 /// A forward declaration for `NameKind` attribute parser.
 static ParseResult parseNameKind(OpAsmParser &parser,
                                  firrtl::NameKindEnumAttr &result);
