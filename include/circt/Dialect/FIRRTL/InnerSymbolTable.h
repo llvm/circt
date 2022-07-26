@@ -38,6 +38,34 @@ public:
   explicit InnerSymTarget(size_t portIdx, Operation *op, size_t fieldID = 0)
       : op(op), portIdx(portIdx), fieldID(fieldID) {}
 
+  InnerSymTarget(const InnerSymTarget &) = default;
+  InnerSymTarget(InnerSymTarget &&) = default;
+
+  // Accessors:
+
+  /// Return the target's fieldID.
+  auto getField() const { return fieldID; }
+
+  /// Return the target's base operation.  For ports, this is the module.
+  Operation *getOp() const { return op; }
+
+  /// Return the target's port, if valid.  Check "isPort()".
+  auto getPort() const {
+    assert(isPort());
+    return portIdx;
+  }
+
+  // Classification:
+
+  /// Return if this targets a field (nonzero fieldID).
+  bool isField() const { return fieldID != 0; }
+
+  /// Return if this targets a port.
+  bool isPort() const { return portIdx != invalidPort; }
+
+  /// Returns if this targets an operation only (not port or field).
+  bool isOpOnly() const { return !isPort() && !isField(); }
+
   /// Return a target to the specified field within the given base.
   /// FieldID is relative to the specified base target.
   static InnerSymTarget getTargetForSubfield(const InnerSymTarget &base,
@@ -47,22 +75,6 @@ public:
     return InnerSymTarget(base.op, base.fieldID + fieldID);
   }
 
-  InnerSymTarget(const InnerSymTarget &) = default;
-  InnerSymTarget(InnerSymTarget &&) = default;
-
-  // Accessors
-  auto getField() const { return fieldID; }
-  Operation *getOp() const { return op; }
-  auto getPort() const {
-    assert(isPort());
-    return portIdx;
-  }
-
-  // Classification
-  bool isField() const { return fieldID != 0; }
-  bool isPort() const { return portIdx != invalidPort; }
-  bool isOpOnly() const { return !isPort() && !isField(); }
-
 private:
   auto asTuple() const { return std::tie(op, portIdx, fieldID); }
   Operation *op = nullptr;
@@ -71,7 +83,9 @@ private:
   static constexpr size_t invalidPort = ~size_t{0};
 
 public:
-  // Comparison operators
+  // Operators are defined below.
+
+  // Comparison operators:
   bool operator<(const InnerSymTarget &rhs) const {
     return asTuple() < rhs.asTuple();
   }
@@ -79,11 +93,11 @@ public:
     return asTuple() == rhs.asTuple();
   }
 
-  // Assignment
+  // Assignment operators:
   InnerSymTarget &operator=(InnerSymTarget &&) = default;
   InnerSymTarget &operator=(const InnerSymTarget &) = default;
 
-  // All targets must involve a valid op.
+  /// Check if this target is valid.
   operator bool() const { return op; }
 };
 
@@ -149,7 +163,8 @@ public:
 
   explicit InnerSymbolTableCollection() = default;
   InnerSymbolTableCollection(const InnerSymbolTableCollection &) = delete;
-  InnerSymbolTableCollection &operator=(InnerSymbolTableCollection &) = delete;
+  InnerSymbolTableCollection &
+  operator=(const InnerSymbolTableCollection &) = delete;
 
 private:
   /// This maps Operations to their InnnerSymbolTable's.
