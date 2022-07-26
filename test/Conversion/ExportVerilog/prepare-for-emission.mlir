@@ -59,13 +59,13 @@ module attributes {circt.loweringOptions = "disallowLocalVariables,spillWiresAtP
 
   // CHECK-LABEL: @SpillTemporaryWireForMultipleUseExpression
   hw.module @SpillTemporaryWireForMultipleUseExpression(%a: i4, %b: i4) -> (c: i4, d: i4) {
-    // CHECK-NEXT: %0 = sv.wire
-    // CHECK-NEXT: %1 = comb.add %a, %b
-    // CHECK-NEXT: sv.assign %0, %1
-    // CHECK-NEXT: %2 = sv.read_inout %0
-    // CHECK-NEXT: %3 = sv.read_inout %0
-    // CHECK-NEXT: hw.output %3, %2
-    %0 = comb.add %a, %b : i4
+    // CHECK-NEXT: %bar = sv.wire
+    // CHECK-NEXT: %0 = comb.add %a, %b
+    // CHECK-NEXT: sv.assign %bar, %0
+    // CHECK-NEXT: %1 = sv.read_inout %bar
+    // CHECK-NEXT: %2 = sv.read_inout %bar
+    // CHECK-NEXT: hw.output %2, %1
+    %0 = comb.add %a, %b {sv.namehint = "bar"}: i4
     hw.output %0, %0 : i4, i4
   }
 }
