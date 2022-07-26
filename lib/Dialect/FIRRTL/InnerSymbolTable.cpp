@@ -31,11 +31,10 @@ InnerSymbolTable::InnerSymbolTable(Operation *op) {
   // Save the operation this table is for.
   this->innerSymTblOp = op;
 
-  (void)walkSymbols(op, [&](StringAttr name, InnerSymTarget target) {
+  walkSymbols(op, [&](StringAttr name, InnerSymTarget target) {
     auto it = symbolTable.insert({name, target});
     (void)it;
     assert(it.second && "repeated symbol found");
-    return success();
   });
 }
 

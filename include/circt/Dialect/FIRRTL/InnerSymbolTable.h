@@ -146,16 +146,43 @@ public:
   /// Return the name of the attribute used for inner symbol names.
   static StringRef getInnerSymbolAttrName() { return "inner_sym"; }
 
+  /// Construct an InnerSymbolTable, checking for verification failure.
+  /// Emits diagnostics describing encountered issues.
+  static FailureOr<InnerSymbolTable> get(Operation *op);
+
   using InnerSymCallbackFn =
       llvm::function_ref<LogicalResult(StringAttr, InnerSymTarget)>;
 
   /// Walk the given IST operation and invoke the callback for all encountered
   /// inner symbols.
-  static LogicalResult walkSymbols(Operation *op, InnerSymCallbackFn callback);
+  /// This variant is used for callbacks that return LogicalResult.
+  template <typename FuncTy,
+            typename RetTy = typename std::invoke_result<FuncTy, StringAttr, InnerSymTarget>::type>
+  static typename std::enable_if<std::is_same<LogicalResult, RetTy>::value,
+                                 RetTy>::type
+  walkSymbols(Operation *op, FuncTy &&callback) {
+    return walkSymbols(op, InnerSymCallbackFn(callback));
+  }
 
-  /// Construct an InnerSymbolTable, checking for verification failure.
-  /// Emits diagnostics describing encountered issues.
-  static FailureOr<InnerSymbolTable> get(Operation *op);
+  /// Walk the given IST operation and invoke the callback for all encountered
+  /// inner symbols.
+  /// This variant is used for callbacks that return void.
+  template <typename FuncTy,
+            typename RetTy = typename std::invoke_result<
+                FuncTy, StringAttr, InnerSymTarget>::type>
+  static typename std::enable_if<std::is_void<RetTy>::value, RetTy>::type
+  walkSymbols(Operation *op, FuncTy &&callback) {
+    (void)InnerSymbolTable::walkSymbols(
+        op, [&](StringAttr name, InnerSymTarget target) {
+          std::invoke(std::forward<FuncTy>(callback), name, target);
+          return success();
+        });
+  }
+
+  /// Walk the given IST operation and invoke the callback for all encountered
+  /// inner symbols.
+  /// This variant is the shared implementation and takes an InnerSymCallbackFn.
+  static LogicalResult walkSymbols(Operation *op, InnerSymCallbackFn callback);
 
 private:
   using TableTy = DenseMap<StringAttr, InnerSymTarget>;
