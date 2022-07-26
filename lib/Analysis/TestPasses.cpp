@@ -190,14 +190,18 @@ struct InferTopModulePass
 
 void InferTopModulePass::runOnOperation() {
   circt::hw::InstanceGraph &analysis = getAnalysis<circt::hw::InstanceGraph>();
-  auto res = analysis.getInferredTopLevelNode();
+  auto res = analysis.getInferredTopLevelNodes();
   if (failed(res)) {
     signalPassFailure();
     return;
   }
 
+  llvm::SmallVector<Attribute, 4> attrs;
+  for (auto *node : res.getValue())
+    attrs.push_back(node->getModule().moduleNameAttr());
+
   analysis.getParent()->setAttr("test.top",
-                                res.getValue()->getModule().moduleNameAttr());
+                                ArrayAttr::get(&getContext(), attrs));
 }
 
 //===----------------------------------------------------------------------===//

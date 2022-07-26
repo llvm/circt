@@ -1,6 +1,6 @@
-// RUN: circt-opt %s -split-input-file -test-infer-top-level -verify-diagnostics | FileCheck %s
+// RUN: circt-opt -split-input-file -test-infer-top-level -verify-diagnostics %s | FileCheck %s
 
-// CHECK: module attributes {test.top = "baz"}
+// CHECK: module attributes {test.top = ["baz"]}
 module {
   hw.module @bar() -> () {}
   hw.module @foo() -> () {
@@ -33,7 +33,7 @@ module {
 // -----
 
 // test multiple candidate top components
-// expected-error @+1 {{'builtin.module' op multiple candidate top-level modules detected (bar, foo).}}
+// CHECK: module attributes {test.top = ["bar", "foo"]}
 module {
   hw.module @bar() -> () {
     hw.instance "baz" @baz() -> ()

@@ -139,14 +139,15 @@ bool InstanceGraphBase::isAncestor(HWModuleLike child, HWModuleLike parent) {
   return false;
 }
 
-FailureOr<InstanceGraphNode *> InstanceGraphBase::getInferredTopLevelNode() {
-  if (inferredTopLevelNode)
-    return inferredTopLevelNode;
+FailureOr<llvm::ArrayRef<InstanceGraphNode *>>
+InstanceGraphBase::getInferredTopLevelNodes() {
+  if (!inferredTopLevelNodes.empty())
+    return {inferredTopLevelNodes};
 
   /// Topologically sort the instance graph.
   llvm::SetVector<InstanceGraphNode *> visited, marked;
-  llvm::SetVector<InstanceGraphNode *> candidateTopLevel(this->begin(),
-                                                         this->end());
+  llvm::SetVector<InstanceGraphNode *> candidateTopLevels(this->begin(),
+                                                          this->end());
   SmallVector<InstanceGraphNode *> cycleTrace;
 
   // Recursion function; returns true if a cycle was detected.
@@ -164,7 +165,7 @@ FailureOr<InstanceGraphNode *> InstanceGraphBase::getInferredTopLevelNode() {
             marked.insert(node);
             for (auto use : *node) {
               InstanceGraphNode *targetModule = use->getTarget();
-              candidateTopLevel.remove(targetModule);
+              candidateTopLevels.remove(targetModule);
               if (cycleUtil(targetModule, trace))
                 return true; // Cycle detected.
             }
@@ -193,19 +194,10 @@ FailureOr<InstanceGraphNode *> InstanceGraphBase::getInferredTopLevelNode() {
     err << ").";
     return err;
   }
-  assert(!candidateTopLevel.empty() &&
+  assert(!candidateTopLevels.empty() &&
          "if non-cyclic, there should be at least 1 candidate top level");
 
-  if (candidateTopLevel.size() > 1) {
-    auto err = getParent()->emitOpError();
-    err << "multiple candidate top-level modules detected (";
-    llvm::interleaveComma(candidateTopLevel, err, [&](auto topLevel) {
-      err << topLevel->getModule().moduleName();
-    });
-    err << ").";
-    return err;
-  }
-
-  inferredTopLevelNode = *candidateTopLevel.begin();
-  return inferredTopLevelNode;
+  inferredTopLevelNodes = llvm::SmallVector<InstanceGraphNode *>(
+      candidateTopLevels.begin(), candidateTopLevels.end());
+  return {inferredTopLevelNodes};
 }
