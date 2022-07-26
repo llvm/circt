@@ -112,7 +112,7 @@ void InnerSymPropertiesAttr::print(AsmPrinter &p) const {
     << getSymVisibility().getValue() << ">";
 }
 
-StringAttr InnerSymAttr::getSymIfExists(unsigned fieldId) {
+StringAttr InnerSymAttr::getSymIfExists(unsigned fieldId) const {
   auto it =
       llvm::find_if(getImpl()->props, [&](const InnerSymPropertiesAttr &p) {
         return p.getFieldID() == fieldId;
@@ -122,14 +122,26 @@ StringAttr InnerSymAttr::getSymIfExists(unsigned fieldId) {
   return {};
 }
 
-StringAttr InnerSymAttr::getSymName() { return getSymIfExists(0); }
+StringAttr InnerSymAttr::getSymName() const { return getSymIfExists(0); }
 
 bool InnerSymAttr::all_of_props(
-    std::function<bool(InnerSymPropertiesAttr)> func) {
+    std::function<bool(InnerSymPropertiesAttr)> func) const {
   return llvm::all_of(getImpl()->props, func);
 }
 
-size_t InnerSymAttr::numSymbols() { return getImpl()->props.size(); }
+size_t InnerSymAttr::numSymbols() const { return getImpl()->props.size(); }
+
+bool InnerSymAttr::isSymbolInvalid() const {
+  return all_of_props(
+      [](InnerSymPropertiesAttr p) { return p.getName().getValue().empty(); });
+}
+
+void InnerSymAttr::forAllSymNames(
+    llvm::function_ref<bool(StringAttr)> callback) {
+  for (auto p : getImpl()->props)
+    if (!callback(p.getName()))
+      break;
+}
 
 Attribute InnerSymAttr::parse(AsmParser &parser, Type type) {
   StringAttr sym;
