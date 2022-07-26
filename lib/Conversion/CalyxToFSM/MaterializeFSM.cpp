@@ -26,9 +26,6 @@ using namespace fsm;
 
 namespace {
 
-// A set of group names. Use SetVector to ensure deterministic ordering.
-using GroupSet = SetVector<StringAttr>;
-
 struct MaterializeCalyxToFSMPass
     : public MaterializeCalyxToFSMBase<MaterializeCalyxToFSMPass> {
   void runOnOperation() override;
@@ -98,10 +95,13 @@ struct MaterializeCalyxToFSMPass
   }
 
   /// Maintain a set of all groups referenced within this fsm.machine.
-  GroupSet referencedGroups;
+  /// Use a SetVector to ensure a deterministic ordering - strong assumptions
+  /// are placed on the order of referenced groups wrt. the top-level I/O
+  /// created for the group done/go signals.
+  SetVector<StringAttr> referencedGroups;
 
   /// Maintain a relation between states and the groups which they enable.
-  DenseMap<fsm::StateOp, GroupSet> stateEnables;
+  DenseMap<fsm::StateOp, DenseSet<StringAttr>> stateEnables;
 
   /// A handle to the machine under transformation.
   MachineOp machineOp;
