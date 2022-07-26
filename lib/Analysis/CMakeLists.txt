@@ -39,5 +39,6 @@ add_circt_library(CIRCTAnalysisTestPasses
   CIRCTControlFlowLoopAnalysis
   CIRCTDependenceAnalysis
   CIRCTSchedulingAnalysis
+  CIRCTHW
   MLIRPass
   )

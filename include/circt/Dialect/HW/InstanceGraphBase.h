@@ -198,6 +198,10 @@ public:
   /// Get the node corresponding to the top-level module of a circuit.
   virtual InstanceGraphNode *getTopLevelNode() = 0;
 
+  /// Get the nodes corresponding to the inferred top-level modules of a
+  /// circuit.
+  FailureOr<llvm::ArrayRef<InstanceGraphNode *>> getInferredTopLevelNodes();
+
   /// Return the parent under which all nodes are nested.
   Operation *getParent() { return parent; }
 
@@ -250,6 +254,9 @@ protected:
 
   /// This maps each operation to its graph node.
   llvm::DenseMap<Attribute, InstanceGraphNode *> nodeMap;
+
+  /// A caching of the inferred top level module(s).
+  llvm::SmallVector<InstanceGraphNode *> inferredTopLevelNodes;
 };
 
 } // namespace hw

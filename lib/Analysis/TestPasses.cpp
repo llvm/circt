@@ -13,6 +13,7 @@
 #include "circt/Analysis/ControlFlowLoopAnalysis.h"
 #include "circt/Analysis/DependenceAnalysis.h"
 #include "circt/Analysis/SchedulingAnalysis.h"
+#include "circt/Dialect/HW/HWInstanceGraph.h"
 #include "circt/Scheduling/Problems.h"
 #include "mlir/Dialect/Affine/IR/AffineMemoryOpInterfaces.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
@@ -170,6 +171,40 @@ void TestControlFlowLoopAnalysisPass::runOnOperation() {
 }
 
 //===----------------------------------------------------------------------===//
+// InferTopModule passes.
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct InferTopModulePass
+    : public PassWrapper<InferTopModulePass, OperationPass<mlir::ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(InferTopModulePass)
+
+  void runOnOperation() override;
+  StringRef getArgument() const override { return "test-infer-top-level"; }
+  StringRef getDescription() const override {
+    return "Perform top level module inference and emit results as attributes "
+           "on the enclosing module.";
+  }
+};
+} // namespace
+
+void InferTopModulePass::runOnOperation() {
+  circt::hw::InstanceGraph &analysis = getAnalysis<circt::hw::InstanceGraph>();
+  auto res = analysis.getInferredTopLevelNodes();
+  if (failed(res)) {
+    signalPassFailure();
+    return;
+  }
+
+  llvm::SmallVector<Attribute, 4> attrs;
+  for (auto *node : res.getValue())
+    attrs.push_back(node->getModule().moduleNameAttr());
+
+  analysis.getParent()->setAttr("test.top",
+                                ArrayAttr::get(&getContext(), attrs));
+}
+
+//===----------------------------------------------------------------------===//
 // Pass registration
 //===----------------------------------------------------------------------===//
 
@@ -184,6 +219,9 @@ void registerAnalysisTestPasses() {
   });
   mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
     return std::make_unique<TestControlFlowLoopAnalysisPass>();
+  });
+  mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
+    return std::make_unique<InferTopModulePass>();
   });
 }
 } // namespace test
