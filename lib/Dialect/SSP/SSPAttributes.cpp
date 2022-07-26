@@ -12,7 +12,6 @@
 
 #include "circt/Dialect/SSP/SSPAttributes.h"
 #include "circt/Dialect/SSP/SSPDialect.h"
-#include "circt/Support/LLVM.h"
 
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
