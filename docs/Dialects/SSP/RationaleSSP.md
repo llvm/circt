@@ -124,13 +124,17 @@ problem instances?
 
 ## Rationale for selected design points
 
-### InstanceOp has a single graph region
+### Use of container-like operations instead of regions in `InstanceOp`
 
-The `InstanceOp`'s region serves as the container for the problem instance's
-operator types and dependence graph, which may be cyclic and therefore requires
-a graph region. We considered using separate regions for operator types and the
-graph, however, the `InstanceOp` has to provide a symbol table, and the
-`SymbolTable` trait enforces single-region ops.
+This dialect defines the `OperatorLibraryOp` and `DependenceGraphOp` to
+serve exclusively as the first and second operation in an `InstanceOp`'s region. 
+The alternative of using two regions on the `InstanceOp` is not applicable,
+because the `InstanceOp` then needs to provide a symbol table, but the upstream
+`SymbolTable` trait enforces single-region ops. Lastly, we also considered using
+a single graph region to hold both `OperatorTypeOp`s and `OperationOp`s, but
+discarded that design because it cannot be safely roundtripped via a
+`circt::scheduling::Problem` (internally, registered operator types and
+operations are separate lists).
 
 ### Use of SSA operands _and_ symbol references to encode dependences
 
