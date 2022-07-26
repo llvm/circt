@@ -98,7 +98,6 @@ class Multiple:
 
   @generator
   def construct(ports):
-    o = Multiple.out0
     ports.out0 = (ports.in0 + ports.in1 + ports.in0 + ports.in1).asInt(16)
 
 
