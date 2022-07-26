@@ -257,9 +257,9 @@ def FModuleLike : OpInterface<"FModuleLike"> {
     /// Replace NUll entries with empty string and clear array if all elements
     /// are invalid.
     static void fixupPortSymsArray(SmallVectorImpl<Attribute> &syms,
-                                   MLIRContext * context) {
+                                   MLIRContext *context) {
       bool isValid = false;
-      for (size_t i=0, e = syms.size(); i < e ; ++i)
+      for (size_t i = 0, e = syms.size(); i < e; ++i)
         if (!syms[i])
           syms[i] = InnerSymAttr::get(StringAttr::get(context,""));
         else

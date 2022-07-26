@@ -80,7 +80,7 @@ struct PortInfo {
     sym = InnerSymAttr::get(symName);
   };
   PortInfo(StringAttr name, FIRRTLType type, Direction dir,
-           InnerSymAttr symName, Location loc, AnnotationSet annos)
+           InnerSymAttr sym, Location loc, AnnotationSet annos)
       : name(name), type(type), direction(dir), sym(symName), loc(loc),
         annotations(annos) {}
 };
