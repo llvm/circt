@@ -259,7 +259,7 @@ void CombToLLVMLoweringPass::runOnOperation() {
   target.addLegalOp<UnrealizedConversionCastOp>();
   target.addLegalOp<ModuleOp>();
   target.addLegalDialect<LLVM::LLVMDialect>();
-  target.addLegalDialect<comb::CombDialect>();
+  target.addIllegalDialect<comb::CombDialect>();
 
   // Setup the conversion.
   populateCombToLLVMConversionPatterns(converter, patterns);

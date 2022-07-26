@@ -10,6 +10,7 @@ add_circt_conversion_library(CIRCTCombToLLVM
 
   LINK_LIBS PUBLIC
   CIRCTComb
+  MLIRLLVMCommonConversion
   MLIRTransforms
   MLIRReconcileUnrealizedCasts
 )
