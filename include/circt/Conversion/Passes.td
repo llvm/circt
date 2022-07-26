@@ -212,6 +212,29 @@ def CalyxToFSM : Pass<"lower-calyx-to-fsm", "calyx::ComponentOp"> {
   let dependentDialects = ["fsm::FSMDialect", "comb::CombDialect"];
 }
 
+def MaterializeCalyxToFSM : Pass<"materialize-calyx-to-fsm", "calyx::ComponentOp"> {
+  let summary = "Materializes an FSM embedded inside the control of this Calyx component.";
+  let description = [{
+    Materializes the FSM in the control of the component. This materializes the
+    top-level I/O of the FSM to receive `group_done` signals as input and
+    `group_go` signals as output, based on the `calyx.enable` operations
+    used within the states of the FSM.
+    Each transition of the FSM is predicated on the enabled groups within a
+    state being done, or, for static groups, a separate sub-FSM is instantiated
+    to await the group finishing.
+
+    Given an FSM that enables N unique groups, the top-level FSM will have N+1
+    in- and output ports, wherein:
+    * Input # 0 to N-1 are `group_done` signals
+    * Input N is the top-level `go` port
+    * Output 0 to N-1 are `group_go` signals
+    * Output N is the top-level `done` port
+  }];
+  let dependentDialects = ["comb::CombDialect", "hw::HWDialect", "fsm::FSMDialect"];
+  let constructor = "circt::createMaterializeCalyxToFSMPass()";
+}
+
+
 //===----------------------------------------------------------------------===//
 // FSMToSV
 //===----------------------------------------------------------------------===//
