@@ -209,17 +209,18 @@ LogicalResult ESIConnectServicesPass::process(hw::HWMutableModuleLike mod) {
     localImplReqs[instOp.service_symbolAttr()] = new Block();
 
   // Find all of the "local" requests.
-  mod.walk([&](RequestToClientConnection req) {
-    auto service = req.servicePortAttr().getModuleRef();
-    auto implOpF = localImplReqs.find(service);
-    if (implOpF != localImplReqs.end())
-      req->moveBefore(implOpF->second, implOpF->second->end());
-  });
-  mod.walk([&](RequestToServerConnection req) {
-    auto service = req.servicePortAttr().getModuleRef();
-    auto implOpF = localImplReqs.find(service);
-    if (implOpF != localImplReqs.end())
-      req->moveBefore(implOpF->second, implOpF->second->end());
+  mod.walk([&](Operation *op) {
+    if (auto req = dyn_cast<RequestToClientConnection>(op)) {
+      auto service = req.servicePortAttr().getModuleRef();
+      auto implOpF = localImplReqs.find(service);
+      if (implOpF != localImplReqs.end())
+        req->moveBefore(implOpF->second, implOpF->second->end());
+    } else if (auto req = dyn_cast<RequestToServerConnection>(op)) {
+      auto service = req.servicePortAttr().getModuleRef();
+      auto implOpF = localImplReqs.find(service);
+      if (implOpF != localImplReqs.end())
+        req->moveBefore(implOpF->second, implOpF->second->end());
+    }
   });
 
   // Replace each service instance with a generation request. If a service
@@ -234,17 +235,18 @@ LogicalResult ESIConnectServicesPass::process(hw::HWMutableModuleLike mod) {
   // Identify the non-local reqs which need to be surfaced from this module.
   SmallVector<RequestToClientConnection, 4> nonLocalToClientReqs;
   SmallVector<RequestToServerConnection, 4> nonLocalToServerReqs;
-  mod.walk([&](RequestToClientConnection req) {
-    auto service = req.servicePortAttr().getModuleRef();
-    auto implOpF = localImplReqs.find(service);
-    if (implOpF == localImplReqs.end())
-      nonLocalToClientReqs.push_back(req);
-  });
-  mod.walk([&](RequestToServerConnection req) {
-    auto service = req.servicePortAttr().getModuleRef();
-    auto implOpF = localImplReqs.find(service);
-    if (implOpF == localImplReqs.end())
-      nonLocalToServerReqs.push_back(req);
+  mod.walk([&](Operation *op) {
+    if (auto req = dyn_cast<RequestToClientConnection>(op)) {
+      auto service = req.servicePortAttr().getModuleRef();
+      auto implOpF = localImplReqs.find(service);
+      if (implOpF == localImplReqs.end())
+        nonLocalToClientReqs.push_back(req);
+    } else if (auto req = dyn_cast<RequestToServerConnection>(op)) {
+      auto service = req.servicePortAttr().getModuleRef();
+      auto implOpF = localImplReqs.find(service);
+      if (implOpF == localImplReqs.end())
+        nonLocalToServerReqs.push_back(req);
+    }
   });
 
   // Surface all of the requests which cannot be fulfilled locally.
