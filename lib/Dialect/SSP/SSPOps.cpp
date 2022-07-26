@@ -20,6 +20,47 @@ using namespace circt;
 using namespace circt::ssp;
 
 //===----------------------------------------------------------------------===//
+// InstanceOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult InstanceOp::verify() {
+  auto &ops = getBodyBlock()->getOperations();
+  auto it = ops.begin();
+  if (ops.size() != 2 || !isa<OperatorLibraryOp>(*it) ||
+      !isa<DependenceGraphOp>(*(++it)))
+    return emitOpError()
+           << "must contain exactly one 'library' op and one 'graph' op";
+
+  return success();
+}
+
+// The verifier checks that exactly one of each of the container ops is present.
+OperatorLibraryOp InstanceOp::getOperatorLibrary() {
+  return *getOps<OperatorLibraryOp>().begin();
+}
+
+DependenceGraphOp InstanceOp::getDependenceGraph() {
+  return *getOps<DependenceGraphOp>().begin();
+}
+
+//===----------------------------------------------------------------------===//
+// Wrappers for the `custom<Properties>` ODS directive.
+//===----------------------------------------------------------------------===//
+
+static ParseResult parseProperties(OpAsmParser &parser, ArrayAttr &attr) {
+  auto result = parseOptionalPropertyArray(attr, parser);
+  if (!result.hasValue() || succeeded(*result))
+    return success();
+  return failure();
+}
+
+static void printProperties(OpAsmPrinter &p, Operation *op, ArrayAttr attr) {
+  if (!attr)
+    return;
+  printPropertyArray(attr, p);
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen'ed code
 //===----------------------------------------------------------------------===//
 

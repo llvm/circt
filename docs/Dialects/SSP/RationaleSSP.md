@@ -121,3 +121,17 @@ problem instances?
 
   No, you're right. However, the SSP dialect uses the same terminology as the
   scheduling infrastructure, so any changes would have to originate there.
+
+## Rationale for selected design points
+
+### Use of container-like operations instead of regions in `InstanceOp`
+
+This dialect defines the `OperatorLibraryOp` and `DependenceGraphOp` to
+serve exclusively as the first and second operation in an `InstanceOp`'s region. 
+The alternative of using two regions on the `InstanceOp` is not applicable,
+because the `InstanceOp` then needs to provide a symbol table, but the upstream
+`SymbolTable` trait enforces single-region ops. Lastly, we also considered using
+a single graph region to hold both `OperatorTypeOp`s and `OperationOp`s, but
+discarded that design because it cannot be safely roundtripped via a
+`circt::scheduling::Problem` (internally, registered operator types and
+operations are separate lists).

@@ -9,3 +9,12 @@
 // This file defines the SSP (static scheduling problem) dialect attributes.
 //
 //===----------------------------------------------------------------------===//
+
+//===----------------------------------------------------------------------===//
+// Dialect attributes
+//===----------------------------------------------------------------------===//
+
+def DummyAttr : AttrDef<SSPDialect, "Dummy"> {
+  let summary = "Trigger generation of dialect attribute parser & printer.";
+  let mnemonic = "dummy";
+}
