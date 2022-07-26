@@ -32,6 +32,7 @@ static void registerPasses() {
   registerSeqPasses();
   registerSVPasses();
   registerFSMPasses();
+  registerHWArithPasses();
 }
 
 PYBIND11_MODULE(_circt, m) {
