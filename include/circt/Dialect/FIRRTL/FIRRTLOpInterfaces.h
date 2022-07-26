@@ -63,25 +63,20 @@ struct PortInfo {
   bool isInOut() { return !isOutput() && !isInput(); }
 
   /// Default constructors
-  PortInfo(StringAttr name, FIRRTLType type, Direction dir)
-      : name(name), type(type), direction(dir) {}
-  PortInfo(StringAttr name, FIRRTLType type, Direction dir, StringAttr symName)
-      : name(name), type(type), direction(dir) {
-    sym = InnerSymAttr::get(symName);
-  };
-  PortInfo(StringAttr name, FIRRTLType type, Direction dir, StringAttr symName,
-           Location loc)
-      : name(name), type(type), direction(dir), loc(loc) {
-    sym = InnerSymAttr::get(symName);
-  };
-  PortInfo(StringAttr name, FIRRTLType type, Direction dir, StringAttr symName,
-           Location loc, AnnotationSet annos)
-      : name(name), type(type), direction(dir), loc(loc), annotations(annos) {
-    sym = InnerSymAttr::get(symName);
-  };
   PortInfo(StringAttr name, FIRRTLType type, Direction dir,
-           InnerSymAttr sym, Location loc, AnnotationSet annos)
-      : name(name), type(type), direction(dir), sym(symName), loc(loc),
+           StringAttr symName = {}, Optional<Location> location = {},
+           Optional<AnnotationSet> annos = {})
+      : name(name), type(type), direction(dir) {
+    if (symName)
+      sym = InnerSymAttr::get(symName);
+    if (location.hasValue())
+      loc = location.getValue();
+    if (annos.hasValue())
+      annotations = annos.getValue();
+  };
+  PortInfo(StringAttr name, FIRRTLType type, Direction dir, InnerSymAttr sym,
+           Location loc, AnnotationSet annos)
+      : name(name), type(type), direction(dir), sym(sym), loc(loc),
         annotations(annos) {}
 };
 
