@@ -13,28 +13,15 @@
 #include "circt/Conversion/CombToLLVM.h"
 #include "../PassDetail.h"
 #include "circt/Dialect/Comb/CombOps.h"
-#include "circt/Dialect/HW/HWOps.h"
-#include "circt/Dialect/LLHD/IR/LLHDDialect.h"
-#include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "circt/Support/LLVM.h"
-#include "mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"
-#include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVM.h"
-#include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVMPass.h"
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/LLVMCommon/Pattern.h"
-#include "mlir/Conversion/ReconcileUnrealizedCasts/ReconcileUnrealizedCasts.h"
-#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
-#include "mlir/IR/BlockAndValueMapping.h"
-#include "mlir/IR/BuiltinOps.h"
-#include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
-#include "llvm/ADT/TypeSwitch.h"
 
 using namespace mlir;
 using namespace circt;
-using namespace circt::llhd;
 
 //===----------------------------------------------------------------------===//
 // Extraction operation conversions
@@ -263,7 +250,6 @@ void circt::populateCombToLLVMConversionPatterns(LLVMTypeConverter &converter,
                CombReplicateOpConversion>(converter);
 }
 
-// TODO: Update for Comb
 void CombToLLVMLoweringPass::runOnOperation() {
 
   RewritePatternSet patterns(&getContext());
@@ -271,14 +257,14 @@ void CombToLLVMLoweringPass::runOnOperation() {
 
   LLVMConversionTarget target(getContext());
   target.addLegalOp<UnrealizedConversionCastOp>();
+  target.addLegalOp<ModuleOp>();
+  target.addLegalDialect<LLVM::LLVMDialect>();
+  target.addLegalDialect<comb::CombDialect>();
 
   // Setup the conversion.
   populateCombToLLVMConversionPatterns(converter, patterns);
 
-  target.addLegalDialect<LLVM::LLVMDialect>();
-  target.addLegalOp<ModuleOp>();
-
-  // Apply a full conversion to remove unrealized conversion casts.
+  // Apply a partial conversion.
   if (failed(
           applyPartialConversion(getOperation(), target, std::move(patterns))))
     signalPassFailure();

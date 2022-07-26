@@ -1,7 +1,5 @@
 add_circt_conversion_library(CIRCTLLHDToLLVM
   LLHDToLLVM.cpp
-  ../HWToLLVM/HWToLLVM.cpp
-  ../CombToLLVM/CombToLLVM.cpp
 
   DEPENDS
   CIRCTConversionPassIncGen
@@ -12,6 +10,8 @@ add_circt_conversion_library(CIRCTLLHDToLLVM
   LINK_LIBS PUBLIC
   CIRCTLLHD
   CIRCTComb
+  CIRCTCombToLLVM
+  CIRCTHWToLLVM
   CIRCTHW
   MLIRArithmeticToLLVM
   MLIRControlFlowToLLVM
@@ -20,4 +20,4 @@ add_circt_conversion_library(CIRCTLLHDToLLVM
   MLIRVectorDialect
   MLIRTransforms
   MLIRReconcileUnrealizedCasts
-)
+  )

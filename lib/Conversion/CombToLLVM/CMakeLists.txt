@@ -9,13 +9,7 @@ add_circt_conversion_library(CIRCTCombToLLVM
   Core
 
   LINK_LIBS PUBLIC
-  CIRCTLLHD
   CIRCTComb
-  CIRCTHW
-  MLIRControlFlowToLLVM
-  MLIRFuncToLLVM
-  MLIRLLVMCommonConversion
-  MLIRVectorDialect
   MLIRTransforms
   MLIRReconcileUnrealizedCasts
 )

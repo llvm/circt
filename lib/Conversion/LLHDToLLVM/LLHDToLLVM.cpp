@@ -14,8 +14,6 @@
 #include "../PassDetail.h"
 #include "circt/Conversion/CombToLLVM.h"
 #include "circt/Conversion/HWToLLVM.h"
-#include "circt/Dialect/Comb/CombOps.h"
-#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "circt/Support/LLVM.h"
@@ -26,14 +24,10 @@
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/LLVMCommon/Pattern.h"
 #include "mlir/Conversion/ReconcileUnrealizedCasts/ReconcileUnrealizedCasts.h"
-#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/IR/BlockAndValueMapping.h"
-#include "mlir/IR/BuiltinOps.h"
-#include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
-#include "llvm/ADT/TypeSwitch.h"
 
 using namespace mlir;
 using namespace circt;
@@ -2056,7 +2050,6 @@ void LLHDToLLVMLoweringPass::runOnOperation() {
                                        regCounter);
 
   // Populate with HW and Comb conversion patterns
-
   populateHWToLLVMConversionPatterns(converter, patterns);
   populateCombToLLVMConversionPatterns(converter, patterns);
 

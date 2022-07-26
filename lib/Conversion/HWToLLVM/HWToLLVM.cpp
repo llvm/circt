@@ -12,29 +12,17 @@
 
 #include "circt/Conversion/HWToLLVM.h"
 #include "../PassDetail.h"
-#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
-#include "circt/Dialect/LLHD/IR/LLHDDialect.h"
-#include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "circt/Support/LLVM.h"
-#include "mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"
-#include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVM.h"
-#include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVMPass.h"
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/LLVMCommon/Pattern.h"
-#include "mlir/Conversion/ReconcileUnrealizedCasts/ReconcileUnrealizedCasts.h"
-#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
-#include "mlir/IR/BlockAndValueMapping.h"
-#include "mlir/IR/BuiltinOps.h"
-#include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 using namespace mlir;
 using namespace circt;
-using namespace circt::llhd;
 
 //===----------------------------------------------------------------------===//
 // Endianess Converter
@@ -78,7 +66,6 @@ circt::HWToLLVMEndianessConverter::llvmIndexOfStructField(hw::StructType type,
 /// Create a zext operation by one bit on the given value. This is useful when
 /// passing unsigned indexes to a GEP instruction, which treats indexes as
 /// signed values, to avoid unexpected "sign overflows".
-
 static Value zextByOne(Location loc, ConversionPatternRewriter &rewriter,
                        Value value) {
   auto valueTy = value.getType();
@@ -462,8 +449,7 @@ void circt::populateHWToLLVMConversionPatterns(LLVMTypeConverter &converter,
   // Bitwise conversion patterns.
   patterns.add<BitcastOpConversion>(converter);
 
-  // Memory conversion patterns.
-
+  // Extraction operation conversion patterns.
   patterns.add<ArrayGetOpConversion, ArraySliceOpConversion,
                ArrayConcatOpConversion, StructExtractOpConversion,
                StructInjectOpConversion>(converter);
@@ -484,12 +470,12 @@ void HWToLLVMLoweringPass::runOnOperation() {
 
   LLVMConversionTarget target(getContext());
   target.addLegalOp<UnrealizedConversionCastOp>();
+  target.addLegalOp<ModuleOp>();
+  target.addLegalDialect<LLVM::LLVMDialect>();
+  target.addIllegalDialect<hw::HWDialect>();
 
   // Setup the conversion.
   populateHWToLLVMConversionPatterns(converter, patterns);
-
-  target.addLegalDialect<LLVM::LLVMDialect>();
-  target.addLegalOp<ModuleOp>();
 
   // Apply the partial conversion.
   if (failed(

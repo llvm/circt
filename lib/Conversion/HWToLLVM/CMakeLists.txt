@@ -8,13 +8,7 @@ add_circt_conversion_library(CIRCTHWToLLVM
   Core
 
   LINK_LIBS PUBLIC
-  CIRCTLLHD
-  CIRCTComb
   CIRCTHW
-  MLIRControlFlowToLLVM
-  MLIRFuncToLLVM
-  MLIRLLVMCommonConversion
-  MLIRVectorDialect
   MLIRTransforms
   MLIRReconcileUnrealizedCasts
 )
