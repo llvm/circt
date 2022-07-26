@@ -24,12 +24,18 @@ using namespace circt::ssp;
 //===----------------------------------------------------------------------===//
 
 LogicalResult InstanceOp::verify() {
-  auto &ops = getBodyBlock()->getOperations();
-  auto it = ops.begin();
-  if (ops.size() != 2 || !isa<OperatorLibraryOp>(*it) ||
-      !isa<DependenceGraphOp>(*(++it)))
+  auto *body = getBodyBlock();
+  auto libraryOps = body->getOps<OperatorLibraryOp>();
+  auto graphOps = body->getOps<DependenceGraphOp>();
+
+  if (std::distance(libraryOps.begin(), libraryOps.end()) != 1 ||
+      std::distance(graphOps.begin(), graphOps.end()) != 1)
     return emitOpError()
            << "must contain exactly one 'library' op and one 'graph' op";
+
+  if ((*graphOps.begin())->isBeforeInBlock(*libraryOps.begin()))
+    return emitOpError()
+           << "must contain the 'library' op followed by the 'graph' op";
 
   return success();
 }

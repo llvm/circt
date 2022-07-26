@@ -66,10 +66,11 @@ ssp::parseOptionalPropertyArray(ArrayAttr &attr, AsmParser &parser,
     auto parseShortformAttrResult =
         generatedAttributeParser(parser, &mnemonic, Type(), elem);
 
-    if (!parseShortformAttrResult.hasValue())
+    if (!parseShortformAttrResult.hasValue()) {
       return parser.emitError(parser.getCurrentLocation(),
                               "carries unknown shortform property: ")
              << mnemonic;
+    }
 
     if (failed(*parseShortformAttrResult))
       return failure();

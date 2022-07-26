@@ -26,7 +26,7 @@ namespace ssp {
 
 /// Parse an array of attributes while recognizing the properties of the SSP
 /// dialect even without a `#ssp.` prefix. Any attributes supplied in \p
-/// alreadParsed are prepended to the parsed ones.
+/// alreadyParsed are prepended to the parsed ones.
 mlir::OptionalParseResult
 parseOptionalPropertyArray(ArrayAttr &attr, AsmParser &parser,
                            ArrayRef<Attribute> alreadyParsed = {});
