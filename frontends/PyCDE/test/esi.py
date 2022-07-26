@@ -2,19 +2,20 @@
 # RUN: %PYTHON% %s %t 2>&1 | FileCheck %s
 
 import pycde
-from pycde import (Input, InputChannel, OutputChannel, module, generator, types)
+from pycde import (Clock, Input, InputChannel, OutputChannel, module, generator,
+                   types)
 from pycde import esi
 
 
 @module
 class Producer:
   clk = Input(types.i1)
-  const_out = OutputChannel(types.i32)
+  int_out = OutputChannel(types.i32)
 
   @generator
   def construct(ports):
-    chan, ready = types.channel(types.i32).wrap(42, valid=1)
-    ports.const_out = chan
+    chan = esi.HostComms.FromHost(types.i32, "loopback_in")
+    ports.int_out = chan
 
 
 @module
@@ -24,21 +25,24 @@ class Consumer:
 
   @generator
   def construct(ports):
-    data, valid = ports.int_in.unwrap(ready=1)
+    esi.HostComms.ToHost(ports.int_in, "loopback_out")
 
 
 @module
 class Top:
-  clk = Input(types.i1)
+  clk = Clock(types.i1)
+  rst = Input(types.i1)
 
   @generator
   def construct(ports):
     p = Producer(clk=ports.clk)
-    Consumer(clk=ports.clk, int_in=p.const_out)
-    esi.Cosim()
+    Consumer(clk=ports.clk, int_in=p.int_out)
+    # Use Cosim to implement the standard 'HostComms' service.
+    esi.Cosim(esi.HostComms)
 
 
 s = pycde.System([Top], name="EsiSys")
+
 s.generate()
 s.print()
 
