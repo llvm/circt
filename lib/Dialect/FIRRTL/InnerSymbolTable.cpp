@@ -150,7 +150,7 @@ StringAttr InnerSymbolTable::getInnerSymbol(const InnerSymTarget &target) {
     // Workaround quirk with empty string for no symbol on ports.
     if (!sym)
       return {};
-    return sym.getSymName();
+    return sym.getSymIfExists(target.getField());
   }
 
   // InnerSymbols only supported if op implements the interface.
