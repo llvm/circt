@@ -79,7 +79,6 @@ def InstanceOp : ReferableDeclOp<"instance", [HasParent<"firrtl::FModuleOp, firr
   let extraClassDeclaration = [{
     /// Lookup the module or extmodule for the symbol.  This returns null on
     /// invalid IR.
-    FModuleLike getReferencedModule();
     FModuleLike getReferencedModule(SymbolTable& symtbl);
 
     /// Return the port direction for the specified result number.

@@ -52,7 +52,11 @@ ParseResult ChannelBuffer::parse(OpAsmParser &parser, OperationState &result) {
 void ChannelBuffer::print(OpAsmPrinter &p) {
   p << " " << clk() << ", " << rstn() << ", " << input() << " ";
   p.printOptionalAttrDict((*this)->getAttrs());
-  p << " : " << output().getType().cast<ChannelPort>().getInner();
+  p << " : " << innerType();
+}
+
+circt::esi::ChannelPort ChannelBuffer::channelType() {
+  return input().getType().cast<circt::esi::ChannelPort>();
 }
 
 //===----------------------------------------------------------------------===//
@@ -82,7 +86,11 @@ ParseResult PipelineStage::parse(OpAsmParser &parser, OperationState &result) {
 void PipelineStage::print(OpAsmPrinter &p) {
   p << " " << clk() << ", " << rstn() << ", " << input() << " ";
   p.printOptionalAttrDict((*this)->getAttrs());
-  p << " : " << output().getType().cast<ChannelPort>().getInner();
+  p << " : " << innerType();
+}
+
+circt::esi::ChannelPort PipelineStage::channelType() {
+  return input().getType().cast<circt::esi::ChannelPort>();
 }
 
 //===----------------------------------------------------------------------===//
@@ -112,7 +120,7 @@ ParseResult WrapValidReady::parse(OpAsmParser &parser, OperationState &result) {
 void WrapValidReady::print(OpAsmPrinter &p) {
   p << " " << rawInput() << ", " << valid();
   p.printOptionalAttrDict((*this)->getAttrs());
-  p << " : " << chanOutput().getType().cast<ChannelPort>().getInner();
+  p << " : " << innerType();
 }
 
 void WrapValidReady::build(OpBuilder &b, OperationState &state, Value data,
@@ -150,10 +158,18 @@ void UnwrapValidReady::print(OpAsmPrinter &p) {
   p << " : " << rawOutput().getType();
 }
 
+circt::esi::ChannelPort WrapValidReady::channelType() {
+  return chanOutput().getType().cast<circt::esi::ChannelPort>();
+}
+
 void UnwrapValidReady::build(OpBuilder &b, OperationState &state, Value inChan,
                              Value ready) {
   auto inChanType = inChan.getType().cast<ChannelPort>();
   build(b, state, inChanType.getInner(), b.getI1Type(), inChan, ready);
+}
+
+circt::esi::ChannelPort UnwrapValidReady::channelType() {
+  return chanInput().getType().cast<circt::esi::ChannelPort>();
 }
 
 /// If 'iface' looks like an ESI interface, return the inner data type.
@@ -198,10 +214,18 @@ LogicalResult WrapSVInterface::verify() {
   return verifySVInterface(*this, modportType, chanType);
 }
 
+circt::esi::ChannelPort WrapSVInterface::channelType() {
+  return output().getType().cast<circt::esi::ChannelPort>();
+}
+
 LogicalResult UnwrapSVInterface::verify() {
   auto modportType = interfaceSource().getType().cast<circt::sv::ModportType>();
   auto chanType = chanInput().getType().cast<ChannelPort>();
   return verifySVInterface(*this, modportType, chanType);
+}
+
+circt::esi::ChannelPort UnwrapSVInterface::channelType() {
+  return chanInput().getType().cast<circt::esi::ChannelPort>();
 }
 
 /// Get the port declaration op for the specified service decl, port name.

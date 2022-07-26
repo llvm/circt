@@ -185,6 +185,57 @@ def CalyxToHW : Pass<"lower-calyx-to-hw", "mlir::ModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
+// CalyxToFSM
+//===----------------------------------------------------------------------===//
+
+def CalyxToFSM : Pass<"lower-calyx-to-fsm", "calyx::ComponentOp"> {
+  let summary = "Lower Calyx to FSM";
+  let description = [{
+    This pass lowers a Calyx control schedule to an FSM representation.
+    An `fsm.machine` operation is nested within the `control` region of the Calyx
+    component. This machine is itself in an intermediate format wherein it has
+    no I/O ports and solely contains output statements with `calyx.enable`s
+    referencing `calyx.group` and transition logic guarded by the SSA values
+    specified in the source control schedule.
+    This intermediate state facilitates transformation of the FSM, given that
+    top-level I/O has yet to be materialized (one input and output per activated
+    group) as well as guard transition logic (every transition must be guarded
+    on all groups active within the state having finished). As such, `calyx.enable`
+    operations can easily be moved between states without worrying about updating
+    transition guards while doing so.
+
+    Eventually, the FSM must be materialized (materialize I/O ports, remove
+    `calyx.enable` operations in favor of asserting output ports, guarding
+    transitions by input `done` ports) and outlined to a separate module.
+  }];
+  let constructor = "circt::createCalyxToFSMPass()";
+  let dependentDialects = ["fsm::FSMDialect", "comb::CombDialect"];
+}
+
+def MaterializeCalyxToFSM : Pass<"materialize-calyx-to-fsm", "calyx::ComponentOp"> {
+  let summary = "Materializes an FSM embedded inside the control of this Calyx component.";
+  let description = [{
+    Materializes the FSM in the control of the component. This materializes the
+    top-level I/O of the FSM to receive `group_done` signals as input and
+    `group_go` signals as output, based on the `calyx.enable` operations
+    used within the states of the FSM.
+    Each transition of the FSM is predicated on the enabled groups within a
+    state being done, or, for static groups, a separate sub-FSM is instantiated
+    to await the group finishing.
+
+    Given an FSM that enables N unique groups, the top-level FSM will have N+1
+    in- and output ports, wherein:
+    * Input # 0 to N-1 are `group_done` signals
+    * Input N is the top-level `go` port
+    * Output 0 to N-1 are `group_go` signals
+    * Output N is the top-level `done` port
+  }];
+  let dependentDialects = ["comb::CombDialect", "hw::HWDialect", "fsm::FSMDialect"];
+  let constructor = "circt::createMaterializeCalyxToFSMPass()";
+}
+
+
+//===----------------------------------------------------------------------===//
 // FSMToSV
 //===----------------------------------------------------------------------===//
 
@@ -335,6 +386,24 @@ def StandardToHandshake : Pass<"lower-std-to-handshake", "mlir::ModuleOp"> {
 def HandshakeRemoveBlock : Pass<"handshake-remove-block-structure", "handshake::FuncOp"> {
   let summary = "Remove block structure in Handshake IR";
   let constructor = "circt::createHandshakeRemoveBlockPass()";
+}
+
+def InsertMergeBlocks : Pass<"insert-merge-blocks", "::mlir::ModuleOp"> {
+  let summary = "Insert explicit merge blocks";
+  let description = [{
+    This pass inserts additional merge blocks for each block with more than
+    two successors. A merge block is a block that only contains one operation,
+    a terminator, and has two predecessors.
+    The order successors are merged together mirrors the order different control
+    paths are created. Thus, each block with two successors will have a corresponding
+    merge block.
+
+    This pass brings the CFG into a canonical form for further transformations.
+
+    Treats loops and sub-CFGs with irregular control flow like single blocks.
+  }];
+  let constructor = "circt::createInsertMergeBlocksPass()";
+  let dependentDialects = ["mlir::cf::ControlFlowDialect", "mlir::func::FuncDialect"];
 }
 
 //===----------------------------------------------------------------------===//

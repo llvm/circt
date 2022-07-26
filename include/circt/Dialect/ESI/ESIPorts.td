@@ -38,6 +38,14 @@ def Channel : ESI_Port<"Channel"> {
   let parameters = (ins "Type":$inner);
 
   let assemblyFormat = "`<` $inner `>`";
+
+  let extraClassDeclaration = [{
+    /// Returns true if this channel carries a data value.
+    bool hasData() {
+      return !getInner().isa<mlir::NoneType>();
+    }
+  }];
+
 }
 
 def ChannelType :
@@ -47,7 +55,10 @@ def ChannelType :
 //=========
 // Operations on ports.
 
-def WrapValidReady : ESI_Op<"wrap.vr", [NoSideEffect]> {
+def WrapValidReady : ESI_Op<"wrap.vr", [
+    NoSideEffect,
+    DeclareOpInterfaceMethods<ChannelOpInterface>
+  ]> {
   let summary = "Wrap a value into an ESI port";
   let description = [{
     Wrapping a value into an ESI port type allows modules to send values down
@@ -65,7 +76,10 @@ def WrapValidReady : ESI_Op<"wrap.vr", [NoSideEffect]> {
   ];
 }
 
-def UnwrapValidReady : ESI_Op<"unwrap.vr", [NoSideEffect]> {
+def UnwrapValidReady : ESI_Op<"unwrap.vr", [
+    NoSideEffect,
+    DeclareOpInterfaceMethods<ChannelOpInterface>
+  ]> {
   let summary = "Unwrap a value from an ESI port";
   let description = [{
     Unwrapping a value allows operations on the contained value. Unwrap the
@@ -85,7 +99,10 @@ def UnwrapValidReady : ESI_Op<"unwrap.vr", [NoSideEffect]> {
 def ModportType:
   Type<CPred<"$_self.isa<::circt::sv::ModportType>()">, "sv.interface">;
 
-def WrapSVInterface: ESI_Op<"wrap.iface", [NoSideEffect]> {
+def WrapSVInterface: ESI_Op<"wrap.iface", [
+    NoSideEffect,
+    DeclareOpInterfaceMethods<ChannelOpInterface>
+  ]> {
   let summary = "Wrap an SV interface into an ESI port";
   let description = [{
     Wrap a SystemVerilog interface into an ESI channel. Interface MUST look
@@ -103,7 +120,9 @@ def WrapSVInterface: ESI_Op<"wrap.iface", [NoSideEffect]> {
   let hasVerifier = 1;
 }
 
-def UnwrapSVInterface : ESI_Op<"unwrap.iface", []> {
+def UnwrapSVInterface : ESI_Op<"unwrap.iface", [
+    DeclareOpInterfaceMethods<ChannelOpInterface>
+  ]> {
   let summary = "Unwrap an SV interface from an ESI port";
   let description = [{
     Unwrap an ESI channel into a SystemVerilog interface containing valid,

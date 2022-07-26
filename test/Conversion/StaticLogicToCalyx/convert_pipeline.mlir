@@ -1,6 +1,6 @@
 // RUN: circt-opt %s -lower-static-logic-to-calyx -split-input-file | FileCheck %s
 
-// CHECK:     calyx.program "minimal"
+// CHECK:     module attributes {calyx.entrypoint = "minimal"} {
 // CHECK:       calyx.component @minimal
 // CHECK-DAG:     %[[TRUE:.+]] = hw.constant true
 // CHECK-DAG:     %[[C0:.+]] = hw.constant 0 : i64
@@ -53,7 +53,7 @@ func.func @minimal() {
 
 // -----
 
-// CHECK:     calyx.program "dot"
+// CHECK:     module attributes {calyx.entrypoint = "dot"} {
 // CHECK:       calyx.component @dot(%[[MEM0_READ:.+]]: i32 {mem = {id = 0 : i32, tag = "read_data"}}, {{.+}}, %[[MEM1_READ:.+]]: i32 {mem = {id = 1 : i32, tag = "read_data"}}, {{.+}}) -> ({{.+}} %[[MEM0_ADDR:.+]]: i6 {mem = {addr_idx = 0 : i32, id = 0 : i32, tag = "addr"}}, {{.+}} %[[MEM1_ADDR:.+]]: i6 {mem = {addr_idx = 0 : i32, id = 1 : i32, tag = "addr"}}, {{.+}} %[[OUT:.+]]: i32, {{.+}}) {
 // CHECK-DAG:     %[[TRUE:.+]] = hw.constant true
 // CHECK-DAG:     %[[C0:.+]] = hw.constant 0 : i32
@@ -191,6 +191,7 @@ func.func @dot(%arg0: memref<64xi32>, %arg1: memref<64xi32>) -> i32 {
 // Verify that independent store operations are still pipelined.
 // See: https://github.com/llvm/circt/issues/3112
 
+// CHECK:     module attributes {calyx.entrypoint = "store"} {
 // CHECK:       calyx.component @store({{.+}}, {{.+}}, {{.+}}, %[[MEM1_DONE:.+]]: i1 {mem = {id = 1 : i32, tag = "done"}}, {{.+}}) -> ({{.+}}, %[[MEM1_WRITE_DATA:.+]]: i32 {mem = {id = 1 : i32, tag = "write_data"}}, %[[MEM1_ADDR0:.+]]: i2 {mem = {addr_idx = 0 : i32, id = 1 : i32, tag = "addr"}}, %[[MEM1_WRITE_EN:.+]]: i1 {mem = {id = 1 : i32, tag = "write_en"}}, {{.+}}) {
 // CHECK-DAG:     %[[SLICE0_IN:.+]], %[[SLICE0_OUT:.+]] = calyx.std_slice @std_slice_0
 // CHECK-DAG:     {{.+}}, {{.+}}, {{.+}}, {{.+}}, %[[S0_REG0_OUT:.+]], {{.+}} = calyx.register @stage_0_register_0_reg
@@ -216,6 +217,7 @@ func.func @dot(%arg0: memref<64xi32>, %arg1: memref<64xi32>) -> i32 {
 // CHECK-NEXT: calyx.enable @[[INCR_GROUP]]
 // CHECK-NEXT: calyx.enable @[[STORE_GROUP1]]
 // CHECK-NEXT: calyx.enable @[[STORE_GROUP2]]
+// CHECK-NEXT: }
 // CHECK-NEXT: }
 module {
   func.func @store(%arg0: memref<4xi32>, %arg1: memref<4xi32>) {

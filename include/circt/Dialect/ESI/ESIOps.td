@@ -10,7 +10,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-def ChannelBuffer : ESI_Abstract_Op<"buffer", [NoSideEffect]> {
+def ChannelBuffer : ESI_Abstract_Op<"buffer", [
+    NoSideEffect,
+    DeclareOpInterfaceMethods<ChannelOpInterface>
+  ]> {
   let summary = "Control options for an ESI channel.";
   let description = [{
     A channel buffer (`buffer`) is essentially a set of options on a channel.
@@ -46,7 +49,10 @@ def ChannelBuffer : ESI_Abstract_Op<"buffer", [NoSideEffect]> {
   let hasCustomAssemblyFormat = 1;
 }
 
-def PipelineStage : ESI_Physical_Op<"stage", [NoSideEffect]> {
+def PipelineStage : ESI_Physical_Op<"stage", [
+    NoSideEffect,
+    DeclareOpInterfaceMethods<ChannelOpInterface>
+  ]> {
   let summary = "An elastic buffer stage.";
   let description = [{
     An individual elastic pipeline register. Generally lowered to from a
@@ -123,4 +129,24 @@ def NullSourceOp : ESI_Physical_Op<"null", [NoSideEffect]> {
   let results = (outs ChannelType:$out);
 
   let assemblyFormat = [{ attr-dict `:` qualified(type($out)) }];
+}
+
+def NoneSourceOp : ESI_Physical_Op<"none", [NoSideEffect]> {
+  let summary = [{"
+    An op which produces a 'none'-typed value, used in conjunction.
+    with data-less channels.
+  "}];
+
+  let arguments = (ins);
+  let results = (outs NoneType:$out);
+
+  let assemblyFormat = [{ attr-dict `:` qualified(type($out)) }];
+
+  let builders = [
+    OpBuilder<(ins), [{
+      $_state.addTypes($_builder.getNoneType());
+    }]>
+  ];
+
+
 }

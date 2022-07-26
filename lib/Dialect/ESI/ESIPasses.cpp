@@ -54,7 +54,7 @@ public:
 
   ArrayAttr getStageParameterList(Attribute value);
 
-  HWModuleExternOp declareStage(Operation *symTable, Type);
+  HWModuleExternOp declareStage(Operation *symTable, PipelineStage);
   // Will be unused when CAPNP is undefined
   HWModuleExternOp declareCosimEndpoint(Operation *symTable, Type sendType,
                                         Type recvType) LLVM_ATTRIBUTE_UNUSED;
@@ -181,28 +181,37 @@ ArrayAttr ESIHWBuilder::getStageParameterList(Attribute value) {
 /// implementation is double-buffered and fully pipelines the reverse-flow ready
 /// signal.
 HWModuleExternOp ESIHWBuilder::declareStage(Operation *symTable,
-                                            Type dataType) {
-  HWModuleExternOp &stage = declaredStage[dataType];
-  if (stage)
-    return stage;
+                                            PipelineStage stage) {
+  Type dataType = stage.innerType();
+  HWModuleExternOp &stageMod = declaredStage[dataType];
+  if (stageMod)
+    return stageMod;
 
   // Since this module has parameterized widths on the a input and x output,
   // give the extern declation a None type since nothing else makes sense.
   // Will be refining this when we decide how to better handle parameterized
   // types and ops.
-  PortInfo ports[] = {{clk, PortDirection::INPUT, getI1Type(), 0},
-                      {rstn, PortDirection::INPUT, getI1Type(), 1},
-                      {a, PortDirection::INPUT, dataType, 2},
-                      {aValid, PortDirection::INPUT, getI1Type(), 3},
-                      {aReady, PortDirection::OUTPUT, getI1Type(), 0},
-                      {x, PortDirection::OUTPUT, dataType, 1},
-                      {xValid, PortDirection::OUTPUT, getI1Type(), 2},
-                      {xReady, PortDirection::INPUT, getI1Type(), 4}};
+  size_t argn = 0;
+  size_t resn = 0;
+  llvm::SmallVector<PortInfo> ports = {
+      {clk, PortDirection::INPUT, getI1Type(), argn++},
+      {rstn, PortDirection::INPUT, getI1Type(), argn++}};
 
-  stage = create<HWModuleExternOp>(
+  if (stage.hasData())
+    ports.push_back({a, PortDirection::INPUT, dataType, argn++});
+
+  ports.push_back({aValid, PortDirection::INPUT, getI1Type(), argn++});
+  ports.push_back({aReady, PortDirection::OUTPUT, getI1Type(), resn++});
+  if (stage.hasData())
+    ports.push_back({x, PortDirection::OUTPUT, dataType, resn++});
+
+  ports.push_back({xValid, PortDirection::OUTPUT, getI1Type(), resn++});
+  ports.push_back({xReady, PortDirection::INPUT, getI1Type(), argn++});
+
+  stageMod = create<HWModuleExternOp>(
       constructUniqueSymbol(symTable, "ESI_PipelineStage"), ports,
       "ESI_PipelineStage", getStageParameterList({}));
-  return stage;
+  return stageMod;
 }
 
 /// Write an 'ExternModuleOp' to use a hand-coded SystemVerilog module. Said
@@ -257,14 +266,18 @@ InterfaceOp ESIHWBuilder::constructInterface(ChannelPort chan) {
   return create<InterfaceOp>(constructInterfaceName(chan).getValue(), [&]() {
     create<InterfaceSignalOp>(validStr, getI1Type());
     create<InterfaceSignalOp>(readyStr, getI1Type());
-    create<InterfaceSignalOp>(dataStr, chan.getInner());
-    create<InterfaceModportOp>(
-        sinkStr, /*inputs=*/ArrayRef<StringRef>{readyStr},
-        /*outputs=*/ArrayRef<StringRef>{validStr, dataStr});
-    create<InterfaceModportOp>(
-        sourceStr,
-        /*inputs=*/ArrayRef<StringRef>{validStr, dataStr},
-        /*outputs=*/ArrayRef<StringRef>{readyStr});
+    if (chan.hasData())
+      create<InterfaceSignalOp>(dataStr, chan.getInner());
+    llvm::SmallVector<StringRef> validDataStrs;
+    validDataStrs.push_back(validStr);
+    if (chan.hasData())
+      validDataStrs.push_back(dataStr);
+    create<InterfaceModportOp>(sinkStr,
+                               /*inputs=*/ArrayRef<StringRef>{readyStr},
+                               /*outputs=*/validDataStrs);
+    create<InterfaceModportOp>(sourceStr,
+                               /*inputs=*/validDataStrs,
+                               /*outputs=*/ArrayRef<StringRef>{readyStr});
   });
 }
 
@@ -440,31 +453,35 @@ bool ESIPortsPass::updateFunc(HWModuleOp mod) {
       newArgNames.push_back(argNameAttr);
       continue;
     }
-
     // When we find one, add a data and valid signal to the new args.
-    newArgTypes.push_back(chanTy.getInner());
+    Value data;
+    if (chanTy.hasData()) {
+      newArgTypes.push_back(chanTy.getInner());
+      newArgNames.push_back(argNameAttr);
+      data = mod.front().insertArgument(blockArgNum, chanTy.getInner(),
+                                        mod.getArgument(argNum).getLoc());
+      ++blockArgNum;
+    } else {
+      // This is a data-less channel - need to create a none-typed SSA value
+      // to feed into wrapvr.
+      data = modBuilder.create<esi::NoneSourceOp>();
+    }
+
     newArgTypes.push_back(i1);
-    newArgNames.push_back(argNameAttr);
     newArgNames.push_back(appendToRtlName(argNameAttr, "_valid"));
-    // Add the BlockArguments.
-    Value data = mod.front().insertArgument(blockArgNum, chanTy.getInner(),
-                                            mod.getArgument(argNum).getLoc());
-    Value valid = mod.front().insertArgument(blockArgNum + 1, i1,
+    Value valid = mod.front().insertArgument(blockArgNum, i1,
                                              mod.getArgument(argNum).getLoc());
+    ++blockArgNum;
     // Build the ESI wrap operation to translate the lowered signals to what
     // they were. (A later pass takes care of eliminating the ESI ops.)
     auto wrap = modBuilder.create<WrapValidReady>(data, valid);
     // Replace uses of the old ESI port argument with the new one from the wrap.
-    mod.front()
-        .getArgument(blockArgNum + 2)
-        .replaceAllUsesWith(wrap.chanOutput());
+    mod.front().getArgument(blockArgNum).replaceAllUsesWith(wrap.chanOutput());
     // Delete the ESI port block argument.
-    mod.front().eraseArgument(blockArgNum + 2);
+    mod.front().eraseArgument(blockArgNum);
+    --blockArgNum;
     newReadySignals.push_back(
         std::make_pair(wrap.ready(), appendToRtlName(argNameAttr, "_ready")));
-
-    // Since we added 2 block args but erased one, there's a net increase of 1.
-    blockArgNum += 1;
     updated = true;
   }
 
@@ -493,12 +510,14 @@ bool ESIPortsPass::updateFunc(HWModuleOp mod) {
     Value ready = mod.front().addArgument(
         i1, modBuilder.getUnknownLoc()); // Ready block arg.
     auto unwrap = modBuilder.create<UnwrapValidReady>(oldOutputValue, ready);
-    newOutputOperands.push_back(unwrap.rawOutput());
-    newOutputOperands.push_back(unwrap.valid());
+    if (unwrap.hasData()) {
+      newOutputOperands.push_back(unwrap.rawOutput());
+      newResultTypes.push_back(chanTy.getInner()); // Raw data.
+      newResultNames.push_back(oldResultName);
+    }
 
-    newResultTypes.push_back(chanTy.getInner()); // Raw data.
-    newResultTypes.push_back(i1);                // Valid.
-    newResultNames.push_back(oldResultName);
+    newResultTypes.push_back(i1); // Valid.
+    newOutputOperands.push_back(unwrap.valid());
     newResultNames.push_back(appendToRtlName(oldResultName, "_valid"));
 
     newArgTypes.push_back(i1); // Ready func arg.
@@ -874,7 +893,7 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
   if (!chPort)
     return failure();
   Operation *symTable = stage->getParentWithTrait<OpTrait::SymbolTable>();
-  auto stageModule = builder.declareStage(symTable, chPort.getInner());
+  auto stageModule = builder.declareStage(symTable, stage);
 
   size_t width = circt::hw::getBitWidth(chPort.getInner());
 
@@ -895,17 +914,27 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
 
   // Instantiate the "ESI_PipelineStage" external module.
   circt::Backedge stageReady = back.get(rewriter.getI1Type());
-  Value operands[] = {stage.clk(), stage.rstn(), unwrap.rawOutput(),
-                      unwrap.valid(), stageReady};
+  llvm::SmallVector<Value> operands = {stage.clk(), stage.rstn()};
+  if (stage.hasData())
+    operands.push_back(unwrap.rawOutput());
+  operands.push_back(unwrap.valid());
+  operands.push_back(stageReady);
   auto stageInst = rewriter.create<InstanceOp>(loc, stageModule, pipeStageName,
                                                operands, stageParams);
   auto stageInstResults = stageInst.getResults();
 
   // Set a_ready (from the unwrap) back edge correctly to its output from stage.
   wrapReady.setValue(stageInstResults[0]);
-
-  Value x = stageInstResults[1];
-  Value xValid = stageInstResults[2];
+  Value x, xValid;
+  if (stage.hasData()) {
+    x = stageInstResults[1];
+    xValid = stageInstResults[2];
+  } else {
+    // This is a data-less channel - need to create a none-typed SSA value
+    // to feed into wrapvr.
+    x = rewriter.create<esi::NoneSourceOp>(loc);
+    xValid = stageInstResults[1];
+  }
 
   // Wrap up the output of the HW stage module.
   auto wrap = rewriter.create<WrapValidReady>(loc, chPort, rewriter.getI1Type(),
@@ -950,6 +979,26 @@ LogicalResult NullSourceOpLowering::matchAndRewrite(
 }
 
 namespace {
+struct RemoveNoneSourceOp : public OpConversionPattern<NoneSourceOp> {
+public:
+  RemoveNoneSourceOp(MLIRContext *ctxt) : OpConversionPattern(ctxt) {}
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(NoneSourceOp nullop, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override;
+};
+
+LogicalResult
+RemoveNoneSourceOp::matchAndRewrite(NoneSourceOp noneOp, OpAdaptor adaptor,
+                                    ConversionPatternRewriter &rewriter) const {
+  rewriter.eraseOp(noneOp);
+  return success();
+}
+
+} // anonymous namespace
+
+namespace {
 /// Eliminate back-to-back wrap-unwraps to reduce the number of ESI channels.
 struct RemoveWrapUnwrap : public ConversionPattern {
 public:
@@ -969,6 +1018,7 @@ public:
         return rewriter.notifyMatchFailure(
             wrap, "This conversion only supports wrap-unwrap back-to-back. "
                   "Could not find 'unwrap'.");
+
       data = operands[0];
       valid = operands[1];
       ready = unwrap.ready();
@@ -1036,8 +1086,15 @@ WrapInterfaceLower::matchAndRewrite(WrapSVInterface wrap, OpAdaptor adaptor,
   auto loc = wrap.getLoc();
   auto validSignal = rewriter.create<ReadInterfaceSignalOp>(
       loc, ifaceInstance, ESIHWBuilder::validStr);
-  auto dataSignal = rewriter.create<ReadInterfaceSignalOp>(
-      loc, ifaceInstance, ESIHWBuilder::dataStr);
+  Value dataSignal;
+  if (wrap.hasData())
+    dataSignal = rewriter.create<ReadInterfaceSignalOp>(loc, ifaceInstance,
+                                                        ESIHWBuilder::dataStr);
+  else {
+    // This is a data-less channel - need to create a none-typed SSA value
+    // to feed into wrapvr.
+    dataSignal = rewriter.create<esi::NoneSourceOp>(loc);
+  }
   auto wrapVR = rewriter.create<WrapValidReady>(loc, dataSignal, validSignal);
   rewriter.create<AssignInterfaceSignalOp>(
       loc, ifaceInstance, ESIHWBuilder::readyStr, wrapVR.ready());
@@ -1084,8 +1141,10 @@ LogicalResult UnwrapInterfaceLower::matchAndRewrite(
       rewriter.create<UnwrapValidReady>(loc, operands[0], readySignal);
   rewriter.create<AssignInterfaceSignalOp>(
       loc, ifaceInstance, ESIHWBuilder::validStr, unwrapVR.valid());
-  rewriter.create<AssignInterfaceSignalOp>(
-      loc, ifaceInstance, ESIHWBuilder::dataStr, unwrapVR.rawOutput());
+
+  if (unwrap.hasData())
+    rewriter.create<AssignInterfaceSignalOp>(
+        loc, ifaceInstance, ESIHWBuilder::dataStr, unwrapVR.rawOutput());
   rewriter.eraseOp(unwrap);
   return success();
 }
@@ -1266,6 +1325,7 @@ void ESItoHWPass::runOnOperation() {
   pass1Target.addLegalDialect<SVDialect>();
   pass1Target.addLegalOp<WrapValidReady, UnwrapValidReady>();
   pass1Target.addLegalOp<CapnpDecode, CapnpEncode>();
+  pass1Target.addLegalOp<NoneSourceOp>();
 
   pass1Target.addIllegalOp<WrapSVInterface, UnwrapSVInterface>();
   pass1Target.addIllegalOp<PipelineStage>();
@@ -1294,6 +1354,7 @@ void ESItoHWPass::runOnOperation() {
   pass2Patterns.insert<RemoveWrapUnwrap>(ctxt);
   pass2Patterns.insert<EncoderLowering>(ctxt);
   pass2Patterns.insert<DecoderLowering>(ctxt);
+  pass2Patterns.insert<RemoveNoneSourceOp>(ctxt);
   if (failed(
           applyPartialConversion(top, pass2Target, std::move(pass2Patterns))))
     signalPassFailure();

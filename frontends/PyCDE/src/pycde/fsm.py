@@ -27,13 +27,12 @@ class State:
       self.condition = condition
 
     def _emit(self, state_op, ports):
-      with InsertionPoint(state_op.transitions):
-        op = fsm.TransitionOp(self.to_state.name)
+      op = fsm.TransitionOp(self.to_state.name)
 
-        # If a condition function was specified, execute it on the ports and
-        # assign the result as the guard of this transition.
-        if self.condition:
-          op.set_guard(lambda: self.condition(ports))
+      # If a condition function was specified, execute it on the ports and
+      # assign the result as the guard of this transition.
+      if self.condition:
+        op.set_guard(lambda: self.condition(ports))
 
   def __init__(self, initial=False):
     self.initial = initial
@@ -45,6 +44,9 @@ class State:
 
   def set_transitions(self, *transitions):
     self.transitions = [State.Transition(*t) for t in transitions]
+
+  def add_transitions(self, *transitions):
+    self.transitions.extend([State.Transition(*t) for t in transitions])
 
   def _emit(self, spec_mod, ports):
     # Create state op
@@ -59,8 +61,9 @@ class State:
       fsm.OutputOp(*outputs)
 
     # Emit outgoing transitions from this state.
-    for transition in self.transitions:
-      transition._emit(state_op, ports)
+    with InsertionPoint(state_op.transitions):
+      for transition in self.transitions:
+        transition._emit(state_op, ports)
 
 
 def States(n):
@@ -246,3 +249,74 @@ def fsm_wrapper_class(fsm_mod, fsm_name, clock, reset=None):
   fsm_hw_mod.__name__ = fsm_name
   fsm_hw_mod.__module__ = fsm_name
   return fsm_hw_mod
+
+
+def gen_fsm(transitions: dict, name: str = "MyFSM"):
+  """
+  Generate a FSM from a dictionary of states and their transitions.
+
+  E.g.:
+  {
+    "a": [
+      ("c", "go"),
+      "b",
+    ],
+    "b": [],
+    "c": []
+  }
+
+  creates an FSM with 3 states (a, b, c). 'b' and 'c' have no outgoing transitions,
+  and 'a' has two outgoing transitions. The first transition ("c", "go") transitions
+  to 'c' whenever an input port 'go' is asserted. The second transition is a default
+  transition to 'b'.
+
+  Any state and guard referenced within the dictionary will automatically be created
+  as a state operation and top-level input, respectively.
+  """
+
+  class FSM:
+    pass
+
+  # Gather states and input variables
+  states = set()
+  inputs = set()
+  initial = True
+
+  def ensure_state(state, initial=False):
+    if state not in states:
+      setattr(FSM, state, State(initial=initial))
+      states.add(state)
+    return getattr(FSM, state)
+
+  def ensure_input(input):
+    if input not in inputs:
+      setattr(FSM, input, Input(types.i1))
+      inputs.add(input)
+
+  for (state, state_transitions) in transitions.items():
+    currentStateAttr = ensure_state(state, initial)
+    if not type(state_transitions) is list:
+      raise TypeError(f"Transitions for state '{state}' must be a list")
+
+    for transition in state_transitions:
+      guard_port = None
+      if isinstance(transition, tuple):
+        (nextState, guard_port) = transition
+      else:
+        if not type(transition) is str:
+          raise TypeError(
+              f"Transition for state '{state}' must be of the form 'nextstate' or ('nextstate', 'guard')"
+          )
+        nextState = transition
+
+      nextStateAttr = ensure_state(nextState)
+      if guard_port:
+        ensure_input(guard_port)
+        currentStateAttr.add_transitions(
+            (nextStateAttr, lambda ports: getattr(ports, guard_port)))
+      else:
+        currentStateAttr.add_transitions((nextStateAttr,))
+
+  setattr(FSM, "__name__", name)
+  setattr(FSM, "__qualname__", name)
+  return machine()(FSM)

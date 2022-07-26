@@ -35,3 +35,19 @@ hw.module @zeroSizeConst() {
   // expected-error @+1 {{'hwarith.constant' op result #0 must be an arbitrary precision integer with signedness semantics, but got 'ui0'}}
   %c1_1 = hwarith.constant 0 : ui0
 }
+
+// -----
+
+hw.module @signlessExtensionCast() {
+  %0 = hw.constant 0 : i4
+  // expected-error @+1 {{bit extension is undefined for a signless type}}
+  %1 = hwarith.cast %0 : (i4) -> ui5
+}
+
+// -----
+
+hw.module @signlessToSignlessCast() {
+  %0 = hw.constant 0 : i4
+  // expected-error @+1 {{at least one type needs to carry sign semantics (ui/si)}}
+  %1 = hwarith.cast %0 : (i4) -> i3
+}

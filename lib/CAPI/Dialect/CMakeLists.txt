@@ -98,4 +98,5 @@ add_mlir_public_c_api_library(CIRCTCAPIHWArith
   LINK_LIBS PUBLIC
   MLIRCAPIIR
   CIRCTHWArith
+  CIRCTHWArithToHW
 )

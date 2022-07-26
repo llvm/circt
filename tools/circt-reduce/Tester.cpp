@@ -22,8 +22,10 @@ using namespace circt;
 // Tester
 //===----------------------------------------------------------------------===//
 
-Tester::Tester(StringRef scriptName, ArrayRef<std::string> scriptArgs)
-    : testScript(scriptName), testScriptArgs(scriptArgs) {}
+Tester::Tester(StringRef scriptName, ArrayRef<std::string> scriptArgs,
+               bool testMustFail)
+    : testScript(scriptName), testScriptArgs(scriptArgs),
+      testMustFail(testMustFail) {}
 
 std::pair<bool, size_t> Tester::isInteresting(ModuleOp module) const {
   auto test = get(module);
@@ -50,7 +52,10 @@ bool Tester::isInteresting(StringRef testCase) const {
     llvm::report_fatal_error(
         Twine("Error running interestingness test: ") + errMsg, false);
 
-  return result > 0;
+  if (testMustFail)
+    return result > 0;
+
+  return result == 0;
 }
 
 /// Create a new test case for the given `module`.

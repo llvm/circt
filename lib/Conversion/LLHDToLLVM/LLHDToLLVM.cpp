@@ -17,6 +17,7 @@
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "circt/Support/LLVM.h"
+#include "mlir/Conversion/ArithmeticToLLVM/ArithmeticToLLVM.h"
 #include "mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"
 #include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVM.h"
 #include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVMPass.h"
@@ -518,39 +519,57 @@ static Value adjustBitWidth(Location loc, ConversionPatternRewriter &rewriter,
   return value;
 }
 
+static unsigned getIndexOfOperandResult(Operation *op, Value result) {
+  for (unsigned j = 0, e = op->getNumResults(); j < e; ++j) {
+    if (result == result.getDefiningOp()->getResult(j))
+      return j;
+  }
+  llvm_unreachable(
+      "no way to recurse to an operation that does not return any value");
+}
+
 /// Recursively clone the init origin of a sig operation into the init function,
 /// up to the initial constant value(s). This is required to clone the
-/// initialization of array and struct signals, where the init operant cannot
-/// originate from a constant operation. Integer constants are currently assumed
-/// to come from a constant operation.
-static Operation *recursiveCloneInit(OpBuilder &initBuilder, Operation *op) {
-  if (auto arrayCreateOp = dyn_cast<hw::ArrayCreateOp>(op)) {
-    auto def =
-        cast<hw::ArrayCreateOp>(initBuilder.insert(arrayCreateOp.clone()));
-    initBuilder.setInsertionPoint(def.getOperation());
-    for (size_t i = 0, e = def.getInputs().size(); i < e; ++i) {
-      auto clone =
-          recursiveCloneInit(initBuilder, def.getInputs()[i].getDefiningOp());
-      def.setOperand(i, clone->getResult(0));
+/// initialization of array and struct signals, where the init operand cannot
+/// originate from a constant operation.
+static Value recursiveCloneInit(OpBuilder &initBuilder,
+                                BlockAndValueMapping &mapping, Value init) {
+  SmallVector<Value> clonedOperands;
+  Operation *initOp = init.getDefiningOp();
+
+  // If we end up at a value that we get via BlockArgument or as a result of a
+  // llhd.prb op, return a nullptr to signal that something went wrong, because
+  // these cases are not supported.
+  if (!initOp || isa<llhd::PrbOp>(initOp))
+    return nullptr;
+
+  for (size_t i = 0, e = initOp->getNumOperands(); i < e; ++i) {
+    Value operand = initOp->getOperand(i);
+
+    // If we have some value that is used multiple times (e.g., broadcasted to
+    // an array) then don't emit the ops to create this value several times,
+    // but instead remember the cloned value and use it again.
+    if (auto memorizedOperand = mapping.lookupOrNull(operand)) {
+      clonedOperands.push_back(memorizedOperand);
+      continue;
     }
-    initBuilder.setInsertionPointAfter(def.getOperation());
-    return def;
+
+    // Recursively follow operands.
+    Value clonedOperand = recursiveCloneInit(initBuilder, mapping, operand);
+    if (!clonedOperand)
+      return nullptr;
+
+    mapping.map(operand, clonedOperand);
+    clonedOperands.push_back(clonedOperand);
   }
 
-  if (auto structCreateOp = dyn_cast<hw::StructCreateOp>(op)) {
-    auto def =
-        cast<hw::StructCreateOp>(initBuilder.insert(structCreateOp.clone()));
-    initBuilder.setInsertionPoint(def.getOperation());
-    for (size_t i = 0, e = def.getInput().size(); i < e; ++i) {
-      auto clone =
-          recursiveCloneInit(initBuilder, def.getInput()[i].getDefiningOp());
-      def.setOperand(i, clone->getResult(0));
-    }
-    initBuilder.setInsertionPointAfter(def.getOperation());
-    return def;
-  }
+  Operation *clone = initOp->clone();
+  clone->setOperands(clonedOperands);
 
-  return initBuilder.insert(op->clone());
+  // If we have cloned an operation that returns several values, we have to
+  // find the result value of the cloned operation we want to return.
+  unsigned index = getIndexOfOperandResult(initOp, init);
+  return initBuilder.insert(clone)->getResult(index);
 }
 
 /// Check if the given type is either of LLHD's ArrayType, StructType, or LLVM
@@ -1165,7 +1184,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
       // Index of the signal in the entity's signal table.
       int initCounter = 0;
       // Walk over the entity and generate mallocs for each one of its signals.
-      child.walk([&](SigOp op) -> void {
+      WalkResult sigWalkResult = child.walk([&](SigOp op) -> WalkResult {
         // if (auto sigOp = dyn_cast<SigOp>(op)) {
         auto underlyingTy = typeConverter->convertType(op.getInit().getType());
         // Get index constant of the signal in the entity's signal table.
@@ -1175,8 +1194,12 @@ struct InstOpConversion : public ConvertToLLVMPattern {
 
         // Clone and insert the operation that defines the signal's init
         // operand (assmued to be a constant/array op)
-        auto defOp = op.getInit().getDefiningOp();
-        auto initDef = recursiveCloneInit(initBuilder, defOp)->getResult(0);
+        BlockAndValueMapping mapping;
+        Value initDef = recursiveCloneInit(initBuilder, mapping, op.getInit());
+
+        if (!initDef)
+          return WalkResult::interrupt();
+
         Value initDefCast = typeConverter->materializeTargetConversion(
             initBuilder, initDef.getLoc(),
             typeConverter->convertType(initDef.getType()), initDef);
@@ -1287,7 +1310,12 @@ struct InstOpConversion : public ConvertToLLVMPattern {
                     {initStatePtr, sigIndex, elemToInt, elemSizeToInt}));
           }
         }
+        return WalkResult::advance();
       });
+
+      if (sigWalkResult.wasInterrupted())
+        return failure();
+
     } else if (auto proc = module.lookupSymbol<ProcOp>(instOp.getCallee())) {
       // Handle process instantiation.
       auto sensesPtrTy = LLVM::LLVMPointerType::get(
@@ -1749,138 +1777,6 @@ private:
 //===----------------------------------------------------------------------===//
 // Bitwise conversions
 //===----------------------------------------------------------------------===//
-
-namespace {
-/// Convert an `llhd.shr` operation to LLVM dialect. All the operands are
-/// extended to the width obtained by combining the hidden and base values. This
-/// combined value is then shifted (exposing the hidden value) and truncated to
-/// the base length
-struct ShrOpConversion : public ConvertToLLVMPattern {
-  explicit ShrOpConversion(MLIRContext *ctx, LLVMTypeConverter &typeConverter)
-      : ConvertToLLVMPattern(llhd::ShrOp::getOperationName(), ctx,
-                             typeConverter) {}
-
-  LogicalResult
-  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
-                  ConversionPatternRewriter &rewriter) const override {
-
-    ShrOpAdaptor transformed(operands);
-    auto shrOp = cast<ShrOp>(op);
-
-    if (auto resTy = shrOp.getResult().getType().dyn_cast<IntegerType>()) {
-      // Get width of the base and hidden values combined.
-      auto baseWidth = shrOp.getType().getIntOrFloatBitWidth();
-      auto hdnWidth = shrOp.getHidden().getType().getIntOrFloatBitWidth();
-      auto full = baseWidth + hdnWidth;
-
-      auto tmpTy = IntegerType::get(rewriter.getContext(), full);
-
-      // Extend all operands the combined width.
-      auto baseZext =
-          adjustBitWidth(op->getLoc(), rewriter, tmpTy, transformed.getBase());
-      auto hdnZext = adjustBitWidth(op->getLoc(), rewriter, tmpTy,
-                                    transformed.getHidden());
-      auto amntZext = adjustBitWidth(op->getLoc(), rewriter, tmpTy,
-                                     transformed.getAmount());
-
-      // Shift the hidden operand such that it can be prepended to the full
-      // value.
-      auto hdnShAmnt = rewriter.create<LLVM::ConstantOp>(
-          op->getLoc(), tmpTy,
-          rewriter.getIntegerAttr(rewriter.getIntegerType(full), baseWidth));
-      auto hdnSh =
-          rewriter.create<LLVM::ShlOp>(op->getLoc(), tmpTy, hdnZext, hdnShAmnt);
-
-      // Combine the base and hidden values.
-      auto combined =
-          rewriter.create<LLVM::OrOp>(op->getLoc(), tmpTy, hdnSh, baseZext);
-
-      // Perform the right shift.
-      auto shifted = rewriter.create<LLVM::LShrOp>(op->getLoc(), tmpTy,
-                                                   combined, amntZext);
-
-      // Truncate to final width.
-      rewriter.replaceOpWithNewOp<LLVM::TruncOp>(
-          op, transformed.getBase().getType(), shifted);
-
-      return success();
-    }
-    if (auto arrTy = shrOp.getResult().getType().dyn_cast<hw::ArrayType>()) {
-
-      auto combined = rewriter.create<hw::ArrayConcatOp>(
-          op->getLoc(), ValueRange({shrOp.getHidden(), shrOp.getBase()}));
-      rewriter.replaceOpWithNewOp<hw::ArraySliceOp>(op, arrTy, combined,
-                                                    transformed.getAmount());
-
-      return success();
-    }
-
-    return failure();
-  }
-};
-} // namespace
-
-namespace {
-/// Convert an `llhd.shl` operation to LLVM dialect. All the operands are
-/// extended to the width obtained by combining the hidden and base values. This
-/// combined value is then shifted right by `hidden_width - amount` (exposing
-/// the hidden value) and truncated to the base length
-struct ShlOpConversion : public ConvertToLLVMPattern {
-  explicit ShlOpConversion(MLIRContext *ctx, LLVMTypeConverter &typeConverter)
-      : ConvertToLLVMPattern(llhd::ShlOp::getOperationName(), ctx,
-                             typeConverter) {}
-
-  LogicalResult
-  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
-                  ConversionPatternRewriter &rewriter) const override {
-
-    ShlOpAdaptor transformed(operands);
-    auto shlOp = cast<ShlOp>(op);
-    assert(!shlOp.getType().isa<llhd::SigType>() && "sig not yet supported");
-
-    // Get the width of the base and hidden operands combined.
-    auto baseWidth = shlOp.getType().getIntOrFloatBitWidth();
-    auto hdnWidth = shlOp.getHidden().getType().getIntOrFloatBitWidth();
-    auto full = baseWidth + hdnWidth;
-
-    auto tmpTy = IntegerType::get(rewriter.getContext(), full);
-
-    // Extend all operands to the combined width.
-    auto baseZext =
-        adjustBitWidth(op->getLoc(), rewriter, tmpTy, transformed.getBase());
-    auto hdnZext =
-        adjustBitWidth(op->getLoc(), rewriter, tmpTy, transformed.getHidden());
-    auto amntZext =
-        adjustBitWidth(op->getLoc(), rewriter, tmpTy, transformed.getAmount());
-
-    // Shift the base operand such that it can be prepended to the full value.
-    auto hdnWidthConst = rewriter.create<LLVM::ConstantOp>(
-        op->getLoc(), tmpTy,
-        rewriter.getIntegerAttr(rewriter.getIntegerType(full), hdnWidth));
-    auto baseSh = rewriter.create<LLVM::ShlOp>(op->getLoc(), tmpTy, baseZext,
-                                               hdnWidthConst);
-
-    // Comvine the base and hidden operands.
-    auto combined =
-        rewriter.create<LLVM::OrOp>(op->getLoc(), tmpTy, baseSh, hdnZext);
-
-    // Get the final right shift amount by subtracting the shift amount from the
-    // hidden width .
-    auto shrAmnt = rewriter.create<LLVM::SubOp>(op->getLoc(), tmpTy,
-                                                hdnWidthConst, amntZext);
-
-    // Perform the shift.
-    auto shifted =
-        rewriter.create<LLVM::LShrOp>(op->getLoc(), tmpTy, combined, shrAmnt);
-
-    // Truncate to the final width.
-    rewriter.replaceOpWithNewOp<LLVM::TruncOp>(
-        op, transformed.getBase().getType(), shifted);
-
-    return success();
-  }
-};
-} // namespace
 
 namespace {
 template <typename SourceOp, typename TargetOp>
@@ -2550,6 +2446,23 @@ struct CombConcatOpConversion : public ConvertToLLVMPattern {
 };
 } // namespace
 
+namespace {
+/// Lower a comb::ReplicateOp operation to the LLVM dialect.
+struct CombReplicateOpConversion
+    : public ConvertOpToLLVMPattern<comb::ReplicateOp> {
+  using ConvertOpToLLVMPattern<comb::ReplicateOp>::ConvertOpToLLVMPattern;
+
+  LogicalResult
+  matchAndRewrite(comb::ReplicateOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+
+    std::vector<Value> inputs(op.getMultiple(), op.getInput());
+    rewriter.replaceOpWithNewOp<comb::ConcatOp>(op, inputs);
+    return success();
+  }
+};
+} // namespace
+
 //===----------------------------------------------------------------------===//
 // Memory operations
 //===----------------------------------------------------------------------===//
@@ -2635,8 +2548,7 @@ void circt::populateLLHDToLLVMConversionPatterns(LLVMTypeConverter &converter,
   patterns.add<CombExtractOpConversion, CombConcatOpConversion>(ctx, converter);
 
   // Bitwise conversion patterns.
-  patterns.add<ShrOpConversion, ShlOpConversion, CombParityOpConversion>(
-      ctx, converter);
+  patterns.add<CombParityOpConversion>(ctx, converter);
   patterns.add<AndOpConversion, OrOpConversion, XorOpConversion>(converter);
   patterns.add<CombShlOpConversion, CombShrUOpConversion, CombShrSOpConversion,
                BitcastOpConversion>(converter);
@@ -2644,8 +2556,8 @@ void circt::populateLLHDToLLVMConversionPatterns(LLVMTypeConverter &converter,
   // Arithmetic conversion patterns.
   patterns.add<CombAddOpConversion, CombSubOpConversion, CombMulOpConversion,
                CombDivUOpConversion, CombDivSOpConversion, CombModUOpConversion,
-               CombModSOpConversion, CombICmpOpConversion, CombMuxOpConversion>(
-      converter);
+               CombModSOpConversion, CombICmpOpConversion, CombMuxOpConversion,
+               CombReplicateOpConversion>(converter);
 
   // Unit conversion patterns.
   patterns.add<ProcOpConversion, WaitOpConversion, HaltOpConversion>(ctx,
@@ -2694,6 +2606,7 @@ void LLHDToLLVMLoweringPass::runOnOperation() {
   target.addIllegalOp<InstOp>();
   target.addLegalOp<UnrealizedConversionCastOp>();
   cf::populateControlFlowToLLVMConversionPatterns(converter, patterns);
+  arith::populateArithmeticToLLVMConversionPatterns(converter, patterns);
 
   // Apply the partial conversion.
   if (failed(

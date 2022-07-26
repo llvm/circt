@@ -400,13 +400,13 @@ private:
 
 /// An interface for conversion passes that lower Calyx programs. This handles
 /// state during the lowering of a Calyx program.
-class ProgramLoweringState {
+class CalyxLoweringState {
 public:
-  explicit ProgramLoweringState(calyx::ProgramOp program,
-                                StringRef topLevelFunction);
+  explicit CalyxLoweringState(mlir::ModuleOp module,
+                              StringRef topLevelFunction);
 
   /// Returns the current program.
-  calyx::ProgramOp getProgram();
+  mlir::ModuleOp getModule();
 
   /// Returns the name of the top-level function in the source program.
   StringRef getTopLevelFunction() const;
@@ -438,7 +438,7 @@ public:
   std::string irName(ValueOrBlock &v) {
     std::string s;
     llvm::raw_string_ostream os(s);
-    mlir::AsmState asmState(program);
+    mlir::AsmState asmState(module);
     v.printAsOperand(os, asmState);
     return s;
   }
@@ -447,7 +447,7 @@ private:
   /// The name of this top-level function.
   StringRef topLevelFunction;
   /// The program associated with this state.
-  calyx::ProgramOp program;
+  mlir::ModuleOp module;
   /// Mapping from ComponentOp to component lowering state.
   DenseMap<Operation *, std::unique_ptr<ComponentLoweringStateInterface>>
       componentStates;
@@ -481,14 +481,12 @@ private:
 };
 
 struct ModuleOpConversion : public OpRewritePattern<mlir::ModuleOp> {
-  ModuleOpConversion(MLIRContext *context, StringRef topLevelFunction,
-                     calyx::ProgramOp *programOpOutput);
+  ModuleOpConversion(MLIRContext *context, StringRef topLevelFunction);
 
   LogicalResult matchAndRewrite(mlir::ModuleOp moduleOp,
                                 PatternRewriter &rewriter) const override;
 
 private:
-  calyx::ProgramOp *programOpOutput;
   StringRef topLevelFunction;
 };
 
@@ -501,7 +499,7 @@ public:
   FuncOpPartialLoweringPattern(
       MLIRContext *context, LogicalResult &resRef,
       DenseMap<mlir::func::FuncOp, calyx::ComponentOp> &map,
-      calyx::ProgramLoweringState &state);
+      calyx::CalyxLoweringState &state);
 
   /// Entry point to initialize the state of this class and conduct the partial
   /// lowering.
@@ -524,8 +522,8 @@ public:
     return *static_cast<T *>(componentLoweringState);
   }
 
-  /// Return the program lowering state for this pattern.
-  ProgramLoweringState &programState() const;
+  /// Return the calyx lowering state for this pattern.
+  CalyxLoweringState &loweringState() const;
 
   /// Partial lowering implementation.
   virtual LogicalResult
@@ -539,7 +537,7 @@ protected:
 private:
   mutable ComponentOp componentOp;
   mutable ComponentLoweringStateInterface *componentLoweringState = nullptr;
-  ProgramLoweringState &programLoweringState;
+  CalyxLoweringState &calyxLoweringState;
 };
 
 /// Converts all index-typed operations and values to i32 values.
@@ -594,7 +592,7 @@ class InlineCombGroups
                                            mlir::OpInterfaceRewritePattern> {
 public:
   InlineCombGroups(MLIRContext *context, LogicalResult &resRef,
-                   calyx::ProgramLoweringState &pls);
+                   calyx::CalyxLoweringState &pls);
 
   LogicalResult partiallyLower(calyx::GroupInterface originGroup,
                                PatternRewriter &rewriter) const override;
@@ -607,7 +605,7 @@ private:
                           calyx::GroupInterface originGroup,
                           calyx::GroupInterface recGroup, bool doInline) const;
 
-  calyx::ProgramLoweringState &pls;
+  calyx::CalyxLoweringState &cls;
 };
 
 /// This pass rewrites memory accesses that have a width mismatch. Such
@@ -617,14 +615,14 @@ class RewriteMemoryAccesses
     : public calyx::PartialLoweringPattern<calyx::AssignOp> {
 public:
   RewriteMemoryAccesses(MLIRContext *context, LogicalResult &resRef,
-                        calyx::ProgramLoweringState &pls)
-      : PartialLoweringPattern(context, resRef), pls(pls) {}
+                        calyx::CalyxLoweringState &cls)
+      : PartialLoweringPattern(context, resRef), cls(cls) {}
 
   LogicalResult partiallyLower(calyx::AssignOp assignOp,
                                PatternRewriter &rewriter) const override;
 
 private:
-  calyx::ProgramLoweringState &pls;
+  calyx::CalyxLoweringState &cls;
 };
 
 /// Builds registers for each block argument in the program.

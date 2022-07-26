@@ -30,13 +30,38 @@ bool circt::sv::hasSVAttributes(mlir::Operation *op) {
   return op->hasAttr(sv::SVAttributeAttr::getSVAttributesAttrName());
 }
 
-mlir::ArrayAttr circt::sv::getSVAttributes(mlir::Operation *op) {
-  return op->getAttrOfType<mlir::ArrayAttr>(
-      sv::SVAttributeAttr::getSVAttributesAttrName());
+SVAttributesAttr circt::sv::getSVAttributes(mlir::Operation *op) {
+  return op->getAttrOfType<SVAttributesAttr>(
+      SVAttributeAttr::getSVAttributesAttrName());
 }
 
 void circt::sv::setSVAttributes(mlir::Operation *op, mlir::Attribute attr) {
-  return op->setAttr(sv::SVAttributeAttr::getSVAttributesAttrName(), attr);
+  return op->setAttr(SVAttributeAttr::getSVAttributesAttrName(), attr);
+}
+
+mlir::Attribute SVAttributesAttr::parse(mlir::AsmParser &p, mlir::Type type) {
+  mlir::ArrayAttr attributes;
+  if (p.parseLess() || p.parseAttribute<ArrayAttr>(attributes))
+    return Attribute();
+  bool emitAsComments = false;
+  if (!p.parseOptionalComma()) {
+    if (p.parseKeyword("emitAsComments"))
+      return Attribute();
+    emitAsComments = true;
+  }
+
+  if (p.parseGreater())
+    return Attribute();
+
+  return SVAttributesAttr::get(p.getContext(), attributes,
+                               BoolAttr::get(p.getContext(), emitAsComments));
+}
+
+void SVAttributesAttr::print(::mlir::AsmPrinter &p) const {
+  p << "<" << getAttributes();
+  if (getEmitAsComments().getValue())
+    p << ", emitAsComments";
+  p << ">";
 }
 
 void SVDialect::registerAttributes() {

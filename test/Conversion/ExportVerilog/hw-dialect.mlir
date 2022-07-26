@@ -77,7 +77,7 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
   // make tests brittle. This line breaking does not mean your change is no
   // good! You'll just have to find a new place for `sv.namehint`.
   %elem2d = hw.array_get %array2d[%a] { sv.namehint="array2d_idx_0_name" } : !hw.array<12 x array<10xi4>>
-  %37 = hw.array_get %elem2d[%b] {sv.attributes=[#sv.attribute<"svAttr">]}: !hw.array<10xi4>
+  %37 = hw.array_get %elem2d[%b] {sv.attributes=#sv.attributes<[#sv.attribute<"svAttr">]>}: !hw.array<10xi4>
 
   %36 = comb.replicate %a : (i4) -> i12
 

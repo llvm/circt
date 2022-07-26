@@ -1,6 +1,6 @@
 // RUN: circt-translate -split-input-file --export-calyx --verify-diagnostics %s
 
-calyx.program "main" {
+module attributes {calyx.entrypoint = "main"} {
   calyx.component @main(%in0: i4, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%out0: i8, %done: i1 {done}) {
     %true = hw.constant true
     // expected-error @+2 {{'calyx.std_extsi' op not supported for emission}}

@@ -649,15 +649,17 @@ static IfOp findNestedElseIf(Block *elseBlock) {
 
 /// Emit SystemVerilog attributes.
 static void emitSVAttributesImpl(llvm::raw_ostream &os,
-                                 mlir::ArrayAttr svAttrs) {
-  os << "(* ";
-  llvm::interleaveComma(svAttrs, os, [&](Attribute attr) {
+                                 sv::SVAttributesAttr svAttrs) {
+  auto body = svAttrs.getAttributes();
+  auto emitAsComments = svAttrs.getEmitAsComments().getValue();
+  os << (emitAsComments ? "/* " : "(* ");
+  llvm::interleaveComma(body, os, [&](Attribute attr) {
     auto svattr = attr.cast<SVAttributeAttr>();
     os << svattr.getName().getValue();
     if (svattr.getExpression())
       os << " = " << svattr.getExpression().getValue();
   });
-  os << " *)";
+  os << (emitAsComments ? " */" : " *)");
 }
 
 //===----------------------------------------------------------------------===//
@@ -851,11 +853,6 @@ public:
   /// the value is empty.
   void emitComment(StringAttr comment);
 
-  /// Given an expression that is spilled into a temporary wire, try to
-  /// synthesize a better name than "_T_42" based on the structure of the
-  /// expression.
-  StringAttr inferStructuralNameForTemporary(Value expr);
-
 private:
   void operator=(const EmitterBase &) = delete;
   EmitterBase(const EmitterBase &) = delete;
@@ -1026,7 +1023,7 @@ void EmitterBase::emitComment(StringAttr comment) {
 
 /// Given an expression that is spilled into a temporary wire, try to synthesize
 /// a better name than "_T_42" based on the structure of the expression.
-StringAttr EmitterBase::inferStructuralNameForTemporary(Value expr) {
+StringAttr ExportVerilog::inferStructuralNameForTemporary(Value expr) {
   StringAttr result;
   bool addPrefixUnderScore = true;
 
@@ -1069,7 +1066,7 @@ StringAttr EmitterBase::inferStructuralNameForTemporary(Value expr) {
           })
 
           // If this is an extract from a namable object, derive a name from it.
-          .Case([&result, this](ExtractOp extract) {
+          .Case([&result](ExtractOp extract) {
             if (auto operandName =
                     inferStructuralNameForTemporary(extract.getInput())) {
               unsigned numBits = extract.getType().getWidth();
@@ -2521,7 +2518,7 @@ void NameCollector::collectNames(Block &block) {
         // Get an explicitly set name or try to infer a name from the structure
         // of the expression.
         names.addName(result,
-                      moduleEmitter.inferStructuralNameForTemporary(result));
+                      ExportVerilog::inferStructuralNameForTemporary(result));
 
         // Don't measure or emit wires that are emitted inline (i.e. the wire
         // definition is emitted on the line of the expression instead of a

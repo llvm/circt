@@ -47,43 +47,6 @@ func.func @convert_bitwise_i32_variadic(%arg0 : i32, %arg1 : i32, %arg2 : i32) {
   return
 }
 
-// CHECK-LABEL: convert_shl_i5_i2_i2
-// CHECK-SAME: %[[BASE:.*]]: i5,
-// CHECK-SAME: %[[HIDDEN:.*]]: i2,
-// CHECK-SAME: %[[AMOUNT:.*]]: i2
-func.func @convert_shl_i5_i2_i2(%base : i5, %hidden : i2, %amount : i2) {
-  // CHECK-NEXT: %[[ZEXTB:.*]] = llvm.zext %[[BASE]] : i5 to i7
-  // CHECK-NEXT: %[[ZEXTH:.*]] = llvm.zext %[[HIDDEN]] : i2 to i7
-  // CHECK-NEXT: %[[ZEXTA:.*]] = llvm.zext %[[AMOUNT]] : i2 to i7
-  // CHECK-NEXT: %[[HDNW:.*]] = llvm.mlir.constant(2 : i7) : i7
-  // CHECK-NEXT: %[[SHB:.*]] = llvm.shl %[[ZEXTB]], %[[HDNW]] : i7
-  // CHECK-NEXT: %[[COMB:.*]] = llvm.or %[[SHB]], %[[ZEXTH]] : i7
-  // CHECK-NEXT: %[[SA:.*]] = llvm.sub %[[HDNW]], %[[ZEXTA]] : i7
-  // CHECK-NEXT: %[[SH:.*]] = llvm.lshr %[[COMB]], %[[SA]] : i7
-  // CHECK-NEXT: %{{.*}} = llvm.trunc %[[SH]] : i7 to i5
-  %0 = llhd.shl %base, %hidden, %amount : (i5, i2, i2) -> i5
-
-  return
-}
-
-// CHECK-LABEL: convert_shr_i5_i2_i2
-// CHECK-SAME: %[[BASE:.*]]: i5,
-// CHECK-SAME: %[[HIDDEN:.*]]: i2,
-// CHECK-SAME: %[[AMOUNT:.*]]: i2
-func.func @convert_shr_i5_i2_i2(%base : i5, %hidden : i2, %amount : i2) {
-  // CHECK-NEXT: %[[ZEXTB:.*]] = llvm.zext %[[BASE]] : i5 to i7
-  // CHECK-NEXT: %[[ZEXTH:.*]] = llvm.zext %[[HIDDEN]] : i2 to i7
-  // CHECK-NEXT: %[[ZEXTA:.*]] = llvm.zext %[[AMOUNT]] : i2 to i7
-  // CHECK-NEXT: %[[BASEW:.*]] = llvm.mlir.constant(5 : i7) : i7
-  // CHECK-NEXT: %[[SHH:.*]] = llvm.shl %[[ZEXTH]], %[[BASEW]] : i7
-  // CHECK-NEXT: %[[COMB:.*]] = llvm.or %[[SHH]], %[[ZEXTB]] : i7
-  // CHECK-NEXT: %[[SH:.*]] = llvm.lshr %[[COMB]], %[[ZEXTA]] : i7
-  // CHECK-NEXT: %{{.*}} = llvm.trunc %[[SH]] : i7 to i5
-  %0 = llhd.shr %base, %hidden, %amount : (i5, i2, i2) -> i5
-
-  return
-}
-
 // CHECK-LABEL: llvm.func @convert_comb_shift
 func.func @convert_comb_shift(%arg0: i32, %arg1: i32, %arg2: i1) -> i32 {
 
@@ -123,5 +86,21 @@ func.func @convert_comb_shift(%arg0: i32, %arg1: i32, %arg2: i1) -> i32 {
   // CHECK: llvm.select %arg2, %arg0, %arg1 : i1, i32
   %7 = comb.mux %arg2, %arg0, %arg1 : i32
 
+  // CHECK-NEXT: %[[INIT:.*]] = llvm.mlir.constant(0 : i96) : i96
+  // CHECK-NEXT: %[[A1:.*]] = llvm.mlir.constant(64 : i96) : i96
+  // CHECK-NEXT: %[[ZEXT1:.*]] = llvm.zext %arg0 : i32 to i96
+  // CHECK-NEXT: %[[SHIFT1:.*]] = llvm.shl %[[ZEXT1]], %[[A1]]  : i96
+  // CHECK-NEXT: %[[OR1:.*]] = llvm.or %[[INIT]], %[[SHIFT1]]  : i96
+  // CHECK-NEXT: %[[A2:.*]] = llvm.mlir.constant(32 : i96) : i96
+  // CHECK-NEXT: %[[ZEXT2:.*]] = llvm.zext %arg0 : i32 to i96
+  // CHECK-NEXT: %[[SHIFT2:.*]] = llvm.shl %[[ZEXT2]], %[[A2]]  : i96
+  // CHECK-NEXT: %[[OR2:.*]] = llvm.or %[[OR1]], %[[SHIFT2]]  : i96
+  // CHECK-NEXT: %[[A3:.*]] = llvm.mlir.constant(0 : i96) : i96
+  // CHECK-NEXT: %[[ZEXT3:.*]] = llvm.zext %arg0 : i32 to i96
+  // CHECK-NEXT: %[[SHIFT3:.*]] = llvm.shl %[[ZEXT3]], %[[A3]]  : i96
+  // CHECK-NEXT: llvm.or %[[OR2]], %[[SHIFT3]]  : i96
+  %8 = comb.replicate %arg0 : (i32) -> i96
+
+  // CHECK-NEXT: return
   return %7 : i32
 }
