@@ -510,18 +510,13 @@ void FModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
       }))
     newAnnos.clear();
 
-  // The lack of *any* port symbol is represented by an empty `portSyms` array
-  // as a shorthand.
-  if (llvm::all_of(newSyms, [](Attribute attr) { return !attr; }))
-    newSyms.clear();
-
   // Apply these changed markers.
   (*this)->setAttr("portDirections",
                    direction::packAttribute(getContext(), newDirections));
   (*this)->setAttr("portNames", ArrayAttr::get(getContext(), newNames));
   (*this)->setAttr("portTypes", ArrayAttr::get(getContext(), newTypes));
   (*this)->setAttr("portAnnotations", ArrayAttr::get(getContext(), newAnnos));
-  (*this)->setAttr("portSyms", ArrayAttr::get(getContext(), newSyms));
+  (*this).setPortSymbols(newSyms);
 }
 
 /// Inserts the given ports. The insertion indices are expected to be in order.
@@ -584,18 +579,13 @@ void FMemModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
       }))
     newAnnos.clear();
 
-  // The lack of *any* port symbol is represented by an empty `portSyms` array
-  // as a shorthand.
-  if (llvm::all_of(newSyms, [](Attribute attr) { return !attr; }))
-    newSyms.clear();
-
   // Apply these changed markers.
   (*this)->setAttr("portDirections",
                    direction::packAttribute(getContext(), newDirections));
   (*this)->setAttr("portNames", ArrayAttr::get(getContext(), newNames));
   (*this)->setAttr("portTypes", ArrayAttr::get(getContext(), newTypes));
   (*this)->setAttr("portAnnotations", ArrayAttr::get(getContext(), newAnnos));
-  (*this)->setAttr("portSyms", ArrayAttr::get(getContext(), newSyms));
+  (*this).setPortSymbols(newSyms);
 }
 
 /// Erases the ports listed in `portIndices`.  `portIndices` is expected to
@@ -666,11 +656,7 @@ static void buildModule(OpBuilder &builder, OperationState &result,
       }))
     portAnnotations.clear();
 
-  // The lack of *any* port symbol is represented by an empty `portSyms` array
-  // as a shorthand.
-  if (llvm::all_of(portSyms, [](Attribute attr) { return !attr; }))
-    portSyms.clear();
-
+  FModuleLike::fixupPortSymsArray(portSyms, builder.getContext());
   // Both attributes are added, even if the module has no ports.
   result.addAttribute(
       "portDirections",
@@ -794,7 +780,7 @@ static bool printModulePorts(OpAsmPrinter &p, Block *block,
 
     // Print the optional port symbol.
     if (!portSyms.empty()) {
-      if (portSyms[i]) {
+      if (!portSyms[i].cast<InnerSymAttr>().isSymbolInvalid()) {
         p << " sym ";
         portSyms[i].cast<InnerSymAttr>().print(p);
       }
@@ -1070,10 +1056,7 @@ static ParseResult parseFModuleLikeOp(OpAsmParser &parser,
 
   // Add port symbols.
   if (!result.attributes.get("portSyms")) {
-    // The lack of *any* port symbol is represented by an empty `portSyms` array
-    // as a shorthand.
-    if (llvm::all_of(portSyms, [](Attribute attr) { return !attr; }))
-      portSyms.clear();
+    FModuleLike::fixupPortSymsArray(portSyms, builder.getContext());
     result.addAttribute("portSyms", builder.getArrayAttr(portSyms));
   }
 

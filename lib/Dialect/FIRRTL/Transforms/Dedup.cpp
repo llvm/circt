@@ -970,7 +970,7 @@ private:
     }
 
     // Commit the new symbol attribute.
-    to->setAttr("portSyms", ArrayAttr::get(context, newPortSyms));
+    cast<FModuleLike>(to).setPortSymbols(newPortSyms);
   }
 
   /// Recursively merge two operations.

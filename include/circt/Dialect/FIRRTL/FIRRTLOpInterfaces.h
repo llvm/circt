@@ -72,12 +72,12 @@ struct PortInfo {
   PortInfo(StringAttr name, FIRRTLType type, Direction dir, StringAttr symName,
            Location loc)
       : name(name), type(type), direction(dir), loc(loc) {
-    sym = symName ? InnerSymAttr::get(symName) : InnerSymAttr();
+    sym = InnerSymAttr::get(symName);
   };
   PortInfo(StringAttr name, FIRRTLType type, Direction dir, StringAttr symName,
            Location loc, AnnotationSet annos)
       : name(name), type(type), direction(dir), loc(loc), annotations(annos) {
-    sym = symName ? InnerSymAttr::get(symName) : InnerSymAttr();
+    sym = InnerSymAttr::get(symName);
   };
   PortInfo(StringAttr name, FIRRTLType type, Direction dir,
            InnerSymAttr symName, Location loc, AnnotationSet annos)

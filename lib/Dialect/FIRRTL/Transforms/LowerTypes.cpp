@@ -874,19 +874,14 @@ bool TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
   SmallVector<Attribute, 8> newPortTypes;
   SmallVector<Attribute, 8> newArgSyms;
   SmallVector<Attribute, 8> newArgAnnotations;
-  bool validSym = false;
 
   for (auto &port : newArgs) {
     newArgDirections.push_back(port.direction);
     newArgNames.push_back(port.name);
     newPortTypes.push_back(TypeAttr::get(port.type));
     newArgSyms.push_back(port.sym);
-    if (port.sym)
-      validSym = true;
     newArgAnnotations.push_back(port.annotations.getArrayAttr());
   }
-  if (!validSym)
-    newArgSyms.clear();
 
   newModuleAttrs.push_back(
       NamedAttribute(cache.sPortDirections,
@@ -898,14 +893,12 @@ bool TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
   newModuleAttrs.push_back(
       NamedAttribute(cache.sPortTypes, builder.getArrayAttr(newPortTypes)));
 
-  newModuleAttrs.push_back(
-      NamedAttribute(cache.sPortSyms, builder.getArrayAttr(newArgSyms)));
-
   newModuleAttrs.push_back(NamedAttribute(
       cache.sPortAnnotations, builder.getArrayAttr(newArgAnnotations)));
 
   // Update the module's attributes.
   extModule->setAttrs(newModuleAttrs);
+  extModule.setPortSymbols(newArgSyms);
   return false;
 }
 
@@ -954,18 +947,13 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
   SmallVector<Attribute> newArgTypes;
   SmallVector<Attribute> newArgSyms;
   SmallVector<Attribute, 8> newArgAnnotations;
-  bool validSym = false;
   for (auto &port : newArgs) {
     newArgDirections.push_back(port.direction);
     newArgNames.push_back(port.name);
     newArgTypes.push_back(TypeAttr::get(port.type));
     newArgSyms.push_back(port.sym);
-    if (port.sym)
-      validSym = true;
     newArgAnnotations.push_back(port.annotations.getArrayAttr());
   }
-  if (!validSym)
-    newArgSyms.clear();
 
   newModuleAttrs.push_back(
       NamedAttribute(cache.sPortDirections,
@@ -976,13 +964,12 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
 
   newModuleAttrs.push_back(
       NamedAttribute(cache.sPortTypes, builder->getArrayAttr(newArgTypes)));
-  newModuleAttrs.push_back(
-      NamedAttribute(cache.sPortSyms, builder->getArrayAttr(newArgSyms)));
   newModuleAttrs.push_back(NamedAttribute(
       cache.sPortAnnotations, builder->getArrayAttr(newArgAnnotations)));
 
   // Update the module's attributes.
   module->setAttrs(newModuleAttrs);
+  module.setPortSymbols(newArgSyms);
   return false;
 }
 
@@ -1349,6 +1336,8 @@ void LowerTypesPass::runOnOperation() {
               auto portIdx = target.getPortNo();
               newNamepath.push_back(hw::InnerRefAttr::get(
                   target.getModule().moduleNameAttr(),
+                  // getPortSymbolAttr can return null,
+                  // but here it must exist.
                   op.getPortSymbolAttr(portIdx).getSymName()));
               newPath = builder.create<HierPathOp>(
                   newSym, builder.getArrayAttr(newNamepath));
