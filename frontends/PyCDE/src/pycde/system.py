@@ -5,6 +5,7 @@
 from pycde.devicedb import (EntityExtern, PlacementDB, PrimitiveDB,
                             PhysicalRegion)
 
+from .common import _PyProxy
 from .module import _SpecializedModule
 from .pycde_types import types
 from .instance import Instance, InstanceHierarchyRoot
@@ -135,7 +136,7 @@ class System:
 
   def _passes(self, partition):
     tops = ",".join(
-        [self._op_cache.get_module_symbol(m) for m in self.top_modules])
+        [self._op_cache.get_pyproxy_symbol(m) for m in self.top_modules])
     verilog_file = self.name + ".sv"
     tcl_file = self.name + ".tcl"
     self.files.add(os.path.join(self._output_directory, verilog_file))
@@ -225,7 +226,7 @@ class _OpCache:
   import pycde.instance as pi
 
   __slots__ = [
-      "_module", "_symbols", "_module_symbols", "_symbol_modules",
+      "_module", "_symbols", "_pyproxy_symbols", "_symbol_pyproxy",
       "_instance_hier_cache", "_instance_hier_obj_cache", "_instance_cache",
       "_module_inside_sym_cache", "_dyn_insts_in_inst"
   ]
@@ -233,8 +234,8 @@ class _OpCache:
   def __init__(self, module: ir.Module):
     self._module = module
     self._symbols: Dict[str, ir.OpView] = None
-    self._module_symbols: dict[_SpecializedModule, str] = {}
-    self._symbol_modules: dict[str, _SpecializedModule] = {}
+    self._pyproxy_symbols: dict[_PyProxy, str] = {}
+    self._symbol_pyproxy: dict[str, _PyProxy] = {}
 
     # InstanceHier caches are indexes are (module_sym, instance_name)
     self._instance_hier_cache: dict[(ir.FlatSymbolRefAttr, ir.StringAttr),
@@ -277,16 +278,16 @@ class _OpCache:
     """Resolve a symbol to an op."""
     return self.symbols[symbol]
 
-  def create_symbol(self, spec_mod: _SpecializedModule) -> Tuple[str, Callable]:
+  def create_symbol(self, pyproxy: _PyProxy) -> Tuple[str, Callable]:
     """Create a unique symbol and add it to the cache. If it is to be preserved,
     the caller must use it as the symbol on a top-level op. Returns the symbol
     string and a callback to install the mapping. Return (None, None) if
     `spec_mod` already has a symbol."""
 
-    if spec_mod in self._module_symbols:
+    if pyproxy in self._pyproxy_symbols:
       return (None, None)
     ctr = 0
-    basename = spec_mod.name
+    basename = pyproxy.name
     symbol = basename
     while symbol in self.symbols:
       ctr += 1
@@ -294,30 +295,29 @@ class _OpCache:
 
     def install(op):
       self._symbols[symbol] = op
-      self._module_symbols[spec_mod] = symbol
-      self._symbol_modules[symbol] = spec_mod
+      self._pyproxy_symbols[pyproxy] = symbol
+      self._symbol_pyproxy[symbol] = pyproxy
 
     return symbol, install
 
-  def get_symbol_module(self, symbol):
-    """Get the _SpecializedModule for a symbol."""
+  def get_symbol_pyproxy(self, symbol):
+    """Get the _PyProxy for a symbol."""
     if isinstance(symbol, ir.FlatSymbolRefAttr):
       symbol = symbol.value
-    return self._symbol_modules[symbol]
+    return self._symbol_pyproxy[symbol]
 
-  def get_module_symbol(self, spec_mod) -> str:
-    """Get the symbol for a module or its associated _SpecializedModule."""
+  def get_pyproxy_symbol(self, spec_mod) -> str:
+    """Get the symbol for a module or its associated _PyProxy."""
     if not isinstance(spec_mod, _SpecializedModule):
-      if not hasattr(spec_mod, "_pycde_mod"):
-        raise TypeError("Expected _SpecializedModule or pycde module")
-      spec_mod = spec_mod._pycde_mod
-    if spec_mod not in self._module_symbols:
+      if hasattr(spec_mod, "_pycde_mod"):
+        spec_mod = spec_mod._pycde_mod
+    if spec_mod not in self._pyproxy_symbols:
       return None
-    return self._module_symbols[spec_mod]
+    return self._pyproxy_symbols[spec_mod]
 
   def get_circt_mod(self, spec_mod: _SpecializedModule) -> ir.Operation:
     """Get the CIRCT module op for a PyCDE module."""
-    return self.symbols[self.get_module_symbol(spec_mod)]
+    return self.symbols[self.get_pyproxy_symbol(spec_mod)]
 
   def _build_instance_hier_cache(self):
     """If the instance hierarchy cache doesn't exist, build it."""

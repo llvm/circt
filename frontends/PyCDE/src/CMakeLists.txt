@@ -21,6 +21,7 @@ declare_mlir_python_sources(PyCDESources
   pycde/support.py
   pycde/module.py
   pycde/constructs.py
+  pycde/common.py
   pycde/system.py
   pycde/devicedb.py
   pycde/instance.py
