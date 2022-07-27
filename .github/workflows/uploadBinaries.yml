@@ -24,9 +24,6 @@ jobs:
             cmake-args: '-DCMAKE_CXX_FLAGS="-static-libgcc -static-libstdc++"'
     runs-on: ${{ matrix.runner }}
     steps:
-      - name: Configure Environment
-        run: echo "$GITHUB_WORKSPACE/llvm/install/bin" >> $GITHUB_PATH
-
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
       # time.
       - name: Get CIRCT
@@ -55,7 +52,6 @@ jobs:
         with:
           path: |
             llvm/build
-            llvm/install
           key: ${{ matrix.runner }}-llvm-${{ steps.get-llvm-hash.outputs.hash }}-${{ steps.get-workflow-hash.outputs.hash }}-${{ matrix.compiler.cc }} 
 
       - name: Setup Ninja Linux
