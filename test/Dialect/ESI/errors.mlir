@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -split-input-file -verify-diagnostics
+// RUN: circt-opt %s --esi-connect-services -split-input-file -verify-diagnostics
 
 sv.interface @IData {
   sv.interface.signal @data : i32
@@ -82,4 +82,20 @@ hw.module @Loopback (%clk: i1) -> () {
 hw.module @Loopback (%clk: i1) -> () {
   // expected-error @+1 {{Cannot find module "HostComms"}}
   %dataIn = esi.service.req.to_client <@HostComms::@Recv> (["loopback_tohw"]) : !esi.channel<i32>
+}
+
+// -----
+
+hw.module @Top(%clk: i1, %rstn: i1) -> () {
+  // expected-error @+2 {{'esi.service.impl_req' op incorrect type for option 'EpID_start'}}
+  // expected-error @+1 {{'esi.service.instance' op failed to generate server}}
+  esi.service.instance @HostComms impl as  "cosim" opts {EpID_start = "wrong!"} (%clk, %rstn) : (i1, i1) -> ()
+}
+
+// -----
+
+hw.module @Top(%clk: i1, %rstn: i1) -> () {
+  // expected-error @+2 {{'esi.service.impl_req' op did not recognize option name "badOpt"}}
+  // expected-error @+1 {{'esi.service.instance' op failed to generate server}}
+  esi.service.instance @HostComms impl as  "cosim" opts {badOpt = "wrong!"} (%clk, %rstn) : (i1, i1) -> ()
 }

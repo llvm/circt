@@ -19,10 +19,21 @@ class LoopbackTester(cosim.CosimBase):
     ep = openResp.iface
     ep.close().wait()
 
+  def test_two_chan_loopback(self, num_msgs):
+    to_hw = self.openEP(11, sendType=self.schema.I1, recvType=self.schema.I8)
+    from_hw = self.openEP(12, sendType=self.schema.I8, recvType=self.schema.I1)
+    for _ in range(num_msgs):
+      data = random.randint(0, 2**8 - 1)
+      print(f"Sending {data}")
+      to_hw.send(self.schema.I8.new_message(i=data))
+      result = self.readMsg(from_hw, self.schema.I8)
+      print(f"Got {result}")
+      assert (result.i == data)
+
   def test_i32(self, num_msgs):
     ep = self.openEP(sendType=self.schema.I32, recvType=self.schema.I32)
     for _ in range(num_msgs):
-      data = random.randint(0, 2**32)
+      data = random.randint(0, 2**32 - 1)
       print(f"Sending {data}")
       ep.send(self.schema.I32.new_message(i=data))
       result = self.readMsg(ep, self.schema.I32)
@@ -30,7 +41,7 @@ class LoopbackTester(cosim.CosimBase):
       assert (result.i == data)
 
   def write_3bytes(self, ep):
-    r = random.randrange(0, 2**24)
+    r = random.randrange(0, 2**24 - 1)
     data = r.to_bytes(3, 'big')
     print(f'Sending: {binascii.hexlify(data)}')
     ep.send(self.schema.UntypedData.new_message(data=data)).wait()
