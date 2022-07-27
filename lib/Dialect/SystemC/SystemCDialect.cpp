@@ -21,6 +21,7 @@ using namespace circt::systemc;
 
 void SystemCDialect::initialize() {
   // Register types.
+  registerAttributes();
   registerTypes();
 
   // Register operations.

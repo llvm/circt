@@ -10,5 +10,6 @@ add_circt_conversion_library(CIRCTHWToSystemC
   LINK_LIBS PUBLIC
   CIRCTSystemC
   CIRCTHW
+  CIRCTComb
   MLIRTransforms
 )

@@ -15,18 +15,24 @@
 
 def SystemCDialect : Dialect {
   let name = "systemc";
+  let cppNamespace = "::circt::systemc";
 
   let summary = "Types and operations for the SystemC dialect";
   let description = [{
     This dialect defines the `systemc` dialect, which represents various
     constructs of the SystemC library (IEEE 1666-2011) useful for emission.
   }];
-  let cppNamespace = "::circt::systemc";
+
   let extraClassDeclaration = [{
+    /// Register all SystemC attributes.
+    void registerAttributes();
     /// Register all SystemC types.
     void registerTypes();
   }];
-  int emitAccessorPrefix = kEmitAccessorPrefix_Prefixed;
+
+  let useDefaultAttributePrinterParser = 1;
+
+  let emitAccessorPrefix = kEmitAccessorPrefix_Prefixed;
 }
 
 #endif // CIRCT_DIALECT_SYSTEMC_SYSTEMCDIALECT

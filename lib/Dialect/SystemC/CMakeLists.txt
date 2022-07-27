@@ -1,4 +1,5 @@
 add_circt_dialect_library(CIRCTSystemC
+  SystemCAttributes.cpp
   SystemCDialect.cpp
   SystemCTypes.cpp
   SystemCOps.cpp
