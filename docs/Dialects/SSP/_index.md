@@ -1,3 +1,3 @@
-# 'SSP' Dialect
+# 'ssp' Dialect
 
 [include "Dialects/SSP.md"]
