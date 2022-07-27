@@ -16,6 +16,8 @@
 #include "circt/Dialect/SSP/SSPDialect.h"
 
 #include "mlir/IR/OpImplementation.h"
+#include "mlir/IR/RegionKindInterface.h"
+#include "mlir/IR/SymbolTable.h"
 
 #define GET_OP_CLASSES
 #include "circt/Dialect/SSP/SSP.h.inc"
