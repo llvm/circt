@@ -2043,7 +2043,7 @@ OpFoldResult ArrayGetOp::fold(ArrayRef<Attribute> operands) {
 //===----------------------------------------------------------------------===//
 
 StringRef TypedeclOp::getPreferredName() {
-  return getVerilogName().getValueOr(getName());
+  return getVerilogName().value_or(getName());
 }
 
 //===----------------------------------------------------------------------===//

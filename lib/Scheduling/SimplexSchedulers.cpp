@@ -845,7 +845,7 @@ LogicalResult CyclicSimplexScheduler::schedule() {
 //===----------------------------------------------------------------------===//
 
 static bool isLimited(Operation *op, SharedOperatorsProblem &prob) {
-  return prob.getLimit(*prob.getLinkedOperatorType(op)).getValueOr(0) > 0;
+  return prob.getLimit(*prob.getLinkedOperatorType(op)).value_or(0) > 0;
 }
 
 LogicalResult SharedOperatorsSimplexScheduler::schedule() {
@@ -901,7 +901,7 @@ LogicalResult SharedOperatorsSimplexScheduler::schedule() {
 
   for (auto *op : limitedOps) {
     auto opr = *prob.getLinkedOperatorType(op);
-    unsigned limit = prob.getLimit(opr).getValueOr(0);
+    unsigned limit = prob.getLimit(opr).value_or(0);
     assert(limit > 0);
 
     // Find the first time step (beginning at the current start time in the

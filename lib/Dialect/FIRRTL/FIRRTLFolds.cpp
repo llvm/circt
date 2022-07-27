@@ -138,7 +138,7 @@ static Optional<APSInt> getConstant(Attribute operand) {
     return {};
   if (auto attr = operand.dyn_cast<InvalidValueAttr>()) {
     if (auto type = attr.getType().dyn_cast<IntType>())
-      return APSInt(type.getWidth().getValueOr(1), type.isUnsigned());
+      return APSInt(type.getWidth().value_or(1), type.isUnsigned());
     if (attr.getType().isa<ClockType, ResetType, AsyncResetType>())
       return APSInt(1);
   }
