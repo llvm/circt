@@ -141,7 +141,7 @@ public:
   static StringAttr getInnerSymbol(Operation *op);
 
   /// Get InnerSymbol for a target.
-  static StringAttr getInnerSymbol(InnerSymTarget target);
+  static StringAttr getInnerSymbol(const InnerSymTarget &target);
 
   /// Return the name of the attribute used for inner symbol names.
   static StringRef getInnerSymbolAttrName() { return "inner_sym"; }
@@ -151,13 +151,14 @@ public:
   static FailureOr<InnerSymbolTable> get(Operation *op);
 
   using InnerSymCallbackFn =
-      llvm::function_ref<LogicalResult(StringAttr, InnerSymTarget)>;
+      llvm::function_ref<LogicalResult(StringAttr, const InnerSymTarget &)>;
 
   /// Walk the given IST operation and invoke the callback for all encountered
   /// inner symbols.
   /// This variant is used for callbacks that return LogicalResult.
   template <typename FuncTy,
-            typename RetTy = typename std::invoke_result<FuncTy, StringAttr, InnerSymTarget>::type>
+            typename RetTy = typename std::invoke_result<
+                FuncTy, StringAttr, const InnerSymTarget &>::type>
   static typename std::enable_if<std::is_same<LogicalResult, RetTy>::value,
                                  RetTy>::type
   walkSymbols(Operation *op, FuncTy &&callback) {
@@ -169,11 +170,11 @@ public:
   /// This variant is used for callbacks that return void.
   template <typename FuncTy,
             typename RetTy = typename std::invoke_result<
-                FuncTy, StringAttr, InnerSymTarget>::type>
+                FuncTy, StringAttr, const InnerSymTarget &>::type>
   static typename std::enable_if<std::is_void<RetTy>::value, RetTy>::type
   walkSymbols(Operation *op, FuncTy &&callback) {
     (void)InnerSymbolTable::walkSymbols(
-        op, [&](StringAttr name, InnerSymTarget target) {
+        op, [&](StringAttr name, const InnerSymTarget &target) {
           std::invoke(std::forward<FuncTy>(callback), name, target);
           return success();
         });

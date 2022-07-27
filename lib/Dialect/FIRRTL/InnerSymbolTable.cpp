@@ -31,8 +31,8 @@ InnerSymbolTable::InnerSymbolTable(Operation *op) {
   // Save the operation this table is for.
   this->innerSymTblOp = op;
 
-  walkSymbols(op, [&](StringAttr name, InnerSymTarget target) {
-    auto it = symbolTable.insert({name, target});
+  walkSymbols(op, [&](StringAttr name, const InnerSymTarget &target) {
+    auto it = symbolTable.try_emplace(name, target);
     (void)it;
     assert(it.second && "repeated symbol found");
   });
@@ -45,8 +45,8 @@ FailureOr<InnerSymbolTable> InnerSymbolTable::get(Operation *op) {
 
   TableTy table;
   auto result = walkSymbols(
-      op, [&](StringAttr name, InnerSymTarget target) -> LogicalResult {
-        auto it = table.insert({name, target});
+      op, [&](StringAttr name, const InnerSymTarget &target) -> LogicalResult {
+        auto it = table.try_emplace(name, target);
         if (it.second)
           return success();
         auto existing = it.first->second;
@@ -67,14 +67,14 @@ LogicalResult InnerSymbolTable::walkSymbols(Operation *op,
   LLVM_DEBUG(dbgs() << "===----- InnerSymbolTable -----===\n";
              dbgs() << "Walking inner symbols for @"
                     << SymbolTable::getSymbolName(op) << "\n");
-  auto walkSym = [&](StringAttr name, InnerSymTarget target) {
+  auto walkSym = [&](StringAttr name, const InnerSymTarget &target) {
     LLVM_DEBUG(dbgs() << " - @" << name << " -> " << target << "\n");
     assert(name && !name.getValue().empty());
     return callback(name, target);
   };
 
   auto walkSyms = [&](InnerSymAttr symAttr,
-                      InnerSymTarget baseTarget) -> LogicalResult {
+                      const InnerSymTarget &baseTarget) -> LogicalResult {
     if (!symAttr)
       return success();
     assert(baseTarget.getField() == 0);
@@ -138,7 +138,7 @@ StringAttr InnerSymbolTable::getInnerSymbol(Operation *op) {
 
 /// Get InnerSymbol for a target.  Be robust to queries on unexpected
 /// operations to avoid users needing to know the details.
-StringAttr InnerSymbolTable::getInnerSymbol(InnerSymTarget target) {
+StringAttr InnerSymbolTable::getInnerSymbol(const InnerSymTarget &target) {
   // Assert on misuse, but try to handle queries otherwise.
   assert(target);
 
