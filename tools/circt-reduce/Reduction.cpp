@@ -72,7 +72,8 @@ static llvm::Optional<firrtl::FModuleOp>
 findInstantiatedModule(firrtl::InstanceOp instOp, SymbolCache &symbols) {
   auto *tableOp = SymbolTable::getNearestSymbolTable(instOp);
   auto moduleOp = dyn_cast<firrtl::FModuleOp>(
-      instOp.getReferencedModule(symbols.getSymbolTable(tableOp)));
+      instOp.getReferencedModule(symbols.getSymbolTable(tableOp))
+          .getOperation());
   return moduleOp ? llvm::Optional(moduleOp)
                   : llvm::Optional<firrtl::FModuleOp>();
 }
@@ -1031,7 +1032,7 @@ struct EagerInliner : public Reduction {
       return 0;
     auto tableOp = SymbolTable::getNearestSymbolTable(instOp);
     auto moduleOp = instOp.getReferencedModule(symbols.getSymbolTable(tableOp));
-    if (!isa<firrtl::FModuleOp>(moduleOp))
+    if (!isa<firrtl::FModuleOp>(moduleOp.getOperation()))
       return 0;
     return symbols.getSymbolUserMap(tableOp).getUsers(moduleOp).size() == 1;
   }
@@ -1054,7 +1055,8 @@ struct EagerInliner : public Reduction {
     }
     auto tableOp = SymbolTable::getNearestSymbolTable(instOp);
     auto moduleOp = cast<firrtl::FModuleOp>(
-        instOp.getReferencedModule(symbols.getSymbolTable(tableOp)));
+        instOp.getReferencedModule(symbols.getSymbolTable(tableOp))
+            .getOperation());
     for (auto &op : llvm::make_early_inc_range(*moduleOp.getBodyBlock())) {
       op.remove();
       builder.insert(&op);
