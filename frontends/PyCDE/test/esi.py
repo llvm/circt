@@ -38,7 +38,7 @@ class Top:
     p = Producer(clk=ports.clk)
     Consumer(clk=ports.clk, int_in=p.int_out)
     # Use Cosim to implement the standard 'HostComms' service.
-    esi.Cosim(esi.HostComms)
+    esi.Cosim(esi.HostComms, ports.clk, ports.rst)
 
 
 s = pycde.System([Top], name="EsiSys")
@@ -49,6 +49,7 @@ s.print()
 # CHECK-LABEL: msft.module @Top {} (%clk: i1, %rst: i1) attributes {fileName = "Top.sv"} {
 # CHECK:         %Producer.int_out = msft.instance @Producer @Producer(%clk)  : (i1) -> !esi.channel<i32>
 # CHECK:         msft.instance @Consumer @Consumer(%clk, %Producer.int_out)  : (i1, !esi.channel<i32>) -> ()
+# CHECK:         esi.service.instance @HostComms impl as "cosim"(%clk, %rst) : (i1, i1) -> ()
 # CHECK:         msft.output
 # CHECK-LABEL: msft.module @Producer {} (%clk: i1) -> (int_out: !esi.channel<i32>) attributes {fileName = "Producer.sv"} {
 # CHECK:         [[R0:%.+]] = esi.service.req.to_client <@HostComms::@FromHost>(["loopback_in"]) : !esi.channel<i32>

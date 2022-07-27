@@ -80,9 +80,12 @@ class HostComms:
   FromHost = FromServer(types.any)
 
 
-def Cosim(decl):
+def Cosim(decl: ServiceDecl, clk, rst):
 
-  class Cosim:
-    pass
-
-  return Cosim
+  # TODO: better modeling and implementation capacity. The below is just
+  # temporary.
+  raw_esi.ServiceInstanceOp(result=[],
+                            service_symbol=ir.FlatSymbolRefAttr.get(
+                                decl._materialize_service_decl()),
+                            impl_type=ir.StringAttr.get("cosim"),
+                            inputs=[clk.value, rst.value])
