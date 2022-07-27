@@ -224,6 +224,12 @@ void InnerRefAttr::print(AsmPrinter &p) const {
   p << ">";
 }
 
+Attribute
+InnerRefAttr::replaceImmediateSubElements(ArrayRef<Attribute> replAttrs,
+                                          ArrayRef<Type> replTypes) const {
+  return get(replAttrs[0].cast<StringAttr>(), replAttrs[1].cast<StringAttr>());
+}
+
 //===----------------------------------------------------------------------===//
 // ParamDeclAttr
 //===----------------------------------------------------------------------===//
