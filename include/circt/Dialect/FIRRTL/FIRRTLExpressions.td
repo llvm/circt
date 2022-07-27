@@ -687,10 +687,10 @@ class RefPortConstraint<string ref>
                 CPred<"($" # ref # ".isa<BlockArgument>()"
                 " || (isa<InstanceOp>($" # ref # ".getDefiningOp())))">>;
 
-def XMRGetOp : FIRRTLOp<"xmr.get", [RefTypeConstraint<"ref","result">,
+def RefResolveOp: FIRRTLOp<"ref.resolve", [RefTypeConstraint<"ref","result">,
                                     RefSingleUserConstraint<"ref">,
                                     RefInstancePortConstraint<"ref">]> {
-  let summary = "FIRRTL XMR Get";
+  let summary = "FIRRTL Resolve a Reference";
   let description = [{
     Resolve a remote reference (XMR) for reading/writing.
     If an XMR is emitted for this reference, it will be at the location
@@ -702,13 +702,13 @@ def XMRGetOp : FIRRTLOp<"xmr.get", [RefTypeConstraint<"ref","result">,
   let assemblyFormat = "$ref attr-dict `:` qualified(type($ref))";
 }
 
-def XMRReadOp : FIRRTLOp<"xmr.read", [RefTypeConstraint<"ref","result">,
+def RefSendOp: FIRRTLOp<"ref.send", [RefTypeConstraint<"ref","result">,
                                     RefSingleUserConstraint<"ref">,
                                     RefPortConstraint<"ref">]> {
-  let summary = "FIRRTL XMR Read";
+  let summary = "FIRRTL Send through Reference";
   let description = [{
-    Endpoint of remote reference (XMR), read from
-    the firrtl.xmr.get op.
+    Endpoint of remote reference (XMR), send value through a reference
+    to be read from the firrtl.ref.resolve op.
   }];
   let arguments = (ins RefType:$ref, FIRRTLType:$result);
   let hasVerifier = 1;
@@ -716,14 +716,14 @@ def XMRReadOp : FIRRTLOp<"xmr.read", [RefTypeConstraint<"ref","result">,
   let assemblyFormat = "$ref `,` $result attr-dict `:` qualified(type($ref))";
 }
 
-def XMRWriteOp : FIRRTLOp<"xmr.write", [RefTypeConstraint<"ref","result">,
+def RefRecvOp: FIRRTLOp<"ref.recv", [RefTypeConstraint<"ref","result">,
                                     RefSingleUserConstraint<"ref">,
                                     RefPortConstraint<"ref">]> {
-  let summary = "FIRRTL XMR Write";
+  let summary = "FIRRTL Receive from Reference";
   let description = [{
-    Endpoint of remote reference (XMR), written from
-    the firrtl.xmr.get end. This should override any
-    other write to $result.
+    Endpoint of remote reference (XMR), receive value through a reference
+    written from the firrtl.ref.resolve end.
+    This should override any other write to $result.
   }];
   let arguments = (ins FIRRTLType:$result, RefType:$ref);
   let hasVerifier = 1;

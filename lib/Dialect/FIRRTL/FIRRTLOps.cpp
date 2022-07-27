@@ -140,7 +140,7 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
         return swap();
       })
       .Case<MemOp>([&](auto op) { return swap(); })
-      .Case<XMRGetOp>(
+      .Case<RefResolveOp>(
           [&](auto op) { return foldFlow(op->getOperand(0), accumulatedFlow); })
       // Anything else acts like a universal source.
       .Default([&](auto) { return accumulatedFlow; });
@@ -3949,7 +3949,7 @@ void XorRPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 // Cross Module Reference verifiers.
 //===----------------------------------------------------------------------===//
 
-LogicalResult XMRReadOp::verify() {
+LogicalResult RefSendOp::verify() {
   // Check that the flows make sense.
   if (failed(checkConnectFlow(*this)))
     return failure();
@@ -3957,12 +3957,12 @@ LogicalResult XMRReadOp::verify() {
   return success();
 }
 
-LogicalResult XMRWriteOp::verify() {
+LogicalResult RefRecvOp::verify() {
   // Check that the flows make sense.
   if (failed(checkConnectFlow(*this, true)))
     return failure();
-  // The result of the xmr write op cannot be used as the destination of any
-  // connect op in the module.
+  // The result of the ref recv op (xmr write) cannot be used as the destination
+  // of any connect op in the module.
   Value res = getResult();
   if (res.hasOneUse())
     return success();
@@ -3974,7 +3974,7 @@ LogicalResult XMRWriteOp::verify() {
       bool rootKnown;
       auto resName = getFieldName(resRef, rootKnown);
       auto diag = emitError();
-      diag << "xmr write result ";
+      diag << "ref recv (xmr write) result ";
       if (rootKnown)
         diag << "\"" << resName << "\" ";
       diag << "cannot be used as the destination of a connect";

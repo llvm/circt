@@ -909,14 +909,14 @@ firrtl.circuit "DupSymField" {
 firrtl.circuit "Foo" {
   firrtl.module @Bar(in %_a: !firrtl.ref<uint<1>>) {
     %a = firrtl.wire : !firrtl.uint<1>
-    firrtl.xmr.write %a, %_a : !firrtl.ref<uint<1>>
+    firrtl.ref.recv %a, %_a : !firrtl.ref<uint<1>>
   }
   firrtl.module @Foo(in %fa: !firrtl.ref<uint<1>>) {
     %bar_a = firrtl.instance bar @Bar(in _a: !firrtl.ref<uint<1>>)
 
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     // expected-error @+1 {{reference port operand cannot be reused by any other op}}
-    %0 = firrtl.xmr.get %bar_a : !firrtl.ref<uint<1>>
+    %0 = firrtl.ref.resolve %bar_a : !firrtl.ref<uint<1>>
     firrtl.strictconnect %0, %zero : !firrtl.uint<1>
     firrtl.strictconnect %fa, %bar_a : !firrtl.ref<uint<1>>
   }
@@ -927,8 +927,8 @@ firrtl.circuit "Foo" {
 
 firrtl.circuit "MyView_mapping" {
   firrtl.module @MyView_mapping(in %ref_in1: !firrtl.ref<uint<1>>) {
-    // expected-error @+1 {{'firrtl.xmr.get' op failed to verify that it cannot have module port as an operand because it implies upward reference XMR, which are not supported. The reference operand must be a port from firrtl.instance}}
-    %0 = firrtl.xmr.get %ref_in1 : !firrtl.ref<uint<1>>
+    // expected-error @+1 {{'firrtl.ref.resolve' op failed to verify that it cannot have module port as an operand because it implies upward reference XMR, which are not supported. The reference operand must be a port from firrtl.instance}}
+    %0 = firrtl.ref.resolve %ref_in1 : !firrtl.ref<uint<1>>
   }
 }
 
@@ -940,7 +940,7 @@ firrtl.circuit "MyView" {
     %ref_in1 = firrtl.wire : !firrtl.ref<uint<1>>
     %in1 = firrtl.wire : !firrtl.uint<1>
     // expected-error @+1 {{that reference port operand can only be a module or instance port}}
-    firrtl.xmr.read  %ref_in1, %in1 : !firrtl.ref<uint<1>>
+    firrtl.ref.send  %ref_in1, %in1 : !firrtl.ref<uint<1>>
   }
 }
 
@@ -955,38 +955,38 @@ firrtl.circuit "func2" {
 }
 
 // -----
-// Check flow semantics for xmr.write
+// Check flow semantics for ref.recv
 
 firrtl.circuit "Foo" {
   // expected-note @+1 {{source was defined here}}
   firrtl.module @Foo(out %_a: !firrtl.ref<uint<1>>) {
     %a = firrtl.wire : !firrtl.uint<1>
     // expected-error @+1 {{connect has invalid flow: the source expression "_a" has sink flow, expected source or duplex flow}}
-    firrtl.xmr.write %a, %_a : !firrtl.ref<uint<1>>
+    firrtl.ref.recv %a, %_a : !firrtl.ref<uint<1>>
   }
 }
 
 // -----
-// Check flow semantics for xmr.read
+// Check flow semantics for ref.send
 
 firrtl.circuit "Foo" {
   // expected-note @+1 {{destination was defined here}}
   firrtl.module @Foo(in  %_a: !firrtl.ref<uint<1>>) {
     %a = firrtl.wire : !firrtl.uint<1>
     // expected-error @+1 {{connect has invalid flow: the destination expression "_a" has source flow, expected sink or duplex flow}}
-    firrtl.xmr.read %_a, %a : !firrtl.ref<uint<1>>
+    firrtl.ref.send %_a, %a : !firrtl.ref<uint<1>>
   }
 }
 
 // -----
-// Check flow semantics for xmr.write
+// Check flow semantics for ref.recv
 
 firrtl.circuit "Bar" {
   firrtl.module @Bar(in %_a: !firrtl.ref<uint<1>>) {
     %a = firrtl.wire : !firrtl.uint<1>
     %b = firrtl.wire : !firrtl.uint<1>
-    // expected-error @+1 {{xmr write result "a" cannot be used as the destination of a connect}}
-    firrtl.xmr.write %a, %_a : !firrtl.ref<uint<1>>
+    // expected-error @+1 {{ref recv (xmr write) result "a" cannot be used as the destination of a connect}}
+    firrtl.ref.recv %a, %_a : !firrtl.ref<uint<1>>
     // expected-note @+1 {{the connect was defined here}}
     firrtl.strictconnect %a, %b : !firrtl.uint<1>
   }
