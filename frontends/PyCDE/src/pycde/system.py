@@ -301,13 +301,13 @@ class _OpCache:
     return symbol, install
 
   def get_symbol_pyproxy(self, symbol):
-    """Get the _SpecializedModule for a symbol."""
+    """Get the _PyProxy for a symbol."""
     if isinstance(symbol, ir.FlatSymbolRefAttr):
       symbol = symbol.value
     return self._symbol_pyproxy[symbol]
 
   def get_pyproxy_symbol(self, spec_mod) -> str:
-    """Get the symbol for a module or its associated _SpecializedModule."""
+    """Get the symbol for a module or its associated _PyProxy."""
     if not isinstance(spec_mod, _SpecializedModule):
       if hasattr(spec_mod, "_pycde_mod"):
         spec_mod = spec_mod._pycde_mod
