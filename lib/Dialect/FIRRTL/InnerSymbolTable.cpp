@@ -228,11 +228,11 @@ namespace detail {
 LogicalResult verifyInnerRefNamespace(Operation *op) {
   // Construct the symbol tables.
   InnerSymbolTableCollection innerSymTables;
-  SymbolTable symbolTable(op);
-  InnerRefNamespace ns{symbolTable, innerSymTables};
-
   if (failed(innerSymTables.populateAndVerifyTables(op)))
     return failure();
+
+  SymbolTable symbolTable(op);
+  InnerRefNamespace ns{symbolTable, innerSymTables};
 
   // Conduct parallel walks of the top-level children of this
   // InnerRefNamespace, verifying all InnerRefUserOp's discovered within.
