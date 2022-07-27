@@ -67,21 +67,21 @@ LogicalResult InnerSymbolTable::walkSymbols(Operation *op,
   LLVM_DEBUG(dbgs() << "===----- InnerSymbolTable -----===\n";
              dbgs() << "Walking inner symbols for @"
                     << SymbolTable::getSymbolName(op) << "\n");
-  auto addSym = [&](StringAttr name, InnerSymTarget target) {
+  auto walkSym = [&](StringAttr name, InnerSymTarget target) {
     LLVM_DEBUG(dbgs() << " - @" << name << " -> " << target << "\n");
     assert(name && !name.getValue().empty());
     return callback(name, target);
   };
 
-  auto addSyms = [&](InnerSymAttr symAttr,
-                     InnerSymTarget baseTarget) -> LogicalResult {
+  auto walkSyms = [&](InnerSymAttr symAttr,
+                      InnerSymTarget baseTarget) -> LogicalResult {
     if (!symAttr)
       return success();
     assert(baseTarget.getField() == 0);
     for (const auto &symProp : symAttr.getProps()) {
-      if (failed(
-              addSym(symProp.getName(), InnerSymTarget::getTargetForSubfield(
-                                            baseTarget, symProp.getFieldID()))))
+      if (failed(walkSym(symProp.getName(),
+                         InnerSymTarget::getTargetForSubfield(
+                             baseTarget, symProp.getFieldID()))))
         return failure();
     }
     return success();
@@ -92,7 +92,7 @@ LogicalResult InnerSymbolTable::walkSymbols(Operation *op,
       !op->walk<mlir::WalkOrder::PreOrder>([&](Operation *curOp) -> WalkResult {
            if (auto symOp = dyn_cast<InnerSymbolOpInterface>(curOp))
              if (failed(
-                     addSyms(symOp.getInnerSymAttr(), InnerSymTarget(symOp))))
+                     walkSyms(symOp.getInnerSymAttr(), InnerSymTarget(symOp))))
                return WalkResult::interrupt();
 
            // Check for ports
@@ -100,8 +100,8 @@ LogicalResult InnerSymbolTable::walkSymbols(Operation *op,
            if (auto mod = dyn_cast<FModuleLike>(curOp)) {
              for (const auto &p : llvm::enumerate(mod.getPorts()))
                if (auto sym = p.value().sym; sym && !sym.getValue().empty())
-                 if (failed(addSym(p.value().sym,
-                                   InnerSymTarget(p.index(), curOp))))
+                 if (failed(walkSym(p.value().sym,
+                                    InnerSymTarget(p.index(), curOp))))
                    return WalkResult::interrupt();
            }
            return WalkResult::advance();
