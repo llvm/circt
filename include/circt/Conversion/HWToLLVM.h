@@ -25,13 +25,16 @@ class LLVMTypeConverter;
 namespace circt {
 
 struct HWToLLVMEndianessConverter {
+  /// Convert an index into a HW ArrayType or StructType to LLVM Endianess.
   static uint32_t convertToLLVMEndianess(Type type, uint32_t index);
 
+  /// Get the index of a specific StructType field in the LLVM lowering of the
+  /// StructType
   static uint32_t llvmIndexOfStructField(hw::StructType type,
                                          StringRef fieldName);
 };
 
-/// Get the HW to LLVM type conversions
+/// Get the HW to LLVM type conversions.
 void populateHWToLLVMTypeConversions(mlir::LLVMTypeConverter &converter);
 
 /// Get the HW to LLVM conversion patterns.
