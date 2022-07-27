@@ -14,7 +14,7 @@ class Producer:
 
   @generator
   def construct(ports):
-    chan = esi.HostComms.FromHost(types.i32, "loopback_in")
+    chan = esi.HostComms.from_host(types.i32, "loopback_in")
     ports.int_out = chan
 
 
@@ -25,7 +25,7 @@ class Consumer:
 
   @generator
   def construct(ports):
-    esi.HostComms.ToHost(ports.int_in, "loopback_out")
+    esi.HostComms.to_host(ports.int_in, "loopback_out")
 
 
 @module
@@ -52,11 +52,11 @@ s.print()
 # CHECK:         esi.service.instance @HostComms impl as "cosim"(%clk, %rst) : (i1, i1) -> ()
 # CHECK:         msft.output
 # CHECK-LABEL: msft.module @Producer {} (%clk: i1) -> (int_out: !esi.channel<i32>) attributes {fileName = "Producer.sv"} {
-# CHECK:         [[R0:%.+]] = esi.service.req.to_client <@HostComms::@FromHost>(["loopback_in"]) : !esi.channel<i32>
+# CHECK:         [[R0:%.+]] = esi.service.req.to_client <@HostComms::@from_host>(["loopback_in"]) : !esi.channel<i32>
 # CHECK:         msft.output [[R0]] : !esi.channel<i32>
 # CHECK-LABEL: msft.module @Consumer {} (%clk: i1, %int_in: !esi.channel<i32>) attributes {fileName = "Consumer.sv"} {
-# CHECK:         esi.service.req.to_server %int_in -> <@HostComms::@ToHost>(["loopback_out"]) : !esi.channel<i32>
+# CHECK:         esi.service.req.to_server %int_in -> <@HostComms::@to_host>(["loopback_out"]) : !esi.channel<i32>
 # CHECK:         msft.output
 # CHECK-LABEL: esi.service.decl @HostComms {
-# CHECK:         esi.service.to_server @ToHost : !esi.channel<!esi.any>
-# CHECK:         esi.service.to_client @FromHost : !esi.channel<!esi.any>
+# CHECK:         esi.service.to_server @to_host : !esi.channel<!esi.any>
+# CHECK:         esi.service.to_client @from_host : !esi.channel<!esi.any>

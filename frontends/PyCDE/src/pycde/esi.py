@@ -12,20 +12,27 @@ FromServer = OutputChannel
 
 
 class ServiceDecl(_PyProxy):
+  """Declare an ESI service interface."""
 
   def __init__(self, cls: typing.Type):
     self.name = cls.__name__
     for (attr_name, attr) in cls.__dict__.items():
       if isinstance(attr, InputChannel):
-        setattr(self, attr_name, _RequestToServerConn(self, attr, attr_name))
+        setattr(self, attr_name, _RequestToServerConn(self, attr.type,
+                                                      attr_name))
       elif isinstance(attr, OutputChannel):
-        setattr(self, attr_name, _RequestToClientConn(self, attr, attr_name))
+        setattr(self, attr_name, _RequestToClientConn(self, attr.type,
+                                                      attr_name))
       elif isinstance(attr, (Input, Output)):
         raise TypeError(
             "Input and Output are not allowed in ESI service declarations. " +
             " Use InputChannel and OutputChannel instead.")
 
   def _materialize_service_decl(self) -> str:
+    """Create the ServiceDeclOp. We must do this lazily since this class gets
+    instantiated when the code is read, rather than during `System` generation
+    time. Return its symbol name."""
+
     from .system import System, _OpCache
     curr_sys: System = System.current()
     op_cache: _OpCache = curr_sys._op_cache
@@ -46,11 +53,14 @@ class ServiceDecl(_PyProxy):
 
 
 class _RequestConnection:
+  """Parent to 'request' proxy classes. Constructed as attributes on the
+  ServiceDecl class. Provides syntactic sugar for constructing service
+  connection requests."""
 
-  def __init__(self, decl: ServiceDecl, chan, attr_name: str):
+  def __init__(self, decl: ServiceDecl, type: PyCDEType, attr_name: str):
     self.decl = decl
     self._name = ir.StringAttr.get(attr_name)
-    self.type = chan.type
+    self.type = type
 
 
 class _RequestToServerConn(_RequestConnection):
@@ -76,8 +86,8 @@ class _RequestToClientConn(_RequestConnection):
 
 @ServiceDecl
 class HostComms:
-  ToHost = ToServer(types.any)
-  FromHost = FromServer(types.any)
+  to_host = ToServer(types.any)
+  from_host = FromServer(types.any)
 
 
 def Cosim(decl: ServiceDecl, clk, rst):
