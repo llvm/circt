@@ -23,4 +23,8 @@ def ESIAnyType : ESI_Type<"Any"> {
 
   let mnemonic = "any";
   let assemblyFormat = "";
+
+  let extraClassDeclaration = [{
+    static AnyType get(MLIRContext *context);
+  }];
 }

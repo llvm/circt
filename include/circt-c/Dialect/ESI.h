@@ -28,6 +28,9 @@ MLIR_CAPI_EXPORTED bool circtESITypeIsAChannelType(MlirType type);
 MLIR_CAPI_EXPORTED MlirType circtESIChannelTypeGet(MlirType inner);
 MLIR_CAPI_EXPORTED MlirType circtESIChannelGetInner(MlirType channelType);
 
+MLIR_CAPI_EXPORTED bool circtESITypeIsAnAnyType(MlirType type);
+MLIR_CAPI_EXPORTED MlirType circtESIAnyTypeGet(MlirContext);
+
 MLIR_CAPI_EXPORTED MlirOperation circtESIWrapModule(MlirOperation cModOp,
                                                     long numPorts,
                                                     const MlirStringRef *ports);
