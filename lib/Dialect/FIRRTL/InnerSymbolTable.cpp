@@ -75,8 +75,6 @@ LogicalResult InnerSymbolTable::walkSymbols(Operation *op,
 
   auto walkSyms = [&](InnerSymAttr symAttr,
                       const InnerSymTarget &baseTarget) -> LogicalResult {
-    if (!symAttr)
-      return success();
     assert(baseTarget.getField() == 0);
     for (const auto &symProp : symAttr.getProps()) {
       if (failed(walkSym(symProp.getName(),
@@ -91,9 +89,9 @@ LogicalResult InnerSymbolTable::walkSymbols(Operation *op,
   return success(
       !op->walk<mlir::WalkOrder::PreOrder>([&](Operation *curOp) -> WalkResult {
            if (auto symOp = dyn_cast<InnerSymbolOpInterface>(curOp))
-             if (failed(
-                     walkSyms(symOp.getInnerSymAttr(), InnerSymTarget(symOp))))
-               return WalkResult::interrupt();
+             if (auto symAttr = symOp.getInnerSymAttr())
+               if (failed(walkSyms(symAttr, InnerSymTarget(symOp))))
+                 return WalkResult::interrupt();
 
            // Check for ports
            // TODO: Add fields per port, once they work that way (use addSyms)
