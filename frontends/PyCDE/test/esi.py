@@ -46,18 +46,16 @@ s = pycde.System([Top], name="EsiSys")
 s.generate()
 s.print()
 
-# CHECK-LABEL: msft.module @Top {} (%clk: i1)
-# CHECK:         %Producer.const_out = msft.instance @Producer @Producer(%clk)  : (i1) -> !esi.channel<i32>
-# CHECK:         msft.instance @Consumer @Consumer(%clk, %Producer.const_out)  : (i1, !esi.channel<i32>) -> ()
+# CHECK-LABEL: msft.module @Top {} (%clk: i1, %rst: i1) attributes {fileName = "Top.sv"} {
+# CHECK:         %Producer.int_out = msft.instance @Producer @Producer(%clk)  : (i1) -> !esi.channel<i32>
+# CHECK:         msft.instance @Consumer @Consumer(%clk, %Producer.int_out)  : (i1, !esi.channel<i32>) -> ()
 # CHECK:         msft.output
-
-# CHECK-LABEL: msft.module @Producer {} (%clk: i1) -> (const_out: !esi.channel<i32>)
-# CHECK:         %c42_i32 = hw.constant 42 : i32
-# CHECK:         %true = hw.constant true
-# CHECK:         %chanOutput, %ready = esi.wrap.vr %c42_i32, %true : i32
-# CHECK:         msft.output %chanOutput : !esi.channel<i32>
-
-# CHECK-LABEL: msft.module @Consumer {} (%clk: i1, %int_in: !esi.channel<i32>)
-# CHECK:         %true = hw.constant true
-# CHECK:         %rawOutput, %valid = esi.unwrap.vr %int_in, %true : i32
+# CHECK-LABEL: msft.module @Producer {} (%clk: i1) -> (int_out: !esi.channel<i32>) attributes {fileName = "Producer.sv"} {
+# CHECK:         [[R0:%.+]] = esi.service.req.to_client <@HostComms::@FromHost>(["loopback_in"]) : !esi.channel<i32>
+# CHECK:         msft.output [[R0]] : !esi.channel<i32>
+# CHECK-LABEL: msft.module @Consumer {} (%clk: i1, %int_in: !esi.channel<i32>) attributes {fileName = "Consumer.sv"} {
+# CHECK:         esi.service.req.to_server %int_in -> <@HostComms::@ToHost>(["loopback_out"]) : !esi.channel<i32>
 # CHECK:         msft.output
+# CHECK-LABEL: esi.service.decl @HostComms {
+# CHECK:         esi.service.to_server @ToHost : !esi.channel<!esi.any>
+# CHECK:         esi.service.to_client @FromHost : !esi.channel<!esi.any>
