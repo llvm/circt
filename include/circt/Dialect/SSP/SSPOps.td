@@ -145,3 +145,73 @@ def OperatorTypeOp : SSPOp<"operator_type",
   let arguments = (ins SymbolNameAttr:$sym_name, OptionalAttr<ArrayAttr>:$properties);
   let assemblyFormat = "$sym_name custom<Properties>($properties) attr-dict";
 }
+
+def OperationOp : SSPOp<"operation",
+    [Symbol, HasParent<"DependenceGraphOp">,
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
+  let summary = "Vertex and incoming edges in the dependence graph.";
+  let description = [{
+    This MLIR operation represents an operation (in the terminology of CIRCT's
+    scheduling infra) in a scheduling problem, or in other words, a vertex in
+    the surrounding instance's dependence graph. In addition, it also encodes
+    the operation's incoming dependences. In order to faithfully reproduce the
+    internal modeling in the scheduling infrastructure, these dependence edges
+    are either encoded as MLIR operands (def-use dependences) or symbol
+    references (auxiliary dependences). To that end, `OperationOp`s can
+    optionally be named, and accept/produce an arbitrary number of
+    operands/results. The operation and the incoming dependences can carry
+    properties.
+
+    The `linkedOperatorType` property in the root `Problem` class is central to
+    the problem models, because it links operations to their properties in the
+    target IR. Therefore, the referenced operator type symbol is parsed/printed
+    right after the operation keyword in the custom assembly syntax.
+
+    **Examples**
+    ```mlir
+    // unnamed, only def-use dependences
+    %2 = operation<@Add>(%0, %1)
+
+    // unnamed, multiple results
+    %5:2 = operation<@Div>(%3, %4) // multiple results
+    
+    // named, mix of def-use and auxiliary dependences
+    operation<@MemPort> @store_A(%2, @store_B, @load_A)
+    
+    // dependence properties
+    operation<@Barrier>(%2 [dist<1>], %5#1, @store_A [dist<3>])
+    ```
+  }];
+
+  let arguments = (ins Variadic<NoneType>:$operands,
+                       OptionalAttr<SymbolNameAttr>:$sym_name,
+                       OptionalAttr<DependenceArrayAttr>:$dependences,
+                       OptionalAttr<ArrayAttr>:$properties);
+  let results = (outs Variadic<NoneType>:$results);
+
+  let hasCustomAssemblyFormat = true;
+  let hasVerifier = true;
+
+  let extraClassDeclaration = [{
+    // SymbolUserOpInterface
+    static bool isOptionalSymbol() { return true; }
+  }];
+
+  let skipDefaultBuilders = true;
+  let builders = [
+    OpBuilder<(ins "unsigned":$numResults,
+                   "::mlir::ValueRange":$operands,
+                   CArg<"::mlir::StringAttr", "::mlir::StringAttr()">:$sym_name,
+                   CArg<"::mlir::ArrayAttr", "::mlir::ArrayAttr()">:$dependences,
+                   CArg<"::mlir::ArrayAttr", "::mlir::ArrayAttr()">:$properties), [{
+      $_state.addTypes(::llvm::SmallVector<::mlir::Type>(numResults, $_builder.getNoneType()));
+      $_state.addOperands(operands);
+      if (sym_name)
+        $_state.addAttribute(::mlir::SymbolTable::getSymbolAttrName(), sym_name);
+      if (dependences)
+        $_state.addAttribute($_builder.getStringAttr("dependences"), dependences);
+      if (properties)
+        $_state.addAttribute($_builder.getStringAttr("properties"), properties);
+    }]>
+  ];
+}
