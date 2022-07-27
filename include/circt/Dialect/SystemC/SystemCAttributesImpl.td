@@ -32,6 +32,7 @@ def PortDirection : I32EnumAttr<
 def PortDirectionsAttr : SystemCAttrDef<"PortDirections"> {
   let summary = "Port directions attribute";
   let description = [{
+    An attribute to store an array of PortDirection.
   }];
 
   let mnemonic = "port_directions";

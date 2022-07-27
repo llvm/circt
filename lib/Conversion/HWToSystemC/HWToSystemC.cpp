@@ -40,15 +40,18 @@ struct ConvertHWModule : public OpConversionPattern<HWModuleOp> {
   LogicalResult
   matchAndRewrite(HWModuleOp module, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
+    // Parameterized modules are supported yet.
+    if (module.getParameters().size() > 0)
+      return emitError(module->getLoc(), "module parameters not supported yet");
+
     // Collect the HW module's port types.
     FunctionType moduleType = module.getFunctionType();
-    TypeRange moduleInputs = moduleType.getInputs();
     TypeRange moduleOutputs = moduleType.getResults();
 
     // SystemC module port types are all expressed as block arguments to the op,
     // so collect all of the types and add them as arguments to the SystemC
     // module.
-    SmallVector<Type, 4> portTypes(moduleInputs);
+    SmallVector<Type, 4> portTypes((TypeRange)moduleType.getInputs());
     portTypes.append(moduleOutputs.begin(), moduleOutputs.end());
 
     // Collect all the port directions.
@@ -59,7 +62,7 @@ struct ConvertHWModule : public OpConversionPattern<HWModuleOp> {
       else if (port.isOutput())
         directions.push_back(systemc::PortDirection::Output);
       else
-        directions.push_back(systemc::PortDirection::InOut);
+        return emitError(module->getLoc(), "inout arguments not supported yet");
     }
     PortDirectionsAttr portDirections =
         PortDirectionsAttr::get(rewriter.getContext(), directions);
@@ -71,8 +74,7 @@ struct ConvertHWModule : public OpConversionPattern<HWModuleOp> {
     portNames.append(args.begin(), args.end());
     portNames.append(results.begin(), results.end());
 
-    // Create the SystemC module. Note that no parameterized modules are
-    // supported yet.
+    // Create the SystemC module.
     auto scModule = rewriter.create<SCModuleOp>(
         module.getLoc(), portDirections,
         ArrayAttr::get(rewriter.getContext(), portNames));
