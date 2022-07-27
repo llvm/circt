@@ -45,7 +45,7 @@ class System:
   ]
 
   PASSES = """
-    msft-lower-constructs, msft-lower-instances, {partition}
+    lower-hwarith-to-hw, msft-lower-constructs, msft-lower-instances, {partition}
     lower-msft-to-hw{{verilog-file={verilog_file}}},
     lower-esi-to-physical, lower-esi-ports, lower-esi-to-hw, convert-fsm-to-sv,
     lower-seq-to-sv, hw.module(prettify-verilog), hw.module(hw-cleanup),
