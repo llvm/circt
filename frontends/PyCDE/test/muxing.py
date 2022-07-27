@@ -1,8 +1,8 @@
 # RUN: %PYTHON% py-split-input-file.py %s | FileCheck %s
 
-from pycde import System, generator, dim, Input, Output, Value, types
+from pycde import generator, dim, Clock, Input, Output, Value, types
+from pycde.constructs import Mux
 from pycde.testing import unittestmodule
-import sys
 
 
 def array_from_tuple(*input):
@@ -36,7 +36,7 @@ def array_from_tuple(*input):
 @unittestmodule()
 class ComplexMux:
 
-  Clk = Input(dim(1))
+  Clk = Clock()
   In = Input(dim(3, 4, 5))
   Sel = Input(dim(1))
   Out = Output(dim(3, 4))
@@ -46,9 +46,7 @@ class ComplexMux:
 
   @generator
   def create(ports):
-    clk = ports.Clk
-    select_from = Value([ports.In[3].reg(clk).reg(clk, cycles=2), ports.In[1]])
-    ports.Out = select_from[ports.Sel]
+    ports.Out = Mux(ports.Sel, ports.In[3].reg().reg(cycles=2), ports.In[1])
 
     ports.OutArr = array_from_tuple(ports.In[0], ports.In[1])
     ports.OutSlice = ports.In[0:3]
