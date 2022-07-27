@@ -261,21 +261,23 @@ class BitVectorValue(Value):
   #  === Casting ===
 
   def _exec_cast(self, targetValueType, type_getter, width: int = None):
+
     from .dialects import hwarith
-    if type(self) is targetValueType:
-      return self
     if width is None:
       width = self.type.width
+
+    if type(self) is targetValueType and width == self.type.width:
+      return self
     return hwarith.CastOp(self.value, type_getter(width))
 
-  def asInt(self, width: int = None):
+  def as_int(self, width: int = None):
     """
     Returns this value as a signless integer. If 'width' is provided, this value
     will be truncated to that width.
     """
     return self._exec_cast(BitVectorValue, ir.IntegerType.get_signless, width)
 
-  def asSInt(self, width: int = None):
+  def as_sint(self, width: int = None):
     """
     Returns this value as a a signed integer. If 'width' is provided, this value
     will be truncated or sign-extended to that width.
@@ -283,7 +285,7 @@ class BitVectorValue(Value):
     return self._exec_cast(SignedBitVectorValue, ir.IntegerType.get_signed,
                            width)
 
-  def asUInt(self, width: int = None):
+  def as_uint(self, width: int = None):
     """
     Returns this value as an unsigned integer. If 'width' is provided, this value
     will be truncated or zero-padded to that width.
@@ -295,35 +297,58 @@ class BitVectorValue(Value):
 
   # Signless operations. These will all return signless values - a user is
   # expected to reapply signedness semantics if needed.
+
+  # Generalized function for executing signless binary operations. Performs
+  # a check to ensure that the operands have signless semantics and are of
+  # identical width, and then calls the provided operator.
+  def __exec_signless_binop__(self, other, op):
+    w = max(self.type.width, other.type.width)
+    return op(self.as_int(w), other.as_int(w))
+
+  def __exec_signless_binop_nocast__(self, other, op, op_symbol: str):
+    signednessOperand = None
+    if type(self) is not BitVectorValue:
+      signednessOperand = "LHS"
+    elif type(other) is not BitVectorValue:
+      signednessOperand = "RHS"
+
+    if signednessOperand is not None:
+      raise TypeError(
+          f"Operator '{op_symbol}' requires {signednessOperand} to be cast .as_int()."
+      )
+
+    w = max(self.type.width, other.type.width)
+    return op(self.as_int(w), other.as_int(w))
+
   def __eq__(self, other):
     from .dialects import comb
-    return comb.EqOp(self.asInt(), other.asInt())
+    return self.__exec_signless_binop_nocast__(other, comb.EqOp, "==")
 
   def __ne__(self, other):
     from .dialects import comb
-    return comb.NeOp(self.asInt(), other.asInt())
+    return self.__exec_signless_binop_nocast__(other, comb.NeOp, "!=")
 
   def __and__(self, other):
     from .dialects import comb
-    return comb.AndOp(self.asInt(), other.asInt())
+    return self.__exec_signless_binop__(other, comb.AndOp)
 
   def __or__(self, other):
     from .dialects import comb
-    return comb.OrOp(self.asInt(), other.asInt())
+    return self.__exec_signless_binop__(other, comb.OrOp)
 
   def __xor__(self, other):
     from .dialects import comb
-    return comb.XorOp(self.asInt(), other.asInt())
+    return self.__exec_signless_binop__(other, comb.XorOp)
 
   def __invert__(self):
     from .dialects import comb
     from .pycde_types import types
-    return self.asInt() ^ types.int(self.type.width)(-1)
+    return self.as_int() ^ types.int(self.type.width)(-1)
 
   # Generalized function for executing sign-aware binary operations. Performs
   # a check to ensure that the operands have signedness semantics, and then calls
   # the provided operator.
-  def __exec_signedness_binop__(self, other, op, op_symbol):
+  def __exec_signedness_binop__(self, other, op, op_symbol: str):
     signlessOperand = None
     if type(self) is BitVectorValue:
       signlessOperand = "LHS"
@@ -332,7 +357,7 @@ class BitVectorValue(Value):
 
     if signlessOperand is not None:
       raise TypeError(
-          f"Operator '{op_symbol}' is not supported on signless values. {signlessOperand} operand should be cast .asSInt()/.asUInt()."
+          f"Operator '{op_symbol}' is not supported on signless values. {signlessOperand} operand should be cast .as_sint()/.as_uint()."
       )
 
     return op(self, other)
@@ -377,7 +402,7 @@ class SignedBitVectorValue(WidthExtendingBitVectorValue):
   def __neg__(self):
     from .dialects import comb
     from .pycde_types import types
-    return self * types.int(self.type.width)(-1).asSInt()
+    return self * types.int(self.type.width)(-1).as_sint()
 
 
 class ListValue(Value):

@@ -76,7 +76,7 @@ class OperatorError:
 
   @generator
   def build(ports):
-    # CHECK: Operator '+' is not supported on signless values. LHS operand should be cast .asSInt()/.asUInt().
+    # CHECK: Operator '+' is not supported on signless values. LHS operand should be cast .as_sint()/.as_uint().
     ports.a + ports.b
 
 
@@ -90,5 +90,19 @@ class OperatorError2:
 
   @generator
   def build(ports):
-    # CHECK: Operator '+' is not supported on signless values. RHS operand should be cast .asSInt()/.asUInt().
+    # CHECK: Operator '+' is not supported on signless values. RHS operand should be cast .as_sint()/.as_uint().
     ports.b + ports.a
+
+
+# -----
+
+
+@unittestmodule()
+class OperatorError2:
+  a = Input(types.i32)
+  b = Input(types.si32)
+
+  @generator
+  def build(ports):
+    # CHECK: Operator '==' requires LHS to be cast .as_int().
+    ports.b == ports.a

@@ -72,7 +72,7 @@ class InfixLogic:
 # CHECK-NEXT:    msft.output
 @unittestmodule(run_passes=False)
 class InfixComparison:
-  in0 = Input(types.si16)
+  in0 = Input(types.i16)
   in1 = Input(types.i16)
 
   @generator
@@ -98,7 +98,7 @@ class Multiple:
 
   @generator
   def construct(ports):
-    ports.out0 = (ports.in0 + ports.in1 + ports.in0 + ports.in1).asInt(16)
+    ports.out0 = (ports.in0 + ports.in1 + ports.in0 + ports.in1).as_int(16)
 
 
 # -----
@@ -111,6 +111,7 @@ class Multiple:
 # CHECK-NEXT:    %3 = hwarith.cast %in0 : (i16) -> si8
 # CHECK-NEXT:    %4 = hwarith.cast %in0 : (i16) -> ui8
 # CHECK-NEXT:    %5 = hwarith.cast %0 : (si16) -> i8
+# CHECK-NEXT:    %6 = hwarith.cast %0 : (si16) -> si24
 # CHECK-NEXT:    msft.output
 @unittestmodule(run_passes=False)
 class Casting:
@@ -118,12 +119,13 @@ class Casting:
 
   @generator
   def construct(ports):
-    in0s = ports.in0.asSInt()
-    in0u = ports.in0.asUInt()
-    in0s_i = in0s.asInt()
-    in0s8 = ports.in0.asSInt(8)
-    in0u8 = ports.in0.asUInt(8)
-    in0s_i8 = in0s.asInt(8)
+    in0s = ports.in0.as_sint()
+    in0u = ports.in0.as_uint()
+    in0s_i = in0s.as_int()
+    in0s8 = ports.in0.as_sint(8)
+    in0u8 = ports.in0.as_uint(8)
+    in0s_i8 = in0s.as_int(8)
+    in0s_s24 = in0s.as_sint(24)
 
 
 # -----
@@ -145,4 +147,4 @@ class Lowering:
 
   @generator
   def construct(ports):
-    ports.out0 = (ports.in0.asSInt() + ports.in1.asSInt()).asInt(16)
+    ports.out0 = (ports.in0.as_sint() + ports.in1.as_sint()).as_int(16)
