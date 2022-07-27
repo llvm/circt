@@ -7,7 +7,6 @@ import inspect
 def unittestmodule(generate=True,
                    print=True,
                    run_passes=False,
-                   print_after_passes=False,
                    emit_outputs=False,
                    **kwargs):
   """
@@ -35,8 +34,6 @@ def unittestmodule(generate=True,
         sys.print()
       if run_passes:
         sys.run_passes()
-      if print_after_passes:
-        sys.print()
       if emit_outputs:
         sys.emit_outputs()
 
