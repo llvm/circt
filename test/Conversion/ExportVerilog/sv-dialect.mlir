@@ -1472,8 +1472,9 @@ hw.module @ReuseExistingInOut(%clock: i1, %a: i1) -> (out1: i1) {
 
 // CHECK-LABEL: ProhibitReuseOfExistingInOut
 hw.module @ProhibitReuseOfExistingInOut(%a: i1) -> (out1: i1) {
-  // CHECK:      wire [[GEN:.+]] = a | a;
-  // CHECK-NEXT: `ifdef FOO
+  // CHECK-DAG:   wire [[GEN:.+]] = a | a;
+  // CHECK-DAG:   wire mywire;
+  // CHECK:       `ifdef FOO
   // CHECK-NEXT:    assign mywire = [[GEN]];
   // CHECK-NEXT: `endif
   // CHECK-NEXT: assign out1 = [[GEN]];

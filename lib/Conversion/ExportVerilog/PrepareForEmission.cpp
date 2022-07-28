@@ -476,7 +476,7 @@ static bool reuseExistingInOut(Operation *op) {
       // If the assign is not at the top level, it might be conditionally
       // executed. So bail out.
       if (!isa<HWModuleOp>(assignUse->getParentOp()))
-        return;
+        return false;
 
       // Remember this assign for later.
       assign = assignUse;

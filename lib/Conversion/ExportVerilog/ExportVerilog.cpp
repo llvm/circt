@@ -4060,6 +4060,7 @@ void StmtEmitter::collectNamesEmitDecls(Block &block) {
     maxTypeWidth += 1;
 
   // In the new emission mode, we don't do forward declarations.
+  // TODO: Remove the below once we enabled the new emission mode by default.
   if (state.options.spillWiresAtPrepare)
     return;
 
