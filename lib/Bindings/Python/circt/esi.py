@@ -78,8 +78,8 @@ class System(CppSystem):
     if send is None:
       send = NullSourceOp(ChannelType.get(
           mlir.ir.IntegerType.get_signless(1))).out
-    ep = CosimEndpoint(recv_type, clk, rst, send,
-                       mlir.ir.Attribute.parse(str(id)))
+    ep = CosimEndpointOp(recv_type, clk, rst, send,
+                         mlir.ir.Attribute.parse(str(id)))
     ep.operation.attributes["name"] = mlir.ir.StringAttr.get(name)
     return ep
 

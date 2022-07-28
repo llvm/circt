@@ -10,7 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-def ChannelBuffer : ESI_Abstract_Op<"buffer", [
+def ChannelBufferOp : ESI_Abstract_Op<"buffer", [
     NoSideEffect,
     DeclareOpInterfaceMethods<ChannelOpInterface>
   ]> {
@@ -49,7 +49,7 @@ def ChannelBuffer : ESI_Abstract_Op<"buffer", [
   let hasCustomAssemblyFormat = 1;
 }
 
-def PipelineStage : ESI_Physical_Op<"stage", [
+def PipelineStageOp : ESI_Physical_Op<"stage", [
     NoSideEffect,
     DeclareOpInterfaceMethods<ChannelOpInterface>
   ]> {
@@ -66,7 +66,7 @@ def PipelineStage : ESI_Physical_Op<"stage", [
   let hasCustomAssemblyFormat = 1;
 }
 
-def CosimEndpoint : ESI_Physical_Op<"cosim", []> {
+def CosimEndpointOp : ESI_Physical_Op<"cosim", []> {
   let summary = "Co-simulation endpoint";
   let description = [{
     A co-simulation endpoint is a connection from the simulation to some
@@ -94,14 +94,14 @@ def CosimEndpoint : ESI_Physical_Op<"cosim", []> {
   }];
 }
 
-def RtlBitArray : Type<CPred<"$_self.isa<::circt::hw::ArrayType>()"
+def RtlBitArrayType : Type<CPred<"$_self.isa<::circt::hw::ArrayType>()"
  " && $_self.cast<::circt::hw::ArrayType>().getElementType() =="
  "   ::mlir::IntegerType::get($_self.getContext(), 1)">, "an HW bit array">;
 
-def CapnpDecode : ESI_Physical_Op<"decode.capnp", [NoSideEffect]> {
+def CapnpDecodeOp : ESI_Physical_Op<"decode.capnp", [NoSideEffect]> {
   let summary = "Translate bits in Cap'nProto messages to HW typed data";
 
-  let arguments = (ins I1:$clk, I1:$valid, RtlBitArray:$capnpBits);
+  let arguments = (ins I1:$clk, I1:$valid, RtlBitArrayType:$capnpBits);
   let results = (outs AnyType:$decodedData);
 
   let assemblyFormat = [{
@@ -110,11 +110,11 @@ def CapnpDecode : ESI_Physical_Op<"decode.capnp", [NoSideEffect]> {
   }];
 }
 
-def CapnpEncode : ESI_Physical_Op<"encode.capnp", [NoSideEffect]> {
+def CapnpEncodeOp : ESI_Physical_Op<"encode.capnp", [NoSideEffect]> {
   let summary = "Translate HW typed data to Cap'nProto";
 
   let arguments = (ins I1:$clk, I1:$valid, AnyType:$dataToEncode);
-  let results = (outs RtlBitArray:$capnpBits);
+  let results = (outs RtlBitArrayType:$capnpBits);
 
   let assemblyFormat = [{
     $clk $valid $dataToEncode attr-dict `:` qualified(type($dataToEncode))

@@ -19,7 +19,7 @@ def ChannelOpInterface : OpInterface<"ChannelOpInterface"> {
   let methods = [
     InterfaceMethod<
       [{"Returns the channel type of this operation."}],
-      "circt::esi::ChannelPort", "channelType"
+      "circt::esi::ChannelType", "channelType"
     >,
     InterfaceMethod<
         "Returns true if this channel carries data.",

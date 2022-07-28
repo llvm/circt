@@ -49,7 +49,7 @@ LogicalResult ServiceGeneratorDispatcher::generate(ServiceImplementReqOp req) {
 }
 
 /// The generator for the "cosim" impl_type.
-static LogicalResult instantiateCosimEndpoints(ServiceImplementReqOp req) {
+static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp req) {
   auto *ctxt = req.getContext();
   OpBuilder b(req);
   Block *portReqs = &req.portReqs().getBlocks().front();
@@ -84,12 +84,12 @@ static LogicalResult instantiateCosimEndpoints(ServiceImplementReqOp req) {
   // Create Cosim endpoints for the incoming data requests.
   unsigned clientReqIdx = 0;
   for (auto toClientReq :
-       llvm::make_early_inc_range(req.getOps<RequestToClientConnection>())) {
+       llvm::make_early_inc_range(req.getOps<RequestToClientConnectionOp>())) {
     auto cosimIn = b.create<NullSourceOp>(
-        toClientReq.getLoc(), ChannelPort::get(ctxt, b.getI1Type()));
-    auto cosim = b.create<CosimEndpoint>(toClientReq.getLoc(),
-                                         toClientReq.receiving().getType(), clk,
-                                         rst, cosimIn, ++epIdCtr);
+        toClientReq.getLoc(), ChannelType::get(ctxt, b.getI1Type()));
+    auto cosim = b.create<CosimEndpointOp>(toClientReq.getLoc(),
+                                           toClientReq.receiving().getType(),
+                                           clk, rst, cosimIn, ++epIdCtr);
     cosim->setAttr("name", toStringAttr(toClientReq.clientNamePath()));
     req.getResult(clientReqIdx).replaceAllUsesWith(cosim.recv());
     toClientReq.erase();
@@ -104,9 +104,9 @@ static LogicalResult instantiateCosimEndpoints(ServiceImplementReqOp req) {
 
   // Create output Cosim endpoints.
   for (auto toServerReq :
-       llvm::make_early_inc_range(req.getOps<RequestToServerConnection>())) {
-    auto cosim = b.create<CosimEndpoint>(
-        toServerReq.getLoc(), ChannelPort::get(ctxt, b.getI1Type()), clk, rst,
+       llvm::make_early_inc_range(req.getOps<RequestToServerConnectionOp>())) {
+    auto cosim = b.create<CosimEndpointOp>(
+        toServerReq.getLoc(), ChannelType::get(ctxt, b.getI1Type()), clk, rst,
         argMap.lookup(toServerReq.sending()), ++epIdCtr);
     cosim->setAttr("name", toStringAttr(toServerReq.clientNamePath()));
     toServerReq.erase();
@@ -120,7 +120,7 @@ static LogicalResult instantiateCosimEndpoints(ServiceImplementReqOp req) {
 static DenseMap<Attribute, ServiceGeneratorDispatcher::ServiceGeneratorFunc>
 DefaultTableCreator(MLIRContext *ctxt) {
   DenseMap<Attribute, ServiceGeneratorDispatcher::ServiceGeneratorFunc> lut;
-  lut[StringAttr::get(ctxt, "cosim")] = instantiateCosimEndpoints;
+  lut[StringAttr::get(ctxt, "cosim")] = instantiateCosimEndpointOps;
   return lut;
 }
 
@@ -146,8 +146,8 @@ struct ESIConnectServicesPass
   /// module specified. Create and connect up ports to tunnel the ESI channels
   /// through.
   LogicalResult surfaceReqs(hw::HWMutableModuleLike,
-                            ArrayRef<RequestToClientConnection>,
-                            ArrayRef<RequestToServerConnection>);
+                            ArrayRef<RequestToClientConnectionOp>,
+                            ArrayRef<RequestToServerConnectionOp>);
 
   /// For any service which is "local" (provides the requested service) in a
   /// module, replace it with a ServiceImplementOp. Said op is to be replaced
@@ -210,12 +210,12 @@ LogicalResult ESIConnectServicesPass::process(hw::HWMutableModuleLike mod) {
 
   // Find all of the "local" requests.
   mod.walk([&](Operation *op) {
-    if (auto req = dyn_cast<RequestToClientConnection>(op)) {
+    if (auto req = dyn_cast<RequestToClientConnectionOp>(op)) {
       auto service = req.servicePortAttr().getModuleRef();
       auto implOpF = localImplReqs.find(service);
       if (implOpF != localImplReqs.end())
         req->moveBefore(implOpF->second, implOpF->second->end());
-    } else if (auto req = dyn_cast<RequestToServerConnection>(op)) {
+    } else if (auto req = dyn_cast<RequestToServerConnectionOp>(op)) {
       auto service = req.servicePortAttr().getModuleRef();
       auto implOpF = localImplReqs.find(service);
       if (implOpF != localImplReqs.end())
@@ -233,15 +233,15 @@ LogicalResult ESIConnectServicesPass::process(hw::HWMutableModuleLike mod) {
   }
 
   // Identify the non-local reqs which need to be surfaced from this module.
-  SmallVector<RequestToClientConnection, 4> nonLocalToClientReqs;
-  SmallVector<RequestToServerConnection, 4> nonLocalToServerReqs;
+  SmallVector<RequestToClientConnectionOp, 4> nonLocalToClientReqs;
+  SmallVector<RequestToServerConnectionOp, 4> nonLocalToServerReqs;
   mod.walk([&](Operation *op) {
-    if (auto req = dyn_cast<RequestToClientConnection>(op)) {
+    if (auto req = dyn_cast<RequestToClientConnectionOp>(op)) {
       auto service = req.servicePortAttr().getModuleRef();
       auto implOpF = localImplReqs.find(service);
       if (implOpF == localImplReqs.end())
         nonLocalToClientReqs.push_back(req);
-    } else if (auto req = dyn_cast<RequestToServerConnection>(op)) {
+    } else if (auto req = dyn_cast<RequestToServerConnectionOp>(op)) {
       auto service = req.servicePortAttr().getModuleRef();
       auto implOpF = localImplReqs.find(service);
       if (implOpF == localImplReqs.end())
@@ -263,14 +263,14 @@ LogicalResult ESIConnectServicesPass::replaceInst(ServiceInstanceOp instOp,
   // + the to_client types.
   SmallVector<Type, 8> resultTypes(instOp.getResultTypes().begin(),
                                    instOp.getResultTypes().end());
-  for (auto toClient : portReqs->getOps<RequestToClientConnection>())
+  for (auto toClient : portReqs->getOps<RequestToClientConnectionOp>())
     resultTypes.push_back(toClient.receiving().getType());
 
   // Compute the operands for the new op -- the instance op's operands + the
   // to_server types. Reassign the reqs' operand to the new blocks arguments.
   SmallVector<Value, 8> operands(instOp.getOperands().begin(),
                                  instOp.getOperands().end());
-  for (auto toServer : portReqs->getOps<RequestToServerConnection>()) {
+  for (auto toServer : portReqs->getOps<RequestToServerConnectionOp>()) {
     Value sending = toServer.sending();
     operands.push_back(sending);
     toServer.sendingMutable().assign(
@@ -289,7 +289,8 @@ LogicalResult ESIConnectServicesPass::replaceInst(ServiceInstanceOp instOp,
   for (auto [n, o] : llvm::zip(implOp.getResults(), instOp.getResults()))
     o.replaceAllUsesWith(n);
   unsigned instOpNumResults = instOp.getNumResults();
-  for (auto e : llvm::enumerate(portReqs->getOps<RequestToClientConnection>()))
+  for (auto e :
+       llvm::enumerate(portReqs->getOps<RequestToClientConnectionOp>()))
     e.value().receiving().replaceAllUsesWith(
         implOp.getResult(e.index() + instOpNumResults));
 
@@ -303,8 +304,8 @@ LogicalResult ESIConnectServicesPass::replaceInst(ServiceInstanceOp instOp,
 
 LogicalResult ESIConnectServicesPass::surfaceReqs(
     hw::HWMutableModuleLike mod,
-    ArrayRef<RequestToClientConnection> toClientReqs,
-    ArrayRef<RequestToServerConnection> toServerReqs) {
+    ArrayRef<RequestToClientConnectionOp> toClientReqs,
+    ArrayRef<RequestToServerConnectionOp> toServerReqs) {
   auto ctxt = mod.getContext();
   Block &modBlock = mod->getRegion(0).front();
   Operation *modTerminator = modBlock.getTerminator();
@@ -380,7 +381,7 @@ LogicalResult ESIConnectServicesPass::surfaceReqs(
     // Add new inputs for the new to_client requests and clone the request
     // into the module containing `inst`.
     for (auto [toClient, newPort] : llvm::zip(toClientReqs, newInputs)) {
-      auto instToClient = cast<RequestToClientConnection>(b.clone(*toClient));
+      auto instToClient = cast<RequestToClientConnectionOp>(b.clone(*toClient));
       instToClient.clientNamePathAttr(
           prependNamePart(instToClient.clientNamePath(), inst.instanceName()));
       newOperands.push_back(instToClient.receiving());
@@ -415,7 +416,7 @@ LogicalResult ESIConnectServicesPass::surfaceReqs(
     // Clone the to_server requests and wire them up to the new instance.
     outputCounter = origNumOutputs;
     for (auto [toServer, newPort] : llvm::zip(toServerReqs, newOutputs)) {
-      auto instToServer = cast<RequestToServerConnection>(b.clone(*toServer));
+      auto instToServer = cast<RequestToServerConnectionOp>(b.clone(*toServer));
       instToServer.clientNamePathAttr(
           prependNamePart(instToServer.clientNamePath(), inst.instanceName()));
       instToServer->setOperand(0, newHWInst->getResult(outputCounter++));
