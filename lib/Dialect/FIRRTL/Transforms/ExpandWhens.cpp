@@ -127,8 +127,8 @@ public:
     if (auto bits = dyn_cast<BitsPrimOp>(dest.getDefiningOp())) {
       int w = bits.getInput().getType().dyn_cast<IntType>().getWidth().getValue();
       auto it = driverMap.find(getFieldRefFromValue(bits.getInput()));
-      ImplicitLocOpBuilder b(bits.getLoc(), bits.getContext());
-      b.setInsertionPoint(bits);
+      ImplicitLocOpBuilder b(connection.getLoc(), connection.getContext());
+      b.setInsertionPointAfter(connection);
       Value xprev;
       if (it == driverMap.end() || !it.base()->second) {
         xprev = b.create<InvalidValueOp>(bits.getInput().getType());
