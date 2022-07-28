@@ -991,3 +991,26 @@ firrtl.circuit "Bar" {
     firrtl.strictconnect %a, %b : !firrtl.uint<1>
   }
 }
+
+// -----
+// Reference port cannot be reused
+
+firrtl.circuit "ForwardToInstance2x" {
+  firrtl.module @Bar2(out %_a: !firrtl.ref<uint<1>>) {
+    %zero = firrtl.constant 0 : !firrtl.uint<1>
+    firrtl.ref.send %_a, %zero : !firrtl.ref<uint<1>>
+  }
+  firrtl.module @Bar(out %_a: !firrtl.ref<uint<1>>) {
+    %x = firrtl.instance x @Bar2(out _a: !firrtl.ref<uint<1>>)
+    %y = firrtl.instance y @Bar2(out _a: !firrtl.ref<uint<1>>)
+    // expected-error @+1 {{connect operands of Ref type cannot be reused}}
+    firrtl.strictconnect %_a, %x : !firrtl.ref<uint<1>>
+    firrtl.strictconnect %_a, %y : !firrtl.ref<uint<1>>
+  }
+  firrtl.module @ForwardToInstance2x() {
+    %bar_a = firrtl.instance bar @Bar(out _a: !firrtl.ref<uint<1>>)
+    %a = firrtl.wire : !firrtl.uint<1>
+    %0 = firrtl.ref.resolve %bar_a : !firrtl.ref<uint<1>>
+    firrtl.strictconnect %a, %0 : !firrtl.uint<1>
+  }
+}
