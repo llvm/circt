@@ -96,11 +96,12 @@ LogicalResult InnerSymbolTable::walkSymbols(Operation *op,
            // Check for ports
            // TODO: Add fields per port, once they work that way (use addSyms)
            if (auto mod = dyn_cast<FModuleLike>(curOp)) {
-             for (const auto &p : llvm::enumerate(mod.getPorts()))
-               if (auto sym = p.value().sym; sym && !sym.getValue().empty())
-                 if (failed(walkSym(p.value().sym,
-                                    InnerSymTarget(p.index(), curOp))))
+             for (size_t i = 0, e = mod.getNumPorts(); i < e; ++i) {
+               auto sym = mod.getPortSymbolAttr(i);
+               if (sym && !sym.getValue().empty())
+                 if (failed(walkSym(sym, InnerSymTarget(i, curOp))))
                    return WalkResult::interrupt();
+             }
            }
            return WalkResult::advance();
          }).wasInterrupted());
