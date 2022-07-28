@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/SystemC/SystemCOps.h"
+#include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/HW/ModuleImplementation.h"
 #include "mlir/IR/FunctionImplementation.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -321,6 +322,90 @@ void SCFuncOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 LogicalResult SCFuncOp::verify() {
   if (getBody().getNumArguments() != 0)
     return emitOpError("must not have any arguments");
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// InstanceDeclOp
+//===----------------------------------------------------------------------===//
+
+void InstanceDeclOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getInstanceHandle(), getName());
+}
+
+Operation *InstanceDeclOp::getReferencedModule(const hw::HWSymbolCache *cache) {
+  if (cache)
+    if (auto *result = cache->getDefinition(getModuleNameAttr()))
+      return result;
+
+  auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
+  return topLevelModuleOp.lookupSymbol(getModuleName());
+}
+
+Operation *InstanceDeclOp::getReferencedModule() {
+  return getReferencedModule(/*cache=*/nullptr);
+}
+
+LogicalResult
+InstanceDeclOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto *module =
+      symbolTable.lookupNearestSymbolFrom(*this, getModuleNameAttr());
+  if (module == nullptr)
+    return emitError("cannot find module definition '")
+           << getModuleName() << "'";
+
+  auto emitError = [&](const std::function<void(InFlightDiagnostic & diag)> &fn)
+      -> LogicalResult {
+    auto diag = emitOpError();
+    fn(diag);
+    diag.attachNote(module->getLoc()) << "module declared here";
+    return failure();
+  };
+
+  // It must be a systemc module.
+  if (!isa<SCModuleOp>(module))
+    return emitError([&](auto &diag) {
+      diag << "symbol reference '" << getModuleName()
+           << "' isn't a systemc module";
+    });
+
+  auto scModule = cast<SCModuleOp>(module);
+
+  // Check that the module name of the symbol and instance type match.
+  if (scModule.getModuleName() != getInstanceType().getModuleName())
+    return emitError([&](auto &diag) {
+      diag << "module names must match; expected '" << scModule.getModuleName()
+           << "' but got '" << getInstanceType().getModuleName().getValue()
+           << "'";
+    });
+
+  // Check that port types and names are consistent with the referenced module.
+  ArrayRef<ModuleType::PortInfo> ports = getInstanceType().getPorts();
+  ArrayAttr modArgNames = scModule.getPortNames();
+  auto numPorts = ports.size();
+  auto expectedPortTypes = scModule.getArgumentTypes();
+
+  if (expectedPortTypes.size() != numPorts)
+    return emitError([&](auto &diag) {
+      diag << "has a wrong number of ports; expected "
+           << expectedPortTypes.size() << " but got " << numPorts;
+    });
+
+  for (size_t i = 0; i != numPorts; ++i) {
+    if (ports[i].type != expectedPortTypes[i]) {
+      return emitError([&](auto &diag) {
+        diag << "port type #" << i << " must be " << expectedPortTypes[i]
+             << ", but got " << ports[i].type;
+      });
+    }
+
+    if (ports[i].name != modArgNames[i])
+      return emitError([&](auto &diag) {
+        diag << "port name #" << i << " must be " << modArgNames[i]
+             << ", but got " << ports[i].name;
+      });
+  }
 
   return success();
 }
