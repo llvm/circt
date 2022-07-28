@@ -17,8 +17,12 @@
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Support/FieldRef.h"
+#include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/Support/Debug.h"
+
+#define DEBUG_TYPE "firrtl-expand-whens"
 
 using namespace circt;
 using namespace firrtl;
@@ -78,7 +82,7 @@ private:
 
 /// This is a determistic mapping of a FieldRef to the last operation which set
 /// a value to it.
-using ScopedDriverMap = HashTableStack<FieldRef, Operation *>;
+using ScopedDriverMap = HashTableStack<FieldRef, FConnectLike>;
 using DriverMap = ScopedDriverMap::ScopeT;
 
 //===----------------------------------------------------------------------===//
@@ -106,7 +110,49 @@ public:
   /// Records a connection to a destination in the current scope. This will
   /// delete a previous connection to a destination if there was one. Returns
   /// true if an old connect was erased.
-  bool setLastConnect(FieldRef dest, Operation *connection) {
+  bool setLastConnect(FieldRef dest, FConnectLike connection) {
+    // if we see `bits(x, hi, lo) <= e` this gets transformed into x <= cat(bits(x_prev, x_w-1, hi+1), e, bits(x_prev, lo-1, 0))
+    // Example:
+    // ; x<4>
+    // ; x_prev is null
+    // x[1:0] <= y
+    // ; x <= cat(x_prev[3:2], y)
+    // ; x <= cat(null[3:2], y)
+    // ; x_prev is cat(null[3:2], y)
+    // x[3:1] <= z
+    // ; x <= cat(z, x_prev[0:0])
+    // ; x <= cat(z, cat(null[3:2], y)[0:0])
+    // ; x <= cat(z, y[0:0])
+    //
+    if (auto bits = dyn_cast<BitsPrimOp>(dest.getDefiningOp())) {
+      int w = bits.getInput().getType().dyn_cast<IntType>().getWidth().getValue();
+      auto it = driverMap.find(getFieldRefFromValue(bits.getInput()));
+      ImplicitLocOpBuilder b(bits.getLoc(), bits.getContext());
+      b.setInsertionPoint(bits);
+      Value xprev;
+      if (it == driverMap.end() || !it.base()->second) {
+        xprev = b.create<InvalidValueOp>(bits.getInput().getType());
+      } else {
+        xprev = it.base()->second.getSrc();
+      }
+
+      int top[2] = {w-1, (int)bits.getHi()+1};
+      int bot[2] = {(int)bits.getLo()-1, 0};
+      Value cat;
+      if (top[0] >= top[1]) {
+        Value x = b.create<BitsPrimOp>(xprev, (uint32_t)top[0], (uint32_t)top[1]);
+        cat = b.create<CatPrimOp>(x, connection.getSrc());
+      } else {
+        cat = connection.getSrc();
+      }
+      if (bot[0] >= bot[1]) {
+        auto x = b.create<BitsPrimOp>(xprev, (uint32_t)bot[0], (uint32_t)bot[1]);
+        cat = b.create<CatPrimOp>(cat, x);
+      }
+      dest = getFieldRefFromValue(bits.getInput());
+      connection.erase();
+      connection = b.create<StrictConnectOp>(bits.getInput(), cat);
+    }
     // Try to insert, if it doesn't insert, replace the previous value.
     auto itAndInserted = driverMap.getLastScope().insert({dest, connection});
     if (!std::get<1>(itAndInserted)) {
@@ -114,7 +160,7 @@ public:
       auto changed = false;
       // Delete the old connection if it exists. Null connections are inserted
       // on declarations.
-      if (auto *oldConnect = iterator->second) {
+      if (auto oldConnect = iterator->second) {
         oldConnect->erase();
         changed = true;
       }
@@ -231,7 +277,7 @@ public:
 
   void visitDecl(RegOp op) {
     // Registers are initialized to themselves. If the register has an
-    // aggergate type, connect each ground type element.
+    // aggregate type, connect each ground type element.
     auto builder = OpBuilder(op->getBlock(), ++Block::iterator(op));
     auto fn = [&](Value value) {
       auto connect = builder.create<ConnectOp>(value.getLoc(), value, value);
@@ -242,7 +288,7 @@ public:
 
   void visitDecl(RegResetOp op) {
     // Registers are initialized to themselves. If the register has an
-    // aggergate type, connect each ground type element.
+    // aggregate type, connect each ground type element.
     auto builder = OpBuilder(op->getBlock(), ++Block::iterator(op));
     auto fn = [&](Value value) {
       auto connect = builder.create<ConnectOp>(value.getLoc(), value, value);
@@ -333,7 +379,7 @@ public:
 
       auto &outerConnect = std::get<1>(*outerIt);
       if (!outerConnect) {
-        // `dest` is null in the outer scope. This indicate an initialization
+        // `dest` is null in the outer scope. This indicates an initialization
         // problem: `mux(p, then, nullptr)`. Just delete the broken connect.
         thenConnect->erase();
         continue;
@@ -584,7 +630,7 @@ LogicalResult ModuleVisitor::checkInitialization() {
   bool failed = false;
   for (auto destAndConnect : driverMap.getLastScope()) {
     // If there is valid connection to this destination, everything is good.
-    auto *connect = std::get<1>(destAndConnect);
+    auto connect = std::get<1>(destAndConnect);
     if (connect)
       continue;
 

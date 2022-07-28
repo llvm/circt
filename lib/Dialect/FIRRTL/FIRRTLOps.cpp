@@ -131,7 +131,7 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
       .Case<SubindexOp, SubaccessOp>(
           [&](auto op) { return foldFlow(op.getInput(), accumulatedFlow); })
       // Registers, Wires, and behavioral memory ports are always Duplex.
-      .Case<RegOp, RegResetOp, WireOp, MemoryPortOp>(
+      .Case<RegOp, RegResetOp, WireOp, MemoryPortOp, BitsPrimOp>(
           [](auto) { return Flow::Duplex; })
       .Case<InstanceOp>([&](auto inst) {
         auto resultNo = val.cast<OpResult>().getResultNumber();
