@@ -1384,8 +1384,8 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult setPossiblyFoldedLowering(Value orig, Value result);
   template <typename ResultOpType, typename... CtorArgTypes>
   LogicalResult setLoweringTo(Operation *orig, CtorArgTypes... args);
-  Backedge setBackedgeLowering(Value orig, Type result);
-  Backedge getBackedgeLowering(Value value);
+  Backedge createBackedge(Value orig, Type type);
+  bool updateIfBackedge(Value dest, Value src);
   void emitRandomizePrologIfNeeded();
   void initializeRegister(Value reg, llvm::Optional<std::pair<Value, Value>>
                                          asyncRegResetInitPair = llvm::None);
@@ -1627,8 +1627,8 @@ private:
   /// without requiring temporary wires.
   BackedgeBuilder backedgeBuilder;
   /// Currently unresolved backedges. More precisely, a mapping from the
-  /// backedge's value to the backedge itself.
-  llvm::SmallDenseMap<Value, Backedge> backedges;
+  /// backedge value to the value it will be replaced with.
+  llvm::SmallDenseMap<Value, Value> backedges;
 };
 } // end anonymous namespace
 
@@ -1669,6 +1669,13 @@ LogicalResult FIRRTLLowering::run() {
         return failure();
       }
     }
+  }
+
+  // Replace all backedges with uses of their regular values.
+  for (auto &[backedge, value] : backedges) {
+    while (backedges.count(value))
+      value = backedges[value];
+    backedge.replaceAllUsesWith(value);
   }
 
   // Now that all of the operations that can be lowered are, remove the
@@ -2047,14 +2054,6 @@ LogicalResult FIRRTLLowering::setLowering(Value orig, Value result) {
   }
 
   auto &slot = valueMapping[orig];
-  if (slot) {
-    auto backedgeIt = backedges.find(slot);
-    if (backedgeIt != backedges.end()) {
-      backedgeIt->second.setValue(result);
-      backedges.erase(backedgeIt);
-      slot = nullptr;
-    }
-  }
   assert(!slot && "value lowered multiple times");
   slot = result;
   return success();
@@ -2100,18 +2099,22 @@ LogicalResult FIRRTLLowering::setLoweringTo(Operation *orig,
 /// This is useful for lowering types which cannot pass through a wire, or to
 /// directly materialize values in operations that violate the SSA dominance
 /// constraint.
-Backedge FIRRTLLowering::setBackedgeLowering(Value orig, Type result) {
-  auto backedge = backedgeBuilder.get(result, orig.getLoc());
+Backedge FIRRTLLowering::createBackedge(Value orig, Type type) {
+  auto backedge = backedgeBuilder.get(type, orig.getLoc());
   backedges.insert({backedge, backedge});
   (void)setLowering(orig, backedge);
   return backedge;
 }
 
-/// If the given value has been lowered to a backedge, returns the value.
-/// Returns null if the value has not been lowered or it has been lowered to
-/// something else than a backedge.
-Backedge FIRRTLLowering::getBackedgeLowering(Value value) {
-  return backedges.lookup(getPossiblyInoutLoweredValue(value));
+/// If the `from` value is in fact a backedge, record that the backedge will
+/// be replaced by the value.  Return true if the destination is a backedge.
+bool FIRRTLLowering::updateIfBackedge(Value dest, Value src) {
+  auto backedgeIt = backedges.find(dest);
+  if (backedgeIt == backedges.end())
+    return false;
+  assert(backedgeIt->first == backedgeIt->second && "backedge lowered twice");
+  backedgeIt->second = src;
+  return true;
 }
 
 /// Switch the insertion point of the current builder to the end of the
@@ -3014,7 +3017,7 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
     // Directly materialize inputs which are trivially assigned once through a
     // `StrictConnectOp`.
     if (port.isInput() && getSingleConnectUserOf(portResult)) {
-      operands.push_back(setBackedgeLowering(portResult, portType));
+      operands.push_back(createBackedge(portResult, portType));
       continue;
     }
 
@@ -3635,12 +3638,14 @@ LogicalResult FIRRTLLowering::visitStmt(StrictConnectOp op) {
   if (!srcVal)
     return handleZeroBit(op.getSrc(), []() { return success(); });
 
-  if (getBackedgeLowering(dest))
-    return setLowering(dest, srcVal);
-
   auto destVal = getPossiblyInoutLoweredValue(dest);
   if (!destVal)
     return failure();
+
+  // If this connect is driving a value that is currently a backedge, record
+  // that the source is the value of the backedge.
+  if (updateIfBackedge(destVal, srcVal))
+    return success();
 
   if (!destVal.getType().isa<hw::InOutType>())
     return op.emitError("destination isn't an inout type");
