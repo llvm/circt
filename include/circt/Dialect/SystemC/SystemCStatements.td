@@ -38,3 +38,23 @@ def SignalOp : SystemCOp<"signal", [HasCustomSSAName, SystemCNameDeclOpInterface
     custom<ImplicitSSAName>($name) attr-dict `:` type($signal)
   }];
 }
+
+def MethodOp : SystemCOp<"method", []> {
+  let summary = "Represents the SystemC SC_METHOD macro.";
+  let description = [{
+    Represents the SC_METHOD macro as described in IEEE 1666-2011 §5.2.9.
+  }];
+
+  let arguments = (ins FuncHandleType:$funcHandle);
+  let assemblyFormat = "$funcHandle attr-dict";
+}
+
+def ThreadOp : SystemCOp<"thread", []> {
+  let summary = "Represents the SystemC SC_THREAD macro.";
+  let description = [{
+    Represents the SC_THREAD macro as described in IEEE 1666-2011 §5.2.9.
+  }];
+
+  let arguments = (ins FuncHandleType:$funcHandle);
+  let assemblyFormat = "$funcHandle attr-dict";
+}

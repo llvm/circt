@@ -92,4 +92,36 @@ def CtorOp : SystemCOp<"ctor", [SingleBlock, NoTerminator,
 
   let regions = (region SizedRegion<1>:$body);
   let assemblyFormat = "$body attr-dict";
+
+  let hasVerifier = true;
+}
+
+def SCFuncOp : SystemCOp<"func", [
+  HasCustomSSAName,
+  SystemCNameDeclOpInterface,
+  NoTerminator,
+  HasParent<"SCModuleOp">
+]> {
+  let summary = "A (void)->void member function of a SC_MODULE.";
+  let description = [{
+    This operation does not represent a specific SystemC construct, but a
+    regular C++ member function with no arguments and a void return type.
+    These are used to implement module-internal logic and are registered to the
+    module using the SC_METHOD, SC_THREAD, and SC_CTHREAD macros.
+  }];
+
+  let arguments = (ins StrAttr:$name);
+  let results = (outs FuncHandleType:$handle);
+  let regions = (region SizedRegion<1>:$body);
+
+  let builders = [
+    OpBuilder<(ins "StringAttr":$name), [{
+      build($_builder, $_state,
+            FuncHandleType::get($_builder.getContext()), name);
+    }]>
+  ];
+
+  let assemblyFormat = "custom<ImplicitSSAName>($name) $body attr-dict";
+
+  let hasVerifier = true;
 }

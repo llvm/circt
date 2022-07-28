@@ -13,6 +13,7 @@
 #ifndef CIRCT_DIALECT_SYSTEMC_SYSTEMCTYPES_H
 #define CIRCT_DIALECT_SYSTEMC_SYSTEMCTYPES_H
 
+#include "circt/Dialect/HW/HWTypes.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/Types.h"
 
