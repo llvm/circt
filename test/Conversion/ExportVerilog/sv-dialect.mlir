@@ -1456,7 +1456,7 @@ hw.module @ProhibitReuseOfExistingInOut(%a: i1) -> (out1: i1) {
   // CHECK-NEXT: assign out1 = [[GEN]];
   %0 = comb.or %a, %a : i1
   %mywire = sv.wire  : !hw.inout<i1>
-  sv.ifdef  "FOO" {
+  sv.ifdef "FOO" {
     sv.assign %mywire, %0 : i1
   }
   hw.output %0 : i1
