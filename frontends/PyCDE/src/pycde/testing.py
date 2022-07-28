@@ -49,13 +49,13 @@ def unittestmodule(generate=True,
   return testmodule_inner
 
 
-def pycdetest(func):
+def cocotest(func):
   # Set a flag on the function to indicate that it's a testbench.
   setattr(func, "_testbench", True)
   return func
 
 
-def gen_cocotb_makefile(top, testmod, sources, sim):
+def _gen_cocotb_makefile(top, testmod, sources, sim):
   """
   Creates a simple cocotb makefile suitable for driving the testbench.
   """
@@ -71,7 +71,7 @@ include $(shell cocotb-config --makefiles)/Makefile.sim
   return template
 
 
-def gen_cocotb_testfile(tests):
+def _gen_cocotb_testfile(tests):
   """
   Converts testbench functions to cocotb-compatible versions..
   To do this cleanly, we need to detect the indent of the function,
@@ -83,7 +83,7 @@ def gen_cocotb_testfile(tests):
     src = inspect.getsourcelines(test)[0]
     indent = len(src[0]) - len(src[0].lstrip())
     src = [line[indent:] for line in src]
-    # Remove the '@pycdetest' decorator
+    # Remove the '@cocotest' decorator
     src = src[1:]
     # If the function was not async, make it so.
     if not src[0].startswith("async"):
@@ -97,7 +97,7 @@ def gen_cocotb_testfile(tests):
   return template
 
 
-class IVerilogHandler:
+class _IVerilogHandler:
   """ Class for handling icarus-verilog specific commands and patching."""
 
   def __init__(self):
@@ -122,11 +122,11 @@ class IVerilogHandler:
     return "icarus"
 
 
-def testbench(pycde_mod, simulator="iverilog"):
+def cocotestbench(pycde_mod, simulator="iverilog"):
   """
   Decorator class for defining a class as a PyCDE testbench.
   'pycde_mod' is the PyCDE module under test.
-  Within the decorated class, functions with the '@pycdetest' decorator
+  Within the decorated class, functions with the '@cocotest' decorator
   will be converted to a cocotb-compatible testbench.
   """
 
@@ -139,7 +139,7 @@ def testbench(pycde_mod, simulator="iverilog"):
 
   try:
     if simulator == "iverilog":
-      simhandler = IVerilogHandler()
+      simhandler = _IVerilogHandler()
     else:
       raise Exception(f"Unknown simulator: {simulator}")
   except Exception as e:
@@ -155,8 +155,8 @@ def testbench(pycde_mod, simulator="iverilog"):
     makefile_path = Path(sys._output_directory, "Makefile")
     with open(makefile_path, "w") as f:
       f.write(
-          gen_cocotb_makefile(pycde_mod.__name__, testmodule, sys.mod_files,
-                              simhandler.sim_name))
+          _gen_cocotb_makefile(pycde_mod.__name__, testmodule, sys.mod_files,
+                               simhandler.sim_name))
 
     # Find functions with the testbench flag set.
     testbench_funcs = [
@@ -168,7 +168,7 @@ def testbench(pycde_mod, simulator="iverilog"):
     # Generate the cocotb test file.
     testfile_path = Path(sys._output_directory, f"{testmodule}.py")
     with open(testfile_path, "w") as f:
-      f.write(gen_cocotb_testfile(testbench_funcs))
+      f.write(_gen_cocotb_testfile(testbench_funcs))
 
     # Run 'make' in the output directory and let cocotb do its thing.
     subprocess.run(["make"], cwd=sys._output_directory)

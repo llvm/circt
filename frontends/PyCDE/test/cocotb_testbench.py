@@ -1,11 +1,12 @@
-# REQUIRES: iverilog
+# REQUIRES: iverilog,cocotb
 # RUN: %PYTHON% %s | FileCheck %s
 from pycde import Input, Output, generator, module, Clock
 from pycde.pycde_types import types
-from pycde.testing import testbench, pycdetest
+from pycde.testing import cocotestbench, cocotest
 from pycde.dialects import comb
 
-# CHECK:      ********************************
+# CHECK:      ** TEST
+# CHECK-NEXT: ********************************
 # CHECK-NEXT: ** test_RegAdd.inc_test
 # CHECK-NEXT: ** test_RegAdd.random_test
 # CHECK-NEXT: ********************************
@@ -43,10 +44,10 @@ class RegAdd:
     ports.out = w16Adder.out
 
 
-@testbench(RegAdd, simulator="iverilog")
+@cocotestbench(RegAdd, simulator="iverilog")
 class RegAddTester:
 
-  @pycdetest
+  @cocotest
   async def random_test(ports):
     import cocotb
     import cocotb.clock
@@ -66,7 +67,7 @@ class RegAddTester:
       assert ports.out.value == (
           in1 + in2), "output q was incorrect on the {}th cycle".format(i)
 
-  @pycdetest
+  @cocotest
   async def inc_test(ports):
     import cocotb
     import cocotb.clock
