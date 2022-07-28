@@ -42,7 +42,7 @@ def ChannelBuffer : ESI_Abstract_Op<"buffer", [
     ```
   }];
 
-  let arguments = (ins I1:$clk, I1:$rstn, ChannelType:$input,
+  let arguments = (ins I1:$clk, I1:$rst, ChannelType:$input,
     OptionalAttr<Confined<I64Attr, [IntMinValue<1>]>>:$stages,
     OptionalAttr<StrAttr>:$name);
   let results = (outs ChannelType:$output);
@@ -61,7 +61,7 @@ def PipelineStage : ESI_Physical_Op<"stage", [
     late-pass latency balancing.
   }];
 
-  let arguments = (ins I1:$clk, I1:$rstn, ChannelType:$input);
+  let arguments = (ins I1:$clk, I1:$rst, ChannelType:$input);
   let results = (outs ChannelType:$output);
   let hasCustomAssemblyFormat = 1;
 }
@@ -84,12 +84,12 @@ def CosimEndpoint : ESI_Physical_Op<"cosim", []> {
     supported by the specific protocol.
   }];
 
-  let arguments = (ins I1:$clk, I1:$rstn, ChannelType:$send,
+  let arguments = (ins I1:$clk, I1:$rst, ChannelType:$send,
     I64Attr:$endpointID);
   let results = (outs ChannelType:$recv);
 
   let assemblyFormat = [{
-    $clk `,` $rstn `,` $send `,` $endpointID attr-dict
+    $clk `,` $rst `,` $send `,` $endpointID attr-dict
       `:` qualified(type($send)) `->` qualified(type($recv))
   }];
 }

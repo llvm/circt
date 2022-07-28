@@ -40,7 +40,7 @@ class System(CppSystem):
 
   def top_module(self):
     return hw.HWModuleOp(name='top',
-                         input_ports=[('clk', self.i1), ('rstn', self.i1)],
+                         input_ports=[('clk', self.i1), ('rst', self.i1)],
                          output_ports=[],
                          body_builder=self.build_top)
 
@@ -71,14 +71,14 @@ class System(CppSystem):
     self.run_passes()
     circt.export_verilog(self.mod, out_stream)
 
-  def cosim(self, name, id, clk, rstn, recv_type=None, send=None):
+  def cosim(self, name, id, clk, rst, recv_type=None, send=None):
     if recv_type is None:
       recv_type = mlir.ir.IntegerType.get_signless(1)
     recv_type = ChannelType.get(recv_type)
     if send is None:
       send = NullSourceOp(ChannelType.get(
           mlir.ir.IntegerType.get_signless(1))).out
-    ep = CosimEndpoint(recv_type, clk, rstn, send,
+    ep = CosimEndpoint(recv_type, clk, rst, send,
                        mlir.ir.Attribute.parse(str(id)))
     ep.operation.attributes["name"] = mlir.ir.StringAttr.get(name)
     return ep

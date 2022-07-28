@@ -28,11 +28,11 @@ circuit top :
 
   module top :
     input clk : Clock
-    input rstn : UInt<1>
+    input rst : UInt<1>
 
     inst iLFSR of LFSR @[main.scala 31:21]
     node clock = clk
-    node reset = not(rstn)
+    node reset = rst
     reg i : UInt<8>, clock with :
       reset => (UInt<1>("h0"), i) @[main.scala 32:18]
     reg golden_0 : UInt<6>, clock with :
