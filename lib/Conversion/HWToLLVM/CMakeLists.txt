@@ -11,5 +11,4 @@ add_circt_conversion_library(CIRCTHWToLLVM
   CIRCTHW
   MLIRLLVMCommonConversion
   MLIRTransforms
-  MLIRReconcileUnrealizedCasts
 )
