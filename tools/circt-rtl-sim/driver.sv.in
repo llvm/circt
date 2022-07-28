@@ -36,13 +36,13 @@ module driver();
 
     $display("[driver] Starting simulation");
 
-    rst = 0;
+    rst = 1;
     // Hold in reset for 4 cycles.
     @(posedge clk);
     @(posedge clk);
     @(posedge clk);
     @(posedge clk);
-    rst = 1;
+    rst = 0;
 
     if ($value$plusargs ("cycles=%d", cycles)) begin
       int i;

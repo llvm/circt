@@ -44,7 +44,7 @@ module top (
   end
 
   initial begin
-    // Wait until rst is asserted.
+    // Wait until rstn is deasserted.
     while (rst) begin
       @(posedge clk);
     end

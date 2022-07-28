@@ -61,7 +61,7 @@ module ESI_PipelineStage # (
 
   // Register the backpressure.
   always_ff @(posedge clk)
-    x_ready_reg <= ~rst ? x_ready : 1'b0;
+    x_ready_reg <= rst ? 1'b0 : x_ready;
 
   // We are transmitting a token on this cycle.
   wire xmit = x_valid && x_ready;
