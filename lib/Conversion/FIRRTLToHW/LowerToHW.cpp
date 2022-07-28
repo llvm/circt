@@ -1628,7 +1628,7 @@ private:
   BackedgeBuilder backedgeBuilder;
   /// Currently unresolved backedges. More precisely, a mapping from the
   /// backedge value to the value it will be replaced with.
-  llvm::SmallDenseMap<Value, Value> backedges;
+  llvm::MapVector<Value, Value> backedges;
 };
 } // end anonymous namespace
 
@@ -1673,8 +1673,19 @@ LogicalResult FIRRTLLowering::run() {
 
   // Replace all backedges with uses of their regular values.
   for (auto &[backedge, value] : backedges) {
-    while (backedges.count(value))
-      value = backedges[value];
+    while (true) {
+      auto it = backedges.find(value);
+      // If the value is not another backedge, we have found the driver.
+      if (it == backedges.end())
+        break;
+      // We have to recurse on the value.
+      value = it->second;
+      // If the we find the original backedge we have some undriven logic.
+      if (value == backedge) {
+        backedgeBuilder.abandon();
+        return emitError(backedge.getLoc(), "undriven logic detected");
+      }
+    }
     backedge.replaceAllUsesWith(value);
   }
 
