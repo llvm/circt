@@ -1447,6 +1447,21 @@ hw.module @ReuseExistingInOut(%clock: i1, %a: i1) -> (out1: i1) {
   hw.output %0 : i1
 }
 
+// CHECK-LABEL: ProhibitReuseOfExistingInOut
+hw.module @ProhibitReuseOfExistingInOut(%a: i1) -> (out1: i1) {
+  // CHECK:      wire [[GEN:.+]] = a | a;
+  // CHECK-NEXT: `ifdef FOO
+  // CHECK-NEXT:    assign mywire = [[GEN]];
+  // CHECK-NEXT: `endif
+  // CHECK-NEXT: assign out1 = [[GEN]];
+  %0 = comb.or %a, %a : i1
+  %mywire = sv.wire  : !hw.inout<i1>
+  sv.ifdef "FOO" {
+    sv.assign %mywire, %0 : i1
+  }
+  hw.output %0 : i1
+}
+
 // See https://github.com/verilator/verilator/issues/3405.
 // CHECK-LABEL: Verilator3405
 // CHECK-DAG: wire [[GEN0:.+]];
