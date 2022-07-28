@@ -14,14 +14,20 @@ jobs:
             mode: release
             assert: OFF
             shared: OFF
-        os: [linux, macos]
+        runner: [ubuntu-20.04, ubuntu-18.04, macos-11]
         include:
-          - os: linux
-            runner: ubuntu-20.04
+          - runner: ubuntu-20.04
+            os: linux
             cmake-args: ''
-          - os: macos
-            runner: macos-11
+            tar: tar
+          - runner: ubuntu-18.04
+            os: linux
+            cmake-args: ''
+            tar: tar
+          - runner: macos-11
+            os: macos
             cmake-args: '-DCMAKE_CXX_FLAGS="-static-libgcc -static-libstdc++"'
+            tar: gtar
     runs-on: ${{ matrix.runner }}
     steps:
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
@@ -43,7 +49,7 @@ jobs:
 
       - name: Get workflow spec hash
         id: get-workflow-hash
-        run: echo "::set-output name=hash::$(md5sum $GITHUB_WORKSPACE/.github/workflows/uploadBinaries.yml | awk '{print $1}')"
+        run: echo "::set-output name=hash::$(shasum $GITHUB_WORKSPACE/.github/workflows/uploadBinaries.yml | awk '{print $1}')"
 
       # Try to fetch LLVM from the cache.
       - name: Cache LLVM
@@ -52,20 +58,20 @@ jobs:
         with:
           path: |
             llvm/build
-          key: ${{ matrix.runner }}-llvm-${{ steps.get-llvm-hash.outputs.hash }}-${{ steps.get-workflow-hash.outputs.hash }}-${{ matrix.compiler.cc }} 
+          key: ${{ matrix.runner }}-llvm-${{ steps.get-llvm-hash.outputs.hash }}-${{ steps.get-workflow-hash.outputs.hash }}-${{ matrix.compiler.cc }}
 
       - name: Setup Ninja Linux
         if: matrix.os == 'linux'
         run: sudo apt-get install ninja-build
 
-      - name: Setup Ninja Mac
+      - name: Setup Ninja and GNU Tar Mac
         if: matrix.os == 'macos'
-        run: brew install ninja
+        run: brew install ninja gnu-tar
 
       # Build LLVM if we didn't hit in the cache. Even though we build it in
       # the previous job, there is a low chance that it'll have been evicted by
       # the time we get here.
-      - name: Rebuild and Install LLVM
+      - name: Rebuild LLVM
         if: steps.cache-llvm.outputs.cache-hit != 'true'
         run: |
           mkdir -p llvm/build
@@ -111,10 +117,17 @@ jobs:
             -DLLVM_PARALLEL_LINK_JOBS=1 \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=OFF
           ninja
+      - name: Display Files
+        run: file build/bin/*
       - name: Package Binaries
         run: |
           cd build
-          tar -czf circt-bin-${{ matrix.runner }}.tar.gz bin 
+          ${{ matrix.tar }} czf circt-bin-${{ matrix.runner }}.tar.gz bin
+      - name: Show Tarball
+        run: |
+          cd build
+          ls -l circt-bin-${{ matrix.runner }}.tar.gz
+          shasum -a 256 circt-bin-${{ matrix.runner }}.tar.gz
       - name: Upload Binaries
         uses: AButler/upload-release-assets@v2.0
         with:
