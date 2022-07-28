@@ -2124,15 +2124,22 @@ firrtl.module @constReg7(in %v: !firrtl.uint<1>, in %clock: !firrtl.clock, in %r
 }
 
 // Check that firrtl.regreset reset mux folding doesn't respects
-// DontTouchAnnotations.
+// DontTouchAnnotations or other annotations.
 // CHECK-LABEL: firrtl.module @constReg8
-firrtl.module @constReg8(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
+firrtl.module @constReg8(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, out %out1: !firrtl.uint<1>, out %out2: !firrtl.uint<1>) {
   %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+  // CHECK: firrtl.regreset sym @s2
+  %r1 = firrtl.regreset sym @s2 %clock, %reset, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+  %0 = firrtl.mux(%reset, %c1_ui1, %r1) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  firrtl.connect %r1, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+  firrtl.connect %out1, %r1 : !firrtl.uint<1>, !firrtl.uint<1>
+
   // CHECK: firrtl.regreset
-  %r = firrtl.regreset  sym @s2 %clock, %reset, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
-  %0 = firrtl.mux(%reset, %c1_ui1, %r) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-  firrtl.connect %r, %0 : !firrtl.uint<1>, !firrtl.uint<1>
-  firrtl.connect %out, %r : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK-SAME: Foo
+  %r2 = firrtl.regreset  %clock, %reset, %c1_ui1 {annotations = [{class = "Foo"}]} : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+  %1 = firrtl.mux(%reset, %c1_ui1, %r2) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  firrtl.connect %r2, %1 : !firrtl.uint<1>, !firrtl.uint<1>
+  firrtl.connect %out2, %r2 : !firrtl.uint<1>, !firrtl.uint<1>
 }
 
 firrtl.module @BitCast(out %o:!firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<1>> ) {
