@@ -1709,7 +1709,8 @@ struct FoldResetMux : public mlir::RewritePattern {
     auto reg = cast<RegResetOp>(op);
     auto reset =
         dyn_cast_or_null<ConstantOp>(reg.getResetValue().getDefiningOp());
-    if (!reset || hasDontTouch(reg.getOperation()))
+    if (!reset || hasDontTouch(reg.getOperation()) ||
+        !reg.getAnnotations().empty())
       return failure();
     // Find the one true connect, or bail
     auto con = getSingleConnectUserOf(reg.getResult());
