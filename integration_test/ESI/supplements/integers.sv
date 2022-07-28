@@ -4,15 +4,15 @@
 // Produce a stream of incrementing integers.
 module IntCountProd (
   input clk,
-  input rstn,
+  input rst,
   IValidReady_i32.sink ints
 );
   logic unsigned [31:0] count;
-  assign ints.valid = rstn;
+  assign ints.valid = ~rst;
   assign ints.data = count;
 
   always@(posedge clk) begin
-    if (~rstn)
+    if (rst)
       count <= 32'h0;
     else if (ints.ready)
       count <= count + 1'h1;
@@ -23,7 +23,7 @@ endmodule
 // cycle. Output the total over a raw port.
 module IntAcc (
   input clk,
-  input rstn,
+  input rst,
   IValidReady_i32.source ints,
   output unsigned [31:0] totalOut
 );
@@ -31,11 +31,11 @@ module IntAcc (
 
   // De-assert ready randomly
   int unsigned randReady;
-  assign ints.ready = rstn && (randReady > 25);
+  assign ints.ready = ~rst && (randReady > 25);
 
   always@(posedge clk) begin
     randReady <= $urandom_range(100, 0);
-    if (~rstn) begin
+    if (rst) begin
       total <= 32'h0;
     end else begin
       $display("Total: %10d", total);
@@ -50,7 +50,7 @@ endmodule
 // over an ESI channel.
 module IntAccNoBP (
   input clk,
-  input rstn,
+  input rst,
   IValidReady_i32.source ints,
   IValidReady_i32.sink totalOut
 );
@@ -58,7 +58,7 @@ module IntAccNoBP (
   assign totalOut.data = total;
 
   always@(posedge clk) begin
-    if (~rstn) begin
+    if (rst) begin
       total <= 32'h0;
       ints.ready <= 1;
       totalOut.valid <= 0;
@@ -79,7 +79,7 @@ endmodule
 
 module IntArrSum (
   input clk,
-  input rstn,
+  input rst,
   IValidReady_ArrayOf4xsi13.source arr,
   IValidReady_ArrayOf2xui24.sink totalOut
 );
@@ -92,7 +92,7 @@ endmodule
 
 module Encryptor (
   input clk,
-  input rstn,
+  input rst,
   IValidReady_Struct.source in,
   IValidReady_Struct1.source cfg,
   IValidReady_Struct.sink x
@@ -113,7 +113,7 @@ module Encryptor (
       encrypt <= cfg.data.encrypt;
       otpValid <= 1;
     end
-    if (~rstn)
+    if (rst)
       otpValid <= 0;
   end
 endmodule

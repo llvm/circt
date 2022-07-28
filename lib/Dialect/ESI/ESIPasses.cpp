@@ -66,7 +66,7 @@ public:
   const StringAttr a, aValid, aReady, x, xValid, xReady;
   const StringAttr dataOutValid, dataOutReady, dataOut, dataInValid,
       dataInReady, dataIn;
-  const StringAttr clk, rstn;
+  const StringAttr clk, rst;
   const StringAttr width;
 
   // Various identifier strings. Keep them all here in case we rename them.
@@ -107,7 +107,7 @@ ESIHWBuilder::ESIHWBuilder(Operation *top)
       dataInReady(StringAttr::get(getContext(), "DataInReady")),
       dataIn(StringAttr::get(getContext(), "DataIn")),
       clk(StringAttr::get(getContext(), "clk")),
-      rstn(StringAttr::get(getContext(), "rstn")),
+      rst(StringAttr::get(getContext(), "rst")),
       width(StringAttr::get(getContext(), "WIDTH")) {
 
   auto regions = top->getRegions();
@@ -196,7 +196,7 @@ HWModuleExternOp ESIHWBuilder::declareStage(Operation *symTable,
   size_t resn = 0;
   llvm::SmallVector<PortInfo> ports = {
       {clk, PortDirection::INPUT, getI1Type(), argn++},
-      {rstn, PortDirection::INPUT, getI1Type(), argn++}};
+      {rst, PortDirection::INPUT, getI1Type(), argn++}};
 
   if (stage.hasData())
     ports.push_back({a, PortDirection::INPUT, dataType, argn++});
@@ -230,7 +230,7 @@ HWModuleExternOp ESIHWBuilder::declareCosimEndpointOp(Operation *symTable,
   // Will be refining this when we decide how to better handle parameterized
   // types and ops.
   PortInfo ports[] = {{clk, PortDirection::INPUT, getI1Type(), 0},
-                      {rstn, PortDirection::INPUT, getI1Type(), 1},
+                      {rst, PortDirection::INPUT, getI1Type(), 1},
                       {dataOutValid, PortDirection::OUTPUT, getI1Type(), 0},
                       {dataOutReady, PortDirection::INPUT, getI1Type(), 2},
                       {dataOut, PortDirection::OUTPUT, recvType, 1},
@@ -319,7 +319,7 @@ LogicalResult ChannelBufferLowering::matchAndRewrite(
   for (uint64_t i = 0; i < numStages; ++i) {
     // Create the stages, connecting them up as we build.
     auto stage = rewriter.create<PipelineStageOp>(loc, type, buffer.clk(),
-                                                  buffer.rstn(), input);
+                                                  buffer.rst(), input);
     if (bufferName) {
       SmallString<64> stageName(
           {bufferName.getValue(), "_stage", std::to_string(i)});
@@ -915,7 +915,7 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
 
   // Instantiate the "ESI_PipelineStage" external module.
   circt::Backedge stageReady = back.get(rewriter.getI1Type());
-  llvm::SmallVector<Value> operands = {stage.clk(), stage.rstn()};
+  llvm::SmallVector<Value> operands = {stage.clk(), stage.rst()};
   if (stage.hasData())
     operands.push_back(unwrap.rawOutput());
   operands.push_back(unwrap.valid());
@@ -1181,7 +1181,7 @@ CosimLowering::matchAndRewrite(CosimEndpointOp ep, OpAdaptor adaptor,
   auto *ctxt = rewriter.getContext();
   auto operands = adaptor.getOperands();
   Value clk = operands[0];
-  Value rstn = operands[1];
+  Value rst = operands[1];
   Value send = operands[2];
 
   circt::BackedgeBuilder bb(rewriter, loc);
@@ -1234,7 +1234,7 @@ CosimLowering::matchAndRewrite(CosimEndpointOp ep, OpAdaptor adaptor,
   StringAttr nameAttr = ep->getAttr("name").dyn_cast_or_null<StringAttr>();
   StringRef name = nameAttr ? nameAttr.getValue() : "CosimEndpointOp";
   Value epInstInputs[] = {
-      clk, rstn, recvReady, unwrapSend.valid(), encodeData.capnpBits(),
+      clk, rst, recvReady, unwrapSend.valid(), encodeData.capnpBits(),
   };
 
   auto cosimEpModule =

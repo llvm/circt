@@ -12,21 +12,21 @@ hw.module.extern @ArrReciever(%x: !esi.channel<!hw.array<4xsi64>>)
 // CHECK-LABEL: hw.module.extern @Reciever(%a: !esi.channel<i32>)
 // CHECK-LABEL: hw.module.extern @ArrReciever(%x: !esi.channel<!hw.array<4xsi64>>)
 
-hw.module @top(%clk:i1, %rstn:i1) -> () {
+hw.module @top(%clk:i1, %rst:i1) -> () {
   hw.instance "recv" @Reciever (a: %cosimRecv: !esi.channel<i32>) -> ()
   // CHECK:  hw.instance "recv" @Reciever(a: %0: !esi.channel<i32>) -> ()
 
   %send.x = hw.instance "send" @Sender () -> (x: !esi.channel<si14>)
   // CHECK:  %send.x = hw.instance "send" @Sender() -> (x: !esi.channel<si14>)
 
-  %cosimRecv = esi.cosim %clk, %rstn, %send.x, 1 {name="TestEP"} : !esi.channel<si14> -> !esi.channel<i32>
-  // CHECK:  esi.cosim %clk, %rstn, %send.x, 1 {name = "TestEP"} : !esi.channel<si14> -> !esi.channel<i32>
+  %cosimRecv = esi.cosim %clk, %rst, %send.x, 1 {name="TestEP"} : !esi.channel<si14> -> !esi.channel<i32>
+  // CHECK:  esi.cosim %clk, %rst, %send.x, 1 {name = "TestEP"} : !esi.channel<si14> -> !esi.channel<i32>
 
   %send2.x = hw.instance "send2" @Sender () -> (x: !esi.channel<si14>)
   // CHECK:  %send2.x = hw.instance "send2" @Sender() -> (x: !esi.channel<si14>)
 
-  %cosimArrRecv = esi.cosim %clk, %rstn, %send2.x, 2 {name="ArrTestEP"} : !esi.channel<si14> -> !esi.channel<!hw.array<4xsi64>>
-  // CHECK:  esi.cosim %clk, %rstn, %send2.x, 2 {name = "ArrTestEP"} : !esi.channel<si14> -> !esi.channel<!hw.array<4xsi64>>
+  %cosimArrRecv = esi.cosim %clk, %rst, %send2.x, 2 {name="ArrTestEP"} : !esi.channel<si14> -> !esi.channel<!hw.array<4xsi64>>
+  // CHECK:  esi.cosim %clk, %rst, %send2.x, 2 {name = "ArrTestEP"} : !esi.channel<si14> -> !esi.channel<!hw.array<4xsi64>>
 
   hw.instance "arrRecv" @ArrReciever (x: %cosimArrRecv: !esi.channel<!hw.array<4 x si64>>) -> ()
 
@@ -41,7 +41,7 @@ hw.module @top(%clk:i1, %rstn:i1) -> () {
   // CAPNP: list @0 () -> (ifaces :List(EsiDpiInterfaceDesc));
   // CAPNP: open @1 [S, T] (iface :EsiDpiInterfaceDesc) -> (iface :EsiDpiEndpoint(S, T));
 
-  // COSIM: %TestEP.DataOutValid, %TestEP.DataOut, %TestEP.DataInReady = hw.instance "TestEP" @Cosim_Endpoint<ENDPOINT_ID: i32 = 1, SEND_TYPE_ID: ui64 = 11229133067582987457, SEND_TYPE_SIZE_BITS: i32 = 128, RECV_TYPE_ID: ui64 = 10578209918096690139, RECV_TYPE_SIZE_BITS: i32 = 128>(clk: %clk: i1, rstn: %rstn: i1, DataOutReady: %{{.*}}: i1, DataInValid: %{{.*}}: i1, DataIn: %encodeSi14Inst.encoded: !hw.array<128xi1>) -> (DataOutValid: i1, DataOut: !hw.array<128xi1>, DataInReady: i1)
+  // COSIM: %TestEP.DataOutValid, %TestEP.DataOut, %TestEP.DataInReady = hw.instance "TestEP" @Cosim_Endpoint<ENDPOINT_ID: i32 = 1, SEND_TYPE_ID: ui64 = 11229133067582987457, SEND_TYPE_SIZE_BITS: i32 = 128, RECV_TYPE_ID: ui64 = 10578209918096690139, RECV_TYPE_SIZE_BITS: i32 = 128>(clk: %clk: i1, rst: %rst: i1, DataOutReady: %{{.*}}: i1, DataInValid: %{{.*}}: i1, DataIn: %encodeSi14Inst.encoded: !hw.array<128xi1>) -> (DataOutValid: i1, DataOut: !hw.array<128xi1>, DataInReady: i1)
 
   // SV: assign _T.valid = TestEP_DataOutValid;
   // SV: assign _T.data = dataSection[6'h0+:32];
@@ -60,7 +60,7 @@ hw.module @top(%clk:i1, %rstn:i1) -> () {
   // SV:   .SEND_TYPE_SIZE_BITS(32'd128)
   // SV: ) TestEP (
   // SV:   .clk (clk),
-  // SV:   .rstn (rstn),
+  // SV:   .rst (rst),
   // SV:   .DataOutReady ({{.+}}.ready),
   // SV:   .DataInValid ({{.+}}.valid),
   // SV:   .DataIn ({50'h0, {{.+}}.data, {16'h0, 16'h1, 30'h0, 2'h0}})
@@ -83,7 +83,7 @@ hw.module @top(%clk:i1, %rstn:i1) -> () {
   // SV:    .SEND_TYPE_SIZE_BITS(32'd128)
   // SV:  ) ArrTestEP (
   // SV:    .clk          (clk),
-  // SV:    .rstn         (rstn),
+  // SV:    .rst         (rst),
   // SV:    .DataOutReady ({{.+}}.ready),
   // SV:    .DataInValid  ([[IF1]].valid),
   // SV:    .DataIn       ({50'h0, [[IF1]].data, {16'h0, 16'h1, 30'h0, 2'h0}}),
