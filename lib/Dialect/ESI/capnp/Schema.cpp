@@ -1229,7 +1229,7 @@ llvm::SmallDenseMap<Type, hw::HWModuleOp>
     circt::esi::capnp::TypeSchema::encImplMods;
 
 circt::esi::capnp::TypeSchema::TypeSchema(Type type) {
-  circt::esi::ChannelPort chan = type.dyn_cast<circt::esi::ChannelPort>();
+  circt::esi::ChannelType chan = type.dyn_cast<circt::esi::ChannelType>();
   if (chan) // Unwrap the channel if it's a channel.
     type = chan.getInner();
   s = std::make_shared<detail::TypeSchemaImpl>(type);

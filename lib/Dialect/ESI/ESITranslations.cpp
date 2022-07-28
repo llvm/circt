@@ -58,7 +58,7 @@ struct ExportCosimSchema {
 
   /// Collect the types for which we need to emit a schema. Output some metadata
   /// comments.
-  LogicalResult visitEndpoint(CosimEndpoint);
+  LogicalResult visitEndpoint(CosimEndpointOp);
 
 private:
   ModuleOp module;
@@ -73,7 +73,7 @@ private:
 };
 } // anonymous namespace
 
-LogicalResult ExportCosimSchema::visitEndpoint(CosimEndpoint ep) {
+LogicalResult ExportCosimSchema::visitEndpoint(CosimEndpointOp ep) {
   capnp::TypeSchema sendTypeSchema(ep.send().getType());
   if (!sendTypeSchema.isSupported())
     return ep.emitOpError("Type ") << ep.send().getType() << " not supported.";
@@ -119,7 +119,7 @@ LogicalResult ExportCosimSchema::emit() {
      << "#########################################################\n";
 
   // Walk and collect the type data.
-  auto walkResult = module.walk([this](CosimEndpoint ep) {
+  auto walkResult = module.walk([this](CosimEndpointOp ep) {
     if (failed(visitEndpoint(ep)))
       return mlir::WalkResult::interrupt();
     return mlir::WalkResult::advance();

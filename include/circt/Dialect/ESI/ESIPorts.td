@@ -14,11 +14,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-class ESI_Port<string name> : TypeDef<ESI_Dialect, name> {
-  let cppClassName = name # "Port";
-}
+class ESI_Port<string name> : TypeDef<ESI_Dialect, name> {}
 
-def Channel : ESI_Port<"Channel"> {
+def ChannelType : ESI_Port<"Channel"> {
   let summary = "An ESI-compatible channel port";
   let description = [{
     An ESI port kind which models a latency-insensitive, unidirectional,
@@ -48,14 +46,10 @@ def Channel : ESI_Port<"Channel"> {
 
 }
 
-def ChannelType :
-  Type<CPred<"$_self.isa<::circt::esi::ChannelPort>()">, "">;
-
-
 //=========
 // Operations on ports.
 
-def WrapValidReady : ESI_Op<"wrap.vr", [
+def WrapValidReadyOp : ESI_Op<"wrap.vr", [
     NoSideEffect,
     DeclareOpInterfaceMethods<ChannelOpInterface>
   ]> {
@@ -76,7 +70,7 @@ def WrapValidReady : ESI_Op<"wrap.vr", [
   ];
 }
 
-def UnwrapValidReady : ESI_Op<"unwrap.vr", [
+def UnwrapValidReadyOp : ESI_Op<"unwrap.vr", [
     NoSideEffect,
     DeclareOpInterfaceMethods<ChannelOpInterface>
   ]> {
@@ -99,7 +93,7 @@ def UnwrapValidReady : ESI_Op<"unwrap.vr", [
 def ModportType:
   Type<CPred<"$_self.isa<::circt::sv::ModportType>()">, "sv.interface">;
 
-def WrapSVInterface: ESI_Op<"wrap.iface", [
+def WrapSVInterfaceOp: ESI_Op<"wrap.iface", [
     NoSideEffect,
     DeclareOpInterfaceMethods<ChannelOpInterface>
   ]> {
@@ -120,7 +114,7 @@ def WrapSVInterface: ESI_Op<"wrap.iface", [
   let hasVerifier = 1;
 }
 
-def UnwrapSVInterface : ESI_Op<"unwrap.iface", [
+def UnwrapSVInterfaceOp : ESI_Op<"unwrap.iface", [
     DeclareOpInterfaceMethods<ChannelOpInterface>
   ]> {
   let summary = "Unwrap an SV interface from an ESI port";
