@@ -50,7 +50,7 @@ ParseResult ChannelBuffer::parse(OpAsmParser &parser, OperationState &result) {
 }
 
 void ChannelBuffer::print(OpAsmPrinter &p) {
-  p << " " << clk() << ", " << rstn() << ", " << input() << " ";
+  p << " " << clk() << ", " << rst() << ", " << input() << " ";
   p.printOptionalAttrDict((*this)->getAttrs());
   p << " : " << innerType();
 }
@@ -84,7 +84,7 @@ ParseResult PipelineStage::parse(OpAsmParser &parser, OperationState &result) {
 }
 
 void PipelineStage::print(OpAsmPrinter &p) {
-  p << " " << clk() << ", " << rstn() << ", " << input() << " ";
+  p << " " << clk() << ", " << rst() << ", " << input() << " ";
   p.printOptionalAttrDict((*this)->getAttrs());
   p << " : " << innerType();
 }

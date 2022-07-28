@@ -63,7 +63,7 @@ module Cosim_Endpoint
 )
 (
    input  logic clk,
-   input  logic rstn,
+   input  logic rst,
 
    output logic DataOutValid,
    input  logic DataOutReady,
