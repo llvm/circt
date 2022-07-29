@@ -4,12 +4,20 @@
 systemc.module @adder (sc_in %summand_a: i32, sc_in %summand_b: i32, sc_out %sum: i32) {
   //CHECK-NEXT: systemc.ctor {
   systemc.ctor {
+    // CHECK-NEXT: systemc.method %addFunc
+    systemc.method %addFunc
+    // CHECK-NEXT: systemc.thread %addFunc
+    systemc.thread %addFunc
   //CHECK-NEXT: }
   }
-  // CHECK-NEXT: [[RES:%.*]] = comb.add %summand_a, %summand_b : i32
-  %res = comb.add %summand_a, %summand_b : i32
-  // CHECK-NEXT: systemc.alias %sum, [[RES]] : i32
-  systemc.alias %sum, %res : i32
+  // CHECK-NEXT: %addFunc = systemc.func {
+  %addFunc = systemc.func {
+    // CHECK-NEXT: [[RES:%.*]] = comb.add %summand_a, %summand_b : i32
+    %res = comb.add %summand_a, %summand_b : i32
+    // CHECK-NEXT: systemc.alias %sum, [[RES]] : i32
+    systemc.alias %sum, %res : i32
+  // CHECK-NEXT: }
+  }
 // CHECK-NEXT: }
 }
 

@@ -88,3 +88,33 @@ systemc.module @signalMustBeDirectChildOfModule () {
     %signal = systemc.signal : i32
   }
 }
+
+// -----
+
+systemc.module @ctorNoBlockArguments () {
+  // expected-error @+1 {{op must not have any arguments}} 
+  "systemc.ctor"() ({
+    ^bb0(%arg0: i32):
+    }) : () -> ()
+}
+
+// -----
+
+systemc.module @funcNoBlockArguments () {
+  // expected-error @+1 {{op must not have any arguments}} 
+  %0 = "systemc.func"() ({
+    ^bb0(%arg0: i32):
+    }) {name="funcname"}: () -> (!systemc.func_handle)
+}
+
+// -----
+
+// expected-note @+1 {{in module '@signalFuncNameConflict'}}
+systemc.module @signalFuncNameConflict () {
+  // expected-note @+1 {{'name' first defined here}}
+  %0 = "systemc.signal"() {name="name"} : () -> i32
+  // expected-error @+1 {{redefines name 'name'}}
+  %1 = "systemc.func"() ({
+    ^bb0:
+    }) {name="name"}: () -> (!systemc.func_handle)
+}

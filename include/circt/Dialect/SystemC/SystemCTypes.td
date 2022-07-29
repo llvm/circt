@@ -18,4 +18,11 @@ include "circt/Dialect/SystemC/SystemCDialect.td"
 class SystemCType<Pred condition, string description, string cppClassName>
   : DialectType<SystemCDialect, condition, description, cppClassName>;
 
+// A handle to refer to circt::systemc::FuncHandleType in ODS.
+def FuncHandleType : SystemCType<
+    CPred<"::circt::hw::type_isa<circt::systemc::FuncHandleType>($_self)">,
+    "FuncHandleType",
+    "::circt::hw::TypeAliasOr<circt::systemc::FuncHandleType>">,
+  BuildableType<"::circt::systemc::FuncHandleType::get($_builder.getContext())">;
+
 #endif // CIRCT_DIALECT_SYSTEMC_SYSTEMCTYPES

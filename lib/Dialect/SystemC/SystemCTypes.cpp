@@ -12,6 +12,8 @@
 
 #include "circt/Dialect/SystemC/SystemCTypes.h"
 #include "circt/Dialect/SystemC/SystemCDialect.h"
+#include "mlir/IR/DialectImplementation.h"
+#include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;
 using namespace circt::systemc;

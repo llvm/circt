@@ -258,6 +258,32 @@ void SignalOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 //===----------------------------------------------------------------------===//
+// CtorOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult CtorOp::verify() {
+  if (getBody().getNumArguments() != 0)
+    return emitOpError("must not have any arguments");
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// SCFuncOp
+//===----------------------------------------------------------------------===//
+
+void SCFuncOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getHandle(), getName());
+}
+
+LogicalResult SCFuncOp::verify() {
+  if (getBody().getNumArguments() != 0)
+    return emitOpError("must not have any arguments");
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 

@@ -19,6 +19,7 @@ add_circt_dialect_library(CIRCTSystemC
   LINK_LIBS PUBLIC
   MLIRIR
   MLIRInferTypeOpInterface
+  CIRCTHW
 )
 
 add_dependencies(circt-headers MLIRSystemCIncGen)
