@@ -39,7 +39,7 @@ ssp.instance "deps_interleaved" of "Problem" {
   graph {
     %0 = operation<> @Op()
     // expected-error @+1 {{Auxiliary dependence from @Op is interleaved with SSA operands}}
-    operation<> (@Op, %0)
+    operation<>(@Op, %0)
   }
 }
 
@@ -60,7 +60,7 @@ ssp.instance "deps_aux_invalid" of "Problem" {
   library {}
   graph {
     // expected-error @+1 {{Auxiliary dependence references invalid source operation: @InvalidOp}}
-    operation<> (@InvalidOp)
+    operation<>(@InvalidOp)
   }
 }
 
