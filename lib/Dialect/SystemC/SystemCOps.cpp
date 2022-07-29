@@ -17,6 +17,19 @@ using namespace circt;
 using namespace circt::systemc;
 
 //===----------------------------------------------------------------------===//
+// ImplicitSSAName Custom Directive
+//===----------------------------------------------------------------------===//
+
+static ParseResult parseImplicitSSAName(OpAsmParser &parser,
+                                        StringAttr &nameAttr) {
+  nameAttr = parser.getBuilder().getStringAttr(parser.getResultName(0).first);
+  return success();
+}
+
+static void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
+                                 StringAttr nameAttr) {}
+
+//===----------------------------------------------------------------------===//
 // SCModuleOp
 //===----------------------------------------------------------------------===//
 
@@ -32,6 +45,12 @@ mlir::Region *SCModuleOp::getCallableRegion() { return &getBody(); }
 
 ArrayRef<mlir::Type> SCModuleOp::getCallableResults() {
   return getResultTypes();
+}
+
+StringRef SCModuleOp::getModuleName() {
+  return (*this)
+      ->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName())
+      .getValue();
 }
 
 /// Parse an argument list of a systemc.module operation.
@@ -124,12 +143,8 @@ static void printArgumentList(OpAsmPrinter &printer,
 }
 
 void SCModuleOp::print(OpAsmPrinter &printer) {
-  auto moduleName =
-      (*this)
-          ->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName())
-          .getValue();
   printer << " ";
-  printer.printSymbolName(moduleName);
+  printer.printSymbolName(getModuleName());
   printer << " ";
   SmallVector<PortDirection> directions;
   getPortDirections().getPortDirections(directions);
@@ -171,6 +186,75 @@ LogicalResult SCModuleOp::verify() {
   }
 
   return success();
+}
+
+LogicalResult SCModuleOp::verifyRegions() {
+  DenseMap<StringRef, BlockArgument> portNames;
+  DenseMap<StringRef, Operation *> memberNames;
+  DenseMap<StringRef, Operation *> localNames;
+
+  bool portsVerified = true;
+
+  for (auto arg : llvm::zip(getPortNames(), getArguments())) {
+    StringRef argName = std::get<0>(arg).cast<StringAttr>().getValue();
+    BlockArgument argValue = std::get<1>(arg);
+
+    if (portNames.count(argName)) {
+      auto diag = mlir::emitError(argValue.getLoc(), "redefines port name '")
+                  << argName << "'";
+      diag.attachNote(portNames[argName].getLoc())
+          << "'" << argName << "' first defined here";
+      diag.attachNote(getLoc()) << "in module '@" << getModuleName() << "'";
+      portsVerified = false;
+      continue;
+    }
+
+    portNames.insert({argName, argValue});
+  }
+
+  WalkResult result = walk<mlir::WalkOrder::PreOrder>([&](Operation *op) {
+    if (isa<SCModuleOp>(op->getParentOp()))
+      localNames.clear();
+
+    if (auto nameDeclOp = dyn_cast<SystemCNameDeclOpInterface>(op)) {
+      StringRef name = nameDeclOp.getName();
+
+      auto reportNameRedefinition = [&](Location firstLoc) -> WalkResult {
+        auto diag = mlir::emitError(op->getLoc(), "redefines name '")
+                    << name << "'";
+        diag.attachNote(firstLoc) << "'" << name << "' first defined here";
+        diag.attachNote(getLoc()) << "in module '@" << getModuleName() << "'";
+        return WalkResult::interrupt();
+      };
+
+      if (portNames.count(name))
+        return reportNameRedefinition(portNames[name].getLoc());
+      if (memberNames.count(name))
+        return reportNameRedefinition(memberNames[name]->getLoc());
+      if (localNames.count(name))
+        return reportNameRedefinition(localNames[name]->getLoc());
+
+      if (isa<SCModuleOp>(op->getParentOp()))
+        memberNames.insert({name, op});
+      else
+        localNames.insert({name, op});
+    }
+
+    return WalkResult::advance();
+  });
+
+  if (result.wasInterrupted() || !portsVerified)
+    return failure();
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// SignalOp
+//===----------------------------------------------------------------------===//
+
+void SignalOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getSignal(), getName());
 }
 
 //===----------------------------------------------------------------------===//

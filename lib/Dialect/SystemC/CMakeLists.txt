@@ -1,8 +1,9 @@
 add_circt_dialect_library(CIRCTSystemC
   SystemCAttributes.cpp
   SystemCDialect.cpp
-  SystemCTypes.cpp
+  SystemCOpInterfaces.cpp
   SystemCOps.cpp
+  SystemCTypes.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${CIRCT_MAIN_INCLUDE_DIR}/circt/Dialect/SystemC

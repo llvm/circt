@@ -15,3 +15,11 @@ systemc.module @adder (sc_in %summand_a: i32, sc_in %summand_b: i32, sc_out %sum
 
 // CHECK: systemc.module @mixedPorts (sc_out %port0: i4, sc_in %port1: i32, sc_out %port2: i4, sc_inout %port3: i8)
 systemc.module @mixedPorts (sc_out %port0: i4, sc_in %port1: i32, sc_out %port2: i4, sc_inout %port3: i8) {}
+
+// CHECK-LABEL: systemc.module @signals
+systemc.module @signals () {
+  // CHECK-NEXT: %signal0 = systemc.signal : i32
+  %signal0 = systemc.signal : i32
+  // CHECK-NEXT: %signal1 = systemc.signal : i1
+  %signal1 = systemc.signal : i1
+}

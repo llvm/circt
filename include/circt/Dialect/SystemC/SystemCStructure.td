@@ -35,6 +35,7 @@ def SCModuleOp : SystemCOp<"module", [
 
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
+  let hasRegionVerifier = 1;
 
   let extraClassDeclaration = [{
     // Implement RegionKindInterface.
@@ -62,6 +63,9 @@ def SCModuleOp : SystemCOp<"module", [
 
     /// Return the block corresponding to the region.
     Block *getBodyBlock() { return &getBody().front(); }
+
+    /// Return the symbol name of this module as string.
+    StringRef getModuleName();
 
     void getPortsOfDirection(PortDirection direction,
                              llvm::SmallVector<Value> &values);

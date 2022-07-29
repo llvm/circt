@@ -23,3 +23,18 @@ def AliasOp : SystemCOp<"alias", [SameTypeOperands]> {
   let arguments = (ins AnyType:$lhs, AnyType:$rhs);
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($lhs)";
 }
+
+def SignalOp : SystemCOp<"signal", [HasCustomSSAName, SystemCNameDeclOpInterface,
+                                    HasParent<"SCModuleOp">]> {
+  let summary = "Declares a SystemC `sc_signal<T>`.";
+  let description = [{
+    Represents the `sc_signal` template as described in IEEE 1666-2011 §6.4.
+  }];
+
+  let arguments = (ins StrAttr:$name);
+  let results = (outs AnySignlessInteger:$signal);
+
+  let assemblyFormat = [{
+    custom<ImplicitSSAName>($name) attr-dict `:` type($signal)
+  }];
+}
