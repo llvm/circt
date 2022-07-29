@@ -90,7 +90,7 @@ static bool isZeroBitFIRRTLType(Type type) {
 // Return a single source value in the operands of the given attach op if
 // exists.
 static Value getSingleNonInstanceOperand(AttachOp op) {
-  Value singleSource = {};
+  Value singleSource;
   for (auto operand : op.getAttached()) {
     if (isZeroBitFIRRTLType(operand.getType()) ||
         operand.getDefiningOp<InstanceOp>())
@@ -3037,10 +3037,8 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
 
     // If the result has an analog type and is used only by attach op,
     // try eliminating a temporary wire by directly using an attached value.
-    if (portResult.getType().isa<AnalogType>()) {
-      AttachOp attach;
-      if (portResult.hasOneUse() &&
-          (attach = dyn_cast<AttachOp>(*portResult.getUsers().begin()))) {
+    if (portResult.getType().isa<AnalogType>() && portResult.hasOneUse()) {
+      if (auto attach = dyn_cast<AttachOp>(*portResult.getUsers().begin())) {
         if (auto source = getSingleNonInstanceOperand(attach)) {
           auto loweredResult = getPossiblyInoutLoweredValue(source);
           operands.push_back(loweredResult);
