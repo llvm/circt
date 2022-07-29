@@ -2,10 +2,10 @@
 
 import binascii
 import random
-import cosim
+import esi_cosim
 
 
-class LoopbackTester(cosim.CosimBase):
+class LoopbackTester(esi_cosim.CosimBase):
   """Provides methods to test the loopback simulations."""
 
   def test_list(self):

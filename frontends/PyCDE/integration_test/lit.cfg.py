@@ -51,7 +51,7 @@ if config.timeout is not None and config.timeout != "":
 # directories.
 config.excludes = [
     'Inputs', 'CMakeLists.txt', 'README.txt', 'LICENSE.txt', 'lit.cfg.py',
-    'lit.local.cfg.py'
+    'lit.local.cfg.py', 'support'
 ]
 
 # test_source_root: The root path where tests are located.

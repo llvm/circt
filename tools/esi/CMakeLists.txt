@@ -16,7 +16,7 @@ if (TARGET EsiCosimDpiServer)
   set(ESI_COSIM_PATH ${ESI_COSIM_LIB_DIR}/libEsiCosimDpiServer.so)
 endif()
 
-set(SOURCES esi-cosim-runner.py)
+set(SOURCES esi-cosim-runner.py esi_cosim.py)
 foreach(file IN ITEMS ${SOURCES})
   configure_file(${file}.in ${CIRCT_TOOLS_DIR}/${file})
   list(APPEND OUTPUTS ${CIRCT_TOOLS_DIR}/${file})
