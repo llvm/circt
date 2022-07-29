@@ -14,6 +14,7 @@
 #include "../PassDetail.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/SystemC/SystemCOps.h"
 #include "mlir/IR/BuiltinDialect.h"
 #include "mlir/Transforms/DialectConversion.h"
@@ -51,21 +52,16 @@ struct ConvertHWModule : public OpConversionPattern<HWModuleOp> {
     // SystemC module port types are all expressed as block arguments to the op,
     // so collect all of the types and add them as arguments to the SystemC
     // module.
-    SmallVector<Type, 4> portTypes((TypeRange)moduleType.getInputs());
-    portTypes.append(moduleOutputs.begin(), moduleOutputs.end());
-
-    // Collect all the port directions.
-    SmallVector<systemc::PortDirection> directions;
-    for (auto port : module.getAllPorts()) {
-      if (port.isInput())
-        directions.push_back(systemc::PortDirection::Input);
-      else if (port.isOutput())
-        directions.push_back(systemc::PortDirection::Output);
-      else
+    SmallVector<Type, 4> portTypes;
+    for (Type argType : moduleType.getInputs()) {
+      if (hw::type_isa<hw::InOutType>(argType))
         return emitError(module->getLoc(), "inout arguments not supported yet");
+
+      portTypes.push_back(InputType::get(argType));
     }
-    PortDirectionsAttr portDirections =
-        PortDirectionsAttr::get(rewriter.getContext(), directions);
+    for (Type argType : moduleOutputs) {
+      portTypes.push_back(OutputType::get(argType));
+    }
 
     // Collect all the port names (inputs and outputs).
     SmallVector<Attribute> portNames;
@@ -76,8 +72,7 @@ struct ConvertHWModule : public OpConversionPattern<HWModuleOp> {
 
     // Create the SystemC module.
     auto scModule = rewriter.create<SCModuleOp>(
-        module.getLoc(), portDirections,
-        ArrayAttr::get(rewriter.getContext(), portNames));
+        module.getLoc(), ArrayAttr::get(rewriter.getContext(), portNames));
 
     // Create a systemc.ctor operation inside the module.
     Block *moduleBlock = new Block;
@@ -117,8 +112,13 @@ struct ConvertHWModule : public OpConversionPattern<HWModuleOp> {
       // Move the block arguments of the systemc.func (that we got from the
       // hw.module) to the systemc.module
       Region &funcBody = scFunc.getBody();
+      rewriter.setInsertionPointToStart(&funcBody.front());
       for (size_t i = 0, e = scFunc.getRegion().getNumArguments(); i < e; ++i) {
-        funcBody.getArgument(0).replaceAllUsesWith(scModule.getArgument(i));
+        auto inputRead =
+            rewriter
+                .create<SignalReadOp>(scFunc.getLoc(), scModule.getArgument(i))
+                .getResult();
+        funcBody.getArgument(0).replaceAllUsesWith(inputRead);
         funcBody.eraseArgument(0);
       }
     });
@@ -143,8 +143,8 @@ struct ConvertOutput : public OpConversionPattern<OutputOp> {
     if (auto scModule = outputOp->getParentOfType<SCModuleOp>()) {
       scModule.getOutputs(moduleOutputs);
       for (auto args : llvm::zip(moduleOutputs, outputOp.getOperands())) {
-        rewriter.create<AliasOp>(outputOp->getLoc(), std::get<0>(args),
-                                 std::get<1>(args));
+        rewriter.create<SignalWriteOp>(outputOp->getLoc(), std::get<0>(args),
+                                       std::get<1>(args));
       }
 
       // Erase the HW OutputOp.

@@ -30,7 +30,7 @@ def SCModuleOp : SystemCOp<"module", [
     but are nonetheless emitted as regular struct fields.
   }];
 
-  let arguments = (ins PortDirectionsAttr:$portDirections, StrArrayAttr:$portNames);
+  let arguments = (ins StrArrayAttr:$portNames);
   let regions = (region SizedRegion<1>: $body);
 
   let hasCustomAssemblyFormat = 1;

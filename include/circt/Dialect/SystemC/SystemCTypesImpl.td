@@ -24,3 +24,62 @@ def FuncHandleTypeImpl : SystemCTypeDef<"FuncHandle"> {
 
   let mnemonic = "func_handle";
 }
+
+class PortTypesImplBase<string name> : SystemCTypeDef<name> {
+  let parameters = (ins "::mlir::Type":$baseType);
+  let assemblyFormat = "`<` $baseType `>`";
+
+  let builders = [
+    AttrBuilderWithInferredContext<(ins "::mlir::Type":$baseType), [{
+      return $_get(baseType.getContext(), baseType);
+    }]>
+  ];
+}
+
+// Represents the SystemC sc_in<T> type.
+// Declares the systemc::InputType in C++.
+def InputTypeImpl : PortTypesImplBase<"Input"> {
+  let summary = "Represents a SystemC sc_in<T> value.";
+  let description = [{
+    Represents the specialized SystemC port class sc_in<T> as described in
+    IEEE 1666-2011 §6.8.
+  }];
+
+  let mnemonic = "sc_in";
+}
+
+// Represents the SystemC sc_inout<T> type.
+// Declares the systemc::InOutType in C++.
+def InOutTypeImpl : PortTypesImplBase<"InOut"> {
+  let summary = "Represents a SystemC sc_inout<T> value.";
+  let description = [{
+    Represents the specialized SystemC port class sc_inout<T> as described in
+    IEEE 1666-2011 §6.10.
+  }];
+
+  let mnemonic = "sc_inout";
+}
+
+// Represents the SystemC sc_out<T> type.
+// Declares the systemc::OutputType in C++.
+def OutputTypeImpl : PortTypesImplBase<"Output"> {
+  let summary = "Represents a SystemC sc_out<T> value.";
+  let description = [{
+    Represents the specialized SystemC port class sc_out<T> as described in
+    IEEE 1666-2011 §6.12.
+  }];
+
+  let mnemonic = "sc_out";
+}
+
+// Represents the SystemC sc_signal<T> type.
+// Declares the systemc::SignalType in C++.
+def SignalTypeImpl : PortTypesImplBase<"Signal"> {
+  let summary = "Represents a SystemC sc_signal<T> value.";
+  let description = [{
+    Represents the predefined primitive channel sc_signal<T> as described in
+    IEEE 1666-2011 §6.4.
+  }];
+
+  let mnemonic = "sc_signal";
+}

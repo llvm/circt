@@ -10,7 +10,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-def AliasOp : SystemCOp<"alias", [SameTypeOperands]> {
+def SignalWriteOp : SystemCOp<"signal.write", [
+    TypesMatchWith<"dest has to be the base type of the src",
+                   "dest", "src", "systemc::getBaseType($_self)">]> {
   let summary = "Declare two SSA values equivalent.";
   let description = [{
     This operation does not model a specific construct in the SystemC spec, but
@@ -20,8 +22,8 @@ def AliasOp : SystemCOp<"alias", [SameTypeOperands]> {
     SSA values in the alias set.
   }];
 
-  let arguments = (ins AnyType:$lhs, AnyType:$rhs);
-  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($lhs)";
+  let arguments = (ins AnyTypeOf<[OutputType, InOutType, SignalType]>:$dest, AnyType:$src);
+  let assemblyFormat = "$dest `,` $src attr-dict `:` type($dest)";
 }
 
 def SignalOp : SystemCOp<"signal", [HasCustomSSAName, SystemCNameDeclOpInterface,
@@ -32,7 +34,7 @@ def SignalOp : SystemCOp<"signal", [HasCustomSSAName, SystemCNameDeclOpInterface
   }];
 
   let arguments = (ins StrAttr:$name);
-  let results = (outs AnySignlessInteger:$signal);
+  let results = (outs SignalType:$signal);
 
   let assemblyFormat = [{
     custom<ImplicitSSAName>($name) attr-dict `:` type($signal)

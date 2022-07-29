@@ -12,11 +12,21 @@
 
 #include "circt/Dialect/SystemC/SystemCTypes.h"
 #include "circt/Dialect/SystemC/SystemCDialect.h"
+#include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;
 using namespace circt::systemc;
+
+Type systemc::getBaseType(Type type) {
+  return TypeSwitch<Type, Type>(type)
+      .Case<InputType>([](auto ty) { return ty.getBaseType(); })
+      .Case<OutputType>([](auto ty) { return ty.getBaseType(); })
+      .Case<InOutType>([](auto ty) { return ty.getBaseType(); })
+      .Case<SignalType>([](auto ty) { return ty.getBaseType(); })
+      .Default([](auto ty) { return Type(); });
+}
 
 //===----------------------------------------------------------------------===//
 // Generated logic
