@@ -99,6 +99,7 @@ protected:
   /// the current scope. This is used for resolving last connect semantics, and
   /// for retrieving the responsible connect operation.
   ScopedDriverMap &driverMap;
+  llvm::SmallDenseSet<Value, 8> subwordInvalids;
 
 public:
   LastConnectResolver(ScopedDriverMap &driverMap) : driverMap(driverMap) {}
@@ -106,6 +107,45 @@ public:
   using FIRRTLVisitor<ConcreteT>::visitExpr;
   using FIRRTLVisitor<ConcreteT>::visitDecl;
   using FIRRTLVisitor<ConcreteT>::visitStmt;
+
+  Value canonicalizeBits(BitsPrimOp op, ImplicitLocOpBuilder builder) {
+    if (!op.getInput().getDefiningOp()) {
+      return op;
+    }
+    if (auto cat = dyn_cast<CatPrimOp>(op.getInput().getDefiningOp())) {
+      if (auto rhsT = cat.getRhs().getType().dyn_cast<IntType>()) {
+        auto lhsLo = (uint32_t)rhsT.getWidth().getValue();
+        auto rhsHi = (uint32_t)lhsLo - 1;
+        if (op.getHi() >= lhsLo && op.getLo() >= lhsLo) {
+          // only indexing the lhs
+          auto bits = builder.create<BitsPrimOp>(cat.getLhs(), op.getHi() - lhsLo, op.getLo() - lhsLo);
+          op.erase();
+          return canonicalizeBits(bits, builder);
+        } if (op.getHi() <= rhsHi && op.getLo() <= rhsHi) {
+          // only indexing the rhs
+          auto bits = builder.create<BitsPrimOp>(cat.getRhs(), op.getHi(), op.getLo());
+          op.erase();
+          return canonicalizeBits(bits, builder);
+        }
+        auto bitsLhs = canonicalizeBits(builder.create<BitsPrimOp>(cat.getLhs(), op.getHi() - lhsLo, 0), builder);
+        auto bitsRhs = canonicalizeBits(builder.create<BitsPrimOp>(cat.getRhs(), rhsHi, op.getLo()), builder);
+        Value newcat = builder.create<CatPrimOp>(bitsLhs, bitsRhs);
+        cat.replaceAllUsesWith(newcat);
+        cat.erase();
+        op.erase();
+        return newcat;
+      }
+    } else if (auto mux = dyn_cast<MuxPrimOp>(op.getInput().getDefiningOp())) {
+      auto bitsHigh = canonicalizeBits(builder.create<BitsPrimOp>(mux.getHigh(), op.getHi(), op.getLo()), builder);
+      auto bitsLow = canonicalizeBits(builder.create<BitsPrimOp>(mux.getLow(), op.getHi(), op.getLo()), builder);
+      Value newmux = builder.create<MuxPrimOp>(mux.getSel(), bitsHigh, bitsLow);
+      mux.replaceAllUsesWith(newmux);
+      mux.erase();
+      op.erase();
+      return newmux;
+    }
+    return op;
+  }
 
   void rewriteBitsConnect(BitsPrimOp bits, FieldRef &dest, FConnectLike &connection) {
     int w = bits.getInput().getType().dyn_cast<IntType>().getWidth().getValue();
@@ -115,6 +155,7 @@ public:
     Value xprev;
     if (it == driverMap.end() || !it.base()->second) {
       xprev = b.create<InvalidValueOp>(bits.getInput().getType());
+      subwordInvalids.insert(xprev);
     } else {
       xprev = it.base()->second.getSrc();
     }
@@ -123,13 +164,13 @@ public:
     int bot[2] = {(int)bits.getLo()-1, 0};
     Value cat;
     if (top[0] >= top[1]) {
-      Value x = b.create<BitsPrimOp>(xprev, (uint32_t)top[0], (uint32_t)top[1]);
+      Value x = canonicalizeBits(b.create<BitsPrimOp>(xprev, (uint32_t)top[0], (uint32_t)top[1]), b);
       cat = b.create<CatPrimOp>(x, connection.getSrc());
     } else {
       cat = connection.getSrc();
     }
     if (bot[0] >= bot[1]) {
-      auto x = b.create<BitsPrimOp>(xprev, (uint32_t)bot[0], (uint32_t)bot[1]);
+      auto x = canonicalizeBits(b.create<BitsPrimOp>(xprev, (uint32_t)bot[0], (uint32_t)bot[1]), b);
       cat = b.create<CatPrimOp>(cat, x);
     }
     dest = getFieldRefFromValue(bits.getInput());
@@ -573,6 +614,7 @@ public:
 
   bool run(FModuleOp op);
   LogicalResult checkInitialization();
+  bool usesSubwordInvalid(Operation *base);
 
 private:
   /// The outermost scope of the module body.
@@ -616,6 +658,18 @@ void ModuleVisitor::visitStmt(WhenOp whenOp) {
   processWhenOp(whenOp, /*outerCondition=*/{});
 }
 
+bool ModuleVisitor::usesSubwordInvalid(Operation *base) {
+  if (!base) {
+    return false;
+  }
+  for (auto val : base->getOperands()) {
+    if (subwordInvalids.contains(val) || usesSubwordInvalid(val.getDefiningOp())) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /// Perform initialization checking.  This uses the built up state from
 /// running on a module. Returns failure in the event of bad initialization.
 LogicalResult ModuleVisitor::checkInitialization() {
@@ -623,7 +677,7 @@ LogicalResult ModuleVisitor::checkInitialization() {
   for (auto destAndConnect : driverMap.getLastScope()) {
     // If there is valid connection to this destination, everything is good.
     auto connect = std::get<1>(destAndConnect);
-    if (connect)
+    if (connect && !usesSubwordInvalid(connect))
       continue;
 
     // Get the op which defines the sink, and emit an error.
