@@ -246,15 +246,21 @@ firrtl.circuit "Simple" {
 
   // https://github.com/llvm/circt/issues/740
   // CHECK-LABEL: hw.module private @foo740(%led_0: !hw.inout<i1>) {
-  // CHECK:  %.led_0.wire = sv.wire
-  // CHECK-NEXT: sv.read_inout %.led_0.wire
-  // CHECK-NEXT:  hw.instance "fpga" @bar740(led_0: %.led_0.wire: !hw.inout<i1>) -> ()
+  // CHECK-NEXT:  hw.instance "fpga" @bar740(led_0: %led_0: !hw.inout<i1>) -> ()
   firrtl.extmodule private @bar740(in led_0: !firrtl.analog<1>)
   firrtl.module private @foo740(in %led_0: !firrtl.analog<1>) {
     %result = firrtl.instance fpga @bar740(in led_0: !firrtl.analog<1>)
     firrtl.attach %result, %led_0 : !firrtl.analog<1>, !firrtl.analog<1>
   }
-  
+
+  firrtl.extmodule private @UIntToAnalog_8(out a: !firrtl.analog<8>, out b: !firrtl.analog<8>)
+  firrtl.module @Example(out %port: !firrtl.analog<8>) {
+    // CHECK-LABEL: hw.module @Example(%port: !hw.inout<i8>)
+    // CHECK-NEXT: hw.instance "a2b" @UIntToAnalog_8(a: %port: !hw.inout<i8>, b: %port: !hw.inout<i8>)
+    %a2b_a, %a2b_b = firrtl.instance a2b  @UIntToAnalog_8(out a: !firrtl.analog<8>, out b: !firrtl.analog<8>)
+    firrtl.attach %port, %a2b_b, %a2b_a : !firrtl.analog<8>, !firrtl.analog<8>, !firrtl.analog<8>
+  }
+
   // Memory modules are lowered to plain external modules.
   // CHECK: hw.module.extern @MRead_ext(%R0_addr: i4, %R0_en: i1, %R0_clk: i1) -> (R0_data: i42) attributes {verilogName = "MRead_ext"}
   firrtl.memmodule @MRead_ext(in R0_addr: !firrtl.uint<4>, in R0_en: !firrtl.uint<1>, in R0_clk: !firrtl.uint<1>, out R0_data: !firrtl.uint<42>) attributes {dataWidth = 42 : ui32, depth = 12 : ui64, extraPorts = [], maskBits = 0 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 0 : ui32, readLatency = 0 : ui32, writeLatency = 1 : ui32}
