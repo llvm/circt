@@ -13,6 +13,7 @@
 #ifndef CIRCT_DIALECT_SYSTEMC_SYSTEMCOPS_H
 #define CIRCT_DIALECT_SYSTEMC_SYSTEMCOPS_H
 
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SystemC/SystemCAttributes.h"
 #include "circt/Dialect/SystemC/SystemCDialect.h"
 #include "circt/Dialect/SystemC/SystemCOpInterfaces.h"

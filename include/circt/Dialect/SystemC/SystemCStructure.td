@@ -11,8 +11,11 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "circt/Dialect/HW/HWOpInterfaces.td"
+
 def SCModuleOp : SystemCOp<"module", [
     Symbol,
+    HWModuleLike,
     FunctionOpInterface,
     IsolatedFromAbove,
     SingleBlock,
@@ -30,12 +33,23 @@ def SCModuleOp : SystemCOp<"module", [
     but are nonetheless emitted as regular struct fields.
   }];
 
-  let arguments = (ins PortDirectionsAttr:$portDirections, StrArrayAttr:$portNames);
+  let arguments = (ins StrArrayAttr:$portNames);
   let regions = (region SizedRegion<1>: $body);
 
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
   let hasRegionVerifier = 1;
+  let skipDefaultBuilders = 1;
+
+  let builders = [
+    OpBuilder<(ins "StringAttr":$name, "ArrayRef<hw::PortInfo>":$ports,
+                   CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>,
+    OpBuilder<(ins "StringAttr":$name, "const hw::ModulePortInfo &":$ports,
+                   CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>,
+    OpBuilder<(ins "StringAttr":$name, "ArrayAttr":$portNames,
+                   "ArrayRef<Type>":$portTypes,
+                   CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>
+  ];
 
   let extraClassDeclaration = [{
     // Implement RegionKindInterface.
@@ -67,16 +81,20 @@ def SCModuleOp : SystemCOp<"module", [
     /// Return the symbol name of this module as string.
     StringRef getModuleName();
 
-    void getPortsOfDirection(PortDirection direction,
-                             llvm::SmallVector<Value> &values);
-    void getInputs(llvm::SmallVector<Value> &inputs) {
-      getPortsOfDirection(PortDirection::Input, inputs);
+    using PortDirectionRange = llvm::iterator_range<
+      llvm::filter_iterator<Region::BlockArgListType::iterator,
+                            std::function<bool(const BlockArgument &)>>>;
+
+    void getPortInfoList(SmallVectorImpl<hw::PortInfo> &portInfoList);
+    PortDirectionRange getPortsOfDirection(hw::PortDirection direction);
+    PortDirectionRange getInputPorts() {
+      return getPortsOfDirection(hw::PortDirection::INPUT);
     }
-    void getOutputs(llvm::SmallVector<Value> &outputs) {
-      getPortsOfDirection(PortDirection::Output, outputs);
+    PortDirectionRange getOutputPorts() {
+      return getPortsOfDirection(hw::PortDirection::OUTPUT);
     }
-    void getInOuts(llvm::SmallVector<Value> &inouts) {
-      getPortsOfDirection(PortDirection::InOut, inouts);
+    PortDirectionRange getInOutPorts() {
+      return getPortsOfDirection(hw::PortDirection::INOUT);
     }
   }];
 }
@@ -93,7 +111,15 @@ def CtorOp : SystemCOp<"ctor", [SingleBlock, NoTerminator,
   let regions = (region SizedRegion<1>:$body);
   let assemblyFormat = "$body attr-dict";
 
+  let builders = [
+    OpBuilder<(ins), [{
+      Region *region = $_state.addRegion();
+      region->push_back(new Block);
+    }]>
+  ];
+
   let hasVerifier = true;
+  let skipDefaultBuilders = 1;
 }
 
 def SCFuncOp : SystemCOp<"func", [
@@ -116,12 +142,15 @@ def SCFuncOp : SystemCOp<"func", [
 
   let builders = [
     OpBuilder<(ins "StringAttr":$name), [{
-      build($_builder, $_state,
-            FuncHandleType::get($_builder.getContext()), name);
+      $_state.addAttribute(getNameAttrName($_state.name), name);
+      Region *region = $_state.addRegion();
+      $_state.addTypes(FuncHandleType::get($_builder.getContext()));
+      region->push_back(new Block);
     }]>
   ];
 
   let assemblyFormat = "custom<ImplicitSSAName>($name) $body attr-dict";
 
   let hasVerifier = true;
+  let skipDefaultBuilders = 1;
 }

@@ -11,7 +11,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/SystemC/SystemCOps.h"
-#include "mlir/IR/Builders.h"
+#include "circt/Dialect/HW/ModuleImplementation.h"
+#include "mlir/IR/FunctionImplementation.h"
+#include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;
 using namespace circt::systemc;
@@ -33,11 +35,29 @@ static void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
 // SCModuleOp
 //===----------------------------------------------------------------------===//
 
-void SCModuleOp::getPortsOfDirection(PortDirection direction,
-                                     SmallVector<Value> &outputs) {
+static hw::PortDirection getDirection(Type type) {
+  return TypeSwitch<Type, hw::PortDirection>(type)
+      .Case<InOutType>([](auto ty) { return hw::PortDirection::INOUT; })
+      .Case<InputType>([](auto ty) { return hw::PortDirection::INPUT; })
+      .Case<OutputType>([](auto ty) { return hw::PortDirection::OUTPUT; });
+}
+
+SCModuleOp::PortDirectionRange
+SCModuleOp::getPortsOfDirection(hw::PortDirection direction) {
+  std::function<bool(const BlockArgument &)> predicateFn =
+      [&](const BlockArgument &arg) -> bool {
+    return getDirection(arg.getType()) == direction;
+  };
+  return llvm::make_filter_range(getArguments(), predicateFn);
+}
+
+void SCModuleOp::getPortInfoList(SmallVectorImpl<hw::PortInfo> &portInfoList) {
   for (int i = 0, e = getNumArguments(); i < e; ++i) {
-    if (getPortDirections().getDirection(i) == direction)
-      outputs.push_back(getArgument(i));
+    hw::PortInfo info;
+    info.name = getPortNames()[i].cast<StringAttr>();
+    info.type = getSignalBaseType(getArgument(i).getType());
+    info.direction = getDirection(info.type);
+    portInfoList.push_back(info);
   }
 }
 
@@ -53,72 +73,43 @@ StringRef SCModuleOp::getModuleName() {
       .getValue();
 }
 
-/// Parse an argument list of a systemc.module operation.
-static ParseResult parseArgumentList(
-    OpAsmParser &parser, SmallVectorImpl<OpAsmParser::Argument> &args,
-    SmallVectorImpl<Type> &argTypes, SmallVectorImpl<Attribute> &argNames,
-    SmallVectorImpl<PortDirection> &argDirection) {
-  auto parseElt = [&]() -> ParseResult {
-    // Parse port direction.
-    PortDirection dir = PortDirection::Input;
-    if (succeeded(parser.parseOptionalKeyword(
-            stringifyPortDirection(PortDirection::InOut))))
-      dir = PortDirection::InOut;
-    else if (succeeded(parser.parseOptionalKeyword(
-                 stringifyPortDirection(PortDirection::Output))))
-      dir = PortDirection::Output;
-    else if (failed(parser.parseKeyword(
-                 stringifyPortDirection(PortDirection::Input),
-                 ", 'sc_out', or 'sc_inout'")))
-      return failure();
-
-    OpAsmParser::Argument argument;
-    auto optArg = parser.parseOptionalArgument(argument);
-    if (optArg.hasValue()) {
-      if (succeeded(optArg.getValue())) {
-        Type argType;
-        if (!argument.ssaName.name.empty() &&
-            succeeded(parser.parseColonType(argType))) {
-          args.push_back(argument);
-          argTypes.push_back(argType);
-          args.back().type = argType;
-          argDirection.push_back(dir);
-          argNames.push_back(StringAttr::get(
-              parser.getContext(), argument.ssaName.name.drop_front()));
-        }
-      }
-    }
-    return success();
-  };
-
-  return parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
-                                        parseElt);
-}
-
 ParseResult SCModuleOp::parse(OpAsmParser &parser, OperationState &result) {
-  StringAttr entityName;
+  StringAttr moduleName;
   SmallVector<OpAsmParser::Argument, 4> args;
   SmallVector<Type, 4> argTypes;
+  SmallVector<Type, 4> resultTypes;
   SmallVector<Attribute> argNames;
-  SmallVector<PortDirection> argDirection;
+  SmallVector<DictionaryAttr> resultAttrs;
 
-  if (parser.parseSymbolName(entityName, SymbolTable::getSymbolAttrName(),
+  // Parse the visibility attribute.
+  (void)mlir::impl::parseOptionalVisibilityKeyword(parser, result.attributes);
+
+  if (parser.parseSymbolName(moduleName, SymbolTable::getSymbolAttrName(),
                              result.attributes))
     return failure();
 
-  if (failed(parseArgumentList(parser, args, argTypes, argNames, argDirection)))
+  bool isVariadic = false;
+  if (hw::module_like_impl::parseModuleFunctionSignature(
+          parser, args, isVariadic, resultTypes, resultAttrs, argNames))
     return failure();
-
-  result.addAttribute("portDirections", PortDirectionsAttr::get(
-                                            parser.getContext(), argDirection));
-  result.addAttribute("portNames",
-                      ArrayAttr::get(parser.getContext(), argNames));
 
   if (parser.parseOptionalAttrDictWithKeyword(result.attributes))
     return failure();
 
-  auto type = parser.getBuilder().getFunctionType(argTypes, llvm::None);
+  for (auto &arg : args) {
+    argNames.push_back(
+        StringAttr::get(parser.getContext(), arg.ssaName.name.drop_front()));
+    argTypes.push_back(arg.type);
+  }
+
+  result.addAttribute("portNames",
+                      ArrayAttr::get(parser.getContext(), argNames));
+
+  auto type = parser.getBuilder().getFunctionType(argTypes, resultTypes);
   result.addAttribute(SCModuleOp::getTypeAttrName(), TypeAttr::get(type));
+
+  mlir::function_interface_impl::addArgAndResultAttrs(
+      parser.getBuilder(), result, args, resultAttrs);
 
   auto &body = *result.addRegion();
   if (parser.parseRegion(body, args))
@@ -129,33 +120,79 @@ ParseResult SCModuleOp::parse(OpAsmParser &parser, OperationState &result) {
   return success();
 }
 
-static void printArgumentList(OpAsmPrinter &printer,
-                              ArrayRef<BlockArgument> args,
-                              ArrayRef<PortDirection> directions) {
-  printer << "(";
-  for (size_t i = 0; i < args.size(); ++i) {
-    if (i > 0)
-      printer << ", ";
-    printer << stringifyPortDirection(directions[i]) << " " << args[i] << ": "
-            << args[i].getType();
-  }
-  printer << ")";
+void SCModuleOp::print(OpAsmPrinter &p) {
+  p << ' ';
+
+  // Print the visibility of the module.
+  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  if (auto visibility =
+          getOperation()->getAttrOfType<StringAttr>(visibilityAttrName))
+    p << visibility.getValue() << ' ';
+
+  p.printSymbolName(SymbolTable::getSymbolName(*this).getValue());
+  p << ' ';
+
+  bool needArgNamesAttr = false;
+  hw::module_like_impl::printModuleSignature(
+      p, *this, getFunctionType().getInputs(), false, {}, needArgNamesAttr);
+  mlir::function_interface_impl::printFunctionAttributes(
+      p, *this, getFunctionType().getInputs().size(), 0, {"portNames"});
+
+  p << ' ';
+  p.printRegion(getBody(), false, false);
 }
 
-void SCModuleOp::print(OpAsmPrinter &printer) {
-  printer << " ";
-  printer.printSymbolName(getModuleName());
-  printer << " ";
-  SmallVector<PortDirection> directions;
-  getPortDirections().getPortDirections(directions);
-  printArgumentList(printer, getArguments(), directions);
-  printer.printOptionalAttrDictWithKeyword(
-      (*this)->getAttrs(),
-      /*elidedAttrs =*/{SymbolTable::getSymbolAttrName(),
-                        SCModuleOp::getTypeAttrName(), "portNames",
-                        "portDirections"});
-  printer << " ";
-  printer.printRegion(getBody(), false, false);
+static Type wrapPortType(Type type, hw::PortDirection direction) {
+  if (auto inoutTy = type.dyn_cast<hw::InOutType>())
+    type = inoutTy.getElementType();
+
+  switch (direction) {
+  case hw::PortDirection::INOUT:
+    return InOutType::get(type);
+  case hw::PortDirection::INPUT:
+    return InputType::get(type);
+  case hw::PortDirection::OUTPUT:
+    return OutputType::get(type);
+  }
+}
+
+void SCModuleOp::build(OpBuilder &builder, OperationState &result,
+                       StringAttr name, ArrayAttr portNames,
+                       ArrayRef<Type> portTypes,
+                       ArrayRef<NamedAttribute> attributes) {
+  result.addAttribute(getPortNamesAttrName(result.name), portNames);
+  Region *region = result.addRegion();
+
+  auto moduleType = builder.getFunctionType(portTypes, {});
+  result.addAttribute(getTypeAttrName(), TypeAttr::get(moduleType));
+
+  result.addAttribute(SymbolTable::getSymbolAttrName(), name);
+  region->push_back(new Block);
+  region->addArguments(
+      portTypes,
+      SmallVector<Location>(portTypes.size(), builder.getUnknownLoc()));
+  result.addAttributes(attributes);
+}
+
+void SCModuleOp::build(OpBuilder &builder, OperationState &result,
+                       StringAttr name, ArrayRef<hw::PortInfo> ports,
+                       ArrayRef<NamedAttribute> attributes) {
+  MLIRContext *ctxt = builder.getContext();
+  SmallVector<Attribute> portNames;
+  SmallVector<Type> portTypes;
+  for (auto port : ports) {
+    portNames.push_back(StringAttr::get(ctxt, port.getName()));
+    portTypes.push_back(wrapPortType(port.type, port.direction));
+  }
+  build(builder, result, name, ArrayAttr::get(ctxt, portNames), portTypes);
+}
+
+void SCModuleOp::build(OpBuilder &builder, OperationState &result,
+                       StringAttr name, const hw::ModulePortInfo &ports,
+                       ArrayRef<NamedAttribute> attributes) {
+  SmallVector<hw::PortInfo> portInfos(ports.inputs);
+  portInfos.append(ports.outputs);
+  build(builder, result, name, portInfos, attributes);
 }
 
 void SCModuleOp::getAsmBlockArgumentNames(mlir::Region &region,
@@ -176,8 +213,13 @@ LogicalResult SCModuleOp::verify() {
         "incorrect number of function results (always has to be 0)");
   if (getPortNames().size() != getFunctionType().getNumInputs())
     return emitOpError("incorrect number of port names");
-  if (getPortDirections().getNumPorts() != getFunctionType().getNumInputs())
-    return emitOpError("incorrect number of port directions");
+
+  for (auto arg : getArguments()) {
+    if (!hw::type_isa<InputType, OutputType, InOutType>(arg.getType()))
+      return mlir::emitError(
+          arg.getLoc(),
+          "module port must be of type 'sc_in', 'sc_out', or 'sc_inout'");
+  }
 
   ArrayAttr portNames = getPortNames();
   for (auto *iter = portNames.begin(); iter != portNames.end(); ++iter) {
