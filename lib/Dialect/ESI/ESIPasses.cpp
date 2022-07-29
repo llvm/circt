@@ -1361,8 +1361,52 @@ void ESItoHWPass::runOnOperation() {
     signalPassFailure();
 }
 
+//===----------------------------------------------------------------------===//
+// Create Cap'n Proto schema pass
+//===----------------------------------------------------------------------===//
+
+namespace {
+/// Run all the physical lowerings.
+struct ESICreateCapnpSchemaPass
+    : public ESICreateCapnpSchemaBase<ESICreateCapnpSchemaPass> {
+  void runOnOperation() override;
+};
+} // anonymous namespace
+
+void ESICreateCapnpSchemaPass::runOnOperation() {
+  ModuleOp mod = getOperation();
+  auto *ctxt = &getContext();
+
+  // Check for cosim endpoints in the design. If the design doesn't have any we
+  // don't need a schema.
+  WalkResult cosimWalk =
+      mod.walk([](CosimEndpointOp _) { return WalkResult::interrupt(); });
+  if (!cosimWalk.wasInterrupted())
+    return;
+
+  // Generate the schema
+  std::string schemaStrBuffer;
+  llvm::raw_string_ostream os(schemaStrBuffer);
+  if (failed(exportCosimSchema(mod, os))) {
+    signalPassFailure();
+    return;
+  }
+
+  // And stuff if in a verbatim op with a filename, optionally.
+  OpBuilder b = OpBuilder::atBlockEnd(mod.getBody());
+  auto verbatim = b.create<sv::VerbatimOp>(b.getUnknownLoc(),
+                                           StringAttr::get(ctxt, os.str()));
+  if (!schemaFile.empty()) {
+    auto outputFileAttr = OutputFileAttr::getFromFilename(ctxt, schemaFile);
+    verbatim->setAttr("output_file", outputFileAttr);
+  }
+}
+
 namespace circt {
 namespace esi {
+std::unique_ptr<OperationPass<ModuleOp>> createESICreateCapnpSchemaPass() {
+  return std::make_unique<ESICreateCapnpSchemaPass>();
+}
 std::unique_ptr<OperationPass<ModuleOp>> createESIPhysicalLoweringPass() {
   return std::make_unique<ESIToPhysicalPass>();
 }
