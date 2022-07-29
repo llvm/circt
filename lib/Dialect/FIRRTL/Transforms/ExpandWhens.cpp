@@ -99,6 +99,9 @@ protected:
   /// the current scope. This is used for resolving last connect semantics, and
   /// for retrieving the responsible connect operation.
   ScopedDriverMap &driverMap;
+  /// A set containing all InvalidValue ops that were created as part of a
+  /// subword assignment. If any of these are reachable after all connections
+  /// have been resolved, then the this indicates an initialization failure.
   llvm::SmallDenseSet<Value, 8> subwordInvalids;
 
 public:
@@ -646,6 +649,8 @@ public:
 private:
   /// The outermost scope of the module body.
   ScopedDriverMap driverMap;
+  /// A memoization table for computing reachable subword InvalidValue ops.
+  DenseMap<Operation *, bool> subwordInvalidMemo;
 
   /// Tracks if anything in the IR has changed.
   bool anythingChanged = false;
@@ -685,15 +690,20 @@ void ModuleVisitor::visitStmt(WhenOp whenOp) {
   processWhenOp(whenOp, /*outerCondition=*/{});
 }
 
-bool ModuleVisitor::usesSubwordInvalid(Operation *base) {
-  if (!base) {
+bool ModuleVisitor::usesSubwordInvalid(Operation *op) {
+  if (!op) {
     return false;
   }
-  for (auto val : base->getOperands()) {
+  if (auto b = subwordInvalidMemo.lookup(op)) {
+    return b;
+  }
+  for (auto val : op->getOperands()) {
     if (subwordInvalids.contains(val) || usesSubwordInvalid(val.getDefiningOp())) {
+      subwordInvalidMemo[op] = true;
       return true;
     }
   }
+  subwordInvalidMemo[op] = false;
   return false;
 }
 
