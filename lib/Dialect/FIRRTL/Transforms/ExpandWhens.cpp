@@ -108,6 +108,12 @@ public:
   using FIRRTLVisitor<ConcreteT>::visitDecl;
   using FIRRTLVisitor<ConcreteT>::visitStmt;
 
+  // This function simplifies bitindex expressions by pushing them through cat
+  // and mux ops. For example `cat(a, b)[1:0]` where b's width is >= 2 is just
+  // b[1:0]. And `mux(sel, a, b)[3:0]` is `mux(sel, a[3:0], b[3:0])`. This
+  // canonicalization is necessary to eliminate uses of subword InvalidValue
+  // ops so that initialization checking only signals a failure if a bit is
+  // truly not assigned.
   Value canonicalizeBits(BitsPrimOp op, ImplicitLocOpBuilder builder) {
     if (!op.getInput().getDefiningOp()) {
       return op;
@@ -118,19 +124,22 @@ public:
         auto rhsHi = (uint32_t)lhsLo - 1;
         if (op.getHi() >= lhsLo && op.getLo() >= lhsLo) {
           // only indexing the lhs
-          auto bits = builder.create<BitsPrimOp>(cat.getLhs(), op.getHi() - lhsLo, op.getLo() - lhsLo);
+          Value bits = canonicalizeBits(builder.create<BitsPrimOp>(cat.getLhs(), op.getHi() - lhsLo, op.getLo() - lhsLo), builder);
+          op.replaceAllUsesWith(bits);
           op.erase();
-          return canonicalizeBits(bits, builder);
+          return bits;
         } if (op.getHi() <= rhsHi && op.getLo() <= rhsHi) {
           // only indexing the rhs
-          auto bits = builder.create<BitsPrimOp>(cat.getRhs(), op.getHi(), op.getLo());
+          Value bits = canonicalizeBits(builder.create<BitsPrimOp>(cat.getRhs(), op.getHi(), op.getLo()), builder);
+          op.replaceAllUsesWith(bits);
           op.erase();
-          return canonicalizeBits(bits, builder);
+          return bits;
         }
         auto bitsLhs = canonicalizeBits(builder.create<BitsPrimOp>(cat.getLhs(), op.getHi() - lhsLo, 0), builder);
         auto bitsRhs = canonicalizeBits(builder.create<BitsPrimOp>(cat.getRhs(), rhsHi, op.getLo()), builder);
         Value newcat = builder.create<CatPrimOp>(bitsLhs, bitsRhs);
-        cat.replaceAllUsesWith(newcat);
+        cat->dropAllUses();
+        op.replaceAllUsesWith(newcat);
         cat.erase();
         op.erase();
         return newcat;
@@ -139,7 +148,8 @@ public:
       auto bitsHigh = canonicalizeBits(builder.create<BitsPrimOp>(mux.getHigh(), op.getHi(), op.getLo()), builder);
       auto bitsLow = canonicalizeBits(builder.create<BitsPrimOp>(mux.getLow(), op.getHi(), op.getLo()), builder);
       Value newmux = builder.create<MuxPrimOp>(mux.getSel(), bitsHigh, bitsLow);
-      mux.replaceAllUsesWith(newmux);
+      mux->dropAllUses();
+      op.replaceAllUsesWith(newmux);
       mux.erase();
       op.erase();
       return newmux;
@@ -147,33 +157,50 @@ public:
     return op;
   }
 
+  // Rewrites a connection where the dest is the bitindex. An expression that
+  // looks like `x[hi:lo] <= e` gets rewritten to `x <= cat(xprev[x.w-1:hi+1],
+  // e, xprev[lo-1:0])`, where xprev is the most recent connection to x in any
+  // scope.
   void rewriteBitsConnect(BitsPrimOp bits, FieldRef &dest, FConnectLike &connection) {
+    // get x's width
     int w = bits.getInput().getType().dyn_cast<IntType>().getWidth().getValue();
+    // find the previous connection to x, search across scopes
     auto it = driverMap.find(getFieldRefFromValue(bits.getInput()));
     ImplicitLocOpBuilder b(connection.getLoc(), connection.getContext());
     b.setInsertionPointAfter(connection);
     Value xprev;
     if (it == driverMap.end() || !it.base()->second) {
+      // x had no previous connection, so set xprev to an InvalidValue with x's
+      // type and insert it into the set of invalid values created for subword
+      // assignments
       xprev = b.create<InvalidValueOp>(bits.getInput().getType());
       subwordInvalids.insert(xprev);
     } else {
+      // x had a previous connection -- extract its source
       xprev = it.base()->second.getSrc();
     }
 
     int top[2] = {w-1, (int)bits.getHi()+1};
     int bot[2] = {(int)bits.getLo()-1, 0};
     Value cat;
+    // build the high bits
     if (top[0] >= top[1]) {
+      // build `cat(xprev[x.w-1:hi], e)`
       Value x = canonicalizeBits(b.create<BitsPrimOp>(xprev, (uint32_t)top[0], (uint32_t)top[1]), b);
       cat = b.create<CatPrimOp>(x, connection.getSrc());
     } else {
+      // the assignment is assigning all the high bits, so no need to get them from xprev
       cat = connection.getSrc();
     }
+    // build the low bits if they are not completely assigned
     if (bot[0] >= bot[1]) {
+      // build cat(cat, xprev[lo-1:0])
       auto x = canonicalizeBits(b.create<BitsPrimOp>(xprev, (uint32_t)bot[0], (uint32_t)bot[1]), b);
       cat = b.create<CatPrimOp>(cat, x);
     }
+    // the dest needs to be transformed from a bitindex `x[hi:lo] <=` to just `x <=`
     dest = getFieldRefFromValue(bits.getInput());
+    // erase the old connection and use a new one with the new dest
     connection.erase();
     connection = b.create<StrictConnectOp>(bits.getInput(), cat);
   }
