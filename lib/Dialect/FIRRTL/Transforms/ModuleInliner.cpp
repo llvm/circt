@@ -328,6 +328,11 @@ public:
            rootSet.contains(mod.moduleNameAttr());
   }
 
+  /// Return true if either this NLA is rooted at modName, or is retoped to it.
+  bool hasRoot(StringAttr modName) {
+    return (nla.root() == modName) || rootSet.contains(modName);
+  }
+
   /// Mark a module as inlined.  This will remove it from the NLA.
   void inlineModule(FModuleOp module) {
     auto sym = module.getNameAttr();
@@ -512,6 +517,28 @@ private:
   /// Identify all module-only NLA's, marking their MutableNLA's accordingly.
   void identifyNLAsTargetingOnlyModules();
 
+  /// Populate the activeHierpaths with the HierPaths that are active given the
+  /// current hierarchy. This is the set of HierPaths that were active in the
+  /// parent, and on the current instance. Also HierPaths that are rooted at
+  /// this module are also added to the active set.
+  void setActiveHierPaths(StringAttr moduleName, StringAttr instInnerSym) {
+    auto &instPaths =
+        instOpHierPaths[InnerRefAttr::get(moduleName, instInnerSym)];
+    if (currentPath.empty()) {
+      activeHierpaths.insert(instPaths.begin(), instPaths.end());
+      return;
+    }
+    DenseSet<StringAttr> hPaths(instPaths.begin(), instPaths.end());
+    // Only the hierPaths that this instance participates in, and is active in
+    // the the current path must be kept active for the child modules.
+    llvm::set_intersect(activeHierpaths, hPaths);
+    // Also, the nlas, that have current instance as the top must be added to
+    // the active set.
+    for (auto hPath : instPaths)
+      if (nlaMap[hPath].hasRoot(moduleName))
+        activeHierpaths.insert(hPath);
+  }
+
   CircuitOp circuit;
   MLIRContext *context;
 
@@ -536,6 +563,8 @@ private:
   /// current instance or not.
   SmallVector<std::pair<Attribute, Attribute>> currentPath;
 
+  DenseSet<StringAttr> activeHierpaths;
+
   /// Record the HierPathOps that each InstanceOp participates in. This is a map
   /// from the InnerRefAttr to the list of HierPathOp names. The InnerRefAttr
   /// corresponds to the InstanceOp.
@@ -547,23 +576,7 @@ private:
 /// instance paths backwards starting from the current module. We drop the back
 /// element from the NLA because it obviously matches the current operation.
 bool Inliner::doesNLAMatchCurrentPath(HierPathOp nla) {
-  auto nlaPath = nla.getNamepath().getValue().drop_back();
-  auto nlaIt = nlaPath.rbegin();
-  auto nlaEnd = nlaPath.rend();
-  auto pathIt = currentPath.rbegin();
-  auto pathEnd = currentPath.rend();
-  while (nlaIt != nlaEnd && pathIt != pathEnd) {
-    auto innerRef = (*nlaIt++).cast<hw::InnerRefAttr>();
-    auto &[module, name] = (*pathIt++);
-    // Break if the NLA does not correspond to our instance.
-    if (innerRef.getModule() != module || innerRef.getName() != name)
-      return false;
-  }
-  // If we found a mismatch in the path, we should not copy this annotation into
-  // the current context.  Note: If we reached the end of the pathIt, it means
-  // that the NLA is still providing necessary context and *should* be copied
-  // over to the inlined operation.
-  return true;
+  return (activeHierpaths.find(nla.getSymNameAttr()) != activeHierpaths.end());
 }
 
 /// If this operation or any child operation has a name, add the prefix to that
@@ -725,29 +738,24 @@ void Inliner::cloneAndRename(
       // Get the innerRef to the original InstanceOp that is being inlined here.
       auto oldInnerRef = InnerRefAttr::get(
           instance->getParentOfType<FModuleOp>().getNameAttr(), instSym);
-      // Now get the currentPath, where this InstanceOp is being inlined.
-      auto &[inlineMod, inlineInst] = currentPath.back();
-      // Only the HierPathOps that participate at both the
-      // InstanceOp(`instance`) being inlined and at the place being
-      // inlined(inlineMod, inlineInst) must be valid after inlining.
-      if (inlineMod && inlineInst)
-        for (auto nlaAtInlineLoc : instOpHierPaths[InnerRefAttr::get(
-                 inlineMod.cast<StringAttr>(),
-                 inlineInst.cast<StringAttr>())]) {
-          // For all the HierPathOps that participate at the current path,
-          // inlining location.
-          for (auto old : instOpHierPaths[oldInnerRef])
-            // For all the HierPathOps that the instance being inlined
-            // participates in.
-            if (old == nlaAtInlineLoc)
+      // For all the HierPathOps that the instance being inlined participates
+      // in.
+      for (auto old : instOpHierPaths[oldInnerRef]) {
+        // If this HierPathOp is valid at the inlining context, where the
+        // instance is being inlined at. That is, if it exists in the
+        // activeHierpaths.
+        if (activeHierpaths.find(old) != activeHierpaths.end())
+          validHierPaths.push_back(old);
+        else
+          // The HierPathOp could have been renamed, check for the other retoped
+          // names, if they are active at the inlining context.
+          for (auto additionalSym : nlaMap[old].getAdditionalSymbols())
+            if (activeHierpaths.find(additionalSym.getName()) !=
+                activeHierpaths.end()) {
               validHierPaths.push_back(old);
-            else
-              // The HierPathOp name might not match, if it is duplicated after
-              // being retopped. Get all the retopped HierPathOp names.
-              for (auto renamedTops : nlaMap[old].getAdditionalSymbols())
-                if (renamedTops.getName() == nlaAtInlineLoc)
-                  validHierPaths.push_back(old);
-        }
+              break;
+            }
+      }
     }
   rename(prefix, newOp, moduleNamespace, validHierPaths);
   if (isa<InstanceOp>(&op)) {
@@ -806,7 +814,10 @@ void Inliner::flattenInto(StringRef prefix, OpBuilder &b,
     // Anything in this set will be made local during the recursive flattenInto
     // walk.
     llvm::set_union(localSymbols, rootMap[target.getNameAttr()]);
-    currentPath.emplace_back(moduleName, getInnerSymName(instance));
+    auto instInnerSym = getInnerSymName(instance);
+    auto parentActivePaths = activeHierpaths;
+    setActiveHierPaths(moduleName, instInnerSym);
+    currentPath.emplace_back(moduleName, instInnerSym);
 
     // Create the wire mapping for results + ports.
     auto nestedPrefix = (prefix + instance.getName() + "_").str();
@@ -817,6 +828,7 @@ void Inliner::flattenInto(StringRef prefix, OpBuilder &b,
     // Unconditionally flatten all instance operations.
     flattenInto(nestedPrefix, b, mapper, target, localSymbols, moduleNamespace);
     currentPath.pop_back();
+    activeHierpaths = parentActivePaths;
   }
 }
 
@@ -853,7 +865,10 @@ void Inliner::flattenInstances(FModuleOp module) {
     // walk.
     DenseSet<Attribute> localSymbols;
     llvm::set_union(localSymbols, rootMap[target.getNameAttr()]);
-    currentPath.emplace_back(moduleName, getInnerSymName(instance));
+    auto instInnerSym = getInnerSymName(instance);
+    auto parentActivePaths = activeHierpaths;
+    setActiveHierPaths(moduleName, instInnerSym);
+    currentPath.emplace_back(moduleName, instInnerSym);
 
     // Create the wire mapping for results + ports. We RAUW the results instead
     // of mapping them.
@@ -868,6 +883,7 @@ void Inliner::flattenInstances(FModuleOp module) {
     // Recursively flatten the target module.
     flattenInto(nestedPrefix, b, mapper, target, localSymbols, moduleNamespace);
     currentPath.pop_back();
+    activeHierpaths = parentActivePaths;
 
     // Erase the replaced instance.
     instance.erase();
@@ -947,8 +963,11 @@ void Inliner::inlineInto(StringRef prefix, OpBuilder &b,
         symbolRenames.insert({mnla.getNLA().getNameAttr(), sym});
       }
     }
+    auto instInnerSym = getInnerSymName(instance);
+    auto parentActivePaths = activeHierpaths;
+    setActiveHierPaths(moduleName, instInnerSym);
     // This must be done after the reTop, since it might introduce an innerSym.
-    currentPath.emplace_back(moduleName, getInnerSymName(instance));
+    currentPath.emplace_back(moduleName, instInnerSym);
 
     // Create the wire mapping for results + ports.
     auto nestedPrefix = (prefix + instance.getName() + "_").str();
@@ -964,6 +983,7 @@ void Inliner::inlineInto(StringRef prefix, OpBuilder &b,
                  moduleNamespace);
     }
     currentPath.pop_back();
+    activeHierpaths = parentActivePaths;
   }
 }
 
@@ -1030,8 +1050,11 @@ void Inliner::inlineInstances(FModuleOp parent) {
         symbolRenames.insert({mnla.getNLA().getNameAttr(), sym});
       }
     }
+    auto instInnerSym = getInnerSymName(instance);
+    auto parentActivePaths = activeHierpaths;
+    setActiveHierPaths(moduleName, instInnerSym);
     // This must be done after the reTop, since it might introduce an innerSym.
-    currentPath.emplace_back(moduleName, getInnerSymName(instance));
+    currentPath.emplace_back(moduleName, instInnerSym);
     // Create the wire mapping for results + ports. We RAUW the results instead
     // of mapping them.
     BlockAndValueMapping mapper;
@@ -1050,6 +1073,7 @@ void Inliner::inlineInstances(FModuleOp parent) {
                  moduleNamespace);
     }
     currentPath.pop_back();
+    activeHierpaths = parentActivePaths;
 
     // Erase the replaced instance.
     instance.erase();
