@@ -389,13 +389,13 @@ class WidthExtendingBitVectorValue(BitVectorValue):
   pass
 
   def __lt__(self, other):
-    assert (False, "Unimplemented")
+    assert False, "Unimplemented"
 
   def __le__(self, other):
-    assert (False, "Unimplemented")
+    assert False, "Unimplemented"
 
   def __ge__(self, other):
-    assert (False, "Unimplemented")
+    assert False, "Unimplemented"
 
 
 class UnsignedBitVectorValue(WidthExtendingBitVectorValue):
