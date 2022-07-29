@@ -15,7 +15,7 @@
 
 include "mlir/IR/OpBase.td"
 
-def SystemCNameDeclOp : OpInterface<"SystemCNameDeclOp"> {
+def SystemCNameDeclOpInterface : OpInterface<"SystemCNameDeclOpInterface"> {
   let cppNamespace = "circt::systemc";
   let description = [{
     Provide common information for operations that declare a SystemC variable

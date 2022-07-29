@@ -64,6 +64,9 @@ def SCModuleOp : SystemCOp<"module", [
     /// Return the block corresponding to the region.
     Block *getBodyBlock() { return &getBody().front(); }
 
+    /// Return the symbol name of this module as string.
+    StringRef getModuleName();
+
     void getPortsOfDirection(PortDirection direction,
                              llvm::SmallVector<Value> &values);
     void getInputs(llvm::SmallVector<Value> &inputs) {

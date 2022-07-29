@@ -35,8 +35,10 @@
 
 // -----
 
-// expected-error @+1 {{module port names must be unique}}
+// expected-note @+1 {{in module '@verifierTest'}}
 "systemc.module"() ({
+  // expected-error @+2 {{redefines port name 'port2'}}
+  // expected-note @+1 {{'port2' first defined here}}
   ^bb0(%arg0: i4, %arg1: i32, %arg2: i4, %arg3: i8):
   }) {function_type = (i4, i32, i4, i8) -> (), portDirections = #systemc.port_directions<[sc_out, sc_in, sc_out, sc_inout]>, portNames = ["port0", "port1", "port2", "port2"], sym_name = "verifierTest"} : () -> ()
 
@@ -47,16 +49,20 @@ systemc.module @parserTest (sc_invalid %arg: i32) { }
 
 // -----
 
-// expected-error @+1 {{declared names must be unique}}
+// expected-note @+1 {{in module '@signalNameConflict'}}
 systemc.module @signalNameConflict () {
+  // expected-note @+1 {{'signal0' first defined here}}
   %0 = "systemc.signal"() {name = "signal0"} : () -> i32
+  // expected-error @+1 {{redefines name 'signal0'}}
   %1 = "systemc.signal"() {name = "signal0"} : () -> i32
 }
 
 // -----
 
-// expected-error @+1 {{declared names must be unique}}
+// expected-note @+2 {{in module '@signalNameConflictWithArg'}}
+// expected-note @+1 {{'in' first defined here}}
 systemc.module @signalNameConflictWithArg (sc_in %in: i32) {
+  // expected-error @+1 {{redefines name 'in'}}
   %0 = "systemc.signal"() {name = "in"} : () -> i32
 }
 

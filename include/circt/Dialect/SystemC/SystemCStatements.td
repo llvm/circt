@@ -24,7 +24,7 @@ def AliasOp : SystemCOp<"alias", [SameTypeOperands]> {
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($lhs)";
 }
 
-def SignalOp : SystemCOp<"signal", [HasCustomSSAName, SystemCNameDeclOp,
+def SignalOp : SystemCOp<"signal", [HasCustomSSAName, SystemCNameDeclOpInterface,
                                     HasParent<"SCModuleOp">]> {
   let summary = "Declares a SystemC `sc_signal<T>`.";
   let description = [{
