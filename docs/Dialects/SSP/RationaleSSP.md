@@ -135,3 +135,18 @@ a single graph region to hold both `OperatorTypeOp`s and `OperationOp`s, but
 discarded that design because it cannot be safely roundtripped via a
 `circt::scheduling::Problem` (internally, registered operator types and
 operations are separate lists).
+
+### Use of SSA operands _and_ symbol references to encode dependences
+
+This is required to faithfully reproduce the internal modeling in the scheduling
+infrastructure, which distinguishes def-use (result to operand, tied to MLIR SSA
+graph) and auxiliary (op to op, stored explicitly) dependences
+([example](https://circt.llvm.org/docs/Scheduling/#constructing-a-problem-instance)).
+To represent the former, the `OperationOp` produces an arbitrary number of
+`NoneType`-typed results, and accepts an arbitrary number of operands, thus
+spanning a def-use graph. Auxiliary dependences are encoded as symbol uses,
+which reference the name of the dependence's source `OperationOp`. Modeling
+these dependences with symbols rather than SSA operands is a necessity because
+the scheduling infrastructure implicitly considers *all* def-use edges between
+registered operations. Hence, auxiliary dependences, hypothetically encoded as
+SSA operands, would be counted twice.

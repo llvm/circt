@@ -50,6 +50,258 @@ DependenceGraphOp InstanceOp::getDependenceGraph() {
 }
 
 //===----------------------------------------------------------------------===//
+// OperationOp
+//===----------------------------------------------------------------------===//
+
+ParseResult OperationOp::parse(OpAsmParser &parser, OperationState &result) {
+  auto &builder = parser.getBuilder();
+
+  // Special handling for the linked operator type property
+  SmallVector<Attribute> alreadyParsed;
+
+  if (parser.parseLess())
+    return failure();
+
+  FlatSymbolRefAttr oprRef;
+  auto parseSymbolResult = parser.parseOptionalAttribute(oprRef);
+  if (parseSymbolResult.hasValue()) {
+    assert(succeeded(*parseSymbolResult));
+    alreadyParsed.push_back(builder.getAttr<LinkedOperatorTypeAttr>(oprRef));
+  }
+
+  if (parser.parseGreater())
+    return failure();
+
+  // (Scheduling) operation's name
+  StringAttr opName;
+  (void)parser.parseOptionalSymbolName(opName, SymbolTable::getSymbolAttrName(),
+                                       result.attributes);
+
+  // Dependences
+  SmallVector<OpAsmParser::UnresolvedOperand> unresolvedOperands;
+  SmallVector<Attribute> dependences;
+  unsigned operandIdx = 0;
+  auto parseDependenceSourceWithAttrDict = [&]() -> ParseResult {
+    llvm::SMLoc loc = parser.getCurrentLocation();
+    FlatSymbolRefAttr sourceRef;
+    ArrayAttr properties;
+
+    // Try to parse either symbol reference...
+    auto parseSymbolResult = parser.parseOptionalAttribute(sourceRef);
+    if (parseSymbolResult.hasValue())
+      assert(succeeded(*parseSymbolResult));
+    else {
+      // ...or an SSA operand.
+      OpAsmParser::UnresolvedOperand operand;
+      if (parser.parseOperand(operand))
+        return parser.emitError(loc, "expected SSA value or symbol reference");
+
+      unresolvedOperands.push_back(operand);
+    }
+
+    // Parse the properties, if present.
+    parseOptionalPropertyArray(properties, parser);
+
+    // No need to explicitly store SSA deps without properties.
+    if (sourceRef || properties)
+      dependences.push_back(
+          builder.getAttr<DependenceAttr>(operandIdx, sourceRef, properties));
+
+    ++operandIdx;
+    return success();
+  };
+
+  if (parser.parseCommaSeparatedList(AsmParser::Delimiter::Paren,
+                                     parseDependenceSourceWithAttrDict))
+    return failure();
+
+  if (!dependences.empty())
+    result.addAttribute(builder.getStringAttr("dependences"),
+                        builder.getArrayAttr(dependences));
+
+  // Properties
+  ArrayAttr properties;
+  auto parsePropertiesResult =
+      parseOptionalPropertyArray(properties, parser, alreadyParsed);
+  if (parsePropertiesResult.hasValue()) {
+    if (failed(*parsePropertiesResult))
+      return failure();
+    result.addAttribute(builder.getStringAttr("properties"), properties);
+  }
+
+  // Parse default attr-dict
+  if (parser.parseOptionalAttrDict(result.attributes))
+    return failure();
+
+  // Resolve operands
+  SmallVector<Value> operands;
+  if (parser.resolveOperands(unresolvedOperands, builder.getNoneType(),
+                             operands))
+    return failure();
+  result.addOperands(operands);
+
+  // Mockup results
+  SmallVector<Type> types(parser.getNumResults(), builder.getNoneType());
+  result.addTypes(types);
+
+  return success();
+}
+
+void OperationOp::print(OpAsmPrinter &p) {
+  // Special handling for the linked operator type
+  SmallVector<Attribute> alreadyPrinted;
+
+  p << '<';
+  if (ArrayAttr properties = getPropertiesAttr()) {
+    auto it =
+        std::find_if(properties.begin(), properties.end(), [](Attribute a) {
+          return a.isa<LinkedOperatorTypeAttr>();
+        });
+    if (it != properties.end()) {
+      auto opr = (*it).dyn_cast<LinkedOperatorTypeAttr>();
+      p.printAttribute(opr.getValue());
+      alreadyPrinted.push_back(opr);
+    }
+  }
+  p << '>';
+
+  // (Scheduling) operation's name
+  if (StringAttr symName = getSymNameAttr()) {
+    p << ' ';
+    p.printSymbolName(symName);
+  }
+
+  // Dependences = SSA operands + other OperationOps via symbol references.
+  // Emitted format looks like this:
+  // (%0, %1 [#ssp.some_property<42>, ...], %2, ...,
+  //  @op0, @op1 [#ssp.some_property<17>, ...], ...)
+  SmallVector<DependenceAttr> defUseDeps(getNumOperands()), auxDeps;
+  if (ArrayAttr dependences = getDependencesAttr()) {
+    for (auto dep : dependences.getAsRange<DependenceAttr>()) {
+      if (dep.getSourceRef())
+        auxDeps.push_back(dep);
+      else
+        defUseDeps[dep.getOperandIdx()] = dep;
+    }
+  }
+
+  p << '(';
+  llvm::interleaveComma((*this)->getOpOperands(), p, [&](OpOperand &operand) {
+    p.printOperand(operand.get());
+    if (DependenceAttr dep = defUseDeps[operand.getOperandNumber()]) {
+      p << ' ';
+      p.printAttribute(dep.getProperties());
+    }
+  });
+  if (!auxDeps.empty()) {
+    if (!defUseDeps.empty())
+      p << ", ";
+    llvm::interleaveComma(auxDeps, p, [&](DependenceAttr dep) {
+      p.printAttribute(dep.getSourceRef());
+      if (ArrayAttr depProps = dep.getProperties()) {
+        p << ' ';
+        printPropertyArray(depProps, p);
+      }
+    });
+  }
+  p << ')';
+
+  // Properties
+  if (ArrayAttr properties = getPropertiesAttr()) {
+    p << ' ';
+    printPropertyArray(properties, p, alreadyPrinted);
+  }
+
+  // Default attr-dict
+  SmallVector<StringRef> elidedAttrs = {
+      SymbolTable::getSymbolAttrName(),
+      OperationOp::getDependencesAttrName().getValue(),
+      OperationOp::getPropertiesAttrName().getValue()};
+  p.printOptionalAttrDict((*this)->getAttrs(), elidedAttrs);
+}
+
+LogicalResult OperationOp::verify() {
+  ArrayAttr dependences = getDependencesAttr();
+  if (!dependences)
+    return success();
+
+  int nOperands = getNumOperands();
+  int lastIdx = -1;
+  for (auto dep : dependences.getAsRange<DependenceAttr>()) {
+    int idx = dep.getOperandIdx();
+    FlatSymbolRefAttr sourceRef = dep.getSourceRef();
+
+    if (!sourceRef) {
+      // Def-use deps use the index to refer to one of the SSA operands.
+      if (idx >= nOperands)
+        return emitError(
+            "Operand index is out of bounds for def-use dependence attribute");
+
+      // Indices may be sparse, but shall be sorted and unique.
+      if (idx <= lastIdx)
+        return emitError("Def-use operand indices in dependence attribute are "
+                         "not monotonically increasing");
+    } else {
+      // Auxiliary deps are expected to follow the def-use deps (if present),
+      // and hence use indices >= #operands.
+      if (idx < nOperands)
+        return emitError() << "Auxiliary dependence from " << sourceRef
+                           << " is interleaved with SSA operands";
+
+      // Indices shall be consecutive (special case: the first aux dep)
+      if (!((idx == lastIdx + 1) || (idx > lastIdx && idx == nOperands)))
+        return emitError("Auxiliary operand indices in dependence attribute "
+                         "are not consecutive");
+    }
+
+    lastIdx = idx;
+  }
+  return success();
+}
+
+LogicalResult
+OperationOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto instanceOp = (*this)->getParentOfType<InstanceOp>();
+  auto libraryOp = instanceOp.getOperatorLibrary();
+  auto graphOp = instanceOp.getDependenceGraph();
+
+  // Verify that all auxiliary dependences reference valid named operations
+  // inside the dependence graph.
+  if (ArrayAttr dependences = getDependencesAttr())
+    for (auto dep : dependences.getAsRange<DependenceAttr>()) {
+      FlatSymbolRefAttr sourceRef = dep.getSourceRef();
+      if (!sourceRef)
+        continue;
+
+      Operation *sourceOp = symbolTable.lookupSymbolIn(graphOp, sourceRef);
+      if (!sourceOp || !isa<OperationOp>(sourceOp)) {
+        return emitError(
+                   "Auxiliary dependence references invalid source operation: ")
+               << sourceRef;
+      }
+    }
+
+  // If a linkedOperatorType property is present, verify that it references a
+  // valid operator type.
+  if (ArrayAttr properties = getPropertiesAttr()) {
+    for (auto prop : properties.getAsRange<Attribute>()) {
+      if (auto linkedOpr = prop.dyn_cast<LinkedOperatorTypeAttr>()) {
+        FlatSymbolRefAttr oprRef = linkedOpr.getValue();
+        Operation *oprOp = symbolTable.lookupSymbolIn(libraryOp, oprRef);
+        if (!oprOp || !isa<OperatorTypeOp>(oprOp)) {
+          return emitError("Linked operator type property references invalid "
+                           "operator type: ")
+                 << oprRef;
+        }
+        break;
+      }
+    }
+  }
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // Wrappers for the `custom<Properties>` ODS directive.
 //===----------------------------------------------------------------------===//
 
