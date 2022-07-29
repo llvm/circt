@@ -81,6 +81,29 @@ static Type lowerType(Type type) {
   return {};
 }
 
+/// Return true if the specified FIRRTL type is a sized type (Int or Analog)
+/// with zero bits.
+static bool isZeroBitFIRRTLType(Type type) {
+  return type.cast<FIRRTLType>().getPassiveType().getBitWidthOrSentinel() == 0;
+}
+
+// Return a single source value in the operands of the given attach op if
+// exists.
+static Value getSingleNonInstanceOperand(AttachOp op) {
+  Value singleSource;
+  for (auto operand : op.getAttached()) {
+    if (isZeroBitFIRRTLType(operand.getType()) ||
+        operand.getDefiningOp<InstanceOp>())
+      continue;
+    // If it is used by other than attach op or there is already a source
+    // value, bail out.
+    if (!operand.hasOneUse() || singleSource)
+      return {};
+    singleSource = operand;
+  }
+  return singleSource;
+}
+
 /// This verifies that the target operation has been lowered to a legal
 /// operation.  This checks that the operation recursively has no FIRRTL
 /// operations or types.
@@ -160,12 +183,6 @@ static Value castFromFIRRTLType(Value val, Type type,
       builder.create<mlir::UnrealizedConversionCastOp>(type, val).getResult(0);
 
   return val;
-}
-
-/// Return true if the specified FIRRTL type is a sized type (Int or Analog)
-/// with zero bits.
-static bool isZeroBitFIRRTLType(Type type) {
-  return type.cast<FIRRTLType>().getPassiveType().getBitWidthOrSentinel() == 0;
 }
 
 /// Move a ExtractTestCode related annotation from annotations to an attribute.
@@ -3018,6 +3035,19 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
       continue;
     }
 
+    // If the result has an analog type and is used only by attach op,
+    // try eliminating a temporary wire by directly using an attached value.
+    if (portResult.getType().isa<AnalogType>() && portResult.hasOneUse()) {
+      if (auto attach = dyn_cast<AttachOp>(*portResult.getUsers().begin())) {
+        if (auto source = getSingleNonInstanceOperand(attach)) {
+          auto loweredResult = getPossiblyInoutLoweredValue(source);
+          operands.push_back(loweredResult);
+          (void)setLowering(portResult, loweredResult);
+          continue;
+        }
+      }
+    }
+
     // Create a wire for each input/inout operand, so there is
     // something to connect to.
     Value wire =
@@ -4018,6 +4048,11 @@ LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {
   }
 
   if (inoutValues.size() < 2)
+    return success();
+
+  // If the op has a single source value, the value is used as a lowering result
+  // of other values. Therefore we can delete the attach op here.
+  if (getSingleNonInstanceOperand(op))
     return success();
 
   addToIfDefBlock(
