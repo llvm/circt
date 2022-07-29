@@ -1,4 +1,4 @@
-//RUN: circt-opt %s --convert-llhd-to-llvm | FileCheck %s
+//RUN: circt-opt %s --convert-comb-to-llvm | FileCheck %s
 
 // CHECK-LABEL: convert_bitwise_i1
 // CHECK-SAME: %[[LHS:.*]]: i1,
@@ -47,7 +47,7 @@ func.func @convert_bitwise_i32_variadic(%arg0 : i32, %arg1 : i32, %arg2 : i32) {
   return
 }
 
-// CHECK-LABEL: llvm.func @convert_comb_shift
+// CHECK-LABEL: @convert_comb_shift
 func.func @convert_comb_shift(%arg0: i32, %arg1: i32, %arg2: i1) -> i32 {
 
   // CHECK: %[[R0:.*]] = llvm.shl %arg0, %arg1 : i32

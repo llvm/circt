@@ -12,8 +12,8 @@
 
 #include "circt/Conversion/LLHDToLLVM.h"
 #include "../PassDetail.h"
-#include "circt/Dialect/Comb/CombOps.h"
-#include "circt/Dialect/HW/HWOps.h"
+#include "circt/Conversion/CombToLLVM.h"
+#include "circt/Conversion/HWToLLVM.h"
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "circt/Support/LLVM.h"
@@ -24,14 +24,10 @@
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/LLVMCommon/Pattern.h"
 #include "mlir/Conversion/ReconcileUnrealizedCasts/ReconcileUnrealizedCasts.h"
-#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/IR/BlockAndValueMapping.h"
-#include "mlir/IR/BuiltinOps.h"
-#include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
-#include "llvm/ADT/TypeSwitch.h"
 
 using namespace mlir;
 using namespace circt;
@@ -40,33 +36,6 @@ using namespace circt::llhd;
 //===----------------------------------------------------------------------===//
 // Helpers
 //===----------------------------------------------------------------------===//
-
-uint32_t convertToLLVMEndianess(Type type, uint32_t index) {
-  // This is hardcoded for little endian machines for now.
-  return TypeSwitch<Type, uint32_t>(type)
-      .Case<hw::ArrayType>(
-          [&](hw::ArrayType ty) { return ty.getSize() - index - 1; })
-      .Case<hw::StructType>([&](hw::StructType ty) {
-        return ty.getElements().size() - index - 1;
-      });
-}
-
-uint32_t llvmIndexOfStructField(hw::StructType type, StringRef fieldName) {
-  auto fieldIter = type.getElements();
-  size_t index = 0;
-
-  for (const auto *iter = fieldIter.begin(); iter != fieldIter.end(); ++iter) {
-    if (iter->name == fieldName) {
-      return convertToLLVMEndianess(type, index);
-    }
-    ++index;
-  }
-
-  // Verifier of StructExtractOp has to ensure that the field name is indeed
-  // present.
-  llvm_unreachable("Field name attribute of hw::StructExtractOp invalid");
-  return 0;
-}
 
 /// Get an existing global string.
 static Value getGlobalString(Location loc, OpBuilder &builder,
@@ -656,23 +625,6 @@ static Type convertPtrType(PtrType type, LLVMTypeConverter &converter) {
       converter.convertType(type.getUnderlyingType()));
 }
 
-static Type convertArrayType(hw::ArrayType type, LLVMTypeConverter &converter) {
-  auto elementTy = converter.convertType(type.getElementType());
-  return LLVM::LLVMArrayType::get(elementTy, type.getSize());
-}
-
-static Type convertStructType(hw::StructType type,
-                              LLVMTypeConverter &converter) {
-  llvm::SmallVector<Type, 8> elements;
-  mlir::SmallVector<mlir::Type> types;
-  type.getInnerTypes(types);
-
-  for (int i = 0, e = types.size(); i < e; ++i)
-    elements.push_back(
-        converter.convertType(types[convertToLLVMEndianess(type, i)]));
-
-  return LLVM::LLVMStructType::getLiteral(&converter.getContext(), elements);
-}
 //===----------------------------------------------------------------------===//
 // Unit conversions
 //===----------------------------------------------------------------------===//
@@ -1775,142 +1727,6 @@ private:
 } // namespace
 
 //===----------------------------------------------------------------------===//
-// Bitwise conversions
-//===----------------------------------------------------------------------===//
-
-namespace {
-template <typename SourceOp, typename TargetOp>
-class VariadicOpConversion : public ConvertOpToLLVMPattern<SourceOp> {
-public:
-  using OpAdaptor = typename SourceOp::Adaptor;
-  using ConvertOpToLLVMPattern<SourceOp>::ConvertOpToLLVMPattern;
-  using Super = VariadicOpConversion<SourceOp, TargetOp>;
-
-  LogicalResult
-  matchAndRewrite(SourceOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-
-    size_t numOperands = op.getOperands().size();
-    // All operands have the same type.
-    Type type = op.getOperandTypes().front();
-    auto replacement = op.getOperand(0);
-
-    for (unsigned i = 1; i < numOperands; i++) {
-      replacement = rewriter.create<TargetOp>(op.getLoc(), type, replacement,
-                                              op.getOperand(i));
-    }
-
-    rewriter.replaceOp(op, replacement);
-
-    return success();
-  }
-};
-
-using AndOpConversion = VariadicOpConversion<comb::AndOp, LLVM::AndOp>;
-using OrOpConversion = VariadicOpConversion<comb::OrOp, LLVM::OrOp>;
-using XorOpConversion = VariadicOpConversion<comb::XorOp, LLVM::XOrOp>;
-
-using CombShlOpConversion =
-    OneToOneConvertToLLVMPattern<comb::ShlOp, LLVM::ShlOp>;
-using CombShrUOpConversion =
-    OneToOneConvertToLLVMPattern<comb::ShrUOp, LLVM::LShrOp>;
-using CombShrSOpConversion =
-    OneToOneConvertToLLVMPattern<comb::ShrSOp, LLVM::AShrOp>;
-
-} // namespace
-
-namespace {
-/// Lower an ArrayConcatOp operation to the LLVM dialect.
-/// Pattern: hw.bitcast(input) ==> load(bitcast_ptr(store(input, alloca)))
-/// This is necessary because we cannot bitcast aggregate types directly in
-/// LLVMIR.
-struct BitcastOpConversion : public ConvertOpToLLVMPattern<hw::BitcastOp> {
-  using ConvertOpToLLVMPattern<hw::BitcastOp>::ConvertOpToLLVMPattern;
-
-  LogicalResult
-  matchAndRewrite(hw::BitcastOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-
-    Type resultTy = typeConverter->convertType(op.getResult().getType());
-    Type inputTy = typeConverter->convertType(op.getInput().getType());
-
-    Value castInput = getTypeConverter()->materializeTargetConversion(
-        rewriter, op.getInput().getLoc(), inputTy, op.getInput());
-    auto oneC = rewriter.createOrFold<LLVM::ConstantOp>(
-        op->getLoc(), rewriter.getI32Type(), rewriter.getI32IntegerAttr(1));
-
-    auto ptr = rewriter.create<LLVM::AllocaOp>(
-        op->getLoc(), LLVM::LLVMPointerType::get(inputTy), oneC,
-        /*alignment=*/4);
-
-    rewriter.create<LLVM::StoreOp>(op->getLoc(), castInput, ptr);
-
-    auto cast = rewriter.create<LLVM::BitcastOp>(
-        op.getLoc(), LLVM::LLVMPointerType::get(resultTy), ptr);
-
-    rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, resultTy, cast);
-
-    return success();
-  }
-};
-} // namespace
-
-//===----------------------------------------------------------------------===//
-// Arithmetic conversions
-//===----------------------------------------------------------------------===//
-
-namespace {
-
-using CombAddOpConversion = VariadicOpConversion<comb::AddOp, LLVM::AddOp>;
-using CombMulOpConversion = VariadicOpConversion<comb::MulOp, LLVM::MulOp>;
-using CombSubOpConversion =
-    OneToOneConvertToLLVMPattern<comb::SubOp, LLVM::SubOp>;
-
-using CombDivUOpConversion =
-    OneToOneConvertToLLVMPattern<comb::DivUOp, LLVM::UDivOp>;
-using CombDivSOpConversion =
-    OneToOneConvertToLLVMPattern<comb::DivSOp, LLVM::SDivOp>;
-
-using CombModUOpConversion =
-    OneToOneConvertToLLVMPattern<comb::ModUOp, LLVM::URemOp>;
-using CombModSOpConversion =
-    OneToOneConvertToLLVMPattern<comb::ModSOp, LLVM::SRemOp>;
-
-using CombICmpOpConversion =
-    OneToOneConvertToLLVMPattern<comb::ICmpOp, LLVM::ICmpOp>;
-
-// comb.mux supports any type thus this conversion relies on the type converter
-// to be able to convert the type of the operands and result to an LLVM_Type
-using CombMuxOpConversion =
-    OneToOneConvertToLLVMPattern<comb::MuxOp, LLVM::SelectOp>;
-
-} // namespace
-
-namespace {
-/// Convert a comb::ParityOp to the LLVM dialect.
-struct CombParityOpConversion : public ConvertToLLVMPattern {
-  explicit CombParityOpConversion(MLIRContext *ctx,
-                                  LLVMTypeConverter &typeConverter)
-      : ConvertToLLVMPattern(comb::ParityOp::getOperationName(), ctx,
-                             typeConverter) {}
-
-  LogicalResult
-  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
-                  ConversionPatternRewriter &rewriter) const override {
-    auto parityOp = cast<comb::ParityOp>(op);
-
-    auto popCount =
-        rewriter.create<LLVM::CtPopOp>(op->getLoc(), parityOp.getInput());
-    rewriter.replaceOpWithNewOp<LLVM::TruncOp>(
-        op, IntegerType::get(rewriter.getContext(), 1), popCount);
-
-    return success();
-  }
-};
-
-} // namespace
-
-//===----------------------------------------------------------------------===//
 // Value creation conversions
 //===----------------------------------------------------------------------===//
 
@@ -1949,91 +1765,6 @@ struct ConstantTimeOpConversion : public ConvertToLLVMPattern {
         DenseElementsAttr::get(RankedTensorType::get(3, rewriter.getI64Type()),
                                {adjusted, delta, eps});
     rewriter.replaceOpWithNewOp<LLVM::ConstantOp>(op, timeTy, denseAttr);
-    return success();
-  }
-};
-} // namespace
-
-namespace {
-struct HWConstantOpConversion : public ConvertToLLVMPattern {
-  explicit HWConstantOpConversion(MLIRContext *ctx,
-                                  LLVMTypeConverter &typeConverter)
-      : ConvertToLLVMPattern(hw::ConstantOp::getOperationName(), ctx,
-                             typeConverter) {}
-
-  LogicalResult
-  matchAndRewrite(Operation *op, ArrayRef<Value> operand,
-                  ConversionPatternRewriter &rewriter) const override {
-    // Get the ConstOp.
-    auto constOp = cast<hw::ConstantOp>(op);
-    // Get the converted llvm type.
-    auto intType = typeConverter->convertType(constOp.getValueAttr().getType());
-    // Replace the operation with an llvm constant op.
-    rewriter.replaceOpWithNewOp<LLVM::ConstantOp>(op, intType,
-                                                  constOp.getValueAttr());
-
-    return success();
-  }
-};
-} // namespace
-
-namespace {
-/// Convert an ArrayOp operation to the LLVM dialect. An equivalent and
-/// initialized llvm dialect array type is generated.
-struct HWArrayCreateOpConversion
-    : public ConvertOpToLLVMPattern<hw::ArrayCreateOp> {
-  using ConvertOpToLLVMPattern<hw::ArrayCreateOp>::ConvertOpToLLVMPattern;
-
-  LogicalResult
-  matchAndRewrite(hw::ArrayCreateOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-
-    auto arrayTy = typeConverter->convertType(op->getResult(0).getType());
-
-    Value arr = rewriter.create<LLVM::UndefOp>(op->getLoc(), arrayTy);
-    for (size_t i = 0, e = op.getInputs().size(); i < e; ++i) {
-      Value input =
-          op.getInputs()[convertToLLVMEndianess(op.getResult().getType(), i)];
-      Value castInput = typeConverter->materializeTargetConversion(
-          rewriter, op->getLoc(), typeConverter->convertType(input.getType()),
-          input);
-
-      arr = rewriter.create<LLVM::InsertValueOp>(
-          op->getLoc(), arrayTy, arr, castInput, rewriter.getI32ArrayAttr(i));
-    }
-
-    rewriter.replaceOp(op, arr);
-    return success();
-  }
-};
-} // namespace
-
-namespace {
-/// Convert a StructCreateOp operation to the LLVM dialect. An equivalent and
-/// initialized llvm dialect struct type is generated.
-struct HWStructCreateOpConversion
-    : public ConvertOpToLLVMPattern<hw::StructCreateOp> {
-  using ConvertOpToLLVMPattern<hw::StructCreateOp>::ConvertOpToLLVMPattern;
-
-  LogicalResult
-  matchAndRewrite(hw::StructCreateOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-
-    auto resTy = typeConverter->convertType(op.getResult().getType());
-
-    Value tup = rewriter.create<LLVM::UndefOp>(op->getLoc(), resTy);
-    for (size_t i = 0, e = resTy.cast<LLVM::LLVMStructType>().getBody().size();
-         i < e; ++i) {
-      Value input =
-          op.getInput()[convertToLLVMEndianess(op.getResult().getType(), i)];
-      Value castInput = typeConverter->materializeTargetConversion(
-          rewriter, op->getLoc(), typeConverter->convertType(input.getType()),
-          input);
-      tup = rewriter.create<LLVM::InsertValueOp>(
-          op->getLoc(), resTy, tup, castInput, rewriter.getI32ArrayAttr(i));
-    }
-
-    rewriter.replaceOp(op, tup);
     return success();
   }
 };
@@ -2130,7 +1861,8 @@ struct SigStructExtractOpConversion
         getSignalDetail(rewriter, &getDialect(), op->getLoc(), castInput,
                         /*extractIndices=*/true);
 
-    uint32_t index = llvmIndexOfStructField(op.getStructType(), op.getField());
+    uint32_t index = HWToLLVMEndianessConverter::llvmIndexOfStructField(
+        op.getStructType(), op.getField());
 
     auto indexC = rewriter.create<LLVM::ConstantOp>(
         op->getLoc(), rewriter.getI32Type(), rewriter.getI32IntegerAttr(index));
@@ -2174,290 +1906,6 @@ struct SigArrayGetOpConversion
     rewriter.replaceOp(op, createSubSig(&getDialect(), rewriter, op->getLoc(),
                                         sigDetail, adjustedPtr, sigDetail[1]));
 
-    return success();
-  }
-};
-} // namespace
-
-namespace {
-/// Convert a comb::ExtractOp to LLVM dialect.
-struct CombExtractOpConversion : public ConvertToLLVMPattern {
-  explicit CombExtractOpConversion(MLIRContext *ctx,
-                                   LLVMTypeConverter &typeConverter)
-      : ConvertToLLVMPattern(comb::ExtractOp::getOperationName(), ctx,
-                             typeConverter) {}
-
-  LogicalResult
-  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
-                  ConversionPatternRewriter &rewriter) const override {
-    auto extractOp = cast<comb::ExtractOp>(op);
-    mlir::Value valueToTrunc = extractOp.getInput();
-    mlir::Type type = extractOp.getInput().getType();
-
-    if (extractOp.getLowBit() != 0) {
-      mlir::Value amt = rewriter.create<LLVM::ConstantOp>(
-          op->getLoc(), type, extractOp.getLowBitAttr());
-      valueToTrunc = rewriter.create<LLVM::LShrOp>(op->getLoc(), type,
-                                                   extractOp.getInput(), amt);
-    }
-
-    rewriter.replaceOpWithNewOp<LLVM::TruncOp>(
-        op, extractOp.getResult().getType(), valueToTrunc);
-    return success();
-  }
-};
-} // namespace
-
-namespace {
-/// Convert a StructExtractOp to LLVM dialect.
-/// Pattern: struct_extract(input, fieldname) =>
-///   extractvalue(input, fieldname_to_index(fieldname))
-struct StructExtractOpConversion
-    : public ConvertOpToLLVMPattern<hw::StructExtractOp> {
-  using ConvertOpToLLVMPattern<hw::StructExtractOp>::ConvertOpToLLVMPattern;
-
-  LogicalResult
-  matchAndRewrite(hw::StructExtractOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-
-    Type inputTy = typeConverter->convertType(op.getInput().getType());
-    Type resultTy = typeConverter->convertType(op.getResult().getType());
-
-    uint32_t fieldIndex = llvmIndexOfStructField(
-        op.getInput().getType().cast<hw::StructType>(), op.getField());
-    IntegerAttr indexAttr = rewriter.getI32IntegerAttr(fieldIndex);
-
-    Value castInput = typeConverter->materializeTargetConversion(
-        rewriter, op.getInput().getLoc(), inputTy, op.getInput());
-
-    rewriter.replaceOpWithNewOp<LLVM::ExtractValueOp>(
-        op, resultTy, castInput, rewriter.getArrayAttr(indexAttr));
-
-    return success();
-  }
-};
-} // namespace
-
-namespace {
-/// Convert an ArrayGetOp to the LLVM dialect.
-/// Pattern: array_get(input, index) =>
-///   load(gep(store(input, alloca), zext(index)))
-struct ArrayGetOpConversion : public ConvertOpToLLVMPattern<hw::ArrayGetOp> {
-  using ConvertOpToLLVMPattern<hw::ArrayGetOp>::ConvertOpToLLVMPattern;
-
-  LogicalResult
-  matchAndRewrite(hw::ArrayGetOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-
-    auto elemTy = typeConverter->convertType(op.getResult().getType());
-    auto inputTy = typeConverter->convertType(op.getInput().getType());
-
-    auto zeroC = rewriter.create<LLVM::ConstantOp>(
-        op->getLoc(), IntegerType::get(rewriter.getContext(), 32),
-        rewriter.getI32IntegerAttr(0));
-    auto oneC = rewriter.create<LLVM::ConstantOp>(
-        op->getLoc(), IntegerType::get(rewriter.getContext(), 32),
-        rewriter.getI32IntegerAttr(1));
-    auto arrPtr = rewriter.create<LLVM::AllocaOp>(
-        op->getLoc(), LLVM::LLVMPointerType::get(inputTy), oneC,
-        /*alignment=*/4);
-    Value castInput = typeConverter->materializeTargetConversion(
-        rewriter, op.getInput().getLoc(), inputTy, op.getInput());
-
-    rewriter.create<LLVM::StoreOp>(op->getLoc(), castInput, arrPtr);
-    auto zextIndex = zextByOne(op->getLoc(), rewriter, op.getIndex());
-    auto gep = rewriter.create<LLVM::GEPOp>(
-        op->getLoc(), LLVM::LLVMPointerType::get(elemTy), arrPtr,
-        ArrayRef<Value>({zeroC, zextIndex}));
-    rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, elemTy, gep);
-
-    return success();
-  }
-};
-} // namespace
-
-namespace {
-/// Convert an ArraySliceOp to the LLVM dialect.
-/// Pattern: array_slice(input, lowIndex) =>
-///   load(bitcast(gep(store(input, alloca), zext(lowIndex))))
-struct ArraySliceOpConversion
-    : public ConvertOpToLLVMPattern<hw::ArraySliceOp> {
-  using ConvertOpToLLVMPattern<hw::ArraySliceOp>::ConvertOpToLLVMPattern;
-
-  LogicalResult
-  matchAndRewrite(hw::ArraySliceOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-
-    auto dstTy = typeConverter->convertType(op.getDst().getType());
-    auto elemTy = typeConverter->convertType(
-        op.getDst().getType().cast<hw::ArrayType>().getElementType());
-    auto inputTy = typeConverter->convertType(op.getInput().getType());
-
-    auto zeroC = rewriter.create<LLVM::ConstantOp>(
-        op->getLoc(), rewriter.getI32Type(), rewriter.getI32IntegerAttr(0));
-    auto oneC = rewriter.create<LLVM::ConstantOp>(
-        op->getLoc(), rewriter.getI32Type(), rewriter.getI32IntegerAttr(1));
-    Value castInput = typeConverter->materializeTargetConversion(
-        rewriter, op.getInput().getLoc(), inputTy, op.getInput());
-
-    auto arrPtr = rewriter.create<LLVM::AllocaOp>(
-        op->getLoc(), LLVM::LLVMPointerType::get(inputTy), oneC,
-        /*alignment=*/4);
-
-    rewriter.create<LLVM::StoreOp>(op->getLoc(), castInput, arrPtr);
-
-    auto zextIndex = zextByOne(op->getLoc(), rewriter, op.getLowIndex());
-
-    auto gep = rewriter.create<LLVM::GEPOp>(
-        op->getLoc(), LLVM::LLVMPointerType::get(elemTy), arrPtr,
-        ArrayRef<Value>({zeroC, zextIndex}));
-
-    auto cast = rewriter.create<LLVM::BitcastOp>(
-        op->getLoc(), LLVM::LLVMPointerType::get(dstTy), gep);
-
-    rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, dstTy, cast);
-
-    return success();
-  }
-};
-} // namespace
-
-//===----------------------------------------------------------------------===//
-// Insertion operations conversion
-//===----------------------------------------------------------------------===//
-
-namespace {
-/// Convert a StructInjectOp to LLVM dialect.
-/// Pattern: struct_inject(input, index, value) =>
-///   insertvalue(input, value, index)
-struct StructInjectOpConversion
-    : public ConvertOpToLLVMPattern<hw::StructInjectOp> {
-  using ConvertOpToLLVMPattern<hw::StructInjectOp>::ConvertOpToLLVMPattern;
-
-  LogicalResult
-  matchAndRewrite(hw::StructInjectOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-
-    Type inputTy = typeConverter->convertType(op.getInput().getType());
-    Type resultTy = typeConverter->convertType(op.getResult().getType());
-
-    uint32_t fieldIndex =
-        llvmIndexOfStructField(op.getInput().getType().cast<hw::StructType>(),
-                               op.getFieldAttr().getValue());
-    IntegerAttr indexAttr = rewriter.getI32IntegerAttr(fieldIndex);
-
-    Value castInput = typeConverter->materializeTargetConversion(
-        rewriter, op.getInput().getLoc(), inputTy, op.getInput());
-
-    rewriter.replaceOpWithNewOp<LLVM::InsertValueOp>(
-        op, resultTy, castInput, op.getNewValue(),
-        rewriter.getArrayAttr(indexAttr));
-
-    return success();
-  }
-};
-} // namespace
-
-//===----------------------------------------------------------------------===//
-// Concat operations conversion
-//===----------------------------------------------------------------------===//
-
-namespace {
-/// Lower an ArrayConcatOp operation to the LLVM dialect.
-struct ArrayConcatOpConversion
-    : public ConvertOpToLLVMPattern<hw::ArrayConcatOp> {
-  using ConvertOpToLLVMPattern<hw::ArrayConcatOp>::ConvertOpToLLVMPattern;
-
-  LogicalResult
-  matchAndRewrite(hw::ArrayConcatOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-
-    hw::ArrayType arrTy = op.getResult().getType().cast<hw::ArrayType>();
-    Type elemTy = typeConverter->convertType(arrTy.getElementType());
-    Type resultTy = typeConverter->convertType(arrTy);
-
-    Value arr = rewriter.create<LLVM::UndefOp>(op->getLoc(), resultTy);
-
-    // Attention: j is hardcoded for little endian machines.
-    size_t j = op.getInputs().size() - 1, k = 0;
-
-    for (size_t i = 0, e = arrTy.getSize(); i < e; ++i) {
-      Type inputTy = typeConverter->convertType(op.getInputs()[j].getType());
-      Value castInput = typeConverter->materializeTargetConversion(
-          rewriter, op.getInputs()[j].getLoc(), inputTy, op.getInputs()[j]);
-
-      Value element = rewriter.create<LLVM::ExtractValueOp>(
-          op->getLoc(), elemTy, castInput, rewriter.getI32ArrayAttr(k));
-      arr = rewriter.create<LLVM::InsertValueOp>(
-          op->getLoc(), resultTy, arr, element, rewriter.getI32ArrayAttr(i));
-
-      ++k;
-      if (k >= op.getInputs()[j].getType().cast<hw::ArrayType>().getSize()) {
-        k = 0;
-        --j;
-      }
-    }
-
-    rewriter.replaceOp(op, arr);
-    return success();
-  }
-};
-} // namespace
-
-namespace {
-/// Convert a comb::ConcatOp to the LLVM dialect.
-struct CombConcatOpConversion : public ConvertToLLVMPattern {
-  explicit CombConcatOpConversion(MLIRContext *ctx,
-                                  LLVMTypeConverter &typeConverter)
-      : ConvertToLLVMPattern(comb::ConcatOp::getOperationName(), ctx,
-                             typeConverter) {}
-
-  LogicalResult
-  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
-                  ConversionPatternRewriter &rewriter) const override {
-    auto concatOp = cast<comb::ConcatOp>(op);
-    auto numOperands = concatOp->getNumOperands();
-    mlir::Type type = concatOp.getResult().getType();
-
-    unsigned nextInsertion = type.getIntOrFloatBitWidth();
-    auto aggregate = rewriter
-                         .create<LLVM::ConstantOp>(op->getLoc(), type,
-                                                   IntegerAttr::get(type, 0))
-                         .getRes();
-
-    for (unsigned i = 0; i < numOperands; i++) {
-      nextInsertion -=
-          concatOp->getOperand(i).getType().getIntOrFloatBitWidth();
-
-      auto nextInsValue = rewriter.create<LLVM::ConstantOp>(
-          op->getLoc(), type, IntegerAttr::get(type, nextInsertion));
-      auto extended = rewriter.create<LLVM::ZExtOp>(op->getLoc(), type,
-                                                    concatOp->getOperand(i));
-      auto shifted = rewriter.create<LLVM::ShlOp>(op->getLoc(), type, extended,
-                                                  nextInsValue);
-      aggregate =
-          rewriter.create<LLVM::OrOp>(op->getLoc(), type, aggregate, shifted)
-              .getRes();
-    }
-
-    rewriter.replaceOp(op, aggregate);
-    return success();
-  }
-};
-} // namespace
-
-namespace {
-/// Lower a comb::ReplicateOp operation to the LLVM dialect.
-struct CombReplicateOpConversion
-    : public ConvertOpToLLVMPattern<comb::ReplicateOp> {
-  using ConvertOpToLLVMPattern<comb::ReplicateOp>::ConvertOpToLLVMPattern;
-
-  LogicalResult
-  matchAndRewrite(comb::ReplicateOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-
-    std::vector<Value> inputs(op.getMultiple(), op.getInput());
-    rewriter.replaceOpWithNewOp<comb::ConcatOp>(op, inputs);
     return success();
   }
 };
@@ -2535,29 +1983,12 @@ void circt::populateLLHDToLLVMConversionPatterns(LLVMTypeConverter &converter,
   MLIRContext *ctx = converter.getDialect()->getContext();
 
   // Value creation conversion patterns.
-  patterns.add<ConstantTimeOpConversion, HWConstantOpConversion>(ctx,
-                                                                 converter);
-  patterns.add<HWArrayCreateOpConversion, HWStructCreateOpConversion>(
-      converter);
+  patterns.add<ConstantTimeOpConversion>(ctx, converter);
 
   // Extract conversion patterns.
   patterns.add<SigExtractOpConversion, SigArraySliceOpConversion,
                SigArrayGetOpConversion, SigStructExtractOpConversion>(
       converter);
-
-  patterns.add<CombExtractOpConversion, CombConcatOpConversion>(ctx, converter);
-
-  // Bitwise conversion patterns.
-  patterns.add<CombParityOpConversion>(ctx, converter);
-  patterns.add<AndOpConversion, OrOpConversion, XorOpConversion>(converter);
-  patterns.add<CombShlOpConversion, CombShrUOpConversion, CombShrSOpConversion,
-               BitcastOpConversion>(converter);
-
-  // Arithmetic conversion patterns.
-  patterns.add<CombAddOpConversion, CombSubOpConversion, CombMulOpConversion,
-               CombDivUOpConversion, CombDivSOpConversion, CombModUOpConversion,
-               CombModSOpConversion, CombICmpOpConversion, CombMuxOpConversion,
-               CombReplicateOpConversion>(converter);
 
   // Unit conversion patterns.
   patterns.add<ProcOpConversion, WaitOpConversion, HaltOpConversion>(ctx,
@@ -2572,10 +2003,15 @@ void circt::populateLLHDToLLVMConversionPatterns(LLVMTypeConverter &converter,
   // Memory conversion patterns.
   patterns.add<VarOpConversion, StoreOpConversion>(ctx, converter);
   patterns.add<LoadOpConversion>(converter);
+}
 
-  patterns.add<ArrayGetOpConversion, ArraySliceOpConversion,
-               ArrayConcatOpConversion, StructExtractOpConversion,
-               StructInjectOpConversion>(converter);
+void circt::populateLLHDToLLVMTypeConversions(LLVMTypeConverter &converter) {
+  converter.addConversion(
+      [&](SigType sig) { return convertSigType(sig, converter); });
+  converter.addConversion(
+      [&](TimeType time) { return convertTimeType(time, converter); });
+  converter.addConversion(
+      [&](PtrType ptr) { return convertPtrType(ptr, converter); });
 }
 
 void LLHDToLLVMLoweringPass::runOnOperation() {
@@ -2587,16 +2023,10 @@ void LLHDToLLVMLoweringPass::runOnOperation() {
 
   RewritePatternSet patterns(&getContext());
   auto converter = mlir::LLVMTypeConverter(&getContext());
-  converter.addConversion(
-      [&](SigType sig) { return convertSigType(sig, converter); });
-  converter.addConversion(
-      [&](TimeType time) { return convertTimeType(time, converter); });
-  converter.addConversion(
-      [&](PtrType ptr) { return convertPtrType(ptr, converter); });
-  converter.addConversion(
-      [&](hw::ArrayType arr) { return convertArrayType(arr, converter); });
-  converter.addConversion(
-      [&](hw::StructType tup) { return convertStructType(tup, converter); });
+  populateLLHDToLLVMTypeConversions(converter);
+
+  // Also populate with HW type conversions
+  populateHWToLLVMTypeConversions(converter);
 
   // Apply a partial conversion first, lowering only the instances, to generate
   // the init function.
@@ -2618,6 +2048,10 @@ void LLHDToLLVMLoweringPass::runOnOperation() {
   populateFuncToLLVMConversionPatterns(converter, patterns);
   populateLLHDToLLVMConversionPatterns(converter, patterns, sigCounter,
                                        regCounter);
+
+  // Populate with HW and Comb conversion patterns
+  populateHWToLLVMConversionPatterns(converter, patterns);
+  populateCombToLLVMConversionPatterns(converter, patterns);
 
   target.addLegalDialect<LLVM::LLVMDialect>();
   target.addLegalOp<ModuleOp>();

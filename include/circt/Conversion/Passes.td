@@ -326,6 +326,32 @@ def ConvertLLHDToLLVM : Pass<"convert-llhd-to-llvm", "mlir::ModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
+// HWToLLVM
+//===----------------------------------------------------------------------===//
+
+def ConvertHWToLLVM : Pass<"convert-hw-to-llvm", "mlir::ModuleOp"> {
+  let summary = "Convert HW to LLVM";
+  let description = [{
+    This pass translates HW to LLVM."
+  }];
+  let constructor = "circt::createConvertHWToLLVMPass()";
+  let dependentDialects = ["mlir::LLVM::LLVMDialect"];
+}
+
+//===----------------------------------------------------------------------===//
+// CombToLLVM
+//===----------------------------------------------------------------------===//
+
+def ConvertCombToLLVM : Pass<"convert-comb-to-llvm", "mlir::ModuleOp"> {
+  let summary = "Convert Comb to LLVM";
+  let description = [{
+    This pass translates Comb to LLVM."
+  }];
+  let constructor = "circt::createConvertCombToLLVMPass()";
+  let dependentDialects = ["mlir::LLVM::LLVMDialect"];
+}
+
+//===----------------------------------------------------------------------===//
 // HWArithToHW
 //===----------------------------------------------------------------------===//
 
