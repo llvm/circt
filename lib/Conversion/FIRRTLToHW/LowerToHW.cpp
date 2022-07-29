@@ -1673,23 +1673,30 @@ LogicalResult FIRRTLLowering::run() {
 
   // Replace all backedges with uses of their regular values.
   for (auto &[backedge, value] : backedges) {
+    // In the case where we have backedges connected to other backedges, we have
+    // to find the value that actually drives the group.
     while (true) {
-      auto it = backedges.find(value);
+      // If the we find the original backedge we have some undriven logic.
+      if (backedge == value) {
+        // Create a wire with no driver and use that as the backedge value.
+        OpBuilder::InsertionGuard guard(builder);
+        builder.setInsertionPointAfterValue(backedge);
+        value = builder.create<sv::WireOp>(backedge.getLoc(),
+                                           backedge.getType(), "undriven");
+        value = builder.createOrFold<sv::ReadInOutOp>(value);
+        break;
+      }
       // If the value is not another backedge, we have found the driver.
+      auto it = backedges.find(value);
       if (it == backedges.end())
         break;
-      // We have to recurse on the value.
+      // Find what is driving the next backedge.
       value = it->second;
-      // If the we find the original backedge we have some undriven logic.
-      if (value == backedge) {
-        backedgeBuilder.abandon();
-        return emitError(backedge.getLoc(), "undriven logic detected");
-      }
     }
     backedge.replaceAllUsesWith(value);
   }
 
-  // Now that all of the operations that can be lowered are, remove the
+  // Now that all of the operations that can be lowered are, remove th
   // original values.  We know that any lowered operations will be dead (if
   // removed in reverse order) at this point - any users of them from
   // unremapped operations will be changed to use the newly lowered ops.

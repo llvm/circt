@@ -116,16 +116,3 @@ firrtl.circuit "Foo" attributes {annotations = [
       firrtl.instance foo sym @s1 {annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}]} @Foo()
     }
 }
-
-// -----
-
-firrtl.circuit "UndrivenInputPort" {
-  firrtl.extmodule @Blackbox(in in : !firrtl.uint<1>)
-  firrtl.module @UndrivenInputPort() {
-    // expected-error @below {{undriven logic detected}}
-    %0 = firrtl.instance blackbox @Blackbox(in in : !firrtl.uint<1>)
-    %1 = firrtl.instance blackbox @Blackbox(in in : !firrtl.uint<1>)
-    firrtl.strictconnect %0, %1 : !firrtl.uint<1>
-    firrtl.strictconnect %1, %0 : !firrtl.uint<1>
-  }
-}
