@@ -2089,10 +2089,10 @@ static LogicalResult checkConnectFlow(Operation *connect,
 
   // If the connect is for RefType, implement the constraint for downward only
   // references. We cannot connect
-  //  1. an input reference port to the output reference port.
-  //  2. instance reference results to each other.
-  //  This means, the connect can only be used for forwarding RefType module
-  //  ports to Instance ports.
+  //   1. an input reference port to the output reference port.
+  //   2. instance reference results to each other.
+  // This means, the connect can only be used for forwarding RefType module
+  // ports to Instance ports.
   if (dst.getType().isa<RefType>()) {
     if (getDeclarationKind(src) == getDeclarationKind(dst)) {
       auto srcRef = getFieldRefFromValue(src);
@@ -3964,7 +3964,7 @@ LogicalResult RefSendOp::verify() {
 
 LogicalResult RefRecvOp::verify() {
   // Check that the flows make sense.
-  if (failed(checkConnectFlow(*this, true)))
+  if (failed(checkConnectFlow(*this, /*disallowOutputPortSink=*/ true)))
     return failure();
   // The result of the ref recv op (xmr write) cannot be used as the destination
   // of any connect op in the module.
