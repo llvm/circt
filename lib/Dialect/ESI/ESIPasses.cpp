@@ -1384,6 +1384,7 @@ void ESICreateCapnpSchemaPass::runOnOperation() {
   if (!cosimWalk.wasInterrupted())
     return;
 
+  // Generate the schema
   std::string schemaStrBuffer;
   llvm::raw_string_ostream os(schemaStrBuffer);
   if (failed(exportCosimSchema(mod, os))) {
@@ -1391,10 +1392,10 @@ void ESICreateCapnpSchemaPass::runOnOperation() {
     return;
   }
 
+  // And stuff if in a verbatim op with a filename, optionally.
   OpBuilder b = OpBuilder::atBlockEnd(mod.getBody());
   auto verbatim = b.create<sv::VerbatimOp>(b.getUnknownLoc(),
                                            StringAttr::get(ctxt, os.str()));
-
   if (!schemaFile.empty()) {
     auto outputFileAttr = OutputFileAttr::getFromFilename(ctxt, schemaFile);
     verbatim->setAttr("output_file", outputFileAttr);
