@@ -130,7 +130,8 @@ ParseResult OperationOp::parse(OpAsmParser &parser, OperationState &result) {
   }
 
   // Parse default attr-dict
-  (void)parser.parseOptionalAttrDict(result.attributes);
+  if (parser.parseOptionalAttrDict(result.attributes))
+    return failure();
 
   // Resolve operands
   SmallVector<Value> operands;
@@ -282,8 +283,8 @@ OperationOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 
   // If a linkedOperatorType property is present, verify that it references a
   // valid operator type.
-  if (ArrayAttr properties = getPropertiesAttr())
-    for (auto prop : properties.getAsRange<Attribute>())
+  if (ArrayAttr properties = getPropertiesAttr()) {
+    for (auto prop : properties.getAsRange<Attribute>()) {
       if (auto linkedOpr = prop.dyn_cast<LinkedOperatorTypeAttr>()) {
         FlatSymbolRefAttr oprRef = linkedOpr.getValue();
         Operation *oprOp = symbolTable.lookupSymbolIn(libraryOp, oprRef);
@@ -294,6 +295,8 @@ OperationOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
         }
         break;
       }
+    }
+  }
 
   return success();
 }
