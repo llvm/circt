@@ -1627,7 +1627,9 @@ private:
   /// without requiring temporary wires.
   BackedgeBuilder backedgeBuilder;
   /// Currently unresolved backedges. More precisely, a mapping from the
-  /// backedge value to the value it will be replaced with.
+  /// backedge value to the value it will be replaced with. We use a MapVector
+  /// so that a combinational cycles of backedges, the one backedge that gets
+  /// replaced with an undriven wire is consistent.
   llvm::MapVector<Value, Value> backedges;
 };
 } // end anonymous namespace
@@ -1671,7 +1673,11 @@ LogicalResult FIRRTLLowering::run() {
     }
   }
 
-  // Replace all backedges with uses of their regular values.
+  // Replace all backedges with uses of their regular values.  We process them
+  // after the module body since the lowering table is too hard to keep up to
+  // date.  Multiple operations may be lowered to the same backedge when values
+  // are folded, which means we would have to scan the entire lowering table to
+  // safely replace a backedge.
   for (auto &[backedge, value] : backedges) {
     // In the case where we have backedges connected to other backedges, we have
     // to find the value that actually drives the group.
