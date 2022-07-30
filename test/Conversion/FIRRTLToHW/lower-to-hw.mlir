@@ -1674,4 +1674,52 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %1 = arith.addf %0, %0 : f32
     builtin.unrealized_conversion_cast %1 : f32 to index
   }
+
+  // Used for testing.
+  firrtl.extmodule private @Blackbox(in inst: !firrtl.uint<1>)
+
+  // Check that the following doesn't crash, when we have a no-op cast which
+  // uses an input port.
+  // CHECK-LABEL: hw.module private @BackedgesAndNoopCasts
+  // CHECK-NEXT:    hw.instance "blackbox" @Blackbox(inst: %clock: i1) -> ()
+  // CHECK-NEXT:    hw.output %clock : i1
+  firrtl.module private @BackedgesAndNoopCasts(in %clock: !firrtl.uint<1>, out %out : !firrtl.clock) {
+    // Following comments describe why this used to crash.
+    // Blackbox input port creates a backedge.
+    %inst = firrtl.instance blackbox @Blackbox(in inst: !firrtl.uint<1>)
+    // No-op cast is removed, %cast lowered to point directly to the backedge.
+    %cast = firrtl.asClock %inst : (!firrtl.uint<1>) -> !firrtl.clock
+    // Finalize the backedge, replacing all uses with %clock.
+    firrtl.strictconnect %inst, %clock : !firrtl.uint<1>
+    // %cast accidentally still points to the back edge in the lowering table.
+    firrtl.strictconnect %out, %cast : !firrtl.clock
+  }
+  
+  // Check that when inputs are connected to other inputs, the backedges are
+  // properly resolved to the final real value.
+  // CHECK-LABEL: hw.module @ChainedBackedges
+  // CHECK-NEXT:    hw.instance "a" @Blackbox
+  // CHECK-NEXT:    hw.instance "b" @Blackbox
+  // CHECK-NEXT:    hw.output %in : i1
+  firrtl.module @ChainedBackedges(in %in: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
+    %a_inst = firrtl.instance a @Blackbox(in inst: !firrtl.uint<1>)
+    %b_inst = firrtl.instance b @Blackbox(in inst: !firrtl.uint<1>)
+    firrtl.strictconnect %a_inst, %in : !firrtl.uint<1>
+    firrtl.strictconnect %b_inst, %a_inst : !firrtl.uint<1>
+    firrtl.strictconnect %out, %b_inst : !firrtl.uint<1>
+  }
+
+  // Check that combinational cycles with no outside driver are lowered to
+  // be driven from a wire.
+  // CHECK-LABEL: hw.module @UndrivenInputPort()
+  // CHECK-NEXT:    %undriven = sv.wire : !hw.inout<i1>
+  // CHECK-NEXT:    %0 = sv.read_inout %undriven : !hw.inout<i1>
+  // CHECK-NEXT:    hw.instance "blackbox" @Blackbox(inst: %0: i1) -> ()
+  // CHECK-NEXT:    hw.instance "blackbox" @Blackbox(inst: %0: i1) -> ()
+  firrtl.module @UndrivenInputPort() {
+    %0 = firrtl.instance blackbox @Blackbox(in inst : !firrtl.uint<1>)
+    %1 = firrtl.instance blackbox @Blackbox(in inst : !firrtl.uint<1>)
+    firrtl.strictconnect %0, %1 : !firrtl.uint<1>
+    firrtl.strictconnect %1, %0 : !firrtl.uint<1>
+  }
 }
