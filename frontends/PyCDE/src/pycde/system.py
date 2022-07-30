@@ -294,7 +294,8 @@ class _OpCache:
     if pyproxy in self._pyproxy_symbols:
       return (None, None)
     ctr = 0
-    basename = pyproxy.name
+    # Get the sanitized name.
+    basename = "".join([c if c.isalnum() else '_' for c in pyproxy.name])
     symbol = basename
     while symbol in self.symbols:
       ctr += 1
