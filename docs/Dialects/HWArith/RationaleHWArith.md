@@ -192,7 +192,7 @@ operand's width.
     We know that `a + 1 > b`, and derive from (S) that the result type must be
     `si<(a+1) + 1>` = `si<a+2>`.
 
-* `a < b`, i.e. the unsigned operand's width is stricly less than the signed
+* `a < b`, i.e. the unsigned operand's width is strictly less than the signed
 operand's width.
 
     As `a + 1 ≤ b`, the result via (S) is `si<b+1>`.
@@ -233,7 +233,7 @@ Example:
 
 Result value range: `[SI_MIN<a> - SI_MAX<b>, SI_MAX<a> - SI_MIN<b>]`
 
-We rewrite the value range and then appy the same reasoning as for the
+We rewrite the value range and then apply the same reasoning as for the
 [signed addition](#signed-addition-S):
 ```
   [SI_MIN<a> - SI_MAX<b>, SI_MAX<a> - SI_MIN<b>]
@@ -370,7 +370,7 @@ Example:
 
 Result value range: `[SI_MIN<a> / 1, SI_MIN<a> / -1]`
 
-`- SI_MIN<a>` is not convered by `si<a>`, so we have to widen the result type to
+`- SI_MIN<a>` is not covered by `si<a>`, so we have to widen the result type to
 `si<a+1>`.
 
 Example:
@@ -463,6 +463,45 @@ required.
 %2 = hwarith.cast %12 : (si7) -> ui4 // (S)
 %3 = hwarith.cast %13 : (i7) -> si5  // (I)
 %3 = hwarith.cast %13 : (si14) -> i4 // (S)
+```
+
+### Comparison
+
+In order to compare two sign-aware operands, a common type must first be found
+that is able to preserve the values of the two operands. Once determined, the
+operands are casted to this comparison type as specified in the
+[casting section](#casting). To simplify the use as well as the IR generation
+of the dialect, the necessary casting steps are hidden from the user and
+applied during the lowering. Thus, the following code:
+```mlir
+%2 = hwarith.cast %0 : (si3) -> si6
+%3 = hwarith.cast %1 : (ui5) -> si6
+%4 = hwarith.icmp lt %2, %3 : si6, si6
+```
+can be simplified to:
+```mlir
+%4 = hwarith.icmp lt %0, %1 : si3, ui5
+```
+
+Note that the result of the comparison is *always* of type `ui1`, regardless of
+the operands. So if the `i1` type is needed, the result must be cast
+accordingly.
+
+#### Overview
+
+|   | LHS type | RHS type | Comparison type                          | Result type |
+| - | :------- | :------- | :--------------------------------------- | :---------- |
+|(U)| `ui<a>`  | `ui<b>`  | `ui<r>`, *r* = max(*a*, *b*)             | `ui1`       |
+|(S)| `si<a>`  | `si<b>`  | `si<r>`, *r* = max(*a*, *b*)             | `ui1`       |
+|(M)| `ui<a>`  | `si<b>`  | `si<r>`, *r* = *a* + 1 **if** *a* ≥ *b*  | `ui1`       |
+|   |          |          | `si<r>`, *r* = *b* **if** *a* < *b*      | `ui1`       |
+|(M)| `si<a>`  | `ui<b>`  | Same as `ui<b> si<a>`                    | `ui1`       |
+
+#### Examples
+```mlir
+%0 = hwarith.icmp lt %10, %11 : ui5, ui6 // (U)
+%1 = hwarith.icmp lt %12, %13 : si3, si4 // (S)
+%2 = hwarith.icmp lt %12, %11 : si3, ui6 // (M)
 ```
 
 ### Additional operators

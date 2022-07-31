@@ -13,6 +13,7 @@
 #ifndef CIRCT_DIALECT_HWARITH_HWARITHOPS_TD
 #define CIRCT_DIALECT_HWARITH_HWARITHOPS_TD
 
+include "mlir/IR/EnumAttr.td"
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
@@ -199,6 +200,55 @@ def HWArith_CastOp : HWArithOp<"cast", [NoSideEffect]> {
   let assemblyFormat = "$in attr-dict `:` functional-type($in, $out)";
 
   let hasVerifier = 1;
+}
+
+// Comparison predicates
+// `==` and `!=`
+def ICmpPredicateEQ  : I64EnumAttrCase<"eq", 0b000>;
+def ICmpPredicateNE  : I64EnumAttrCase<"ne", 0b001>;
+// `<` and `>=`
+def ICmpPredicateLT : I64EnumAttrCase<"lt", 0b010>;
+def ICmpPredicateGE : I64EnumAttrCase<"ge", 0b011>;
+// `<=` and `>`
+def ICmpPredicateLE : I64EnumAttrCase<"le", 0b100>;
+def ICmpPredicateGT : I64EnumAttrCase<"gt", 0b101>;
+
+let cppNamespace = "circt::hwarith" in
+def ICmpPredicate : I64EnumAttr<
+    "ICmpPredicate",
+    "hwarith.icmp comparison predicate",
+    [ICmpPredicateEQ, ICmpPredicateNE, ICmpPredicateLT,
+     ICmpPredicateGE, ICmpPredicateLE, ICmpPredicateGT]>;
+
+def ICmpOp : HWArithOp<"icmp", [NoSideEffect]> {
+  let summary = "Sign- and bitwidth-aware integer comparison.";
+  let description = [{
+    The `icmp` operation compares two integers using a predicate. If the
+    predicate is true, returns 1, otherwise returns 0. This operation always
+    returns a one bit wide result of type `ui1`. Both operand types may be
+    signed or unsigned scalar integer types of arbitrary bitwidth.
+
+    | LHS type | RHS type | Comparison type                          | Result type |
+    | :------- | :------- | :--------------------------------------- | :---------- |
+    | `ui<a>`  | `ui<b>`  | `ui<r>`, *r* = max(*a*, *b*)             | `ui1`       |
+    | `si<a>`  | `si<b>`  | `si<r>`, *r* = max(*a*, *b*)             | `ui1`       |
+    | `ui<a>`  | `si<b>`  | `si<r>`, *r* = *a* + 1 **if** *a* ≥ *b*  | `ui1`       |
+    |          |          | `si<r>`, *r* = *b* **if** *a* < *b*      | `ui1`       |
+    | `si<a>`  | `ui<b>`  | Same as `ui<b> si<a>`                    | `ui1`       |
+
+    Examples:
+    ```mlir
+    %0 = hwarith.icmp lt %10, %11 : ui5, ui6
+    %1 = hwarith.icmp lt %12, %13 : si3, si4
+    %2 = hwarith.icmp lt %12, %11 : si3, ui6
+    ```
+  }];
+
+  let arguments = (ins ICmpPredicate:$predicate,
+                   HWArithIntegerType:$lhs, HWArithIntegerType:$rhs);
+  let results = (outs UI1:$result);
+
+  let assemblyFormat = "$predicate $lhs `,` $rhs  attr-dict `:` type($lhs) `,` type($rhs)";
 }
 
 #endif // CIRCT_DIALECT_HWARITH_HWARITHOPS_TD
