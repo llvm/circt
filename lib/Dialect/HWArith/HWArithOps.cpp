@@ -175,7 +175,7 @@ namespace circt {
 namespace hwarith {
 
 unsigned inferAddResultType(IntegerType::SignednessSemantics &signedness,
-                                   IntegerType lhs, IntegerType rhs) {
+                            IntegerType lhs, IntegerType rhs) {
   // the result width is never less than max(w1, w2) + 1
   unsigned resultWidth = std::max(lhs.getWidth(), rhs.getWidth()) + 1;
 
