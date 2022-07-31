@@ -301,11 +301,15 @@ class BitVectorValue(Value):
   # Generalized function for executing signless binary operations. Performs
   # a check to ensure that the operands have signless semantics and are of
   # identical width, and then calls the provided operator.
-  def __exec_signless_binop__(self, other, op):
+  def __exec_signless_binop__(self, other, op, op_name: str):
     w = max(self.type.width, other.type.width)
-    return op(self.as_int(w), other.as_int(w))
+    ret = op(self.as_int(w), other.as_int(w))
+    if self.name is not None and other.name is not None:
+      ret.name = f"{self.name}_{op_name}_{other.name}"
+    return ret
 
-  def __exec_signless_binop_nocast__(self, other, op, op_symbol: str):
+  def __exec_signless_binop_nocast__(self, other, op, op_symbol: str,
+                                     op_name: str):
     if not isinstance(other, Value):
       # Fall back to the default implementation in cases where we're not dealing
       # with PyCDE value comparison.
@@ -323,37 +327,42 @@ class BitVectorValue(Value):
       )
 
     w = max(self.type.width, other.type.width)
-    return op(self.as_int(w), other.as_int(w))
+    ret = op(self.as_int(w), other.as_int(w))
+    if self.name is not None and other.name is not None:
+      ret.name = f"{self.name}_{op_name}_{other.name}"
+    return ret
 
   def __eq__(self, other):
     from .dialects import comb
-    return self.__exec_signless_binop_nocast__(other, comb.EqOp, "==")
+    return self.__exec_signless_binop_nocast__(other, comb.EqOp, "==", "eq")
 
   def __ne__(self, other):
     from .dialects import comb
-    return self.__exec_signless_binop_nocast__(other, comb.NeOp, "!=")
+    return self.__exec_signless_binop_nocast__(other, comb.NeOp, "!=", "neq")
 
   def __and__(self, other):
     from .dialects import comb
-    return self.__exec_signless_binop__(other, comb.AndOp)
+    return self.__exec_signless_binop__(other, comb.AndOp, "and")
 
   def __or__(self, other):
     from .dialects import comb
-    return self.__exec_signless_binop__(other, comb.OrOp)
+    return self.__exec_signless_binop__(other, comb.OrOp, "or")
 
   def __xor__(self, other):
     from .dialects import comb
-    return self.__exec_signless_binop__(other, comb.XorOp)
+    return self.__exec_signless_binop__(other, comb.XorOp, "xor")
 
   def __invert__(self):
-    from .dialects import comb
     from .pycde_types import types
-    return self.as_int() ^ types.int(self.type.width)(-1)
+    ret = self.as_int() ^ types.int(self.type.width)(-1)
+    if self.name is not None:
+      ret.name = f"neg_{self.name}"
+    return ret
 
   # Generalized function for executing sign-aware binary operations. Performs
   # a check to ensure that the operands have signedness semantics, and then calls
   # the provided operator.
-  def __exec_signedness_binop__(self, other, op, op_symbol: str):
+  def __exec_signedness_binop__(self, other, op, op_symbol: str, op_name: str):
     signlessOperand = None
     if type(self) is BitVectorValue:
       signlessOperand = "LHS"
@@ -365,23 +374,26 @@ class BitVectorValue(Value):
           f"Operator '{op_symbol}' is not supported on signless values. {signlessOperand} operand should be cast .as_sint()/.as_uint()."
       )
 
-    return op(self, other)
+    ret = op(self, other)
+    if self.name is not None and other.name is not None:
+      ret.name = f"{self.name}_{op_name}_{other.name}"
+    return ret
 
   def __add__(self, other):
     from .dialects import hwarith
-    return self.__exec_signedness_binop__(other, hwarith.AddOp, "+")
+    return self.__exec_signedness_binop__(other, hwarith.AddOp, "+", "plus")
 
   def __sub__(self, other):
     from .dialects import hwarith
-    return self.__exec_signedness_binop__(other, hwarith.SubOp, "-")
+    return self.__exec_signedness_binop__(other, hwarith.SubOp, "-", "minus")
 
   def __mul__(self, other):
     from .dialects import hwarith
-    return self.__exec_signedness_binop__(other, hwarith.MulOp, "*")
+    return self.__exec_signedness_binop__(other, hwarith.MulOp, "*", "mul")
 
   def __truediv__(self, other):
     from .dialects import hwarith
-    return self.__exec_signedness_binop__(other, hwarith.DivOp, "/")
+    return self.__exec_signedness_binop__(other, hwarith.DivOp, "/", "div")
 
 
 class WidthExtendingBitVectorValue(BitVectorValue):

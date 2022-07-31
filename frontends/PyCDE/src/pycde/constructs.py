@@ -97,12 +97,20 @@ class If:
     _current_if_stmt.reset(self._old_system_token)
 
     s = inspect.stack()[1][0]
+    new_locals: Dict[str, Value] = {}
     for (varname, (else_value, then_value)) in self._muxes.items():
-      if then_value is None:
-        raise Exception(f"'Then' value not set for variable '{varname}'")
-      if else_value is None:
-        raise Exception(f"'Else' value not set for variable '{varname}'")
-      s.f_locals[varname] = comb.MuxOp(self._cond, else_value, then_value)
+      if then_value is None or else_value is None:
+        continue
+      if then_value.type != else_value.type:
+        raise TypeError(
+            f"'Then' and 'Else' values must have same type for {varname}" +
+            f" ({then_value.type} vs {else_value.type})")
+      then_value.name = f"{varname}_thenvalue"
+      else_value.name = f"{varname}_elsevalue"
+      mux = comb.MuxOp(self._cond, then_value, else_value)
+      mux.name = varname
+      new_locals[varname] = mux
+    s.f_locals.update(new_locals)
     ctypes.pythonapi.PyFrame_LocalsToFast(ctypes.py_object(s), ctypes.c_int(1))
 
 
@@ -122,8 +130,11 @@ class _IfBlock:
     if_stmt = If.current()
     s = inspect.stack()[1][0]
     lcls_to_del = set()
+    new_lcls: Dict[str, Value] = {}
     for (varname, value) in s.f_locals.items():
       if not isinstance(value, Value):
+        continue
+      if varname in self._scope and self._scope[varname] is value:
         continue
       if varname not in if_stmt._muxes:
         if_stmt._muxes[varname] = (None, None)
@@ -142,13 +153,15 @@ class _IfBlock:
         if_stmt._muxes[varname] = (value, m[1])
 
       if varname in self._scope:
-        s.f_locals[varname] = self._scope[varname]
+        new_lcls[varname] = self._scope[varname]
       else:
         lcls_to_del.add(varname)
 
     for varname in lcls_to_del:
       del s.f_locals[varname]
-
+      ctypes.pythonapi.PyFrame_LocalsToFast(ctypes.py_object(s),
+                                            ctypes.c_int(1))
+    s.f_locals.update(new_lcls)
     ctypes.pythonapi.PyFrame_LocalsToFast(ctypes.py_object(s), ctypes.c_int(1))
 
 
