@@ -150,3 +150,19 @@ these dependences with symbols rather than SSA operands is a necessity because
 the scheduling infrastructure implicitly considers *all* def-use edges between
 registered operations. Hence, auxiliary dependences, hypothetically encoded as
 SSA operands, would be counted twice.
+
+### No attribute interface for scheduling properties
+
+Properties are represented by dialect attributes inheriting from the base
+classes in `PropertyBase.td`, which include `extraClassDeclaration`s for
+`setInProblem(...)` and `getFromProblem(...)` methods that directly interact
+with the C++ problem class. In order to get/set a certain property, a reference
+to the concrete class is required, e.g.: a `CyclicProblem &` if we want to set a
+dependence's `distance` property.
+
+A more obvious design would be to make these methods part of an attribute
+interface. However, then the methods could only accept a `Problem &`, which
+cannot be statically downcasted to the concrete class due to the use of virtual
+multiple inheritance in the problem class hierarchy. If the inheritance model
+were to change in the scheduling infrastructure, the use of attribute interfaces
+should be reconsidered.

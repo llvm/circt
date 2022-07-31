@@ -41,9 +41,46 @@ def DependenceArrayAttr
 // Property definitions for in-tree problems
 //===----------------------------------------------------------------------===//
 
-// Real definition to follow in next PR
-def DummyLinkedOperatorType : AttrDef<SSPDialect, "LinkedOperatorType"> {
-  let parameters = (ins "::mlir::FlatSymbolRefAttr":$value);
-  let mnemonic = "dummy_opr";
-  let assemblyFormat = "`<` $value `>`";
+include "PropertyBase.td"
+
+// Problem
+def LinkedOperatorTypeProp : OperationProperty<SSPDialect,
+  "LinkedOperatorType", "::mlir::FlatSymbolRefAttr", "::circt::scheduling::Problem"> {
+  let mnemonic = "opr";
+  // Need to override the default implementation because to (un)wrap the
+  // StringAttr from/for the symbol reference
+  let extraClassDeclaration = [{
+    void setInProblem(}] # problemClassName # [{ &prob, ::mlir::Operation *op) {
+      prob.set}] # propertyName # [{(op, getValue().getLeafReference());
+    }
+    static ::mlir::Attribute getFromProblem(}] # problemClassName # [{ &prob, ::mlir::Operation *op, ::mlir::MLIRContext *ctx) {
+      if (auto value = prob.get}] # propertyName # [{(op))
+        return }] # cppClassName # [{::get(ctx, ::mlir::FlatSymbolRefAttr::get(ctx, *value));
+      return {};
+    }
+  }];
+}
+def StartTimeProp : OperationProperty<SSPDialect,
+  "StartTime", "unsigned", "::circt::scheduling::Problem"> {
+  let mnemonic = "t";
+}
+def LatencyProp : OperatorTypeProperty<SSPDialect,
+  "Latency", "unsigned", "::circt::scheduling::Problem"> {
+  let mnemonic = "latency";
+}
+
+// CyclicProblem
+def DistanceProp : DependenceProperty<SSPDialect,
+  "Distance", "unsigned", "::circt::scheduling::CyclicProblem"> {
+  let mnemonic = "dist";
+}
+def InitiationIntervalProp : InstanceProperty<SSPDialect,
+  "InitiationInterval", "unsigned", "::circt::scheduling::CyclicProblem"> {
+  let mnemonic = "II";
+}
+
+// SharedOperatorsProblem
+def LimitProp : OperatorTypeProperty<SSPDialect,
+  "Limit", "unsigned", "::circt::scheduling::SharedOperatorsProblem"> {
+  let mnemonic = "limit";
 }
