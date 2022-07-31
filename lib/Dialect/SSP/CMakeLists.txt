@@ -12,6 +12,7 @@ set(SSP_Srcs
 
 set(SSP_LinkLibs
   CIRCTScheduling
+  CIRCTSupport
   MLIRIR
   )
 
