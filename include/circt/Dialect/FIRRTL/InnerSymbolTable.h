@@ -155,34 +155,31 @@ public:
 
   /// Walk the given IST operation and invoke the callback for all encountered
   /// inner symbols.
-  /// This variant is used for callbacks that return LogicalResult.
-  template <typename FuncTy,
-            typename RetTy = typename std::invoke_result<
-                FuncTy, StringAttr, const InnerSymTarget &>::type>
-  static typename std::enable_if<std::is_same<LogicalResult, RetTy>::value,
-                                 RetTy>::type
-  walkSymbols(Operation *op, FuncTy &&callback) {
-    return walkSymbols(op, InnerSymCallbackFn(callback));
+  /// This variant allows callbacks that return LogicalResult OR void,
+  /// and wraps the underlying implementation.
+  template <typename FuncTy, typename RetTy = typename std::invoke_result_t<
+                                 FuncTy, StringAttr, const InnerSymTarget &>>
+  static RetTy walkSymbols(Operation *op, FuncTy &&callback) {
+    if constexpr (std::is_void_v<RetTy>)
+      return (void)walkSymbols(
+          op, InnerSymCallbackFn(
+                  [&](StringAttr name, const InnerSymTarget &target) {
+                    std::invoke(std::forward<FuncTy>(callback), name, target);
+                    return success();
+                  }));
+    else
+      return walkSymbols(
+          op, InnerSymCallbackFn([&](StringAttr name,
+                                     const InnerSymTarget &target) {
+            return std::invoke(std::forward<FuncTy>(callback), name, target);
+          }));
   }
 
   /// Walk the given IST operation and invoke the callback for all encountered
   /// inner symbols.
-  /// This variant is used for callbacks that return void.
-  template <typename FuncTy,
-            typename RetTy = typename std::invoke_result<
-                FuncTy, StringAttr, const InnerSymTarget &>::type>
-  static typename std::enable_if<std::is_void<RetTy>::value, RetTy>::type
-  walkSymbols(Operation *op, FuncTy &&callback) {
-    (void)InnerSymbolTable::walkSymbols(
-        op, [&](StringAttr name, const InnerSymTarget &target) {
-          std::invoke(std::forward<FuncTy>(callback), name, target);
-          return success();
-        });
-  }
-
-  /// Walk the given IST operation and invoke the callback for all encountered
-  /// inner symbols.
-  /// This variant is the shared implementation and takes an InnerSymCallbackFn.
+  /// This variant is the underlying implementation.
+  /// If callback returns failure, the walk is aborted and failure is returned.
+  /// A successful walk with no failures returns success.
   static LogicalResult walkSymbols(Operation *op, InnerSymCallbackFn callback);
 
 private:
