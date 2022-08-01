@@ -11,6 +11,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Target/ExportSystemC.h"
+#include "EmissionPrinter.h"
+#include "RegisterAllEmitters.h"
+#include "circt/Dialect/Comb/CombDialect.h"
+#include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/SystemC/SystemCDialect.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Support/FileUtilities.h"
@@ -24,9 +28,40 @@ using namespace circt::ExportSystemC;
 
 #define DEBUG_TYPE "export-systemc"
 
-static LogicalResult emitFile(Operation *op, StringRef filePath,
-                              raw_ostream &os) {
-  return op->emitError("Not yet supported!");
+/// Helper to convert a file-path to a macro name that can be used to guard a
+/// header file.
+static std::string pathToMacroName(StringRef path) {
+  std::string macroname = path.upper();
+  std::replace(macroname.begin(), macroname.end(), '.', '_');
+  std::replace(macroname.begin(), macroname.end(), '/', '_');
+  return macroname;
+}
+
+/// Emits the given operation to a file represented by the passed ostream and
+/// file-path.
+static LogicalResult emitFile(Operation *op, EmissionConfig &config,
+                              StringRef filePath, raw_ostream &os) {
+  mlir::raw_indented_ostream ios(os);
+
+  OpEmissionPatternSet opPatterns;
+  registerAllOpEmitters(opPatterns, op->getContext());
+  TypeEmissionPatternSet typePatterns;
+  registerAllTypeEmitters(typePatterns);
+  EmissionPrinter printer(ios, config, opPatterns, typePatterns);
+
+  printer << "// " << filePath << "\n";
+  std::string macroname = pathToMacroName(filePath);
+  printer << "#ifndef " << macroname << "\n";
+  printer << "#define " << macroname << "\n\n";
+
+  // TODO: add support for 'emitc.include' and remove this hard-coded include.
+  printer << "#include <systemc>\n\n";
+
+  printer.emitOp(op);
+
+  printer << "\n#endif // " << macroname << "\n\n";
+
+  return failure(printer.exitState().failed());
 }
 
 //===----------------------------------------------------------------------===//
@@ -34,11 +69,13 @@ static LogicalResult emitFile(Operation *op, StringRef filePath,
 //===----------------------------------------------------------------------===//
 
 LogicalResult ExportSystemC::exportSystemC(ModuleOp module,
+                                           EmissionConfig &config,
                                            llvm::raw_ostream &os) {
-  return emitFile(module, "stdout.h", os);
+  return emitFile(module, config, "stdout.h", os);
 }
 
 LogicalResult ExportSystemC::exportSplitSystemC(ModuleOp module,
+                                                EmissionConfig &config,
                                                 StringRef directory) {
   for (Operation &op : module.getRegion().front()) {
     if (auto symbolOp = dyn_cast<mlir::SymbolOpInterface>(op)) {
@@ -47,17 +84,17 @@ LogicalResult ExportSystemC::exportSplitSystemC(ModuleOp module,
         return module.emitError("cannot create output directory \"")
                << directory << "\": " << error.message();
 
-      SmallString<128> filePath(directory);
-      llvm::sys::path::append(filePath, symbolOp.getName());
-
       // Open or create the output file.
+      std::string fileName = symbolOp.getName().str() + ".h";
+      SmallString<128> filePath(directory);
+      llvm::sys::path::append(filePath, fileName);
       std::string errorMessage;
       auto output = mlir::openOutputFile(filePath, &errorMessage);
       if (!output)
         return module.emitError(errorMessage);
 
       // Emit the content to the file.
-      if (failed(emitFile(symbolOp, filePath, output->os())))
+      if (failed(emitFile(symbolOp, config, filePath, output->os())))
         return symbolOp->emitError("failed to emit to file \"")
                << filePath << "\"";
 
@@ -82,18 +119,22 @@ void ExportSystemC::registerExportSystemCTranslation() {
   static mlir::TranslateFromMLIRRegistration toSystemC(
       "export-systemc",
       [](ModuleOp module, raw_ostream &output) {
-        return ExportSystemC::exportSystemC(module, output);
+        EmissionConfig config;
+        return ExportSystemC::exportSystemC(module, config, output);
       },
       [](mlir::DialectRegistry &registry) {
-        registry.insert<systemc::SystemCDialect>();
+        registry.insert<hw::HWDialect, comb::CombDialect,
+                        systemc::SystemCDialect>();
       });
 
   static mlir::TranslateFromMLIRRegistration toSplitSystemC(
       "export-split-systemc",
       [](ModuleOp module, raw_ostream &output) {
-        return ExportSystemC::exportSplitSystemC(module, directory);
+        EmissionConfig config;
+        return ExportSystemC::exportSplitSystemC(module, config, directory);
       },
       [](mlir::DialectRegistry &registry) {
-        registry.insert<systemc::SystemCDialect>();
+        registry.insert<hw::HWDialect, comb::CombDialect,
+                        systemc::SystemCDialect>();
       });
 }

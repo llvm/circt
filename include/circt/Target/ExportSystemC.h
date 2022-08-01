@@ -17,10 +17,14 @@
 
 namespace circt {
 namespace ExportSystemC {
+// Forward declarations.
+class EmissionConfig;
 
-LogicalResult exportSystemC(ModuleOp module, llvm::raw_ostream &os);
+LogicalResult exportSystemC(ModuleOp module, EmissionConfig &config,
+                            llvm::raw_ostream &os);
 
-LogicalResult exportSplitSystemC(ModuleOp module, StringRef directory);
+LogicalResult exportSplitSystemC(ModuleOp module, EmissionConfig &config,
+                                 StringRef directory);
 
 void registerExportSystemCTranslation();
 
