@@ -15,7 +15,6 @@ target_link_libraries(circt-opt
   CIRCTCalyxToFSM
   CIRCTCalyxTransforms
   CIRCTESI
-  CIRCTExportSystemC
   CIRCTExportVerilog
   CIRCTFIRRTL
   CIRCTFIRRTLToHW

@@ -1,11 +1,7 @@
-
 add_circt_translation_library(CIRCTExportSystemC
   ExportSystemC.cpp
 
   ADDITIONAL_HEADER_DIRS
-
-  DEPENDS
-  CIRCTConversionPassIncGen
 
   LINK_COMPONENTS
   Core
@@ -15,6 +11,6 @@ add_circt_translation_library(CIRCTExportSystemC
   CIRCTHW
   CIRCTSystemC
   CIRCTSupport
-  MLIRPass
-  MLIRSideEffectInterfaces
-  )
+  MLIRIR
+  MLIRTranslateLib
+)

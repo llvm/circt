@@ -10,19 +10,21 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_TRANSLATION_EXPORTSYSTEMC_H
-#define CIRCT_TRANSLATION_EXPORTSYSTEMC_H
+#ifndef CIRCT_TARGET_EXPORTSYSTEMC_H
+#define CIRCT_TARGET_EXPORTSYSTEMC_H
 
-#include "mlir/Pass/Pass.h"
+#include "circt/Support/LLVM.h"
 
 namespace circt {
+namespace ExportSystemC {
 
-std::unique_ptr<mlir::Pass> createExportSystemCPass(llvm::raw_ostream &os);
-std::unique_ptr<mlir::Pass> createExportSystemCPass();
+LogicalResult exportSystemC(ModuleOp module, llvm::raw_ostream &os);
 
-std::unique_ptr<mlir::Pass>
-createExportSplitSystemCPass(llvm::StringRef directory = "./");
+LogicalResult exportSplitSystemC(ModuleOp module, StringRef directory);
 
+void registerExportSystemCTranslation();
+
+} // namespace ExportSystemC
 } // namespace circt
 
-#endif // CIRCT_TRANSLATION_EXPORTSYSTEMC_H
+#endif // CIRCT_TARGET_EXPORTSYSTEMC_H
