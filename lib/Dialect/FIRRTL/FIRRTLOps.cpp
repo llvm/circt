@@ -3964,7 +3964,7 @@ LogicalResult RefSendOp::verify() {
 
 LogicalResult RefRecvOp::verify() {
   // Check that the flows make sense.
-  if (failed(checkConnectFlow(*this, /*disallowOutputPortSink=*/ true)))
+  if (failed(checkConnectFlow(*this, /*disallowOutputPortSink=*/true)))
     return failure();
   // The result of the ref recv op (xmr write) cannot be used as the destination
   // of any connect op in the module.
