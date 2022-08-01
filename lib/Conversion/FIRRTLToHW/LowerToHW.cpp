@@ -1393,6 +1393,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
                                bool isSigned = false) {
     return getOrCreateIntConstant(APInt(numBits, val, isSigned));
   }
+  Value getOrCreateXConstant(unsigned numBits);
   Value getPossiblyInoutLoweredValue(Value value);
   Value getLoweredValue(Value value);
   Value getLoweredAndExtendedValue(Value value, Type destType);
@@ -1542,6 +1543,9 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
     return lowerDivLikeOp<comb::ModSOp, comb::ModUOp>(op);
   }
 
+  // Verif Operations
+  LogicalResult visitExpr(IsXVerifOp op);
+
   // Other Operations
   LogicalResult visitExpr(BitsPrimOp op);
   LogicalResult visitExpr(InvalidValueOp op);
@@ -1598,6 +1602,10 @@ private:
   /// This keeps track of constants that we have created so we can reuse them.
   /// This is populated by the getOrCreateIntConstant method.
   DenseMap<Attribute, Value> hwConstantMap;
+
+  /// This keeps track of constant X that we have created so we can reuse them.
+  /// This is populated by the getOrCreateXConstant method.
+  DenseMap<unsigned, Value> hwConstantXMap;
 
   /// We auto-unique "ReadInOut" ops from wires and regs, enabling
   /// optimizations and CSEs of the read values to be more obvious.  This
@@ -1807,6 +1815,20 @@ static LogicalResult handleZeroBit(Value failedOperand,
   if (!isZeroBitFIRRTLType(failedOperand.getType()))
     return failure();
   return fn();
+}
+
+/// Check to see if we've already lowered the specified constant.  If so,
+/// return it.  Otherwise create it and put it in the entry block for reuse.
+Value FIRRTLLowering::getOrCreateXConstant(unsigned numBits) {
+
+  auto &entry = hwConstantXMap[numBits];
+  if (entry)
+    return entry;
+
+  OpBuilder entryBuilder(&theModule.getBodyBlock()->front());
+  entry = entryBuilder.create<sv::ConstantXOp>(
+      builder.getLoc(), entryBuilder.getIntegerType(numBits));
+  return entry;
 }
 
 /// Return the lowered HW value corresponding to the specified original value.
@@ -3416,6 +3438,20 @@ LogicalResult FIRRTLLowering::visitExpr(CatPrimOp op) {
     return handleZeroBit(op.getRhs(), [&]() { return setLowering(op, lhs); });
 
   return setLoweringTo<comb::ConcatOp>(op, lhs, rhs);
+}
+
+//===----------------------------------------------------------------------===//
+// Verif Operations
+//===----------------------------------------------------------------------===//
+
+LogicalResult FIRRTLLowering::visitExpr(IsXVerifOp op) {
+  auto input = getLoweredValue(op.getArg());
+  if (!input)
+    return failure();
+
+  return setLoweringTo<comb::ICmpOp>(
+      op, ICmpPredicate::ceq, input,
+      getOrCreateXConstant(input.getType().getIntOrFloatBitWidth()));
 }
 
 //===----------------------------------------------------------------------===//
