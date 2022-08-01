@@ -168,6 +168,10 @@ struct CastOpLowering : public OpConversionPattern<CastOp> {
 } // namespace
 
 namespace {
+
+// Utility lowering function that maps a hwarith::ICmpPredicate predicate and
+// the information whether the comparison contains signed values to the
+// corresponding comb::ICmpPredicate.
 static comb::ICmpPredicate lowerPredicate(ICmpPredicate pred, bool isSigned) {
 #define _CREATE_HWARITH_ICMP_CASE(x)                                           \
   case ICmpPredicate::x:                                                       \

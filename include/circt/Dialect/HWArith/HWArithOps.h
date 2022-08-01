@@ -25,6 +25,8 @@
 namespace circt {
 namespace hwarith {
 
+// Infer the bitwidth as well as the signedness that is required to store the
+// sum of two given integer types without over- or underflowing.
 unsigned inferAddResultType(IntegerType::SignednessSemantics &signedness,
                             IntegerType lhs, IntegerType rhs);
 
