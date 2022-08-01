@@ -167,7 +167,7 @@ Calyx currently serves as the compilation target for [Dahlia](https://capra.cs.c
 and several other domain-specific architectures (systolic array, number 
 theoretic transform unit).
 
-### [Dataflow/handshake](Dialects/Handshake.md)
+### [Dataflow/handshake](Dialects/Handshake/RationaleHandshake.md)
 
 Dataflow models have long been used to represent parallel computation.
 Typically these models include components representing independent
