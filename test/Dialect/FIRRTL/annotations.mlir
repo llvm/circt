@@ -739,7 +739,7 @@ firrtl.circuit "Test" attributes {rawAnnotations = [
 
 // -----
 
-// DontTouchAnnotations create symbols on the things they target.
+// DontTouchAnnotations are placed on the things they target.
 
 firrtl.circuit "Foo"  attributes {
   rawAnnotations = [
@@ -751,31 +751,41 @@ firrtl.circuit "Foo"  attributes {
     {class = "firrtl.transforms.DontTouchAnnotation", target = "~Foo|Foo>_T_5"},
     {class = "firrtl.transforms.DontTouchAnnotation", target = "~Foo|Foo>_T_6"},
     {class = "firrtl.transforms.DontTouchAnnotation", target = "~Foo|Foo>_T_8"},
-    {class = "firrtl.transforms.DontTouchAnnotation", target = "~Foo|Foo>_T_9.a"}]} {
-  // CHECK: firrtl.module @Foo
+    {class = "firrtl.transforms.DontTouchAnnotation", target = "~Foo|Foo>_T_9.a"},
+    {class = "firrtl.transforms.DontTouchAnnotation", target = "~Foo|Foo/bar:Bar>_T.a"}]} {
+  // CHECK:      firrtl.hierpath @nla [@Foo::@bar, @Bar]
+  // CHECK-NEXT: firrtl.module @Foo
   firrtl.module @Foo(in %reset: !firrtl.uint<1>, in %clock: !firrtl.clock) {
-    // CHECK-NEXT: %_T_0 = firrtl.wire sym @_T_0
+    // CHECK-NEXT: %_T_0 = firrtl.wire {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}
     %_T_0 = firrtl.wire  : !firrtl.uint<1>
-    // CHECK-NEXT: %_T_1 = firrtl.node sym @_T_1
+    // CHECK-NEXT: %_T_1 = firrtl.node %_T_0 {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}
     %_T_1 = firrtl.node %_T_0  : !firrtl.uint<1>
-    // CHECK-NEXT: %_T_2 = firrtl.reg sym @_T_2
+    // CHECK-NEXT: %_T_2 = firrtl.reg %clock {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}
     %_T_2 = firrtl.reg %clock  : !firrtl.uint<1>
     %c0_ui4 = firrtl.constant 0 : !firrtl.uint<4>
-    // CHECK: %_T_3 = firrtl.regreset sym @_T_3
+    // CHECK: %_T_3 = firrtl.regreset
+    // CHECK-SAME: {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}
     %_T_3 = firrtl.regreset %clock, %reset, %c0_ui4  : !firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>
-    // CHECK-NEXT: %_T_4 = chirrtl.seqmem sym @_T_4
+    // CHECK-NEXT: %_T_4 = chirrtl.seqmem
+    // CHECK-SAME: {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}
     %_T_4 = chirrtl.seqmem Undefined  : !chirrtl.cmemory<vector<uint<1>, 9>, 256>
-    // CHECK-NEXT: %_T_5 = chirrtl.combmem sym @_T_5
+    // CHECK-NEXT: %_T_5 = chirrtl.combmem {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}
     %_T_5 = chirrtl.combmem  : !chirrtl.cmemory<vector<uint<1>, 9>, 256>
     // CHECK: chirrtl.memoryport Infer %_T_5 {annotations =
     // CHECK-SAME: {class = "firrtl.transforms.DontTouchAnnotation"}
     %_T_6_data, %_T_6_port = chirrtl.memoryport Infer %_T_5  {name = "_T_6"} : (!chirrtl.cmemory<vector<uint<1>, 9>, 256>) -> (!firrtl.vector<uint<1>, 9>, !chirrtl.cmemoryport)
     chirrtl.memoryport.access %_T_6_port[%reset], %clock : !chirrtl.cmemoryport, !firrtl.uint<1>, !firrtl.clock
-    // CHECK: firrtl.mem sym @_T_8
+    // CHECK: firrtl.mem
+    // CHECK-SAME: {class = "firrtl.transforms.DontTouchAnnotation"}
     %_T_8_w = firrtl.mem Undefined  {depth = 8 : i64, name = "_T_8", portNames = ["w"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: uint<4>, mask: uint<1>>
     %aggregate = firrtl.wire  : !firrtl.bundle<a: uint<1>>
     // CHECK: %_T_9 = firrtl.node %aggregate {annotations = [{circt.fieldID = 1 : i32, class = "firrtl.transforms.DontTouchAnnotation"}]}
     %_T_9 = firrtl.node %aggregate  : !firrtl.bundle<a: uint<1>>
+    firrtl.instance bar @Bar()
+  }
+  firrtl.module @Bar() {
+    //  CHECK: %_T = firrtl.wire {annotations = [{circt.fieldID = 1 : i32, circt.nonlocal = @nla, class = "firrtl.transforms.DontTouchAnnotation"}]}
+    %_T = firrtl.wire : !firrtl.bundle<a: uint<1>>
   }
 }
 
@@ -1194,10 +1204,12 @@ firrtl.circuit "Sub"  attributes {
 //
 // CHECK:         firrtl.module @Sub()
 // CHECK-SAME:      {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation.module", id = [[id]] : i64}
-// CHECK-NEXT:      %clockSource = firrtl.wire sym @[[_:[^ ]+]]
+// CHECK-NEXT:      %clockSource = firrtl.wire
 // CHECK-SAME:        {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation.target", dir = "source", id = [[id]] : i64, peer = "~Top|Top>clock", side = "local", targetId = {{[0-9]+}} : i64}
-// CHECK-NEXT:      %clockSink = firrtl.wire sym @[[_:[^ ]+]]
+// CHECK-SAME:        {class = "firrtl.transforms.DontTouchAnnotation"}
+// CHECK-NEXT:      %clockSink = firrtl.wire
 // CHECK-SAME:        {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation.target", dir = "sink", id = [[id]] : i64, peer = "~Top|Foo>clock", side = "local", targetId = {{[0-9]+}} : i64}
+// CHECK-SAME:        {class = "firrtl.transforms.DontTouchAnnotation"}
 // CHECK-NEXT:      %dataSource = firrtl.wire
 // CHECK-SAME:        {circt.fieldID = 3 : i32, class = "sifive.enterprise.grandcentral.SignalDriverAnnotation.target", dir = "source", id = [[id]] : i64, peer = "~Top|Foo>dataOut.p", side = "local", targetId = {{[0-9]+}} : i64}
 // CHECK-SAME:        {circt.fieldID = 3 : i32, class = "firrtl.transforms.DontTouchAnnotation"}
