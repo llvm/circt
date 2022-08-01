@@ -551,7 +551,7 @@ def IsXVerifOp : FIRRTLExprOp<"verif_isX"> {
   let description = [{
     The verif.isX expression checks that the operand is not a verilog literal 
     'x.  Firrtl doesn't have a notion of 'x per-se, but x can come in to the 
-    system from external modules and from SV constructs.  Verificaiton 
+    system from external modules and from SV constructs.  Verification 
     constructs need to explicitly test for 'x.
     }];
 
