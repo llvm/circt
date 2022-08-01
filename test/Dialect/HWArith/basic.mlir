@@ -31,4 +31,8 @@ hw.module @test1() {
   %11 = hwarith.add %10, %6 : (si9, ui3) -> si10
   // CHECK: %12 = hwarith.cast %11 : (si10) -> i9
   %12 = hwarith.cast %11 : (si10) -> i9
+  // CHECK: %13 = hwarith.icmp eq %5, %10 : ui2, si9
+  %13 = hwarith.icmp eq %5, %10 : ui2, si9
+  // CHECK: %14 = hwarith.cast %13 : (ui1) -> i1
+  %14 = hwarith.cast %13 : (ui1) -> i1
 }

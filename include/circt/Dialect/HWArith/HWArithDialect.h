@@ -19,4 +19,7 @@
 // Pull in the Dialect definition.
 #include "circt/Dialect/HWArith/HWArithDialect.h.inc"
 
+// Pull in all enum type definitions and utility function declarations.
+#include "circt/Dialect/HWArith/HWArithEnums.h.inc"
+
 #endif // CIRCT_DIALECT_HWARITH_HWARITHDIALECT_H

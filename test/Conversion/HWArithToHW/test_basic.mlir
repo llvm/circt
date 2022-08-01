@@ -179,14 +179,14 @@ hw.module @div(%op0: i32, %op1: i32) -> (sisi: i32, siui: i32, uisi: i32, uiui: 
   %op1Unsigned = hwarith.cast %op1 : (i32) -> ui32
 
 // CHECK:   %[[SIGN_BIT_OP0:.*]] = comb.extract %op0 from 31 : (i32) -> i1
-// CHECK:   %[[OP0_PADDED:.*]] = comb.concat %0, %op0 : i1, i32
+// CHECK:   %[[OP0_PADDED:.*]] = comb.concat %[[SIGN_BIT_OP0]], %op0 : i1, i32
 // CHECK:   %[[SIGN_BIT_OP1:.*]] = comb.extract %op1 from 31 : (i32) -> i1
-// CHECK:   %[[OP1_PADDED:.*]] = comb.concat %2, %op1 : i1, i32
+// CHECK:   %[[OP1_PADDED:.*]] = comb.concat %[[SIGN_BIT_OP1]], %op1 : i1, i32
 // CHECK:   %[[SISI_RES:.*]] = comb.divs %[[OP0_PADDED]], %[[OP1_PADDED]] : i33
   %sisi = hwarith.div %op0Signed, %op1Signed : (si32, si32) -> si33
 
 // CHECK:   %[[SIGN_BIT_OP0:.*]] = comb.extract %op0 from 31 : (i32) -> i1
-// CHECK:   %[[OP0_PADDED:.*]] = comb.concat %5, %op0 : i1, i32
+// CHECK:   %[[OP0_PADDED:.*]] = comb.concat %[[SIGN_BIT_OP0]], %op0 : i1, i32
 // CHECK:   %[[ZERO_EXTEND:.*]] = hw.constant false
 // CHECK:   %[[OP1_PADDED:.*]] = comb.concat %[[ZERO_EXTEND]], %op1 : i1, i32
 // CHECK:   %[[SIUI_RES_IMM:.*]] = comb.divs %[[OP0_PADDED]], %[[OP1_PADDED]] : i33
@@ -196,7 +196,7 @@ hw.module @div(%op0: i32, %op1: i32) -> (sisi: i32, siui: i32, uisi: i32, uiui: 
 // CHECK:   %[[ZERO_EXTEND:.*]] = hw.constant false
 // CHECK:   %[[OP0_PADDED:.*]] = comb.concat %[[ZERO_EXTEND]], %op0 : i1, i32
 // CHECK:   %[[SIGN_BIT_OP1:.*]] = comb.extract %op1 from 31 : (i32) -> i1
-// CHECK:   %[[OP1_PADDED:.*]] = comb.concat %11, %op1 : i1, i32
+// CHECK:   %[[OP1_PADDED:.*]] = comb.concat %[[SIGN_BIT_OP1]], %op1 : i1, i32
 // CHECK:   %[[UISI_RES:.*]] = comb.divs %[[OP0_PADDED]], %[[OP1_PADDED]] : i33
   %uisi = hwarith.div %op0Unsigned, %op1Signed : (ui32, si32) -> si33
 
@@ -212,4 +212,84 @@ hw.module @div(%op0: i32, %op1: i32) -> (sisi: i32, siui: i32, uisi: i32, uiui: 
 
 // CHECK:   hw.output %[[SISI_OUT]], %[[SIUI_RES]], %[[UISI_OUT]], %[[UIUI_RES]] : i32, i32, i32, i32
   hw.output %sisiOut, %siuiOut, %uisiOut, %uiuiOut : i32, i32, i32, i32
+}
+
+// -----
+
+// CHECK: hw.module @icmp(%op0: i32, %op1: i32) -> (sisi: i1, siui: i1, uisi: i1, uiui: i1) {
+hw.module @icmp(%op0: i32, %op1: i32) -> (sisi: i1, siui: i1, uisi: i1, uiui: i1) {
+  %op0Signed = hwarith.cast %op0 : (i32) -> si32
+  %op0Unsigned = hwarith.cast %op0 : (i32) -> ui32
+  %op1Signed = hwarith.cast %op1 : (i32) -> si32
+  %op1Unsigned = hwarith.cast %op1 : (i32) -> ui32
+
+// CHECK:   %[[SISI_OUT:.*]] = comb.icmp slt %op0, %op1 : i32
+  %sisi = hwarith.icmp lt %op0Signed, %op1Signed : si32, si32
+
+// CHECK:   %[[SIGN_BIT_OP0:.*]] = comb.extract %op0 from 31 : (i32) -> i1
+// CHECK:   %[[OP0_PADDED:.*]] = comb.concat %[[SIGN_BIT_OP0]], %op0 : i1, i32
+// CHECK:   %[[ZERO_EXTEND:.*]] = hw.constant false
+// CHECK:   %[[OP1_PADDED:.*]] = comb.concat %[[ZERO_EXTEND]], %op1 : i1, i32
+// CHECK:   %[[SIUI_OUT:.*]] = comb.icmp slt %[[OP0_PADDED]], %[[OP1_PADDED]] : i33
+  %siui = hwarith.icmp lt %op0Signed, %op1Unsigned : si32, ui32
+
+// CHECK:   %[[ZERO_EXTEND:.*]] = hw.constant false
+// CHECK:   %[[OP0_PADDED:.*]] = comb.concat %[[ZERO_EXTEND]], %op0 : i1, i32
+// CHECK:   %[[SIGN_BIT_OP1:.*]] = comb.extract %op1 from 31 : (i32) -> i1
+// CHECK:   %[[OP1_PADDED:.*]] = comb.concat %[[SIGN_BIT_OP1]], %op1 : i1, i32
+// CHECK:   %[[UISI_OUT:.*]] = comb.icmp slt %[[OP0_PADDED]], %[[OP1_PADDED]] : i33
+  %uisi = hwarith.icmp lt %op0Unsigned, %op1Signed : ui32, si32
+
+// CHECK:   %[[UIUI_OUT:.*]] = comb.icmp ult %op0, %op1 : i32
+  %uiui = hwarith.icmp lt %op0Unsigned, %op1Unsigned : ui32, ui32
+
+  %sisiOut = hwarith.cast %sisi : (ui1) -> i1
+  %siuiOut = hwarith.cast %siui : (ui1) -> i1
+  %uisiOut = hwarith.cast %uisi : (ui1) -> i1
+  %uiuiOut = hwarith.cast %uiui : (ui1) -> i1
+
+// CHECK:   hw.output %[[SISI_OUT]], %[[SIUI_OUT]], %[[UISI_OUT]], %[[UIUI_OUT]] : i1, i1, i1, i1
+  hw.output %sisiOut, %siuiOut, %uisiOut, %uiuiOut : i1, i1, i1, i1
+}
+
+// -----
+
+// CHECK: hw.module @icmp_mixed_width(%op0: i5, %op1: i7) -> (sisi: i1, siui: i1, uisi: i1, uiui: i1) {
+hw.module @icmp_mixed_width(%op0: i5, %op1: i7) -> (sisi: i1, siui: i1, uisi: i1, uiui: i1) {
+  %op0Signed = hwarith.cast %op0 : (i5) -> si5
+  %op0Unsigned = hwarith.cast %op0 : (i5) -> ui5
+  %op1Signed = hwarith.cast %op1 : (i7) -> si7
+  %op1Unsigned = hwarith.cast %op1 : (i7) -> ui7
+
+// CHECK:   %[[SIGN_BIT_OP0:.*]] = comb.extract %op0 from 4 : (i5) -> i1
+// CHECK:   %[[SIGN_EXTEND:.*]] = comb.replicate %[[SIGN_BIT_OP0]] : (i1) -> i2
+// CHECK:   %[[OP0_PADDED:.*]] = comb.concat %[[SIGN_EXTEND]], %op0 : i2, i5
+// CHECK:   %[[SISI_OUT:.*]] = comb.icmp slt %[[OP0_PADDED]], %op1 : i7
+  %sisi = hwarith.icmp lt %op0Signed, %op1Signed : si5, si7
+
+// CHECK:   %[[SIGN_BIT_OP0:.*]] = comb.extract %op0 from 4 : (i5) -> i1
+// CHECK:   %[[SIGN_EXTEND:.*]] = comb.replicate %[[SIGN_BIT_OP0]] : (i1) -> i3
+// CHECK:   %[[OP0_PADDED:.*]] = comb.concat %[[SIGN_EXTEND]], %op0 : i3, i5
+// CHECK:   %[[ZERO_EXTEND:.*]] = hw.constant false
+// CHECK:   %[[OP1_PADDED:.*]] = comb.concat %[[ZERO_EXTEND]], %op1 : i1, i7
+// CHECK:   %[[SIUI_OUT:.*]] = comb.icmp slt %[[OP0_PADDED]], %[[OP1_PADDED]] : i8
+  %siui = hwarith.icmp lt %op0Signed, %op1Unsigned : si5, ui7
+
+// CHECK:   %[[ZERO_EXTEND:.*]] = hw.constant 0 : i2
+// CHECK:   %[[OP0_PADDED:.*]] = comb.concat %[[ZERO_EXTEND]], %op0 : i2, i5
+// CHECK:   %[[UISI_OUT:.*]] = comb.icmp slt %[[OP0_PADDED]], %op1 : i7
+  %uisi = hwarith.icmp lt %op0Unsigned, %op1Signed : ui5, si7
+
+// CHECK:   %[[ZERO_EXTEND:.*]] = hw.constant 0 : i2
+// CHECK:   %[[OP0_PADDED:.*]] = comb.concat %[[ZERO_EXTEND]], %op0 : i2, i5
+// CHECK:   %[[UIUI_OUT:.*]] = comb.icmp ult %[[OP0_PADDED]], %op1 : i7
+  %uiui = hwarith.icmp lt %op0Unsigned, %op1Unsigned : ui5, ui7
+
+  %sisiOut = hwarith.cast %sisi : (ui1) -> i1
+  %siuiOut = hwarith.cast %siui : (ui1) -> i1
+  %uisiOut = hwarith.cast %uisi : (ui1) -> i1
+  %uiuiOut = hwarith.cast %uiui : (ui1) -> i1
+
+// CHECK:   hw.output %[[SISI_OUT]], %[[SIUI_OUT]], %[[UISI_OUT]], %[[UIUI_OUT]] : i1, i1, i1, i1
+  hw.output %sisiOut, %siuiOut, %uisiOut, %uiuiOut : i1, i1, i1, i1
 }
