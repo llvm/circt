@@ -105,6 +105,7 @@ constexpr const char *augmentedBundleTypeClass =
     "sifive.enterprise.grandcentral.AugmentedBundleType"; // not an annotation
 constexpr const char *dataTapsClass =
     "sifive.enterprise.grandcentral.DataTapsAnnotation";
+// TODO Delete this
 constexpr const char *dataTapsBlackboxClass =
     "sifive.enterprise.grandcentral.DataTapsAnnotation.blackbox"; // not in SFC
 constexpr const char *memTapClass =
@@ -121,6 +122,9 @@ constexpr const char *literalKeyClass =
     "sifive.enterprise.grandcentral.LiteralDataTapKey";
 constexpr const char *referenceKeyClass =
     "sifive.enterprise.grandcentral.ReferenceDataTapKey";
+constexpr const char *referenceKeyWireClass =
+    "sifive.enterprise.grandcentral.ReferenceDataTapKey.wire"; // not in SFC
+// TODO Delete this
 constexpr const char *referenceKeyPortClass =
     "sifive.enterprise.grandcentral.ReferenceDataTapKey.port"; // not in SFC
 constexpr const char *referenceKeySourceClass =

@@ -143,11 +143,33 @@ static T &operator<<(T &os, Key key) {
   return os << "[" << key.first << ", " << key.second << "]";
 }
 
+// Allow printing of `PortWiring` through `<<`.
+template <typename T>
+static T &operator<<(T &os, PortWiring w) {
+  os << "PortWiring(";
+  //  os << w.target << ",";
+  bool first = true;
+  for (auto path : w.prefices) {
+    os << path;
+    if (w.nla)
+      os << "." << w.nla; //.getNamepathAttr();
+    if (!w.suffix.empty())
+      os << " $ " << w.suffix;
+    if (first)
+      first = false;
+    else
+      os << ",";
+  }
+  os << ")";
+
+  return os;
+}
+
 /// Map an annotation to a `Key`.
 static Key getKey(Annotation anno) {
   auto id = anno.getMember("id");
-  auto portID = anno.getMember("portID");
-  return {id, portID};
+  auto tapID = anno.getMember("tapID");
+  return {id, tapID};
 }
 
 /// Parse a FIRRTL `UInt`/`SInt` literal.
@@ -302,17 +324,8 @@ LogicalResult circt::firrtl::applyGCTDataTaps(const AnnoPathValue &target,
   auto loc = state.circuit.getLoc();
 
   auto id = state.newID();
+
   NamedAttrList attrs;
-  attrs.append("class", StringAttr::get(context, dataTapsBlackboxClass));
-  auto blackBoxAttr =
-      tryGetAs<StringAttr>(anno, anno, "blackBox", loc, dataTapsClass);
-  if (!blackBoxAttr)
-    return failure();
-  auto canonicalTarget = canonicalizeTarget(blackBoxAttr.getValue());
-  if (!tokenizePath(canonicalTarget))
-    return failure();
-  attrs.append("target", StringAttr::get(context, canonicalTarget));
-  state.addToWorklistFn(DictionaryAttr::getWithSorted(context, attrs));
 
   // Process all the taps.
   auto keyAttr = tryGetAs<ArrayAttr>(anno, anno, "keys", loc, dataTapsClass);
@@ -327,22 +340,22 @@ LogicalResult circt::firrtl::applyGCTDataTaps(const AnnoPathValue &target,
     if (!classAttr)
       return failure();
 
-    // The "portName" field is common across all sub-types of DataTapKey.
-    NamedAttrList port;
-    auto portNameAttr =
-        tryGetAs<StringAttr>(bDict, anno, "portName", loc, dataTapsClass, path);
-    if (!portNameAttr)
+    // The "wireName" field is common across all sub-types of DataTapKey.
+    NamedAttrList wire;
+    auto wireNameAttr =
+        tryGetAs<StringAttr>(bDict, anno, "wireName", loc, dataTapsClass, path);
+    if (!wireNameAttr)
       return failure();
-    auto portTarget = canonicalizeTarget(portNameAttr.getValue());
-    if (!tokenizePath(portTarget))
+    auto wireTarget = canonicalizeTarget(wireNameAttr.getValue());
+    if (!tokenizePath(wireTarget))
       return failure();
 
     if (classAttr.getValue() == referenceKeyClass) {
       NamedAttrList source;
-      auto portID = state.newID();
+      auto tapID = state.newID();
       source.append("class", StringAttr::get(context, referenceKeySourceClass));
       source.append("id", id);
-      source.append("portID", portID);
+      source.append("tapID", tapID);
       auto sourceAttr =
           tryGetAs<StringAttr>(bDict, anno, "source", loc, dataTapsClass, path);
       if (!sourceAttr)
@@ -355,18 +368,18 @@ LogicalResult circt::firrtl::applyGCTDataTaps(const AnnoPathValue &target,
 
       state.addToWorklistFn(DictionaryAttr::get(context, source));
 
-      // Annotate the data tap module port.
-      port.append("class", StringAttr::get(context, referenceKeyPortClass));
-      port.append("id", id);
-      port.append("portID", portID);
-      port.append("target", StringAttr::get(context, portTarget));
-      state.addToWorklistFn(DictionaryAttr::getWithSorted(context, port));
+      // Annotate the data tap wire.
+      wire.append("class", StringAttr::get(context, referenceKeyWireClass));
+      wire.append("id", id);
+      wire.append("tapID", tapID);
+      wire.append("target", StringAttr::get(context, wireTarget));
+      state.addToWorklistFn(DictionaryAttr::getWithSorted(context, wire));
       continue;
     }
 
     if (classAttr.getValue() == internalKeyClass) {
       NamedAttrList module;
-      auto portID = state.newID();
+      auto tapID = state.newID();
       module.append("class", StringAttr::get(context, internalKeySourceClass));
       module.append("id", id);
       auto internalPathAttr = tryGetAs<StringAttr>(bDict, anno, "internalPath",
@@ -376,7 +389,7 @@ LogicalResult circt::firrtl::applyGCTDataTaps(const AnnoPathValue &target,
       if (!internalPathAttr || !moduleAttr)
         return failure();
       module.append("internalPath", internalPathAttr);
-      module.append("portID", portID);
+      module.append("tapID", tapID);
       auto moduleTarget = canonicalizeTarget(moduleAttr.getValue());
       if (!tokenizePath(moduleTarget))
         return failure();
@@ -385,20 +398,20 @@ LogicalResult circt::firrtl::applyGCTDataTaps(const AnnoPathValue &target,
       state.addToWorklistFn(DictionaryAttr::getWithSorted(context, module));
 
       // Annotate the data tap module port.
-      port.append("class", StringAttr::get(context, internalKeyPortClass));
-      port.append("id", id);
-      port.append("portID", portID);
-      port.append("target", StringAttr::get(context, portTarget));
-      state.addToWorklistFn(DictionaryAttr::get(context, port));
+      wire.append("class", StringAttr::get(context, internalKeyPortClass));
+      wire.append("id", id);
+      wire.append("tapID", tapID);
+      wire.append("target", StringAttr::get(context, wireTarget));
+      state.addToWorklistFn(DictionaryAttr::get(context, wire));
       continue;
     }
 
     if (classAttr.getValue() == deletedKeyClass) {
       // Annotate the data tap module port.
-      port.append("class", classAttr);
-      port.append("id", id);
-      port.append("target", StringAttr::get(context, portTarget));
-      state.addToWorklistFn(DictionaryAttr::get(context, port));
+      wire.append("class", classAttr);
+      wire.append("id", id);
+      wire.append("target", StringAttr::get(context, wireTarget));
+      state.addToWorklistFn(DictionaryAttr::get(context, wire));
       continue;
     }
 
@@ -409,11 +422,11 @@ LogicalResult circt::firrtl::applyGCTDataTaps(const AnnoPathValue &target,
         return failure();
 
       // Annotate the data tap module port.
-      port.append("class", classAttr);
-      port.append("id", id);
-      port.append("literal", literalAttr);
-      port.append("target", StringAttr::get(context, portTarget));
-      state.addToWorklistFn(DictionaryAttr::get(context, port));
+      wire.append("class", classAttr);
+      wire.append("id", id);
+      wire.append("literal", literalAttr);
+      wire.append("target", StringAttr::get(context, wireTarget));
+      state.addToWorklistFn(DictionaryAttr::get(context, wire));
       continue;
     }
 
@@ -499,8 +512,9 @@ LogicalResult circt::firrtl::applyGCTMemTaps(const AnnoPathValue &target,
 class GrandCentralTapsPass : public GrandCentralTapsBase<GrandCentralTapsPass> {
   void runOnOperation() override;
   void gatherAnnotations(Operation *op);
-  void processAnnotation(AnnotatedPort &portAnno, AnnotatedExtModule &blackBox,
-                         InstancePathCache &instancePaths);
+  llvm::Optional<PortWiring>
+  processAnnotation(const Annotation &sinkAnno, WireOp sinkOp,
+                    InstancePathCache &instancePaths);
 
   // Helpers to simplify collecting taps on the various things.
   void gatherTap(Annotation anno, Port port) {
@@ -537,6 +551,42 @@ class GrandCentralTapsPass : public GrandCentralTapsBase<GrandCentralTapsPass> {
     if (auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal"))
       deadNLAs.insert(sym.getAttr());
   }
+  // Helper to get a sink annotation from a wire if it exists
+  llvm::Optional<Annotation> getSinkAnno(WireOp wire) {
+    llvm::Optional<Annotation> result =
+        llvm::Optional<Annotation>(); // How do I say "None"?
+    auto gather = [&](Annotation anno) {
+      if (anno.isClass(referenceKeyWireClass)) {
+        assert(!result.hasValue() &&
+               "A Wire should only have 1 sink annotation!");
+        result = anno;
+        return true;
+      }
+      return false;
+    };
+    AnnotationSet::removeAnnotations(wire, gather);
+
+    return result;
+  }
+
+  void findAndDeleteDriver(WireOp wire) {
+    StrictConnectOp connect;
+    for (auto *user : wire->getUsers()) {
+      if (auto op = dyn_cast<StrictConnectOp>(user)) {
+        if (op.getDest() == wire) {
+          connect = op;
+          break;
+        }
+      }
+    }
+    if (connect) {
+      LLVM_DEBUG(llvm::dbgs() << "Deleting " << connect << "\n");
+      connect.erase();
+    } else {
+      // Should we just error here?
+      LLVM_DEBUG(llvm::dbgs() << "No driver found for " << wire << "\n");
+    }
+  }
 
   /// Returns a port's `inner_sym`, adding one if necessary.
   StringAttr getOrAddInnerSym(FModuleLike module, size_t portIdx);
@@ -560,7 +610,8 @@ class GrandCentralTapsPass : public GrandCentralTapsBase<GrandCentralTapsPass> {
   DenseMap<Key, Operation *> tappedOps;
   DenseSet<Key> zeroWidthTaps;
   DenseMap<Key, Port> tappedPorts;
-  SmallVector<PortWiring, 8> portWiring;
+  // TODO should we keep the Annotation here or just the Key?
+  SmallVector<std::pair<WireOp, Annotation>, 8> tapSinks;
 
   /// The name of the directory where data and mem tap modules should be
   /// output.
@@ -626,70 +677,6 @@ void GrandCentralTapsPass::runOnOperation() {
   // Build a generator for absolute module and instance paths in the design.
   InstancePathCache instancePaths(getAnalysis<InstanceGraph>());
 
-  // Gather a list of extmodules that have data or mem tap annotations to be
-  // expanded.
-  SmallVector<AnnotatedExtModule, 4> modules;
-  for (auto extModule : llvm::make_early_inc_range(
-           circuitOp.getBodyBlock()->getOps<FExtModuleOp>())) {
-
-    // If the external module indicates that it is a data or mem tap, but does
-    // not actually contain any taps (it has no ports), then delete the module
-    // and all instantiations of it.
-    AnnotationSet annotations(extModule);
-    if (annotations.hasAnnotation(dataTapsBlackboxClass) &&
-        !extModule.getNumPorts()) {
-      LLVM_DEBUG(llvm::dbgs() << "Extmodule " << extModule.getName()
-                              << " is a data/memtap that has no ports and "
-                                 "will be deleted\n";);
-      for (auto *use : instancePaths.instanceGraph[extModule]->uses())
-        use->getInstance().erase();
-      extModule.erase();
-      continue;
-    }
-
-    // Go through the module ports and collect the annotated ones.
-    AnnotatedExtModule result{extModule, {}, {}, {}};
-    result.filteredPortAnnos.reserve(extModule.getNumPorts());
-    for (unsigned argNum = 0, e = extModule.getNumPorts(); argNum < e;
-         ++argNum) {
-      // Go through all annotations on this port and add the data tap key and
-      // mem tap ones to the list.
-      auto annos = AnnotationSet::forPort(extModule, argNum);
-      annos.removeAnnotations([&](Annotation anno) {
-        if (anno.isClass(memTapPortClass, deletedKeyClass, literalKeyClass,
-                         internalKeyPortClass, referenceKeyPortClass)) {
-          result.portAnnos.push_back({argNum, anno});
-          return true;
-        }
-        return false;
-      });
-      result.filteredPortAnnos.push_back(annos);
-    }
-
-    // If there are data tap annotations on the module, which is likely the
-    // case, create a filtered array of annotations with them removed.
-    AnnotationSet annos(extModule.getOperation());
-    annos.removeAnnotations(
-        [&](Annotation anno) { return anno.isClass(dataTapsBlackboxClass); });
-    result.filteredModuleAnnos = annos.getArrayAttr();
-
-    if (!result.portAnnos.empty())
-      modules.push_back(std::move(result));
-  }
-
-  LLVM_DEBUG({
-    for (auto m : modules) {
-      llvm::dbgs() << "Extmodule " << m.extModule.getName() << " has "
-                   << m.portAnnos.size() << " port annotations\n";
-    }
-  });
-
-  // Fast path if there's nothing to do.
-  if (modules.empty()) {
-    markAllAnalysesPreserved();
-    return;
-  }
-
   // Gather the annotated ports and operations throughout the design that we are
   // supposed to tap in one way or another.
   tappedPorts.clear();
@@ -705,208 +692,147 @@ void GrandCentralTapsPass::runOnOperation() {
     llvm::dbgs() << "Tapped ops:\n";
     for (auto it : tappedOps)
       llvm::dbgs() << "- " << it.first << ": " << *it.second << "\n";
+    llvm::dbgs() << "Tap sinks:\n";
+    for (auto it : tapSinks) {
+      auto key = getKey(it.second);
+      llvm::dbgs() << "- " << key << ": " << it.first << "\n";
+    }
   });
 
-  // Process each black box independently.
-  for (auto blackBox : modules) {
-    LLVM_DEBUG(llvm::dbgs() << "Generating impls for "
-                            << blackBox.extModule.getName() << "\n");
+  // TODO should we group these by Module?
+  for (auto sinkPair : tapSinks) {
+    auto wire = sinkPair.first;
+    auto sinkAnno = sinkPair.second;
 
-    // As a first step, gather a list of all absolute paths to instances of
-    // this black box.
-    auto paths = instancePaths.getAbsolutePaths(blackBox.extModule);
+    auto module = wire->getParentOfType<FModuleOp>();
+
     LLVM_DEBUG({
-      for (auto path : paths)
-        llvm::dbgs() << "- " << path << "\n";
+      llvm::dbgs() << "Wiring up sink '" << wire << "' in module"
+                   << module.moduleName() << "\n"
+                   << "- " << sinkAnno.getDict() << "\n";
     });
 
-    // Go through the port annotations of the tap module and generate a
-    // hierarchical path for each.
-    portWiring.clear();
-    portWiring.reserve(blackBox.portAnnos.size());
-    for (auto portAnno : blackBox.portAnnos) {
-      processAnnotation(portAnno, blackBox, instancePaths);
+    // TODO is it bad to make a builder for a module a bunch of times?
+    ImplicitLocOpBuilder builder(module->getLoc(), module);
+    builder.setInsertionPointToEnd(module.getBodyBlock());
+
+    // Wire the sink up
+    auto wiringOpt = processAnnotation(sinkAnno, wire, instancePaths);
+    if (!wiringOpt) {
+      wire->emitError("No Tap source found for this wire!");
+      return signalPassFailure();
     }
+    auto wiring = wiringOpt.value();
 
-    LLVM_DEBUG({
-      llvm::dbgs() << "- Wire up as follows:\n";
-      for (auto wiring : portWiring) {
-        llvm::dbgs() << "- Port " << wiring.portNum << ":\n";
-        for (auto path : wiring.prefices) {
-          llvm::dbgs() << "  - " << path;
-          if (wiring.nla)
-            llvm::dbgs() << "." << wiring.nla.getNamepathAttr();
-          if (!wiring.suffix.empty())
-            llvm::dbgs() << " $ " << wiring.suffix;
-          llvm::dbgs() << "\n";
-        }
-      }
-    });
+    // Connect the output ports to the appropriate tapped object.
+    LLVM_DEBUG(llvm::dbgs() << "- Wiring up " << wiring << "\n");
 
-    // Now we have an awkward mapping problem. We have multiple data tap
-    // module instances, which reference things in modules that in turn have
-    // multiple instances. This is a side-effect of how Grand Central
-    // annotates things on modules rather than instances. (However in practice
-    // these will have a one-to-one correspondence due to CHIRRTL having fully
-    // uniquified instances.) To solve this issue, create a dedicated
-    // implementation for every data tap instance, and among the possible
-    // targets for the data taps choose the one with the shortest relative
-    // path to the data tap instance.
-    ImplicitLocOpBuilder builder(blackBox.extModule->getLoc(),
-                                 blackBox.extModule);
-    unsigned implIdx = 0;
-    for (auto path : paths) {
-      builder.setInsertionPointAfter(blackBox.extModule);
+    // Ignore the port if it is marked for deletion.
+    if (wiring.zeroWidth)
+      continue;
 
-      // Get the list of ports from the original extmodule, and update the
-      // annotations such that they no longer contain any data/mem taps.
-      auto ports = blackBox.extModule.getPorts();
-      for (auto port : llvm::zip(ports, blackBox.filteredPortAnnos)) {
-        std::get<0>(port).annotations = std::get<1>(port);
-      }
-
-      // Create a new firrtl.module that implements the data tap.
-      auto name =
-          StringAttr::get(&getContext(), Twine(blackBox.extModule.getName()) +
-                                             "_impl_" + Twine(implIdx++));
+    // Handle literals. We send the literal string off to the FIRParser to
+    // translate into whatever ops are necessary. This yields a handle on
+    // value we're supposed to drive.
+    if (wiring.literal) {
       LLVM_DEBUG(llvm::dbgs()
-                 << "Implementing " << name << " ("
-                 << blackBox.extModule.getName() << " for " << path << ")\n");
-      auto impl =
-          builder.create<FModuleOp>(name, ports, blackBox.filteredModuleAnnos);
-      // If extraction information was provided via an
-      // `ExtractGrandCentralAnnotation`, put the created data or memory taps
-      // inside this directory.
-      if (maybeExtractDirectory)
-        impl->setAttr("output_file",
-                      hw::OutputFileAttr::getFromDirectoryAndFilename(
-                          &getContext(), maybeExtractDirectory.getValue(),
-                          impl.getName() + ".sv"));
-      impl->setAttr("comment",
-                    builder.getStringAttr("VCS coverage exclude_file"));
-      builder.setInsertionPointToEnd(impl.getBodyBlock());
+                 << "  - Connecting literal " << wiring.literal.value << "\n");
+      auto literal =
+          builder.create<ConstantOp>(wiring.literal.type, wiring.literal.value);
+      findAndDeleteDriver(wire);
+      builder.create<StrictConnectOp>(wire, literal);
+      continue;
+    }
+    // The code tries to come up with a relative path from the data tap
+    // instance (path being the absolute path to that instance) to the
+    // tapped thing (prefix being the path to the tapped port, wire, or
+    // memory) by calling stripCommonPrefix(prefix, path).  If the tapped
+    // thing includes an NLA, then the NLA path is appended to the rest of
+    // the path before the common prefix stripping is done.
 
-      // Connect the output ports to the appropriate tapped object.
-      for (auto port : portWiring) {
-        LLVM_DEBUG(llvm::dbgs() << "- Wiring up port " << port.portNum << "\n");
+    // Determine the shortest hierarchical prefix from this black box
+    // instance to the tapped object.
+    Optional<SmallVector<InstanceOp>> shortestPrefix;
+    for (auto prefix : wiring.prefices) {
 
-        // Ignore the port if it is marked for deletion.
-        if (port.zeroWidth)
-          continue;
-
-        // Handle literals. We send the literal string off to the FIRParser to
-        // translate into whatever ops are necessary. This yields a handle on
-        // value we're supposed to drive.
-        if (port.literal) {
-          LLVM_DEBUG(llvm::dbgs() << "  - Connecting literal "
-                                  << port.literal.value << "\n");
-          auto literal =
-              builder.create<ConstantOp>(port.literal.type, port.literal.value);
-          auto arg = impl.getArgument(port.portNum);
-          builder.create<ConnectOp>(arg, literal);
-          continue;
-        }
-        // The code tries to come up with a relative path from the data tap
-        // instance (path being the absolute path to that instance) to the
-        // tapped thing (prefix being the path to the tapped port, wire, or
-        // memory) by calling stripCommonPrefix(prefix, path).  If the tapped
-        // thing includes an NLA, then the NLA path is appended to the rest of
-        // the path before the common prefix stripping is done.
-
-        // Determine the shortest hierarchical prefix from this black box
-        // instance to the tapped object.
-        Optional<SmallVector<InstanceOp>> shortestPrefix;
-        for (auto prefix : port.prefices) {
-
-          // Append the NLA path to the instance graph-determined path.
-          SmallVector<InstanceOp> prefixWithNLA(prefix.begin(), prefix.end());
-          if (port.nla) {
-            for (auto segment : port.nla.getNamepath().getValue().drop_back())
-              if (auto ref = segment.dyn_cast<InnerRefAttr>()) {
-                prefixWithNLA.push_back(
-                    cast<InstanceOp>(innerRefNS.lookupOp(ref)));
-              }
+      // Append the NLA path to the instance graph-determined path.
+      SmallVector<InstanceOp> prefixWithNLA(prefix.begin(), prefix.end());
+      if (wiring.nla) {
+        for (auto segment : wiring.nla.getNamepath().getValue().drop_back())
+          if (auto ref = segment.dyn_cast<InnerRefAttr>()) {
+            prefixWithNLA.push_back(cast<InstanceOp>(innerRefNS.lookupOp(ref)));
           }
-
-          auto relative = stripCommonPrefix(prefixWithNLA, path);
-          if (!shortestPrefix || relative.size() < shortestPrefix->size())
-            shortestPrefix.emplace(relative.begin(), relative.end());
-        }
-        if (!shortestPrefix) {
-          LLVM_DEBUG(llvm::dbgs() << "  - Has no prefix, skipping\n");
-          continue;
-        }
-        LLVM_DEBUG(llvm::dbgs()
-                   << "  - Shortest prefix " << *shortestPrefix << "\n");
-
-        // Determine the module at which the hierarchical name should start.
-        FModuleLike rootModule;
-        if (shortestPrefix->empty()) {
-          if (port.target.hasPort())
-            rootModule = cast<FModuleLike>(port.target.getOp());
-          else
-            rootModule = port.target.getOp()->getParentOfType<FModuleLike>();
-        } else
-          rootModule = shortestPrefix->front()->getParentOfType<FModuleLike>();
-
-        SmallVector<Attribute> symbols;
-        SmallString<128> hname;
-        auto addSymbol = [&](Attribute symbol) {
-          auto id = symbols.size();
-          symbols.push_back(symbol);
-          if (!hname.empty())
-            hname += '.';
-          ("{{" + Twine(id) + "}}").toVector(hname);
-        };
-
-        // Concatenate the prefix into a proper full hierarchical name.
-        addSymbol(
-            FlatSymbolRefAttr::get(SymbolTable::getSymbolName(rootModule)));
-        for (auto inst : *shortestPrefix)
-          addSymbol(getInnerRefTo(inst));
-
-        if (port.target.getOp()) {
-          Attribute leaf;
-          if (port.target.hasPort())
-            leaf = getInnerRefTo(port.target.getOp(), port.target.getPort());
-          else
-            leaf = getInnerRefTo(port.target.getOp());
-          addSymbol(leaf);
-        }
-
-        if (!port.suffix.empty()) {
-          hname += '.';
-          hname += port.suffix;
-        }
-        LLVM_DEBUG({
-          llvm::dbgs() << "  - Connecting as " << hname;
-          if (!symbols.empty()) {
-            llvm::dbgs() << " (";
-            llvm::interleave(
-                symbols, llvm::dbgs(),
-                [&](Attribute sym) { llvm::dbgs() << sym; }, ".");
-            llvm::dbgs() << ")";
-          }
-          llvm::dbgs() << "\n";
-        });
-
-        // Add a verbatim op that assigns this module port.
-        auto arg = impl.getArgument(port.portNum);
-        auto hnameExpr = builder.create<VerbatimExprOp>(
-            arg.getType().cast<FIRRTLType>(), hname, ValueRange{}, symbols);
-        builder.create<ConnectOp>(arg, hnameExpr);
       }
+      auto path = instancePaths.getAbsolutePaths(
+          module)[0]; // Should this be memoized above? How do we deal with
+                      // multiple paths?
 
-      // Switch the instance from the original extmodule to this
-      // implementation. CAVEAT: If the same black box data tap module is
-      // instantiated in a parent module that itself is instantiated in
-      // different locations, this will pretty arbitrarily pick one of those
-      // locations.
-      path.back()->setAttr("moduleName", SymbolRefAttr::get(name));
+      auto relative = stripCommonPrefix(prefixWithNLA, path);
+      if (!shortestPrefix || relative.size() < shortestPrefix->size())
+        shortestPrefix.emplace(relative.begin(), relative.end());
+    }
+    if (!shortestPrefix) {
+      LLVM_DEBUG(llvm::dbgs() << "  - Has no prefix, skipping\n");
+      continue;
+    }
+    LLVM_DEBUG(llvm::dbgs()
+               << "  - Shortest prefix " << *shortestPrefix << "\n");
+
+    // Determine the module at which the hierarchical name should start.
+    FModuleLike rootModule;
+    if (shortestPrefix->empty()) {
+      if (wiring.target.hasPort())
+        rootModule = cast<FModuleLike>(wiring.target.getOp());
+      else
+        rootModule = wiring.target.getOp()->getParentOfType<FModuleLike>();
+    } else
+      rootModule = shortestPrefix->front()->getParentOfType<FModuleLike>();
+
+    SmallVector<Attribute> symbols;
+    SmallString<128> hname;
+    auto addSymbol = [&](Attribute symbol) {
+      auto id = symbols.size();
+      symbols.push_back(symbol);
+      if (!hname.empty())
+        hname += '.';
+      ("{{" + Twine(id) + "}}").toVector(hname);
+    };
+
+    // Concatenate the prefix into a proper full hierarchical name.
+    addSymbol(FlatSymbolRefAttr::get(SymbolTable::getSymbolName(rootModule)));
+    for (auto inst : *shortestPrefix)
+      addSymbol(getInnerRefTo(inst));
+
+    if (wiring.target.getOp()) {
+      Attribute leaf;
+      if (wiring.target.hasPort())
+        leaf = getInnerRefTo(wiring.target.getOp(), wiring.target.getPort());
+      else
+        leaf = getInnerRefTo(wiring.target.getOp());
+      addSymbol(leaf);
     }
 
-    // Drop the original black box module.
-    blackBox.extModule.erase();
+    if (!wiring.suffix.empty()) {
+      hname += '.';
+      hname += wiring.suffix;
+    }
+    LLVM_DEBUG({
+      llvm::dbgs() << "  - Connecting as " << hname;
+      if (!symbols.empty()) {
+        llvm::dbgs() << " (";
+        llvm::interleave(
+            symbols, llvm::dbgs(), [&](Attribute sym) { llvm::dbgs() << sym; },
+            ".");
+        llvm::dbgs() << ")";
+      }
+      llvm::dbgs() << "\n";
+    });
+
+    // Add a verbatim op that assigns the sink.
+    auto hnameExpr = builder.create<VerbatimExprOp>(
+        wire.getType().cast<FIRRTLType>(), hname, ValueRange{}, symbols);
+    findAndDeleteDriver(wire);
+    builder.create<StrictConnectOp>(wire, hnameExpr);
   }
 
   // Garbage collect NLAs which were removed.
@@ -950,6 +876,18 @@ void GrandCentralTapsPass::gatherAnnotations(Operation *op) {
     return;
   }
 
+  // Collet all of the sinks which are always on Wires
+  if (isa<WireOp>(op)) {
+    auto gather = [&](Annotation anno) {
+      if (anno.isClass(referenceKeyWireClass)) {
+        tapSinks.push_back({dyn_cast<WireOp>(op), anno});
+        return true;
+      }
+      return false;
+    };
+    AnnotationSet::removeAnnotations(op, gather);
+  }
+
   // Go through all annotations on this op and extract the interesting
   // ones. Note that the way tap annotations are scattered to their
   // targets, we should never see multiple values or memories annotated
@@ -963,38 +901,47 @@ void GrandCentralTapsPass::gatherAnnotations(Operation *op) {
   });
 }
 
-void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
-                                             AnnotatedExtModule &blackBox,
-                                             InstancePathCache &instancePaths) {
-  LLVM_DEBUG(llvm::dbgs() << "- Processing port " << portAnno.portNum
-                          << " anno " << portAnno.anno.getDict() << "\n");
-  auto key = getKey(portAnno.anno);
-  auto portName = blackBox.extModule.getPortNameAttr(portAnno.portNum);
-  PortWiring wiring;
-  wiring.portNum = portAnno.portNum;
+llvm::Optional<PortWiring>
+GrandCentralTapsPass::processAnnotation(const Annotation &sinkAnno,
+                                        WireOp sinkOp,
+                                        InstancePathCache &instancePaths) {
 
-  // Lookup the sibling annotation no the target. This may not exist, e.g. in
-  // the case of a `LiteralDataTapKey`, in which use the annotation on the
-  // data tap module port again.
-  auto targetAnnoIt = annos.find(key);
-  if (portAnno.anno.isClass(memTapPortClass) && targetAnnoIt == annos.end())
-    targetAnnoIt = annos.find({key.first, {}});
-  auto targetAnno =
-      targetAnnoIt != annos.end() ? targetAnnoIt->second : portAnno.anno;
-  LLVM_DEBUG(llvm::dbgs() << "  Target anno " << targetAnno.getDict() << "\n");
+  auto key = getKey(sinkAnno);
+
+  PortWiring wiring;
+  wiring.portNum = 0;
+
+  // // Lookup the sibling annotation no the target. This may not exist, e.g.
+  // in
+  // // the case of a `LiteralDataTapKey`, in which use the annotation on the
+  // // data tap module port again.
+  // auto targetAnnoIt = annos.find(key);
+  // if (portAnno.anno.isClass(memTapPortClass) && targetAnnoIt ==
+  // annos.end())
+  //   targetAnnoIt = annos.find({key.first, {}});
+  // auto targetAnno =
+  //     targetAnnoIt != annos.end() ? targetAnnoIt->second : portAnno.anno;
+
+  // NOTE: target anno renamed to sourceAnno
+  auto sourceAnno = annos[key];
+  LLVM_DEBUG(llvm::dbgs() << "  Target anno " << sourceAnno.getDict() << "\n");
 
   // NOTE:
   // - portAnno holds the "*.port" flavor of the annotation
   // - targetAnno holds the "*.source" flavor of the annotation
+  // - New is below
+  // - sinkAnno holds the ".wire" flavor of the annotation
+  // - sourceAnno holds the "*.source" flavor of the annotation
 
-  // If the annotation is non-local, look up the corresponding NLA operation to
-  // find the exact instance path. We basically make the `wiring.prefices` array
-  // of instance paths list all the possible paths to the beginning of the NLA
-  // path. During wiring of the ports, we generate hierarchical names of the
-  // form `<prefix>.<nla-path>.<suffix>`. If we don't have an NLA, we leave it
-  // to the key-class-specific code below to come up with the possible prefices.
+  // If the annotation is non-local, look up the corresponding NLA operation
+  // to find the exact instance path. We basically make the `wiring.prefices`
+  // array of instance paths list all the possible paths to the beginning of
+  // the NLA path. During wiring of the ports, we generate hierarchical names
+  // of the form `<prefix>.<nla-path>.<suffix>`. If we don't have an NLA, we
+  // leave it to the key-class-specific code below to come up with the
+  // possible prefices.
   HierPathOp nla;
-  if (auto nlaSym = targetAnno.getMember<FlatSymbolRefAttr>("circt.nonlocal")) {
+  if (auto nlaSym = sourceAnno.getMember<FlatSymbolRefAttr>("circt.nonlocal")) {
     nla = dyn_cast<HierPathOp>(circuitSymbols->lookup(nlaSym.getAttr()));
     assert(nla);
     // Find all paths to the root of the NLA.
@@ -1004,14 +951,13 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
   }
 
   // Handle data taps on signals and ports.
-  if (targetAnno.isClass(referenceKeySourceClass)) {
+  if (sourceAnno.isClass(referenceKeySourceClass)) {
     // Handle ports.
     if (auto port = tappedPorts.lookup(key)) {
       if (!nla)
         wiring.prefices = instancePaths.getAbsolutePaths(port.first);
       wiring.target = PortWiring::Target(port.first, port.second);
-      portWiring.push_back(std::move(wiring));
-      return;
+      return wiring;
     }
 
     // Handle operations.
@@ -1019,11 +965,14 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
       // We require the target to be a wire or node, such that it gets a name
       // during Verilog emission.
       if (!isa<WireOp, NodeOp, RegOp, RegResetOp>(op)) {
-        auto diag = blackBox.extModule.emitError("ReferenceDataTapKey on port ")
-                    << portName << " must be a wire, node, or reg";
+        // auto diag = blackBox.extModule.emitError("ReferenceDataTapKey on
+        // port
+        // ")
+        //             << portName << " must be a wire, node, or reg";
+        auto diag = op->emitError("Tap must be a wire, node or reg");
         diag.attachNote(op->getLoc()) << "referenced operation is here:";
         signalPassFailure();
-        return;
+        return None;
       }
 
       if (!nla)
@@ -1032,148 +981,161 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
       wiring.target = PortWiring::Target(op);
 
       // If the tapped operation is trivially driven by a constant, set
-      // information about the literal so that this can later be used instead of
-      // an XMR.
+      // information about the literal so that this can later be used instead
+      // of an XMR.
       if (auto driver = getDriverFromConnect(op->getResult(0)))
         if (auto constant =
                 dyn_cast_or_null<ConstantOp>(driver.getDefiningOp()))
           wiring.literal = {constant.getValueAttr(), constant.getType()};
 
-      portWiring.push_back(std::move(wiring));
-      return;
+      return wiring;
     }
 
     // If the port is zero-width, then mark it as
     if (zeroWidthTaps.contains(key)) {
       wiring.zeroWidth = true;
-      portWiring.push_back(std::move(wiring));
-      return;
+      return wiring;
     }
 
     // The annotation scattering must have placed this annotation on some
     // target operation or block argument, which we should have picked up in
     // the tapped args or ops maps.
-    blackBox.extModule.emitOpError(
-        "ReferenceDataTapKey annotation was not scattered to "
-        "an operation: ")
-        << targetAnno.getDict();
+    // blackBox.extModule.emitOpError(
+    //     "ReferenceDataTapKey annotation was not scattered to "
+    //     "an operation: ")
+    //     << sourceAnno.getDict();
+    // TODO add some error reporting
     signalPassFailure();
-    return;
+    return wiring;
   }
 
   // Handle data taps on black boxes.
-  if (targetAnno.isClass(internalKeySourceClass)) {
+  if (sourceAnno.isClass(internalKeySourceClass)) {
     auto op = tappedOps.lookup(key);
     if (!op) {
-      blackBox.extModule.emitOpError(
-          "DataTapModuleSignalKey annotation was not scattered to "
-          "an operation: ")
-          << targetAnno.getDict();
+      // TODO fix
+      // blackBox.extModule.emitOpError(
+      //     "DataTapModuleSignalKey annotation was not scattered to "
+      //     "an operation: ")
+      //     << sourceAnno.getDict();
       signalPassFailure();
-      return;
+      return None;
     }
 
     // Extract the internal path we're supposed to append.
-    auto internalPath = targetAnno.getMember<StringAttr>("internalPath");
+    auto internalPath = sourceAnno.getMember<StringAttr>("internalPath");
     if (!internalPath) {
-      blackBox.extModule.emitError("DataTapModuleSignalKey annotation on port ")
-          << portName << " missing \"internalPath\" attribute";
+      // TODO fix
+      // blackBox.extModule.emitError("DataTapModuleSignalKey annotation on
+      // port
+      // ")
+      //     << portName << " missing \"internalPath\" attribute";
       signalPassFailure();
-      return;
+      return None;
     }
 
     if (!nla)
       wiring.prefices = instancePaths.getAbsolutePaths(op);
     wiring.suffix = internalPath.getValue();
-    portWiring.push_back(std::move(wiring));
-    return;
+    //    portWiring.push_back(std::move(wiring));
+    return wiring;
   }
 
   // Handle data taps with literals.
-  if (targetAnno.isClass(literalKeyClass)) {
-    auto literal = portAnno.anno.getMember<StringAttr>("literal");
+  if (sourceAnno.isClass(literalKeyClass)) {
+    auto literal = sourceAnno.getMember<StringAttr>("literal");
     if (!literal) {
-      blackBox.extModule.emitError("LiteralDataTapKey annotation on port ")
-          << portName << " missing \"literal\" attribute";
+      // TODO fix
+      // blackBox.extModule.emitError("LiteralDataTapKey annotation on port ")
+      //     << portName << " missing \"literal\" attribute";
       signalPassFailure();
-      return;
+      return None;
     }
 
     // Parse the literal.
-    auto parsed =
-        parseIntegerLiteral(blackBox.extModule.getContext(), literal.getValue(),
-                            blackBox.extModule.getLoc());
+    auto parsed = parseIntegerLiteral(sinkOp->getContext(), literal.getValue(),
+                                      sinkOp.getLoc());
     if (failed(parsed)) {
-      blackBox.extModule.emitError("LiteralDataTapKey annotation on port ")
-          << portName << " has invalid literal \"" << literal.getValue()
-          << "\"";
+      // TODO fix
+      // blackBox.extModule.emitError("LiteralDataTapKey annotation on port ")
+      //     << portName << " has invalid literal \"" << literal.getValue()
+      //     << "\"";
       signalPassFailure();
-      return;
+      return None;
     }
 
     wiring.literal = *parsed;
-    portWiring.push_back(std::move(wiring));
-    return;
+    return wiring;
   }
 
-  // Handle memory taps.
-  if (targetAnno.isClass(memTapSourceClass)) {
+  // TODO fix
+  // // Handle memory taps.
+  // if (sourceAnno.isClass(memTapSourceClass)) {
 
-    // Handle operations.
-    if (auto *op = tappedOps.lookup(key)) {
-      // We require the target to be a wire or node, such that it gets a name
-      // during Verilog emission.
-      if (!isa<WireOp, NodeOp, RegOp, RegResetOp>(op)) {
-        auto diag = blackBox.extModule.emitError("MemTapAnnotation on port ")
-                    << portName << " must be a wire, node, or reg";
-        diag.attachNote(op->getLoc()) << "referenced operation is here:";
-        signalPassFailure();
-        return;
-      }
+  //   // Handle operations.
+  //   if (auto *op = tappedOps.lookup(key)) {
+  //     // We require the target to be a wire or node, such that it gets a
+  //     name
+  //     // during Verilog emission.
+  //     if (!isa<WireOp, NodeOp, RegOp, RegResetOp>(op)) {
+  //       auto diag = blackBox.extModule.emitError("MemTapAnnotation on port
+  //       ")
+  //                   << portName << " must be a wire, node, or reg";
+  //       diag.attachNote(op->getLoc()) << "referenced operation is here:";
+  //       signalPassFailure();
+  //       return;
+  //     }
 
-      if (!nla)
-        wiring.prefices =
-            instancePaths.getAbsolutePaths(op->getParentOfType<FModuleOp>());
-      wiring.target = PortWiring::Target(op);
-      portWiring.push_back(std::move(wiring));
-      return;
-    }
-    // This handles the case when the memtap is on a MemOp, which shouldn't have
-    // the PortID attribute. Lookup the op without the portID key.
-    if (auto *op = tappedOps.lookup({key.first, {}})) {
+  //     if (!nla)
+  //       wiring.prefices =
+  //           instancePaths.getAbsolutePaths(op->getParentOfType<FModuleOp>());
+  //     wiring.target = PortWiring::Target(op);
+  //     portWiring.push_back(std::move(wiring));
+  //     return;
+  //   }
+  //   // This handles the case when the memtap is on a MemOp, which shouldn't
+  //   have
+  //   // the PortID attribute. Lookup the op without the portID key.
+  //   if (auto *op = tappedOps.lookup({key.first, {}})) {
 
-      // Extract the memory location we're supposed to access.
-      auto word = portAnno.anno.getMember<IntegerAttr>("portID");
-      if (!word) {
-        blackBox.extModule.emitError("MemTapAnnotation annotation on port ")
-            << portName << " missing \"word\" attribute";
-        signalPassFailure();
-        return;
-      }
-      // Formulate a hierarchical reference into the memory.
-      // CAVEAT: This just assumes that the memory will map to something that
-      // can be indexed in the final Verilog. If the memory gets turned into
-      // an instance of some sort, we lack the information necessary to go in
-      // and access individual elements of it. This will break horribly since
-      // we generate memory impls out-of-line already, and memories coming
-      // from an external generator are even worse. This needs a special node
-      // in the IR that can properly inject the memory array on emission.
-      if (!nla)
-        wiring.prefices =
-            instancePaths.getAbsolutePaths(op->getParentOfType<FModuleOp>());
-      wiring.target = PortWiring::Target(op);
-      ("Memory[" + Twine(word.getValue().getLimitedValue()) + "]")
-          .toVector(wiring.suffix);
-      portWiring.push_back(std::move(wiring));
-      return;
-    }
-    blackBox.extModule.emitOpError(
-        "MemTapAnnotation annotation was not scattered to "
-        "an operation: ")
-        << targetAnno.getDict();
-    signalPassFailure();
-    return;
-  }
+  //     // Extract the memory location we're supposed to access.
+  //     auto word = portAnno.anno.getMember<IntegerAttr>("portID");
+  //     if (!word) {
+  //       blackBox.extModule.emitError("MemTapAnnotation annotation on port
+  //       ")
+  //           << portName << " missing \"word\" attribute";
+  //       signalPassFailure();
+  //       return;
+  //     }
+  //     // Formulate a hierarchical reference into the memory.
+  //     // CAVEAT: This just assumes that the memory will map to something
+  //     that
+  //     // can be indexed in the final Verilog. If the memory gets turned
+  //     into
+  //     // an instance of some sort, we lack the information necessary to go
+  //     in
+  //     // and access individual elements of it. This will break horribly
+  //     since
+  //     // we generate memory impls out-of-line already, and memories coming
+  //     // from an external generator are even worse. This needs a special
+  //     node
+  //     // in the IR that can properly inject the memory array on emission.
+  //     if (!nla)
+  //       wiring.prefices =
+  //           instancePaths.getAbsolutePaths(op->getParentOfType<FModuleOp>());
+  //     wiring.target = PortWiring::Target(op);
+  //     ("Memory[" + Twine(word.getValue().getLimitedValue()) + "]")
+  //         .toVector(wiring.suffix);
+  //     portWiring.push_back(std::move(wiring));
+  //     return;
+  //   }
+  //   blackBox.extModule.emitOpError(
+  //       "MemTapAnnotation annotation was not scattered to "
+  //       "an operation: ")
+  //       << sourceAnno.getDict();
+  //   signalPassFailure();
+  //   return;
+  // }
 
   // We never arrive here since the above code that populates the portAnnos
   // list only adds annotations that we handle in one of the if statements

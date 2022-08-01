@@ -310,7 +310,9 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
     {dataTapsClass, {noResolve, applyGCTDataTaps}},
     {dataTapsBlackboxClass, {stdResolve, applyWithoutTarget<true>}},
     {referenceKeySourceClass, {stdResolve, applyWithoutTarget<true>}},
-    {referenceKeyPortClass, {stdResolve, applyWithoutTarget<true>}},
+    {referenceKeyWireClass,
+     {stdResolve,
+      applyWithoutTarget<false, WireOp>}}, // this may need to be true
     {internalKeySourceClass, {stdResolve, applyWithoutTarget<true>}},
     {internalKeyPortClass, {stdResolve, applyWithoutTarget<true>}},
     {deletedKeyClass, {stdResolve, applyWithoutTarget<true>}},
