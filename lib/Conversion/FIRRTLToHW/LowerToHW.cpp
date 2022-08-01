@@ -3449,7 +3449,6 @@ LogicalResult FIRRTLLowering::visitExpr(IsXVerifOp op) {
   if (!input)
     return failure();
 
-  Type resultType = builder.getIntegerType(1);
   return setLoweringTo<comb::ICmpOp>(
       op, ICmpPredicate::ceq, input,
       getOrCreateXConstant(input.getType().getIntOrFloatBitWidth()));
