@@ -1144,6 +1144,7 @@ private:
   ParseResult parseOptionalExpPostscript(Value &result);
   ParseResult parsePostFixFieldId(Value &result);
   ParseResult parsePostFixIntSubscript(Value &result);
+  ParseResult parsePostFixIntRangeSubscript(Value &result);
   ParseResult parsePostFixDynamicSubscript(Value &result);
   ParseResult parsePrimExp(Value &result);
   ParseResult parseIntegerLiteralExp(Value &result);
@@ -1400,6 +1401,7 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
 ///
 ///  exp ::= exp '.' fieldId
 ///      ::= exp '[' intLit ']'
+///      ::= exp '[' intLit ':' intLit ']'
 /// XX   ::= exp '.' DoubleLit // TODO Workaround for #470
 ///      ::= exp '[' exp ']'
 ParseResult FIRStmtParser::parseOptionalExpPostscript(Value &result) {
@@ -1414,10 +1416,17 @@ ParseResult FIRStmtParser::parseOptionalExpPostscript(Value &result) {
       continue;
     }
 
-    // Subindex: exp ::= exp '[' intLit ']' | exp '[' exp ']'
+    // Subindex: exp ::= exp '[' intLit ']' | exp '[' intLit ':' intLit ']' | exp '[' exp ']'
     if (consumeIf(FIRToken::l_square)) {
       if (getToken().isAny(FIRToken::integer, FIRToken::string)) {
-        if (parsePostFixIntSubscript(result))
+        // need one token lookahead here to see if this is a range subindex or not
+        auto backtrackState = getLexer().getCursor();
+        consumeToken();
+        bool range = getToken().is(FIRToken::colon);
+        backtrackState.restore(getLexer());
+        if (!range && parsePostFixIntSubscript(result))
+          return failure();
+        if (range && parsePostFixIntRangeSubscript(result))
           return failure();
         continue;
       }
@@ -1479,6 +1488,35 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result) {
 
   result = value;
   return success();
+}
+
+ParseResult FIRStmtParser::parsePostFixIntRangeSubscript(Value &result) {
+    auto loc = getToken().getLoc();
+    int32_t indexHi, indexLo;
+    if (parseIntLit(indexHi, "expected high index") ||
+        parseToken(FIRToken::colon, "expected ':'") ||
+        parseIntLit(indexLo, "expected low index") ||
+        parseToken(FIRToken::r_square, "expected ']'"))
+      return failure();
+
+    if (indexHi < 0 || indexLo < 0 || indexHi < indexLo)
+      return emitError(loc, "invalid index specifier"), failure();
+
+    NamedAttrList attrs;
+    attrs.append(getConstants().hiIdentifier, builder.getI32IntegerAttr(indexHi));
+    attrs.append(getConstants().loIdentifier, builder.getI32IntegerAttr(indexLo));
+    auto resultType = BitsPrimOp::inferReturnType({result}, attrs, {});
+    if (!resultType) {
+        (void)BitsPrimOp::inferReturnType({result}, attrs,
+            translateLocation(loc));
+        return failure();
+    }
+    locationProcessor.setLoc(loc);
+    OpBuilder::InsertionGuard guard(builder);
+    builder.setInsertionPointAfterValue(result);
+    auto op = builder.create<BitsPrimOp>(resultType, result, attrs);
+    result = op.getResult();
+    return success();
 }
 
 /// exp ::= exp '[' intLit ']'
