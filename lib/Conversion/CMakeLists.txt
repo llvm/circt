@@ -1,7 +1,6 @@
 add_subdirectory(AffineToStaticLogic)
 add_subdirectory(CalyxToFSM)
 add_subdirectory(CalyxToHW)
-add_subdirectory(ExportSystemC)
 add_subdirectory(ExportVerilog)
 add_subdirectory(FIRRTLToHW)
 add_subdirectory(HWArithToHW)
