@@ -2931,7 +2931,6 @@ FIRRTLType HeadPrimOp::inferReturnType(ValueRange operands,
     return {};
   }
 
-  width = std::max<int32_t>(width, amount);
   return UIntType::get(input.getContext(), amount);
 }
 
