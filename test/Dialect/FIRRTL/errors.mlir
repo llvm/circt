@@ -791,7 +791,7 @@ firrtl.circuit "Top" {
 
 firrtl.circuit "AnalogRegister" {
   firrtl.module @AnalogRegister(in %clock: !firrtl.clock) {
-    // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive type that does not contain analog, but got '!firrtl.analog'}}
+    // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive type that does not contain analog and is not a ref type, but got '!firrtl.analog'}}
     %r = firrtl.reg %clock : !firrtl.analog
   }
 }
@@ -800,7 +800,7 @@ firrtl.circuit "AnalogRegister" {
 
 firrtl.circuit "AnalogVectorRegister" {
   firrtl.module @AnalogVectorRegister(in %clock: !firrtl.clock) {
-    // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive type that does not contain analog, but got '!firrtl.vector<analog, 2>'}}
+    // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive type that does not contain analog and is not a ref type, but got '!firrtl.vector<analog, 2>'}}
     %r = firrtl.reg %clock : !firrtl.vector<analog, 2>
   }
 }
@@ -933,18 +933,6 @@ firrtl.circuit "MyView_mapping" {
 }
 
 // -----
-// Incorrect connections
-
-firrtl.circuit "MyView" {
-  firrtl.module @MyView() {
-    %ref_in1 = firrtl.wire : !firrtl.ref<uint<1>>
-    %in1 = firrtl.wire : !firrtl.uint<1>
-    // expected-error @+1 {{that reference port operand can only be a module or instance port}}
-    firrtl.ref.send  %ref_in1, %in1 : !firrtl.ref<uint<1>>
-  }
-}
-
-// -----
 // Check upward reference XMRs
 
 firrtl.circuit "func2" {
@@ -985,7 +973,7 @@ firrtl.circuit "Bar" {
   firrtl.module @Bar(in %_a: !firrtl.ref<uint<1>>) {
     %a = firrtl.wire : !firrtl.uint<1>
     %b = firrtl.wire : !firrtl.uint<1>
-    // expected-error @+1 {{ref recv (xmr write) result "a" cannot be used as the destination of a connect}}
+    // expected-error @+1 {{ref recv result "a" cannot be used as the destination of a connect}}
     firrtl.ref.recv %a, %_a : !firrtl.ref<uint<1>>
     // expected-note @+1 {{the connect was defined here}}
     firrtl.strictconnect %a, %b : !firrtl.uint<1>
@@ -1012,5 +1000,37 @@ firrtl.circuit "ForwardToInstance2x" {
     %a = firrtl.wire : !firrtl.uint<1>
     %0 = firrtl.ref.resolve %bar_a : !firrtl.ref<uint<1>>
     firrtl.strictconnect %a, %0 : !firrtl.uint<1>
+  }
+}
+
+// -----
+// Node ops cannot have reference type
+
+firrtl.circuit "NonRefNode" {
+firrtl.module @NonRefNode(in %in1 : !firrtl.ref<uint<8>>) {
+  // expected-error @+1 {{must be a base type, it cannot be a Ref Type}}
+  %n1 = firrtl.node %in1 : !firrtl.ref<uint<8>>
+    %a = firrtl.wire : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>
+}
+}
+
+// -----
+
+firrtl.circuit "NonRefRegister" {
+  firrtl.module @NonRefRegister(in %clock: !firrtl.clock) {
+    // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive type that does not contain analog and is not a ref type}}
+    %r = firrtl.reg %clock : !firrtl.ref<uint<8>>
+  }
+}
+
+// -----
+// Wire ops cannot have reference type
+
+firrtl.circuit "MyView" {
+  firrtl.module @MyView() {
+  // expected-error @+1 {{must be a base type, it cannot be a Ref Type}}
+    %ref_in1 = firrtl.wire : !firrtl.ref<uint<1>>
+    %in1 = firrtl.wire : !firrtl.uint<1>
+    firrtl.ref.send  %ref_in1, %in1 : !firrtl.ref<uint<1>>
   }
 }
