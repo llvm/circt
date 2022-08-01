@@ -23,11 +23,13 @@ hw.module @no_ports() {
 // CHECK-NEXT:    output [15:0] out16,
 // CHECK-NEXT:                  out16s,
 // CHECK-NEXT:    output [16:0] sext17,
-// CHECK-NEXT:    output [1:0]  orvout);
+// CHECK-NEXT:    output [1:0]  orvout,
+// CHECK-NEXT:    output [7:0]  streamout_1,
+// CHECK-NEXT:                  streamout_2);
 
 hw.module @Expressions(%in4: i4, %clock: i1) ->
   (out1a: i1, out1b: i1, out1c: i1,
-   out4: i4, out4s: i4, out16: i16, out16s: i16, sext17: i17, orvout: i2) {
+   out4: i4, out4s: i4, out16: i16, out16s: i16, sext17: i17, orvout: i2, streamout_1: i8, streamout_2: i8) {
   %c1_i4 = hw.constant 1 : i4
   %c2_i4 = hw.constant 2 : i4
   %c3_i4 = hw.constant 3 : i4
@@ -129,7 +131,13 @@ hw.module @Expressions(%in4: i4, %clock: i1) ->
   %orpre2 = comb.extract %in4 from 2 : (i4) -> i2
   %orpre3 = comb.extract %in4 from 1 : (i4) -> i2
   %orv = comb.or %orpre1, %orpre2, %orpre3 {sv.namehint = "hintyhint"}: i2
-  hw.output %0, %1, %2, %w1_use, %11, %w2_use, %w3_use, %35, %orv : i1, i1, i1, i4, i4, i16, i16, i17, i2
+
+  // CHECK: assign streamout_1 = {<<{4'h1, in4}};
+  // CHECK: assign streamout_2 = {<<4{4'h1, in4}};
+  %stream0 = sv.lstream_pack %c1_i4, %in4 slice 1 : i4, i4
+  %stream1 = sv.lstream_pack %c1_i4, %in4 slice 4 : i4, i4
+
+  hw.output %0, %1, %2, %w1_use, %11, %w2_use, %w3_use, %35, %orv, %stream0, %stream1 : i1, i1, i1, i4, i4, i16, i16, i17, i2, i8, i8
 }
 
 // CHECK-LABEL: module Precedence(

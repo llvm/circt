@@ -30,8 +30,8 @@ using namespace sv;
 /// Return true if the specified operation is an expression.
 bool sv::isExpression(Operation *op) {
   return isa<VerbatimExprOp, VerbatimExprSEOp, GetModportOp,
-             ReadInterfaceSignalOp, ConstantXOp, ConstantZOp, MacroRefExprOp>(
-      op);
+             ReadInterfaceSignalOp, ConstantXOp, ConstantZOp, MacroRefExprOp,
+             LStreamPackOp>(op);
 }
 
 LogicalResult sv::verifyInProceduralRegion(Operation *op) {
@@ -1748,6 +1748,41 @@ ModportStructAttr ModportStructAttr::get(MLIRContext *context,
                                          ModportDirection direction,
                                          FlatSymbolRefAttr signal) {
   return get(context, ModportDirectionAttr::get(context, direction), signal);
+}
+
+//===----------------------------------------------------------------------===//
+// Streaming Op.
+//===----------------------------------------------------------------------===//
+
+static unsigned getTotalWidth(ValueRange inputs) {
+  unsigned resultWidth = 0;
+  for (auto input : inputs) {
+    resultWidth += input.getType().cast<IntegerType>().getWidth();
+  }
+  return resultWidth;
+}
+
+LogicalResult LStreamPackOp::verify() {
+  unsigned tyWidth = getType().getWidth();
+  unsigned operandsTotalWidth = getTotalWidth(inputs());
+  if (tyWidth != operandsTotalWidth)
+    return emitOpError("LStreamPack requires operands total width to "
+                       "match type width. operands "
+                       "totalWidth is")
+           << operandsTotalWidth << ", but concatOp type width is " << tyWidth;
+
+  return success();
+}
+
+LogicalResult LStreamPackOp::inferReturnTypes(MLIRContext *context,
+                                              Optional<Location> loc,
+                                              ValueRange operands,
+                                              DictionaryAttr attrs,
+                                              mlir::RegionRange regions,
+                                              SmallVectorImpl<Type> &results) {
+  unsigned resultWidth = getTotalWidth(operands);
+  results.push_back(IntegerType::get(context, resultWidth));
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
