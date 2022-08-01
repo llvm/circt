@@ -220,7 +220,7 @@ def NodeOp : ReferableDeclOp<"node",
                        NameKindAttr:$nameKind,
                        AnnotationArrayAttr:$annotations,
                        OptionalAttr<InnerSymAttr>:$inner_sym);
-  let results = (outs FIRRTLType:$result);
+  let results = (outs FIRRTLnonRefType:$result);
 
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$input,
@@ -353,7 +353,7 @@ def WireOp : ReferableDeclOp<"wire"> {
   let arguments = (ins StrAttr:$name, NameKindAttr:$nameKind,
                        AnnotationArrayAttr:$annotations,
                        OptionalAttr<InnerSymAttr>:$inner_sym);
-  let results = (outs FIRRTLType:$result);
+  let results = (outs FIRRTLnonRefType:$result);
 
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType,

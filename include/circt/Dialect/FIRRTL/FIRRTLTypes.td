@@ -86,8 +86,9 @@ def AnyResetType : DialectType<FIRRTLDialect,
 
 def AnyRegisterType : DialectType<FIRRTLDialect,
     CPred<"$_self.isa<FIRRTLType>() && "
-          "$_self.cast<FIRRTLType>().isRegisterType()">,
-    "a passive type that does not contain analog",
+          "$_self.cast<FIRRTLType>().isRegisterType() && "
+          "!$_self.isa<RefType>()">,
+    "a passive type that does not contain analog and is not a ref type",
     "::circt::firrtl::FIRRTLType">;
 
 def UIntSIntClockType : AnyTypeOf<[SIntType, UIntType, ClockType],
@@ -98,6 +99,10 @@ def OneBitCastableType : AnyTypeOf<
   [OneBitType, AnyResetType, AsyncResetType, ClockType],
   "1-bit uint/sint/analog, reset, asyncreset, or clock",
                                   "::circt::firrtl::FIRRTLType">;
+
+def FIRRTLnonRefType : DialectType<FIRRTLDialect,
+  CPred<"$_self.isa<FIRRTLType>() && !$_self.isa<RefType>()">,
+  "a base type, it cannot be a Ref Type", "::circt::firrtl::FIRRTLType">;
 
 //===----------------------------------------------------------------------===//
 // FIRRTL Enum Definitions
