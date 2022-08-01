@@ -251,3 +251,45 @@ hw.module @icmp(%op0: i32, %op1: i32) -> (sisi: i1, siui: i1, uisi: i1, uiui: i1
 // CHECK:   hw.output %[[SISI_OUT]], %[[SIUI_OUT]], %[[UISI_OUT]], %[[UIUI_OUT]] : i1, i1, i1, i1
   hw.output %sisiOut, %siuiOut, %uisiOut, %uiuiOut : i1, i1, i1, i1
 }
+
+// -----
+
+// CHECK: hw.module @icmp_mixed_width(%op0: i5, %op1: i7) -> (sisi: i1, siui: i1, uisi: i1, uiui: i1) {
+hw.module @icmp_mixed_width(%op0: i5, %op1: i7) -> (sisi: i1, siui: i1, uisi: i1, uiui: i1) {
+  %op0Signed = hwarith.cast %op0 : (i5) -> si5
+  %op0Unsigned = hwarith.cast %op0 : (i5) -> ui5
+  %op1Signed = hwarith.cast %op1 : (i7) -> si7
+  %op1Unsigned = hwarith.cast %op1 : (i7) -> ui7
+
+// CHECK:   %[[SIGN_BIT_OP0:.*]] = comb.extract %op0 from 4 : (i5) -> i1
+// CHECK:   %[[SIGN_EXTEND:.*]] = comb.replicate %[[SIGN_BIT_OP0]] : (i1) -> i2
+// CHECK:   %[[OP0_PADDED:.*]] = comb.concat %[[SIGN_EXTEND]], %op0 : i2, i5
+// CHECK:   %[[SISI_OUT:.*]] = comb.icmp slt %[[OP0_PADDED]], %op1 : i7
+  %sisi = hwarith.icmp lt %op0Signed, %op1Signed : si5, si7
+
+// CHECK:   %[[SIGN_BIT_OP0:.*]] = comb.extract %op0 from 4 : (i5) -> i1
+// CHECK:   %[[SIGN_EXTEND:.*]] = comb.replicate %[[SIGN_BIT_OP0]] : (i1) -> i3
+// CHECK:   %[[OP0_PADDED:.*]] = comb.concat %[[SIGN_EXTEND]], %op0 : i3, i5
+// CHECK:   %[[ZERO_EXTEND:.*]] = hw.constant false
+// CHECK:   %[[OP1_PADDED:.*]] = comb.concat %[[ZERO_EXTEND]], %op1 : i1, i7
+// CHECK:   %[[SIUI_OUT:.*]] = comb.icmp slt %[[OP0_PADDED]], %[[OP1_PADDED]] : i8
+  %siui = hwarith.icmp lt %op0Signed, %op1Unsigned : si5, ui7
+
+// CHECK:   %[[ZERO_EXTEND:.*]] = hw.constant 0 : i2
+// CHECK:   %[[OP0_PADDED:.*]] = comb.concat %[[ZERO_EXTEND]], %op0 : i2, i5
+// CHECK:   %[[UISI_OUT:.*]] = comb.icmp slt %[[OP0_PADDED]], %op1 : i7
+  %uisi = hwarith.icmp lt %op0Unsigned, %op1Signed : ui5, si7
+
+// CHECK:   %[[ZERO_EXTEND:.*]] = hw.constant 0 : i2
+// CHECK:   %[[OP0_PADDED:.*]] = comb.concat %[[ZERO_EXTEND]], %op0 : i2, i5
+// CHECK:   %[[UIUI_OUT:.*]] = comb.icmp ult %[[OP0_PADDED]], %op1 : i7
+  %uiui = hwarith.icmp lt %op0Unsigned, %op1Unsigned : ui5, ui7
+
+  %sisiOut = hwarith.cast %sisi : (ui1) -> i1
+  %siuiOut = hwarith.cast %siui : (ui1) -> i1
+  %uisiOut = hwarith.cast %uisi : (ui1) -> i1
+  %uiuiOut = hwarith.cast %uiui : (ui1) -> i1
+
+// CHECK:   hw.output %[[SISI_OUT]], %[[SIUI_OUT]], %[[UISI_OUT]], %[[UIUI_OUT]] : i1, i1, i1, i1
+  hw.output %sisiOut, %siuiOut, %uisiOut, %uiuiOut : i1, i1, i1, i1
+}
