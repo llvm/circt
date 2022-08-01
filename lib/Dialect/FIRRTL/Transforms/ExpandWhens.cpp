@@ -128,33 +128,21 @@ public:
         if (op.getHi() >= lhsLo && op.getLo() >= lhsLo) {
           // only indexing the lhs
           Value bits = canonicalizeBits(builder.create<BitsPrimOp>(cat.getLhs(), op.getHi() - lhsLo, op.getLo() - lhsLo), builder);
-          op.replaceAllUsesWith(bits);
-          op.erase();
           return bits;
         } if (op.getHi() <= rhsHi && op.getLo() <= rhsHi) {
           // only indexing the rhs
           Value bits = canonicalizeBits(builder.create<BitsPrimOp>(cat.getRhs(), op.getHi(), op.getLo()), builder);
-          op.replaceAllUsesWith(bits);
-          op.erase();
           return bits;
         }
         auto bitsLhs = canonicalizeBits(builder.create<BitsPrimOp>(cat.getLhs(), op.getHi() - lhsLo, 0), builder);
         auto bitsRhs = canonicalizeBits(builder.create<BitsPrimOp>(cat.getRhs(), rhsHi, op.getLo()), builder);
         Value newcat = builder.create<CatPrimOp>(bitsLhs, bitsRhs);
-        cat->dropAllUses();
-        op.replaceAllUsesWith(newcat);
-        cat.erase();
-        op.erase();
         return newcat;
       }
     } else if (auto mux = dyn_cast<MuxPrimOp>(op.getInput().getDefiningOp())) {
       auto bitsHigh = canonicalizeBits(builder.create<BitsPrimOp>(mux.getHigh(), op.getHi(), op.getLo()), builder);
       auto bitsLow = canonicalizeBits(builder.create<BitsPrimOp>(mux.getLow(), op.getHi(), op.getLo()), builder);
       Value newmux = builder.create<MuxPrimOp>(mux.getSel(), bitsHigh, bitsLow);
-      mux->dropAllUses();
-      op.replaceAllUsesWith(newmux);
-      mux.erase();
-      op.erase();
       return newmux;
     }
     return op;
