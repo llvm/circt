@@ -77,4 +77,4 @@ specifying placement constraints, or representing non-local attributes (FIRRTL).
 
 The common element for building paths of instances through the instantiation 
 graph is with a `NameRefArrayAttr` attribute.  This is used, for example, by 
-`hw.GlobalRefOp` and `firrtl.NonLocalAnchor`.
+`hw.GlobalRefOp` and `firrtl.hierpath`.
