@@ -25,15 +25,17 @@ class EmissionPrinter {
 public:
   EmissionPrinter(mlir::raw_indented_ostream &os,
                   const FrozenOpEmissionPatternSet &opPatterns,
-                  const FrozenTypeEmissionPatternSet &typePatterns)
+                  const FrozenTypeEmissionPatternSet &typePatterns,
+                  Location loc)
       : opPatterns(opPatterns), typePatterns(typePatterns), os(os),
-        emissionFailed(false) {}
+        emissionFailed(false), currentLoc(loc) {}
 
   EmissionPrinter(mlir::raw_indented_ostream &os,
                   OpEmissionPatternSet &opPatterns,
-                  TypeEmissionPatternSet &typePatterns)
+                  TypeEmissionPatternSet &typePatterns, Location loc)
       : opPatterns(std::move(opPatterns)),
-        typePatterns(std::move(typePatterns)), os(os), emissionFailed(false) {}
+        typePatterns(std::move(typePatterns)), os(os), emissionFailed(false),
+        currentLoc(loc) {}
 
   /// Emit the given operation as a statement to the ostream associated with
   /// this printer according to the emission patterns registered. An operation
@@ -91,6 +93,7 @@ private:
   FrozenTypeEmissionPatternSet typePatterns;
   mlir::raw_indented_ostream &os;
   bool emissionFailed;
+  Location currentLoc;
 };
 
 } // namespace ExportSystemC
