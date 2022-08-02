@@ -136,7 +136,7 @@ dependencies are installed on your system. They are:
 7) **Install Cap'nProto** (optional, affects ESI dialect only)
 
 Some of the ESI dialect code requires [libcapnp](https://capnproto.org/), 0.9.1 or newer.
-(Specifically, the [cosimulation](ESI/cosim.md) component.) Most of
+(Specifically, the [cosimulation](Dialects/ESI/cosim.md) component.) Most of
 the ESI cosim integration tests also require the python bindings: pycapnp.
 The `utils/get-capnp.sh` script downloads, compiles, and installs a known
 good version to a directory within the circt source code. It optionally

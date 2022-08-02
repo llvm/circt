@@ -5,8 +5,8 @@ global perspective on the `hw`, `comb`, and `sv` dialects, why
 they are the way they are, and current status.  This follows in the spirit of
 other [MLIR Rationale docs](https://mlir.llvm.org/docs/Rationale/).  For more
 information about the other dialects, please see the
-[Comb Dialect Rationale](RationaleComb.md) and [SV Dialect
-Rationale](RationaleSV.md).
+[Comb Dialect Rationale](../Comb/RationaleComb.md) and [SV Dialect
+Rationale](../SV/RationaleSV.md).
 
 - [HW Dialect Rationale](#hw-dialect-rationale)
   - [General Introduction](#general-introduction)
@@ -139,7 +139,7 @@ notable differences: for example:
    analysis from the `hw.output` which is useful for inter-module analyses.
  - We allow arbitrary types for module ports.  The `hw` dialect is generally
    designed to be extensible by other dialects, and thus being permissive here
-   is useful.  That said, the [Verilog exporter](VerilogGeneration.md) does not
+   is useful.  That said, the [Verilog exporter](../../VerilogGeneration.md) does not
    support arbitrary user-defined types.
  - The `comb` dialect in particular does not use signed integer types, its
    operators do not support zero-width integer types.  Modules in the `hw` dialect,
