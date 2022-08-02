@@ -71,7 +71,7 @@ class InnerSymbolOpInterface;
 LogicalResult verifyInnerSymAttr(InnerSymbolOpInterface op);
 
 namespace detail {
-LogicalResult verifyInnerRefs(Operation *op);
+LogicalResult verifyInnerRefNamespace(Operation *op);
 } // namespace detail
 
 } // namespace firrtl
@@ -95,8 +95,8 @@ public:
     if (!op->getRegion(0).hasOneBlock())
       return op->emitError("expected operation to have a single block");
 
-    // Verify all InnerRef users.
-    return ::circt::firrtl::detail::verifyInnerRefs(op);
+    // Verify all InnerSymbolTable's and InnerRef users.
+    return ::circt::firrtl::detail::verifyInnerRefNamespace(op);
   }
 };
 

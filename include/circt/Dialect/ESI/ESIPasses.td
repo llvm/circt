@@ -22,6 +22,16 @@ def ESIConnectServices : Pass<"esi-connect-services", "mlir::ModuleOp"> {
   let dependentDialects = ["circt::hw::HWDialect"];
 }
 
+def ESICreateCapnpSchema: Pass<"esi-create-capnp-schema", "mlir::ModuleOp"> {
+  let summary = "Create a Cap'nProto schema";
+  let constructor = "circt::esi::createESICreateCapnpSchemaPass()";
+  let dependentDialects = ["circt::sv::SVDialect"];
+  let options = [
+    Option<"schemaFile", "schema-file", "std::string",
+           "", "File to output capnp schema into">
+  ];
+}
+
 def LowerESIToPhysical: Pass<"lower-esi-to-physical", "mlir::ModuleOp"> {
   let summary = "Lower ESI abstract Ops to ESI physical ops.";
   let constructor = "circt::esi::createESIPhysicalLoweringPass()";

@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_SSP_SSPATTRIBUTES_H
 
 #include "circt/Dialect/SSP/SSPDialect.h"
+#include "circt/Scheduling/Problems.h"
 #include "circt/Support/LLVM.h"
 
 #include "mlir/IR/OpImplementation.h"

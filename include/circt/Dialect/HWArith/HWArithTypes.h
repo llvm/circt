@@ -19,6 +19,8 @@
 namespace circt {
 namespace hwarith {
 
+// Check whether a specified type satisfies the constraints for the
+// HWArithIntegerType
 bool isHWArithIntegerType(::mlir::Type type);
 
 } // namespace hwarith

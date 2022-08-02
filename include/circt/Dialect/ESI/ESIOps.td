@@ -10,7 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-def ChannelBuffer : ESI_Abstract_Op<"buffer", [
+def ChannelBufferOp : ESI_Abstract_Op<"buffer", [
     NoSideEffect,
     DeclareOpInterfaceMethods<ChannelOpInterface>
   ]> {
@@ -42,14 +42,14 @@ def ChannelBuffer : ESI_Abstract_Op<"buffer", [
     ```
   }];
 
-  let arguments = (ins I1:$clk, I1:$rstn, ChannelType:$input,
+  let arguments = (ins I1:$clk, I1:$rst, ChannelType:$input,
     OptionalAttr<Confined<I64Attr, [IntMinValue<1>]>>:$stages,
     OptionalAttr<StrAttr>:$name);
   let results = (outs ChannelType:$output);
   let hasCustomAssemblyFormat = 1;
 }
 
-def PipelineStage : ESI_Physical_Op<"stage", [
+def PipelineStageOp : ESI_Physical_Op<"stage", [
     NoSideEffect,
     DeclareOpInterfaceMethods<ChannelOpInterface>
   ]> {
@@ -61,12 +61,12 @@ def PipelineStage : ESI_Physical_Op<"stage", [
     late-pass latency balancing.
   }];
 
-  let arguments = (ins I1:$clk, I1:$rstn, ChannelType:$input);
+  let arguments = (ins I1:$clk, I1:$rst, ChannelType:$input);
   let results = (outs ChannelType:$output);
   let hasCustomAssemblyFormat = 1;
 }
 
-def CosimEndpoint : ESI_Physical_Op<"cosim", []> {
+def CosimEndpointOp : ESI_Physical_Op<"cosim", []> {
   let summary = "Co-simulation endpoint";
   let description = [{
     A co-simulation endpoint is a connection from the simulation to some
@@ -84,24 +84,24 @@ def CosimEndpoint : ESI_Physical_Op<"cosim", []> {
     supported by the specific protocol.
   }];
 
-  let arguments = (ins I1:$clk, I1:$rstn, ChannelType:$send,
+  let arguments = (ins I1:$clk, I1:$rst, ChannelType:$send,
     I64Attr:$endpointID);
   let results = (outs ChannelType:$recv);
 
   let assemblyFormat = [{
-    $clk `,` $rstn `,` $send `,` $endpointID attr-dict
+    $clk `,` $rst `,` $send `,` $endpointID attr-dict
       `:` qualified(type($send)) `->` qualified(type($recv))
   }];
 }
 
-def RtlBitArray : Type<CPred<"$_self.isa<::circt::hw::ArrayType>()"
+def RtlBitArrayType : Type<CPred<"$_self.isa<::circt::hw::ArrayType>()"
  " && $_self.cast<::circt::hw::ArrayType>().getElementType() =="
  "   ::mlir::IntegerType::get($_self.getContext(), 1)">, "an HW bit array">;
 
-def CapnpDecode : ESI_Physical_Op<"decode.capnp", [NoSideEffect]> {
+def CapnpDecodeOp : ESI_Physical_Op<"decode.capnp", [NoSideEffect]> {
   let summary = "Translate bits in Cap'nProto messages to HW typed data";
 
-  let arguments = (ins I1:$clk, I1:$valid, RtlBitArray:$capnpBits);
+  let arguments = (ins I1:$clk, I1:$valid, RtlBitArrayType:$capnpBits);
   let results = (outs AnyType:$decodedData);
 
   let assemblyFormat = [{
@@ -110,11 +110,11 @@ def CapnpDecode : ESI_Physical_Op<"decode.capnp", [NoSideEffect]> {
   }];
 }
 
-def CapnpEncode : ESI_Physical_Op<"encode.capnp", [NoSideEffect]> {
+def CapnpEncodeOp : ESI_Physical_Op<"encode.capnp", [NoSideEffect]> {
   let summary = "Translate HW typed data to Cap'nProto";
 
   let arguments = (ins I1:$clk, I1:$valid, AnyType:$dataToEncode);
-  let results = (outs RtlBitArray:$capnpBits);
+  let results = (outs RtlBitArrayType:$capnpBits);
 
   let assemblyFormat = [{
     $clk $valid $dataToEncode attr-dict `:` qualified(type($dataToEncode))

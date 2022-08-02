@@ -80,6 +80,14 @@ ICmpPredicate ICmpOp::getFlippedPredicate(ICmpPredicate predicate) {
     return ICmpPredicate::ult;
   case ICmpPredicate::uge:
     return ICmpPredicate::ule;
+  case ICmpPredicate::ceq:
+    return ICmpPredicate::ceq;
+  case ICmpPredicate::cne:
+    return ICmpPredicate::cne;
+  case ICmpPredicate::weq:
+    return ICmpPredicate::weq;
+  case ICmpPredicate::wne:
+    return ICmpPredicate::wne;
   }
   llvm_unreachable("unknown comparison predicate");
 }
@@ -92,6 +100,10 @@ bool ICmpOp::isPredicateSigned(ICmpPredicate predicate) {
   case ICmpPredicate::uge:
   case ICmpPredicate::ne:
   case ICmpPredicate::eq:
+  case ICmpPredicate::cne:
+  case ICmpPredicate::ceq:
+  case ICmpPredicate::wne:
+  case ICmpPredicate::weq:
     return false;
   case ICmpPredicate::slt:
   case ICmpPredicate::sgt:
@@ -126,6 +138,14 @@ ICmpPredicate ICmpOp::getNegatedPredicate(ICmpPredicate predicate) {
     return ICmpPredicate::ule;
   case ICmpPredicate::uge:
     return ICmpPredicate::ult;
+  case ICmpPredicate::ceq:
+    return ICmpPredicate::cne;
+  case ICmpPredicate::cne:
+    return ICmpPredicate::ceq;
+  case ICmpPredicate::weq:
+    return ICmpPredicate::wne;
+  case ICmpPredicate::wne:
+    return ICmpPredicate::weq;
   }
   llvm_unreachable("unknown comparison predicate");
 }

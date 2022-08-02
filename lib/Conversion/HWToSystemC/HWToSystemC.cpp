@@ -79,10 +79,29 @@ struct ConvertHWModule : public OpConversionPattern<HWModuleOp> {
         module.getLoc(), portDirections,
         ArrayAttr::get(rewriter.getContext(), portNames));
 
-    // Inline the HW module body into the SystemC module body.
-    Region &scModuleBodyRegion = scModule.getBodyRegion();
-    rewriter.inlineRegionBefore(module.getBodyRegion(), scModuleBodyRegion,
-                                scModuleBodyRegion.end());
+    // Create a systemc.ctor operation inside the module.
+    Block *moduleBlock = new Block;
+    scModule.getBodyRegion().push_back(moduleBlock);
+    rewriter.setInsertionPointToStart(moduleBlock);
+    auto ctor = rewriter.create<CtorOp>(module.getLoc());
+
+    // Create a systemc.func operation inside the module after the ctor.
+    // TODO: implement logic to extract a better name and properly unique it.
+    auto scFunc = rewriter.create<SCFuncOp>(
+        module.getLoc(), rewriter.getStringAttr("innerLogic"));
+
+    // Inline the HW module body into the systemc.func body.
+    // TODO: do some dominance analysis to detect use-before-def and cycles in
+    // the use chain, which are allowed in graph regions but not in SSACFG
+    // regions, and when possible fix them.
+    Region &scFuncBody = scFunc.getBody();
+    rewriter.inlineRegionBefore(module.getBody(), scFuncBody, scFuncBody.end());
+
+    // Register the systemc.func inside the systemc.ctor
+    Block *ctorBlock = new Block;
+    ctor.getRegion().push_back(ctorBlock);
+    rewriter.setInsertionPointToStart(ctorBlock);
+    rewriter.create<MethodOp>(ctor.getLoc(), scFunc.getHandle());
 
     // Set the SCModule type and name attributes. Add block arguments for each
     // output.
@@ -91,9 +110,17 @@ struct ConvertHWModule : public OpConversionPattern<HWModuleOp> {
       scModule->setAttr(scModule.getTypeAttrName(),
                         TypeAttr::get(scModuleType));
       scModule.setName(module.getName());
-      scModuleBodyRegion.addArguments(
-          moduleOutputs, SmallVector<Location, 4>(moduleOutputs.size(),
-                                                  rewriter.getUnknownLoc()));
+      scModule.getBodyRegion().addArguments(
+          portTypes,
+          SmallVector<Location, 4>(portTypes.size(), rewriter.getUnknownLoc()));
+
+      // Move the block arguments of the systemc.func (that we got from the
+      // hw.module) to the systemc.module
+      Region &funcBody = scFunc.getBody();
+      for (size_t i = 0, e = scFunc.getRegion().getNumArguments(); i < e; ++i) {
+        funcBody.getArgument(0).replaceAllUsesWith(scModule.getArgument(i));
+        funcBody.eraseArgument(0);
+      }
     });
 
     // Erase the HW module.
@@ -113,7 +140,7 @@ struct ConvertOutput : public OpConversionPattern<OutputOp> {
                   ConversionPatternRewriter &rewriter) const override {
 
     SmallVector<Value> moduleOutputs;
-    if (auto scModule = dyn_cast<SCModuleOp>(outputOp->getParentOp())) {
+    if (auto scModule = outputOp->getParentOfType<SCModuleOp>()) {
       scModule.getOutputs(moduleOutputs);
       for (auto args : llvm::zip(moduleOutputs, outputOp.getOperands())) {
         rewriter.create<AliasOp>(outputOp->getLoc(), std::get<0>(args),
@@ -140,6 +167,7 @@ static void populateLegality(ConversionTarget &target) {
   target.addLegalDialect<mlir::BuiltinDialect>();
   target.addLegalDialect<systemc::SystemCDialect>();
   target.addLegalDialect<comb::CombDialect>();
+  target.addLegalOp<hw::ConstantOp>();
 }
 
 static void populateOpConversion(RewritePatternSet &patterns) {

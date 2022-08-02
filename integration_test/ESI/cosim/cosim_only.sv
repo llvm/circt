@@ -10,7 +10,7 @@ import Cosim_DpiPkg::*;
 
 module top(
     input logic clk,
-    input logic rstn
+    input logic rst
 );
     localparam int TYPE_SIZE_BITS =
         (1 * 64) + // root message
@@ -37,7 +37,7 @@ module top(
 
     always@(posedge clk)
     begin
-        if (rstn)
+        if (~rst)
         begin
             if (DataOutValid && DataOutReady)
             begin

@@ -7,7 +7,7 @@
 //===----------------------------------------------------------------------===//
 //
 // A fairly standard, boilerplate Verilator C++ simulation driver. Assumes the
-// top level exposes just two signals: 'clk' and 'rstn'.
+// top level exposes just two signals: 'clk' and 'rst'.
 //
 //===----------------------------------------------------------------------===//
 
@@ -66,7 +66,7 @@ int main(int argc, char **argv) {
   std::cout << "[driver] Starting simulation" << std::endl;
 
   // Reset.
-  dut.rstn = 0;
+  dut.rst = 1;
   dut.clk = 0;
 
   // Run for a few cycles with reset held.
@@ -78,7 +78,7 @@ int main(int argc, char **argv) {
   }
 
   // Take simulation out of reset.
-  dut.rstn = 1;
+  dut.rst = 0;
 
   // Run for the specified number of cycles out of reset.
   vluint64_t endTime = timeStamp + (numCyclesToRun * 2);

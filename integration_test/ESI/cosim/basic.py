@@ -1,10 +1,10 @@
 #!/usr/bin/python3
 
 import random
-import cosim
+import esi_cosim
 
 
-class BasicSystemTester(cosim.CosimBase):
+class BasicSystemTester(esi_cosim.CosimBase):
   """Provides methods to test the 'basic' simulation."""
 
   def testIntAcc(self, num_msgs):

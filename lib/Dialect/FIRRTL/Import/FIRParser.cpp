@@ -1486,8 +1486,6 @@ private:
   /// Remove the DontTouch annotation and return a valid symbol name if the
   /// annotation exists. Ignore DontTouch that will apply only to a subfield.
   StringAttr getSymbolIfRequired(ArrayAttr &annotations, StringRef id) {
-    SmallVector<Attribute> filteredAnnos;
-
     bool hasDontTouch = needsSymbol(annotations);
     if (hasDontTouch)
       return StringAttr::get(annotations.getContext(),

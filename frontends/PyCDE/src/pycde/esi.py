@@ -67,7 +67,7 @@ class _RequestToServerConn(_RequestConnection):
 
   def __call__(self, chan: ChannelValue, chan_name: str):
     decl_sym = self.decl._materialize_service_decl()
-    raw_esi.RequestToServerConnection(
+    raw_esi.RequestToServerConnectionOp(
         hw.InnerRefAttr.get(ir.StringAttr.get(decl_sym), self._name),
         chan.value, ir.ArrayAttr.get([ir.StringAttr.get(chan_name)]))
 
@@ -78,7 +78,7 @@ class _RequestToClientConn(_RequestConnection):
     decl_sym = self.decl._materialize_service_decl()
     if not isinstance(type, ChannelType):
       type = types.channel(type)
-    req_op = raw_esi.RequestToClientConnection(
+    req_op = raw_esi.RequestToClientConnectionOp(
         type, hw.InnerRefAttr.get(ir.StringAttr.get(decl_sym), self._name),
         ir.ArrayAttr.get([ir.StringAttr.get(chan_name)]))
     return ChannelValue(req_op)

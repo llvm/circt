@@ -99,13 +99,20 @@ def ICmpPredicateULT : I64EnumAttrCase<"ult", 6>;
 def ICmpPredicateULE : I64EnumAttrCase<"ule", 7>;
 def ICmpPredicateUGT : I64EnumAttrCase<"ugt", 8>;
 def ICmpPredicateUGE : I64EnumAttrCase<"uge", 9>;
+// SV case equality
+def ICmpPredicateCEQ : I64EnumAttrCase<"ceq", 10>;
+def ICmpPredicateCNE : I64EnumAttrCase<"cne", 11>;
+// SV wild card equality
+def ICmpPredicateWEQ : I64EnumAttrCase<"weq", 12>;
+def ICmpPredicateWNE : I64EnumAttrCase<"wne", 13>;
 let cppNamespace = "circt::comb" in
 def ICmpPredicate : I64EnumAttr<
     "ICmpPredicate",
     "hw.icmp comparison predicate",
     [ICmpPredicateEQ, ICmpPredicateNE, ICmpPredicateSLT, ICmpPredicateSLE,
      ICmpPredicateSGT, ICmpPredicateSGE, ICmpPredicateULT, ICmpPredicateULE,
-     ICmpPredicateUGT, ICmpPredicateUGE]>;
+     ICmpPredicateUGT, ICmpPredicateUGE, ICmpPredicateCEQ, ICmpPredicateCNE,
+     ICmpPredicateWEQ, ICmpPredicateWNE]>;
 
 def ICmpOp : CombOp<"icmp", [NoSideEffect, SameTypeOperands]> {
   let summary = "Compare two integer values";

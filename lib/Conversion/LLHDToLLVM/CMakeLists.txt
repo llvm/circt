@@ -10,6 +10,8 @@ add_circt_conversion_library(CIRCTLLHDToLLVM
   LINK_LIBS PUBLIC
   CIRCTLLHD
   CIRCTComb
+  CIRCTCombToLLVM
+  CIRCTHWToLLVM
   CIRCTHW
   MLIRArithmeticToLLVM
   MLIRControlFlowToLLVM
@@ -18,4 +20,4 @@ add_circt_conversion_library(CIRCTLLHDToLLVM
   MLIRVectorDialect
   MLIRTransforms
   MLIRReconcileUnrealizedCasts
-)
+  )

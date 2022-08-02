@@ -167,6 +167,65 @@ struct CastOpLowering : public OpConversionPattern<CastOp> {
 };
 } // namespace
 
+namespace {
+
+// Utility lowering function that maps a hwarith::ICmpPredicate predicate and
+// the information whether the comparison contains signed values to the
+// corresponding comb::ICmpPredicate.
+static comb::ICmpPredicate lowerPredicate(ICmpPredicate pred, bool isSigned) {
+#define _CREATE_HWARITH_ICMP_CASE(x)                                           \
+  case ICmpPredicate::x:                                                       \
+    return isSigned ? comb::ICmpPredicate::s##x : comb::ICmpPredicate::u##x
+
+  switch (pred) {
+  case ICmpPredicate::eq:
+    return comb::ICmpPredicate::eq;
+
+  case ICmpPredicate::ne:
+    return comb::ICmpPredicate::ne;
+
+    _CREATE_HWARITH_ICMP_CASE(lt);
+    _CREATE_HWARITH_ICMP_CASE(ge);
+    _CREATE_HWARITH_ICMP_CASE(le);
+    _CREATE_HWARITH_ICMP_CASE(gt);
+  }
+
+#undef _CREATE_HWARITH_ICMP_CASE
+
+  llvm_unreachable(
+      "Missing hwarith::ICmpPredicate to comb::ICmpPredicate lowering");
+  return comb::ICmpPredicate::eq;
+}
+
+struct ICmpOpLowering : public OpConversionPattern<ICmpOp> {
+  using OpConversionPattern<ICmpOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ICmpOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto lhsType = op.lhs().getType().cast<IntegerType>();
+    auto rhsType = op.rhs().getType().cast<IntegerType>();
+    IntegerType::SignednessSemantics cmpSignedness;
+    const unsigned cmpWidth =
+        inferAddResultType(cmpSignedness, lhsType, rhsType) - 1;
+
+    ICmpPredicate pred = op.predicate();
+    comb::ICmpPredicate combPred = lowerPredicate(
+        pred, cmpSignedness == IntegerType::SignednessSemantics::Signed);
+
+    const auto loc = op.getLoc();
+    Value lhsValue = extendTypeWidth(rewriter, loc, adaptor.lhs(), cmpWidth,
+                                     lhsType.isSigned());
+    Value rhsValue = extendTypeWidth(rewriter, loc, adaptor.rhs(), cmpWidth,
+                                     rhsType.isSigned());
+
+    rewriter.replaceOpWithNewOp<comb::ICmpOp>(op, combPred, lhsValue, rhsValue);
+
+    return success();
+  }
+};
+} // namespace
+
 // Templated patterns
 
 namespace {
@@ -212,7 +271,7 @@ public:
     target.addIllegalDialect<HWArithDialect>();
     target.addLegalDialect<comb::CombDialect, hw::HWDialect>();
 
-    patterns.add<ConstantOpLowering, CastOpLowering,
+    patterns.add<ConstantOpLowering, CastOpLowering, ICmpOpLowering,
                  BinaryOpLowering<AddOp, comb::AddOp>,
                  BinaryOpLowering<SubOp, comb::SubOp>,
                  BinaryOpLowering<MulOp, comb::MulOp>, DivOpLowering>(

@@ -75,32 +75,6 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
 // AddOp
 //===----------------------------------------------------------------------===//
 
-static unsigned inferAddResultType(IntegerType::SignednessSemantics &signedness,
-                                   IntegerType lhs, IntegerType rhs) {
-  // the result width is never less than max(w1, w2) + 1
-  unsigned resultWidth = std::max(lhs.getWidth(), rhs.getWidth()) + 1;
-
-  if (lhs.getSignedness() == rhs.getSignedness()) {
-    // max(w1, w2) + 1 in case both operands use the same signedness
-    // the signedness is also identical to the operands
-    signedness = lhs.getSignedness();
-  } else {
-    // For mixed signedness the result is always signed
-    signedness = IntegerType::Signed;
-
-    // Regarding the result width two case need to be considered:
-    if ((lhs.isUnsigned() && lhs.getWidth() >= rhs.getWidth()) ||
-        (rhs.isUnsigned() && rhs.getWidth() >= lhs.getWidth())) {
-      // 1. the unsigned width is >= the signed width,
-      // then the width needs to be increased by 1
-      ++resultWidth;
-    }
-    // 2. the unsigned width is < the signed width,
-    // then no further adjustment is needed
-  }
-  return resultWidth;
-}
-
 LogicalResult AddOp::inferReturnTypes(MLIRContext *context,
                                       Optional<Location> loc,
                                       ValueRange operands, DictionaryAttr attrs,
@@ -199,6 +173,32 @@ LogicalResult DivOp::inferReturnTypes(MLIRContext *context,
 
 namespace circt {
 namespace hwarith {
+
+unsigned inferAddResultType(IntegerType::SignednessSemantics &signedness,
+                            IntegerType lhs, IntegerType rhs) {
+  // the result width is never less than max(w1, w2) + 1
+  unsigned resultWidth = std::max(lhs.getWidth(), rhs.getWidth()) + 1;
+
+  if (lhs.getSignedness() == rhs.getSignedness()) {
+    // max(w1, w2) + 1 in case both operands use the same signedness
+    // the signedness is also identical to the operands
+    signedness = lhs.getSignedness();
+  } else {
+    // For mixed signedness the result is always signed
+    signedness = IntegerType::Signed;
+
+    // Regarding the result width two case need to be considered:
+    if ((lhs.isUnsigned() && lhs.getWidth() >= rhs.getWidth()) ||
+        (rhs.isUnsigned() && rhs.getWidth() >= lhs.getWidth())) {
+      // 1. the unsigned width is >= the signed width,
+      // then the width needs to be increased by 1
+      ++resultWidth;
+    }
+    // 2. the unsigned width is < the signed width,
+    // then no further adjustment is needed
+  }
+  return resultWidth;
+}
 
 static LogicalResult verifyBinOp(Operation *binOp) {
   auto ops = binOp->getOperands();

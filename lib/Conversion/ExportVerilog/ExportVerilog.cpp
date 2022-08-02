@@ -2065,15 +2065,17 @@ SubExprInfo ExprEmitter::visitTypeOp(BitcastOp op) {
 }
 
 SubExprInfo ExprEmitter::visitComb(ICmpOp op) {
-  const char *symop[] = {"==", "!=", "<",  "<=", ">",
-                         ">=", "<",  "<=", ">",  ">="};
+  const char *symop[] = {"==", "!=", "<",  "<=",  ">",   ">=",  "<",
+                         "<=", ">",  ">=", "===", "!==", "==?", "!=?"};
   SubExprSignRequirement signop[] = {
       // Equality
       NoRequirement, NoRequirement,
       // Signed Comparisons
       RequireSigned, RequireSigned, RequireSigned, RequireSigned,
       // Unsigned Comparisons
-      RequireUnsigned, RequireUnsigned, RequireUnsigned, RequireUnsigned};
+      RequireUnsigned, RequireUnsigned, RequireUnsigned, RequireUnsigned,
+      // Weird Comparisons
+      NoRequirement, NoRequirement, NoRequirement, NoRequirement};
 
   auto pred = static_cast<uint64_t>(op.getPredicate());
   assert(pred < sizeof(symop) / sizeof(symop[0]));

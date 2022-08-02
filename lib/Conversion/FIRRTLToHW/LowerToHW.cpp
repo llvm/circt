@@ -81,6 +81,29 @@ static Type lowerType(Type type) {
   return {};
 }
 
+/// Return true if the specified FIRRTL type is a sized type (Int or Analog)
+/// with zero bits.
+static bool isZeroBitFIRRTLType(Type type) {
+  return type.cast<FIRRTLType>().getPassiveType().getBitWidthOrSentinel() == 0;
+}
+
+// Return a single source value in the operands of the given attach op if
+// exists.
+static Value getSingleNonInstanceOperand(AttachOp op) {
+  Value singleSource;
+  for (auto operand : op.getAttached()) {
+    if (isZeroBitFIRRTLType(operand.getType()) ||
+        operand.getDefiningOp<InstanceOp>())
+      continue;
+    // If it is used by other than attach op or there is already a source
+    // value, bail out.
+    if (!operand.hasOneUse() || singleSource)
+      return {};
+    singleSource = operand;
+  }
+  return singleSource;
+}
+
 /// This verifies that the target operation has been lowered to a legal
 /// operation.  This checks that the operation recursively has no FIRRTL
 /// operations or types.
@@ -160,12 +183,6 @@ static Value castFromFIRRTLType(Value val, Type type,
       builder.create<mlir::UnrealizedConversionCastOp>(type, val).getResult(0);
 
   return val;
-}
-
-/// Return true if the specified FIRRTL type is a sized type (Int or Analog)
-/// with zero bits.
-static bool isZeroBitFIRRTLType(Type type) {
-  return type.cast<FIRRTLType>().getPassiveType().getBitWidthOrSentinel() == 0;
 }
 
 /// Move a ExtractTestCode related annotation from annotations to an attribute.
@@ -1376,6 +1393,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
                                bool isSigned = false) {
     return getOrCreateIntConstant(APInt(numBits, val, isSigned));
   }
+  Value getOrCreateXConstant(unsigned numBits);
   Value getPossiblyInoutLoweredValue(Value value);
   Value getLoweredValue(Value value);
   Value getLoweredAndExtendedValue(Value value, Type destType);
@@ -1384,8 +1402,8 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult setPossiblyFoldedLowering(Value orig, Value result);
   template <typename ResultOpType, typename... CtorArgTypes>
   LogicalResult setLoweringTo(Operation *orig, CtorArgTypes... args);
-  Backedge setBackedgeLowering(Value orig, Type result);
-  Backedge getBackedgeLowering(Value value);
+  Backedge createBackedge(Value orig, Type type);
+  bool updateIfBackedge(Value dest, Value src);
   void emitRandomizePrologIfNeeded();
   void initializeRegister(Value reg, llvm::Optional<std::pair<Value, Value>>
                                          asyncRegResetInitPair = llvm::None);
@@ -1525,6 +1543,9 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
     return lowerDivLikeOp<comb::ModSOp, comb::ModUOp>(op);
   }
 
+  // Verif Operations
+  LogicalResult visitExpr(IsXVerifOp op);
+
   // Other Operations
   LogicalResult visitExpr(BitsPrimOp op);
   LogicalResult visitExpr(InvalidValueOp op);
@@ -1582,6 +1603,10 @@ private:
   /// This is populated by the getOrCreateIntConstant method.
   DenseMap<Attribute, Value> hwConstantMap;
 
+  /// This keeps track of constant X that we have created so we can reuse them.
+  /// This is populated by the getOrCreateXConstant method.
+  DenseMap<unsigned, Value> hwConstantXMap;
+
   /// We auto-unique "ReadInOut" ops from wires and regs, enabling
   /// optimizations and CSEs of the read values to be more obvious.  This
   /// caches a known ReadInOutOp for the given value and is managed by
@@ -1627,8 +1652,10 @@ private:
   /// without requiring temporary wires.
   BackedgeBuilder backedgeBuilder;
   /// Currently unresolved backedges. More precisely, a mapping from the
-  /// backedge's value to the backedge itself.
-  llvm::SmallDenseMap<Value, Backedge> backedges;
+  /// backedge value to the value it will be replaced with. We use a MapVector
+  /// so that a combinational cycles of backedges, the one backedge that gets
+  /// replaced with an undriven wire is consistent.
+  llvm::MapVector<Value, Value> backedges;
 };
 } // end anonymous namespace
 
@@ -1671,7 +1698,36 @@ LogicalResult FIRRTLLowering::run() {
     }
   }
 
-  // Now that all of the operations that can be lowered are, remove the
+  // Replace all backedges with uses of their regular values.  We process them
+  // after the module body since the lowering table is too hard to keep up to
+  // date.  Multiple operations may be lowered to the same backedge when values
+  // are folded, which means we would have to scan the entire lowering table to
+  // safely replace a backedge.
+  for (auto &[backedge, value] : backedges) {
+    // In the case where we have backedges connected to other backedges, we have
+    // to find the value that actually drives the group.
+    while (true) {
+      // If the we find the original backedge we have some undriven logic.
+      if (backedge == value) {
+        // Create a wire with no driver and use that as the backedge value.
+        OpBuilder::InsertionGuard guard(builder);
+        builder.setInsertionPointAfterValue(backedge);
+        value = builder.create<sv::WireOp>(backedge.getLoc(),
+                                           backedge.getType(), "undriven");
+        value = builder.createOrFold<sv::ReadInOutOp>(value);
+        break;
+      }
+      // If the value is not another backedge, we have found the driver.
+      auto it = backedges.find(value);
+      if (it == backedges.end())
+        break;
+      // Find what is driving the next backedge.
+      value = it->second;
+    }
+    backedge.replaceAllUsesWith(value);
+  }
+
+  // Now that all of the operations that can be lowered are, remove th
   // original values.  We know that any lowered operations will be dead (if
   // removed in reverse order) at this point - any users of them from
   // unremapped operations will be changed to use the newly lowered ops.
@@ -1759,6 +1815,20 @@ static LogicalResult handleZeroBit(Value failedOperand,
   if (!isZeroBitFIRRTLType(failedOperand.getType()))
     return failure();
   return fn();
+}
+
+/// Check to see if we've already lowered the specified constant.  If so,
+/// return it.  Otherwise create it and put it in the entry block for reuse.
+Value FIRRTLLowering::getOrCreateXConstant(unsigned numBits) {
+
+  auto &entry = hwConstantXMap[numBits];
+  if (entry)
+    return entry;
+
+  OpBuilder entryBuilder(&theModule.getBodyBlock()->front());
+  entry = entryBuilder.create<sv::ConstantXOp>(
+      builder.getLoc(), entryBuilder.getIntegerType(numBits));
+  return entry;
 }
 
 /// Return the lowered HW value corresponding to the specified original value.
@@ -2047,14 +2117,6 @@ LogicalResult FIRRTLLowering::setLowering(Value orig, Value result) {
   }
 
   auto &slot = valueMapping[orig];
-  if (slot) {
-    auto backedgeIt = backedges.find(slot);
-    if (backedgeIt != backedges.end()) {
-      backedgeIt->second.setValue(result);
-      backedges.erase(backedgeIt);
-      slot = nullptr;
-    }
-  }
   assert(!slot && "value lowered multiple times");
   slot = result;
   return success();
@@ -2100,18 +2162,22 @@ LogicalResult FIRRTLLowering::setLoweringTo(Operation *orig,
 /// This is useful for lowering types which cannot pass through a wire, or to
 /// directly materialize values in operations that violate the SSA dominance
 /// constraint.
-Backedge FIRRTLLowering::setBackedgeLowering(Value orig, Type result) {
-  auto backedge = backedgeBuilder.get(result, orig.getLoc());
+Backedge FIRRTLLowering::createBackedge(Value orig, Type type) {
+  auto backedge = backedgeBuilder.get(type, orig.getLoc());
   backedges.insert({backedge, backedge});
   (void)setLowering(orig, backedge);
   return backedge;
 }
 
-/// If the given value has been lowered to a backedge, returns the value.
-/// Returns null if the value has not been lowered or it has been lowered to
-/// something else than a backedge.
-Backedge FIRRTLLowering::getBackedgeLowering(Value value) {
-  return backedges.lookup(getPossiblyInoutLoweredValue(value));
+/// If the `from` value is in fact a backedge, record that the backedge will
+/// be replaced by the value.  Return true if the destination is a backedge.
+bool FIRRTLLowering::updateIfBackedge(Value dest, Value src) {
+  auto backedgeIt = backedges.find(dest);
+  if (backedgeIt == backedges.end())
+    return false;
+  assert(backedgeIt->first == backedgeIt->second && "backedge lowered twice");
+  backedgeIt->second = src;
+  return true;
 }
 
 /// Switch the insertion point of the current builder to the end of the
@@ -3014,8 +3080,21 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
     // Directly materialize inputs which are trivially assigned once through a
     // `StrictConnectOp`.
     if (port.isInput() && getSingleConnectUserOf(portResult)) {
-      operands.push_back(setBackedgeLowering(portResult, portType));
+      operands.push_back(createBackedge(portResult, portType));
       continue;
+    }
+
+    // If the result has an analog type and is used only by attach op,
+    // try eliminating a temporary wire by directly using an attached value.
+    if (portResult.getType().isa<AnalogType>() && portResult.hasOneUse()) {
+      if (auto attach = dyn_cast<AttachOp>(*portResult.getUsers().begin())) {
+        if (auto source = getSingleNonInstanceOperand(attach)) {
+          auto loweredResult = getPossiblyInoutLoweredValue(source);
+          operands.push_back(loweredResult);
+          (void)setLowering(portResult, loweredResult);
+          continue;
+        }
+      }
     }
 
     // Create a wire for each input/inout operand, so there is
@@ -3362,6 +3441,20 @@ LogicalResult FIRRTLLowering::visitExpr(CatPrimOp op) {
 }
 
 //===----------------------------------------------------------------------===//
+// Verif Operations
+//===----------------------------------------------------------------------===//
+
+LogicalResult FIRRTLLowering::visitExpr(IsXVerifOp op) {
+  auto input = getLoweredValue(op.getArg());
+  if (!input)
+    return failure();
+
+  return setLoweringTo<comb::ICmpOp>(
+      op, ICmpPredicate::ceq, input,
+      getOrCreateXConstant(input.getType().getIntOrFloatBitWidth()));
+}
+
+//===----------------------------------------------------------------------===//
 // Other Operations
 //===----------------------------------------------------------------------===//
 
@@ -3635,12 +3728,14 @@ LogicalResult FIRRTLLowering::visitStmt(StrictConnectOp op) {
   if (!srcVal)
     return handleZeroBit(op.getSrc(), []() { return success(); });
 
-  if (getBackedgeLowering(dest))
-    return setLowering(dest, srcVal);
-
   auto destVal = getPossiblyInoutLoweredValue(dest);
   if (!destVal)
     return failure();
+
+  // If this connect is driving a value that is currently a backedge, record
+  // that the source is the value of the backedge.
+  if (updateIfBackedge(destVal, srcVal))
+    return success();
 
   if (!destVal.getType().isa<hw::InOutType>())
     return op.emitError("destination isn't an inout type");
@@ -4018,6 +4113,11 @@ LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {
   }
 
   if (inoutValues.size() < 2)
+    return success();
+
+  // If the op has a single source value, the value is used as a lowering result
+  // of other values. Therefore we can delete the attach op here.
+  if (getSingleNonInstanceOperand(op))
     return success();
 
   addToIfDefBlock(

@@ -46,6 +46,7 @@ class System:
 
   PASSES = """
     lower-hwarith-to-hw, msft-lower-constructs, msft-lower-instances, {partition}
+    esi-connect-services, esi-create-capnp-schema{{schema-file=schema.capnp}},
     lower-msft-to-hw{{verilog-file={verilog_file}}},
     lower-esi-to-physical, lower-esi-ports, lower-esi-to-hw, convert-fsm-to-sv,
     lower-seq-to-sv, hw.module(prettify-verilog), hw.module(hw-cleanup),
@@ -293,7 +294,8 @@ class _OpCache:
     if pyproxy in self._pyproxy_symbols:
       return (None, None)
     ctr = 0
-    basename = pyproxy.name
+    # Get the sanitized name.
+    basename = "".join([c if c.isalnum() else '_' for c in pyproxy.name])
     symbol = basename
     while symbol in self.symbols:
       ctr += 1

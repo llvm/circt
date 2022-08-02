@@ -110,7 +110,11 @@ public:
 
   /// Non-copyable
   InnerSymbolTable(const InnerSymbolTable &) = delete;
-  InnerSymbolTable &operator=(InnerSymbolTable &) = delete;
+  InnerSymbolTable &operator=(const InnerSymbolTable &) = delete;
+
+  // Moveable
+  InnerSymbolTable(InnerSymbolTable &&) = default;
+  InnerSymbolTable &operator=(InnerSymbolTable &&) = default;
 
   /// Look up a symbol with the specified name, returning empty InnerSymTarget
   /// if no such name exists. Names never include the @ on them.
@@ -137,18 +141,60 @@ public:
   static StringAttr getInnerSymbol(Operation *op);
 
   /// Get InnerSymbol for a target.
-  static StringAttr getInnerSymbol(InnerSymTarget target);
+  static StringAttr getInnerSymbol(const InnerSymTarget &target);
 
   /// Return the name of the attribute used for inner symbol names.
   static StringRef getInnerSymbolAttrName() { return "inner_sym"; }
 
+  /// Construct an InnerSymbolTable, checking for verification failure.
+  /// Emits diagnostics describing encountered issues.
+  static FailureOr<InnerSymbolTable> get(Operation *op);
+
+  using InnerSymCallbackFn =
+      llvm::function_ref<LogicalResult(StringAttr, const InnerSymTarget &)>;
+
+  /// Walk the given IST operation and invoke the callback for all encountered
+  /// inner symbols.
+  /// This variant allows callbacks that return LogicalResult OR void,
+  /// and wraps the underlying implementation.
+  template <typename FuncTy, typename RetTy = typename std::invoke_result_t<
+                                 FuncTy, StringAttr, const InnerSymTarget &>>
+  static RetTy walkSymbols(Operation *op, FuncTy &&callback) {
+    if constexpr (std::is_void_v<RetTy>)
+      return (void)walkSymbols(
+          op, InnerSymCallbackFn(
+                  [&](StringAttr name, const InnerSymTarget &target) {
+                    std::invoke(std::forward<FuncTy>(callback), name, target);
+                    return success();
+                  }));
+    else
+      return walkSymbols(
+          op, InnerSymCallbackFn([&](StringAttr name,
+                                     const InnerSymTarget &target) {
+            return std::invoke(std::forward<FuncTy>(callback), name, target);
+          }));
+  }
+
+  /// Walk the given IST operation and invoke the callback for all encountered
+  /// inner symbols.
+  /// This variant is the underlying implementation.
+  /// If callback returns failure, the walk is aborted and failure is returned.
+  /// A successful walk with no failures returns success.
+  static LogicalResult walkSymbols(Operation *op, InnerSymCallbackFn callback);
+
 private:
+  using TableTy = DenseMap<StringAttr, InnerSymTarget>;
+  /// Construct an inner symbol table for the given operation,
+  /// with pre-populated table contents.
+  explicit InnerSymbolTable(Operation *op, TableTy &&table)
+      : innerSymTblOp(op), symbolTable(table){};
+
   /// This is the operation this table is constructed for, which must have the
   /// InnerSymbolTable trait.
   Operation *innerSymTblOp;
 
-  /// This maps names to operations with that inner symbol.
-  DenseMap<StringAttr, InnerSymTarget> symbolTable;
+  /// This maps inner symbol names to their targets.
+  TableTy symbolTable;
 };
 
 /// This class represents a collection of InnerSymbolTable's.
@@ -158,10 +204,17 @@ public:
   InnerSymbolTable &getInnerSymbolTable(Operation *op);
 
   /// Populate tables in parallel for all InnerSymbolTable operations in the
-  /// given InnerRefNamespace operation.
-  void populateTables(Operation *innerRefNSOp);
+  /// given InnerRefNamespace operation, verifying each and returning
+  /// the verification result.
+  LogicalResult populateAndVerifyTables(Operation *innerRefNSOp);
 
   explicit InnerSymbolTableCollection() = default;
+  explicit InnerSymbolTableCollection(Operation *innerRefNSOp) {
+    // Caller is not interested in verification, no way to report it upwards.
+    auto result = populateAndVerifyTables(innerRefNSOp);
+    (void)result;
+    assert(succeeded(result));
+  }
   InnerSymbolTableCollection(const InnerSymbolTableCollection &) = delete;
   InnerSymbolTableCollection &
   operator=(const InnerSymbolTableCollection &) = delete;

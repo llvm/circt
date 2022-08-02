@@ -24,7 +24,7 @@ module Cosim_Endpoint
 )
 (
   input  logic clk,
-  input  logic rstn,
+  input  logic rst,
 
   output logic DataOutValid,
   input  logic DataOutReady,
@@ -66,7 +66,7 @@ module Cosim_Endpoint
 
   byte unsigned DataOutBuffer[RECV_TYPE_SIZE_BYTES-1:0];
   always @(posedge clk) begin
-    if (rstn && Initialized) begin
+    if (~rst && Initialized) begin
       if (DataOutValid && DataOutReady) // A transfer occurred.
         DataOutValid <= 1'b0;
 
@@ -137,7 +137,7 @@ module Cosim_Endpoint
   byte unsigned DataInBuffer[SEND_TYPE_SIZE_BYTES-1:0];
 
   always@(posedge clk) begin
-    if (rstn && Initialized) begin
+    if (~rst && Initialized) begin
       if (DataInValid) begin
         int rc;
         rc = cosim_ep_tryput(ENDPOINT_ID, DataInBuffer, SEND_TYPE_SIZE_BYTES);

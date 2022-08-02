@@ -2931,7 +2931,6 @@ FIRRTLType HeadPrimOp::inferReturnType(ValueRange operands,
     return {};
   }
 
-  width = std::max<int32_t>(width, amount);
   return UIntType::get(input.getContext(), amount);
 }
 
@@ -3139,6 +3138,16 @@ FIRRTLType TailPrimOp::inferReturnType(ValueRange operands,
   }
 
   return IntType::get(input.getContext(), false, width);
+}
+
+//===----------------------------------------------------------------------===//
+// Verif Expressions
+//===----------------------------------------------------------------------===//
+
+FIRRTLType IsXVerifOp::inferReturnType(ValueRange operands,
+                                       ArrayRef<NamedAttribute> attrs,
+                                       Optional<Location> loc) {
+  return UIntType::get(operands[0].getContext(), 1);
 }
 
 //===----------------------------------------------------------------------===//
@@ -3826,6 +3835,9 @@ void GTPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 void HeadPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void IsXVerifOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 void LEQPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {

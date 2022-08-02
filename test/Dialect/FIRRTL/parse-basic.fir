@@ -999,9 +999,10 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
       printf(clock, enable, "assertNotX:%d:value must not be X!", value)
     ; CHECK: [[TMP1:%.+]] = firrtl.not %cond
     ; CHECK: [[TMP2:%.+]] = firrtl.xorr %value
-    ; CHECK: [[TMP3:%.+]] = firrtl.verbatim.expr "{{[{][{]0[}][}]}} !== 1'bx"([[TMP2]])
-    ; CHECK: [[TMP4:%.+]] = firrtl.or [[TMP1]], [[TMP3]]
-    ; CHECK: firrtl.assert %clock, [[TMP4]], %enable, "value must not be X!"
+    ; CHECK: [[TMP3:%.+]] = firrtl.verif_isX
+    ; CHECK: [[TMP4:%.+]] = firrtl.not
+    ; CHECK: [[TMP5:%.+]] = firrtl.or [[TMP1]], [[TMP4]]
+    ; CHECK: firrtl.assert %clock, [[TMP5]], %enable, "value must not be X!"
     ; CHECK-SAME: name = "notX"
 
     ; Chisel built-in assertions

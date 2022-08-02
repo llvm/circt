@@ -81,10 +81,7 @@ struct AnnoTargetCache {
   /// Lookup the target for 'name', empty if not found.
   /// (check for validity using operator bool()).
   AnnoTarget getTargetForName(StringRef name) const {
-    auto it = targets.find(name);
-    if (it == targets.end())
-      return {};
-    return it->second;
+    return targets.lookup(name);
   }
 
 private:
