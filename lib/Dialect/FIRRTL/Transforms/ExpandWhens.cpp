@@ -141,7 +141,7 @@ public:
     if (top[0] >= top[1]) {
       // build `cat(xprev[x.w-1:hi], e)`
       Value x = b.createOrFold<BitsPrimOp>(xprev, (uint32_t)top[0], (uint32_t)top[1]);
-      cat = b.create<CatPrimOp>(x, connection.getSrc());
+      cat = b.createOrFold<CatPrimOp>(x, connection.getSrc());
     } else {
       // the assignment is assigning all the high bits, so no need to get them from xprev
       cat = connection.getSrc();
@@ -150,7 +150,7 @@ public:
     if (bot[0] >= bot[1]) {
       // build cat(cat, xprev[lo-1:0])
       auto x = b.createOrFold<BitsPrimOp>(xprev, (uint32_t)bot[0], (uint32_t)bot[1]);
-      cat = b.create<CatPrimOp>(cat, x);
+      cat = b.createOrFold<CatPrimOp>(cat, x);
     }
     // the dest needs to be transformed from a bitindex `x[hi:lo] <=` to just `x <=`
     dest = getFieldRefFromValue(bits.getInput());
