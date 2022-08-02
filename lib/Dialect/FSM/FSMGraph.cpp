@@ -61,8 +61,9 @@ FSMGraph::FSMGraph(Operation *op) {
 
 FSMStateNode *FSMGraph::lookup(StringAttr name) {
   auto it = nodeMap.find(name);
-  assert(it != nodeMap.end() && "Module not in InstanceGraph!");
-  return it->second;
+  if (it != nodeMap.end())
+    return it->second;
+  return nullptr;
 }
 
 FSMStateNode *FSMGraph::lookup(StateOp state) {

@@ -10,12 +10,11 @@
 
 sv.verbatim "`define INIT_RANDOM_PROLOG_"
 
-hw.module @top(%clk: i1, %rstn: i1) {
+hw.module @top(%clk: i1, %rst: i1) {
   %cst0 = hw.constant 0 : i32
   %cst1 = hw.constant 1 : i32
 
   %true = hw.constant 1 : i1
-  %rst = comb.xor %true, %rstn : i1
 
   %rC = seq.firreg %nextC clock %clk sym @regC reset sync %rst, %cst0 : i32
   %rB = seq.firreg %nextB clock %clk sym @regB reset sync %rst, %cst0 : i32

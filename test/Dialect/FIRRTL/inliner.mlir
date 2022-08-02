@@ -777,3 +777,49 @@ firrtl.circuit "instNameRename"  {
     %w = firrtl.wire sym @w   : !firrtl.uint<8>
   }
 }
+
+// This test checks for context sensitive Hierpath update.
+// The following inlining causes 4 instances of @Baz being added to @Foo1,
+// but only two of them should have valid HierPathOps.
+firrtl.circuit "CollidingSymbolsMultiInline" {
+
+  firrtl.hierpath @nla1 [@Foo1::@bar1, @Foo2::@bar, @Foo::@bar, @Bar::@w, @Baz::@w]
+  // CHECK: firrtl.hierpath @nla1 [@Foo1::@w_0, @Baz::@w]
+  firrtl.hierpath @nla2 [@Foo1::@bar2, @Foo2::@bar1, @Foo::@bar, @Bar::@w, @Baz::@w]
+  // CHECK:  firrtl.hierpath @nla2 [@Foo1::@w_7, @Baz::@w]
+
+  firrtl.module @Baz(out %io: !firrtl.uint<1> )
+        {
+    %w = firrtl.wire sym @w {annotations = [{circt.nonlocal = @nla1, class = "test"}, {circt.nonlocal = @nla2, class = "test"}]} : !firrtl.uint<1>
+  }
+
+  firrtl.module @Bar() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
+    %0 = firrtl.instance baz0 sym @w    @Baz(out io : !firrtl.uint<1>)
+  }
+
+  firrtl.module @Foo() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
+    firrtl.instance bar sym @bar @Bar()
+    %w = firrtl.wire sym @w : !firrtl.uint<1>
+  }
+
+  firrtl.module @Foo2() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
+    firrtl.instance bar sym @bar @Foo()
+    firrtl.instance bar sym @bar1 @Foo()
+    %w = firrtl.wire sym @w : !firrtl.uint<1>
+  }
+
+  firrtl.module @Foo1() {
+    firrtl.instance bar sym @bar1 @Foo2()
+    firrtl.instance bar sym @bar2 @Foo2()
+    %w = firrtl.wire sym @bar : !firrtl.uint<1>
+    %w1 = firrtl.wire sym @w : !firrtl.uint<1>
+    // CHECK:  %bar_bar_bar_baz0_io = firrtl.instance bar_bar_bar_baz0 sym @w_0  @Baz(out io: !firrtl.uint<1>)
+    // CHECK:  %bar_bar_bar_baz0_io_0 = firrtl.instance bar_bar_bar_baz0 sym @w_2  @Baz(out io: !firrtl.uint<1>)
+    // CHECK:  %bar_bar_bar_baz0_io_2 = firrtl.instance bar_bar_bar_baz0 sym @w_5  @Baz(out io: !firrtl.uint<1>)
+    // CHECK:  %bar_bar_bar_baz0_io_4 = firrtl.instance bar_bar_bar_baz0 sym @w_7  @Baz(out io: !firrtl.uint<1>)
+  }
+
+  firrtl.module @CollidingSymbolsMultiInline() {
+    firrtl.instance system sym @system @Foo1()
+  }
+}

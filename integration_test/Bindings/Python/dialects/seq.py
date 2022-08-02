@@ -25,33 +25,31 @@ with Context() as ctx, Location.unknown():
       reg_reset = hw.ConstantOp.create(i32, 0).result
       # CHECK: %[[INPUT_VAL:.+]] = hw.constant 45
       reg_input = hw.ConstantOp.create(i32, 45).result
-      # CHECK: %[[DATA_VAL:.+]] = seq.compreg %[[INPUT_VAL]], %clk, %rstn, %[[RESET_VAL]]
+      # CHECK: %[[DATA_VAL:.+]] = seq.compreg %[[INPUT_VAL]], %clk, %rst, %[[RESET_VAL]]
       reg = seq.CompRegOp(i32,
                           reg_input,
                           module.clk,
-                          reset=module.rstn,
+                          reset=module.rst,
                           reset_value=reg_reset,
                           name="my_reg")
 
       # CHECK: seq.compreg %[[INPUT_VAL]], %clk
       seq.reg(reg_input, module.clk)
-      # CHECK: seq.compreg %[[INPUT_VAL]], %clk, %rstn, %{{.+}}
-      seq.reg(reg_input, module.clk, reset=module.rstn)
+      # CHECK: seq.compreg %[[INPUT_VAL]], %clk, %rst, %{{.+}}
+      seq.reg(reg_input, module.clk, reset=module.rst)
       # CHECK: %[[RESET_VALUE:.+]] = hw.constant 123
-      # CHECK: seq.compreg %[[INPUT_VAL]], %clk, %rstn, %[[RESET_VALUE]]
+      # CHECK: seq.compreg %[[INPUT_VAL]], %clk, %rst, %[[RESET_VALUE]]
       custom_reset = hw.ConstantOp.create(i32, 123).result
-      seq.reg(reg_input,
-              module.clk,
-              reset=module.rstn,
-              reset_value=custom_reset)
+      seq.reg(reg_input, module.clk, reset=module.rst, reset_value=custom_reset)
       # CHECK: %FuBar = seq.compreg {{.+}}
       seq.reg(reg_input, module.clk, name="FuBar")
 
-      # CHECK: %reg1 = seq.compreg %[[INPUT_VAL]], %clk {sv.attributes = [#sv.attribute<"no_merge">]} : i32
+      # CHECK: %reg1 = seq.compreg %[[INPUT_VAL]], %clk {sv.attributes = #sv.attributes<[#sv.attribute<"no_merge">]>} : i32
       sv_attr = sv.SVAttributeAttr.get("no_merge")
       reg1 = seq.CompRegOp.create(i32, clk=module.clk, name="reg1")
 
-      reg1.attributes["sv.attributes"] = ArrayAttr.get([sv_attr])
+      reg1.attributes["sv.attributes"] = sv.SVAttributesAttr.get(
+          ArrayAttr.get([sv_attr]))
       connect(reg1.input, reg_input)
 
       # CHECK: %reg2 = seq.compreg %[[INPUT_VAL]], %clk
@@ -69,7 +67,7 @@ with Context() as ctx, Location.unknown():
       hw.OutputOp([reg.data])
 
     hw.HWModuleOp(name="top",
-                  input_ports=[("clk", i1), ("rstn", i1)],
+                  input_ports=[("clk", i1), ("rst", i1)],
                   output_ports=[("result", i32)],
                   body_builder=top)
 

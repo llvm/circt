@@ -18,14 +18,17 @@ declare_mlir_python_sources(PyCDESources
   pycde/dialects/comb.py
   pycde/dialects/sv.py
   pycde/dialects/fsm.py
+  pycde/dialects/hwarith.py
   pycde/support.py
   pycde/module.py
   pycde/constructs.py
+  pycde/common.py
   pycde/system.py
   pycde/devicedb.py
   pycde/instance.py
   pycde/value.py
   pycde/ndarray.py
+  pycde/esi.py
   pycde/fsm.py
   pycde/testing.py
 )

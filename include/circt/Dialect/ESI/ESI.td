@@ -47,6 +47,7 @@ class ESI_Abstract_Op<string mnemonic, list<Trait> traits = []> :
 class ESI_Physical_Op<string mnemonic, list<Trait> traits = []> :
     ESI_Op<mnemonic, traits>;
 
+include "circt/Dialect/ESI/ESIInterfaces.td"
 include "circt/Dialect/ESI/ESIPorts.td"
 include "circt/Dialect/ESI/ESITypes.td"
 include "circt/Dialect/ESI/ESIOps.td"

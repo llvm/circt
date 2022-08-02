@@ -89,4 +89,12 @@ void circt::python::populateDialectESISubmodule(py::module &m) {
                        })
       .def_property_readonly(
           "inner", [](MlirType self) { return circtESIChannelGetInner(self); });
+
+  mlir_type_subclass(m, "AnyType", circtESITypeIsAnAnyType)
+      .def_classmethod(
+          "get",
+          [](py::object cls, MlirContext ctxt) {
+            return cls(circtESIAnyTypeGet(ctxt));
+          },
+          py::arg("self"), py::arg("ctxt") = nullptr);
 }

@@ -15,6 +15,7 @@ add_circt_dialect_library(CIRCTHWArith
 
     DEPENDS
     MLIRHWArithIncGen
+    MLIRHWArithEnumsIncGen
     MLIRIR
 
     LINK_COMPONENTS

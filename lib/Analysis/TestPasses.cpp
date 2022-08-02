@@ -10,8 +10,10 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Analysis/ControlFlowLoopAnalysis.h"
 #include "circt/Analysis/DependenceAnalysis.h"
 #include "circt/Analysis/SchedulingAnalysis.h"
+#include "circt/Dialect/HW/HWInstanceGraph.h"
 #include "circt/Scheduling/Problems.h"
 #include "mlir/Dialect/Affine/IR/AffineMemoryOpInterfaces.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
@@ -111,6 +113,98 @@ void TestSchedulingAnalysisPass::runOnOperation() {
 }
 
 //===----------------------------------------------------------------------===//
+// ControlFlowLoopAnalysis passes.
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct TestControlFlowLoopAnalysisPass
+    : public PassWrapper<TestControlFlowLoopAnalysisPass,
+                         OperationPass<func::FuncOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TestControlFlowLoopAnalysisPass)
+
+  void runOnOperation() override;
+  StringRef getArgument() const override { return "test-cf-loop-analysis"; }
+  StringRef getDescription() const override {
+    return "Perform cf loop analysis and emit results as attributes";
+  }
+};
+} // namespace
+
+static SmallVector<Attribute> &
+lookupOrInsert(DenseMap<Block *, SmallVector<Attribute>> &map, Block *key) {
+  if (map.count(key) == 0) {
+    map.try_emplace(key, SmallVector<Attribute>());
+  }
+  return map.find(key)->getSecond();
+}
+
+void TestControlFlowLoopAnalysisPass::runOnOperation() {
+  Region &r = getOperation().getRegion();
+  ControlFlowLoopAnalysis analysis(r);
+  if (failed(analysis.analyzeRegion())) {
+    signalPassFailure();
+    return;
+  }
+  OpBuilder builder(r);
+  DenseMap<Block *, SmallVector<Attribute>> blockMap;
+  for (const LoopInfo &info : analysis.topLevelLoops) {
+    Block *header = info.loopHeader;
+    lookupOrInsert(blockMap, header).push_back(builder.getStringAttr("header"));
+
+    for (auto *latch : info.loopLatches)
+      lookupOrInsert(blockMap, latch).push_back(builder.getStringAttr("latch"));
+
+    for (auto *inLoop : info.inLoop)
+      lookupOrInsert(blockMap, inLoop)
+          .push_back(builder.getStringAttr("inLoop"));
+
+    for (auto *exit : info.exitBlocks)
+      lookupOrInsert(blockMap, exit).push_back(builder.getStringAttr("exit"));
+  }
+
+  for (auto it : blockMap) {
+    OperationState opState(builder.getUnknownLoc(), "block.info");
+    opState.addAttribute("loopInfo", builder.getArrayAttr(it.getSecond()));
+    builder.setInsertionPointToStart(it.getFirst());
+    builder.create(opState);
+  }
+}
+
+//===----------------------------------------------------------------------===//
+// InferTopModule passes.
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct InferTopModulePass
+    : public PassWrapper<InferTopModulePass, OperationPass<mlir::ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(InferTopModulePass)
+
+  void runOnOperation() override;
+  StringRef getArgument() const override { return "test-infer-top-level"; }
+  StringRef getDescription() const override {
+    return "Perform top level module inference and emit results as attributes "
+           "on the enclosing module.";
+  }
+};
+} // namespace
+
+void InferTopModulePass::runOnOperation() {
+  circt::hw::InstanceGraph &analysis = getAnalysis<circt::hw::InstanceGraph>();
+  auto res = analysis.getInferredTopLevelNodes();
+  if (failed(res)) {
+    signalPassFailure();
+    return;
+  }
+
+  llvm::SmallVector<Attribute, 4> attrs;
+  for (auto *node : res.getValue())
+    attrs.push_back(node->getModule().moduleNameAttr());
+
+  analysis.getParent()->setAttr("test.top",
+                                ArrayAttr::get(&getContext(), attrs));
+}
+
+//===----------------------------------------------------------------------===//
 // Pass registration
 //===----------------------------------------------------------------------===//
 
@@ -122,6 +216,12 @@ void registerAnalysisTestPasses() {
   });
   mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
     return std::make_unique<TestSchedulingAnalysisPass>();
+  });
+  mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
+    return std::make_unique<TestControlFlowLoopAnalysisPass>();
+  });
+  mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
+    return std::make_unique<InferTopModulePass>();
   });
 }
 } // namespace test

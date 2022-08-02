@@ -353,7 +353,7 @@ LogicalResult ModuleExternOpLowering::matchAndRewrite(
     MSFTModuleExternOp mod, OpAdaptor adaptor,
     ConversionPatternRewriter &rewriter) const {
   auto hwMod = rewriter.replaceOpWithNewOp<hw::HWModuleExternOp>(
-      mod, mod.getNameAttr(), mod.getPorts(), mod.verilogName().getValueOr(""),
+      mod, mod.getNameAttr(), mod.getPorts(), mod.verilogName().value_or(""),
       mod.parameters());
 
   if (!outputFile.empty()) {
@@ -1568,7 +1568,8 @@ void MSFTPassCommon::dedupInputs(MSFTModuleOp mod) {
   // loopbacks for all the instances.
   if (instantiations.size() != 1)
     return;
-  InstanceOp inst = dyn_cast<InstanceOp>(instantiations[0]);
+  InstanceOp inst =
+      dyn_cast<InstanceOp>(static_cast<Operation *>(instantiations[0]));
   if (!inst)
     return;
 
@@ -1619,7 +1620,8 @@ void MSFTPassCommon::sinkWiresDown(MSFTModuleOp mod) {
   // loopbacks for all the instances.
   if (instantiations.size() != 1)
     return;
-  InstanceOp inst = dyn_cast<InstanceOp>(instantiations[0]);
+  InstanceOp inst =
+      dyn_cast<InstanceOp>(static_cast<Operation *>(instantiations[0]));
   if (!inst)
     return;
 

@@ -31,6 +31,14 @@ MLIR_CAPI_EXPORTED MlirAttribute svSVAttributeAttrGet(MlirContext cCtxt,
 MLIR_CAPI_EXPORTED MlirStringRef svSVAttributeAttrGetName(MlirAttribute);
 MLIR_CAPI_EXPORTED MlirStringRef svSVAttributeAttrGetExpression(MlirAttribute);
 
+MLIR_CAPI_EXPORTED bool svAttrIsASVAttributesAttr(MlirAttribute);
+MLIR_CAPI_EXPORTED MlirAttribute svSVAttributesAttrGet(MlirContext cCtxt,
+                                                       MlirAttribute attributes,
+                                                       bool emitAsComments);
+MLIR_CAPI_EXPORTED MlirAttribute svSVAttributesAttrGetAttributes(MlirAttribute);
+MLIR_CAPI_EXPORTED
+bool svSVAttributesAttrGetEmitAsComments(MlirAttribute);
+
 #ifdef __cplusplus
 }
 #endif

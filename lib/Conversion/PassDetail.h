@@ -43,8 +43,13 @@ class FuncOp;
 
 namespace circt {
 
+namespace fsm {
+class FSMDialect;
+} // namespace fsm
+
 namespace calyx {
 class CalyxDialect;
+class ComponentOp;
 } // namespace calyx
 
 namespace firrtl {

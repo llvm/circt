@@ -12,6 +12,7 @@ target_link_libraries(circt-opt
   CIRCTAnalysisTestPasses
   CIRCTCalyx
   CIRCTCalyxToHW
+  CIRCTCalyxToFSM
   CIRCTCalyxTransforms
   CIRCTESI
   CIRCTExportSystemC
@@ -28,6 +29,8 @@ target_link_libraries(circt-opt
   CIRCTHandshakeTransforms
   CIRCTLLHD
   CIRCTLLHDToLLVM
+  CIRCTHWToLLVM
+  CIRCTCombToLLVM
   CIRCTLLHDTransforms
   CIRCTMoore
   CIRCTMooreToCore
@@ -43,6 +46,7 @@ target_link_libraries(circt-opt
   CIRCTSchedulingTestPasses
   CIRCTSeq
   CIRCTSeqTransforms
+  CIRCTSSP
   CIRCTStandardToHandshake
   CIRCTStandardToStaticLogic
   CIRCTStaticLogicOps

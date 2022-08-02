@@ -56,7 +56,7 @@ static std::string getCallName(Operation *op) {
 /// assume that opType itself is the data-carrying type.
 static Type getOperandDataType(Value op) {
   auto opType = op.getType();
-  if (auto channelType = opType.dyn_cast<esi::ChannelPort>())
+  if (auto channelType = opType.dyn_cast<esi::ChannelType>())
     return channelType.getInner();
   return opType;
 }
@@ -90,7 +90,7 @@ static DiscriminatingTypes getHandshakeDiscriminatingTypes(Operation *op) {
       });
 }
 
-// Wraps a type into an ESI ChannelPort type. The inner type is converted to
+// Wraps a type into an ESI ChannelType type. The inner type is converted to
 // ensure comprehensability by the RTL dialects.
 static Type esiWrapper(Type t) {
   // Translate none- and index types to something HW understands.
@@ -99,7 +99,7 @@ static Type esiWrapper(Type t) {
   else if (t.isa<IndexType>())
     t = IntegerType::get(t.getContext(), 64);
 
-  return esi::ChannelPort::get(t.getContext(), t);
+  return esi::ChannelType::get(t.getContext(), t);
 }
 
 /// Get type name. Currently we only support integer or index types.

@@ -574,25 +574,13 @@ class GrandCentralTapsPass : public GrandCentralTapsBase<GrandCentralTapsPass> {
   SymbolTable *circuitSymbols;
 };
 
-static StringAttr getModPart(Attribute pathSegment) {
-  return TypeSwitch<Attribute, StringAttr>(pathSegment)
-      .Case<FlatSymbolRefAttr>([](auto a) { return a.getAttr(); })
-      .Case<hw::InnerRefAttr>([](auto a) { return a.getModule(); });
-}
-
-static StringAttr getRefPart(Attribute pathSegment) {
-  return TypeSwitch<Attribute, StringAttr>(pathSegment)
-      .Case<FlatSymbolRefAttr>([](auto a) { return StringAttr{}; })
-      .Case<hw::InnerRefAttr>([](auto a) { return a.getName(); });
-}
-
 void GrandCentralTapsPass::runOnOperation() {
   auto circuitOp = getOperation();
   LLVM_DEBUG(llvm::dbgs() << "Running the GCT Data Taps pass\n");
   SymbolTable symtbl(circuitOp);
   circuitSymbols = &symtbl;
-  InnerSymbolTableCollection innerSymTblCol;
-  innerSymTblCol.populateTables(circuitOp);
+  InnerSymbolTableCollection innerSymTblCol(circuitOp);
+  InnerRefNamespace innerRefNS{symtbl, innerSymTblCol};
 
   // Here's a rough idea of what the Scala code is doing:
   // - Gather the `source` of all `keys` of all `DataTapsAnnotation`s throughout
@@ -830,15 +818,11 @@ void GrandCentralTapsPass::runOnOperation() {
           // Append the NLA path to the instance graph-determined path.
           SmallVector<InstanceOp> prefixWithNLA(prefix.begin(), prefix.end());
           if (port.nla) {
-            for (auto segment : port.nla.getNamepath().getValue().drop_back()) {
-              auto refPart = getRefPart(segment);
-              if (!refPart)
-                continue;
-              auto &innerSymTbl = innerSymTblCol.getInnerSymbolTable(
-                  symtbl.lookup(getModPart(segment)));
-              prefixWithNLA.push_back(
-                  cast<InstanceOp>(innerSymTbl.lookup(refPart)));
-            }
+            for (auto segment : port.nla.getNamepath().getValue().drop_back())
+              if (auto ref = segment.dyn_cast<InnerRefAttr>()) {
+                prefixWithNLA.push_back(
+                    cast<InstanceOp>(innerRefNS.lookupOp(ref)));
+              }
           }
 
           auto relative = stripCommonPrefix(prefixWithNLA, path);

@@ -205,12 +205,6 @@ void getAsmBlockArgumentNamesImpl(Operation *op, mlir::Region &region,
   }
 }
 
-static bool hasPortNamed(FModuleLike op, StringAttr name) {
-  return llvm::any_of(op.getPortSymbols(), [name](Attribute pname) {
-    return pname.cast<StringAttr>() == name;
-  });
-}
-
 /// A forward declaration for `NameKind` attribute parser.
 static ParseResult parseNameKind(OpAsmParser &parser,
                                  firrtl::NameKindEnumAttr &result);
@@ -1157,7 +1151,7 @@ void FMemModuleOp::getAsmBlockArgumentNames(
 
 /// Lookup the module or extmodule for the symbol.  This returns null on
 /// invalid IR.
-FModuleLike InstanceOp::getReferencedModule() {
+Operation *InstanceOp::getReferencedModule() {
   auto circuit = (*this)->getParentOfType<CircuitOp>();
   if (!circuit)
     return nullptr;
@@ -2937,7 +2931,6 @@ FIRRTLType HeadPrimOp::inferReturnType(ValueRange operands,
     return {};
   }
 
-  width = std::max<int32_t>(width, amount);
   return UIntType::get(input.getContext(), amount);
 }
 
@@ -3145,6 +3138,16 @@ FIRRTLType TailPrimOp::inferReturnType(ValueRange operands,
   }
 
   return IntType::get(input.getContext(), false, width);
+}
+
+//===----------------------------------------------------------------------===//
+// Verif Expressions
+//===----------------------------------------------------------------------===//
+
+FIRRTLType IsXVerifOp::inferReturnType(ValueRange operands,
+                                       ArrayRef<NamedAttribute> attrs,
+                                       Optional<Location> loc) {
+  return UIntType::get(operands[0].getContext(), 1);
 }
 
 //===----------------------------------------------------------------------===//
@@ -3679,7 +3682,7 @@ LogicalResult HierPathOp::verifyInnerRefs(InnerRefNamespace &ns) {
       return emitOpError() << "instance path is incorrect. Expected module: "
                            << expectedModuleName
                            << " instead found: " << innerRef.getModule();
-    InstanceOp instOp = ns.lookup<InstanceOp>(innerRef);
+    InstanceOp instOp = ns.lookupOp<InstanceOp>(innerRef);
     if (!instOp)
       return emitOpError() << " module: " << innerRef.getModule()
                            << " does not contain any instance with symbol: "
@@ -3689,9 +3692,7 @@ LogicalResult HierPathOp::verifyInnerRefs(InnerRefNamespace &ns) {
   // The instance path has been verified. Now verify the last element.
   auto leafRef = getNamepath()[getNamepath().size() - 1];
   if (auto innerRef = leafRef.dyn_cast<hw::InnerRefAttr>()) {
-    auto *fmod = ns.symTable.lookup(innerRef.getModule());
-    auto mod = cast<FModuleLike>(fmod);
-    if (!hasPortNamed(mod, innerRef.getName()) && !ns.lookup(innerRef)) {
+    if (!ns.lookup(innerRef)) {
       return emitOpError() << " operation with symbol: " << innerRef
                            << " was not found ";
     }
@@ -3834,6 +3835,9 @@ void GTPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 void HeadPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void IsXVerifOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 void LEQPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {

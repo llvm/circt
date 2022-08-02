@@ -192,7 +192,7 @@ operand's width.
     We know that `a + 1 > b`, and derive from (S) that the result type must be
     `si<(a+1) + 1>` = `si<a+2>`.
 
-* `a < b`, i.e. the unsigned operand's width is stricly less than the signed
+* `a < b`, i.e. the unsigned operand's width is strictly less than the signed
 operand's width.
 
     As `a + 1 ≤ b`, the result via (S) is `si<b+1>`.
@@ -233,7 +233,7 @@ Example:
 
 Result value range: `[SI_MIN<a> - SI_MAX<b>, SI_MAX<a> - SI_MIN<b>]`
 
-We rewrite the value range and then appy the same reasoning as for the
+We rewrite the value range and then apply the same reasoning as for the
 [signed addition](#signed-addition-S):
 ```
   [SI_MIN<a> - SI_MAX<b>, SI_MAX<a> - SI_MIN<b>]
@@ -370,7 +370,7 @@ Example:
 
 Result value range: `[SI_MIN<a> / 1, SI_MIN<a> / -1]`
 
-`- SI_MIN<a>` is not convered by `si<a>`, so we have to widen the result type to
+`- SI_MIN<a>` is not covered by `si<a>`, so we have to widen the result type to
 `si<a+1>`.
 
 Example:
@@ -404,10 +404,109 @@ Example:
 %3 = hwarith.div %16, %17 : (si4, ui6) -> si4
 ```
 
+### Casting
+
+Casting between signless and sign-aware types is essential for `HWArith` to
+coexist and interact with core dialects such as `HW` and `Comb`. Defining
+casting rules can be split into two sub-problems: bit-extension and truncation.
+Truncation to a type with identical or smaller bitwidth is simply implemented
+by extracting the least significant bits of the operand. Hence, it is identical
+for sign-aware and signless types. Bit-extension on the other hand needs to
+consider the signedness of the operand to preserve the operand's value. As
+signless types do not express such information by design, no bit-extension can
+be performed. Values of type `si<w>` or `ui<w>` are sign-extended or
+zero-extended, respectively, regardless of the target's signedness or lack
+thereof. Thus, when casting in `HWArith`, first the bitwidth is adjusted to the
+target size, then in a second step the signedness is changed in a bitcast
+manner.
+
+To visualize this behavior study the following example:
+```mlir
+%1 = hwarith.cast %10 : (ui3) -> ui5
+%2 = hwarith.cast %1 : (ui5) -> si5
+// ^-- both casts can be combined into one equivalent cast:
+%0 = hwarith.cast %10 : (ui3) -> si5
+// ^-- this would be lowered to something like this:
+%zero_padding = hw.constant 0 : i2
+%0_lowered = comb.concat %zero_padding, %10 : i2, i3
+```
+
+As an alternative to the proposed *all-in-one* cast op, we considered
+implementing a set of ops with distinct concerns, for example, an op for
+bitcasting between types of the same bitwidth, an op to implementing the
+truncation and two ops for the different bit extension types. Yet, considering
+that `HWArith` is currently intended as a short-lived dialect, being immediately
+lowered to `comb`, no obvious benefits emerge. This could also significantly
+increase the code redundancy during IR generation as well as when lowering to
+`comb`.
+
+#### Overview
+
+|    | Input type | Result type            | Behavior                                 |
+| -- | :--------- | :--------------------- | :--------------------------------------- |
+|(U) | `ui<a>`    | `ui<b>`/`si<b>`/`i<b>` | zero-extension **if** *b* ≥ *a*          |
+|    |            |                        | truncation **if** *b* < *a*              |
+|(S) | `si<a>`    | `ui<b>`/`si<b>`/`i<b>` | sign-extension **if** *b* ≥ *a*          |
+|    |            |                        | truncation **if** *b* < *a*              |
+|(I) | `i<a>`     | `ui<b>`/`si<b>`        | truncation **if** *b* **≤** *a*          |
+|    | `i<a>`     | `ui<b>`/`si<b>`        | prohibited<sup>†</sup> **if** *b* > *a*  |
+
+†\) prohibited because of the ambiguity whether a sign or a zero extension is
+required.
+
+
+#### Examples
+
+```mlir
+%0 = hwarith.cast %10 : (ui3) -> si5 // (U)
+%1 = hwarith.cast %11 : (si3) -> si4 // (S)
+%2 = hwarith.cast %12 : (si7) -> ui4 // (S)
+%3 = hwarith.cast %13 : (i7) -> si5  // (I)
+%3 = hwarith.cast %13 : (si14) -> i4 // (S)
+```
+
+### Comparison
+
+In order to compare two sign-aware operands, a common type must first be found
+that is able to preserve the values of the two operands. Once determined, the
+operands are casted to this comparison type as specified in the
+[casting section](#casting). To simplify the use as well as the IR generation
+of the dialect, the necessary casting steps are hidden from the user and
+applied during the lowering. Thus, the following code:
+```mlir
+%2 = hwarith.cast %0 : (si3) -> si6
+%3 = hwarith.cast %1 : (ui5) -> si6
+%4 = hwarith.icmp lt %2, %3 : si6, si6
+```
+can be simplified to:
+```mlir
+%4 = hwarith.icmp lt %0, %1 : si3, ui5
+```
+
+Note that the result of the comparison is *always* of type `ui1`, regardless of
+the operands. So if the `i1` type is needed, the result must be cast
+accordingly.
+
+#### Overview
+
+|   | LHS type | RHS type | Comparison type                          | Result type |
+| - | :------- | :------- | :--------------------------------------- | :---------- |
+|(U)| `ui<a>`  | `ui<b>`  | `ui<r>`, *r* = max(*a*, *b*)             | `ui1`       |
+|(S)| `si<a>`  | `si<b>`  | `si<r>`, *r* = max(*a*, *b*)             | `ui1`       |
+|(M)| `ui<a>`  | `si<b>`  | `si<r>`, *r* = *a* + 1 **if** *a* ≥ *b*  | `ui1`       |
+|   |          |          | `si<r>`, *r* = *b* **if** *a* < *b*      | `ui1`       |
+|(M)| `si<a>`  | `ui<b>`  | Same as `ui<b> si<a>`                    | `ui1`       |
+
+#### Examples
+```mlir
+%0 = hwarith.icmp lt %10, %11 : ui5, ui6 // (U)
+%1 = hwarith.icmp lt %12, %13 : si3, si4 // (S)
+%2 = hwarith.icmp lt %12, %11 : si3, ui6 // (M)
+```
+
 ### Additional operators
 **TODO**: elaborate once operators are provided.
 * `hwarith.mod %0, %1 : (#l0, #l1) -> (#l2)`:
-* `hwarith.cast %0 : (#l0) -> (#l2)`: 
 
 
 ## Lowering
@@ -425,7 +524,7 @@ For instance, given `%res = hwarith.add %lhs, %rhs` and a rule stating `w(res)`
 // lowers to
 %z2 = hw.constant 0 : i2
 %z1 = hw.constant 0 : i1
-%lhs_padded = comb.concat %z2, %lhs : i5
-%rhs_padded = comb.concat %z1, %rhs : i5
+%lhs_padded = comb.concat %z2, %lhs : i2, i3
+%rhs_padded = comb.concat %z1, %rhs : i1, i4
 %res = comb.add %lhs_padded, %rhs_padded : i5
 ```

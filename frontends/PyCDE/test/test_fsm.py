@@ -149,3 +149,61 @@ class F0:
 system = System([F0])
 system.generate()
 system.print()
+
+# -----
+
+# Shorthand FSM generator.
+
+# CHECK:      fsm.machine @Generated_FSM_impl(%arg0: i1) -> (i1, i1, i1) attributes {clock_name = "clk", in_names = ["go"], initialState = "a", out_names = ["is_a", "is_b", "is_c"], reset_name = "rst"} {
+# CHECK-NEXT:    fsm.state @a output {
+# CHECK-NEXT:      %true = hw.constant true
+# CHECK-NEXT:      %false = hw.constant false
+# CHECK-NEXT:      %false_0 = hw.constant false
+# CHECK-NEXT:      fsm.output %true, %false, %false_0 : i1, i1, i1
+# CHECK-NEXT:    } transitions {
+# CHECK-NEXT:      fsm.transition @b
+# CHECK-NEXT:      fsm.transition @c guard {
+# CHECK-NEXT:        fsm.return %arg0
+# CHECK-NEXT:      }
+# CHECK-NEXT:    }
+# CHECK-NEXT:    fsm.state @b output {
+# CHECK-NEXT:      %false = hw.constant false
+# CHECK-NEXT:      %true = hw.constant true
+# CHECK-NEXT:      %false_0 = hw.constant false
+# CHECK-NEXT:      fsm.output %false, %true, %false_0 : i1, i1, i1
+# CHECK-NEXT:    } transitions {
+# CHECK-NEXT:    }
+# CHECK-NEXT:    fsm.state @c output {
+# CHECK-NEXT:      %false = hw.constant false
+# CHECK-NEXT:      %false_0 = hw.constant false
+# CHECK-NEXT:      %true = hw.constant true
+# CHECK-NEXT:      fsm.output %false, %false_0, %true : i1, i1, i1
+# CHECK-NEXT:    } transitions {
+# CHECK-NEXT:    }
+# CHECK-NEXT:  }
+
+
+@unittestmodule()
+class FSMUser:
+  go = Input(types.i1)
+  clk = Input(types.i1)
+  rst = Input(types.i1)
+  is_a = Output(types.i1)
+  is_b = Output(types.i1)
+  is_c = Output(types.i1)
+
+  @generator
+  def construct(ports):
+    MyFSM = fsm.gen_fsm({
+        "a": [
+            "b",
+            ("c", "go"),
+        ],
+        "b": [],
+        "c": []
+    }, "Generated_FSM")
+
+    inst = MyFSM(go=ports.go, clk=ports.clk, rst=ports.rst)
+    ports.is_a = inst.is_a
+    ports.is_b = inst.is_b
+    ports.is_c = inst.is_c

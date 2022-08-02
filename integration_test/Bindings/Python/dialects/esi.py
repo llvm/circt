@@ -40,6 +40,13 @@ class TestESISys(esi.System):
     return
 
 
+with Context() as ctx:
+  circt.register_dialects(ctx)
+  any_type = esi.AnyType.get()
+  print(any_type)
+  print()
+  # CHECK: !esi.any
+
 esisys = TestESISys()
 
 prod = esisys.lookup("IntProducer")

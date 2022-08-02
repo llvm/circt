@@ -32,7 +32,6 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-DAG: hw.constant 2 : i3
     %c2_si3 = firrtl.constant 2 : !firrtl.sint<3>
 
-
     // CHECK: %out4 = sv.wire sym @__Simple__out4 : !hw.inout<i4>
     // CHECK: %out5 = sv.wire sym @__Simple__out5 : !hw.inout<i4>
     %out4 = firrtl.wire {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<4>
@@ -202,6 +201,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
     // CHECK-NEXT: = comb.icmp eq  {{.*}}, %c-1_i14 : i14
     %28 = firrtl.andr %18 : (!firrtl.uint<14>) -> !firrtl.uint<1>
+
+    // CHECK-NEXT: = comb.icmp ceq {{.*}}, %x_i1
+    %x28 = firrtl.verif_isX %28 : !firrtl.uint<1>
 
     // CHECK-NEXT: [[XOREXT:%.+]] = comb.concat %c0_i11, [[XOR]]
     // CHECK-NEXT: [[SHIFT:%.+]] = comb.shru [[XOREXT]], [[VAL18]] : i14
@@ -1656,7 +1658,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   firrtl.module private @eliminateSingleOutputConnects(in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
     firrtl.strictconnect %b, %a : !firrtl.uint<1>
   }
-  
+
   // Check that modules with comments are lowered.
   // CHECK-LABEL: hw.module private @Commented() attributes {
   // CHECK-SAME:      comment = "this module is commented"
@@ -1664,4 +1666,62 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   firrtl.module private @Commented() attributes {
       comment = "this module is commented"
   } {}
+
+  // CHECK-LABEL: hw.module @preLoweredOps
+  firrtl.module @preLoweredOps() {
+    // CHECK-NEXT: %0 = builtin.unrealized_conversion_cast to f32
+    // CHECK-NEXT: %1 = arith.addf %0, %0 : f32
+    // CHECK-NEXT: builtin.unrealized_conversion_cast %1 : f32 to index
+    %0 = builtin.unrealized_conversion_cast to f32
+    %1 = arith.addf %0, %0 : f32
+    builtin.unrealized_conversion_cast %1 : f32 to index
+  }
+
+  // Used for testing.
+  firrtl.extmodule private @Blackbox(in inst: !firrtl.uint<1>)
+
+  // Check that the following doesn't crash, when we have a no-op cast which
+  // uses an input port.
+  // CHECK-LABEL: hw.module private @BackedgesAndNoopCasts
+  // CHECK-NEXT:    hw.instance "blackbox" @Blackbox(inst: %clock: i1) -> ()
+  // CHECK-NEXT:    hw.output %clock : i1
+  firrtl.module private @BackedgesAndNoopCasts(in %clock: !firrtl.uint<1>, out %out : !firrtl.clock) {
+    // Following comments describe why this used to crash.
+    // Blackbox input port creates a backedge.
+    %inst = firrtl.instance blackbox @Blackbox(in inst: !firrtl.uint<1>)
+    // No-op cast is removed, %cast lowered to point directly to the backedge.
+    %cast = firrtl.asClock %inst : (!firrtl.uint<1>) -> !firrtl.clock
+    // Finalize the backedge, replacing all uses with %clock.
+    firrtl.strictconnect %inst, %clock : !firrtl.uint<1>
+    // %cast accidentally still points to the back edge in the lowering table.
+    firrtl.strictconnect %out, %cast : !firrtl.clock
+  }
+  
+  // Check that when inputs are connected to other inputs, the backedges are
+  // properly resolved to the final real value.
+  // CHECK-LABEL: hw.module @ChainedBackedges
+  // CHECK-NEXT:    hw.instance "a" @Blackbox
+  // CHECK-NEXT:    hw.instance "b" @Blackbox
+  // CHECK-NEXT:    hw.output %in : i1
+  firrtl.module @ChainedBackedges(in %in: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
+    %a_inst = firrtl.instance a @Blackbox(in inst: !firrtl.uint<1>)
+    %b_inst = firrtl.instance b @Blackbox(in inst: !firrtl.uint<1>)
+    firrtl.strictconnect %a_inst, %in : !firrtl.uint<1>
+    firrtl.strictconnect %b_inst, %a_inst : !firrtl.uint<1>
+    firrtl.strictconnect %out, %b_inst : !firrtl.uint<1>
+  }
+
+  // Check that combinational cycles with no outside driver are lowered to
+  // be driven from a wire.
+  // CHECK-LABEL: hw.module @UndrivenInputPort()
+  // CHECK-NEXT:    %undriven = sv.wire : !hw.inout<i1>
+  // CHECK-NEXT:    %0 = sv.read_inout %undriven : !hw.inout<i1>
+  // CHECK-NEXT:    hw.instance "blackbox" @Blackbox(inst: %0: i1) -> ()
+  // CHECK-NEXT:    hw.instance "blackbox" @Blackbox(inst: %0: i1) -> ()
+  firrtl.module @UndrivenInputPort() {
+    %0 = firrtl.instance blackbox @Blackbox(in inst : !firrtl.uint<1>)
+    %1 = firrtl.instance blackbox @Blackbox(in inst : !firrtl.uint<1>)
+    firrtl.strictconnect %0, %1 : !firrtl.uint<1>
+    firrtl.strictconnect %1, %0 : !firrtl.uint<1>
+  }
 }

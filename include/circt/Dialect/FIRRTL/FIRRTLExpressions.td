@@ -543,6 +543,26 @@ def TailPrimOp : PrimOp<"tail"> {
 }
 
 //===----------------------------------------------------------------------===//
+// Verif and SV specific
+//===----------------------------------------------------------------------===//
+
+def IsXVerifOp : FIRRTLExprOp<"verif_isX"> {
+  let summary = "Test for 'x";
+  let description = [{
+    The verif.isX expression checks that the operand is not a verilog literal 
+    'x.  Firrtl doesn't have a notion of 'x per-se, but x can come in to the 
+    system from external modules and from SV constructs.  Verification 
+    constructs need to explicitly test for 'x.
+    }];
+
+  let arguments = (ins FIRRTLType:$arg);
+  let results = (outs UInt1Type:$result);
+  let assemblyFormat =
+    "$arg attr-dict `:` qualified(type($arg))";
+
+}
+
+//===----------------------------------------------------------------------===//
 // Verbatim
 //===----------------------------------------------------------------------===//
 

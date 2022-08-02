@@ -111,6 +111,11 @@ static cl::opt<unsigned>
                           "ops per chunk (granularity upper bound)"),
                  cl::cat(granularityCategory));
 
+static cl::opt<bool> testMustFail(
+    "test-must-fail", cl::init(false),
+    cl::desc("Consider an input to be interesting on non-zero exit status."),
+    cl::cat(mainCategory));
+
 //===----------------------------------------------------------------------===//
 // Tool Implementation
 //===----------------------------------------------------------------------===//
@@ -175,7 +180,7 @@ static LogicalResult execute(MLIRContext &context) {
     for (auto &arg : testerArgs)
       llvm::errs() << "  with argument `" << arg << "`\n";
   });
-  Tester tester(testerCommand, testerArgs);
+  Tester tester(testerCommand, testerArgs, testMustFail);
   auto initialTest = tester.get(module.get());
   if (!skipInitial && !initialTest.isInteresting()) {
     mlir::emitError(UnknownLoc::get(&context), "input is not interesting");

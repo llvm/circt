@@ -98,3 +98,10 @@ fsm.machine @foo(%arg0: i1) -> () attributes {initialState = "A"} {
     }
   }
 }
+
+// -----
+
+fsm.machine @foo(%arg0: i1) -> (i1) attributes {initialState = "IDLE"} {
+  // expected-error@+1 {{'fsm.state' op state must have a non-empty output region when the machine has results.}}
+  fsm.state @IDLE output {}
+}

@@ -1,4 +1,4 @@
-// RUN: circt-reduce %s --test %S/test.sh --test-arg cat --test-arg "firrtl.module @Basic" --keep-best=0 --include memory-stubber | FileCheck %s
+// RUN: circt-reduce %s --test %S/test.sh --test-arg cat --test-arg "firrtl.module @Basic" --keep-best=0 --include memory-stubber --test-must-fail | FileCheck %s
 
 firrtl.circuit "Basic"   {
   // CHECK-LABEL: @Basic

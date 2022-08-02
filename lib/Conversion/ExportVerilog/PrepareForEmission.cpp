@@ -280,13 +280,10 @@ static void lowerUsersToTemporaryWire(Operation &op,
     connect->moveAfter(&op);
   };
 
-  // If the op has a single result and a namehint, give the name to its
-  // temporary wire.
+  // If the op has a single result, infer a meaningfull name from the
+  // value.
   if (op.getNumResults() == 1) {
-    auto namehint = op.getAttrOfType<StringAttr>("sv.namehint");
-    // Remove a namehint from the op because the name is moved to the wire.
-    if (namehint)
-      op.removeAttr("sv.namehint");
+    auto namehint = inferStructuralNameForTemporary(op.getResult(0));
     createWireForResult(op.getResult(0), namehint);
     return;
   }
@@ -435,6 +432,11 @@ static void reuseExistingInOut(Operation *op) {
     if (auto assignUse = dyn_cast<AssignOp>(use.getOwner())) {
       // If there are multiple assigns, bail out.
       if (assign)
+        return;
+
+      // If the assign is not at the top level, it might be conditionally
+      // executed. So bail out.
+      if (!isa<HWModuleOp>(assignUse->getParentOp()))
         return;
 
       // Remember this assign for later.

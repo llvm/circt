@@ -17,7 +17,7 @@ module {
   hw.module.extern @Rcvr (%m: !sv.modport<@data_vr::@data_in>)
   sv.verbatim "module Rcvr (data_vr.data_in m);\nendmodule"
 
-  hw.module @top (%clk: i1, %rstn: i1) {
+  hw.module @top (%clk: i1, %rst: i1) {
     %iface = sv.interface.instance : !sv.interface<@data_vr>
 
     %ifaceInPort = sv.modport.get %iface @data_in :

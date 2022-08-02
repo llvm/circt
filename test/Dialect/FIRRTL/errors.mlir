@@ -871,3 +871,35 @@ firrtl.circuit "Foo"   {
     %bar_a, %bar_b, %bar_c = firrtl.instance bar sym [<@w3,1,public>,<@w3,2,private>,<@syh2,0,public>] @Bar(in a: !firrtl.uint<1> [{one}], out b: !firrtl.bundle<baz: uint<1>, qux: uint<1>> [{circt.fieldID = 1 : i32, two}], out c: !firrtl.uint<1> [{four}])
   }
 }
+
+// -----
+
+firrtl.circuit "DupSyms" {
+  firrtl.module @DupSyms() {
+    // expected-note @+1 {{see existing inner symbol definition here}}
+    %w1 = firrtl.wire sym @x : !firrtl.uint<2>
+    // expected-error @+1 {{redefinition of inner symbol named 'x'}}
+    %w2 = firrtl.wire sym @x : !firrtl.uint<2>
+  }
+}
+
+// -----
+
+firrtl.circuit "DupSymPort" {
+  // expected-note @+1 {{see existing inner symbol definition here}}
+  firrtl.module @DupSymPort(in %a : !firrtl.uint<1> sym @x) {
+    // expected-error @+1 {{redefinition of inner symbol named 'x'}}
+    %w1 = firrtl.wire sym @x : !firrtl.uint<2>
+  }
+}
+
+// -----
+
+firrtl.circuit "DupSymField" {
+  firrtl.module @DupSymField() {
+    // expected-note @+1 {{see existing inner symbol definition here}}
+    %w1 = firrtl.wire sym @x : !firrtl.uint<2>
+    // expected-error @+1 {{redefinition of inner symbol named 'x'}}
+    %w3 = firrtl.wire sym [<@x,1,public>] : !firrtl.vector<uint<1>,1>
+  }
+}

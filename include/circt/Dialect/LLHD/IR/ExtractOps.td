@@ -237,7 +237,6 @@ def LLHD_SigArrayGetOp : LLHD_Op<"sig.array_get",
       .getUnderlyingType().cast<hw::ArrayType>();
     }
   }];
-  let hasCanonicalizeMethod = true;
 }
 
 def LLHD_PtrArrayGetOp : LLHD_Op<"ptr.array_get",
@@ -270,7 +269,6 @@ def LLHD_PtrArrayGetOp : LLHD_Op<"ptr.array_get",
       .getUnderlyingType().cast<hw::ArrayType>();
     }
   }];
-  let hasCanonicalizeMethod = true;
 }
 
 //===----------------------------------------------------------------------===//

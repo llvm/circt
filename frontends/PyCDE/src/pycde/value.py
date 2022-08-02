@@ -89,8 +89,9 @@ class Value:
                             name=give_name,
                             sym_name=give_name)
       if sv_attributes is not None:
-        reg.value.owner.attributes["sv.attributes"] = ir.ArrayAttr.get(
-            [sv.SVAttributeAttr.get(attr) for attr in sv_attributes])
+        reg.value.owner.attributes["sv.attributes"] = sv.SVAttributesAttr.get(
+            ir.ArrayAttr.get(
+                [sv.SVAttributeAttr.get(attr) for attr in sv_attributes]))
       if appid is not None:
         reg.appid = appid
       return reg
@@ -256,6 +257,169 @@ class BitVectorValue(Value):
 
   def __len__(self):
     return self.type.width
+
+  #  === Casting ===
+
+  def _exec_cast(self, targetValueType, type_getter, width: int = None):
+
+    from .dialects import hwarith
+    if width is None:
+      width = self.type.width
+
+    if type(self) is targetValueType and width == self.type.width:
+      return self
+    return hwarith.CastOp(self.value, type_getter(width))
+
+  def as_int(self, width: int = None):
+    """
+    Returns this value as a signless integer. If 'width' is provided, this value
+    will be truncated to that width.
+    """
+    return self._exec_cast(BitVectorValue, ir.IntegerType.get_signless, width)
+
+  def as_sint(self, width: int = None):
+    """
+    Returns this value as a a signed integer. If 'width' is provided, this value
+    will be truncated or sign-extended to that width.
+    """
+    return self._exec_cast(SignedBitVectorValue, ir.IntegerType.get_signed,
+                           width)
+
+  def as_uint(self, width: int = None):
+    """
+    Returns this value as an unsigned integer. If 'width' is provided, this value
+    will be truncated or zero-padded to that width.
+    """
+    return self._exec_cast(UnsignedBitVectorValue, ir.IntegerType.get_unsigned,
+                           width)
+
+  #  === Infix operators ===
+
+  # Signless operations. These will all return signless values - a user is
+  # expected to reapply signedness semantics if needed.
+
+  # Generalized function for executing signless binary operations. Performs
+  # a check to ensure that the operands have signless semantics and are of
+  # identical width, and then calls the provided operator.
+  def __exec_signless_binop__(self, other, op, op_name: str):
+    w = max(self.type.width, other.type.width)
+    ret = op(self.as_int(w), other.as_int(w))
+    if self.name is not None and other.name is not None:
+      ret.name = f"{self.name}_{op_name}_{other.name}"
+    return ret
+
+  def __exec_signless_binop_nocast__(self, other, op, op_symbol: str,
+                                     op_name: str):
+    if not isinstance(other, Value):
+      # Fall back to the default implementation in cases where we're not dealing
+      # with PyCDE value comparison.
+      return super().__eq__(other)
+
+    signednessOperand = None
+    if type(self) is not BitVectorValue:
+      signednessOperand = "LHS"
+    elif type(other) is not BitVectorValue:
+      signednessOperand = "RHS"
+
+    if signednessOperand is not None:
+      raise TypeError(
+          f"Operator '{op_symbol}' requires {signednessOperand} to be cast .as_int()."
+      )
+
+    w = max(self.type.width, other.type.width)
+    ret = op(self.as_int(w), other.as_int(w))
+    if self.name is not None and other.name is not None:
+      ret.name = f"{self.name}_{op_name}_{other.name}"
+    return ret
+
+  def __eq__(self, other):
+    from .dialects import comb
+    return self.__exec_signless_binop_nocast__(other, comb.EqOp, "==", "eq")
+
+  def __ne__(self, other):
+    from .dialects import comb
+    return self.__exec_signless_binop_nocast__(other, comb.NeOp, "!=", "neq")
+
+  def __and__(self, other):
+    from .dialects import comb
+    return self.__exec_signless_binop__(other, comb.AndOp, "and")
+
+  def __or__(self, other):
+    from .dialects import comb
+    return self.__exec_signless_binop__(other, comb.OrOp, "or")
+
+  def __xor__(self, other):
+    from .dialects import comb
+    return self.__exec_signless_binop__(other, comb.XorOp, "xor")
+
+  def __invert__(self):
+    from .pycde_types import types
+    ret = self.as_int() ^ types.int(self.type.width)(-1)
+    if self.name is not None:
+      ret.name = f"neg_{self.name}"
+    return ret
+
+  # Generalized function for executing sign-aware binary operations. Performs
+  # a check to ensure that the operands have signedness semantics, and then calls
+  # the provided operator.
+  def __exec_signedness_binop__(self, other, op, op_symbol: str, op_name: str):
+    signlessOperand = None
+    if type(self) is BitVectorValue:
+      signlessOperand = "LHS"
+    elif type(other) is BitVectorValue:
+      signlessOperand = "RHS"
+
+    if signlessOperand is not None:
+      raise TypeError(
+          f"Operator '{op_symbol}' is not supported on signless values. {signlessOperand} operand should be cast .as_sint()/.as_uint()."
+      )
+
+    ret = op(self, other)
+    if self.name is not None and other.name is not None:
+      ret.name = f"{self.name}_{op_name}_{other.name}"
+    return ret
+
+  def __add__(self, other):
+    from .dialects import hwarith
+    return self.__exec_signedness_binop__(other, hwarith.AddOp, "+", "plus")
+
+  def __sub__(self, other):
+    from .dialects import hwarith
+    return self.__exec_signedness_binop__(other, hwarith.SubOp, "-", "minus")
+
+  def __mul__(self, other):
+    from .dialects import hwarith
+    return self.__exec_signedness_binop__(other, hwarith.MulOp, "*", "mul")
+
+  def __truediv__(self, other):
+    from .dialects import hwarith
+    return self.__exec_signedness_binop__(other, hwarith.DivOp, "/", "div")
+
+
+class WidthExtendingBitVectorValue(BitVectorValue):
+  # TODO: This class will contain comparison operators (<, >, <=, >=)
+  pass
+
+  def __lt__(self, other):
+    assert False, "Unimplemented"
+
+  def __le__(self, other):
+    assert False, "Unimplemented"
+
+  def __ge__(self, other):
+    assert False, "Unimplemented"
+
+
+class UnsignedBitVectorValue(WidthExtendingBitVectorValue):
+  pass
+
+
+class SignedBitVectorValue(WidthExtendingBitVectorValue):
+
+  def __neg__(self):
+    from .dialects import comb
+    from .pycde_types import types
+    return self * types.int(self.type.width)(-1).as_sint()
 
 
 class ListValue(Value):

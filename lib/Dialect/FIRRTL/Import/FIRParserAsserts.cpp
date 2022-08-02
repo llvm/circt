@@ -404,8 +404,8 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
       // Construct a `!whenCond | (value !== 1'bx)` predicate.
       Value notCond = predicate;
       predicate = builder.create<XorRPrimOp>(printOp.getSubstitutions()[0]);
-      predicate = builder.create<VerbatimExprOp>(UIntType::get(context, 1),
-                                                 "{{0}} !== 1'bx", predicate);
+      predicate = builder.create<IsXVerifOp>(predicate);
+      predicate = builder.create<NotPrimOp>(predicate);
       predicate = builder.create<OrPrimOp>(notCond, predicate);
     }
 

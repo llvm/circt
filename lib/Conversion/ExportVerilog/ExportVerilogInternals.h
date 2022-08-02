@@ -30,6 +30,11 @@ bool isSimpleReadOrPort(Value v);
 /// for instances this is `instanceName`, etc.
 StringAttr getDeclarationName(Operation *op);
 
+/// Given an expression that is spilled into a temporary wire, try to
+/// synthesize a better name than "_T_42" based on the structure of the
+/// expression.
+StringAttr inferStructuralNameForTemporary(Value expr);
+
 /// This class keeps track of global names at the module/interface level.
 /// It is built in a global pass over the entire design and then frozen to allow
 /// concurrent accesses.

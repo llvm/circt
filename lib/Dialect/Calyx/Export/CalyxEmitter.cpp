@@ -88,8 +88,8 @@ struct ImportTracker {
 public:
   /// Returns the list of library names used for in this program.
   /// E.g. if `primitives/core.futil` is used, returns { "core" }.
-  FailureOr<llvm::SmallSet<StringRef, 4>> getLibraryNames(ProgramOp program) {
-    auto walkRes = program.walk([&](ComponentOp component) {
+  FailureOr<llvm::SmallSet<StringRef, 4>> getLibraryNames(ModuleOp module) {
+    auto walkRes = module.walk([&](ComponentOp component) {
       for (auto &op : *component.getBody()) {
         if (!isa<CellInterface>(op) || isa<InstanceOp>(op))
           // It is not a primitive.
@@ -156,8 +156,8 @@ struct Emitter {
     currentIndent -= 2;
   }
 
-  // Program emission
-  void emitProgram(ProgramOp op);
+  // Module emission
+  void emitModule(ModuleOp op);
 
   // Metadata emission for the Cider debugger.
   void emitCiderMetadata(mlir::ModuleOp op) {
@@ -178,7 +178,7 @@ struct Emitter {
   }
 
   /// Import emission.
-  LogicalResult emitImports(ProgramOp op) {
+  LogicalResult emitImports(ModuleOp op) {
     auto emitImport = [&](StringRef library) {
       // Libraries share a common relative path:
       //   primitives/<library-name>.futil
@@ -505,7 +505,7 @@ private:
 LogicalResult Emitter::finalize() { return failure(encounteredError); }
 
 /// Emit an entire program.
-void Emitter::emitProgram(ProgramOp op) {
+void Emitter::emitModule(ModuleOp op) {
   for (auto &bodyOp : *op.getBody()) {
     if (auto componentOp = dyn_cast<ComponentOp>(bodyOp))
       emitComponent(componentOp);
@@ -726,16 +726,9 @@ void Emitter::emitControl(ControlOp control) {
 mlir::LogicalResult circt::calyx::exportCalyx(mlir::ModuleOp module,
                                               llvm::raw_ostream &os) {
   Emitter emitter(os);
-  for (auto &op : *module.getBody()) {
-    auto walkRes = op.walk([&](ProgramOp program) {
-      if (failed(emitter.emitImports(program)))
-        return WalkResult::interrupt();
-      emitter.emitProgram(program);
-      return WalkResult::advance();
-    });
-    if (walkRes.wasInterrupted())
-      return failure();
-  }
+  if (failed(emitter.emitImports(module)))
+    return failure();
+  emitter.emitModule(module);
   emitter.emitCiderMetadata(module);
   return emitter.finalize();
 }

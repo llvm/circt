@@ -68,6 +68,20 @@ tool_dirs = [
 ]
 tools = ['py-split-input-file.py']
 
+# IVerilog tooling
+if config.iverilog_path != "":
+  tool_dirs.append(os.path.dirname(config.iverilog_path))
+  tools.append('iverilog')
+  config.available_features.add('iverilog')
+  config.substitutions.append(('%iverilog', config.iverilog_path))
+
+# cocotb availability
+try:
+  import cocotb
+  config.available_features.add('cocotb')
+except ImportError:
+  pass
+
 llvm_config.add_tool_substitutions(tools, tool_dirs)
 
 # Tweak the PYTHONPATH to include the binary dir.

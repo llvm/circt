@@ -5,10 +5,24 @@
 from __future__ import annotations
 
 from .pycde_types import dim
-from .value import Value
+from .value import BitVectorValue, ListValue, Value
 from circt.support import get_value
 from circt.dialects import msft, hw
 import mlir.ir as ir
+
+import typing
+
+
+def Mux(sel: BitVectorValue, *data_inputs: typing.List[Value]):
+  """Create a single mux from a list of values."""
+  num_inputs = len(data_inputs)
+  if num_inputs == 0:
+    raise ValueError("'Mux' must have 1 or more data input")
+  if num_inputs == 1:
+    return data_inputs[0]
+  if sel.type.width != (num_inputs - 1).bit_length():
+    raise TypeError("'Sel' bit width must be clog2 of number of inputs")
+  return ListValue(data_inputs)[sel]
 
 
 def SystolicArray(row_inputs, col_inputs, pe_builder):

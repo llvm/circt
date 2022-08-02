@@ -35,19 +35,6 @@ using namespace circt::sv;
 
 /// ConversionPatterns.
 
-struct ConvertProgramOp : public OpConversionPattern<ProgramOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(ProgramOp program, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    ModuleOp mod = program->getParentOfType<ModuleOp>();
-    rewriter.inlineRegionBefore(program.body(), &mod.getBodyRegion().front());
-    rewriter.eraseBlock(&mod.getBodyRegion().back());
-    return success();
-  }
-};
-
 struct ConvertComponentOp : public OpConversionPattern<ComponentOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -419,18 +406,17 @@ public:
   void runOnOperation() override;
 
 private:
-  LogicalResult runOnProgram(ProgramOp program);
+  LogicalResult runOnModule(ModuleOp module);
 };
 } // end anonymous namespace
 
 void CalyxToHWPass::runOnOperation() {
   ModuleOp mod = getOperation();
-  for (auto program : llvm::make_early_inc_range(mod.getOps<ProgramOp>()))
-    if (failed(runOnProgram(program)))
-      return signalPassFailure();
+  if (failed(runOnModule(mod)))
+    return signalPassFailure();
 }
 
-LogicalResult CalyxToHWPass::runOnProgram(ProgramOp program) {
+LogicalResult CalyxToHWPass::runOnModule(ModuleOp module) {
   MLIRContext &context = getContext();
 
   ConversionTarget target(context);
@@ -441,14 +427,13 @@ LogicalResult CalyxToHWPass::runOnProgram(ProgramOp program) {
   target.addLegalDialect<SVDialect>();
 
   RewritePatternSet patterns(&context);
-  patterns.add<ConvertProgramOp>(&context);
   patterns.add<ConvertComponentOp>(&context);
   patterns.add<ConvertWiresOp>(&context);
   patterns.add<ConvertControlOp>(&context);
   patterns.add<ConvertCellOp>(&context);
   patterns.add<ConvertAssignOp>(&context);
 
-  return applyPartialConversion(program, target, std::move(patterns));
+  return applyPartialConversion(module, target, std::move(patterns));
 }
 
 std::unique_ptr<mlir::Pass> circt::createCalyxToHWPass() {

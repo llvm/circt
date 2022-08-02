@@ -22,4 +22,15 @@
 #define GET_OP_CLASSES
 #include "circt/Dialect/HWArith/HWArith.h.inc"
 
+namespace circt {
+namespace hwarith {
+
+// Infer the bitwidth as well as the signedness that is required to store the
+// sum of two given integer types without over- or underflowing.
+unsigned inferAddResultType(IntegerType::SignednessSemantics &signedness,
+                            IntegerType lhs, IntegerType rhs);
+
+} // namespace hwarith
+} // namespace circt
+
 #endif // CIRCT_DIALECT_HWARITH_OPS_H

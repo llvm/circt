@@ -29,4 +29,7 @@ void HWArithDialect::initialize() {
       >();
 }
 
+// Provide implementations for the enums we use.
+#include "circt/Dialect/HWArith/HWArithEnums.cpp.inc"
+
 #include "circt/Dialect/HWArith/HWArithDialect.cpp.inc"

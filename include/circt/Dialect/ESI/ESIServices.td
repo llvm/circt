@@ -73,12 +73,13 @@ def ServiceInstanceOp : ESI_Op<"service.instance"> {
   }];
 
   let arguments = (ins FlatSymbolRefAttr:$service_symbol,
-                       AnyAttr:$identifier,
+                       AnyAttr:$impl_type,
+                       OptionalAttr<DictionaryAttr>:$impl_opts,
                        Variadic<AnyType>:$inputs);
   let results = (outs Variadic<AnyType>);
   let assemblyFormat = [{
-    $service_symbol `impl` `as` $identifier `(` $inputs `)` attr-dict
-      `:` functional-type($inputs, results)
+    $service_symbol `impl` `as` $impl_type (`opts` $impl_opts^)?
+      `(` $inputs `)` attr-dict `:` functional-type($inputs, results)
   }];
 }
 
@@ -96,19 +97,20 @@ def ServiceImplementReqOp : ESI_Op<"service.impl_req", [NoTerminator]> {
   }];
 
   let arguments = (ins FlatSymbolRefAttr:$service_symbol,
-                       AnyAttr:$identifier,
+                       AnyAttr:$impl_type,
+                       OptionalAttr<DictionaryAttr>:$impl_opts,
                        Variadic<AnyType>:$inputs);
   let results = (outs Variadic<AnyType>:$outputs);
   let regions = (region SizedRegion<1>:$portReqs);
 
   let assemblyFormat = [{
-    $service_symbol `impl` `as` $identifier `(` $inputs `)` attr-dict
-      `:` functional-type($inputs, results)
+    $service_symbol `impl` `as` $impl_type (`opts` $impl_opts^)?
+     `(` $inputs `)` attr-dict `:` functional-type($inputs, results)
       $portReqs
   }];
 }
 
-def RequestToServerConnection : ESI_Op<"service.req.to_server", [
+def RequestToServerConnectionOp : ESI_Op<"service.req.to_server", [
         DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let summary = "Request a connection to send data";
 
@@ -116,11 +118,11 @@ def RequestToServerConnection : ESI_Op<"service.req.to_server", [
                        ChannelType:$sending, StrArrayAttr:$clientNamePath);
   let assemblyFormat = [{
     $sending `->` $servicePort `(` $clientNamePath `)`
-      attr-dict `:` type($sending)
+      attr-dict `:` qualified(type($sending))
   }];
 }
 
-def RequestToClientConnection : ESI_Op<"service.req.to_client", [
+def RequestToClientConnectionOp : ESI_Op<"service.req.to_client", [
         DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let summary = "Request a connection to receive data";
 
@@ -128,6 +130,7 @@ def RequestToClientConnection : ESI_Op<"service.req.to_client", [
                        StrArrayAttr:$clientNamePath);
   let results = (outs ChannelType:$receiving);
   let assemblyFormat = [{
-    $servicePort `(` $clientNamePath `)` attr-dict `:` type($receiving)
+    $servicePort `(` $clientNamePath `)`
+      attr-dict `:` qualified(type($receiving))
   }];
 }
