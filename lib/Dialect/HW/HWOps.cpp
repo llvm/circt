@@ -1899,18 +1899,38 @@ void StructExtractOp::build(OpBuilder &builder, OperationState &odsState,
   build(builder, odsState, resultType, input, fieldAttr);
 }
 
-// A struct extract of a struct create -> corresponding struct create operand.
 OpFoldResult StructExtractOp::fold(ArrayRef<Attribute> operands) {
-  auto structCreate =
-      dyn_cast_or_null<StructCreateOp>(getInput().getDefiningOp());
-  if (!structCreate)
+  auto inputOp = getInput().getDefiningOp();
+  // A struct extract of a struct create -> corresponding struct create operand.
+  if (auto structCreate = dyn_cast_or_null<StructCreateOp>(inputOp)) {
+    auto ty = type_cast<StructType>(getInput().getType());
+    if (auto idx = ty.getFieldIndex(getField()))
+      return structCreate.getOperand(*idx);
     return {};
-  auto ty = type_cast<StructType>(getInput().getType());
-  if (!ty)
-    return {};
-  if (auto idx = ty.getFieldIndex(getField()))
-    return structCreate.getOperand(*idx);
+  }
+  // Extracting injected field -> corresponding field
+  if (auto structInject = dyn_cast_or_null<StructInjectOp>(inputOp)) {
+    if (structInject.getField() != getField())
+      return {};
+    return structInject.getNewValue();
+  }
   return {};
+}
+
+LogicalResult StructExtractOp::canonicalize(StructExtractOp op,
+                                            PatternRewriter &rewriter) {
+  auto inputOp = op.getInput().getDefiningOp();
+
+  // b = extract(inject(x["a"], v0)["b"]) => extract(x, "b")
+  if (auto structInject = dyn_cast_or_null<StructInjectOp>(inputOp)) {
+    if (structInject.getField() != op.getField()) {
+      rewriter.replaceOpWithNewOp<StructExtractOp>(
+          op, op.getType(), structInject.getInput(), op.getField());
+      return success();
+    }
+  }
+
+  return failure();
 }
 
 //===----------------------------------------------------------------------===//
@@ -1954,6 +1974,26 @@ void StructInjectOp::print(OpAsmPrinter &printer) {
   printer.printOperand(getNewValue());
   printer.printOptionalAttrDict((*this)->getAttrs(), {"field"});
   printer << " : " << getInput().getType();
+}
+
+LogicalResult StructInjectOp::canonicalize(StructInjectOp op,
+                                           PatternRewriter &rewriter) {
+  auto inputOp = op.getInput().getDefiningOp();
+
+  // b = inject(inject(x["field"], v0)["field"], v1) => inject(x["field"], v1)
+  if (auto structInject = dyn_cast_or_null<StructInjectOp>(inputOp)) {
+    if (structInject == op)
+      return failure();
+
+    if (structInject.getField() == op.getField()) {
+      rewriter.replaceOpWithNewOp<StructInjectOp>(
+          op, op.getType(), structInject.getInput(), op.getField(),
+          op.getNewValue());
+      return success();
+    }
+  }
+
+  return failure();
 }
 
 //===----------------------------------------------------------------------===//
