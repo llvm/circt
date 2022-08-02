@@ -307,3 +307,17 @@ hw.module @sigAndOps(%a: ui8, %b: ui8, %cond: i1, %clk : i1) -> (out: ui8)  {
     %1 = seq.compreg %0, %clk: ui8
     hw.output %1 : ui8
 }
+
+// -----
+
+// Type conversions of struct and array ops.
+// CHECK:      hw.module @structAndArrays(%a: i8, %b: i8) -> (out: !hw.struct<foo: !hw.array<2xi8>>) {
+// CHECK-NEXT:   %[[ARRAY:.*]] = hw.array_create %a, %b : i8
+// CHECK-NEXT:   %[[STRUCT:.*]] = hw.struct_create (%[[ARRAY]]) : !hw.struct<foo: !hw.array<2xi8>>
+// CHECK-NEXT:   hw.output %[[STRUCT]] : !hw.struct<foo: !hw.array<2xi8>>
+// CHECK-NEXT: }
+hw.module @structAndArrays(%a: ui8, %b: ui8) -> (out: !hw.struct<foo: !hw.array<2xui8>>)  {
+    %2 = hw.array_create %a, %b : ui8
+    %3 = hw.struct_create (%2) : !hw.struct<foo: !hw.array<2xui8>>
+    hw.output %3 : !hw.struct<foo: !hw.array<2xui8>>
+}

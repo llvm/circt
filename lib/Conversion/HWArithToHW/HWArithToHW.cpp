@@ -17,6 +17,7 @@
 #include "circt/Dialect/HWArith/HWArithOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "mlir/Transforms/DialectConversion.h"
+#include "llvm/ADT/TypeSwitch.h"
 
 using namespace mlir;
 using namespace circt;
@@ -256,7 +257,7 @@ struct BinaryOpLowering : public OpConversionPattern<BinOp> {
 };
 
 template <class TOp>
-struct ArgOpConversion : public OpConversionPattern<TOp> {
+struct ArgResOpConversion : public OpConversionPattern<TOp> {
   // Generic pattern which replaces an op by one of the same type, but with
   // converted operands and result types.
   using OpConversionPattern<TOp>::OpConversionPattern;
@@ -276,6 +277,51 @@ struct ArgOpConversion : public OpConversionPattern<TOp> {
   }
 };
 
+// A function which recursively converts any integer type with signedness
+// semantics to a signless counterpart.
+static Type removeSignedness(Type type) {
+  return llvm::TypeSwitch<Type, Type>(type)
+      .Case<IntegerType>([](auto type) {
+        if (type.isSignless())
+          return type;
+        return IntegerType::get(type.getContext(), type.getIntOrFloatBitWidth(),
+                                IntegerType::SignednessSemantics::Signless);
+      })
+      .Case<hw::ArrayType>([](auto type) {
+        return hw::ArrayType::get(removeSignedness(type.getElementType()),
+                                  type.getSize());
+      })
+      .Case<hw::StructType>([](auto type) {
+        // Recursively convert each element.
+        llvm::SmallVector<hw::StructType::FieldInfo> convertedElements;
+        for (auto element : type.getElements()) {
+          convertedElements.push_back(
+              {element.name, removeSignedness(element.type)});
+        }
+        return hw::StructType::get(type.getContext(), convertedElements);
+      })
+      .Default([](auto type) { return type; });
+}
+
+// Returns true if any subtype in 'type' has signedness semantics.
+static bool hasSignednessSemantics(Type type) {
+  return llvm::TypeSwitch<Type, bool>(type)
+      .Case<IntegerType>([](auto type) { return !type.isSignless(); })
+      .Case<hw::ArrayType>([](auto type) {
+        return hasSignednessSemantics(type.getElementType());
+      })
+      .Case<hw::StructType>([](auto type) {
+        return llvm::any_of(type.getElements(), [](auto element) {
+          return hasSignednessSemantics(element.type);
+        });
+      })
+      .Default([](auto type) { return false; });
+}
+
+static bool hasSignednessSemantics(TypeRange types) {
+  return llvm::any_of(types, [](Type t) { return hasSignednessSemantics(t); });
+}
+
 /// A helper type converter class that automatically populates the relevant
 /// materializations and type conversions for converting HWArith to HW.
 /// Source/target materialization patterns are strictly for materializing
@@ -285,20 +331,8 @@ struct HWArithToHWTypeConverter : public TypeConverter {
 };
 
 HWArithToHWTypeConverter::HWArithToHWTypeConverter() {
-  // Convert any integer type to signless.
-  addConversion([](IntegerType type) {
-    if (type.isSignless())
-      return type;
-    return IntegerType::get(type.getContext(), type.getIntOrFloatBitWidth(),
-                            IntegerType::SignednessSemantics::Signless);
-  });
-
-  auto addCastOp = [](OpBuilder &builder, Type type, ValueRange values,
-                      Location loc) {
-    return builder.create<hwarith::CastOp>(loc, type, values[0]).getResult();
-  };
-  addSourceMaterialization(addCastOp);
-  addTargetMaterialization(addCastOp);
+  // Pass any type through the signedness remover.
+  addConversion([](Type type) { return removeSignedness(type); });
 }
 
 } // namespace
@@ -309,27 +343,17 @@ HWArithToHWTypeConverter::HWArithToHWTypeConverter() {
 
 namespace {
 
-// Returns true if no type in 'types' is an IntegerType with signedness
-// semantics.
-static bool noSignednessInt(TypeRange types) {
-  return llvm::none_of(types, [](Type t) {
-    if (auto intType = t.dyn_cast<IntegerType>())
-      return !intType.isSignless();
-    return false;
-  });
-}
-
-// Adds the ArgOpConversion for 'TOp' to the set of conversion patterns, as well
-// as a legality check on the conversion status of the op's operands and
+// Adds the ArgResOpConversion for 'TOp' to the set of conversion patterns, as
+// well as a legality check on the conversion status of the op's operands and
 // results.
 template <typename TOp>
 static void addOperandConversion(ConversionTarget &target,
                                  RewritePatternSet &patterns,
                                  HWArithToHWTypeConverter &typeConverter) {
-  patterns.add<ArgOpConversion<TOp>>(typeConverter, patterns.getContext());
+  patterns.add<ArgResOpConversion<TOp>>(typeConverter, patterns.getContext());
   target.addDynamicallyLegalOp<TOp>([](TOp op) {
-    return noSignednessInt(op->getOperandTypes()) &&
-           noSignednessInt(op->getResultTypes());
+    return !hasSignednessSemantics(op->getOperandTypes()) &&
+           !hasSignednessSemantics(op->getResultTypes());
   });
 }
 
@@ -357,16 +381,19 @@ public:
     target.addDynamicallyLegalOp<hw::HWModuleOp, hw::HWModuleExternOp>(
         [](auto moduleLikeOp) {
           // Legal if all results and args have no signedness integers.
-          bool legalResults = noSignednessInt(
+          bool legalResults = !hasSignednessSemantics(
               cast<FunctionOpInterface>(moduleLikeOp).getResultTypes());
-          bool legalArgs = noSignednessInt(
+          bool legalArgs = !hasSignednessSemantics(
               cast<FunctionOpInterface>(moduleLikeOp).getArgumentTypes());
           return legalResults && legalArgs;
         });
 
     // Generic conversion and legalization patterns for operations that may have
     // their operands modified from signedness to signless.
-    addOperandConversion<hw::OutputOp, comb::MuxOp, seq::CompRegOp>(
+    addOperandConversion<
+        hw::OutputOp, comb::MuxOp, seq::CompRegOp, hw::ArrayCreateOp,
+        hw::ArrayGetOp, hw::ArrayConcatOp, hw::ArraySliceOp, hw::StructCreateOp,
+        hw::StructExplodeOp, hw::StructExtractOp, hw::StructInjectOp>(
         target, patterns, typeConverter);
 
     patterns.add<ConstantOpLowering, CastOpLowering, ICmpOpLowering,
