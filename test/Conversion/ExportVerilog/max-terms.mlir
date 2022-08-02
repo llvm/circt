@@ -61,9 +61,11 @@ hw.module @large_use_in_procedural_successive(%clock: i1, %a: i1) {
 hw.module @dont_spill_to_procedural_regions(%z: i10) -> () {
   %r1 = sv.reg : !hw.inout<i1>
   %r2 = sv.reg : !hw.inout<i10>
+  // CHECK: wire [9:0] _GEN;
+  // CHECK: assign _GEN = r2 + r2 + r2 + r2 + r2;
   // CHECK: initial begin
   // CHECK-NEXT:   `ifdef BAR
-  // CHECK-NEXT:      r1 <= r2 + r2 + r2 + r2 + r2 == z;
+  // CHECK-NEXT:      r1 <= _GEN == z;
   // CHECK-NEXT:   `endif
   // CHECK-NEXT: end // initial
   sv.initial {
