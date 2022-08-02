@@ -1,3 +1,4 @@
+# REQUIRES: esi-cosim
 # RUN: rm -rf %t
 # RUN: %PYTHON% %s %t 2>&1
 # RUN: esi-cosim-runner.py --schema %t/schema.capnp %s %t/*.sv
