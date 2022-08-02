@@ -179,7 +179,7 @@ bool firrtl::hasDontTouch(Value value) {
     return hasDontTouch(op);
   auto arg = value.dyn_cast<BlockArgument>();
   auto module = cast<FModuleOp>(arg.getOwner()->getParentOp());
-  return (!module.getPortSymbol(arg.getArgNumber()).empty()) ||
+  return (!module.getPortSymbolAttr(arg.getArgNumber())) ||
          AnnotationSet::forPort(module, arg.getArgNumber()).hasDontTouch();
 }
 

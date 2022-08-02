@@ -98,9 +98,8 @@ LogicalResult InnerSymbolTable::walkSymbols(Operation *op,
            if (auto mod = dyn_cast<FModuleLike>(curOp)) {
              for (size_t i = 0, e = mod.getNumPorts(); i < e; ++i)
                if (InnerSymAttr symAttr = mod.getPortSymbolAttr(i))
-               if (failed(walkSyms(symAttr, InnerSymTarget(i, curOp))))
-                 return WalkResult::interrupt();
-             
+                 if (failed(walkSyms(symAttr, InnerSymTarget(i, curOp))))
+                   return WalkResult::interrupt();
            }
            return WalkResult::advance();
          }).wasInterrupted());

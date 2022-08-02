@@ -149,11 +149,11 @@ def FModuleLike : OpInterface<"FModuleLike"> {
     //===------------------------------------------------------------------===//
     // Symbol conventions:
     // 1. Every element of the ArrayAttr(portSyms) must be NON-NULL.
-    // 2. An empty string represents no symbol.
-    //    a. TODO: Update the representation to avoid storing "".
+    // 2. An empty array represents no symbol.
+    //    a. TODO: Update the representation to avoid storing it.
     // 3. The Getters return null if a port sym is invalid.
     // 4. The fixupPortSymsArray, is a utility to update a portSyms
-    //    Vector, by replacing each null entry with empty string and
+    //    Vector, by replacing each null entry with empty array and
     //    clearing the array if all the elements are empty.
 
     // Getters
@@ -201,7 +201,7 @@ def FModuleLike : OpInterface<"FModuleLike"> {
                                      $_op.getPortSymbols().end());
       if (symbols.empty()) {
         symbols.resize($_op.getNumPorts(),
-                      InnerSymAttr::get(StringAttr::get($_op.getContext(),"")));
+                      InnerSymAttr::get($_op.getContext()));
       }
       assert(symbols.size() == $_op.getNumPorts());
       symbols[portIndex] = InnerSymAttr::get(symbol);
@@ -254,14 +254,14 @@ def FModuleLike : OpInterface<"FModuleLike"> {
       return "portSyms";
     }
 
-    /// Replace NUll entries with empty string and clear array if all elements
+    /// Replace NUll entries with invalid sym and clear array if all elements
     /// are invalid.
     static void fixupPortSymsArray(SmallVectorImpl<Attribute> &syms,
                                    MLIRContext *context) {
       bool isValid = false;
       for (size_t i = 0, e = syms.size(); i < e; ++i)
         if (!syms[i])
-          syms[i] = InnerSymAttr::get(StringAttr::get(context,""));
+          syms[i] = InnerSymAttr::get(context);
         else
           isValid = true;
       // The lack of *any* port symbol is represented by an empty `portSyms`

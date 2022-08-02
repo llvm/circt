@@ -182,6 +182,30 @@ public:
   /// A successful walk with no failures returns success.
   static LogicalResult walkSymbols(Operation *op, InnerSymCallbackFn callback);
 
+  /// Get the sym name from the InnerSymPropertiesAttr.
+  static StringAttr getInnerSymName(const InnerSymPropertiesAttr p) {
+    return p.getName();
+  }
+
+  /// Get the iterator for all the symbol names for an InnerSymAttr.
+  static auto getSymNamesBegin(InnerSymAttr isa) {
+    return llvm::map_iterator(isa.begin(), getInnerSymName);
+  }
+
+  /// Get the iterator for all the symbol names for an InnerSymAttr.
+  static auto getSymNamesEnd(InnerSymAttr isa) {
+    return llvm::map_iterator(isa.end(), getInnerSymName);
+  }
+
+  /// Get all the symbol names for an Operation.
+  static auto getSymNames(Operation *op) {
+    InnerSymAttr isa =
+        op->getAttrOfType<InnerSymAttr>(getInnerSymbolAttrName());
+    if (isa)
+      llvm::make_range(getSymNamesBegin(isa), getSymNamesEnd(isa));
+    return StringAttr{};
+  }
+
 private:
   using TableTy = DenseMap<StringAttr, InnerSymTarget>;
   /// Construct an inner symbol table for the given operation,

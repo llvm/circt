@@ -1273,90 +1273,10 @@ void LowerTypesPass::runOnOperation() {
     return LogicalResult::failure(tl.isFailed());
   };
 
-<<<<<<< HEAD
   auto result = failableParallelForEach(&getContext(), ops.begin(), ops.end(),
                                         lowerModules);
   if (failed(result))
     signalPassFailure();
-=======
-      // Split the old hierarchical path into one hierarchical path for each new
-      // InnerRefAttr.  Update the symbols in any NLAs which use the old
-      // InnerRefAttr to the correct new InnerRefAttr.
-      auto namepath = path.getNamepath().getValue();
-      // Grab the old namepath.  We reuse all but the last element of this.
-      SmallVector<Attribute> newNamepath{namepath.begin(), namepath.end()};
-      ImplicitLocOpBuilder builder(path.getLoc(), path);
-      builder.setInsertionPointAfter(path);
-      StringAttr oldSym;
-      assert(!newRefs.empty() && "LowerTypes should not delete InnerRefAttrs");
-      for (auto &target : newRefs) {
-        // Drop the last part of the namepath so we can replace it.
-        newNamepath.pop_back();
-
-        // Re-use the old hierarchical path symbol for the first new
-        // hierarchical path.  Generate a new symbol for any later paths.
-        StringAttr newSym;
-        if (!oldSym) {
-          oldSym = path.getNameAttr();
-          newSym = oldSym;
-          // Delete the old hierarchical path from the NLA and symbol tables.
-          nlaTable->erase(path, &symTbl);
-        } else
-          newSym =
-              builder.getStringAttr(circtNamespace.newName(oldSym.getValue()));
-
-        // This is the new annotation sequence.  Put the update method into a
-        // lambda to enable reuse for operation and port annotations.
-        SmallVector<Annotation> newAnnotations;
-        auto updateNLASymbol = [&](Annotation anno) -> bool {
-          auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal");
-          if (!sym || sym.getAttr() != oldSym)
-            return false;
-          anno.setMember("circt.nonlocal", FlatSymbolRefAttr::get(newSym));
-          newAnnotations.push_back(anno);
-          return true;
-        };
-
-        // Update annotations the operation or on the port.
-        HierPathOp newPath;
-        TypeSwitch<AnnoTarget>(target)
-            .Case<OpAnnoTarget>([&](OpAnnoTarget target) {
-              auto *op = target.getOp();
-              newNamepath.push_back(hw::InnerRefAttr::get(
-                  target.getModule().moduleNameAttr(), getInnerSymName(op)));
-              newPath = builder.create<HierPathOp>(
-                  newSym, builder.getArrayAttr(newNamepath));
-              AnnotationSet annotations(op);
-              annotations.removeAnnotations(updateNLASymbol);
-              annotations.addAnnotations(newAnnotations);
-              annotations.applyToOperation(op);
-            })
-            .Case<PortAnnoTarget>([&](PortAnnoTarget target) {
-              auto op = cast<FModuleLike>(target.getOp());
-              auto portIdx = target.getPortNo();
-              newNamepath.push_back(hw::InnerRefAttr::get(
-                  target.getModule().moduleNameAttr(),
-                  // getPortSymbolAttr can return null,
-                  // but here it must exist.
-                  op.getPortSymbolAttr(portIdx).getSymName()));
-              newPath = builder.create<HierPathOp>(
-                  newSym, builder.getArrayAttr(newNamepath));
-              auto annotations = AnnotationSet::forPort(op, portIdx);
-              annotations.removeAnnotations(updateNLASymbol);
-              annotations.addAnnotations(newAnnotations);
-              annotations.applyToPort(op, portIdx);
-            })
-            .Default([](auto) {
-              llvm_unreachable("match on unkonwn AnnoTarget type");
-            });
-
-        // Add the new hierarchical path to the NLA Table and Symbol Table.
-        nlaTable->addNLA(newPath);
-        symTbl.insert(newPath);
-      }
-    }
-  }
->>>>>>> 65052de05... [FIRRTL] Handle ports symbols as InnrtSymAttr and null attribute instead of empty string
 }
 
 /// This is the pass constructor.
