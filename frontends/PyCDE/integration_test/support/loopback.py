@@ -7,17 +7,6 @@ import random
 class LoopbackTester(esi_cosim.CosimBase):
   """Provides methods to test the loopback simulations."""
 
-  def test_list(self):
-    ifaces = self.cosim.list().wait().ifaces
-    assert len(ifaces) > 0
-
-  def test_open_close(self):
-    ifaces = self.cosim.list().wait().ifaces
-    openResp = self.cosim.open(ifaces[0]).wait()
-    assert openResp.iface is not None
-    ep = openResp.iface
-    ep.close().wait()
-
   def test_two_chan_loopback(self, num_msgs):
     to_hw = self.openEP(1001, sendType=self.schema.I1, recvType=self.schema.I32)
     from_hw = self.openEP(1002,
