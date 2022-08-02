@@ -324,8 +324,6 @@ static bool hasSignednessSemantics(TypeRange types) {
 
 /// A helper type converter class that automatically populates the relevant
 /// materializations and type conversions for converting HWArith to HW.
-/// Source/target materialization patterns are strictly for materializing
-/// intermediate conversions - all of these will eventually canonicalize out.
 struct HWArithToHWTypeConverter : public TypeConverter {
   HWArithToHWTypeConverter();
 };
@@ -334,14 +332,6 @@ HWArithToHWTypeConverter::HWArithToHWTypeConverter() {
   // Pass any type through the signedness remover.
   addConversion([](Type type) { return removeSignedness(type); });
 }
-
-} // namespace
-
-//===----------------------------------------------------------------------===//
-// Pass driver
-//===----------------------------------------------------------------------===//
-
-namespace {
 
 // Adds the ArgResOpConversion for 'TOp' to the set of conversion patterns, as
 // well as a legality check on the conversion status of the op's operands and
@@ -364,6 +354,14 @@ static void addOperandConversion(ConversionTarget &target,
   addOperandConversion<TOp>(target, patterns, typeConverter);
   addOperandConversion<TOp2, OpTs...>(target, patterns, typeConverter);
 }
+
+} // namespace
+
+//===----------------------------------------------------------------------===//
+// Pass driver
+//===----------------------------------------------------------------------===//
+
+namespace {
 
 class HWArithToHWPass : public HWArithToHWBase<HWArithToHWPass> {
 public:
@@ -388,8 +386,8 @@ public:
           return legalResults && legalArgs;
         });
 
-    // Generic conversion and legalization patterns for operations that may have
-    // their operands modified from signedness to signless.
+    // Generic conversion and legalization patterns for operations that we
+    // expect to be using in conjunction with the signedness values of hwarith.
     addOperandConversion<
         hw::OutputOp, comb::MuxOp, seq::CompRegOp, hw::ArrayCreateOp,
         hw::ArrayGetOp, hw::ArrayConcatOp, hw::ArraySliceOp, hw::StructCreateOp,
