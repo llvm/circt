@@ -547,9 +547,10 @@ bool TypeLoweringVisitor::lowerProducer(
   if (!peelType(srcType, fieldTypes, aggregatePreservationMode))
     return false;
 
-  // If an aggregate value has a symbol, bail out.
+  // If an aggregate value has a symbol, emit errors.
   if (op->hasAttr(cache.innerSymAttr)) {
-    op->emitError() << "LowerTypes cannot lower symbols on aggregates";
+    op->emitError() << "has a symbol, but no symbols may exist on aggregates "
+                       "passed through LowerTypes";
     encounteredError = true;
     return false;
   }
@@ -560,27 +561,15 @@ bool TypeLoweringVisitor::lowerProducer(
   SmallString<16> loweredSymName;
   auto nameKindAttr = op->getAttrOfType<NameKindEnumAttr>(cache.nameKindAttr);
 
-  auto innerSymAttr = getInnerSymName(op);
-  if (innerSymAttr)
-    loweredSymName = innerSymAttr.getValue();
   if (auto nameAttr = op->getAttrOfType<StringAttr>(cache.nameAttr))
     loweredName = nameAttr.getValue();
-  if (loweredSymName.empty())
-    loweredSymName = loweredName;
-  if (loweredSymName.empty())
-    loweredSymName = uniqueName();
   auto baseNameLen = loweredName.size();
-  auto baseSymNameLen = loweredSymName.size();
   auto oldAnno = op->getAttr("annotations").dyn_cast_or_null<ArrayAttr>();
 
   for (auto field : fieldTypes) {
     if (!loweredName.empty()) {
       loweredName.resize(baseNameLen);
       loweredName += field.suffix;
-    }
-    if (!loweredSymName.empty()) {
-      loweredSymName.resize(baseSymNameLen);
-      loweredSymName += field.suffix;
     }
 
     // For all annotations on the parent op, filter them based on the target
@@ -648,7 +637,8 @@ TypeLoweringVisitor::addArg(Operation *module, unsigned insertPt,
   bool oldArgHadSym = oldArg.sym && !oldArg.sym.getValue().empty();
   if (oldArgHadSym) {
     mlir::emitError(newValue ? newValue.getLoc() : module->getLoc())
-        << "LowerTypes cannot lower symbols on aggregates";
+        << "has a symbol, but no symbols may exist on aggregates "
+           "passed through LowerTypes";
     encounteredError = true;
   }
 
