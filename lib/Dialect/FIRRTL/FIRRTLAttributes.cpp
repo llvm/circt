@@ -131,13 +131,10 @@ bool InnerSymAttr::all_of_props(
 
 size_t InnerSymAttr::numSymbols() const { return getImpl()->props.size(); }
 
-bool InnerSymAttr::isSymbolInvalid() const {
-  return all_of_props(
-      [](InnerSymPropertiesAttr p) { return p.getName().getValue().empty(); });
-}
+bool InnerSymAttr::isSymbolInvalid() const { return getImpl()->props.empty(); }
 
 void InnerSymAttr::forAllSymNames(
-    llvm::function_ref<bool(StringAttr)> callback) {
+    llvm::function_ref<bool(StringAttr)> callback) const {
   for (auto p : getImpl()->props)
     if (!callback(p.getName()))
       break;

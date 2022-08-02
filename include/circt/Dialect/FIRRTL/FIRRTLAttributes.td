@@ -235,6 +235,10 @@ def InnerSymAttr : AttrDef<FIRRTLDialect, "InnerSym"> {
       return get(sym.getContext(),
       {InnerSymPropertiesAttr::get(sym.getContext(), sym, 0,
                         StringAttr::get(sym.getContext(), "public"))});
+    }]>,
+    // Create an empty array, represents an invalid InnerSym.
+    AttrBuilder<(ins),[{
+      return get($_ctxt, {});
     }]>
   ];
   let extraClassDeclaration = [{
@@ -246,7 +250,7 @@ def InnerSymAttr : AttrDef<FIRRTLDialect, "InnerSym"> {
     bool all_of_props(std::function<bool (InnerSymPropertiesAttr)>) const;
     /// Get the number of inner symbols defined.
     size_t numSymbols() const;
-    /// Check if symbol name is invalid.
+    /// Check if this is an empty array, no sym names stored.
     bool isSymbolInvalid() const;
     using iterator = ArrayRef<InnerSymPropertiesAttr>::iterator;
     /// Iterator begin for all the InnerSymProperties.
@@ -255,7 +259,7 @@ def InnerSymAttr : AttrDef<FIRRTLDialect, "InnerSym"> {
     iterator end() const {return getProps().end();}
     /// Invoke the func, for all sym names. Stop the iteration if the func
     /// returns false, else continue.
-    void forAllSymNames(llvm::function_ref<bool (StringAttr)>); 
+    void forAllSymNames(llvm::function_ref<bool (StringAttr)>) const;
   }];
 
   let hasCustomAssemblyFormat = 1;
