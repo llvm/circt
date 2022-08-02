@@ -1,5 +1,9 @@
 # RUN: rm -rf %t
 # RUN: %PYTHON% %s %t 2>&1
+# RUN: esi-cosim-runner.py --schema %t/schema.capnp %s %t/*.sv
+# PY: import support.loopback as test
+# PY: rpc = test.LoopbackTester(rpcschemapath, simhostport)
+# PY: rpc.test_two_chan_loopback(25)
 
 import pycde
 from pycde import (Clock, Input, InputChannel, OutputChannel, module, generator,
@@ -31,7 +35,7 @@ class Consumer:
 
 
 @module
-class Top:
+class top:
   clk = Clock(types.i1)
   rst = Input(types.i1)
 
@@ -43,7 +47,7 @@ class Top:
     esi.Cosim(esi.HostComms, ports.clk, ports.rst)
 
 
-s = pycde.System([Top], name="ESILoopback", output_directory=sys.argv[1])
+s = pycde.System([top], name="ESILoopback", output_directory=sys.argv[1])
 s.print()
 s.generate()
 s.emit_outputs()
