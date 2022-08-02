@@ -111,43 +111,6 @@ public:
   using FIRRTLVisitor<ConcreteT>::visitDecl;
   using FIRRTLVisitor<ConcreteT>::visitStmt;
 
-  // This function simplifies bitindex expressions by pushing them through cat
-  // and mux ops. For example `cat(a, b)[1:0]` where b's width is >= 2 is just
-  // b[1:0]. And `mux(sel, a, b)[3:0]` is `mux(sel, a[3:0], b[3:0])`. This
-  // canonicalization is necessary to eliminate uses of subword InvalidValue
-  // ops so that initialization checking only signals a failure if a bit is
-  // truly not assigned.
-  Value canonicalizeBits(BitsPrimOp op, ImplicitLocOpBuilder builder) {
-    if (!op.getInput().getDefiningOp()) {
-      return op;
-    }
-    if (auto cat = dyn_cast<CatPrimOp>(op.getInput().getDefiningOp())) {
-      if (auto rhsT = cat.getRhs().getType().dyn_cast<IntType>()) {
-        auto lhsLo = (uint32_t)rhsT.getWidth().getValue();
-        auto rhsHi = (uint32_t)lhsLo - 1;
-        if (op.getHi() >= lhsLo && op.getLo() >= lhsLo) {
-          // only indexing the lhs
-          Value bits = canonicalizeBits(builder.create<BitsPrimOp>(cat.getLhs(), op.getHi() - lhsLo, op.getLo() - lhsLo), builder);
-          return bits;
-        } if (op.getHi() <= rhsHi && op.getLo() <= rhsHi) {
-          // only indexing the rhs
-          Value bits = canonicalizeBits(builder.create<BitsPrimOp>(cat.getRhs(), op.getHi(), op.getLo()), builder);
-          return bits;
-        }
-        auto bitsLhs = canonicalizeBits(builder.create<BitsPrimOp>(cat.getLhs(), op.getHi() - lhsLo, 0), builder);
-        auto bitsRhs = canonicalizeBits(builder.create<BitsPrimOp>(cat.getRhs(), rhsHi, op.getLo()), builder);
-        Value newcat = builder.create<CatPrimOp>(bitsLhs, bitsRhs);
-        return newcat;
-      }
-    } else if (auto mux = dyn_cast<MuxPrimOp>(op.getInput().getDefiningOp())) {
-      auto bitsHigh = canonicalizeBits(builder.create<BitsPrimOp>(mux.getHigh(), op.getHi(), op.getLo()), builder);
-      auto bitsLow = canonicalizeBits(builder.create<BitsPrimOp>(mux.getLow(), op.getHi(), op.getLo()), builder);
-      Value newmux = builder.create<MuxPrimOp>(mux.getSel(), bitsHigh, bitsLow);
-      return newmux;
-    }
-    return op;
-  }
-
   // Rewrites a connection where the dest is the bitindex. An expression that
   // looks like `x[hi:lo] <= e` gets rewritten to `x <= cat(xprev[x.w-1:hi+1],
   // e, xprev[lo-1:0])`, where xprev is the most recent connection to x in any
@@ -177,7 +140,7 @@ public:
     // build the high bits
     if (top[0] >= top[1]) {
       // build `cat(xprev[x.w-1:hi], e)`
-      Value x = canonicalizeBits(b.create<BitsPrimOp>(xprev, (uint32_t)top[0], (uint32_t)top[1]), b);
+      Value x = b.createOrFold<BitsPrimOp>(xprev, (uint32_t)top[0], (uint32_t)top[1]);
       cat = b.create<CatPrimOp>(x, connection.getSrc());
     } else {
       // the assignment is assigning all the high bits, so no need to get them from xprev
@@ -186,7 +149,7 @@ public:
     // build the low bits if they are not completely assigned
     if (bot[0] >= bot[1]) {
       // build cat(cat, xprev[lo-1:0])
-      auto x = canonicalizeBits(b.create<BitsPrimOp>(xprev, (uint32_t)bot[0], (uint32_t)bot[1]), b);
+      auto x = b.createOrFold<BitsPrimOp>(xprev, (uint32_t)bot[0], (uint32_t)bot[1]);
       cat = b.create<CatPrimOp>(cat, x);
     }
     // the dest needs to be transformed from a bitindex `x[hi:lo] <=` to just `x <=`
