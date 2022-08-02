@@ -293,3 +293,17 @@ hw.module @icmp_mixed_width(%op0: i5, %op1: i7) -> (sisi: i1, siui: i1, uisi: i1
 // CHECK:   hw.output %[[SISI_OUT]], %[[SIUI_OUT]], %[[UISI_OUT]], %[[UIUI_OUT]] : i1, i1, i1, i1
   hw.output %sisiOut, %siuiOut, %uisiOut, %uiuiOut : i1, i1, i1, i1
 }
+
+// -----
+
+// Signature conversion and other-dialect operations using signedness values.
+// CHECK:      hw.module @sigAndOps(%a: i8, %b: i8, %cond: i1, %clk: i1) -> (out: i8) {
+// CHECK-NEXT:   %[[MUX_OUT:.*]] = comb.mux %cond, %a, %b : i8
+// CHECK-NEXT:   %[[REG_OUT:.*]] = seq.compreg %[[MUX_OUT]], %clk : i8
+// CHECK-NEXT:   hw.output %[[REG_OUT]] : i8
+// CHECK-NEXT: }
+hw.module @sigAndOps(%a: ui8, %b: ui8, %cond: i1, %clk : i1) -> (out: ui8)  {
+    %0 = comb.mux %cond, %a, %b : ui8
+    %1 = seq.compreg %0, %clk: ui8
+    hw.output %1 : ui8
+}

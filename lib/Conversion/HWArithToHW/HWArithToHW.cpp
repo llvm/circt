@@ -15,6 +15,7 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HWArith/HWArithOps.h"
+#include "circt/Dialect/Seq/SeqOps.h"
 #include "mlir/Transforms/DialectConversion.h"
 
 using namespace mlir;
@@ -253,6 +254,53 @@ struct BinaryOpLowering : public OpConversionPattern<BinOp> {
     return success();
   }
 };
+
+template <class TOp>
+struct ArgOpConversion : public OpConversionPattern<TOp> {
+  // Generic pattern which replaces an op by one of the same type, but with
+  // converted operands and result types.
+  using OpConversionPattern<TOp>::OpConversionPattern;
+  using OpAdaptor = typename OpConversionPattern<TOp>::OpAdaptor;
+
+  LogicalResult
+  matchAndRewrite(TOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // Use the generic builder to allow this pattern to apply to all ops.
+    llvm::SmallVector<Type, 4> convResTypes;
+    if (failed(this->getTypeConverter()->convertTypes(op->getResultTypes(),
+                                                      convResTypes)))
+      return failure();
+    rewriter.replaceOpWithNewOp<TOp>(op, convResTypes, adaptor.getOperands(),
+                                     op->getAttrs());
+    return success();
+  }
+};
+
+/// A helper type converter class that automatically populates the relevant
+/// materializations and type conversions for converting HWArith to HW.
+/// Source/target materialization patterns are strictly for materializing
+/// intermediate conversions - all of these will eventually canonicalize out.
+struct HWArithToHWTypeConverter : public TypeConverter {
+  HWArithToHWTypeConverter();
+};
+
+HWArithToHWTypeConverter::HWArithToHWTypeConverter() {
+  // Convert any integer type to signless.
+  addConversion([](IntegerType type) {
+    if (type.isSignless())
+      return type;
+    return IntegerType::get(type.getContext(), type.getIntOrFloatBitWidth(),
+                            IntegerType::SignednessSemantics::Signless);
+  });
+
+  auto addCastOp = [](OpBuilder &builder, Type type, ValueRange values,
+                      Location loc) {
+    return builder.create<hwarith::CastOp>(loc, type, values[0]).getResult();
+  };
+  addSourceMaterialization(addCastOp);
+  addTargetMaterialization(addCastOp);
+}
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -260,6 +308,39 @@ struct BinaryOpLowering : public OpConversionPattern<BinOp> {
 //===----------------------------------------------------------------------===//
 
 namespace {
+
+// Returns true if no type in 'types' is an IntegerType with signedness
+// semantics.
+static bool noSignednessInt(TypeRange types) {
+  return llvm::none_of(types, [](Type t) {
+    if (auto intType = t.dyn_cast<IntegerType>())
+      return !intType.isSignless();
+    return false;
+  });
+}
+
+// Adds the ArgOpConversion for 'TOp' to the set of conversion patterns, as well
+// as a legality check on the conversion status of the op's operands and
+// results.
+template <typename TOp>
+static void addOperandConversion(ConversionTarget &target,
+                                 RewritePatternSet &patterns,
+                                 HWArithToHWTypeConverter &typeConverter) {
+  patterns.add<ArgOpConversion<TOp>>(typeConverter, patterns.getContext());
+  target.addDynamicallyLegalOp<TOp>([](TOp op) {
+    return noSignednessInt(op->getOperandTypes()) &&
+           noSignednessInt(op->getResultTypes());
+  });
+}
+
+template <typename TOp, typename TOp2, typename... OpTs>
+static void addOperandConversion(ConversionTarget &target,
+                                 RewritePatternSet &patterns,
+                                 HWArithToHWTypeConverter &typeConverter) {
+  addOperandConversion<TOp>(target, patterns, typeConverter);
+  addOperandConversion<TOp2, OpTs...>(target, patterns, typeConverter);
+}
+
 class HWArithToHWPass : public HWArithToHWBase<HWArithToHWPass> {
 public:
   void runOnOperation() override {
@@ -267,9 +348,26 @@ public:
 
     ConversionTarget target(getContext());
     RewritePatternSet patterns(&getContext());
+    HWArithToHWTypeConverter typeConverter;
+    mlir::populateFunctionOpInterfaceTypeConversionPattern<hw::HWModuleOp>(
+        patterns, typeConverter);
 
     target.addIllegalDialect<HWArithDialect>();
     target.addLegalDialect<comb::CombDialect, hw::HWDialect>();
+    target.addDynamicallyLegalOp<hw::HWModuleOp, hw::HWModuleExternOp>(
+        [](auto moduleLikeOp) {
+          // Legal if all results and args have no signedness integers.
+          bool legalResults = noSignednessInt(
+              cast<FunctionOpInterface>(moduleLikeOp).getResultTypes());
+          bool legalArgs = noSignednessInt(
+              cast<FunctionOpInterface>(moduleLikeOp).getArgumentTypes());
+          return legalResults && legalArgs;
+        });
+
+    // Generic conversion and legalization patterns for operations that may have
+    // their operands modified from signedness to signless.
+    addOperandConversion<hw::OutputOp, comb::MuxOp, seq::CompRegOp>(
+        target, patterns, typeConverter);
 
     patterns.add<ConstantOpLowering, CastOpLowering, ICmpOpLowering,
                  BinaryOpLowering<AddOp, comb::AddOp>,
