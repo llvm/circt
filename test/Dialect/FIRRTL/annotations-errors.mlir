@@ -180,8 +180,6 @@ firrtl.circuit "DontTouchOnNonReferenceTarget" attributes {
      target = "~DontTouchOnNonReferenceTarget|Submodule"},
     {class = "firrtl.transforms.DontTouchAnnotation",
      target = "~DontTouchOnNonReferenceTarget|DontTouchOnNonReferenceTarget>submodule"}]} {
-  // expected-error @+2 {{targeted by a DontTouchAnotation with target "~DontTouchOnNonReferenceTarget|Submodule"}}
-  // expected-error @+1 {{targeted by a DontTouchAnotation with target "~DontTouchOnNonReferenceTarget|DontTouchOnNonReferenceTarget>submodule"}}
   firrtl.module @Submodule() {}
   firrtl.module @DontTouchOnNonReferenceTarget() {
     firrtl.instance submodule @Submodule()
