@@ -277,60 +277,95 @@ struct ArgResOpConversion : public OpConversionPattern<TOp> {
   }
 };
 
-// A function which recursively converts any integer type with signedness
-// semantics to a signless counterpart.
-static Type removeSignedness(Type type) {
-  return llvm::TypeSwitch<Type, Type>(type)
-      .Case<IntegerType>([](auto type) {
-        if (type.isSignless())
-          return type;
-        return IntegerType::get(type.getContext(), type.getIntOrFloatBitWidth(),
-                                IntegerType::SignednessSemantics::Signless);
-      })
-      .Case<hw::ArrayType>([](auto type) {
-        return hw::ArrayType::get(removeSignedness(type.getElementType()),
-                                  type.getSize());
-      })
-      .Case<hw::StructType>([](auto type) {
-        // Recursively convert each element.
-        llvm::SmallVector<hw::StructType::FieldInfo> convertedElements;
-        for (auto element : type.getElements()) {
-          convertedElements.push_back(
-              {element.name, removeSignedness(element.type)});
-        }
-        return hw::StructType::get(type.getContext(), convertedElements);
-      })
-      .Default([](auto type) { return type; });
-}
-
-// Returns true if any subtype in 'type' has signedness semantics.
-static bool hasSignednessSemantics(Type type) {
-  return llvm::TypeSwitch<Type, bool>(type)
-      .Case<IntegerType>([](auto type) { return !type.isSignless(); })
-      .Case<hw::ArrayType>([](auto type) {
-        return hasSignednessSemantics(type.getElementType());
-      })
-      .Case<hw::StructType>([](auto type) {
-        return llvm::any_of(type.getElements(), [](auto element) {
-          return hasSignednessSemantics(element.type);
-        });
-      })
-      .Default([](auto type) { return false; });
-}
-
-static bool hasSignednessSemantics(TypeRange types) {
-  return llvm::any_of(types, [](Type t) { return hasSignednessSemantics(t); });
-}
-
 /// A helper type converter class that automatically populates the relevant
 /// materializations and type conversions for converting HWArith to HW.
-struct HWArithToHWTypeConverter : public TypeConverter {
+class HWArithToHWTypeConverter : public TypeConverter {
+public:
   HWArithToHWTypeConverter();
+
+  // A function which recursively converts any integer type with signedness
+  // semantics to a signless counterpart.
+  Type removeSignedness(Type type) {
+    auto it = conversionCache.find(type);
+    if (it != conversionCache.end())
+      return it->second.type;
+
+    auto convertedType =
+        llvm::TypeSwitch<Type, Type>(type)
+            .Case<IntegerType>([](auto type) {
+              if (type.isSignless())
+                return type;
+              return IntegerType::get(
+                  type.getContext(), type.getIntOrFloatBitWidth(),
+                  IntegerType::SignednessSemantics::Signless);
+            })
+            .Case<hw::ArrayType>([this](auto type) {
+              return hw::ArrayType::get(removeSignedness(type.getElementType()),
+                                        type.getSize());
+            })
+            .Case<hw::StructType>([this](auto type) {
+              // Recursively convert each element.
+              llvm::SmallVector<hw::StructType::FieldInfo> convertedElements;
+              for (auto element : type.getElements()) {
+                convertedElements.push_back(
+                    {element.name, removeSignedness(element.type)});
+              }
+              return hw::StructType::get(type.getContext(), convertedElements);
+            })
+            .Default([](auto type) { return type; });
+
+    return convertedType;
+  }
+
+  // Returns true if any subtype in 'type' has signedness semantics.
+  bool hasSignednessSemantics(Type type) {
+    auto it = conversionCache.find(type);
+    if (it != conversionCache.end())
+      return it->second.hadSignednessSemantics;
+
+    auto match =
+        llvm::TypeSwitch<Type, bool>(type)
+            .Case<IntegerType>([](auto type) { return !type.isSignless(); })
+            .Case<hw::ArrayType>([this](auto type) {
+              return hasSignednessSemantics(type.getElementType());
+            })
+            .Case<hw::StructType>([this](auto type) {
+              return llvm::any_of(type.getElements(), [this](auto element) {
+                return this->hasSignednessSemantics(element.type);
+              });
+            })
+            .Default([](auto type) { return false; });
+
+    if (match) {
+      // Prime the conversion cache by pre-converting the type.
+      conversionCache[type] = {removeSignedness(type), true};
+    } else {
+      // Prime the conversion cache by not converting the type - this prevents
+      // iterating through the type on future removeSignedness calls for this
+      // type.
+      conversionCache[type] = {type, false};
+    }
+
+    return match;
+  }
+
+  bool hasSignednessSemantics(TypeRange types) {
+    return llvm::any_of(types,
+                        [this](Type t) { return hasSignednessSemantics(t); });
+  }
+
+private:
+  // Memoizations for signedness info and conversions.
+  struct ConvertedType {
+    Type type;
+    bool hadSignednessSemantics;
+  };
+  llvm::DenseMap<Type, ConvertedType> conversionCache;
 };
 
 HWArithToHWTypeConverter::HWArithToHWTypeConverter() {
   // Pass any type through the signedness remover.
-  addConversion([](Type type) { return removeSignedness(type); });
+  addConversion([this](Type type) { return removeSignedness(type); });
 }
 
 // Adds the ArgResOpConversion for 'TOp' to the set of conversion patterns, as
@@ -341,9 +376,9 @@ static void addOperandConversion(ConversionTarget &target,
                                  RewritePatternSet &patterns,
                                  HWArithToHWTypeConverter &typeConverter) {
   patterns.add<ArgResOpConversion<TOp>>(typeConverter, patterns.getContext());
-  target.addDynamicallyLegalOp<TOp>([](TOp op) {
-    return !hasSignednessSemantics(op->getOperandTypes()) &&
-           !hasSignednessSemantics(op->getResultTypes());
+  target.addDynamicallyLegalOp<TOp>([&](TOp op) {
+    return !typeConverter.hasSignednessSemantics(op->getOperandTypes()) &&
+           !typeConverter.hasSignednessSemantics(op->getResultTypes());
   });
 }
 
@@ -377,11 +412,11 @@ public:
     target.addIllegalDialect<HWArithDialect>();
     target.addLegalDialect<comb::CombDialect, hw::HWDialect>();
     target.addDynamicallyLegalOp<hw::HWModuleOp, hw::HWModuleExternOp>(
-        [](auto moduleLikeOp) {
+        [&](auto moduleLikeOp) {
           // Legal if all results and args have no signedness integers.
-          bool legalResults = !hasSignednessSemantics(
+          bool legalResults = !typeConverter.hasSignednessSemantics(
               cast<FunctionOpInterface>(moduleLikeOp).getResultTypes());
-          bool legalArgs = !hasSignednessSemantics(
+          bool legalArgs = !typeConverter.hasSignednessSemantics(
               cast<FunctionOpInterface>(moduleLikeOp).getArgumentTypes());
           return legalResults && legalArgs;
         });
