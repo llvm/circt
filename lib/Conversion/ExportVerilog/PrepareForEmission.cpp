@@ -568,7 +568,9 @@ void ExportVerilog::prepareHWModule(Block &block,
       // it, we are good to generate a wire.
       if (!isProceduralRegion ||
           (isProceduralRegion && hoistNonSideEffectExpr(&op))) {
-        lowerUsersToTemporaryWire(op);
+        // If op is moved to a non-procedural region, create a temporary wire.
+        if (!op.getParentOp()->hasTrait<ProceduralRegion>())
+          lowerUsersToTemporaryWire(op);
 
         // If we're in a procedural region, we move on to the next op in the
         // block. The expression splitting and canonicalization below will

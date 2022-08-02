@@ -53,3 +53,23 @@ hw.module @large_use_in_procedural_successive(%clock: i1, %a: i1) {
     }
   }
 }
+
+// CHECK-LABEL: module dont_spill_to_procedural_regions
+hw.module @dont_spill_to_procedural_regions(%z: i10) -> () {
+  %r1 = sv.reg : !hw.inout<i1>
+  %r2 = sv.reg : !hw.inout<i10>
+  // CHECK: initial begin
+  // CHECK-NEXT:   `ifdef BAR
+  // CHECK-NEXT:      r1 <= r2 + r2 + r2 + r2 + r2 == z;
+  // CHECK-NEXT:   `endif
+  // CHECK-NEXT: end // initial
+  sv.initial {
+    %x = sv.read_inout %r2: !hw.inout<i10>
+    sv.ifdef.procedural "BAR" {
+      %2 = comb.add %x, %x, %x, %x, %x : i10
+      %3 = comb.icmp eq %2, %z: i10
+      sv.passign %r1, %3: i1
+    }
+  }
+  hw.output
+}
