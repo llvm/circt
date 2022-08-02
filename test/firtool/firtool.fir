@@ -266,7 +266,7 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
 ; VERILOG-NEXT:    output a_q);
 ; VERILOG:         always @(posedge clock)
 ; VERILOG-NEXT:      r <= a_d;
-; VERILOG-NEXT:    assign a_q = r;
+; VERILOG:         assign a_q = r;
 
   module MultibitMux :
     input a : UInt<1>[3]

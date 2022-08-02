@@ -26,6 +26,7 @@
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/HW/Namespace.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Support/BackedgeBuilder.h"
 #include "circt/Support/Namespace.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -1404,9 +1405,6 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult setLoweringTo(Operation *orig, CtorArgTypes... args);
   Backedge createBackedge(Value orig, Type type);
   bool updateIfBackedge(Value dest, Value src);
-  void emitRandomizePrologIfNeeded();
-  void initializeRegister(Value reg, llvm::Optional<std::pair<Value, Value>>
-                                         asyncRegResetInitPair = llvm::None);
 
   void runWithInsertionPointAtEndOfBlock(std::function<void(void)> fn,
                                          Region &region);
@@ -1432,7 +1430,6 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
                                  std::function<void(void)> elseCtor = {});
   void addIfProceduralBlock(Value cond, std::function<void(void)> thenCtor,
                             std::function<void(void)> elseCtor = {});
-  void addToOrderedBlock(std::function<void(void)> body);
   Value getExtOrTruncAggregateValue(Value array, FIRRTLType sourceType,
                                     FIRRTLType destType, bool allowTruncate);
 
@@ -1573,6 +1570,8 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
       StringAttr nameAttr, bool isConcurrent, EventControl eventControl);
 
   LogicalResult visitStmt(SkipOp op);
+
+  void lowerRegConnect(const FieldRef &fieldRef, Value dest, Value srcVal);
   LogicalResult visitStmt(ConnectOp op);
   LogicalResult visitStmt(StrictConnectOp op);
   LogicalResult visitStmt(ForceOp op);
@@ -1622,27 +1621,10 @@ private:
   llvm::SmallDenseMap<std::pair<Block *, Attribute>, sv::IfDefOp> ifdefBlocks;
   llvm::SmallDenseMap<Block *, sv::InitialOp> initialBlocks;
 
-  llvm::SmallDenseMap<Block *, sv::IfDefProceduralOp> randomizeRegInitIfOp;
-  llvm::SmallDenseMap<std::pair<Block *, Value>, sv::IfOp>
-      asyncRegPostRandomizationIfOp;
-  llvm::SmallDenseMap<Block *, sv::OrderedOutputOp> orderedOutputOp;
-
   /// This is a set of wires that get inserted as an artifact of the
   /// lowering process.  LowerToHW should attempt to clean these up after
   /// lowering.
   SmallVector<sv::WireOp> tmpWiresToOptimize;
-
-  /// This is true if we've emitted `INIT_RANDOM_PROLOG_ into an initial
-  /// block in this module already.
-  bool randomizePrologEmitted;
-
-  /// This is true if we've emitted `FIRRTL_BEFORE_INITIAL and
-  /// `FIRRTL_AFTER_INITIAL into an initial block in this module already.
-  bool areFIRRTLBeforeAndAfterInitialEmitted;
-
-  /// This is a map from block to a pair of a random value and its unused
-  /// bits. It is used to reduce the number of random value.
-  DenseMap<Block *, std::pair<Value, unsigned>> blockRandomValueAndRemain;
 
   /// A namespace that can be used to generte new symbol names that are unique
   /// within this module.
@@ -1656,6 +1638,11 @@ private:
   /// so that a combinational cycles of backedges, the one backedge that gets
   /// replaced with an undriven wire is consistent.
   llvm::MapVector<Value, Value> backedges;
+
+  /// Back-edges for register.  A mapping from the operation defining the
+  /// FIRRTL register to the backedge which represents the next value, along
+  /// with the value to which the register was lowered.
+  DenseMap<Operation *, seq::FirRegOp> regMapping;
 };
 } // end anonymous namespace
 
@@ -1670,8 +1657,6 @@ LogicalResult FIRRTLLowering::run() {
   // through each operation, lowering each in turn if we can, introducing
   // casts if we cannot.
   auto &body = theModule.getBody();
-  randomizePrologEmitted = false;
-  areFIRRTLBeforeAndAfterInitialEmitted = false;
 
   SmallVector<Operation *, 16> opsToRemove;
 
@@ -2303,22 +2288,6 @@ void FIRRTLLowering::addToIfDefBlock(StringRef cond,
   }
 }
 
-void FIRRTLLowering::addToOrderedBlock(std::function<void(void)> body) {
-  auto op = orderedOutputOp.lookup(builder.getBlock());
-  if (op) {
-    runWithInsertionPointAtEndOfBlock(body, op.getRegion());
-
-    // Move the earlier sv.ordered block(s) down to where the last would have
-    // been inserted.  This ensures that any values used by the sv.ordered
-    // blocks are defined ahead of the uses, which leads to better generated
-    // Verilog.
-    op->moveBefore(builder.getInsertionBlock(), builder.getInsertionPoint());
-  } else {
-    orderedOutputOp[builder.getBlock()] =
-        builder.create<sv::OrderedOutputOp>(body);
-  }
-}
-
 void FIRRTLLowering::addToInitialBlock(std::function<void(void)> body) {
   auto op = initialBlocks.lookup(builder.getBlock());
   if (op) {
@@ -2588,210 +2557,6 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
   return setLowering(op, operand);
 }
 
-/// Emit a `INIT_RANDOM_PROLOG_ statement into the current block.  This should
-/// already be within an `ifndef SYNTHESIS + initial block.
-void FIRRTLLowering::emitRandomizePrologIfNeeded() {
-  if (randomizePrologEmitted)
-    return;
-
-  builder.create<sv::VerbatimOp>("`INIT_RANDOM_PROLOG_");
-  randomizePrologEmitted = true;
-}
-
-void FIRRTLLowering::initializeRegister(
-    Value reg, llvm::Optional<std::pair<Value, Value>> asyncRegResetInitPair) {
-  typedef std::pair<Attribute, std::pair<unsigned, unsigned>> SymbolAndRange;
-
-  // The point in the design where we should add randomization register
-  // definitions.  This is at the top of the "`ifndef SYNTHESIS" block.
-  mlir::OpBuilder::InsertPoint regInsertionPoint;
-
-  auto regDef = cast<sv::RegOp>(reg.getDefiningOp());
-  if (!regDef->hasAttrOfType<StringAttr>("inner_sym"))
-    regDef->setAttr("inner_sym", builder.getStringAttr(moduleNamespace.newName(
-                                     Twine("__") + regDef.getName() + "__")));
-  auto regDefSym =
-      hw::InnerRefAttr::get(theModule.getNameAttr(), regDef.getInnerSymAttr());
-
-  // Construct and return a new reference to `RANDOM.  It is always a 32-bit
-  // unsigned expression.  Calls to $random have side effects, so we use
-  // VerbatimExprSEOp.
-  constexpr unsigned randomWidth = 32;
-  auto getRandom32Val = [&](Twine suffix = "") -> Value {
-    sv::RegOp randReg;
-    {
-      OpBuilder::InsertionGuard topBuilder(builder);
-      builder.restoreInsertionPoint(regInsertionPoint);
-      randReg = builder.create<sv::RegOp>(
-          reg.getLoc(), builder.getIntegerType(randomWidth),
-          /*name=*/builder.getStringAttr("_RANDOM"),
-          /*inner_sym=*/
-          builder.getStringAttr(moduleNamespace.newName(Twine("_RANDOM"))));
-    }
-
-    builder.create<sv::VerbatimOp>(
-        builder.getStringAttr(Twine("{{0}} = {`RANDOM};")), ValueRange{},
-        builder.getArrayAttr({hw::InnerRefAttr::get(
-            theModule.getNameAttr(), randReg.getInnerSymAttr())}));
-
-    return randReg.getResult();
-  };
-
-  auto getRandomValues = [&](IntegerType type,
-                             SmallVector<SymbolAndRange> &values) {
-    auto width = type.getWidth();
-    assert(width != 0 && "zero bit width's not supported");
-    while (width > 0) {
-      auto &randomValueAndRemain =
-          blockRandomValueAndRemain[builder.getBlock()];
-
-      // If there are no bits left, then generate a new random value.
-      if (!randomValueAndRemain.second)
-        randomValueAndRemain = {getRandom32Val("foo"), randomWidth};
-
-      auto reg = cast<sv::RegOp>(randomValueAndRemain.first.getDefiningOp());
-
-      auto symbol =
-          hw::InnerRefAttr::get(theModule.getNameAttr(), reg.getInnerSymAttr());
-      unsigned low = randomWidth - randomValueAndRemain.second;
-      unsigned high = randomWidth - 1;
-      if (width <= randomValueAndRemain.second)
-        high = width - 1 + low;
-      unsigned consumed = high - low + 1;
-      values.push_back({symbol, {high, low}});
-      randomValueAndRemain.second -= consumed;
-      width -= consumed;
-    }
-  };
-
-  // Get a random value with the specified width, combining or truncating
-  // 32-bit units as necessary.
-  auto emitRandomInit = [&](Value dest, Type type, Twine accessor) {
-    auto intType = type.cast<IntegerType>();
-    if (intType.getWidth() == 0)
-      return;
-
-    SmallVector<SymbolAndRange> values;
-    getRandomValues(intType, values);
-
-    SmallString<32> rhs(("{{0}}" + accessor + " = ").str());
-    unsigned i = 1;
-    SmallVector<Attribute, 4> symbols({regDefSym});
-    if (values.size() > 1)
-      rhs.append("{");
-    for (auto [value, range] : llvm::reverse(values)) {
-      symbols.push_back(value);
-      auto [high, low] = range;
-      if (i > 1)
-        rhs.append(", ");
-      rhs.append(("{{" + Twine(i++) + "}}").str());
-
-      // This uses all bits of the random value. Emit without part select.
-      if (high == randomWidth - 1 && low == 0)
-        continue;
-
-      // Emit a single bit part select, e.g., emit "[0]" and not "[0:0]".
-      if (high == low) {
-        rhs.append(("[" + Twine(high) + "]").str());
-        continue;
-      }
-
-      // Emit a part select, e.g., "[4:2]"
-      rhs.append(
-          ("[" + Twine(range.first) + ":" + Twine(range.second) + "]").str());
-    }
-    if (values.size() > 1)
-      rhs.append("}");
-    rhs.append(";");
-
-    builder.create<sv::VerbatimOp>(rhs, ValueRange{},
-                                   builder.getArrayAttr(symbols));
-  };
-
-  // Randomly initialize everything in the register. If the register
-  // is an aggregate type, then assign random values to all its
-  // constituent ground types.
-  auto randomInit = [&]() {
-    auto type = reg.getType().dyn_cast<hw::InOutType>().getElementType();
-    std::function<void(Value, Type, Twine)> recurse = [&](Value reg, Type type,
-                                                          Twine accessor) {
-      TypeSwitch<Type>(type)
-          .Case<hw::UnpackedArrayType, hw::ArrayType>([&](auto a) {
-            for (size_t i = 0, e = a.getSize(); i != e; ++i)
-              recurse(reg, a.getElementType(), accessor + "[" + Twine(i) + "]");
-          })
-          .Case<hw::StructType>([&](hw::StructType s) {
-            for (auto elem : s.getElements())
-              recurse(reg, elem.type, accessor + "." + elem.name.getValue());
-          })
-          .Default([&](auto type) { emitRandomInit(reg, type, accessor); });
-    };
-    recurse(reg, type, "");
-  };
-
-  // Emit the initializer expression for simulation that fills it with random
-  // value.
-
-  addToIfDefBlock("SYNTHESIS", std::function<void()>(), [&]() {
-    addToOrderedBlock([&]() {
-      addToIfDefBlock(
-          "RANDOMIZE_REG_INIT",
-          [&]() { regInsertionPoint = builder.saveInsertionPoint(); },
-          std::function<void()>());
-
-      addToIfDefBlock(
-          "FIRRTL_BEFORE_INITIAL",
-          [&] {
-            if (!areFIRRTLBeforeAndAfterInitialEmitted)
-              builder.create<sv::VerbatimOp>("`FIRRTL_BEFORE_INITIAL");
-          },
-          std::function<void()>());
-
-      addToInitialBlock([&]() {
-        emitRandomizePrologIfNeeded();
-        circuitState.used_RANDOMIZE_REG_INIT = 1;
-        auto *block = builder.getBlock();
-
-        // Randomized values are assigned to registers in `ifdef
-        // RANDOMIZE_REG_INIT block.
-        auto &op = randomizeRegInitIfOp[block];
-        if (!op)
-          op = builder.create<sv::IfDefProceduralOp>("RANDOMIZE_REG_INIT",
-                                                     [&]() {});
-        runWithInsertionPointAtEndOfBlock(randomInit, op.getThenRegion());
-
-        // If the register is async reset, we need to insert extra
-        // initialization in post-randomization so that we can set the reset
-        // value to register if the reset signal is enabled.
-        if (asyncRegResetInitPair.hasValue()) {
-          Value resetSignal, resetValue;
-          std::tie(resetSignal, resetValue) = *asyncRegResetInitPair;
-          // Merge if op if their reset values are same.
-          auto &op = asyncRegPostRandomizationIfOp[{block, resetSignal}];
-          if (!op)
-            builder.create<sv::IfDefProceduralOp>("RANDOMIZE", [&] {
-              op = builder.create<sv::IfOp>(resetSignal, [&]() {});
-            });
-
-          runWithInsertionPointAtEndOfBlock(
-              [&]() { builder.create<sv::BPAssignOp>(reg, resetValue); },
-              op.getThenRegion());
-        }
-      });
-
-      addToIfDefBlock(
-          "FIRRTL_AFTER_INITIAL",
-          [&] {
-            if (!areFIRRTLBeforeAndAfterInitialEmitted) {
-              builder.create<sv::VerbatimOp>("`FIRRTL_AFTER_INITIAL");
-              areFIRRTLBeforeAndAfterInitialEmitted = true;
-            }
-          },
-          std::function<void()>());
-    });
-  });
-}
-
 LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
   auto resultType = lowerType(op.getResult().getType());
   if (!resultType)
@@ -2799,16 +2564,23 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
   if (resultType.isInteger(0))
     return setLowering(op, Value());
 
+  Value clockVal = getLoweredValue(op.getClockVal());
+  if (!clockVal)
+    return failure();
+
   // Add symbol if DontTouch annotation present.
   auto symName = getInnerSymName(op);
   if (AnnotationSet::removeAnnotations(op, dontTouchAnnoClass) && !symName)
     symName = op.getNameAttr();
-  auto regResult =
-      builder.create<sv::RegOp>(resultType, op.getNameAttr(), symName);
-  (void)setLowering(op, regResult);
 
-  initializeRegister(regResult);
-
+  // Create a reg op, wiring itself to its input.
+  Backedge inputEdge = backedgeBuilder.get(resultType);
+  auto reg = builder.create<seq::FirRegOp>(inputEdge, clockVal,
+                                           op.getNameAttr(), symName);
+  inputEdge.setValue(reg);
+  circuitState.used_RANDOMIZE_REG_INIT = 1;
+  regMapping.try_emplace(op, reg);
+  (void)setLowering(op, reg);
   return success();
 }
 
@@ -2831,27 +2603,18 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
   auto symName = getInnerSymName(op);
   if (AnnotationSet::removeAnnotations(op, dontTouchAnnoClass) && !symName)
     symName = op.getNameAttr();
-  auto regResult =
-      builder.create<sv::RegOp>(resultType, op.getNameAttr(), symName);
-  (void)setLowering(op, regResult);
 
-  auto resetFn = [&]() {
-    builder.create<sv::PAssignOp>(regResult, resetValue);
-  };
+  // Create a reg op, wiring itself to its input.
+  bool isAsync = op.getResetSignal().getType().isa<AsyncResetType>();
+  Backedge inputEdge = backedgeBuilder.get(resultType);
+  auto reg =
+      builder.create<seq::FirRegOp>(inputEdge, clockVal, op.getNameAttr(),
+                                    resetSignal, resetValue, symName, isAsync);
+  inputEdge.setValue(reg);
+  circuitState.used_RANDOMIZE_REG_INIT = 1;
+  regMapping.try_emplace(op, reg);
+  (void)setLowering(op, reg);
 
-  if (op.getResetSignal().getType().isa<AsyncResetType>()) {
-    addToAlwaysBlock(sv::EventControl::AtPosEdge, clockVal,
-                     ::ResetType::AsyncReset, sv::EventControl::AtPosEdge,
-                     resetSignal, std::function<void()>(), resetFn);
-  } else { // sync reset
-    addToAlwaysBlock(sv::EventControl::AtPosEdge, clockVal,
-                     ::ResetType::SyncReset, sv::EventControl::AtPosEdge,
-                     resetSignal, std::function<void()>(), resetFn);
-  }
-  llvm::Optional<std::pair<Value, Value>> asyncRegResetInitPair;
-  if (op.getResetSignal().getType().isa<AsyncResetType>())
-    asyncRegResetInitPair = {resetSignal, resetValue};
-  initializeRegister(regResult, asyncRegResetInitPair);
   return success();
 }
 
@@ -3672,6 +3435,95 @@ LogicalResult FIRRTLLowering::visitStmt(SkipOp op) {
   return success();
 }
 
+void FIRRTLLowering::lowerRegConnect(const FieldRef &fieldRef, Value dest,
+                                     Value srcVal) {
+  auto *regOp = fieldRef.getValue().getDefiningOp();
+  // Construct the updated value.  For each access, starting with the
+  // outermost ones, the new value is computed by updating one of its
+  // fields. The value of the field itself is determined by updating the
+  // previous value according to the subsequent access operation.
+  std::function<Value(Value, Type, unsigned)> inject = [&](Value base,
+                                                           Type type,
+                                                           unsigned fieldID) {
+    if (auto bundle = type.dyn_cast<BundleType>()) {
+      auto index = bundle.getIndexForFieldID(fieldID);
+      fieldID -= bundle.getFieldID(index);
+
+      auto ty = hw::type_cast<hw::StructType>(base.getType());
+      auto field = ty.getElements()[index];
+      auto name = field.name;
+
+      // Determine the value of the new field.
+      Value value;
+      if (fieldID == 0) {
+        value = srcVal;
+      } else {
+        auto oldField =
+            builder.create<hw::StructExtractOp>(field.type, base, field.name);
+        value = inject(oldField, bundle.getElementType(index), fieldID);
+      }
+
+      return builder.create<hw::StructInjectOp>(ty, base, name, value)
+          .getResult();
+
+    } else {
+      auto vector = type.cast<FVectorType>();
+      auto index = vector.getIndexForFieldID(fieldID);
+      fieldID -= vector.getFieldID(index);
+
+      auto ty = hw::type_cast<hw::ArrayType>(base.getType());
+      auto elemTy = ty.getElementType();
+
+      auto size = ty.getSize();
+      auto indexWidth = getBitWidthFromVectorSize(size);
+
+      // Determine the value of the new field.
+      Value value;
+      if (fieldID == 0) {
+        value = srcVal;
+      } else {
+        auto oldField = builder.create<hw::ArrayGetOp>(
+            elemTy, base,
+            builder.create<hw::ConstantOp>(APInt(indexWidth, index)));
+        value = inject(oldField, vector.getElementType(), fieldID);
+      }
+
+      // Build a new array by concatenating predecessors, the new
+      // value and any successors from the old array.
+      if (index == 0 && size == 1)
+        return builder.create<hw::ArrayCreateOp>(value).getResult();
+
+      SmallVector<Value> elements;
+      if (index != 0) {
+        elements.push_back(builder.create<hw::ArraySliceOp>(
+            hw::ArrayType::get(elemTy, index), base,
+            getOrCreateIntConstant(indexWidth, 0)));
+      }
+      elements.push_back(builder.create<hw::ArrayCreateOp>(value));
+      if (index + 1 != size) {
+        elements.push_back(builder.create<hw::ArraySliceOp>(
+            hw::ArrayType::get(elemTy, size - index - 1), base,
+            getOrCreateIntConstant(indexWidth, index + 1)));
+      }
+
+      return builder.create<hw::ArrayConcatOp>(elements).getResult();
+    }
+  };
+
+  // Update the last value mapped for the register.
+  auto it = regMapping.find(regOp);
+  assert(it != regMapping.end() && "register not defined");
+  auto seqReg = it->second;
+
+  auto fieldID = fieldRef.getFieldID();
+  Value nextValue = srcVal;
+  if (fieldID != 0) {
+    nextValue =
+        inject(seqReg.getNext(), regOp->getResult(0).getType(), fieldID);
+  }
+  seqReg.getNextMutable().assign(nextValue);
+}
+
 LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
   auto dest = op.getDest();
   // The source can be a smaller integer, extend it as appropriate if so.
@@ -3684,39 +3536,15 @@ LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
   if (!destVal)
     return failure();
 
+  auto fieldRef = getFieldRefFromValue(dest);
+  auto definingOp = fieldRef.getValue().getDefiningOp();
+  if (isa<RegOp>(definingOp) || isa<RegResetOp>(definingOp)) {
+    lowerRegConnect(fieldRef, dest, srcVal);
+    return success();
+  }
+
   if (!destVal.getType().isa<hw::InOutType>())
     return op.emitError("destination isn't an inout type");
-
-  auto *definingOp = getFieldRefFromValue(dest).getValue().getDefiningOp();
-
-  // If this is an assignment to a register, then the connect implicitly
-  // happens under the clock that gates the register.
-  if (auto regOp = dyn_cast_or_null<RegOp>(definingOp)) {
-    Value clockVal = getLoweredValue(regOp.getClockVal());
-    if (!clockVal)
-      return failure();
-
-    addToAlwaysBlock(clockVal,
-                     [&]() { builder.create<sv::PAssignOp>(destVal, srcVal); });
-    return success();
-  }
-
-  // If this is an assignment to a RegReset, then the connect implicitly
-  // happens under the clock and reset that gate the register.
-  if (auto regResetOp = dyn_cast_or_null<RegResetOp>(definingOp)) {
-    Value clockVal = getLoweredValue(regResetOp.getClockVal());
-    Value resetSignal = getLoweredValue(regResetOp.getResetSignal());
-    if (!clockVal || !resetSignal)
-      return failure();
-
-    addToAlwaysBlock(sv::EventControl::AtPosEdge, clockVal,
-                     regResetOp.getResetSignal().getType().isa<AsyncResetType>()
-                         ? ::ResetType::AsyncReset
-                         : ::ResetType::SyncReset,
-                     sv::EventControl::AtPosEdge, resetSignal,
-                     [&]() { builder.create<sv::PAssignOp>(destVal, srcVal); });
-    return success();
-  }
 
   builder.create<sv::AssignOp>(destVal, srcVal);
   return success();
@@ -3732,6 +3560,13 @@ LogicalResult FIRRTLLowering::visitStmt(StrictConnectOp op) {
   if (!destVal)
     return failure();
 
+  auto fieldRef = getFieldRefFromValue(dest);
+  auto definingOp = fieldRef.getValue().getDefiningOp();
+  if (isa<RegOp>(definingOp) || isa<RegResetOp>(definingOp)) {
+    lowerRegConnect(fieldRef, dest, srcVal);
+    return success();
+  }
+
   // If this connect is driving a value that is currently a backedge, record
   // that the source is the value of the backedge.
   if (updateIfBackedge(destVal, srcVal))
@@ -3739,37 +3574,6 @@ LogicalResult FIRRTLLowering::visitStmt(StrictConnectOp op) {
 
   if (!destVal.getType().isa<hw::InOutType>())
     return op.emitError("destination isn't an inout type");
-
-  auto *definingOp = getFieldRefFromValue(dest).getValue().getDefiningOp();
-
-  // If this is an assignment to a register, then the connect implicitly
-  // happens under the clock that gates the register.
-  if (auto regOp = dyn_cast_or_null<RegOp>(definingOp)) {
-    Value clockVal = getLoweredValue(regOp.getClockVal());
-    if (!clockVal)
-      return failure();
-
-    addToAlwaysBlock(clockVal,
-                     [&]() { builder.create<sv::PAssignOp>(destVal, srcVal); });
-    return success();
-  }
-
-  // If this is an assignment to a RegReset, then the connect implicitly
-  // happens under the clock and reset that gate the register.
-  if (auto regResetOp = dyn_cast_or_null<RegResetOp>(definingOp)) {
-    Value clockVal = getLoweredValue(regResetOp.getClockVal());
-    Value resetSignal = getLoweredValue(regResetOp.getResetSignal());
-    if (!clockVal || !resetSignal)
-      return failure();
-
-    addToAlwaysBlock(sv::EventControl::AtPosEdge, clockVal,
-                     regResetOp.getResetSignal().getType().isa<AsyncResetType>()
-                         ? ::ResetType::AsyncReset
-                         : ::ResetType::SyncReset,
-                     sv::EventControl::AtPosEdge, resetSignal,
-                     [&]() { builder.create<sv::PAssignOp>(destVal, srcVal); });
-    return success();
-  }
 
   builder.create<sv::AssignOp>(destVal, srcVal);
   return success();
