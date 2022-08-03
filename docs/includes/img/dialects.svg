@@ -11,12 +11,12 @@
 <polygon fill="white" stroke="transparent" points="-4,4 -4,-829 693.34,-829 693.34,4 -4,4"/>
 <g id="clust1" class="cluster">
 <title>cluster_mlir</title>
-<polygon fill="none" stroke="black" points="47.72,-726 47.72,-817 365.72,-817 365.72,-726 47.72,-726"/>
-<text text-anchor="middle" x="206.72" y="-801.8" font-family="Times,serif" font-size="14.00">Upstream MLIR</text>
+<polygon fill="none" stroke="black" points="51.72,-726 51.72,-817 369.72,-817 369.72,-726 51.72,-726"/>
+<text text-anchor="middle" x="210.72" y="-801.8" font-family="Times,serif" font-size="14.00">Upstream MLIR</text>
 </g>
 <g id="clust2" class="cluster">
 <title>cluster_std_arith_dialect</title>
-<polygon fill="none" stroke="black" points="55.72,-734 55.72,-786 223.72,-786 223.72,-734 55.72,-734"/>
+<polygon fill="none" stroke="black" points="59.72,-734 59.72,-786 227.72,-786 227.72,-734 59.72,-734"/>
 </g>
 <g id="clust3" class="cluster">
 <title>cluster_circt</title>
@@ -31,8 +31,8 @@
 <!-- SCF -->
 <g id="node1" class="node">
 <title>SCF</title>
-<polygon fill="#beaed4" stroke="black" points="357.72,-778 303.72,-778 303.72,-742 357.72,-742 357.72,-778"/>
-<text text-anchor="middle" x="330.72" y="-756.3" font-family="Times,serif" font-size="14.00">SCF</text>
+<polygon fill="#beaed4" stroke="black" points="361.72,-778 307.72,-778 307.72,-742 361.72,-742 361.72,-778"/>
+<text text-anchor="middle" x="334.72" y="-756.3" font-family="Times,serif" font-size="14.00">SCF</text>
 </g>
 <!-- Calyx -->
 <g id="node6" class="node">
@@ -46,36 +46,36 @@
 <!-- SCF&#45;&gt;Calyx -->
 <g id="edge1" class="edge">
 <title>SCF&#45;&gt;Calyx</title>
-<path fill="none" stroke="black" d="M333.11,-741.92C336.94,-708.14 341.13,-631.52 309.72,-579 304.73,-570.65 287.5,-558.37 270.7,-547.72"/>
-<polygon fill="black" stroke="black" points="272.37,-544.64 262.03,-542.34 268.68,-550.59 272.37,-544.64"/>
+<path fill="none" stroke="black" d="M333.88,-741.84C332.48,-720.26 328.84,-682.26 319.72,-651 309.86,-617.21 306.82,-607.9 286.72,-579 279.6,-568.75 270.37,-558.75 261.62,-550.24"/>
+<polygon fill="black" stroke="black" points="263.8,-547.48 254.12,-543.18 259,-552.58 263.8,-547.48"/>
 </g>
 <!-- Affine -->
 <g id="node2" class="node">
 <title>Affine</title>
-<polygon fill="#beaed4" stroke="black" points="289.72,-778 231.72,-778 231.72,-742 289.72,-742 289.72,-778"/>
-<text text-anchor="middle" x="260.72" y="-756.3" font-family="Times,serif" font-size="14.00">Affine</text>
+<polygon fill="#beaed4" stroke="black" points="293.72,-778 235.72,-778 235.72,-742 293.72,-742 293.72,-778"/>
+<text text-anchor="middle" x="264.72" y="-756.3" font-family="Times,serif" font-size="14.00">Affine</text>
 </g>
-<!-- StaticLogic -->
+<!-- Pipeline -->
 <g id="node8" class="node">
-<title>StaticLogic</title>
-<g id="a_node8"><a xlink:href="https://circt.llvm.org/docs/Dialects/StaticLogic/" xlink:title="StaticLogic">
-<polygon fill="white" stroke="black" points="302.22,-615 205.22,-615 205.22,-579 302.22,-579 302.22,-615"/>
-<text text-anchor="middle" x="253.72" y="-593.3" font-family="Times,serif" font-size="14.00">StaticLogic</text>
+<title>Pipeline</title>
+<g id="a_node8"><a xlink:href="https://circt.llvm.org/docs/Dialects/Pipeline/" xlink:title="Pipeline">
+<polygon fill="white" stroke="black" points="279.72,-615 205.72,-615 205.72,-579 279.72,-579 279.72,-615"/>
+<text text-anchor="middle" x="242.72" y="-593.3" font-family="Times,serif" font-size="14.00">Pipeline</text>
 </a>
 </g>
 </g>
-<!-- Affine&#45;&gt;StaticLogic -->
+<!-- Affine&#45;&gt;Pipeline -->
 <g id="edge2" class="edge">
-<title>Affine&#45;&gt;StaticLogic</title>
-<path fill="none" stroke="black" d="M245.63,-741.76C240.1,-736.18 233.52,-730.33 226.72,-726 218.3,-720.63 211.39,-726.22 205.72,-718 188.83,-693.48 195.01,-678.78 205.72,-651 209.83,-640.36 217.17,-630.53 224.89,-622.3"/>
-<polygon fill="black" stroke="black" points="227.39,-624.75 232.01,-615.21 222.46,-619.78 227.39,-624.75"/>
+<title>Affine&#45;&gt;Pipeline</title>
+<path fill="none" stroke="black" d="M249.63,-741.76C244.1,-736.18 237.52,-730.33 230.72,-726 222.3,-720.63 215.39,-726.22 209.72,-718 192.83,-693.48 201.54,-679.63 209.72,-651 212.44,-641.51 217.4,-632.06 222.66,-623.83"/>
+<polygon fill="black" stroke="black" points="225.65,-625.67 228.4,-615.43 219.87,-621.72 225.65,-625.67"/>
 </g>
 <!-- Scheduling -->
 <g id="node26" class="node">
 <title>Scheduling</title>
 <g id="a_node26"><a xlink:href="https://circt.llvm.org/docs/Scheduling/" xlink:title="Scheduling">
-<polygon fill="#fdc086" stroke="black" points="308.72,-687 212.72,-687 212.72,-651 308.72,-651 308.72,-687"/>
-<text text-anchor="middle" x="260.72" y="-665.3" font-family="Times,serif" font-size="14.00">Scheduling</text>
+<polygon fill="#fdc086" stroke="black" points="312.72,-687 216.72,-687 216.72,-651 312.72,-651 312.72,-687"/>
+<text text-anchor="middle" x="264.72" y="-665.3" font-family="Times,serif" font-size="14.00">Scheduling</text>
 </a>
 </g>
 </g>
@@ -83,14 +83,14 @@
 <!-- Standard -->
 <g id="node3" class="node">
 <title>Standard</title>
-<polygon fill="#beaed4" stroke="black" points="215.22,-778 132.22,-778 132.22,-742 215.22,-742 215.22,-778"/>
-<text text-anchor="middle" x="173.72" y="-756.3" font-family="Times,serif" font-size="14.00">Standard</text>
+<polygon fill="#beaed4" stroke="black" points="219.22,-778 136.22,-778 136.22,-742 219.22,-742 219.22,-778"/>
+<text text-anchor="middle" x="177.72" y="-756.3" font-family="Times,serif" font-size="14.00">Standard</text>
 </g>
 <!-- Arith -->
 <g id="node4" class="node">
 <title>Arith</title>
-<polygon fill="#beaed4" stroke="black" points="117.72,-778 63.72,-778 63.72,-742 117.72,-742 117.72,-778"/>
-<text text-anchor="middle" x="90.72" y="-756.3" font-family="Times,serif" font-size="14.00">Arith</text>
+<polygon fill="#beaed4" stroke="black" points="121.72,-778 67.72,-778 67.72,-742 121.72,-742 121.72,-778"/>
+<text text-anchor="middle" x="94.72" y="-756.3" font-family="Times,serif" font-size="14.00">Arith</text>
 </g>
 <!-- Handshake -->
 <g id="node5" class="node">
@@ -104,14 +104,14 @@
 <!-- Arith&#45;&gt;Handshake -->
 <g id="edge4" class="edge">
 <title>Arith&#45;&gt;Handshake</title>
-<path fill="none" stroke="black" d="M102.67,-734C124.38,-689.56 170.64,-599.54 198.72,-579 252.13,-539.94 280.97,-559.22 347.41,-543.67"/>
-<polygon fill="black" stroke="black" points="348.66,-546.96 357.49,-541.11 346.93,-540.18 348.66,-546.96"/>
+<path fill="none" stroke="black" d="M106.11,-734C126.83,-689.57 171.08,-599.57 198.72,-579 251.81,-539.5 280.94,-559.18 347.4,-543.67"/>
+<polygon fill="black" stroke="black" points="348.65,-546.96 357.49,-541.11 346.93,-540.17 348.65,-546.96"/>
 </g>
 <!-- Arith&#45;&gt;Calyx -->
 <g id="edge5" class="edge">
 <title>Arith&#45;&gt;Calyx</title>
-<path fill="none" stroke="black" d="M89.71,-734C89.49,-696.46 94.25,-625.05 129.72,-579 146.1,-557.74 173.36,-544.3 195.86,-536.27"/>
-<polygon fill="black" stroke="black" points="197.11,-539.54 205.49,-533.05 194.89,-532.9 197.11,-539.54"/>
+<path fill="none" stroke="black" d="M93.81,-734C93.71,-696.54 98.64,-625.3 133.72,-579 149.16,-558.63 174.73,-545.28 196.15,-537.07"/>
+<polygon fill="black" stroke="black" points="197.42,-540.33 205.64,-533.65 195.05,-533.74 197.42,-540.33"/>
 </g>
 <!-- FIRRTL -->
 <g id="node7" class="node">
@@ -172,11 +172,11 @@
 <path fill="none" stroke="black" d="M509.21,-434.61C499.53,-424.81 488.01,-411.97 479.72,-399 472.89,-388.3 466.78,-376.21 461.53,-364.39"/>
 <polygon fill="black" stroke="black" points="464.67,-362.81 457.52,-355 458.23,-365.57 464.67,-362.81"/>
 </g>
-<!-- StaticLogic&#45;&gt;Calyx -->
+<!-- Pipeline&#45;&gt;Calyx -->
 <g id="edge3" class="edge">
-<title>StaticLogic&#45;&gt;Calyx</title>
-<path fill="none" stroke="black" d="M248.78,-578.7C246.55,-570.9 243.87,-561.51 241.39,-552.83"/>
-<polygon fill="black" stroke="black" points="244.72,-551.76 238.61,-543.1 237.99,-553.68 244.72,-551.76"/>
+<title>Pipeline&#45;&gt;Calyx</title>
+<path fill="none" stroke="black" d="M240.5,-578.7C239.51,-570.98 238.32,-561.71 237.21,-553.11"/>
+<polygon fill="black" stroke="black" points="240.67,-552.58 235.92,-543.1 233.73,-553.47 240.67,-552.58"/>
 </g>
 <!-- MSFT -->
 <g id="node9" class="node">
@@ -526,19 +526,19 @@
 <path fill="none" stroke="black" d="M324.8,-506.7C332.12,-498.3 341.03,-488.07 349.06,-478.86"/>
 <polygon fill="black" stroke="black" points="351.89,-480.94 355.82,-471.1 346.61,-476.34 351.89,-480.94"/>
 </g>
-<!-- Scheduling&#45;&gt;StaticLogic -->
+<!-- Scheduling&#45;&gt;Pipeline -->
 <g id="edge18" class="edge">
-<title>Scheduling&#45;&gt;StaticLogic</title>
-<path fill="none" stroke="black" d="M257.99,-640.67C257.48,-635.55 256.95,-630.21 256.43,-625.1"/>
-<polygon fill="black" stroke="black" points="254.52,-641.09 258.99,-650.7 261.48,-640.4 254.52,-641.09"/>
-<polygon fill="black" stroke="black" points="259.91,-624.71 255.43,-615.1 252.95,-625.4 259.91,-624.71"/>
+<title>Scheduling&#45;&gt;Pipeline</title>
+<path fill="none" stroke="black" d="M256.22,-640.95C254.56,-635.65 252.81,-630.1 251.15,-624.81"/>
+<polygon fill="black" stroke="black" points="252.95,-642.21 259.29,-650.7 259.63,-640.11 252.95,-642.21"/>
+<polygon fill="black" stroke="black" points="254.44,-623.59 248.1,-615.1 247.76,-625.69 254.44,-623.59"/>
 </g>
 <!-- Scheduling&#45;&gt;MSFT -->
 <g id="edge47" class="edge">
 <title>Scheduling&#45;&gt;MSFT</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M223,-644.6C213.27,-636.53 204.05,-626.56 198.72,-615 178.64,-571.4 189.72,-554.15 198.72,-507 200.43,-498.06 203.62,-488.7 207.01,-480.37"/>
-<polygon fill="black" stroke="black" points="221.16,-647.61 231.22,-650.94 225.43,-642.06 221.16,-647.61"/>
-<polygon fill="black" stroke="black" points="210.24,-481.73 211.01,-471.17 203.82,-478.95 210.24,-481.73"/>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M224.38,-644.86C214.11,-636.83 204.39,-626.82 198.72,-615 177.85,-571.46 194.31,-514.11 207.49,-480.92"/>
+<polygon fill="black" stroke="black" points="222.52,-647.84 232.67,-650.88 226.63,-642.17 222.52,-647.84"/>
+<polygon fill="black" stroke="black" points="210.82,-482.02 211.43,-471.44 204.36,-479.33 210.82,-482.02"/>
 </g>
 <!-- Moore -->
 <g id="node27" class="node">

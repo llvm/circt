@@ -1,4 +1,4 @@
-//===- StaticLogic.h - StaticLogic Definitions ------------------*- C++ -*-===//
+//===- Pipeline.h - Pipeline Definitions ------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,12 +6,12 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file defines an StaticLogic MLIR dialect.
+// This file defines an Pipeline MLIR dialect.
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_STATICLOGIC_OPS_H_
-#define CIRCT_STATICLOGIC_OPS_H_
+#ifndef CIRCT_PIPELINE_OPS_H_
+#define CIRCT_PIPELINE_OPS_H_
 
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Attributes.h"
@@ -28,9 +28,9 @@
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "mlir/Pass/Pass.h"
 
-#include "circt/Dialect/StaticLogic/StaticLogicDialect.h.inc"
+#include "circt/Dialect/Pipeline/PipelineDialect.h.inc"
 
 #define GET_OP_CLASSES
-#include "circt/Dialect/StaticLogic/StaticLogic.h.inc"
+#include "circt/Dialect/Pipeline/Pipeline.h.inc"
 
-#endif // CIRCT_STATICLOGIC_OPS_H_
+#endif // CIRCT_PIPELINE_OPS_H_

@@ -1,4 +1,4 @@
-//=== StaticLogicToCalyx.cpp - StaticLogic to Calyx pass entry point *-----===//
+//=== PipelineToCalyx.cpp - Pipeline to Calyx pass entry point ------*-----===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,18 +6,18 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This is the main StaticLogic to Calyx conversion pass implementation.
+// This is the main Pipeline to Calyx conversion pass implementation.
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Conversion/StaticLogicToCalyx.h"
+#include "circt/Conversion/PipelineToCalyx.h"
 #include "../PassDetail.h"
 #include "circt/Dialect/Calyx/CalyxHelpers.h"
 #include "circt/Dialect/Calyx/CalyxLoweringUtils.h"
 #include "circt/Dialect/Calyx/CalyxOps.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
-#include "circt/Dialect/StaticLogic/StaticLogic.h"
+#include "circt/Dialect/Pipeline/Pipeline.h"
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/LLVMCommon/Pattern.h"
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
@@ -38,17 +38,17 @@ using namespace mlir::cf;
 using namespace mlir::func;
 
 namespace circt {
-namespace staticlogictocalyx {
+namespace pipelinetocalyx {
 
 //===----------------------------------------------------------------------===//
 // Utility types
 //===----------------------------------------------------------------------===//
 
-class StaticLogicWhileOp
-    : public calyx::WhileOpInterface<staticlogic::PipelineWhileOp> {
+class PipelineWhileOp
+    : public calyx::WhileOpInterface<pipeline::PipelineWhileOp> {
 public:
-  explicit StaticLogicWhileOp(staticlogic::PipelineWhileOp op)
-      : calyx::WhileOpInterface<staticlogic::PipelineWhileOp>(op) {}
+  explicit PipelineWhileOp(pipeline::PipelineWhileOp op)
+      : calyx::WhileOpInterface<pipeline::PipelineWhileOp>(op) {}
 
   Block::BlockArgListType getBodyArgs() override {
     return getOperation().getStagesBlock().getArguments();
@@ -71,7 +71,7 @@ public:
 
 struct PipelineScheduleable {
   /// While operation to schedule.
-  StaticLogicWhileOp whileOp;
+  PipelineWhileOp whileOp;
   /// The group(s) to schedule before the while operation These groups should
   /// set the initial value(s) of the loop init_args register(s).
   SmallVector<calyx::GroupOp> initGroups;
@@ -80,7 +80,7 @@ struct PipelineScheduleable {
 /// A variant of types representing scheduleable operations.
 using Scheduleable = std::variant<calyx::GroupOp, PipelineScheduleable>;
 
-/// Holds additional information required for scheduling StaticLogic pipelines.
+/// Holds additional information required for scheduling Pipeline pipelines.
 class PipelineScheduler : public calyx::SchedulerInterface<Scheduleable> {
 public:
   /// Registers operations that may be used in a pipeline, but does not produce
@@ -185,7 +185,7 @@ private:
 /// which is required at later lowering passes.
 class ComponentLoweringState
     : public calyx::ComponentLoweringStateInterface,
-      public calyx::LoopLoweringStateInterface<StaticLogicWhileOp>,
+      public calyx::LoopLoweringStateInterface<PipelineWhileOp>,
       public PipelineScheduler {
 public:
   ComponentLoweringState(calyx::ComponentOp component)
@@ -219,11 +219,11 @@ class BuildOpGroups : public calyx::FuncOpPartialLoweringPattern {
                              AndIOp, XOrIOp, OrIOp, ExtUIOp, TruncIOp, MulIOp,
                              DivUIOp, RemUIOp, IndexCastOp,
                              /// static logic
-                             staticlogic::PipelineTerminatorOp>(
+                             pipeline::PipelineTerminatorOp>(
                   [&](auto op) { return buildOp(rewriter, op).succeeded(); })
-              .template Case<FuncOp, staticlogic::PipelineWhileOp,
-                             staticlogic::PipelineRegisterOp,
-                             staticlogic::PipelineStageOp>([&](auto) {
+              .template Case<FuncOp, pipeline::PipelineWhileOp,
+                             pipeline::PipelineRegisterOp,
+                             pipeline::PipelineStageOp>([&](auto) {
                 /// Skip: these special cases will be handled separately.
                 return true;
               })
@@ -266,7 +266,7 @@ private:
   LogicalResult buildOp(PatternRewriter &rewriter, memref::LoadOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, memref::StoreOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter,
-                        staticlogic::PipelineTerminatorOp op) const;
+                        pipeline::PipelineTerminatorOp op) const;
 
   /// buildLibraryOp will build a TCalyxLibOp inside a TGroupOp based on the
   /// source operation TSrcOp.
@@ -540,7 +540,7 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 
 LogicalResult
 BuildOpGroups::buildOp(PatternRewriter &rewriter,
-                       staticlogic::PipelineTerminatorOp term) const {
+                       pipeline::PipelineTerminatorOp term) const {
   if (term.getOperands().size() == 0)
     return success();
 
@@ -837,10 +837,10 @@ class BuildWhileGroups : public calyx::FuncOpPartialLoweringPattern {
                            PatternRewriter &rewriter) const override {
     LogicalResult res = success();
     funcOp.walk([&](Operation *op) {
-      if (!isa<staticlogic::PipelineWhileOp>(op))
+      if (!isa<pipeline::PipelineWhileOp>(op))
         return WalkResult::advance();
 
-      StaticLogicWhileOp whileOp(cast<staticlogic::PipelineWhileOp>(op));
+      PipelineWhileOp whileOp(cast<pipeline::PipelineWhileOp>(op));
 
       getState<ComponentLoweringState>().setUniqueName(whileOp.getOperation(),
                                                        "while");
@@ -903,10 +903,10 @@ class BuildPipelineRegs : public calyx::FuncOpPartialLoweringPattern {
   LogicalResult
   partiallyLowerFuncToComp(FuncOp funcOp,
                            PatternRewriter &rewriter) const override {
-    funcOp.walk([&](staticlogic::PipelineRegisterOp op) {
+    funcOp.walk([&](pipeline::PipelineRegisterOp op) {
       // Condition registers are handled in BuildWhileGroups.
       auto *parent = op->getParentOp();
-      auto stage = dyn_cast<staticlogic::PipelineStageOp>(parent);
+      auto stage = dyn_cast<pipeline::PipelineStageOp>(parent);
       if (!stage)
         return;
 
@@ -919,10 +919,10 @@ class BuildPipelineRegs : public calyx::FuncOpPartialLoweringPattern {
         bool isIterArg = false;
         for (auto &use : stageResult.getUses()) {
           if (auto term =
-                  dyn_cast<staticlogic::PipelineTerminatorOp>(use.getOwner())) {
+                  dyn_cast<pipeline::PipelineTerminatorOp>(use.getOwner())) {
             if (use.getOperandNumber() < term.iter_args().size()) {
-              StaticLogicWhileOp whileOp(
-                  dyn_cast<staticlogic::PipelineWhileOp>(stage->getParentOp()));
+              PipelineWhileOp whileOp(
+                  dyn_cast<pipeline::PipelineWhileOp>(stage->getParentOp()));
               auto reg = getState<ComponentLoweringState>().getLoopIterReg(
                   whileOp, use.getOperandNumber());
               getState<ComponentLoweringState>().addPipelineReg(stage, reg, i);
@@ -964,17 +964,17 @@ class BuildPipelineGroups : public calyx::FuncOpPartialLoweringPattern {
   LogicalResult
   partiallyLowerFuncToComp(FuncOp funcOp,
                            PatternRewriter &rewriter) const override {
-    for (auto pipeline : funcOp.getOps<staticlogic::PipelineWhileOp>())
+    for (auto pipeline : funcOp.getOps<pipeline::PipelineWhileOp>())
       for (auto stage :
-           pipeline.getStagesBlock().getOps<staticlogic::PipelineStageOp>())
+           pipeline.getStagesBlock().getOps<pipeline::PipelineStageOp>())
         if (failed(buildStageGroups(pipeline, stage, rewriter)))
           return failure();
 
     return success();
   }
 
-  LogicalResult buildStageGroups(staticlogic::PipelineWhileOp whileOp,
-                                 staticlogic::PipelineStageOp stage,
+  LogicalResult buildStageGroups(pipeline::PipelineWhileOp whileOp,
+                                 pipeline::PipelineStageOp stage,
                                  PatternRewriter &rewriter) const {
     // Collect pipeline registers for stage.
     auto pipelineRegisters =
@@ -1278,7 +1278,7 @@ private:
     return success();
   }
 
-  calyx::WhileOp buildWhileCtrlOp(StaticLogicWhileOp whileOp,
+  calyx::WhileOp buildWhileCtrlOp(PipelineWhileOp whileOp,
                                   SmallVector<calyx::GroupOp> initGroups,
                                   PatternRewriter &rewriter) const {
     Location loc = whileOp.getLoc();
@@ -1352,11 +1352,10 @@ class CleanupFuncOps : public calyx::FuncOpPartialLoweringPattern {
 //===----------------------------------------------------------------------===//
 // Pass driver
 //===----------------------------------------------------------------------===//
-class StaticLogicToCalyxPass
-    : public StaticLogicToCalyxBase<StaticLogicToCalyxPass> {
+class PipelineToCalyxPass : public PipelineToCalyxBase<PipelineToCalyxPass> {
 public:
-  StaticLogicToCalyxPass()
-      : StaticLogicToCalyxBase<StaticLogicToCalyxPass>(),
+  PipelineToCalyxPass()
+      : PipelineToCalyxBase<PipelineToCalyxPass>(),
         partialPatternRes(success()) {}
   void runOnOperation() override;
 
@@ -1487,7 +1486,7 @@ private:
   std::shared_ptr<calyx::CalyxLoweringState> loweringState = nullptr;
 };
 
-void StaticLogicToCalyxPass::runOnOperation() {
+void PipelineToCalyxPass::runOnOperation() {
   // Clear internal state. See https://github.com/llvm/circt/issues/3235
   loweringState.reset();
   partialPatternRes = LogicalResult::failure();
@@ -1617,14 +1616,14 @@ void StaticLogicToCalyxPass::runOnOperation() {
   }
 }
 
-} // namespace staticlogictocalyx
+} // namespace pipelinetocalyx
 
 //===----------------------------------------------------------------------===//
 // Pass initialization
 //===----------------------------------------------------------------------===//
 
-std::unique_ptr<OperationPass<ModuleOp>> createStaticLogicToCalyxPass() {
-  return std::make_unique<staticlogictocalyx::StaticLogicToCalyxPass>();
+std::unique_ptr<OperationPass<ModuleOp>> createPipelineToCalyxPass() {
+  return std::make_unique<pipelinetocalyx::PipelineToCalyxPass>();
 }
 
 } // namespace circt

@@ -1,5 +1,5 @@
-add_circt_conversion_library(CIRCTStaticLogicToCalyx
-  StaticLogicToCalyx.cpp
+add_circt_conversion_library(CIRCTPipelineToCalyx
+  PipelineToCalyx.cpp
 
   DEPENDS
   CIRCTConversionPassIncGen
@@ -10,7 +10,7 @@ add_circt_conversion_library(CIRCTStaticLogicToCalyx
   LINK_LIBS PUBLIC
   CIRCTCalyx
   CIRCTCalyxTransforms
-  CIRCTStaticLogicOps
+  CIRCTPipelineOps
   MLIRIR
   MLIRPass
   MLIRArithmeticDialect

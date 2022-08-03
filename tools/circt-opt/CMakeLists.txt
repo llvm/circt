@@ -8,7 +8,7 @@ add_llvm_tool(circt-opt
 llvm_update_compile_flags(circt-opt)
 target_link_libraries(circt-opt
   PRIVATE
-  CIRCTAffineToStaticLogic
+  CIRCTAffineToPipeline
   CIRCTAnalysisTestPasses
   CIRCTCalyx
   CIRCTCalyxToHW
@@ -48,9 +48,9 @@ target_link_libraries(circt-opt
   CIRCTSeqTransforms
   CIRCTSSP
   CIRCTStandardToHandshake
-  CIRCTStandardToStaticLogic
-  CIRCTStaticLogicOps
-  CIRCTStaticLogicToCalyx
+  CIRCTStandardToPipeline
+  CIRCTPipelineOps
+  CIRCTPipelineToCalyx
   CIRCTSV
   CIRCTSVTransforms
   CIRCTHWArith

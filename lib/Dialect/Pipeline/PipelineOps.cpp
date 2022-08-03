@@ -1,4 +1,4 @@
-//===- StaticLogicOps.h - StaticLogic MLIR Operations -----------*- C++ -*-===//
+//===- PipelineOps.h - Pipeline MLIR Operations -----------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,11 +6,11 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file implement the StaticLogic ops.
+// This file implement the Pipeline ops.
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/StaticLogic/StaticLogic.h"
+#include "circt/Dialect/Pipeline/Pipeline.h"
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
@@ -18,9 +18,9 @@
 
 using namespace mlir;
 using namespace circt;
-using namespace circt::staticlogic;
+using namespace circt::pipeline;
 
-#include "circt/Dialect/StaticLogic/StaticLogicDialect.cpp.inc"
+#include "circt/Dialect/Pipeline/PipelineDialect.cpp.inc"
 
 //===----------------------------------------------------------------------===//
 // PipelineWhileOp
@@ -123,7 +123,7 @@ LogicalResult PipelineWhileOp::verify() {
   Block &conditionBlock = condition().front();
   Operation *nonCombinational;
   WalkResult conditionWalk = conditionBlock.walk([&](Operation *op) {
-    if (isa<StaticLogicDialect>(op->getDialect()))
+    if (isa<PipelineDialect>(op->getDialect()))
       return WalkResult::advance();
 
     if (!isa<arith::AddIOp, arith::AndIOp, arith::BitcastOp, arith::CmpIOp,
@@ -162,12 +162,11 @@ LogicalResult PipelineWhileOp::verify() {
 
   int64_t lastStartTime = -1;
   for (Operation &inner : stagesBlock) {
-    // Verify the stages block contains only `staticlogic.pipeline.stage` and
-    // `staticlogic.pipeline.terminator` ops.
+    // Verify the stages block contains only `pipeline.stage` and
+    // `pipeline.terminator` ops.
     if (!isa<PipelineStageOp, PipelineTerminatorOp>(inner))
-      return emitOpError(
-                 "stages may only contain 'staticlogic.pipeline.stage' or "
-                 "'staticlogic.pipeline.terminator' ops, found ")
+      return emitOpError("stages may only contain 'pipeline.stage' or "
+                         "'pipeline.terminator' ops, found ")
              << inner;
 
     // Verify the stage start times are monotonically increasing.
@@ -295,8 +294,7 @@ LogicalResult PipelineTerminatorOp::verify() {
   // Verify `iter_args` are defined by a pipeline stage.
   for (auto iterArg : iterArgs)
     if (iterArg.getDefiningOp<PipelineStageOp>() == nullptr)
-      return emitOpError(
-          "'iter_args' must be defined by a 'staticlogic.pipeline.stage'");
+      return emitOpError("'iter_args' must be defined by a 'pipeline.stage'");
 
   // Verify pipeline terminates with the same result types as the pipeline.
   auto opResults = results();
@@ -310,18 +308,17 @@ LogicalResult PipelineTerminatorOp::verify() {
   // Verify `results` are defined by a pipeline stage.
   for (auto result : opResults)
     if (result.getDefiningOp<PipelineStageOp>() == nullptr)
-      return emitOpError(
-          "'results' must be defined by a 'staticlogic.pipeline.stage'");
+      return emitOpError("'results' must be defined by a 'pipeline.stage'");
 
   return success();
 }
 
 #define GET_OP_CLASSES
-#include "circt/Dialect/StaticLogic/StaticLogic.cpp.inc"
+#include "circt/Dialect/Pipeline/Pipeline.cpp.inc"
 
-void StaticLogicDialect::initialize() {
+void PipelineDialect::initialize() {
   addOperations<
 #define GET_OP_LIST
-#include "circt/Dialect/StaticLogic/StaticLogic.cpp.inc"
+#include "circt/Dialect/Pipeline/Pipeline.cpp.inc"
       >();
 }

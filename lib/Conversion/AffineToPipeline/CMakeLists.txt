@@ -1,5 +1,5 @@
-add_circt_library(CIRCTAffineToStaticLogic
-  AffineToStaticLogic.cpp
+add_circt_library(CIRCTAffineToPipeline
+  AffineToPipeline.cpp
 
   DEPENDS
   CIRCTConversionPassIncGen
@@ -9,5 +9,5 @@ add_circt_library(CIRCTAffineToStaticLogic
   MLIRPass
   CIRCTScheduling
   CIRCTSchedulingAnalysis
-  CIRCTStaticLogicOps
+  CIRCTPipelineOps
   )
