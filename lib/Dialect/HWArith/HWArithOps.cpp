@@ -51,7 +51,7 @@ LogicalResult CastOp::verify() {
 
 void CastOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                          MLIRContext *context) {
-  results.insert<EliminateCast, ChainedCast>(context);
+  results.insert<EliminateCast>(context);
 }
 
 //===----------------------------------------------------------------------===//

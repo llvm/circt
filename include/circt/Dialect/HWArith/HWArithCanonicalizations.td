@@ -22,7 +22,4 @@ def IdenticalTypePred : Constraint<CPred<"$0.getType() == $1.getType()">>;
 def EliminateCast : Pat<(HWArith_CastOp:$out $in), (replaceWithValue $in),
     [(IdenticalTypePred $in, $out)]>;
 
-def ChainedCast : Pat<(HWArith_CastOp:$out (HWArith_CastOp $in)),
-    (HWArith_CastOp $in)>;
-
 #endif // CIRCT_DIALECT_HWARITH_HWARITHCANONICALIZATIONS_TD
