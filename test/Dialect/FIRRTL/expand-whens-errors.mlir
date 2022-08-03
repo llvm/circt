@@ -135,3 +135,16 @@ firrtl.module @CheckInitialization(in %p : !firrtl.uint<1>, out %out: !firrtl.ve
   // expected-error @above {{port "out[0].b" not fully initialized in module "CheckInitialization"}}
 }
 }
+
+// -----
+
+// check subword initialization
+firrtl.circuit "CheckInitialization" {
+firrtl.module @CheckInitialization(in %y: !firrtl.uint<1>, in %z: !firrtl.uint<2>, out %out: !firrtl.uint<4>) {
+  // expected-error @-1 {{port "out" not fully initialized in module "CheckInitialization"}}
+  %0 = firrtl.bits %out 3 to 3 : (!firrtl.uint<4>) -> !firrtl.uint<1>
+  %1 = firrtl.bits %out 1 to 0 : (!firrtl.uint<4>) -> !firrtl.uint<2>
+  firrtl.strictconnect %1, %z : !firrtl.uint<2>
+  firrtl.strictconnect %0, %y : !firrtl.uint<1>
+}
+}
