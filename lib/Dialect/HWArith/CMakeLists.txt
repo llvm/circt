@@ -16,6 +16,7 @@ add_circt_dialect_library(CIRCTHWArith
     DEPENDS
     MLIRHWArithIncGen
     MLIRHWArithEnumsIncGen
+    MLIRHWArithCanonicalizationsIncGen
     MLIRIR
 
     LINK_COMPONENTS

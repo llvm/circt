@@ -200,6 +200,7 @@ def HWArith_CastOp : HWArithOp<"cast", [NoSideEffect]> {
   let assemblyFormat = "$in attr-dict `:` functional-type($in, $out)";
 
   let hasVerifier = 1;
+  let hasCanonicalizer = 1;
 }
 
 // Comparison predicates
