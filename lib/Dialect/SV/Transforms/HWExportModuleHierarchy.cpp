@@ -33,8 +33,8 @@ using namespace circt;
 struct HWExportModuleHierarchyPass
     : public sv::HWExportModuleHierarchyBase<HWExportModuleHierarchyPass> {
   HWExportModuleHierarchyPass(Optional<std::string> directory) {
-    if (directory.hasValue())
-      directoryName = directory.getValue();
+    if (directory)
+      directoryName = *directory;
   }
   void runOnOperation() override;
 };
@@ -114,7 +114,7 @@ void HWExportModuleHierarchyPass::runOnOperation() {
         return;
       }
 
-      extractHierarchyFromTop(op, symbolTable.getValue(), outputFile->os());
+      extractHierarchyFromTop(op, *symbolTable, outputFile->os());
 
       outputFile->keep();
     }

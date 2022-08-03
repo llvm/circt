@@ -208,11 +208,11 @@ static LogicalResult buildMergeBlocks(Block *currBlock, SplitInfo &splitInfo,
 
     // Update info for the newly created block.
     Block *splitIn = splitInfo.in.lookup(splitBlock);
-    splitInfo.in.try_emplace(mergeBlock.getValue(), splitIn);
+    splitInfo.in.try_emplace(*mergeBlock, splitIn);
     // By construction, this block has only one successor, therefore, out == in.
-    splitInfo.out.try_emplace(mergeBlock.getValue(), splitIn);
+    splitInfo.out.try_emplace(*mergeBlock, splitIn);
 
-    preds.push_back(mergeBlock.getValue());
+    preds.push_back(*mergeBlock);
   }
   if (predsToConsider.size() != 0)
     return currBlock->getParentOp()->emitError(

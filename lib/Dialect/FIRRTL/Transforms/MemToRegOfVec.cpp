@@ -124,7 +124,7 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
 
   Value getMask(ImplicitLocOpBuilder &builder, Value bundle) {
     auto bType = bundle.getType().cast<FIRRTLType>().cast<BundleType>();
-    if (bType.getElement("mask").hasValue())
+    if (bType.getElement("mask"))
       return builder.create<SubfieldOp>(bundle, "mask");
     return builder.create<SubfieldOp>(bundle, "wmask");
   }
@@ -132,9 +132,9 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
   Value getData(ImplicitLocOpBuilder &builder, Value bundle,
                 bool getWdata = false) {
     auto bType = bundle.getType().cast<FIRRTLType>().cast<BundleType>();
-    if (bType.getElement("data").hasValue())
+    if (bType.getElement("data"))
       return builder.create<SubfieldOp>(bundle, "data");
-    if (bType.getElement("rdata").hasValue() && !getWdata)
+    if (bType.getElement("rdata") && !getWdata)
       return builder.create<SubfieldOp>(bundle, "rdata");
     return builder.create<SubfieldOp>(bundle, "wdata");
   }
@@ -335,7 +335,7 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
           })
           .Case<IntType>([&](auto iType) {
             results.push_back({reg, input, mask});
-            return iType.getWidth().hasValue();
+            return iType.getWidth().has_value();
           })
           .Default([&](auto) { return false; });
     };

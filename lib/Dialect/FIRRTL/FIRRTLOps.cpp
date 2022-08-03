@@ -1713,7 +1713,7 @@ LogicalResult MemOp::verify() {
                          "port or \"rdata\" for a read/write port)";
         return failure();
       }
-      dataType = dataTypeOption.getValue().type;
+      dataType = dataTypeOption->type;
       // Read data is expected to ba a flip.
       if (portKind == MemOp::PortKind::Read) {
         // FIXME error on missing bundle flip
@@ -1968,10 +1968,9 @@ FirMemory MemOp::getSummary() {
       ++numReadWritePorts;
   }
 
-  auto widthV = getBitWidth(op.getDataType());
   size_t width = 0;
-  if (widthV.hasValue())
-    width = widthV.getValue();
+  if (auto widthV = getBitWidth(op.getDataType()))
+    width = *widthV;
   else
     op.emitError("'firrtl.mem' should have simple type and known width");
   uint32_t groupID = 0;
@@ -2697,10 +2696,10 @@ FIRRTLType DShlPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
   // If the left or right has unknown result type, then the operation does
   // too.
   auto width = lhsi.getWidthOrSentinel();
-  if (width == -1 || !rhsui.getWidth().hasValue()) {
+  if (width == -1 || !rhsui.getWidth().has_value()) {
     width = -1;
   } else {
-    auto amount = rhsui.getWidth().getValue();
+    auto amount = *rhsui.getWidth();
     if (amount >= 32) {
       if (loc)
         mlir::emitError(*loc, "shift amount too large: second operand of dshl "
@@ -3233,15 +3232,15 @@ LogicalResult HWStructCastOp::verify() {
 LogicalResult BitCastOp::verify() {
   auto inTypeBits = getBitWidth(getOperand().getType().cast<FIRRTLType>());
   auto resTypeBits = getBitWidth(getType());
-  if (inTypeBits.hasValue() && resTypeBits.hasValue()) {
+  if (inTypeBits.has_value() && resTypeBits.has_value()) {
     // Bitwidths must match for valid bit
-    if (inTypeBits.getValue() == resTypeBits.getValue())
+    if (*inTypeBits == *resTypeBits)
       return success();
     return emitError("the bitwidth of input (")
-           << inTypeBits.getValue() << ") and result ("
-           << resTypeBits.getValue() << ") don't match";
+           << *inTypeBits << ") and result (" << *resTypeBits
+           << ") don't match";
   }
-  if (!inTypeBits.hasValue())
+  if (!inTypeBits.has_value())
     return emitError("bitwidth cannot be determined for input operand type ")
            << getOperand().getType();
   return emitError("bitwidth cannot be determined for result type ")
@@ -3314,7 +3313,7 @@ static ParseResult parseNameKind(OpAsmParser &parser,
   if (!parser.parseOptionalKeyword(&keyword,
                                    {"interesting_name", "droppable_name"})) {
     auto kind = symbolizeNameKindEnum(keyword);
-    result = NameKindEnumAttr::get(parser.getContext(), kind.getValue());
+    result = NameKindEnumAttr::get(parser.getContext(), kind.value());
     return success();
   }
 

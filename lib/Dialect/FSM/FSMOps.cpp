@@ -53,15 +53,15 @@ StateOp MachineOp::getInitialStateOp() {
 }
 
 StringAttr MachineOp::getArgName(size_t i) {
-  if (argNames())
-    return argNames().getValue()[i].cast<StringAttr>();
+  if (auto args = argNames())
+    return (*args)[i].cast<StringAttr>();
   else
     return StringAttr::get(getContext(), "in" + std::to_string(i));
 }
 
 StringAttr MachineOp::getResName(size_t i) {
-  if (resNames())
-    return resNames().getValue()[i].cast<StringAttr>();
+  if (auto resNameAttrs = resNames())
+    return (*resNameAttrs)[i].cast<StringAttr>();
   else
     return StringAttr::get(getContext(), "out" + std::to_string(i));
 }
@@ -138,21 +138,21 @@ LogicalResult MachineOp::verify() {
     return emitOpError("initial state '" + initialState() +
                        "' was not defined in the machine");
 
-  if (argNames() && argNames().getValue().size() != getArgumentTypes().size())
+  if (argNames() && argNames()->size() != getArgumentTypes().size())
     return emitOpError() << "number of machine arguments ("
                          << getArgumentTypes().size()
                          << ") does "
                             "not match the provided number "
                             "of argument names ("
-                         << argNames().getValue().size() << ")";
+                         << argNames()->size() << ")";
 
-  if (resNames() && resNames().getValue().size() != getResultTypes().size())
+  if (resNames() && resNames()->size() != getResultTypes().size())
     return emitOpError() << "number of machine results ("
                          << getResultTypes().size()
                          << ") does "
                             "not match the provided number "
                             "of result names ("
-                         << resNames().getValue().size() << ")";
+                         << resNames()->size() << ")";
 
   return success();
 }

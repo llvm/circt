@@ -1509,13 +1509,13 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
   // TODO: This could try harder to omit redundant casts like the mainline
   // expression emitter.
   auto emitOperand = [&](Attribute operand) -> bool {
-    if (operandSign.hasValue())
-      os << (operandSign.getValue() == IsSigned ? "$signed(" : "$unsigned(");
+    if (operandSign.has_value())
+      os << (operandSign.value() == IsSigned ? "$signed(" : "$unsigned(");
     auto signedness =
         printParamValue(operand, os, subprecedence, emitError).signedness;
-    if (operandSign.hasValue()) {
+    if (operandSign.has_value()) {
       os << ')';
-      signedness = operandSign.getValue();
+      signedness = operandSign.value();
     }
     return signedness == IsSigned;
   };

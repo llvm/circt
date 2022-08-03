@@ -157,12 +157,12 @@ struct IdExpr : public ExprBase<IdExpr, Expr::Kind::Id> {
 /// A known constant value.
 struct KnownExpr : public ExprBase<KnownExpr, Expr::Kind::Known> {
   KnownExpr(int32_t value) : ExprBase() { solution = value; }
-  void print(llvm::raw_ostream &os) const { os << solution.getValue(); }
+  void print(llvm::raw_ostream &os) const { os << solution.value(); }
   bool operator==(const KnownExpr &other) const {
-    return solution.getValue() == other.solution.getValue();
+    return solution.value() == other.solution.value();
   }
   llvm::hash_code hash_value() const {
-    return llvm::hash_combine(Expr::hash_value(), solution.getValue());
+    return llvm::hash_combine(Expr::hash_value(), solution.value());
   }
 };
 
@@ -1948,7 +1948,7 @@ FIRRTLType InferenceTypeUpdate::updateType(FieldRef fieldRef, FIRRTLType type) {
   auto value = fieldRef.getValue();
   // Get the inferred width.
   Expr *expr = mapping.getExprOrNull(fieldRef);
-  if (!expr || !expr->solution.hasValue()) {
+  if (!expr || !expr->solution) {
     // It should not be possible to arrive at an uninferred width at this point.
     // In case the constraints are not resolvable, checks before the calls to
     // `updateType` must have already caught the issues and aborted the pass
@@ -1957,7 +1957,7 @@ FIRRTLType InferenceTypeUpdate::updateType(FieldRef fieldRef, FIRRTLType type) {
     mlir::emitError(value.getLoc(), "width should have been inferred");
     return type;
   }
-  int32_t solution = expr->solution.getValue();
+  int32_t solution = *expr->solution;
   assert(solution >= 0); // The solver infers variables to be 0 or greater.
   return resizeType(type, solution);
 }

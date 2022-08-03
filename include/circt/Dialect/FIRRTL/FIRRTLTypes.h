@@ -201,13 +201,10 @@ public:
   }
 
   /// Return the width of this type, or -1 if it has none specified.
-  int32_t getWidthOrSentinel() {
-    auto width = getWidth();
-    return width.hasValue() ? width.getValue() : -1;
-  }
+  int32_t getWidthOrSentinel() { return getWidth().value_or(-1); }
 
   /// Return true if this type has a known width.
-  bool hasWidth() { return getWidth().hasValue(); }
+  bool hasWidth() { return getWidth().has_value(); }
 
   /// Return a new type with the width changed to a different value.
   ConcreteType changeWidth(int32_t width) {
@@ -231,16 +228,13 @@ public:
   bool isUnsigned() { return isa<UIntType>(); }
 
   /// Return true if this integer type has a known width.
-  bool hasWidth() { return getWidth().hasValue(); }
+  bool hasWidth() { return getWidth().has_value(); }
 
   /// Return the bitwidth of this type or None if unknown.
   Optional<int32_t> getWidth();
 
   /// Return the width of this type, or -1 if it has none specified.
-  int32_t getWidthOrSentinel() {
-    auto width = getWidth();
-    return width.hasValue() ? width.getValue() : -1;
-  }
+  int32_t getWidthOrSentinel() { return getWidth().value_or(-1); }
 
   static bool classof(Type type) {
     return type.isa<SIntType>() || type.isa<UIntType>();

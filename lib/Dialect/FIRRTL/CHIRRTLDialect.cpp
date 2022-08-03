@@ -90,7 +90,7 @@ static ParseResult parseNameKind(OpAsmParser &parser,
   if (!parser.parseOptionalKeyword(&keyword,
                                    {"interesting_name", "droppable_name"})) {
     auto kind = symbolizeNameKindEnum(keyword);
-    result = NameKindEnumAttr::get(parser.getContext(), kind.getValue());
+    result = NameKindEnumAttr::get(parser.getContext(), kind.value());
     return success();
   }
 

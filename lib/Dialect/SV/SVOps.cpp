@@ -504,9 +504,9 @@ static ParseResult parseEventList(
   if (!p.parseOptionalKeyword(&keyword)) {
     while (1) {
       auto kind = symbolizeEventControl(keyword);
-      if (!kind.hasValue())
+      if (!kind.has_value())
         return p.emitError(loc, "expected 'posedge', 'negedge', or 'edge'");
-      auto eventEnum = static_cast<int32_t>(kind.getValue());
+      auto eventEnum = static_cast<int32_t>(*kind);
       events.push_back(p.getBuilder().getI32IntegerAttr(eventEnum));
 
       clocksOperands.push_back({});
@@ -736,7 +736,7 @@ ParseResult CaseOp::parse(OpAsmParser &parser, OperationState &result) {
   StringRef keyword;
   if (!parser.parseOptionalKeyword(&keyword, {"case", "casex", "casez"})) {
     auto kind = symbolizeCaseStmtType(keyword);
-    auto caseEnum = static_cast<int32_t>(kind.getValue());
+    auto caseEnum = static_cast<int32_t>(kind.value());
     result.addAttribute("caseStyle", builder.getI32IntegerAttr(caseEnum));
   }
 
@@ -746,7 +746,7 @@ ParseResult CaseOp::parse(OpAsmParser &parser, OperationState &result) {
     auto kind = symbolizeValidationQualifierTypeEnum(keyword);
     result.addAttribute("validationQualifier",
                         ValidationQualifierTypeEnumAttr::get(
-                            builder.getContext(), kind.getValue()));
+                            builder.getContext(), kind.value()));
   }
 
   if (parser.parseOperand(condOperand) || parser.parseColonType(condType) ||
@@ -1475,7 +1475,7 @@ static Op findInstanceSymbolInBlock(StringAttr name, Block *body) {
   for (auto &op : llvm::reverse(body->getOperations())) {
     if (auto instance = dyn_cast<Op>(op)) {
       if (instance.getInnerSym() &&
-          instance.getInnerSym().getValue() == name.getValue())
+          instance.getInnerSym().value() == name.getValue())
         return instance;
     }
 

@@ -97,7 +97,7 @@ public:
         auto libraryName = getLibraryFor(&op);
         if (failed(libraryName))
           return WalkResult::interrupt();
-        usedLibraries.insert(libraryName.getValue());
+        usedLibraries.insert(*libraryName);
       }
       return WalkResult::advance();
     });
@@ -190,7 +190,7 @@ struct Emitter {
     if (failed(libraryNames))
       return failure();
 
-    for (StringRef library : libraryNames.getValue())
+    for (StringRef library : *libraryNames)
       emitImport(library);
 
     return success();
@@ -465,8 +465,8 @@ private:
             indent() << prependAttributes(op, "while ");
             emitValue(op.cond(), /*isIndented=*/false);
 
-            if (auto groupName = op.groupName(); groupName.hasValue())
-              os << " with " << groupName.getValue();
+            if (auto groupName = op.groupName())
+              os << " with " << *groupName;
 
             emitCalyxBody([&]() { emitCalyxControl(op.getBody()); });
           })
@@ -474,8 +474,8 @@ private:
             indent() << prependAttributes(op, "if ");
             emitValue(op.cond(), /*isIndented=*/false);
 
-            if (auto groupName = op.groupName(); groupName.hasValue())
-              os << " with " << groupName.getValue();
+            if (auto groupName = op.groupName())
+              os << " with " << *groupName;
 
             emitCalyxBody([&]() { emitCalyxControl(op.getThenBody()); });
             if (op.elseBodyExists())
@@ -658,8 +658,7 @@ void Emitter::emitLibraryPrimTypedByFirstOutputPort(
   StringRef opName = op->getName().getStringRef();
   indent() << getAttributes(op) << cell.instanceName() << space() << equals()
            << space()
-           << (calyxLibName.hasValue() ? *calyxLibName
-                                       : removeCalyxPrefix(opName))
+           << (calyxLibName ? *calyxLibName : removeCalyxPrefix(opName))
            << LParen() << bitWidth << RParen() << semicolonEndL();
 }
 

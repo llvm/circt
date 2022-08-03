@@ -40,7 +40,7 @@ static Attribute convertJSONToAttribute(MLIRContext *context,
     // Test to see if this might be quoted JSON (a string that is actually
     // JSON).  Sometimes FIRRTL developers will do this to serialize objects
     // that the Scala FIRRTL Compiler doesn't know about.
-    auto unquotedValue = json::parse(a.getValue());
+    auto unquotedValue = json::parse(*a);
     auto err = unquotedValue.takeError();
     // If this parsed without an error, then it's more JSON and recurse on
     // that.
@@ -48,20 +48,20 @@ static Attribute convertJSONToAttribute(MLIRContext *context,
       return convertJSONToAttribute(context, unquotedValue.get(), p);
     // If there was an error, then swallow it and handle this as a string.
     handleAllErrors(std::move(err), [&](const json::ParseError &a) {});
-    return StringAttr::get(context, a.getValue());
+    return StringAttr::get(context, *a);
   }
 
   // Integer
   if (auto a = value.getAsInteger())
-    return IntegerAttr::get(IntegerType::get(context, 64), a.getValue());
+    return IntegerAttr::get(IntegerType::get(context, 64), *a);
 
   // Float
   if (auto a = value.getAsNumber())
-    return FloatAttr::get(mlir::FloatType::getF64(context), a.getValue());
+    return FloatAttr::get(mlir::FloatType::getF64(context), *a);
 
   // Boolean
   if (auto a = value.getAsBoolean())
-    return BoolAttr::get(context, a.getValue());
+    return BoolAttr::get(context, *a);
 
   // Null
   if (auto a = value.getAsNull())
@@ -131,7 +131,7 @@ bool circt::firrtl::fromOMIRJSON(json::Value &value, StringRef circuitTarget,
       return false;
     }
     auto maybeID = object->getString("id");
-    if (!maybeID || !maybeID.getValue().startswith("OMID:")) {
+    if (!maybeID || !maybeID->startswith("OMID:")) {
       p.report("OMNode missing mandatory member \"id\" with type \"string\" "
                "that starts with \"OMID:\"");
       return false;
@@ -173,16 +173,15 @@ bool circt::firrtl::fromOMIRJSON(json::Value &value, StringRef circuitTarget,
           return false;
         }
         NamedAttrList values;
-        values.append("info", StringAttr::get(context, maybeInfo.getValue()));
+        values.append("info", StringAttr::get(context, *maybeInfo));
         values.append("value", convertJSONToAttribute(context, *maybeValue,
                                                       pI.field("value")));
-        fieldAttrs.append(maybeName.getValue(),
-                          DictionaryAttr::get(context, values));
+        fieldAttrs.append(*maybeName, DictionaryAttr::get(context, values));
       }
       fields = DictionaryAttr::get(context, fieldAttrs);
     }
 
-    omnode.append("info", StringAttr::get(context, maybeInfo.getValue()));
+    omnode.append("info", StringAttr::get(context, *maybeInfo));
     omnode.append("id", convertJSONToAttribute(context, *object->get("id"),
                                                p.field("id")));
     omnode.append("fields", fields);

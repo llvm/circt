@@ -146,8 +146,7 @@ public:
         narrowValueToArrayWidth(rewriter, op.getInput(), op.getIndex());
     if (failed(narrowedIndex))
       return failure();
-    rewriter.replaceOpWithNewOp<ArrayGetOp>(op, op.getInput(),
-                                            narrowedIndex.getValue());
+    rewriter.replaceOpWithNewOp<ArrayGetOp>(op, op.getInput(), *narrowedIndex);
     return success();
   }
 };
@@ -175,7 +174,7 @@ struct ParametricTypeConversionPattern : public ConversionPattern {
         ok &= succeeded(res);
         if (!ok)
           return;
-        op->getResult(it.index()).setType(res.getValue());
+        op->getResult(it.index()).setType(*res);
       }
 
       // Note: 'operands' have already been converted with the supplied type
@@ -197,10 +196,10 @@ static void populateTypeConversion(Location loc, TypeConverter &typeConverter,
                                    ArrayAttr parameters) {
   // Possibly parametric types
   typeConverter.addConversion([=](hw::IntType type) {
-    return evaluateParametricType(loc, parameters, type).getValue();
+    return evaluateParametricType(loc, parameters, type).value();
   });
   typeConverter.addConversion([=](hw::ArrayType type) {
-    return evaluateParametricType(loc, parameters, type).getValue();
+    return evaluateParametricType(loc, parameters, type).value();
   });
 
   // Valid target types.
@@ -233,8 +232,8 @@ static LogicalResult registerNestedParametricInstanceOps(
                                               instanceParameterValue);
       if (failed(evaluated))
         return WalkResult::interrupt();
-      evaluatedInstanceParameters.push_back(hw::ParamDeclAttr::get(
-          instanceParameterDecl.getName(), evaluated.getValue()));
+      evaluatedInstanceParameters.push_back(
+          hw::ParamDeclAttr::get(instanceParameterDecl.getName(), *evaluated));
     }
 
     auto evaluatedInstanceParametersAttr =
@@ -280,14 +279,14 @@ static LogicalResult specializeModule(
         evaluateParametricType(source.getLoc(), parameters, in.value());
     if (failed(resType))
       return failure();
-    ports.inputs[in.index()].type = resType.getValue();
+    ports.inputs[in.index()].type = *resType;
   }
   for (auto &out : llvm::enumerate(source.getFunctionType().getResults())) {
     FailureOr<Type> resolvedType =
         evaluateParametricType(source.getLoc(), parameters, out.value());
     if (failed(resolvedType))
       return failure();
-    ports.outputs[out.index()].type = resolvedType.getValue();
+    ports.outputs[out.index()].type = *resolvedType;
   }
 
   // Create the specialized module using the evaluated port info.

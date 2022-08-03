@@ -987,7 +987,7 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
 
   StringRef verilogName;
   if (auto defName = oldModule.getDefname())
-    verilogName = defName.getValue();
+    verilogName = defName.value();
 
   // Build the new hw.module op.
   auto builder = OpBuilder::atBlockEnd(topLevelModule);
@@ -1260,10 +1260,8 @@ static SmallVector<SubfieldOp> getAllFieldAccesses(Value structValue,
     auto elemIndex =
         fieldAccess.getInput().getType().cast<BundleType>().getElementIndex(
             field);
-    if (elemIndex.hasValue() &&
-        fieldAccess.getFieldIndex() == elemIndex.getValue()) {
+    if (elemIndex && *elemIndex == fieldAccess.getFieldIndex())
       accesses.push_back(fieldAccess);
-    }
   }
   return accesses;
 }
@@ -3251,10 +3249,10 @@ LogicalResult FIRRTLLowering::visitExpr(InvalidValueOp op) {
   // lowering it to a random value, we should see if this is what we need to
   // do.
   if (auto bitwidth = firrtl::getBitWidth(op.getType().cast<FIRRTLType>())) {
-    if (bitwidth.getValue() == 0) // Let the caller handle zero width values.
+    if (bitwidth.value() == 0) // Let the caller handle zero width values.
       return failure();
 
-    auto constant = getOrCreateIntConstant(bitwidth.getValue(), 0);
+    auto constant = getOrCreateIntConstant(bitwidth.value(), 0);
     // If the result is an aggregate value, we have to bitcast the constant.
     if (!resultTy.isa<IntegerType>())
       constant = builder.create<hw::BitcastOp>(resultTy, constant);

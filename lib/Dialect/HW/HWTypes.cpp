@@ -346,7 +346,7 @@ void EnumType::print(AsmPrinter &p) const {
 }
 
 bool EnumType::contains(mlir::StringRef field) {
-  return indexOf(field).hasValue();
+  return indexOf(field).has_value();
 }
 
 Optional<size_t> EnumType::indexOf(mlir::StringRef field) {

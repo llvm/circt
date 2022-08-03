@@ -852,7 +852,7 @@ ParseResult llhd::RegOp::parse(OpAsmParser &parser, OperationState &result) {
     if (!attrOptional)
       return parser.emitError(parser.getCurrentLocation(),
                               "invalid string attribute");
-    modesArray.push_back(static_cast<int64_t>(attrOptional.getValue()));
+    modesArray.push_back(static_cast<int64_t>(*attrOptional));
     if (parser.parseOperand(trigger))
       return failure();
     if (parser.parseKeyword("after") || parser.parseOperand(delay))
@@ -919,8 +919,8 @@ void llhd::RegOp::print(OpAsmPrinter &printer) {
       return;
     }
     printer << ", (" << getValues()[i] << ", \""
-            << llhd::stringifyRegMode(mode.getValue()) << "\" "
-            << getTriggers()[i] << " after " << getDelays()[i];
+            << llhd::stringifyRegMode(*mode) << "\" " << getTriggers()[i]
+            << " after " << getDelays()[i];
     if (hasGate(i))
       printer << " if " << getGateAt(i);
     printer << " : " << getValues()[i].getType() << ")";

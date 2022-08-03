@@ -98,10 +98,10 @@ ParseResult CompRegOp::parse(OpAsmParser &parser, OperationState &result) {
 
 void CompRegOp::print(::mlir::OpAsmPrinter &p) {
   SmallVector<StringRef> elidedAttrs;
-  if (getSymName().hasValue()) {
+  if (auto sym = getSymName()) {
     elidedAttrs.push_back("sym_name");
     p << ' ' << "sym ";
-    p.printSymbolName(*getSymName());
+    p.printSymbolName(*sym);
   }
 
   p << ' ' << getInput() << ", " << getClk();

@@ -298,12 +298,11 @@ static void eraseControlWithGroupAndConditional(OpTy op,
 
   // Save information about the operation, and erase it.
   Value cond = op.cond();
-  Optional<StringRef> groupName = op.groupName();
   auto component = op->template getParentOfType<ComponentOp>();
   rewriter.eraseOp(op);
 
   // Clean up the attached conditional and combinational group (if it exists).
-  if (groupName.hasValue()) {
+  if (auto groupName = op.groupName()) {
     auto group = component.getWiresOp().template lookupSymbol<GroupInterface>(
         *groupName);
     if (SymbolTable::symbolKnownUseEmpty(group, component.getRegion()))
@@ -1481,11 +1480,11 @@ LogicalResult IfOp::verify() {
     return emitError() << "empty 'else' region.";
 
   Optional<StringRef> optGroupName = groupName();
-  if (!optGroupName.hasValue()) {
+  if (!optGroupName) {
     // No combinational group was provided.
     return success();
   }
-  StringRef groupName = optGroupName.getValue();
+  StringRef groupName = *optGroupName;
   auto groupOp = wiresOp.lookupSymbol<GroupInterface>(groupName);
   if (!groupOp)
     return emitOpError() << "with group '" << groupName
@@ -1570,7 +1569,7 @@ struct CommonTailPatternWithSeq : mlir::OpRewritePattern<IfOp> {
     Optional<EnableOp> lastThenEnableOp = getLastEnableOp(thenControl),
                        lastElseEnableOp = getLastEnableOp(elseControl);
 
-    if (!lastThenEnableOp.hasValue() || !lastElseEnableOp.hasValue())
+    if (!lastThenEnableOp || !lastElseEnableOp)
       return failure();
     if (lastThenEnableOp->groupName() != lastElseEnableOp->groupName())
       return failure();
@@ -1683,11 +1682,11 @@ LogicalResult WhileOp::verify() {
   auto wiresOp = component.getWiresOp();
 
   Optional<StringRef> optGroupName = groupName();
-  if (!optGroupName.hasValue()) {
+  if (!optGroupName) {
     /// No combinational group was provided
     return success();
   }
-  StringRef groupName = optGroupName.getValue();
+  StringRef groupName = *optGroupName;
   auto groupOp = wiresOp.lookupSymbol<GroupInterface>(groupName);
   if (!groupOp)
     return emitOpError() << "with group '" << groupName

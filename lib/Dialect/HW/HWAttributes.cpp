@@ -766,7 +766,7 @@ static Attribute parseParamExprWithOpcode(StringRef opcodeStr,
     return {};
 
   Optional<PEO> opcode = symbolizePEO(opcodeStr);
-  if (!opcode.hasValue()) {
+  if (!opcode.has_value()) {
     p.emitError(p.getNameLoc(), "unknown parameter expr operator name");
     return {};
   }
@@ -807,7 +807,7 @@ replaceDeclRefInExpr(Location loc,
       auto res = replaceDeclRefInExpr(loc, parameters, operand);
       if (failed(res))
         return {failure()};
-      replacedOperands.push_back(res.getValue());
+      replacedOperands.push_back(*res);
     }
     return {
         hw::ParamExprAttr::get(paramExprAttr.getOpcode(), replacedOperands)};
@@ -831,7 +831,7 @@ FailureOr<Attribute> hw::evaluateParametricAttr(Location loc,
   auto paramAttrRes = replaceDeclRefInExpr(loc, parameterMap, paramAttr);
   if (failed(paramAttrRes))
     return {failure()};
-  paramAttr = paramAttrRes.getValue();
+  paramAttr = *paramAttrRes;
 
   // Then, evaluate the parametric attribute.
   if (paramAttr.isa<IntegerAttr>() || paramAttr.isa<hw::ParamDeclRefAttr>())
@@ -863,7 +863,7 @@ FailureOr<Type> hw::evaluateParametricType(Location loc, ArrayAttr parameters,
                                    intAttr.getValue().getSExtValue())};
 
         // Otherwise parameter references are still involved
-        return hw::IntType::get(evaluatedWidth.getValue());
+        return hw::IntType::get(*evaluatedWidth);
       })
       .Case<hw::ArrayType>([&](hw::ArrayType arrayType) -> FailureOr<Type> {
         auto size =
@@ -879,13 +879,12 @@ FailureOr<Type> hw::evaluateParametricType(Location loc, ArrayAttr parameters,
         // attribute version of it
         if (auto intAttr = size->dyn_cast<IntegerAttr>())
           return hw::ArrayType::get(
-              arrayType.getContext(), elementType.getValue(),
+              arrayType.getContext(), *elementType,
               IntegerAttr::get(IntegerType::get(type.getContext(), 64),
                                intAttr.getValue().getSExtValue()));
 
         // Otherwise parameter references are still involved
-        return hw::ArrayType::get(arrayType.getContext(),
-                                  elementType.getValue(), size.getValue());
+        return hw::ArrayType::get(arrayType.getContext(), *elementType, *size);
       })
       .Default([&](auto) { return type; });
 }

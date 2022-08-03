@@ -476,7 +476,7 @@ LogicalResult circt::firrtl::applyGCTMemTaps(const AnnoPathValue &target,
     port.append("target", StringAttr::get(context, canonTarget));
     state.addToWorklistFn(DictionaryAttr::get(context, port));
 
-    auto blackboxTarget = tokenizePath(canonTarget).getValue();
+    auto blackboxTarget = tokenizePath(canonTarget).value();
     blackboxTarget.name = {};
     blackboxTarget.component.clear();
     auto blackboxTargetStr = blackboxTarget.str();
@@ -826,11 +826,10 @@ void GrandCentralTapsPass::runOnOperation() {
           }
 
           auto relative = stripCommonPrefix(prefixWithNLA, path);
-          if (!shortestPrefix.hasValue() ||
-              relative.size() < shortestPrefix->size())
+          if (!shortestPrefix || relative.size() < shortestPrefix->size())
             shortestPrefix.emplace(relative.begin(), relative.end());
         }
-        if (!shortestPrefix.hasValue()) {
+        if (!shortestPrefix) {
           LLVM_DEBUG(llvm::dbgs() << "  - Has no prefix, skipping\n");
           continue;
         }
@@ -860,7 +859,7 @@ void GrandCentralTapsPass::runOnOperation() {
         // Concatenate the prefix into a proper full hierarchical name.
         addSymbol(
             FlatSymbolRefAttr::get(SymbolTable::getSymbolName(rootModule)));
-        for (auto inst : shortestPrefix.getValue())
+        for (auto inst : *shortestPrefix)
           addSymbol(getInnerRefTo(inst));
 
         if (port.target.getOp()) {

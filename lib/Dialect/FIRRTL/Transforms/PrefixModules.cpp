@@ -360,8 +360,7 @@ void PrefixModulesPass::renameExtModule(FExtModuleOp extModule) {
                                          StringRef prefix) {
     extModule.setName((prefix + extModule.getName()).str());
     if (auto defname = extModule.getDefname())
-      extModule->setAttr("defname",
-                         builder.getStringAttr(prefix + defname.getValue()));
+      extModule->setAttr("defname", builder.getStringAttr(prefix + *defname));
   };
 
   // Duplicate the external module if there is more than one prefix.
