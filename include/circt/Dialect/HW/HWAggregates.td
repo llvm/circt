@@ -169,6 +169,7 @@ def StructExtractOp : HWOp<"struct_extract", [NoSideEffect]> {
   ];
 
   let hasFolder = 1;
+  let hasCanonicalizeMethod = 1;
 }
 
 // Create a structure by replacing a field with a value in an existing one.
@@ -186,6 +187,8 @@ def StructInjectOp : HWOp<"struct_inject", [NoSideEffect,
                    HWNonInOutType:$newValue);
   let results = (outs StructType:$result);
   let hasCustomAssemblyFormat = 1;
+
+  let hasCanonicalizeMethod = 1;
 }
 
 def StructExplodeOp : HWOp<"struct_explode", [NoSideEffect]> {
