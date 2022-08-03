@@ -266,11 +266,11 @@ struct ArgResOpConversion : public OpConversionPattern<TOp> {
   LogicalResult
   matchAndRewrite(TOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    // Use the generic builder to allow this pattern to apply to all ops.
     llvm::SmallVector<Type, 4> convResTypes;
     if (failed(this->getTypeConverter()->convertTypes(op->getResultTypes(),
                                                       convResTypes)))
       return failure();
+    // Use the generic builder to allow this pattern to apply to all ops.
     rewriter.replaceOpWithNewOp<TOp>(op, convResTypes, adaptor.getOperands(),
                                      op->getAttrs());
     return success();
