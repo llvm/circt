@@ -3978,37 +3978,6 @@ LogicalResult RefSendOp::verify() {
   return success();
 }
 
-LogicalResult RefRecvOp::verify() {
-  // Check that the flows make sense.
-  if (failed(checkConnectFlow(*this, /*disallowOutputPortSink=*/true)))
-    return failure();
-
-  // Check constraints on RefType.
-  if (failed(checkRefTypeFlow(*this)))
-    return failure();
-
-  // The result of the ref recv op (xmr write) cannot be used as the destination
-  // of any connect op in the module.
-  Value res = getResult();
-  if (res.hasOneUse())
-    return success();
-  for (auto u : res.getUsers())
-    if (auto cLike = dyn_cast<FConnectLike>(u)) {
-      if (cLike.getDest() != res)
-        continue;
-      auto resRef = getFieldRefFromValue(res);
-      bool rootKnown;
-      auto resName = getFieldName(resRef, rootKnown);
-      auto diag = emitError() << "ref recv result ";
-      if (rootKnown)
-        diag << "\"" << resName << "\" ";
-      diag << "cannot be used as the destination of a connect";
-      return diag.attachNote(cLike.getLoc()) << "the connect was defined here";
-    }
-
-  return success();
-}
-
 //===----------------------------------------------------------------------===//
 // TblGen Generated Logic.
 //===----------------------------------------------------------------------===//

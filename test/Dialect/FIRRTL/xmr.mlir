@@ -1,12 +1,12 @@
 // RUN: circt-opt %s -split-input-file
 
 firrtl.circuit "xmr" {
-  firrtl.module private @Test(in %x: !firrtl.ref<uint<2>>) {
+  firrtl.module private @Test(out %x: !firrtl.ref<uint<2>>) {
     %w = firrtl.wire : !firrtl.uint<2>
-    firrtl.ref.recv %w, %x : !firrtl.ref<uint<2>>
+    firrtl.ref.send %x, %w : !firrtl.ref<uint<2>>
   }
   firrtl.module @xmr() {
-    %test_x = firrtl.instance test @Test(in x: !firrtl.ref<uint<2>>)
+    %test_x = firrtl.instance test @Test(out x: !firrtl.ref<uint<2>>)
     %x = firrtl.ref.resolve %test_x : !firrtl.ref<uint<2>>
   }
 }
@@ -46,20 +46,20 @@ firrtl.circuit "DUT" {
 
 // -----
 
-// "Example 1"
-firrtl.circuit "SimpleWrite" {
-  firrtl.module @Bar(in %_a: !firrtl.ref<uint<1>>) {
-    %a = firrtl.wire : !firrtl.uint<1>
-    firrtl.ref.recv %a, %_a : !firrtl.ref<uint<1>>
-  }
-  firrtl.module @SimpleWrite() {
-    %bar_a = firrtl.instance bar @Bar(in _a: !firrtl.ref<uint<1>>)
-
-    %zero = firrtl.constant 0 : !firrtl.uint<1>
-    %0 = firrtl.ref.resolve %bar_a : !firrtl.ref<uint<1>>
-    firrtl.strictconnect %0, %zero : !firrtl.uint<1>
-  }
-}
+//// "Example 1"
+//firrtl.circuit "SimpleWrite" {
+//  firrtl.module @Bar(out %_a: !firrtl.ref<uint<1>>) {
+//    %zero = firrtl.constant 0 : !firrtl.uint<1>
+//    firrtl.ref.send %_a, %zero : !firrtl.ref<uint<1>>
+//  }
+//  firrtl.module @SimpleWrite() {
+//    %bar_a = firrtl.instance bar @Bar(out _a: !firrtl.ref<uint<1>>)
+//
+//    %0 = firrtl.ref.resolve %bar_a : !firrtl.ref<uint<1>>
+//    %a = firrtl.wire : !firrtl.uint<1>
+//    firrtl.strictconnect %0, %a    : !firrtl.uint<1>
+//  }
+//}
 
 // -----
 
@@ -79,21 +79,21 @@ firrtl.circuit "SimpleRead" {
 
 // -----
 
-firrtl.circuit "UnconnectedRef" {
-  firrtl.module @Bar(in %_a: !firrtl.ref<uint<1>>) {
-    %a = firrtl.wire : !firrtl.uint<1>
-    firrtl.ref.recv %a, %_a : !firrtl.ref<uint<1>>
-  }
-  firrtl.module @UnconnectedRef() {
-    %bar_a = firrtl.instance bar1 @Bar(in _a: !firrtl.ref<uint<1>>)
-    // bar_b is unconnected.
-    %bar_b = firrtl.instance bar2 @Bar(in _a: !firrtl.ref<uint<1>>)
-
-    %zero = firrtl.constant 0 : !firrtl.uint<1>
-    %0 = firrtl.ref.resolve %bar_a : !firrtl.ref<uint<1>>
-    firrtl.strictconnect %0, %zero : !firrtl.uint<1>
-  }
-}
+//firrtl.circuit "UnconnectedRef" {
+//  firrtl.module @Bar(in %_a: !firrtl.ref<uint<1>>) {
+//    %a = firrtl.wire : !firrtl.uint<1>
+//    firrtl.ref.recv %a, %_a : !firrtl.ref<uint<1>>
+//  }
+//  firrtl.module @UnconnectedRef() {
+//    %bar_a = firrtl.instance bar1 @Bar(in _a: !firrtl.ref<uint<1>>)
+//    // bar_b is unconnected.
+//    %bar_b = firrtl.instance bar2 @Bar(in _a: !firrtl.ref<uint<1>>)
+//
+//    %zero = firrtl.constant 0 : !firrtl.uint<1>
+//    %0 = firrtl.ref.resolve %bar_a : !firrtl.ref<uint<1>>
+//    firrtl.strictconnect %0, %zero : !firrtl.uint<1>
+//  }
+//}
 
 // -----
 

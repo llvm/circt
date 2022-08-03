@@ -715,18 +715,3 @@ def RefSendOp: FIRRTLOp<"ref.send", [RefTypeConstraint<"ref","result">,
 
   let assemblyFormat = "$ref `,` $result attr-dict `:` qualified(type($ref))";
 }
-
-def RefRecvOp: FIRRTLOp<"ref.recv", [RefTypeConstraint<"ref","result">,
-                                    RefSingleUserConstraint<"ref">,
-                                    RefPortConstraint<"ref">]> {
-  let summary = "FIRRTL Receive from Reference";
-  let description = [{
-    Endpoint of remote reference (XMR), receive value through a reference
-    written from the firrtl.ref.resolve end.
-    This should override any other write to $result.
-  }];
-  let arguments = (ins FIRRTLType:$result, RefType:$ref);
-  let hasVerifier = 1;
-
-  let assemblyFormat = "$result `,` $ref attr-dict `:` qualified(type($ref))";
-}
