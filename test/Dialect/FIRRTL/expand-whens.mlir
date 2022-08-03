@@ -684,4 +684,22 @@ firrtl.module @subword_assign_4(in %clock: !firrtl.clock, in %x: !firrtl.uint<4>
 // CHECK-NEXT: firrtl.strictconnect %out, %r : !firrtl.uint<4>
 // CHECK-NEXT: }
 
+// Test subword assignment on SInt
+firrtl.module @subword_assign_5(in %x: !firrtl.sint<4>, in %y: !firrtl.uint<2>, in %en: !firrtl.uint<1>, out %out: !firrtl.sint<4>) {
+  %0 = firrtl.bits %out 1 to 0 : (!firrtl.sint<4>) -> !firrtl.uint<2>
+  firrtl.strictconnect %out, %x : !firrtl.sint<4>
+  firrtl.when %en {
+    firrtl.strictconnect %0, %y : !firrtl.uint<2>
+  }
+}
+
+// CHECK-LABEL: firrtl.module @subword_assign_5(in %x: !firrtl.sint<4>, in %y: !firrtl.uint<2>, in %en: !firrtl.uint<1>, out %out: !firrtl.sint<4>) {
+// CHECK-NEXT: %0 = firrtl.bits %out 1 to 0 : (!firrtl.sint<4>) -> !firrtl.uint<2>
+// CHECK-NEXT: %1 = firrtl.bits %x 3 to 2 : (!firrtl.sint<4>) -> !firrtl.uint<2>
+// CHECK-NEXT: %2 = firrtl.cat %1, %y : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<4>
+// CHECK-NEXT: %3 = firrtl.asSInt %2 : (!firrtl.uint<4>) -> !firrtl.sint<4>
+// CHECK-NEXT: %4 = firrtl.mux(%en, %3, %x) : (!firrtl.uint<1>, !firrtl.sint<4>, !firrtl.sint<4>) -> !firrtl.sint<4>
+// CHECK-NEXT: firrtl.connect %out, %4 : !firrtl.sint<4>, !firrtl.sint<4>
+// CHECK-NEXT: }
+
 }

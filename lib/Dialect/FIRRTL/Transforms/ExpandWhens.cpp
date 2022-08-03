@@ -193,6 +193,9 @@ public:
       auto x = canonicalizeBits(b.create<BitsPrimOp>(xprev, (uint32_t)bot[0], (uint32_t)bot[1]), b);
       cat = b.createOrFold<CatPrimOp>(cat, x);
     }
+    if (bits.getInput().getType().isa<SIntType>()) {
+      cat = b.create<AsSIntPrimOp>(cat);
+    }
     // the dest needs to be transformed from a bitindex `x[hi:lo] <=` to just `x <=`
     dest = getFieldRefFromValue(bits.getInput());
     // erase the old connection and use a new one with the new dest
