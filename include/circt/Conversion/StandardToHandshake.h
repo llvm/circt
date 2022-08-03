@@ -82,6 +82,7 @@ public:
   LogicalResult connectConstantsToControl(ConversionPatternRewriter &rewriter,
                                           bool sourceConstants);
 
+  LogicalResult feedForwardRewriting(ConversionPatternRewriter &rewriter);
   LogicalResult loopNetworkRewriting(ConversionPatternRewriter &rewriter);
 
   BlockOps insertMergeOps(BlockValues blockLiveIns, blockArgPairs &mergePairs,
@@ -170,6 +171,9 @@ LogicalResult lowerRegion(HandshakeLowering &hl, bool sourceConstants,
   if (!disableTaskPipelining) {
     if (failed(
             runPartialLowering(hl, &HandshakeLowering::loopNetworkRewriting)))
+      return failure();
+    if (failed(
+            runPartialLowering(hl, &HandshakeLowering::feedForwardRewriting)))
       return failure();
   }
 
