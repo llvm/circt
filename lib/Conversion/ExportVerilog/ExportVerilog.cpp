@@ -616,7 +616,8 @@ bool ExportVerilog::isExpressionEmittedInline(Operation *op) {
   // Never create a temporary which is only going to be assigned to an output
   // port.
   if (op->hasOneUse() &&
-      isa<hw::OutputOp, sv::AssignOp>(*op->getUsers().begin()))
+      isa<hw::OutputOp, sv::AssignOp, sv::BPAssignOp, sv::PAssignOp>(
+          *op->getUsers().begin()))
     return true;
 
   // If this operation has multiple uses, we can't generally inline it unless
@@ -2603,6 +2604,7 @@ public:
   /// return false. If the operation *is* a constant, also emit the initializer
   /// and semicolon, e.g. `localparam K = 1'h0;`, and return true.
   bool emitDeclarationForTemporary(Operation *op);
+  LogicalResult emitDeclaration(Operation *op);
 
 private:
   void collectNamesEmitDecls(Block &block);
@@ -2628,10 +2630,10 @@ private:
     return success();
   }
 
-  LogicalResult visitSV(WireOp op) { return emitNoop(); }
-  LogicalResult visitSV(RegOp op) { return emitNoop(); }
-  LogicalResult visitSV(LogicOp op) { return emitNoop(); }
-  LogicalResult visitSV(LocalParamOp op) { return emitNoop(); }
+  LogicalResult visitSV(WireOp op) { return emitDeclaration(op); }
+  LogicalResult visitSV(RegOp op) { return emitDeclaration(op); }
+  LogicalResult visitSV(LogicOp op) { return emitDeclaration(op); }
+  LogicalResult visitSV(LocalParamOp op) { return emitDeclaration(op); }
   LogicalResult visitSV(AssignOp op);
   LogicalResult visitSV(BPAssignOp op);
   LogicalResult visitSV(PAssignOp op);
@@ -2727,6 +2729,11 @@ private:
   /// determining if we need to put out a begin/end marker in a block
   /// declaration.
   size_t numStatementsEmitted = 0;
+
+  /// These keep track of the maximum length of name width and type width in the
+  /// current statement scope.
+  size_t maxDeclNameWidth = 0;
+  size_t maxTypeWidth = 0;
 };
 
 } // end anonymous namespace
@@ -2792,6 +2799,85 @@ void StmtEmitter::emitStatementExpression(Operation *op) {
   emitExpression(op->getResult(0), emittedExprs, ForceEmitMultiUse);
   os << ';';
   emitLocationInfoAndNewLine(emittedExprs);
+}
+
+LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
+  // If spillWiresAtPrepare option is disabled, use the previous emission
+  // method.
+  // TODO: Once ExportVerilog simplification finished, remove this condition.
+  if (!state.options.spillWiresAtPrepare)
+    return emitNoop();
+
+  emitSVAttributes(op);
+  auto value = op->getResult(0);
+  SmallPtrSet<Operation *, 8> opsForLocation;
+  opsForLocation.insert(op);
+
+  // Emit the leading word, like 'wire', 'reg' or 'logic'.
+  auto type = value.getType();
+  auto word = getVerilogDeclWord(op, state.options);
+  if (!isZeroBitType(type)) {
+    indent() << word;
+    auto extraIndent = word.empty() ? 0 : 1;
+    os.indent(maxDeclNameWidth - word.size() + extraIndent);
+  } else {
+    indent() << "// Zero width: " << word << ' ';
+  }
+
+  SmallString<8> typeString;
+  // Convert the port's type to a string and measure it.
+  {
+    llvm::raw_svector_ostream stringStream(typeString);
+    emitter.printPackedType(stripUnpackedTypes(type), stringStream,
+                            op->getLoc());
+  }
+  // Emit the type.
+  os << typeString;
+  if (typeString.size() < maxTypeWidth)
+    os.indent(maxTypeWidth - typeString.size());
+
+  // Emit the name.
+  os << names.getName(value);
+
+  // Print out any array subscripts or other post-name stuff.
+  emitter.printUnpackedTypePostfix(type, os);
+
+  if (auto localparam = dyn_cast<LocalParamOp>(op)) {
+    os << " = ";
+    emitter.printParamValue(localparam.getValue(), os, [&]() {
+      return op->emitOpError("invalid localparam value");
+    });
+  }
+
+  // Try inlining wire assignments into declarations.
+  if (isa<WireOp>(op)) {
+    // If the wire has a single assignment located at next to the wire, we can
+    // inline the assignment.
+    AssignOp singleAssign = {};
+    if (llvm::all_of(op->getUsers(),
+                     [&](Operation *user) {
+                       if (hasSVAttributes(user))
+                         return false;
+
+                       if (auto assign = dyn_cast<AssignOp>(user)) {
+                         singleAssign = assign;
+                         // Check that the assignment is next to the wire.
+                         return assign == op->getNextNode();
+                       }
+
+                       return isa<ReadInOutOp>(user);
+                     }) &&
+        singleAssign) {
+      os << " = ";
+      emitExpression(singleAssign.getSrc(), opsForLocation, ForceEmitMultiUse);
+      emitter.assignsInlined.insert(singleAssign);
+    }
+  }
+
+  os << ';';
+  emitLocationInfoAndNewLine(opsForLocation);
+  ++numStatementsEmitted;
+  return success();
 }
 
 LogicalResult StmtEmitter::visitSV(AssignOp op) {
@@ -3968,11 +4054,17 @@ void StmtEmitter::collectNamesEmitDecls(Block &block) {
   if (valuesToEmit.empty())
     return;
 
-  size_t maxDeclNameWidth = collector.getMaxDeclNameWidth();
-  size_t maxTypeWidth = collector.getMaxTypeWidth();
+  // Record maxDeclNameWidth and maxTypeWidth in the current scope.
+  maxDeclNameWidth = collector.getMaxDeclNameWidth();
+  maxTypeWidth = collector.getMaxTypeWidth();
 
   if (maxTypeWidth > 0) // add a space if any type exists
     maxTypeWidth += 1;
+
+  // In the new emission mode, we don't do forward declarations.
+  // TODO: Remove the below once we enabled the new emission mode by default.
+  if (state.options.spillWiresAtPrepare)
+    return;
 
   SmallPtrSet<Operation *, 8> opsForLocation;
 

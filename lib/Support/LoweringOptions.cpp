@@ -95,14 +95,6 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
       // We continue parsing options after a failure.
     }
   }
-
-  if (spillWiresAtPrepare && !disallowLocalVariables) {
-    // FIXME: Currently we cannot spill temporaries in procedural regions. Hence
-    // `spillWiresAtPrepare` must be used together with
-    // `disallowLocalVariables`.
-    errorHandler(llvm::Twine(
-        "`spillWiresAtPrepare` must be used with `disallowLocalVariables`"));
-  }
 }
 
 std::string LoweringOptions::toString() const {
