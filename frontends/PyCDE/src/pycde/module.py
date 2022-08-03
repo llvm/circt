@@ -575,6 +575,10 @@ class _GeneratorPortAccess:
     if name in self._output_values:
       raise ValueError(f"Cannot set output '{name}' twice")
 
+    from .behavioral import If
+    if If.current() is not None:
+      raise ValueError(f"Cannot set output '{name}' inside an if block")
+
     output_port = self._mod.output_ports[self._mod.output_port_lookup[name]]
     output_port_type = output_port[1]
     if not isinstance(value, Value):

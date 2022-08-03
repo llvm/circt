@@ -207,3 +207,28 @@ class FSMUser:
     ports.is_a = inst.is_a
     ports.is_b = inst.is_b
     ports.is_c = inst.is_c
+
+
+from pycde.behavioral import If, Else, EndIf
+
+
+@fsm.machine
+class F1:
+  clk = Clock()
+  go = Input(types.i1)
+  valid = Input(types.i1)
+  data = Input(types.i4)
+
+  @fsm.state(initial=True)
+  def a(ports, state):
+    with If(ports.go):
+      state.goto_b()
+    EndIf()
+
+  @fsm.state(initial=True)
+  def b(ports, state):
+    with If(ports.valid):
+      with If(ports.data == 3):
+        state.goto_a()
+      EndIf()
+    EndIf()
