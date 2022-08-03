@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_FIRRTL_FIRRTLATTRIBUTES_TD
 
 include "mlir/IR/EnumAttr.td"
+include "mlir/IR/BuiltinAttributeInterfaces.td"
 
 //===----------------------------------------------------------------------===//
 // FIRRTL Annotations Definition
@@ -35,7 +36,8 @@ def PortAnnotationsAttr : ArrayAttrBase<
   let constBuilderCall = "$_builder.getArrayAttr($0)";
 }
 
-def InvalidValueAttr : AttrDef<FIRRTLDialect, "InvalidValue"> {
+def InvalidValueAttr : AttrDef<FIRRTLDialect, "InvalidValue",
+                               [TypedAttrInterface]> {
   let summary = "A constant value of firrtl.invalid type";
   let description = [{
     Represents an firrtl.invalidvalue value, whose type is specified by the
@@ -136,7 +138,7 @@ def AugmentedDeletedType : AugmentedType<"AugmentedDeletedType"> {
 }
 
 
-def ParamDeclAttr : AttrDef<FIRRTLDialect, "ParamDecl"> {
+def ParamDeclAttr : AttrDef<FIRRTLDialect, "ParamDecl", [TypedAttrInterface]> {
   let summary = "Module or instance parameter definition";
   let description = [{
     An attribute describing a module parameter, or instance parameter
@@ -149,7 +151,7 @@ def ParamDeclAttr : AttrDef<FIRRTLDialect, "ParamDecl"> {
   /// parameter for an instance when the applied value and the default value are
   /// the same.
   let parameters = (ins "::mlir::StringAttr":$name,
-                        "::mlir::TypeAttr":$type,
+                        AttributeSelfTypeParameter<"">:$type,
                         "::mlir::Attribute":$value);
   let mnemonic = "param.decl";
 
@@ -157,19 +159,19 @@ def ParamDeclAttr : AttrDef<FIRRTLDialect, "ParamDecl"> {
 
   let builders = [
     AttrBuilderWithInferredContext<(ins "::mlir::StringAttr":$name,
-                                         "::mlir::Type":$type),
+                                        "::mlir::Type":$type),
       "auto *context = type.getContext();\n"
-      "return $_get(context, name, TypeAttr::get(type), Attribute());">,
+      "return $_get(context, name, type, Attribute());">,
     AttrBuilderWithInferredContext<(ins "::mlir::StringRef":$name,
-                                         "::mlir::Type":$type),
+                                        "::mlir::Type":$type),
       "return get(StringAttr::get(type.getContext(), name), type);">,
 
     AttrBuilderWithInferredContext<(ins "::mlir::StringAttr":$name,
-                                        "::mlir::Attribute":$value),
+                                        "::mlir::TypedAttr":$value),
       "auto *context = value.getContext();\n"
-      "return $_get(context, name, TypeAttr::get(value.getType()), value);">,
+      "return $_get(context, name, value.getType(), value);">,
     AttrBuilderWithInferredContext<(ins "::mlir::StringRef":$name,
-                                        "::mlir::Attribute":$value),
+                                        "::mlir::TypedAttr":$value),
       "return get(StringAttr::get(value.getContext(), name), value);">
   ];
 

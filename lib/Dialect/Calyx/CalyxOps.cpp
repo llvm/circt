@@ -1448,8 +1448,7 @@ static ParseResult parseParameterList(OpAsmParser &parser,
 
         auto &builder = parser.getBuilder();
         parameters.push_back(hw::ParamDeclAttr::get(
-            builder.getContext(), builder.getStringAttr(name),
-            TypeAttr::get(type), value));
+            builder.getContext(), builder.getStringAttr(name), type, value));
         return success();
       });
 }

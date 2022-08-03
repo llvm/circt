@@ -21,6 +21,7 @@
 
 using namespace circt;
 using namespace circt::hw;
+using mlir::TypedAttr;
 
 // Internal method used for .mlir file parsing, defined below.
 static Attribute parseParamExprWithOpcode(StringRef opcode, DialectAsmParser &p,
@@ -254,7 +255,8 @@ void ParamDeclAttr::print(AsmPrinter &p) const {
 
 Attribute ParamDeclRefAttr::parse(AsmParser &p, Type type) {
   StringAttr name;
-  if (p.parseLess() || p.parseAttribute(name) || p.parseGreater())
+  if (p.parseLess() || p.parseAttribute(name) || p.parseGreater() ||
+      (!type && (p.parseColon() || p.parseType(type))))
     return Attribute();
 
   return ParamDeclRefAttr::get(name, type);
@@ -270,7 +272,8 @@ void ParamDeclRefAttr::print(AsmPrinter &p) const {
 
 Attribute ParamVerbatimAttr::parse(AsmParser &p, Type type) {
   StringAttr text;
-  if (p.parseLess() || p.parseAttribute(text) || p.parseGreater())
+  if (p.parseLess() || p.parseAttribute(text) || p.parseGreater() ||
+      (!type && (p.parseColon() || p.parseType(type))))
     return Attribute();
 
   return ParamVerbatimAttr::get(p.getContext(), text, type);
@@ -286,8 +289,8 @@ void ParamVerbatimAttr::print(AsmPrinter &p) const {
 
 /// Given a binary function, if the two operands are known constant integers,
 /// use the specified fold function to compute the result.
-static Attribute foldBinaryOp(
-    ArrayRef<Attribute> operands,
+static TypedAttr foldBinaryOp(
+    ArrayRef<TypedAttr> operands,
     llvm::function_ref<APInt(const APInt &, const APInt &)> calculate) {
   assert(operands.size() == 2 && "binary operator always has two operands");
   if (auto lhs = operands[0].dyn_cast<IntegerAttr>())
@@ -299,8 +302,8 @@ static Attribute foldBinaryOp(
 
 /// Given a unary function, if the operand is a known constant integer,
 /// use the specified fold function to compute the result.
-static Attribute
-foldUnaryOp(ArrayRef<Attribute> operands,
+static TypedAttr
+foldUnaryOp(ArrayRef<TypedAttr> operands,
             llvm::function_ref<APInt(const APInt &)> calculate) {
   assert(operands.size() == 1 && "unary operator always has one operand");
   if (auto intAttr = operands[0].dyn_cast<IntegerAttr>())
@@ -368,7 +371,7 @@ static bool paramExprOperandSortPredicate(Attribute lhs, Attribute rhs) {
            stringifyPEO(rhsExpr.getOpcode());
 
   // If they are the same opcode, then sort by arity: more complex to the left.
-  ArrayRef<Attribute> lhsOperands = lhsExpr.getOperands(),
+  ArrayRef<TypedAttr> lhsOperands = lhsExpr.getOperands(),
                       rhsOperands = rhsExpr.getOperands();
   if (lhsOperands.size() != rhsOperands.size())
     return lhsOperands.size() > rhsOperands.size();
@@ -389,8 +392,8 @@ static bool paramExprOperandSortPredicate(Attribute lhs, Attribute rhs) {
 /// Given a fully associative variadic integer operation, constant fold any
 /// constant operands and move them to the right.  If the whole expression is
 /// constant, then return that, otherwise update the operands list.
-static Attribute simplifyAssocOp(
-    PEO opcode, SmallVector<Attribute, 4> &operands,
+static TypedAttr simplifyAssocOp(
+    PEO opcode, SmallVector<TypedAttr, 4> &operands,
     llvm::function_ref<APInt(const APInt &, const APInt &)> calculateFn,
     llvm::function_ref<bool(const APInt &)> identityConstantFn,
     llvm::function_ref<bool(const APInt &)> destructiveConstantFn = {}) {
@@ -447,20 +450,20 @@ static Attribute simplifyAssocOp(
 /// `(a*b*42)` then split it into the non-constant and the constant portions
 /// (e.g. `a*b` and `42`).  Otherwise return the operand as the first value and
 /// null as the second (standin for "multiplication by 1").
-static std::pair<Attribute, Attribute> decomposeAddend(Attribute operand) {
+static std::pair<TypedAttr, TypedAttr> decomposeAddend(TypedAttr operand) {
   if (auto mul = dyn_castPE(PEO::Mul, operand))
     if (auto cst = mul.getOperands().back().dyn_cast<IntegerAttr>()) {
       auto nonCst = ParamExprAttr::get(PEO::Mul, mul.getOperands().drop_back());
       return {nonCst, cst};
     }
-  return {operand, Attribute()};
+  return {operand, TypedAttr()};
 }
 
-static Attribute getOneOfType(Type type) {
+static TypedAttr getOneOfType(Type type) {
   return IntegerAttr::get(type, APInt(type.getIntOrFloatBitWidth(), 1));
 }
 
-static Attribute simplifyAdd(SmallVector<Attribute, 4> &operands) {
+static TypedAttr simplifyAdd(SmallVector<TypedAttr, 4> &operands) {
   if (auto result = simplifyAssocOp(
           PEO::Add, operands, [](auto a, auto b) { return a + b; },
           /*identityCst*/ [](auto cst) { return cst.isZero(); }))
@@ -468,8 +471,8 @@ static Attribute simplifyAdd(SmallVector<Attribute, 4> &operands) {
 
   // Canonicalize the add by splitting all addends into their variable and
   // constant factors.
-  SmallVector<std::pair<Attribute, Attribute>> decomposedOperands;
-  llvm::SmallDenseSet<Attribute> nonConstantParts;
+  SmallVector<std::pair<TypedAttr, TypedAttr>> decomposedOperands;
+  llvm::SmallDenseSet<TypedAttr> nonConstantParts;
   for (auto &op : operands) {
     decomposedOperands.push_back(decomposeAddend(op));
 
@@ -479,7 +482,7 @@ static Attribute simplifyAdd(SmallVector<Attribute, 4> &operands) {
     // `(a*3 + b)`.
     if (!nonConstantParts.insert(decomposedOperands.back().first).second) {
       // The thing we multiply will be the common expression.
-      Attribute mulOperand = decomposedOperands.back().first;
+      TypedAttr mulOperand = decomposedOperands.back().first;
 
       // Find the index of the first occurrence.
       size_t i = 0;
@@ -509,7 +512,7 @@ static Attribute simplifyAdd(SmallVector<Attribute, 4> &operands) {
   return {};
 }
 
-static Attribute simplifyMul(SmallVector<Attribute, 4> &operands) {
+static TypedAttr simplifyMul(SmallVector<TypedAttr, 4> &operands) {
   if (auto result = simplifyAssocOp(
           PEO::Mul, operands, [](auto a, auto b) { return a * b; },
           /*identityCst*/ [](auto cst) { return cst.isOne(); },
@@ -522,11 +525,11 @@ static Attribute simplifyMul(SmallVector<Attribute, 4> &operands) {
     if (auto subexpr = dyn_castPE(PEO::Add, operands[i])) {
       // Pull the `c*d` operands out - it is whatever operands remain after
       // removing the `(a+b)` term.
-      SmallVector<Attribute> mulOperands(operands.begin(), operands.end());
+      SmallVector<TypedAttr> mulOperands(operands.begin(), operands.end());
       mulOperands.erase(mulOperands.begin() + i);
 
       // Build each add operand.
-      SmallVector<Attribute> addOperands;
+      SmallVector<TypedAttr> addOperands;
       for (auto addOperand : subexpr.getOperands()) {
         mulOperands.push_back(addOperand);
         addOperands.push_back(ParamExprAttr::get(PEO::Mul, mulOperands));
@@ -539,27 +542,27 @@ static Attribute simplifyMul(SmallVector<Attribute, 4> &operands) {
 
   return {};
 }
-static Attribute simplifyAnd(SmallVector<Attribute, 4> &operands) {
+static TypedAttr simplifyAnd(SmallVector<TypedAttr, 4> &operands) {
   return simplifyAssocOp(
       PEO::And, operands, [](auto a, auto b) { return a & b; },
       /*identityCst*/ [](auto cst) { return cst.isAllOnes(); },
       /*destructiveCst*/ [](auto cst) { return cst.isZero(); });
 }
 
-static Attribute simplifyOr(SmallVector<Attribute, 4> &operands) {
+static TypedAttr simplifyOr(SmallVector<TypedAttr, 4> &operands) {
   return simplifyAssocOp(
       PEO::Or, operands, [](auto a, auto b) { return a | b; },
       /*identityCst*/ [](auto cst) { return cst.isZero(); },
       /*destructiveCst*/ [](auto cst) { return cst.isAllOnes(); });
 }
 
-static Attribute simplifyXor(SmallVector<Attribute, 4> &operands) {
+static TypedAttr simplifyXor(SmallVector<TypedAttr, 4> &operands) {
   return simplifyAssocOp(
       PEO::Xor, operands, [](auto a, auto b) { return a ^ b; },
       /*identityCst*/ [](auto cst) { return cst.isZero(); });
 }
 
-static Attribute simplifyShl(SmallVector<Attribute, 4> &operands) {
+static TypedAttr simplifyShl(SmallVector<TypedAttr, 4> &operands) {
   assert(isHWIntegerType(operands[0].getType()));
 
   if (auto rhs = operands[1].dyn_cast<IntegerAttr>()) {
@@ -578,7 +581,7 @@ static Attribute simplifyShl(SmallVector<Attribute, 4> &operands) {
   return {};
 }
 
-static Attribute simplifyShrU(SmallVector<Attribute, 4> &operands) {
+static TypedAttr simplifyShrU(SmallVector<TypedAttr, 4> &operands) {
   assert(isHWIntegerType(operands[0].getType()));
   // Implement support for identities like `x >> 0`.
   if (auto rhs = operands[1].dyn_cast<IntegerAttr>())
@@ -588,7 +591,7 @@ static Attribute simplifyShrU(SmallVector<Attribute, 4> &operands) {
   return foldBinaryOp(operands, [](auto a, auto b) { return a.lshr(b); });
 }
 
-static Attribute simplifyShrS(SmallVector<Attribute, 4> &operands) {
+static TypedAttr simplifyShrS(SmallVector<TypedAttr, 4> &operands) {
   assert(isHWIntegerType(operands[0].getType()));
   // Implement support for identities like `x >> 0`.
   if (auto rhs = operands[1].dyn_cast<IntegerAttr>())
@@ -598,7 +601,7 @@ static Attribute simplifyShrS(SmallVector<Attribute, 4> &operands) {
   return foldBinaryOp(operands, [](auto a, auto b) { return a.ashr(b); });
 }
 
-static Attribute simplifyDivU(SmallVector<Attribute, 4> &operands) {
+static TypedAttr simplifyDivU(SmallVector<TypedAttr, 4> &operands) {
   assert(isHWIntegerType(operands[0].getType()));
   // Implement support for identities like `x/1`.
   if (auto rhs = operands[1].dyn_cast<IntegerAttr>())
@@ -608,7 +611,7 @@ static Attribute simplifyDivU(SmallVector<Attribute, 4> &operands) {
   return foldBinaryOp(operands, [](auto a, auto b) { return a.udiv(b); });
 }
 
-static Attribute simplifyDivS(SmallVector<Attribute, 4> &operands) {
+static TypedAttr simplifyDivS(SmallVector<TypedAttr, 4> &operands) {
   assert(isHWIntegerType(operands[0].getType()));
   // Implement support for identities like `x/1`.
   if (auto rhs = operands[1].dyn_cast<IntegerAttr>())
@@ -618,7 +621,7 @@ static Attribute simplifyDivS(SmallVector<Attribute, 4> &operands) {
   return foldBinaryOp(operands, [](auto a, auto b) { return a.sdiv(b); });
 }
 
-static Attribute simplifyModU(SmallVector<Attribute, 4> &operands) {
+static TypedAttr simplifyModU(SmallVector<TypedAttr, 4> &operands) {
   assert(isHWIntegerType(operands[0].getType()));
   // Implement support for identities like `x%1`.
   if (auto rhs = operands[1].dyn_cast<IntegerAttr>())
@@ -628,7 +631,7 @@ static Attribute simplifyModU(SmallVector<Attribute, 4> &operands) {
   return foldBinaryOp(operands, [](auto a, auto b) { return a.urem(b); });
 }
 
-static Attribute simplifyModS(SmallVector<Attribute, 4> &operands) {
+static TypedAttr simplifyModS(SmallVector<TypedAttr, 4> &operands) {
   assert(isHWIntegerType(operands[0].getType()));
   // Implement support for identities like `x%1`.
   if (auto rhs = operands[1].dyn_cast<IntegerAttr>())
@@ -638,7 +641,7 @@ static Attribute simplifyModS(SmallVector<Attribute, 4> &operands) {
   return foldBinaryOp(operands, [](auto a, auto b) { return a.srem(b); });
 }
 
-static Attribute simplifyCLog2(SmallVector<Attribute, 4> &operands) {
+static TypedAttr simplifyCLog2(SmallVector<TypedAttr, 4> &operands) {
   assert(isHWIntegerType(operands[0].getType()));
   return foldUnaryOp(operands, [](auto a) {
     // Following the Verilog spec, clog2(0) is 0
@@ -646,9 +649,9 @@ static Attribute simplifyCLog2(SmallVector<Attribute, 4> &operands) {
   });
 }
 
-static Attribute simplifyStrConcat(SmallVector<Attribute, 4> &operands) {
+static TypedAttr simplifyStrConcat(SmallVector<TypedAttr, 4> &operands) {
   // Combine all adjacent strings.
-  SmallVector<Attribute> newOperands;
+  SmallVector<TypedAttr> newOperands;
   SmallVector<StringAttr> stringsToCombine;
   auto combineAndPush = [&]() {
     if (stringsToCombine.empty())
@@ -662,7 +665,7 @@ static Attribute simplifyStrConcat(SmallVector<Attribute, 4> &operands) {
     stringsToCombine.clear();
   };
 
-  for (Attribute op : operands) {
+  for (TypedAttr op : operands) {
     if (auto strOp = op.dyn_cast<StringAttr>()) {
       // Queue up adjacent strings.
       stringsToCombine.push_back(strOp);
@@ -683,17 +686,17 @@ static Attribute simplifyStrConcat(SmallVector<Attribute, 4> &operands) {
 
 /// Build a parameter expression.  This automatically canonicalizes and
 /// folds, so it may not necessarily return a ParamExprAttr.
-Attribute ParamExprAttr::get(PEO opcode, ArrayRef<Attribute> operandsIn) {
+TypedAttr ParamExprAttr::get(PEO opcode, ArrayRef<TypedAttr> operandsIn) {
   assert(!operandsIn.empty() && "Cannot have expr with no operands");
   // All operands must have the same type, which is the type of the result.
   auto type = operandsIn.front().getType();
   assert(llvm::all_of(operandsIn.drop_front(),
                       [&](auto op) { return op.getType() == type; }));
 
-  SmallVector<Attribute, 4> operands(operandsIn.begin(), operandsIn.end());
+  SmallVector<TypedAttr, 4> operands(operandsIn.begin(), operandsIn.end());
 
   // Verify and canonicalize parameter expressions.
-  Attribute result;
+  TypedAttr result;
   switch (opcode) {
   case PEO::Add:
     result = simplifyAdd(operands);
@@ -757,7 +760,7 @@ Attribute ParamExprAttr::parse(AsmParser &p, Type type) {
 /// "#hw.param.expr.mul" form of the attribute.
 static Attribute parseParamExprWithOpcode(StringRef opcodeStr,
                                           DialectAsmParser &p, Type type) {
-  SmallVector<Attribute> operands;
+  SmallVector<TypedAttr> operands;
   if (p.parseCommaSeparatedList(
           mlir::AsmParser::Delimiter::LessGreater, [&]() -> ParseResult {
             operands.push_back({});
@@ -802,7 +805,7 @@ replaceDeclRefInExpr(Location loc,
   }
   if (auto paramExprAttr = paramAttr.dyn_cast<hw::ParamExprAttr>()) {
     // Recurse into all operands of the expression.
-    llvm::SmallVector<Attribute, 4> replacedOperands;
+    llvm::SmallVector<TypedAttr, 4> replacedOperands;
     for (auto operand : paramExprAttr.getOperands()) {
       auto res = replaceDeclRefInExpr(loc, parameters, operand);
       if (failed(res))

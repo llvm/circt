@@ -10,6 +10,7 @@
 #define CIRCT_DIALECT_HW_ATTRIBUTES_H
 
 #include "mlir/IR/Attributes.h"
+#include "mlir/IR/BuiltinAttributeInterfaces.h"
 #include "mlir/IR/BuiltinAttributes.h"
 
 namespace circt {

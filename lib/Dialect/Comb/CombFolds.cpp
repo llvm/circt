@@ -639,8 +639,19 @@ static Attribute constFoldAssociativeOp(ArrayRef<Attribute> operands,
     return {};
 
   // This will fold to a simple constant if all operands are constant.
-  if (llvm::all_of(operands.drop_front(2), [&](Attribute in) { return !!in; }))
-    return hw::ParamExprAttr::get(paramOpcode, operands);
+  if (llvm::all_of(operands.drop_front(2),
+                   [&](Attribute in) { return !!in; })) {
+    SmallVector<mlir::TypedAttr> typedOperands;
+    typedOperands.reserve(operands.size());
+    for (auto operand : operands) {
+      if (auto typedOperand = operand.dyn_cast<mlir::TypedAttr>())
+        typedOperands.push_back(typedOperand);
+      else
+        break;
+    }
+    if (typedOperands.size() == operands.size())
+      return hw::ParamExprAttr::get(paramOpcode, typedOperands);
+  }
 
   return {};
 }

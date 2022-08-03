@@ -230,7 +230,7 @@ hw.module @Use(%a: i8) -> (xx: i8) {
 hw.module.extern @p<p1: i42 = 17, p2: i1>(%arg0: i8) -> (out: i8)
 
 hw.module @Use(%a: i8) -> (xx: i8) {
-  // expected-error @+1 {{op parameter "p2" should have type i1 but has type i2}}
+  // expected-error @+1 {{op parameter "p2" should have type 'i1' but has type 'i2'}}
   %r0 = hw.instance "inst1" @p<p1: i42 = 4, p2: i2 = 0>(arg0: %a: i8) -> (out: i8)
   hw.output %r0: i8
 }
@@ -284,7 +284,7 @@ hw.module @Use<xx: i41>() {
 
 // -----
 
-// expected-error @+1 {{parameter #hw.param.decl<"xx": i41> has the same name as a previous parameter}}
+// expected-error @+1 {{parameter #hw.param.decl<"xx": i41> : i41 has the same name as a previous parameter}}
 hw.module @Use<xx: i41, xx: i41>() {
 }
 
