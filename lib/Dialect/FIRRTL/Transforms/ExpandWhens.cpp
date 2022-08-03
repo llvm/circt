@@ -123,40 +123,55 @@ public:
     }
     auto *inputOp = op.getInput().getDefiningOp();
     if (auto cat = dyn_cast<CatPrimOp>(inputOp)) {
-      // bits(cat(a, b), ...) => bits(a, ...), or bits(b, ...), or cat(bits(a, ...), bits(b, ...))
+      // bits(cat(a, b), ...) => bits(a, ...), or bits(b, ...), or cat(bits(a,
+      // ...), bits(b, ...))
       if (auto rhsT = cat.getRhs().getType().dyn_cast<IntType>()) {
         uint32_t lhsLo = rhsT.getWidth().getValue();
         uint32_t rhsHi = lhsLo - 1;
         Value newOp;
         if (op.getHi() >= lhsLo && op.getLo() >= lhsLo) {
           // only indexing the lhs
-          newOp = canonicalizeBits(builder.create<BitsPrimOp>(cat.getLhs(), op.getHi() - lhsLo, op.getLo() - lhsLo), builder);
+          newOp = canonicalizeBits(
+              builder.create<BitsPrimOp>(cat.getLhs(), op.getHi() - lhsLo,
+                                         op.getLo() - lhsLo),
+              builder);
         } else if (op.getHi() <= rhsHi && op.getLo() <= rhsHi) {
           // only indexing the rhs
-          newOp = canonicalizeBits(builder.create<BitsPrimOp>(cat.getRhs(), op.getHi(), op.getLo()), builder);
+          newOp = canonicalizeBits(
+              builder.create<BitsPrimOp>(cat.getRhs(), op.getHi(), op.getLo()),
+              builder);
         } else {
-          auto bitsLhs = canonicalizeBits(builder.create<BitsPrimOp>(cat.getLhs(), op.getHi() - lhsLo, 0), builder);
-          auto bitsRhs = canonicalizeBits(builder.create<BitsPrimOp>(cat.getRhs(), rhsHi, op.getLo()), builder);
+          auto bitsLhs = canonicalizeBits(
+              builder.create<BitsPrimOp>(cat.getLhs(), op.getHi() - lhsLo, 0),
+              builder);
+          auto bitsRhs = canonicalizeBits(
+              builder.create<BitsPrimOp>(cat.getRhs(), rhsHi, op.getLo()),
+              builder);
           newOp = builder.createOrFold<CatPrimOp>(bitsLhs, bitsRhs);
         }
         return newOp;
       }
     } else if (auto mux = dyn_cast<MuxPrimOp>(op.getInput().getDefiningOp())) {
       // bits(mux(sel, a, b), ...) => mux(sel, bits(a, ...), bits(b, ...))
-      auto bitsHigh = canonicalizeBits(builder.create<BitsPrimOp>(mux.getHigh(), op.getHi(), op.getLo()), builder);
-      auto bitsLow = canonicalizeBits(builder.create<BitsPrimOp>(mux.getLow(), op.getHi(), op.getLo()), builder);
-      Value newOp = builder.createOrFold<MuxPrimOp>(mux.getSel(), bitsHigh, bitsLow);
+      auto bitsHigh = canonicalizeBits(
+          builder.create<BitsPrimOp>(mux.getHigh(), op.getHi(), op.getLo()),
+          builder);
+      auto bitsLow = canonicalizeBits(
+          builder.create<BitsPrimOp>(mux.getLow(), op.getHi(), op.getLo()),
+          builder);
+      Value newOp =
+          builder.createOrFold<MuxPrimOp>(mux.getSel(), bitsHigh, bitsLow);
       return newOp;
     }
     return op;
   }
 
-
   // Rewrites a connection where the dest is the bitindex. An expression that
   // looks like `x[hi:lo] <= e` gets rewritten to `x <= cat(xprev[x.w-1:hi+1],
   // e, xprev[lo-1:0])`, where xprev is the most recent connection to x in any
   // scope.
-  void rewriteBitsConnect(BitsPrimOp bits, FieldRef &dest, FConnectLike &connection) {
+  void rewriteBitsConnect(BitsPrimOp bits, FieldRef &dest,
+                          FConnectLike &connection) {
     // get x's width
     int w = bits.getInput().getType().dyn_cast<IntType>().getWidth().getValue();
     // find the previous connection to x, search across scopes
@@ -175,28 +190,32 @@ public:
       xprev = it.base()->second.getSrc();
     }
 
-    int top[2] = {w-1, (int)bits.getHi()+1};
-    int bot[2] = {(int)bits.getLo()-1, 0};
+    int top[2] = {w - 1, (int)bits.getHi() + 1};
+    int bot[2] = {(int)bits.getLo() - 1, 0};
     Value cat;
     // build the high bits
     if (top[0] >= top[1]) {
       // build `cat(xprev[x.w-1:hi], e)`
-      Value x = canonicalizeBits(b.create<BitsPrimOp>(xprev, (uint32_t)top[0], (uint32_t)top[1]), b);
+      Value x = canonicalizeBits(
+          b.create<BitsPrimOp>(xprev, (uint32_t)top[0], (uint32_t)top[1]), b);
       cat = b.createOrFold<CatPrimOp>(x, connection.getSrc());
     } else {
-      // the assignment is assigning all the high bits, so no need to get them from xprev
+      // the assignment is assigning all the high bits, so no need to get them
+      // from xprev
       cat = connection.getSrc();
     }
     // build the low bits if they are not completely assigned
     if (bot[0] >= bot[1]) {
       // build cat(cat, xprev[lo-1:0])
-      auto x = canonicalizeBits(b.create<BitsPrimOp>(xprev, (uint32_t)bot[0], (uint32_t)bot[1]), b);
+      auto x = canonicalizeBits(
+          b.create<BitsPrimOp>(xprev, (uint32_t)bot[0], (uint32_t)bot[1]), b);
       cat = b.createOrFold<CatPrimOp>(cat, x);
     }
     if (bits.getInput().getType().isa<SIntType>()) {
       cat = b.create<AsSIntPrimOp>(cat);
     }
-    // the dest needs to be transformed from a bitindex `x[hi:lo] <=` to just `x <=`
+    // the dest needs to be transformed from a bitindex `x[hi:lo] <=` to just `x
+    // <=`
     dest = getFieldRefFromValue(bits.getInput());
     // erase the old connection and use a new one with the new dest
     connection.erase();
@@ -207,7 +226,8 @@ public:
   /// delete a previous connection to a destination if there was one. Returns
   /// true if an old connect was erased.
   bool setLastConnect(FieldRef dest, FConnectLike connection) {
-    // if we see `x[hi:lo] <= e`, we have to transform this into a read-modify-write
+    // if we see `x[hi:lo] <= e`, we have to transform this into a
+    // read-modify-write
     if (auto bits = dyn_cast<BitsPrimOp>(dest.getDefiningOp())) {
       rewriteBitsConnect(bits, dest, connection);
     }

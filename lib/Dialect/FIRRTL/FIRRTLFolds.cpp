@@ -1106,13 +1106,17 @@ LogicalResult BitsPrimOp::canonicalize(BitsPrimOp op,
   }
   // bits(mux(sel, a, b), ...) => mux(sel, bits(a, ...), bits(b, ...))
   if (auto mux = dyn_cast_or_null<MuxPrimOp>(inputOp)) {
-    auto bitsHigh = rewriter.create<BitsPrimOp>(op->getLoc(), mux.getHigh(), op.getHi(), op.getLo());
-    auto bitsLow = rewriter.create<BitsPrimOp>(op->getLoc(), mux.getLow(), op.getHi(), op.getLo());
-    Value newOp = rewriter.create<MuxPrimOp>(op->getLoc(), mux.getSel(), bitsHigh, bitsLow);
+    auto bitsHigh = rewriter.create<BitsPrimOp>(op->getLoc(), mux.getHigh(),
+                                                op.getHi(), op.getLo());
+    auto bitsLow = rewriter.create<BitsPrimOp>(op->getLoc(), mux.getLow(),
+                                               op.getHi(), op.getLo());
+    Value newOp = rewriter.create<MuxPrimOp>(op->getLoc(), mux.getSel(),
+                                             bitsHigh, bitsLow);
     rewriter.replaceOp(op, newOp);
     return success();
   }
-  // bits(cat(a, b), ...) => bits(a, ...), or bits(b, ...), or cat(bits(a, ...), bits(b, ...))
+  // bits(cat(a, b), ...) => bits(a, ...), or bits(b, ...), or cat(bits(a, ...),
+  // bits(b, ...))
   if (auto cat = dyn_cast_or_null<CatPrimOp>(inputOp)) {
     if (auto rhsT = cat.getRhs().getType().dyn_cast<IntType>()) {
       uint32_t lhsLo = rhsT.getWidth().getValue();
@@ -1120,13 +1124,17 @@ LogicalResult BitsPrimOp::canonicalize(BitsPrimOp op,
       Value newOp;
       if (op.getHi() >= lhsLo && op.getLo() >= lhsLo) {
         // only indexing the lhs
-        newOp = rewriter.create<BitsPrimOp>(op->getLoc(), cat.getLhs(), op.getHi() - lhsLo, op.getLo() - lhsLo);
+        newOp = rewriter.create<BitsPrimOp>(
+            op->getLoc(), cat.getLhs(), op.getHi() - lhsLo, op.getLo() - lhsLo);
       } else if (op.getHi() <= rhsHi && op.getLo() <= rhsHi) {
         // only indexing the rhs
-        newOp = rewriter.create<BitsPrimOp>(op->getLoc(), cat.getRhs(), op.getHi(), op.getLo());
+        newOp = rewriter.create<BitsPrimOp>(op->getLoc(), cat.getRhs(),
+                                            op.getHi(), op.getLo());
       } else {
-        auto bitsLhs = rewriter.create<BitsPrimOp>(op->getLoc(), cat.getLhs(), op.getHi() - lhsLo, 0);
-        auto bitsRhs = rewriter.create<BitsPrimOp>(op->getLoc(), cat.getRhs(), rhsHi, op.getLo());
+        auto bitsLhs = rewriter.create<BitsPrimOp>(op->getLoc(), cat.getLhs(),
+                                                   op.getHi() - lhsLo, 0);
+        auto bitsRhs = rewriter.create<BitsPrimOp>(op->getLoc(), cat.getRhs(),
+                                                   rhsHi, op.getLo());
         newOp = rewriter.create<CatPrimOp>(op->getLoc(), bitsLhs, bitsRhs);
       }
       rewriter.replaceOp(op, newOp);
