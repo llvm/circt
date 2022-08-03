@@ -540,7 +540,7 @@ firrtl.module @subword_assign_1(in %x: !firrtl.uint<4>, in %y: !firrtl.uint<1>, 
   }
 }
 // CHECK-LABEL: firrtl.module @subword_assign_1(in %x: !firrtl.uint<4>, in %y: !firrtl.uint<1>, in %en: !firrtl.uint<1>, out %out: !firrtl.uint<4>) {
-// CHECK-NEXT: [[UNUSUED:%.+]] = firrtl.bits %out 0 to 0 : (!firrtl.uint<4>) -> !firrtl.uint<1>
+// CHECK-NEXT: [[UNUSED:%.+]] = firrtl.bits %out 0 to 0 : (!firrtl.uint<4>) -> !firrtl.uint<1>
 // CHECK-NEXT: [[TMP0:%.+]] = firrtl.bits %x 3 to 1 : (!firrtl.uint<4>) -> !firrtl.uint<3>
 // CHECK-NEXT: [[TMP1:%.+]] = firrtl.cat [[TMP0]], %y : (!firrtl.uint<3>, !firrtl.uint<1>) -> !firrtl.uint<4>
 // CHECK-NEXT: [[TMP2:%.+]] = firrtl.mux(%en, [[TMP1]], %x) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
