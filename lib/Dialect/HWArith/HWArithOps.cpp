@@ -13,10 +13,18 @@
 #include "circt/Dialect/HWArith/HWArithOps.h"
 #include "circt/Dialect/HWArith/HWArithTypes.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/APSInt.h"
 
 using namespace circt;
 using namespace hwarith;
+
+namespace circt {
+namespace hwarith {
+#include "circt/Dialect/HWArith/HWArithCanonicalizations.h.inc"
+
+}
+} // namespace circt
 
 //===----------------------------------------------------------------------===//
 // CastOp
@@ -39,6 +47,11 @@ LogicalResult CastOp::verify() {
   }
 
   return success();
+}
+
+void CastOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                         MLIRContext *context) {
+  results.insert<EliminateCast, ChainedCast>(context);
 }
 
 //===----------------------------------------------------------------------===//
