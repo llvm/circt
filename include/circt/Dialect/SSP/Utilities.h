@@ -172,6 +172,8 @@ ArrayAttr saveOperationProperties(ProblemT &prob, Operation *op,
                                   ImplicitLocOpBuilder &b) {
   SmallVector<Attribute> props;
   Attribute prop;
+  // Fold expression: Expands to a `getFromProblem` and a conditional
+  // `push_back` call for each of the `OperationPropertyTs`.
   ((prop = OperationPropertyTs::getFromProblem(prob, op, b.getContext()),
     prop ? props.push_back(prop) : (void)prop),
    ...);
@@ -183,6 +185,8 @@ ArrayAttr saveOperatorTypeProperties(ProblemT &prob, OperatorType opr,
                                      ImplicitLocOpBuilder &b) {
   SmallVector<Attribute> props;
   Attribute prop;
+  // Fold expression: Expands to a `getFromProblem` and a conditional
+  // `push_back` call for each of the `OperatorTypePropertyTs`.
   ((prop = OperatorTypePropertyTs::getFromProblem(prob, opr, b.getContext()),
     prop ? props.push_back(prop) : (void)prop),
    ...);
@@ -194,6 +198,8 @@ ArrayAttr saveDependenceProperties(ProblemT &prob, Dependence dep,
                                    ImplicitLocOpBuilder &b) {
   SmallVector<Attribute> props;
   Attribute prop;
+  // Fold expression: Expands to a `getFromProblem` and a conditional
+  // `push_back` call for each of the `DependencePropertyTs`.
   ((prop = DependencePropertyTs::getFromProblem(prob, dep, b.getContext()),
     prop ? props.push_back(prop) : (void)prop),
    ...);
@@ -204,6 +210,8 @@ template <typename ProblemT, typename... InstancePropertyTs>
 ArrayAttr saveInstanceProperties(ProblemT &prob, ImplicitLocOpBuilder &b) {
   SmallVector<Attribute> props;
   Attribute prop;
+  // Fold expression: Expands to a `getFromProblem` and a conditional
+  // `push_back` call for each of the `InstancePropertyTs`.
   ((prop = InstancePropertyTs::getFromProblem(prob, b.getContext()),
     prop ? props.push_back(prop) : (void)prop),
    ...);
