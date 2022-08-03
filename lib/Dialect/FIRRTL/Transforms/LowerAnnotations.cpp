@@ -223,13 +223,26 @@ static LogicalResult applyWithoutTargetImpl(const AnnoPathValue &target,
 /// An applier which puts the annotation on the target and drops the 'target'
 /// field from the annotaiton.  Optionally handles non-local annotations.
 /// Ensures the target resolves to an expected type of operation.
+template <bool allowNonLocal, bool allowPortAnnoTarget, typename T,
+          typename... Tr>
+static LogicalResult applyWithoutTarget(const AnnoPathValue &target,
+                                        DictionaryAttr anno,
+                                        ApplyState &state) {
+  if (target.ref.isa<PortAnnoTarget>()) {
+    if (!allowPortAnnoTarget)
+      return failure();
+  } else if (!target.isOpOfType<T, Tr...>())
+    return failure();
+
+  return applyWithoutTargetImpl(target, anno, state, allowNonLocal);
+}
+
 template <bool allowNonLocal, typename T, typename... Tr>
 static LogicalResult applyWithoutTarget(const AnnoPathValue &target,
                                         DictionaryAttr anno,
                                         ApplyState &state) {
-  if (!target.isOpOfType<T, Tr...>())
-    return failure();
-  return applyWithoutTargetImpl(target, anno, state, allowNonLocal);
+  return applyWithoutTarget<allowNonLocal, false, T, Tr...>(target, anno,
+                                                            state);
 }
 
 /// An applier which puts the annotation on the target and drops the 'target'
@@ -239,32 +252,6 @@ static LogicalResult applyWithoutTarget(const AnnoPathValue &target,
                                         DictionaryAttr anno,
                                         ApplyState &state) {
   return applyWithoutTargetImpl(target, anno, state, allowNonLocal);
-}
-
-/// Apply a DontTouchAnnotation to the circuit.  For almost all operations, this
-/// just adds a symbol.  For CHIRRTL memory ports, this preserves the
-/// annotation.
-static LogicalResult applyDontTouch(const AnnoPathValue &target,
-                                    DictionaryAttr anno, ApplyState &state) {
-
-  // A DontTouchAnnotation is only allowed to be placed on a ReferenceTarget.
-  // If this winds up on a module. then it indicates that the original
-  // annotation was incorrect.
-  if (target.isOpOfType<FModuleOp, FExtModuleOp>()) {
-    mlir::emitError(target.ref.getOp()->getLoc())
-        << "'firrtl.module' op is targeted by a DontTouchAnotation with target "
-        << Annotation(anno).getMember("target")
-        << ", but this annotation must be a reference target";
-    return failure();
-  }
-
-  // If the annotation is on a MemoryPortOp or if the annotation is on part of
-  // an aggregate, then keep the DontTouchAnnotation around.
-  if (isa<chirrtl::MemoryPortOp>(target.ref.getOp()) || target.fieldIdx)
-    return applyWithoutTarget<true>(target, anno, state);
-
-  target.ref.getInnerSym(state.getNamespace(target.ref.getModule()));
-  return success();
 }
 
 /// Just drop the annotation.  This is intended for Annotations which are known,
@@ -342,7 +329,10 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
     {omirTrackerAnnoClass, {stdResolve, applyWithoutTarget<true>}},
     {omirFileAnnoClass, NoTargetAnnotation},
     // Miscellaneous Annotations
-    {dontTouchAnnoClass, {stdResolve, applyDontTouch}},
+    {dontTouchAnnoClass,
+     {stdResolve, applyWithoutTarget<true, true, WireOp, NodeOp, RegOp,
+                                     RegResetOp, InstanceOp, MemOp, CombMemOp,
+                                     MemoryPortOp, SeqMemOp>}},
     {prefixModulesAnnoClass,
      {stdResolve,
       applyWithoutTarget<true, FModuleOp, FExtModuleOp, InstanceOp>}},
