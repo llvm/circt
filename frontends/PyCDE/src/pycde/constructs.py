@@ -7,14 +7,10 @@ from __future__ import annotations
 from .pycde_types import dim
 from .value import BitVectorValue, ListValue, Value
 from circt.support import get_value
-from pycde.dialects import comb
 from circt.dialects import msft, hw
 import mlir.ir as ir
 
-import ctypes
-from contextvars import ContextVar
-import inspect
-from typing import Dict, List, Tuple
+from typing import List
 
 
 def Mux(sel: BitVectorValue, *data_inputs: List[Value]):
@@ -53,117 +49,3 @@ def SystolicArray(row_inputs, col_inputs, pe_builder):
   dummy_op.operation.erase()
 
   return Value(array.peOutputs)
-
-
-_current_if_stmt = ContextVar("current_pycde_if_stmt")
-
-
-class If:
-  """Syntactic sugar for creation of muxes with if-then-else-ish behavioral
-  syntax.
-
-  ```
-  @module
-  class IfDemo:
-    cond = Input(types.i1)
-    out = Output(types.i8)
-
-    @generator
-    def build(ports):
-      with If(ports.cond):
-        with Then:
-          v = types.i8(1)
-        with Else:
-          v = types.i8(0)
-      ports.out = v
-  ```"""
-
-  def __init__(self, cond: BitVectorValue):
-    if (cond.type.width != 1):
-      raise TypeError("'Cond' bit width must be 1")
-    self._cond = cond
-    self._muxes: Dict[str, Tuple[Value, Value]] = {}
-
-  @staticmethod
-  def current():
-    return _current_if_stmt.get(None)
-
-  def __enter__(self):
-    self._old_system_token = _current_if_stmt.set(self)
-
-  def __exit__(self, exc_type, exc_value, traceback):
-    if exc_value is not None:
-      return
-    _current_if_stmt.reset(self._old_system_token)
-
-    s = inspect.stack()[1][0]
-    new_locals: Dict[str, Value] = {}
-    for (varname, (else_value, then_value)) in self._muxes.items():
-      if then_value is None or else_value is None:
-        continue
-      if then_value.type != else_value.type:
-        raise TypeError(
-            f"'Then' and 'Else' values must have same type for {varname}" +
-            f" ({then_value.type} vs {else_value.type})")
-      then_value.name = f"{varname}_thenvalue"
-      else_value.name = f"{varname}_elsevalue"
-      mux = comb.MuxOp(self._cond, then_value, else_value)
-      mux.name = varname
-      new_locals[varname] = mux
-    s.f_locals.update(new_locals)
-    ctypes.pythonapi.PyFrame_LocalsToFast(ctypes.py_object(s), ctypes.c_int(1))
-
-
-class _IfBlock:
-
-  def __init__(self, is_then: bool):
-    self._is_then = is_then
-
-  def __enter__(self):
-    s = inspect.stack()[1][0]
-    self._scope = dict(s.f_locals)
-
-  def __exit__(self, exc_type, exc_val, exc_tb):
-    if exc_val is not None:
-      return
-
-    if_stmt = If.current()
-    s = inspect.stack()[1][0]
-    lcls_to_del = set()
-    new_lcls: Dict[str, Value] = {}
-    for (varname, value) in s.f_locals.items():
-      if not isinstance(value, Value):
-        continue
-      if varname in self._scope and self._scope[varname] is value:
-        continue
-      if varname not in if_stmt._muxes:
-        if_stmt._muxes[varname] = (None, None)
-      m = if_stmt._muxes[varname]
-
-      if self._is_then:
-        if m[1] is not None:
-          raise Exception(
-              f"Multiple assignments to '{varname}' in 'then' block")
-        if_stmt._muxes[varname] = (m[0], value)
-
-      if not self._is_then:
-        if m[0] is not None:
-          raise Exception(
-              f"Multiple assignments to '{varname}' in 'else' block")
-        if_stmt._muxes[varname] = (value, m[1])
-
-      if varname in self._scope:
-        new_lcls[varname] = self._scope[varname]
-      else:
-        lcls_to_del.add(varname)
-
-    for varname in lcls_to_del:
-      del s.f_locals[varname]
-      ctypes.pythonapi.PyFrame_LocalsToFast(ctypes.py_object(s),
-                                            ctypes.c_int(1))
-    s.f_locals.update(new_lcls)
-    ctypes.pythonapi.PyFrame_LocalsToFast(ctypes.py_object(s), ctypes.c_int(1))
-
-
-Then = _IfBlock(True)
-Else = _IfBlock(False)

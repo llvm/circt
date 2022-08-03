@@ -575,7 +575,7 @@ class _GeneratorPortAccess:
     if name in self._output_values:
       raise ValueError(f"Cannot set output '{name}' twice")
 
-    from .constructs import If
+    from .behavioral import If
     if If.current() is not None:
       raise ValueError(f"Cannot set output '{name}' inside an if block")
 
