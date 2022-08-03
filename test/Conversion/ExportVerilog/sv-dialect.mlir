@@ -1514,10 +1514,8 @@ hw.module @CollectNamesOrder(%in: i1) -> (out: i1) {
   // OLD: wire _GEN;
   // OLD: wire [[EXTRA_GEN:.+]] = {{.+}};
   // OLD: assign {{.+}} = [[EXTRA_GEN]]
-  // FIXME: This is incorrect. `foo` should have the name "_GEN".
-  //        See https://github.com/llvm/circt/issues/3607.
-  // NEW: wire _GEN = in | in;
-  // NEW: wire _GEN_0;
+  // NEW: wire _GEN_0 = in | in;
+  // NEW: wire _GEN;
   %0 = comb.or %in, %in : i1
   %1 = comb.or %0, %0 : i1
   %foo = sv.wire {hw.verilogName = "_GEN" } : !hw.inout<i1>
