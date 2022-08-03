@@ -10,10 +10,10 @@ from circt.support import get_value
 from circt.dialects import msft, hw
 import mlir.ir as ir
 
-from typing import List
+import typing
 
 
-def Mux(sel: BitVectorValue, *data_inputs: List[Value]):
+def Mux(sel: BitVectorValue, *data_inputs: typing.List[Value]):
   """Create a single mux from a list of values."""
   num_inputs = len(data_inputs)
   if num_inputs == 0:
