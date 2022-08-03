@@ -99,10 +99,10 @@ protected:
   /// the current scope. This is used for resolving last connect semantics, and
   /// for retrieving the responsible connect operation.
   ScopedDriverMap &driverMap;
-  /// A set containing all InvalidValue ops that were created as part of a
+  /// A set containing all uninitialized wire ops that were created as part of a
   /// subword assignment. If any of these are reachable after all connections
   /// have been resolved, then the this indicates an initialization failure.
-  llvm::SmallDenseSet<Value, 8> subwordInvalids;
+  llvm::SmallDenseSet<Value, 8> subwordUninit;
 
 public:
   LastConnectResolver(ScopedDriverMap &driverMap) : driverMap(driverMap) {}
@@ -114,9 +114,9 @@ public:
   // This function simplifies bitindex expressions by pushing them through cat
   // and mux ops. For example `cat(a, b)[1:0]` where b's width is >= 2 is just
   // b[1:0]. And `mux(sel, a, b)[3:0]` is `mux(sel, a[3:0], b[3:0])`. This
-  // canonicalization is necessary to eliminate uses of subword InvalidValue
-  // ops so that initialization checking only signals a failure if a bit is
-  // truly not assigned.
+  // canonicalization is necessary to eliminate uses of subword uninitialized
+  // wire ops so that initialization checking only signals a failure if a bit
+  // is truly not assigned.
   Value canonicalizeBits(BitsPrimOp op, ImplicitLocOpBuilder builder) {
     if (!op.getInput().getDefiningOp()) {
       return op;
@@ -165,11 +165,11 @@ public:
     b.setInsertionPointAfter(connection);
     Value xprev;
     if (it == driverMap.end() || !it.base()->second) {
-      // x had no previous connection, so set xprev to an InvalidValue with x's
-      // type and insert it into the set of invalid values created for subword
-      // assignments
+      // x had no previous connection, so set xprev to an uninitialized wire
+      // with x's type and insert it into the set of uninitialized values
+      // created for subword assignments
       xprev = b.create<WireOp>(bits.getInput().getType());
-      subwordInvalids.insert(xprev);
+      subwordUninit.insert(xprev);
     } else {
       // x had a previous connection -- extract its source
       xprev = it.base()->second.getSrc();
@@ -639,12 +639,12 @@ public:
 
   bool run(FModuleOp op);
   LogicalResult checkInitialization();
-  bool usesSubwordInvalid(Operation *base);
+  bool usesSubwordUninit(Operation *base);
 
 private:
   /// The outermost scope of the module body.
   ScopedDriverMap driverMap;
-  /// A memoization table for computing reachable subword InvalidValue ops.
+  /// A memoization table for computing reachable subword uninitialized ops.
   DenseMap<Operation *, bool> subwordInvalidMemo;
 
   /// Tracks if anything in the IR has changed.
@@ -685,7 +685,7 @@ void ModuleVisitor::visitStmt(WhenOp whenOp) {
   processWhenOp(whenOp, /*outerCondition=*/{});
 }
 
-bool ModuleVisitor::usesSubwordInvalid(Operation *op) {
+bool ModuleVisitor::usesSubwordUninit(Operation *op) {
   if (!op) {
     return false;
   }
@@ -693,7 +693,7 @@ bool ModuleVisitor::usesSubwordInvalid(Operation *op) {
     return b;
   }
   for (auto val : op->getOperands()) {
-    if (subwordInvalids.contains(val) || usesSubwordInvalid(val.getDefiningOp())) {
+    if (subwordUninit.contains(val) || usesSubwordUninit(val.getDefiningOp())) {
       subwordInvalidMemo[op] = true;
       return true;
     }
@@ -709,7 +709,7 @@ LogicalResult ModuleVisitor::checkInitialization() {
   for (auto destAndConnect : driverMap.getLastScope()) {
     // If there is valid connection to this destination, everything is good.
     auto connect = std::get<1>(destAndConnect);
-    if (connect && !usesSubwordInvalid(connect))
+    if (connect && !usesSubwordUninit(connect))
       continue;
 
     // Get the op which defines the sink, and emit an error.
