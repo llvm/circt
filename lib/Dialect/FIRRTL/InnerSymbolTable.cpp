@@ -210,12 +210,16 @@ InnerSymbolTableCollection::populateAndVerifyTables(Operation *innerRefNSOp) {
 
 InnerSymTarget InnerRefNamespace::lookup(hw::InnerRefAttr inner) {
   auto *mod = symTable.lookup(inner.getModule());
+  if (!mod)
+    return {};
   assert(mod->hasTrait<mlir::OpTrait::InnerSymbolTable>());
   return innerSymTables.getInnerSymbolTable(mod).lookup(inner.getName());
 }
 
 Operation *InnerRefNamespace::lookupOp(hw::InnerRefAttr inner) {
   auto *mod = symTable.lookup(inner.getModule());
+  if (!mod)
+    return nullptr;
   assert(mod->hasTrait<mlir::OpTrait::InnerSymbolTable>());
   return innerSymTables.getInnerSymbolTable(mod).lookupOp(inner.getName());
 }
