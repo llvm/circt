@@ -265,8 +265,12 @@ findLogicOpInsertionPoint(Operation *op) {
                        [](Operation &it) { return !isa<LogicOp>(&it); })};
 }
 
-/// When we find that an operation is used before it is defined in a graph
-/// region, we emit an explicit wire to resolve the issue.
+/// Emit an explicit wire or logic to assign operation's result. This function
+/// is used to create a temporary to legalize a verilog epression or to
+/// resolve use-before-def in a graph region. If `emitWireAtBlockBegin` is true,
+/// a temporary wire will be created at the beggining of the block. Otherwise,
+/// a wire is created just after op's position so that we can inline the
+/// assignement into its wire declaration.
 static void lowerUsersToTemporaryWire(Operation &op,
                                       bool emitWireAtBlockBegin = false) {
   Block *block = op.getBlock();
