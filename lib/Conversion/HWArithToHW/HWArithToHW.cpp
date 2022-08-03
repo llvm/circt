@@ -15,7 +15,9 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HWArith/HWArithOps.h"
+#include "circt/Dialect/Seq/SeqOps.h"
 #include "mlir/Transforms/DialectConversion.h"
+#include "llvm/ADT/TypeSwitch.h"
 
 using namespace mlir;
 using namespace circt;
@@ -253,6 +255,150 @@ struct BinaryOpLowering : public OpConversionPattern<BinOp> {
     return success();
   }
 };
+
+template <class TOp>
+struct ArgResOpConversion : public OpConversionPattern<TOp> {
+  // Generic pattern which replaces an op by one of the same type, but with
+  // converted operands and result types.
+  using OpConversionPattern<TOp>::OpConversionPattern;
+  using OpAdaptor = typename OpConversionPattern<TOp>::OpAdaptor;
+
+  LogicalResult
+  matchAndRewrite(TOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // Use the generic builder to allow this pattern to apply to all ops.
+    llvm::SmallVector<Type, 4> convResTypes;
+    if (failed(this->getTypeConverter()->convertTypes(op->getResultTypes(),
+                                                      convResTypes)))
+      return failure();
+    rewriter.replaceOpWithNewOp<TOp>(op, convResTypes, adaptor.getOperands(),
+                                     op->getAttrs());
+    return success();
+  }
+};
+
+/// A helper type converter class that automatically populates the relevant
+/// materializations and type conversions for converting HWArith to HW.
+class HWArithToHWTypeConverter : public TypeConverter {
+public:
+  HWArithToHWTypeConverter();
+
+  // A function which recursively converts any integer type with signedness
+  // semantics to a signless counterpart.
+  Type removeSignedness(Type type) {
+    auto it = conversionCache.find(type);
+    if (it != conversionCache.end())
+      return it->second.type;
+
+    auto convertedType =
+        llvm::TypeSwitch<Type, Type>(type)
+            .Case<IntegerType>([](auto type) {
+              if (type.isSignless())
+                return type;
+              return IntegerType::get(type.getContext(), type.getWidth());
+            })
+            .Case<hw::ArrayType>([this](auto type) {
+              return hw::ArrayType::get(removeSignedness(type.getElementType()),
+                                        type.getSize());
+            })
+            .Case<hw::StructType>([this](auto type) {
+              // Recursively convert each element.
+              llvm::SmallVector<hw::StructType::FieldInfo> convertedElements;
+              for (auto element : type.getElements()) {
+                convertedElements.push_back(
+                    {element.name, removeSignedness(element.type)});
+              }
+              return hw::StructType::get(type.getContext(), convertedElements);
+            })
+            .Default([](auto type) { return type; });
+
+    return convertedType;
+  }
+
+  // Returns true if any subtype in 'type' has signedness semantics.
+  bool hasSignednessSemantics(Type type) {
+    auto it = conversionCache.find(type);
+    if (it != conversionCache.end())
+      return it->second.hadSignednessSemantics;
+
+    auto match =
+        llvm::TypeSwitch<Type, bool>(type)
+            .Case<IntegerType>([](auto type) { return !type.isSignless(); })
+            .Case<hw::ArrayType>([this](auto type) {
+              return hasSignednessSemantics(type.getElementType());
+            })
+            .Case<hw::StructType>([this](auto type) {
+              return llvm::any_of(type.getElements(), [this](auto element) {
+                return this->hasSignednessSemantics(element.type);
+              });
+            })
+            .Default([](auto type) { return false; });
+
+    if (match) {
+      // Prime the conversion cache by pre-converting the type.
+      conversionCache[type] = {removeSignedness(type), true};
+    } else {
+      // Prime the conversion cache by not converting the type - this prevents
+      // iterating through the type on future removeSignedness calls for this
+      // type.
+      conversionCache[type] = {type, false};
+    }
+
+    return match;
+  }
+
+  bool hasSignednessSemantics(TypeRange types) {
+    return llvm::any_of(types,
+                        [this](Type t) { return hasSignednessSemantics(t); });
+  }
+
+private:
+  // Memoizations for signedness info and conversions.
+  struct ConvertedType {
+    Type type;
+    bool hadSignednessSemantics;
+  };
+  llvm::DenseMap<Type, ConvertedType> conversionCache;
+};
+
+HWArithToHWTypeConverter::HWArithToHWTypeConverter() {
+  // Pass any type through the signedness remover.
+  addConversion([this](Type type) { return removeSignedness(type); });
+}
+
+// Adds the ArgResOpConversion for 'TOp' to the set of conversion patterns, as
+// well as a legality check on the conversion status of the op's operands and
+// results.
+template <typename... TOp>
+static void addOperandConversion(ConversionTarget &target,
+                                 RewritePatternSet &patterns,
+                                 HWArithToHWTypeConverter &typeConverter) {
+  (patterns.add<ArgResOpConversion<TOp>>(typeConverter, patterns.getContext()),
+   ...);
+  target.addDynamicallyLegalOp<TOp...>([&](auto op) {
+    return !typeConverter.hasSignednessSemantics(op->getOperandTypes()) &&
+           !typeConverter.hasSignednessSemantics(op->getResultTypes());
+  });
+}
+
+template <typename... TOp>
+static void addSignatureConversion(ConversionTarget &target,
+                                   RewritePatternSet &patterns,
+                                   HWArithToHWTypeConverter &typeConverter) {
+  (mlir::populateFunctionOpInterfaceTypeConversionPattern<TOp>(patterns,
+                                                               typeConverter),
+   ...);
+
+  target.addDynamicallyLegalOp<TOp...>([&](FunctionOpInterface moduleLikeOp) {
+    // Legal if all results and args have no signedness integers.
+    bool legalResults =
+        !typeConverter.hasSignednessSemantics(moduleLikeOp.getResultTypes());
+    bool legalArgs =
+        !typeConverter.hasSignednessSemantics(moduleLikeOp.getArgumentTypes());
+    return legalResults && legalArgs;
+  });
+}
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -260,6 +406,7 @@ struct BinaryOpLowering : public OpConversionPattern<BinOp> {
 //===----------------------------------------------------------------------===//
 
 namespace {
+
 class HWArithToHWPass : public HWArithToHWBase<HWArithToHWPass> {
 public:
   void runOnOperation() override {
@@ -267,9 +414,21 @@ public:
 
     ConversionTarget target(getContext());
     RewritePatternSet patterns(&getContext());
-
+    HWArithToHWTypeConverter typeConverter;
     target.addIllegalDialect<HWArithDialect>();
     target.addLegalDialect<comb::CombDialect, hw::HWDialect>();
+
+    // Signature conversion and legalization patterns.
+    addSignatureConversion<hw::HWModuleOp, hw::HWModuleExternOp>(
+        target, patterns, typeConverter);
+
+    // Generic conversion and legalization patterns for operations that we
+    // expect to be using in conjunction with the signedness values of hwarith.
+    addOperandConversion<
+        hw::OutputOp, comb::MuxOp, seq::CompRegOp, hw::ArrayCreateOp,
+        hw::ArrayGetOp, hw::ArrayConcatOp, hw::ArraySliceOp, hw::StructCreateOp,
+        hw::StructExplodeOp, hw::StructExtractOp, hw::StructInjectOp,
+        hw::UnionCreateOp, hw::UnionExtractOp>(target, patterns, typeConverter);
 
     patterns.add<ConstantOpLowering, CastOpLowering, ICmpOpLowering,
                  BinaryOpLowering<AddOp, comb::AddOp>,
