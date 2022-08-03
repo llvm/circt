@@ -1515,6 +1515,7 @@ hw.module @CollectNamesOrder(%in: i1) -> (out: i1) {
   // OLD: wire [[EXTRA_GEN:.+]] = {{.+}};
   // OLD: assign {{.+}} = [[EXTRA_GEN]]
   // FIXME: This is incorrect. `foo` should have the name "_GEN".
+  //        See https://github.com/llvm/circt/issues/3607.
   // NEW: wire _GEN = in | in;
   // NEW: wire _GEN_0;
   %0 = comb.or %in, %in : i1
