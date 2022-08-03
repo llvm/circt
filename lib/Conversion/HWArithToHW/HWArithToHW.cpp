@@ -295,9 +295,7 @@ public:
             .Case<IntegerType>([](auto type) {
               if (type.isSignless())
                 return type;
-              return IntegerType::get(
-                  type.getContext(), type.getIntOrFloatBitWidth(),
-                  IntegerType::SignednessSemantics::Signless);
+              return IntegerType::get(type.getContext(), type.getWidth());
             })
             .Case<hw::ArrayType>([this](auto type) {
               return hw::ArrayType::get(removeSignedness(type.getElementType()),
@@ -371,23 +369,34 @@ HWArithToHWTypeConverter::HWArithToHWTypeConverter() {
 // Adds the ArgResOpConversion for 'TOp' to the set of conversion patterns, as
 // well as a legality check on the conversion status of the op's operands and
 // results.
-template <typename TOp>
+template <typename... TOp>
 static void addOperandConversion(ConversionTarget &target,
                                  RewritePatternSet &patterns,
                                  HWArithToHWTypeConverter &typeConverter) {
-  patterns.add<ArgResOpConversion<TOp>>(typeConverter, patterns.getContext());
-  target.addDynamicallyLegalOp<TOp>([&](TOp op) {
+  (patterns.add<ArgResOpConversion<TOp>>(typeConverter, patterns.getContext()),
+   ...);
+  target.addDynamicallyLegalOp<TOp...>([&](auto op) {
     return !typeConverter.hasSignednessSemantics(op->getOperandTypes()) &&
            !typeConverter.hasSignednessSemantics(op->getResultTypes());
   });
 }
 
-template <typename TOp, typename TOp2, typename... OpTs>
-static void addOperandConversion(ConversionTarget &target,
-                                 RewritePatternSet &patterns,
-                                 HWArithToHWTypeConverter &typeConverter) {
-  addOperandConversion<TOp>(target, patterns, typeConverter);
-  addOperandConversion<TOp2, OpTs...>(target, patterns, typeConverter);
+template <typename... TOp>
+static void addSignatureConversion(ConversionTarget &target,
+                                   RewritePatternSet &patterns,
+                                   HWArithToHWTypeConverter &typeConverter) {
+  (mlir::populateFunctionOpInterfaceTypeConversionPattern<TOp>(patterns,
+                                                               typeConverter),
+   ...);
+
+  target.addDynamicallyLegalOp<TOp...>([&](FunctionOpInterface moduleLikeOp) {
+    // Legal if all results and args have no signedness integers.
+    bool legalResults =
+        !typeConverter.hasSignednessSemantics(moduleLikeOp.getResultTypes());
+    bool legalArgs =
+        !typeConverter.hasSignednessSemantics(moduleLikeOp.getArgumentTypes());
+    return legalResults && legalArgs;
+  });
 }
 
 } // namespace
@@ -406,28 +415,20 @@ public:
     ConversionTarget target(getContext());
     RewritePatternSet patterns(&getContext());
     HWArithToHWTypeConverter typeConverter;
-    mlir::populateFunctionOpInterfaceTypeConversionPattern<hw::HWModuleOp>(
-        patterns, typeConverter);
-
     target.addIllegalDialect<HWArithDialect>();
     target.addLegalDialect<comb::CombDialect, hw::HWDialect>();
-    target.addDynamicallyLegalOp<hw::HWModuleOp, hw::HWModuleExternOp>(
-        [&](auto moduleLikeOp) {
-          // Legal if all results and args have no signedness integers.
-          bool legalResults = !typeConverter.hasSignednessSemantics(
-              cast<FunctionOpInterface>(moduleLikeOp).getResultTypes());
-          bool legalArgs = !typeConverter.hasSignednessSemantics(
-              cast<FunctionOpInterface>(moduleLikeOp).getArgumentTypes());
-          return legalResults && legalArgs;
-        });
+
+    // Signature conversion and legalization patterns.
+    addSignatureConversion<hw::HWModuleOp, hw::HWModuleExternOp>(
+        target, patterns, typeConverter);
 
     // Generic conversion and legalization patterns for operations that we
     // expect to be using in conjunction with the signedness values of hwarith.
     addOperandConversion<
         hw::OutputOp, comb::MuxOp, seq::CompRegOp, hw::ArrayCreateOp,
         hw::ArrayGetOp, hw::ArrayConcatOp, hw::ArraySliceOp, hw::StructCreateOp,
-        hw::StructExplodeOp, hw::StructExtractOp, hw::StructInjectOp>(
-        target, patterns, typeConverter);
+        hw::StructExplodeOp, hw::StructExtractOp, hw::StructInjectOp,
+        hw::UnionCreateOp, hw::UnionExtractOp>(target, patterns, typeConverter);
 
     patterns.add<ConstantOpLowering, CastOpLowering, ICmpOpLowering,
                  BinaryOpLowering<AddOp, comb::AddOp>,
