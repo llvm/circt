@@ -16,6 +16,14 @@ from typing import Dict, Optional, Tuple
 # it.
 _current_if_stmt = ContextVar("current_pycde_if_stmt")
 
+# Note: these constructs play around with Python stack frames. They use a Python
+# C function to flush the changes back to the interpreter.
+# PyFrame_LocalsToFast(...) is specific to CPython and as such, is
+# implementation-defined. So it _could_ change in subsequent versions of Python.
+# It is, however, commonly used to modify stack frames so would break many users
+# if it were changed. (So it probably won't be.) Tested with all the Python
+# versions for which we produce wheels on PyPI.
+
 
 class If:
   """Syntactic sugar for creation of muxes with if-then-else-ish behavioral
@@ -42,7 +50,6 @@ class If:
       raise TypeError("'Cond' bit width must be 1")
     self._cond = cond
     self._muxes: Dict[str, Tuple[Value, Value]] = {}
-    self._finalized: bool = False
 
   @staticmethod
   def current() -> Optional[If]:
@@ -61,8 +68,6 @@ class If:
     self.then.__exit__(exc_type, exc_value, traceback, stack_level=2)
 
   def _finalize(self):
-    assert not self._finalized
-    self._finalized = True
     _current_if_stmt.reset(self._old_system_token)
 
     # Create the set of muxes from the 'then' and/or 'else' blocks.
@@ -152,4 +157,6 @@ Else = _IfBlock(False)
 
 
 def EndIf():
-  If.current()._finalize()
+  c = If.current()
+  assert c, "EndIf() called without matching If()"
+  c._finalize()

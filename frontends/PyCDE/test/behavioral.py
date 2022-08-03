@@ -1,5 +1,4 @@
-# RUN: rm -rf %t
-# RUN: %PYTHON% %s %t 2>&1 | FileCheck %s
+# RUN: %PYTHON% py-split-input-file.py %s | FileCheck %s
 
 from pycde import generator, types, Input, Output
 from pycde.behavioral import If, Else, EndIf
@@ -69,3 +68,54 @@ class IfDefaultTest:
 # CHECK-LABEL: msft.module @IfDefaultTest {} (%a: ui8, %b: ui8, %cond: i1) -> (out: ui8)
 # CHECK:         [[r0:%.+]] = comb.mux %cond, %b, %a {sv.namehint = "v"} : ui8
 # CHECK:         msft.output [[r0]] : ui8
+
+# -----
+
+
+@unittestmodule()
+class IfMismatchErrorTest:
+  cond = Input(types.i1)
+  a = Input(types.ui8)
+  b = Input(types.ui4)
+
+  out = Output(types.ui8)
+
+  @generator
+  def build(ports):
+    v = ports.a
+    with If(ports.cond):
+      v = ports.b
+    EndIf()
+    ports.out = v
+
+
+# CHECK: TypeError: 'Then' and 'Else' values must have same type for
+
+# -----
+
+
+@unittestmodule()
+class IfMismatchEndIfTest:
+
+  @generator
+  def build(ports):
+    EndIf()
+
+
+# CHECK: AssertionError: EndIf() called without matching If()
+
+# -----
+
+
+@unittestmodule()
+class IfCondErrorTest:
+  cond = Input(types.i2)
+
+  @generator
+  def build(ports):
+    with If(ports.cond):
+      pass
+    EndIf()
+
+
+# CHECK: TypeError: 'Cond' bit width must be 1
