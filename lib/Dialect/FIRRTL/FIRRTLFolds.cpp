@@ -1123,11 +1123,11 @@ LogicalResult BitsPrimOp::canonicalize(BitsPrimOp op,
       uint32_t rhsHi = lhsLo - 1;
       Value newOp;
       if (op.getHi() >= lhsLo && op.getLo() >= lhsLo) {
-        // only indexing the lhs
+        // Only indexing the lhs.
         newOp = rewriter.create<BitsPrimOp>(
             op->getLoc(), cat.getLhs(), op.getHi() - lhsLo, op.getLo() - lhsLo);
       } else if (op.getHi() <= rhsHi && op.getLo() <= rhsHi) {
-        // only indexing the rhs
+        // Only indexing the rhs.
         newOp = rewriter.create<BitsPrimOp>(op->getLoc(), cat.getRhs(),
                                             op.getHi(), op.getLo());
       } else {
