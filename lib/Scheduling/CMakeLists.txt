@@ -43,6 +43,7 @@ add_circt_library(CIRCTSchedulingTestPasses
 
   LINK_LIBS PUBLIC
   CIRCTScheduling
+  CIRCTSSP
   MLIRPass
   )
 

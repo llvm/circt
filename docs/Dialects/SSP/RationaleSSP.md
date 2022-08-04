@@ -166,3 +166,26 @@ cannot be statically downcasted to the concrete class due to the use of virtual
 multiple inheritance in the problem class hierarchy. If the inheritance model
 were to change in the scheduling infrastructure, the use of attribute interfaces
 should be reconsidered.
+
+## Import/export
+
+The `circt/Dialect/SSP/Utilities.h` header defines methods to convert between
+`ssp.InstanceOp`s and `circt::scheduling::Problem` instances. These utilities
+use template parameters for the problem class and the property attribute
+classes, allowing client code to load/save an instance of a certain problem
+class with the given properties (but ignoring others). Incompatible properties
+(e.g. `distance` on a base `Problem`, or `initiationInterval` on an operation)
+will be caught at compile time as errors in the template instantiation. Note
+that convenience versions that simply load/save all properties known in the
+given problem class are provided as well.
+
+## Extensibility
+
+A key feature of the scheduling infrastructure is its extensibility. New problem
+definitions in out-of-tree projects have to define attributes inheriting from
+the property base classes in one of their own dialects. Due to the heavy use of
+templates in the import/export utilities, these additional attributes are
+supported uniformly alongside the built-in property attributes. The only
+difference is that the SSP dialect provides short-form pretty printing for its
+own properties, whereas externally-defined properties fall back to the generic
+dialect attribute syntax.
