@@ -11,8 +11,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "SystemCEmissionPatterns.h"
-#include "EmissionPattern.h"
-#include "EmissionPrinter.h"
+#include "../EmissionPattern.h"
+#include "../EmissionPrinter.h"
 #include "circt/Dialect/SystemC/SystemCOps.h"
 #include "llvm/ADT/TypeSwitch.h"
 

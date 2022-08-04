@@ -14,16 +14,20 @@
 #ifndef REGISTERALLEMITTERS_H
 #define REGISTERALLEMITTERS_H
 
-#include "CombEmissionPatterns.h"
 #include "EmissionPattern.h"
-#include "SystemCEmissionPatterns.h"
+#include "Patterns/CombEmissionPatterns.h"
+#include "Patterns/HWEmissionPatterns.h"
+#include "Patterns/SCFEmissionPatterns.h"
+#include "Patterns/SystemCEmissionPatterns.h"
 
 namespace circt {
 namespace ExportSystemC {
 
 inline void registerAllEmitters(EmissionPatternSet &patterns) {
-  populateSystemCEmitters(patterns);
   populateCombEmitters(patterns);
+  populateHWEmitters(patterns);
+  populateSCFEmitters(patterns);
+  populateSystemCEmitters(patterns);
 }
 
 } // namespace ExportSystemC

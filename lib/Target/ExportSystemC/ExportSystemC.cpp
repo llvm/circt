@@ -16,6 +16,7 @@
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/SystemC/SystemCDialect.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/BuiltinOps.h"
 
 #include "circt/Dialect/Comb/CombDialect.h"
@@ -116,6 +117,8 @@ void ExportSystemC::registerExportSystemCTranslation() {
       [](mlir::DialectRegistry &registry) {
         // clang-format off
         registry.insert<comb::CombDialect,
+                        hw::HWDialect,
+                        mlir::scf::SCFDialect,
                         systemc::SystemCDialect>();
         // clang-format on
       });
@@ -163,6 +166,8 @@ void ExportSystemC::registerExportSystemCTranslation() {
       [](mlir::DialectRegistry &registry) {
         // clang-format off
         registry.insert<comb::CombDialect,
+                        hw::HWDialect,
+                        mlir::scf::SCFDialect,
                         systemc::SystemCDialect>();
         // clang-format on
       });

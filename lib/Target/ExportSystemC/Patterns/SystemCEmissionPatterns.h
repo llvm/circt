@@ -13,7 +13,7 @@
 #ifndef SYSTEMCEMISSIONPATTERNS_H
 #define SYSTEMCEMISSIONPATTERNS_H
 
-#include "EmissionPattern.h"
+#include "../EmissionPattern.h"
 
 namespace circt {
 namespace ExportSystemC {

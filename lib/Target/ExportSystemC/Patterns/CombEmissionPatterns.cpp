@@ -11,8 +11,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "CombEmissionPatterns.h"
-#include "EmissionPattern.h"
-#include "EmissionPrinter.h"
+#include "../EmissionPattern.h"
+#include "../EmissionPrinter.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "llvm/ADT/TypeSwitch.h"
 

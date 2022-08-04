@@ -3,8 +3,10 @@ add_circt_translation_library(CIRCTExportSystemC
   EmissionPrinter.cpp
   EmissionPattern.cpp
   ExportSystemC.cpp
-  CombEmissionPatterns.cpp
-  SystemCEmissionPatterns.cpp
+  Patterns/CombEmissionPatterns.cpp
+  Patterns/HWEmissionPatterns.cpp
+  Patterns/SCFEmissionPatterns.cpp
+  Patterns/SystemCEmissionPatterns.cpp
 
   ADDITIONAL_HEADER_DIRS
 
