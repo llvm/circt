@@ -22,6 +22,7 @@
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Affine/IR/AffineValueMap.h"
 #include "mlir/Dialect/Affine/Utils.h"
+#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
@@ -616,6 +617,13 @@ static int getBranchCount(Value val, Block *block) {
 
 namespace {
 
+/// This class inserts a reorder prevention mechanism for blocks with multiple
+/// successors. Such a mechanism is required to guarantee correct execution in a
+/// multi-threaded usage of the circuits.
+///
+/// The order of the results matches the order of the traversals of the
+/// divergence point. A FIFO buffer stores the condition of the conditional
+/// branch. The buffer feeds a mux that guarantees the correct out-order.
 class FeedForwardNetworkRewriter {
 public:
   FeedForwardNetworkRewriter(HandshakeLowering &hl,
@@ -657,10 +665,14 @@ FeedForwardNetworkRewriter::findBlockPairs(BlockPairs &blockPairs) {
   // Thus, for each split block, there exists one merge block which is the post
   // dominator of the child nodes.
   Region &r = hl.getRegion();
+  Operation *parentOp = r.getParentOp();
 
-  // Assumes that each loop has only one exit block
+  // Assumes that each loop has only one exit block. Such an error should
+  // already be reported by the loop rewriting.
   assert(loopsHaveSingleExit(loopAnalysis) &&
-         "cannot handle loop with multiple exit nodes");
+         "expected loop to only have one exit block.");
+
+  // TODO: cannot handle irreducible control flow at this point.
 
   for (Block &b : r) {
     if (b.getNumSuccessors() < 2)
@@ -678,6 +690,19 @@ FeedForwardNetworkRewriter::findBlockPairs(BlockPairs &blockPairs) {
       continue;
 
     Block *mergeBlock = postDomInfo.findNearestCommonDominator(succ0, succ1);
+
+    unsigned nonLoopPreds = 0;
+    LoopInfo *info = loopAnalysis.getLoopInfoForHeader(mergeBlock);
+    for (auto pred : mergeBlock->getPredecessors()) {
+      if (info && info->inLoop.contains(pred))
+        continue;
+      nonLoopPreds++;
+    }
+    if (nonLoopPreds > 2)
+      return parentOp->emitError(
+          "expected a merge block to have two predecessors. Did you run the "
+          "merge block insertion pass?");
+
     blockPairs.emplace_back(&b, mergeBlock);
   }
 
@@ -711,9 +736,14 @@ BranchOp FeedForwardNetworkRewriter::buildSplitNetwork(Block *splitBlock) {
   }));
 
   rewriter.setInsertionPointAfterValue(cond);
+  // Requre a cast to index to stick to the type of the mux input.
+  Value condAsIndex = rewriter.create<arith::IndexCastOp>(
+      cond.getLoc(), rewriter.getIndexType(), cond);
+
   // TODO how to size these?
+  // Longest path in a CFG-DAG would be O(#blocks)
   auto buffer = rewriter.create<handshake::BufferOp>(
-      cond.getLoc(), rewriter.getI1Type(), /*size=*/2, cond,
+      cond.getLoc(), rewriter.getIndexType(), /*size=*/2, condAsIndex,
       /*bufferType=*/BufferTypeEnum::fifo);
 
   return rewriter.create<handshake::BranchOp>(cond.getLoc(), buffer);
@@ -736,12 +766,8 @@ void FeedForwardNetworkRewriter::buildMergeNetwork(Block *mergeBlock,
 
   hl.setBlockEntryControl(mergeBlock, newCtrl);
 
-  // TODO why does the rewriter not figure this out?
   // Replace with new ctrl value from mux and the index
-  // rewriter.replaceOp(ctrlMerge, {newCtrl, buf});
-  ctrlMerge.result().replaceAllUsesWith(newCtrl);
-  ctrlMerge.index().replaceAllUsesWith(buf);
-  rewriter.eraseOp(ctrlMerge);
+  rewriter.replaceOp(ctrlMerge, {newCtrl, buf});
 }
 
 namespace {
@@ -1169,121 +1195,7 @@ LogicalResult HandshakeLowering::connectConstantsToControl(
   return success();
 }
 
-static LogicalResult checkUseCount(Operation *op, Value res) {
-  // Checks if every result has single use
-  if (!res.hasOneUse()) {
-    int i = 0;
-    for (auto *user : res.getUsers()) {
-      user->emitWarning("user here");
-      i++;
-    }
-    return op->emitOpError("every result must have exactly one user, but had ")
-           << i;
-  }
-  return success();
-}
-
-// Checks if op successors are in appropriate blocks
-static LogicalResult checkSuccessorBlocks(Operation *op, Value res) {
-  // TODO rewrite this
-  return success();
-  /*
-  for (auto &u : res.getUses()) {
-    Operation *succOp = u.getOwner();
-    // Non-branch ops: succesors must be in same block
-    if (!(isa<handshake::ConditionalBranchOp>(op) ||
-          isa<handshake::BranchOp>(op))) {
-      if (op->getBlock() != succOp->getBlock())
-        return op->emitOpError("cannot be block live-out");
-    } else {
-      // Branch ops: must have successor per successor block
-      if (op->getBlock()->getNumSuccessors() != op->getNumResults())
-        return op->emitOpError("incorrect successor count");
-      bool found = false;
-      for (int i = 0, e = op->getBlock()->getNumSuccessors(); i < e; ++i) {
-        Block *succ = op->getBlock()->getSuccessor(i);
-        if (succOp->getBlock() == succ || isa<SinkOp>(succOp))
-          found = true;
-      }
-      if (!found)
-        return op->emitOpError("branch successor in incorrect block");
-    }
-  }
-  return success();
-  */
-}
-
 // Checks if merge predecessors are in appropriate block
-static LogicalResult checkMergeOps(MergeLikeOpInterface mergeOp,
-                                   bool disableTaskPipelining) {
-  Block *block = mergeOp->getBlock();
-  unsigned operand_count = mergeOp.dataOperands().size();
-
-  // Merges in entry block have single predecessor (argument)
-  if (block->isEntryBlock()) {
-    if (operand_count != 1)
-      return mergeOp->emitOpError(
-                 "merge operations in entry block must have a ")
-             << "single predecessor";
-  } else {
-    if (operand_count > getBlockPredecessorCount(block))
-      return mergeOp->emitOpError("merge operation has ")
-             << operand_count << " data inputs, but only "
-             << getBlockPredecessorCount(block) << " predecessor blocks";
-  }
-
-  if (disableTaskPipelining) {
-    // There must be a predecessor from each predecessor block
-    for (auto *predBlock : block->getPredecessors()) {
-      bool found = false;
-      for (auto operand : mergeOp.dataOperands()) {
-        auto *operandOp = operand.getDefiningOp();
-        if (operandOp->getBlock() == predBlock) {
-          found = true;
-          break;
-        }
-      }
-      if (!found)
-        return mergeOp->emitOpError(
-            "missing predecessor from predecessor block");
-    }
-  }
-
-  // TODO does this still preserve correctness?
-  if (disableTaskPipelining) {
-    // Select operand must come from same block
-    if (auto muxOp = dyn_cast<MuxOp>(mergeOp.getOperation())) {
-      auto *operand = muxOp.selectOperand().getDefiningOp();
-      if (operand->getBlock() != block)
-        return mergeOp->emitOpError(
-            "mux select operand must be from same block");
-    }
-  }
-  return success();
-}
-
-LogicalResult handshake::checkDataflowConversion(Region &r,
-                                                 bool disableTaskPipelining) {
-  for (Operation &op : r.getOps()) {
-    if (isa<mlir::cf::CondBranchOp, mlir::cf::BranchOp, memref::LoadOp,
-            arith::ConstantOp, mlir::AffineReadOpInterface, mlir::AffineForOp>(
-            op))
-      continue;
-
-    if (op.getNumResults() > 0) {
-      for (auto result : op.getResults()) {
-        if (checkUseCount(&op, result).failed() ||
-            checkSuccessorBlocks(&op, result).failed())
-          return failure();
-      }
-    }
-    if (auto mergeOp = dyn_cast<MergeLikeOpInterface>(op); mergeOp)
-      if (checkMergeOps(mergeOp, disableTaskPipelining).failed())
-        return failure();
-  }
-  return success();
-}
-
 static Value getBlockControlValue(Block *block) {
   // Get control-only value sent to the block terminator
   for (Operation &op : *block) {

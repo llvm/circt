@@ -140,8 +140,6 @@ LogicalResult runPartialLowering(
 }
 
 // Helper to check the validity of the dataflow conversion
-LogicalResult checkDataflowConversion(Region &r, bool disableTaskPipelining);
-
 // Driver that applies the partial lowerings expressed in HandshakeLowering to
 // the region encapsulated in it. The region is assumed to have a terminator of
 // type TTerm. See HandshakeLowering for the different lowering steps.
@@ -189,8 +187,6 @@ LogicalResult lowerRegion(HandshakeLowering &hl, bool sourceConstants,
     return failure();
 
   if (failed(partiallyLowerRegion(addForkOps, hl.getContext(), hl.getRegion())))
-    return failure();
-  if (failed(checkDataflowConversion(hl.getRegion(), disableTaskPipelining)))
     return failure();
 
   bool lsq = false;
