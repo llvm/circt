@@ -729,9 +729,8 @@ void Emitter::emitAttribute(RUWAttr attr) {
 /// Emit a FIRRTL type into the output.
 void Emitter::emitType(Type type) {
   auto emitWidth = [&](Optional<int32_t> width) {
-    if (!width.hasValue())
-      return;
-    os << "<" << *width << ">";
+    if (width)
+      os << "<" << *width << ">";
   };
   TypeSwitch<Type>(type)
       .Case<ClockType>([&](auto) { os << "Clock"; })

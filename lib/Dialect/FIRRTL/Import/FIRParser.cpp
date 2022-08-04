@@ -352,8 +352,8 @@ public:
   SMLoc getFIRLoc() const { return firLoc; }
 
   Location getLoc() {
-    if (infoLoc.hasValue())
-      return infoLoc.getValue();
+    if (infoLoc)
+      return *infoLoc;
     auto result = parser->translateLocation(firLoc);
     infoLoc = result;
     return result;
@@ -372,7 +372,7 @@ public:
   /// If we didn't parse an info locator for the specified value, this sets a
   /// default, overriding a fall back to a location in the .fir file.
   void setDefaultLoc(Location loc) {
-    if (!infoLoc.hasValue())
+    if (!infoLoc)
       infoLoc = loc;
   }
 
@@ -415,7 +415,7 @@ ParseResult FIRParser::parseOptionalInfoLocator(LocationAttr &result) {
     return success();
 
   // Otherwise, set the location attribute and return.
-  result = locationPair.second.getValue();
+  result = locationPair.second.value();
   return success();
 }
 
@@ -822,8 +822,8 @@ Optional<unsigned> FIRParser::getFieldIDFromTokens(ArrayAttr tokens, SMLoc loc,
         return None;
       }
 
-      id += bundleType.getFieldID(index.getValue());
-      currentType = bundleType.getElementType(index.getValue());
+      id += bundleType.getFieldID(*index);
+      currentType = bundleType.getElementType(*index);
       continue;
     }
 
@@ -893,7 +893,7 @@ ArrayAttr FIRParser::convertSubAnnotations(ArrayRef<Attribute> annotations,
     modAttr.append("circt.fieldID",
                    IntegerAttr::get(IntegerType::get(constants.context, 64,
                                                      IntegerType::Signless),
-                                    fieldID.getValue()));
+                                    *fieldID));
 
     annotationVec.push_back(DictionaryAttr::get(constants.context, modAttr));
   }
@@ -1767,7 +1767,7 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result) {
   if (!indexV)
     return emitError(loc, "unknown field '" + fieldName + "' in bundle type ")
            << result.getType();
-  auto indexNo = indexV.getValue();
+  auto indexNo = *indexV;
 
   // Make sure the field name matches up with the input value's type and
   // compute the result type for the expression.
@@ -2175,14 +2175,14 @@ ParseResult FIRStmtParser::parseSimpleStmtBlock(unsigned indent) {
       return success();
 
     auto subIndent = getIndentation();
-    if (!subIndent.hasValue())
+    if (!subIndent.has_value())
       return emitError("expected statement to be on its own line"), failure();
 
-    if (subIndent.getValue() <= indent)
+    if (*subIndent <= indent)
       return success();
 
     // Let the statement parser handle this.
-    if (parseSimpleStmt(subIndent.getValue()))
+    if (parseSimpleStmt(*subIndent))
       return failure();
   }
 }
@@ -2273,7 +2273,7 @@ ParseResult FIRStmtParser::parseAttach() {
 
   // If this was actually the start of a connect or something else handle that.
   if (auto isExpr = parseExpWithLeadingKeyword(startTok))
-    return isExpr.getValue();
+    return *isExpr;
 
   if (parseToken(FIRToken::l_paren, "expected '(' after attach"))
     return failure();
@@ -2303,7 +2303,7 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
   // If this was actually the start of a connect or something else handle
   // that.
   if (auto isExpr = parseExpWithLeadingKeyword(startTok))
-    return isExpr.getValue();
+    return *isExpr;
 
   StringRef id;
   StringRef memName;
@@ -2393,7 +2393,7 @@ ParseResult FIRStmtParser::parseSkip() {
   // If this was actually the start of a connect or something else handle
   // that.
   if (auto isExpr = parseExpWithLeadingKeyword(startTok))
-    return isExpr.getValue();
+    return *isExpr;
 
   if (parseOptionalInfo())
     return failure();
@@ -2500,7 +2500,7 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
   // If this was actually the start of a connect or something else handle
   // that.
   if (auto isExpr = parseExpWithLeadingKeyword(startTok))
-    return isExpr.getValue();
+    return *isExpr;
 
   Value condition;
   if (parseExp(condition, "expected condition in 'when'") ||
@@ -2538,10 +2538,10 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
     auto stmtIndent = getIndentation();
 
     // Parsing a single statment is straightforward.
-    if (!stmtIndent.hasValue())
+    if (!stmtIndent.has_value())
       return subParser.parseSimpleStmt(whenIndent);
 
-    if (stmtIndent.getValue() <= whenIndent)
+    if (*stmtIndent <= whenIndent)
       return emitError("statement must be indented more than 'when'"),
              failure();
 
@@ -2560,7 +2560,7 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
   // If the 'else' is less indented than the when, then it must belong to some
   // containing 'when'.
   auto elseIndent = getIndentation();
-  if (elseIndent.hasValue() && elseIndent.getValue() < whenIndent)
+  if (elseIndent && *elseIndent < whenIndent)
     return success();
 
   consumeToken(FIRToken::kw_else);
@@ -2647,7 +2647,7 @@ ParseResult FIRStmtParser::parseInstance() {
   // If this was actually the start of a connect or something else handle
   // that.
   if (auto isExpr = parseExpWithLeadingKeyword(startTok))
-    return isExpr.getValue();
+    return *isExpr;
 
   StringRef id;
   StringRef moduleName;
@@ -2728,7 +2728,7 @@ ParseResult FIRStmtParser::parseCombMem() {
   // If this was actually the start of a connect or something else handle
   // that.
   if (auto isExpr = parseExpWithLeadingKeyword(startTok))
-    return isExpr.getValue();
+    return *isExpr;
 
   StringRef id;
   FIRRTLType type;
@@ -2763,7 +2763,7 @@ ParseResult FIRStmtParser::parseSeqMem() {
   // If this was actually the start of a connect or something else handle
   // that.
   if (auto isExpr = parseExpWithLeadingKeyword(startTok))
-    return isExpr.getValue();
+    return *isExpr;
 
   StringRef id;
   FIRRTLType type;
@@ -2808,7 +2808,7 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
   // If this was actually the start of a connect or something else handle
   // that.
   if (auto isExpr = parseExpWithLeadingKeyword(startTok))
-    return isExpr.getValue();
+    return *isExpr;
 
   StringRef id;
   if (parseId(id, "expected mem name") ||
@@ -2824,7 +2824,7 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
   // Parse all the memfield records, which are indented more than the mem.
   while (1) {
     auto nextIndent = getIndentation();
-    if (!nextIndent.hasValue() || nextIndent.getValue() <= memIndent)
+    if (!nextIndent || *nextIndent <= memIndent)
       break;
 
     auto spelling = getTokenSpelling();
@@ -2881,7 +2881,7 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
     ports.push_back({builder.getStringAttr(portName),
                      MemOp::getTypeForPort(depth, type, portKind)});
 
-    while (!getIndentation().hasValue()) {
+    while (!getIndentation().has_value()) {
       if (parseId(portName, "expected port name"))
         return failure();
       ports.push_back({builder.getStringAttr(portName),
@@ -2949,7 +2949,7 @@ ParseResult FIRStmtParser::parseNode() {
   // If this was actually the start of a connect or something else handle
   // that.
   if (auto isExpr = parseExpWithLeadingKeyword(startTok))
-    return isExpr.getValue();
+    return *isExpr;
 
   StringRef id;
   Value initializer;
@@ -2997,7 +2997,7 @@ ParseResult FIRStmtParser::parseWire() {
   // If this was actually the start of a connect or something else handle
   // that.
   if (auto isExpr = parseExpWithLeadingKeyword(startTok))
-    return isExpr.getValue();
+    return *isExpr;
 
   StringRef id;
   FIRRTLType type;
@@ -3035,7 +3035,7 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
   // If this was actually the start of a connect or something else handle
   // that.
   if (auto isExpr = parseExpWithLeadingKeyword(startTok))
-    return isExpr.getValue();
+    return *isExpr;
 
   StringRef id;
   FIRRTLType type;
@@ -3063,7 +3063,7 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
     bool hasExtraLParen = consumeIf(FIRToken::l_paren);
 
     auto indent = getIndentation();
-    if (!indent.hasValue() || indent.getValue() <= regIndent)
+    if (!indent || *indent <= regIndent)
       if (!hasExtraLParen)
         return emitError("expected indented reset specifier in reg"), failure();
 
@@ -3547,9 +3547,9 @@ ParseResult FIRCircuitParser::parseCircuit(
     mlir::TimingScope &ts) {
 
   auto indent = getIndentation();
-  if (!indent.hasValue())
+  if (!indent.has_value())
     return emitError("'circuit' must be first token on its line"), failure();
-  unsigned circuitIndent = indent.getValue();
+  unsigned circuitIndent = indent.value();
 
   LocWithInfo info(getToken().getLoc(), this);
   StringAttr name;
@@ -3644,9 +3644,9 @@ ParseResult FIRCircuitParser::parseCircuit(
     case FIRToken::kw_module:
     case FIRToken::kw_extmodule: {
       auto indent = getIndentation();
-      if (!indent.hasValue())
+      if (!indent.has_value())
         return emitError("'module' must be first token on its line"), failure();
-      unsigned moduleIndent = indent.getValue();
+      unsigned moduleIndent = indent.value();
 
       if (moduleIndent <= circuitIndent)
         return emitError("module should be indented more"), failure();

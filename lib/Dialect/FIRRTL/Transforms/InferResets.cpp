@@ -1663,8 +1663,8 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
       instanceGraph->replaceInstance(instOp, newInstOp);
       instOp->erase();
       instOp = newInstOp;
-    } else if (domain.existingPort.hasValue()) {
-      auto idx = domain.existingPort.getValue();
+    } else if (domain.existingPort.has_value()) {
+      auto idx = domain.existingPort.value();
       instReset = instOp.getResult(idx);
       LLVM_DEBUG(llvm::dbgs() << "  - Using result #" << idx << " as reset\n");
     }

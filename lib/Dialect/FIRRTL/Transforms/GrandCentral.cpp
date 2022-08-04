@@ -626,8 +626,8 @@ private:
   Optional<StringAttr> maybeHierarchyFileYAML = None;
 
   StringAttr getOutputDirectory() {
-    if (maybeExtractInfo.hasValue())
-      return maybeExtractInfo.getValue().directory;
+    if (maybeExtractInfo)
+      return maybeExtractInfo->directory;
     return {};
   }
 
@@ -652,7 +652,7 @@ private:
   CircuitNamespace &getNamespace() {
     if (!circuitNamespace)
       circuitNamespace = CircuitNamespace(getOperation());
-    return circuitNamespace.getValue();
+    return *circuitNamespace;
   }
 
   /// Get the cached namespace for a module.
@@ -673,7 +673,7 @@ private:
   SymbolTable &getSymbolTable() {
     if (!symbolTable)
       symbolTable = SymbolTable(getOperation());
-    return symbolTable.getValue();
+    return *symbolTable;
   }
 
   // Utility that acts like emitOpError, but does _not_ include a note.  The
@@ -918,7 +918,7 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
         attrs.append("description", maybeDescription.cast<StringAttr>());
       attrs.append("name", name);
       attrs.append("tpe", tpe.getAs<StringAttr>("class"));
-      elements.push_back(eltAttr.getValue());
+      elements.push_back(*eltAttr);
     }
     // Add an annotation that stores information necessary to construct the
     // module for the view.  This needs the name of the module (defName) and the
@@ -927,10 +927,10 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
     attrs.append("class", classAttr);
     attrs.append("defName", defName);
     if (description)
-      attrs.append("description", description.getValue());
+      attrs.append("description", *description);
     attrs.append("elements", ArrayAttr::get(context, elements));
     if (id)
-      attrs.append("id", id.getValue());
+      attrs.append("id", *id);
     attrs.append("name", name);
     return DictionaryAttr::getWithSorted(context, attrs);
   }
@@ -954,14 +954,14 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
     // TODO: We don't support non-local annotations, so force this annotation
     // into a local annotation.  This does not properly check that the
     // non-local and local targets are totally equivalent.
-    auto target = maybeTarget.getValue();
+    auto target = *maybeTarget;
 
     NamedAttrList elementIface, elementScattered;
 
     // Populate the annotation for the interface element.
     elementIface.append("class", classAttr);
     if (description)
-      elementIface.append("description", description.getValue());
+      elementIface.append("description", *description);
     elementIface.append("id", id);
     elementIface.append("name", name);
     // Populate an annotation that will be scattered onto the element.
@@ -991,12 +991,12 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
           StringAttr::get(context, ""), id, None, clazz, path);
       if (!eltAttr)
         return None;
-      elements.push_back(eltAttr.getValue());
+      elements.push_back(*eltAttr);
     }
     NamedAttrList attrs;
     attrs.append("class", classAttr);
     if (description)
-      attrs.append("description", description.getValue());
+      attrs.append("description", *description);
     attrs.append("elements", ArrayAttr::get(context, elements));
     attrs.append("name", name);
     return DictionaryAttr::getWithSorted(context, attrs);
@@ -1068,7 +1068,7 @@ LogicalResult circt::firrtl::applyGCTView(const AnnoPathValue &target,
     return failure();
 
   AnnotationSet annotations(state.circuit);
-  annotations.addAnnotations({prunedAttr.getValue()});
+  annotations.addAnnotations({*prunedAttr});
   annotations.applyToOperation(state.circuit);
 
   return success();
@@ -1294,9 +1294,8 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
           auto field = fromAttr(elements[i]);
           if (!field)
             return false;
-          notFailed &=
-              traverseField(field.getValue(), id,
-                            path.snapshot().append("[" + Twine(i) + "]"));
+          notFailed &= traverseField(
+              *field, id, path.snapshot().append("[" + Twine(i) + "]"));
         }
         return notFailed;
       })
@@ -1309,9 +1308,8 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
           auto name = element.cast<DictionaryAttr>().getAs<StringAttr>("name");
           if (!name)
             name = element.cast<DictionaryAttr>().getAs<StringAttr>("defName");
-          anyFailed &=
-              traverseField(field.getValue(), id,
-                            path.snapshot().append("." + name.getValue()));
+          anyFailed &= traverseField(
+              *field, id, path.snapshot().append("." + name.getValue()));
         }
 
         return anyFailed;
@@ -1360,7 +1358,7 @@ Optional<TypeSum> GrandCentralPass::computeField(Attribute field,
             auto elements = vector.getElements();
             auto firstElement = fromAttr(elements[0]);
             auto elementType =
-                computeField(firstElement.getValue(), id, prefix,
+                computeField(firstElement.value(), id, prefix,
                              path.snapshot().append("[" + Twine(0) + "]"));
             if (!elementType)
               return None;
@@ -1369,21 +1367,21 @@ Optional<TypeSum> GrandCentralPass::computeField(Attribute field,
               auto subField = fromAttr(elements[i]);
               if (!subField)
                 return None;
-              (void)traverseField(subField.getValue(), id,
+              (void)traverseField(*subField, id,
                                   path.snapshot().append("[" + Twine(i) + "]"));
             }
 
-            if (auto *tpe = std::get_if<Type>(&elementType.getValue()))
+            if (auto *tpe = std::get_if<Type>(&*elementType))
               return TypeSum(
                   hw::UnpackedArrayType::get(*tpe, elements.getValue().size()));
-            auto str = std::get<VerbatimType>(elementType.getValue());
+            auto str = std::get<VerbatimType>(*elementType);
             str.dimensions.push_back(elements.getValue().size());
             return TypeSum(str);
           })
       .Case<AugmentedBundleTypeAttr>(
           [&](AugmentedBundleTypeAttr bundle) -> TypeSum {
             auto iface = traverseBundle(bundle, id, prefix, path);
-            assert(iface && iface.getValue());
+            assert(iface && *iface);
             (void)iface;
             return VerbatimType({getInterfaceName(prefix, bundle), true});
           })
@@ -1458,7 +1456,7 @@ GrandCentralPass::traverseBundle(AugmentedBundleTypeAttr bundle, IntegerAttr id,
     // if the interface field requires renaming in the output (e.g. due to
     // naming conflicts).
     auto elementType =
-        computeField(field.getValue(), id, prefix,
+        computeField(*field, id, prefix,
                      path.snapshot().append(".").append(name.getValue()));
     if (!elementType)
       return None;
@@ -1478,7 +1476,7 @@ GrandCentralPass::traverseBundle(AugmentedBundleTypeAttr bundle, IntegerAttr id,
                                builder.getStringAttr("description"));
     }
 
-    if (auto *str = std::get_if<VerbatimType>(&elementType.getValue())) {
+    if (auto *str = std::get_if<VerbatimType>(&*elementType)) {
       auto instanceOp =
           builder.create<sv::VerbatimOp>(uloc, str->toStr(name.getValue()));
 
@@ -1501,7 +1499,7 @@ GrandCentralPass::traverseBundle(AugmentedBundleTypeAttr bundle, IntegerAttr id,
       continue;
     }
 
-    auto tpe = std::get<Type>(elementType.getValue());
+    auto tpe = std::get<Type>(*elementType);
     builder.create<sv::InterfaceSignalOp>(uloc, name.getValue(), tpe);
   }
 
@@ -1547,7 +1545,7 @@ void GrandCentralPass::runOnOperation() {
       return true;
     }
     if (anno.isClass(extractGrandCentralClass)) {
-      if (maybeExtractInfo.hasValue()) {
+      if (maybeExtractInfo) {
         emitCircuitError("more than one 'ExtractGrandCentralAnnotation' was "
                          "found, but exactly one must be provided");
         removalError = true;
@@ -1570,7 +1568,7 @@ void GrandCentralPass::runOnOperation() {
       return false;
     }
     if (anno.isClass(grandCentralHierarchyFileAnnoClass)) {
-      if (maybeHierarchyFileYAML.hasValue()) {
+      if (maybeHierarchyFileYAML) {
         emitCircuitError("more than one 'GrandCentralHierarchyFileAnnotation' "
                          "was found, but zero or one may be provided");
         removalError = true;
@@ -1647,10 +1645,8 @@ void GrandCentralPass::runOnOperation() {
   LLVM_DEBUG({
     llvm::dbgs() << "Extraction Info:\n";
     if (maybeExtractInfo)
-      llvm::dbgs() << "  directory: " << maybeExtractInfo.getValue().directory
-                   << "\n"
-                   << "  filename: " << maybeExtractInfo.getValue().bindFilename
-                   << "\n";
+      llvm::dbgs() << "  directory: " << maybeExtractInfo->directory << "\n"
+                   << "  filename: " << maybeExtractInfo->bindFilename << "\n";
     else
       llvm::dbgs() << "  <none>\n";
     llvm::dbgs() << "DUT: ";
@@ -1664,7 +1660,7 @@ void GrandCentralPass::runOnOperation() {
         << "Hierarchy File Info (from GrandCentralHierarchyFileAnnotation):\n"
         << "  filename: ";
     if (maybeHierarchyFileYAML)
-      llvm::dbgs() << maybeHierarchyFileYAML.getValue();
+      llvm::dbgs() << *maybeHierarchyFileYAML;
     else
       llvm::dbgs() << "<none>";
     llvm::dbgs() << "\n";
@@ -1687,8 +1683,7 @@ void GrandCentralPass::runOnOperation() {
     builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), yamlString)
         ->setAttr("output_file",
                   hw::OutputFileAttr::getFromFilename(
-                      &getContext(),
-                      maybeHierarchyFileYAML.getValue().getValue(),
+                      &getContext(), maybeHierarchyFileYAML->getValue(),
                       /*excludFromFileList=*/true));
     LLVM_DEBUG({ llvm::dbgs() << "Generated YAML:" << yamlString << "\n"; });
     return;
@@ -1763,8 +1758,8 @@ void GrandCentralPass::runOnOperation() {
               return false;
             auto sym =
                 annotation.getMember<FlatSymbolRefAttr>("circt.nonlocal");
-            leafMap[maybeID.getValue()] = {
-                {op.getResult(), annotation.getFieldID()}, sym};
+            leafMap[*maybeID] = {{op.getResult(), annotation.getFieldID()},
+                                 sym};
             if (sym)
               deadNLAs.insert(sym.getAttr());
             ++numAnnosRemoved;
@@ -1819,7 +1814,7 @@ void GrandCentralPass::runOnOperation() {
                   return false;
                 auto sym =
                     annotation.getMember<FlatSymbolRefAttr>("circt.nonlocal");
-                leafMap[maybeID.getValue()] = {
+                leafMap[*maybeID] = {
                     {op.getArgument(i), annotation.getFieldID()}, sym};
                 if (sym)
                   deadNLAs.insert(sym.getAttr());
@@ -1893,18 +1888,16 @@ void GrandCentralPass::runOnOperation() {
                 return true;
               }
 
-              instance.getValue()->setAttr("lowerToBind",
-                                           builder.getUnitAttr());
-              instance.getValue()->setAttr(
+              (*instance)->setAttr("lowerToBind", builder.getUnitAttr());
+              (*instance)->setAttr(
                   "output_file",
                   hw::OutputFileAttr::getFromFilename(
-                      &getContext(),
-                      maybeExtractInfo.getValue().bindFilename.getValue(),
+                      &getContext(), maybeExtractInfo->bindFilename.getValue(),
                       /*excludeFromFileList=*/true));
               op->setAttr("output_file",
                           hw::OutputFileAttr::getFromDirectoryAndFilename(
                               &getContext(),
-                              maybeExtractInfo.getValue().directory.getValue(),
+                              maybeExtractInfo->directory.getValue(),
                               op.getName() + ".sv",
                               /*excludeFromFileList=*/true,
                               /*includeReplicatedOps=*/true));
@@ -1938,7 +1931,7 @@ void GrandCentralPass::runOnOperation() {
                         "output_file",
                         hw::OutputFileAttr::getAsDirectory(
                             &getContext(),
-                            maybeExtractInfo.getValue().directory.getValue(),
+                            maybeExtractInfo->directory.getValue(),
                             /*excludeFromFileList=*/false));
                     break;
                   }
@@ -2028,7 +2021,7 @@ void GrandCentralPass::runOnOperation() {
       auto value = parentIDMap.lookup(id);
       StringRef name;
       if (value.first)
-        name = value.first.getValue().getName();
+        name = value.first->getName();
       else
         name = value.second.getName();
       llvm::dbgs() << "  - " << id.getValue() << ": " << name << ":"
@@ -2122,12 +2115,12 @@ void GrandCentralPass::runOnOperation() {
     }
     ++numViews;
 
-    interfaceVec.push_back(iface.getValue());
+    interfaceVec.push_back(*iface);
 
     // Instantiate the interface inside the parent.
     builder.setInsertionPointToStart(companionModule.getBodyBlock());
     builder.create<sv::InterfaceInstanceOp>(
-        getOperation().getLoc(), iface.getValue().getInterfaceType(),
+        getOperation().getLoc(), iface->getInterfaceType(),
         companionIDMap.lookup(bundle.getID()).name,
         builder.getStringAttr(symbolName));
 
@@ -2158,8 +2151,7 @@ void GrandCentralPass::runOnOperation() {
     builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), yamlString)
         ->setAttr("output_file",
                   hw::OutputFileAttr::getFromFilename(
-                      &getContext(),
-                      maybeHierarchyFileYAML.getValue().getValue(),
+                      &getContext(), maybeHierarchyFileYAML->getValue(),
                       /*excludFromFileList=*/true));
     LLVM_DEBUG({ llvm::dbgs() << "Generated YAML:" << yamlString << "\n"; });
   }

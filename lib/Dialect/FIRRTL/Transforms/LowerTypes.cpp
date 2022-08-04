@@ -508,7 +508,7 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(MLIRContext *ctxt,
           updateAnnotationFieldID(ctxt, opAttr, field.fieldID, cache.i64ty));
       continue;
     }
-    auto fieldID = maybeFieldID.getValue();
+    auto fieldID = maybeFieldID.value();
     // Check whether the annotation falls into the range of the current field.
     if (fieldID != 0 &&
         !(fieldID >= field.fieldID &&
@@ -1064,7 +1064,7 @@ bool TypeLoweringVisitor::visitExpr(BitCastOp op) {
     // Loop over the leaf aggregates and concat each of them to get a UInt.
     // Bitcast the fields to handle nested aggregate types.
     for (const auto &field : llvm::enumerate(fields)) {
-      auto fieldBitwidth = getBitWidth(field.value().type).getValue();
+      auto fieldBitwidth = getBitWidth(field.value().type).value();
       // Ignore zero width fields, like empty bundles.
       if (fieldBitwidth == 0)
         continue;
@@ -1091,7 +1091,7 @@ bool TypeLoweringVisitor::visitExpr(BitCastOp op) {
     auto clone = [&](const FlatBundleFieldEntry &field,
                      ArrayAttr attrs) -> Operation * {
       // All the fields must have valid bitwidth, a requirement for BitCastOp.
-      auto fieldBits = getBitWidth(field.type).getValue();
+      auto fieldBits = getBitWidth(field.type).value();
       // If empty field, then it doesnot have any use, so replace it with an
       // invalid op, which should be trivially removed.
       if (fieldBits == 0)

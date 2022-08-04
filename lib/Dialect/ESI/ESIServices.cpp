@@ -33,7 +33,7 @@ ServiceGeneratorDispatcher ServiceGeneratorDispatcher::defaultDispatcher() {
 
 LogicalResult ServiceGeneratorDispatcher::generate(ServiceImplementReqOp req) {
   // Create the lookup table lazily.
-  if (!lookupTable.hasValue())
+  if (!lookupTable)
     lookupTable = create(req.getContext());
 
   // Lookup based on 'impl_type' attribute and pass through the generate request

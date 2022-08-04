@@ -44,11 +44,11 @@ void appendPortsForExternalMemref(PatternRewriter &rewriter, StringRef memName,
         rewriter.getNamedAttr("id", rewriter.getI32IntegerAttr(memoryID)),
         // "tag" denotes the function of this signal.
         rewriter.getNamedAttr("tag", rewriter.getStringAttr(tag))};
-    if (addrIdx.hasValue())
+    if (addrIdx.has_value())
       // "addr_idx" denotes the address index of this signal, for
       // multi-dimensional memory interfaces.
       attrs.push_back(rewriter.getNamedAttr(
-          "addr_idx", rewriter.getI32IntegerAttr(addrIdx.getValue())));
+          "addr_idx", rewriter.getI32IntegerAttr(*addrIdx)));
 
     return rewriter.getNamedAttr("mem", rewriter.getDictionaryAttr(attrs));
   };
@@ -582,7 +582,7 @@ RewriteMemoryAccesses::partiallyLower(calyx::AssignOp assignOp,
   auto *state = cls.getState(assignOp->getParentOfType<calyx::ComponentOp>());
 
   Value dest = assignOp.dest();
-  if (!state->isInputPortOfMemory(dest).hasValue())
+  if (!state->isInputPortOfMemory(dest))
     return success();
 
   Value src = assignOp.src();

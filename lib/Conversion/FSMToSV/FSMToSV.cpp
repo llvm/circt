@@ -439,9 +439,9 @@ LogicalResult MachineOpConverter::dispatch() {
     if (failed(stateConvRes))
       return failure();
 
-    stateConvResults[state] = stateConvRes.getValue();
+    stateConvResults[state] = *stateConvRes;
     orderedStates.push_back(state);
-    nextStateFromState[state] = {stateConvRes.getValue().nextState};
+    nextStateFromState[state] = {stateConvRes->nextState};
   }
 
   // 4/5) Create next-state assignments for each output.
@@ -608,7 +608,7 @@ MachineOpConverter::convertState(StateOp state) {
   if (failed(outputOpRes))
     return failure();
 
-  OutputOp outputOp = cast<fsm::OutputOp>(outputOpRes.getValue());
+  OutputOp outputOp = cast<fsm::OutputOp>(*outputOpRes);
   res.outputs = outputOp.getOperands(); // 3.2
 
   auto transitions = llvm::SmallVector<TransitionOp>(
@@ -618,7 +618,7 @@ MachineOpConverter::convertState(StateOp state) {
   auto nextStateRes = convertTransitions(state, transitions);
   if (failed(nextStateRes))
     return failure();
-  res.nextState = nextStateRes.getValue();
+  res.nextState = *nextStateRes;
   return res;
 }
 

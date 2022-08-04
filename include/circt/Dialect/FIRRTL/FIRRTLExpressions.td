@@ -161,7 +161,7 @@ def SubfieldOp : FIRRTLExprOp<"subfield"> {
     OpBuilder<(ins "Value":$input, "StringRef":$fieldName), [{
       auto bundleType = input.getType().cast<BundleType>();
       auto fieldIndex = bundleType.getElementIndex(fieldName);
-      assert(fieldIndex.hasValue() && "subfield operation to unknown field");
+      assert(fieldIndex.has_value() && "subfield operation to unknown field");
       return build($_builder, $_state, input, *fieldIndex);
     }]>
   ];

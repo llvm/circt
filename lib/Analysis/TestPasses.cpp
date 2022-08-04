@@ -60,10 +60,10 @@ void TestDependenceAnalysisPass::runOnOperation() {
       SmallVector<Attribute> comps;
       for (auto comp : dep.dependenceComponents) {
         SmallVector<Attribute> vector;
-        vector.push_back(IntegerAttr::get(IntegerType::get(context, 64),
-                                          comp.lb.getValue()));
-        vector.push_back(IntegerAttr::get(IntegerType::get(context, 64),
-                                          comp.ub.getValue()));
+        vector.push_back(
+            IntegerAttr::get(IntegerType::get(context, 64), comp.lb.value()));
+        vector.push_back(
+            IntegerAttr::get(IntegerType::get(context, 64), comp.ub.value()));
         comps.push_back(ArrayAttr::get(context, vector));
       }
 
@@ -197,7 +197,7 @@ void InferTopModulePass::runOnOperation() {
   }
 
   llvm::SmallVector<Attribute, 4> attrs;
-  for (auto *node : res.getValue())
+  for (auto *node : *res)
     attrs.push_back(node->getModule().moduleNameAttr());
 
   analysis.getParent()->setAttr("test.top",

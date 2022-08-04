@@ -65,7 +65,7 @@ struct FlattenMemoryPass : public FlattenMemoryBase<FlattenMemoryPass> {
       // Get the width of individual aggregate leaf elements.
       for (auto f : flatMemType) {
         LLVM_DEBUG(llvm::dbgs() << "\n field type:" << f);
-        memWidths.push_back(f.getWidth().getValue());
+        memWidths.push_back(f.getWidth().value());
       }
       maskGran = memWidths[0];
       size_t memFlatWidth = 0;
@@ -141,9 +141,8 @@ struct FlattenMemoryPass : public FlattenMemoryBase<FlattenMemoryPass> {
             auto oldFieldBitWidth = getBitWidth(oldField.getType());
             // Following condition is true, if a data field is 0 bits. Then
             // newFieldType is of smaller bits than old.
-            if (getBitWidth(newFieldType) != oldFieldBitWidth.getValue())
-              newFieldType =
-                  UIntType::get(context, oldFieldBitWidth.getValue());
+            if (getBitWidth(newFieldType) != oldFieldBitWidth.value())
+              newFieldType = UIntType::get(context, oldFieldBitWidth.value());
             realOldField = builder.create<BitCastOp>(newFieldType, oldField);
             // Mask bits require special handling, since some of the mask bits
             // need to be repeated, direct bitcasting wouldn't work. Depending
@@ -200,7 +199,7 @@ private:
           })
           .Case<IntType>([&](auto iType) {
             results.push_back({iType});
-            return iType.getWidth().hasValue();
+            return iType.getWidth().has_value();
           })
           .Default([&](auto) { return false; });
     };

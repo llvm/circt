@@ -285,7 +285,7 @@ static Optional<Attribute> scatterOMIR(Attribute original, ApplyState &state) {
           auto newElement = scatterOMIR(element, state);
           if (!newElement)
             return None;
-          newArr.push_back(newElement.getValue());
+          newArr.push_back(*newElement);
         }
         return ArrayAttr::get(ctx, newArr);
       })
@@ -297,7 +297,7 @@ static Optional<Attribute> scatterOMIR(Attribute original, ApplyState &state) {
           auto maybeValue = scatterOMIR(pairs.getValue(), state);
           if (!maybeValue)
             return None;
-          newAttrs.append(pairs.getName(), maybeValue.getValue());
+          newAttrs.append(pairs.getName(), *maybeValue);
         }
         return DictionaryAttr::get(ctx, newAttrs);
       })
@@ -363,7 +363,7 @@ scatterOMField(Attribute original, const Attribute root, unsigned index,
                             fileLineColLocCache, ctx);
   mlir::LocationAttr infoLoc;
   if (maybeLoc.first)
-    infoLoc = maybeLoc.second.getValue();
+    infoLoc = maybeLoc.second.value();
   else
     infoLoc = UnknownLoc::get(ctx);
 
@@ -385,7 +385,7 @@ scatterOMField(Attribute original, const Attribute root, unsigned index,
   // reconstruct the order of the original array.
   values.append("index", IntegerAttr::get(IntegerType::get(ctx, 64), index));
   values.append("info", infoLoc);
-  values.append("value", newValue.getValue());
+  values.append("value", *newValue);
 
   return {{nameAttr.getValue(), DictionaryAttr::getWithSorted(ctx, values)}};
 }
@@ -431,7 +431,7 @@ scatterOMNode(Attribute original, const Attribute root, ApplyState &state) {
                             fileLineColLocCache, ctx);
   mlir::LocationAttr infoLoc;
   if (maybeLoc.first)
-    infoLoc = maybeLoc.second.getValue();
+    infoLoc = maybeLoc.second.value();
   else
     infoLoc = UnknownLoc::get(ctx);
 
@@ -454,8 +454,7 @@ scatterOMNode(Attribute original, const Attribute root, ApplyState &state) {
     for (size_t i = 0, e = fieldAttr.size(); i != e; ++i) {
       auto field = fieldAttr[i];
       if (auto newField = scatterOMField(field, root, i, state)) {
-        fieldAttrs.append(newField.getValue().first,
-                          newField.getValue().second);
+        fieldAttrs.append(newField->first, newField->second);
         continue;
       }
       return None;
@@ -487,7 +486,7 @@ LogicalResult circt::firrtl::applyOMIR(const AnnoPathValue &target,
     auto newNode = scatterOMNode(node, anno, state);
     if (!newNode)
       return failure();
-    newNodes.push_back(newNode.getValue());
+    newNodes.push_back(*newNode);
   }
 
   auto *ctx = state.circuit.getContext();

@@ -42,7 +42,7 @@ using mlir::TypeStorageAllocator;
 static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
   auto printWidthQualifier = [&](Optional<int32_t> width) {
     if (width)
-      os << '<' << width.getValue() << '>';
+      os << '<' << *width << '>';
   };
   bool anyFailed = false;
   TypeSwitch<Type>(type)
@@ -577,9 +577,9 @@ bool firrtl::areTypesWeaklyEquivalent(FIRRTLType destType, FIRRTLType srcType,
       // If the src doesn't contain the destination's field, that's okay.
       if (!srcElt)
         return true;
-      return areTypesWeaklyEquivalent(destElt.type, srcElt.getValue().type,
+      return areTypesWeaklyEquivalent(destElt.type, srcElt->type,
                                       destFlip ^ destElt.isFlip,
-                                      srcFlip ^ srcElt.getValue().isFlip);
+                                      srcFlip ^ srcElt->isFlip);
     });
 
   // Ground types can be connected if their passive, widthless versions
@@ -860,12 +860,12 @@ BundleType::BundleElement BundleType::getElement(size_t index) {
 
 FIRRTLType BundleType::getElementType(StringAttr name) {
   auto element = getElement(name);
-  return element.hasValue() ? element.getValue().type : FIRRTLType();
+  return element ? element->type : FIRRTLType();
 }
 
 FIRRTLType BundleType::getElementType(StringRef name) {
   auto element = getElement(name);
-  return element.hasValue() ? element.getValue().type : FIRRTLType();
+  return element ? element->type : FIRRTLType();
 }
 
 FIRRTLType BundleType::getElementType(size_t index) {
@@ -1033,18 +1033,17 @@ llvm::Optional<int64_t> firrtl::getBitWidth(FIRRTLType type) {
             if (elt.isFlip)
               return llvm::Optional<int64_t>(None);
             auto w = getBitWidth(elt.type);
-            if (!w.hasValue())
+            if (!w.has_value())
               return llvm::Optional<int64_t>(None);
-            width += w.getValue();
+            width += *w;
           }
           return llvm::Optional<int64_t>(width);
         })
         .Case<FVectorType>([&](auto vector) {
           auto w = getBitWidth(vector.getElementType());
-          if (!w.hasValue())
+          if (!w.has_value())
             return llvm::Optional<int64_t>(None);
-          return llvm::Optional<int64_t>(w.getValue() *
-                                         vector.getNumElements());
+          return llvm::Optional<int64_t>(*w * vector.getNumElements());
         })
         .Case<IntType>([&](IntType iType) {
           auto retval = iType.getWidth();

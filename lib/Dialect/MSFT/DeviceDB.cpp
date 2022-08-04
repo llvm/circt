@@ -363,7 +363,7 @@ void PlacementDB::walkPlacements(
   // right data structure.
 
   auto maybeSort = [](auto &container, auto direction) {
-    if (!direction.hasValue())
+    if (!direction.has_value())
       return;
     if (*direction == Direction::NONE)
       return;

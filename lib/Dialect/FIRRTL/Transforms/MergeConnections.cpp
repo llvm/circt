@@ -80,7 +80,7 @@ bool MergeConnection::peelConnect(StrictConnectOp connect) {
   // connections.
   LLVM_DEBUG(llvm::dbgs() << "Visiting " << connect << "\n");
   auto destTy = connect.getDest().getType().cast<FIRRTLType>();
-  if (!destTy.isPassive() || !firrtl::getBitWidth(destTy).hasValue())
+  if (!destTy.isPassive() || !firrtl::getBitWidth(destTy).has_value())
     return false;
 
   auto destFieldRef = getFieldRefFromValue(connect.getDest());

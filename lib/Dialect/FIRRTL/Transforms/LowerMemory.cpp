@@ -310,10 +310,8 @@ static SmallVector<SubfieldOp> getAllFieldAccesses(Value structValue,
     auto elemIndex =
         fieldAccess.getInput().getType().cast<BundleType>().getElementIndex(
             field);
-    if (elemIndex.hasValue() &&
-        fieldAccess.getFieldIndex() == elemIndex.getValue()) {
+    if (elemIndex && *elemIndex == fieldAccess.getFieldIndex())
       accesses.push_back(fieldAccess);
-    }
   }
   return accesses;
 }

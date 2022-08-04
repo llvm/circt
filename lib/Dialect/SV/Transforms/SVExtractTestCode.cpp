@@ -339,10 +339,10 @@ void SVExtractTestCodeImplPass::runOnOperation() {
     // verifications. See FIRParserAsserts for more details.
     if (auto error = dyn_cast<ErrorOp>(op)) {
       if (auto message = error.getMessage())
-        return message.getValue().startswith("assert:") ||
-               message.getValue().startswith("Assertion failed") ||
-               message.getValue().startswith("assertNotX:") ||
-               message.getValue().contains("[verif-library-assert]");
+        return message->startswith("assert:") ||
+               message->startswith("Assertion failed") ||
+               message->startswith("assertNotX:") ||
+               message->contains("[verif-library-assert]");
       return false;
     }
 

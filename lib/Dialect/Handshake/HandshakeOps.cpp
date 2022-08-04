@@ -1006,12 +1006,12 @@ void handshake::TerminatorOp::build(OpBuilder &builder, OperationState &result,
 LogicalResult BufferOp::verify() {
   // Verify that exactly 'size' number of initial values have been provided, if
   // an initializer list have been provided.
-  if (initValues().hasValue()) {
+  if (auto initVals = initValues()) {
     if (!isSequential())
       return emitOpError()
              << "only bufferType buffers are allowed to have initial values.";
 
-    auto nInits = initValues().getValue().size();
+    auto nInits = initVals->size();
     if (nInits != size())
       return emitOpError() << "expected " << size() << " init values but got "
                            << nInits << ".";

@@ -1013,14 +1013,10 @@ class BuildPipelineGroups : public calyx::FuncOpPartialLoweringPattern {
     if (isStageWithNoPipelinedValues) {
       // Covers the case where there are no values that need to be passed
       // through to the next stage, e.g., some intermediary store.
-      for (auto &op : stage.getBodyBlock()) {
-        Optional<calyx::GroupOp> group =
-            getState<ComponentLoweringState>()
-                .getNonPipelinedGroupFrom<calyx::GroupOp>(&op);
-        if (!group.hasValue())
-          continue;
-        updatePrologueAndEpilogue(*group);
-      }
+      for (auto &op : stage.getBodyBlock())
+        if (auto group = getState<ComponentLoweringState>()
+                             .getNonPipelinedGroupFrom<calyx::GroupOp>(&op))
+          updatePrologueAndEpilogue(*group);
     }
 
     for (auto &operand : operands) {

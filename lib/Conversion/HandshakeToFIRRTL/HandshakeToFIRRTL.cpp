@@ -444,10 +444,9 @@ static std::string getSubModuleName(Operation *oldOp) {
     else
       subModuleName += "_fifo";
 
-    if (bufferOp.initValues().hasValue()) {
+    if (auto initValues = bufferOp.initValues()) {
       subModuleName += "_init";
-      ArrayAttr values = bufferOp.initValues().getValue();
-      for (const Attribute e : values) {
+      for (const Attribute e : *initValues) {
         assert(e.isa<IntegerAttr>());
         subModuleName +=
             "_" + std::to_string(e.dyn_cast<IntegerAttr>().getInt());
@@ -2127,17 +2126,17 @@ FModuleOp buildInnerFIFO(CircuitOp circuit, StringRef moduleName,
 
     // Get the clock out of the bundle and connect them.
     auto readClock = builder.create<SubfieldOp>(
-        readBundle, readType.getElementIndex("clk").getValue());
+        readBundle, readType.getElementIndex("clk").value());
     builder.create<ConnectOp>(readClock, clk);
     auto writeClock = builder.create<SubfieldOp>(
-        writeBundle, writeType.getElementIndex("clk").getValue());
+        writeBundle, writeType.getElementIndex("clk").value());
     builder.create<ConnectOp>(writeClock, clk);
 
     // Get the addresses out of the bundle
     auto readAddr = builder.create<SubfieldOp>(
-        readBundle, readType.getElementIndex("addr").getValue());
+        readBundle, readType.getElementIndex("addr").value());
     auto writeAddr = builder.create<SubfieldOp>(
-        writeBundle, readType.getElementIndex("addr").getValue());
+        writeBundle, readType.getElementIndex("addr").value());
 
     // Connect read and write to head and tail registers.
     builder.create<ConnectOp>(readAddr, head);
@@ -2145,9 +2144,9 @@ FModuleOp buildInnerFIFO(CircuitOp circuit, StringRef moduleName,
 
     // Get the memory enable out of the bundles.
     auto memReadEn = builder.create<SubfieldOp>(
-        readBundle, readType.getElementIndex("en").getValue());
+        readBundle, readType.getElementIndex("en").value());
     auto memWriteEn = builder.create<SubfieldOp>(
-        writeBundle, writeType.getElementIndex("en").getValue());
+        writeBundle, writeType.getElementIndex("en").value());
     // Always read
     builder.create<ConnectOp>(memReadEn, oneConst);
     // Write on writeEn
@@ -2155,15 +2154,15 @@ FModuleOp buildInnerFIFO(CircuitOp circuit, StringRef moduleName,
 
     // Connect read and write data.
     auto readData = builder.create<SubfieldOp>(
-        readBundle, readType.getElementIndex("data").getValue());
+        readBundle, readType.getElementIndex("data").value());
     auto writeData = builder.create<SubfieldOp>(
-        writeBundle, writeType.getElementIndex("data").getValue());
+        writeBundle, writeType.getElementIndex("data").value());
     builder.create<ConnectOp>(dataOut, readData);
     builder.create<ConnectOp>(writeData, dataIn);
 
     // Get the store mask out of the bundle.
     auto writeMask = builder.create<SubfieldOp>(
-        writeBundle, writeType.getElementIndex("mask").getValue());
+        writeBundle, writeType.getElementIndex("mask").value());
 
     // We might be storing bundles. Therefore, we have to ensure that writeEn is
     // connected to all elements of the mask.
@@ -2570,12 +2569,12 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
 
     // Get the clock out of the bundle and connect it.
     auto memClock = rewriter.create<SubfieldOp>(
-        insertLoc, memBundle, memType.getElementIndex("clk").getValue());
+        insertLoc, memBundle, memType.getElementIndex("clk").value());
     rewriter.create<ConnectOp>(insertLoc, memClock, clock);
 
     // Get the load address out of the bundle.
     auto memAddr = rewriter.create<SubfieldOp>(
-        insertLoc, memBundle, memType.getElementIndex("addr").getValue());
+        insertLoc, memBundle, memType.getElementIndex("addr").value());
 
     // Since addresses coming from Handshake are IndexType and have a hardcoded
     // 64-bit width in this pass, we may need to truncate down to the actual
@@ -2595,14 +2594,14 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
 
     // Get the load data out of the bundle.
     auto memData = rewriter.create<SubfieldOp>(
-        insertLoc, memBundle, memType.getElementIndex("data").getValue());
+        insertLoc, memBundle, memType.getElementIndex("data").value());
 
     // Connect the memory to the load data.
     rewriter.create<ConnectOp>(insertLoc, loadDataData, memData);
 
     // Get the load enable out of the bundle.
     auto memEnable = rewriter.create<SubfieldOp>(
-        insertLoc, memBundle, memType.getElementIndex("en").getValue());
+        insertLoc, memBundle, memType.getElementIndex("en").value());
 
     // Connect the address valid signal to the memory enable.
     rewriter.create<ConnectOp>(insertLoc, memEnable, loadAddrValid);
@@ -2638,12 +2637,12 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
 
     // Get the clock out of the bundle and connect it.
     auto memClock = rewriter.create<SubfieldOp>(
-        insertLoc, memBundle, memType.getElementIndex("clk").getValue());
+        insertLoc, memBundle, memType.getElementIndex("clk").value());
     rewriter.create<ConnectOp>(insertLoc, memClock, clock);
 
     // Get the store address out of the bundle.
     auto memAddr = rewriter.create<SubfieldOp>(
-        insertLoc, memBundle, memType.getElementIndex("addr").getValue());
+        insertLoc, memBundle, memType.getElementIndex("addr").value());
 
     // Since addresses coming from Handshake are IndexType and have a hardcoded
     // 64-bit width in this pass, we may need to truncate down to the actual
@@ -2663,7 +2662,7 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
 
     // Get the store data out of the bundle.
     auto memData = rewriter.create<SubfieldOp>(
-        insertLoc, memBundle, memType.getElementIndex("data").getValue());
+        insertLoc, memBundle, memType.getElementIndex("data").value());
 
     // Connect the store data to the memory.
     rewriter.create<ConnectOp>(insertLoc, memData, storeDataData);
@@ -2717,14 +2716,14 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
 
     // Get the store enable out of the bundle.
     auto memEnable = rewriter.create<SubfieldOp>(
-        insertLoc, memBundle, memType.getElementIndex("en").getValue());
+        insertLoc, memBundle, memType.getElementIndex("en").value());
 
     // Connect the write valid signal to the memory enable.
     rewriter.create<ConnectOp>(insertLoc, memEnable, writeValid);
 
     // Get the store mask out of the bundle.
     auto memMask = rewriter.create<SubfieldOp>(
-        insertLoc, memBundle, memType.getElementIndex("mask").getValue());
+        insertLoc, memBundle, memType.getElementIndex("mask").value());
 
     // Since we are not storing bundles in the memory, we can assume the mask is
     // a single bit.
