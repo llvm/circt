@@ -915,7 +915,17 @@ LogicalResult FIRRTLModuleLowering::lowerPorts(
     hw::PortInfo hwPort;
     hwPort.name = firrtlPort.name;
     hwPort.type = lowerType(firrtlPort.type);
-    hwPort.sym = firrtlPort.sym;
+    if (firrtlPort.sym)
+      if (firrtlPort.sym.size() > 1 ||
+          (firrtlPort.sym.size() == 1 && !firrtlPort.sym.getSymName())) {
+        moduleOp->emitError("cannot lower aggregate port `" +
+                            firrtlPort.name.getValue() +
+                            "` with field sensitive symbols, HW dialect does  "
+                            "not support per field symbols yet.");
+        return failure();
+      }
+    hwPort.sym = firrtlPort.sym ? firrtlPort.sym.getSymName()
+                                : StringAttr::get(moduleOp->getContext(), "");
 
     // We can't lower all types, so make sure to cleanly reject them.
     if (!hwPort.type) {

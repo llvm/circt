@@ -179,7 +179,7 @@ bool firrtl::hasDontTouch(Value value) {
     return hasDontTouch(op);
   auto arg = value.dyn_cast<BlockArgument>();
   auto module = cast<FModuleOp>(arg.getOwner()->getParentOp());
-  return (!module.getPortSymbol(arg.getArgNumber()).empty()) ||
+  return (module.getPortSymbolAttr(arg.getArgNumber())) ||
          AnnotationSet::forPort(module, arg.getArgNumber()).hasDontTouch();
 }
 
@@ -468,7 +468,6 @@ void FModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
   newSyms.reserve(newNumArgs);
 
   auto emptyArray = ArrayAttr::get(getContext(), {});
-  auto emptyString = StringAttr::get(getContext(), "");
 
   unsigned oldIdx = 0;
   auto migrateOldPorts = [&](unsigned untilOldIdx) {
@@ -491,7 +490,7 @@ void FModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
     newTypes.push_back(TypeAttr::get(port.type));
     auto annos = port.annotations.getArrayAttr();
     newAnnos.push_back(annos ? annos : emptyArray);
-    newSyms.push_back(port.sym ? port.sym : emptyString);
+    newSyms.push_back(port.sym);
     // Block arguments are inserted one at a time, so for each argument we
     // insert we have to increase the index by 1.
     body->insertArgument(idx + newIdx, port.type, port.loc);
@@ -505,20 +504,13 @@ void FModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
       }))
     newAnnos.clear();
 
-  // The lack of *any* port symbol is represented by an empty `portSyms` array
-  // as a shorthand.
-  if (llvm::all_of(newSyms, [](Attribute attr) {
-        return attr.cast<StringAttr>().getValue().empty();
-      }))
-    newSyms.clear();
-
   // Apply these changed markers.
   (*this)->setAttr("portDirections",
                    direction::packAttribute(getContext(), newDirections));
   (*this)->setAttr("portNames", ArrayAttr::get(getContext(), newNames));
   (*this)->setAttr("portTypes", ArrayAttr::get(getContext(), newTypes));
   (*this)->setAttr("portAnnotations", ArrayAttr::get(getContext(), newAnnos));
-  (*this)->setAttr("portSyms", ArrayAttr::get(getContext(), newSyms));
+  (*this).setPortSymbols(newSyms);
 }
 
 /// Inserts the given ports. The insertion indices are expected to be in order.
@@ -551,7 +543,6 @@ void FMemModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
   newSyms.reserve(newNumArgs);
 
   auto emptyArray = ArrayAttr::get(getContext(), {});
-  auto emptyString = StringAttr::get(getContext(), "");
 
   unsigned oldIdx = 0;
   auto migrateOldPorts = [&](unsigned untilOldIdx) {
@@ -571,7 +562,7 @@ void FMemModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
     newTypes.push_back(TypeAttr::get(port.second.type));
     auto annos = port.second.annotations.getArrayAttr();
     newAnnos.push_back(annos ? annos : emptyArray);
-    newSyms.push_back(port.second.sym ? port.second.sym : emptyString);
+    newSyms.push_back(port.second.sym);
   }
   migrateOldPorts(oldNumArgs);
 
@@ -582,20 +573,13 @@ void FMemModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
       }))
     newAnnos.clear();
 
-  // The lack of *any* port symbol is represented by an empty `portSyms` array
-  // as a shorthand.
-  if (llvm::all_of(newSyms, [](Attribute attr) {
-        return attr.cast<StringAttr>().getValue().empty();
-      }))
-    newSyms.clear();
-
   // Apply these changed markers.
   (*this)->setAttr("portDirections",
                    direction::packAttribute(getContext(), newDirections));
   (*this)->setAttr("portNames", ArrayAttr::get(getContext(), newNames));
   (*this)->setAttr("portTypes", ArrayAttr::get(getContext(), newTypes));
   (*this)->setAttr("portAnnotations", ArrayAttr::get(getContext(), newAnnos));
-  (*this)->setAttr("portSyms", ArrayAttr::get(getContext(), newSyms));
+  (*this).setPortSymbols(newSyms);
 }
 
 /// Erases the ports listed in `portIndices`.  `portIndices` is expected to
@@ -656,7 +640,7 @@ static void buildModule(OpBuilder &builder, OperationState &result,
     portNames.push_back(ports[i].name);
     portTypes.push_back(TypeAttr::get(ports[i].type));
     portAnnotations.push_back(ports[i].annotations.getArrayAttr());
-    portSyms.push_back(ports[i].sym ? ports[i].sym : builder.getStringAttr(""));
+    portSyms.push_back(ports[i].sym);
   }
 
   // The lack of *any* port annotations is represented by an empty
@@ -666,13 +650,7 @@ static void buildModule(OpBuilder &builder, OperationState &result,
       }))
     portAnnotations.clear();
 
-  // The lack of *any* port symbol is represented by an empty `portSyms` array
-  // as a shorthand.
-  if (llvm::all_of(portSyms, [](Attribute attr) {
-        return attr.cast<StringAttr>().getValue().empty();
-      }))
-    portSyms.clear();
-
+  FModuleLike::fixupPortSymsArray(portSyms, builder.getContext());
   // Both attributes are added, even if the module has no ports.
   result.addAttribute(
       "portDirections",
@@ -796,10 +774,9 @@ static bool printModulePorts(OpAsmPrinter &p, Block *block,
 
     // Print the optional port symbol.
     if (!portSyms.empty()) {
-      auto symValue = portSyms[i].cast<StringAttr>().getValue();
-      if (!symValue.empty()) {
+      if (!portSyms[i].cast<InnerSymAttr>().empty()) {
         p << " sym ";
-        p.printSymbolName(symValue);
+        portSyms[i].cast<InnerSymAttr>().print(p);
       }
     }
 
@@ -869,15 +846,16 @@ parseModulePorts(OpAsmParser &parser, bool hasSSAIdentifiers,
       entryArgs.back().type = portType;
 
     // Parse the optional port symbol.
-    StringAttr portSym;
+    InnerSymAttr innerSymAttr;
     if (succeeded(parser.parseOptionalKeyword("sym"))) {
       NamedAttrList dummyAttrs;
-      if (parser.parseSymbolName(portSym, "dummy", dummyAttrs))
-        return failure();
-    } else {
-      portSym = StringAttr::get(context, "");
+      if (parser.parseCustomAttributeWithFallback(
+              innerSymAttr, ::mlir::Type{},
+              InnerSymbolTable::getInnerSymbolAttrName(), dummyAttrs)) {
+        return ::mlir::failure();
+      }
     }
-    portSyms.push_back(portSym);
+    portSyms.push_back(innerSymAttr);
 
     // Parse the port annotations.
     ArrayAttr annos;
@@ -1072,6 +1050,7 @@ static ParseResult parseFModuleLikeOp(OpAsmParser &parser,
 
   // Add port symbols.
   if (!result.attributes.get("portSyms")) {
+    FModuleLike::fixupPortSymsArray(portSyms, builder.getContext());
     result.addAttribute("portSyms", builder.getArrayAttr(portSyms));
   }
 

@@ -1178,17 +1178,6 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
   llvm_unreachable("portAnnos is never populated with unsupported annos");
 }
 
-StringAttr GrandCentralTapsPass::getOrAddInnerSym(FModuleLike module,
-                                                  size_t portIdx) {
-  auto attr = module.getPortSymbolAttr(portIdx);
-  if (attr && !attr.getValue().empty())
-    return attr;
-  auto name = getModuleNamespace(module).newName("gct_sym");
-  attr = StringAttr::get(module.getContext(), name);
-  module.setPortSymbolAttr(portIdx, attr);
-  return attr;
-}
-
 InnerRefAttr GrandCentralTapsPass::getInnerRefTo(Operation *op) {
   return ::getInnerRefTo(op, "gct_sym",
                          [&](FModuleOp mod) -> ModuleNamespace & {
@@ -1198,8 +1187,10 @@ InnerRefAttr GrandCentralTapsPass::getInnerRefTo(Operation *op) {
 
 InnerRefAttr GrandCentralTapsPass::getInnerRefTo(FModuleLike module,
                                                  size_t portIdx) {
-  return InnerRefAttr::get(SymbolTable::getSymbolName(module),
-                           getOrAddInnerSym(module, portIdx));
+  return ::getInnerRefTo(module, portIdx, "gct_sym",
+                         [&](FModuleLike mod) -> ModuleNamespace & {
+                           return getModuleNamespace(mod);
+                         });
 }
 
 std::unique_ptr<mlir::Pass> circt::firrtl::createGrandCentralTapsPass() {

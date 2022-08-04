@@ -208,8 +208,8 @@ void InjectDUTHierarchy::runOnOperation() {
   }
   for (size_t i = 0, e = dut.getNumPorts(); i != e; ++i) {
     auto portSym = dut.getPortSymbolAttr(i);
-    if (portSym && !portSym.getValue().empty())
-      dutPortSyms.insert(portSym);
+    if (portSym)
+      dutPortSyms.insert(portSym.getSymName());
     for (auto anno : AnnotationSet::forPort(dut, i)) {
       auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal");
       if (sym)

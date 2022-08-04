@@ -634,8 +634,7 @@ TypeLoweringVisitor::addArg(Operation *module, unsigned insertPt,
   // Save the name attribute for the new argument.
   auto name = builder->getStringAttr(oldArg.name.getValue() + field.suffix);
 
-  bool oldArgHadSym = oldArg.sym && !oldArg.sym.getValue().empty();
-  if (oldArgHadSym) {
+  if (oldArg.sym) {
     mlir::emitError(newValue ? newValue.getLoc() : module->getLoc())
         << "has a symbol, but no symbols may exist on aggregates "
            "passed through LowerTypes";
@@ -880,7 +879,7 @@ bool TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
     newArgDirections.push_back(port.direction);
     newArgNames.push_back(port.name);
     newPortTypes.push_back(TypeAttr::get(port.type));
-    newArgSyms.push_back(port.sym ? port.sym : cache.sEmpty);
+    newArgSyms.push_back(port.sym);
     newArgAnnotations.push_back(port.annotations.getArrayAttr());
   }
 
@@ -894,14 +893,12 @@ bool TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
   newModuleAttrs.push_back(
       NamedAttribute(cache.sPortTypes, builder.getArrayAttr(newPortTypes)));
 
-  newModuleAttrs.push_back(
-      NamedAttribute(cache.sPortSyms, builder.getArrayAttr(newArgSyms)));
-
   newModuleAttrs.push_back(NamedAttribute(
       cache.sPortAnnotations, builder.getArrayAttr(newArgAnnotations)));
 
   // Update the module's attributes.
   extModule->setAttrs(newModuleAttrs);
+  extModule.setPortSymbols(newArgSyms);
   return false;
 }
 
@@ -954,7 +951,7 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
     newArgDirections.push_back(port.direction);
     newArgNames.push_back(port.name);
     newArgTypes.push_back(TypeAttr::get(port.type));
-    newArgSyms.push_back(port.sym ? port.sym : cache.sEmpty);
+    newArgSyms.push_back(port.sym);
     newArgAnnotations.push_back(port.annotations.getArrayAttr());
   }
 
@@ -967,13 +964,12 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
 
   newModuleAttrs.push_back(
       NamedAttribute(cache.sPortTypes, builder->getArrayAttr(newArgTypes)));
-  newModuleAttrs.push_back(
-      NamedAttribute(cache.sPortSyms, builder->getArrayAttr(newArgSyms)));
   newModuleAttrs.push_back(NamedAttribute(
       cache.sPortAnnotations, builder->getArrayAttr(newArgAnnotations)));
 
   // Update the module's attributes.
   module->setAttrs(newModuleAttrs);
+  module.setPortSymbols(newArgSyms);
   return false;
 }
 

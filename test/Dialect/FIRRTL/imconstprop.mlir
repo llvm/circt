@@ -174,10 +174,8 @@ firrtl.circuit "Issue1188"  {
 // DontTouch annotation should block constant propagation.
 firrtl.circuit "testDontTouch"  {
   // CHECK-LABEL: firrtl.module private @blockProp
-  firrtl.module private @blockProp1(in %clock: !firrtl.clock, in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) attributes {
-    portAnnotations = [[], [],[]],
-    portSyms = ["", "dntSym", ""]
-  }{
+  firrtl.module private @blockProp1(in %clock: !firrtl.clock,
+    in %a: !firrtl.uint<1> sym @dntSym, out %b: !firrtl.uint<1>){
     //CHECK: %c = firrtl.reg
     %c = firrtl.reg %clock : !firrtl.uint<1>
     firrtl.connect %c, %a : !firrtl.uint<1>, !firrtl.uint<1>
@@ -229,7 +227,7 @@ firrtl.circuit "testDontTouch"  {
 // -----
 
 firrtl.circuit "OutPortTop" {
-    firrtl.module private @OutPortChild1(out %out: !firrtl.uint<1>)  attributes {portSyms = ["dntSym"]}{
+    firrtl.module private @OutPortChild1(out %out: !firrtl.uint<1> sym @dntSym1) {
       %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
       firrtl.connect %out, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     } 
@@ -263,9 +261,8 @@ firrtl.circuit "InputPortTop"   {
     firrtl.connect %out, %0 : !firrtl.uint<1>, !firrtl.uint<1>
   }
   // CHECK-LABEL: firrtl.module private @InputPortChild
-  firrtl.module private @InputPortChild(in %in0: !firrtl.uint<1>, in %in1: !firrtl.uint<1>, out %out: !firrtl.uint<1>) attributes {
-    portAnnotations = [[], [], []], portSyms = ["", "dntSym", ""]
-  } {
+  firrtl.module private @InputPortChild(in %in0: !firrtl.uint<1>,
+    in %in1 : !firrtl.uint<1> sym @dntSym1, out %out: !firrtl.uint<1>) {
     // CHECK: %0 = firrtl.and %in0, %in1
     %0 = firrtl.and %in0, %in1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     firrtl.connect %out, %0 : !firrtl.uint<1>, !firrtl.uint<1>
@@ -507,7 +504,7 @@ firrtl.circuit "dntOutput" {
     %m = firrtl.mux(%c, %int_b, %const) : (!firrtl.uint<1>, !firrtl.uint<3>, !firrtl.uint<3>) -> !firrtl.uint<3>
     firrtl.connect %b, %m : !firrtl.uint<3>, !firrtl.uint<3>
   }
-  firrtl.module private @foo(out %b: !firrtl.uint<3> ) attributes {portSyms = ["dntSym1"] } {
+  firrtl.module private @foo(out %b: !firrtl.uint<3>  sym @dntSym1) {
     %const = firrtl.constant 1 : !firrtl.uint<3>
     firrtl.connect %b, %const : !firrtl.uint<3>, !firrtl.uint<3>
   }

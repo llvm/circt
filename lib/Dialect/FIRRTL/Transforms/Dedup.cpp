@@ -940,36 +940,37 @@ private:
     // Create an array of new port symbols for the "to" operation, copy in the
     // old symbols if it has any, create an empty symbol array if it doesn't.
     SmallVector<Attribute> newPortSyms;
-    auto emptyString = StringAttr::get(context, "");
     if (toPortSyms.empty())
-      newPortSyms.assign(portCount, emptyString);
+      newPortSyms.assign(portCount, InnerSymAttr());
     else
       newPortSyms.assign(toPortSyms.begin(), toPortSyms.end());
 
     for (unsigned portNo = 0; portNo < portCount; ++portNo) {
       // If this fromPort doesn't have a symbol, move on to the next one.
-      auto fromSym = fromPortSyms[portNo].cast<StringAttr>();
-      if (fromSym.getValue().empty())
+      if (!fromPortSyms[portNo])
         continue;
+      auto fromSym = fromPortSyms[portNo].cast<InnerSymAttr>();
 
       // If this toPort doesn't have a symbol, assign one.
-      auto toSym = newPortSyms[portNo].cast<StringAttr>();
-      if (toSym == emptyString) {
+      InnerSymAttr toSym;
+      if (!newPortSyms[portNo]) {
         // Get a reasonable base name for the port.
         StringRef symName = "inner_sym";
         if (portNames)
           symName = portNames[portNo].cast<StringAttr>().getValue();
         // Create the symbol and store it into the array.
-        toSym = StringAttr::get(context, moduleNamespace.newName(symName));
+        toSym = InnerSymAttr::get(
+            StringAttr::get(context, moduleNamespace.newName(symName)));
         newPortSyms[portNo] = toSym;
-      }
+      } else
+        toSym = newPortSyms[portNo].cast<InnerSymAttr>();
 
       // Record the renaming.
-      renameMap[fromSym] = toSym;
+      renameMap[fromSym.getSymName()] = toSym.getSymName();
     }
 
     // Commit the new symbol attribute.
-    to->setAttr("portSyms", ArrayAttr::get(context, newPortSyms));
+    cast<FModuleLike>(to).setPortSymbols(newPortSyms);
   }
 
   /// Recursively merge two operations.

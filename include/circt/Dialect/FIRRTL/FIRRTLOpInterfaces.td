@@ -147,6 +147,14 @@ def FModuleLike : OpInterface<"FModuleLike"> {
     //===------------------------------------------------------------------===//
     // Port Symbols
     //===------------------------------------------------------------------===//
+    // Symbol conventions:
+    // 1. Every element of the ArrayAttr(portSyms) must be NON-NULL.
+    // 2. An empty array represents no symbol.
+    //    a. TODO: Update the representation to avoid storing it.
+    // 3. The Getters return null if a port sym is invalid.
+    // 4. The fixupPortSymsArray, is a utility to update a portSyms
+    //    Vector, by replacing each null entry with empty array and
+    //    clearing the array if all the elements are empty.
 
     // Getters
     InterfaceMethod<"Get the port symbols attribute",
@@ -161,36 +169,29 @@ def FModuleLike : OpInterface<"FModuleLike"> {
     }]>,
 
     InterfaceMethod<"Get a port symbol attribute",
-    "StringAttr", "getPortSymbolAttr", (ins "size_t":$portIndex), [{}], [{
+    "InnerSymAttr", "getPortSymbolAttr", (ins "size_t":$portIndex), [{}], [{
       auto syms = $_op.getPortSymbols();
-      if (syms.empty())
-        return StringAttr::get($_op.getContext(), "");
-      return syms[portIndex].template cast<StringAttr>();
+      if (syms.empty() ||
+          syms[portIndex].template cast<InnerSymAttr>().empty())
+        return InnerSymAttr();
+      return syms[portIndex].template cast<InnerSymAttr>();
     }]>,
 
-    InterfaceMethod<"Get a port symbol",
-    "StringRef", "getPortSymbol", (ins "size_t":$portIndex), [{}], [{
-      return $_op.getPortSymbolAttr(portIndex).getValue();
+    InterfaceMethod<"Check if port has symbol attribute",
+    "bool", "hasPortSymbolAttr", (ins "size_t":$portIndex), [{}], [{
+      auto syms = $_op.getPortSymbols();
+        return  (!syms.empty() &&
+        !syms[portIndex].template cast<InnerSymAttr>().empty());
     }]>,
 
     // Setters
-    InterfaceMethod<"Set the port symbols attribute", "void",
-    "setPortSymbolsAttr", (ins "ArrayAttr":$symbols), [{}], [{
-      if (llvm::all_of(symbols.getValue(), [](Attribute symbol) {
-         return symbol.cast<StringAttr>().getValue().empty(); }))
-        symbols = ArrayAttr::get($_op.getContext(), {});
-      assert(symbols.getValue().empty() ||
-             symbols.getValue().size() == $_op.getNumPorts());
-      $_op->setAttr(FModuleLike::getPortSymbolsAttrName(), symbols);
-    }]>,
-
     InterfaceMethod<"Set the port symbols", "void",
     "setPortSymbols", (ins "ArrayRef<Attribute>":$symbols), [{}], [{
-      if (llvm::all_of(symbols, [](Attribute symbol) {
-         return symbol.cast<StringAttr>().getValue().empty(); }))
-        symbols = {};
+      SmallVector<Attribute> newSyms(symbols.begin(), symbols.end());
+      FModuleLike::fixupPortSymsArray(newSyms, $_op.getContext());
       assert(symbols.empty() || symbols.size() == $_op.getNumPorts());
-      $_op.setPortSymbolsAttr(ArrayAttr::get($_op.getContext(), symbols));
+      $_op->setAttr(FModuleLike::getPortSymbolsAttrName(),
+                    ArrayAttr::get($_op.getContext(), newSyms));
     }]>,
 
     InterfaceMethod<"Set a port symbol attribute", "void",
@@ -199,11 +200,11 @@ def FModuleLike : OpInterface<"FModuleLike"> {
       SmallVector<Attribute> symbols($_op.getPortSymbols().begin(),
                                      $_op.getPortSymbols().end());
       if (symbols.empty()) {
-        auto emptyString = StringAttr::get($_op.getContext(), "");
-        symbols.resize($_op.getNumPorts(), emptyString);
+        symbols.resize($_op.getNumPorts(),
+                      InnerSymAttr::get($_op.getContext()));
       }
       assert(symbols.size() == $_op.getNumPorts());
-      symbols[portIndex] = symbol;
+      symbols[portIndex] = InnerSymAttr::get(symbol);
       $_op.setPortSymbols(symbols);
     }]>,
 
@@ -251,6 +252,22 @@ def FModuleLike : OpInterface<"FModuleLike"> {
     /// Get the attribute name for port symbols.
     static StringRef getPortSymbolsAttrName() {
       return "portSyms";
+    }
+
+    /// Replace NUll entries with invalid sym and clear array if all elements
+    /// are invalid.
+    static void fixupPortSymsArray(SmallVectorImpl<Attribute> &syms,
+                                   MLIRContext *context) {
+      bool isValid = false;
+      for (size_t i = 0, e = syms.size(); i < e; ++i)
+        if (!syms[i])
+          syms[i] = InnerSymAttr::get(context);
+        else
+          isValid = true;
+      // The lack of *any* port symbol is represented by an empty `portSyms`
+      // array as a shorthand.
+      if (!isValid)
+        syms.clear();
     }
   }];
 

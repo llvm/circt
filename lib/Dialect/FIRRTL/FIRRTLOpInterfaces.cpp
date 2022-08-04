@@ -81,9 +81,10 @@ LogicalResult circt::firrtl::verifyModuleLikeOpInterface(FModuleLike module) {
     return module.emitOpError("requires valid port symbols");
   if (!portSymbols.empty() && portSymbols.size() != numPorts)
     return module.emitOpError("requires ") << numPorts << " port symbols";
-  if (llvm::any_of(portSymbols.getValue(),
-                   [](Attribute attr) { return !attr.isa<StringAttr>(); }))
-    return module.emitOpError("port symbols should all be string attributes");
+  if (llvm::any_of(portSymbols.getValue(), [](Attribute attr) {
+        return !attr || !attr.isa<InnerSymAttr>();
+      }))
+    return module.emitOpError("port symbols should all be InnerSym attributes");
 
   // Verify the body.
   if (module->getNumRegions() != 1)

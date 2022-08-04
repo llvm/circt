@@ -668,9 +668,11 @@ Inliner::mapPortsToWires(StringRef prefix, OpBuilder &b,
 
     // Compute a unique symbol if needed
     StringAttr newSym;
-    StringAttr oldSym = portInfo[i].sym;
-    if (!oldSym.getValue().empty())
+    StringAttr oldSym;
+    if (portInfo[i].sym) {
+      oldSym = portInfo[i].sym.getSymName();
       newSym = b.getStringAttr(moduleNamespace.newName(oldSym.getValue()));
+    }
 
     SmallVector<Attribute> newAnnotations;
     for (auto anno : AnnotationSet::forPort(target, i)) {

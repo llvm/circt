@@ -36,7 +36,7 @@ struct PortInfo {
   StringAttr name;
   FIRRTLType type;
   Direction direction;
-  StringAttr sym = {};
+  InnerSymAttr sym = {};
   Location loc = UnknownLoc::get(type.getContext());
   AnnotationSet annotations = AnnotationSet(type.getContext());
 
@@ -61,6 +61,23 @@ struct PortInfo {
   /// Return true if this is an inout port.  This will be true if the port
   /// contains either bi-directional signals or analog types.
   bool isInOut() { return !isOutput() && !isInput(); }
+
+  /// Default constructors
+  PortInfo(StringAttr name, FIRRTLType type, Direction dir,
+           StringAttr symName = {}, Optional<Location> location = {},
+           Optional<AnnotationSet> annos = {})
+      : name(name), type(type), direction(dir) {
+    if (symName)
+      sym = InnerSymAttr::get(symName);
+    if (location.hasValue())
+      loc = location.getValue();
+    if (annos.hasValue())
+      annotations = annos.getValue();
+  };
+  PortInfo(StringAttr name, FIRRTLType type, Direction dir, InnerSymAttr sym,
+           Location loc, AnnotationSet annos)
+      : name(name), type(type), direction(dir), sym(sym), loc(loc),
+        annotations(annos) {}
 };
 
 /// Verification hook for verifying module like operations.

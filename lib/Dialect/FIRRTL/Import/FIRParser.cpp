@@ -3503,7 +3503,8 @@ FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
     PortInfo &port = std::get<0>(tuple);
     llvm::SMLoc loc = std::get<1>(tuple);
     BlockArgument portArg = std::get<2>(tuple);
-    modNameSpace.newName(port.sym.getValue());
+    if (port.sym)
+      modNameSpace.newName(port.sym.getSymName().getValue());
     if (moduleContext.addSymbolEntry(port.getName(), portArg, loc))
       return failure();
   }

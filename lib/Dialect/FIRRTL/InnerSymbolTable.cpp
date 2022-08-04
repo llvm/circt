@@ -96,12 +96,10 @@ LogicalResult InnerSymbolTable::walkSymbols(Operation *op,
            // Check for ports
            // TODO: Add fields per port, once they work that way (use addSyms)
            if (auto mod = dyn_cast<FModuleLike>(curOp)) {
-             for (size_t i = 0, e = mod.getNumPorts(); i < e; ++i) {
-               auto sym = mod.getPortSymbolAttr(i);
-               if (sym && !sym.getValue().empty())
-                 if (failed(walkSym(sym, InnerSymTarget(i, curOp))))
+             for (size_t i = 0, e = mod.getNumPorts(); i < e; ++i)
+               if (InnerSymAttr symAttr = mod.getPortSymbolAttr(i))
+                 if (failed(walkSyms(symAttr, InnerSymTarget(i, curOp))))
                    return WalkResult::interrupt();
-             }
            }
            return WalkResult::advance();
          }).wasInterrupted());
@@ -149,9 +147,9 @@ StringAttr InnerSymbolTable::getInnerSymbol(const InnerSymTarget &target) {
     // TODO: update this when ports support per-field symbols
     auto sym = mod.getPortSymbolAttr(target.getPort());
     // Workaround quirk with empty string for no symbol on ports.
-    if (sym && sym.getValue().empty())
+    if (!sym)
       return {};
-    return sym;
+    return sym.getSymIfExists(target.getField());
   }
 
   // InnerSymbols only supported if op implements the interface.
