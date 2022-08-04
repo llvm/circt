@@ -1309,7 +1309,7 @@ verifyPrimitiveOpType(PrimitiveOp instance,
 
   // Verify parameters match up
   ArrayAttr modParameters = referencedPrimitive.getParameters();
-  ArrayAttr parameters = instance.parameters().getValueOr(ArrayAttr());
+  ArrayAttr parameters = instance.parameters().value_or(ArrayAttr());
   size_t numExpected = modParameters.size();
   size_t numParams = parameters.size();
   if (numParams != numExpected)

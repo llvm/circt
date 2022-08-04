@@ -680,8 +680,8 @@ void Emitter::emitPrimitive(PrimitiveOp op) {
   indent() << getAttributes(op) << op.instanceName() << space() << equals()
            << space() << op.primitiveName() << LParen();
 
-  if (op.parameters().hasValue()) {
-    llvm::interleaveComma(op.parameters().getValue(), os, [&](Attribute param) {
+  if (op.parameters().has_value()) {
+    llvm::interleaveComma(*op.parameters(), os, [&](Attribute param) {
       auto paramAttr = param.cast<hw::ParamDeclAttr>();
       auto value = paramAttr.getValue();
       if (auto intAttr = value.dyn_cast<IntegerAttr>()) {
