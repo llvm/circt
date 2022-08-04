@@ -59,7 +59,7 @@ FailureOr<InnerSymbolTable> InnerSymbolTable::get(Operation *op) {
   if (failed(result))
     return failure();
   return InnerSymbolTable(op, std::move(table));
-};
+}
 
 LogicalResult InnerSymbolTable::walkSymbols(Operation *op,
                                             InnerSymCallbackFn callback) {

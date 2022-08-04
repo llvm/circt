@@ -107,7 +107,7 @@ static bool valueDefinedBeforeOp(Value value, Operation *op) {
     op = op->getParentOp();
   return valueBlock == op->getBlock() &&
          (!valueOp || valueOp->isBeforeInBlock(op));
-};
+}
 
 Value HWMemSimImpl::addPipelineStages(ImplicitLocOpBuilder &b,
                                       ModuleNamespace &moduleNamespace,

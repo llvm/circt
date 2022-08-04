@@ -111,7 +111,7 @@ static bool isSelfWrite(Value dst, Value src) {
       })
       .Case<sv::ReadInOutOp>([&](auto read) { return dst == read.getInput(); })
       .Default([&](auto srcOp) { return false; });
-};
+}
 
 /// Split an assignment to a structure to writes of individual fields.
 bool PrettifyVerilogPass::splitStructAssignment(OpBuilder &builder,
