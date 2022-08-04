@@ -14,7 +14,6 @@
 #define CIRCT_TARGET_EXPORTSYSTEMC_H
 
 #include "circt/Support/LLVM.h"
-#include "llvm/ADT/StringRef.h"
 
 namespace circt {
 namespace ExportSystemC {
@@ -26,7 +25,7 @@ LogicalResult exportSystemC(ModuleOp module, EmissionConfig &config,
 LogicalResult exportSystemC(ModuleOp module, EmissionConfig &config);
 
 LogicalResult exportSplitSystemC(ModuleOp module, EmissionConfig &config,
-                                 llvm::StringRef directory = "./");
+                                 StringRef directory, StringRef fileExt);
 
 void registerExportSystemCTranslation();
 

@@ -68,25 +68,33 @@ struct SCModuleEmitter : EmissionPattern {
   LogicalResult emitStatement(Operation *op, EmissionConfig &config,
                               EmissionPrinter &p) override {
     auto module = cast<SCModuleOp>(op);
-    p.emitIndent();
-    p << "\nSC_MODULE(" << module.getModuleName() << ") {\n";
-    p.increaseIndent();
-    for (size_t i = 0, e = module.getNumArguments(); i < e; ++i) {
+    bool indent = false;
+    if (config.get(moduleDefinitionEmissionFlag) !=
+        ModuleDefinitionEmission::DEFINITION_ONLY) {
       p.emitIndent();
-      if (failed(emitType(module.getArgument(i).getType(), p)))
-        return mlir::emitError(module.getArgument(i).getLoc(),
-                               "unsupported type");
+      p << "\nSC_MODULE(" << module.getModuleName() << ") {\n";
+      p.increaseIndent();
+      for (size_t i = 0, e = module.getNumArguments(); i < e; ++i) {
+        p.emitIndent();
+        if (failed(emitType(module.getArgument(i).getType(), p)))
+          return mlir::emitError(module.getArgument(i).getLoc(),
+                                 "unsupported type");
 
-      p << " " << module.getPortNames()[i].cast<StringAttr>().getValue()
-        << ";\n";
+        p << " " << module.getPortNames()[i].cast<StringAttr>().getValue()
+          << ";\n";
+      }
+      p.decreaseIndent();
+      indent = true;
     }
-    p.decreaseIndent();
 
-    if (failed(p.emitRegion(module.getRegion())))
+    if (failed(p.emitRegion(module.getRegion(), indent)))
       return failure();
 
-    p.emitIndent();
-    p << "}\n";
+    if (config.get(moduleDefinitionEmissionFlag) !=
+        ModuleDefinitionEmission::DEFINITION_ONLY) {
+      p.emitIndent();
+      p << "}\n";
+    }
     return success();
   }
 };
@@ -109,14 +117,14 @@ struct SignalWriteEmitter : EmissionPattern {
     p.emitIndent();
     p << p.getExpression(signalWrite.getDest()).getExpressionString();
 
-    if (config.getEmitExplicitReadWrite())
+    if (!config.get(implicitReadWriteFlag))
       p << ".write(";
     else
       p << " = ";
 
     p << p.getExpression(signalWrite.getSrc()).getExpressionString();
 
-    if (config.getEmitExplicitReadWrite())
+    if (!config.get(implicitReadWriteFlag))
       p << ")";
 
     p << ";\n";
@@ -137,7 +145,7 @@ struct SignalReadEmitter : EmissionPattern {
     SignalReadOp readOp = value.getDefiningOp<SignalReadOp>();
     std::string input =
         p.getExpression(readOp.getInput()).getExpressionString();
-    if (config.getEmitExplicitReadWrite())
+    if (!config.get(implicitReadWriteFlag))
       input += ".read()";
     return EmissionResult(input, Precedence::VAR);
   }
@@ -165,8 +173,21 @@ struct CtorEmitter : EmissionPattern {
     auto ctorOp = cast<CtorOp>(op);
     p << "\n";
     p.emitIndent();
-    p << "SC_CTOR(\"" << ctorOp->getParentOfType<SCModuleOp>().getModuleName()
-      << "\") {\n";
+    StringRef moduleName =
+        ctorOp->getParentOfType<SCModuleOp>().getModuleName();
+    if (config.get(moduleDefinitionEmissionFlag) ==
+        ModuleDefinitionEmission::DEFINITION_ONLY) {
+      p << moduleName << ":";
+    }
+    p << "SC_CTOR(" << moduleName << ")";
+
+    if (config.get(moduleDefinitionEmissionFlag) ==
+        ModuleDefinitionEmission::DECLARATION_ONLY) {
+      p << ";\n";
+      return success();
+    }
+
+    p << " {\n";
 
     if (failed(p.emitRegion(ctorOp.getRegion())))
       return failure();
@@ -195,7 +216,23 @@ struct SCFuncEmitter : EmissionPattern {
     auto funcOp = cast<SCFuncOp>(op);
     p << "\n";
     p.emitIndent();
-    p << "void " << funcOp.getName() << "() {\n";
+    p << "void ";
+
+    StringRef moduleName =
+        funcOp->getParentOfType<SCModuleOp>().getModuleName();
+    if (config.get(moduleDefinitionEmissionFlag) ==
+        ModuleDefinitionEmission::DEFINITION_ONLY) {
+      p << moduleName << ":";
+    }
+    p << funcOp.getName() << "()";
+
+    if (config.get(moduleDefinitionEmissionFlag) ==
+        ModuleDefinitionEmission::DECLARATION_ONLY) {
+      p << ";\n";
+      return success();
+    }
+
+    p << " {\n";
 
     if (failed(p.emitRegion(funcOp.getRegion())))
       return failure();
@@ -270,6 +307,10 @@ struct SignalEmitter : EmissionPattern {
 
   LogicalResult emitStatement(Operation *op, EmissionConfig &config,
                               EmissionPrinter &p) override {
+    if (config.get(moduleDefinitionEmissionFlag) ==
+        ModuleDefinitionEmission::DEFINITION_ONLY)
+      return success();
+
     auto signalOp = cast<SignalOp>(op);
     p.emitIndent();
     if (failed(emitType(signalOp.getSignal().getType(), p)))

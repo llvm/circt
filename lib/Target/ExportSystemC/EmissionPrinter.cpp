@@ -39,8 +39,6 @@ void EmissionPrinter::emitFileFooter(StringRef filename) {
 }
 
 LogicalResult EmissionPrinter::emitOp(Operation *op) {
-  // EmissionPattern pattern;// = std::find_if(patterns.begin(), patterns.end(),
-  // [&](EmissionPattern pat) { return pat.match(op, config); });
   for (size_t i = 0; i < patterns.size(); ++i) {
     if (patterns[i]->match(op, config))
       return patterns[i]->emitStatement(op, config, *this);

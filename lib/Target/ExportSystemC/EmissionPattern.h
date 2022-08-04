@@ -13,21 +13,48 @@
 #ifndef EMISSION_PATTERN_H
 #define EMISSION_PATTERN_H
 
+#include "circt/Support/LLVM.h"
 #include "mlir/IR/Operation.h"
-
+#include <any>
 namespace circt {
 namespace ExportSystemC {
 
 class EmissionPrinter;
 
-class EmissionConfig {
+template <typename T>
+class Flag {
 public:
-  EmissionConfig(bool emitExplicitReadWrite);
+  Flag<T>(StringRef name, T defaultValue) {
+    this->name = name;
+    this->defaultValue = defaultValue;
+  }
 
-  bool getEmitExplicitReadWrite() { return emitExplicitReadWrite; }
+  StringRef getName() const { return name; }
+  T getDefault() const { return defaultValue; }
 
 private:
-  bool emitExplicitReadWrite;
+  StringRef name;
+  T defaultValue;
+};
+
+class EmissionConfig {
+public:
+  EmissionConfig() {}
+
+  template <typename T>
+  void set(StringRef flag, T value) {
+    flags[flag] = value;
+  }
+
+  template <typename T>
+  T get(Flag<T> flag) {
+    if (!flags.count(flag.getName()))
+      return flag.getDefault();
+    return std::any_cast<T>(flags[flag.getName()]);
+  }
+
+private:
+  DenseMap<StringRef, std::any> flags;
 };
 
 // source: https://en.cppreference.com/w/cpp/language/operator_precedence
@@ -71,9 +98,6 @@ enum class Precedence {
   ASSIGN = 16,
   COMMA = 17
 };
-
-// bool operator<(Precedence &p1, Precedence &p2);
-// bool operator>(Precedence &p1, Precedence &p2);
 
 class EmissionResult {
 public:

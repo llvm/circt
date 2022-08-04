@@ -66,7 +66,8 @@ LogicalResult ExportSystemC::exportSystemC(ModuleOp module,
 
 LogicalResult ExportSystemC::exportSplitSystemC(ModuleOp module,
                                                 EmissionConfig &config,
-                                                StringRef directory) {
+                                                StringRef directory,
+                                                StringRef fileExt) {
   for (Operation &op : module.getRegion().front()) {
     if (auto symbolOp = dyn_cast<mlir::SymbolOpInterface>(op)) {
       // Create the output directory if needed.
@@ -74,7 +75,7 @@ LogicalResult ExportSystemC::exportSplitSystemC(ModuleOp module,
         return module.emitError("cannot create output directory \"")
                << directory << "\": " << error.message();
 
-      std::string fileName = symbolOp.getName().str() + ".h";
+      std::string fileName = symbolOp.getName().str() + fileExt.str();
       SmallString<128> filePath(directory);
       llvm::sys::path::append(filePath, fileName);
       std::string errorMessage;
@@ -107,7 +108,9 @@ void ExportSystemC::registerExportSystemCTranslation() {
   static mlir::TranslateFromMLIRRegistration toSystemC(
       "export-systemc",
       [](ModuleOp module, raw_ostream &output) {
-        EmissionConfig config(!useImplicitReadWriteOnSignals);
+        EmissionConfig config;
+        config.set<bool>(implicitReadWriteFlag.getName(),
+                         useImplicitReadWriteOnSignals);
         return ExportSystemC::exportSystemC(module, config, output);
       },
       [](mlir::DialectRegistry &registry) {
@@ -122,12 +125,40 @@ void ExportSystemC::registerExportSystemCTranslation() {
       llvm::cl::desc("Directory path to write all header files to."),
       llvm::cl::init("./"));
 
+  static llvm::cl::opt<std::string> implementationDirectory(
+      "implementation-dir",
+      llvm::cl::desc("Directory path to write all implementation files to."),
+      llvm::cl::init("./"));
+
+  static llvm::cl::opt<bool> separateDeclaration(
+      "separate-declaration",
+      llvm::cl::desc("Separate declarations and implementations."),
+      llvm::cl::init(false));
+
   static mlir::TranslateFromMLIRRegistration toSplitSystemC(
       "export-split-systemc",
       [](ModuleOp module, raw_ostream &output) {
-        EmissionConfig config(useImplicitReadWriteOnSignals);
+        EmissionConfig config;
+        config.set<bool>(implicitReadWriteFlag.getName(),
+                         useImplicitReadWriteOnSignals);
+        if (separateDeclaration) {
+          config.set<ModuleDefinitionEmission>(
+              moduleDefinitionEmissionFlag.getName(),
+              ModuleDefinitionEmission::DEFINITION_ONLY);
+          if (failed(ExportSystemC::exportSplitSystemC(
+                  module, config, implementationDirectory, ".cpp")))
+            return failure();
+
+          config.set<ModuleDefinitionEmission>(
+              moduleDefinitionEmissionFlag.getName(),
+              ModuleDefinitionEmission::DECLARATION_ONLY);
+        } else {
+          config.set<ModuleDefinitionEmission>(
+              moduleDefinitionEmissionFlag.getName(),
+              ModuleDefinitionEmission::INLINE_DEFINITION);
+        }
         return ExportSystemC::exportSplitSystemC(module, config,
-                                                 headerDirectory);
+                                                 headerDirectory, ".h");
       },
       [](mlir::DialectRegistry &registry) {
         // clang-format off
@@ -136,3 +167,6 @@ void ExportSystemC::registerExportSystemCTranslation() {
         // clang-format on
       });
 }
+
+// flags are passed in as string (can later also expand to reading the string
+// out a file) of the format "flag: value, ...". Flags are

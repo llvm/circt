@@ -16,9 +16,6 @@
 using namespace circt;
 using namespace circt::ExportSystemC;
 
-EmissionConfig::EmissionConfig(bool emitExplicitReadWrite)
-    : emitExplicitReadWrite(emitExplicitReadWrite) {}
-
 EmissionResult::EmissionResult() : isFailure(true) {}
 
 EmissionResult::EmissionResult(mlir::StringRef expression,
@@ -28,11 +25,3 @@ EmissionResult::EmissionResult(mlir::StringRef expression,
 EmissionPatternSet::EmissionPatternSet(
     std::vector<std::unique_ptr<EmissionPattern>> &patterns)
     : patterns(patterns) {}
-
-// bool circt::ExportSystemC::operator<(Precedence &p1, Precedence &p2) {
-//   return static_cast<uint32_t>(p1) < static_cast<uint32_t>(p2);
-// }
-
-// bool circt::ExportSystemC::operator>(Precedence &p1, Precedence &p2) {
-//   return static_cast<uint32_t>(p1) > static_cast<uint32_t>(p2);
-// }

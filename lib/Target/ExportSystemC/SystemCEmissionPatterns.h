@@ -17,7 +17,21 @@
 
 namespace circt {
 namespace ExportSystemC {
+
+enum class ModuleDefinitionEmission {
+  DECLARATION_ONLY,
+  DEFINITION_ONLY,
+  INLINE_DEFINITION
+};
+
+// Flags
+static const Flag<bool> implicitReadWriteFlag("implicit-read-write", false);
+static const Flag<ModuleDefinitionEmission>
+    moduleDefinitionEmissionFlag("module-definition-emission",
+                                 ModuleDefinitionEmission::INLINE_DEFINITION);
+
 void populateSystemCEmitters(EmissionPatternSet &patterns);
+
 } // namespace ExportSystemC
 } // namespace circt
 
