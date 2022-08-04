@@ -345,11 +345,6 @@ LogicalResult CircuitOp::verify() {
       StringAttr aName = std::get<0>(p).name, bName = std::get<1>(p).name;
       FIRRTLType aType = std::get<0>(p).type, bType = std::get<1>(p).type;
 
-      if (!extModule.getParameters().empty() ||
-          !collidingExtModule.getParameters().empty()) {
-        aType = aType.getWidthlessType();
-        bType = bType.getWidthlessType();
-      }
       if (aName != bName) {
         auto diag = extModule.emitOpError()
                     << "with 'defname' attribute " << defname
@@ -362,6 +357,18 @@ LogicalResult CircuitOp::verify() {
         diag.attachNote(collidingExtModule.getLoc())
             << "previous extmodule definition occurred here";
         return failure();
+      }
+      if (!aType.isa<FIRRTLBaseType>() || !bType.isa<FIRRTLBaseType>())
+        return extModule.emitOpError().append(
+                   "with 'defname' attribute ", defname,
+                   " has a port that is of unsupported type, must be base "
+                   "type."),
+               failure();
+
+      if (!extModule.getParameters().empty() ||
+          !collidingExtModule.getParameters().empty()) {
+        aType = aType.cast<FIRRTLBaseType>().getWidthlessType();
+        bType = bType.cast<FIRRTLBaseType>().getWidthlessType();
       }
       if (aType != bType) {
         auto diag = extModule.emitOpError()
@@ -1680,7 +1687,7 @@ LogicalResult MemOp::verify() {
 
     // Safely search for the "data" field, erroring if it can't be
     // found.
-    FIRRTLType dataType;
+    FIRRTLBaseType dataType;
     {
       auto dataTypeOption = portBundleType.getElement("data");
       if (!dataTypeOption && portKind == MemOp::PortKind::ReadWrite)
@@ -1769,11 +1776,11 @@ LogicalResult MemOp::verify() {
   return success();
 }
 
-BundleType MemOp::getTypeForPort(uint64_t depth, FIRRTLType dataType,
+BundleType MemOp::getTypeForPort(uint64_t depth, FIRRTLBaseType dataType,
                                  PortKind portKind, size_t maskBits) {
 
   auto *context = dataType.getContext();
-  FIRRTLType maskType;
+  FIRRTLBaseType maskType;
   // maskBits not specified (==0), then get the mask type from the dataType.
   if (maskBits == 0)
     maskType = dataType.getMaskType();
@@ -1855,11 +1862,11 @@ MemOp::PortKind MemOp::getPortKind(size_t resultNo) {
 size_t MemOp::getMaskBits() {
 
   for (auto res : getResults()) {
-    auto firstPortType = res.getType().cast<FIRRTLType>();
+    auto firstPortType = res.getType().cast<FIRRTLBaseType>();
     if (getMemPortKindFromType(firstPortType) == PortKind::Read)
       continue;
 
-    FIRRTLType mType;
+    FIRRTLBaseType mType;
     for (auto t : firstPortType.getPassiveType().cast<BundleType>()) {
       if (t.name.getValue().contains("mask"))
         mType = t.type;
@@ -1873,10 +1880,10 @@ size_t MemOp::getMaskBits() {
 }
 
 /// Return the data-type field of the memory, the type of each element.
-FIRRTLType MemOp::getDataType() {
+FIRRTLBaseType MemOp::getDataType() {
   assert(getNumResults() != 0 && "Mems with no read/write ports are illegal");
 
-  auto firstPortType = getResult(0).getType().cast<FIRRTLType>();
+  auto firstPortType = getResult(0).getType().cast<FIRRTLBaseType>();
 
   StringRef dataFieldName = "data";
   if (getMemPortKindFromType(firstPortType) == PortKind::ReadWrite)
@@ -1890,8 +1897,8 @@ StringAttr MemOp::getPortName(size_t resultNo) {
   return getPortNames()[resultNo].cast<StringAttr>();
 }
 
-FIRRTLType MemOp::getPortType(size_t resultNo) {
-  return getResults()[resultNo].getType().cast<FIRRTLType>();
+FIRRTLBaseType MemOp::getPortType(size_t resultNo) {
+  return getResults()[resultNo].getType().cast<FIRRTLBaseType>();
 }
 
 Value MemOp::getPortNamed(StringAttr name) {
@@ -2001,8 +2008,8 @@ void RegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 LogicalResult RegResetOp::verify() {
   Value reset = getResetValue();
 
-  FIRRTLType resetType = reset.getType().cast<FIRRTLType>();
-  FIRRTLType regType = getResult().getType().cast<FIRRTLType>();
+  FIRRTLBaseType resetType = reset.getType().cast<FIRRTLBaseType>();
+  FIRRTLBaseType regType = getResult().getType().cast<FIRRTLBaseType>();
 
   // The type of the initialiser must be equivalent to the register type.
   if (!areTypesEquivalent(resetType, regType))
@@ -2024,7 +2031,11 @@ void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 // Statements
 //===----------------------------------------------------------------------===//
 
-static LogicalResult checkConnectFlow(Operation *connect) {
+/// Check if the source and sink are of appropriate flow.
+/// The disallowOutputPortSink flag can be enabled to disallow reads from
+/// module/instance output ports.
+static LogicalResult checkConnectFlow(Operation *connect,
+                                      bool disallowOutputPortSink = false) {
   Value dst = connect->getOperand(0);
   Value src = connect->getOperand(1);
 
@@ -2033,7 +2044,8 @@ static LogicalResult checkConnectFlow(Operation *connect) {
   if (foldFlow(src) == Flow::Sink) {
     // A sink that is a port output or instance input used as a source is okay.
     auto kind = getDeclarationKind(src);
-    if (kind != DeclKind::Port && kind != DeclKind::Instance) {
+    if (disallowOutputPortSink ||
+        (kind != DeclKind::Port && kind != DeclKind::Instance)) {
       auto srcRef = getFieldRefFromValue(src);
       bool rootKnown;
       auto srcName = getFieldName(srcRef, rootKnown);
@@ -2061,23 +2073,31 @@ static LogicalResult checkConnectFlow(Operation *connect) {
 }
 
 LogicalResult ConnectOp::verify() {
-  FIRRTLType dstType = getDest().getType().cast<FIRRTLType>();
-  FIRRTLType srcType = getSrc().getType().cast<FIRRTLType>();
+  auto dstType = getDest().getType().cast<FIRRTLType>();
+  auto srcType = getSrc().getType().cast<FIRRTLType>();
+  auto dstBaseType = dstType.dyn_cast<FIRRTLBaseType>();
+  auto srcBaseType = srcType.dyn_cast<FIRRTLBaseType>();
+  if (!dstBaseType || !srcBaseType) {
+    if (dstBaseType || srcBaseType)
+      return emitError("type mismatch with base/non-base");
+    if (dstType != srcType)
+      return emitError("may not connect different non-base types");
+  } else {
+    // Analog types cannot be connected and must be attached.
+    if (dstBaseType.containsAnalog() || srcBaseType.containsAnalog())
+      return emitError("analog types may not be connected");
 
-  // Analog types cannot be connected and must be attached.
-  if (dstType.containsAnalog() || srcType.containsAnalog())
-    return emitError("analog types may not be connected");
+    // Destination and source types must be equivalent.
+    if (!areTypesEquivalent(dstBaseType, srcBaseType))
+      return emitError("type mismatch between destination ")
+             << dstBaseType << " and source " << srcBaseType;
 
-  // Destination and source types must be equivalent.
-  if (!areTypesEquivalent(dstType, srcType))
-    return emitError("type mismatch between destination ")
-           << dstType << " and source " << srcType;
-
-  // Truncation is banned in a connection: destination bit width must be
-  // greater than or equal to source bit width.
-  if (!isTypeLarger(dstType, srcType))
-    return emitError("destination ")
-           << dstType << " is not as wide as the source " << srcType;
+    // Truncation is banned in a connection: destination bit width must be
+    // greater than or equal to source bit width.
+    if (!isTypeLarger(dstBaseType, srcBaseType))
+      return emitError("destination ")
+             << dstBaseType << " is not as wide as the source " << srcBaseType;
+  }
 
   // Check that the flows make sense.
   if (failed(checkConnectFlow(*this)))
@@ -2087,10 +2107,11 @@ LogicalResult ConnectOp::verify() {
 }
 
 LogicalResult StrictConnectOp::verify() {
-  FIRRTLType type = getDest().getType().cast<FIRRTLType>();
+  auto type = getDest().getType().cast<FIRRTLType>();
+  auto baseType = type.dyn_cast<FIRRTLBaseType>();
 
   // Analog types cannot be connected and must be attached.
-  if (type.containsAnalog())
+  if (baseType && baseType.containsAnalog())
     return emitError("analog types may not be connected");
 
   // Check that the flows make sense.
@@ -2734,35 +2755,37 @@ LogicalResult impl::validateUnaryOpArguments(ValueRange operands,
 
 FIRRTLType AsSIntPrimOp::inferUnaryReturnType(FIRRTLType input,
                                               Optional<Location> loc) {
-  int32_t width = input.getBitWidthOrSentinel();
-  if (width == -2) {
-    if (loc)
-      mlir::emitError(*loc, "operand must be a scalar type");
-    return {};
+  auto base = input.dyn_cast<FIRRTLBaseType>();
+  if (base) {
+    int32_t width = base.getBitWidthOrSentinel();
+    if (width != -2)
+      return SIntType::get(input.getContext(), width);
   }
-  return SIntType::get(input.getContext(), width);
+  if (loc)
+    mlir::emitError(*loc, "operand must be a scalar type");
+  return {};
 }
 
 FIRRTLType AsUIntPrimOp::inferUnaryReturnType(FIRRTLType input,
                                               Optional<Location> loc) {
-  int32_t width = input.getBitWidthOrSentinel();
-  if (width == -2) {
-    if (loc)
-      mlir::emitError(*loc, "operand must be a scalar type");
-    return {};
-  }
-  return UIntType::get(input.getContext(), width);
+  auto base = input.cast<FIRRTLBaseType>();
+  int32_t width = base.getBitWidthOrSentinel();
+  if (width != -2)
+    return UIntType::get(input.getContext(), width);
+  if (loc)
+    mlir::emitError(*loc, "operand must be a scalar type");
+  return {};
 }
 
 FIRRTLType AsAsyncResetPrimOp::inferUnaryReturnType(FIRRTLType input,
                                                     Optional<Location> loc) {
-  int32_t width = input.getBitWidthOrSentinel();
-  if (width == -2 || width == 0 || width > 1) {
-    if (loc)
-      mlir::emitError(*loc, "operand must be single bit scalar type");
-    return {};
-  }
-  return AsyncResetType::get(input.getContext());
+  auto base = input.cast<FIRRTLBaseType>();
+  int32_t width = base.getBitWidthOrSentinel();
+  if (width == -1 || width == 1)
+    return AsyncResetType::get(input.getContext());
+  if (loc)
+    mlir::emitError(*loc, "operand must be single bit scalar type");
+  return {};
 }
 
 FIRRTLType AsClockPrimOp::inferUnaryReturnType(FIRRTLType input,
@@ -2931,8 +2954,9 @@ LogicalResult MuxPrimOp::validateArguments(ValueRange operands,
 ///   widthless integer otherwise.
 /// - Vectors inferred based on the element type.
 /// - Bundles inferred in a pairwise fashion based on the field types.
-static FIRRTLType inferMuxReturnType(FIRRTLType high, FIRRTLType low,
-                                     Optional<Location> loc) {
+static FIRRTLBaseType inferMuxReturnType(FIRRTLBaseType high,
+                                         FIRRTLBaseType low,
+                                         Optional<Location> loc) {
   // If the types are identical we're done.
   if (high == low)
     return low;
@@ -3020,8 +3044,8 @@ static FIRRTLType inferMuxReturnType(FIRRTLType high, FIRRTLType low,
 FIRRTLType MuxPrimOp::inferReturnType(ValueRange operands,
                                       ArrayRef<NamedAttribute> attrs,
                                       Optional<Location> loc) {
-  auto high = operands[1].getType().cast<FIRRTLType>();
-  auto low = operands[2].getType().cast<FIRRTLType>();
+  auto high = operands[1].getType().cast<FIRRTLBaseType>();
+  auto low = operands[2].getType().cast<FIRRTLBaseType>();
   return inferMuxReturnType(high, low, loc);
 }
 
@@ -3196,7 +3220,7 @@ LogicalResult HWStructCastOp::verify() {
              << firFields[findex].name.getValue() << "', '"
              << hwFields[findex].name.getValue() << "'";
     int64_t firWidth =
-        FIRRTLType(firFields[findex].type).getBitWidthOrSentinel();
+        FIRRTLBaseType(firFields[findex].type).getBitWidthOrSentinel();
     int64_t hwWidth = hw::getBitWidth(hwFields[findex].type);
     if (firWidth > 0 && hwWidth > 0 && firWidth != hwWidth)
       return emitError("size of field '")
@@ -3208,7 +3232,7 @@ LogicalResult HWStructCastOp::verify() {
 }
 
 LogicalResult BitCastOp::verify() {
-  auto inTypeBits = getBitWidth(getOperand().getType().cast<FIRRTLType>());
+  auto inTypeBits = getBitWidth(getOperand().getType().cast<FIRRTLBaseType>());
   auto resTypeBits = getBitWidth(getType());
   if (inTypeBits.has_value() && resTypeBits.has_value()) {
     // Bitwidths must match for valid bit

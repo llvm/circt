@@ -1166,7 +1166,7 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
         auto builder = OpBuilder::atBlockEnd(
             companionIDMap.lookup(id).companion.getBodyBlock());
 
-        FIRRTLType tpe = leafValue.getType().cast<FIRRTLType>();
+        auto tpe = leafValue.getType().cast<FIRRTLBaseType>();
 
         // If the type is zero-width then do not emit an XMR.
         if (!tpe.getBitWidthOrSentinel())
@@ -1341,8 +1341,9 @@ Optional<TypeSum> GrandCentralPass::computeField(Attribute field,
             FieldRef fieldRef = leafMap.lookup(ground.getID()).field;
             auto value = fieldRef.getValue();
             auto fieldID = fieldRef.getFieldID();
-            auto tpe = value.getType().cast<FIRRTLType>().getFinalTypeByFieldID(
-                fieldID);
+            auto tpe =
+                value.getType().cast<FIRRTLBaseType>().getFinalTypeByFieldID(
+                    fieldID);
             if (!tpe.isGround()) {
               value.getDefiningOp()->emitOpError()
                   << "cannot be added to interface with id '"

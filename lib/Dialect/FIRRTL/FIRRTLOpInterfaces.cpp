@@ -128,7 +128,10 @@ LogicalResult circt::firrtl::verifyInnerSymAttr(InnerSymbolOpInterface op) {
     }
     return success();
   }
-  auto maxFields = op->getResultTypes()[0].cast<FIRRTLType>().getMaxFieldID();
+  auto resultType = op->getResultTypes()[0].dyn_cast<FIRRTLBaseType>();
+  if (!resultType)
+    return op->emitOpError("cannot attach symbols to non-base types");
+  auto maxFields = resultType.getMaxFieldID();
   SmallBitVector indices(maxFields + 1);
   SmallPtrSet<Attribute, 8> symNames;
   // Ensure fieldID and symbol names are unique.

@@ -134,7 +134,7 @@ def InvalidValueOp : FIRRTLOp<"invalidvalue",
   }];
 
   let arguments = (ins);
-  let results = (outs FIRRTLType:$result);
+  let results = (outs FIRRTLBaseType:$result);
 
   let hasFolder = 1;
   let assemblyFormat = "attr-dict `:` qualified(type($result))";
@@ -151,7 +151,7 @@ def SubfieldOp : FIRRTLExprOp<"subfield"> {
     }];
 
   let arguments = (ins BundleType:$input, I32Attr:$fieldIndex);
-  let results = (outs FIRRTLType:$result);
+  let results = (outs FIRRTLBaseType:$result);
 
   // TODO: Could drop the result type, inferring it from the source.
   let assemblyFormat =
@@ -199,8 +199,8 @@ def SubindexOp : FIRRTLExprOp<"subindex", [
     ```
     }];
 
-  let arguments = (ins FIRRTLType:$input, I32Attr:$index);
-  let results = (outs FIRRTLType:$result);
+  let arguments = (ins FIRRTLBaseType:$input, I32Attr:$index);
+  let results = (outs FIRRTLBaseType:$result);
 
   // TODO: Could drop the result type, inferring it from the source.
   let assemblyFormat =
@@ -228,8 +228,8 @@ def SubaccessOp : FIRRTLExprOp<"subaccess", [
     ```
     }];
 
-  let arguments = (ins FIRRTLType:$input, UIntType:$index);
-  let results = (outs FIRRTLType:$result);
+  let arguments = (ins FIRRTLBaseType:$input, UIntType:$index);
+  let results = (outs FIRRTLBaseType:$result);
 
   let assemblyFormat =
      "$input `[` $index `]` attr-dict `:` qualified(type($input)) `,` qualified(type($index))";
@@ -250,8 +250,8 @@ def MultibitMuxOp : FIRRTLExprOp<"multibit_mux"> {
     For the example above, if `%index` is 0, then the value is `%v_0`.
     }];
 
-  let arguments = (ins FIRRTLType:$index, Variadic<FIRRTLType>:$inputs);
-  let results = (outs FIRRTLType:$result);
+  let arguments = (ins FIRRTLBaseType:$index, Variadic<FIRRTLBaseType>:$inputs);
+  let results = (outs FIRRTLBaseType:$result);
   let hasCustomAssemblyFormat = 1;
   let hasFolder = true;
   let hasCanonicalizeMethod = true;
@@ -406,8 +406,8 @@ class UnaryPrimOp<string mnemonic, Type srcType, Type resultType,
   let parseValidator = "impl::validateUnaryOpArguments";
 }
 
-def AsSIntPrimOp : UnaryPrimOp<"asSInt", FIRRTLType, SIntType>;
-def AsUIntPrimOp : UnaryPrimOp<"asUInt", FIRRTLType, UIntType>;
+def AsSIntPrimOp : UnaryPrimOp<"asSInt", FIRRTLBaseType, SIntType>;
+def AsUIntPrimOp : UnaryPrimOp<"asUInt", FIRRTLBaseType, UIntType>;
 def AsAsyncResetPrimOp
   : UnaryPrimOp<"asAsyncReset", OneBitCastableType, AsyncResetType>;
 def AsClockPrimOp : UnaryPrimOp<"asClock", OneBitCastableType, ClockType>;
@@ -555,7 +555,7 @@ def IsXVerifOp : FIRRTLExprOp<"verif_isX"> {
     constructs need to explicitly test for 'x.
     }];
 
-  let arguments = (ins FIRRTLType:$arg);
+  let arguments = (ins FIRRTLBaseType:$arg);
   let results = (outs UInt1Type:$result);
   let assemblyFormat =
     "$arg attr-dict `:` qualified(type($arg))";
@@ -583,7 +583,7 @@ def VerbatimExprOp : FIRRTLOp<"verbatim.expr",
 
   let arguments = (ins StrAttr:$text, Variadic<AnyType>:$substitutions,
                        DefaultValuedAttr<NameRefArrayAttr,"{}">:$symbols);
-  let results = (outs FIRRTLType:$result);
+  let results = (outs FIRRTLBaseType:$result);
   let assemblyFormat = [{
     $text (`(` $substitutions^ `)`)?
     `:` functional-type($substitutions, $result) attr-dict
@@ -617,7 +617,7 @@ def VerbatimWireOp : FIRRTLOp<"verbatim.wire",
 
   let arguments = (ins StrAttr:$text, Variadic<AnyType>:$substitutions,
                        DefaultValuedAttr<NameRefArrayAttr,"{}">:$symbols);
-  let results = (outs FIRRTLType:$result);
+  let results = (outs FIRRTLBaseType:$result);
   let assemblyFormat = [{
     $text (`(` $substitutions^ `)`)?
     `:` functional-type($substitutions, $result) attr-dict
@@ -655,8 +655,8 @@ def BitCastOp: FIRRTLOp<"bitcast", [NoSideEffect]> {
     potentially different type. This op is lowered to hw::BitCastOp.
   }];
 
-  let arguments = (ins FIRRTLType:$input);
-  let results = (outs FIRRTLType:$result);
+  let arguments = (ins FIRRTLBaseType:$input);
+  let results = (outs FIRRTLBaseType:$result);
   let hasVerifier = 1;
   let hasFolder = 1;
 

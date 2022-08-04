@@ -722,8 +722,12 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
               parseType(type, "expected bundle field type"))
             return failure();
 
+          auto baseType = type.dyn_cast<FIRRTLBaseType>();
+          if (!baseType)
+            return emitError(getToken().getLoc(), "field must be base type");
+
           elements.push_back(
-              {StringAttr::get(getContext(), fieldName), isFlipped, type});
+              {StringAttr::get(getContext(), fieldName), isFlipped, baseType});
           return success();
         }))
       return failure();
@@ -743,7 +747,11 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     if (size < 0)
       return emitError(sizeLoc, "invalid size specifier"), failure();
 
-    result = FVectorType::get(result, size);
+    auto baseType = result.dyn_cast<FIRRTLBaseType>();
+    if (!baseType)
+      return emitError(getToken().getLoc(), "element must be base type");
+
+    result = FVectorType::get(baseType, size);
   }
 
   return success();
@@ -1508,7 +1516,7 @@ private:
 
 /// Attach invalid values to every element of the value.
 void FIRStmtParser::emitInvalidate(Value val, Flow flow) {
-  auto tpe = val.getType().cast<FIRRTLType>();
+  auto tpe = val.getType().cast<FIRRTLBaseType>();
 
   auto props = tpe.getRecursiveTypeProperties();
   if (props.isPassive && !props.containsAnalog) {
@@ -1557,8 +1565,11 @@ void FIRStmtParser::emitInvalidate(Value val, Flow flow) {
 
 void FIRStmtParser::emitPartialConnect(ImplicitLocOpBuilder &builder, Value dst,
                                        Value src) {
-  auto dstType = dst.getType().cast<FIRRTLType>();
-  auto srcType = src.getType().cast<FIRRTLType>();
+  auto dstType = dst.getType().dyn_cast<FIRRTLBaseType>();
+  auto srcType = src.getType().dyn_cast<FIRRTLBaseType>();
+  if (!dstType || !srcType)
+    return emitConnect(builder, dst, src);
+
   if (dstType.isa<AnalogType>()) {
     builder.create<AttachOp>(SmallVector{dst, src});
   } else if (dstType == srcType && !dstType.containsAnalog()) {
@@ -1861,7 +1872,9 @@ ParseResult FIRStmtParser::parsePostFixDynamicSubscript(Value &result) {
     return failure();
 
   // If the index expression is a flip type, strip it off.
-  auto indexType = index.getType().cast<FIRRTLType>();
+  auto indexType = index.getType().dyn_cast<FIRRTLBaseType>();
+  if (!indexType)
+    return emitError("expected base type for index expression");
   indexType = indexType.getPassiveType();
   locationProcessor.setLoc(loc);
 
@@ -2878,14 +2891,17 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
     StringRef portName;
     if (parseId(portName, "expected port name"))
       return failure();
+    auto baseType = type.dyn_cast<FIRRTLBaseType>();
+    if (!baseType)
+      return emitError("unexpected type, must be base type");
     ports.push_back({builder.getStringAttr(portName),
-                     MemOp::getTypeForPort(depth, type, portKind)});
+                     MemOp::getTypeForPort(depth, baseType, portKind)});
 
     while (!getIndentation().has_value()) {
       if (parseId(portName, "expected port name"))
         return failure();
       ports.push_back({builder.getStringAttr(portName),
-                       MemOp::getTypeForPort(depth, type, portKind)});
+                       MemOp::getTypeForPort(depth, baseType, portKind)});
     }
   }
 
@@ -2972,7 +2988,9 @@ ParseResult FIRStmtParser::parseNode() {
   // the SFC to accomodate for situations where the node is something
   // weird like a module output or an instance input.
   auto initializerType = initializer.getType().cast<FIRRTLType>();
-  if (initializerType.isa<AnalogType>() || !initializerType.isPassive()) {
+  auto initializerBaseType = initializer.getType().dyn_cast<FIRRTLBaseType>();
+  if (initializerType.isa<AnalogType>() ||
+      !(initializerBaseType && initializerBaseType.isPassive())) {
     emitError(startTok.getLoc())
         << "Node cannot be analog and must be passive or passive under a flip "
         << initializer.getType();

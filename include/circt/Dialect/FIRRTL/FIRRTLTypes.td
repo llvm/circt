@@ -19,6 +19,10 @@ include "mlir/IR/EnumAttr.td"
 def FIRRTLType : DialectType<FIRRTLDialect, CPred<"$_self.isa<FIRRTLType>()">,
   "FIRRTLType", "::circt::firrtl::FIRRTLType">;
 
+def FIRRTLBaseType : DialectType<FIRRTLDialect,
+  CPred<"$_self.isa<FIRRTLBaseType>()">,
+  "a base type", "::circt::firrtl::FIRRTLBaseType">;
+
 def ClockType : DialectType<FIRRTLDialect, CPred<"$_self.isa<ClockType>()">,
     "clock", "::circt::firrtl::ClockType">,
   BuildableType<"ClockType::get($_builder.getContext())">;
@@ -42,8 +46,8 @@ def FVectorType : DialectType<FIRRTLDialect, CPred<"$_self.isa<FVectorType>()">,
   "FVectorType", "::circt::firrtl::FVectorType">;
 
 def SizedType : DialectType<FIRRTLDialect,
-    CPred<"$_self.isa<FIRRTLType>() && "
-          "!$_self.cast<FIRRTLType>().hasUninferredWidth()">,
+    CPred<"$_self.isa<FIRRTLBaseType>() && "
+          "!$_self.cast<FIRRTLBaseType>().hasUninferredWidth()">,
     "a sized type (contains no unifered widths)", "::circt::firrtl::FIRRTLType">;
 
 def UInt1Type : DialectType<FIRRTLDialect,
@@ -64,8 +68,8 @@ def ResetType : DialectType<FIRRTLDialect,
   BuildableType<"ResetType::get($_builder.getContext())">;
 
 def PassiveType : DialectType<FIRRTLDialect,
-  CPred<"$_self.isa<FIRRTLType>() && $_self.cast<FIRRTLType>().isPassive()">,
-  "a passive type (contain no flips)", "::circt::firrtl::FIRRTLType">;
+  CPred<"$_self.isa<FIRRTLBaseType>() && $_self.cast<FIRRTLBaseType>().isPassive()">,
+  "a passive base type (contain no flips)", "::circt::firrtl::FIRRTLBaseType">;
 
 //===----------------------------------------------------------------------===//
 // FIRRTL Types Predicates
@@ -74,26 +78,27 @@ def PassiveType : DialectType<FIRRTLDialect,
 def OneBitType : DialectType<FIRRTLDialect,
  CPred<"($_self.isa<IntType>() && $_self.cast<IntType>().getWidth() == 1) || "
    "($_self.isa<AnalogType>() && $_self.cast<AnalogType>().getWidth() == 1)">,
- "UInt<1>, SInt<1>, or Analog<1>", "::circt::firrtl::FIRRTLType">;
+ "UInt<1>, SInt<1>, or Analog<1>", "::circt::firrtl::FIRRTLBaseType">;
+
 
 def AnyResetType : DialectType<FIRRTLDialect,
-    CPred<"$_self.isa<FIRRTLType>() && $_self.cast<FIRRTLType>().isResetType()">,
-    "Reset", "::circt::firrtl::FIRRTLType">;
+    CPred<"$_self.isa<FIRRTLBaseType>() && $_self.cast<FIRRTLBaseType>().isResetType()">,
+    "Reset", "::circt::firrtl::FIRRTLBaseType">;
 
 def AnyRegisterType : DialectType<FIRRTLDialect,
-    CPred<"$_self.isa<FIRRTLType>() && "
-          "$_self.cast<FIRRTLType>().isRegisterType()">,
+    CPred<"$_self.isa<FIRRTLBaseType>() && "
+          "$_self.cast<FIRRTLBaseType>().isRegisterType()">,
     "a passive type that does not contain analog",
-    "::circt::firrtl::FIRRTLType">;
+    "::circt::firrtl::FIRRTLBaseType">;
 
 def UIntSIntClockType : AnyTypeOf<[SIntType, UIntType, ClockType],
                                   "sint, uint, or clock",
-                                  "::circt::firrtl::FIRRTLType">;
+                                  "::circt::firrtl::FIRRTLBaseType">;
 
 def OneBitCastableType : AnyTypeOf<
   [OneBitType, AnyResetType, AsyncResetType, ClockType],
   "1-bit uint/sint/analog, reset, asyncreset, or clock",
-                                  "::circt::firrtl::FIRRTLType">;
+                                  "::circt::firrtl::FIRRTLBaseType">;
 
 //===----------------------------------------------------------------------===//
 // FIRRTL Enum Definitions
