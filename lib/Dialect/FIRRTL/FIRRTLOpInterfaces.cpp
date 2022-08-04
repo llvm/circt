@@ -120,7 +120,7 @@ LogicalResult circt::firrtl::verifyInnerSymAttr(InnerSymbolOpInterface op) {
   if (op->getNumResults() != 1) {
     // If more than one results, then the inner sym can only be specified on
     // fieldID=0.
-    if (isa.numSymbols() > 1 || !isa.getSymName()) {
+    if (isa.size() > 1 || !isa.getSymName()) {
       op->emitOpError("cannot assign symbols to non-zero field id, for ops "
                       "with zero or multiple results");
       return failure();
@@ -152,7 +152,8 @@ LogicalResult circt::firrtl::verifyInnerSymAttr(InnerSymbolOpInterface op) {
     }
     return true;
   };
-  if (!isa.all_of_props(uniqSyms))
+
+  if (!llvm::all_of(isa.getProps(), uniqSyms))
     return failure();
   return success();
 }

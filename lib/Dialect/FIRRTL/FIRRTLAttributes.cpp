@@ -112,7 +112,7 @@ void InnerSymPropertiesAttr::print(AsmPrinter &p) const {
     << getSymVisibility().getValue() << ">";
 }
 
-StringAttr InnerSymAttr::getSymIfExists(unsigned fieldId) {
+StringAttr InnerSymAttr::getSymIfExists(unsigned fieldId) const {
   auto it =
       llvm::find_if(getImpl()->props, [&](const InnerSymPropertiesAttr &p) {
         return p.getFieldID() == fieldId;
@@ -122,14 +122,13 @@ StringAttr InnerSymAttr::getSymIfExists(unsigned fieldId) {
   return {};
 }
 
-StringAttr InnerSymAttr::getSymName() { return getSymIfExists(0); }
-
-bool InnerSymAttr::all_of_props(
-    std::function<bool(InnerSymPropertiesAttr)> func) {
-  return llvm::all_of(getImpl()->props, func);
+LogicalResult InnerSymAttr::walkSymbols(
+    llvm::function_ref<LogicalResult(StringAttr)> callback) const {
+  for (auto p : getImpl()->props)
+    if (callback(p.getName()).failed())
+      return failure();
+  return success();
 }
-
-size_t InnerSymAttr::numSymbols() { return getImpl()->props.size(); }
 
 Attribute InnerSymAttr::parse(AsmParser &parser, Type type) {
   StringAttr sym;

@@ -232,20 +232,33 @@ def InnerSymAttr : AttrDef<FIRRTLDialect, "InnerSym"> {
   let parameters = (ins ArrayRefParameter<"InnerSymPropertiesAttr">:$props);
   let builders = [
     AttrBuilderWithInferredContext<(ins "::mlir::StringAttr":$sym),[{
-      return get(sym.getContext(), 
+      return get(sym.getContext(),
       {InnerSymPropertiesAttr::get(sym.getContext(), sym, 0,
                         StringAttr::get(sym.getContext(), "public"))});
+    }]>,
+    // Create an empty array, represents an invalid InnerSym.
+    AttrBuilder<(ins),[{
+      return get($_ctxt, {});
     }]>
   ];
   let extraClassDeclaration = [{
     /// Get the inner sym name for fieldID, if it exists.
-    StringAttr getSymIfExists(unsigned fieldID);
+    StringAttr getSymIfExists(unsigned fieldID) const;
     /// Get the inner sym name for fieldID=0, if it exists.
-    StringAttr getSymName();
-    /// Check if all the elements of props satisfy the predicate lambda.
-    bool all_of_props(std::function<bool (InnerSymPropertiesAttr)>) ;
+    StringAttr getSymName() const { return getSymIfExists(0); }
     /// Get the number of inner symbols defined.
-    size_t numSymbols() ;
+    size_t size() const { return getProps().size(); }
+    /// Check if this is an empty array, no sym names stored.
+    bool empty() const { return getProps().empty(); }
+    using iterator = ArrayRef<InnerSymPropertiesAttr>::iterator;
+    /// Iterator begin for all the InnerSymProperties.
+    iterator begin() const { return getProps().begin(); }
+    /// Iterator end for all the InnerSymProperties.
+    iterator end() const { return getProps().end(); }
+    /// Invoke the func, for all sym names. Return success(),
+    /// if the callback function never returns failure().
+    LogicalResult walkSymbols(llvm::function_ref<
+                              LogicalResult (StringAttr)>) const;
   }];
 
   let hasCustomAssemblyFormat = 1;
