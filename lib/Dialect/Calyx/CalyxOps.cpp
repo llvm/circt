@@ -12,7 +12,9 @@
 
 #include "circt/Dialect/Calyx/CalyxOps.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWTypes.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -1265,6 +1267,220 @@ SmallVector<DictionaryAttr> InstanceOp::portAttributes() {
   for (const PortInfo &port : getReferencedComponent().getPortInfo())
     portAttributes.push_back(port.attributes);
   return portAttributes;
+}
+
+//===----------------------------------------------------------------------===//
+// PrimitiveOp
+//===----------------------------------------------------------------------===//
+
+/// Lookup the component for the symbol. This returns null on
+/// invalid IR.
+hw::HWModuleExternOp PrimitiveOp::getReferencedPrimitive() {
+  auto module = (*this)->getParentOfType<ModuleOp>();
+  if (!module)
+    return nullptr;
+
+  return module.lookupSymbol<hw::HWModuleExternOp>(primitiveName());
+}
+
+/// Verifies the port information in comparison with the referenced component
+/// of an instance. This helper function avoids conducting a lookup for the
+/// referenced component twice.
+static LogicalResult
+verifyPrimitiveOpType(PrimitiveOp instance,
+                      hw::HWModuleExternOp referencedPrimitive) {
+  auto module = instance->getParentOfType<ModuleOp>();
+  StringRef entryPointName =
+      module->getAttrOfType<StringAttr>("calyx.entrypoint");
+  if (instance.primitiveName() == entryPointName)
+    return instance.emitOpError()
+           << "cannot reference the entry-point component: '" << entryPointName
+           << "'.";
+
+  // Verify the instance result ports with those of its referenced component.
+  SmallVector<hw::PortInfo> primitivePorts = referencedPrimitive.getAllPorts();
+  size_t numPorts = primitivePorts.size();
+
+  size_t numResults = instance.getNumResults();
+  if (numResults != numPorts)
+    return instance.emitOpError()
+           << "has a wrong number of results; expected: " << numPorts
+           << " but got " << numResults;
+
+  // Verify parameters match up
+  ArrayAttr modParameters = referencedPrimitive.getParameters();
+  ArrayAttr parameters = instance.parameters().getValueOr(ArrayAttr());
+  size_t numExpected = modParameters.size();
+  size_t numParams = parameters.size();
+  if (numParams != numExpected)
+    return instance.emitOpError()
+           << "has the wrong number of parameters; expected: " << numExpected
+           << " but got " << numParams;
+
+  for (size_t i = 0; i != numExpected; ++i) {
+    auto param = parameters[i].cast<circt::hw::ParamDeclAttr>();
+    auto modParam = modParameters[i].cast<circt::hw::ParamDeclAttr>();
+
+    auto paramName = param.getName();
+    if (paramName != modParam.getName())
+      return instance.emitOpError()
+             << "parameter #" << i << " should have name " << modParam.getName()
+             << " but has name " << paramName;
+
+    if (param.getType() != modParam.getType())
+      return instance.emitOpError()
+             << "parameter " << paramName << " should have type "
+             << modParam.getType() << " but has type " << param.getType();
+
+    // All instance parameters must have a value.  Specify the same value as
+    // a module's default value if you want the default.
+    if (!param.getValue())
+      return instance.emitOpError("parameter ")
+             << paramName << " must have a value";
+  }
+
+  for (size_t i = 0; i != numResults; ++i) {
+    auto resultType = instance.getResult(i).getType();
+    auto expectedType = primitivePorts[i].type;
+    auto replacedType = hw::evaluateParametricType(
+        instance.getLoc(), instance.parametersAttr(), expectedType);
+    if (failed(replacedType))
+      return failure();
+    if (resultType == replacedType)
+      continue;
+    return instance.emitOpError()
+           << "result type for " << primitivePorts[i].name << " must be "
+           << expectedType << ", but got " << resultType;
+  }
+  return success();
+}
+
+LogicalResult
+PrimitiveOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  Operation *op = *this;
+  auto module = op->getParentOfType<ModuleOp>();
+  Operation *referencedPrimitive =
+      symbolTable.lookupNearestSymbolFrom(module, primitiveNameAttr());
+  if (referencedPrimitive == nullptr)
+    return emitError() << "referencing primitive: '" << primitiveName()
+                       << "', which does not exist.";
+
+  Operation *shadowedPrimitiveName =
+      symbolTable.lookupNearestSymbolFrom(module, sym_nameAttr());
+  if (shadowedPrimitiveName != nullptr)
+    return emitError() << "instance symbol: '" << instanceName()
+                       << "' is already a symbol for another primitive.";
+
+  // Verify the referenced primitive is not instantiating itself.
+  auto parentPrimitive = op->getParentOfType<hw::HWModuleExternOp>();
+  if (parentPrimitive == referencedPrimitive)
+    return emitError() << "recursive instantiation of its parent primitive: '"
+                       << primitiveName() << "'";
+
+  assert(isa<hw::HWModuleExternOp>(referencedPrimitive) &&
+         "Should be a HardwareModuleExternOp.");
+
+  return verifyPrimitiveOpType(*this,
+                               cast<hw::HWModuleExternOp>(referencedPrimitive));
+}
+
+/// Provide meaningful names to the result values of an PrimitiveOp.
+void PrimitiveOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  getCellAsmResultNames(setNameFn, *this, this->portNames());
+}
+
+SmallVector<StringRef> PrimitiveOp::portNames() {
+  SmallVector<StringRef> portNames;
+  for (hw::PortInfo port : getReferencedPrimitive().getAllPorts())
+    portNames.push_back(port.name.getValue());
+
+  return portNames;
+}
+
+Direction convertHWDirectionToCalyx(hw::PortDirection direction) {
+  switch (direction) {
+  case hw::PortDirection::INPUT:
+    return Direction::Input;
+  case hw::PortDirection::OUTPUT:
+    return Direction::Output;
+  case hw::PortDirection::INOUT:
+    llvm_unreachable("InOut ports not supported by Calyx");
+  }
+}
+
+SmallVector<Direction> PrimitiveOp::portDirections() {
+  SmallVector<Direction> portDirections;
+  for (hw::PortInfo port : getReferencedPrimitive().getAllPorts())
+    portDirections.push_back(convertHWDirectionToCalyx(port.direction));
+  return portDirections;
+}
+
+SmallVector<DictionaryAttr> PrimitiveOp::portAttributes() {
+  SmallVector<DictionaryAttr> portAttributes;
+  for (size_t i = 0; i < getReferencedPrimitive().getAllPorts().size(); ++i)
+    portAttributes.push_back(DictionaryAttr());
+  return portAttributes;
+}
+
+/// Parse an parameter list if present. Same format as HW dialect.
+/// module-parameter-list ::= `<` parameter-decl (`,` parameter-decl)* `>`
+/// parameter-decl ::= identifier `:` type
+/// parameter-decl ::= identifier `:` type `=` attribute
+///
+static ParseResult parseParameterList(OpAsmParser &parser,
+                                      SmallVector<Attribute> &parameters) {
+
+  return parser.parseCommaSeparatedList(
+      OpAsmParser::Delimiter::OptionalLessGreater, [&]() {
+        std::string name;
+        Type type;
+        Attribute value;
+
+        if (parser.parseKeywordOrString(&name) || parser.parseColonType(type))
+          return failure();
+
+        // Parse the default value if present.
+        if (succeeded(parser.parseOptionalEqual())) {
+          if (parser.parseAttribute(value, type))
+            return failure();
+        }
+
+        auto &builder = parser.getBuilder();
+        parameters.push_back(hw::ParamDeclAttr::get(
+            builder.getContext(), builder.getStringAttr(name),
+            TypeAttr::get(type), value));
+        return success();
+      });
+}
+
+/// Shim to also use this for the InstanceOp custom parser.
+static ParseResult parseParameterList(OpAsmParser &parser,
+                                      ArrayAttr &parameters) {
+  SmallVector<Attribute> parseParameters;
+  if (failed(parseParameterList(parser, parseParameters)))
+    return failure();
+
+  parameters = ArrayAttr::get(parser.getContext(), parseParameters);
+
+  return success();
+}
+
+/// Print a parameter list for a module or instance. Same format as HW dialect.
+static void printParameterList(OpAsmPrinter &p, Operation *op,
+                               ArrayAttr parameters) {
+  if (parameters.empty())
+    return;
+
+  p << '<';
+  llvm::interleaveComma(parameters, p, [&](Attribute param) {
+    auto paramAttr = param.cast<hw::ParamDeclAttr>();
+    p << paramAttr.getName().getValue() << ": " << paramAttr.getType();
+    if (auto value = paramAttr.getValue()) {
+      p << " = ";
+      p.printAttributeWithoutType(value);
+    }
+  });
+  p << '>';
 }
 
 //===----------------------------------------------------------------------===//

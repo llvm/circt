@@ -10,6 +10,14 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "mlir/IR/EnumAttr.td"
+
+// "Forward-declare" these HW attributes rather than including or duplicating
+// them here. This lets us to refer to them in ODS, but delegates to HW in C++.
+// These are used to represent parameters for the PrimitiveOp.
+def ParamDeclAttr : Attr<CPred<"$_self.isa<hw::ParamDeclAttr>()">>;
+def ParamDeclArrayAttr : TypedArrayAttrBase<ParamDeclAttr, "parameter array">;
+
 def UndefinedOp : CalyxOp<"undef", [
     NoSideEffect
   ]> {
@@ -201,6 +209,37 @@ def InstanceOp : CalyxCell<"instance", [
     $sym_name `of` $componentName attr-dict (`:` qualified(type($results))^)?
   }];
 }
+
+def PrimitiveOp : CalyxCell<"primitive", [
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>
+  ]> {
+  let summary = "Calyx Primitive Instance";
+  let description = [{
+    Represents an instance of a Calyx primitive.
+
+    ```mlir
+      %c.in, %c.out = calyx.primitive @c of @MyExternalPrimitive : i64, i16
+    ```
+  }];
+
+  let extraClassDeclaration = [{
+    /// Lookup the component for the symbol. This returns null on
+    /// invalid IR.
+    hw::HWModuleExternOp getReferencedPrimitive();
+  }];
+
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<ParamDeclArrayAttr>:$parameters,
+    FlatSymbolRefAttr:$primitiveName
+  );
+  let results = (outs Variadic<AnyType>:$results);
+
+  let assemblyFormat = [{
+    $sym_name `of` $primitiveName``custom<ParameterList>($parameters) attr-dict (`:` qualified(type($results))^)?
+  }];
+}
+
 
 def GroupOp : CalyxOp<"group", [
     HasParent<"WiresOp">,

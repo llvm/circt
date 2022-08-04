@@ -850,7 +850,7 @@ FailureOr<Attribute> hw::evaluateParametricAttr(Location loc,
 
 FailureOr<Type> hw::evaluateParametricType(Location loc, ArrayAttr parameters,
                                            Type type) {
-  return llvm::TypeSwitch<Type, Type>(type)
+  return llvm::TypeSwitch<Type, FailureOr<Type>>(type)
       .Case<hw::IntType>([&](hw::IntType t) -> FailureOr<Type> {
         auto evaluatedWidth =
             evaluateParametricAttr(loc, parameters, t.getWidth());
