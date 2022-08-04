@@ -782,7 +782,7 @@ firrtl.circuit "Top"   {
 firrtl.circuit "Top" {
   firrtl.module @Top (in %in : !firrtl.uint) {
     %a = firrtl.wire : !firrtl.uint
-    // expected-error @+1 {{op operand #0 must be a sized type}}
+    // expected-error @+1 {{op operand #0 must be a sized base or ref type}}
     firrtl.strictconnect %a, %in : !firrtl.uint
   }
 }
@@ -909,9 +909,8 @@ firrtl.circuit "DupSymField" {
 
 firrtl.circuit "func2" {
   firrtl.module @func2(in %ref_in1: !firrtl.ref<uint<1>>, out %ref_out: !firrtl.ref<uint<1>>) {
-    // TODO: Support use in strictconnect ?
     // expected-error @+1 {{connect has invalid flow for Ref type ports: the source expression "ref_in1" and destination expression "ref_out" both have same port kind, expected Module port to Instance connections only}}
-    firrtl.connect %ref_out, %ref_in1 : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
+    firrtl.strictconnect %ref_out, %ref_in1 : !firrtl.ref<uint<1>>
   }
 }
 
@@ -1001,5 +1000,17 @@ firrtl.circuit "BitcastRef" {
   firrtl.module @BitcastRef(in %a: !firrtl.ref<uint<1>>) {
     // expected-error @+1 {{'firrtl.bitcast' op operand #0 must be a base type, but got '!firrtl.ref<uint<1>>}}
     %0 = firrtl.bitcast %a : (!firrtl.ref<uint<1>>) -> (!firrtl.ref<uint<1>>)
+  }
+}
+
+// -----
+// Cannot strictconnect unsized types, even when ref's.
+
+firrtl.circuit "Top" {
+  firrtl.module @Foo (in %in: !firrtl.ref<uint>) {}
+  firrtl.module @Top (in %in : !firrtl.ref<uint>) {
+    %foo_in = firrtl.instance foo @Foo(in in: !firrtl.ref<uint>)
+    // expected-error @+1 {{op operand #0 must be a sized base or ref type}}
+    firrtl.strictconnect %foo_in, %in : !firrtl.ref<uint>
   }
 }
