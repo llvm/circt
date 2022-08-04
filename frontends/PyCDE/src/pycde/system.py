@@ -181,6 +181,7 @@ class System:
     # browsing.
     gen_left = len(self._generate_queue)
     if gen_left == 0:
+      self._op_cache.release_ops()
       pm = mlir.passmanager.PassManager.parse("msft-discover-appids")
       pm.run(self.mod)
     return
@@ -206,9 +207,9 @@ class System:
     # By now, we have all the types defined so we can go through and output the
     # typedefs delcarations.
     types.declare_types(self.mod)
-    self._op_cache.release_ops()
 
     pm = mlir.passmanager.PassManager.parse(self._passes(partition))
+    self._op_cache.release_ops()
     pm.run(self.mod)
     self.passed = True
 

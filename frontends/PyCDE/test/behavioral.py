@@ -33,12 +33,12 @@ class IfNestedTest:
     with If(ports.cond):
       with If(ports.cond2):
         x = ports.a
-      with Else:
+      with Else():
         x = ports.b
       EndIf()
       v = ports.a * x
       u = v * ports.b
-    with Else:
+    with Else():
       v = ports.b.as_uint(16)
       u = v * ports.a
     EndIf()
