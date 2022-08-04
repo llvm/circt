@@ -64,14 +64,14 @@ constexpr std::array<StringRef, 7> booleanAttributes{
     "clk", "done", "go", "reset", "generated", "precious", "toplevel",
 };
 
-static std::optional<StringRef> getCalyxAttrIdentifier(NamedAttribute attr) {
+static Optional<StringRef> getCalyxAttrIdentifier(NamedAttribute attr) {
   StringRef identifier = attr.getName().strref();
   if (identifier.contains(".")) {
     Dialect *dialect = attr.getNameDialect();
     if (dialect != nullptr && isa<CalyxDialect>(*dialect)) {
       return std::get<1>(identifier.split("."));
     }
-    return std::nullopt;
+    return None;
   }
 
   return identifier;
@@ -296,7 +296,7 @@ private:
   /// given operation.
   std::string getAttribute(Operation *op, NamedAttribute attr, bool isPort) {
 
-    std::optional<StringRef> identifierOpt = getCalyxAttrIdentifier(attr);
+    Optional<StringRef> identifierOpt = getCalyxAttrIdentifier(attr);
     // Verify this is a Calyx attribute
     if (!identifierOpt.has_value())
       return "";
