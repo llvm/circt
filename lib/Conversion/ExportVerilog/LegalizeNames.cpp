@@ -186,16 +186,25 @@ void GlobalNameResolver::legalizeModuleNames(HWModuleOp module) {
       globalNameTable.addRenamedParam(module, paramAttr.getName(), newName);
   }
 
-  // Legalize the value names.
+  SmallVector<std::pair<Operation *, StringAttr>> declAndNames;
+  // Legalize the value names. We first mark existing hw.verilogName attrs as
+  // being used, and then resolve names of declarations.
   module.walk([&](Operation *op) {
-    if (!isa<HWModuleOp>(op))
-      if (auto nameAttr = getDeclarationName(op)) {
-        auto newName = nameResolver.getLegalName(nameAttr);
-        if (newName != nameAttr.getValue()) {
-          op->setAttr(verilogNameAttr, StringAttr::get(ctxt, newName));
-        }
+    if (!isa<HWModuleOp>(op)) {
+      if (auto name = op->getAttrOfType<StringAttr>(verilogNameAttr)) {
+        nameResolver.insertUsedName(
+            op->getAttrOfType<StringAttr>(verilogNameAttr));
+      } else if (auto name = getDeclarationName(op)) {
+        declAndNames.push_back({op, name});
       }
+    }
   });
+
+  for (auto [op, nameAttr] : declAndNames) {
+    auto newName = nameResolver.getLegalName(nameAttr);
+    if (newName != nameAttr.getValue())
+      op->setAttr(verilogNameAttr, StringAttr::get(ctxt, newName));
+  }
 }
 
 void GlobalNameResolver::legalizeInterfaceNames(InterfaceOp interface) {
