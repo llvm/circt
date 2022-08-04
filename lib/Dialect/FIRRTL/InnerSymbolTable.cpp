@@ -76,7 +76,7 @@ LogicalResult InnerSymbolTable::walkSymbols(Operation *op,
   auto walkSyms = [&](InnerSymAttr symAttr,
                       const InnerSymTarget &baseTarget) -> LogicalResult {
     assert(baseTarget.getField() == 0);
-    for (const auto &symProp : symAttr.getProps()) {
+    for (auto symProp : symAttr) {
       if (failed(walkSym(symProp.getName(),
                          InnerSymTarget::getTargetForSubfield(
                              baseTarget, symProp.getFieldID()))))
@@ -139,26 +139,24 @@ StringAttr InnerSymbolTable::getInnerSymbol(const InnerSymTarget &target) {
   // Assert on misuse, but try to handle queries otherwise.
   assert(target);
 
-  if (target.isPort()) {
-    auto mod = dyn_cast<FModuleLike>(target.getOp());
-    if (!mod)
-      return {};
-    assert(target.getPort() < mod.getNumPorts());
-    // TODO: update this when ports support per-field symbols
-    auto sym = mod.getPortSymbolAttr(target.getPort());
-    // Workaround quirk with empty string for no symbol on ports.
-    if (!sym)
-      return {};
-    return sym.getSymIfExists(target.getField());
-  }
-
-  // InnerSymbols only supported if op implements the interface.
-  auto symOp = dyn_cast<InnerSymbolOpInterface>(target.getOp());
-  if (!symOp)
+  // Obtain the base InnerSymAttr for the specified target.
+  auto getBase = [](auto &target) -> InnerSymAttr {
+    if (target.isPort()) {
+      if (auto mod = dyn_cast<FModuleLike>(target.getOp())) {
+        assert(target.getPort() < mod.getNumPorts());
+        return mod.getPortSymbolAttr(target.getPort());
+      }
+    } else {
+      // InnerSymbols only supported if op implements the interface.
+      if (auto symOp = dyn_cast<InnerSymbolOpInterface>(target.getOp()))
+        return symOp.getInnerSymAttr();
+    }
     return {};
+  };
 
-  auto base = symOp.getInnerSymAttr();
-  return base.getSymIfExists(target.getField());
+  if (auto base = getBase(target))
+    return base.getSymIfExists(target.getField());
+  return {};
 }
 
 //===----------------------------------------------------------------------===//
