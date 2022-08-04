@@ -195,7 +195,8 @@ static LogicalResult execute(MLIRContext &context) {
   auto clearSummary = [&] {
     if (llvm::errs().tell() != errsPosAfterLastSummary)
       return;
-    llvm::errs() << "\e[1A\e[2K"; // move up one line ("1A"), clear line ("2K")
+    llvm::errs()
+        << "\x1B[1A\x1B[2K"; // move up one line ("1A"), clear line ("2K")
   };
 
   // Iteratively reduce the input module by applying the current reduction
