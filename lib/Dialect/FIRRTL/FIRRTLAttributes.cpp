@@ -122,22 +122,12 @@ StringAttr InnerSymAttr::getSymIfExists(unsigned fieldId) const {
   return {};
 }
 
-StringAttr InnerSymAttr::getSymName() const { return getSymIfExists(0); }
-
-bool InnerSymAttr::all_of_props(
-    std::function<bool(InnerSymPropertiesAttr)> func) const {
-  return llvm::all_of(getImpl()->props, func);
-}
-
-size_t InnerSymAttr::numSymbols() const { return getImpl()->props.size(); }
-
-bool InnerSymAttr::isSymbolInvalid() const { return getImpl()->props.empty(); }
-
-void InnerSymAttr::forAllSymNames(
-    llvm::function_ref<bool(StringAttr)> callback) const {
+LogicalResult InnerSymAttr::walkSymbols(
+    llvm::function_ref<LogicalResult(StringAttr)> callback) const {
   for (auto p : getImpl()->props)
-    if (!callback(p.getName()))
-      break;
+    if (callback(p.getName()).failed())
+      return failure();
+  return success();
 }
 
 Attribute InnerSymAttr::parse(AsmParser &parser, Type type) {

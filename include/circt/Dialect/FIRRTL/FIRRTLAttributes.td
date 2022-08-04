@@ -245,21 +245,20 @@ def InnerSymAttr : AttrDef<FIRRTLDialect, "InnerSym"> {
     /// Get the inner sym name for fieldID, if it exists.
     StringAttr getSymIfExists(unsigned fieldID) const;
     /// Get the inner sym name for fieldID=0, if it exists.
-    StringAttr getSymName() const;
-    /// Check if all the elements of props satisfy the predicate lambda.
-    bool all_of_props(std::function<bool (InnerSymPropertiesAttr)>) const;
+    StringAttr getSymName() const { return getSymIfExists(0); }
     /// Get the number of inner symbols defined.
-    size_t numSymbols() const;
+    size_t size() const { return getProps().size(); }
     /// Check if this is an empty array, no sym names stored.
-    bool isSymbolInvalid() const;
+    bool empty() const { return getProps().empty(); }
     using iterator = ArrayRef<InnerSymPropertiesAttr>::iterator;
     /// Iterator begin for all the InnerSymProperties.
-    iterator begin() const {return getProps().begin();}
+    iterator begin() const { return getProps().begin(); }
     /// Iterator end for all the InnerSymProperties.
-    iterator end() const {return getProps().end();}
-    /// Invoke the func, for all sym names. Stop the iteration if the func
-    /// returns false, else continue.
-    void forAllSymNames(llvm::function_ref<bool (StringAttr)>) const;
+    iterator end() const { return getProps().end(); }
+    /// Invoke the func, for all sym names. Return success(),
+    /// if the callback function never returns failure().
+    LogicalResult walkSymbols(llvm::function_ref<
+                              LogicalResult (StringAttr)>) const;
   }];
 
   let hasCustomAssemblyFormat = 1;
