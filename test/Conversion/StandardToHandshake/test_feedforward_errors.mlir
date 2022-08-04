@@ -15,17 +15,17 @@ func.func @missingMergeBlocks(%arg0: i1) {
 
 // -----
 
-// TODO
-//func.func @irregular_cfg_two_preds(%cond: i1) {
-//  cf.cond_br %cond, ^1, ^2
-//^1:
-//  cf.cond_br %cond, ^3, ^4
-//^2:
-//  cf.br ^4
-//^3:
-//  cf.br ^5
-//^4:
-//  cf.br ^5
-//^5:
-//  return
-//}
+// expected-error @+1 {{expected only reducible control flow.}}
+func.func @irreducibleCFG(%cond: i1) {
+  cf.cond_br %cond, ^1, ^2
+^1:
+  cf.cond_br %cond, ^3, ^4
+^2:
+  cf.br ^4
+^3:
+  cf.br ^5
+^4:
+  cf.br ^5
+^5:
+  return
+}

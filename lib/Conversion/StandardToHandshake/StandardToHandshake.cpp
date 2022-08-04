@@ -629,13 +629,14 @@ public:
   FeedForwardNetworkRewriter(HandshakeLowering &hl,
                              ConversionPatternRewriter &rewriter)
       : hl(hl), rewriter(rewriter), postDomInfo(hl.getRegion().getParentOp()),
-        loopAnalysis(hl.getRegion()) {}
+        domInfo(hl.getRegion().getParentOp()), loopAnalysis(hl.getRegion()) {}
   LogicalResult apply();
 
 private:
   HandshakeLowering &hl;
   ConversionPatternRewriter &rewriter;
   PostDominanceInfo postDomInfo;
+  DominanceInfo domInfo;
   ControlFlowLoopAnalysis loopAnalysis;
 
   using BlockPair = std::pair<Block *, Block *>;
@@ -644,6 +645,8 @@ private:
 
   BranchOp buildSplitNetwork(Block *splitBlock);
   void buildMergeNetwork(Block *mergeBlock, BranchOp buf);
+
+  bool formsIrreducibleCF(Block *splitBlock, Block *mergeBlock);
 };
 } // namespace
 
@@ -657,6 +660,29 @@ static bool loopsHaveSingleExit(ControlFlowLoopAnalysis &loopAnalysis) {
     if (info.exitBlocks.size() > 1)
       return false;
   return true;
+}
+
+bool FeedForwardNetworkRewriter::formsIrreducibleCF(Block *splitBlock,
+                                                    Block *mergeBlock) {
+  LoopInfo *info = loopAnalysis.getLoopInfoForHeader(mergeBlock);
+  for (auto mergePred : mergeBlock->getPredecessors()) {
+    // Skip loop predecessors
+    if (info && info->inLoop.contains(mergePred))
+      continue;
+
+    // A DAG-CFG is irreducible, iff a merge block has a predecessor that can be
+    // reached from both successors of a split node, e.g., neither is a
+    // dominator.
+    // => Their control flow can merge in other places, which makes this
+    // irreducible.
+    if (llvm::none_of(splitBlock->getSuccessors(), [&](Block *splitSucc) {
+          if (splitSucc == mergeBlock || mergePred == splitBlock)
+            return true;
+          return domInfo.dominates(splitSucc, mergePred);
+        }))
+      return true;
+  }
+  return false;
 }
 
 LogicalResult
@@ -690,6 +716,10 @@ FeedForwardNetworkRewriter::findBlockPairs(BlockPairs &blockPairs) {
       continue;
 
     Block *mergeBlock = postDomInfo.findNearestCommonDominator(succ0, succ1);
+
+    // Precondition checks
+    if (formsIrreducibleCF(&b, mergeBlock))
+      return parentOp->emitError("expected only reducible control flow.");
 
     unsigned nonLoopPreds = 0;
     LoopInfo *info = loopAnalysis.getLoopInfoForHeader(mergeBlock);
