@@ -791,7 +791,7 @@ firrtl.circuit "Top" {
 
 firrtl.circuit "AnalogRegister" {
   firrtl.module @AnalogRegister(in %clock: !firrtl.clock) {
-    // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive type that does not contain analog, but got '!firrtl.analog'}}
+    // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive base type that does not contain analog, but got '!firrtl.analog'}}
     %r = firrtl.reg %clock : !firrtl.analog
   }
 }
@@ -800,7 +800,7 @@ firrtl.circuit "AnalogRegister" {
 
 firrtl.circuit "AnalogVectorRegister" {
   firrtl.module @AnalogVectorRegister(in %clock: !firrtl.clock) {
-    // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive type that does not contain analog, but got '!firrtl.vector<analog, 2>'}}
+    // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive base type that does not contain analog, but got '!firrtl.vector<analog, 2>'}}
     %r = firrtl.reg %clock : !firrtl.vector<analog, 2>
   }
 }
@@ -901,5 +901,105 @@ firrtl.circuit "DupSymField" {
     %w1 = firrtl.wire sym @x : !firrtl.uint<2>
     // expected-error @+1 {{redefinition of inner symbol named 'x'}}
     %w3 = firrtl.wire sym [<@x,1,public>] : !firrtl.vector<uint<1>,1>
+  }
+}
+
+// -----
+// Check upward reference XMRs
+
+firrtl.circuit "func2" {
+  firrtl.module @func2(in %ref_in1: !firrtl.ref<uint<1>>, out %ref_out: !firrtl.ref<uint<1>>) {
+    // TODO: Support use in strictconnect ?
+    // expected-error @+1 {{connect has invalid flow for Ref type ports: the source expression "ref_in1" and destination expression "ref_out" both have same port kind, expected Module port to Instance connections only}}
+    firrtl.connect %ref_out, %ref_in1 : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
+  }
+}
+
+// -----
+// Node ops cannot have reference type
+
+firrtl.circuit "NonRefNode" {
+firrtl.module @NonRefNode(in %in1 : !firrtl.ref<uint<8>>) {
+  // expected-error @+1 {{'firrtl.node' op operand #0 must be a passive base type (contain no flips), but got '!firrtl.ref<uint<8>>'}}
+  %n1 = firrtl.node %in1 : !firrtl.ref<uint<8>>
+  %a = firrtl.wire : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>
+}
+}
+
+// -----
+
+firrtl.circuit "NonRefRegister" {
+  firrtl.module @NonRefRegister(in %clock: !firrtl.clock) {
+    // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive base type that does not contain analog}}
+    %r = firrtl.reg %clock : !firrtl.ref<uint<8>>
+  }
+}
+
+// -----
+// Wire ops cannot have reference type
+
+firrtl.circuit "MyView" {
+  firrtl.module @MyView() {
+  // expected-error @+1 {{'firrtl.wire' op result #0 must be a base type, but got '!firrtl.ref<uint<1>>'}}
+    %ref_in1 = firrtl.wire : !firrtl.ref<uint<1>>
+    %in1 = firrtl.wire : !firrtl.uint<1>
+  }
+}
+
+// -----
+// Ref types must be ground
+
+firrtl.circuit "RefBundle" {
+  // expected-error @+1 {{reference type must be ground}}
+  firrtl.module @RefBundle(in %in1 : !firrtl.ref<bundle<valid: uint<1>>>) {
+  }
+}
+
+// -----
+// Ref types cannot be ref
+
+firrtl.circuit "RefRef" {
+  // expected-error @+1 {{expected base type, found '!firrtl.ref<uint<1>>'}}
+  firrtl.module @RefRef(in %in1 : !firrtl.ref<ref<uint<1>>>) {
+  }
+}
+
+// -----
+// No ref in bundle
+
+firrtl.circuit "RefField" {
+  // expected-error @+1 {{expected base type, found '!firrtl.ref<uint<1>>'}}
+  firrtl.module @RefField(in %in1 : !firrtl.bundle<r: ref<uint<1>>>) {
+  }
+}
+
+// -----
+// Invalid
+
+firrtl.circuit "InvalidRef" {
+  firrtl.module @InvalidRef() {
+    // expected-error @+1 {{'firrtl.invalidvalue' op result #0 must be a base type, but got '!firrtl.ref<uint<1>>'}}
+    %0 = firrtl.invalidvalue : !firrtl.ref<uint<1>>
+  }
+}
+
+// -----
+// Mux ref
+
+firrtl.circuit "MuxRef" {
+  firrtl.module @MuxRef(in %a: !firrtl.ref<uint<1>>, in %b: !firrtl.ref<uint<1>>,
+                          in %cond: !firrtl.uint<1>) {
+    // expected-error @+1 {{'firrtl.mux' op operand #1 must be a passive base type (contain no flips), but got '!firrtl.ref<uint<1>>'}}
+    %a_or_b = firrtl.mux(%cond, %a, %b) : (!firrtl.uint<1>, !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>) -> !firrtl.ref<uint<1>>
+  }
+}
+
+// -----
+// Bitcast ref
+
+firrtl.circuit "BitcastRef" {
+  firrtl.module @BitcastRef(in %a: !firrtl.ref<uint<1>>) {
+    // expected-error @+1 {{'firrtl.bitcast' op operand #0 must be a base type, but got '!firrtl.ref<uint<1>>}}
+    %0 = firrtl.bitcast %a : (!firrtl.ref<uint<1>>) -> (!firrtl.ref<uint<1>>)
   }
 }

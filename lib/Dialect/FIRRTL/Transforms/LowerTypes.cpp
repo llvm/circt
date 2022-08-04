@@ -97,6 +97,7 @@ static bool hasZeroBitWidth(FIRRTLType type) {
       .Case<FIRRTLBaseType>([](auto groundType) {
         return firrtl::getBitWidth(groundType).value_or(0) == 0;
       })
+      .Case<RefType>([](auto) { return false; })
       .Default([](auto) { return false; });
 }
 

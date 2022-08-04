@@ -2018,6 +2018,46 @@ void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 // Statements
 //===----------------------------------------------------------------------===//
 
+/// If the connect is for RefType, implement the constraint for downward only
+/// references. We cannot connect :
+///   1. an input reference port to the output reference port.
+///   2. instance reference results to each other.
+/// This means, the connect can only be used for forwarding RefType module
+/// ports to Instance ports.
+static LogicalResult checkRefTypeFlow(Operation *connect) {
+  Value dst = connect->getOperand(0);
+  Value src = connect->getOperand(1);
+
+  if (dst.getType().isa<RefType>()) {
+    if (getDeclarationKind(src) == getDeclarationKind(dst)) {
+      auto srcRef = getFieldRefFromValue(src);
+      bool rootKnown;
+      auto srcName = getFieldName(srcRef, rootKnown);
+      auto diag = emitError(connect->getLoc())
+                  << "connect has invalid flow for Ref type ports: the source "
+                     "expression ";
+      if (rootKnown)
+        diag << "\"" << srcName << "\" ";
+      diag << "and destination expression ";
+      auto dstRef = getFieldRefFromValue(dst);
+      bool dstRootKnown;
+      auto dstName = getFieldName(dstRef, dstRootKnown);
+      if (dstRootKnown)
+        diag << "\"" << dstName << "\" ";
+      diag << "both have same port kind, expected Module port to Instance "
+              "connections only";
+      return diag;
+    }
+    if (!src.hasOneUse() || !dst.hasOneUse()) {
+      auto diag = emitError(connect->getLoc());
+      diag << "connect operands of ref type cannot be reused";
+      return diag;
+    }
+  }
+  return success();
+}
+
+/// Check if the source and sink are of appropriate flow.
 static LogicalResult checkConnectFlow(Operation *connect) {
   Value dst = connect->getOperand(0);
   Value src = connect->getOperand(1);
@@ -2083,6 +2123,10 @@ LogicalResult ConnectOp::verify() {
   if (failed(checkConnectFlow(*this)))
     return failure();
 
+  // Check constraints on RefType.
+  if (failed(checkRefTypeFlow(*this)))
+    return failure();
+
   return success();
 }
 
@@ -2096,6 +2140,10 @@ LogicalResult StrictConnectOp::verify() {
 
   // Check that the flows make sense.
   if (failed(checkConnectFlow(*this)))
+    return failure();
+
+  // Check constraints on RefType.
+  if (failed(checkRefTypeFlow(*this)))
     return failure();
 
   return success();

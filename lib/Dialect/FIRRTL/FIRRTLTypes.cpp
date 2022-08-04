@@ -78,6 +78,11 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
         printNestedType(vectorType.getElementType(), os);
         os << ", " << vectorType.getNumElements() << '>';
       })
+      .Case<RefType>([&](auto refType) {
+        os << "ref<";
+        printNestedType(refType.getType(), os);
+        os << '>';
+      })
       .Default([&](auto) { anyFailed = true; });
   return failure(anyFailed);
 }
@@ -198,6 +203,19 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
       return failure();
 
     return result = FVectorType::get(elementType, width), success();
+  }
+
+  if (name.equals("ref")) {
+    FIRRTLBaseType type;
+    if (parser.parseLess() || parseNestedBaseType(type, parser) ||
+        parser.parseGreater())
+      return failure();
+
+    if (!type.isGround())
+      return parser.emitError(parser.getNameLoc(),
+                              "reference type must be ground");
+
+    return result = RefType::get(type), success();
   }
 
   return {};
@@ -1043,13 +1061,45 @@ std::pair<size_t, bool> FVectorType::rootChildFieldID(size_t fieldID,
 }
 
 //===----------------------------------------------------------------------===//
+// RefType
+//===----------------------------------------------------------------------===//
+
+namespace circt {
+namespace firrtl {
+namespace detail {
+struct RefTypeStorage : mlir::TypeStorage {
+  using KeyTy = FIRRTLBaseType;
+
+  RefTypeStorage(KeyTy value) : value(value) {}
+
+  bool operator==(const KeyTy &key) const { return key == value; }
+
+  static RefTypeStorage *construct(TypeStorageAllocator &allocator, KeyTy key) {
+    return new (allocator.allocate<RefTypeStorage>()) RefTypeStorage(key);
+  }
+
+  KeyTy value;
+};
+
+} // namespace detail
+} // namespace firrtl
+} // namespace circt
+
+auto RefType::get(FIRRTLBaseType type) -> RefType {
+  assert(type.isGround() && "reference base type must be ground");
+  return Base::get(type.getContext(), type);
+}
+
+auto RefType::getType() -> FIRRTLBaseType { return getImpl()->value; }
+
+//===----------------------------------------------------------------------===//
 // FIRRTLDialect
 //===----------------------------------------------------------------------===//
 
 void FIRRTLDialect::registerTypes() {
   addTypes<SIntType, UIntType, ClockType, ResetType, AsyncResetType, AnalogType,
            // Derived Types
-           BundleType, FVectorType>();
+           BundleType, FVectorType, RefType>();
 }
 
 // Get the bit width for this type, return None  if unknown. Unlike
@@ -1088,6 +1138,7 @@ llvm::Optional<int64_t> firrtl::getBitWidth(FIRRTLBaseType type) {
             return llvm::Optional<int64_t>(None);
         })
         .Case<ClockType, ResetType, AsyncResetType>([](Type) { return 1; })
+        .Case<RefType>([&](RefType ref) { return getBitWidth(ref.getType()); })
         .Default([&](auto t) { return llvm::Optional<int64_t>(None); });
   };
   return getWidth(type);

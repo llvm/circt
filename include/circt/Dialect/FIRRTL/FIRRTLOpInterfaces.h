@@ -58,6 +58,9 @@ struct PortInfo {
                      .Case<FIRRTLBaseType>([](auto base) {
                        return base.getRecursiveTypeProperties();
                      })
+                     .Case<RefType>([](auto ref) {
+                       return ref.getType().getRecursiveTypeProperties();
+                     })
                      .Default([](auto) {
                        llvm_unreachable("unsupported type");
                        return RecursiveTypeProperties{};
