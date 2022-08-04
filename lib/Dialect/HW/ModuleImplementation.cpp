@@ -68,7 +68,7 @@ ParseResult module_like_impl::parseFunctionResultList(
                                         parseElt);
 }
 
-/// This is a variant of mlor::parseFunctionSignature that allows names on
+/// This is a variant of mlir::parseFunctionSignature that allows names on
 /// result arguments.
 ParseResult module_like_impl::parseModuleFunctionSignature(
     OpAsmParser &parser, SmallVectorImpl<OpAsmParser::Argument> &args,
