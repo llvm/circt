@@ -69,10 +69,10 @@ struct PortInfo {
       : name(name), type(type), direction(dir) {
     if (symName)
       sym = InnerSymAttr::get(symName);
-    if (location.hasValue())
-      loc = location.getValue();
-    if (annos.hasValue())
-      annotations = annos.getValue();
+    if (location)
+      loc = *location;
+    if (annos)
+      annotations = *annos;
   };
   PortInfo(StringAttr name, FIRRTLType type, Direction dir, InnerSymAttr sym,
            Location loc, AnnotationSet annos)
