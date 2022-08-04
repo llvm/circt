@@ -706,7 +706,7 @@ void ModuleVisitor::visitStmt(WhenOp whenOp) {
 }
 
 bool ModuleVisitor::usesSubwordUninit(Operation *op) {
-  if (!op) {
+  if (!op || subwordUninit.size() == 0) {
     return false;
   }
   if (auto b = subwordInvalidMemo.lookup(op)) {
