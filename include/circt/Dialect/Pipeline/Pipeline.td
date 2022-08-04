@@ -1,4 +1,4 @@
-//===- StaticLogic.td - StaticLogic Definitions ------------*- tablegen -*-===//
+//===- Pipeline.td - Pipeline Definitions ------------------*- tablegen -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,13 +6,13 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// StaticLogic Ops are defined in tablegen.
+// Pipeline Ops are defined in tablegen.
 //
 //===----------------------------------------------------------------------===//
 
-#ifdef STATICLOGIC_OPS
+#ifdef PIPELINE_OPS
 #else
-#define STATICLOGIC_OPS
+#define PIPELINE_OPS
 
 #ifdef OP_BASE
 #else
@@ -24,15 +24,15 @@ include "mlir/IR/RegionKindInterface.td"
 include "mlir/Interfaces/CallInterfaces.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
-def StaticLogic_Dialect : Dialect {
-  let name = "staticlogic";
-  let cppNamespace = "::circt::staticlogic";
+def Pipeline_Dialect : Dialect {
+  let name = "pipeline";
+  let cppNamespace = "::circt::pipeline";
 }
 
-def PipelineOp : Op<StaticLogic_Dialect, "pipeline", [NoSideEffect]> {
+def PipelineOp : Op<Pipeline_Dialect, "pipeline", [NoSideEffect]> {
   let summary = "pipeline operation";
   let description = [{
-    The "staticlogic.pipeline" operation represents a statically scheduled
+    The "pipeline" operation represents a statically scheduled
     pipeline stucture which contains several MLIR blocks. Each MLIR block is
     corresponding to a pipeline stage.
   }];
@@ -65,20 +65,20 @@ def PipelineOp : Op<StaticLogic_Dialect, "pipeline", [NoSideEffect]> {
   }]>];
 }
 
-def ReturnOp : Op<StaticLogic_Dialect, "return", [Terminator]> {
-  let summary = "StaticLogic dialect return.";
+def ReturnOp : Op<Pipeline_Dialect, "return", [Terminator]> {
+  let summary = "Pipeline dialect return.";
   let description = [{
-    The "staticlogic.return" operation represents a terminator of a statically
+    The "return" operation represents a terminator of a statically
     scheduled module, which is similar to a standard return operation.
   }];
 
   let arguments = (ins Variadic<AnyType>: $operands);
 }
 
-def PipelineWhileOp : Op<StaticLogic_Dialect, "pipeline.while", []> {
-  let summary = "StaticLogic dialect pipeline while-loop.";
+def PipelineWhileOp : Op<Pipeline_Dialect, "while", []> {
+  let summary = "Pipeline dialect pipeline while-loop.";
   let description = [{
-    The `staticlogic.pipeline.while` operation represents a statically scheduled
+    The `pipeline.while` operation represents a statically scheduled
     pipeline stucture that executes while a condition is true. For more details,
     see: https://llvm.discourse.group/t/rfc-representing-pipelined-loops/4171.
 
@@ -93,7 +93,7 @@ def PipelineWhileOp : Op<StaticLogic_Dialect, "pipeline.while", []> {
     The pipeline may accept an optional `iter_args`, similar to the SCF dialect,
     for representing loop-carried values like induction variables or reductions.
     When the pipeline starts execution, the registers indicated as `iter_args`
-    by `staticlogic.pipeline.terminator` should be initialized to the initial
+    by `pipeline.terminator` should be initialized to the initial
     values specified in the `iter_args` section here. The `iter_args` relate to
     the initiation interval of the loop. The maximum distance in stages between
     where an `iter_arg` is used and where that `iter_arg` is registered must be
@@ -101,15 +101,15 @@ def PipelineWhileOp : Op<StaticLogic_Dialect, "pipeline.while", []> {
     `iter_arg` must be used and registered in the same stage.
 
     The single-block `condition` region dictates the condition under which the
-    pipeline should execute. It has a `staticlogic.register` terminator, and the
+    pipeline should execute. It has a `register` terminator, and the
     pipeline initiates new iterations while the registered value is `true : i1`.
     It may access SSA values dominating the pipeline, as well as `iter_args`,
     which are block arguments. The body of the block may only contain
     "combinational" operations, which are currently defined to be simple
     arithmetic, comparisons, and selects from the `Standard` dialect.
 
-    The single-block `stages` region wraps `staticlogic.pipeline.stage`
-    operations. It has a `staticlogic.pipeline.terminator` terminator, which can
+    The single-block `stages` region wraps `pipeline.stage`
+    operations. It has a `pipeline.terminator` terminator, which can
     both return results from the pipeline and register `iter_args`. Stages may
     access SSA values dominating the pipeline, as well as `iter_args`, which are
     block arguments.
@@ -147,9 +147,9 @@ def PipelineWhileOp : Op<StaticLogic_Dialect, "pipeline.while", []> {
   }];
 }
 
-def PipelineStageOp : Op<StaticLogic_Dialect, "pipeline.stage",
+def PipelineStageOp : Op<Pipeline_Dialect, "stage",
     [HasParent<"PipelineWhileOp">]> {
-  let summary = "StaticLogic dialect pipeline stage.";
+  let summary = "Pipeline dialect pipeline stage.";
   let description = [{
     This operation has a single-block region which dictates the operations that
     may occur concurrently.
@@ -162,7 +162,7 @@ def PipelineStageOp : Op<StaticLogic_Dialect, "pipeline.stage",
     predicate should only execute when the predicate is `true : i1`, and push a
     bubble through the pipeline otherwise.
 
-    It has a `staticlogic.register` terminator, which passes the concurrently
+    It has a `register` terminator, which passes the concurrently
     computed values forward to the next stage.
 
     Any stage may access `iter_args`. If a stage accesses an `iter_arg` after
@@ -205,11 +205,11 @@ def PipelineStageOp : Op<StaticLogic_Dialect, "pipeline.stage",
   }];
 }
 
-def PipelineRegisterOp : Op<StaticLogic_Dialect, "pipeline.register",
+def PipelineRegisterOp : Op<Pipeline_Dialect, "register",
     [ParentOneOf<["PipelineWhileOp", "PipelineStageOp"]>, Terminator]> {
-  let summary = "StaticLogic dialect pipeline register.";
+  let summary = "Pipeline dialect pipeline register.";
   let description = [{
-    The `staticlogic.pipeline.register` terminates a pipeline stage and
+    The `pipeline.register` terminates a pipeline stage and
     "registers" the values specified as operands. These values become the
     results of the stage.
   }];
@@ -225,12 +225,12 @@ def PipelineRegisterOp : Op<StaticLogic_Dialect, "pipeline.register",
   let hasVerifier = 1;
 }
 
-def PipelineTerminatorOp : Op<StaticLogic_Dialect, "pipeline.terminator",
+def PipelineTerminatorOp : Op<Pipeline_Dialect, "terminator",
     [HasParent<"PipelineWhileOp">, Terminator, AttrSizedOperandSegments]> {
-  let summary = "StaticLogic dialect pipeline terminator.";
+  let summary = "Pipeline dialect pipeline terminator.";
   let description = [{
-    The `staticlogic.pipeline.terminator` operation represents the terminator of
-    a `staticlogic.pipeline.while`.
+    The `pipeline.terminator` operation represents the terminator of
+    a `pipeline.while`.
 
     The `results` section accepts a variadic list of values which become the
     pipeline’s return values. These must be results of a stage, and their types
@@ -257,4 +257,4 @@ def PipelineTerminatorOp : Op<StaticLogic_Dialect, "pipeline.terminator",
   let hasVerifier = 1;
 }
 
-#endif // STATICLOGIC_OPS
+#endif // PIPELINE_OPS

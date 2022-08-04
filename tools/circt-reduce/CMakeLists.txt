@@ -24,7 +24,7 @@ target_link_libraries(circt-reduce
   CIRCTScheduling
   CIRCTSeq
   CIRCTSSP
-  CIRCTStaticLogicOps
+  CIRCTPipelineOps
   CIRCTHWArith
   CIRCTSV
   CIRCTSystemC

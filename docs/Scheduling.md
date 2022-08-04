@@ -156,7 +156,7 @@ for (auto &op : prob.getOperations())
 ```
 
 And that's it! For a more practical example, have a look at the 
-[`AffineToStaticLogic`](https://github.com/llvm/circt/blob/main/lib/Conversion/AffineToStaticLogic/AffineToStaticLogic.cpp)
+[`AffineToPipeline`](https://github.com/llvm/circt/blob/main/lib/Conversion/AffineToPipeline/AffineToPipeline.cpp)
 pass.
 
 ## Extensible problem model

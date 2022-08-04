@@ -17,7 +17,7 @@
 #include "circt/Dialect/Calyx/CalyxHelpers.h"
 #include "circt/Dialect/Calyx/CalyxOps.h"
 #include "circt/Dialect/Comb/CombOps.h"
-#include "circt/Dialect/StaticLogic/StaticLogic.h"
+#include "circt/Dialect/Pipeline/Pipeline.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"

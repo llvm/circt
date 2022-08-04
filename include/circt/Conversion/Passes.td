@@ -16,19 +16,19 @@
 include "mlir/Pass/PassBase.td"
 
 //===----------------------------------------------------------------------===//
-// AffineToStaticLogic
+// AffineToPipeline
 //===----------------------------------------------------------------------===//
 
-def AffineToStaticLogic : Pass<"convert-affine-to-staticlogic", "mlir::func::FuncOp"> {
-  let summary = "Convert Affine dialect to StaticLogic pipelines";
+def AffineToPipeline : Pass<"convert-affine-to-pipeline", "mlir::func::FuncOp"> {
+  let summary = "Convert Affine dialect to Pipeline pipelines";
   let description = [{
     This pass analyzes Affine loops and control flow, creates a Scheduling
     problem using the Calyx operator library, solves the problem, and lowers
-    the loops to a StaticLogic pipeline.
+    the loops to a Pipeline pipeline.
   }];
-  let constructor = "circt::createAffineToStaticLogic()";
+  let constructor = "circt::createAffineToPipeline()";
   let dependentDialects = [
-    "circt::staticlogic::StaticLogicDialect",
+    "circt::pipeline::PipelineDialect",
     "mlir::arith::ArithmeticDialect",
     "mlir::cf::ControlFlowDialect",
     "mlir::memref::MemRefDialect",
@@ -148,15 +148,15 @@ def SCFToCalyx : Pass<"lower-scf-to-calyx", "mlir::ModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
-// StaticLogicToCalyx
+// PipelineToCalyx
 //===----------------------------------------------------------------------===//
 
-def StaticLogicToCalyx : Pass<"lower-static-logic-to-calyx", "mlir::ModuleOp"> {
-  let summary = "Lower StaticLogic to Calyx";
+def PipelineToCalyx : Pass<"lower-static-logic-to-calyx", "mlir::ModuleOp"> {
+  let summary = "Lower Pipeline to Calyx";
   let description = [{
-    This pass lowers StaticLogic to Calyx.
+    This pass lowers Pipeline to Calyx.
   }];
-  let constructor = "circt::createStaticLogicToCalyxPass()";
+  let constructor = "circt::createPipelineToCalyxPass()";
   let dependentDialects = [
     "calyx::CalyxDialect", "::mlir::scf::SCFDialect", "hw::HWDialect",
     "comb::CombDialect"
@@ -433,13 +433,13 @@ def InsertMergeBlocks : Pass<"insert-merge-blocks", "::mlir::ModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
-// StandardToStaticLogic
+// StandardToPipeline
 //===----------------------------------------------------------------------===//
 
 def CreatePipeline : Pass<"create-pipeline", "mlir::func::FuncOp"> {
-  let summary = "Create StaticLogic pipeline operations";
+  let summary = "Create Pipeline pipeline operations";
   let constructor = "circt::createCreatePipelinePass()";
-  let dependentDialects = ["staticlogic::StaticLogicDialect"];
+  let dependentDialects = ["pipeline::PipelineDialect"];
 }
 
 #endif // CIRCT_CONVERSION_PASSES_TD

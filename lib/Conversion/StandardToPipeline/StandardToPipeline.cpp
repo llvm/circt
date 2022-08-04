@@ -1,4 +1,4 @@
-//===- StandardToStaticLogic.cpp ------------------------------------------===//
+//===- StandardToPipeline.cpp ------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,17 +6,17 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This is the main Standard to StaticLogic Conversion Pass Implementation.
+// This is the main Standard to Pipeline Conversion Pass Implementation.
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Conversion/StandardToStaticLogic.h"
+#include "circt/Conversion/StandardToPipeline.h"
 #include "../PassDetail.h"
-#include "circt/Dialect/StaticLogic/StaticLogic.h"
+#include "circt/Dialect/Pipeline/Pipeline.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 
 using namespace circt;
-using namespace staticlogic;
+using namespace pipeline;
 using namespace std;
 
 using valueVector = SmallVector<Value, 4>;
@@ -69,12 +69,12 @@ static void createPipeline(mlir::func::FuncOp f, OpBuilder &builder) {
       auto arguments = getPipelineArgs(block);
       auto results = getPipelineResults(block);
       builder.setInsertionPoint(&block.back());
-      builder.create<staticlogic::ReturnOp>(f.getLoc(), ValueRange(results));
+      builder.create<pipeline::ReturnOp>(f.getLoc(), ValueRange(results));
 
       // Create pipeline operation, and move all operations except terminator
       // into the pipeline.
       builder.setInsertionPoint(&block.front());
-      auto pipeline = builder.create<staticlogic::PipelineOp>(
+      auto pipeline = builder.create<pipeline::PipelineOp>(
           f.getLoc(), ValueRange(arguments), ValueRange(results));
 
       auto &body = pipeline.getRegion().front();

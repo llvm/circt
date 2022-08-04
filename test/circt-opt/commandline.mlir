@@ -23,9 +23,9 @@
 // DIALECT-NEXT: memref
 // DIALECT-NEXT: moore
 // DIALECT-NEXT: msft
+// DIALECT-NEXT: pipeline
 // DIALECT-NEXT: scf
 // DIALECT-NEXT: seq
 // DIALECT-NEXT: ssp
-// DIALECT-NEXT: staticlogic
 // DIALECT-NEXT: sv
 // DIALECT-NEXT: systemc

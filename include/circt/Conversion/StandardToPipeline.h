@@ -1,4 +1,4 @@
-//===- StandardToStaticLogic.h ----------------------------------*- C++ -*-===//
+//===- StandardToPipeline.h -------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -7,12 +7,12 @@
 //===----------------------------------------------------------------------===//
 //
 // This file declares passes which together will lower the Standard dialect to
-// StaticLogic dialect.
+// Pipeline dialect.
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_CONVERSION_STANDARDTOSTATICLOGIC_H_
-#define CIRCT_CONVERSION_STANDARDTOSTATICLOGIC_H_
+#ifndef CIRCT_CONVERSION_STANDARDTOPIPELINE_H_
+#define CIRCT_CONVERSION_STANDARDTOPIPELINE_H_
 
 #include <memory>
 
@@ -24,4 +24,4 @@ namespace circt {
 std::unique_ptr<mlir::Pass> createCreatePipelinePass();
 } // namespace circt
 
-#endif // CIRCT_CONVERSION_STANDARDTOSTATICLOGIC_H_
+#endif // CIRCT_CONVERSION_STANDARDTOPIPELINE_H_

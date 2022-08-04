@@ -6,11 +6,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Conversion/AffineToStaticLogic.h"
+#include "circt/Conversion/AffineToPipeline.h"
 #include "../PassDetail.h"
 #include "circt/Analysis/DependenceAnalysis.h"
 #include "circt/Analysis/SchedulingAnalysis.h"
-#include "circt/Dialect/StaticLogic/StaticLogic.h"
+#include "circt/Dialect/Pipeline/Pipeline.h"
 #include "circt/Scheduling/Algorithms.h"
 #include "circt/Scheduling/Problems.h"
 #include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
@@ -34,7 +34,7 @@
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
 
-#define DEBUG_TYPE "affine-to-staticlogic"
+#define DEBUG_TYPE "affine-to-pipeline"
 
 using namespace mlir;
 using namespace mlir::arith;
@@ -44,12 +44,11 @@ using namespace mlir::func;
 using namespace circt;
 using namespace circt::analysis;
 using namespace circt::scheduling;
-using namespace circt::staticlogic;
+using namespace circt::pipeline;
 
 namespace {
 
-struct AffineToStaticLogic
-    : public AffineToStaticLogicBase<AffineToStaticLogic> {
+struct AffineToPipeline : public AffineToPipelineBase<AffineToPipeline> {
   void runOnOperation() override;
 
 private:
@@ -57,15 +56,14 @@ private:
   lowerAffineStructures(MemoryDependenceAnalysis &dependenceAnalysis);
   LogicalResult populateOperatorTypes(SmallVectorImpl<AffineForOp> &loopNest);
   LogicalResult solveSchedulingProblem(SmallVectorImpl<AffineForOp> &loopNest);
-  LogicalResult
-  createStaticLogicPipeline(SmallVectorImpl<AffineForOp> &loopNest);
+  LogicalResult createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest);
 
   CyclicSchedulingAnalysis *schedulingAnalysis;
 };
 
 } // namespace
 
-void AffineToStaticLogic::runOnOperation() {
+void AffineToPipeline::runOnOperation() {
   // Get dependence analysis for the whole function.
   auto dependenceAnalysis = getAnalysis<MemoryDependenceAnalysis>();
 
@@ -95,7 +93,7 @@ void AffineToStaticLogic::runOnOperation() {
       return signalPassFailure();
 
     // Convert the IR.
-    if (failed(createStaticLogicPipeline(nestedLoops)))
+    if (failed(createPipelinePipeline(nestedLoops)))
       return signalPassFailure();
   }
 }
@@ -211,7 +209,7 @@ static bool yieldOpLegalityCallback(AffineYieldOp op) {
 /// computations in the condition of ifs, or the addresses of loads and stores.
 /// The dependence analysis will be updated so the dependences from the affine
 /// loads and stores are now on the memref loads and stores.
-LogicalResult AffineToStaticLogic::lowerAffineStructures(
+LogicalResult AffineToPipeline::lowerAffineStructures(
     MemoryDependenceAnalysis &dependenceAnalysis) {
   auto *context = &getContext();
   auto op = getOperation();
@@ -239,7 +237,7 @@ LogicalResult AffineToStaticLogic::lowerAffineStructures(
 /// targetting. Right now, we assume Calyx, which has a standard library with
 /// well-defined operator latencies. Ultimately, we should move this to a
 /// dialect interface in the Scheduling dialect.
-LogicalResult AffineToStaticLogic::populateOperatorTypes(
+LogicalResult AffineToPipeline::populateOperatorTypes(
     SmallVectorImpl<AffineForOp> &loopNest) {
   // Scheduling analyis only considers the innermost loop nest for now.
   auto forOp = loopNest.back();
@@ -292,7 +290,7 @@ LogicalResult AffineToStaticLogic::populateOperatorTypes(
 }
 
 /// Solve the pre-computed scheduling problem.
-LogicalResult AffineToStaticLogic::solveSchedulingProblem(
+LogicalResult AffineToPipeline::solveSchedulingProblem(
     SmallVectorImpl<AffineForOp> &loopNest) {
   // Scheduling analyis only considers the innermost loop nest for now.
   auto forOp = loopNest.back();
@@ -340,7 +338,7 @@ LogicalResult AffineToStaticLogic::solveSchedulingProblem(
 }
 
 /// Create the pipeline op for a loop nest.
-LogicalResult AffineToStaticLogic::createStaticLogicPipeline(
+LogicalResult AffineToPipeline::createPipelinePipeline(
     SmallVectorImpl<AffineForOp> &loopNest) {
   // Scheduling analyis only considers the innermost loop nest for now.
   auto forOp = loopNest.back();
@@ -517,6 +515,6 @@ LogicalResult AffineToStaticLogic::createStaticLogicPipeline(
   return success();
 }
 
-std::unique_ptr<mlir::Pass> circt::createAffineToStaticLogic() {
-  return std::make_unique<AffineToStaticLogic>();
+std::unique_ptr<mlir::Pass> circt::createAffineToPipeline() {
+  return std::make_unique<AffineToPipeline>();
 }

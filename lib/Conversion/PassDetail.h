@@ -87,9 +87,9 @@ namespace hwarith {
 class HWArithDialect;
 } // namespace hwarith
 
-namespace staticlogic {
-class StaticLogicDialect;
-} // namespace staticlogic
+namespace pipeline {
+class PipelineDialect;
+} // namespace pipeline
 
 namespace seq {
 class SeqDialect;
