@@ -172,7 +172,7 @@ def FModuleLike : OpInterface<"FModuleLike"> {
     "InnerSymAttr", "getPortSymbolAttr", (ins "size_t":$portIndex), [{}], [{
       auto syms = $_op.getPortSymbols();
       if (syms.empty() ||
-          syms[portIndex].template cast<InnerSymAttr>().isSymbolInvalid())
+          syms[portIndex].template cast<InnerSymAttr>().empty())
         return InnerSymAttr();
       return syms[portIndex].template cast<InnerSymAttr>();
     }]>,
@@ -181,7 +181,7 @@ def FModuleLike : OpInterface<"FModuleLike"> {
     "bool", "hasPortSymbolAttr", (ins "size_t":$portIndex), [{}], [{
       auto syms = $_op.getPortSymbols();
         return  (!syms.empty() &&
-        !syms[portIndex].template cast<InnerSymAttr>().isSymbolInvalid());
+        !syms[portIndex].template cast<InnerSymAttr>().empty());
     }]>,
 
     // Setters

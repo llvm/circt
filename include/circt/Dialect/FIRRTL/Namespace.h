@@ -53,19 +53,21 @@ struct ModuleNamespace : public Namespace {
   void addPorts(FModuleLike module) {
     for (auto portSymbol : module.getPortSymbolsAttr())
       if (portSymbol)
-        portSymbol.cast<InnerSymAttr>().forAllSymNames([&](StringAttr sName) {
-          nextIndex.insert({sName.getValue(), 0});
-          return true;
-        });
+        static_cast<void>(
+            portSymbol.cast<InnerSymAttr>().walkSymbols([&](StringAttr sName) {
+              nextIndex.insert({sName.getValue(), 0});
+              return success();
+            }));
   }
 
   void addPorts(ArrayRef<PortInfo> ports) {
     for (auto port : ports)
       if (port.sym)
-        port.sym.cast<InnerSymAttr>().forAllSymNames([&](StringAttr symName) {
-          nextIndex.insert({symName.getValue(), 0});
-          return true;
-        });
+        static_cast<void>(
+            port.sym.cast<InnerSymAttr>().walkSymbols([&](StringAttr symName) {
+              nextIndex.insert({symName.getValue(), 0});
+              return success();
+            }));
   }
 
   /// Populate the namespace with the body of a module-like operation.

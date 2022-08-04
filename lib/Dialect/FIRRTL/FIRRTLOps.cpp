@@ -179,7 +179,7 @@ bool firrtl::hasDontTouch(Value value) {
     return hasDontTouch(op);
   auto arg = value.dyn_cast<BlockArgument>();
   auto module = cast<FModuleOp>(arg.getOwner()->getParentOp());
-  return (!module.getPortSymbolAttr(arg.getArgNumber())) ||
+  return (module.getPortSymbolAttr(arg.getArgNumber())) ||
          AnnotationSet::forPort(module, arg.getArgNumber()).hasDontTouch();
 }
 
@@ -774,7 +774,7 @@ static bool printModulePorts(OpAsmPrinter &p, Block *block,
 
     // Print the optional port symbol.
     if (!portSyms.empty()) {
-      if (!portSyms[i].cast<InnerSymAttr>().isSymbolInvalid()) {
+      if (!portSyms[i].cast<InnerSymAttr>().empty()) {
         p << " sym ";
         portSyms[i].cast<InnerSymAttr>().print(p);
       }
