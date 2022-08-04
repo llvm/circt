@@ -300,11 +300,12 @@ static void eraseControlWithGroupAndConditional(OpTy op,
 
   // Save information about the operation, and erase it.
   Value cond = op.cond();
+  Optional<StringRef> groupName = op.groupName();
   auto component = op->template getParentOfType<ComponentOp>();
   rewriter.eraseOp(op);
 
   // Clean up the attached conditional and combinational group (if it exists).
-  if (auto groupName = op.groupName()) {
+  if (groupName) {
     auto group = component.getWiresOp().template lookupSymbol<GroupInterface>(
         *groupName);
     if (SymbolTable::symbolKnownUseEmpty(group, component.getRegion()))
