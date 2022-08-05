@@ -73,7 +73,7 @@ def ServiceInstanceOp : ESI_Op<"service.instance"> {
   }];
 
   let arguments = (ins FlatSymbolRefAttr:$service_symbol,
-                       AnyAttr:$impl_type,
+                       StrAttr:$impl_type,
                        OptionalAttr<DictionaryAttr>:$impl_opts,
                        Variadic<AnyType>:$inputs);
   let results = (outs Variadic<AnyType>);
@@ -97,7 +97,7 @@ def ServiceImplementReqOp : ESI_Op<"service.impl_req", [NoTerminator]> {
   }];
 
   let arguments = (ins FlatSymbolRefAttr:$service_symbol,
-                       AnyAttr:$impl_type,
+                       StrAttr:$impl_type,
                        OptionalAttr<DictionaryAttr>:$impl_opts,
                        Variadic<AnyType>:$inputs);
   let results = (outs Variadic<AnyType>:$outputs);

@@ -3,6 +3,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt-c/Dialect/ESI.h"
+#include "circt/Dialect/ESI/ESIServices.h"
 #include "circt/Dialect/ESI/ESITypes.h"
 #include "mlir/CAPI/IR.h"
 #include "mlir/CAPI/Registration.h"
@@ -75,4 +76,13 @@ void circtESIAppendMlirFile(MlirModule cMod, MlirStringRef filename) {
 }
 MlirOperation circtESILookup(MlirModule mod, MlirStringRef symbol) {
   return wrap(SymbolTable::lookupSymbolIn(unwrap(mod), unwrap(symbol)));
+}
+
+void circtESIRegisterGlobalServiceGenerator(
+    MlirStringRef impl_type, CirctESIServiceGeneratorFunc genFunc,
+    void *userData) {
+  ServiceGeneratorDispatcher::globalDispatcher().registerGenerator(
+      unwrap(impl_type), [genFunc, userData](ServiceImplementReqOp req) {
+        return unwrap(genFunc(wrap(req), userData));
+      });
 }

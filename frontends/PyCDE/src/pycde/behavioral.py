@@ -117,7 +117,8 @@ class _IfBlock:
       # Only operate on Values.
       if not isinstance(value, Value):
         continue
-      # If the value was in the original scope and it hasn't changed, don't touch it.
+      # If the value was in the original scope and it hasn't changed, don't
+      # touch it.
       if varname in self._scope and self._scope[varname] is value:
         continue
 
@@ -153,7 +154,8 @@ class _IfBlock:
     ctypes.pythonapi.PyFrame_LocalsToFast(ctypes.py_object(s), ctypes.c_int(1))
 
 
-Else = _IfBlock(False)
+def Else():
+  return _IfBlock(False)
 
 
 def EndIf():

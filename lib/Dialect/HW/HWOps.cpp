@@ -1798,6 +1798,20 @@ void StructCreateOp::print(OpAsmPrinter &printer) {
   printer << " : " << getType();
 }
 
+LogicalResult StructCreateOp::verify() {
+  auto elements = hw::type_cast<StructType>(getType()).getElements();
+
+  if (elements.size() != getInput().size())
+    return emitOpError("structure field count mismatch");
+
+  for (const auto &[field, value] : llvm::zip(elements, getInput()))
+    if (field.type != value.getType())
+      return emitOpError("structure field `")
+             << field.name << "` type does not match";
+
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // StructExplodeOp
 //===----------------------------------------------------------------------===//

@@ -86,9 +86,6 @@ public:
   // Operators are defined below.
 
   // Comparison operators:
-  bool operator<(const InnerSymTarget &rhs) const {
-    return asTuple() < rhs.asTuple();
-  }
   bool operator==(const InnerSymTarget &rhs) const {
     return asTuple() == rhs.asTuple();
   }

@@ -321,3 +321,8 @@ hw.module @structAndArrays(%a: ui8, %b: ui8) -> (out: !hw.struct<foo: !hw.array<
     %3 = hw.struct_create (%2) : !hw.struct<foo: !hw.array<2xui8>>
     hw.output %3 : !hw.struct<foo: !hw.array<2xui8>>
 }
+
+// -----
+
+// CHECK: msft.module.extern @externModule(%a: i8, %b: i8) -> (out: !hw.struct<foo: !hw.array<2xi8>>)
+msft.module.extern @externModule(%a: ui8, %b: ui8) -> (out: !hw.struct<foo: !hw.array<2xui8>>) 

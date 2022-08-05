@@ -82,6 +82,7 @@ public:
   LogicalResult connectConstantsToControl(ConversionPatternRewriter &rewriter,
                                           bool sourceConstants);
 
+  LogicalResult feedForwardRewriting(ConversionPatternRewriter &rewriter);
   LogicalResult loopNetworkRewriting(ConversionPatternRewriter &rewriter);
 
   BlockOps insertMergeOps(BlockValues blockLiveIns, blockArgPairs &mergePairs,
@@ -139,8 +140,6 @@ LogicalResult runPartialLowering(
 }
 
 // Helper to check the validity of the dataflow conversion
-LogicalResult checkDataflowConversion(Region &r, bool disableTaskPipelining);
-
 // Driver that applies the partial lowerings expressed in HandshakeLowering to
 // the region encapsulated in it. The region is assumed to have a terminator of
 // type TTerm. See HandshakeLowering for the different lowering steps.
@@ -171,6 +170,9 @@ LogicalResult lowerRegion(HandshakeLowering &hl, bool sourceConstants,
     if (failed(
             runPartialLowering(hl, &HandshakeLowering::loopNetworkRewriting)))
       return failure();
+    if (failed(
+            runPartialLowering(hl, &HandshakeLowering::feedForwardRewriting)))
+      return failure();
   }
 
   // Fork/sink materialization. @todo: this should be removed and
@@ -185,8 +187,6 @@ LogicalResult lowerRegion(HandshakeLowering &hl, bool sourceConstants,
     return failure();
 
   if (failed(partiallyLowerRegion(addForkOps, hl.getContext(), hl.getRegion())))
-    return failure();
-  if (failed(checkDataflowConversion(hl.getRegion(), disableTaskPipelining)))
     return failure();
 
   bool lsq = false;
