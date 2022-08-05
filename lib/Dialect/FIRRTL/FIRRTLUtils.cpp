@@ -230,20 +230,19 @@ bool circt::firrtl::walkDrivers(Value val, bool lookThroughWires,
                                 bool lookThroughNodes, bool lookThroughCasts,
                                 WalkDriverCallback callback) {
   // TODO: what do we want to happen when there are flips in the type? Do we
-  // want to filter out fields which has reverse flow?
+  // want to filter out fields which have reverse flow?
   assert(val.getType().cast<FIRRTLType>().isPassive() &&
          "this code was not tested with flips");
 
   // This method keeps a stack of wires (or ports) and subfields of those that
   // it still has to process.  It keeps track of which fields in the
-  // destination are attached to which fields of the source, as well which
+  // destination are attached to which fields of the source, as well as which
   // subfield of the source we are currently investigating.  The fieldID is
   // used to filter which subfields of the current operation which we should
   // visit. As an example, the src might be an aggregate wire, but the current
-  // value might be a subfield of that wire. The src field ref will represent
-  // all subaccesses to the target, but the fieldID for the current op only
-  // needs to represent the all subaccesses between the current op and the
-  // target.
+  // value might be a subfield of that wire. The `src` FieldRef will represent
+  // all subaccesses to the target, but `fieldID` for the current op only needs
+  // to represent the all subaccesses between the current op and the target.
   struct StackElement {
     StackElement(FieldRef dst, FieldRef src, Value current,
                  Value::user_iterator it, Value::user_iterator end,
@@ -332,7 +331,7 @@ bool circt::firrtl::walkDrivers(Value val, bool lookThroughWires,
         continue;
       }
 
-      //
+      // If told to look through casts, continue from the cast input.
       if (lookThroughCasts &&
           isa<AsUIntPrimOp, AsSIntPrimOp, AsClockPrimOp, AsAsyncResetPrimOp>(
               op)) {
@@ -383,10 +382,8 @@ bool circt::firrtl::walkDrivers(Value val, bool lookThroughWires,
         auto index = subfield.getFieldIndex();
         auto subID = bundleType.getFieldID(index);
         // If the index of this operation doesn't match the target, skip it.
-        if (fieldID) {
-          if (index != bundleType.getIndexForFieldID(fieldID))
-            continue;
-        }
+        if (fieldID && index != bundleType.getIndexForFieldID(fieldID))
+          continue;
         auto subRef = fieldRef.getSubField(subID);
         auto subOriginal = original.getSubField(subID);
         auto value = subfield.getResult();
@@ -397,10 +394,8 @@ bool circt::firrtl::walkDrivers(Value val, bool lookThroughWires,
         auto index = subindex.getIndex();
         auto subID = vectorType.getFieldID(index);
         // If the index of this operation doesn't match the target, skip it.
-        if (fieldID) {
-          if (index != vectorType.getIndexForFieldID(fieldID))
-            continue;
-        }
+        if (fieldID && index != vectorType.getIndexForFieldID(fieldID))
+          continue;
         auto subRef = fieldRef.getSubField(subID);
         auto subOriginal = original.getSubField(subID);
         auto value = subindex.getResult();

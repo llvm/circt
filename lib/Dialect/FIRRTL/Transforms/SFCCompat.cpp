@@ -19,6 +19,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -57,7 +58,7 @@ void SFCCompatPass::runOnOperation() {
     // with a `RegOp`.
     if (walkDrivers(reg.getResetValue(), true, false, false,
                     [](FieldRef dst, FieldRef src) {
-                      return isa<InvalidValueOp>(src.getDefiningOp());
+                      return src.isa<InvalidValueOp>();
                     })) {
       ImplicitLocOpBuilder builder(reg.getLoc(), reg);
       RegOp newReg = builder.create<RegOp>(
@@ -77,8 +78,7 @@ void SFCCompatPass::runOnOperation() {
     if (walkDrivers(
             reg.getResetValue(), true, true, true,
             [&](FieldRef dst, FieldRef src) {
-              if (isa<ConstantOp, InvalidValueOp, SpecialConstantOp>(
-                      src.getDefiningOp()))
+              if (src.isa<ConstantOp, InvalidValueOp, SpecialConstantOp>())
                 return true;
               auto diag = emitError(reg.getLoc());
               bool rootKnown;
