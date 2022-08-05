@@ -58,6 +58,8 @@ LogicalResult PipelineOp::verify() {
   }
 
   // Check mixing of `pipeline.stage` and `pipeline.stage.register` ops.
+  // This verifier thus ensures a proper phase ordering between stage ops
+  // and their materialized stage register op counterparts.
   bool hasStageOps = !getOps<PipelineStageOp>().empty();
   bool hasStageRegOps = !getOps<PipelineStageRegisterOp>().empty();
 

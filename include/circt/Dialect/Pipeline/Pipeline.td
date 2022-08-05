@@ -141,6 +141,14 @@ def PipelineStageOp : Op<Pipeline_Dialect, "stage", [
   let assemblyFormat = [{
     `when` $when attr-dict
   }];
+
+  let extraClassDeclaration = [{
+    // Returns the index of this stage in the pipeline.
+    unsigned index() {
+      auto stageOps = getOperation()->getParentOfType<PipelineOp>().getOps<PipelineStageOp>();
+      return std::distance(stageOps.begin(), llvm::find(stageOps, *this));
+    }
+  }];
 }
 
 def PipelineStageRegisterOp : Op<Pipeline_Dialect, "stage.register", [
@@ -163,6 +171,14 @@ def PipelineStageRegisterOp : Op<Pipeline_Dialect, "stage.register", [
 
   let assemblyFormat = [{
     `when` $when (`regs` $regIns^)? attr-dict (`:` type($regIns)^)?
+  }];
+
+  let extraClassDeclaration = [{
+    // Returns the index of this stage in the pipeline.
+    unsigned index() {
+      auto stageOps = getOperation()->getParentOfType<PipelineOp>().getOps<PipelineStageRegisterOp>();
+      return std::distance(stageOps.begin(), llvm::find(stageOps, *this));
+    }
   }];
 }
 
