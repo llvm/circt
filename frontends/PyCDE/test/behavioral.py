@@ -9,12 +9,13 @@ from pycde.testing import unittestmodule
 # CHECK:         %1 = comb.mux %cond2, %a, %b {sv.namehint = "x"} : ui8
 # CHECK:         %2 = hwarith.mul %a, %1 {sv.namehint = "v_thenvalue"} : (ui8, ui8) -> ui16
 # CHECK:         %3 = hwarith.mul %2, %b {sv.namehint = "u_thenvalue"} : (ui16, ui8) -> ui24
-# CHECK:         %4 = hwarith.cast %b {sv.namehint = "v_elsevalue"} : (ui8) -> ui16
-# CHECK:         %5 = hwarith.mul %4, %a {sv.namehint = "u_elsevalue"} : (ui16, ui8) -> ui24
-# CHECK:         %6 = comb.mux %cond, %2, %4 {sv.namehint = "v"} : ui16
-# CHECK:         %7 = comb.mux %cond, %3, %5 {sv.namehint = "u"} : ui24
-# CHECK:         %8 = hwarith.add %6, %0 {sv.namehint = "v_plus_a_mul_b"} : (ui16, ui16) -> ui17
-# CHECK:         msft.output %8, %7 : ui17, ui24
+# CHECK:         %4 = comb.mux %cond2, %a, %b {sv.namehint = "p"} : ui8
+# CHECK:         %5 = hwarith.mul %b, %4 {sv.namehint = "v_elsevalue"} : (ui8, ui8) -> ui16
+# CHECK:         %6 = hwarith.mul %5, %a {sv.namehint = "u_elsevalue"} : (ui16, ui8) -> ui24
+# CHECK:         %7 = comb.mux %cond, %2, %5 {sv.namehint = "v"} : ui16
+# CHECK:         %8 = comb.mux %cond, %3, %6 {sv.namehint = "u"} : ui24
+# CHECK:         %9 = hwarith.add %7, %0 {sv.namehint = "v_plus_a_mul_b"} : (ui16, ui16) -> ui17
+# CHECK:         msft.output %9, %8 : ui17, ui24
 
 
 @unittestmodule()
@@ -33,13 +34,18 @@ class IfNestedTest:
     with If(ports.cond):
       with If(ports.cond2):
         x = ports.a
-      with Else:
+      with Else():
         x = ports.b
       EndIf()
       v = ports.a * x
       u = v * ports.b
-    with Else:
-      v = ports.b.as_uint(16)
+    with Else():
+      with If(ports.cond2):
+        p = ports.a
+      with Else():
+        p = ports.b
+      EndIf()
+      v = ports.b * p
       u = v * ports.a
     EndIf()
 
