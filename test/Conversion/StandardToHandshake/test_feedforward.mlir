@@ -3,7 +3,7 @@
 // CHECK-LABEL:   handshake.func @simpleDiamond(
 // CHECK-SAME:                                  %[[VAL_0:.*]]: i1,
 // CHECK-SAME:                                  %[[VAL_1:.*]]: i64,
-// CHECK-SAME:                                  %[[VAL_2:.*]]: none, ...) -> none attributes {argNames = ["in0", "in1", "inCtrl"], resNames = ["outCtrl"]} {
+// CHECK-SAME:                                  %[[VAL_2:.*]]: none, ...) -> none
 // CHECK:           %[[VAL_3:.*]]:3 = fork [3] %[[VAL_0]] : i1
 // CHECK:           %[[VAL_4:.*]] = arith.index_cast %[[VAL_3]]#0 : i1 to index
 // CHECK:           %[[VAL_5:.*]] = buffer [2] fifo %[[VAL_4]] : index
@@ -29,7 +29,7 @@ func.func @simpleDiamond(%arg0: i1, %arg1: i64) {
 
 // CHECK-LABEL:   handshake.func @nestedDiamond(
 // CHECK-SAME:                                  %[[VAL_0:.*]]: i1,
-// CHECK-SAME:                                  %[[VAL_1:.*]]: none, ...) -> none attributes {argNames = ["in0", "inCtrl"], resNames = ["outCtrl"]} {
+// CHECK-SAME:                                  %[[VAL_1:.*]]: none, ...) -> none
 // CHECK:           %[[VAL_2:.*]]:4 = fork [4] %[[VAL_0]] : i1
 // CHECK:           %[[VAL_3:.*]] = arith.index_cast %[[VAL_2]]#0 : i1 to index
 // CHECK:           %[[VAL_4:.*]] = buffer [2] fifo %[[VAL_3]] : index
@@ -65,7 +65,7 @@ func.func @nestedDiamond(%arg0: i1) {
 // CHECK-LABEL:   handshake.func @triangle(
 // CHECK-SAME:                             %[[VAL_0:.*]]: i1,
 // CHECK-SAME:                             %[[VAL_1:.*]]: i64,
-// CHECK-SAME:                             %[[VAL_2:.*]]: none, ...) -> none attributes {argNames = ["in0", "in1", "inCtrl"], resNames = ["outCtrl"]} {
+// CHECK-SAME:                             %[[VAL_2:.*]]: none, ...) -> none
 // CHECK:           %[[VAL_3:.*]]:3 = fork [3] %[[VAL_0]] : i1
 // CHECK:           %[[VAL_4:.*]] = arith.index_cast %[[VAL_3]]#0 : i1 to index
 // CHECK:           %[[VAL_5:.*]] = buffer [2] fifo %[[VAL_4]] : index
@@ -89,7 +89,7 @@ func.func @triangle(%arg0: i1, %val0: i64) {
 
 // CHECK-LABEL:   handshake.func @nestedTriangle(
 // CHECK-SAME:                                   %[[VAL_0:.*]]: i1,
-// CHECK-SAME:                                   %[[VAL_1:.*]]: none, ...) -> none attributes {argNames = ["in0", "inCtrl"], resNames = ["outCtrl"]} {
+// CHECK-SAME:                                   %[[VAL_1:.*]]: none, ...) -> none
 // CHECK:           %[[VAL_2:.*]]:4 = fork [4] %[[VAL_0]] : i1
 // CHECK:           %[[VAL_3:.*]] = arith.index_cast %[[VAL_2]]#0 : i1 to index
 // CHECK:           %[[VAL_4:.*]] = buffer [2] fifo %[[VAL_3]] : index
@@ -120,7 +120,7 @@ func.func @nestedTriangle(%arg0: i1) {
 
 // CHECK-LABEL:   handshake.func @multiple_blocks_needed(
 // CHECK-SAME:                                           %[[VAL_0:.*]]: i1,
-// CHECK-SAME:                                           %[[VAL_1:.*]]: none, ...) -> none attributes {argNames = ["in0", "inCtrl"], resNames = ["outCtrl"]} {
+// CHECK-SAME:                                           %[[VAL_1:.*]]: none, ...) -> none
 // CHECK:           %[[VAL_2:.*]]:4 = fork [4] %[[VAL_0]] : i1
 // CHECK:           %[[VAL_3:.*]] = arith.index_cast %[[VAL_2]]#0 : i1 to index
 // CHECK:           %[[VAL_4:.*]] = buffer [2] fifo %[[VAL_3]] : index
@@ -175,7 +175,7 @@ func.func @multiple_blocks_needed(%arg0: i1) {
 
 // CHECK-LABEL:   handshake.func @sameSuccessor(
 // CHECK-SAME:                                  %[[VAL_0:.*]]: i1,
-// CHECK-SAME:                                  %[[VAL_1:.*]]: none, ...) -> none attributes {argNames = ["in0", "inCtrl"], resNames = ["outCtrl"]} {
+// CHECK-SAME:                                  %[[VAL_1:.*]]: none, ...) -> none
 // CHECK:           %[[VAL_2:.*]]:2 = fork [2] %[[VAL_0]] : i1
 // CHECK:           %[[VAL_3:.*]]:2 = fork [2] %[[VAL_1]] : none
 // CHECK:           %[[VAL_4:.*]], %[[VAL_5:.*]] = cond_br %[[VAL_2]]#1, %[[VAL_3]]#1 : none
@@ -197,7 +197,7 @@ func.func @sameSuccessor(%cond: i1) {
 
 // CHECK-LABEL:   handshake.func @simple_loop(
 // CHECK-SAME:                                %[[VAL_0:.*]]: i64,
-// CHECK-SAME:                                %[[VAL_1:.*]]: none, ...) -> none attributes {argNames = ["in0", "inCtrl"], resNames = ["outCtrl"]} {
+// CHECK-SAME:                                %[[VAL_1:.*]]: none, ...) -> none
 // CHECK:           %[[VAL_2:.*]]:2 = fork [2] %[[VAL_1]] : none
 // CHECK:           %[[VAL_3:.*]] = constant %[[VAL_2]]#0 {value = 1 : i64} : i64
 // CHECK:           %[[VAL_4:.*]] = buffer [1] seq %[[VAL_5:.*]] {initValues = [0]} : i1
@@ -240,7 +240,7 @@ func.func @simple_loop(%arg0: i64) {
 
 // CHECK-LABEL:   handshake.func @blockWith3PredsAndLoop(
 // CHECK-SAME:                                           %[[VAL_0:.*]]: i1,
-// CHECK-SAME:                                           %[[VAL_1:.*]]: none, ...) -> none attributes {argNames = ["in0", "inCtrl"], resNames = ["outCtrl"]} {
+// CHECK-SAME:                                           %[[VAL_1:.*]]: none, ...) -> none
 // CHECK:           %[[VAL_2:.*]]:4 = fork [4] %[[VAL_0]] : i1
 // CHECK:           %[[VAL_3:.*]] = arith.index_cast %[[VAL_2]]#0 : i1 to index
 // CHECK:           %[[VAL_4:.*]] = buffer [2] fifo %[[VAL_3]] : index
@@ -289,7 +289,7 @@ func.func @blockWith3PredsAndLoop(%arg0: i1) {
 
 // CHECK-LABEL:   handshake.func @otherBlockOrder(
 // CHECK-SAME:                                    %[[VAL_0:.*]]: i1,
-// CHECK-SAME:                                    %[[VAL_1:.*]]: none, ...) -> none attributes {argNames = ["in0", "inCtrl"], resNames = ["outCtrl"]} {
+// CHECK-SAME:                                    %[[VAL_1:.*]]: none, ...) -> none
 // CHECK:           %[[VAL_2:.*]]:4 = fork [4] %[[VAL_0]] : i1
 // CHECK:           %[[VAL_3:.*]] = arith.index_cast %[[VAL_2]]#0 : i1 to index
 // CHECK:           %[[VAL_4:.*]] = buffer [2] fifo %[[VAL_3]] : index
@@ -339,7 +339,7 @@ func.func @otherBlockOrder(%arg0: i1) {
 // CHECK-LABEL:   handshake.func @multiple_block_args(
 // CHECK-SAME:                                        %[[VAL_0:.*]]: i1,
 // CHECK-SAME:                                        %[[VAL_1:.*]]: i64,
-// CHECK-SAME:                                        %[[VAL_2:.*]]: none, ...) -> none attributes {argNames = ["in0", "in1", "inCtrl"], resNames = ["outCtrl"]} {
+// CHECK-SAME:                                        %[[VAL_2:.*]]: none, ...) -> none
 // CHECK:           %[[VAL_3:.*]]:6 = fork [6] %[[VAL_0]] : i1
 // CHECK:           %[[VAL_4:.*]] = arith.index_cast %[[VAL_3]]#0 : i1 to index
 // CHECK:           %[[VAL_5:.*]] = buffer [2] fifo %[[VAL_4]] : index
@@ -387,7 +387,7 @@ func.func @multiple_block_args(%arg0: i1, %arg1: i64) {
 
 // CHECK-LABEL:   handshake.func @mergeBlockAsLoopHeader(
 // CHECK-SAME:                                           %[[VAL_0:.*]]: i1,
-// CHECK-SAME:                                           %[[VAL_1:.*]]: none, ...) -> none attributes {argNames = ["in0", "inCtrl"], resNames = ["outCtrl"]} {
+// CHECK-SAME:                                           %[[VAL_1:.*]]: none, ...) -> none
 // CHECK:           %[[VAL_2:.*]]:4 = fork [4] %[[VAL_0]] : i1
 // CHECK:           %[[VAL_3:.*]] = arith.index_cast %[[VAL_2]]#0 : i1 to index
 // CHECK:           %[[VAL_4:.*]] = buffer [2] fifo %[[VAL_3]] : index

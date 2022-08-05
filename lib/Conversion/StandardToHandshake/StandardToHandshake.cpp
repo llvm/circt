@@ -685,6 +685,11 @@ bool FeedForwardNetworkRewriter::formsIrreducibleCF(Block *splitBlock,
   return false;
 }
 
+static Operation *findBranchToBlock(Block *block) {
+  Block *pred = *block->getPredecessors().begin();
+  return pred->getTerminator();
+}
+
 LogicalResult
 FeedForwardNetworkRewriter::findBlockPairs(BlockPairs &blockPairs) {
   // assumes that merge block insertion happended beforehand
@@ -718,8 +723,11 @@ FeedForwardNetworkRewriter::findBlockPairs(BlockPairs &blockPairs) {
     Block *mergeBlock = postDomInfo.findNearestCommonDominator(succ0, succ1);
 
     // Precondition checks
-    if (formsIrreducibleCF(&b, mergeBlock))
-      return parentOp->emitError("expected only reducible control flow.");
+    if (formsIrreducibleCF(&b, mergeBlock)) {
+      return parentOp->emitError("expected only reducible control flow.")
+                 .attachNote(findBranchToBlock(mergeBlock)->getLoc())
+             << "This branch is involved in the irreducible control flow";
+    }
 
     unsigned nonLoopPreds = 0;
     LoopInfo *info = loopAnalysis.getLoopInfoForHeader(mergeBlock);
@@ -729,9 +737,12 @@ FeedForwardNetworkRewriter::findBlockPairs(BlockPairs &blockPairs) {
       nonLoopPreds++;
     }
     if (nonLoopPreds > 2)
-      return parentOp->emitError(
-          "expected a merge block to have two predecessors. Did you run the "
-          "merge block insertion pass?");
+      return parentOp
+                 ->emitError("expected a merge block to have two predecessors. "
+                             "Did you run the "
+                             "merge block insertion pass?")
+                 .attachNote(findBranchToBlock(mergeBlock)->getLoc())
+             << "This branch jumps to the illegal block";
 
     blockPairs.emplace_back(&b, mergeBlock);
   }
@@ -770,10 +781,14 @@ BranchOp FeedForwardNetworkRewriter::buildSplitNetwork(Block *splitBlock) {
   Value condAsIndex = rewriter.create<arith::IndexCastOp>(
       cond.getLoc(), rewriter.getIndexType(), cond);
 
+  // The buffer size defines the number of threads that can be concurently
+  // traversing the sub-CFG starting at the splitBlock.
+  size_t bufferSize = 2;
   // TODO how to size these?
   // Longest path in a CFG-DAG would be O(#blocks)
+
   auto buffer = rewriter.create<handshake::BufferOp>(
-      cond.getLoc(), rewriter.getIndexType(), /*size=*/2, condAsIndex,
+      cond.getLoc(), rewriter.getIndexType(), bufferSize, condAsIndex,
       /*bufferType=*/BufferTypeEnum::fifo);
 
   return rewriter.create<handshake::BranchOp>(cond.getLoc(), buffer);

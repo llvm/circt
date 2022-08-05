@@ -8,6 +8,7 @@ func.func @missingMergeBlocks(%arg0: i1) {
 ^bb2:  // pred: ^bb0
   cf.br ^bb4
 ^bb3:  // pred: ^bb1
+// expected-note @+1 {{This branch jumps to the illegal block}}
   cf.br ^bb4
 ^bb4:  // 3 preds: ^bb1, ^bb2, ^bb3
   return
@@ -25,6 +26,7 @@ func.func @irreducibleCFG(%cond: i1) {
 ^3:
   cf.br ^5
 ^4:
+// expected-note @+1 {{This branch is involved in the irreducible control flow}}
   cf.br ^5
 ^5:
   return
