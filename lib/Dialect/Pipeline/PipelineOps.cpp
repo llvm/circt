@@ -297,6 +297,17 @@ void PipelineWhileOp::build(OpBuilder &builder, OperationState &state,
 }
 
 //===----------------------------------------------------------------------===//
+// PipelineStageRegisterOp
+//===----------------------------------------------------------------------===//
+
+void PipelineStageRegisterOp::build(OpBuilder &builder, OperationState &state,
+                                    Value when, ValueRange regIns) {
+  PipelineStageRegisterOp::build(builder, state, regIns.getTypes(), regIns,
+                                 when);
+  state.addTypes({when.getType()});
+}
+
+//===----------------------------------------------------------------------===//
 // PipelineWhileStageOp
 //===----------------------------------------------------------------------===//
 
