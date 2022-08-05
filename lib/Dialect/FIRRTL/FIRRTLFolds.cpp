@@ -1110,9 +1110,8 @@ LogicalResult BitsPrimOp::canonicalize(BitsPrimOp op,
                                                 op.getHi(), op.getLo());
     auto bitsLow = rewriter.create<BitsPrimOp>(op->getLoc(), mux.getLow(),
                                                op.getHi(), op.getLo());
-    Value newOp = rewriter.create<MuxPrimOp>(op->getLoc(), mux.getSel(),
+    replaceOpWithNewOpAndCopyName<MuxPrimOp>(rewriter, op, mux.getSel(),
                                              bitsHigh, bitsLow);
-    rewriter.replaceOp(op, newOp);
     return success();
   }
   // bits(cat(a, b), ...) => bits(a, ...), or bits(b, ...), or cat(bits(a, ...),
@@ -1121,23 +1120,22 @@ LogicalResult BitsPrimOp::canonicalize(BitsPrimOp op,
     if (auto rhsT = cat.getRhs().getType().dyn_cast<IntType>()) {
       uint32_t lhsLo = rhsT.getWidth().getValue();
       uint32_t rhsHi = lhsLo - 1;
-      Value newOp;
       if (op.getHi() >= lhsLo && op.getLo() >= lhsLo) {
         // Only indexing the lhs.
-        newOp = rewriter.create<BitsPrimOp>(
-            op->getLoc(), cat.getLhs(), op.getHi() - lhsLo, op.getLo() - lhsLo);
+        replaceOpWithNewOpAndCopyName<BitsPrimOp>(
+            rewriter, op, cat.getLhs(), op.getHi() - lhsLo, op.getLo() - lhsLo);
       } else if (op.getHi() <= rhsHi && op.getLo() <= rhsHi) {
         // Only indexing the rhs.
-        newOp = rewriter.create<BitsPrimOp>(op->getLoc(), cat.getRhs(),
-                                            op.getHi(), op.getLo());
+        replaceOpWithNewOpAndCopyName<BitsPrimOp>(rewriter, op, cat.getRhs(),
+                                                  op.getHi(), op.getLo());
       } else {
         auto bitsLhs = rewriter.create<BitsPrimOp>(op->getLoc(), cat.getLhs(),
                                                    op.getHi() - lhsLo, 0);
         auto bitsRhs = rewriter.create<BitsPrimOp>(op->getLoc(), cat.getRhs(),
                                                    rhsHi, op.getLo());
-        newOp = rewriter.create<CatPrimOp>(op->getLoc(), bitsLhs, bitsRhs);
+        replaceOpWithNewOpAndCopyName<CatPrimOp>(rewriter, op, bitsLhs,
+                                                 bitsRhs);
       }
-      rewriter.replaceOp(op, newOp);
       return success();
     }
   }
