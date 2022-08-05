@@ -14,7 +14,7 @@ include "mlir/IR/EnumAttr.td"
 
 /// An attribute to indicate the output file an operation should be emitted to.
 def OutputFileAttr : AttrDef<HWDialect, "OutputFile"> {
-  let summary = "Ouput file attribute";
+  let summary = "Output file attribute";
   let description = [{
     This attribute represents an output file for something which will be
     printed. The `filename` string is the file to be output to. If `filename`
