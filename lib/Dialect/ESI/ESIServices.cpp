@@ -24,22 +24,11 @@
 using namespace circt;
 using namespace circt::esi;
 
-static DenseMap<Attribute, ServiceGeneratorDispatcher::ServiceGeneratorFunc>
-DefaultTableCreator(MLIRContext *);
-
-ServiceGeneratorDispatcher ServiceGeneratorDispatcher::defaultDispatcher() {
-  return ServiceGeneratorDispatcher(DefaultTableCreator, false);
-}
-
 LogicalResult ServiceGeneratorDispatcher::generate(ServiceImplementReqOp req) {
-  // Create the lookup table lazily.
-  if (!lookupTable)
-    lookupTable = create(req.getContext());
-
   // Lookup based on 'impl_type' attribute and pass through the generate request
   // if found.
-  auto genF = lookupTable->find(req.impl_typeAttr());
-  if (genF == lookupTable->end()) {
+  auto genF = genLookupTable.find(req.impl_typeAttr().getValue());
+  if (genF == genLookupTable.end()) {
     if (failIfNotFound)
       return req.emitOpError("Could not find service generator for attribute '")
              << req.impl_typeAttr() << "'";
@@ -117,11 +106,16 @@ static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp req) {
   return success();
 }
 
-static DenseMap<Attribute, ServiceGeneratorDispatcher::ServiceGeneratorFunc>
-DefaultTableCreator(MLIRContext *ctxt) {
-  DenseMap<Attribute, ServiceGeneratorDispatcher::ServiceGeneratorFunc> lut;
-  lut[StringAttr::get(ctxt, "cosim")] = instantiateCosimEndpointOps;
-  return lut;
+static ServiceGeneratorDispatcher
+    globalDispatcher({{"cosim", instantiateCosimEndpointOps}}, false);
+
+ServiceGeneratorDispatcher &ServiceGeneratorDispatcher::globalDispatcher() {
+  return ::globalDispatcher;
+}
+
+void ServiceGeneratorDispatcher::registerGenerator(StringRef implType,
+                                                   ServiceGeneratorFunc gen) {
+  genLookupTable[implType] = gen;
 }
 
 //===----------------------------------------------------------------------===//
@@ -138,7 +132,7 @@ struct ESIConnectServicesPass
 
   ESIConnectServicesPass(ServiceGeneratorDispatcher gen) : genDispatcher(gen) {}
   ESIConnectServicesPass()
-      : genDispatcher(ServiceGeneratorDispatcher::defaultDispatcher()) {}
+      : genDispatcher(ServiceGeneratorDispatcher::globalDispatcher()) {}
 
   void runOnOperation() override;
 

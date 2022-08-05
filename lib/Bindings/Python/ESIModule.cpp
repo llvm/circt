@@ -15,6 +15,7 @@
 #include "mlir/CAPI/IR.h"
 #include "mlir/CAPI/Support.h"
 
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
 
 #include "PybindUtils.h"
@@ -57,6 +58,23 @@ private:
   MlirModule cModuleOp;
 };
 
+// Mapping from unique identifier to python callback. We use std::string
+// pointers since we also need to allocate memory for the string.
+llvm::DenseMap<std::string *, py::object> serviceGenFuncLookup;
+static MlirLogicalResult serviceGenFunc(MlirOperation reqOp, void *userData) {
+  std::string *name = static_cast<std::string *>(userData);
+  py::object genFunc = serviceGenFuncLookup[name];
+  py::object rc = genFunc(reqOp);
+  return rc.cast<bool>() ? mlirLogicalResultSuccess()
+                         : mlirLogicalResultFailure();
+}
+
+void registerServiceGenerator(std::string name, py::object genFunc) {
+  std::string *n = new std::string(name);
+  serviceGenFuncLookup[n] = genFunc;
+  circtESIRegisterGlobalServiceGenerator(wrap(*n), serviceGenFunc, n);
+}
+
 using namespace mlir::python::adaptors;
 
 void circt::python::populateDialectESISubmodule(py::module &m) {
@@ -74,6 +92,10 @@ void circt::python::populateDialectESISubmodule(py::module &m) {
       "Construct an ESI wrapper around HW module 'op' given a list of "
       "latency-insensitive ports.",
       py::arg("op"), py::arg("name_list"));
+
+  m.def("registerServiceGenerator", registerServiceGenerator,
+        "Register a service generator for a given service name.",
+        py::arg("impl_type"), py::arg("generator"));
 
   py::class_<System>(m, "CppSystem")
       .def(py::init<MlirModule>())

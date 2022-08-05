@@ -24,32 +24,33 @@ class ServiceGeneratorDispatcher {
 public:
   // All generators must support this function pointer signature.
   using ServiceGeneratorFunc =
-      llvm::function_ref<LogicalResult(ServiceImplementReqOp)>;
+      std::function<LogicalResult(ServiceImplementReqOp)>;
 
   // Since passes don't have access to a context at creation time (and
   // Attributes are tied to the context), we need to delay lookup table creation
   // until running the dispatch the first time. This is the function pointer
   // signature to create and return that lookup table.
-  using CreateLookupTable =
-      llvm::function_ref<DenseMap<Attribute, ServiceGeneratorFunc>(
-          MLIRContext *)>;
-
-  ServiceGeneratorDispatcher(CreateLookupTable create, bool failIfNotFound)
-      : create(create), failIfNotFound(failIfNotFound) {}
+  ServiceGeneratorDispatcher(
+      DenseMap<StringRef, ServiceGeneratorFunc> genLookupTable,
+      bool failIfNotFound)
+      : genLookupTable(genLookupTable), failIfNotFound(failIfNotFound) {}
   ServiceGeneratorDispatcher(const ServiceGeneratorDispatcher &that)
-      : create(that.create), failIfNotFound(that.failIfNotFound) {}
+      : genLookupTable(that.genLookupTable),
+        failIfNotFound(that.failIfNotFound) {}
 
-  /// Assemble the a default dispatcher.
-  static ServiceGeneratorDispatcher defaultDispatcher();
+  /// Get the global dispatcher.
+  static ServiceGeneratorDispatcher &globalDispatcher();
 
   /// Generate a service implementation if a generator exists in this registry.
   /// If one is not found, return failure if the `failIfNotFound` flag is set.
   LogicalResult generate(ServiceImplementReqOp);
 
+  /// Add a generator to this registry.
+  void registerGenerator(StringRef name, ServiceGeneratorFunc func);
+
 private:
-  CreateLookupTable create;
+  DenseMap<StringRef, ServiceGeneratorFunc> genLookupTable;
   bool failIfNotFound;
-  llvm::Optional<DenseMap<Attribute, ServiceGeneratorFunc>> lookupTable;
 };
 
 std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>

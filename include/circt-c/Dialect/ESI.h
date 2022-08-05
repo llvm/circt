@@ -40,6 +40,11 @@ MLIR_CAPI_EXPORTED void circtESIAppendMlirFile(MlirModule,
 MLIR_CAPI_EXPORTED MlirOperation circtESILookup(MlirModule,
                                                 MlirStringRef symbol);
 
+typedef MlirLogicalResult (*CirctESIServiceGeneratorFunc)(
+    MlirOperation serviceImplementReqOp, void *userData);
+MLIR_CAPI_EXPORTED void circtESIRegisterGlobalServiceGenerator(
+    MlirStringRef impl_type, CirctESIServiceGeneratorFunc, void *userData);
+
 #ifdef __cplusplus
 }
 #endif
