@@ -78,7 +78,7 @@ MlirOperation circtESILookup(MlirModule mod, MlirStringRef symbol) {
   return wrap(SymbolTable::lookupSymbolIn(unwrap(mod), unwrap(symbol)));
 }
 
-void circtESIRegisterGlobalServiceImplementor(
+void circtESIRegisterGlobalServiceGenerator(
     MlirStringRef impl_type, CirctESIServiceGeneratorFunc genFunc,
     void *userData) {
   ServiceGeneratorDispatcher::globalDispatcher().registerGenerator(

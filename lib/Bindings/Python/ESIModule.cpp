@@ -72,7 +72,7 @@ static MlirLogicalResult serviceGenFunc(MlirOperation reqOp, void *userData) {
 void registerServiceGenerator(std::string name, py::object genFunc) {
   std::string *n = new std::string(name);
   serviceGenFuncLookup[n] = genFunc;
-  circtESIRegisterGlobalServiceImplementor(wrap(*n), serviceGenFunc, n);
+  circtESIRegisterGlobalServiceGenerator(wrap(*n), serviceGenFunc, n);
 }
 
 using namespace mlir::python::adaptors;
