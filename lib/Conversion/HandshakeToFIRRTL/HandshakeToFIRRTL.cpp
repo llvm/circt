@@ -108,8 +108,8 @@ static FIRRTLBaseType portInfosToBundleType(MLIRContext *ctx,
 static FIRRTLBaseType getBundleType(Type type) {
   // If the input is already converted to a bundle type elsewhere, itself will
   // be returned after cast.
-  if (auto firrtlBaseType = type.dyn_cast<FIRRTLBaseType>())
-    return firrtlBaseType;
+  if (auto bundleType = type.dyn_cast<BundleType>())
+    return bundleType;
 
   MLIRContext *context = type.getContext();
   using BundleElement = BundleType::BundleElement;
