@@ -1518,6 +1518,17 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         }
       })
 
+      .Case<RefSendOp>([&](auto op) {
+        declareVars(op.getResult(), op.getLoc());
+        constrainTypes(op.getResult(), op.getBase());
+      })
+      .Case<RefResolveOp>([&](auto op) {
+        declareVars(op.getResult(), op.getLoc());
+        // Both directions, resolve may flow either way.
+        unifyTypes(FieldRef(op.getResult(), 0), FieldRef(op.getRef(), 0),
+                   op.getResult().getType().template cast<FIRRTLType>());
+      })
+
       .Default([&](auto op) {
         op->emitOpError("not supported in width inference");
         mappingFailed = true;
