@@ -118,9 +118,8 @@ public:
   // wire ops so that initialization checking only signals a failure if a bit
   // is truly not assigned.
   Value canonicalizeBits(BitsPrimOp op, ImplicitLocOpBuilder builder) {
-    if (!op.getInput().getDefiningOp()) {
+    if (!op.getInput().getDefiningOp())
       return op;
-    }
     auto *inputOp = op.getInput().getDefiningOp();
     if (auto cat = dyn_cast<CatPrimOp>(inputOp)) {
       // bits(cat(a, b), ...) => bits(a, ...), or bits(b, ...), or cat(bits(a,
@@ -211,9 +210,8 @@ public:
           b.create<BitsPrimOp>(xprev, (uint32_t)bot[0], (uint32_t)bot[1]), b);
       cat = b.createOrFold<CatPrimOp>(cat, x);
     }
-    if (bits.getInput().getType().isa<SIntType>()) {
+    if (bits.getInput().getType().isa<SIntType>())
       cat = b.create<AsSIntPrimOp>(cat);
-    }
     // The dest needs to be transformed from a bitindex `x[hi:lo] <=` to just
     // `x <=`.
     dest = getFieldRefFromValue(bits.getInput());
@@ -228,9 +226,8 @@ public:
   bool setLastConnect(FieldRef dest, FConnectLike connection) {
     // if we see `x[hi:lo] <= e`, we have to transform this into a
     // read-modify-write
-    if (auto bits = dyn_cast<BitsPrimOp>(dest.getDefiningOp())) {
+    if (auto bits = dyn_cast<BitsPrimOp>(dest.getDefiningOp()))
       rewriteBitsConnect(bits, dest, connection);
-    }
     // Try to insert, if it doesn't insert, replace the previous value.
     auto itAndInserted = driverMap.getLastScope().insert({dest, connection});
     if (!std::get<1>(itAndInserted)) {
@@ -706,12 +703,10 @@ void ModuleVisitor::visitStmt(WhenOp whenOp) {
 }
 
 bool ModuleVisitor::usesSubwordUninit(Operation *op) {
-  if (!op || subwordUninit.size() == 0) {
+  if (!op || subwordUninit.size() == 0)
     return false;
-  }
-  if (auto b = subwordInvalidMemo.lookup(op)) {
+  if (auto b = subwordInvalidMemo.lookup(op))
     return b;
-  }
   for (auto val : op->getOperands()) {
     if (subwordUninit.contains(val) || usesSubwordUninit(val.getDefiningOp())) {
       subwordInvalidMemo[op] = true;
