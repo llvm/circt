@@ -10,6 +10,7 @@ add_circt_conversion_library(CIRCTHWArithToHW
   LINK_LIBS PUBLIC
   CIRCTComb
   CIRCTSeq
+  CIRCTMSFT
   CIRCTHW
   CIRCTHWArith
   MLIRTransforms

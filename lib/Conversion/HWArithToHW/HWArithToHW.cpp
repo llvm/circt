@@ -15,6 +15,7 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HWArith/HWArithOps.h"
+#include "circt/Dialect/MSFT/MSFTOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -419,7 +420,8 @@ public:
     target.addLegalDialect<comb::CombDialect, hw::HWDialect>();
 
     // Signature conversion and legalization patterns.
-    addSignatureConversion<hw::HWModuleOp, hw::HWModuleExternOp>(
+    addSignatureConversion<hw::HWModuleOp, hw::HWModuleExternOp,
+                           msft::MSFTModuleOp, msft::MSFTModuleExternOp>(
         target, patterns, typeConverter);
 
     // Generic conversion and legalization patterns for operations that we
