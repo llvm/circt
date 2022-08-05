@@ -5,6 +5,7 @@ import pycde
 from pycde import (Clock, Input, InputChannel, OutputChannel, module, generator,
                    types)
 from pycde import esi
+from pycde.common import Output
 
 
 @module
@@ -29,7 +30,7 @@ class Consumer:
 
 
 @module
-class Top:
+class LoopbackTop:
   clk = Clock(types.i1)
   rst = Input(types.i1)
 
@@ -41,7 +42,50 @@ class Top:
     esi.Cosim(esi.HostComms, ports.clk, ports.rst)
 
 
-s = pycde.System([Top], name="EsiSys")
+@esi.ServiceImplementation(esi.HostComms)
+class MultiplexerService:
+  clk = Clock()
+  rst = Input(types.i1)
+
+  # Underlying channel is an untyped, 256-bit LI channel.
+  trunk_in = Input(types.i256)
+  trunk_in_valid = Input(types.i1)
+  trunk_in_ready = Output(types.i1)
+  trunk_out = Output(types.i256)
+  trunk_out_valid = Output(types.i1)
+  trunk_out_ready = Input(types.i1)
+
+  # @esi.generator
+  # def construct(ports, clients):
+  #   pass
+
+
+@module
+class MultiplexerTop:
+  clk = Clock(types.i1)
+  rst = Input(types.i1)
+
+  trunk_in = Input(types.i256)
+  trunk_in_valid = Input(types.i1)
+  trunk_in_ready = Output(types.i1)
+  trunk_out = Output(types.i256)
+  trunk_out_valid = Output(types.i1)
+  trunk_out_ready = Input(types.i1)
+
+  @generator
+  def construct(ports):
+    m = MultiplexerService(clk=ports.clk,
+                           rst=ports.rst,
+                           trunk_in=ports.trunk_in,
+                           trunk_in_valid=ports.trunk_in_valid,
+                           trunk_out_ready=ports.trunk_out_ready)
+
+    ports.trunk_in_ready = m.trunk_in_ready
+    ports.trunk_out = m.trunk_out
+    ports.trunk_out_valid = m.trunk_out_valid
+
+
+s = pycde.System([LoopbackTop, MultiplexerTop], name="EsiSys")
 
 s.generate()
 s.print()

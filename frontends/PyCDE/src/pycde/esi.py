@@ -1,4 +1,4 @@
-from pycde.value import ChannelValue
+from pycde.value import ChannelValue, Value
 from .common import Input, Output, InputChannel, OutputChannel, _PyProxy
 from circt.dialects import esi as raw_esi, hw
 from pycde.pycde_types import ChannelType, PyCDEType, types
@@ -99,3 +99,71 @@ def Cosim(decl: ServiceDecl, clk, rst):
                                 decl._materialize_service_decl()),
                             impl_type=ir.StringAttr.get("cosim"),
                             inputs=[clk.value, rst.value])
+
+
+class ServiceInstanceOp:
+
+  def __init__(self, result: typing.List[PyCDEType],
+               service_symbol: ir.FlatSymbolRefAttr, impl_type: ir.Attribute,
+               inputs: typing.List[Value],
+               output_port_lookup: typing.Dict[str, int]):
+    self._op = raw_esi.ServiceInstanceOp(result, service_symbol, impl_type,
+                                         inputs)
+    self._output_port_lookup = output_port_lookup
+
+  def __getattr__(self, name: str) -> object:
+    if (name in self._output_port_lookup):
+      return Value(self._op.results[self._output_port_lookup[name][0]])
+    raise AttributeError(name)
+
+
+def ServiceImplementation(decl: ServiceDecl):
+
+  class ServiceImplementation:
+
+    def __init__(self, service_impl_class):
+      self._service_impl_class = service_impl_class
+      self._impl_name = ir.StringAttr.get("pycde:" +
+                                          service_impl_class.__name__)
+      output_ports = [
+          pn for pn in [(name, getattr(service_impl_class, name))
+                        for name in dir(service_impl_class)]
+          if isinstance(pn[1], Output)
+      ]
+      self._output_port_lookup = {
+          pn[0]: (port_num, pn[1]) for (port_num, pn) in enumerate(output_ports)
+      }
+
+      input_ports = [
+          pn for pn in [(name, getattr(service_impl_class, name))
+                        for name in dir(service_impl_class)]
+          if isinstance(pn[1], Input)
+      ]
+      self._input_port_lookup = {
+          pn[0]: (port_num, pn[1]) for (port_num, pn) in enumerate(input_ports)
+      }
+
+    def __call__(self, **kwargs):
+      inputs_missing = set(self._input_port_lookup.keys()) - set(kwargs.keys())
+      if inputs_missing:
+        raise ValueError(f"Missing inputs: {inputs_missing}")
+
+      inputs = [None] * len(self._input_port_lookup)
+      for (k, v) in kwargs.items():
+        if k not in self._input_port_lookup:
+          raise ValueError(f"Unknown input port: {k}")
+        port_num, port_type = self._input_port_lookup[k]
+        if port_type.type != v.type:
+          raise ValueError(f"Type mismatch for input port {k}: "
+                           f"expected {port_type.type}, got {v.type}")
+        inputs[port_num] = v.value
+
+      return ServiceInstanceOp(
+          result=[t.type for _, t in self._output_port_lookup.values()],
+          service_symbol=ir.FlatSymbolRefAttr.get(
+              decl._materialize_service_decl()),
+          impl_type=self._impl_name,
+          inputs=inputs,
+          output_port_lookup=self._output_port_lookup)
+
+  return ServiceImplementation
