@@ -671,6 +671,14 @@ void IMConstPropPass::visitOperation(Operation *op) {
       operandConstants.push_back({});
   }
 
+  // If this is a commutative operation, move constants to be trailing
+  // operands.
+  if (op->getNumOperands() >= 2 && op->hasTrait<OpTrait::IsCommutative>()) {
+    auto isUndefined = [](Attribute attr) { return !attr; };
+    auto *firstConstantIt = llvm::find_if_not(operandConstants, isUndefined);
+    std::stable_partition(firstConstantIt, operandConstants.end(), isUndefined);
+  }
+
   // Simulate the result of folding this operation to a constant. If folding
   // fails or was an in-place fold, mark the results as overdefined.
   SmallVector<OpFoldResult, 8> foldResults;

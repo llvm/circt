@@ -554,3 +554,15 @@ firrtl.circuit "Issue3372"  {
     firrtl.strictconnect %zero, %c0_ui1 : !firrtl.uint<1>
   }
 }
+
+// -----
+
+// CHECK-LABEL: "LhsConstant"
+firrtl.circuit "LhsConstant"  {
+  firrtl.module @LhsConstant(in %reset: !firrtl.uint<1>, out %value: !firrtl.uint<1>) {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %c = firrtl.xor %c0_ui1, %reset : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK:  firrtl.strictconnect %value, %reset : !firrtl.uint<1>
+    firrtl.strictconnect %value, %c: !firrtl.uint<1>
+  }
+}
