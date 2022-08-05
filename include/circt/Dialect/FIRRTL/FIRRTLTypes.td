@@ -100,9 +100,21 @@ def PassiveType : FIRRTLDialectType<
   CPred<"$_self.isa<FIRRTLBaseType>() && $_self.cast<FIRRTLBaseType>().isPassive()">,
   "a passive base type (contain no flips)", "::circt::firrtl::FIRRTLBaseType">;
 
-def RefType : DialectType<FIRRTLDialect,
+def RefType : FIRRTLDialectType<
    CPred<"$_self.isa<RefType>()">,
-  "reference type", "::circt::firrtl::RefType">;
+  "reference type", "::circt::firrtl::RefType", [{
+    A reference type, such as `firrtl.ref<uint<1>>`.
+
+    Used for remote reads and writes of the wrapped base type.
+
+    Parameterized over the referenced base type,
+    which must be passive and for now must also be ground.
+
+    Not a base type.
+
+    Values of this type are used to capture dataflow paths,
+    and do not represent a circuit element or entity.
+  }]>;
 
 //===----------------------------------------------------------------------===//
 // FIRRTL Types Predicates
