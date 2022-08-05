@@ -96,7 +96,6 @@ struct DualGraph {
   DenseMap<Block *, size_t> getPredCountMapCopy() { return predCnts; }
 
 private:
-  Region &r;
   ControlFlowLoopAnalysis &loopAnalysis;
 
   DenseMap<Block *, SmallVector<Block *>> succMap;
@@ -105,7 +104,7 @@ private:
 } // namespace
 
 DualGraph::DualGraph(Region &r, ControlFlowLoopAnalysis &loopAnalysis)
-    : r(r), loopAnalysis(loopAnalysis), succMap(), predCnts() {
+    : loopAnalysis(loopAnalysis), succMap(), predCnts() {
   for (Block &b : r) {
     if (!loopAnalysis.isLoopHeader(&b) && loopAnalysis.isLoopElement(&b))
       continue;
