@@ -17,7 +17,7 @@ from pycde.pycde_types import dim, types
 # CHECK-NEXT:   %4 = hwarith.cast %c-1_i16 {{({sv.namehint = ".*"} )?}}: (i16) -> si16
 # CHECK-NEXT:   %5 = hwarith.mul %in0, %4 {{({sv.namehint = ".*"} )?}}: (si16, si16) -> si32
 # CHECK-NEXT:   msft.output
-@unittestmodule(run_passes=False)
+@unittestmodule(run_passes=True)
 class InfixArith:
   in0 = Input(types.si16)
   in1 = Input(types.ui16)
@@ -48,7 +48,7 @@ class InfixArith:
 # CHECK-NEXT:  %c-1_i16 = hw.constant -1 {{({sv.namehint = ".*"} )?}}: i16
 # CHECK-NEXT:  %10 = comb.xor %9, %c-1_i16 {{({sv.namehint = ".*"} )?}}: i16
 # CHECK-NEXT:  msft.output
-@unittestmodule(run_passes=False)
+@unittestmodule(run_passes=True)
 class InfixLogic:
   in0 = Input(types.si16)
   in1 = Input(types.ui16)
@@ -68,7 +68,7 @@ class InfixLogic:
 # CHECK-NEXT:    %0 = comb.icmp eq %in0, %in1 {{({sv.namehint = ".*"} )?}}: i16
 # CHECK-NEXT:    %1 = comb.icmp ne %in0, %in1 {{({sv.namehint = ".*"} )?}}: i16
 # CHECK-NEXT:    msft.output
-@unittestmodule(run_passes=False)
+@unittestmodule(run_passes=True)
 class InfixComparison:
   in0 = Input(types.i16)
   in1 = Input(types.i16)
@@ -88,7 +88,7 @@ class InfixComparison:
 # CHECK-NEXT:    %2 = hwarith.add %1, %in1 {{({sv.namehint = ".*"} )?}}: (si18, si16) -> si19
 # CHECK-NEXT:    %3 = hwarith.cast %2 {{({sv.namehint = ".*"} )?}}: (si19) -> i16
 # CHECK-NEXT:    msft.output %3 {{({sv.namehint = ".*"} )?}}: i16
-@unittestmodule(run_passes=False)
+@unittestmodule(run_passes=True)
 class Multiple:
   in0 = Input(types.si16)
   in1 = Input(types.si16)
@@ -111,7 +111,7 @@ class Multiple:
 # CHECK-NEXT:    %5 = hwarith.cast %0 {{({sv.namehint = ".*"} )?}}: (si16) -> i8
 # CHECK-NEXT:    %6 = hwarith.cast %0 {{({sv.namehint = ".*"} )?}}: (si16) -> si24
 # CHECK-NEXT:    msft.output
-@unittestmodule(run_passes=False)
+@unittestmodule(run_passes=True)
 class Casting:
   in0 = Input(types.i16)
 
