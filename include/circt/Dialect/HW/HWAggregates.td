@@ -148,6 +148,7 @@ def StructCreateOp : HWOp<"struct_create", [NoSideEffect]> {
   let arguments = (ins Variadic<HWNonInOutType>:$input);
   let results = (outs StructType:$result);
   let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
 }
 
 // Extract the value of a field of a structure.
