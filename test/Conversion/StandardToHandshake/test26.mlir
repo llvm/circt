@@ -14,8 +14,7 @@
 // CHECK:           %[[VAL_8:.*]] = arith.cmpi sge, %[[VAL_7]], %[[VAL_3]]#1 : index
 // CHECK:           %[[VAL_9:.*]]:2 = fork [2] %[[VAL_8]] : i1
 // CHECK:           %[[VAL_10:.*]] = arith.index_cast %[[VAL_9]]#0 : i1 to index
-// CHECK:           %[[VAL_11:.*]] = buffer [2] fifo %[[VAL_10]] : index
-// CHECK:           %[[VAL_12:.*]] = br %[[VAL_11]] : index
+// CHECK:           %[[VAL_12:.*]] = buffer [2] fifo %[[VAL_10]] : index
 // CHECK:           %[[VAL_13:.*]], %[[VAL_14:.*]] = cond_br %[[VAL_9]]#1, %[[VAL_1]]#3 : none
 // CHECK:           %[[VAL_15:.*]], %[[VAL_16:.*]] = control_merge %[[VAL_13]] : none
 // CHECK:           sink %[[VAL_16]] : index

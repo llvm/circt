@@ -35,8 +35,7 @@
 // CHECK:           %[[VAL_34:.*]] = arith.andi %[[VAL_30]], %[[VAL_33]] : i1
 // CHECK:           %[[VAL_35:.*]]:2 = fork [2] %[[VAL_34]] : i1
 // CHECK:           %[[VAL_36:.*]] = arith.index_cast %[[VAL_35]]#0 : i1 to index
-// CHECK:           %[[VAL_37:.*]] = buffer [2] fifo %[[VAL_36]] : index
-// CHECK:           %[[VAL_38:.*]] = br %[[VAL_37]] : index
+// CHECK:           %[[VAL_38:.*]] = buffer [2] fifo %[[VAL_36]] : index
 // CHECK:           %[[VAL_39:.*]], %[[VAL_40:.*]] = cond_br %[[VAL_35]]#1, %[[VAL_10]]#7 : none
 // CHECK:           %[[VAL_41:.*]], %[[VAL_42:.*]] = control_merge %[[VAL_39]] : none
 // CHECK:           sink %[[VAL_42]] : index

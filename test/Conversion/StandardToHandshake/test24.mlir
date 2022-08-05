@@ -14,8 +14,7 @@
 // CHECK:           %[[VAL_9:.*]] = arith.cmpi sge, %[[VAL_8]], %[[VAL_3]]#1 : index
 // CHECK:           %[[VAL_10:.*]]:3 = fork [3] %[[VAL_9]] : i1
 // CHECK:           %[[VAL_11:.*]] = arith.index_cast %[[VAL_10]]#0 : i1 to index
-// CHECK:           %[[VAL_12:.*]] = buffer [2] fifo %[[VAL_11]] : index
-// CHECK:           %[[VAL_13:.*]] = br %[[VAL_12]] : index
+// CHECK:           %[[VAL_13:.*]] = buffer [2] fifo %[[VAL_11]] : index
 // CHECK:           %[[VAL_14:.*]], %[[VAL_15:.*]] = cond_br %[[VAL_10]]#2, %[[VAL_1]]#3 : none
 // CHECK:           %[[VAL_16:.*]], %[[VAL_17:.*]] = cond_br %[[VAL_10]]#1, %[[VAL_6]]#0 : index
 // CHECK:           %[[VAL_18:.*]] = merge %[[VAL_16]] : index
@@ -28,8 +27,7 @@
 // CHECK:           %[[VAL_25:.*]] = arith.cmpi sge, %[[VAL_24]], %[[VAL_22]] : index
 // CHECK:           %[[VAL_26:.*]]:2 = fork [2] %[[VAL_25]] : i1
 // CHECK:           %[[VAL_27:.*]] = arith.index_cast %[[VAL_26]]#0 : i1 to index
-// CHECK:           %[[VAL_28:.*]] = buffer [2] fifo %[[VAL_27]] : index
-// CHECK:           %[[VAL_29:.*]] = br %[[VAL_28]] : index
+// CHECK:           %[[VAL_29:.*]] = buffer [2] fifo %[[VAL_27]] : index
 // CHECK:           %[[VAL_30:.*]], %[[VAL_31:.*]] = cond_br %[[VAL_26]]#1, %[[VAL_21]]#2 : none
 // CHECK:           %[[VAL_32:.*]], %[[VAL_33:.*]] = control_merge %[[VAL_30]] : none
 // CHECK:           sink %[[VAL_33]] : index
@@ -46,8 +44,7 @@
 // CHECK:           %[[VAL_44:.*]] = arith.cmpi sge, %[[VAL_43]], %[[VAL_41]] : index
 // CHECK:           %[[VAL_45:.*]]:2 = fork [2] %[[VAL_44]] : i1
 // CHECK:           %[[VAL_46:.*]] = arith.index_cast %[[VAL_45]]#0 : i1 to index
-// CHECK:           %[[VAL_47:.*]] = buffer [2] fifo %[[VAL_46]] : index
-// CHECK:           %[[VAL_48:.*]] = br %[[VAL_47]] : index
+// CHECK:           %[[VAL_48:.*]] = buffer [2] fifo %[[VAL_46]] : index
 // CHECK:           %[[VAL_49:.*]], %[[VAL_50:.*]] = cond_br %[[VAL_45]]#1, %[[VAL_40]]#2 : none
 // CHECK:           %[[VAL_51:.*]], %[[VAL_52:.*]] = control_merge %[[VAL_49]] : none
 // CHECK:           sink %[[VAL_52]] : index

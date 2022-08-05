@@ -46,8 +46,7 @@ func.func @sub(%arg0 : i32, %arg1: i32) -> i32 {
 // CHECK:           %[[VAL_6:.*]] = merge %[[VAL_2]] : i1
 // CHECK:           %[[VAL_7:.*]]:4 = fork [4] %[[VAL_6]] : i1
 // CHECK:           %[[VAL_8:.*]] = arith.index_cast %[[VAL_7]]#0 : i1 to index
-// CHECK:           %[[VAL_9:.*]] = buffer [2] fifo %[[VAL_8]] : index
-// CHECK:           %[[VAL_10:.*]] = br %[[VAL_9]] : index
+// CHECK:           %[[VAL_10:.*]] = buffer [2] fifo %[[VAL_8]] : index
 // CHECK:           %[[VAL_11:.*]]:2 = fork [2] %[[VAL_10]] : index
 // CHECK:           %[[VAL_12:.*]], %[[VAL_13:.*]] = cond_br %[[VAL_7]]#3, %[[VAL_4]] : i32
 // CHECK:           %[[VAL_14:.*]], %[[VAL_15:.*]] = cond_br %[[VAL_7]]#2, %[[VAL_5]] : i32

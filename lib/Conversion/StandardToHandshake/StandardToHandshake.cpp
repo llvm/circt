@@ -643,8 +643,8 @@ private:
   using BlockPairs = SmallVector<BlockPair>;
   LogicalResult findBlockPairs(BlockPairs &blockPairs);
 
-  BranchOp buildSplitNetwork(Block *splitBlock);
-  void buildMergeNetwork(Block *mergeBlock, BranchOp buf);
+  BufferOp buildSplitNetwork(Block *splitBlock);
+  void buildMergeNetwork(Block *mergeBlock, BufferOp buf);
 
   bool formsIrreducibleCF(Block *splitBlock, Block *mergeBlock);
 };
@@ -763,7 +763,7 @@ LogicalResult FeedForwardNetworkRewriter::apply() {
   return success();
 }
 
-BranchOp FeedForwardNetworkRewriter::buildSplitNetwork(Block *splitBlock) {
+BufferOp FeedForwardNetworkRewriter::buildSplitNetwork(Block *splitBlock) {
   SmallVector<handshake::ConditionalBranchOp> branches;
   llvm::copy(splitBlock->getOps<handshake::ConditionalBranchOp>(),
              std::back_inserter(branches));
@@ -784,15 +784,13 @@ BranchOp FeedForwardNetworkRewriter::buildSplitNetwork(Block *splitBlock) {
   // TODO how to size these?
   // Longest path in a CFG-DAG would be O(#blocks)
 
-  auto buffer = rewriter.create<handshake::BufferOp>(
+  return rewriter.create<handshake::BufferOp>(
       cond.getLoc(), rewriter.getIndexType(), bufferSize, condAsIndex,
       /*bufferType=*/BufferTypeEnum::fifo);
-
-  return rewriter.create<handshake::BranchOp>(cond.getLoc(), buffer);
 }
 
 void FeedForwardNetworkRewriter::buildMergeNetwork(Block *mergeBlock,
-                                                   BranchOp buf) {
+                                                   BufferOp buf) {
   // Replace control merge with mux
   auto ctrlMerges = mergeBlock->getOps<handshake::ControlMergeOp>();
   assert(std::distance(ctrlMerges.begin(), ctrlMerges.end()) == 1);
