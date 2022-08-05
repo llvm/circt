@@ -909,7 +909,7 @@ firrtl.circuit "DupSymField" {
 
 firrtl.circuit "func2" {
   firrtl.module @func2(in %ref_in1: !firrtl.ref<uint<1>>, out %ref_out: !firrtl.ref<uint<1>>) {
-    // expected-error @+1 {{connect has invalid flow for Ref type ports: the source expression "ref_in1" and destination expression "ref_out" both have same port kind, expected Module port to Instance connections only}}
+    // expected-error @+1 {{connect has invalid flow for ref type ports: the source expression "ref_in1" and destination expression "ref_out" both have same port kind, expected Module port to Instance connections only}}
     firrtl.strictconnect %ref_out, %ref_in1 : !firrtl.ref<uint<1>>
   }
 }
