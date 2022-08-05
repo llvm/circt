@@ -117,6 +117,17 @@ static bool isSelfWrite(Value dst, Value src) {
 bool PrettifyVerilogPass::splitStructAssignment(OpBuilder &builder,
                                                 hw::StructType ty, Value dst,
                                                 Value src) {
+  // Break up struct creation into assignments to individual fields.
+  if (auto op = dyn_cast_or_null<hw::StructCreateOp>(src.getDefiningOp())) {
+    auto loc = op.getLoc();
+    for (const auto &[field, v] : llvm::zip(ty.getElements(), op.getInput())) {
+      auto ref = builder.create<sv::StructFieldInOutOp>(loc, dst, field.name);
+      if (!splitAssignment(builder, ref, v))
+        builder.create<sv::PAssignOp>(loc, ref, v);
+    }
+    return true;
+  }
+
   // Follow a chain of injects to find all fields overwritten and separate
   // them into a series of field updates instead of a whole-structure write.
   DenseMap<StringAttr, std::pair<Location, Value>> fields;
@@ -153,25 +164,25 @@ bool PrettifyVerilogPass::splitStructAssignment(OpBuilder &builder,
 bool PrettifyVerilogPass::splitArrayAssignment(OpBuilder &builder,
                                                hw::ArrayType ty, Value dst,
                                                Value src) {
-  // Follow a chain of concat + slice operations that alter a single element.
+  // Break up array creation into assignments to individual elements.
   if (auto op = dyn_cast_or_null<hw::ArrayCreateOp>(src.getDefiningOp())) {
-    // TODO: consider breaking up array assignments into assignments
-    // to individual fields.
-    auto ty = hw::type_cast<hw::ArrayType>(op.getType());
-    if (ty.getSize() != 1)
-      return false;
-    APInt zero(std::max(1u, llvm::Log2_64_Ceil(ty.getSize())), 0);
-
-    Value value = op.getInputs()[0];
     auto loc = op.getLoc();
-    auto index = builder.create<hw::ConstantOp>(loc, zero);
+    auto ty = hw::type_cast<hw::ArrayType>(op.getType());
+    size_t arraySize = ty.getSize();
+    unsigned indexWidth = std::max(1u, llvm::Log2_64_Ceil(arraySize));
+    for (auto &idxAndElem : llvm::enumerate(llvm::reverse(op.getInputs()))) {
+      APInt index(indexWidth, idxAndElem.index());
 
-    auto field = builder.create<sv::ArrayIndexInOutOp>(loc, dst, index);
-    if (!splitAssignment(builder, field, value))
-      builder.create<sv::PAssignOp>(loc, field, value);
+      auto indexOp = builder.create<hw::ConstantOp>(loc, index);
+      auto field = builder.create<sv::ArrayIndexInOutOp>(loc, dst, indexOp);
+
+      if (!splitAssignment(builder, field, idxAndElem.value()))
+        builder.create<sv::PAssignOp>(loc, field, idxAndElem.value());
+    }
     return true;
   }
 
+  // Follow a chain of concat + slice operations that alter a single element.
   // TODO: generalise to ranges and arbitrary concatenations.
   SmallVector<std::tuple<APInt, Location, Value>> fields;
   while (auto concat =

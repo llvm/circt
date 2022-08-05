@@ -564,3 +564,39 @@ hw.module private @ConnectNestedFieldsAndIndices(%clock: i1, %reset: i1, %value:
   // VERILOG:      always @(posedge clock)
   // VERILOG-NEXT:   r[3'h1].a[2'h1].b <= value;
 }
+
+// CHECK-LABEL: hw.module private @ArrayCreateAssignment
+hw.module private @ArrayCreateAssignment(%clock: i1, %c0: i1, %c1: i1, %c2: i1) -> (o: !hw.array<3xi1>) {
+  %r = sv.reg : !hw.inout<array<3xi1>>
+  %0 = sv.read_inout %r : !hw.inout<array<3xi1>>
+
+  %val = hw.array_create %c2, %c1, %c0 : i1
+  sv.always posedge %clock {
+    sv.passign %r, %val : !hw.array<3xi1>
+  }
+
+  // VERILOG-LABEL: module ArrayCreateAssignment
+  // VERILOG: r[2'h0] <= c0;
+  // VERILOG: r[2'h1] <= c1;
+  // VERILOG: r[2'h2] <= c2;
+
+  hw.output %0 : !hw.array<3xi1>
+}
+
+// CHECK-LABEL: hw.module private @StructCreateAssignment
+hw.module private @StructCreateAssignment(%clock: i1, %a: i1, %b: i1, %c: i1) -> (o: !hw.struct<a: i1, b: i1, c: i1>) {
+  %r = sv.reg : !hw.inout<struct<a: i1, b: i1, c: i1>>
+  %0 = sv.read_inout %r : !hw.inout<struct<a: i1, b: i1, c: i1>>
+
+  %val = hw.struct_create (%a, %b, %c) : !hw.struct<a: i1, b: i1, c: i1>
+  sv.always posedge %clock {
+    sv.passign %r, %val : !hw.struct<a: i1, b: i1, c: i1>
+  }
+
+  // VERILOG-LABEL: module StructCreateAssignment
+  // VERILOG: r.a <= a;
+  // VERILOG: r.b <= b;
+  // VERILOG: r.c <= c;
+
+  hw.output %0 : !hw.struct<a: i1, b: i1, c: i1>
+}
