@@ -1460,15 +1460,15 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-DAG: %6 = hw.struct_extract %5["a"] : !hw.struct<a: !hw.array<3xstruct<b: i2>>>
     // CHECK-DAG: %7 = hw.array_get %6[%c1_i2_1] : !hw.array<3xstruct<b: i2>>
     // CHECK-DAG: %8 = hw.struct_inject %7["b"], %value : !hw.struct<b: i2>
-    // CHECK-DAG: %9 = hw.array_slice %6[%c0_i2] : (!hw.array<3xstruct<b: i2>>) -> !hw.array<1xstruct<b: i2>>
-    // CHECK-DAG: %10 = hw.array_create %8 : !hw.struct<b: i2>
-    // CHECK-DAG: %11 = hw.array_slice %6[%c-2_i2] : (!hw.array<3xstruct<b: i2>>) -> !hw.array<1xstruct<b: i2>>
-    // CHECK-DAG: %12 = hw.array_concat %9, %10, %11 : !hw.array<1xstruct<b: i2>>, !hw.array<1xstruct<b: i2>>, !hw.array<1xstruct<b: i2>>
+    // CHECK-DAG: [[L0_LO:%.+]] = hw.array_slice %6[%c0_i2] : (!hw.array<3xstruct<b: i2>>) -> !hw.array<1xstruct<b: i2>>
+    // CHECK-DAG: [[L0_MID:%.+]] = hw.array_create %8 : !hw.struct<b: i2>
+    // CHECK-DAG: [[L0_HI:%.+]] = hw.array_slice %6[%c-2_i2] : (!hw.array<3xstruct<b: i2>>) -> !hw.array<1xstruct<b: i2>>
+    // CHECK-DAG: %12 = hw.array_concat [[L0_HI]], [[L0_MID]], [[L0_LO]] : !hw.array<1xstruct<b: i2>>, !hw.array<1xstruct<b: i2>>, !hw.array<1xstruct<b: i2>>
     // CHECK-DAG: %13 = hw.struct_inject %5["a"], %12 : !hw.struct<a: !hw.array<3xstruct<b: i2>>>
-    // CHECK-DAG: %14 = hw.array_slice %count[%c0_i3] : (!hw.array<5xstruct<a: !hw.array<3xstruct<b: i2>>>>) -> !hw.array<1xstruct<a: !hw.array<3xstruct<b: i2>>>>
-    // CHECK-DAG: %15 = hw.array_create %13 : !hw.struct<a: !hw.array<3xstruct<b: i2>>>
-    // CHECK-DAG: %16 = hw.array_slice %count[%c2_i3] : (!hw.array<5xstruct<a: !hw.array<3xstruct<b: i2>>>>) -> !hw.array<3xstruct<a: !hw.array<3xstruct<b: i2>>>>
-    // CHECK-DAG: %17 = hw.array_concat %14, %15, %16 : !hw.array<1xstruct<a: !hw.array<3xstruct<b: i2>>>>, !hw.array<1xstruct<a: !hw.array<3xstruct<b: i2>>>>, !hw.array<3xstruct<a: !hw.array<3xstruct<b: i2>>>>
+    // CHECK-DAG: [[L1_LO:%.+]] = hw.array_slice %count[%c0_i3] : (!hw.array<5xstruct<a: !hw.array<3xstruct<b: i2>>>>) -> !hw.array<1xstruct<a: !hw.array<3xstruct<b: i2>>>>
+    // CHECK-DAG: [[L1_MID:%.+]] = hw.array_create %13 : !hw.struct<a: !hw.array<3xstruct<b: i2>>>
+    // CHECK-DAG: [[L1_HI:%.+]] = hw.array_slice %count[%c2_i3] : (!hw.array<5xstruct<a: !hw.array<3xstruct<b: i2>>>>) -> !hw.array<3xstruct<a: !hw.array<3xstruct<b: i2>>>>
+    // CHECK-DAG: %17 = hw.array_concat [[L1_HI]], [[L1_MID]], [[L1_LO]] : !hw.array<3xstruct<a: !hw.array<3xstruct<b: i2>>>>, !hw.array<1xstruct<a: !hw.array<3xstruct<b: i2>>>>, !hw.array<1xstruct<a: !hw.array<3xstruct<b: i2>>>>
   }
 
   // CHECK-LABEL: hw.module @ConnectSubindex(%clock: i1, %reset: i1, %value: i2) -> (result: !hw.array<3xi2>)
@@ -1477,17 +1477,16 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
                                  in %value: !firrtl.uint<2>,
                                  out %result: !firrtl.vector<uint<2>, 3>) {
     %count = firrtl.reg %clock: !firrtl.vector<uint<2>, 3>
-    // CHECK: %count = seq.firreg %4 clock %clock : !hw.array<3xi2>
+    // CHECK: %count = seq.firreg [[REG:%.+]] clock %clock : !hw.array<3xi2>
 
     firrtl.strictconnect %result, %count : !firrtl.vector<uint<2>, 3>
     %field = firrtl.subindex %count[1] : !firrtl.vector<uint<2>, 3>
     firrtl.strictconnect %field, %value : !firrtl.uint<2>
 
-    // CHECK: %0 = hw.array_get %count[%c1_i2] : !hw.array<3xi2>
-    // CHECK: %1 = hw.array_slice %count[%c0_i2] : (!hw.array<3xi2>) -> !hw.array<1xi2>
-    // CHECK: %2 = hw.array_create %value : i2
-    // CHECK: %3 = hw.array_slice %count[%c-2_i2] : (!hw.array<3xi2>) -> !hw.array<1xi2>
-    // CHECK: %4 = hw.array_concat %1, %2, %3 : !hw.array<1xi2>, !hw.array<1xi2>, !hw.array<1xi2>
+    // CHECK: [[HI:%.+]] = hw.array_slice %count[%c-2_i2] : (!hw.array<3xi2>) -> !hw.array<1xi2>
+    // CHECK: [[MID:%.+]] = hw.array_create %value : i2
+    // CHECK: [[LO:%.+]] = hw.array_slice %count[%c0_i2] : (!hw.array<3xi2>) -> !hw.array<1xi2>
+    // CHECK: [[REG]] = hw.array_concat [[HI]], [[MID]], [[LO]] : !hw.array<1xi2>, !hw.array<1xi2>, !hw.array<1xi2>
 
     // CHECK: hw.output %count : !hw.array<3xi2>
   }
@@ -1520,9 +1519,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %field = firrtl.subindex %count[0] : !firrtl.vector<uint<2>, 3>
     firrtl.strictconnect %field, %value : !firrtl.uint<2>
 
-    // CHECK: [[ELEM:%.+]] = hw.array_create %value : i2
     // CHECK: [[REST:%.+]] = hw.array_slice %count[%c1_i2] : (!hw.array<3xi2>) -> !hw.array<2xi2>
-    // CHECK: [[INPUT]] = hw.array_concat [[ELEM]], [[REST]] : !hw.array<1xi2>, !hw.array<2xi2>
+    // CHECK: [[ELEM:%.+]] = hw.array_create %value : i2
+    // CHECK: [[INPUT]] = hw.array_concat [[REST]], [[ELEM]] : !hw.array<2xi2>, !hw.array<1xi2>
 
     // CHECK: hw.output %count : !hw.array<3xi2>
   }
@@ -1539,9 +1538,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %field = firrtl.subindex %count[2] : !firrtl.vector<uint<2>, 3>
     firrtl.strictconnect %field, %value : !firrtl.uint<2>
 
-    // CHECK: [[REST:%.+]] = hw.array_slice %count[%c0_i2] : (!hw.array<3xi2>) -> !hw.array<2xi2>
     // CHECK: [[ELEM:%.+]] = hw.array_create %value : i2
-    // CHECK: [[INPUT]] = hw.array_concat [[REST]], [[ELEM]] : !hw.array<2xi2>, !hw.array<1xi2>
+    // CHECK: [[REST:%.+]] = hw.array_slice %count[%c0_i2] : (!hw.array<3xi2>) -> !hw.array<2xi2>
+    // CHECK: [[INPUT]] = hw.array_concat  [[ELEM]], [[REST]] : !hw.array<1xi2>, !hw.array<2xi2>
 
     // CHECK: hw.output %count : !hw.array<3xi2>
   }
@@ -1552,7 +1551,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
                                  in %value: !firrtl.uint<2>,
                                  out %result: !firrtl.vector<uint<2>, 5>) {
     %count = firrtl.reg %clock: !firrtl.vector<uint<2>, 5>
-    // CHECK: %count = seq.firreg %13 clock %clock : !hw.array<5xi2>
+    // CHECK: %count = seq.firreg [[NEXT:%.+]] clock %clock : !hw.array<5xi2>
 
     firrtl.strictconnect %result, %count : !firrtl.vector<uint<2>, 5>
 
@@ -1563,17 +1562,17 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %field5 = firrtl.subindex %count[4] : !firrtl.vector<uint<2>, 5>
     firrtl.strictconnect %field5, %value : !firrtl.uint<2>
 
-    // CHECK-DAG: %1 = hw.array_slice %count[%c0_i3] : (!hw.array<5xi2>) -> !hw.array<1xi2>
-    // CHECK-DAG: %2 = hw.array_create %value : i2
-    // CHECK-DAG: %3 = hw.array_slice %count[%c2_i3] : (!hw.array<5xi2>) -> !hw.array<3xi2>
-    // CHECK-DAG: %4 = hw.array_concat %1, %2, %3 : !hw.array<1xi2>, !hw.array<1xi2>, !hw.array<3xi2>
-    // CHECK-DAG: %6 = hw.array_slice %4[%c0_i3] : (!hw.array<5xi2>) -> !hw.array<2xi2>
-    // CHECK-DAG: %7 = hw.array_create %value : i2
-    // CHECK-DAG: %8 = hw.array_slice %4[%c3_i3] : (!hw.array<5xi2>) -> !hw.array<2xi2>
-    // CHECK-DAG: %9 = hw.array_concat %6, %7, %8 : !hw.array<2xi2>, !hw.array<1xi2>, !hw.array<2xi2>
-    // CHECK-DAG: %11 = hw.array_slice %9[%c0_i3] : (!hw.array<5xi2>) -> !hw.array<4xi2>
-    // CHECK-DAG: %12 = hw.array_create %value : i2
-    // CHECK-DAG: %13 = hw.array_concat %11, %12 : !hw.array<4xi2>, !hw.array<1xi2>
+    // CHECK-DAG: [[L0_LO:%.+]] = hw.array_slice %count[%c0_i3] : (!hw.array<5xi2>) -> !hw.array<1xi2>
+    // CHECK-DAG: [[L0_MID:%.+]] = hw.array_create %value : i2
+    // CHECK-DAG: [[L0_HI:%.+]] = hw.array_slice %count[%c2_i3] : (!hw.array<5xi2>) -> !hw.array<3xi2>
+    // CHECK-DAG: [[IN:%.+]] = hw.array_concat [[L0_HI]], [[L0_MID]], [[L0_LO]] : !hw.array<3xi2>, !hw.array<1xi2>, !hw.array<1xi2>
+    // CHECK-DAG: [[L1_LO:%.+]] = hw.array_slice [[IN]][%c0_i3] : (!hw.array<5xi2>) -> !hw.array<2xi2>
+    // CHECK-DAG: [[L1_MID:%.+]] = hw.array_create %value : i2
+    // CHECK-DAG: [[L1_HI:%.+]] = hw.array_slice %4[%c3_i3] : (!hw.array<5xi2>) -> !hw.array<2xi2>
+    // CHECK-DAG: [[L2_LO:%.+]] = hw.array_concat [[L1_HI]], [[L1_MID]], [[L1_LO]] : !hw.array<2xi2>, !hw.array<1xi2>, !hw.array<2xi2>
+    // CHECK-DAG: [[L3_LO:%.+]] = hw.array_slice [[L2_LO]][%c0_i3] : (!hw.array<5xi2>) -> !hw.array<4xi2>
+    // CHECK-DAG: [[L3_MID:%.+]] = hw.array_create %value : i2
+    // CHECK-DAG: [[NEXT]] = hw.array_concat [[L3_MID]], [[L3_LO]] : !hw.array<1xi2>, !hw.array<4xi2>
 
     // CHECK: hw.output %count : !hw.array<5xi2>
   }
@@ -1594,14 +1593,15 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-DAG: %0 = hw.array_get %count[%c1_i2] : !hw.array<3xarray<3xi2>>
     // CHECK-DAG: %1 = hw.array_get %0[%c1_i2] : !hw.array<3xi2>
     // CHECK-DAG: %2 = hw.array_get %count[%c1_i2_0] : !hw.array<3xarray<3xi2>>
-    // CHECK-DAG: %3 = hw.array_slice %2[%c0_i2] : (!hw.array<3xi2>) -> !hw.array<1xi2>
+    // CHECK-DAG: [[IN_LO:%.+]] = hw.array_slice %2[%c0_i2] : (!hw.array<3xi2>) -> !hw.array<1xi2>
     // CHECK-DAG: %4 = hw.array_create %value : i2
-    // CHECK-DAG: %5 = hw.array_slice %2[%c-2_i2] : (!hw.array<3xi2>) -> !hw.array<1xi2>
-    // CHECK-DAG: %6 = hw.array_concat %3, %4, %5 : !hw.array<1xi2>, !hw.array<1xi2>, !hw.array<1xi2>
-    // CHECK-DAG: %7 = hw.array_slice %count[%c0_i2] : (!hw.array<3xarray<3xi2>>) -> !hw.array<1xarray<3xi2>>
-    // CHECK-DAG: %8 = hw.array_create %6 : !hw.array<3xi2>
-    // CHECK-DAG: %9 = hw.array_slice %count[%c-2_i2] : (!hw.array<3xarray<3xi2>>) -> !hw.array<1xarray<3xi2>>
-    // CHECK-DAG: %10 = hw.array_concat %7, %8, %9 : !hw.array<1xarray<3xi2>>, !hw.array<1xarray<3xi2>>, !hw.array<1xarray<3xi2>>
+    // CHECK-DAG: [[IN_HI:%.+]] = hw.array_slice %2[%c-2_i2] : (!hw.array<3xi2>) -> !hw.array<1xi2>
+    // CHECK-DAG: %6 = hw.array_concat [[IN_HI]], %4, [[IN_LO]] : !hw.array<1xi2>, !hw.array<1xi2>, !hw.array<1xi2>
+    // CHECK-DAG: [[OUT_LO:%.+]] = hw.array_slice %count[%c0_i2] : (!hw.array<3xarray<3xi2>>) -> !hw.array<1xarray<3xi2>>
+    // CHECK-DAG: [[OUT_MID:%.+]] = hw.array_create %6 : !hw.array<3xi2>
+    // CHECK-DAG: [[OUT_HI:%.+]] = hw.array_slice %count[%c-2_i2] : (!hw.array<3xarray<3xi2>>) -> !hw.array<1xarray<3xi2>>
+
+    // CHECK-DAG: %10 = hw.array_concat [[OUT_HI]], [[OUT_MID]], [[OUT_LO]] : !hw.array<1xarray<3xi2>>, !hw.array<1xarray<3xi2>>, !hw.array<1xarray<3xi2>>
 
     // CHECK: hw.output %count : !hw.array<3xarray<3xi2>>
   }

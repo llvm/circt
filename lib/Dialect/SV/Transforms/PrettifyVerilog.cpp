@@ -184,10 +184,10 @@ bool PrettifyVerilogPass::splitArrayAssignment(OpBuilder &builder,
     if (concat.getNumOperands() == 2) {
       auto c = concat.getInputs();
 
-      auto lhs = dyn_cast_or_null<hw::ArraySliceOp>(c[0].getDefiningOp());
-      auto rhs = dyn_cast_or_null<hw::ArraySliceOp>(c[1].getDefiningOp());
-      auto midL = dyn_cast_or_null<hw::ArrayCreateOp>(c[0].getDefiningOp());
-      auto midR = dyn_cast_or_null<hw::ArrayCreateOp>(c[1].getDefiningOp());
+      auto lhs = dyn_cast_or_null<hw::ArraySliceOp>(c[1].getDefiningOp());
+      auto rhs = dyn_cast_or_null<hw::ArraySliceOp>(c[0].getDefiningOp());
+      auto midL = dyn_cast_or_null<hw::ArrayCreateOp>(c[1].getDefiningOp());
+      auto midR = dyn_cast_or_null<hw::ArrayCreateOp>(c[0].getDefiningOp());
 
       auto size = hw::type_cast<hw::ArrayType>(concat.getType()).getSize();
       if (lhs && midR) {
@@ -216,9 +216,9 @@ bool PrettifyVerilogPass::splitArrayAssignment(OpBuilder &builder,
     // n))
     if (concat.getNumOperands() == 3) {
       auto c = concat.getInputs();
-      auto lhs = dyn_cast_or_null<hw::ArraySliceOp>(c[0].getDefiningOp());
+      auto rhs = dyn_cast_or_null<hw::ArraySliceOp>(c[0].getDefiningOp());
       auto mid = dyn_cast_or_null<hw::ArrayCreateOp>(c[1].getDefiningOp());
-      auto rhs = dyn_cast_or_null<hw::ArraySliceOp>(c[2].getDefiningOp());
+      auto lhs = dyn_cast_or_null<hw::ArraySliceOp>(c[2].getDefiningOp());
       if (!lhs || !mid || !rhs || mid.getInputs().size() != 1)
         break;
       auto elem = mid.getInputs()[0];
