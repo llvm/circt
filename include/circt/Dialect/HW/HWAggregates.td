@@ -67,6 +67,8 @@ def ArrayConcatOp : HWOp<"array_concat", [NoSideEffect]> {
     // ValueRange needs to contain at least one element.
     OpBuilder<(ins "ValueRange":$inputs)>
   ];
+
+  let hasCanonicalizeMethod = 1;
 }
 
 def ArraySliceOp : HWOp<"array_slice", [NoSideEffect]> {
@@ -99,6 +101,7 @@ def ArraySliceOp : HWOp<"array_slice", [NoSideEffect]> {
   let results = (outs ArrayType:$dst);
 
   let hasVerifier = 1;
+  let hasCanonicalizeMethod = 1;
 
   let assemblyFormat = [{
     $input`[`$lowIndex`]` attr-dict `:`
@@ -137,6 +140,7 @@ def ArrayGetOp : HWOp<"array_get",
   ];
 
   let hasFolder = 1;
+  let hasCanonicalizeMethod = 1;
 }
 
 //===----------------------------------------------------------------------===//
