@@ -703,8 +703,6 @@ FeedForwardNetworkRewriter::findBlockPairs(BlockPairs &blockPairs) {
   assert(loopsHaveSingleExit(loopAnalysis) &&
          "expected loop to only have one exit block.");
 
-  // TODO: cannot handle irreducible control flow at this point.
-
   for (Block &b : r) {
     if (b.getNumSuccessors() < 2)
       continue;
@@ -739,8 +737,7 @@ FeedForwardNetworkRewriter::findBlockPairs(BlockPairs &blockPairs) {
     if (nonLoopPreds > 2)
       return parentOp
                  ->emitError("expected a merge block to have two predecessors. "
-                             "Did you run the "
-                             "merge block insertion pass?")
+                             "Did you run the merge block insertion pass?")
                  .attachNote(findBranchToBlock(mergeBlock)->getLoc())
              << "This branch jumps to the illegal block";
 
