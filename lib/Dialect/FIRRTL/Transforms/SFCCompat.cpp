@@ -53,20 +53,12 @@ void SFCCompatPass::runOnOperation() {
     if (!reg)
       continue;
 
-    // Skip if the reg has an aggregate type.
-    // TODO: Support aggregate types.
-    if (reg.getType().isa<FVectorType, BundleType>()) {
-      reg.emitWarning() << "Aggregate values are not supported by SFCCompat "
-                           "pass. This may result in incorrect results";
-      continue;
-    }
-
     // If the `RegResetOp` has an invalidated initialization, then replace it
     // with a `RegOp`.
-    if (isModuleScopedDrivenBy<InvalidValueOp>(reg.getResetValue(), true, false,
-                                               false)) {
-      LLVM_DEBUG(llvm::dbgs() << "  - RegResetOp '" << reg.getName()
-                              << "' will be replaced with a RegOp\n");
+    if (walkDrivers(reg.getResetValue(), true, false, false,
+                    [](FieldRef dst, FieldRef src) {
+                      return isa<InvalidValueOp>(src.getDefiningOp());
+                    })) {
       ImplicitLocOpBuilder builder(reg.getLoc(), reg);
       RegOp newReg = builder.create<RegOp>(
           reg.getType(), reg.getClockVal(), reg.getName(), reg.getNameKind(),
@@ -82,15 +74,28 @@ void SFCCompatPass::runOnOperation() {
     // generate an error.  This implements the SFC's CheckResets pass.
     if (!reg.getResetSignal().getType().isa<AsyncResetType>())
       continue;
-    if (isModuleScopedDrivenBy<ConstantOp, InvalidValueOp, SpecialConstantOp>(
-            reg.getResetValue(), true, true, true))
+    if (walkDrivers(
+            reg.getResetValue(), true, true, true,
+            [&](FieldRef dst, FieldRef src) {
+              if (isa<ConstantOp, InvalidValueOp, SpecialConstantOp>(
+                      src.getDefiningOp()))
+                return true;
+              auto diag = emitError(reg.getLoc());
+              bool rootKnown;
+              auto fieldName = getFieldName(dst, rootKnown);
+              diag << "register " << reg.getNameAttr()
+                   << " has an async reset, but its reset value";
+              if (rootKnown)
+                diag << " \"" << fieldName << "\"";
+              diag << " is not driven with a constant value through wires, "
+                      "nodes, or connects";
+              fieldName = getFieldName(src, rootKnown);
+              diag.attachNote(src.getLoc())
+                  << "reset driver is "
+                  << (rootKnown ? ("\"" + fieldName + "\"") : "here");
+              return false;
+            }))
       continue;
-    auto resetDriver =
-        getModuleScopedDriver(reg.getResetValue(), true, true, true);
-    auto diag = reg.emitOpError()
-                << "has an async reset, but its reset value is not driven with "
-                   "a constant value through wires, nodes, or connects";
-    diag.attachNote(resetDriver.getLoc()) << "reset driver is here";
     return signalPassFailure();
   }
 
