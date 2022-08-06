@@ -244,10 +244,8 @@ bool circt::firrtl::walkDrivers(Value val, bool lookThroughWires,
   // all subaccesses to the target, but `fieldID` for the current op only needs
   // to represent the all subaccesses between the current op and the target.
   struct StackElement {
-    StackElement(FieldRef dst, FieldRef src, Value current,
-                 Value::user_iterator it, Value::user_iterator end,
-                 unsigned fieldID)
-        : dst(dst), src(src), current(current), it(it), end(end),
+    StackElement(FieldRef dst, FieldRef src, Value current, unsigned fieldID)
+        : dst(dst), src(src), current(current), it(current.user_begin()),
           fieldID(fieldID) {}
     // The elements of the destination that this refers to.
     FieldRef dst;
@@ -258,9 +256,9 @@ bool circt::firrtl::walkDrivers(Value val, bool lookThroughWires,
     // is used so we can check if a connect op is reading or driving from this
     // value.
     Value current;
-    // An iterator of the users of the current value.
+    // An iterator of the users of the current value. An end() iterator can be
+    // constructed from the `current` value.
     Value::user_iterator it;
-    Value::user_iterator end;
     // A filter for which fields of the current value we care about.
     unsigned fieldID;
   };
@@ -271,8 +269,7 @@ bool circt::firrtl::walkDrivers(Value val, bool lookThroughWires,
   // being eventually processed as well.
   auto addToWorklist = [&](FieldRef dst, FieldRef src) {
     auto value = src.getValue();
-    workStack.emplace_back(dst, src, value, value.user_begin(),
-                           value.user_end(), src.getFieldID());
+    workStack.emplace_back(dst, src, value, src.getFieldID());
   };
 
   // Create an initial fieldRef from the input value.  As a starting state, the
@@ -365,15 +362,15 @@ bool circt::firrtl::walkDrivers(Value val, bool lookThroughWires,
       if (workStack.empty())
         return true;
       auto &back = workStack.back();
+      auto current = back.current;
       // Pop the current element if we have processed all users.
-      if (back.it == back.end) {
+      if (back.it == current.user_end()) {
         workStack.pop_back();
         continue;
       }
 
       original = back.dst;
       fieldRef = back.src;
-      auto current = back.current;
       auto *user = *back.it++;
       auto fieldID = back.fieldID;
 
@@ -387,8 +384,7 @@ bool circt::firrtl::walkDrivers(Value val, bool lookThroughWires,
         auto subRef = fieldRef.getSubField(subID);
         auto subOriginal = original.getSubField(subID);
         auto value = subfield.getResult();
-        workStack.emplace_back(subOriginal, subRef, value, value.user_begin(),
-                               value.user_end(), fieldID - subID);
+        workStack.emplace_back(subOriginal, subRef, value, fieldID - subID);
       } else if (auto subindex = dyn_cast<SubindexOp>(user)) {
         auto vectorType = subindex.getInput().getType().cast<FVectorType>();
         auto index = subindex.getIndex();
@@ -399,8 +395,7 @@ bool circt::firrtl::walkDrivers(Value val, bool lookThroughWires,
         auto subRef = fieldRef.getSubField(subID);
         auto subOriginal = original.getSubField(subID);
         auto value = subindex.getResult();
-        workStack.emplace_back(subOriginal, subRef, value, value.user_begin(),
-                               value.user_end(), fieldID - subID);
+        workStack.emplace_back(subOriginal, subRef, value, fieldID - subID);
       } else if (auto connect = dyn_cast<FConnectLike>(user)) {
         // Make sure that this connect is driving the value.
         if (connect.getDest() != current)
