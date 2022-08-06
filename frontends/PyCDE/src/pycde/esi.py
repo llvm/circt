@@ -1,11 +1,15 @@
+from pycde.system import System
+from .module import Generator, _module_base, _SpecializedModule
 from pycde.value import ChannelValue, Value
-from .common import Input, Output, InputChannel, OutputChannel, _PyProxy
+from .common import AppID, Input, Output, InputChannel, OutputChannel, _PyProxy
 from circt.dialects import esi as raw_esi, hw
 from pycde.pycde_types import ChannelType, PyCDEType, types
 
 import mlir.ir as ir
 
-import typing
+from typing import Callable, Dict, List, Tuple, Type, Union
+
+from pycde import support
 
 ToServer = InputChannel
 FromServer = OutputChannel
@@ -14,7 +18,7 @@ FromServer = OutputChannel
 class ServiceDecl(_PyProxy):
   """Declare an ESI service interface."""
 
-  def __init__(self, cls: typing.Type):
+  def __init__(self, cls: Type):
     self.name = cls.__name__
     for (attr_name, attr) in cls.__dict__.items():
       if isinstance(attr, InputChannel):
@@ -101,69 +105,70 @@ def Cosim(decl: ServiceDecl, clk, rst):
                             inputs=[clk.value, rst.value])
 
 
-class ServiceInstanceOp:
-
-  def __init__(self, result: typing.List[PyCDEType],
-               service_symbol: ir.FlatSymbolRefAttr, impl_type: ir.Attribute,
-               inputs: typing.List[Value],
-               output_port_lookup: typing.Dict[str, int]):
-    self._op = raw_esi.ServiceInstanceOp(result, service_symbol, impl_type,
-                                         inputs)
-    self._output_port_lookup = output_port_lookup
-
-  def __getattr__(self, name: str) -> object:
-    if (name in self._output_port_lookup):
-      return Value(self._op.results[self._output_port_lookup[name][0]])
-    raise AttributeError(name)
-
-
 def ServiceImplementation(decl: ServiceDecl):
 
-  class ServiceImplementation:
+  def wrap(service_impl, decl: ServiceDecl = decl):
 
-    def __init__(self, service_impl_class):
-      self._service_impl_class = service_impl_class
-      self._impl_name = ir.StringAttr.get("pycde:" +
-                                          service_impl_class.__name__)
-      output_ports = [
-          pn for pn in [(name, getattr(service_impl_class, name))
-                        for name in dir(service_impl_class)]
-          if isinstance(pn[1], Output)
-      ]
-      self._output_port_lookup = {
-          pn[0]: (port_num, pn[1]) for (port_num, pn) in enumerate(output_ports)
-      }
-
-      input_ports = [
-          pn for pn in [(name, getattr(service_impl_class, name))
-                        for name in dir(service_impl_class)]
-          if isinstance(pn[1], Input)
-      ]
-      self._input_port_lookup = {
-          pn[0]: (port_num, pn[1]) for (port_num, pn) in enumerate(input_ports)
-      }
-
-    def __call__(self, **kwargs):
-      inputs_missing = set(self._input_port_lookup.keys()) - set(kwargs.keys())
-      if inputs_missing:
-        raise ValueError(f"Missing inputs: {inputs_missing}")
-
-      inputs = [None] * len(self._input_port_lookup)
-      for (k, v) in kwargs.items():
-        if k not in self._input_port_lookup:
-          raise ValueError(f"Unknown input port: {k}")
-        port_num, port_type = self._input_port_lookup[k]
-        if port_type.type != v.type:
-          raise ValueError(f"Type mismatch for input port {k}: "
-                           f"expected {port_type.type}, got {v.type}")
-        inputs[port_num] = v.value
-
-      return ServiceInstanceOp(
-          result=[t.type for _, t in self._output_port_lookup.values()],
+    def instantiate_cb(mod: _SpecializedModule, instance_name: str,
+                       inputs: dict, appid: AppID, loc):
+      opts = _service_generator_registry.register(mod)
+      return raw_esi.ServiceInstanceOp(
+          result=[t for _, t in mod.output_ports],
           service_symbol=ir.FlatSymbolRefAttr.get(
               decl._materialize_service_decl()),
-          impl_type=self._impl_name,
-          inputs=inputs,
-          output_port_lookup=self._output_port_lookup)
+          impl_type=_ServiceGeneratorRegistry._impl_type_name,
+          inputs=[inputs[pn].value for pn, _ in mod.input_ports],
+          impl_opts=opts)
 
-  return ServiceImplementation
+    def generate_cb(generator: Generator, spec_mod: _SpecializedModule,
+                    extra_args: Dict[str, object]):
+      # return _generate_block(generator, spec_mod, None, extra_args)
+      pass
+
+    return _module_base(service_impl,
+                        extern_name=None,
+                        generator_cb=generate_cb,
+                        instantiate_cb=instantiate_cb)
+
+  return wrap
+
+
+class _ServiceGeneratorRegistry:
+  """Class to register individual service instance generators."""
+  _registered = False
+  _impl_type_name = ir.StringAttr.get("pycde")
+
+  def __init__(self):
+    self._registry = {}
+    assert _ServiceGeneratorRegistry._registered is False, \
+      "Cannot instantiate more than one _ServiceGeneratorRegistry"
+    raw_esi.registerServiceGenerator(
+        _ServiceGeneratorRegistry._impl_type_name.value,
+        self._implement_service)
+    _ServiceGeneratorRegistry._registered = True
+
+  def register(self, service_implementation: _SpecializedModule) -> ir.DictAttr:
+    # Create unique name for the service instance.
+    basename = service_implementation.name
+    name = basename
+    ctr = 0
+    while name in self._registry:
+      ctr += 1
+      name = basename + "_" + str(ctr)
+    name_attr = ir.StringAttr.get(name)
+    self._registry[name_attr] = (service_implementation, System.current())
+    return ir.DictAttr.get({"name": name_attr})
+
+  def _implement_service(self, req: ir.Operation):
+    """This is the callback which the ESI connect-services pass calls."""
+    assert isinstance(req.opview, raw_esi.ServiceImplementReqOp)
+    opts = ir.DictAttr(req.attributes["impl_opts"])
+    impl_name = opts["name"]
+    if impl_name not in self._registry:
+      return False
+    (impl, sys) = self._registry[impl_name]
+    with sys:
+      return impl.generate(input_channels=None, output_channels=None)
+
+
+_service_generator_registry = _ServiceGeneratorRegistry()

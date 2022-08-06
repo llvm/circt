@@ -7,39 +7,36 @@ from pycde import (Clock, Input, InputChannel, OutputChannel, module, generator,
 from pycde import esi
 from pycde.common import Output
 
+# @module
+# class Producer:
+#   clk = Input(types.i1)
+#   int_out = OutputChannel(types.i32)
 
-@module
-class Producer:
-  clk = Input(types.i1)
-  int_out = OutputChannel(types.i32)
+#   @generator
+#   def construct(ports):
+#     chan = esi.HostComms.from_host(types.i32, "loopback_in")
+#     ports.int_out = chan
 
-  @generator
-  def construct(ports):
-    chan = esi.HostComms.from_host(types.i32, "loopback_in")
-    ports.int_out = chan
+# @module
+# class Consumer:
+#   clk = Input(types.i1)
+#   int_in = InputChannel(types.i32)
 
+#   @generator
+#   def construct(ports):
+#     esi.HostComms.to_host(ports.int_in, "loopback_out")
 
-@module
-class Consumer:
-  clk = Input(types.i1)
-  int_in = InputChannel(types.i32)
+# @module
+# class LoopbackTop:
+#   clk = Clock(types.i1)
+#   rst = Input(types.i1)
 
-  @generator
-  def construct(ports):
-    esi.HostComms.to_host(ports.int_in, "loopback_out")
-
-
-@module
-class LoopbackTop:
-  clk = Clock(types.i1)
-  rst = Input(types.i1)
-
-  @generator
-  def construct(ports):
-    p = Producer(clk=ports.clk)
-    Consumer(clk=ports.clk, int_in=p.int_out)
-    # Use Cosim to implement the standard 'HostComms' service.
-    esi.Cosim(esi.HostComms, ports.clk, ports.rst)
+#   @generator
+#   def construct(ports):
+#     p = Producer(clk=ports.clk)
+#     Consumer(clk=ports.clk, int_in=p.int_out)
+#     # Use Cosim to implement the standard 'HostComms' service.
+#     esi.Cosim(esi.HostComms, ports.clk, ports.rst)
 
 
 @esi.ServiceImplementation(esi.HostComms)
@@ -55,9 +52,10 @@ class MultiplexerService:
   trunk_out_valid = Output(types.i1)
   trunk_out_ready = Input(types.i1)
 
-  # @esi.generator
-  # def construct(ports, clients):
-  #   pass
+  @generator
+  def generate(ports, input_streams, output_streams):
+    print("generating ")
+    return True
 
 
 @module
@@ -85,9 +83,11 @@ class MultiplexerTop:
     ports.trunk_out_valid = m.trunk_out_valid
 
 
-s = pycde.System([LoopbackTop, MultiplexerTop], name="EsiSys")
+s = pycde.System([MultiplexerTop], name="EsiSys")
 
 s.generate()
+s.print()
+s.run_passes()
 s.print()
 
 # CHECK-LABEL: msft.module @Top {} (%clk: i1, %rst: i1) attributes {fileName = "Top.sv"} {
