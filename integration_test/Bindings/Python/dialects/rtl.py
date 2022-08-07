@@ -48,8 +48,7 @@ with Context() as ctx, Location.unknown():
         name="one_input",
         input_ports=[("a", i32)],
         parameters=[
-            hw.ParamDeclAttr.get("BANKS", TypeAttr.get(i32),
-                                 IntegerAttr.get(i32, 5))
+            hw.ParamDeclAttr.get("BANKS", i32, IntegerAttr.get(i32, 5))
         ],
         body_builder=lambda m: hw.OutputOp([]),
     )

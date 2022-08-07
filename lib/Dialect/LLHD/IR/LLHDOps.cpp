@@ -71,10 +71,6 @@ static Attribute constFoldTernaryOp(ArrayRef<Attribute> operands,
   assert(operands.size() == 3 && "ternary op takes three operands");
   if (!operands[0] || !operands[1] || !operands[2])
     return {};
-  if (operands[0].getType() != operands[1].getType())
-    return {};
-  if (operands[0].getType() != operands[2].getType())
-    return {};
 
   if (operands[0].isa<AttrElementT>() && operands[1].isa<AttrElementT>() &&
       operands[2].isa<AttrElementT>()) {

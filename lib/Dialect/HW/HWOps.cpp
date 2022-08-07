@@ -24,6 +24,7 @@
 
 using namespace circt;
 using namespace hw;
+using mlir::TypedAttr;
 
 /// Flip a port direction.
 PortDirection hw::flip(PortDirection direction) {
@@ -117,13 +118,13 @@ LogicalResult hw::checkParameterInContext(Attribute value, Operation *module,
         continue;
 
       // If the types match then the reference is ok.
-      if (paramAttr.getType().getValue() == parameterRef.getType())
+      if (paramAttr.getType() == parameterRef.getType())
         return success();
 
       if (usingOp) {
         auto diag = usingOp->emitOpError("parameter ")
                     << nameAttr << " used with type " << parameterRef.getType()
-                    << "; should have type " << paramAttr.getType().getValue();
+                    << "; should have type " << paramAttr.getType();
         diag.attachNote(module->getLoc()) << "module declared here";
       }
       return failure();
@@ -779,9 +780,8 @@ static ParseResult parseOptionalParameters(OpAsmParser &parser,
         }
 
         auto &builder = parser.getBuilder();
-        parameters.push_back(ParamDeclAttr::get(builder.getContext(),
-                                                builder.getStringAttr(name),
-                                                TypeAttr::get(type), value));
+        parameters.push_back(ParamDeclAttr::get(
+            builder.getContext(), builder.getStringAttr(name), type, value));
         return success();
       });
 }
@@ -1011,11 +1011,15 @@ static LogicalResult verifyModuleCommon(Operation *module) {
     if (!value)
       continue;
 
-    if (value.getType() != paramAttr.getType().getValue())
+    auto typedValue = value.dyn_cast<TypedAttr>();
+    if (!typedValue)
       return module->emitOpError("parameter ")
-             << paramAttr << " should have type "
-             << paramAttr.getType().getValue() << "; has type "
-             << value.getType();
+             << paramAttr << " should have a typed value; has value " << value;
+
+    if (typedValue.getType() != paramAttr.getType())
+      return module->emitOpError("parameter ")
+             << paramAttr << " should have type " << paramAttr.getType()
+             << "; has type " << typedValue.getType();
 
     // Verify that this is a valid parameter value, disallowing parameter
     // references.  We could allow parameters to refer to each other in the
@@ -1300,10 +1304,15 @@ LogicalResult InstanceOp::verify() {
     if (!value)
       continue;
 
-    if (value.getType() != paramAttr.getType().getValue())
-      return emitOpError("parameter ") << paramAttr << " should have type "
-                                       << paramAttr.getType().getValue()
-                                       << "; has type " << value.getType();
+    auto typedValue = value.dyn_cast<TypedAttr>();
+    if (!typedValue)
+      return emitOpError("parameter ")
+             << paramAttr << " should have a typed value; has value " << value;
+
+    if (typedValue.getType() != paramAttr.getType())
+      return emitOpError("parameter ")
+             << paramAttr << " should have type " << paramAttr.getType()
+             << "; has type " << typedValue.getType();
 
     if (failed(checkParameterInContext(
             value, (*this)->getParentOfType<HWModuleOp>(), *this)))

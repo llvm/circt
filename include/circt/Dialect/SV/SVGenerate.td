@@ -10,6 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "mlir/IR/BuiltinAttributeInterfaces.td"
+
 def GenerateOp : SVOp<"generate",
                       [SingleBlock, NoTerminator, NoRegionArguments]> {
   let summary = "A generate block";
@@ -28,6 +30,12 @@ class MaxSizedRegion<int numBlocks> : Region<
   CPred<"::llvm::hasNItemsOrLess($_self, " # numBlocks # ")">,
   "region with at most " # numBlocks # " blocks">;
 
+/// An array of case patterns. This is either a typed attribute of some kind,
+/// an integer constant or a parameter expression for example, or a `unit` attr
+/// that indicates the `default` case.
+def PatternArrayAttr : TypedArrayAttrBase<
+  AnyAttrOf<[TypedAttrInterface, UnitAttr]>, "case pattern array">;
+
 def GenerateCaseOp : SVOp<"generate.case",
                           [SingleBlock, NoTerminator, NoRegionArguments,
                            HasParent<"GenerateOp">]> {
@@ -36,11 +44,11 @@ def GenerateCaseOp : SVOp<"generate.case",
   let description = "See SystemVerilog 2017 27.5.";
 
   let regions = (region VariadicRegion<SizedRegion<1>>:$caseRegions);
-  let arguments = (ins AnyAttr:$cond,
-                       ArrayAttr:$casePatterns, ArrayAttr:$caseNames);
+  let arguments = (ins TypedAttrInterface:$cond,
+                       PatternArrayAttr:$casePatterns, StrArrayAttr:$caseNames);
 
   let assemblyFormat = [{
-    $cond attr-dict `[`
+    $cond attr-dict ` ` `[`
       custom<CaseRegions>($casePatterns, $caseNames, $caseRegions)
     `]`
   }];

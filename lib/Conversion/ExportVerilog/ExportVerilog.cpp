@@ -1206,9 +1206,14 @@ static void emitDims(ArrayRef<Attribute> dims, raw_ostream &os, Location loc,
 
     // Otherwise it must be a parameterized dimension.  Shove the "-1" into the
     // attribute so it gets printed in canonical form.
-    auto negOne =
-        getIntAttr(loc.getContext(), width.getType(),
-                   APInt(width.getType().getIntOrFloatBitWidth(), -1L, true));
+    auto typedAttr = width.dyn_cast<mlir::TypedAttr>();
+    if (!typedAttr) {
+      mlir::emitError(loc, "untyped dimension attribute ") << width;
+      continue;
+    }
+    auto negOne = getIntAttr(
+        loc.getContext(), typedAttr.getType(),
+        APInt(typedAttr.getType().getIntOrFloatBitWidth(), -1L, true));
     width = ParamExprAttr::get(PEO::Add, width, negOne);
     os << '[';
     emitter.printParamValue(width, os, [loc]() {
@@ -3266,7 +3271,7 @@ LogicalResult StmtEmitter::visitSV(GenerateCaseOp op) {
     Attribute patternAttr = patterns[i];
 
     indent();
-    if (patternAttr.getType().isa<NoneType>())
+    if (!patternAttr.isa<mlir::TypedAttr>())
       os << "default";
     else
       emitter.printParamValue(
@@ -4416,8 +4421,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
     for (auto param : module.getParameters()) {
       auto paramAttr = param.cast<ParamDeclAttr>();
       // Measure the type length by printing it to a temporary string.
-      printParamType(paramAttr.getType().getValue(), paramAttr.getValue(),
-                     scratch);
+      printParamType(paramAttr.getType(), paramAttr.getValue(), scratch);
       maxTypeWidth = std::max(scratch.size(), maxTypeWidth);
     }
 
@@ -4430,7 +4434,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
           auto paramAttr = param.cast<ParamDeclAttr>();
           auto defaultValue = paramAttr.getValue(); // may be null if absent.
           os << "parameter ";
-          printParamType(paramAttr.getType().getValue(), defaultValue, scratch);
+          printParamType(paramAttr.getType(), defaultValue, scratch);
           os << scratch;
           if (scratch.size() < maxTypeWidth)
             os.indent(maxTypeWidth - scratch.size());

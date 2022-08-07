@@ -13,6 +13,7 @@
 include "mlir/IR/EnumAttr.td"
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/BuiltinTypes.td"
+include "mlir/IR/BuiltinAttributeInterfaces.td"
 
 // This is almost exactly like a standard FuncOp, except that it has some
 // extra verification conditions.  In particular, each Value must
@@ -594,15 +595,15 @@ def ConstantOp : Handshake_Op<"constant", [
     ```
   }];
 
-  let arguments = (ins AnyAttr:$value, NoneType:$ctrl);
+  let arguments = (ins TypedAttrInterface:$value, NoneType:$ctrl);
   let results = (outs AnyType : $result);
 
-  let builders = [OpBuilder<(ins "Attribute":$value, "Value":$ctrl)>];
+  let builders = [OpBuilder<(ins "mlir::TypedAttr":$value, "Value":$ctrl)>];
   let skipDefaultBuilders = 1;
 
   let hasCanonicalizer = 1;
   let extraClassDeclaration = [{
-    Attribute getValue() { return (*this)->getAttr("value"); }
+    mlir::TypedAttr getValue() { return value(); }
   }];
   let assemblyFormat = [{ $ctrl attr-dict `:` qualified(type($result))}];
   let hasVerifier = 1;
