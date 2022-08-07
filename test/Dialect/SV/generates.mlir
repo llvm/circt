@@ -12,7 +12,7 @@ hw.module @PrintPath<> () -> () {
 hw.module @Case1<NUM : i8> () -> () {
   %fd = hw.constant 0x80000002 : i32
   sv.generate "foo_case": {
-    sv.generate.case #hw.param.decl.ref<"NUM"> [
+    sv.generate.case #hw.param.decl.ref<"NUM"> : i8 [
       case (0, "case0") {
         sv.initial {
           sv.fwrite %fd, "case 0\n"
@@ -21,7 +21,7 @@ hw.module @Case1<NUM : i8> () -> () {
       case (1 : i64, "case1") {
         hw.instance "print1" @PrintPath() -> ()
       }
-      case (none, "dflt") {
+      case (unit, "dflt") {
         hw.instance "printDflt" @PrintPath() -> ()
       }
     ]
@@ -31,7 +31,7 @@ hw.module @Case1<NUM : i8> () -> () {
 // CHECK-LABEL: hw.module @Case1
 // CHECK-NEXT:    [[FD:%.+]] = hw.constant -2147483646 : i32
 // CHECK-NEXT:    sv.generate "foo_case" : {
-// CHECK-NEXT:      sv.generate.case #hw.param.decl.ref<"NUM">[
+// CHECK-NEXT:      sv.generate.case #hw.param.decl.ref<"NUM"> : i8 [
 // CHECK-NEXT:        case (0 : i64, "case0") {
 // CHECK-NEXT:          sv.initial {
 // CHECK-NEXT:            sv.fwrite [[FD]], "case 0\0A"
@@ -40,7 +40,7 @@ hw.module @Case1<NUM : i8> () -> () {
 // CHECK-NEXT:        case (1 : i64, "case1") {
 // CHECK-NEXT:          hw.instance "print1" @PrintPath() -> ()
 // CHECK-NEXT:        }
-// CHECK-NEXT:        case (none, "dflt") {
+// CHECK-NEXT:        case (unit, "dflt") {
 // CHECK-NEXT:          hw.instance "printDflt" @PrintPath() -> ()
 // CHECK-NEXT:        }
 // CHECK-NEXT:        ]
@@ -68,7 +68,7 @@ hw.module @Case1<NUM : i8> () -> () {
 
 hw.module @CaseNoDefault<NUM : i8> () -> () {
   sv.generate "bar": {
-    sv.generate.case #hw.param.decl.ref<"NUM"> [
+    sv.generate.case #hw.param.decl.ref<"NUM"> : i8 [
       case (0 : i64, "bar0") { }
     ]
   }
@@ -76,7 +76,7 @@ hw.module @CaseNoDefault<NUM : i8> () -> () {
 
 // CHECK-LABEL: hw.module @CaseNoDefault
 // CHECK:         sv.generate "bar" : {
-// CHECK:           sv.generate.case #hw.param.decl.ref<"NUM">[
+// CHECK:           sv.generate.case #hw.param.decl.ref<"NUM"> : i8 [
 // CHECK:             case (0 : i64, "bar0") {
 // CHECK:             }
 // CHECK:           ]

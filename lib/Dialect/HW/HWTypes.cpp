@@ -188,7 +188,7 @@ static void printHWElementType(Type element, AsmPrinter &p) {
 // Int Type
 //===----------------------------------------------------------------------===//
 
-Type IntType::get(Attribute width) {
+Type IntType::get(mlir::TypedAttr width) {
   // The width expression must always be a 32-bit wide integer type itself.
   auto widthWidth = width.getType().dyn_cast<IntegerType>();
   assert(widthWidth && widthWidth.getWidth() == 32 &&
@@ -206,7 +206,7 @@ Type IntType::parse(AsmParser &p) {
   // The bitwidth of the parameter size is always 32 bits.
   auto int32Type = p.getBuilder().getIntegerType(32);
 
-  Attribute width;
+  mlir::TypedAttr width;
   if (p.parseLess() || p.parseAttribute(width, int32Type) || p.parseGreater())
     return Type();
   return get(width);

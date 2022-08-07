@@ -27,7 +27,7 @@ def IntTypeImpl : HWType<"Int"> {
   }];
 
   let mnemonic = "int";
-  let parameters = (ins "::mlir::Attribute":$width);
+  let parameters = (ins "::mlir::TypedAttr":$width);
 
   let hasCustomAssemblyFormat = 1;
 
@@ -36,7 +36,7 @@ def IntTypeImpl : HWType<"Int"> {
   let extraClassDeclaration = [{
     /// Get an integer type for the specified width.  Note that this may return
     /// a builtin integer type if the width is a known-constant value.
-    static Type get(::mlir::Attribute width);
+    static Type get(::mlir::TypedAttr width);
   }];
 }
 

@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 include "mlir/IR/EnumAttr.td"
+include "mlir/IR/BuiltinAttributeInterfaces.td"
 
 /// An attribute to indicate the output file an operation should be emitted to.
 def OutputFileAttr : AttrDef<HWDialect, "OutputFile"> {
@@ -125,7 +126,7 @@ def FileListAttr : AttrDef<HWDialect, "FileList"> {
 
 }
 
-def ParamDeclAttr : AttrDef<HWDialect, "ParamDecl"> {
+def ParamDeclAttr : AttrDef<HWDialect, "ParamDecl", [TypedAttrInterface]> {
   let summary = "Module or instance parameter definition";
   let description = [{
     An attribute describing a module parameter, or instance parameter
@@ -138,7 +139,7 @@ def ParamDeclAttr : AttrDef<HWDialect, "ParamDecl"> {
   /// parameter for an instance when the applied value and the default value are
   /// the same.
   let parameters = (ins "::mlir::StringAttr":$name,
-                        "::mlir::TypeAttr":$type,
+                        AttributeSelfTypeParameter<"">:$type,
                         "::mlir::Attribute":$value);
   let mnemonic = "param.decl";
 
@@ -146,19 +147,19 @@ def ParamDeclAttr : AttrDef<HWDialect, "ParamDecl"> {
 
   let builders = [
     AttrBuilderWithInferredContext<(ins "::mlir::StringAttr":$name,
-                                         "::mlir::Type":$type),
+                                        "::mlir::Type":$type),
       "auto *context = type.getContext();\n"
-      "return $_get(context, name, TypeAttr::get(type), Attribute());">,
+      "return $_get(context, name, type, Attribute());">,
     AttrBuilderWithInferredContext<(ins "::mlir::StringRef":$name,
-                                         "::mlir::Type":$type),
+                                        "::mlir::Type":$type),
       "return get(StringAttr::get(type.getContext(), name), type);">,
 
     AttrBuilderWithInferredContext<(ins "::mlir::StringAttr":$name,
-                                        "::mlir::Attribute":$value),
+                                        "::mlir::TypedAttr":$value),
       "auto *context = value.getContext();\n"
-      "return $_get(context, name, TypeAttr::get(value.getType()), value);">,
+      "return $_get(context, name, value.getType(), value);">,
     AttrBuilderWithInferredContext<(ins "::mlir::StringRef":$name,
-                                        "::mlir::Attribute":$value),
+                                        "::mlir::TypedAttr":$value),
       "return get(StringAttr::get(value.getContext(), name), value);">
   ];
 
@@ -179,7 +180,8 @@ def ParamDeclArrayAttr
 /// This attribute models a reference to a named parameter within a module body.
 /// The type of the ParamDeclRefAttr must always be the same as the type of the
 /// parameter being referenced.
-def ParamDeclRefAttr : AttrDef<HWDialect, "ParamDeclRef"> {
+def ParamDeclRefAttr : AttrDef<HWDialect, "ParamDeclRef",
+                               [TypedAttrInterface]> {
   let summary = "Is a reference to a parameter value.";
   let parameters = (ins "::mlir::StringAttr":$name,
                         AttributeSelfTypeParameter<"">:$type);
@@ -195,7 +197,8 @@ def ParamDeclRefAttr : AttrDef<HWDialect, "ParamDeclRef"> {
   let hasCustomAssemblyFormat = 1;
 }
 
-def ParamVerbatimAttr : AttrDef<HWDialect, "ParamVerbatim"> {
+def ParamVerbatimAttr : AttrDef<HWDialect, "ParamVerbatim",
+                                [TypedAttrInterface]> {
   let summary =
     "Represents text to emit directly to SystemVerilog for a parameter";
   let parameters = (ins "::mlir::StringAttr":$value,
@@ -238,10 +241,10 @@ def PEOAttr  : I32EnumAttr<"PEO", "Parameter Expression Opcode",
                             PEO_CLog2, PEO_StrConcat]>;
 }
 
-def ParamExprAttr : AttrDef<HWDialect, "ParamExpr"> {
+def ParamExprAttr : AttrDef<HWDialect, "ParamExpr", [TypedAttrInterface]> {
   let summary = "Parameter expression combining operands";
   let parameters = (ins "PEO":$opcode,
-                        ArrayRefParameter<"::mlir::Attribute">:$operands,
+                        ArrayRefParameter<"::mlir::TypedAttr">:$operands,
                         AttributeSelfTypeParameter<"">:$type);
   let mnemonic = "param.expr";
 
@@ -252,11 +255,13 @@ def ParamExprAttr : AttrDef<HWDialect, "ParamExpr"> {
   let extraClassDeclaration = [{
     /// Build a parameter expression.  This automatically canonicalizes and
     /// folds, so it may not necessarily return a ParamExprAttr.
-    static Attribute get(PEO opcode, mlir::ArrayRef<mlir::Attribute> operands);
+    static mlir::TypedAttr get(PEO opcode,
+                               mlir::ArrayRef<mlir::TypedAttr> operands);
 
     /// Build a binary parameter expression for convenience.
-    static Attribute get(PEO opcode, mlir::Attribute lhs, mlir::Attribute rhs) {
-      Attribute operands[] = { lhs, rhs };
+    static mlir::TypedAttr get(PEO opcode, mlir::TypedAttr lhs,
+                                           mlir::TypedAttr rhs) {
+      mlir::TypedAttr operands[] = { lhs, rhs };
       return get(opcode, operands);
     }
   }];

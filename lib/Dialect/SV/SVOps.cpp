@@ -26,6 +26,7 @@
 
 using namespace circt;
 using namespace sv;
+using mlir::TypedAttr;
 
 /// Return true if the specified operation is an expression.
 bool sv::isExpression(Operation *op) {

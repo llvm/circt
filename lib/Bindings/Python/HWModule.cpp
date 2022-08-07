@@ -130,18 +130,17 @@ void circt::python::populateDialectHWSubmodule(py::module &m) {
   mlir_attribute_subclass(m, "ParamDeclAttr", hwAttrIsAParamDeclAttr)
       .def_classmethod(
           "get",
-          [](py::object cls, std::string name, MlirAttribute type,
+          [](py::object cls, std::string name, MlirType type,
              MlirAttribute value) {
             return cls(hwParamDeclAttrGet(
                 mlirStringRefCreateFromCString(name.c_str()), type, value));
           })
-      .def_classmethod(
-          "get_nodefault",
-          [](py::object cls, std::string name, MlirAttribute type) {
-            return cls(
-                hwParamDeclAttrGet(mlirStringRefCreateFromCString(name.c_str()),
-                                   type, MlirAttribute{nullptr}));
-          })
+      .def_classmethod("get_nodefault",
+                       [](py::object cls, std::string name, MlirType type) {
+                         return cls(hwParamDeclAttrGet(
+                             mlirStringRefCreateFromCString(name.c_str()), type,
+                             MlirAttribute{nullptr}));
+                       })
       .def_property_readonly(
           "value",
           [](MlirAttribute self) { return hwParamDeclAttrGetValue(self); })

@@ -110,7 +110,7 @@ def generate_msft_module_op(generator: Generator, spec_mod: _SpecializedModule):
 def create_msft_module_extern_op(sys, mod: _SpecializedModule, symbol):
   """Creation callback for creating a MSFTModuleExternOp."""
   paramdecl_list = [
-      hw.ParamDeclAttr.get_nodefault(i.name, mlir.ir.TypeAttr.get(i.attr.type))
+      hw.ParamDeclAttr.get_nodefault(i.name, i.attr.type)
       for i in mod.parameters
   ]
   return msft.MSFTModuleExternOp(

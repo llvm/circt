@@ -976,9 +976,8 @@ parseOptionalParameters(OpAsmParser &parser,
         }
 
         auto &builder = parser.getBuilder();
-        parameters.push_back(ParamDeclAttr::get(builder.getContext(),
-                                                builder.getStringAttr(name),
-                                                TypeAttr::get(type), value));
+        parameters.push_back(ParamDeclAttr::get(
+            builder.getContext(), builder.getStringAttr(name), type, value));
         return success();
       });
 }

@@ -566,8 +566,7 @@ static ParseResult parseParameterList(OpAsmParser &parser,
 
         auto &builder = parser.getBuilder();
         parameters.push_back(hw::ParamDeclAttr::get(
-            builder.getContext(), builder.getStringAttr(name),
-            TypeAttr::get(type), value));
+            builder.getContext(), builder.getStringAttr(name), type, value));
         return success();
       });
 }
@@ -647,13 +646,13 @@ static LogicalResult checkParameterInContext(Attribute value, Operation *module,
         continue;
 
       // If the types match then the reference is ok.
-      if (paramAttr.getType().getValue() == parameterRef.getType())
+      if (paramAttr.getType() == parameterRef.getType())
         return success();
 
       if (usingOp) {
         auto diag = usingOp->emitOpError("parameter ")
                     << nameAttr << " used with type " << parameterRef.getType()
-                    << "; should have type " << paramAttr.getType().getValue();
+                    << "; should have type " << paramAttr.getType();
         diag.attachNote(module->getLoc()) << "module declared here";
       }
       return failure();
@@ -803,10 +802,15 @@ LogicalResult MSFTModuleExternOp::verify() {
     if (!value)
       continue;
 
-    if (value.getType() != paramAttr.getType().getValue())
-      return emitOpError("parameter ") << paramAttr << " should have type "
-                                       << paramAttr.getType().getValue()
-                                       << "; has type " << value.getType();
+    auto typedValue = value.dyn_cast<mlir::TypedAttr>();
+    if (!typedValue)
+      return emitOpError("parameter ")
+             << paramAttr << " should have a typed value; has value " << value;
+
+    if (typedValue.getType() != paramAttr.getType())
+      return emitOpError("parameter ")
+             << paramAttr << " should have type " << paramAttr.getType()
+             << "; has type " << typedValue.getType();
 
     // Verify that this is a valid parameter value, disallowing parameter
     // references.  We could allow parameters to refer to each other in the
