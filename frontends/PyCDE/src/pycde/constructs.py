@@ -15,8 +15,8 @@ import typing
 
 
 def Wire(type: PyCDEType):
-  """Declare a wire. Used to create backedges and they disappear when assigned
-  to."""
+  """Declare a wire. Used to create backedges. Must assign exactly once. Assign
+  method disappears after being called."""
 
   def assign(self, new_value: Value):
     if new_value.type != self.type:
@@ -26,6 +26,7 @@ def Wire(type: PyCDEType):
     msft.replaceAllUsesWith(self.value, new_value.value)
     self.value.owner.erase()
     self.value = new_value.value
+    # Remove this method so it can't be called again.
     del self.assign
 
   value = Value(ir.Operation.create("builtin.reinterpret_cast", [type]), type)
@@ -37,16 +38,21 @@ def Reg(type: PyCDEType,
         clk: Value = None,
         rst: Value = None,
         rst_value: Value = None):
-  """Declare a register. Must be assigned at some point."""
+  """Declare a register. Must assign exactly once. Assign method disappears
+  after being called."""
 
-  wire = Wire(type)
-
-  def assign(self, new_value: Value, wire=wire):
-    wire.assign(new_value)
+  def assign(self, new_value: Value):
+    self._wire.assign(new_value)
+    # Remove this method so it can't be called again.
     del self.assign
+    # Also the backing Wire.
+    del self._wire
 
+  # Create a wire and register it.
+  wire = Wire(type)
   value = wire.reg(clk, rst, rst_value)
   value.assign = types.MethodType(assign, value)
+  value._wire = wire
   return value
 
 
