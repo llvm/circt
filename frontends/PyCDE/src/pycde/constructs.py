@@ -10,55 +10,44 @@ from circt.support import get_value
 from circt.dialects import msft, hw
 import mlir.ir as ir
 
+import types
 import typing
 
 
-class Wire(Value):
+def Wire(type: PyCDEType):
   """Declare a wire. Used to create backedges and they disappear when assigned
   to."""
 
-  def __init__(self, type: PyCDEType):
-    self.value = ir.Operation.create("builtin.reinterpret_cast", [type])
-    self.type = type
-    self.assigned = False
-
-  def __new__(cls, type, name=None):
-    return super(Value, cls).__new__(cls)
-
   def assign(self, new_value: Value):
-    if self.assigned:
-      raise ValueError("Cannot assign to a wire that has already been assigned")
     if new_value.type != self.type:
       raise TypeError(
           f"Cannot assign {new_value.value.type} to {self.value.type}")
 
-    self.assigned = True
-    msft.replaceAllUsesWith(self.value.result, new_value.value)
-    self.value.operation.erase()
+    msft.replaceAllUsesWith(self.value, new_value.value)
+    self.value.owner.erase()
     self.value = new_value.value
+    del self.assign
+
+  value = Value(ir.Operation.create("builtin.reinterpret_cast", [type]), type)
+  value.assign = types.MethodType(assign, value)
+  return value
 
 
-class Reg:
+def Reg(type: PyCDEType,
+        clk: Value = None,
+        rst: Value = None,
+        rst_value: Value = None):
   """Declare a register. Must be assigned at some point."""
 
-  def __init__(self,
-               type: PyCDEType,
-               clk: Value = None,
-               rst: Value = None,
-               rst_value: Value = None):
-    self.wire = Wire(type)
-    self.value = self.wire.reg(clk, rst, rst_value)
-    self.type = type
+  wire = Wire(type)
 
-  def __new__(cls, type, name=None):
-    return super(Value, cls).__new__(cls)
+  def assign(self, new_value: Value, wire=wire):
+    wire.assign(new_value)
+    del self.assign
 
-  def assign(self, new_value: Value):
-    if self.wire is None:
-      raise ValueError("Cannot assign to a reg that has already been assigned")
-
-    self.wire.assign(new_value)
-    self.wire = None
+  value = wire.reg(clk, rst, rst_value)
+  value.assign = types.MethodType(assign, value)
+  return value
 
 
 def Mux(sel: BitVectorValue, *data_inputs: typing.List[Value]):
