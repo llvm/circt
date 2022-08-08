@@ -14,8 +14,7 @@ import typing
 
 
 def Wire(type: PyCDEType):
-  """Declare a wire. Used to create backedges. Must assign exactly once. Assign
-  method disappears after being called."""
+  """Declare a wire. Used to create backedges. Must assign exactly once."""
 
   class WireValue(type._get_value_class()):
 
@@ -24,7 +23,7 @@ def Wire(type: PyCDEType):
       self._assigned = False
 
     def assign(self, new_value: Value):
-      if self._assigned == True:
+      if self._assigned is True:
         raise ValueError("Cannot assign value to Wire twice.")
       if new_value.type != self.type:
         raise TypeError(
