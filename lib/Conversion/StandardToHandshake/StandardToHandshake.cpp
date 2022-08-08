@@ -773,10 +773,20 @@ BufferOp FeedForwardNetworkRewriter::buildSplitNetwork(Block *splitBlock) {
     return branch.conditionOperand() == cond;
   }));
 
+  Location loc = cond.getLoc();
   rewriter.setInsertionPointAfterValue(cond);
-  // Requre a cast to index to stick to the type of the mux input.
-  Value condAsIndex = rewriter.create<arith::IndexCastOp>(
-      cond.getLoc(), rewriter.getIndexType(), cond);
+
+  // A conditional branch selects the successor at index zero when the condition
+  // is 1, which is the oposit of how a mux selects its inputs. Thus we have to
+  // negate the condition here.
+  cond = rewriter.create<arith::XOrIOp>(
+      loc, cond.getType(), cond,
+      rewriter.create<arith::ConstantOp>(
+          loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 1)));
+
+  // Require a cast to index to stick to the type of the mux input.
+  Value condAsIndex =
+      rewriter.create<arith::IndexCastOp>(loc, rewriter.getIndexType(), cond);
 
   // The buffer size defines the number of threads that can be concurently
   // traversing the sub-CFG starting at the splitBlock.
@@ -785,7 +795,7 @@ BufferOp FeedForwardNetworkRewriter::buildSplitNetwork(Block *splitBlock) {
   // Longest path in a CFG-DAG would be O(#blocks)
 
   return rewriter.create<handshake::BufferOp>(
-      cond.getLoc(), rewriter.getIndexType(), bufferSize, condAsIndex,
+      loc, rewriter.getIndexType(), bufferSize, condAsIndex,
       /*bufferType=*/BufferTypeEnum::fifo);
 }
 
@@ -799,7 +809,9 @@ void FeedForwardNetworkRewriter::buildMergeNetwork(Block *mergeBlock,
   assert(ctrlMerge.getNumOperands() == 2 &&
          "Loops should already have been handled");
 
-  // TODO check for correct order
+  // The mux uses the same order of inputs as the merge is guaranteed to have
+  // the order matching the branching. The selection input is already swapped
+  // beforehand.
   rewriter.setInsertionPointAfter(ctrlMerge);
   Value newCtrl = rewriter.create<handshake::MuxOp>(ctrlMerge->getLoc(), buf,
                                                     ctrlMerge.getOperands());

@@ -975,15 +975,20 @@ void SourceOp::print(OpAsmPrinter &p) {
 
 LogicalResult ConstantOp::verify() {
   // Verify that the type of the provided value is equal to the result type.
-  if ((*this)->getAttr("value").getType() != getResult().getType())
-    return emitOpError()
-           << "constant value type differs from operation result type.";
+  auto typedValue = value().dyn_cast<mlir::TypedAttr>();
+  if (!typedValue)
+    return emitOpError("constant value must be a typed attribute; value is ")
+           << value();
+  if (typedValue.getType() != getResult().getType())
+    return emitOpError() << "constant value type " << typedValue.getType()
+                         << " differs from operation result type "
+                         << getResult().getType();
 
   return success();
 }
 
 void handshake::ConstantOp::build(OpBuilder &builder, OperationState &result,
-                                  Attribute value, Value operand) {
+                                  mlir::TypedAttr value, Value operand) {
   result.addOperands(operand);
 
   auto type = value.getType();

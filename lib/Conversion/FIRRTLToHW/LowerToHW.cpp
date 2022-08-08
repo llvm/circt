@@ -976,7 +976,7 @@ static ArrayAttr getHWParameters(FExtModuleOp module, bool ignoreValues) {
   SmallVector<Attribute> newParams;
   for (const ParamDeclAttr &entry : params) {
     auto name = entry.getName();
-    auto type = TypeAttr::get(entry.getValue().getType());
+    auto type = entry.getType();
     auto value = ignoreValues ? Attribute() : entry.getValue();
     auto paramAttr =
         hw::ParamDeclAttr::get(builder.getContext(), name, type, value);

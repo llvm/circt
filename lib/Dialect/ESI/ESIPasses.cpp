@@ -172,8 +172,7 @@ StringAttr ESIHWBuilder::constructInterfaceName(ChannelType port) {
 /// Return a parameter list for the stage module with the specified value.
 ArrayAttr ESIHWBuilder::getStageParameterList(Attribute value) {
   auto type = IntegerType::get(width.getContext(), 32, IntegerType::Unsigned);
-  auto widthParam =
-      ParamDeclAttr::get(width.getContext(), width, TypeAttr::get(type), value);
+  auto widthParam = ParamDeclAttr::get(width.getContext(), width, type, value);
   return ArrayAttr::get(width.getContext(), widthParam);
 }
 

@@ -125,10 +125,10 @@ MLIR_CAPI_EXPORTED MlirAttribute hwGlobalRefAttrGet(MlirAttribute symName);
 
 MLIR_CAPI_EXPORTED bool hwAttrIsAParamDeclAttr(MlirAttribute);
 MLIR_CAPI_EXPORTED MlirAttribute hwParamDeclAttrGet(MlirStringRef name,
-                                                    MlirAttribute type,
+                                                    MlirType type,
                                                     MlirAttribute value);
 MLIR_CAPI_EXPORTED MlirStringRef hwParamDeclAttrGetName(MlirAttribute decl);
-MLIR_CAPI_EXPORTED MlirAttribute hwParamDeclAttrGetType(MlirAttribute decl);
+MLIR_CAPI_EXPORTED MlirType hwParamDeclAttrGetType(MlirAttribute decl);
 MLIR_CAPI_EXPORTED MlirAttribute hwParamDeclAttrGetValue(MlirAttribute decl);
 
 MLIR_CAPI_EXPORTED bool hwAttrIsAParamDeclRefAttr(MlirAttribute);
