@@ -1346,8 +1346,124 @@ hw.module @ExtractOfUnrelatedInject(%a: !hw.struct<a: i1, b: i1>, %v: i1) -> (re
 hw.module @InjectOnInject(%a: !hw.struct<a: i1>, %p: i1, %q: i1) -> (result: !hw.struct<a: i1>) {
   %b = hw.struct_inject %a["a"], %p : !hw.struct<a: i1>
   %c = hw.struct_inject %b["a"], %q : !hw.struct<a: i1>
-  // CHECK: [[STRUCT:%.+]] = hw.struct_inject %a["a"], %q
+  // CHECK: [[STRUCT:%.+]] = hw.struct_create (%q) : !hw.struct<a: i1>
   // CHECK-NEXT: hw.output [[STRUCT]]
   hw.output %c : !hw.struct<a: i1>
 }
 
+// CHECK-LABEL: hw.module @InjectOnInjectChain
+hw.module @InjectOnInjectChain(%a: !hw.struct<a: i1, b: i1, c: i1>, %p: i1, %q: i1, %s: i1) -> (result: !hw.struct<a: i1, b: i1, c: i1>) {
+  %b = hw.struct_inject %a["a"], %p : !hw.struct<a: i1, b: i1, c: i1>
+  %c = hw.struct_inject %b["a"], %q : !hw.struct<a: i1, b: i1, c: i1>
+  %d = hw.struct_inject %c["b"], %s : !hw.struct<a: i1, b: i1, c: i1>
+  // CHECK: [[A:%.+]] = hw.struct_inject %a["a"], %q : !hw.struct<a: i1, b: i1, c: i1>
+  // CHECK: [[B:%.+]] = hw.struct_inject %0["b"], %s : !hw.struct<a: i1, b: i1, c: i1>
+  // CHECK-NEXT: hw.output [[B]]
+  hw.output %d : !hw.struct<a: i1, b: i1, c: i1>
+}
+
+// CHECK-LABEL: hw.module @InjectToCreate
+hw.module @InjectToCreate(%a: !hw.struct<a: i1, b: i1>, %p: i1, %q: i1) -> (result: !hw.struct<a: i1, b: i1>) {
+  %b = hw.struct_inject %a["a"], %p : !hw.struct<a: i1, b: i1>
+  %c = hw.struct_inject %b["b"], %q : !hw.struct<a: i1, b: i1>
+  // CHECK: [[STRUCT:%.+]] = hw.struct_create (%p, %q) : !hw.struct<a: i1, b: i1>
+  // CHECK-NEXT: hw.output [[STRUCT]]
+  hw.output %c : !hw.struct<a: i1, b: i1>
+}
+
+// CHECK-LABEL: hw.module @GetOfConcat
+hw.module @GetOfConcat(%a: !hw.array<5xi1>, %b: !hw.array<2xi1>) -> (out0: i1, out1: i1) {
+  %concat = hw.array_concat %a, %b : !hw.array<5xi1>, !hw.array<2xi1>
+  %c1_i3 = hw.constant 1 : i3
+  %out0 = hw.array_get %concat[%c1_i3] : !hw.array<7xi1>
+  %c6_i3 = hw.constant 6 : i3
+  %out1 = hw.array_get %concat[%c6_i3] : !hw.array<7xi1>
+  // CHECK: [[OUT0:%.+]] = hw.array_get %b[%true] : !hw.array<2xi1>
+  // CHECK: [[OUT1:%.+]] = hw.array_get %a[%c-4_i3] : !hw.array<5xi1>
+  // CHECK: hw.output [[OUT0]], [[OUT1]] : i1, i1
+  hw.output %out0, %out1 : i1, i1
+}
+
+// CHECK-LABEL: hw.module @GetOfSliceStatic
+hw.module @GetOfSliceStatic(%a: !hw.array<5xi1>) -> (out0: i1) {
+  %c1_i3 = hw.constant 1 : i3
+  %c1_i2 = hw.constant 1 : i2
+  %slice = hw.array_slice %a[%c1_i3] : (!hw.array<5xi1>) -> !hw.array<3xi1>
+  %get = hw.array_get %slice[%c1_i2] : !hw.array<3xi1>
+
+  // CHECK: [[OUT:%.+]] = hw.array_get %a[%c2_i3] : !hw.array<5xi1>
+  // CHECK: hw.output [[OUT]] : i1
+  hw.output %get : i1
+}
+
+// CHECK-LABEL: hw.module @ConcatOfCreate
+hw.module @ConcatOfCreate(%a: i1, %b: i1) -> (out0: !hw.array<5xi1>) {
+  %lhs = hw.array_create %a, %b : i1
+  %rhs = hw.array_create %a, %b, %a : i1
+  %concat = hw.array_concat %lhs, %rhs : !hw.array<2xi1>, !hw.array<3xi1>
+  // CHECK: [[ARRAY:%.+]] = hw.array_create %a, %b, %a, %b, %a : i1
+  // CHECK: hw.output [[ARRAY]] : !hw.array<5xi1>
+  hw.output %concat : !hw.array<5xi1>
+}
+
+// CHECK-LABEL: hw.module @SliceOfConcat
+hw.module @SliceOfConcat(%a: !hw.array<2xi1>, %b: !hw.array<3xi1>,%c: !hw.array<4xi1>,%d: !hw.array<5xi1>) -> (out0: !hw.array<3xi1>, out1: !hw.array<8xi1>, out2: !hw.array<5xi1>) {
+  %concat = hw.array_concat %a, %b, %c, %d : !hw.array<2xi1>, !hw.array<3xi1>, !hw.array<4xi1>, !hw.array<5xi1>
+
+  %c0_i4 = hw.constant 0 : i4
+  %c3_i4 = hw.constant 3 : i4
+  %c7_i4 = hw.constant 7 : i4
+
+  %slice0 = hw.array_slice %concat[%c0_i4] : (!hw.array<14xi1>) -> !hw.array<3xi1>
+  %slice1 = hw.array_slice %concat[%c3_i4] : (!hw.array<14xi1>) -> !hw.array<8xi1>
+  %slice2 = hw.array_slice %concat[%c7_i4] : (!hw.array<14xi1>) -> !hw.array<5xi1>
+
+  // CHECK: [[SLICE_0:%.+]] = hw.array_slice %d[%c0_i3] : (!hw.array<5xi1>) -> !hw.array<3xi1>
+  // CHECK: [[D:%.+]] = hw.array_slice %d[%c3_i3] : (!hw.array<5xi1>) -> !hw.array<2xi1>
+  // CHECK: [[B:%.+]] = hw.array_slice %b[%c0_i2] : (!hw.array<3xi1>) -> !hw.array<2xi1>
+  // CHECK: [[SLICE_1:%.+]] = hw.array_concat [[B]], %c, [[D]] : !hw.array<2xi1>, !hw.array<4xi1>, !hw.array<2xi1>
+  // CHECK: [[C:%.+]] = hw.array_slice %c[%c-2_i2] : (!hw.array<4xi1>) -> !hw.array<2xi1>
+  // CHECK: [[SLICE_2:%.+]] = hw.array_concat %b, [[C]] : !hw.array<3xi1>, !hw.array<2xi1>
+  // CHECK: hw.output [[SLICE_0]], [[SLICE_1]], [[SLICE_2]] : !hw.array<3xi1>, !hw.array<8xi1>, !hw.array<5xi1>
+
+
+  hw.output %slice0, %slice1, %slice2 : !hw.array<3xi1>, !hw.array<8xi1>, !hw.array<5xi1>
+}
+
+// CHECK-LABEL: hw.module @SingleElementSlice
+hw.module @SingleElementSlice(%a: !hw.array<2xi1>) -> (out: !hw.array<1xi1>) {
+  %false = hw.constant 0 : i1
+  %out = hw.array_slice %a[%false] : (!hw.array<2xi1>) -> !hw.array<1xi1>
+
+  // CHECK: [[ELEM:%.+]] = hw.array_get %a[%false] : !hw.array<2xi1>
+  // CHECK: [[CREATE:%.+]] = hw.array_create [[ELEM]] : i1
+  // CHECK: hw.output [[CREATE]] : !hw.array<1xi1>
+
+  hw.output %out : !hw.array<1xi1>
+}
+
+// CHECK-LABEL: hw.module @SliceOfSlice
+hw.module @SliceOfSlice(%a: !hw.array<7xi1>) -> (out: !hw.array<2xi1>) {
+  %c1_i3 = hw.constant 1 : i3
+
+  %slice0 = hw.array_slice %a[%c1_i3] : (!hw.array<7xi1>) -> !hw.array<6xi1>
+  %slice1 = hw.array_slice %slice0[%c1_i3] : (!hw.array<6xi1>) -> !hw.array<2xi1>
+
+  // CHECK: [[SLICE:%.+]] = hw.array_slice %a[%c2_i3] : (!hw.array<7xi1>) -> !hw.array<2xi1>
+  // CHECK: hw.output [[SLICE]] : !hw.array<2xi1>
+
+  hw.output %slice1 : !hw.array<2xi1>
+}
+
+// CHECK-LABEL: hw.module @SliceOfCreate
+hw.module @SliceOfCreate(%a0: i1, %a1: i1, %a2: i1, %a3: i1) -> (out: !hw.array<2xi1>) {
+  %c1_i2 = hw.constant 1 : i2
+
+  %create = hw.array_create %a3, %a2, %a1, %a0 : i1
+  %slice = hw.array_slice %create[%c1_i2] : (!hw.array<4xi1>) -> !hw.array<2xi1>
+
+  // CHECK: [[CREATE:%.+]] = hw.array_create %a2, %a1 : i1
+  // CHECK: hw.output [[CREATE]] : !hw.array<2xi1>
+
+  hw.output %slice : !hw.array<2xi1>
+}
