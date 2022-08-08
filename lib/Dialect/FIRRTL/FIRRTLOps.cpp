@@ -282,7 +282,7 @@ LogicalResult CircuitOp::verify() {
   // that defines it and has no parameters.
   llvm::DenseMap<Attribute, FExtModuleOp> defnameMap;
 
-  auto verifyExtModule = [&](FExtModuleOp extModule) {
+  auto verifyExtModule = [&](FExtModuleOp extModule) -> LogicalResult {
     if (!extModule)
       return success();
 
@@ -293,15 +293,12 @@ LogicalResult CircuitOp::verify() {
     // Check that this extmodule's defname does not conflict with
     // the symbol name of any module.
     auto *collidingModule = lookupSymbol(defname.getValue());
-    if (isa_and_nonnull<FModuleOp>(collidingModule)) {
-      auto diag =
-          extModule.emitOpError()
-          << "attribute 'defname' with value " << defname
-          << " conflicts with the name of another module in the circuit";
-      diag.attachNote(collidingModule->getLoc())
-          << "previous module declared here";
-      return failure();
-    }
+    if (isa_and_nonnull<FModuleOp>(collidingModule))
+      return extModule.emitOpError()
+          .append("attribute 'defname' with value ", defname,
+                  " conflicts with the name of another module in the circuit")
+          .attachNote(collidingModule->getLoc())
+          .append("previous module declared here");
 
     // Find an optional extmodule with a defname collision. Update
     // the defnameMap if this is the first extmodule with that
@@ -325,17 +322,14 @@ LogicalResult CircuitOp::verify() {
     SmallVector<PortInfo> ports = extModule.getPorts();
     SmallVector<PortInfo> collidingPorts = collidingExtModule.getPorts();
 
-    if (ports.size() != collidingPorts.size()) {
-      auto diag = extModule.emitOpError()
-                  << "with 'defname' attribute " << defname << " has "
-                  << ports.size()
-                  << " ports which is different from a previously defined "
-                     "extmodule with the same 'defname' which has "
-                  << collidingPorts.size() << " ports";
-      diag.attachNote(collidingExtModule.getLoc())
-          << "previous extmodule definition occurred here";
-      return failure();
-    }
+    if (ports.size() != collidingPorts.size())
+      return extModule.emitOpError()
+          .append("with 'defname' attribute ", defname, " has ", ports.size(),
+                  " ports which is different from a previously defined "
+                  "extmodule with the same 'defname' which has ",
+                  collidingPorts.size(), " ports")
+          .attachNote(collidingExtModule.getLoc())
+          .append("previous extmodule definition occurred here");
 
     // Check that ports match for name and type. Since parameters
     // *might* affect widths, ignore widths if either module has
@@ -345,45 +339,38 @@ LogicalResult CircuitOp::verify() {
       StringAttr aName = std::get<0>(p).name, bName = std::get<1>(p).name;
       FIRRTLType aType = std::get<0>(p).type, bType = std::get<1>(p).type;
 
-      if (aName != bName) {
-        auto diag = extModule.emitOpError()
-                    << "with 'defname' attribute " << defname
-                    << " has a port with name " << aName
-                    << " which does not match the name of the port "
-                    << "in the same position of a previously defined "
-                    << "extmodule with the same 'defname', expected port "
-                       "to have name "
-                    << bName;
-        diag.attachNote(collidingExtModule.getLoc())
-            << "previous extmodule definition occurred here";
-        return failure();
-      }
+      if (aName != bName)
+        return extModule.emitOpError()
+            .append("with 'defname' attribute ", defname,
+                    " has a port with name ", aName,
+                    " which does not match the name of the port in the same "
+                    "position of a previously defined extmodule with the same "
+                    "'defname', expected port to have name ",
+                    bName)
+            .attachNote(collidingExtModule.getLoc())
+            .append("previous extmodule definition occurred here");
+
       if (!aType.isa<FIRRTLBaseType>() || !bType.isa<FIRRTLBaseType>())
         return extModule.emitOpError().append(
-                   "with 'defname' attribute ", defname,
-                   " has a port that is of unsupported type, must be base "
-                   "type."),
-               failure();
+            "with 'defname' attribute ", defname,
+            " has a port that is of unsupported type, must be base type.");
 
       if (!extModule.getParameters().empty() ||
           !collidingExtModule.getParameters().empty()) {
         aType = aType.cast<FIRRTLBaseType>().getWidthlessType();
         bType = bType.cast<FIRRTLBaseType>().getWidthlessType();
       }
-      if (aType != bType) {
-        auto diag = extModule.emitOpError()
-                    << "with 'defname' attribute " << defname
-                    << " has a port with name " << aName
-                    << " which has a different type " << aType
-                    << " which does not match the type of the port in "
-                       "the same position of a previously defined "
-                       "extmodule with the same 'defname', expected port "
-                       "to have type "
-                    << bType;
-        diag.attachNote(collidingExtModule.getLoc())
-            << "previous extmodule definition occurred here";
-        return failure();
-      }
+      if (aType != bType)
+        return extModule.emitOpError()
+            .append("with 'defname' attribute ", defname,
+                    " has a port with name ", aName,
+                    " which has a different type ", aType,
+                    " which does not match the type of the port in the same "
+                    "position of a previously defined extmodule with the same "
+                    "'defname', expected port to have type ",
+                    bType)
+            .attachNote(collidingExtModule.getLoc())
+            .append("previous extmodule definition occurred here");
     }
     return success();
   };
