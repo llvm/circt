@@ -2018,11 +2018,7 @@ void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 // Statements
 //===----------------------------------------------------------------------===//
 
-/// Check if the source and sink are of appropriate flow.
-/// The disallowOutputPortSink flag can be enabled to disallow reads from
-/// module/instance output ports.
-static LogicalResult checkConnectFlow(Operation *connect,
-                                      bool disallowOutputPortSink = false) {
+static LogicalResult checkConnectFlow(Operation *connect) {
   Value dst = connect->getOperand(0);
   Value src = connect->getOperand(1);
 
@@ -2031,8 +2027,7 @@ static LogicalResult checkConnectFlow(Operation *connect,
   if (foldFlow(src) == Flow::Sink) {
     // A sink that is a port output or instance input used as a source is okay.
     auto kind = getDeclarationKind(src);
-    if (disallowOutputPortSink ||
-        (kind != DeclKind::Port && kind != DeclKind::Instance)) {
+    if (kind != DeclKind::Port && kind != DeclKind::Instance) {
       auto srcRef = getFieldRefFromValue(src);
       bool rootKnown;
       auto srcName = getFieldName(srcRef, rootKnown);
