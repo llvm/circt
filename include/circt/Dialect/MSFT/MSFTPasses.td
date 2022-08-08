@@ -27,7 +27,9 @@ def ExportTcl: Pass<"msft-export-tcl", "mlir::ModuleOp"> {
                "List of top modules to export Tcl for",
                "llvm::cl::ZeroOrMore,">,
     Option<"tclFile", "tcl-file", "std::string",
-           "", "File to output Tcl into">
+           "", "File to output Tcl into">,
+    Option<"tool", "tool", "std::string",
+           "\"quartus\"", "Target TCL tool. Options: [quartus]">
   ];
 }
 

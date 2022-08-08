@@ -5,7 +5,6 @@
 #include "circt-c/Dialect/MSFT.h"
 #include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/MSFT/DeviceDB.h"
-#include "circt/Dialect/MSFT/ExportTcl.h"
 #include "circt/Dialect/MSFT/MSFTAttributes.h"
 #include "circt/Dialect/MSFT/MSFTDialect.h"
 #include "circt/Dialect/MSFT/MSFTOps.h"
