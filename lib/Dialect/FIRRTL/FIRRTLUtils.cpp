@@ -239,7 +239,7 @@ bool circt::firrtl::walkDrivers(Value val, bool lookThroughWires,
                                 WalkDriverCallback callback) {
   // TODO: what do we want to happen when there are flips in the type? Do we
   // want to filter out fields which have reverse flow?
-  assert(val.getType().cast<FIRRTLType>().isPassive() &&
+  assert(val.getType().cast<FIRRTLBaseType>().isPassive() &&
          "this code was not tested with flips");
 
   // This method keeps a stack of wires (or ports) and subfields of those that
