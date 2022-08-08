@@ -31,7 +31,6 @@
 #include "circt/Conversion/PipelineToCalyx.h"
 #include "circt/Conversion/SCFToCalyx.h"
 #include "circt/Conversion/StandardToHandshake.h"
-#include "circt/Conversion/StandardToPipeline.h"
 #include "mlir/IR/DialectRegistry.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassRegistry.h"

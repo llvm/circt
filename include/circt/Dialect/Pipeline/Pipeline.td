@@ -29,52 +29,6 @@ def Pipeline_Dialect : Dialect {
   let cppNamespace = "::circt::pipeline";
 }
 
-def PipelineOp : Op<Pipeline_Dialect, "pipeline", [NoSideEffect]> {
-  let summary = "pipeline operation";
-  let description = [{
-    The "pipeline" operation represents a statically scheduled
-    pipeline stucture which contains several MLIR blocks. Each MLIR block is
-    corresponding to a pipeline stage.
-  }];
-
-  let arguments = (ins Variadic<AnyType>);
-  let results = (outs Variadic<AnyType>);
-  let regions = (region AnyRegion: $body);
-
-  let skipDefaultBuilders = 1;
-
-  let builders = [OpBuilder<(ins "ValueRange":$operands, "ValueRange":$results), [{
-    SmallVector<Type, 4> argTypes;
-    SmallVector<Location, 4> argLocs;
-    for (auto value : operands) {
-      argTypes.push_back(value.getType());
-      argLocs.push_back(value.getLoc());
-    }
-
-    SmallVector<Type, 4> resultTypes;
-    for (auto value : results)
-      resultTypes.push_back(value.getType());
-
-    Region *bodyRegion = odsState.addRegion();
-    Block *body = new Block();
-    bodyRegion->push_back(body);
-    body->addArguments(argTypes, argLocs);
-
-    odsState.addOperands(operands);
-    odsState.addTypes(resultTypes);
-  }]>];
-}
-
-def ReturnOp : Op<Pipeline_Dialect, "return", [Terminator]> {
-  let summary = "Pipeline dialect return.";
-  let description = [{
-    The "return" operation represents a terminator of a statically
-    scheduled module, which is similar to a standard return operation.
-  }];
-
-  let arguments = (ins Variadic<AnyType>: $operands);
-}
-
 def PipelineWhileOp : Op<Pipeline_Dialect, "while", []> {
   let summary = "Pipeline dialect pipeline while-loop.";
   let description = [{
