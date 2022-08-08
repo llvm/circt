@@ -550,7 +550,7 @@ static bool isOkToBitSelectFrom(Value v) {
   }
 
   // Aggregate access can be inlined.
-  if (v.getDefiningOp<StructExtractOp>())
+  if (v.getDefiningOp<StructExtractOp>() || v.getDefiningOp<ArrayGetOp>())
     return true;
 
   // Interface signal can be inlined.

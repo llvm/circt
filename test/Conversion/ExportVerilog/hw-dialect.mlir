@@ -65,19 +65,19 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
   %allone = hw.constant 15 : i4
   %34 = comb.xor %a, %allone : i4
 
-  %arrCreated = hw.array_create %allone, %allone, %allone, %allone, %allone, %allone, %allone, %allone, %allone : i4
+  // Having "sv.namehint" (and checking that it works) anywhere will inherently
+  // make tests brittle. This line breaking does not mean your change is no
+  // good! You'll just have to find a new place for `sv.namehint`.
+  %arrCreated = hw.array_create %allone, %allone, %allone, %allone, %allone, %allone, %allone, %allone, %allone { sv.namehint="name_hint" } : i4
   %slice1 = hw.array_slice %arrCreated[%a] : (!hw.array<9xi4>) -> !hw.array<3xi4>
   %slice2 = hw.array_slice %arrCreated[%b] : (!hw.array<9xi4>) -> !hw.array<3xi4>
   %35 = comb.mux %cond, %slice1, %slice2 : !hw.array<3xi4>
 
   %ab = comb.add %a, %b : i4
   %subArr = hw.array_create %allone, %ab, %allone : i4
-  %38 = hw.array_concat %subArr, %subArr : !hw.array<3 x i4>, !hw.array<3 x i4>
 
-  // Having "sv.namehint" (and checking that it works) anywhere will inherently
-  // make tests brittle. This line breaking does not mean your change is no
-  // good! You'll just have to find a new place for `sv.namehint`.
-  %elem2d = hw.array_get %array2d[%a] { sv.namehint="array2d_idx_0_name" } : !hw.array<12 x array<10xi4>>
+  %38 = hw.array_concat %subArr, %subArr : !hw.array<3 x i4>, !hw.array<3 x i4>
+  %elem2d = hw.array_get %array2d[%a] : !hw.array<12 x array<10xi4>>
   %37 = hw.array_get %elem2d[%b] {sv.attributes=#sv.attributes<[#sv.attribute<"svAttr">]>}: !hw.array<10xi4>
 
   %36 = comb.replicate %a : (i4) -> i12
@@ -146,10 +146,9 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
 // CHECK-NEXT:   output struct packed {logic [1:0] foo; logic [3:0] bar; } r40,
 // CHECK-NEXT:                                                             r41,
 // CHECK-NEXT:   output                                                    r42);
-// CHECK:        wire [8:0][3:0] [[WIRE0:.+]] = {{[{}][{}]}}4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}};
-// CHECK-NEXT:   wire [2:0][3:0] [[WIRE1:.+]] = {{[{}][{}]}}4'hF}, {a + b}, {4'hF}};
-// CHECK-NEXT:   wire [9:0][3:0] [[WIRE2:array2d_idx_0_name]] = array2d[a];
-// CHECK-NEXT:   wire struct packed {logic [1:0] foo; logic [3:0] bar; } [[WIRE3:.+]] = '{foo: c, bar: a};
+// CHECK:        wire [8:0][3:0] name_hint = {{[{}][{}]}}4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}};
+// CHECK-NEXT:   wire [2:0][3:0] [[WIRE0:.+]] = {{[{}][{}]}}4'hF}, {a + b}, {4'hF}};
+// CHECK-NEXT:   wire struct packed {logic [1:0] foo; logic [3:0] bar; } [[WIRE1:.+]] = '{foo: c, bar: a};
 // CHECK-NEXT:   assign r0 = a + b;
 // CHECK-NEXT:   assign r2 = a - b;
 // CHECK-NEXT:   assign r4 = a * b;
@@ -181,12 +180,12 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
 // CHECK-NEXT:   assign r31 = {{[{}][{}]}}5{a[3]}}, a};
 // CHECK-NEXT:   assign r33 = cond ? a : b;
 // CHECK-NEXT:   assign r34 = ~a;
-// CHECK-NEXT:   assign r35 = cond ? [[WIRE0]][a +: 3] : [[WIRE0]][b +: 3];
+// CHECK-NEXT:   assign r35 = cond ? name_hint[a +: 3] : name_hint[b +: 3];
 // CHECK-NEXT:   assign r36 = {3{a}};
-// CHECK-NEXT:   assign r37 = [[WIRE2]][b] (* svAttr *);
-// CHECK-NEXT:   assign r38 = {[[WIRE1]], [[WIRE1]]};
+// CHECK-NEXT:   assign r37 = array2d[a][b] (* svAttr *);
+// CHECK-NEXT:   assign r38 = {[[WIRE0]], [[WIRE0]]};
 // CHECK-NEXT:   assign r40 = '{foo: structA.foo, bar: a};
-// CHECK-NEXT:   assign r41 = '{foo: [[WIRE3]].foo, bar: b};
+// CHECK-NEXT:   assign r41 = '{foo: [[WIRE1]].foo, bar: b};
 // CHECK-NEXT:   assign r42 = array1[1'h0];
 // CHECK-NEXT: endmodule
 
@@ -1210,4 +1209,13 @@ hw.module @NoneTypeParam<p1: none>() -> () {}
 // CHECK:       endmodule
 hw.module @ParamConcatInst<name: none = "top">() -> () {
   hw.instance "inst" @NoneTypeParam<p1: none = #hw.param.expr.str.concat<".", #hw.param.decl.ref<"name">, ".", "child">>() -> ()
+}
+
+// CHECK-LABEL: module ArrayGetInline
+hw.module @ArrayGetInline(%a: !hw.array<4xstruct<a: i32>>) -> (out: i32) {
+  %c0_i2 = hw.constant 0 : i2
+  %x = hw.array_get %a[%c0_i2] : !hw.array<4xstruct<a: i32>>
+  %y = hw.struct_extract %x["a"] : !hw.struct<a: i32>
+  // CHECK: assign out = a[2'h0].a;
+  hw.output %y : i32
 }
