@@ -43,7 +43,7 @@ inline void registerAllPasses() {
   firrtl::registerPasses();
   fsm::registerPasses();
   llhd::initLLHDTransformationPasses();
-  msft::registerMSFTPasses();
+  msft::registerPasses();
   seq::registerPasses();
   sv::registerPasses();
   handshake::registerPasses();

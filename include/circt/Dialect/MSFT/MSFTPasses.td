@@ -6,6 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "mlir/Pass/PassBase.td"
+
 def LowerToHW: Pass<"lower-msft-to-hw", "mlir::ModuleOp"> {
   let summary = "Lower MSFT ops to hw ops";
   let constructor = "circt::msft::createLowerToHWPass()";

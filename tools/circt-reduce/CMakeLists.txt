@@ -19,6 +19,7 @@ target_link_libraries(circt-reduce
   CIRCTLLHD
   CIRCTMoore
   CIRCTMSFT
+  CIRCTMSFTTransforms
   CIRCTHW
   CIRCTHWTransforms
   CIRCTScheduling
