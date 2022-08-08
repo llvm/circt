@@ -32,7 +32,14 @@ IntegerAttr getIntZerosAttr(Type type);
 /// Return the module-scoped driver of a value only looking through one connect.
 Value getDriverFromConnect(Value val);
 
-/// Return the module-scoped driver of a value
+/// Return the value that drives another FIRRTL value within module scope.  This
+/// is parameterized by looking through or not through certain constructs.
+Value getValueSource(Value val, bool lookThroughWires, bool lookThroughNodes,
+                     bool lookThroughCasts);
+
+/// Return the value that drives another FIRRTL value within module scope.  This
+/// is parameterized by looking through or not through certain constructs.  This
+/// assumes a single driver and should only be run after `ExpandWhens`.
 Value getModuleScopedDriver(Value val, bool lookThroughWires,
                             bool lookThroughNodes, bool lookThroughCasts);
 
@@ -54,6 +61,16 @@ static bool isModuleScopedDrivenBy(Value val, bool lookThroughWires,
 
   return isa<A, B...>(op);
 }
+
+/// Walk all the drivers of a value, passing in the connect operations drive the
+/// value. If the value is an aggregate it will find connects to subfields. If
+/// the callback returns false, this function will stop walking.  Returns false
+/// if walking was broken, and true otherwise.
+using WalkDriverCallback =
+    llvm::function_ref<bool(const FieldRef &dst, const FieldRef &src)>;
+bool walkDrivers(Value value, bool lookThroughWires,
+                 bool lookTWalkDriverCallbackhroughNodes, bool lookThroughCasts,
+                 WalkDriverCallback callback);
 
 /// Get the FieldRef from a value.  This will travel backwards to through the
 /// IR, following Subfield and Subindex to find the op which declares the
