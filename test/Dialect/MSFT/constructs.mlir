@@ -61,3 +61,19 @@ msft.module @ChannelExample {} (%clk: i1, %a : i8) -> (out: i8) {
   %out = msft.constructs.channel %a %clk "chEx" (2) : i8
   msft.output %out : i8
 }
+
+// CHECK-LABEL: msft.module @foo {} (%in0: i32, %in1: i32, %in2: i32, %clk: i1) -> (out: i32) {
+// CHECK:       %0 = msft.hlc.linear(%arg0 = %in0, %arg1 = %in1, %arg2 = %in2) clock %clk : (i32, i32, i32) -> i32 {
+// CHECK:         %1 = comb.mul %arg0, %arg1 : i32
+// CHECK:         %2 = comb.add %1, %arg2 : i32
+// CHECK:         msft.output %2 : i32
+// CHECK:       }
+// CHECK:       msft.output %0 : i32
+msft.module @foo {} (%in0 : i32, %in1 : i32, %in2 : i32, %clk : i1) -> (out: i32) {
+  %0 = msft.hlc.linear(%arg0 = %in0, %arg1 = %in1, %arg2 = %in2) clock %clk : (i32, i32, i32) -> (i32) {
+    %0 = comb.mul %arg0, %arg1 : i32
+    %1 = comb.add %0, %arg2 : i32
+    msft.output %1 : i32
+  }
+  msft.output %0 : i32
+}

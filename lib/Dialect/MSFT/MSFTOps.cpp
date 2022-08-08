@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/MSFT/MSFTOps.h"
+#include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/ModuleImplementation.h"
@@ -976,6 +977,100 @@ void SystolicArrayOp::print(OpAsmPrinter &p) {
                   .getElementType());
   p << ") ";
   p.printRegion(pe(), false);
+}
+
+//===----------------------------------------------------------------------===//
+// LinearOp
+//===----------------------------------------------------------------------===//
+
+ParseResult LinearOp::parse(OpAsmParser &parser, OperationState &result) {
+  llvm::SmallVector<OpAsmParser::Argument> regionArgs;
+  llvm::SmallVector<OpAsmParser::UnresolvedOperand> opInputs;
+
+  if (parser.parseLParen())
+    return failure();
+
+  // Parse the input values and inner region argument defs.
+  if (failed(parser.parseOptionalRParen())) {
+    do {
+      regionArgs.resize(regionArgs.size() + 1);
+      opInputs.resize(opInputs.size() + 1);
+      if (parser.parseArgument(regionArgs.back()) || parser.parseEqual() ||
+          parser.parseOperand(opInputs.back()))
+        return failure();
+    } while (!parser.parseOptionalComma());
+    if (parser.parseRParen())
+      return failure();
+  }
+
+  // Parse clock signal.
+  opInputs.resize(opInputs.size() + 1);
+  if (parser.parseKeyword("clock") || parser.parseOperand(opInputs.back()))
+    return failure();
+
+  // Parse the optional attribute list.
+  if (parser.parseOptionalAttrDict(result.attributes))
+    return failure();
+
+  // Parse the type.
+  FunctionType type;
+  if (failed(parser.parseColonType(type)))
+    return failure();
+
+  for (auto it : llvm::enumerate(type.getInputs())) {
+    if (failed(parser.resolveOperand(opInputs[it.index()], it.value(),
+                                     result.operands)))
+      return failure();
+    regionArgs[it.index()].type = it.value();
+  }
+  if (failed(parser.resolveOperand(
+          opInputs.back(), parser.getBuilder().getI1Type(), result.operands)))
+    return failure();
+  if (parser.addTypesToList(type.getResults(), result.types))
+    return failure();
+
+  // Parse the inner region.
+  Region *region = result.addRegion();
+  if (parser.parseRegion(*region, regionArgs))
+    return failure();
+
+  return success();
+}
+
+void LinearOp::print(OpAsmPrinter &p) {
+  p << "(";
+
+  for (int i = 0, e = ins().size(); i < e; i++) {
+    p << getBody()->getArgument(i) << " = " << ins()[i];
+    if (i != e - 1)
+      p << ", ";
+  }
+
+  p << ") clock " << clock();
+  p.printOptionalAttrDict(getOperation()->getAttrs());
+  p << " : " << getType() << " ";
+  p.printRegion(datapath(), /*printEntryBlockArgs=*/false);
+}
+
+LogicalResult LinearOp::verify() {
+
+  for (auto &op : *getBodyBlock()) {
+    if (!isa<hw::HWDialect, comb::CombDialect, msft::MSFTDialect>(
+            op.getDialect()))
+      return op.emitOpError() << "expected only hw, comb, and msft dialect ops "
+                                 "inside the msft.hlc.linear datapath.";
+  }
+
+  return success();
+}
+
+FunctionType LinearOp::getType() {
+  llvm::SmallVector<Type, 4> inTypes, outTypes;
+  llvm::transform(ins(), std::back_inserter(inTypes),
+                  [](Value v) { return v.getType(); });
+  llvm::transform(outs(), std::back_inserter(outTypes),
+                  [](Value v) { return v.getType(); });
+  return FunctionType::get(getContext(), inTypes, outTypes);
 }
 
 #define GET_OP_CLASSES
