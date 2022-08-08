@@ -10,7 +10,6 @@ from circt.support import get_value
 from circt.dialects import msft, hw
 import mlir.ir as ir
 
-import types
 import typing
 
 
@@ -18,40 +17,45 @@ def Wire(type: PyCDEType):
   """Declare a wire. Used to create backedges. Must assign exactly once. Assign
   method disappears after being called."""
 
-  def assign(self, new_value: Value):
-    if new_value.type != self.type:
-      raise TypeError(
-          f"Cannot assign {new_value.value.type} to {self.value.type}")
+  class WireValue(type._get_value_class()):
 
-    msft.replaceAllUsesWith(self.value, new_value.value)
-    self.value.owner.erase()
-    self.value = new_value.value
-    # Remove this method so it can't be called again.
-    del self.assign
+    def __init__(self, value, type: PyCDEType):
+      super().__init__(value, type)
+      self._assigned = False
 
-  value = Value(ir.Operation.create("builtin.reinterpret_cast", [type]), type)
-  value.assign = types.MethodType(assign, value)
-  return value
+    def assign(self, new_value: Value):
+      if self._assigned == True:
+        raise ValueError("Cannot assign value to Wire twice.")
+      if new_value.type != self.type:
+        raise TypeError(
+            f"Cannot assign {new_value.value.type} to {self.value.type}")
+
+      msft.replaceAllUsesWith(self.value, new_value.value)
+      self.value.owner.erase()
+      self.value = new_value.value
+      self._assigned = True
+
+  return WireValue(ir.Operation.create("builtin.reinterpret_cast", [type]),
+                   type)
 
 
 def Reg(type: PyCDEType,
         clk: Value = None,
         rst: Value = None,
         rst_value: Value = None):
-  """Declare a register. Must assign exactly once. Assign method disappears
-  after being called."""
+  """Declare a register. Must assign exactly once."""
 
-  def assign(self, new_value: Value):
-    self._wire.assign(new_value)
-    # Remove this method so it can't be called again.
-    del self.assign
-    # Also the backing Wire.
-    del self._wire
+  class RegisterValue(type._get_value_class()):
+
+    def assign(self, new_value: Value):
+      if self._wire is None:
+        raise ValueError("Cannot assign value to Reg twice.")
+      self._wire.assign(new_value)
+      self._wire = None
 
   # Create a wire and register it.
   wire = Wire(type)
-  value = wire.reg(clk, rst, rst_value)
-  value.assign = types.MethodType(assign, value)
+  value = RegisterValue(wire.reg(clk, rst, rst_value), type)
   value._wire = wire
   return value
 
