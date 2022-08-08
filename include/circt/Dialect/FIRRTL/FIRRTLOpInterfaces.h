@@ -45,11 +45,11 @@ struct PortInfo {
 
   /// Return true if this is a simple output-only port.  If you want the
   /// direction of the port, use the \p direction parameter.
-  bool isOutput() { return !isInOut() && direction == Direction::Out; }
+  bool isOutput() { return direction == Direction::Out && !isInOut(); }
 
   /// Return true if this is a simple input-only port.  If you want the
   /// direction of the port, use the \p direction parameter.
-  bool isInput() { return !isInOut() && direction == Direction::In; }
+  bool isInput() { return direction == Direction::In && !isInOut(); }
 
   /// Return true if this is an inout port.  This will be true if the port
   /// contains either bi-directional signals or analog types.
