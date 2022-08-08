@@ -27,7 +27,7 @@ using namespace circt::msft;
 
 void mlirMSFTRegisterPasses() {
   mlir::registerCanonicalizerPass();
-  circt::msft::registerMSFTPasses();
+  registerPasses();
 }
 
 //===----------------------------------------------------------------------===//

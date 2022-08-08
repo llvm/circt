@@ -34,6 +34,7 @@ target_link_libraries(circt-opt
   CIRCTMoore
   CIRCTMooreToCore
   CIRCTMSFT
+  CIRCTMSFTTransforms
   CIRCTHW
   CIRCTHWArith
   CIRCTHWArithToHW
