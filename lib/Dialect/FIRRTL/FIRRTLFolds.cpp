@@ -1553,13 +1553,21 @@ static LogicalResult canonicalizeIntTypeConnect(ConnectOp op,
   return failure();
 }
 
+/// Determines if the specified type is a sized base type.
+static bool isSizedBaseType(Type type) {
+  auto base = type.dyn_cast<FIRRTLBaseType>();
+  return base && !base.hasUninferredWidth();
+}
+
 // Forward simple values through wire's and reg's.
 static LogicalResult
 canonicalizeMatchingTypeConnect(ConnectOp op, PatternRewriter &rewriter) {
-  if (op.getSrc().getType() != op.getDest().getType() ||
-      !op.getSrc().getType().isa<FIRRTLBaseType>() ||
-      op.getSrc().getType().cast<FIRRTLBaseType>().hasUninferredWidth())
+  // Limit to connects between matching sized base types.
+  if (op.getSrc().getType() != op.getDest().getType())
     return failure();
+  if (!isSizedBaseType(op.getSrc().getType()))
+    return failure();
+
   rewriter.create<StrictConnectOp>(op.getLoc(), op.getDest(), op.getSrc());
   if (auto *srcOp = op.getSrc().getDefiningOp())
     rewriter.updateRootInPlace(srcOp, []() {});
