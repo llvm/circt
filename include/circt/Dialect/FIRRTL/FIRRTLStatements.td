@@ -30,7 +30,7 @@ def ConnectOp : FIRRTLOp<"connect", [FConnectLike]> {
     ```
     }];
 
-  let arguments = (ins FIRRTLType:$dest, FIRRTLType:$src);
+  let arguments = (ins ConnectableType:$dest, ConnectableType:$src);
   let results = (outs);
 
   let assemblyFormat =

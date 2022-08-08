@@ -60,6 +60,13 @@ def BundleType : FIRRTLDialectType<CPred<"$_self.isa<BundleType>()">,
 def FVectorType : FIRRTLDialectType<CPred<"$_self.isa<FVectorType>()">,
   "FVectorType", "::circt::firrtl::FVectorType">;
 
+def ConnectableType : FIRRTLDialectType<
+    CPred<"$_self.isa<FIRRTLBaseType>()">,
+    "a connectable type (base type)", "::circt::firrtl::FIRRTLType", [{
+    Any type that is valid for use in connect statements.
+    Currently this is any base type.
+  }]>;
+
 def SizedType : FIRRTLDialectType<
     CPred<"$_self.isa<FIRRTLBaseType>() && "
           "!$_self.cast<FIRRTLBaseType>().hasUninferredWidth()">,
