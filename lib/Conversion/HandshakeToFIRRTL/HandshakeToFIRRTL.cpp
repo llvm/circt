@@ -2636,8 +2636,7 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
 
     auto fieldName = storeIdentifier(i);
     auto memBundle = memOp.getPortNamed(fieldName);
-    auto memType =
-        memBundle.getType().cast<FIRRTLBaseType>().cast<BundleType>();
+    auto memType = memBundle.getType().cast<BundleType>();
 
     // Get the clock out of the bundle and connect it.
     auto memClock = rewriter.create<SubfieldOp>(
