@@ -30,6 +30,10 @@ void mlirMSFTRegisterPasses() {
   registerPasses();
 }
 
+void circtMSFTReplaceAllUsesWith(MlirValue value, MlirValue newValue) {
+  unwrap(value).replaceAllUsesWith(unwrap(newValue));
+}
+
 //===----------------------------------------------------------------------===//
 // PrimitiveDB.
 //===----------------------------------------------------------------------===//

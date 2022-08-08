@@ -27,7 +27,7 @@ class Value:
   def __new__(cls, value, type=None):
     from .pycde_types import Type
 
-    if value is None or isinstance(value, Value):
+    if (value is None or isinstance(value, Value)) and value.__class__ is cls:
       return value
     resvalue = support.get_value(value)
 
@@ -37,7 +37,10 @@ class Value:
     if type is None:
       type = resvalue.type
     type = Type(type)
-    v = super().__new__(type._get_value_class())
+    if cls is Value:
+      v = super().__new__(type._get_value_class())
+    else:
+      v = super().__new__(cls)
     v.value = resvalue
     v.type = type
     return v
