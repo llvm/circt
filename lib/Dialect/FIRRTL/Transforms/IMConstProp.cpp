@@ -489,9 +489,10 @@ void IMConstPropPass::markInstanceOp(InstanceOp instance) {
 // We merge the value from the RHS into the value of the LHS.
 void IMConstPropPass::visitConnect(ConnectOp connect) {
   auto connectDestType = connect.getDest().getType().dyn_cast<FIRRTLBaseType>();
+  // Only base types are handled for now, mark non-base overdefined.
   if (!connectDestType) {
-    connect.emitError("connect of non-base types unhandled by IMConstProp");
-    return;
+    markOverdefined(connect.getSrc());
+    return markOverdefined(connect.getDest());
   }
   auto destType = connectDestType.getPassiveType();
 
@@ -546,9 +547,10 @@ void IMConstPropPass::visitConnect(ConnectOp connect) {
 // We merge the value from the RHS into the value of the LHS.
 void IMConstPropPass::visitStrictConnect(StrictConnectOp connect) {
   auto connectDestType = connect.getDest().getType().dyn_cast<FIRRTLBaseType>();
+  // Only base types are handled for now, mark non-base overdefined.
   if (!connectDestType) {
-    connect.emitError("connect of non-base types unhandled by IMConstProp");
-    return;
+    markOverdefined(connect.getSrc());
+    return markOverdefined(connect.getDest());
   }
   auto destType = connectDestType.getPassiveType();
 
