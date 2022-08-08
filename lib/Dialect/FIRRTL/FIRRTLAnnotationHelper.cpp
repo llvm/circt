@@ -327,7 +327,7 @@ void AnnoTargetCache::gatherTargets(FModuleLike mod) {
   mod.walk([&](Operation *op) {
     TypeSwitch<Operation *>(op)
         .Case<InstanceOp, MemOp, NodeOp, RegOp, RegResetOp, WireOp, CombMemOp,
-              SeqMemOp, MemoryPortOp>([&](auto op) {
+              SeqMemOp, MemoryPortOp, PrintFOp>([&](auto op) {
           // To be safe, check attribute and non-empty name before adding.
           if (auto name = op.getNameAttr(); name && !name.getValue().empty())
             targets.insert({name, OpAnnoTarget(op)});
