@@ -254,18 +254,18 @@ ParseResult circt::firrtl::parseNestedType(FIRRTLType &result,
 //===----------------------------------------------------------------------===//
 
 /// Print a type registered to this dialect.
-void FIRRTLDialect::printType(Type type, DialectAsmPrinter &os) const {
-  printNestedType(type, os);
-}
+//void FIRRTLDialect::printType(Type type, DialectAsmPrinter &os) const {
+//  printNestedType(type, os);
+//}
 
 /// Parse a type registered to this dialect.
-Type FIRRTLDialect::parseType(DialectAsmParser &parser) const {
-  StringRef name;
-  Type result;
-  if (parser.parseKeyword(&name) || ::parseType(result, name, parser))
-    return Type();
-  return result;
-}
+//Type FIRRTLDialect::parseType(DialectAsmParser &parser) const {
+//  StringRef name;
+//  Type result;
+//  if (parser.parseKeyword(&name) || ::parseType(result, name, parser))
+//    return Type();
+//  return result;
+//}
 
 //===----------------------------------------------------------------------===//
 // Recursive Type Properties
@@ -718,6 +718,11 @@ namespace firrtl {
 llvm::hash_code hash_value(const BundleType::BundleElement &arg) {
   return mlir::hash_value(arg.name) ^ mlir::hash_value(arg.type);
 }
+namespace detail {
+llvm::hash_code hash_value(const FieldInfo &arg) {
+  return llvm::hash_combine(arg.name, arg.type, arg.isFlip);
+}
+} // namespace detail
 } // namespace firrtl
 } // namespace circt
 
@@ -1007,6 +1012,66 @@ std::pair<size_t, bool> FVectorType::rootChildFieldID(size_t fieldID,
                         fieldID >= childRoot && fieldID <= rangeEnd);
 }
 
+
+//===----------------------------------------------------------------------===//
+// FIRRTLTDType Implementations
+//===----------------------------------------------------------------------===//
+
+/// Parse a list of field names and types within <>. E.g.:
+/// <foo: i7, bar: i8>
+static ParseResult parseFields(AsmParser &p,
+              SmallVectorImpl<BundleTDType::FieldInfo> &parameters) {
+                    auto parseBundleElement = [&]() -> ParseResult {
+      std::string nameStr;
+      StringRef name;
+      FIRRTLType type;
+
+      // The 'name' can be an identifier or an integer.
+      uint32_t fieldIntName;
+      auto intName = p.parseOptionalInteger(fieldIntName);
+      if (intName.hasValue()) {
+        if (failed(intName.getValue()))
+          return failure();
+        nameStr = llvm::utostr(fieldIntName);
+        name = nameStr;
+      } else {
+        // Otherwise must be an identifier.
+        if (p.parseKeyword(&name))
+          return failure();
+      }
+
+      bool isFlip = succeeded(p.parseOptionalKeyword("flip"));
+      if (p.parseColon() || parseNestedType(type, p))
+        return failure();
+
+      parameters.push_back({StringAttr::get(p.getContext(), name), isFlip, type});
+      return success();
+    };
+
+  return p.parseCommaSeparatedList(
+      mlir::AsmParser::Delimiter::LessGreater, parseBundleElement);
+      }
+
+/// Print out a list of named fields surrounded by <>.
+static void printFields(AsmPrinter &p, ArrayRef<BundleTDType::FieldInfo> fields) {
+  p << '<';
+  llvm::interleaveComma(fields, p, [&](const BundleTDType::FieldInfo &field) {
+    p << field.name.getValue() << ": " << field.type;
+  });
+  p << ">";
+}
+
+
+Type BundleTDType::parse(AsmParser &p) {
+  llvm::SmallVector<FieldInfo, 4> parameters;
+  if (parseFields(p, parameters))
+    return Type();
+  return get(p.getContext(), parameters);
+}
+
+void BundleTDType::print(AsmPrinter &p) const { printFields(p, getElements()); }
+
+
 //===----------------------------------------------------------------------===//
 // FIRRTLDialect
 //===----------------------------------------------------------------------===//
@@ -1014,7 +1079,10 @@ std::pair<size_t, bool> FVectorType::rootChildFieldID(size_t fieldID,
 void FIRRTLDialect::registerTypes() {
   addTypes<SIntType, UIntType, ClockType, ResetType, AsyncResetType, AnalogType,
            // Derived Types
-           BundleType, FVectorType>();
+           BundleType, FVectorType,
+           // Temporary TD conversion
+           SIntTDType, UIntTDType, ClockTDType, ResetTDType, AsyncResetTDType, AnalogTDType, BundleTDType, FVectorTDType
+           >();
 }
 
 // Get the bit width for this type, return None  if unknown. Unlike
