@@ -48,21 +48,21 @@ hw.module @hwModule(%arg0 : i32, %arg1 : i16) -> (arg2: i8) {
 // CHECK: llhd.entity @caller (%[[ARG0:.*]] : !llhd.sig<i32>, %[[ARG1:.*]] : !llhd.sig<i16>) -> (%[[OUT0:.*]] : !llhd.sig<i8>, %[[OUT1:.*]] : !llhd.sig<i4>) {
 llhd.entity @caller(%arg0 : !llhd.sig<i32>, %arg1 : !llhd.sig<i16>) -> (%out0 : !llhd.sig<i8>, %out1 : !llhd.sig<i4>) {
   // CHECK-NEXT: llhd.inst "empty_entity" @empty_entity() -> () : () -> ()
-  "llhd.inst"() {callee=@empty_entity, operand_segment_sizes=dense<[0,0]> : vector<2xi32>, name="empty_entity"} : () -> ()
+  "llhd.inst"() {callee=@empty_entity, operand_segment_sizes=array<i32: 0,0>, name="empty_entity"} : () -> ()
   // CHECK-NEXT: llhd.inst "empty_proc" @empty_proc() -> () : () -> ()
-  "llhd.inst"() {callee=@empty_proc, operand_segment_sizes=dense<[0,0]> : vector<2xi32>, name="empty_proc"} : () -> ()
+  "llhd.inst"() {callee=@empty_proc, operand_segment_sizes=array<i32: 0,0>, name="empty_proc"} : () -> ()
   // CHECK-NEXT: llhd.inst "one_in_entity" @one_input_entity(%[[ARG0]]) -> () : (!llhd.sig<i32>) -> ()
-  "llhd.inst"(%arg0) {callee=@one_input_entity, operand_segment_sizes=dense<[1,0]> : vector<2xi32>, name="one_in_entity"} : (!llhd.sig<i32>) -> ()
+  "llhd.inst"(%arg0) {callee=@one_input_entity, operand_segment_sizes=array<i32: 1,0>, name="one_in_entity"} : (!llhd.sig<i32>) -> ()
   // CHECK-NEXT: llhd.inst "one_in_proc" @one_input_proc(%[[ARG0]]) -> () : (!llhd.sig<i32>) -> ()
-  "llhd.inst"(%arg0) {callee=@one_input_proc, operand_segment_sizes=dense<[1,0]> : vector<2xi32>, name="one_in_proc"} : (!llhd.sig<i32>) -> ()
+  "llhd.inst"(%arg0) {callee=@one_input_proc, operand_segment_sizes=array<i32: 1,0>, name="one_in_proc"} : (!llhd.sig<i32>) -> ()
   // CHECK-NEXT: llhd.inst "one_out_entity" @one_output_entity() -> (%[[ARG0]]) : () -> !llhd.sig<i32>
-  "llhd.inst"(%arg0) {callee=@one_output_entity, operand_segment_sizes=dense<[0,1]> : vector<2xi32>, name="one_out_entity"} : (!llhd.sig<i32>) -> ()
+  "llhd.inst"(%arg0) {callee=@one_output_entity, operand_segment_sizes=array<i32: 0,1>, name="one_out_entity"} : (!llhd.sig<i32>) -> ()
   // CHECK-NEXT: llhd.inst "one_out_proc" @one_output_proc() -> (%[[ARG0]]) : () -> !llhd.sig<i32>
-  "llhd.inst"(%arg0) {callee=@one_output_proc, operand_segment_sizes=dense<[0,1]> : vector<2xi32>, name="one_out_proc"} : (!llhd.sig<i32>) -> ()
+  "llhd.inst"(%arg0) {callee=@one_output_proc, operand_segment_sizes=array<i32: 0,1>, name="one_out_proc"} : (!llhd.sig<i32>) -> ()
   // CHECK-NEXT: llhd.inst "entity" @entity(%[[ARG0]], %[[ARG1]]) -> (%[[OUT0]], %[[OUT1]]) : (!llhd.sig<i32>, !llhd.sig<i16>) -> (!llhd.sig<i8>, !llhd.sig<i4>)
-  "llhd.inst"(%arg0, %arg1, %out0, %out1) {callee=@entity, operand_segment_sizes=dense<[2,2]> : vector<2xi32>, name="entity"} : (!llhd.sig<i32>, !llhd.sig<i16>, !llhd.sig<i8>, !llhd.sig<i4>) -> ()
+  "llhd.inst"(%arg0, %arg1, %out0, %out1) {callee=@entity, operand_segment_sizes=array<i32: 2,2>, name="entity"} : (!llhd.sig<i32>, !llhd.sig<i16>, !llhd.sig<i8>, !llhd.sig<i4>) -> ()
   // CHECK-NEXT: llhd.inst "proc" @proc(%[[ARG0]], %[[ARG1]]) -> (%[[OUT0]], %[[OUT1]]) : (!llhd.sig<i32>, !llhd.sig<i16>) -> (!llhd.sig<i8>, !llhd.sig<i4>)
-  "llhd.inst"(%arg0, %arg1, %out0, %out1) {callee=@proc, operand_segment_sizes=dense<[2,2]> : vector<2xi32>, name="proc"} : (!llhd.sig<i32>, !llhd.sig<i16>, !llhd.sig<i8>, !llhd.sig<i4>) -> ()
+  "llhd.inst"(%arg0, %arg1, %out0, %out1) {callee=@proc, operand_segment_sizes=array<i32: 2,2>, name="proc"} : (!llhd.sig<i32>, !llhd.sig<i16>, !llhd.sig<i8>, !llhd.sig<i4>) -> ()
   // CHECK-NEXT: llhd.inst "module" @hwModule(%[[ARG0]], %[[ARG1]]) -> (%[[OUT0]]) : (!llhd.sig<i32>, !llhd.sig<i16>) -> !llhd.sig<i8>
   llhd.inst "module" @hwModule(%arg0, %arg1) -> (%out0) : (!llhd.sig<i32>, !llhd.sig<i16>) -> !llhd.sig<i8>
   // CHECK-NEXT: }

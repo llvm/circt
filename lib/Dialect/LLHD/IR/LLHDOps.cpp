@@ -900,7 +900,7 @@ ParseResult llhd::RegOp::parse(OpAsmParser &parser, OperationState &result) {
   operandSizes.push_back(delayOperands.size());
   operandSizes.push_back(gateOperands.size());
   result.addAttribute("operand_segment_sizes",
-                      parser.getBuilder().getI32VectorAttr(operandSizes));
+                      parser.getBuilder().getDenseI32ArrayAttr(operandSizes));
 
   return success();
 }
