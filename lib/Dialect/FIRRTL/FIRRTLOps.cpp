@@ -2078,8 +2078,6 @@ LogicalResult ConnectOp::verify() {
   auto dstBaseType = dstType.dyn_cast<FIRRTLBaseType>();
   auto srcBaseType = srcType.dyn_cast<FIRRTLBaseType>();
   if (!dstBaseType || !srcBaseType) {
-    if (dstBaseType || srcBaseType)
-      return emitError("type mismatch with base/non-base");
     if (dstType != srcType)
       return emitError("may not connect different non-base types");
   } else {
