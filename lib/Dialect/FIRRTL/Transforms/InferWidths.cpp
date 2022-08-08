@@ -1799,37 +1799,38 @@ bool InferenceTypeUpdate::updateOperation(Operation *op) {
   if (auto con = dyn_cast<ConnectOp>(op)) {
     auto lhs = con.getDest();
     auto rhs = con.getSrc();
-    auto lhsFType = lhs.getType().cast<FIRRTLType>();
-    auto rhsFType = rhs.getType().cast<FIRRTLType>();
-    auto lhsType = lhsFType.dyn_cast<FIRRTLBaseType>();
-    auto rhsType = rhsFType.dyn_cast<FIRRTLBaseType>();
+    auto lhsType = lhs.getType().dyn_cast<FIRRTLBaseType>();
+    auto rhsType = rhs.getType().dyn_cast<FIRRTLBaseType>();
 
-    if (lhsType && rhsType) {
-      // If the source is an InvalidValue of unknown width, infer the type to be
-      // the same as the destination.
-      if (dyn_cast_or_null<InvalidValueOp>(rhs.getDefiningOp()) &&
-          hasUninferredWidth(rhs.getType()))
-        rhs.setType(lhsType);
+    // Nothing to do if not base types.
+    if (!lhsType || !rhsType)
+      return anyChanged;
 
-      auto lhsWidth = lhsType.getBitWidthOrSentinel();
-      auto rhsWidth = rhsType.getBitWidthOrSentinel();
-      if (lhsWidth >= 0 && rhsWidth >= 0 && lhsWidth < rhsWidth) {
-        OpBuilder builder(op);
-        auto trunc = builder.createOrFold<TailPrimOp>(
-            con.getLoc(), con.getSrc(), rhsWidth - lhsWidth);
-        if (rhsType.isa<SIntType>())
-          trunc =
-              builder.createOrFold<AsSIntPrimOp>(con.getLoc(), lhsType, trunc);
+    // If the source is an InvalidValue of unknown width, infer the type to be
+    // the same as the destination.
+    if (dyn_cast_or_null<InvalidValueOp>(rhs.getDefiningOp()) &&
+        hasUninferredWidth(rhs.getType()))
+      rhs.setType(lhsType);
 
-        LLVM_DEBUG(llvm::dbgs()
-                   << "Truncating RHS to " << lhsType << " in " << con << "\n");
-        con->replaceUsesOfWith(con.getSrc(), trunc);
-      }
+    auto lhsWidth = lhsType.getBitWidthOrSentinel();
+    auto rhsWidth = rhsType.getBitWidthOrSentinel();
+    if (lhsWidth >= 0 && rhsWidth >= 0 && lhsWidth < rhsWidth) {
+      OpBuilder builder(op);
+      auto trunc = builder.createOrFold<TailPrimOp>(con.getLoc(), con.getSrc(),
+                                                    rhsWidth - lhsWidth);
+      if (rhsType.isa<SIntType>())
+        trunc =
+            builder.createOrFold<AsSIntPrimOp>(con.getLoc(), lhsType, trunc);
+
+      LLVM_DEBUG(llvm::dbgs()
+                 << "Truncating RHS to " << lhsType << " in " << con << "\n");
+      con->replaceUsesOfWith(con.getSrc(), trunc);
     }
+    return anyChanged;
   }
 
   // If this is a module, update its ports.
-  if (auto module = dyn_cast<FModuleOp>(op)) {
+  else if (auto module = dyn_cast<FModuleOp>(op)) {
     // Update the block argument types.
     bool argsChanged = false;
     SmallVector<Attribute> argTypes;
