@@ -79,8 +79,9 @@ bool MergeConnection::peelConnect(StrictConnectOp connect) {
   // partial connect. Also ignore non-passive connections or non-integer
   // connections.
   LLVM_DEBUG(llvm::dbgs() << "Visiting " << connect << "\n");
-  auto destTy = connect.getDest().getType().cast<FIRRTLType>();
-  if (!destTy.isPassive() || !firrtl::getBitWidth(destTy).has_value())
+  auto destTy = connect.getDest().getType().dyn_cast<FIRRTLBaseType>();
+  if (!destTy || !destTy.isPassive() ||
+      !firrtl::getBitWidth(destTy).has_value())
     return false;
 
   auto destFieldRef = getFieldRefFromValue(connect.getDest());
@@ -210,7 +211,7 @@ bool MergeConnection::peelConnect(StrictConnectOp connect) {
         subConnections[e.index()].erase();
       auto value = e.value();
       auto bitwidth =
-          firrtl::getBitWidth(value.getType().template cast<FIRRTLType>());
+          firrtl::getBitWidth(value.getType().template cast<FIRRTLBaseType>());
       assert(bitwidth &&
              "it should be checked at the beginning of `peelConnect`");
       value = builder->createOrFold<BitCastOp>(

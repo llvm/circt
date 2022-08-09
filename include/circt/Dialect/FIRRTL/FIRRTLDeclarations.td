@@ -121,7 +121,7 @@ def MemOp : ReferableDeclOp<"mem"> {
          PortAnnotationsAttr:$portAnnotations,
          OptionalAttr<InnerSymAttr>:$inner_sym,
          OptionalAttr<UI32Attr>:$groupID);
-  let results = (outs Variadic<FIRRTLType>:$results);
+  let results = (outs Variadic<FIRRTLBaseType>:$results);
 
   let assemblyFormat = [{
     (`sym` $inner_sym^)? custom<NameKind>($nameKind)
@@ -156,7 +156,7 @@ def MemOp : ReferableDeclOp<"mem"> {
     using NamedPort = std::pair<StringAttr, MemOp::PortKind>;
 
     /// Return the type of a port given the memory depth, type, and kind
-    static BundleType getTypeForPort(uint64_t depth, FIRRTLType dataType,
+    static BundleType getTypeForPort(uint64_t depth, FIRRTLBaseType dataType,
                                      PortKind portKind, size_t maskBits = 0);
 
     /// Return the name and kind of ports supported by this memory.
@@ -169,7 +169,7 @@ def MemOp : ReferableDeclOp<"mem"> {
     PortKind getPortKind(size_t resultNo);
 
     /// Return the data-type field of the memory, the type of each element.
-    FIRRTLType getDataType();
+    FIRRTLBaseType getDataType();
 
     /// Return the number of mask bits.
     size_t getMaskBits();
@@ -181,7 +181,7 @@ def MemOp : ReferableDeclOp<"mem"> {
     }
 
     /// Return the port type for the specified result number.
-    FIRRTLType getPortType(size_t resultNo);
+    FIRRTLBaseType getPortType(size_t resultNo);
 
     // Return the result for this instance that corresponds to the specified
     // port name.
@@ -220,7 +220,7 @@ def NodeOp : ReferableDeclOp<"node",
                        NameKindAttr:$nameKind,
                        AnnotationArrayAttr:$annotations,
                        OptionalAttr<InnerSymAttr>:$inner_sym);
-  let results = (outs FIRRTLType:$result);
+  let results = (outs FIRRTLBaseType:$result);
 
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$input,
@@ -353,7 +353,7 @@ def WireOp : ReferableDeclOp<"wire"> {
   let arguments = (ins StrAttr:$name, NameKindAttr:$nameKind,
                        AnnotationArrayAttr:$annotations,
                        OptionalAttr<InnerSymAttr>:$inner_sym);
-  let results = (outs FIRRTLType:$result);
+  let results = (outs FIRRTLBaseType:$result);
 
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType,

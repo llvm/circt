@@ -317,7 +317,7 @@ private:
             // Already 1 bit, nothing to do.
             if (sf.getResult()
                     .getType()
-                    .cast<FIRRTLType>()
+                    .cast<FIRRTLBaseType>()
                     .getBitWidthOrSentinel() == 1)
               continue;
             // Check what is the mask field directly connected to.

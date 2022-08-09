@@ -352,7 +352,9 @@ void AddSeqMemPortsPass::runOnOperation() {
             context, userPort.direction == Direction::In ? "input" : "output"));
     attrs.emplace_back(
         StringAttr::get(context, "width"),
-        IntegerAttr::get(ui32Type, userPort.type.getBitWidthOrSentinel()));
+        IntegerAttr::get(
+            ui32Type,
+            userPort.type.cast<FIRRTLBaseType>().getBitWidthOrSentinel()));
     extraPorts.push_back(DictionaryAttr::get(context, attrs));
   }
   extraPortsAttr = ArrayAttr::get(context, extraPorts);

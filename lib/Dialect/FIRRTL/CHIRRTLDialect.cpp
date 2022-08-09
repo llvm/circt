@@ -196,7 +196,7 @@ static void printCombMemOp(OpAsmPrinter &p, Operation *op,
 }
 
 void CombMemOp::build(OpBuilder &builder, OperationState &result,
-                      FIRRTLType elementType, uint64_t numElements,
+                      FIRRTLBaseType elementType, uint64_t numElements,
                       StringRef name, NameKindEnum nameKind,
                       ArrayAttr annotations, StringAttr innerSym) {
   build(builder, result,
@@ -224,8 +224,8 @@ static void printSeqMemOp(OpAsmPrinter &p, Operation *op, DictionaryAttr attr) {
 }
 
 void SeqMemOp::build(OpBuilder &builder, OperationState &result,
-                     FIRRTLType elementType, uint64_t numElements, RUWAttr ruw,
-                     StringRef name, NameKindEnum nameKind,
+                     FIRRTLBaseType elementType, uint64_t numElements,
+                     RUWAttr ruw, StringRef name, NameKindEnum nameKind,
                      ArrayAttr annotations, StringAttr innerSym) {
   build(builder, result,
         CMemoryType::get(builder.getContext(), elementType, numElements), ruw,
@@ -293,9 +293,9 @@ void CMemoryType::print(AsmPrinter &printer) const {
 }
 
 Type CMemoryType::parse(AsmParser &parser) {
-  FIRRTLType elementType;
+  FIRRTLBaseType elementType;
   uint64_t numElements;
-  if (parser.parseLess() || firrtl::parseNestedType(elementType, parser) ||
+  if (parser.parseLess() || firrtl::parseNestedBaseType(elementType, parser) ||
       parser.parseComma() || parser.parseInteger(numElements) ||
       parser.parseGreater())
     return {};
@@ -303,7 +303,7 @@ Type CMemoryType::parse(AsmParser &parser) {
 }
 
 LogicalResult CMemoryType::verify(function_ref<InFlightDiagnostic()> emitError,
-                                  FIRRTLType elementType,
+                                  FIRRTLBaseType elementType,
                                   uint64_t numElements) {
   if (!elementType.isPassive()) {
     return emitError() << "behavioral memory element type must be passive";

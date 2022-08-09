@@ -28,16 +28,24 @@ void circt::firrtl::emitConnect(OpBuilder &builder, Location loc, Value dst,
 /// Emit a connect between two values.
 void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
                                 Value src) {
-  auto dstType = dst.getType().cast<FIRRTLType>();
-  auto srcType = src.getType().cast<FIRRTLType>();
+  auto dstFType = dst.getType().cast<FIRRTLType>();
+  auto srcFType = src.getType().cast<FIRRTLType>();
+  auto dstType = dstFType.dyn_cast<FIRRTLBaseType>();
+  auto srcType = srcFType.dyn_cast<FIRRTLBaseType>();
 
   // If the types are the exact same we can just connect them.
-  if (dstType == srcType) {
+  if (dstFType == srcFType) {
     // Strict connect does not allow uninferred widths.
-    if (dstType.hasUninferredWidth())
+    if (dstType && dstType.hasUninferredWidth())
       builder.create<ConnectOp>(dst, src);
     else
       builder.create<StrictConnectOp>(dst, src);
+    return;
+  }
+
+  // Non-base types don't need special handling.
+  if (!srcType || !dstType) {
+    builder.create<ConnectOp>(dst, src);
     return;
   }
 
@@ -231,7 +239,7 @@ bool circt::firrtl::walkDrivers(Value val, bool lookThroughWires,
                                 WalkDriverCallback callback) {
   // TODO: what do we want to happen when there are flips in the type? Do we
   // want to filter out fields which have reverse flow?
-  assert(val.getType().cast<FIRRTLType>().isPassive() &&
+  assert(val.getType().cast<FIRRTLBaseType>().isPassive() &&
          "this code was not tested with flips");
 
   // This method keeps a stack of wires (or ports) and subfields of those that
