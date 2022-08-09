@@ -10,11 +10,12 @@
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
-#include "circt/Dialect/MSFT/ExportTcl.h"
 #include "circt/Dialect/MSFT/MSFTDialect.h"
 #include "circt/Dialect/MSFT/MSFTOpInterfaces.h"
 #include "circt/Dialect/MSFT/MSFTOps.h"
 #include "circt/Dialect/MSFT/MSFTPasses.h"
+#include "circt/Dialect/MSFT/TclEmitter.h"
+#include "circt/Dialect/MSFT/TclEmitters/Quartus/TclEmitter.h"
 #include "circt/Support/Namespace.h"
 
 #include "mlir/IR/BlockAndValueMapping.h"
@@ -56,19 +57,27 @@ struct ExportTclPass : public ExportTclBase<ExportTclPass> {
 void ExportTclPass::runOnOperation() {
   auto top = getOperation();
   auto *ctxt = &getContext();
-  TclEmitter emitter(top);
+
+  std::unique_ptr<TclEmitter> emitter;
+  if (tool == "quartus") {
+    emitter = std::make_unique<QuartusTclEmitter>(top);
+  } else {
+    top.emitError("Unsupported TCL tool: " + tool);
+    signalPassFailure();
+    return;
+  }
 
   // Traverse MSFT location attributes and export the required Tcl into
   // templated `sv::VerbatimOp`s with symbolic references to the instance paths.
   for (std::string moduleName : tops) {
     Operation *hwmod =
-        emitter.getDefinition(FlatSymbolRefAttr::get(ctxt, moduleName));
+        emitter->getDefinition(FlatSymbolRefAttr::get(ctxt, moduleName));
     if (!hwmod) {
       top.emitError("Failed to find module '") << moduleName << "'";
       signalPassFailure();
       return;
     }
-    if (failed(emitter.emit(hwmod, tclFile))) {
+    if (failed(emitter->emit(hwmod, tclFile))) {
       hwmod->emitError("failed to emit tcl");
       signalPassFailure();
       return;
@@ -91,7 +100,7 @@ void ExportTclPass::runOnOperation() {
     signalPassFailure();
 
   target.addDynamicallyLegalOp<hw::GlobalRefOp>([&](hw::GlobalRefOp ref) {
-    return !emitter.getRefsUsed().contains(ref);
+    return !emitter->getRefsUsed().contains(ref);
   });
   patterns.clear();
   patterns.insert<RemoveOpLowering<hw::GlobalRefOp>>(ctxt);
