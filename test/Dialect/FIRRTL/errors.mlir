@@ -926,6 +926,7 @@ firrtl.module @NonRefNode(in %in1 : !firrtl.ref<uint<8>>) {
 }
 
 // -----
+// Registers cannot be reference type.
 
 firrtl.circuit "NonRefRegister" {
   firrtl.module @NonRefRegister(in %clock: !firrtl.clock) {
