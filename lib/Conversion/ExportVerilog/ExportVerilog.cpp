@@ -2806,85 +2806,6 @@ void StmtEmitter::emitStatementExpression(Operation *op) {
   emitLocationInfoAndNewLine(emittedExprs);
 }
 
-LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
-  // If spillWiresAtPrepare option is disabled, use the previous emission
-  // method.
-  // TODO: Once ExportVerilog simplification finished, remove this condition.
-  if (!state.options.spillWiresAtPrepare)
-    return emitNoop();
-
-  emitSVAttributes(op);
-  auto value = op->getResult(0);
-  SmallPtrSet<Operation *, 8> opsForLocation;
-  opsForLocation.insert(op);
-
-  // Emit the leading word, like 'wire', 'reg' or 'logic'.
-  auto type = value.getType();
-  auto word = getVerilogDeclWord(op, state.options);
-  if (!isZeroBitType(type)) {
-    indent() << word;
-    auto extraIndent = word.empty() ? 0 : 1;
-    os.indent(maxDeclNameWidth - word.size() + extraIndent);
-  } else {
-    indent() << "// Zero width: " << word << ' ';
-  }
-
-  SmallString<8> typeString;
-  // Convert the port's type to a string and measure it.
-  {
-    llvm::raw_svector_ostream stringStream(typeString);
-    emitter.printPackedType(stripUnpackedTypes(type), stringStream,
-                            op->getLoc());
-  }
-  // Emit the type.
-  os << typeString;
-  if (typeString.size() < maxTypeWidth)
-    os.indent(maxTypeWidth - typeString.size());
-
-  // Emit the name.
-  os << names.getName(value);
-
-  // Print out any array subscripts or other post-name stuff.
-  emitter.printUnpackedTypePostfix(type, os);
-
-  if (auto localparam = dyn_cast<LocalParamOp>(op)) {
-    os << " = ";
-    emitter.printParamValue(localparam.getValue(), os, [&]() {
-      return op->emitOpError("invalid localparam value");
-    });
-  }
-
-  // Try inlining wire assignments into declarations.
-  if (isa<WireOp>(op)) {
-    // If the wire has a single assignment located at next to the wire, we can
-    // inline the assignment.
-    AssignOp singleAssign = {};
-    if (llvm::all_of(op->getUsers(),
-                     [&](Operation *user) {
-                       if (hasSVAttributes(user))
-                         return false;
-
-                       if (auto assign = dyn_cast<AssignOp>(user)) {
-                         singleAssign = assign;
-                         // Check that the assignment is next to the wire.
-                         return assign == op->getNextNode();
-                       }
-
-                       return isa<ReadInOutOp>(user);
-                     }) &&
-        singleAssign) {
-      os << " = ";
-      emitExpression(singleAssign.getSrc(), opsForLocation, ForceEmitMultiUse);
-      emitter.assignsInlined.insert(singleAssign);
-    }
-  }
-
-  os << ';';
-  emitLocationInfoAndNewLine(opsForLocation);
-  ++numStatementsEmitted;
-  return success();
-}
-
 LogicalResult StmtEmitter::visitSV(AssignOp op) {
   // prepare assigns wires to instance outputs, but these are logically handled
   // in the port binding list when outputing an instance.
@@ -2910,6 +2831,10 @@ LogicalResult StmtEmitter::visitSV(AssignOp op) {
 }
 
 LogicalResult StmtEmitter::visitSV(BPAssignOp op) {
+  // If the assign is emitted into logic declaration, we must not emit again.
+  if (emitter.assignsInlined.count(op))
+    return success();
+
   // Emit SV attributes. See Spec 12.3.
   emitSVAttributes(op);
 
@@ -4018,6 +3943,13 @@ isExpressionEmittedInlineIntoProceduralDeclaration(Operation *op,
         return false;
 
       // It's safe to inline if all users are read op, passign or assign.
+      // If the op is a logic op whose single assignment is inlined into
+      // declaration, we can inline the read.
+      if (isa<LogicOp>(defOp) &&
+          stmtEmitter.emitter.expressionsEmittedIntoDecl.count(defOp))
+        continue;
+
+      // Check that it's safe for all users to be inlined.
       if (llvm::all_of(defOp->getResult(0).getUsers(), [&](Operation *op) {
             return isa<ReadInOutOp, PAssignOp, AssignOp>(op);
           }))
@@ -4044,6 +3976,147 @@ isExpressionEmittedInlineIntoProceduralDeclaration(Operation *op,
   }
 
   return true;
+}
+
+/// This function determines whether we can inline an assignment into
+/// a declaration of a given op. We first check that op's users are either a
+/// single assignment with type `AssignTy` or read from the op. If we can find
+/// such assignment, check that it dominates all users. If
+/// `onlyAllowAssignToBeNextToOp` is true, we check the dominance only by
+/// looking at positions of op and assign. More specifically, if the assignment
+/// is defined next to the op, we can say that the assignment dominates op's
+/// users (recall that PrepareForEmission already turns graph regions into
+/// SSACFG). Additionally, we can ensure that the source of the
+/// assign is known to be referable from the declaration.
+template <class AssignTy>
+static AssignTy
+getSingleAssignIfDominateUsers(Operation *op,
+                               bool onlyAllowAssignToBeNextToOp) {
+  assert((isa<WireOp, LogicOp>(op)) && "op is expected either a wire or logic");
+  AssignTy singleAssign;
+  if (!llvm::all_of(op->getUsers(),
+                    [&](Operation *user) {
+                      if (hasSVAttributes(user))
+                        return false;
+
+                      if (auto assign = dyn_cast<AssignTy>(user)) {
+                        if (singleAssign)
+                          return false;
+                        singleAssign = assign;
+                        return true;
+                      }
+
+                      return isa<ReadInOutOp>(user);
+                    }) ||
+      !singleAssign)
+    return {};
+
+  // We first check the dominance by looking at the next node of the op.
+  if (op->getNextNode() == singleAssign ||
+      (!onlyAllowAssignToBeNextToOp &&
+       // Check that the assignment is defined in the same block and placed
+       // before any user.
+       // TOOD: Consider to use `DominanceInfo`.
+       llvm::all_of(op->getUsers(), [&](Operation *user) {
+         if (singleAssign->getBlock() != user->getBlock())
+           return false;
+
+         if (singleAssign == user)
+           return true;
+
+         return singleAssign->isBeforeInBlock(user);
+       })))
+    return singleAssign;
+
+  return {};
+}
+
+LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
+  // If spillWiresAtPrepare option is disabled, use the previous emission
+  // method.
+  // TODO: Once ExportVerilog simplification finished, remove this condition.
+  if (!state.options.spillWiresAtPrepare)
+    return emitNoop();
+
+  emitSVAttributes(op);
+  auto value = op->getResult(0);
+  SmallPtrSet<Operation *, 8> opsForLocation;
+  opsForLocation.insert(op);
+
+  // Emit the leading word, like 'wire', 'reg' or 'logic'.
+  auto type = value.getType();
+  auto word = getVerilogDeclWord(op, state.options);
+  if (!isZeroBitType(type)) {
+    indent() << word;
+    auto extraIndent = word.empty() ? 0 : 1;
+    os.indent(maxDeclNameWidth - word.size() + extraIndent);
+  } else {
+    indent() << "// Zero width: " << word << ' ';
+  }
+
+  SmallString<8> typeString;
+  // Convert the port's type to a string and measure it.
+  {
+    llvm::raw_svector_ostream stringStream(typeString);
+    emitter.printPackedType(stripUnpackedTypes(type), stringStream,
+                            op->getLoc());
+  }
+  // Emit the type.
+  os << typeString;
+  if (typeString.size() < maxTypeWidth)
+    os.indent(maxTypeWidth - typeString.size());
+
+  // Emit the name.
+  os << names.getName(value);
+
+  // Print out any array subscripts or other post-name stuff.
+  emitter.printUnpackedTypePostfix(type, os);
+
+  if (auto localparam = dyn_cast<LocalParamOp>(op)) {
+    os << " = ";
+    emitter.printParamValue(localparam.getValue(), os, [&]() {
+      return op->emitOpError("invalid localparam value");
+    });
+  }
+
+  // Try inlining an assignment into declarations.
+  if (isa<WireOp, LogicOp>(op) &&
+      !op->getParentOp()->hasTrait<ProceduralRegion>()) {
+    // Get a single assignment which dominates op's users.
+    // `onlyAllowAssignToBeNextToOp` is required to ensure that its source value
+    // can be inlined into the decl.
+    if (auto singleAssign = getSingleAssignIfDominateUsers<AssignOp>(
+            op, /*onlyAllowAssignToBeNextToOp=*/true)) {
+      os << " = ";
+      emitExpression(singleAssign.getSrc(), opsForLocation, ForceEmitMultiUse);
+      emitter.assignsInlined.insert(singleAssign);
+    }
+  }
+
+  // Try inlining a blocking assignment to logic op declaration.
+  if (isa<LogicOp>(op) && op->getParentOp()->hasTrait<ProceduralRegion>()) {
+    // Get a single assignment which might be possible to inline.
+    if (auto singleAssign = getSingleAssignIfDominateUsers<BPAssignOp>(
+            op, /*onlyAllowAssignToBeNextToOp=*/false)) {
+      auto srcOp = singleAssign.getSrc().getDefiningOp();
+      // A port can be read from everywhere. If not, check that srcOp can be
+      // inlined into the decl.
+      if (!srcOp ||
+          isExpressionEmittedInlineIntoProceduralDeclaration(srcOp, *this)) {
+        os << " = ";
+        emitExpression(singleAssign.getSrc(), opsForLocation,
+                       ForceEmitMultiUse);
+        // Remember that the assignment and logic op are emitted into decl.
+        emitter.assignsInlined.insert(singleAssign);
+        emitter.expressionsEmittedIntoDecl.insert(op);
+      }
+    }
+  }
+
+  os << ';';
+  emitLocationInfoAndNewLine(opsForLocation);
+  ++numStatementsEmitted;
+  return success();
 }
 
 /// Emit the declaration for the temporary operation. If the operation is not
