@@ -350,15 +350,13 @@ LogicalResult CircuitOp::verify() {
             .attachNote(collidingExtModule.getLoc())
             .append("previous extmodule definition occurred here");
 
-      if (!aType.isa<FIRRTLBaseType>() || !bType.isa<FIRRTLBaseType>())
-        return extModule.emitOpError().append(
-            "with 'defname' attribute ", defname,
-            " has a port that is of unsupported type, must be base type.");
-
       if (!extModule.getParameters().empty() ||
           !collidingExtModule.getParameters().empty()) {
-        aType = aType.cast<FIRRTLBaseType>().getWidthlessType();
-        bType = bType.cast<FIRRTLBaseType>().getWidthlessType();
+        // Compare base types as widthless, others must match.
+        if (auto base = aType.dyn_cast<FIRRTLBaseType>())
+          aType = base.getWidthlessType();
+        if (auto base = bType.dyn_cast<FIRRTLBaseType>())
+          bType = base.getWidthlessType();
       }
       if (aType != bType)
         return extModule.emitOpError()
