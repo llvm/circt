@@ -3998,6 +3998,33 @@ isExpressionEmittedInlineIntoProceduralDeclaration(Operation *op,
     if (!expr)
       continue; // Ports are always safe to reference.
 
+    // If this is an inout op, check that its inout op has no blocking
+    // assignment. A register or logic might be mutated by a blocking assignment
+    // so it is not always safe to inline.
+    if (auto readInout = dyn_cast<sv::ReadInOutOp>(expr)) {
+      auto defOp = readInout.getOperand().getDefiningOp();
+
+      // If it is a read from an inout port, it's unsafe to inline in general.
+      if (!defOp)
+        return false;
+
+      // If the operand is a wire, it's OK to inline the read.
+      if (isa<WireOp>(defOp))
+        continue;
+
+      // Reject struct_field_inout/array_index_inout for now because it's
+      // necessary to consider aliasing inout operations.
+      if (!isa<RegOp, LogicOp>(defOp))
+        return false;
+
+      // It's safe to inline if all users are read op, passign or assign.
+      if (llvm::all_of(defOp->getResult(0).getUsers(), [&](Operation *op) {
+            return isa<ReadInOutOp, PAssignOp, AssignOp>(op);
+          }))
+        continue;
+      return false;
+    }
+
     // If this is an internal node in the expression tree, process its operands.
     if (isExpressionEmittedInline(expr)) {
       exprsToScan.append(expr->getOperands().begin(),

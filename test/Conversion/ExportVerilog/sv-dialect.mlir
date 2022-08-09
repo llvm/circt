@@ -1509,6 +1509,22 @@ hw.module @Verilator3405(
   hw.output %out : i2
 }
 
+hw.module @prohiditInline(%a:i4, %b:i1, %c:i1, %d: i4) {
+  %0 = sv.reg : !hw.inout<i4>
+  %1 = sv.reg : !hw.inout<i4>
+  %2 = sv.reg : !hw.inout<i2>
+  sv.always posedge %b {
+    // CHECK: automatic logic [3:0][[GEN1:.+]];
+    // CHECK: [[GEN2:_GEN.*]] = a;
+    sv.bpassign %0, %a: i4
+    // CHECK-NEXT: [[GEN1]] = 4'([[GEN2]] + d);
+    %3 = sv.read_inout %0: !hw.inout<i4>
+    %add =comb.add %3, %d: i4
+    %extract = comb.extract %add from 1 : (i4) -> i2
+    sv.bpassign %2, %extract: i2
+  }
+}
+
 // CHECK-LABEL: module CollectNamesOrder
 hw.module @CollectNamesOrder(%in: i1) -> (out: i1) {
   // OLD: wire _GEN;
