@@ -53,9 +53,11 @@ class MultiplexerService:
   trunk_out_ready = Input(types.i1)
 
   @generator
-  def generate(ports, input_streams, output_streams):
-    print("generating ")
-    return True
+  def generate(ports, channels):
+    ports.trunk_out = types.i256(0)
+    ports.trunk_out_valid = types.i1(0)
+    ports.trunk_in_ready = types.i1(0)
+    print("generating")
 
 
 @module
@@ -87,8 +89,10 @@ s = pycde.System([MultiplexerTop], name="EsiSys")
 
 s.generate()
 s.print()
-s.run_passes()
-s.print()
+try:
+  s.run_passes()
+finally:
+  s.print()
 
 # CHECK-LABEL: msft.module @Top {} (%clk: i1, %rst: i1) attributes {fileName = "Top.sv"} {
 # CHECK:         %Producer.int_out = msft.instance @Producer @Producer(%clk)  : (i1) -> !esi.channel<i32>

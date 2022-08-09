@@ -1,9 +1,11 @@
 from pycde.system import System
-from .module import Generator, _module_base, _SpecializedModule
-from pycde.value import ChannelValue, Value
+from .module import (Generator, _module_base, _BlockContext,
+                     _GeneratorPortAccess, _SpecializedModule)
+from pycde.value import ChannelValue, ClockValue
 from .common import AppID, Input, Output, InputChannel, OutputChannel, _PyProxy
-from circt.dialects import esi as raw_esi, hw
-from pycde.pycde_types import ChannelType, PyCDEType, types
+from circt.dialects import esi as raw_esi, hw, msft
+from circt.support import BackedgeBuilder
+from pycde.pycde_types import ChannelType, ClockType, PyCDEType, types
 
 import mlir.ir as ir
 
@@ -105,30 +107,72 @@ def Cosim(decl: ServiceDecl, clk, rst):
                             inputs=[clk.value, rst.value])
 
 
+class _ServiceGeneratorChannels:
+
+  def __init__(self, req: raw_esi.ServiceImplementReqOp):
+    self._req = req
+
+
 def ServiceImplementation(decl: ServiceDecl):
 
   def wrap(service_impl, decl: ServiceDecl = decl):
 
-    def instantiate_cb(mod: _SpecializedModule, instance_name: str,
-                       inputs: dict, appid: AppID, loc):
-      opts = _service_generator_registry.register(mod)
-      return raw_esi.ServiceInstanceOp(
-          result=[t for _, t in mod.output_ports],
-          service_symbol=ir.FlatSymbolRefAttr.get(
-              decl._materialize_service_decl()),
-          impl_type=_ServiceGeneratorRegistry._impl_type_name,
-          inputs=[inputs[pn].value for pn, _ in mod.input_ports],
-          impl_opts=opts)
+    class ServiceImpl:
 
-    def generate_cb(generator: Generator, spec_mod: _SpecializedModule,
-                    extra_args: Dict[str, object]):
-      # return _generate_block(generator, spec_mod, None, extra_args)
-      pass
+      def instantiate_cb(self, mod: _SpecializedModule, instance_name: str,
+                         inputs: dict, appid: AppID, loc):
+        opts = _service_generator_registry.register(mod)
+        return raw_esi.ServiceInstanceOp(
+            result=[t for _, t in mod.output_ports],
+            service_symbol=ir.FlatSymbolRefAttr.get(
+                decl._materialize_service_decl()),
+            impl_type=_ServiceGeneratorRegistry._impl_type_name,
+            inputs=[inputs[pn].value for pn, _ in mod.input_ports],
+            impl_opts=opts,
+            loc=loc)
 
+      def generate(self, generator: Generator, spec_mod: _SpecializedModule,
+                   serviceReq: raw_esi.ServiceInstanceOp):
+        arguments = serviceReq.operation.operands
+        with ir.InsertionPoint(
+            serviceReq), generator.loc, BackedgeBuilder(), _BlockContext():
+          args = _GeneratorPortAccess(spec_mod, arguments)
+
+          # Enter clock block implicitly if only one clock given
+          clk = None
+          if len(spec_mod.clock_ports) == 1:
+            clk_port = list(spec_mod.clock_ports.values())[0]
+            clk = ClockValue(arguments[clk_port], ClockType())
+            clk.__enter__()
+
+          channels = _ServiceGeneratorChannels(serviceReq)
+          rc = generator.gen_func(args, channels=channels)
+          if rc is None:
+            rc = True
+          elif not isinstance(rc, bool):
+            raise ValueError("Generators must a return a bool or None")
+
+          ports_unconnected = spec_mod.output_port_lookup.keys() - \
+            args._output_values.keys()
+          if len(ports_unconnected) > 0:
+            raise ValueError("Generator did not connect all output ports: " +
+                             ", ".join(ports_unconnected))
+          for port_name, port_value in args._output_values.items():
+            port_num = spec_mod.output_port_lookup[port_name]
+            msft.replaceAllUsesWith(serviceReq.operation.results[port_num],
+                                    port_value.value)
+          serviceReq.operation.erase()
+
+          if clk is not None:
+            clk.__exit__(None, None, None)
+
+          return rc
+
+    impl = ServiceImpl()
     return _module_base(service_impl,
                         extern_name=None,
-                        generator_cb=generate_cb,
-                        instantiate_cb=instantiate_cb)
+                        generator_cb=impl.generate,
+                        instantiate_cb=impl.instantiate_cb)
 
   return wrap
 
@@ -168,7 +212,7 @@ class _ServiceGeneratorRegistry:
       return False
     (impl, sys) = self._registry[impl_name]
     with sys:
-      return impl.generate(input_channels=None, output_channels=None)
+      return impl.generate(serviceReq=req.opview)
 
 
 _service_generator_registry = _ServiceGeneratorRegistry()

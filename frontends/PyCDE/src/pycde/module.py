@@ -66,7 +66,7 @@ def create_msft_module_op(sys, mod: _SpecializedModule, symbol):
 
 
 def generate_msft_module_op(generator: Generator, spec_mod: _SpecializedModule,
-                            extra_args: Dict[str, object]):
+                            **kwargs):
 
   def create_output_op(args: _GeneratorPortAccess):
     """Create the hw.OutputOp from module I/O ports in 'args'."""
@@ -99,7 +99,7 @@ def generate_msft_module_op(generator: Generator, spec_mod: _SpecializedModule,
       clk = ClockValue(val, ClockType())
       clk.__enter__()
 
-    outputs = generator.gen_func(args, **extra_args)
+    outputs = generator.gen_func(args, **kwargs)
     if outputs is not None:
       raise ValueError("Generators must not return a value")
     if create_output_op is not None:
@@ -266,8 +266,7 @@ class _SpecializedModule(_PyProxy):
     currently."""
     assert len(self.generators) == 1
     for g in self.generators.values():
-      self.generator_cb(g, self, kwargs)
-      return
+      return self.generator_cb(g, self, **kwargs)
 
   def print(self, out):
     print(f"<pycde.Module: {self.name} inputs: {self.input_ports} " +
