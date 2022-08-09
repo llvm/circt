@@ -28,6 +28,7 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseMapInfo.h"
 #include "llvm/ADT/DepthFirstIterator.h"
+#include "llvm/ADT/None.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Format.h"
@@ -420,17 +421,13 @@ struct Equivalence {
     // sub module did not dedupliate. This code recursively checks the child
     // module.
     if (aName != bName) {
-      diag.attachNote(a->getLoc()) << "first instance targets module " << aName;
-      diag.attachNote(b->getLoc())
-          << "second instance targets module " << bName;
-      diag.report();
       auto aModule = instanceGraph.getReferencedModule(a);
       auto bModule = instanceGraph.getReferencedModule(b);
       // Create a new error for the submodule.
-      auto newDiag = emitError(aModule->getLoc())
-                     << "module " << aName << " not deduplicated with "
-                     << bName;
-      check(newDiag, aModule, bModule);
+      diag.attachNote(llvm::None)
+          << "in instance " << a.getNameAttr() << " of " << aName
+          << ", and instance " << b.getNameAttr() << " of " << bName;
+      check(diag, aModule, bModule);
       return failure();
     }
     return success();
