@@ -426,7 +426,8 @@ struct HWConstArrayCreateOpConversion
                                              init.getI32ArrayAttr(i));
     }
     init.create<LLVM::ReturnOp>(op->getLoc(), arr);
-    rewriter.replaceOpWithNewOp<LLVM::AddressOfOp>(op, global);
+    auto addr = rewriter.create<LLVM::AddressOfOp>(op->getLoc(), global);
+    rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, arrayTy, addr);
   }
 };
 } // namespace
