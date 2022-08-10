@@ -350,15 +350,13 @@ LogicalResult CircuitOp::verify() {
             .attachNote(collidingExtModule.getLoc())
             .append("previous extmodule definition occurred here");
 
-      if (!aType.isa<FIRRTLBaseType>() || !bType.isa<FIRRTLBaseType>())
-        return extModule.emitOpError().append(
-            "with 'defname' attribute ", defname,
-            " has a port that is of unsupported type, must be base type.");
-
       if (!extModule.getParameters().empty() ||
           !collidingExtModule.getParameters().empty()) {
-        aType = aType.cast<FIRRTLBaseType>().getWidthlessType();
-        bType = bType.cast<FIRRTLBaseType>().getWidthlessType();
+        // Compare base types as widthless, others must match.
+        if (auto base = aType.dyn_cast<FIRRTLBaseType>())
+          aType = base.getWidthlessType();
+        if (auto base = bType.dyn_cast<FIRRTLBaseType>())
+          bType = base.getWidthlessType();
       }
       if (aType != bType)
         return extModule.emitOpError()
@@ -2018,6 +2016,43 @@ void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 // Statements
 //===----------------------------------------------------------------------===//
 
+/// If the connect is for RefType, implement the constraint for downward only
+/// references. We cannot connect :
+///   1. an input reference port to the output reference port.
+///   2. instance reference results to each other.
+/// This means, the connect can only be used for forwarding RefType module
+/// ports to Instance ports.
+static LogicalResult checkRefTypeFlow(Operation *connect) {
+  Value dst = connect->getOperand(0);
+  Value src = connect->getOperand(1);
+
+  if (dst.getType().isa<RefType>()) {
+    if (getDeclarationKind(src) == getDeclarationKind(dst)) {
+      bool rootKnown;
+      auto diag = emitError(connect->getLoc())
+                  << "connect is invalid: the first operand ";
+      auto dstName = getFieldName(getFieldRefFromValue(dst), rootKnown);
+      if (rootKnown)
+        diag << "\"" << dstName << "\" ";
+      diag << "and second operand ";
+      auto srcName = getFieldName(getFieldRefFromValue(src), rootKnown);
+      if (rootKnown)
+        diag << "\"" << srcName << "\" ";
+      diag << "both have same port kind, expected Module port to Instance "
+              "connections only";
+      return diag;
+    }
+    if ((src.getType().isa<RefType>() && !src.hasOneUse()) ||
+        (dst.getType().isa<RefType>() && !dst.hasOneUse())) {
+      auto diag = emitError(connect->getLoc());
+      diag << "connect operands of ref type cannot be reused";
+      return diag;
+    }
+  }
+  return success();
+}
+
+/// Check if the source and sink are of appropriate flow.
 static LogicalResult checkConnectFlow(Operation *connect) {
   Value dst = connect->getOperand(0);
   Value src = connect->getOperand(1);
@@ -2083,6 +2118,10 @@ LogicalResult ConnectOp::verify() {
   if (failed(checkConnectFlow(*this)))
     return failure();
 
+  // Check constraints on RefType.
+  if (failed(checkRefTypeFlow(*this)))
+    return failure();
+
   return success();
 }
 
@@ -2096,6 +2135,10 @@ LogicalResult StrictConnectOp::verify() {
 
   // Check that the flows make sense.
   if (failed(checkConnectFlow(*this)))
+    return failure();
+
+  // Check constraints on RefType.
+  if (failed(checkRefTypeFlow(*this)))
     return failure();
 
   return success();

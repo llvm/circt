@@ -24,6 +24,7 @@ struct WidthTypeStorage;
 struct BundleTypeStorage;
 struct VectorTypeStorage;
 struct CMemoryTypeStorage;
+struct RefTypeStorage;
 } // namespace detail.
 
 class ClockType;
@@ -34,6 +35,7 @@ class UIntType;
 class AnalogType;
 class BundleType;
 class FVectorType;
+class RefType;
 
 /// A collection of bits indicating the recursive properties of a type.
 struct RecursiveTypeProperties {
@@ -109,7 +111,7 @@ public:
 
   /// Support method to enable LLVM-style type casting.
   static bool classof(Type type) {
-    return llvm::isa<FIRRTLDialect>(type.getDialect());
+    return llvm::isa<FIRRTLDialect>(type.getDialect()) && !type.isa<RefType>();
   }
 
   /// Return true if this is a valid "reset" type.
@@ -422,6 +424,23 @@ public:
   /// of the type.  Essentially maps a fieldID to a fieldID after a subfield op.
   /// Returns the new id and whether the id is in the given child.
   std::pair<size_t, bool> rootChildFieldID(size_t fieldID, size_t index);
+};
+
+//===----------------------------------------------------------------------===//
+// Reference Type
+//===----------------------------------------------------------------------===//
+
+class RefType
+    : public FIRRTLType::TypeBase<RefType, FIRRTLType, detail::RefTypeStorage> {
+public:
+  using Base::Base;
+  static RefType get(FIRRTLBaseType type);
+
+  /// Return the underlying type.
+  FIRRTLBaseType getType();
+
+  static LogicalResult verify(function_ref<InFlightDiagnostic()> emitErrorFn,
+                              FIRRTLBaseType base);
 };
 
 //===----------------------------------------------------------------------===//
