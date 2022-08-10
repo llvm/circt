@@ -1144,7 +1144,6 @@ llvm::Optional<int64_t> firrtl::getBitWidth(FIRRTLBaseType type) {
             return llvm::Optional<int64_t>(None);
         })
         .Case<ClockType, ResetType, AsyncResetType>([](Type) { return 1; })
-        .Case<RefType>([&](RefType ref) { return getBitWidth(ref.getType()); })
         .Default([&](auto t) { return llvm::Optional<int64_t>(None); });
   };
   return getWidth(type);
