@@ -56,7 +56,8 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
 
 // -----
 
-// expected-error@below {{module "Mid1" not deduplicated with "Mid0"}}
+// expected-error@+2 {{module "Mid1" not deduplicated with "Mid0"}}
+// expected-note@+1 {{in instance "test0" of "Test0", and instance "test1" of "Test1"}}
 firrtl.circuit "MustDedup" attributes {annotations = [{
       class = "firrtl.transforms.MustDeduplicateAnnotation",
       modules = ["~MustDedup|Mid0", "~MustDedup|Mid1"]
@@ -66,14 +67,11 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
     firrtl.instance mid1 @Mid1()
   }
   firrtl.module @Mid0() {
-    // expected-note@below {{first instance targets module "Test0"}}
     firrtl.instance test0 @Test0()
   }
   firrtl.module @Mid1() {
-    // expected-note@below {{second instance targets module "Test1"}}
     firrtl.instance test1 @Test1()
   }
-  // expected-error@below {{module "Test0" not deduplicated with "Test1"}}
   firrtl.module @Test0() {
     // expected-note@below {{first operation is a firrtl.wire}}
     %w = firrtl.wire : !firrtl.uint<8>

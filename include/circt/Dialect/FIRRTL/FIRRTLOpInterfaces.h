@@ -24,6 +24,7 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/SymbolTable.h"
+#include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/CommandLine.h"
 
 namespace circt {
@@ -44,23 +45,25 @@ struct PortInfo {
 
   /// Return true if this is a simple output-only port.  If you want the
   /// direction of the port, use the \p direction parameter.
-  bool isOutput() {
-    auto flags = type.getRecursiveTypeProperties();
-    return flags.isPassive && !flags.containsAnalog &&
-           direction == Direction::Out;
-  }
+  bool isOutput() { return direction == Direction::Out && !isInOut(); }
 
   /// Return true if this is a simple input-only port.  If you want the
   /// direction of the port, use the \p direction parameter.
-  bool isInput() {
-    auto flags = type.getRecursiveTypeProperties();
-    return flags.isPassive && !flags.containsAnalog &&
-           direction == Direction::In;
-  }
+  bool isInput() { return direction == Direction::In && !isInOut(); }
 
   /// Return true if this is an inout port.  This will be true if the port
   /// contains either bi-directional signals or analog types.
-  bool isInOut() { return !isOutput() && !isInput(); }
+  bool isInOut() {
+    auto flags = TypeSwitch<FIRRTLType, RecursiveTypeProperties>(type)
+                     .Case<FIRRTLBaseType>([](auto base) {
+                       return base.getRecursiveTypeProperties();
+                     })
+                     .Default([](auto) {
+                       llvm_unreachable("unsupported type");
+                       return RecursiveTypeProperties{};
+                     });
+    return !flags.isPassive || flags.containsAnalog;
+  }
 
   /// Default constructors
   PortInfo(StringAttr name, FIRRTLType type, Direction dir,

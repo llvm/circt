@@ -509,6 +509,7 @@ class GrandCentralTapsPass : public GrandCentralTapsBase<GrandCentralTapsPass> {
     assert(!tappedPorts.count(key) && "ambiguous tap annotation");
     auto portWidth = cast<FModuleLike>(port.first)
                          .getPortType(port.second)
+                         .cast<FIRRTLBaseType>()
                          .getBitWidthOrSentinel();
     // If the port width is non-zero, process it normally.  Otherwise, record it
     // as being zero-width.
@@ -526,8 +527,10 @@ class GrandCentralTapsPass : public GrandCentralTapsBase<GrandCentralTapsPass> {
     // If the port width is targeting a module (e.g., a blackbox) or if it has a
     // non-zero width, process it normally.  Otherwise, record it as being
     // zero-width.
-    if (isa<FModuleLike>(op) ||
-        op->getResult(0).getType().cast<FIRRTLType>().getBitWidthOrSentinel())
+    if (isa<FModuleLike>(op) || op->getResult(0)
+                                    .getType()
+                                    .cast<FIRRTLBaseType>()
+                                    .getBitWidthOrSentinel())
       tappedOps.insert({key, op});
     else
       zeroWidthTaps.insert(key);

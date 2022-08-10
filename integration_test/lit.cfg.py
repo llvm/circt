@@ -149,6 +149,10 @@ if len(ieee_sims) > 1:
   warnings.warn(
       f"You have multiple ieee-sim simulators configured, choosing: {ieee_sims[-1][1]}"
   )
+  # remove all other subsitution entries
+  config.substitutions = list(
+      filter(lambda x: x[0] != '%ieee-sim' or x == ieee_sims[-1],
+             config.substitutions))
 
 # If the ieee-sim was selected to be iverilog in case no other simulators are
 # available, define a feature flag to allow tests which cannot be simulated
@@ -174,3 +178,10 @@ if config.bindings_tcl_enabled:
   config.available_features.add('bindings_tcl')
 
 llvm_config.add_tool_substitutions(tools, tool_dirs)
+
+# cocotb availability
+try:
+  import cocotb
+  config.available_features.add('cocotb')
+except ImportError:
+  pass

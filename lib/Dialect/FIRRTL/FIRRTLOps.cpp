@@ -282,7 +282,7 @@ LogicalResult CircuitOp::verify() {
   // that defines it and has no parameters.
   llvm::DenseMap<Attribute, FExtModuleOp> defnameMap;
 
-  auto verifyExtModule = [&](FExtModuleOp extModule) {
+  auto verifyExtModule = [&](FExtModuleOp extModule) -> LogicalResult {
     if (!extModule)
       return success();
 
@@ -293,15 +293,12 @@ LogicalResult CircuitOp::verify() {
     // Check that this extmodule's defname does not conflict with
     // the symbol name of any module.
     auto *collidingModule = lookupSymbol(defname.getValue());
-    if (isa_and_nonnull<FModuleOp>(collidingModule)) {
-      auto diag =
-          extModule.emitOpError()
-          << "attribute 'defname' with value " << defname
-          << " conflicts with the name of another module in the circuit";
-      diag.attachNote(collidingModule->getLoc())
-          << "previous module declared here";
-      return failure();
-    }
+    if (isa_and_nonnull<FModuleOp>(collidingModule))
+      return extModule.emitOpError()
+          .append("attribute 'defname' with value ", defname,
+                  " conflicts with the name of another module in the circuit")
+          .attachNote(collidingModule->getLoc())
+          .append("previous module declared here");
 
     // Find an optional extmodule with a defname collision. Update
     // the defnameMap if this is the first extmodule with that
@@ -325,17 +322,14 @@ LogicalResult CircuitOp::verify() {
     SmallVector<PortInfo> ports = extModule.getPorts();
     SmallVector<PortInfo> collidingPorts = collidingExtModule.getPorts();
 
-    if (ports.size() != collidingPorts.size()) {
-      auto diag = extModule.emitOpError()
-                  << "with 'defname' attribute " << defname << " has "
-                  << ports.size()
-                  << " ports which is different from a previously defined "
-                     "extmodule with the same 'defname' which has "
-                  << collidingPorts.size() << " ports";
-      diag.attachNote(collidingExtModule.getLoc())
-          << "previous extmodule definition occurred here";
-      return failure();
-    }
+    if (ports.size() != collidingPorts.size())
+      return extModule.emitOpError()
+          .append("with 'defname' attribute ", defname, " has ", ports.size(),
+                  " ports which is different from a previously defined "
+                  "extmodule with the same 'defname' which has ",
+                  collidingPorts.size(), " ports")
+          .attachNote(collidingExtModule.getLoc())
+          .append("previous extmodule definition occurred here");
 
     // Check that ports match for name and type. Since parameters
     // *might* affect widths, ignore widths if either module has
@@ -345,38 +339,38 @@ LogicalResult CircuitOp::verify() {
       StringAttr aName = std::get<0>(p).name, bName = std::get<1>(p).name;
       FIRRTLType aType = std::get<0>(p).type, bType = std::get<1>(p).type;
 
+      if (aName != bName)
+        return extModule.emitOpError()
+            .append("with 'defname' attribute ", defname,
+                    " has a port with name ", aName,
+                    " which does not match the name of the port in the same "
+                    "position of a previously defined extmodule with the same "
+                    "'defname', expected port to have name ",
+                    bName)
+            .attachNote(collidingExtModule.getLoc())
+            .append("previous extmodule definition occurred here");
+
+      if (!aType.isa<FIRRTLBaseType>() || !bType.isa<FIRRTLBaseType>())
+        return extModule.emitOpError().append(
+            "with 'defname' attribute ", defname,
+            " has a port that is of unsupported type, must be base type.");
+
       if (!extModule.getParameters().empty() ||
           !collidingExtModule.getParameters().empty()) {
-        aType = aType.getWidthlessType();
-        bType = bType.getWidthlessType();
+        aType = aType.cast<FIRRTLBaseType>().getWidthlessType();
+        bType = bType.cast<FIRRTLBaseType>().getWidthlessType();
       }
-      if (aName != bName) {
-        auto diag = extModule.emitOpError()
-                    << "with 'defname' attribute " << defname
-                    << " has a port with name " << aName
-                    << " which does not match the name of the port "
-                    << "in the same position of a previously defined "
-                    << "extmodule with the same 'defname', expected port "
-                       "to have name "
-                    << bName;
-        diag.attachNote(collidingExtModule.getLoc())
-            << "previous extmodule definition occurred here";
-        return failure();
-      }
-      if (aType != bType) {
-        auto diag = extModule.emitOpError()
-                    << "with 'defname' attribute " << defname
-                    << " has a port with name " << aName
-                    << " which has a different type " << aType
-                    << " which does not match the type of the port in "
-                       "the same position of a previously defined "
-                       "extmodule with the same 'defname', expected port "
-                       "to have type "
-                    << bType;
-        diag.attachNote(collidingExtModule.getLoc())
-            << "previous extmodule definition occurred here";
-        return failure();
-      }
+      if (aType != bType)
+        return extModule.emitOpError()
+            .append("with 'defname' attribute ", defname,
+                    " has a port with name ", aName,
+                    " which has a different type ", aType,
+                    " which does not match the type of the port in the same "
+                    "position of a previously defined extmodule with the same "
+                    "'defname', expected port to have type ",
+                    bType)
+            .attachNote(collidingExtModule.getLoc())
+            .append("previous extmodule definition occurred here");
     }
     return success();
   };
@@ -1680,7 +1674,7 @@ LogicalResult MemOp::verify() {
 
     // Safely search for the "data" field, erroring if it can't be
     // found.
-    FIRRTLType dataType;
+    FIRRTLBaseType dataType;
     {
       auto dataTypeOption = portBundleType.getElement("data");
       if (!dataTypeOption && portKind == MemOp::PortKind::ReadWrite)
@@ -1769,11 +1763,11 @@ LogicalResult MemOp::verify() {
   return success();
 }
 
-BundleType MemOp::getTypeForPort(uint64_t depth, FIRRTLType dataType,
+BundleType MemOp::getTypeForPort(uint64_t depth, FIRRTLBaseType dataType,
                                  PortKind portKind, size_t maskBits) {
 
   auto *context = dataType.getContext();
-  FIRRTLType maskType;
+  FIRRTLBaseType maskType;
   // maskBits not specified (==0), then get the mask type from the dataType.
   if (maskBits == 0)
     maskType = dataType.getMaskType();
@@ -1855,11 +1849,11 @@ MemOp::PortKind MemOp::getPortKind(size_t resultNo) {
 size_t MemOp::getMaskBits() {
 
   for (auto res : getResults()) {
-    auto firstPortType = res.getType().cast<FIRRTLType>();
+    auto firstPortType = res.getType().cast<FIRRTLBaseType>();
     if (getMemPortKindFromType(firstPortType) == PortKind::Read)
       continue;
 
-    FIRRTLType mType;
+    FIRRTLBaseType mType;
     for (auto t : firstPortType.getPassiveType().cast<BundleType>()) {
       if (t.name.getValue().contains("mask"))
         mType = t.type;
@@ -1873,10 +1867,10 @@ size_t MemOp::getMaskBits() {
 }
 
 /// Return the data-type field of the memory, the type of each element.
-FIRRTLType MemOp::getDataType() {
+FIRRTLBaseType MemOp::getDataType() {
   assert(getNumResults() != 0 && "Mems with no read/write ports are illegal");
 
-  auto firstPortType = getResult(0).getType().cast<FIRRTLType>();
+  auto firstPortType = getResult(0).getType().cast<FIRRTLBaseType>();
 
   StringRef dataFieldName = "data";
   if (getMemPortKindFromType(firstPortType) == PortKind::ReadWrite)
@@ -1890,8 +1884,8 @@ StringAttr MemOp::getPortName(size_t resultNo) {
   return getPortNames()[resultNo].cast<StringAttr>();
 }
 
-FIRRTLType MemOp::getPortType(size_t resultNo) {
-  return getResults()[resultNo].getType().cast<FIRRTLType>();
+FIRRTLBaseType MemOp::getPortType(size_t resultNo) {
+  return getResults()[resultNo].getType().cast<FIRRTLBaseType>();
 }
 
 Value MemOp::getPortNamed(StringAttr name) {
@@ -2001,8 +1995,8 @@ void RegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 LogicalResult RegResetOp::verify() {
   Value reset = getResetValue();
 
-  FIRRTLType resetType = reset.getType().cast<FIRRTLType>();
-  FIRRTLType regType = getResult().getType().cast<FIRRTLType>();
+  FIRRTLBaseType resetType = reset.getType().cast<FIRRTLBaseType>();
+  FIRRTLBaseType regType = getResult().getType().cast<FIRRTLBaseType>();
 
   // The type of the initialiser must be equivalent to the register type.
   if (!areTypesEquivalent(resetType, regType))
@@ -2061,23 +2055,29 @@ static LogicalResult checkConnectFlow(Operation *connect) {
 }
 
 LogicalResult ConnectOp::verify() {
-  FIRRTLType dstType = getDest().getType().cast<FIRRTLType>();
-  FIRRTLType srcType = getSrc().getType().cast<FIRRTLType>();
+  auto dstType = getDest().getType().cast<FIRRTLType>();
+  auto srcType = getSrc().getType().cast<FIRRTLType>();
+  auto dstBaseType = dstType.dyn_cast<FIRRTLBaseType>();
+  auto srcBaseType = srcType.dyn_cast<FIRRTLBaseType>();
+  if (!dstBaseType || !srcBaseType) {
+    if (dstType != srcType)
+      return emitError("may not connect different non-base types");
+  } else {
+    // Analog types cannot be connected and must be attached.
+    if (dstBaseType.containsAnalog() || srcBaseType.containsAnalog())
+      return emitError("analog types may not be connected");
 
-  // Analog types cannot be connected and must be attached.
-  if (dstType.containsAnalog() || srcType.containsAnalog())
-    return emitError("analog types may not be connected");
+    // Destination and source types must be equivalent.
+    if (!areTypesEquivalent(dstBaseType, srcBaseType))
+      return emitError("type mismatch between destination ")
+             << dstBaseType << " and source " << srcBaseType;
 
-  // Destination and source types must be equivalent.
-  if (!areTypesEquivalent(dstType, srcType))
-    return emitError("type mismatch between destination ")
-           << dstType << " and source " << srcType;
-
-  // Truncation is banned in a connection: destination bit width must be
-  // greater than or equal to source bit width.
-  if (!isTypeLarger(dstType, srcType))
-    return emitError("destination ")
-           << dstType << " is not as wide as the source " << srcType;
+    // Truncation is banned in a connection: destination bit width must be
+    // greater than or equal to source bit width.
+    if (!isTypeLarger(dstBaseType, srcBaseType))
+      return emitError("destination ")
+             << dstBaseType << " is not as wide as the source " << srcBaseType;
+  }
 
   // Check that the flows make sense.
   if (failed(checkConnectFlow(*this)))
@@ -2087,10 +2087,11 @@ LogicalResult ConnectOp::verify() {
 }
 
 LogicalResult StrictConnectOp::verify() {
-  FIRRTLType type = getDest().getType().cast<FIRRTLType>();
+  auto type = getDest().getType().cast<FIRRTLType>();
+  auto baseType = type.dyn_cast<FIRRTLBaseType>();
 
   // Analog types cannot be connected and must be attached.
-  if (type.containsAnalog())
+  if (baseType && baseType.containsAnalog())
     return emitError("analog types may not be connected");
 
   // Check that the flows make sense.
@@ -2734,7 +2735,13 @@ LogicalResult impl::validateUnaryOpArguments(ValueRange operands,
 
 FIRRTLType AsSIntPrimOp::inferUnaryReturnType(FIRRTLType input,
                                               Optional<Location> loc) {
-  int32_t width = input.getBitWidthOrSentinel();
+  auto base = input.dyn_cast<FIRRTLBaseType>();
+  if (!base) {
+    if (loc)
+      mlir::emitError(*loc, "operand must be a scalar base type");
+    return {};
+  }
+  int32_t width = base.getBitWidthOrSentinel();
   if (width == -2) {
     if (loc)
       mlir::emitError(*loc, "operand must be a scalar type");
@@ -2745,7 +2752,13 @@ FIRRTLType AsSIntPrimOp::inferUnaryReturnType(FIRRTLType input,
 
 FIRRTLType AsUIntPrimOp::inferUnaryReturnType(FIRRTLType input,
                                               Optional<Location> loc) {
-  int32_t width = input.getBitWidthOrSentinel();
+  auto base = input.dyn_cast<FIRRTLBaseType>();
+  if (!base) {
+    if (loc)
+      mlir::emitError(*loc, "operand must be a scalar base type");
+    return {};
+  }
+  int32_t width = base.getBitWidthOrSentinel();
   if (width == -2) {
     if (loc)
       mlir::emitError(*loc, "operand must be a scalar type");
@@ -2756,7 +2769,13 @@ FIRRTLType AsUIntPrimOp::inferUnaryReturnType(FIRRTLType input,
 
 FIRRTLType AsAsyncResetPrimOp::inferUnaryReturnType(FIRRTLType input,
                                                     Optional<Location> loc) {
-  int32_t width = input.getBitWidthOrSentinel();
+  auto base = input.dyn_cast<FIRRTLBaseType>();
+  if (!base) {
+    if (loc)
+      mlir::emitError(*loc, "operand must be single bit scalar base type");
+    return {};
+  }
+  int32_t width = base.getBitWidthOrSentinel();
   if (width == -2 || width == 0 || width > 1) {
     if (loc)
       mlir::emitError(*loc, "operand must be single bit scalar type");
@@ -2931,8 +2950,9 @@ LogicalResult MuxPrimOp::validateArguments(ValueRange operands,
 ///   widthless integer otherwise.
 /// - Vectors inferred based on the element type.
 /// - Bundles inferred in a pairwise fashion based on the field types.
-static FIRRTLType inferMuxReturnType(FIRRTLType high, FIRRTLType low,
-                                     Optional<Location> loc) {
+static FIRRTLBaseType inferMuxReturnType(FIRRTLBaseType high,
+                                         FIRRTLBaseType low,
+                                         Optional<Location> loc) {
   // If the types are identical we're done.
   if (high == low)
     return low;
@@ -3020,9 +3040,14 @@ static FIRRTLType inferMuxReturnType(FIRRTLType high, FIRRTLType low,
 FIRRTLType MuxPrimOp::inferReturnType(ValueRange operands,
                                       ArrayRef<NamedAttribute> attrs,
                                       Optional<Location> loc) {
-  auto high = operands[1].getType().cast<FIRRTLType>();
-  auto low = operands[2].getType().cast<FIRRTLType>();
-  return inferMuxReturnType(high, low, loc);
+  auto highType = operands[1].getType().dyn_cast<FIRRTLBaseType>();
+  auto lowType = operands[2].getType().dyn_cast<FIRRTLBaseType>();
+  if (!highType || !lowType) {
+    if (loc)
+      mlir::emitError(*loc, "operands must be base type");
+    return {};
+  }
+  return inferMuxReturnType(highType, lowType, loc);
 }
 
 FIRRTLType PadPrimOp::inferReturnType(ValueRange operands,
@@ -3196,7 +3221,7 @@ LogicalResult HWStructCastOp::verify() {
              << firFields[findex].name.getValue() << "', '"
              << hwFields[findex].name.getValue() << "'";
     int64_t firWidth =
-        FIRRTLType(firFields[findex].type).getBitWidthOrSentinel();
+        FIRRTLBaseType(firFields[findex].type).getBitWidthOrSentinel();
     int64_t hwWidth = hw::getBitWidth(hwFields[findex].type);
     if (firWidth > 0 && hwWidth > 0 && firWidth != hwWidth)
       return emitError("size of field '")
@@ -3208,7 +3233,7 @@ LogicalResult HWStructCastOp::verify() {
 }
 
 LogicalResult BitCastOp::verify() {
-  auto inTypeBits = getBitWidth(getOperand().getType().cast<FIRRTLType>());
+  auto inTypeBits = getBitWidth(getOperand().getType().cast<FIRRTLBaseType>());
   auto resTypeBits = getBitWidth(getType());
   if (inTypeBits.has_value() && resTypeBits.has_value()) {
     // Bitwidths must match for valid bit

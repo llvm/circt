@@ -55,7 +55,7 @@ namespace {
 /// This represents a flattened bundle field element.
 struct FlatBundleFieldEntry {
   /// This is the underlying ground type of the field.
-  FIRRTLType type;
+  FIRRTLBaseType type;
   /// The index in the parent type
   size_t index;
   /// The fieldID
@@ -65,8 +65,8 @@ struct FlatBundleFieldEntry {
   /// This indicates whether the field was flipped to be an output.
   bool isOutput;
 
-  FlatBundleFieldEntry(const FIRRTLType &type, size_t index, unsigned fieldID,
-                       StringRef suffix, bool isOutput)
+  FlatBundleFieldEntry(const FIRRTLBaseType &type, size_t index,
+                       unsigned fieldID, StringRef suffix, bool isOutput)
       : type(type), index(index), fieldID(fieldID), suffix(suffix),
         isOutput(isOutput) {}
 
@@ -94,9 +94,10 @@ static bool hasZeroBitWidth(FIRRTLType type) {
           return true;
         return hasZeroBitWidth(vector.getElementType());
       })
-      .Default([](auto groundType) {
+      .Case<FIRRTLBaseType>([](auto groundType) {
         return firrtl::getBitWidth(groundType).value_or(0) == 0;
-      });
+      })
+      .Default([](auto) { return false; });
 }
 
 /// Return true if the type is a 1d vector type or ground type.
@@ -126,7 +127,10 @@ static bool isPreservableAggregateType(Type type,
   if (mode == PreserveAggregate::None)
     return false;
 
-  auto firrtlType = type.cast<FIRRTLType>();
+  auto firrtlType = type.dyn_cast<FIRRTLBaseType>();
+  if (!firrtlType)
+    return false;
+
   // We can a preserve the type iff (i) the type is not passive, (ii) the type
   // doesn't contain analog and (iii) type don't contain zero bitwidth.
   if (!firrtlType.isPassive() || firrtlType.containsAnalog() ||

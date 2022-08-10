@@ -916,7 +916,8 @@ void EmitOMIRPass::emitOptionalRTLPorts(DictionaryAttr node,
     jsonStream.attribute("name", "ports");
     jsonStream.attributeArray("value", [&] {
       for (const auto &port : llvm::enumerate(module.getPorts())) {
-        if (port.value().type.getBitWidthOrSentinel() == 0)
+        auto portType = port.value().type.dyn_cast<FIRRTLBaseType>();
+        if (!portType || portType.getBitWidthOrSentinel() == 0)
           continue;
         jsonStream.object([&] {
           // Emit the `ref` field.
@@ -940,8 +941,7 @@ void EmitOMIRPass::emitOptionalRTLPorts(DictionaryAttr node,
 
           // Emit the `width` field.
           buf.assign("OMBigInt:");
-          Twine::utohexstr(port.value().type.getBitWidthOrSentinel())
-              .toVector(buf);
+          Twine::utohexstr(portType.getBitWidthOrSentinel()).toVector(buf);
           jsonStream.attribute("width", buf);
         });
       }

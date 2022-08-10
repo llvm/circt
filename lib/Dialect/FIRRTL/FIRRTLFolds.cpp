@@ -245,7 +245,7 @@ static LogicalResult canonicalizePrimOp(
   // Can only operate on FIRRTL primitive operations.
   if (op->getNumResults() != 1)
     return failure();
-  auto type = op->getResult(0).getType().dyn_cast<FIRRTLType>();
+  auto type = op->getResult(0).getType().dyn_cast<FIRRTLBaseType>();
   if (!type)
     return failure();
 
@@ -280,7 +280,8 @@ static LogicalResult canonicalizePrimOp(
     resultValue = result.get<Value>();
 
   // Insert a pad if the type widths disagree.
-  if (width != resultValue.getType().cast<FIRRTLType>().getBitWidthOrSentinel())
+  if (width !=
+      resultValue.getType().cast<FIRRTLBaseType>().getBitWidthOrSentinel())
     resultValue = rewriter.create<PadPrimOp>(op->getLoc(), resultValue, width);
 
   // Insert a cast if this is a uint vs. sint or vice versa.
@@ -1078,7 +1079,7 @@ OpFoldResult BitCastOp::fold(ArrayRef<Attribute> operands) {
 }
 
 OpFoldResult BitsPrimOp::fold(ArrayRef<Attribute> operands) {
-  auto inputType = getInput().getType().cast<FIRRTLType>();
+  auto inputType = getInput().getType().cast<FIRRTLBaseType>();
   // If we are extracting the entire input, then return it.
   if (inputType == getType() && getType().hasWidth())
     return getInput();
@@ -1177,7 +1178,7 @@ static LogicalResult canonicalizeMux(MuxPrimOp op, PatternRewriter &rewriter) {
 
   auto pad = [&](Value input) {
     auto inputWidth =
-        input.getType().cast<FIRRTLType>().getBitWidthOrSentinel();
+        input.getType().cast<FIRRTLBaseType>().getBitWidthOrSentinel();
     if (inputWidth < 0 || width == inputWidth)
       return input;
     return rewriter.create<PadPrimOp>(op.getLoc(), op.getType(), input, width)
@@ -1403,7 +1404,7 @@ LogicalResult MultibitMuxOp::canonicalize(MultibitMuxOp op,
 
   // TODO: Handle even when `index` doesn't have uint<1>.
   auto uintType =
-      op.getIndex().getType().cast<FIRRTLType>().dyn_cast<UIntType>();
+      op.getIndex().getType().cast<FIRRTLBaseType>().dyn_cast<UIntType>();
   if (!uintType || uintType.getBitWidthOrSentinel() != 1)
     return failure();
 
@@ -1523,9 +1524,14 @@ static LogicalResult canonicalizeIntTypeConnect(ConnectOp op,
                                                 PatternRewriter &rewriter) {
   // If a connect exists from a shorter int to a longer int, simplify
   // to an extend and strict connect.
+
+  // Base types only
+  if (!op.getOperand(0).getType().isa<FIRRTLBaseType>())
+    return failure();
+
   auto destType =
-      op.getOperand(0).getType().cast<FIRRTLType>().getPassiveType();
-  auto srcType = op.getOperand(1).getType().cast<FIRRTLType>();
+      op.getOperand(0).getType().cast<FIRRTLBaseType>().getPassiveType();
+  auto srcType = op.getOperand(1).getType().cast<FIRRTLBaseType>();
   if (destType == srcType)
     return failure();
 
@@ -1547,12 +1553,21 @@ static LogicalResult canonicalizeIntTypeConnect(ConnectOp op,
   return failure();
 }
 
+/// Determines if the specified type is a sized base type.
+static bool isSizedBaseType(Type type) {
+  auto base = type.dyn_cast<FIRRTLBaseType>();
+  return base && !base.hasUninferredWidth();
+}
+
 // Forward simple values through wire's and reg's.
 static LogicalResult
 canonicalizeMatchingTypeConnect(ConnectOp op, PatternRewriter &rewriter) {
-  if (op.getSrc().getType() != op.getDest().getType() ||
-      op.getSrc().getType().cast<FIRRTLType>().hasUninferredWidth())
+  // Limit to connects between matching sized base types.
+  if (op.getSrc().getType() != op.getDest().getType())
     return failure();
+  if (!isSizedBaseType(op.getSrc().getType()))
+    return failure();
+
   rewriter.create<StrictConnectOp>(op.getLoc(), op.getDest(), op.getSrc());
   if (auto *srcOp = op.getSrc().getDefiningOp())
     rewriter.updateRootInPlace(srcOp, []() {});

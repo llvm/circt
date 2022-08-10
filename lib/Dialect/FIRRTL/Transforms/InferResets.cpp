@@ -108,8 +108,8 @@ static inline StringAttr getResetName(Value reset) {
 }
 
 /// Construct a zero value of the given type using the given builder.
-static Value createZeroValue(ImplicitLocOpBuilder &builder, FIRRTLType type,
-                             SmallDenseMap<FIRRTLType, Value> &cache) {
+static Value createZeroValue(ImplicitLocOpBuilder &builder, FIRRTLBaseType type,
+                             SmallDenseMap<FIRRTLBaseType, Value> &cache) {
   auto it = cache.find(type);
   if (it != cache.end())
     return it->second;
@@ -118,7 +118,7 @@ static Value createZeroValue(ImplicitLocOpBuilder &builder, FIRRTLType type,
                            cache);
   };
   auto value =
-      TypeSwitch<FIRRTLType, Value>(type)
+      TypeSwitch<FIRRTLBaseType, Value>(type)
           .Case<ClockType>([&](auto type) {
             return builder.create<AsClockPrimOp>(nullBit());
           })
@@ -159,8 +159,9 @@ static Value createZeroValue(ImplicitLocOpBuilder &builder, FIRRTLType type,
 }
 
 /// Construct a null value of the given type using the given builder.
-static Value createZeroValue(ImplicitLocOpBuilder &builder, FIRRTLType type) {
-  SmallDenseMap<FIRRTLType, Value> cache;
+static Value createZeroValue(ImplicitLocOpBuilder &builder,
+                             FIRRTLBaseType type) {
+  SmallDenseMap<FIRRTLBaseType, Value> cache;
   return createZeroValue(builder, type, cache);
 }
 
@@ -235,7 +236,7 @@ namespace {
 /// This essentially combines the exact `FieldRef` of the signal in question
 /// with a type to be used for error reporting and inferring the reset kind.
 struct ResetSignal {
-  ResetSignal(FieldRef field, FIRRTLType type) : field(field), type(type) {}
+  ResetSignal(FieldRef field, FIRRTLBaseType type) : field(field), type(type) {}
   bool operator<(const ResetSignal &other) const { return field < other.field; }
   bool operator==(const ResetSignal &other) const {
     return field == other.field;
@@ -243,7 +244,7 @@ struct ResetSignal {
   bool operator!=(const ResetSignal &other) const { return !(*this == other); }
 
   FieldRef field;
-  FIRRTLType type;
+  FIRRTLBaseType type;
 };
 
 /// A connection made to or from a reset network.
@@ -421,13 +422,14 @@ struct InferResetsPass : public InferResetsBase<InferResetsPass> {
   void traceResets(InstanceOp inst);
   void traceResets(Value dst, Value src, Location loc);
   void traceResets(Value value);
-  void traceResets(FIRRTLType dstType, Value dst, unsigned dstID,
-                   FIRRTLType srcType, Value src, unsigned srcID, Location loc);
+  void traceResets(FIRRTLBaseType dstType, Value dst, unsigned dstID,
+                   FIRRTLBaseType srcType, Value src, unsigned srcID,
+                   Location loc);
 
   LogicalResult inferAndUpdateResets();
   FailureOr<ResetKind> inferReset(ResetNetwork net);
   LogicalResult updateReset(ResetNetwork net, ResetKind kind);
-  bool updateReset(FieldRef field, FIRRTLType resetType);
+  bool updateReset(FieldRef field, FIRRTLBaseType resetType);
 
   //===--------------------------------------------------------------------===//
   // Async reset implementation
@@ -576,8 +578,8 @@ ResetSignal InferResetsPass::guessRoot(ResetNetwork net) {
 // their elements. Instead they have one set of IDs for the entire vector, since
 // the element type is uniform across all elements.
 
-static unsigned getMaxFieldID(FIRRTLType type) {
-  return TypeSwitch<FIRRTLType, unsigned>(type)
+static unsigned getMaxFieldID(FIRRTLBaseType type) {
+  return TypeSwitch<FIRRTLBaseType, unsigned>(type)
       .Case<BundleType>([](auto type) {
         unsigned id = 0;
         for (auto e : type.getElements())
@@ -613,7 +615,7 @@ static unsigned getIndexForFieldID(BundleType type, unsigned fieldID) {
 }
 
 // If a field is pointing to a child of a zero-length vector, it is useless.
-static bool isUselessVec(FIRRTLType oldType, unsigned fieldID) {
+static bool isUselessVec(FIRRTLBaseType oldType, unsigned fieldID) {
   if (oldType.isGround()) {
     assert(fieldID == 0);
     return false;
@@ -640,7 +642,7 @@ static bool isUselessVec(FIRRTLType oldType, unsigned fieldID) {
 
 // If a field is pointing to a child of a zero-length vector, it is useless.
 static bool isUselessVec(FieldRef field) {
-  auto oldType = field.getValue().getType().cast<FIRRTLType>();
+  auto oldType = field.getValue().getType().cast<FIRRTLBaseType>();
   return isUselessVec(oldType, field.getFieldID());
 }
 
@@ -814,16 +816,16 @@ void InferResetsPass::traceResets(InstanceOp inst) {
 /// Each drive involving a `ResetType` is recorded.
 void InferResetsPass::traceResets(Value dst, Value src, Location loc) {
   // Analyze the actual connection.
-  auto dstType = dst.getType().cast<FIRRTLType>();
-  auto srcType = src.getType().cast<FIRRTLType>();
+  auto dstType = dst.getType().cast<FIRRTLBaseType>();
+  auto srcType = src.getType().cast<FIRRTLBaseType>();
   traceResets(dstType, dst, 0, srcType, src, 0, loc);
 }
 
 /// Analyze a connect of one (possibly aggregate) value to another.
 /// Each drive involving a `ResetType` is recorded.
-void InferResetsPass::traceResets(FIRRTLType dstType, Value dst, unsigned dstID,
-                                  FIRRTLType srcType, Value src, unsigned srcID,
-                                  Location loc) {
+void InferResetsPass::traceResets(FIRRTLBaseType dstType, Value dst,
+                                  unsigned dstID, FIRRTLBaseType srcType,
+                                  Value src, unsigned srcID, Location loc) {
   if (auto dstBundle = dstType.dyn_cast<BundleType>()) {
     auto srcBundle = srcType.cast<BundleType>();
     for (unsigned dstIdx = 0, e = dstBundle.getNumElements(); dstIdx < e;
@@ -1012,7 +1014,7 @@ LogicalResult InferResetsPass::updateReset(ResetNetwork net, ResetKind kind) {
                           << " nodes to " << kind << "\n");
 
   // Determine the final type the reset should have.
-  FIRRTLType resetType;
+  FIRRTLBaseType resetType;
   if (kind == ResetKind::Async)
     resetType = AsyncResetType::get(&getContext());
   else
@@ -1108,8 +1110,8 @@ LogicalResult InferResetsPass::updateReset(ResetNetwork net, ResetKind kind) {
 }
 
 /// Update the type of a single field within a type.
-static FIRRTLType updateType(FIRRTLType oldType, unsigned fieldID,
-                             FIRRTLType fieldType) {
+static FIRRTLBaseType updateType(FIRRTLBaseType oldType, unsigned fieldID,
+                                 FIRRTLBaseType fieldType) {
   // If this is a ground type, simply replace it.
   if (oldType.isGround()) {
     assert(fieldID == 0);
@@ -1138,9 +1140,9 @@ static FIRRTLType updateType(FIRRTLType oldType, unsigned fieldID,
 }
 
 /// Update the reset type of a specific field.
-bool InferResetsPass::updateReset(FieldRef field, FIRRTLType resetType) {
+bool InferResetsPass::updateReset(FieldRef field, FIRRTLBaseType resetType) {
   // Compute the updated type.
-  auto oldType = field.getValue().getType().cast<FIRRTLType>();
+  auto oldType = field.getValue().getType().cast<FIRRTLBaseType>();
   auto newType = updateType(oldType, field.getFieldID(), resetType);
 
   // Update the type if necessary.
@@ -1654,7 +1656,7 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
 
       auto newInstOp = instOp.cloneAndInsertPorts(
           {{/*portIndex=*/0,
-            {domain.newPortName, actualReset.getType().cast<FIRRTLType>(),
+            {domain.newPortName, actualReset.getType().cast<FIRRTLBaseType>(),
              Direction::In}}});
       instReset = newInstOp.getResult(0);
 
