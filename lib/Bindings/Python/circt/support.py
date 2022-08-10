@@ -183,7 +183,8 @@ class BackedgeBuilder(AbstractContextManager):
                  instance_of: ir.Operation,
                  loc: ir.Location = None):
       self.creator: BackedgeBuilder = creator
-      self.dummy_op = ir.Operation.create("builtin.reinterpret_cast", [type],
+      self.dummy_op = ir.Operation.create("builtin.unrealized_conversion_cast",
+                                          [type],
                                           loc=loc)
       self.instance_of = instance_of
       self.op_view = op_view
