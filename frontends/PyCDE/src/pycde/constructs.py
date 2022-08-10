@@ -34,8 +34,8 @@ def Wire(type: PyCDEType):
       self.value = new_value.value
       self._assigned = True
 
-  return WireValue(ir.Operation.create("builtin.reinterpret_cast", [type]),
-                   type)
+  return WireValue(
+      ir.Operation.create("builtin.unrealized_conversion_cast", [type]), type)
 
 
 def Reg(type: PyCDEType,
