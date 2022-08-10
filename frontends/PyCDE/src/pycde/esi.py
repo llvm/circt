@@ -9,9 +9,7 @@ from pycde.pycde_types import ChannelType, ClockType, PyCDEType, types
 
 import mlir.ir as ir
 
-from typing import Callable, Dict, List, Tuple, Type, Union
-
-from pycde import support
+from typing import List, Tuple, Type
 
 ToServer = InputChannel
 FromServer = OutputChannel
@@ -113,11 +111,6 @@ class _ServiceGeneratorChannels:
                req: raw_esi.ServiceImplementReqOp, arguments: List[ir.Value]):
     self._req = req
     portReqsBlock = req.portReqs.blocks[0]
-
-    print()
-    req.print()
-    print()
-    print()
 
     input_reqs = [
         x for x in portReqsBlock

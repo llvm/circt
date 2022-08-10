@@ -107,7 +107,6 @@ class Value:
 
   @property
   def name(self):
-    print(self.value)
     owner = self.value.owner
     if hasattr(owner,
                "attributes") and self._namehint_attrname in owner.attributes:
@@ -115,9 +114,10 @@ class Value:
     from circt.dialects import msft
     if isinstance(owner, ir.Block) and isinstance(owner.owner,
                                                   msft.MSFTModuleOp):
+      block_arg = ir.BlockArgument(self.value)
       mod = owner.owner
       return ir.StringAttr(
-          ir.ArrayAttr(mod.attributes["argNames"])[self.value.arg_number]).value
+          ir.ArrayAttr(mod.attributes["argNames"])[block_arg.arg_number]).value
     if hasattr(self, "_name"):
       return self._name
 

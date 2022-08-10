@@ -3,7 +3,7 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from __future__ import annotations
-from typing import Callable, Optional, Tuple, Union, Dict
+from typing import Optional, Tuple, Union, Dict
 from pycde.pycde_types import ClockType
 
 from pycde.support import _obj_to_value

@@ -95,7 +95,7 @@ def create_fsm_machine_op(sys, mod: _SpecializedModule, symbol):
 
 
 def generate_fsm_machine_op(generate_obj: Generator,
-                            spec_mod: _SpecializedModule, _):
+                            spec_mod: _SpecializedModule):
   """ Generator callback for generating an FSM op. """
   entry_block = spec_mod.circt_mod.body.blocks[0]
   ports = _GeneratorPortAccess(spec_mod, entry_block.arguments)
