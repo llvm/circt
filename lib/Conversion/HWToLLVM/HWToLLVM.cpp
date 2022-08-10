@@ -391,6 +391,7 @@ struct HWConstArrayCreateOpConversion
   using ConvertOpToLLVMPattern<hw::ArrayCreateOp>::ConvertOpToLLVMPattern;
 
   LogicalResult match(hw::ArrayCreateOp op) const override {
+    // Apply this conversion if all the array elements are constants.
     return success(llvm::all_of(op.getOperands(), [](auto op) {
       return isa_and_nonnull<hw::ConstantOp>(op.getDefiningOp());
     }));
@@ -403,6 +404,7 @@ struct HWConstArrayCreateOpConversion
 
     OpBuilder b(op->getParentOfType<mlir::ModuleOp>().getBodyRegion());
 
+    // Create a global region for this static array.
     auto name = globals.newName("array_global");
     auto global =
         b.create<LLVM::GlobalOp>(op->getLoc(), arrayTy, false,
@@ -414,6 +416,8 @@ struct HWConstArrayCreateOpConversion
 
     Value arr = init.create<LLVM::UndefOp>(op->getLoc(), arrayTy);
     for (size_t i = 0, e = op.getInputs().size(); i < e; ++i) {
+      // Copy over the converted constant ops from the adaptor into the global
+      // region and insert them into the array.
       Value input =
           adaptor
               .getInputs()[HWToLLVMEndianessConverter::convertToLLVMEndianess(
@@ -426,6 +430,7 @@ struct HWConstArrayCreateOpConversion
                                              init.getI32ArrayAttr(i));
     }
     init.create<LLVM::ReturnOp>(op->getLoc(), arr);
+    // Get the global array address and load it to return an array value.
     auto addr = rewriter.create<LLVM::AddressOfOp>(op->getLoc(), global);
     rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, arrayTy, addr);
   }
