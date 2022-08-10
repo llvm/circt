@@ -107,6 +107,7 @@ class Value:
 
   @property
   def name(self):
+    print(self.value)
     owner = self.value.owner
     if hasattr(owner,
                "attributes") and self._namehint_attrname in owner.attributes:
@@ -547,8 +548,8 @@ class ChannelValue(Value):
     from .pycde_types import types
     from .support import _obj_to_value
     ready = _obj_to_value(ready, types.i1)
-    unwrap_op = esi.UnwrapValidReady(self.type.inner_type, types.i1, self.value,
-                                     ready.value)
+    unwrap_op = esi.UnwrapValidReadyOp(self.type.inner_type, types.i1,
+                                       self.value, ready.value)
     return Value(unwrap_op.rawOutput), Value(unwrap_op.valid)
 
 

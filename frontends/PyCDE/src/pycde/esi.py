@@ -109,8 +109,57 @@ def Cosim(decl: ServiceDecl, clk, rst):
 
 class _ServiceGeneratorChannels:
 
-  def __init__(self, req: raw_esi.ServiceImplementReqOp):
+  def __init__(self, mod: _SpecializedModule,
+               req: raw_esi.ServiceImplementReqOp, arguments: List[ir.Value]):
     self._req = req
+    portReqsBlock = req.portReqs.blocks[0]
+
+    print()
+    req.print()
+    print()
+    print()
+
+    input_reqs = [
+        x for x in portReqsBlock
+        if isinstance(x, raw_esi.RequestToServerConnectionOp)
+    ]
+    start_inputs_chan_num = len(mod.input_port_lookup)
+    assert len(input_reqs) == len(req.inputs) - len(mod.input_port_lookup)
+    self.input_lookup = {
+        n: i
+        for i, n in zip(list(req.inputs)[start_inputs_chan_num:], input_reqs)
+    }
+
+    self.output_reqs = [
+        x for x in portReqsBlock
+        if isinstance(x, raw_esi.RequestToClientConnectionOp)
+    ]
+    self.output_chan_offset = len(mod.output_port_lookup)
+    assert len(
+        self.output_reqs) == len(req.results) - len(mod.output_port_lookup)
+
+    self._yet_to_be_connected_outputs = set(range(len(self.output_reqs)))
+
+  @property
+  def to_server_reqs(self) -> List[Tuple[List[str], ChannelValue]]:
+    return [(req.clientNamePath, ChannelValue(input))
+            for (req, input) in self.input_lookup.items()]
+
+  @property
+  def to_client_reqs(self) -> List[Tuple[int, List[str], ChannelType]]:
+    return [(i, chan_req.clientNamePath, ChannelType(chan_req.receiving.type))
+            for (i, chan_req) in enumerate(self.output_reqs)]
+
+  def set_output(self, chan_num: int, new_chan: ChannelValue):
+    if chan_num > len(self.output_reqs):
+      raise ValueError(
+          f"Channel number {chan_num} is not an output of this service")
+    chan_req = self.output_reqs[chan_num]
+    if chan_num not in self._yet_to_be_connected_outputs:
+      raise ValueError(f"{chan_req.clientNamePath} has already been connected.")
+    self._yet_to_be_connected_outputs.remove(chan_num)
+    msft.replaceAllUsesWith(
+        self._req.results[self.output_chan_offset + chan_num], new_chan.value)
 
 
 def ServiceImplementation(decl: ServiceDecl):
@@ -145,7 +194,7 @@ def ServiceImplementation(decl: ServiceDecl):
             clk = ClockValue(arguments[clk_port], ClockType())
             clk.__enter__()
 
-          channels = _ServiceGeneratorChannels(serviceReq)
+          channels = _ServiceGeneratorChannels(spec_mod, serviceReq, arguments)
           rc = generator.gen_func(args, channels=channels)
           if rc is None:
             rc = True

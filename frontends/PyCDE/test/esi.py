@@ -6,25 +6,30 @@ from pycde import (Clock, Input, InputChannel, OutputChannel, module, generator,
                    types)
 from pycde import esi
 from pycde.common import Output
+from pycde.pycde_types import ChannelType
+from pycde.value import BitVectorValue, ChannelValue
 
-# @module
-# class Producer:
-#   clk = Input(types.i1)
-#   int_out = OutputChannel(types.i32)
 
-#   @generator
-#   def construct(ports):
-#     chan = esi.HostComms.from_host(types.i32, "loopback_in")
-#     ports.int_out = chan
+@module
+class Producer:
+  clk = Input(types.i1)
+  int_out = OutputChannel(types.i32)
 
-# @module
-# class Consumer:
-#   clk = Input(types.i1)
-#   int_in = InputChannel(types.i32)
+  @generator
+  def construct(ports):
+    chan = esi.HostComms.from_host(types.i32, "loopback_in")
+    ports.int_out = chan
 
-#   @generator
-#   def construct(ports):
-#     esi.HostComms.to_host(ports.int_in, "loopback_out")
+
+@module
+class Consumer:
+  clk = Input(types.i1)
+  int_in = InputChannel(types.i32)
+
+  @generator
+  def construct(ports):
+    esi.HostComms.to_host(ports.int_in, "loopback_out")
+
 
 # @module
 # class LoopbackTop:
@@ -54,10 +59,37 @@ class MultiplexerService:
 
   @generator
   def generate(ports, channels):
-    ports.trunk_out = types.i256(0)
-    ports.trunk_out_valid = types.i1(0)
-    ports.trunk_in_ready = types.i1(0)
+
     print("generating")
+    input_reqs = channels.to_server_reqs
+    if len(input_reqs) > 1:
+      raise Exception("Multiple to_server requests not supported")
+    MultiplexerService.unwrap_and_pad(ports, input_reqs[0][1])
+
+    output_reqs = channels.to_client_reqs
+    if len(output_reqs) > 1:
+      raise Exception("Multiple to_client requests not supported")
+    idx, req_name, req_type = output_reqs[0]
+    output_chan, ready = MultiplexerService.slice_and_wrap(ports, req_type)
+    channels.set_output(idx, output_chan)
+    ports.trunk_in_ready = ready
+
+  @staticmethod
+  def slice_and_wrap(ports, channel_type: ChannelType):
+    assert (channel_type.inner_type.width <= 256)
+    sliced = ports.trunk_in[:channel_type.inner_type.width]
+    return channel_type.wrap(sliced, ports.trunk_in_valid)
+
+  @staticmethod
+  def unwrap_and_pad(ports, input_channel: ChannelValue):
+    """
+    Unwrap the input channel and pad it to 256 bits.
+    """
+    (data, valid) = input_channel.unwrap(ports.trunk_out_ready)
+    assert isinstance(data, BitVectorValue)
+    assert len(data) <= 256
+    ports.trunk_out = data.pad_or_truncate(256)
+    ports.trunk_out_valid = valid
 
 
 @module
@@ -83,6 +115,9 @@ class MultiplexerTop:
     ports.trunk_in_ready = m.trunk_in_ready
     ports.trunk_out = m.trunk_out
     ports.trunk_out_valid = m.trunk_out_valid
+
+    p = Producer(clk=ports.clk)
+    Consumer(clk=ports.clk, int_in=p.int_out)
 
 
 s = pycde.System([MultiplexerTop], name="EsiSys")

@@ -543,11 +543,6 @@ class Generator:
   """
 
   def __init__(self, gen_func):
-    # sig = inspect.signature(gen_func)
-    # if len(sig.parameters) != 1:
-    #   raise ValueError(
-    #       "Generate functions must take one argument and do not support 'self'."
-    #   )
     self.gen_func = gen_func
     self.loc = get_user_loc()
 
