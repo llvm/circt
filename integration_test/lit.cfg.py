@@ -178,3 +178,10 @@ if config.bindings_tcl_enabled:
   config.available_features.add('bindings_tcl')
 
 llvm_config.add_tool_substitutions(tools, tool_dirs)
+
+# cocotb availability
+try:
+  import cocotb
+  config.available_features.add('cocotb')
+except ImportError:
+  pass

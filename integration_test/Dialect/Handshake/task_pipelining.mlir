@@ -1,5 +1,4 @@
-// REQUIRES: ieee-sim
-// UNSUPPORTED: ieee-sim-iverilog
+// REQUIRES: iverilog,cocotb
 
 // This test is executed with all different buffering strategies
 
@@ -7,26 +6,30 @@
 // RUN:   --canonicalize='top-down=true region-simplify=true' \
 // RUN:   --handshake-materialize-forks-sinks --canonicalize \
 // RUN:   --handshake-insert-buffers=strategy=all --lower-handshake-to-firrtl | \
-// RUN: firtool --format=mlir --verilog > %t.sv && \
-// RUN: circt-rtl-sim.py %t.sv %S/driver_with_input.sv --sim %ieee-sim --no-default-driver --top driver | FileCheck %s
+// RUN: firtool --format=mlir --verilog --lowering-options=disallowLocalVariables > %t.sv && \
+// RUN: %PYTHON% %S/cocotb_driver.py --objdir=%T --topLevel=top --pythonModule=task_pipelining --pythonFolder=%S %t.sv | FileCheck %s
 
 // RUN: circt-opt %s --lower-std-to-handshake \
 // RUN:   --canonicalize='top-down=true region-simplify=true' \
 // RUN:   --handshake-materialize-forks-sinks --canonicalize \
 // RUN:   --handshake-insert-buffers=strategy=allFIFO --lower-handshake-to-firrtl | \
-// RUN: firtool --format=mlir --verilog > %t.sv && \
-// RUN: circt-rtl-sim.py %t.sv %S/driver_with_input.sv --sim %ieee-sim --no-default-driver --top driver | FileCheck %s
+// RUN: firtool --format=mlir --verilog --lowering-options=disallowLocalVariables > %t.sv && \
+// RUN: %PYTHON% %S/cocotb_driver.py --objdir=%T --topLevel=top --pythonModule=task_pipelining --pythonFolder=%S %t.sv | FileCheck %s
 
 // RUN: circt-opt %s --lower-std-to-handshake \
 // RUN:   --canonicalize='top-down=true region-simplify=true' \
 // RUN:   --handshake-materialize-forks-sinks --canonicalize \
 // RUN:   --handshake-insert-buffers=strategy=cycles --lower-handshake-to-firrtl | \
-// RUN: firtool --format=mlir --verilog > %t.sv && \
-// RUN: circt-rtl-sim.py %t.sv %S/driver_with_input.sv --sim %ieee-sim --no-default-driver --top driver | FileCheck %s
+// RUN: firtool --format=mlir --verilog --lowering-options=disallowLocalVariables > %t.sv && \
+// RUN: %PYTHON% %S/cocotb_driver.py --objdir=%T --topLevel=top --pythonModule=task_pipelining --pythonFolder=%S %t.sv | FileCheck %s
 
-// CHECK: ## run -all
-// CHECK-NEXT: Result={{.*}}100
-// CHECK-NEXT: Result={{.*}}24
+// CHECK:      ** TEST
+// CHECK-NEXT: ********************************
+// CHECK-NEXT: ** task_pipelining.oneInput
+// CHECK-NEXT: ** task_pipelining.sendMultiple
+// CHECK-NEXT: ********************************
+// CHECK-NEXT: ** TESTS=2 PASS=2 FAIL=0 SKIP=0
+// CHECK-NEXT: ********************************
 
 module {
   func.func @top(%val: i64) -> i64 {
