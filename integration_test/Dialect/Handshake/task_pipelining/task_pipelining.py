@@ -1,6 +1,15 @@
 import cocotb
 import cocotb.clock
 from cocotb.triggers import FallingEdge, RisingEdge
+
+# Hack to allow imports from parent directory
+import sys
+import os
+
+currentdir = os.path.dirname(os.path.abspath(__file__))
+parentdir = os.path.dirname(currentdir)
+sys.path.append(parentdir)
+
 from helper import HandshakePort, getPorts
 
 
