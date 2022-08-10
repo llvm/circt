@@ -1,5 +1,14 @@
 // RUN: circt-opt %s --convert-llhd-to-llvm | FileCheck %s
 
+// CHECK-LABEL: llvm.mlir.global internal @array_global_0() : !llvm.array<2 x i1> {
+// CHECK: %0 = llvm.mlir.undef : !llvm.array<2 x i1>
+// CHECK: %1 = llvm.mlir.constant(false) : i1
+// CHECK: %2 = llvm.insertvalue %1, %0[0 : i32] : !llvm.array<2 x i1>
+// CHECK: %3 = llvm.mlir.constant(false) : i1
+// CHECK: %4 = llvm.insertvalue %3, %2[1 : i32] : !llvm.array<2 x i1>
+// CHECK: llvm.return %4 : !llvm.array<2 x i1>
+// CHECK: }
+
 // CHECK-LABEL: llvm.func @llhd_init
 // CHECK: llvm.mlir.constant(false) : i1
 llhd.entity @root() -> () {
