@@ -226,7 +226,7 @@ FIRToken FIRLexer::lexTokenImpl() {
       if (curPtr - 1 == curBuffer.end())
         return formToken(FIRToken::eof, tokStart);
 
-      LLVM_FALLTHROUGH; // Treat as whitespace.
+      [[fallthrough]]; // Treat as whitespace.
 
     case ' ':
     case '\t':
@@ -325,7 +325,7 @@ FIRToken FIRLexer::lexFileInfo(const char *tokStart) {
       // emit an error.
       if (curPtr - 1 != curBuffer.end())
         break;
-      LLVM_FALLTHROUGH;
+      [[fallthrough]];
     case '\n': // Vertical whitespace isn't allowed in a fileinfo.
     case '\v':
     case '\f':
@@ -425,7 +425,7 @@ void FIRLexer::skipComment() {
         --curPtr;
         return;
       }
-      LLVM_FALLTHROUGH;
+      [[fallthrough]];
     default:
       // Skip over other characters.
       break;
@@ -458,7 +458,7 @@ FIRToken FIRLexer::lexString(const char *tokStart, bool isRaw) {
       // emit an error.
       if (curPtr - 1 != curBuffer.end())
         break;
-      LLVM_FALLTHROUGH;
+      [[fallthrough]];
     case '\n': // Vertical whitespace isn't allowed in a string.
     case '\r':
     case '\v':
