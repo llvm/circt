@@ -815,6 +815,8 @@ void InferResetsPass::traceResets(InstanceOp inst) {
 /// Analyze a connect of one (possibly aggregate) value to another.
 /// Each drive involving a `ResetType` is recorded.
 void InferResetsPass::traceResets(Value dst, Value src, Location loc) {
+  if (dst.getType().isa<RefType>())
+    return;
   // Analyze the actual connection.
   auto dstType = dst.getType().cast<FIRRTLBaseType>();
   auto srcType = src.getType().cast<FIRRTLBaseType>();

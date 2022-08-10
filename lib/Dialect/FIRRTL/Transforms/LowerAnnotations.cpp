@@ -21,8 +21,10 @@
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
+#include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "llvm/ADT/APSInt.h"
@@ -261,6 +263,14 @@ static LogicalResult drop(const AnnoPathValue &target, DictionaryAttr anno,
   return success();
 }
 
+static LogicalResult setTestBenchDir(const AnnoPathValue &target,
+                                        DictionaryAttr anno,
+                                        ApplyState &state) {
+  state.testbenchDir = 
+     tryGetAs<StringAttr>(anno, anno, "dirname", state.circuit.getLoc(), testBenchDirAnnoClass);
+  return applyWithoutTarget<false, CircuitOp>(target, anno, state);
+}
+
 //===----------------------------------------------------------------------===//
 // Driving table
 //===----------------------------------------------------------------------===//
@@ -299,8 +309,8 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
     {"circt.testNT", {noResolve, applyWithoutTarget<>}},
     {"circt.missing", {tryResolve, applyWithoutTarget<true>}},
     // Grand Central Views/Interfaces Annotations
-    {extractGrandCentralClass, NoTargetAnnotation},
-    {grandCentralHierarchyFileAnnoClass, NoTargetAnnotation},
+    {extractGrandCentralClass, {noResolve, applyExtractionInfo}},
+    {grandCentralHierarchyFileAnnoClass, {noResolve, applyGCHierFileInfo}},
     {serializedViewAnnoClass, {noResolve, applyGCTView}},
     {viewAnnoClass, {noResolve, applyGCTView}},
     {companionAnnoClass, {stdResolve, applyWithoutTarget<>}},
@@ -366,10 +376,10 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
     {metadataDirectoryAttrName, NoTargetAnnotation},
     {moduleHierAnnoClass, NoTargetAnnotation},
     {sitestTestHarnessBlackBoxAnnoClass, NoTargetAnnotation},
-    {testBenchDirAnnoClass, NoTargetAnnotation},
+    {testBenchDirAnnoClass, {noResolve, setTestBenchDir}},
     {testHarnessHierAnnoClass, NoTargetAnnotation},
     {testHarnessPathAnnoClass, NoTargetAnnotation},
-    {prefixInterfacesAnnoClass, NoTargetAnnotation},
+    {prefixInterfacesAnnoClass, {noResolve, applyGCHierFileInfo}},
     {subCircuitDirAnnotation, NoTargetAnnotation},
     {extractAssertAnnoClass, NoTargetAnnotation},
     {extractAssumeAnnoClass, NoTargetAnnotation},
@@ -496,6 +506,8 @@ void LowerAnnotationsPass::runOnOperation() {
     if (applyAnnotation(attr, state).failed())
       ++numFailures;
   }
+  if (handleGCTViews(state, getAnalysis<InstanceGraph>()).failed())
+    return signalPassFailure();
 
   // Update statistics
   numRawAnnotations += annotations.size();

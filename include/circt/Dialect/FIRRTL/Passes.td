@@ -29,7 +29,7 @@ def LowerFIRRTLAnnotations : Pass<"firrtl-lower-annotations", "firrtl::CircuitOp
     Option<"ignoreAnnotationUnknown", "disable-annotation-unknown", "bool", "true",
       "Ignore unknown annotations.">
   ];
-  let dependentDialects = ["hw::HWDialect"];
+  let dependentDialects = ["sv::SVDialect", "hw::HWDialect"];
   let statistics = [
     Statistic<"numRawAnnotations", "num-raw-annos",
       "Number of raw annotations on circuit">,
@@ -39,6 +39,12 @@ def LowerFIRRTLAnnotations : Pass<"firrtl-lower-annotations", "firrtl::CircuitOp
        "Total number of annotations processed">,
     Statistic<"numUnhandled", "num-unhandled-annos",
       "Number of unhandled annotations">,
+    Statistic<"numViews", "num-views-created",
+      "Number of top-level SystemVerilog interfaces that were created">,
+    Statistic<"numInterfaces", "num-interfaces-created",
+      "Number of SystemVerilog interfaces that were created">,
+    Statistic<"numXMRs", "num-xmrs-created",
+      "Number of SystemVerilog XMRs added">,
   ];
 }
 
@@ -411,25 +417,6 @@ def PrintNLATable
   let constructor =  "circt::firrtl::createPrintNLATablePass()";
 }
 
-def GrandCentral : Pass<"firrtl-grand-central", "CircuitOp"> {
-  let summary = "Remove Grand Central Annotations";
-  let description = [{
-    Processes annotations associated with SiFive's Grand Central utility.
-  }];
-
-  let constructor = "circt::firrtl::createGrandCentralPass()";
-  let dependentDialects = ["circt::sv::SVDialect", "circt::hw::HWDialect"];
-  let statistics = [
-    Statistic<"numViews", "num-views-created",
-      "Number of top-level SystemVerilog interfaces that were created">,
-    Statistic<"numInterfaces", "num-interfaces-created",
-      "Number of SystemVerilog interfaces that were created">,
-    Statistic<"numXMRs", "num-xmrs-created",
-      "Number of SystemVerilog XMRs added">,
-    Statistic<"numAnnosRemoved", "num-annotations-removed",
-      "Number of annotations removed">
-  ];
-}
 
 def GrandCentralTaps : Pass<"firrtl-grand-central-taps", "firrtl::CircuitOp"> {
   let summary = "Generate code for grand central data and memory taps";

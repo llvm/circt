@@ -606,7 +606,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   // certain black boxes should be placed.
   if (grandCentral) {
     auto &circuitPM = pm.nest<firrtl::CircuitOp>();
-    circuitPM.addPass(firrtl::createGrandCentralPass());
+    // circuitPM.addPass(firrtl::createGrandCentralPass());
     circuitPM.addPass(firrtl::createGrandCentralTapsPass());
     circuitPM.addPass(
         firrtl::createGrandCentralSignalMappingsPass(outputFilename));
@@ -640,6 +640,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         firrtl::createMergeConnectionsPass(mergeConnectionsAgggresively));
 
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerXMRPass());
   // Lower if we are going to verilog or if lowering was specifically requested.
   if (outputFormat != OutputIRFir) {
     pm.addPass(createLowerFIRRTLToHWPass(enableAnnotationWarning.getValue(),
