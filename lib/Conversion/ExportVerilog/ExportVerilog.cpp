@@ -3978,57 +3978,37 @@ isExpressionEmittedInlineIntoProceduralDeclaration(Operation *op,
   return true;
 }
 
-/// This function determines whether we can inline an assignment into
-/// a declaration of a given op. We first check that op's users are either a
-/// single assignment with type `AssignTy` or read from the op. If we can find
-/// such assignment, check that it dominates all users. If
-/// `onlyAllowAssignToBeNextToOp` is true, we check the dominance only by
-/// looking at positions of op and assign. More specifically, if the assignment
-/// is defined next to the op, we can say that the assignment dominates op's
-/// users (recall that PrepareForEmission already turns graph regions into
-/// SSACFG). Additionally, we can ensure that the source of the
-/// assign is known to be referable from the declaration.
 template <class AssignTy>
-static AssignTy
-getSingleAssignIfDominateUsers(Operation *op,
-                               bool onlyAllowAssignToBeNextToOp) {
-  assert((isa<WireOp, LogicOp>(op)) && "op is expected either a wire or logic");
+static AssignTy getSingleAssignAndCheckUsers(Operation *op) {
   AssignTy singleAssign;
-  if (!llvm::all_of(op->getUsers(),
-                    [&](Operation *user) {
-                      if (hasSVAttributes(user))
-                        return false;
+  if (llvm::all_of(op->getUsers(), [&](Operation *user) {
+        if (hasSVAttributes(user))
+          return false;
 
-                      if (auto assign = dyn_cast<AssignTy>(user)) {
-                        if (singleAssign)
-                          return false;
-                        singleAssign = assign;
-                        return true;
-                      }
+        if (auto assign = dyn_cast<AssignTy>(user)) {
+          if (singleAssign)
+            return false;
+          singleAssign = assign;
+          return true;
+        }
 
-                      return isa<ReadInOutOp>(user);
-                    }) ||
-      !singleAssign)
-    return {};
-
-  // We first check the dominance by looking at the next node of the op.
-  if (op->getNextNode() == singleAssign ||
-      (!onlyAllowAssignToBeNextToOp &&
-       // Check that the assignment is defined in the same block and placed
-       // before any user.
-       // TOOD: Consider to use `DominanceInfo`.
-       llvm::all_of(op->getUsers(), [&](Operation *user) {
-         if (singleAssign->getBlock() != user->getBlock())
-           return false;
-
-         if (singleAssign == user)
-           return true;
-
-         return singleAssign->isBeforeInBlock(user);
-       })))
+        return isa<ReadInOutOp>(user);
+      }))
     return singleAssign;
-
   return {};
+}
+
+// Return true if `op1` dominates users of `op2`.
+static bool checkDominanceOfUsers(Operation *op1, Operation *op2) {
+  return llvm::all_of(op2->getUsers(), [&](Operation *user) {
+    if (op1->getBlock() != user->getBlock())
+      return false;
+
+    if (op1 == user)
+      return true;
+
+    return op1->isBeforeInBlock(user);
+  });
 }
 
 LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
@@ -4082,33 +4062,40 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
   // Try inlining an assignment into declarations.
   if (isa<WireOp, LogicOp>(op) &&
       !op->getParentOp()->hasTrait<ProceduralRegion>()) {
-    // Get a single assignment which dominates op's users.
-    // `onlyAllowAssignToBeNextToOp` is required to ensure that its source value
-    // can be inlined into the decl.
-    if (auto singleAssign = getSingleAssignIfDominateUsers<AssignOp>(
-            op, /*onlyAllowAssignToBeNextToOp=*/true)) {
-      os << " = ";
-      emitExpression(singleAssign.getSrc(), opsForLocation, ForceEmitMultiUse);
-      emitter.assignsInlined.insert(singleAssign);
+    // Get a single assignments if any.
+    if (auto singleAssign = getSingleAssignAndCheckUsers<AssignOp>(op)) {
+      auto source = singleAssign.getSrc().getDefiningOp();
+      // Check that the source value is OK to inline in the current emission
+      // point. A port or constant is fine, otherwise check that the assign is
+      // next to the operation.
+      if (!source || isa<ConstantOp>(source) ||
+          op->getNextNode() == singleAssign) {
+        os << " = ";
+        emitExpression(singleAssign.getSrc(), opsForLocation,
+                       ForceEmitMultiUse);
+        emitter.assignsInlined.insert(singleAssign);
+      }
     }
   }
 
   // Try inlining a blocking assignment to logic op declaration.
   if (isa<LogicOp>(op) && op->getParentOp()->hasTrait<ProceduralRegion>()) {
     // Get a single assignment which might be possible to inline.
-    if (auto singleAssign = getSingleAssignIfDominateUsers<BPAssignOp>(
-            op, /*onlyAllowAssignToBeNextToOp=*/false)) {
-      auto srcOp = singleAssign.getSrc().getDefiningOp();
-      // A port can be read from everywhere. If not, check that srcOp can be
-      // inlined into the decl.
-      if (!srcOp ||
-          isExpressionEmittedInlineIntoProceduralDeclaration(srcOp, *this)) {
-        os << " = ";
-        emitExpression(singleAssign.getSrc(), opsForLocation,
-                       ForceEmitMultiUse);
-        // Remember that the assignment and logic op are emitted into decl.
-        emitter.assignsInlined.insert(singleAssign);
-        emitter.expressionsEmittedIntoDecl.insert(op);
+    if (auto singleAssign = getSingleAssignAndCheckUsers<BPAssignOp>(op)) {
+      // It is necessary for the assignment to dominate users of the op.
+      if (checkDominanceOfUsers(singleAssign, op)) {
+        auto source = singleAssign.getSrc().getDefiningOp();
+        // A port or constant can be inlined at everywhere. Otherwise, check the
+        // validity by `isExpressionEmittedInlineIntoProceduralDeclaration`.
+        if (!source || isa<ConstantOp>(source) ||
+            isExpressionEmittedInlineIntoProceduralDeclaration(source, *this)) {
+          os << " = ";
+          emitExpression(singleAssign.getSrc(), opsForLocation,
+                         ForceEmitMultiUse);
+          // Remember that the assignment and logic op are emitted into decl.
+          emitter.assignsInlined.insert(singleAssign);
+          emitter.expressionsEmittedIntoDecl.insert(op);
+        }
       }
     }
   }
