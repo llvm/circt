@@ -355,12 +355,7 @@ struct HWArrayCreateOpConversion
   using ConvertOpToLLVMPattern<hw::ArrayCreateOp>::ConvertOpToLLVMPattern;
 
   bool isConst(hw::ArrayCreateOp op) const {
-    for (auto op : op.getOperands()) {
-      if (!op.getDefiningOp() || !isa<hw::ConstantOp>(op.getDefiningOp())) {
-        return false;
-      }
-    }
-    return true;
+      return llvm::all_of(op.getOperands(), [](auto op) { return isa_and_nonnull<hw::ConstantOp>(op.getDefiningOp()); });
   }
 
   Value convertConstArray(hw::ArrayCreateOp &op, OpAdaptor &adaptor,
