@@ -2028,20 +2028,16 @@ static LogicalResult checkRefTypeFlow(Operation *connect) {
 
   if (dst.getType().isa<RefType>()) {
     if (getDeclarationKind(src) == getDeclarationKind(dst)) {
-      auto srcRef = getFieldRefFromValue(src);
       bool rootKnown;
-      auto srcName = getFieldName(srcRef, rootKnown);
       auto diag = emitError(connect->getLoc())
-                  << "connect has invalid flow for ref type ports: the source "
-                     "expression ";
+                  << "connect is invalid: the first operand ";
+      auto dstName = getFieldName(getFieldRefFromValue(dst), rootKnown);
+      if (rootKnown)
+        diag << "\"" << dstName << "\" ";
+      diag << "and second operand ";
+      auto srcName = getFieldName(getFieldRefFromValue(src), rootKnown);
       if (rootKnown)
         diag << "\"" << srcName << "\" ";
-      diag << "and destination expression ";
-      auto dstRef = getFieldRefFromValue(dst);
-      bool dstRootKnown;
-      auto dstName = getFieldName(dstRef, dstRootKnown);
-      if (dstRootKnown)
-        diag << "\"" << dstName << "\" ";
       diag << "both have same port kind, expected Module port to Instance "
               "connections only";
       return diag;
