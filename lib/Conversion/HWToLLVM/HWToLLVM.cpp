@@ -18,9 +18,9 @@
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/LLVMCommon/Pattern.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
-#include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 using namespace mlir;
@@ -350,7 +350,7 @@ static Namespace globals;
 
 /// Convert an ArrayOp operation to the LLVM dialect. An equivalent and
 /// initialized llvm dialect array type is generated.
-    struct HWArrayCreateOpConversion
+struct HWArrayCreateOpConversion
     : public ConvertOpToLLVMPattern<hw::ArrayCreateOp> {
   using ConvertOpToLLVMPattern<hw::ArrayCreateOp>::ConvertOpToLLVMPattern;
 
@@ -381,7 +381,8 @@ static Namespace globals;
     for (size_t i = 0, e = op.getInputs().size(); i < e; ++i) {
       Value input =
           adaptor
-              .getInputs()[HWToLLVMEndianessConverter::convertToLLVMEndianess(op.getResult().getType(), i)];
+              .getInputs()[HWToLLVMEndianessConverter::convertToLLVMEndianess(
+                  op.getResult().getType(), i)];
       auto *clone = input.getDefiningOp()->clone();
       init.insert(clone);
 
@@ -400,7 +401,8 @@ static Namespace globals;
     Value arr = rewriter.create<LLVM::UndefOp>(op->getLoc(), arrayTy);
     for (size_t i = 0, e = op.getInputs().size(); i < e; ++i) {
       Value input =
-          op.getInputs()[HWToLLVMEndianessConverter::convertToLLVMEndianess(op.getResult().getType(), i)];
+          op.getInputs()[HWToLLVMEndianessConverter::convertToLLVMEndianess(
+              op.getResult().getType(), i)];
       Value castInput = typeConverter->materializeTargetConversion(
           rewriter, op->getLoc(), typeConverter->convertType(input.getType()),
           input);
@@ -434,7 +436,6 @@ static Namespace globals;
   }
 };
 } // namespace
-
 
 namespace {
 /// Convert a StructCreateOp operation to the LLVM dialect. An equivalent and
