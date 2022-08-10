@@ -4012,10 +4012,10 @@ static bool checkDominanceOfUsers(Operation *op1, Operation *op2) {
 }
 
 LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
-  // If spillWiresAtPrepare option is disabled, use the previous emission
+  // If useOldEmissionMode option is enabled, use the previous emission
   // method.
   // TODO: Once ExportVerilog simplification finished, remove this condition.
-  if (!state.options.spillWiresAtPrepare)
+  if (state.options.useOldEmissionMode)
     return emitNoop();
 
   emitSVAttributes(op);
@@ -4051,6 +4051,13 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
 
   // Print out any array subscripts or other post-name stuff.
   emitter.printUnpackedTypePostfix(type, os);
+
+  // Print debug info.
+  if (state.options.printDebugInfo) {
+    StringAttr sym = op->getAttr("inner_sym").dyn_cast_or_null<StringAttr>();
+    if (sym && !sym.getValue().empty())
+      os << " /* inner_sym: " << sym.getValue() << " */";
+  }
 
   if (auto localparam = dyn_cast<LocalParamOp>(op)) {
     os << " = ";
@@ -4155,7 +4162,7 @@ void StmtEmitter::collectNamesEmitDecls(Block &block) {
 
   // In the new emission mode, we don't do forward declarations.
   // TODO: Remove the below once we enabled the new emission mode by default.
-  if (state.options.spillWiresAtPrepare)
+  if (!state.options.useOldEmissionMode)
     return;
 
   SmallPtrSet<Operation *, 8> opsForLocation;

@@ -1,5 +1,5 @@
-// RUN: circt-opt %s -export-verilog -verify-diagnostics -o %t.mlir | FileCheck %s --strict-whitespace --check-prefixes=CHECK,OLD
-// RUN: circt-opt %s -export-verilog -verify-diagnostics -o %t.mlir --lowering-options=spillWiresAtPrepare | FileCheck %s --check-prefixes=CHECK,NEW
+// RUN: circt-opt %s -export-verilog -verify-diagnostics -o %t.mlir --lowering-options=useOldEmissionMode | FileCheck %s --strict-whitespace --check-prefixes=CHECK,OLD
+// RUN: circt-opt %s -export-verilog -verify-diagnostics -o %t.mlir | FileCheck %s --check-prefixes=CHECK,NEW
 
 // CHECK-LABEL: // external module E
 hw.module.extern @E(%a: i1, %b: i1, %c: i1)
