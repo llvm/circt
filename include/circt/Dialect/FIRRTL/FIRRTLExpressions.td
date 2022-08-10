@@ -711,7 +711,7 @@ def RefResolveOp: FIRRTLOp<"ref.resolve", [RefTypeConstraint<"ref","result">,
     of this operation.
   }];
   let arguments = (ins RefType:$ref);
-  let results = (outs FIRRTLType:$result);
+  let results = (outs FIRRTLBaseType:$result);
 
   let assemblyFormat = "$ref attr-dict `:` qualified(type($ref))";
 }
@@ -721,10 +721,10 @@ def RefSendOp: FIRRTLOp<"ref.send", [RefTypeConstraint<"ref","result">,
                                     RefPortConstraint<"ref">]> {
   let summary = "FIRRTL Send through Reference";
   let description = [{
-    Endpoint of a remote reference, send value through a reference
+    Endpoint of a remote reference. Send a value through a reference
     to be read from the firrtl.ref.resolve op.
   }];
-  let arguments = (ins RefType:$ref, FIRRTLType:$result);
+  let arguments = (ins RefType:$ref, FIRRTLBaseType:$result);
   let hasVerifier = 1;
 
   let assemblyFormat = "$ref `,` $result attr-dict `:` qualified(type($ref))";
