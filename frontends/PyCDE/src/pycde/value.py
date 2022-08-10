@@ -114,9 +114,10 @@ class Value:
     from circt.dialects import msft
     if isinstance(owner, ir.Block) and isinstance(owner.owner,
                                                   msft.MSFTModuleOp):
+      block_arg = ir.BlockArgument(self.value)
       mod = owner.owner
       return ir.StringAttr(
-          ir.ArrayAttr(mod.attributes["argNames"])[self.value.arg_number]).value
+          ir.ArrayAttr(mod.attributes["argNames"])[block_arg.arg_number]).value
     if hasattr(self, "_name"):
       return self._name
 
@@ -547,8 +548,8 @@ class ChannelValue(Value):
     from .pycde_types import types
     from .support import _obj_to_value
     ready = _obj_to_value(ready, types.i1)
-    unwrap_op = esi.UnwrapValidReady(self.type.inner_type, types.i1, self.value,
-                                     ready.value)
+    unwrap_op = esi.UnwrapValidReadyOp(self.type.inner_type, types.i1,
+                                       self.value, ready.value)
     return Value(unwrap_op.rawOutput), Value(unwrap_op.valid)
 
 

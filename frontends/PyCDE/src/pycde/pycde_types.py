@@ -123,7 +123,7 @@ class PyCDEType(mlir.ir.Type):
 
   def __init__(self, mlir_type: mlir.ir.Type):
     super().__init__(mlir_type)
-    self._type = mlir_type
+    self._type = circt.support.type_to_pytype(mlir_type)
 
   @property
   def strip(self):
@@ -315,7 +315,8 @@ class ChannelType(PyCDEType):
     from .support import _obj_to_value
     value = _obj_to_value(value, self._type.inner)
     valid = _obj_to_value(valid, types.i1)
-    wrap_op = esi.WrapValidReady(self._type, types.i1, value.value, valid.value)
+    wrap_op = esi.WrapValidReadyOp(self._type, types.i1, value.value,
+                                   valid.value)
     return Value(wrap_op.chanOutput), BitVectorValue(wrap_op.ready, types.i1)
 
 
