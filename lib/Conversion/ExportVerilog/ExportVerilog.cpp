@@ -441,7 +441,7 @@ getLocationInfoAsStringImpl(const SmallPtrSet<Operation *, 8> &ops) {
   switch (locationSet.size()) {
   case 1:
     printLoc((*locationSet.begin()).cast<FileLineColLoc>());
-    LLVM_FALLTHROUGH;
+    [[fallthrough]];
   case 0:
     return sstr.str();
   default:
