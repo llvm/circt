@@ -365,7 +365,7 @@ struct HWArrayCreateOpConversion
                           Type arrayTy) const {
     OpBuilder b(op->getParentOfType<mlir::ModuleOp>().getBodyRegion());
 
-    auto name = globals.newName(Twine("array_global"));
+    auto name = globals.newName("array_global");
     auto global =
         b.create<LLVM::GlobalOp>(op->getLoc(), arrayTy, false,
                                  LLVM::Linkage::Internal, name, Attribute(), 0);
