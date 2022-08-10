@@ -480,7 +480,7 @@ ParseResult FIRParser::parseIntLit(APInt &result, const Twine &message) {
     isNegative = spelling[0] == '-';
     assert(spelling[0] == '+' || spelling[0] == '-');
     spelling = spelling.drop_front();
-    LLVM_FALLTHROUGH;
+    [[fallthrough]];
   case FIRToken::integer:
     if (spelling.getAsInteger(10, result))
       return emitError(message), failure();

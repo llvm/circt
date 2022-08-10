@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 ##===- utils/get-iverilog.sh - Install Icarus Verilog ---------*- Script -*-===##
 # 
 # Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.

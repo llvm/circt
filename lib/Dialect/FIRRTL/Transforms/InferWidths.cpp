@@ -1146,12 +1146,15 @@ private:
 static bool hasUninferredWidth(Type type) {
   return TypeSwitch<Type, bool>(type)
       .Case<FIRRTLBaseType>([](auto base) { return base.hasUninferredWidth(); })
+      .Case<RefType>(
+          [](auto ref) { return ref.getType().hasUninferredWidth(); })
       .Default([](auto) { return false; });
 }
 
 static FIRRTLBaseType getBaseType(FIRRTLType type) {
   return TypeSwitch<FIRRTLType, FIRRTLBaseType>(type)
       .Case<FIRRTLBaseType>([](auto base) { return base; })
+      .Case<RefType>([](auto ref) { return ref.getType(); })
       .Default([](auto) {
         llvm_unreachable("unexpected FIRRTLType");
         return FIRRTLBaseType();
@@ -1940,6 +1943,8 @@ bool InferenceTypeUpdate::updateValue(Value value) {
   auto update = [&](FIRRTLType ftype) {
     return TypeSwitch<FIRRTLType, FIRRTLType>(type)
         .Case<FIRRTLBaseType>([&](auto base) { return updateBase(base); })
+        .Case<RefType>(
+            [&](auto ref) { return RefType::get(updateBase(ref.getType())); })
         .Default([](auto) {
           llvm_unreachable("unsupported type");
           return FIRRTLType();

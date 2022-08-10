@@ -61,16 +61,23 @@ def FVectorType : FIRRTLDialectType<CPred<"$_self.isa<FVectorType>()">,
   "FVectorType", "::circt::firrtl::FVectorType">;
 
 def ConnectableType : FIRRTLDialectType<
+  Or<[
     CPred<"$_self.isa<FIRRTLBaseType>()">,
-    "a connectable type (base type)", "::circt::firrtl::FIRRTLType", [{
+    CPred<"$_self.isa<RefType>()">,
+    ]>,
+    "a connectable type (base or ref type)", "::circt::firrtl::FIRRTLType", [{
     Any type that is valid for use in connect statements.
-    Currently this is any base type.
+    Currently this is any base type or ref type.
   }]>;
 
-def SizedType : FIRRTLDialectType<
+def SizedBaseOrRefType : FIRRTLDialectType<
+  Or<[
     CPred<"$_self.isa<FIRRTLBaseType>() && "
           "!$_self.cast<FIRRTLBaseType>().hasUninferredWidth()">,
-    "a sized type (contains no unifered widths)", "::circt::firrtl::FIRRTLType">;
+    CPred<"$_self.isa<RefType>() && "
+          "!$_self.cast<RefType>().getType().hasUninferredWidth()">,
+    ]>,
+  "a sized base or ref type (contains no uninferred widths)", "::circt::firrtl::FIRRTLType">;
 
 def UInt1Type : FIRRTLDialectType<
     CPred<"$_self.isa<UIntType>() && "
@@ -93,6 +100,22 @@ def PassiveType : FIRRTLDialectType<
   CPred<"$_self.isa<FIRRTLBaseType>() && $_self.cast<FIRRTLBaseType>().isPassive()">,
   "a passive base type (contain no flips)", "::circt::firrtl::FIRRTLBaseType">;
 
+def RefType : FIRRTLDialectType<
+   CPred<"$_self.isa<RefType>()">,
+  "reference type", "::circt::firrtl::RefType", [{
+    A reference type, such as `firrtl.ref<uint<1>>`.
+
+    Used for remote reads and writes of the wrapped base type.
+
+    Parameterized over the referenced base type,
+    which must be passive and for now must also be ground.
+
+    Not a base type.
+
+    Values of this type are used to capture dataflow paths,
+    and do not represent a circuit element or entity.
+  }]>;
+
 //===----------------------------------------------------------------------===//
 // FIRRTL Types Predicates
 //===----------------------------------------------------------------------===//
@@ -110,7 +133,7 @@ def AnyResetType : FIRRTLDialectType<
 def AnyRegisterType : FIRRTLDialectType<
     CPred<"$_self.isa<FIRRTLBaseType>() && "
           "$_self.cast<FIRRTLBaseType>().isRegisterType()">,
-    "a passive type that does not contain analog",
+    "a passive base type that does not contain analog",
     "::circt::firrtl::FIRRTLBaseType">;
 
 def UIntSIntClockType : AnyTypeOf<[SIntType, UIntType, ClockType],
