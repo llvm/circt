@@ -211,9 +211,9 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
         parser.parseGreater())
       return failure();
 
-    if (!type.isGround())
-      return parser.emitError(parser.getNameLoc(),
-                              "reference type must be ground");
+    if (failed(RefType::verify(
+            [&]() { return parser.emitError(parser.getNameLoc()); }, type)))
+      return failure();
 
     return result = RefType::get(type), success();
   }
@@ -1086,11 +1086,17 @@ struct RefTypeStorage : mlir::TypeStorage {
 } // namespace circt
 
 auto RefType::get(FIRRTLBaseType type) -> RefType {
-  assert(type.isGround() && "reference base type must be ground");
   return Base::get(type.getContext(), type);
 }
 
 auto RefType::getType() -> FIRRTLBaseType { return getImpl()->value; }
+
+auto RefType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
+                     FIRRTLBaseType base) -> LogicalResult {
+  if (!base.isGround())
+    return emitErrorFn() << "reference base type must be ground";
+  return success();
+}
 
 //===----------------------------------------------------------------------===//
 // FIRRTLDialect

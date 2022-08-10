@@ -438,6 +438,9 @@ public:
 
   /// Return the underlying type.
   FIRRTLBaseType getType();
+
+  static LogicalResult verify(function_ref<InFlightDiagnostic()> emitErrorFn,
+                              FIRRTLBaseType base);
 };
 
 //===----------------------------------------------------------------------===//
