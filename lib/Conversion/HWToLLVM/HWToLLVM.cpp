@@ -414,10 +414,7 @@ struct HWArrayCreateOpConversion
                   ConversionPatternRewriter &rewriter) const override {
 
     auto arrayTy = typeConverter->convertType(op->getResult(0).getType());
-    if (!arrayTy) {
-      op.emitOpError("cannot convert result type");
-      return failure();
-    }
+    assert(arrayTy);
 
     Value arr;
     if (isConst(op)) {
