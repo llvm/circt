@@ -2042,8 +2042,10 @@ static LogicalResult checkRefTypeFlow(Operation *connect) {
               "connections only";
       return diag;
     }
-    if ((src.getType().isa<RefType>() && !src.hasOneUse()) ||
-        (dst.getType().isa<RefType>() && !dst.hasOneUse())) {
+    // RefType supports multiple readers. That is, there can be multiple
+    // RefResolveOps remotely connected to a single RefSendOp.
+    // But multiple RefSendOps should not be remotely connected to a single RefResolveOp.
+    if (dst.getType().isa<RefType>() && !dst.hasOneUse()) {
       auto diag = emitError(connect->getLoc());
       diag << "connect operands of ref type cannot be reused";
       return diag;
@@ -3955,6 +3957,22 @@ void XorPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 void XorRPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
+}
+
+//===----------------------------------------------------------------------===//
+// RefOp verifiers.
+//===----------------------------------------------------------------------===//
+
+LogicalResult RefSendOp::verify() {
+  // Check that the flows make sense.
+  if (failed(checkConnectFlow(*this)))
+    return failure();
+
+  // Check constraints on RefType.
+  if (failed(checkRefTypeFlow(*this)))
+    return failure();
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
