@@ -1,6 +1,6 @@
 // RUN: circt-opt %s --convert-llhd-to-llvm | FileCheck %s
 
-// CHECK-LABEL: llvm.mlir.global internal @array_global() : !llvm.array<2 x i1> {
+// CHECK-LABEL: llvm.mlir.global internal @_array_global() : !llvm.array<2 x i1> {
 // CHECK: [[VAL_0:%.+]] = llvm.mlir.undef : !llvm.array<2 x i1>
 // CHECK: [[VAL_1:%.+]] = llvm.mlir.constant(false) : i1
 // CHECK: [[VAL_2:%.+]] = llvm.insertvalue [[VAL_1]], [[VAL_0]][0 : i32] : !llvm.array<2 x i1>
@@ -19,7 +19,7 @@ llhd.entity @root() -> () {
 }
 
 // CHECK: [[ZERO:%.+]] = llvm.mlir.constant(false) : i1
-// CHECK: [[A2:%.+]] = llvm.mlir.addressof @array_global : !llvm.ptr<array<2 x i1>>
+// CHECK: [[A2:%.+]] = llvm.mlir.addressof @_array_global : !llvm.ptr<array<2 x i1>>
 // CHECK: [[A3:%.+]] = llvm.load [[A2]] : !llvm.ptr<array<2 x i1>>
 // CHECK: llvm.store [[A3]], {{%.+}} : !llvm.ptr<array<2 x i1>>
 llhd.entity @initArraySig () -> () {

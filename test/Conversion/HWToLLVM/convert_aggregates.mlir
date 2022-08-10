@@ -1,6 +1,6 @@
 // RUN: circt-opt %s --convert-hw-to-llvm | FileCheck %s
 
-// CHECK-LABEL: llvm.mlir.global internal @array_global() : !llvm.array<2 x i32> {
+// CHECK-LABEL: llvm.mlir.global internal @_array_global() : !llvm.array<2 x i32> {
 // CHECK-NEXT: %[[VAL_0:.*]] = llvm.mlir.undef : !llvm.array<2 x i32>
 // CHECK-NEXT: %[[VAL_1:.*]] = llvm.mlir.constant(1 : i32) : i32
 // CHECK-NEXT: %[[VAL_2:.*]] = llvm.insertvalue %[[VAL_1]], %[[VAL_0]][0 : i32] : !llvm.array<2 x i32>
@@ -85,7 +85,7 @@ func.func @convertArray(%arg0 : i1, %arg1: !hw.array<2xi32>) {
 func.func @convertConstArray(%arg0 : i1, %arg1: !hw.array<2xi32>) {
   // CHECK:      %[[VAL_0:.*]] = llvm.mlir.constant(0 : i32) : i32
   // CHECK-NEXT: %[[VAL_1:.*]] = llvm.mlir.constant(1 : i32) : i32
-  // CHECK-NEXT: %[[VAL_2:.*]] = llvm.mlir.addressof @array_global : !llvm.ptr<array<2 x i32>>
+  // CHECK-NEXT: %[[VAL_2:.*]] = llvm.mlir.addressof @_array_global : !llvm.ptr<array<2 x i32>>
   // CHECK-NEXT: %[[VAL_3:.*]] = llvm.load %[[VAL_2]] : !llvm.ptr<array<2 x i32>>
   // CHECK-NEXT: %[[VAL_4:.*]] = llvm.mlir.constant(0 : i32) : i32
   // CHECK-NEXT: %[[VAL_5:.*]] = llvm.zext %arg0 : i1 to i2
