@@ -77,8 +77,6 @@ def LinearOp : MSFTOp<"hlc.linear", [
     Defines a feed-forward datapath which can be scheduled into a pipeline.
     Due to the feed-forwardness, the inner region is NOT a graph region.
     Internally, only combinational operations (`comb`, `msft`, `hw`) are allowed.
-    The operation expects exactly one i1-typed port to be tagged with a
-    `msft.clock` attribute.
 
     Example:
     ```mlir
