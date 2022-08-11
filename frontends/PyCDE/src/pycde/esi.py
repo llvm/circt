@@ -85,7 +85,7 @@ class _RequestToClientConn(_RequestConnection):
     req_op = raw_esi.RequestToClientConnectionOp(
         type, hw.InnerRefAttr.get(ir.StringAttr.get(decl_sym), self._name),
         ir.ArrayAttr.get([ir.StringAttr.get(chan_name)]))
-    return ChannelValue(req_op.receiving)
+    return ChannelValue(req_op)
 
 
 @ServiceDecl
@@ -113,34 +113,31 @@ class NamedChannelValue(ChannelValue):
     super().__init__(input_chan)
 
 
+class _OutputChannelSetter:
+  """Return a list of these as a proxy for a 'request to client connection'.
+  Users should call the 'assign' method with the `ChannelValue` which they
+  have implemented for this request."""
+
+  def __init__(self, req: raw_esi.RequestToClientConnectionOp,
+               old_chan_to_replace: ChannelValue):
+    self.type = ChannelType(req.receiving.type)
+    self.client_name = req.clientNamePath
+    self._chan_to_replace = old_chan_to_replace
+
+  def assign(self, new_value: ChannelValue):
+    """Assign the generated channel to this request."""
+    if self._chan_to_replace is None:
+      raise ValueError(f"{self.client_name} has already been connected.")
+    if new_value.type != self.type:
+      raise TypeError(
+          f"ChannelType mismatch. Expected {self.type}, got {new_value.type}.")
+    msft.replaceAllUsesWith(self._chan_to_replace, new_value.value)
+    self._chan_to_replace = None
+
+
 class _ServiceGeneratorChannels:
   """Provide access to the channels which the service generator is responsible
   for connecting up."""
-
-  class _OutputChannelSetter:
-    """Return a list of these as a proxy for a 'request to client connection'.
-    Users should call the 'assign' method with the `ChannelValue` which they
-    have implemented for this request."""
-
-    def __init__(self, parent, chan_num: int,
-                 req: raw_esi.RequestToClientConnectionOp,
-                 old_chan_to_replace: ChannelValue):
-      self._parent: _ServiceGeneratorChannels = parent
-      self._chan_num = chan_num
-      self.type = ChannelType(req.receiving.type)
-      self.client_name = req.clientNamePath
-      self._chan_to_replace = old_chan_to_replace
-
-    def assign(self, new_value: ChannelValue):
-      """Assign the generated channel to this request."""
-      if self._chan_to_replace is None:
-        raise ValueError(f"{self.client_name} has already been connected.")
-      if new_value.type != self.type:
-        raise TypeError(
-            f"ChannelType mismatch. Expected {self.type}, got {new_value.type}."
-        )
-      msft.replaceAllUsesWith(self._chan_to_replace, new_value.value)
-      self._chan_to_replace = None
 
   def __init__(self, mod: _SpecializedModule,
                req: raw_esi.ServiceImplementReqOp):
@@ -163,23 +160,26 @@ class _ServiceGeneratorChannels:
     # Find the output channel requests and store the settable proxies.
     num_output_ports = len(mod.output_port_lookup)
     self._output_reqs = [
-        _ServiceGeneratorChannels._OutputChannelSetter(
-            self, idx, req, self._req.results[num_output_ports + idx])
+        _OutputChannelSetter(req, self._req.results[num_output_ports + idx])
         for idx, req in enumerate(portReqsBlock)
         if isinstance(req, raw_esi.RequestToClientConnectionOp)
     ]
     assert len(self._output_reqs) == len(req.results) - num_output_ports
-    self._yet_to_be_connected_outputs = set(range(len(self._output_reqs)))
 
   @property
-  def to_server_reqs(self) -> List:
+  def to_server_reqs(self) -> List[NamedChannelValue]:
     """Get the list of incoming channels from the 'to server' connection
     requests."""
     return self._input_reqs
 
   @property
-  def to_client_reqs(self) -> List:
+  def to_client_reqs(self) -> List[_OutputChannelSetter]:
     return self._output_reqs
+
+  def check_unconnected_outputs(self):
+    for req in self._output_reqs:
+      if req._chan_to_replace is not None:
+        raise ValueError(f"{req.client_name} has not been connected.")
 
 
 def ServiceImplementation(decl: ServiceDecl):
@@ -228,6 +228,7 @@ def ServiceImplementation(decl: ServiceDecl):
         elif not isinstance(rc, bool):
           raise ValueError("Generators must a return a bool or None")
         ports.check_unconnected_outputs()
+        channels.check_unconnected_outputs()
 
         # Replace the output values from the service implement request op with
         # the generated values. Erase the service implement request op.
