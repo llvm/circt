@@ -409,7 +409,8 @@ def import_hw_module(hw_module: hw.HWModuleOp):
   # would wrap.
   cls = type(name, (object,), ports)
 
-  # Creation callback that just returns the already build module.
+  # Creation callback that just moves the already build module into the System's
+  # ModuleOp and returns it.
   def create_cb(sys: System, mod: _SpecializedModule, symbol: str):
     sys.mod.body.append(hw_module)
     return hw_module

@@ -90,19 +90,19 @@ class System:
   def set_debug():
     ir._GlobalDebug.flag = True
 
-  @classmethod
-  def import_hw_modules(cls, path: Path):
+  def import_hw_modules(self, path: Path):
     # Parse the MLIR Module at path.
     mlir_module = ir.Module.parse(open(path).read())
 
-    # Construct PyCDE modules wrapping each HW module.
-    hw_modules = []
-    for op in mlir_module.body:
-      if isinstance(op, hw.HWModuleOp):
-        hw_modules.append(import_hw_module(op))
-
-    # Construct a System containing the modules.
-    return cls(hw_modules)
+    # Construct PyCDE modules wrapping each HW module, and call their `create`
+    # method to import the IR into the PyCDE System ModuleOp. Also add them to
+    # the list of top-level modules so later emission stages know about them.
+    with self:
+      for op in mlir_module.body:
+        if isinstance(op, hw.HWModuleOp):
+          hw_module = import_hw_module(op)
+          hw_module._pycde_mod.create()
+          self.top_modules.append(hw_module)
 
   def create_physical_region(self, name: str = None):
     with self._get_ip():

@@ -19,7 +19,8 @@ hw.module @and(%a: i1, %b: i1) -> (out: i1) {
 """)
 tmp.flush()
 
-system = System.import_hw_modules(tmp.name)
+system = System([])
+system.import_hw_modules(tmp.name)
 system.generate()
 
 # CHECK: hw.module @add(%a: i1, %b: i1) -> (out: i1)
