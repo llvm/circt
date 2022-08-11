@@ -108,7 +108,7 @@ def Cosim(decl: ServiceDecl, clk, rst):
 class NamedChannelValue(ChannelValue):
   """A ChannelValue with the name of the client request."""
 
-  def __init__(self, input_chan: ChannelValue, client_name: List[str]):
+  def __init__(self, input_chan: ir.Value, client_name: List[str]):
     self.client_name = client_name
     super().__init__(input_chan)
 
