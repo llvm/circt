@@ -60,10 +60,11 @@ private:
 
 // Mapping from unique identifier to python callback. We use std::string
 // pointers since we also need to allocate memory for the string.
-llvm::DenseMap<std::string *, py::object> serviceGenFuncLookup;
+llvm::DenseMap<std::string *, PyObject *> serviceGenFuncLookup;
 static MlirLogicalResult serviceGenFunc(MlirOperation reqOp, void *userData) {
   std::string *name = static_cast<std::string *>(userData);
-  py::object genFunc = serviceGenFuncLookup[name];
+  py::handle genFunc(serviceGenFuncLookup[name]);
+  py::gil_scoped_acquire();
   py::object rc = genFunc(reqOp);
   return rc.cast<bool>() ? mlirLogicalResultSuccess()
                          : mlirLogicalResultFailure();
@@ -71,7 +72,8 @@ static MlirLogicalResult serviceGenFunc(MlirOperation reqOp, void *userData) {
 
 void registerServiceGenerator(std::string name, py::object genFunc) {
   std::string *n = new std::string(name);
-  serviceGenFuncLookup[n] = genFunc;
+  genFunc.inc_ref();
+  serviceGenFuncLookup[n] = genFunc.ptr();
   circtESIRegisterGlobalServiceGenerator(wrap(*n), serviceGenFunc, n);
 }
 

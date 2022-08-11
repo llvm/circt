@@ -3,7 +3,7 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from __future__ import annotations
-from typing import Tuple, Union, Dict
+from typing import Optional, Tuple, Union, Dict
 from pycde.pycde_types import ClockType
 
 from pycde.support import _obj_to_value
@@ -65,7 +65,8 @@ def create_msft_module_op(sys, mod: _SpecializedModule, symbol):
                            ip=sys._get_ip())
 
 
-def generate_msft_module_op(generator: Generator, spec_mod: _SpecializedModule):
+def generate_msft_module_op(generator: Generator, spec_mod: _SpecializedModule,
+                            **kwargs):
 
   def create_output_op(args: _GeneratorPortAccess):
     """Create the hw.OutputOp from module I/O ports in 'args'."""
@@ -88,7 +89,7 @@ def generate_msft_module_op(generator: Generator, spec_mod: _SpecializedModule):
   entry_block = spec_mod.circt_mod.add_entry_block()
   with mlir.ir.InsertionPoint(
       entry_block), generator.loc, BackedgeBuilder(), bc:
-    args = _GeneratorPortAccess(spec_mod)
+    args = _GeneratorPortAccess(spec_mod, entry_block.arguments)
 
     # Enter clock block implicitly if only one clock given
     clk = None
@@ -98,10 +99,11 @@ def generate_msft_module_op(generator: Generator, spec_mod: _SpecializedModule):
       clk = ClockValue(val, ClockType())
       clk.__enter__()
 
-    outputs = generator.gen_func(args)
+    outputs = generator.gen_func(args, **kwargs)
     if outputs is not None:
       raise ValueError("Generators must not return a value")
-    create_output_op(args)
+    if create_output_op is not None:
+      create_output_op(args)
 
     if clk is not None:
       clk.__exit__(None, None, None)
@@ -135,25 +137,34 @@ class _SpecializedModule(_PyProxy):
   only created if said module is instantiated."""
 
   __slots__ = [
-      "generators", "modcls", "loc", "clock_ports", "input_ports",
-      "input_port_lookup", "output_ports", "output_port_lookup", "parameters",
-      "extern_name", "create_cb", "generator_cb"
+      "generators",
+      "modcls",
+      "loc",
+      "clock_ports",
+      "input_ports",
+      "input_port_lookup",
+      "output_ports",
+      "output_port_lookup",
+      "parameters",
+      "extern_name",
+      "create_cb",
+      "generator_cb",
+      "instantiate_cb",
   ]
 
   def __init__(self,
                cls: type,
                parameters: Union[dict, mlir.ir.DictAttr],
                extern_name: str,
-               create_cb: builtins.function,
-               generator_cb: builtins.function = None):
+               create_cb: Optional[builtins.function],
+               generator_cb: Optional[builtins.function] = None,
+               instantiate_cb: Optional[builtins.function] = None):
     self.modcls = cls
     self.extern_name = extern_name
     self.loc = get_user_loc()
     self.create_cb = create_cb
-    if not self.create_cb:
-      raise NotImplementedError(
-          "Creation callback function must be set for module")
     self.generator_cb = generator_cb
+    self.instantiate_cb = instantiate_cb
 
     # Make sure 'parameters' is a DictAttr rather than a python value.
     self.parameters = _obj_to_attribute(parameters)
@@ -218,6 +229,9 @@ class _SpecializedModule(_PyProxy):
     """Create the module op. Should not be called outside of a 'System'
     context. Returns the symbol of the module op."""
 
+    if self.create_cb is None:
+      return
+
     from .system import System
     sys = System.current()
     sys._create_circt_mod(self, self.create_cb)
@@ -234,7 +248,9 @@ class _SpecializedModule(_PyProxy):
 
   def instantiate(self, instance_name: str, inputs: dict, appid: AppID, loc):
     """Create a instance op."""
-    if self.extern_name is None:
+    if self.instantiate_cb is not None:
+      ret = self.instantiate_cb(self, instance_name, inputs, appid, loc)
+    elif self.extern_name is None:
       ret = self.circt_mod.instantiate(instance_name, **inputs, loc=loc)
     else:
       ret = self.circt_mod.instantiate(instance_name,
@@ -245,13 +261,12 @@ class _SpecializedModule(_PyProxy):
       ret.operation.attributes[AppID.AttributeName] = appid._appid
     return ret
 
-  def generate(self):
+  def generate(self, **kwargs):
     """Fill in (generate) this module. Only supports a single generator
     currently."""
     assert len(self.generators) == 1
     for g in self.generators.values():
-      self.generator_cb(g, self)
-      return
+      return self.generator_cb(g, self, **kwargs)
 
   def print(self, out):
     print(f"<pycde.Module: {self.name} inputs: {self.input_ports} " +
@@ -381,8 +396,9 @@ def externmodule(to_be_wrapped, extern_name=None):
 
 def _module_base(cls,
                  extern_name: str,
-                 create_cb: builtins.function,
-                 generator_cb: builtins.function = None,
+                 create_cb: Optional[builtins.function] = None,
+                 generator_cb: Optional[builtins.function] = None,
+                 instantiate_cb: Optional[builtins.function] = None,
                  params={}):
   """Wrap a class, making it a PyCDE module."""
 
@@ -477,7 +493,8 @@ def _module_base(cls,
                                       params,
                                       extern_name,
                                       create_cb=create_cb,
-                                      generator_cb=generator_cb)
+                                      generator_cb=generator_cb,
+                                      instantiate_cb=instantiate_cb)
   return mod
 
 
@@ -526,11 +543,6 @@ class Generator:
   """
 
   def __init__(self, gen_func):
-    sig = inspect.signature(gen_func)
-    if len(sig.parameters) != 1:
-      raise ValueError(
-          "Generate functions must take one argument and do not support 'self'."
-      )
     self.gen_func = gen_func
     self.loc = get_user_loc()
 
@@ -543,18 +555,18 @@ def generator(func):
 class _GeneratorPortAccess:
   """Get the input ports."""
 
-  __slots__ = ["_mod", "_output_values"]
+  __slots__ = ["_mod", "_output_values", "_block_args"]
 
-  def __init__(self, mod: _SpecializedModule):
+  def __init__(self, mod: _SpecializedModule, block_args):
     self._mod = mod
     self._output_values: dict[str, Value] = {}
+    self._block_args = block_args
 
   # Support attribute access to block arguments by name
   def __getattr__(self, name):
     if name in self._mod.input_port_lookup:
       idx = self._mod.input_port_lookup[name]
-      entry_block = self._mod.circt_mod.regions[0].blocks[0]
-      val = entry_block.arguments[idx]
+      val = self._block_args[idx]
       if name in self._mod.clock_ports:
         return ClockValue(val, ClockType())
       return Value(val)
@@ -595,6 +607,13 @@ class _GeneratorPortAccess:
     """Set all of the output values in a portname -> value dict."""
     for (name, value) in port_values.items():
       self.__setattr__(name, value)
+
+  def check_unconnected_outputs(self):
+    ports_unconnected = self._mod.output_port_lookup.keys() - \
+      self._output_values.keys()
+    if len(ports_unconnected) > 0:
+      raise ValueError("Generator did not connect all output ports: " +
+                       ", ".join(ports_unconnected))
 
 
 class DesignPartition:
