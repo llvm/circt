@@ -70,8 +70,7 @@ def ChannelOp: MSFTOp<"constructs.channel",
 
 // Linear, pipelineable datapath.
 def LinearOp : MSFTOp<"hlc.linear", [
-    SingleBlockImplicitTerminator<"OutputOp">,
-    IsolatedFromAbove
+    SingleBlockImplicitTerminator<"OutputOp">
   ]> {
   let summary = "Model of a linear datapath which can be arbitrarily pipelined";
   let description = [{
@@ -93,22 +92,14 @@ def LinearOp : MSFTOp<"hlc.linear", [
     ```
   }];
 
-  let arguments = (ins Variadic<AnyType>:$ins, I1:$clock);
+  let arguments = (ins I1:$clock);
   let results = (outs Variadic<AnyType>:$outs);
   let regions = (region SizedRegion<1>:$datapath);
 
-  let skipDefaultBuilders = 1;
-  let builders = [
-    OpBuilder<(ins "StringAttr":$name, "hw::ModulePortInfo":$ports)>
-  ];
-
   let extraClassDeclaration = [{
     Block *getBodyBlock() { return &datapath().front(); }
-
-    // Returns the functional type of this operation.
-    FunctionType getType();
   }];
 
   let hasVerifier = 1;
-  let hasCustomAssemblyFormat = 1;
+  let assemblyFormat = [{ `clock` $clock attr-dict `:` type($outs) $datapath }];
 }

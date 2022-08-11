@@ -49,10 +49,10 @@ msft.module @M {} (%x : i32) {
 // -----
 
 msft.module @foo {} (%in0 : i32, %clk : i1) -> (out: i32) {
-  %0 = msft.hlc.linear(%a = %in0) clock %clk : (i32) -> (i32) {
+// expected-error @+1 {{'msft.hlc.linear' op expected only hw, comb, and msft dialect ops inside the datapath.}}
+  %0 = msft.hlc.linear clock %clk : i32 {
     %c1_i1 = hw.constant 1 : i1
-// expected-error @+1 {{'seq.compreg' op expected only hw, comb, and msft dialect ops inside the msft.hlc.linear datapath.}}
-    %0 = seq.compreg %a, %c1_i1 : i32
+    %0 = seq.compreg %in0, %c1_i1 : i32
     msft.output %0 : i32
   }
   msft.output %0 : i32
