@@ -6,7 +6,7 @@ from pycde.devicedb import (EntityExtern, PlacementDB, PrimitiveDB,
                             PhysicalRegion)
 
 from .common import _PyProxy
-from .module import _SpecializedModule
+from .module import _SpecializedModule, import_hw_module
 from .pycde_types import types
 from .instance import Instance, InstanceHierarchyRoot
 
@@ -24,6 +24,7 @@ from contextvars import ContextVar
 import gc
 import os
 import sys
+from pathlib import Path
 from typing import Callable, Dict, Set, Tuple
 
 _current_system = ContextVar("current_pycde_system")
@@ -88,6 +89,20 @@ class System:
   @staticmethod
   def set_debug():
     ir._GlobalDebug.flag = True
+
+  @classmethod
+  def import_hw_modules(cls, path: Path):
+    # Parse the MLIR Module at path.
+    mlir_module = ir.Module.parse(open(path).read())
+
+    # Construct PyCDE modules wrapping each HW module.
+    hw_modules = []
+    for op in mlir_module.body:
+      if isinstance(op, hw.HWModuleOp):
+        hw_modules.append(import_hw_module(op))
+
+    # Construct a System containing the modules.
+    return cls(hw_modules)
 
   def create_physical_region(self, name: str = None):
     with self._get_ip():
