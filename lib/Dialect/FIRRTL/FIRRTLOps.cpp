@@ -2046,11 +2046,10 @@ static LogicalResult checkRefTypeFlow(Operation *connect) {
     // RefResolveOps remotely connected to a single RefSendOp.
     // But multiple RefSendOps should not be remotely connected to a single
     // RefResolveOp.
-    if (!dst.hasOneUse()) 
-      return emitError(connect->getLoc()) 
-        << "output reference port cannot be reused by multiple operations"
-        << ", it can only capture a unique dataflow";
-    
+    if (!dst.hasOneUse())
+      return emitError(connect->getLoc())
+             << "output reference port cannot be reused by multiple operations"
+             << ", it can only capture a unique dataflow";
   }
   return success();
 }
