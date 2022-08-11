@@ -1051,24 +1051,52 @@ firrtl.circuit "Foo" {
 }
 
 // -----
-// Reference port cannot be reused
+// Output reference port cannot be reused
 
-firrtl.circuit "ForwardToInstance2x" {
-  firrtl.module @Bar2(out %_a: !firrtl.ref<uint<1>>) {
-    %zero = firrtl.constant 0 : !firrtl.uint<1>
-    firrtl.ref.send %_a, %zero : !firrtl.ref<uint<1>>
-  }
+firrtl.circuit "Bar" {
   firrtl.module @Bar(out %_a: !firrtl.ref<uint<1>>) {
     %x = firrtl.instance x @Bar2(out _a: !firrtl.ref<uint<1>>)
     %y = firrtl.instance y @Bar2(out _a: !firrtl.ref<uint<1>>)
-    // expected-error @+1 {{connect operands of ref type cannot be reused}}
+    // expected-error @+1 {{output reference port cannot be reused by multiple operations, it can only capture a unique dataflow}}
     firrtl.strictconnect %_a, %x : !firrtl.ref<uint<1>>
     firrtl.strictconnect %_a, %y : !firrtl.ref<uint<1>>
   }
-  firrtl.module @ForwardToInstance2x() {
-    %bar_a = firrtl.instance bar @Bar(out _a: !firrtl.ref<uint<1>>)
-    %a = firrtl.wire : !firrtl.uint<1>
-    %0 = firrtl.ref.resolve %bar_a : !firrtl.ref<uint<1>>
-    firrtl.strictconnect %a, %0 : !firrtl.uint<1>
+}
+
+// -----
+// Output reference port cannot be reused
+
+firrtl.circuit "Bar" {
+  firrtl.module @Bar(out %_a: !firrtl.ref<uint<1>>) {
+    %x = firrtl.instance x @Bar2(out _a: !firrtl.ref<uint<1>>)
+    %y = firrtl.wire : !firrtl.uint<1>
+    // expected-error @+1 {{output reference port cannot be reused by multiple operations, it can only capture a unique dataflow}}
+    firrtl.strictconnect %_a, %x : !firrtl.ref<uint<1>>
+    firrtl.ref.send %_a, %y : !firrtl.ref<uint<1>>
+  }
+}
+
+// -----
+// Output reference port cannot be reused
+
+firrtl.circuit "Bar" {
+  firrtl.module @Bar(out %_a: !firrtl.ref<uint<1>>) {
+    %x = firrtl.wire : !firrtl.uint<1>
+    %y = firrtl.wire : !firrtl.uint<1>
+    // expected-error @+1 {{output reference port cannot be reused by multiple operations, it can only capture a unique dataflow}}
+    firrtl.ref.send %_a, %x : !firrtl.ref<uint<1>>
+    firrtl.ref.send %_a, %y : !firrtl.ref<uint<1>>
+  }
+}
+
+// -----
+// Reference and base type must match
+
+firrtl.circuit "Bar" {
+  firrtl.module @Bar(out %_a: !firrtl.ref<uint<1>>) {
+    // expected-note @+1 {{prior use here}}
+    %x = firrtl.wire : !firrtl.uint<2>
+    // expected-error @+1 {{use of value '%x' expects different type than prior uses: '!firrtl.uint<1>' vs '!firrtl.uint<2>'}}
+    firrtl.ref.send %_a, %x : !firrtl.ref<uint<1>>
   }
 }

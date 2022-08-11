@@ -695,10 +695,6 @@ class RefTypeConstraint<string ref, string base>
                    ref, base,
                    "$_self.cast<RefType>().getType()">;
 
-class RefSingleUserConstraint
-  : PredOpTrait<"reference port operand cannot be reused by any other op",
-                CPred<"$ref.hasOneUse()">>;
-
 class RefInstancePortConstraint
   : PredOpTrait<"it cannot have module port as an operand because it implies"
   " upward reference XMR, which are not supported."
@@ -730,7 +726,6 @@ def RefResolveOp: FIRRTLOp<"ref.resolve", [RefTypeConstraint<"ref","result">,
 }
 
 def RefSendOp: FIRRTLOp<"ref.send", [RefTypeConstraint<"ref","result">,
-                                    RefSingleUserConstraint<>,
                                     RefPortConstraint<>]> {
   let summary = "FIRRTL Send through Reference";
   let description = [{
