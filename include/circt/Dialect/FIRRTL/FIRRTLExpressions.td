@@ -666,11 +666,24 @@ def BitCastOp: FIRRTLOp<"bitcast", [NoSideEffect]> {
 //===----------------------------------------------------------------------===//
 // RefOperations: Operations on the RefType.
 //
-// The current motivation is that these operations will be used to express
-// cross module references (xmr). The RefOps will be lowered to sv.verbatim
-// to encode the xmr.
-// These operations can be used to express only a remote read. Remote write
-// is still not supported.
+// The RefType is used to capture dataflow paths across modules.
+// The operations on RefType support capturing the dataflow to/from SSA values.
+// The following ops are supported on the RefType:
+//
+//   > RefSendOp
+//       * Send a read-only handle of a local value to a reference port.
+//       * Has connect-like semantics, but can only connect a BaseType value
+//          to a RefType port.
+//       * Expresses the source of a dataflow by getting it's reference.
+//   > RefResolveOp
+//       * Reads the BaseType value from a reference port
+//       * Represents the sink of a dataflow from the reference ports
+//       * The RefType is constrained to express a "single source to
+//         one-or-more sink" dataflow
+//       * Hence, multiple RefResolveOps can be remotely connected to a single
+//         RefSendOp.
+//       * If the Reference ops are lowered to cross-module-reference, then it
+//          represents the location of the XMR.
 //===----------------------------------------------------------------------===//
 
 //===----------------------------------------------------------------------===//
@@ -682,27 +695,27 @@ class RefTypeConstraint<string ref, string base>
                    ref, base,
                    "$_self.cast<RefType>().getType()">;
 
-class RefSingleUserConstraint<string ref>
+class RefSingleUserConstraint
   : PredOpTrait<"reference port operand cannot be reused by any other op",
-                CPred<"$" # ref # ".hasOneUse()">>;
+                CPred<"$ref.hasOneUse()">>;
 
-class RefInstancePortConstraint<string ref>
+class RefInstancePortConstraint
   : PredOpTrait<"it cannot have module port as an operand because it implies"
   " upward reference XMR, which are not supported."
   " The reference operand must be a port from firrtl.instance",
-                CPred<"!($" # ref # ".isa<BlockArgument>())">>;
+                CPred<"!($ref.isa<BlockArgument>())">>;
 
-class RefPortConstraint<string ref>
+class RefPortConstraint
   : PredOpTrait<"reference port operand can only be a module or instance port",
-                CPred<"($" # ref # ".isa<BlockArgument>()"
-                " || (isa<InstanceOp>($" # ref # ".getDefiningOp())))">>;
+                CPred<"($ref.isa<BlockArgument>()"
+                " || (isa<InstanceOp>($ref.getDefiningOp())))">>;
 
 //===----------------------------------------------------------------------===//
 // RefOps
 //===----------------------------------------------------------------------===//
 
 def RefResolveOp: FIRRTLOp<"ref.resolve", [RefTypeConstraint<"ref","result">,
-                                    RefInstancePortConstraint<"ref">]> {
+                                    RefInstancePortConstraint<>]> {
   let summary = "FIRRTL Resolve a Reference";
   let description = [{
     Resolve a remote reference for reading a remote value.
@@ -717,8 +730,8 @@ def RefResolveOp: FIRRTLOp<"ref.resolve", [RefTypeConstraint<"ref","result">,
 }
 
 def RefSendOp: FIRRTLOp<"ref.send", [RefTypeConstraint<"ref","result">,
-                                    RefSingleUserConstraint<"ref">,
-                                    RefPortConstraint<"ref">]> {
+                                    RefSingleUserConstraint<>,
+                                    RefPortConstraint<>]> {
   let summary = "FIRRTL Send through Reference";
   let description = [{
     Endpoint of a remote reference. Send a value through a reference
