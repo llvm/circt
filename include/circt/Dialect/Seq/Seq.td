@@ -96,7 +96,7 @@ def FirRegOp : SeqOp<"firreg",
     %zero = hw.constant 0 : i32
     %reg = seq.firreg %next clock %clk reset sync %reset, %zero : i32
     %one = hw.constant 1 : i32
-    %next = comb.add %zero, %one : i32
+    %next = comb.add %reg, %one : i32
     ```
   }];
 
