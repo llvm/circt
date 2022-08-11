@@ -672,8 +672,6 @@ def BitCastOp: FIRRTLOp<"bitcast", [NoSideEffect]> {
 //
 //   > RefSendOp
 //       * Send a read-only handle of a local value to a reference port.
-//       * Has connect-like semantics, but can only connect a BaseType value
-//          to a RefType port.
 //       * Expresses the source of a dataflow by getting it's reference.
 //   > RefResolveOp
 //       * Reads the BaseType value from a reference port
@@ -695,16 +693,16 @@ class RefTypeConstraint<string ref, string base>
                    ref, base,
                    "$_self.cast<RefType>().getType()">;
 
+class RefResultTypeConstraint<string base, string ref>
+  : TypesMatchWith<"reference base type should match",
+                   base, ref,
+                   "RefType::get($_self.cast<FIRRTLBaseType>())">;
+
 class RefInstancePortConstraint
   : PredOpTrait<"it cannot have module port as an operand because it implies"
   " upward reference XMR, which are not supported."
   " The reference operand must be a port from firrtl.instance",
                 CPred<"!($ref.isa<BlockArgument>())">>;
-
-class RefPortConstraint
-  : PredOpTrait<"reference port operand can only be a module or instance port",
-                CPred<"($ref.isa<BlockArgument>()"
-                " || (isa<InstanceOp>($ref.getDefiningOp())))">>;
 
 //===----------------------------------------------------------------------===//
 // RefOps
@@ -725,15 +723,15 @@ def RefResolveOp: FIRRTLOp<"ref.resolve", [RefTypeConstraint<"ref","result">,
   let assemblyFormat = "$ref attr-dict `:` qualified(type($ref))";
 }
 
-def RefSendOp: FIRRTLOp<"ref.send", [RefTypeConstraint<"ref","result">,
-                                    RefPortConstraint<>]> {
+def RefSendOp: FIRRTLOp<"ref.send", [RefResultTypeConstraint<"base", "result">]> {
   let summary = "FIRRTL Send through Reference";
   let description = [{
     Endpoint of a remote reference. Send a value through a reference
     to be read from the firrtl.ref.resolve op.
+    It takes a BaseType input and returns the corresponding RefType value.
   }];
-  let arguments = (ins RefType:$ref, FIRRTLBaseType:$result);
-  let hasVerifier = 1;
+  let arguments = (ins FIRRTLBaseType:$base);
+  let results = (outs RefType:$result);
 
-  let assemblyFormat = "$ref `,` $result attr-dict `:` qualified(type($ref))";
+  let assemblyFormat = "$base attr-dict `:` qualified(type($base))";
 }

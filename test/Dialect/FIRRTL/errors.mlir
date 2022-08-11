@@ -1045,8 +1045,9 @@ firrtl.circuit "Foo" {
   // expected-note @+1 {{destination was defined here}}
   firrtl.module @Foo(in  %_a: !firrtl.ref<uint<1>>) {
     %a = firrtl.wire : !firrtl.uint<1>
+    %1 = firrtl.ref.send %a : !firrtl.uint<1>
     // expected-error @+1 {{connect has invalid flow: the destination expression "_a" has source flow, expected sink or duplex flow}}
-    firrtl.ref.send %_a, %a : !firrtl.ref<uint<1>>
+    firrtl.strictconnect %_a, %1 : !firrtl.ref<uint<1>>
   }
 }
 
@@ -1072,7 +1073,8 @@ firrtl.circuit "Bar" {
     %y = firrtl.wire : !firrtl.uint<1>
     // expected-error @+1 {{output reference port cannot be reused by multiple operations, it can only capture a unique dataflow}}
     firrtl.strictconnect %_a, %x : !firrtl.ref<uint<1>>
-    firrtl.ref.send %_a, %y : !firrtl.ref<uint<1>>
+    %1 = firrtl.ref.send %y : !firrtl.uint<1>
+    firrtl.strictconnect %_a, %1 : !firrtl.ref<uint<1>>
   }
 }
 
@@ -1083,20 +1085,11 @@ firrtl.circuit "Bar" {
   firrtl.module @Bar(out %_a: !firrtl.ref<uint<1>>) {
     %x = firrtl.wire : !firrtl.uint<1>
     %y = firrtl.wire : !firrtl.uint<1>
+    %1 = firrtl.ref.send %x : !firrtl.uint<1>
+    %2 = firrtl.ref.send %y : !firrtl.uint<1>
     // expected-error @+1 {{output reference port cannot be reused by multiple operations, it can only capture a unique dataflow}}
-    firrtl.ref.send %_a, %x : !firrtl.ref<uint<1>>
-    firrtl.ref.send %_a, %y : !firrtl.ref<uint<1>>
+    firrtl.strictconnect %_a, %1 : !firrtl.ref<uint<1>>
+    firrtl.strictconnect %_a, %2 : !firrtl.ref<uint<1>>
   }
 }
 
-// -----
-// Reference and base type must match
-
-firrtl.circuit "Bar" {
-  firrtl.module @Bar(out %_a: !firrtl.ref<uint<1>>) {
-    // expected-note @+1 {{prior use here}}
-    %x = firrtl.wire : !firrtl.uint<2>
-    // expected-error @+1 {{use of value '%x' expects different type than prior uses: '!firrtl.uint<1>' vs '!firrtl.uint<2>'}}
-    firrtl.ref.send %_a, %x : !firrtl.ref<uint<1>>
-  }
-}

@@ -3960,22 +3960,6 @@ void XorRPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 //===----------------------------------------------------------------------===//
-// RefOp verifiers.
-//===----------------------------------------------------------------------===//
-
-LogicalResult RefSendOp::verify() {
-  // Check that the flows make sense.
-  if (failed(checkConnectFlow(*this)))
-    return failure();
-
-  // Check constraints on RefType.
-  if (failed(checkRefTypeFlow(*this)))
-    return failure();
-
-  return success();
-}
-
-//===----------------------------------------------------------------------===//
 // TblGen Generated Logic.
 //===----------------------------------------------------------------------===//
 
