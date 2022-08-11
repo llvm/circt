@@ -70,35 +70,87 @@ static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp req) {
     return StringAttr::get(ctxt, os.str());
   };
 
-  // Create Cosim endpoints for the incoming data requests.
-  unsigned clientReqIdx = 0;
-  for (auto toClientReq :
-       llvm::make_early_inc_range(req.getOps<RequestToClientConnectionOp>())) {
-    auto cosimIn = b.create<NullSourceOp>(
-        toClientReq.getLoc(), ChannelType::get(ctxt, b.getI1Type()));
-    auto cosim = b.create<CosimEndpointOp>(toClientReq.getLoc(),
-                                           toClientReq.receiving().getType(),
-                                           clk, rst, cosimIn, ++epIdCtr);
-    cosim->setAttr("name", toStringAttr(toClientReq.clientNamePath()));
-    req.getResult(clientReqIdx).replaceAllUsesWith(cosim.recv());
-    toClientReq.erase();
-    ++clientReqIdx;
-  }
-
   // Since outgoing data gets passed in through block args, we need to translate
   // internal Values (with the block) to the external Values driving them.
   BlockAndValueMapping argMap;
   for (unsigned i = 0, e = portReqs->getArguments().size(); i < e; ++i)
     argMap.map(portReqs->getArgument(i), req->getOperand(i + 2));
 
-  // Create output Cosim endpoints.
+  // Build a mapping of client names to request.
+  DenseMap<ArrayAttr, SmallVector<Operation *, 0>> clientNameToOps;
+  for (auto &op : req.getOps())
+    if (auto req = dyn_cast<RequestToClientConnectionOp>(op))
+      clientNameToOps[req.clientNamePathAttr()].push_back(&op);
+    else if (auto req = dyn_cast<RequestToServerConnectionOp>(op))
+      clientNameToOps[req.clientNamePathAttr()].push_back(&op);
+
+  // For any client names with two requests of opposite directions, mark a
+  // paired.
+  DenseMap<RequestToServerConnectionOp, RequestToClientConnectionOp> pairs;
+  for (auto opsForClientName : clientNameToOps) {
+    const SmallVector<Operation *, 0> &ops = opsForClientName.second;
+    if (ops.size() != 2)
+      continue;
+
+    // Only proceed if a to_client and to_server are found.
+    RequestToClientConnectionOp to_client;
+    RequestToServerConnectionOp to_server;
+    if ((to_client = dyn_cast<RequestToClientConnectionOp>(ops[0]))) {
+      if (!(to_server = dyn_cast<RequestToServerConnectionOp>(ops[1])))
+        continue;
+    } else if ((to_server = dyn_cast<RequestToServerConnectionOp>(ops[0]))) {
+      if (!(to_client = dyn_cast<RequestToClientConnectionOp>(ops[1])))
+        continue;
+    }
+    assert(to_client);
+    assert(to_server);
+    pairs[to_server] = to_client;
+  }
+
+  // Create output Cosim endpoints. If the request is one half of a pair, store
+  // it.
+  DenseMap<RequestToClientConnectionOp, CosimEndpointOp> pairedCosimEndpoints;
   for (auto toServerReq :
        llvm::make_early_inc_range(req.getOps<RequestToServerConnectionOp>())) {
+
+    Type resType;
+    auto foundClient = pairs.find(toServerReq);
+    if (foundClient != pairs.end())
+      resType = foundClient->second.receiving().getType();
+    else
+      resType = ChannelType::get(ctxt, b.getI1Type());
+
     auto cosim = b.create<CosimEndpointOp>(
-        toServerReq.getLoc(), ChannelType::get(ctxt, b.getI1Type()), clk, rst,
+        toServerReq.getLoc(), resType, clk, rst,
         argMap.lookup(toServerReq.sending()), ++epIdCtr);
     cosim->setAttr("name", toStringAttr(toServerReq.clientNamePath()));
     toServerReq.erase();
+
+    if (foundClient != pairs.end())
+      pairedCosimEndpoints[foundClient->second] = cosim;
+  }
+
+  // Create Cosim endpoints for the incoming data requests.
+  unsigned clientReqIdx = 0;
+  for (auto toClientReq :
+       llvm::make_early_inc_range(req.getOps<RequestToClientConnectionOp>())) {
+    CosimEndpointOp cosim;
+
+    // If this is a paired request, use the paired endpoint.
+    auto epFound = pairedCosimEndpoints.find(toClientReq);
+    if (epFound != pairedCosimEndpoints.end()) {
+      cosim = epFound->second;
+    } else {
+      auto cosimIn = b.create<NullSourceOp>(
+          toClientReq.getLoc(), ChannelType::get(ctxt, b.getI1Type()));
+      cosim = b.create<CosimEndpointOp>(toClientReq.getLoc(),
+                                        toClientReq.receiving().getType(), clk,
+                                        rst, cosimIn, ++epIdCtr);
+      cosim->setAttr("name", toStringAttr(toClientReq.clientNamePath()));
+    }
+    req.getResult(clientReqIdx).replaceAllUsesWith(cosim.recv());
+    toClientReq.erase();
+    ++clientReqIdx;
   }
 
   // Erase the generation request.
@@ -201,6 +253,19 @@ LogicalResult ESIConnectServicesPass::process(hw::HWMutableModuleLike mod) {
   DenseMap<SymbolRefAttr, Block *> localImplReqs;
   for (auto instOp : modBlock.getOps<ServiceInstanceOp>())
     localImplReqs[instOp.service_symbolAttr()] = new Block();
+
+  // Decompose the 'inout' requests int to 'in' and 'out' requests.
+  mod.walk([&](RequestInOutChannelOp reqInOut) {
+    ImplicitLocOpBuilder b(reqInOut.getLoc(), reqInOut);
+    b.create<RequestToServerConnectionOp>(reqInOut.servicePortAttr(),
+                                          reqInOut.sending(),
+                                          reqInOut.clientNamePathAttr());
+    auto toClientReq = b.create<RequestToClientConnectionOp>(
+        reqInOut.receiving().getType(), reqInOut.servicePortAttr(),
+        reqInOut.clientNamePathAttr());
+    reqInOut.receiving().replaceAllUsesWith(toClientReq.receiving());
+    reqInOut.erase();
+  });
 
   // Find all of the "local" requests.
   mod.walk([&](Operation *op) {
