@@ -11,7 +11,7 @@ from pycde.support import _obj_to_value
 from .common import (AppID, Clock, Input, Output, _PyProxy)
 from .support import (get_user_loc, _obj_to_attribute, OpOperandConnect,
                       create_type_string, create_const_zero)
-from .value import ClockValue, Value
+from .value import ClockValue, PyCDEValue, Value
 
 from circt import support
 from circt.dialects import hw, msft
@@ -581,7 +581,7 @@ class _GeneratorPortAccess:
 
     output_port = self._mod.output_ports[self._mod.output_port_lookup[name]]
     output_port_type = output_port[1]
-    if not isinstance(value, Value):
+    if not isinstance(value, PyCDEValue):
       value = _obj_to_value(value, output_port_type)
     if value.type != output_port_type:
       if value.type == output_port_type.strip:

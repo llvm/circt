@@ -18,32 +18,40 @@ import re
 import numpy as np
 
 
-class Value:
+def Value(value, type=None):
+  from .pycde_types import Type
 
-  # Dummy __init__ as everything is done in __new__.
+  if isinstance(value, PyCDEValue):
+    return value
+
+  resvalue = support.get_value(value)
+  if resvalue is None:
+    return _obj_to_value_infer_type(value)
+
+  if type is None:
+    type = resvalue.type
+  type = Type(type)
+
+  return type._get_value_class()(resvalue, type)
+
+
+class PyCDEValue:
+  """Root of the PyCDE value (signal, in RTL terms) hierarchy."""
+
   def __init__(self, value, type=None):
-    pass
-
-  def __new__(cls, value, type=None):
     from .pycde_types import Type
 
-    if (value is None or isinstance(value, Value)) and value.__class__ is cls:
-      return value
-    resvalue = support.get_value(value)
-
-    if resvalue is None:
-      return _obj_to_value_infer_type(value)
-
-    if type is None:
-      type = resvalue.type
-    type = Type(type)
-    if cls is Value:
-      v = super().__new__(type._get_value_class())
+    if isinstance(value, ir.Value):
+      self.value = value
     else:
-      v = super().__new__(cls)
-    v.value = resvalue
-    v.type = type
-    return v
+      self.value = support.get_value(value)
+      if self.value is None:
+        self.value = _obj_to_value_infer_type(value).value
+
+    if type is not None:
+      self.type = type
+    else:
+      self.type = Type(self.value.type)
 
   _reg_name = re.compile(r"^(.*)__reg(\d+)$")
 
@@ -68,7 +76,7 @@ class Value:
     if name is None:
       basename = None
       if self.name is not None:
-        m = Value._reg_name.match(self.name)
+        m = PyCDEValue._reg_name.match(self.name)
         if m:
           basename = m.group(1)
           reg_num = m.group(2)
@@ -145,14 +153,14 @@ class Value:
     self.value.owner.attributes[AppID.AttributeName] = appid._appid
 
 
-class RegularValue(Value):
+class RegularValue(PyCDEValue):
   pass
 
 
 _current_clock_context = ContextVar("current_clock_context")
 
 
-class ClockValue(Value):
+class ClockValue(PyCDEValue):
   """A clock signal."""
 
   __slots__ = ["_old_token"]
@@ -170,7 +178,7 @@ class ClockValue(Value):
     return _current_clock_context.get(None)
 
 
-class InOutValue(Value):
+class InOutValue(PyCDEValue):
   # Maintain a caching of the read value.
   read_value = None
 
@@ -210,7 +218,7 @@ def get_slice_bounds(size, idxOrSlice: Union[int, slice]):
   return idxs[0], idxs[1]
 
 
-class BitVectorValue(Value):
+class BitVectorValue(PyCDEValue):
 
   @singledispatchmethod
   def __getitem__(self, idxOrSlice: Union[int, slice]) -> BitVectorValue:
@@ -225,7 +233,7 @@ class BitVectorValue(Value):
         ret.name = f"{self.name}_{lo}upto{hi}"
       return ret
 
-  @__getitem__.register(Value)
+  @__getitem__.register(PyCDEValue)
   def __get_item__value(self, idx: BitVectorValue) -> BitVectorValue:
     """Get the single bit at `idx`."""
     return self.slice(idx, 1)
@@ -314,7 +322,7 @@ class BitVectorValue(Value):
 
   def __exec_signless_binop_nocast__(self, other, op, op_symbol: str,
                                      op_name: str):
-    if not isinstance(other, Value):
+    if not isinstance(other, PyCDEValue):
       # Fall back to the default implementation in cases where we're not dealing
       # with PyCDE value comparison.
       return super().__eq__(other)
@@ -426,10 +434,10 @@ class SignedBitVectorValue(WidthExtendingBitVectorValue):
     return self * types.int(self.type.width)(-1).as_sint()
 
 
-class ListValue(Value):
+class ListValue(PyCDEValue):
 
   @singledispatchmethod
-  def __getitem__(self, idx: Union[int, BitVectorValue]) -> Value:
+  def __getitem__(self, idx: Union[int, BitVectorValue]) -> PyCDEValue:
     _validate_idx(self.type.size, idx)
     from .dialects import hw
     with get_user_loc():
@@ -454,7 +462,8 @@ class ListValue(Value):
         ret.name = f"{self.name}_{idxs[0]}upto{idxs[1]}"
       return ret
 
-  def slice(self, low_idx: Union[int, BitVectorValue], num_elems: int) -> Value:
+  def slice(self, low_idx: Union[int, BitVectorValue],
+            num_elems: int) -> PyCDEValue:
     """Get an array slice starting at `low_idx` and ending at `low_idx +
     num_elems`."""
     _validate_idx(self.type.size, low_idx)
@@ -518,7 +527,7 @@ class ListValue(Value):
     return np.roll(NDArray(from_value=self), shift=shift, axis=axis).to_circt()
 
 
-class StructValue(Value):
+class StructValue(PyCDEValue):
 
   def __getitem__(self, sub):
     if sub not in [name for name, _ in self.type.strip.fields]:
@@ -539,7 +548,7 @@ class StructValue(Value):
     raise AttributeError(f"'Value' object has no attribute '{attr}'")
 
 
-class ChannelValue(Value):
+class ChannelValue(PyCDEValue):
 
   def reg(self, clk, rst=None, name=None):
     raise TypeError("Cannot register a channel")
@@ -570,9 +579,9 @@ def wrap_opviews_with_values(dialect, module_name, excluded=[]):
 
         def create(*args, **kwargs):
           # If any of the arguments are Value objects, we need to convert them.
-          args = [v.value if isinstance(v, Value) else v for v in args]
+          args = [v.value if isinstance(v, PyCDEValue) else v for v in args]
           kwargs = {
-              k: v.value if isinstance(v, Value) else v
+              k: v.value if isinstance(v, PyCDEValue) else v
               for k, v in kwargs.items()
           }
           # Create the OpView.

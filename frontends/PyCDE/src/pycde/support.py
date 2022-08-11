@@ -79,12 +79,12 @@ def _obj_to_value(x, type, result_type=None):
   if x is None:
     raise ValueError(
         "Encountered 'None' when trying to build hardware for python value.")
-  from .value import Value
+  from .value import PyCDEValue
   from .dialects import hw
   from .pycde_types import (TypeAliasType, ArrayType, StructType, BitVectorType,
                             Type)
 
-  if isinstance(x, Value):
+  if isinstance(x, PyCDEValue):
     return x
 
   type = Type(type)
@@ -142,8 +142,8 @@ def _obj_to_value(x, type, result_type=None):
 def _infer_type(x):
   """Infer the CIRCT type from a python object. Only works on lists."""
   from .pycde_types import types
-  from .value import Value
-  if isinstance(x, Value):
+  from .value import PyCDEValue
+  if isinstance(x, PyCDEValue):
     return x.type
 
   if isinstance(x, (list, tuple)):
