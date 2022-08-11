@@ -127,7 +127,8 @@ class _OutputChannelSetter:
   def assign(self, new_value: ChannelValue):
     """Assign the generated channel to this request."""
     if self._chan_to_replace is None:
-      raise ValueError(f"{self.client_name} has already been connected.")
+      name_str = ".".join(self.client_name)
+      raise ValueError(f"{name_str} has already been connected.")
     if new_value.type != self.type:
       raise TypeError(
           f"ChannelType mismatch. Expected {self.type}, got {new_value.type}.")
@@ -179,7 +180,8 @@ class _ServiceGeneratorChannels:
   def check_unconnected_outputs(self):
     for req in self._output_reqs:
       if req._chan_to_replace is not None:
-        raise ValueError(f"{req.client_name} has not been connected.")
+        name_str = ".".join(req.client_name)
+        raise ValueError(f"{name_str} has not been connected.")
 
 
 def ServiceImplementation(decl: ServiceDecl):
