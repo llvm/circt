@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from .pycde_types import PyCDEType, dim
 from .value import BitVectorValue, ListValue, Value
-from circt.support import get_value
+from circt.support import get_value, BackedgeBuilder
 from circt.dialects import msft, hw
 import mlir.ir as ir
 
@@ -18,24 +18,23 @@ def Wire(type: PyCDEType):
 
   class WireValue(type._get_value_class()):
 
-    def __init__(self, value, type: PyCDEType):
-      super().__init__(value, type)
-      self._assigned = False
+    def __init__(self):
+      self._backedge = BackedgeBuilder.create(type, "wire", None)
+      super().__init__(self._backedge.result, type)
 
     def assign(self, new_value: Value):
-      if self._assigned is True:
+      if self._backedge is None:
         raise ValueError("Cannot assign value to Wire twice.")
       if new_value.type != self.type:
         raise TypeError(
             f"Cannot assign {new_value.value.type} to {self.value.type}")
 
-      msft.replaceAllUsesWith(self.value, new_value.value)
-      self.value.owner.erase()
+      msft.replaceAllUsesWith(self._backedge.result, new_value.value)
+      self._backedge.erase()
+      self._backedge = None
       self.value = new_value.value
-      self._assigned = True
 
-  return WireValue(ir.Operation.create("builtin.reinterpret_cast", [type]),
-                   type)
+  return WireValue()
 
 
 def Reg(type: PyCDEType,
