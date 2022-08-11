@@ -3,10 +3,14 @@
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
-from pycde.system import System
+from mlir.ir import Module
 
-tmp = NamedTemporaryFile()
-tmp.write(b"""
+from circt.dialects import hw
+
+from pycde import Input, Output, System, generator, module, types
+from pycde.module import import_hw_module
+
+mlir_module = Module.parse("""
 hw.module @add(%a: i1, %b: i1) -> (out: i1) {
   %0 = comb.add %a, %b : i1
   hw.output %0 : i1
@@ -17,11 +21,39 @@ hw.module @and(%a: i1, %b: i1) -> (out: i1) {
   hw.output %0 : i1
 }
 """)
-tmp.flush()
 
-system = System([])
-system.import_hw_modules(tmp.name)
+imported_modules = []
+for op in mlir_module.body:
+  if isinstance(op, hw.HWModuleOp):
+    imported_module = import_hw_module(op)
+    imported_modules.append(imported_module)
+
+
+@module
+class Top:
+  a = Input(types.i1)
+  b = Input(types.i1)
+  out0 = Output(types.i1)
+  out1 = Output(types.i1)
+
+  @generator
+  def generate(ports):
+    outs = []
+    for mod in imported_modules:
+      outs.append(mod(a=ports.a, b=ports.b).out)
+
+    ports.out0 = outs[0]
+    ports.out1 = outs[1]
+
+
+system = System([Top])
+system.import_modules(imported_modules)
 system.generate()
+
+# CHECK: msft.module @Top {} (%a: i1, %b: i1) -> (out0: i1, out1: i1)
+# CHECK:   %add.out = hw.instance "add" @add(a: %a: i1, b: %b: i1) -> (out: i1)
+# CHECK:   %and.out = hw.instance "and" @and(a: %a: i1, b: %b: i1) -> (out: i1)
+# CHECK:   msft.output %add.out, %and.out : i1, i1
 
 # CHECK: hw.module @add(%a: i1, %b: i1) -> (out: i1)
 # CHECK:   %0 = comb.add %a, %b : i1
@@ -30,6 +62,4 @@ system.generate()
 # CHECK: hw.module @and(%a: i1, %b: i1) -> (out: i1)
 # CHECK:   %0 = comb.and %a, %b : i1
 # CHECK:   hw.output %0 : i1
-
 system.print()
-tmp.close()
