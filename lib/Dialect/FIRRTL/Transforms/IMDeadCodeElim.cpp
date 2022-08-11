@@ -396,6 +396,10 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
       if (!deadOutputPortAtAnyInstantiation)
         continue;
 
+      // RefType can't be a wire, especially if it won't be erased.  Skip.
+      if (argument.getType().isa<RefType>())
+        continue;
+
       // Ok, this port is used only within its defined module. So we can replace
       // the port with a wire.
       WireOp wire = builder.create<WireOp>(argument.getType());
