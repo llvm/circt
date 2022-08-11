@@ -8,7 +8,7 @@ from pycde.devicedb import (EntityExtern, PlacementDB, PrimitiveDB,
                             PhysicalRegion)
 
 from .common import _PyProxy
-from .module import _SpecializedModule, import_hw_module
+from .module import _SpecializedModule
 from .pycde_types import types
 from .instance import Instance, InstanceHierarchyRoot
 
@@ -26,7 +26,6 @@ from contextvars import ContextVar
 import gc
 import os
 import sys
-from pathlib import Path
 from typing import Callable, Dict, Set, Tuple
 
 _current_system = ContextVar("current_pycde_system")
