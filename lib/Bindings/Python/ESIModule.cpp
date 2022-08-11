@@ -64,7 +64,7 @@ llvm::DenseMap<std::string *, PyObject *> serviceGenFuncLookup;
 static MlirLogicalResult serviceGenFunc(MlirOperation reqOp, void *userData) {
   std::string *name = static_cast<std::string *>(userData);
   py::handle genFunc(serviceGenFuncLookup[name]);
-  py::gil_scoped_release();
+  py::gil_scoped_acquire();
   py::object rc = genFunc(reqOp);
   return rc.cast<bool>() ? mlirLogicalResultSuccess()
                          : mlirLogicalResultFailure();

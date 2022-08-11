@@ -22,10 +22,24 @@ class Value:
 
   # Dummy __init__ as everything is done in __new__.
   def __init__(self, value, type=None):
-    pass
-
-  def __new__(cls, value, type=None):
     from .pycde_types import Type
+    if not hasattr(self, "value"):
+      self.value = value
+    if not hasattr(self, "type"):
+      if type is not None:
+        self.type = type
+      else:
+        self.type = Type(value.type)
+
+  def __new__(cls, value, *argv, **kwargs):
+    from .pycde_types import Type, PyCDEType
+    type = None
+    if len(argv) > 0:
+      # Since this method gets called for subclasses which have different
+      # constructor signatures, 'type' is not necessarily the type.
+      type = argv[0]
+      if not isinstance(type, (PyCDEType, ir.Type)):
+        type = None
 
     if (value is None or isinstance(value, Value)) and value.__class__ is cls:
       return value
@@ -37,10 +51,11 @@ class Value:
     if type is None:
       type = resvalue.type
     type = Type(type)
-    if cls is Value:
-      v = super().__new__(type._get_value_class())
-    else:
+
+    if cls is not Value:
       v = super().__new__(cls)
+    else:
+      v = super().__new__(type._get_value_class())
     v.value = resvalue
     v.type = type
     return v

@@ -608,6 +608,13 @@ class _GeneratorPortAccess:
     for (name, value) in port_values.items():
       self.__setattr__(name, value)
 
+  def check_unconnected_outputs(self):
+    ports_unconnected = self._mod.output_port_lookup.keys() - \
+      self._output_values.keys()
+    if len(ports_unconnected) > 0:
+      raise ValueError("Generator did not connect all output ports: " +
+                       ", ".join(ports_unconnected))
+
 
 class DesignPartition:
   """Construct a design partition "module" for entities to target."""

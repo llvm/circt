@@ -85,7 +85,7 @@ class _RequestToClientConn(_RequestConnection):
     req_op = raw_esi.RequestToClientConnectionOp(
         type, hw.InnerRefAttr.get(ir.StringAttr.get(decl_sym), self._name),
         ir.ArrayAttr.get([ir.StringAttr.get(chan_name)]))
-    return ChannelValue(req_op)
+    return ChannelValue(req_op.receiving)
 
 
 @ServiceDecl
@@ -105,127 +105,161 @@ def Cosim(decl: ServiceDecl, clk, rst):
                             inputs=[clk.value, rst.value])
 
 
+class NamedChannelValue(ChannelValue):
+  """A ChannelValue with the name of the client request."""
+
+  def __init__(self, input_chan: ChannelValue, client_name: List[str]):
+    self.client_name = client_name
+    super().__init__(input_chan)
+
+
 class _ServiceGeneratorChannels:
+  """Provide access to the channels which the service generator is responsible
+  for connecting up."""
+
+  class _OutputChannelSetter:
+    """Return a list of these as a proxy for a 'request to client connection'.
+    Users should call the 'assign' method with the `ChannelValue` which they
+    have implemented for this request."""
+
+    def __init__(self, parent, chan_num: int,
+                 req: raw_esi.RequestToClientConnectionOp,
+                 old_chan_to_replace: ChannelValue):
+      self._parent: _ServiceGeneratorChannels = parent
+      self._chan_num = chan_num
+      self.type = ChannelType(req.receiving.type)
+      self.client_name = req.clientNamePath
+      self._chan_to_replace = old_chan_to_replace
+
+    def assign(self, new_value: ChannelValue):
+      """Assign the generated channel to this request."""
+      if self._chan_to_replace is None:
+        raise ValueError(f"{self.client_name} has already been connected.")
+      if new_value.type != self.type:
+        raise TypeError(
+            f"ChannelType mismatch. Expected {self.type}, got {new_value.type}."
+        )
+      msft.replaceAllUsesWith(self._chan_to_replace, new_value.value)
+      self._chan_to_replace = None
 
   def __init__(self, mod: _SpecializedModule,
-               req: raw_esi.ServiceImplementReqOp, arguments: List[ir.Value]):
+               req: raw_esi.ServiceImplementReqOp):
     self._req = req
     portReqsBlock = req.portReqs.blocks[0]
 
-    input_reqs = [
+    # Find the input channel requests and store named versions of the values.
+    input_req_ops = [
         x for x in portReqsBlock
         if isinstance(x, raw_esi.RequestToServerConnectionOp)
     ]
     start_inputs_chan_num = len(mod.input_port_lookup)
-    assert len(input_reqs) == len(req.inputs) - len(mod.input_port_lookup)
-    self.input_lookup = {
-        n: i
-        for i, n in zip(list(req.inputs)[start_inputs_chan_num:], input_reqs)
-    }
-
-    self.output_reqs = [
-        x for x in portReqsBlock
-        if isinstance(x, raw_esi.RequestToClientConnectionOp)
+    assert len(input_req_ops) == len(req.inputs) - len(mod.input_port_lookup)
+    self._input_reqs = [
+        NamedChannelValue(input_value, req.clientNamePath)
+        for input_value, req in zip(
+            list(req.inputs)[start_inputs_chan_num:], input_req_ops)
     ]
-    self.output_chan_offset = len(mod.output_port_lookup)
-    assert len(
-        self.output_reqs) == len(req.results) - len(mod.output_port_lookup)
 
-    self._yet_to_be_connected_outputs = set(range(len(self.output_reqs)))
+    # Find the output channel requests and store the settable proxies.
+    num_output_ports = len(mod.output_port_lookup)
+    self._output_reqs = [
+        _ServiceGeneratorChannels._OutputChannelSetter(
+            self, idx, req, self._req.results[num_output_ports + idx])
+        for idx, req in enumerate(portReqsBlock)
+        if isinstance(req, raw_esi.RequestToClientConnectionOp)
+    ]
+    assert len(self._output_reqs) == len(req.results) - num_output_ports
+    self._yet_to_be_connected_outputs = set(range(len(self._output_reqs)))
 
   @property
-  def to_server_reqs(self) -> List[Tuple[List[str], ChannelValue]]:
-    return [(req.clientNamePath, ChannelValue(input))
-            for (req, input) in self.input_lookup.items()]
+  def to_server_reqs(self) -> List:
+    """Get the list of incoming channels from the 'to server' connection
+    requests."""
+    return self._input_reqs
 
   @property
-  def to_client_reqs(self) -> List[Tuple[int, List[str], ChannelType]]:
-    return [(i, chan_req.clientNamePath, ChannelType(chan_req.receiving.type))
-            for (i, chan_req) in enumerate(self.output_reqs)]
-
-  def set_output(self, chan_num: int, new_chan: ChannelValue):
-    if chan_num > len(self.output_reqs):
-      raise ValueError(
-          f"Channel number {chan_num} is not an output of this service")
-    chan_req = self.output_reqs[chan_num]
-    if chan_num not in self._yet_to_be_connected_outputs:
-      raise ValueError(f"{chan_req.clientNamePath} has already been connected.")
-    self._yet_to_be_connected_outputs.remove(chan_num)
-    msft.replaceAllUsesWith(
-        self._req.results[self.output_chan_offset + chan_num], new_chan.value)
+  def to_client_reqs(self) -> List:
+    return self._output_reqs
 
 
 def ServiceImplementation(decl: ServiceDecl):
+  """A generator for a service implementation. Must contain a @generator method
+  which will be called whenever required to implement the server. Said generator
+  function will be called with the same 'ports' argument as modules and a
+  'channels' argument containing lists of the input and output channels which
+  need to be connected to the service being implemented."""
 
   def wrap(service_impl, decl: ServiceDecl = decl):
 
-    class ServiceImpl:
+    def instantiate_cb(mod: _SpecializedModule, instance_name: str,
+                       inputs: dict, appid: AppID, loc):
+      # Each instantiation of the ServiceImplementation has its own
+      # registration.
+      opts = _service_generator_registry.register(mod)
+      return raw_esi.ServiceInstanceOp(
+          result=[t for _, t in mod.output_ports],
+          service_symbol=ir.FlatSymbolRefAttr.get(
+              decl._materialize_service_decl()),
+          impl_type=_ServiceGeneratorRegistry._impl_type_name,
+          inputs=[inputs[pn].value for pn, _ in mod.input_ports],
+          impl_opts=opts,
+          loc=loc)
 
-      def instantiate_cb(self, mod: _SpecializedModule, instance_name: str,
-                         inputs: dict, appid: AppID, loc):
-        opts = _service_generator_registry.register(mod)
-        return raw_esi.ServiceInstanceOp(
-            result=[t for _, t in mod.output_ports],
-            service_symbol=ir.FlatSymbolRefAttr.get(
-                decl._materialize_service_decl()),
-            impl_type=_ServiceGeneratorRegistry._impl_type_name,
-            inputs=[inputs[pn].value for pn, _ in mod.input_ports],
-            impl_opts=opts,
-            loc=loc)
+    def generate(generator: Generator, spec_mod: _SpecializedModule,
+                 serviceReq: raw_esi.ServiceInstanceOp):
+      arguments = serviceReq.operation.operands
+      with ir.InsertionPoint(
+          serviceReq), generator.loc, BackedgeBuilder(), _BlockContext():
+        # Insert generated code after the service instance op.
+        ports = _GeneratorPortAccess(spec_mod, arguments)
 
-      def generate(self, generator: Generator, spec_mod: _SpecializedModule,
-                   serviceReq: raw_esi.ServiceInstanceOp):
-        arguments = serviceReq.operation.operands
-        with ir.InsertionPoint(
-            serviceReq), generator.loc, BackedgeBuilder(), _BlockContext():
-          args = _GeneratorPortAccess(spec_mod, arguments)
+        # Enter clock block implicitly if only one clock given
+        clk = None
+        if len(spec_mod.clock_ports) == 1:
+          clk_port = list(spec_mod.clock_ports.values())[0]
+          clk = ClockValue(arguments[clk_port], ClockType())
+          clk.__enter__()
 
-          # Enter clock block implicitly if only one clock given
-          clk = None
-          if len(spec_mod.clock_ports) == 1:
-            clk_port = list(spec_mod.clock_ports.values())[0]
-            clk = ClockValue(arguments[clk_port], ClockType())
-            clk.__enter__()
+        # Run the generator.
+        channels = _ServiceGeneratorChannels(spec_mod, serviceReq)
+        rc = generator.gen_func(ports, channels=channels)
+        if rc is None:
+          rc = True
+        elif not isinstance(rc, bool):
+          raise ValueError("Generators must a return a bool or None")
+        ports.check_unconnected_outputs()
 
-          channels = _ServiceGeneratorChannels(spec_mod, serviceReq, arguments)
-          rc = generator.gen_func(args, channels=channels)
-          if rc is None:
-            rc = True
-          elif not isinstance(rc, bool):
-            raise ValueError("Generators must a return a bool or None")
+        # Replace the output values from the service implement request op with
+        # the generated values. Erase the service implement request op.
+        for port_name, port_value in ports._output_values.items():
+          port_num = spec_mod.output_port_lookup[port_name]
+          msft.replaceAllUsesWith(serviceReq.operation.results[port_num],
+                                  port_value.value)
+        serviceReq.operation.erase()
 
-          ports_unconnected = spec_mod.output_port_lookup.keys() - \
-            args._output_values.keys()
-          if len(ports_unconnected) > 0:
-            raise ValueError("Generator did not connect all output ports: " +
-                             ", ".join(ports_unconnected))
-          for port_name, port_value in args._output_values.items():
-            port_num = spec_mod.output_port_lookup[port_name]
-            msft.replaceAllUsesWith(serviceReq.operation.results[port_num],
-                                    port_value.value)
-          serviceReq.operation.erase()
+        if clk is not None:
+          clk.__exit__(None, None, None)
 
-          if clk is not None:
-            clk.__exit__(None, None, None)
+        return rc
 
-          return rc
-
-    impl = ServiceImpl()
     return _module_base(service_impl,
                         extern_name=None,
-                        generator_cb=impl.generate,
-                        instantiate_cb=impl.instantiate_cb)
+                        generator_cb=generate,
+                        instantiate_cb=instantiate_cb)
 
   return wrap
 
 
 class _ServiceGeneratorRegistry:
-  """Class to register individual service instance generators."""
+  """Class to register individual service instance generators. Should be a
+  singleton."""
   _registered = False
   _impl_type_name = ir.StringAttr.get("pycde")
 
   def __init__(self):
     self._registry = {}
+
+    # Register myself with ESI so I can dispatch to my internal registry.
     assert _ServiceGeneratorRegistry._registered is False, \
       "Cannot instantiate more than one _ServiceGeneratorRegistry"
     raw_esi.registerServiceGenerator(
@@ -234,6 +268,9 @@ class _ServiceGeneratorRegistry:
     _ServiceGeneratorRegistry._registered = True
 
   def register(self, service_implementation: _SpecializedModule) -> ir.DictAttr:
+    """Register a ServiceImplementation generator with the PyCDE generator.
+    Called when the ServiceImplamentation is defined."""
+
     # Create unique name for the service instance.
     basename = service_implementation.name
     name = basename
@@ -246,7 +283,8 @@ class _ServiceGeneratorRegistry:
     return ir.DictAttr.get({"name": name_attr})
 
   def _implement_service(self, req: ir.Operation):
-    """This is the callback which the ESI connect-services pass calls."""
+    """This is the callback which the ESI connect-services pass calls. Dispatch
+    to the op-specified generator."""
     assert isinstance(req.opview, raw_esi.ServiceImplementReqOp)
     opts = ir.DictAttr(req.attributes["impl_opts"])
     impl_name = opts["name"]

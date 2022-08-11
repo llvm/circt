@@ -79,14 +79,15 @@ class MultiplexerService:
     input_reqs = channels.to_server_reqs
     if len(input_reqs) > 1:
       raise Exception("Multiple to_server requests not supported")
-    MultiplexerService.unwrap_and_pad(ports, input_reqs[0][1])
+    MultiplexerService.unwrap_and_pad(ports, input_reqs[0])
 
     output_reqs = channels.to_client_reqs
     if len(output_reqs) > 1:
       raise Exception("Multiple to_client requests not supported")
-    idx, req_name, req_type = output_reqs[0]
-    output_chan, ready = MultiplexerService.slice_and_wrap(ports, req_type)
-    channels.set_output(idx, output_chan)
+    output_req = output_reqs[0]
+    output_chan, ready = MultiplexerService.slice_and_wrap(
+        ports, output_req.type)
+    output_req.assign(output_chan)
     ports.trunk_in_ready = ready
 
   @staticmethod
