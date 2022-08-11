@@ -307,11 +307,14 @@ RequestInOutChannelOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 
   auto *ctxt = getContext();
   auto anyChannelType = ChannelType::get(ctxt, AnyType::get(ctxt));
+
+  // Check the input port type.
   if (portDecl.inType() != sending().getType() &&
       portDecl.inType() != anyChannelType)
     return emitOpError("Request to_server type does not match port type ")
            << portDecl.inType();
 
+  // Check the output port type.
   if (portDecl.outType() != receiving().getType() &&
       portDecl.outType() != anyChannelType)
     return emitOpError("Request to_client type does not match port type ")

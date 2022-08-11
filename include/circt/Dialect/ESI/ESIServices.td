@@ -56,7 +56,7 @@ def ToClientOp : ESI_Op<"service.to_client",
 
 def ServiceDeclInOutOp : ESI_Op<"service.inout",
                         [HasParent<"::circt::esi::ServiceDeclOp">]> {
-  let summary = "An ESI service port headed to a particular client";
+  let summary = "An ESI service port which has both directions";
 
   let arguments = (ins SymbolNameAttr:$inner_sym,
                        TypeAttr:$inType, TypeAttr:$outType);
