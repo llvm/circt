@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/MSFT/MSFTOps.h"
+#include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/ModuleImplementation.h"
@@ -976,6 +977,22 @@ void SystolicArrayOp::print(OpAsmPrinter &p) {
                   .getElementType());
   p << ") ";
   p.printRegion(pe(), false);
+}
+
+//===----------------------------------------------------------------------===//
+// LinearOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult LinearOp::verify() {
+
+  for (auto &op : *getBodyBlock()) {
+    if (!isa<hw::HWDialect, comb::CombDialect, msft::MSFTDialect>(
+            op.getDialect()))
+      return emitOpError() << "expected only hw, comb, and msft dialect ops "
+                              "inside the datapath.";
+  }
+
+  return success();
 }
 
 #define GET_OP_CLASSES

@@ -237,7 +237,7 @@ def DesignPartitionOp : MSFTOp<"partition",
   let assemblyFormat = "$sym_name `,` $verilogName attr-dict";
 }
 
-def OutputOp : MSFTOp<"output", [Terminator, HasParent<"MSFTModuleOp">,
+def OutputOp : MSFTOp<"output", [Terminator, ParentOneOf<["MSFTModuleOp", "LinearOp"]>,
                                 NoSideEffect, ReturnLike]> {
   let summary = "termination operation";
 
