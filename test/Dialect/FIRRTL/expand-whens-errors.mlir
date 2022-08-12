@@ -138,7 +138,7 @@ firrtl.module @CheckInitialization(in %p : !firrtl.uint<1>, out %out: !firrtl.ve
 
 // -----
 
-// check subword initialization
+// Check subword initialization.
 firrtl.circuit "CheckInitialization" {
 firrtl.module @CheckInitialization(in %y: !firrtl.uint<1>, in %z: !firrtl.uint<2>, out %out: !firrtl.uint<4>) {
   // expected-error @-1 {{port "out" not fully initialized in module "CheckInitialization"}}
