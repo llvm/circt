@@ -159,7 +159,7 @@ class _SpecializedModule(_PyProxy):
                create_cb: Optional[builtins.function],
                generator_cb: Optional[builtins.function] = None,
                instantiate_cb: Optional[builtins.function] = None,
-               input_port_order=None):
+               input_port_order = None):
     self.modcls = cls
     self.extern_name = extern_name
     self.loc = get_user_loc()
@@ -423,10 +423,7 @@ def import_hw_module(hw_module: hw.HWModuleOp):
     return hw_module
 
   # Hand off the class, external name, and create callback to _module_base.
-  return _module_base(cls,
-                      name,
-                      create_cb,
-                      input_port_order=hw_module.input_indices)
+  return _module_base(cls, name, create_cb, input_port_order=hw_module.input_indices)
 
 
 def _module_base(cls,
