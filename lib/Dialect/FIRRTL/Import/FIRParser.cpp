@@ -229,7 +229,7 @@ struct FIRParser {
   ParseResult parseIntLit(int32_t &result, const Twine &message);
 
   // Parse 'verLit' into specified value
-  ParseResult parseVersionLit(int32_t major, int32_t minor, int32_t patch,
+  ParseResult parseVersionLit(uint32_t &major, uint32_t &minor, uint32_t &patch,
                               const Twine &message);
 
   // Parse ('<' intLit '>')? setting result to -1 if not present.
@@ -588,9 +588,9 @@ ParseResult FIRParser::parseIntLit(int32_t &result, const Twine &message) {
 }
 
 /// versionLit    ::= version
-/// deconstruct a version literal into parts
-ParseResult FIRParser::parseVersionLit(int32_t major, int32_t minor,
-                                       int32_t patch, const Twine &message) {
+/// deconstruct a version literal into parts and returns those.
+ParseResult FIRParser::parseVersionLit(uint32_t &major, uint32_t &minor,
+                                       uint32_t &patch, const Twine &message) {
   auto spelling = getTokenSpelling();
   if (getToken().getKind() != FIRToken::version)
     return emitError("expected version literal"), failure();
@@ -602,6 +602,11 @@ ParseResult FIRParser::parseVersionLit(int32_t major, int32_t minor,
       c.getAsInteger(10, cInt))
     return emitError("failed to parse version string"), failure();
   consumeToken(FIRToken::version);
+  major = aInt.getLimitedValue(UINT32_MAX);
+  minor = bInt.getLimitedValue(UINT32_MAX);
+  patch = cInt.getLimitedValue(UINT32_MAX);
+  if (major != aInt || minor != bInt || patch != cInt)
+    return emitError("integers out of range"), failure();
   return success();
 }
 
@@ -3597,11 +3602,14 @@ ParseResult FIRCircuitParser::parseCircuit(
   SMLoc inlineAnnotationsLoc;
   StringRef inlineAnnotations;
 
-  int32_t verMajor(1), verMinor(0), verPatch(0);
+  uint32_t verMajor(1), verMinor(0), verPatch(0);
   if (consumeIf(FIRToken::kw_FIRRTL))
     if (parseToken(FIRToken::kw_version, "expected version after 'FIRRTL'") ||
         parseVersionLit(verMajor, verMinor, verPatch, "expected version"))
       return failure();
+  (void)verMajor;
+  (void)verMinor;
+  (void)verPatch;
 
   // A file must contain a top level `circuit` definition.
   if (parseToken(FIRToken::kw_circuit,
