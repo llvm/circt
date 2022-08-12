@@ -478,7 +478,7 @@ FIRToken FIRLexer::lexString(const char *tokStart, bool isRaw) {
 ///   DoubleLit ::=
 ///       ( '+' | '-' )? Digit+ '.' Digit+ ( 'E' ( '+' | '-' )? Digit+ )?
 ///   TripleLit ::=
-///       Digit+ '.' Digit+
+///       Digit+ '.' Digit+ '.' Digit+
 ///
 FIRToken FIRLexer::lexNumber(const char *tokStart) {
   assert(llvm::isDigit(curPtr[-1]) || curPtr[-1] == '+' || curPtr[-1] == '-');
