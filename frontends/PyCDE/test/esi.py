@@ -5,9 +5,18 @@ from pycde import (Clock, Input, InputChannel, OutputChannel, module, generator,
                    types)
 from pycde import esi
 from pycde.common import Output
+from pycde.constructs import Wire
 from pycde.pycde_types import ChannelType
 from pycde.testing import unittestmodule
 from pycde.value import BitVectorValue, ChannelValue
+
+
+@esi.ServiceDecl
+class HostComms:
+  to_host = esi.ToServer(types.any)
+  from_host = esi.FromServer(types.any)
+  req_resp = esi.ToFromServer(to_server_type=types.i16,
+                              to_client_type=types.i32)
 
 
 @module
@@ -17,7 +26,7 @@ class Producer:
 
   @generator
   def construct(ports):
-    chan = esi.HostComms.from_host(types.i32, "loopback_in")
+    chan = HostComms.from_host("loopback_in", types.i32)
     ports.int_out = chan
 
 
@@ -28,7 +37,7 @@ class Consumer:
 
   @generator
   def construct(ports):
-    esi.HostComms.to_host(ports.int_in, "loopback_out")
+    HostComms.to_host("loopback_out", ports.int_in)
 
 
 # CHECK-LABEL: msft.module @LoopbackTop {} (%clk: i1, %rst: i1)
@@ -57,10 +66,37 @@ class LoopbackTop:
     p = Producer(clk=ports.clk)
     Consumer(clk=ports.clk, int_in=p.int_out)
     # Use Cosim to implement the standard 'HostComms' service.
-    esi.Cosim(esi.HostComms, ports.clk, ports.rst)
+    esi.Cosim(HostComms, ports.clk, ports.rst)
 
 
-@esi.ServiceImplementation(esi.HostComms)
+# CHECK-LABEL: msft.module @LoopbackInOutTop {} (%clk: i1, %rst: i1)
+# CHECK:         esi.service.instance @HostComms impl as "cosim"(%clk, %rst) : (i1, i1) -> ()
+# CHECK:         %0 = esi.service.req.inout %chanOutput -> <@HostComms::@req_resp>(["loopback_inout"]) : !esi.channel<i16> -> !esi.channel<i32>
+# CHECK:         %rawOutput, %valid = esi.unwrap.vr %0, %ready : i32
+# CHECK:         %1 = comb.extract %rawOutput from 0 : (i32) -> i16
+# CHECK:         %chanOutput, %ready = esi.wrap.vr %1, %valid : i16
+# CHECK:         msft.output
+@unittestmodule(print=True)
+class LoopbackInOutTop:
+  clk = Clock(types.i1)
+  rst = Input(types.i1)
+
+  @generator
+  def construct(ports):
+    # Use Cosim to implement the standard 'HostComms' service.
+    esi.Cosim(HostComms, ports.clk, ports.rst)
+
+    loopback = Wire(types.channel(types.i16))
+    from_host = HostComms.req_resp("loopback_inout", loopback)
+    ready = Wire(types.i1)
+    wide_data, valid = from_host.unwrap(ready)
+    data = wide_data[0:16]
+    data_chan, data_ready = loopback.type.wrap(data, valid)
+    ready.assign(data_ready)
+    loopback.assign(data_chan)
+
+
+@esi.ServiceImplementation(HostComms)
 class MultiplexerService:
   clk = Clock()
   rst = Input(types.i1)

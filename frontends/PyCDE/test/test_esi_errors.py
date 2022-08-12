@@ -4,10 +4,13 @@
 from pycde import (Clock, Input, InputChannel, OutputChannel, module, generator,
                    types)
 from pycde import esi
-from pycde.common import Output
-from pycde.pycde_types import ChannelType
 from pycde.testing import unittestmodule
-from pycde.value import BitVectorValue, ChannelValue
+
+
+@esi.ServiceDecl
+class HostComms:
+  to_host = esi.ToServer(types.any)
+  from_host = esi.FromServer(types.any)
 
 
 @module
@@ -17,7 +20,7 @@ class Producer:
 
   @generator
   def construct(ports):
-    chan = esi.HostComms.from_host(types.i32, "loopback_in")
+    chan = HostComms.from_host("loopback_in", types.i32)
     ports.int_out = chan
 
 
@@ -28,7 +31,7 @@ class Consumer:
 
   @generator
   def construct(ports):
-    esi.HostComms.to_host(ports.int_in, "loopback_out")
+    HostComms.to_host("loopback_out", ports.int_in)
 
 
 @unittestmodule(print=True)
@@ -41,10 +44,10 @@ class LoopbackTop:
     p = Producer(clk=ports.clk)
     Consumer(clk=ports.clk, int_in=p.int_out)
     # Use Cosim to implement the standard 'HostComms' service.
-    esi.Cosim(esi.HostComms, ports.clk, ports.rst)
+    esi.Cosim(HostComms, ports.clk, ports.rst)
 
 
-@esi.ServiceImplementation(esi.HostComms)
+@esi.ServiceImplementation(HostComms)
 class MultiplexerService:
   clk = Clock()
   rst = Input(types.i1)
@@ -87,7 +90,7 @@ class MultiplexerTop:
 # -----
 
 
-@esi.ServiceImplementation(esi.HostComms)
+@esi.ServiceImplementation(HostComms)
 class BrokenService:
   clk = Clock()
   rst = Input(types.i1)
