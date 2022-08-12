@@ -343,7 +343,8 @@ hw.module @wires(%in4: i4, %in8: i8) -> (a: i4, b: i8, c: i8) {
   // CHECK-EMPTY:
 
   // Wires.
-  // CHECK-NEXT: wire [3:0]            myWire;
+  // NEW-NEXT: wire [3:0]            myWire = in4;
+  // OLD-NEXT: wire [3:0]            myWire;
   %myWire = sv.wire : !hw.inout<i4>
 
   // Packed arrays.
@@ -363,7 +364,7 @@ hw.module @wires(%in4: i4, %in8: i8) -> (a: i4, b: i8, c: i8) {
 
   // Wires.
 
-  // CHECK: assign myWire = in4;
+  // OLD: assign myWire = in4;
   sv.assign %myWire, %in4 : i4
   %wireout = sv.read_inout %myWire : !hw.inout<i4>
 
