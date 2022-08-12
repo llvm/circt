@@ -17,6 +17,12 @@
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/Types.h"
 
+namespace circt {
+namespace systemc {
+Type getSignalBaseType(Type type);
+} // namespace systemc
+} // namespace circt
+
 // Include generated types.
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/SystemC/SystemCTypes.h.inc"

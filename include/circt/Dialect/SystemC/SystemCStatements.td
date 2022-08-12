@@ -10,21 +10,27 @@
 //
 //===----------------------------------------------------------------------===//
 
-def AliasOp : SystemCOp<"alias", [SameTypeOperands]> {
-  let summary = "Declare two SSA values equivalent.";
+def SignalWriteOp : SystemCOp<"signal.write", [
+    TypesMatchWith<"dest has to be the base type of the src",
+                   "dest", "src", "systemc::getSignalBaseType($_self)">]> {
+  let summary = "Writes a value to a signal or port.";
   let description = [{
-    This operation does not model a specific construct in the SystemC spec, but
-    is required to 'connect' an SSA value to a module output SSA value. It can,
-    however, also be used to declare any two SSA values to be aliases which
-    means that ExportSystemC will generate at most one variable name for all
-    SSA values in the alias set.
+    Represents the member function `void write(const T&);` and several variants
+    of the operator `operator=` of class `sc_signal` as described in
+    IEEE 1666-2011 §6.4.8., of class `sc_inout` as described in §6.10.3., and of
+    class `sc_out` as decribed in §6.12.3. It shall modify the value of the
+    signal/port such that it appears to have the new value (as observed using
+    the `sytemc.signal.read` operation) in the next delta cycle but not before
+    then.
   }];
 
-  let arguments = (ins AnyType:$lhs, AnyType:$rhs);
-  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($lhs)";
+  let arguments = (ins AnyTypeOf<[OutputType, InOutType, SignalType]>:$dest,
+                       AnyType:$src);
+  let assemblyFormat = "$dest `,` $src attr-dict `:` type($dest)";
 }
 
-def SignalOp : SystemCOp<"signal", [HasCustomSSAName, SystemCNameDeclOpInterface,
+def SignalOp : SystemCOp<"signal", [HasCustomSSAName,
+                                    SystemCNameDeclOpInterface,
                                     HasParent<"SCModuleOp">]> {
   let summary = "Declares a SystemC `sc_signal<T>`.";
   let description = [{
@@ -32,7 +38,7 @@ def SignalOp : SystemCOp<"signal", [HasCustomSSAName, SystemCNameDeclOpInterface
   }];
 
   let arguments = (ins StrAttr:$name);
-  let results = (outs AnySignlessInteger:$signal);
+  let results = (outs SignalType:$signal);
 
   let assemblyFormat = [{
     custom<ImplicitSSAName>($name) attr-dict `:` type($signal)
