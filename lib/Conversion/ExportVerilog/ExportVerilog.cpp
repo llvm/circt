@@ -3998,9 +3998,12 @@ static AssignTy getSingleAssignAndCheckUsers(Operation *op) {
   return {};
 }
 
-// Return true if `op1` dominates users of `op2`.
+/// Return true if `op1` dominates users of `op2`.
 static bool checkDominanceOfUsers(Operation *op1, Operation *op2) {
   return llvm::all_of(op2->getUsers(), [&](Operation *user) {
+    /// TODO: Use MLIR DominanceInfo.
+
+    // If the op1 and op2 are in different blocks, conservatively return false.
     if (op1->getBlock() != user->getBlock())
       return false;
 
