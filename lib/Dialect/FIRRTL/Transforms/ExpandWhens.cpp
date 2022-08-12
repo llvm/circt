@@ -20,9 +20,6 @@
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/STLExtras.h"
-#include "llvm/Support/Debug.h"
-
-#define DEBUG_TYPE "firrtl-expand-whens"
 
 using namespace circt;
 using namespace firrtl;
