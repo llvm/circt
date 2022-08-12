@@ -1415,8 +1415,9 @@ ParseResult FIRStmtParser::parseOptionalExpPostscript(Value &result) {
       continue;
     }
 
-    // Subindex: exp ::= exp '[' intLit ']' | exp '[' intLit ':' intLit ']' |
-    // exp '[' exp ']'
+    // Subindex: exp ::= exp '[' intLit ']'
+    //               ::= exp '[' intLit ':' intLit ']'
+    //               ::= exp '[' exp ']'
     if (consumeIf(FIRToken::l_square)) {
       if (getToken().isAny(FIRToken::integer, FIRToken::string)) {
         if (parsePostFixIntSubscript(result))
