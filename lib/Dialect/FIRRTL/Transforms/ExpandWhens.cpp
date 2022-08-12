@@ -663,7 +663,7 @@ private:
   /// The outermost scope of the module body.
   ScopedDriverMap driverMap;
   /// A memoization table for computing reachable subword uninitialized ops.
-  DenseMap<Operation *, bool> subwordInvalidMemo;
+  DenseSet<Operation *> subwordInitChecked;
 
   /// Tracks if anything in the IR has changed.
   bool anythingChanged = false;
@@ -706,15 +706,14 @@ void ModuleVisitor::visitStmt(WhenOp whenOp) {
 bool ModuleVisitor::usesSubwordUninit(Operation *op) {
   if (!op || subwordUninit.size() == 0)
     return false;
-  if (auto b = subwordInvalidMemo.lookup(op))
-    return b;
+  if (subwordInitChecked.contains(op))
+    return false;
   for (auto val : op->getOperands()) {
     if (subwordUninit.contains(val) || usesSubwordUninit(val.getDefiningOp())) {
-      subwordInvalidMemo[op] = true;
       return true;
     }
   }
-  subwordInvalidMemo[op] = false;
+  subwordInitChecked.insert(op);
   return false;
 }
 
