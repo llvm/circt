@@ -19,10 +19,13 @@ import numpy as np
 
 
 def Value(value, type=None):
-  from .pycde_types import Type
+  from .pycde_types import NoneType, Type
 
   if isinstance(value, PyCDEValue):
     return value
+
+  if value is None:
+    return RegularValue(NoneType()(), NoneType())
 
   resvalue = support.get_value(value)
   if resvalue is None:

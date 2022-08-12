@@ -116,6 +116,10 @@ def type_to_pytype(t) -> ir.Type:
     return esi.ChannelType(t)
   except ValueError:
     pass
+  try:
+    return ir.NoneType(t)
+  except ValueError:
+    pass
 
   raise TypeError(f"Cannot convert {repr(t)} to python type")
 

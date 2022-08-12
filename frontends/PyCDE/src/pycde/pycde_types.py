@@ -12,7 +12,7 @@ import mlir.ir
 from circt.dialects import esi, hw, sv
 import circt.support
 
-from typing import Union
+from typing import Tuple, Union
 
 
 class _Types:
@@ -52,6 +52,10 @@ class _Types:
   @property
   def any(self):
     return self.wrap(esi.AnyType.get())
+
+  @property
+  def none(self):
+    return self.wrap(NoneType())
 
   def wrap(self, type, name=None):
     if name is not None:
@@ -167,6 +171,8 @@ def Type(type: Union[mlir.ir.Type, PyCDEType]):
       return BitVectorType(type)
   if isinstance(type, esi.ChannelType):
     return ChannelType(type)
+  if isinstance(type, mlir.ir.NoneType):
+    return NoneType()
   return PyCDEType(type)
 
 
@@ -311,13 +317,28 @@ class ChannelType(PyCDEType):
   def __str__(self):
     return f"channel<{self.inner_type}>"
 
-  def wrap(self, value, valid):
+  def wrap(self, value, valid) -> Tuple[ChannelValue, BitVectorValue]:
     from .support import _obj_to_value
     value = _obj_to_value(value, self._type.inner)
     valid = _obj_to_value(valid, types.i1)
     wrap_op = esi.WrapValidReadyOp(self._type, types.i1, value.value,
                                    valid.value)
     return Value(wrap_op.chanOutput), BitVectorValue(wrap_op.ready, types.i1)
+
+
+class NoneType(PyCDEType):
+
+  def __init__(self):
+    super().__init__(mlir.ir.NoneType.get())
+
+  def __str__(self):
+    return "None"
+
+  def __call__(self, name: str = None):
+    v = Value(esi.NoneSourceOp(self._type), self._type)
+    if name is not None:
+      v.name = name
+    return v
 
 
 def dim(inner_type_or_bitwidth, *size: int, name: str = None) -> ArrayType:

@@ -76,13 +76,11 @@ class OpOperandConnect(support.OpOperand):
 
 def _obj_to_value(x, type, result_type=None):
   """Convert a python object to a CIRCT value, given the CIRCT type."""
-  if x is None:
-    raise ValueError(
-        "Encountered 'None' when trying to build hardware for python value.")
+
   from .value import PyCDEValue
   from .dialects import hw
   from .pycde_types import (TypeAliasType, ArrayType, StructType, BitVectorType,
-                            Type)
+                            NoneType, Type)
 
   if isinstance(x, PyCDEValue):
     return x
@@ -90,6 +88,12 @@ def _obj_to_value(x, type, result_type=None):
   type = Type(type)
   if isinstance(type, TypeAliasType):
     return _obj_to_value(x, type.inner_type, type)
+
+  if x is None:
+    if isinstance(type, NoneType):
+      return NoneType()()
+    raise ValueError(
+        "Encountered 'None' when trying to build hardware for python value.")
 
   if result_type is None:
     result_type = type
@@ -152,6 +156,8 @@ def _infer_type(x):
     if not all([i == list_type for i in list_types]):
       raise ValueError("CIRCT array must be homogenous, unlike object")
     return types.array(list_type, len(x))
+  if x is None:
+    return types.none
   if isinstance(x, int):
     raise ValueError(f"Cannot infer width of {x}")
   if isinstance(x, dict):
