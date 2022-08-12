@@ -2042,12 +2042,14 @@ static LogicalResult checkRefTypeFlow(Operation *connect) {
               "connections only";
       return diag;
     }
-    if ((src.getType().isa<RefType>() && !src.hasOneUse()) ||
-        (dst.getType().isa<RefType>() && !dst.hasOneUse())) {
-      auto diag = emitError(connect->getLoc());
-      diag << "connect operands of ref type cannot be reused";
-      return diag;
-    }
+    // RefType supports multiple readers. That is, there can be multiple
+    // RefResolveOps remotely connected to a single RefSendOp.
+    // But multiple RefSendOps should not be remotely connected to a single
+    // RefResolveOp.
+    if (!dst.hasOneUse())
+      return emitError(connect->getLoc())
+             << "output reference port cannot be reused by multiple operations"
+             << ", it can only capture a unique dataflow";
   }
   return success();
 }

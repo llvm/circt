@@ -215,4 +215,3 @@ def ProbeOp : FIRRTLOp<"probe"> {
 
   let assemblyFormat = "$inner_sym attr-dict ( `,` $captured^  `:` qualified(type($captured)))?";
 }
-

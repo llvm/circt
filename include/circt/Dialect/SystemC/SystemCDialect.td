@@ -30,7 +30,6 @@ def SystemCDialect : Dialect {
     void registerTypes();
   }];
 
-  let useDefaultAttributePrinterParser = 1;
   let useDefaultTypePrinterParser = 1;
 
   let emitAccessorPrefix = kEmitAccessorPrefix_Prefixed;

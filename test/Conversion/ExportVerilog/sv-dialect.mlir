@@ -17,24 +17,26 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
   // CHECK: localparam [41:0]{{ *}} param_y = param1;
   %param_y = sv.localparam : i42 { value = #hw.param.decl.ref<"param1">: i42 }
 
-  // CHECK:       logic{{ *}} [7:0]{{ *}} logic_op;
-  // CHECK-NEXT:  struct packed {logic b; } logic_op_struct;
-  // CHECK: assign logic_op = val;
+  // OLD:        logic{{ *}} [7:0]{{ *}} logic_op;
+  // NEW:        logic{{ *}} [7:0]{{ *}} logic_op = val;
+  // CHECK-NEXT: struct packed {logic b; } logic_op_struct;
+  // OLD:        assign logic_op = val;
   %logic_op = sv.logic : !hw.inout<i8>
   %logic_op_struct = sv.logic : !hw.inout<struct<b: i1>>
   sv.assign %logic_op, %val: i8
 
   // CHECK:      always @(posedge clock) begin
   sv.always posedge %clock {
-    // CHECK-NEXT: automatic logic [7:0]                     logic_op_procedural;
+    // OLD: automatic logic [7:0]                     logic_op_procedural;
+    // NEW: automatic logic [7:0]                     logic_op_procedural = val;
     // CHECK-NEXT: automatic       struct packed {logic b; } logic_op_struct_procedural
 
     // CHECK: force forceWire = cond;
+    // OLD: logic_op_procedural = val;
     sv.force %forceWire, %cond : i1
     %logic_op_procedural = sv.logic : !hw.inout<i8>
     %logic_op_struct_procedural = sv.logic : !hw.inout<struct<b: i1>>
 
-    // CHECK-NEXT: logic_op_procedural = val;
     sv.bpassign %logic_op_procedural, %val: i8
   // CHECK-NEXT:   `ifndef SYNTHESIS
     sv.ifdef.procedural "SYNTHESIS" {
@@ -753,15 +755,13 @@ hw.module @issue720(%clock: i1, %arg1: i1, %arg2: i1, %arg3: i1) {
   // CHECK: always @(posedge clock) begin
   sv.always posedge %clock  {
     // OLD:   automatic logic _GEN = arg1 & arg2;
-    // NEW:   automatic logic _GEN;
+    // NEW:   automatic logic _GEN = arg1 & arg2;
 
     // CHECK:   if (arg1)
     // CHECK:     $fatal;
     sv.if %arg1  {
       sv.fatal 1
     }
-
-    // NEW: _GEN = arg1 & arg2;
 
     // CHECK:   if (_GEN)
     // CHECK:     $fatal;
@@ -904,10 +904,11 @@ hw.module @inlineProceduralWiresWithLongNames(%clock: i1, %in: i1) {
 // https://github.com/llvm/circt/issues/859
 // CHECK-LABEL: module oooReg(
 hw.module @oooReg(%in: i1) -> (result: i1) {
-  // CHECK: wire abc;
+  // OLD: wire abc;
+  // NEW: wire abc = in;
   %0 = sv.read_inout %abc : !hw.inout<i1>
 
-  // CHECK: assign abc = in;
+  // OLD: assign abc = in;
   sv.assign %abc, %in : i1
   %abc = sv.wire  : !hw.inout<i1>
 
@@ -1084,12 +1085,8 @@ hw.module @DontDuplicateSideEffectingVerbatim() {
   %b = sv.reg sym @regSym : !hw.inout<i42>
 
   sv.initial {
-    // OLD: automatic logic [41:0] _SIDEEFFECT = SIDEEFFECT;
-    // OLD-NEXT: automatic logic [41:0] _GEN = b;
-    // NEW: automatic logic [41:0] _SIDEEFFECT;
-    // NEW: automatic logic [41:0] _GEN;
-    // NEW-NEXT: _SIDEEFFECT = SIDEEFFECT;
-    // NEW-NEXT: _GEN = b;
+    // CHECK: automatic logic [41:0] _SIDEEFFECT = SIDEEFFECT;
+    // CHECK-NEXT: automatic logic [41:0] _GEN = b;
     %tmp = sv.verbatim.expr.se "SIDEEFFECT" : () -> i42
     %verb_tmp = sv.verbatim.expr.se "{{0}}" : () -> i42 {symbols = [#hw.innerNameRef<@DontDuplicateSideEffectingVerbatim::@regSym>]}
     // CHECK: a = _SIDEEFFECT;
@@ -1150,17 +1147,12 @@ hw.module @InlineAutomaticLogicInit(%a : i42, %b: i42, %really_really_long_port:
   %regValue = sv.reg : !hw.inout<i42>
   // CHECK: initial begin
   sv.initial {
-    // OLD: automatic logic [63:0] [[_THING:.+]] = `THING;
-    // OLD: automatic logic [41:0] [[GEN_0:.+]] = 42'(a + a);
-    // OLD: automatic logic [41:0] [[GEN_1:.+]] = 42'(_GEN + b);
-    // OLD: automatic logic [41:0] [[GEN_2:.+]];
-    // NEW: automatic logic [41:0] [[GEN_2:.+]];
-    // NEW: automatic logic [63:0] _THING;
-    // NEW: automatic logic [41:0] [[GEN_0:.+]];
-    // NEW: automatic logic [41:0] [[GEN_1:.+]];
+    // CHECK-DAG: automatic logic [63:0] [[_THING:.+]] = `THING;
+    // CHECK-DAG: automatic logic [41:0] [[GEN_0:.+]] = 42'(a + a);
+    // CHECK-DAG: automatic logic [41:0] [[GEN_1:.+]] = 42'([[GEN_0]] + b);
+    // CHECK-DAG: automatic logic [41:0] [[GEN_2:.+]];
     %thing = sv.verbatim.expr "`THING" : () -> i64
 
-    // NEW: _THING = `THING;
     // CHECK: regValue = _THING[44:3];
     %v = comb.extract %thing from 3 : (i64) -> i42
     sv.bpassign %regValue, %v : i42
@@ -1330,20 +1322,22 @@ hw.module @remoteInstDut(%i: i1, %j: i1, %z: i0) -> () {
   hw.instance "a2" sym @bindInst2 @extInst(_h: %mywire_rd: i1, _i: %myreg_rd: i1, _j: %j: i1, _k: %0: i1, _z: %z: i0) -> () {doNotPrint=1}
   hw.instance "signed" sym @bindInst3 @extInst2(signed: %mywire_rd1 : i1, _i: %myreg_rd1 : i1, _j: %j: i1, _k: %0: i1, _z: %z: i0) -> () {doNotPrint=1}
 // CHECK: wire _signed__k
-// CHECK-NEXT: wire _a2__k
-// CHECK-NEXT: wire _a1__k
+// OLD-NEXT: wire _a2__k
+// OLD-NEXT: wire _a1__k
+// NEW-NEXT: wire _a2__k = 1'h1;
+// NEW-NEXT: wire _a1__k = 1'h1;
 // CHECK-NEXT: wire mywire
 // CHECK-NEXT: myreg
 // CHECK-NEXT: wire signed_0
 // CHECK-NEXT: reg  output_1
-// CHECK: assign _a1__k = 1'h1
+// OLD:        assign _a1__k = 1'h1
 // CHECK-NEXT: /* This instance is elsewhere emitted as a bind statement
 // CHECK-NEXT:    extInst a1
-// CHECK: assign _a2__k = 1'h1
-// CHECK-NEXT: /* This instance is elsewhere emitted as a bind statement
+// OLD: assign _a2__k = 1'h1
+// CHECK: /* This instance is elsewhere emitted as a bind statement
 // CHECK-NEXT:    extInst a2
-// CHECK:  assign _signed__k = 1'h1
-// CHECK-NEXT:  /* This instance is elsewhere emitted as a bind statement
+// OLD:  assign _signed__k = 1'h1
+// CHECK:      /* This instance is elsewhere emitted as a bind statement
 // CHECK-NEXT:    extInst2 signed_2
 // CHECK-NEXT:    .signed_0 (signed_0)
 }

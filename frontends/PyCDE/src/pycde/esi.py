@@ -9,10 +9,18 @@ from pycde.pycde_types import ChannelType, ClockType, PyCDEType, types
 
 import mlir.ir as ir
 
-from typing import List, Tuple, Type
+from typing import List, Optional, Type
 
 ToServer = InputChannel
 FromServer = OutputChannel
+
+
+class ToFromServer:
+  """A bidirectional channel declaration."""
+
+  def __init__(self, to_server_type: Type, to_client_type: Type):
+    self.to_server_type = raw_esi.ChannelType.get(to_server_type)
+    self.to_client_type = raw_esi.ChannelType.get(to_client_type)
 
 
 class ServiceDecl(_PyProxy):
@@ -20,13 +28,18 @@ class ServiceDecl(_PyProxy):
 
   def __init__(self, cls: Type):
     self.name = cls.__name__
-    for (attr_name, attr) in cls.__dict__.items():
+    for (attr_name, attr) in vars(cls).items():
       if isinstance(attr, InputChannel):
-        setattr(self, attr_name, _RequestToServerConn(self, attr.type,
-                                                      attr_name))
+        setattr(self, attr_name,
+                _RequestToServerConn(self, attr.type, None, attr_name))
       elif isinstance(attr, OutputChannel):
-        setattr(self, attr_name, _RequestToClientConn(self, attr.type,
-                                                      attr_name))
+        setattr(self, attr_name,
+                _RequestToClientConn(self, None, attr.type, attr_name))
+      elif isinstance(attr, ToFromServer):
+        setattr(
+            self, attr_name,
+            _RequestToFromServerConn(self, attr.to_server_type,
+                                     attr.to_client_type, attr_name))
       elif isinstance(attr, (Input, Output)):
         raise TypeError(
             "Input and Output are not allowed in ESI service declarations. " +
@@ -50,9 +63,14 @@ class ServiceDecl(_PyProxy):
       with ir.InsertionPoint.at_block_begin(ports_block):
         for (_, attr) in self.__dict__.items():
           if isinstance(attr, _RequestToServerConn):
-            raw_esi.ToServerOp(attr._name, ir.TypeAttr.get(attr.type))
+            raw_esi.ToServerOp(attr._name, ir.TypeAttr.get(attr.to_server_type))
           elif isinstance(attr, _RequestToClientConn):
-            raw_esi.ToClientOp(attr._name, ir.TypeAttr.get(attr.type))
+            raw_esi.ToClientOp(attr._name, ir.TypeAttr.get(attr.to_client_type))
+          elif isinstance(attr, _RequestToFromServerConn):
+            raw_esi.ServiceDeclInOutOp(attr._name,
+                                       ir.TypeAttr.get(attr.to_server_type),
+                                       ir.TypeAttr.get(attr.to_client_type))
+      self.symbol = ir.StringAttr.get(sym_name)
     return sym_name
 
 
@@ -61,37 +79,62 @@ class _RequestConnection:
   ServiceDecl class. Provides syntactic sugar for constructing service
   connection requests."""
 
-  def __init__(self, decl: ServiceDecl, type: PyCDEType, attr_name: str):
+  def __init__(self, decl: ServiceDecl, to_server_type: Optional[PyCDEType],
+               to_client_type: Optional[PyCDEType], attr_name: str):
     self.decl = decl
     self._name = ir.StringAttr.get(attr_name)
-    self.type = type
+    self.to_server_type = to_server_type
+    self.to_client_type = to_client_type
+
+  @property
+  def service_port(self) -> hw.InnerRefAttr:
+    return hw.InnerRefAttr.get(self.decl.symbol, self._name)
 
 
 class _RequestToServerConn(_RequestConnection):
 
-  def __call__(self, chan: ChannelValue, chan_name: str):
-    decl_sym = self.decl._materialize_service_decl()
+  def __call__(self, chan_name: str, chan: ChannelValue):
+    self.decl._materialize_service_decl()
     raw_esi.RequestToServerConnectionOp(
-        hw.InnerRefAttr.get(ir.StringAttr.get(decl_sym), self._name),
-        chan.value, ir.ArrayAttr.get([ir.StringAttr.get(chan_name)]))
+        self.service_port, chan.value,
+        ir.ArrayAttr.get([ir.StringAttr.get(chan_name)]))
 
 
 class _RequestToClientConn(_RequestConnection):
 
-  def __call__(self, type: PyCDEType, chan_name: str):
-    decl_sym = self.decl._materialize_service_decl()
+  def __call__(self, chan_name: str, type: Optional[PyCDEType] = None):
+    self.decl._materialize_service_decl()
+    if type is None:
+      type = self.to_client_type
+      if type == types.any:
+        raise ValueError(
+            "If service port has type 'any', then 'type' must be specified.")
     if not isinstance(type, ChannelType):
       type = types.channel(type)
     req_op = raw_esi.RequestToClientConnectionOp(
-        type, hw.InnerRefAttr.get(ir.StringAttr.get(decl_sym), self._name),
+        type, self.service_port,
         ir.ArrayAttr.get([ir.StringAttr.get(chan_name)]))
     return ChannelValue(req_op)
 
 
-@ServiceDecl
-class HostComms:
-  to_host = ToServer(types.any)
-  from_host = FromServer(types.any)
+class _RequestToFromServerConn(_RequestConnection):
+
+  def __call__(self,
+               chan_name: str,
+               to_server_channel: ChannelValue,
+               to_client_type: Optional[PyCDEType] = None):
+    self.decl._materialize_service_decl()
+    if to_client_type is None:
+      type = self.to_client_type
+      if type == types.any:
+        raise ValueError(
+            "If service port has type 'any', then 'type' must be specified.")
+    if not isinstance(type, ChannelType):
+      type = types.channel(type)
+    to_client = raw_esi.RequestInOutChannelOp(
+        self.to_client_type, self.service_port, to_server_channel.value,
+        ir.ArrayAttr.get([ir.StringAttr.get(chan_name)]))
+    return ChannelValue(to_client)
 
 
 def Cosim(decl: ServiceDecl, clk, rst):
