@@ -20,8 +20,8 @@ class LoopbackTester(esi_cosim.CosimBase):
     ep.close().wait()
 
   def test_two_chan_loopback(self, num_msgs):
-    to_hw = self.openEP(11, sendType=self.schema.I1, recvType=self.schema.I8)
-    from_hw = self.openEP(12, sendType=self.schema.I8, recvType=self.schema.I1)
+    to_hw = self.openEP(12, sendType=self.schema.I1, recvType=self.schema.I8)
+    from_hw = self.openEP(11, sendType=self.schema.I8, recvType=self.schema.I1)
     for _ in range(num_msgs):
       data = random.randint(0, 2**8 - 1)
       print(f"Sending {data}")

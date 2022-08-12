@@ -7,6 +7,7 @@
 esi.service.decl @HostComms {
   esi.service.to_server @Send : !esi.channel<!esi.any>
   esi.service.to_client @Recv : !esi.channel<i8>
+  esi.service.inout @ReqResp : !esi.channel<i8> -> !esi.channel<i16>
 }
 
 // CHECK-LABEL: hw.module @Top(%clk: i1, %rst: i1) {
@@ -14,9 +15,9 @@ esi.service.decl @HostComms {
 // CHECK:         hw.instance "m1" @Loopback(clk: %clk: i1) -> ()
 
 // CONN-LABEL: hw.module @Top(%clk: i1, %rst: i1) {
+// CONN:         [[R2:%.+]] = esi.cosim %clk, %rst, %m1.loopback_fromhw, 21 {name = "m1.loopback_fromhw"} : !esi.channel<i8> -> !esi.channel<i1>
 // CONN:         [[R0:%.+]] = esi.null : !esi.channel<i1>
-// CONN:         [[R1:%.+]] = esi.cosim %clk, %rst, [[R0]], 21 {name = "m1.loopback_tohw"} : !esi.channel<i1> -> !esi.channel<i8>
-// CONN:         [[R2:%.+]] = esi.cosim %clk, %rst, %m1.loopback_fromhw, 22 {name = "m1.loopback_fromhw"} : !esi.channel<i8> -> !esi.channel<i1>
+// CONN:         [[R1:%.+]] = esi.cosim %clk, %rst, [[R0]], 22 {name = "m1.loopback_tohw"} : !esi.channel<i1> -> !esi.channel<i8>
 // CONN:         %m1.loopback_fromhw = hw.instance "m1" @Loopback(clk: %clk: i1, loopback_tohw: [[R1]]: !esi.channel<i8>) -> (loopback_fromhw: !esi.channel<i8>)
 hw.module @Top (%clk: i1, %rst: i1) {
   esi.service.instance @HostComms impl as  "cosim" opts {EpID_start = 20} (%clk, %rst) : (i1, i1) -> ()
@@ -106,5 +107,43 @@ msft.module @MsTop {} (%clk: i1) -> (chksum: i8) {
 msft.module @MsLoopback {} (%clk: i1) -> () {
   %dataIn = esi.service.req.to_client <@HostComms::@Recv> (["loopback_tohw"]) : !esi.channel<i8>
   esi.service.req.to_server %dataIn -> <@HostComms::@Send> (["loopback_fromhw"]) : !esi.channel<i8>
+  msft.output
+}
+
+
+
+// CONN-LABEL: msft.module @InOutTop {} (%clk: i1) -> (chksum: i8) {
+// CONN:          %0:2 = esi.service.impl_req @HostComms impl as "topComms"(%clk, %m1.loopback_inout) : (i1, !esi.channel<i8>) -> (i8, !esi.channel<i16>) {
+// CONN:          ^bb0(%arg0: !esi.channel<i8>):
+// CONN:            %1 = esi.service.req.to_client <@HostComms::@ReqResp>(["m1", "loopback_inout"]) : !esi.channel<i16>
+// CONN:            esi.service.req.to_server %arg0 -> <@HostComms::@ReqResp>(["m1", "loopback_inout"]) : !esi.channel<i8>
+// CONN:          }
+// CONN:          %m1.loopback_inout = msft.instance @m1 @InOutLoopback(%clk, %0#1)  : (i1, !esi.channel<i16>) -> !esi.channel<i8>
+// CONN:          msft.output %0#0 : i8
+msft.module @InOutTop {} (%clk: i1) -> (chksum: i8) {
+  %c = esi.service.instance @HostComms impl as  "topComms" (%clk) : (i1) -> (i8)
+  msft.instance @m1 @InOutLoopback (%clk) : (i1) -> ()
+  msft.output %c : i8
+}
+
+// CONN-LABEL: msft.module @InOutLoopback {} (%clk: i1, %loopback_inout: !esi.channel<i16>) -> (loopback_inout: !esi.channel<i8>) {
+// CONN:          %rawOutput, %valid = esi.unwrap.vr %loopback_inout, %ready : i16
+// CONN:          %0 = comb.extract %rawOutput from 0 : (i16) -> i8
+// CONN:          %chanOutput, %ready = esi.wrap.vr %0, %valid : i8
+// CONN:          msft.output %chanOutput : !esi.channel<i8>
+msft.module @InOutLoopback {} (%clk: i1) -> () {
+  %dataIn = esi.service.req.inout %dataTrunc -> <@HostComms::@ReqResp> (["loopback_inout"]) : !esi.channel<i8> -> !esi.channel<i16>
+  %unwrap, %valid = esi.unwrap.vr %dataIn, %rdy: i16
+  %trunc = comb.extract %unwrap from 0 : (i16) -> (i8)
+  %dataTrunc, %rdy = esi.wrap.vr %trunc, %valid : i8
+  msft.output
+}
+
+// CONN-LABEL: msft.module @LoopbackCosimTop {} (%clk: i1, %rst: i1) {
+// CONN:         [[R1:%.+]] = esi.cosim %clk, %rst, %m1.loopback_inout, 21 {name = "m1.loopback_inout"} : !esi.channel<i8> -> !esi.channel<i16>
+// CONN:         %m1.loopback_inout = msft.instance @m1 @InOutLoopback(%clk, %0)  : (i1, !esi.channel<i16>) -> !esi.channel<i8>
+msft.module @LoopbackCosimTop {} (%clk: i1, %rst: i1) {
+  esi.service.instance @HostComms impl as "cosim" opts {EpID_start = 20} (%clk, %rst) : (i1, i1) -> ()
+  msft.instance @m1 @InOutLoopback(%clk) : (i1) -> ()
   msft.output
 }
