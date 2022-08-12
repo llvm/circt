@@ -6,8 +6,8 @@ from pycde import (Output, Input, module, generator, types, dim, System)
 @module
 class WireNames:
   clk = Input(types.i1)
-  sel = Input(types.i2)
   data_in = Input(dim(32, 3))
+  sel = Input(types.i2)
 
   a = Output(types.i32)
   b = Output(types.i32)

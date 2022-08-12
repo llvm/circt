@@ -13,8 +13,8 @@ from pycde.testing import unittestmodule
 
 @unittestmodule()
 class WireAndRegTest:
-  clk = Clock()
   In = Input(types.i8)
+  clk = Clock()
   Out = Output(types.i8)
   OutReg = Output(types.i8)
 
@@ -41,8 +41,8 @@ class WireAndRegTest:
 @unittestmodule(print=True, run_passes=True, print_after_passes=True)
 class SystolicArrayTest:
   clk = Input(types.i1)
-  row_data = Input(dim(8, 3))
   col_data = Input(dim(8, 2))
+  row_data = Input(dim(8, 3))
   out = Output(dim(8, 2, 3))
 
   @generator
