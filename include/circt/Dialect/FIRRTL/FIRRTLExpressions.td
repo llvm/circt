@@ -709,7 +709,7 @@ class RefInstancePortConstraint
 // RefOps
 //===----------------------------------------------------------------------===//
 
-def RefResolveOp: FIRRTLOp<"ref.resolve", [RefTypeConstraint<"ref","result">,
+def RefResolveOp: FIRRTLExprOp<"ref.resolve", [RefTypeConstraint<"ref","result">,
                                     RefInstancePortConstraint<>]> {
   let summary = "FIRRTL Resolve a Reference";
   let description = [{
@@ -724,7 +724,7 @@ def RefResolveOp: FIRRTLOp<"ref.resolve", [RefTypeConstraint<"ref","result">,
   let assemblyFormat = "$ref attr-dict `:` qualified(type($ref))";
 }
 
-def RefSendOp: FIRRTLOp<"ref.send", [RefResultTypeConstraint<"base", "result">]> {
+def RefSendOp: FIRRTLExprOp<"ref.send", [RefResultTypeConstraint<"base", "result">]> {
   let summary = "FIRRTL Send through Reference";
   let description = [{
     Endpoint of a remote reference. Send a value through a reference
