@@ -93,6 +93,10 @@ def type_to_pytype(t) -> ir.Type:
   except ValueError:
     pass
   try:
+    return ir.NoneType(t)
+  except ValueError:
+    pass
+  try:
     return hw.ArrayType(t)
   except ValueError:
     pass
