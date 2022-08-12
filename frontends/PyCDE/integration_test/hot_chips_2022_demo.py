@@ -4,7 +4,7 @@ from mlir.ir import Module, NoneType
 
 from circt.dialects import hw
 
-from pycde import Input, InputChannel, Output, OutputChannel, module, generator, types
+from pycde import Input, InputChannel, Output, OutputChannel, esi, module, generator, types
 from pycde.system import System
 from pycde.module import import_hw_module
 
@@ -113,7 +113,25 @@ class HandshakeToESIWrapper:
     wrapped_top.out0_ready.connect(out0_ready)
     ports.out0 = out0_channel
 
-system = System([HandshakeToESIWrapper])
+
+@esi.ServiceDecl
+class Memory:
+  port0 = esi.ToFromServer(to_server_type=types.i64, to_client_type=types.i32)
+
+
+@module
+class ServiceWrapper:
+
+  @generator
+  def generate(ports):
+    wrapped_top = HandshakeToESIWrapper()
+
+    port0_data = Memory.port0("port0", wrapped_top.in0_ld_addr0)
+    wrapped_top.in0_ld_data0.connect(port0_data)
+
+    import pdb; pdb.set_trace()
+
+system = System([ServiceWrapper])
 system.import_modules(imported_modules)
 system.generate()
 system.emit_outputs()
