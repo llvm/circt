@@ -313,7 +313,10 @@ class ChannelType(PyCDEType):
 
   def wrap(self, value, valid):
     from .support import _obj_to_value
-    value = _obj_to_value(value, self._type.inner)
+    if value is None:
+      value = RegularValue(esi.NoneSourceOp(mlir.ir.NoneType.get()).result)
+    else:
+      value = _obj_to_value(value, self._type.inner)
     valid = _obj_to_value(valid, types.i1)
     wrap_op = esi.WrapValidReadyOp(self._type, types.i1, value.value,
                                    valid.value)

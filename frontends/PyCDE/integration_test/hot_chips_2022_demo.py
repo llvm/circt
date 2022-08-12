@@ -60,13 +60,60 @@ class HandshakeToESIWrapper:
 
   @generator
   def generate(ports):
+    none_channel = types.channel(NoneType.get())
+    i32_channel = types.channel(types.i32)
+    i64_channel = types.channel(types.i64)
+
+    # Instantiate the top-level module to wrap with backedges for most ports.
     wrapped_top = top(clock=ports.clock, reset=ports.reset)
 
+    # Control Ports
+
+    ## Go signal
     _, in_ctrl_valid = ports.in_ctrl.unwrap(wrapped_top.inCtrl_ready)
     wrapped_top.inCtrl_valid.connect(in_ctrl_valid)
 
+    ## Done signal
+    out_ctrl_channel, out_ctrl_ready = none_channel.wrap(None, wrapped_top.outCtrl_valid)
+    wrapped_top.outCtrl_ready.connect(out_ctrl_ready)
+    ports.out_ctrl = out_ctrl_channel
+
+    # Input 0 Ports
+
+    ## Channels from Memory
+    in0_ld_data0_data, in0_ld_data0_valid = ports.in0_ld_data0.unwrap(wrapped_top.in0_ldData0_ready)
+    wrapped_top.in0_ldData0_data.connect(in0_ld_data0_data)
+    wrapped_top.in0_ldData0_valid.connect(in0_ld_data0_valid)
+
+    _, in0_ld_done0_valid = ports.in0_ld_done0.unwrap(wrapped_top.in0_ldDone0_ready)
+    wrapped_top.in0_ldDone0_valid.connect(in0_ld_done0_valid)
+
+    ## Channels to Memory
+    in0_ld_addr0_channel, in0_ld_addr0_ready = i64_channel.wrap(wrapped_top.in0_ldAddr0_data, wrapped_top.in0_ldAddr0_valid)
+    wrapped_top.in0_ldAddr0_ready.connect(in0_ld_addr0_ready)
+    ports.in0_ld_addr0 = in0_ld_addr0_channel
+
+    # Input 1 Ports
+
+    ## Channels from Memory
+    in1_ld_data0_data, in1_ld_data0_valid = ports.in1_ld_data0.unwrap(wrapped_top.in1_ldData0_ready)
+    wrapped_top.in1_ldData0_data.connect(in1_ld_data0_data)
+    wrapped_top.in1_ldData0_valid.connect(in1_ld_data0_valid)
+
+    _, in1_ld_done0_valid = ports.in1_ld_done0.unwrap(wrapped_top.in1_ldDone0_ready)
+    wrapped_top.in1_ldDone0_valid.connect(in1_ld_done0_valid)
+
+    ## Channels to Memory
+    in1_ld_addr0_channel, in1_ld_addr0_ready = i64_channel.wrap(wrapped_top.in1_ldAddr0_data, wrapped_top.in1_ldAddr0_valid)
+    wrapped_top.in1_ldAddr0_ready.connect(in1_ld_addr0_ready)
+    ports.in1_ld_addr0 = in1_ld_addr0_channel
+
+    # Output 0 Ports
+    out0_channel, out0_ready = i32_channel.wrap(wrapped_top.out0_data, wrapped_top.out0_valid)
+    wrapped_top.out0_ready.connect(out0_ready)
+    ports.out0 = out0_channel
 
 system = System([HandshakeToESIWrapper])
 system.import_modules(imported_modules)
 system.generate()
-# system.print()
+system.emit_outputs()
