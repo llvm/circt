@@ -662,3 +662,77 @@ def BitCastOp: FIRRTLOp<"bitcast", [NoSideEffect]> {
 
   let assemblyFormat = "$input attr-dict `:` functional-type($input, $result)";
 }
+
+//===----------------------------------------------------------------------===//
+// RefOperations: Operations on the RefType.
+//
+// The RefType is used to capture dataflow paths.
+// The operations on RefType support capturing the dataflow to/from SSA values.
+// The following ops are supported on the RefType:
+//
+//	- RefSendOp
+//	  - Takes as input a `BaseType` and returns a `RefType`
+//	  - Used to send a read-only Reference handle of a local value.
+//	  - Represents the source of a dataflow by getting it's reference.
+//	- RefResolveOp
+//	  - Takes as input a `RefType` and returns a `BaseType`
+//	  - Represents the sink of a dataflow from the reference handle
+//	  - The `RefType` is constrained to express a "single source to
+//		one-or-more sink" dataflow
+//	  - Hence, multiple `RefResolveOp`s can be remotely connected to a single
+//		`RefSendOp`.
+//	  - If the Reference ops are lowered to cross-module-reference, then it
+//		represents the location of the XMR.
+//===----------------------------------------------------------------------===//
+
+//===----------------------------------------------------------------------===//
+// Constraints on RefOps
+//===----------------------------------------------------------------------===//
+
+class RefTypeConstraint<string ref, string base>
+  : TypesMatchWith<"reference base type should match",
+                   ref, base,
+                   "$_self.cast<RefType>().getType()">;
+
+class RefResultTypeConstraint<string base, string ref>
+  : TypesMatchWith<"reference base type should match",
+                   base, ref,
+                   "RefType::get($_self.cast<FIRRTLBaseType>())">;
+
+class RefInstancePortConstraint
+  : PredOpTrait<"it cannot have module port as an operand because it implies"
+  " upward reference XMR, which are not supported."
+  " The reference operand must be a port from firrtl.instance",
+                CPred<"!($ref.isa<BlockArgument>())">>;
+
+//===----------------------------------------------------------------------===//
+// RefOps
+//===----------------------------------------------------------------------===//
+
+def RefResolveOp: FIRRTLOp<"ref.resolve", [RefTypeConstraint<"ref","result">,
+                                    RefInstancePortConstraint<>]> {
+  let summary = "FIRRTL Resolve a Reference";
+  let description = [{
+    Resolve a remote reference for reading a remote value.
+    It takes a RefType input and returns the corresponding BaseType value.
+    If an XMR is emitted for this reference, it will be at the location
+    of this operation.
+  }];
+  let arguments = (ins RefType:$ref);
+  let results = (outs FIRRTLBaseType:$result);
+
+  let assemblyFormat = "$ref attr-dict `:` qualified(type($ref))";
+}
+
+def RefSendOp: FIRRTLOp<"ref.send", [RefResultTypeConstraint<"base", "result">]> {
+  let summary = "FIRRTL Send through Reference";
+  let description = [{
+    Endpoint of a remote reference. Send a value through a reference
+    to be read from the firrtl.ref.resolve op.
+    It takes a BaseType input and returns the corresponding RefType value.
+  }];
+  let arguments = (ins FIRRTLBaseType:$base);
+  let results = (outs RefType:$result);
+
+  let assemblyFormat = "$base attr-dict `:` qualified(type($base))";
+}
