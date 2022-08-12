@@ -1137,8 +1137,7 @@ LogicalResult BitsPrimOp::canonicalize(BitsPrimOp op,
                                                  op.getHi() - lhsLo, 0);
       auto bitsRhs = rewriter.create<BitsPrimOp>(op->getLoc(), cat.getRhs(),
                                                  rhsHi, op.getLo());
-      replaceOpWithNewOpAndCopyName<CatPrimOp>(rewriter, op, bitsLhs,
-                                               bitsRhs);
+      replaceOpWithNewOpAndCopyName<CatPrimOp>(rewriter, op, bitsLhs, bitsRhs);
     }
     return success();
   }

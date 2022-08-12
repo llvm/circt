@@ -132,10 +132,10 @@ public:
       Value newOp;
       if (op.getLo() >= lhsLo) {
         // Only indexing the lhs.
-        newOp = canonicalizeBits(
-            builder.create<BitsPrimOp>(cat.getLhs(), op.getHi() - lhsLo,
-                                       op.getLo() - lhsLo),
-            builder);
+        newOp = canonicalizeBits(builder.create<BitsPrimOp>(cat.getLhs(),
+                                                            op.getHi() - lhsLo,
+                                                            op.getLo() - lhsLo),
+                                 builder);
       } else if (op.getHi() <= rhsHi) {
         // Only indexing the rhs.
         newOp = canonicalizeBits(
