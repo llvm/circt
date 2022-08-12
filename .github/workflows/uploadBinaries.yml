@@ -9,7 +9,9 @@ jobs:
     strategy:
       matrix:
         compiler:
-          - mode: release
+          - cc: clang
+            cxx: clang++
+            mode: release
             assert: OFF
             shared: OFF
         runner: [ubuntu-20.04, ubuntu-18.04, macos-11]
@@ -18,20 +20,14 @@ jobs:
             os: linux
             cmake-args: ''
             tar: tar
-            cc: gcc
-            cxx: g++
           - runner: ubuntu-18.04
             os: linux
             cmake-args: ''
             tar: tar
-            cc: gcc
-            cxx: g++
           - runner: macos-11
             os: macos
             cmake-args: ''
             tar: gtar
-            cc: clang
-            cxx: clang++
     runs-on: ${{ matrix.runner }}
     steps:
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
@@ -62,7 +58,7 @@ jobs:
         with:
           path: |
             llvm/build
-          key: ${{ matrix.runner }}-llvm-${{ steps.get-llvm-hash.outputs.hash }}-${{ steps.get-workflow-hash.outputs.hash }}-${{ matrix.cc }}
+          key: ${{ matrix.runner }}-llvm-${{ steps.get-llvm-hash.outputs.hash }}-${{ steps.get-workflow-hash.outputs.hash }}-${{ matrix.compiler.cc }}
 
       - name: Setup Ninja Linux
         if: matrix.os == 'linux'
@@ -83,8 +79,8 @@ jobs:
           cmake -G Ninja ../llvm \
               ${{ matrix.cmake-args }} \
               -DCMAKE_BUILD_TYPE=${{ matrix.compiler.mode }} \
-              -DCMAKE_C_COMPILER=${{ matrix.cc }} \
-              -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} \
+              -DCMAKE_C_COMPILER=${{ matrix.compiler.cc }} \
+              -DCMAKE_CXX_COMPILER=${{ matrix.compiler.cxx }} \
               -DBUILD_SHARED_LIBS=${{ matrix.compiler.shared }} \
               -DLLVM_BUILD_EXAMPLES=OFF \
               -DLLVM_ENABLE_ASSERTIONS=${{ matrix.compiler.assert }} \
@@ -113,8 +109,8 @@ jobs:
             -DLLVM_ENABLE_ASSERTIONS=${{ matrix.compiler.assert }} \
             -DMLIR_DIR=`pwd`/../llvm/build/lib/cmake/mlir \
             -DLLVM_DIR=`pwd`/../llvm/build/lib/cmake/llvm \
-            -DCMAKE_C_COMPILER=${{ matrix.cc }} \
-            -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} \
+            -DCMAKE_C_COMPILER=${{ matrix.compiler.cc }} \
+            -DCMAKE_CXX_COMPILER=${{ matrix.compiler.cxx }} \
             -DVERILATOR_DISABLE=ON \
             -DLLVM_ENABLE_TERMINFO=OFF \
             -DLLVM_STATIC_LINK_CXX_STDLIB=ON \
