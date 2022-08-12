@@ -513,7 +513,7 @@ FIRToken FIRLexer::lexNumber(const char *tokStart) {
       ++curPtr;
   }
 
-  // If se encounter a '.' followed by a digit, again, and there was no
+  // If we encounter a '.' followed by a digit, again, and there was no
   // exponent, then this is a version literal.  Otherwise it is a floating point
   // literal.
   if (*curPtr != '.' || !llvm::isDigit(curPtr[1]) || hasE)
