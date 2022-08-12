@@ -153,6 +153,7 @@ class _SpecializedModule(_PyProxy):
   ]
 
   def __init__(self,
+               orig_cls: type,
                cls: type,
                parameters: Union[dict, mlir.ir.DictAttr],
                extern_name: str,
@@ -188,7 +189,7 @@ class _SpecializedModule(_PyProxy):
     self.output_ports = []
     self.generators = {}
     self.clock_ports: Dict[str, int] = {}
-    for attr_name in dir(cls):
+    for attr_name in vars(orig_cls):
       if attr_name.startswith("_"):
         continue
       attr = getattr(cls, attr_name)
@@ -489,7 +490,8 @@ def _module_base(cls,
   mod.__qualname__ = cls.__qualname__
   mod.__name__ = cls.__name__
   mod.__module__ = cls.__module__
-  mod._pycde_mod = _SpecializedModule(mod,
+  mod._pycde_mod = _SpecializedModule(cls,
+                                      mod,
                                       params,
                                       extern_name,
                                       create_cb=create_cb,

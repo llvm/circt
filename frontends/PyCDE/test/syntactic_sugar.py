@@ -76,8 +76,8 @@ class Top:
 @unittestmodule()
 class ComplexPorts:
   clk = Input(types.i1)
-  sel = Input(types.i2)
   data_in = Input(dim(32, 3))
+  sel = Input(types.i2)
   struct_data_in = Input(types.struct({"foo": types.i36}))
 
   a = Output(types.i32)

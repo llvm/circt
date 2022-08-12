@@ -30,7 +30,7 @@ def array_from_tuple(*input):
 # CHECK:         [[R10:%.+]] = comb.concat %c0_i2_3, %Sel : i2, i1
 # CHECK:         [[R11:%.+]] = comb.shru [[R9]], [[R10]] : i3
 # CHECK:         [[R12:%.+]] = comb.extract [[R11]] from 0 : (i3) -> i1
-# CHECK:         msft.output [[R3]], [[R6]], [[R12]], [[R7]] : !hw.array<4xi3>, !hw.array<2xarray<4xi3>>, i1, !hw.array<3xarray<4xi3>>
+# CHECK:         msft.output %3, %6, %12, %7 : !hw.array<4xi3>, !hw.array<2xarray<4xi3>>, i1, !hw.array<3xarray<4xi3>>
 
 
 @unittestmodule()
@@ -41,8 +41,8 @@ class ComplexMux:
   Sel = Input(dim(1))
   Out = Output(dim(3, 4))
   OutArr = Output(dim(3, 4, 2))
-  OutSlice = Output(dim(3, 4, 3))
   OutInt = Output(types.i1)
+  OutSlice = Output(dim(3, 4, 3))
 
   @generator
   def create(ports):
@@ -56,7 +56,7 @@ class ComplexMux:
 
 # -----
 
-# CHECK-LABEL:  msft.module @Slicing {} (%In: !hw.array<5xarray<4xi8>>, %Sel2: i2, %Sel8: i8) -> (OutArrSlice2: !hw.array<2xarray<4xi8>>, OutArrSlice8: !hw.array<2xarray<4xi8>>, OutIntSlice: i2)
+# CHECK-LABEL:  msft.module @Slicing {} (%In: !hw.array<5xarray<4xi8>>, %Sel8: i8, %Sel2: i2) -> (OutIntSlice: i2, OutArrSlice8: !hw.array<2xarray<4xi8>>, OutArrSlice2: !hw.array<2xarray<4xi8>>)
 # CHECK:          [[R0:%.+]] = hw.array_get %In[%c0_i3] {sv.namehint = "In__0"} : !hw.array<5xarray<4xi8>>
 # CHECK:          [[R1:%.+]] = hw.array_get %0[%c0_i2] {sv.namehint = "In__0__0"} : !hw.array<4xi8>
 # CHECK:          [[R2:%.+]] = comb.concat %c0_i6, %Sel2 : i6, i2
@@ -66,7 +66,7 @@ class ComplexMux:
 # CHECK:          [[R6:%.+]] = hw.array_slice %In[[[R5]]] : (!hw.array<5xarray<4xi8>>) -> !hw.array<2xarray<4xi8>>
 # CHECK:          [[R7:%.+]] = comb.extract %Sel8 from 0 : (i8) -> i3
 # CHECK:          [[R8:%.+]] = hw.array_slice %In[[[R7]]] : (!hw.array<5xarray<4xi8>>) -> !hw.array<2xarray<4xi8>>
-# CHECK:          msft.output [[R6]], [[R8]], [[R4]] : !hw.array<2xarray<4xi8>>, !hw.array<2xarray<4xi8>>, i2
+# CHECK:          msft.output %4, %8, %6 : i2, !hw.array<2xarray<4xi8>>, !hw.array<2xarray<4xi8>>
 
 
 @unittestmodule()
