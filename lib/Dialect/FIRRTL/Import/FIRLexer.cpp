@@ -226,7 +226,7 @@ FIRToken FIRLexer::lexTokenImpl() {
       if (curPtr - 1 == curBuffer.end())
         return formToken(FIRToken::eof, tokStart);
 
-      LLVM_FALLTHROUGH; // Treat as whitespace.
+      [[fallthrough]]; // Treat as whitespace.
 
     case ' ':
     case '\t':
@@ -325,7 +325,7 @@ FIRToken FIRLexer::lexFileInfo(const char *tokStart) {
       // emit an error.
       if (curPtr - 1 != curBuffer.end())
         break;
-      LLVM_FALLTHROUGH;
+      [[fallthrough]];
     case '\n': // Vertical whitespace isn't allowed in a fileinfo.
     case '\v':
     case '\f':
@@ -425,7 +425,7 @@ void FIRLexer::skipComment() {
         --curPtr;
         return;
       }
-      LLVM_FALLTHROUGH;
+      [[fallthrough]];
     default:
       // Skip over other characters.
       break;
@@ -458,7 +458,7 @@ FIRToken FIRLexer::lexString(const char *tokStart, bool isRaw) {
       // emit an error.
       if (curPtr - 1 != curBuffer.end())
         break;
-      LLVM_FALLTHROUGH;
+      [[fallthrough]];
     case '\n': // Vertical whitespace isn't allowed in a string.
     case '\r':
     case '\v':
@@ -477,6 +477,8 @@ FIRToken FIRLexer::lexString(const char *tokStart, bool isRaw) {
 ///   PosInt ::= [1-9] ([0-9])*
 ///   DoubleLit ::=
 ///       ( '+' | '-' )? Digit+ '.' Digit+ ( 'E' ( '+' | '-' )? Digit+ )?
+///   TripleLit ::=
+///       Digit+ '.' Digit+ '.' Digit+
 ///
 FIRToken FIRLexer::lexNumber(const char *tokStart) {
   assert(llvm::isDigit(curPtr[-1]) || curPtr[-1] == '+' || curPtr[-1] == '-');
@@ -501,12 +503,25 @@ FIRToken FIRLexer::lexNumber(const char *tokStart) {
   while (llvm::isDigit(*curPtr))
     ++curPtr;
 
+  bool hasE = false;
   if (*curPtr == 'E') {
+    hasE = true;
     ++curPtr;
     if (*curPtr == '+' || *curPtr == '-')
       ++curPtr;
     while (llvm::isDigit(*curPtr))
       ++curPtr;
   }
-  return formToken(FIRToken::floatingpoint, tokStart);
+
+  // If we encounter a '.' followed by a digit, again, and there was no
+  // exponent, then this is a version literal.  Otherwise it is a floating point
+  // literal.
+  if (*curPtr != '.' || !llvm::isDigit(curPtr[1]) || hasE)
+    return formToken(FIRToken::floatingpoint, tokStart);
+
+  // Lex a version literal.
+  curPtr += 2;
+  while (llvm::isDigit(*curPtr))
+    ++curPtr;
+  return formToken(FIRToken::version, tokStart);
 }

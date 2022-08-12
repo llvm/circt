@@ -9,6 +9,41 @@ circuit test :
 
 ;// -----
 
+FIRRTL
+; expected-error @+1 {{expected version after 'FIRRTL'}}
+circuit test :
+  module test :
+
+;// -----
+
+FIRRTL version
+; expected-error @+1 {{expected version literal}}
+circuit test :
+  module test :
+
+;// -----
+
+; expected-error @+1 {{expected version literal}}
+FIRRTL version 1
+circuit test :
+  module test :
+
+;// -----
+
+; expected-error @+1 {{expected version literal}}
+FIRRTL version 1.
+circuit test :
+  module test :
+
+;// -----
+
+; expected-error @+1 {{expected version literal}}
+FIRRTL version 1.a
+circuit test :
+  module test :
+
+;// -----
+
 circuit test test : ; expected-error {{expected ':' in circuit definition}}
 
 ;// -----

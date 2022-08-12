@@ -25,4 +25,28 @@ def FuncHandleType : SystemCType<
     "::circt::hw::TypeAliasOr<circt::systemc::FuncHandleType>">,
   BuildableType<"::circt::systemc::FuncHandleType::get($_builder.getContext())">;
 
+// A handle to refer to circt::systemc::InputType in ODS.
+def InputType : SystemCType<
+    CPred<"::circt::hw::type_isa<circt::systemc::InputType>($_self)">,
+    "InputType",
+    "::circt::hw::TypeAliasOr<circt::systemc::InputType>">;
+
+// A handle to refer to circt::systemc::InOutType in ODS.
+def InOutType : SystemCType<
+    CPred<"::circt::hw::type_isa<circt::systemc::InOutType>($_self)">,
+    "InOutType",
+    "::circt::hw::TypeAliasOr<circt::systemc::InOutType>">;
+
+// A handle to refer to circt::systemc::OutputType in ODS.
+def OutputType : SystemCType<
+    CPred<"::circt::hw::type_isa<circt::systemc::OutputType>($_self)">,
+    "OutputType",
+    "::circt::hw::TypeAliasOr<circt::systemc::OutputType>">;
+
+// A handle to refer to circt::systemc::SignalType in ODS.
+def SignalType : SystemCType<
+    CPred<"::circt::hw::type_isa<circt::systemc::SignalType>($_self)">,
+    "SignalType",
+    "::circt::hw::TypeAliasOr<circt::systemc::SignalType>">;
+
 #endif // CIRCT_DIALECT_SYSTEMC_SYSTEMCTYPES

@@ -256,7 +256,7 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
   /// Return the lattice value for the specified SSA value, extended to the
   /// width of the specified destType.  If allowTruncation is true, then this
   /// allows truncating the lattice value to the specified type.
-  LatticeValue getExtendedLatticeValue(Value value, FIRRTLType destType,
+  LatticeValue getExtendedLatticeValue(Value value, FIRRTLBaseType destType,
                                        bool allowTruncation = false);
 
   /// Mark the given block as executable.
@@ -335,7 +335,7 @@ void IMConstPropPass::runOnOperation() {
 /// of the specified destType.  If allowTruncation is true, then this allows
 /// truncating the lattice value to the specified type.
 LatticeValue IMConstPropPass::getExtendedLatticeValue(Value value,
-                                                      FIRRTLType destType,
+                                                      FIRRTLBaseType destType,
                                                       bool allowTruncation) {
   // If 'value' hasn't been computed yet, then it is unknown.
   auto it = latticeValues.find(value);
@@ -401,7 +401,7 @@ void IMConstPropPass::markWireRegOp(Operation *wireOrReg) {
   // handle, mark it as overdefined.
   // TODO: Eventually add a field-sensitive model.
   auto resultValue = wireOrReg->getResult(0);
-  if (!resultValue.getType().cast<FIRRTLType>().getPassiveType().isGround())
+  if (!resultValue.getType().cast<FIRRTLBaseType>().getPassiveType().isGround())
     return markOverdefined(resultValue);
 
   // Otherwise, this starts out as InvalidValue and is upgraded by connects.
@@ -463,7 +463,8 @@ void IMConstPropPass::markInstanceOp(InstanceOp instance) {
     if (fModule.getPortDirection(resultNo) == Direction::In)
       continue;
     // We only support simple values so far.
-    if (!instancePortVal.getType().cast<FIRRTLType>().isGround()) {
+    auto portType = instancePortVal.getType().dyn_cast<FIRRTLBaseType>();
+    if (portType && !portType.isGround()) {
       // TODO: Add field sensitivity.
       markOverdefined(instancePortVal);
       continue;
@@ -487,8 +488,13 @@ void IMConstPropPass::markInstanceOp(InstanceOp instance) {
 
 // We merge the value from the RHS into the value of the LHS.
 void IMConstPropPass::visitConnect(ConnectOp connect) {
-  auto destType =
-      connect.getDest().getType().cast<FIRRTLType>().getPassiveType();
+  auto connectDestType = connect.getDest().getType().dyn_cast<FIRRTLBaseType>();
+  // Only base types are handled for now, mark non-base overdefined.
+  if (!connectDestType) {
+    markOverdefined(connect.getSrc());
+    return markOverdefined(connect.getDest());
+  }
+  auto destType = connectDestType.getPassiveType();
 
   // Handle implicit extensions.
   auto srcValue = getExtendedLatticeValue(connect.getSrc(), destType);
@@ -540,8 +546,13 @@ void IMConstPropPass::visitConnect(ConnectOp connect) {
 
 // We merge the value from the RHS into the value of the LHS.
 void IMConstPropPass::visitStrictConnect(StrictConnectOp connect) {
-  auto destType =
-      connect.getDest().getType().cast<FIRRTLType>().getPassiveType();
+  auto connectDestType = connect.getDest().getType().dyn_cast<FIRRTLBaseType>();
+  // Only base types are handled for now, mark non-base overdefined.
+  if (!connectDestType) {
+    markOverdefined(connect.getSrc());
+    return markOverdefined(connect.getDest());
+  }
+  auto destType = connectDestType.getPassiveType();
 
   // Handle implicit extensions.
   auto srcValue = getExtendedLatticeValue(connect.getSrc(), destType);
@@ -606,12 +617,12 @@ void IMConstPropPass::visitRegResetOp(RegResetOp regReset) {
 
   // The reset value may be known - if so, merge it in if the enable is greater
   // than invalid.
-  auto srcValue = getExtendedLatticeValue(regReset.getResetValue(),
-                                          regReset.getType().cast<FIRRTLType>(),
-                                          /*allowTruncation=*/true);
+  auto srcValue = getExtendedLatticeValue(
+      regReset.getResetValue(), regReset.getType().cast<FIRRTLBaseType>(),
+      /*allowTruncation=*/true);
   auto enable = getExtendedLatticeValue(
       regReset.getResetSignal(),
-      regReset.getResetSignal().getType().cast<FIRRTLType>(),
+      regReset.getResetSignal().getType().cast<FIRRTLBaseType>(),
       /*allowTruncation=*/true);
   if (enable.isOverdefined() ||
       (enable.isConstant() && !enable.getConstant().getValue().isZero()))

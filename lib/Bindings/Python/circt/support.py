@@ -93,6 +93,10 @@ def type_to_pytype(t) -> ir.Type:
   except ValueError:
     pass
   try:
+    return ir.NoneType(t)
+  except ValueError:
+    pass
+  try:
     return hw.ArrayType(t)
   except ValueError:
     pass
@@ -183,7 +187,9 @@ class BackedgeBuilder(AbstractContextManager):
                  instance_of: ir.Operation,
                  loc: ir.Location = None):
       self.creator: BackedgeBuilder = creator
-      self.dummy_op = ir.Operation.create("TemporaryBackedge", [type], loc=loc)
+      self.dummy_op = ir.Operation.create("builtin.unrealized_conversion_cast",
+                                          [type],
+                                          loc=loc)
       self.instance_of = instance_of
       self.op_view = op_view
       self.port_name = backedge_name
@@ -202,7 +208,6 @@ class BackedgeBuilder(AbstractContextManager):
 
   def __init__(self):
     self.edges = set()
-    ir.Context.current.allow_unregistered_dialects = True
 
   @staticmethod
   def current():

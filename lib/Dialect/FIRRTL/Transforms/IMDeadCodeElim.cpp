@@ -40,6 +40,7 @@ struct IMDeadCodeElimPass : public IMDeadCodeElimBase<IMDeadCodeElimPass> {
   void rewriteModuleSignature(FModuleOp module);
   void rewriteModuleBody(FModuleOp module);
   void eraseEmptyModule(FModuleOp module);
+  void forwardConstantOutputPort(FModuleOp module);
 
   void markAlive(Value value) {
     //  If the value is already in `liveSet`, skip it.
@@ -179,11 +180,57 @@ void IMDeadCodeElimPass::markBlockExecutable(Block *block) {
   }
 }
 
+void IMDeadCodeElimPass::forwardConstantOutputPort(FModuleOp module) {
+  // This tracks constant values of output ports.
+  SmallVector<std::pair<unsigned, APSInt>> constantPortIndicesAndValues;
+  auto ports = module.getPorts();
+  auto *instanceGraphNode = instanceGraph->lookup(module);
+
+  for (const auto &e : llvm::enumerate(ports)) {
+    unsigned index = e.index();
+    auto port = e.value();
+    auto arg = module.getArgument(index);
+
+    // If the port has don't touch, don't propagate the constant value.
+    if (!port.isOutput() || hasDontTouch(arg))
+      continue;
+
+    // Remember the index and constant value connected to an output port.
+    if (auto connect = getSingleConnectUserOf(arg))
+      if (auto constant = connect.getSrc().getDefiningOp<ConstantOp>())
+        constantPortIndicesAndValues.push_back({index, constant.getValue()});
+  }
+
+  // If there is no constant port, abort.
+  if (constantPortIndicesAndValues.empty())
+    return;
+
+  // Rewrite all uses.
+  for (auto *use : instanceGraphNode->uses()) {
+    auto instance = cast<InstanceOp>(*use->getInstance());
+    ImplicitLocOpBuilder builder(instance.getLoc(), instance);
+    for (auto [index, constant] : constantPortIndicesAndValues) {
+      auto result = instance.getResult(index);
+      assert(ports[index].isOutput() && "must be an output port");
+
+      // Replace the port with the constant.
+      result.replaceAllUsesWith(builder.create<ConstantOp>(constant));
+    }
+  }
+}
+
 void IMDeadCodeElimPass::runOnOperation() {
   LLVM_DEBUG(llvm::dbgs() << "===----- Remove unused ports -----==="
                           << "\n");
   auto circuit = getOperation();
   instanceGraph = &getAnalysis<InstanceGraph>();
+
+  // Forward constant output ports to caller sides so that we can eliminate
+  // constant outputs.
+  for (auto *node : llvm::post_order(instanceGraph))
+    if (auto module = dyn_cast_or_null<FModuleOp>(*node->getModule()))
+      forwardConstantOutputPort(module);
+
   for (auto module : circuit.getBodyBlock()->getOps<FModuleOp>()) {
     // Mark the ports of public modules as alive.
     if (module.isPublic()) {

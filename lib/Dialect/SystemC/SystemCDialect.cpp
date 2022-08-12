@@ -20,8 +20,9 @@ using namespace circt::systemc;
 //===----------------------------------------------------------------------===//
 
 void SystemCDialect::initialize() {
-  // Register types.
+  // Register attributes.
   registerAttributes();
+  // Register types.
   registerTypes();
 
   // Register operations.

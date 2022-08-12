@@ -20,10 +20,10 @@ from pycde.testing import unittestmodule
 
 @unittestmodule()
 class IfNestedTest:
-  cond = Input(types.i1)
-  cond2 = Input(types.i1)
   a = Input(types.ui8)
   b = Input(types.ui8)
+  cond = Input(types.i1)
+  cond2 = Input(types.i1)
 
   out = Output(types.ui17)
   out2 = Output(types.ui24)
@@ -61,10 +61,10 @@ class IfNestedTest:
 
 @unittestmodule()
 class IfDefaultTest:
-  cond = Input(types.i1)
-  cond2 = Input(types.i1)
   a = Input(types.ui8)
   b = Input(types.ui8)
+  cond = Input(types.i1)
+  cond2 = Input(types.i1)
 
   out = Output(types.ui8)
 

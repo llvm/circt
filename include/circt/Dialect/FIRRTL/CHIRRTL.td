@@ -64,11 +64,11 @@ def CMemoryType : TypeDef<CHIRRTLDialect, "CMemory"> {
     ```
   }];
 
-  let parameters = (ins "firrtl::FIRRTLType":$elementType,
+  let parameters = (ins "firrtl::FIRRTLBaseType":$elementType,
                         "uint64_t":$numElements);
 
   let builders = [
-    TypeBuilderWithInferredContext<(ins "firrtl::FIRRTLType":$elementType,
+    TypeBuilderWithInferredContext<(ins "firrtl::FIRRTLBaseType":$elementType,
                                         "uint64_t":$numElements), [{
       return $_get(elementType.getContext(), elementType, numElements);
     }]>
@@ -116,7 +116,7 @@ def CombMemOp : CHIRRTLOp<"combmem", [HasCustomSSAName, FNamableOp]> {
   let assemblyFormat = [{(`sym` $inner_sym^)? custom<NameKind>($nameKind)
                          custom<CombMemOp>(attr-dict) `:` qualified(type($result))}];
   let builders = [
-    OpBuilder<(ins "firrtl::FIRRTLType":$elementType, "uint64_t":$numElements,
+    OpBuilder<(ins "firrtl::FIRRTLBaseType":$elementType, "uint64_t":$numElements,
                    "mlir::StringRef":$name, "firrtl::NameKindEnum":$nameKind,
                    "ArrayAttr":$annotations, CArg<"StringAttr", "StringAttr()">:$inner_sym)>
   ];
@@ -135,7 +135,7 @@ def SeqMemOp : CHIRRTLOp<"seqmem", [HasCustomSSAName, FNamableOp]> {
   let assemblyFormat = [{(`sym` $inner_sym^)? custom<NameKind>($nameKind) $ruw
                          custom<SeqMemOp>(attr-dict) `:` qualified(type($result))}];
   let builders = [
-    OpBuilder<(ins "firrtl::FIRRTLType":$elementType, "uint64_t":$numElements,
+    OpBuilder<(ins "firrtl::FIRRTLBaseType":$elementType, "uint64_t":$numElements,
                    "RUWAttr":$ruw, "mlir::StringRef":$name,
                    "firrtl::NameKindEnum":$nameKind, "ArrayAttr":$annotations,
                    CArg<"StringAttr", "StringAttr()">:$inner_sym)>
@@ -160,7 +160,7 @@ def MemoryPortOp : CHIRRTLOp<"memoryport", [InferTypeOpInterface,
   let arguments = (ins CMemoryType:$memory, MemDirAttr:$direction,
                     StrAttr:$name, AnnotationArrayAttr:$annotations);
 
-  let results = (outs FIRRTLType:$data, CMemoryPortType:$port);
+  let results = (outs FIRRTLBaseType:$data, CMemoryPortType:$port);
 
   let assemblyFormat = [{
     $direction $memory custom<MemoryPortOp>(attr-dict) `:`

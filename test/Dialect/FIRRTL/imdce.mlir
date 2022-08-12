@@ -162,3 +162,21 @@ firrtl.circuit "DeleteEmptyModule" {
     firrtl.instance sub2 @Sub(in a: !firrtl.uint<1>)
   }
 }
+
+// -----
+
+// CHECK-LABEL: "ForwardConstant"
+firrtl.circuit "ForwardConstant" {
+  // CHECK-NOT: Zero
+  firrtl.module private @Zero(out %zero: !firrtl.uint<1>) {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    firrtl.strictconnect %zero, %c0_ui1 : !firrtl.uint<1>
+  }
+  // CHECK-LABEL: @ForwardConstant
+  firrtl.module @ForwardConstant(out %zero: !firrtl.uint<1>) {
+    // CHECK: %c0_ui1 = firrtl.constant 0
+    %sub_zero = firrtl.instance sub @Zero(out zero: !firrtl.uint<1>)
+    // CHECK-NEXT: firrtl.strictconnect %zero, %c0_ui1
+    firrtl.strictconnect %zero, %sub_zero : !firrtl.uint<1>
+  }
+}

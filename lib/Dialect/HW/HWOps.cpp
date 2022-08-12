@@ -1665,6 +1665,16 @@ LogicalResult ArrayCreateOp::verify() {
   return success();
 }
 
+static Optional<uint64_t> getUIntFromValue(Value value) {
+  auto idxOp = dyn_cast_or_null<ConstantOp>(value.getDefiningOp());
+  if (!idxOp)
+    return llvm::None;
+  APInt idxAttr = idxOp.getValue();
+  if (idxAttr.getBitWidth() > 64)
+    return llvm::None;
+  return idxAttr.getLimitedValue();
+}
+
 LogicalResult ArraySliceOp::verify() {
   unsigned inputSize = type_cast<ArrayType>(getInput().getType()).getSize();
   if (llvm::Log2_64_Ceil(inputSize) !=
@@ -1673,6 +1683,106 @@ LogicalResult ArraySliceOp::verify() {
         "ArraySlice: index width must match clog2 of array size");
   return success();
 }
+
+LogicalResult ArraySliceOp::canonicalize(ArraySliceOp op,
+                                         PatternRewriter &rewriter) {
+  auto sliceTy = hw::type_cast<ArrayType>(op.getType());
+  auto elemTy = sliceTy.getElementType();
+  uint64_t sliceSize = sliceTy.getSize();
+  assert(sliceSize != 0 && "empty slice");
+
+  if (sliceSize == 1) {
+    // slice(a, n) -> create(a[n])
+    auto get = rewriter.create<ArrayGetOp>(op.getLoc(), op.getInput(),
+                                           op.getLowIndex());
+    rewriter.replaceOpWithNewOp<ArrayCreateOp>(op, op.getType(),
+                                               get.getResult());
+    return success();
+  }
+
+  auto offsetOpt = getUIntFromValue(op.getLowIndex());
+  if (!offsetOpt)
+    return failure();
+
+  auto inputOp = op.getInput().getDefiningOp();
+  if (auto inputSlice = dyn_cast_or_null<ArraySliceOp>(inputOp)) {
+    // slice(slice(a, n), m) -> slice(a, n + m)
+    if (inputSlice == op)
+      return failure();
+
+    auto inputIndex = inputSlice.getLowIndex();
+    auto inputOffsetOpt = getUIntFromValue(inputIndex);
+    if (!inputOffsetOpt)
+      return failure();
+
+    uint64_t offset = *offsetOpt + *inputOffsetOpt;
+    auto lowIndex =
+        rewriter.create<ConstantOp>(op.getLoc(), inputIndex.getType(), offset);
+    rewriter.replaceOpWithNewOp<ArraySliceOp>(op, op.getType(),
+                                              inputSlice.getInput(), lowIndex);
+    return success();
+  }
+
+  if (auto inputCreate = dyn_cast_or_null<ArrayCreateOp>(inputOp)) {
+    // slice(create(a0, a1, ..., an), m) -> create(am, ...)
+    auto inputs = inputCreate.getInputs();
+
+    uint64_t begin = inputs.size() - *offsetOpt - sliceSize;
+    rewriter.replaceOpWithNewOp<ArrayCreateOp>(op, op.getType(),
+                                               inputs.slice(begin, sliceSize));
+    return success();
+  }
+
+  if (auto inputConcat = dyn_cast_or_null<ArrayConcatOp>(inputOp)) {
+    // slice(concat(a1, a2, ...)) -> concat(a2, slice(a3, ..), ...)
+    SmallVector<Value> chunks;
+    uint64_t sliceStart = *offsetOpt;
+    for (auto input : llvm::reverse(inputConcat.getInputs())) {
+      // Check whether the input intersects with the slice.
+      uint64_t inputSize = hw::type_cast<ArrayType>(input.getType()).getSize();
+      if (inputSize == 0 || inputSize <= sliceStart) {
+        sliceStart -= inputSize;
+        continue;
+      }
+
+      // Find the indices to slice from this input by intersection.
+      uint64_t cutEnd = std::min(inputSize, sliceStart + sliceSize);
+      uint64_t cutSize = cutEnd - sliceStart;
+      assert(cutSize != 0 && "slice cannot be empty");
+
+      if (cutSize == inputSize) {
+        // The whole input fits in the slice, add it.
+        assert(sliceStart == 0 && "invalid cut size");
+        chunks.push_back(input);
+      } else {
+        // Slice the required bits from the input.
+        unsigned width = inputSize == 1 ? 1 : llvm::Log2_64_Ceil(inputSize);
+        auto lowIndex = rewriter.create<ConstantOp>(
+            op.getLoc(), rewriter.getIntegerType(width), sliceStart);
+        chunks.push_back(rewriter.create<ArraySliceOp>(
+            op.getLoc(), hw::ArrayType::get(elemTy, cutSize), input, lowIndex));
+      }
+
+      sliceStart = 0;
+      sliceSize -= cutSize;
+      if (sliceSize == 0)
+        break;
+    }
+
+    assert(chunks.size() > 0 && "missing sliced items");
+    if (chunks.size() == 1)
+      rewriter.replaceOp(op, chunks[0]);
+    else
+      rewriter.replaceOpWithNewOp<ArrayConcatOp>(
+          op, llvm::to_vector(llvm::reverse(chunks)));
+    return success();
+  }
+  return failure();
+}
+
+//===----------------------------------------------------------------------===//
+// ArrayConcatOp
+//===----------------------------------------------------------------------===//
 
 static ParseResult parseArrayConcatTypes(OpAsmParser &p,
                                          SmallVectorImpl<Type> &inputTypes,
@@ -1726,6 +1836,24 @@ void ArrayConcatOp::build(OpBuilder &b, OperationState &state,
   for (Value val : values)
     resultSize += val.getType().cast<ArrayType>().getSize();
   build(b, state, ArrayType::get(elemTy, resultSize), values);
+}
+
+LogicalResult ArrayConcatOp::canonicalize(ArrayConcatOp op,
+                                          PatternRewriter &rewriter) {
+  // concat(create(a1, ...), create(a3, ...), ...) -> create(a1, ..., a3, ...)
+  for (auto input : op.getInputs())
+    if (!input.getDefiningOp<ArrayCreateOp>())
+      return failure();
+
+  SmallVector<Value> items;
+  for (auto input : op.getInputs()) {
+    auto create = cast<ArrayCreateOp>(input.getDefiningOp());
+    for (auto item : create.getInputs())
+      items.push_back(item);
+  }
+
+  rewriter.replaceOpWithNewOp<ArrayCreateOp>(op, items);
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -2001,22 +2129,53 @@ void StructInjectOp::print(OpAsmPrinter &printer) {
 
 LogicalResult StructInjectOp::canonicalize(StructInjectOp op,
                                            PatternRewriter &rewriter) {
-  auto inputOp = op.getInput().getDefiningOp();
+  // Canonicalize multiple injects into a create op and eliminate overwrites.
+  SmallPtrSet<Operation *, 4> injects;
+  DenseMap<StringAttr, Value> fields;
 
-  // b = inject(inject(x["field"], v0)["field"], v1) => inject(x["field"], v1)
-  if (auto structInject = dyn_cast_or_null<StructInjectOp>(inputOp)) {
-    if (structInject == op)
+  // Chase a chain of injects. Bail out if cycles are present.
+  StructInjectOp inject = op;
+  Value input;
+  do {
+    if (!injects.insert(inject).second)
       return failure();
 
-    if (structInject.getField() == op.getField()) {
-      rewriter.replaceOpWithNewOp<StructInjectOp>(
-          op, op.getType(), structInject.getInput(), op.getField(),
-          op.getNewValue());
-      return success();
+    fields.try_emplace(inject.getFieldAttr(), inject.getNewValue());
+    input = inject.getInput();
+    inject = dyn_cast_or_null<StructInjectOp>(input.getDefiningOp());
+  } while (inject);
+  assert(input && "missing input to inject chain");
+
+  auto ty = hw::type_cast<StructType>(op.getType());
+  auto elements = ty.getElements();
+
+  // If the inject chain sets all fields, canonicalize to create.
+  if (fields.size() == elements.size()) {
+    SmallVector<Value> createFields;
+    for (const auto &field : elements) {
+      auto it = fields.find(field.name);
+      assert(it != fields.end() && "missing field");
+      createFields.push_back(it->second);
     }
+    rewriter.replaceOpWithNewOp<StructCreateOp>(op, ty, createFields);
+    return success();
   }
 
-  return failure();
+  // Nothing to canonicalize, only the original inject in the chain.
+  if (injects.size() == fields.size())
+    return failure();
+
+  // Eliminate overwrites. The hash map contains the last write to each field.
+  for (const auto &field : elements) {
+    auto it = fields.find(field.name);
+    if (it == fields.end())
+      continue;
+    input = rewriter.create<StructInjectOp>(op.getLoc(), ty, input, field.name,
+                                            it->second);
+  }
+
+  rewriter.replaceOp(op, input);
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -2099,6 +2258,51 @@ OpFoldResult ArrayGetOp::fold(ArrayRef<Attribute> operands) {
   if (idx >= createInputs.size())
     return {};
   return createInputs[createInputs.size() - idx - 1];
+}
+
+LogicalResult ArrayGetOp::canonicalize(ArrayGetOp op,
+                                       PatternRewriter &rewriter) {
+  auto idxOpt = getUIntFromValue(op.getIndex());
+  if (!idxOpt)
+    return failure();
+
+  auto *inputOp = op.getInput().getDefiningOp();
+  if (auto inputSlice = dyn_cast_or_null<ArraySliceOp>(inputOp)) {
+    // get(slice(a, n), m) -> get(a, n + m)
+    auto offsetOp = inputSlice.getLowIndex();
+    auto offsetOpt = getUIntFromValue(offsetOp);
+    if (!offsetOpt)
+      return failure();
+
+    uint64_t offset = *offsetOpt + *idxOpt;
+    auto newOffset =
+        rewriter.create<ConstantOp>(op.getLoc(), offsetOp.getType(), offset);
+    rewriter.replaceOpWithNewOp<ArrayGetOp>(op, inputSlice.getInput(),
+                                            newOffset);
+    return success();
+  }
+
+  if (auto inputConcat = dyn_cast_or_null<ArrayConcatOp>(inputOp)) {
+    // get(concat(a0, a1, ...), m) -> get(an, m - s0 - s1 - ...)
+    uint64_t elemIndex = *idxOpt;
+    for (auto input : llvm::reverse(inputConcat.getInputs())) {
+      size_t size = hw::type_cast<ArrayType>(input.getType()).getSize();
+      if (elemIndex >= size) {
+        elemIndex -= size;
+        continue;
+      }
+
+      unsigned indexWidth = size == 1 ? 1 : llvm::Log2_64_Ceil(size);
+      auto newIdxOp = rewriter.create<ConstantOp>(
+          op.getLoc(), rewriter.getIntegerType(indexWidth), elemIndex);
+
+      rewriter.replaceOpWithNewOp<ArrayGetOp>(op, input, newIdxOp);
+      return success();
+    }
+    return failure();
+  }
+
+  return failure();
 }
 
 //===----------------------------------------------------------------------===//

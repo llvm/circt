@@ -44,45 +44,29 @@ struct ConvertHWModule : public OpConversionPattern<HWModuleOp> {
     if (module.getParameters().size() > 0)
       return emitError(module->getLoc(), "module parameters not supported yet");
 
-    // Collect the HW module's port types.
-    FunctionType moduleType = module.getFunctionType();
-    TypeRange moduleOutputs = moduleType.getResults();
-
-    // SystemC module port types are all expressed as block arguments to the op,
-    // so collect all of the types and add them as arguments to the SystemC
-    // module.
-    SmallVector<Type, 4> portTypes((TypeRange)moduleType.getInputs());
-    portTypes.append(moduleOutputs.begin(), moduleOutputs.end());
-
-    // Collect all the port directions.
-    SmallVector<systemc::PortDirection> directions;
-    for (auto port : module.getAllPorts()) {
-      if (port.isInput())
-        directions.push_back(systemc::PortDirection::Input);
-      else if (port.isOutput())
-        directions.push_back(systemc::PortDirection::Output);
-      else
-        return emitError(module->getLoc(), "inout arguments not supported yet");
-    }
-    PortDirectionsAttr portDirections =
-        PortDirectionsAttr::get(rewriter.getContext(), directions);
-
-    // Collect all the port names (inputs and outputs).
-    SmallVector<Attribute> portNames;
-    ArrayRef<Attribute> args = module.getArgNames().getValue();
-    ArrayRef<Attribute> results = module.getResultNames().getValue();
-    portNames.append(args.begin(), args.end());
-    portNames.append(results.begin(), results.end());
+    if (llvm::any_of(module.getAllPorts(),
+                     [](auto port) { return port.isInOut(); }))
+      return emitError(module->getLoc(), "inout arguments not supported yet");
 
     // Create the SystemC module.
     auto scModule = rewriter.create<SCModuleOp>(
-        module.getLoc(), portDirections,
-        ArrayAttr::get(rewriter.getContext(), portNames));
+        module.getLoc(), module.getNameAttr(), module.getAllPorts());
+    scModule.setVisibility(module.getVisibility());
+
+    SmallVector<Attribute> portAttrs;
+    if (auto argAttrs = module.getAllArgAttrs())
+      portAttrs.append(argAttrs.begin(), argAttrs.end());
+    else
+      portAttrs.append(module.getNumInputs(), Attribute());
+    if (auto resultAttrs = module.getAllResultAttrs())
+      portAttrs.append(resultAttrs.begin(), resultAttrs.end());
+    else
+      portAttrs.append(module.getNumOutputs(), Attribute());
+
+    scModule.setAllArgAttrs(portAttrs);
 
     // Create a systemc.ctor operation inside the module.
-    Block *moduleBlock = new Block;
-    scModule.getBodyRegion().push_back(moduleBlock);
-    rewriter.setInsertionPointToStart(moduleBlock);
+    rewriter.setInsertionPointToStart(scModule.getBodyBlock());
     auto ctor = rewriter.create<CtorOp>(module.getLoc());
 
     // Create a systemc.func operation inside the module after the ctor.
@@ -95,33 +79,25 @@ struct ConvertHWModule : public OpConversionPattern<HWModuleOp> {
     // the use chain, which are allowed in graph regions but not in SSACFG
     // regions, and when possible fix them.
     Region &scFuncBody = scFunc.getBody();
+    scFuncBody.front().erase();
     rewriter.inlineRegionBefore(module.getBody(), scFuncBody, scFuncBody.end());
 
     // Register the systemc.func inside the systemc.ctor
-    Block *ctorBlock = new Block;
-    ctor.getRegion().push_back(ctorBlock);
-    rewriter.setInsertionPointToStart(ctorBlock);
+    rewriter.setInsertionPointToStart(&ctor.getBody().front());
     rewriter.create<MethodOp>(ctor.getLoc(), scFunc.getHandle());
 
-    // Set the SCModule type and name attributes. Add block arguments for each
-    // output.
-    auto scModuleType = rewriter.getFunctionType(portTypes, {});
-    rewriter.updateRootInPlace(scModule, [&] {
-      scModule->setAttr(scModule.getTypeAttrName(),
-                        TypeAttr::get(scModuleType));
-      scModule.setName(module.getName());
-      scModule.getBodyRegion().addArguments(
-          portTypes,
-          SmallVector<Location, 4>(portTypes.size(), rewriter.getUnknownLoc()));
-
-      // Move the block arguments of the systemc.func (that we got from the
-      // hw.module) to the systemc.module
-      Region &funcBody = scFunc.getBody();
-      for (size_t i = 0, e = scFunc.getRegion().getNumArguments(); i < e; ++i) {
-        funcBody.getArgument(0).replaceAllUsesWith(scModule.getArgument(i));
-        funcBody.eraseArgument(0);
-      }
-    });
+    // Move the block arguments of the systemc.func (that we got from the
+    // hw.module) to the systemc.module
+    Region &funcBody = scFunc.getBody();
+    rewriter.setInsertionPointToStart(&funcBody.front());
+    for (size_t i = 0, e = scFunc.getRegion().getNumArguments(); i < e; ++i) {
+      auto inputRead =
+          rewriter
+              .create<SignalReadOp>(scFunc.getLoc(), scModule.getArgument(i))
+              .getResult();
+      funcBody.getArgument(0).replaceAllUsesWith(inputRead);
+      funcBody.eraseArgument(0);
+    }
 
     // Erase the HW module.
     rewriter.eraseOp(module);
@@ -139,12 +115,11 @@ struct ConvertOutput : public OpConversionPattern<OutputOp> {
   matchAndRewrite(OutputOp outputOp, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
 
-    SmallVector<Value> moduleOutputs;
     if (auto scModule = outputOp->getParentOfType<SCModuleOp>()) {
-      scModule.getOutputs(moduleOutputs);
-      for (auto args : llvm::zip(moduleOutputs, outputOp.getOperands())) {
-        rewriter.create<AliasOp>(outputOp->getLoc(), std::get<0>(args),
-                                 std::get<1>(args));
+      for (auto args :
+           llvm::zip(scModule.getOutputPorts(), outputOp.getOperands())) {
+        rewriter.create<SignalWriteOp>(outputOp->getLoc(), std::get<0>(args),
+                                       std::get<1>(args));
       }
 
       // Erase the HW OutputOp.

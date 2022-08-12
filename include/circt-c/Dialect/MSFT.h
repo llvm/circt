@@ -26,6 +26,10 @@ MLIR_CAPI_EXPORTED void mlirMSFTRegisterPasses();
 // Values represented in `MSFT.td`.
 typedef int32_t CirctMSFTPrimitiveType;
 
+// Replace all uses of Value with new value.
+MLIR_CAPI_EXPORTED void circtMSFTReplaceAllUsesWith(MlirValue value,
+                                                    MlirValue newValue);
+
 //===----------------------------------------------------------------------===//
 // MSFT Attributes.
 //===----------------------------------------------------------------------===//

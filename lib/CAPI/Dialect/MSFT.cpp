@@ -27,7 +27,11 @@ using namespace circt::msft;
 
 void mlirMSFTRegisterPasses() {
   mlir::registerCanonicalizerPass();
-  circt::msft::registerMSFTPasses();
+  registerPasses();
+}
+
+void circtMSFTReplaceAllUsesWith(MlirValue value, MlirValue newValue) {
+  unwrap(value).replaceAllUsesWith(unwrap(newValue));
 }
 
 //===----------------------------------------------------------------------===//

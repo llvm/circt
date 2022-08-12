@@ -134,7 +134,7 @@ def InvalidValueOp : FIRRTLOp<"invalidvalue",
   }];
 
   let arguments = (ins);
-  let results = (outs FIRRTLType:$result);
+  let results = (outs FIRRTLBaseType:$result);
 
   let hasFolder = 1;
   let assemblyFormat = "attr-dict `:` qualified(type($result))";
@@ -151,7 +151,7 @@ def SubfieldOp : FIRRTLExprOp<"subfield"> {
     }];
 
   let arguments = (ins BundleType:$input, I32Attr:$fieldIndex);
-  let results = (outs FIRRTLType:$result);
+  let results = (outs FIRRTLBaseType:$result);
 
   // TODO: Could drop the result type, inferring it from the source.
   let assemblyFormat =
@@ -199,8 +199,8 @@ def SubindexOp : FIRRTLExprOp<"subindex", [
     ```
     }];
 
-  let arguments = (ins FIRRTLType:$input, I32Attr:$index);
-  let results = (outs FIRRTLType:$result);
+  let arguments = (ins FIRRTLBaseType:$input, I32Attr:$index);
+  let results = (outs FIRRTLBaseType:$result);
 
   // TODO: Could drop the result type, inferring it from the source.
   let assemblyFormat =
@@ -228,8 +228,8 @@ def SubaccessOp : FIRRTLExprOp<"subaccess", [
     ```
     }];
 
-  let arguments = (ins FIRRTLType:$input, UIntType:$index);
-  let results = (outs FIRRTLType:$result);
+  let arguments = (ins FIRRTLBaseType:$input, UIntType:$index);
+  let results = (outs FIRRTLBaseType:$result);
 
   let assemblyFormat =
      "$input `[` $index `]` attr-dict `:` qualified(type($input)) `,` qualified(type($index))";
@@ -250,8 +250,8 @@ def MultibitMuxOp : FIRRTLExprOp<"multibit_mux"> {
     For the example above, if `%index` is 0, then the value is `%v_0`.
     }];
 
-  let arguments = (ins FIRRTLType:$index, Variadic<FIRRTLType>:$inputs);
-  let results = (outs FIRRTLType:$result);
+  let arguments = (ins FIRRTLBaseType:$index, Variadic<FIRRTLBaseType>:$inputs);
+  let results = (outs FIRRTLBaseType:$result);
   let hasCustomAssemblyFormat = 1;
   let hasFolder = true;
   let hasCanonicalizeMethod = true;
@@ -406,8 +406,8 @@ class UnaryPrimOp<string mnemonic, Type srcType, Type resultType,
   let parseValidator = "impl::validateUnaryOpArguments";
 }
 
-def AsSIntPrimOp : UnaryPrimOp<"asSInt", FIRRTLType, SIntType>;
-def AsUIntPrimOp : UnaryPrimOp<"asUInt", FIRRTLType, UIntType>;
+def AsSIntPrimOp : UnaryPrimOp<"asSInt", FIRRTLBaseType, SIntType>;
+def AsUIntPrimOp : UnaryPrimOp<"asUInt", FIRRTLBaseType, UIntType>;
 def AsAsyncResetPrimOp
   : UnaryPrimOp<"asAsyncReset", OneBitCastableType, AsyncResetType>;
 def AsClockPrimOp : UnaryPrimOp<"asClock", OneBitCastableType, ClockType>;
@@ -555,7 +555,7 @@ def IsXVerifOp : FIRRTLExprOp<"verif_isX"> {
     constructs need to explicitly test for 'x.
     }];
 
-  let arguments = (ins FIRRTLType:$arg);
+  let arguments = (ins FIRRTLBaseType:$arg);
   let results = (outs UInt1Type:$result);
   let assemblyFormat =
     "$arg attr-dict `:` qualified(type($arg))";
@@ -583,7 +583,7 @@ def VerbatimExprOp : FIRRTLOp<"verbatim.expr",
 
   let arguments = (ins StrAttr:$text, Variadic<AnyType>:$substitutions,
                        DefaultValuedAttr<NameRefArrayAttr,"{}">:$symbols);
-  let results = (outs FIRRTLType:$result);
+  let results = (outs FIRRTLBaseType:$result);
   let assemblyFormat = [{
     $text (`(` $substitutions^ `)`)?
     `:` functional-type($substitutions, $result) attr-dict
@@ -617,7 +617,7 @@ def VerbatimWireOp : FIRRTLOp<"verbatim.wire",
 
   let arguments = (ins StrAttr:$text, Variadic<AnyType>:$substitutions,
                        DefaultValuedAttr<NameRefArrayAttr,"{}">:$symbols);
-  let results = (outs FIRRTLType:$result);
+  let results = (outs FIRRTLBaseType:$result);
   let assemblyFormat = [{
     $text (`(` $substitutions^ `)`)?
     `:` functional-type($substitutions, $result) attr-dict
@@ -655,10 +655,84 @@ def BitCastOp: FIRRTLOp<"bitcast", [NoSideEffect]> {
     potentially different type. This op is lowered to hw::BitCastOp.
   }];
 
-  let arguments = (ins FIRRTLType:$input);
-  let results = (outs FIRRTLType:$result);
+  let arguments = (ins FIRRTLBaseType:$input);
+  let results = (outs FIRRTLBaseType:$result);
   let hasVerifier = 1;
   let hasFolder = 1;
 
   let assemblyFormat = "$input attr-dict `:` functional-type($input, $result)";
+}
+
+//===----------------------------------------------------------------------===//
+// RefOperations: Operations on the RefType.
+//
+// The RefType is used to capture dataflow paths.
+// The operations on RefType support capturing the dataflow to/from SSA values.
+// The following ops are supported on the RefType:
+//
+//	- RefSendOp
+//	  - Takes as input a `BaseType` and returns a `RefType`
+//	  - Used to send a read-only Reference handle of a local value.
+//	  - Represents the source of a dataflow by getting it's reference.
+//	- RefResolveOp
+//	  - Takes as input a `RefType` and returns a `BaseType`
+//	  - Represents the sink of a dataflow from the reference handle
+//	  - The `RefType` is constrained to express a "single source to
+//		one-or-more sink" dataflow
+//	  - Hence, multiple `RefResolveOp`s can be remotely connected to a single
+//		`RefSendOp`.
+//	  - If the Reference ops are lowered to cross-module-reference, then it
+//		represents the location of the XMR.
+//===----------------------------------------------------------------------===//
+
+//===----------------------------------------------------------------------===//
+// Constraints on RefOps
+//===----------------------------------------------------------------------===//
+
+class RefTypeConstraint<string ref, string base>
+  : TypesMatchWith<"reference base type should match",
+                   ref, base,
+                   "$_self.cast<RefType>().getType()">;
+
+class RefResultTypeConstraint<string base, string ref>
+  : TypesMatchWith<"reference base type should match",
+                   base, ref,
+                   "RefType::get($_self.cast<FIRRTLBaseType>())">;
+
+class RefInstancePortConstraint
+  : PredOpTrait<"it cannot have module port as an operand because it implies"
+  " upward reference XMR, which are not supported."
+  " The reference operand must be a port from firrtl.instance",
+                CPred<"!($ref.isa<BlockArgument>())">>;
+
+//===----------------------------------------------------------------------===//
+// RefOps
+//===----------------------------------------------------------------------===//
+
+def RefResolveOp: FIRRTLOp<"ref.resolve", [RefTypeConstraint<"ref","result">,
+                                    RefInstancePortConstraint<>]> {
+  let summary = "FIRRTL Resolve a Reference";
+  let description = [{
+    Resolve a remote reference for reading a remote value.
+    It takes a RefType input and returns the corresponding BaseType value.
+    If an XMR is emitted for this reference, it will be at the location
+    of this operation.
+  }];
+  let arguments = (ins RefType:$ref);
+  let results = (outs FIRRTLBaseType:$result);
+
+  let assemblyFormat = "$ref attr-dict `:` qualified(type($ref))";
+}
+
+def RefSendOp: FIRRTLOp<"ref.send", [RefResultTypeConstraint<"base", "result">]> {
+  let summary = "FIRRTL Send through Reference";
+  let description = [{
+    Endpoint of a remote reference. Send a value through a reference
+    to be read from the firrtl.ref.resolve op.
+    It takes a BaseType input and returns the corresponding RefType value.
+  }];
+  let arguments = (ins FIRRTLBaseType:$base);
+  let results = (outs RefType:$result);
+
+  let assemblyFormat = "$base attr-dict `:` qualified(type($base))";
 }

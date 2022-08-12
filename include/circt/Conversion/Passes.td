@@ -395,14 +395,4 @@ def InsertMergeBlocks : Pass<"insert-merge-blocks", "::mlir::ModuleOp"> {
   let dependentDialects = ["mlir::cf::ControlFlowDialect", "mlir::func::FuncDialect"];
 }
 
-//===----------------------------------------------------------------------===//
-// StandardToPipeline
-//===----------------------------------------------------------------------===//
-
-def CreatePipeline : Pass<"create-pipeline", "mlir::func::FuncOp"> {
-  let summary = "Create Pipeline pipeline operations";
-  let constructor = "circt::createCreatePipelinePass()";
-  let dependentDialects = ["pipeline::PipelineDialect"];
-}
-
 #endif // CIRCT_CONVERSION_PASSES_TD
