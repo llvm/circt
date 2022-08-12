@@ -387,6 +387,7 @@ firrtl.module @Cat(in %in4: !firrtl.uint<4>,
 // CHECK-LABEL: firrtl.module @Bits
 firrtl.module @Bits(in %in1: !firrtl.uint<1>,
                     in %in4: !firrtl.uint<4>,
+                    in %in4_1: !firrtl.uint<4>,
                     out %out1: !firrtl.uint<1>,
                     out %out2: !firrtl.uint<2>,
                     out %out4: !firrtl.uint<4>) {
@@ -418,6 +419,34 @@ firrtl.module @Bits(in %in1: !firrtl.uint<1>,
   %invalid_ui4 = firrtl.invalidvalue : !firrtl.uint<4>
   %6 = firrtl.bits %invalid_ui4 2 to 1 : (!firrtl.uint<4>) -> !firrtl.uint<2>
   firrtl.connect %out2, %6 : !firrtl.uint<2>, !firrtl.uint<2>
+
+  // CHECK: [[TMP0:%.+]] = firrtl.bits %in4 1 to 0 : (!firrtl.uint<4>) -> !firrtl.uint<2>
+  // CHECK: [[TMP1:%.+]] = firrtl.bits %in4_1 1 to 0 : (!firrtl.uint<4>) -> !firrtl.uint<2>
+  // CHECK: [[TMP2:%.+]] = firrtl.mux(%in1, [[TMP0]], [[TMP1]]) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
+  // CHECK: firrtl.strictconnect %out2, [[TMP2]] : !firrtl.uint<2>
+  %7 = firrtl.mux(%in1, %in4, %in4_1) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  %8 = firrtl.bits %7 1 to 0 : (!firrtl.uint<4>) -> !firrtl.uint<2>
+  firrtl.strictconnect %out2, %8 : !firrtl.uint<2>
+
+  // CHECK: [[TMP0:%.+]] = firrtl.bits %in4_1 1 to 0 : (!firrtl.uint<4>) -> !firrtl.uint<2>
+  // CHECK: firrtl.strictconnect %out2, [[TMP0]] : !firrtl.uint<2>
+  %9 = firrtl.cat %in4, %in4_1 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<8>
+  %10 = firrtl.bits %9 1 to 0 : (!firrtl.uint<8>) -> !firrtl.uint<2>
+  firrtl.strictconnect %out2, %10 : !firrtl.uint<2>
+
+  // CHECK: [[TMP0:%.+]] = firrtl.bits %in4 3 to 2 : (!firrtl.uint<4>) -> !firrtl.uint<2>
+  // CHECK: firrtl.strictconnect %out2, [[TMP0]] : !firrtl.uint<2>
+  %11 = firrtl.cat %in4, %in4_1 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<8>
+  %12 = firrtl.bits %11 7 to 6 : (!firrtl.uint<8>) -> !firrtl.uint<2>
+  firrtl.strictconnect %out2, %12 : !firrtl.uint<2>
+
+  // CHECK: [[TMP0:%.+]] = firrtl.bits %in4 0 to 0 : (!firrtl.uint<4>) -> !firrtl.uint<1>
+  // CHECK: [[TMP1:%.+]] = firrtl.bits %in4_1 3 to 3 : (!firrtl.uint<4>) -> !firrtl.uint<1>
+  // CHECK: [[TMP2:%.+]] = firrtl.cat [[TMP0]], [[TMP1]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
+  // CHECK: firrtl.strictconnect %out2, [[TMP2]] : !firrtl.uint<2>
+  %13 = firrtl.cat %in4, %in4_1 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<8>
+  %14 = firrtl.bits %13 4 to 3 : (!firrtl.uint<8>) -> !firrtl.uint<2>
+  firrtl.strictconnect %out2, %14 : !firrtl.uint<2>
 }
 
 // CHECK-LABEL: firrtl.module @Head
