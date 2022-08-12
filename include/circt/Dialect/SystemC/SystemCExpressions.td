@@ -10,10 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-def SignalReadOp : SystemCOp<"signal.read", [
-    NoSideEffect,
-    TypesMatchWith<"result has to be the base type of the input",
-                   "input", "result", "systemc::getSignalBaseType($_self)">]> {
+def SignalReadOp : SystemCOp<"signal.read", [NoSideEffect,
+                                             InferTypeOpInterface]> {
   let summary = "Returns the current value of a signal or port.";
   let description = [{
     Represents the member function `const T& read() const;` and operator
@@ -27,10 +25,16 @@ def SignalReadOp : SystemCOp<"signal.read", [
   let results = (outs AnyType:$result);
   let assemblyFormat = "$input attr-dict `:` type($input)";
 
-  let builders = [
-    OpBuilder<(ins "mlir::Value":$input), [{
-      build($_builder, $_state,
-            systemc::getSignalBaseType(input.getType()), input);
-    }]>
-  ];
+  let extraClassDeclaration = [{
+    /// Infer the return types of this operation.
+    static LogicalResult inferReturnTypes(MLIRContext *context,
+                                          Optional<Location> loc,
+                                          ValueRange operands,
+                                          DictionaryAttr attrs,
+                                          mlir::RegionRange regions,
+                                          SmallVectorImpl<Type> &results) {
+      results.push_back(systemc::getSignalBaseType(operands[0].getType()));
+      return success();
+    }
+  }];
 }

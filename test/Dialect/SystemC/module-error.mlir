@@ -129,8 +129,15 @@ systemc.module @signalFuncNameConflict () {
 // -----
 
 systemc.module @cannotReadFromOutPort (%port0: !systemc.out<i32>) {
-  // expected-error @+1 {{'input' must be InputType or InOutType or SignalType, but got '!systemc.out<i32>'}}
+  // expected-error @+1 {{op operand #0 must be InputType or InOutType or SignalType, but got '!systemc.out<i32>'}}
   %0 = systemc.signal.read %port0 : !systemc.out<i32>
+}
+
+// -----
+
+systemc.module @inferredTypeDoesNotMatch (%port0: !systemc.in<i32>) {
+  // expected-error @+1 {{op inferred type(s) 'i32' are incompatible with return type(s) of operation 'i4'}}
+  %0 = "systemc.signal.read"(%port0) : (!systemc.in<i32>) -> i4
 }
 
 // -----
