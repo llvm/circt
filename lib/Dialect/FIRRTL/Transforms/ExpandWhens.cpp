@@ -118,9 +118,18 @@ public:
     if (!op.getInput().getDefiningOp())
       return op;
     auto *inputOp = op.getInput().getDefiningOp();
+    // bits(bits(x, ...), ...) -> bits(x, ...).
+    if (auto innerBits = dyn_cast<BitsPrimOp>(inputOp)) {
+      auto newLo = op.getLo() + innerBits.getLo();
+      auto newHi = newLo + op.getHi() - op.getLo();
+      Value newOp = canonicalizeBits(
+          builder.create<BitsPrimOp>(innerBits.getInput(), newHi, newLo),
+          builder);
+      return newOp;
+    }
+    // bits(cat(a, b), ...) => bits(a, ...), or bits(b, ...), or cat(bits(a,
+    // ...), bits(b, ...))
     if (auto cat = dyn_cast<CatPrimOp>(inputOp)) {
-      // bits(cat(a, b), ...) => bits(a, ...), or bits(b, ...), or cat(bits(a,
-      // ...), bits(b, ...))
       auto rhsT = cat.getRhs().getType().cast<IntType>();
       if (!rhsT.hasWidth())
         return op;
@@ -148,8 +157,9 @@ public:
         newOp = builder.createOrFold<CatPrimOp>(bitsLhs, bitsRhs);
       }
       return newOp;
-    } else if (auto mux = dyn_cast<MuxPrimOp>(op.getInput().getDefiningOp())) {
-      // bits(mux(sel, a, b), ...) => mux(sel, bits(a, ...), bits(b, ...))
+    }
+    // bits(mux(sel, a, b), ...) => mux(sel, bits(a, ...), bits(b, ...))
+    if (auto mux = dyn_cast<MuxPrimOp>(op.getInput().getDefiningOp())) {
       auto bitsHigh = canonicalizeBits(
           builder.create<BitsPrimOp>(mux.getHigh(), op.getHi(), op.getLo()),
           builder);
@@ -169,12 +179,18 @@ public:
   // scope.
   void rewriteBitsConnect(BitsPrimOp bits, FieldRef &dest,
                           FConnectLike &connection) {
-    // Get x's width.
-    int w = bits.getInput().getType().dyn_cast<IntType>().getWidth().getValue();
+
     // Find the previous connection to x, search across scopes.
-    auto it = driverMap.find(getFieldRefFromValue(bits.getInput()));
     ImplicitLocOpBuilder b(connection.getLoc(), connection.getContext());
     b.setInsertionPointAfter(connection);
+    // Since bits is the dest here, canonicalizing it is guaranteed to return a
+    // BitsPrimOp.
+    bits = cast<BitsPrimOp>(canonicalizeBits(bits, b).getDefiningOp());
+
+    // Get x's width.
+    int w = bits.getInput().getType().dyn_cast<IntType>().getWidth().getValue();
+    auto it = driverMap.find(getFieldRefFromValue(bits.getInput()));
+
     Value xprev;
     if (it == driverMap.end() || !it.base()->second) {
       // x had no previous connection, so set xprev to an uninitialized wire
@@ -210,6 +226,7 @@ public:
     }
     if (bits.getInput().getType().isa<SIntType>())
       cat = b.create<AsSIntPrimOp>(cat);
+
     // The dest needs to be transformed from a bitindex `x[hi:lo] <=` to just
     // `x <=`.
     dest = getFieldRefFromValue(bits.getInput());

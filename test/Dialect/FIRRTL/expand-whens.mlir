@@ -531,7 +531,7 @@ firrtl.module @aggregate_regreset(in %clock: !firrtl.clock, in %reset: !firrtl.u
   // CHECK-NEXT: firrtl.connect %2, %2
 }
 
-// Test subword assignment basic rewrite
+// Test subword assignment basic rewrite.
 firrtl.module @subword_assign_1(in %x: !firrtl.uint<4>, in %y: !firrtl.uint<1>, in %en: !firrtl.uint<1>, out %out: !firrtl.uint<4>) {
   %0 = firrtl.bits %out 0 to 0 : (!firrtl.uint<4>) -> !firrtl.uint<1>
   firrtl.strictconnect %out, %x : !firrtl.uint<4>
@@ -547,7 +547,7 @@ firrtl.module @subword_assign_1(in %x: !firrtl.uint<4>, in %y: !firrtl.uint<1>, 
 // CHECK-NEXT: firrtl.connect %out, [[TMP2]] : !firrtl.uint<4>
 // CHECK-NEXT: }
 
-// Test subword assignment overlapping ranges and initialization checking
+// Test subword assignment overlapping ranges and initialization checking.
 firrtl.module @subword_assign_2(in %in: !firrtl.uint<1>, in %x: !firrtl.uint<2>, in %y: !firrtl.uint<2>, in %c: !firrtl.uint<1>, out %out: !firrtl.uint<4>) {
   %0 = firrtl.bits %out 3 to 2 : (!firrtl.uint<4>) -> !firrtl.uint<2>
   %1 = firrtl.bits %out 2 to 1 : (!firrtl.uint<4>) -> !firrtl.uint<2>
@@ -563,9 +563,8 @@ firrtl.module @subword_assign_2(in %in: !firrtl.uint<1>, in %x: !firrtl.uint<2>,
 // CHECK-LABEL: firrtl.module @subword_assign_2(in %in: !firrtl.uint<1>, in %x: !firrtl.uint<2>, in %y: !firrtl.uint<2>, in %c: !firrtl.uint<1>, out %out: !firrtl.uint<4>) {
 // CHECK: %c3_ui2 = firrtl.constant 3 : !firrtl.uint<2>
 // CHECK: %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
-// CHECK: [[TMP10:%.+]] = firrtl.bits %c3_ui2 0 to 0 : (!firrtl.uint<2>) -> !firrtl.uint<1>
 // CHECK: [[TMP16:%.+]] = firrtl.bits %c0_ui2 0 to 0 : (!firrtl.uint<2>) -> !firrtl.uint<1>
-// CHECK: [[TMP17:%.+]] = firrtl.bits [[TMP10]] 0 to 0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK: [[TMP17:%.+]] = firrtl.bits %c3_ui2 0 to 0 : (!firrtl.uint<2>) -> !firrtl.uint<1>
 // CHECK: [[TMP18:%.+]] = firrtl.cat [[TMP16]], [[TMP17]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
 // CHECK: [[TMP20:%.+]] = firrtl.bits %c3_ui2 1 to 0 : (!firrtl.uint<2>) -> !firrtl.uint<2>
 // CHECK: [[TMP21:%.+]] = firrtl.mux(%c, [[TMP18]], [[TMP20]]) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
@@ -573,7 +572,7 @@ firrtl.module @subword_assign_2(in %in: !firrtl.uint<1>, in %x: !firrtl.uint<2>,
 // CHECK: firrtl.strictconnect %out, [[TMP22]] : !firrtl.uint<4>
 // CHECK: }
 
-// Test subword assignment with register
+// Test subword assignment with register.
 firrtl.module @subword_assign_3(in %clock: !firrtl.clock, in %x: !firrtl.uint<4>, in %y: !firrtl.uint<1>, in %z: !firrtl.uint<3>, in %o: !firrtl.uint<3>, in %en: !firrtl.uint<1>, out %out: !firrtl.uint<4>) {
   %r = firrtl.reg interesting_name %clock  : !firrtl.uint<4>
   %0 = firrtl.bits %r 0 to 0 : (!firrtl.uint<4>) -> !firrtl.uint<1>
@@ -590,7 +589,7 @@ firrtl.module @subword_assign_3(in %clock: !firrtl.clock, in %x: !firrtl.uint<4>
 // CHECK-NEXT: firrtl.strictconnect %out, %r : !firrtl.uint<4>
 // CHECK-NEXT: }
 
-// Test subword assignment on SInt
+// Test subword assignment on SInt.
 firrtl.module @subword_assign_4(in %x: !firrtl.sint<4>, in %y: !firrtl.uint<2>, in %en: !firrtl.uint<1>, out %out: !firrtl.sint<4>) {
   %0 = firrtl.bits %out 1 to 0 : (!firrtl.sint<4>) -> !firrtl.uint<2>
   firrtl.strictconnect %out, %x : !firrtl.sint<4>
@@ -607,5 +606,21 @@ firrtl.module @subword_assign_4(in %x: !firrtl.sint<4>, in %y: !firrtl.uint<2>, 
 // CHECK-NEXT: %4 = firrtl.mux(%en, %3, %x) : (!firrtl.uint<1>, !firrtl.sint<4>, !firrtl.sint<4>) -> !firrtl.sint<4>
 // CHECK-NEXT: firrtl.connect %out, %4 : !firrtl.sint<4>, !firrtl.sint<4>
 // CHECK-NEXT: }
+
+// Test subword assignment with multiple LHS bits ops.
+firrtl.module @subword_assign_5(in %b: !firrtl.uint<1>, out %o: !firrtl.uint<2>) {
+  %0 = firrtl.bits %o 1 to 0 : (!firrtl.uint<2>) -> !firrtl.uint<2>
+  %1 = firrtl.bits %0 1 to 1 : (!firrtl.uint<2>) -> !firrtl.uint<1>
+  %2 = firrtl.bits %o 1 to 0 : (!firrtl.uint<2>) -> !firrtl.uint<2>
+  %3 = firrtl.bits %2 0 to 0 : (!firrtl.uint<2>) -> !firrtl.uint<1>
+  firrtl.strictconnect %3, %b : !firrtl.uint<1>
+  firrtl.strictconnect %1, %b : !firrtl.uint<1>
+}
+
+// CHECK-LABEL: firrtl.module @subword_assign_5(in %b: !firrtl.uint<1>, out %o: !firrtl.uint<2>) {
+// CHECK: [[TMP0:%.+]] = firrtl.bits %b 0 to 0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK: [[TMP1:%.+]] = firrtl.cat %b, [[TMP0]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
+// CHECK: firrtl.strictconnect %o, [[TMP1]] : !firrtl.uint<2>
+// CHECK: }
 
 }
