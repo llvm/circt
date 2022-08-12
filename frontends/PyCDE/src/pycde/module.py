@@ -158,7 +158,8 @@ class _SpecializedModule(_PyProxy):
                extern_name: str,
                create_cb: Optional[builtins.function],
                generator_cb: Optional[builtins.function] = None,
-               instantiate_cb: Optional[builtins.function] = None):
+               instantiate_cb: Optional[builtins.function] = None,
+               input_port_order = None):
     self.modcls = cls
     self.extern_name = extern_name
     self.loc = get_user_loc()
@@ -206,6 +207,12 @@ class _SpecializedModule(_PyProxy):
 
       if isinstance(attr, Clock):
         self.clock_ports[attr.name] = len(self.input_ports) - 1
+
+    # If an input port order is specified, sort the input ports according to it.
+    if input_port_order is not None:
+      self.input_ports.sort(key=lambda pair: input_port_order[pair[0]])
+      self.input_port_lookup = input_port_order
+
     self.add_accessors()
 
   def add_accessors(self):
@@ -416,7 +423,7 @@ def import_hw_module(hw_module: hw.HWModuleOp):
     return hw_module
 
   # Hand off the class, external name, and create callback to _module_base.
-  return _module_base(cls, name, create_cb)
+  return _module_base(cls, name, create_cb, input_port_order=hw_module.input_indices)
 
 
 def _module_base(cls,
@@ -424,7 +431,8 @@ def _module_base(cls,
                  create_cb: Optional[builtins.function] = None,
                  generator_cb: Optional[builtins.function] = None,
                  instantiate_cb: Optional[builtins.function] = None,
-                 params={}):
+                 params={},
+                 input_port_order=None):
   """Wrap a class, making it a PyCDE module."""
 
   class mod(cls):
@@ -519,7 +527,8 @@ def _module_base(cls,
                                       extern_name,
                                       create_cb=create_cb,
                                       generator_cb=generator_cb,
-                                      instantiate_cb=instantiate_cb)
+                                      instantiate_cb=instantiate_cb,
+                                      input_port_order=input_port_order)
   return mod
 
 
