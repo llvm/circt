@@ -51,6 +51,7 @@ TOK_IDENTIFIER(identifier) // foo
 TOK_LITERAL(integer)        // 42
 TOK_LITERAL(signed_integer) // -42 and +42
 TOK_LITERAL(floatingpoint)  // 42.0
+TOK_LITERAL(version)        // 1.2.3
 TOK_LITERAL(string)         // "foo"
 TOK_LITERAL(raw_string)     // 'foo'
 
@@ -91,6 +92,7 @@ TOK_KEYWORD(cmem)
 TOK_KEYWORD(defname)
 TOK_KEYWORD(else)
 TOK_KEYWORD(extmodule)
+TOK_KEYWORD(FIRRTL)
 TOK_KEYWORD(flip)
 TOK_KEYWORD(infer)
 TOK_KEYWORD(input)
@@ -113,6 +115,7 @@ TOK_KEYWORD(reset)
 TOK_KEYWORD(skip)
 TOK_KEYWORD(smem)
 TOK_KEYWORD(undefined)
+TOK_KEYWORD(version)
 TOK_KEYWORD(when)
 TOK_KEYWORD(wire)
 TOK_KEYWORD(with)
