@@ -654,7 +654,7 @@ public:
 
   bool run(FModuleOp op);
   LogicalResult checkInitialization();
-  bool usesSubwordUninit(Operation *base);
+  bool usesSubwordUninit(SmallVector<Operation *> ops);
 
 private:
   /// The outermost scope of the module body.
@@ -700,17 +700,23 @@ void ModuleVisitor::visitStmt(WhenOp whenOp) {
   processWhenOp(whenOp, /*outerCondition=*/{});
 }
 
-bool ModuleVisitor::usesSubwordUninit(Operation *op) {
-  if (!op || subwordUninit.size() == 0)
+// Returns true if any ops in the list use an uninitialized subword value.
+bool ModuleVisitor::usesSubwordUninit(SmallVector<Operation *> ops) {
+  if (subwordUninit.size() == 0)
     return false;
-  if (subwordInitChecked.contains(op))
-    return false;
-  for (auto val : op->getOperands()) {
-    if (subwordUninit.contains(val) || usesSubwordUninit(val.getDefiningOp())) {
-      return true;
+  while (ops.size() > 0) {
+    auto *op = ops.pop_back_val();
+
+    if (!op || subwordInitChecked.contains(op))
+      continue;
+    for (auto val : op->getOperands()) {
+      if (subwordUninit.contains(val))
+        return true;
+      ops.push_back(val.getDefiningOp());
     }
+    subwordInitChecked.insert(op);
   }
-  subwordInitChecked.insert(op);
+
   return false;
 }
 
@@ -718,10 +724,13 @@ bool ModuleVisitor::usesSubwordUninit(Operation *op) {
 /// running on a module. Returns failure in the event of bad initialization.
 LogicalResult ModuleVisitor::checkInitialization() {
   bool failed = false;
+  SmallVector<Operation *> ops;
   for (auto destAndConnect : driverMap.getLastScope()) {
     // If there is valid connection to this destination, everything is good.
     auto connect = std::get<1>(destAndConnect);
-    if (connect && !usesSubwordUninit(connect))
+    ops.clear();
+    ops.push_back(connect);
+    if (connect && !usesSubwordUninit(ops))
       continue;
 
     // Get the op which defines the sink, and emit an error.
