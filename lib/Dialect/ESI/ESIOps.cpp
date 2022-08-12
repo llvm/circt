@@ -242,7 +242,6 @@ static OpType getServicePortDecl(Operation *op,
   StringAttr modName = servicePort.getModule();
   ServiceDeclOp serviceDeclOp = topSyms.lookup<ServiceDeclOp>(modName);
   if (!serviceDeclOp) {
-    op->emitOpError("Cannot find module ") << modName;
     return {};
   }
 
@@ -250,7 +249,6 @@ static OpType getServicePortDecl(Operation *op,
   for (auto portDecl : serviceDeclOp.getOps<OpType>())
     if (portDecl.inner_symAttr() == innerSym)
       return portDecl;
-  op->emitOpError("Cannot find port named ") << innerSym;
   return {};
 }
 
@@ -259,17 +257,34 @@ static OpType getServicePortDecl(Operation *op,
 template <class PortTypeOp, class OpType>
 static LogicalResult
 reqPortMatches(OpType op, SymbolTableCollection &symbolTable, Type t) {
-  auto portDecl =
-      getServicePortDecl<PortTypeOp>(op, symbolTable, op.servicePort());
-  if (!portDecl)
-    return failure();
+  hw::InnerRefAttr port = op.servicePort();
+  auto portDecl = getServicePortDecl<PortTypeOp>(op, symbolTable, port);
+  auto inoutPortDecl =
+      getServicePortDecl<ServiceDeclInOutOp>(op, symbolTable, port);
+  if (!portDecl && !inoutPortDecl)
+    return op.emitOpError("Could not find service port declaration ")
+           << port.getModuleRef() << "::" << port.getName().getValue();
 
   auto *ctxt = op.getContext();
-  if (portDecl.type() != t &&
-      portDecl.type() != ChannelType::get(ctxt, AnyType::get(ctxt)))
-    return op.emitOpError("Request type does not match port type ")
-           << portDecl.type();
+  auto anyChannelType = ChannelType::get(ctxt, AnyType::get(ctxt));
+  if (portDecl) {
+    if (portDecl.type() != t && portDecl.type() != anyChannelType)
+      return op.emitOpError("Request type does not match port type ")
+             << portDecl.type();
+    return success();
+  }
 
+  assert(inoutPortDecl);
+  if (isa<ToClientOp>(op)) {
+    if (inoutPortDecl.inType() != t && inoutPortDecl.inType() != anyChannelType)
+      return op.emitOpError("Request type does not match port type ")
+             << inoutPortDecl.inType();
+  } else if (isa<ToServerOp>(op)) {
+    if (inoutPortDecl.outType() != t &&
+        inoutPortDecl.outType() != anyChannelType)
+      return op.emitOpError("Request type does not match port type ")
+             << inoutPortDecl.outType();
+  }
   return success();
 }
 
@@ -281,6 +296,31 @@ LogicalResult RequestToClientConnectionOp::verifySymbolUses(
 LogicalResult RequestToServerConnectionOp::verifySymbolUses(
     SymbolTableCollection &symbolTable) {
   return reqPortMatches<ToServerOp>(*this, symbolTable, sending().getType());
+}
+
+LogicalResult
+RequestInOutChannelOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto portDecl = getServicePortDecl<ServiceDeclInOutOp>(
+      this->getOperation(), symbolTable, servicePort());
+  if (!portDecl)
+    return emitOpError("Could not find inout service port declaration.");
+
+  auto *ctxt = getContext();
+  auto anyChannelType = ChannelType::get(ctxt, AnyType::get(ctxt));
+
+  // Check the input port type.
+  if (portDecl.inType() != sending().getType() &&
+      portDecl.inType() != anyChannelType)
+    return emitOpError("Request to_server type does not match port type ")
+           << portDecl.inType();
+
+  // Check the output port type.
+  if (portDecl.outType() != receiving().getType() &&
+      portDecl.outType() != anyChannelType)
+    return emitOpError("Request to_client type does not match port type ")
+           << portDecl.outType();
+
+  return success();
 }
 
 #define GET_OP_CLASSES

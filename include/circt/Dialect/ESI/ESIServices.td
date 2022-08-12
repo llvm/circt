@@ -54,6 +54,17 @@ def ToClientOp : ESI_Op<"service.to_client",
   }];
 }
 
+def ServiceDeclInOutOp : ESI_Op<"service.inout",
+                        [HasParent<"::circt::esi::ServiceDeclOp">]> {
+  let summary = "An ESI service port which has both directions";
+
+  let arguments = (ins SymbolNameAttr:$inner_sym,
+                       TypeAttr:$inType, TypeAttr:$outType);
+  let assemblyFormat = [{
+    $inner_sym attr-dict `:` qualified($inType) `->` qualified($outType)
+  }];
+}
+
 def ServiceInstanceOp : ESI_Op<"service.instance"> {
   let summary = "Instantiate a server module";
   let description = [{
@@ -132,5 +143,20 @@ def RequestToClientConnectionOp : ESI_Op<"service.req.to_client", [
   let assemblyFormat = [{
     $servicePort `(` $clientNamePath `)`
       attr-dict `:` qualified(type($receiving))
+  }];
+}
+
+def RequestInOutChannelOp : ESI_Op<"service.req.inout", [
+        DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
+  let summary = "Request a bidirectional channel";
+
+  let arguments = (ins HWInnerRefAttr:$servicePort,
+                       ChannelType:$sending,
+                       StrArrayAttr:$clientNamePath);
+  let results = (outs ChannelType:$receiving);
+
+  let assemblyFormat = [{
+    $sending `->` $servicePort `(` $clientNamePath `)` attr-dict `:`
+      qualified(type($sending)) `->` qualified(type($receiving))
   }];
 }
