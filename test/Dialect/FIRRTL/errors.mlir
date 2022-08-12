@@ -1027,3 +1027,69 @@ firrtl.circuit "Top" {
     firrtl.connect %foo_in, %in : !firrtl.ref<uint<2>>, !firrtl.ref<uint<1>>
   }
 }
+
+// -----
+// Check upward reference XMRs
+
+firrtl.circuit "MyView_mapping" {
+  firrtl.module @MyView_mapping(in %ref_in1: !firrtl.ref<uint<1>>) {
+    // expected-error @+1 {{'firrtl.ref.resolve' op failed to verify that it cannot have module port as an operand because it implies upward reference XMR, which are not supported. The reference operand must be a port from firrtl.instance}}
+    %0 = firrtl.ref.resolve %ref_in1 : !firrtl.ref<uint<1>>
+  }
+}
+
+// -----
+// Check flow semantics for ref.send
+
+firrtl.circuit "Foo" {
+  // expected-note @+1 {{destination was defined here}}
+  firrtl.module @Foo(in  %_a: !firrtl.ref<uint<1>>) {
+    %a = firrtl.wire : !firrtl.uint<1>
+    %1 = firrtl.ref.send %a : !firrtl.uint<1>
+    // expected-error @+1 {{connect has invalid flow: the destination expression "_a" has source flow, expected sink or duplex flow}}
+    firrtl.strictconnect %_a, %1 : !firrtl.ref<uint<1>>
+  }
+}
+
+// -----
+// Output reference port cannot be reused
+
+firrtl.circuit "Bar" {
+  firrtl.module @Bar(out %_a: !firrtl.ref<uint<1>>) {
+    %x = firrtl.instance x @Bar2(out _a: !firrtl.ref<uint<1>>)
+    %y = firrtl.instance y @Bar2(out _a: !firrtl.ref<uint<1>>)
+    // expected-error @+1 {{output reference port cannot be reused by multiple operations, it can only capture a unique dataflow}}
+    firrtl.strictconnect %_a, %x : !firrtl.ref<uint<1>>
+    firrtl.strictconnect %_a, %y : !firrtl.ref<uint<1>>
+  }
+}
+
+// -----
+// Output reference port cannot be reused
+
+firrtl.circuit "Bar" {
+  firrtl.module @Bar(out %_a: !firrtl.ref<uint<1>>) {
+    %x = firrtl.instance x @Bar2(out _a: !firrtl.ref<uint<1>>)
+    %y = firrtl.wire : !firrtl.uint<1>
+    // expected-error @+1 {{output reference port cannot be reused by multiple operations, it can only capture a unique dataflow}}
+    firrtl.strictconnect %_a, %x : !firrtl.ref<uint<1>>
+    %1 = firrtl.ref.send %y : !firrtl.uint<1>
+    firrtl.strictconnect %_a, %1 : !firrtl.ref<uint<1>>
+  }
+}
+
+// -----
+// Output reference port cannot be reused
+
+firrtl.circuit "Bar" {
+  firrtl.module @Bar(out %_a: !firrtl.ref<uint<1>>) {
+    %x = firrtl.wire : !firrtl.uint<1>
+    %y = firrtl.wire : !firrtl.uint<1>
+    %1 = firrtl.ref.send %x : !firrtl.uint<1>
+    %2 = firrtl.ref.send %y : !firrtl.uint<1>
+    // expected-error @+1 {{output reference port cannot be reused by multiple operations, it can only capture a unique dataflow}}
+    firrtl.strictconnect %_a, %1 : !firrtl.ref<uint<1>>
+    firrtl.strictconnect %_a, %2 : !firrtl.ref<uint<1>>
+  }
+}
+
