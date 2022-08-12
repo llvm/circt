@@ -124,32 +124,33 @@ public:
     if (auto cat = dyn_cast<CatPrimOp>(inputOp)) {
       // bits(cat(a, b), ...) => bits(a, ...), or bits(b, ...), or cat(bits(a,
       // ...), bits(b, ...))
-      if (auto rhsT = cat.getRhs().getType().dyn_cast<IntType>()) {
-        uint32_t lhsLo = rhsT.getWidth().getValue();
-        uint32_t rhsHi = lhsLo - 1;
-        Value newOp;
-        if (op.getHi() >= lhsLo && op.getLo() >= lhsLo) {
-          // Only indexing the lhs.
-          newOp = canonicalizeBits(
-              builder.create<BitsPrimOp>(cat.getLhs(), op.getHi() - lhsLo,
-                                         op.getLo() - lhsLo),
-              builder);
-        } else if (op.getHi() <= rhsHi && op.getLo() <= rhsHi) {
-          // Only indexing the rhs.
-          newOp = canonicalizeBits(
-              builder.create<BitsPrimOp>(cat.getRhs(), op.getHi(), op.getLo()),
-              builder);
-        } else {
-          auto bitsLhs = canonicalizeBits(
-              builder.create<BitsPrimOp>(cat.getLhs(), op.getHi() - lhsLo, 0),
-              builder);
-          auto bitsRhs = canonicalizeBits(
-              builder.create<BitsPrimOp>(cat.getRhs(), rhsHi, op.getLo()),
-              builder);
-          newOp = builder.createOrFold<CatPrimOp>(bitsLhs, bitsRhs);
-        }
-        return newOp;
+      auto rhsT = cat.getRhs().getType().cast<IntType>();
+      if (!rhsT.hasWidth())
+        return op;
+      uint32_t lhsLo = rhsT.getWidth().getValue();
+      uint32_t rhsHi = lhsLo - 1;
+      Value newOp;
+      if (op.getLo() >= lhsLo) {
+        // Only indexing the lhs.
+        newOp = canonicalizeBits(
+            builder.create<BitsPrimOp>(cat.getLhs(), op.getHi() - lhsLo,
+                                       op.getLo() - lhsLo),
+            builder);
+      } else if (op.getHi() <= rhsHi) {
+        // Only indexing the rhs.
+        newOp = canonicalizeBits(
+            builder.create<BitsPrimOp>(cat.getRhs(), op.getHi(), op.getLo()),
+            builder);
+      } else {
+        auto bitsLhs = canonicalizeBits(
+            builder.create<BitsPrimOp>(cat.getLhs(), op.getHi() - lhsLo, 0),
+            builder);
+        auto bitsRhs = canonicalizeBits(
+            builder.create<BitsPrimOp>(cat.getRhs(), rhsHi, op.getLo()),
+            builder);
+        newOp = builder.createOrFold<CatPrimOp>(bitsLhs, bitsRhs);
       }
+      return newOp;
     } else if (auto mux = dyn_cast<MuxPrimOp>(op.getInput().getDefiningOp())) {
       // bits(mux(sel, a, b), ...) => mux(sel, bits(a, ...), bits(b, ...))
       auto bitsHigh = canonicalizeBits(
