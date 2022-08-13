@@ -699,7 +699,7 @@ class RefResultTypeConstraint<string base, string ref>
                    base, ref,
                    "RefType::get($_self.cast<FIRRTLBaseType>())">;
 
-class RefInstancePortConstraint
+def RefInstancePortConstraint
   : PredOpTrait<"it cannot have module port as an operand because it implies"
   " upward reference XMR, which are not supported."
   " The reference operand must be a port from firrtl.instance",
@@ -710,7 +710,7 @@ class RefInstancePortConstraint
 //===----------------------------------------------------------------------===//
 
 def RefResolveOp: FIRRTLExprOp<"ref.resolve", [RefTypeConstraint<"ref","result">,
-                                    RefInstancePortConstraint<>]> {
+                                    RefInstancePortConstraint]> {
   let summary = "FIRRTL Resolve a Reference";
   let description = [{
     Resolve a remote reference for reading a remote value.
