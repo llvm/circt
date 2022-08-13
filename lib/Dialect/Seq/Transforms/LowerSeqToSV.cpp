@@ -268,6 +268,7 @@ FirRegLower::lower(FirRegOp reg) {
 
 static void emitRandomInit(
     hw::HWModuleOp module, sv::RegOp reg, OpBuilder &builder,
+    uint64_t randomRegWidth,
     llvm::function_ref<void(IntegerType,
                             SmallVector<FirRegLower::SymbolAndRange> &)>
         getRandomValues) {
@@ -297,7 +298,7 @@ static void emitRandomInit(
       rhs.append(("{{" + Twine(i++) + "}}").str());
 
       // This uses all bits of the random value. Emit without part select.
-      if (high == randomWidth - 1 && low == 0)
+      if (high == randomWidth - 1 && low == 0 && randomRegWidth == randomWidth)
         continue;
 
       // Emit a single bit part select, e.g., emit "[0]" and not "[0:0]".
@@ -406,7 +407,7 @@ void FirRegLower::initialisePreset(OpBuilder &regBuilder,
     values.push_back({symbol, {randomEnd, randomStart}});
   };
 
-  emitRandomInit(module, reg, initBuilder, getRandomValues);
+  emitRandomInit(module, reg, initBuilder, randomRegWidth, getRandomValues);
 }
 
 void FirRegLower::initialise(OpBuilder &regBuilder, OpBuilder &initBuilder,
@@ -454,7 +455,7 @@ void FirRegLower::initialise(OpBuilder &regBuilder, OpBuilder &initBuilder,
     }
   };
 
-  emitRandomInit(module, reg, initBuilder, getRandomValues);
+  emitRandomInit(module, reg, initBuilder, randomWidth, getRandomValues);
 }
 
 void FirRegLower::addToAlwaysBlock(sv::EventControl clockEdge, Value clock,
