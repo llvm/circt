@@ -92,7 +92,7 @@ public:
 
   void lower();
 
-  using SymbolAndRange = std::pair<Attribute, std::pair<unsigned, unsigned>>;
+  using SymbolAndRange = std::pair<Attribute, std::pair<uint64_t, uint64_t>>;
 
 private:
   using AsyncResetSignal = std::pair<Value, Value>;
@@ -122,7 +122,8 @@ private:
 
   /// This is a map from block to a pair of a random value and its unused
   /// bits. It is used to reduce the number of random value.
-  std::pair<Value, unsigned> randomValueAndRemain;
+  std::pair<Value, uint64_t> randomValueAndRemain;
+  sv::RegOp presetRandomValue;
 };
 } // namespace
 
@@ -217,8 +218,8 @@ void FirRegLower::lower() {
         });
   }
 
-  if (module->hasAttr("firrtl.random_init_width"))
-    module->removeAttr("firrtl.random_init_width");
+  // if (module->hasAttr("firrtl.random_init_width"))
+  //   module->removeAttr("firrtl.random_init_width");
 }
 
 std::pair<sv::RegOp, llvm::Optional<FirRegLower::AsyncResetSignal>>
@@ -357,7 +358,7 @@ void FirRegLower::initialisePreset(OpBuilder &regBuilder,
   uint64_t randomRegWidth = randomWidth * numRandomSources;
 
   // Only create the random register once.
-  if (randomValueAndRemain.first == nullptr) {
+  if (presetRandomValue == nullptr) {
     // Declare the random register.
     auto randReg = regBuilder.create<sv::RegOp>(
         reg.getLoc(), regBuilder.getIntegerType(randomRegWidth),
@@ -365,7 +366,7 @@ void FirRegLower::initialisePreset(OpBuilder &regBuilder,
         /*inner_sym=*/
         regBuilder.getStringAttr(ns.newName(Twine("_RANDOM"))));
 
-    randomValueAndRemain = {randReg, randomRegWidth};
+    presetRandomValue = randReg;
 
     SmallString<32> randomRegAssign("{{0}} = {");
 
@@ -394,10 +395,10 @@ void FirRegLower::initialisePreset(OpBuilder &regBuilder,
         reg->getAttrOfType<IntegerAttr>("firrtl.random_init_start").getUInt();
     auto randomEnd =
         reg->getAttrOfType<IntegerAttr>("firrtl.random_init_end").getUInt();
-    reg->removeAttr("firrtl.random_init_start");
-    reg->removeAttr("firrtl.random_init_end");
+    // reg->removeAttr("firrtl.random_init_start");
+    // reg->removeAttr("firrtl.random_init_end");
 
-    auto randReg = cast<sv::RegOp>(randomValueAndRemain.first.getDefiningOp());
+    auto randReg = presetRandomValue;
 
     auto symbol =
         hw::InnerRefAttr::get(module.getNameAttr(), randReg.getInnerSymAttr());
