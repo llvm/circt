@@ -20,6 +20,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Support/BackedgeBuilder.h"
+#include "circt/Support/SymCache.h"
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -1369,7 +1370,6 @@ void ESItoHWPass::runOnOperation() {
 static llvm::json::Value toJSON(Type type) {
   // TODO: This is far from complete. Build out as necessary.
   using llvm::json::Object;
-  using llvm::json::Value;
 
   StringRef dialect = type.getDialect().getNamespace();
   std::string m;
@@ -1431,11 +1431,14 @@ struct ESIEmitCollateralPass
 void ESIEmitCollateralPass::emitServiceJSON() {
   ModuleOp mod = getOperation();
   auto *ctxt = &getContext();
+  SymbolCache topSyms;
+  topSyms.addDefinitions(mod);
 
   std::string jsonStrBuffer;
   llvm::raw_string_ostream os(jsonStrBuffer);
   llvm::json::OStream J(os, 2);
 
+  // Emit the list of ports of a service declaration.
   auto emitPorts = [&](ServiceDeclOp decl) {
     J.array([&] {
       for (auto portOp : llvm::make_pointer_range(decl.ports().getOps())) {
@@ -1456,20 +1459,10 @@ void ESIEmitCollateralPass::emitServiceJSON() {
     });
   };
 
-  J.object([&] {
-    J.attributeArray("declarations", [&] {
-      for (auto op : llvm::make_pointer_range(mod.getOps())) {
-        if (auto decl = dyn_cast<ServiceDeclOp>(op)) {
-          J.object([&] {
-            J.attribute("name", decl.sym_name());
-            J.attributeArray("ports", [&] { emitPorts(decl); });
-          });
-        }
-      }
-    });
-
+  auto emitServicesForModule = [&](Operation *hwMod) {
+    // Emit a list of the servers in a design and the clients connected to them.
     J.attributeArray("services", [&] {
-      mod.walk([&](ServiceHierarchyMetadataOp metadata) {
+      hwMod->walk([&](ServiceHierarchyMetadataOp metadata) {
         J.object([&] {
           J.attribute("service", metadata.service_symbol());
           J.attributeArray("path", [&] {
@@ -1483,9 +1476,33 @@ void ESIEmitCollateralPass::emitServiceJSON() {
             for (auto client : metadata.clients())
               J.value(toJSON(client));
           });
-          metadata.erase();
         });
       });
+    });
+  };
+
+  J.object([&] {
+    // Emit a list of the service declarations in a design.
+    J.attributeArray("declarations", [&] {
+      for (auto op : llvm::make_pointer_range(mod.getOps())) {
+        if (auto decl = dyn_cast<ServiceDeclOp>(op)) {
+          J.object([&] {
+            J.attribute("name", decl.sym_name());
+            J.attributeArray("ports", [&] { emitPorts(decl); });
+          });
+        }
+      }
+    });
+
+    J.attributeArray("top_levels", [&] {
+      for (auto topModName : tops) {
+        J.object([&] {
+          auto sym = FlatSymbolRefAttr::get(ctxt, topModName);
+          Operation *hwMod = topSyms.getDefinition(sym);
+          J.attribute("module", toJSON(sym));
+          emitServicesForModule(hwMod);
+        });
+      }
     });
   });
 
@@ -1496,8 +1513,11 @@ void ESIEmitCollateralPass::emitServiceJSON() {
   auto outputFileAttr = OutputFileAttr::getFromFilename(ctxt, "services.json");
   verbatim->setAttr("output_file", outputFileAttr);
 
-  // By now, we should be done with all of the service declarations so we
-  // should delete them.
+  // By now, we should be done with all of the service declarations and metadata
+  // ops so we should delete them.
+  mod.walk([&](ServiceHierarchyMetadataOp op) { op.erase(); });
+  // Track declarations which are still used so that the service impl reqs are
+  // still valid.
   DenseSet<StringAttr> stillUsed;
   mod.walk([&](ServiceImplementReqOp req) {
     stillUsed.insert(StringAttr::get(req.getContext(), req.service_symbol()));

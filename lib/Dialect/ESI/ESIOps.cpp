@@ -328,7 +328,10 @@ LogicalResult ServiceHierarchyMetadataOp::verifySymbolUses(
   ModuleOp top = getOperation()->getParentOfType<mlir::ModuleOp>();
   SymbolTable topSyms = symbolTable.getSymbolTable(top);
   ServiceDeclOp serviceDeclOp = topSyms.lookup<ServiceDeclOp>(service_symbol());
-  return success(serviceDeclOp);
+  if (!serviceDeclOp)
+    return emitOpError("Could not find service declaration ")
+           << service_symbol();
+  return success();
 }
 
 #define GET_OP_CLASSES

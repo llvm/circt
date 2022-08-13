@@ -329,8 +329,10 @@ void ESIConnectServicesPass::copyMetadata(hw::HWMutableModuleLike mod) {
   }
 }
 
+/// Create an op which contains metadata about the soon-to-be implemented
+/// service. To be used by later passes which require these data (e.g. automated
+/// software API creation).
 static void emitServiceMetadata(ServiceImplementReqOp implReqOp) {
-
   ImplicitLocOpBuilder b(implReqOp.getLoc(), implReqOp);
   SmallVector<Attribute, 8> clients;
   for (auto clientOp : llvm::make_pointer_range(implReqOp.getOps())) {
