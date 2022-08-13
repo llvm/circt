@@ -171,7 +171,7 @@ def ServiceHierarchyMetadataOp : ESI_Op<"service.hierarchy.metadata", [
                        OptionalAttr<DictionaryAttr>:$impl_details,
                        ArrayAttr:$clients);
   let assemblyFormat = [{
-    $service_symbol `@` $serverNamePath
+    `path` $serverNamePath `implementing` $service_symbol
       `impl` `as` $impl_type (`opts` $impl_details^)?
       `clients` $clients attr-dict 
   }];

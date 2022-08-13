@@ -29,6 +29,7 @@
 
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/JSON.h"
 
 #include <memory>
 
@@ -1361,23 +1362,160 @@ void ESItoHWPass::runOnOperation() {
 }
 
 //===----------------------------------------------------------------------===//
-// Create Cap'n Proto schema pass
+// Emit ESI collateral pass. Collateral includes the capnp schema and a JSON
+// descriptor of the service hierarchy.
 //===----------------------------------------------------------------------===//
+
+static llvm::json::Value toJSON(Type type) {
+  // TODO: This is far from complete. Build out as necessary.
+  using llvm::json::Object;
+  using llvm::json::Value;
+
+  StringRef dialect = type.getDialect().getNamespace();
+  std::string m;
+  Object o = TypeSwitch<Type, Object>(type)
+                 .Case([&](ChannelType t) {
+                   m = "channel";
+                   return Object({{"inner", toJSON(t.getInner())}});
+                 })
+                 .Case([&](AnyType t) {
+                   m = "any";
+                   return Object();
+                 })
+                 .Default([&](Type t) {
+                   llvm::raw_string_ostream(m) << t;
+                   return Object();
+                 });
+  o["dialect"] = dialect;
+  if (m.length())
+    o["mnemonic"] = m;
+  return o;
+}
+
+// Serialize an attribute to a JSON value.
+static llvm::json::Value toJSON(Attribute attr) {
+  // TODO: This is far from complete. Build out as necessary.
+  using llvm::json::Value;
+  return TypeSwitch<Attribute, Value>(attr)
+      .Case([&](StringAttr a) { return a.getValue(); })
+      .Case([&](IntegerAttr a) { return a.getValue().getLimitedValue(); })
+      .Case([&](TypeAttr a) { return toJSON(a.getValue()); })
+      .Case([&](ArrayAttr a) {
+        return llvm::json::Array(
+            llvm::map_range(a, [](Attribute a) { return toJSON(a); }));
+      })
+      .Case([&](DictionaryAttr a) {
+        llvm::json::Object dict;
+        for (auto &entry : a.getValue())
+          dict[entry.getName().getValue()] = toJSON(entry.getValue());
+        return dict;
+      })
+      .Default([&](Attribute a) {
+        std::string buff;
+        llvm::raw_string_ostream(buff) << a;
+        return buff;
+      });
+}
 
 namespace {
 /// Run all the physical lowerings.
-struct ESICreateCapnpSchemaPass
-    : public ESICreateCapnpSchemaBase<ESICreateCapnpSchemaPass> {
+struct ESIEmitCollateralPass
+    : public ESIEmitCollateralBase<ESIEmitCollateralPass> {
   void runOnOperation() override;
+
+  /// Emit service hierarchy info in JSON format.
+  void emitServiceJSON();
 };
 } // anonymous namespace
 
-void ESICreateCapnpSchemaPass::runOnOperation() {
+void ESIEmitCollateralPass::emitServiceJSON() {
   ModuleOp mod = getOperation();
   auto *ctxt = &getContext();
 
-  // Check for cosim endpoints in the design. If the design doesn't have any we
-  // don't need a schema.
+  std::string jsonStrBuffer;
+  llvm::raw_string_ostream os(jsonStrBuffer);
+  llvm::json::OStream J(os, 2);
+
+  auto emitPorts = [&](ServiceDeclOp decl) {
+    J.array([&] {
+      for (auto portOp : llvm::make_pointer_range(decl.ports().getOps())) {
+        J.object([&] {
+          if (auto port = dyn_cast<ToServerOp>(portOp)) {
+            J.attribute("name", port.inner_sym());
+            J.attribute("to-server-type", toJSON(port.type()));
+          } else if (auto port = dyn_cast<ToClientOp>(portOp)) {
+            J.attribute("name", port.inner_sym());
+            J.attribute("to-client-type", toJSON(port.type()));
+          } else if (auto port = dyn_cast<ServiceDeclInOutOp>(portOp)) {
+            J.attribute("name", port.inner_sym());
+            J.attribute("to-client-type", toJSON(port.outType()));
+            J.attribute("to-server-type", toJSON(port.inType()));
+          }
+        });
+      }
+    });
+  };
+
+  J.object([&] {
+    J.attributeArray("declarations", [&] {
+      for (auto op : llvm::make_pointer_range(mod.getOps())) {
+        if (auto decl = dyn_cast<ServiceDeclOp>(op)) {
+          J.object([&] {
+            J.attribute("name", decl.sym_name());
+            J.attributeArray("ports", [&] { emitPorts(decl); });
+          });
+        }
+      }
+    });
+
+    J.attributeArray("services", [&] {
+      mod.walk([&](ServiceHierarchyMetadataOp metadata) {
+        J.object([&] {
+          J.attribute("service", metadata.service_symbol());
+          J.attributeArray("path", [&] {
+            for (auto attr : metadata.serverNamePath())
+              J.value(attr.cast<StringAttr>().getValue());
+          });
+          J.attribute("impl_type", metadata.impl_type());
+          if (metadata.impl_detailsAttr())
+            J.attribute("impl_details", toJSON(metadata.impl_detailsAttr()));
+          J.attributeArray("clients", [&] {
+            for (auto client : metadata.clients())
+              J.value(toJSON(client));
+          });
+          metadata.erase();
+        });
+      });
+    });
+  });
+
+  J.flush();
+  OpBuilder b = OpBuilder::atBlockEnd(mod.getBody());
+  auto verbatim = b.create<sv::VerbatimOp>(b.getUnknownLoc(),
+                                           StringAttr::get(ctxt, os.str()));
+  auto outputFileAttr = OutputFileAttr::getFromFilename(ctxt, "services.json");
+  verbatim->setAttr("output_file", outputFileAttr);
+
+  // By now, we should be done with all of the service declarations so we
+  // should delete them.
+  DenseSet<StringAttr> stillUsed;
+  mod.walk([&](ServiceImplementReqOp req) {
+    stillUsed.insert(StringAttr::get(req.getContext(), req.service_symbol()));
+  });
+  mod.walk([&](ServiceDeclOp decl) {
+    if (!stillUsed.contains(decl.sym_nameAttr()))
+      decl.erase();
+  });
+}
+
+void ESIEmitCollateralPass::runOnOperation() {
+  ModuleOp mod = getOperation();
+  auto *ctxt = &getContext();
+
+  emitServiceJSON();
+
+  // Check for cosim endpoints in the design. If the design doesn't have any
+  // we don't need a schema.
   WalkResult cosimWalk =
       mod.walk([](CosimEndpointOp _) { return WalkResult::interrupt(); });
   if (!cosimWalk.wasInterrupted())
@@ -1403,8 +1541,8 @@ void ESICreateCapnpSchemaPass::runOnOperation() {
 
 namespace circt {
 namespace esi {
-std::unique_ptr<OperationPass<ModuleOp>> createESICreateCapnpSchemaPass() {
-  return std::make_unique<ESICreateCapnpSchemaPass>();
+std::unique_ptr<OperationPass<ModuleOp>> createESIEmitCollateralPass() {
+  return std::make_unique<ESIEmitCollateralPass>();
 }
 std::unique_ptr<OperationPass<ModuleOp>> createESIPhysicalLoweringPass() {
   return std::make_unique<ESIToPhysicalPass>();

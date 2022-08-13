@@ -323,5 +323,13 @@ RequestInOutChannelOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   return success();
 }
 
+LogicalResult ServiceHierarchyMetadataOp::verifySymbolUses(
+    SymbolTableCollection &symbolTable) {
+  ModuleOp top = getOperation()->getParentOfType<mlir::ModuleOp>();
+  SymbolTable topSyms = symbolTable.getSymbolTable(top);
+  ServiceDeclOp serviceDeclOp = topSyms.lookup<ServiceDeclOp>(service_symbol());
+  return success(serviceDeclOp);
+}
+
 #define GET_OP_CLASSES
 #include "circt/Dialect/ESI/ESI.cpp.inc"

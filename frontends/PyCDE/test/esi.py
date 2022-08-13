@@ -157,7 +157,7 @@ class MultiplexerService:
 # CHECK:         hw.output %int_in, %int_in_valid, %loopback_out_ready : i32, i1, i1
 
 
-@unittestmodule(run_passes=True, print_after_passes=True)
+@unittestmodule(run_passes=True, print_after_passes=True, emit_outputs=True)
 class MultiplexerTop:
   clk = Clock(types.i1)
   rst = Input(types.i1)

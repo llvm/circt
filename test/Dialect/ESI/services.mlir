@@ -147,3 +147,11 @@ msft.module @LoopbackCosimTop {} (%clk: i1, %rst: i1) {
   msft.instance @m1 @InOutLoopback(%clk) : (i1) -> ()
   msft.output
 }
+
+// CONN-LABEL: msft.module @LoopbackCosimTopWrapper {} (%clk: i1, %rst: i1) {
+// CONN:         esi.service.hierarchy.metadata path ["top"] implementing @HostComms impl as "cosim" opts {EpID_start = 20 : i64} clients [{client_name = ["m1", "loopback_inout"], port = #hw.innerNameRef<@HostComms::@ReqResp>, to_client_type = !esi.channel<i16>}, {client_name = ["m1", "loopback_inout"], port = #hw.innerNameRef<@HostComms::@ReqResp>, to_server_type = !esi.channel<i8>}]
+// CONN:         msft.instance @top @LoopbackCosimTop(%clk, %rst)  : (i1, i1) -> ()
+msft.module @LoopbackCosimTopWrapper {} (%clk: i1, %rst: i1) {
+  msft.instance @top @LoopbackCosimTop(%clk, %rst) : (i1, i1) -> ()
+  msft.output
+}
