@@ -558,6 +558,9 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     }
   }
 
+  if (inliner)
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInlinerPass());
+
   pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
       firrtl::createRandomizeRegisterInitPass());
 
@@ -580,9 +583,6 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
 
   if (prefixModules)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createPrefixModulesPass());
-
-  if (inliner)
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInlinerPass());
 
   if (imconstprop && !disableOptimization)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createIMConstPropPass());
