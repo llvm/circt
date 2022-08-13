@@ -33,20 +33,16 @@ def unittestmodule(generate=True,
     setattr(builtins, mod.__name__, mod)
 
     sys = System([mod])
-    try:
-      if generate:
-        sys.generate()
-        if print:
-          sys.print()
-        if run_passes:
-          sys.run_passes()
-        if print_after_passes:
-          sys.print()
-        if emit_outputs:
-          sys.emit_outputs()
-    except Exception:
-      sys.print()
-      raise
+    if generate:
+      sys.generate()
+      if print:
+        sys.print()
+      if run_passes:
+        sys.run_passes()
+      if print_after_passes:
+        sys.print()
+      if emit_outputs:
+        sys.emit_outputs()
 
     return mod
 
