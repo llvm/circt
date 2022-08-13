@@ -600,4 +600,12 @@ def RandomizeRegisterInit :
   let constructor = "circt::firrtl::createRandomizeRegisterInitPass()";
 }
 
+def LowerXMR : Pass<"firrtl-lower-xmr", "firrtl::CircuitOp"> {
+  let summary = "Lower ref ports to XMR";
+  let description = [{
+    This pass lowers RefType ops and ports to verbatim encoded XMRs.
+  }];
+  let constructor = "circt::firrtl::createLowerXMRPass()";
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD
