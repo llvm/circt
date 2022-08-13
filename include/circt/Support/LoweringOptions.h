@@ -117,12 +117,9 @@ struct LoweringOptions {
   /// Print debug info.
   bool printDebugInfo = false;
 
-  /// If true, verilog expression legalization is performed at
-  /// PrepareForEmission via IR mutation. This means temporary wires are
-  /// explicitly spilled to wire ops instead of implicilty being spilled at
-  /// emission. Once ExportVerilog simplification is completed, this feature
-  /// shoiuld be enabled by default.
-  bool spillWiresAtPrepare = false;
+  /// If true, ExportVerilog uses an old emission. This flag should be
+  /// deprecated once the old emission mode is no longer necessary.
+  bool useOldEmissionMode = false;
 };
 
 /// Register commandline options for the verilog emitter.

@@ -79,8 +79,8 @@ with Context() as ctx, Location.unknown():
 
   pm = PassManager.parse("lower-seq-to-sv")
   pm.run(m)
-  # CHECK: (* no_merge *)
-  # CHECK: reg [31:0] reg1;
   # CHECK: always_ff @(posedge clk)
   # CHECK: my_reg <= {{.+}}
+  # CHECK: (* no_merge *)
+  # CHECK: reg [31:0] reg1;
   circt.export_verilog(m, sys.stdout)

@@ -43,7 +43,7 @@ hw.module @Expressions(%in4: i4, %clock: i1) ->
   %c0_i6 = hw.constant 0 : i6
   %c0_i10 = hw.constant 0 : i10
 
-  // CHECK: wire [3:0] _GEN = in4 >> in4;
+  // CHECK: wire [3:0]  _GEN = in4 >> in4;
   %7 = comb.extract %in4 from 2 : (i4) -> i1
 
   %10 = comb.shru %in4, %in4 : i4
@@ -291,7 +291,7 @@ hw.module @MultiUseExpr(%a: i4) -> (b0: i1, b1: i1, b2: i1, b3: i1, b4: i2) {
   %c-1_i5 = hw.constant -1 : i5
   %c-1_i4 = hw.constant -1 : i4
 
-  // CHECK: wire _GEN = ^a;
+  // CHECK: wire {{ *}}_GEN = ^a;
   %0 = comb.parity %a : i4
   // CHECK-NEXT: wire [4:0] _GEN_0 = {1'h0, a} << 5'h1;
   %1 = comb.concat %false, %a : i1, i4
@@ -352,19 +352,15 @@ hw.module @ordered_region(%a: i1) {
   sv.ordered {
     // CHECK-NEXT: `ifdef foo
     sv.ifdef "foo" {
-      // CHECK-NEXT: wire
+      // CHECK-NEXT: wire_0 = a;
       %wire = sv.wire : !hw.inout<i1>
-      // CHECK-EMPTY:
-      // CHECK-NEXT: assign
       sv.assign %wire, %a : i1
     }
     // CHECK-NEXT: `endif
     // CHECK-NEXT: `ifdef bar
     sv.ifdef "bar" {
-      // CHECK-NEXT: wire
+      // CHECK-NEXT: wire_1 = a;
       %wire = sv.wire : !hw.inout<i1>
-      // CHECK-EMPTY:
-      // CHECK-NEXT: assign
       sv.assign %wire, %a : i1
     }
     // CHECK-NEXT: `endif
