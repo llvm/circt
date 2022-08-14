@@ -53,7 +53,7 @@ ssp::parseOptionalPropertyArray(ArrayAttr &attr, AsmParser &parser,
 
     // Try to parse a generic attribute.
     auto parseGenericAttrResult = parser.parseOptionalAttribute(elem);
-    if (parseGenericAttrResult.hasValue()) {
+    if (parseGenericAttrResult.has_value()) {
       if (failed(*parseGenericAttrResult))
         return failure();
 
@@ -66,7 +66,7 @@ ssp::parseOptionalPropertyArray(ArrayAttr &attr, AsmParser &parser,
     auto parseShortformAttrResult =
         generatedAttributeParser(parser, &mnemonic, Type(), elem);
 
-    if (!parseShortformAttrResult.hasValue()) {
+    if (!parseShortformAttrResult.has_value()) {
       return parser.emitError(parser.getCurrentLocation(),
                               "carries unknown shortform property: ")
              << mnemonic;

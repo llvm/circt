@@ -91,17 +91,15 @@ struct StructExtractOpConversion
                   ConversionPatternRewriter &rewriter) const override {
 
     Type inputTy = typeConverter->convertType(op.getInput().getType());
-    Type resultTy = typeConverter->convertType(op.getResult().getType());
 
     uint32_t fieldIndex = HWToLLVMEndianessConverter::llvmIndexOfStructField(
         op.getInput().getType().cast<hw::StructType>(), op.getField());
-    IntegerAttr indexAttr = rewriter.getI32IntegerAttr(fieldIndex);
 
     Value castInput = typeConverter->materializeTargetConversion(
         rewriter, op.getInput().getLoc(), inputTy, op.getInput());
 
-    rewriter.replaceOpWithNewOp<LLVM::ExtractValueOp>(
-        op, resultTy, castInput, rewriter.getArrayAttr(indexAttr));
+    rewriter.replaceOpWithNewOp<LLVM::ExtractValueOp>(op, castInput,
+                                                      fieldIndex);
 
     return success();
   }
@@ -209,19 +207,16 @@ struct StructInjectOpConversion
                   ConversionPatternRewriter &rewriter) const override {
 
     Type inputTy = typeConverter->convertType(op.getInput().getType());
-    Type resultTy = typeConverter->convertType(op.getResult().getType());
 
     uint32_t fieldIndex = HWToLLVMEndianessConverter::llvmIndexOfStructField(
         op.getInput().getType().cast<hw::StructType>(),
         op.getFieldAttr().getValue());
-    IntegerAttr indexAttr = rewriter.getI32IntegerAttr(fieldIndex);
 
     Value castInput = typeConverter->materializeTargetConversion(
         rewriter, op.getInput().getLoc(), inputTy, op.getInput());
 
     rewriter.replaceOpWithNewOp<LLVM::InsertValueOp>(
-        op, resultTy, castInput, op.getNewValue(),
-        rewriter.getArrayAttr(indexAttr));
+        op, castInput, op.getNewValue(), fieldIndex);
 
     return success();
   }
@@ -243,7 +238,6 @@ struct ArrayConcatOpConversion
                   ConversionPatternRewriter &rewriter) const override {
 
     hw::ArrayType arrTy = op.getResult().getType().cast<hw::ArrayType>();
-    Type elemTy = typeConverter->convertType(arrTy.getElementType());
     Type resultTy = typeConverter->convertType(arrTy);
 
     Value arr = rewriter.create<LLVM::UndefOp>(op->getLoc(), resultTy);
@@ -256,10 +250,9 @@ struct ArrayConcatOpConversion
       Value castInput = typeConverter->materializeTargetConversion(
           rewriter, op.getInputs()[j].getLoc(), inputTy, op.getInputs()[j]);
 
-      Value element = rewriter.create<LLVM::ExtractValueOp>(
-          op->getLoc(), elemTy, castInput, rewriter.getI32ArrayAttr(k));
-      arr = rewriter.create<LLVM::InsertValueOp>(
-          op->getLoc(), resultTy, arr, element, rewriter.getI32ArrayAttr(i));
+      Value element =
+          rewriter.create<LLVM::ExtractValueOp>(op->getLoc(), castInput, k);
+      arr = rewriter.create<LLVM::InsertValueOp>(op->getLoc(), arr, element, i);
 
       ++k;
       if (k >= op.getInputs()[j].getType().cast<hw::ArrayType>().getSize()) {
@@ -363,8 +356,8 @@ struct HWArrayCreateOpConversion
           rewriter, op->getLoc(), typeConverter->convertType(input.getType()),
           input);
 
-      arr = rewriter.create<LLVM::InsertValueOp>(
-          op->getLoc(), arrayTy, arr, castInput, rewriter.getI32ArrayAttr(i));
+      arr =
+          rewriter.create<LLVM::InsertValueOp>(op->getLoc(), arr, castInput, i);
     }
 
     rewriter.replaceOp(op, arr);
@@ -395,8 +388,8 @@ struct HWStructCreateOpConversion
       Value castInput = typeConverter->materializeTargetConversion(
           rewriter, op->getLoc(), typeConverter->convertType(input.getType()),
           input);
-      tup = rewriter.create<LLVM::InsertValueOp>(
-          op->getLoc(), resTy, tup, castInput, rewriter.getI32ArrayAttr(i));
+      tup =
+          rewriter.create<LLVM::InsertValueOp>(op->getLoc(), tup, castInput, i);
     }
 
     rewriter.replaceOp(op, tup);

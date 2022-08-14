@@ -88,8 +88,8 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
       disallowPortDeclSharing = true;
     } else if (option == "printDebugInfo") {
       printDebugInfo = true;
-    } else if (option == "spillWiresAtPrepare") {
-      spillWiresAtPrepare = true;
+    } else if (option == "useOldEmissionMode") {
+      useOldEmissionMode = true;
     } else {
       errorHandler(llvm::Twine("unknown style option \'") + option + "\'");
       // We continue parsing options after a failure.
@@ -122,8 +122,8 @@ std::string LoweringOptions::toString() const {
     options += "disallowPortDeclSharing,";
   if (printDebugInfo)
     options += "printDebugInfo,";
-  if (spillWiresAtPrepare)
-    options += "spillWiresAtPrepare,";
+  if (useOldEmissionMode)
+    options += "useOldEmissionMode,";
 
   if (emittedLineLength != DEFAULT_LINE_LENGTH)
     options += "emittedLineLength=" + std::to_string(emittedLineLength) + ',';

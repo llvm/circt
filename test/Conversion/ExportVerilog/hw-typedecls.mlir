@@ -80,7 +80,6 @@ hw.module @testAggregateCreate(%i: i1) -> (out1: i1, out2: i1) {
 hw.module @testAggregateInout(%i: i1) -> (out1: i8, out2: i1) {
   // CHECK:      wire arr array;
   // CHECK-NEXT: wire bar str;
-  // CHECK-EMPTY:
   // CHECK-NEXT: assign out1 = array[4'h0];
   // CHECk-NEXT: assign out2 = str.a;
   %array = sv.wire : !hw.inout<!hw.typealias<@__hw_typedecls::@arr, !hw.array<16xi8>>>

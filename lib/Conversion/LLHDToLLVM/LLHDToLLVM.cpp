@@ -145,14 +145,14 @@ static Value createSubSig(LLVM::LLVMDialect *dialect,
 
   // Create signal struct.
   auto sigUndef = rewriter.create<LLVM::UndefOp>(loc, sigTy);
-  auto storeSubPtr = rewriter.create<LLVM::InsertValueOp>(
-      loc, sigUndef, newPtr, rewriter.getI32ArrayAttr(0));
-  auto storeSubOffset = rewriter.create<LLVM::InsertValueOp>(
-      loc, storeSubPtr, newOffset, rewriter.getI32ArrayAttr(1));
+  auto storeSubPtr =
+      rewriter.create<LLVM::InsertValueOp>(loc, sigUndef, newPtr, 0);
+  auto storeSubOffset =
+      rewriter.create<LLVM::InsertValueOp>(loc, storeSubPtr, newOffset, 1);
   auto storeSubInstIndex = rewriter.create<LLVM::InsertValueOp>(
-      loc, storeSubOffset, originDetail[2], rewriter.getI32ArrayAttr(2));
+      loc, storeSubOffset, originDetail[2], 2);
   auto storeSubGlobalIndex = rewriter.create<LLVM::InsertValueOp>(
-      loc, storeSubInstIndex, originDetail[3], rewriter.getI32ArrayAttr(3));
+      loc, storeSubInstIndex, originDetail[3], 3);
 
   // Allocate and store the subsignal.
   auto oneC = rewriter.create<LLVM::ConstantOp>(loc, i32Ty,
@@ -967,14 +967,11 @@ struct WaitOpConversion : public ConvertToLLVMPattern {
     // Spawn scheduled event, if present.
     if (waitOp.getTime()) {
       auto realTime = rewriter.create<LLVM::ExtractValueOp>(
-          op->getLoc(), i64Ty, transformed.getTime(),
-          rewriter.getI32ArrayAttr(0));
+          op->getLoc(), transformed.getTime(), 0);
       auto delta = rewriter.create<LLVM::ExtractValueOp>(
-          op->getLoc(), i64Ty, transformed.getTime(),
-          rewriter.getI32ArrayAttr(1));
+          op->getLoc(), transformed.getTime(), 1);
       auto eps = rewriter.create<LLVM::ExtractValueOp>(
-          op->getLoc(), i64Ty, transformed.getTime(),
-          rewriter.getI32ArrayAttr(2));
+          op->getLoc(), transformed.getTime(), 2);
 
       std::array<Value, 5> args({statePtr, procStateBC, realTime, delta, eps});
       rewriter.create<LLVM::CallOp>(op->getLoc(), llvm::None,
@@ -1102,7 +1099,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
                          .create<LLVM::CallOp>(op->getLoc(), i8PtrTy,
                                                SymbolRefAttr::get(mallFunc),
                                                ArrayRef<Value>({regSize}))
-                         .getResult(0);
+                         .getResult();
       auto regMallBC = initBuilder.create<LLVM::BitcastOp>(
           op->getLoc(), regStatePtrTy, regMall);
       auto zeroB = initBuilder.create<LLVM::ConstantOp>(
@@ -1177,7 +1174,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
             initBuilder
                 .create<LLVM::CallOp>(op.getLoc(), i8PtrTy,
                                       SymbolRefAttr::get(mallFunc), margs)
-                .getResult(0);
+                .getResult();
 
         // Store the initial value.
         auto bitcast = initBuilder.create<LLVM::BitcastOp>(
@@ -1202,7 +1199,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
             initBuilder
                 .create<LLVM::CallOp>(op.getLoc(), i32Ty,
                                       SymbolRefAttr::get(sigFunc), args)
-                .getResult(0);
+                .getResult();
 
         // Add structured underlying type information.
         if (auto arrayTy = underlyingTy.dyn_cast<LLVM::LLVMArrayType>()) {
@@ -1298,7 +1295,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
                                .create<LLVM::CallOp>(
                                    op->getLoc(), i8PtrTy,
                                    SymbolRefAttr::get(mallFunc), procStateMArgs)
-                               .getResult(0);
+                               .getResult();
 
       auto procStateBC = initBuilder.create<LLVM::BitcastOp>(
           op->getLoc(), procStatePtrTy, procStateMall);
@@ -1321,7 +1318,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
           initBuilder
               .create<LLVM::CallOp>(op->getLoc(), i8PtrTy,
                                     SymbolRefAttr::get(mallFunc), senseMArgs)
-              .getResult(0);
+              .getResult();
 
       auto sensesBC = initBuilder.create<LLVM::BitcastOp>(
           op->getLoc(), sensesPtrTy, sensesMall);
@@ -1562,14 +1559,11 @@ struct DrvOpConversion : public ConvertToLLVMPattern {
 
     // Get the time values.
     auto realTime = rewriter.create<LLVM::ExtractValueOp>(
-        op->getLoc(), i64Ty, transformed.getTime(),
-        rewriter.getI32ArrayAttr(0));
+        op->getLoc(), transformed.getTime(), 0);
     auto delta = rewriter.create<LLVM::ExtractValueOp>(
-        op->getLoc(), i64Ty, transformed.getTime(),
-        rewriter.getI32ArrayAttr(1));
-    auto eps = rewriter.create<LLVM::ExtractValueOp>(
-        op->getLoc(), i64Ty, transformed.getTime(),
-        rewriter.getI32ArrayAttr(2));
+        op->getLoc(), transformed.getTime(), 1);
+    auto eps = rewriter.create<LLVM::ExtractValueOp>(op->getLoc(),
+                                                     transformed.getTime(), 2);
 
     // Define the driveSignal library call arguments.
     std::array<Value, 7> args({statePtr, transformed.getSignal(), bc, sigWidth,

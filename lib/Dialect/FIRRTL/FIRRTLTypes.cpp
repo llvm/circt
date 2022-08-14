@@ -167,8 +167,8 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
       // The 'name' can be an identifier or an integer.
       uint32_t fieldIntName;
       auto intName = parser.parseOptionalInteger(fieldIntName);
-      if (intName.hasValue()) {
-        if (failed(intName.getValue()))
+      if (intName.has_value()) {
+        if (failed(intName.value()))
           return failure();
         nameStr = llvm::utostr(fieldIntName);
         name = nameStr;
@@ -229,8 +229,8 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
 static ParseResult parseType(Type &result, StringRef name, AsmParser &parser) {
   // Try the custom type parser.
   OptionalParseResult parseResult = customTypeParser(parser, name, result);
-  if (parseResult.hasValue())
-    return parseResult.getValue();
+  if (parseResult.has_value())
+    return parseResult.value();
 
   // None of the above recognized the type, so we bail.
   parser.emitError(parser.getNameLoc(), "unknown FIRRTL dialect type: \"")
