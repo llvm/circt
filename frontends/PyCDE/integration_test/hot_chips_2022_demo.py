@@ -147,7 +147,17 @@ class ServiceWrapper:
 
     Result.data("data", wrapped_top.out0)
 
-system = System([ServiceWrapper])
+@module
+class Top:
+  clock = Input(types.i1)
+  reset = Input(types.i1)
+
+  @generator
+  def generate(ports):
+    ServiceWrapper(clock=ports.clock, reset=ports.reset)
+    esi.Cosim(Memory, ports.clock, ports.reset)
+
+system = System([Top])
 system.import_modules(imported_modules)
 system.generate()
 system.emit_outputs()
