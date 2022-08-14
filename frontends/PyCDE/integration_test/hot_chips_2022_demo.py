@@ -112,21 +112,40 @@ class HandshakeToESIWrapper:
 
 
 @esi.ServiceDecl
+class Control:
+  ctrl = esi.ToFromServer(to_server_type=NoneType.get(), to_client_type=NoneType.get())
+
+
+@esi.ServiceDecl
 class Memory:
   port0 = esi.ToFromServer(to_server_type=types.i64, to_client_type=types.i32)
+  port1 = esi.ToFromServer(to_server_type=types.i64, to_client_type=types.i32)
+
+
+@esi.ServiceDecl
+class Result:
+  data = esi.ToServer(types.i32)
 
 
 @module
 class ServiceWrapper:
+  clock = Input(types.i1)
+  reset = Input(types.i1)
 
   @generator
   def generate(ports):
-    wrapped_top = HandshakeToESIWrapper()
+    wrapped_top = HandshakeToESIWrapper(clock=ports.clock, reset=ports.reset)
+
+    ctrl = Control.ctrl("ctrl", wrapped_top.out_ctrl)
+    wrapped_top.in_ctrl.connect(ctrl)
 
     port0_data = Memory.port0("port0", wrapped_top.in0_ld_addr0)
     wrapped_top.in0_ld_data0.connect(port0_data)
 
-    import pdb; pdb.set_trace()
+    port1_data = Memory.port1("port1", wrapped_top.in1_ld_addr0)
+    wrapped_top.in1_ld_data0.connect(port1_data)
+
+    Result.data("data", wrapped_top.out0)
 
 system = System([ServiceWrapper])
 system.import_modules(imported_modules)
