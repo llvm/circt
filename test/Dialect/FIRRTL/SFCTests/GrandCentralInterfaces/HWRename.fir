@@ -32,7 +32,7 @@ circuit Top:
     ; CHECK-NEXT: endmodule
 
     ; CHECK:      module DUT
-    ; CHECK:        wire [[wireName]];
+    ; CHECK:        wire [[wireName]]
     ; CHECK:      endmodule
 
     ; CHECK:      module Top

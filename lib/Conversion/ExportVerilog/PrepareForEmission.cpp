@@ -58,8 +58,9 @@ static bool shouldSpillWire(Operation &op, const LoweringOptions &options) {
   if (!isVerilogExpression(&op))
     return false;
 
-  // When `spillWiresAtPrepare` is true, spill temporary wires if necessary.
-  if (options.spillWiresAtPrepare &&
+  // In the new emission mode, spill temporary wires if it is not possible to
+  // inline.
+  if (!options.useOldEmissionMode &&
       !ExportVerilog::isExpressionEmittedInline(&op))
     return true;
 

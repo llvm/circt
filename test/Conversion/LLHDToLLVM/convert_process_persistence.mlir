@@ -229,10 +229,10 @@ llhd.proc @convert_persistent_ptr () -> () {
 // CHECK:           %[[VAL_30:.*]] = llvm.inttoptr %[[VAL_29]] : i64 to !llvm.ptr<i8>
 // CHECK:           %[[VAL_31:.*]] = llvm.urem %[[VAL_25]], %[[VAL_27]]  : i64
 // CHECK:           %[[VAL_32:.*]] = llvm.mlir.undef : !llvm.struct<(ptr<i8>, i64, i64, i64)>
-// CHECK:           %[[VAL_33:.*]] = llvm.insertvalue %[[VAL_30]], %[[VAL_32]][0 : i32] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
-// CHECK:           %[[VAL_34:.*]] = llvm.insertvalue %[[VAL_31]], %[[VAL_33]][1 : i32] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
-// CHECK:           %[[VAL_35:.*]] = llvm.insertvalue %[[VAL_21]], %[[VAL_34]][2 : i32] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
-// CHECK:           %[[VAL_36:.*]] = llvm.insertvalue %[[VAL_23]], %[[VAL_35]][3 : i32] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
+// CHECK:           %[[VAL_33:.*]] = llvm.insertvalue %[[VAL_30]], %[[VAL_32]][0] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
+// CHECK:           %[[VAL_34:.*]] = llvm.insertvalue %[[VAL_31]], %[[VAL_33]][1] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
+// CHECK:           %[[VAL_35:.*]] = llvm.insertvalue %[[VAL_21]], %[[VAL_34]][2] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
+// CHECK:           %[[VAL_36:.*]] = llvm.insertvalue %[[VAL_23]], %[[VAL_35]][3] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
 // CHECK:           %[[VAL_37:.*]] = llvm.mlir.constant(1 : i32) : i32
 // CHECK:           %[[VAL_38:.*]] = llvm.alloca %[[VAL_37]] x !llvm.struct<(ptr<i8>, i64, i64, i64)> {alignment = 4 : i64} : (i32) -> !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>
 // CHECK:           llvm.store %[[VAL_36]], %[[VAL_38]] : !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>

@@ -29,9 +29,9 @@
 // CHECK:           %[[VAL_22:.*]] = llvm.alloca %[[VAL_21]] x i1 {alignment = 4 : i64} : (i32) -> !llvm.ptr<i1>
 // CHECK:           llvm.store %[[VAL_18]], %[[VAL_22]] : !llvm.ptr<i1>
 // CHECK:           %[[VAL_23:.*]] = llvm.bitcast %[[VAL_22]] : !llvm.ptr<i1> to !llvm.ptr<i8>
-// CHECK:           %[[VAL_24:.*]] = llvm.extractvalue %[[VAL_19]][0 : i32] : !llvm.array<3 x i64>
-// CHECK:           %[[VAL_25:.*]] = llvm.extractvalue %[[VAL_19]][1 : i32] : !llvm.array<3 x i64>
-// CHECK:           %[[VAL_26:.*]] = llvm.extractvalue %[[VAL_19]][2 : i32] : !llvm.array<3 x i64>
+// CHECK:           %[[VAL_24:.*]] = llvm.extractvalue %[[VAL_19]][0] : !llvm.array<3 x i64>
+// CHECK:           %[[VAL_25:.*]] = llvm.extractvalue %[[VAL_19]][1] : !llvm.array<3 x i64>
+// CHECK:           %[[VAL_26:.*]] = llvm.extractvalue %[[VAL_19]][2] : !llvm.array<3 x i64>
 // CHECK:           llvm.call @driveSignal(%[[VAL_0]], %[[VAL_5]], %[[VAL_23]], %[[VAL_20]], %[[VAL_24]], %[[VAL_25]], %[[VAL_26]]) : (!llvm.ptr<i8>, !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>, !llvm.ptr<i8>, i64, i64, i64, i64) -> ()
 // CHECK:           llvm.return
 // CHECK:         }

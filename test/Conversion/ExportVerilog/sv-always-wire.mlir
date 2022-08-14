@@ -6,7 +6,7 @@ hw.module @AlwaysSpill(%port: i1) {
   %true = hw.constant true
   %awire = sv.wire : !hw.inout<i1>
 
-  // CHECK: wire awire;
+  // CHECK: wire {{ *}} awire;
   %awire2 = sv.read_inout %awire : !hw.inout<i1>
 
   // Existing simple names should not cause additional spill.

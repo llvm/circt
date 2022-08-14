@@ -43,7 +43,7 @@ def ChannelBufferOp : ESI_Abstract_Op<"buffer", [
   }];
 
   let arguments = (ins I1:$clk, I1:$rst, ChannelType:$input,
-    OptionalAttr<Confined<I64Attr, [IntMinValue<1>]>>:$stages,
+    OptionalAttr<ConfinedAttr<I64Attr, [IntMinValue<1>]>>:$stages,
     OptionalAttr<StrAttr>:$name);
   let results = (outs ChannelType:$output);
   let hasCustomAssemblyFormat = 1;

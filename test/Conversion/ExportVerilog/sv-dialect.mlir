@@ -1,5 +1,5 @@
-// RUN: circt-opt %s -export-verilog -verify-diagnostics --lowering-options=exprInEventControl,explicitBitcast,maximumNumberOfTermsInConcat=10 | FileCheck %s --strict-whitespace --check-prefixes=CHECK,OLD
-// RUN: circt-opt %s -export-verilog -verify-diagnostics --lowering-options=exprInEventControl,explicitBitcast,maximumNumberOfTermsInConcat=10,spillWiresAtPrepare | FileCheck %s --check-prefixes=CHECK,NEW
+// RUN: circt-opt %s -export-verilog -verify-diagnostics --lowering-options=exprInEventControl,explicitBitcast,maximumNumberOfTermsInConcat=10,useOldEmissionMode | FileCheck %s --strict-whitespace --check-prefixes=CHECK,OLD
+// RUN: circt-opt %s -export-verilog -verify-diagnostics --lowering-options=exprInEventControl,explicitBitcast,maximumNumberOfTermsInConcat=10 | FileCheck %s --check-prefixes=CHECK,NEW
 
 // CHECK-LABEL: module M1
 // CHECK-NEXT:    #(parameter [41:0] param1) (

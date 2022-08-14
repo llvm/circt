@@ -56,17 +56,17 @@ func.func @convertArray(%arg0 : i1, %arg1: !hw.array<2xi32>) {
 
   // CHECK-NEXT: %[[UNDEF:.*]] = llvm.mlir.undef : !llvm.array<4 x i32>
   // CHECK-NEXT: %[[CAST2:.*]] = builtin.unrealized_conversion_cast %arg1 : !hw.array<2xi32> to !llvm.array<2 x i32>
-  // CHECK-NEXT: %[[E1:.*]] = llvm.extractvalue %[[CAST2]][0 : i32] : !llvm.array<2 x i32>
-  // CHECK-NEXT: %[[I1:.*]] = llvm.insertvalue %[[E1]], %[[UNDEF]][0 : i32] : !llvm.array<4 x i32>
+  // CHECK-NEXT: %[[E1:.*]] = llvm.extractvalue %[[CAST2]][0] : !llvm.array<2 x i32>
+  // CHECK-NEXT: %[[I1:.*]] = llvm.insertvalue %[[E1]], %[[UNDEF]][0] : !llvm.array<4 x i32>
   // CHECK-NEXT: %[[CAST3:.*]] = builtin.unrealized_conversion_cast %arg1 : !hw.array<2xi32> to !llvm.array<2 x i32>
-  // CHECK-NEXT: %[[E2:.*]] = llvm.extractvalue %[[CAST3]][1 : i32] : !llvm.array<2 x i32>
-  // CHECK-NEXT: %[[I2:.*]] = llvm.insertvalue %[[E2]], %[[I1]][1 : i32] : !llvm.array<4 x i32>
+  // CHECK-NEXT: %[[E2:.*]] = llvm.extractvalue %[[CAST3]][1] : !llvm.array<2 x i32>
+  // CHECK-NEXT: %[[I2:.*]] = llvm.insertvalue %[[E2]], %[[I1]][1] : !llvm.array<4 x i32>
   // CHECK-NEXT: %[[CAST4:.*]] = builtin.unrealized_conversion_cast %arg1 : !hw.array<2xi32> to !llvm.array<2 x i32>
-  // CHECK-NEXT: %[[E3:.*]] = llvm.extractvalue %[[CAST4]][0 : i32] : !llvm.array<2 x i32>
-  // CHECK-NEXT: %[[I3:.*]] = llvm.insertvalue %[[E3]], %[[I2]][2 : i32] : !llvm.array<4 x i32>
+  // CHECK-NEXT: %[[E3:.*]] = llvm.extractvalue %[[CAST4]][0] : !llvm.array<2 x i32>
+  // CHECK-NEXT: %[[I3:.*]] = llvm.insertvalue %[[E3]], %[[I2]][2] : !llvm.array<4 x i32>
   // CHECK-NEXT: %[[CAST5:.*]] = builtin.unrealized_conversion_cast %arg1 : !hw.array<2xi32> to !llvm.array<2 x i32>
-  // CHECK: %[[E4:.*]] = llvm.extractvalue %[[CAST5]][1 : i32] : !llvm.array<2 x i32>
-  // CHECK-NEXT: llvm.insertvalue %[[E4]], %[[I3]][3 : i32] : !llvm.array<4 x i32>
+  // CHECK: %[[E4:.*]] = llvm.extractvalue %[[CAST5]][1] : !llvm.array<2 x i32>
+  // CHECK-NEXT: llvm.insertvalue %[[E4]], %[[I3]][3] : !llvm.array<4 x i32>
   %2 = hw.array_concat %arg1, %arg1 : !hw.array<2xi32>, !hw.array<2xi32>
 
   return
@@ -77,11 +77,11 @@ func.func @convertStruct(%arg0 : i32, %arg1: !hw.struct<foo: i32, bar: i8>) {
   // COM: Produces 2 casts here - first one automatically, second one for use in extractvalue
   // CHECK-NEXT: %[[SCAST:.*]] = builtin.unrealized_conversion_cast %arg1 : !hw.struct<foo: i32, bar: i8> to !llvm.struct<(i8, i32)>
   // CHECK-NEXT: %[[SCAST0:.*]] = builtin.unrealized_conversion_cast %arg1 : !hw.struct<foo: i32, bar: i8> to !llvm.struct<(i8, i32)>
-  // CHECK-NEXT: llvm.extractvalue %[[SCAST0]][1 : i32] : !llvm.struct<(i8, i32)>
+  // CHECK-NEXT: llvm.extractvalue %[[SCAST0]][1] : !llvm.struct<(i8, i32)>
   %0 = hw.struct_extract %arg1["foo"] : !hw.struct<foo: i32, bar: i8>
 
   // CHECK: %[[SCAST1:.*]] = builtin.unrealized_conversion_cast %arg1 : !hw.struct<foo: i32, bar: i8> to !llvm.struct<(i8, i32)>
-  // CHECK: llvm.insertvalue %arg0, %[[SCAST1]][1 : i32] : !llvm.struct<(i8, i32)>
+  // CHECK: llvm.insertvalue %arg0, %[[SCAST1]][1] : !llvm.struct<(i8, i32)>
   %1 = hw.struct_inject %arg1["foo"], %arg0 : !hw.struct<foo: i32, bar: i8>
 
   return

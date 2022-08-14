@@ -2,11 +2,8 @@
 
 // CHECK-LABEL: module large_use_in_procedural
 hw.module @large_use_in_procedural(%clock: i1, %a: i1) {
-  // CHECK-DAG: wire [[GEN_1:long_concat]];
-  // CHECK-DAG: wire [[GEN_0:.*]];
-  // CHECK-DAG: reg [[REG:.+]];
+  // CHECK: wire [[GEN_1:long_concat]] = a + a + a + a + a;
 
-  // CHECK: assign [[GEN_1]] = a + a + a + a + a;
   // CHECK: always
   sv.always {
     sv.ifdef.procedural "FOO" {
@@ -25,9 +22,10 @@ hw.module @large_use_in_procedural(%clock: i1, %a: i1) {
     }
   }
 
+  // CHECK: reg [[REG:.+]];
   %reg = sv.reg : !hw.inout<i1>
 
-  // CHECK: assign [[GEN_0]] = reg_0 + reg_0 + reg_0 + reg_0 + reg_0;
+  // CHECK: wire [[GEN_0:.+]] = reg_0 + reg_0 + reg_0 + reg_0 + reg_0;
   sv.alwaysff(posedge %clock) {
     // CHECK: always
     // CHECK: [[REG]] = a;
@@ -46,8 +44,8 @@ hw.module @large_use_in_procedural_successive(%clock: i1, %a: i1) {
   sv.always posedge %clock {
     %0 = comb.and %a, %a, %a, %a, %a : i1
     %1 = comb.and %a, %a, %a, %a, %a : i1
-    // CHECK:      assign {{.*}} = a & a & a & a & a;
-    // CHECK-NEXT: assign {{.*}} = a & a & a & a & a;
+    // CHECK:      wire {{.*}} = a & a & a & a & a;
+    // CHECK-NEXT: wire {{.*}} = a & a & a & a & a;
     sv.if %0 {
       sv.exit
     }
@@ -61,8 +59,7 @@ hw.module @large_use_in_procedural_successive(%clock: i1, %a: i1) {
 hw.module @dont_spill_to_procedural_regions(%z: i10) -> () {
   %r1 = sv.reg : !hw.inout<i1>
   %r2 = sv.reg : !hw.inout<i10>
-  // CHECK: wire [9:0] _GEN;
-  // CHECK: assign _GEN = r2 + r2 + r2 + r2 + r2;
+  // CHECK: wire [9:0] _GEN = r2 + r2 + r2 + r2 + r2;
   // CHECK: initial begin
   // CHECK-NEXT:   `ifdef BAR
   // CHECK-NEXT:      r1 <= _GEN == z;
