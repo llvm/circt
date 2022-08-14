@@ -5,6 +5,7 @@ from mlir.ir import Module, NoneType
 from circt.dialects import hw
 
 from pycde import Input, InputChannel, Output, OutputChannel, esi, module, generator, types
+from pycde.dialects import comb
 from pycde.system import System
 from pycde.module import import_hw_module
 
@@ -38,8 +39,6 @@ class HandshakeToESIWrapper:
   ## Channels from Memory
   in0_ld_data0 = InputChannel(types.i32)
 
-  in0_ld_done0 = InputChannel(NoneType.get())
-
   ## Channels to Memory
   in0_ld_addr0 = OutputChannel(types.i64)
 
@@ -47,8 +46,6 @@ class HandshakeToESIWrapper:
 
   ## Channels from Memory
   in1_ld_data0 = InputChannel(types.i32)
-
-  in1_ld_done0 = InputChannel(NoneType.get())
 
   ## Channels to Memory
   in1_ld_addr0 = OutputChannel(types.i64)
@@ -81,12 +78,12 @@ class HandshakeToESIWrapper:
     # Input 0 Ports
 
     ## Channels from Memory
-    in0_ld_data0_data, in0_ld_data0_valid = ports.in0_ld_data0.unwrap(wrapped_top.in0_ldData0_ready)
+    in0_ready = comb.AndOp(wrapped_top.in0_ldData0_ready, wrapped_top.in0_ldDone0_ready)
+
+    in0_ld_data0_data, in0_ld_data0_valid = ports.in0_ld_data0.unwrap(in0_ready)
     wrapped_top.in0_ldData0_data.connect(in0_ld_data0_data)
     wrapped_top.in0_ldData0_valid.connect(in0_ld_data0_valid)
-
-    _, in0_ld_done0_valid = ports.in0_ld_done0.unwrap(wrapped_top.in0_ldDone0_ready)
-    wrapped_top.in0_ldDone0_valid.connect(in0_ld_done0_valid)
+    wrapped_top.in0_ldDone0_valid.connect(in0_ld_data0_valid)
 
     ## Channels to Memory
     in0_ld_addr0_channel, in0_ld_addr0_ready = i64_channel.wrap(wrapped_top.in0_ldAddr0_data, wrapped_top.in0_ldAddr0_valid)
@@ -96,12 +93,12 @@ class HandshakeToESIWrapper:
     # Input 1 Ports
 
     ## Channels from Memory
-    in1_ld_data0_data, in1_ld_data0_valid = ports.in1_ld_data0.unwrap(wrapped_top.in1_ldData0_ready)
+    in1_ready = comb.AndOp(wrapped_top.in1_ldData0_ready, wrapped_top.in1_ldDone0_ready)
+
+    in1_ld_data0_data, in1_ld_data0_valid = ports.in1_ld_data0.unwrap(in1_ready)
     wrapped_top.in1_ldData0_data.connect(in1_ld_data0_data)
     wrapped_top.in1_ldData0_valid.connect(in1_ld_data0_valid)
-
-    _, in1_ld_done0_valid = ports.in1_ld_done0.unwrap(wrapped_top.in1_ldDone0_ready)
-    wrapped_top.in1_ldDone0_valid.connect(in1_ld_done0_valid)
+    wrapped_top.in1_ldDone0_valid.connect(in1_ld_data0_valid)
 
     ## Channels to Memory
     in1_ld_addr0_channel, in1_ld_addr0_ready = i64_channel.wrap(wrapped_top.in1_ldAddr0_data, wrapped_top.in1_ldAddr0_valid)
