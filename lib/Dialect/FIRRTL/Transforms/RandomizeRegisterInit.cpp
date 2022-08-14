@@ -11,6 +11,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/FIRRTL/AnnotationDetails.h"
+#include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
+#include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
@@ -33,7 +36,25 @@ std::unique_ptr<mlir::Pass> circt::firrtl::createRandomizeRegisterInitPass() {
 }
 
 void RandomizeRegisterInitPass::runOnOperation() {
-  OpBuilder builder(getOperation());
+  FModuleOp op = getOperation();
+  CircuitOp circuit = op->getParentOfType<CircuitOp>();
+  OpBuilder builder(op);
+
+  // Look for a DUT annotation.
+  FModuleOp dut;
+  for (auto mod : circuit.getOps<FModuleOp>()) {
+    if (AnnotationSet(mod).hasAnnotation(dutAnnoClass)) {
+      dut = mod;
+      break;
+    }
+  }
+
+  // If there is a DUT, and this module is not a child of it, return early.
+  if (dut) {
+    auto instanceGraph = InstanceGraph(circuit);
+    if (op != dut && !instanceGraph.isAncestor(op, dut))
+      return;
+  }
 
   // Collect all registers.
   SmallVector<Operation *> regs;
