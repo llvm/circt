@@ -571,7 +571,8 @@ void ESIPortsPass::updateInstance(HWModuleOp mod, InstanceOp inst) {
     auto ready = beb.get(i1);
     inputReadysToConnect.push_back(ready);
     auto unwrap = b.create<UnwrapValidReadyOp>(operand, ready);
-    newOperands.push_back(unwrap.rawOutput());
+    if (unwrap.hasData())
+      newOperands.push_back(unwrap.rawOutput());
     newOperands.push_back(unwrap.valid());
   }
 
@@ -617,9 +618,16 @@ void ESIPortsPass::updateInstance(HWModuleOp mod, InstanceOp inst) {
       continue;
     }
 
-    auto wrap = b.create<WrapValidReadyOp>(
-        newInst.getResult(newInstResNum), newInst.getResult(newInstResNum + 1));
-    newInstResNum += 2;
+    WrapValidReadyOp wrap;
+    if (cpTy.hasData()) {
+      wrap = b.create<WrapValidReadyOp>(newInst.getResult(newInstResNum),
+                                        newInst.getResult(newInstResNum + 1));
+      newInstResNum += 2;
+    } else {
+      wrap = b.create<WrapValidReadyOp>(b.create<esi::NoneSourceOp>(),
+                                        newInst.getResult(newInstResNum));
+      newInstResNum += 1;
+    }
     res.replaceAllUsesWith(wrap.chanOutput());
     outputReadysToConnect[readyIdx].setValue(wrap.ready());
     readyIdx++;
