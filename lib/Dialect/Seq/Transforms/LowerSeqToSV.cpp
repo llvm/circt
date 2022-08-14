@@ -378,7 +378,7 @@ void FirRegLower::initialisePreset(OpBuilder &regBuilder,
       if (i < numRandomSources - 1)
         randomRegAssign.append(",");
       // Add a line break when line length gets close to 1000 characters.
-      if (i % 125 == 0)
+      if (i > 0 && i % 125 == 0)
         randomRegAssign.append("\n");
     }
 
