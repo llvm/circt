@@ -218,8 +218,7 @@ void FirRegLower::lower() {
         });
   }
 
-  // if (module->hasAttr("firrtl.random_init_width"))
-  //   module->removeAttr("firrtl.random_init_width");
+  module->removeAttr("firrtl.random_init_width");
 }
 
 std::pair<sv::RegOp, llvm::Optional<FirRegLower::AsyncResetSignal>>
@@ -355,6 +354,8 @@ void FirRegLower::initialisePreset(OpBuilder &regBuilder,
          "firrtl.random_init_width required for preset initialisation");
 
   uint64_t randomInitWidth = randomInitWidthAttr.getUInt();
+  assert(randomInitWidth > 0 &&
+         "random initialization width should be non-zero");
   uint64_t numRandomSources = llvm::divideCeil(randomInitWidth, randomWidth);
   uint64_t randomRegWidth = randomWidth * numRandomSources;
 
@@ -399,8 +400,8 @@ void FirRegLower::initialisePreset(OpBuilder &regBuilder,
         reg->getAttrOfType<IntegerAttr>("firrtl.random_init_start").getUInt();
     auto randomEnd =
         reg->getAttrOfType<IntegerAttr>("firrtl.random_init_end").getUInt();
-    // reg->removeAttr("firrtl.random_init_start");
-    // reg->removeAttr("firrtl.random_init_end");
+    reg->removeAttr("firrtl.random_init_start");
+    reg->removeAttr("firrtl.random_init_end");
 
     auto randReg = presetRandomValue;
 
