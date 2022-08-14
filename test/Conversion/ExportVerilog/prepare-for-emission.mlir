@@ -11,7 +11,7 @@ hw.module @namehint_variadic(%a: i3) -> (b: i3) {
 
 // -----
 
-module attributes {circt.loweringOptions = "spillWiresAtPrepare"} {
+module {
   // CHECK-LABEL:  hw.module @SpillTemporaryInProceduralRegion
   hw.module @SpillTemporaryInProceduralRegion(%a: i4, %b: i4, %fd: i32) -> () {
     // CHECK-NEXT: %r = sv.reg
@@ -35,7 +35,7 @@ module attributes {circt.loweringOptions = "spillWiresAtPrepare"} {
 
 // -----
 
-module attributes {circt.loweringOptions = "disallowLocalVariables,spillWiresAtPrepare"} {
+module attributes {circt.loweringOptions = "disallowLocalVariables"} {
   // CHECK: @test_hoist
   hw.module @test_hoist(%a: i3) -> () {
     // CHECK-NEXT: %reg = sv.reg

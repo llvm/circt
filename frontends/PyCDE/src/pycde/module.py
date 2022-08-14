@@ -395,6 +395,31 @@ def externmodule(to_be_wrapped, extern_name=None):
                                create_cb=create_msft_module_extern_op)
 
 
+def import_hw_module(hw_module: hw.HWModuleOp):
+  # Get the module name to use in the generated class and as the external name.
+  name = mlir.ir.StringAttr(hw_module.name).value
+
+  # Collect input and output ports as named Inputs and Outputs.
+  ports = {}
+  for input_name, block_arg in hw_module.inputs().items():
+    ports[input_name] = Input(block_arg.type, input_name)
+  for output_name, output_type in hw_module.outputs().items():
+    ports[output_name] = Output(output_type, output_name)
+
+  # Use the name and ports to construct a class object like what externmodule
+  # would wrap.
+  cls = type(name, (object,), ports)
+
+  # Creation callback that just moves the already build module into the System's
+  # ModuleOp and returns it.
+  def create_cb(sys: System, mod: _SpecializedModule, symbol: str):
+    sys.mod.body.append(hw_module)
+    return hw_module
+
+  # Hand off the class, external name, and create callback to _module_base.
+  return _module_base(cls, name, create_cb)
+
+
 def _module_base(cls,
                  extern_name: str,
                  create_cb: Optional[builtins.function] = None,

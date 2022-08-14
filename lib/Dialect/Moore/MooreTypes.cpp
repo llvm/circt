@@ -1245,13 +1245,13 @@ static OptionalParseResult customTypeParser(DialectAsmParser &parser,
       return failure();
     StringAttr name;
     auto result = parser.parseOptionalAttribute(name);
-    if (result.hasValue())
+    if (result.has_value())
       if (*result || parser.parseComma())
         return failure();
     LocationAttr loc;
     PackedType base;
     result = parser.parseOptionalAttribute(loc);
-    if (result.hasValue()) {
+    if (result.has_value()) {
       if (*result)
         return failure();
     } else {
@@ -1368,7 +1368,7 @@ static OptionalParseResult customTypeParser(DialectAsmParser &parser,
 
     StringAttr name;
     auto result = parser.parseOptionalAttribute(name);
-    if (result.hasValue())
+    if (result.has_value())
       if (*result || parser.parseComma())
         return failure();
 
@@ -1550,12 +1550,12 @@ static ParseResult parseMooreType(DialectAsmParser &parser, Subset subset,
   llvm::SMLoc loc = parser.getCurrentLocation();
   StringRef mnemonic;
   OptionalParseResult result = generatedTypeParser(parser, &mnemonic, type);
-  if (result.hasValue())
-    return result.getValue();
+  if (result.has_value())
+    return result.value();
 
   result = customTypeParser(parser, mnemonic, subset, loc, type);
-  if (result.hasValue())
-    return result.getValue();
+  if (result.has_value())
+    return result.value();
 
   parser.emitError(loc) << "unknown type `" << mnemonic
                         << "` in dialect `moore`";

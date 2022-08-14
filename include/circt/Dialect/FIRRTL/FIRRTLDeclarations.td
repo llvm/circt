@@ -113,9 +113,9 @@ def InstanceOp : ReferableDeclOp<"instance", [HasParent<"firrtl::FModuleOp, firr
 def MemOp : ReferableDeclOp<"mem"> {
   let summary = "Define a new mem";
   let arguments =
-    (ins Confined<I32Attr, [IntMinValue<0>]>:$readLatency,
-         Confined<I32Attr, [IntMinValue<1>]>:$writeLatency,
-         Confined<I64Attr, [IntMinValue<1>]>:$depth, RUWAttr:$ruw,
+    (ins ConfinedAttr<I32Attr, [IntMinValue<0>]>:$readLatency,
+         ConfinedAttr<I32Attr, [IntMinValue<1>]>:$writeLatency,
+         ConfinedAttr<I64Attr, [IntMinValue<1>]>:$depth, RUWAttr:$ruw,
          StrArrayAttr:$portNames, StrAttr:$name, NameKindAttr:$nameKind,
          AnnotationArrayAttr:$annotations,
          PortAnnotationsAttr:$portAnnotations,

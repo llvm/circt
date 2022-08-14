@@ -583,7 +583,7 @@ def BindInterfaceOp : SVOp<"bind.interface",
 /// - `1`: Prints simulation time and location (default)
 /// - `2`: Prints simulation time, location, and statistics about the memory and
 ///   CPU time used in simulation
-def VerbosityIntAttr : DefaultValuedAttr<Confined<I8Attr,
+def VerbosityIntAttr : DefaultValuedAttr<ConfinedAttr<I8Attr,
   [IntMinValue<0>, IntMaxValue<2>]>, "1">;
 
 /// Commonalities between `StopOp` and `FinishOp`.

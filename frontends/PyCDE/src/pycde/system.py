@@ -2,6 +2,8 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+from __future__ import annotations
+
 from pycde.devicedb import (EntityExtern, PlacementDB, PrimitiveDB,
                             PhysicalRegion)
 
@@ -88,6 +90,15 @@ class System:
   @staticmethod
   def set_debug():
     ir._GlobalDebug.flag = True
+
+  def import_modules(self, modules: list[_SpecializedModule]):
+    # Call the imported modules' `create` methods to import the IR into the
+    # PyCDE System ModuleOp. Also add them to the list of top-level modules so
+    # later emission stages know about them.
+    with self:
+      for module in modules:
+        module._pycde_mod.create()
+        self.top_modules.append(module)
 
   def create_physical_region(self, name: str = None):
     with self._get_ip():

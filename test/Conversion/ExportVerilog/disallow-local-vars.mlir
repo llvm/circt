@@ -75,8 +75,8 @@ hw.module @hoist_expressions(%clock: i1, %x: i8, %y: i8, %z: i8) {
   }
 
   // Check out wires.
-  // CHECK: assign myWire = x;
-  // DISALLOW: assign myWire = x;
+  // CHECK: wire [7:0] myWire = x;
+  // DISALLOW: wire [7:0] myWire = x;
   %myWire = sv.wire : !hw.inout<i8>
   sv.assign %myWire, %x : i8
 

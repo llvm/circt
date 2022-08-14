@@ -336,6 +336,14 @@ class HWModuleOp(ModuleLike):
       ret[name] = self.entry_block.arguments[idx]
     return ret
 
+  def outputs(self) -> dict[str:Type]:
+    result_names = [
+        StringAttr(name).value
+        for name in ArrayAttr(self.attributes["resultNames"])
+    ]
+    result_types = self.type.results
+    return dict(zip(result_names, result_types))
+
   def add_entry_block(self):
     if not self.is_external:
       raise IndexError('The module already has an entry block')

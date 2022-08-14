@@ -241,7 +241,7 @@ def BufferOp : Handshake_Op<"buffer", [NoSideEffect, HasClock,
 
   let arguments = (ins
     TypeAttr:$dataType,
-    Confined<I32Attr, [IntMinValue<1>]>:$size,
+    ConfinedAttr<I32Attr, [IntMinValue<1>]>:$size,
     AnyType:$operand,
     BufferTypeEnumAttr:$bufferType,
     OptionalAttr<I64ArrayAttr>:$initValues);
@@ -290,7 +290,7 @@ def ForkOp : Handshake_Op<"fork", [
 
   let arguments = (ins
     TypeAttr:$dataType,
-    Confined<I32Attr, [IntMinValue<1>]>:$size,
+    ConfinedAttr<I32Attr, [IntMinValue<1>]>:$size,
     AnyType : $operand);
   let results = (outs Variadic<AnyType> : $result);
 
@@ -315,7 +315,7 @@ def LazyForkOp : Handshake_Op<"lazy_fork", [NoSideEffect]> {
 
   let arguments = (ins
     TypeAttr:$dataType,
-    Confined<I32Attr, [IntMinValue<1>]>:$size,
+    ConfinedAttr<I32Attr, [IntMinValue<1>]>:$size,
     AnyType : $operand);
   let results = (outs Variadic<AnyType> : $result);
   let hasCustomAssemblyFormat = 1;
@@ -342,7 +342,7 @@ def MergeOp : Handshake_Op<"merge", [
 
   let arguments = (ins
     TypeAttr:$dataType,
-    Confined<I32Attr, [IntMinValue<1>]>:$size,
+    ConfinedAttr<I32Attr, [IntMinValue<1>]>:$size,
     Variadic<AnyType>:$dataOperands);
   let results = (outs AnyType:$result);
   let hasCustomAssemblyFormat = 1;
@@ -376,7 +376,7 @@ def MuxOp : Handshake_Op<"mux", [
   }];
   let arguments = (ins
     TypeAttr:$dataType,
-    Confined<I32Attr, [IntMinValue<1>]>:$size,
+    ConfinedAttr<I32Attr, [IntMinValue<1>]>:$size,
     AnyType : $selectOperand,
 		Variadic<AnyType> : $dataOperands);
   let results = (outs AnyType : $result);
@@ -415,7 +415,7 @@ def ControlMergeOp : Handshake_Op<"control_merge", [
 
   let arguments = (ins
     TypeAttr:$dataType,
-    Confined<I32Attr, [IntMinValue<1>]>:$size,
+    ConfinedAttr<I32Attr, [IntMinValue<1>]>:$size,
     Variadic<AnyType> : $dataOperands);
   let results = (outs AnyType : $result, Index : $index);
 

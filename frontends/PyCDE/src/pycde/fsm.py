@@ -313,7 +313,8 @@ def gen_fsm(transitions: dict, name: str = "MyFSM"):
       if guard_port:
         ensure_input(guard_port)
         currentStateAttr.add_transitions(
-            (nextStateAttr, lambda ports: getattr(ports, guard_port)))
+            (nextStateAttr,
+             lambda ports, guard_port=guard_port: getattr(ports, guard_port)))
       else:
         currentStateAttr.add_transitions((nextStateAttr,))
 

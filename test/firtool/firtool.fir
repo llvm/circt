@@ -150,7 +150,6 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
 ; VERILOG-NEXT:    wire [2:0] _implicitTrunc_out1;
 ; VERILOG-NEXT:    wire [2:0] _implicitTrunc_out2;
 ; VERILOG-NEXT:    wire [5:0] _cat_d;
-; VERILOG-EMPTY:
 ; VERILOG-NEXT:    Cat cat (
 ; VERILOG-NEXT:      .a (b),
 ; VERILOG-NEXT:      .b (b),
@@ -274,10 +273,9 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
     output b : UInt<1>
     b <= a[sel]
 ; VERILOG-LABEL: module MultibitMux(
-; VERILOG:       wire [[T1:.*]];
-; VERILOG-EMPTY:
-; VERILOG-NEXT:  wire [2:0] [[T2:.*]] =
+; VERILOG:  wire [2:0] [[T2:.*]] =
 ; VERILOG-SAME{LITERAL}: {{a_2}, {a_1}, {a_0}};
+; VERILOG-NEXT:  wire [[T1:.*]];
 ; VERILOG-NEXT:  assign [[T1]] = [[T2]][sel] /* cadence map_to_mux */; /* synopsys infer_mux_override */
 ; VERILOG-NEXT:  assign b = &sel ? a_0 : [[T1]];
 
