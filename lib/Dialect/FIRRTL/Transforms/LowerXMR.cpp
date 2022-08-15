@@ -28,38 +28,42 @@ using hw::InnerRefAttr;
 // The LowerXMRPass will replace every RefResolveOp with an XMR encoded within a
 // verbatim expr op. This also removes every RefType port from the modules and
 // corresponding instances. This is a dataflow analysis over a very constrained
-// RefType. Domain of the dataflow analysis is the set of all RefSendOps.
+// RefType. Domain of the dataflow analysis is the set of all RefSendOps. It
+// computes an interprocedural reaching definitions (of RefSendOp) analysis.
 // Essentially every RefType value must be mapped to one and only one RefSendOp.
 // The analysis propagates the dataflow from every RefSendOp to every value of
-// RefType across modules.
-// The RefResolveOp is the final leaf into which the dataflow must flow into.
+// RefType across modules. The RefResolveOp is the final leaf into which the
+// dataflow must reach.
 //
-// Algorithm:
 // Due to the downward only reference constraint on XMRs, the post order
-//  traversal ensures that the RefSendOp will be encountered before any
-//  RefResolveOp.
+// traversal ensures that the RefSendOp will be encountered before any
+// RefResolveOp. But since there can be multiple readers, multiple
+// RefResolveOps can be reachable from a single RefSendOp. To support multiply
+// instantiated modules and multiple readers, it is essential to track the path
+// to the RefSendOp, other than just the RefSendOp. For example, if there exists
+// a wire `xmr_wire` in module `L2`, the algorithm needs to support generating
+// Top.L1.L2.xmr_wire and Top.L2.xmr_wire and Top.L3.L2.xmr_wire for different
+// instance paths that exist in the circuit.
+// Algorithm:
+//
 // For every RefSendOp
-//  0. The BaseType input is the value to which the final XMR should refer to.
-//  1. create a new entry into the `remoteRefToXMRsymVec`.
-//  2. Get the InnerRef to the BaseType input of RefSendOp and initialize the
-//     remoteRefToXMRsymVec with it. (This is the remote op that the
-//     xmr needs to refer to)
-//  3. Set the `reachingRefSendAt` for the result RefType to this op. This map
-//  tracks the dataflow from the original
-//     RefSendOp to the corresponding ref ports.
+//  1. The BaseType input is the value to which the final XMR should refer to.
+//  2. Set the `reachingRefSendAt` for the result RefType to an InnerRef to this
+//  op. This map tracks the dataflow path from the original RefSendOp to the
+//  corresponding ref values.
 // For every InstanceOp
 //  1. For every RefType port of the InstanceOp, get the remote RefSendOp
 //     that flows into the corresponding port of the Referenced module.
 //     Because of the order of traversal and the constraints on the ref
 //     ports, the Referenced module ref ports must already be resolved.
-//  2. Update the `remoteRefToXMRsymVec` for the corresponding RefSendOp,
-//    with an InnerRef to this InstanceOp. This denotes that the final
+//  2. Update the `reachingRefSendAt` for the corresponding RefSendOp,
+//    to append an InnerRef to this InstanceOp. This denotes that the final
 //    XMR must include this InstanceOp.
 // For every ConnectLike op
 //  1. Copy the dataflow of the src to the dest.
 // For every RefResolveOp,
 //  1. Replace the op result with a VerbatimExpr, representing the XMR.
-//       The InnerRef sequence of symbols from remoteRefToXMRsymVec is
+//       The InnerRef sequence of symbols from `reachingRefSendAt` is
 //       used to construct the symbol list for the verbatim.
 //
 class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
