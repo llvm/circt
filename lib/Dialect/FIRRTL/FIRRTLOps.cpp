@@ -3964,8 +3964,8 @@ void XorRPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 //===----------------------------------------------------------------------===//
 
 FIRRTLType RefResolveOp::inferReturnType(ValueRange operands,
-                                       ArrayRef<NamedAttribute> attrs,
-                                       Optional<Location> loc) {
+                                         ArrayRef<NamedAttribute> attrs,
+                                         Optional<Location> loc) {
   auto inType = operands[0].getType();
   auto inRefType = inType.dyn_cast<RefType>();
   if (!inRefType) {
@@ -3978,8 +3978,8 @@ FIRRTLType RefResolveOp::inferReturnType(ValueRange operands,
 }
 
 FIRRTLType RefSendOp::inferReturnType(ValueRange operands,
-                                       ArrayRef<NamedAttribute> attrs,
-                                       Optional<Location> loc) {
+                                      ArrayRef<NamedAttribute> attrs,
+                                      Optional<Location> loc) {
   auto inType = operands[0].getType();
   auto inBaseType = inType.dyn_cast<FIRRTLBaseType>();
   if (!inBaseType) {
@@ -3998,7 +3998,6 @@ void RefResolveOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 void RefSendOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
-
 
 //===----------------------------------------------------------------------===//
 // TblGen Generated Logic.
