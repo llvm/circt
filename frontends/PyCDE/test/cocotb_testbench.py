@@ -1,4 +1,4 @@
-# REQUIRES: iverilog,cocotb
+# REQUIRES: icarus,cocotb
 # RUN: %PYTHON% %s | FileCheck %s
 from pycde import Input, Output, generator, module, Clock
 from pycde.pycde_types import types
@@ -44,7 +44,7 @@ class RegAdd:
     ports.out = w16Adder.out
 
 
-@cocotestbench(RegAdd, simulator="iverilog")
+@cocotestbench(RegAdd, simulator="icarus")
 class RegAddTester:
 
   @cocotest

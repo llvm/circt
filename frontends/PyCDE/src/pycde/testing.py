@@ -6,6 +6,7 @@ from pathlib import Path
 import subprocess
 import inspect
 import re
+import os
 
 
 def unittestmodule(generate=True,
@@ -55,22 +56,6 @@ def cocotest(func):
   return func
 
 
-def _gen_cocotb_makefile(top, testmod, sources, sim):
-  """
-  Creates a simple cocotb makefile suitable for driving the testbench.
-  """
-  template = f"""
-TOPLEVEL_LANG = verilog
-VERILOG_SOURCES = {" ".join(list(sources))}
-TOPLEVEL = {top}
-MODULE = {testmod}
-SIM={sim}
-
-include $(shell cocotb-config --makefiles)/Makefile.sim
-"""
-  return template
-
-
 def _gen_cocotb_testfile(tests):
   """
   Converts testbench functions to cocotb-compatible versions..
@@ -117,17 +102,25 @@ class _IVerilogHandler:
     if float(ver) < 11:
       raise Exception(f"Icarus Verilog version must be >= 11, got {ver}")
 
-  @property
-  def sim_name(self):
-    return "icarus"
+  def extra_compile_args(self, pycde_system: System):
+    # If no timescale is defined in the source code, icarus assumes a
+    # timescale of '1'. This prevents cocotb from creating small timescale clocks.
+    # Since a timescale is not emitted by default from export-verilog, make our
+    # lives easier and create a minimum timescale through the command-line.
+    cmd_file = os.path.join(pycde_system._output_directory, "cmds.f")
+    with open(cmd_file, "w+") as f:
+      f.write("+timescale+1ns/1ps")
+
+    return [f"-f{cmd_file}"]
 
 
-def cocotestbench(pycde_mod, simulator="iverilog"):
+def cocotestbench(pycde_mod, simulator='icarus', **kwargs):
   """
   Decorator class for defining a class as a PyCDE testbench.
   'pycde_mod' is the PyCDE module under test.
   Within the decorated class, functions with the '@cocotest' decorator
   will be converted to a cocotb-compatible testbench.
+  kwargs will be forwarded to the cocotb-test 'run' function
   """
 
   # Ensure that system has 'make' available:
@@ -137,26 +130,18 @@ def cocotestbench(pycde_mod, simulator="iverilog"):
     raise Exception(
         "'make' is not available, and is required to run cocotb tests.")
 
-  try:
-    if simulator == "iverilog":
-      simhandler = _IVerilogHandler()
-    else:
-      raise Exception(f"Unknown simulator: {simulator}")
-  except Exception as e:
-    raise Exception(f"Failed to initialize simulator handler: {e}")
+  # Some iverilog-specific checking. This is the main simulator currently used
+  # for integration testing, and we require a minimum version for it to be
+  # compatible with CIRCT output.
+  if simulator == "icarus":
+    simhandler = _IVerilogHandler()
+  # else, let cocotb handle simulator verification.
 
   def testbenchmodule_inner(tb_class):
     sys = System([pycde_mod])
     sys.generate()
     sys.emit_outputs()
-
-    # Generate cocotb makefile
     testmodule = "test_" + pycde_mod.__name__
-    makefile_path = Path(sys._output_directory, "Makefile")
-    with open(makefile_path, "w") as f:
-      f.write(
-          _gen_cocotb_makefile(pycde_mod.__name__, testmodule, sys.mod_files,
-                               simhandler.sim_name))
 
     # Find functions with the testbench flag set.
     testbench_funcs = [
@@ -170,8 +155,19 @@ def cocotestbench(pycde_mod, simulator="iverilog"):
     with open(testfile_path, "w") as f:
       f.write(_gen_cocotb_testfile(testbench_funcs))
 
-    # Run 'make' in the output directory and let cocotb do its thing.
-    subprocess.run(["make"], cwd=sys._output_directory)
+    # Simulator-specific extra compile args.
+    compile_args = kwargs.get("compile_args", [])
+    compile_args += simhandler.extra_compile_args(sys)
+    kwargs["compile_args"] = compile_args
+
+    from cocotb_test.simulator import run
+    run(simulator=simulator,
+        module=testmodule,
+        toplevel=pycde_mod.__name__,
+        toplevel_lang="verilog",
+        verilog_sources=list(sys.mod_files),
+        work_dir=sys._output_directory,
+        **kwargs)
 
     return pycde_mod
 
