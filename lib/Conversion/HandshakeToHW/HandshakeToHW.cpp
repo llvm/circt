@@ -93,10 +93,8 @@ static DiscriminatingTypes getHandshakeDiscriminatingTypes(Operation *op) {
 // Wraps a type into an ESI ChannelType type. The inner type is converted to
 // ensure comprehensability by the RTL dialects.
 static Type esiWrapper(Type t) {
-  // Translate none- and index types to something HW understands.
-  if (t.isa<NoneType>())
-    t = IntegerType::get(t.getContext(), 0);
-  else if (t.isa<IndexType>())
+  // Translate index types to something HW understands.
+  if (t.isa<IndexType>())
     t = IntegerType::get(t.getContext(), 64);
 
   return esi::ChannelType::get(t.getContext(), t);
