@@ -3,9 +3,9 @@
 // CHECK-LABEL: llvm.mlir.global internal @_array_global() : !llvm.array<2 x i32> {
 // CHECK-NEXT: %[[VAL_0:.*]] = llvm.mlir.undef : !llvm.array<2 x i32>
 // CHECK-NEXT: %[[VAL_1:.*]] = llvm.mlir.constant(1 : i32) : i32
-// CHECK-NEXT: %[[VAL_2:.*]] = llvm.insertvalue %[[VAL_1]], %[[VAL_0]][0 : i32] : !llvm.array<2 x i32>
+// CHECK-NEXT: %[[VAL_2:.*]] = llvm.insertvalue %[[VAL_1]], %[[VAL_0]][0] : !llvm.array<2 x i32>
 // CHECK-NEXT: %[[VAL_3:.*]] = llvm.mlir.constant(0 : i32) : i32
-// CHECK-NEXT: %[[VAL_4:.*]] = llvm.insertvalue %[[VAL_3]], %[[VAL_2]][1 : i32] : !llvm.array<2 x i32>
+// CHECK-NEXT: %[[VAL_4:.*]] = llvm.insertvalue %[[VAL_3]], %[[VAL_2]][1] : !llvm.array<2 x i32>
 // CHECK-NEXT: llvm.return %[[VAL_4]] : !llvm.array<2 x i32>
 // CHECK-NEXT: }
 
