@@ -33,9 +33,7 @@
 module {
   handshake.func @top(%arg0: tuple<i32, i32>, %arg1: none, ...) -> (i32, none) attributes {argNames = ["in0", "inCtrl"], resNames = ["out0", "outCtrl"]} {
     %res:2 = handshake.unpack %arg0 : tuple<i32, i32>
-
     %sum = arith.addi %res#0, %res#1 : i32
-
     return %sum, %arg1 : i32, none
   }
 }

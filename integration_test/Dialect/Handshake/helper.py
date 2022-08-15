@@ -126,8 +126,7 @@ def _findPort(dut, name):
   if hasData:
     return HandshakeDataPort(dut, ready, valid, data)
 
-  isTuple = hasattr(dut, f"{name}_data_field0")
-  isCtrl = not isTuple and not hasData
+  isCtrl = not hasattr(dut, f"{name}_data_field0")
 
   if (isCtrl):
     return HandshakePort(dut, ready, valid)
