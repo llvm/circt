@@ -371,8 +371,8 @@ struct HWDynamicArrayCreateOpConversion
           rewriter, op->getLoc(), typeConverter->convertType(input.getType()),
           input);
 
-      arr = rewriter.create<LLVM::InsertValueOp>(op->getLoc(), arrayTy, arr,
-                                                 castInput, i);
+      arr =
+          rewriter.create<LLVM::InsertValueOp>(op->getLoc(), arr, castInput, i);
     }
 
     rewriter.replaceOp(op, arr);
@@ -426,7 +426,7 @@ struct HWConstArrayCreateOpConversion
       init.insert(clone);
 
       Value v = clone->getResult(0);
-      arr = init.create<LLVM::InsertValueOp>(op->getLoc(), arrayTy, arr, v, i);
+      arr = init.create<LLVM::InsertValueOp>(op->getLoc(), arr, v, i);
     }
     init.create<LLVM::ReturnOp>(op->getLoc(), arr);
     // Get the global array address and load it to return an array value.
