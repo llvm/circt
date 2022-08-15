@@ -1,4 +1,4 @@
-# REQUIRES: icarus,cocotb
+# REQUIRES: iverilog,cocotb
 # RUN: %PYTHON% %s | FileCheck %s
 from pycde import Input, Output, generator, module, Clock
 from pycde.pycde_types import types
