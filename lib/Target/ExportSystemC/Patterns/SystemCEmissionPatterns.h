@@ -10,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef SYSTEMCEMISSIONPATTERNS_H
-#define SYSTEMCEMISSIONPATTERNS_H
+#ifndef CIRCT_TARGET_EXPORTSYSTEMC_PATTERNS_SYSTEMCEMISSIONPATTERNS_H
+#define CIRCT_TARGET_EXPORTSYSTEMC_PATTERNS_SYSTEMCEMISSIONPATTERNS_H
 
 #include "../EmissionPatternSupport.h"
 
@@ -28,4 +28,4 @@ void populateSystemCTypeEmitters(TypeEmissionPatternSet &patterns);
 } // namespace ExportSystemC
 } // namespace circt
 
-#endif // SYSTEMCEMISSIONPATTERNS_H
+#endif // CIRCT_TARGET_EXPORTSYSTEMC_PATTERNS_SYSTEMCEMISSIONPATTERNS_H

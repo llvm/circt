@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef EMISSION_DRIVER_H
-#define EMISSION_DRIVER_H
+#ifndef CIRCT_TARGET_EXPORTSYSTEMC_EMISSIONPRINTER_H
+#define CIRCT_TARGET_EXPORTSYSTEMC_EMISSIONPRINTER_H
 
 #include "EmissionPattern.h"
 #include "mlir/Support/IndentedOstream.h"
@@ -96,4 +96,4 @@ private:
 } // namespace ExportSystemC
 } // namespace circt
 
-#endif // EMISSION_DRIVER_H
+#endif // CIRCT_TARGET_EXPORTSYSTEMC_EMISSIONPRINTER_H

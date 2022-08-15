@@ -10,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef EMISSION_PATTERN_H
-#define EMISSION_PATTERN_H
+#ifndef CIRCT_TARGET_EXPORTSYSTEMC_EMISSIONPATTERN_H
+#define CIRCT_TARGET_EXPORTSYSTEMC_EMISSIONPATTERN_H
 
 #include "EmissionPatternSupport.h"
 #include "mlir/IR/Operation.h"
@@ -165,13 +165,13 @@ struct TypeEmissionPatternBase : PatternBase {
 
 /// This is a convenience class providing default implementations for operation
 /// emission patterns.
-template <typename SourceOp>
+template <typename Op>
 struct OpEmissionPattern : OpEmissionPatternBase {
   explicit OpEmissionPattern(MLIRContext *context)
-      : OpEmissionPatternBase(SourceOp::getOperationName(), context) {}
+      : OpEmissionPatternBase(Op::getOperationName(), context) {}
 
   void emitStatement(mlir::Operation *op, EmissionPrinter &p) final {
-    return emitStatement(cast<SourceOp>(op), p);
+    return emitStatement(cast<Op>(op), p);
   }
 
   /// Checks if this pattern is applicable to the given value to emit an
@@ -183,16 +183,14 @@ struct OpEmissionPattern : OpEmissionPatternBase {
   /// Checks if this pattern is applicable to the given operation for statement
   /// emission. When not overriden this matches on all operations of the type
   /// given as template parameter and emits nothing.
-  bool matchStatement(mlir::Operation *op) override {
-    return isa<SourceOp>(op);
-  }
+  bool matchStatement(mlir::Operation *op) override { return isa<Op>(op); }
 
   /// Emit the expression for the given value. This has to be overriden whenever
   /// the 'matchInlinable' function is overriden and emit a valid expression.
   void emitInlined(mlir::Value value, EmissionPrinter &p) override {}
 
   /// Emit zero (default) or more statements for the given operation.
-  virtual void emitStatement(SourceOp op, EmissionPrinter &p) {}
+  virtual void emitStatement(Op op, EmissionPrinter &p) {}
 };
 
 /// This is a convenience class providing default implementations for type
@@ -307,4 +305,4 @@ private:
 } // namespace ExportSystemC
 } // namespace circt
 
-#endif // EMISSION_PATTERN_H
+#endif // CIRCT_TARGET_EXPORTSYSTEMC_EMISSIONPATTERN_H

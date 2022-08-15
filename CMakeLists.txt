@@ -260,7 +260,7 @@ else()
 endif()
 
 #-------------------------------------------------------------------------------
-# Clang-Tidy Configuration
+# Clang-Tidy Configuration (for integration tests to check SystemC linting)
 #-------------------------------------------------------------------------------
 
 # If clang-tidy hasn't been explicitly disabled, find it.

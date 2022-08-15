@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef REGISTERALLEMITTERS_H
-#define REGISTERALLEMITTERS_H
+#ifndef CIRCT_TARGET_EXPORTSYSTEMC_REGISTERALLEMITTERS_H
+#define CIRCT_TARGET_EXPORTSYSTEMC_REGISTERALLEMITTERS_H
 
 #include "Patterns/SystemCEmissionPatterns.h"
 
@@ -33,4 +33,4 @@ inline void registerAllTypeEmitters(TypeEmissionPatternSet &patterns) {
 } // namespace ExportSystemC
 } // namespace circt
 
-#endif // REGISTERALLEMITTERS_H
+#endif // CIRCT_TARGET_EXPORTSYSTEMC_REGISTERALLEMITTERS_H

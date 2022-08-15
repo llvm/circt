@@ -12,8 +12,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef EMISSIONPATTERNSUPPORT_H
-#define EMISSIONPATTERNSUPPORT_H
+#ifndef CIRCT_TARGET_EXPORTSYSTEMC_EMISSIONPATTERNSUPPORT_H
+#define CIRCT_TARGET_EXPORTSYSTEMC_EMISSIONPATTERNSUPPORT_H
 
 #include "circt/Support/LLVM.h"
 
@@ -39,4 +39,4 @@ using FrozenTypeEmissionPatternSet =
 } // namespace ExportSystemC
 } // namespace circt
 
-#endif // EMISSIONPATTERNSUPPORT_H
+#endif // CIRCT_TARGET_EXPORTSYSTEMC_EMISSIONPATTERNSUPPORT_H
