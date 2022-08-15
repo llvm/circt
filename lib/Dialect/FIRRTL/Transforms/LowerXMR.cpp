@@ -182,9 +182,8 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
       auto instanceResult = inst.getResult(portNum);
       if (!instanceResult.getType().isa<RefType>())
         continue;
-      if (!refMod) {
+      if (!refMod) 
         return inst.emitOpError("cannot lower ext modules with RefType ports");
-      }
       // Reference ports must be removed.
       refPortsToRemoveMap[inst].push_back(portNum);
       // Drop dead instance ports.
@@ -220,6 +219,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
                              return getModuleNamespace(mod);
                            });
   }
+  
   /// Cached module namespaces.
   DenseMap<Operation *, ModuleNamespace> moduleNamespaces;
 
@@ -232,6 +232,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
   /// of the path exist.
   DenseMap<Value, ArrayAttr> reachingRefSendAt;
 
+  /// RefResolve, RefSend, and Connects involving them that will be removed.
   SmallVector<Operation *> opsToRemove;
 
   // Instance and module ref ports that needs to be removed.
