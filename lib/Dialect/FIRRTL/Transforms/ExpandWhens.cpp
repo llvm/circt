@@ -114,63 +114,79 @@ public:
   // canonicalization is necessary to eliminate uses of subword uninitialized
   // wire ops so that initialization checking only signals a failure if a bit
   // is truly not assigned.
-  Value canonicalizeBits(BitsPrimOp op, ImplicitLocOpBuilder builder) {
-    if (!op.getInput().getDefiningOp())
-      return op;
-    auto *inputOp = op.getInput().getDefiningOp();
-    // bits(bits(x, ...), ...) -> bits(x, ...).
-    if (auto innerBits = dyn_cast<BitsPrimOp>(inputOp)) {
-      auto newLo = op.getLo() + innerBits.getLo();
-      auto newHi = newLo + op.getHi() - op.getLo();
-      Value newOp = canonicalizeBits(
-          builder.create<BitsPrimOp>(innerBits.getInput(), newHi, newLo),
-          builder);
-      return newOp;
-    }
-    // bits(cat(a, b), ...) => bits(a, ...), or bits(b, ...), or cat(bits(a,
-    // ...), bits(b, ...))
-    if (auto cat = dyn_cast<CatPrimOp>(inputOp)) {
-      auto rhsT = cat.getRhs().getType().cast<IntType>();
-      if (!rhsT.hasWidth())
-        return op;
-      uint32_t lhsLo = rhsT.getWidth().getValue();
-      uint32_t rhsHi = lhsLo - 1;
-      Value newOp;
-      if (op.getLo() >= lhsLo) {
-        // Only indexing the lhs.
-        newOp = canonicalizeBits(builder.create<BitsPrimOp>(cat.getLhs(),
-                                                            op.getHi() - lhsLo,
-                                                            op.getLo() - lhsLo),
-                                 builder);
-      } else if (op.getHi() <= rhsHi) {
-        // Only indexing the rhs.
-        newOp = canonicalizeBits(
-            builder.create<BitsPrimOp>(cat.getRhs(), op.getHi(), op.getLo()),
-            builder);
-      } else {
-        auto bitsLhs = canonicalizeBits(
-            builder.create<BitsPrimOp>(cat.getLhs(), op.getHi() - lhsLo, 0),
-            builder);
-        auto bitsRhs = canonicalizeBits(
-            builder.create<BitsPrimOp>(cat.getRhs(), rhsHi, op.getLo()),
-            builder);
-        newOp = builder.createOrFold<CatPrimOp>(bitsLhs, bitsRhs);
+  // A vector is provided to allow the caller to re-use storage. The initial
+  // bits op will be added to the vector and then any additional bits ops
+  // created by canonicalizations will be added to the vector and canonicalized
+  // repeatedly until there are no more bits ops to canonicalize.
+  Value canonicalizeBits(BitsPrimOp bits, SmallVector<BitsPrimOp> &ops, ImplicitLocOpBuilder builder) {
+    ops.push_back(bits);
+    // By default don't make a replacement.
+    Value replacedVal = bits;
+    while (ops.size() > 0) {
+      auto op = ops.pop_back_val();
+      if (!op.getInput().getDefiningOp())
+        continue;
+      auto *inputOp = op.getInput().getDefiningOp();
+      // bits(bits(x, ...), ...) -> bits(x, ...).
+      if (auto innerBits = dyn_cast<BitsPrimOp>(inputOp)) {
+        auto newLo = op.getLo() + innerBits.getLo();
+        auto newHi = newLo + op.getHi() - op.getLo();
+        auto newOp = builder.create<BitsPrimOp>(innerBits.getInput(), newHi, newLo);
+        ops.push_back(newOp);
+        op->replaceAllUsesWith(newOp);
+        if (op == bits) replacedVal = newOp;
       }
-      return newOp;
+      // bits(cat(a, b), ...) -> bits(a, ...), or bits(b, ...), or cat(bits(a,
+      // ...), bits(b, ...)).
+      if (auto cat = dyn_cast<CatPrimOp>(inputOp)) {
+        auto rhsT = cat.getRhs().getType().cast<IntType>();
+        if (!rhsT.hasWidth())
+          continue;
+        uint32_t lhsLo = rhsT.getWidth().getValue();
+        uint32_t rhsHi = lhsLo - 1;
+        Value newVal;
+        if (op.getLo() >= lhsLo) {
+          // Only indexing the lhs.
+          auto bitsOp = builder.create<BitsPrimOp>(cat.getLhs(),
+              op.getHi() - lhsLo,
+              op.getLo() - lhsLo);
+          ops.push_back(bitsOp);
+          newVal = bitsOp;
+        } else if (op.getHi() <= rhsHi) {
+          // Only indexing the rhs.
+          auto bitsOp =
+              builder.create<BitsPrimOp>(cat.getRhs(), op.getHi(), op.getLo());
+          ops.push_back(bitsOp);
+          newVal = bitsOp;
+        } else {
+          auto bitsLhs =
+              builder.create<BitsPrimOp>(cat.getLhs(), op.getHi() - lhsLo, 0);
+          ops.push_back(bitsLhs);
+          auto bitsRhs =
+              builder.create<BitsPrimOp>(cat.getRhs(), rhsHi, op.getLo());
+          ops.push_back(bitsRhs);
+          auto newOp = builder.create<CatPrimOp>(bitsLhs, bitsRhs);
+          builder.setInsertionPoint(newOp);
+          newVal = newOp;
+        }
+        op.replaceAllUsesWith(newVal);
+        if (op == bits) replacedVal = newVal;
+      }
+      // bits(mux(sel, a, b), ...) -> mux(sel, bits(a, ...), bits(b, ...)).
+      if (auto mux = dyn_cast<MuxPrimOp>(op.getInput().getDefiningOp())) {
+        auto bitsHigh =
+            builder.create<BitsPrimOp>(mux.getHigh(), op.getHi(), op.getLo());
+        ops.push_back(bitsHigh);
+        auto bitsLow =
+            builder.create<BitsPrimOp>(mux.getLow(), op.getHi(), op.getLo());
+        ops.push_back(bitsLow);
+        auto newOp = builder.create<MuxPrimOp>(mux.getSel(), bitsHigh, bitsLow);
+        builder.setInsertionPoint(newOp);
+        op->replaceAllUsesWith(newOp);
+        if (op == bits) replacedVal = newOp;
+      }
     }
-    // bits(mux(sel, a, b), ...) => mux(sel, bits(a, ...), bits(b, ...))
-    if (auto mux = dyn_cast<MuxPrimOp>(op.getInput().getDefiningOp())) {
-      auto bitsHigh = canonicalizeBits(
-          builder.create<BitsPrimOp>(mux.getHigh(), op.getHi(), op.getLo()),
-          builder);
-      auto bitsLow = canonicalizeBits(
-          builder.create<BitsPrimOp>(mux.getLow(), op.getHi(), op.getLo()),
-          builder);
-      Value newOp =
-          builder.createOrFold<MuxPrimOp>(mux.getSel(), bitsHigh, bitsLow);
-      return newOp;
-    }
-    return op;
+    return replacedVal;
   }
 
   // Rewrites a connection where the dest is the bitindex. An expression that
@@ -185,7 +201,8 @@ public:
     b.setInsertionPointAfter(connection);
     // Since bits is the dest here, canonicalizing it is guaranteed to return a
     // BitsPrimOp.
-    bits = cast<BitsPrimOp>(canonicalizeBits(bits, b).getDefiningOp());
+    SmallVector<BitsPrimOp> ops;
+    bits = cast<BitsPrimOp>(canonicalizeBits(bits, ops, b).getDefiningOp());
 
     // Get x's width.
     int w = bits.getInput().getType().dyn_cast<IntType>().getWidth().getValue();
@@ -209,9 +226,8 @@ public:
     // Build the high bits.
     if (top[0] >= top[1]) {
       // Build `cat(xprev[x.w-1:hi], e)`.
-      Value x = canonicalizeBits(
-          b.create<BitsPrimOp>(xprev, (uint32_t)top[0], (uint32_t)top[1]), b);
-      cat = b.createOrFold<CatPrimOp>(x, connection.getSrc());
+      auto x = b.create<BitsPrimOp>(xprev, (uint32_t)top[0], (uint32_t)top[1]);
+      cat = b.createOrFold<CatPrimOp>(canonicalizeBits(x, ops, b), connection.getSrc());
     } else {
       // The assignment is assigning all the high bits, so no need to get them
       // from xprev.
@@ -220,9 +236,8 @@ public:
     // Build the low bits if they are not completely assigned.
     if (bot[0] >= bot[1]) {
       // Build cat(cat, xprev[lo-1:0]).
-      auto x = canonicalizeBits(
-          b.create<BitsPrimOp>(xprev, (uint32_t)bot[0], (uint32_t)bot[1]), b);
-      cat = b.createOrFold<CatPrimOp>(cat, x);
+      auto x = b.create<BitsPrimOp>(xprev, (uint32_t)bot[0], (uint32_t)bot[1]);
+      cat = b.createOrFold<CatPrimOp>(cat, canonicalizeBits(x, ops, b));
     }
     if (bits.getInput().getType().isa<SIntType>())
       cat = b.create<AsSIntPrimOp>(cat);

@@ -1106,7 +1106,7 @@ LogicalResult BitsPrimOp::canonicalize(BitsPrimOp op,
         rewriter, op, innerBits.getInput(), newHi, newLo);
     return success();
   }
-  // bits(mux(sel, a, b), ...) => mux(sel, bits(a, ...), bits(b, ...))
+  // bits(mux(sel, a, b), ...) -> mux(sel, bits(a, ...), bits(b, ...)).
   if (auto mux = dyn_cast<MuxPrimOp>(inputOp)) {
     auto bitsHigh = rewriter.create<BitsPrimOp>(op->getLoc(), mux.getHigh(),
                                                 op.getHi(), op.getLo());
@@ -1116,8 +1116,8 @@ LogicalResult BitsPrimOp::canonicalize(BitsPrimOp op,
                                              bitsHigh, bitsLow);
     return success();
   }
-  // bits(cat(a, b), ...) => bits(a, ...), or bits(b, ...), or cat(bits(a, ...),
-  // bits(b, ...))
+  // bits(cat(a, b), ...) -> bits(a, ...), or bits(b, ...), or cat(bits(a, ...),
+  // bits(b, ...)).
   if (auto cat = dyn_cast<CatPrimOp>(inputOp)) {
     auto rhsT = cat.getRhs().getType().cast<IntType>();
     if (!rhsT.hasWidth())
