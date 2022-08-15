@@ -118,7 +118,8 @@ public:
   // bits op will be added to the vector and then any additional bits ops
   // created by canonicalizations will be added to the vector and canonicalized
   // repeatedly until there are no more bits ops to canonicalize.
-  Value canonicalizeBits(BitsPrimOp bits, SmallVector<BitsPrimOp> &ops, ImplicitLocOpBuilder builder) {
+  Value canonicalizeBits(BitsPrimOp bits, SmallVector<BitsPrimOp> &ops,
+                         ImplicitLocOpBuilder builder) {
     ops.push_back(bits);
     // By default don't make a replacement.
     Value replacedVal = bits;
@@ -131,10 +132,12 @@ public:
       if (auto innerBits = dyn_cast<BitsPrimOp>(inputOp)) {
         auto newLo = op.getLo() + innerBits.getLo();
         auto newHi = newLo + op.getHi() - op.getLo();
-        auto newOp = builder.create<BitsPrimOp>(innerBits.getInput(), newHi, newLo);
+        auto newOp =
+            builder.create<BitsPrimOp>(innerBits.getInput(), newHi, newLo);
         ops.push_back(newOp);
         op->replaceAllUsesWith(newOp);
-        if (op == bits) replacedVal = newOp;
+        if (op == bits)
+          replacedVal = newOp;
       }
       // bits(cat(a, b), ...) -> bits(a, ...), or bits(b, ...), or cat(bits(a,
       // ...), bits(b, ...)).
@@ -147,9 +150,8 @@ public:
         Value newVal;
         if (op.getLo() >= lhsLo) {
           // Only indexing the lhs.
-          auto bitsOp = builder.create<BitsPrimOp>(cat.getLhs(),
-              op.getHi() - lhsLo,
-              op.getLo() - lhsLo);
+          auto bitsOp = builder.create<BitsPrimOp>(
+              cat.getLhs(), op.getHi() - lhsLo, op.getLo() - lhsLo);
           ops.push_back(bitsOp);
           newVal = bitsOp;
         } else if (op.getHi() <= rhsHi) {
@@ -170,7 +172,8 @@ public:
           newVal = newOp;
         }
         op.replaceAllUsesWith(newVal);
-        if (op == bits) replacedVal = newVal;
+        if (op == bits)
+          replacedVal = newVal;
       }
       // bits(mux(sel, a, b), ...) -> mux(sel, bits(a, ...), bits(b, ...)).
       if (auto mux = dyn_cast<MuxPrimOp>(op.getInput().getDefiningOp())) {
@@ -183,7 +186,8 @@ public:
         auto newOp = builder.create<MuxPrimOp>(mux.getSel(), bitsHigh, bitsLow);
         builder.setInsertionPoint(newOp);
         op->replaceAllUsesWith(newOp);
-        if (op == bits) replacedVal = newOp;
+        if (op == bits)
+          replacedVal = newOp;
       }
     }
     return replacedVal;
@@ -227,7 +231,8 @@ public:
     if (top[0] >= top[1]) {
       // Build `cat(xprev[x.w-1:hi], e)`.
       auto x = b.create<BitsPrimOp>(xprev, (uint32_t)top[0], (uint32_t)top[1]);
-      cat = b.createOrFold<CatPrimOp>(canonicalizeBits(x, ops, b), connection.getSrc());
+      cat = b.createOrFold<CatPrimOp>(canonicalizeBits(x, ops, b),
+                                      connection.getSrc());
     } else {
       // The assignment is assigning all the high bits, so no need to get them
       // from xprev.
