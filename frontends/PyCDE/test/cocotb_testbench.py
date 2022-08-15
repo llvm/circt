@@ -1,9 +1,10 @@
 # REQUIRES: iverilog,cocotb
-# RUN: %PYTHON% %s | FileCheck %s
-from pycde import Input, Output, generator, module, Clock
+# RUN: %PYTHON% %s 2>&1 | FileCheck %s
+from pycde import Input, Output, generator, module, Clock, externmodule
 from pycde.pycde_types import types
-from pycde.testing import cocotestbench, cocotest
+from pycde.testing import cocotestbench, cocotest, cocoextra
 from pycde.dialects import comb
+import os
 
 # CHECK:      ** TEST
 # CHECK-NEXT: ********************************
@@ -90,3 +91,52 @@ class RegAddTester:
       await FallingEdge(ports.clk)
       assert ports.out.value == (
           acc), "output q was incorrect on the {}th cycle".format(i)
+
+
+# -----
+
+# CHECK:      ** TEST
+# CHECK-NEXT: ********************************
+# CHECK-NEXT: ** test_RegAdd.extern_test
+# CHECK-NEXT: *******************************
+# CHECK-NEXT: ** TESTS=1 PASS=1 FAIL=0 SKIP=0
+# CHECK-NEXT: *******************************
+
+
+@externmodule("adder")
+class ExternAdder:
+  in1 = Input(types.i16)
+  in2 = Input(types.i16)
+  out = Output(types.i16)
+
+
+@module
+class RegAdd:
+  rst = Input(types.i1)
+  clk = Clock()
+  in1 = Input(types.i16)
+  in2 = Input(types.i16)
+  out = Output(types.i16)
+
+  @generator
+  def build(ports):
+    w16Adder = ExternAdder(in1=ports.in1, in2=ports.in2)
+    ports.out = w16Adder.out
+
+
+@cocotestbench(RegAdd, simulator="icarus")
+class RegAddTester:
+
+  @cocoextra
+  def extrafiles():
+    scriptdir = os.path.dirname(os.path.realpath(__file__))
+    return [os.path.join(scriptdir, "my_adder.sv")]
+
+  @cocotest
+  async def extern_test(ports):
+    from cocotb.triggers import ReadOnly
+
+    ports.in1.value = 1
+    ports.in2.value = 2
+    await ReadOnly()
+    assert ports.out.value == (3), "Addition failed"
