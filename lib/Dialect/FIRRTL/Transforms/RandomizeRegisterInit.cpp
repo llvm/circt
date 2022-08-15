@@ -18,6 +18,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/Builders.h"
+#include "llvm/Support/Parallel.h"
 
 using namespace mlir;
 using namespace circt;
@@ -35,31 +36,24 @@ std::unique_ptr<mlir::Pass> circt::firrtl::createRandomizeRegisterInitPass() {
   return std::make_unique<RandomizeRegisterInitPass>();
 }
 
-void RandomizeRegisterInitPass::runOnOperation() {
-  FModuleOp op = getOperation();
-  CircuitOp circuit = op->getParentOfType<CircuitOp>();
-  OpBuilder builder(op);
+/// Create attributes indicating the required size of random initialization
+/// values for each register in the module, and mark which range of these values
+/// each register should consume. The goal is for registers to always read the
+/// same random bits for the same seed, regardless of optimizations that might
+/// remove registers.
+static void createRandomizationAttributes(FModuleOp mod, FModuleOp dut,
+                                          InstanceGraph &instanceGraph) {
+  OpBuilder builder(mod);
 
-  // Look for a DUT annotation.
-  FModuleOp dut;
-  for (auto mod : circuit.getOps<FModuleOp>()) {
-    if (AnnotationSet(mod).hasAnnotation(dutAnnoClass)) {
-      dut = mod;
-      break;
-    }
-  }
-
-  // If there is a DUT, and this module is not a child of it, return early.
-  if (dut) {
-    auto instanceGraph = InstanceGraph(circuit);
-    if (op != dut && !instanceGraph.isAncestor(op, dut))
-      return;
-  }
+  // If there is a DUT, and this module is not it or a child of it, return
+  // early.
+  if (dut && mod != dut && !instanceGraph.isAncestor(mod, dut))
+    return;
 
   // Walk all registers.
   uint64_t width = 0;
   auto ui64Type = builder.getIntegerType(64, false);
-  getOperation().walk([&](Operation *op) {
+  mod.walk([&](Operation *op) {
     if (!isa<RegOp, RegResetOp>(op))
       return;
 
@@ -80,6 +74,26 @@ void RandomizeRegisterInitPass::runOnOperation() {
   // Remember the width of the random vector in the module's attributes so
   // LowerSeqToSV can grab it to create the appropriate random register.
   if (width > 0)
-    getOperation()->setAttr("firrtl.random_init_width",
-                            builder.getIntegerAttr(ui64Type, width));
+    mod->setAttr("firrtl.random_init_width",
+                 builder.getIntegerAttr(ui64Type, width));
+}
+
+void RandomizeRegisterInitPass::runOnOperation() {
+  CircuitOp circuit = getOperation();
+  auto &instanceGraph = getAnalysis<InstanceGraph>();
+
+  // Look for a DUT annotation.
+  FModuleOp dut;
+  for (auto mod : circuit.getOps<FModuleOp>()) {
+    if (AnnotationSet(mod).hasAnnotation(dutAnnoClass)) {
+      dut = mod;
+      break;
+    }
+  }
+
+  // Process each module in parallel.
+  auto modules = SmallVector<FModuleOp>(circuit.getOps<FModuleOp>());
+  llvm::parallelForEach(modules, [&](FModuleOp mod) {
+    createRandomizationAttributes(mod, dut, instanceGraph);
+  });
 }
