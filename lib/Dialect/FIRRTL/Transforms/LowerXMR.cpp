@@ -52,19 +52,19 @@ using hw::InnerRefAttr;
 //  op. This map tracks the dataflow path from the original RefSendOp to the
 //  corresponding ref values.
 // For every InstanceOp
-//  1. For every RefType port of the InstanceOp, get the remote RefSendOp
-//     that flows into the corresponding port of the Referenced module.
-//     Because of the order of traversal and the constraints on the ref
-//     ports, the Referenced module ref ports must already be resolved.
-//  2. Update the `reachingRefSendAt` for the corresponding RefSendOp,
-//    to append an InnerRef to this InstanceOp. This denotes that the final
-//    XMR must include this InstanceOp.
+//  1. For every RefType port of the InstanceOp, get the remote RefSendOp that
+//  flows into the corresponding port of the Referenced module. Because of the
+//  order of traversal and the constraints on the ref ports, the Referenced
+//  module ref ports must already be resolved.
+//  2. Update the `reachingRefSendAt` for the corresponding RefSendOp, to append
+//  an InnerRef to this InstanceOp. This denotes that the final XMR must include
+//  this InstanceOp.
 // For every ConnectLike op
 //  1. Copy the dataflow of the src to the dest.
 // For every RefResolveOp,
-//  1. Replace the op result with a VerbatimExpr, representing the XMR.
-//       The InnerRef sequence of symbols from `reachingRefSendAt` is
-//       used to construct the symbol list for the verbatim.
+//  1. Replace the op result with a VerbatimExpr, representing the XMR. The
+//  InnerRef sequence of symbols from `reachingRefSendAt` is used to construct
+//  the symbol list for the verbatim.
 //
 class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
 
@@ -90,7 +90,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
             if (!connect.getSrc().getType().isa<RefType>())
               return success();
             // Get the dataflow value into the src.
-            if (auto remoteOpPath = getRemoteRefSend(connect.getSrc(), connect))
+            if (auto remoteOpPath = getRemoteRefSend(connect.getSrc()))
               reachingRefSendAt[connect.getDest()] = remoteOpPath;
             else
               return failure();
@@ -137,21 +137,29 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
       }
   }
 
-  ArrayAttr getRemoteRefSend(Value val, Operation *op) {
+  ArrayAttr getRemoteRefSend(Value val) {
     auto iter = reachingRefSendAt.find(val);
     if (iter != reachingRefSendAt.end())
       return iter->getSecond();
     // The referenced module must have already been analyzed, error out if the
     // dataflow at the child module is not resolved.
-    op->emitOpError(
-        "reference dataflow cannot be traced back to the remote read op");
+    if (BlockArgument arg = val.dyn_cast<BlockArgument>())
+      arg.getOwner()->getParentOp()->emitError(
+          "reference dataflow cannot be traced back to the remote read op for "
+          "module port '")
+          << dyn_cast<FModuleOp>(arg.getOwner()->getParentOp())
+                 .getPortName(arg.getArgNumber())
+          << "'";
+    else
+      val.getDefiningOp()->emitOpError(
+          "reference dataflow cannot be traced back to the remote read op");
     return {};
   }
-  //
+
   // Replace the RefResolveOp with verbatim op representing the XMR.
   LogicalResult handleRefResolve(RefResolveOp resolve) {
     opsToRemove.push_back(resolve);
-    auto remoteOpPath = getRemoteRefSend(resolve.getRef(), resolve);
+    auto remoteOpPath = getRemoteRefSend(resolve.getRef());
     if (!remoteOpPath)
       return failure();
     auto xmrSize = remoteOpPath.size();
@@ -182,7 +190,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
       auto instanceResult = inst.getResult(portNum);
       if (!instanceResult.getType().isa<RefType>())
         continue;
-      if (!refMod) 
+      if (!refMod)
         return inst.emitOpError("cannot lower ext modules with RefType ports");
       // Reference ports must be removed.
       refPortsToRemoveMap[inst].push_back(portNum);
@@ -191,7 +199,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
         continue;
       auto refModuleArg = refMod.getArgument(portNum);
       // Get the remote RefSendOp, that flows through the module ports.
-      auto remoteOpPath = getRemoteRefSend(refModuleArg, inst);
+      auto remoteOpPath = getRemoteRefSend(refModuleArg);
       if (!remoteOpPath)
         return failure();
 
@@ -219,7 +227,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
                              return getModuleNamespace(mod);
                            });
   }
-  
+
   /// Cached module namespaces.
   DenseMap<Operation *, ModuleNamespace> moduleNamespaces;
 

@@ -16,6 +16,33 @@ firrtl.circuit "xmr" {
 
 // -----
 
+// Test the correct xmr path is generated
+// CHECK-LABEL: firrtl.circuit "Top" {
+firrtl.circuit "Top" {
+  firrtl.module @XmrSrcMod(out %_a: !firrtl.ref<uint<1>>) {
+    // CHECK: firrtl.module @XmrSrcMod() {
+    %zero = firrtl.constant 0 : !firrtl.uint<1>
+    // CHECK:   %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1> {inner_sym = #firrtl<innerSym@xmr_sym>}
+    %1 = firrtl.ref.send %zero : !firrtl.uint<1>
+    firrtl.strictconnect %_a, %1 : !firrtl.ref<uint<1>>
+  }
+  firrtl.module @Bar(out %_a: !firrtl.ref<uint<1>>) {
+    %xmr   = firrtl.instance bar sym @barXMR @XmrSrcMod(out _a: !firrtl.ref<uint<1>>)
+    // CHECK:  firrtl.instance bar sym @barXMR  @XmrSrcMod()
+    firrtl.strictconnect %_a, %xmr   : !firrtl.ref<uint<1>>
+  }
+  firrtl.module @Top() {
+    %bar_a = firrtl.instance bar sym @bar  @Bar(out _a: !firrtl.ref<uint<1>>)
+    // CHECK:  firrtl.instance bar sym @bar  @Bar()
+    %a = firrtl.wire : !firrtl.uint<1>
+    %0 = firrtl.ref.resolve %bar_a : !firrtl.ref<uint<1>>
+    // CHECK-LITERAL:  %0 = firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}" : () -> !firrtl.uint<1> {symbols = [#hw.innerNameRef<@Top::@bar>, #hw.innerNameRef<@Bar::@barXMR>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
+    firrtl.strictconnect %a, %0 : !firrtl.uint<1>
+  }
+}
+
+// -----
+
 // Test for multiple readers and multiple instances
 // CHECK-LABEL: firrtl.circuit "Top" {
 firrtl.circuit "Top" {
