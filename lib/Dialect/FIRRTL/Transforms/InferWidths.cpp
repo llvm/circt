@@ -1524,9 +1524,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
       })
       .Case<RefResolveOp>([&](auto op) {
         declareVars(op.getResult(), op.getLoc());
-        // Both directions, resolve may flow either way.
-        unifyTypes(FieldRef(op.getResult(), 0), FieldRef(op.getRef(), 0),
-                   op.getResult().getType().template cast<FIRRTLType>());
+        constrainTypes(op.getResult(), op.getRef());
       })
 
       .Default([&](auto op) {
