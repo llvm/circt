@@ -82,6 +82,8 @@ public:
 };
 } // namespace
 
+constexpr uint64_t randomWidth = 32;
+
 namespace {
 /// Lower FirRegOp to `sv.reg` and `sv.always`.
 class FirRegLower {
@@ -90,10 +92,17 @@ public:
 
   void lower();
 
+  using SymbolAndRange = std::pair<Attribute, std::pair<uint64_t, uint64_t>>;
+
 private:
   using AsyncResetSignal = std::pair<Value, Value>;
 
   std::pair<sv::RegOp, llvm::Optional<AsyncResetSignal>> lower(FirRegOp reg);
+
+  bool isInitialisePreset(sv::RegOp);
+
+  void initialisePreset(OpBuilder &regBuilder, OpBuilder &initBuilder,
+                        sv::RegOp reg);
 
   void initialise(OpBuilder &regBuilder, OpBuilder &initBuilder, sv::RegOp reg);
 
@@ -113,7 +122,8 @@ private:
 
   /// This is a map from block to a pair of a random value and its unused
   /// bits. It is used to reduce the number of random value.
-  std::pair<Value, unsigned> randomValueAndRemain;
+  std::pair<Value, uint64_t> randomValueAndRemain;
+  sv::RegOp presetRandomValue;
 };
 } // namespace
 
@@ -167,7 +177,11 @@ void FirRegLower::lower() {
               builder.create<sv::IfDefProceduralOp>(randInitRef, [&] {
                 // Create initialisers for all registers.
                 for (auto &[svReg, asyncReset] : toInit) {
-                  initialise(regBuilder, builder, svReg);
+                  if (isInitialisePreset(svReg))
+                    initialisePreset(regBuilder, builder, svReg);
+                  else
+                    initialise(regBuilder, builder, svReg);
+
                   if (asyncReset) {
                     auto &[resetSignal, resetValue] = *asyncReset;
                     resets[resetSignal].emplace_back(svReg, resetValue);
@@ -203,6 +217,8 @@ void FirRegLower::lower() {
           });
         });
   }
+
+  module->removeAttr("firrtl.random_init_width");
 }
 
 std::pair<sv::RegOp, llvm::Optional<FirRegLower::AsyncResetSignal>>
@@ -249,17 +265,160 @@ FirRegLower::lower(FirRegOp reg) {
   return {svReg, asyncReset};
 }
 
-void FirRegLower::initialise(OpBuilder &regBuilder, OpBuilder &initBuilder,
-                             sv::RegOp reg) {
-  typedef std::pair<Attribute, std::pair<unsigned, unsigned>> SymbolAndRange;
-
+static void emitRandomInit(
+    hw::HWModuleOp module, sv::RegOp reg, OpBuilder &builder,
+    uint64_t randomRegWidth,
+    llvm::function_ref<void(IntegerType,
+                            SmallVector<FirRegLower::SymbolAndRange> &)>
+        getRandomValues) {
   auto regDefSym =
       hw::InnerRefAttr::get(module.getNameAttr(), reg.getInnerSymAttr());
 
+  // Get a random value with the specified width, combining or truncating
+  // 32-bit units as necessary.
+  auto emitRandomInit = [&](Value dest, Type type, const Twine &accessor) {
+    auto intType = type.cast<IntegerType>();
+    if (intType.getWidth() == 0)
+      return;
+
+    SmallVector<FirRegLower::SymbolAndRange> values;
+    getRandomValues(intType, values);
+
+    SmallString<32> rhs(("{{0}}" + accessor + " = ").str());
+    unsigned i = 1;
+    SmallVector<Attribute, 4> symbols({regDefSym});
+    if (values.size() > 1)
+      rhs.append("{");
+    for (auto [value, range] : llvm::reverse(values)) {
+      symbols.push_back(value);
+      auto [high, low] = range;
+      if (i > 1)
+        rhs.append(", ");
+      rhs.append(("{{" + Twine(i++) + "}}").str());
+
+      // This uses all bits of the random value. Emit without part select.
+      if (high == randomWidth - 1 && low == 0 && randomRegWidth == randomWidth)
+        continue;
+
+      // Emit a single bit part select, e.g., emit "[0]" and not "[0:0]".
+      if (high == low) {
+        rhs.append(("[" + Twine(high) + "]").str());
+        continue;
+      }
+
+      // Emit a part select, e.g., "[4:2]"
+      rhs.append(
+          ("[" + Twine(range.first) + ":" + Twine(range.second) + "]").str());
+    }
+    if (values.size() > 1)
+      rhs.append("}");
+    rhs.append(";");
+
+    builder.create<sv::VerbatimOp>(reg.getLoc(), rhs, ValueRange{},
+                                   builder.getArrayAttr(symbols));
+  };
+
+  // Randomly initialize everything in the register. If the register
+  // is an aggregate type, then assign random values to all its
+  // constituent ground types.
+  auto type = reg.getType().dyn_cast<hw::InOutType>().getElementType();
+  std::function<void(Type, const Twine &)> recurse = [&](Type type,
+                                                         const Twine &member) {
+    TypeSwitch<Type>(type)
+        .Case<hw::UnpackedArrayType, hw::ArrayType>([&](auto a) {
+          for (size_t i = 0, e = a.getSize(); i != e; ++i)
+            recurse(a.getElementType(), member + "[" + Twine(i) + "]");
+        })
+        .Case<hw::StructType>([&](hw::StructType s) {
+          for (auto elem : s.getElements())
+            recurse(elem.type, member + "." + elem.name.getValue());
+        })
+        .Default([&](auto type) { emitRandomInit(reg, type, member); });
+  };
+  recurse(type, "");
+}
+
+bool FirRegLower::isInitialisePreset(sv::RegOp reg) {
+  return module->hasAttr("firrtl.random_init_width") &&
+         reg->hasAttr("firrtl.random_init_start") &&
+         reg->hasAttr("firrtl.random_init_end");
+}
+
+void FirRegLower::initialisePreset(OpBuilder &regBuilder,
+                                   OpBuilder &initBuilder, sv::RegOp reg) {
+  // Extract the required random initialisation width and compute the number of
+  // `RANDOM calls required to fill it up, as well as the final register width.
+  auto randomInitWidthAttr =
+      module->getAttrOfType<IntegerAttr>("firrtl.random_init_width");
+  assert(randomInitWidthAttr &&
+         "firrtl.random_init_width required for preset initialisation");
+
+  uint64_t randomInitWidth = randomInitWidthAttr.getUInt();
+  assert(randomInitWidth > 0 &&
+         "random initialization width should be non-zero");
+  uint64_t numRandomSources = llvm::divideCeil(randomInitWidth, randomWidth);
+  uint64_t randomRegWidth = randomWidth * numRandomSources;
+
+  // Only create the random register once.
+  if (presetRandomValue == nullptr) {
+    // Declare the random register.
+    auto randReg = regBuilder.create<sv::RegOp>(
+        reg.getLoc(), regBuilder.getIntegerType(randomRegWidth),
+        /*name=*/regBuilder.getStringAttr("_RANDOM"),
+        /*inner_sym=*/
+        regBuilder.getStringAttr(ns.newName(Twine("_RANDOM"))));
+
+    presetRandomValue = randReg;
+
+    SmallString<32> randomRegAssign("{{0}} = {");
+
+    // Fill the random register by concatenating calls to `RANDOM in a verbatim
+    // string.
+    for (uint64_t i = 0; i < numRandomSources; ++i) {
+      randomRegAssign.append("`RANDOM");
+      if (i < numRandomSources - 1)
+        randomRegAssign.append(",");
+      // Add a line break when line length gets close to 1000 characters.
+      if (i > 0 && i % 125 == 0)
+        randomRegAssign.append("\n");
+    }
+
+    randomRegAssign.append("};");
+
+    // Assign the concatenated calls to the declared register.
+    initBuilder.create<sv::VerbatimOp>(
+        reg.getLoc(), initBuilder.getStringAttr(randomRegAssign), ValueRange{},
+        initBuilder.getArrayAttr({hw::InnerRefAttr::get(
+            module.getNameAttr(), randReg.getInnerSymAttr())}));
+  }
+
+  auto getRandomValues = [&](IntegerType type,
+                             SmallVector<SymbolAndRange> &values) {
+    assert(type.getWidth() != 0 && "zero bit width's not supported");
+
+    auto randomStart =
+        reg->getAttrOfType<IntegerAttr>("firrtl.random_init_start").getUInt();
+    auto randomEnd =
+        reg->getAttrOfType<IntegerAttr>("firrtl.random_init_end").getUInt();
+    reg->removeAttr("firrtl.random_init_start");
+    reg->removeAttr("firrtl.random_init_end");
+
+    auto randReg = presetRandomValue;
+
+    auto symbol =
+        hw::InnerRefAttr::get(module.getNameAttr(), randReg.getInnerSymAttr());
+
+    values.push_back({symbol, {randomEnd, randomStart}});
+  };
+
+  emitRandomInit(module, reg, initBuilder, randomRegWidth, getRandomValues);
+}
+
+void FirRegLower::initialise(OpBuilder &regBuilder, OpBuilder &initBuilder,
+                             sv::RegOp reg) {
   // Construct and return a new reference to `RANDOM.  It is always a 32-bit
   // unsigned expression.  Calls to $random have side effects, so we use
   // VerbatimExprSEOp.
-  constexpr unsigned randomWidth = 32;
   auto getRandom32Val = [&](const char *suffix = "") -> Value {
     sv::RegOp randReg = regBuilder.create<sv::RegOp>(
         reg.getLoc(), regBuilder.getIntegerType(randomWidth),
@@ -300,68 +459,7 @@ void FirRegLower::initialise(OpBuilder &regBuilder, OpBuilder &initBuilder,
     }
   };
 
-  // Get a random value with the specified width, combining or truncating
-  // 32-bit units as necessary.
-  auto emitRandomInit = [&](Value dest, Type type, const Twine &accessor) {
-    auto intType = type.cast<IntegerType>();
-    if (intType.getWidth() == 0)
-      return;
-
-    SmallVector<SymbolAndRange> values;
-    getRandomValues(intType, values);
-
-    SmallString<32> rhs(("{{0}}" + accessor + " = ").str());
-    unsigned i = 1;
-    SmallVector<Attribute, 4> symbols({regDefSym});
-    if (values.size() > 1)
-      rhs.append("{");
-    for (auto [value, range] : llvm::reverse(values)) {
-      symbols.push_back(value);
-      auto [high, low] = range;
-      if (i > 1)
-        rhs.append(", ");
-      rhs.append(("{{" + Twine(i++) + "}}").str());
-
-      // This uses all bits of the random value. Emit without part select.
-      if (high == randomWidth - 1 && low == 0)
-        continue;
-
-      // Emit a single bit part select, e.g., emit "[0]" and not "[0:0]".
-      if (high == low) {
-        rhs.append(("[" + Twine(high) + "]").str());
-        continue;
-      }
-
-      // Emit a part select, e.g., "[4:2]"
-      rhs.append(
-          ("[" + Twine(range.first) + ":" + Twine(range.second) + "]").str());
-    }
-    if (values.size() > 1)
-      rhs.append("}");
-    rhs.append(";");
-
-    initBuilder.create<sv::VerbatimOp>(reg.getLoc(), rhs, ValueRange{},
-                                       initBuilder.getArrayAttr(symbols));
-  };
-
-  // Randomly initialize everything in the register. If the register
-  // is an aggregate type, then assign random values to all its
-  // constituent ground types.
-  auto type = reg.getType().dyn_cast<hw::InOutType>().getElementType();
-  std::function<void(Type, const Twine &)> recurse = [&](Type type,
-                                                         const Twine &member) {
-    TypeSwitch<Type>(type)
-        .Case<hw::UnpackedArrayType, hw::ArrayType>([&](auto a) {
-          for (size_t i = 0, e = a.getSize(); i != e; ++i)
-            recurse(a.getElementType(), member + "[" + Twine(i) + "]");
-        })
-        .Case<hw::StructType>([&](hw::StructType s) {
-          for (auto elem : s.getElements())
-            recurse(elem.type, member + "." + elem.name.getValue());
-        })
-        .Default([&](auto type) { emitRandomInit(reg, type, member); });
-  };
-  recurse(type, "");
+  emitRandomInit(module, reg, initBuilder, randomWidth, getRandomValues);
 }
 
 void FirRegLower::addToAlwaysBlock(sv::EventControl clockEdge, Value clock,

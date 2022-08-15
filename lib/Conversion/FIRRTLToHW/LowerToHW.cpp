@@ -1063,6 +1063,11 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
   if (auto comment = oldModule->getAttrOfType<StringAttr>("comment"))
     newModule.setCommentAttr(comment);
 
+  // Pass along the number of random initialization bits needed for this module.
+  if (auto randomWidth =
+          oldModule->getAttrOfType<IntegerAttr>("firrtl.random_init_width"))
+    newModule->setAttr("firrtl.random_init_width", randomWidth);
+
   // If the circuit has an entry point, set all other modules private.
   // Otherwise, mark all modules as public.
   SymbolTable::setSymbolVisibility(newModule,
@@ -2597,6 +2602,13 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
   Backedge inputEdge = backedgeBuilder.get(resultType);
   auto reg = builder.create<seq::FirRegOp>(inputEdge, clockVal,
                                            op.getNameAttr(), symName);
+
+  // Pass along the start and end random initialization bits for this register.
+  if (auto randomStart = op->getAttr("firrtl.random_init_start"))
+    reg->setAttr("firrtl.random_init_start", randomStart);
+  if (auto randomEnd = op->getAttr("firrtl.random_init_end"))
+    reg->setAttr("firrtl.random_init_end", randomEnd);
+
   inputEdge.setValue(reg);
   circuitState.used_RANDOMIZE_REG_INIT = 1;
   regMapping.try_emplace(op, reg);
@@ -2630,6 +2642,13 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
   auto reg =
       builder.create<seq::FirRegOp>(inputEdge, clockVal, op.getNameAttr(),
                                     resetSignal, resetValue, symName, isAsync);
+
+  // Pass along the start and end random initialization bits for this register.
+  if (auto randomStart = op->getAttr("firrtl.random_init_start"))
+    reg->setAttr("firrtl.random_init_start", randomStart);
+  if (auto randomEnd = op->getAttr("firrtl.random_init_end"))
+    reg->setAttr("firrtl.random_init_end", randomEnd);
+
   inputEdge.setValue(reg);
   circuitState.used_RANDOMIZE_REG_INIT = 1;
   regMapping.try_emplace(op, reg);

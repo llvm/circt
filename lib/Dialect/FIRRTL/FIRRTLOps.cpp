@@ -3960,6 +3960,46 @@ void XorRPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 //===----------------------------------------------------------------------===//
+// RefOps
+//===----------------------------------------------------------------------===//
+
+FIRRTLType RefResolveOp::inferReturnType(ValueRange operands,
+                                         ArrayRef<NamedAttribute> attrs,
+                                         Optional<Location> loc) {
+  auto inType = operands[0].getType();
+  auto inRefType = inType.dyn_cast<RefType>();
+  if (!inRefType) {
+    if (loc)
+      mlir::emitError(*loc, "ref.resolve operand must be ref type, not ")
+          << inType;
+    return {};
+  }
+  return inRefType.getType();
+}
+
+FIRRTLType RefSendOp::inferReturnType(ValueRange operands,
+                                      ArrayRef<NamedAttribute> attrs,
+                                      Optional<Location> loc) {
+  auto inType = operands[0].getType();
+  auto inBaseType = inType.dyn_cast<FIRRTLBaseType>();
+  if (!inBaseType) {
+    if (loc)
+      mlir::emitError(*loc, "ref.send operand must be base type, not ")
+          << inType;
+    return {};
+  }
+  return RefType::get(inBaseType);
+}
+
+void RefResolveOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+
+void RefSendOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+
+//===----------------------------------------------------------------------===//
 // TblGen Generated Logic.
 //===----------------------------------------------------------------------===//
 

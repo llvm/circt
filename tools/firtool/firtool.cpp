@@ -558,6 +558,16 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     }
   }
 
+  if (inliner)
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInlinerPass());
+
+  // Preset the random initialization parameters for each module. The current
+  // implementation assumes it can run at a time where every register is
+  // currently in the final module it will be emitted in, all registers have
+  // been created, and no registers have yet been removed.
+  pm.nest<firrtl::CircuitOp>().addPass(
+      firrtl::createRandomizeRegisterInitPass());
+
   if (checkCombCycles)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCheckCombCyclesPass());
 
@@ -577,9 +587,6 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
 
   if (prefixModules)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createPrefixModulesPass());
-
-  if (inliner)
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInlinerPass());
 
   if (imconstprop && !disableOptimization)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createIMConstPropPass());

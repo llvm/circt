@@ -272,6 +272,8 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
   void visitConnect(ConnectOp connect);
   void visitStrictConnect(StrictConnectOp connect);
   void visitRegResetOp(RegResetOp regReset);
+  void visitRefSend(RefSendOp send);
+  void visitRefResolve(RefResolveOp resolve);
   void visitOperation(Operation *op);
 
 private:
@@ -488,13 +490,15 @@ void IMConstPropPass::markInstanceOp(InstanceOp instance) {
 
 // We merge the value from the RHS into the value of the LHS.
 void IMConstPropPass::visitConnect(ConnectOp connect) {
-  auto connectDestType = connect.getDest().getType().dyn_cast<FIRRTLBaseType>();
-  // Only base types are handled for now, mark non-base overdefined.
-  if (!connectDestType) {
-    markOverdefined(connect.getSrc());
-    return markOverdefined(connect.getDest());
-  }
-  auto destType = connectDestType.getPassiveType();
+  auto destType =
+      TypeSwitch<FIRRTLType, FIRRTLBaseType>(
+          connect.getDest().getType().cast<FIRRTLType>())
+          .Case<FIRRTLBaseType>([](auto base) { return base.getPassiveType(); })
+          .Case<RefType>([](auto ref) { return ref.getType(); })
+          .Default([](auto) {
+            llvm_unreachable("unsupported type");
+            return FIRRTLBaseType();
+          });
 
   // Handle implicit extensions.
   auto srcValue = getExtendedLatticeValue(connect.getSrc(), destType);
@@ -546,13 +550,15 @@ void IMConstPropPass::visitConnect(ConnectOp connect) {
 
 // We merge the value from the RHS into the value of the LHS.
 void IMConstPropPass::visitStrictConnect(StrictConnectOp connect) {
-  auto connectDestType = connect.getDest().getType().dyn_cast<FIRRTLBaseType>();
-  // Only base types are handled for now, mark non-base overdefined.
-  if (!connectDestType) {
-    markOverdefined(connect.getSrc());
-    return markOverdefined(connect.getDest());
-  }
-  auto destType = connectDestType.getPassiveType();
+  auto destType =
+      TypeSwitch<FIRRTLType, FIRRTLBaseType>(
+          connect.getDest().getType().cast<FIRRTLType>())
+          .Case<FIRRTLBaseType>([](auto base) { return base.getPassiveType(); })
+          .Case<RefType>([](auto ref) { return ref.getType(); })
+          .Default([](auto) {
+            llvm_unreachable("unsupported type");
+            return FIRRTLBaseType();
+          });
 
   // Handle implicit extensions.
   auto srcValue = getExtendedLatticeValue(connect.getSrc(), destType);
@@ -629,6 +635,17 @@ void IMConstPropPass::visitRegResetOp(RegResetOp regReset) {
     mergeLatticeValue(regReset, srcValue);
 }
 
+void IMConstPropPass::visitRefSend(RefSendOp send) {
+  // Send connects the base value (source) to the result (dest).
+  return mergeLatticeValue(send.getResult(), send.getBase());
+}
+
+void IMConstPropPass::visitRefResolve(RefResolveOp resolve) {
+  // Resolve connects the ref value (source) to result (dest).
+  // If writes are ever supported, this will need to work differently!
+  return mergeLatticeValue(resolve.getResult(), resolve.getRef());
+}
+
 /// This method is invoked when an operand of the specified op changes its
 /// lattice value state and when the block containing the operation is first
 /// noticed as being alive.
@@ -643,6 +660,10 @@ void IMConstPropPass::visitOperation(Operation *op) {
     return visitStrictConnect(strictConnectOp);
   if (auto regResetOp = dyn_cast<RegResetOp>(op))
     return visitRegResetOp(regResetOp);
+  if (auto sendOp = dyn_cast<RefSendOp>(op))
+    return visitRefSend(sendOp);
+  if (auto resolveOp = dyn_cast<RefResolveOp>(op))
+    return visitRefResolve(resolveOp);
 
   // The clock operand of regop changing doesn't change its result value.
   if (isa<RegOp>(op))
@@ -755,6 +776,10 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
     auto it = latticeValues.find(value);
     if (it == latticeValues.end() || it->second.isOverdefined() ||
         it->second.isUnknown())
+      return false;
+
+    // Cannot materialize constants for non-base types.
+    if (!value.getType().isa<FIRRTLBaseType>())
       return false;
 
     auto cstValue =
