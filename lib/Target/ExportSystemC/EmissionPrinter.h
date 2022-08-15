@@ -23,18 +23,17 @@ namespace ExportSystemC {
 /// This is intended to be the driving class for all pattern-based IR emission.
 class EmissionPrinter {
 public:
-  EmissionPrinter(mlir::raw_indented_ostream &os, EmissionConfig &config,
+  EmissionPrinter(mlir::raw_indented_ostream &os,
                   const FrozenOpEmissionPatternSet &opPatterns,
                   const FrozenTypeEmissionPatternSet &typePatterns)
-      : opPatterns(opPatterns), typePatterns(typePatterns), config(config),
-        os(os), emissionFailed(false) {}
+      : opPatterns(opPatterns), typePatterns(typePatterns), os(os),
+        emissionFailed(false) {}
 
-  EmissionPrinter(mlir::raw_indented_ostream &os, EmissionConfig &config,
+  EmissionPrinter(mlir::raw_indented_ostream &os,
                   OpEmissionPatternSet &opPatterns,
                   TypeEmissionPatternSet &typePatterns)
       : opPatterns(std::move(opPatterns)),
-        typePatterns(std::move(typePatterns)), config(config), os(os),
-        emissionFailed(false) {}
+        typePatterns(std::move(typePatterns)), os(os), emissionFailed(false) {}
 
   /// Emit the given operation as a statement to the ostream associated with
   /// this printer according to the emission patterns registered. An operation
@@ -90,7 +89,6 @@ public:
 private:
   FrozenOpEmissionPatternSet opPatterns;
   FrozenTypeEmissionPatternSet typePatterns;
-  EmissionConfig config;
   mlir::raw_indented_ostream &os;
   bool emissionFailed;
 };

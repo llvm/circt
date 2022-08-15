@@ -23,46 +23,6 @@ namespace ExportSystemC {
 class EmissionPrinter;
 
 //===----------------------------------------------------------------------===//
-// Utilities to configure the behavior of emission patterns.
-//===----------------------------------------------------------------------===//
-
-/// A Flag to be added to an EmissionConfig.
-template <typename T>
-class Flag {
-public:
-  Flag<T>(StringRef name, T defaultValue)
-      : name(name), defaultValue(defaultValue) {}
-
-  StringRef getName() const { return name; }
-  T getDefault() const { return defaultValue; }
-
-private:
-  StringRef name;
-  T defaultValue;
-};
-
-/// This class collects a set of configuration flags to be passed to the
-/// emission patterns. Emission patterns can make their matching decision
-/// dependent on the configuration, or change their emission behavior.
-class EmissionConfig {
-public:
-  template <typename T>
-  void set(StringRef flag, T value) {
-    flags[flag] = value;
-  }
-
-  template <typename T>
-  T get(Flag<T> flag) {
-    if (!flags.count(flag.getName()))
-      return flag.getDefault();
-    return std::any_cast<T>(flags[flag.getName()]);
-  }
-
-private:
-  DenseMap<StringRef, std::any> flags;
-};
-
-//===----------------------------------------------------------------------===//
 // Inline emission utilities.
 //===----------------------------------------------------------------------===//
 
@@ -173,23 +133,20 @@ struct OpEmissionPatternBase : PatternBase {
             OperationName(operationName, context).getAsOpaquePointer()) {}
   virtual ~OpEmissionPatternBase() = default;
 
-  /// Checks if this pattern is applicable to the given value and configuration
-  /// to emit an inlinable expression. Additionally returns information such as
-  /// the precedence to the pattern where this pattern's result is to be
-  /// inlined.
-  virtual MatchResult matchInlinable(Value value, EmissionConfig &config) = 0;
+  /// Checks if this pattern is applicable to the given value to emit an
+  /// inlinable expression. Additionally returns information such as the
+  /// precedence to the pattern where this pattern's result is to be inlined.
+  virtual MatchResult matchInlinable(Value value) = 0;
 
-  /// Checks if this pattern is applicable to the given operation and
-  /// configuration for statement emission.
-  virtual bool matchStatement(mlir::Operation *op, EmissionConfig &config) = 0;
+  /// Checks if this pattern is applicable to the given operation for statement
+  /// emission.
+  virtual bool matchStatement(mlir::Operation *op) = 0;
 
   /// Emit the expression for the given value.
-  virtual void emitInlined(mlir::Value value, EmissionConfig &config,
-                           EmissionPrinter &p) = 0;
+  virtual void emitInlined(mlir::Value value, EmissionPrinter &p) = 0;
 
   /// Emit zero or more statements for the given operation.
-  virtual void emitStatement(mlir::Operation *op, EmissionConfig &config,
-                             EmissionPrinter &p) = 0;
+  virtual void emitStatement(mlir::Operation *op, EmissionPrinter &p) = 0;
 };
 
 /// This is intended to be the base class for all emission patterns matching on
@@ -200,11 +157,10 @@ struct TypeEmissionPatternBase : PatternBase {
   virtual ~TypeEmissionPatternBase() = default;
 
   /// Checks if this pattern is applicable to the given type.
-  virtual bool match(Type type, EmissionConfig &config) = 0;
+  virtual bool match(Type type) = 0;
 
   /// Emit the given type to the emission printer.
-  virtual void emitType(Type type, EmissionConfig &config,
-                        EmissionPrinter &p) = 0;
+  virtual void emitType(Type type, EmissionPrinter &p) = 0;
 };
 
 /// This is a convenience class providing default implementations for operation
@@ -214,34 +170,29 @@ struct OpEmissionPattern : OpEmissionPatternBase {
   explicit OpEmissionPattern(MLIRContext *context)
       : OpEmissionPatternBase(SourceOp::getOperationName(), context) {}
 
-  void emitStatement(mlir::Operation *op, EmissionConfig &config,
-                     EmissionPrinter &p) final {
-    return emitStatement(cast<SourceOp>(op), config, p);
+  void emitStatement(mlir::Operation *op, EmissionPrinter &p) final {
+    return emitStatement(cast<SourceOp>(op), p);
   }
 
-  /// Checks if this pattern is applicable to the given value and configuration
-  /// to emit an inlinable expression. Additionally returns information such as
-  /// the precedence to the pattern where this pattern's result is to be
-  /// inlined. Defaults to never match.
-  MatchResult matchInlinable(Value value, EmissionConfig &config) override {
-    return MatchResult();
-  }
+  /// Checks if this pattern is applicable to the given value to emit an
+  /// inlinable expression. Additionally returns information such as the
+  /// precedence to the pattern where this pattern's result is to be inlined.
+  /// Defaults to never match.
+  MatchResult matchInlinable(Value value) override { return MatchResult(); }
 
-  /// Checks if this pattern is applicable to the given operation and
-  /// configuration for statement emission. When not overriden this matches on
-  /// all operations of the type given as template parameter and emits nothing.
-  bool matchStatement(mlir::Operation *op, EmissionConfig &config) override {
+  /// Checks if this pattern is applicable to the given operation for statement
+  /// emission. When not overriden this matches on all operations of the type
+  /// given as template parameter and emits nothing.
+  bool matchStatement(mlir::Operation *op) override {
     return isa<SourceOp>(op);
   }
 
   /// Emit the expression for the given value. This has to be overriden whenever
   /// the 'matchInlinable' function is overriden and emit a valid expression.
-  void emitInlined(mlir::Value value, EmissionConfig &config,
-                   EmissionPrinter &p) override {}
+  void emitInlined(mlir::Value value, EmissionPrinter &p) override {}
 
   /// Emit zero (default) or more statements for the given operation.
-  virtual void emitStatement(SourceOp op, EmissionConfig &config,
-                             EmissionPrinter &p) {}
+  virtual void emitStatement(SourceOp op, EmissionPrinter &p) {}
 };
 
 /// This is a convenience class providing default implementations for type
@@ -250,19 +201,16 @@ template <typename Ty>
 struct TypeEmissionPattern : TypeEmissionPatternBase {
   TypeEmissionPattern() : TypeEmissionPatternBase(TypeID::get<Ty>()) {}
 
-  void emitType(Type type, EmissionConfig &config, EmissionPrinter &p) final {
-    emitType(type.cast<Ty>(), config, p);
+  void emitType(Type type, EmissionPrinter &p) final {
+    emitType(type.cast<Ty>(), p);
   }
 
   /// Checks if this pattern is applicable to the given type. Matches to the
   /// type given as template argument by default.
-  bool match(Type type, EmissionConfig &config) override {
-    return type.isa<Ty>();
-  }
+  bool match(Type type) override { return type.isa<Ty>(); }
 
   /// Emit the given type to the emission printer.
-  virtual void emitType(Ty type, EmissionConfig &config,
-                        EmissionPrinter &p) = 0;
+  virtual void emitType(Ty type, EmissionPrinter &p) = 0;
 };
 
 //===----------------------------------------------------------------------===//

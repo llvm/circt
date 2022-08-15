@@ -39,15 +39,15 @@ static std::string pathToMacroName(StringRef path) {
 
 /// Emits the given operation to a file represented by the passed ostream and
 /// file-path.
-static LogicalResult emitFile(Operation *op, EmissionConfig &config,
-                              StringRef filePath, raw_ostream &os) {
+static LogicalResult emitFile(Operation *op, StringRef filePath,
+                              raw_ostream &os) {
   mlir::raw_indented_ostream ios(os);
 
   OpEmissionPatternSet opPatterns;
   registerAllOpEmitters(opPatterns, op->getContext());
   TypeEmissionPatternSet typePatterns;
   registerAllTypeEmitters(typePatterns);
-  EmissionPrinter printer(ios, config, opPatterns, typePatterns);
+  EmissionPrinter printer(ios, opPatterns, typePatterns);
 
   printer << "// " << filePath << "\n";
   std::string macroname = pathToMacroName(filePath);
@@ -69,13 +69,11 @@ static LogicalResult emitFile(Operation *op, EmissionConfig &config,
 //===----------------------------------------------------------------------===//
 
 LogicalResult ExportSystemC::exportSystemC(ModuleOp module,
-                                           EmissionConfig &config,
                                            llvm::raw_ostream &os) {
-  return emitFile(module, config, "stdout.h", os);
+  return emitFile(module, "stdout.h", os);
 }
 
 LogicalResult ExportSystemC::exportSplitSystemC(ModuleOp module,
-                                                EmissionConfig &config,
                                                 StringRef directory) {
   for (Operation &op : module.getRegion().front()) {
     if (auto symbolOp = dyn_cast<mlir::SymbolOpInterface>(op)) {
@@ -94,7 +92,7 @@ LogicalResult ExportSystemC::exportSplitSystemC(ModuleOp module,
         return module.emitError(errorMessage);
 
       // Emit the content to the file.
-      if (failed(emitFile(symbolOp, config, filePath, output->os())))
+      if (failed(emitFile(symbolOp, filePath, output->os())))
         return symbolOp->emitError("failed to emit to file \"")
                << filePath << "\"";
 
@@ -119,8 +117,7 @@ void ExportSystemC::registerExportSystemCTranslation() {
   static mlir::TranslateFromMLIRRegistration toSystemC(
       "export-systemc",
       [](ModuleOp module, raw_ostream &output) {
-        EmissionConfig config;
-        return ExportSystemC::exportSystemC(module, config, output);
+        return ExportSystemC::exportSystemC(module, output);
       },
       [](mlir::DialectRegistry &registry) {
         registry.insert<hw::HWDialect, comb::CombDialect,
@@ -130,8 +127,7 @@ void ExportSystemC::registerExportSystemCTranslation() {
   static mlir::TranslateFromMLIRRegistration toSplitSystemC(
       "export-split-systemc",
       [](ModuleOp module, raw_ostream &output) {
-        EmissionConfig config;
-        return ExportSystemC::exportSplitSystemC(module, config, directory);
+        return ExportSystemC::exportSplitSystemC(module, directory);
       },
       [](mlir::DialectRegistry &registry) {
         registry.insert<hw::HWDialect, comb::CombDialect,

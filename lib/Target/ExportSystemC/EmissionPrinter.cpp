@@ -18,8 +18,8 @@ using namespace circt::ExportSystemC;
 void EmissionPrinter::emitOp(Operation *op) {
   auto patterns = opPatterns.getSpecificNativePatterns().lookup(op->getName());
   for (auto *pat : patterns) {
-    if (pat->matchStatement(op, config)) {
-      pat->emitStatement(op, config, *this);
+    if (pat->matchStatement(op)) {
+      pat->emitStatement(op, *this);
       return;
     }
   }
@@ -36,8 +36,8 @@ void EmissionPrinter::emitType(Type type) {
   auto patterns =
       typePatterns.getSpecificNativePatterns().lookup(type.getTypeID());
   for (auto *pat : patterns) {
-    if (pat->match(type, config)) {
-      pat->emitType(type, config, *this);
+    if (pat->match(type)) {
+      pat->emitType(type, *this);
       return;
     }
   }
@@ -55,9 +55,9 @@ InlineEmitter EmissionPrinter::getInlinable(Value value) {
                                         : value.getDefiningOp();
   auto patterns = opPatterns.getSpecificNativePatterns().lookup(op->getName());
   for (auto *pat : patterns) {
-    MatchResult match = pat->matchInlinable(value, config);
+    MatchResult match = pat->matchInlinable(value);
     if (!match.failed()) {
-      return InlineEmitter([=]() { pat->emitInlined(value, config, *this); },
+      return InlineEmitter([=]() { pat->emitInlined(value, *this); },
                            match.getPrecedence());
     }
   }
