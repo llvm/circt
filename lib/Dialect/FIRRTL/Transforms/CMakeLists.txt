@@ -22,6 +22,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   LowerCHIRRTL.cpp
   LowerMemory.cpp
   LowerTypes.cpp
+  LowerXMR.cpp
   MergeConnections.cpp
   MemToRegOfVec.cpp
   ModuleInliner.cpp
