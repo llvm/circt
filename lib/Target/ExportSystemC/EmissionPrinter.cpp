@@ -43,9 +43,10 @@ void EmissionPrinter::emitType(Type type) {
   }
 
   // Emit a placeholder to the output and an error to stderr in case no valid
-  // emission pattern was found. Unfortunately, we cannot use MLIR's error
-  // emission here because a type does not carry any location information.
-  llvm::errs() << "no emission pattern found for type '" << type << "'\n";
+  // emission pattern was found.
+  mlir::emitError(UnknownLoc::get(type.getContext()),
+                  "no emission pattern found for type ")
+      << type << "\n";
   os << "<<UNSUPPORTED TYPE (" << type << ")>>";
   emissionFailed = true;
 }
