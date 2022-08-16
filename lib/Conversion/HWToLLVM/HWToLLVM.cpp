@@ -120,8 +120,7 @@ struct ArrayGetOpConversion : public ConvertOpToLLVMPattern<hw::ArrayGetOp> {
                   ConversionPatternRewriter &rewriter) const override {
 
     Value arrPtr;
-    if (auto load = dyn_cast_or_null<LLVM::LoadOp>(
-            adaptor.getInput().getDefiningOp())) {
+    if (auto load = adaptor.getInput().getDefiningOp<LLVM::LoadOp>()) {
       // In this case the array was loaded from an existing address, so we can
       // just grab that address instead of reallocating the array on the stack.
       arrPtr = load.getAddr();
@@ -399,7 +398,7 @@ struct HWConstArrayCreateOpConversion
 
   void rewrite(hw::ArrayCreateOp op, OpAdaptor adaptor,
                ConversionPatternRewriter &rewriter) const override {
-    auto arrayTy = typeConverter->convertType(op->getResult(0).getType());
+    auto arrayTy = typeConverter->convertType(op.getResult().getType());
     assert(arrayTy);
 
     OpBuilder b(op->getParentOfType<mlir::ModuleOp>().getBodyRegion());
@@ -411,10 +410,9 @@ struct HWConstArrayCreateOpConversion
                                  LLVM::Linkage::Internal, name, Attribute(), 0);
     Block *blk = new Block();
     global.getInitializerRegion().push_back(blk);
-    ImplicitLocOpBuilder init(op->getLoc(), op->getContext());
-    init.setInsertionPointToStart(blk);
+    b.setInsertionPointToStart(blk);
 
-    Value arr = init.create<LLVM::UndefOp>(op->getLoc(), arrayTy);
+    Value arr = b.create<LLVM::UndefOp>(op->getLoc(), arrayTy);
     for (size_t i = 0, e = op.getInputs().size(); i < e; ++i) {
       // Copy over the converted constant ops from the adaptor into the global
       // region and insert them into the array.
@@ -422,13 +420,14 @@ struct HWConstArrayCreateOpConversion
           adaptor
               .getInputs()[HWToLLVMEndianessConverter::convertToLLVMEndianess(
                   op.getResult().getType(), i)];
-      auto *clone = input.getDefiningOp()->clone();
-      init.insert(clone);
 
-      Value v = clone->getResult(0);
-      arr = init.create<LLVM::InsertValueOp>(op->getLoc(), arr, v, i);
+      assert(isa<LLVM::ConstantOp>(input.getDefiningOp()));
+      auto *clone = input.getDefiningOp()->clone();
+      b.insert(clone);
+
+      arr = b.create<LLVM::InsertValueOp>(op->getLoc(), arr, clone->getResult(0), i);
     }
-    init.create<LLVM::ReturnOp>(op->getLoc(), arr);
+    b.create<LLVM::ReturnOp>(op->getLoc(), arr);
     // Get the global array address and load it to return an array value.
     auto addr = rewriter.create<LLVM::AddressOfOp>(op->getLoc(), global);
     rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, arrayTy, addr);
