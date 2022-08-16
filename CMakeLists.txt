@@ -260,6 +260,50 @@ else()
 endif()
 
 #-------------------------------------------------------------------------------
+# Clang-Tidy Configuration (for integration tests to check SystemC linting)
+#-------------------------------------------------------------------------------
+
+# If clang-tidy hasn't been explicitly disabled, find it.
+option(CLANG_TIDY_DISABLE "Disable the clang-tidy lint tests.")
+if (CLANG_TIDY_DISABLE)
+  message(STATUS "Disabling clang-tidy lint tests.")
+else()
+  if (EXISTS ${CLANG_TIDY_PATH})
+    get_filename_component(CLANG_TIDY_PATH ${CLANG_TIDY_PATH} DIRECTORY)
+    message(STATUS "Setting clang-tidy path to ${CLANG_TIDY_PATH}.")
+  else()
+    # Search for the `clang-tidy` command.
+    find_program(CLANG_TIDY_PATH "clang-tidy")
+    if(EXISTS ${CLANG_TIDY_PATH})
+      # Then strip the filename.
+      get_filename_component(CLANG_TIDY_PATH ${CLANG_TIDY_PATH} DIRECTORY)
+      message(STATUS "Found clang-tidy at ${CLANG_TIDY_PATH}.")
+    else()
+      set(CLANG_TIDY_PATH "")
+      message(STATUS "Did NOT find clang-tidy.")
+    endif()
+  endif()
+endif()
+
+#-------------------------------------------------------------------------------
+# SystemC Configuration
+#-------------------------------------------------------------------------------
+
+# If SystemC hasn't been explicitly disabled, find it.
+option(SYSTEMC_DISABLE "Disable the systemc tests.")
+if (SYSTEMC_DISABLE)
+  message(STATUS "Disabling systemc tests.")
+else()
+  find_file(HAVE_SYSTEMC systemc PATH /usr/include /usr/local/include ${SYSTEMC_PATH})
+  if(HAVE_SYSTEMC)
+    message(STATUS "Found systemc headers.")
+  else()
+    set(HAVE_SYSTEMC "")
+    message(STATUS "Did NOT find systemc headers.")
+  endif()
+endif()
+
+#-------------------------------------------------------------------------------
 # Quartus Configuration
 #-------------------------------------------------------------------------------
 

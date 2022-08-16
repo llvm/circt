@@ -177,6 +177,16 @@ if config.bindings_python_enabled:
 if config.bindings_tcl_enabled:
   config.available_features.add('bindings_tcl')
 
+# Enable clang-tidy if it has been detected.
+if config.clang_tidy_path != "":
+  tool_dirs.append(config.clang_tidy_path)
+  tools.append('clang-tidy')
+  config.available_features.add('clang-tidy')
+
+# Enable systemc if it has been detected.
+if config.have_systemc != "":
+  config.available_features.add('systemc')
+
 llvm_config.add_tool_substitutions(tools, tool_dirs)
 
 # cocotb availability

@@ -11,6 +11,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Target/ExportSystemC.h"
+#include "EmissionPrinter.h"
+#include "RegisterAllEmitters.h"
+#include "circt/Dialect/Comb/CombDialect.h"
+#include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/SystemC/SystemCDialect.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Support/FileUtilities.h"
@@ -18,15 +22,49 @@
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/ToolOutputFile.h"
+#include <regex>
 
 using namespace circt;
 using namespace circt::ExportSystemC;
 
 #define DEBUG_TYPE "export-systemc"
 
+/// Helper to convert a file-path to a macro name that can be used to guard a
+/// header file.
+static std::string pathToMacroName(StringRef path) {
+  // Replace characters that represent a path hierarchy with underscore to match
+  // the usual header guard formatting.
+  auto str = std::regex_replace(path.upper(), std::regex("[\\\\./]"), "_");
+  // Remove invalid characters. TODO: a digit is not allowed as the first
+  // character, but not fixed here.
+  return std::regex_replace(str, std::regex("[^a-zA-Z0-9_$]+"), "");
+}
+
+/// Emits the given operation to a file represented by the passed ostream and
+/// file-path.
 static LogicalResult emitFile(Operation *op, StringRef filePath,
                               raw_ostream &os) {
-  return op->emitError("Not yet supported!");
+  mlir::raw_indented_ostream ios(os);
+
+  OpEmissionPatternSet opPatterns;
+  registerAllOpEmitters(opPatterns, op->getContext());
+  TypeEmissionPatternSet typePatterns;
+  registerAllTypeEmitters(typePatterns);
+  EmissionPrinter printer(ios, opPatterns, typePatterns);
+
+  printer << "// " << filePath << "\n";
+  std::string macroname = pathToMacroName(filePath);
+  printer << "#ifndef " << macroname << "\n";
+  printer << "#define " << macroname << "\n\n";
+
+  // TODO: add support for 'emitc.include' and remove this hard-coded include.
+  printer << "#include <systemc>\n\n";
+
+  printer.emitOp(op);
+
+  printer << "\n#endif // " << macroname << "\n\n";
+
+  return failure(printer.exitState().failed());
 }
 
 //===----------------------------------------------------------------------===//
@@ -47,10 +85,10 @@ LogicalResult ExportSystemC::exportSplitSystemC(ModuleOp module,
         return module.emitError("cannot create output directory \"")
                << directory << "\": " << error.message();
 
-      SmallString<128> filePath(directory);
-      llvm::sys::path::append(filePath, symbolOp.getName());
-
       // Open or create the output file.
+      std::string fileName = symbolOp.getName().str() + ".h";
+      SmallString<128> filePath(directory);
+      llvm::sys::path::append(filePath, fileName);
       std::string errorMessage;
       auto output = mlir::openOutputFile(filePath, &errorMessage);
       if (!output)
@@ -85,7 +123,8 @@ void ExportSystemC::registerExportSystemCTranslation() {
         return ExportSystemC::exportSystemC(module, output);
       },
       [](mlir::DialectRegistry &registry) {
-        registry.insert<systemc::SystemCDialect>();
+        registry.insert<hw::HWDialect, comb::CombDialect,
+                        systemc::SystemCDialect>();
       });
 
   static mlir::TranslateFromMLIRRegistration toSplitSystemC(
@@ -94,6 +133,7 @@ void ExportSystemC::registerExportSystemCTranslation() {
         return ExportSystemC::exportSplitSystemC(module, directory);
       },
       [](mlir::DialectRegistry &registry) {
-        registry.insert<systemc::SystemCDialect>();
+        registry.insert<hw::HWDialect, comb::CombDialect,
+                        systemc::SystemCDialect>();
       });
 }
