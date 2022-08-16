@@ -56,6 +56,16 @@ def cocotest(func):
   return func
 
 
+_EXTRA_FLAG = "_extra_files"
+
+
+def cocoextra(func):
+  # cocotb extra files function. Will include all returned filepaths in the
+  # cocotb run.
+  setattr(func, _EXTRA_FLAG, True)
+  return func
+
+
 def _gen_cocotb_testfile(tests):
   """
   Converts testbench functions to cocotb-compatible versions..
@@ -133,6 +143,7 @@ def cocotestbench(pycde_mod, simulator='icarus', **kwargs):
   # Some iverilog-specific checking. This is the main simulator currently used
   # for integration testing, and we require a minimum version for it to be
   # compatible with CIRCT output.
+  simhandler = None
   if simulator == "icarus":
     simhandler = _IVerilogHandler()
   # else, let cocotb handle simulator verification.
@@ -142,6 +153,15 @@ def cocotestbench(pycde_mod, simulator='icarus', **kwargs):
     sys.generate()
     sys.emit_outputs()
     testmodule = "test_" + pycde_mod.__name__
+
+    # Find include files in the testbench.
+    extra_files_funcs = [
+        getattr(tb_class, a)
+        for a in dir(tb_class)
+        if getattr(getattr(tb_class, a), _EXTRA_FLAG, False)
+    ]
+    test_files = sys.mod_files.union(
+        set(sum([f() for f in extra_files_funcs], [])))
 
     # Find functions with the testbench flag set.
     testbench_funcs = [
@@ -156,16 +176,17 @@ def cocotestbench(pycde_mod, simulator='icarus', **kwargs):
       f.write(_gen_cocotb_testfile(testbench_funcs))
 
     # Simulator-specific extra compile args.
-    compile_args = kwargs.get("compile_args", [])
-    compile_args += simhandler.extra_compile_args(sys)
-    kwargs["compile_args"] = compile_args
+    if simhandler:
+      compile_args = kwargs.get("compile_args", [])
+      compile_args += simhandler.extra_compile_args(sys)
+      kwargs["compile_args"] = compile_args
 
     from cocotb_test.simulator import run
     run(simulator=simulator,
         module=testmodule,
         toplevel=pycde_mod.__name__,
         toplevel_lang="verilog",
-        verilog_sources=list(sys.mod_files),
+        verilog_sources=list(test_files),
         work_dir=sys._output_directory,
         **kwargs)
 
