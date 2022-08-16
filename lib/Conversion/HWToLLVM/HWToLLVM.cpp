@@ -422,10 +422,9 @@ struct HWConstArrayCreateOpConversion
                   op.getResult().getType(), i)];
 
       assert(isa<LLVM::ConstantOp>(input.getDefiningOp()));
-      auto *clone = input.getDefiningOp()->clone();
-      b.insert(clone);
-
-      arr = b.create<LLVM::InsertValueOp>(op->getLoc(), arr, clone->getResult(0), i);
+      auto *clone = b.clone(*input.getDefiningOp());
+      arr = b.create<LLVM::InsertValueOp>(op->getLoc(), arr,
+                                          clone->getResult(0), i);
     }
     b.create<LLVM::ReturnOp>(op->getLoc(), arr);
     // Get the global array address and load it to return an array value.
