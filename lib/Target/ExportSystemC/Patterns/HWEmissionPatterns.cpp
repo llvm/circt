@@ -12,10 +12,44 @@
 
 #include "HWEmissionPatterns.h"
 #include "../EmissionPrinter.h"
-#include "mlir/IR/BuiltinTypes.h"
+#include "circt/Dialect/HW/HWOps.h"
 
 using namespace circt;
+using namespace circt::hw;
 using namespace circt::ExportSystemC;
+
+//===----------------------------------------------------------------------===//
+// Operation emission patterns.
+//===----------------------------------------------------------------------===//
+
+namespace {
+/// The ConstantOp always inlines its value. Examples:
+/// * hw.constant 5 : i32 ==> 5
+/// * hw.constant 0 : i1 ==> false
+/// * hw.constant 1 : i1 ==> true
+struct ConstantEmitter : OpEmissionPattern<ConstantOp> {
+  using OpEmissionPattern::OpEmissionPattern;
+
+  MatchResult matchInlinable(Value value) override {
+    if (value.getDefiningOp<ConstantOp>())
+      return Precedence::LIT;
+    return {};
+  }
+
+  void emitInlined(Value value, EmissionPrinter &p) override {
+    APInt val = value.getDefiningOp<ConstantOp>().getValue();
+
+    if (val.getBitWidth() == 1) {
+      p << (val.getBoolValue() ? "true" : "false");
+      return;
+    }
+
+    SmallString<64> valueString;
+    val.toStringUnsigned(valueString);
+    p << valueString;
+  }
+};
+} // namespace
 
 //===----------------------------------------------------------------------===//
 // Type emission patterns.
@@ -54,7 +88,9 @@ struct IntegerTypeEmitter : TypeEmissionPattern<IntegerType> {
 //===----------------------------------------------------------------------===//
 
 void circt::ExportSystemC::populateHWEmitters(OpEmissionPatternSet &patterns,
-                                              MLIRContext *context) {}
+                                              MLIRContext *context) {
+  patterns.add<ConstantEmitter>(context);
+}
 
 void circt::ExportSystemC::populateHWTypeEmitters(
     TypeEmissionPatternSet &patterns) {
