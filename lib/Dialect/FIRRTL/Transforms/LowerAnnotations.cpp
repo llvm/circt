@@ -379,7 +379,7 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
     {testBenchDirAnnoClass, {noResolve, setTestBenchDir}},
     {testHarnessHierAnnoClass, NoTargetAnnotation},
     {testHarnessPathAnnoClass, NoTargetAnnotation},
-    {prefixInterfacesAnnoClass, {noResolve, applyGCHierFileInfo}},
+    {prefixInterfacesAnnoClass, {noResolve, applyGCinterfacePrefixInfo}},
     {subCircuitDirAnnotation, NoTargetAnnotation},
     {extractAssertAnnoClass, NoTargetAnnotation},
     {extractAssumeAnnoClass, NoTargetAnnotation},
