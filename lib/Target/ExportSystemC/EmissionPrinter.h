@@ -11,6 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+// NOLINTNEXTLINE(llvm-header-guard)
 #ifndef CIRCT_TARGET_EXPORTSYSTEMC_EMISSIONPRINTER_H
 #define CIRCT_TARGET_EXPORTSYSTEMC_EMISSIONPRINTER_H
 

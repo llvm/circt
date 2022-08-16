@@ -5,6 +5,10 @@
 // CHECK-NEXT: #define STDOUT_H
 
 // CHECK: #include <systemc>
+// CHECK: #include "nosystemheader"
+
+emitc.include <"systemc">
+emitc.include "nosystemheader"
 
 // CHECK-LABEL: SC_MODULE(basic) {
 // CHECK-NEXT: sc_core::sc_in<bool> port0;
