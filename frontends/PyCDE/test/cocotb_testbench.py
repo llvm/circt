@@ -44,7 +44,7 @@ class RegAdd:
     ports.out = w16Adder.out
 
 
-@cocotestbench(RegAdd, simulator="iverilog")
+@cocotestbench(RegAdd, simulator="icarus")
 class RegAddTester:
 
   @cocotest
