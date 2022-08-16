@@ -605,12 +605,12 @@ LogicalResult circt::firrtl::applyGCTView(const AnnoPathValue &target,
   return success();
 }
 
-
 /// Generate SystemVerilog interfaces from Grand Central annotations.  This pass
 /// roughly works in the following three phases:
 ///
 /// 1. Extraction information related to Grand Central interfaces is determined.
-/// These are: (a) the parent module, (b) the companion module, and (c) all targets that are to be connected to the interface.
+/// These are: (a) the parent module, (b) the companion module, and (c) all
+/// targets that are to be connected to the interface.
 ///
 /// 2. The circuit-level Grand Central annotation is walked to both generate and
 ///    instantiate interfaces and to generate the "mappings" file that produces
@@ -639,8 +639,10 @@ private:
   /// templates for AugmentedTypes.
   Optional<Attribute> fromAttr(Attribute attr);
 
-  /// Mapping of ID to the leaf ground type Value and a hierarchical path to it. Each element in this map is the source of the XMR. Generate one ref.send for each entry.
-  DenseMap<Attribute, AnnoPathValue> leafMap;
+  /// Mapping of ID to the leaf ground type Value and a hierarchical path to it.
+  /// Each element in this map is the source of the XMR. Generate one ref.send
+  /// for each entry.
+  DenseMap<Attribute, StringAttr> leafMap;
 
   CircuitOp circuitOp;
 
@@ -689,19 +691,22 @@ private:
                                            IntegerAttr id, StringAttr prefix,
                                            VerbatimBuilder &path);
 
-  /// Add ports to the module and all its instances. Return only the clone for `instOnPath`.
-  InstanceOp addPortsToModule(FModuleOp mod, InstanceOp instOnPath, FIRRTLType portType, Direction dir, IntegerAttr id) {
+  /// Add ports to the module and all its instances. Return only the clone for
+  /// `instOnPath`.
+  InstanceOp addPortsToModule(FModuleOp mod, InstanceOp instOnPath,
+                              FIRRTLType portType, Direction dir,
+                              IntegerAttr id) {
     InstanceOp clonedInstOnPath;
     unsigned portNo = mod.getNumPorts();
-    auto portName = [&] (FModuleOp nameForMod) { 
-      return StringAttr::get(
-        getContext(), getModuleNamespace(nameForMod)
-        .newName("test_refPort" + Twine(id.getInt())));
+    auto portName = [&](FModuleOp nameForMod) {
+      return StringAttr::get(getContext(),
+                             getModuleNamespace(nameForMod)
+                                 .newName("test_refPort" + Twine(id.getInt())));
     };
     auto loc = mod.getLoc();
     PortInfo portInfo = {portName(mod), portType, dir, {}, loc};
     mod.insertPorts({{portNo, portInfo}});
-    for (auto use : instanceGraph->lookup(mod)->uses()){
+    for (auto use : instanceGraph->lookup(mod)->uses()) {
       InstanceOp useInst = cast<InstanceOp>(use->getInstance());
       auto clonedInst = useInst.cloneAndInsertPorts({{portNo, portInfo}});
       if (useInst == instOnPath)
@@ -738,9 +743,7 @@ private:
 
   /// Return a reference to the circuit namespace.  This will lazily construct a
   /// namespace if one does not exist.
-  CircuitNamespace &getNamespace() {
-    return circuitNamespace;
-  }
+  CircuitNamespace &getNamespace() { return circuitNamespace; }
 
   /// Get the cached namespace for a module.
   ModuleNamespace &getModuleNamespace(FModuleLike module) {
@@ -816,23 +819,23 @@ private:
                      Twine path = {});
 
   LogicalResult genInterfaces(DictionaryAttr augAttr);
-Value getSub(Value val, size_t fieldID, ImplicitLocOpBuilder &builder) {
-  return TypeSwitch<FIRRTLBaseType, Value>(val.getType().cast<FIRRTLBaseType>())
-      .template Case<FVectorType>([&](FVectorType vecType) {
-        auto index = vecType.getIndexForFieldID(fieldID);
-        auto subfieldIndex = fieldID - vecType.getFieldID(index);
-        return getSub(builder.create<SubindexOp>(val, index), subfieldIndex,
-                      builder);
-      })
-      .template Case<BundleType>([&](BundleType bundleType) {
-        auto index = bundleType.getIndexForFieldID(fieldID);
-        auto subfieldIndex = fieldID - bundleType.getFieldID(index);
-        return getSub(builder.create<SubfieldOp>(val, index), subfieldIndex,
-                      builder);
-      })
-      .Default([&](auto) { return val; });
-}
-
+  Value getSub(Value val, size_t fieldID, ImplicitLocOpBuilder &builder) {
+    return TypeSwitch<FIRRTLBaseType, Value>(
+               val.getType().cast<FIRRTLBaseType>())
+        .template Case<FVectorType>([&](FVectorType vecType) {
+          auto index = vecType.getIndexForFieldID(fieldID);
+          auto subfieldIndex = fieldID - vecType.getFieldID(index);
+          return getSub(builder.create<SubindexOp>(val, index), subfieldIndex,
+                        builder);
+        })
+        .template Case<BundleType>([&](BundleType bundleType) {
+          auto index = bundleType.getIndexForFieldID(fieldID);
+          auto subfieldIndex = fieldID - bundleType.getFieldID(index);
+          return getSub(builder.create<SubfieldOp>(val, index), subfieldIndex,
+                        builder);
+        })
+        .Default([&](auto) { return val; });
+  }
 };
 
 LogicalResult GrandCentralLowerAnno::genInterfaces(DictionaryAttr augAttr) {
@@ -866,7 +869,7 @@ LogicalResult GrandCentralLowerAnno::genInterfaces(DictionaryAttr augAttr) {
       traverseBundle(bundle, bundle.getID(), bundle.getPrefix(), verbatim);
   if (!iface)
     return emitCircuitError("cannot generate the interface");
-  
+
   ++numViews;
 
   interfaceVec.push_back(*iface);
@@ -1120,12 +1123,9 @@ Optional<DictionaryAttr> GrandCentralLowerAnno::parseAugmentedType(
       elementIface.append("description", *description);
     elementIface.append("id", id);
     elementIface.append("name", name);
-    auto targetPath = resolvePath(target, circuitOp, symbolTable, targetCaches);
-    if (!targetPath) {
-      emitCircuitError("cannot resolve targetPath" + target);
-      return {};
-    }
-    leafMap[id] = targetPath.value();
+    leafMap[id] = StringAttr::get(context, target);
+    LLVM_DEBUG(llvm::dbgs() << "\n Target GroundType:'" << target
+                            << "' for id: '" << id << "'");
 
     return DictionaryAttr::getWithSorted(context, elementIface);
   }
@@ -1306,26 +1306,34 @@ Optional<Attribute> GrandCentralLowerAnno::fromAttr(Attribute attr) {
 
 bool GrandCentralLowerAnno::traverseField(Attribute field, IntegerAttr id,
                                           VerbatimBuilder &path) {
-  // TODO: The InstancePathCache does not support replacing an InstanceOp. Add the replaceInstance to it, otherwise this is redundant.
+  // TODO: The InstancePathCache does not support replacing an InstanceOp. Add
+  // the replaceInstance to it, otherwise this is redundant.
   InstancePathCache instancePaths(*instanceGraph);
   return TypeSwitch<Attribute, bool>(field)
       .Case<AugmentedGroundTypeAttr>([&](AugmentedGroundTypeAttr ground) {
-        AnnoPathValue elemTarget = leafMap.lookup(ground.getID());
+        auto targetPath = leafMap.lookup(ground.getID());
+
+        auto elemTarget = resolvePath(targetPath.getValue(), circuitOp,
+                                      symbolTable, targetCaches);
+        if (!elemTarget) {
+          emitCircuitError("cannot resolve targetPath '") << targetPath << ";";
+          return false;
+        }
         Value leafValue;
         FModuleOp targetParentMod =
-            dyn_cast<FModuleOp>(elemTarget.ref.getModule());
-        if (elemTarget.ref.getImpl().isOp())
-          leafValue = elemTarget.ref.getImpl().getOp()->getResult(0);
-        else if (elemTarget.ref.getImpl().isPort())
-          leafValue =
-              targetParentMod.getArgument(elemTarget.ref.getImpl().getPortNo());
+            dyn_cast<FModuleOp>(elemTarget->ref.getModule());
+        if (elemTarget->ref.getImpl().isOp())
+          leafValue = elemTarget->ref.getImpl().getOp()->getResult(0);
+        else if (elemTarget->ref.getImpl().isPort())
+          leafValue = targetParentMod.getArgument(
+              elemTarget->ref.getImpl().getPortNo());
         auto leafType =
             leafValue.getType().cast<FIRRTLBaseType>().getFinalTypeByFieldID(
-                elemTarget.fieldIdx);
+                elemTarget->fieldIdx);
         auto leafRefType = RefType::get(leafType);
         auto builder = ImplicitLocOpBuilder::atBlockEnd(
             targetParentMod.getLoc(), targetParentMod.getBodyBlock());
-        leafValue = getSub(leafValue, elemTarget.fieldIdx, builder);
+        leafValue = getSub(leafValue, elemTarget->fieldIdx, builder);
         auto refVal = builder.create<RefSendOp>(leafRefType, leafValue);
 
         auto enclosingPaths = instancePaths.getAbsolutePaths(targetParentMod);
@@ -1350,7 +1358,8 @@ bool GrandCentralLowerAnno::traverseField(Attribute field, IntegerAttr id,
           LLVM_DEBUG(llvm::dbgs() << "\n RefPath::" << refInst);
           auto instTargetMod = cast<FModuleOp>(refInst.getReferencedModule());
           unsigned portNo = instTargetMod.getNumPorts();
-          auto clonedInst = addPortsToModule(instTargetMod, refInst, leafRefType, Direction::Out, id);
+          auto clonedInst = addPortsToModule(instTargetMod, refInst,
+                                             leafRefType, Direction::Out, id);
           auto instParentMod = clonedInst->getParentOfType<FModuleOp>();
           ImplicitLocOpBuilder refConnectBuilder(clonedInst.getLoc(),
                                                  clonedInst);
@@ -1362,7 +1371,8 @@ bool GrandCentralLowerAnno::traverseField(Attribute field, IntegerAttr id,
                 instParentMod.getArgument(portNo));
         }
         if (parentModRefPort != refVal)
-          builder.create<ConnectOp>(targetParentMod.getArguments().back(), refVal);
+          builder.create<ConnectOp>(targetParentMod.getArguments().back(),
+                                    refVal);
         auto builder2 = ImplicitLocOpBuilder::atBlockEnd(
             parentModule.getLoc(), parentModule.getBodyBlock());
         auto refRes = builder2.create<RefResolveOp>(leafType, parentModRefPort);
@@ -1381,7 +1391,8 @@ bool GrandCentralLowerAnno::traverseField(Attribute field, IntegerAttr id,
           auto instTargetMod =
               cast<FModuleOp>(companionPathInst.getReferencedModule());
           unsigned portNo = instTargetMod.getNumPorts();
-          auto clonedInst = addPortsToModule(instTargetMod, companionPathInst, leafType, Direction::In, id);
+          auto clonedInst = addPortsToModule(instTargetMod, companionPathInst,
+                                             leafType, Direction::In, id);
           auto newInstRes = clonedInst.getResult(portNo);
           auto thisMod = clonedInst->getParentOfType<FModuleOp>();
           auto builderTemp = ImplicitLocOpBuilder::atBlockEnd(
@@ -1450,21 +1461,28 @@ Optional<TypeSum> GrandCentralLowerAnno::computeField(Attribute field,
   };
 
   return TypeSwitch<Attribute, Optional<TypeSum>>(field)
-      .Case<AugmentedGroundTypeAttr>([&](AugmentedGroundTypeAttr ground)
-                                         -> Optional<TypeSum> {
-        // Traverse to generate mappings.
-        if (!traverseField(field, id, path))
-          return None;
-        auto fieldRef = leafMap.lookup(ground.getID());
-        auto tpe =
-            fieldRef.ref.getType().cast<FIRRTLBaseType>().getFinalTypeByFieldID(
-                fieldRef.fieldIdx);
-        if (!tpe.isGround()) {
-          return None;
-        }
-        return TypeSum(IntegerType::get(getOperation().getContext(),
-                                        tpe.getBitWidthOrSentinel()));
-      })
+      .Case<AugmentedGroundTypeAttr>(
+          [&](AugmentedGroundTypeAttr ground) -> Optional<TypeSum> {
+            // Traverse to generate mappings.
+            if (!traverseField(field, id, path))
+              return None;
+            auto elemTarget = leafMap.lookup(ground.getID());
+            auto fieldRef = resolvePath(elemTarget.getValue(), circuitOp,
+                                        symbolTable, targetCaches);
+            if (!fieldRef) {
+              emitCircuitError("cannot resolve targetPath '")
+                  << elemTarget << ";";
+              return {};
+            }
+            auto tpe = fieldRef->ref.getType()
+                           .cast<FIRRTLBaseType>()
+                           .getFinalTypeByFieldID(fieldRef->fieldIdx);
+            if (!tpe.isGround()) {
+              return None;
+            }
+            return TypeSum(IntegerType::get(getOperation().getContext(),
+                                            tpe.getBitWidthOrSentinel()));
+          })
       .Case<AugmentedVectorTypeAttr>(
           [&](AugmentedVectorTypeAttr vector) -> Optional<TypeSum> {
             auto elements = vector.getElements();
@@ -1682,16 +1700,16 @@ LogicalResult circt::firrtl::handleGCTViews(ApplyState &state,
                              state.gctViewAnnoList);
   return gcLA.lowerGCAnnos(state);
 }
-  hw::InnerRefAttr GrandCentralLowerAnno::getInnerRefTo(Operation *op) {
-    return ::getInnerRefTo(op, "", [&](FModuleOp mod) -> ModuleNamespace & {
-      return getModuleNamespace(mod);
-    });
-  }
+hw::InnerRefAttr GrandCentralLowerAnno::getInnerRefTo(Operation *op) {
+  return ::getInnerRefTo(op, "", [&](FModuleOp mod) -> ModuleNamespace & {
+    return getModuleNamespace(mod);
+  });
+}
 
-  hw::InnerRefAttr GrandCentralLowerAnno::getInnerRefTo(FModuleLike module, size_t portIdx) {
-    return ::getInnerRefTo(module, portIdx, "",
-                           [&](FModuleLike mod) -> ModuleNamespace & {
-                             return getModuleNamespace(mod);
-                           });
-  }
-
+hw::InnerRefAttr GrandCentralLowerAnno::getInnerRefTo(FModuleLike module,
+                                                      size_t portIdx) {
+  return ::getInnerRefTo(module, portIdx, "",
+                         [&](FModuleLike mod) -> ModuleNamespace & {
+                           return getModuleNamespace(mod);
+                         });
+}
