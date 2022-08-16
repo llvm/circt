@@ -77,7 +77,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
           .Case<RefSendOp>([&](auto send) {
             // Get a reference to the actual signal to which the XMR will be
             // generated.
-            auto xmrDefOp = getInnerRefTo(send.getBase().getDefiningOp());
+            auto xmrDefOp = getInnerRefTo(send.getBase());
             // Record the remote reference op, that this ref value refers to.
             reachingRefSendAt[send.getResult()] =
                 ArrayAttr::get(send.getContext(), {xmrDefOp});
@@ -105,7 +105,9 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     DenseSet<Operation *> visitedModules;
     // Traverse the modules in post order.
     for (auto node : llvm::post_order(&instanceGraph)) {
-      auto module = cast<FModuleOp>(*node->getModule());
+      auto module = dyn_cast<FModuleOp>(*node->getModule());
+      if (!module)
+        continue;
       if (!visitedModules.insert(module).second)
         continue;
 
@@ -220,8 +222,19 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
         .first->second;
   }
 
-  InnerRefAttr getInnerRefTo(Operation *op) {
+  InnerRefAttr getInnerRefTo(Value val) {
+    if (auto arg = val.dyn_cast<BlockArgument>())
+      return ::getInnerRefTo(
+          cast<FModuleLike>(arg.getParentBlock()->getParentOp()),
+          arg.getArgNumber(), "xmr_sym",
+          [&](FModuleLike mod) -> ModuleNamespace & {
+            return getModuleNamespace(mod);
+          });
+    else
+      return getInnerRefTo(val.getDefiningOp());
+  }
 
+  InnerRefAttr getInnerRefTo(Operation *op) {
     return ::getInnerRefTo(op, "xmr_sym",
                            [&](FModuleOp mod) -> ModuleNamespace & {
                              return getModuleNamespace(mod);
