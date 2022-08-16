@@ -22,6 +22,7 @@
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/ToolOutputFile.h"
+#include <regex>
 
 using namespace circt;
 using namespace circt::ExportSystemC;
@@ -31,10 +32,12 @@ using namespace circt::ExportSystemC;
 /// Helper to convert a file-path to a macro name that can be used to guard a
 /// header file.
 static std::string pathToMacroName(StringRef path) {
-  std::string macroname = path.upper();
-  std::replace(macroname.begin(), macroname.end(), '.', '_');
-  std::replace(macroname.begin(), macroname.end(), '/', '_');
-  return macroname;
+  // Replace characters that represent a path hierarchy with underscore to match
+  // the usual header guard formatting.
+  auto str = std::regex_replace(path.upper(), std::regex("[\\\\./]"), "_");
+  // Remove invalid characters. TODO: a digit is not allowed as the first
+  // character, but not fixed here.
+  return std::regex_replace(str, std::regex("[^a-zA-Z0-9_$]+"), "");
 }
 
 /// Emits the given operation to a file represented by the passed ostream and

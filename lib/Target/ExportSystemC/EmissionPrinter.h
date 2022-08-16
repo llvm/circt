@@ -57,8 +57,8 @@ public:
 
   /// Emit the given type to the ostream associated with this printer according
   /// to the emission patterns registered. If multiple emission patterns match,
-  /// the first one in the first one in the pattern set is chosen. If no pattern
-  /// matches, a remark is left in the output and an error is added to stderr.
+  /// the first one in the pattern set is chosen. If no pattern matches, a
+  /// remark is left in the output and an error is added to stderr.
   /// Additionally, the exit-code to be obtained by the 'exitCode()'
   /// member-function is set to 'failure'.
   void emitType(Type type);
