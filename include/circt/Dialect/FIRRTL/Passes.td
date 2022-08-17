@@ -586,10 +586,10 @@ def DropName : Pass<"firrtl-drop-names", "firrtl::FModuleOp"> {
 }
 
 def RandomizeRegisterInit :
-    Pass<"firrtl-randomize-register-init", "firrtl::CircuitOp"> {
+    Pass<"firrtl-randomize-register-init", "firrtl::FModuleOp"> {
   let summary = "Randomize register initialization.";
   let description = [{
-    This pass eagerly creates a large vector of randomized bits for initializing
+    This pass eagerly creates large vectors of randomized bits for initializing
     registers, and marks each register with attributes indicating which bits to
     read. If the registers survive until LowerToHW, their initialization logic
     will pick up the correct bits.
