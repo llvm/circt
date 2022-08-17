@@ -102,7 +102,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
               removeOp(resolve);
               return success();
             }
-              return handleRefResolve(resolve);
+            return handleRefResolve(resolve);
           })
           .Default([&](auto) { return success(); });
     };
@@ -133,10 +133,9 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     for (auto *current : instanceGraph)
       for (auto &node : llvm::inverse_post_order_ext(current, visited))
         if (auto module = dyn_cast<FModuleOp>(*node->getModule()))
-        for (Operation &op : module.getBodyBlock()->getOperations())
-          if (transferFunc(op).failed())
-            return signalPassFailure();
-      
+          for (Operation &op : module.getBodyBlock()->getOperations())
+            if (transferFunc(op).failed())
+              return signalPassFailure();
 
     // Now erase all the Ops and ports of RefType.
     // This needs to be done as the last step to ensure uses are erased before
@@ -157,15 +156,15 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     auto iter = reachingRefSendAt.find(val);
     if (iter != reachingRefSendAt.end())
       return iter->getSecond();
-    // Everything might not be resolved yet on the first pass. Error out only on the second pass.
+    // Everything might not be resolved yet on the first pass. Error out only on
+    // the second pass.
     if (!firstPass) {
       // The referenced module must have already been analyzed, error out if the
       // dataflow at the child module is not resolved.
       if (BlockArgument arg = val.dyn_cast<BlockArgument>())
         arg.getOwner()->getParentOp()->emitError(
             "reference dataflow cannot be traced back to the remote read op "
-            "for "
-            "module port '")
+            "for module port '")
             << dyn_cast<FModuleOp>(arg.getOwner()->getParentOp())
                    .getPortName(arg.getArgNumber())
             << "'";
@@ -212,7 +211,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
       if (!refMod)
         return inst.emitOpError("cannot lower ext modules with RefType ports");
       // Reference ports must be removed.
-      if (firstPass) 
+      if (firstPass)
         refPortsToRemoveMap[inst].push_back(portNum);
       // Drop dead instance ports.
       if (instanceResult.use_empty())
@@ -222,7 +221,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
         // Get the remote RefSendOp, that flows through the module ports.
         auto remoteOpPath = getRemoteRefSend(refModuleArg);
         if (!remoteOpPath)
-          continue ;
+          continue;
 
         auto pathToRefSend = remoteOpPath.getValue().vec();
         pathToRefSend.push_back(getInnerRefTo(inst));
@@ -230,12 +229,13 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
             ArrayAttr::get(inst.getContext(), pathToRefSend);
       } else {
         // Input RefType port implies, generating an upward scoped XMR.
-        // No need to add the instance context, since downward reference must be through single instantiated modules.
-          for (auto driver : instanceResult.getUsers())
-            if (auto c = dyn_cast<FConnectLike>(driver)) {
-              reachingRefSendAt[refModuleArg] = getRemoteRefSend(c.getSrc());
-              break;
-            }
+        // No need to add the instance context, since downward reference must be
+        // through single instantiated modules.
+        for (auto driver : instanceResult.getUsers())
+          if (auto c = dyn_cast<FConnectLike>(driver)) {
+            reachingRefSendAt[refModuleArg] = getRemoteRefSend(c.getSrc());
+            break;
+          }
       }
     }
     return success();
@@ -284,13 +284,16 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
   /// satically resolved to a single remote send op, according to the
   /// constraints on the RefType. The ArrayAttr ensures that only unique copies
   /// of the path exist.
-  DenseMap<Value, ArrayAttr> reachingRefSendAt;
+  DenseMap<Value, size_t> reachingRefSendAt;
 
   /// RefResolve, RefSend, and Connects involving them that will be removed.
   SmallVector<Operation *> opsToRemove;
 
   // Instance and module ref ports that needs to be removed.
   DenseMap<Operation *, SmallVector<unsigned>> refPortsToRemoveMap;
+
+
+  SmallVector<ArrayAttr> refSendPathList;
 
   bool firstPass = true;
 };
