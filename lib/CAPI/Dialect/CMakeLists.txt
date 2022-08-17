@@ -38,6 +38,7 @@ add_mlir_public_c_api_library(CIRCTCAPIMSFT
   MLIRCAPIIR
   MLIRTransforms
   CIRCTMSFT
+  CIRCTMSFTTransforms
 )
 
 add_mlir_public_c_api_library(CIRCTCAPIHW
