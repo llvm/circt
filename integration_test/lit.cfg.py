@@ -35,7 +35,6 @@ config.substitutions.append(('%PATH%', config.environment['PATH']))
 config.substitutions.append(('%shlibext', config.llvm_shlib_ext))
 config.substitutions.append(('%shlibdir', config.circt_shlib_dir))
 config.substitutions.append(('%INC%', config.circt_include_dir))
-config.substitutions.append(('%PYTHON%', config.python_executable))
 config.substitutions.append(
     ('%TCL_PATH%', config.circt_src_root + '/build/lib/Bindings/Tcl/'))
 config.substitutions.append(('%CIRCT_SOURCE%', config.circt_src_root))
@@ -81,6 +80,12 @@ tools = [
     'circt-opt', 'circt-translate', 'firtool', 'circt-rtl-sim.py',
     'esi-cosim-runner.py', 'equiv-rtl.sh'
 ]
+
+# Enable python if its path was configured
+if config.python_executable != "":
+  tool_dirs.append(os.path.dirname(config.python_executable))
+  config.available_features.add('python')
+  config.substitutions.append(('%PYTHON%', config.python_executable))
 
 # Enable yosys if it has been detected.
 if config.yosys_path != "":

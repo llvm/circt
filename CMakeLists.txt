@@ -481,6 +481,12 @@ if(CIRCT_BINDINGS_PYTHON_ENABLED)
   mlir_configure_python_dev_packages()
 else()
   message(STATUS "CIRCT Python bindings are disabled.")
+  # Lookup python either way as some integration tests use python without the
+  # bindings
+  find_package(Python3)
+  if(Python3_FOUND)
+    message(STATUS "Found python at ${Python3_EXECUTABLE}")
+  endif()
 endif()
 
 #-------------------------------------------------------------------------------
