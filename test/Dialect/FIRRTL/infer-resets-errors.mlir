@@ -230,3 +230,10 @@ firrtl.circuit "UninferredReset" {
   // expected-error @+1 {{contains an abstract reset type after InferResets}}
   firrtl.module @UninferredReset(in %reset: !firrtl.reset) {}
 }
+
+// -----
+
+firrtl.circuit "UninferredRefReset" {
+  // expected-error @+1 {{contains an abstract reset type after InferResets}}
+  firrtl.module @UninferredRefReset(in %reset: !firrtl.ref<reset>) {}
+}

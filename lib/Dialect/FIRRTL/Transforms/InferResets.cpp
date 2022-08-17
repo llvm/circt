@@ -1767,10 +1767,17 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
 
 LogicalResult InferResetsPass::verifyNoAbstractReset() {
   bool hasAbstractResetPorts = false;
+  auto isResetType = [](FIRRTLType type) {
+    return TypeSwitch<FIRRTLType, bool>(type)
+        .Case<ResetType>([](auto reset) { return true; })
+        .Case<RefType>(
+            [](RefType ref) { return ref.getType().isa<ResetType>(); })
+        .Default([](auto) { return false; });
+  };
   for (FModuleLike module :
        getOperation().getBodyBlock()->getOps<FModuleLike>()) {
     for (PortInfo port : module.getPorts()) {
-      if (port.type.isa<ResetType>()) {
+      if (isResetType(port.type)) {
         module->emitOpError()
             << "contains an abstract reset type after InferResets";
         hasAbstractResetPorts = true;
