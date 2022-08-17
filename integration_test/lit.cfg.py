@@ -192,6 +192,7 @@ llvm_config.add_tool_substitutions(tools, tool_dirs)
 # cocotb availability
 try:
   import cocotb
+  import cocotb_test
   config.available_features.add('cocotb')
 except ImportError:
   pass
