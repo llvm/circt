@@ -147,6 +147,8 @@ class PyCDEType(mlir.ir.Type):
 
 
 def Type(type: Union[mlir.ir.Type, PyCDEType]):
+  if type is None:
+    return None
   if isinstance(type, PyCDEType):
     return type
   type = circt.support.type_to_pytype(type)

@@ -6,6 +6,7 @@ from .common import AppID, Input, Output, InputChannel, OutputChannel, _PyProxy
 from circt.dialects import esi as raw_esi, hw, msft
 from circt.support import BackedgeBuilder
 from pycde.pycde_types import ChannelType, ClockType, PyCDEType, types
+from pycde.pycde_types import Type as PType
 
 import mlir.ir as ir
 
@@ -83,8 +84,8 @@ class _RequestConnection:
                to_client_type: Optional[PyCDEType], attr_name: str):
     self.decl = decl
     self._name = ir.StringAttr.get(attr_name)
-    self.to_server_type = to_server_type
-    self.to_client_type = to_client_type
+    self.to_server_type = PType(to_server_type)
+    self.to_client_type = PType(to_client_type)
 
   @property
   def service_port(self) -> hw.InnerRefAttr:
