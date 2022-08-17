@@ -15,6 +15,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Support/FieldRef.h"
 #include "mlir/IR/Dominance.h"
@@ -641,12 +642,9 @@ static bool isUselessVec(FIRRTLBaseType oldType, unsigned fieldID) {
 
 // If a field is pointing to a child of a zero-length vector, it is useless.
 static bool isUselessVec(FieldRef field) {
-  return TypeSwitch<Type, bool>(field.getValue().getType())
-      .Case<FIRRTLBaseType>(
-          [&](auto base) { return isUselessVec(base, field.getFieldID()); })
-      .Case<RefType>([&](auto ref) {
-        return isUselessVec(ref.getType(), field.getFieldID());
-      });
+  return isUselessVec(
+      getBaseType(field.getValue().getType().cast<FIRRTLType>()),
+      field.getFieldID());
 }
 
 static bool getDeclName(Value value, SmallString<32> &string) {
@@ -1167,15 +1165,9 @@ static FIRRTLBaseType updateType(FIRRTLBaseType oldType, unsigned fieldID,
 bool InferResetsPass::updateReset(FieldRef field, FIRRTLBaseType resetType) {
   // Compute the updated type.
   auto oldType = field.getValue().getType().cast<FIRRTLType>();
-  FIRRTLType newType =
-      TypeSwitch<FIRRTLType, FIRRTLType>(oldType)
-          .Case<FIRRTLBaseType>([&](auto base) {
-            return updateType(base, field.getFieldID(), resetType);
-          })
-          .Case<RefType>([&](auto ref) {
-            return RefType::get(
-                updateType(ref.getType(), field.getFieldID(), resetType));
-          });
+  FIRRTLType newType = mapBaseType(oldType, [&](auto base) {
+    return updateType(base, field.getFieldID(), resetType);
+  });
 
   // Update the type if necessary.
   if (oldType == newType)
@@ -1767,17 +1759,10 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
 
 LogicalResult InferResetsPass::verifyNoAbstractReset() {
   bool hasAbstractResetPorts = false;
-  auto isResetType = [](FIRRTLType type) {
-    return TypeSwitch<FIRRTLType, bool>(type)
-        .Case<ResetType>([](auto reset) { return true; })
-        .Case<RefType>(
-            [](RefType ref) { return ref.getType().isa<ResetType>(); })
-        .Default([](auto) { return false; });
-  };
   for (FModuleLike module :
        getOperation().getBodyBlock()->getOps<FModuleLike>()) {
     for (PortInfo port : module.getPorts()) {
-      if (isResetType(port.type)) {
+      if (getBaseType(port.type).isa<ResetType>()) {
         module->emitOpError()
             << "contains an abstract reset type after InferResets";
         hasAbstractResetPorts = true;

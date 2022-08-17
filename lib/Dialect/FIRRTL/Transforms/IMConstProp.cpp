@@ -10,6 +10,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Support/APInt.h"
 #include "mlir/IR/Threading.h"
@@ -490,15 +491,8 @@ void IMConstPropPass::markInstanceOp(InstanceOp instance) {
 
 // We merge the value from the RHS into the value of the LHS.
 void IMConstPropPass::visitConnect(ConnectOp connect) {
-  auto destType =
-      TypeSwitch<FIRRTLType, FIRRTLBaseType>(
-          connect.getDest().getType().cast<FIRRTLType>())
-          .Case<FIRRTLBaseType>([](auto base) { return base.getPassiveType(); })
-          .Case<RefType>([](auto ref) { return ref.getType(); })
-          .Default([](auto) {
-            llvm_unreachable("unsupported type");
-            return FIRRTLBaseType();
-          });
+  auto destType = getBaseType(connect.getDest().getType().cast<FIRRTLType>())
+                      .getPassiveType();
 
   // Handle implicit extensions.
   auto srcValue = getExtendedLatticeValue(connect.getSrc(), destType);
@@ -550,15 +544,8 @@ void IMConstPropPass::visitConnect(ConnectOp connect) {
 
 // We merge the value from the RHS into the value of the LHS.
 void IMConstPropPass::visitStrictConnect(StrictConnectOp connect) {
-  auto destType =
-      TypeSwitch<FIRRTLType, FIRRTLBaseType>(
-          connect.getDest().getType().cast<FIRRTLType>())
-          .Case<FIRRTLBaseType>([](auto base) { return base.getPassiveType(); })
-          .Case<RefType>([](auto ref) { return ref.getType(); })
-          .Default([](auto) {
-            llvm_unreachable("unsupported type");
-            return FIRRTLBaseType();
-          });
+  auto destType = getBaseType(connect.getDest().getType().cast<FIRRTLType>())
+                      .getPassiveType();
 
   // Handle implicit extensions.
   auto srcValue = getExtendedLatticeValue(connect.getSrc(), destType);
