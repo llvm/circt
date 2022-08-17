@@ -422,9 +422,8 @@ struct InferResetsPass : public InferResetsBase<InferResetsPass> {
   void traceResets(InstanceOp inst);
   void traceResets(Value dst, Value src, Location loc);
   void traceResets(Value value);
-  void traceResets(FIRRTLBaseType dstType, Value dst, unsigned dstID,
-                   FIRRTLBaseType srcType, Value src, unsigned srcID,
-                   Location loc);
+  void traceResets(FIRRTLType dstType, Value dst, unsigned dstID,
+                   FIRRTLType srcType, Value src, unsigned srcID, Location loc);
 
   LogicalResult inferAndUpdateResets();
   FailureOr<ResetKind> inferReset(ResetNetwork net);
@@ -642,8 +641,12 @@ static bool isUselessVec(FIRRTLBaseType oldType, unsigned fieldID) {
 
 // If a field is pointing to a child of a zero-length vector, it is useless.
 static bool isUselessVec(FieldRef field) {
-  auto oldType = field.getValue().getType().cast<FIRRTLBaseType>();
-  return isUselessVec(oldType, field.getFieldID());
+  return TypeSwitch<Type, bool>(field.getValue().getType())
+      .Case<FIRRTLBaseType>(
+          [&](auto base) { return isUselessVec(base, field.getFieldID()); })
+      .Case<RefType>([&](auto ref) {
+        return isUselessVec(ref.getType(), field.getFieldID());
+      });
 }
 
 static bool getDeclName(Value value, SmallString<32> &string) {
@@ -737,6 +740,18 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
         })
 
         .Case<InstanceOp>([&](auto op) { traceResets(op); })
+        .Case<RefSendOp>([&](auto op) {
+          // Trace using base types.
+          traceResets(op.getType().getType(), op.getResult(), 0,
+                      op.getBase().getType().template cast<FIRRTLBaseType>(),
+                      op.getBase(), 0, op.getLoc());
+        })
+        .Case<RefResolveOp>([&](auto op) {
+          // Trace using base types.
+          traceResets(op.getType(), op.getResult(), 0,
+                      op.getRef().getType().template cast<RefType>().getType(),
+                      op.getRef(), 0, op.getLoc());
+        })
 
         .Case<InvalidValueOp>([&](auto op) {
           // Uniquify `InvalidValueOp`s that are contributing to multiple reset
@@ -816,16 +831,16 @@ void InferResetsPass::traceResets(InstanceOp inst) {
 /// Each drive involving a `ResetType` is recorded.
 void InferResetsPass::traceResets(Value dst, Value src, Location loc) {
   // Analyze the actual connection.
-  auto dstType = dst.getType().cast<FIRRTLBaseType>();
-  auto srcType = src.getType().cast<FIRRTLBaseType>();
+  auto dstType = dst.getType().cast<FIRRTLType>();
+  auto srcType = src.getType().cast<FIRRTLType>();
   traceResets(dstType, dst, 0, srcType, src, 0, loc);
 }
 
 /// Analyze a connect of one (possibly aggregate) value to another.
 /// Each drive involving a `ResetType` is recorded.
-void InferResetsPass::traceResets(FIRRTLBaseType dstType, Value dst,
-                                  unsigned dstID, FIRRTLBaseType srcType,
-                                  Value src, unsigned srcID, Location loc) {
+void InferResetsPass::traceResets(FIRRTLType dstType, Value dst, unsigned dstID,
+                                  FIRRTLType srcType, Value src, unsigned srcID,
+                                  Location loc) {
   if (auto dstBundle = dstType.dyn_cast<BundleType>()) {
     auto srcBundle = srcType.cast<BundleType>();
     for (unsigned dstIdx = 0, e = dstBundle.getNumElements(); dstIdx < e;
@@ -870,8 +885,17 @@ void InferResetsPass::traceResets(FIRRTLBaseType dstType, Value dst,
     return;
   }
 
-  if (dstType.isGround()) {
-    if (dstType.isa<ResetType>() || srcType.isa<ResetType>()) {
+  // Handle connecting ref's.  Other uses trace using base type.
+  if (auto dstRef = dstType.dyn_cast<RefType>()) {
+    auto srcRef = srcType.cast<RefType>();
+    return traceResets(dstRef.getType(), dst, dstID, srcRef.getType(), src,
+                       srcID, loc);
+  }
+
+  auto dstBase = dstType.cast<FIRRTLBaseType>();
+  auto srcBase = srcType.cast<FIRRTLBaseType>();
+  if (dstBase.isGround()) {
+    if (dstBase.isa<ResetType>() || srcBase.isa<ResetType>()) {
       FieldRef dstField(dst, dstID);
       FieldRef srcField(src, srcID);
       LLVM_DEBUG(llvm::dbgs()
@@ -882,9 +906,9 @@ void InferResetsPass::traceResets(FIRRTLBaseType dstType, Value dst,
       // the connection. This will allow us to later detect if dst got merged
       // into src, or src into dst.
       ResetSignal dstLeader =
-          *resetClasses.findLeader(resetClasses.insert({dstField, dstType}));
+          *resetClasses.findLeader(resetClasses.insert({dstField, dstBase}));
       ResetSignal srcLeader =
-          *resetClasses.findLeader(resetClasses.insert({srcField, srcType}));
+          *resetClasses.findLeader(resetClasses.insert({srcField, srcBase}));
 
       // Unify the two reset networks.
       ResetSignal unionLeader = *resetClasses.unionSets(dstLeader, srcLeader);
@@ -906,7 +930,7 @@ void InferResetsPass::traceResets(FIRRTLBaseType dstType, Value dst,
       // Keep note of this drive so we can point the user at the right location
       // in case something goes wrong.
       resetDrives[unionLeader].push_back(
-          {{dstField, dstType}, {srcField, srcType}, loc});
+          {{dstField, dstBase}, {srcField, srcBase}, loc});
     }
     return;
   }
@@ -1142,8 +1166,16 @@ static FIRRTLBaseType updateType(FIRRTLBaseType oldType, unsigned fieldID,
 /// Update the reset type of a specific field.
 bool InferResetsPass::updateReset(FieldRef field, FIRRTLBaseType resetType) {
   // Compute the updated type.
-  auto oldType = field.getValue().getType().cast<FIRRTLBaseType>();
-  auto newType = updateType(oldType, field.getFieldID(), resetType);
+  auto oldType = field.getValue().getType().cast<FIRRTLType>();
+  FIRRTLType newType =
+      TypeSwitch<FIRRTLType, FIRRTLType>(oldType)
+          .Case<FIRRTLBaseType>([&](auto base) {
+            return updateType(base, field.getFieldID(), resetType);
+          })
+          .Case<RefType>([&](auto ref) {
+            return RefType::get(
+                updateType(ref.getType(), field.getFieldID(), resetType));
+          });
 
   // Update the type if necessary.
   if (oldType == newType)
@@ -1735,10 +1767,17 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
 
 LogicalResult InferResetsPass::verifyNoAbstractReset() {
   bool hasAbstractResetPorts = false;
+  auto isResetType = [](FIRRTLType type) {
+    return TypeSwitch<FIRRTLType, bool>(type)
+        .Case<ResetType>([](auto reset) { return true; })
+        .Case<RefType>(
+            [](RefType ref) { return ref.getType().isa<ResetType>(); })
+        .Default([](auto) { return false; });
+  };
   for (FModuleLike module :
        getOperation().getBodyBlock()->getOps<FModuleLike>()) {
     for (PortInfo port : module.getPorts()) {
-      if (port.type.isa<ResetType>()) {
+      if (isResetType(port.type)) {
         module->emitOpError()
             << "contains an abstract reset type after InferResets";
         hasAbstractResetPorts = true;
