@@ -84,6 +84,10 @@ std::string getFieldName(const FieldRef &fieldRef, bool &rootKnown);
 Value getValueByFieldID(ImplicitLocOpBuilder builder, Value value,
                         unsigned fieldID);
 
+//===----------------------------------------------------------------------===//
+// Inner symbol and InnerRef helpers.
+//===----------------------------------------------------------------------===//
+
 /// Returns an operation's `inner_sym`, adding one if necessary.
 StringAttr
 getOrAddInnerSym(Operation *op, StringRef nameHint, FModuleOp mod,
@@ -105,6 +109,26 @@ getOrAddInnerSym(FModuleLike mod, size_t portIdx, StringRef nameHint,
 hw::InnerRefAttr
 getInnerRefTo(FModuleLike mod, size_t portIdx, StringRef nameHint,
               std::function<ModuleNamespace &(FModuleLike)> getNamespace);
+
+//===----------------------------------------------------------------------===//
+// RefType and BaseType utilities.
+//===----------------------------------------------------------------------===//
+
+/// If reftype, return wrapped base type.  Otherwise (if base), return as-is.
+inline FIRRTLBaseType getBaseType(FIRRTLType type) {
+  return TypeSwitch<FIRRTLType, FIRRTLBaseType>(type)
+      .Case<FIRRTLBaseType>([](auto base) { return base; })
+      .Case<RefType>([](auto ref) { return ref.getType(); });
+}
+
+/// Return a FIRRTLType with its base type component mutated by the given
+/// function. (i.e., ref<T> -> ref<f(T)> and T -> f(T)).
+inline FIRRTLType mapBaseType(FIRRTLType type,
+                              function_ref<FIRRTLBaseType(FIRRTLBaseType)> fn) {
+  return TypeSwitch<FIRRTLType, FIRRTLType>(type)
+      .Case<FIRRTLBaseType>([&](auto base) { return fn(base); })
+      .Case<RefType>([&](auto ref) { return RefType::get(fn(ref.getType())); });
+}
 
 //===----------------------------------------------------------------------===//
 // Parser-related utilities
