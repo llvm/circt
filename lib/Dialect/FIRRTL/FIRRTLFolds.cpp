@@ -1849,15 +1849,12 @@ static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
     constOp->moveBefore(&con->getBlock()->front());
 
   if (!constReg) {
+    SmallVector<NamedAttribute, 2> attrs(reg->getDialectAttrs());
     auto newReg = replaceOpWithNewOpAndCopyName<RegResetOp>(
         rewriter, reg, reg.getType(), reg.getClockVal(), mux.getSel(),
         mux.getHigh(), reg.getName(), reg.getNameKind(), reg.getAnnotations(),
         reg.getInnerSymAttr());
-    // Copy any register initialization information to the new register.
-    if (auto randomStart = reg->getAttr("firrtl.random_init_start"))
-      newReg->setAttr("firrtl.random_init_start", randomStart);
-    if (auto randomEnd = reg->getAttr("firrtl.random_init_end"))
-      newReg->setAttr("firrtl.random_init_end", randomEnd);
+    newReg->setDialectAttrs(attrs);
   }
   auto pt = rewriter.saveInsertionPoint();
   rewriter.setInsertionPoint(con);
