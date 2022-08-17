@@ -1969,13 +1969,13 @@ firrtl.module @PadMuxOperands(
 }
 
 // CHECK-LABEL: firrtl.module @regsyncreset
-firrtl.module @regsyncreset(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %foo : !firrtl.uint<2>, out %bar: !firrtl.uint<2>) {
+firrtl.module @regsyncreset(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %foo : !firrtl.uint<2>, out %bar: !firrtl.uint<2>) attributes {firrtl.random_init_width = 2 : ui64} {
   // CHECK: %[[const:.*]] = firrtl.constant 1
-  // CHECK-NEXT: firrtl.regreset %clock, %reset, %[[const]]
+  // CHECK-NEXT: firrtl.regreset %clock, %reset, %[[const]] {firrtl.random_init_end = 1 : ui64, firrtl.random_init_start = 0 : ui64}
   // CHECK-NEXT:  firrtl.strictconnect %bar, %d : !firrtl.uint<2>
   // CHECK-NEXT:  firrtl.strictconnect %d, %foo : !firrtl.uint<2>
   // CHECK-NEXT: }
-  %d = firrtl.reg %clock  : !firrtl.uint<2>
+  %d = firrtl.reg %clock {firrtl.random_init_end = 1 : ui64, firrtl.random_init_start = 0 : ui64} : !firrtl.uint<2>
   firrtl.connect %bar, %d : !firrtl.uint<2>, !firrtl.uint<2>
   %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
   %1 = firrtl.mux(%reset, %c1_ui2, %foo) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
