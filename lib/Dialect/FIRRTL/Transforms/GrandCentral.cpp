@@ -725,17 +725,207 @@ private:
 // Code related to handling Grand Central View annotations
 //===----------------------------------------------------------------------===//
 
+/// Read the field `fieldID` from the aggregate type val. It constructs the
+/// appropriate SubindexOp/SubfieldOp ops recursively to get the ground type at
+/// the given `fieldID`.
+static Value getSub(Value val, size_t fieldID, ImplicitLocOpBuilder &builder) {
+  return TypeSwitch<FIRRTLBaseType, Value>(val.getType().cast<FIRRTLBaseType>())
+      .template Case<FVectorType>([&](FVectorType vecType) {
+        auto index = vecType.getIndexForFieldID(fieldID);
+        auto subfieldIndex = fieldID - vecType.getFieldID(index);
+        // Insert a SubIndex access to the vector element. The element can be an
+        // aggregate type, so recursively get the appropriate field from it.
+        return getSub(builder.create<SubindexOp>(val, index), subfieldIndex,
+                      builder);
+      })
+      .template Case<BundleType>([&](BundleType bundleType) {
+        auto index = bundleType.getIndexForFieldID(fieldID);
+        auto subfieldIndex = fieldID - bundleType.getFieldID(index);
+        // Insert a SubField access to the bundle field. The element can be an
+        // aggregate type, so recursively get the appropriate field from it.
+        return getSub(builder.create<SubfieldOp>(val, index), subfieldIndex,
+                      builder);
+      })
+      .Default([&](auto) { return val; });
+}
+
+/// Add ports to the module and all its instances. Return only the clone for
+/// `instOnPath`.
+static InstanceOp addPortsToModule(FModuleOp mod, InstanceOp instOnPath,
+                                   FIRRTLType portType, Direction dir,
+                                   AnnoPathValue &companionTarget,
+                                   ApplyState &state) {
+  // To store the cloned version of `instOnPath`.
+  InstanceOp clonedInstOnPath;
+  auto portName = [&](FModuleOp nameForMod) {
+    return StringAttr::get(
+        state.circuit.getContext(),
+        state.getNamespace(nameForMod).newName("gc_refPort"));
+  };
+  unsigned portNo = mod.getNumPorts();
+  PortInfo portInfo = {portName(mod), portType, dir, {}, mod.getLoc()};
+  mod.insertPorts({{portNo, portInfo}});
+  state.targetCaches.insertPort(mod, portNo);
+  // Now update all the instances of this `mod`.
+  for (auto *use : state.instancePathcache.instanceGraph.lookup(mod)->uses()) {
+    InstanceOp useInst = cast<InstanceOp>(use->getInstance());
+    auto clonedInst = useInst.cloneAndInsertPorts({{portNo, portInfo}});
+    if (useInst == instOnPath)
+      clonedInstOnPath = clonedInst;
+    state.instancePathcache.replaceInstance(useInst, clonedInst);
+    state.targetCaches.replaceOp(useInst, clonedInst);
+    useInst->replaceAllUsesWith(clonedInst.getResults().drop_back());
+    auto *iter = llvm::find(companionTarget.instances, useInst);
+    if (iter != companionTarget.instances.end())
+      *iter = clonedInst;
+    useInst->erase();
+  }
+  return clonedInstOnPath;
+}
+
+/// Get the path from `parentModule` to `targetModule`. If `nonlocalPath` is
+/// empty, get the path from InstanceGraph, else get the path from the
+/// `nonlocalPath`. Emit error if there are multiple paths between
+/// `parentModule` and `targetModule`.
+Optional<ArrayRef<InstanceOp>> getPath(FModuleLike targetModule,
+                                       FModuleOp parentModule,
+                                       SmallVector<InstanceOp> &nonlocalPath,
+                                       ApplyState &state) {
+  auto isInstanceInParentModule = [&](InstanceOp inst) {
+    return (inst->getParentOfType<FModuleOp>() == parentModule);
+  };
+  ArrayRef<InstanceOp> pathToSend;
+  if (nonlocalPath.empty()) {
+    // For all paths from root to `targetModule`. Get the path that passes
+    // through the `parentModule`. Only one such path must exist.
+    for (auto path : state.instancePathcache.getAbsolutePaths(targetModule)) {
+      // If `parentModule` exists in the path
+      if (llvm::find_if(path, isInstanceInParentModule) != path.end()) {
+        // If already found one path, and another path exists, emit error.
+        if (!pathToSend.empty()) {
+          targetModule.emitOpError(
+              "cannot handle multiple paths from the parent module ")
+              << parentModule.moduleNameAttr()
+              << " till the GrandCentral view target";
+          return None;
+        }
+
+        pathToSend = path.drop_until(isInstanceInParentModule);
+      }
+    }
+  } else // Get the path from the `parentModule` in the `nonlocalPath`.
+    pathToSend = ArrayRef<InstanceOp>(
+        llvm::find_if(nonlocalPath, isInstanceInParentModule),
+        nonlocalPath.end());
+  return pathToSend;
+}
+
+/// Add a RefType cross-module connection from the `refSendTarget` to the
+/// parentModule. The assumption is that `refSendTarget` has a path from
+/// `parentModule`.
+static Value borePortsToRefSend(AnnoPathValue &refSendTarget,
+                                FModuleOp parentModule, ApplyState &state,
+                                AnnoPathValue &companionTarget) {
+  auto refSendModule = dyn_cast<FModuleOp>(refSendTarget.ref.getModule());
+  Value refSendBase;
+  if (refSendTarget.ref.getImpl().isOp())
+    refSendBase = refSendTarget.ref.getImpl().getOp()->getResult(0);
+  else if (refSendTarget.ref.getImpl().isPort())
+    refSendBase =
+        refSendModule.getArgument(refSendTarget.ref.getImpl().getPortNo());
+  auto refSendBuilder = ImplicitLocOpBuilder::atBlockEnd(
+      refSendModule.getLoc(), refSendModule.getBodyBlock());
+  // If the target value is a field of an aggregate. Create the
+  // subfield/subaccess into it.
+  auto refSendBaseType =
+      refSendBase.getType().cast<FIRRTLBaseType>().getFinalTypeByFieldID(
+          refSendTarget.fieldIdx);
+  auto refSendRefType = RefType::get(refSendBaseType);
+  refSendBase = getSub(refSendBase, refSendTarget.fieldIdx, refSendBuilder);
+  // Note: No DontTouch added to refSendTarget.
+  auto sendVal = refSendBuilder.create<RefSendOp>(refSendBase);
+
+  Value parentModRefPort = sendVal;
+  // Get the paths from the parent to the refSendModule.
+  if (refSendModule != parentModule) {
+    auto targetInstancePath =
+        getPath(refSendModule, parentModule, refSendTarget.instances, state);
+    if (!targetInstancePath || targetInstancePath.value().empty())
+      return nullptr;
+    for (auto refInst : targetInstancePath.value()) {
+      LLVM_DEBUG(llvm::dbgs() << "\n RefPath::" << refInst);
+      auto refInstTargetMod = cast<FModuleOp>(refInst.getReferencedModule());
+      auto clonedInst =
+          addPortsToModule(refInstTargetMod, refInst, refSendRefType,
+                           Direction::Out, companionTarget, state);
+      auto instParentMod = clonedInst->getParentOfType<FModuleOp>();
+      ImplicitLocOpBuilder refConnectBuilder(clonedInst.getLoc(), clonedInst);
+      refConnectBuilder.setInsertionPointAfter(clonedInst);
+      if (instParentMod == parentModule)
+        parentModRefPort = clonedInst.getResults().back();
+      else
+        refConnectBuilder.create<ConnectOp>(instParentMod.getArguments().back(),
+                                            clonedInst.getResults().back());
+    }
+    refSendBuilder.create<ConnectOp>(refSendModule.getArguments().back(),
+                                     sendVal);
+  }
+  return parentModRefPort;
+}
+
+/// Add the RefType ports from the parent to the companion and add the
+/// RefResolve to the companion. Connect the RefResolve to a wire and return the
+/// name of the wire.
+StringAttr boreRefResolveToCompanion(Value refSendVal, FModuleOp parentModule,
+                                     AnnoPathValue &companionTarget,
+                                     ApplyState &state) {
+
+  FModuleOp companionModule = cast<FModuleOp>(companionTarget.ref.getOp());
+  auto companionPath = companionTarget.instances;
+  auto portName = [&](FModuleOp nameForMod) {
+    return StringAttr::get(state.circuit.getContext(),
+                           state.getNamespace(nameForMod).newName("gc_xmr"));
+  };
+  auto forwardRefPort = refSendVal;
+
+  for (auto companionPathInst : companionTarget.instances) {
+    auto instTargetMod =
+        cast<FModuleOp>(companionPathInst.getReferencedModule());
+    unsigned portNo = instTargetMod.getNumPorts();
+    auto clonedInst = addPortsToModule(instTargetMod, companionPathInst,
+                                       refSendVal.getType().cast<RefType>(),
+                                       Direction::In, companionTarget, state);
+    auto newInstRes = clonedInst.getResult(portNo);
+    auto thisMod = clonedInst->getParentOfType<FModuleOp>();
+    ImplicitLocOpBuilder builderTemp = ImplicitLocOpBuilder::atBlockEnd(
+        thisMod.getLoc(), thisMod.getBodyBlock());
+    builderTemp.create<ConnectOp>(newInstRes, forwardRefPort);
+    forwardRefPort = instTargetMod.getArgument(portNo);
+  }
+  auto compBuilder = ImplicitLocOpBuilder::atBlockEnd(
+      companionModule.getLoc(), companionModule.getBodyBlock());
+  auto refResolve =
+      compBuilder.create<RefResolveOp>(companionModule.getArguments().back());
+  auto wire = compBuilder.create<WireOp>(refResolve.getResult().getType(),
+                                         portName(companionModule));
+  state.targetCaches.insertOp(wire);
+  wire.dropName();
+  compBuilder.create<ConnectOp>(wire, refResolve);
+  LLVM_DEBUG(llvm::dbgs() << "\n refresol:" << refResolve);
+
+  return wire.getNameAttr();
+}
+
 /// Recursively walk a sifive.enterprise.grandcentral.AugmentedType to extract
 /// any annotations it may contain.  This is going to generate two types of
 /// annotations:
 ///   1) Annotations necessary to build interfaces and store them at "~"
 ///   2) Scattered annotations for how components bind to interfaces
-static Optional<DictionaryAttr>
-parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
-                   DictionaryAttr root, StringRef companion, StringAttr name,
-                   StringAttr defName, Optional<IntegerAttr> id,
-                   Optional<StringAttr>(description), Twine clazz,
-                   Twine path = {}) {
+static Optional<DictionaryAttr> parseAugmentedType(
+    ApplyState &state, DictionaryAttr augmentedType, DictionaryAttr root,
+    StringRef companion, StringAttr name, StringAttr defName,
+    Optional<IntegerAttr> id, Optional<StringAttr>(description), Twine clazz,
+    FModuleOp parentModule, AnnoPathValue &companionTarget, Twine path = {}) {
 
   auto *context = state.circuit.getContext();
   auto loc = state.circuit.getLoc();
@@ -905,9 +1095,9 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
       Optional<StringAttr> description = None;
       if (auto maybeDescription = field.get("description"))
         description = maybeDescription.cast<StringAttr>();
-      auto eltAttr =
-          parseAugmentedType(state, tpe, root, companion, name, defName, None,
-                             description, clazz, path);
+      auto eltAttr = parseAugmentedType(state, tpe, root, companion, name,
+                                        defName, None, description, clazz,
+                                        parentModule, companionTarget, path);
       if (!name || !tpe || !eltAttr)
         return None;
 
@@ -951,9 +1141,6 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
 
     auto id = state.newID();
 
-    // TODO: We don't support non-local annotations, so force this annotation
-    // into a local annotation.  This does not properly check that the
-    // non-local and local targets are totally equivalent.
     auto target = *maybeTarget;
 
     NamedAttrList elementIface, elementScattered;
@@ -969,7 +1156,45 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
     elementScattered.append("id", id);
     // If there are sub-targets, then add these.
     auto targetAttr = StringAttr::get(context, target);
-    elementScattered.append("target", targetAttr);
+    auto targetPath = resolvePath(targetAttr.getValue(), state.circuit,
+                                  state.symTbl, state.targetCaches);
+    assert(targetPath && "invalid target");
+    // If the target for the view is not in the Companion module, then add the
+    // RefType port from the parent module to the target module and insert the
+    // RefSend at the target and RefResolve in the companion module.
+    if (targetPath->ref.getModule() !=
+        cast<FModuleOp>(companionTarget.ref.getOp())) {
+      // Add the refSend and get the RefType val through the ports from the
+      // target. Note: The remote signal to which the XMR is being generated,
+      // does not contain any DontTouch. Which implies the remote signal can be
+      // optimized away, but the XMR should still point to a legal value  or a
+      // constant after the optimization.
+      auto refSendVal =
+          borePortsToRefSend(*targetPath, parentModule, state, companionTarget);
+      if (!refSendVal) {
+        mlir::emitError(loc, "Failed to resolve target, cannot find unique "
+                             "path from parent module `" +
+                                 parentModule.getName() + "` to target`" +
+                                 targetAttr.getValue())
+                .attachNote()
+            << "See the full Annotation here: " << root;
+        return None;
+      }
+      // Given the refType val from the refSend, pass it through the ports to
+      // the companion module and add the refResolve in the companion module,
+      // then read the remote value into a wire, and return the name of the
+      // wire.
+      auto resolveTargetName = boreRefResolveToCompanion(
+          refSendVal, parentModule, companionTarget, state);
+      // Now the view target can be added to the local wire created inside the
+      // compaion. Add the annotation. This essentially moves the annotation
+      // from the remote XMR signal to a local wire, which in-turn reads the
+      // XMR.
+      elementScattered.append(
+          "target", StringAttr::get(context, companion + ">" +
+                                                 resolveTargetName.getValue()));
+    } else
+      elementScattered.append("target", targetAttr);
 
     state.addToWorklistFn(
         DictionaryAttr::getWithSorted(context, elementScattered));
@@ -986,9 +1211,10 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
       return None;
     SmallVector<Attribute> elements;
     for (auto elt : elementsAttr) {
-      auto eltAttr = parseAugmentedType(
-          state, elt.cast<DictionaryAttr>(), root, companion, name,
-          StringAttr::get(context, ""), id, None, clazz, path);
+      auto eltAttr =
+          parseAugmentedType(state, elt.cast<DictionaryAttr>(), root, companion,
+                             name, StringAttr::get(context, ""), id, None,
+                             clazz, parentModule, companionTarget, path);
       if (!eltAttr)
         return None;
       elements.push_back(*eltAttr);
@@ -1054,16 +1280,36 @@ LogicalResult circt::firrtl::applyGCTView(const AnnoPathValue &target,
       tryGetAs<StringAttr>(anno, anno, "parent", loc, viewAnnoClass);
   if (!parentAttr)
     return failure();
+  auto parentTarget = resolvePath(parentAttr.getValue(), state.circuit,
+                                  state.symTbl, state.targetCaches);
+  auto companionTarget = resolvePath(companionAttr.getValue(), state.circuit,
+                                     state.symTbl, state.targetCaches);
   parentAttrs.append("class", StringAttr::get(context, parentAnnoClass));
   parentAttrs.append("id", id);
   parentAttrs.append("name", name);
   parentAttrs.append("target", parentAttr);
   parentAttrs.append("type", StringAttr::get(context, "parent"));
   state.addToWorklistFn(DictionaryAttr::get(context, parentAttrs));
+  if (!isa<FModuleOp>(companionTarget->ref.getOp()))
+    return companionTarget->ref.getOp()->emitOpError(
+        "only FModuleOp can be a view companion");
+  // Ensure that a unique path from parentModule to the companionTarget can be
+  // resolved.
+  if (auto path = getPath(cast<FModuleOp>(companionTarget->ref.getOp()),
+                          cast<FModuleOp>(parentTarget->ref.getOp()),
+                          companionTarget->instances, state))
+    // Update the instances vector to store a unique path from the parentModule
+    // to the companionModule.
+    companionTarget->instances = SmallVector<InstanceOp>(path.value());
+  else
+    return companionTarget->ref.getOp()->emitOpError(
+        "cannot determine a unique path from parent module to the companion "
+        "module ");
 
-  auto prunedAttr =
-      parseAugmentedType(state, viewAttr, anno, companionAttr.getValue(), name,
-                         {}, id, {}, viewAnnoClass, "view");
+  auto prunedAttr = parseAugmentedType(
+      state, viewAttr, anno, companionAttr.getValue(), name, {}, id, {},
+      viewAnnoClass, cast<FModuleOp>(parentTarget->ref.getOp()),
+      companionTarget.value(), "view");
   if (!prunedAttr)
     return failure();
 
@@ -1164,9 +1410,7 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
         assert(leafValue && "leafValue not found");
 
         auto companionModule = companionIDMap.lookup(id).companion;
-        FModuleLike enclosing = getEnclosingModule(leafValue, sym);
         auto builder = OpBuilder::atBlockEnd(companionModule.getBodyBlock());
-        auto uloc = builder.getUnknownLoc();
 
         auto tpe = leafValue.getType().cast<FIRRTLBaseType>();
 
@@ -1177,132 +1421,77 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
         // Generate the path from the LCA to the module that contains the leaf.
         path += " = ";
 
-        /// Increment all the indices inside `{{`, `}}` by one. This is to
-        /// indicate that a value is added to the `substitutions` of the
-        /// verbatim op, other than the symbols.
-        auto getStrAndIncrementIds = [&](StringRef base) -> StringAttr {
-          SmallString<128> replStr;
-          StringRef begin = "{{";
-          StringRef end = "}}";
-          // The replacement string.
-          size_t from = 0;
-          while (from < base.size()) {
-            // Search for the first `{{` and `}}`.
-            size_t beginAt = base.find(begin, from);
-            size_t endAt = base.find(end, from);
-            // If not found, then done.
-            if (beginAt == StringRef::npos || endAt == StringRef::npos ||
-                (beginAt > endAt)) {
-              replStr.append(base.substr(from));
-              break;
+        FModuleLike enclosing = getEnclosingModule(leafValue, sym);
+        // If the leaf is inside the companionModule, then no path needs to be
+        // generated, only the leaf.
+        if (companionModule != enclosing) {
+          // There are two posisibilites for what this is tapping:
+          //   1. This is a constant that will be synced into the mappings
+          //   file.
+          //   2. This is something else and we need an XMR.
+          // Handle case (1) here and exit.  Handle case (2) following.
+          auto driver = getDriverFromConnect(leafValue);
+          if (driver) {
+            if (auto constant =
+                    dyn_cast_or_null<ConstantOp>(driver.getDefiningOp())) {
+              path.append(Twine(constant.getValue().getBitWidth()));
+              path += "'h";
+              SmallString<32> valueStr;
+              constant.getValue().toStringUnsigned(valueStr, 16);
+              path.append(valueStr);
+              builder.create<sv::VerbatimOp>(
+                  constant.getLoc(),
+                  StringAttr::get(&getContext(),
+                                  "assign " + path.getString() + ";"),
+                  ValueRange{},
+                  ArrayAttr::get(&getContext(), path.getSymbols()));
+              return true;
             }
-            // Copy the string as is, until the `{{`.
-            replStr.append(base.substr(from, beginAt - from));
-            // Advance `from` to the character after the `}}`.
-            from = endAt + 2;
-            auto idChar = base.substr(beginAt + 2, endAt - beginAt - 2);
-            int idNum;
-            bool failed = idChar.getAsInteger(10, idNum);
-            assert(!failed && "failed to parse integer from verbatim string");
-            // Now increment the id and append.
-            replStr.append("{{");
-            Twine(idNum + 1).toVector(replStr);
-            replStr.append("}}");
           }
-          return StringAttr::get(&getContext(), "assign " + replStr + ";");
-        };
 
-        // If the leaf is inside the companionModule and the leaf is a NodeOp
-        // and the NodeOp input is a RefResolveOp, then no path needs to be
-        // generated, only the RefResolveOp result can be used as a value
-        // substitution into the verbatim.
-        if (companionModule == enclosing && !leafValue.isa<BlockArgument>() &&
-            isa<NodeOp>(leafValue.getDefiningOp()) &&
-            !leafValue.getDefiningOp()->getOperand(0).isa<BlockArgument>()) {
-          auto *nodeOp = leafValue.getDefiningOp();
-          auto *nodeDef = nodeOp->getOperand(0).getDefiningOp();
-          if (isa<RefResolveOp>(nodeDef) || isa<ConstantOp>(nodeDef)) {
-            // This is the new style of XMRs using RefTypes.
-            // The value subsitution index is set to -1, as it will be
-            // incremented when generating the string.
-            path += "{{-1}}";
-            AnnotationSet::removeDontTouch(nodeOp);
-            // Assemble the verbatim op.
-            builder.create<sv::VerbatimOp>(
-                uloc, getStrAndIncrementIds(path.getString()),
-                nodeOp->getOperand(0),
-                ArrayAttr::get(&getContext(), path.getSymbols()));
-            ++numXMRs;
-            return true;
+          // Populate a hierarchical path to the leaf.  For an NLA this is
+          // just the namepath of the associated hierarchical path.  For a
+          // local annotation, this is computed from the instance path.
+          SmallVector<Attribute> fullLeafPath;
+          if (nla) {
+            fullLeafPath.append(nla.getNamepath().begin(),
+                                nla.getNamepath().end());
+          } else {
+            auto enclosingPaths = instancePaths->getAbsolutePaths(enclosing);
+            assert(enclosingPaths.size() == 1 &&
+                   "Unable to handle multiply instantiated companions");
+            if (enclosingPaths.size() != 1)
+              return false;
+            StringAttr root = instancePaths->instanceGraph.getTopLevelModule()
+                                  .moduleNameAttr();
+            for (auto segment : enclosingPaths[0]) {
+              fullLeafPath.push_back(getInnerRefTo(segment));
+              root = segment.getModuleNameAttr().getAttr();
+            }
+            fullLeafPath.push_back(FlatSymbolRefAttr::get(root));
           }
+
+          // Compute the lowest common ancestor (LCA) of the leaf path and the
+          // parent module.  This enables the generated XMR to be as short as
+          // possible while not losing specificity.
+          ArrayRef<Attribute> minimalLeafPath(fullLeafPath);
+          StringAttr parentNameAttr =
+              parentIDMap.lookup(id).second.moduleNameAttr();
+          minimalLeafPath = minimalLeafPath.drop_until([&](Attribute attr) {
+            return getModPart(attr) == parentNameAttr;
+          });
+
+          path += FlatSymbolRefAttr::get(getModPart(minimalLeafPath.front()));
+          if (!minimalLeafPath.empty()) {
+            for (auto segment : minimalLeafPath.drop_back()) {
+              path += ".";
+              path += segment;
+            }
+          }
+
+          path += '.';
         }
-
-        // This case can only occur if ref.resolve is not introduced during
-        // LowerAnnotations.
-        //
-        // There are two posisibilites for what this is tapping:
-        //   1. This is a constant that will be synced into the mappings file.
-        //   2. This is something else and we need an XMR.
-        // Handle case (1) here and exit.  Handle case (2) following.
-        auto driver = getDriverFromConnect(leafValue);
-        if (driver) {
-          if (auto constant =
-                  dyn_cast_or_null<ConstantOp>(driver.getDefiningOp())) {
-            path.append(Twine(constant.getValue().getBitWidth()));
-            path += "'h";
-            SmallString<32> valueStr;
-            constant.getValue().toStringUnsigned(valueStr, 16);
-            path.append(valueStr);
-            builder.create<sv::VerbatimOp>(
-                constant.getLoc(),
-                StringAttr::get(&getContext(),
-                                "assign " + path.getString() + ";"),
-                ValueRange{}, ArrayAttr::get(&getContext(), path.getSymbols()));
-            return true;
-          }
-        }
-
-        // Populate a hierarchical path to the leaf.  For an NLA this is just
-        // the namepath of the associated hierarchical path.  For a local
-        // annotation, this is computed from the instance path.
-        SmallVector<Attribute> fullLeafPath;
-        if (nla) {
-          fullLeafPath.append(nla.getNamepath().begin(),
-                              nla.getNamepath().end());
-        } else {
-          auto enclosingPaths = instancePaths->getAbsolutePaths(enclosing);
-          assert(enclosingPaths.size() == 1 &&
-                 "Unable to handle multiply instantiated companions");
-          if (enclosingPaths.size() != 1)
-            return false;
-          StringAttr root =
-              instancePaths->instanceGraph.getTopLevelModule().moduleNameAttr();
-          for (auto segment : enclosingPaths[0]) {
-            fullLeafPath.push_back(getInnerRefTo(segment));
-            root = segment.getModuleNameAttr().getAttr();
-          }
-          fullLeafPath.push_back(FlatSymbolRefAttr::get(root));
-        }
-
-        // Compute the lowest common ancestor (LCA) of the leaf path and the
-        // parent module.  This enables the generated XMR to be as short as
-        // possible while not losing specificity.
-        ArrayRef<Attribute> minimalLeafPath(fullLeafPath);
-        StringAttr parentNameAttr =
-            parentIDMap.lookup(id).second.moduleNameAttr();
-        minimalLeafPath = minimalLeafPath.drop_until(
-            [&](Attribute attr) { return getModPart(attr) == parentNameAttr; });
-
-        path += FlatSymbolRefAttr::get(getModPart(minimalLeafPath.front()));
-        if (minimalLeafPath.size() > 0) {
-          for (auto segment : minimalLeafPath.drop_back()) {
-            path += ".";
-            path += segment;
-          }
-        }
-
         // Add the leaf value to the path.
-        path += '.';
         if (auto blockArg = leafValue.dyn_cast<BlockArgument>()) {
           auto module = cast<FModuleOp>(blockArg.getOwner()->getParentOp());
           path += getInnerRefTo(module, blockArg.getArgNumber());
@@ -1342,6 +1531,7 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
               });
         }
 
+        auto uloc = builder.getUnknownLoc();
         // Assemble the verbatim op.
         builder.create<sv::VerbatimOp>(
             uloc,

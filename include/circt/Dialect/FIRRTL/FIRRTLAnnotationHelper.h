@@ -196,13 +196,16 @@ bool isAnnoClassLowered(StringRef className);
 struct ApplyState {
   using AddToWorklistFn = llvm::function_ref<void(DictionaryAttr)>;
   ApplyState(CircuitOp circuit, SymbolTable &symTbl,
-             AddToWorklistFn addToWorklistFn)
-      : circuit(circuit), symTbl(symTbl), addToWorklistFn(addToWorklistFn) {}
+             AddToWorklistFn addToWorklistFn,
+             InstancePathCache &instancePathcache)
+      : circuit(circuit), symTbl(symTbl), addToWorklistFn(addToWorklistFn),
+        instancePathcache(instancePathcache) {}
 
   CircuitOp circuit;
   SymbolTable &symTbl;
   CircuitTargetCache targetCaches;
   AddToWorklistFn addToWorklistFn;
+  InstancePathCache &instancePathcache;
 
   ModuleNamespace &getNamespace(FModuleLike module) {
     auto &ptr = namespaces[module];
