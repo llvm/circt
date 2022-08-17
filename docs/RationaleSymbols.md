@@ -35,7 +35,10 @@ symbol-like data to allow forming non-SSA linkage between disparate elements.
 To accomplish this, an attribute named `inner_sym` is attached, providing a 
 scoped symbol-like name to the element.  An operation with an `inner_sym`
 resides in arbitrarily-nested regions of a region that defines an
-`InnerSymbolTable` and a `Symbol` .
+`InnerSymbolTable` and a `Symbol` .  `InnerSymbolTable` operations must reside
+within an `InnerRefNamespace`.  The `inner_sym` attribute must be an `InnerSymAttr`
+which defines the inner symbols attached to the operation and its fields.
+Operations containing an inner symbol must implement the `InnerSymbol` interface.
 
 Inner Symbols are different from normal symbols due to MLIR symbol table 
 resolution rules.  Specifically, normal symbols are resolved by first going up 
@@ -57,7 +60,56 @@ something not allowed by normal symbols.
 An attribute `InnerRefAttr` is provided to encapsulate references to inner 
 symbols.  This attribute stores the parent symbol and the inner symbol.  This 
 provides a uniform type for storing and manipulating references to inner 
-symbols.
+symbols.  An `InnerRefAttr` resolves in an `InnerRefNamespace`.
+
+Operations using `InnerRefAttr` should implement the `verifyInnerRefs` method
+of `InnerRefUserOpInterface` to verify these references efficiently.
+
+## Traits and Classes
+
+### InnerSymbolTable
+
+Similar to MLIR's `SymbolTable`, `InnerSymbolTable` is both a trait and a class.
+
+#### Trait
+
+The trait is used by Operations to define a new scope for inner symbols
+contained within.  These operations must have the `Symbol` trait and be
+immediate children of an `InnerRefNamespace`.  Operations must use the
+`InnerSymbol` interface to provide a symbol, regardless of presence of
+attributes.
+
+#### Class
+
+The class is used either manually constructed or as an analysis to track and
+resolve inner symbols within an operation with the trait.
+
+The class is also used in verification.
+
+### InnerSymbolTableCollection
+
+This class is used to construct the inner symbol tables
+for all `InnerSymbolTable`s (e.g., a Module) within an `InnerRefNamespace`
+(e.g., a circuit), either on-demand or eagerly in parallel.
+
+Use this to efficiently gather information about inner symbols.
+
+### InnerRefNamespace
+
+This is also both a class and a trait.
+
+#### Class
+
+Combines `InnerSymbolTableCollection` with a `SymbolTable` for resolution of
+`InnerRefAttr`s, primarily used during verification as argument to the
+`verifyInnerRefs` hook which operations may use for more efficient checking of
+`InnerRefAttr`s.
+
+#### Trait
+
+The `InnerRefNamespace` trait is used by Operations to define a new scope for
+InnerRef’s.  Operations with this trait must also be a `SymbolTable`.
+Presently the only user is `CircuitOp`.
 
 ## Cost
 
@@ -66,6 +118,12 @@ relaxation of MLIR symbol constraints.  Since nested regions are allowed,
 finding all operations defining an `inner_sym` requires a recursive IR scan.  
 Verification is likewise trickier, partly due the significant increase in 
 non-local references.
+
+For this reason, verification is driven as a trait verifier on
+`InnerRefNamespace` which constructs and verifies `InnerSymbolTable`s in
+parallel, and uses these to conduct a per-`InnerSymbolTable` parallelized walk
+to verify references by calling the `verifyInnerRefs` hook on
+`InnerRefUserOpInterface` operations.
 
 ## Common Use
 
