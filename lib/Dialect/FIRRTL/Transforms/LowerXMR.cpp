@@ -25,23 +25,23 @@ using namespace circt;
 using namespace firrtl;
 using hw::InnerRefAttr;
 
-// The LowerXMRPass will replace every RefResolveOp with an XMR encoded within a
-// verbatim expr op. This also removes every RefType port from the modules and
-// corresponding instances. This is a dataflow analysis over a very constrained
-// RefType. Domain of the dataflow analysis is the set of all RefSendOps. It
-// computes an interprocedural reaching definitions (of RefSendOp) analysis.
-// Essentially every RefType value must be mapped to one and only one RefSendOp.
-// The analysis propagates the dataflow from every RefSendOp to every value of
-// RefType across modules. The RefResolveOp is the final leaf into which the
-// dataflow must reach.
-//
-// Since there can be multiple readers, multiple RefResolveOps can be reachable
-// from a single RefSendOp. To support multiply instantiated modules and
-// multiple readers, it is essential to track the path to the RefSendOp, other
-// than just the RefSendOp. For example, if there exists a wire `xmr_wire` in
-// module `L2`, the algorithm needs to support generating Top.L1.L2.xmr_wire and
-// Top.L2.xmr_wire and Top.L3.L2.xmr_wire for different instance paths that
-// exist in the circuit.
+/// The LowerXMRPass will replace every RefResolveOp with an XMR encoded within
+/// a verbatim expr op. This also removes every RefType port from the modules
+/// and corresponding instances. This is a dataflow analysis over a very
+/// constrained RefType. Domain of the dataflow analysis is the set of all
+/// RefSendOps. It computes an interprocedural reaching definitions (of
+/// RefSendOp) analysis. Essentially every RefType value must be mapped to one
+/// and only one RefSendOp. The analysis propagates the dataflow from every
+/// RefSendOp to every value of RefType across modules. The RefResolveOp is the
+/// final leaf into which the dataflow must reach.
+///
+/// Since there can be multiple readers, multiple RefResolveOps can be reachable
+/// from a single RefSendOp. To support multiply instantiated modules and
+/// multiple readers, it is essential to track the path to the RefSendOp, other
+/// than just the RefSendOp. For example, if there exists a wire `xmr_wire` in
+/// module `Foo`, the algorithm needs to support generating Top.Bar.Foo.xmr_wire
+/// and Top.Foo.xmr_wire and Top.Zoo.Foo.xmr_wire for different instance paths
+/// that exist in the circuit.
 
 class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
 
@@ -52,11 +52,11 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     // RefType Ops.
     auto transferFunc = [&](Operation &op) -> LogicalResult {
       return TypeSwitch<Operation *, LogicalResult>(&op)
-          .Case<RefSendOp>([&](auto send) {
+          .Case<RefSendOp>([&](RefSendOp send) {
             // Get a reference to the actual signal to which the XMR will be
             // generated.
-            auto xmrDef = send.getBase();
-            if (!xmrDef.template isa<BlockArgument>()) {
+            Value xmrDef = send.getBase();
+            if (!xmrDef.isa<BlockArgument>()) {
               Operation *xmrDefOp = xmrDef.getDefiningOp();
               if (!isa<InnerSymbolOpInterface>(xmrDefOp)) {
                 // Add a node, for non-innerSym ops. Otherwise the sym will be
@@ -64,17 +64,19 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
                 ImplicitLocOpBuilder b(xmrDefOp->getLoc(), xmrDefOp);
                 b.setInsertionPointAfter(xmrDefOp);
                 StringRef opName;
-                if (auto name =
-                        xmrDefOp->template getAttrOfType<StringAttr>("name"))
+                auto nameKind = NameKindEnum::DroppableName;
+                if (auto name = xmrDefOp->getAttrOfType<StringAttr>("name")) {
                   opName = name.getValue();
+                  nameKind = NameKindEnum::InterestingName;
+                }
                 xmrDef = b.create<NodeOp>(xmrDef.getType(), xmrDef, opName,
-                                          NameKindEnum::InterestingName);
+                                          nameKind);
               }
             }
             // Create a new entry for this RefSendOp. The path is currently
             // local.
             addReachingSendsEntry(send.getResult(), getInnerRefTo(xmrDef));
-            removeOp(send);
+            markForRemoval(send);
             return success();
           })
           .Case<InstanceOp>([&](auto inst) { return handleInstanceOp(inst); })
@@ -82,7 +84,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
             // Ignore BaseType.
             if (!connect.getSrc().getType().isa<RefType>())
               return success();
-            removeOp(connect);
+            markForRemoval(connect);
             mergeDataflow(connect.getSrc(), connect.getDest());
             return success();
           })
@@ -90,7 +92,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
             dataflowAt[resolve.getResult()] =
                 getRemoteRefSend(resolve.getRef()).value();
             resolveOps.push_back(resolve);
-            removeOp(resolve);
+            markForRemoval(resolve);
             return success();
           })
           .Default([&](auto) { return success(); });
@@ -219,7 +221,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
                            });
   }
 
-  void removeOp(Operation *op) { opsToRemove.push_back(op); }
+  void markForRemoval(Operation *op) { opsToRemove.push_back(op); }
 
   Optional<size_t> getRemoteRefSend(Value val, bool mayNotExist = true) {
     auto iter = dataflowAt.find(val);
@@ -251,28 +253,28 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     auto flowAtSrc = dataflowAt.find(src);
     // If now flow at source, then just copy the info from dst. The dst might
     // also not exist yet, in that case a new entry will be created.
-    if (flowAtSrc == dataflowAt.end())
+    if (flowAtSrc == dataflowAt.end()) {
       dataflowAt[src] = getRemoteRefSend(dst).value();
-    else {
-      // dataflow at src exists, so merge it if an entry already exists at dest.
-      auto flowAtDst = dataflowAt.find(dst);
-      if (flowAtDst == dataflowAt.end())
-        dataflowAt[dst] = flowAtSrc->getSecond();
-      else {
-        auto oldEntry = flowAtDst->getSecond();
-        if (!refSendList[oldEntry].empty()) {
-          // If a valid dataflow already reaches the destination, emit remark.
-          // This happens when multiple connects attached to an input RefType
-          // port, or multiple instantiation (which is already an error).
-          dst.getDefiningOp()->emitRemark("has multipl reaching definitions");
-        }
-        // Dest already has an entry, make sure to update all the entries in the
-        // dataflow map to point to this new entry.
-        for (auto entr : dataflowAt) {
-          if (entr.getSecond() == oldEntry) {
-            dataflowAt[entr.getFirst()] = flowAtSrc->getSecond();
-          }
-        }
+      return;
+    }
+    // dataflow at src exists, so merge it if an entry already exists at dest.
+    auto flowAtDst = dataflowAt.find(dst);
+    if (flowAtDst == dataflowAt.end()) {
+      dataflowAt[dst] = flowAtSrc->getSecond();
+      return;
+    }
+    auto oldEntry = flowAtDst->getSecond();
+    if (!refSendList[oldEntry].empty()) {
+      // If a valid dataflow already reaches the destination, emit remark.
+      // This happens when multiple connects attached to an input RefType
+      // port, or multiple instantiation (which is already an error).
+      dst.getDefiningOp()->emitRemark("has multipl reaching definitions");
+    }
+    // Dest already has an entry, make sure to update all the entries in the
+    // dataflow map to point to this new entry.
+    for (auto entr : dataflowAt) {
+      if (entr.getSecond() == oldEntry) {
+        dataflowAt[entr.getFirst()] = flowAtSrc->getSecond();
       }
     }
   }

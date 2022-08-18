@@ -23,7 +23,7 @@ firrtl.circuit "Top" {
     // CHECK: firrtl.module @XmrSrcMod() {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     // CHECK:  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    // CHECK:  %0 = firrtl.node sym @xmr_sym interesting_name %c0_ui1  : !firrtl.uint<1>
+    // CHECK:  %0 = firrtl.node sym @xmr_sym %c0_ui1  : !firrtl.uint<1>
     %1 = firrtl.ref.send %zero : !firrtl.uint<1>
     firrtl.strictconnect %_a, %1 : !firrtl.ref<uint<1>>
   }
@@ -76,7 +76,7 @@ firrtl.circuit "Top" {
     // CHECK: firrtl.module @XmrSrcMod() {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     // CHECK:   %c0_ui1 = firrtl.constant 0
-    // CHECK:  %0 = firrtl.node sym @xmr_sym interesting_name %c0_ui1  : !firrtl.uint<1>
+    // CHECK:  %0 = firrtl.node sym @xmr_sym %c0_ui1  : !firrtl.uint<1>
     %1 = firrtl.ref.send %zero : !firrtl.uint<1>
     firrtl.strictconnect %_a, %1 : !firrtl.ref<uint<1>>
   }
@@ -129,7 +129,7 @@ firrtl.circuit "Top" {
     // CHECK: firrtl.module @XmrSrcMod() {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     // CHECK:   %c0_ui1 = firrtl.constant 0
-    // CHECK:  %0 = firrtl.node sym @xmr_sym interesting_name %c0_ui1  : !firrtl.uint<1>
+    // CHECK:  %0 = firrtl.node sym @xmr_sym %c0_ui1  : !firrtl.uint<1>
     %1 = firrtl.ref.send %zero : !firrtl.uint<1>
     firrtl.strictconnect %_a, %1 : !firrtl.ref<uint<1>>
   }
