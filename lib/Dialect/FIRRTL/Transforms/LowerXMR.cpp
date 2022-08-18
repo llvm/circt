@@ -73,9 +73,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
             }
             // Create a new entry for this RefSendOp. The path is currently
             // local.
-            addReachingSendsEntry(
-                send.getResult(),
-                ArrayAttr::get(send.getContext(), {getInnerRefTo(xmrDef)}));
+            addReachingSendsEntry(send.getResult(), getInnerRefTo(xmrDef));
             removeOp(send);
             return success();
           })
@@ -172,11 +170,9 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
         if (!remoteOpPath)
           return failure();
         // Get the path to reaching refSend at the referenced module argument.
-        auto pathToRefSend = refSendList[remoteOpPath.value()].getValue().vec();
         // Now append this instance to the path to the reaching refSend.
-        pathToRefSend.push_back(getInnerRefTo(inst));
-        addReachingSendsEntry(instanceResult,
-                              ArrayAttr::get(inst.getContext(), pathToRefSend));
+        addReachingSendsEntry(instanceResult, getInnerRefTo(inst),
+                              remoteOpPath.value());
       } else {
         // For input instance ports, the dataflow is into the referenced module.
         // Input RefType port implies, generating an upward scoped XMR.
@@ -228,7 +224,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
   Optional<size_t> getRemoteRefSend(Value val, bool mayNotExist = true) {
     auto iter = dataflowAt.find(val);
     if (iter != dataflowAt.end())
-      if (mayNotExist || refSendList[iter->getSecond()])
+      if (mayNotExist || !refSendList[iter->getSecond()].empty())
         return iter->getSecond();
     if (!mayNotExist) {
       // The referenced module must have already been analyzed, error out if the
@@ -264,7 +260,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
         dataflowAt[dst] = flowAtSrc->getSecond();
       else {
         auto oldEntry = flowAtDst->getSecond();
-        if (refSendList[oldEntry]) {
+        if (!refSendList[oldEntry].empty()) {
           // If a valid dataflow already reaches the destination, emit remark.
           // This happens when multiple connects attached to an input RefType
           // port, or multiple instantiation (which is already an error).
@@ -281,10 +277,17 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     }
   }
 
-  size_t addReachingSendsEntry(Value atRefVal, ArrayAttr refSendPath) {
+  size_t addReachingSendsEntry(Value atRefVal, Attribute newRef,
+                               Optional<size_t> copyFrom = None) {
     auto index = refSendList.size();
     dataflowAt[atRefVal] = index;
-    refSendList.push_back(refSendPath);
+    if (copyFrom) {
+      refSendList.emplace_back(refSendList[copyFrom.value()]);
+      refSendList[index].push_back(newRef);
+    } else if (newRef)
+      refSendList.push_back({newRef});
+    else
+      refSendList.push_back({});
     return index;
   }
 
@@ -322,10 +325,12 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
   /// only unique copies of the path exist.
   DenseMap<Value, size_t> dataflowAt;
 
-  // This is the set of all rechable RefSendOps. If there are multiple paths to
-  // a RefSendOp, record all the paths. Each entry is a unique path to a
-  // RefSendOp.
-  SmallVector<ArrayAttr> refSendList;
+  /// This is the set of all unique paths from a RefSendOp to RefResolveOps.
+  /// Each entry is a unique path to a RefSendOp. In case this becomes a
+  /// performance issue, store only the unique instance paths from the root to
+  /// each RefResolve, and index into them.
+  using instancePath = SmallVector<Attribute>;
+  SmallVector<instancePath> refSendList;
 
   // Instance and module ref ports that needs to be removed.
   DenseMap<Operation *, SmallVector<unsigned>> refPortsToRemoveMap;
