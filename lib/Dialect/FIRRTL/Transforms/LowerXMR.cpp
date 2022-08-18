@@ -107,7 +107,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
                  << "\n Traversing module:" << module.moduleNameAttr());
       for (Operation &op : module.getBodyBlock()->getOperations())
         if (transferFunc(op).failed())
-          continue;
+          return signalPassFailure();
 
       // Record all the RefType ports to be removed later.
       for (size_t portNum = 0, e = module.getNumPorts(); portNum < e; ++portNum)
@@ -129,7 +129,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     auto xmrSize = refSendList[remoteOpPath.value()].size();
     SmallVector<Attribute> xmrHierPath(xmrSize);
     SmallString<128> xmrString;
-    for (auto instanceRef :
+    for (const auto &instanceRef :
          llvm::enumerate(refSendList[remoteOpPath.value()])) {
       xmrHierPath[xmrSize - instanceRef.index() - 1] = instanceRef.value();
       ("{{" + Twine(instanceRef.index()) + "}}").toVector(xmrString);
@@ -170,7 +170,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
         // If dataflow at remote module argument does not exist, error out.
         auto remoteOpPath = getRemoteRefSend(refModuleArg, false);
         if (!remoteOpPath)
-          continue;
+          return failure();
         // Get the path to reaching refSend at the referenced module argument.
         auto pathToRefSend = refSendList[remoteOpPath.value()].getValue().vec();
         // Now append this instance to the path to the reaching refSend.
@@ -228,7 +228,8 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
   Optional<size_t> getRemoteRefSend(Value val, bool mayNotExist = true) {
     auto iter = dataflowAt.find(val);
     if (iter != dataflowAt.end())
-      return iter->getSecond();
+      if (mayNotExist || refSendList[iter->getSecond()])
+        return iter->getSecond();
     if (!mayNotExist) {
       // The referenced module must have already been analyzed, error out if the
       // dataflow at the child module is not resolved.
