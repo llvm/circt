@@ -643,9 +643,14 @@ private:
   using BlockPairs = SmallVector<BlockPair>;
   LogicalResult findBlockPairs(BlockPairs &blockPairs);
 
-  BufferOp buildSplitNetwork(Block *splitBlock);
-  void buildMergeNetwork(Block *mergeBlock, BufferOp buf);
+  BufferOp buildSplitNetwork(Block *splitBlock,
+                             handshake::ConditionalBranchOp &ctrlBr);
+  void buildMergeNetwork(Block *mergeBlock, BufferOp buf,
+                         handshake::ConditionalBranchOp &ctrlBr);
 
+  // Determines if the cmerge inpus match the cond_br output order.
+  bool requiresOperandFlip(ControlMergeOp &ctrlMerge,
+                           handshake::ConditionalBranchOp &ctrlBr);
   bool formsIrreducibleCF(Block *splitBlock, Block *mergeBlock);
 };
 } // namespace
@@ -756,37 +761,34 @@ LogicalResult FeedForwardNetworkRewriter::apply() {
     return failure();
 
   for (auto [splitBlock, mergeBlock] : pairs) {
-    auto buffer = buildSplitNetwork(splitBlock);
-    buildMergeNetwork(mergeBlock, buffer);
+    handshake::ConditionalBranchOp ctrlBr;
+    BufferOp buffer = buildSplitNetwork(splitBlock, ctrlBr);
+    buildMergeNetwork(mergeBlock, buffer, ctrlBr);
   }
 
   return success();
 }
 
-BufferOp FeedForwardNetworkRewriter::buildSplitNetwork(Block *splitBlock) {
+BufferOp FeedForwardNetworkRewriter::buildSplitNetwork(
+    Block *splitBlock, handshake::ConditionalBranchOp &ctrlBr) {
   SmallVector<handshake::ConditionalBranchOp> branches;
   llvm::copy(splitBlock->getOps<handshake::ConditionalBranchOp>(),
              std::back_inserter(branches));
 
-  Value cond = branches[0].conditionOperand();
+  auto *findRes = llvm::find_if(branches, [](auto br) {
+    return br.dataOperand().getType().template isa<NoneType>();
+  });
+
+  assert(findRes && "expected one branch for the ctrl signal");
+  ctrlBr = *findRes;
+
+  Value cond = ctrlBr.conditionOperand();
   assert(llvm::all_of(branches, [&](auto branch) {
     return branch.conditionOperand() == cond;
   }));
 
   Location loc = cond.getLoc();
   rewriter.setInsertionPointAfterValue(cond);
-
-  // A conditional branch selects the successor at index zero when the condition
-  // is 1, which is the oposit of how a mux selects its inputs. Thus we have to
-  // negate the condition here.
-  cond = rewriter.create<arith::XOrIOp>(
-      loc, cond.getType(), cond,
-      rewriter.create<arith::ConstantOp>(
-          loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 1)));
-
-  // Require a cast to index to stick to the type of the mux input.
-  Value condAsIndex =
-      rewriter.create<arith::IndexCastOp>(loc, rewriter.getIndexType(), cond);
 
   // The buffer size defines the number of threads that can be concurently
   // traversing the sub-CFG starting at the splitBlock.
@@ -795,31 +797,71 @@ BufferOp FeedForwardNetworkRewriter::buildSplitNetwork(Block *splitBlock) {
   // Longest path in a CFG-DAG would be O(#blocks)
 
   return rewriter.create<handshake::BufferOp>(
-      loc, rewriter.getIndexType(), bufferSize, condAsIndex,
+      loc, rewriter.getI1Type(), bufferSize, cond,
       /*bufferType=*/BufferTypeEnum::fifo);
 }
 
-void FeedForwardNetworkRewriter::buildMergeNetwork(Block *mergeBlock,
-                                                   BufferOp buf) {
+void FeedForwardNetworkRewriter::buildMergeNetwork(
+    Block *mergeBlock, BufferOp buf, handshake::ConditionalBranchOp &ctrlBr) {
   // Replace control merge with mux
   auto ctrlMerges = mergeBlock->getOps<handshake::ControlMergeOp>();
   assert(std::distance(ctrlMerges.begin(), ctrlMerges.end()) == 1);
 
   handshake::ControlMergeOp ctrlMerge = *ctrlMerges.begin();
-  assert(ctrlMerge.getNumOperands() == 2 &&
-         "Loops should already have been handled");
-
-  // The mux uses the same order of inputs as the merge is guaranteed to have
-  // the order matching the branching. The selection input is already swapped
-  // beforehand.
   rewriter.setInsertionPointAfter(ctrlMerge);
-  Value newCtrl = rewriter.create<handshake::MuxOp>(ctrlMerge->getLoc(), buf,
-                                                    ctrlMerge.getOperands());
+  Location loc = ctrlMerge->getLoc();
+
+  // The newly inserted mux has to select the results from the correct operand.
+  // As there is no guarantee on the order of cmerge inputs, the correct order
+  // has to be determined first.
+  bool requiresFlip = requiresOperandFlip(ctrlMerge, ctrlBr);
+  SmallVector<Value> muxOperands;
+  if (requiresFlip)
+    muxOperands = llvm::to_vector(llvm::reverse(ctrlMerge.getOperands()));
+  else
+    muxOperands = llvm::to_vector(ctrlMerge.getOperands());
+
+  Value newCtrl = rewriter.create<handshake::MuxOp>(loc, buf, muxOperands);
+
+  Value cond = buf.result();
+  if (requiresFlip) {
+    // As the mux operand order is the flipped cmerge input order, the index
+    // which replaces the output of the cmerge has to be flipped/negated as
+    // well.
+    cond = rewriter.create<arith::XOrIOp>(
+        loc, cond.getType(), cond,
+        rewriter.create<arith::ConstantOp>(
+            loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 1)));
+  }
+
+  // Require a cast to index to stick to the type of the mux input.
+  Value condAsIndex =
+      rewriter.create<arith::IndexCastOp>(loc, rewriter.getIndexType(), cond);
 
   hl.setBlockEntryControl(mergeBlock, newCtrl);
 
   // Replace with new ctrl value from mux and the index
-  rewriter.replaceOp(ctrlMerge, {newCtrl, buf});
+  rewriter.replaceOp(ctrlMerge, {newCtrl, condAsIndex});
+}
+
+bool FeedForwardNetworkRewriter::requiresOperandFlip(
+    ControlMergeOp &ctrlMerge, handshake::ConditionalBranchOp &ctrlBr) {
+  assert(ctrlMerge.getNumOperands() == 2 &&
+         "Loops should already have been handled");
+
+  Value fstOperand = ctrlMerge.getOperand(0);
+
+  assert(ctrlBr.trueResult().hasOneUse() &&
+         "expected the result of a branch to only have one user");
+  Operation *trueUser = *ctrlBr.trueResult().user_begin();
+  if (trueUser == ctrlBr)
+    // The cmerge directly consumes the cond_br output.
+    return ctrlBr.trueResult() == fstOperand;
+
+  // The cmerge is consumed in an intermediate block. Find out if this block is
+  // a predecessor of the "true" successor of the cmerge.
+  Block *trueBlock = trueUser->getBlock();
+  return domInfo.dominates(trueBlock, fstOperand.getDefiningOp()->getBlock());
 }
 
 namespace {

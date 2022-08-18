@@ -3,62 +3,68 @@
 // RUN: circt-opt -lower-std-to-handshake %s | FileCheck %s
 // CHECK-LABEL:   handshake.func @nested_ifs(
 // CHECK-SAME:                               %[[VAL_0:.*]]: none, ...) -> none
-// CHECK:           %[[VAL_1:.*]]:5 = fork [5] %[[VAL_0]] : none
-// CHECK:           %[[VAL_2:.*]] = constant %[[VAL_1]]#3 {value = 0 : index} : index
+// CHECK:           %[[VAL_1:.*]]:4 = fork [4] %[[VAL_0]] : none
+// CHECK:           %[[VAL_2:.*]] = constant %[[VAL_1]]#2 {value = 0 : index} : index
 // CHECK:           %[[VAL_3:.*]]:2 = fork [2] %[[VAL_2]] : index
-// CHECK:           %[[VAL_4:.*]] = constant %[[VAL_1]]#2 {value = -1 : index} : index
+// CHECK:           %[[VAL_4:.*]] = constant %[[VAL_1]]#1 {value = -1 : index} : index
 // CHECK:           %[[VAL_5:.*]] = arith.muli %[[VAL_3]]#0, %[[VAL_4]] : index
 // CHECK:           %[[VAL_6:.*]]:2 = fork [2] %[[VAL_5]] : index
-// CHECK:           %[[VAL_7:.*]] = constant %[[VAL_1]]#1 {value = 20 : index} : index
+// CHECK:           %[[VAL_7:.*]] = constant %[[VAL_1]]#0 {value = 20 : index} : index
 // CHECK:           %[[VAL_8:.*]] = arith.addi %[[VAL_6]]#1, %[[VAL_7]] : index
 // CHECK:           %[[VAL_9:.*]] = arith.cmpi sge, %[[VAL_8]], %[[VAL_3]]#1 : index
 // CHECK:           %[[VAL_10:.*]]:3 = fork [3] %[[VAL_9]] : i1
-// CHECK:           %[[VAL_11:.*]] = constant %[[VAL_1]]#0 {value = true} : i1
-// CHECK:           %[[VAL_12:.*]] = arith.xori %[[VAL_10]]#0, %[[VAL_11]] : i1
-// CHECK:           %[[VAL_13:.*]] = arith.index_cast %[[VAL_12]] : i1 to index
-// CHECK:           %[[VAL_14:.*]] = buffer [2] fifo %[[VAL_13]] : index
-// CHECK:           %[[VAL_15:.*]], %[[VAL_16:.*]] = cond_br %[[VAL_10]]#2, %[[VAL_1]]#4 : none
-// CHECK:           %[[VAL_17:.*]], %[[VAL_18:.*]] = cond_br %[[VAL_10]]#1, %[[VAL_6]]#0 : index
-// CHECK:           %[[VAL_19:.*]] = merge %[[VAL_17]] : index
-// CHECK:           %[[VAL_20:.*]], %[[VAL_21:.*]] = control_merge %[[VAL_15]] : none
-// CHECK:           %[[VAL_22:.*]]:4 = fork [4] %[[VAL_20]] : none
-// CHECK:           sink %[[VAL_21]] : index
-// CHECK:           %[[VAL_23:.*]] = constant %[[VAL_22]]#2 {value = 0 : index} : index
-// CHECK:           %[[VAL_24:.*]] = constant %[[VAL_22]]#1 {value = -10 : index} : index
-// CHECK:           %[[VAL_25:.*]] = arith.addi %[[VAL_19]], %[[VAL_24]] : index
-// CHECK:           %[[VAL_26:.*]] = arith.cmpi sge, %[[VAL_25]], %[[VAL_23]] : index
+// CHECK:           %[[VAL_11:.*]] = buffer [2] fifo %[[VAL_10]]#0 : i1
+// CHECK:           %[[VAL_12:.*]]:2 = fork [2] %[[VAL_11]] : i1
+// CHECK:           %[[VAL_13:.*]], %[[VAL_14:.*]] = cond_br %[[VAL_10]]#2, %[[VAL_1]]#3 : none
+// CHECK:           %[[VAL_15:.*]], %[[VAL_16:.*]] = cond_br %[[VAL_10]]#1, %[[VAL_6]]#0 : index
+// CHECK:           %[[VAL_17:.*]] = merge %[[VAL_15]] : index
+// CHECK:           %[[VAL_18:.*]], %[[VAL_19:.*]] = control_merge %[[VAL_13]] : none
+// CHECK:           %[[VAL_20:.*]]:3 = fork [3] %[[VAL_18]] : none
+// CHECK:           sink %[[VAL_19]] : index
+// CHECK:           %[[VAL_21:.*]] = constant %[[VAL_20]]#1 {value = 0 : index} : index
+// CHECK:           %[[VAL_22:.*]] = constant %[[VAL_20]]#0 {value = -10 : index} : index
+// CHECK:           %[[VAL_23:.*]] = arith.addi %[[VAL_17]], %[[VAL_22]] : index
+// CHECK:           %[[VAL_24:.*]] = arith.cmpi sge, %[[VAL_23]], %[[VAL_21]] : index
+// CHECK:           %[[VAL_25:.*]]:2 = fork [2] %[[VAL_24]] : i1
+// CHECK:           %[[VAL_26:.*]] = buffer [2] fifo %[[VAL_25]]#0 : i1
 // CHECK:           %[[VAL_27:.*]]:2 = fork [2] %[[VAL_26]] : i1
-// CHECK:           %[[VAL_28:.*]] = constant %[[VAL_22]]#0 {value = true} : i1
-// CHECK:           %[[VAL_29:.*]] = arith.xori %[[VAL_27]]#0, %[[VAL_28]] : i1
-// CHECK:           %[[VAL_30:.*]] = arith.index_cast %[[VAL_29]] : i1 to index
-// CHECK:           %[[VAL_31:.*]] = buffer [2] fifo %[[VAL_30]] : index
-// CHECK:           %[[VAL_32:.*]], %[[VAL_33:.*]] = cond_br %[[VAL_27]]#1, %[[VAL_22]]#3 : none
-// CHECK:           %[[VAL_34:.*]], %[[VAL_35:.*]] = control_merge %[[VAL_32]] : none
-// CHECK:           sink %[[VAL_35]] : index
-// CHECK:           %[[VAL_36:.*]] = br %[[VAL_34]] : none
-// CHECK:           %[[VAL_37:.*]] = mux %[[VAL_31]] {{\[}}%[[VAL_36]], %[[VAL_33]]] : index, none
-// CHECK:           %[[VAL_38:.*]] = br %[[VAL_37]] : none
-// CHECK:           %[[VAL_39:.*]] = merge %[[VAL_18]] : index
-// CHECK:           %[[VAL_40:.*]], %[[VAL_41:.*]] = control_merge %[[VAL_16]] : none
-// CHECK:           %[[VAL_42:.*]]:4 = fork [4] %[[VAL_40]] : none
+// CHECK:           %[[VAL_28:.*]], %[[VAL_29:.*]] = cond_br %[[VAL_25]]#1, %[[VAL_20]]#2 : none
+// CHECK:           %[[VAL_30:.*]], %[[VAL_31:.*]] = control_merge %[[VAL_28]] : none
+// CHECK:           sink %[[VAL_31]] : index
+// CHECK:           %[[VAL_32:.*]] = br %[[VAL_30]] : none
+// CHECK:           %[[VAL_33:.*]] = mux %[[VAL_27]]#1 {{\[}}%[[VAL_29]], %[[VAL_32]]] : i1, none
+// CHECK:           %[[VAL_34:.*]]:2 = fork [2] %[[VAL_33]] : none
+// CHECK:           %[[VAL_35:.*]] = constant %[[VAL_34]]#0 {value = true} : i1
+// CHECK:           %[[VAL_36:.*]] = arith.xori %[[VAL_27]]#0, %[[VAL_35]] : i1
+// CHECK:           %[[VAL_37:.*]] = arith.index_cast %[[VAL_36]] : i1 to index
+// CHECK:           sink %[[VAL_37]] : index
+// CHECK:           %[[VAL_38:.*]] = br %[[VAL_34]]#1 : none
+// CHECK:           %[[VAL_39:.*]] = merge %[[VAL_16]] : index
+// CHECK:           %[[VAL_40:.*]], %[[VAL_41:.*]] = control_merge %[[VAL_14]] : none
+// CHECK:           %[[VAL_42:.*]]:3 = fork [3] %[[VAL_40]] : none
 // CHECK:           sink %[[VAL_41]] : index
-// CHECK:           %[[VAL_43:.*]] = constant %[[VAL_42]]#2 {value = 0 : index} : index
-// CHECK:           %[[VAL_44:.*]] = constant %[[VAL_42]]#1 {value = -10 : index} : index
+// CHECK:           %[[VAL_43:.*]] = constant %[[VAL_42]]#1 {value = 0 : index} : index
+// CHECK:           %[[VAL_44:.*]] = constant %[[VAL_42]]#0 {value = -10 : index} : index
 // CHECK:           %[[VAL_45:.*]] = arith.addi %[[VAL_39]], %[[VAL_44]] : index
 // CHECK:           %[[VAL_46:.*]] = arith.cmpi sge, %[[VAL_45]], %[[VAL_43]] : index
 // CHECK:           %[[VAL_47:.*]]:2 = fork [2] %[[VAL_46]] : i1
-// CHECK:           %[[VAL_48:.*]] = constant %[[VAL_42]]#0 {value = true} : i1
-// CHECK:           %[[VAL_49:.*]] = arith.xori %[[VAL_47]]#0, %[[VAL_48]] : i1
-// CHECK:           %[[VAL_50:.*]] = arith.index_cast %[[VAL_49]] : i1 to index
-// CHECK:           %[[VAL_51:.*]] = buffer [2] fifo %[[VAL_50]] : index
-// CHECK:           %[[VAL_52:.*]], %[[VAL_53:.*]] = cond_br %[[VAL_47]]#1, %[[VAL_42]]#3 : none
-// CHECK:           %[[VAL_54:.*]], %[[VAL_55:.*]] = control_merge %[[VAL_52]] : none
-// CHECK:           sink %[[VAL_55]] : index
-// CHECK:           %[[VAL_56:.*]] = br %[[VAL_54]] : none
-// CHECK:           %[[VAL_57:.*]] = mux %[[VAL_51]] {{\[}}%[[VAL_56]], %[[VAL_53]]] : index, none
-// CHECK:           %[[VAL_58:.*]] = br %[[VAL_57]] : none
-// CHECK:           %[[VAL_59:.*]] = mux %[[VAL_14]] {{\[}}%[[VAL_58]], %[[VAL_38]]] : index, none
-// CHECK:           return %[[VAL_59]] : none
+// CHECK:           %[[VAL_48:.*]] = buffer [2] fifo %[[VAL_47]]#0 : i1
+// CHECK:           %[[VAL_49:.*]]:2 = fork [2] %[[VAL_48]] : i1
+// CHECK:           %[[VAL_50:.*]], %[[VAL_51:.*]] = cond_br %[[VAL_47]]#1, %[[VAL_42]]#2 : none
+// CHECK:           %[[VAL_52:.*]], %[[VAL_53:.*]] = control_merge %[[VAL_50]] : none
+// CHECK:           sink %[[VAL_53]] : index
+// CHECK:           %[[VAL_54:.*]] = br %[[VAL_52]] : none
+// CHECK:           %[[VAL_55:.*]] = mux %[[VAL_49]]#1 {{\[}}%[[VAL_51]], %[[VAL_54]]] : i1, none
+// CHECK:           %[[VAL_56:.*]]:2 = fork [2] %[[VAL_55]] : none
+// CHECK:           %[[VAL_57:.*]] = constant %[[VAL_56]]#0 {value = true} : i1
+// CHECK:           %[[VAL_58:.*]] = arith.xori %[[VAL_49]]#0, %[[VAL_57]] : i1
+// CHECK:           %[[VAL_59:.*]] = arith.index_cast %[[VAL_58]] : i1 to index
+// CHECK:           sink %[[VAL_59]] : index
+// CHECK:           %[[VAL_60:.*]] = br %[[VAL_56]]#1 : none
+// CHECK:           %[[VAL_61:.*]] = mux %[[VAL_12]]#1 {{\[}}%[[VAL_60]], %[[VAL_38]]] : i1, none
+// CHECK:           %[[VAL_62:.*]] = arith.index_cast %[[VAL_12]]#0 : i1 to index
+// CHECK:           sink %[[VAL_62]] : index
+// CHECK:           return %[[VAL_61]] : none
 // CHECK:         }
   func.func @nested_ifs() {
     %c0 = arith.constant 0 : index
