@@ -709,8 +709,8 @@ def RefInstancePortConstraint
 // RefOps
 //===----------------------------------------------------------------------===//
 
-def RefResolveOp: FIRRTLExprOp<"ref.resolve", [RefTypeConstraint<"ref","result">,
-                                    RefInstancePortConstraint]> {
+def RefResolveOp: FIRRTLExprOp<"ref.resolve",
+                              [RefTypeConstraint<"ref","result">]> {
   let summary = "FIRRTL Resolve a Reference";
   let description = [{
     Resolve a remote reference for reading a remote value.

@@ -2024,24 +2024,8 @@ void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 /// ports to Instance ports.
 static LogicalResult checkRefTypeFlow(Operation *connect) {
   Value dst = connect->getOperand(0);
-  Value src = connect->getOperand(1);
 
   if (dst.getType().isa<RefType>()) {
-    if (getDeclarationKind(src) == getDeclarationKind(dst)) {
-      bool rootKnown;
-      auto diag = emitError(connect->getLoc())
-                  << "connect is invalid: the first operand ";
-      auto dstName = getFieldName(getFieldRefFromValue(dst), rootKnown);
-      if (rootKnown)
-        diag << "\"" << dstName << "\" ";
-      diag << "and second operand ";
-      auto srcName = getFieldName(getFieldRefFromValue(src), rootKnown);
-      if (rootKnown)
-        diag << "\"" << srcName << "\" ";
-      diag << "both have same port kind, expected Module port to Instance "
-              "connections only";
-      return diag;
-    }
     // RefType supports multiple readers. That is, there can be multiple
     // RefResolveOps remotely connected to a single RefSendOp.
     // But multiple RefSendOps should not be remotely connected to a single
