@@ -1,4 +1,4 @@
-// REQUIRES: iverilog,cocotb,python
+// REQUIRES: iverilog,cocotb
 
 // This test is executed with all different buffering strategies
 
