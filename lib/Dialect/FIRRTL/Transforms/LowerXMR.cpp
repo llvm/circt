@@ -75,12 +75,30 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     auto transferFunc = [&](Operation &op) -> LogicalResult {
       return TypeSwitch<Operation *, LogicalResult>(&op)
           .Case<RefSendOp>([&](auto send) {
+            if (!firstPass)
+              return success();
             // Get a reference to the actual signal to which the XMR will be
             // generated.
-            auto xmrDefOp = getInnerRefTo(send.getBase());
+
+            auto xmrDef = send.getBase();
+            if (!xmrDef.template isa<BlockArgument>()) {
+              Operation *xmrDefOp = xmrDef.getDefiningOp();
+              if (!isa<InnerSymbolOpInterface>(xmrDefOp)) {
+                ImplicitLocOpBuilder b(xmrDefOp->getLoc(), xmrDefOp);
+                b.setInsertionPointAfter(xmrDefOp);
+                StringRef opName;
+                if (auto name =
+                        xmrDefOp->template getAttrOfType<StringAttr>("name"))
+                  opName = name.getValue();
+
+                xmrDef = b.create<NodeOp>(xmrDef.getType(), xmrDef, opName,
+                                          NameKindEnum::InterestingName);
+              }
+            }
+
             // Record the remote reference op, that this ref value refers to.
             reachingRefSendAt[send.getResult()] =
-                ArrayAttr::get(send.getContext(), {xmrDefOp});
+                ArrayAttr::get(send.getContext(), {getInnerRefTo(xmrDef)});
             removeOp(send);
             return success();
           })
