@@ -16,6 +16,7 @@ using namespace circt;
 using namespace circt::ExportSystemC;
 
 void EmissionPrinter::emitOp(Operation *op) {
+  currentLoc = op->getLoc();
   auto patterns = opPatterns.getSpecificNativePatterns().lookup(op->getName());
   for (auto *pat : patterns) {
     if (pat->matchStatement(op)) {
@@ -44,8 +45,7 @@ void EmissionPrinter::emitType(Type type) {
 
   // Emit a placeholder to the output and an error to stderr in case no valid
   // emission pattern was found.
-  mlir::emitError(UnknownLoc::get(type.getContext()),
-                  "no emission pattern found for type ")
+  mlir::emitError(currentLoc, "no emission pattern found for type ")
       << type << "\n";
   os << "<<UNSUPPORTED TYPE (" << type << ")>>";
   emissionFailed = true;
@@ -54,6 +54,8 @@ void EmissionPrinter::emitType(Type type) {
 InlineEmitter EmissionPrinter::getInlinable(Value value) {
   auto *op = value.isa<BlockArgument>() ? value.getParentRegion()->getParentOp()
                                         : value.getDefiningOp();
+  Location requestLoc = currentLoc;
+  currentLoc = op->getLoc();
   auto patterns = opPatterns.getSpecificNativePatterns().lookup(op->getName());
   for (auto *pat : patterns) {
     MatchResult match = pat->matchInlinable(value);
@@ -66,8 +68,10 @@ InlineEmitter EmissionPrinter::getInlinable(Value value) {
   // Emit a placeholder to the output and an error to stderr in case no valid
   // emission pattern was found.
   emissionFailed = true;
-  mlir::emitError(value.getLoc(), "inlining not supported for value '")
+  auto err =
+      mlir::emitError(value.getLoc(), "inlining not supported for value '")
       << value << "'\n";
+  err.attachNote(requestLoc) << "requested to be inlined here";
   return InlineEmitter(
       [&]() { os << "<<INVALID VALUE TO INLINE (" << value << ")>>"; },
       Precedence::LIT);

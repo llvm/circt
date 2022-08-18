@@ -50,7 +50,7 @@ static LogicalResult emitFile(Operation *op, StringRef filePath,
   registerAllOpEmitters(opPatterns, op->getContext());
   TypeEmissionPatternSet typePatterns;
   registerAllTypeEmitters(typePatterns);
-  EmissionPrinter printer(ios, opPatterns, typePatterns);
+  EmissionPrinter printer(ios, opPatterns, typePatterns, op->getLoc());
 
   printer << "// " << filePath << "\n";
   std::string macroname = pathToMacroName(filePath);

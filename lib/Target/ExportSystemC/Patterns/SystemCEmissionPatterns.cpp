@@ -71,6 +71,23 @@ struct BuiltinModuleEmitter : OpEmissionPattern<ModuleOp> {
 } // namespace
 
 //===----------------------------------------------------------------------===//
+// Type emission patterns.
+//===----------------------------------------------------------------------===//
+
+namespace {
+/// Emit SystemC signal and port types according to the specification listed in
+/// their ODS description.
+template <typename Ty, const char Mn[]>
+struct SignalTypeEmitter : public TypeEmissionPattern<Ty> {
+  void emitType(Ty type, EmissionPrinter &p) override {
+    p << "sc_core::" << Mn << "<";
+    p.emitType(type.getBaseType());
+    p << ">";
+  }
+};
+} // namespace
+
+//===----------------------------------------------------------------------===//
 // Register Operation and Type emission patterns.
 //===----------------------------------------------------------------------===//
 
@@ -80,4 +97,14 @@ void circt::ExportSystemC::populateSystemCOpEmitters(
 }
 
 void circt::ExportSystemC::populateSystemCTypeEmitters(
-    TypeEmissionPatternSet &patterns) {}
+    TypeEmissionPatternSet &patterns) {
+  static constexpr const char in[] = "sc_in";
+  static constexpr const char inout[] = "sc_inout";
+  static constexpr const char out[] = "sc_out";
+
+  // clang-format off
+  patterns.add<SignalTypeEmitter<InputType, in>, 
+               SignalTypeEmitter<InOutType, inout>,
+               SignalTypeEmitter<OutputType, out>>();
+  // clang-format on
+}
