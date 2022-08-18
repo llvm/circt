@@ -46,6 +46,8 @@ struct SCModuleEmitter : OpEmissionPattern<SCModuleOp> {
   }
 
   void emitStatement(SCModuleOp module, EmissionPrinter &p) override {
+    // Emit a newline at the start to ensure an empty line before the module for
+    // better readability.
     p << "\nSC_MODULE(" << module.getModuleName() << ") ";
     auto scope = p.getOstream().scope("{\n", "};\n");
     for (size_t i = 0, e = module.getNumArguments(); i < e; ++i) {
@@ -66,6 +68,113 @@ struct BuiltinModuleEmitter : OpEmissionPattern<ModuleOp> {
   void emitStatement(ModuleOp op, EmissionPrinter &p) override {
     auto scope = p.getOstream().scope("", "", false);
     p.emitRegion(op.getRegion(), scope);
+  }
+};
+
+/// Emit a systemc.signal.write operation by using the explicit 'write' member
+/// function of the signal and port classes.
+struct SignalWriteEmitter : OpEmissionPattern<SignalWriteOp> {
+  using OpEmissionPattern::OpEmissionPattern;
+
+  void emitStatement(SignalWriteOp op, EmissionPrinter &p) override {
+    p.getInlinable(op.getDest()).emit();
+    p << ".write(";
+    p.getInlinable(op.getSrc()).emit();
+    p << ");\n";
+  }
+};
+
+/// Emit a systemc.signal.read operation by using the explicit 'read' member
+/// function of the signal and port classes.
+struct SignalReadEmitter : OpEmissionPattern<SignalReadOp> {
+  using OpEmissionPattern::OpEmissionPattern;
+
+  MatchResult matchInlinable(Value value) override {
+    if (value.getDefiningOp<SignalReadOp>())
+      return Precedence::FUNCTION_CALL;
+    return {};
+  }
+
+  void emitInlined(Value value, EmissionPrinter &p) override {
+    p.getInlinable(value.getDefiningOp<SignalReadOp>().getInput()).emit();
+    p << ".read()";
+  }
+};
+
+/// Emit a systemc.ctor operation by using the SC_CTOR macro.
+struct CtorEmitter : OpEmissionPattern<CtorOp> {
+  using OpEmissionPattern::OpEmissionPattern;
+
+  void emitStatement(CtorOp op, EmissionPrinter &p) override {
+    // Emit a new line before the SC_CTOR to ensure an empty line for better
+    // readability.
+    p << "\nSC_CTOR(" << op->getParentOfType<SCModuleOp>().getModuleName()
+      << ") ";
+    p.emitRegion(op.getBody());
+  }
+};
+
+/// Emit a systemc.func operation.
+struct SCFuncEmitter : OpEmissionPattern<SCFuncOp> {
+  using OpEmissionPattern::OpEmissionPattern;
+
+  MatchResult matchInlinable(Value value) override {
+    if (value.getDefiningOp<SCFuncOp>())
+      return Precedence::VAR;
+    return {};
+  }
+
+  void emitInlined(Value value, EmissionPrinter &p) override {
+    p << value.getDefiningOp<SCFuncOp>().getName();
+  }
+
+  void emitStatement(SCFuncOp op, EmissionPrinter &p) override {
+    // Emit a new line before the member function to ensure an empty line for
+    // better readability.
+    p << "\nvoid " << op.getName() << "() ";
+    p.emitRegion(op.getBody());
+  }
+};
+
+/// Emit a systemc.method operation by using the SC_METHOD macro.
+struct MethodEmitter : OpEmissionPattern<MethodOp> {
+  using OpEmissionPattern::OpEmissionPattern;
+
+  void emitStatement(MethodOp op, EmissionPrinter &p) override {
+    p << "SC_METHOD(";
+    p.getInlinable(op.getFuncHandle()).emit();
+    p << ");\n";
+  }
+};
+
+/// Emit a systemc.thread operation by using the SC_THREAD macro.
+struct ThreadEmitter : OpEmissionPattern<ThreadOp> {
+  using OpEmissionPattern::OpEmissionPattern;
+
+  void emitStatement(ThreadOp op, EmissionPrinter &p) override {
+    p << "SC_THREAD(";
+    p.getInlinable(op.getFuncHandle()).emit();
+    p << ");\n";
+  }
+};
+
+/// Emit a systemc.signal operation.
+struct SignalEmitter : OpEmissionPattern<SignalOp> {
+  using OpEmissionPattern::OpEmissionPattern;
+
+  MatchResult matchInlinable(Value value) override {
+    if (llvm::isa_and_nonnull<SignalOp>(value.getDefiningOp()))
+      return Precedence::VAR;
+    return {};
+  }
+
+  void emitInlined(Value value, EmissionPrinter &p) override {
+    p << value.getDefiningOp<SignalOp>().getName();
+  }
+
+  void emitStatement(SignalOp op, EmissionPrinter &p) override {
+    p.emitType(op.getSignal().getType());
+    p << " " << op.getName() << ";\n";
   }
 };
 } // namespace
@@ -93,7 +202,9 @@ struct SignalTypeEmitter : public TypeEmissionPattern<Ty> {
 
 void circt::ExportSystemC::populateSystemCOpEmitters(
     OpEmissionPatternSet &patterns, MLIRContext *context) {
-  patterns.add<BuiltinModuleEmitter, SCModuleEmitter>(context);
+  patterns.add<BuiltinModuleEmitter, SCModuleEmitter, SignalWriteEmitter,
+               SignalReadEmitter, CtorEmitter, SCFuncEmitter, MethodEmitter,
+               ThreadEmitter, SignalEmitter>(context);
 }
 
 void circt::ExportSystemC::populateSystemCTypeEmitters(
@@ -101,10 +212,12 @@ void circt::ExportSystemC::populateSystemCTypeEmitters(
   static constexpr const char in[] = "sc_in";
   static constexpr const char inout[] = "sc_inout";
   static constexpr const char out[] = "sc_out";
+  static constexpr const char signal[] = "sc_signal";
 
   // clang-format off
   patterns.add<SignalTypeEmitter<InputType, in>, 
                SignalTypeEmitter<InOutType, inout>,
-               SignalTypeEmitter<OutputType, out>>();
+               SignalTypeEmitter<OutputType, out>,
+               SignalTypeEmitter<SignalType, signal>>();
   // clang-format on
 }
