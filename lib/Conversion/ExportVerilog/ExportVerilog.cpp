@@ -4977,9 +4977,8 @@ static void prepareForEmission(ModuleOp module,
                                const LoweringOptions &options) {
   SmallVector<HWModuleOp> modulesToPrepare;
   module.walk([&](HWModuleOp op) { modulesToPrepare.push_back(op); });
-  parallelForEach(module->getContext(), modulesToPrepare, [&](auto op) {
-    prepareHWModule(*op.getBodyBlock(), options);
-  });
+  parallelForEach(module->getContext(), modulesToPrepare,
+                  [&](auto op) { prepareHWModule(op, options); });
 }
 
 //===----------------------------------------------------------------------===//

@@ -285,6 +285,7 @@ static void lowerUsersToTemporaryWire(Operation &op,
   // value.
   if (op.getNumResults() == 1) {
     auto namehint = inferStructuralNameForTemporary(op.getResult(0));
+    op.removeAttr("sv.namehint");
     createWireForResult(op.getResult(0), namehint);
     operandMap[op.getResult(0)] = 1;
     return;
@@ -526,10 +527,76 @@ static bool reuseExistingInOut(Operation *op) {
   return true;
 }
 
+/// Return true if this is something that will get printed as a unary operator
+/// by the Verilog printer.
+/// TODO: This is copied from PrettifyVerilog. Create a common library for
+/// verilog expression stuffs.
+static bool isVerilogUnaryOperator(Operation *op) {
+  if (isa<comb::ParityOp>(op))
+    return true;
+
+  if (auto xorOp = dyn_cast<comb::XorOp>(op))
+    return xorOp.isBinaryNot();
+
+  if (auto icmpOp = dyn_cast<comb::ICmpOp>(op))
+    return icmpOp.isEqualAllOnes() || icmpOp.isNotEqualZero();
+
+  return false;
+}
+
+/// Return true if it is beneficial to spill the operation under the specified
+/// spilling heuristic.
+bool shouldSpillWire(Operation &op,
+                     LoweringOptions::WireSpillingHeuristic heuristic) {
+  assert(heuristic != LoweringOptions::SpillNone &&
+         "If none, we should not call `prettifyAfterLegalization` in the first "
+         "place");
+
+  // Simple expressions like unary operations or reads might be cloned by
+  // PrettifyVerilog, so don't spill wires to prevent name duplications.
+  if (isVerilogUnaryOperator(&op) || isa<ReadInOutOp>(op))
+    return false;
+
+  switch (heuristic) {
+  case LoweringOptions::SpillAllNamehints:
+    if (auto namehint = op.getAttrOfType<StringAttr>("sv.namehint"))
+      return !namehint.getValue().startswith("_");
+    return false;
+  default:
+    llvm_unreachable("unhandled options");
+  }
+}
+
+/// After the legalization, we are able to know accurate verilog AST structures.
+/// So this function walks and prettifies verilog IR with a heuristic method
+/// specified by `options.wireSpillingHeuristic` based on the structures.
+static void prettifyAfterLegalization(Block &block,
+                                      const LoweringOptions &options) {
+  // If disallowLocalVariables is enabled, we don't spill wires in procedural
+  // regions.
+  if (options.disallowLocalVariables &&
+      block.getParentOp()->hasTrait<ProceduralRegion>())
+    return;
+
+  for (auto &op : llvm::make_early_inc_range(block)) {
+    if (!isVerilogExpression(&op))
+      continue;
+    if (shouldSpillWire(op, options.wireSpillingHeuristic))
+      lowerUsersToTemporaryWire(op);
+  }
+
+  for (auto &op : block) {
+    // If the operations has regions, visit each of the region bodies.
+    for (auto &region : op.getRegions()) {
+      if (!region.empty())
+        prettifyAfterLegalization(region.front(), options);
+    }
+  }
+}
+
 /// For each module we emit, do a prepass over the structure, pre-lowering and
 /// otherwise rewriting operations we don't want to emit.
-void ExportVerilog::prepareHWModule(Block &block,
-                                    const LoweringOptions &options) {
+static void legalizeHWModule(Block &block, const LoweringOptions &options) {
 
   /// A cache of the number of operands that feed into an operation.  This
   /// avoids the need to look backwards across ops repeatedly.
@@ -541,7 +608,7 @@ void ExportVerilog::prepareHWModule(Block &block,
     // If the operations has regions, prepare each of the region bodies.
     for (auto &region : op.getRegions()) {
       if (!region.empty())
-        prepareHWModule(region.front(), options);
+        legalizeHWModule(region.front(), options);
     }
   }
 
@@ -781,6 +848,16 @@ void ExportVerilog::prepareHWModule(Block &block,
   }
 }
 
+void ExportVerilog::prepareHWModule(hw::HWModuleOp module,
+                                    const LoweringOptions &options) {
+  // Legalization.
+  legalizeHWModule(*module.getBodyBlock(), options);
+
+  if (options.wireSpillingHeuristic != LoweringOptions::SpillNone)
+    // Spill wires to prettify verilog outputs.
+    prettifyAfterLegalization(*module.getBodyBlock(), options);
+}
+
 namespace {
 
 struct TestPrepareForEmissionPass
@@ -791,7 +868,7 @@ struct TestPrepareForEmissionPass
     LoweringOptions options = getLoweringCLIOption(
         cast<mlir::ModuleOp>(module->getParentOp()),
         [&](llvm::Twine twine) { module.emitError(twine); });
-    prepareHWModule(*module.getBodyBlock(), options);
+    prepareHWModule(module, options);
   }
 };
 } // end anonymous namespace

@@ -93,3 +93,13 @@ module attributes {circt.loweringOptions = "disallowLocalVariables"} {
     hw.output %0, %0 : i4, i4
   }
 }
+
+// -----
+module attributes {circt.loweringOptions = "wireSpillingHeuristic=spillAllNamehints"} {
+  // CHECK: @test_spill
+  hw.module @test_spill(%a: i3, %b: i3) -> (d:i3) {
+    // CHECK: %bar = sv.wire : !hw.inout<i3>
+    %c = comb.add %a, %b {sv.namehint = "bar"} : i3
+    hw.output %c: i3
+  }
+}
