@@ -22,7 +22,8 @@ firrtl.circuit "Top" {
   firrtl.module @XmrSrcMod(out %_a: !firrtl.ref<uint<1>>) {
     // CHECK: firrtl.module @XmrSrcMod() {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
-    // CHECK:   %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1> {inner_sym = #firrtl<innerSym@xmr_sym>}
+    // CHECK:  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    // CHECK:  %0 = firrtl.node sym @xmr_sym interesting_name %c0_ui1  : !firrtl.uint<1>
     %1 = firrtl.ref.send %zero : !firrtl.uint<1>
     firrtl.strictconnect %_a, %1 : !firrtl.ref<uint<1>>
   }
@@ -74,7 +75,8 @@ firrtl.circuit "Top" {
   firrtl.module @XmrSrcMod(out %_a: !firrtl.ref<uint<1>>) {
     // CHECK: firrtl.module @XmrSrcMod() {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
-    // CHECK:   %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1> {inner_sym = #firrtl<innerSym@xmr_sym>}
+    // CHECK:   %c0_ui1 = firrtl.constant 0
+    // CHECK:  %0 = firrtl.node sym @xmr_sym interesting_name %c0_ui1  : !firrtl.uint<1>
     %1 = firrtl.ref.send %zero : !firrtl.uint<1>
     firrtl.strictconnect %_a, %1 : !firrtl.ref<uint<1>>
   }
@@ -126,7 +128,8 @@ firrtl.circuit "Top" {
   firrtl.module @XmrSrcMod(out %_a: !firrtl.ref<uint<1>>) {
     // CHECK: firrtl.module @XmrSrcMod() {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
-    // CHECK:   %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1> {inner_sym = #firrtl<innerSym@xmr_sym>}
+    // CHECK:   %c0_ui1 = firrtl.constant 0
+    // CHECK:  %0 = firrtl.node sym @xmr_sym interesting_name %c0_ui1  : !firrtl.uint<1>
     %1 = firrtl.ref.send %zero : !firrtl.uint<1>
     firrtl.strictconnect %_a, %1 : !firrtl.ref<uint<1>>
   }
@@ -213,6 +216,44 @@ firrtl.circuit "Top" {
   }
 }
 
+// -----
+
+// Test for multiple children paths
+// CHECK-LABEL: firrtl.circuit "Top" {
+firrtl.circuit "Top" {
+  firrtl.module @XmrSrcMod(out %_a: !firrtl.ref<uint<1>>) {
+    %zero = firrtl.constant 0 : !firrtl.uint<1>
+    %1 = firrtl.ref.send %zero : !firrtl.uint<1>
+    firrtl.strictconnect %_a, %1 : !firrtl.ref<uint<1>>
+  }
+  firrtl.module @Top() {
+    %xmr_a = firrtl.instance xmr sym @xmr @XmrSrcMod(out _a: !firrtl.ref<uint<1>>)
+    %c_a = firrtl.instance child @Child1(in _a: !firrtl.ref<uint<1>>)
+    firrtl.strictconnect %c_a, %xmr_a : !firrtl.ref<uint<1>>
+  }
+  // CHECK-LABEL: firrtl.module @Child1() {
+  firrtl.module @Child1(in  %_a: !firrtl.ref<uint<1>>) {
+    %0 = firrtl.ref.resolve %_a : !firrtl.ref<uint<1>>
+    // CHECK-LITERAL:  firrtl.verbatim.expr "{{0}}.{{1}}" : () -> !firrtl.uint<1> {symbols = [#hw.innerNameRef<@Top::@xmr>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
+    %c_a, %c_b = firrtl.instance child @Child2(in _a: !firrtl.ref<uint<1>>, in _b: !firrtl.ref<uint<1>> )
+    firrtl.strictconnect %c_a, %_a : !firrtl.ref<uint<1>>
+    firrtl.strictconnect %c_b, %_a : !firrtl.ref<uint<1>>
+    %c3 = firrtl.instance child @Child3(in _a: !firrtl.ref<uint<1>>)
+    firrtl.strictconnect %c3 , %_a : !firrtl.ref<uint<1>>
+  }
+  firrtl.module @Child2(in  %_a: !firrtl.ref<uint<1>>, in  %_b: !firrtl.ref<uint<1>>) {
+    %0 = firrtl.ref.resolve %_a : !firrtl.ref<uint<1>>
+    // CHECK-LITERAL:  firrtl.verbatim.expr "{{0}}.{{1}}" : () -> !firrtl.uint<1> {symbols = [#hw.innerNameRef<@Top::@xmr>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
+    %1 = firrtl.ref.resolve %_b : !firrtl.ref<uint<1>>
+    // CHECK-LITERAL:  firrtl.verbatim.expr "{{0}}.{{1}}" : () -> !firrtl.uint<1> {symbols = [#hw.innerNameRef<@Top::@xmr>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
+  }
+  firrtl.module @Child3(in  %_a: !firrtl.ref<uint<1>>) {
+    %0 = firrtl.ref.resolve %_a : !firrtl.ref<uint<1>>
+    // CHECK-LITERAL:  firrtl.verbatim.expr "{{0}}.{{1}}" : () -> !firrtl.uint<1> {symbols = [#hw.innerNameRef<@Top::@xmr>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
+    %1 = firrtl.ref.resolve %_a : !firrtl.ref<uint<1>>
+    // CHECK-LITERAL:  firrtl.verbatim.expr "{{0}}.{{1}}" : () -> !firrtl.uint<1> {symbols = [#hw.innerNameRef<@Top::@xmr>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
+  }
+}
 
 // -----
 
@@ -225,6 +266,50 @@ firrtl.circuit "Top" {
     firrtl.strictconnect %_a, %1 : !firrtl.ref<uint<1>>
   }
   firrtl.module @Top() {
+    %xmr_a = firrtl.instance xmr sym @xmr @XmrSrcMod(out _a: !firrtl.ref<uint<1>>)
+    %c_a = firrtl.instance child @Child1(in _a: !firrtl.ref<uint<1>>)
+    firrtl.strictconnect %c_a, %xmr_a : !firrtl.ref<uint<1>>
+  }
+  // CHECK-LABEL: firrtl.module @Child1() {
+  firrtl.module @Child1(in  %_a: !firrtl.ref<uint<1>>) {
+    %0 = firrtl.ref.resolve %_a : !firrtl.ref<uint<1>>
+    // CHECK-LITERAL:  firrtl.verbatim.expr "{{0}}.{{1}}" : () -> !firrtl.uint<1> {symbols = [#hw.innerNameRef<@Top::@xmr>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
+    %c_a, %c_b = firrtl.instance child @Child2(in _a: !firrtl.ref<uint<1>>, in _b: !firrtl.ref<uint<1>> )
+    firrtl.strictconnect %c_a, %_a : !firrtl.ref<uint<1>>
+    firrtl.strictconnect %c_b, %_a : !firrtl.ref<uint<1>>
+    %c3 = firrtl.instance child @Child3(in _a: !firrtl.ref<uint<1>>)
+    firrtl.strictconnect %c3 , %_a : !firrtl.ref<uint<1>>
+  }
+  firrtl.module @Child2(in  %_a: !firrtl.ref<uint<1>>, in  %_b: !firrtl.ref<uint<1>>) {
+    %0 = firrtl.ref.resolve %_a : !firrtl.ref<uint<1>>
+    // CHECK-LITERAL:  firrtl.verbatim.expr "{{0}}.{{1}}" : () -> !firrtl.uint<1> {symbols = [#hw.innerNameRef<@Top::@xmr>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
+    %1 = firrtl.ref.resolve %_b : !firrtl.ref<uint<1>>
+    // CHECK-LITERAL:  firrtl.verbatim.expr "{{0}}.{{1}}" : () -> !firrtl.uint<1> {symbols = [#hw.innerNameRef<@Top::@xmr>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
+  }
+  firrtl.module @Child3(in  %_a: !firrtl.ref<uint<1>>) {
+    %0 = firrtl.ref.resolve %_a : !firrtl.ref<uint<1>>
+    // CHECK-LITERAL:  firrtl.verbatim.expr "{{0}}.{{1}}" : () -> !firrtl.uint<1> {symbols = [#hw.innerNameRef<@Top::@xmr>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
+    %1 = firrtl.ref.resolve %_a : !firrtl.ref<uint<1>>
+    // CHECK-LITERAL:  firrtl.verbatim.expr "{{0}}.{{1}}" : () -> !firrtl.uint<1> {symbols = [#hw.innerNameRef<@Top::@xmr>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
+  }
+}
+
+// -----
+
+// Multiply instantiated Top works, because the reference port does not flow through it.
+firrtl.circuit "Top" {
+  firrtl.module @XmrSrcMod(out %_a: !firrtl.ref<uint<1>>) {
+    %zero = firrtl.constant 0 : !firrtl.uint<1>
+    %1 = firrtl.ref.send %zero : !firrtl.uint<1>
+    firrtl.strictconnect %_a, %1 : !firrtl.ref<uint<1>>
+  }
+  firrtl.module @Top() {
+    firrtl.instance d1 @Dut()
+  }
+  firrtl.module @Top2() {
+    firrtl.instance d2 @Dut()
+  }
+  firrtl.module @Dut() {
     %xmr_a = firrtl.instance xmr sym @xmr @XmrSrcMod(out _a: !firrtl.ref<uint<1>>)
     %c_a = firrtl.instance child @Child1(in _a: !firrtl.ref<uint<1>>)
     firrtl.strictconnect %c_a, %xmr_a : !firrtl.ref<uint<1>>
