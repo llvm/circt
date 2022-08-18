@@ -1,3 +1,4 @@
+// REQUIRES: capnp
 // RUN: circt-opt --esi-connect-services --esi-emit-collateral=tops=LoopbackCosimTopWrapper --lower-msft-to-hw --lower-esi-to-physical --lower-esi-ports --lower-esi-to-hw  --export-verilog %s -o %t1.mlir  | FileCheck %s
 
 // CHECK-LABEL: // ----- 8< ----- FILE "services.json" ----- 8< -----

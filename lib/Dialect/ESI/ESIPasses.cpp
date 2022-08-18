@@ -901,7 +901,7 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
   auto loc = stage.getLoc();
   auto chPort = stage.input().getType().dyn_cast<ChannelType>();
   if (!chPort)
-    return failure();
+    return rewriter.notifyMatchFailure(stage, "stage had wrong type");
   Operation *symTable = stage->getParentWithTrait<OpTrait::SymbolTable>();
   auto stageModule = builder.declareStage(symTable, stage);
 
