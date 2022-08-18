@@ -16,6 +16,7 @@
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/SystemC/SystemCDialect.h"
+#include "mlir/Dialect/EmitC/IR/EmitC.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Support/FileUtilities.h"
 #include "mlir/Tools/mlir-translate/Translation.h"
@@ -42,29 +43,34 @@ static std::string pathToMacroName(StringRef path) {
 
 /// Emits the given operation to a file represented by the passed ostream and
 /// file-path.
-static LogicalResult emitFile(Operation *op, StringRef filePath,
-                              raw_ostream &os) {
+static LogicalResult emitFile(ArrayRef<Operation *> operations,
+                              StringRef filePath, raw_ostream &os) {
   mlir::raw_indented_ostream ios(os);
 
-  OpEmissionPatternSet opPatterns;
-  registerAllOpEmitters(opPatterns, op->getContext());
-  TypeEmissionPatternSet typePatterns;
-  registerAllTypeEmitters(typePatterns);
-  EmissionPrinter printer(ios, opPatterns, typePatterns, op->getLoc());
-
-  printer << "// " << filePath << "\n";
+  ios << "// " << filePath << "\n";
   std::string macroname = pathToMacroName(filePath);
-  printer << "#ifndef " << macroname << "\n";
-  printer << "#define " << macroname << "\n\n";
+  ios << "#ifndef " << macroname << "\n";
+  ios << "#define " << macroname << "\n\n";
 
-  // TODO: add support for 'emitc.include' and remove this hard-coded include.
-  printer << "#include <systemc>\n\n";
+  bool failed = false;
 
-  printer.emitOp(op);
+  if (!operations.empty()) {
+    OpEmissionPatternSet opPatterns;
+    registerAllOpEmitters(opPatterns, operations[0]->getContext());
+    TypeEmissionPatternSet typePatterns;
+    registerAllTypeEmitters(typePatterns);
+    EmissionPrinter printer(ios, opPatterns, typePatterns,
+                            operations[0]->getLoc());
 
-  printer << "\n#endif // " << macroname << "\n\n";
+    for (auto *op : operations)
+      printer.emitOp(op);
 
-  return failure(printer.exitState().failed());
+    failed = printer.exitState().failed();
+  }
+
+  ios << "\n#endif // " << macroname << "\n\n";
+
+  return failure(failed);
 }
 
 //===----------------------------------------------------------------------===//
@@ -73,11 +79,15 @@ static LogicalResult emitFile(Operation *op, StringRef filePath,
 
 LogicalResult ExportSystemC::exportSystemC(ModuleOp module,
                                            llvm::raw_ostream &os) {
-  return emitFile(module, "stdout.h", os);
+  return emitFile({module}, "stdout.h", os);
 }
 
 LogicalResult ExportSystemC::exportSplitSystemC(ModuleOp module,
                                                 StringRef directory) {
+  // Collect all includes to emit them in every file.
+  SmallVector<Operation *> includes;
+  module->walk([&](mlir::emitc::IncludeOp op) { includes.push_back(op); });
+
   for (Operation &op : module.getRegion().front()) {
     if (auto symbolOp = dyn_cast<mlir::SymbolOpInterface>(op)) {
       // Create the output directory if needed.
@@ -95,7 +105,9 @@ LogicalResult ExportSystemC::exportSplitSystemC(ModuleOp module,
         return module.emitError(errorMessage);
 
       // Emit the content to the file.
-      if (failed(emitFile(symbolOp, filePath, output->os())))
+      SmallVector<Operation *> opsInThisFile(includes);
+      opsInThisFile.push_back(symbolOp);
+      if (failed(emitFile(opsInThisFile, filePath, output->os())))
         return symbolOp->emitError("failed to emit to file \"")
                << filePath << "\"";
 
@@ -124,7 +136,7 @@ void ExportSystemC::registerExportSystemCTranslation() {
       },
       [](mlir::DialectRegistry &registry) {
         registry.insert<hw::HWDialect, comb::CombDialect,
-                        systemc::SystemCDialect>();
+                        systemc::SystemCDialect, mlir::emitc::EmitCDialect>();
       });
 
   static mlir::TranslateFromMLIRRegistration toSplitSystemC(
@@ -134,6 +146,6 @@ void ExportSystemC::registerExportSystemCTranslation() {
       },
       [](mlir::DialectRegistry &registry) {
         registry.insert<hw::HWDialect, comb::CombDialect,
-                        systemc::SystemCDialect>();
+                        systemc::SystemCDialect, mlir::emitc::EmitCDialect>();
       });
 }

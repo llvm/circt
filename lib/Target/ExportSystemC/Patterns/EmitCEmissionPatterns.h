@@ -1,4 +1,4 @@
-//===- HWEmissionPatterns.h - HW Dialect Emission Patterns ----------------===//
+//===- EmitCEmissionPatterns.h - EmitC Dialect Emission Patterns ----------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,21 +6,24 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This exposes the emission patterns of the HW dialect for registration.
+// This exposes the emission patterns of the emitc dialect for registration.
 //
 //===----------------------------------------------------------------------===//
 
 // NOLINTNEXTLINE(llvm-header-guard)
-#ifndef CIRCT_TARGET_EXPORTSYSTEMC_PATTERNS_HWEMISSIONPATTERNS_H
-#define CIRCT_TARGET_EXPORTSYSTEMC_PATTERNS_HWEMISSIONPATTERNS_H
+#ifndef CIRCT_TARGET_EXPORTSYSTEMC_PATTERNS_EMITCEMISSIONPATTERNS_H
+#define CIRCT_TARGET_EXPORTSYSTEMC_PATTERNS_EMITCEMISSIONPATTERNS_H
 
 #include "../EmissionPatternSupport.h"
 
 namespace circt {
 namespace ExportSystemC {
-void populateHWEmitters(OpEmissionPatternSet &patterns, MLIRContext *context);
-void populateHWTypeEmitters(TypeEmissionPatternSet &patterns);
+
+/// Register EmitC operation emission patterns.
+void populateEmitCOpEmitters(OpEmissionPatternSet &patterns,
+                             MLIRContext *context);
+
 } // namespace ExportSystemC
 } // namespace circt
 
-#endif // CIRCT_TARGET_EXPORTSYSTEMC_PATTERNS_HWEMISSIONPATTERNS_H
+#endif // CIRCT_TARGET_EXPORTSYSTEMC_PATTERNS_EMITCEMISSIONPATTERNS_H

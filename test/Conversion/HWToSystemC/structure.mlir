@@ -1,5 +1,7 @@
 // RUN: circt-opt --convert-hw-to-systemc --verify-diagnostics %s | FileCheck %s
 
+// CHECK: emitc.include <"systemc">
+
 // CHECK-LABEL: systemc.module @emptyModule ()
 hw.module @emptyModule () -> () {}
 

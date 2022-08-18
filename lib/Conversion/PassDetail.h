@@ -39,6 +39,10 @@ namespace func {
 class FuncDialect;
 class FuncOp;
 } // namespace func
+
+namespace emitc {
+class EmitCDialect;
+} // namespace emitc
 } // namespace mlir
 
 namespace circt {

@@ -12,6 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+// NOLINTNEXTLINE(llvm-header-guard)
 #ifndef CIRCT_TARGET_EXPORTSYSTEMC_EMISSIONPATTERNSUPPORT_H
 #define CIRCT_TARGET_EXPORTSYSTEMC_EMISSIONPATTERNSUPPORT_H
 
