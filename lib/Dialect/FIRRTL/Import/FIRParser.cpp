@@ -55,9 +55,6 @@ namespace json = llvm::json;
 
 namespace {
 
-/// A set of Target strings.
-using TargetSet = StringSet<llvm::BumpPtrAllocator>;
-
 /// This class refers to immutable values and annotations maintained globally by
 /// the parser which can be referred to by any active parser, even those running
 /// in parallel.  This is shared by all active parsers.
@@ -81,12 +78,6 @@ struct SharedParserConstants {
   /// NOTE: Clients (other than the top level Circuit parser) should not mutate
   /// this.  Do not use `annotationMap[key]`, use `aM.lookup(key)` instead.
   llvm::StringMap<ArrayAttr> annotationMap;
-
-  /// A set of all targets discovered in the circuit.  This is used after both
-  /// Annotations and the FIRRTL circuit is parsed to check that nothing was
-  /// unapplied from the annotationMap.  This, like the annotationMap, should
-  /// not be mutated directly unless the client is the Circuit parser.
-  TargetSet targetSet;
 
   /// An empty array attribute.
   const ArrayAttr emptyArrayAttr;
@@ -243,46 +234,6 @@ struct FIRParser {
   ParseResult parseType(FIRRTLType &result, const Twine &message);
 
   ParseResult parseOptionalRUW(RUWAttr &result);
-
-  //===--------------------------------------------------------------------===//
-  // Annotation Utilities
-  //===--------------------------------------------------------------------===//
-
-  /// Convert the input "tokens" to a range of field IDs. Considering a FIRRTL
-  /// aggregate type, "{foo: UInt<1>, bar: UInt<1>}[2]", tokens "[0].foo" will
-  /// be converted to a field ID range of [2, 2]; tokens "[1]" will be converted
-  /// to [4, 6]. The generated field ID range will then be attached to the
-  /// annotation in a "circt.fieldID" field in order to indicate the applicable
-  /// fields of an annotation.
-  Optional<unsigned> getFieldIDFromTokens(ArrayAttr tokens, SMLoc loc,
-                                          Type type);
-
-  /// In the input "annotations", an annotation will have a "target" entry when
-  /// it is only applicable to part of what it is attached to. In this method,
-  /// we convert the tokens contained by the "target" entry to a range of field
-  /// IDs and return the converted annotations.
-  ArrayAttr convertSubAnnotations(ArrayRef<Attribute> annotations, SMLoc loc,
-                                  Type type);
-
-  /// Split the input "annotations" into two parts: (1) Annotations applicable
-  /// to all op results; (2) Annotations only applicable to one specific result.
-  /// The second kind of annotations are store densely in an ArrayAttr and can
-  /// be accessed using the result index.
-  std::pair<ArrayAttr, ArrayAttr>
-  splitAnnotations(ArrayRef<Attribute> annotations, SMLoc loc,
-                   ArrayRef<std::pair<StringAttr, Type>> ports);
-
-  /// Return the set of annotations for a given Target.
-  ArrayAttr getAnnotations(ArrayRef<Twine> targets, SMLoc loc,
-                           TargetSet &targetSet, Type type);
-
-  /// Return the set of annotations for a given Target. If the operation has
-  /// variadic results, such as MemOp and InstanceOp, this method should be used
-  /// to get annotations.
-  std::pair<ArrayAttr, ArrayAttr>
-  getSplitAnnotations(ArrayRef<Twine> targets, SMLoc loc,
-                      ArrayRef<std::pair<StringAttr, Type>> ports,
-                      TargetSet &targetSet);
 
 private:
   FIRParser(const FIRParser &) = delete;
@@ -807,269 +758,6 @@ ParseResult FIRParser::parseOptionalRUW(RUWAttr &result) {
   return success();
 }
 
-/// Convert the input "tokens" to a range of field IDs. Considering a FIRRTL
-/// aggregate type, "{foo: UInt<1>, bar: UInt<1>}[2]", tokens "[0].foo" will be
-/// converted to a field ID range of [2, 2]; tokens "[1]" will be converted to
-/// [4, 6]. The generated field ID range will then be attached to the annotation
-/// in a "circt.fieldID" field to indicate the applicable fields of an
-/// annotation.
-Optional<unsigned> FIRParser::getFieldIDFromTokens(ArrayAttr tokens, SMLoc loc,
-                                                   Type type) {
-  if (!type)
-    return None;
-  if (tokens.empty())
-    return 0;
-
-  auto currentType = type.cast<FIRRTLType>();
-  unsigned id = 0;
-
-  auto getMessage = [&](unsigned tokenIdx) {
-    // Construct a string for error emission.
-    SmallString<16> message("the " + std::to_string(tokenIdx) +
-                            "-th token of ");
-    for (auto token : tokens) {
-      if (auto intAttr = token.dyn_cast<IntegerAttr>()) {
-        message.push_back('[');
-        intAttr.getValue().toStringSigned(message);
-        message.push_back(']');
-      } else if (auto strAttr = token.dyn_cast<StringAttr>()) {
-        message.push_back('.');
-        message.append(strAttr.getValue());
-      }
-    }
-    return message;
-  };
-
-  unsigned tokenIdx = 0;
-  for (auto token : tokens) {
-    ++tokenIdx;
-    if (auto bundleType = currentType.dyn_cast<BundleType>()) {
-      auto subFieldAttr = token.dyn_cast<StringAttr>();
-      if (!subFieldAttr) {
-        emitError(loc, "expect a string for " + getMessage(tokenIdx));
-        return None;
-      }
-
-      // Token should point to valid sub-field.
-      auto index = bundleType.getElementIndex(subFieldAttr);
-      if (!index) {
-        emitError(loc, getMessage(tokenIdx) + " is not found in the bundle");
-        return None;
-      }
-
-      id += bundleType.getFieldID(*index);
-      currentType = bundleType.getElementType(*index);
-      continue;
-    }
-
-    if (auto vectorType = currentType.dyn_cast<FVectorType>()) {
-      auto subIndexAttr = token.dyn_cast<IntegerAttr>();
-      if (!subIndexAttr) {
-        emitError(loc, "expect an integer for " + getMessage(tokenIdx));
-        return None;
-      }
-
-      // Token should be a valid index of the vector.
-      auto subIndex = subIndexAttr.getValue().getZExtValue();
-      if (subIndex >= vectorType.getNumElements()) {
-        emitError(loc, getMessage(tokenIdx) + " is out of range in the vector");
-        return None;
-      }
-
-      id += vectorType.getFieldID(subIndex);
-      currentType = vectorType.getElementType();
-      continue;
-    }
-
-    emitError(loc, getMessage(tokenIdx) + " expects an aggregate type");
-    return None;
-  }
-
-  return id;
-}
-
-/// In the input "annotations", an annotation will have a "target" entry when it
-/// is only applicable to part of what it is attached to. In this method, we
-/// convert the tokens contained by the "target" entry to a range of field IDs
-/// and return the converted annotations.
-ArrayAttr FIRParser::convertSubAnnotations(ArrayRef<Attribute> annotations,
-                                           SMLoc loc, Type type = nullptr) {
-  // This stores the annotations applicable to all fields of the op result.
-  SmallVector<Attribute, 8> annotationVec;
-
-  for (auto a : annotations) {
-    // If the annotation does not contain a "target" entry, it is applicable to
-    // all fields of the op result.
-    auto dict = a.cast<DictionaryAttr>();
-    auto targetAttr = dict.get("target");
-    if (!targetAttr) {
-      annotationVec.push_back(a);
-      continue;
-    }
-
-    // Otherwise, the annotation is only applicable to part of the op result.
-    // Get a range of field IDs to indicate the applicable fields of the
-    // annotation.
-    auto fieldID =
-        getFieldIDFromTokens(targetAttr.cast<ArrayAttr>(), loc, type);
-    if (!fieldID)
-      continue;
-
-    // Remove the "target" entry from the annotation.
-    NamedAttrList modAttr;
-    for (auto attr : dict.getValue()) {
-      // Ignore the actual target annotation, but copy the rest of annotations.
-      if (attr.getName() == "target")
-        continue;
-      modAttr.push_back(attr);
-    }
-
-    // Add a "circt.fieldID" field with the fieldID.
-    modAttr.append("circt.fieldID",
-                   IntegerAttr::get(IntegerType::get(constants.context, 64,
-                                                     IntegerType::Signless),
-                                    *fieldID));
-
-    annotationVec.push_back(DictionaryAttr::get(constants.context, modAttr));
-  }
-
-  return ArrayAttr::get(constants.context, annotationVec);
-}
-
-/// Split the input "annotations" into two parts: (1) Annotations applicable to
-/// all op results; (2) Annotations only applicable to one specific result. The
-/// second kind of annotations are store densely in an ArrayAttr and can be
-/// accessed using the result index.
-std::pair<ArrayAttr, ArrayAttr>
-FIRParser::splitAnnotations(ArrayRef<Attribute> annotations, SMLoc loc,
-                            ArrayRef<std::pair<StringAttr, Type>> ports) {
-  // This stores the annotations applicable to all op ports.
-  SmallVector<Attribute, 8> annotationVec;
-  // This stores the mapping between port names and port-specific annotations.
-  llvm::StringMap<SmallVector<Attribute, 4>> portAnnotationMap;
-
-  for (auto a : annotations) {
-    // If the annotation does not contain a "target" entry, it is applicable to
-    // all op ports.
-    auto dict = a.cast<DictionaryAttr>();
-    auto targetAttr = dict.get("target");
-    if (!targetAttr) {
-      annotationVec.push_back(a);
-      continue;
-    }
-
-    // The first token should always indicate the port name.
-    auto targetTokens = targetAttr.cast<ArrayAttr>().getValue();
-    auto portName = targetTokens[0].dyn_cast<StringAttr>();
-    if (!portName) {
-      emitError(loc, "the first token is invalid");
-      continue;
-    }
-
-    // If there's more than one tokens, the remaining tokens should be added
-    // into the annotation as a "target" field.
-    NamedAttrList modAttr;
-    for (auto attr : dict.getValue()) {
-      if (attr.getName().str() == "target") {
-        if (targetTokens.size() > 1) {
-          auto newTargetAttr =
-              ArrayAttr::get(constants.context, targetTokens.drop_front());
-          modAttr.push_back(NamedAttribute(attr.getName(), newTargetAttr));
-        }
-        continue;
-      }
-      modAttr.push_back(attr);
-    }
-
-    portAnnotationMap[portName.getValue()].push_back(
-        DictionaryAttr::get(constants.context, modAttr));
-  }
-
-  SmallVector<Attribute, 16> portAnnotationVec;
-  for (auto port : ports) {
-    auto portAnnotation = portAnnotationMap.lookup(port.first.getValue());
-    portAnnotationVec.push_back(
-        convertSubAnnotations(portAnnotation, loc, port.second));
-  }
-
-  return {ArrayAttr::get(constants.context, annotationVec),
-          ArrayAttr::get(constants.context, portAnnotationVec)};
-}
-
-/// Return the set of annotations for a given Target.
-ArrayAttr FIRParser::getAnnotations(ArrayRef<Twine> targets, SMLoc loc,
-                                    TargetSet &targetSet, Type type = nullptr) {
-  // Early exit if no annotations exist.  This avoids the cost of constructing
-  // strings representing targets if no annotation can possibly exist.
-  if (constants.annotationMap.empty())
-    return constants.emptyArrayAttr;
-
-  // Stack the annotations for all targets.
-  SmallVector<Attribute, 4> annotations;
-  for (auto target : targets) {
-    // Flatten the input twine into a SmallVector for lookup.
-    SmallString<64> targetStr;
-    target.toVector(targetStr);
-
-    // Record that we've seen this target.
-    targetSet.insert(targetStr);
-
-    // Note: We are not allowed to mutate annotationMap here.  Make sure to only
-    // use non-mutating methods like `lookup`, not mutating ones like `am[key]`.
-    if (auto result = constants.annotationMap.lookup(targetStr)) {
-      if (!result.empty())
-        annotations.append(result.begin(), result.end());
-    }
-  }
-
-  if (!annotations.empty())
-    return convertSubAnnotations(annotations, loc, type);
-  return constants.emptyArrayAttr;
-}
-
-/// Return the set of annotations for a given Target. If the operation has
-/// variadic results, such as MemOp and InstanceOp, this method should be used
-/// to get annotations.
-std::pair<ArrayAttr, ArrayAttr>
-FIRParser::getSplitAnnotations(ArrayRef<Twine> targets, SMLoc loc,
-                               ArrayRef<std::pair<StringAttr, Type>> ports,
-                               TargetSet &targetSet) {
-  // Early exit if no annotations exist.  This avoids the cost of constructing
-  // strings representing targets if no annotation can possibly exist.
-  if (constants.annotationMap.empty()) {
-    SmallVector<Attribute, 4> portAnnotations(
-        ports.size(), ArrayAttr::get(constants.context, {}));
-    return {constants.emptyArrayAttr,
-            ArrayAttr::get(constants.context, portAnnotations)};
-  }
-
-  // Stack the annotations for all targets.
-  SmallVector<Attribute, 4> annotations;
-  for (auto target : targets) {
-    // Flatten the input twine into a SmallVector for lookup.
-    SmallString<64> targetStr;
-    target.toVector(targetStr);
-
-    // Record that we've seen this target.
-    targetSet.insert(targetStr);
-
-    // Note: We are not allowed to mutate annotationMap here.  Make sure to only
-    // use non-mutating methods like `lookup`, not mutating ones like `am[key]`.
-    if (auto result = constants.annotationMap.lookup(targetStr)) {
-      if (!result.empty())
-        annotations.append(result.begin(), result.end());
-    }
-  }
-
-  if (!annotations.empty())
-    return splitAnnotations(annotations, loc, ports);
-
-  SmallVector<Attribute, 4> portAnnotations(
-      ports.size(), ArrayAttr::get(constants.context, {}));
-  return {constants.emptyArrayAttr,
-          ArrayAttr::get(constants.context, portAnnotations)};
-}
-
 //===----------------------------------------------------------------------===//
 // FIRModuleContext
 //===----------------------------------------------------------------------===//
@@ -1196,11 +884,6 @@ struct FIRModuleContext : public FIRParser {
     std::vector<ModuleSymbolTableEntry *> scopedDecls;
     std::vector<std::pair<Value, unsigned>> scopedSubaccesses;
   };
-
-  /// A set of all Annotation Targets found in this module.  This is used to
-  /// facilitate checking if any Annotations exist which do not match to
-  /// Targets.
-  TargetSet targetsInModule;
 
 private:
   /// This symbol table holds the names of ports, wires, and other local decls.
@@ -1405,36 +1088,6 @@ private:
 };
 } // end anonymous namespace
 
-/// Checks if the annotations imply the requirement for a symbol.
-/// DontTouch and circt.nonlocal annotations require a symbol.
-/// Also remove the DontTouch annotation, if it exists.
-/// But ignore DontTouch that will apply only to a subfield.
-static bool needsSymbol(ArrayAttr &annotations) {
-  SmallVector<Attribute> filteredAnnos;
-  bool needsSymbol = false;
-  // Only check for DontTouch annotation that applies to the entire op.
-  // Then drop it and return true.
-  // We cannot use AnnotationSet::removeDontTouch, because it does not ignore
-  // Subfield annotations.
-  for (Attribute attr : annotations) {
-    // Ensure it is a valid annotation.
-    if (!attr.isa<DictionaryAttr>())
-      continue;
-    Annotation anno(attr);
-    // Check if it is a DontTouch annotation that applies to all subfields in
-    // case of a bundle. getFieldID returns 0 if it is not a SubAnno.
-    if (anno.getFieldID() == 0 && anno.isClass(dontTouchAnnoClass)) {
-      needsSymbol = true;
-      // Ignore the annotation.
-      continue;
-    }
-    filteredAnnos.push_back(attr);
-  }
-  if (needsSymbol)
-    annotations = ArrayAttr::get(annotations.getContext(), filteredAnnos);
-  return needsSymbol;
-}
-
 namespace {
 /// This class implements logic and state for parsing statements, suites, and
 /// similar module body constructs.
@@ -1517,17 +1170,6 @@ private:
   ParseResult parseNode();
   ParseResult parseWire();
   ParseResult parseRegister(unsigned regIndent);
-
-  /// Remove the DontTouch annotation and return a valid symbol name if the
-  /// annotation exists. Ignore DontTouch that will apply only to a subfield.
-  StringAttr getSymbolIfRequired(ArrayAttr &annotations, StringRef id) {
-    bool hasDontTouch = needsSymbol(annotations);
-    if (hasDontTouch)
-      return StringAttr::get(annotations.getContext(),
-                             modNameSpace.newName(id));
-
-    return {};
-  }
 
   // The builder to build into.
   ImplicitLocOpBuilder builder;
@@ -2368,9 +2010,6 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
   auto resultType = memVType.getElementType();
 
   ArrayAttr annotations = getConstants().emptyArrayAttr;
-  annotations = getAnnotations(getModuleTarget() + ">" + id, startLoc,
-                               moduleContext.targetsInModule, resultType);
-
   locationProcessor.setLoc(startLoc);
 
   // Create the memory port at the location of the cmemory.
@@ -2721,29 +2360,13 @@ ParseResult FIRStmtParser::parseInstance() {
     resultNamesAndTypes.push_back({port.name, port.type});
   }
 
-  InstanceOp result;
-  // Combine annotations that are ReferenceTargets and InstanceTargets.  By
-  // example, this will lookup all annotations with either of the following
-  // formats:
-  //     ~Foo|Foo>bar
-  //     ~Foo|Foo/bar:Bar
-  auto annotations = getSplitAnnotations(
-      {getModuleTarget() + ">" + id,
-       getModuleTarget() + "/" + id + ":" + moduleName},
-      startTok.getLoc(), resultNamesAndTypes, moduleContext.targetsInModule);
+  auto annotations = getConstants().emptyArrayAttr;
+  SmallVector<Attribute, 4> portAnnotations(modulePorts.size(), annotations);
 
-  auto sym = getSymbolIfRequired(annotations.first, id);
-  // Also check for port annotations that may require adding a symbol
-  if (!sym)
-    for (auto portAnno : annotations.second.getAsRange<ArrayAttr>()) {
-      sym = getSymbolIfRequired(portAnno, id);
-      if (sym)
-        break;
-    }
-
-  result = builder.create<InstanceOp>(
+  StringAttr sym = {};
+  auto result = builder.create<InstanceOp>(
       referencedModule, id, NameKindEnum::InterestingName,
-      annotations.first.getValue(), annotations.second.getValue(), false, sym);
+      annotations.getValue(), portAnnotations, false, sym);
 
   // Since we are implicitly unbundling the instance results, we need to keep
   // track of the mapping from bundle fields to results in the unbundledValues
@@ -2785,10 +2408,7 @@ ParseResult FIRStmtParser::parseCombMem() {
     return emitError("cmem requires vector type");
 
   auto annotations = getConstants().emptyArrayAttr;
-  annotations = getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
-                               moduleContext.targetsInModule, type);
-
-  auto sym = getSymbolIfRequired(annotations, id);
+  StringAttr sym = {};
   auto result = builder.create<CombMemOp>(
       vectorType.getElementType(), vectorType.getNumElements(), id,
       NameKindEnum::InterestingName, annotations, sym);
@@ -2823,10 +2443,7 @@ ParseResult FIRStmtParser::parseSeqMem() {
     return emitError("smem requires vector type");
 
   auto annotations = getConstants().emptyArrayAttr;
-  annotations = getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
-                               moduleContext.targetsInModule, type);
-  auto sym = getSymbolIfRequired(annotations, id);
-
+  StringAttr sym = {};
   auto result = builder.create<SeqMemOp>(
       vectorType.getElementType(), vectorType.getNumElements(), ruw, id,
       NameKindEnum::InterestingName, annotations, sym);
@@ -2946,34 +2563,23 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
                              rhs->first.getValue());
                        });
 
+  auto annotations = getConstants().emptyArrayAttr;
   SmallVector<Attribute, 4> resultNames;
   SmallVector<Type, 4> resultTypes;
+  SmallVector<Attribute, 4> resultAnnotations;
   for (auto p : ports) {
     resultNames.push_back(p.first);
     resultTypes.push_back(p.second);
+    resultAnnotations.push_back(annotations);
   }
 
   locationProcessor.setLoc(startTok.getLoc());
 
-  MemOp result;
-  auto annotations =
-      getSplitAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
-                          ports, moduleContext.targetsInModule);
-
-  auto sym = getSymbolIfRequired(annotations.first, id);
-  // Port annotations are an ArrayAttr of ArrayAttrs, so iterate over all the
-  // annotations for each port, and check if any of the port needs a symbol.
-  if (!sym)
-    for (auto portAnno : annotations.second.getAsRange<ArrayAttr>()) {
-      sym = getSymbolIfRequired(portAnno, id);
-      if (sym)
-        break;
-    }
-  result = builder.create<MemOp>(
+  auto result = builder.create<MemOp>(
       resultTypes, readLatency, writeLatency, depth, ruw,
       builder.getArrayAttr(resultNames), id, NameKindEnum::InterestingName,
-      annotations.first, annotations.second,
-      sym ? InnerSymAttr::get(sym) : InnerSymAttr(), IntegerAttr());
+      annotations, builder.getArrayAttr(resultAnnotations), InnerSymAttr(),
+      IntegerAttr());
 
   UnbundledValueEntry unbundledValueEntry;
   unbundledValueEntry.reserve(result.getNumResults());
@@ -3025,10 +2631,7 @@ ParseResult FIRStmtParser::parseNode() {
   }
 
   auto annotations = getConstants().emptyArrayAttr;
-  annotations = getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
-                               moduleContext.targetsInModule, initializerType);
-
-  auto sym = getSymbolIfRequired(annotations, id);
+  StringAttr sym = {};
   auto result =
       builder.create<NodeOp>(initializer.getType(), initializer, id,
                              NameKindEnum::InterestingName, annotations, sym);
@@ -3054,10 +2657,8 @@ ParseResult FIRStmtParser::parseWire() {
   locationProcessor.setLoc(startTok.getLoc());
 
   auto annotations = getConstants().emptyArrayAttr;
-  annotations = getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
-                               moduleContext.targetsInModule, type);
+  StringAttr sym = {};
 
-  auto sym = getSymbolIfRequired(annotations, id);
   auto result = builder.create<WireOp>(
       type, id, NameKindEnum::InterestingName, annotations,
       sym ? InnerSymAttr::get(sym) : InnerSymAttr());
@@ -3147,11 +2748,8 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
   locationProcessor.setLoc(startTok.getLoc());
 
   ArrayAttr annotations = getConstants().emptyArrayAttr;
-  annotations = getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
-                               moduleContext.targetsInModule, type);
-
   Value result;
-  auto sym = getSymbolIfRequired(annotations, id);
+  StringAttr sym = {};
   if (resetSignal)
     result = builder.create<RegResetOp>(type, clock, resetSignal, resetValue,
                                         id, NameKindEnum::InterestingName,
@@ -3184,20 +2782,19 @@ private:
   /// them to a vector of attributes.
   ParseResult importAnnotationsRaw(SMLoc loc, StringRef circuitTarget,
                                    StringRef annotationsStr,
-                                   SmallVector<Attribute> &attrs);
+                                   SmallVectorImpl<Attribute> &attrs);
   /// Generate OMIR-derived annotations.  Report errors if the OMIR is malformed
   /// in any way.  This also performs scattering of the OMIR to introduce
   /// tracking annotations in the circuit.
   ParseResult importOMIR(CircuitOp circuit, SMLoc loc, StringRef circuitTarget,
-                         StringRef omirStr, size_t &nlaNumber);
+                         StringRef omirStr, SmallVectorImpl<Attribute> &attrs);
 
   ParseResult parseModule(CircuitOp circuit, StringRef circuitTarget,
                           unsigned indent);
 
   ParseResult parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
                             SmallVectorImpl<SMLoc> &resultPortLocs,
-                            Location defaultLoc, StringRef moduleTarget,
-                            unsigned indent);
+                            Location defaultLoc, unsigned indent);
 
   struct DeferredModuleToParse {
     FModuleOp moduleOp;
@@ -3205,7 +2802,6 @@ private:
     FIRLexerCursor lexerCursor;
     std::string moduleTarget;
     unsigned indent;
-    TargetSet targetSet;
   };
 
   ParseResult parseModuleBody(DeferredModuleToParse &deferredModule);
@@ -3218,7 +2814,7 @@ private:
 ParseResult
 FIRCircuitParser::importAnnotationsRaw(SMLoc loc, StringRef circuitTarget,
                                        StringRef annotationsStr,
-                                       SmallVector<Attribute> &attrs) {
+                                       SmallVectorImpl<Attribute> &attrs) {
 
   auto annotations = json::parse(annotationsStr);
   if (auto err = annotations.takeError()) {
@@ -3248,7 +2844,7 @@ FIRCircuitParser::importAnnotationsRaw(SMLoc loc, StringRef circuitTarget,
 ParseResult FIRCircuitParser::importOMIR(CircuitOp circuit, SMLoc loc,
                                          StringRef circuitTarget,
                                          StringRef annotationsStr,
-                                         size_t &nlaNumber) {
+                                         SmallVectorImpl<Attribute> &annos) {
 
   auto annotations = json::parse(annotationsStr);
   if (auto err = annotations.takeError()) {
@@ -3260,8 +2856,7 @@ ParseResult FIRCircuitParser::importOMIR(CircuitOp circuit, SMLoc loc,
   }
 
   json::Path::Root root;
-  llvm::StringMap<ArrayAttr> thisAnnotationMap;
-  if (!fromOMIRJSON(annotations.get(), circuitTarget, thisAnnotationMap, root,
+  if (!fromOMIRJSON(annotations.get(), circuitTarget, annos, root,
                     circuit.getContext())) {
     auto diag = emitError(loc, "Invalid/unsupported OMIR format");
     std::string jsonErrorMessage =
@@ -3270,21 +2865,6 @@ ParseResult FIRCircuitParser::importOMIR(CircuitOp circuit, SMLoc loc,
     root.printErrorContext(annotations.get(), s);
     diag.attachNote() << jsonErrorMessage;
     return failure();
-  }
-
-  // Merge the attributes we just parsed into the global set we're accumulating.
-  llvm::StringMap<ArrayAttr> &resultAnnoMap = getConstants().annotationMap;
-  for (auto &thisEntry : thisAnnotationMap) {
-    auto &existing = resultAnnoMap[thisEntry.getKey()];
-    if (!existing) {
-      existing = thisEntry.getValue();
-      continue;
-    }
-
-    SmallVector<Attribute> annotationVec(existing.begin(), existing.end());
-    annotationVec.append(thisEntry.getValue().begin(),
-                         thisEntry.getValue().end());
-    existing = ArrayAttr::get(getContext(), annotationVec);
   }
 
   return success();
@@ -3300,8 +2880,7 @@ ParseResult FIRCircuitParser::importOMIR(CircuitOp circuit, SMLoc loc,
 ParseResult
 FIRCircuitParser::parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
                                 SmallVectorImpl<SMLoc> &resultPortLocs,
-                                Location defaultLoc, StringRef moduleTarget,
-                                unsigned indent) {
+                                Location defaultLoc, unsigned indent) {
   // Parse any ports.
   while (getToken().isAny(FIRToken::kw_input, FIRToken::kw_output) &&
          // Must be nested under the module.
@@ -3338,17 +2917,9 @@ FIRCircuitParser::parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
     // compile time creating too many unique locations.
     info.setDefaultLoc(defaultLoc);
 
-    AnnotationSet annotations(getContext());
     StringAttr innerSym = {};
-    auto annos =
-        getAnnotations(moduleTarget + ">" + name.getValue(), info.getFIRLoc(),
-                       getConstants().targetSet, type);
-    bool addSym = needsSymbol(annos);
-    if (addSym)
-      innerSym = StringAttr::get(getContext(), name.getValue());
-    annotations = AnnotationSet(annos);
-    resultPorts.push_back({name, type, direction::get(isOutput), innerSym,
-                           info.getLoc(), annotations});
+    resultPorts.push_back(
+        {name, type, direction::get(isOutput), innerSym, info.getLoc()});
     resultPortLocs.push_back(info.getFIRLoc());
   }
 
@@ -3381,12 +2952,10 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
 
   auto moduleTarget = (circuitTarget + "|" + name.getValue()).str();
   ArrayAttr annotations = getConstants().emptyArrayAttr;
-  annotations = getAnnotations({moduleTarget}, info.getFIRLoc(),
-                               getConstants().targetSet);
 
   if (parseToken(FIRToken::colon, "expected ':' in module definition") ||
       info.parseOptionalInfo() ||
-      parsePortList(portList, portLocs, info.getLoc(), moduleTarget, indent))
+      parsePortList(portList, portLocs, info.getLoc(), indent))
     return failure();
 
   auto builder = circuit.getBodyBuilder();
@@ -3417,7 +2986,7 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
     // allows us to handle forward references correctly.
     deferredModules.emplace_back(
         DeferredModuleToParse{moduleOp, portLocs, getLexer().getCursor(),
-                              std::move(moduleTarget), indent, TargetSet()});
+                              std::move(moduleTarget), indent});
 
     // We're going to defer parsing this module, so just skip tokens until we
     // get to the next module or the end of the file.
@@ -3576,7 +3145,6 @@ FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
       return result;
   }
 
-  deferredModule.targetSet = std::move(moduleContext.targetsInModule);
   return success();
 }
 
@@ -3624,12 +3192,10 @@ ParseResult FIRCircuitParser::parseCircuit(
   OpBuilder b(mlirModule.getBodyRegion());
   auto circuit = b.create<CircuitOp>(info.getLoc(), name);
 
-  std::string circuitTarget = "~" + name.getValue().str();
-  size_t nlaNumber = 0;
+  std::string circuitTarget = ("~" + name.getValue()).str();
 
   // A timer to get execution time of annotation parsing.
   auto parseAnnotationTimer = ts.nest("Parse annotations");
-  ArrayAttr annotations;
 
   // Deal with any inline annotations, if they exist.  These are processed
   // first to place any annotations from an annotation file *after* the inline
@@ -3647,9 +3213,6 @@ ParseResult FIRCircuitParser::parseCircuit(
                              annotationsBuf->getBuffer(), annos))
       return failure();
 
-  if (!annos.empty())
-    getConstants().annotationMap[rawAnnotations] = b.getArrayAttr(annos);
-
   parseAnnotationTimer.stop();
   auto parseOMIRTimer = ts.nest("Parse OMIR");
 
@@ -3657,23 +3220,15 @@ ParseResult FIRCircuitParser::parseCircuit(
   // "freechips.rocketchip.objectmodel.OMNode"
   for (auto *omirBuf : omirBufs)
     if (importOMIR(circuit, info.getFIRLoc(), circuitTarget,
-                   omirBuf->getBuffer(), nlaNumber))
+                   omirBuf->getBuffer(), annos))
       return failure();
 
   parseOMIRTimer.stop();
 
-  // Get annotations associated with this circuit. These are either:
-  //   1. Annotations with no target (which we use "~" to identify)
-  //   2. Annotations targeting the circuit, e.g., "~Foo"
-  annotations = getAnnotations({"~", circuitTarget}, info.getFIRLoc(),
-                               getConstants().targetSet);
-  circuit->setAttr("annotations", annotations);
   // Get annotations that are supposed to be specially handled by the
   // LowerAnnotations pass.
-  if (getConstants().annotationMap.count(rawAnnotations)) {
-    auto extraAnnos = getConstants().annotationMap.lookup(rawAnnotations);
-    circuit->setAttr(rawAnnotations, extraAnnos);
-  }
+  if (!annos.empty())
+    circuit->setAttr(rawAnnotations, b.getArrayAttr(annos));
 
   // A timer to get execution time of module parsing.
   auto parseTimer = ts.nest("Parse modules");
@@ -3730,30 +3285,6 @@ DoneParsing:
         return success();
       });
   if (failed(anyFailed))
-    return failure();
-
-  // Mutate the global targetSet by taking the union of it and all targetSets
-  // that were built up when modules were parsed.
-  for (DeferredModuleToParse &deferredModule : deferredModules)
-    getConstants().targetSet.insert(deferredModule.targetSet.begin(),
-                                    deferredModule.targetSet.end());
-
-  // Error if any Annotations were not applied to locations in the IR.
-  bool foundUnappliedAnnotations = false;
-  for (auto &entry : getConstants().annotationMap) {
-    if (getConstants().targetSet.contains(entry.getKey()))
-      continue;
-
-    if (entry.getKey() == rawAnnotations)
-      continue;
-
-    foundUnappliedAnnotations = true;
-    mlir::emitError(circuit.getLoc())
-        << "unapplied annotations with target '" << entry.getKey()
-        << "' and payload '" << entry.getValue() << "'\n";
-  }
-
-  if (foundUnappliedAnnotations)
     return failure();
 
   auto main = circuit.getMainModule();
