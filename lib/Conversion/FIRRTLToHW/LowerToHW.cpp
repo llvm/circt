@@ -1064,8 +1064,7 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
     newModule.setCommentAttr(comment);
 
   // Pass along the number of random initialization bits needed for this module.
-  if (auto randomWidth =
-          oldModule->getAttrOfType<IntegerAttr>("firrtl.random_init_width"))
+  if (auto randomWidth = oldModule->getAttr("firrtl.random_init_width"))
     newModule->setAttr("firrtl.random_init_width", randomWidth);
 
   // If the circuit has an entry point, set all other modules private.
@@ -2604,6 +2603,8 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
                                            op.getNameAttr(), symName);
 
   // Pass along the start and end random initialization bits for this register.
+  if (auto randomRegister = op->getAttr("firrtl.random_init_register"))
+    reg->setAttr("firrtl.random_init_register", randomRegister);
   if (auto randomStart = op->getAttr("firrtl.random_init_start"))
     reg->setAttr("firrtl.random_init_start", randomStart);
   if (auto randomEnd = op->getAttr("firrtl.random_init_end"))
@@ -2644,6 +2645,8 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
                                     resetSignal, resetValue, symName, isAsync);
 
   // Pass along the start and end random initialization bits for this register.
+  if (auto randomRegister = op->getAttr("firrtl.random_init_register"))
+    reg->setAttr("firrtl.random_init_register", randomRegister);
   if (auto randomStart = op->getAttr("firrtl.random_init_start"))
     reg->setAttr("firrtl.random_init_start", randomStart);
   if (auto randomEnd = op->getAttr("firrtl.random_init_end"))

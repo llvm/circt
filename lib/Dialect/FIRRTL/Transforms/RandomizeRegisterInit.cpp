@@ -17,6 +17,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "mlir/IR/Attributes.h"
 #include "mlir/IR/Builders.h"
 #include "llvm/Support/Parallel.h"
 
@@ -41,17 +42,15 @@ std::unique_ptr<mlir::Pass> circt::firrtl::createRandomizeRegisterInitPass() {
 /// each register should consume. The goal is for registers to always read the
 /// same random bits for the same seed, regardless of optimizations that might
 /// remove registers.
-static void createRandomizationAttributes(FModuleOp mod, FModuleOp dut,
-                                          InstanceGraph &instanceGraph) {
+static void createRandomizationAttributes(FModuleOp mod) {
   OpBuilder builder(mod);
 
-  // If there is a DUT, and this module is not it or a child of it, return
-  // early.
-  if (dut && mod != dut && !instanceGraph.isAncestor(mod, dut))
-    return;
+  // Set a maximum width for any single register, based on Verilog 1364-2005.
+  constexpr uint64_t maxRegisterWidth = 65536;
 
   // Walk all registers.
-  uint64_t width = 0;
+  uint64_t currentRegister = 0;
+  SmallDenseMap<uint64_t, uint64_t> widths;
   auto ui64Type = builder.getIntegerType(64, false);
   mod.walk([&](Operation *op) {
     if (!isa<RegOp, RegResetOp>(op))
@@ -63,37 +62,43 @@ static void createRandomizationAttributes(FModuleOp mod, FModuleOp dut,
     Optional<int64_t> regWidth = getBitWidth(regType);
     assert(regWidth.has_value() && "register must have a valid FIRRTL width");
 
-    auto start = builder.getIntegerAttr(ui64Type, width);
-    auto end = builder.getIntegerAttr(ui64Type, width + regWidth.value() - 1);
+    auto currentWidth = widths[currentRegister];
+
+    // If the current register width is non-zero, and the current width plus the
+    // size of the next register exceeds the limit, spill over to a new
+    // register. Note that if a single register exceeds the limit, this will
+    // still happily emit a single random initialization register that also
+    // exceeds the limit.
+    if (currentWidth > 0 &&
+        currentWidth + regWidth.value() > maxRegisterWidth) {
+      ++currentRegister;
+      currentWidth = widths[currentRegister];
+    }
+
+    auto start = builder.getIntegerAttr(ui64Type, currentWidth);
+    auto end =
+        builder.getIntegerAttr(ui64Type, currentWidth + regWidth.value() - 1);
+    op->setAttr("firrtl.random_init_register",
+                builder.getStringAttr(Twine(currentRegister)));
     op->setAttr("firrtl.random_init_start", start);
     op->setAttr("firrtl.random_init_end", end);
 
-    width += regWidth.value();
+    widths[currentRegister] += regWidth.value();
   });
 
   // Remember the width of the random vector in the module's attributes so
   // LowerSeqToSV can grab it to create the appropriate random register.
-  if (width > 0)
+  if (!widths.empty()) {
+    SmallVector<NamedAttribute> widthDictionary;
+    for (auto [registerIndex, registerWidth] : widths)
+      widthDictionary.emplace_back(
+          builder.getStringAttr(Twine(registerIndex)),
+          builder.getIntegerAttr(ui64Type, registerWidth));
     mod->setAttr("firrtl.random_init_width",
-                 builder.getIntegerAttr(ui64Type, width));
+                 builder.getDictionaryAttr(widthDictionary));
+  }
 }
 
 void RandomizeRegisterInitPass::runOnOperation() {
-  CircuitOp circuit = getOperation();
-  auto &instanceGraph = getAnalysis<InstanceGraph>();
-
-  // Look for a DUT annotation.
-  FModuleOp dut;
-  for (auto mod : circuit.getOps<FModuleOp>()) {
-    if (AnnotationSet(mod).hasAnnotation(dutAnnoClass)) {
-      dut = mod;
-      break;
-    }
-  }
-
-  // Process each module in parallel.
-  auto modules = SmallVector<FModuleOp>(circuit.getOps<FModuleOp>());
-  llvm::parallelForEach(modules, [&](FModuleOp mod) {
-    createRandomizationAttributes(mod, dut, instanceGraph);
-  });
+  createRandomizationAttributes(getOperation());
 }

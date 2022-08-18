@@ -6,7 +6,11 @@ circuit Foo:
   module Foo:
     input clock: Clock
     input d: UInt<33>
+    input d0: UInt<60000>
+    input d1: UInt<120000>
     output q: UInt<33>
+    output q0: UInt<60000>
+    output q1: UInt<120000>
 
     ; ALL:   reg [127:0] _RANDOM;
     ; ALL:   _RANDOM = {`RANDOM,`RANDOM,`RANDOM,`RANDOM};
@@ -36,3 +40,40 @@ circuit Foo:
     s <= d
 
     q <= s
+
+    inst i0 of TwoLargeRegisters
+    i0.clock <= clock
+    i0.d <= d0
+    q0 <= i0.q
+
+    inst i1 of OneReallyLargeRegister
+    i1.clock <= clock
+    i1.d <= d1
+    q1 <= i1.q
+
+  module TwoLargeRegisters:
+    input clock: Clock
+    input d: UInt<60000>
+    output q: UInt<60000>
+
+    ; ALL: reg [59999:0] _RANDOM;
+    ; ALL: reg [59999:0] _RANDOM_0;
+
+    reg r0: UInt<60000>, clock
+    reg r1: UInt<60000>, clock
+
+    r0 <= d
+    r1 <= r0
+    q <= r1
+
+  module OneReallyLargeRegister:
+    input clock: Clock
+    input d: UInt<120000>
+    output q: UInt<120000>
+
+    ; ALL: reg [119999:0] _RANDOM;
+
+    reg r: UInt<120000>, clock
+
+    r <= d
+    q <= r

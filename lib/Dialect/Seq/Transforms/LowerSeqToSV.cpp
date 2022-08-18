@@ -123,7 +123,7 @@ private:
   /// This is a map from block to a pair of a random value and its unused
   /// bits. It is used to reduce the number of random value.
   std::pair<Value, uint64_t> randomValueAndRemain;
-  sv::RegOp presetRandomValue;
+  SmallDenseMap<StringAttr, sv::RegOp> presetRandomValues;
 };
 } // namespace
 
@@ -340,6 +340,7 @@ static void emitRandomInit(
 
 bool FirRegLower::isInitialisePreset(sv::RegOp reg) {
   return module->hasAttr("firrtl.random_init_width") &&
+         reg->hasAttr("firrtl.random_init_register") &&
          reg->hasAttr("firrtl.random_init_start") &&
          reg->hasAttr("firrtl.random_init_end");
 }
@@ -348,48 +349,58 @@ void FirRegLower::initialisePreset(OpBuilder &regBuilder,
                                    OpBuilder &initBuilder, sv::RegOp reg) {
   // Extract the required random initialisation width and compute the number of
   // `RANDOM calls required to fill it up, as well as the final register width.
-  auto randomInitWidthAttr =
-      module->getAttrOfType<IntegerAttr>("firrtl.random_init_width");
-  assert(randomInitWidthAttr &&
+  auto randomInitWidthDict =
+      module->getAttrOfType<DictionaryAttr>("firrtl.random_init_width");
+  assert(randomInitWidthDict &&
          "firrtl.random_init_width required for preset initialisation");
 
-  uint64_t randomInitWidth = randomInitWidthAttr.getUInt();
-  assert(randomInitWidth > 0 &&
-         "random initialization width should be non-zero");
-  uint64_t numRandomSources = llvm::divideCeil(randomInitWidth, randomWidth);
-  uint64_t randomRegWidth = randomWidth * numRandomSources;
+  auto randomRegister =
+      reg->getAttrOfType<StringAttr>("firrtl.random_init_register");
+  assert(randomRegister &&
+         "firrtl.random_init_register required for preset initialisation");
 
-  // Only create the random register once.
-  if (presetRandomValue == nullptr) {
-    // Declare the random register.
-    auto randReg = regBuilder.create<sv::RegOp>(
-        reg.getLoc(), regBuilder.getIntegerType(randomRegWidth),
-        /*name=*/regBuilder.getStringAttr("_RANDOM"),
-        /*inner_sym=*/
-        regBuilder.getStringAttr(ns.newName(Twine("_RANDOM"))));
+  // Only create the random register(s) once.
+  if (presetRandomValues.empty()) {
+    for (NamedAttribute registerAndWidth : randomInitWidthDict.getValue()) {
+      auto randomInitWidth =
+          registerAndWidth.getValue().cast<IntegerAttr>().getUInt();
+      assert(randomInitWidth > 0 &&
+             "random initialization width should be non-zero");
+      uint64_t numRandomSources =
+          llvm::divideCeil(randomInitWidth, randomWidth);
+      uint64_t randomRegWidth = randomWidth * numRandomSources;
 
-    presetRandomValue = randReg;
+      // Declare the random register.
+      auto randReg = regBuilder.create<sv::RegOp>(
+          reg.getLoc(), regBuilder.getIntegerType(randomRegWidth),
+          /*name=*/regBuilder.getStringAttr("_RANDOM"),
+          /*inner_sym=*/
+          regBuilder.getStringAttr(ns.newName(Twine("_RANDOM"))));
 
-    SmallString<32> randomRegAssign("{{0}} = {");
+      presetRandomValues[registerAndWidth.getName()] = randReg;
 
-    // Fill the random register by concatenating calls to `RANDOM in a verbatim
-    // string.
-    for (uint64_t i = 0; i < numRandomSources; ++i) {
-      randomRegAssign.append("`RANDOM");
-      if (i < numRandomSources - 1)
-        randomRegAssign.append(",");
-      // Add a line break when line length gets close to 1000 characters.
-      if (i > 0 && i % 125 == 0)
-        randomRegAssign.append("\n");
+      SmallString<32> randomRegAssign("{{0}} = {");
+
+      // Fill the random register by concatenating calls to `RANDOM in a
+      // verbatim string.
+      for (uint64_t i = 0; i < numRandomSources; ++i) {
+        randomRegAssign.append("`RANDOM");
+        if (i < numRandomSources - 1)
+          randomRegAssign.append(",");
+        // Add a line break when line length gets close to 1000 characters.
+        if (i > 0 && i % 125 == 0)
+          randomRegAssign.append("\n");
+      }
+
+      randomRegAssign.append("};");
+
+      // Assign the concatenated calls to the declared register.
+      initBuilder.create<sv::VerbatimOp>(
+          reg.getLoc(), initBuilder.getStringAttr(randomRegAssign),
+          ValueRange{},
+          initBuilder.getArrayAttr({hw::InnerRefAttr::get(
+              module.getNameAttr(), randReg.getInnerSymAttr())}));
     }
-
-    randomRegAssign.append("};");
-
-    // Assign the concatenated calls to the declared register.
-    initBuilder.create<sv::VerbatimOp>(
-        reg.getLoc(), initBuilder.getStringAttr(randomRegAssign), ValueRange{},
-        initBuilder.getArrayAttr({hw::InnerRefAttr::get(
-            module.getNameAttr(), randReg.getInnerSymAttr())}));
   }
 
   auto getRandomValues = [&](IntegerType type,
@@ -403,7 +414,7 @@ void FirRegLower::initialisePreset(OpBuilder &regBuilder,
     reg->removeAttr("firrtl.random_init_start");
     reg->removeAttr("firrtl.random_init_end");
 
-    auto randReg = presetRandomValue;
+    auto randReg = presetRandomValues[randomRegister];
 
     auto symbol =
         hw::InnerRefAttr::get(module.getNameAttr(), randReg.getInnerSymAttr());
@@ -411,6 +422,9 @@ void FirRegLower::initialisePreset(OpBuilder &regBuilder,
     values.push_back({symbol, {randomEnd, randomStart}});
   };
 
+  auto randomRegWidth = presetRandomValues[randomRegister]
+                            .getElementType()
+                            .getIntOrFloatBitWidth();
   emitRandomInit(module, reg, initBuilder, randomRegWidth, getRandomValues);
 }
 
