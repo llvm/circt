@@ -46,6 +46,8 @@ struct SCModuleEmitter : OpEmissionPattern<SCModuleOp> {
   }
 
   void emitStatement(SCModuleOp module, EmissionPrinter &p) override {
+    // Emit a newline at the start to ensure an empty line before the module for
+    // better readability.
     p << "\nSC_MODULE(" << module.getModuleName() << ") ";
     auto scope = p.getOstream().scope("{\n", "};\n");
     for (size_t i = 0, e = module.getNumArguments(); i < e; ++i) {
@@ -104,6 +106,8 @@ struct CtorEmitter : OpEmissionPattern<CtorOp> {
   using OpEmissionPattern::OpEmissionPattern;
 
   void emitStatement(CtorOp op, EmissionPrinter &p) override {
+    // Emit a new line before the SC_CTOR to ensure an empty line for better
+    // readability.
     p << "\nSC_CTOR(" << op->getParentOfType<SCModuleOp>().getModuleName()
       << ") ";
     p.emitRegion(op.getBody());
@@ -125,6 +129,8 @@ struct SCFuncEmitter : OpEmissionPattern<SCFuncOp> {
   }
 
   void emitStatement(SCFuncOp op, EmissionPrinter &p) override {
+    // Emit a new line before the member function to ensure an empty line for
+    // better readability.
     p << "\nvoid " << op.getName() << "() ";
     p.emitRegion(op.getBody());
   }

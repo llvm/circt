@@ -10,6 +10,7 @@
 emitc.include <"systemc">
 emitc.include "nosystemheader"
 
+// CHECK-EMPTY:
 // CHECK-LABEL: SC_MODULE(basic) {
 systemc.module @basic (%port0: !systemc.in<i1>, %port1: !systemc.inout<i64>, %port2: !systemc.out<i512>, %port3: !systemc.out<i1024>, %port4: !systemc.out<i1>) {
   // CHECK-NEXT: sc_core::sc_in<bool> port0;
