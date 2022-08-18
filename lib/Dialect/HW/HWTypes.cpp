@@ -172,7 +172,7 @@ static ParseResult parseHWElementType(Type &result, AsmParser &p) {
       typeString.startswith("typealias<") || typeString.startswith("int<")) {
     llvm::StringRef mnemonic;
     auto parseResult = generatedTypeParser(p, &mnemonic, result);
-    return parseResult.hasValue() ? success() : failure();
+    return parseResult.has_value() ? success() : failure();
   }
 
   return p.parseType(result);
@@ -367,9 +367,9 @@ static LogicalResult parseArray(AsmParser &p, Attribute &dim, Type &inner) {
   uint64_t dimLiteral;
   auto int64Type = p.getBuilder().getIntegerType(64);
 
-  if (auto res = p.parseOptionalInteger(dimLiteral); res.hasValue())
+  if (auto res = p.parseOptionalInteger(dimLiteral); res.has_value())
     dim = p.getBuilder().getI64IntegerAttr(dimLiteral);
-  else if (!p.parseOptionalAttribute(dim, int64Type).hasValue())
+  else if (!p.parseOptionalAttribute(dim, int64Type).has_value())
     return failure();
 
   if (!dim.isa<IntegerAttr, ParamExprAttr, ParamDeclRefAttr>()) {

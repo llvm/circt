@@ -8,6 +8,8 @@ requires = [
     "numpy",
     "pybind11>=2.7.1",
     "PyYAML",
+    "cocotb>=1.6.2",
+    "cocotb-test>=0.2.2",
 ]
 build-backend = "setuptools.build_meta"
 

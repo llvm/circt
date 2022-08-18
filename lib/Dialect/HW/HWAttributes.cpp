@@ -45,7 +45,7 @@ Attribute HWDialect::parseAttribute(DialectAsmParser &p, Type type) const {
   StringRef attrName;
   Attribute attr;
   auto parseResult = generatedAttributeParser(p, &attrName, type, attr);
-  if (parseResult.hasValue())
+  if (parseResult.has_value())
     return attr;
 
   // Parse "#hw.param.expr.add" as ParamExprAttr.

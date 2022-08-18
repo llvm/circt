@@ -8,6 +8,13 @@ digraph G {
   ranksep=0.5 // vertical compression
   compound=true
 
+  // MLIR frontends
+  subgraph cluster_mlir_frontends {
+    label = "Upstream frontends (selection)"
+    PyTorch
+    Polygeist
+  }
+
   // MLIR dialects
   subgraph cluster_mlir {
     label = "Upstream MLIR";
@@ -15,9 +22,12 @@ digraph G {
     SCF Affine
     subgraph cluster_std_arith_dialect {
       label = ""
-      Standard Arith
+      CF
+      Arith
     }
   }
+  PyTorch -> CF [lhead=cluster_mlir]
+  Polygeist -> Affine [lhead=cluster_mlir]
 
   subgraph cluster_circt {
     label = "CIRCT"
@@ -37,13 +47,13 @@ digraph G {
     space_above_RTL [style = invis, label=""]
 
     subgraph cluster_RTL {
-      label = "RTL dialects"
+      label = "Core dialects"
       Seq [URL="https://circt.llvm.org/docs/Dialects/Seq/"]
       HW [URL="https://circt.llvm.org/docs/Dialects/HW/"]
       SV [URL="https://circt.llvm.org/docs/Dialects/SV/"]
       Comb [URL="https://circt.llvm.org/docs/Dialects/Comb/"]
-      LLHD [URL="https://circt.llvm.org/docs/Dialects/LLHD/"]
     }
+    LLHD [URL="https://circt.llvm.org/docs/Dialects/LLHD/"]
 
     // Internal tools
     subgraph internal_tools{
@@ -58,22 +68,29 @@ digraph G {
   // External tools
   subgraph external_tools {
     node [shape=octagon fillcolor="#ffff99"]
-    Moore Chisel
+    Moore 
     Calyx_native [label="Calyx native"]
-    Circilator [style="dashed,filled"]
   }
 
-  // File formats
-  subgraph file_formats {
+  FIRFile [label=".fir" fillcolor="#7fc97f" shape="note"]
+
+  subgraph cluster_input_langs {
+    label = "Input languages"
+    node [shape=octagon fillcolor="#ffff99"]
+    Chisel
+    SVVHDL [label="SV/VHDL"]
+    PyFile [label="Python"]
+  }
+
+  // Output file formats
+  subgraph output_file_formats {
     node [fillcolor="#7fc97f" shape="note"]
-    VCDTrace [label=".vcd"]
-    CPPFile [label=".cpp"]
-    SVFile [label=".sv"]
-    CapNProto [label="Cap'n Proto"]
-    TCL [label=".tcl"]
-    FIRFile [label=".fir"]
-    SVVHDL [label=".sv/.vhd"]
-    PyFile [label=".py"]
+    VCDTrace [label="Trace (vcd)"]
+    SystemCFile [label="SystemC (c++)"]
+    SVFile [label="SystemVerilog"]
+    ServiceDesc [label="ESI system description\n(JSON/Capnp)"]
+    SoftwareAPI [label="Software API\n(e.g. py/c++/c#)" style=dashed]
+    TCL [label="Placements (tcl)"]
   }
 
   // ===== Connections =====
@@ -88,11 +105,11 @@ digraph G {
 
   // Things that lower into a subset of the RTL-like dialects. Cluster these
   // together to avoid a massive clutter.
-  {FIRRTL FSM ESI MSFT HWArith MooreMIR} -> HW [lhead=cluster_RTL]
+  {FIRRTL FSM ESI MSFT HWArith MooreMIR} -> Seq [lhead=cluster_RTL]
   Seq -> SV
   HW -> LLHD
-  Comb -> ExportVerilog
   HW -> SystemC
+  ExportVerilog -> SVFile
 
   // Tool flows
   Scheduling -> Pipeline [dir=both]
@@ -100,37 +117,39 @@ digraph G {
   FIRFile -> FIRRTLParser
   FIRRTLParser -> FIRRTL
   {SystemC, Comb} -> ExportSystemC
-  ExportSystemC -> CPPFile
-  {HW SV} -> ExportVerilog
+  ExportSystemC -> SystemCFile
+  SV -> ExportVerilog [ltail=cluster_RTL]
+  SV -> llhd_sim [ltail=cluster_RTL]
   SVVHDL -> Moore [weight=999]
   Moore -> MooreMIR
-  {LLHD HW} -> Circilator [style=dashed]
   Calyx -> Calyx_native
-  {Calyx_native ExportVerilog} -> SVFile
-  Circilator -> CPPFile [style=dashed]
-  {LLHD Comb HW Seq} -> llhd_sim
+  Calyx_native -> HW [lhead=cluster_RTL]
+  LLHD -> llhd_sim
   llhd_sim -> VCDTrace
-  ESI -> CapNProto
+  //ESI -> CapNProto
+  ESI -> ServiceDesc
   MSFT -> TCL
   PyFile -> PyCDE
-  PyCDE -> ESI [style=dashed]
+  PyCDE -> ESI
   PyCDE -> MSFT
   PyCDE -> HWArith
   PyCDE -> FSM
   Scheduling -> MSFT [dir=both, style=dashed]
+  ServiceDesc -> SoftwareAPI [style=dashed]
 
   // ====== Some fake edges to coerce a good layout ======
   // Note: Modify these if you make changes to the above diagram, and things
   // start looking weird.
-  Affine -> Scheduling [weight=999 style=invis]
-  FIRFile -> PyFile [weight=999 style=invis]
 
   // Leave one rank free above the RTL cluster to improve routing of incoming
   // edges.
-  {FIRRTL FSM ESI MSFT HWArith} -> space_above_RTL [weight=999, style=invis]
+  {FIRRTL FSM ESI MSFT HWArith MooreMIR} -> space_above_RTL [weight=999, style=invis]
   space_above_RTL -> {Seq HW Comb} [lhead=cluster_RTL, weight=999, style=invis]
 
   // Fix the following sink nodes below the CIRCT cluster
-  llhd_sim -> {SVFile Circilator TCL CapNProto} [weight=999 style=invis]
-  Calyx_native -> SVFile [weight=999 style=invis]
+  SystemCFile -> {TCL ServiceDesc} [weight=999 style=invis]
+
+  // Better organize the top.
+  {PyTorch Polygeist Chisel} -> CF [weight=999 style=invis]
+  FIRFile -> Scheduling [weight=999 style=invis]
 }

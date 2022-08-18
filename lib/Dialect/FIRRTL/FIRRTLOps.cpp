@@ -852,7 +852,7 @@ parseModulePorts(OpAsmParser &parser, bool hasSSAIdentifiers,
     // Parse the port annotations.
     ArrayAttr annos;
     auto parseResult = parser.parseOptionalAttribute(annos);
-    if (!parseResult.hasValue())
+    if (!parseResult.has_value())
       annos = parser.getBuilder().getArrayAttr({});
     else if (failed(*parseResult))
       return failure();
@@ -2261,7 +2261,7 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
   APInt value;
   auto loc = parser.getCurrentLocation();
   auto valueResult = parser.parseOptionalInteger(value);
-  if (!valueResult.hasValue())
+  if (!valueResult.has_value())
     return parser.emitError(loc, "expected integer value");
 
   // Parse the result firrtl integer type.
@@ -2375,7 +2375,7 @@ ParseResult SpecialConstantOp::parse(OpAsmParser &parser,
   APInt value;
   auto loc = parser.getCurrentLocation();
   auto valueResult = parser.parseOptionalInteger(value);
-  if (!valueResult.hasValue())
+  if (!valueResult.has_value())
     return parser.emitError(loc, "expected integer value");
 
   // Clocks and resets can only be 0 or 1.
@@ -3956,6 +3956,46 @@ void XorPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 void XorRPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+
+//===----------------------------------------------------------------------===//
+// RefOps
+//===----------------------------------------------------------------------===//
+
+FIRRTLType RefResolveOp::inferReturnType(ValueRange operands,
+                                         ArrayRef<NamedAttribute> attrs,
+                                         Optional<Location> loc) {
+  auto inType = operands[0].getType();
+  auto inRefType = inType.dyn_cast<RefType>();
+  if (!inRefType) {
+    if (loc)
+      mlir::emitError(*loc, "ref.resolve operand must be ref type, not ")
+          << inType;
+    return {};
+  }
+  return inRefType.getType();
+}
+
+FIRRTLType RefSendOp::inferReturnType(ValueRange operands,
+                                      ArrayRef<NamedAttribute> attrs,
+                                      Optional<Location> loc) {
+  auto inType = operands[0].getType();
+  auto inBaseType = inType.dyn_cast<FIRRTLBaseType>();
+  if (!inBaseType) {
+    if (loc)
+      mlir::emitError(*loc, "ref.send operand must be base type, not ")
+          << inType;
+    return {};
+  }
+  return RefType::get(inBaseType);
+}
+
+void RefResolveOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+
+void RefSendOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 

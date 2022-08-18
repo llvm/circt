@@ -302,7 +302,7 @@ static ParseResult parseModuleLikeOp(OpAsmParser &parser,
   // Parse the optional module body.
   auto regionSuccess =
       parser.parseOptionalRegion(*result.addRegion(), entryArgs);
-  if (regionSuccess.hasValue() && failed(*regionSuccess))
+  if (regionSuccess.has_value() && failed(*regionSuccess))
     return failure();
 
   return success();

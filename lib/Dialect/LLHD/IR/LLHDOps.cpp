@@ -358,8 +358,8 @@ parseArgumentList(OpAsmParser &parser,
     OpAsmParser::Argument argument;
     Type argType;
     auto optArg = parser.parseOptionalArgument(argument);
-    if (optArg.hasValue()) {
-      if (succeeded(optArg.getValue())) {
+    if (optArg.has_value()) {
+      if (succeeded(optArg.value())) {
         if (!argument.ssaName.name.empty() &&
             succeeded(parser.parseColonType(argType))) {
           args.push_back(argument);
@@ -590,8 +590,8 @@ parseProcArgumentList(OpAsmParser &parser, SmallVectorImpl<Type> &argTypes,
     OpAsmParser::Argument argument;
     Type argumentType;
     auto optArg = parser.parseOptionalArgument(argument);
-    if (optArg.hasValue()) {
-      if (succeeded(optArg.getValue())) {
+    if (optArg.has_value()) {
+      if (succeeded(optArg.value())) {
         // Reject this if the preceding argument was missing a name.
         if (argNames.empty() && !argTypes.empty())
           return parser.emitError(loc,

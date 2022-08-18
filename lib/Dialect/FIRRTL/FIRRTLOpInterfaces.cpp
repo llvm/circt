@@ -114,14 +114,13 @@ LogicalResult circt::firrtl::verifyModuleLikeOpInterface(FModuleLike module) {
 }
 
 LogicalResult circt::firrtl::verifyInnerSymAttr(InnerSymbolOpInterface op) {
-  auto isa = op.getInnerSymAttr();
+  auto innerSym = op.getInnerSymAttr();
   // If does not have any inner sym then ignore.
-  if (!isa)
+  if (!innerSym)
     return success();
-  if (op->getNumResults() != 1) {
-    // If more than one results, then the inner sym can only be specified on
-    // fieldID=0.
-    if (isa.size() > 1 || !isa.getSymName()) {
+  if (isa<InstanceOp>(&op) || op->getNumResults() != 1) {
+    // The inner sym can only be specified on fieldID=0.
+    if (innerSym.size() > 1 || !innerSym.getSymName()) {
       op->emitOpError("cannot assign symbols to non-zero field id, for ops "
                       "with zero or multiple results");
       return failure();
@@ -157,7 +156,7 @@ LogicalResult circt::firrtl::verifyInnerSymAttr(InnerSymbolOpInterface op) {
     return true;
   };
 
-  if (!llvm::all_of(isa.getProps(), uniqSyms))
+  if (!llvm::all_of(innerSym.getProps(), uniqSyms))
     return failure();
   return success();
 }

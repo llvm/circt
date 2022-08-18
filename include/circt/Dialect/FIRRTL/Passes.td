@@ -585,4 +585,27 @@ def DropName : Pass<"firrtl-drop-names", "firrtl::FModuleOp"> {
   ];
 }
 
+def RandomizeRegisterInit :
+    Pass<"firrtl-randomize-register-init", "firrtl::FModuleOp"> {
+  let summary = "Randomize register initialization.";
+  let description = [{
+    This pass eagerly creates large vectors of randomized bits for initializing
+    registers, and marks each register with attributes indicating which bits to
+    read. If the registers survive until LowerToHW, their initialization logic
+    will pick up the correct bits.
+
+    This ensures a stable initialization, so registers should always see the
+    same initial value for the same seed, regardless of optimization levels.
+  }];
+  let constructor = "circt::firrtl::createRandomizeRegisterInitPass()";
+}
+
+def LowerXMR : Pass<"firrtl-lower-xmr", "firrtl::CircuitOp"> {
+  let summary = "Lower ref ports to XMR";
+  let description = [{
+    This pass lowers RefType ops and ports to verbatim encoded XMRs.
+  }];
+  let constructor = "circt::firrtl::createLowerXMRPass()";
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD

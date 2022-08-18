@@ -180,3 +180,62 @@ firrtl.circuit "ForwardConstant" {
     firrtl.strictconnect %zero, %sub_zero : !firrtl.uint<1>
   }
 }
+
+// -----
+
+// Test handling of ref ports and ops.
+
+// CHECK-LABEL: "RefPorts"
+firrtl.circuit "RefPorts" {
+  // CHECK-NOT: @dead_ref_send
+  firrtl.module private @dead_ref_send(in %source: !firrtl.uint<1>, out %dest: !firrtl.ref<uint<1>>) {
+    %ref = firrtl.ref.send %source: !firrtl.uint<1>
+    firrtl.strictconnect %dest, %ref : !firrtl.ref<uint<1>>
+  }
+
+  // CHECK-LABEL: @dead_ref_port
+  // CHECK-NOT: firrtl.ref
+  firrtl.module private @dead_ref_port(in %source: !firrtl.uint<1>, out %dest: !firrtl.uint<1>, out %ref_dest: !firrtl.ref<uint<1>>) {
+    %ref_not = firrtl.ref.send %source: !firrtl.uint<1>
+    firrtl.strictconnect %ref_dest, %ref_not : !firrtl.ref<uint<1>>
+    firrtl.strictconnect %dest, %source : !firrtl.uint<1>
+  }
+
+  // CHECK: @live_ref
+  firrtl.module private @live_ref(in %source: !firrtl.uint<1>, out %dest: !firrtl.ref<uint<1>>) {
+    %ref_source = firrtl.ref.send %source: !firrtl.uint<1>
+    firrtl.strictconnect %dest, %ref_source : !firrtl.ref<uint<1>>
+  }
+
+  // CHECK-LABEL: @RefPorts
+  firrtl.module @RefPorts(in %source : !firrtl.uint<1>, out %dest : !firrtl.uint<1>) {
+    // Delete send's that aren't resolved, and check deletion of modules with ref ops + ports.
+    // CHECK-NOT: @dead_ref_send
+    %source1, %dest1 = firrtl.instance dead_ref_send @dead_ref_send(in source: !firrtl.uint<1>, out dest: !firrtl.ref<uint<1>>)
+    firrtl.strictconnect %source1, %source : !firrtl.uint<1>
+
+    // Check that an unused resolve doesn't keep send alive, and test ref port removal.
+    // CHECK: @dead_ref_port
+    // CHECK-NOT: firrtl.ref
+    %source2, %dest2, %ref_dest2 = firrtl.instance dead_ref_port @dead_ref_port(in source: !firrtl.uint<1>, out dest: !firrtl.uint<1>, out ref_dest: !firrtl.ref<uint<1>>)
+    firrtl.strictconnect %source2, %source : !firrtl.uint<1>
+    %unused = firrtl.ref.resolve %ref_dest2 : !firrtl.ref<uint<1>>
+    firrtl.strictconnect %dest, %dest2 : !firrtl.uint<1>
+
+    // Check not deleted if live.
+    // CHECK: @live_ref
+    %source3, %dest3 = firrtl.instance live_ref @live_ref(in source: !firrtl.uint<1>, out dest: !firrtl.ref<uint<1>>)
+    firrtl.strictconnect %source3, %source : !firrtl.uint<1>
+    // CHECK: firrtl.ref.resolve
+    %dest3_resolved = firrtl.ref.resolve %dest3 : !firrtl.ref<uint<1>>
+    firrtl.strictconnect %dest, %dest3_resolved : !firrtl.uint<1>
+
+    // Check dead resolve is deleted, even if send isn't.
+    // (Instance is dead too but need context-sensitive analysis to show that.)
+    // CHECK: @live_ref
+    %source4, %dest4 = firrtl.instance live_ref @live_ref(in source: !firrtl.uint<1>, out dest: !firrtl.ref<uint<1>>)
+    firrtl.strictconnect %source4, %source : !firrtl.uint<1>
+    // CHECK-NOT: firrtl.ref.resolve
+    %unused5 = firrtl.ref.resolve %dest4 : !firrtl.ref<uint<1>>
+  }
+}

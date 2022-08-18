@@ -551,3 +551,41 @@ firrtl.circuit "Issue3372"  {
     firrtl.strictconnect %zero, %c0_ui1 : !firrtl.uint<1>
   }
 }
+
+// -----
+
+// CHECK-LABEL: "SendThroughRef"
+firrtl.circuit "SendThroughRef" {
+  firrtl.module private @Bar(out %_a: !firrtl.ref<uint<1>>) {
+    %zero = firrtl.constant 0 : !firrtl.uint<1>
+    %ref_zero = firrtl.ref.send %zero : !firrtl.uint<1>
+    firrtl.strictconnect %_a, %ref_zero : !firrtl.ref<uint<1>>
+  }
+  // CHECK:  firrtl.strictconnect %a, %c0_ui1 : !firrtl.uint<1>
+  firrtl.module @SendThroughRef(out %a: !firrtl.uint<1>) {
+    %bar_a = firrtl.instance bar @Bar(out _a: !firrtl.ref<uint<1>>)
+    %0 = firrtl.ref.resolve %bar_a : !firrtl.ref<uint<1>>
+    firrtl.strictconnect %a, %0 : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// CHECK-LABEL: "ForwardRef"
+firrtl.circuit "ForwardRef" {
+  firrtl.module private @RefForward2(out %_a: !firrtl.ref<uint<1>>) {
+    %zero = firrtl.constant 0 : !firrtl.uint<1>
+    %ref_zero = firrtl.ref.send %zero : !firrtl.uint<1>
+    firrtl.strictconnect %_a, %ref_zero : !firrtl.ref<uint<1>>
+  }
+  firrtl.module private @RefForward(out %_a: !firrtl.ref<uint<1>>) {
+    %fwd_2 = firrtl.instance fwd_2 @RefForward2(out _a: !firrtl.ref<uint<1>>)
+    firrtl.strictconnect %_a, %fwd_2 : !firrtl.ref<uint<1>>
+  }
+  // CHECK:  firrtl.strictconnect %a, %c0_ui1 : !firrtl.uint<1>
+  firrtl.module @ForwardRef(out %a: !firrtl.uint<1>) {
+    %fwd_a = firrtl.instance fwd @RefForward(out _a: !firrtl.ref<uint<1>>)
+    %0 = firrtl.ref.resolve %fwd_a : !firrtl.ref<uint<1>>
+    firrtl.strictconnect %a, %0 : !firrtl.uint<1>
+  }
+}

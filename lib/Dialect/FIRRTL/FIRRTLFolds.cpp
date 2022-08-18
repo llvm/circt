@@ -1848,11 +1848,14 @@ static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
   if (constOp != &con->getBlock()->front())
     constOp->moveBefore(&con->getBlock()->front());
 
-  if (!constReg)
-    replaceOpWithNewOpAndCopyName<RegResetOp>(
+  if (!constReg) {
+    SmallVector<NamedAttribute, 2> attrs(reg->getDialectAttrs());
+    auto newReg = replaceOpWithNewOpAndCopyName<RegResetOp>(
         rewriter, reg, reg.getType(), reg.getClockVal(), mux.getSel(),
         mux.getHigh(), reg.getName(), reg.getNameKind(), reg.getAnnotations(),
         reg.getInnerSymAttr());
+    newReg->setDialectAttrs(attrs);
+  }
   auto pt = rewriter.saveInsertionPoint();
   rewriter.setInsertionPoint(con);
   replaceOpWithNewOpAndCopyName<ConnectOp>(rewriter, con, con.getDest(),

@@ -64,7 +64,7 @@ ParseResult OperationOp::parse(OpAsmParser &parser, OperationState &result) {
 
   FlatSymbolRefAttr oprRef;
   auto parseSymbolResult = parser.parseOptionalAttribute(oprRef);
-  if (parseSymbolResult.hasValue()) {
+  if (parseSymbolResult.has_value()) {
     assert(succeeded(*parseSymbolResult));
     alreadyParsed.push_back(builder.getAttr<LinkedOperatorTypeAttr>(oprRef));
   }
@@ -88,7 +88,7 @@ ParseResult OperationOp::parse(OpAsmParser &parser, OperationState &result) {
 
     // Try to parse either symbol reference...
     auto parseSymbolResult = parser.parseOptionalAttribute(sourceRef);
-    if (parseSymbolResult.hasValue())
+    if (parseSymbolResult.has_value())
       assert(succeeded(*parseSymbolResult));
     else {
       // ...or an SSA operand.
@@ -123,7 +123,7 @@ ParseResult OperationOp::parse(OpAsmParser &parser, OperationState &result) {
   ArrayAttr properties;
   auto parsePropertiesResult =
       parseOptionalPropertyArray(properties, parser, alreadyParsed);
-  if (parsePropertiesResult.hasValue()) {
+  if (parsePropertiesResult.has_value()) {
     if (failed(*parsePropertiesResult))
       return failure();
     result.addAttribute(builder.getStringAttr("properties"), properties);
@@ -307,7 +307,7 @@ OperationOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 
 static ParseResult parseProperties(OpAsmParser &parser, ArrayAttr &attr) {
   auto result = parseOptionalPropertyArray(attr, parser);
-  if (!result.hasValue() || succeeded(*result))
+  if (!result.has_value() || succeeded(*result))
     return success();
   return failure();
 }

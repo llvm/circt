@@ -4,6 +4,7 @@ import subprocess
 import sys
 import re
 from pathlib import Path
+from cocotb_test.simulator import run
 
 
 def parseArgs(args):
@@ -20,8 +21,8 @@ def parseArgs(args):
                          help="Name of the top level verilog module.")
 
   argparser.add_argument("--simulator",
-                         choices=['iverilog'],
-                         default="iverilog",
+                         choices=['icarus'],
+                         default="icarus",
                          help="Name of the simulator to use.")
 
   argparser.add_argument("--pythonModule",
@@ -34,9 +35,10 @@ def parseArgs(args):
                          default=os.getcwd(),
                          help="The folder where the cocotb test file is.")
 
-  argparser.add_argument("sources",
-                         nargs="+",
-                         help="The list of source files to be included.")
+  argparser.add_argument(
+      "sources",
+      nargs="+",
+      help="The list of verilog source files to be included.")
 
   return argparser.parse_args(args[1:])
 
@@ -61,25 +63,16 @@ class _IVerilogHandler:
     if float(ver) < 11:
       raise Exception(f"Icarus Verilog version must be >= 11, got {ver}")
 
-  @property
-  def sim_name(self):
-    return "icarus"
+  def extra_compile_args(self, objDir):
+    # If no timescale is defined in the source code, icarus assumes a
+    # timescale of '1'. This prevents cocotb from creating small timescale clocks.
+    # Since a timescale is not emitted by default from export-verilog, make our
+    # lives easier and create a minimum timescale through the command-line.
+    cmd_file = os.path.join(objDir, "cmds.f")
+    with open(cmd_file, "w+") as f:
+      f.write("+timescale+1ns/1ps")
 
-
-def _gen_cocotb_makefile(top, testmod, sources, sim):
-  """
-  Creates a simple cocotb makefile suitable for driving the testbench.
-  """
-  template = f"""
-TOPLEVEL_LANG = verilog
-VERILOG_SOURCES = {" ".join(list(sources))}
-TOPLEVEL = {top}
-MODULE = {testmod}
-SIM={sim}
-
-include $(shell cocotb-config --makefiles)/Makefile.sim
-"""
-  return template
+    return [f"-f{cmd_file}"]
 
 
 def main():
@@ -104,26 +97,27 @@ def main():
         "'make' is not available, and is required to run cocotb tests.")
 
   try:
-    if args.simulator == "iverilog":
+    if args.simulator == "icarus":
       simhandler = _IVerilogHandler()
     else:
       raise Exception(f"Unknown simulator: {simulator}")
   except Exception as e:
     raise Exception(f"Failed to initialize simulator handler: {e}")
 
-  # Generate cocotb makefile
-  testmodule = "test_" + args.topLevel
-  makefile_path = Path(objDir, "Makefile")
-  with open(makefile_path, "w") as f:
-    f.write(
-        _gen_cocotb_makefile(args.topLevel, args.pythonModule, sources,
-                             simhandler.sim_name))
+  # Simulator-specific extra compile args.
+  compileArgs = []
+  if simhandler:
+    compileArgs += simhandler.extra_compile_args(objDir)
 
-  # Adding the original working dir to the path, as the test file lies there
-  my_env = os.environ.copy()
-  my_env["PYTHONPATH"] = args.pythonFolder + os.pathsep + my_env["PYTHONPATH"]
-  # Run 'make' in the output directory and let cocotb do its thing.
-  subprocess.run(["make"], cwd=objDir, env=my_env)
+  testmodule = "test_" + args.topLevel
+  run(simulator=args.simulator,
+      module=args.pythonModule,
+      toplevel=args.topLevel,
+      toplevel_lang="verilog",
+      verilog_sources=sources,
+      python_search=[args.pythonFolder],
+      work_dir=objDir,
+      compile_args=compileArgs)
 
 
 if __name__ == "__main__":

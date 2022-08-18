@@ -1,5 +1,14 @@
 // RUN: circt-opt %s --convert-hw-to-llvm | FileCheck %s
 
+// CHECK-LABEL: llvm.mlir.global internal @_array_global() : !llvm.array<2 x i32> {
+// CHECK-NEXT: %[[VAL_0:.*]] = llvm.mlir.undef : !llvm.array<2 x i32>
+// CHECK-NEXT: %[[VAL_1:.*]] = llvm.mlir.constant(1 : i32) : i32
+// CHECK-NEXT: %[[VAL_2:.*]] = llvm.insertvalue %[[VAL_1]], %[[VAL_0]][0] : !llvm.array<2 x i32>
+// CHECK-NEXT: %[[VAL_3:.*]] = llvm.mlir.constant(0 : i32) : i32
+// CHECK-NEXT: %[[VAL_4:.*]] = llvm.insertvalue %[[VAL_3]], %[[VAL_2]][1] : !llvm.array<2 x i32>
+// CHECK-NEXT: llvm.return %[[VAL_4]] : !llvm.array<2 x i32>
+// CHECK-NEXT: }
+
 // CHECK-LABEL: @convertBitcast
 func.func @convertBitcast(%arg0 : i32, %arg1: !hw.array<2xi32>, %arg2: !hw.struct<foo: i32, bar: i32>) {
 
@@ -33,11 +42,11 @@ func.func @convertBitcast(%arg0 : i32, %arg1: !hw.array<2xi32>, %arg2: !hw.struc
 // CHECK-LABEL: @convertArray
 func.func @convertArray(%arg0 : i1, %arg1: !hw.array<2xi32>) {
 
-  // CHECK: %[[ZERO:.*]] = llvm.mlir.constant(0 : i32) : i32
-  // CHECK-NEXT: %[[ONE:.*]] = llvm.mlir.constant(1 : i32) : i32
+  // CHECK: %[[ONE:.*]] = llvm.mlir.constant(1 : i32) : i32
   // CHECK-NEXT: %[[ALLOCA:.*]] = llvm.alloca %[[ONE]] x !llvm.array<2 x i32> {alignment = 4 : i64} : (i32) -> !llvm.ptr<array<2 x i32>>
   // CHECK-NEXT: %[[CAST0:.*]] = builtin.unrealized_conversion_cast %arg1 : !hw.array<2xi32> to !llvm.array<2 x i32>
   // CHECK-NEXT: llvm.store %[[CAST0]], %[[ALLOCA]] : !llvm.ptr<array<2 x i32>>
+  // CHECK-NEXT: %[[ZERO:.*]] = llvm.mlir.constant(0 : i32) : i32
   // CHECK-NEXT: %[[ZEXT:.*]] = llvm.zext %arg0 : i1 to i2
   // CHECK-NEXT: %[[GEP:.*]] = llvm.getelementptr %[[ALLOCA]][%[[ZERO]], %[[ZEXT]]] : (!llvm.ptr<array<2 x i32>>, i32, i2) -> !llvm.ptr<i32>
   // CHECK-NEXT: llvm.load %[[GEP]] : !llvm.ptr<i32>
@@ -69,6 +78,21 @@ func.func @convertArray(%arg0 : i1, %arg1: !hw.array<2xi32>) {
   // CHECK-NEXT: llvm.insertvalue %[[E4]], %[[I3]][3] : !llvm.array<4 x i32>
   %2 = hw.array_concat %arg1, %arg1 : !hw.array<2xi32>, !hw.array<2xi32>
 
+  return
+}
+
+// CHECK-LABEL: @convertConstArray
+func.func @convertConstArray(%arg0 : i1, %arg1: !hw.array<2xi32>) {
+  // CHECK: %[[VAL_2:.*]] = llvm.mlir.addressof @_array_global : !llvm.ptr<array<2 x i32>>
+  // CHECK-NEXT: %[[VAL_3:.*]] = llvm.load %[[VAL_2]] : !llvm.ptr<array<2 x i32>>
+  // CHECK-NEXT: %[[VAL_4:.*]] = llvm.mlir.constant(0 : i32) : i32
+  // CHECK-NEXT: %[[VAL_5:.*]] = llvm.zext %arg0 : i1 to i2
+  // CHECK-NEXT: %[[VAL_6:.*]] = llvm.getelementptr %[[VAL_2]][%[[VAL_4]], %[[VAL_5]]] : (!llvm.ptr<array<2 x i32>>, i32, i2) -> !llvm.ptr<i32>
+  // CHECK-NEXT: %[[VAL_7:.*]] = llvm.load %[[VAL_6]] : !llvm.ptr<i32>
+  %0 = hw.constant 0 : i32
+  %1 = hw.constant 1 : i32
+  %2 = hw.array_create %0, %1 : i32
+  %3 = hw.array_get %2[%arg0] : !hw.array<2xi32>
   return
 }
 

@@ -1151,16 +1151,6 @@ static bool hasUninferredWidth(Type type) {
       .Default([](auto) { return false; });
 }
 
-static FIRRTLBaseType getBaseType(FIRRTLType type) {
-  return TypeSwitch<FIRRTLType, FIRRTLBaseType>(type)
-      .Case<FIRRTLBaseType>([](auto base) { return base; })
-      .Case<RefType>([](auto ref) { return ref.getType(); })
-      .Default([](auto) {
-        llvm_unreachable("unexpected FIRRTLType");
-        return FIRRTLBaseType();
-      });
-}
-
 LogicalResult InferenceMapping::map(CircuitOp op) {
   LLVM_DEBUG(llvm::dbgs()
              << "\n===----- Mapping ops to constraint exprs -----===\n\n");
@@ -1516,6 +1506,15 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
             unifyTypes(FieldRef(result, portType.getFieldID(fieldIndex)),
                        firstData, dataType);
         }
+      })
+
+      .Case<RefSendOp>([&](auto op) {
+        declareVars(op.getResult(), op.getLoc());
+        constrainTypes(op.getResult(), op.getBase());
+      })
+      .Case<RefResolveOp>([&](auto op) {
+        declareVars(op.getResult(), op.getLoc());
+        constrainTypes(op.getResult(), op.getRef());
       })
 
       .Default([&](auto op) {
@@ -1940,19 +1939,9 @@ bool InferenceTypeUpdate::updateValue(Value value) {
     }
     llvm_unreachable("Unknown type inside a bundle!");
   };
-  auto update = [&](FIRRTLType ftype) {
-    return TypeSwitch<FIRRTLType, FIRRTLType>(type)
-        .Case<FIRRTLBaseType>([&](auto base) { return updateBase(base); })
-        .Case<RefType>(
-            [&](auto ref) { return RefType::get(updateBase(ref.getType())); })
-        .Default([](auto) {
-          llvm_unreachable("unsupported type");
-          return FIRRTLType();
-        });
-  };
 
   // Update the type.
-  auto newType = update(type);
+  auto newType = mapBaseType(type, updateBase);
   LLVM_DEBUG(llvm::dbgs() << "Update " << value << " to " << newType << "\n");
   value.setType(newType);
 

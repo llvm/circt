@@ -351,7 +351,7 @@ def ConvertHWToSystemC : Pass<"convert-hw-to-systemc", "mlir::ModuleOp"> {
     This pass translates a HW design into an equivalent SystemC design.
   }];
   let constructor = "circt::createConvertHWToSystemCPass()";
-  let dependentDialects = ["systemc::SystemCDialect"];
+  let dependentDialects = ["systemc::SystemCDialect", "mlir::emitc::EmitCDialect"];
 }
 
 //===----------------------------------------------------------------------===//

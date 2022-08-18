@@ -15,6 +15,7 @@
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SystemC/SystemCOps.h"
+#include "mlir/Dialect/EmitC/IR/EmitC.h"
 #include "mlir/IR/BuiltinDialect.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -142,6 +143,7 @@ static void populateLegality(ConversionTarget &target) {
   target.addLegalDialect<mlir::BuiltinDialect>();
   target.addLegalDialect<systemc::SystemCDialect>();
   target.addLegalDialect<comb::CombDialect>();
+  target.addLegalDialect<emitc::EmitCDialect>();
   target.addLegalOp<hw::ConstantOp>();
 }
 
@@ -168,6 +170,11 @@ std::unique_ptr<OperationPass<ModuleOp>> circt::createConvertHWToSystemCPass() {
 void HWToSystemCPass::runOnOperation() {
   MLIRContext &context = getContext();
   ModuleOp module = getOperation();
+
+  // Create the include operation here to have exactly one 'systemc' include at
+  // the top instead of one per module.
+  OpBuilder builder(module.getRegion());
+  builder.create<emitc::IncludeOp>(module->getLoc(), "systemc", true);
 
   ConversionTarget target(context);
   TypeConverter typeConverter;

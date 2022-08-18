@@ -3,16 +3,36 @@
 
 // CHECK-LABEL:   llvm.func @driveSignal(!llvm.ptr<i8>, !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>, !llvm.ptr<i8>, i64, i64, i64, i64)
 
+// CHECK-LABEL: llvm.mlir.global internal @_array_global_0() : !llvm.array<3 x i5> {
+// CHECK: %[[VAL_0:.*]] = llvm.mlir.undef : !llvm.array<3 x i5>
+// CHECK: %[[VAL_1:.*]] = llvm.mlir.constant(0 : i5) : i5
+// CHECK: %[[VAL_2:.*]] = llvm.insertvalue %[[VAL_1]], %[[VAL_0]][0] : !llvm.array<3 x i5>
+// CHECK: %[[VAL_3:.*]] = llvm.mlir.constant(0 : i5) : i5
+// CHECK: %[[VAL_4:.*]] = llvm.insertvalue %[[VAL_3]], %[[VAL_2]][1] : !llvm.array<3 x i5>
+// CHECK: %[[VAL_5:.*]] = llvm.mlir.constant(0 : i5) : i5
+// CHECK: %[[VAL_6:.*]] = llvm.insertvalue %[[VAL_5]], %[[VAL_4]][2] : !llvm.array<3 x i5>
+// CHECK: llvm.return %[[VAL_6]] : !llvm.array<3 x i5>
+// CHECK: }
+// CHECK-LABEL: llvm.mlir.global internal @_array_global() : !llvm.array<4 x i1> {
+// CHECK: %[[VAL_0:.*]] = llvm.mlir.undef : !llvm.array<4 x i1>
+// CHECK: %[[VAL_1:.*]] = llvm.mlir.constant(false) : i1
+// CHECK: %[[VAL_2:.*]] = llvm.insertvalue %[[VAL_1]], %[[VAL_0]][0] : !llvm.array<4 x i1>
+// CHECK: %[[VAL_3:.*]] = llvm.mlir.constant(false) : i1
+// CHECK: %[[VAL_4:.*]] = llvm.insertvalue %[[VAL_3]], %[[VAL_2]][1] : !llvm.array<4 x i1>
+// CHECK: %[[VAL_5:.*]] = llvm.mlir.constant(false) : i1
+// CHECK: %[[VAL_6:.*]] = llvm.insertvalue %[[VAL_5]], %[[VAL_4]][2] : !llvm.array<4 x i1>
+// CHECK: %[[VAL_7:.*]] = llvm.mlir.constant(false) : i1
+// CHECK: %[[VAL_8:.*]] = llvm.insertvalue %[[VAL_7]], %[[VAL_6]][3] : !llvm.array<4 x i1>
+// CHECK: llvm.return %[[VAL_8]] : !llvm.array<4 x i1>
+// CHECK: }
+
 // CHECK-LABEL:   llvm.func @convert_sig(
 // CHECK-SAME:                           %[[VAL_0:.*]]: !llvm.ptr<i8>,
 // CHECK-SAME:                           %[[VAL_1:.*]]: !llvm.ptr<struct<()>>,
 // CHECK-SAME:                           %[[VAL_2:.*]]: !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>) {
 // CHECK:           %[[VAL_3:.*]] = llvm.mlir.constant(false) : i1
-// CHECK:           %[[VAL_4:.*]] = llvm.mlir.undef : !llvm.array<4 x i1>
-// CHECK:           %[[VAL_5:.*]] = llvm.insertvalue %[[VAL_3]], %[[VAL_4]][0] : !llvm.array<4 x i1>
-// CHECK:           %[[VAL_6:.*]] = llvm.insertvalue %[[VAL_3]], %[[VAL_5]][1] : !llvm.array<4 x i1>
-// CHECK:           %[[VAL_7:.*]] = llvm.insertvalue %[[VAL_3]], %[[VAL_6]][2] : !llvm.array<4 x i1>
-// CHECK:           %[[VAL_8:.*]] = llvm.insertvalue %[[VAL_3]], %[[VAL_7]][3] : !llvm.array<4 x i1>
+// CHECK:           %[[VAL_4:.*]] = llvm.mlir.addressof @_array_global : !llvm.ptr<array<4 x i1>>
+// CHECK:           %[[VAL_5:.*]] = llvm.load %[[VAL_4]] : !llvm.ptr<array<4 x i1>>
 // CHECK:           %[[VAL_9:.*]] = llvm.mlir.constant(0 : i32) : i32
 // CHECK:           %[[VAL_10:.*]] = llvm.getelementptr %[[VAL_2]]{{\[}}%[[VAL_9]]] : (!llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>, i32) -> !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>
 // CHECK:           %[[VAL_11:.*]] = llvm.mlir.constant(1 : i32) : i32
@@ -70,10 +90,8 @@ llhd.entity @convert_prb (%sI1 : !llhd.sig<i1>, %sArr : !llhd.sig<!hw.array<3xi5
 // CHECK:           %[[VAL_6:.*]] = llvm.getelementptr %[[VAL_2]]{{\[}}%[[VAL_5]]] : (!llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>, i32) -> !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>
 // CHECK:           %[[VAL_7:.*]] = llvm.mlir.constant(false) : i1
 // CHECK:           %[[VAL_8:.*]] = llvm.mlir.constant(0 : i5) : i5
-// CHECK:           %[[VAL_9:.*]] = llvm.mlir.undef : !llvm.array<3 x i5>
-// CHECK:           %[[VAL_10:.*]] = llvm.insertvalue %[[VAL_8]], %[[VAL_9]][0] : !llvm.array<3 x i5>
-// CHECK:           %[[VAL_11:.*]] = llvm.insertvalue %[[VAL_8]], %[[VAL_10]][1] : !llvm.array<3 x i5>
-// CHECK:           %[[VAL_12:.*]] = llvm.insertvalue %[[VAL_8]], %[[VAL_11]][2] : !llvm.array<3 x i5>
+// CHECK:           %[[VAL_9:.*]] = llvm.mlir.addressof @_array_global_0 : !llvm.ptr<array<3 x i5>>
+// CHECK:           %[[VAL_10:.*]] = llvm.load %[[VAL_9]] : !llvm.ptr<array<3 x i5>>
 // CHECK:           %[[VAL_13:.*]] = llvm.mlir.constant(dense<[1000, 0, 0]> : tensor<3xi64>) : !llvm.array<3 x i64>
 // CHECK:           %[[VAL_14:.*]] = llvm.mlir.constant(1 : i64) : i64
 // CHECK:           %[[VAL_15:.*]] = llvm.mlir.constant(1 : i32) : i32
@@ -92,7 +110,7 @@ llhd.entity @convert_prb (%sI1 : !llhd.sig<i1>, %sArr : !llhd.sig<!hw.array<3xi5
 // CHECK:           %[[VAL_26:.*]] = llvm.mul %[[VAL_25]], %[[VAL_22]]  : i64
 // CHECK:           %[[VAL_27:.*]] = llvm.mlir.constant(1 : i32) : i32
 // CHECK:           %[[VAL_28:.*]] = llvm.alloca %[[VAL_27]] x !llvm.array<3 x i5> {alignment = 4 : i64} : (i32) -> !llvm.ptr<array<3 x i5>>
-// CHECK:           llvm.store %[[VAL_12]], %[[VAL_28]] : !llvm.ptr<array<3 x i5>>
+// CHECK:           llvm.store %[[VAL_10]], %[[VAL_28]] : !llvm.ptr<array<3 x i5>>
 // CHECK:           %[[VAL_29:.*]] = llvm.bitcast %[[VAL_28]] : !llvm.ptr<array<3 x i5>> to !llvm.ptr<i8>
 // CHECK:           %[[VAL_30:.*]] = llvm.extractvalue %[[VAL_13]][0] : !llvm.array<3 x i64>
 // CHECK:           %[[VAL_31:.*]] = llvm.extractvalue %[[VAL_13]][1] : !llvm.array<3 x i64>
