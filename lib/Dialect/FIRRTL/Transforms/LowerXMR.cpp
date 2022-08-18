@@ -297,9 +297,8 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     // Now erase all the Ops and ports of RefType.
     // This needs to be done as the last step to ensure uses are erased before
     // the def is erased.
-    for (auto op : llvm::reverse(opsToRemove)) {
+    for (auto op : llvm::reverse(opsToRemove))
       op->erase();
-    }
     for (auto iter : refPortsToRemoveMap)
       if (auto mod = dyn_cast<FModuleOp>(iter.getFirst()))
         mod.erasePorts(iter.getSecond());
