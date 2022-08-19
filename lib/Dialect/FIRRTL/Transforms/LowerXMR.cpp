@@ -257,7 +257,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
       dataflowAt[src] = getRemoteRefSend(dst).value();
       return;
     }
-    // dataflow at src exists, so merge it if an entry already exists at dest.
+    // dataflow at src exists, so merge it if an entry already exists at dst.
     auto flowAtDst = dataflowAt.find(dst);
     if (flowAtDst == dataflowAt.end()) {
       dataflowAt[dst] = flowAtSrc->getSecond();
@@ -268,7 +268,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
       // If a valid dataflow already reaches the destination, emit remark.
       // This happens when multiple connects attached to an input RefType
       // port, or multiple instantiation (which is already an error).
-      dst.getDefiningOp()->emitRemark("has multipl reaching definitions");
+      dst.getDefiningOp()->emitRemark("has multiple reaching definitions");
     }
     // Dest already has an entry, make sure to update all the entries in the
     // dataflow map to point to this new entry.
@@ -318,12 +318,11 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
 
   DenseSet<Operation *> visitedModules;
   /// Map of a reference value to an entry into refSendList. Each entry in
-  /// refSendList represents the path to RefSend is as an ArrayAttr, which is an
-  /// array of the InnerRef to InstanceOps. The path is required since there can
+  /// refSendList represents the path to RefSend, which is a vector of the
+  /// InnerRefAttr to InstanceOps. The path is required since there can
   /// be multiple paths to the RefSend and we need to identify a unique path.
-  /// Each ref value can be satically resolved to a single remote send op,
-  /// according to the constraints on the RefType. The ArrayAttr ensures that
-  /// only unique copies of the path exist.
+  /// Each ref value can be statically resolved to a single remote send op,
+  /// according to the constraints on the RefType.
   DenseMap<Value, size_t> dataflowAt;
 
   /// This is the set of all unique paths from a RefSendOp to RefResolveOps.
