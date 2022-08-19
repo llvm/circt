@@ -72,7 +72,8 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
             // If this is the enable field, record the product terms(the And
             // expression tree).
             if (fName.equals("en"))
-              getProductTerms(sf, portTerms[portIt.index()]);
+              getProductTerms(sf, portTerms[readPort ? 0 : 1]);
+
             else if (fName.equals("clk")) {
               if (readPort)
                 rClock = getConnectSrc(sf);
@@ -98,9 +99,11 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
                                                << "\n term::" << t;
 
       );
-      // If the read and write clocks are the same, check if any of the product
-      // terms are a complement of each other.
-      if (!checkComplement(portTerms))
+      // If the read and write clocks are the same, and if any of the write
+      // enable product terms are a complement of the read enable, then return
+      // the write enable term.
+      auto complementTerm = checkComplement(portTerms);
+      if (!complementTerm)
         continue;
 
       SmallVector<Attribute, 4> resultNames;
@@ -158,8 +161,8 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
       // Enable = Or(WriteEnable, ReadEnable).
       builder.create<StrictConnectOp>(
           enb, builder.create<OrPrimOp>(rEnWire, wEnWire));
-      // WriteMode = WriteEnable.
-      builder.create<StrictConnectOp>(wmode, wEnWire);
+      builder.setInsertionPointToEnd(wmode->getBlock());
+      builder.create<StrictConnectOp>(wmode, complementTerm);
       // Now iterate over the original memory read and write ports.
       for (const auto &portIt : llvm::enumerate(memOp.getResults())) {
         // Get the port value.
@@ -272,27 +275,27 @@ private:
     }
   }
 
-  /// Check if any of the terms in the prodTerms[0] is a complement of any of
-  /// the terms in prodTerms[1]. prodTerms[0], prodTerms[1] is a vector of
-  /// Value, each of which correspond to the two product terms of read/write
-  /// enable.
-  bool checkComplement(SmallVector<Value> prodTerms[2]) {
-    bool isComplement = false;
+  /// If any of the terms in the read enable, prodTerms[0] is a complement of
+  /// any of the terms in the write enable prodTerms[1], return the
+  /// corresponding write enable term. prodTerms[0], prodTerms[1] is a vector of
+  /// Value, each of which correspond to the two product terms of read and write
+  /// enable respectively.
+  Value checkComplement(SmallVector<Value> prodTerms[2]) {
     // Foreach Value in first term, check if it is the complement of any of the
     // Value in second term.
     for (auto t1 : prodTerms[0])
       for (auto t2 : prodTerms[1]) {
-        // Return true if t1 is a Not of t2.
+        // Return t2, t1 is a Not of t2.
         if (!t1.isa<BlockArgument>() && isa<NotPrimOp>(t1.getDefiningOp()))
           if (cast<NotPrimOp>(t1.getDefiningOp()).getInput() == t2)
-            return true;
-        // Else Return true if t2 is a Not of t1.
+            return t2;
+        // Else Return t2, if t2 is a Not of t1.
         if (!t2.isa<BlockArgument>() && isa<NotPrimOp>(t2.getDefiningOp()))
           if (cast<NotPrimOp>(t2.getDefiningOp()).getInput() == t1)
-            return true;
+            return t2;
       }
 
-    return isComplement;
+    return {};
   }
 
   void inferUnmasked(MemOp &memOp, SmallVector<Operation *> &opsToErase) {
