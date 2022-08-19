@@ -1444,77 +1444,77 @@ void ESIEmitCollateralPass::emitServiceJSON() {
 
   std::string jsonStrBuffer;
   llvm::raw_string_ostream os(jsonStrBuffer);
-  llvm::json::OStream J(os, 2);
+  llvm::json::OStream j(os, 2);
 
   // Emit the list of ports of a service declaration.
-  auto emitPorts = [&](ServiceDeclOp decl) {
-    J.array([&] {
-      for (auto portOp : llvm::make_pointer_range(decl.ports().getOps())) {
-        J.object([&] {
+  auto emitPorts = [j](ServiceDeclOp decl) {
+    j.array([j] {
+      for (auto *portOp : llvm::make_pointer_range(decl.ports().getOps())) {
+        j.object([j] {
           if (auto port = dyn_cast<ToServerOp>(portOp)) {
-            J.attribute("name", port.inner_sym());
-            J.attribute("to-server-type", toJSON(port.type()));
+            j.attribute("name", port.inner_sym());
+            j.attribute("to-server-type", toJSON(port.type()));
           } else if (auto port = dyn_cast<ToClientOp>(portOp)) {
-            J.attribute("name", port.inner_sym());
-            J.attribute("to-client-type", toJSON(port.type()));
+            j.attribute("name", port.inner_sym());
+            j.attribute("to-client-type", toJSON(port.type()));
           } else if (auto port = dyn_cast<ServiceDeclInOutOp>(portOp)) {
-            J.attribute("name", port.inner_sym());
-            J.attribute("to-client-type", toJSON(port.outType()));
-            J.attribute("to-server-type", toJSON(port.inType()));
+            j.attribute("name", port.inner_sym());
+            j.attribute("to-client-type", toJSON(port.outType()));
+            j.attribute("to-server-type", toJSON(port.inType()));
           }
         });
       }
     });
   };
 
-  auto emitServicesForModule = [&](Operation *hwMod) {
+  auto emitServicesForModule = [j](Operation *hwMod) {
     // Emit a list of the servers in a design and the clients connected to them.
-    J.attributeArray("services", [&] {
-      hwMod->walk([&](ServiceHierarchyMetadataOp metadata) {
-        J.object([&] {
-          J.attribute("service", metadata.service_symbol());
-          J.attributeArray("path", [&] {
+    j.attributeArray("services", [j] {
+      hwMod->walk([j](ServiceHierarchyMetadataOp metadata) {
+        j.object([j] {
+          j.attribute("service", metadata.service_symbol());
+          j.attributeArray("path", [j] {
             for (auto attr : metadata.serverNamePath())
-              J.value(attr.cast<StringAttr>().getValue());
+              j.value(attr.cast<StringAttr>().getValue());
           });
-          J.attribute("impl_type", metadata.impl_type());
+          j.attribute("impl_type", metadata.impl_type());
           if (metadata.impl_detailsAttr())
-            J.attribute("impl_details", toJSON(metadata.impl_detailsAttr()));
-          J.attributeArray("clients", [&] {
+            j.attribute("impl_details", toJSON(metadata.impl_detailsAttr()));
+          j.attributeArray("clients", [j] {
             for (auto client : metadata.clients())
-              J.value(toJSON(client));
+              j.value(toJSON(client));
           });
         });
       });
     });
   };
 
-  J.object([&] {
+  j.object([j] {
     // Emit a list of the service declarations in a design.
-    J.attributeArray("declarations", [&] {
-      for (auto op : llvm::make_pointer_range(mod.getOps())) {
+    j.attributeArray("declarations", [j] {
+      for (auto *op : llvm::make_pointer_range(mod.getOps())) {
         if (auto decl = dyn_cast<ServiceDeclOp>(op)) {
-          J.object([&] {
-            J.attribute("name", decl.sym_name());
-            J.attributeArray("ports", [&] { emitPorts(decl); });
+          j.object([j] {
+            j.attribute("name", decl.sym_name());
+            j.attributeArray("ports", [&] { emitPorts(decl); });
           });
         }
       }
     });
 
-    J.attributeArray("top_levels", [&] {
+    j.attributeArray("top_levels", [j] {
       for (auto topModName : tops) {
-        J.object([&] {
+        j.object([j] {
           auto sym = FlatSymbolRefAttr::get(ctxt, topModName);
           Operation *hwMod = topSyms.getDefinition(sym);
-          J.attribute("module", toJSON(sym));
+          j.attribute("module", toJSON(sym));
           emitServicesForModule(hwMod);
         });
       }
     });
   });
 
-  J.flush();
+  j.flush();
   OpBuilder b = OpBuilder::atBlockEnd(mod.getBody());
   auto verbatim = b.create<sv::VerbatimOp>(b.getUnknownLoc(),
                                            StringAttr::get(ctxt, os.str()));

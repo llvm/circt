@@ -335,7 +335,7 @@ void ESIConnectServicesPass::copyMetadata(hw::HWMutableModuleLike mod) {
 static void emitServiceMetadata(ServiceImplementReqOp implReqOp) {
   ImplicitLocOpBuilder b(implReqOp.getLoc(), implReqOp);
   SmallVector<Attribute, 8> clients;
-  for (auto clientOp : llvm::make_pointer_range(implReqOp.getOps())) {
+  for (auto *clientOp : llvm::make_pointer_range(implReqOp.getOps())) {
     SmallVector<NamedAttribute> clientAttrs;
     if (auto client = dyn_cast<RequestToClientConnectionOp>(clientOp)) {
       clientAttrs.push_back(b.getNamedAttr("port", client.servicePortAttr()));
