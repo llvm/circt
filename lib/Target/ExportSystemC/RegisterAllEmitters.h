@@ -15,6 +15,7 @@
 #ifndef CIRCT_TARGET_EXPORTSYSTEMC_REGISTERALLEMITTERS_H
 #define CIRCT_TARGET_EXPORTSYSTEMC_REGISTERALLEMITTERS_H
 
+#include "Patterns/CombEmissionPatterns.h"
 #include "Patterns/EmitCEmissionPatterns.h"
 #include "Patterns/HWEmissionPatterns.h"
 #include "Patterns/SystemCEmissionPatterns.h"
@@ -25,6 +26,7 @@ namespace ExportSystemC {
 /// Collects the operation emission patterns of all supported dialects.
 inline void registerAllOpEmitters(OpEmissionPatternSet &patterns,
                                   MLIRContext *context) {
+  populateCombOpEmitters(patterns, context);
   populateHWEmitters(patterns, context);
   populateSystemCOpEmitters(patterns, context);
   populateEmitCOpEmitters(patterns, context);
