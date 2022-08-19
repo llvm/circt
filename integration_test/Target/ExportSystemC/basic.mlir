@@ -30,5 +30,9 @@ systemc.module @module (%port0: !systemc.in<i1>, %port1: !systemc.inout<i64>, %p
     %12 = comb.shl %0, %11 : i64
     %13 = comb.shru %12, %0 : i64
     systemc.signal.write %sig, %13 : !systemc.signal<i64>
+
+    %14 = comb.concat %0, %0, %0, %0 : i64, i64, i64, i64
+    %15 = comb.extract %14 from 16 : (i256) -> i64
+    systemc.signal.write %sig, %15 : !systemc.signal<i64>
   }
 }

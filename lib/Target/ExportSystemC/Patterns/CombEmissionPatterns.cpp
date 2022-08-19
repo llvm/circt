@@ -146,6 +146,67 @@ struct BinaryExpressionEmitter : OpEmissionPattern<Op> {
       p << ")";
   }
 };
+
+///
+struct ConcatEmitter : OpEmissionPattern<ConcatOp> {
+  using OpEmissionPattern::OpEmissionPattern;
+
+  MatchResult matchInlinable(Value value) override {
+    if (value.getDefiningOp<ConcatOp>())
+      return Precedence::FUNCTION_CALL;
+    return {};
+  }
+
+  void emitInlined(Value value, EmissionPrinter &p) override {
+    ConcatOp op = value.getDefiningOp<ConcatOp>();
+
+    p.emitType(value.getType());
+    p << "(";
+
+    if (op.getInputs().size() == 1) {
+      p.getInlinable(op.getInputs()[0]).emit();
+      return;
+    }
+
+    for (size_t i = 0; i < op.getInputs().size() - 1; ++i) {
+      p << "sc_dt::concat(";
+      p.getInlinable(op.getInputs()[i]).emit();
+      p << ", ";
+    }
+
+    p.getInlinable(op.getInputs()[op.getInputs().size() - 1]).emit();
+
+    for (size_t i = 0; i < op.getInputs().size() - 1; ++i)
+      p << ")";
+
+    p << ")";
+  }
+};
+
+///
+struct ExtractEmitter : OpEmissionPattern<ExtractOp> {
+  using OpEmissionPattern::OpEmissionPattern;
+
+  MatchResult matchInlinable(Value value) override {
+    if (value.getDefiningOp<ExtractOp>())
+      return Precedence::FUNCTION_CALL;
+    return {};
+  }
+
+  void emitInlined(Value value, EmissionPrinter &p) override {
+    ExtractOp op = value.getDefiningOp<ExtractOp>();
+
+    p.emitType(value.getType());
+    p << "(";
+
+    InlineEmitter input = p.getInlinable(op.getInput());
+    parenthesize(input.getPrecedence() > Precedence::VAR, input, p);
+
+    p << ".range(" << op.getLowBit() << ", "
+      << (op.getLowBit() + op.getResult().getType().getIntOrFloatBitWidth() - 1)
+      << "))";
+  }
+};
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -161,4 +222,5 @@ void circt::ExportSystemC::populateCombOpEmitters(
            BinaryExpressionEmitter<ModUOp>, BinaryExpressionEmitter<ShlOp>,
            BinaryExpressionEmitter<ShrUOp>,
            BinaryExpressionEmitter<SubOp, true>>(context);
+  patterns.add<ConcatEmitter, ExtractEmitter>(context);
 }
