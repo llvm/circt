@@ -14,7 +14,7 @@
 #define FIRANNOTATIONS_H
 
 #include "circt/Support/LLVM.h"
-#include "llvm/ADT/StringMap.h"
+#include "llvm/ADT/SmallVector.h"
 
 namespace llvm {
 namespace json {
@@ -36,11 +36,11 @@ class PrintFOp;
 /// Convert a JSON value containing OMIR JSON (an array of OMNodes), convert
 /// this to an OMIRAnnotation, and add it to a mutable `annotationMap` argument.
 bool fromOMIRJSON(llvm::json::Value &value, StringRef circuitTarget,
-                  llvm::StringMap<ArrayAttr> &annotationMap,
+                  SmallVectorImpl<Attribute> &annotations,
                   llvm::json::Path path, MLIRContext *context);
 
 bool fromJSONRaw(llvm::json::Value &value, StringRef circuitTarget,
-                 SmallVectorImpl<Attribute> &attrs, llvm::json::Path path,
+                 SmallVectorImpl<Attribute> &annotations, llvm::json::Path path,
                  MLIRContext *context);
 
 ParseResult foldWhenEncodedVerifOp(PrintFOp printOp);

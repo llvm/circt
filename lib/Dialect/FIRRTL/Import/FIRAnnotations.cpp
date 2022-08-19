@@ -90,7 +90,7 @@ static Attribute convertJSONToAttribute(MLIRContext *context,
 /// Convert a JSON value containing OMIR JSON (an array of OMNodes), convert
 /// this to an OMIRAnnotation, and add it to a mutable `annotationMap` argument.
 bool circt::firrtl::fromOMIRJSON(json::Value &value, StringRef circuitTarget,
-                                 llvm::StringMap<ArrayAttr> &annotationMap,
+                                 SmallVectorImpl<Attribute> &annotations,
                                  json::Path path, MLIRContext *context) {
   // The JSON value must be an array of objects.  Anything else is reported as
   // invalid.
@@ -193,19 +193,7 @@ bool circt::firrtl::fromOMIRJSON(json::Value &value, StringRef circuitTarget,
   omirAnnoFields.append("nodes", convertJSONToAttribute(context, value, path));
 
   DictionaryAttr omirAnno = DictionaryAttr::get(context, omirAnnoFields);
-
-  // If no circuit annotations exist, just insert the OMIRAnnotation.
-  auto &oldAnnotations = annotationMap[rawAnnotations];
-  if (!oldAnnotations) {
-    oldAnnotations = ArrayAttr::get(context, {omirAnno});
-    return true;
-  }
-
-  // Rewrite the ArrayAttr for the circuit.
-  SmallVector<Attribute> newAnnotations(oldAnnotations.begin(),
-                                        oldAnnotations.end());
-  newAnnotations.push_back(omirAnno);
-  oldAnnotations = ArrayAttr::get(context, newAnnotations);
+  annotations.push_back(omirAnno);
 
   return true;
 }
@@ -215,7 +203,7 @@ bool circt::firrtl::fromOMIRJSON(json::Value &value, StringRef circuitTarget,
 /// checked, at runtime, to be an array of objects.  Returns true if successful,
 /// false if unsuccessful.
 bool circt::firrtl::fromJSONRaw(json::Value &value, StringRef circuitTarget,
-                                SmallVectorImpl<Attribute> &attrs,
+                                SmallVectorImpl<Attribute> &annotations,
                                 json::Path path, MLIRContext *context) {
 
   // The JSON value must be an array of objects.  Anything else is reported as
@@ -248,7 +236,7 @@ bool circt::firrtl::fromJSONRaw(json::Value &value, StringRef circuitTarget,
       return false;
     }
 
-    attrs.push_back(DictionaryAttr::get(context, metadata));
+    annotations.push_back(DictionaryAttr::get(context, metadata));
   }
 
   return true;

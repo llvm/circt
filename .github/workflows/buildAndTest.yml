@@ -277,7 +277,7 @@ jobs:
         run: |
           git diff -U0 $DIFF_COMMIT...HEAD | \
             clang-tidy-diff -path build -p1 -fix -j$(nproc)
-          git clang-format $DIFF_COMMIT
+          git clang-format -f $DIFF_COMMIT
           git diff --ignore-submodules > clang-tidy.patch
           if [ -s clang-tidy.patch ]; then
             echo "Clang-tidy problems in the following files. " \
