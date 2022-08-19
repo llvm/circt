@@ -272,9 +272,9 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     }
     // Dest already has an entry, make sure to update all the entries in the
     // dataflow map to point to this new entry.
-    for (auto entr : dataflowAt) {
+    for (auto &entr : dataflowAt) {
       if (entr.getSecond() == oldEntry) {
-        dataflowAt[entr.getFirst()] = flowAtSrc->getSecond();
+        entr.getSecond() = flowAtSrc->getSecond();
       }
     }
   }
