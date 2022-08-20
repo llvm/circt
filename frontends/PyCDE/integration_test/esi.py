@@ -4,6 +4,7 @@
 # RUN: esi-cosim-runner.py --schema %t/schema.capnp %s %t/*.sv
 # PY: import support.loopback as test
 # PY: rpc = test.LoopbackTester(rpcschemapath, simhostport)
+# PY: print(rpc.list())
 # PY: rpc.test_two_chan_loopback(25)
 # PY: rpc.test_one_chan_loopback(25)
 
