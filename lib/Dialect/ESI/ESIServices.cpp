@@ -46,19 +46,11 @@ static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp req) {
   Value rst = req.getOperand(1);
 
   // Determine which EndpointID this generator should start with.
-  uint64_t epIdCtr = 1000; // Default EpID counter.
   if (req.impl_opts()) {
     auto opts = req.impl_opts()->getValue();
     for (auto nameAttr : opts) {
-      if (nameAttr.getName().getValue() == "EpID_start") {
-        auto epAttr = nameAttr.getValue().dyn_cast<IntegerAttr>();
-        if (!epAttr)
-          return req.emitOpError("incorrect type for option 'EpID_start'");
-        epIdCtr = epAttr.getInt();
-      } else {
-        return req.emitOpError("did not recognize option name ")
-               << nameAttr.getName();
-      }
+      return req.emitOpError("did not recognize option name ")
+             << nameAttr.getName();
     }
   }
 
@@ -120,10 +112,10 @@ static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp req) {
     else
       resType = ChannelType::get(ctxt, b.getI1Type());
 
-    auto cosim = b.create<CosimEndpointOp>(
-        toServerReq.getLoc(), resType, clk, rst,
-        argMap.lookup(toServerReq.sending()), ++epIdCtr);
-    cosim->setAttr("name", toStringAttr(toServerReq.clientNamePath()));
+    auto cosim =
+        b.create<CosimEndpointOp>(toServerReq.getLoc(), resType, clk, rst,
+                                  argMap.lookup(toServerReq.sending()),
+                                  toStringAttr(toServerReq.clientNamePath()));
     toServerReq.erase();
 
     if (foundClient != pairs.end())
@@ -143,10 +135,9 @@ static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp req) {
     } else {
       auto cosimIn = b.create<NullSourceOp>(
           toClientReq.getLoc(), ChannelType::get(ctxt, b.getI1Type()));
-      cosim = b.create<CosimEndpointOp>(toClientReq.getLoc(),
-                                        toClientReq.receiving().getType(), clk,
-                                        rst, cosimIn, ++epIdCtr);
-      cosim->setAttr("name", toStringAttr(toClientReq.clientNamePath()));
+      cosim = b.create<CosimEndpointOp>(
+          toClientReq.getLoc(), toClientReq.receiving().getType(), clk, rst,
+          cosimIn, toStringAttr(toClientReq.clientNamePath()));
     }
     req.getResult(clientReqIdx).replaceAllUsesWith(cosim.recv());
     toClientReq.erase();

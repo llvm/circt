@@ -88,8 +88,7 @@ LogicalResult ExportCosimSchema::visitEndpoint(CosimEndpointOp ep) {
   os << "# Endpoint ";
   StringAttr epName = ep->getAttrOfType<StringAttr>("name");
   if (epName)
-    os << epName << " is endpoint ";
-  os << "#" << ep.endpointID() << " at " << ep.getLoc() << ":\n";
+    os << epName << " endpoint at " << ep.getLoc() << ":\n";
   os << "#   Send type: ";
   sendTypeSchema.writeMetadata(os);
   os << "\n";

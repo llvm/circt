@@ -84,12 +84,11 @@ def CosimEndpointOp : ESI_Physical_Op<"cosim", []> {
     supported by the specific protocol.
   }];
 
-  let arguments = (ins I1:$clk, I1:$rst, ChannelType:$send,
-    I64Attr:$endpointID);
+  let arguments = (ins I1:$clk, I1:$rst, ChannelType:$send, StrAttr:$name);
   let results = (outs ChannelType:$recv);
 
   let assemblyFormat = [{
-    $clk `,` $rst `,` $send `,` $endpointID attr-dict
+    $clk `,` $rst `,` $send `,` $name attr-dict
       `:` qualified(type($send)) `->` qualified(type($recv))
   }];
 }

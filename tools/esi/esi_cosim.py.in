@@ -13,11 +13,15 @@ class CosimBase:
     self.rpc_client = capnp.TwoPartyClient(hostPort)
     self.cosim = self.rpc_client.bootstrap().cast_as(self.schema.CosimDpiServer)
 
-  def openEP(self, epNum=1, sendType=None, recvType=None):
+  def list(self):
+    """List the available interfaces"""
+    return self.cosim.list().wait().ifaces
+
+  def openEP(self, epid: str, sendType=None, recvType=None):
     """Open the endpoint, optionally checking the send and recieve types"""
     ifaces = self.cosim.list().wait().ifaces
     for iface in ifaces:
-      if iface.endpointID == epNum:
+      if iface.endpointID == epid:
         # Optionally check that the type IDs match.
         print(f"SendTypeId: {iface.sendTypeID:x}")
         print(f"RecvTypeId: {iface.recvTypeID:x}")
