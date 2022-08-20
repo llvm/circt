@@ -171,7 +171,8 @@ LogicalResult circt::esi::exportCosimSchema(ModuleOp module,
 
 LogicalResult circt::esi::exportCosimSchema(ModuleOp module,
                                             llvm::raw_ostream &os) {
-  return failure();
+  return mlir::emitError(UnknownLoc::get(module.getContext()),
+                         "Not compiled with CAPNP support");
 }
 
 #endif

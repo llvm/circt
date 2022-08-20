@@ -195,6 +195,10 @@ struct ESIConnectServicesPass
                             ArrayRef<RequestToClientConnectionOp>,
                             ArrayRef<RequestToServerConnectionOp>);
 
+  /// Copy all service metadata up the instance hierarchy. Modify the service
+  /// name path while copying.
+  void copyMetadata(hw::HWMutableModuleLike);
+
   /// For any service which is "local" (provides the requested service) in a
   /// module, replace it with a ServiceImplementOp. Said op is to be replaced
   /// with an instantiation by a generator.
@@ -233,17 +237,6 @@ void ESIConnectServicesPass::runOnOperation() {
       return;
     }
   }
-
-  // By now, we should be done with all of the service declarations so we should
-  // delete them.
-  DenseSet<StringAttr> stillUsed;
-  outerMod.walk([&](ServiceImplementReqOp req) {
-    stillUsed.insert(StringAttr::get(req.getContext(), req.service_symbol()));
-  });
-  outerMod.walk([&](ServiceDeclOp decl) {
-    if (!stillUsed.contains(decl.sym_nameAttr()))
-      decl.erase();
-  });
 }
 
 LogicalResult ESIConnectServicesPass::process(hw::HWMutableModuleLike mod) {
@@ -291,6 +284,9 @@ LogicalResult ESIConnectServicesPass::process(hw::HWMutableModuleLike mod) {
       return failure();
   }
 
+  // Copy any metadata up the instance hierarchy.
+  copyMetadata(mod);
+
   // Identify the non-local reqs which need to be surfaced from this module.
   SmallVector<RequestToClientConnectionOp, 4> nonLocalToClientReqs;
   SmallVector<RequestToServerConnectionOp, 4> nonLocalToServerReqs;
@@ -312,6 +308,56 @@ LogicalResult ESIConnectServicesPass::process(hw::HWMutableModuleLike mod) {
   if (nonLocalToClientReqs.empty() && nonLocalToServerReqs.empty())
     return success();
   return surfaceReqs(mod, nonLocalToClientReqs, nonLocalToServerReqs);
+}
+
+void ESIConnectServicesPass::copyMetadata(hw::HWMutableModuleLike mod) {
+  SmallVector<ServiceHierarchyMetadataOp, 8> metadataOps;
+  mod.walk([&](ServiceHierarchyMetadataOp op) { metadataOps.push_back(op); });
+
+  for (auto inst : moduleInstantiations[mod]) {
+    OpBuilder b(inst);
+    auto instName = b.getStringAttr(inst.instanceName());
+    for (auto metadata : metadataOps) {
+      SmallVector<Attribute, 4> path;
+      path.push_back(instName);
+      for (auto attr : metadata.serverNamePathAttr())
+        path.push_back(attr);
+
+      auto metadataCopy = cast<ServiceHierarchyMetadataOp>(b.clone(*metadata));
+      metadataCopy.serverNamePathAttr(b.getArrayAttr(path));
+    }
+  }
+}
+
+/// Create an op which contains metadata about the soon-to-be implemented
+/// service. To be used by later passes which require these data (e.g. automated
+/// software API creation).
+static void emitServiceMetadata(ServiceImplementReqOp implReqOp) {
+  ImplicitLocOpBuilder b(implReqOp.getLoc(), implReqOp);
+  SmallVector<Attribute, 8> clients;
+  for (auto *clientOp : llvm::make_pointer_range(implReqOp.getOps())) {
+    SmallVector<NamedAttribute> clientAttrs;
+    if (auto client = dyn_cast<RequestToClientConnectionOp>(clientOp)) {
+      clientAttrs.push_back(b.getNamedAttr("port", client.servicePortAttr()));
+      clientAttrs.push_back(
+          b.getNamedAttr("client_name", client.clientNamePathAttr()));
+      clientAttrs.push_back(b.getNamedAttr(
+          "to_client_type", TypeAttr::get(client.receiving().getType())));
+    } else if (auto client = dyn_cast<RequestToServerConnectionOp>(clientOp)) {
+      clientAttrs.push_back(
+          b.getNamedAttr("client_name", client.clientNamePathAttr()));
+      clientAttrs.push_back(b.getNamedAttr("port", client.servicePortAttr()));
+      clientAttrs.push_back(b.getNamedAttr(
+          "to_server_type", TypeAttr::get(client.sending().getType())));
+    }
+    clients.push_back(b.getDictionaryAttr(clientAttrs));
+  }
+
+  auto clientsAttr = b.getArrayAttr(clients);
+  auto nameAttr = b.getArrayAttr(ArrayRef<Attribute>{});
+  b.create<ServiceHierarchyMetadataOp>(implReqOp.service_symbolAttr(), nameAttr,
+                                       implReqOp.impl_typeAttr(),
+                                       implReqOp.impl_optsAttr(), clientsAttr);
 }
 
 LogicalResult ESIConnectServicesPass::replaceInst(ServiceInstanceOp instOp,
@@ -352,6 +398,8 @@ LogicalResult ESIConnectServicesPass::replaceInst(ServiceInstanceOp instOp,
        llvm::enumerate(portReqs->getOps<RequestToClientConnectionOp>()))
     e.value().receiving().replaceAllUsesWith(
         implOp.getResult(e.index() + instOpNumResults));
+
+  emitServiceMetadata(implOp);
 
   // Try to generate the service provider.
   if (failed(genDispatcher.generate(implOp)))

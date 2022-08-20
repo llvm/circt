@@ -1,8 +1,10 @@
 // REQUIRES: esi-cosim
-// RUN: circt-opt %s --esi-connect-services > %t4.mlir
-// RUN: circt-opt %t4.mlir --lower-esi-to-physical --lower-esi-ports --lower-esi-to-hw | circt-opt --export-verilog -o %t3.mlir > %t1.sv
+// RUN: rm -rf %t6 && mkdir %t6 && cd %t6
+// RUN: circt-opt %s --esi-connect-services --esi-emit-collateral=schema-file=%t2.capnp > %t4.mlir
+// RUN: circt-opt %t4.mlir --lower-esi-to-physical --lower-esi-ports --lower-esi-to-hw --export-split-verilog -o %t3.mlir
 // RUN: circt-translate %t4.mlir -export-esi-capnp -verify-diagnostics > %t2.capnp
-// RUN: esi-cosim-runner.py --schema %t2.capnp %s %t1.sv
+// RUN: cd ..
+// RUN: esi-cosim-runner.py --schema %t2.capnp %s %t6/*.sv
 // PY: import loopback as test
 // PY: rpc = test.LoopbackTester(rpcschemapath, simhostport)
 // PY: rpc.test_two_chan_loopback(25)

@@ -47,8 +47,10 @@ class System:
   ]
 
   PASSES = """
-    lower-hwarith-to-hw, msft-lower-constructs, msft-lower-instances, {partition}
-    esi-connect-services, esi-create-capnp-schema{{schema-file=schema.capnp}},
+    lower-hwarith-to-hw, msft-lower-constructs, msft-lower-instances,
+    {partition}
+    esi-connect-services,
+    esi-emit-collateral{{tops={tops} schema-file=schema.capnp}},
     lower-msft-to-hw{{verilog-file={verilog_file}}},
     lower-esi-to-physical, lower-esi-ports, lower-esi-to-hw, convert-fsm-to-sv,
     lower-seq-to-sv, hw.module(prettify-verilog), hw.module(hw-cleanup),
