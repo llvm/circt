@@ -1,5 +1,5 @@
 // RUN: circt-opt %s | circt-opt | FileCheck %s
-// RUN: circt-opt --esi-connect-services %s | circt-opt | FileCheck %s --check-prefix=CONN
+// RUN: circt-opt --esi-connect-services  %s | circt-opt | FileCheck %s --check-prefix=CONN
 
 // CHECK-LABEL: esi.service.decl @HostComms {
 // CHECK:         esi.service.to_server @Send : !esi.channel<!esi.any>

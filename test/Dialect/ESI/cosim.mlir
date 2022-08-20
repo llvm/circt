@@ -1,6 +1,6 @@
 // REQUIRES: capnp
 // RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
-// RUN: circt-opt %s --esi-create-capnp-schema=schema-file=%t1.capnp --lower-esi-ports --lower-esi-to-hw --export-verilog -verify-diagnostics | FileCheck --check-prefix=COSIM %s
+// RUN: circt-opt %s --esi-emit-collateral=schema-file=%t1.capnp --lower-esi-ports --lower-esi-to-hw --export-verilog -verify-diagnostics | FileCheck --check-prefix=COSIM %s
 
 hw.module.extern @Sender() -> (x: !esi.channel<si14>)
 hw.module.extern @Reciever(%a: !esi.channel<i32>)

@@ -160,3 +160,19 @@ def RequestInOutChannelOp : ESI_Op<"service.req.inout", [
       qualified(type($sending)) `->` qualified(type($receiving))
   }];
 }
+
+def ServiceHierarchyMetadataOp : ESI_Op<"service.hierarchy.metadata", [
+        DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
+  let summary = "Metadata about a service in the service hierarchy";
+
+  let arguments = (ins FlatSymbolRefAttr:$service_symbol,
+                       StrArrayAttr:$serverNamePath,
+                       StrAttr:$impl_type,
+                       OptionalAttr<DictionaryAttr>:$impl_details,
+                       ArrayAttr:$clients);
+  let assemblyFormat = [{
+    `path` $serverNamePath `implementing` $service_symbol
+      `impl` `as` $impl_type (`opts` $impl_details^)?
+      `clients` $clients attr-dict 
+  }];
+}
