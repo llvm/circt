@@ -55,7 +55,7 @@ bool EndpointRegistry::registerEndpoint(std::string epId, uint64_t sendTypeId,
 }
 
 void EndpointRegistry::iterateEndpoints(
-    std::function<void(std::string, const Endpoint &)> f) const {
+    const std::function<void(std::string, const Endpoint &)> &f) const {
   // This function is logically const, but modification is needed to obtain a
   // lock.
   Lock g(const_cast<EndpointRegistry *>(this)->m);

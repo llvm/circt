@@ -32,7 +32,7 @@ static std::mutex serverMutex;
 // ---- Helper functions ----
 
 /// Emit the contents of 'msg' to the log file in hex.
-static void log(char *epId, bool toClient, Endpoint::BlobPtr msg) {
+static void log(char *epId, bool toClient, const Endpoint::BlobPtr &msg) {
   std::lock_guard<std::mutex> g(serverMutex);
   if (!logFile)
     return;
