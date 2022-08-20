@@ -1447,10 +1447,10 @@ void ESIEmitCollateralPass::emitServiceJSON() {
   llvm::json::OStream j(os, 2);
 
   // Emit the list of ports of a service declaration.
-  auto emitPorts = [j](ServiceDeclOp decl) {
-    j.array([j] {
+  auto emitPorts = [&](ServiceDeclOp decl) {
+    j.array([&] {
       for (auto *portOp : llvm::make_pointer_range(decl.ports().getOps())) {
-        j.object([j] {
+        j.object([&] {
           if (auto port = dyn_cast<ToServerOp>(portOp)) {
             j.attribute("name", port.inner_sym());
             j.attribute("to-server-type", toJSON(port.type()));
@@ -1467,20 +1467,20 @@ void ESIEmitCollateralPass::emitServiceJSON() {
     });
   };
 
-  auto emitServicesForModule = [j](Operation *hwMod) {
+  auto emitServicesForModule = [&](Operation *hwMod) {
     // Emit a list of the servers in a design and the clients connected to them.
-    j.attributeArray("services", [j] {
-      hwMod->walk([j](ServiceHierarchyMetadataOp metadata) {
-        j.object([j] {
+    j.attributeArray("services", [&] {
+      hwMod->walk([&](ServiceHierarchyMetadataOp metadata) {
+        j.object([&] {
           j.attribute("service", metadata.service_symbol());
-          j.attributeArray("path", [j] {
+          j.attributeArray("path", [&] {
             for (auto attr : metadata.serverNamePath())
               j.value(attr.cast<StringAttr>().getValue());
           });
           j.attribute("impl_type", metadata.impl_type());
           if (metadata.impl_detailsAttr())
             j.attribute("impl_details", toJSON(metadata.impl_detailsAttr()));
-          j.attributeArray("clients", [j] {
+          j.attributeArray("clients", [&] {
             for (auto client : metadata.clients())
               j.value(toJSON(client));
           });
@@ -1489,12 +1489,12 @@ void ESIEmitCollateralPass::emitServiceJSON() {
     });
   };
 
-  j.object([j] {
+  j.object([&] {
     // Emit a list of the service declarations in a design.
-    j.attributeArray("declarations", [j] {
+    j.attributeArray("declarations", [&] {
       for (auto *op : llvm::make_pointer_range(mod.getOps())) {
         if (auto decl = dyn_cast<ServiceDeclOp>(op)) {
-          j.object([j] {
+          j.object([&] {
             j.attribute("name", decl.sym_name());
             j.attributeArray("ports", [&] { emitPorts(decl); });
           });
@@ -1502,9 +1502,9 @@ void ESIEmitCollateralPass::emitServiceJSON() {
       }
     });
 
-    j.attributeArray("top_levels", [j] {
+    j.attributeArray("top_levels", [&] {
       for (auto topModName : tops) {
-        j.object([j] {
+        j.object([&] {
           auto sym = FlatSymbolRefAttr::get(ctxt, topModName);
           Operation *hwMod = topSyms.getDefinition(sym);
           j.attribute("module", toJSON(sym));
