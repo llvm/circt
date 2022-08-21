@@ -11,27 +11,42 @@
 //===----------------------------------------------------------------------===//
 
 // Base class for other typedefs. Provides dialact-specific defaults.
-class FIRRTLType<string name> 
-  : TypeDef<FIRRTLDialect, name, [], "::circt::firrtl::FIRRTLBaseType"> {}
+class FIRRTLImplType<string name, list<Trait> traits = []> 
+  : TypeDef<FIRRTLDialect, name, traits, "::circt::firrtl::FIRRTLBaseType"> {}
+
+def WidthQualifiedTrait : NativeTypeTrait<"WidthQualifiedTrait"> {
+  let cppNamespace = "::circt::firrtl";
+}
 
 //===----------------------------------------------------------------------===//
 // Type declarations
 //===----------------------------------------------------------------------===//
-def ClockTypeImpl : FIRRTLType<"Clock"> {
+def ClockTypeImpl : FIRRTLImplType<"Clock"> {
   let summary = "Clock signal";
   let mnemonic = "clock";
   let assemblyFormat = "";
 }
 
-def ResetTypeImpl : FIRRTLType<"Reset"> {
+def ResetTypeImpl : FIRRTLImplType<"Reset"> {
   let summary = "Reset Signal";
-  let mnemonic = "clock";
+  let mnemonic = "reset";
   let assemblyFormat = "";
 }
 
-def AsyncResetTypeImpl : FIRRTLType<"AsyncReset"> {
+def AsyncResetTypeImpl : FIRRTLImplType<"AsyncReset"> {
   let summary = "AsyncReset signal";
-  let mnemonic = "clock";
+  let mnemonic = "asyncreset";
   let assemblyFormat = "";
 }
 
+def AnalogTypeImpl : FIRRTLImplType<"Analog", [WidthQualifiedTrait]> {
+  let summary = "Analog signal";
+  let mnemonic = "analog";
+  let parameters = (ins "int32_t":$baseWidth);
+  let assemblyFormat = "`<` $baseWidth `>`";
+  let builders = [
+    TypeBuilder<(ins "int32_t":$baseWidth)>,
+    TypeBuilder<(ins)>,
+  ];
+
+}

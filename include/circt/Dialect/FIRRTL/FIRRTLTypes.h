@@ -15,6 +15,7 @@
 
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Support/LLVM.h"
+#include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/Types.h"
 
 namespace circt {
@@ -172,6 +173,28 @@ mlir::Type getPassiveType(mlir::Type anyBaseFIRRTLType);
 // Width Qualified Ground Types
 //===----------------------------------------------------------------------===//
 
+template <typename ConcreteType>
+class WidthQualifiedTrait
+    : public mlir::OpTrait::TraitBase<ConcreteType, WidthQualifiedTrait> {
+public:
+  Optional<int32_t> getWidth() {
+    auto v = static_cast<ConcreteType *>(this)->getBaseWidth();
+    if (v >= 0)
+      return v;
+    return {};
+  }
+  int32_t getWidthOrSentinel() {
+    return static_cast<ConcreteType *>(this)->getBaseWidth();
+  }
+  bool hasWidth() {
+    return static_cast<ConcreteType *>(this)->getBaseWidth() >= 0;
+  }
+  ConcreteType changeWidth(int32_t width) {
+    return ConcreteType::get(static_cast<ConcreteType *>(this)->getContext(),
+                             width);
+  }
+};
+
 template <typename ConcreteType, typename ParentType>
 class WidthQualifiedType
     : public FIRRTLType::TypeBase<ConcreteType, ParentType,
@@ -245,18 +268,6 @@ public:
 
   /// Get an with a known width, or -1 for unknown.
   static UIntType get(MLIRContext *context, int32_t width = -1);
-
-  /// Return the bitwidth of this type or None if unknown.
-  Optional<int32_t> getWidth();
-};
-
-// `firrtl.Analog` can be attached to multiple drivers.
-class AnalogType : public WidthQualifiedType<AnalogType, FIRRTLBaseType> {
-public:
-  using WidthQualifiedType::WidthQualifiedType;
-
-  /// Get an with a known width, or -1 for unknown.
-  static AnalogType get(MLIRContext *context, int32_t width = -1);
 
   /// Return the bitwidth of this type or None if unknown.
   Optional<int32_t> getWidth();
