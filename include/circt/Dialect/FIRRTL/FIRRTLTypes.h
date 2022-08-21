@@ -169,36 +169,6 @@ mlir::Type getVectorElementType(mlir::Type array);
 mlir::Type getPassiveType(mlir::Type anyBaseFIRRTLType);
 
 //===----------------------------------------------------------------------===//
-// Ground Types Without Parameters
-//===----------------------------------------------------------------------===//
-
-/// `firrtl.Clock` describe wires and ports meant for carrying clock signals.
-class ClockType : public FIRRTLType::TypeBase<ClockType, FIRRTLBaseType,
-                                              DefaultTypeStorage> {
-public:
-  using Base::Base;
-  static ClockType get(MLIRContext *context) { return Base::get(context); }
-};
-
-/// `firrtl.Reset`.
-/// TODO(firrtl spec): This is not described in the FIRRTL spec.
-class ResetType : public FIRRTLType::TypeBase<ResetType, FIRRTLBaseType,
-                                              DefaultTypeStorage> {
-public:
-  using Base::Base;
-  static ResetType get(MLIRContext *context) { return Base::get(context); }
-};
-/// `firrtl.AsyncReset`.
-/// TODO(firrtl spec): This is not described in the FIRRTL spec.
-class AsyncResetType
-    : public FIRRTLType::TypeBase<AsyncResetType, FIRRTLBaseType,
-                                  DefaultTypeStorage> {
-public:
-  using Base::Base;
-  static AsyncResetType get(MLIRContext *context) { return Base::get(context); }
-};
-
-//===----------------------------------------------------------------------===//
 // Width Qualified Ground Types
 //===----------------------------------------------------------------------===//
 
