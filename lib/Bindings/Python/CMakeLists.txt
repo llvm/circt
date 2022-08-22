@@ -49,7 +49,6 @@ declare_mlir_python_sources(CIRCTBindingsPythonSources
   ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
   SOURCES
     circt/__init__.py
-    circt/esi.py
     circt/support.py
     circt/dialects/_ods_common.py)
 

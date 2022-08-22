@@ -101,9 +101,9 @@ def PipelineWhileOp : Op<Pipeline_Dialect, "while", []> {
   }];
 }
 
-def PipelineStageOp : Op<Pipeline_Dialect, "stage",
+def PipelineWhileStageOp : Op<Pipeline_Dialect, "while.stage",
     [HasParent<"PipelineWhileOp">]> {
-  let summary = "Pipeline dialect pipeline stage.";
+  let summary = "Pipeline dialect while pipeline stage.";
   let description = [{
     This operation has a single-block region which dictates the operations that
     may occur concurrently.
@@ -160,7 +160,7 @@ def PipelineStageOp : Op<Pipeline_Dialect, "stage",
 }
 
 def PipelineRegisterOp : Op<Pipeline_Dialect, "register",
-    [ParentOneOf<["PipelineWhileOp", "PipelineStageOp"]>, Terminator]> {
+    [ParentOneOf<["PipelineWhileOp", "PipelineWhileStageOp"]>, Terminator]> {
   let summary = "Pipeline dialect pipeline register.";
   let description = [{
     The `pipeline.register` terminates a pipeline stage and

@@ -770,7 +770,7 @@ Optional<Range> PackedDim::getRange() const {
 }
 
 Optional<unsigned> PackedDim::getSize() const {
-  return getRange().map([](auto r) { return r.size; });
+  return getRange().transform([](auto r) { return r.size; });
 }
 
 const detail::DimStorage *PackedDim::getImpl() const {
