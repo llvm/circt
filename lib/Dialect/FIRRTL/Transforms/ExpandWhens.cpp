@@ -102,7 +102,9 @@ protected:
   llvm::SmallDenseSet<Value> &subwordUninit;
 
 public:
-  LastConnectResolver(ScopedDriverMap &driverMap, llvm::SmallDenseSet<Value> &subwordUninit) : driverMap(driverMap), subwordUninit(subwordUninit) {}
+  LastConnectResolver(ScopedDriverMap &driverMap,
+                      llvm::SmallDenseSet<Value> &subwordUninit)
+      : driverMap(driverMap), subwordUninit(subwordUninit) {}
 
   using FIRRTLVisitor<ConcreteT>::visitExpr;
   using FIRRTLVisitor<ConcreteT>::visitDecl;
@@ -554,8 +556,10 @@ namespace {
 class WhenOpVisitor : public LastConnectResolver<WhenOpVisitor> {
 
 public:
-  WhenOpVisitor(ScopedDriverMap &driverMap, llvm::SmallDenseSet<Value> &subwordUninit, Value condition)
-      : LastConnectResolver<WhenOpVisitor>(driverMap, subwordUninit), condition(condition) {}
+  WhenOpVisitor(ScopedDriverMap &driverMap,
+                llvm::SmallDenseSet<Value> &subwordUninit, Value condition)
+      : LastConnectResolver<WhenOpVisitor>(driverMap, subwordUninit),
+        condition(condition) {}
 
   using LastConnectResolver<WhenOpVisitor>::visitExpr;
   using LastConnectResolver<WhenOpVisitor>::visitDecl;
@@ -680,7 +684,8 @@ namespace {
 /// This extends the LastConnectResolver to track if anything has changed.
 class ModuleVisitor : public LastConnectResolver<ModuleVisitor> {
 public:
-  ModuleVisitor() : LastConnectResolver<ModuleVisitor>(driverMap, subwordUninit) {}
+  ModuleVisitor()
+      : LastConnectResolver<ModuleVisitor>(driverMap, subwordUninit) {}
 
   using LastConnectResolver<ModuleVisitor>::visitExpr;
   using LastConnectResolver<ModuleVisitor>::visitDecl;
