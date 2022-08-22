@@ -119,7 +119,7 @@ jobs:
   # Configure CIRCT using LLVM's build system ("Unified" build). We do not actually build this configuration since it isn't as easy to cache LLVM artifacts in this mode.
   configure-circt-unified:
     name: Configure Unified Build
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-20.04
     steps:
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
       # time.
