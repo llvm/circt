@@ -223,7 +223,7 @@ class BuildOpGroups : public calyx::FuncOpPartialLoweringPattern {
                   [&](auto op) { return buildOp(rewriter, op).succeeded(); })
               .template Case<FuncOp, pipeline::PipelineWhileOp,
                              pipeline::PipelineRegisterOp,
-                             pipeline::PipelineStageOp>([&](auto) {
+                             pipeline::PipelineWhileStageOp>([&](auto) {
                 /// Skip: these special cases will be handled separately.
                 return true;
               })
@@ -906,7 +906,7 @@ class BuildPipelineRegs : public calyx::FuncOpPartialLoweringPattern {
     funcOp.walk([&](pipeline::PipelineRegisterOp op) {
       // Condition registers are handled in BuildWhileGroups.
       auto *parent = op->getParentOp();
-      auto stage = dyn_cast<pipeline::PipelineStageOp>(parent);
+      auto stage = dyn_cast<pipeline::PipelineWhileStageOp>(parent);
       if (!stage)
         return;
 
@@ -966,7 +966,7 @@ class BuildPipelineGroups : public calyx::FuncOpPartialLoweringPattern {
                            PatternRewriter &rewriter) const override {
     for (auto pipeline : funcOp.getOps<pipeline::PipelineWhileOp>())
       for (auto stage :
-           pipeline.getStagesBlock().getOps<pipeline::PipelineStageOp>())
+           pipeline.getStagesBlock().getOps<pipeline::PipelineWhileStageOp>())
         if (failed(buildStageGroups(pipeline, stage, rewriter)))
           return failure();
 
@@ -974,7 +974,7 @@ class BuildPipelineGroups : public calyx::FuncOpPartialLoweringPattern {
   }
 
   LogicalResult buildStageGroups(pipeline::PipelineWhileOp whileOp,
-                                 pipeline::PipelineStageOp stage,
+                                 pipeline::PipelineWhileStageOp stage,
                                  PatternRewriter &rewriter) const {
     // Collect pipeline registers for stage.
     auto pipelineRegisters =

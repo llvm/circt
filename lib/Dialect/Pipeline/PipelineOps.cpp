@@ -162,15 +162,15 @@ LogicalResult PipelineWhileOp::verify() {
 
   int64_t lastStartTime = -1;
   for (Operation &inner : stagesBlock) {
-    // Verify the stages block contains only `pipeline.stage` and
+    // Verify the stages block contains only `pipeline.while.stage` and
     // `pipeline.terminator` ops.
-    if (!isa<PipelineStageOp, PipelineTerminatorOp>(inner))
-      return emitOpError("stages may only contain 'pipeline.stage' or "
+    if (!isa<PipelineWhileStageOp, PipelineTerminatorOp>(inner))
+      return emitOpError("stages may only contain 'pipeline.while.stage' or "
                          "'pipeline.terminator' ops, found ")
              << inner;
 
     // Verify the stage start times are monotonically increasing.
-    if (auto stage = dyn_cast<PipelineStageOp>(inner)) {
+    if (auto stage = dyn_cast<PipelineWhileStageOp>(inner)) {
       if (lastStartTime == -1) {
         lastStartTime = stage.start();
         continue;
@@ -218,18 +218,18 @@ void PipelineWhileOp::build(OpBuilder &builder, OperationState &state,
 }
 
 //===----------------------------------------------------------------------===//
-// PipelineStageOp
+// PipelineWhileStageOp
 //===----------------------------------------------------------------------===//
 
-LogicalResult PipelineStageOp::verify() {
+LogicalResult PipelineWhileStageOp::verify() {
   if (start() < 0)
     return emitOpError("'start' must be non-negative");
 
   return success();
 }
 
-void PipelineStageOp::build(OpBuilder &builder, OperationState &state,
-                            TypeRange resultTypes, IntegerAttr start) {
+void PipelineWhileStageOp::build(OpBuilder &builder, OperationState &state,
+                                 TypeRange resultTypes, IntegerAttr start) {
   OpBuilder::InsertionGuard g(builder);
 
   state.addTypes(resultTypes);
@@ -241,12 +241,24 @@ void PipelineStageOp::build(OpBuilder &builder, OperationState &state,
   builder.create<PipelineRegisterOp>(builder.getUnknownLoc(), ValueRange());
 }
 
+unsigned PipelineWhileStageOp::getStageNumber() {
+  unsigned number = 0;
+  auto *op = getOperation();
+  auto parent = op->getParentOfType<PipelineWhileOp>();
+  Operation *stage = &parent.getStagesBlock().front();
+  while (stage != op && stage->getNextNode()) {
+    ++number;
+    stage = stage->getNextNode();
+  }
+  return number;
+}
+
 //===----------------------------------------------------------------------===//
 // PipelineRegisterOp
 //===----------------------------------------------------------------------===//
 
 LogicalResult PipelineRegisterOp::verify() {
-  PipelineStageOp stage = (*this)->getParentOfType<PipelineStageOp>();
+  PipelineWhileStageOp stage = (*this)->getParentOfType<PipelineWhileStageOp>();
 
   // If this doesn't terminate a stage, it is terminating the condition.
   if (stage == nullptr)
@@ -261,18 +273,6 @@ LogicalResult PipelineRegisterOp::verify() {
            << ")";
 
   return success();
-}
-
-unsigned PipelineStageOp::getStageNumber() {
-  unsigned number = 0;
-  auto *op = getOperation();
-  auto parent = op->getParentOfType<PipelineWhileOp>();
-  Operation *stage = &parent.getStagesBlock().front();
-  while (stage != op && stage->getNextNode()) {
-    ++number;
-    stage = stage->getNextNode();
-  }
-  return number;
 }
 
 //===----------------------------------------------------------------------===//
@@ -293,8 +293,9 @@ LogicalResult PipelineTerminatorOp::verify() {
 
   // Verify `iter_args` are defined by a pipeline stage.
   for (auto iterArg : iterArgs)
-    if (iterArg.getDefiningOp<PipelineStageOp>() == nullptr)
-      return emitOpError("'iter_args' must be defined by a 'pipeline.stage'");
+    if (iterArg.getDefiningOp<PipelineWhileStageOp>() == nullptr)
+      return emitOpError(
+          "'iter_args' must be defined by a 'pipeline.while.stage'");
 
   // Verify pipeline terminates with the same result types as the pipeline.
   auto opResults = results();
@@ -307,8 +308,9 @@ LogicalResult PipelineTerminatorOp::verify() {
 
   // Verify `results` are defined by a pipeline stage.
   for (auto result : opResults)
-    if (result.getDefiningOp<PipelineStageOp>() == nullptr)
-      return emitOpError("'results' must be defined by a 'pipeline.stage'");
+    if (result.getDefiningOp<PipelineWhileStageOp>() == nullptr)
+      return emitOpError(
+          "'results' must be defined by a 'pipeline.while.stage'");
 
   return success();
 }
