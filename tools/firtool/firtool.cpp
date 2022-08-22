@@ -28,6 +28,7 @@
 #include "circt/Support/LoweringOptions.h"
 #include "circt/Support/Version.h"
 #include "circt/Transforms/Passes.h"
+#include "mlir/Bytecode/BytecodeReader.h"
 #include "mlir/Bytecode/BytecodeWriter.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/AsmState.h"
@@ -66,7 +67,7 @@ static cl::opt<InputFormatKind> inputFormat(
     cl::values(clEnumValN(InputUnspecified, "autodetect",
                           "Autodetect input format"),
                clEnumValN(InputFIRFile, "fir", "Parse as .fir file"),
-               clEnumValN(InputMLIRFile, "mlir", "Parse as .mlir file")),
+               clEnumValN(InputMLIRFile, "mlir", "Parse as .mlir or .bc file")),
     cl::init(InputUnspecified), cl::cat(mainCategory));
 
 static cl::opt<std::string> inputFilename(cl::Positional,
@@ -858,25 +859,27 @@ static LogicalResult executeFirtool(MLIRContext &context) {
   applyDefaultTimingManagerCLOptions(tm);
   auto ts = tm.getRootScope();
 
-  // Figure out the input format if unspecified.
-  if (inputFormat == InputUnspecified) {
-    if (StringRef(inputFilename).endswith(".fir"))
-      inputFormat = InputFIRFile;
-    else if (StringRef(inputFilename).endswith(".mlir"))
-      inputFormat = InputMLIRFile;
-    else {
-      llvm::errs() << "unknown input format: "
-                      "specify with -format=fir or -format=mlir\n";
-      return failure();
-    }
-  }
-
   // Set up the input file.
   std::string errorMessage;
   auto input = openInputFile(inputFilename, &errorMessage);
   if (!input) {
     llvm::errs() << errorMessage << "\n";
     return failure();
+  }
+
+  // Figure out the input format if unspecified.
+  if (inputFormat == InputUnspecified) {
+    if (StringRef(inputFilename).endswith(".fir"))
+      inputFormat = InputFIRFile;
+    else if (StringRef(inputFilename).endswith(".mlir") ||
+             StringRef(inputFilename).endswith(".bc") ||
+             mlir::isBytecode(*input))
+      inputFormat = InputMLIRFile;
+    else {
+      llvm::errs() << "unknown input format: "
+                      "specify with -format=fir or -format=mlir\n";
+      return failure();
+    }
   }
 
   // Create the output directory or output file depending on our mode.
