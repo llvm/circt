@@ -125,7 +125,7 @@ public:
     ops.push_back(bits);
     // By default don't make a replacement.
     Value replacedVal = bits;
-    while (ops.size() > 0) {
+    while (!ops.empty()) {
       auto op = ops.pop_back_val();
       if (!op.getInput().getDefiningOp())
         continue;

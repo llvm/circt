@@ -1122,7 +1122,7 @@ LogicalResult BitsPrimOp::canonicalize(BitsPrimOp op,
     auto rhsT = cat.getRhs().getType().cast<IntType>();
     if (!rhsT.hasWidth())
       return failure();
-    uint32_t lhsLo = rhsT.getWidth().getValue();
+    uint32_t lhsLo = rhsT.getWidth().value();
     uint32_t rhsHi = lhsLo - 1;
     if (op.getLo() >= lhsLo) {
       // Only indexing the lhs.
