@@ -28,6 +28,7 @@
 #include "circt/Support/LoweringOptions.h"
 #include "circt/Support/Version.h"
 #include "circt/Transforms/Passes.h"
+#include "mlir/Bytecode/BytecodeWriter.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -46,6 +47,7 @@
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/SourceMgr.h"
+#include "llvm/Support/SystemUtils.h"
 #include "llvm/Support/ToolOutputFile.h"
 
 using namespace llvm;
@@ -353,6 +355,14 @@ static cl::opt<std::string>
                 cl::init(""), cl::value_desc("filename"),
                 cl::cat(mainCategory));
 
+static cl::opt<bool>
+    emitBytecode("emit-bytecode",
+                 cl::desc("Emit bytecode when generating MLIR output"),
+                 cl::init(false), cl::cat(mainCategory));
+
+static cl::opt<bool> force("f", cl::desc("Enable binary output on terminals"),
+                           cl::init(false), cl::cat(mainCategory));
+
 static cl::opt<std::string> blackBoxRootPath(
     "blackbox-path",
     cl::desc("Optional path to use as the root of black box annotations"),
@@ -441,6 +451,15 @@ public:
   }
 };
 
+/// Print the operation to the specified stream, emitting bytecode when
+/// requested and politely avoiding dumping to terminal unless forced.
+static void printOp(Operation *op, raw_ostream &os) {
+  if (emitBytecode && (force || !CheckBitcodeOutputToConsole(os)))
+    writeBytecodeToFile(op, os, getCirctVersion());
+  else
+    op->print(os);
+}
+
 /// Process a single buffer of the input.
 static LogicalResult
 processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
@@ -505,7 +524,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   if (outputFormat == OutputParseOnly) {
     mlir::ModuleOp theModule = module.release();
     auto outputTimer = ts.nest("Print .mlir output");
-    theModule->print(outputFile.value()->os());
+    printOp(theModule, outputFile.value()->os());
     return success();
   }
 
@@ -757,7 +776,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   if (outputFormat == OutputIRFir || outputFormat == OutputIRHW ||
       outputFormat == OutputIRSV || outputFormat == OutputIRVerilog) {
     auto outputTimer = ts.nest("Print .mlir output");
-    module->print(outputFile.value()->os());
+    printOp(*module, outputFile.value()->os());
   }
 
   // If requested, print the final MLIR into mlirOutFile.
@@ -769,7 +788,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
       return failure();
     }
 
-    module->print(mlirFile->os());
+    printOp(*module, mlirFile->os());
     mlirFile->keep();
   }
 
