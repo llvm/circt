@@ -11,16 +11,16 @@ esi.service.decl @HostComms {
 }
 
 // CHECK-LABEL: hw.module @Top(%clk: i1, %rst: i1) {
-// CHECK:         esi.service.instance @HostComms impl as "cosim" opts {EpID_start = 20 : i64}(%clk, %rst) : (i1, i1) -> ()
+// CHECK:         esi.service.instance @HostComms impl as "cosim"(%clk, %rst) : (i1, i1) -> ()
 // CHECK:         hw.instance "m1" @Loopback(clk: %clk: i1) -> ()
 
 // CONN-LABEL: hw.module @Top(%clk: i1, %rst: i1) {
-// CONN:         [[R2:%.+]] = esi.cosim %clk, %rst, %m1.loopback_fromhw, 21 {name = "m1.loopback_fromhw"} : !esi.channel<i8> -> !esi.channel<i1>
+// CONN:         [[R2:%.+]] = esi.cosim %clk, %rst, %m1.loopback_fromhw, "m1.loopback_fromhw" : !esi.channel<i8> -> !esi.channel<i1>
 // CONN:         [[R0:%.+]] = esi.null : !esi.channel<i1>
-// CONN:         [[R1:%.+]] = esi.cosim %clk, %rst, [[R0]], 22 {name = "m1.loopback_tohw"} : !esi.channel<i1> -> !esi.channel<i8>
+// CONN:         [[R1:%.+]] = esi.cosim %clk, %rst, [[R0]], "m1.loopback_tohw" : !esi.channel<i1> -> !esi.channel<i8>
 // CONN:         %m1.loopback_fromhw = hw.instance "m1" @Loopback(clk: %clk: i1, loopback_tohw: [[R1]]: !esi.channel<i8>) -> (loopback_fromhw: !esi.channel<i8>)
 hw.module @Top (%clk: i1, %rst: i1) {
-  esi.service.instance @HostComms impl as  "cosim" opts {EpID_start = 20} (%clk, %rst) : (i1, i1) -> ()
+  esi.service.instance @HostComms impl as  "cosim" (%clk, %rst) : (i1, i1) -> ()
   hw.instance "m1" @Loopback (clk: %clk: i1) -> ()
 }
 
@@ -140,10 +140,10 @@ msft.module @InOutLoopback {} (%clk: i1) -> () {
 }
 
 // CONN-LABEL: msft.module @LoopbackCosimTop {} (%clk: i1, %rst: i1) {
-// CONN:         [[R1:%.+]] = esi.cosim %clk, %rst, %m1.loopback_inout, 21 {name = "m1.loopback_inout"} : !esi.channel<i8> -> !esi.channel<i16>
+// CONN:         [[R1:%.+]] = esi.cosim %clk, %rst, %m1.loopback_inout, "m1.loopback_inout" : !esi.channel<i8> -> !esi.channel<i16>
 // CONN:         %m1.loopback_inout = msft.instance @m1 @InOutLoopback(%clk, %0)  : (i1, !esi.channel<i16>) -> !esi.channel<i8>
 msft.module @LoopbackCosimTop {} (%clk: i1, %rst: i1) {
-  esi.service.instance @HostComms impl as "cosim" opts {EpID_start = 20} (%clk, %rst) : (i1, i1) -> ()
+  esi.service.instance @HostComms impl as "cosim" (%clk, %rst) : (i1, i1) -> ()
   msft.instance @m1 @InOutLoopback(%clk) : (i1) -> ()
   msft.output
 }

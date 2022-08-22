@@ -16,7 +16,7 @@ import Cosim_DpiPkg::*;
 
 module Cosim_Endpoint
 #(
-  parameter int ENDPOINT_ID = -1,
+  parameter string ENDPOINT_ID_EXT = "",
   parameter longint RECV_TYPE_ID = -1,
   parameter int RECV_TYPE_SIZE_BITS = -1,
   parameter longint SEND_TYPE_ID = -1,
@@ -34,6 +34,13 @@ module Cosim_Endpoint
   output logic DataInReady,
   input  logic [SEND_TYPE_SIZE_BITS-1:0] DataIn
 );
+
+  string ENDPOINT_ID_BASE = $sformatf("%m");
+  string ENDPOINT_ID;
+  if (ENDPOINT_ID_EXT != "")
+    assign ENDPOINT_ID = $sformatf("%s.%s", ENDPOINT_ID_BASE, ENDPOINT_ID_EXT);
+  else
+    assign ENDPOINT_ID = ENDPOINT_ID_BASE;
 
   bit Initialized;
 

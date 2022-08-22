@@ -65,7 +65,7 @@ msft.module @InOutLoopback {} (%clk: i1) -> () {
 }
 
 msft.module @LoopbackCosimTop {} (%clk: i1, %rst: i1) {
-  esi.service.instance @HostComms impl as "cosim" opts {EpID_start = 20} (%clk, %rst) : (i1, i1) -> ()
+  esi.service.instance @HostComms impl as "cosim" (%clk, %rst) : (i1, i1) -> ()
   msft.instance @m1 @InOutLoopback(%clk) : (i1) -> ()
   msft.output
 }
@@ -80,9 +80,6 @@ msft.module @LoopbackCosimTop {} (%clk: i1, %rst: i1) {
 // CHECK:             "top"
 // CHECK:           ],
 // CHECK:           "impl_type": "cosim",
-// CHECK:           "impl_details": {
-// CHECK:             "EpID_start": 20
-// CHECK:           },
 // CHECK:           "clients": [
 // CHECK:             {
 // CHECK:               "client_name": [

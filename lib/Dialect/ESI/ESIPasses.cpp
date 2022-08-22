@@ -239,7 +239,7 @@ HWModuleExternOp ESIHWBuilder::declareCosimEndpointOp(Operation *symTable,
                       {dataInReady, PortDirection::OUTPUT, getI1Type(), 2},
                       {dataIn, PortDirection::INPUT, sendType, 4}};
   SmallVector<Attribute, 8> params;
-  params.push_back(ParamDeclAttr::get("ENDPOINT_ID", getI32Type()));
+  params.push_back(ParamDeclAttr::get("ENDPOINT_ID_EXT", getStringAttr("")));
   params.push_back(
       ParamDeclAttr::get("SEND_TYPE_ID", getIntegerType(64, false)));
   params.push_back(ParamDeclAttr::get("SEND_TYPE_SIZE_BITS", getI32Type()));
@@ -1205,8 +1205,11 @@ CosimLowering::matchAndRewrite(CosimEndpointOp ep, OpAdaptor adaptor,
 
   // Set all the parameters.
   SmallVector<Attribute, 8> params;
-  params.push_back(ParamDeclAttr::get(
-      "ENDPOINT_ID", rewriter.getI32IntegerAttr(ep.endpointID())));
+  if (auto ext = ep->getAttrOfType<StringAttr>("name_ext"))
+    params.push_back(ParamDeclAttr::get("ENDPOINT_ID_EXT", ext));
+  else
+    params.push_back(
+        ParamDeclAttr::get("ENDPOINT_ID_EXT", StringAttr::get(ctxt, "")));
   params.push_back(ParamDeclAttr::get(
       "SEND_TYPE_ID",
       IntegerAttr::get(ui64Type, sendTypeSchema.capnpTypeID())));
