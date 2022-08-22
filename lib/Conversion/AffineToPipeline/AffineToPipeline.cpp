@@ -441,7 +441,8 @@ LogicalResult AffineToPipeline::createPipelinePipeline(
     // Create the stage itself.
     auto startTimeAttr = builder.getIntegerAttr(
         builder.getIntegerType(64, /*isSigned=*/true), startTime);
-    auto stage = builder.create<PipelineStageOp>(stageTypes, startTimeAttr);
+    auto stage =
+        builder.create<PipelineWhileStageOp>(stageTypes, startTimeAttr);
     auto &stageBlock = stage.getBodyBlock();
     auto *stageTerminator = stageBlock.getTerminator();
     builder.setInsertionPointToStart(&stageBlock);
