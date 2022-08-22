@@ -99,10 +99,10 @@ protected:
   /// A set containing all uninitialized wire ops that were created as part of a
   /// subword assignment. If any of these are reachable after all connections
   /// have been resolved, then the this indicates an initialization failure.
-  llvm::SmallDenseSet<Value, 8> subwordUninit;
+  llvm::SmallDenseSet<Value> &subwordUninit;
 
 public:
-  LastConnectResolver(ScopedDriverMap &driverMap) : driverMap(driverMap) {}
+  LastConnectResolver(ScopedDriverMap &driverMap, llvm::SmallDenseSet<Value> &subwordUninit) : driverMap(driverMap), subwordUninit(subwordUninit) {}
 
   using FIRRTLVisitor<ConcreteT>::visitExpr;
   using FIRRTLVisitor<ConcreteT>::visitDecl;
@@ -145,7 +145,7 @@ public:
         auto rhsT = cat.getRhs().getType().cast<IntType>();
         if (!rhsT.hasWidth())
           continue;
-        uint32_t lhsLo = rhsT.getWidth().getValue();
+        uint32_t lhsLo = rhsT.getWidth().value();
         uint32_t rhsHi = lhsLo - 1;
         Value newVal;
         if (op.getLo() >= lhsLo) {
@@ -209,7 +209,7 @@ public:
     bits = cast<BitsPrimOp>(canonicalizeBits(bits, ops, b).getDefiningOp());
 
     // Get x's width.
-    int w = bits.getInput().getType().dyn_cast<IntType>().getWidth().getValue();
+    int w = bits.getInput().getType().dyn_cast<IntType>().getWidth().value();
     auto it = driverMap.find(getFieldRefFromValue(bits.getInput()));
 
     Value xprev;
@@ -554,8 +554,8 @@ namespace {
 class WhenOpVisitor : public LastConnectResolver<WhenOpVisitor> {
 
 public:
-  WhenOpVisitor(ScopedDriverMap &driverMap, Value condition)
-      : LastConnectResolver<WhenOpVisitor>(driverMap), condition(condition) {}
+  WhenOpVisitor(ScopedDriverMap &driverMap, llvm::SmallDenseSet<Value> &subwordUninit, Value condition)
+      : LastConnectResolver<WhenOpVisitor>(driverMap, subwordUninit), condition(condition) {}
 
   using LastConnectResolver<WhenOpVisitor>::visitExpr;
   using LastConnectResolver<WhenOpVisitor>::visitDecl;
@@ -645,7 +645,7 @@ void LastConnectResolver<ConcreteT>::processWhenOp(WhenOp whenOp,
 
   auto &thenBlock = whenOp.getThenBlock();
   driverMap.pushScope();
-  WhenOpVisitor(driverMap, thenCondition).process(thenBlock);
+  WhenOpVisitor(driverMap, subwordUninit, thenCondition).process(thenBlock);
   mergeBlock(*parentBlock, Block::iterator(whenOp), thenBlock);
   auto thenScope = driverMap.popScope();
 
@@ -661,7 +661,7 @@ void LastConnectResolver<ConcreteT>::processWhenOp(WhenOp whenOp,
                                                 elseCondition);
     auto &elseBlock = whenOp.getElseBlock();
     driverMap.pushScope();
-    WhenOpVisitor(driverMap, elseCondition).process(elseBlock);
+    WhenOpVisitor(driverMap, subwordUninit, elseCondition).process(elseBlock);
     mergeBlock(*parentBlock, Block::iterator(whenOp), elseBlock);
     elseScope = driverMap.popScope();
   }
@@ -680,7 +680,7 @@ namespace {
 /// This extends the LastConnectResolver to track if anything has changed.
 class ModuleVisitor : public LastConnectResolver<ModuleVisitor> {
 public:
-  ModuleVisitor() : LastConnectResolver<ModuleVisitor>(driverMap) {}
+  ModuleVisitor() : LastConnectResolver<ModuleVisitor>(driverMap, subwordUninit) {}
 
   using LastConnectResolver<ModuleVisitor>::visitExpr;
   using LastConnectResolver<ModuleVisitor>::visitDecl;
@@ -698,6 +698,8 @@ private:
   ScopedDriverMap driverMap;
   /// A memoization table for computing reachable subword uninitialized ops.
   DenseSet<Operation *> subwordInitChecked;
+  // Uninitialized wire ops used in subword assignments.
+  llvm::SmallDenseSet<Value> subwordUninit;
 
   /// Tracks if anything in the IR has changed.
   bool anythingChanged = false;
@@ -739,9 +741,9 @@ void ModuleVisitor::visitStmt(WhenOp whenOp) {
 
 // Returns true if any ops in the list use an uninitialized subword value.
 bool ModuleVisitor::usesSubwordUninit(SmallVector<Operation *> ops) {
-  if (subwordUninit.size() == 0)
+  if (subwordUninit.empty())
     return false;
-  while (ops.size() > 0) {
+  while (!ops.empty()) {
     auto *op = ops.pop_back_val();
 
     if (!op || subwordInitChecked.contains(op))
