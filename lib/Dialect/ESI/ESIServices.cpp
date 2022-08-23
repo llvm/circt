@@ -310,7 +310,9 @@ void ESIConnectServicesPass::copyMetadata(hw::HWMutableModuleLike mod) {
     auto instName = b.getStringAttr(inst.instanceName());
     for (auto metadata : metadataOps) {
       SmallVector<Attribute, 4> path;
-      path.push_back(instName);
+      path.push_back(hw::InnerRefAttr::get(
+          cast<hw::HWModuleLike>(mod.getOperation()).moduleNameAttr(),
+          instName));
       for (auto attr : metadata.serverNamePathAttr())
         path.push_back(attr);
 

@@ -78,6 +78,7 @@ declare_mlir_dialect_python_bindings(
   TD_FILE circt/dialects/ESIOps.td
   SOURCES
     circt/dialects/esi.py
+    circt/dialects/esi_runtime_common.py
     circt/dialects/_esi_ops_ext.py
   DIALECT_NAME esi)
 
