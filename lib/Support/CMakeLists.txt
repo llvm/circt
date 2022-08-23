@@ -5,6 +5,19 @@
 set(VERSION_CPP "${CMAKE_CURRENT_BINARY_DIR}/Version.cpp")
 set_source_files_properties("${VERSION_CPP}" PROPERTIES GENERATED TRUE)
 
+set(LLVM_OPTIONAL_SOURCES
+  BackedgeBuilder.cpp
+  FieldRef.cpp
+  LoweringOptions.cpp
+  Path.cpp
+  APInt.cpp
+  ValueMapper.cpp
+  SymCache.cpp
+  TestPasses.cpp
+  "${VERSION_CPP}"
+  )
+
+
 add_circt_library(CIRCTSupport
   BackedgeBuilder.cpp
   FieldRef.cpp
@@ -20,6 +33,18 @@ add_circt_library(CIRCTSupport
   LINK_LIBS PUBLIC
   MLIRIR
   )
+
+
+add_circt_library(CIRCTSupportTestPasses
+  TestPasses.cpp
+
+  LINK_LIBS PUBLIC
+  CIRCTHW
+  CIRCTESI
+  CIRCTSeq
+  MLIRPass
+)
+
 
 #-------------------------------------------------------------------------------
 # Generate Version.cpp

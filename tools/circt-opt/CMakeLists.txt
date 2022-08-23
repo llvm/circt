@@ -56,6 +56,7 @@ target_link_libraries(circt-opt
   CIRCTHWArith
   CIRCTSystemC
   CIRCTTransforms
+  CIRCTSupportTestPasses
 
   MLIRIR
   MLIRLLVMDialect

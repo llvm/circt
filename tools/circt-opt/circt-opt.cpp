@@ -30,6 +30,7 @@ namespace circt {
 namespace test {
 void registerAnalysisTestPasses();
 void registerSchedulingTestPasses();
+void registerSupportTestPasses();
 } // namespace test
 } // namespace circt
 
@@ -57,6 +58,7 @@ int main(int argc, char **argv) {
   // Register test passes
   circt::test::registerAnalysisTestPasses();
   circt::test::registerSchedulingTestPasses();
+  circt::test::registerSupportTestPasses();
 
   // Other command line options.
   circt::registerLoweringCLOptions();
