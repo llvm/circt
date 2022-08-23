@@ -55,12 +55,12 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
         continue;
       Value rClock, wClock;
       // The memory has exactly two ports.
-      SmallVector<Value> portTerms[2];
+      SmallVector<Value> readTerms, writeTerms;
       for (const auto &portIt : llvm::enumerate(memOp.getResults())) {
         // Get the port value.
         Value portVal = portIt.value();
         // Get the port kind.
-        bool readPort =
+        bool isReadPort =
             memOp.getPortKind(portIt.index()) == MemOp::PortKind::Read;
         // Iterate over all users of the port.
         for (Operation *u : portVal.getUsers())
@@ -72,10 +72,10 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
             // If this is the enable field, record the product terms(the And
             // expression tree).
             if (fName.equals("en"))
-              getProductTerms(sf, portTerms[readPort ? 0 : 1]);
+              getProductTerms(sf, isReadPort ? readTerms : writeTerms);
 
             else if (fName.equals("clk")) {
-              if (readPort)
+              if (isReadPort)
                 rClock = getConnectSrc(sf);
               else
                 wClock = getConnectSrc(sf);
@@ -91,18 +91,18 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
           llvm::dbgs() << "\n read clock:" << rClock
                        << " --- write clock:" << wClock;
           llvm::dbgs() << "\n Read terms==>"; for (auto t
-                                                   : portTerms[0]) llvm::dbgs()
+                                                   : readTerms) llvm::dbgs()
                                               << "\n term::" << t;
 
           llvm::dbgs() << "\n Write terms==>"; for (auto t
-                                                    : portTerms[1]) llvm::dbgs()
+                                                    : writeTerms) llvm::dbgs()
                                                << "\n term::" << t;
 
       );
       // If the read and write clocks are the same, and if any of the write
       // enable product terms are a complement of the read enable, then return
       // the write enable term.
-      auto complementTerm = checkComplement(portTerms);
+      auto complementTerm = checkComplement(readTerms, writeTerms);
       if (!complementTerm)
         continue;
 
@@ -168,7 +168,7 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
         // Get the port value.
         Value portVal = portIt.value();
         // Get the port kind.
-        bool readPort =
+        bool isReadPort =
             memOp.getPortKind(portIt.index()) == MemOp::PortKind::Read;
         // Iterate over all users of the port, which are the subfield ops, and
         // replace them.
@@ -178,7 +178,7 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
                 sf.getInput().getType().cast<BundleType>().getElementName(
                     sf.getFieldIndex());
             Value repl;
-            if (readPort)
+            if (isReadPort)
               repl = llvm::StringSwitch<Value>(fName)
                          .Case("en", rEnWire)
                          .Case("clk", clk)
@@ -280,11 +280,12 @@ private:
   /// corresponding write enable term. prodTerms[0], prodTerms[1] is a vector of
   /// Value, each of which correspond to the two product terms of read and write
   /// enable respectively.
-  Value checkComplement(SmallVector<Value> prodTerms[2]) {
+  Value checkComplement(SmallVector<Value> readTerms,
+                        SmallVector<Value> writeTerms) {
     // Foreach Value in first term, check if it is the complement of any of the
     // Value in second term.
-    for (auto t1 : prodTerms[0])
-      for (auto t2 : prodTerms[1]) {
+    for (auto t1 : readTerms)
+      for (auto t2 : writeTerms) {
         // Return t2, t1 is a Not of t2.
         if (!t1.isa<BlockArgument>() && isa<NotPrimOp>(t1.getDefiningOp()))
           if (cast<NotPrimOp>(t1.getDefiningOp()).getInput() == t2)
