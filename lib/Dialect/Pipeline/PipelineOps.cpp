@@ -58,12 +58,12 @@ LogicalResult PipelineOp::verify() {
   }
 
   // Check mixing of `pipeline.stage` and `pipeline.stage.register` ops.
-  bool hasStageOps = getOps<PipelineStageOp>().size() > 0;
-  bool hasStageRegOps = getOps<PipelineStageRegisterOp>().size() > 0;
-  if (!(hasStageOps ^ hasStageRegOps))
-    return emitOpError(
-        "expected either `pipeline.stage` or "
-        "`pipeline.stage.register` ops in the pipeline, but not both.");
+  bool hasStageOps = !getOps<PipelineStageOp>().empty();
+  bool hasStageRegOps = !getOps<PipelineStageRegisterOp>().empty();
+
+  if (hasStageOps && hasStageRegOps)
+    return emitOpError("mixing `pipeline.stage` and `pipeline.stage.register` "
+                       "ops is illegal.");
 
   return success();
 }

@@ -278,6 +278,7 @@ hw.module @res_argtype(%arg0 : i32, %arg1 : i32, %clk : i1, %rst : i1) -> (out: 
 // -----
 
 hw.module @mixed_stages(%arg0 : i32, %arg1 : i32, %clk : i1, %rst : i1) -> (out: i32) {
+  // expected-error @+1 {{'pipeline.pipeline' op mixing `pipeline.stage` and `pipeline.stage.register` ops is illegal.}}
   %0 = pipeline.pipeline(%arg0, %arg1) clock %clk reset %rst : (i32, i32) -> (i32) {
    ^bb0(%a0 : i32, %a1: i32):
     %0 = comb.add %a0, %a1 : i32
