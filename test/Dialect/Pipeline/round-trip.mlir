@@ -214,7 +214,7 @@ hw.module @retimeable2(%arg0 : i32, %arg1 : i32, %clk : i1, %rst : i1) -> (out: 
    ^bb0(%a0 : i32, %a1: i32):
     %0 = comb.add %a0, %a1 : i32
     %c1_i1 = hw.constant 1 : i1
-    %r_0, %s0_valid = pipeline.stage when %c1_i1 regs %0 : i32
+    %r_0, %s0_valid = pipeline.stage.register when %c1_i1 regs %0 : i32
     pipeline.return %0 valid %s0_valid : i32
   }
   hw.output %0 : i32

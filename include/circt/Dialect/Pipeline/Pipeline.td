@@ -123,6 +123,27 @@ def PipelineOp : Op<Pipeline_Dialect, "pipeline", [
 
 
 def PipelineStageOp : Op<Pipeline_Dialect, "stage", [
+    HasParent<"PipelineOp">
+  ]> {
+  let summary = "Pipeline pipeline stage.";
+  let description = [{
+    The `pipeline.stage` operation represents a stage separating register
+    in a pipeline. The stage does not define any explicit registers, but solely
+    defines a cut of a dataflow graph based on its lexical position in the
+    pipeline. Pipeline registers are made explicit through the register
+    materialization pass, wherein this op is replaced by
+    `pipeline.stage.register` operations.
+  }];
+
+  let arguments = (ins I1:$when);
+  let results = (outs I1:$valid);
+
+  let assemblyFormat = [{
+    `when` $when attr-dict
+  }];
+}
+
+def PipelineStageRegisterOp : Op<Pipeline_Dialect, "stage.register", [
     HasParent<"PipelineOp">,
     RangedTypesMatchWith<"result type matches operand", "regIns", "regOuts",
                          "llvm::make_range($_self.begin(), $_self.end())">
@@ -130,7 +151,11 @@ def PipelineStageOp : Op<Pipeline_Dialect, "stage", [
   let summary = "Pipeline pipeline stage.";
   let description = [{
     The `pipeline.stage` operation represents a stage separating register
-    in a pipeline.
+    in a pipeline with materialized register values. `pipeline.stage` and
+    `pipeline.stage.register` operations are not allowed to co-exist in the
+    same pipeline body. This is because, once register values are materialized,
+    all delays as well as knowledge about multicycle paths have been lowered
+    away.
   }];
 
   let arguments = (ins Variadic<AnyType>:$regIns, I1:$when);

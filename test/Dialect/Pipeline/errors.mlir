@@ -274,3 +274,17 @@ hw.module @res_argtype(%arg0 : i32, %arg1 : i32, %clk : i1, %rst : i1) -> (out: 
   }
   hw.output %0 : i31
 }
+
+// -----
+
+hw.module @mixed_stages(%arg0 : i32, %arg1 : i32, %clk : i1, %rst : i1) -> (out: i32) {
+  %0 = pipeline.pipeline(%arg0, %arg1) clock %clk reset %rst : (i32, i32) -> (i32) {
+   ^bb0(%a0 : i32, %a1: i32):
+    %0 = comb.add %a0, %a1 : i32
+    %c1_i1 = hw.constant 1 : i1
+    %r_0, %s0_valid = pipeline.stage.register when %c1_i1 regs %0 : i32
+    %s1_valid = pipeline.stage when %s0_valid
+    pipeline.return %0 valid %s0_valid : i32
+  }
+  hw.output %0 : i32
+}
