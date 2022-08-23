@@ -810,11 +810,6 @@ struct BundleTypeStorage : mlir::TypeStorage {
 } // namespace firrtl
 } // namespace circt
 
-// BundleType BundleType::get(ArrayRef<BundleElement> elements,
-//                            MLIRContext *context) {
-//   return Base::get(context, elements);
-// }
-
 auto BundleType::getElements() const -> ArrayRef<BundleElement> {
   return getImpl()->elements;
 }
