@@ -280,8 +280,8 @@ private:
   /// corresponding write enable term. prodTerms[0], prodTerms[1] is a vector of
   /// Value, each of which correspond to the two product terms of read and write
   /// enable respectively.
-  Value checkComplement(SmallVector<Value> readTerms,
-                        SmallVector<Value> writeTerms) {
+  Value checkComplement(const SmallVector<Value> &readTerms,
+                        const SmallVector<Value> &writeTerms) {
     // Foreach Value in first term, check if it is the complement of any of the
     // Value in second term.
     for (auto t1 : readTerms)
