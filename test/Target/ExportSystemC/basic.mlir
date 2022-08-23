@@ -133,4 +133,27 @@ systemc.module @systemCTypes (%p0: !systemc.in<!systemc.int_base>,
                               %p11: !systemc.in<!systemc.lv<1024>>,
                               %p12: !systemc.in<!systemc.logic>) {}
 
+// CHECK-LABEL: SC_MODULE(emitcEmission)
+systemc.module @emitcEmission () {
+  // CHECK: SC_CTOR
+  systemc.ctor {
+    // CHECK-NEXT: int five = 5;
+    // CHECK-NEXT: printf("result: %ld\0A", (long) (*(&five)));
+    %0 = "emitc.constant"() {value = #emitc.opaque<"5"> : !emitc.opaque<"int">} : () -> !emitc.opaque<"int">
+    %five = systemc.cpp.variable %0 : !emitc.opaque<"int">
+    %1 = emitc.apply "&"(%five) : (!emitc.opaque<"int">) -> !emitc.ptr<!emitc.opaque<"int">>
+    %2 = emitc.apply "*"(%1) : (!emitc.ptr<!emitc.opaque<"int">>) -> !emitc.opaque<"int">
+    %3 = emitc.cast %2: !emitc.opaque<"int"> to !emitc.opaque<"long">
+    emitc.call "printf" (%3) {args=["result: %ld\n", 0 : index]} : (!emitc.opaque<"long">) -> ()
+
+    // CHECK-NEXT: size_t idx;
+    %idx = systemc.cpp.variable : index
+    // CHECK-NEXT: int* somePtr = (int*) malloc(4);
+    %4 = hw.constant 4 : i32
+    %5 = emitc.call "malloc" (%4) : (i32) -> !emitc.ptr<!emitc.opaque<"void">>
+    %6 = emitc.cast %5 : !emitc.ptr<!emitc.opaque<"void">> to !emitc.ptr<!emitc.opaque<"int">>
+    %somePtr = systemc.cpp.variable %6 : !emitc.ptr<!emitc.opaque<"int">>
+  }
+}
+
 // CHECK: #endif // STDOUT_H
