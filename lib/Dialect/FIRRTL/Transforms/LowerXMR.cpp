@@ -233,7 +233,9 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
           return refMod.emitOpError(
                      "multiply instantiated module with input RefType port '")
                  << refMod.getPortName(portNum) << "'";
-        dataFlowClasses.unionSets(refModuleArg, instanceResult);
+        dataFlowClasses.unionSets(
+            dataFlowClasses.getOrInsertLeaderValue(refModuleArg),
+            dataFlowClasses.getOrInsertLeaderValue(instanceResult));
       }
     }
     return success();

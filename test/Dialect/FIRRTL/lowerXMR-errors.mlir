@@ -29,7 +29,7 @@ firrtl.circuit "Top" {
     %c_b = firrtl.instance child @Child2(in _a: !firrtl.ref<uint<1>>)
     firrtl.strictconnect %c_b, %_a : !firrtl.ref<uint<1>>
   }
-  // expected-error @+1 {{op multiply instantiated module with input RefType port '0'}}
+  // expected-error @+1 {{op multiply instantiated module with input RefType port '_a'}}
   firrtl.module @Child2(in  %_a: !firrtl.ref<uint<1>>) {
     %0 = firrtl.ref.resolve %_a : !firrtl.ref<uint<1>>
   }
