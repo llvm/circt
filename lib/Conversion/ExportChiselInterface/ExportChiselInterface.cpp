@@ -1,5 +1,4 @@
-//===- ExportChiselInterface.cpp - Chisel Interface Emitter
-//-------------------===//
+//===- ExportChiselInterface.cpp - Chisel Interface Emitter ---------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -7,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This is the Chisel package emitter implementation.
+// This is the Chisel interface emitter implementation.
 //
 //===----------------------------------------------------------------------===//
 
@@ -32,20 +31,20 @@ using namespace firrtl;
 static const unsigned int indentIncrement = 2;
 
 /// Emits type construction expression for the port type, recursing into
-/// aggregate types as needed
+/// aggregate types as needed.
 static LogicalResult emitPortType(Location location, FIRRTLBaseType type,
                                   Direction direction, llvm::raw_ostream &os,
                                   unsigned int indent,
                                   bool hasEmittedDirection = false) {
   auto emitTypeWithArguments =
       [&](StringRef name,
-          // A lambda of type (bool hasEmittedDirection) -> LogicalResult
+          // A lambda of type (bool hasEmittedDirection) -> LogicalResult.
           auto emitArguments,
-          // Whether parentheses around type arguments should be used
+          // Indicates whether parentheses around type arguments should be used.
           bool emitParentheses = true) -> LogicalResult {
     // Include the direction if the type is not composed of flips and analog
     // signals and we haven't already emitted the direction before recursing to
-    // this field
+    // this field.
     bool emitDirection =
         type.isPassive() && !type.containsAnalog() && !hasEmittedDirection;
     if (emitDirection) {
@@ -76,12 +75,12 @@ static LogicalResult emitPortType(Location location, FIRRTLBaseType type,
     return success();
   };
 
-  // Emits a type that does not require arguments
+  // Emits a type that does not require arguments.
   auto emitType = [&](StringRef name) -> LogicalResult {
     return emitTypeWithArguments(name, [](bool) { return success(); });
   };
 
-  // Emits a type that requires a known width argument
+  // Emits a type that requires a known width argument.
   auto emitWidthQualifiedType = [&](auto type,
                                     StringRef name) -> LogicalResult {
     auto width = type.getWidth();
@@ -113,7 +112,7 @@ static LogicalResult emitPortType(Location location, FIRRTLBaseType type,
         return emitWidthQualifiedType(analogType, "Analog");
       })
       .Case<BundleType>([&](BundleType bundleType) {
-        // Emit an anonymous bundle, emitting a `val` for each field
+        // Emit an anonymous bundle, emitting a `val` for each field.
         return emitTypeWithArguments(
             "new Bundle ",
             [&](bool hasEmittedDirection) {
@@ -136,7 +135,7 @@ static LogicalResult emitPortType(Location location, FIRRTLBaseType type,
             false);
       })
       .Case<FVectorType>([&](FVectorType vectorType) {
-        // Emit a vector type, emitting the type of its element as an argument
+        // Emit a vector type, emitting the type of its element as an argument.
         return emitTypeWithArguments("Vec", [&](bool hasEmittedDirection) {
           os << vectorType.getNumElements() << ", ";
           return emitPortType(location, vectorType.getElementType(), direction,
@@ -149,7 +148,7 @@ static LogicalResult emitPortType(Location location, FIRRTLBaseType type,
       });
 }
 
-/// Emits an `IO` for the `port`
+/// Emits an `IO` for the `port`.
 static LogicalResult emitPort(const PortInfo &port, llvm::raw_ostream &os) {
   os.indent(indentIncrement) << "val " << port.getName() << " = IO(";
   if (failed(emitPortType(port.loc, port.type.cast<FIRRTLBaseType>(),
@@ -160,7 +159,7 @@ static LogicalResult emitPort(const PortInfo &port, llvm::raw_ostream &os) {
   return success();
 }
 
-/// Emits an `ExtModule` class with port declarations for `module`
+/// Emits an `ExtModule` class with port declarations for `module`.
 static LogicalResult emitModule(FModuleLike module, llvm::raw_ostream &os) {
   os << "class " << module.moduleName() << " extends ExtModule {\n";
 
@@ -174,7 +173,7 @@ static LogicalResult emitModule(FModuleLike module, llvm::raw_ostream &os) {
   return success();
 }
 
-/// Exports a Chisel interface to the output stream
+/// Exports a Chisel interface to the output stream.
 static LogicalResult exportChiselInterface(CircuitOp circuit,
                                            llvm::raw_ostream &os) {
   // Emit version, package, and import declarations
@@ -182,7 +181,7 @@ static LogicalResult exportChiselInterface(CircuitOp circuit,
      << circuit.getName().lower()
      << "\n\nimport chisel3._\nimport chisel3.experimental._\n\n";
 
-  // Emit a class for the main circuit module
+  // Emit a class for the main circuit module.
   auto topModule = circuit.getMainModule();
   if (failed(emitModule(topModule, os)))
     return failure();
@@ -190,7 +189,7 @@ static LogicalResult exportChiselInterface(CircuitOp circuit,
   return success();
 }
 
-/// Exports Chisel interface files for the circuit to the specified directory
+/// Exports Chisel interface files for the circuit to the specified directory.
 static LogicalResult exportSplitChiselInterface(CircuitOp circuit,
                                                 StringRef outputDirectory) {
   // Create the output directory if needed.
@@ -212,7 +211,7 @@ static LogicalResult exportSplitChiselInterface(CircuitOp circuit,
     return failure();
   }
 
-  // Export the interface to the file
+  // Export the interface to the file.
   auto result = exportChiselInterface(circuit, interfaceFile->os());
   if (succeeded(result))
     interfaceFile->keep();

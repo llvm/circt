@@ -1,7 +1,7 @@
-; Test exporting a Chisel interface to std-out
+; Test exporting a Chisel interface to std-out.
 ; RUN: firtool %s --disable-output --export-chisel-interface | FileCheck %s
 
-; Test exporting a Chisel interface to a directory
+; Test exporting a Chisel interface to a directory.
 ; RUN: firtool %s --disable-output --export-chisel-interface --chisel-interface-out-dir %t
 ; RUN: FileCheck %s -input-file=%t/Foo.scala
 
