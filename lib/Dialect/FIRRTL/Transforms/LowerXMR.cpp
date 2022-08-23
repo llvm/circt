@@ -16,6 +16,7 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/EquivalenceClasses.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/Support/Debug.h"
 
@@ -46,6 +47,7 @@ using hw::InnerRefAttr;
 class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
 
   void runOnOperation() override {
+    dataFlowClasses = llvm::EquivalenceClasses<Value, ValueComparator>();
     auto &instanceGraph = getAnalysis<InstanceGraph>();
     SmallVector<RefResolveOp> resolveOps;
     // The dataflow function, that propagates the reachable RefSendOp across
@@ -56,6 +58,9 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
             // Get a reference to the actual signal to which the XMR will be
             // generated.
             Value xmrDef = send.getBase();
+            // Get an InnerRefAttr to the xmrDef op. If the operation does not
+            // take any InnerSym (like firrtl.add, firrtl.or etc) then create a
+            // NodeOp to add the InnerSym.
             if (!xmrDef.isa<BlockArgument>()) {
               Operation *xmrDefOp = xmrDef.getDefiningOp();
               if (!isa<InnerSymbolOpInterface>(xmrDefOp)) {
@@ -85,12 +90,36 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
             if (!connect.getSrc().getType().isa<RefType>())
               return success();
             markForRemoval(connect);
-            mergeDataflow(connect.getSrc(), connect.getDest());
+            // Merge the dataflow classes of destination into the source of the
+            // Connect. This handles two cases:
+            // 1. If the dataflow at the source is known, then the
+            // destination is also inferred. By merging the dataflow class of
+            // destination with source, every value reachable from the
+            // destination automatically infers a reaching RefSend.
+            // 2. If dataflow at source is unkown, then just record that both
+            // source and destination will have the same dataflow information.
+            // Later in the pass when the reaching RefSend is inferred at the
+            // leader of the dataflowClass, then we automatically infer the
+            // dataflow at this connect and every value reachable from the
+            // destination.
+            dataFlowClasses.unionSets(
+                dataFlowClasses.getOrInsertLeaderValue(connect.getSrc()),
+                dataFlowClasses.getOrInsertLeaderValue(connect.getDest()));
             return success();
           })
           .Case<RefResolveOp>([&](RefResolveOp resolve) {
-            dataflowAt[resolve.getResult()] =
-                getRemoteRefSend(resolve.getRef()).value();
+            // Merge dataflow, under the same conditions as above for Connect.
+            // 1. If dataflow at the resolve.getRef is known, propagate that to
+            // the result. This is true for downward scoped XMRs, that is,
+            // RefSendOp must be visited before the corresponding RefResolveOp
+            // is visited.
+            // 2. Else, just record that both result and ref should have the
+            // same reaching RefSend. This condition is true for upward scoped
+            // XMRs. That is, RefResolveOp can be visited before the
+            // corresponding RefSendOp is recorded.
+            dataFlowClasses.unionSets(
+                dataFlowClasses.getOrInsertLeaderValue(resolve.getRef()),
+                dataFlowClasses.getOrInsertLeaderValue(resolve.getResult()));
             resolveOps.push_back(resolve);
             markForRemoval(resolve);
             return success();
@@ -115,6 +144,24 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
           refPortsToRemoveMap[module].push_back(portNum);
     }
 
+    LLVM_DEBUG({
+      for (auto I = dataFlowClasses.begin(), E = dataFlowClasses.end(); I != E;
+           ++I) { // Iterate over all of the equivalence sets.
+        if (!I->isLeader())
+          continue; // Ignore non-leader sets.
+        for (auto MI = dataFlowClasses.member_begin(I);
+             MI != dataFlowClasses.member_end();
+             ++MI)                    // Loop over members in this set.
+          llvm::dbgs() << *MI << " "; // Print member.
+        llvm::dbgs() << "\n dataflow at leader::" << I->getData() << "\n =>";
+        if (dataflowAt.find(I->getData()) != dataflowAt.end()) {
+          for (auto init = refSendPathList[dataflowAt[I->getData()]];
+               init.second; init = refSendPathList[init.second.value()])
+            llvm::dbgs() << "\n path ::" << init.first << "::" << init.second;
+        }
+        llvm::dbgs() << "\n Done"; // Finish set.
+      }
+    });
     for (auto refResolve : resolveOps)
       if (handleRefResolve(refResolve).failed())
         return signalPassFailure();
@@ -123,19 +170,24 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
 
   // Replace the RefResolveOp with verbatim op representing the XMR.
   LogicalResult handleRefResolve(RefResolveOp resolve) {
-    auto remoteOpPath = getRemoteRefSend(resolve.getRef(), false);
+    auto remoteOpPath = getRemoteRefSend(resolve.getRef());
     if (!remoteOpPath)
       return failure();
-    auto xmrSize = refSendList[remoteOpPath.value()].size();
-    SmallVector<Attribute> xmrHierPath(xmrSize);
+    SmallVector<Attribute> refSendPath;
+    // Verbatim XMR begins with the Top level module.
+    refSendPath.push_back(refSendPathList[remoteOpPath.value()]
+                              .first.cast<InnerRefAttr>()
+                              .getModuleRef());
     SmallString<128> xmrString;
-    for (const auto &instanceRef :
-         llvm::enumerate(refSendList[remoteOpPath.value()])) {
-      xmrHierPath[xmrSize - instanceRef.index() - 1] = instanceRef.value();
-      ("{{" + Twine(instanceRef.index()) + "}}").toVector(xmrString);
-      if (instanceRef.index() < xmrSize - 1)
-        xmrString += '.';
+    unsigned index = 0;
+    for (; remoteOpPath; ++index) {
+      auto entr = refSendPathList[remoteOpPath.value()];
+      refSendPath.push_back(entr.first);
+      remoteOpPath = entr.second;
+      ("{{" + Twine(index) + "}}").toVector(xmrString);
+      xmrString += '.';
     }
+    ("{{" + Twine(index) + "}}").toVector(xmrString);
 
     // The source of the dataflow for this RefResolveOp is established. So
     // replace the RefResolveOp with the coresponding VerbatimExpr to
@@ -143,7 +195,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     ImplicitLocOpBuilder builder(resolve.getLoc(), resolve);
     auto xmrVerbatim =
         builder.create<VerbatimExprOp>(resolve.getType().cast<FIRRTLType>(),
-                                       xmrString, ValueRange{}, xmrHierPath);
+                                       xmrString, ValueRange{}, refSendPath);
     resolve.getResult().replaceAllUsesWith(xmrVerbatim);
     return success();
   }
@@ -168,13 +220,13 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
         // For output instance ports, the dataflow is into this module.
         // Get the remote RefSendOp, that flows through the module ports.
         // If dataflow at remote module argument does not exist, error out.
-        auto remoteOpPath = getRemoteRefSend(refModuleArg, false);
+        auto remoteOpPath = getRemoteRefSend(refModuleArg);
         if (!remoteOpPath)
           return failure();
         // Get the path to reaching refSend at the referenced module argument.
         // Now append this instance to the path to the reaching refSend.
         addReachingSendsEntry(instanceResult, getInnerRefTo(inst),
-                              remoteOpPath.value());
+                              remoteOpPath);
       } else {
         // For input instance ports, the dataflow is into the referenced module.
         // Input RefType port implies, generating an upward scoped XMR.
@@ -184,10 +236,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
           return refMod.emitOpError(
                      "multiply instantiated module with input RefType port '")
                  << portNum << "'";
-
-        auto dataFlowAtRefArg = getRemoteRefSend(refModuleArg).value();
-
-        dataflowAt[instanceResult] = dataFlowAtRefArg;
+        dataFlowClasses.unionSets(refModuleArg, instanceResult);
       }
     }
     return success();
@@ -223,74 +272,33 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
 
   void markForRemoval(Operation *op) { opsToRemove.push_back(op); }
 
-  Optional<size_t> getRemoteRefSend(Value val, bool mayNotExist = true) {
-    auto iter = dataflowAt.find(val);
+  Optional<size_t> getRemoteRefSend(Value val) {
+    auto iter = dataflowAt.find(dataFlowClasses.getOrInsertLeaderValue(val));
     if (iter != dataflowAt.end())
-      if (mayNotExist || !refSendList[iter->getSecond()].empty())
-        return iter->getSecond();
-    if (!mayNotExist) {
-      // The referenced module must have already been analyzed, error out if the
-      // dataflow at the child module is not resolved.
-      if (BlockArgument arg = val.dyn_cast<BlockArgument>())
-        arg.getOwner()->getParentOp()->emitError(
-            "reference dataflow cannot be traced back to the remote read op "
-            "for module port '")
-            << dyn_cast<FModuleOp>(arg.getOwner()->getParentOp())
-                   .getPortName(arg.getArgNumber())
-            << "'";
-      else
-        val.getDefiningOp()->emitOpError(
-            "reference dataflow cannot be traced back to the remote read op");
-      signalPassFailure();
-      return None;
-    }
-    // The Reaching def at this value is not yet known. So create an empty entry
-    // and record it.
-    return addReachingSendsEntry(val, {});
-  }
-
-  void mergeDataflow(Value src, Value dst) {
-    auto flowAtSrc = dataflowAt.find(src);
-    // If now flow at source, then just copy the info from dst. The dst might
-    // also not exist yet, in that case a new entry will be created.
-    if (flowAtSrc == dataflowAt.end()) {
-      dataflowAt[src] = getRemoteRefSend(dst).value();
-      return;
-    }
-    // dataflow at src exists, so merge it if an entry already exists at dst.
-    auto flowAtDst = dataflowAt.find(dst);
-    if (flowAtDst == dataflowAt.end()) {
-      dataflowAt[dst] = flowAtSrc->getSecond();
-      return;
-    }
-    auto oldEntry = flowAtDst->getSecond();
-    if (!refSendList[oldEntry].empty()) {
-      // If a valid dataflow already reaches the destination, emit remark.
-      // This happens when multiple connects attached to an input RefType
-      // port, or multiple instantiation (which is already an error).
-      dst.getDefiningOp()->emitRemark("has multiple reaching definitions");
-    }
-    // Dest already has an entry, make sure to update all the entries in the
-    // dataflow map to point to this new entry.
-    for (auto &entr : dataflowAt) {
-      if (entr.getSecond() == oldEntry) {
-        entr.getSecond() = flowAtSrc->getSecond();
-      }
-    }
+      return iter->getSecond();
+    // The referenced module must have already been analyzed, error out if the
+    // dataflow at the child module is not resolved.
+    if (BlockArgument arg = val.dyn_cast<BlockArgument>())
+      arg.getOwner()->getParentOp()->emitError(
+          "reference dataflow cannot be traced back to the remote read op "
+          "for module port '")
+          << dyn_cast<FModuleOp>(arg.getOwner()->getParentOp())
+                 .getPortName(arg.getArgNumber())
+          << "'";
+    else
+      val.getDefiningOp()->emitOpError(
+          "reference dataflow cannot be traced back to the remote read op");
+    signalPassFailure();
+    return None;
   }
 
   size_t addReachingSendsEntry(Value atRefVal, Attribute newRef,
-                               Optional<size_t> copyFrom = None) {
-    auto index = refSendList.size();
-    dataflowAt[atRefVal] = index;
-    if (copyFrom) {
-      refSendList.emplace_back(refSendList[copyFrom.value()]);
-      refSendList[index].push_back(newRef);
-    } else if (newRef)
-      refSendList.push_back({newRef});
-    else
-      refSendList.push_back({});
-    return index;
+                               Optional<size_t> continueFrom = None) {
+    auto leader = dataFlowClasses.getOrInsertLeaderValue(atRefVal);
+    auto indx = refSendPathList.size();
+    dataflowAt[leader] = indx;
+    refSendPathList.push_back(std::make_pair(newRef, continueFrom));
+    return indx;
   }
 
   void garbageCollect() {
@@ -310,28 +318,39 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     opsToRemove.clear();
     refPortsToRemoveMap.clear();
     dataflowAt.clear();
-    refSendList.clear();
+    refSendPathList.clear();
   }
 
   /// Cached module namespaces.
   DenseMap<Operation *, ModuleNamespace> moduleNamespaces;
 
   DenseSet<Operation *> visitedModules;
-  /// Map of a reference value to an entry into refSendList. Each entry in
-  /// refSendList represents the path to RefSend, which is a vector of the
-  /// InnerRefAttr to InstanceOps. The path is required since there can
-  /// be multiple paths to the RefSend and we need to identify a unique path.
-  /// Each ref value can be statically resolved to a single remote send op,
-  /// according to the constraints on the RefType.
+  /// Map of a reference value to an entry into refSendPathList. Each entry in
+  /// refSendPathList represents the path to RefSend. i
+  /// The path is required since there can be multiple paths to the RefSend and
+  /// we need to identify a unique path.
   DenseMap<Value, size_t> dataflowAt;
 
-  /// This is the set of all unique paths from a RefSendOp to RefResolveOps.
-  /// Each entry is a unique path to a RefSendOp. In case this becomes a
-  /// performance issue, store only the unique instance paths from the root to
-  /// each RefResolve, and index into them.
-  using instancePath = SmallVector<Attribute>;
-  SmallVector<instancePath> refSendList;
+  /// refSendPathList is used to construct a path to the RefSendOp. Each entry
+  /// is a node, with an InnerRefAttr and a pointer to the next node in the
+  /// path. The InnerRefAttr can be to an InstanceOp or to the XMR defining
+  /// op.All the nodes representing an InstanceOp, must have a valid
+  /// nextNodeOnPath. Only the node representing the final XMR defining op has
+  /// no nextNodeOnPath, which denotes a leaf node on the path.
+  using nextNodeOnPath = Optional<size_t>;
+  using innerRefToVal = Attribute;
+  using node = std::pair<innerRefToVal, nextNodeOnPath>;
+  SmallVector<node> refSendPathList;
 
+  /// llvm::EquivalenceClasses wants comparable elements. This comparator uses
+  /// uses pointer comparison on the Impl.
+  struct ValueComparator {
+    bool operator()(const Value &lhs, const Value &rhs) const {
+      return lhs.getImpl() < rhs.getImpl();
+    }
+  };
+
+  llvm::EquivalenceClasses<Value, ValueComparator> dataFlowClasses;
   // Instance and module ref ports that needs to be removed.
   DenseMap<Operation *, SmallVector<unsigned>> refPortsToRemoveMap;
 
