@@ -102,9 +102,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
             // leader of the dataflowClass, then we automatically infer the
             // dataflow at this connect and every value reachable from the
             // destination.
-            dataFlowClasses.unionSets(
-                dataFlowClasses.getOrInsertLeaderValue(connect.getSrc()),
-                dataFlowClasses.getOrInsertLeaderValue(connect.getDest()));
+            dataFlowClasses.unionSets(connect.getSrc(), connect.getDest());
             return success();
           })
           .Case<RefResolveOp>([&](RefResolveOp resolve) {
@@ -117,9 +115,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
             // same reaching RefSend. This condition is true for upward scoped
             // XMRs. That is, RefResolveOp can be visited before the
             // corresponding RefSendOp is recorded.
-            dataFlowClasses.unionSets(
-                dataFlowClasses.getOrInsertLeaderValue(resolve.getRef()),
-                dataFlowClasses.getOrInsertLeaderValue(resolve.getResult()));
+            dataFlowClasses.unionSets(resolve.getRef(), resolve.getResult());
             resolveOps.push_back(resolve);
             markForRemoval(resolve);
             return success();
@@ -133,7 +129,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
       if (!module)
         continue;
       LLVM_DEBUG(llvm::dbgs()
-                 << "\n Traversing module:" << module.moduleNameAttr());
+                 << "Traversing module:" << module.moduleNameAttr() << "\n");
       for (Operation &op : module.getBodyBlock()->getOperations())
         if (transferFunc(op).failed())
           return signalPassFailure();
@@ -149,14 +145,15 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
            ++I) { // Iterate over all of the equivalence sets.
         if (!I->isLeader())
           continue; // Ignore non-leader sets.
-        for (auto MI = dataFlowClasses.member_begin(I);
-             MI != dataFlowClasses.member_end();
-             ++MI)                    // Loop over members in this set.
-          llvm::dbgs() << *MI << " "; // Print member.
+        // Print members in this set.
+        llvm::interleave(llvm::make_range(dataFlowClasses.member_begin(I),
+                                          dataFlowClasses.member_end()),
+                         llvm::dbgs(), "\n");
         llvm::dbgs() << "\n dataflow at leader::" << I->getData() << "\n =>";
-        if (dataflowAt.find(I->getData()) != dataflowAt.end()) {
-          for (auto init = refSendPathList[dataflowAt[I->getData()]];
-               init.second; init = refSendPathList[init.second.value()])
+        auto iter = dataflowAt.find(I->getData());
+        if (iter != dataflowAt.end()) {
+          for (auto init = refSendPathList[iter->getSecond()]; init.second;
+               init = refSendPathList[init.second.value()])
             llvm::dbgs() << "\n path ::" << init.first << "::" << init.second;
         }
         llvm::dbgs() << "\n Done\n"; // Finish set.
@@ -235,7 +232,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
         if (multiplyInstantiated)
           return refMod.emitOpError(
                      "multiply instantiated module with input RefType port '")
-                 << portNum << "'";
+                 << refMod.getPortName(portNum) << "'";
         dataFlowClasses.unionSets(refModuleArg, instanceResult);
       }
     }
