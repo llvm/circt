@@ -709,7 +709,7 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
           return success();
         }))
       return failure();
-    result = BundleType::get(elements, getContext());
+    result = BundleType::get(getContext(), elements);
     break;
   }
   }

@@ -65,11 +65,11 @@ def CMemoryType : TypeDef<CHIRRTLDialect, "CMemory"> {
   }];
 
   let parameters = (ins "firrtl::FIRRTLBaseType":$elementType,
-                        "uint64_t":$numElements);
+                        "size_t":$numElements);
 
   let builders = [
     TypeBuilderWithInferredContext<(ins "firrtl::FIRRTLBaseType":$elementType,
-                                        "uint64_t":$numElements), [{
+                                        "size_t":$numElements), [{
       return $_get(elementType.getContext(), elementType, numElements);
     }]>
   ];

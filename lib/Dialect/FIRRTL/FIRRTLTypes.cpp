@@ -190,7 +190,7 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
                                        parseBundleElement))
       return failure();
 
-    return result = BundleType::get(elements, context), success();
+    return result = BundleType::get(context, elements), success();
   }
 
   if (name.equals("vector")) {
@@ -408,7 +408,7 @@ FIRRTLBaseType FIRRTLBaseType::getMaskType() {
         for (auto elt : bundleType)
           newElements.push_back(
               {elt.name, false /* FIXME */, elt.type.getMaskType()});
-        return BundleType::get(newElements, this->getContext());
+        return BundleType::get(this->getContext(), newElements);
       })
       .Case<FVectorType>([](FVectorType vectorType) {
         return FVectorType::get(vectorType.getElementType().getMaskType(),
@@ -433,7 +433,7 @@ FIRRTLBaseType FIRRTLBaseType::getWidthlessType() {
         for (auto elt : a)
           newElements.push_back(
               {elt.name, elt.isFlip, elt.type.getWidthlessType()});
-        return BundleType::get(newElements, this->getContext());
+        return BundleType::get(this->getContext(), newElements);
       })
       .Case<FVectorType>([](auto a) {
         return FVectorType::get(a.getElementType().getWidthlessType(),
@@ -757,15 +757,11 @@ Optional<int32_t> UIntType::getWidth() {
 
 namespace circt {
 namespace firrtl {
-llvm::hash_code hash_value(const BundleType::BundleElement &arg) {
+namespace detail {
+
+llvm::hash_code hash_value(const BundleElement &arg) {
   return mlir::hash_value(arg.name) ^ mlir::hash_value(arg.type);
 }
-} // namespace firrtl
-} // namespace circt
-
-namespace circt {
-namespace firrtl {
-namespace detail {
 struct BundleTypeStorage : mlir::TypeStorage {
   using KeyTy = ArrayRef<BundleType::BundleElement>;
 
@@ -814,10 +810,10 @@ struct BundleTypeStorage : mlir::TypeStorage {
 } // namespace firrtl
 } // namespace circt
 
-BundleType BundleType::get(ArrayRef<BundleElement> elements,
-                           MLIRContext *context) {
-  return Base::get(context, elements);
-}
+// BundleType BundleType::get(ArrayRef<BundleElement> elements,
+//                            MLIRContext *context) {
+//   return Base::get(context, elements);
+// }
 
 auto BundleType::getElements() const -> ArrayRef<BundleElement> {
   return getImpl()->elements;
@@ -850,7 +846,7 @@ FIRRTLBaseType BundleType::getPassiveType() {
     newElements.push_back({elt.name, false, elt.type.getPassiveType()});
   }
 
-  auto passiveType = BundleType::get(newElements, getContext());
+  auto passiveType = BundleType::get(getContext(), newElements);
   impl->passiveContainsAnalogTypeInfo.setPointer(passiveType);
   return passiveType;
 }
@@ -956,19 +952,20 @@ std::pair<unsigned, bool> BundleType::rootChildFieldID(unsigned fieldID,
 namespace circt {
 namespace firrtl {
 namespace detail {
-struct VectorTypeStorage : mlir::TypeStorage {
+struct FVectorTypeStorage : mlir::TypeStorage {
   using KeyTy = std::pair<FIRRTLBaseType, size_t>;
 
-  VectorTypeStorage(KeyTy value) : value(value) {
+  FVectorTypeStorage(KeyTy value) : value(value) {
     auto properties = value.first.getRecursiveTypeProperties();
     passiveContainsAnalogTypeInfo.setInt(properties.toFlags());
   }
 
   bool operator==(const KeyTy &key) const { return key == value; }
 
-  static VectorTypeStorage *construct(TypeStorageAllocator &allocator,
-                                      KeyTy key) {
-    return new (allocator.allocate<VectorTypeStorage>()) VectorTypeStorage(key);
+  static FVectorTypeStorage *construct(TypeStorageAllocator &allocator,
+                                       KeyTy key) {
+    return new (allocator.allocate<FVectorTypeStorage>())
+        FVectorTypeStorage(key);
   }
 
   KeyTy value;
@@ -983,14 +980,11 @@ struct VectorTypeStorage : mlir::TypeStorage {
 } // namespace firrtl
 } // namespace circt
 
-FVectorType FVectorType::get(FIRRTLBaseType elementType, size_t numElements) {
-  return Base::get(elementType.getContext(),
-                   std::make_pair(elementType, numElements));
+FIRRTLBaseType FVectorType::getElementType() const {
+  return getImpl()->value.first;
 }
 
-FIRRTLBaseType FVectorType::getElementType() { return getImpl()->value.first; }
-
-size_t FVectorType::getNumElements() { return getImpl()->value.second; }
+size_t FVectorType::getNumElements() const { return getImpl()->value.second; }
 
 /// Return the recursive properties of the type.
 RecursiveTypeProperties FVectorType::getRecursiveTypeProperties() {

@@ -13,7 +13,7 @@
 include "mlir/IR/OpBase.td"
 
 def FModuleLike : OpInterface<"FModuleLike"> {
-  let cppNamespace = "circt::firrtl";
+  let cppNamespace = "::circt::firrtl";
   let description = "Provide common module information.";
   let methods = [
 
@@ -286,7 +286,7 @@ def FModuleLike : OpInterface<"FModuleLike"> {
 }
 
 def FConnectLike : OpInterface<"FConnectLike"> {
-  let cppNamespace = "circt::firrtl";
+  let cppNamespace = "::circt::firrtl";
   let description = "Provide common connection information.";
 
   let methods = [
@@ -400,7 +400,7 @@ def InnerRefUserOpInterface : OpInterface<"InnerRefUserOpInterface"> {
 }
 
 def FNamableOp : OpInterface<"FNamableOp"> {
-  let cppNamespace = "circt::firrtl";
+  let cppNamespace = "::circt::firrtl";
   let description = [{The interface provides common methods for namable operations
     related to name preservation semantics. }];
 

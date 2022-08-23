@@ -1803,7 +1803,7 @@ BundleType MemOp::getTypeForPort(uint64_t depth, FIRRTLBaseType dataType,
     break;
   }
 
-  return BundleType::get(portFields, context).cast<BundleType>();
+  return BundleType::get(context, portFields).cast<BundleType>();
 }
 
 /// Return the kind of port this is given the port type from a 'mem' decl.
@@ -3046,7 +3046,7 @@ static FIRRTLBaseType inferMuxReturnType(FIRRTLBaseType high,
         newElements.push_back(element);
       }
       if (!failed)
-        return BundleType::get(newElements, low.getContext());
+        return BundleType::get(low.getContext(), newElements);
     }
     if (loc) {
       auto d = mlir::emitError(*loc, "incompatible mux operand bundle fields");
