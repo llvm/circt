@@ -40,13 +40,13 @@ firrtl.circuit "TLRAM" {
 // CHECK:  firrtl.strictconnect %[[v0:.+]], %[[v7]] : !firrtl.uint<4>
 // CHECK:  %[[v8:.+]] = firrtl.or %[[readEnable:.+]], %[[writeEnable]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK:  firrtl.strictconnect %[[v1:.+]], %[[v8]] : !firrtl.uint<1>
-// CHECK:  firrtl.strictconnect %[[v4:.+]], %[[writeEnable]]
 // CHECK:  firrtl.connect %[[readAddr]], %[[index2:.+]] : !firrtl.uint<4>, !firrtl.uint<4>
 // CHECK:  firrtl.connect %[[readEnable]], %mem_MPORT_en : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK:  firrtl.connect %[[writeAddr]], %index : !firrtl.uint<4>, !firrtl.uint<4>
 // CHECK:  firrtl.connect %[[writeEnable]], %wen : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK:  %[[v10:.+]] = firrtl.not %wen : (!firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK:  firrtl.connect %mem_MPORT_en, %[[v10]] : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:  firrtl.strictconnect %[[v4:.+]], %wen : !firrtl.uint<1>
     }
 
 // Test the pattern of enable  with Mux (sel, high, 0)
@@ -76,6 +76,7 @@ firrtl.circuit "TLRAM" {
     firrtl.connect %5, %io_addr : !firrtl.uint<11>, !firrtl.uint<11>
     firrtl.connect %7, %clock : !firrtl.clock, !firrtl.clock
     firrtl.connect %io_dataOut, %8 : !firrtl.uint<32>, !firrtl.uint<32>
+    // CHECK:   firrtl.strictconnect %4, %io_wen : !firrtl.uint<1>
   }
 
 // Test the pattern of enable  with an And tree and Mux (sel, high, 0)
@@ -111,6 +112,7 @@ firrtl.circuit "TLRAM" {
     firrtl.connect %5, %io_addr : !firrtl.uint<11>, !firrtl.uint<11>
     firrtl.connect %7, %clock : !firrtl.clock, !firrtl.clock
     firrtl.connect %io_dataOut, %8 : !firrtl.uint<32>, !firrtl.uint<32>
+    // CHECK:  firrtl.strictconnect %4, %io_write : !firrtl.uint<1>
   }
 
 // Cannot merge read and write, since the pattern is enable = Mux (sel, high, 1)
@@ -205,6 +207,7 @@ firrtl.circuit "TLRAM" {
     firrtl.connect %6, %clock : !firrtl.clock, !firrtl.clock
     firrtl.connect %8, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %7, %io_wdata : !firrtl.uint<32>, !firrtl.uint<32>
+    // CHECK:  firrtl.strictconnect %4, %io_wen : !firrtl.uint<1>
   }
 
 // Check for indirect connection to clock
