@@ -159,7 +159,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
                init.second; init = refSendPathList[init.second.value()])
             llvm::dbgs() << "\n path ::" << init.first << "::" << init.second;
         }
-        llvm::dbgs() << "\n Done"; // Finish set.
+        llvm::dbgs() << "\n Done\n"; // Finish set.
       }
     });
     for (auto refResolve : resolveOps)
@@ -326,7 +326,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
 
   DenseSet<Operation *> visitedModules;
   /// Map of a reference value to an entry into refSendPathList. Each entry in
-  /// refSendPathList represents the path to RefSend. i
+  /// refSendPathList represents the path to RefSend.
   /// The path is required since there can be multiple paths to the RefSend and
   /// we need to identify a unique path.
   DenseMap<Value, size_t> dataflowAt;
@@ -334,7 +334,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
   /// refSendPathList is used to construct a path to the RefSendOp. Each entry
   /// is a node, with an InnerRefAttr and a pointer to the next node in the
   /// path. The InnerRefAttr can be to an InstanceOp or to the XMR defining
-  /// op.All the nodes representing an InstanceOp, must have a valid
+  /// op. All the nodes representing an InstanceOp must have a valid
   /// nextNodeOnPath. Only the node representing the final XMR defining op has
   /// no nextNodeOnPath, which denotes a leaf node on the path.
   using nextNodeOnPath = Optional<size_t>;
