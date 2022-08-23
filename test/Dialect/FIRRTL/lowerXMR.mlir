@@ -9,7 +9,7 @@ firrtl.circuit "xmr" {
     %x = firrtl.ref.resolve %1 : !firrtl.ref<uint<2>>
     firrtl.strictconnect %o, %x : !firrtl.uint<2>
     // CHECK:  %w = firrtl.wire sym @xmr_sym   : !firrtl.uint<2>
-    // CHECK-LITERAL:  %0 = firrtl.verbatim.expr "{{0}}" : () -> !firrtl.uint<2> {symbols = [#hw.innerNameRef<@xmr::@xmr_sym>]}
+    // CHECK{LITERAL}:  firrtl.verbatim.expr "{{0}}.{{1}}" : () -> !firrtl.uint<2> {symbols = [@xmr, #hw.innerNameRef<@xmr::@xmr_sym>]}
     // CHECK:  firrtl.strictconnect %o, %0 : !firrtl.uint<2>
   }
 }
@@ -37,7 +37,7 @@ firrtl.circuit "Top" {
     // CHECK:  firrtl.instance bar sym @bar  @Bar()
     %a = firrtl.wire : !firrtl.uint<1>
     %0 = firrtl.ref.resolve %bar_a : !firrtl.ref<uint<1>>
-    // CHECK-LITERAL:  %0 = firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}" : () -> !firrtl.uint<1> {symbols = [#hw.innerNameRef<@Top::@bar>, #hw.innerNameRef<@Bar::@barXMR>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
+    // CHECK{LITERAL}:  firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}.{{3}}" : () -> !firrtl.uint<1> {symbols = [@Top, #hw.innerNameRef<@Top::@bar>, #hw.innerNameRef<@Bar::@barXMR>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
     firrtl.strictconnect %a, %0 : !firrtl.uint<1>
   }
 }
@@ -62,7 +62,7 @@ firrtl.circuit "Top" {
     // CHECK:  firrtl.instance bar sym @bar  @Bar()
     %a = firrtl.wire : !firrtl.uint<1>
     %0 = firrtl.ref.resolve %bar_a : !firrtl.ref<uint<1>>
-    // CHECK-LITERAL: %0 = firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}" : () -> !firrtl.uint<1> {symbols = [#hw.innerNameRef<@Top::@bar>, #hw.innerNameRef<@Bar::@barXMR>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
+    // CHECK{LITERAL}:  firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}.{{3}}" : () -> !firrtl.uint<1> {symbols = [@Top, #hw.innerNameRef<@Top::@bar>, #hw.innerNameRef<@Bar::@barXMR>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
     firrtl.strictconnect %a, %0 : !firrtl.uint<1>
   }
 }
@@ -85,7 +85,7 @@ firrtl.circuit "Top" {
     // CHECK:  firrtl.instance bar sym @fooXMR  @XmrSrcMod()
     firrtl.strictconnect %_a, %xmr   : !firrtl.ref<uint<1>>
     %0 = firrtl.ref.resolve %xmr   : !firrtl.ref<uint<1>>
-    // CHECK-LITERAL:  %0 = firrtl.verbatim.expr "{{0}}.{{1}}" : () -> !firrtl.uint<1> {symbols = [#hw.innerNameRef<@Foo::@fooXMR>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
+    // CHECK{LITERAL}:  firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}" : () -> !firrtl.uint<1> {symbols = [@Foo, #hw.innerNameRef<@Foo::@fooXMR>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
     %a = firrtl.wire : !firrtl.uint<1>
     firrtl.strictconnect %a, %0 : !firrtl.uint<1>
   }
@@ -94,7 +94,7 @@ firrtl.circuit "Top" {
     // CHECK:  firrtl.instance bar sym @barXMR  @XmrSrcMod()
     firrtl.strictconnect %_a, %xmr   : !firrtl.ref<uint<1>>
     %0 = firrtl.ref.resolve %xmr   : !firrtl.ref<uint<1>>
-    // CHECK-LITERAL:  %0 = firrtl.verbatim.expr "{{0}}.{{1}}" : () -> !firrtl.uint<1> {symbols = [#hw.innerNameRef<@Bar::@barXMR>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
+    // CHECK{LITERAL}:  firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}" : () -> !firrtl.uint<1> {symbols = [@Bar, #hw.innerNameRef<@Bar::@barXMR>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
     %a = firrtl.wire : !firrtl.uint<1>
     firrtl.strictconnect %a, %0 : !firrtl.uint<1>
   }
@@ -109,11 +109,11 @@ firrtl.circuit "Top" {
     %b = firrtl.wire : !firrtl.uint<1>
     %c = firrtl.wire : !firrtl.uint<1>
     %0 = firrtl.ref.resolve %bar_a : !firrtl.ref<uint<1>>
-    // CHECK-LITERAL:  %0 = firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}" : () -> !firrtl.uint<1> {symbols = [#hw.innerNameRef<@Top::@bar>, #hw.innerNameRef<@Bar::@barXMR>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
+    // CHECK{LITERAL}:  firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}.{{3}}" : () -> !firrtl.uint<1> {symbols = [@Top, #hw.innerNameRef<@Top::@bar>, #hw.innerNameRef<@Bar::@barXMR>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
     %1 = firrtl.ref.resolve %foo_a : !firrtl.ref<uint<1>>
-    // CHECK-LITERAL:  %1 = firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}" : () -> !firrtl.uint<1> {symbols = [#hw.innerNameRef<@Top::@foo>, #hw.innerNameRef<@Foo::@fooXMR>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
+    // CHECK{LITERAL}:  firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}.{{3}}" : () -> !firrtl.uint<1> {symbols = [@Top, #hw.innerNameRef<@Top::@foo>, #hw.innerNameRef<@Foo::@fooXMR>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
     %2 = firrtl.ref.resolve %xmr_a : !firrtl.ref<uint<1>>
-    // CHECK-LITERAL:  %2 = firrtl.verbatim.expr "{{0}}.{{1}}" : () -> !firrtl.uint<1> {symbols = [#hw.innerNameRef<@Top::@xmr>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
+    // CHECK{LITERAL}:  firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}" : () -> !firrtl.uint<1> {symbols = [@Top, #hw.innerNameRef<@Top::@xmr>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
     firrtl.strictconnect %a, %0 : !firrtl.uint<1>
     firrtl.strictconnect %b, %1 : !firrtl.uint<1>
     firrtl.strictconnect %c, %2 : !firrtl.uint<1>
@@ -143,14 +143,14 @@ firrtl.circuit "Top" {
     // CHECK:  firrtl.instance bar sym @bar  @Bar()
     %a = firrtl.wire : !firrtl.uint<1>
     %0 = firrtl.ref.resolve %bar_a : !firrtl.ref<uint<1>>
-    // CHECK-LITERAL:  %0 = firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}" : () -> !firrtl.uint<1> {symbols = [#hw.innerNameRef<@Top::@bar>, #hw.innerNameRef<@Bar::@barXMR>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
+    // CHECK{LITERAL}:  firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}.{{3}}" : () -> !firrtl.uint<1> {symbols = [@Top, #hw.innerNameRef<@Top::@bar>, #hw.innerNameRef<@Bar::@barXMR>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
     firrtl.strictconnect %a, %0 : !firrtl.uint<1>
     %c_a = firrtl.instance child @Child(in  _a: !firrtl.ref<uint<1>>)
     firrtl.strictconnect %c_a, %bar_a : !firrtl.ref<uint<1>>
   }
   firrtl.module @Child(in  %_a: !firrtl.ref<uint<1>>) {
     %0 = firrtl.ref.resolve %_a : !firrtl.ref<uint<1>>
-    // CHECK-LITERAL:  %0 = firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}" : () -> !firrtl.uint<1> {symbols = [#hw.innerNameRef<@Top::@bar>, #hw.innerNameRef<@Bar::@barXMR>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
+    // CHECK{LITERAL}:  firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}.{{3}}" : () -> !firrtl.uint<1> {symbols = [@Top, #hw.innerNameRef<@Top::@bar>, #hw.innerNameRef<@Bar::@barXMR>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
   }
 
 }
@@ -175,14 +175,14 @@ firrtl.circuit "Top" {
     // CHECK:  firrtl.instance bar sym @bar  @Bar()
     %a = firrtl.wire : !firrtl.uint<1>
     %0 = firrtl.ref.resolve %bar_a : !firrtl.ref<uint<1>>
-    // CHECK-LITERAL: %0 = firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}" : () -> !firrtl.uint<1> {symbols = [#hw.innerNameRef<@Top::@bar>, #hw.innerNameRef<@Bar::@barXMR>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
+    // CHECK{LITERAL}:  firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}.{{3}}" : () -> !firrtl.uint<1> {symbols = [@Top, #hw.innerNameRef<@Top::@bar>, #hw.innerNameRef<@Bar::@barXMR>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
     firrtl.strictconnect %a, %0 : !firrtl.uint<1>
     %c_a = firrtl.instance child @Child(in  _a: !firrtl.ref<uint<1>>)
     firrtl.strictconnect %c_a, %bar_a : !firrtl.ref<uint<1>>
   }
   firrtl.module @Child(in  %_a: !firrtl.ref<uint<1>>) {
     %0 = firrtl.ref.resolve %_a : !firrtl.ref<uint<1>>
-    // CHECK-LITERAL:  %0 = firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}" : () -> !firrtl.uint<1> {symbols = [#hw.innerNameRef<@Top::@bar>, #hw.innerNameRef<@Bar::@barXMR>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
+    // CHECK{LITERAL}:  firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}.{{3}}" : () -> !firrtl.uint<1> {symbols = [@Top, #hw.innerNameRef<@Top::@bar>, #hw.innerNameRef<@Bar::@barXMR>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
   }
 }
 
@@ -210,9 +210,9 @@ firrtl.circuit "Top" {
   }
   firrtl.module @Child2p(in  %_a: !firrtl.ref<uint<1>>, in  %_b: !firrtl.ref<uint<1>>) {
     %0 = firrtl.ref.resolve %_a : !firrtl.ref<uint<1>>
-    // CHECK-LITERAL:  %1 = firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}" : () -> !firrtl.uint<1> {symbols = [#hw.innerNameRef<@Top::@foo>, #hw.innerNameRef<@Foo::@fooXMR>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
+    // CHECK{LITERAL}:  firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}.{{3}}" : () -> !firrtl.uint<1> {symbols = [@Top, #hw.innerNameRef<@Top::@foo>, #hw.innerNameRef<@Foo::@fooXMR>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
     %1 = firrtl.ref.resolve %_b : !firrtl.ref<uint<1>>
-    // CHECK-LITERAL:  %1 = firrtl.verbatim.expr "{{0}}.{{1}}" : () -> !firrtl.uint<1> {symbols = [#hw.innerNameRef<@Top::@xmr>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
+    // CHECK{LITERAL}:  firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}" : () -> !firrtl.uint<1> {symbols = [@Top, #hw.innerNameRef<@Top::@xmr>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
   }
 }
 
@@ -234,7 +234,7 @@ firrtl.circuit "Top" {
   // CHECK-LABEL: firrtl.module @Child1() {
   firrtl.module @Child1(in  %_a: !firrtl.ref<uint<1>>) {
     %0 = firrtl.ref.resolve %_a : !firrtl.ref<uint<1>>
-    // CHECK-LITERAL:  firrtl.verbatim.expr "{{0}}.{{1}}" : () -> !firrtl.uint<1> {symbols = [#hw.innerNameRef<@Top::@xmr>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
+    // CHECK{LITERAL}:  firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}" : () -> !firrtl.uint<1> {symbols = [@Top, #hw.innerNameRef<@Top::@xmr>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
     %c_a, %c_b = firrtl.instance child @Child2(in _a: !firrtl.ref<uint<1>>, in _b: !firrtl.ref<uint<1>> )
     firrtl.strictconnect %c_a, %_a : !firrtl.ref<uint<1>>
     firrtl.strictconnect %c_b, %_a : !firrtl.ref<uint<1>>
@@ -243,15 +243,15 @@ firrtl.circuit "Top" {
   }
   firrtl.module @Child2(in  %_a: !firrtl.ref<uint<1>>, in  %_b: !firrtl.ref<uint<1>>) {
     %0 = firrtl.ref.resolve %_a : !firrtl.ref<uint<1>>
-    // CHECK-LITERAL:  firrtl.verbatim.expr "{{0}}.{{1}}" : () -> !firrtl.uint<1> {symbols = [#hw.innerNameRef<@Top::@xmr>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
+    // CHECK{LITERAL}:  firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}" : () -> !firrtl.uint<1> {symbols = [@Top, #hw.innerNameRef<@Top::@xmr>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
     %1 = firrtl.ref.resolve %_b : !firrtl.ref<uint<1>>
-    // CHECK-LITERAL:  firrtl.verbatim.expr "{{0}}.{{1}}" : () -> !firrtl.uint<1> {symbols = [#hw.innerNameRef<@Top::@xmr>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
+    // CHECK{LITERAL}:  firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}" : () -> !firrtl.uint<1> {symbols = [@Top, #hw.innerNameRef<@Top::@xmr>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
   }
   firrtl.module @Child3(in  %_a: !firrtl.ref<uint<1>>) {
     %0 = firrtl.ref.resolve %_a : !firrtl.ref<uint<1>>
-    // CHECK-LITERAL:  firrtl.verbatim.expr "{{0}}.{{1}}" : () -> !firrtl.uint<1> {symbols = [#hw.innerNameRef<@Top::@xmr>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
+    // CHECK{LITERAL}:  firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}" : () -> !firrtl.uint<1> {symbols = [@Top, #hw.innerNameRef<@Top::@xmr>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
     %1 = firrtl.ref.resolve %_a : !firrtl.ref<uint<1>>
-    // CHECK-LITERAL:  firrtl.verbatim.expr "{{0}}.{{1}}" : () -> !firrtl.uint<1> {symbols = [#hw.innerNameRef<@Top::@xmr>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
+    // CHECK{LITERAL}:  firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}" : () -> !firrtl.uint<1> {symbols = [@Top, #hw.innerNameRef<@Top::@xmr>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
   }
 }
 
@@ -273,7 +273,7 @@ firrtl.circuit "Top" {
   // CHECK-LABEL: firrtl.module @Child1() {
   firrtl.module @Child1(in  %_a: !firrtl.ref<uint<1>>) {
     %0 = firrtl.ref.resolve %_a : !firrtl.ref<uint<1>>
-    // CHECK-LITERAL:  firrtl.verbatim.expr "{{0}}.{{1}}" : () -> !firrtl.uint<1> {symbols = [#hw.innerNameRef<@Top::@xmr>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
+    // CHECK{LITERAL}:  firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}" : () -> !firrtl.uint<1> {symbols = [@Top, #hw.innerNameRef<@Top::@xmr>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
     %c_a, %c_b = firrtl.instance child @Child2(in _a: !firrtl.ref<uint<1>>, in _b: !firrtl.ref<uint<1>> )
     firrtl.strictconnect %c_a, %_a : !firrtl.ref<uint<1>>
     firrtl.strictconnect %c_b, %_a : !firrtl.ref<uint<1>>
@@ -282,15 +282,15 @@ firrtl.circuit "Top" {
   }
   firrtl.module @Child2(in  %_a: !firrtl.ref<uint<1>>, in  %_b: !firrtl.ref<uint<1>>) {
     %0 = firrtl.ref.resolve %_a : !firrtl.ref<uint<1>>
-    // CHECK-LITERAL:  firrtl.verbatim.expr "{{0}}.{{1}}" : () -> !firrtl.uint<1> {symbols = [#hw.innerNameRef<@Top::@xmr>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
+    // CHECK{LITERAL}:  firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}" : () -> !firrtl.uint<1> {symbols = [@Top, #hw.innerNameRef<@Top::@xmr>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
     %1 = firrtl.ref.resolve %_b : !firrtl.ref<uint<1>>
-    // CHECK-LITERAL:  firrtl.verbatim.expr "{{0}}.{{1}}" : () -> !firrtl.uint<1> {symbols = [#hw.innerNameRef<@Top::@xmr>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
+    // CHECK{LITERAL}:  firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}" : () -> !firrtl.uint<1> {symbols = [@Top, #hw.innerNameRef<@Top::@xmr>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
   }
   firrtl.module @Child3(in  %_a: !firrtl.ref<uint<1>>) {
     %0 = firrtl.ref.resolve %_a : !firrtl.ref<uint<1>>
-    // CHECK-LITERAL:  firrtl.verbatim.expr "{{0}}.{{1}}" : () -> !firrtl.uint<1> {symbols = [#hw.innerNameRef<@Top::@xmr>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
+    // CHECK{LITERAL}:  firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}" : () -> !firrtl.uint<1> {symbols = [@Top, #hw.innerNameRef<@Top::@xmr>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
     %1 = firrtl.ref.resolve %_a : !firrtl.ref<uint<1>>
-    // CHECK-LITERAL:  firrtl.verbatim.expr "{{0}}.{{1}}" : () -> !firrtl.uint<1> {symbols = [#hw.innerNameRef<@Top::@xmr>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
+    // CHECK{LITERAL}:  firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}" : () -> !firrtl.uint<1> {symbols = [@Top, #hw.innerNameRef<@Top::@xmr>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
   }
 }
 
@@ -317,7 +317,7 @@ firrtl.circuit "Top" {
   // CHECK-LABEL: firrtl.module @Child1() {
   firrtl.module @Child1(in  %_a: !firrtl.ref<uint<1>>) {
     %0 = firrtl.ref.resolve %_a : !firrtl.ref<uint<1>>
-    // CHECK-LITERAL:  firrtl.verbatim.expr "{{0}}.{{1}}" : () -> !firrtl.uint<1> {symbols = [#hw.innerNameRef<@Top::@xmr>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
+    // CHECK{LITERAL}:  firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}" : () -> !firrtl.uint<1> {symbols = [@Dut, #hw.innerNameRef<@Dut::@xmr>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
     %c_a, %c_b = firrtl.instance child @Child2(in _a: !firrtl.ref<uint<1>>, in _b: !firrtl.ref<uint<1>> )
     firrtl.strictconnect %c_a, %_a : !firrtl.ref<uint<1>>
     firrtl.strictconnect %c_b, %_a : !firrtl.ref<uint<1>>
@@ -326,14 +326,14 @@ firrtl.circuit "Top" {
   }
   firrtl.module @Child2(in  %_a: !firrtl.ref<uint<1>>, in  %_b: !firrtl.ref<uint<1>>) {
     %0 = firrtl.ref.resolve %_a : !firrtl.ref<uint<1>>
-    // CHECK-LITERAL:  firrtl.verbatim.expr "{{0}}.{{1}}" : () -> !firrtl.uint<1> {symbols = [#hw.innerNameRef<@Top::@xmr>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
+    // CHECK{LITERAL}:  firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}" : () -> !firrtl.uint<1> {symbols = [@Dut, #hw.innerNameRef<@Dut::@xmr>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
     %1 = firrtl.ref.resolve %_b : !firrtl.ref<uint<1>>
-    // CHECK-LITERAL:  firrtl.verbatim.expr "{{0}}.{{1}}" : () -> !firrtl.uint<1> {symbols = [#hw.innerNameRef<@Top::@xmr>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
+    // CHECK{LITERAL}:  firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}" : () -> !firrtl.uint<1> {symbols = [@Dut, #hw.innerNameRef<@Dut::@xmr>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
   }
   firrtl.module @Child3(in  %_a: !firrtl.ref<uint<1>>) {
     %0 = firrtl.ref.resolve %_a : !firrtl.ref<uint<1>>
-    // CHECK-LITERAL:  firrtl.verbatim.expr "{{0}}.{{1}}" : () -> !firrtl.uint<1> {symbols = [#hw.innerNameRef<@Top::@xmr>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
+    // CHECK{LITERAL}:  firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}" : () -> !firrtl.uint<1> {symbols = [@Dut, #hw.innerNameRef<@Dut::@xmr>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
     %1 = firrtl.ref.resolve %_a : !firrtl.ref<uint<1>>
-    // CHECK-LITERAL:  firrtl.verbatim.expr "{{0}}.{{1}}" : () -> !firrtl.uint<1> {symbols = [#hw.innerNameRef<@Top::@xmr>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
+    // CHECK{LITERAL}:  firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}" : () -> !firrtl.uint<1> {symbols = [@Dut, #hw.innerNameRef<@Dut::@xmr>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
   }
 }
