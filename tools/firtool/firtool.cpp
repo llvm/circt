@@ -48,7 +48,6 @@
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/SourceMgr.h"
-#include "llvm/Support/SystemUtils.h"
 #include "llvm/Support/ToolOutputFile.h"
 
 using namespace llvm;
@@ -452,10 +451,23 @@ public:
   }
 };
 
+/// Check output stream before writing bytecode to it.
+/// Warn and return true if output is known to be displayed.
+static bool checkBytecodeOutputToConsole(raw_ostream &os) {
+  if (os.is_displayed()) {
+    errs() << "WARNING: You're attempting to print out a bytecode file.\n"
+              "This is inadvisable as it may cause display problems. If\n"
+              "you REALLY want to taste MLIR bytecode first-hand, you\n"
+              "can force output with the `-f' option.\n\n";
+    return true;
+  }
+  return false;
+}
+
 /// Print the operation to the specified stream, emitting bytecode when
 /// requested and politely avoiding dumping to terminal unless forced.
 static void printOp(Operation *op, raw_ostream &os) {
-  if (emitBytecode && (force || !CheckBitcodeOutputToConsole(os)))
+  if (emitBytecode && (force || !checkBytecodeOutputToConsole(os)))
     writeBytecodeToFile(op, os, getCirctVersion());
   else
     op->print(os);
