@@ -64,10 +64,10 @@ static cl::OptionCategory mainCategory("firtool Options");
 
 static cl::opt<InputFormatKind> inputFormat(
     "format", cl::desc("Specify input file format:"),
-    cl::values(clEnumValN(InputUnspecified, "autodetect",
-                          "Autodetect input format"),
-               clEnumValN(InputFIRFile, "fir", "Parse as .fir file"),
-               clEnumValN(InputMLIRFile, "mlir", "Parse as .mlir or .bc file")),
+    cl::values(
+        clEnumValN(InputUnspecified, "autodetect", "Autodetect input format"),
+        clEnumValN(InputFIRFile, "fir", "Parse as .fir file"),
+        clEnumValN(InputMLIRFile, "mlir", "Parse as .mlir or .mlirbc file")),
     cl::init(InputUnspecified), cl::cat(mainCategory));
 
 static cl::opt<std::string> inputFilename(cl::Positional,
@@ -872,7 +872,7 @@ static LogicalResult executeFirtool(MLIRContext &context) {
     if (StringRef(inputFilename).endswith(".fir"))
       inputFormat = InputFIRFile;
     else if (StringRef(inputFilename).endswith(".mlir") ||
-             StringRef(inputFilename).endswith(".bc") ||
+             StringRef(inputFilename).endswith(".mlirbc") ||
              mlir::isBytecode(*input))
       inputFormat = InputMLIRFile;
     else {
