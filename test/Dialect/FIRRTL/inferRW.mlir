@@ -76,7 +76,7 @@ firrtl.circuit "TLRAM" {
     firrtl.connect %5, %io_addr : !firrtl.uint<11>, !firrtl.uint<11>
     firrtl.connect %7, %clock : !firrtl.clock, !firrtl.clock
     firrtl.connect %io_dataOut, %8 : !firrtl.uint<32>, !firrtl.uint<32>
-// CHECK:   firrtl.strictconnect %4, %io_wen : !firrtl.uint<1>
+    // CHECK:   firrtl.strictconnect %4, %io_wen : !firrtl.uint<1>
   }
 
 // Test the pattern of enable  with an And tree and Mux (sel, high, 0)
@@ -112,7 +112,7 @@ firrtl.circuit "TLRAM" {
     firrtl.connect %5, %io_addr : !firrtl.uint<11>, !firrtl.uint<11>
     firrtl.connect %7, %clock : !firrtl.clock, !firrtl.clock
     firrtl.connect %io_dataOut, %8 : !firrtl.uint<32>, !firrtl.uint<32>
-// CHECK:  firrtl.strictconnect %4, %io_write : !firrtl.uint<1>
+    // CHECK:  firrtl.strictconnect %4, %io_write : !firrtl.uint<1>
   }
 
 // Cannot merge read and write, since the pattern is enable = Mux (sel, high, 1)
@@ -207,7 +207,7 @@ firrtl.circuit "TLRAM" {
     firrtl.connect %6, %clock : !firrtl.clock, !firrtl.clock
     firrtl.connect %8, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %7, %io_wdata : !firrtl.uint<32>, !firrtl.uint<32>
-// CHECK:  firrtl.strictconnect %4, %io_wen : !firrtl.uint<1>
+    // CHECK:  firrtl.strictconnect %4, %io_wen : !firrtl.uint<1>
   }
 
 // Check for indirect connection to clock
