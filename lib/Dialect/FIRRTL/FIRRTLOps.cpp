@@ -153,7 +153,7 @@ DeclKind firrtl::getDeclarationKind(Value val) {
 
   return TypeSwitch<Operation *, DeclKind>(op)
       .Case<InstanceOp>([](auto) { return DeclKind::Instance; })
-      .Case<SubfieldOp, SubindexOp, SubaccessOp>(
+      .Case<SubfieldOp, SubindexOp, SubaccessOp, BitsPrimOp>(
           [](auto op) { return getDeclarationKind(op.getInput()); })
       .Default([](auto) { return DeclKind::Other; });
 }
