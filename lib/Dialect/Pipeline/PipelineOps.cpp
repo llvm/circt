@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/ESI/ESITypes.h"
 #include "circt/Dialect/Pipeline/Pipeline.h"
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -21,6 +22,86 @@ using namespace circt;
 using namespace circt::pipeline;
 
 #include "circt/Dialect/Pipeline/PipelineDialect.cpp.inc"
+
+//===----------------------------------------------------------------------===//
+// PipelineOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult PipelineOp::verify() {
+  bool anyInputIsAChannel = llvm::any_of(inputs(), [](Value operand) {
+    return operand.getType().isa<esi::ChannelType>();
+  });
+  bool anyOutputIsAChannel = llvm::any_of(
+      getResultTypes(), [](Type type) { return type.isa<esi::ChannelType>(); });
+
+  if ((anyInputIsAChannel || anyOutputIsAChannel) && !isLatencyInsensitive()) {
+    return emitOpError("if any port of this pipeline is an ESI channel, all "
+                       "ports must be ESI channels.");
+  }
+
+  if (getBody()->getNumArguments() != inputs().size())
+    return emitOpError("expected ")
+           << inputs().size() << " arguments in the pipeline body block, got "
+           << getBody()->getNumArguments() << ".";
+
+  for (size_t i = 0; i < inputs().size(); i++) {
+    Type expectedInArg = inputs()[i].getType();
+    Type bodyArg = getBody()->getArgument(i).getType();
+
+    if (isLatencyInsensitive())
+      expectedInArg = expectedInArg.cast<esi::ChannelType>().getInner();
+
+    if (expectedInArg != bodyArg)
+      return emitOpError("expected body block argument ")
+             << i << " to have type " << expectedInArg << ", got " << bodyArg
+             << ".";
+  }
+
+  // Check mixing of `pipeline.stage` and `pipeline.stage.register` ops.
+  bool hasStageOps = !getOps<PipelineStageOp>().empty();
+  bool hasStageRegOps = !getOps<PipelineStageRegisterOp>().empty();
+
+  if (hasStageOps && hasStageRegOps)
+    return emitOpError("mixing `pipeline.stage` and `pipeline.stage.register` "
+                       "ops is illegal.");
+
+  return success();
+}
+
+bool PipelineOp::isLatencyInsensitive() {
+  bool allInputsAreChannels = llvm::all_of(inputs(), [](Value operand) {
+    return operand.getType().isa<esi::ChannelType>();
+  });
+  bool allOutputsAreChannels = llvm::all_of(
+      getResultTypes(), [](Type type) { return type.isa<esi::ChannelType>(); });
+  return allInputsAreChannels && allOutputsAreChannels;
+}
+
+//===----------------------------------------------------------------------===//
+// ReturnOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ReturnOp::verify() {
+  PipelineOp parent = getOperation()->getParentOfType<PipelineOp>();
+  if (operands().size() != parent.results().size())
+    return emitOpError("expected ")
+           << parent.results().size() << " return values, got "
+           << operands().size() << ".";
+
+  bool isLatencyInsensitive = parent.isLatencyInsensitive();
+  for (size_t i = 0; i < parent.results().size(); i++) {
+    Type expectedType = parent.getResultTypes()[i];
+    Type actualType = getOperandTypes()[i];
+    if (isLatencyInsensitive)
+      expectedType = expectedType.cast<esi::ChannelType>().getInner();
+    if (expectedType != actualType)
+      return emitOpError("expected argument ")
+             << i << " to have type " << expectedType << ", got " << actualType
+             << ".";
+  }
+
+  return success();
+}
 
 //===----------------------------------------------------------------------===//
 // PipelineWhileOp
