@@ -70,6 +70,21 @@ TODO: describe why add/xor/or are variadic
 
 TODO: describe why we have divu/divs but not addu/adds, and not sint vs uint.
 
+### Binary (2-State) logic optional per operation
+
+To keep the interpretation of comb operators local to the dialect, each
+operation where it matters has an optional flag to indicate it's semantics need
+only preserve binary (2-state) behavior.  Some users might want to preserve
+verilog or VHDL behavior, which by default comb operators will.  Other users
+don't care about these behaviors (either by analysis, design, or semantics of 
+the front-end language).  These users can opt into common binary optimizations
+on the comb dialect.
+
+This is done so as to not make the operations in comb type-dependent.
+
+This is a tradeoff in that comb operations are either 2-state or the union of 
+common backend language weirdness.  This could be refined in the future.
+
 ### No implicit extensions of operands
 
 Verilog and many other HDL's allow operators like `+` to work with
