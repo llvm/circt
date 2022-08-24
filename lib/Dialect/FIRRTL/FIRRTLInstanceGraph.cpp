@@ -80,9 +80,8 @@ void InstancePathCache::replaceInstance(InstanceOp oldOp, InstanceOp newOp) {
   // then replace it with the new InstanceOp, and create a new copy of the paths
   // and update the cache.
   auto instanceExists = [&](const ArrayRef<InstancePath> &paths) -> bool {
-    return llvm::any_of(paths, [&](InstancePath p) {
-      return llvm::is_contained(p, oldOp);
-    });
+    return llvm::any_of(
+        paths, [&](InstancePath p) { return llvm::is_contained(p, oldOp); });
   };
 
   for (auto &iter : absolutePathsCache) {
