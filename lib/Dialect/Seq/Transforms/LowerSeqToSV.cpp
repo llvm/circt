@@ -172,7 +172,7 @@ void FirRegLower::lower() {
             builder.create<sv::InitialOp>([&] {
               builder.create<sv::VerbatimOp>("`INIT_RANDOM_PROLOG_");
 
-              llvm::DenseMap<Value, SmallVector<std::pair<sv::RegOp, Value>>>
+              llvm::MapVector<Value, SmallVector<std::pair<sv::RegOp, Value>>>
                   resets;
               builder.create<sv::IfDefProceduralOp>(randInitRef, [&] {
                 // Create initialisers for all registers.
