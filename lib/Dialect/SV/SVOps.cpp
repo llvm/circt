@@ -756,7 +756,8 @@ ParseResult CaseOp::parse(OpAsmParser &parser, OperationState &result) {
     return failure();
 
   // Check the integer type.
-  hw::EnumType enumType = condType.dyn_cast<hw::EnumType>();
+  Type canonicalCondType = hw::getCanonicalType(condType);
+  hw::EnumType enumType = canonicalCondType.dyn_cast<hw::EnumType>();
   unsigned condWidth = 0;
   if (!enumType) {
     if (!result.operands[0].getType().isSignlessInteger())
