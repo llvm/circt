@@ -92,3 +92,13 @@ class LoopbackTester(esi_cosim.CosimBase):
       print(f"got:      {kt}")
       assert list(kt.key) == list(kts[i].key)
       assert list(kt.text) == list(kts[i].text)
+
+  def test_api(self):
+    from esi_rt.test import top
+    # Current gets an assert unimplemented error.
+    # top.host_comms.Recv[0].write(128)
+    try:
+      top.host_comms.Recv[0].write(128000)
+      assert False, "Expected exception"
+    except ValueError:
+      pass

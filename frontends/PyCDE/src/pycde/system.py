@@ -243,6 +243,7 @@ class System:
       self._placedb = PlacementDB(self, self.mod, primdb)
 
   def build_api(self, lang: str):
+    """Build an ESI runtime API."""
     if lang != "python":
       raise ValueError(f"Language '{lang}' not supported")
     b = PythonApiBuilder(

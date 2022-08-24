@@ -14,6 +14,7 @@
 
 import argparse
 import os
+import pathlib
 import re
 import signal
 import socket
@@ -276,10 +277,19 @@ def isPortOpen(port):
   return True if result == 0 else False
 
 
+def build_api(schema: str, services_json: str):
+  from circt.dialects.esi import PythonApiBuilder
+  b = PythonApiBuilder(open(services_json).read(), open(schema).read())
+  b.build("test", pathlib.Path.cwd())
+
+
 def __main__(args):
   argparser = argparse.ArgumentParser(
       description="HW cosimulation runner for ESI")
   argparser.add_argument("--schema", default="", help="The schema file to use.")
+  argparser.add_argument("--services",
+                         default="",
+                         help="The services description json to use.")
   argparser.add_argument("source", help="The source run spec file")
   argparser.add_argument("addlArgs",
                          nargs=argparse.REMAINDER,
@@ -297,6 +307,9 @@ def __main__(args):
   if not os.path.exists(testDir):
     os.mkdir(testDir)
   os.chdir(testDir)
+
+  if args.services != "":
+    build_api(args.schema, args.services)
 
   runner = CosimTestRunner(args.source, args.schema, args.addlArgs)
   rc = runner.compile()

@@ -94,6 +94,3 @@ s.build_api("python")
 
 sys.path.append(sys.argv[1])
 from esi_rt.ESILoopback import top
-import IPython
-
-IPython.embed(local=locals())
