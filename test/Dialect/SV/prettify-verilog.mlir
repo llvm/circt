@@ -564,3 +564,23 @@ hw.module private @ConnectNestedFieldsAndIndices(%clock: i1, %reset: i1, %value:
   // VERILOG:      always @(posedge clock)
   // VERILOG-NEXT:   r[3'h1].a[2'h1].b <= value;
 }
+
+
+// CHECK-LABEL: hw.module private @SelfConnect
+hw.module private @SelfConnect(%clock: i1, %reset: i1) -> () {
+  %r = sv.reg : !hw.inout<i2>
+  %val = sv.read_inout %r : !hw.inout<i2>
+  sv.always posedge %clock {
+    sv.passign %r, %val : i2
+  }
+
+  // CHECK: %r = sv.reg  : !hw.inout<i2>
+  // CHECK: sv.always posedge %clock {
+  // CHECK:   [[READ:%.+]] = sv.read_inout %r : !hw.inout<i2>
+  // CHECK:   sv.passign %r, [[READ]] : i2
+  // CHECK: }
+
+  //VERILOG: reg [1:0] r;
+  //VERILOG: always @(posedge clock)
+  //VERILOG:   r <= r;
+}
