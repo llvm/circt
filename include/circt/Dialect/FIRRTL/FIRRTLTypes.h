@@ -278,35 +278,33 @@ public:
 //===----------------------------------------------------------------------===//
 
 namespace detail {
-  // Each element of a bundle, which is a name and type.
-  struct BundleElement {
-    StringAttr name;
-    bool isFlip;
-    FIRRTLBaseType type;
+// Each element of a bundle, which is a name and type.
+struct BundleElement {
+  StringAttr name;
+  bool isFlip;
+  FIRRTLBaseType type;
 
-    BundleElement(StringAttr name, bool isFlip, FIRRTLBaseType type)
-        : name(name), isFlip(isFlip), type(type) {}
+  BundleElement(StringAttr name, bool isFlip, FIRRTLBaseType type)
+      : name(name), isFlip(isFlip), type(type) {}
 
-    bool operator==(const BundleElement &rhs) const {
-      return name == rhs.name && isFlip == rhs.isFlip && type == rhs.type;
-    }
-    bool operator!=(const BundleElement &rhs) const { return !operator==(rhs); }
-  };
-}
+  bool operator==(const BundleElement &rhs) const {
+    return name == rhs.name && isFlip == rhs.isFlip && type == rhs.type;
+  }
+  bool operator!=(const BundleElement &rhs) const { return !operator==(rhs); }
+};
+} // namespace detail
 
 /// BundleType is an aggregate of named elements.  This is effectively a struct
 /// for FIRRTL.
 class ZBundleType : public FIRRTLType::TypeBase<BundleType, FIRRTLBaseType,
-                                               detail::BundleTypeStorage> {
+                                                detail::BundleTypeStorage> {
 public:
   using Base::Base;
 
-  static BundleType get(ArrayRef<detail::BundleElement> elements, MLIRContext *context);
+  static BundleType get(ArrayRef<detail::BundleElement> elements,
+                        MLIRContext *context);
 
   ArrayRef<detail::BundleElement> getElements() const;
-
-
-
 };
 
 //===----------------------------------------------------------------------===//
