@@ -76,7 +76,10 @@ struct InstancePathCache {
   ArrayRef<InstancePath> getAbsolutePaths(Operation *op);
 
   /// Clear the cache.
-  void invalidate() { absolutePathsCache.clear(); }
+  void invalidate() {
+    allocator.Reset();
+    absolutePathsCache.clear();
+  }
 
   /// Replace an InstanceOp. This is required to keep the cache updated.
   void replaceInstance(InstanceOp oldOp, InstanceOp newOp);
