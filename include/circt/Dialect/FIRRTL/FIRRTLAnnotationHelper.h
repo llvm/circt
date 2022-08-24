@@ -84,6 +84,33 @@ struct AnnoTargetCache {
     return targets.lookup(name);
   }
 
+  /// Replace `oldOp` with `newOp` in the target cache. The new and old ops can
+  /// have different names.
+  void replaceOp(Operation *oldOp, Operation *newOp) {
+    auto namOp = dyn_cast<FNamableOp>(oldOp);
+    if (!namOp)
+      return;
+    if (auto name = namOp.getNameAttr(); name && !name.getValue().empty())
+      targets.erase(name);
+    if (auto name = cast<FNamableOp>(newOp).getNameAttr();
+        name && !name.getValue().empty())
+      targets.insert({name, OpAnnoTarget(newOp)});
+  }
+
+  /// Add a new module port to the target cache.
+  void insertPorts(FModuleLike mod, size_t portNo) {
+    targets.insert({mod.getPortNameAttr(portNo), PortAnnoTarget(mod, portNo)});
+  }
+
+  /// Add a new op to the target cache.
+  void insertOp(Operation *op) {
+    auto namOp = dyn_cast<FNamableOp>(op);
+    if (!namOp)
+      return;
+    if (auto name = namOp.getNameAttr(); name && !name.getValue().empty())
+      targets.insert({name, OpAnnoTarget(op)});
+  }
+
 private:
   /// Walk the module and add named things to 'targets'.
   void gatherTargets(FModuleLike mod);
@@ -105,6 +132,36 @@ struct CircuitTargetCache {
   /// Lookup the target for 'name' in 'module'.
   AnnoTarget lookup(FModuleLike module, StringRef name) {
     return getOrCreateCacheFor(module).getTargetForName(name);
+  }
+
+  /// Clear the cache completely.
+  void invalidate() { targetCaches.clear(); }
+
+  /// Replace `oldOp` with `newOp` in the target cache. The new and old ops can
+  /// have different names.
+  void replaceOp(Operation *oldOp, Operation *newOp) {
+    auto mod = newOp->getParentOfType<FModuleOp>();
+    auto it = targetCaches.find(mod);
+    if (it == targetCaches.end())
+      return;
+    it->getSecond().replaceOp(oldOp, newOp);
+  }
+
+  /// Add a new module port to the target cache.
+  void insertPorts(FModuleLike mod, size_t portNo) {
+    auto it = targetCaches.find(mod);
+    if (it == targetCaches.end())
+      return;
+    it->getSecond().insertPorts(mod, portNo);
+  }
+
+  /// Add a new op to the target cache.
+  void insertOp(Operation *op) {
+    auto mod = op->getParentOfType<FModuleOp>();
+    auto it = targetCaches.find(mod);
+    if (it == targetCaches.end())
+      return;
+    it->getSecond().insertOp(op);
   }
 
 private:
