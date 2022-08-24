@@ -81,7 +81,7 @@ void InstancePathCache::replaceInstance(InstanceOp oldOp, InstanceOp newOp) {
   // and update the cache.
   auto instanceExists = [&](const ArrayRef<InstancePath> &paths) -> bool {
     return llvm::any_of(paths, [&](InstancePath p) {
-      return llvm::any_of(p, [&](InstanceOp inst) { return inst == oldOp; });
+      return llvm::is_contained(p, oldOp);
     });
   };
 
@@ -97,14 +97,14 @@ void InstancePathCache::replaceInstance(InstanceOp oldOp, InstanceOp newOp) {
         continue;
       }
       auto *newPath = allocator.Allocate<InstanceOp>(path.size());
-      std::copy(path.begin(), path.end(), newPath);
+      llvm::copy(path, newPath);
       newPath[iter - path.begin()] = newOp;
       updatedPaths.push_back(InstancePath(newPath, path.size()));
     }
     // Move the list of paths into the bump allocator for later quick
     // retrieval.
     auto *paths = allocator.Allocate<InstancePath>(updatedPaths.size());
-    std::copy(updatedPaths.begin(), updatedPaths.end(), paths);
+    llvm::copy(updatedPaths, paths);
     iter.getSecond() = ArrayRef<InstancePath>(paths, updatedPaths.size());
   }
 }
