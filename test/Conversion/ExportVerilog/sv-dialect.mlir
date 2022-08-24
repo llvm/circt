@@ -602,7 +602,7 @@ hw.module @exprInlineTestIssue439(%clk: i1) {
     %c = hw.constant 0 : i32
 
     // OLD: localparam [31:0] _GEN = 32'h0;
-    // NEW: localparam [31:0] _GEN = 0;
+    // NEW: automatic logic [31:0] _GEN = 32'h0;
     %e = comb.extract %c from 0 : (i32) -> i16
     %f = comb.add %e, %e : i16
     sv.fwrite %fd, "%d"(%f) : i16
@@ -947,7 +947,7 @@ hw.module @ConstResetValueMustBeInlined(%clock: i1, %reset: i1, %d: i42) -> (q: 
 // CHECK-LABEL: module OutOfLineConstantsInAlwaysSensitivity
 hw.module @OutOfLineConstantsInAlwaysSensitivity() {
   // OLD-NEXT: localparam _GEN = 1'h0;
-  // NEW-NEXT: localparam _GEN = 0;
+  // NEW-NEXT: wire _GEN = 1'h0;
   // CHECK-NEXT: always_ff @(posedge _GEN)
   %clock = hw.constant 0 : i1
   sv.alwaysff(posedge %clock) {}

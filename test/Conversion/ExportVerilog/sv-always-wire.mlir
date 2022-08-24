@@ -6,7 +6,9 @@ hw.module @AlwaysSpill(%port: i1) {
   %true = hw.constant true
   %awire = sv.wire : !hw.inout<i1>
 
-  // CHECK: wire {{ *}} awire;
+  // CHECK: wire [[TMP1:.+]] = 1'h0;
+  // CHECK: wire [[TMP2:.+]] = 1'h1;
+  // CHECK: wire{{ *}}awire;
   %awire2 = sv.read_inout %awire : !hw.inout<i1>
 
   // Existing simple names should not cause additional spill.
@@ -20,11 +22,9 @@ hw.module @AlwaysSpill(%port: i1) {
   sv.alwaysff(posedge %awire2) {}
 
   // Constant values should cause a spill.
-  // CHECK: assign [[TMP:.+]] =
-  // CHECK-NEXT: always @(posedge [[TMP]])
+  // CHECK: always @(posedge [[TMP1]])
   sv.always posedge %false {}
-  // CHECK: assign [[TMP:.+]] =
-  // CHECK-NEXT: always_ff @(posedge [[TMP]])
+  // CHECK: always_ff @(posedge [[TMP2]])
   sv.alwaysff(posedge %true) {}
 }
 
