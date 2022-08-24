@@ -1421,8 +1421,8 @@ static llvm::json::Value toJSON(Attribute attr) {
 
         if (auto chan_type = t.dyn_cast<ChannelType>()) {
           Type inner = chan_type.getInner();
-#ifdef CAPNP
           typeMD["hw_bitwidth"] = hw::getBitWidth(inner);
+#ifdef CAPNP
           capnp::TypeSchema schema(inner);
           typeMD["capnp_type_id"] = schema.capnpTypeID();
           typeMD["capnp_name"] = schema.name();
@@ -1526,6 +1526,7 @@ void ESIEmitCollateralPass::emitServiceJSON() {
       }
     });
 
+    // Get a list of metadata ops which originated in modules (path is empty).
     DenseMap<hw::HWModuleLike, SmallVector<ServiceHierarchyMetadataOp, 0>>
         modsWithLocalServices;
     for (auto hwmod : mod.getOps<hw::HWModuleLike>()) {
@@ -1538,6 +1539,7 @@ void ESIEmitCollateralPass::emitServiceJSON() {
         modsWithLocalServices[hwmod] = metadataOps;
     }
 
+    // Then output metadata for those modules exclusively.
     j.attributeArray("modules", [&] {
       for (auto &modWithSvc : modsWithLocalServices) {
         j.object([&] {
