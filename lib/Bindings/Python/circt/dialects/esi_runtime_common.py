@@ -46,6 +46,9 @@ class Port:
 class WritePort(Port):
 
   def write(self, msg):
+    assert self.write_type is not None, "Expected non-None write_type"
+    if not self.write_type.is_valid(msg):
+      raise ValueError(f"'{msg}' cannot be converted to '{self.write_type}'")
     assert False, "Unimplemented"
 
 
@@ -58,19 +61,10 @@ class ReadPort(Port):
 class ReadWritePort(Port):
 
   def write(self, msg):
+    assert self.write_type is not None, "Expected non-None write_type"
+    if not self.write_type.is_valid(msg):
+      raise ValueError(f"'{msg}' cannot be converted to '{self.write_type}'")
     assert False, "Unimplemented"
 
   def read(self, block=True):
     assert False, "Unimplemented"
-
-
-class Instance:
-
-  def __init__(self, name: typing.Optional[str]):
-    self.name = name
-
-  def add_child(self, name: str):
-    if hasattr(self, name):
-      return
-    inst = Instance(name)
-    setattr(self, name, inst)
