@@ -215,43 +215,6 @@ static void lowerAlwaysInlineOperation(Operation *op) {
   return;
 }
 
-/// Lower a variadic fully-associative operation into an expression tree.  This
-/// enables long-line splitting to work with them.
-static Value lowerFullyAssociativeOp(Operation &op, OperandRange operands,
-                                     SmallVector<Operation *> &newOps) {
-  // save the top level name
-  auto name = op.getAttr("sv.namehint");
-  if (name)
-    op.removeAttr("sv.namehint");
-  Value lhs, rhs;
-  switch (operands.size()) {
-  case 0:
-    assert(0 && "cannot be called with empty operand range");
-    break;
-  case 1:
-    return operands[0];
-  case 2:
-    lhs = operands[0];
-    rhs = operands[1];
-    break;
-  default:
-    auto firstHalf = operands.size() / 2;
-    lhs = lowerFullyAssociativeOp(op, operands.take_front(firstHalf), newOps);
-    rhs = lowerFullyAssociativeOp(op, operands.drop_front(firstHalf), newOps);
-    break;
-  }
-
-  OperationState state(op.getLoc(), op.getName());
-  state.addOperands(ValueRange{lhs, rhs});
-  state.addTypes(op.getResult(0).getType());
-  auto *newOp = Operation::create(state);
-  op.getBlock()->getOperations().insert(Block::iterator(&op), newOp);
-  newOps.push_back(newOp);
-  if (name)
-    newOp->setAttr("sv.namehint", name);
-  return newOp->getResult(0);
-}
-
 // Find a nearest insertion point where logic op can be declared.
 // Basically this function returns the first operation that is not logic op
 // within the same block. "automatic logic" must be declared at beginning of
@@ -328,6 +291,63 @@ static void lowerUsersToTemporaryWire(Operation &op,
   // If the op has multiple results, create wires for each result.
   for (auto result : op.getResults())
     createWireForResult(result, StringAttr());
+}
+
+/// Lower a variadic fully-associative operation into an expression tree.  This
+/// enables long-line splitting to work with them.
+static Value lowerFullyAssociativeOp(Operation &op, OperandRange operands,
+                                     SmallVector<Operation *> &newOps,
+                                     DenseMap<Value, size_t> &operandMap,
+                                     const LoweringOptions &options) {
+  // save the top level name
+  auto name = op.getAttr("sv.namehint");
+  if (name)
+    op.removeAttr("sv.namehint");
+  Value lhs, rhs;
+  switch (operands.size()) {
+  case 0:
+    assert(0 && "cannot be called with empty operand range");
+    break;
+  case 1:
+    return operands[0];
+  case 2:
+    lhs = operands[0];
+    rhs = operands[1];
+    break;
+  default:
+    auto firstHalf = operands.size() / 2;
+    lhs = lowerFullyAssociativeOp(op, operands.take_front(firstHalf), newOps,
+                                  operandMap, options);
+    rhs = lowerFullyAssociativeOp(op, operands.drop_front(firstHalf), newOps,
+                                  operandMap, options);
+    break;
+  }
+
+  if (operandMap[lhs] + operandMap[rhs] >
+      options.maximumNumberOfVariadicOperands) {
+    if (lhs.getDefiningOp()) {
+      lowerUsersToTemporaryWire(*lhs.getDefiningOp());
+      operandMap[lhs] = 1;
+    }
+    if (rhs.getDefiningOp()) {
+      lowerUsersToTemporaryWire(*rhs.getDefiningOp());
+      operandMap[rhs] = 1;
+    }
+  }
+
+  OperationState state(op.getLoc(), op.getName());
+  state.addOperands(ValueRange{lhs, rhs});
+  state.addTypes(op.getResult(0).getType());
+  auto *newOp = Operation::create(state);
+  op.getBlock()->getOperations().insert(Block::iterator(&op), newOp);
+  newOps.push_back(newOp);
+  if (name)
+    newOp->setAttr("sv.namehint", name);
+  size_t size = 0;
+  for (auto a : newOp->getOperands())
+    size += operandMap[a];
+  operandMap[newOp->getResult(0)] = size;
+  return newOp->getResult(0);
 }
 
 /// Transform "a + -cst" ==> "a - cst" for prettier output.  This returns the
@@ -508,6 +528,10 @@ static bool reuseExistingInOut(Operation *op) {
 void ExportVerilog::prepareHWModule(Block &block,
                                     const LoweringOptions &options) {
 
+  /// A cache of the number of operands that feed into an operation.  This
+  /// avoids the need to look backwards across ops repeatedly.
+  DenseMap<Value, size_t> operandMap;
+
   // First step, check any nested blocks that exist in this region.  This walk
   // can pull things out to our level of the hierarchy.
   for (auto &op : block) {
@@ -525,6 +549,11 @@ void ExportVerilog::prepareHWModule(Block &block,
   for (Block::iterator opIterator = block.begin(), e = block.end();
        opIterator != e;) {
     auto &op = *opIterator++;
+
+    size_t totalOperands = 0;
+    for (auto a : op.getOperands())
+      totalOperands += operandMap.count(a) ? operandMap[a] : 1;
+    operandMap[op.getResult(0)] = totalOperands;
 
     // Name legalization should have happened in a different pass for these sv
     // elements and we don't want to change their name through re-legalization
@@ -657,7 +686,8 @@ void ExportVerilog::prepareHWModule(Block &block,
          (op.getAttrs().size() == 1 && op.hasAttr("sv.namehint")))) {
       // Lower this operation to a balanced binary tree of the same operation.
       SmallVector<Operation *> newOps;
-      auto result = lowerFullyAssociativeOp(op, op.getOperands(), newOps);
+      auto result = lowerFullyAssociativeOp(op, op.getOperands(), newOps,
+                                            operandMap, options);
       op.getResult(0).replaceAllUsesWith(result);
       op.erase();
 
