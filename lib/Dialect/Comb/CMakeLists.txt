@@ -11,6 +11,7 @@ add_circt_dialect_library(CIRCTComb
   CIRCTHW
   MLIRCombIncGen
   MLIRCombEnumsIncGen
+  MLIRCombCanonicalizationIncGen
   
   LINK_COMPONENTS
   Support
@@ -21,4 +22,8 @@ add_circt_dialect_library(CIRCTComb
   MLIRInferTypeOpInterface
    )
 
-add_dependencies(circt-headers MLIRCombIncGen MLIRCombEnumsIncGen)
+add_dependencies(circt-headers 
+  MLIRCombIncGen 
+  MLIRCombEnumsIncGen
+  MLIRCombCanonicalizationIncGen
+)

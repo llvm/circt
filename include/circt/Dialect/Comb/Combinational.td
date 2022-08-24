@@ -204,11 +204,14 @@ def ExtractOp : CombOp<"extract", [NoSideEffect]> {
 // Other Operations
 //===----------------------------------------------------------------------===//
 
-def ConcatOp : VariadicOp<"concat", [InferTypeOpInterface]> {
+def ConcatOp : CombOp<"concat", [InferTypeOpInterface, NoSideEffect]> {
   let summary = "Concatenate a variadic list of operands together.";
   let description = [{
     See the comb rationale document for details on operand ordering.
   }];
+
+  let arguments = (ins Variadic<HWIntegerType>:$inputs);
+  let results = (outs HWIntegerType:$result);
 
   let hasFolder = true;
   let hasCanonicalizeMethod = true;

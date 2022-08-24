@@ -21,6 +21,15 @@ using namespace circt;
 using namespace comb;
 using namespace matchers;
 
+// Declarative canonicalization patterns
+namespace circt {
+namespace comb {
+namespace patterns {
+#include "circt/Dialect/Comb/CombCanonicalization.h.inc"
+} // namespace patterns
+} // namespace firrtl
+} // namespace circt
+
 /// Create a new instance of a generic operation that only has value operands,
 /// and has a single result value whose type matches the first operand.
 ///
@@ -2393,7 +2402,7 @@ static LogicalResult matchAndRewriteCompareConcat(ICmpOp op, Operation *lhs,
     if (sameElement)
       return rewriter.createOrFold<ReplicateOp>(loc, sameElement,
                                                 operands.size());
-    return rewriter.createOrFold<ConcatOp>(loc, operands, false);
+    return rewriter.createOrFold<ConcatOp>(loc, operands);
   };
 
   auto replaceWith = [&](ICmpPredicate predicate, Value lhs,
