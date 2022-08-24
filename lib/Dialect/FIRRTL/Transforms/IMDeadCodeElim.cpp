@@ -11,6 +11,7 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
+#include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/TinyPtrVector.h"
 #include "llvm/Support/Debug.h"
 
@@ -38,6 +39,8 @@ struct IMDeadCodeElimPass : public IMDeadCodeElimBase<IMDeadCodeElimPass> {
 
   void rewriteModuleSignature(FModuleOp module);
   void rewriteModuleBody(FModuleOp module);
+  void eraseEmptyModule(FModuleOp module);
+  void forwardConstantOutputPort(FModuleOp module);
 
   void markAlive(Value value) {
     //  If the value is already in `liveSet`, skip it.
@@ -177,11 +180,57 @@ void IMDeadCodeElimPass::markBlockExecutable(Block *block) {
   }
 }
 
+void IMDeadCodeElimPass::forwardConstantOutputPort(FModuleOp module) {
+  // This tracks constant values of output ports.
+  SmallVector<std::pair<unsigned, APSInt>> constantPortIndicesAndValues;
+  auto ports = module.getPorts();
+  auto *instanceGraphNode = instanceGraph->lookup(module);
+
+  for (const auto &e : llvm::enumerate(ports)) {
+    unsigned index = e.index();
+    auto port = e.value();
+    auto arg = module.getArgument(index);
+
+    // If the port has don't touch, don't propagate the constant value.
+    if (!port.isOutput() || hasDontTouch(arg))
+      continue;
+
+    // Remember the index and constant value connected to an output port.
+    if (auto connect = getSingleConnectUserOf(arg))
+      if (auto constant = connect.src().getDefiningOp<ConstantOp>())
+        constantPortIndicesAndValues.push_back({index, constant.value()});
+  }
+
+  // If there is no constant port, abort.
+  if (constantPortIndicesAndValues.empty())
+    return;
+
+  // Rewrite all uses.
+  for (auto *use : instanceGraphNode->uses()) {
+    auto instance = cast<InstanceOp>(*use->getInstance());
+    ImplicitLocOpBuilder builder(instance.getLoc(), instance);
+    for (auto [index, constant] : constantPortIndicesAndValues) {
+      auto result = instance.getResult(index);
+      assert(ports[index].isOutput() && "must be an output port");
+
+      // Replace the port with the constant.
+      result.replaceAllUsesWith(builder.create<ConstantOp>(constant));
+    }
+  }
+}
+
 void IMDeadCodeElimPass::runOnOperation() {
   LLVM_DEBUG(llvm::dbgs() << "===----- Remove unused ports -----==="
                           << "\n");
   auto circuit = getOperation();
   instanceGraph = &getAnalysis<InstanceGraph>();
+
+  // Forward constant output ports to caller sides so that we can eliminate
+  // constant outputs.
+  for (auto *node : llvm::post_order(instanceGraph))
+    if (auto module = dyn_cast_or_null<FModuleOp>(*node->getModule()))
+      forwardConstantOutputPort(module);
+
   for (auto module : circuit.getBody()->getOps<FModuleOp>()) {
     // Mark the ports of public modules as alive.
     if (module.isPublic()) {
@@ -204,6 +253,19 @@ void IMDeadCodeElimPass::runOnOperation() {
   mlir::parallelForEach(circuit.getContext(),
                         circuit.getBody()->getOps<FModuleOp>(),
                         [&](auto op) { rewriteModuleBody(op); });
+
+  // Erase empty modules. To erase empty modules transitively, it is necessary
+  // to visit modules in the post order of instance graph.
+  // FIXME: We copy the list of modules into a vector first to avoid iterator
+  // invalidation while we mutate the instance graph. See issue 3387.
+  SmallVector<FModuleOp, 0> modules(llvm::make_filter_range(
+      llvm::map_range(
+          llvm::post_order(instanceGraph),
+          [](auto *node) { return dyn_cast<FModuleOp>(*node->getModule()); }),
+      [](auto module) { return module; }));
+
+  for (auto module : modules)
+    eraseEmptyModule(module);
 }
 
 void IMDeadCodeElimPass::visitValue(Value value) {
@@ -397,6 +459,42 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
   }
 
   numRemovedPorts += deadPortIndexes.size();
+}
+
+void IMDeadCodeElimPass::eraseEmptyModule(FModuleOp module) {
+  // Public modules cannot be erased.
+  if (module.isPublic())
+    return;
+
+  // If the module doesn't have arguments, operations or annotations, we
+  // consider it to be dead.
+  if (!module.getBody()->args_empty() || !module.getBody()->empty() ||
+      !module.annotations().empty())
+    return;
+
+  // Ok, the module is empty. Delete instances unless they have symbols.
+  LLVM_DEBUG(llvm::dbgs() << "Erase " << module.getName() << "\n");
+
+  InstanceGraphNode *instanceGraphNode =
+      instanceGraph->lookup(module.moduleNameAttr());
+
+  bool existsInstanceWithSymbol = false;
+  for (auto *use : llvm::make_early_inc_range(instanceGraphNode->uses())) {
+    auto instance = cast<InstanceOp>(use->getInstance());
+    if (instance.inner_sym()) {
+      existsInstanceWithSymbol = true;
+      continue;
+    }
+    use->erase();
+    instance.erase();
+  }
+
+  // If there is an instance with a symbol, we don't delete the module itself.
+  if (existsInstanceWithSymbol)
+    return;
+
+  instanceGraph->erase(instanceGraphNode);
+  module.erase();
 }
 
 std::unique_ptr<mlir::Pass> circt::firrtl::createIMDeadCodeElimPass() {
