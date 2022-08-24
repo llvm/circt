@@ -148,9 +148,8 @@ class Iverilog(IEEEDriver):
     self.vvp = os.path.join(os.path.dirname(self.iverilog), "vvp")
 
   def compile(self, sources):
-    return subprocess.run([
-        self.iverilog, "-s", self.top, "-g2005-sv", "-o", "obj.vvp"
-    ] + sources)
+    return subprocess.run(
+        [self.iverilog, "-s", self.top, "-g2005-sv", "-o", "obj.vvp"] + sources)
 
   def run(self, cycles, args):
     print(self.top)
@@ -304,7 +303,13 @@ def __main__(args):
     if rc.returncode != 0:
       return rc
   if not args.no_run:
-    rc = sim.run(args.cycles, args.simargs)
+    try:
+      rc = sim.run(args.cycles, args.simargs)
+    except KeyboardInterrupt:
+      # If we're instructed to run forever and it is expected for th sim to be
+      # killed via SIGINT.
+      if args.cycles != -1:
+        raise
     return rc.returncode
   return 0
 
