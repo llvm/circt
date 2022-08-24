@@ -237,7 +237,7 @@ static cl::opt<bool> exportChiselInterface(
 static cl::opt<std::string> chiselInterfaceOutDirectory(
     "chisel-interface-out-dir",
     cl::desc("the output directory for generated Chisel interface files"),
-    cl::init("-"), cl::cat(mainCategory));
+    cl::init(""), cl::cat(mainCategory));
 
 static cl::opt<bool>
     injectDUTHierarchy("inject-dut-hierarchy",
@@ -548,7 +548,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferResetsPass());
 
   if (exportChiselInterface) {
-    if (chiselInterfaceOutDirectory == "-") {
+    if (chiselInterfaceOutDirectory.empty()) {
       pm.nest<firrtl::CircuitOp>().addPass(createExportChiselInterfacePass());
     } else {
       pm.nest<firrtl::CircuitOp>().addPass(
