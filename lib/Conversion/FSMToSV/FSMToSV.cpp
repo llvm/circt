@@ -65,7 +65,8 @@ class StateEncoding {
   // values, and used as selection signals for muxes.
 
 public:
-  StateEncoding(OpBuilder &b, MachineOp machine, hw::HWModuleOp hwModule);
+  StateEncoding(OpBuilder &b, hw::TypeScopeOp typeScope, MachineOp machine,
+                hw::HWModuleOp hwModule);
 
   // Get the encoded value for a state.
   Value encode(StateOp state);
@@ -96,6 +97,9 @@ protected:
   // A mapping between an encoded value and the source value in the IR.
   SmallDenseMap<Value, Value> valueToSrcValue;
 
+  // A typescope to emit the FSM enum type within.
+  hw::TypeScopeOp typeScope;
+
   // The enum type for the states.
   Type stateType;
 
@@ -104,9 +108,9 @@ protected:
   hw::HWModuleOp hwModule;
 };
 
-StateEncoding::StateEncoding(OpBuilder &b, MachineOp machine,
-                             hw::HWModuleOp hwModule)
-    : b(b), machine(machine), hwModule(hwModule) {
+StateEncoding::StateEncoding(OpBuilder &b, hw::TypeScopeOp typeScope,
+                             MachineOp machine, hw::HWModuleOp hwModule)
+    : typeScope(typeScope), b(b), machine(machine), hwModule(hwModule) {
   Location loc = machine.getLoc();
   llvm::SmallVector<Attribute> stateNames;
 
@@ -118,11 +122,6 @@ StateEncoding::StateEncoding(OpBuilder &b, MachineOp machine,
       hw::EnumType::get(b.getContext(), b.getArrayAttr(stateNames));
 
   OpBuilder::InsertionGuard guard(b);
-  b.setInsertionPoint(hwModule);
-  auto typeScope = b.create<hw::TypeScopeOp>(
-      loc, b.getStringAttr(hwModule.getName() + "_enum_typedecls"));
-  typeScope.getBodyRegion().push_back(new Block());
-
   b.setInsertionPointToStart(&typeScope.getBodyRegion().front());
   auto typedeclEnumType = b.create<hw::TypedeclOp>(
       loc, b.getStringAttr(hwModule.getName() + "_state_t"),
@@ -189,8 +188,9 @@ void StateEncoding::setEncoding(StateOp state, Value v, bool wire) {
 
 class MachineOpConverter {
 public:
-  MachineOpConverter(OpBuilder &builder, MachineOp machineOp)
-      : machineOp(machineOp), b(builder) {}
+  MachineOpConverter(OpBuilder &builder, hw::TypeScopeOp typeScope,
+                     MachineOp machineOp)
+      : machineOp(machineOp), typeScope(typeScope), b(builder) {}
 
   // Converts the machine op to a hardware module.
   // 1. Creates a HWModuleOp for the machine op, with the same I/O as the FSM +
@@ -294,6 +294,9 @@ private:
   // A handle to the state register of the machine.
   seq::CompRegOp stateReg;
 
+  // A typescope to emit the FSM enum type within.
+  hw::TypeScopeOp typeScope;
+
   OpBuilder &b;
 };
 
@@ -392,7 +395,8 @@ LogicalResult MachineOpConverter::dispatch() {
   auto reset = hwModuleOp.front().getArgument(clkRstIdxs.resetIdx);
 
   // 2) Build state and variable registers.
-  encoding = std::make_unique<StateEncoding>(b, machineOp, hwModuleOp);
+  encoding =
+      std::make_unique<StateEncoding>(b, typeScope, machineOp, hwModuleOp);
   auto stateType = encoding->getStateType();
 
   auto nextStateWire =
@@ -604,12 +608,14 @@ MachineOpConverter::convertState(StateOp state) {
 
   // 3.1) Convert the output region by moving the operations into the module
   // scope and gathering the operands of the output op.
-  auto outputOpRes = moveOps(&state.output().front());
-  if (failed(outputOpRes))
-    return failure();
+  if (!state.output().empty()) {
+    auto outputOpRes = moveOps(&state.output().front());
+    if (failed(outputOpRes))
+      return failure();
 
-  OutputOp outputOp = cast<fsm::OutputOp>(*outputOpRes);
-  res.outputs = outputOp.getOperands(); // 3.2
+    OutputOp outputOp = cast<fsm::OutputOp>(*outputOpRes);
+    res.outputs = outputOp.getOperands(); // 3.2
+  }
 
   auto transitions = llvm::SmallVector<TransitionOp>(
       state.transitions().getOps<TransitionOp>());
@@ -631,9 +637,22 @@ void FSMToSVPass::runOnOperation() {
   auto b = OpBuilder(module);
   SmallVector<Operation *, 16> opToErase;
 
+  // Create a typescope shared by all of the FSMs. This typescope will be
+  // emitted in a single separate file to avoid polluting each output file with
+  // typedefs.
+  b.setInsertionPointToStart(module.getBody());
+  auto typeScope = b.create<hw::TypeScopeOp>(
+      module.getLoc(), b.getStringAttr("fsm_enum_typedecls"));
+  typeScope.getBodyRegion().push_back(new Block());
+  typeScope->setAttr(
+      "output_file",
+      hw::OutputFileAttr::get(b.getStringAttr("fsm_enum_typedefs.sv"),
+                              /*excludeFromFileList*/ b.getBoolAttr(false),
+                              /*includeReplicatedOps*/ b.getBoolAttr(false)));
+
   // Traverse all machines and convert.
   for (auto machine : llvm::make_early_inc_range(module.getOps<MachineOp>())) {
-    MachineOpConverter converter(b, machine);
+    MachineOpConverter converter(b, typeScope, machine);
 
     if (failed(converter.dispatch())) {
       signalPassFailure();
