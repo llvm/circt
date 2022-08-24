@@ -1419,8 +1419,8 @@ static llvm::json::Value toJSON(Attribute attr) {
         llvm::raw_string_ostream(buf) << t;
         typeMD["mlir_name"] = buf;
 
-        if (auto chan_type = t.dyn_cast<ChannelType>()) {
-          Type inner = chan_type.getInner();
+        if (auto chanType = t.dyn_cast<ChannelType>()) {
+          Type inner = chanType.getInner();
           typeMD["hw_bitwidth"] = hw::getBitWidth(inner);
 #ifdef CAPNP
           capnp::TypeSchema schema(inner);
