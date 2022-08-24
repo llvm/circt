@@ -475,13 +475,17 @@ void PrettifyVerilogPass::processPostOrder(Block &body) {
 
     // Simplify assignments involving structures and arrays.
     if (auto assign = dyn_cast<sv::PAssignOp>(op)) {
-      OpBuilder builder(assign);
-      if (splitAssignment(builder, assign.getDest(), assign.getSrc())) {
-        anythingChanged = true;
-        toDelete.insert(assign.getSrc().getDefiningOp());
-        toDelete.insert(assign.getDest().getDefiningOp());
-        assign.erase();
-        continue;
+      auto dst = assign.getDest();
+      auto src = assign.getSrc();
+      if (!isSelfWrite(dst, src)) {
+        OpBuilder builder(assign);
+        if (splitAssignment(builder, dst, src)) {
+          anythingChanged = true;
+          toDelete.insert(src.getDefiningOp());
+          toDelete.insert(dst.getDefiningOp());
+          assign.erase();
+          continue;
+        }
       }
     }
 
