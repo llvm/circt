@@ -2393,7 +2393,7 @@ static LogicalResult matchAndRewriteCompareConcat(ICmpOp op, Operation *lhs,
     if (sameElement)
       return rewriter.createOrFold<ReplicateOp>(loc, sameElement,
                                                 operands.size());
-    return rewriter.createOrFold<ConcatOp>(loc, operands, false);
+    return rewriter.createOrFold<ConcatOp>(loc, operands);
   };
 
   auto replaceWith = [&](ICmpPredicate predicate, Value lhs,
