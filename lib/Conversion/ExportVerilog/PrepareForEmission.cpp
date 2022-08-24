@@ -279,13 +279,6 @@ static void lowerUsersToTemporaryWire(Operation &op,
   bool isProceduralRegion = op.getParentOp()->hasTrait<ProceduralRegion>();
 
   auto createWireForResult = [&](Value result, StringAttr name) {
-    // For constant, use local param op.
-    if (auto constantOp = result.getDefiningOp<ConstantOp>()) {
-      auto localparam = builder.create<LocalParamOp>(
-          constantOp.getType(), constantOp.getValueAttr(), "");
-      result.replaceAllUsesWith(localparam);
-      return;
-    }
     Value newWire;
     // If the op is in a procedural region, use logic op.
     if (isProceduralRegion)

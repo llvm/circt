@@ -1419,10 +1419,10 @@ static llvm::json::Value toJSON(Attribute attr) {
         llvm::raw_string_ostream(buf) << t;
         typeMD["mlir_name"] = buf;
 
-        if (auto chan_type = t.dyn_cast<ChannelType>()) {
-          Type inner = chan_type.getInner();
-#ifdef CAPNP
+        if (auto chanType = t.dyn_cast<ChannelType>()) {
+          Type inner = chanType.getInner();
           typeMD["hw_bitwidth"] = hw::getBitWidth(inner);
+#ifdef CAPNP
           capnp::TypeSchema schema(inner);
           typeMD["capnp_type_id"] = schema.capnpTypeID();
           typeMD["capnp_name"] = schema.name();
@@ -1526,6 +1526,7 @@ void ESIEmitCollateralPass::emitServiceJSON() {
       }
     });
 
+    // Get a list of metadata ops which originated in modules (path is empty).
     DenseMap<hw::HWModuleLike, SmallVector<ServiceHierarchyMetadataOp, 0>>
         modsWithLocalServices;
     for (auto hwmod : mod.getOps<hw::HWModuleLike>()) {
@@ -1538,6 +1539,7 @@ void ESIEmitCollateralPass::emitServiceJSON() {
         modsWithLocalServices[hwmod] = metadataOps;
     }
 
+    // Then output metadata for those modules exclusively.
     j.attributeArray("modules", [&] {
       for (auto &modWithSvc : modsWithLocalServices) {
         j.object([&] {
@@ -1546,10 +1548,6 @@ void ESIEmitCollateralPass::emitServiceJSON() {
             for (ServiceHierarchyMetadataOp metadata : modWithSvc.getSecond()) {
               j.object([&] {
                 j.attribute("service", metadata.service_symbol());
-                j.attributeArray("path", [&] {
-                  for (auto attr : metadata.serverNamePath())
-                    j.value(attr.cast<StringAttr>().getValue());
-                });
                 j.attribute("impl_type", metadata.impl_type());
                 if (metadata.impl_detailsAttr())
                   j.attribute("impl_details",

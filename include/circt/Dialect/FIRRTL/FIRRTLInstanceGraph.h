@@ -75,6 +75,15 @@ struct InstancePathCache {
       : instanceGraph(instanceGraph) {}
   ArrayRef<InstancePath> getAbsolutePaths(Operation *op);
 
+  /// Clear the cache.
+  void invalidate() {
+    allocator.Reset();
+    absolutePathsCache.clear();
+  }
+
+  /// Replace an InstanceOp. This is required to keep the cache updated.
+  void replaceInstance(InstanceOp oldOp, InstanceOp newOp);
+
 private:
   /// An allocator for individual instance paths and entire path lists.
   llvm::BumpPtrAllocator allocator;

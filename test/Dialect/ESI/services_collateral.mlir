@@ -5,51 +5,50 @@
 
 // CHECK-LABEL: "declarations": [ 
 
-// CHECK-LABEL:    "name": "HostComms" 
-// CHECK:          "ports": [
-// CHECK:            [
-// CHECK:              {
-// CHECK:                "name": "Send",
-// CHECK:                "to-server-type": {
-// CHECK:                  "dialect": "esi",
-// CHECK:                  "inner": {
-// CHECK:                    "dialect": "esi",
-// CHECK:                    "mnemonic": "any"
-// CHECK:                  },
-// CHECK:                  "mnemonic": "channel"
-// CHECK:                }
-// CHECK:              },
-// CHECK:              {
-// CHECK:                "name": "Recv",
-// CHECK:                "to-client-type": {
-// CHECK:                  "dialect": "esi",
-// CHECK:                  "inner": {
-// CHECK:                    "dialect": "builtin",
-// CHECK:                    "mnemonic": "i8"
-// CHECK:                  },
-// CHECK:                  "mnemonic": "channel"
-// CHECK:                }
-// CHECK:              },
-// CHECK:              {
-// CHECK:                "name": "ReqResp",
-// CHECK:                "to-client-type": {
-// CHECK:                  "dialect": "esi",
-// CHECK:                  "inner": {
-// CHECK:                    "dialect": "builtin",
-// CHECK:                    "mnemonic": "i16"
-// CHECK:                  },
-// CHECK:                  "mnemonic": "channel"
-// CHECK:                },
-// CHECK:                "to-server-type": {
-// CHECK:                  "dialect": "esi",
-// CHECK:                  "inner": {
-// CHECK:                    "dialect": "builtin",
-// CHECK:                    "mnemonic": "i8"
-// CHECK:                  },
-// CHECK:                  "mnemonic": "channel"
-// CHECK:                }
-// CHECK:              }
-// CHECK:            ]
+// CHECK-LABEL:    "name": "HostComms",
+// CHECK-NEXT:     "ports": [
+// CHECK-NEXT:         {
+// CHECK-NEXT:           "name": "Send",
+// CHECK-NEXT:           "to-server-type": {
+// CHECK-NEXT:             "dialect": "esi",
+// CHECK-NEXT:             "inner": {
+// CHECK-NEXT:               "dialect": "esi",
+// CHECK-NEXT:               "mnemonic": "any"
+// CHECK-NEXT:             },
+// CHECK-NEXT:             "mnemonic": "channel"
+// CHECK-NEXT:           }
+// CHECK-NEXT:         },
+// CHECK-NEXT:         {
+// CHECK-NEXT:           "name": "Recv",
+// CHECK-NEXT:           "to-client-type": {
+// CHECK-NEXT:             "dialect": "esi",
+// CHECK-NEXT:             "inner": {
+// CHECK-NEXT:               "dialect": "builtin",
+// CHECK-NEXT:               "mnemonic": "i8"
+// CHECK-NEXT:             },
+// CHECK-NEXT:             "mnemonic": "channel"
+// CHECK-NEXT:           }
+// CHECK-NEXT:         },
+// CHECK-NEXT:         {
+// CHECK-NEXT:           "name": "ReqResp",
+// CHECK-NEXT:           "to-client-type": {
+// CHECK-NEXT:             "dialect": "esi",
+// CHECK-NEXT:             "inner": {
+// CHECK-NEXT:               "dialect": "builtin",
+// CHECK-NEXT:               "mnemonic": "i16"
+// CHECK-NEXT:             },
+// CHECK-NEXT:             "mnemonic": "channel"
+// CHECK-NEXT:           },
+// CHECK-NEXT:           "to-server-type": {
+// CHECK-NEXT:             "dialect": "esi",
+// CHECK-NEXT:             "inner": {
+// CHECK-NEXT:               "dialect": "builtin",
+// CHECK-NEXT:               "mnemonic": "i8"
+// CHECK-NEXT:             },
+// CHECK-NEXT:             "mnemonic": "channel"
+// CHECK-NEXT:           }
+// CHECK-NEXT:         }
+// CHECK-NEXT:       ]
 esi.service.decl @HostComms {
   esi.service.to_server @Send : !esi.channel<!esi.any>
   esi.service.to_client @Recv : !esi.channel<i8>
@@ -73,42 +72,77 @@ msft.module @LoopbackCosimTop {} (%clk: i1, %rst: i1) {
 // CHECK-LABEL: "top_levels": [
 
 // CHECK-LABEL: "module": "@LoopbackCosimTopWrapper",
-// CHECK:       "services": [
-// CHECK:         {
-// CHECK:           "service": "HostComms",
-// CHECK:           "path": [
-// CHECK:             "top"
-// CHECK:           ],
-// CHECK:           "impl_type": "cosim",
-// CHECK:           "clients": [
-// CHECK:             {
-// CHECK:               "client_name": [
-// CHECK:                 "m1",
-// CHECK:                 "loopback_inout"
-// CHECK:               ],
-// CHECK:               "port": "#hw.innerNameRef<@HostComms::@ReqResp>",
-// CHECK:               "to_client_type": {
-// CHECK:                 "dialect": "esi",
-// CHECK:                 "inner": {
-// CHECK:                   "dialect": "builtin",
-// CHECK:                   "mnemonic": "i16"
-// CHECK:                 },
-// CHECK:                 "mnemonic": "channel"
-// CHECK:               }
-// CHECK:             },
-// CHECK:             {
-// CHECK:               "client_name": [
-// CHECK:                 "m1",
-// CHECK:                 "loopback_inout"
-// CHECK:               ],
-// CHECK:               "port": "#hw.innerNameRef<@HostComms::@ReqResp>",
-// CHECK:               "to_server_type": {
-// CHECK:                 "dialect": "esi",
-// CHECK:                 "inner": {
-// CHECK:                   "dialect": "builtin",
-// CHECK:                   "mnemonic": "i8"
-// CHECK:                 },
-// CHECK:                 "mnemonic": "channel"
+// CHECK-NEXT:  "services": [
+// CHECK-NEXT:    {
+// CHECK-NEXT:      "service": "HostComms",
+// CHECK-NEXT:      "instance_path": [
+// CHECK-NEXT:        {
+// CHECK-NEXT:        "inner": "top",
+// CHECK-NEXT:        "outer_sym": "LoopbackCosimTop"
+// CHECK-NEXT:        }
+// CHECK-NEXT:      ]
+
+// CHECK-LABEL:  "modules": [
+// CHECK-NEXT:     {
+// CHECK-NEXT:       "symbol": "LoopbackCosimTop",
+// CHECK-NEXT:       "services": [
+// CHECK-NEXT:         {
+// CHECK-NEXT:           "service": "HostComms",
+// CHECK-NEXT:           "impl_type": "cosim",
+// CHECK-NEXT:           "clients": [
+// CHECK-NEXT:             {
+// CHECK-NEXT:               "client_name": [
+// CHECK-NEXT:                 "m1",
+// CHECK-NEXT:                 "loopback_inout"
+// CHECK-NEXT:               ],
+// CHECK-NEXT:               "port": {
+// CHECK-NEXT:                 "inner": "ReqResp",
+// CHECK-NEXT:                 "outer_sym": "HostComms"
+// CHECK-NEXT:               },
+// CHECK-NEXT:               "to_client_type": {
+// CHECK-NEXT:                 "capnp_name": "I16",
+// CHECK-NEXT:                 "capnp_type_id": 15002640976408729367,
+// CHECK-NEXT:                 "hw_bitwidth": 16,
+// CHECK-NEXT:                 "mlir_name": "!esi.channel<i16>",
+// CHECK-NEXT:                 "type_desc": {
+// CHECK-NEXT:                   "dialect": "esi",
+// CHECK-NEXT:                   "inner": {
+// CHECK-NEXT:                     "dialect": "builtin",
+// CHECK-NEXT:                     "mnemonic": "i16"
+// CHECK-NEXT:                   },
+// CHECK-NEXT:                   "mnemonic": "channel"
+// CHECK-NEXT:                 }
+// CHECK-NEXT:               }
+// CHECK-NEXT:             },
+// CHECK-NEXT:             {
+// CHECK-NEXT:               "client_name": [
+// CHECK-NEXT:                 "m1",
+// CHECK-NEXT:                 "loopback_inout"
+// CHECK-NEXT:               ],
+// CHECK-NEXT:               "port": {
+// CHECK-NEXT:                 "inner": "ReqResp",
+// CHECK-NEXT:                 "outer_sym": "HostComms"
+// CHECK-NEXT:               },
+// CHECK-NEXT:               "to_server_type": {
+// CHECK-NEXT:                 "capnp_name": "I8",
+// CHECK-NEXT:                 "capnp_type_id": 9950424317211852587,
+// CHECK-NEXT:                 "hw_bitwidth": 8,
+// CHECK-NEXT:                 "mlir_name": "!esi.channel<i8>",
+// CHECK-NEXT:                 "type_desc": {
+// CHECK-NEXT:                   "dialect": "esi",
+// CHECK-NEXT:                   "inner": {
+// CHECK-NEXT:                     "dialect": "builtin",
+// CHECK-NEXT:                     "mnemonic": "i8"
+// CHECK-NEXT:                   },
+// CHECK-NEXT:                   "mnemonic": "channel"
+// CHECK-NEXT:                 }
+// CHECK-NEXT:               }
+// CHECK-NEXT:             }
+// CHECK-NEXT:           ]
+// CHECK-NEXT:         }
+// CHECK-NEXT:       ]
+// CHECK-NEXT:     }
+// CHECK-NEXT:   ]
 
 
 msft.module @LoopbackCosimTopWrapper {} (%clk: i1, %rst: i1) {
