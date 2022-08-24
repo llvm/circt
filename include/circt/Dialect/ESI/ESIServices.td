@@ -166,7 +166,7 @@ def ServiceHierarchyMetadataOp : ESI_Op<"service.hierarchy.metadata", [
   let summary = "Metadata about a service in the service hierarchy";
 
   let arguments = (ins FlatSymbolRefAttr:$service_symbol,
-                       StrArrayAttr:$serverNamePath,
+                       ArrayAttr:$serverNamePath,
                        StrAttr:$impl_type,
                        OptionalAttr<DictionaryAttr>:$impl_details,
                        ArrayAttr:$clients);
