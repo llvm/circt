@@ -1410,7 +1410,28 @@ static llvm::json::Value toJSON(Attribute attr) {
   return TypeSwitch<Attribute, Value>(attr)
       .Case([&](StringAttr a) { return a.getValue(); })
       .Case([&](IntegerAttr a) { return a.getValue().getLimitedValue(); })
-      .Case([&](TypeAttr a) { return toJSON(a.getValue()); })
+      .Case([&](TypeAttr a) {
+        Type t = a.getValue();
+        llvm::json::Object typeMD;
+        typeMD["type_desc"] = toJSON(t);
+
+        std::string buf;
+        llvm::raw_string_ostream(buf) << t;
+        typeMD["mlir_name"] = buf;
+
+        if (auto chanType = t.dyn_cast<ChannelType>()) {
+          Type inner = chanType.getInner();
+          typeMD["hw_bitwidth"] = hw::getBitWidth(inner);
+#ifdef CAPNP
+          capnp::TypeSchema schema(inner);
+          typeMD["capnp_type_id"] = schema.capnpTypeID();
+          typeMD["capnp_name"] = schema.name();
+#endif
+        } else {
+          typeMD["hw_bitwidth"] = hw::getBitWidth(t);
+        }
+        return typeMD;
+      })
       .Case([&](ArrayAttr a) {
         return llvm::json::Array(
             llvm::map_range(a, [](Attribute a) { return toJSON(a); }));
@@ -1419,6 +1440,12 @@ static llvm::json::Value toJSON(Attribute attr) {
         llvm::json::Object dict;
         for (auto &entry : a.getValue())
           dict[entry.getName().getValue()] = toJSON(entry.getValue());
+        return dict;
+      })
+      .Case([&](InnerRefAttr ref) {
+        llvm::json::Object dict;
+        dict["outer_sym"] = ref.getModule().getValue();
+        dict["inner"] = ref.getName().getValue();
         return dict;
       })
       .Default([&](Attribute a) {
@@ -1451,45 +1478,21 @@ void ESIEmitCollateralPass::emitServiceJSON() {
 
   // Emit the list of ports of a service declaration.
   auto emitPorts = [&](ServiceDeclOp decl) {
-    j.array([&] {
-      for (auto *portOp : llvm::make_pointer_range(decl.ports().getOps())) {
-        j.object([&] {
-          if (auto port = dyn_cast<ToServerOp>(portOp)) {
-            j.attribute("name", port.inner_sym());
-            j.attribute("to-server-type", toJSON(port.type()));
-          } else if (auto port = dyn_cast<ToClientOp>(portOp)) {
-            j.attribute("name", port.inner_sym());
-            j.attribute("to-client-type", toJSON(port.type()));
-          } else if (auto port = dyn_cast<ServiceDeclInOutOp>(portOp)) {
-            j.attribute("name", port.inner_sym());
-            j.attribute("to-client-type", toJSON(port.outType()));
-            j.attribute("to-server-type", toJSON(port.inType()));
-          }
-        });
-      }
-    });
-  };
-
-  auto emitServicesForModule = [&](Operation *hwMod) {
-    // Emit a list of the servers in a design and the clients connected to them.
-    j.attributeArray("services", [&] {
-      hwMod->walk([&](ServiceHierarchyMetadataOp metadata) {
-        j.object([&] {
-          j.attribute("service", metadata.service_symbol());
-          j.attributeArray("path", [&] {
-            for (auto attr : metadata.serverNamePath())
-              j.value(attr.cast<StringAttr>().getValue());
-          });
-          j.attribute("impl_type", metadata.impl_type());
-          if (metadata.impl_detailsAttr())
-            j.attribute("impl_details", toJSON(metadata.impl_detailsAttr()));
-          j.attributeArray("clients", [&] {
-            for (auto client : metadata.clients())
-              j.value(toJSON(client));
-          });
-        });
+    for (auto *portOp : llvm::make_pointer_range(decl.ports().getOps())) {
+      j.object([&] {
+        if (auto port = dyn_cast<ToServerOp>(portOp)) {
+          j.attribute("name", port.inner_sym());
+          j.attribute("to-server-type", toJSON(port.type()));
+        } else if (auto port = dyn_cast<ToClientOp>(portOp)) {
+          j.attribute("name", port.inner_sym());
+          j.attribute("to-client-type", toJSON(port.type()));
+        } else if (auto port = dyn_cast<ServiceDeclInOutOp>(portOp)) {
+          j.attribute("name", port.inner_sym());
+          j.attribute("to-client-type", toJSON(port.outType()));
+          j.attribute("to-server-type", toJSON(port.inType()));
+        }
       });
-    });
+    }
   };
 
   j.object([&] {
@@ -1511,7 +1514,51 @@ void ESIEmitCollateralPass::emitServiceJSON() {
           auto sym = FlatSymbolRefAttr::get(ctxt, topModName);
           Operation *hwMod = topSyms.getDefinition(sym);
           j.attribute("module", toJSON(sym));
-          emitServicesForModule(hwMod);
+          j.attributeArray("services", [&] {
+            hwMod->walk([&](ServiceHierarchyMetadataOp md) {
+              j.object([&] {
+                j.attribute("service", md.service_symbol());
+                j.attribute("instance_path", toJSON(md.serverNamePathAttr()));
+              });
+            });
+          });
+        });
+      }
+    });
+
+    // Get a list of metadata ops which originated in modules (path is empty).
+    DenseMap<hw::HWModuleLike, SmallVector<ServiceHierarchyMetadataOp, 0>>
+        modsWithLocalServices;
+    for (auto hwmod : mod.getOps<hw::HWModuleLike>()) {
+      SmallVector<ServiceHierarchyMetadataOp, 0> metadataOps;
+      hwmod.walk([&metadataOps](ServiceHierarchyMetadataOp md) {
+        if (md.serverNamePath().empty())
+          metadataOps.push_back(md);
+      });
+      if (!metadataOps.empty())
+        modsWithLocalServices[hwmod] = metadataOps;
+    }
+
+    // Then output metadata for those modules exclusively.
+    j.attributeArray("modules", [&] {
+      for (auto &modWithSvc : modsWithLocalServices) {
+        j.object([&] {
+          j.attribute("symbol", modWithSvc.first.moduleName());
+          j.attributeArray("services", [&] {
+            for (ServiceHierarchyMetadataOp metadata : modWithSvc.getSecond()) {
+              j.object([&] {
+                j.attribute("service", metadata.service_symbol());
+                j.attribute("impl_type", metadata.impl_type());
+                if (metadata.impl_detailsAttr())
+                  j.attribute("impl_details",
+                              toJSON(metadata.impl_detailsAttr()));
+                j.attributeArray("clients", [&] {
+                  for (auto client : metadata.clients())
+                    j.value(toJSON(client));
+                });
+              });
+            }
+          });
         });
       }
     });
