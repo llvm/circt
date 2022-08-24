@@ -13,8 +13,10 @@
 #ifndef CIRCT_DIALECT_FIRRTL_FIRRTLANNOTATIONHELPER_H
 #define CIRCT_DIALECT_FIRRTL_FIRRTLANNOTATIONHELPER_H
 
+#include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
+#include "llvm/ADT/TypeSwitch.h"
 
 namespace circt {
 namespace firrtl {
@@ -84,31 +86,29 @@ struct AnnoTargetCache {
     return targets.lookup(name);
   }
 
+  void insertOp(Operation *op) {
+    TypeSwitch<Operation *>(op)
+        .Case<InstanceOp, MemOp, NodeOp, RegOp, RegResetOp, WireOp,
+              chirrtl::CombMemOp, chirrtl::SeqMemOp, chirrtl::MemoryPortOp,
+              PrintFOp>([&](auto op) {
+          // To be safe, check attribute and non-empty name before adding.
+          if (auto name = op.getNameAttr(); name && !name.getValue().empty())
+            targets.insert({name, OpAnnoTarget(op)});
+        });
+  }
+
   /// Replace `oldOp` with `newOp` in the target cache. The new and old ops can
   /// have different names.
   void replaceOp(Operation *oldOp, Operation *newOp) {
-    auto namOp = dyn_cast<FNamableOp>(oldOp);
-    if (!namOp)
-      return;
-    if (auto name = namOp.getNameAttr(); name && !name.getValue().empty())
-      targets.erase(name);
-    if (auto name = cast<FNamableOp>(newOp).getNameAttr();
+    if (auto name = oldOp->getAttrOfType<StringAttr>("name");
         name && !name.getValue().empty())
-      targets.insert({name, OpAnnoTarget(newOp)});
+      targets.erase(name);
+    insertOp(newOp);
   }
 
   /// Add a new module port to the target cache.
   void insertPort(FModuleLike mod, size_t portNo) {
     targets.insert({mod.getPortNameAttr(portNo), PortAnnoTarget(mod, portNo)});
-  }
-
-  /// Add a new op to the target cache.
-  void insertOp(Operation *op) {
-    auto namOp = dyn_cast<FNamableOp>(op);
-    if (!namOp)
-      return;
-    if (auto name = namOp.getNameAttr(); name && !name.getValue().empty())
-      targets.insert({name, OpAnnoTarget(op)});
   }
 
 private:
@@ -152,7 +152,7 @@ struct CircuitTargetCache {
     auto it = targetCaches.find(mod);
     if (it == targetCaches.end())
       return;
-    it->getSecond().insertPorts(mod, portNo);
+    it->getSecond().insertPort(mod, portNo);
   }
 
   /// Add a new op to the target cache.
