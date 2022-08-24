@@ -98,7 +98,7 @@ struct AnnoTargetCache {
   }
 
   /// Add a new module port to the target cache.
-  void insertPorts(FModuleLike mod, size_t portNo) {
+  void insertPort(FModuleLike mod, size_t portNo) {
     targets.insert({mod.getPortNameAttr(portNo), PortAnnoTarget(mod, portNo)});
   }
 
@@ -148,7 +148,7 @@ struct CircuitTargetCache {
   }
 
   /// Add a new module port to the target cache.
-  void insertPorts(FModuleLike mod, size_t portNo) {
+  void insertPort(FModuleLike mod, size_t portNo) {
     auto it = targetCaches.find(mod);
     if (it == targetCaches.end())
       return;
