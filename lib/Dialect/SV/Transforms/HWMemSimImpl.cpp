@@ -202,7 +202,7 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
         b.create<sv::ReadInOutOp>(b.create<sv::ArrayIndexInOutOp>(reg, addr));
     if (!ignoreReadEnableMem) {
       Value x = b.create<sv::ConstantXOp>(rdata.getType());
-      rdata = b.create<comb::MuxOp>(en, rdata, x);
+      rdata = b.create<comb::MuxOp>(en, rdata, x, false);
     }
     outputs.push_back(rdata);
   }
@@ -268,19 +268,23 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
 
     // Read logic.
     Value rcond = b.createOrFold<comb::AndOp>(
-        read_en, b.createOrFold<comb::ICmpOp>(
-                     comb::ICmpPredicate::eq, read_wmode,
-                     b.createOrFold<ConstantOp>(read_wmode.getType(), 0)));
+        read_en,
+        b.createOrFold<comb::ICmpOp>(
+            comb::ICmpPredicate::eq, read_wmode,
+            b.createOrFold<ConstantOp>(read_wmode.getType(), 0), false),
+        false);
     Value slotReg = b.create<sv::ArrayIndexInOutOp>(reg, read_addr);
     Value slot = b.create<sv::ReadInOutOp>(slotReg);
     Value x = b.create<sv::ConstantXOp>(slot.getType());
-    b.create<sv::AssignOp>(rWire, b.create<comb::MuxOp>(rcond, slot, x));
+    b.create<sv::AssignOp>(rWire, b.create<comb::MuxOp>(rcond, slot, x, false));
 
     // Write logic gaurded by the corresponding mask bit.
     for (auto wmask : llvm::enumerate(maskValues)) {
       b.create<sv::AlwaysOp>(sv::EventControl::AtPosEdge, clock, [&]() {
         auto wcond = b.createOrFold<comb::AndOp>(
-            write_en, b.createOrFold<comb::AndOp>(wmask.value(), write_wmode));
+            write_en,
+            b.createOrFold<comb::AndOp>(wmask.value(), write_wmode, false),
+            false);
         b.create<sv::IfOp>(wcond, [&]() {
           Value slotReg = b.create<sv::ArrayIndexInOutOp>(reg, write_addr);
           b.create<sv::PAssignOp>(
@@ -334,7 +338,7 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
       // data into it.
       for (auto wmask : llvm::enumerate(maskValues)) {
         // Guard by corresponding mask bit.
-        auto wcond = b.createOrFold<comb::AndOp>(en, wmask.value());
+        auto wcond = b.createOrFold<comb::AndOp>(en, wmask.value(), false);
         b.create<sv::IfOp>(wcond, [&]() {
           auto slot = b.create<sv::ArrayIndexInOutOp>(reg, addr);
           b.create<sv::PAssignOp>(
