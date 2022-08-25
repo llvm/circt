@@ -1158,7 +1158,11 @@ static Optional<DictionaryAttr> parseAugmentedType(
     auto targetAttr = StringAttr::get(context, target);
     auto targetPath = resolvePath(targetAttr.getValue(), state.circuit,
                                   state.symTbl, state.targetCaches);
-    assert(targetPath && "invalid target");
+    if (!targetPath) {
+      mlir::emitError(loc, "Failed to resolve target `" +
+                               targetAttr.getValue() + "'");
+      return None;
+    }
     // If the target for the view is not in the Companion module, then add the
     // RefType port from the parent module to the target module and insert the
     // RefSend at the target and RefResolve in the companion module.
