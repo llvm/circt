@@ -78,7 +78,7 @@ class Mid:
 
 
 @module
-class Top:
+class top:
   clk = Clock(types.i1)
   rst = Input(types.i1)
 
@@ -87,7 +87,7 @@ class Top:
     Mid(clk=ports.clk, rst=ports.rst)
 
 
-s = pycde.System([Top], name="ESILoopback", output_directory=sys.argv[1])
+s = pycde.System([top], name="ESILoopback", output_directory=sys.argv[1])
 s.generate()
 s.emit_outputs()
 s.build_api("python")
