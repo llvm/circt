@@ -1,4 +1,5 @@
 add_circt_library(CIRCTTransforms
+  Feedthrough.cpp
   FlattenMemRefs.cpp
   StripDebugInfoWithPred.cpp
 
@@ -7,6 +8,7 @@ add_circt_library(CIRCTTransforms
 
   LINK_LIBS PUBLIC
   CIRCTControlFlowLoopAnalysis
+  CIRCTHW
   MLIRIR
   MLIRMemRefDialect
   MLIRFuncDialect

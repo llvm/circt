@@ -53,4 +53,28 @@ def StripDebugInfoWithPred : Pass<"strip-debuginfo-with-pred", "::mlir::ModuleOp
            "intended to be used for testing."> ];
 }
 
+def Feedthrough : Pass<"feedthrough", "::mlir::ModuleOp"> {
+  let summary = "Add feedthrough ports to specified modules";
+  let description = [{
+    Add feedthrough ports to specified modules and instances by starting at a
+    specified module and list of ports. These ports will be punched through to
+    output ports. These outputs will then be punched through a list of modules
+    to become inputs and outputs, fed directly through. Finally, the punched
+    through signals will be wired to the specified destination.
+  }];
+  let constructor = "circt::createFeedthroughPass()";
+  let options = [
+    Option<"sourceModule", "source-module", "std::string", /*default=*/"",
+           "Source module to feed signals from through.">,
+    ListOption<"sourcePorts", "source-ports", "std::string",
+           "Source signals to feed through.",
+	   "llvm::cl::OneOrMore">,
+    ListOption<"innerModules", "inner-modules", "std::string",
+           "Inner modules to feed signals through.",
+	   "llvm::cl::ZeroOrMore">,
+    Option<"destModule", "dest-module", "std::string", /*default=*/"",
+           "Destination module to feed signals to.">
+  ];
+}
+
 #endif // CIRCT_TRANSFORMS_PASSES
