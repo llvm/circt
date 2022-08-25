@@ -58,6 +58,7 @@ class ComponentOp;
 
 namespace firrtl {
 class FIRRTLDialect;
+class CircuitOp;
 class FModuleOp;
 } // namespace firrtl
 

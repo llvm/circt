@@ -228,6 +228,17 @@ static cl::opt<bool>
                 cl::desc("run the reset inference pass on firrtl"),
                 cl::init(true), cl::cat(mainCategory));
 
+static cl::opt<bool> exportChiselInterface(
+    "export-chisel-interface",
+    cl::desc("generate a Scala Chisel interface to the top level "
+             "module of the firrtl circuit"),
+    cl::init(false), cl::cat(mainCategory));
+
+static cl::opt<std::string> chiselInterfaceOutDirectory(
+    "chisel-interface-out-dir",
+    cl::desc("the output directory for generated Chisel interface files"),
+    cl::init(""), cl::cat(mainCategory));
+
 static cl::opt<bool>
     injectDUTHierarchy("inject-dut-hierarchy",
                        cl::desc("add a level of hierarchy to the DUT"),
@@ -535,6 +546,15 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
 
   if (inferResets)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferResetsPass());
+
+  if (exportChiselInterface) {
+    if (chiselInterfaceOutDirectory.empty()) {
+      pm.nest<firrtl::CircuitOp>().addPass(createExportChiselInterfacePass());
+    } else {
+      pm.nest<firrtl::CircuitOp>().addPass(
+          createExportSplitChiselInterfacePass(chiselInterfaceOutDirectory));
+    }
+  }
 
   if (!disableOptimization && dedup)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createDedupPass());
@@ -904,6 +924,8 @@ int main(int argc, char **argv) {
     sv::registerPasses();
 
     // Export passes:
+    registerExportChiselInterfacePass();
+    registerExportSplitChiselInterfacePass();
     registerExportSplitVerilogPass();
     registerExportVerilogPass();
   }
