@@ -146,6 +146,24 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
                                          BlockAndValueMapping &cutMap,
                                          StringRef suffix, Attribute path,
                                          Attribute fileName) {
+  // Filter duplicates and track duplicate reads of elements so we don't
+  // make ports for them
+  SmallVector<Value> realInputs;
+  DenseMap<Value, Value> dups; // wire,reg,lhs -> read
+  DenseMap<Value, SmallVector<Value>>
+      realReads; // port mapped read -> dup reads
+  for (auto v : inputs) {
+    if (auto readinout = dyn_cast_or_null<ReadInOutOp>(v.getDefiningOp())) {
+      auto op = readinout.getInput();
+      if (dups.count(op)) {
+        realReads[dups[op]].push_back(v);
+        continue;
+      }
+      dups[op] = v;
+    }
+    realInputs.push_back(v);
+  }
+
   // Create the extracted module right next to the original one.
   OpBuilder b(op);
 
@@ -153,7 +171,7 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
   SmallVector<hw::PortInfo> ports;
   {
     auto srcPorts = op.getArgNames();
-    for (auto port : llvm::enumerate(inputs)) {
+    for (auto port : llvm::enumerate(realInputs)) {
       auto name = getNameForPort(port.value(), srcPorts);
       ports.push_back({b.getStringAttr(name), hw::PortDirection::INPUT,
                        port.value().getType(), port.index()});
@@ -169,14 +187,17 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
   newMod.setCommentAttr(b.getStringAttr("VCS coverage exclude_file"));
 
   // Update the mapping from old values to cloned values
-  for (auto port : llvm::enumerate(inputs))
+  for (auto port : llvm::enumerate(realInputs)) {
     cutMap.map(port.value(), newMod.getBody().getArgument(port.index()));
+    for (auto extra : realReads[port.value()])
+      cutMap.map(extra, newMod.getBody().getArgument(port.index()));
+  }
   cutMap.map(op.getBodyBlock(), newMod.getBodyBlock());
 
   // Add an instance in the old module for the extracted module
   b = OpBuilder::atBlockTerminator(op.getBodyBlock());
   auto inst = b.create<hw::InstanceOp>(
-      op.getLoc(), newMod, newMod.getName(), inputs.getArrayRef(), ArrayAttr(),
+      op.getLoc(), newMod, newMod.getName(), realInputs, ArrayAttr(),
       b.getStringAttr(
           ("__ETC_" + getVerilogModuleNameAttr(op).getValue() + suffix).str()));
   inst->setAttr("doNotPrint", b.getBoolAttr(true));
