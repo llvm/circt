@@ -32,12 +32,17 @@ class IntType(Type):
       return False
     return True
 
+  def __str__(self):
+    return ("" if self.signed else "u") + \
+      f"int{self.width}"
+
 
 class Port:
 
-  def __init__(self, client_path: typing.List[str],
-               read_type: typing.Optional[Type],
-               write_type: typing.Optional[Type]):
+  def __init__(self,
+               client_path: typing.List[str],
+               read_type: typing.Optional[Type] = None,
+               write_type: typing.Optional[Type] = None):
     self.client_path = client_path
     self.read_type = read_type
     self.write_type = write_type

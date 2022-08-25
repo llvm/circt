@@ -13,7 +13,7 @@ from .pycde_types import types
 from .instance import Instance, InstanceHierarchyRoot
 
 from circt.dialects import hw, msft
-from circt.dialects.esi import PythonApiBuilder
+from circt.dialects.esi_api import PythonApiBuilder
 
 import mlir
 import mlir.ir as ir
