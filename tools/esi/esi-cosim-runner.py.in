@@ -301,6 +301,8 @@ def __main__(args):
     return
   args = argparser.parse_args(args[1:])
 
+  print(f"[Python exe] {sys.executable}")
+
   # Create and cd into a test directory before running
   sourceName = os.path.basename(args.source)
   testDir = f"{sourceName}.d"
