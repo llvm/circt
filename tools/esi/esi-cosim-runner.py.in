@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!@Python3_EXECUTABLE@
 
 # ===- circt-rtl-sim.py - CIRCT simulation driver -----------*- python -*-===//
 #
@@ -300,8 +300,6 @@ def __main__(args):
     argparser.print_help()
     return
   args = argparser.parse_args(args[1:])
-
-  print(f"[Python exe] {sys.executable}")
 
   # Create and cd into a test directory before running
   sourceName = os.path.basename(args.source)
