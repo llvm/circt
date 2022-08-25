@@ -85,7 +85,7 @@ static FIRRTLBaseType getFIRRTLType(Type type) {
           elements.emplace_back(BundleElement(
               StringAttr::get(context, llvm::formatv("field{0}", it.index())),
               false, getFIRRTLType(it.value())));
-        return BundleType::get(elements, context);
+        return BundleType::get(context, elements);
       })
       .Default([&](Type) { return FIRRTLBaseType(); });
 }
@@ -100,7 +100,7 @@ static FIRRTLBaseType portInfosToBundleType(MLIRContext *ctx,
                                      port.direction == Direction::Out,
                                      port.type.cast<FIRRTLBaseType>()));
   }
-  return BundleType::get(elements, ctx);
+  return BundleType::get(ctx, elements);
 }
 
 /// Return a FIRRTL bundle type (with data, valid, and ready subfields) given a
@@ -129,7 +129,7 @@ static FIRRTLBaseType getBundleType(Type type) {
     elements.push_back(BundleElement(dataId, false, dataType));
   }
 
-  auto bundleType = BundleType::get(elements, context);
+  auto bundleType = BundleType::get(context, elements);
   return bundleType;
 }
 
