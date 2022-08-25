@@ -62,16 +62,20 @@ struct FlattenMemoryPass : public FlattenMemoryBase<FlattenMemoryPass> {
 
       SmallVector<Operation *, 8> flatData;
       SmallVector<int32_t> memWidths;
+      size_t memFlatWidth = 0;
       // Get the width of individual aggregate leaf elements.
       for (auto f : flatMemType) {
         LLVM_DEBUG(llvm::dbgs() << "\n field type:" << f);
-        memWidths.push_back(f.getWidth().value());
+        auto w = f.getWidth().value();
+        memWidths.push_back(w);
+        memFlatWidth += w;
       }
+      // If all the widths are zero, ignore the memory.
+      if (!memFlatWidth)
+        return;
       maskGran = memWidths[0];
-      size_t memFlatWidth = 0;
       // Compute the GCD of all data bitwidths.
       for (auto w : memWidths) {
-        memFlatWidth += w;
         maskGran = llvm::GreatestCommonDivisor64(maskGran, w);
       }
       for (auto w : memWidths) {
@@ -203,7 +207,8 @@ private:
           })
           .Default([&](auto) { return false; });
     };
-    if (flatten(type) && !results.empty())
+    // Return true only if this is an aggregate with more than one element.
+    if (flatten(type) && results.size() > 1)
       return true;
     return false;
   }
