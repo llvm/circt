@@ -2,7 +2,7 @@
 // RUN: rm -rf %t6 && mkdir %t6 && cd %t6
 // RUN: circt-opt %s --esi-connect-services --esi-emit-collateral='schema-file=%t2.capnp tops=top' --lower-esi-to-physical --lower-esi-ports --lower-esi-to-hw --export-split-verilog -o %t3.mlir
 // RUN: cd ..
-// RUN: esi-cosim-runner.py --schema %t2.capnp --services %t6/services.json %s %t6/*.sv
+// RUN: esi-cosim-runner.py --schema %t2.capnp %s %t6/*.sv
 // PY: import loopback as test
 // PY: rpc = test.LoopbackTester(rpcschemapath, simhostport)
 // PY: print(rpc.list())
