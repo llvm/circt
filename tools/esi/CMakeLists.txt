@@ -16,17 +16,9 @@ if (TARGET EsiCosimDpiServer)
   set(ESI_COSIM_PATH ${ESI_COSIM_LIB_DIR}/libEsiCosimDpiServer.so)
 endif()
 
-# If Python bindings are available to build then enable the tests.
-if(CIRCT_BINDINGS_PYTHON_ENABLED)
-  list(APPEND RUNNER_DEPENDS CIRCTMLIRPythonModules)
-  list(APPEND RUNNER_DEPENDS CIRCTPythonModules)
-endif()
-
 set(SOURCES esi-cosim-runner.py esi_cosim.py)
 foreach(file IN ITEMS ${SOURCES})
   configure_file(${file}.in ${CIRCT_TOOLS_DIR}/${file})
   list(APPEND OUTPUTS ${CIRCT_TOOLS_DIR}/${file})
 endforeach()
-add_custom_target(esi-cosim-runner
-  SOURCES ${OUTPUTS}
-  DEPENDS ${RUNNER_DEPENDS})
+add_custom_target(esi-cosim-runner SOURCES ${OUTPUTS})
