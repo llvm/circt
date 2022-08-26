@@ -236,6 +236,7 @@ findLogicOpInsertionPoint(Operation *op) {
 /// a wire is created just after op's position so that we can inline the
 /// assignement into its wire declaration.
 static void lowerUsersToTemporaryWire(Operation &op,
+                                      DenseMap<Value, size_t> &operandMap,
                                       bool emitWireAtBlockBegin = false) {
   Block *block = op.getBlock();
   auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), block);
@@ -285,12 +286,15 @@ static void lowerUsersToTemporaryWire(Operation &op,
   if (op.getNumResults() == 1) {
     auto namehint = inferStructuralNameForTemporary(op.getResult(0));
     createWireForResult(op.getResult(0), namehint);
+    operandMap[op.getResult(0)] = 1;
     return;
   }
 
   // If the op has multiple results, create wires for each result.
-  for (auto result : op.getResults())
+  for (auto result : op.getResults()) {
     createWireForResult(result, StringAttr());
+    operandMap[result] = 1;
+  }
 }
 
 /// Lower a variadic fully-associative operation into an expression tree.  This
@@ -325,14 +329,10 @@ static Value lowerFullyAssociativeOp(Operation &op, OperandRange operands,
 
   if (operandMap[lhs] + operandMap[rhs] >
       options.maximumNumberOfVariadicOperands) {
-    if (lhs.getDefiningOp()) {
-      lowerUsersToTemporaryWire(*lhs.getDefiningOp());
-      operandMap[lhs] = 1;
-    }
-    if (rhs.getDefiningOp()) {
-      lowerUsersToTemporaryWire(*rhs.getDefiningOp());
-      operandMap[rhs] = 1;
-    }
+    if (lhs.getDefiningOp())
+      lowerUsersToTemporaryWire(*lhs.getDefiningOp(), operandMap);
+    if (rhs.getDefiningOp())
+      lowerUsersToTemporaryWire(*rhs.getDefiningOp(), operandMap);
   }
 
   OperationState state(op.getLoc(), op.getName());
@@ -553,7 +553,8 @@ void ExportVerilog::prepareHWModule(Block &block,
     size_t totalOperands = 0;
     for (auto a : op.getOperands())
       totalOperands += operandMap.count(a) ? operandMap[a] : 1;
-    operandMap[op.getResult(0)] = totalOperands;
+    if (op.getNumResults() == 1)
+      operandMap[op.getResult(0)] = totalOperands;
 
     // Name legalization should have happened in a different pass for these sv
     // elements and we don't want to change their name through re-legalization
@@ -655,7 +656,7 @@ void ExportVerilog::prepareHWModule(Block &block,
             // If op is moved to a non-procedural region, create a temporary
             // wire.
             if (!op.getParentOp()->hasTrait<ProceduralRegion>())
-              lowerUsersToTemporaryWire(op);
+              lowerUsersToTemporaryWire(op, operandMap);
 
             // If we're in a procedural region, we move on to the next op in the
             // block. The expression splitting and canonicalization below will
@@ -668,7 +669,7 @@ void ExportVerilog::prepareHWModule(Block &block,
           // If `disallowLocalVariables` is not enabled, we can spill the
           // expression to automatic logic declarations even when the op is in a
           // procedural region.
-          lowerUsersToTemporaryWire(op);
+          lowerUsersToTemporaryWire(op, operandMap);
         }
       }
     }
@@ -770,7 +771,7 @@ void ExportVerilog::prepareHWModule(Block &block,
       }
 
       // Otherwise, we need to lower this to a wire to resolve this.
-      lowerUsersToTemporaryWire(op, /*emitWireAtBlockBegin=*/true);
+      lowerUsersToTemporaryWire(op, operandMap, /*emitWireAtBlockBegin=*/true);
     }
   }
 }
