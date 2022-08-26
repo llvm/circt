@@ -6,6 +6,7 @@
 firrtl.circuit "CheckInitialization" {
 firrtl.module @CheckInitialization(in %clock : !firrtl.clock, in %en : !firrtl.uint<1>, in %p : !firrtl.uint<1>, in %in0 : !firrtl.bundle<a  flip: uint<1>>, out %out0 : !firrtl.uint<2>, out %out1 : !firrtl.bundle<a flip: uint<1>>) {
   // expected-error @-1 {{port "in0.a" not fully initialized in module "CheckInitialization"}}
+  // expected-error @-2 {{port "out0" not fully initialized in module "CheckInitialization"}}
 }
 }
 
@@ -13,7 +14,8 @@ firrtl.module @CheckInitialization(in %clock : !firrtl.clock, in %en : !firrtl.u
 
 firrtl.circuit "CheckInitialization" {
 firrtl.module @CheckInitialization() {
-  // expected-error @+1 {{sink "w.a" not fully initialized}}
+  // expected-error @+2 {{sink "w.a" not fully initialized}}
+  // expected-error @+1 {{sink "w.b" not fully initialized}}
   %w = firrtl.wire : !firrtl.bundle<a : uint<1>, b  flip: uint<1>>
 }
 }
@@ -34,7 +36,9 @@ firrtl.module @CheckInitialization() {
 
 firrtl.circuit "CheckInitialization" {
 firrtl.module @CheckInitialization() {
-  // expected-error @+1 {{sink "memory.r.addr" not fully initialized}}
+  // expected-error @+3 {{sink "memory.r.addr" not fully initialized}}
+  // expected-error @+2 {{sink "memory.r.en" not fully initialized}}
+  // expected-error @+1 {{sink "memory.r.clk" not fully initialized}}
   %memory_r = firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: bundle<a: uint<8>, b: uint<8>>>
 }
 }
@@ -99,7 +103,8 @@ firrtl.module @CheckInitialization(out %out : !firrtl.vector<uint<1>, 1>) {
 
 firrtl.circuit "CheckInitialization" {
 firrtl.module @CheckInitialization() {
-  // expected-error @+1 {{sink "w[0]" not fully initialized}}
+  // expected-error @+2 {{sink "w[0]" not fully initialized}}
+  // expected-error @+1 {{sink "w[1]" not fully initialized}}
   %w = firrtl.wire : !firrtl.vector<uint<1>, 2>
 }
 }
@@ -127,5 +132,6 @@ firrtl.module @CheckInitialization(in %in : !firrtl.uint<1>, out %out : !firrtl.
 firrtl.circuit "CheckInitialization" {
 firrtl.module @CheckInitialization(in %p : !firrtl.uint<1>, out %out: !firrtl.vector<bundle<a:uint<1>, b:uint<1>>, 1>) {
   // expected-error @-1 {{port "out[0].a" not fully initialized in module "CheckInitialization"}}
+  // expected-error @-2 {{port "out[0].b" not fully initialized in module "CheckInitialization"}}
 }
 }
