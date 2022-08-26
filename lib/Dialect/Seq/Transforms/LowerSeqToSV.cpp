@@ -169,8 +169,9 @@ void FirRegLower::lower() {
             });
 
             builder.create<sv::InitialOp>([&] {
-              builder.create<sv::VerbatimOp>("`INIT_RANDOM_PROLOG_");
-
+              builder.create<sv::IfDefProceduralOp>("INIT_RANDOM_PROLOG_", [&] {
+                builder.create<sv::VerbatimOp>("`INIT_RANDOM_PROLOG_");
+              });
               llvm::MapVector<Value, SmallVector<std::pair<sv::RegOp, Value>>>
                   resets;
               builder.create<sv::IfDefProceduralOp>(randInitRef, [&] {
