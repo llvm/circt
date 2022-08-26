@@ -40,7 +40,7 @@ jobs:
         uses: actions/cache@v2
         with:
           path: |
-            llvm/build
+            llvm/build/Release/bin/llvm-lit.py
             llvm/install
           key: ${{ runner.os }}-llvm-relobj-${{ steps.get-llvm-hash.outputs.hash }}
 
