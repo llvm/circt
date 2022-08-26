@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!@Python3_EXECUTABLE@
 
 # ===- circt-rtl-sim.py - CIRCT simulation driver -----------*- python -*-===//
 #
