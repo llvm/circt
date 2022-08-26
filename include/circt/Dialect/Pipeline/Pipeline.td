@@ -241,7 +241,7 @@ def PipelineWhileOp : Op<Pipeline_Dialect, "while", []> {
   let builders = [
     OpBuilder<(ins "mlir::TypeRange":$resultTypes, "mlir::IntegerAttr":$II,
                    "llvm::Optional<IntegerAttr>": $tripCount,
-		   "mlir::ValueRange":$iterArgs)>
+                   "mlir::ValueRange":$iterArgs)>
   ];
 
   let extraClassDeclaration = [{
