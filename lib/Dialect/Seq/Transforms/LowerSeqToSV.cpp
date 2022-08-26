@@ -493,7 +493,7 @@ void FirRegLower::addToAlwaysBlock(sv::EventControl clockEdge, Value clock,
   if (!alwaysOp) {
     if (reset) {
       assert(resetStyle != ::ResetType::NoReset);
-      // Here, we want to create the folloing structure with sv.always and
+      // Here, we want to create the following structure with sv.always and
       // sv.if. If `reset` is async, we need to add `reset` to a sensitivity
       // list.
       //
