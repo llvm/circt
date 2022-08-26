@@ -3,12 +3,38 @@
 
 from .common import *
 
+{# Function to list port parameters for the service declaration
+   constructors. #}
 {%- macro port_list(ports) -%}
   {% for port in ports -%}
     {{-port.name}}_ports: typing.List[Port]{% if not loop.last %}, {% endif %}
   {%- endfor %}
 {%- endmacro %}
 
+{# List of service declaration classes. E.g.:
+```
+class HostComms:
+
+  def __init__(self, to_host_ports: typing.List[Port], from_host_ports: typing.List[Port], req_resp_ports: typing.List[Port]):
+    self.to_host = to_host_ports
+    self.from_host = from_host_ports
+    self.req_resp = req_resp_ports
+
+  def to_host_read_any(self):
+    for p in self.to_host:
+      rc = p.read(block=False)
+      if rc is not None:
+        return rc
+    return None
+
+  def req_resp_read_any(self):
+    for p in self.req_resp:
+      rc = p.read(block=False)
+      if rc is not None:
+        return rc
+    return None
+```
+#}
 {%- for svc in services.declarations %}
 class {{ svc['name' ]}}:
 
@@ -29,6 +55,32 @@ class {{ svc['name' ]}}:
 {% endfor %}
 
 
+{# "Namespace" for design modules. Section looks roughly like:
+```
+class DesignModules:
+
+  class top:
+
+    def __init__(self):
+      self.mid = DesignModules.Mid()
+
+
+  class Mid:
+
+    def __init__(self):
+      from_host = [
+        ReadPort(['Producer', 'loopback_in'], write_type=ESITypes.I32)
+      ]
+      to_host = [
+        WritePort(['Consumer', 'loopback_out'], read_type=ESITypes.I32)
+      ]
+      req_resp = [
+        ReadPort(['LoopbackInOut', 'loopback_inout'], write_type=ESITypes.I32)
+        WritePort(['LoopbackInOut', 'loopback_inout'], read_type=ESITypes.I16)
+      ]
+      self.host_comms = HostComms(from_host_ports=from_host, to_host_ports=to_host, req_resp_ports=req_resp)
+```
+#}
 class DesignModules:
 {% for mod in modules %}
   class {{mod.name}}:
@@ -63,11 +115,26 @@ class DesignModules:
 {% endfor %} 
 
 
+{# Types section. Example:`
+```
+class ESITypes:
+
+  I32 = IntType(32, False)
+  I16 = IntType(16, False)
+```
+#}
 class ESITypes:
 {% for type_name, type_dict in types.items() %}
   {{type_name}} = {{type_str_of(type_dict)}}
 {%- endfor %}
 
+{# Instantiate the top modules. E.g.: 
+
+```
+top = DesignModules.top()
+```
+
+#}
 {% for top in tops %}
 {{camel_to_snake(top.name)}} = DesignModules.{{top.name}}()
 {%- endfor %}
