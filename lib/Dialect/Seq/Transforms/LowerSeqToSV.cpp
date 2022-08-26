@@ -25,7 +25,6 @@
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/IntervalMap.h"
 #include "llvm/ADT/TypeSwitch.h"
-#include <variant>
 
 using namespace circt;
 using namespace seq;
