@@ -1881,6 +1881,19 @@ struct ConvertSelectOps : public OpConversionPattern<mlir::arith::SelectOp> {
     return success();
   };
 };
+} // namespace
+
+LogicalResult handshake::postDataflowConvert(Operation *op) {
+  MLIRContext *context = op->getContext();
+  ConversionTarget target(*context);
+  target.addLegalDialect<handshake::HandshakeDialect>();
+  target.addIllegalOp<mlir::arith::SelectOp>();
+  RewritePatternSet patterns(context);
+  patterns.insert<ConvertSelectOps>(context);
+  return applyPartialConversion(op, target, std::move(patterns));
+}
+
+namespace {
 
 struct HandshakeRemoveBlockPass
     : HandshakeRemoveBlockBase<HandshakeRemoveBlockPass> {
@@ -1907,15 +1920,6 @@ struct StandardToHandshakePass
       if (failed(postDataflowConvert(func)))
         return signalPassFailure();
     }
-  }
-
-  LogicalResult postDataflowConvert(handshake::FuncOp op) {
-    ConversionTarget target(getContext());
-    target.addLegalDialect<handshake::HandshakeDialect>();
-    target.addIllegalOp<mlir::arith::SelectOp>();
-    RewritePatternSet patterns(&getContext());
-    patterns.insert<ConvertSelectOps>(&getContext());
-    return applyPartialConversion(op, target, std::move(patterns));
   }
 };
 
