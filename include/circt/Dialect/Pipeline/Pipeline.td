@@ -87,10 +87,10 @@ def PipelineOp : Op<Pipeline_Dialect, "pipeline", [
       ^bb0:(%arg0 : i32, %arg1: i32):
         %add0 = comb.add %arg0, %arg1 : i32
 
-        %s0_valid, %add0_r = pipeline.stage when %go regs (%add0: i32)
+        %s0_valid, %add0_r = pipeline.stage.register when %go regs (%add0: i32)
         %add1 = comb.add %add0_r, %arg0 : i32
   
-        %s1_valid, %add1_r = pipeline.stage when %g1 regs (%add1: i32)
+        %s1_valid, %add1_r = pipeline.stage.register when %g1 regs (%add1: i32)
         %add2 = comb.add %add1_r, %arg1 : i32
 
         pipeline.return %add2 valid %s1_valid : i32
