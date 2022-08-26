@@ -352,14 +352,16 @@ static Value lowerFullyAssociativeOp(Operation &op, OperandRange operands,
 
 /// Transform "a + -cst" ==> "a - cst" for prettier output.  This returns the
 /// first operation emitted.
-static Operation *rewriteAddWithNegativeConstant(comb::AddOp add,
-                                                 hw::ConstantOp rhsCst) {
+static Operation *
+rewriteAddWithNegativeConstant(comb::AddOp add, hw::ConstantOp rhsCst,
+                               DenseMap<Value, size_t> &operandMap) {
   ImplicitLocOpBuilder builder(add.getLoc(), add);
 
   // Get the positive constant.
   auto negCst = builder.create<hw::ConstantOp>(-rhsCst.getValue());
   auto sub = builder.create<comb::SubOp>(add.getOperand(0), negCst);
   add.getResult().replaceAllUsesWith(sub);
+  operandMap.erase(add.getResult());
   add.erase();
   if (rhsCst.use_empty())
     rhsCst.erase();
@@ -689,6 +691,7 @@ void ExportVerilog::prepareHWModule(Block &block,
       SmallVector<Operation *> newOps;
       auto result = lowerFullyAssociativeOp(op, op.getOperands(), newOps,
                                             operandMap, options);
+      operandMap.erase(op.getResult(0));
       op.getResult(0).replaceAllUsesWith(result);
       op.erase();
 
@@ -702,7 +705,8 @@ void ExportVerilog::prepareHWModule(Block &block,
       if (auto cst = addOp.getOperand(1).getDefiningOp<hw::ConstantOp>()) {
         assert(addOp.getNumOperands() == 2 && "commutative lowering is done");
         if (cst.getValue().isNegative()) {
-          Operation *firstOp = rewriteAddWithNegativeConstant(addOp, cst);
+          Operation *firstOp =
+              rewriteAddWithNegativeConstant(addOp, cst, operandMap);
           opIterator = Block::iterator(firstOp);
           continue;
         }
