@@ -246,9 +246,12 @@ class System:
     """Build an ESI runtime API."""
     if lang != "python":
       raise ValueError(f"Language '{lang}' not supported")
-    b = PythonApiBuilder(
-        (self._output_directory / "services.json").open().read(),
-        (self._output_directory / "schema.capnp").open().read())
+    services_file = (self._output_directory / "services.json")
+    if not services_file.exists():
+      raise FileNotFoundError("Could not locate ESI services description. " +
+                              "Have you emitted the outputs?")
+
+    b = PythonApiBuilder(services_file.open().read())
     b.build(self.name, self._output_directory)
 
 

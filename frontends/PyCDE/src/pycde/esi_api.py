@@ -40,10 +40,9 @@ class SoftwareApiBuilder:
       self.instances: Dict[str, SoftwareApiBuilder.Module] = {}
       self.services: List[Dict] = []
 
-  def __init__(self, services_json: str, capnp_schema: Optional[str]):
+  def __init__(self, services_json: str):
     """Read in the system descriptor and set up bookkeeping structures."""
     self.services = json.loads(services_json)
-    self.cosim_schema = capnp_schema
     self.types: Dict[str, Dict] = {}
     self.modules: Dict[str, SoftwareApiBuilder.Module] = {}
 
@@ -108,8 +107,8 @@ class SoftwareApiBuilder:
 
 class PythonApiBuilder(SoftwareApiBuilder):
 
-  def __init__(self, services_json: str, capnp_schema: Optional[str]):
-    super().__init__(services_json, capnp_schema)
+  def __init__(self, services_json: str):
+    super().__init__(services_json)
 
   def build(self, system_name: str, output_dir: pathlib.Path):
     """Emit a Python ESI runtime library into 'output_dir'."""
