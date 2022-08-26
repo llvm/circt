@@ -25,7 +25,6 @@
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/IntervalMap.h"
 #include "llvm/ADT/TypeSwitch.h"
-#include <variant>
 
 using namespace circt;
 using namespace seq;
@@ -170,8 +169,9 @@ void FirRegLower::lower() {
             });
 
             builder.create<sv::InitialOp>([&] {
-              builder.create<sv::VerbatimOp>("`INIT_RANDOM_PROLOG_");
-
+              builder.create<sv::IfDefProceduralOp>("INIT_RANDOM_PROLOG_", [&] {
+                builder.create<sv::VerbatimOp>("`INIT_RANDOM_PROLOG_");
+              });
               llvm::MapVector<Value, SmallVector<std::pair<sv::RegOp, Value>>>
                   resets;
               builder.create<sv::IfDefProceduralOp>(randInitRef, [&] {
@@ -493,7 +493,7 @@ void FirRegLower::addToAlwaysBlock(sv::EventControl clockEdge, Value clock,
   if (!alwaysOp) {
     if (reset) {
       assert(resetStyle != ::ResetType::NoReset);
-      // Here, we want to create the folloing structure with sv.always and
+      // Here, we want to create the following structure with sv.always and
       // sv.if. If `reset` is async, we need to add `reset` to a sensitivity
       // list.
       //

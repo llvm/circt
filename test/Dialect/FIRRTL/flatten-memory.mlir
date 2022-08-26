@@ -148,8 +148,22 @@ firrtl.module @MemoryRWSplit(in %clock: !firrtl.clock, in %rwEn: !firrtl.uint<1>
     firrtl.connect %3, %io : !firrtl.bundle<a: uint<0>, b: uint<20>>, !firrtl.bundle<a: uint<0>, b: uint<20>>
   }
 
+  // Tests all the cases when the memory is ignored and not flattened.
   firrtl.module @ZeroBitMem(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %io: !firrtl.bundle<a: uint<0>, b: uint<20>>) {
+    // Case 1: No widths.
     %ram_MPORT = firrtl.mem Undefined  {depth = 1 : i64, groupID = 1 : ui32, name = "ram", portNames = ["MPORT"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: bundle<>, mask: bundle<>>
     // CHECK: %ram_MPORT = firrtl.mem Undefined  {depth = 1 : i64, groupID = 1 : ui32, name = "ram", portNames = ["MPORT"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: bundle<>, mask: bundle<>>
+    // Case 2: All widths of the data add up to zero.
+    %ram_MPORT1 = firrtl.mem Undefined  {depth = 1 : i64, groupID = 1 : ui32, name = "ram", portNames = ["MPORT"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: bundle<a: uint<0>, b: uint<0>>, mask: bundle<a: uint<1>, b: uint<1>>>
+    // CHECK: = firrtl.mem Undefined  {depth = 1 : i64, groupID = 1 : ui32, name = "ram", portNames = ["MPORT"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: bundle<a: uint<0>, b: uint<0>>, mask: bundle<a: uint<1>, b: uint<1>>>
+    // Case 3: Aggregate contains only a single element.
+    %single     = firrtl.mem Undefined  {depth = 1 : i64, groupID = 1 : ui32, name = "ram", portNames = ["MPORT"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: bundle<b: uint<10>>, mask: bundle<b: uint<1>>>
+    // CHECK: = firrtl.mem Undefined  {depth = 1 : i64, groupID = 1 : ui32, name = "ram", portNames = ["MPORT"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: bundle<b: uint<10>>, mask: bundle<b: uint<1>>>
+    // Case 4: Ground Type with zero width.
+    %ram_MPORT2, %ram_io_deq_bits_MPORT = firrtl.mem  Undefined  {depth = 2 : i64, name = "ram", portNames = ["MPORT", "io_deq_bits_MPORT"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<0>, mask: uint<1>>, !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<0>>
+    // CHECK:  = firrtl.mem  Undefined  {depth = 2 : i64, name = "ram", portNames = ["MPORT", "io_deq_bits_MPORT"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<0>, mask: uint<1>>, !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<0>>
+    // Case 5: Any Ground Type.
+    %ram_MPORT3, %ram_io_deq_bits_MPORT2 = firrtl.mem  Undefined  {depth = 2 : i64, name = "ram", portNames = ["MPORT", "io_deq_bits_MPORT"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<1>, mask: uint<1>>, !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
+    // CHECK:  = firrtl.mem  Undefined  {depth = 2 : i64, name = "ram", portNames = ["MPORT", "io_deq_bits_MPORT"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<1>, mask: uint<1>>, !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
   }
 }

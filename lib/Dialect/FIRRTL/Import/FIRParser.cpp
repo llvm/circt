@@ -2452,13 +2452,13 @@ ParseResult FIRStmtParser::parseSeqMem() {
 
 /// mem ::= 'mem' id ':' info? INDENT memField* DEDENT
 /// memField ::= 'data-type' '=>' type NEWLINE
-/// 	       ::= 'depth' '=>' intLit NEWLINE
-/// 	       ::= 'read-latency' '=>' intLit NEWLINE
-/// 	       ::= 'write-latency' '=>' intLit NEWLINE
-/// 	       ::= 'read-under-write' '=>' ruw NEWLINE
-/// 	       ::= 'reader' '=>' id+ NEWLINE
-/// 	       ::= 'writer' '=>' id+ NEWLINE
-/// 	       ::= 'readwriter' '=>' id+ NEWLINE
+///          ::= 'depth' '=>' intLit NEWLINE
+///          ::= 'read-latency' '=>' intLit NEWLINE
+///          ::= 'write-latency' '=>' intLit NEWLINE
+///          ::= 'read-under-write' '=>' ruw NEWLINE
+///          ::= 'reader' '=>' id+ NEWLINE
+///          ::= 'writer' '=>' id+ NEWLINE
+///          ::= 'readwriter' '=>' id+ NEWLINE
 ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
   auto startTok = consumeToken(FIRToken::kw_mem);
 

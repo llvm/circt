@@ -670,19 +670,19 @@ def BitCastOp: FIRRTLOp<"bitcast", [NoSideEffect]> {
 // The operations on RefType support capturing the dataflow to/from SSA values.
 // The following ops are supported on the RefType:
 //
-//	- RefSendOp
-//	  - Takes as input a `BaseType` and returns a `RefType`
-//	  - Used to send a read-only Reference handle of a local value.
-//	  - Represents the source of a dataflow by getting it's reference.
-//	- RefResolveOp
-//	  - Takes as input a `RefType` and returns a `BaseType`
-//	  - Represents the sink of a dataflow from the reference handle
-//	  - The `RefType` is constrained to express a "single source to
-//		one-or-more sink" dataflow
-//	  - Hence, multiple `RefResolveOp`s can be remotely connected to a single
-//		`RefSendOp`.
-//	  - If the Reference ops are lowered to cross-module-reference, then it
-//		represents the location of the XMR.
+//  - RefSendOp
+//    - Takes as input a `BaseType` and returns a `RefType`
+//    - Used to send a read-only Reference handle of a local value.
+//    - Represents the source of a dataflow by getting it's reference.
+//  - RefResolveOp
+//    - Takes as input a `RefType` and returns a `BaseType`
+//    - Represents the sink of a dataflow from the reference handle
+//    - The `RefType` is constrained to express a "single source to
+//    one-or-more sink" dataflow
+//    - Hence, multiple `RefResolveOp`s can be remotely connected to a single
+//    `RefSendOp`.
+//    - If the Reference ops are lowered to cross-module-reference, then it
+//    represents the location of the XMR.
 //===----------------------------------------------------------------------===//
 
 //===----------------------------------------------------------------------===//

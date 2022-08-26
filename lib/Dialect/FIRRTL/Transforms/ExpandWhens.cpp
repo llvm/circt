@@ -581,6 +581,7 @@ void ModuleVisitor::visitStmt(WhenOp whenOp) {
 /// Perform initialization checking.  This uses the built up state from
 /// running on a module. Returns failure in the event of bad initialization.
 LogicalResult ModuleVisitor::checkInitialization() {
+  bool failed = false;
   for (auto destAndConnect : driverMap.getLastScope()) {
     // If there is valid connection to this destination, everything is good.
     auto *connect = std::get<1>(destAndConnect);
@@ -598,8 +599,10 @@ LogicalResult ModuleVisitor::checkInitialization() {
     else
       definingOp->emitError("sink \"" + getFieldName(dest) +
                             "\" not fully initialized");
-    return failure();
+    failed = true;
   }
+  if (failed)
+    return failure();
   return success();
 }
 

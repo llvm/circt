@@ -122,8 +122,8 @@ def InstanceOp : Handshake_Op<"instance", [
   let summary = "module instantiate operation";
   let description = [{
     The `instance` operation represents the instantiation of a module.  This
-	  is similar to a function call, except that different instances of the
-	  same module are guaranteed to have their own distinct state.
+    is similar to a function call, except that different instances of the
+    same module are guaranteed to have their own distinct state.
     The instantiated module is encoded as a symbol reference attribute named
     "module". An instance operation takes a control input as its last argument
     and returns a control output as its last result.
@@ -378,7 +378,7 @@ def MuxOp : Handshake_Op<"mux", [
     TypeAttr:$dataType,
     ConfinedAttr<I32Attr, [IntMinValue<1>]>:$size,
     AnyType : $selectOperand,
-		Variadic<AnyType> : $dataOperands);
+    Variadic<AnyType> : $dataOperands);
   let results = (outs AnyType : $result);
   let skipDefaultBuilders = 1;
   let builders = [

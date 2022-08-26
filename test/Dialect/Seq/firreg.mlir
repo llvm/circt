@@ -76,7 +76,9 @@ hw.module @lowering(%clk: i1, %rst: i1, %in: i32) -> (a: i32, b: i32, c: i32, d:
   // CHECK-NEXT:       sv.verbatim "`FIRRTL_BEFORE_INITIAL" {symbols = []}
   // CHECK-NEXT:     }
   // CHECK-NEXT:     sv.initial {
-  // CHECK-NEXT:       sv.verbatim "`INIT_RANDOM_PROLOG_" {symbols = []}
+  // CHECK-NEXT:       sv.ifdef.procedural "INIT_RANDOM_PROLOG_" {
+  // CHECK-NEXT:         sv.verbatim "`INIT_RANDOM_PROLOG_" {symbols = []}
+  // CHECK-NEXT:       }
   // CHECK-NEXT:       sv.ifdef.procedural  "RANDOMIZE_REG_INIT" {
   // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@lowering::@_RANDOM>]}
   // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {{[{][{]1[}][}]}};" {symbols = [#hw.innerNameRef<@lowering::@regA>, #hw.innerNameRef<@lowering::@_RANDOM>]}
@@ -138,7 +140,9 @@ hw.module private @UninitReg1(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
   // CHECK-NEXT:       sv.verbatim "`FIRRTL_BEFORE_INITIAL" {symbols = []}
   // CHECK-NEXT:     }
   // CHECK-NEXT:     sv.initial {
-  // CHECK-NEXT:     sv.verbatim "`INIT_RANDOM_PROLOG_"
+  // CHECK-NEXT:       sv.ifdef.procedural "INIT_RANDOM_PROLOG_" {
+  // CHECK-NEXT:         sv.verbatim "`INIT_RANDOM_PROLOG_" {symbols = []}
+  // CHECK-NEXT:       }
   // CHECK-NEXT:     sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
   // CHECK-NEXT:        sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@UninitReg1::@[[RANDOM_SYM]]>]}
   // CHECK-NEXT:        sv.verbatim "{{[{][{]0[}][}]}} = {{[{][{]1[}][}]}}[1:0];" {symbols = [#hw.innerNameRef<@UninitReg1::@count>, #hw.innerNameRef<@UninitReg1::@[[RANDOM_SYM]]>]}
@@ -218,7 +222,9 @@ hw.module private @InitReg1(%clock: i1, %reset: i1, %io_d: i32, %io_en: i1) -> (
   // CHECK-NEXT:       sv.verbatim "`FIRRTL_BEFORE_INITIAL" {symbols = []}
   // CHECK-NEXT:     }
   // CHECK-NEXT:     sv.initial {
-  // CHECK-NEXT:       sv.verbatim "`INIT_RANDOM_PROLOG_"
+  // CHECK-NEXT:       sv.ifdef.procedural "INIT_RANDOM_PROLOG_" {
+  // CHECK-NEXT:         sv.verbatim "`INIT_RANDOM_PROLOG_" {symbols = []}
+  // CHECK-NEXT:       }
   // CHECK-NEXT:       sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
   // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@InitReg1::@[[RANDOM_SYM]]>]}
   // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {{[{][{]1[}][}]}};" {symbols = [#hw.innerNameRef<@InitReg1::@[[reg_sym]]>, #hw.innerNameRef<@InitReg1::@[[RANDOM_SYM]]>]}
@@ -262,7 +268,9 @@ hw.module private @UninitReg42(%clock: i1, %reset: i1, %cond: i1, %value: i42) {
   // CHECK-NEXT:       sv.verbatim "`FIRRTL_BEFORE_INITIAL" {symbols = []}
   // CHECK-NEXT:     }
   // CHECK-NEXT:     sv.initial {
-  // CHECK-NEXT:       sv.verbatim "`INIT_RANDOM_PROLOG_"
+  // CHECK-NEXT:       sv.ifdef.procedural "INIT_RANDOM_PROLOG_" {
+  // CHECK-NEXT:         sv.verbatim "`INIT_RANDOM_PROLOG_" {symbols = []}
+  // CHECK-NEXT:       }
   // CHECK-NEXT:       sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
   // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@UninitReg42::@[[RANDOM_0_SYM]]>]}
   // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@UninitReg42::@[[RANDOM_1_SYM]]>]}
@@ -310,7 +318,9 @@ hw.module private @regInitRandomReuse(%clock: i1, %a: i1) -> (o1: i2, o2: i4, o3
   // CHECK-NEXT:       sv.verbatim "`FIRRTL_BEFORE_INITIAL" {symbols = []}
   // CHECK-NEXT:     }
   // CHECK-NEXT:     sv.initial {
-  // CHECK-NEXT:       sv.verbatim "`INIT_RANDOM_PROLOG_"
+  // CHECK-NEXT:       sv.ifdef.procedural "INIT_RANDOM_PROLOG_" {
+  // CHECK-NEXT:         sv.verbatim "`INIT_RANDOM_PROLOG_" {symbols = []}
+  // CHECK-NEXT:       }
   // CHECK-NEXT:       sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
   // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_0_SYM]]>]}
   // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {{[{][{]1[}][}]}}[1:0];" {symbols = [#hw.innerNameRef<@regInitRandomReuse::@[[r1_sym]]>, #hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_0_SYM]]>]}
@@ -351,7 +361,9 @@ hw.module private @init1DVector(%clock: i1, %a: !hw.array<2xi1>) -> (b: !hw.arra
   // CHECK-NEXT:       sv.verbatim "`FIRRTL_BEFORE_INITIAL" {symbols = []}
   // CHECK-NEXT:     }
   // CHECK-NEXT:     sv.initial {
-  // CHECK-NEXT:       sv.verbatim "`INIT_RANDOM_PROLOG_"
+  // CHECK-NEXT:       sv.ifdef.procedural "INIT_RANDOM_PROLOG_" {
+  // CHECK-NEXT:         sv.verbatim "`INIT_RANDOM_PROLOG_" {symbols = []}
+  // CHECK-NEXT:       }
   // CHECK-NEXT:       sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
   // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@init1DVector::@[[RANDOM_SYM]]>]}
   // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}}[0] = {{[{][{]1[}][}]}}[0];" {symbols = [#hw.innerNameRef<@init1DVector::@[[r_sym]]>, #hw.innerNameRef<@init1DVector::@[[RANDOM_SYM]]>]}
@@ -385,7 +397,9 @@ hw.module private @init2DVector(%clock: i1, %a: !hw.array<1xarray<1xi1>>) -> (b:
   // CHECK-NEXT:       sv.verbatim "`FIRRTL_BEFORE_INITIAL" {symbols = []}
   // CHECK-NEXT:     }
   // CHECK-NEXT:     sv.initial {
-  // CHECK-NEXT:       sv.verbatim "`INIT_RANDOM_PROLOG_" {symbols = []}
+  // CHECK-NEXT:       sv.ifdef.procedural "INIT_RANDOM_PROLOG_" {
+  // CHECK-NEXT:         sv.verbatim "`INIT_RANDOM_PROLOG_" {symbols = []}
+  // CHECK-NEXT:       }
   // CHECK-NEXT:       sv.ifdef.procedural  "RANDOMIZE_REG_INIT" {
   // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@init2DVector::@_RANDOM>]}
   // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}}[0][0] = {{[{][{]1[}][}]}}[0];" {symbols = [#hw.innerNameRef<@init2DVector::@__r__>, #hw.innerNameRef<@init2DVector::@_RANDOM>]}
@@ -416,7 +430,9 @@ hw.module private @initStruct(%clock: i1) {
   // CHECK-NEXT:       sv.verbatim "`FIRRTL_BEFORE_INITIAL" {symbols = []}
   // CHECK-NEXT:     }
   // CHECK-NEXT:     sv.initial {
-  // CHECK-NEXT:       sv.verbatim "`INIT_RANDOM_PROLOG_"
+  // CHECK-NEXT:       sv.ifdef.procedural "INIT_RANDOM_PROLOG_" {
+  // CHECK-NEXT:         sv.verbatim "`INIT_RANDOM_PROLOG_" {symbols = []}
+  // CHECK-NEXT:       }
   // CHECK-NEXT:       sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
   // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@initStruct::@[[RANDOM_SYM]]>]}
   // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}}.a = {{[{][{]1[}][}]}}[0];" {symbols = [#hw.innerNameRef<@initStruct::@[[r_sym]]>, #hw.innerNameRef<@initStruct::@[[RANDOM_SYM]]>]}
