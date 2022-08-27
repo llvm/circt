@@ -30,6 +30,9 @@ declare_mlir_python_sources(PyCDESources
   pycde/value.py
   pycde/ndarray.py
   pycde/esi.py
+  pycde/esi_api.py
+  pycde/esi_api.py.j2
+  pycde/esi_runtime_common.py
   pycde/fsm.py
   pycde/testing.py
 )

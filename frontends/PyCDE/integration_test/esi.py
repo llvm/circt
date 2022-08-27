@@ -62,7 +62,7 @@ class LoopbackInOut:
 
 
 @module
-class top:
+class Mid:
   clk = Clock(types.i1)
   rst = Input(types.i1)
 
@@ -77,7 +77,20 @@ class top:
     esi.Cosim(HostComms, ports.clk, ports.rst)
 
 
+@module
+class top:
+  clk = Clock(types.i1)
+  rst = Input(types.i1)
+
+  @generator
+  def construct(ports):
+    Mid(clk=ports.clk, rst=ports.rst)
+
+
 s = pycde.System([top], name="ESILoopback", output_directory=sys.argv[1])
-s.print()
 s.generate()
 s.emit_outputs()
+s.build_api("python")
+
+sys.path.append(sys.argv[1])
+from esi_rt.ESILoopback import top

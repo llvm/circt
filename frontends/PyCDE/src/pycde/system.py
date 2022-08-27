@@ -13,6 +13,7 @@ from .pycde_types import types
 from .instance import Instance, InstanceHierarchyRoot
 
 from circt.dialects import hw, msft
+from .esi_api import PythonApiBuilder
 
 import mlir
 import mlir.ir as ir
@@ -240,6 +241,18 @@ class System:
   def createdb(self, primdb: PrimitiveDB = None):
     if self._placedb is None:
       self._placedb = PlacementDB(self, self.mod, primdb)
+
+  def build_api(self, lang: str):
+    """Build an ESI runtime API."""
+    if lang != "python":
+      raise ValueError(f"Language '{lang}' not supported")
+    services_file = (self._output_directory / "services.json")
+    if not services_file.exists():
+      raise FileNotFoundError("Could not locate ESI services description. " +
+                              "Have you emitted the outputs?")
+
+    b = PythonApiBuilder(services_file.open().read())
+    b.build(self.name, self._output_directory)
 
 
 class _OpCache:
