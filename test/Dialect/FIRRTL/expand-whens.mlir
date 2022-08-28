@@ -56,9 +56,9 @@ firrtl.module @simulation(in %clock : !firrtl.clock, in %p : !firrtl.uint<1>, in
 // CHECK-NEXT:   %1 = firrtl.and %p, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK-NEXT:   firrtl.stop %clock, %1, 0
 // CHECK-NEXT:   %2 = firrtl.and %p, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:   firrtl.assert %clock, %p, %2, ""
+// CHECK-NEXT:   firrtl.assert %clock, %p, %2, "" {eventControl = 0 : i32, isConcurrent = false}
 // CHECK-NEXT:   %3 = firrtl.and %p, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:   firrtl.assume %clock, %p, %3, ""
+// CHECK-NEXT:   firrtl.assume %clock, %p, %3, "" {eventControl = 0 : i32, isConcurrent = false}
 // CHECK-NEXT:   %4 = firrtl.and %p, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK-NEXT:   firrtl.cover %clock, %p, %4, ""
 // CHECK-NEXT:   %5 = firrtl.not %p : (!firrtl.uint<1>) -> !firrtl.uint<1>
@@ -67,11 +67,11 @@ firrtl.module @simulation(in %clock : !firrtl.clock, in %p : !firrtl.uint<1>, in
 // CHECK-NEXT:   %7 = firrtl.and %5, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK-NEXT:   firrtl.stop %clock, %7, 1
 // CHECK-NEXT:   %8 = firrtl.and %5, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:   firrtl.assert %clock, %p, %8, ""
+// CHECK-NEXT:   firrtl.assert %clock, %p, %8, "" {eventControl = 0 : i32, isConcurrent = false}
 // CHECK-NEXT:   %9 = firrtl.and %5, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:   firrtl.assume %clock, %p, %9, ""
+// CHECK-NEXT:   firrtl.assume %clock, %p, %9, "" {eventControl = 0 : i32, isConcurrent = false}
 // CHECK-NEXT:   %10 = firrtl.and %5, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:   firrtl.cover %clock, %p, %10, ""
+// CHECK-NEXT:   firrtl.cover %clock, %p, %10, "" {eventControl = 0 : i32, isConcurrent = false}
 // CHECK-NEXT: }
 
 

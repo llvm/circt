@@ -3,7 +3,7 @@
 
 // CHECK-LABEL:   llvm.func @driveSignal(!llvm.ptr<i8>, !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>, !llvm.ptr<i8>, i64, i64, i64, i64)
 
-// CHECK-LABEL: llvm.mlir.global internal @_array_global_0() : !llvm.array<3 x i5> {
+// CHECK-LABEL: llvm.mlir.global internal @_array_global_0() {addr_space = 0 : i32} : !llvm.array<3 x i5> {
 // CHECK: %[[VAL_0:.*]] = llvm.mlir.undef : !llvm.array<3 x i5>
 // CHECK: %[[VAL_1:.*]] = llvm.mlir.constant(0 : i5) : i5
 // CHECK: %[[VAL_2:.*]] = llvm.insertvalue %[[VAL_1]], %[[VAL_0]][0] : !llvm.array<3 x i5>
@@ -13,7 +13,7 @@
 // CHECK: %[[VAL_6:.*]] = llvm.insertvalue %[[VAL_5]], %[[VAL_4]][2] : !llvm.array<3 x i5>
 // CHECK: llvm.return %[[VAL_6]] : !llvm.array<3 x i5>
 // CHECK: }
-// CHECK-LABEL: llvm.mlir.global internal @_array_global() : !llvm.array<4 x i1> {
+// CHECK-LABEL: llvm.mlir.global internal @_array_global() {addr_space = 0 : i32} : !llvm.array<4 x i1> {
 // CHECK: %[[VAL_0:.*]] = llvm.mlir.undef : !llvm.array<4 x i1>
 // CHECK: %[[VAL_1:.*]] = llvm.mlir.constant(false) : i1
 // CHECK: %[[VAL_2:.*]] = llvm.insertvalue %[[VAL_1]], %[[VAL_0]][0] : !llvm.array<4 x i1>
