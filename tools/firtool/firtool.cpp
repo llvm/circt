@@ -620,8 +620,16 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
       firrtl::createRandomizeRegisterInitPass());
 
-  if (checkCombCycles)
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCheckCombCyclesPass());
+  if (checkCombCycles) {
+    // TODO: Currently CheckCombCyles pass doesn't support aggregates so skip
+    // the pass for now.
+    if (preserveAggregate == firrtl::PreserveAggregate::None)
+      pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCheckCombCyclesPass());
+    else
+      emitWarning(module->getLoc())
+          << "CheckCombCyclesPass doens't support aggregate "
+             "values yet so it is skipped\n";
+  }
 
   // If we parsed a FIRRTL file and have optimizations enabled, clean it up.
   if (!disableOptimization)
