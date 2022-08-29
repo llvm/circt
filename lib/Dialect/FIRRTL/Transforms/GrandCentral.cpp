@@ -730,7 +730,7 @@ private:
 /// the given `fieldID`.
 static Value getSub(Value val, size_t fieldID, ImplicitLocOpBuilder &builder) {
   return TypeSwitch<FIRRTLBaseType, Value>(val.getType().cast<FIRRTLBaseType>())
-      .template Case<FVectorType>([&](FVectorType vecType) {
+      .Case<FVectorType>([&](FVectorType vecType) {
         auto index = vecType.getIndexForFieldID(fieldID);
         auto subfieldIndex = fieldID - vecType.getFieldID(index);
         // Insert a SubIndex access to the vector element. The element can be an
@@ -738,7 +738,7 @@ static Value getSub(Value val, size_t fieldID, ImplicitLocOpBuilder &builder) {
         return getSub(builder.create<SubindexOp>(val, index), subfieldIndex,
                       builder);
       })
-      .template Case<BundleType>([&](BundleType bundleType) {
+      .Case<BundleType>([&](BundleType bundleType) {
         auto index = bundleType.getIndexForFieldID(fieldID);
         auto subfieldIndex = fieldID - bundleType.getFieldID(index);
         // Insert a SubField access to the bundle field. The element can be an
@@ -750,17 +750,17 @@ static Value getSub(Value val, size_t fieldID, ImplicitLocOpBuilder &builder) {
 }
 
 /// Add ports to the module and all its instances. Return only the clone for
-/// `instOnPath`.
+/// `instOnPath`. This does not connect the new ports to anything.
 static InstanceOp addPortsToModule(FModuleOp mod, InstanceOp instOnPath,
                                    FIRRTLType portType, Direction dir,
                                    AnnoPathValue &companionTarget,
-                                   ApplyState &state) {
+                                   ApplyState &state, StringRef viewName) {
   // To store the cloned version of `instOnPath`.
   InstanceOp clonedInstOnPath;
   auto portName = [&](FModuleOp nameForMod) {
     return StringAttr::get(
         state.circuit.getContext(),
-        state.getNamespace(nameForMod).newName("gc_refPort"));
+        state.getNamespace(nameForMod).newName("view_" + viewName + "refPort"));
   };
   unsigned portNo = mod.getNumPorts();
   PortInfo portInfo = {portName(mod), portType, dir, {}, mod.getLoc()};
@@ -785,8 +785,9 @@ static InstanceOp addPortsToModule(FModuleOp mod, InstanceOp instOnPath,
 
 /// Get the path from `parentModule` to `targetModule`. If `nonlocalPath` is
 /// empty, get the path from InstanceGraph, else get the path from the
-/// `nonlocalPath`. Emit error if there are multiple paths between
-/// `parentModule` and `targetModule`.
+/// `nonlocalPath`. Emit error and return None, if there are multiple paths
+/// between `parentModule` and `targetModule`. The caller must handle the None
+/// return value and error out.
 Optional<ArrayRef<InstanceOp>> getPath(FModuleLike targetModule,
                                        FModuleOp parentModule,
                                        SmallVector<InstanceOp> &nonlocalPath,
@@ -821,11 +822,12 @@ Optional<ArrayRef<InstanceOp>> getPath(FModuleLike targetModule,
 }
 
 /// Add a RefType cross-module connection from the `refSendTarget` to the
-/// parentModule. The assumption is that `refSendTarget` has a path from
+/// `parentModule`. The assumption is that `refSendTarget` has a path from
 /// `parentModule`.
 static Value borePortsToRefSend(AnnoPathValue &refSendTarget,
                                 FModuleOp parentModule, ApplyState &state,
-                                AnnoPathValue &companionTarget) {
+                                AnnoPathValue &companionTarget,
+                                StringAttr viewName) {
   auto refSendModule = dyn_cast<FModuleOp>(refSendTarget.ref.getModule());
   Value refSendBase;
   if (refSendTarget.ref.getImpl().isOp())
@@ -854,10 +856,11 @@ static Value borePortsToRefSend(AnnoPathValue &refSendTarget,
       return nullptr;
     for (auto refInst : targetInstancePath.value()) {
       LLVM_DEBUG(llvm::dbgs() << "\n RefPath::" << refInst);
-      auto refInstTargetMod = cast<FModuleOp>(refInst.getReferencedModule());
-      auto clonedInst =
-          addPortsToModule(refInstTargetMod, refInst, refSendRefType,
-                           Direction::Out, companionTarget, state);
+      auto refInstTargetMod = cast<FModuleOp>(
+          state.instancePathcache.instanceGraph.getReferencedModule(refInst));
+      auto clonedInst = addPortsToModule(
+          refInstTargetMod, refInst, refSendRefType, Direction::Out,
+          companionTarget, state, viewName.getValue());
       auto instParentMod = clonedInst->getParentOfType<FModuleOp>();
       ImplicitLocOpBuilder refConnectBuilder(clonedInst.getLoc(), clonedInst);
       refConnectBuilder.setInsertionPointAfter(clonedInst);
@@ -876,25 +879,30 @@ static Value borePortsToRefSend(AnnoPathValue &refSendTarget,
 /// Add the RefType ports from the parent to the companion and add the
 /// RefResolve to the companion. Connect the RefResolve to a wire and return the
 /// name of the wire.
-StringAttr boreRefResolveToCompanion(Value refSendVal, FModuleOp parentModule,
-                                     AnnoPathValue &companionTarget,
-                                     ApplyState &state) {
+static StringAttr boreRefResolveToCompanion(Value refSendVal,
+                                            FModuleOp parentModule,
+                                            AnnoPathValue &companionTarget,
+                                            ApplyState &state,
+                                            StringAttr viewName) {
 
   FModuleOp companionModule = cast<FModuleOp>(companionTarget.ref.getOp());
   auto companionPath = companionTarget.instances;
   auto portName = [&](FModuleOp nameForMod) {
-    return StringAttr::get(state.circuit.getContext(),
-                           state.getNamespace(nameForMod).newName("gc_xmr"));
+    return StringAttr::get(
+        state.circuit.getContext(),
+        state.getNamespace(nameForMod)
+            .newName("view_" + viewName.getValue() + "refPort"));
   };
   auto forwardRefPort = refSendVal;
 
   for (auto companionPathInst : companionTarget.instances) {
-    auto instTargetMod =
-        cast<FModuleOp>(companionPathInst.getReferencedModule());
+    auto instTargetMod = cast<FModuleOp>(
+        state.instancePathcache.instanceGraph.getReferencedModule(
+            companionPathInst));
     unsigned portNo = instTargetMod.getNumPorts();
-    auto clonedInst = addPortsToModule(instTargetMod, companionPathInst,
-                                       refSendVal.getType().cast<RefType>(),
-                                       Direction::In, companionTarget, state);
+    auto clonedInst = addPortsToModule(
+        instTargetMod, companionPathInst, refSendVal.getType().cast<RefType>(),
+        Direction::In, companionTarget, state, viewName.getValue());
     auto newInstRes = clonedInst.getResult(portNo);
     auto thisMod = clonedInst->getParentOfType<FModuleOp>();
     ImplicitLocOpBuilder builderTemp = ImplicitLocOpBuilder::atBlockEnd(
@@ -1159,8 +1167,7 @@ static Optional<DictionaryAttr> parseAugmentedType(
     auto targetPath = resolvePath(targetAttr.getValue(), state.circuit,
                                   state.symTbl, state.targetCaches);
     if (!targetPath) {
-      mlir::emitError(loc, "Failed to resolve target `" +
-                               targetAttr.getValue() + "'");
+      mlir::emitError(loc, "Failed to resolve target ") << targetAttr;
       return None;
     }
     // If the target for the view is not in the Companion module, then add the
@@ -1173,8 +1180,8 @@ static Optional<DictionaryAttr> parseAugmentedType(
       // does not contain any DontTouch. Which implies the remote signal can be
       // optimized away, but the XMR should still point to a legal value  or a
       // constant after the optimization.
-      auto refSendVal =
-          borePortsToRefSend(*targetPath, parentModule, state, companionTarget);
+      auto refSendVal = borePortsToRefSend(*targetPath, parentModule, state,
+                                           companionTarget, name);
       if (!refSendVal) {
         mlir::emitError(loc, "Failed to resolve target, cannot find unique "
                              "path from parent module `" +
@@ -1189,7 +1196,7 @@ static Optional<DictionaryAttr> parseAugmentedType(
       // then read the remote value into a wire, and return the name of the
       // wire.
       auto resolveTargetName = boreRefResolveToCompanion(
-          refSendVal, parentModule, companionTarget, state);
+          refSendVal, parentModule, companionTarget, state, name);
       // Now the view target can be added to the local wire created inside the
       // compaion. Add the annotation. This essentially moves the annotation
       // from the remote XMR signal to a local wire, which in-turn reads the
