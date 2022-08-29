@@ -137,7 +137,7 @@ def SCFuncOp : SystemCOp<"func", [
   }];
 
   let arguments = (ins StrAttr:$name);
-  let results = (outs VoidFunctionType:$handle);
+  let results = (outs NullaryVoidFunctionType:$handle);
   let regions = (region SizedRegion<1>:$body);
 
   let builders = [
