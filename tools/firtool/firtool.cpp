@@ -28,6 +28,8 @@
 #include "circt/Support/LoweringOptions.h"
 #include "circt/Support/Version.h"
 #include "circt/Transforms/Passes.h"
+#include "mlir/Bytecode/BytecodeReader.h"
+#include "mlir/Bytecode/BytecodeWriter.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -61,10 +63,10 @@ static cl::OptionCategory mainCategory("firtool Options");
 
 static cl::opt<InputFormatKind> inputFormat(
     "format", cl::desc("Specify input file format:"),
-    cl::values(clEnumValN(InputUnspecified, "autodetect",
-                          "Autodetect input format"),
-               clEnumValN(InputFIRFile, "fir", "Parse as .fir file"),
-               clEnumValN(InputMLIRFile, "mlir", "Parse as .mlir file")),
+    cl::values(
+        clEnumValN(InputUnspecified, "autodetect", "Autodetect input format"),
+        clEnumValN(InputFIRFile, "fir", "Parse as .fir file"),
+        clEnumValN(InputMLIRFile, "mlir", "Parse as .mlir or .mlirbc file")),
     cl::init(InputUnspecified), cl::cat(mainCategory));
 
 static cl::opt<std::string> inputFilename(cl::Positional,
@@ -353,6 +355,14 @@ static cl::opt<std::string>
                 cl::init(""), cl::value_desc("filename"),
                 cl::cat(mainCategory));
 
+static cl::opt<bool>
+    emitBytecode("emit-bytecode",
+                 cl::desc("Emit bytecode when generating MLIR output"),
+                 cl::init(false), cl::cat(mainCategory));
+
+static cl::opt<bool> force("f", cl::desc("Enable binary output on terminals"),
+                           cl::init(false), cl::cat(mainCategory));
+
 static cl::opt<std::string> blackBoxRootPath(
     "blackbox-path",
     cl::desc("Optional path to use as the root of black box annotations"),
@@ -441,6 +451,28 @@ public:
   }
 };
 
+/// Check output stream before writing bytecode to it.
+/// Warn and return true if output is known to be displayed.
+static bool checkBytecodeOutputToConsole(raw_ostream &os) {
+  if (os.is_displayed()) {
+    errs() << "WARNING: You're attempting to print out a bytecode file.\n"
+              "This is inadvisable as it may cause display problems. If\n"
+              "you REALLY want to taste MLIR bytecode first-hand, you\n"
+              "can force output with the `-f' option.\n\n";
+    return true;
+  }
+  return false;
+}
+
+/// Print the operation to the specified stream, emitting bytecode when
+/// requested and politely avoiding dumping to terminal unless forced.
+static void printOp(Operation *op, raw_ostream &os) {
+  if (emitBytecode && (force || !checkBytecodeOutputToConsole(os)))
+    writeBytecodeToFile(op, os, getCirctVersion());
+  else
+    op->print(os);
+}
+
 /// Process a single buffer of the input.
 static LogicalResult
 processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
@@ -505,7 +537,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   if (outputFormat == OutputParseOnly) {
     mlir::ModuleOp theModule = module.release();
     auto outputTimer = ts.nest("Print .mlir output");
-    theModule->print(outputFile.value()->os());
+    printOp(theModule, outputFile.value()->os());
     return success();
   }
 
@@ -757,7 +789,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   if (outputFormat == OutputIRFir || outputFormat == OutputIRHW ||
       outputFormat == OutputIRSV || outputFormat == OutputIRVerilog) {
     auto outputTimer = ts.nest("Print .mlir output");
-    module->print(outputFile.value()->os());
+    printOp(*module, outputFile.value()->os());
   }
 
   // If requested, print the final MLIR into mlirOutFile.
@@ -769,7 +801,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
       return failure();
     }
 
-    module->print(mlirFile->os());
+    printOp(*module, mlirFile->os());
     mlirFile->keep();
   }
 
@@ -839,25 +871,27 @@ static LogicalResult executeFirtool(MLIRContext &context) {
   applyDefaultTimingManagerCLOptions(tm);
   auto ts = tm.getRootScope();
 
-  // Figure out the input format if unspecified.
-  if (inputFormat == InputUnspecified) {
-    if (StringRef(inputFilename).endswith(".fir"))
-      inputFormat = InputFIRFile;
-    else if (StringRef(inputFilename).endswith(".mlir"))
-      inputFormat = InputMLIRFile;
-    else {
-      llvm::errs() << "unknown input format: "
-                      "specify with -format=fir or -format=mlir\n";
-      return failure();
-    }
-  }
-
   // Set up the input file.
   std::string errorMessage;
   auto input = openInputFile(inputFilename, &errorMessage);
   if (!input) {
     llvm::errs() << errorMessage << "\n";
     return failure();
+  }
+
+  // Figure out the input format if unspecified.
+  if (inputFormat == InputUnspecified) {
+    if (StringRef(inputFilename).endswith(".fir"))
+      inputFormat = InputFIRFile;
+    else if (StringRef(inputFilename).endswith(".mlir") ||
+             StringRef(inputFilename).endswith(".mlirbc") ||
+             mlir::isBytecode(*input))
+      inputFormat = InputMLIRFile;
+    else {
+      llvm::errs() << "unknown input format: "
+                      "specify with -format=fir or -format=mlir\n";
+      return failure();
+    }
   }
 
   // Create the output directory or output file depending on our mode.

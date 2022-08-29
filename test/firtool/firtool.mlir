@@ -1,7 +1,12 @@
-// RUN: firtool %s --format=mlir --ir-fir    | circt-opt | FileCheck %s --check-prefix=MLIR
-// RUN: firtool %s --format=mlir -verilog |           FileCheck %s --check-prefix=VERILOG
+// RUN: firtool %s --format=mlir --ir-fir | circt-opt | FileCheck %s --check-prefix=MLIR
+// RUN: firtool %s --format=mlir --ir-fir --emit-bytecode | circt-opt | FileCheck %s --check-prefix=MLIR
+// RUN: circt-opt %s --emit-bytecode | firtool --ir-fir | circt-opt | FileCheck %s --check-prefix=MLIR
+// RUN: firtool %s --format=mlir -verilog | FileCheck %s --check-prefix=VERILOG
 // RUN: firtool %s --format=mlir -verilog -output-final-mlir=%t | FileCheck %s --check-prefix=VERILOG-WITH-MLIR
+// RUN: firtool %s --format=mlir -verilog -output-final-mlir=%t.mlirbc -emit-bytecode | FileCheck %s --check-prefix=VERILOG-WITH-MLIR
 // RUN: FileCheck %s --input-file=%t --check-prefix=VERILOG-WITH-MLIR-OUT
+// RUN: circt-opt %t.mlirbc | FileCheck %s --check-prefix=VERILOG-WITH-MLIR-OUT
+// RUN: not diff %t %t.mlirbc
 
 firrtl.circuit "Top" {
   firrtl.module @Top(in %in : !firrtl.uint<8>,
