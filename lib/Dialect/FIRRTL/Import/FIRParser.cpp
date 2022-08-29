@@ -3169,7 +3169,8 @@ ParseResult FIRCircuitParser::parseCircuit(
                  << " and must not be indented",
              failure();
     if (parseToken(FIRToken::kw_version, "expected version after 'FIRRTL'") ||
-        parseVersionLit(verMajor, verMinor, verPatch, "expected version literal"))
+        parseVersionLit(verMajor, verMinor, verPatch,
+                        "expected version literal"))
       return failure();
     indent = getIndentation();
   }
