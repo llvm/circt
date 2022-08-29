@@ -131,6 +131,7 @@ public:
         continue;
       auto *inputOp = op.getInput().getDefiningOp();
       // canonicalize through asSInt primOps
+      // bits(asSInt(x), ..., ...) -> bits(x, ..., ...)
       if (auto asSInt = dyn_cast<AsSIntPrimOp>(inputOp)) {
         inputOp = asSInt.getInput().getDefiningOp();
         if (!inputOp)
