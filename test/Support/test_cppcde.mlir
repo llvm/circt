@@ -7,7 +7,6 @@
 // CHECK-NEXT:  }
 
 // CHECK-LABEL: hw.module @MyESIAdder(%in0: !esi.channel<i32>, %in1: !esi.channel<i32>, %clk: i1) -> (out0: !esi.channel<i32>) {
-// CHECK-NEXT:    %true = hw.constant true
 // CHECK-NEXT:    %rawOutput, %valid = esi.unwrap.vr %in0, %ready : i32
 // CHECK-NEXT:    %rawOutput_0, %valid_1 = esi.unwrap.vr %in1, %ready : i32
 // CHECK-NEXT:    %0 = comb.add %rawOutput, %rawOutput_0 : i32

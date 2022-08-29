@@ -32,7 +32,7 @@ enum class PortKind { Clock, Reset, Default };
 // A context defining the operations that define a given semantic.
 // This can be used to overload the inferred operations in a CPPCDE
 // generator.
-struct CDEOperatorSelector {
+struct CDECombOperationSelector {
   // Logical operators.
   using And = comb::AndOp;
   using Or = comb::OrOp;
@@ -52,9 +52,9 @@ struct CDEOperatorSelector {
   using ModS = comb::ModSOp;
 };
 
-// A context containing the shared state of a generator.
-struct CDEContext {
-  CDEContext(Location loc, OpBuilder &b, BackedgeBuilder &bb)
+// An object containing the shared state of a generator.
+struct CDEState {
+  CDEState(Location loc, OpBuilder &b, BackedgeBuilder &bb)
       : loc(loc), b(b), bb(bb) {}
   Location loc;
   OpBuilder &b;
@@ -83,9 +83,12 @@ public:
   explicit CDEValueImpl(const CDEValue &other) : ctx(other.ctx) {
     this->valueOrBackedge = other.valueOrBackedge;
   }
-  CDEValueImpl(CDEContext *ctx, Value v) : ctx(ctx), valueOrBackedge(v) {}
-  CDEValueImpl(CDEContext *ctx, CDEValue v) : ctx(ctx), valueOrBackedge(v) {}
-  CDEValueImpl(CDEContext *ctx, Backedge *b) : ctx(ctx), valueOrBackedge(b) {}
+  CDEValueImpl(CDEState *ctx, Value v) : ctx(ctx), valueOrBackedge(v) {}
+  CDEValueImpl(CDEState *ctx, CDEValue v) : ctx(ctx) {
+    valueOrBackedge = v.valueOrBackedge;
+  }
+  CDEValueImpl(CDEState *ctx, const std::shared_ptr<Backedge> &b)
+      : ctx(ctx), valueOrBackedge(b) {}
 
   virtual ~CDEValueImpl() {}
 
@@ -93,7 +96,8 @@ public:
 
   // Returns a registered version of this value. If no clock is provided,
   // it is assumed that the context contains a clock value.
-  CDEValue reg(StringRef name, CDEValue clk = CDEValue()) {
+  CDEValue reg(StringRef name, CDEValue rstValue = CDEValue(),
+               CDEValue clk = CDEValue(), CDEValue rst = CDEValue()) {
     Value clock;
     if (clk.isNull()) {
       assert(ctx->clk && "A clock must be in the CDE context to creae a "
@@ -102,9 +106,18 @@ public:
     } else {
       clock = clk.get();
     }
-    return CDEValue(ctx,
-                    ctx->b.create<seq::CompRegOp>(get().getLoc(), get(), clock,
-                                                  ctx->b.getStringAttr(name)));
+
+    if (rstValue.isNull()) {
+      return CDEValue(
+          ctx, ctx->b.create<seq::CompRegOp>(get().getLoc(), get(), clock,
+                                             ctx->b.getStringAttr(name)));
+    } else {
+      Value reset = rst.isNull() ? ctx->rst : rst.get();
+      return CDEValue(ctx,
+                      ctx->b.create<seq::CompRegOp>(
+                          get().getLoc(), get().getType(), get(), clock, name,
+                          reset, rstValue.get(), mlir::StringAttr()));
+    }
   }
 
   // An explicit function for backedge assignment instead of overloading the
@@ -112,7 +125,7 @@ public:
   // By this, we avoid aliasing with the implicit copy constructor + don't mix
   // C++ and the underlying op generation semantics.
   void assign(CDEValue rhs) {
-    auto *backedge = std::get_if<Backedge *>(&valueOrBackedge);
+    auto *backedge = std::get_if<std::shared_ptr<Backedge>>(&valueOrBackedge);
     assert(backedge && "Cannot assign to a value.");
     assert(!(*backedge)->isSet() && "backedge already assigned.");
     (*backedge)->setValue(rhs.get());
@@ -124,7 +137,7 @@ public:
     if (value)
       return *value;
 
-    return **std::get_if<Backedge *>(&valueOrBackedge);
+    return **std::get_if<std::shared_ptr<Backedge>>(&valueOrBackedge);
   }
 
   // Various binary operators.
@@ -185,11 +198,11 @@ public:
   }
 
 protected:
-  CDEContext *ctx = nullptr;
-  std::variant<Value, Backedge *> valueOrBackedge;
+  CDEState *ctx = nullptr;
+  std::variant<Value, std::shared_ptr<Backedge>> valueOrBackedge;
 };
 
-class ESICDEValue : public CDEValueImpl<CDEOperatorSelector, ESICDEValue> {
+class ESICDEValue : public CDEValueImpl<CDECombOperationSelector, ESICDEValue> {
 public:
   using CDEValueImpl::CDEValueImpl;
 
@@ -209,7 +222,7 @@ public:
 };
 
 struct DefaultCDEValue
-    : public CDEValueImpl<CDEOperatorSelector, DefaultCDEValue> {
+    : public CDEValueImpl<CDECombOperationSelector, DefaultCDEValue> {
   using CDEValueImpl::CDEValueImpl;
 };
 
@@ -219,7 +232,8 @@ template <typename CDEValue>
 class CDEPorts {
 
 public:
-  CDEPorts(CDEContext &ctx, hw::HWModuleOp module) : ctx(ctx) {
+  CDEPorts(CDEState &ctx, hw::HWModuleOp module) : ctx(ctx) {
+    OpBuilder::InsertionGuard g(ctx.b);
     auto modPorts = module.getPorts();
 
     for (auto [barg, info] : llvm::zip(module.getArguments(), modPorts.inputs))
@@ -228,14 +242,14 @@ public:
     auto outputOp = cast<hw::OutputOp>(module.getBodyBlock()->getTerminator());
     assert(outputOp.getNumOperands() == 0);
 
-    OpBuilder::InsertionGuard g(ctx.b);
     ctx.b.setInsertionPoint(outputOp);
     llvm::SmallVector<Value> outputOpArgs;
     for (auto &info : modPorts.outputs) {
-      outputBackedges.push_back(ctx.bb.get(info.type));
-      ports.try_emplace(info.name.str(),
-                        CDEValue(&ctx, &outputBackedges.back()));
-      outputOpArgs.push_back(outputBackedges.back());
+      auto be = std::make_shared<Backedge>(ctx.bb.get(info.type));
+      outputBackedges.push_back(be);
+      assert(ports.count(info.name.str()) == 0 && "output port already exists");
+      ports[info.name.str()] = CDEValue(&ctx, be);
+      outputOpArgs.push_back(*be.get());
     }
 
     ctx.b.create<hw::OutputOp>(outputOp.getLoc(), outputOpArgs);
@@ -250,8 +264,8 @@ public:
 
 private:
   std::map<std::string, CDEValue> ports;
-  CDEContext &ctx;
-  std::vector<Backedge> outputBackedges;
+  CDEState &ctx;
+  std::vector<std::shared_ptr<Backedge>> outputBackedges;
 };
 
 // A CDE Generator is a utility class for supporting syntactically sugar'ed
@@ -283,25 +297,30 @@ protected:
 
   // Various N-ary operations.
   CDEValue And(llvm::ArrayRef<CDEValue> operands) {
-    return execNAryOp<CDEValue::OpTypes::And>(operands);
+    return execNAryOp<typename CDEValue::OpTypes::And>(operands);
   }
 
   CDEValue Or(llvm::ArrayRef<CDEValue> operands) {
-    return execNAryOp<CDEValue::OpTypes::Or>(operands);
+    return execNAryOp<typename CDEValue::OpTypes::Or>(operands);
   }
 
   CDEValue Xor(llvm::ArrayRef<CDEValue> operands) {
-    return execNAryOp<CDEValue::OpTypes::XOr>(operands);
+    return execNAryOp<typename CDEValue::OpTypes::XOr>(operands);
   }
 
-  CDEValue cint(size_t width, int64_t value) {
+  CDEValue constant(size_t width, int64_t value) {
     return CDEValue(&ctx,
                     ctx.b.create<hw::ConstantOp>(ctx.loc, APInt(width, value)));
   }
 
   CDEValue wire(Type t) {
-    backedges.push_back(ctx.bb.get(t));
-    return CDEValue(&ctx, &backedges.back());
+    return CDEValue(&ctx, std::make_shared<Backedge>(ctx.bb.get(t)));
+  }
+
+  // Generic function for building arbitrary types through the OpBuilder.
+  template <typename T, typename... Args>
+  Type type(Args... args) {
+    return T::get(ctx.b.getContext(), args...);
   }
 
   // Implementation-defined generator function - this is where user logic
@@ -310,8 +329,7 @@ protected:
 
   Location loc;
   BackedgeBuilder bb;
-  CDEContext ctx;
-  llvm::SmallVector<Backedge> backedges;
+  CDEState ctx;
 };
 
 /// A CDE Generator which generates hw::HWModuleOp modules.
@@ -327,7 +345,6 @@ public:
 
   // Run module generation.
   FailureOr<hw::HWModuleOp> operator()() {
-    OpBuilder::InsertionGuard g(this->ctx.b);
 
     // Reset I/O.
     portInfo = hw::ModulePortInfo({});
@@ -338,8 +355,9 @@ public:
         this->loc, this->ctx.b.getStringAttr(getName()), portInfo);
 
     // Generate module port accessors.
-    auto ports = CDEPorts<CDEValue>(this->ctx, module);
+    OpBuilder::InsertionGuard g(this->ctx.b);
     this->ctx.b.setInsertionPointToStart(module.getBodyBlock());
+    auto ports = CDEPorts<CDEValue>(this->ctx, module);
 
     if (clockIdx.has_value())
       this->ctx.clk = module.getArgument(clockIdx.value());
@@ -347,6 +365,7 @@ public:
       this->ctx.rst = module.getArgument(resetIdx.value());
 
     // Go generate!
+    this->ctx.b.setInsertionPoint(module.getBodyBlock()->getTerminator());
     this->generate(ports);
     return module;
   }

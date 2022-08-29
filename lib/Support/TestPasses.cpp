@@ -46,10 +46,10 @@ public:
   using HWModuleGenerator::HWModuleGenerator;
   std::string getName() override { return "MyAdder"; }
   void createIO() override {
-    input("in0", ctx.b.getIntegerType(32));
-    input("in1", ctx.b.getIntegerType(32));
+    input("in0", type<IntegerType>(32));
+    input("in1", type<IntegerType>(32));
     clock();
-    output("out0", ctx.b.getIntegerType(32));
+    output("out0", type<IntegerType>(32));
   }
 
   void generate(CDEPorts &ports) override {
@@ -64,8 +64,7 @@ public:
   using HWModuleGenerator::HWModuleGenerator;
   std::string getName() override { return "MyESIAdder"; }
   void createIO() override {
-    Type channelType =
-        esi::ChannelType::get(ctx.b.getContext(), ctx.b.getIntegerType(32));
+    Type channelType = type<esi::ChannelType>(type<IntegerType>(32));
     input("in0", channelType);
     input("in1", channelType);
     clock();
@@ -73,7 +72,6 @@ public:
   }
 
   void generate(CDEPorts &ports) override {
-    auto c1_i1 = cint(1, 1);
     auto valid = wire(ctx.b.getI1Type());
     auto [inner1, valid1] = ports["in0"].unwrap(valid);
     auto [inner2, valid2] = ports["in1"].unwrap(valid);
