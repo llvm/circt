@@ -111,7 +111,16 @@ systemc.module @funcNoBlockArguments () {
   // expected-error @+1 {{op must not have any arguments}} 
   %0 = "systemc.func"() ({
     ^bb0(%arg0: i32):
-    }) {name="funcname"}: () -> (!systemc.func_handle)
+    }) {name="funcname"}: () -> (() -> ())
+}
+
+// -----
+
+systemc.module @funcNoBlockArguments () {
+  // expected-error @+1 {{result #0 must be FunctionType with no inputs and results, but got '(i32) -> ()'}}
+  %0 = "systemc.func"() ({
+    ^bb0():
+    }) {name="funcname"}: () -> ((i32) -> ())
 }
 
 // -----
@@ -123,7 +132,7 @@ systemc.module @signalFuncNameConflict () {
   // expected-error @+1 {{redefines name 'name'}}
   %1 = "systemc.func"() ({
     ^bb0:
-    }) {name="name"}: () -> (!systemc.func_handle)
+    }) {name="name"}: () -> (() -> ())
 }
 
 // -----

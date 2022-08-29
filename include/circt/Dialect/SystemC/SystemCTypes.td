@@ -18,12 +18,17 @@ include "circt/Dialect/SystemC/SystemCDialect.td"
 class SystemCType<Pred condition, string description, string cppClassName>
   : DialectType<SystemCDialect, condition, description, cppClassName>;
 
-// A handle to refer to circt::systemc::FuncHandleType in ODS.
-def FuncHandleType : SystemCType<
-    CPred<"::circt::hw::type_isa<circt::systemc::FuncHandleType>($_self)">,
-    "FuncHandleType",
-    "::circt::hw::TypeAliasOr<circt::systemc::FuncHandleType>">,
-  BuildableType<"::circt::systemc::FuncHandleType::get($_builder.getContext())">;
+// A handle to refer to a mlir::FunctionType with zero inputs and results,
+// i.e., a void function.
+def VoidFunctionType : SystemCType<
+    CPred<
+      "::circt::hw::type_isa<mlir::FunctionType>($_self) && " #
+      "::circt::hw::type_cast<mlir::FunctionType>($_self)" #
+        ".getNumResults() == 0 && " #
+      "::circt::hw::type_cast<mlir::FunctionType>($_self).getNumInputs() == 0">,
+    "FunctionType with no inputs and results",
+    "::circt::hw::TypeAliasOr<mlir::FunctionType>">,
+  BuildableType<"mlir::FunctionType::get($_builder.getContext(), {}, {})">;
 
 // A handle to refer to circt::systemc::InputType in ODS.
 def InputType : SystemCType<
