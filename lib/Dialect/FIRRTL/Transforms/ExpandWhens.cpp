@@ -130,6 +130,12 @@ public:
       if (!op.getInput().getDefiningOp())
         continue;
       auto *inputOp = op.getInput().getDefiningOp();
+      // canonicalize through asSInt primOps
+      if (auto asSInt = dyn_cast<AsSIntPrimOp>(inputOp)) {
+        inputOp = asSInt.getInput().getDefiningOp();
+        if (!inputOp)
+          continue;
+      }
       // bits(bits(x, ...), ...) -> bits(x, ...).
       if (auto innerBits = dyn_cast<BitsPrimOp>(inputOp)) {
         auto newLo = op.getLo() + innerBits.getLo();
@@ -140,6 +146,7 @@ public:
         op->replaceAllUsesWith(newOp);
         if (op == bits)
           replacedVal = newOp;
+        continue;
       }
       // bits(cat(a, b), ...) -> bits(a, ...), or bits(b, ...), or cat(bits(a,
       // ...), bits(b, ...)).
@@ -176,6 +183,7 @@ public:
         op.replaceAllUsesWith(newVal);
         if (op == bits)
           replacedVal = newVal;
+        continue;
       }
       // bits(mux(sel, a, b), ...) -> mux(sel, bits(a, ...), bits(b, ...)).
       if (auto mux = dyn_cast<MuxPrimOp>(op.getInput().getDefiningOp())) {
@@ -190,6 +198,7 @@ public:
         op->replaceAllUsesWith(newOp);
         if (op == bits)
           replacedVal = newOp;
+        continue;
       }
     }
     return replacedVal;
