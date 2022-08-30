@@ -175,7 +175,7 @@ def SCFuncOp : SystemCOp<"func", [
 }
 
 //===----------------------------------------------------------------------===//
-// 
+// Operations that model C++-level features.
 //===----------------------------------------------------------------------===//
 
 def DestructorOp : SystemCOp<"cpp.destructor", [
