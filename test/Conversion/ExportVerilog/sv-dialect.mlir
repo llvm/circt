@@ -1532,6 +1532,26 @@ hw.module @CollectNamesOrder(%in: i1) -> (out: i1) {
   hw.output %1 : i1
 }
 
+// CHECK-LABEL: module InlineReadInout
+hw.module private @InlineReadInout() -> () {
+  %c0_i32 = hw.constant 0 : i32
+  %false = hw.constant false
+  %r1 = sv.reg  : !hw.inout<i2>
+  sv.initial {
+    %_RANDOM = sv.logic  : !hw.inout<uarray<1xi32>>
+    %2 = sv.array_index_inout %_RANDOM[%c0_i32] : !hw.inout<uarray<1xi32>>, i32
+    %RAMDOM = sv.verbatim.expr.se "`RAMDOM" : () -> i32 {symbols = []}
+    sv.bpassign %2, %RAMDOM : i32
+    %3 = sv.array_index_inout %_RANDOM[%c0_i32] : !hw.inout<uarray<1xi32>>, i32
+    %4 = sv.read_inout %3 : !hw.inout<i32>
+    // CHECK: automatic logic [31:0] _RANDOM[0:0];
+    // CHECK: _RANDOM[32'h0] = `RAMDOM;
+    // CHECK-NEXT: r1 = _RANDOM[32'h0][1:0];
+    %5 = comb.extract %4 from 0 : (i32) -> i2
+    sv.bpassign %r1, %5 : i2
+  }
+}
+
 hw.module @bindInMod() {
   sv.bind #hw.innerNameRef<@remoteInstDut::@bindInst>
   sv.bind #hw.innerNameRef<@remoteInstDut::@bindInst3>

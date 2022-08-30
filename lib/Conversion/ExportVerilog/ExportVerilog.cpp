@@ -541,13 +541,10 @@ static bool isOkToBitSelectFrom(Value v) {
   if (v.isa<BlockArgument>())
     return true;
 
-  // Uses of a wire or register can be done inline.
-  if (auto read = v.getDefiningOp<ReadInOutOp>()) {
-    if (read.getInput().getDefiningOp<WireOp>() ||
-        read.getInput().getDefiningOp<RegOp>() ||
-        read.getInput().getDefiningOp<LogicOp>())
-      return true;
-  }
+  // Read_inout is valid to inline for bit-select. See `select` syntax on
+  // SV spec A.8.4 (P1174).
+  if (auto read = v.getDefiningOp<ReadInOutOp>())
+    return true;
 
   // Aggregate access can be inlined.
   if (v.getDefiningOp<StructExtractOp>() || v.getDefiningOp<ArrayGetOp>())
