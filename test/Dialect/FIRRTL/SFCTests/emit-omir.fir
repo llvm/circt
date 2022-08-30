@@ -1,4 +1,4 @@
-; RUN: firtool --repl-seq-mem --repl-seq-mem-file="dummy" --mem-to-reg-of-vec=0 --verify-diagnostics --verilog --emit-omir %s | FileCheck %s
+; RUN: firtool --repl-seq-mem --repl-seq-mem-file="dummy" --emit-omir %s | FileCheck %s
 
 circuit Foo : %[[
   {

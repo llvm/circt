@@ -1,4 +1,4 @@
-; RUN: firtool -dedup -split-input-file -ir-fir -lower-types=0 -imconstprop=0 -imdeadcodeelim=0 %s | FileCheck %s
+; RUN: firtool -dedup -split-input-file -ir-fir -disable-lower-types -disable-imcp -disable-imdce %s | FileCheck %s
 ; Tests extracted from:
 ;   - test/scala/firrtlTests/transforms/DedupTests.scala
 ; The following tests are not included:

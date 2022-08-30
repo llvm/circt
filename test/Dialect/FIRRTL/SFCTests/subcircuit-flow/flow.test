@@ -6,8 +6,8 @@
 ; RUN: rm -rf %t && mkdir -p %t/default %t/inline
 
 ; 1) Run on main circuit, with signal mapping annotations
-; RUN: firtool %S/main.fir --annotation-file %S/subCircuit.json --firrtl-grand-central --split-verilog -o %t/default
-; RUN: firtool %S/main.fir --annotation-file %S/subCircuit.json --firrtl-grand-central --split-verilog -o %t/inline  --annotation-file %S/inline.json
+; RUN: firtool %S/main.fir --annotation-file %S/subCircuit.json --split-verilog -o %t/default
+; RUN: firtool %S/main.fir --annotation-file %S/subCircuit.json --split-verilog -o %t/inline  --annotation-file %S/inline.json
 
 ; Check the generated file
 ; RUN: FileCheck %s --input-file=%t/default/sigdrive.json --check-prefix=JSONDEFAULT
@@ -43,8 +43,8 @@
 
 
 ; 2) Run on sub circuit, with updated annotation file (sigdrive.json) from (1):
-; RUN: firtool %S/subcircuit.fir --annotation-file %t/default/sigdrive.json --firrtl-grand-central | FileCheck %s --check-prefix=MAPPINGDEFAULT
-; RUN: firtool %S/subcircuit.fir --annotation-file %t/inline/sigdrive.json  --firrtl-grand-central | FileCheck %s --check-prefix=MAPPINGINLINE
+; RUN: firtool %S/subcircuit.fir --annotation-file %t/default/sigdrive.json | FileCheck %s --check-prefix=MAPPINGDEFAULT
+; RUN: firtool %S/subcircuit.fir --annotation-file %t/inline/sigdrive.json  | FileCheck %s --check-prefix=MAPPINGINLINE
 
 ; MAPPINGDEFAULT-LABEL: module Sub_signal_mappings(
 ; MAPPINGDEFAULT-NEXT:   input           clock_sink,
