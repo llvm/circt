@@ -150,3 +150,30 @@ module {
     fsm.state @B
   }
 }
+
+// -----
+
+// Test use of constants defined outside the machine. This is just a pass/fail
+// test - the verifier will complain if the constant is not defined within
+// the resulting hw.module.
+
+module {
+  %c0 = hw.constant 0 : i16
+  fsm.machine @M1() -> (i16) attributes {initialState = "A"} {
+    fsm.state @A output {
+      fsm.output %c0 : i16
+    }
+    fsm.state @B output {
+      fsm.output %c0 : i16
+    }
+  }
+
+  fsm.machine @M2() -> (i16) attributes {initialState = "A"} {
+    fsm.state @A output  {
+      fsm.output %c0 : i16
+    }
+    fsm.state @B output {
+      fsm.output %c0 : i16
+    }
+  }
+}
