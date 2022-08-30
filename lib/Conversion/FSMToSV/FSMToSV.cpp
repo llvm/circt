@@ -68,17 +68,15 @@ static void cloneConstantsIntoRegion(Region &region, OpBuilder &builder) {
   builder.setInsertionPointToStart(&region.front());
 
   // Clone ConstantLike operations into the region.
-  for (Value capture : captures) {
+  for (auto &capture : captures) {
     Operation *op = capture.getDefiningOp();
     if (!op || !op->hasTrait<OpTrait::ConstantLike>())
       continue;
 
     Operation *cloned = builder.clone(*op);
-    for (auto tuple : llvm::zip(op->getResults(), cloned->getResults())) {
-      Value orig = std::get<0>(tuple);
-      Value replacement = std::get<1>(tuple);
+    for (auto [orig, replacement] :
+         llvm::zip(op->getResults(), cloned->getResults()))
       replaceAllUsesInRegionWith(orig, replacement, region);
-    }
   }
 }
 
