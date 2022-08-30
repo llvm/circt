@@ -75,7 +75,7 @@ with Context() as ctx, Location.unknown():
   print(typeAlias.name)
 
   pdecl = hw.ParamDeclAttr.get("param1", i32, IntegerAttr.get(i32, 13))
-  # CHECK: #hw.param.decl<"param1": i32 = 13 : i32>
+  # CHECK: #hw.param.decl<"param1": i32 = 13>
   print(pdecl)
 
   pdecl = hw.ParamDeclAttr.get_nodefault("param2", i32)
