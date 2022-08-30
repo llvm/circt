@@ -411,9 +411,59 @@ struct VerbatimBuilder {
   struct Base {
     SmallString<128> string;
     SmallVector<Attribute> symbols;
+    SmallVector<Value, 2> subst;
     VerbatimBuilder builder() { return VerbatimBuilder(*this); }
     operator VerbatimBuilder() { return builder(); }
   };
+
+  /// Increment all the indices inside `{{`, `}}` by one. This is to indicate
+  /// that a value is added to the `substitutions` of the verbatim op, other
+  /// than the symbols.
+  void incrementIds() {
+    StringRef begin = "{{";
+    StringRef end = "}}";
+    // The replacement string.
+    size_t from = 0;
+    replStr.clear();
+    while (from < base.string.size()) {
+      // Search for the first `{{` and `}}`.
+      auto beginAt = base.string.find(begin, from);
+      auto endAt = base.string.find(end, beginAt);
+      // Copy the string as is, until the `{{`.
+      replStr.append(base.string.substr(from, beginAt - from));
+      // If not found, then done.
+      if (beginAt == StringRef::npos || endAt == StringRef::npos)
+        break;
+      // Advance `from` to the character after the `}}`.
+      from = endAt + 2;
+      auto idChar = base.string.substr(beginAt + 2, endAt - beginAt - 2);
+      unsigned idNum;
+      bool failed = idChar.getAsInteger(10, idNum);
+      assert(!failed && "failed to parse integer from verbatim string");
+      // Now increment the id and append.
+      replStr.append("{{");
+      Twine(idNum + 1).toVector(replStr);
+      replStr.append("}}");
+    }
+  }
+
+  /// Add Value for substitution. Since the value precedes the symbols in the
+  /// index, increment all the ids in the string, and then append the value for
+  /// index 0. The original base.string is not updated, but a copy replStr is
+  /// maintained for value sustitution. The original base.string is not updated,
+  /// since the snapshot should still return the original un-modified string.
+  VerbatimBuilder &addValue(Value s) {
+    // Add the value to be used for substitution.
+    base.subst.push_back(s);
+    // Create a copy of the base.string into replStr, and increment all the
+    // index integers by 1.
+    incrementIds();
+    // Append the index for the value into the replStr.
+    Twine("{{" + Twine(0) + "}}").toVector(replStr);
+    return *this;
+  }
+
+  bool hasOnlySymbolSubst() { return base.subst.empty(); }
 
   /// Constructing a builder will snapshot the `Base` which holds the actual
   /// string and symbols.
@@ -426,6 +476,7 @@ struct VerbatimBuilder {
   ~VerbatimBuilder() {
     base.string.resize(stringBaseSize);
     base.symbols.resize(symbolsBaseSize);
+    base.subst.clear();
   }
 
   // Disallow copying.
@@ -438,9 +489,16 @@ struct VerbatimBuilder {
   VerbatimBuilder snapshot() { return VerbatimBuilder(base); }
 
   /// Get the current string.
-  StringRef getString() const { return base.string; }
+  StringRef getString() const {
+    if (base.subst.empty())
+      return base.string;
+    return replStr;
+  }
   /// Get the current symbols;
   ArrayRef<Attribute> getSymbols() const { return base.symbols; }
+
+  /// Get the current values;
+  ArrayRef<Value> getValues() const { return base.subst; }
 
   /// Append to the string.
   VerbatimBuilder &append(char c) {
@@ -470,6 +528,7 @@ private:
   Base &base;
   size_t stringBaseSize;
   size_t symbolsBaseSize;
+  SmallString<128> replStr;
 };
 
 /// A wrapper around a string that is used to encode a type which cannot be
@@ -914,14 +973,14 @@ static StringAttr boreRefResolveToCompanion(Value refSendVal,
       companionModule.getLoc(), companionModule.getBodyBlock());
   auto refResolve =
       compBuilder.create<RefResolveOp>(companionModule.getArguments().back());
-  auto wire = compBuilder.create<WireOp>(refResolve.getResult().getType(),
-                                         portName(companionModule));
-  state.targetCaches.insertOp(wire);
-  wire.dropName();
-  compBuilder.create<ConnectOp>(wire, refResolve);
+  auto node = compBuilder.create<NodeOp>(refResolve.getResult().getType(),
+                                         refResolve, portName(companionModule));
+  node.dropName();
+  state.targetCaches.insertOp(node);
+  AnnotationSet::addDontTouch(node);
   LLVM_DEBUG(llvm::dbgs() << "\n refresol:" << refResolve);
 
-  return wire.getNameAttr();
+  return node.getNameAttr();
 }
 
 /// Recursively walk a sifive.enterprise.grandcentral.AugmentedType to extract
@@ -1435,7 +1494,17 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
         FModuleLike enclosing = getEnclosingModule(leafValue, sym);
         // If the leaf is inside the companionModule, then no path needs to be
         // generated, only the leaf.
-        if (companionModule != enclosing) {
+
+        if (companionModule == enclosing) {
+          if (!leafValue.isa<BlockArgument>() &&
+              isa<NodeOp>(leafValue.getDefiningOp())) {
+            auto nodeOp = leafValue.getDefiningOp();
+            path.addValue(nodeOp->getOperand(0));
+            AnnotationSet::removeDontTouch(nodeOp);
+          } else
+            path.addValue(leafValue);
+
+        } else {
           // There are two posisibilites for what this is tapping:
           //   1. This is a constant that will be synced into the mappings
           //   file.
@@ -1503,13 +1572,14 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
           path += '.';
         }
         // Add the leaf value to the path.
-        if (auto blockArg = leafValue.dyn_cast<BlockArgument>()) {
-          auto module = cast<FModuleOp>(blockArg.getOwner()->getParentOp());
-          path += getInnerRefTo(module, blockArg.getArgNumber());
-        } else {
-          path += getInnerRefTo(leafValue.getDefiningOp());
+        if (path.hasOnlySymbolSubst()) {
+          if (auto blockArg = leafValue.dyn_cast<BlockArgument>()) {
+            auto module = cast<FModuleOp>(blockArg.getOwner()->getParentOp());
+            path += getInnerRefTo(module, blockArg.getArgNumber());
+          } else {
+            path += getInnerRefTo(leafValue.getDefiningOp());
+          }
         }
-
         if (fieldID > tpe.getMaxFieldID()) {
           leafValue.getDefiningOp()->emitError()
               << "subannotation with fieldID=" << fieldID
@@ -1547,7 +1617,7 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
         builder.create<sv::VerbatimOp>(
             uloc,
             StringAttr::get(&getContext(), "assign " + path.getString() + ";"),
-            ValueRange{}, ArrayAttr::get(&getContext(), path.getSymbols()));
+            path.getValues(), ArrayAttr::get(&getContext(), path.getSymbols()));
         ++numXMRs;
         return true;
       })
