@@ -34,7 +34,7 @@ circuit Top :
     w.multivec[1][0] <= in.multivec[1][0]
     w.multivec[1][1] <= in.multivec[1][1]
     w.multivec[1][2] <= in.multivec[1][2]
-    w.uint <= in.uint
+    w.uint <= UInt<1>("h1")
     out.otherOther.other.sint <= w.otherOther.other.sint
     out.otherOther.other.uint <= w.otherOther.other.uint
     out.vecOfBundle[0].sint <= w.vecOfBundle[0].sint
@@ -199,7 +199,7 @@ circuit Top :
     ; NOEXTRACT-NEXT:   assign MyView.vecOfBundle[1].uint = DUT.w_vecOfBundle_1_uint;
     ; NOEXTRACT-NEXT:   assign MyView.otherOther.other.sint = DUT.w_otherOther_other_sint;
     ; NOEXTRACT-NEXT:   assign MyView.otherOther.other.uint = DUT.w_otherOther_other_uint;
-    ; NOEXTRACT-NEXT:   assign MyView.sub_uint = DUT.submodule.w_uint;
+    ; NOEXTRACT-NEXT:   assign MyView.sub_uint = 1'h1;
     ; NOEXTRACT-NEXT:   assign MyView.sub_vec[0] = DUT.submodule.w_vec_0;
     ; NOEXTRACT-NEXT:   assign MyView.sub_vec[1] = DUT.submodule.w_vec_1;
     ; NOEXTRACT-NEXT:   assign MyView.sub_vecOfBundle[0].sint = DUT.submodule.w_vecOfBundle_0_sint;
@@ -249,7 +249,7 @@ circuit Top :
     ; EXTRACT-NEXT:     assign MyView.vecOfBundle[1].uint = DUT.in_vecOfBundle_1_uint;
     ; EXTRACT-NEXT:     assign MyView.otherOther.other.sint = DUT.in_otherOther_other_sint;
     ; EXTRACT-NEXT:     assign MyView.otherOther.other.uint = DUT.in_otherOther_other_uint;
-    ; EXTRACT-NEXT:     assign MyView.sub_uint = DUT.submodule.in_uint;
+    ; EXTRACT-NEXT:     assign MyView.sub_uint = 1'h1;
     ; EXTRACT-NEXT:     assign MyView.sub_vec[0] = DUT.submodule.in_vec_0;
     ; EXTRACT-NEXT:     assign MyView.sub_vec[1] = DUT.submodule.in_vec_1;
     ; EXTRACT-NEXT:     assign MyView.sub_vecOfBundle[0].sint = DUT.submodule.in_vecOfBundle_0_sint;
