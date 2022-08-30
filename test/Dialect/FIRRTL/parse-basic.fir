@@ -332,6 +332,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: %_t_2622 = firrtl.reg interesting_name %clock : !firrtl.uint<4>
     reg _t_2622 : UInt<4>, clock with :
       reset => (UInt<1>("h0"), _t_2622)
+    ; CHECK:  firrtl.strictconnect %_t_2622, %invalid_ui4 : !firrtl.uint<4>
 
     ; CHECK: %xyz_in = firrtl.instance xyz interesting_name @circuit(in in: !firrtl.uint<80>)
     inst xyz of circuit

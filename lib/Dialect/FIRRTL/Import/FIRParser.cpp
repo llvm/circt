@@ -2754,9 +2754,12 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
     result = builder.create<RegResetOp>(type, clock, resetSignal, resetValue,
                                         id, NameKindEnum::InterestingName,
                                         annotations, sym);
-  else
+  else {
     result = builder.create<RegOp>(
         type, clock, id, NameKindEnum::InterestingName, annotations, sym);
+    // Emit an implicit invalid connection to align with SFC's behavior.
+    emitInvalidate(result);
+  }
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
