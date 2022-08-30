@@ -94,7 +94,7 @@ static cl::opt<bool> disableOptimization("disable-opt",
                                          cl::cat(mainCategory));
 
 static cl::opt<bool> disableInliner("disable-inliner",
-                                    cl::desc("Disable the module inliner"),
+                                    cl::desc("Disable the Inliner pass"),
                                     cl::init(false), cl::Hidden,
                                     cl::cat(mainCategory));
 
@@ -180,10 +180,10 @@ static cl::opt<bool>
                                  "assigning X on read disable"),
                         cl::init(false), cl::cat(mainCategory));
 
-static cl::opt<bool>
-    disableIMCP("disable-imcp",
-                cl::desc("Disable the intermodule constant propagation pass"),
-                cl::init(false), cl::Hidden, cl::cat(mainCategory));
+static cl::opt<bool> disableIMCP("disable-imcp",
+                                 cl::desc("Disable the IMCP pass"),
+                                 cl::init(false), cl::Hidden,
+                                 cl::cat(mainCategory));
 
 static cl::opt<bool>
     disableLowerMemory("disable-lower-memory",
@@ -285,10 +285,10 @@ static cl::opt<bool>
                            cl::desc("Disable the CheckCombCycles pass"),
                            cl::init(false), cl::Hidden, cl::cat(mainCategory));
 
-static cl::opt<bool> disableIMDCE(
-    "disable-imdce",
-    cl::desc("Disable the inter-module dead code elimination pass"),
-    cl::init(false), cl::Hidden, cl::cat(mainCategory));
+static cl::opt<bool> disableIMDCE("disable-imdce",
+                                  cl::desc("Disable the IMDCE pass"),
+                                  cl::init(false), cl::Hidden,
+                                  cl::cat(mainCategory));
 
 static cl::opt<bool>
     disableMergeConnections("disable-merge-connections",
