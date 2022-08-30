@@ -14,6 +14,7 @@
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Support/BackedgeBuilder.h"
+#include "mlir/Transforms/RegionUtils.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 #include <memory>
@@ -55,6 +56,28 @@ static ClkRstIdxs getMachinePortInfo(SmallVectorImpl<hw::PortInfo> &ports,
   specialPorts.resetIdx = reset.argNum;
 
   return specialPorts;
+}
+
+// Clones constants implicitly captured by the region, into the region.
+static void cloneConstantsIntoRegion(Region &region, OpBuilder &builder) {
+  // Values implicitly captured by the region.
+  llvm::SetVector<Value> captures;
+  getUsedValuesDefinedAbove(region, region, captures);
+
+  OpBuilder::InsertionGuard guard(builder);
+  builder.setInsertionPointToStart(&region.front());
+
+  // Clone ConstantLike operations into the region.
+  for (auto &capture : captures) {
+    Operation *op = capture.getDefiningOp();
+    if (!op || !op->hasTrait<OpTrait::ConstantLike>())
+      continue;
+
+    Operation *cloned = builder.clone(*op);
+    for (auto [orig, replacement] :
+         llvm::zip(op->getResults(), cloned->getResults()))
+      replaceAllUsesInRegionWith(orig, replacement, region);
+  }
 }
 
 namespace {
@@ -375,6 +398,10 @@ LogicalResult MachineOpConverter::dispatch() {
   auto loc = machineOp.getLoc();
   if (machineOp.getNumStates() < 2)
     return machineOp.emitOpError() << "expected at least 2 states.";
+
+  // Clone all referenced constants into the machine body - constants may have
+  // been moved to the machine parent due to the lack of IsolationFromAbove.
+  cloneConstantsIntoRegion(machineOp.getBody(), b);
 
   // 1) Get the port info of the machine and create a new HW module for it.
   SmallVector<hw::PortInfo, 16> ports;
