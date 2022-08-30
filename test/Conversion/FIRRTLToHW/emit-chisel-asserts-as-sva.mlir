@@ -10,7 +10,7 @@ firrtl.circuit "ifElseFatalToSVA" {
     firrtl.assert %clock, %cond, %enable, "assert0" {isConcurrent = true, format = "ifElseFatal"}
     // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
     // CHECK-NEXT: [[TMP1:%.+]] = comb.xor %enable, [[TRUE]]
-    // CHECK-NEXT: [[TMP2:%.+]] = comb.or [[TMP1]], %cond
+    // CHECK-NEXT: [[TMP2:%.+]] = comb.or bin [[TMP1]], %cond 
     // CHECK-NEXT: sv.assert.concurrent posedge %clock, [[TMP2]] message "assert0"
     // CHECK-NEXT: sv.ifdef "USE_PROPERTY_AS_CONSTRAINT" {
     // CHECK-NEXT:   sv.assume.concurrent posedge %clock, [[TMP2]]

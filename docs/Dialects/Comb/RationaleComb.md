@@ -70,6 +70,18 @@ TODO: describe why add/xor/or are variadic
 
 TODO: describe why we have divu/divs but not addu/adds, and not sint vs uint.
 
+### Selectable truth-table
+
+To keep the interpretation of comb operators local to the dialect, each
+operation where it matters has an optional flag to indicate what semantics it needs
+to preserve.  All operations are defined in the expected way for 2-state (binary) logic.  However, comb is used for operations which have extended truth table for non-2-state logic for various target languages.  To accommodate this, operations can opt into known extended truth tables so that any transformation will preserve semantics with respect to the extended truth table.
+
+Initially, operations support 2-state or the union of 4-state (verilog) and 9-state (VHDL) behavior.  2-state is specified with the "bin" flag on operations.  In the future, explicit flags for "4state" and "9state" might be added.
+
+This is done so as to not make the operations in comb type-dependent.
+This is a tradeoff in that comb operations are either 2-state or the union of 
+common backend language weirdness.  This could be refined in the future.
+
 ### No implicit extensions of operands
 
 Verilog and many other HDL's allow operators like `+` to work with

@@ -48,12 +48,12 @@ static Value adjustIntegerWidth(OpBuilder &builder, Value value,
                                              intWidth - targetWidth);
   Value zero = builder.create<hw::ConstantOp>(
       loc, builder.getIntegerType(intWidth - targetWidth), 0);
-  Value isZero =
-      builder.create<comb::ICmpOp>(loc, comb::ICmpPredicate::eq, hi, zero);
+  Value isZero = builder.create<comb::ICmpOp>(loc, comb::ICmpPredicate::eq, hi,
+                                              zero, false);
   Value lo = builder.create<comb::ExtractOp>(loc, value, 0, targetWidth);
   Value max = builder.create<hw::ConstantOp>(
       loc, builder.getIntegerType(targetWidth), -1);
-  return builder.create<comb::MuxOp>(loc, isZero, lo, max);
+  return builder.create<comb::MuxOp>(loc, isZero, lo, max, false);
 }
 
 //===----------------------------------------------------------------------===//
@@ -203,7 +203,7 @@ struct ShlOpConversion : public OpConversionPattern<ShlOp> {
         adjustIntegerWidth(rewriter, adaptor.getAmount(),
                            resultType.getIntOrFloatBitWidth(), op->getLoc());
     rewriter.replaceOpWithNewOp<comb::ShlOp>(op, resultType, adaptor.getValue(),
-                                             amount);
+                                             amount, false);
     return success();
   }
 };
@@ -227,13 +227,13 @@ struct ShrOpConversion : public OpConversionPattern<ShrOp> {
                            resultType.getIntOrFloatBitWidth(), op->getLoc());
 
     if (adaptor.getArithmetic() && hasSignedResultType) {
-      rewriter.replaceOpWithNewOp<comb::ShrSOp>(op, resultType,
-                                                adaptor.getValue(), amount);
+      rewriter.replaceOpWithNewOp<comb::ShrSOp>(
+          op, resultType, adaptor.getValue(), amount, false);
       return success();
     }
 
-    rewriter.replaceOpWithNewOp<comb::ShrUOp>(op, resultType,
-                                              adaptor.getValue(), amount);
+    rewriter.replaceOpWithNewOp<comb::ShrUOp>(
+        op, resultType, adaptor.getValue(), amount, false);
     return success();
   }
 };
