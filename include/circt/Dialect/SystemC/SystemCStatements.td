@@ -64,3 +64,18 @@ def ThreadOp : SystemCOp<"thread", []> {
   let arguments = (ins NullaryVoidFunctionType:$funcHandle);
   let assemblyFormat = "$funcHandle attr-dict";
 }
+
+//===----------------------------------------------------------------------===//
+// Operations that model C++-level features.
+//===----------------------------------------------------------------------===//
+
+def DeleteOp : SystemCOp<"cpp.delete", []> {
+  let summary = "A C++ delete expression.";
+  let description = [{
+    Destroys objects previously allocated by the new expression and releases
+    the allocated memory.
+  }];
+
+  let arguments = (ins EmitC_PointerType:$pointer);
+  let assemblyFormat = "$pointer attr-dict `:` qualified(type($pointer))";
+}

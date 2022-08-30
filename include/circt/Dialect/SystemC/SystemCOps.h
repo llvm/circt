@@ -19,6 +19,7 @@
 #include "circt/Dialect/SystemC/SystemCOpInterfaces.h"
 #include "circt/Dialect/SystemC/SystemCTypes.h"
 #include "circt/Support/LLVM.h"
+#include "mlir/Dialect/EmitC/IR/EmitC.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/FunctionInterfaces.h"
 #include "mlir/Interfaces/CallInterfaces.h"

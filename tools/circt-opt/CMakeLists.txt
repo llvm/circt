@@ -66,4 +66,5 @@ target_link_libraries(circt-opt
   MLIRSupport
   MLIRTransforms
   MLIRSCFDialect
+  MLIREmitCDialect
 )

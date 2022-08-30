@@ -23,8 +23,15 @@ systemc.module @adder (%summand_a: !systemc.in<i32>, %summand_b: !systemc.in<i32
   // CHECK-NEXT: }
   }
   // CHECK-NEXT: systemc.cpp.destructor {
-  systemc.cpp.destructor { }
+  systemc.cpp.destructor {
+    // CHECK-NEXT: [[PTR:%.+]] = systemc.cpp.new(%summand_a, %summand_b) : (!systemc.in<i32>, !systemc.in<i32>) -> !emitc.ptr<!emitc.opaque<"someclass">>
+    %0 = systemc.cpp.new(%summand_a, %summand_b) : (!systemc.in<i32>, !systemc.in<i32>) -> !emitc.ptr<!emitc.opaque<"someclass">>
+    // CHECK-NEXT: systemc.cpp.delete [[PTR]] : !emitc.ptr<!emitc.opaque<"someclass">>
+    systemc.cpp.delete %0 : !emitc.ptr<!emitc.opaque<"someclass">>
+    // CHECK-NEXT: systemc.cpp.new() : () -> !emitc.ptr<!emitc.opaque<"someclass">>
+    %1 = systemc.cpp.new() : () -> !emitc.ptr<!emitc.opaque<"someclass">>
   // CHECK-NEXT: }
+  }
 // CHECK-NEXT: }
 }
 

@@ -38,3 +38,24 @@ def SignalReadOp : SystemCOp<"signal.read", [NoSideEffect,
     }
   }];
 }
+
+//===----------------------------------------------------------------------===//
+// Operations that model C++-level features.
+//===----------------------------------------------------------------------===//
+
+def NewOp : SystemCOp<"cpp.new", [NoSideEffect]> {
+  let summary = "A C++ 'new' expression.";
+  let description = [{
+    Creates and initializes C++ objects using dynamic storage.
+    Note that the types of the constructor arguments are not verified in any way
+    w.r.t. the result's type because it is allowed to use an opaque type for the
+    pointee.
+  }];
+
+  let arguments = (ins Variadic<AnyType>:$args);
+  let results = (outs EmitC_PointerType:$result);
+
+  let assemblyFormat = [{
+    `(` $args `)` attr-dict `:` functional-type($args, $result)
+  }];
+}
