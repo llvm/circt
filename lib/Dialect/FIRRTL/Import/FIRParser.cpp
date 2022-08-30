@@ -3164,10 +3164,8 @@ ParseResult FIRCircuitParser::parseCircuit(
   auto indent = getIndentation();
   uint32_t verMajor(1), verMinor(0), verPatch(0);
   if (consumeIf(FIRToken::kw_FIRRTL)) {
-    if (!indent.has_value() || *indent > 0)
-      return emitError("'FIRRTL' must be first token on its line")
-                 << " and must not be indented",
-             failure();
+    if (!indent.has_value())
+      return emitError("'FIRRTL' must be first token on its line"), failure();
     if (parseToken(FIRToken::kw_version, "expected version after 'FIRRTL'") ||
         parseVersionLit(verMajor, verMinor, verPatch,
                         "expected version literal"))
