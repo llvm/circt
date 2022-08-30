@@ -320,8 +320,7 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
     // Grand Central Mem Tap Annotations
     {memTapClass, {noResolve, applyGCTMemTaps}},
     {memTapSourceClass, {stdResolve, applyWithoutTarget<true>}},
-    {memTapPortClass, {stdResolve, applyWithoutTarget<true>}},
-    {memTapBlackboxClass, {stdResolve, applyWithoutTarget<true>}},
+    {memTapWireClass, {stdResolve, applyWithoutTarget<true>}},
     // Grand Central Signal Mapping Annotations
     {signalDriverAnnoClass, {noResolve, applyGCTSignalMappings}},
     {signalDriverTargetAnnoClass, {stdResolve, applyWithoutTarget<true>}},

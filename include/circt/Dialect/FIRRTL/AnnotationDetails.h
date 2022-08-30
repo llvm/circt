@@ -110,10 +110,14 @@ constexpr const char *dataTapsBlackboxClass =
     "sifive.enterprise.grandcentral.DataTapsAnnotation.blackbox"; // not in SFC
 constexpr const char *memTapClass =
     "sifive.enterprise.grandcentral.MemTapAnnotation";
+// TODO Delete this
 constexpr const char *memTapBlackboxClass =
     "sifive.enterprise.grandcentral.MemTapAnnotation.blackbox"; // not in SFC
+// TODO Delete this
 constexpr const char *memTapPortClass =
     "sifive.enterprise.grandcentral.MemTapAnnotation.port"; // not in SFC
+constexpr const char *memTapWireClass =
+    "sifive.enterprise.grandcentral.MemTapAnnotation.wire"; // not in SFC
 constexpr const char *memTapSourceClass =
     "sifive.enterprise.grandcentral.MemTapAnnotation.source"; // not in SFC
 constexpr const char *deletedKeyClass =

@@ -464,15 +464,15 @@ LogicalResult circt::firrtl::applyGCTMemTaps(const AnnoPathValue &target,
   attrs.append("target", StringAttr::get(context, sourceTarget));
   state.addToWorklistFn(DictionaryAttr::get(context, attrs));
 
-  auto tapsAttr = tryGetAs<ArrayAttr>(anno, anno, "taps", loc, memTapClass);
-  if (!tapsAttr)
+  auto wireNameAttr =
+      tryGetAs<ArrayAttr>(anno, anno, "wireName", loc, memTapClass);
+  if (!wireNameAttr)
     return failure();
-  StringSet<> memTapBlackboxes;
-  for (size_t i = 0, e = tapsAttr.size(); i != e; ++i) {
-    auto tap = tapsAttr[i].dyn_cast_or_null<StringAttr>();
+  for (size_t i = 0, e = wireNameAttr.size(); i != e; ++i) {
+    auto tap = wireNameAttr[i].dyn_cast_or_null<StringAttr>();
     if (!tap) {
       mlir::emitError(
-          loc, "Annotation '" + Twine(memTapClass) + "' with path '.taps[" +
+          loc, "Annotation '" + Twine(memTapClass) + "' with path '.wireName[" +
                    Twine(i) +
                    "]' contained an unexpected type (expected a string).")
               .attachNote()
@@ -480,26 +480,14 @@ LogicalResult circt::firrtl::applyGCTMemTaps(const AnnoPathValue &target,
       return failure();
     }
     NamedAttrList port;
-    port.append("class", StringAttr::get(context, memTapPortClass));
+    port.append("class", StringAttr::get(context, memTapWireClass));
     port.append("id", id);
-    port.append("portID", IntegerAttr::get(IntegerType::get(context, 64), i));
+    port.append("tapID", IntegerAttr::get(IntegerType::get(context, 64), i));
     auto canonTarget = canonicalizeTarget(tap.getValue());
     if (!tokenizePath(canonTarget))
       return failure();
     port.append("target", StringAttr::get(context, canonTarget));
     state.addToWorklistFn(DictionaryAttr::get(context, port));
-
-    auto blackboxTarget = tokenizePath(canonTarget).value();
-    blackboxTarget.name = {};
-    blackboxTarget.component.clear();
-    auto blackboxTargetStr = blackboxTarget.str();
-    if (!memTapBlackboxes.insert(blackboxTargetStr).second)
-      continue;
-
-    NamedAttrList blackbox;
-    blackbox.append("class", StringAttr::get(context, memTapBlackboxClass));
-    blackbox.append("target", StringAttr::get(context, blackboxTargetStr));
-    state.addToWorklistFn(DictionaryAttr::getWithSorted(context, blackbox));
   }
 
   return success();
@@ -703,6 +691,11 @@ void GrandCentralTapsPass::runOnOperation() {
   for (auto sinkPair : tapSinks) {
     auto wire = sinkPair.first;
     auto sinkAnno = sinkPair.second;
+    if (sinkAnno.isClass(memTapWireClass)) {
+      llvm::errs() << "Skipping MemTap which are not fully implemented: "
+                   << sinkAnno.getDict() << "\n";
+      continue;
+    }
 
     auto module = wire->getParentOfType<FModuleOp>();
 
@@ -849,6 +842,7 @@ void GrandCentralTapsPass::runOnOperation() {
 
 /// Gather the annotations on ports and operations into the `tappedPorts` and
 /// `tappedOps` maps.
+// TODO need to gather memTapSourceClass as well
 void GrandCentralTapsPass::gatherAnnotations(Operation *op) {
   if (isa<FModuleOp, FExtModuleOp>(op)) {
     // Handle port annotations on module/extmodule ops.
@@ -883,6 +877,10 @@ void GrandCentralTapsPass::gatherAnnotations(Operation *op) {
         tapSinks.push_back({dyn_cast<WireOp>(op), anno});
         return true;
       }
+      if (anno.isClass(memTapWireClass)) {
+        tapSinks.push_back({dyn_cast<WireOp>(op), anno});
+        return true;
+      }
       return false;
     };
     AnnotationSet::removeAnnotations(op, gather);
@@ -909,7 +907,7 @@ GrandCentralTapsPass::processAnnotation(const Annotation &sinkAnno,
   auto key = getKey(sinkAnno);
 
   PortWiring wiring;
-  wiring.portNum = 0;
+  wiring.portNum = 0; // TODO delete this unused field
 
   // // Lookup the sibling annotation no the target. This may not exist, e.g.
   // in
@@ -924,7 +922,7 @@ GrandCentralTapsPass::processAnnotation(const Annotation &sinkAnno,
 
   // NOTE: target anno renamed to sourceAnno
   auto sourceAnno = annos[key];
-  LLVM_DEBUG(llvm::dbgs() << "  Target anno " << sourceAnno.getDict() << "\n");
+  LLVM_DEBUG(llvm::dbgs() << "  Source anno " << sourceAnno.getDict() << "\n");
 
   // NOTE:
   // - portAnno holds the "*.port" flavor of the annotation
