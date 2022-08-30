@@ -1,4 +1,4 @@
-; RUN: firtool --firrtl-grand-central --verilog --annotation-file %S/HWRename.anno.json %s | FileCheck %s --check-prefixes CHECK
+; RUN: firtool --annotation-file %S/HWRename.anno.json %s | FileCheck %s
 
 circuit Top:
   module Companion :
