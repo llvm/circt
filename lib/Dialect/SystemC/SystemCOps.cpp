@@ -291,6 +291,24 @@ LogicalResult SCModuleOp::verifyRegions() {
   return success();
 }
 
+CtorOp SCModuleOp::getOrCreateCtor() {
+  CtorOp ctor;
+  getBody().walk([&](CtorOp op) { ctor = op; });
+  if (ctor)
+    return ctor;
+
+  return OpBuilder(getBody()).create<CtorOp>(getLoc());
+}
+
+DestructorOp SCModuleOp::getOrCreateDestructor() {
+  DestructorOp destructor;
+  getBody().walk([&](DestructorOp op) { destructor = op; });
+  if (destructor)
+    return destructor;
+
+  return OpBuilder::atBlockEnd(getBodyBlock()).create<DestructorOp>(getLoc());
+}
+
 //===----------------------------------------------------------------------===//
 // SignalOp
 //===----------------------------------------------------------------------===//
@@ -319,6 +337,17 @@ void SCFuncOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 LogicalResult SCFuncOp::verify() {
+  if (getBody().getNumArguments() != 0)
+    return emitOpError("must not have any arguments");
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// DestructorOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult DestructorOp::verify() {
   if (getBody().getNumArguments() != 0)
     return emitOpError("must not have any arguments");
 

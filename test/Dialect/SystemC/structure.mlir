@@ -22,6 +22,9 @@ systemc.module @adder (%summand_a: !systemc.in<i32>, %summand_b: !systemc.in<i32
     systemc.signal.write %sum, %res : !systemc.out<i32>
   // CHECK-NEXT: }
   }
+  // CHECK-NEXT: systemc.cpp.destructor {
+  systemc.cpp.destructor { }
+  // CHECK-NEXT: }
 // CHECK-NEXT: }
 }
 
@@ -63,3 +66,16 @@ systemc.module @argAttrs (%port0: !systemc.in<i32> {hw.attrname = "sometext"}, %
 
 // CHECK-LABEL: systemc.module @resultAttrs (%port0: !systemc.in<i32>, %out0: !systemc.out<i32> {hw.attrname = "sometext"})
 systemc.module @resultAttrs (%port0: !systemc.in<i32>, %out0: !systemc.out<i32> {hw.attrname = "sometext"}) {}
+
+// CHECK-LABEL: systemc.module @attributes
+systemc.module @attributes () {
+  // CHECK-NEXT: systemc.ctor attributes {systemc.someattr = 0 : i64} {
+  systemc.ctor attributes {systemc.someattr = 0 : i64} {}
+  // CHECK-NEXT: }
+  // CHECK-NEXT: %func = systemc.func attributes {systemc.someattr = 0 : i64} {
+  %func = systemc.func attributes {systemc.someattr = 0 : i64} {}
+  // CHECK-NEXT: }
+  // CHECK-NEXT: systemc.cpp.destructor attributes {systemc.someattr = 0 : i64} {
+  systemc.cpp.destructor attributes {systemc.someattr = 0 : i64} {}
+  // CHECK-NEXT: }
+}
