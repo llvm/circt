@@ -848,20 +848,15 @@ firrtl.circuit "GCTInterface"  attributes {annotations = [{unrelatedAnnotation}]
 // CHECK-SAME:  id = [[ID_ViewName]] : i64,
 // CHECK-SAME:  type = "companion"}
 // CHECK:      %0 = firrtl.ref.resolve %view__2refPort : !firrtl.ref<uint<1>>
-// CHECK:      %[[gc_xmr:.+]] = firrtl.wire   {annotations = [{class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 1 : i64}]} : !firrtl.uint<1>
-// CHECK:      firrtl.connect %[[gc_xmr]], %0 : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:       = firrtl.node %0 {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}, {class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 1 : i64}]} : !firrtl.uint<1>
 // CHECK:      %1 = firrtl.ref.resolve %view__2refPort_1 : !firrtl.ref<uint<1>>
-// CHECK:      %[[gc_xmr_0:.+]] = firrtl.wire   {annotations = [{class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 2 : i64}]} : !firrtl.uint<1>
-// CHECK:      firrtl.connect %[[gc_xmr_0]], %1 : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:       = firrtl.node %1 {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}, {class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 2 : i64}]} : !firrtl.uint<1>
 // CHECK:      %2 = firrtl.ref.resolve %view__1refPort : !firrtl.ref<uint<1>>
-// CHECK:      %[[gc_xmr_1:.+]] = firrtl.wire   {annotations = [{class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 3 : i64}]} : !firrtl.uint<1>
-// CHECK:      firrtl.connect %[[gc_xmr_1]], %2 : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:      = firrtl.node %2 {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}, {class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 3 : i64}]} : !firrtl.uint<1>
 // CHECK:      %3 = firrtl.ref.resolve %view__0refPort : !firrtl.ref<uint<1>>
-// CHECK:      %[[gc_xmr_2:.+]] = firrtl.wire   {annotations = [{class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 4 : i64}]} : !firrtl.uint<1>
-// CHECK:      firrtl.connect %[[gc_xmr_2]], %3 : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:      = firrtl.node %3  {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}, {class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 4 : i64}]} : !firrtl.uint<1>
 // CHECK:      %4 = firrtl.ref.resolve %view_portrefPort : !firrtl.ref<uint<1>>
-// CHECK:      %[[gc_xmr_3:.+]] = firrtl.wire   {annotations = [{class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 5 : i64}]} : !firrtl.uint<1>
-// CHECK:      firrtl.connect %[[gc_xmr_3]], %4 : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:      = firrtl.node %4 {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}, {class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 5 : i64}]} : !firrtl.uint<1>
 
 // The parent should be annotated. Additionally, this example has all the
 // members of the interface inside the parent.  Both port "a" and register

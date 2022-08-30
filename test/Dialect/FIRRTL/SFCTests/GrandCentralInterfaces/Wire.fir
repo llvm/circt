@@ -62,7 +62,6 @@ circuit Top :
   ; included in output files. Here, only "RANDOM" macro is checked.
   ; MYVIEW_COMPANION: define RANDOM
   module MyView_companion :
-    input uint : UInt<1>
     output io : { }
 
     wire clock: Clock
@@ -136,8 +135,7 @@ circuit Top :
     out.multivec[1][1] <= submodule.out.multivec[1][1]
     out.multivec[1][2] <= submodule.out.multivec[1][2]
     out.uint <= submodule.out.uint
-    inst myView_companion of MyView_companion
-    myView_companion.uint <= w.uint
+    inst MyView_companion of MyView_companion
 
     inst bbox1 of BlackBox_DUT
     bbox1.a <= in.uint
@@ -184,52 +182,30 @@ circuit Top :
     out.multivec[1][2] <= dut.out.multivec[1][2]
     out.uint <= dut.out.uint
 
-    ; NOEXTRACT:      module MyView_companion(
-    ; NOEXTRACT:      input uint);
+    ; NOEXTRACT:      module MyView_companion();
     ; NOEXTRACT:        MyInterface MyView();
-    ; NOEXTRACT:     wire [[gc_xmr0:.+]]  = DUT.w_vec_0;
-    ; NOEXTRACT-NEXT:     wire [[gc_xmr1:.+]]  = DUT.w_vec_1;
-    ; NOEXTRACT-NEXT:     wire [[gc_xmr2:.+]]  = DUT.w_multivec_0_0;
-    ; NOEXTRACT-NEXT:     wire [[gc_xmr3:.+]]  = DUT.w_multivec_0_1;
-    ; NOEXTRACT-NEXT:     wire [[gc_xmr4:.+]]  = DUT.w_multivec_0_2;
-    ; NOEXTRACT-NEXT:     wire [[gc_xmr5:.+]]  = DUT.w_multivec_1_0;
-    ; NOEXTRACT-NEXT:     wire [[gc_xmr6:.+]]  = DUT.w_multivec_1_1;
-    ; NOEXTRACT-NEXT:     wire [[gc_xmr7:.+]] = DUT.w_multivec_1_2;
-    ; NOEXTRACT-NEXT:     wire [1:0] [[gc_xmr8:.+]] = DUT.w_vecOfBundle_0_sint;
-    ; NOEXTRACT-NEXT:     wire [3:0] [[gc_xmr9:.+]] = DUT.w_vecOfBundle_0_uint;
-    ; NOEXTRACT-NEXT:     wire [1:0] [[gc_xmr10:.+]]  = DUT.w_vecOfBundle_1_sint;
-    ; NOEXTRACT-NEXT:     wire [3:0] [[gc_xmr11:.+]]  = DUT.w_vecOfBundle_1_uint;
-    ; NOEXTRACT-NEXT:     wire [1:0] [[gc_xmr12:.+]]  = DUT.w_otherOther_other_sint;
-    ; NOEXTRACT-NEXT:     wire [3:0] [[gc_xmr13:.+]]  = DUT.w_otherOther_other_uint;
-    ; NOEXTRACT-NEXT:     wire [[gc_xmr14:.+]]  = DUT.submodule.w_uint;
-    ; NOEXTRACT-NEXT:     wire [[gc_xmr15:.+]]  = DUT.submodule.w_vec_0;
-    ; NOEXTRACT-NEXT:     wire [[gc_xmr16:.+]]  = DUT.submodule.w_vec_1;
-    ; NOEXTRACT-NEXT:     wire [1:0] [[gc_xmr17:.+]]  = DUT.submodule.w_vecOfBundle_0_sint;
-    ; NOEXTRACT-NEXT:     wire [3:0] [[gc_xmr18:.+]]  = DUT.submodule.w_vecOfBundle_0_uint;
-    ; NOEXTRACT-NEXT:     wire [1:0] [[gc_xmr19:.+]]  = DUT.submodule.w_vecOfBundle_1_sint;
-    ; NOEXTRACT-NEXT:     wire [3:0] [[gc_xmr20:.+]]  = DUT.submodule.w_vecOfBundle_1_uint;
-    ; NOEXTRACT:          assign MyView.uint = uint;
-    ; NOEXTRACT-NEXT:     assign MyView.vec[0] = [[gc_xmr0]];
-    ; NOEXTRACT-NEXT:     assign MyView.vec[1] = [[gc_xmr1]];
-    ; NOEXTRACT-NEXT:     assign MyView.multivec[0][0] = [[gc_xmr2]];
-    ; NOEXTRACT-NEXT:     assign MyView.multivec[0][1] = [[gc_xmr3]];
-    ; NOEXTRACT-NEXT:     assign MyView.multivec[0][2] = [[gc_xmr4]];
-    ; NOEXTRACT-NEXT:     assign MyView.multivec[1][0] = [[gc_xmr5]];
-    ; NOEXTRACT-NEXT:     assign MyView.multivec[1][1] = [[gc_xmr6]];
-    ; NOEXTRACT-NEXT:     assign MyView.multivec[1][2] = [[gc_xmr7]];
-    ; NOEXTRACT-NEXT:     assign MyView.vecOfBundle[0].sint = [[gc_xmr8]];
-    ; NOEXTRACT-NEXT:     assign MyView.vecOfBundle[0].uint = [[gc_xmr9]];
-    ; NOEXTRACT-NEXT:     assign MyView.vecOfBundle[1].sint = [[gc_xmr10]];
-    ; NOEXTRACT-NEXT:     assign MyView.vecOfBundle[1].uint = [[gc_xmr11]];
-    ; NOEXTRACT-NEXT:     assign MyView.otherOther.other.sint = [[gc_xmr12]];
-    ; NOEXTRACT-NEXT:     assign MyView.otherOther.other.uint = [[gc_xmr13]];
-    ; NOEXTRACT-NEXT:     assign MyView.sub_uint = [[gc_xmr14]];
-    ; NOEXTRACT-NEXT:     assign MyView.sub_vec[0] = [[gc_xmr15]];
-    ; NOEXTRACT-NEXT:     assign MyView.sub_vec[1] = [[gc_xmr16]];
-    ; NOEXTRACT-NEXT:     assign MyView.sub_vecOfBundle[0].sint = [[gc_xmr17]];
-    ; NOEXTRACT-NEXT:     assign MyView.sub_vecOfBundle[0].uint = [[gc_xmr18]];
-    ; NOEXTRACT-NEXT:     assign MyView.sub_vecOfBundle[1].sint = [[gc_xmr19]];
-    ; NOEXTRACT-NEXT:     assign MyView.sub_vecOfBundle[1].uint = [[gc_xmr20]];
+    ; NOEXTRACT:        assign MyView.uint = DUT.w_uint;
+    ; NOEXTRACT-NEXT:   assign MyView.vec[0] = DUT.w_vec_0;
+    ; NOEXTRACT-NEXT:   assign MyView.vec[1] = DUT.w_vec_1;
+    ; NOEXTRACT-NEXT:   assign MyView.multivec[0][0] = DUT.w_multivec_0_0;
+    ; NOEXTRACT-NEXT:   assign MyView.multivec[0][1] = DUT.w_multivec_0_1;
+    ; NOEXTRACT-NEXT:   assign MyView.multivec[0][2] = DUT.w_multivec_0_2;
+    ; NOEXTRACT-NEXT:   assign MyView.multivec[1][0] = DUT.w_multivec_1_0;
+    ; NOEXTRACT-NEXT:   assign MyView.multivec[1][1] = DUT.w_multivec_1_1;
+    ; NOEXTRACT-NEXT:   assign MyView.multivec[1][2] = DUT.w_multivec_1_2;
+    ; NOEXTRACT-NEXT:   assign MyView.vecOfBundle[0].sint = DUT.w_vecOfBundle_0_sint;
+    ; NOEXTRACT-NEXT:   assign MyView.vecOfBundle[0].uint = DUT.w_vecOfBundle_0_uint;
+    ; NOEXTRACT-NEXT:   assign MyView.vecOfBundle[1].sint = DUT.w_vecOfBundle_1_sint;
+    ; NOEXTRACT-NEXT:   assign MyView.vecOfBundle[1].uint = DUT.w_vecOfBundle_1_uint;
+    ; NOEXTRACT-NEXT:   assign MyView.otherOther.other.sint = DUT.w_otherOther_other_sint;
+    ; NOEXTRACT-NEXT:   assign MyView.otherOther.other.uint = DUT.w_otherOther_other_uint;
+    ; NOEXTRACT-NEXT:   assign MyView.sub_uint = DUT.submodule.w_uint;
+    ; NOEXTRACT-NEXT:   assign MyView.sub_vec[0] = DUT.submodule.w_vec_0;
+    ; NOEXTRACT-NEXT:   assign MyView.sub_vec[1] = DUT.submodule.w_vec_1;
+    ; NOEXTRACT-NEXT:   assign MyView.sub_vecOfBundle[0].sint = DUT.submodule.w_vecOfBundle_0_sint;
+    ; NOEXTRACT-NEXT:   assign MyView.sub_vecOfBundle[0].uint = DUT.submodule.w_vecOfBundle_0_uint;
+    ; NOEXTRACT-NEXT:   assign MyView.sub_vecOfBundle[1].sint = DUT.submodule.w_vecOfBundle_1_sint;
+    ; NOEXTRACT-NEXT:   assign MyView.sub_vecOfBundle[1].uint = DUT.submodule.w_vecOfBundle_1_uint;
     ; NOEXTRACT:        Tap tap (
     ; NOEXTRACT-NEXT:     .b     (r),
     ; NOEXTRACT-NEXT:     .clock (clock),
@@ -240,11 +216,9 @@ circuit Top :
     ; CHECK:          module DUT
     ; CHECK-NOT:      endmodule
     ; EXTRACT:          /* This instance is elsewhere emitted as a bind statement.
-    ; EXTRACT-NEXT:        MyView_companion myView_companion (
-    ; EXTRACT-NEXT:          .uint (in_uint)
-    ; EXTRACT-NEXT:     )
+    ; EXTRACT-NEXT:        MyView_companion MyView_companion
     ; EXTRACT-NEXT:     */
-    ; NOEXTRACT:        {{^ *}}MyView_companion myView_companion
+    ; NOEXTRACT:        {{^ *}}MyView_companion MyView_companion
 
     ; EXTRACT:        FILE "./BlackBox_DUT.v"
     ; EXTRACT:        FILE "Wire/firrtl/gct/BlackBox_GCT.v"
@@ -258,52 +232,30 @@ circuit Top :
 
     ; EXTRACT:        FILE "Wire/firrtl/gct/MyView_companion.sv"
     ; NOEXTRACT-NOT:  FILE {{.*}}/MyView_companion.sv
-    ; EXTRACT:        module MyView_companion(
-    ; EXTRACT-NEXT:          input uint
+    ; EXTRACT:        module MyView_companion();
     ; EXTRACT:          MyInterface MyView();
-    ; EXTRACT:     wire [[gc_xmr0:.+]]  = DUT.in_vec_0;
-    ; EXTRACT-NEXT:     wire [[gc_xmr1:.+]]  = DUT.in_vec_1;
-    ; EXTRACT-NEXT:     wire [[gc_xmr2:.+]]  = DUT.in_multivec_0_0;
-    ; EXTRACT-NEXT:     wire [[gc_xmr3:.+]]  = DUT.in_multivec_0_1;
-    ; EXTRACT-NEXT:     wire [[gc_xmr4:.+]]  = DUT.in_multivec_0_2;
-    ; EXTRACT-NEXT:     wire [[gc_xmr5:.+]]  = DUT.in_multivec_1_0;
-    ; EXTRACT-NEXT:     wire [[gc_xmr6:.+]]  = DUT.in_multivec_1_1;
-    ; EXTRACT-NEXT:     wire [[gc_xmr7:.+]] = DUT.in_multivec_1_2;
-    ; EXTRACT-NEXT:     wire [1:0] [[gc_xmr8:.+]] = DUT.in_vecOfBundle_0_sint;
-    ; EXTRACT-NEXT:     wire [3:0] [[gc_xmr9:.+]] = DUT.in_vecOfBundle_0_uint;
-    ; EXTRACT-NEXT:     wire [1:0] [[gc_xmr10:.+]]  = DUT.in_vecOfBundle_1_sint;
-    ; EXTRACT-NEXT:     wire [3:0] [[gc_xmr11:.+]]  = DUT.in_vecOfBundle_1_uint;
-    ; EXTRACT-NEXT:     wire [1:0] [[gc_xmr12:.+]]  = DUT.in_otherOther_other_sint;
-    ; EXTRACT-NEXT:     wire [3:0] [[gc_xmr13:.+]]  = DUT.in_otherOther_other_uint;
-    ; EXTRACT-NEXT:     wire [[gc_xmr14:.+]]  = DUT.submodule.in_uint;
-    ; EXTRACT-NEXT:     wire [[gc_xmr15:.+]]  = DUT.submodule.in_vec_0;
-    ; EXTRACT-NEXT:     wire [[gc_xmr16:.+]]  = DUT.submodule.in_vec_1;
-    ; EXTRACT-NEXT:     wire [1:0] [[gc_xmr17:.+]]  = DUT.submodule.in_vecOfBundle_0_sint;
-    ; EXTRACT-NEXT:     wire [3:0] [[gc_xmr18:.+]]  = DUT.submodule.in_vecOfBundle_0_uint;
-    ; EXTRACT-NEXT:     wire [1:0] [[gc_xmr19:.+]]  = DUT.submodule.in_vecOfBundle_1_sint;
-    ; EXTRACT-NEXT:     wire [3:0] [[gc_xmr20:.+]]  = DUT.submodule.in_vecOfBundle_1_uint;
-    ; EXTRACT:          assign MyView.uint = uint;
-    ; EXTRACT-NEXT:     assign MyView.vec[0] = [[gc_xmr0]];
-    ; EXTRACT-NEXT:     assign MyView.vec[1] = [[gc_xmr1]];
-    ; EXTRACT-NEXT:     assign MyView.multivec[0][0] = [[gc_xmr2]];
-    ; EXTRACT-NEXT:     assign MyView.multivec[0][1] = [[gc_xmr3]];
-    ; EXTRACT-NEXT:     assign MyView.multivec[0][2] = [[gc_xmr4]];
-    ; EXTRACT-NEXT:     assign MyView.multivec[1][0] = [[gc_xmr5]];
-    ; EXTRACT-NEXT:     assign MyView.multivec[1][1] = [[gc_xmr6]];
-    ; EXTRACT-NEXT:     assign MyView.multivec[1][2] = [[gc_xmr7]];
-    ; EXTRACT-NEXT:     assign MyView.vecOfBundle[0].sint = [[gc_xmr8]];
-    ; EXTRACT-NEXT:     assign MyView.vecOfBundle[0].uint = [[gc_xmr9]];
-    ; EXTRACT-NEXT:     assign MyView.vecOfBundle[1].sint = [[gc_xmr10]];
-    ; EXTRACT-NEXT:     assign MyView.vecOfBundle[1].uint = [[gc_xmr11]];
-    ; EXTRACT-NEXT:     assign MyView.otherOther.other.sint = [[gc_xmr12]];
-    ; EXTRACT-NEXT:     assign MyView.otherOther.other.uint = [[gc_xmr13]];
-    ; EXTRACT-NEXT:     assign MyView.sub_uint = [[gc_xmr14]];
-    ; EXTRACT-NEXT:     assign MyView.sub_vec[0] = [[gc_xmr15]];
-    ; EXTRACT-NEXT:     assign MyView.sub_vec[1] = [[gc_xmr16]];
-    ; EXTRACT-NEXT:     assign MyView.sub_vecOfBundle[0].sint = [[gc_xmr17]];
-    ; EXTRACT-NEXT:     assign MyView.sub_vecOfBundle[0].uint = [[gc_xmr18]];
-    ; EXTRACT-NEXT:     assign MyView.sub_vecOfBundle[1].sint = [[gc_xmr19]];
-    ; EXTRACT-NEXT:     assign MyView.sub_vecOfBundle[1].uint = [[gc_xmr20]];
+    ; EXTRACT:          assign MyView.uint = DUT.in_uint;
+    ; EXTRACT-NEXT:     assign MyView.vec[0] = DUT.in_vec_0;
+    ; EXTRACT-NEXT:     assign MyView.vec[1] = DUT.in_vec_1;
+    ; EXTRACT-NEXT:     assign MyView.multivec[0][0] = DUT.in_multivec_0_0;
+    ; EXTRACT-NEXT:     assign MyView.multivec[0][1] = DUT.in_multivec_0_1;
+    ; EXTRACT-NEXT:     assign MyView.multivec[0][2] = DUT.in_multivec_0_2;
+    ; EXTRACT-NEXT:     assign MyView.multivec[1][0] = DUT.in_multivec_1_0;
+    ; EXTRACT-NEXT:     assign MyView.multivec[1][1] = DUT.in_multivec_1_1;
+    ; EXTRACT-NEXT:     assign MyView.multivec[1][2] = DUT.in_multivec_1_2;
+    ; EXTRACT-NEXT:     assign MyView.vecOfBundle[0].sint = DUT.in_vecOfBundle_0_sint;
+    ; EXTRACT-NEXT:     assign MyView.vecOfBundle[0].uint = DUT.in_vecOfBundle_0_uint;
+    ; EXTRACT-NEXT:     assign MyView.vecOfBundle[1].sint = DUT.in_vecOfBundle_1_sint;
+    ; EXTRACT-NEXT:     assign MyView.vecOfBundle[1].uint = DUT.in_vecOfBundle_1_uint;
+    ; EXTRACT-NEXT:     assign MyView.otherOther.other.sint = DUT.in_otherOther_other_sint;
+    ; EXTRACT-NEXT:     assign MyView.otherOther.other.uint = DUT.in_otherOther_other_uint;
+    ; EXTRACT-NEXT:     assign MyView.sub_uint = DUT.submodule.in_uint;
+    ; EXTRACT-NEXT:     assign MyView.sub_vec[0] = DUT.submodule.in_vec_0;
+    ; EXTRACT-NEXT:     assign MyView.sub_vec[1] = DUT.submodule.in_vec_1;
+    ; EXTRACT-NEXT:     assign MyView.sub_vecOfBundle[0].sint = DUT.submodule.in_vecOfBundle_0_sint;
+    ; EXTRACT-NEXT:     assign MyView.sub_vecOfBundle[0].uint = DUT.submodule.in_vecOfBundle_0_uint;
+    ; EXTRACT-NEXT:     assign MyView.sub_vecOfBundle[1].sint = DUT.submodule.in_vecOfBundle_1_sint;
+    ; EXTRACT-NEXT:     assign MyView.sub_vecOfBundle[1].uint = DUT.submodule.in_vecOfBundle_1_uint;
     ; EXTRACT:          Tap tap (
     ; EXTRACT-NEXT:       .b     (r),
     ; EXTRACT-NEXT:       .clock (_tap_clock),
@@ -313,7 +265,7 @@ circuit Top :
 
     ; EXTRACT:        FILE "Wire/firrtl/bindings.sv"
     ; EXTRACT-NOT:    FILE
-    ; EXTRACT:        bind DUT MyView_companion myView_companion
+    ; EXTRACT:        bind DUT MyView_companion MyView_companion{{ *}}();
     ; NOEXTRACT-NOT:  FILE "Wire/firrtl/bindings.sv"
 
     ; EXTRACT:        FILE "Wire/firrtl/gct/MyInterface.sv"

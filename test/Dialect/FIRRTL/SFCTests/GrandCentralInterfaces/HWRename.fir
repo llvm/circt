@@ -28,8 +28,7 @@ circuit Top:
 
     ; CHECK:      module Companion();
     ; CHECK-NEXT:   MyInterface MyView();
-    ; CHECK-NEXT:   wire [[tmpWire:.+]] = DUT.a;
-    ; CHECK-NEXT:   assign MyView.[[elementName:.+]] = [[tmpWire]];
+    ; CHECK-NEXT:   assign MyView.[[elementName:.+]] = DUT.a;
     ; CHECK-NEXT: endmodule
 
     ; CHECK:      module DUT
