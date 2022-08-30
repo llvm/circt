@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -verify-diagnostics --lower-seq-to-sv | FileCheck %s
+// RUN: circt-opt %s -verify-diagnostics --lower-seq-firrtl-to-sv | FileCheck %s
 
 // CHECK-LABEL: hw.module @lowering
 hw.module @lowering(%clk: i1, %rst: i1, %in: i32) -> (a: i32, b: i32, c: i32, d: i32, e: i32, f: i32) {

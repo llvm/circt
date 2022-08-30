@@ -718,7 +718,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
         modulePM.addPass(createSimpleCanonicalizerPass());
       }
     } else {
-      pm.addPass(seq::createSeqLowerToSVPass());
+      pm.addPass(seq::createSeqFIRRTLLowerToSVPass());
       pm.addPass(sv::createHWMemSimImplPass(replSeqMem, ignoreReadEnableMem));
 
       if (extractTestCode)

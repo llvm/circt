@@ -21,4 +21,10 @@ def LowerSeqToSV: Pass<"lower-seq-to-sv", "mlir::ModuleOp"> {
   let dependentDialects = ["circt::sv::SVDialect"];
 }
 
+def LowerSeqFIRRTLToSV: Pass<"lower-seq-firrtl-to-sv", "mlir::ModuleOp"> {
+  let summary = "Lower sequential firrtl ops to SV.";
+  let constructor = "circt::seq::createSeqFIRRTLLowerToSVPass()";
+  let dependentDialects = ["circt::sv::SVDialect"];
+}
+
 #endif // CIRCT_DIALECT_SEQ_SEQPASSES
