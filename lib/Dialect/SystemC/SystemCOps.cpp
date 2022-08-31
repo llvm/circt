@@ -293,7 +293,13 @@ LogicalResult SCModuleOp::verifyRegions() {
 
 CtorOp SCModuleOp::getOrCreateCtor() {
   CtorOp ctor;
-  getBody().walk([&](CtorOp op) { ctor = op; });
+  getBody().walk([&](Operation *op) {
+    if ((ctor = dyn_cast<CtorOp>(op)))
+      return WalkResult::interrupt();
+
+    return WalkResult::skip();
+  });
+
   if (ctor)
     return ctor;
 
@@ -302,7 +308,13 @@ CtorOp SCModuleOp::getOrCreateCtor() {
 
 DestructorOp SCModuleOp::getOrCreateDestructor() {
   DestructorOp destructor;
-  getBody().walk([&](DestructorOp op) { destructor = op; });
+  getBody().walk([&](Operation *op) {
+    if ((destructor = dyn_cast<DestructorOp>(op)))
+      return WalkResult::interrupt();
+
+    return WalkResult::skip();
+  });
+
   if (destructor)
     return destructor;
 
