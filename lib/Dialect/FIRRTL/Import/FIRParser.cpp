@@ -544,7 +544,7 @@ ParseResult FIRParser::parseVersionLit(uint32_t &major, uint32_t &minor,
                                        uint32_t &patch, const Twine &message) {
   auto spelling = getTokenSpelling();
   if (getToken().getKind() != FIRToken::version)
-    return emitError("expected version literal"), failure();
+    return emitError(message), failure();
   // form a.b.c
   auto [a, d] = spelling.split(".");
   auto [b, c] = d.split(".");
@@ -3149,7 +3149,8 @@ FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
 }
 
 /// file ::= circuit
-/// circuit ::= 'circuit' id ':' info? INDENT module* DEDENT EOF
+/// versionHeader ::= 'FIRRTL' 'version' versionLit NEWLINE
+/// circuit ::= versionHeader? 'circuit' id ':' info? INDENT module* DEDENT EOF
 ///
 /// If non-null, annotationsBuf is a memory buffer containing JSON annotations.
 /// If non-null, omirBufs is a vector of memory buffers containing SiFive Object
@@ -3161,6 +3162,20 @@ ParseResult FIRCircuitParser::parseCircuit(
     mlir::TimingScope &ts) {
 
   auto indent = getIndentation();
+  uint32_t verMajor(1), verMinor(0), verPatch(0);
+  if (consumeIf(FIRToken::kw_FIRRTL)) {
+    if (!indent.has_value())
+      return emitError("'FIRRTL' must be first token on its line"), failure();
+    if (parseToken(FIRToken::kw_version, "expected version after 'FIRRTL'") ||
+        parseVersionLit(verMajor, verMinor, verPatch,
+                        "expected version literal"))
+      return failure();
+    indent = getIndentation();
+  }
+  (void)verMajor;
+  (void)verMinor;
+  (void)verPatch;
+
   if (!indent.has_value())
     return emitError("'circuit' must be first token on its line"), failure();
   unsigned circuitIndent = indent.value();
@@ -3169,15 +3184,6 @@ ParseResult FIRCircuitParser::parseCircuit(
   StringAttr name;
   SMLoc inlineAnnotationsLoc;
   StringRef inlineAnnotations;
-
-  uint32_t verMajor(1), verMinor(0), verPatch(0);
-  if (consumeIf(FIRToken::kw_FIRRTL))
-    if (parseToken(FIRToken::kw_version, "expected version after 'FIRRTL'") ||
-        parseVersionLit(verMajor, verMinor, verPatch, "expected version"))
-      return failure();
-  (void)verMajor;
-  (void)verMinor;
-  (void)verPatch;
 
   // A file must contain a top level `circuit` definition.
   if (parseToken(FIRToken::kw_circuit,
