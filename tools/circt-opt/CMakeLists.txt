@@ -1,9 +1,9 @@
 set(LLVM_LINK_COMPONENTS
   Support
-  )
+)
 
 add_llvm_tool(circt-opt
- circt-opt.cpp
+  circt-opt.cpp
 )
 llvm_update_compile_flags(circt-opt)
 target_link_libraries(circt-opt
@@ -15,6 +15,7 @@ target_link_libraries(circt-opt
   CIRCTCalyxToFSM
   CIRCTCalyxTransforms
   CIRCTESI
+  CIRCTExportChiselInterface
   CIRCTExportVerilog
   CIRCTFIRRTL
   CIRCTFIRRTLToHW

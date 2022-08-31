@@ -823,3 +823,293 @@ firrtl.circuit "CollidingSymbolsMultiInline" {
     firrtl.instance system sym @system @Foo1()
   }
 }
+
+// -----
+
+// Test proper hierarchical inlining of RefType
+// CHECK-LABEL: firrtl.circuit "Top" {
+firrtl.circuit "Top" {
+  firrtl.module @XmrSrcMod(out %_a: !firrtl.ref<uint<1>>) attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
+    %zero = firrtl.constant 0 : !firrtl.uint<1>
+    %1 = firrtl.ref.send %zero : !firrtl.uint<1>
+    firrtl.strictconnect %_a, %1 : !firrtl.ref<uint<1>>
+  }
+  firrtl.module @Bar(out %_a: !firrtl.ref<uint<1>>) attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
+    %xmr   = firrtl.instance bar sym @barXMR @XmrSrcMod(out _a: !firrtl.ref<uint<1>>)
+    firrtl.strictconnect %_a, %xmr   : !firrtl.ref<uint<1>>
+    // CHECK:  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    // CHECK:  %0 = firrtl.ref.send %c0_ui1 : !firrtl.uint<1>
+    // CHECK:  firrtl.strictconnect %_a, %0 : !firrtl.ref<uint<1>>
+  }
+  firrtl.module @Top() {
+    %bar_a = firrtl.instance bar sym @bar  @Bar(out _a: !firrtl.ref<uint<1>>)
+    %a = firrtl.wire : !firrtl.uint<1>
+    %0 = firrtl.ref.resolve %bar_a : !firrtl.ref<uint<1>>
+    firrtl.strictconnect %a, %0 : !firrtl.uint<1>
+    // CHECK:  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    // CHECK:  %0 = firrtl.ref.send %c0_ui1 : !firrtl.uint<1>
+    // CHECK:  %a = firrtl.wire   : !firrtl.uint<1>
+    // CHECK:  %1 = firrtl.ref.resolve %0 : !firrtl.ref<uint<1>>
+    // CHECK:  firrtl.strictconnect %a, %1 : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// Test proper inlining of RefSend to Ports of RefType
+// CHECK-LABEL: firrtl.circuit "Top" {
+firrtl.circuit "Top" {
+  firrtl.module @XmrSrcMod(in %pa: !firrtl.uint<1>, out %_a: !firrtl.ref<uint<1>>) attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
+    %1 = firrtl.ref.send %pa : !firrtl.uint<1>
+    firrtl.strictconnect %_a, %1 : !firrtl.ref<uint<1>>
+  }
+  firrtl.module @Bar(out %_a: !firrtl.ref<uint<1>>)  attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
+    %pa, %xmr   = firrtl.instance bar sym @barXMR @XmrSrcMod(in pa: !firrtl.uint<1>, out _a: !firrtl.ref<uint<1>>)
+    // CHECK:  %bar_pa = firrtl.wire   : !firrtl.uint<1>
+    // CHECK:  %0 = firrtl.ref.send %bar_pa : !firrtl.uint<1>
+    // CHECK:  firrtl.strictconnect %_a, %0 : !firrtl.ref<uint<1>>
+    firrtl.strictconnect %_a, %xmr   : !firrtl.ref<uint<1>>
+  }
+  firrtl.module @Top() {
+    %bar_a = firrtl.instance bar sym @bar  @Bar(out _a: !firrtl.ref<uint<1>>)
+    %a = firrtl.wire : !firrtl.uint<1>
+    %0 = firrtl.ref.resolve %bar_a : !firrtl.ref<uint<1>>
+    firrtl.strictconnect %a, %0 : !firrtl.uint<1>
+    // CHECK:  %bar_bar_pa = firrtl.wire   : !firrtl.uint<1>
+    // CHECK:  %0 = firrtl.ref.send %bar_bar_pa : !firrtl.uint<1>
+    // CHECK:  %a = firrtl.wire   : !firrtl.uint<1>
+    // CHECK:  %1 = firrtl.ref.resolve %0 : !firrtl.ref<uint<1>>
+  }
+}
+
+// -----
+
+// Test for multiple readers and multiple instances of RefType
+// CHECK-LABEL: firrtl.circuit "Top" {
+firrtl.circuit "Top" {
+  firrtl.module @XmrSrcMod(out %_a: !firrtl.ref<uint<1>>) {
+    %zero = firrtl.constant 0 : !firrtl.uint<1>
+    %1 = firrtl.ref.send %zero : !firrtl.uint<1>
+    firrtl.strictconnect %_a, %1 : !firrtl.ref<uint<1>>
+  }
+  firrtl.module @Foo(out %_a: !firrtl.ref<uint<1>>) {
+    %xmr   = firrtl.instance bar sym @fooXMR @XmrSrcMod(out _a: !firrtl.ref<uint<1>>)
+    firrtl.strictconnect %_a, %xmr   : !firrtl.ref<uint<1>>
+    %0 = firrtl.ref.resolve %xmr   : !firrtl.ref<uint<1>>
+    %a = firrtl.wire : !firrtl.uint<1>
+    firrtl.strictconnect %a, %0 : !firrtl.uint<1>
+  }
+  firrtl.module @Bar(out %_a: !firrtl.ref<uint<1>>) {
+    %xmr   = firrtl.instance bar sym @barXMR @XmrSrcMod(out _a: !firrtl.ref<uint<1>>)
+    firrtl.strictconnect %_a, %xmr   : !firrtl.ref<uint<1>>
+    %0 = firrtl.ref.resolve %xmr   : !firrtl.ref<uint<1>>
+    %a = firrtl.wire : !firrtl.uint<1>
+    firrtl.strictconnect %a, %0 : !firrtl.uint<1>
+  }
+  firrtl.module @Top() attributes {annotations = [{class = "firrtl.transforms.FlattenAnnotation"}]}{
+    %bar_a = firrtl.instance bar sym @bar  @Bar(out _a: !firrtl.ref<uint<1>>)
+    // CHECK:  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    // CHECK:  %0 = firrtl.ref.send %c0_ui1 : !firrtl.uint<1>
+    // CHECK:  %1 = firrtl.ref.resolve %0 : !firrtl.ref<uint<1>>
+    // CHECK:  %bar_a = firrtl.wire   : !firrtl.uint<1>
+    // CHECK:  firrtl.strictconnect %bar_a, %1 : !firrtl.uint<1>
+    %foo_a = firrtl.instance foo sym @foo @Foo(out _a: !firrtl.ref<uint<1>>)
+    // CHECK:  %c0_ui1_0 = firrtl.constant 0 : !firrtl.uint<1>
+    // CHECK:  %2 = firrtl.ref.send %c0_ui1_0 : !firrtl.uint<1>
+    // CHECK:  %3 = firrtl.ref.resolve %2 : !firrtl.ref<uint<1>>
+    // CHECK:  %foo_a = firrtl.wire   : !firrtl.uint<1>
+    // CHECK:  firrtl.strictconnect %foo_a, %3 : !firrtl.uint<1>
+    %xmr_a = firrtl.instance xmr sym @xmr @XmrSrcMod(out _a: !firrtl.ref<uint<1>>)
+    // CHECK:  %c0_ui1_1 = firrtl.constant 0 : !firrtl.uint<1>
+    // CHECK:  %4 = firrtl.ref.send %c0_ui1_1 : !firrtl.uint<1>
+    %a = firrtl.wire : !firrtl.uint<1>
+    %b = firrtl.wire : !firrtl.uint<1>
+    %c = firrtl.wire : !firrtl.uint<1>
+    %0 = firrtl.ref.resolve %bar_a : !firrtl.ref<uint<1>>
+    %1 = firrtl.ref.resolve %foo_a : !firrtl.ref<uint<1>>
+    %2 = firrtl.ref.resolve %xmr_a : !firrtl.ref<uint<1>>
+    // CHECK:  %5 = firrtl.ref.resolve %0 : !firrtl.ref<uint<1>>
+    // CHECK:  %6 = firrtl.ref.resolve %2 : !firrtl.ref<uint<1>>
+    // CHECK:  %7 = firrtl.ref.resolve %4 : !firrtl.ref<uint<1>>
+    firrtl.strictconnect %a, %0 : !firrtl.uint<1>
+    firrtl.strictconnect %b, %1 : !firrtl.uint<1>
+    firrtl.strictconnect %c, %2 : !firrtl.uint<1>
+    // CHECK:  firrtl.strictconnect %a, %5 : !firrtl.uint<1>
+    // CHECK:  firrtl.strictconnect %b, %6 : !firrtl.uint<1>
+    // CHECK:  firrtl.strictconnect %c, %7 : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// Test for inlining module with RefType input port.
+// CHECK-LABEL: firrtl.circuit "Top" {
+firrtl.circuit "Top" {
+  firrtl.module @XmrSrcMod(out %_a: !firrtl.ref<uint<1>>) {
+    %zero = firrtl.constant 0 : !firrtl.uint<1>
+    %1 = firrtl.ref.send %zero : !firrtl.uint<1>
+    firrtl.strictconnect %_a, %1 : !firrtl.ref<uint<1>>
+  }
+  firrtl.module @Top() {
+    %xmr = firrtl.instance xmr sym @TopXMR @XmrSrcMod(out _a: !firrtl.ref<uint<1>>)
+    %a = firrtl.wire : !firrtl.uint<1>
+    %0 = firrtl.ref.resolve %xmr : !firrtl.ref<uint<1>>
+    firrtl.strictconnect %a, %0 : !firrtl.uint<1>
+    %c_a = firrtl.instance child @Child(in  _a: !firrtl.ref<uint<1>>)
+    firrtl.strictconnect %c_a, %xmr : !firrtl.ref<uint<1>>
+    // CHECK:  %1 = firrtl.ref.resolve %xmr__a : !firrtl.ref<uint<1>>
+    // CHECK:  %child_child__a = firrtl.instance child_child  @Child2(in _a: !firrtl.ref<uint<1>>)
+    // CHECK:  firrtl.strictconnect %child_child__a, %xmr__a : !firrtl.ref<uint<1>>
+  }
+  firrtl.module @Child(in  %_a: !firrtl.ref<uint<1>>)  attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
+    %0 = firrtl.ref.resolve %_a : !firrtl.ref<uint<1>>
+    %c_a = firrtl.instance child @Child2(in  _a: !firrtl.ref<uint<1>>)
+    firrtl.strictconnect %c_a, %_a : !firrtl.ref<uint<1>>
+  }
+  firrtl.module @Child2(in  %_a: !firrtl.ref<uint<1>>) {
+    %0 = firrtl.ref.resolve %_a : !firrtl.ref<uint<1>>
+  }
+}
+
+// -----
+
+// Test for inlining module with RefType input port.
+// CHECK-LABEL: firrtl.circuit "Top" {
+firrtl.circuit "Top" {
+  firrtl.module @XmrSrcMod(out %_a: !firrtl.ref<uint<1>>) {
+    %zero = firrtl.constant 0 : !firrtl.uint<1>
+    %1 = firrtl.ref.send %zero : !firrtl.uint<1>
+    firrtl.strictconnect %_a, %1 : !firrtl.ref<uint<1>>
+  }
+  firrtl.module @Top() {
+    %xmr = firrtl.instance xmr sym @TopXMR @XmrSrcMod(out _a: !firrtl.ref<uint<1>>)
+    %a = firrtl.wire : !firrtl.uint<1>
+    %0 = firrtl.ref.resolve %xmr : !firrtl.ref<uint<1>>
+    firrtl.strictconnect %a, %0 : !firrtl.uint<1>
+    %c_a = firrtl.instance child @Child(in  _a: !firrtl.ref<uint<1>>)
+    firrtl.strictconnect %c_a, %xmr : !firrtl.ref<uint<1>>
+    // CHECK:  %1 = firrtl.ref.resolve %xmr__a : !firrtl.ref<uint<1>>
+    // CHECK:  %2 = firrtl.ref.resolve %xmr__a : !firrtl.ref<uint<1>>
+  }
+  firrtl.module @Child(in  %_a: !firrtl.ref<uint<1>>)  attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
+    %0 = firrtl.ref.resolve %_a : !firrtl.ref<uint<1>>
+    %c_a = firrtl.instance child @Child2(in  _a: !firrtl.ref<uint<1>>)
+    firrtl.strictconnect %c_a, %_a : !firrtl.ref<uint<1>>
+  }
+  firrtl.module @Child2(in  %_a: !firrtl.ref<uint<1>>)  attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
+    %0 = firrtl.ref.resolve %_a : !firrtl.ref<uint<1>>
+  }
+}
+
+// -----
+
+// Test for recursive inlining of modules with RefType input port.
+// CHECK-LABEL: firrtl.circuit "Top" {
+firrtl.circuit "Top" {
+  firrtl.module @XmrSrcMod(out %_a: !firrtl.ref<uint<1>>) {
+    %zero = firrtl.constant 0 : !firrtl.uint<1>
+    %1 = firrtl.ref.send %zero : !firrtl.uint<1>
+    firrtl.strictconnect %_a, %1 : !firrtl.ref<uint<1>>
+  }
+  firrtl.module @Top() {
+    %xmr = firrtl.instance xmr sym @TopXMR @XmrSrcMod(out _a: !firrtl.ref<uint<1>>)
+    %a = firrtl.wire : !firrtl.uint<1>
+    %xmr2 = firrtl.ref.send %a : !firrtl.uint<1>
+    %c_a1, %c_a2  = firrtl.instance child @Child(in  _a1: !firrtl.ref<uint<1>>, in  _a2: !firrtl.ref<uint<1>>)
+    firrtl.strictconnect %c_a1, %xmr : !firrtl.ref<uint<1>>
+    firrtl.strictconnect %c_a2, %xmr2 : !firrtl.ref<uint<1>>
+    // CHECK:  %1 = firrtl.ref.resolve %xmr__a : !firrtl.ref<uint<1>>
+    // CHECK:  %2 = firrtl.ref.resolve %xmr__a : !firrtl.ref<uint<1>>
+    // CHECK:  %3 = firrtl.ref.resolve %0 : !firrtl.ref<uint<1>>
+    // CHECK:  %child_cw = firrtl.wire   : !firrtl.uint<1>
+    // CHECK:  firrtl.strictconnect %child_cw, %3 : !firrtl.uint<1>
+  }
+  firrtl.module @Child(in  %_a1: !firrtl.ref<uint<1>>, in  %_a2: !firrtl.ref<uint<1>>)  attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
+    %c_a = firrtl.instance child @Child2(in  _a: !firrtl.ref<uint<1>>)
+    // CHECK:  %0 = firrtl.ref.resolve %_a1 : !firrtl.ref<uint<1>>
+    // CHECK:  %1 = firrtl.ref.resolve %_a1 : !firrtl.ref<uint<1>>
+    firrtl.strictconnect %c_a, %_a1 : !firrtl.ref<uint<1>>
+    %0 = firrtl.ref.resolve %_a2 : !firrtl.ref<uint<1>>
+    %cw = firrtl.wire : !firrtl.uint<1>
+    firrtl.strictconnect %cw, %0 : !firrtl.uint<1>
+  }
+  firrtl.module @Child2(in  %_a: !firrtl.ref<uint<1>>)   attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
+    %0 = firrtl.ref.resolve %_a : !firrtl.ref<uint<1>>
+    %c_a = firrtl.instance child @Child3(in  _b: !firrtl.ref<uint<1>>)
+    firrtl.strictconnect %c_a, %_a : !firrtl.ref<uint<1>>
+  }
+  firrtl.module @Child3(in  %_b: !firrtl.ref<uint<1>>)   attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
+    %0 = firrtl.ref.resolve %_b : !firrtl.ref<uint<1>>
+  }
+}
+
+// -----
+
+// Test for flatten annotation, and remove unused port wires
+// CHECK-LABEL: firrtl.circuit "Top"
+firrtl.circuit "Top" {
+  firrtl.module @XmrSrcMod(out %_a: !firrtl.ref<uint<1>>) {
+    %zero = firrtl.constant 0 : !firrtl.uint<1>
+    %1 = firrtl.ref.send %zero : !firrtl.uint<1>
+    firrtl.strictconnect %_a, %1 : !firrtl.ref<uint<1>>
+  }
+  firrtl.module @Top() attributes {annotations = [{class = "firrtl.transforms.FlattenAnnotation"}]}{
+    %xmr = firrtl.instance xmr sym @TopXMR @XmrSrcMod(out _a: !firrtl.ref<uint<1>>)
+    // CHECK:  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    // CHECK:  %0 = firrtl.ref.send %c0_ui1 : !firrtl.uint<1>
+    %a = firrtl.wire : !firrtl.uint<1>
+    %xmr2 = firrtl.ref.send %a : !firrtl.uint<1>
+    %0 = firrtl.ref.resolve %xmr : !firrtl.ref<uint<1>>
+    // CHECK:  %2 = firrtl.ref.resolve %0 : !firrtl.ref<uint<1>>
+    firrtl.strictconnect %a, %0 : !firrtl.uint<1>
+    %c_a1, %c_a2  = firrtl.instance child @Child(in  _a1: !firrtl.ref<uint<1>>, in  _a2: !firrtl.ref<uint<1>>)
+    // CHECK:  %3 = firrtl.ref.resolve %0 : !firrtl.ref<uint<1>>
+    // CHECK:  %4 = firrtl.ref.resolve %0 : !firrtl.ref<uint<1>>
+    // CHECK:  %5 = firrtl.ref.resolve %1 : !firrtl.ref<uint<1>>
+    // CHECK:  %child_cw = firrtl.wire   : !firrtl.uint<1>
+    // CHECK:  firrtl.strictconnect %child_cw, %5 : !firrtl.uint<1>
+    firrtl.strictconnect %c_a1, %xmr : !firrtl.ref<uint<1>>
+    firrtl.strictconnect %c_a2, %xmr2 : !firrtl.ref<uint<1>>
+  }
+  firrtl.module @Child(in  %_a1: !firrtl.ref<uint<1>>, in  %_a2: !firrtl.ref<uint<1>>)  {
+    %c_a = firrtl.instance child @Child2(in  _a: !firrtl.ref<uint<1>>)
+    firrtl.strictconnect %c_a, %_a1 : !firrtl.ref<uint<1>>
+    %0 = firrtl.ref.resolve %_a2 : !firrtl.ref<uint<1>>
+    %cw = firrtl.wire : !firrtl.uint<1>
+    firrtl.strictconnect %cw, %0 : !firrtl.uint<1>
+  }
+  firrtl.module @Child2(in  %_a: !firrtl.ref<uint<1>>){
+    %0 = firrtl.ref.resolve %_a : !firrtl.ref<uint<1>>
+    %c_a = firrtl.instance child @Child3(in  _b: !firrtl.ref<uint<1>>)
+    firrtl.strictconnect %c_a, %_a : !firrtl.ref<uint<1>>
+  }
+  firrtl.module @Child3(in  %_b: !firrtl.ref<uint<1>>){
+    %0 = firrtl.ref.resolve %_b : !firrtl.ref<uint<1>>
+  }
+}
+
+// -----
+
+// Test for U-Turn in ref ports. The inlined module defines and uses the RefPort.
+// CHECK-LABEL: firrtl.circuit "Top"
+firrtl.circuit "Top" {
+  firrtl.module @Top() {
+    %c_a, %c_o = firrtl.instance child @Child(in  _a: !firrtl.ref<uint<1>>, out  o_a: !firrtl.ref<uint<1>>)
+    firrtl.strictconnect %c_a, %c_o : !firrtl.ref<uint<1>>
+    // CHECK:  %child_bar__a = firrtl.instance child_bar sym @bar  @Bar(out _a: !firrtl.ref<uint<1>>)
+    // CHECK:  %0 = firrtl.ref.resolve %child_bar__a : !firrtl.ref<uint<1>>
+  }
+  firrtl.module @Child(in  %_a: !firrtl.ref<uint<1>>, out  %o_a: !firrtl.ref<uint<1>>)   attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
+    %0 = firrtl.ref.resolve %_a : !firrtl.ref<uint<1>>
+    %bar_a = firrtl.instance bar sym @bar  @Bar(out _a: !firrtl.ref<uint<1>>)
+    firrtl.strictconnect %o_a, %bar_a : !firrtl.ref<uint<1>>
+  }
+  firrtl.module @Bar(out %_a: !firrtl.ref<uint<1>>) {
+    %pa, %xmr   = firrtl.instance bar sym @barXMR @XmrSrcMod(in pa: !firrtl.uint<1>, out _a: !firrtl.ref<uint<1>>)
+    firrtl.strictconnect %_a, %xmr   : !firrtl.ref<uint<1>>
+  }
+  firrtl.module @XmrSrcMod(in %pa: !firrtl.uint<1>, out %_a: !firrtl.ref<uint<1>>) {
+    %1 = firrtl.ref.send %pa : !firrtl.uint<1>
+    firrtl.strictconnect %_a, %1 : !firrtl.ref<uint<1>>
+  }
+}

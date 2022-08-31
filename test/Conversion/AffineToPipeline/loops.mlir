@@ -15,7 +15,7 @@ func.func @minimal(%arg0 : memref<10xindex>) {
   // CHECK: pipeline.register %[[COND_RESULT]]
 
   // First stage.
-  // CHECK: %[[STAGE0:.+]] = pipeline.stage
+  // CHECK: %[[STAGE0:.+]] = pipeline.while.stage
   // CHECK: %[[ITER_INC:.+]] = arith.addi %[[ITER_ARG]], %[[STEP]]
   // CHECK: pipeline.register %[[ITER_INC]]
 
@@ -34,19 +34,19 @@ func.func @dot(%arg0: memref<64xi32>, %arg1: memref<64xi32>) -> i32 {
   // Pipeline boilerplate checked above, just check the stages computations.
 
   // First stage.
-  // CHECK: %[[STAGE0:.+]]:3 = pipeline.stage
+  // CHECK: %[[STAGE0:.+]]:3 = pipeline.while.stage
   // CHECK-DAG: %[[STAGE0_0:.+]] = memref.load %arg0[%arg2]
   // CHECK-DAG: %[[STAGE0_1:.+]] = memref.load %arg1[%arg2]
   // CHECK-DAG: %[[STAGE0_2:.+]] = arith.addi %arg2, %c1
   // CHECK: pipeline.register %[[STAGE0_0]], %[[STAGE0_1]], %[[STAGE0_2]]
 
   // Second stage.
-  // CHECK: %[[STAGE1:.+]] = pipeline.stage
+  // CHECK: %[[STAGE1:.+]] = pipeline.while.stage
   // CHECK-DAG: %[[STAGE1_0:.+]] = arith.muli %[[STAGE0]]#0, %[[STAGE0]]#1 : i32
   // CHECK: pipeline.register %[[STAGE1_0]]
 
   // Third stage.
-  // CHECK: %[[STAGE2:.+]] = pipeline.stage
+  // CHECK: %[[STAGE2:.+]] = pipeline.while.stage
   // CHECK-DAG: %[[STAGE2_0:.+]] = arith.addi %arg3, %2
   // CHECK: pipeline.register %[[STAGE2_0]]
 

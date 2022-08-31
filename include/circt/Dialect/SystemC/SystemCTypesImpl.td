@@ -14,16 +14,6 @@ include "mlir/IR/EnumAttr.td"
 
 class SystemCTypeDef<string name> : TypeDef<SystemCDialect, name> { }
 
-// A handle to a systemc::SCFuncOp. Declares the systemc::FuncHandleType in C++.
-def FuncHandleTypeImpl : SystemCTypeDef<"FuncHandle"> {
-  let summary = "A function handle type";
-  let description = [{
-    Represents a handle to a SystemC module's member function that
-    can be used in places like SC_METHOD, SC_THREAD, etc.
-  }];
-  let mnemonic = "func_handle";
-}
-
 class SignalTypesImplBase<string name> : SystemCTypeDef<name> {
   let parameters = (ins "::mlir::Type":$baseType);
   let assemblyFormat = "`<` $baseType `>`";

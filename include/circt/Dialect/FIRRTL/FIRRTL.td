@@ -27,6 +27,7 @@ include "circt/Dialect/HW/HWOpInterfaces.td"
 
 include "FIRRTLDialect.td"
 include "FIRRTLAttributes.td"
+include "FIRRTLTypesImpl.td"
 include "FIRRTLTypes.td"
 include "FIRRTLOpInterfaces.td"
 include "FIRRTLStructure.td"

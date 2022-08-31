@@ -137,14 +137,14 @@ def SCFuncOp : SystemCOp<"func", [
   }];
 
   let arguments = (ins StrAttr:$name);
-  let results = (outs FuncHandleType:$handle);
+  let results = (outs NullaryVoidFunctionType:$handle);
   let regions = (region SizedRegion<1>:$body);
 
   let builders = [
     OpBuilder<(ins "StringAttr":$name), [{
       $_state.addAttribute(getNameAttrName($_state.name), name);
       Region *region = $_state.addRegion();
-      $_state.addTypes(FuncHandleType::get($_builder.getContext()));
+      $_state.addTypes(FunctionType::get($_builder.getContext(), {}, {}));
       region->push_back(new Block);
     }]>
   ];

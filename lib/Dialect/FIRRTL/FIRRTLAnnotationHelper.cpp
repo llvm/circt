@@ -11,8 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotationHelper.h"
-#include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
-#include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;
 using namespace firrtl;
@@ -324,13 +322,5 @@ void AnnoTargetCache::gatherTargets(FModuleLike mod) {
     targets.insert({p.value().name, PortAnnoTarget(mod, p.index())});
 
   // And named things
-  mod.walk([&](Operation *op) {
-    TypeSwitch<Operation *>(op)
-        .Case<InstanceOp, MemOp, NodeOp, RegOp, RegResetOp, WireOp, CombMemOp,
-              SeqMemOp, MemoryPortOp, PrintFOp>([&](auto op) {
-          // To be safe, check attribute and non-empty name before adding.
-          if (auto name = op.getNameAttr(); name && !name.getValue().empty())
-            targets.insert({name, OpAnnoTarget(op)});
-        });
-  });
+  mod.walk([&](Operation *op) { insertOp(op); });
 }

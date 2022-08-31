@@ -751,16 +751,6 @@ Optional<int32_t> UIntType::getWidth() {
   return getWidthQualifiedTypeWidth(this->getImpl());
 }
 
-/// Get an with a known width, or -1 for unknown.
-AnalogType AnalogType::get(MLIRContext *context, int32_t width) {
-  assert(width >= -1 && "unknown width");
-  return Base::get(context, width);
-}
-
-Optional<int32_t> AnalogType::getWidth() {
-  return getWidthQualifiedTypeWidth(this->getImpl());
-}
-
 //===----------------------------------------------------------------------===//
 // Bundle Type
 //===----------------------------------------------------------------------===//
@@ -1096,6 +1086,14 @@ auto RefType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
   if (!base.isGround())
     return emitErrorFn() << "reference base type must be ground";
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// ODS Custom Builders
+//===----------------------------------------------------------------------===//
+
+AnalogType AnalogType::get(mlir::MLIRContext *context) {
+  return AnalogType::get(context, -1);
 }
 
 //===----------------------------------------------------------------------===//

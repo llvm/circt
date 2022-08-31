@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/ESI/ESITypes.h"
 #include "circt/Dialect/Pipeline/Pipeline.h"
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -21,6 +22,86 @@ using namespace circt;
 using namespace circt::pipeline;
 
 #include "circt/Dialect/Pipeline/PipelineDialect.cpp.inc"
+
+//===----------------------------------------------------------------------===//
+// PipelineOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult PipelineOp::verify() {
+  bool anyInputIsAChannel = llvm::any_of(inputs(), [](Value operand) {
+    return operand.getType().isa<esi::ChannelType>();
+  });
+  bool anyOutputIsAChannel = llvm::any_of(
+      getResultTypes(), [](Type type) { return type.isa<esi::ChannelType>(); });
+
+  if ((anyInputIsAChannel || anyOutputIsAChannel) && !isLatencyInsensitive()) {
+    return emitOpError("if any port of this pipeline is an ESI channel, all "
+                       "ports must be ESI channels.");
+  }
+
+  if (getBody()->getNumArguments() != inputs().size())
+    return emitOpError("expected ")
+           << inputs().size() << " arguments in the pipeline body block, got "
+           << getBody()->getNumArguments() << ".";
+
+  for (size_t i = 0; i < inputs().size(); i++) {
+    Type expectedInArg = inputs()[i].getType();
+    Type bodyArg = getBody()->getArgument(i).getType();
+
+    if (isLatencyInsensitive())
+      expectedInArg = expectedInArg.cast<esi::ChannelType>().getInner();
+
+    if (expectedInArg != bodyArg)
+      return emitOpError("expected body block argument ")
+             << i << " to have type " << expectedInArg << ", got " << bodyArg
+             << ".";
+  }
+
+  // Check mixing of `pipeline.stage` and `pipeline.stage.register` ops.
+  bool hasStageOps = !getOps<PipelineStageOp>().empty();
+  bool hasStageRegOps = !getOps<PipelineStageRegisterOp>().empty();
+
+  if (hasStageOps && hasStageRegOps)
+    return emitOpError("mixing `pipeline.stage` and `pipeline.stage.register` "
+                       "ops is illegal.");
+
+  return success();
+}
+
+bool PipelineOp::isLatencyInsensitive() {
+  bool allInputsAreChannels = llvm::all_of(inputs(), [](Value operand) {
+    return operand.getType().isa<esi::ChannelType>();
+  });
+  bool allOutputsAreChannels = llvm::all_of(
+      getResultTypes(), [](Type type) { return type.isa<esi::ChannelType>(); });
+  return allInputsAreChannels && allOutputsAreChannels;
+}
+
+//===----------------------------------------------------------------------===//
+// ReturnOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ReturnOp::verify() {
+  PipelineOp parent = getOperation()->getParentOfType<PipelineOp>();
+  if (operands().size() != parent.results().size())
+    return emitOpError("expected ")
+           << parent.results().size() << " return values, got "
+           << operands().size() << ".";
+
+  bool isLatencyInsensitive = parent.isLatencyInsensitive();
+  for (size_t i = 0; i < parent.results().size(); i++) {
+    Type expectedType = parent.getResultTypes()[i];
+    Type actualType = getOperandTypes()[i];
+    if (isLatencyInsensitive)
+      expectedType = expectedType.cast<esi::ChannelType>().getInner();
+    if (expectedType != actualType)
+      return emitOpError("expected argument ")
+             << i << " to have type " << expectedType << ", got " << actualType
+             << ".";
+  }
+
+  return success();
+}
 
 //===----------------------------------------------------------------------===//
 // PipelineWhileOp
@@ -162,15 +243,15 @@ LogicalResult PipelineWhileOp::verify() {
 
   int64_t lastStartTime = -1;
   for (Operation &inner : stagesBlock) {
-    // Verify the stages block contains only `pipeline.stage` and
+    // Verify the stages block contains only `pipeline.while.stage` and
     // `pipeline.terminator` ops.
-    if (!isa<PipelineStageOp, PipelineTerminatorOp>(inner))
-      return emitOpError("stages may only contain 'pipeline.stage' or "
+    if (!isa<PipelineWhileStageOp, PipelineTerminatorOp>(inner))
+      return emitOpError("stages may only contain 'pipeline.while.stage' or "
                          "'pipeline.terminator' ops, found ")
              << inner;
 
     // Verify the stage start times are monotonically increasing.
-    if (auto stage = dyn_cast<PipelineStageOp>(inner)) {
+    if (auto stage = dyn_cast<PipelineWhileStageOp>(inner)) {
       if (lastStartTime == -1) {
         lastStartTime = stage.start();
         continue;
@@ -218,18 +299,18 @@ void PipelineWhileOp::build(OpBuilder &builder, OperationState &state,
 }
 
 //===----------------------------------------------------------------------===//
-// PipelineStageOp
+// PipelineWhileStageOp
 //===----------------------------------------------------------------------===//
 
-LogicalResult PipelineStageOp::verify() {
+LogicalResult PipelineWhileStageOp::verify() {
   if (start() < 0)
     return emitOpError("'start' must be non-negative");
 
   return success();
 }
 
-void PipelineStageOp::build(OpBuilder &builder, OperationState &state,
-                            TypeRange resultTypes, IntegerAttr start) {
+void PipelineWhileStageOp::build(OpBuilder &builder, OperationState &state,
+                                 TypeRange resultTypes, IntegerAttr start) {
   OpBuilder::InsertionGuard g(builder);
 
   state.addTypes(resultTypes);
@@ -241,12 +322,24 @@ void PipelineStageOp::build(OpBuilder &builder, OperationState &state,
   builder.create<PipelineRegisterOp>(builder.getUnknownLoc(), ValueRange());
 }
 
+unsigned PipelineWhileStageOp::getStageNumber() {
+  unsigned number = 0;
+  auto *op = getOperation();
+  auto parent = op->getParentOfType<PipelineWhileOp>();
+  Operation *stage = &parent.getStagesBlock().front();
+  while (stage != op && stage->getNextNode()) {
+    ++number;
+    stage = stage->getNextNode();
+  }
+  return number;
+}
+
 //===----------------------------------------------------------------------===//
 // PipelineRegisterOp
 //===----------------------------------------------------------------------===//
 
 LogicalResult PipelineRegisterOp::verify() {
-  PipelineStageOp stage = (*this)->getParentOfType<PipelineStageOp>();
+  PipelineWhileStageOp stage = (*this)->getParentOfType<PipelineWhileStageOp>();
 
   // If this doesn't terminate a stage, it is terminating the condition.
   if (stage == nullptr)
@@ -261,18 +354,6 @@ LogicalResult PipelineRegisterOp::verify() {
            << ")";
 
   return success();
-}
-
-unsigned PipelineStageOp::getStageNumber() {
-  unsigned number = 0;
-  auto *op = getOperation();
-  auto parent = op->getParentOfType<PipelineWhileOp>();
-  Operation *stage = &parent.getStagesBlock().front();
-  while (stage != op && stage->getNextNode()) {
-    ++number;
-    stage = stage->getNextNode();
-  }
-  return number;
 }
 
 //===----------------------------------------------------------------------===//
@@ -293,8 +374,9 @@ LogicalResult PipelineTerminatorOp::verify() {
 
   // Verify `iter_args` are defined by a pipeline stage.
   for (auto iterArg : iterArgs)
-    if (iterArg.getDefiningOp<PipelineStageOp>() == nullptr)
-      return emitOpError("'iter_args' must be defined by a 'pipeline.stage'");
+    if (iterArg.getDefiningOp<PipelineWhileStageOp>() == nullptr)
+      return emitOpError(
+          "'iter_args' must be defined by a 'pipeline.while.stage'");
 
   // Verify pipeline terminates with the same result types as the pipeline.
   auto opResults = results();
@@ -307,8 +389,9 @@ LogicalResult PipelineTerminatorOp::verify() {
 
   // Verify `results` are defined by a pipeline stage.
   for (auto result : opResults)
-    if (result.getDefiningOp<PipelineStageOp>() == nullptr)
-      return emitOpError("'results' must be defined by a 'pipeline.stage'");
+    if (result.getDefiningOp<PipelineWhileStageOp>() == nullptr)
+      return emitOpError(
+          "'results' must be defined by a 'pipeline.while.stage'");
 
   return success();
 }

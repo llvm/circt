@@ -32,12 +32,12 @@ static std::mutex serverMutex;
 // ---- Helper functions ----
 
 /// Emit the contents of 'msg' to the log file in hex.
-static void log(int epId, bool toClient, Endpoint::BlobPtr msg) {
+static void log(char *epId, bool toClient, const Endpoint::BlobPtr &msg) {
   std::lock_guard<std::mutex> g(serverMutex);
   if (!logFile)
     return;
 
-  fprintf(logFile, "[ep: %4x to: %4s]", epId, toClient ? "host" : "sim");
+  fprintf(logFile, "[ep: %50s to: %4s]", epId, toClient ? "host" : "sim");
   size_t msgSize = msg->size();
   for (size_t i = 0; i < msgSize; ++i) {
     auto b = (*msg)[i];
@@ -99,7 +99,7 @@ static int validateSvOpenArray(const svOpenArrayHandle data,
 
 // Register simulated device endpoints.
 // - return 0 on success, non-zero on failure (duplicate EP registered).
-DPI int sv2cCosimserverEpRegister(int endpointId, long long sendTypeId,
+DPI int sv2cCosimserverEpRegister(char *endpointId, long long sendTypeId,
                                   int sendTypeSize, long long recvTypeId,
                                   int recvTypeSize) {
   // Ensure the server has been constructed.
@@ -117,7 +117,7 @@ DPI int sv2cCosimserverEpRegister(int endpointId, long long sendTypeId,
 //   - Assumes buffer is large enough to contain entire message. Fails if not
 //     large enough. (In the future, will add support for getting the message
 //     into a fixed-size buffer over multiple calls.)
-DPI int sv2cCosimserverEpTryGet(unsigned int endpointId,
+DPI int sv2cCosimserverEpTryGet(char *endpointId,
                                 // NOLINTNEXTLINE(misc-misplaced-const)
                                 const svOpenArrayHandle data,
                                 unsigned int *dataSize) {
@@ -183,7 +183,7 @@ DPI int sv2cCosimserverEpTryGet(unsigned int endpointId,
 // - return 0 on success, negative on failure (unregistered EP).
 // - if dataSize is negative, attempt to dynamically determine the size of
 //   'data'.
-DPI int sv2cCosimserverEpTryPut(unsigned int endpointId,
+DPI int sv2cCosimserverEpTryPut(char *endpointId,
                                 // NOLINTNEXTLINE(misc-misplaced-const)
                                 const svOpenArrayHandle data, int dataSize) {
   if (server == nullptr)

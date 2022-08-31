@@ -1,4 +1,4 @@
-; RUN: firtool -firrtl-grand-central %s | FileCheck %s
+; RUN: firtool %s | FileCheck %s
 
 circuit PortDelete : %[[
   {

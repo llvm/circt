@@ -207,6 +207,10 @@ LogicalResult lowerRegion(HandshakeLowering &hl, bool sourceConstants,
 /// be graph regions currently.
 void removeBasicBlocks(Region &r);
 
+/// Lowers the mlir operations into handshake that are not part of the dataflow
+/// conversion.
+LogicalResult postDataflowConvert(Operation *op);
+
 } // namespace handshake
 
 std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>

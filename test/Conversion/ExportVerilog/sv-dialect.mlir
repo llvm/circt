@@ -602,7 +602,7 @@ hw.module @exprInlineTestIssue439(%clk: i1) {
     %c = hw.constant 0 : i32
 
     // OLD: localparam [31:0] _GEN = 32'h0;
-    // NEW: localparam [31:0] _GEN = 0;
+    // NEW: automatic logic [31:0] _GEN = 32'h0;
     %e = comb.extract %c from 0 : (i32) -> i16
     %f = comb.add %e, %e : i16
     sv.fwrite %fd, "%d"(%f) : i16
@@ -947,7 +947,7 @@ hw.module @ConstResetValueMustBeInlined(%clock: i1, %reset: i1, %d: i42) -> (q: 
 // CHECK-LABEL: module OutOfLineConstantsInAlwaysSensitivity
 hw.module @OutOfLineConstantsInAlwaysSensitivity() {
   // OLD-NEXT: localparam _GEN = 1'h0;
-  // NEW-NEXT: localparam _GEN = 0;
+  // NEW-NEXT: wire _GEN = 1'h0;
   // CHECK-NEXT: always_ff @(posedge _GEN)
   %clock = hw.constant 0 : i1
   sv.alwaysff(posedge %clock) {}
@@ -1530,6 +1530,26 @@ hw.module @CollectNamesOrder(%in: i1) -> (out: i1) {
   %1 = comb.or %0, %0 : i1
   %foo = sv.wire {hw.verilogName = "_GEN" } : !hw.inout<i1>
   hw.output %1 : i1
+}
+
+// CHECK-LABEL: module InlineReadInout
+hw.module private @InlineReadInout() -> () {
+  %c0_i32 = hw.constant 0 : i32
+  %false = hw.constant false
+  %r1 = sv.reg  : !hw.inout<i2>
+  sv.initial {
+    %_RANDOM = sv.logic  : !hw.inout<uarray<1xi32>>
+    %2 = sv.array_index_inout %_RANDOM[%c0_i32] : !hw.inout<uarray<1xi32>>, i32
+    %RAMDOM = sv.verbatim.expr.se "`RAMDOM" : () -> i32 {symbols = []}
+    sv.bpassign %2, %RAMDOM : i32
+    %3 = sv.array_index_inout %_RANDOM[%c0_i32] : !hw.inout<uarray<1xi32>>, i32
+    %4 = sv.read_inout %3 : !hw.inout<i32>
+    // CHECK: automatic logic [31:0] _RANDOM[0:0];
+    // CHECK: _RANDOM[32'h0] = `RAMDOM;
+    // CHECK-NEXT: r1 = _RANDOM[32'h0][1:0];
+    %5 = comb.extract %4 from 0 : (i32) -> i2
+    sv.bpassign %r1, %5 : i2
+  }
 }
 
 hw.module @bindInMod() {

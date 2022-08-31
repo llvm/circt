@@ -285,8 +285,17 @@ hw.module @Use<xx: i41>() {
 // -----
 
 // expected-error @+1 {{parameter #hw.param.decl<"xx": i41> : i41 has the same name as a previous parameter}}
-hw.module @Use<xx: i41, xx: i41>() {
-}
+hw.module @Use<xx: i41, xx: i41>() {}
+
+// -----
+
+// expected-error @+1 {{parameter #hw.param.decl<"xx": i41 = 1> : i41 has the same name as a previous parameter}}
+hw.module @Use<xx: i41, xx: i41 = 1>() {}
+
+// -----
+
+// expected-error @+1 {{parameter #hw.param.decl<"xx": none> has the same name as a previous parameter}}
+hw.module @Use<xx: none, xx: none>() {}
 
 // -----
 

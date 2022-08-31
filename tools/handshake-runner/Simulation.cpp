@@ -900,7 +900,7 @@ HandshakeExecuter::HandshakeExecuter(
 
     for (auto out : enumerate(op.getResults())) {
       LLVM_DEBUG(debugArg("OUT", out.value(), outValues[out.index()], time));
-      assert(outValues[out.index()].hasValue());
+      assert(outValues[out.index()].has_value());
       valueMap[out.value()] = outValues[out.index()];
       timeMap[out.value()] = time + 1;
       scheduleUses(readyList, valueMap, out.value());

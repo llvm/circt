@@ -139,7 +139,7 @@ struct ConvertAssignOp : public OpConversionPattern<calyx::AssignOp> {
     if (auto guard = adaptor.guard()) {
       auto zero =
           rewriter.create<hw::ConstantOp>(assign.getLoc(), src.getType(), 0);
-      src = rewriter.create<MuxOp>(assign.getLoc(), guard, src, zero);
+      src = rewriter.create<MuxOp>(assign.getLoc(), guard, src, zero, false);
     }
 
     rewriter.replaceOpWithNewOp<sv::AssignOp>(assign, dest, src);
@@ -282,7 +282,7 @@ private:
           auto in = wireIn(op.in(), op.instanceName(), op.portName(op.in()), b);
           auto one = b.create<hw::ConstantOp>(op.in().getType(), 0);
 
-          auto xorOp = b.create<XorOp>(in, one);
+          auto xorOp = b.create<XorOp>(in, one, false);
 
           auto out =
               wireOut(xorOp, op.instanceName(), op.portName(op.out()), b);
@@ -319,7 +319,7 @@ private:
     auto right =
         wireIn(op.right(), op.instanceName(), op.portName(op.right()), b);
 
-    auto add = b.create<ResultTy>(left, right);
+    auto add = b.create<ResultTy>(left, right, false);
 
     auto out = wireOut(add, op.instanceName(), op.portName(op.out()), b);
     wires.append({left.getInput(), right.getInput(), out});
@@ -333,7 +333,7 @@ private:
     auto right =
         wireIn(op.right(), op.instanceName(), op.portName(op.right()), b);
 
-    auto add = b.create<ICmpOp>(pred, left, right);
+    auto add = b.create<ICmpOp>(pred, left, right, false);
 
     auto out = wireOut(add, op.instanceName(), op.portName(op.out()), b);
     wires.append({left.getInput(), right.getInput(), out});
@@ -352,7 +352,7 @@ private:
     wires.append({clk.getInput(), reset.getInput(), go.getInput(),
                   left.getInput(), right.getInput()});
 
-    auto targetOp = b.create<TargetOpTy>(left, right);
+    auto targetOp = b.create<TargetOpTy>(left, right, false);
     for (auto &&[targetRes, sourceRes] :
          llvm::zip(targetOp->getResults(), op.getOutputPorts())) {
       auto portName = op.portName(sourceRes);

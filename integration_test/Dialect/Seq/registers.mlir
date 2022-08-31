@@ -1,5 +1,5 @@
 // REQUIRES: verilator
-// RUN: circt-opt %s -lower-seq-to-sv -export-verilog -verify-diagnostics -o %t2.mlir > %t1.sv
+// RUN: circt-opt %s -lower-seq-firrtl-to-sv -export-verilog -verify-diagnostics -o %t2.mlir > %t1.sv
 // RUN: verilator --lint-only +1364-1995ext+v %t1.sv
 // RUN: verilator --lint-only +1364-2001ext+v %t1.sv
 // RUN: verilator --lint-only +1364-2005ext+v %t1.sv

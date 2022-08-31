@@ -90,6 +90,11 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
       printDebugInfo = true;
     } else if (option == "useOldEmissionMode") {
       useOldEmissionMode = true;
+    } else if (option.consume_front("maximumNumberOfVariadicOperands=")) {
+      if (option.getAsInteger(10, maximumNumberOfVariadicOperands)) {
+        errorHandler("expected integer for number of variadic operands");
+        maximumNumberOfVariadicOperands = DEFAULT_VARIADIC_OPERAND_LIMIT;
+      }
     } else {
       errorHandler(llvm::Twine("unknown style option \'") + option + "\'");
       // We continue parsing options after a failure.
@@ -133,6 +138,9 @@ std::string LoweringOptions::toString() const {
   if (maximumNumberOfTermsInConcat != DEFAULT_CONCAT_TERM_LIMIT)
     options += "maximumNumberOfTermsInConcat=" +
                std::to_string(maximumNumberOfTermsInConcat) + ',';
+  if (maximumNumberOfVariadicOperands != DEFAULT_VARIADIC_OPERAND_LIMIT)
+    options += "maximumNumberOfVariadicOperands=" +
+               std::to_string(maximumNumberOfVariadicOperands) + ',';
 
   // Remove a trailing comma if present.
   if (!options.empty()) {
@@ -187,6 +195,7 @@ struct LoweringCLOptions {
           "disallowLocalVariables, verifLabels, emittedLineLength=<n>, "
           "maximumNumberOfTermsPerExpression=<n>, "
           "maximumNumberOfTermsInConcat=<n>, explicitBitcast, "
+          "maximumNumberOfVariadicOperands=<n>, "
           "emitReplicatedOpsToHeader, "
           "locationInfoStyle={plain,wrapInAtSquareBracket,none}, "
           "disallowPortDeclSharing, printDebugInfo"),

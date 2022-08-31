@@ -71,3 +71,39 @@ InstancePath InstancePathCache::appendInstance(InstancePath path,
   newPath[path.size()] = inst;
   return InstancePath(newPath, n);
 }
+
+void InstancePathCache::replaceInstance(InstanceOp oldOp, InstanceOp newOp) {
+
+  instanceGraph.replaceInstance(oldOp, newOp);
+
+  // Iterate over all the paths, and search for the old InstanceOp. If found,
+  // then replace it with the new InstanceOp, and create a new copy of the paths
+  // and update the cache.
+  auto instanceExists = [&](const ArrayRef<InstancePath> &paths) -> bool {
+    return llvm::any_of(
+        paths, [&](InstancePath p) { return llvm::is_contained(p, oldOp); });
+  };
+
+  for (auto &iter : absolutePathsCache) {
+    if (!instanceExists(iter.getSecond()))
+      continue;
+    SmallVector<InstancePath, 8> updatedPaths;
+    for (auto path : iter.getSecond()) {
+      const auto *iter = llvm::find(path, oldOp);
+      if (iter == path.end()) {
+        // path does not contain the oldOp, just copy it as is.
+        updatedPaths.push_back(path);
+        continue;
+      }
+      auto *newPath = allocator.Allocate<InstanceOp>(path.size());
+      llvm::copy(path, newPath);
+      newPath[iter - path.begin()] = newOp;
+      updatedPaths.push_back(InstancePath(newPath, path.size()));
+    }
+    // Move the list of paths into the bump allocator for later quick
+    // retrieval.
+    auto *paths = allocator.Allocate<InstancePath>(updatedPaths.size());
+    llvm::copy(updatedPaths, paths);
+    iter.getSecond() = ArrayRef<InstancePath>(paths, updatedPaths.size());
+  }
+}

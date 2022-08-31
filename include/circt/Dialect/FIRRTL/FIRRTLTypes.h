@@ -15,6 +15,7 @@
 
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Support/LLVM.h"
+#include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/Types.h"
 
 namespace circt {
@@ -169,38 +170,30 @@ mlir::Type getVectorElementType(mlir::Type array);
 mlir::Type getPassiveType(mlir::Type anyBaseFIRRTLType);
 
 //===----------------------------------------------------------------------===//
-// Ground Types Without Parameters
-//===----------------------------------------------------------------------===//
-
-/// `firrtl.Clock` describe wires and ports meant for carrying clock signals.
-class ClockType : public FIRRTLType::TypeBase<ClockType, FIRRTLBaseType,
-                                              DefaultTypeStorage> {
-public:
-  using Base::Base;
-  static ClockType get(MLIRContext *context) { return Base::get(context); }
-};
-
-/// `firrtl.Reset`.
-/// TODO(firrtl spec): This is not described in the FIRRTL spec.
-class ResetType : public FIRRTLType::TypeBase<ResetType, FIRRTLBaseType,
-                                              DefaultTypeStorage> {
-public:
-  using Base::Base;
-  static ResetType get(MLIRContext *context) { return Base::get(context); }
-};
-/// `firrtl.AsyncReset`.
-/// TODO(firrtl spec): This is not described in the FIRRTL spec.
-class AsyncResetType
-    : public FIRRTLType::TypeBase<AsyncResetType, FIRRTLBaseType,
-                                  DefaultTypeStorage> {
-public:
-  using Base::Base;
-  static AsyncResetType get(MLIRContext *context) { return Base::get(context); }
-};
-
-//===----------------------------------------------------------------------===//
 // Width Qualified Ground Types
 //===----------------------------------------------------------------------===//
+
+template <typename ConcreteType>
+class WidthQualifiedTrait
+    : public mlir::OpTrait::TraitBase<ConcreteType, WidthQualifiedTrait> {
+public:
+  Optional<int32_t> getWidth() {
+    auto v = static_cast<ConcreteType *>(this)->getBaseWidth();
+    if (v >= 0)
+      return v;
+    return {};
+  }
+  int32_t getWidthOrSentinel() {
+    return static_cast<ConcreteType *>(this)->getBaseWidth();
+  }
+  bool hasWidth() {
+    return static_cast<ConcreteType *>(this)->getBaseWidth() >= 0;
+  }
+  ConcreteType changeWidth(int32_t width) {
+    return ConcreteType::get(static_cast<ConcreteType *>(this)->getContext(),
+                             width);
+  }
+};
 
 template <typename ConcreteType, typename ParentType>
 class WidthQualifiedType
@@ -275,18 +268,6 @@ public:
 
   /// Get an with a known width, or -1 for unknown.
   static UIntType get(MLIRContext *context, int32_t width = -1);
-
-  /// Return the bitwidth of this type or None if unknown.
-  Optional<int32_t> getWidth();
-};
-
-// `firrtl.Analog` can be attached to multiple drivers.
-class AnalogType : public WidthQualifiedType<AnalogType, FIRRTLBaseType> {
-public:
-  using WidthQualifiedType::WidthQualifiedType;
-
-  /// Get an with a known width, or -1 for unknown.
-  static AnalogType get(MLIRContext *context, int32_t width = -1);
 
   /// Return the bitwidth of this type or None if unknown.
   Optional<int32_t> getWidth();

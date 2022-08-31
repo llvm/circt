@@ -92,6 +92,39 @@ lowestCommonAncestor(InstanceGraphNode *top,
   return currentLCA;
 }
 
+/// Compute if specified nodes are instantiated only under 'top'.
+static bool allUnder(ArrayRef<InstanceRecord *> nodes, InstanceGraphNode *top) {
+  DenseSet<InstanceGraphNode *> seen;
+  SmallVector<InstanceGraphNode *> worklist;
+  worklist.reserve(nodes.size());
+  seen.reserve(nodes.size());
+  seen.insert(top);
+  for (auto *n : nodes) {
+    auto *mod = n->getParent();
+    if (seen.insert(mod).second)
+      worklist.push_back(mod);
+  }
+
+  while (!worklist.empty()) {
+    auto *node = worklist.back();
+    worklist.pop_back();
+
+    assert(node != top);
+
+    // If reach top-level node we're not covered by 'top', return.
+    if (node->noUses())
+      return false;
+
+    // Otherwise, walk upwards.
+    for (auto *use : node->uses()) {
+      auto *mod = use->getParent();
+      if (seen.insert(mod).second)
+        worklist.push_back(mod);
+    }
+  }
+  return true;
+}
+
 namespace {
 class WireDFTPass : public WireDFTBase<WireDFTPass> {
   void runOnOperation() override;
@@ -102,7 +135,7 @@ void WireDFTPass::runOnOperation() {
   auto circuit = getOperation();
 
   // This is the module marked as the device under test.
-  Operation *dut = nullptr;
+  FModuleOp dut = nullptr;
 
   // This is the signal marked as the DFT enable, a 1-bit signal to be wired to
   // the EICG modules.
@@ -217,6 +250,36 @@ void WireDFTPass::runOnOperation() {
   // If there are no clock gates under the DUT, we can stop now.
   if (!clockGates.size())
     return;
+
+  // Handle enable signal (only) outside DUT.
+  if (!instanceGraph.isAncestor(enableModule, lca->getModule())) {
+    // Current LCA covers the clock gates we care about.
+    // Compute new LCA from enable to that node.
+    lca = lowestCommonAncestor(
+        instanceGraph.getTopLevelNode(), [&](InstanceRecord *node) {
+          return node->getTarget() == lca ||
+                 node->getParent()->getModule() == enableModule;
+        });
+    // Handle unreachable case.
+    if (!lca) {
+      auto diag =
+          circuit.emitError("unable to connect enable signal and DUT, may not "
+                            "be reachable from top-level module");
+      diag.attachNote(enableSignal.getLoc()) << "enable signal here";
+      diag.attachNote(dut.getLoc()) << "DUT here";
+      diag.attachNote(instanceGraph.getTopLevelModule().getLoc())
+          << "top-level module here";
+
+      return signalPassFailure();
+    }
+  }
+
+  // Check all gates we're wiring are only within the DUT.
+  if (!allUnder(clockGates.getArrayRef(), instanceGraph.lookup(dut))) {
+    dut->emitError()
+        << "clock gates within DUT must not be instantiated outside the DUT";
+    return signalPassFailure();
+  }
 
   // Stash some useful things.
   auto *context = &getContext();

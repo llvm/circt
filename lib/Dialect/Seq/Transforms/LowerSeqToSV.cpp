@@ -25,13 +25,15 @@
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/IntervalMap.h"
 #include "llvm/ADT/TypeSwitch.h"
-#include <variant>
 
 using namespace circt;
 using namespace seq;
 
 namespace {
 struct SeqToSVPass : public LowerSeqToSVBase<SeqToSVPass> {
+  void runOnOperation() override;
+};
+struct SeqFIRRTLToSVPass : public LowerSeqFIRRTLToSVBase<SeqFIRRTLToSVPass> {
   void runOnOperation() override;
 };
 } // anonymous namespace
@@ -170,9 +172,10 @@ void FirRegLower::lower() {
             });
 
             builder.create<sv::InitialOp>([&] {
-              builder.create<sv::VerbatimOp>("`INIT_RANDOM_PROLOG_");
-
-              llvm::DenseMap<Value, SmallVector<std::pair<sv::RegOp, Value>>>
+              builder.create<sv::IfDefProceduralOp>("INIT_RANDOM_PROLOG_", [&] {
+                builder.create<sv::VerbatimOp>("`INIT_RANDOM_PROLOG_");
+              });
+              llvm::MapVector<Value, SmallVector<std::pair<sv::RegOp, Value>>>
                   resets;
               builder.create<sv::IfDefProceduralOp>(randInitRef, [&] {
                 // Create initialisers for all registers.
@@ -493,7 +496,7 @@ void FirRegLower::addToAlwaysBlock(sv::EventControl clockEdge, Value clock,
   if (!alwaysOp) {
     if (reset) {
       assert(resetStyle != ::ResetType::NoReset);
-      // Here, we want to create the folloing structure with sv.always and
+      // Here, we want to create the following structure with sv.always and
       // sv.if. If `reset` is async, we need to add `reset` to a sensitivity
       // list.
       //
@@ -549,9 +552,6 @@ void FirRegLower::addToAlwaysBlock(sv::EventControl clockEdge, Value clock,
 void SeqToSVPass::runOnOperation() {
   ModuleOp top = getOperation();
 
-  for (auto module : top.getOps<hw::HWModuleOp>())
-    FirRegLower(module).lower();
-
   MLIRContext &ctxt = getContext();
   ConversionTarget target(ctxt);
   target.addIllegalDialect<SeqDialect>();
@@ -563,6 +563,17 @@ void SeqToSVPass::runOnOperation() {
     signalPassFailure();
 }
 
+void SeqFIRRTLToSVPass::runOnOperation() {
+  ModuleOp top = getOperation();
+
+  for (auto module : top.getOps<hw::HWModuleOp>())
+    FirRegLower(module).lower();
+}
+
 std::unique_ptr<Pass> circt::seq::createSeqLowerToSVPass() {
   return std::make_unique<SeqToSVPass>();
+}
+
+std::unique_ptr<Pass> circt::seq::createSeqFIRRTLLowerToSVPass() {
+  return std::make_unique<SeqFIRRTLToSVPass>();
 }

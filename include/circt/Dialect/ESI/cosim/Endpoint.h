@@ -111,14 +111,15 @@ class EndpointRegistry {
 public:
   /// Register an Endpoint. Creates the Endpoint object and owns it. Returns
   /// false if unsuccessful.
-  bool registerEndpoint(int epId, uint64_t sendTypeId, int sendTypeMaxSize,
-                        uint64_t recvTypeId, int recvTypeMaxSize);
+  bool registerEndpoint(std::string epId, uint64_t sendTypeId,
+                        int sendTypeMaxSize, uint64_t recvTypeId,
+                        int recvTypeMaxSize);
 
   /// Get the specified endpoint. Return nullptr if it does not exist. This
   /// method is defined inline so it can be inlined at compile time. Performance
   /// is important here since this method is used in the polling call from the
   /// simulator. Returns nullptr if the endpoint cannot be found.
-  Endpoint *operator[](int epId) {
+  Endpoint *operator[](const std::string &epId) {
     Lock g(m);
     auto it = endpoints.find(epId);
     if (it == endpoints.end())
@@ -128,7 +129,8 @@ public:
 
   /// Iterate over the list of endpoints, calling the provided function for each
   /// endpoint.
-  void iterateEndpoints(std::function<void(int id, const Endpoint &)> f) const;
+  void iterateEndpoints(
+      const std::function<void(std::string id, const Endpoint &)> &f) const;
   /// Return the number of endpoints.
   size_t size() const;
 
@@ -139,7 +141,7 @@ private:
   std::mutex m;
 
   /// Endpoint ID to object pointer mapping.
-  std::map<int, Endpoint> endpoints;
+  std::map<std::string, Endpoint> endpoints;
 };
 
 } // namespace cosim

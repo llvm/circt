@@ -24,6 +24,8 @@
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/SetOperations.h"
+#include "llvm/ADT/SetVector.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/FormatVariadic.h"
@@ -1224,10 +1226,44 @@ void Inliner::run() {
   for (auto &nla : nlaMap)
     nla.getSecond().applyUpdates();
 
+  llvm::SetVector<Operation *> opsToRemove;
+
+  // Get the driver for this val, and mark the corresponding connect for
+  // removal.
+  auto getDriverAndMarkConnectForRemoval = [&](Value val) -> Value {
+    Value driver;
+    for (Operation *use : val.getUsers())
+      if (auto connect = dyn_cast<FConnectLike>(use))
+        if (connect.getDest() == val) {
+          driver = connect.getSrc();
+          opsToRemove.insert(connect);
+        }
+    return driver;
+  };
+
+  // Ensure that all users of the `wireToRemove` are defined after the driver.
+  // This is required to ensure the driver dominates the users.
+  auto moveUseAfterDef = [&](Operation *wireToRemove, Operation *driver) {
+    for (Operation *user : wireToRemove->getUsers())
+      if (user->isBeforeInBlock(driver))
+        user->moveAfter(driver);
+  };
   // Garbage collect any annotations which are now dead.  Duplicate annotations
   // which are now split.
   for (auto fmodule : circuit.getBodyBlock()->getOps<FModuleOp>()) {
     for (auto &op : *fmodule.getBodyBlock()) {
+      // Remove all the temporary wires of RefType, created during inlining.
+      if (auto wire = dyn_cast<WireOp>(op))
+        if (wire.getResult().getType().isa<RefType>()) {
+          auto driver = getDriverAndMarkConnectForRemoval(wire);
+          if (!driver.isa<BlockArgument>())
+            moveUseAfterDef(wire, driver.getDefiningOp());
+          wire.getResult().replaceAllUsesExcept(
+              driver, llvm::SmallPtrSet<Operation *, 16>(opsToRemove.begin(),
+                                                         opsToRemove.end()));
+          opsToRemove.insert(wire);
+          continue;
+        }
       AnnotationSet annotations(&op);
       // Early exit to avoid adding an empty annotations attribute to operations
       // which did not previously have annotations.
@@ -1297,6 +1333,8 @@ void Inliner::run() {
                        ArrayAttr::get(op.getContext(), newPortAnnotations));
     }
   }
+  for (auto *op : opsToRemove)
+    op->erase();
 }
 
 //===----------------------------------------------------------------------===//

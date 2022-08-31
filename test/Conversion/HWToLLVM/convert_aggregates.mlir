@@ -1,6 +1,6 @@
 // RUN: circt-opt %s --convert-hw-to-llvm | FileCheck %s
 
-// CHECK-LABEL: llvm.mlir.global internal @_array_global() : !llvm.array<2 x i32> {
+// CHECK-LABEL: llvm.mlir.global internal @_array_global() {addr_space = 0 : i32} : !llvm.array<2 x i32> {
 // CHECK-NEXT: %[[VAL_0:.*]] = llvm.mlir.undef : !llvm.array<2 x i32>
 // CHECK-NEXT: %[[VAL_1:.*]] = llvm.mlir.constant(1 : i32) : i32
 // CHECK-NEXT: %[[VAL_2:.*]] = llvm.insertvalue %[[VAL_1]], %[[VAL_0]][0] : !llvm.array<2 x i32>

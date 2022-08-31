@@ -4,6 +4,7 @@
 // RUN: esi-cosim-runner.py --schema %t2.capnp %s %t1.sv %S/../supplements/integers.sv
 // PY: import basic
 // PY: rpc = basic.BasicSystemTester(rpcschemapath, simhostport)
+// PY: print(rpc.list())
 // PY: rpc.testIntAcc(25)
 // PY: rpc.testVectorSum(25)
 // PY: rpc.testCrypto(25)
@@ -12,14 +13,14 @@ hw.module.extern @IntAccNoBP(%clk: i1, %rst: i1, %ints: !esi.channel<i32>) -> (t
 hw.module.extern @IntArrSum(%clk: i1, %rst: i1, %arr: !esi.channel<!hw.array<4 x si13>>) -> (totalOut: !esi.channel<!hw.array<2 x ui24>>)
 
 hw.module @ints(%clk: i1, %rst: i1) {
-  %intsIn = esi.cosim %clk, %rst, %intsTotalBuffered, 1 {name="TestEP"} : !esi.channel<i32> -> !esi.channel<i32>
+  %intsIn = esi.cosim %clk, %rst, %intsTotalBuffered, "TestEP" : !esi.channel<i32> -> !esi.channel<i32>
   %intsInBuffered = esi.buffer %clk, %rst, %intsIn {stages=2, name="intChan"} : i32
   %intsTotal = hw.instance "acc" @IntAccNoBP(clk: %clk: i1, rst: %rst: i1, ints: %intsInBuffered: !esi.channel<i32>) -> (totalOut: !esi.channel<i32>)
   %intsTotalBuffered = esi.buffer %clk, %rst, %intsTotal {stages=2, name="totalChan"} : i32
 }
 
 hw.module @array(%clk: i1, %rst: i1) {
-  %arrIn = esi.cosim %clk, %rst, %arrTotalBuffered, 2 {name="TestEP"} : !esi.channel<!hw.array<2 x ui24>> -> !esi.channel<!hw.array<4 x si13>>
+  %arrIn = esi.cosim %clk, %rst, %arrTotalBuffered, "TestEP" : !esi.channel<!hw.array<2 x ui24>> -> !esi.channel<!hw.array<4 x si13>>
   %arrInBuffered = esi.buffer %clk, %rst, %arrIn {stages=2, name="arrChan"} : !hw.array<4 x si13>
   %arrTotal = hw.instance "acc" @IntArrSum(clk: %clk: i1, rst: %rst: i1, arr: %arrInBuffered: !esi.channel<!hw.array<4 x si13>>) -> (totalOut: !esi.channel<!hw.array<2 x ui24>>)
   %arrTotalBuffered = esi.buffer %clk, %rst, %arrTotal {stages=2, name="totalChan"} : !hw.array<2 x ui24>
@@ -34,10 +35,10 @@ hw.module.extern @Encryptor(%clk: i1, %rst: i1, %in: !pktChan, %cfg: !cfgChan) -
 
 hw.module @structs(%clk:i1, %rst:i1) -> () {
   %compressedData = hw.instance "otpCryptor" @Encryptor(clk: %clk: i1, rst: %rst: i1, in: %inputData: !pktChan, cfg: %cfg: !cfgChan) -> (x: !pktChan)
-  %inputData = esi.cosim %clk, %rst, %compressedData, 3 {name="CryptoData"} : !pktChan -> !pktChan
+  %inputData = esi.cosim %clk, %rst, %compressedData, "CryptoData" : !pktChan -> !pktChan
   %c0 = hw.constant 0 : i1
   %null, %nullReady = esi.wrap.vr %c0, %c0 : i1
-  %cfg = esi.cosim %clk, %rst, %null, 4 {name="CryptoConfig"} : !esi.channel<i1> -> !cfgChan
+  %cfg = esi.cosim %clk, %rst, %null, "CryptoConfig" : !esi.channel<i1> -> !cfgChan
 }
 
 hw.module @top(%clk: i1, %rst: i1) {

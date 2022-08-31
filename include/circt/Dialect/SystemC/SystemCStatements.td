@@ -51,7 +51,7 @@ def MethodOp : SystemCOp<"method", []> {
     Represents the SC_METHOD macro as described in IEEE 1666-2011 §5.2.9.
   }];
 
-  let arguments = (ins FuncHandleType:$funcHandle);
+  let arguments = (ins NullaryVoidFunctionType:$funcHandle);
   let assemblyFormat = "$funcHandle attr-dict";
 }
 
@@ -61,6 +61,6 @@ def ThreadOp : SystemCOp<"thread", []> {
     Represents the SC_THREAD macro as described in IEEE 1666-2011 §5.2.9.
   }];
 
-  let arguments = (ins FuncHandleType:$funcHandle);
+  let arguments = (ins NullaryVoidFunctionType:$funcHandle);
   let assemblyFormat = "$funcHandle attr-dict";
 }

@@ -905,16 +905,6 @@ firrtl.circuit "DupSymField" {
 }
 
 // -----
-// Check upward reference XMRs
-
-firrtl.circuit "func2" {
-  firrtl.module @func2(in %ref_in1: !firrtl.ref<uint<1>>, out %ref_out: !firrtl.ref<uint<1>>) {
-    // expected-error @+1 {{connect is invalid: the first operand "ref_out" and second operand "ref_in1" both have same port kind, expected Module port to Instance connections only}}
-    firrtl.strictconnect %ref_out, %ref_in1 : !firrtl.ref<uint<1>>
-  }
-}
-
-// -----
 // Node ops cannot have reference type
 
 firrtl.circuit "NonRefNode" {
@@ -1025,16 +1015,6 @@ firrtl.circuit "Top" {
     %foo_in = firrtl.instance foo @Foo(in in: !firrtl.ref<uint<2>>)
     // expected-error @+1 {{may not connect different non-base types}}
     firrtl.connect %foo_in, %in : !firrtl.ref<uint<2>>, !firrtl.ref<uint<1>>
-  }
-}
-
-// -----
-// Check upward reference XMRs
-
-firrtl.circuit "MyView_mapping" {
-  firrtl.module @MyView_mapping(in %ref_in1: !firrtl.ref<uint<1>>) {
-    // expected-error @+1 {{'firrtl.ref.resolve' op failed to verify that it cannot have module port as an operand because it implies upward reference XMR, which are not supported. The reference operand must be a port from firrtl.instance}}
-    %0 = firrtl.ref.resolve %ref_in1 : !firrtl.ref<uint<1>>
   }
 }
 

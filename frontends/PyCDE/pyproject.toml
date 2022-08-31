@@ -4,12 +4,16 @@ requires = [
     "setuptools_scm>=6.2",
     "wheel",
     "cmake>=3.12",
+    
     # MLIR build depends.
     "numpy",
     "pybind11>=2.7.1",
     "PyYAML",
+
+    # PyCDE depends
     "cocotb>=1.6.2",
     "cocotb-test>=0.2.2",
+    "jinja2"
 ]
 build-backend = "setuptools.build_meta"
 

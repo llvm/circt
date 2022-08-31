@@ -1,6 +1,6 @@
 // REQUIRES: verilator
-// RUN: circt-opt %s --convert-fsm-to-sv --canonicalize --lower-seq-to-sv --export-verilog -o %t2.mlir > %t1.sv
-// RUN: circt-rtl-sim.py %t1.sv %S/driver.cpp --no-default-driver | FileCheck %s
+// RUN: circt-opt %s --convert-fsm-to-sv --canonicalize --lower-seq-to-sv --export-split-verilog -o %t2.mlir
+// RUN: circt-rtl-sim.py fsm_enum_typedefs.sv top.sv %S/driver.cpp --no-default-driver | FileCheck %s
 
 // A simple FSM with an internal variable. The FSM counts up to 5 and then resets
 // the counter to 0, always emitting the current counter value on the output.

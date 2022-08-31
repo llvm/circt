@@ -20,8 +20,12 @@ class LoopbackTester(esi_cosim.CosimBase):
     ep.close().wait()
 
   def test_two_chan_loopback(self, num_msgs):
-    to_hw = self.openEP(12, sendType=self.schema.I1, recvType=self.schema.I8)
-    from_hw = self.openEP(11, sendType=self.schema.I8, recvType=self.schema.I1)
+    to_hw = self.openEP("TOP.top.TwoChanLoopback_loopback_tohw",
+                        sendType=self.schema.I1,
+                        recvType=self.schema.I8)
+    from_hw = self.openEP("TOP.top.TwoChanLoopback_loopback_fromhw",
+                          sendType=self.schema.I8,
+                          recvType=self.schema.I1)
     for _ in range(num_msgs):
       data = random.randint(0, 2**8 - 1)
       print(f"Sending {data}")
@@ -31,7 +35,9 @@ class LoopbackTester(esi_cosim.CosimBase):
       assert (result.i == data)
 
   def test_i32(self, num_msgs):
-    ep = self.openEP(sendType=self.schema.I32, recvType=self.schema.I32)
+    ep = self.openEP("TOP.top.intLoopbackInst.IntTestEP.loopback",
+                     sendType=self.schema.I32,
+                     recvType=self.schema.I32)
     for _ in range(num_msgs):
       data = random.randint(0, 2**32 - 1)
       print(f"Sending {data}")
@@ -54,7 +60,7 @@ class LoopbackTester(esi_cosim.CosimBase):
     return data
 
   def test_3bytes(self, num_msgs=50):
-    ep = self.openEP()
+    ep = self.openEP("TOP.top.ep")
     print("Testing writes")
     dataSent = list()
     for _ in range(num_msgs):
@@ -69,7 +75,9 @@ class LoopbackTester(esi_cosim.CosimBase):
 
   def test_keytext(self, num_msgs=50):
     cStructType = self.schema.Struct17798359158705484171
-    ep = self.openEP(epNum=2, sendType=cStructType, recvType=cStructType)
+    ep = self.openEP("TOP.top.twoListLoopbackInst.KeyTextEP",
+                     sendType=cStructType,
+                     recvType=cStructType)
     kts = []
     for i in range(num_msgs):
       kt = cStructType.new_message(
