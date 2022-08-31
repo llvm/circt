@@ -1496,15 +1496,19 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
         // generated, only the leaf.
 
         if (companionModule == enclosing) {
+          // This is the new style of XMRs using RefTypes.
           if (!leafValue.isa<BlockArgument>() &&
               isa<NodeOp>(leafValue.getDefiningOp())) {
-            auto nodeOp = leafValue.getDefiningOp();
+            auto *nodeOp = leafValue.getDefiningOp();
             path.addValue(nodeOp->getOperand(0));
             AnnotationSet::removeDontTouch(nodeOp);
           } else
             path.addValue(leafValue);
 
         } else {
+          // This case can only occur if ref.resolve is not introduced during
+          // LowerAnnotations. The following code can be eventually removed.
+          //
           // There are two posisibilites for what this is tapping:
           //   1. This is a constant that will be synced into the mappings
           //   file.
