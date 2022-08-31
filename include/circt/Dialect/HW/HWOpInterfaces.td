@@ -120,11 +120,7 @@ def HWMutableModuleLike : OpInterface<"HWMutableModuleLike"> {
     /// the output op to return the associated values.
     InterfaceMethod<"Append output values to this module",
     "void", "appendOutputs", (ins
-      "ArrayRef<std::pair<StringAttr, Value>>":$outputs),
-    /*methodBody=*/[{}],
-    /*defaultImplementation=*/[{
-      return;
-    }]>
+      "ArrayRef<std::pair<StringAttr, Value>>":$outputs)>
   ];
 }
 

@@ -589,6 +589,11 @@ void MSFTModuleOp::modifyPorts(
                         eraseOutputs);
 }
 
+void MSFTModuleOp::appendOutputs(
+    ArrayRef<std::pair<StringAttr, Value>> outputs) {
+  addPorts({}, outputs);
+}
+
 void MSFTModuleOp::build(OpBuilder &builder, OperationState &result,
                          StringAttr name, hw::ModulePortInfo ports,
                          ArrayRef<NamedAttribute> params) {
