@@ -623,4 +623,23 @@ firrtl.module @subword_assign_5(in %b: !firrtl.uint<1>, out %o: !firrtl.uint<2>)
 // CHECK: firrtl.strictconnect %o, [[TMP1]] : !firrtl.uint<2>
 // CHECK: }
 
+// Test subword individual bit assignment on SInt.
+firrtl.module @subword_assign_6(in %c: !firrtl.uint<2>, out %x: !firrtl.sint<2>) {
+  %0 = firrtl.bits %c 1 to 1 : (!firrtl.uint<2>) -> !firrtl.uint<1>
+  %1 = firrtl.bits %x 1 to 1 : (!firrtl.sint<2>) -> !firrtl.uint<1>
+  %2 = firrtl.bits %c 0 to 0 : (!firrtl.uint<2>) -> !firrtl.uint<1>
+  %3 = firrtl.bits %x 0 to 0 : (!firrtl.sint<2>) -> !firrtl.uint<1>
+  firrtl.strictconnect %3, %2 : !firrtl.uint<1>
+  firrtl.strictconnect %1, %0 : !firrtl.uint<1>
+}
+
+// CHECK-LABEL: firrtl.module @subword_assign_6(in %c: !firrtl.uint<2>, out %x: !firrtl.sint<2>) {
+// CHECK: [[TMP0:%.+]] = firrtl.bits %c 1 to 1 : (!firrtl.uint<2>) -> !firrtl.uint<1>
+// CHECK: [[TMP2:%.+]] = firrtl.bits %c 0 to 0 : (!firrtl.uint<2>) -> !firrtl.uint<1>
+// CHECK: [[TMP9:%.+]] = firrtl.bits [[TMP2]] 0 to 0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK: [[TMP11:%.+]] = firrtl.cat [[TMP0]], [[TMP9]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
+// CHECK: [[TMP12:%.+]] = firrtl.asSInt [[TMP11]] : (!firrtl.uint<2>) -> !firrtl.sint<2>
+// CHECK: firrtl.strictconnect %x, [[TMP12]] : !firrtl.sint<2>
+// CHECK: }
+
 }
