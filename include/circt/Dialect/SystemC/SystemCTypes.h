@@ -19,7 +19,19 @@
 
 namespace circt {
 namespace systemc {
+
+namespace detail {
+/// A struct containing minimal information for a systemc module port. Thus, can
+/// be used as parameter in attributes or types.
+struct PortInfo {
+  mlir::StringAttr name;
+  mlir::Type type;
+};
+} // namespace detail
+
+/// Get the type wrapped by a signal or port (in, inout, out) type.
 Type getSignalBaseType(Type type);
+
 } // namespace systemc
 } // namespace circt
 

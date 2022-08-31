@@ -60,4 +60,9 @@ def SignalType : SystemCType<
     "SignalType",
     "::circt::hw::TypeAliasOr<circt::systemc::SignalType>">;
 
+// A handle to refer to circt::systemc::ModuleType in ODS.
+def ModuleType : SystemCType<
+    CPred<"::circt::hw::type_isa<circt::systemc::ModuleType>($_self)">,
+    "a ModuleType", "::circt::hw::TypeAliasOr<circt::systemc::ModuleType>">;
+
 #endif // CIRCT_DIALECT_SYSTEMC_SYSTEMCTYPES

@@ -163,3 +163,92 @@ systemc.module @invalidSignalOpReturnType () {
   // expected-error @+1 {{invalid kind of type specified}}
   %signal0 = systemc.signal : i32
 }
+
+// -----
+
+systemc.module @m1() {}
+
+// expected-note @+1 {{in module '@instanceDeclNameConflict'}}
+systemc.module @instanceDeclNameConflict () {
+  // expected-note @+1 {{'name' first defined here}}
+  %0 = "systemc.signal"() {name="name"} : () -> !systemc.signal<i32>
+  // expected-error @+1 {{redefines name 'name'}}
+  %1 = "systemc.instance.decl"() {name="name", moduleName=@m1} : () -> !systemc.module<m1()>
+}
+
+// -----
+
+systemc.module @m1() {}
+
+systemc.module @instanceDeclNameNotEmpty () {
+  // expected-error @+1 {{'name' attribute must not be empty}}
+  %0 = "systemc.instance.decl"() {name = "", moduleName=@m1} : () -> !systemc.module<m1()>
+}
+
+// -----
+
+systemc.module @submodule (%in0: !systemc.in<i32>) {}
+
+systemc.module @instanceDeclMustBeDirectChildOfModule () {
+  systemc.ctor {
+    // expected-error @+1 {{expects parent op 'systemc.module'}}
+    %instance = systemc.instance.decl @submodule : !systemc.module<submodule(in0: !systemc.in<i32>)>
+  }
+}
+
+// -----
+
+// expected-note @+1 {{module declared here}}
+systemc.module @adder (%summand_a: !systemc.in<i32>, %summand_b: !systemc.in<i32>, %sum: !systemc.out<i32>) {}
+
+systemc.module @instanceDeclTypeMismatch () {
+  // expected-error @+1 {{port type #1 must be '!systemc.in<i32>', but got '!systemc.in<i1>'}}
+  %moduleInstance = systemc.instance.decl @adder : !systemc.module<adder(summand_a: !systemc.in<i32>, summand_b: !systemc.in<i1>, sum: !systemc.out<i32>)>
+}
+
+// -----
+
+// expected-note @+1 {{module declared here}}
+systemc.module @adder (%summand_a: !systemc.in<i32>, %summand_b: !systemc.in<i32>, %sum: !systemc.out<i32>) {}
+
+systemc.module @instanceDeclPortNameMismatch () {
+  // expected-error @+1 {{port name #1 must be "summand_b", but got "summand"}}
+  %moduleInstance = systemc.instance.decl @adder : !systemc.module<adder(summand_a: !systemc.in<i32>, summand: !systemc.in<i32>, sum: !systemc.out<i32>)>
+}
+
+// -----
+
+// expected-note @+1 {{module declared here}}
+systemc.module @adder (%summand_a: !systemc.in<i32>, %summand_b: !systemc.in<i32>, %sum: !systemc.out<i32>) {}
+
+systemc.module @instanceDeclPortNumMismatch () {
+  // expected-error @+1 {{has a wrong number of ports; expected 3 but got 2}}
+  %moduleInstance = systemc.instance.decl @adder : !systemc.module<adder(summand_a: !systemc.in<i32>, summand_b: !systemc.in<i32>)>
+}
+
+// -----
+
+systemc.module @instanceDeclNonExistentModule () {
+  // expected-error @+1 {{cannot find module definition 'adder'}}
+  %moduleInstance = systemc.instance.decl @adder : !systemc.module<adder(summand_a: !systemc.in<i32>, summand_b: !systemc.in<i32>)>
+}
+
+// -----
+
+// expected-note @+1 {{module declared here}}
+hw.module @adder () -> () {}
+
+systemc.module @instanceDeclDoesNotReferenceSystemCModule () {
+  // expected-error @+1 {{symbol reference 'adder' isn't a systemc module}}
+  %moduleInstance = systemc.instance.decl @adder : !systemc.module<adder()>
+}
+
+// -----
+
+// expected-note @+1 {{module declared here}}
+systemc.module @adder (%summand_a: !systemc.in<i32>, %summand_b: !systemc.in<i32>, %sum: !systemc.out<i32>) {}
+
+systemc.module @instanceDeclPortNumMismatch () {
+  // expected-error @+1 {{module names must match; expected 'adder' but got 'wrongname'}}
+  %moduleInstance = systemc.instance.decl @adder : !systemc.module<wrongname(summand_a: !systemc.in<i32>, summand_b: !systemc.in<i32>)>
+}

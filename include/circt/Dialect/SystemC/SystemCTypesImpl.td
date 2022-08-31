@@ -68,3 +68,26 @@ def SignalTypeImpl : SignalTypesImplBase<"Signal"> {
   }];
   let mnemonic = "signal";
 }
+
+// A type to represent systemc::SCModuleOp instances.
+// Declares the systemc::ModuleType in C++.
+def ModuleTypeImpl : SystemCTypeDef<"Module"> {
+  let summary = "SystemC module type";
+  let description = [{
+    Represents a SystemC module instantiation. Example:
+    `!systemc.module<moduleName(portName1: type1, portName2: type2)>`
+  }];
+  let mnemonic = "module";
+
+  let hasCustomAssemblyFormat = 1;
+
+  let parameters = (ins
+    "mlir::StringAttr":$moduleName,
+    ArrayRefParameter<
+      "::circt::systemc::ModuleType::PortInfo", "module ports">:$ports
+  );
+
+  let extraClassDeclaration = [{
+    using PortInfo = ::circt::systemc::detail::PortInfo;
+  }];
+}
