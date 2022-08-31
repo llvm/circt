@@ -26,6 +26,17 @@ approach will lead itself to a significant decrease in the LOC required.
 namespace circt {
 namespace cppcde {
 
+namespace {
+/// Unwraps a range of CDEValues to their underlying mlir::Value's.
+template <typename CDEValue>
+static llvm::SmallVector<Value> unwrap(llvm::ArrayRef<CDEValue> values) {
+  SmallVector<Value> unwrapped;
+  llvm::transform(values, std::back_inserter(unwrapped),
+                  [](auto &v) { return v.get(); });
+  return unwrapped;
+}
+} // namespace
+
 // Port annotations.
 enum class PortKind { Clock, Reset, Default };
 
@@ -226,18 +237,31 @@ struct DefaultCDEValue
   using CDEValueImpl::CDEValueImpl;
 };
 
+template <typename CDEValue>
+class CDEPorts {
+public:
+  CDEValue operator[](llvm::StringRef name) {
+    auto it = ports.find(name.str());
+    assert(it != ports.end() && "Port not found.");
+    return it->second;
+  }
+
+protected:
+  std::map<std::string, CDEValue> ports;
+};
+
 // A class for providing backedge-based access to the in- and output ports of
 // a module.
 template <typename CDEValue>
-class CDEPorts {
+class CDEModulePorts : public CDEPorts<CDEValue> {
 
 public:
-  CDEPorts(CDEState &ctx, hw::HWModuleOp module) : ctx(ctx) {
+  CDEModulePorts(CDEState &ctx, hw::HWModuleOp module) : ctx(ctx) {
     OpBuilder::InsertionGuard g(ctx.b);
     auto modPorts = module.getPorts();
 
     for (auto [barg, info] : llvm::zip(module.getArguments(), modPorts.inputs))
-      ports.try_emplace(info.name.str(), CDEValue(&ctx, barg));
+      this->ports.try_emplace(info.name.str(), CDEValue(&ctx, barg));
 
     auto outputOp = cast<hw::OutputOp>(module.getBodyBlock()->getTerminator());
     assert(outputOp.getNumOperands() == 0);
@@ -247,8 +271,9 @@ public:
     for (auto &info : modPorts.outputs) {
       auto be = std::make_shared<Backedge>(ctx.bb.get(info.type));
       outputBackedges.push_back(be);
-      assert(ports.count(info.name.str()) == 0 && "output port already exists");
-      ports[info.name.str()] = CDEValue(&ctx, be);
+      assert(this->ports.count(info.name.str()) == 0 &&
+             "output port already exists");
+      this->ports[info.name.str()] = CDEValue(&ctx, be);
       outputOpArgs.push_back(*be.get());
     }
 
@@ -256,16 +281,26 @@ public:
     outputOp.erase();
   }
 
-  CDEValue operator[](llvm::StringRef name) {
-    auto it = ports.find(name.str());
-    assert(it != ports.end() && "Port not found.");
-    return it->second;
+private:
+  CDEState &ctx;
+  std::vector<std::shared_ptr<Backedge>> outputBackedges;
+};
+
+// A class facilitating CPPCDE-value access to module instance ports.
+template <typename CDEValue>
+class GeneratedModuleInstance : public CDEPorts<CDEValue> {
+
+public:
+  GeneratedModuleInstance(CDEState &ctx, hw::InstanceOp instance)
+      : instance(instance), ctx(ctx) {
+    for (size_t i = 0; i < instance.getNumResults(); ++i)
+      this->ports[instance.getResultName(i).str()] =
+          CDEValue(&ctx, instance.getResult(i));
   }
 
 private:
-  std::map<std::string, CDEValue> ports;
+  hw::InstanceOp instance;
   CDEState &ctx;
-  std::vector<std::shared_ptr<Backedge>> outputBackedges;
 };
 
 // A CDE Generator is a utility class for supporting syntactically sugar'ed
@@ -273,20 +308,13 @@ private:
 template <typename CDEValue>
 class Generator {
 public:
-  using CDEPorts = CDEPorts<CDEValue>;
+  using CDEModulePorts = CDEModulePorts<CDEValue>;
   Generator(Location loc, OpBuilder &b)
       : loc(loc), bb(b, loc), ctx(loc, b, bb) {}
+
   virtual ~Generator() = default;
 
 protected:
-  /// Unwraps a range of CDEValues to their underlying mlir::Value's.
-  static llvm::SmallVector<Value> unwrap(llvm::ArrayRef<CDEValue> values) {
-    SmallVector<Value> unwrapped;
-    llvm::transform(values, std::back_inserter(unwrapped),
-                    [](auto &v) { return v.get(); });
-    return unwrapped;
-  }
-
   // Executes an N-ary operation on a range of CDEValues and returns the
   // result as a CDEValue.
   template <typename TOp>
@@ -323,41 +351,67 @@ protected:
     return T::get(ctx.b.getContext(), args...);
   }
 
-  // Implementation-defined generator function - this is where user logic
-  // should be implemented.
-  virtual void generate(CDEPorts &ports) = 0;
-
   Location loc;
   BackedgeBuilder bb;
   CDEState ctx;
 };
 
 /// A CDE Generator which generates hw::HWModuleOp modules.
-template <typename CDEValue>
+template <typename TGeneratorImpl, typename CDEValue>
 class HWModuleGenerator : public Generator<CDEValue> {
+
+  // Wrapper class for a CPPCDE generated module.
+  class GeneratedModule {
+    friend class HWModuleGenerator;
+
+  public:
+    hw::HWModuleOp get() { return module; }
+    GeneratedModuleInstance<CDEValue>
+    instantiate(StringRef instanceName, llvm::ArrayRef<CDEValue> operands) {
+      auto unwrappedOperands = unwrap(operands);
+      return GeneratedModuleInstance<CDEValue>(
+          ctx, ctx.b.create<hw::InstanceOp>(ctx.b.getUnknownLoc(), module,
+                                            instanceName, unwrappedOperands));
+    }
+
+  private:
+    GeneratedModule(CDEState &ctx, hw::HWModuleOp module)
+        : ctx(ctx), module(module) {}
+    CDEState &ctx;
+    hw::HWModuleOp module;
+  };
 
 public:
   HWModuleGenerator(Location loc, OpBuilder &b)
       : Generator<CDEValue>(loc, b), portInfo({}) {}
 
-  // Returns the name of this module.
-  virtual std::string getName() = 0;
-
   // Run module generation.
-  FailureOr<hw::HWModuleOp> operator()() {
+  template <typename... Args>
+  FailureOr<GeneratedModule> operator()(Args... args) {
+    OpBuilder::InsertionGuard g(this->ctx.b);
+
+    // Regardless of where the current insertion point is, the generator is
+    // always expected to emit a hw::HWModuleOp in the nearest module scope.
+    auto parentOp = this->ctx.b.getInsertionBlock()->getParentOp();
+    if (!isa<mlir::ModuleOp>(parentOp))
+      parentOp = parentOp->template getParentOfType<mlir::ModuleOp>();
+    this->ctx.b.setInsertionPointToStart(
+        cast<mlir::ModuleOp>(parentOp).getBody());
+
+    auto *impl = static_cast<TGeneratorImpl *>(this);
 
     // Reset I/O.
     portInfo = hw::ModulePortInfo({});
-    createIO();
+    impl->createIO(args...);
 
     // Create the module.
+    auto name = impl->getName(args...);
     auto module = this->ctx.b.template create<hw::HWModuleOp>(
-        this->loc, this->ctx.b.getStringAttr(getName()), portInfo);
+        this->loc, this->ctx.b.getStringAttr(name), portInfo);
 
     // Generate module port accessors.
-    OpBuilder::InsertionGuard g(this->ctx.b);
     this->ctx.b.setInsertionPointToStart(module.getBodyBlock());
-    auto ports = CDEPorts<CDEValue>(this->ctx, module);
+    auto ports = CDEModulePorts<CDEValue>(this->ctx, module);
 
     if (clockIdx.has_value())
       this->ctx.clk = module.getArgument(clockIdx.value());
@@ -366,8 +420,8 @@ public:
 
     // Go generate!
     this->ctx.b.setInsertionPoint(module.getBodyBlock()->getTerminator());
-    this->generate(ports);
-    return module;
+    impl->generate(ports, args...);
+    return GeneratedModule(this->ctx, module);
   }
 
 protected:
@@ -402,9 +456,6 @@ protected:
                                             hw::PortDirection::OUTPUT, type,
                                             portInfo.outputs.size()});
   }
-
-  // Hook for creating the input and output ports of this module.
-  virtual void createIO() = 0;
 
   hw::ModulePortInfo portInfo;
 

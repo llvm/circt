@@ -41,42 +41,59 @@ struct TestCPPCDEPass
 };
 } // namespace
 
-class MyAdder : public HWModuleGenerator<DefaultCDEValue> {
+// A width and value parameterized adder.
+template <typename CDEValue = DefaultCDEValue>
+class MyAdder : public HWModuleGenerator<MyAdder<CDEValue>, CDEValue> {
 public:
-  using HWModuleGenerator::HWModuleGenerator;
-  std::string getName() override { return "MyAdder"; }
-  void createIO() override {
-    input("in0", type<IntegerType>(32));
-    input("in1", type<IntegerType>(32));
-    clock();
-    output("out0", type<IntegerType>(32));
+  using HWModuleGenerator<MyAdder<CDEValue>, CDEValue>::HWModuleGenerator;
+  std::string getName(int width) { return "MyAdder_" + std::to_string(width); }
+  void createIO(int width) {
+    this->input("in0", this->template type<IntegerType>(width));
+    this->input("in1", this->template type<IntegerType>(width));
+    this->clock();
+    this->output("out0", this->template type<IntegerType>(width));
   }
 
-  void generate(CDEPorts &ports) override {
+  void generate(CDEModulePorts<CDEValue> &ports, int width) {
     ports["out0"].assign((ports["in0"] + ports["in1"]).reg("add_reg"));
   }
 };
 
 // Example of specializing the generator with a custom value type that extends
 // the default value type with a few extra operators.
-class MyESIAdder : public HWModuleGenerator<ESICDEValue> {
+class MyESIAdder : public HWModuleGenerator<MyESIAdder, ESICDEValue> {
 public:
   using HWModuleGenerator::HWModuleGenerator;
-  std::string getName() override { return "MyESIAdder"; }
-  void createIO() override {
-    Type channelType = type<esi::ChannelType>(type<IntegerType>(32));
+
+  // Alternative to duplicating args in createIO, generate and getName is to
+  // pack it beforehand.
+  struct Args {
+    int width;
+  };
+
+  std::string getName(Args &args) { return "MyESIAdder"; }
+  void createIO(Args &args) {
+    Type channelType = type<esi::ChannelType>(type<IntegerType>(args.width));
     input("in0", channelType);
     input("in1", channelType);
     clock();
     output("out0", channelType);
   }
 
-  void generate(CDEPorts &ports) override {
+  void generate(CDEModulePorts &ports, Args &args) {
     auto valid = wire(ctx.b.getI1Type());
     auto [inner1, valid1] = ports["in0"].unwrap(valid);
     auto [inner2, valid2] = ports["in1"].unwrap(valid);
-    auto res = inner1 + inner2;
-    auto [outCh, outReady] = res.wrap(valid1 & valid2);
+
+    // TODO: some form of memoization is needed to avoid multiple definitions of
+    // myAdder if this generator is called multiple times - but should this be
+    // done by CPPCDE or the programmer? Since this is a library, probably the
+    // latter. Could even pass in the adder through a reference in the args!
+    auto myAdder = (MyAdder<ESICDEValue>(ctx.loc, ctx.b))(32);
+    auto adderInstance =
+        myAdder.value().instantiate("myAdder", {inner1, inner2, ports["clk"]});
+
+    auto [outCh, outReady] = adderInstance["out0"].wrap(valid1 & valid2);
     valid.assign(outReady);
     ports["out0"].assign(outCh);
   }
@@ -88,10 +105,9 @@ void TestCPPCDEPass::runOnOperation() {
   OpBuilder b(context);
   b.setInsertionPointToStart(getOperation().getBody());
 
-  if (failed((MyAdder(loc, b))()) || failed((MyESIAdder(loc, b))())) {
-    signalPassFailure();
-    return;
-  }
+  auto myESIAdder = (MyESIAdder(loc, b))(MyESIAdder::Args{32});
+  if (failed(myESIAdder))
+    return signalPassFailure();
 }
 
 //===----------------------------------------------------------------------===//
