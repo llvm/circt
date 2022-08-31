@@ -160,7 +160,7 @@ static bool isDuplicatableExpression(Operation *op) {
 /// Return the verilog name of the operations that can define a symbol.
 /// Except for <WireOp, RegOp, LogicOp, LocalParamOp, InstanceOp>, check global
 /// state `getDeclarationVerilogName` for them.
-static StringRef getSymOpName(Operation *symOp) {
+StringRef ExportVerilog::getSymOpName(Operation *symOp) {
   // Typeswitch of operation types which can define a symbol.
   // If legalizeNames has renamed it, then the attribute must be set.
   if (auto attr = symOp->getAttrOfType<StringAttr>("hw.verilogName"))
@@ -188,7 +188,8 @@ static StringRef getSymOpName(Operation *symOp) {
 }
 
 /// Return the verilog name of the port for the module.
-StringRef getPortVerilogName(Operation *module, ssize_t portArgNum) {
+StringRef ExportVerilog::getPortVerilogName(Operation *module,
+                                            size_t portArgNum) {
   auto numInputs = hw::getModuleNumInputs(module);
   // portArgNum is the index into the result of getAllModulePortInfos.
   // Also ensure the correct index into the input/output list is computed.

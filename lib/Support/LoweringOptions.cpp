@@ -46,7 +46,7 @@ parseWireSpillingHeuristic(StringRef option) {
   return llvm::StringSwitch<
              llvm::Optional<LoweringOptions::WireSpillingHeuristic>>(option)
       .Case("spillNone", LoweringOptions::SpillNone)
-      .Case("spillAllNamehints", LoweringOptions::SpillAllNamehints)
+      .Case("spillNamehintsIfShort", LoweringOptions::SpillNamehintsIfShort)
       .Default(llvm::None);
 }
 
@@ -103,11 +103,12 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
       if (option.getAsInteger(10, maximumNumberOfVariadicOperands)) {
         errorHandler("expected integer for number of variadic operands");
         maximumNumberOfVariadicOperands = DEFAULT_VARIADIC_OPERAND_LIMIT;
+      }
     } else if (option.consume_front("wireSpillingHeuristic=")) {
       if (auto heuristic = parseWireSpillingHeuristic(option)) {
         wireSpillingHeuristic = *heuristic;
       } else {
-        errorHandler("expected 'spillNone' or 'spillAllNamehints'");
+        errorHandler("expected 'spillNone' or 'spillNamehintsIfShort'");
       }
     } else {
       errorHandler(llvm::Twine("unknown style option \'") + option + "\'");
@@ -143,8 +144,8 @@ std::string LoweringOptions::toString() const {
     options += "printDebugInfo,";
   if (useOldEmissionMode)
     options += "useOldEmissionMode,";
-  if (wireSpillingHeuristic == WireSpillingHeuristic::SpillAllNamehints)
-    options += "wireSpillingHeuristic=spillAllNamehints,";
+  if (wireSpillingHeuristic == WireSpillingHeuristic::SpillNamehintsIfShort)
+    options += "wireSpillingHeuristic=spillNamehintsIfShort,";
 
   if (emittedLineLength != DEFAULT_LINE_LENGTH)
     options += "emittedLineLength=" + std::to_string(emittedLineLength) + ',';
