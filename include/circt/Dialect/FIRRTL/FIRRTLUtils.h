@@ -84,6 +84,16 @@ std::string getFieldName(const FieldRef &fieldRef, bool &rootKnown);
 Value getValueByFieldID(ImplicitLocOpBuilder builder, Value value,
                         unsigned fieldID);
 
+/// Get the ground type leaf-sub-element from the aggregate type val. This
+/// constructs the appropriate SubindexOp/SubfieldOp ops recursively to get the
+/// ground type at the given `fieldID`. Unlike the `getValueByFieldID`, which
+/// returns the immediate field value at a given fieldID, which maybe an
+/// aggregate type and generates at most a single subField/subIndex op, this
+/// always generates as many subField/subIndex ops necessary to get the leaf
+/// value of ground type recursively.
+Value getLeafSubElement(Value val, unsigned fieldID,
+                        ImplicitLocOpBuilder &builder);
+
 //===----------------------------------------------------------------------===//
 // Inner symbol and InnerRef helpers.
 //===----------------------------------------------------------------------===//

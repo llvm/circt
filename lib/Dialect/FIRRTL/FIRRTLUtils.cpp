@@ -541,6 +541,28 @@ Value circt::firrtl::getValueByFieldID(ImplicitLocOpBuilder builder,
   return value;
 }
 
+Value circt::firrtl::getLeafSubElement(Value val, unsigned fieldID,
+                                       ImplicitLocOpBuilder &builder) {
+  return TypeSwitch<FIRRTLBaseType, Value>(val.getType().cast<FIRRTLBaseType>())
+      .Case<FVectorType>([&](FVectorType vecType) {
+        auto index = vecType.getIndexForFieldID(fieldID);
+        auto subfieldIndex = fieldID - vecType.getFieldID(index);
+        // Insert a SubIndex access to the vector element. The element can be an
+        // aggregate type, so recursively get the appropriate field from it.
+        return getLeafSubElement(builder.create<SubindexOp>(val, index),
+                                 subfieldIndex, builder);
+      })
+      .Case<BundleType>([&](BundleType bundleType) {
+        auto index = bundleType.getIndexForFieldID(fieldID);
+        auto subfieldIndex = fieldID - bundleType.getFieldID(index);
+        // Insert a SubField access to the bundle field. The element can be an
+        // aggregate type, so recursively get the appropriate field from it.
+        return getLeafSubElement(builder.create<SubfieldOp>(val, index),
+                                 subfieldIndex, builder);
+      })
+      .Default([&](auto) { return val; });
+}
+
 /// Returns an operation's `inner_sym`, adding one if necessary.
 StringAttr circt::firrtl::getOrAddInnerSym(
     Operation *op, StringRef nameHint, FModuleOp mod,
