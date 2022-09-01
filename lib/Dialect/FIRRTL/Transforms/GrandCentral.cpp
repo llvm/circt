@@ -784,64 +784,6 @@ private:
 // Code related to handling Grand Central View annotations
 //===----------------------------------------------------------------------===//
 
-/// Read the field `fieldID` from the aggregate type val. It constructs the
-/// appropriate SubindexOp/SubfieldOp ops recursively to get the ground type at
-/// the given `fieldID`.
-static Value getSub(Value val, size_t fieldID, ImplicitLocOpBuilder &builder) {
-  return TypeSwitch<FIRRTLBaseType, Value>(val.getType().cast<FIRRTLBaseType>())
-      .Case<FVectorType>([&](FVectorType vecType) {
-        auto index = vecType.getIndexForFieldID(fieldID);
-        auto subfieldIndex = fieldID - vecType.getFieldID(index);
-        // Insert a SubIndex access to the vector element. The element can be an
-        // aggregate type, so recursively get the appropriate field from it.
-        return getSub(builder.create<SubindexOp>(val, index), subfieldIndex,
-                      builder);
-      })
-      .Case<BundleType>([&](BundleType bundleType) {
-        auto index = bundleType.getIndexForFieldID(fieldID);
-        auto subfieldIndex = fieldID - bundleType.getFieldID(index);
-        // Insert a SubField access to the bundle field. The element can be an
-        // aggregate type, so recursively get the appropriate field from it.
-        return getSub(builder.create<SubfieldOp>(val, index), subfieldIndex,
-                      builder);
-      })
-      .Default([&](auto) { return val; });
-}
-
-/// Add ports to the module and all its instances. Return only the clone for
-/// `instOnPath`. This does not connect the new ports to anything.
-static InstanceOp addPortsToModule(FModuleOp mod, InstanceOp instOnPath,
-                                   FIRRTLType portType, Direction dir,
-                                   AnnoPathValue &companionTarget,
-                                   ApplyState &state, StringRef viewName) {
-  // To store the cloned version of `instOnPath`.
-  InstanceOp clonedInstOnPath;
-  auto portName = [&](FModuleOp nameForMod) {
-    return StringAttr::get(
-        state.circuit.getContext(),
-        state.getNamespace(nameForMod).newName("view_" + viewName + "refPort"));
-  };
-  unsigned portNo = mod.getNumPorts();
-  PortInfo portInfo = {portName(mod), portType, dir, {}, mod.getLoc()};
-  mod.insertPorts({{portNo, portInfo}});
-  state.targetCaches.insertPort(mod, portNo);
-  // Now update all the instances of this `mod`.
-  for (auto *use : state.instancePathcache.instanceGraph.lookup(mod)->uses()) {
-    InstanceOp useInst = cast<InstanceOp>(use->getInstance());
-    auto clonedInst = useInst.cloneAndInsertPorts({{portNo, portInfo}});
-    if (useInst == instOnPath)
-      clonedInstOnPath = clonedInst;
-    state.instancePathcache.replaceInstance(useInst, clonedInst);
-    state.targetCaches.replaceOp(useInst, clonedInst);
-    useInst->replaceAllUsesWith(clonedInst.getResults().drop_back());
-    auto *iter = llvm::find(companionTarget.instances, useInst);
-    if (iter != companionTarget.instances.end())
-      *iter = clonedInst;
-    useInst->erase();
-  }
-  return clonedInstOnPath;
-}
-
 /// Get the path from `parentModule` to `targetModule`. If `nonlocalPath` is
 /// empty, get the path from InstanceGraph, else get the path from the
 /// `nonlocalPath`. Emit error and return None, if there are multiple paths
@@ -902,7 +844,8 @@ static Value borePortsToRefSend(AnnoPathValue &refSendTarget,
       refSendBase.getType().cast<FIRRTLBaseType>().getFinalTypeByFieldID(
           refSendTarget.fieldIdx);
   auto refSendRefType = RefType::get(refSendBaseType);
-  refSendBase = getSub(refSendBase, refSendTarget.fieldIdx, refSendBuilder);
+  refSendBase =
+      getValueByFieldID(refSendBuilder, refSendBase, refSendTarget.fieldIdx);
   // Note: No DontTouch added to refSendTarget.
   auto sendVal = refSendBuilder.create<RefSendOp>(refSendBase);
 
@@ -919,7 +862,12 @@ static Value borePortsToRefSend(AnnoPathValue &refSendTarget,
           state.instancePathcache.instanceGraph.getReferencedModule(refInst));
       auto clonedInst = addPortsToModule(
           refInstTargetMod, refInst, refSendRefType, Direction::Out,
-          companionTarget, state, viewName.getValue());
+          viewName.getValue(), state.instancePathcache,
+          state.circuit.getContext(),
+          [&](FModuleLike mod) -> ModuleNamespace & {
+            return state.getNamespace(mod);
+          },
+          &companionTarget, &state.targetCaches);
       auto instParentMod = clonedInst->getParentOfType<FModuleOp>();
       ImplicitLocOpBuilder refConnectBuilder(clonedInst.getLoc(), clonedInst);
       refConnectBuilder.setInsertionPointAfter(clonedInst);
@@ -961,7 +909,12 @@ static StringAttr boreRefResolveToCompanion(Value refSendVal,
     unsigned portNo = instTargetMod.getNumPorts();
     auto clonedInst = addPortsToModule(
         instTargetMod, companionPathInst, refSendVal.getType().cast<RefType>(),
-        Direction::In, companionTarget, state, viewName.getValue());
+        Direction::In, viewName.getValue(), state.instancePathcache,
+        state.circuit.getContext(),
+        [&](FModuleLike mod) -> ModuleNamespace & {
+          return state.getNamespace(mod);
+        },
+        &companionTarget, &state.targetCaches);
     auto newInstRes = clonedInst.getResult(portNo);
     auto thisMod = clonedInst->getParentOfType<FModuleOp>();
     ImplicitLocOpBuilder builderTemp = ImplicitLocOpBuilder::atBlockEnd(

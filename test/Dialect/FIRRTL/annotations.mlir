@@ -847,15 +847,15 @@ firrtl.circuit "GCTInterface"  attributes {annotations = [{unrelatedAnnotation}]
 // CHECK-SAME: {class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
 // CHECK-SAME:  id = [[ID_ViewName]] : i64,
 // CHECK-SAME:  type = "companion"}
-// CHECK:      %0 = firrtl.ref.resolve %view__2refPort : !firrtl.ref<uint<1>>
+// CHECK:      %0 = firrtl.ref.resolve %{{.*}} : !firrtl.ref<uint<1>>
 // CHECK:       = firrtl.node %0 {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}, {class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 1 : i64}]} : !firrtl.uint<1>
-// CHECK:      %1 = firrtl.ref.resolve %view__2refPort_1 : !firrtl.ref<uint<1>>
+// CHECK:      %1 = firrtl.ref.resolve %{{.*}}: !firrtl.ref<uint<1>>
 // CHECK:       = firrtl.node %1 {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}, {class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 2 : i64}]} : !firrtl.uint<1>
-// CHECK:      %2 = firrtl.ref.resolve %view__1refPort : !firrtl.ref<uint<1>>
+// CHECK:      %2 = firrtl.ref.resolve %{{.*}} : !firrtl.ref<uint<1>>
 // CHECK:      = firrtl.node %2 {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}, {class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 3 : i64}]} : !firrtl.uint<1>
-// CHECK:      %3 = firrtl.ref.resolve %view__0refPort : !firrtl.ref<uint<1>>
+// CHECK:      %3 = firrtl.ref.resolve %{{.*}} : !firrtl.ref<uint<1>>
 // CHECK:      = firrtl.node %3  {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}, {class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 4 : i64}]} : !firrtl.uint<1>
-// CHECK:      %4 = firrtl.ref.resolve %view_portrefPort : !firrtl.ref<uint<1>>
+// CHECK:      %4 = firrtl.ref.resolve %{{.*}} : !firrtl.ref<uint<1>>
 // CHECK:      = firrtl.node %4 {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}, {class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 5 : i64}]} : !firrtl.uint<1>
 
 // The parent should be annotated. Additionally, this example has all the
@@ -864,24 +864,24 @@ firrtl.circuit "GCTInterface"  attributes {annotations = [{unrelatedAnnotation}]
 // CHECK: firrtl.module @GCTInterface
 // CHECK-SAME: %a: !firrtl.uint<1>
 // CHECK:      %r = firrtl.reg  %clock  : !firrtl.bundle<_0: bundle<_0: uint<1>, _1: uint<1>>, _2: vector<uint<1>, 2>>
-// CHECK:      %view_companion_view__2refPort, %view_companion_view__2refPort_1, %view_companion_view__1refPort, %view_companion_view__0refPort, %view_companion_view_portrefPort = firrtl.instance view_companion  @view_companion(in view__2refPort: !firrtl.ref<uint<1>>, in view__2refPort_1: !firrtl.ref<uint<1>>, in view__1refPort: !firrtl.ref<uint<1>>, in view__0refPort: !firrtl.ref<uint<1>>, in view_portrefPort: !firrtl.ref<uint<1>>)
+// CHECK:      %[[view_companion_view__2refPort:.+]], %[[view_companion_view__2refPort_1:.+]], %[[view_companion_view__1refPort:.+]], %[[view_companion_view__0refPort:.+]], %[[view_companion_view_portrefPort:.+]] = firrtl.instance view_companion  @view_companion(in {{.*}}: !firrtl.ref<uint<1>>, in {{.*}}: !firrtl.ref<uint<1>>, in {{.*}}: !firrtl.ref<uint<1>>, in {{.*}}: !firrtl.ref<uint<1>>, in {{.*}}: !firrtl.ref<uint<1>>)
 // CHECK:      %1 = firrtl.subindex %0[0] : !firrtl.vector<uint<1>, 2>
 // CHECK:      %2 = firrtl.ref.send %1 : !firrtl.uint<1>
-// CHECK:      firrtl.connect %view_companion_view__2refPort, %2 : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
+// CHECK:      firrtl.connect %[[view_companion_view__2refPort]], %2 : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
 // CHECK:      %3 = firrtl.subfield %r(1) : (!firrtl.bundle<_0: bundle<_0: uint<1>, _1: uint<1>>, _2: vector<uint<1>, 2>>) -> !firrtl.vector<uint<1>, 2>
 // CHECK:      %4 = firrtl.subindex %3[1] : !firrtl.vector<uint<1>, 2>
 // CHECK:      %5 = firrtl.ref.send %4 : !firrtl.uint<1>
-// CHECK:      firrtl.connect %view_companion_view__2refPort_1, %5 : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
+// CHECK:      firrtl.connect %[[view_companion_view__2refPort_1]], %5 : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
 // CHECK:      %6 = firrtl.subfield %r(0) : (!firrtl.bundle<_0: bundle<_0: uint<1>, _1: uint<1>>, _2: vector<uint<1>, 2>>) -> !firrtl.bundle<_0: uint<1>, _1: uint<1>>
 // CHECK:      %7 = firrtl.subfield %6(1) : (!firrtl.bundle<_0: uint<1>, _1: uint<1>>) -> !firrtl.uint<1>
 // CHECK:      %8 = firrtl.ref.send %7 : !firrtl.uint<1>
-// CHECK:      firrtl.connect %view_companion_view__1refPort, %8 : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
+// CHECK:      firrtl.connect %[[view_companion_view__1refPort]], %8 : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
 // CHECK:      %9 = firrtl.subfield %r(0) : (!firrtl.bundle<_0: bundle<_0: uint<1>, _1: uint<1>>, _2: vector<uint<1>, 2>>) -> !firrtl.bundle<_0: uint<1>, _1: uint<1>>
 // CHECK:      %10 = firrtl.subfield %9(0) : (!firrtl.bundle<_0: uint<1>, _1: uint<1>>) -> !firrtl.uint<1>
 // CHECK:      %11 = firrtl.ref.send %10 : !firrtl.uint<1>
-// CHECK:      firrtl.connect %view_companion_view__0refPort, %11 : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
+// CHECK:      firrtl.connect %[[view_companion_view__0refPort]], %11 : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
 // CHECK:      %12 = firrtl.ref.send %a : !firrtl.uint<1>
-// CHECK:      firrtl.connect %view_companion_view_portrefPort, %12 : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
+// CHECK:      firrtl.connect %[[view_companion_view_portrefPort]], %12 : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
 
 // -----
 
