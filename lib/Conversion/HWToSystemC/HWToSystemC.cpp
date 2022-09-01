@@ -42,7 +42,7 @@ struct ConvertHWModule : public OpConversionPattern<HWModuleOp> {
   matchAndRewrite(HWModuleOp module, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     // Parameterized modules are supported yet.
-    if (module.getParameters().size() > 0)
+    if (!module.getParameters().empty())
       return emitError(module->getLoc(), "module parameters not supported yet");
 
     if (llvm::any_of(module.getAllPorts(),

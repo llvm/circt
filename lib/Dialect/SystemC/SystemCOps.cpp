@@ -157,43 +157,43 @@ static Type wrapPortType(Type type, hw::PortDirection direction) {
   }
 }
 
-void SCModuleOp::build(OpBuilder &builder, OperationState &result,
+void SCModuleOp::build(OpBuilder &odsBuilder, OperationState &odsState,
                        StringAttr name, ArrayAttr portNames,
                        ArrayRef<Type> portTypes,
                        ArrayRef<NamedAttribute> attributes) {
-  result.addAttribute(getPortNamesAttrName(result.name), portNames);
-  Region *region = result.addRegion();
+  odsState.addAttribute(getPortNamesAttrName(odsState.name), portNames);
+  Region *region = odsState.addRegion();
 
-  auto moduleType = builder.getFunctionType(portTypes, {});
-  result.addAttribute(getTypeAttrName(), TypeAttr::get(moduleType));
+  auto moduleType = odsBuilder.getFunctionType(portTypes, {});
+  odsState.addAttribute(getTypeAttrName(), TypeAttr::get(moduleType));
 
-  result.addAttribute(SymbolTable::getSymbolAttrName(), name);
+  odsState.addAttribute(SymbolTable::getSymbolAttrName(), name);
   region->push_back(new Block);
   region->addArguments(
       portTypes,
-      SmallVector<Location>(portTypes.size(), builder.getUnknownLoc()));
-  result.addAttributes(attributes);
+      SmallVector<Location>(portTypes.size(), odsBuilder.getUnknownLoc()));
+  odsState.addAttributes(attributes);
 }
 
-void SCModuleOp::build(OpBuilder &builder, OperationState &result,
+void SCModuleOp::build(OpBuilder &odsBuilder, OperationState &odsState,
                        StringAttr name, ArrayRef<hw::PortInfo> ports,
                        ArrayRef<NamedAttribute> attributes) {
-  MLIRContext *ctxt = builder.getContext();
+  MLIRContext *ctxt = odsBuilder.getContext();
   SmallVector<Attribute> portNames;
   SmallVector<Type> portTypes;
   for (auto port : ports) {
     portNames.push_back(StringAttr::get(ctxt, port.getName()));
     portTypes.push_back(wrapPortType(port.type, port.direction));
   }
-  build(builder, result, name, ArrayAttr::get(ctxt, portNames), portTypes);
+  build(odsBuilder, odsState, name, ArrayAttr::get(ctxt, portNames), portTypes);
 }
 
-void SCModuleOp::build(OpBuilder &builder, OperationState &result,
+void SCModuleOp::build(OpBuilder &odsBuilder, OperationState &odsState,
                        StringAttr name, const hw::ModulePortInfo &ports,
                        ArrayRef<NamedAttribute> attributes) {
   SmallVector<hw::PortInfo> portInfos(ports.inputs);
   portInfos.append(ports.outputs);
-  build(builder, result, name, portInfos, attributes);
+  build(odsBuilder, odsState, name, portInfos, attributes);
 }
 
 void SCModuleOp::getAsmBlockArgumentNames(mlir::Region &region,
@@ -222,9 +222,8 @@ LogicalResult SCModuleOp::verify() {
           "module port must be of type 'sc_in', 'sc_out', or 'sc_inout'");
   }
 
-  ArrayAttr portNames = getPortNames();
-  for (auto *iter = portNames.begin(); iter != portNames.end(); ++iter) {
-    if (iter->cast<StringAttr>().getValue().empty())
+  for (auto portName : getPortNames()) {
+    if (portName.cast<StringAttr>().getValue().empty())
       return emitOpError("port name must not be empty");
   }
 
