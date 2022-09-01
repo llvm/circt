@@ -197,7 +197,7 @@ class HWModulePortAccessor {
 
   class PortValue {
   public:
-    PortValue() {}
+    PortValue() = default;
     PortValue(Value v) : valueOrBackedge(v) {}
     PortValue(const std::shared_ptr<Backedge> &b) : valueOrBackedge(b) {}
 

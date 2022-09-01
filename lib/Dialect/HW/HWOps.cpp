@@ -198,7 +198,7 @@ HWModulePortAccessor::HWModulePortAccessor(Location loc, OpBuilder &b,
     assert(ports.count(outputInfo.name.str()) == 0 &&
            "output port already exists");
     ports[outputInfo.name.str()] = PortValue(be);
-    outputOpArgs.push_back(*be.get());
+    outputOpArgs.push_back(*be);
   }
 
   b.create<hw::OutputOp>(outputOp.getLoc(), outputOpArgs);
@@ -610,17 +610,17 @@ void HWModuleOp::build(OpBuilder &builder, OperationState &result,
         comment);
 }
 
-void HWModuleOp::build(OpBuilder &builder, OperationState &result,
+void HWModuleOp::build(OpBuilder &builder, OperationState &odsState,
                        StringAttr name, const ModulePortInfo &ports,
                        HWModuleBuilder modBuilder, ArrayAttr parameters,
                        ArrayRef<NamedAttribute> attributes,
                        StringAttr comment) {
-  build(builder, result, name, ports, parameters, attributes, comment);
-  auto *bodyRegion = result.regions[0].get();
+  build(builder, odsState, name, ports, parameters, attributes, comment);
+  auto *bodyRegion = odsState.regions[0].get();
   OpBuilder::InsertionGuard guard(builder);
   builder.setInsertionPointToStart(&bodyRegion->front());
   auto accessor =
-      HWModulePortAccessor(result.location, builder, ports, *bodyRegion);
+      HWModulePortAccessor(odsState.location, builder, ports, *bodyRegion);
   builder.setInsertionPoint(bodyRegion->front().getTerminator());
   modBuilder(builder, accessor);
 }
