@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_FIRRTL_FIRRTLANNOTATIONHELPER_H
 
 #include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
+#include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -276,6 +277,17 @@ A tryGetAs(DictionaryAttr &dict, const Attribute &root, StringRef key,
   }
   return valueA;
 }
+
+/// Add ports to the module and all its instances and return the clone for
+/// `instOnPath`. This does not connect the new ports to anything. Replace
+/// the old instances with the new cloned instance in all the caches.
+InstanceOp addPortsToModule(
+    FModuleOp mod, InstanceOp instOnPath, FIRRTLType portType, Direction dir,
+    StringRef newName, InstancePathCache &instancePathcache,
+    MLIRContext *context,
+    llvm::function_ref<ModuleNamespace &(FModuleLike)> getNamespace,
+    AnnoPathValue *instancePathToUpdate = nullptr,
+    CircuitTargetCache *targetCaches = nullptr);
 
 } // namespace firrtl
 } // namespace circt
