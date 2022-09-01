@@ -47,7 +47,6 @@ static void createRandomizationAttributes(FModuleOp mod) {
 
   // Walk all registers.
   uint64_t currentWidth = 0;
-  SmallDenseMap<uint64_t, uint64_t> widths;
   auto ui64Type = builder.getIntegerType(64, false);
   mod.walk([&](Operation *op) {
     if (!isa<RegOp, RegResetOp>(op))

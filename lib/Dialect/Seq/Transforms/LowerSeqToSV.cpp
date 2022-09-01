@@ -248,7 +248,7 @@ FirRegLower::RegLowerInfo FirRegLower::lower(FirRegOp reg) {
 
   ImplicitLocOpBuilder builder(reg.getLoc(), reg);
   RegLowerInfo svReg{nullptr, nullptr, nullptr, -1, 0};
-  svReg.reg = builder.create<sv::RegOp>(loc, reg.getResult().getType(),
+  svReg.reg = builder.create<sv::RegOp>(loc, reg.getType(),
                                         reg.getNameAttr());
   svReg.width = hw::getBitWidth(reg.getResult().getType());
   if (auto attr = reg->getAttrOfType<IntegerAttr>("firrtl.random_init_start"))

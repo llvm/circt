@@ -54,6 +54,11 @@ circuit Foo:
     ; NONE:   _RANDOM_2 = `RANDOM;
     ; NONE:   _RANDOM_3 = `RANDOM;
 
+    ; ALL:       _r = {_RANDOM_0, _RANDOM_1[0]}; 
+    ; NAMED-NOT: _r = 
+    ; NONE-NOT:  _r = 
+    
+
     ; ALL:       r = {_RANDOM_1[31:1], _RANDOM_2[1:0]};
     ; NAMED:     r = {_RANDOM_1[31:1], _RANDOM_2[1:0]};
     ; NONE-NOT:  r = {{.*}};
