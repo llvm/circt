@@ -74,11 +74,11 @@ struct IntegerTypeEmitter : TypeEmissionPattern<IntegerType> {
     if (bitWidth == 1)
       p << "bool";
     else if (bitWidth <= 64)
-      p << "sc_dt::sc_uint<" << bitWidth << ">";
+      p << "sc_uint<" << bitWidth << ">";
     else if (bitWidth <= 512)
-      p << "sc_dt::sc_biguint<" << bitWidth << ">";
+      p << "sc_biguint<" << bitWidth << ">";
     else
-      p << "sc_dt::sc_bv<" << bitWidth << ">";
+      p << "sc_bv<" << bitWidth << ">";
   }
 };
 } // namespace

@@ -2,7 +2,7 @@
 // RUN: circt-translate %s --export-systemc > %t.cpp
 // RUN: clang-tidy --extra-arg=-frtti %t.cpp
 
-emitc.include <"systemc">
+emitc.include <"systemc.h">
 
 systemc.module @submodule (%in0: !systemc.in<i32>, %in1: !systemc.in<i32>, %out0: !systemc.out<i32>) {}
 

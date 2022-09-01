@@ -4,30 +4,30 @@
 // CHECK-NEXT: #ifndef STDOUT_H
 // CHECK-NEXT: #define STDOUT_H
 
-// CHECK: #include <systemc>
+// CHECK: #include <systemc.h>
 // CHECK: #include "nosystemheader"
 
-emitc.include <"systemc">
+emitc.include <"systemc.h">
 emitc.include "nosystemheader"
 
 // CHECK-EMPTY:
 // CHECK-LABEL: SC_MODULE(submodule) {
 systemc.module @submodule (%in0: !systemc.in<i32>, %in1: !systemc.in<i32>, %out0: !systemc.out<i32>) {
-// CHECK-NEXT: sc_core::sc_in<sc_dt::sc_uint<32>> in0;
-// CHECK-NEXT: sc_core::sc_in<sc_dt::sc_uint<32>> in1;
-// CHECK-NEXT: sc_core::sc_out<sc_dt::sc_uint<32>> out0;
+// CHECK-NEXT: sc_in<sc_uint<32>> in0;
+// CHECK-NEXT: sc_in<sc_uint<32>> in1;
+// CHECK-NEXT: sc_out<sc_uint<32>> out0;
 // CHECK-NEXT: };
 }
 
 // CHECK-EMPTY:
 // CHECK-LABEL: SC_MODULE(basic) {
 systemc.module @basic (%port0: !systemc.in<i1>, %port1: !systemc.inout<i64>, %port2: !systemc.out<i512>, %port3: !systemc.out<i1024>, %port4: !systemc.out<i1>) {
-  // CHECK-NEXT: sc_core::sc_in<bool> port0;
-  // CHECK-NEXT: sc_core::sc_inout<sc_dt::sc_uint<64>> port1;
-  // CHECK-NEXT: sc_core::sc_out<sc_dt::sc_biguint<512>> port2;
-  // CHECK-NEXT: sc_core::sc_out<sc_dt::sc_bv<1024>> port3;
-  // CHECK-NEXT: sc_core::sc_out<bool> port4;
-  // CHECK-NEXT: sc_core::sc_signal<sc_dt::sc_uint<64>> sig;
+  // CHECK-NEXT: sc_in<bool> port0;
+  // CHECK-NEXT: sc_inout<sc_uint<64>> port1;
+  // CHECK-NEXT: sc_out<sc_biguint<512>> port2;
+  // CHECK-NEXT: sc_out<sc_bv<1024>> port3;
+  // CHECK-NEXT: sc_out<bool> port4;
+  // CHECK-NEXT: sc_signal<sc_uint<64>> sig;
   %sig = systemc.signal : !systemc.signal<i64>
   // CHECK-NEXT: submodule submoduleInstance;
   %submoduleInstance = systemc.instance.decl @submodule : !systemc.module<submodule(in0: !systemc.in<i32>, in1: !systemc.in<i32>, out0: !systemc.out<i32>)>

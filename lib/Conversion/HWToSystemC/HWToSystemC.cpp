@@ -171,7 +171,7 @@ void HWToSystemCPass::runOnOperation() {
   // Create the include operation here to have exactly one 'systemc' include at
   // the top instead of one per module.
   OpBuilder builder(module.getRegion());
-  builder.create<emitc::IncludeOp>(module->getLoc(), "systemc", true);
+  builder.create<emitc::IncludeOp>(module->getLoc(), "systemc.h", true);
 
   ConversionTarget target(context);
   TypeConverter typeConverter;

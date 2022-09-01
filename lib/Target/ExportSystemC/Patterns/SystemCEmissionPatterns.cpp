@@ -209,7 +209,7 @@ namespace {
 template <typename Ty, const char Mn[]>
 struct SignalTypeEmitter : public TypeEmissionPattern<Ty> {
   void emitType(Ty type, EmissionPrinter &p) override {
-    p << "sc_core::" << Mn << "<";
+    p << Mn << "<";
     p.emitType(type.getBaseType());
     p << ">";
   }
