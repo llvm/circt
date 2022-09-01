@@ -312,6 +312,46 @@ Optional<AnnoPathValue> firrtl::resolvePath(StringRef rawPath,
   return resolveEntities(*tokens, circuit, symTbl, cache);
 }
 
+InstanceOp firrtl::addPortsToModule(
+    FModuleOp mod, InstanceOp instOnPath, FIRRTLType portType, Direction dir,
+    StringRef newName, InstancePathCache &instancePathcache,
+    MLIRContext *context,
+    llvm::function_ref<ModuleNamespace &(FModuleLike)> getNamespace,
+    AnnoPathValue *instancePathToUpdate, CircuitTargetCache *targetCaches) {
+  // To store the cloned version of `instOnPath`.
+  InstanceOp clonedInstOnPath;
+  // Get a new port name from the Namespace.
+  auto portName = [&](FModuleOp nameForMod) {
+    return StringAttr::get(context,
+                           getNamespace(nameForMod).newName("_gen_" + newName));
+  };
+  // The port number for the new port.
+  unsigned portNo = mod.getNumPorts();
+  PortInfo portInfo = {portName(mod), portType, dir, {}, mod.getLoc()};
+  mod.insertPorts({{portNo, portInfo}});
+  if (targetCaches)
+    targetCaches->insertPort(mod, portNo);
+  // Now update all the instances of `mod`.
+  for (auto *use : instancePathcache.instanceGraph.lookup(mod)->uses()) {
+    InstanceOp useInst = cast<InstanceOp>(use->getInstance());
+    auto clonedInst = useInst.cloneAndInsertPorts({{portNo, portInfo}});
+    if (useInst == instOnPath)
+      clonedInstOnPath = clonedInst;
+    // Update all occurences of old instance.
+    instancePathcache.replaceInstance(useInst, clonedInst);
+    if (targetCaches)
+      targetCaches->replaceOp(useInst, clonedInst);
+    if (instancePathToUpdate) {
+      auto *iter = llvm::find(instancePathToUpdate->instances, useInst);
+      if (iter != instancePathToUpdate->instances.end())
+        *iter = clonedInst;
+    }
+    useInst->replaceAllUsesWith(clonedInst.getResults().drop_back());
+    useInst->erase();
+  }
+  return clonedInstOnPath;
+}
+
 //===----------------------------------------------------------------------===//
 // AnnoTargetCache
 //===----------------------------------------------------------------------===//
