@@ -107,6 +107,15 @@ systemc.module @ctorNoBlockArguments () {
 
 // -----
 
+systemc.module @destructorNoBlockArguments () {
+  // expected-error @+1 {{op must not have any arguments}} 
+  "systemc.cpp.destructor"() ({
+    ^bb0(%arg0: i32):
+    }) : () -> ()
+}
+
+// -----
+
 systemc.module @funcNoBlockArguments () {
   // expected-error @+1 {{op must not have any arguments}} 
   %0 = "systemc.func"() ({

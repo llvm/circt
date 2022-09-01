@@ -22,6 +22,9 @@ systemc.module @adder (%summand_a: !systemc.in<i32>, %summand_b: !systemc.in<i32
     systemc.signal.write %sum, %res : !systemc.out<i32>
   // CHECK-NEXT: }
   }
+  // CHECK-NEXT: systemc.cpp.destructor {
+  systemc.cpp.destructor { }
+  // CHECK-NEXT: }
 // CHECK-NEXT: }
 }
 
@@ -70,4 +73,17 @@ systemc.module @instanceDecl () {
   %moduleInstance0 = systemc.instance.decl @adder : !systemc.module<adder(summand_a: !systemc.in<i32>, summand_b: !systemc.in<i32>, sum: !systemc.out<i32>)>
   // CHECK-NEXT: %moduleInstance1 = systemc.instance.decl @moduleVisibility : !systemc.module<moduleVisibility()>
   %moduleInstance1 = systemc.instance.decl @moduleVisibility : !systemc.module<moduleVisibility()>
+}
+
+// CHECK-LABEL: systemc.module @attributes
+systemc.module @attributes () {
+  // CHECK-NEXT: systemc.ctor attributes {systemc.someattr = 0 : i64} {
+  systemc.ctor attributes {systemc.someattr = 0 : i64} {}
+  // CHECK-NEXT: }
+  // CHECK-NEXT: %func = systemc.func attributes {systemc.someattr = 0 : i64} {
+  %func = systemc.func attributes {systemc.someattr = 0 : i64} {}
+  // CHECK-NEXT: }
+  // CHECK-NEXT: systemc.cpp.destructor attributes {systemc.someattr = 0 : i64} {
+  systemc.cpp.destructor attributes {systemc.someattr = 0 : i64} {}
+  // CHECK-NEXT: }
 }

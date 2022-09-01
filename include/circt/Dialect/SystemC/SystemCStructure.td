@@ -96,6 +96,14 @@ def SCModuleOp : SystemCOp<"module", [
     PortDirectionRange getInOutPorts() {
       return getPortsOfDirection(hw::PortDirection::INOUT);
     }
+
+    // Return the Ctor operation in this module's body or create one if none
+    // exists yet.
+    systemc::CtorOp getOrCreateCtor();
+
+    // Return the Destructor operation in this module's body or create one if
+    // none exists yet.
+    systemc::DestructorOp getOrCreateDestructor();
   }];
 }
 
@@ -109,7 +117,7 @@ def CtorOp : SystemCOp<"ctor", [SingleBlock, NoTerminator,
   }];
 
   let regions = (region SizedRegion<1>:$body);
-  let assemblyFormat = "$body attr-dict";
+  let assemblyFormat = "attr-dict-with-keyword $body";
 
   let builders = [
     OpBuilder<(ins), [{
@@ -118,6 +126,11 @@ def CtorOp : SystemCOp<"ctor", [SingleBlock, NoTerminator,
     }]>
   ];
 
+  let extraClassDeclaration = [{
+    /// Return the block corresponding to the region.
+    Block *getBodyBlock() { return &getBody().front(); }
+  }];
+
   let hasVerifier = true;
   let skipDefaultBuilders = 1;
 }
@@ -125,6 +138,7 @@ def CtorOp : SystemCOp<"ctor", [SingleBlock, NoTerminator,
 def SCFuncOp : SystemCOp<"func", [
   HasCustomSSAName,
   SystemCNameDeclOpInterface,
+  SingleBlock,
   NoTerminator,
   HasParent<"SCModuleOp">
 ]> {
@@ -149,7 +163,48 @@ def SCFuncOp : SystemCOp<"func", [
     }]>
   ];
 
-  let assemblyFormat = "custom<ImplicitSSAName>($name) $body attr-dict";
+  let extraClassDeclaration = [{
+    /// Return the block corresponding to the region.
+    Block *getBodyBlock() { return &getBody().front(); }
+  }];
+
+  let assemblyFormat = "custom<ImplicitSSAName>($name) attr-dict-with-keyword $body";
+
+  let hasVerifier = true;
+  let skipDefaultBuilders = 1;
+}
+
+//===----------------------------------------------------------------------===//
+// Operations that model C++-level features.
+//===----------------------------------------------------------------------===//
+
+def DestructorOp : SystemCOp<"cpp.destructor", [
+    SingleBlock,
+    NoTerminator,
+    HasParent<"SCModuleOp">
+]> {
+  let summary = "A C++ destructor definition.";
+  let description = [{
+    This operation models a C++ destructor of a class or struct. It is not an
+    operation modelling some abstract SystemC construct, but still required to
+    support more complex functionality such as having a pointer to an external
+    object inside a SystemC module, e.g., for interoperability purposes.
+  }];
+
+  let regions = (region SizedRegion<1>:$body);
+  let assemblyFormat = "attr-dict-with-keyword $body";
+
+  let builders = [
+    OpBuilder<(ins), [{
+      Region *region = $_state.addRegion();
+      region->push_back(new Block);
+    }]>
+  ];
+
+  let extraClassDeclaration = [{
+    /// Return the block corresponding to the region.
+    Block *getBodyBlock() { return &getBody().front(); }
+  }];
 
   let hasVerifier = true;
   let skipDefaultBuilders = 1;

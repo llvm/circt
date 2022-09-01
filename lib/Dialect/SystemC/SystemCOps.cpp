@@ -292,6 +292,36 @@ LogicalResult SCModuleOp::verifyRegions() {
   return success();
 }
 
+CtorOp SCModuleOp::getOrCreateCtor() {
+  CtorOp ctor;
+  getBody().walk([&](Operation *op) {
+    if ((ctor = dyn_cast<CtorOp>(op)))
+      return WalkResult::interrupt();
+
+    return WalkResult::skip();
+  });
+
+  if (ctor)
+    return ctor;
+
+  return OpBuilder(getBody()).create<CtorOp>(getLoc());
+}
+
+DestructorOp SCModuleOp::getOrCreateDestructor() {
+  DestructorOp destructor;
+  getBody().walk([&](Operation *op) {
+    if ((destructor = dyn_cast<DestructorOp>(op)))
+      return WalkResult::interrupt();
+
+    return WalkResult::skip();
+  });
+
+  if (destructor)
+    return destructor;
+
+  return OpBuilder::atBlockEnd(getBodyBlock()).create<DestructorOp>(getLoc());
+}
+
 //===----------------------------------------------------------------------===//
 // SignalOp
 //===----------------------------------------------------------------------===//
@@ -406,6 +436,17 @@ InstanceDeclOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
              << ", but got " << ports[i].name;
       });
   }
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// DestructorOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult DestructorOp::verify() {
+  if (getBody().getNumArguments() != 0)
+    return emitOpError("must not have any arguments");
 
   return success();
 }

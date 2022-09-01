@@ -66,12 +66,9 @@ struct ConvertHWModule : public OpConversionPattern<HWModuleOp> {
 
     scModule.setAllArgAttrs(portAttrs);
 
-    // Create a systemc.ctor operation inside the module.
-    rewriter.setInsertionPointToStart(scModule.getBodyBlock());
-    auto ctor = rewriter.create<CtorOp>(module.getLoc());
-
     // Create a systemc.func operation inside the module after the ctor.
     // TODO: implement logic to extract a better name and properly unique it.
+    rewriter.setInsertionPointToStart(scModule.getBodyBlock());
     auto scFunc = rewriter.create<SCFuncOp>(
         module.getLoc(), rewriter.getStringAttr("innerLogic"));
 
@@ -79,25 +76,25 @@ struct ConvertHWModule : public OpConversionPattern<HWModuleOp> {
     // TODO: do some dominance analysis to detect use-before-def and cycles in
     // the use chain, which are allowed in graph regions but not in SSACFG
     // regions, and when possible fix them.
+    scFunc.getBodyBlock()->erase();
     Region &scFuncBody = scFunc.getBody();
-    scFuncBody.front().erase();
     rewriter.inlineRegionBefore(module.getBody(), scFuncBody, scFuncBody.end());
 
     // Register the systemc.func inside the systemc.ctor
-    rewriter.setInsertionPointToStart(&ctor.getBody().front());
-    rewriter.create<MethodOp>(ctor.getLoc(), scFunc.getHandle());
+    rewriter.setInsertionPointToStart(
+        scModule.getOrCreateCtor().getBodyBlock());
+    rewriter.create<MethodOp>(scModule.getLoc(), scFunc.getHandle());
 
     // Move the block arguments of the systemc.func (that we got from the
     // hw.module) to the systemc.module
-    Region &funcBody = scFunc.getBody();
-    rewriter.setInsertionPointToStart(&funcBody.front());
+    rewriter.setInsertionPointToStart(scFunc.getBodyBlock());
     for (size_t i = 0, e = scFunc.getRegion().getNumArguments(); i < e; ++i) {
       auto inputRead =
           rewriter
               .create<SignalReadOp>(scFunc.getLoc(), scModule.getArgument(i))
               .getResult();
-      funcBody.getArgument(0).replaceAllUsesWith(inputRead);
-      funcBody.eraseArgument(0);
+      scFuncBody.getArgument(0).replaceAllUsesWith(inputRead);
+      scFuncBody.eraseArgument(0);
     }
 
     // Erase the HW module.
