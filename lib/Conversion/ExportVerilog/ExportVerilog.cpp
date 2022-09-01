@@ -1530,7 +1530,7 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
   if (expr.getOpcode() == PEO::StrConcat)
     os << '{';
   bool allOperandsSigned = emitOperand(expr.getOperands()[0]);
-  for (auto op : ArrayRef(expr.getOperands()).drop_front()) {
+  for (auto op : expr.getOperands().drop_front()) {
     // Handle the special case of (a + b + -42) as (a + b - 42).
     // TODO: Also handle (a + b + x*-1).
     if (expr.getOpcode() == PEO::Add) {
@@ -2571,7 +2571,7 @@ void NameCollector::collectNames(Block &block) {
     // Recursively process any regions under the op iff this is a procedural
     // #ifdef region: we need to emit automatic logic values at the top of the
     // enclosing region.
-    if (isa<IfDefProceduralOp>(op)) {
+    if (isa<IfDefProceduralOp, OrderedOutputOp>(op)) {
       for (auto &region : op.getRegions()) {
         if (!region.empty())
           collectNames(region.front());
