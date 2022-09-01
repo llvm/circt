@@ -65,6 +65,49 @@ def ThreadOp : SystemCOp<"thread", []> {
   let assemblyFormat = "$funcHandle attr-dict";
 }
 
+def InstanceDeclOp : SystemCOp<"instance.decl", [
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+  DeclareOpInterfaceMethods<HWInstanceLike>,
+  HasCustomSSAName,
+  SystemCNameDeclOpInterface,
+  HasParent<"SCModuleOp">
+]> {
+  let summary = "Declares a SystemC module instance.";
+  let description = [{
+    Declares an instantiation of a SystemC module inside another SystemC module
+    by value. The instance handle returned by this operation can then be used
+    to initialize it in the constructor and to access its fields.
+    More information can be found in IEEE 1666-2011 §4.1.1.
+  }];
+
+  let arguments = (ins StrAttr:$name, FlatSymbolRefAttr:$moduleName);
+  let results = (outs ModuleType:$instanceHandle);
+
+  let assemblyFormat = [{
+    custom<ImplicitSSAName>($name) $moduleName attr-dict
+    `:` type($instanceHandle)
+  }];
+
+  let extraClassDeclaration = [{
+    /// Get the systemc::ModuleType that represents the instantiated module.
+    systemc::ModuleType getInstanceType() {
+      return getInstanceHandle().getType().cast<systemc::ModuleType>();
+    }
+
+    StringRef getInstanceName() { return getName(); }
+
+    /// Lookup the module for the symbol. This returns null on invalid IR.
+    Operation *getReferencedModule(const hw::HWSymbolCache *cache);
+
+    //===------------------------------------------------------------------===//
+    // SymbolOpInterface Methods
+    //===------------------------------------------------------------------===//
+
+    /// An InstanceDeclOp may not optionally define a symbol.
+    bool isOptionalSymbol() { return false; }
+  }];
+}
+
 //===----------------------------------------------------------------------===//
 // Operations that model C++-level features.
 //===----------------------------------------------------------------------===//

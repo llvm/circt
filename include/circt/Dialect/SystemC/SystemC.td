@@ -22,6 +22,7 @@ include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Interfaces/CallInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
+include "circt/Dialect/HW/HWOpInterfaces.td"
 
 include "circt/Dialect/SystemC/SystemCOpInterfaces.td"
 include "circt/Dialect/SystemC/SystemCDialect.td"
