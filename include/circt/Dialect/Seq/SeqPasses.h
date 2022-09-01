@@ -20,6 +20,7 @@ namespace circt {
 namespace seq {
 
 std::unique_ptr<mlir::Pass> createSeqLowerToSVPass();
+std::unique_ptr<mlir::Pass> createSeqFIRRTLLowerToSVPass();
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION

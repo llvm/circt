@@ -5,7 +5,8 @@
 from collections import OrderedDict
 
 from .value import (BitVectorValue, ChannelValue, ClockValue, ListValue,
-                    StructValue, RegularValue, InOutValue, Value)
+                    SignedBitVectorValue, UnsignedBitVectorValue, StructValue,
+                    RegularValue, InOutValue, Value)
 
 import mlir.ir
 from circt.dialects import esi, hw, sv
@@ -47,6 +48,10 @@ class _Types:
     if isinstance(members, list):
       return self.wrap(hw.StructType.get(members), name)
     raise TypeError("Expected either list or dict.")
+
+  @property
+  def any(self):
+    return self.wrap(esi.AnyType.get())
 
   def wrap(self, type, name=None):
     if name is not None:
@@ -118,7 +123,7 @@ class PyCDEType(mlir.ir.Type):
 
   def __init__(self, mlir_type: mlir.ir.Type):
     super().__init__(mlir_type)
-    self._type = mlir_type
+    self._type = circt.support.type_to_pytype(mlir_type)
 
   @property
   def strip(self):
@@ -154,7 +159,12 @@ def Type(type: Union[mlir.ir.Type, PyCDEType]):
   if isinstance(type, hw.InOutType):
     return InOutType(type)
   if isinstance(type, mlir.ir.IntegerType):
-    return BitVectorType(type)
+    if type.is_signed:
+      return SignedBitVectorType(type)
+    elif type.is_unsigned:
+      return UnsignedBitVectorType(type)
+    else:
+      return BitVectorType(type)
   if isinstance(type, esi.ChannelType):
     return ChannelType(type)
   return PyCDEType(type)
@@ -265,6 +275,18 @@ class BitVectorType(PyCDEType):
     return BitVectorValue
 
 
+class SignedBitVectorType(BitVectorType):
+
+  def _get_value_class(self):
+    return SignedBitVectorValue
+
+
+class UnsignedBitVectorType(BitVectorType):
+
+  def _get_value_class(self):
+    return UnsignedBitVectorValue
+
+
 class ClockType(PyCDEType):
   """A special single bit to represent a clock. Can't do any special operations
   on it, except enter it as a implicit clock block."""
@@ -293,7 +315,8 @@ class ChannelType(PyCDEType):
     from .support import _obj_to_value
     value = _obj_to_value(value, self._type.inner)
     valid = _obj_to_value(valid, types.i1)
-    wrap_op = esi.WrapValidReady(self._type, types.i1, value.value, valid.value)
+    wrap_op = esi.WrapValidReadyOp(self._type, types.i1, value.value,
+                                   valid.value)
     return Value(wrap_op.chanOutput), BitVectorValue(wrap_op.ready, types.i1)
 
 

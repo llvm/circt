@@ -109,7 +109,7 @@ class MSFTModuleOp(_hw_ext.ModuleLike):
   @property
   def parameters(self):
     return [
-        hw.ParamDeclAttr.get(p.name, _ir.TypeAttr.get(p.attr.type), p.attr)
+        hw.ParamDeclAttr.get(p.name, p.attr.type, p.attr)
         for p in _ir.DictAttr(self.attributes["parameters"])
     ]
 

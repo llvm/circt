@@ -144,6 +144,10 @@ firrtl.module @And(in %in: !firrtl.uint<4>,
   %2 = firrtl.and %in, %c1_ui0 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
   firrtl.connect %out, %2 : !firrtl.uint<4>, !firrtl.uint<4>
 
+  // CHECK: firrtl.strictconnect %out, %c0_ui4
+  %inv_2 = firrtl.and %c1_ui0, %in : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  firrtl.connect %out, %inv_2 : !firrtl.uint<4>, !firrtl.uint<4>
+
   // CHECK: firrtl.strictconnect %out, %in
   %3 = firrtl.and %in, %in : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
   firrtl.connect %out, %3 : !firrtl.uint<4>, !firrtl.uint<4>
@@ -198,6 +202,10 @@ firrtl.module @Or(in %in: !firrtl.uint<4>,
   %c1_ui0 = firrtl.constant 0 : !firrtl.uint<4>
   %2 = firrtl.or %in, %c1_ui0 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
   firrtl.connect %out, %2 : !firrtl.uint<4>, !firrtl.uint<4>
+
+  // CHECK: firrtl.strictconnect %out, %in
+  %inv_2 = firrtl.or %c1_ui0, %in : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  firrtl.connect %out, %inv_2 : !firrtl.uint<4>, !firrtl.uint<4>
 
   // CHECK: firrtl.strictconnect %out, %in
   %3 = firrtl.or %in, %in : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
@@ -1961,13 +1969,13 @@ firrtl.module @PadMuxOperands(
 }
 
 // CHECK-LABEL: firrtl.module @regsyncreset
-firrtl.module @regsyncreset(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %foo : !firrtl.uint<2>, out %bar: !firrtl.uint<2>) {
+firrtl.module @regsyncreset(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %foo : !firrtl.uint<2>, out %bar: !firrtl.uint<2>) attributes {firrtl.random_init_width = 2 : ui64} {
   // CHECK: %[[const:.*]] = firrtl.constant 1
-  // CHECK-NEXT: firrtl.regreset %clock, %reset, %[[const]]
+  // CHECK-NEXT: firrtl.regreset %clock, %reset, %[[const]] {firrtl.random_init_end = 1 : ui64, firrtl.random_init_start = 0 : ui64}
   // CHECK-NEXT:  firrtl.strictconnect %bar, %d : !firrtl.uint<2>
   // CHECK-NEXT:  firrtl.strictconnect %d, %foo : !firrtl.uint<2>
   // CHECK-NEXT: }
-  %d = firrtl.reg %clock  : !firrtl.uint<2>
+  %d = firrtl.reg %clock {firrtl.random_init_end = 1 : ui64, firrtl.random_init_start = 0 : ui64} : !firrtl.uint<2>
   firrtl.connect %bar, %d : !firrtl.uint<2>, !firrtl.uint<2>
   %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
   %1 = firrtl.mux(%reset, %c1_ui2, %foo) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
@@ -2116,15 +2124,22 @@ firrtl.module @constReg7(in %v: !firrtl.uint<1>, in %clock: !firrtl.clock, in %r
 }
 
 // Check that firrtl.regreset reset mux folding doesn't respects
-// DontTouchAnnotations.
+// DontTouchAnnotations or other annotations.
 // CHECK-LABEL: firrtl.module @constReg8
-firrtl.module @constReg8(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
+firrtl.module @constReg8(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, out %out1: !firrtl.uint<1>, out %out2: !firrtl.uint<1>) {
   %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+  // CHECK: firrtl.regreset sym @s2
+  %r1 = firrtl.regreset sym @s2 %clock, %reset, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+  %0 = firrtl.mux(%reset, %c1_ui1, %r1) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  firrtl.connect %r1, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+  firrtl.connect %out1, %r1 : !firrtl.uint<1>, !firrtl.uint<1>
+
   // CHECK: firrtl.regreset
-  %r = firrtl.regreset  sym @s2 %clock, %reset, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
-  %0 = firrtl.mux(%reset, %c1_ui1, %r) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-  firrtl.connect %r, %0 : !firrtl.uint<1>, !firrtl.uint<1>
-  firrtl.connect %out, %r : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK-SAME: Foo
+  %r2 = firrtl.regreset  %clock, %reset, %c1_ui1 {annotations = [{class = "Foo"}]} : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+  %1 = firrtl.mux(%reset, %c1_ui1, %r2) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  firrtl.connect %r2, %1 : !firrtl.uint<1>, !firrtl.uint<1>
+  firrtl.connect %out2, %r2 : !firrtl.uint<1>, !firrtl.uint<1>
 }
 
 firrtl.module @BitCast(out %o:!firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<1>> ) {
@@ -2366,9 +2381,20 @@ firrtl.module @Foo3319(in %i: !firrtl.uint<1>, out %o : !firrtl.uint<1>) {
   %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
   %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
   %0 = firrtl.and %c0_ui1, %i : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-  %n = firrtl.node  %0  : !firrtl.uint<1>
+  // CHECK: %n = firrtl.node interesting_name %c0_ui1
+  %n = firrtl.node interesting_name %0  : !firrtl.uint<1>
+  // CHECK: firrtl.strictconnect %o, %n
   firrtl.strictconnect %o, %n : !firrtl.uint<1>
-  // CHECK: firrtl.strictconnect %o, %c0_ui1
+}
+
+// CHECK-LABEL: @WireByPass
+firrtl.module @WireByPass(in %i: !firrtl.uint<1>, out %o : !firrtl.uint<1>) {
+  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+  %n = firrtl.wire interesting_name : !firrtl.uint<1>
+  // CHECK: firrtl.strictconnect %n, %c0_ui1
+  firrtl.strictconnect %n, %c0_ui1 : !firrtl.uint<1>
+  // CHECK: firrtl.strictconnect %o, %n
+  firrtl.strictconnect %o, %n : !firrtl.uint<1>
 }
 
 // Check that canonicalizeSingleSetConnect doesn't remove a wire with an
@@ -2385,4 +2411,25 @@ firrtl.module @AnnotationsBlockRemoval(
   firrtl.strictconnect %b, %w : !firrtl.uint<1>
 }
 
+// CHECK-LABEL: firrtl.module @Verification
+firrtl.module @Verification(in %clock: !firrtl.clock, in %p: !firrtl.uint<1>) {
+  %c0 = firrtl.constant 0 : !firrtl.uint<1>
+  %c1 = firrtl.constant 1 : !firrtl.uint<1>
+
+  // Never enabled.
+  // CHECK-NOT: firrtl.assert
+  firrtl.assert %clock, %p, %c0, "assert0"
+  // CHECK-NOT: firrtl.assume
+  firrtl.assume %clock, %p, %c0, "assume0"
+  // CHECK-NOT: firrtl.cover
+  firrtl.cover %clock, %p, %c0, "cover0"
+
+  // Never fired.
+  // CHECK-NOT: firrtl.assert
+  firrtl.assert %clock, %c1, %p, "assert1"
+  // CHECK-NOT: firrtl.assume
+  firrtl.assume %clock, %c1, %p, "assume1"
+  // CHECK-NOT: firrtl.cover
+  firrtl.cover %clock, %c0, %p, "cover0"
+}
 }

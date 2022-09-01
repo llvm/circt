@@ -30,24 +30,24 @@ def VerbatimExprOp : SVOp<"verbatim.expr", [NoSideEffect, HasCustomSSAName]> {
     sv.verbatim.expr allows operand substitutions with {{0}} syntax.
     }];
 
-  let arguments = (ins StrAttr:$string, Variadic<AnyType>:$operands,
+  let arguments = (ins StrAttr:$format_string, Variadic<AnyType>:$substitutions,
                   DefaultValuedAttr<NameRefArrayAttr,"{}">:$symbols);
   let results = (outs HWValueOrInOutType:$result);
   let assemblyFormat = [{
-    $string (`(` $operands^ `)`)?
-      `:` functional-type($operands, $result) attr-dict
+    $format_string (`(` $substitutions^ `)`)?
+      `:` functional-type($substitutions, $result) attr-dict
   }];
 
   let builders = [
-    OpBuilder<(ins "Type":$resultType, "Twine":$string,
-                CArg<"ValueRange", "{}">:$operands),
+    OpBuilder<(ins "Type":$resultType, "Twine":$formatString,
+                CArg<"ValueRange", "{}">:$substitutions),
                "build(odsBuilder, odsState, resultType, "
-               "odsBuilder.getStringAttr(string), operands,"
+               "odsBuilder.getStringAttr(formatString), substitutions,"
                "odsBuilder.getArrayAttr({}));">,
-    OpBuilder<(ins "Type":$resultType, "StringAttr":$string,
-                CArg<"ValueRange", "{}">:$operands),
+    OpBuilder<(ins "Type":$resultType, "StringAttr":$formatString,
+                CArg<"ValueRange", "{}">:$substitutions),
                "build(odsBuilder, odsState, resultType, "
-               "string, operands,"
+               "formatString, substitutions,"
                "odsBuilder.getArrayAttr({}));">
   ];
 }
@@ -66,18 +66,18 @@ def VerbatimExprSEOp : SVOp<"verbatim.expr.se", [HasCustomSSAName]> {
     sv.verbatim.se.expr allows operand substitutions with {{0}} syntax.
     }];
 
-  let arguments = (ins StrAttr:$string, Variadic<AnyType>:$operands,
+  let arguments = (ins StrAttr:$format_string, Variadic<AnyType>:$substitutions,
                  DefaultValuedAttr<NameRefArrayAttr,"{}">:$symbols );
   let results = (outs HWValueOrInOutType:$result);
   let assemblyFormat = [{
-    $string (`(` $operands^ `)`)?
-      `:` functional-type($operands, $result) attr-dict
+    $format_string (`(` $substitutions^ `)`)?
+      `:` functional-type($substitutions, $result) attr-dict
   }];
 
   let builders = [
-    OpBuilder<(ins "Type":$resultType, "Twine":$string),
+    OpBuilder<(ins "Type":$resultType, "Twine":$formatString),
                "build(odsBuilder, odsState, resultType, "
-               "odsBuilder.getStringAttr(string), ValueRange{},"
+               "odsBuilder.getStringAttr(formatString), ValueRange{},"
                "odsBuilder.getArrayAttr({}));">
   ];
 }

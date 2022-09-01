@@ -13,6 +13,7 @@
 include "mlir/IR/EnumAttr.td"
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/BuiltinTypes.td"
+include "mlir/IR/BuiltinAttributeInterfaces.td"
 
 // This is almost exactly like a standard FuncOp, except that it has some
 // extra verification conditions.  In particular, each Value must
@@ -121,8 +122,8 @@ def InstanceOp : Handshake_Op<"instance", [
   let summary = "module instantiate operation";
   let description = [{
     The `instance` operation represents the instantiation of a module.  This
-	  is similar to a function call, except that different instances of the
-	  same module are guaranteed to have their own distinct state.
+    is similar to a function call, except that different instances of the
+    same module are guaranteed to have their own distinct state.
     The instantiated module is encoded as a symbol reference attribute named
     "module". An instance operation takes a control input as its last argument
     and returns a control output as its last result.
@@ -240,7 +241,7 @@ def BufferOp : Handshake_Op<"buffer", [NoSideEffect, HasClock,
 
   let arguments = (ins
     TypeAttr:$dataType,
-    Confined<I32Attr, [IntMinValue<1>]>:$size,
+    ConfinedAttr<I32Attr, [IntMinValue<1>]>:$size,
     AnyType:$operand,
     BufferTypeEnumAttr:$bufferType,
     OptionalAttr<I64ArrayAttr>:$initValues);
@@ -289,7 +290,7 @@ def ForkOp : Handshake_Op<"fork", [
 
   let arguments = (ins
     TypeAttr:$dataType,
-    Confined<I32Attr, [IntMinValue<1>]>:$size,
+    ConfinedAttr<I32Attr, [IntMinValue<1>]>:$size,
     AnyType : $operand);
   let results = (outs Variadic<AnyType> : $result);
 
@@ -314,7 +315,7 @@ def LazyForkOp : Handshake_Op<"lazy_fork", [NoSideEffect]> {
 
   let arguments = (ins
     TypeAttr:$dataType,
-    Confined<I32Attr, [IntMinValue<1>]>:$size,
+    ConfinedAttr<I32Attr, [IntMinValue<1>]>:$size,
     AnyType : $operand);
   let results = (outs Variadic<AnyType> : $result);
   let hasCustomAssemblyFormat = 1;
@@ -341,7 +342,7 @@ def MergeOp : Handshake_Op<"merge", [
 
   let arguments = (ins
     TypeAttr:$dataType,
-    Confined<I32Attr, [IntMinValue<1>]>:$size,
+    ConfinedAttr<I32Attr, [IntMinValue<1>]>:$size,
     Variadic<AnyType>:$dataOperands);
   let results = (outs AnyType:$result);
   let hasCustomAssemblyFormat = 1;
@@ -375,9 +376,9 @@ def MuxOp : Handshake_Op<"mux", [
   }];
   let arguments = (ins
     TypeAttr:$dataType,
-    Confined<I32Attr, [IntMinValue<1>]>:$size,
+    ConfinedAttr<I32Attr, [IntMinValue<1>]>:$size,
     AnyType : $selectOperand,
-		Variadic<AnyType> : $dataOperands);
+    Variadic<AnyType> : $dataOperands);
   let results = (outs AnyType : $result);
   let skipDefaultBuilders = 1;
   let builders = [
@@ -414,7 +415,7 @@ def ControlMergeOp : Handshake_Op<"control_merge", [
 
   let arguments = (ins
     TypeAttr:$dataType,
-    Confined<I32Attr, [IntMinValue<1>]>:$size,
+    ConfinedAttr<I32Attr, [IntMinValue<1>]>:$size,
     Variadic<AnyType> : $dataOperands);
   let results = (outs AnyType : $result, Index : $index);
 
@@ -594,15 +595,15 @@ def ConstantOp : Handshake_Op<"constant", [
     ```
   }];
 
-  let arguments = (ins AnyAttr:$value, NoneType:$ctrl);
+  let arguments = (ins TypedAttrInterface:$value, NoneType:$ctrl);
   let results = (outs AnyType : $result);
 
-  let builders = [OpBuilder<(ins "Attribute":$value, "Value":$ctrl)>];
+  let builders = [OpBuilder<(ins "mlir::TypedAttr":$value, "Value":$ctrl)>];
   let skipDefaultBuilders = 1;
 
   let hasCanonicalizer = 1;
   let extraClassDeclaration = [{
-    Attribute getValue() { return (*this)->getAttr("value"); }
+    mlir::TypedAttr getValue() { return value(); }
   }];
   let assemblyFormat = [{ $ctrl attr-dict `:` qualified(type($result))}];
   let hasVerifier = 1;

@@ -30,6 +30,28 @@ firrtl.circuit "SFCCompatTests" {
     firrtl.connect %q, %r : !firrtl.uint<1>, !firrtl.uint<1>
   }
 
+  // A regreset invalidated through wires with aggregate types should be
+  // converted to a reg.
+  //
+  // CHECK-LABEL: firrtl.module @AggregateInvalidThroughWire
+  firrtl.module @AggregateInvalidThroughWire(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %d: !firrtl.vector<bundle<a: uint<1>>, 2>, out %q: !firrtl.vector<bundle<a: uint<1>>, 2>) {
+    %inv = firrtl.wire : !firrtl.bundle<a: uint<1>>
+    %inv_a = firrtl.subfield %inv(0) : (!firrtl.bundle<a: uint<1>>) -> !firrtl.uint<1>
+    %invalid = firrtl.invalidvalue : !firrtl.uint<1>
+    firrtl.strictconnect %inv_a, %invalid : !firrtl.uint<1>
+
+    %inv1 = firrtl.wire : !firrtl.vector<bundle<a: uint<1>>, 2>
+    %inv1_0 = firrtl.subindex %inv1[0] : !firrtl.vector<bundle<a: uint<1>>, 2>
+    firrtl.strictconnect %inv1_0, %inv : !firrtl.bundle<a: uint<1>>
+    %inv1_1 = firrtl.subindex %inv1[0] : !firrtl.vector<bundle<a: uint<1>>, 2>
+    firrtl.strictconnect %inv1_1, %inv : !firrtl.bundle<a: uint<1>>
+
+    // CHECK: firrtl.reg %clock : !firrtl.vector<bundle<a: uint<1>>, 2>
+    %r = firrtl.regreset %clock, %reset, %inv1  : !firrtl.uint<1>, !firrtl.vector<bundle<a: uint<1>>, 2>, !firrtl.vector<bundle<a: uint<1>>, 2>
+    firrtl.strictconnect %r, %d : !firrtl.vector<bundle<a: uint<1>>, 2>
+    firrtl.strictconnect %q, %r : !firrtl.vector<bundle<a: uint<1>>, 2>
+  }
+
   // A regreset invalidated via an output port should be converted to a reg.
   //
   // CHECK-LABEL: @InvalidPort
@@ -72,7 +94,7 @@ firrtl.circuit "SFCCompatTests" {
   }
 
   // A regreset invalid value should NOT propagate through a node.
-  firrtl.module @Foo(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %d: !firrtl.uint<8>, out %q: !firrtl.uint<8>) {
+  firrtl.module @InvalidNode(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %d: !firrtl.uint<8>, out %q: !firrtl.uint<8>) {
     %inv = firrtl.wire  : !firrtl.uint<8>
     %invalid_ui8 = firrtl.invalidvalue : !firrtl.uint<8>
     firrtl.connect %inv, %invalid_ui8 : !firrtl.uint<8>, !firrtl.uint<8>
@@ -136,9 +158,9 @@ firrtl.circuit "SFCCompatTests" {
 // -----
 
 firrtl.circuit "NonConstantAsyncReset_Port" {
-  // expected-note @+1 {{reset driver is here}}
+  // expected-note @below {{reset driver is "x"}}
   firrtl.module @NonConstantAsyncReset_Port(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %x: !firrtl.uint<1>) {
-    // expected-error @+1 {{'firrtl.regreset' op has an async reset, but its reset value is not driven with a constant value through wires, nodes, or connects}}
+    // expected-error @below {{register "r0" has an async reset, but its reset value "x" is not driven with a constant value through wires, nodes, or connects}}
     %r0 = firrtl.regreset %clock, %reset, %x : !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
@@ -150,7 +172,45 @@ firrtl.circuit "NonConstantAsyncReset_PrimOp" {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     // expected-note @+1 {{reset driver is here}}
     %c1_ui1 = firrtl.not %c0_ui1 : (!firrtl.uint<1>) -> !firrtl.uint<1>
-    // expected-error @+1 {{'firrtl.regreset' op has an async reset, but its reset value is not driven with a constant value through wires, nodes, or connects}}
+    // expected-error @below {{register "r0" has an async reset, but its reset value is not driven with a constant value through wires, nodes, or connects}}
     %r0 = firrtl.regreset %clock, %reset, %c1_ui1 : !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
+  }
+}
+
+// -----
+
+firrtl.circuit "NonConstantAsyncReset_Aggregate0" {
+  // expected-note @below {{reset driver is "x"}}
+  firrtl.module @NonConstantAsyncReset_Aggregate0(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %x : !firrtl.vector<uint<1>, 2>) {
+    %value = firrtl.wire : !firrtl.vector<uint<1>, 2>
+    firrtl.strictconnect %value, %x : !firrtl.vector<uint<1>, 2>
+    // expected-error @below {{register "r0" has an async reset, but its reset value "value" is not driven with a constant value through wires, nodes, or connects}}
+    %r0 = firrtl.regreset %clock, %reset, %value : !firrtl.asyncreset, !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
+  }
+}
+
+// -----
+
+firrtl.circuit "NonConstantAsyncReset_Aggregate1" {
+  // expected-note @below {{reset driver is "x[0].y"}}
+  firrtl.module @NonConstantAsyncReset_Aggregate1(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %x : !firrtl.vector<bundle<y: uint<1>>, 1>) {
+
+    // Aggregate wire used for the reset value.
+    %value = firrtl.wire : !firrtl.vector<uint<1>, 2>
+
+    // Connect a constant 0 to value[0].
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %value_0 = firrtl.subindex %value[0] : !firrtl.vector<uint<1>, 2>
+    firrtl.strictconnect %value_0, %c0_ui1 : !firrtl.uint<1>
+
+    // Connect a complex chain of operations leading to the port to value[1].
+    %subindex = firrtl.subindex %x[0] : !firrtl.vector<bundle<y : uint<1>>, 1>
+    %node = firrtl.node %subindex : !firrtl.bundle<y : uint<1>>
+    %subfield = firrtl.subfield %node(0) : (!firrtl.bundle<y : uint<1>>) -> !firrtl.uint<1>
+    %value_1 = firrtl.subindex %value[1] : !firrtl.vector<uint<1>, 2>
+    firrtl.strictconnect %value_1, %subfield : !firrtl.uint<1>
+
+    // expected-error @below {{register "r0" has an async reset, but its reset value "value[1]" is not driven with a constant value through wires, nodes, or connects}}
+    %r0 = firrtl.regreset %clock, %reset, %value : !firrtl.asyncreset, !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
   }
 }

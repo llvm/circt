@@ -79,16 +79,16 @@ def IfDefOp : SVOp<"ifdef", [SingleBlock, NoTerminator, NoRegionArguments,
 
   let extraClassDeclaration = [{
     /// Returns true if an else block exists.
-    bool hasElse() { return !elseRegion().empty(); }
+    bool hasElse() { return !getElseRegion().empty(); }
 
     Block *getThenBlock() {
-      assert(!thenRegion().empty() && "Unexpected empty 'then' region.");
-      return &thenRegion().front();
+      assert(!getThenRegion().empty() && "Unexpected empty 'then' region.");
+      return &getThenRegion().front();
     }
 
     Block *getElseBlock() {
       assert(hasElse() && "Empty 'else' region.");
-      return &elseRegion().front();
+      return &getElseRegion().front();
     }
   }];
 }
@@ -124,16 +124,16 @@ def IfDefProceduralOp
 
   let extraClassDeclaration = [{
     /// Returns true if an else block exists.
-    bool hasElse() { return !elseRegion().empty(); }
+    bool hasElse() { return !getElseRegion().empty(); }
 
     Block *getThenBlock() {
-      assert(!thenRegion().empty() && "Unexpected empty 'then' region.");
-      return &thenRegion().front();
+      assert(!getThenRegion().empty() && "Unexpected empty 'then' region.");
+      return &getThenRegion().front();
     }
 
     Block *getElseBlock() {
       assert(hasElse() && "Empty 'else' region.");
-      return &elseRegion().front();
+      return &getElseRegion().front();
     }
   }];
 }
@@ -160,16 +160,16 @@ def IfOp : SVOp<"if", [SingleBlock, NoTerminator, NoRegionArguments,
 
   let extraClassDeclaration = [{
     /// Returns true if an else block exists.
-    bool hasElse() { return !elseRegion().empty(); }
+    bool hasElse() { return !getElseRegion().empty(); }
 
     Block *getThenBlock() {
-      assert(!thenRegion().empty() && "Unexpected empty 'then' region.");
-      return &thenRegion().front();
+      assert(!getThenRegion().empty() && "Unexpected empty 'then' region.");
+      return &getThenRegion().front();
     }
 
     Block *getElseBlock() {
       assert(hasElse() && "Empty 'else' region.");
-      return &elseRegion().front();
+      return &getElseRegion().front();
     }
   }];
 }
@@ -209,14 +209,14 @@ def AlwaysOp : SVOp<"always", [SingleBlock, NoTerminator, NoRegionArguments,
   ];
 
   let extraClassDeclaration = [{
-    Block *getBodyBlock() { return &body().front(); }
+    Block *getBodyBlock() { return &getBody().front(); }
 
     struct Condition {
       EventControl event;
       Value value;
     };
 
-    size_t getNumConditions() { return events().size(); }
+    size_t getNumConditions() { return getEvents().size(); }
     Condition getCondition(size_t idx);
   }];
 
@@ -242,7 +242,7 @@ def AlwaysCombOp : SVOp<"alwayscomb", [SingleBlock, NoTerminator,
   ];
 
   let extraClassDeclaration = [{
-    Block *getBodyBlock() { return &body().front(); }
+    Block *getBodyBlock() { return &getBody().front(); }
   }];
 }
 
@@ -293,8 +293,8 @@ def AlwaysFFOp : SVOp<"alwaysff", [SingleBlock, NoTerminator, NoRegionArguments,
   ];
 
   let extraClassDeclaration = [{
-    Block *getBodyBlock() { return &bodyBlk().front(); }
-    Block *getResetBlock() { return &resetBlk().front(); }
+    Block *getBodyBlock() { return &getBodyBlk().front(); }
+    Block *getResetBlock() { return &getResetBlk().front(); }
   }];
 }
 
@@ -319,7 +319,7 @@ def InitialOp : SVOp<"initial", [SingleBlock, NoTerminator, NoRegionArguments,
   ];
 
   let extraClassDeclaration = [{
-    Block *getBodyBlock() { return &body().front(); }
+    Block *getBodyBlock() { return &getBody().front(); }
   }];
 }
 
@@ -352,10 +352,10 @@ def CaseOp : SVOp<"case", [SingleBlock, NoTerminator, NoRegionArguments,
   let regions = (region VariadicRegion<SizedRegion<1>>:$caseRegions);
   let arguments = (ins DefaultValuedAttr<CaseStmtTypeAttr,
                                          "CaseStmtType::CaseStmt">:$caseStyle,
-                       HWIntegerType:$cond, ArrayAttr:$casePatterns,
+                       AnyType:$cond, ArrayAttr:$casePatterns,
                        DefaultValuedAttr<ValidationQualifierTypeAttr,
                        "ValidationQualifierTypeEnum::ValidationQualifierPlain">:
-                       $validationQualifier);
+                      $validationQualifier);
   let results = (outs);
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
@@ -367,9 +367,9 @@ def CaseOp : SVOp<"case", [SingleBlock, NoTerminator, NoRegionArguments,
     OpBuilder<(ins "CaseStmtType":$caseStyle,
                    "ValidationQualifierTypeEnum":$validationQualifier,
                    "Value":$cond, "size_t":$numCases,
-                   "std::function<CasePattern(size_t)>":$caseCtor)>,
+                   "std::function<std::unique_ptr<CasePattern>(size_t)>":$caseCtor)>,
     OpBuilder<(ins "CaseStmtType":$caseStyle, "Value":$cond, "size_t":$numCases,
-               "std::function<CasePattern(size_t)>":$caseCtor), [{
+               "std::function<std::unique_ptr<CasePattern>(size_t)>":$caseCtor), [{
       build($_builder, $_state, caseStyle,
             ValidationQualifierTypeEnum::ValidationQualifierPlain, cond,  numCases,
             caseCtor);
@@ -394,15 +394,9 @@ def AssignOp : SVOp<"assign", [InOutTypeConstraint<"src", "dest">,
     A SystemVerilog assignment statement 'x = y;'.
     These occur in module scope.  See SV Spec 10.3.2.
   }];
-  let arguments = (ins InOutType:$dest, InOutElementType:$src,
-                  OptionalAttr<SVAttributeArrayAttr>:$svAttributes);
+  let arguments = (ins InOutType:$dest, InOutElementType:$src);
   let results = (outs);
-  let assemblyFormat = [{$dest `,` $src (`svattrs` $svAttributes^)? attr-dict
-                       `:` qualified(type($src))}];
-  let builders = [
-    OpBuilder<(ins "::mlir::Value":$dest, "::mlir::Value":$src),
-      "return build($_builder, $_state, dest, src, ArrayAttr());">
-  ];
+  let assemblyFormat = "$dest `,` $src attr-dict `:` qualified(type($src))";
 }
 
 def BPAssignOp : SVOp<"bpassign", [InOutTypeConstraint<"src", "dest">,
@@ -427,7 +421,6 @@ def PAssignOp : SVOp<"passign", [InOutTypeConstraint<"src", "dest">,
     These occur in initial, always, task, and function blocks.  The statement
     can be scheduled without blocking procedural flow.  See SV Spec 10.4.2.
   }];
-  let hasCanonicalizeMethod = true;
   let arguments = (ins InOutType:$dest, InOutElementType:$src);
   let results = (outs);
   let assemblyFormat = "$dest `,` $src  attr-dict `:` qualified(type($src))";
@@ -482,10 +475,10 @@ def AliasOp : SVOp<"alias"> {
     bits within a net.  Aliases always have at least two operands.
   }];
 
-  let arguments = (ins Variadic<InOutType>:$operands);
+  let arguments = (ins Variadic<InOutType>:$aliases);
   let results = (outs);
 
-  let assemblyFormat = "$operands attr-dict `:` qualified(type($operands))";
+  let assemblyFormat = "$aliases attr-dict `:` qualified(type($aliases))";
 
   // Verify that we have at least two operands.
   let hasVerifier = 1;
@@ -494,11 +487,15 @@ def AliasOp : SVOp<"alias"> {
 def FWriteOp : SVOp<"fwrite", [ProceduralOp]> {
   let summary = "'$fwrite' statement";
 
-  let arguments = (ins I32:$fd, StrAttr:$string, Variadic<AnyType>:$operands);
+  let arguments = (ins I32:$fd,
+                       StrAttr:$format_string,
+                       Variadic<AnyType>:$substitutions);
   let results = (outs);
 
-  let assemblyFormat =
-    "$fd `,` $string attr-dict (`(` $operands^ `)` `:` qualified(type($operands)))?";
+  let assemblyFormat = [{
+    $fd `,` $format_string attr-dict (`(` $substitutions^ `)` `:`
+    qualified(type($substitutions)))?
+  }];
 }
 
 def VerbatimOp : SVOp<"verbatim"> {
@@ -508,19 +505,21 @@ def VerbatimOp : SVOp<"verbatim"> {
 
     sv.verbatim allows operand substitutions with {{0}} syntax.
   }];
-  let arguments = (ins StrAttr:$string, Variadic<AnyType>:$operands,
+  let arguments = (ins StrAttr:$format_string, Variadic<AnyType>:$substitutions,
                   DefaultValuedAttr<NameRefArrayAttr,"{}">:$symbols);
 
-  let assemblyFormat =
-    "$string (`(` $operands^ `)` `:` qualified(type($operands)))? attr-dict";
+  let assemblyFormat = [{
+    $format_string (`(` $substitutions^ `)` `:`
+    qualified(type($substitutions)))? attr-dict
+  }];
 
   let builders = [
-    OpBuilder<(ins "Twine":$string),
+    OpBuilder<(ins "Twine":$formatString),
                  "build(odsBuilder, odsState, "
-                 "odsBuilder.getStringAttr(string), ValueRange{},"
+                 "odsBuilder.getStringAttr(formatString), ValueRange{},"
                  "odsBuilder.getArrayAttr({}));">,
-    OpBuilder<(ins "StringAttr":$string),
-                 "build(odsBuilder, odsState, string, ValueRange{},"
+    OpBuilder<(ins "StringAttr":$formatString),
+                 "build(odsBuilder, odsState, formatString, ValueRange{},"
                  "odsBuilder.getArrayAttr({}));">
   ];
 }
@@ -584,7 +583,7 @@ def BindInterfaceOp : SVOp<"bind.interface",
 /// - `1`: Prints simulation time and location (default)
 /// - `2`: Prints simulation time, location, and statistics about the memory and
 ///   CPU time used in simulation
-def VerbosityIntAttr : DefaultValuedAttr<Confined<I8Attr,
+def VerbosityIntAttr : DefaultValuedAttr<ConfinedAttr<I8Attr,
   [IntMinValue<0>, IntMaxValue<2>]>, "1">;
 
 /// Commonalities between `StopOp` and `FinishOp`.
@@ -647,11 +646,11 @@ def FatalOp : SVOp<"fatal", [ProceduralOp]> {
   }];
   let arguments = (ins
     VerbosityIntAttr:$verbosity,
-    OptionalAttr<StrAttr>:$message, Variadic<AnyType>:$operands);
+    OptionalAttr<StrAttr>:$message, Variadic<AnyType>:$substitutions);
   let assemblyFormat = [{
     $verbosity
-    (`,` $message^ (`(` $operands^ `)` `:` qualified(type($operands)))?)?
-    attr-dict
+    (`,` $message^ (`(` $substitutions^ `)` `:`
+    qualified(type($substitutions)))?)? attr-dict
   }];
   let builders = [
     OpBuilder<(ins CArg<VerbosityIntAttr.returnType,"1">:$verbosity),
@@ -670,9 +669,9 @@ class NonfatalMessageOp<string mnemonic, list<Trait> traits = []> :
     interpolated into the message string.
   }];
   let arguments = (ins
-    OptionalAttr<StrAttr>:$message, Variadic<AnyType>:$operands);
+    OptionalAttr<StrAttr>:$message, Variadic<AnyType>:$substitutions);
   let assemblyFormat = [{
-    ($message^ (`(` $operands^ `)` `:` qualified(type($operands)))?)?
+    ($message^ (`(` $substitutions^ `)` `:` qualified(type($substitutions)))?)?
     attr-dict
   }];
   let builders = [

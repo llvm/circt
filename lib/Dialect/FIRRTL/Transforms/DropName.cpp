@@ -39,7 +39,7 @@ private:
   size_t dropNamesIf(llvm::function_ref<bool(FNamableOp)> pred) {
     size_t changedNames = 0;
     getOperation()->walk([&](FNamableOp op) {
-      if (pred(op)) {
+      if (pred(op) && !op.hasDroppableName()) {
         ++changedNames;
         op.dropName();
       }

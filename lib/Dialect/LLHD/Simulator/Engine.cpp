@@ -250,7 +250,7 @@ void Engine::walkEntity(EntityOp entity, Instance &child) {
 
     // Add a signal to the signal table.
     if (auto sig = dyn_cast<SigOp>(op)) {
-      uint64_t index = state->addSignal(sig.name().str(), child.name);
+      uint64_t index = state->addSignal(sig.getName().str(), child.name);
       child.sensitivityList.push_back(
           SignalDetail({nullptr, 0, child.sensitivityList.size(), index}));
     }
@@ -258,21 +258,23 @@ void Engine::walkEntity(EntityOp entity, Instance &child) {
     // Build (recursive) instance layout.
     if (auto inst = dyn_cast<InstOp>(op)) {
       // Skip self-recursion.
-      if (inst.callee() == child.name)
+      if (inst.getCallee() == child.name)
         return;
       if (auto e =
-              op->getParentOfType<ModuleOp>().lookupSymbol(inst.callee())) {
-        Instance newChild(child.unit + '.' + inst.name().str());
-        newChild.unit = inst.callee().str();
+              op->getParentOfType<ModuleOp>().lookupSymbol(inst.getCallee())) {
+        Instance newChild(child.unit + '.' + inst.getName().str());
+        newChild.unit = inst.getCallee().str();
         newChild.nArgs = inst.getNumOperands();
-        newChild.path = child.path + "/" + inst.name().str();
+        newChild.path = child.path + "/" + inst.getName().str();
 
         // Add instance arguments to sensitivity list. The first nArgs signals
         // in the sensitivity list represent the unit's arguments, while the
         // following ones represent the unit-defined signals.
         llvm::SmallVector<Value, 8> args;
-        args.insert(args.end(), inst.inputs().begin(), inst.inputs().end());
-        args.insert(args.end(), inst.outputs().begin(), inst.outputs().end());
+        args.insert(args.end(), inst.getInputs().begin(),
+                    inst.getInputs().end());
+        args.insert(args.end(), inst.getOutputs().begin(),
+                    inst.getOutputs().end());
 
         for (size_t i = 0, e = args.size(); i < e; ++i) {
           // The signal comes from an instance's argument.
@@ -286,7 +288,7 @@ void Engine::walkEntity(EntityOp entity, Instance &child) {
                 child.sensitivityList.begin(), child.sensitivityList.end(),
                 [&](SignalDetail &detail) {
                   return state->signals[detail.globalIndex].getName() ==
-                             sigOp.name() &&
+                             sigOp.getName() &&
                          state->signals[detail.globalIndex].getOwner() ==
                              child.name;
                 });

@@ -16,25 +16,59 @@
 include "mlir/Pass/PassBase.td"
 
 //===----------------------------------------------------------------------===//
-// AffineToStaticLogic
+// AffineToPipeline
 //===----------------------------------------------------------------------===//
 
-def AffineToStaticLogic : Pass<"convert-affine-to-staticlogic", "mlir::func::FuncOp"> {
-  let summary = "Convert Affine dialect to StaticLogic pipelines";
+def AffineToPipeline : Pass<"convert-affine-to-pipeline", "mlir::func::FuncOp"> {
+  let summary = "Convert Affine dialect to Pipeline pipelines";
   let description = [{
     This pass analyzes Affine loops and control flow, creates a Scheduling
     problem using the Calyx operator library, solves the problem, and lowers
-    the loops to a StaticLogic pipeline.
+    the loops to a Pipeline pipeline.
   }];
-  let constructor = "circt::createAffineToStaticLogic()";
+  let constructor = "circt::createAffineToPipeline()";
   let dependentDialects = [
-    "circt::staticlogic::StaticLogicDialect",
+    "circt::pipeline::PipelineDialect",
     "mlir::arith::ArithmeticDialect",
     "mlir::cf::ControlFlowDialect",
     "mlir::memref::MemRefDialect",
     "mlir::scf::SCFDialect",
     "mlir::func::FuncDialect"
   ];
+}
+
+//===----------------------------------------------------------------------===//
+// ExportChiselInterface and ExportSplitChiselInterface
+//===----------------------------------------------------------------------===//
+
+def ExportChiselInterface : Pass<"export-chisel-interface", "firrtl::CircuitOp"> {
+  let summary = "Emit a Chisel interface to a FIRRTL circuit";
+  let description = [{
+    This pass generates a Scala Chisel interface for the top level module of
+    a FIRRTL circuit.
+  }];
+
+  let constructor = "createExportChiselInterfacePass()";
+  let dependentDialects = [
+    "circt::firrtl::FIRRTLDialect"
+  ];
+}
+
+def ExportSplitChiselInterface : Pass<"export-split-chisel-interface", "firrtl::CircuitOp"> {
+  let summary = "Emit a Chisel interface to a FIRRTL circuit to a directory of files";
+  let description = [{
+    This pass generates a Scala Chisel interface for the top level module of
+    a FIRRTL circuit.
+  }];
+
+  let constructor = "createExportSplitChiselInterfacePass()";
+  let dependentDialects = [
+    "circt::firrtl::FIRRTLDialect"
+  ];
+  let options = [
+    Option<"directoryName", "dir-name", "std::string",
+            "", "Directory to emit into">
+   ];
 }
 
 //===----------------------------------------------------------------------===//
@@ -111,15 +145,15 @@ def SCFToCalyx : Pass<"lower-scf-to-calyx", "mlir::ModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
-// StaticLogicToCalyx
+// PipelineToCalyx
 //===----------------------------------------------------------------------===//
 
-def StaticLogicToCalyx : Pass<"lower-static-logic-to-calyx", "mlir::ModuleOp"> {
-  let summary = "Lower StaticLogic to Calyx";
+def PipelineToCalyx : Pass<"lower-static-logic-to-calyx", "mlir::ModuleOp"> {
+  let summary = "Lower Pipeline to Calyx";
   let description = [{
-    This pass lowers StaticLogic to Calyx.
+    This pass lowers Pipeline to Calyx.
   }];
-  let constructor = "circt::createStaticLogicToCalyxPass()";
+  let constructor = "circt::createPipelineToCalyxPass()";
   let dependentDialects = [
     "calyx::CalyxDialect", "::mlir::scf::SCFDialect", "hw::HWDialect",
     "comb::CombDialect"
@@ -148,6 +182,68 @@ def CalyxToHW : Pass<"lower-calyx-to-hw", "mlir::ModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
+// CalyxToFSM
+//===----------------------------------------------------------------------===//
+
+def CalyxToFSM : Pass<"lower-calyx-to-fsm", "calyx::ComponentOp"> {
+  let summary = "Lower Calyx to FSM";
+  let description = [{
+    This pass lowers a Calyx control schedule to an FSM representation.
+    An `fsm.machine` operation is nested within the `control` region of the Calyx
+    component. This machine is itself in an intermediate format wherein it has
+    no I/O ports and solely contains output statements with `calyx.enable`s
+    referencing `calyx.group` and transition logic guarded by the SSA values
+    specified in the source control schedule.
+    This intermediate state facilitates transformation of the FSM, given that
+    top-level I/O has yet to be materialized (one input and output per activated
+    group) as well as guard transition logic (every transition must be guarded
+    on all groups active within the state having finished). As such, `calyx.enable`
+    operations can easily be moved between states without worrying about updating
+    transition guards while doing so.
+
+    Eventually, the FSM must be materialized (materialize I/O ports, remove
+    `calyx.enable` operations in favor of asserting output ports, guarding
+    transitions by input `done` ports) and outlined to a separate module.
+  }];
+  let constructor = "circt::createCalyxToFSMPass()";
+  let dependentDialects = ["fsm::FSMDialect", "comb::CombDialect"];
+}
+
+def MaterializeCalyxToFSM : Pass<"materialize-calyx-to-fsm", "calyx::ComponentOp"> {
+  let summary = "Materializes an FSM embedded inside the control of this Calyx component.";
+  let description = [{
+    Materializes the FSM in the control of the component. This materializes the
+    top-level I/O of the FSM to receive `group_done` signals as input and
+    `group_go` signals as output, based on the `calyx.enable` operations
+    used within the states of the FSM.
+    Each transition of the FSM is predicated on the enabled groups within a
+    state being done, or, for static groups, a separate sub-FSM is instantiated
+    to await the group finishing.
+
+    Given an FSM that enables N unique groups, the top-level FSM will have N+1
+    in- and output ports, wherein:
+    * Input # 0 to N-1 are `group_done` signals
+    * Input N is the top-level `go` port
+    * Output 0 to N-1 are `group_go` signals
+    * Output N is the top-level `done` port
+  }];
+  let dependentDialects = ["comb::CombDialect", "hw::HWDialect", "fsm::FSMDialect"];
+  let constructor = "circt::createMaterializeCalyxToFSMPass()";
+}
+
+
+//===----------------------------------------------------------------------===//
+// FSMToSV
+//===----------------------------------------------------------------------===//
+
+def ConvertFSMToSV : Pass<"convert-fsm-to-sv", "mlir::ModuleOp"> {
+  let summary = "Convert FSM to HW";
+  let constructor = "circt::createConvertFSMToSVPass()";
+  let dependentDialects = ["circt::hw::HWDialect", "circt::comb::CombDialect",
+                           "circt::seq::SeqDialect", "circt::sv::SVDialect"];
+}
+
+//===----------------------------------------------------------------------===//
 // FIRRTLToHW
 //===----------------------------------------------------------------------===//
 
@@ -158,11 +254,13 @@ def LowerFIRRTLToHW : Pass<"lower-firrtl-to-hw", "mlir::ModuleOp"> {
   }];
   let constructor = "circt::createLowerFIRRTLToHWPass()";
   let dependentDialects = ["comb::CombDialect", "hw::HWDialect",
-                           "sv::SVDialect"];
+                           "seq::SeqDialect", "sv::SVDialect"];
   let options = [
     Option<"enableAnnotationWarning", "warn-on-unprocessed-annotations",
            "bool", "false",
-    "Emit warnings on unprocessed annotations during lower-to-hw pass">
+    "Emit warnings on unprocessed annotations during lower-to-hw pass">,
+    Option<"emitChiselAssertsAsSVA", "emit-chisel-asserts-as-sva",
+           "bool", "false","Convert all Chisel asserts to SVA">
   ];
 }
 
@@ -225,6 +323,45 @@ def ConvertLLHDToLLVM : Pass<"convert-llhd-to-llvm", "mlir::ModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
+// HWToLLVM
+//===----------------------------------------------------------------------===//
+
+def ConvertHWToLLVM : Pass<"convert-hw-to-llvm", "mlir::ModuleOp"> {
+  let summary = "Convert HW to LLVM";
+  let description = [{
+    This pass translates HW to LLVM."
+  }];
+  let constructor = "circt::createConvertHWToLLVMPass()";
+  let dependentDialects = ["mlir::LLVM::LLVMDialect"];
+}
+
+//===----------------------------------------------------------------------===//
+// CombToLLVM
+//===----------------------------------------------------------------------===//
+
+def ConvertCombToLLVM : Pass<"convert-comb-to-llvm", "mlir::ModuleOp"> {
+  let summary = "Convert Comb to LLVM";
+  let description = [{
+    This pass translates Comb to LLVM."
+  }];
+  let constructor = "circt::createConvertCombToLLVMPass()";
+  let dependentDialects = ["mlir::LLVM::LLVMDialect"];
+}
+
+//===----------------------------------------------------------------------===//
+// HWArithToHW
+//===----------------------------------------------------------------------===//
+
+def HWArithToHW : Pass<"lower-hwarith-to-hw", "mlir::ModuleOp"> {
+  let summary = "Lower HWArith to HW/Comb";
+  let description = [{
+    This pass lowers HWArith to HW/Comb.
+  }];
+  let constructor = "circt::createHWArithToHWPass()";
+  let dependentDialects = ["hw::HWDialect", "comb::CombDialect"];
+}
+
+//===----------------------------------------------------------------------===//
 // HWToLLHD
 //===----------------------------------------------------------------------===//
 
@@ -236,6 +373,19 @@ def ConvertHWToLLHD : Pass<"convert-hw-to-llhd", "mlir::ModuleOp"> {
   }];
   let constructor = "circt::createConvertHWToLLHDPass()";
   let dependentDialects = ["llhd::LLHDDialect"];
+}
+
+//===----------------------------------------------------------------------===//
+// HWToSystemC
+//===----------------------------------------------------------------------===//
+
+def ConvertHWToSystemC : Pass<"convert-hw-to-systemc", "mlir::ModuleOp"> {
+  let summary = "Convert HW to SystemC";
+  let description = [{
+    This pass translates a HW design into an equivalent SystemC design.
+  }];
+  let constructor = "circt::createConvertHWToSystemCPass()";
+  let dependentDialects = ["systemc::SystemCDialect", "mlir::emitc::EmitCDialect"];
 }
 
 //===----------------------------------------------------------------------===//
@@ -261,14 +411,22 @@ def HandshakeRemoveBlock : Pass<"handshake-remove-block-structure", "handshake::
   let constructor = "circt::createHandshakeRemoveBlockPass()";
 }
 
-//===----------------------------------------------------------------------===//
-// StandardToStaticLogic
-//===----------------------------------------------------------------------===//
+def InsertMergeBlocks : Pass<"insert-merge-blocks", "::mlir::ModuleOp"> {
+  let summary = "Insert explicit merge blocks";
+  let description = [{
+    This pass inserts additional merge blocks for each block with more than
+    two successors. A merge block is a block that only contains one operation,
+    a terminator, and has two predecessors.
+    The order successors are merged together mirrors the order different control
+    paths are created. Thus, each block with two successors will have a corresponding
+    merge block.
 
-def CreatePipeline : Pass<"create-pipeline", "mlir::func::FuncOp"> {
-  let summary = "Create StaticLogic pipeline operations";
-  let constructor = "circt::createCreatePipelinePass()";
-  let dependentDialects = ["staticlogic::StaticLogicDialect"];
+    This pass brings the CFG into a canonical form for further transformations.
+
+    Treats loops and sub-CFGs with irregular control flow like single blocks.
+  }];
+  let constructor = "circt::createInsertMergeBlocksPass()";
+  let dependentDialects = ["mlir::cf::ControlFlowDialect", "mlir::func::FuncDialect"];
 }
 
 #endif // CIRCT_CONVERSION_PASSES_TD

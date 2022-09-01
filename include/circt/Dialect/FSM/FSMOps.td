@@ -12,11 +12,14 @@
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
+include "circt/Dialect/HW/HWOpInterfaces.td"
 
 def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>;
 
-def MachineOp : FSMOp<"machine", [FunctionOpInterface,
-      Symbol, SymbolTable, NoTerminator]> {
+def MachineOp : FSMOp<"machine", [
+      FunctionOpInterface,
+      Symbol, SymbolTable, NoTerminator,
+      HWModuleLike]> {
   let summary = "Define a finite-state machine";
   let description = [{
     `fsm.machine` represents a finite-state machine, including a machine name,
@@ -25,7 +28,9 @@ def MachineOp : FSMOp<"machine", [FunctionOpInterface,
   }];
 
   let arguments = (ins StrAttr:$sym_name, StrAttr:$initialState,
-                       TypeAttrOf<FunctionType>:$function_type);
+                       TypeAttrOf<FunctionType>:$function_type,
+                       OptionalAttr<StrArrayAttr>:$argNames,
+                       OptionalAttr<StrArrayAttr>:$resNames);
   let regions = (region SizedRegion<1>:$body);
 
   let builders = [
@@ -47,6 +52,12 @@ def MachineOp : FSMOp<"machine", [FunctionOpInterface,
       return getFunctionTypeAttr().getValue().cast<FunctionType>();
     }
 
+    /// Returns the number of states in this machhine.
+    size_t getNumStates() {
+      auto stateOps = getBody().getOps<fsm::StateOp>();
+      return std::distance(stateOps.begin(), stateOps.end());
+    }
+
     /// Returns the argument types of this function.
     ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
 
@@ -62,6 +73,12 @@ def MachineOp : FSMOp<"machine", [FunctionOpInterface,
                            "' attribute of function type");
       return success();
     }
+
+    /// Return the name of the i'th input to this machine.
+    StringAttr getArgName(size_t i);
+
+    /// Return the name of the i'th result of this machine.
+    StringAttr getResName(size_t i);
   }];
 
   let skipDefaultBuilders = 1;
@@ -112,7 +129,10 @@ def TriggerOp : FSMOp<"trigger", []> {
   let hasVerifier = 1;
 }
 
-def HWInstanceOp : FSMOp<"hw_instance", [Symbol, AttrSizedOperandSegments]> {
+def HWInstanceOp : FSMOp<"hw_instance", [
+    Symbol,
+    DeclareOpInterfaceMethods<HWInstanceLike>
+  ]> {
   let summary = "Create a hardware-style instance of a state machine";
   let description = [{
     `fsm.hw_instance` represents a hardware-style instance of a state machine,
@@ -122,19 +142,33 @@ def HWInstanceOp : FSMOp<"hw_instance", [Symbol, AttrSizedOperandSegments]> {
   }];
 
   let arguments = (ins StrAttr:$sym_name, FlatSymbolRefAttr:$machine,
-                       Variadic<AnyType>:$inputs, Optional<AnyType>:$clock,
-                       Optional<AnyType>:$reset);
+                       Variadic<AnyType>:$inputs, I1:$clock, I1:$reset);
   let results = (outs Variadic<AnyType>:$outputs);
 
   let assemblyFormat = [{
-    $sym_name $machine attr-dict `(` $inputs `)` `:`
-    functional-type($inputs, $outputs) (`,` `clock` $clock^ `:` qualified(type($clock)))?
-    (`,` `reset` $reset^ `:` qualified(type($reset)))?
+    $sym_name $machine attr-dict `(` $inputs `)`
+    `,` `clock` $clock `,` `reset` $reset `:` functional-type($inputs, $outputs)
   }];
 
   let extraClassDeclaration = [{
     /// Lookup the machine for the symbol. This returns null on invalid IR.
     MachineOp getMachine();
+
+    /// Module name is the same as the machine name.
+    StringRef getModuleName() {
+      return machine();
+    }
+    FlatSymbolRefAttr getModuleNameAttr() {
+      return machineAttr();
+    }
+
+    // HWInstanceLike interface
+    StringRef getInstanceName() {
+      return sym_name();
+    }
+    StringAttr getInstanceNameAttr() {
+      return sym_nameAttr();
+    }
   }];
 
   let hasVerifier = 1;
@@ -150,17 +184,29 @@ def StateOp : FSMOp<"state", [HasParent<"MachineOp">, Symbol, NoTerminator]> {
   }];
 
   let arguments = (ins SymbolNameAttr:$sym_name);
-  let regions = (region SizedRegion<1>:$output, SizedRegion<1>:$transitions);
+  let regions = (region AnyRegion:$output, AnyRegion:$transitions);
 
   let hasCanonicalizeMethod = true;
 
   let assemblyFormat = [{
-    $sym_name attr-dict `output` $output `transitions` $transitions
+    $sym_name attr-dict (`output` $output^)? (`transitions` $transitions^)?
   }];
 
   let extraClassDeclaration = [{
     /// Returns all possible next states from this state.
     llvm::SetVector<StateOp> getNextStates();
+
+    /// Returns the OutputOp of this state.
+    OutputOp getOutputOp() {
+      auto outputOp = output().getOps<fsm::OutputOp>();
+      assert(!outputOp.empty() &&
+           "Expected an fsm.output op inside the state output region");
+      return *outputOp.begin();
+    }
+
+    /// Ensures that this state has an output region with an output operation.
+    /// Returns the inner block of the output region.
+    Block* ensureOutput(OpBuilder& builder);
   }];
 
   let builders = [
@@ -234,6 +280,12 @@ def TransitionOp : FSMOp<"transition", [HasParent<"StateOp">, NoTerminator]> {
 
     /// Returns true if this transition is always taken.
     bool isAlwaysTaken();
+
+    /// Ensures that this transition has a guard region.
+    Block* ensureGuard(OpBuilder& builder);
+
+    /// Ensures that this transition has an action region.
+    Block* ensureAction(OpBuilder& builder);
   }];
 
   let builders = [

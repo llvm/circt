@@ -25,6 +25,14 @@ void registerDialect(DialectRegistry &registry);
 namespace memref {
 class MemRefDialect;
 } // end namespace memref
+
+namespace cf {
+class ControlFlowDialect;
+} // namespace cf
+
+namespace func {
+class FuncDialect;
+} // namespace func
 } // end namespace mlir
 
 namespace circt {

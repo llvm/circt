@@ -790,7 +790,7 @@ HandshakeExecuter::HandshakeExecuter(
 
   // Initialize the value map for buffers with initial values.
   for (auto bufferOp : func.getOps<handshake::BufferOp>()) {
-    if (bufferOp.initValues().hasValue()) {
+    if (bufferOp.initValues().has_value()) {
       auto initValues = bufferOp.getInitValues();
       assert(initValues.size() == 1 &&
              "Handshake-runner only supports buffer initialization with a "
@@ -900,7 +900,7 @@ HandshakeExecuter::HandshakeExecuter(
 
     for (auto out : enumerate(op.getResults())) {
       LLVM_DEBUG(debugArg("OUT", out.value(), outValues[out.index()], time));
-      assert(outValues[out.index()].hasValue());
+      assert(outValues[out.index()].has_value());
       valueMap[out.value()] = outValues[out.index()];
       timeMap[out.value()] = time + 1;
       scheduleUses(readyList, valueMap, out.value());

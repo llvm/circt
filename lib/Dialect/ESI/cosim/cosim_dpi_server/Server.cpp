@@ -147,7 +147,7 @@ CosimServer::CosimServer(EndpointRegistry &reg) : reg(reg) {}
 kj::Promise<void> CosimServer::list(ListContext context) {
   auto ifaces = context.getResults().initIfaces((unsigned int)reg.size());
   unsigned int ctr = 0u;
-  reg.iterateEndpoints([&](int id, const Endpoint &ep) {
+  reg.iterateEndpoints([&](std::string id, const Endpoint &ep) {
     ifaces[ctr].setEndpointID(id);
     ifaces[ctr].setSendTypeID(ep.getSendTypeId());
     ifaces[ctr].setRecvTypeID(ep.getRecvTypeId());

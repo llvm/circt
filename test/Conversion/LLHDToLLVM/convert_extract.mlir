@@ -25,10 +25,10 @@
 // CHECK:           %[[VAL_20:.*]] = llvm.inttoptr %[[VAL_19]] : i64 to !llvm.ptr<i8>
 // CHECK:           %[[VAL_21:.*]] = llvm.urem %[[VAL_15]], %[[VAL_17]]  : i64
 // CHECK:           %[[VAL_22:.*]] = llvm.mlir.undef : !llvm.struct<(ptr<i8>, i64, i64, i64)>
-// CHECK:           %[[VAL_23:.*]] = llvm.insertvalue %[[VAL_20]], %[[VAL_22]][0 : i32] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
-// CHECK:           %[[VAL_24:.*]] = llvm.insertvalue %[[VAL_21]], %[[VAL_23]][1 : i32] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
-// CHECK:           %[[VAL_25:.*]] = llvm.insertvalue %[[VAL_11]], %[[VAL_24]][2 : i32] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
-// CHECK:           %[[VAL_26:.*]] = llvm.insertvalue %[[VAL_13]], %[[VAL_25]][3 : i32] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
+// CHECK:           %[[VAL_23:.*]] = llvm.insertvalue %[[VAL_20]], %[[VAL_22]][0] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
+// CHECK:           %[[VAL_24:.*]] = llvm.insertvalue %[[VAL_21]], %[[VAL_23]][1] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
+// CHECK:           %[[VAL_25:.*]] = llvm.insertvalue %[[VAL_11]], %[[VAL_24]][2] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
+// CHECK:           %[[VAL_26:.*]] = llvm.insertvalue %[[VAL_13]], %[[VAL_25]][3] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
 // CHECK:           %[[VAL_27:.*]] = llvm.mlir.constant(1 : i32) : i32
 // CHECK:           %[[VAL_28:.*]] = llvm.alloca %[[VAL_27]] x !llvm.struct<(ptr<i8>, i64, i64, i64)> {alignment = 4 : i64} : (i32) -> !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>
 // CHECK:           llvm.store %[[VAL_26]], %[[VAL_28]] : !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>
@@ -61,10 +61,10 @@ func.func @convertSigExtract (%c : i5, %sI32 : !llhd.sig<i32>) {
 // CHECK:           %[[VAL_17:.*]] = llvm.getelementptr %[[VAL_16]]{{\[}}%[[VAL_15]], %[[VAL_14]]] : (!llvm.ptr<array<4 x i4>>, i32, i3) -> !llvm.ptr<i4>
 // CHECK:           %[[VAL_18:.*]] = llvm.bitcast %[[VAL_17]] : !llvm.ptr<i4> to !llvm.ptr<i8>
 // CHECK:           %[[VAL_19:.*]] = llvm.mlir.undef : !llvm.struct<(ptr<i8>, i64, i64, i64)>
-// CHECK:           %[[VAL_20:.*]] = llvm.insertvalue %[[VAL_18]], %[[VAL_19]][0 : i32] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
-// CHECK:           %[[VAL_21:.*]] = llvm.insertvalue %[[VAL_7]], %[[VAL_20]][1 : i32] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
-// CHECK:           %[[VAL_22:.*]] = llvm.insertvalue %[[VAL_11]], %[[VAL_21]][2 : i32] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
-// CHECK:           %[[VAL_23:.*]] = llvm.insertvalue %[[VAL_13]], %[[VAL_22]][3 : i32] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
+// CHECK:           %[[VAL_20:.*]] = llvm.insertvalue %[[VAL_18]], %[[VAL_19]][0] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
+// CHECK:           %[[VAL_21:.*]] = llvm.insertvalue %[[VAL_7]], %[[VAL_20]][1] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
+// CHECK:           %[[VAL_22:.*]] = llvm.insertvalue %[[VAL_11]], %[[VAL_21]][2] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
+// CHECK:           %[[VAL_23:.*]] = llvm.insertvalue %[[VAL_13]], %[[VAL_22]][3] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
 // CHECK:           %[[VAL_24:.*]] = llvm.mlir.constant(1 : i32) : i32
 // CHECK:           %[[VAL_25:.*]] = llvm.alloca %[[VAL_24]] x !llvm.struct<(ptr<i8>, i64, i64, i64)> {alignment = 4 : i64} : (i32) -> !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>
 // CHECK:           llvm.store %[[VAL_23]], %[[VAL_25]] : !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>
@@ -96,10 +96,10 @@ func.func @convertSigArraySlice (%c : i2, %sArr : !llhd.sig<!hw.array<4xi4>>) {
 // CHECK:           %[[VAL_16:.*]] = llvm.getelementptr %[[VAL_15]]{{\[}}%[[VAL_14]], 1] : (!llvm.ptr<struct<(i3, i2, i1)>>, i32) -> !llvm.ptr<i2>
 // CHECK:           %[[VAL_17:.*]] = llvm.bitcast %[[VAL_16]] : !llvm.ptr<i2> to !llvm.ptr<i8>
 // CHECK:           %[[VAL_18:.*]] = llvm.mlir.undef : !llvm.struct<(ptr<i8>, i64, i64, i64)>
-// CHECK:           %[[VAL_19:.*]] = llvm.insertvalue %[[VAL_17]], %[[VAL_18]][0 : i32] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
-// CHECK:           %[[VAL_20:.*]] = llvm.insertvalue %[[VAL_6]], %[[VAL_19]][1 : i32] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
-// CHECK:           %[[VAL_21:.*]] = llvm.insertvalue %[[VAL_10]], %[[VAL_20]][2 : i32] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
-// CHECK:           %[[VAL_22:.*]] = llvm.insertvalue %[[VAL_12]], %[[VAL_21]][3 : i32] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
+// CHECK:           %[[VAL_19:.*]] = llvm.insertvalue %[[VAL_17]], %[[VAL_18]][0] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
+// CHECK:           %[[VAL_20:.*]] = llvm.insertvalue %[[VAL_6]], %[[VAL_19]][1] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
+// CHECK:           %[[VAL_21:.*]] = llvm.insertvalue %[[VAL_10]], %[[VAL_20]][2] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
+// CHECK:           %[[VAL_22:.*]] = llvm.insertvalue %[[VAL_12]], %[[VAL_21]][3] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
 // CHECK:           %[[VAL_23:.*]] = llvm.mlir.constant(1 : i32) : i32
 // CHECK:           %[[VAL_24:.*]] = llvm.alloca %[[VAL_23]] x !llvm.struct<(ptr<i8>, i64, i64, i64)> {alignment = 4 : i64} : (i32) -> !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>
 // CHECK:           llvm.store %[[VAL_22]], %[[VAL_24]] : !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>
@@ -132,10 +132,10 @@ func.func @convertSigStructExtract (%sTup : !llhd.sig<!hw.struct<foo: i1, bar: i
 // CHECK:           %[[VAL_17:.*]] = llvm.getelementptr %[[VAL_16]]{{\[}}%[[VAL_15]], %[[VAL_14]]] : (!llvm.ptr<array<4 x i4>>, i32, i3) -> !llvm.ptr<i4>
 // CHECK:           %[[VAL_18:.*]] = llvm.bitcast %[[VAL_17]] : !llvm.ptr<i4> to !llvm.ptr<i8>
 // CHECK:           %[[VAL_19:.*]] = llvm.mlir.undef : !llvm.struct<(ptr<i8>, i64, i64, i64)>
-// CHECK:           %[[VAL_20:.*]] = llvm.insertvalue %[[VAL_18]], %[[VAL_19]][0 : i32] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
-// CHECK:           %[[VAL_21:.*]] = llvm.insertvalue %[[VAL_7]], %[[VAL_20]][1 : i32] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
-// CHECK:           %[[VAL_22:.*]] = llvm.insertvalue %[[VAL_11]], %[[VAL_21]][2 : i32] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
-// CHECK:           %[[VAL_23:.*]] = llvm.insertvalue %[[VAL_13]], %[[VAL_22]][3 : i32] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
+// CHECK:           %[[VAL_20:.*]] = llvm.insertvalue %[[VAL_18]], %[[VAL_19]][0] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
+// CHECK:           %[[VAL_21:.*]] = llvm.insertvalue %[[VAL_7]], %[[VAL_20]][1] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
+// CHECK:           %[[VAL_22:.*]] = llvm.insertvalue %[[VAL_11]], %[[VAL_21]][2] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
+// CHECK:           %[[VAL_23:.*]] = llvm.insertvalue %[[VAL_13]], %[[VAL_22]][3] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
 // CHECK:           %[[VAL_24:.*]] = llvm.mlir.constant(1 : i32) : i32
 // CHECK:           %[[VAL_25:.*]] = llvm.alloca %[[VAL_24]] x !llvm.struct<(ptr<i8>, i64, i64, i64)> {alignment = 4 : i64} : (i32) -> !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>
 // CHECK:           llvm.store %[[VAL_23]], %[[VAL_25]] : !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>

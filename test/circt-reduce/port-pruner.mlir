@@ -1,4 +1,4 @@
-// RUN: circt-reduce %s --test %S/test.sh --test-arg cat --test-arg "firrtl.module private @Bar" --keep-best=0 --include firrtl-remove-unused-ports | FileCheck %s
+// RUN: circt-reduce %s --test %S/test.sh --test-arg cat --test-arg "firrtl.module private @Bar" --keep-best=0 --include firrtl-remove-unused-ports --test-must-fail | FileCheck %s
 
 firrtl.circuit "Foo" {
   // CHECK-LABEL: firrtl.module @Foo

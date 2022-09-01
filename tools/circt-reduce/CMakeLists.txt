@@ -21,12 +21,16 @@ target_link_libraries(circt-reduce
   CIRCTLLHD
   CIRCTMoore
   CIRCTMSFT
+  CIRCTMSFTTransforms
   CIRCTHW
   CIRCTHWTransforms
   CIRCTScheduling
   CIRCTSeq
-  CIRCTStaticLogicOps
+  CIRCTSSP
+  CIRCTPipelineOps
+  CIRCTHWArith
   CIRCTSV
+  CIRCTSystemC
 
   MLIRIR
   MLIRParser

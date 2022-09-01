@@ -6,4 +6,10 @@ mlir_tablegen(ESIPasses.h.inc -gen-pass-decls)
 add_public_tablegen_target(MLIRESITransformsIncGen)
 add_circt_doc(ESI ESIPasses -gen-pass-doc)
 
+set(LLVM_TARGET_DEFINITIONS ESIInterfaces.td)
+mlir_tablegen(ESIInterfaces.h.inc -gen-op-interface-decls)
+mlir_tablegen(ESIInterfaces.cpp.inc -gen-op-interface-defs)
+add_public_tablegen_target(MLIRESIInterfacesIncGen)
+add_dependencies(circt-headers MLIRESIInterfacesIncGen)
+
 add_subdirectory(cosim)

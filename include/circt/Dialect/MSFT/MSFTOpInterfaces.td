@@ -62,10 +62,10 @@ def DynInstDataOpInterface : OpInterface<"DynInstDataOpInterface"> {
           $_op->emitOpError("could not find hw.globalRef ") << refSym;
           return nullptr;
         }
-        if (ref.namepath().empty())
+        if (ref.getNamepath().empty())
           return nullptr;
         auto modSym = FlatSymbolRefAttr::get(
-            ref.namepath()[0].cast<hw::InnerRefAttr>().getModule());
+            ref.getNamepath()[0].cast<hw::InnerRefAttr>().getModule());
         return symCache.getDefinition(modSym);
       }]
     >

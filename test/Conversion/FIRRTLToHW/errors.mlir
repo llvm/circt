@@ -15,7 +15,8 @@
 // COM: This is a memory with aggregates which is currently not supported.
 firrtl.circuit "Div" {
   firrtl.module @Div(in %clock1: !firrtl.clock, in %clock2: !firrtl.clock) {
-  // expected-error @+1 {{'firrtl.mem' op should have already been lowered from a ground type to an aggregate type using the LowerTypes pass}}
+    // expected-error @+2 {{'firrtl.mem' op should have already been lowered from a ground type to an aggregate type using the LowerTypes pass}}
+    // expected-error @+1 {{'firrtl.mem' op LowerToHW couldn't handle this operation}}
     %_M_read, %_M_write = firrtl.mem Undefined {depth = 20 : i64, name = "_M", portNames = ["read", "write"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<5>, en: uint<1>, clk: clock, data flip: bundle<id: uint<4>, other: sint<8>>>, !firrtl.bundle<addr: uint<5>, en: uint<1>, clk: clock, data: bundle<id: uint<4>, other: sint<8>>, mask: bundle<id: uint<1>, other: uint<1>>>
   }
 }
@@ -34,7 +35,8 @@ firrtl.circuit "Div" {
 // COM: This is an aggregate memory which is not supported.
 firrtl.circuit "MemOne" {
   firrtl.module @MemOne() {
-  // expected-error @+1 {{'firrtl.mem' op should have already been lowered from a ground type to an aggregate type using the LowerTypes pass}}
+    // expected-error @+2 {{'firrtl.mem' op should have already been lowered from a ground type to an aggregate type using the LowerTypes pass}}
+    // expected-error @+1 {{'firrtl.mem' op LowerToHW couldn't handle this operation}}
     %_M_read, %_M_write = firrtl.mem Undefined {depth = 1 : i64, name = "_M", portNames=["read", "write"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: bundle<id: uint<4>, other: sint<8>>>, !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: bundle<id: uint<4>, other: sint<8>>, mask: bundle<id: uint<1>, other: uint<1>>>
   }
 }

@@ -23,6 +23,9 @@ class LLVMTypeConverter;
 
 namespace circt {
 
+/// Get the LLHD to LLVM type conversions
+void populateLLHDToLLVMTypeConversions(mlir::LLVMTypeConverter &converter);
+
 /// Get the LLHD to LLVM conversion patterns.
 void populateLLHDToLLVMConversionPatterns(mlir::LLVMTypeConverter &converter,
                                           RewritePatternSet &patterns,

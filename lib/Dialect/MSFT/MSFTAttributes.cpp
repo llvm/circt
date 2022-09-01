@@ -94,7 +94,7 @@ circt::msft::parseOptionalRegLoc(SmallVectorImpl<PhysLocationAttr> &locs,
   }
 
   PhysLocationAttr loc;
-  if (p.parseOptionalAttribute(loc).hasValue()) {
+  if (p.parseOptionalAttribute(loc).has_value()) {
     locs.push_back(loc);
     return success();
   }

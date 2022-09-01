@@ -59,8 +59,7 @@ static PrefixInfo getPrefixInfo(Operation *module) {
   AnnotationSet annotations(module);
 
   // Get the annotation from the module.
-  auto anno = annotations.getAnnotation(
-      "sifive.enterprise.firrtl.NestedPrefixModulesAnnotation");
+  auto anno = annotations.getAnnotation(prefixModulesAnnoClass);
   if (!anno)
     return {"", false};
 
@@ -185,14 +184,14 @@ void PrefixModulesPass::renameModuleBody(std::string prefix, FModuleOp module) {
   // on the instance.
   removeDeadAnnotations(thisMod, module);
 
-  module.body().walk([&](Operation *op) {
+  module.getBody().walk([&](Operation *op) {
     // Remove spurious NLA references either on a leaf op, or the InstanceOp.
     removeDeadAnnotations(thisMod, op);
 
     if (auto memOp = dyn_cast<MemOp>(op)) {
       // Memories will be turned into modules and should be prefixed.
-      memOp.nameAttr(StringAttr::get(context, prefix + memOp.name()));
-      memOp.groupIDAttr(IntegerAttr::get(
+      memOp.setNameAttr(StringAttr::get(context, prefix + memOp.getName()));
+      memOp.setGroupIDAttr(IntegerAttr::get(
           IntegerType::get(context, 32, IntegerType::Unsigned), groupID));
     } else if (auto instanceOp = dyn_cast<InstanceOp>(op)) {
       auto target = dyn_cast<FModuleLike>(
@@ -222,7 +221,7 @@ void PrefixModulesPass::renameModuleBody(std::string prefix, FModuleOp module) {
       // If the instance has HierPathOp, then update its module name also.
       // There can be multiple HierPathOps attached to the instance op.
 
-      StringAttr oldModName = instanceOp.moduleNameAttr().getAttr();
+      StringAttr oldModName = instanceOp.getModuleNameAttr().getAttr();
       // Update the NLAs that apply on this InstanceOp.
       for (Annotation anno : instAnnos) {
         if (auto nla = anno.getMember("circt.nonlocal")) {
@@ -236,7 +235,7 @@ void PrefixModulesPass::renameModuleBody(std::string prefix, FModuleOp module) {
       for (auto nla : instNLAs)
         nlaTable->updateModuleInNLA(nla, oldModName, newTarget);
 
-      instanceOp.moduleNameAttr(FlatSymbolRefAttr::get(context, newTarget));
+      instanceOp.setModuleNameAttr(FlatSymbolRefAttr::get(context, newTarget));
     }
   });
 }
@@ -250,8 +249,7 @@ void PrefixModulesPass::renameModule(FModuleOp module) {
   auto innerPrefix = prefixInfo.prefix;
 
   // Remove the annotation from the module.
-  AnnotationSet::removeAnnotations(
-      module, "sifive.enterprise.firrtl.NestedPrefixModulesAnnotation");
+  AnnotationSet::removeAnnotations(module, prefixModulesAnnoClass);
 
   // We only add the annotated prefix to the module name if it is inclusive.
   auto moduleName = module.getName().str();
@@ -361,9 +359,8 @@ void PrefixModulesPass::renameExtModule(FExtModuleOp extModule) {
   auto applyPrefixToNameAndDefName = [&](FExtModuleOp &extModule,
                                          StringRef prefix) {
     extModule.setName((prefix + extModule.getName()).str());
-    if (auto defname = extModule.defname())
-      extModule->setAttr("defname",
-                         builder.getStringAttr(prefix + defname.getValue()));
+    if (auto defname = extModule.getDefname())
+      extModule->setAttr("defname", builder.getStringAttr(prefix + *defname));
   };
 
   // Duplicate the external module if there is more than one prefix.
@@ -417,7 +414,7 @@ void PrefixModulesPass::prefixGrandCentralInterfaces() {
     // Only mutate this annotation if it is an AugmentedBundleType and
     // interfacePrefixMap has prefix information for it.
     StringRef prefix;
-    if (anno.isClass("sifive.enterprise.grandcentral.AugmentedBundleType")) {
+    if (anno.isClass(augmentedBundleTypeClass)) {
       if (auto id = anno.getMember<IntegerAttr>("id"))
         prefix = interfacePrefixMap[id];
     }
@@ -454,8 +451,8 @@ void PrefixModulesPass::runOnOperation() {
   if (!prefix.empty()) {
     auto oldModName = mainModule.moduleNameAttr();
     auto newMainModuleName =
-        StringAttr::get(context, (prefix + circuitOp.name()).str());
-    circuitOp.nameAttr(newMainModuleName);
+        StringAttr::get(context, (prefix + circuitOp.getName()).str());
+    circuitOp.setNameAttr(newMainModuleName);
 
     // Now update all the NLAs that have the top level module symbol.
     nlaTable->renameModule(oldModName, newMainModuleName);

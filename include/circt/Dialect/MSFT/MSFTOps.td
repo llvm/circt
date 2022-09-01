@@ -6,11 +6,14 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "circt/Dialect/HW/HWOpInterfaces.td"
+
 def InstanceOp : MSFTOp<"instance", [
         Symbol,
         ParentOneOf<["MSFTModuleOp"]>,
         DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
-        DeclareOpInterfaceMethods<SymbolUserOpInterface>
+        DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+        DeclareOpInterfaceMethods<HWInstanceLike>
     ]> {
   let summary = "Instantiate a module";
 
@@ -30,10 +33,6 @@ def InstanceOp : MSFTOp<"instance", [
     // Return the name of the specified result or empty string if it cannot be
     // determined.
     StringAttr getResultName(size_t i);
-
-    /// Lookup the module or extmodule for the symbol.  This returns null on
-    /// invalid IR.
-    Operation *getReferencedModule();
 
     /// Instance name is the same as the symbol name. This may change in the
     /// future.
@@ -64,54 +63,17 @@ def OneOrNoBlocksRegion : Region<
 
 def AppIDArrayAttr : TypedArrayAttrBase<AppIDAttr, "Array of AppIDs">;
 
-def MSFTModuleOp : MSFTOp<"module",
-      [IsolatedFromAbove, FunctionOpInterface, Symbol, RegionKindInterface,
-       HasParent<"mlir::ModuleOp">,
-       SingleBlockImplicitTerminator<"OutputOp">,
-       OpAsmOpInterface]>{
-  let summary = "MSFT HW Module";
-  let description = [{
-    A lot like `hw.module`, but with a few differences:
-      - Can exist without a body. The body is filled in by a generator post op
-      creation.
-      - Provides methods for mutation.
-  }];
-  let arguments = (ins
-      StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
-      DictionaryAttr:$parameters,
-      OptionalAttr<StrAttr>:$fileName,
-      OptionalAttr<StrArrayAttr>:$childAppIDBases);
-  let results = (outs);
-  let regions = (region OneOrNoBlocksRegion:$body);
+class MSFTModuleOpBase<string mnemonic, list<Trait> traits = []> :
+    MSFTOp<mnemonic, traits # [
+      IsolatedFromAbove, Symbol, FunctionOpInterface, OpAsmOpInterface,
+      HasParent<"mlir::ModuleOp">, DeclareOpInterfaceMethods<HWModuleLike>
+    ]> {
+  /// Additional class declarations inside the module op.
+  code extraModuleClassDeclaration = ?;
 
-  let skipDefaultBuilders = 1;
-  let builders = [
-    OpBuilder<(ins "StringAttr":$name, "hw::ModulePortInfo":$ports,
-                   "ArrayRef<NamedAttribute>":$params)>
-  ];
-
-  let extraClassDeclaration = [{
-    using mlir::detail::FunctionOpInterfaceTrait<MSFTModuleOp>::front;
-    using mlir::detail::FunctionOpInterfaceTrait<MSFTModuleOp>::getBody;
-
-    // Implement RegionKindInterface.
-    static RegionKind getRegionKind(unsigned index) {
-      return RegionKind::Graph;
-    }
-
+  let extraClassDeclaration = extraModuleClassDeclaration # [{
     // Decode information about the input and output ports on this module.
     ::circt::hw::ModulePortInfo getPorts();
-
-    // Adds input and output ports. Returns a list of new block arguments for
-    // the new inputs.
-    SmallVector<BlockArgument> addPorts(
-      ArrayRef<std::pair<StringAttr, Type>> inputs,
-      ArrayRef<std::pair<StringAttr, Value>> outputs);
-
-    // Remove the ports at the specified indexes. Returns the new to old result
-    // mapping.
-    SmallVector<unsigned>
-    removePorts(llvm::BitVector inputs, llvm::BitVector outputs);
 
     // Get the module's symbolic name as StringAttr.
     StringAttr getNameAttr() {
@@ -123,10 +85,6 @@ def MSFTModuleOp : MSFTOp<"module",
     StringRef getName() {
       return getNameAttr().getValue();
     }
-
-    Block *getBodyBlock() { return &body().front(); }
-    void getAsmBlockArgumentNames(mlir::Region &region,
-                                  mlir::OpAsmSetValueNameFn setNameFn);
 
     /// Returns the type of this function.
     FunctionType getFunctionType() {
@@ -149,13 +107,81 @@ def MSFTModuleOp : MSFTOp<"module",
             "' attribute of function type");
       return success();
     }
+
+    void getAsmBlockArgumentNames(Region &region,
+                                      OpAsmSetValueNameFn setNameFn) {
+      if (region.empty())
+        return;
+      Block *block = getBodyBlock();
+      ArrayAttr argNames = argNamesAttr();
+      for (size_t i = 0, e = block->getNumArguments(); i != e; ++i) {
+        auto name = argNames[i].cast<StringAttr>().getValue();
+        if (!name.empty())
+          setNameFn(block->getArgument(i), name);
+      }
+    }
+  }];
+}
+
+def MSFTModuleOp : MSFTModuleOpBase<"module",
+      [RegionKindInterface, HasParent<"mlir::ModuleOp">,
+       SingleBlockImplicitTerminator<"OutputOp">,
+       DeclareOpInterfaceMethods<HWMutableModuleLike>]>{
+  let summary = "MSFT HW Module";
+  let description = [{
+    A lot like `hw.module`, but with a few differences:
+      - Can exist without a body. The body is filled in by a generator post op
+      creation.
+      - Provides methods for mutation.
+  }];
+  let arguments = (ins
+      StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
+      DictionaryAttr:$parameters,
+      OptionalAttr<StrAttr>:$fileName,
+      OptionalAttr<StrArrayAttr>:$childAppIDBases);
+  let results = (outs);
+  let regions = (region OneOrNoBlocksRegion:$body);
+
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<(ins "StringAttr":$name, "hw::ModulePortInfo":$ports,
+                   "ArrayRef<NamedAttribute>":$params)>
+  ];
+
+  let extraModuleClassDeclaration = [{
+    using mlir::detail::FunctionOpInterfaceTrait<MSFTModuleOp>::front;
+    using mlir::detail::FunctionOpInterfaceTrait<MSFTModuleOp>::getBody;
+
+    // Implement RegionKindInterface.
+    static RegionKind getRegionKind(unsigned index) {
+      return RegionKind::Graph;
+    }
+
+    // Insert and remove ports.
+    void modifyPorts(
+      ArrayRef<std::pair<unsigned, circt::hw::PortInfo>> insertInputs,
+      ArrayRef<std::pair<unsigned, circt::hw::PortInfo>> insertOutputs,
+      ArrayRef<unsigned> eraseInputs, ArrayRef<unsigned> eraseOutputs);
+
+    // Adds input and output ports. Returns a list of new block arguments for
+    // the new inputs.
+    SmallVector<BlockArgument> addPorts(
+      ArrayRef<std::pair<StringAttr, Type>> inputs,
+      ArrayRef<std::pair<StringAttr, Value>> outputs);
+
+    // Remove the ports at the specified indexes. Returns the new to old result
+    // mapping.
+    SmallVector<unsigned>
+    removePorts(llvm::BitVector inputs, llvm::BitVector outputs);
+
+    Block *getBodyBlock() { return &body().front(); }
   }];
 
   let hasCustomAssemblyFormat = 1;
 }
 
 def MSFTModuleExternOp : MSFTOp<"module.extern",
-      [Symbol, HasParent<"mlir::ModuleOp">]> {
+      [Symbol, FunctionOpInterface, HasParent<"mlir::ModuleOp">]> {
   let summary = "MSFT external Module";
   let description = [{
     Identical to `hw.module.extern`, and trivially lowers to that. This op
@@ -181,6 +207,17 @@ def MSFTModuleExternOp : MSFTOp<"module.extern",
   let extraClassDeclaration = [{
     /// Decode information about the input and output ports on this module.
     hw::ModulePortInfo getPorts();
+
+    /// Returns the type of this function.
+    FunctionType getFunctionType() {
+      return getFunctionTypeAttr().getValue().cast<FunctionType>();
+    }
+
+    /// Returns the argument types of this function.
+    ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
+
+    /// Returns the result types of this function.
+    ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
   }];
 }
 
@@ -200,7 +237,7 @@ def DesignPartitionOp : MSFTOp<"partition",
   let assemblyFormat = "$sym_name `,` $verilogName attr-dict";
 }
 
-def OutputOp : MSFTOp<"output", [Terminator, HasParent<"MSFTModuleOp">,
+def OutputOp : MSFTOp<"output", [Terminator, ParentOneOf<["MSFTModuleOp", "LinearOp"]>,
                                 NoSideEffect, ReturnLike]> {
   let summary = "termination operation";
 

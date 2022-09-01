@@ -12,7 +12,6 @@ add_circt_dialect_library(CIRCTMSFT
   MSFTDialect.cpp
   MSFTOpInterfaces.cpp
   MSFTOps.cpp
-  MSFTPasses.cpp
   ExportQuartusTcl.cpp
 
   ADDITIONAL_HEADER_DIRS
@@ -38,3 +37,4 @@ add_circt_dialect_library(CIRCTMSFT
 )
 
 add_dependencies(circt-headers MLIRMSFTIncGen)
+add_subdirectory(Transforms)

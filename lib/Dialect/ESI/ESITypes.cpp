@@ -24,6 +24,8 @@ using namespace circt::esi;
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/ESI/ESITypes.cpp.inc"
 
+AnyType AnyType::get(MLIRContext *context) { return Base::get(context); }
+
 void ESIDialect::registerTypes() {
   addTypes<
 #define GET_TYPEDEF_LIST

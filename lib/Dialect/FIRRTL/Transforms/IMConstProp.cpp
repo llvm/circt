@@ -10,6 +10,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Support/APInt.h"
 #include "mlir/IR/Threading.h"
@@ -167,17 +168,16 @@ private:
 };
 } // end anonymous namespace
 
+LLVM_ATTRIBUTE_USED
 static llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
                                      const LatticeValue &lattice) {
-  if (lattice.isUnknown()) {
+  if (lattice.isUnknown())
     return os << "<Unknown>";
-  } else if (lattice.isOverdefined()) {
+  if (lattice.isOverdefined())
     return os << "<Overdefined>";
-  } else if (lattice.isInvalidValue()) {
+  if (lattice.isInvalidValue())
     return os << "<Invalid>";
-  } else {
-    return os << "<" << lattice.getConstant() << ">";
-  }
+  return os << "<" << lattice.getConstant() << ">";
 }
 
 namespace {
@@ -257,7 +257,7 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
   /// Return the lattice value for the specified SSA value, extended to the
   /// width of the specified destType.  If allowTruncation is true, then this
   /// allows truncating the lattice value to the specified type.
-  LatticeValue getExtendedLatticeValue(Value value, FIRRTLType destType,
+  LatticeValue getExtendedLatticeValue(Value value, FIRRTLBaseType destType,
                                        bool allowTruncation = false);
 
   /// Mark the given block as executable.
@@ -273,6 +273,8 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
   void visitConnect(ConnectOp connect);
   void visitStrictConnect(StrictConnectOp connect);
   void visitRegResetOp(RegResetOp regReset);
+  void visitRefSend(RefSendOp send);
+  void visitRefResolve(RefResolveOp resolve);
   void visitOperation(Operation *op);
 
 private:
@@ -303,10 +305,10 @@ void IMConstPropPass::runOnOperation() {
   instanceGraph = &getAnalysis<InstanceGraph>();
 
   // Mark the input ports of public modules as being overdefined.
-  for (auto module : circuit.getBody()->getOps<FModuleOp>()) {
+  for (auto module : circuit.getBodyBlock()->getOps<FModuleOp>()) {
     if (module.isPublic()) {
-      markBlockExecutable(module.getBody());
-      for (auto port : module.getBody()->getArguments())
+      markBlockExecutable(module.getBodyBlock());
+      for (auto port : module.getBodyBlock()->getArguments())
         markOverdefined(port);
     }
   }
@@ -322,7 +324,7 @@ void IMConstPropPass::runOnOperation() {
 
   // Rewrite any constants in the modules.
   mlir::parallelForEach(circuit.getContext(),
-                        circuit.getBody()->getOps<FModuleOp>(),
+                        circuit.getBodyBlock()->getOps<FModuleOp>(),
                         [&](auto op) { rewriteModuleBody(op); });
 
   // Clean up our state for next time.
@@ -336,7 +338,7 @@ void IMConstPropPass::runOnOperation() {
 /// of the specified destType.  If allowTruncation is true, then this allows
 /// truncating the lattice value to the specified type.
 LatticeValue IMConstPropPass::getExtendedLatticeValue(Value value,
-                                                      FIRRTLType destType,
+                                                      FIRRTLBaseType destType,
                                                       bool allowTruncation) {
   // If 'value' hasn't been computed yet, then it is unknown.
   auto it = latticeValues.find(value);
@@ -402,7 +404,7 @@ void IMConstPropPass::markWireRegOp(Operation *wireOrReg) {
   // handle, mark it as overdefined.
   // TODO: Eventually add a field-sensitive model.
   auto resultValue = wireOrReg->getResult(0);
-  if (!resultValue.getType().cast<FIRRTLType>().getPassiveType().isGround())
+  if (!resultValue.getType().cast<FIRRTLBaseType>().getPassiveType().isGround())
     return markOverdefined(resultValue);
 
   // Otherwise, this starts out as InvalidValue and is upgraded by connects.
@@ -415,11 +417,12 @@ void IMConstPropPass::markMemOp(MemOp mem) {
 }
 
 void IMConstPropPass::markConstantOp(ConstantOp constant) {
-  mergeLatticeValue(constant, LatticeValue(constant.valueAttr()));
+  mergeLatticeValue(constant, LatticeValue(constant.getValueAttr()));
 }
 
 void IMConstPropPass::markSpecialConstantOp(SpecialConstantOp specialConstant) {
-  mergeLatticeValue(specialConstant, LatticeValue(specialConstant.valueAttr()));
+  mergeLatticeValue(specialConstant,
+                    LatticeValue(specialConstant.getValueAttr()));
 }
 
 void IMConstPropPass::markInvalidValueOp(InvalidValueOp invalid) {
@@ -451,7 +454,7 @@ void IMConstPropPass::markInstanceOp(InstanceOp instance) {
 
   // Otherwise this is a defined module.
   auto fModule = cast<FModuleOp>(op);
-  markBlockExecutable(fModule.getBody());
+  markBlockExecutable(fModule.getBodyBlock());
 
   // Ok, it is a normal internal module reference.  Populate
   // resultPortToInstanceResultMapping, and forward any already-computed values.
@@ -463,7 +466,8 @@ void IMConstPropPass::markInstanceOp(InstanceOp instance) {
     if (fModule.getPortDirection(resultNo) == Direction::In)
       continue;
     // We only support simple values so far.
-    if (!instancePortVal.getType().cast<FIRRTLType>().isGround()) {
+    auto portType = instancePortVal.getType().dyn_cast<FIRRTLBaseType>();
+    if (portType && !portType.isGround()) {
       // TODO: Add field sensitivity.
       markOverdefined(instancePortVal);
       continue;
@@ -487,35 +491,36 @@ void IMConstPropPass::markInstanceOp(InstanceOp instance) {
 
 // We merge the value from the RHS into the value of the LHS.
 void IMConstPropPass::visitConnect(ConnectOp connect) {
-  auto destType = connect.dest().getType().cast<FIRRTLType>().getPassiveType();
+  auto destType = getBaseType(connect.getDest().getType().cast<FIRRTLType>())
+                      .getPassiveType();
 
   // Handle implicit extensions.
-  auto srcValue = getExtendedLatticeValue(connect.src(), destType);
+  auto srcValue = getExtendedLatticeValue(connect.getSrc(), destType);
   if (srcValue.isUnknown())
     return;
 
   // Driving result ports propagates the value to each instance using the
   // module.
-  if (auto blockArg = connect.dest().dyn_cast<BlockArgument>()) {
+  if (auto blockArg = connect.getDest().dyn_cast<BlockArgument>()) {
     for (auto userOfResultPort : resultPortToInstanceResultMapping[blockArg])
       mergeLatticeValue(userOfResultPort, srcValue);
     // Output ports are wire-like and may have users.
-    mergeLatticeValue(connect.dest(), srcValue);
+    mergeLatticeValue(connect.getDest(), srcValue);
     return;
   }
 
-  auto dest = connect.dest().cast<mlir::OpResult>();
+  auto dest = connect.getDest().cast<mlir::OpResult>();
 
   // For wires and registers, we drive the value of the wire itself, which
   // automatically propagates to users.
   if (isWireOrReg(dest.getOwner()))
-    return mergeLatticeValue(connect.dest(), srcValue);
+    return mergeLatticeValue(connect.getDest(), srcValue);
 
   // Driving an instance argument port drives the corresponding argument of the
   // referenced module.
   if (auto instance = dest.getDefiningOp<InstanceOp>()) {
     // Update the dest, when its an instance op.
-    mergeLatticeValue(connect.dest(), srcValue);
+    mergeLatticeValue(connect.getDest(), srcValue);
     auto module =
         dyn_cast<FModuleOp>(*instanceGraph->getReferencedModule(instance));
     if (!module)
@@ -533,41 +538,42 @@ void IMConstPropPass::visitConnect(ConnectOp connect) {
   }
 
   connect.emitError("connect unhandled by IMConstProp")
-          .attachNote(connect.dest().getLoc())
+          .attachNote(connect.getDest().getLoc())
       << "connect destination is here";
 }
 
 // We merge the value from the RHS into the value of the LHS.
 void IMConstPropPass::visitStrictConnect(StrictConnectOp connect) {
-  auto destType = connect.dest().getType().cast<FIRRTLType>().getPassiveType();
+  auto destType = getBaseType(connect.getDest().getType().cast<FIRRTLType>())
+                      .getPassiveType();
 
   // Handle implicit extensions.
-  auto srcValue = getExtendedLatticeValue(connect.src(), destType);
+  auto srcValue = getExtendedLatticeValue(connect.getSrc(), destType);
   if (srcValue.isUnknown())
     return;
 
   // Driving result ports propagates the value to each instance using the
   // module.
-  if (auto blockArg = connect.dest().dyn_cast<BlockArgument>()) {
+  if (auto blockArg = connect.getDest().dyn_cast<BlockArgument>()) {
     for (auto userOfResultPort : resultPortToInstanceResultMapping[blockArg])
       mergeLatticeValue(userOfResultPort, srcValue);
     // Output ports are wire-like and may have users.
-    mergeLatticeValue(connect.dest(), srcValue);
+    mergeLatticeValue(connect.getDest(), srcValue);
     return;
   }
 
-  auto dest = connect.dest().cast<mlir::OpResult>();
+  auto dest = connect.getDest().cast<mlir::OpResult>();
 
   // For wires and registers, we drive the value of the wire itself, which
   // automatically propagates to users.
   if (isWireOrReg(dest.getOwner()))
-    return mergeLatticeValue(connect.dest(), srcValue);
+    return mergeLatticeValue(connect.getDest(), srcValue);
 
   // Driving an instance argument port drives the corresponding argument of the
   // referenced module.
   if (auto instance = dest.getDefiningOp<InstanceOp>()) {
     // Update the dest, when its an instance op.
-    mergeLatticeValue(connect.dest(), srcValue);
+    mergeLatticeValue(connect.getDest(), srcValue);
     auto module =
         dyn_cast<FModuleOp>(*instanceGraph->getReferencedModule(instance));
     if (!module)
@@ -586,12 +592,12 @@ void IMConstPropPass::visitStrictConnect(StrictConnectOp connect) {
 
   // Make aggregates overdefined for now.  Fix when context sensitive.
   if (isAggregate(dest.getOwner())) {
-    markOverdefined(connect.src());
-    return markOverdefined(connect.dest());
+    markOverdefined(connect.getSrc());
+    return markOverdefined(connect.getDest());
   }
 
   connect.emitError("strictconnect unhandled by IMConstProp")
-          .attachNote(connect.dest().getLoc())
+          .attachNote(connect.getDest().getLoc())
       << "strictconnect destination is here";
 }
 
@@ -604,16 +610,27 @@ void IMConstPropPass::visitRegResetOp(RegResetOp regReset) {
 
   // The reset value may be known - if so, merge it in if the enable is greater
   // than invalid.
-  auto srcValue = getExtendedLatticeValue(regReset.resetValue(),
-                                          regReset.getType().cast<FIRRTLType>(),
-                                          /*allowTruncation=*/true);
+  auto srcValue = getExtendedLatticeValue(
+      regReset.getResetValue(), regReset.getType().cast<FIRRTLBaseType>(),
+      /*allowTruncation=*/true);
   auto enable = getExtendedLatticeValue(
-      regReset.resetSignal(),
-      regReset.resetSignal().getType().cast<FIRRTLType>(),
+      regReset.getResetSignal(),
+      regReset.getResetSignal().getType().cast<FIRRTLBaseType>(),
       /*allowTruncation=*/true);
   if (enable.isOverdefined() ||
       (enable.isConstant() && !enable.getConstant().getValue().isZero()))
     mergeLatticeValue(regReset, srcValue);
+}
+
+void IMConstPropPass::visitRefSend(RefSendOp send) {
+  // Send connects the base value (source) to the result (dest).
+  return mergeLatticeValue(send.getResult(), send.getBase());
+}
+
+void IMConstPropPass::visitRefResolve(RefResolveOp resolve) {
+  // Resolve connects the ref value (source) to result (dest).
+  // If writes are ever supported, this will need to work differently!
+  return mergeLatticeValue(resolve.getResult(), resolve.getRef());
 }
 
 /// This method is invoked when an operand of the specified op changes its
@@ -630,6 +647,10 @@ void IMConstPropPass::visitOperation(Operation *op) {
     return visitStrictConnect(strictConnectOp);
   if (auto regResetOp = dyn_cast<RegResetOp>(op))
     return visitRegResetOp(regResetOp);
+  if (auto sendOp = dyn_cast<RefSendOp>(op))
+    return visitRefSend(sendOp);
+  if (auto resolveOp = dyn_cast<RefResolveOp>(op))
+    return visitRefResolve(resolveOp);
 
   // The clock operand of regop changing doesn't change its result value.
   if (isa<RegOp>(op))
@@ -709,7 +730,7 @@ void IMConstPropPass::visitOperation(Operation *op) {
 }
 
 void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
-  auto *body = module.getBody();
+  auto *body = module.getBodyBlock();
   // If a module is unreachable, just ignore it.
   if (!executableBlocks.count(body))
     return;
@@ -744,6 +765,10 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
         it->second.isUnknown())
       return false;
 
+    // Cannot materialize constants for non-base types.
+    if (!value.getType().isa<FIRRTLBaseType>())
+      return false;
+
     auto cstValue =
         getConst(it->second.getValue(), value.getType(), value.getLoc());
 
@@ -773,8 +798,8 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
   for (auto &op : llvm::make_early_inc_range(llvm::reverse(*body))) {
     // Connects to values that we found to be constant can be dropped.
     if (auto connect = dyn_cast<ConnectOp>(op)) {
-      if (auto *destOp = connect.dest().getDefiningOp()) {
-        if (isDeletableWireOrReg(destOp) && !isOverdefined(connect.dest())) {
+      if (auto *destOp = connect.getDest().getDefiningOp()) {
+        if (isDeletableWireOrReg(destOp) && !isOverdefined(connect.getDest())) {
           connect.erase();
           ++numErasedOp;
         }
@@ -782,8 +807,8 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
       continue;
     }
     if (auto connect = dyn_cast<StrictConnectOp>(op)) {
-      if (auto *destOp = connect.dest().getDefiningOp()) {
-        if (isDeletableWireOrReg(destOp) && !isOverdefined(connect.dest())) {
+      if (auto *destOp = connect.getDest().getDefiningOp()) {
+        if (isDeletableWireOrReg(destOp) && !isOverdefined(connect.getDest())) {
           connect.erase();
           ++numErasedOp;
         }

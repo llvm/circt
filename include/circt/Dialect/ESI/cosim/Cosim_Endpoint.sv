@@ -16,7 +16,7 @@ import Cosim_DpiPkg::*;
 
 module Cosim_Endpoint
 #(
-  parameter int ENDPOINT_ID = -1,
+  parameter string ENDPOINT_ID_EXT = "",
   parameter longint RECV_TYPE_ID = -1,
   parameter int RECV_TYPE_SIZE_BITS = -1,
   parameter longint SEND_TYPE_ID = -1,
@@ -24,7 +24,7 @@ module Cosim_Endpoint
 )
 (
   input  logic clk,
-  input  logic rstn,
+  input  logic rst,
 
   output logic DataOutValid,
   input  logic DataOutReady,
@@ -34,6 +34,13 @@ module Cosim_Endpoint
   output logic DataInReady,
   input  logic [SEND_TYPE_SIZE_BITS-1:0] DataIn
 );
+
+  string ENDPOINT_ID_BASE = $sformatf("%m");
+  string ENDPOINT_ID;
+  if (ENDPOINT_ID_EXT != "")
+    assign ENDPOINT_ID = $sformatf("%s.%s", ENDPOINT_ID_BASE, ENDPOINT_ID_EXT);
+  else
+    assign ENDPOINT_ID = ENDPOINT_ID_BASE;
 
   bit Initialized;
 
@@ -66,7 +73,7 @@ module Cosim_Endpoint
 
   byte unsigned DataOutBuffer[RECV_TYPE_SIZE_BYTES-1:0];
   always @(posedge clk) begin
-    if (rstn && Initialized) begin
+    if (~rst && Initialized) begin
       if (DataOutValid && DataOutReady) // A transfer occurred.
         DataOutValid <= 1'b0;
 
@@ -137,7 +144,7 @@ module Cosim_Endpoint
   byte unsigned DataInBuffer[SEND_TYPE_SIZE_BYTES-1:0];
 
   always@(posedge clk) begin
-    if (rstn && Initialized) begin
+    if (~rst && Initialized) begin
       if (DataInValid) begin
         int rc;
         rc = cosim_ep_tryput(ENDPOINT_ID, DataInBuffer, SEND_TYPE_SIZE_BYTES);

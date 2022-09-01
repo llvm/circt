@@ -46,7 +46,7 @@ class Instance:
   @property
   def _inside_of_symbol(self) -> str:
     """Return the string symbol of the module which contains this instance."""
-    return self._op_cache.get_module_symbol(self.inside_of)
+    return self._op_cache.get_pyproxy_symbol(self.inside_of)
 
   def __repr__(self) -> str:
     path_names = [i.name for i in self.path]
@@ -136,7 +136,7 @@ class ModuleInstance(Instance):
 
     sym_name = static_op.attributes["sym_name"]
     if isinstance(static_op, msft.InstanceOp):
-      tgt_mod = self._op_cache.get_symbol_module(static_op.moduleName)
+      tgt_mod = self._op_cache.get_symbol_pyproxy(static_op.moduleName)
       return ModuleInstance(self,
                             instance_sym=sym_name,
                             inside_of=self.tgt_mod,
@@ -310,7 +310,7 @@ class InstanceHierarchyRoot(ModuleInstance):
   @property
   def _cache_key(self):
     mod_sym = ir.FlatSymbolRefAttr.get(
-        self._op_cache.get_module_symbol(self.inside_of))
+        self._op_cache.get_pyproxy_symbol(self.inside_of))
     inst_name = None if self.instance_name is None else ir.StringAttr.get(
         self.instance_name)
     return (mod_sym, inst_name)

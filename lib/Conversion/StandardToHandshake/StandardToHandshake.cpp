@@ -11,9 +11,10 @@
 
 #include "circt/Conversion/StandardToHandshake.h"
 #include "../PassDetail.h"
+#include "circt/Analysis/ControlFlowLoopAnalysis.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/Handshake/HandshakePasses.h"
-#include "circt/Dialect/StaticLogic/StaticLogic.h"
+#include "circt/Dialect/Pipeline/Pipeline.h"
 #include "circt/Support/BackedgeBuilder.h"
 #include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
 #include "mlir/Dialect/Affine/Analysis/AffineAnalysis.h"
@@ -21,6 +22,7 @@
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Affine/IR/AffineValueMap.h"
 #include "mlir/Dialect/Affine/Utils.h"
+#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
@@ -48,6 +50,7 @@ using namespace mlir;
 using namespace mlir::func;
 using namespace circt;
 using namespace circt::handshake;
+using namespace circt::analysis;
 using namespace std;
 
 // ============================================================================
@@ -612,109 +615,253 @@ static int getBranchCount(Value val, Block *block) {
   return uses;
 }
 
-static bool hasMultiplePredecessors(Block *block) {
-  return std::distance(block->getPredecessors().begin(),
-                       block->getPredecessors().end()) > 1;
-}
-
-// The BFS callback provides the current block as an argument and returns
-// whether search should halt.
-enum class BFSNextState { Halt, SkipSuccessors, Continue };
-using BFSCallback = llvm::function_ref<BFSNextState(Block *)>;
-
-static void blockBFS(Block *start, BFSCallback callback) {
-  DenseSet<Block *> visited;
-  SmallVector<Block *> queue = {start};
-  while (!queue.empty()) {
-    Block *currBlock = queue.front();
-    queue.erase(queue.begin());
-    visited.insert(currBlock);
-
-    switch (callback(currBlock)) {
-    case BFSNextState::Halt:
-      return;
-    case BFSNextState::Continue: {
-      llvm::copy_if(currBlock->getSuccessors(), std::back_inserter(queue),
-                    [&](Block *block) { return visited.count(block) == 0; });
-      break;
-    }
-    case BFSNextState::SkipSuccessors:
-      for (auto *succ : currBlock->getSuccessors())
-        visited.insert(succ);
-      continue;
-    }
-  }
-}
-
-// Performs a BFS to determine whether there exists a path between 'from' and
-// 'to'.
-static bool isReachable(Block *from, Block *to) {
-  bool isReachable = false;
-  blockBFS(from, [&](Block *currBlock) {
-    if (currBlock == to) {
-      isReachable = true;
-      return BFSNextState::Halt;
-    }
-    return BFSNextState::Continue;
-  });
-  return isReachable;
-}
-
 namespace {
-/// Container that holds information about a cfg loop.
-struct LoopInfo {
-  Block *loopHeader;
-  llvm::SmallSet<Block *, 2> loopLatches;
-  llvm::SmallSet<Block *, 4> inLoop;
-  llvm::SmallSet<Block *, 2> exitBlocks;
-  bool isValid;
+
+/// This class inserts a reorder prevention mechanism for blocks with multiple
+/// successors. Such a mechanism is required to guarantee correct execution in a
+/// multi-threaded usage of the circuits.
+///
+/// The order of the results matches the order of the traversals of the
+/// divergence point. A FIFO buffer stores the condition of the conditional
+/// branch. The buffer feeds a mux that guarantees the correct out-order.
+class FeedForwardNetworkRewriter {
+public:
+  FeedForwardNetworkRewriter(HandshakeLowering &hl,
+                             ConversionPatternRewriter &rewriter)
+      : hl(hl), rewriter(rewriter), postDomInfo(hl.getRegion().getParentOp()),
+        domInfo(hl.getRegion().getParentOp()), loopAnalysis(hl.getRegion()) {}
+  LogicalResult apply();
+
+private:
+  HandshakeLowering &hl;
+  ConversionPatternRewriter &rewriter;
+  PostDominanceInfo postDomInfo;
+  DominanceInfo domInfo;
+  ControlFlowLoopAnalysis loopAnalysis;
+
+  using BlockPair = std::pair<Block *, Block *>;
+  using BlockPairs = SmallVector<BlockPair>;
+  LogicalResult findBlockPairs(BlockPairs &blockPairs);
+
+  BufferOp buildSplitNetwork(Block *splitBlock,
+                             handshake::ConditionalBranchOp &ctrlBr);
+  void buildMergeNetwork(Block *mergeBlock, BufferOp buf,
+                         handshake::ConditionalBranchOp &ctrlBr);
+
+  // Determines if the cmerge inpus match the cond_br output order.
+  bool requiresOperandFlip(ControlMergeOp &ctrlMerge,
+                           handshake::ConditionalBranchOp &ctrlBr);
+  bool formsIrreducibleCF(Block *splitBlock, Block *mergeBlock);
 };
 } // namespace
 
-/// Helper that checks if entry is a loop header. If it is, it collects
-/// additional information about the loop for further processing.
-static LogicalResult collectLoopInfo(Block *entry, DominanceInfo &domInfo,
-                                     LoopInfo &loopInfo) {
-  for (auto *backedge : entry->getPredecessors()) {
-    bool dominates = domInfo.dominates(entry, backedge);
-    bool formsLoop = isReachable(entry, backedge);
-    if (formsLoop) {
-      if (dominates)
-        loopInfo.loopLatches.insert(backedge);
-      else
-        return entry->getParentOp()->emitError()
-               << "Non-canonical loop structures detected; a potential "
-                  "loop header has backedges not dominated by the loop "
-                  "header. This indicates that the loop has multiple entry "
-                  "points. Handshake lowering does not yet support this "
-                  "form of control flow, exiting.";
-    }
+LogicalResult
+HandshakeLowering::feedForwardRewriting(ConversionPatternRewriter &rewriter) {
+  return FeedForwardNetworkRewriter(*this, rewriter).apply();
+}
+
+static bool loopsHaveSingleExit(ControlFlowLoopAnalysis &loopAnalysis) {
+  for (LoopInfo &info : loopAnalysis.topLevelLoops)
+    if (info.exitBlocks.size() > 1)
+      return false;
+  return true;
+}
+
+bool FeedForwardNetworkRewriter::formsIrreducibleCF(Block *splitBlock,
+                                                    Block *mergeBlock) {
+  LoopInfo *info = loopAnalysis.getLoopInfoForHeader(mergeBlock);
+  for (auto mergePred : mergeBlock->getPredecessors()) {
+    // Skip loop predecessors
+    if (info && info->inLoop.contains(mergePred))
+      continue;
+
+    // A DAG-CFG is irreducible, iff a merge block has a predecessor that can be
+    // reached from both successors of a split node, e.g., neither is a
+    // dominator.
+    // => Their control flow can merge in other places, which makes this
+    // irreducible.
+    if (llvm::none_of(splitBlock->getSuccessors(), [&](Block *splitSucc) {
+          if (splitSucc == mergeBlock || mergePred == splitBlock)
+            return true;
+          return domInfo.dominates(splitSucc, mergePred);
+        }))
+      return true;
   }
+  return false;
+}
 
-  loopInfo.isValid = !loopInfo.loopLatches.empty();
-  if (loopInfo.isValid) {
-    loopInfo.loopHeader = entry;
+static Operation *findBranchToBlock(Block *block) {
+  Block *pred = *block->getPredecessors().begin();
+  return pred->getTerminator();
+}
 
-    // Exit blocks are the blocks that control is transfered to after exiting
-    // the loop. This is essentially determining the strongly connected
-    // components with the loop header. We perform a BFS from the loop header,
-    // and if the loop header is reachable from the block, it is within the
-    // loop.
-    blockBFS(entry, [&](Block *currBlock) {
-      if (isReachable(currBlock, entry)) {
-        loopInfo.inLoop.insert(currBlock);
-        return BFSNextState::Continue;
-      }
-      loopInfo.exitBlocks.insert(currBlock);
-      return BFSNextState::SkipSuccessors;
-    });
+LogicalResult
+FeedForwardNetworkRewriter::findBlockPairs(BlockPairs &blockPairs) {
+  // assumes that merge block insertion happended beforehand
+  // Thus, for each split block, there exists one merge block which is the post
+  // dominator of the child nodes.
+  Region &r = hl.getRegion();
+  Operation *parentOp = r.getParentOp();
 
-    assert(loopInfo.inLoop.size() >= 2 && "A loop must have at least 2 blocks");
-    assert(loopInfo.exitBlocks.size() != 0 &&
-           "A loop must have an exit block...?");
+  // Assumes that each loop has only one exit block. Such an error should
+  // already be reported by the loop rewriting.
+  assert(loopsHaveSingleExit(loopAnalysis) &&
+         "expected loop to only have one exit block.");
+
+  for (Block &b : r) {
+    if (b.getNumSuccessors() < 2)
+      continue;
+
+    // Loop headers cannot be merge blocks.
+    if (loopAnalysis.isLoopElement(&b))
+      continue;
+
+    assert(b.getNumSuccessors() == 2);
+    Block *succ0 = b.getSuccessor(0);
+    Block *succ1 = b.getSuccessor(1);
+
+    if (succ0 == succ1)
+      continue;
+
+    Block *mergeBlock = postDomInfo.findNearestCommonDominator(succ0, succ1);
+
+    // Precondition checks
+    if (formsIrreducibleCF(&b, mergeBlock)) {
+      return parentOp->emitError("expected only reducible control flow.")
+                 .attachNote(findBranchToBlock(mergeBlock)->getLoc())
+             << "This branch is involved in the irreducible control flow";
+    }
+
+    unsigned nonLoopPreds = 0;
+    LoopInfo *info = loopAnalysis.getLoopInfoForHeader(mergeBlock);
+    for (auto pred : mergeBlock->getPredecessors()) {
+      if (info && info->inLoop.contains(pred))
+        continue;
+      nonLoopPreds++;
+    }
+    if (nonLoopPreds > 2)
+      return parentOp
+                 ->emitError("expected a merge block to have two predecessors. "
+                             "Did you run the merge block insertion pass?")
+                 .attachNote(findBranchToBlock(mergeBlock)->getLoc())
+             << "This branch jumps to the illegal block";
+
+    blockPairs.emplace_back(&b, mergeBlock);
   }
 
   return success();
+}
+
+LogicalResult FeedForwardNetworkRewriter::apply() {
+  if (failed(loopAnalysis.analyzeRegion()))
+    return failure();
+
+  BlockPairs pairs;
+  if (failed(findBlockPairs(pairs)))
+    return failure();
+
+  for (auto [splitBlock, mergeBlock] : pairs) {
+    handshake::ConditionalBranchOp ctrlBr;
+    BufferOp buffer = buildSplitNetwork(splitBlock, ctrlBr);
+    buildMergeNetwork(mergeBlock, buffer, ctrlBr);
+  }
+
+  return success();
+}
+
+BufferOp FeedForwardNetworkRewriter::buildSplitNetwork(
+    Block *splitBlock, handshake::ConditionalBranchOp &ctrlBr) {
+  SmallVector<handshake::ConditionalBranchOp> branches;
+  llvm::copy(splitBlock->getOps<handshake::ConditionalBranchOp>(),
+             std::back_inserter(branches));
+
+  auto *findRes = llvm::find_if(branches, [](auto br) {
+    return br.dataOperand().getType().template isa<NoneType>();
+  });
+
+  assert(findRes && "expected one branch for the ctrl signal");
+  ctrlBr = *findRes;
+
+  Value cond = ctrlBr.conditionOperand();
+  assert(llvm::all_of(branches, [&](auto branch) {
+    return branch.conditionOperand() == cond;
+  }));
+
+  Location loc = cond.getLoc();
+  rewriter.setInsertionPointAfterValue(cond);
+
+  // The buffer size defines the number of threads that can be concurently
+  // traversing the sub-CFG starting at the splitBlock.
+  size_t bufferSize = 2;
+  // TODO how to size these?
+  // Longest path in a CFG-DAG would be O(#blocks)
+
+  return rewriter.create<handshake::BufferOp>(
+      loc, rewriter.getI1Type(), bufferSize, cond,
+      /*bufferType=*/BufferTypeEnum::fifo);
+}
+
+void FeedForwardNetworkRewriter::buildMergeNetwork(
+    Block *mergeBlock, BufferOp buf, handshake::ConditionalBranchOp &ctrlBr) {
+  // Replace control merge with mux
+  auto ctrlMerges = mergeBlock->getOps<handshake::ControlMergeOp>();
+  assert(std::distance(ctrlMerges.begin(), ctrlMerges.end()) == 1);
+
+  handshake::ControlMergeOp ctrlMerge = *ctrlMerges.begin();
+  rewriter.setInsertionPointAfter(ctrlMerge);
+  Location loc = ctrlMerge->getLoc();
+
+  // The newly inserted mux has to select the results from the correct operand.
+  // As there is no guarantee on the order of cmerge inputs, the correct order
+  // has to be determined first.
+  bool requiresFlip = requiresOperandFlip(ctrlMerge, ctrlBr);
+  SmallVector<Value> muxOperands;
+  if (requiresFlip)
+    muxOperands = llvm::to_vector(llvm::reverse(ctrlMerge.getOperands()));
+  else
+    muxOperands = llvm::to_vector(ctrlMerge.getOperands());
+
+  Value newCtrl = rewriter.create<handshake::MuxOp>(loc, buf, muxOperands);
+
+  Value cond = buf.result();
+  if (requiresFlip) {
+    // As the mux operand order is the flipped cmerge input order, the index
+    // which replaces the output of the cmerge has to be flipped/negated as
+    // well.
+    cond = rewriter.create<arith::XOrIOp>(
+        loc, cond.getType(), cond,
+        rewriter.create<arith::ConstantOp>(
+            loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 1)));
+  }
+
+  // Require a cast to index to stick to the type of the mux input.
+  Value condAsIndex =
+      rewriter.create<arith::IndexCastOp>(loc, rewriter.getIndexType(), cond);
+
+  hl.setBlockEntryControl(mergeBlock, newCtrl);
+
+  // Replace with new ctrl value from mux and the index
+  rewriter.replaceOp(ctrlMerge, {newCtrl, condAsIndex});
+}
+
+bool FeedForwardNetworkRewriter::requiresOperandFlip(
+    ControlMergeOp &ctrlMerge, handshake::ConditionalBranchOp &ctrlBr) {
+  assert(ctrlMerge.getNumOperands() == 2 &&
+         "Loops should already have been handled");
+
+  Value fstOperand = ctrlMerge.getOperand(0);
+
+  assert(ctrlBr.trueResult().hasOneUse() &&
+         "expected the result of a branch to only have one user");
+  Operation *trueUser = *ctrlBr.trueResult().user_begin();
+  if (trueUser == ctrlBr)
+    // The cmerge directly consumes the cond_br output.
+    return ctrlBr.trueResult() == fstOperand;
+
+  // The cmerge is consumed in an intermediate block. Find out if this block is
+  // a predecessor of the "true" successor of the cmerge.
+  Block *trueBlock = trueUser->getBlock();
+  return domInfo.dominates(trueBlock, fstOperand.getDefiningOp()->getBlock());
 }
 
 namespace {
@@ -759,9 +906,6 @@ private:
 
 private:
   ConversionPatternRewriter *rewriter = nullptr;
-  std::set<Block *> visited;
-  std::list<Block *> queue;
-  DominanceInfo domInfo;
   HandshakeLowering &hl;
 };
 } // namespace
@@ -778,38 +922,22 @@ LoopNetworkRewriter::processRegion(Region &r,
 
   Operation *op = r.getParentOp();
 
-  // Initialize the BFS queue with the entry block.
-  queue = {&r.front()};
-  domInfo = DominanceInfo(op);
+  ControlFlowLoopAnalysis loopAnalysis(r);
+  if (failed(loopAnalysis.analyzeRegion())) {
+    return failure();
+  }
 
-  while (!queue.empty()) {
-    Block *currBlock = queue.front();
-    queue.pop_front();
-    visited.insert(currBlock);
+  for (LoopInfo &loopInfo : loopAnalysis.topLevelLoops) {
+    if (loopInfo.loopLatches.size() > 1)
+      return emitError(op->getLoc()) << "Multiple loop latches detected "
+                                        "(backedges from within the loop "
+                                        "to the loop header). Loop task "
+                                        "pipelining is only supported for "
+                                        "loops with unified loop latches.";
 
-    if (!hasMultiplePredecessors(currBlock)) {
-      // Not a loop header;
-      llvm::copy_if(currBlock->getSuccessors(), std::back_inserter(queue),
-                    [&](Block *block) { return !visited.count(block); });
-    } else {
-      // Check if currBlock starts a loop
-      LoopInfo loopInfo;
-      if (failed(collectLoopInfo(currBlock, domInfo, loopInfo)))
-        return failure();
-
-      if (loopInfo.isValid) {
-        if (loopInfo.loopLatches.size() > 1)
-          return emitError(op->getLoc()) << "Multiple loop latches detected "
-                                            "(backedges from within the loop "
-                                            "to the loop header). Loop task "
-                                            "pipelining is only supported for "
-                                            "loops with unified loop latches.";
-
-        // This is the start of an outer loop - go process!
-        if (failed(processOuterLoop(op->getLoc(), loopInfo)))
-          return failure();
-      }
-    }
+    // This is the start of an outer loop - go process!
+    if (failed(processOuterLoop(op->getLoc(), loopInfo)))
+      return failure();
   }
 
   return success();
@@ -1042,14 +1170,6 @@ LogicalResult LoopNetworkRewriter::processOuterLoop(Location loc,
   buildExitNetwork(loopInfo.loopHeader, exitPairs, loopPrimingRegister,
                    loopPrimingRegisterInput);
 
-  // Finally, we must reprime the BFS in processFunction; it must skip all
-  // of the inLoop nodes - since they have now been captured within the loop
-  // network that we just built- and restart from the exitBlocks - since they
-  // are guaranteed to be outside of the loop, but more loops may be
-  // downstream of these blocks.
-  llvm::copy(loopInfo.inLoop, std::inserter(visited, visited.begin()));
-  llvm::copy_if(loopInfo.exitBlocks, std::back_inserter(queue),
-                [&](Block *exitBlock) { return !visited.count(exitBlock); });
   return success();
 }
 
@@ -1169,113 +1289,7 @@ LogicalResult HandshakeLowering::connectConstantsToControl(
   return success();
 }
 
-static LogicalResult checkUseCount(Operation *op, Value res) {
-  // Checks if every result has single use
-  if (!res.hasOneUse()) {
-    int i = 0;
-    for (auto *user : res.getUsers()) {
-      user->emitWarning("user here");
-      i++;
-    }
-    return op->emitOpError("every result must have exactly one user, but had ")
-           << i;
-  }
-  return success();
-}
-
-// Checks if op successors are in appropriate blocks
-static LogicalResult checkSuccessorBlocks(Operation *op, Value res) {
-  for (auto &u : res.getUses()) {
-    Operation *succOp = u.getOwner();
-    // Non-branch ops: succesors must be in same block
-    if (!(isa<handshake::ConditionalBranchOp>(op) ||
-          isa<handshake::BranchOp>(op))) {
-      if (op->getBlock() != succOp->getBlock())
-        return op->emitOpError("cannot be block live-out");
-    } else {
-      // Branch ops: must have successor per successor block
-      if (op->getBlock()->getNumSuccessors() != op->getNumResults())
-        return op->emitOpError("incorrect successor count");
-      bool found = false;
-      for (int i = 0, e = op->getBlock()->getNumSuccessors(); i < e; ++i) {
-        Block *succ = op->getBlock()->getSuccessor(i);
-        if (succOp->getBlock() == succ || isa<SinkOp>(succOp))
-          found = true;
-      }
-      if (!found)
-        return op->emitOpError("branch successor in incorrect block");
-    }
-  }
-  return success();
-}
-
 // Checks if merge predecessors are in appropriate block
-static LogicalResult checkMergeOps(MergeLikeOpInterface mergeOp,
-                                   bool disableTaskPipelining) {
-  Block *block = mergeOp->getBlock();
-  unsigned operand_count = mergeOp.dataOperands().size();
-
-  // Merges in entry block have single predecessor (argument)
-  if (block->isEntryBlock()) {
-    if (operand_count != 1)
-      return mergeOp->emitOpError(
-                 "merge operations in entry block must have a ")
-             << "single predecessor";
-  } else {
-    if (operand_count > getBlockPredecessorCount(block))
-      return mergeOp->emitOpError("merge operation has ")
-             << operand_count << " data inputs, but only "
-             << getBlockPredecessorCount(block) << " predecessor blocks";
-  }
-
-  if (disableTaskPipelining) {
-    // There must be a predecessor from each predecessor block
-    for (auto *predBlock : block->getPredecessors()) {
-      bool found = false;
-      for (auto operand : mergeOp.dataOperands()) {
-        auto *operandOp = operand.getDefiningOp();
-        if (operandOp->getBlock() == predBlock) {
-          found = true;
-          break;
-        }
-      }
-      if (!found)
-        return mergeOp->emitOpError(
-            "missing predecessor from predecessor block");
-    }
-  }
-
-  // Select operand must come from same block
-  if (auto muxOp = dyn_cast<MuxOp>(mergeOp.getOperation())) {
-    auto *operand = muxOp.selectOperand().getDefiningOp();
-    if (operand->getBlock() != block)
-      return mergeOp->emitOpError("mux select operand must be from same block");
-  }
-  return success();
-}
-
-LogicalResult handshake::checkDataflowConversion(Region &r,
-                                                 bool disableTaskPipelining) {
-  for (Operation &op : r.getOps()) {
-    if (isa<mlir::cf::CondBranchOp, mlir::cf::BranchOp, memref::LoadOp,
-            arith::ConstantOp, mlir::AffineReadOpInterface, mlir::AffineForOp>(
-            op))
-      continue;
-
-    if (op.getNumResults() > 0) {
-      for (auto result : op.getResults()) {
-        if (checkUseCount(&op, result).failed() ||
-            checkSuccessorBlocks(&op, result).failed())
-          return failure();
-      }
-    }
-    if (auto mergeOp = dyn_cast<MergeLikeOpInterface>(op); mergeOp)
-      if (checkMergeOps(mergeOp, disableTaskPipelining).failed())
-        return failure();
-  }
-  return success();
-}
-
 static Value getBlockControlValue(Block *block) {
   // Get control-only value sent to the block terminator
   for (Operation &op : *block) {
@@ -1867,6 +1881,19 @@ struct ConvertSelectOps : public OpConversionPattern<mlir::arith::SelectOp> {
     return success();
   };
 };
+} // namespace
+
+LogicalResult handshake::postDataflowConvert(Operation *op) {
+  MLIRContext *context = op->getContext();
+  ConversionTarget target(*context);
+  target.addLegalDialect<handshake::HandshakeDialect>();
+  target.addIllegalOp<mlir::arith::SelectOp>();
+  RewritePatternSet patterns(context);
+  patterns.insert<ConvertSelectOps>(context);
+  return applyPartialConversion(op, target, std::move(patterns));
+}
+
+namespace {
 
 struct HandshakeRemoveBlockPass
     : HandshakeRemoveBlockBase<HandshakeRemoveBlockPass> {
@@ -1893,15 +1920,6 @@ struct StandardToHandshakePass
       if (failed(postDataflowConvert(func)))
         return signalPassFailure();
     }
-  }
-
-  LogicalResult postDataflowConvert(handshake::FuncOp op) {
-    ConversionTarget target(getContext());
-    target.addLegalDialect<handshake::HandshakeDialect>();
-    target.addIllegalOp<mlir::arith::SelectOp>();
-    RewritePatternSet patterns(&getContext());
-    patterns.insert<ConvertSelectOps>(&getContext());
-    return applyPartialConversion(op, target, std::move(patterns));
   }
 };
 

@@ -79,17 +79,16 @@ def InstanceOp : ReferableDeclOp<"instance", [HasParent<"firrtl::FModuleOp, firr
   let extraClassDeclaration = [{
     /// Lookup the module or extmodule for the symbol.  This returns null on
     /// invalid IR.
-    FModuleLike getReferencedModule();
     FModuleLike getReferencedModule(SymbolTable& symtbl);
 
     /// Return the port direction for the specified result number.
     Direction getPortDirection(size_t resultNo) {
-      return direction::get(portDirections()[resultNo]);
+      return direction::get(getPortDirections()[resultNo]);
     }
 
     /// Return the port name for the specified result number.
     StringAttr getPortName(size_t resultNo) {
-      return portNames()[resultNo].cast<StringAttr>();
+      return getPortNames()[resultNo].cast<StringAttr>();
     }
     StringRef getPortNameStr(size_t resultNo) {
       return getPortName(resultNo).getValue();
@@ -114,15 +113,15 @@ def InstanceOp : ReferableDeclOp<"instance", [HasParent<"firrtl::FModuleOp, firr
 def MemOp : ReferableDeclOp<"mem"> {
   let summary = "Define a new mem";
   let arguments =
-    (ins Confined<I32Attr, [IntMinValue<0>]>:$readLatency,
-         Confined<I32Attr, [IntMinValue<1>]>:$writeLatency,
-         Confined<I64Attr, [IntMinValue<1>]>:$depth, RUWAttr:$ruw,
+    (ins ConfinedAttr<I32Attr, [IntMinValue<0>]>:$readLatency,
+         ConfinedAttr<I32Attr, [IntMinValue<1>]>:$writeLatency,
+         ConfinedAttr<I64Attr, [IntMinValue<1>]>:$depth, RUWAttr:$ruw,
          StrArrayAttr:$portNames, StrAttr:$name, NameKindAttr:$nameKind,
          AnnotationArrayAttr:$annotations,
          PortAnnotationsAttr:$portAnnotations,
          OptionalAttr<InnerSymAttr>:$inner_sym,
          OptionalAttr<UI32Attr>:$groupID);
-  let results = (outs Variadic<FIRRTLType>:$results);
+  let results = (outs Variadic<FIRRTLBaseType>:$results);
 
   let assemblyFormat = [{
     (`sym` $inner_sym^)? custom<NameKind>($nameKind)
@@ -157,7 +156,7 @@ def MemOp : ReferableDeclOp<"mem"> {
     using NamedPort = std::pair<StringAttr, MemOp::PortKind>;
 
     /// Return the type of a port given the memory depth, type, and kind
-    static BundleType getTypeForPort(uint64_t depth, FIRRTLType dataType,
+    static BundleType getTypeForPort(uint64_t depth, FIRRTLBaseType dataType,
                                      PortKind portKind, size_t maskBits = 0);
 
     /// Return the name and kind of ports supported by this memory.
@@ -170,7 +169,7 @@ def MemOp : ReferableDeclOp<"mem"> {
     PortKind getPortKind(size_t resultNo);
 
     /// Return the data-type field of the memory, the type of each element.
-    FIRRTLType getDataType();
+    FIRRTLBaseType getDataType();
 
     /// Return the number of mask bits.
     size_t getMaskBits();
@@ -182,7 +181,7 @@ def MemOp : ReferableDeclOp<"mem"> {
     }
 
     /// Return the port type for the specified result number.
-    FIRRTLType getPortType(size_t resultNo);
+    FIRRTLBaseType getPortType(size_t resultNo);
 
     // Return the result for this instance that corresponds to the specified
     // port name.
@@ -221,7 +220,7 @@ def NodeOp : ReferableDeclOp<"node",
                        NameKindAttr:$nameKind,
                        AnnotationArrayAttr:$annotations,
                        OptionalAttr<InnerSymAttr>:$inner_sym);
-  let results = (outs FIRRTLType:$result);
+  let results = (outs FIRRTLBaseType:$result);
 
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$input,
@@ -354,7 +353,7 @@ def WireOp : ReferableDeclOp<"wire"> {
   let arguments = (ins StrAttr:$name, NameKindAttr:$nameKind,
                        AnnotationArrayAttr:$annotations,
                        OptionalAttr<InnerSymAttr>:$inner_sym);
-  let results = (outs FIRRTLType:$result);
+  let results = (outs FIRRTLBaseType:$result);
 
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType,

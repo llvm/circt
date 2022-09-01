@@ -35,19 +35,6 @@ using namespace circt::sv;
 
 /// ConversionPatterns.
 
-struct ConvertProgramOp : public OpConversionPattern<ProgramOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(ProgramOp program, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    ModuleOp mod = program->getParentOfType<ModuleOp>();
-    rewriter.inlineRegionBefore(program.body(), &mod.getBodyRegion().front());
-    rewriter.eraseBlock(&mod.getBodyRegion().back());
-    return success();
-  }
-};
-
 struct ConvertComponentOp : public OpConversionPattern<ComponentOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -100,6 +87,7 @@ private:
     case calyx::Direction::Output:
       return hw::PortDirection::OUTPUT;
     }
+    llvm_unreachable("unknown direction");
   }
 };
 
@@ -145,13 +133,13 @@ struct ConvertAssignOp : public OpConversionPattern<calyx::AssignOp> {
     // converter. This means assigns to ComponentOp outputs will try to assign
     // to a read from a wire, so we need to map to the wire.
     if (auto readInOut = dyn_cast<ReadInOutOp>(adaptor.dest().getDefiningOp()))
-      dest = readInOut.input();
+      dest = readInOut.getInput();
 
     Value src = adaptor.src();
     if (auto guard = adaptor.guard()) {
       auto zero =
           rewriter.create<hw::ConstantOp>(assign.getLoc(), src.getType(), 0);
-      src = rewriter.create<MuxOp>(assign.getLoc(), guard, src, zero);
+      src = rewriter.create<MuxOp>(assign.getLoc(), guard, src, zero, false);
     }
 
     rewriter.replaceOpWithNewOp<sv::AssignOp>(assign, dest, src);
@@ -276,8 +264,8 @@ private:
           auto out = wireOut(outReg, op.instanceName(), "", b);
           auto done =
               wireOut(doneReg, op.instanceName(), op.portName(op.done()), b);
-          wires.append({in.input(), writeEn.input(), clk.input(), reset.input(),
-                        out, done});
+          wires.append({in.getInput(), writeEn.getInput(), clk.getInput(),
+                        reset.getInput(), out, done});
         })
         // Unary operqations.
         .Case([&](SliceLibOp op) {
@@ -288,21 +276,21 @@ private:
 
           auto out =
               wireOut(extract, op.instanceName(), op.portName(op.out()), b);
-          wires.append({in.input(), out});
+          wires.append({in.getInput(), out});
         })
         .Case([&](NotLibOp op) {
           auto in = wireIn(op.in(), op.instanceName(), op.portName(op.in()), b);
           auto one = b.create<hw::ConstantOp>(op.in().getType(), 0);
 
-          auto xorOp = b.create<XorOp>(in, one);
+          auto xorOp = b.create<XorOp>(in, one, false);
 
           auto out =
               wireOut(xorOp, op.instanceName(), op.portName(op.out()), b);
-          wires.append({in.input(), out});
+          wires.append({in.getInput(), out});
         })
         .Case([&](WireLibOp op) {
           auto wire = wireIn(op.in(), op.instanceName(), "", b);
-          wires.append({wire.input(), wire});
+          wires.append({wire.getInput(), wire});
         })
         .Case([&](PadLibOp op) {
           auto in = wireIn(op.in(), op.instanceName(), op.portName(op.in()), b);
@@ -312,14 +300,14 @@ private:
                                                APInt(destWidth - srcWidth, 0));
           auto padded = wireOut(b.createOrFold<comb::ConcatOp>(zero, in),
                                 op.instanceName(), op.portName(op.out()), b);
-          wires.append({in.input(), padded});
+          wires.append({in.getInput(), padded});
         })
         .Case([&](ExtSILibOp op) {
           auto in = wireIn(op.in(), op.instanceName(), op.portName(op.in()), b);
           auto extsi =
               wireOut(createOrFoldSExt(op.getLoc(), in, op.out().getType(), b),
                       op.instanceName(), op.portName(op.out()), b);
-          wires.append({in.input(), extsi});
+          wires.append({in.getInput(), extsi});
         })
         .Default([](Operation *) { return SmallVector<Value>(); });
   }
@@ -331,10 +319,10 @@ private:
     auto right =
         wireIn(op.right(), op.instanceName(), op.portName(op.right()), b);
 
-    auto add = b.create<ResultTy>(left, right);
+    auto add = b.create<ResultTy>(left, right, false);
 
     auto out = wireOut(add, op.instanceName(), op.portName(op.out()), b);
-    wires.append({left.input(), right.input(), out});
+    wires.append({left.getInput(), right.getInput(), out});
   }
 
   template <typename OpTy>
@@ -345,10 +333,10 @@ private:
     auto right =
         wireIn(op.right(), op.instanceName(), op.portName(op.right()), b);
 
-    auto add = b.create<ICmpOp>(pred, left, right);
+    auto add = b.create<ICmpOp>(pred, left, right, false);
 
     auto out = wireOut(add, op.instanceName(), op.portName(op.out()), b);
-    wires.append({left.input(), right.input(), out});
+    wires.append({left.getInput(), right.getInput(), out});
   }
 
   template <typename SrcOpTy, typename TargetOpTy>
@@ -361,10 +349,10 @@ private:
     auto left = wireIn(op.left(), op.instanceName(), op.portName(op.left()), b);
     auto right =
         wireIn(op.right(), op.instanceName(), op.portName(op.right()), b);
-    wires.append(
-        {clk.input(), reset.input(), go.input(), left.input(), right.input()});
+    wires.append({clk.getInput(), reset.getInput(), go.getInput(),
+                  left.getInput(), right.getInput()});
 
-    auto targetOp = b.create<TargetOpTy>(left, right);
+    auto targetOp = b.create<TargetOpTy>(left, right, false);
     for (auto &&[targetRes, sourceRes] :
          llvm::zip(targetOp->getResults(), op.getOutputPorts())) {
       auto portName = op.portName(sourceRes);
@@ -399,7 +387,7 @@ private:
     auto resetValue = b.create<hw::ConstantOp>(source.getType(), 0);
     auto regName = b.getStringAttr(name);
     return b.create<CompRegOp>(source.getType(), source, clock, regName, reset,
-                               resetValue, regName, ArrayAttr());
+                               resetValue, regName);
   }
 
   std::string createName(StringRef instanceName, StringRef portName) const {
@@ -418,18 +406,17 @@ public:
   void runOnOperation() override;
 
 private:
-  LogicalResult runOnProgram(ProgramOp program);
+  LogicalResult runOnModule(ModuleOp module);
 };
 } // end anonymous namespace
 
 void CalyxToHWPass::runOnOperation() {
   ModuleOp mod = getOperation();
-  for (auto program : llvm::make_early_inc_range(mod.getOps<ProgramOp>()))
-    if (failed(runOnProgram(program)))
-      return signalPassFailure();
+  if (failed(runOnModule(mod)))
+    return signalPassFailure();
 }
 
-LogicalResult CalyxToHWPass::runOnProgram(ProgramOp program) {
+LogicalResult CalyxToHWPass::runOnModule(ModuleOp module) {
   MLIRContext &context = getContext();
 
   ConversionTarget target(context);
@@ -440,14 +427,13 @@ LogicalResult CalyxToHWPass::runOnProgram(ProgramOp program) {
   target.addLegalDialect<SVDialect>();
 
   RewritePatternSet patterns(&context);
-  patterns.add<ConvertProgramOp>(&context);
   patterns.add<ConvertComponentOp>(&context);
   patterns.add<ConvertWiresOp>(&context);
   patterns.add<ConvertControlOp>(&context);
   patterns.add<ConvertCellOp>(&context);
   patterns.add<ConvertAssignOp>(&context);
 
-  return applyPartialConversion(program, target, std::move(patterns));
+  return applyPartialConversion(module, target, std::move(patterns));
 }
 
 std::unique_ptr<mlir::Pass> circt::createCalyxToHWPass() {

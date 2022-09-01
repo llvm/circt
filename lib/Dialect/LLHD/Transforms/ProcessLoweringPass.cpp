@@ -61,18 +61,18 @@ static LogicalResult checkSignalsAreObserved(OperandRange obs, Value value) {
 }
 
 static LogicalResult isProcValidToLower(llhd::ProcOp op) {
-  size_t numBlocks = op.body().getBlocks().size();
+  size_t numBlocks = op.getBody().getBlocks().size();
 
   if (numBlocks == 1) {
-    if (!isa<llhd::HaltOp>(op.body().back().getTerminator()))
+    if (!isa<llhd::HaltOp>(op.getBody().back().getTerminator()))
       return op.emitOpError("during process-lowering: entry block is required "
                             "to be terminated by llhd.halt");
     return success();
   }
 
   if (numBlocks == 2) {
-    Block &first = op.body().front();
-    Block &last = op.body().back();
+    Block &first = op.getBody().front();
+    Block &last = op.getBody().back();
 
     if (last.getArguments().size() != 0)
       return op.emitOpError(
@@ -85,7 +85,7 @@ static LogicalResult isProcValidToLower(llhd::ProcOp op) {
 
     if (auto wait = dyn_cast<llhd::WaitOp>(last.getTerminator())) {
       // No optional time argument is allowed
-      if (wait.time())
+      if (wait.getTime())
         return wait.emitOpError(
             "during process-lowering: llhd.wait terminators with optional time "
             "argument cannot be lowered to structural LLHD");
@@ -93,7 +93,7 @@ static LogicalResult isProcValidToLower(llhd::ProcOp op) {
       // Every probed signal has to occur in the observed signals list in
       // the wait instruction
       WalkResult result = op.walk([&wait](llhd::PrbOp prbOp) -> WalkResult {
-        if (failed(checkSignalsAreObserved(wait.obs(), prbOp.signal())))
+        if (failed(checkSignalsAreObserved(wait.getObs(), prbOp.getSignal())))
           return wait.emitOpError(
               "during process-lowering: the wait terminator is required to "
               "have all probed signals as arguments");
@@ -126,20 +126,20 @@ void ProcessLoweringPass::runOnOperation() {
 
     // Replace proc with entity
     llhd::EntityOp entity =
-        builder.create<llhd::EntityOp>(op.getLoc(), op.ins());
+        builder.create<llhd::EntityOp>(op.getLoc(), op.getIns());
     // Set the symbol name of the entity to the same as the process (as the
     // process gets deleted anyways).
     entity.setName(op.getName());
     // Move all blocks from the process to the entity, the process does not have
     // a region afterwards.
-    entity.body().takeBody(op.body());
+    entity.getBody().takeBody(op.getBody());
     entity->setAttr("function_type", op->getAttr("function_type"));
     // In the case that wait is used to suspend the process, we need to merge
     // the two blocks as we needed the second block to have a target for wait
     // (the entry block cannot be targeted).
-    if (entity.body().getBlocks().size() == 2) {
-      Block &first = entity.body().front();
-      Block &second = entity.body().back();
+    if (entity.getBody().getBlocks().size() == 2) {
+      Block &first = entity.getBody().front();
+      Block &second = entity.getBody().back();
       // Delete the BranchOp operation in the entry block
       first.getTerminator()->dropAllReferences();
       first.getTerminator()->erase();
@@ -157,7 +157,7 @@ void ProcessLoweringPass::runOnOperation() {
     op->erase();
 
     // Remove the remaining llhd.halt or llhd.wait terminator
-    Operation *terminator = entity.body().front().getTerminator();
+    Operation *terminator = entity.getBody().front().getTerminator();
     terminator->dropAllReferences();
     terminator->dropAllUses();
     terminator->erase();

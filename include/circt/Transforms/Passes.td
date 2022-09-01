@@ -38,4 +38,19 @@ def FlattenMemRefCalls : Pass<"flatten-memref-calls", "::mlir::ModuleOp"> {
   let dependentDialects = ["mlir::memref::MemRefDialect"];
 }
 
+def StripDebugInfoWithPred : Pass<"strip-debuginfo-with-pred", "::mlir::ModuleOp"> {
+  let summary = "Selectively strip debug info from all operations";
+
+  let description = [{
+    This pass extends mlir::StrinpDebugInfoPass to selectively strip locations with a
+    given predicate.
+  }];
+  let constructor = "circt::createStripDebugInfoWithPredPass({})";
+  let options = [
+    Option<"dropSuffix", "drop-suffix", "std::string",
+           /*default=*/"",
+           "Drop file location info with the specified suffix. This option is"
+           "intended to be used for testing."> ];
+}
+
 #endif // CIRCT_TRANSFORMS_PASSES

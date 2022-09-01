@@ -61,8 +61,9 @@ FSMGraph::FSMGraph(Operation *op) {
 
 FSMStateNode *FSMGraph::lookup(StringAttr name) {
   auto it = nodeMap.find(name);
-  assert(it != nodeMap.end() && "Module not in InstanceGraph!");
-  return it->second;
+  if (it != nodeMap.end())
+    return it->second;
+  return nullptr;
 }
 
 FSMStateNode *FSMGraph::lookup(StateOp state) {
@@ -93,12 +94,8 @@ FSMTransitionEdge *FSMGraph::createTransition(OpBuilder &builder, Location loc,
   auto *currentStateNode = getOrAddState(from);
   auto *nextStateNode = getOrAddState(to);
   OpBuilder::InsertionGuard g(builder);
-  // Set the insertion point to the end of the transitions. This will always be
-  // right before the implicit fsm.output terminator operation. @todo: the
-  // transition region should obviously not have a terminator, but this needs a
-  // significant change in the ODS/parser of the op.
-  builder.setInsertionPoint(
-      *from.transitions().getBlocks().front().getOps<OutputOp>().begin());
+  // Set the insertion point to the end of the transitions.
+  builder.setInsertionPointToEnd(&from.transitions().getBlocks().front());
   auto transition = builder.create<TransitionOp>(loc, to);
   return currentStateNode->addTransitionEdge(nextStateNode, transition);
 }

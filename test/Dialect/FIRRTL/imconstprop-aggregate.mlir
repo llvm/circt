@@ -163,10 +163,7 @@ firrtl.circuit "DontTouchAggregate" {
 
 firrtl.circuit "OutPortTop" {
   // Check that we don't propagate througth it.
-  firrtl.module @OutPortChild(out %out: !firrtl.vector<uint<1>, 2>) attributes {
-    portAnnotations = [[]],
-    portSyms = ["dntSym"]
-  }
+  firrtl.module @OutPortChild(out %out: !firrtl.vector<uint<1>, 2> sym @dntSym)
   {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %0 = firrtl.subindex %out[0] : !firrtl.vector<uint<1>, 2>
@@ -196,9 +193,9 @@ firrtl.circuit "InputPortTop"  {
     firrtl.strictconnect %2, %3 : !firrtl.uint<1>
   }
   // CHECK-LABEL: firrtl.module @InputPortChild
-  firrtl.module @InputPortChild(in %in0: !firrtl.bundle<v: uint<1>>, in %in1: !firrtl.bundle<v: uint<1>>, out %out: !firrtl.bundle<v: uint<1>>) attributes {
-    portAnnotations = [[], [], []], portSyms = ["", "dntSym", ""]
-  }
+  firrtl.module @InputPortChild(in %in0: !firrtl.bundle<v: uint<1>>,
+    in %in1: !firrtl.bundle<v: uint<1>> sym @dntSym,
+    out %out: !firrtl.bundle<v: uint<1>>)
   {
     %0 = firrtl.subfield %in1(0) : (!firrtl.bundle<v: uint<1>>) -> !firrtl.uint<1>
     %1 = firrtl.subfield %in0(0) : (!firrtl.bundle<v: uint<1>>) -> !firrtl.uint<1>
@@ -385,7 +382,7 @@ firrtl.circuit "dntOutput"  {
     %2 = firrtl.mux(%c, %1, %c2_ui3) : (!firrtl.uint<1>, !firrtl.uint<3>, !firrtl.uint<3>) -> !firrtl.uint<3>
     firrtl.strictconnect %0, %2 : !firrtl.uint<3>
   }
-  firrtl.module @foo(out %b: !firrtl.bundle<v: uint<3>>) attributes {portSyms = ["dntSym1"] }{
+  firrtl.module @foo(out %b: !firrtl.bundle<v: uint<3>> sym @dntSym1){
     %c1_ui3 = firrtl.constant 1 : !firrtl.uint<3>
     %0 = firrtl.subfield %b(0) : (!firrtl.bundle<v: uint<3>>) -> !firrtl.uint<3>
     firrtl.strictconnect %0, %c1_ui3 : !firrtl.uint<3>

@@ -1,6 +1,6 @@
-// RUN: circt-opt -pass-pipeline='calyx.program(calyx.component(calyx-gicm))' %s | FileCheck %s
+// RUN: circt-opt -pass-pipeline='calyx.component(calyx-gicm)' %s | FileCheck %s
 
-calyx.program "main" {
+module attributes {calyx.entrypoint = "main"} {
   calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
     %add.left, %add.right, %add.out = calyx.std_add @add : i8, i8, i8
     %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register @r : i8, i1, i1, i1, i8, i1

@@ -15,6 +15,7 @@
 
 #include "PassDetail.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Dialect/SV/SVPasses.h"
 
 using namespace circt;
@@ -103,6 +104,9 @@ private:
   /// Inline all regions from the second operation into the first and delete the
   /// second operation.
   void mergeOperationsIntoFrom(Operation *op1, Operation *op2) {
+    // If either op1 or op2 has SV attributues, we cannot merge the ops.
+    if (sv::hasSVAttributes(op1) || sv::hasSVAttributes(op2))
+      return;
     assert(op1 != op2 && "Cannot merge an op into itself");
     for (size_t i = 0, e = op1->getNumRegions(); i != e; ++i)
       mergeRegions(&op1->getRegion(i), &op2->getRegion(i));
@@ -170,7 +174,7 @@ void HWCleanupPass::runOnGraphRegion(Region &region) {
 
     // Merge graph ifdefs anywhere in the module.
     if (auto ifdefOp = dyn_cast<sv::IfDefOp>(op)) {
-      auto *&entry = ifdefOps[ifdefOp.condAttr()];
+      auto *&entry = ifdefOps[ifdefOp.getCondAttr()];
       if (entry)
         mergeOperationsIntoFrom(ifdefOp, entry);
 
@@ -214,7 +218,7 @@ void HWCleanupPass::runOnProceduralRegion(Region &region) {
     if (auto ifdef = dyn_cast<sv::IfDefProceduralOp>(op)) {
       if (auto prevIfDef =
               dyn_cast_or_null<sv::IfDefProceduralOp>(lastSideEffectingOp)) {
-        if (ifdef.cond() == prevIfDef.cond()) {
+        if (ifdef.getCond() == prevIfDef.getCond()) {
           // We know that there are no side effective operations between the
           // two, so merge the first one into this one.
           mergeOperationsIntoFrom(ifdef, prevIfDef);
@@ -225,7 +229,7 @@ void HWCleanupPass::runOnProceduralRegion(Region &region) {
     // Merge 'if' operations with the same condition.
     if (auto ifop = dyn_cast<sv::IfOp>(op)) {
       if (auto prevIf = dyn_cast_or_null<sv::IfOp>(lastSideEffectingOp)) {
-        if (ifop.cond() == prevIf.cond()) {
+        if (ifop.getCond() == prevIf.getCond()) {
           // We know that there are no side effective operations between the
           // two, so merge the first one into this one.
           mergeOperationsIntoFrom(ifop, prevIf);

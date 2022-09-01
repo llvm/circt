@@ -54,6 +54,11 @@ def UnionType : DialectType<HWDialect,
     CPred<"::circt::hw::type_isa<circt::hw::UnionType>($_self)">,
           "a UnionType", "::circt::hw::TypeAliasOr<hw::UnionType>">;
 
+// A handle to refer to circt::hw::EnumType in ODS.
+def EnumType : DialectType<HWDialect,
+    CPred<"::circt::hw::type_isa<circt::hw::EnumType>($_self)">,
+          "a EnumType", "::circt::hw::TypeAliasOr<circt::hw::EnumType>">;
+
 //===----------------------------------------------------------------------===//
 // Type Definitions
 //===----------------------------------------------------------------------===//

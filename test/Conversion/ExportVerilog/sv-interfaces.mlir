@@ -123,7 +123,7 @@ module {
   }
   // CHECK-LABEL: module structs(
   // CHECK-NOT: wire [383:0] _tmp =
-  // CHECK: wire struct packed {logic [383:0] foo; } _GEN_2
+  // CHECK: wire struct packed {logic [383:0] foo; } _GEN
   // CHECK: endmodule
   hw.module @structs(%clk: i1, %rstn: i1) {
     %0 = sv.interface.instance {name = "iface"} : !sv.interface<@IValidReady_Struct>
@@ -142,4 +142,8 @@ module {
     // CHECK-NEXT: struct packed {logic repeat_0; } data;
   }
 
+  // CHECK-LABEL: // interface with a comment
+  // CHECK-NEXT:  interface interfaceWithComment
+  sv.interface @interfaceWithComment
+    attributes {comment = "interface with a comment"} {}
 }

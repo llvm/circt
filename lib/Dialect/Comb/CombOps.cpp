@@ -47,7 +47,7 @@ Value comb::createOrFoldSExt(Value value, Type destTy,
 
 Value comb::createOrFoldNot(Location loc, Value value, OpBuilder &builder) {
   auto allOnes = builder.create<hw::ConstantOp>(loc, value.getType(), -1);
-  return builder.createOrFold<XorOp>(loc, value, allOnes);
+  return builder.createOrFold<XorOp>(loc, value, allOnes, false);
 }
 
 Value comb::createOrFoldNot(Value value, ImplicitLocOpBuilder &builder) {
@@ -80,6 +80,14 @@ ICmpPredicate ICmpOp::getFlippedPredicate(ICmpPredicate predicate) {
     return ICmpPredicate::ult;
   case ICmpPredicate::uge:
     return ICmpPredicate::ule;
+  case ICmpPredicate::ceq:
+    return ICmpPredicate::ceq;
+  case ICmpPredicate::cne:
+    return ICmpPredicate::cne;
+  case ICmpPredicate::weq:
+    return ICmpPredicate::weq;
+  case ICmpPredicate::wne:
+    return ICmpPredicate::wne;
   }
   llvm_unreachable("unknown comparison predicate");
 }
@@ -92,6 +100,10 @@ bool ICmpOp::isPredicateSigned(ICmpPredicate predicate) {
   case ICmpPredicate::uge:
   case ICmpPredicate::ne:
   case ICmpPredicate::eq:
+  case ICmpPredicate::cne:
+  case ICmpPredicate::ceq:
+  case ICmpPredicate::wne:
+  case ICmpPredicate::weq:
     return false;
   case ICmpPredicate::slt:
   case ICmpPredicate::sgt:
@@ -126,6 +138,14 @@ ICmpPredicate ICmpOp::getNegatedPredicate(ICmpPredicate predicate) {
     return ICmpPredicate::ule;
   case ICmpPredicate::uge:
     return ICmpPredicate::ult;
+  case ICmpPredicate::ceq:
+    return ICmpPredicate::cne;
+  case ICmpPredicate::cne:
+    return ICmpPredicate::ceq;
+  case ICmpPredicate::weq:
+    return ICmpPredicate::wne;
+  case ICmpPredicate::wne:
+    return ICmpPredicate::weq;
   }
   llvm_unreachable("unknown comparison predicate");
 }
@@ -133,7 +153,7 @@ ICmpPredicate ICmpOp::getNegatedPredicate(ICmpPredicate predicate) {
 /// Return true if this is an equality test with -1, which is a "reduction
 /// and" operation in Verilog.
 bool ICmpOp::isEqualAllOnes() {
-  if (predicate() != ICmpPredicate::eq)
+  if (getPredicate() != ICmpPredicate::eq)
     return false;
 
   if (auto op1 =
@@ -145,7 +165,7 @@ bool ICmpOp::isEqualAllOnes() {
 /// Return true if this is a not equal test with 0, which is a "reduction
 /// or" operation in Verilog.
 bool ICmpOp::isNotEqualZero() {
-  if (predicate() != ICmpPredicate::ne)
+  if (getPredicate() != ICmpPredicate::ne)
     return false;
 
   if (auto op1 =
@@ -222,7 +242,7 @@ static unsigned getTotalWidth(ValueRange inputs) {
 
 LogicalResult ConcatOp::verify() {
   unsigned tyWidth = getType().getWidth();
-  unsigned operandsTotalWidth = getTotalWidth(inputs());
+  unsigned operandsTotalWidth = getTotalWidth(getInputs());
   if (tyWidth != operandsTotalWidth)
     return emitOpError("ConcatOp requires operands total width to "
                        "match type width. operands "
@@ -256,9 +276,9 @@ LogicalResult ConcatOp::inferReturnTypes(MLIRContext *context,
 //===----------------------------------------------------------------------===//
 
 LogicalResult ExtractOp::verify() {
-  unsigned srcWidth = input().getType().cast<IntegerType>().getWidth();
+  unsigned srcWidth = getInput().getType().cast<IntegerType>().getWidth();
   unsigned dstWidth = getType().getWidth();
-  if (lowBit() >= srcWidth || srcWidth - lowBit() < dstWidth)
+  if (getLowBit() >= srcWidth || srcWidth - getLowBit() < dstWidth)
     return emitOpError("from bit too large for input"), failure();
 
   return success();

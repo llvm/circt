@@ -55,4 +55,22 @@ void circt::python::populateDialectSVSubmodule(py::module &m) {
               return py::none();
             return py::str(std::string(name.data, name.length));
           });
+
+  mlir_attribute_subclass(m, "SVAttributesAttr", svAttrIsASVAttributesAttr)
+      .def_classmethod(
+          "get",
+          [](py::object cls, MlirAttribute attributes, bool emitAsComments,
+             MlirContext ctxt) {
+            return cls(svSVAttributesAttrGet(ctxt, attributes, emitAsComments));
+          },
+          "Create SV attributes attr", py::arg(), py::arg("attributes"),
+          py::arg("emit_as_comments") = py::none(),
+          py::arg("ctxt") = py::none())
+      .def_property_readonly("attributes",
+                             [](MlirAttribute self) {
+                               return svSVAttributesAttrGetAttributes(self);
+                             })
+      .def_property_readonly("emit_as_comments", [](MlirAttribute self) {
+        return svSVAttributesAttrGetEmitAsComments(self);
+      });
 }

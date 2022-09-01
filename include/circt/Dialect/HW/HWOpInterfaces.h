@@ -16,6 +16,12 @@
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/SymbolTable.h"
 
+namespace circt {
+namespace hw {
+struct PortInfo;
+} // namespace hw
+} // namespace circt
+
 #include "circt/Dialect/HW/HWOpInterfaces.h.inc"
 
 #endif // CIRCT_DIALECT_HW_HWOPINTERFACES_H

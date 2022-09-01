@@ -57,12 +57,12 @@ private:
 /// otherwise.
 Operation *HWLegalizeModulesPass::tryLoweringArrayGet(hw::ArrayGetOp getOp) {
   // If the operand is an array_create, then we can lower this into a casez.
-  auto createOp = getOp.input().getDefiningOp<hw::ArrayCreateOp>();
+  auto createOp = getOp.getInput().getDefiningOp<hw::ArrayCreateOp>();
   if (!createOp)
     return nullptr;
 
   // array_get(idx, array_create(a,b,c,d)) ==> casez(idx).
-  Value index = getOp.index();
+  Value index = getOp.getIndex();
 
   // Create the wire for the result of the casez in the hw.module.
   OpBuilder builder(&thisHWModule.getBodyBlock()->front());
@@ -90,21 +90,21 @@ Operation *HWLegalizeModulesPass::tryLoweringArrayGet(hw::ArrayGetOp getOp) {
   APInt caseValue(index.getType().getIntOrFloatBitWidth(), 0);
   auto *context = builder.getContext();
 
-  using sv::CasePattern;
-
   // Create the casez itself.
   builder.create<sv::CaseOp>(
       createOp.getLoc(), CaseStmtType::CaseZStmt, index, caseValues.size(),
-      [&](size_t caseIdx) -> CasePattern {
+      [&](size_t caseIdx) -> std::unique_ptr<sv::CasePattern> {
         // Use a default pattern for the last value, even if we are complete.
         // This avoids tools thinking they need to insert a latch due to
         // potentially incomplete case coverage.
         bool isDefault = caseIdx == caseValues.size() - 1;
         Value theValue = caseValues[caseIdx];
-        sv::CasePattern thePattern =
-            isDefault ? CasePattern(caseValue.getBitWidth(),
-                                    CasePattern::DefaultPatternTag(), context)
-                      : CasePattern(caseValue, context);
+        std::unique_ptr<sv::CasePattern> thePattern;
+
+        if (isDefault)
+          thePattern = std::make_unique<sv::CaseDefaultPattern>(context);
+        else
+          thePattern = std::make_unique<sv::CaseBitPattern>(caseValue, context);
         ++caseValue;
         builder.create<sv::BPAssignOp>(createOp.getLoc(), theWire, theValue);
         return thePattern;

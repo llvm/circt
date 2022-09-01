@@ -36,6 +36,8 @@ def CalyxDialect : Dialect {
     /// Register all Calyx attributes.
     void registerAttributes();
   }];
+  // Depends on the HWDialect to support external primitives using hw.module.extern
+  let dependentDialects = ["circt::hw::HWDialect"];
   let cppNamespace = "::circt::calyx";
 }
 

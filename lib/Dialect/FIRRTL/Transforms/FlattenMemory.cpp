@@ -43,7 +43,7 @@ struct FlattenMemoryPass : public FlattenMemoryBase<FlattenMemoryPass> {
 
       return false;
     };
-    getOperation().getBody()->walk([&](MemOp memOp) {
+    getOperation().getBodyBlock()->walk([&](MemOp memOp) {
       LLVM_DEBUG(llvm::dbgs() << "\n Memory:" << memOp);
       // The vector of leaf elements type after flattening the data.
       SmallVector<IntType> flatMemType;
@@ -62,16 +62,20 @@ struct FlattenMemoryPass : public FlattenMemoryBase<FlattenMemoryPass> {
 
       SmallVector<Operation *, 8> flatData;
       SmallVector<int32_t> memWidths;
+      size_t memFlatWidth = 0;
       // Get the width of individual aggregate leaf elements.
       for (auto f : flatMemType) {
         LLVM_DEBUG(llvm::dbgs() << "\n field type:" << f);
-        memWidths.push_back(f.getWidth().getValue());
+        auto w = f.getWidth().value();
+        memWidths.push_back(w);
+        memFlatWidth += w;
       }
+      // If all the widths are zero, ignore the memory.
+      if (!memFlatWidth)
+        return;
       maskGran = memWidths[0];
-      size_t memFlatWidth = 0;
       // Compute the GCD of all data bitwidths.
       for (auto w : memWidths) {
-        memFlatWidth += w;
         maskGran = llvm::GreatestCommonDivisor64(maskGran, w);
       }
       for (auto w : memWidths) {
@@ -92,23 +96,25 @@ struct FlattenMemoryPass : public FlattenMemoryBase<FlattenMemoryPass> {
       auto opPorts = memOp.getPorts();
       for (size_t portIdx = 0, e = opPorts.size(); portIdx < e; ++portIdx) {
         auto port = opPorts[portIdx];
-        ports.push_back(MemOp::getTypeForPort(memOp.depth(), flatType,
+        ports.push_back(MemOp::getTypeForPort(memOp.getDepth(), flatType,
                                               port.second, totalmaskWidths));
         portNames.push_back(port.first);
       }
 
       auto flatMem = builder.create<MemOp>(
-          ports, memOp.readLatency(), memOp.writeLatency(), memOp.depth(),
-          memOp.ruw(), builder.getArrayAttr(portNames), memOp.nameAttr(),
-          memOp.nameKind(), memOp.annotations(), memOp.portAnnotations(),
-          memOp.inner_symAttr(), memOp.groupIDAttr());
+          ports, memOp.getReadLatency(), memOp.getWriteLatency(),
+          memOp.getDepth(), memOp.getRuw(), builder.getArrayAttr(portNames),
+          memOp.getNameAttr(), memOp.getNameKind(), memOp.getAnnotations(),
+          memOp.getPortAnnotations(), memOp.getInnerSymAttr(),
+          memOp.getGroupIDAttr());
       // Hook up the new memory to the wires the old memory was replaced with.
       for (size_t index = 0, rend = memOp.getNumResults(); index < rend;
            ++index) {
         auto result = memOp.getResult(index);
         auto wire = builder.create<WireOp>(
             result.getType(),
-            (memOp.name() + "_" + memOp.getPortName(index).getValue()).str());
+            (memOp.getName() + "_" + memOp.getPortName(index).getValue())
+                .str());
         result.replaceAllUsesWith(wire.getResult());
         result = wire;
         auto newResult = flatMem.getResult(index);
@@ -135,13 +141,12 @@ struct FlattenMemoryPass : public FlattenMemoryBase<FlattenMemoryPass> {
           } else {
             // Cast the input aggregate write data to flat type.
             // Cast the input aggregate write data to flat type.
-            auto newFieldType = newField.getType().cast<FIRRTLType>();
+            auto newFieldType = newField.getType().cast<FIRRTLBaseType>();
             auto oldFieldBitWidth = getBitWidth(oldField.getType());
             // Following condition is true, if a data field is 0 bits. Then
             // newFieldType is of smaller bits than old.
-            if (getBitWidth(newFieldType) != oldFieldBitWidth.getValue())
-              newFieldType =
-                  UIntType::get(context, oldFieldBitWidth.getValue());
+            if (getBitWidth(newFieldType) != oldFieldBitWidth.value())
+              newFieldType = UIntType::get(context, oldFieldBitWidth.value());
             realOldField = builder.create<BitCastOp>(newFieldType, oldField);
             // Mask bits require special handling, since some of the mask bits
             // need to be repeated, direct bitcasting wouldn't work. Depending
@@ -171,6 +176,7 @@ struct FlattenMemoryPass : public FlattenMemoryBase<FlattenMemoryPass> {
           }
         }
       }
+      ++numFlattenedMems;
       memOp.erase();
       return;
     });
@@ -197,11 +203,12 @@ private:
           })
           .Case<IntType>([&](auto iType) {
             results.push_back({iType});
-            return iType.getWidth().hasValue();
+            return iType.getWidth().has_value();
           })
           .Default([&](auto) { return false; });
     };
-    if (flatten(type))
+    // Return true only if this is an aggregate with more than one element.
+    if (flatten(type) && results.size() > 1)
       return true;
     return false;
   }

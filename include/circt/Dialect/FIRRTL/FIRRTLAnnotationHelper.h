@@ -13,8 +13,11 @@
 #ifndef CIRCT_DIALECT_FIRRTL_FIRRTLANNOTATIONHELPER_H
 #define CIRCT_DIALECT_FIRRTL_FIRRTLANNOTATIONHELPER_H
 
+#include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
+#include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
+#include "llvm/ADT/TypeSwitch.h"
 
 namespace circt {
 namespace firrtl {
@@ -81,10 +84,32 @@ struct AnnoTargetCache {
   /// Lookup the target for 'name', empty if not found.
   /// (check for validity using operator bool()).
   AnnoTarget getTargetForName(StringRef name) const {
-    auto it = targets.find(name);
-    if (it == targets.end())
-      return {};
-    return it->second;
+    return targets.lookup(name);
+  }
+
+  void insertOp(Operation *op) {
+    TypeSwitch<Operation *>(op)
+        .Case<InstanceOp, MemOp, NodeOp, RegOp, RegResetOp, WireOp,
+              chirrtl::CombMemOp, chirrtl::SeqMemOp, chirrtl::MemoryPortOp,
+              PrintFOp>([&](auto op) {
+          // To be safe, check attribute and non-empty name before adding.
+          if (auto name = op.getNameAttr(); name && !name.getValue().empty())
+            targets.insert({name, OpAnnoTarget(op)});
+        });
+  }
+
+  /// Replace `oldOp` with `newOp` in the target cache. The new and old ops can
+  /// have different names.
+  void replaceOp(Operation *oldOp, Operation *newOp) {
+    if (auto name = oldOp->getAttrOfType<StringAttr>("name");
+        name && !name.getValue().empty())
+      targets.erase(name);
+    insertOp(newOp);
+  }
+
+  /// Add a new module port to the target cache.
+  void insertPort(FModuleLike mod, size_t portNo) {
+    targets.insert({mod.getPortNameAttr(portNo), PortAnnoTarget(mod, portNo)});
   }
 
 private:
@@ -108,6 +133,36 @@ struct CircuitTargetCache {
   /// Lookup the target for 'name' in 'module'.
   AnnoTarget lookup(FModuleLike module, StringRef name) {
     return getOrCreateCacheFor(module).getTargetForName(name);
+  }
+
+  /// Clear the cache completely.
+  void invalidate() { targetCaches.clear(); }
+
+  /// Replace `oldOp` with `newOp` in the target cache. The new and old ops can
+  /// have different names.
+  void replaceOp(Operation *oldOp, Operation *newOp) {
+    auto mod = newOp->getParentOfType<FModuleOp>();
+    auto it = targetCaches.find(mod);
+    if (it == targetCaches.end())
+      return;
+    it->getSecond().replaceOp(oldOp, newOp);
+  }
+
+  /// Add a new module port to the target cache.
+  void insertPort(FModuleLike mod, size_t portNo) {
+    auto it = targetCaches.find(mod);
+    if (it == targetCaches.end())
+      return;
+    it->getSecond().insertPort(mod, portNo);
+  }
+
+  /// Add a new op to the target cache.
+  void insertOp(Operation *op) {
+    auto mod = op->getParentOfType<FModuleOp>();
+    auto it = targetCaches.find(mod);
+    if (it == targetCaches.end())
+      return;
+    it->getSecond().insertOp(op);
   }
 
 private:
@@ -178,6 +233,9 @@ LogicalResult applyGCTMemTaps(const AnnoPathValue &target, DictionaryAttr anno,
 LogicalResult applyGCTSignalMappings(const AnnoPathValue &target,
                                      DictionaryAttr anno, ApplyState &state);
 
+LogicalResult applyOMIR(const AnnoPathValue &target, DictionaryAttr anno,
+                        ApplyState &state);
+
 /// Implements the same behavior as DictionaryAttr::getAs<A> to return the
 /// value of a specific type associated with a key in a dictionary. However,
 /// this is specialized to print a useful error message, specific to custom
@@ -219,6 +277,17 @@ A tryGetAs(DictionaryAttr &dict, const Attribute &root, StringRef key,
   }
   return valueA;
 }
+
+/// Add ports to the module and all its instances and return the clone for
+/// `instOnPath`. This does not connect the new ports to anything. Replace
+/// the old instances with the new cloned instance in all the caches.
+InstanceOp addPortsToModule(
+    FModuleOp mod, InstanceOp instOnPath, FIRRTLType portType, Direction dir,
+    StringRef newName, InstancePathCache &instancePathcache,
+    MLIRContext *context,
+    llvm::function_ref<ModuleNamespace &(FModuleLike)> getNamespace,
+    AnnoPathValue *instancePathToUpdate = nullptr,
+    CircuitTargetCache *targetCaches = nullptr);
 
 } // namespace firrtl
 } // namespace circt

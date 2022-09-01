@@ -18,29 +18,40 @@ import re
 import numpy as np
 
 
-class Value:
+def Value(value, type=None):
+  from .pycde_types import Type
 
-  # Dummy __init__ as everything is done in __new__.
+  if isinstance(value, PyCDEValue):
+    return value
+
+  resvalue = support.get_value(value)
+  if resvalue is None:
+    return _obj_to_value_infer_type(value)
+
+  if type is None:
+    type = resvalue.type
+  type = Type(type)
+
+  return type._get_value_class()(resvalue, type)
+
+
+class PyCDEValue:
+  """Root of the PyCDE value (signal, in RTL terms) hierarchy."""
+
   def __init__(self, value, type=None):
-    pass
-
-  def __new__(cls, value, type=None):
     from .pycde_types import Type
 
-    if value is None or isinstance(value, Value):
-      return value
-    resvalue = support.get_value(value)
+    if isinstance(value, ir.Value):
+      self.value = value
+    else:
+      self.value = support.get_value(value)
+      if self.value is None:
+        self.value = _obj_to_value_infer_type(value).value
 
-    if resvalue is None:
-      return _obj_to_value_infer_type(value)
-
-    if type is None:
-      type = resvalue.type
-    type = Type(type)
-    v = super().__new__(type._get_value_class())
-    v.value = resvalue
-    v.type = type
-    return v
+    if type is not None:
+      self.type = type
+    else:
+      self.type = Type(self.value.type)
 
   _reg_name = re.compile(r"^(.*)__reg(\d+)$")
 
@@ -60,14 +71,12 @@ class Value:
       clk = ClockValue._get_current_clock_block()
       if clk is None:
         raise ValueError("If 'clk' not specified, must be in clock block")
-    if sv_attributes is not None:
-      sv_attributes = [sv.SVAttributeAttr.get(attr) for attr in sv_attributes]
 
     from .dialects import seq
     if name is None:
       basename = None
       if self.name is not None:
-        m = Value._reg_name.match(self.name)
+        m = PyCDEValue._reg_name.match(self.name)
         if m:
           basename = m.group(1)
           reg_num = m.group(2)
@@ -89,8 +98,11 @@ class Value:
                             clk=clk,
                             reset=rst,
                             name=give_name,
-                            sym_name=give_name,
-                            sv_attributes=sv_attributes)
+                            sym_name=give_name)
+      if sv_attributes is not None:
+        reg.value.owner.attributes["sv.attributes"] = sv.SVAttributesAttr.get(
+            ir.ArrayAttr.get(
+                [sv.SVAttributeAttr.get(attr) for attr in sv_attributes]))
       if appid is not None:
         reg.appid = appid
       return reg
@@ -110,9 +122,10 @@ class Value:
     from circt.dialects import msft
     if isinstance(owner, ir.Block) and isinstance(owner.owner,
                                                   msft.MSFTModuleOp):
+      block_arg = ir.BlockArgument(self.value)
       mod = owner.owner
       return ir.StringAttr(
-          ir.ArrayAttr(mod.attributes["argNames"])[self.value.arg_number]).value
+          ir.ArrayAttr(mod.attributes["argNames"])[block_arg.arg_number]).value
     if hasattr(self, "_name"):
       return self._name
 
@@ -140,14 +153,14 @@ class Value:
     self.value.owner.attributes[AppID.AttributeName] = appid._appid
 
 
-class RegularValue(Value):
+class RegularValue(PyCDEValue):
   pass
 
 
 _current_clock_context = ContextVar("current_clock_context")
 
 
-class ClockValue(Value):
+class ClockValue(PyCDEValue):
   """A clock signal."""
 
   __slots__ = ["_old_token"]
@@ -165,7 +178,7 @@ class ClockValue(Value):
     return _current_clock_context.get(None)
 
 
-class InOutValue(Value):
+class InOutValue(PyCDEValue):
   # Maintain a caching of the read value.
   read_value = None
 
@@ -205,7 +218,7 @@ def get_slice_bounds(size, idxOrSlice: Union[int, slice]):
   return idxs[0], idxs[1]
 
 
-class BitVectorValue(Value):
+class BitVectorValue(PyCDEValue):
 
   @singledispatchmethod
   def __getitem__(self, idxOrSlice: Union[int, slice]) -> BitVectorValue:
@@ -220,7 +233,7 @@ class BitVectorValue(Value):
         ret.name = f"{self.name}_{lo}upto{hi}"
       return ret
 
-  @__getitem__.register(Value)
+  @__getitem__.register(PyCDEValue)
   def __get_item__value(self, idx: BitVectorValue) -> BitVectorValue:
     """Get the single bit at `idx`."""
     return self.slice(idx, 1)
@@ -257,11 +270,174 @@ class BitVectorValue(Value):
   def __len__(self):
     return self.type.width
 
+  #  === Casting ===
 
-class ListValue(Value):
+  def _exec_cast(self, targetValueType, type_getter, width: int = None):
+
+    from .dialects import hwarith
+    if width is None:
+      width = self.type.width
+
+    if type(self) is targetValueType and width == self.type.width:
+      return self
+    return hwarith.CastOp(self.value, type_getter(width))
+
+  def as_int(self, width: int = None):
+    """
+    Returns this value as a signless integer. If 'width' is provided, this value
+    will be truncated to that width.
+    """
+    return self._exec_cast(BitVectorValue, ir.IntegerType.get_signless, width)
+
+  def as_sint(self, width: int = None):
+    """
+    Returns this value as a a signed integer. If 'width' is provided, this value
+    will be truncated or sign-extended to that width.
+    """
+    return self._exec_cast(SignedBitVectorValue, ir.IntegerType.get_signed,
+                           width)
+
+  def as_uint(self, width: int = None):
+    """
+    Returns this value as an unsigned integer. If 'width' is provided, this value
+    will be truncated or zero-padded to that width.
+    """
+    return self._exec_cast(UnsignedBitVectorValue, ir.IntegerType.get_unsigned,
+                           width)
+
+  #  === Infix operators ===
+
+  # Signless operations. These will all return signless values - a user is
+  # expected to reapply signedness semantics if needed.
+
+  # Generalized function for executing signless binary operations. Performs
+  # a check to ensure that the operands have signless semantics and are of
+  # identical width, and then calls the provided operator.
+  def __exec_signless_binop__(self, other, op, op_name: str):
+    w = max(self.type.width, other.type.width)
+    ret = op(self.as_int(w), other.as_int(w))
+    if self.name is not None and other.name is not None:
+      ret.name = f"{self.name}_{op_name}_{other.name}"
+    return ret
+
+  def __exec_signless_binop_nocast__(self, other, op, op_symbol: str,
+                                     op_name: str):
+    if not isinstance(other, PyCDEValue):
+      # Fall back to the default implementation in cases where we're not dealing
+      # with PyCDE value comparison.
+      return super().__eq__(other)
+
+    signednessOperand = None
+    if type(self) is not BitVectorValue:
+      signednessOperand = "LHS"
+    elif type(other) is not BitVectorValue:
+      signednessOperand = "RHS"
+
+    if signednessOperand is not None:
+      raise TypeError(
+          f"Operator '{op_symbol}' requires {signednessOperand} to be cast .as_int()."
+      )
+
+    w = max(self.type.width, other.type.width)
+    ret = op(self.as_int(w), other.as_int(w))
+    if self.name is not None and other.name is not None:
+      ret.name = f"{self.name}_{op_name}_{other.name}"
+    return ret
+
+  def __eq__(self, other):
+    from .dialects import comb
+    return self.__exec_signless_binop_nocast__(other, comb.EqOp, "==", "eq")
+
+  def __ne__(self, other):
+    from .dialects import comb
+    return self.__exec_signless_binop_nocast__(other, comb.NeOp, "!=", "neq")
+
+  def __and__(self, other):
+    from .dialects import comb
+    return self.__exec_signless_binop__(other, comb.AndOp, "and")
+
+  def __or__(self, other):
+    from .dialects import comb
+    return self.__exec_signless_binop__(other, comb.OrOp, "or")
+
+  def __xor__(self, other):
+    from .dialects import comb
+    return self.__exec_signless_binop__(other, comb.XorOp, "xor")
+
+  def __invert__(self):
+    from .pycde_types import types
+    ret = self.as_int() ^ types.int(self.type.width)(-1)
+    if self.name is not None:
+      ret.name = f"neg_{self.name}"
+    return ret
+
+  # Generalized function for executing sign-aware binary operations. Performs
+  # a check to ensure that the operands have signedness semantics, and then calls
+  # the provided operator.
+  def __exec_signedness_binop__(self, other, op, op_symbol: str, op_name: str):
+    signlessOperand = None
+    if type(self) is BitVectorValue:
+      signlessOperand = "LHS"
+    elif type(other) is BitVectorValue:
+      signlessOperand = "RHS"
+
+    if signlessOperand is not None:
+      raise TypeError(
+          f"Operator '{op_symbol}' is not supported on signless values. {signlessOperand} operand should be cast .as_sint()/.as_uint()."
+      )
+
+    ret = op(self, other)
+    if self.name is not None and other.name is not None:
+      ret.name = f"{self.name}_{op_name}_{other.name}"
+    return ret
+
+  def __add__(self, other):
+    from .dialects import hwarith
+    return self.__exec_signedness_binop__(other, hwarith.AddOp, "+", "plus")
+
+  def __sub__(self, other):
+    from .dialects import hwarith
+    return self.__exec_signedness_binop__(other, hwarith.SubOp, "-", "minus")
+
+  def __mul__(self, other):
+    from .dialects import hwarith
+    return self.__exec_signedness_binop__(other, hwarith.MulOp, "*", "mul")
+
+  def __truediv__(self, other):
+    from .dialects import hwarith
+    return self.__exec_signedness_binop__(other, hwarith.DivOp, "/", "div")
+
+
+class WidthExtendingBitVectorValue(BitVectorValue):
+  # TODO: This class will contain comparison operators (<, >, <=, >=)
+  pass
+
+  def __lt__(self, other):
+    assert False, "Unimplemented"
+
+  def __le__(self, other):
+    assert False, "Unimplemented"
+
+  def __ge__(self, other):
+    assert False, "Unimplemented"
+
+
+class UnsignedBitVectorValue(WidthExtendingBitVectorValue):
+  pass
+
+
+class SignedBitVectorValue(WidthExtendingBitVectorValue):
+
+  def __neg__(self):
+    from .dialects import comb
+    from .pycde_types import types
+    return self * types.int(self.type.width)(-1).as_sint()
+
+
+class ListValue(PyCDEValue):
 
   @singledispatchmethod
-  def __getitem__(self, idx: Union[int, BitVectorValue]) -> Value:
+  def __getitem__(self, idx: Union[int, BitVectorValue]) -> PyCDEValue:
     _validate_idx(self.type.size, idx)
     from .dialects import hw
     with get_user_loc():
@@ -286,7 +462,8 @@ class ListValue(Value):
         ret.name = f"{self.name}_{idxs[0]}upto{idxs[1]}"
       return ret
 
-  def slice(self, low_idx: Union[int, BitVectorValue], num_elems: int) -> Value:
+  def slice(self, low_idx: Union[int, BitVectorValue],
+            num_elems: int) -> PyCDEValue:
     """Get an array slice starting at `low_idx` and ending at `low_idx +
     num_elems`."""
     _validate_idx(self.type.size, low_idx)
@@ -350,7 +527,7 @@ class ListValue(Value):
     return np.roll(NDArray(from_value=self), shift=shift, axis=axis).to_circt()
 
 
-class StructValue(Value):
+class StructValue(PyCDEValue):
 
   def __getitem__(self, sub):
     if sub not in [name for name, _ in self.type.strip.fields]:
@@ -371,7 +548,7 @@ class StructValue(Value):
     raise AttributeError(f"'Value' object has no attribute '{attr}'")
 
 
-class ChannelValue(Value):
+class ChannelValue(PyCDEValue):
 
   def reg(self, clk, rst=None, name=None):
     raise TypeError("Cannot register a channel")
@@ -380,8 +557,8 @@ class ChannelValue(Value):
     from .pycde_types import types
     from .support import _obj_to_value
     ready = _obj_to_value(ready, types.i1)
-    unwrap_op = esi.UnwrapValidReady(self.type.inner_type, types.i1, self.value,
-                                     ready.value)
+    unwrap_op = esi.UnwrapValidReadyOp(self.type.inner_type, types.i1,
+                                       self.value, ready.value)
     return Value(unwrap_op.rawOutput), Value(unwrap_op.valid)
 
 
@@ -402,9 +579,9 @@ def wrap_opviews_with_values(dialect, module_name, excluded=[]):
 
         def create(*args, **kwargs):
           # If any of the arguments are Value objects, we need to convert them.
-          args = [v.value if isinstance(v, Value) else v for v in args]
+          args = [v.value if isinstance(v, PyCDEValue) else v for v in args]
           kwargs = {
-              k: v.value if isinstance(v, Value) else v
+              k: v.value if isinstance(v, PyCDEValue) else v
               for k, v in kwargs.items()
           }
           # Create the OpView.

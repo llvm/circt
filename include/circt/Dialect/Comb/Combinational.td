@@ -20,24 +20,24 @@ include "mlir/IR/EnumAttr.td"
 // Base class for binary operators.
 class BinOp<string mnemonic, list<Trait> traits = []> :
       CombOp<mnemonic, traits # [NoSideEffect]> {
-  let arguments = (ins HWIntegerType:$lhs, HWIntegerType:$rhs);
+  let arguments = (ins HWIntegerType:$lhs, HWIntegerType:$rhs, UnitAttr:$twoState);
   let results = (outs HWIntegerType:$result);
 
   let assemblyFormat =
-    "$lhs `,` $rhs  attr-dict `:` functional-type($args, $results)";
+    "$lhs `,` $rhs (`bin` $twoState^)? attr-dict `:` functional-type($args, $results)";
 }
 
 // Binary operator with uniform input/result types.
 class UTBinOp<string mnemonic, list<Trait> traits = []> :
       BinOp<mnemonic,
                traits # [SameTypeOperands, SameOperandsAndResultType]> {
-  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` qualified(type($result))";
+  let assemblyFormat = "(`bin` $twoState^)? $lhs `,` $rhs attr-dict `:` qualified(type($result))";
 }
 
 // Base class for variadic operators.
 class VariadicOp<string mnemonic, list<Trait> traits = []> :
       CombOp<mnemonic, traits # [NoSideEffect]> {
-  let arguments = (ins Variadic<HWIntegerType>:$inputs);
+  let arguments = (ins Variadic<HWIntegerType>:$inputs, UnitAttr:$twoState);
   let results = (outs HWIntegerType:$result);
 }
 
@@ -49,12 +49,12 @@ class UTVariadicOp<string mnemonic, list<Trait> traits = []> :
   let hasFolder = true;
   let hasVerifier = 1;
 
-  let assemblyFormat = "$inputs attr-dict `:` qualified(type($result))";
+  let assemblyFormat = "(`bin` $twoState^)? $inputs attr-dict `:` qualified(type($result))";
 
   let builders = [
-    OpBuilder<(ins "Value":$lhs, "Value":$rhs), [{
+    OpBuilder<(ins "Value":$lhs, "Value":$rhs, "bool":$twoState), [{
       return build($_builder, $_state, lhs.getType(),
-                   ValueRange{lhs, rhs}, ArrayRef<NamedAttribute>{});
+                   ValueRange{lhs, rhs}, twoState);
     }]>
   ];
 }
@@ -99,13 +99,20 @@ def ICmpPredicateULT : I64EnumAttrCase<"ult", 6>;
 def ICmpPredicateULE : I64EnumAttrCase<"ule", 7>;
 def ICmpPredicateUGT : I64EnumAttrCase<"ugt", 8>;
 def ICmpPredicateUGE : I64EnumAttrCase<"uge", 9>;
+// SV case equality
+def ICmpPredicateCEQ : I64EnumAttrCase<"ceq", 10>;
+def ICmpPredicateCNE : I64EnumAttrCase<"cne", 11>;
+// SV wild card equality
+def ICmpPredicateWEQ : I64EnumAttrCase<"weq", 12>;
+def ICmpPredicateWNE : I64EnumAttrCase<"wne", 13>;
 let cppNamespace = "circt::comb" in
 def ICmpPredicate : I64EnumAttr<
     "ICmpPredicate",
     "hw.icmp comparison predicate",
     [ICmpPredicateEQ, ICmpPredicateNE, ICmpPredicateSLT, ICmpPredicateSLE,
      ICmpPredicateSGT, ICmpPredicateSGE, ICmpPredicateULT, ICmpPredicateULE,
-     ICmpPredicateUGT, ICmpPredicateUGE]>;
+     ICmpPredicateUGT, ICmpPredicateUGE, ICmpPredicateCEQ, ICmpPredicateCNE,
+     ICmpPredicateWEQ, ICmpPredicateWNE]>;
 
 def ICmpOp : CombOp<"icmp", [NoSideEffect, SameTypeOperands]> {
   let summary = "Compare two integer values";
@@ -120,10 +127,10 @@ def ICmpOp : CombOp<"icmp", [NoSideEffect, SameTypeOperands]> {
   }];
 
   let arguments = (ins ICmpPredicate:$predicate,
-                   HWIntegerType:$lhs, HWIntegerType:$rhs);
+                   HWIntegerType:$lhs, HWIntegerType:$rhs, UnitAttr:$twoState);
   let results = (outs I1:$result);
 
-  let assemblyFormat = "$predicate $lhs `,` $rhs  attr-dict `:` qualified(type($lhs))";
+  let assemblyFormat = "(`bin` $twoState^)? $predicate $lhs `,` $rhs attr-dict `:` qualified(type($lhs))";
 
   let hasFolder = true;
   let hasCanonicalizeMethod = true;
@@ -157,11 +164,11 @@ def ICmpOp : CombOp<"icmp", [NoSideEffect, SameTypeOperands]> {
 // Base class for unary reduction operations that produce an i1.
 class UnaryI1ReductionOp<string mnemonic, list<Trait> traits = []> :
       CombOp<mnemonic, traits # [NoSideEffect]> {
-  let arguments = (ins HWIntegerType:$input);
+  let arguments = (ins HWIntegerType:$input, UnitAttr:$twoState);
   let results = (outs I1:$result);
   let hasFolder = 1;
 
-  let assemblyFormat = "$input attr-dict `:` qualified(type($input))";
+  let assemblyFormat = "(`bin` $twoState^)? $input attr-dict `:` qualified(type($input))";
 }
 
 def ParityOp : UnaryI1ReductionOp<"parity">;
@@ -196,12 +203,14 @@ def ExtractOp : CombOp<"extract", [NoSideEffect]> {
 //===----------------------------------------------------------------------===//
 // Other Operations
 //===----------------------------------------------------------------------===//
-
-def ConcatOp : VariadicOp<"concat", [InferTypeOpInterface]> {
+def ConcatOp : CombOp<"concat", [InferTypeOpInterface, NoSideEffect]> {
   let summary = "Concatenate a variadic list of operands together.";
   let description = [{
     See the comb rationale document for details on operand ordering.
   }];
+
+  let arguments = (ins Variadic<HWIntegerType>:$inputs);
+  let results = (outs HWIntegerType:$result);
 
   let hasFolder = true;
   let hasCanonicalizeMethod = true;
@@ -251,7 +260,7 @@ def ReplicateOp : CombOp<"replicate", [NoSideEffect]> {
   let extraClassDeclaration = [{
     /// Returns the number of times the operand is replicated.
     size_t getMultiple() {
-      auto opWidth = input().getType().cast<IntegerType>().getWidth();
+      auto opWidth = getInput().getType().cast<IntegerType>().getWidth();
       return getType().getWidth()/opWidth;
     }
   }];
@@ -268,11 +277,11 @@ def MuxOp : CombOp<"mux",
   }];
 
   let arguments = (ins I1:$cond, AnyType:$trueValue,
-                       AnyType:$falseValue);
+                       AnyType:$falseValue, UnitAttr:$twoState);
   let results = (outs AnyType:$result);
 
   let assemblyFormat =
-    "$cond `,` $trueValue `,` $falseValue attr-dict `:` qualified(type($result))";
+    "(`bin` $twoState^)? $cond `,` $trueValue `,` $falseValue  attr-dict `:` qualified(type($result))";
 
   let hasFolder = true;
   let hasCanonicalizeMethod = true;

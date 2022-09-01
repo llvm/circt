@@ -88,20 +88,17 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
       disallowPortDeclSharing = true;
     } else if (option == "printDebugInfo") {
       printDebugInfo = true;
-    } else if (option == "spillWiresAtPrepare") {
-      spillWiresAtPrepare = true;
+    } else if (option == "useOldEmissionMode") {
+      useOldEmissionMode = true;
+    } else if (option.consume_front("maximumNumberOfVariadicOperands=")) {
+      if (option.getAsInteger(10, maximumNumberOfVariadicOperands)) {
+        errorHandler("expected integer for number of variadic operands");
+        maximumNumberOfVariadicOperands = DEFAULT_VARIADIC_OPERAND_LIMIT;
+      }
     } else {
       errorHandler(llvm::Twine("unknown style option \'") + option + "\'");
       // We continue parsing options after a failure.
     }
-  }
-
-  if (spillWiresAtPrepare && !disallowLocalVariables) {
-    // FIXME: Currently we cannot spill temporaries in procedural regions. Hence
-    // `spillWiresAtPrepare` must be used together with
-    // `disallowLocalVariables`.
-    errorHandler(llvm::Twine(
-        "`spillWiresAtPrepare` must be used with `disallowLocalVariables`"));
   }
 }
 
@@ -130,8 +127,8 @@ std::string LoweringOptions::toString() const {
     options += "disallowPortDeclSharing,";
   if (printDebugInfo)
     options += "printDebugInfo,";
-  if (spillWiresAtPrepare)
-    options += "spillWiresAtPrepare,";
+  if (useOldEmissionMode)
+    options += "useOldEmissionMode,";
 
   if (emittedLineLength != DEFAULT_LINE_LENGTH)
     options += "emittedLineLength=" + std::to_string(emittedLineLength) + ',';
@@ -141,6 +138,9 @@ std::string LoweringOptions::toString() const {
   if (maximumNumberOfTermsInConcat != DEFAULT_CONCAT_TERM_LIMIT)
     options += "maximumNumberOfTermsInConcat=" +
                std::to_string(maximumNumberOfTermsInConcat) + ',';
+  if (maximumNumberOfVariadicOperands != DEFAULT_VARIADIC_OPERAND_LIMIT)
+    options += "maximumNumberOfVariadicOperands=" +
+               std::to_string(maximumNumberOfVariadicOperands) + ',';
 
   // Remove a trailing comma if present.
   if (!options.empty()) {
@@ -195,6 +195,7 @@ struct LoweringCLOptions {
           "disallowLocalVariables, verifLabels, emittedLineLength=<n>, "
           "maximumNumberOfTermsPerExpression=<n>, "
           "maximumNumberOfTermsInConcat=<n>, explicitBitcast, "
+          "maximumNumberOfVariadicOperands=<n>, "
           "emitReplicatedOpsToHeader, "
           "locationInfoStyle={plain,wrapInAtSquareBracket,none}, "
           "disallowPortDeclSharing, printDebugInfo"),

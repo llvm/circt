@@ -98,7 +98,7 @@ firrtl.circuit "foo" {
 // expected-error @+1 {{requires one region}}
 "firrtl.module"() ( { }, { })
    {sym_name = "foo", portTypes = [!firrtl.uint], portDirections = 1 : i1,
-    portNames = ["in0"], portAnnotations = [], portSyms = [""]} : () -> ()
+    portNames = ["in0"], portAnnotations = [], portSyms = []} : () -> ()
 }
 
 
@@ -109,7 +109,7 @@ firrtl.circuit "foo" {
 "firrtl.module"() ( {
   ^entry:
 }) {sym_name = "foo", portTypes = [!firrtl.uint], portDirections = 1 : i1,
-    portNames = ["in0"], portAnnotations = [], portSyms = [""]} : () -> ()
+    portNames = ["in0"], portAnnotations = [], portSyms = []} : () -> ()
 }
 
 // -----
@@ -119,7 +119,7 @@ firrtl.circuit "foo" {
 "firrtl.module"() ( {
   ^entry(%a: i1):
 }) {sym_name = "foo", portTypes = [!firrtl.uint], portDirections = 1 : i1,
-    portNames = ["in0"], portAnnotations = [], portSyms = [""]} : () -> ()
+    portNames = ["in0"], portAnnotations = [], portSyms = []} : () -> ()
 }
 
 // -----
@@ -782,7 +782,7 @@ firrtl.circuit "Top"   {
 firrtl.circuit "Top" {
   firrtl.module @Top (in %in : !firrtl.uint) {
     %a = firrtl.wire : !firrtl.uint
-    // expected-error @+1 {{op operand #0 must be a sized type}}
+    // expected-error @+1 {{op operand #0 must be a sized base or ref type}}
     firrtl.strictconnect %a, %in : !firrtl.uint
   }
 }
@@ -791,7 +791,7 @@ firrtl.circuit "Top" {
 
 firrtl.circuit "AnalogRegister" {
   firrtl.module @AnalogRegister(in %clock: !firrtl.clock) {
-    // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive type that does not contain analog, but got '!firrtl.analog'}}
+    // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive base type that does not contain analog, but got '!firrtl.analog'}}
     %r = firrtl.reg %clock : !firrtl.analog
   }
 }
@@ -800,7 +800,7 @@ firrtl.circuit "AnalogRegister" {
 
 firrtl.circuit "AnalogVectorRegister" {
   firrtl.module @AnalogVectorRegister(in %clock: !firrtl.clock) {
-    // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive type that does not contain analog, but got '!firrtl.vector<analog, 2>'}}
+    // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive base type that does not contain analog, but got '!firrtl.vector<analog, 2>'}}
     %r = firrtl.reg %clock : !firrtl.vector<analog, 2>
   }
 }
@@ -822,3 +822,254 @@ firrtl.circuit "MismatchedRegister" {
 firrtl.circuit "private_main" {
   firrtl.module private @private_main() {}
 }
+
+// -----
+
+firrtl.circuit "InnerSymAttr" {
+  firrtl.module @InnerSymAttr() {
+    // expected-error @+1 {{cannot assign multiple symbol names to the field id:'2'}}
+    %w3 = firrtl.wire sym [<@w3,2,public>,<@x2,2,private>,<@syh2,0,public>] : !firrtl.bundle<a: uint<1>, b: uint<1>, c: uint<1>, d: uint<1>>
+  }
+}
+
+// -----
+
+firrtl.circuit "InnerSymAttr2" {
+  firrtl.module @InnerSymAttr2() {
+    // expected-error @+1 {{cannot reuse symbol name:'w3'}}
+    %w4 = firrtl.wire sym [<@w3,1,public>,<@w3,2,private>,<@syh2,0,public>] : !firrtl.bundle<a: uint<1>, b: uint<1>, c: uint<1>, d: uint<1>>
+  }
+}
+
+// -----
+firrtl.circuit "Parent" {
+  firrtl.module @Child() {
+    %w = firrtl.wire sym @w : !firrtl.uint<1>
+  }
+  firrtl.module @Parent() {
+    // expected-error @+1 {{cannot assign symbols to non-zero field id, for ops with zero or multiple results}}
+    firrtl.instance child sym [<@w3,1,public>,<@w3,2,private>,<@syh2,0,public>] @Child()
+  }
+}
+
+// -----
+
+firrtl.circuit "Foo" {
+  firrtl.module @Foo() {
+  // expected-error @+1 {{field id:'1' is greater than the maximum field id:'0'}}
+    %m = firrtl.mem sym [<@w3,1,public>,<@w3,2,private>,<@syh2,0,public>] Undefined {depth = 32 : i64, name = "m", portNames = ["rw"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<>
+  }
+}
+
+// -----
+
+firrtl.circuit "Foo"   {
+  firrtl.module @Bar(in %a: !firrtl.uint<1>, out %b: !firrtl.bundle<baz: uint<1>, qux: uint<1>>, out %c: !firrtl.uint<1>) {
+  }
+  firrtl.module @Foo() {
+    // expected-error @+1 {{cannot assign symbols to non-zero field id, for ops with zero or multiple results}}
+    %bar_a, %bar_b, %bar_c = firrtl.instance bar sym [<@w3,1,public>,<@w3,2,private>,<@syh2,0,public>] @Bar(in a: !firrtl.uint<1> [{one}], out b: !firrtl.bundle<baz: uint<1>, qux: uint<1>> [{circt.fieldID = 1 : i32, two}], out c: !firrtl.uint<1> [{four}])
+  }
+}
+
+// -----
+
+firrtl.circuit "DupSyms" {
+  firrtl.module @DupSyms() {
+    // expected-note @+1 {{see existing inner symbol definition here}}
+    %w1 = firrtl.wire sym @x : !firrtl.uint<2>
+    // expected-error @+1 {{redefinition of inner symbol named 'x'}}
+    %w2 = firrtl.wire sym @x : !firrtl.uint<2>
+  }
+}
+
+// -----
+
+firrtl.circuit "DupSymPort" {
+  // expected-note @+1 {{see existing inner symbol definition here}}
+  firrtl.module @DupSymPort(in %a : !firrtl.uint<1> sym @x) {
+    // expected-error @+1 {{redefinition of inner symbol named 'x'}}
+    %w1 = firrtl.wire sym @x : !firrtl.uint<2>
+  }
+}
+
+// -----
+
+firrtl.circuit "DupSymField" {
+  firrtl.module @DupSymField() {
+    // expected-note @+1 {{see existing inner symbol definition here}}
+    %w1 = firrtl.wire sym @x : !firrtl.uint<2>
+    // expected-error @+1 {{redefinition of inner symbol named 'x'}}
+    %w3 = firrtl.wire sym [<@x,1,public>] : !firrtl.vector<uint<1>,1>
+  }
+}
+
+// -----
+// Node ops cannot have reference type
+
+firrtl.circuit "NonRefNode" {
+firrtl.module @NonRefNode(in %in1 : !firrtl.ref<uint<8>>) {
+  // expected-error @+1 {{'firrtl.node' op operand #0 must be a passive base type (contain no flips), but got '!firrtl.ref<uint<8>>'}}
+  %n1 = firrtl.node %in1 : !firrtl.ref<uint<8>>
+  %a = firrtl.wire : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>
+}
+}
+
+// -----
+// Registers cannot be reference type.
+
+firrtl.circuit "NonRefRegister" {
+  firrtl.module @NonRefRegister(in %clock: !firrtl.clock) {
+    // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive base type that does not contain analog}}
+    %r = firrtl.reg %clock : !firrtl.ref<uint<8>>
+  }
+}
+
+// -----
+// Wire ops cannot have reference type
+
+firrtl.circuit "MyView" {
+  firrtl.module @MyView() {
+  // expected-error @+1 {{'firrtl.wire' op result #0 must be a base type, but got '!firrtl.ref<uint<1>>'}}
+    %ref_in1 = firrtl.wire : !firrtl.ref<uint<1>>
+    %in1 = firrtl.wire : !firrtl.uint<1>
+  }
+}
+
+// -----
+// Ref types must be ground
+
+firrtl.circuit "RefBundle" {
+  // expected-error @+1 {{reference base type must be ground}}
+  firrtl.module @RefBundle(in %in1 : !firrtl.ref<bundle<valid: uint<1>>>) {
+  }
+}
+
+// -----
+// Ref types cannot be ref
+
+firrtl.circuit "RefRef" {
+  // expected-error @+1 {{expected base type, found '!firrtl.ref<uint<1>>'}}
+  firrtl.module @RefRef(in %in1 : !firrtl.ref<ref<uint<1>>>) {
+  }
+}
+
+// -----
+// No ref in bundle
+
+firrtl.circuit "RefField" {
+  // expected-error @+1 {{expected base type, found '!firrtl.ref<uint<1>>'}}
+  firrtl.module @RefField(in %in1 : !firrtl.bundle<r: ref<uint<1>>>) {
+  }
+}
+
+// -----
+// Invalid
+
+firrtl.circuit "InvalidRef" {
+  firrtl.module @InvalidRef() {
+    // expected-error @+1 {{'firrtl.invalidvalue' op result #0 must be a base type, but got '!firrtl.ref<uint<1>>'}}
+    %0 = firrtl.invalidvalue : !firrtl.ref<uint<1>>
+  }
+}
+
+// -----
+// Mux ref
+
+firrtl.circuit "MuxRef" {
+  firrtl.module @MuxRef(in %a: !firrtl.ref<uint<1>>, in %b: !firrtl.ref<uint<1>>,
+                          in %cond: !firrtl.uint<1>) {
+    // expected-error @+1 {{'firrtl.mux' op operand #1 must be a passive base type (contain no flips), but got '!firrtl.ref<uint<1>>'}}
+    %a_or_b = firrtl.mux(%cond, %a, %b) : (!firrtl.uint<1>, !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>) -> !firrtl.ref<uint<1>>
+  }
+}
+
+// -----
+// Bitcast ref
+
+firrtl.circuit "BitcastRef" {
+  firrtl.module @BitcastRef(in %a: !firrtl.ref<uint<1>>) {
+    // expected-error @+1 {{'firrtl.bitcast' op operand #0 must be a base type, but got '!firrtl.ref<uint<1>>}}
+    %0 = firrtl.bitcast %a : (!firrtl.ref<uint<1>>) -> (!firrtl.ref<uint<1>>)
+  }
+}
+
+// -----
+// Cannot strictconnect unsized types, even when ref's.
+
+firrtl.circuit "Top" {
+  firrtl.module @Foo (in %in: !firrtl.ref<uint>) {}
+  firrtl.module @Top (in %in : !firrtl.ref<uint>) {
+    %foo_in = firrtl.instance foo @Foo(in in: !firrtl.ref<uint>)
+    // expected-error @+1 {{op operand #0 must be a sized base or ref type}}
+    firrtl.strictconnect %foo_in, %in : !firrtl.ref<uint>
+  }
+}
+
+// -----
+// Cannot connect different ref types
+
+firrtl.circuit "Top" {
+  firrtl.module @Foo (in %in: !firrtl.ref<uint<2>>) {}
+  firrtl.module @Top (in %in: !firrtl.ref<uint<1>>) {
+    %foo_in = firrtl.instance foo @Foo(in in: !firrtl.ref<uint<2>>)
+    // expected-error @+1 {{may not connect different non-base types}}
+    firrtl.connect %foo_in, %in : !firrtl.ref<uint<2>>, !firrtl.ref<uint<1>>
+  }
+}
+
+// -----
+// Check flow semantics for ref.send
+
+firrtl.circuit "Foo" {
+  // expected-note @+1 {{destination was defined here}}
+  firrtl.module @Foo(in  %_a: !firrtl.ref<uint<1>>) {
+    %a = firrtl.wire : !firrtl.uint<1>
+    %1 = firrtl.ref.send %a : !firrtl.uint<1>
+    // expected-error @+1 {{connect has invalid flow: the destination expression "_a" has source flow, expected sink or duplex flow}}
+    firrtl.strictconnect %_a, %1 : !firrtl.ref<uint<1>>
+  }
+}
+
+// -----
+// Output reference port cannot be reused
+
+firrtl.circuit "Bar" {
+  firrtl.module @Bar(out %_a: !firrtl.ref<uint<1>>) {
+    %x = firrtl.instance x @Bar2(out _a: !firrtl.ref<uint<1>>)
+    %y = firrtl.instance y @Bar2(out _a: !firrtl.ref<uint<1>>)
+    // expected-error @+1 {{output reference port cannot be reused by multiple operations, it can only capture a unique dataflow}}
+    firrtl.strictconnect %_a, %x : !firrtl.ref<uint<1>>
+    firrtl.strictconnect %_a, %y : !firrtl.ref<uint<1>>
+  }
+}
+
+// -----
+// Output reference port cannot be reused
+
+firrtl.circuit "Bar" {
+  firrtl.module @Bar(out %_a: !firrtl.ref<uint<1>>) {
+    %x = firrtl.instance x @Bar2(out _a: !firrtl.ref<uint<1>>)
+    %y = firrtl.wire : !firrtl.uint<1>
+    // expected-error @+1 {{output reference port cannot be reused by multiple operations, it can only capture a unique dataflow}}
+    firrtl.strictconnect %_a, %x : !firrtl.ref<uint<1>>
+    %1 = firrtl.ref.send %y : !firrtl.uint<1>
+    firrtl.strictconnect %_a, %1 : !firrtl.ref<uint<1>>
+  }
+}
+
+// -----
+// Output reference port cannot be reused
+
+firrtl.circuit "Bar" {
+  firrtl.module @Bar(out %_a: !firrtl.ref<uint<1>>) {
+    %x = firrtl.wire : !firrtl.uint<1>
+    %y = firrtl.wire : !firrtl.uint<1>
+    %1 = firrtl.ref.send %x : !firrtl.uint<1>
+    %2 = firrtl.ref.send %y : !firrtl.uint<1>
+    // expected-error @+1 {{output reference port cannot be reused by multiple operations, it can only capture a unique dataflow}}
+    firrtl.strictconnect %_a, %1 : !firrtl.ref<uint<1>>
+    firrtl.strictconnect %_a, %2 : !firrtl.ref<uint<1>>
+  }
+}
+

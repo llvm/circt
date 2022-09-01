@@ -24,7 +24,8 @@ class Pass;
 namespace circt {
 
 std::unique_ptr<mlir::Pass>
-createLowerFIRRTLToHWPass(bool enableAnnotationWarning = false);
+createLowerFIRRTLToHWPass(bool enableAnnotationWarning = false,
+                          bool emitChiselAssertsAsSVA = false);
 
 } // namespace circt
 

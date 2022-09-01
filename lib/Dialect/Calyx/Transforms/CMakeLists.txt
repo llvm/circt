@@ -14,7 +14,7 @@ add_circt_dialect_library(CIRCTCalyxTransforms
   CIRCTCalyx
   CIRCTComb
   CIRCTHW
-  CIRCTStaticLogicOps
+  CIRCTPipelineOps
   CIRCTSupport
   MLIRArithmeticDialect
   MLIRFuncDialect

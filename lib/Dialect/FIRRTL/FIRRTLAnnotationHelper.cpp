@@ -11,8 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotationHelper.h"
-#include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
-#include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;
 using namespace firrtl;
@@ -24,7 +22,7 @@ using llvm::StringRef;
 // a return value.
 static LogicalResult updateExpandedPort(StringRef field, AnnoTarget &ref) {
   if (auto mem = dyn_cast<MemOp>(ref.getOp()))
-    for (size_t p = 0, pe = mem.portNames().size(); p < pe; ++p)
+    for (size_t p = 0, pe = mem.getPortNames().size(); p < pe; ++p)
       if (mem.getPortNameStr(p) == field) {
         ref = PortAnnoTarget(mem, p);
         return success();
@@ -65,7 +63,7 @@ static FailureOr<unsigned> findVectorElement(Operation *op, Type type,
   auto vec = type.dyn_cast<FVectorType>();
   if (!vec) {
     op->emitError("index access '")
-        << index << "' into non-vector type '" << vec << "'";
+        << index << "' into non-vector type '" << type << "'";
     return failure();
   }
   return index;
@@ -77,7 +75,6 @@ static FailureOr<unsigned> findFieldID(AnnoTarget &ref,
     return 0;
 
   auto *op = ref.getOp();
-  auto type = ref.getType();
   auto fieldIdx = 0;
   // The first field for some ops refers to expanded return values.
   if (isa<MemOp>(ref.getOp())) {
@@ -86,6 +83,7 @@ static FailureOr<unsigned> findFieldID(AnnoTarget &ref,
     tokens = tokens.drop_front();
   }
 
+  auto type = ref.getType();
   for (auto token : tokens) {
     if (token.isIndex) {
       auto result = findVectorElement(op, type, token.name);
@@ -160,9 +158,9 @@ Optional<AnnoPathValue> firrtl::resolveEntities(TokenAnnoTarget path,
                                                 SymbolTable &symTbl,
                                                 CircuitTargetCache &cache) {
   // Validate circuit name.
-  if (!path.circuit.empty() && circuit.name() != path.circuit) {
-    circuit->emitError("circuit name doesn't match annotation '")
-        << path.circuit << '\'';
+  if (!path.circuit.empty() && circuit.getName() != path.circuit) {
+    mlir::emitError(circuit.getLoc())
+        << "circuit name doesn't match annotation '" << path.circuit << '\'';
     return {};
   }
   // Circuit only target.
@@ -177,13 +175,14 @@ Optional<AnnoPathValue> firrtl::resolveEntities(TokenAnnoTarget path,
   for (auto p : path.instances) {
     auto mod = symTbl.lookup<FModuleOp>(p.first);
     if (!mod) {
-      circuit->emitError("module doesn't exist '") << p.first << '\'';
+      mlir::emitError(circuit.getLoc())
+          << "module doesn't exist '" << p.first << '\'';
       return {};
     }
     auto resolved = cache.lookup(mod, p.second);
     if (!resolved || !isa<InstanceOp>(resolved.getOp())) {
-      circuit.emitError("cannot find instance '")
-          << p.second << "' in '" << mod.getName() << "'";
+      mlir::emitError(circuit.getLoc()) << "cannot find instance '" << p.second
+                                        << "' in '" << mod.getName() << "'";
       return {};
     }
     instances.push_back(cast<InstanceOp>(resolved.getOp()));
@@ -191,7 +190,8 @@ Optional<AnnoPathValue> firrtl::resolveEntities(TokenAnnoTarget path,
   // The final module is where the named target is (or is the named target).
   auto mod = symTbl.lookup<FModuleLike>(path.module);
   if (!mod) {
-    circuit->emitError("module doesn't exist '") << path.module << '\'';
+    mlir::emitError(circuit.getLoc())
+        << "module doesn't exist '" << path.module << '\'';
     return {};
   }
   AnnoTarget ref;
@@ -201,8 +201,8 @@ Optional<AnnoPathValue> firrtl::resolveEntities(TokenAnnoTarget path,
   } else {
     ref = cache.lookup(mod, path.name);
     if (!ref) {
-      circuit->emitError("cannot find name '")
-          << path.name << "' in " << mod.moduleName();
+      mlir::emitError(circuit.getLoc())
+          << "cannot find name '" << path.name << "' in " << mod.moduleName();
       return {};
     }
   }
@@ -221,6 +221,10 @@ Optional<AnnoPathValue> firrtl::resolveEntities(TokenAnnoTarget path,
     auto target = instance.getReferencedModule(symTbl);
     if (component.empty()) {
       ref = OpAnnoTarget(instance.getReferencedModule(symTbl));
+    } else if (component.front().isIndex) {
+      mlir::emitError(circuit.getLoc())
+          << "illegal target '" << path.str() << "' indexes into an instance";
+      return {};
     } else {
       auto field = component.front().name;
       ref = AnnoTarget();
@@ -230,8 +234,9 @@ Optional<AnnoPathValue> firrtl::resolveEntities(TokenAnnoTarget path,
           break;
         }
       if (!ref) {
-        circuit->emitError("!cannot find port '")
-            << field << "' in module " << target.moduleName();
+        mlir::emitError(circuit.getLoc())
+            << "!cannot find port '" << field << "' in module "
+            << target.moduleName();
         return {};
       }
       component = component.drop_front();
@@ -251,6 +256,9 @@ Optional<AnnoPathValue> firrtl::resolveEntities(TokenAnnoTarget path,
 /// split a target string into it constituent parts.  This is the primary parser
 /// for targets.
 Optional<TokenAnnoTarget> firrtl::tokenizePath(StringRef origTarget) {
+  // An empty string is not a legal target.
+  if (origTarget.empty())
+    return {};
   StringRef target = origTarget;
   TokenAnnoTarget retval;
   std::tie(retval.circuit, target) = target.split('|');
@@ -296,11 +304,52 @@ Optional<AnnoPathValue> firrtl::resolvePath(StringRef rawPath,
 
   auto tokens = tokenizePath(path);
   if (!tokens) {
-    circuit->emitError("Cannot tokenize annotation path ") << rawPath;
+    mlir::emitError(circuit.getLoc())
+        << "Cannot tokenize annotation path " << rawPath;
     return {};
   }
 
   return resolveEntities(*tokens, circuit, symTbl, cache);
+}
+
+InstanceOp firrtl::addPortsToModule(
+    FModuleOp mod, InstanceOp instOnPath, FIRRTLType portType, Direction dir,
+    StringRef newName, InstancePathCache &instancePathcache,
+    MLIRContext *context,
+    llvm::function_ref<ModuleNamespace &(FModuleLike)> getNamespace,
+    AnnoPathValue *instancePathToUpdate, CircuitTargetCache *targetCaches) {
+  // To store the cloned version of `instOnPath`.
+  InstanceOp clonedInstOnPath;
+  // Get a new port name from the Namespace.
+  auto portName = [&](FModuleOp nameForMod) {
+    return StringAttr::get(context,
+                           getNamespace(nameForMod).newName("_gen_" + newName));
+  };
+  // The port number for the new port.
+  unsigned portNo = mod.getNumPorts();
+  PortInfo portInfo = {portName(mod), portType, dir, {}, mod.getLoc()};
+  mod.insertPorts({{portNo, portInfo}});
+  if (targetCaches)
+    targetCaches->insertPort(mod, portNo);
+  // Now update all the instances of `mod`.
+  for (auto *use : instancePathcache.instanceGraph.lookup(mod)->uses()) {
+    InstanceOp useInst = cast<InstanceOp>(use->getInstance());
+    auto clonedInst = useInst.cloneAndInsertPorts({{portNo, portInfo}});
+    if (useInst == instOnPath)
+      clonedInstOnPath = clonedInst;
+    // Update all occurences of old instance.
+    instancePathcache.replaceInstance(useInst, clonedInst);
+    if (targetCaches)
+      targetCaches->replaceOp(useInst, clonedInst);
+    if (instancePathToUpdate) {
+      auto *iter = llvm::find(instancePathToUpdate->instances, useInst);
+      if (iter != instancePathToUpdate->instances.end())
+        *iter = clonedInst;
+    }
+    useInst->replaceAllUsesWith(clonedInst.getResults().drop_back());
+    useInst->erase();
+  }
+  return clonedInstOnPath;
 }
 
 //===----------------------------------------------------------------------===//
@@ -313,13 +362,5 @@ void AnnoTargetCache::gatherTargets(FModuleLike mod) {
     targets.insert({p.value().name, PortAnnoTarget(mod, p.index())});
 
   // And named things
-  mod.walk([&](Operation *op) {
-    TypeSwitch<Operation *>(op)
-        .Case<InstanceOp, MemOp, NodeOp, RegOp, RegResetOp, WireOp, CombMemOp,
-              SeqMemOp, MemoryPortOp>([&](auto op) {
-          // To be safe, check attribute and non-empty name before adding.
-          if (auto name = op.nameAttr(); name && !name.getValue().empty())
-            targets.insert({name, OpAnnoTarget(op)});
-        });
-  });
+  mod.walk([&](Operation *op) { insertOp(op); });
 }

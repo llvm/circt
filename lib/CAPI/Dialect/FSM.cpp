@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt-c/Dialect/FSM.h"
+#include "circt/Conversion/Passes.h"
 #include "circt/Dialect/FSM/FSMDialect.h"
 #include "circt/Dialect/FSM/FSMPasses.h"
 #include "mlir/CAPI/IR.h"
@@ -13,5 +14,8 @@
 
 using namespace circt::fsm;
 
-void registerFSMPasses() { registerPasses(); }
+void registerFSMPasses() {
+  registerPasses();
+  circt::registerConvertFSMToSVPass();
+}
 MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(FSM, fsm, FSMDialect)

@@ -42,16 +42,16 @@ def EqualTypes : Constraint<CPred<"$0.getType() == $1.getType()">>;
 
 // Constraint that enforces types of known width
 def KnownWidth : Constraint<CPred<[{
-  $0.getType().isa<FIRRTLType>() &&
-    $0.getType().cast<FIRRTLType>().getBitWidthOrSentinel() >= 0
+  $0.getType().isa<FIRRTLBaseType>() &&
+    $0.getType().cast<FIRRTLBaseType>().getBitWidthOrSentinel() >= 0
   }]>>;
 
 /// Constraint that matches a zero ConstantOp or SpecialConstantOp.
 def ZeroConstantOp : Constraint<Or<[
   CPred<"$0.getDefiningOp<ConstantOp>() &&"
-        "$0.getDefiningOp<ConstantOp>().value().isZero()">,
+        "$0.getDefiningOp<ConstantOp>().getValue().isZero()">,
   CPred<"$0.getDefiningOp<SpecialConstantOp>() &&"
-        "$0.getDefiningOp<SpecialConstantOp>().value() == false">
+        "$0.getDefiningOp<SpecialConstantOp>().getValue() == false">
 ]>>;
 
 def GetEmptyString : NativeCodeCall<
@@ -117,6 +117,6 @@ def RegResetWithZeroReset : Pat<
 // useful to pad another operation up to the width of the original operation.
 def GetWidthAsIntAttr : NativeCodeCall<
   "IntegerAttr::get(IntegerType::get($_builder.getContext(), 32, IntegerType::Signless), "
-                    "$0.getType().cast<FIRRTLType>().getBitWidthOrSentinel())">;
+                    "$0.getType().cast<FIRRTLBaseType>().getBitWidthOrSentinel())">;
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLCANONICALIZATION_TD

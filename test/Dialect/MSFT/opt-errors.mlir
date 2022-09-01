@@ -45,3 +45,15 @@ msft.module @M {} (%x : i32) {
   comb.add %x, %x {msft.appid=#msft.appid<"add"[0]>} : i32
   msft.output
 }
+
+// -----
+
+msft.module @foo {} (%in0 : i32, %clk : i1) -> (out: i32) {
+// expected-error @+1 {{'msft.hlc.linear' op expected only hw, comb, and msft dialect ops inside the datapath.}}
+  %0 = msft.hlc.linear clock %clk : i32 {
+    %c1_i1 = hw.constant 1 : i1
+    %0 = seq.compreg %in0, %c1_i1 : i32
+    msft.output %0 : i32
+  }
+  msft.output %0 : i32
+}

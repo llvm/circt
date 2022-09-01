@@ -28,16 +28,24 @@ void circt::firrtl::emitConnect(OpBuilder &builder, Location loc, Value dst,
 /// Emit a connect between two values.
 void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
                                 Value src) {
-  auto dstType = dst.getType().cast<FIRRTLType>();
-  auto srcType = src.getType().cast<FIRRTLType>();
+  auto dstFType = dst.getType().cast<FIRRTLType>();
+  auto srcFType = src.getType().cast<FIRRTLType>();
+  auto dstType = dstFType.dyn_cast<FIRRTLBaseType>();
+  auto srcType = srcFType.dyn_cast<FIRRTLBaseType>();
 
   // If the types are the exact same we can just connect them.
-  if (dstType == srcType) {
+  if (dstFType == srcFType) {
     // Strict connect does not allow uninferred widths.
-    if (dstType.hasUninferredWidth())
+    if (dstType && dstType.hasUninferredWidth())
       builder.create<ConnectOp>(dst, src);
     else
       builder.create<StrictConnectOp>(dst, src);
+    return;
+  }
+
+  // Non-base types don't need special handling.
+  if (!srcType || !dstType) {
+    builder.create<ConnectOp>(dst, src);
     return;
   }
 
@@ -139,17 +147,14 @@ IntegerAttr circt::firrtl::getIntZerosAttr(Type type) {
 Value circt::firrtl::getDriverFromConnect(Value val) {
   for (auto *user : val.getUsers()) {
     if (auto connect = dyn_cast<FConnectLike>(user)) {
-      if (connect.dest() != val)
+      if (connect.getDest() != val)
         continue;
-      return connect.src();
+      return connect.getSrc();
     }
   }
   return nullptr;
 }
 
-/// Return the value that drives another FIRRTL value within module scope.  This
-/// is parameterized by looking through or not through certain constructs.  This
-/// assumes a single driver and should only be run after `ExpandWhens`.
 Value circt::firrtl::getModuleScopedDriver(Value val, bool lookThroughWires,
                                            bool lookThroughNodes,
                                            bool lookThroughCasts) {
@@ -160,9 +165,9 @@ Value circt::firrtl::getModuleScopedDriver(Value val, bool lookThroughWires,
   auto updateVal = [&](Value thisVal) {
     for (auto *user : thisVal.getUsers()) {
       if (auto connect = dyn_cast<FConnectLike>(user)) {
-        if (connect.dest() != val)
+        if (connect.getDest() != val)
           continue;
-        val = connect.src();
+        val = connect.getSrc();
         return;
       }
     }
@@ -202,7 +207,7 @@ Value circt::firrtl::getModuleScopedDriver(Value val, bool lookThroughWires,
 
     // If told to look through nodes, continue from the node input.
     if (lookThroughNodes && isa<NodeOp>(op)) {
-      val = cast<NodeOp>(op).input();
+      val = cast<NodeOp>(op).getInput();
       continue;
     }
 
@@ -229,6 +234,189 @@ Value circt::firrtl::getModuleScopedDriver(Value val, bool lookThroughWires,
   return val;
 }
 
+bool circt::firrtl::walkDrivers(Value val, bool lookThroughWires,
+                                bool lookThroughNodes, bool lookThroughCasts,
+                                WalkDriverCallback callback) {
+  // TODO: what do we want to happen when there are flips in the type? Do we
+  // want to filter out fields which have reverse flow?
+  assert(val.getType().cast<FIRRTLBaseType>().isPassive() &&
+         "this code was not tested with flips");
+
+  // This method keeps a stack of wires (or ports) and subfields of those that
+  // it still has to process.  It keeps track of which fields in the
+  // destination are attached to which fields of the source, as well as which
+  // subfield of the source we are currently investigating.  The fieldID is
+  // used to filter which subfields of the current operation which we should
+  // visit. As an example, the src might be an aggregate wire, but the current
+  // value might be a subfield of that wire. The `src` FieldRef will represent
+  // all subaccesses to the target, but `fieldID` for the current op only needs
+  // to represent the all subaccesses between the current op and the target.
+  struct StackElement {
+    StackElement(FieldRef dst, FieldRef src, Value current, unsigned fieldID)
+        : dst(dst), src(src), current(current), it(current.user_begin()),
+          fieldID(fieldID) {}
+    // The elements of the destination that this refers to.
+    FieldRef dst;
+    // The elements of the source that this refers to.
+    FieldRef src;
+
+    // These next fields are tied to the value we are currently iterating. This
+    // is used so we can check if a connect op is reading or driving from this
+    // value.
+    Value current;
+    // An iterator of the users of the current value. An end() iterator can be
+    // constructed from the `current` value.
+    Value::user_iterator it;
+    // A filter for which fields of the current value we care about.
+    unsigned fieldID;
+  };
+  SmallVector<StackElement> workStack;
+
+  // Helper to add record a new wire to be processed in the worklist.  This will
+  // add the wire itself to the worklist, which will lead to all subaccesses
+  // being eventually processed as well.
+  auto addToWorklist = [&](FieldRef dst, FieldRef src) {
+    auto value = src.getValue();
+    workStack.emplace_back(dst, src, value, src.getFieldID());
+  };
+
+  // Create an initial fieldRef from the input value.  As a starting state, the
+  // dst and src are the same value.
+  auto original = getFieldRefFromValue(val);
+  auto fieldRef = original;
+
+  // This loop wraps the worklist, which processes wires. Initially the worklist
+  // is empty.
+  while (true) {
+    // This loop looks through simple operations like casts and nodes.  If it
+    // encounters a wire it will stop and add the wire to the worklist.
+    while (true) {
+      auto val = fieldRef.getValue();
+
+      // The value is a port.
+      if (auto blockArg = val.dyn_cast<BlockArgument>()) {
+        FModuleOp op = cast<FModuleOp>(val.getParentBlock()->getParentOp());
+        auto direction = op.getPortDirection(blockArg.getArgNumber());
+        // Base case: this is one of the module's input ports.
+        if (direction == Direction::In) {
+          if (!callback(original, fieldRef))
+            return false;
+          break;
+        }
+        addToWorklist(original, fieldRef);
+        break;
+      }
+
+      auto *op = val.getDefiningOp();
+
+      // The value is an instance port.
+      if (auto inst = dyn_cast<InstanceOp>(op)) {
+        auto resultNo = val.cast<OpResult>().getResultNumber();
+        // Base case: this is an instance's output port.
+        if (inst.getPortDirection(resultNo) == Direction::Out) {
+          if (!callback(original, fieldRef))
+            return false;
+          break;
+        }
+        addToWorklist(original, fieldRef);
+        break;
+      }
+
+      // If told to look through wires, continue from the driver of the wire.
+      if (lookThroughWires && isa<WireOp>(op)) {
+        addToWorklist(original, fieldRef);
+        break;
+      }
+
+      // If told to look through nodes, continue from the node input.
+      if (lookThroughNodes && isa<NodeOp>(op)) {
+        auto input = cast<NodeOp>(op).getInput();
+        auto next = getFieldRefFromValue(input);
+        fieldRef = next.getSubField(fieldRef.getFieldID());
+        continue;
+      }
+
+      // If told to look through casts, continue from the cast input.
+      if (lookThroughCasts &&
+          isa<AsUIntPrimOp, AsSIntPrimOp, AsClockPrimOp, AsAsyncResetPrimOp>(
+              op)) {
+        auto input = op->getOperand(0);
+        auto next = getFieldRefFromValue(input);
+        fieldRef = next.getSubField(fieldRef.getFieldID());
+        continue;
+      }
+
+      // Look through unary ops generated by emitConnect.
+      if (isa<PadPrimOp, TailPrimOp>(op)) {
+        auto input = op->getOperand(0);
+        auto next = getFieldRefFromValue(input);
+        fieldRef = next.getSubField(fieldRef.getFieldID());
+        continue;
+      }
+
+      // Base case: this is a constant/invalid or primop.
+      //
+      // TODO: If needed, this could be modified to look through unary ops which
+      // have an unambiguous single driver.  This should only be added if a need
+      // arises for it.
+      if (!callback(original, fieldRef))
+        return false;
+      break;
+    }
+
+    // Process the next element on the stack.
+    while (true) {
+      // If there is nothing left in the workstack, we are done.
+      if (workStack.empty())
+        return true;
+      auto &back = workStack.back();
+      auto current = back.current;
+      // Pop the current element if we have processed all users.
+      if (back.it == current.user_end()) {
+        workStack.pop_back();
+        continue;
+      }
+
+      original = back.dst;
+      fieldRef = back.src;
+      auto *user = *back.it++;
+      auto fieldID = back.fieldID;
+
+      if (auto subfield = dyn_cast<SubfieldOp>(user)) {
+        auto bundleType = subfield.getInput().getType().cast<BundleType>();
+        auto index = subfield.getFieldIndex();
+        auto subID = bundleType.getFieldID(index);
+        // If the index of this operation doesn't match the target, skip it.
+        if (fieldID && index != bundleType.getIndexForFieldID(fieldID))
+          continue;
+        auto subRef = fieldRef.getSubField(subID);
+        auto subOriginal = original.getSubField(subID);
+        auto value = subfield.getResult();
+        workStack.emplace_back(subOriginal, subRef, value, fieldID - subID);
+      } else if (auto subindex = dyn_cast<SubindexOp>(user)) {
+        auto vectorType = subindex.getInput().getType().cast<FVectorType>();
+        auto index = subindex.getIndex();
+        auto subID = vectorType.getFieldID(index);
+        // If the index of this operation doesn't match the target, skip it.
+        if (fieldID && index != vectorType.getIndexForFieldID(fieldID))
+          continue;
+        auto subRef = fieldRef.getSubField(subID);
+        auto subOriginal = original.getSubField(subID);
+        auto value = subindex.getResult();
+        workStack.emplace_back(subOriginal, subRef, value, fieldID - subID);
+      } else if (auto connect = dyn_cast<FConnectLike>(user)) {
+        // Make sure that this connect is driving the value.
+        if (connect.getDest() != current)
+          continue;
+        // If the value is driven by a connect, we don't have to recurse,
+        // just update the current value.
+        fieldRef = getFieldRefFromValue(connect.getSrc());
+        break;
+      }
+    }
+  }
+}
+
 //===----------------------------------------------------------------------===//
 // FieldRef helpers
 //===----------------------------------------------------------------------===//
@@ -247,15 +435,15 @@ FieldRef circt::firrtl::getFieldRefFromValue(Value value) {
       break;
 
     if (auto subfieldOp = dyn_cast<SubfieldOp>(op)) {
-      value = subfieldOp.input();
+      value = subfieldOp.getInput();
       auto bundleType = value.getType().cast<BundleType>();
       // Rebase the current index on the parent field's index.
-      id += bundleType.getFieldID(subfieldOp.fieldIndex());
+      id += bundleType.getFieldID(subfieldOp.getFieldIndex());
     } else if (auto subindexOp = dyn_cast<SubindexOp>(op)) {
-      value = subindexOp.input();
+      value = subindexOp.getInput();
       auto vecType = value.getType().cast<FVectorType>();
       // Rebase the current index on the parent field's index.
-      id += vecType.getFieldID(subindexOp.index());
+      id += vecType.getFieldID(subindexOp.getIndex());
     } else {
       break;
     }
@@ -276,12 +464,13 @@ static void getDeclName(Value value, SmallString<64> &string) {
   auto *op = value.getDefiningOp();
   TypeSwitch<Operation *>(op)
       .Case<InstanceOp, MemOp>([&](auto op) {
-        string += op.name();
+        string += op.getName();
         string += ".";
         string +=
             op.getPortName(value.cast<OpResult>().getResultNumber()).getValue();
       })
-      .Case<WireOp, RegOp, RegResetOp>([&](auto op) { string += op.name(); });
+      .Case<WireOp, RegOp, RegResetOp>(
+          [&](auto op) { string += op.getName(); });
 }
 
 std::string circt::firrtl::getFieldName(const FieldRef &fieldRef) {
@@ -389,8 +578,8 @@ StringAttr circt::firrtl::getOrAddInnerSym(
     std::function<ModuleNamespace &(FModuleLike)> getNamespace) {
 
   auto attr = mod.getPortSymbolAttr(portIdx);
-  if (attr && !attr.getValue().empty())
-    return attr;
+  if (attr)
+    return attr.getSymName();
   if (nameHint.empty()) {
     if (auto name = mod.getPortNameAttr(portIdx))
       nameHint = name;
@@ -398,9 +587,9 @@ StringAttr circt::firrtl::getOrAddInnerSym(
       nameHint = "sym";
   }
   auto name = getNamespace(mod).newName(nameHint);
-  attr = StringAttr::get(mod.getContext(), name);
-  mod.setPortSymbolAttr(portIdx, attr);
-  return attr;
+  auto sAttr = StringAttr::get(mod.getContext(), name);
+  mod.setPortSymbolAttr(portIdx, sAttr);
+  return sAttr;
 }
 
 /// Obtain an inner reference to a port, possibly adding an `inner_sym`

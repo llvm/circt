@@ -86,6 +86,12 @@ struct LoweringOptions {
   enum { DEFAULT_TERM_LIMIT = 256 };
   unsigned maximumNumberOfTermsPerExpression = DEFAULT_TERM_LIMIT;
 
+  /// This is the maximum number of terms allow in a variadic expression before
+  /// it will spill to a wire.  This is used to break up large product-of-sums
+  /// or sum-of-products for improved simulator performance.
+  enum { DEFAULT_VARIADIC_OPERAND_LIMIT = 32 };
+  unsigned maximumNumberOfVariadicOperands = DEFAULT_VARIADIC_OPERAND_LIMIT;
+
   /// This is the maximum number of terms in an expression used in a concat
   /// before that expression spills a wire.
   enum { DEFAULT_CONCAT_TERM_LIMIT = 10 };
@@ -117,12 +123,9 @@ struct LoweringOptions {
   /// Print debug info.
   bool printDebugInfo = false;
 
-  /// If true, verilog expression legalization is performed at
-  /// PrepareForEmission via IR mutation. This means temporary wires are
-  /// explicitly spilled to wire ops instead of implicilty being spilled at
-  /// emission. Once ExportVerilog simplification is completed, this feature
-  /// shoiuld be enabled by default.
-  bool spillWiresAtPrepare = false;
+  /// If true, ExportVerilog uses an old emission. This flag should be
+  /// deprecated once the old emission mode is no longer necessary.
+  bool useOldEmissionMode = false;
 };
 
 /// Register commandline options for the verilog emitter.

@@ -62,7 +62,19 @@ firrtl.circuit "InterfaceGroundType" attributes {
 
 // CHECK: firrtl.module @View_companion
 // CHECK-SAME: output_file = #hw.output_file<"gct-dir/View_companion.sv"
-// CHECK-NEXT: firrtl.instance View_mapping @View_mapping
+// CHECK-NEXT: sv.interface.instance sym @__View_Foo__ {name = "View"} : !sv.interface<@Foo>
+// CHECK-NEXT: sv.verbatim "assign {{[{][{]0[}][}]}}.foo = {{[{][{]1[}][}]}}.{{[{][{]2[}][}]}};"
+// CHECK-SAME:   #hw.innerNameRef<@View_companion::@__View_Foo__>
+// CHECK-SAME:   @DUT
+// CHECK-SAME:   #hw.innerNameRef<@DUT::@a>
+// CHECK-NEXT: sv.verbatim "assign {{[{][{]0[}][}]}}.bar = {{[{][{]1[}][}]}}.{{[{][{]2[}][}]}};"
+// CHECK-SAME:   #hw.innerNameRef<@View_companion::@__View_Foo__>
+// CHECK-SAME:   @DUT
+// CHECK-SAME:   #hw.innerNameRef<@DUT::@b>
+// CHECK-NEXT: sv.verbatim "assign {{[{][{]0[}][}]}}.baz = {{[{][{]1[}][}]}}.{{[{][{]2[}][}]}}[1].d;"
+// CHECK-SAME:   #hw.innerNameRef<@View_companion::@__View_Foo__>
+// CHECK-SAME:   @DUT
+// CHECK-SAME:   #hw.innerNameRef<@DUT::@c>]
 
 // All Grand Central annotations are removed from the wires.
 // CHECK: firrtl.module @DUT
@@ -73,24 +85,9 @@ firrtl.circuit "InterfaceGroundType" attributes {
 // CHECK: %c = firrtl.wire
 // CHECK-SAME: annotations = [{a}]
 
-// CHECK: firrtl.module @View_mapping
-// CHECK-SAME: output_file = #hw.output_file<"gct-dir/View_mapping.sv"
-// CHECK-NEXT: sv.verbatim "assign {{[{][{]0[}][}]}}.foo = {{[{][{]1[}][}]}}.{{[{][{]2[}][}]}};"
-// CHECK-SAME:   #hw.innerNameRef<@DUT::@__View_Foo__>
-// CHECK-SAME:   @DUT
-// CHECK-SAME:   #hw.innerNameRef<@DUT::@a>
-// CHECK-NEXT: sv.verbatim "assign {{[{][{]0[}][}]}}.bar = {{[{][{]1[}][}]}}.{{[{][{]2[}][}]}};"
-// CHECK-SAME:   #hw.innerNameRef<@DUT::@__View_Foo__>
-// CHECK-SAME:   @DUT
-// CHECK-SAME:   #hw.innerNameRef<@DUT::@b>
-// CHECK-NEXT: sv.verbatim "assign {{[{][{]0[}][}]}}.baz = {{[{][{]1[}][}]}}.{{[{][{]2[}][}]}}[1].d;"
-// CHECK-SAME:   #hw.innerNameRef<@DUT::@__View_Foo__>
-// CHECK-SAME:   @DUT
-// CHECK-SAME:   #hw.innerNameRef<@DUT::@c>]
-
-// CHECK: sv.interface {
+// CHECK: sv.interface @Foo
+// CHECK-SAME: comment = "VCS coverage exclude_file"
 // CHECK-SAME: output_file = #hw.output_file<"gct-dir/Foo.sv"
-// CHECK-SAME: @Foo
 // CHECK-NEXT: sv.verbatim "// description of foo"
 // CHECK-NEXT: sv.interface.signal @foo : i2
 // CHECK-NEXT: sv.verbatim "// multi\0A// line\0A// description\0A// of\0A// bar"
@@ -158,7 +155,6 @@ firrtl.circuit "InterfaceVectorType" attributes {
 
 // CHECK: firrtl.module @View_companion
 // CHECK-SAME: output_file = #hw.output_file<"gct-dir/View_companion.sv"
-// CHECK-NEXT: firrtl.instance View_mapping @View_mapping
 
 // All Grand Central annotations are removed from the registers.
 // CHECK: firrtl.module @DUT
@@ -167,9 +163,9 @@ firrtl.circuit "InterfaceVectorType" attributes {
 // CHECK: %a_1 = firrtl.regreset
 // CHECK-SAME: annotations = [{a}]
 
-// CHECK: sv.interface {
+// CHECK: sv.interface @Foo
+// CHECK-SAME: comment = "VCS coverage exclude_file"
 // CHECK-SAME: output_file = #hw.output_file<"gct-dir/Foo.sv"
-// CHECK-SAME: @Foo
 // CHECK-NEXT: sv.verbatim "// description of foo"
 // CHECK-NEXT: sv.interface.signal @foo : !hw.uarray<2xi1>
 
@@ -240,15 +236,15 @@ firrtl.circuit "InterfaceBundleType" attributes {
 // CHECK: %y = firrtl.wire
 // CHECK-SAME: annotations = [{a}]
 
-// CHECK: sv.interface {
+// CHECK: sv.interface @Foo
+// CHECK-SAME: comment = "VCS coverage exclude_file"
 // CHECK-SAME: output_file = #hw.output_file<"gct-dir/Foo.sv"
-// CHECK-SAME: @Foo
 // CHECK-NEXT: sv.verbatim "// description of Bar"
 // CHECK-NEXT: Bar bar();
 
-// CHECK: sv.interface {
+// CHECK: sv.interface @Bar
+// CHECK-SAME: comment = "VCS coverage exclude_file"
 // CHECK-SAME: output_file = #hw.output_file<"gct-dir/Bar.sv"
-// CHECK-SAME: @Bar
 // CHECK-NEXT: sv.interface.signal @b : i2
 // CHECK-NEXT: sv.interface.signal @a : i1
 
@@ -358,13 +354,14 @@ firrtl.circuit "VecOfVec" attributes {
 
 // CHECK-LABEL: firrtl.circuit "VecOfVec"
 
-// CHECK:      firrtl.module @View_mapping
+// CHECK:      firrtl.module @View_companion
+// CHECK-NEXT:    sv.interface.instance sym @__View_Foo__ {name = "View"} : !sv.interface<@Foo>
 // CHECK-NEXT:    assign {{[{][{]0[}][}]}}.foo[0][0]
-// CHECK-SAME:      #hw.innerNameRef<@DUT::@__View_Foo__>
+// CHECK-SAME:      #hw.innerNameRef<@View_companion::@__View_Foo__>
 // CHECK-NEXT:    assign {{[{][{]0[}][}]}}.foo[0][1]
-// CHECK-SAME:      #hw.innerNameRef<@DUT::@__View_Foo__>
+// CHECK-SAME:      #hw.innerNameRef<@View_companion::@__View_Foo__>
 
-// CHECK:      sv.interface {{.+}} @Foo
+// CHECK:      sv.interface @Foo
 // CHECK:        sv.interface.signal @foo : !hw.uarray<1xuarray<2xi3>>
 
 // -----
@@ -423,9 +420,9 @@ firrtl.circuit "InterfaceNode" attributes {
 // CHECK: firrtl.node
 // CHECK-SAME: annotations = [{a}]
 
-// CHECK: sv.interface {
+// CHECK: sv.interface @Foo
+// CHECK-SAME: comment = "VCS coverage exclude_file"
 // CHECK-SAME: output_file = #hw.output_file<"gct-dir/Foo.sv"
-// CHECK-SAME: @Foo
 // CHECK-NEXT: sv.verbatim "// some expression"
 // CHECK-NEXT: sv.interface.signal @foo : i2
 
@@ -480,9 +477,9 @@ firrtl.circuit "InterfacePort" attributes {
 // CHECK: firrtl.module @DUT
 // CHECK-SAME: %a: !firrtl.uint<4> sym @a [{a}]
 
-// CHECK: sv.interface {
+// CHECK: sv.interface @Foo
+// CHECK-SAME: comment = "VCS coverage exclude_file"
 // CHECK-SAME: output_file = #hw.output_file<"gct-dir/Foo.sv"
-// CHECK-SAME: @Foo
 // CHECK-NEXT: sv.verbatim "// description of foo"
 // CHECK-NEXT: sv.interface.signal @foo : i4
 
@@ -535,9 +532,9 @@ firrtl.circuit "UnsupportedTypes" attributes {
 // CHECK-NOT: class = "sifive.enterprise.grandcentral.AugmentedBundleType"
 // CHECK-SAME: {
 
-// CHECK: sv.interface {
+// CHECK: sv.interface @Foo
+// CHECK-SAME: comment = "VCS coverage exclude_file"
 // CHECK-SAME: output_file = #hw.output_file<"gct-dir/Foo.sv"
-// CHECK-SAME: @Foo
 // CHECK-NEXT: sv.verbatim "// <unsupported string type> string;"
 // CHECK-NEXT: sv.verbatim "// <unsupported boolean type> boolean;"
 // CHECK-NEXT: sv.verbatim "// <unsupported integer type> integer;"
@@ -601,22 +598,18 @@ firrtl.circuit "BindInterfaceTest"  attributes {
 // CHECK-NOT: annotations
 // CHECK-SAME: {
 
-// The bind is dropped inside the circuit.
-// CHECK-NEXT: sv.bind.interface <@DUT::@[[INTERFACE_INSTANCE_SYMBOL:.+]]> {output_file
+// CHECK: firrtl.module @View_companion()
+// CHECK-NEXT: sv.interface.instance sym @[[INTERFACE_INSTANCE_SYMBOL:.+]]
 
 // Annotations are removed from the module.
 // CHECK: firrtl.module @DUT
 // CHECK-NOT: annotations
 // CHECK-SAME: %a
 
-// An instance of the interface was added to the module.
-// CHECK: sv.interface.instance sym @[[INTERFACE_INSTANCE_SYMBOL]] {
-// CHECK-SAME: doNotPrint = true
-
 // The interface is added.
-// CHECK: sv.interface {
+// CHECK: sv.interface @InterfaceName
+// CHECK-SAME: comment = "VCS coverage exclude_file"
 // CHECK-SAME: output_file = #hw.output_file<"gct-dir/InterfaceName.sv"
-// CHECK-SAME: @InterfaceName
 // CHECK-NEXT: sv.interface.signal @_a : i8
 
 // -----
@@ -678,13 +671,13 @@ firrtl.circuit "MultipleGroundTypeInterfaces" attributes {
   }
 }
 
-// CHECK: sv.interface {
+// CHECK: sv.interface @Foo
+// CHECK-SAME: comment = "VCS coverage exclude_file"
 // CHECK-SAME: output_file = #hw.output_file<"gct-dir/Foo.sv"
-// CHECK-SAME: @Foo
 
-// CHECK: sv.interface {
+// CHECK: sv.interface @Bar
+// CHECK-SAME: comment = "VCS coverage exclude_file"
 // CHECK-SAME: output_file = #hw.output_file<"gct-dir/Bar.sv"
-// CHECK-SAME: @Bar
 
 // -----
 
@@ -725,7 +718,7 @@ firrtl.circuit "PrefixInterfacesAnnotation"
 // CHECK-NOT:     sifive.enterprise.grandcentral.PrefixInterfacesAnnotation
 
 // Interface "Foo" is prefixed.
-// CHECK:       sv.interface @PREFIX_Foo {
+// CHECK:       sv.interface @PREFIX_Foo
 // Interface "Bar" is prefixed, but not its name.
 // CHECK-NEXT:    PREFIX_Bar bar()
 
@@ -796,33 +789,33 @@ firrtl.circuit "NestedInterfaceVectorTypes" attributes {annotations = [
 }
 
 // CHECK-LABEL: firrtl.circuit "NestedInterfaceVectorTypes"
-// CHECK:         firrtl.module @View_mapping
+// CHECK:         firrtl.module @View_companion
+// CHECK-NEXT:      sv.interface.instance sym @__View_Foo__ {name = "View"} : !sv.interface<@Foo>
 // CHECK-NEXT:      sv.verbatim "assign {{[{][{]0[}][}]}}.bar[0][0] = {{[{][{]1[}][}]}}.{{[{][{]2[}][}]}};"
-// CHECK-SAME:        #hw.innerNameRef<@DUT::@__View_Foo__>
+// CHECK-SAME:        #hw.innerNameRef<@View_companion::@__View_Foo__>
 // CHECK-SAME:        @DUT
 // CHECK-SAME:        #hw.innerNameRef<@DUT::@a0>
 // CHECK-NEXT:      sv.verbatim "assign {{[{][{]0[}][}]}}.bar[0][1] = {{[{][{]1[}][}]}}.{{[{][{]2[}][}]}};"
-// CHECK-SAME:        #hw.innerNameRef<@DUT::@__View_Foo__>
+// CHECK-SAME:        #hw.innerNameRef<@View_companion::@__View_Foo__>
 // CHECK-SAME:        @DUT
 // CHECK-SAME:        #hw.innerNameRef<@DUT::@a1>
 // CHECK-NEXT:      sv.verbatim "assign {{[{][{]0[}][}]}}.bar[0][2] = {{[{][{]1[}][}]}}.{{[{][{]2[}][}]}};"
-// CHECK-SAME:        #hw.innerNameRef<@DUT::@__View_Foo__>
+// CHECK-SAME:        #hw.innerNameRef<@View_companion::@__View_Foo__>
 // CHECK-SAME:        @DUT
 // CHECK-SAME:        #hw.innerNameRef<@DUT::@a2>
 // CHECK-NEXT:      sv.verbatim "assign {{[{][{]0[}][}]}}.bar[1][0] = {{[{][{]1[}][}]}}.{{[{][{]2[}][}]}};"
-// CHECK-SAME:        #hw.innerNameRef<@DUT::@__View_Foo__>
+// CHECK-SAME:        #hw.innerNameRef<@View_companion::@__View_Foo__>
 // CHECK-SAME:        @DUT
 // CHECK-SAME:        #hw.innerNameRef<@DUT::@b0>
 // CHECK-NEXT:      sv.verbatim "assign {{[{][{]0[}][}]}}.bar[1][1] = {{[{][{]1[}][}]}}.{{[{][{]2[}][}]}};"
-// CHECK-SAME:        #hw.innerNameRef<@DUT::@__View_Foo__>
+// CHECK-SAME:        #hw.innerNameRef<@View_companion::@__View_Foo__>
 // CHECK-SAME:        @DUT
 // CHECK-SAME:        #hw.innerNameRef<@DUT::@b1>
 // CHECK-NEXT:      sv.verbatim "assign {{[{][{]0[}][}]}}.bar[1][2] = {{[{][{]1[}][}]}}.{{[{][{]2[}][}]}};"
-// CHECK-SAME:        #hw.innerNameRef<@DUT::@__View_Foo__>
+// CHECK-SAME:        #hw.innerNameRef<@View_companion::@__View_Foo__>
 // CHECK-SAME:        @DUT
 // CHECK-SAME:        #hw.innerNameRef<@DUT::@b2>
-// CHECK:         sv.interface {
-// CHECK-SAME:      @Foo
+// CHECK:         sv.interface @Foo
 // CHECK-NEXT:      sv.verbatim "// description of bar"
 // CHECK-NEXT:      sv.interface.signal @bar : !hw.uarray<2xuarray<3xi1>>
 
@@ -885,8 +878,7 @@ firrtl.circuit "VerbatimTypesInVector" attributes {annotations = [
 }
 
 // CHECK-LABEL: firrtl.circuit "VerbatimTypesInVector"
-// CHECK:         sv.interface {
-// CHECK-SAME:      @Foo
+// CHECK:         sv.interface @Foo
 // CHECK-NEXT:      sv.verbatim "// description of bar"
 // CHECK-NEXT:      sv.verbatim "// <unsupported string type> bar[2][3];"
 
@@ -930,9 +922,10 @@ firrtl.circuit "ParentIsMainModule" attributes {
 // Check that this doesn't error out and that the XMR is generated correctly.
 //
 // CHECK-LABEL: firrtl.circuit "ParentIsMainModule"
-// CHECK:       firrtl.module @View_mapping
+// CHECK:       firrtl.module @View_companion
+// CHECK-NEXT:    sv.interface.instance sym @__View_Foo__ {name = "View"} : !sv.interface<@Foo>
 // CHECK-NEXT:    sv.verbatim "assign {{[{][{]0[}][}]}}.foo = {{[{][{]1[}][}]}}.{{[{][{]2[}][}]}};"
-// CHECK-SAME:      #hw.innerNameRef<@ParentIsMainModule::@__View_Foo__>
+// CHECK-SAME:      #hw.innerNameRef<@View_companion::@__View_Foo__>
 // CHECK-SAME:      @ParentIsMainModule
 // CHECK-SAME:      #hw.innerNameRef<@ParentIsMainModule::@a>
 
@@ -1025,32 +1018,33 @@ firrtl.circuit "DedupedPath" attributes {
 // CHECK-NOT:              firrtl.hierpath
 // CHECK-NEXT:             firrtl.module @Tile()
 // CHECK-NOT:                circt.nonlocal
+// CHECK:                  firrtl.module @MyView_companion
+// CHECK-NEXT:               sv.interface.instance sym @__MyView_Foo__ {name = "MyView"} : !sv.interface<@Foo>
+// CHECK-NEXT{LITERAL}:      sv.verbatim "assign {{0}}.foo = {{1}}.{{2}}.{{3}};"
+// CHECK-SAME:                 symbols = [#hw.innerNameRef<@MyView_companion::@__MyView_Foo__>,
+// CHECK-SAME:                   @DUT,
+// CHECK-SAME:                   #hw.innerNameRef<@DUT::@tile1>,
+// CHECK-SAME:                   #hw.innerNameRef<@Tile::@w>]
+// CHECK-NEXT{LITERAL}:      sv.verbatim "assign {{0}}.bar = {{1}}.{{2}}.{{3}};"
+// CHECK-SAME:                 symbols = [#hw.innerNameRef<@MyView_companion::@__MyView_Foo__>,
+// CHECK-SAME:                   @DUT,
+// CHECK-SAME:                   #hw.innerNameRef<@DUT::@tile2>,
+// CHECK-SAME:                   #hw.innerNameRef<@Tile::@w>]
+// CHECK-NEXT{LITERAL}:      sv.verbatim "assign {{0}}.baz = {{1}}.{{2}}.{{3}};"
+// CHECK-SAME:                 symbols = [#hw.innerNameRef<@MyView_companion::@__MyView_Foo__>,
+// CHECK-SAME:                   @DUT,
+// CHECK-SAME:                   #hw.innerNameRef<@DUT::@tile1>,
+// CHECK-SAME:                   #hw.innerNameRef<@Tile::@x>]
+// CHECK-NEXT{LITERAL}:      sv.verbatim "assign {{0}}.qux = {{1}}.{{2}}.{{3}};"
+// CHECK-SAME:                 symbols = [#hw.innerNameRef<@MyView_companion::@__MyView_Foo__>,
+// CHECK-SAME:                   @DUT,
+// CHECK-SAME:                   #hw.innerNameRef<@DUT::@tile2>,
+// CHECK-SAME:                   #hw.innerNameRef<@Tile::@x>]
 // CHECK:                  firrtl.module @DUT()
 // CHECK-NOT:                circt.nonlocal
 // CHECK:                  firrtl.module @DedupedPath
 // CHECK-NEXT:               firrtl.instance dut
 // CHECK-NOT:                  sym
-// CHECK:                  firrtl.module @MyView_mapping()
-// CHECK-NEXT{LITERAL}:      sv.verbatim "assign {{0}}.foo = {{1}}.{{2}}.{{3}};"
-// CHECK-SAME:                 symbols = [#hw.innerNameRef<@DUT::@__MyView_Foo__>,
-// CHECK-SAME:                   @DUT,
-// CHECK-SAME:                   #hw.innerNameRef<@DUT::@tile1>,
-// CHECK-SAME:                   #hw.innerNameRef<@Tile::@w>]
-// CHECK-NEXT{LITERAL}:      sv.verbatim "assign {{0}}.bar = {{1}}.{{2}}.{{3}};"
-// CHECK-SAME:                 symbols = [#hw.innerNameRef<@DUT::@__MyView_Foo__>,
-// CHECK-SAME:                   @DUT,
-// CHECK-SAME:                   #hw.innerNameRef<@DUT::@tile2>,
-// CHECK-SAME:                   #hw.innerNameRef<@Tile::@w>]
-// CHECK-NEXT{LITERAL}:      sv.verbatim "assign {{0}}.baz = {{1}}.{{2}}.{{3}};"
-// CHECK-SAME:                 symbols = [#hw.innerNameRef<@DUT::@__MyView_Foo__>,
-// CHECK-SAME:                   @DUT,
-// CHECK-SAME:                   #hw.innerNameRef<@DUT::@tile1>,
-// CHECK-SAME:                   #hw.innerNameRef<@Tile::@x>]
-// CHECK-NEXT{LITERAL}:      sv.verbatim "assign {{0}}.qux = {{1}}.{{2}}.{{3}};"
-// CHECK-SAME:                 symbols = [#hw.innerNameRef<@DUT::@__MyView_Foo__>,
-// CHECK-SAME:                   @DUT,
-// CHECK-SAME:                   #hw.innerNameRef<@DUT::@tile2>,
-// CHECK-SAME:                   #hw.innerNameRef<@Tile::@x>]
 
 // -----
 
@@ -1156,14 +1150,15 @@ firrtl.circuit "InterfaceInTestHarness" attributes {
 // harness will be written to the test harness directory.
 //
 // CHECK-LABEL: "InterfaceInTestHarness"
-// CHECK:       firrtl.module @InterfaceInTestHarness
-// CHECK:         firrtl.instance View_companion
-// CHECK-NOT:       output_file
-// CHECK-NOT:       lowerToBind
+// CHECK:       firrtl.module @View_companion
 // CHECK:         sv.interface.instance
 // CHECK-NOT:       output_file
 // CHECK-NOT:       lowerToBind
 // CHECK-SAME:      !sv.interface
+// CHECK:       firrtl.module @InterfaceInTestHarness
+// CHECK:         firrtl.instance View_companion
+// CHECK-NOT:       output_file
+// CHECK-NOT:       lowerToBind
 // CHECK-NEXT:  }
 // CHECK:       sv.interface
 // CHECK-SAME:    output_file = #hw.output_file<"testbenchDir/Foo.sv", excludeFromFileList>
@@ -1217,13 +1212,70 @@ firrtl.circuit "ZeroWidth" attributes {annotations = [
 // Check that a view of a zero-width thing produces a comment in the output and
 // not XMR.
 //
-// CHECK-LABEL: firrtl.module @MyView_mapping() {
+// CHECK-LABEL: firrtl.circuit "ZeroWidth"
+//
+// CHECK:       firrtl.module private @MyView_companion() {
 // CHECK-NOT:     sv.verbatim
 // CHECK-NEXT:  }
 //
 // CHECK-LABEL: sv.interface @MyInterface
 // CHECK-NEXT:    sv.verbatim "// a zero-width port"
 // CHECK-NEXT:    sv.interface.signal @ground : i0
+
+// -----
+
+firrtl.circuit "ZeroWidth" attributes {annotations = [
+  {
+    class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+    defName = "MyInterface",
+    elements = [
+      {
+        class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+        id = 1 : i64,
+        name = "ground"
+      }
+    ],
+    id = 0 : i64,
+    name = "MyView"
+  }
+]} {
+  firrtl.module private @MyView_companion() attributes {annotations = [
+    {
+      class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
+      id = 0 : i64,
+      name = "MyView",
+      type = "companion"
+    }
+  ]} {}
+  firrtl.module @ZeroWidth() attributes {annotations = [
+    {
+      class = "sifive.enterprise.grandcentral.ViewAnnotation.parent",
+      id = 0 : i64,
+      name = "MyView",
+      type = "parent"
+    }
+  ]} {
+    %w = firrtl.wire {annotations = [
+      {
+        class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+        id = 1 : i64
+      }
+    ]} : !firrtl.uint<1>
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    firrtl.strictconnect %w, %c1_ui1 : !firrtl.uint<1>
+    firrtl.instance MyView_companion @MyView_companion()
+  }
+}
+
+// Check that a constant is sunk into the interface mapping module and that no
+// symbol is created on the viewed component.
+//
+// CHECK-LABEL:         firrtl.circuit "ZeroWidth"
+// CHECK:                 firrtl.module private @MyView_companion()
+// CHECK-NEXT:              sv.interface.instance
+// CHECK-NEXT{LITERAL}:     sv.verbatim "assign {{0}}.ground = 1'h1;
+// CHECK:                 firrtl.module @ZeroWidth()
+// CHECK-NEXT:            %w = firrtl.wire : !firrtl.uint<1>
 
 // -----
 

@@ -35,10 +35,14 @@ struct AddressIterator
   // This using statement is to get around a bug in MSVC.  Without it, it
   // tries to look up "It" as a member type of the parent class.
   using Iterator = It;
+  static typename Iterator::value_type *
+  addrOf(typename Iterator::value_type &v) noexcept {
+    return std::addressof(v);
+  }
   /* implicit */ AddressIterator(Iterator iterator)
       : llvm::mapped_iterator<It, typename Iterator::pointer (*)(
-                                      typename Iterator::reference)>(
-            iterator, &std::addressof<typename Iterator::value_type>) {}
+                                      typename Iterator::reference)>(iterator,
+                                                                     addrOf) {}
 };
 
 // Escapes any occurance of (regex) characters 'c' in 'str'. If 'noEscape' is

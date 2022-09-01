@@ -191,7 +191,7 @@ static Optional<AnnoPathValue> tryResolve(DictionaryAttr anno,
 //===----------------------------------------------------------------------===//
 
 /// An applier which puts the annotation on the target and drops the 'target'
-/// field from the annotaiton.  Optionally handles non-local annotations.
+/// field from the annotation.  Optionally handles non-local annotations.
 static LogicalResult applyWithoutTargetImpl(const AnnoPathValue &target,
                                             DictionaryAttr anno,
                                             ApplyState &state,
@@ -223,13 +223,26 @@ static LogicalResult applyWithoutTargetImpl(const AnnoPathValue &target,
 /// An applier which puts the annotation on the target and drops the 'target'
 /// field from the annotaiton.  Optionally handles non-local annotations.
 /// Ensures the target resolves to an expected type of operation.
+template <bool allowNonLocal, bool allowPortAnnoTarget, typename T,
+          typename... Tr>
+static LogicalResult applyWithoutTarget(const AnnoPathValue &target,
+                                        DictionaryAttr anno,
+                                        ApplyState &state) {
+  if (target.ref.isa<PortAnnoTarget>()) {
+    if (!allowPortAnnoTarget)
+      return failure();
+  } else if (!target.isOpOfType<T, Tr...>())
+    return failure();
+
+  return applyWithoutTargetImpl(target, anno, state, allowNonLocal);
+}
+
 template <bool allowNonLocal, typename T, typename... Tr>
 static LogicalResult applyWithoutTarget(const AnnoPathValue &target,
                                         DictionaryAttr anno,
                                         ApplyState &state) {
-  if (!target.isOpOfType<T, Tr...>())
-    return failure();
-  return applyWithoutTargetImpl(target, anno, state, allowNonLocal);
+  return applyWithoutTarget<allowNonLocal, false, T, Tr...>(target, anno,
+                                                            state);
 }
 
 /// An applier which puts the annotation on the target and drops the 'target'
@@ -241,29 +254,10 @@ static LogicalResult applyWithoutTarget(const AnnoPathValue &target,
   return applyWithoutTargetImpl(target, anno, state, allowNonLocal);
 }
 
-/// Apply a DontTouchAnnotation to the circuit.  For almost all operations, this
-/// just adds a symbol.  For CHIRRTL memory ports, this preserves the
-/// annotation.
-static LogicalResult applyDontTouch(const AnnoPathValue &target,
-                                    DictionaryAttr anno, ApplyState &state) {
-
-  // A DontTouchAnnotation is only allowed to be placed on a ReferenceTarget.
-  // If this winds up on a module. then it indicates that the original
-  // annotation was incorrect.
-  if (target.isOpOfType<FModuleOp, FExtModuleOp>()) {
-    mlir::emitError(target.ref.getOp()->getLoc())
-        << "'firrtl.module' op is targeted by a DontTouchAnotation with target "
-        << Annotation(anno).getMember("target")
-        << ", but this annotation must be a reference target";
-    return failure();
-  }
-
-  // If the annotation is on a MemoryPortOp or if the annotation is on part of
-  // an aggregate, then keep the DontTouchAnnotation around.
-  if (isa<chirrtl::MemoryPortOp>(target.ref.getOp()) || target.fieldIdx)
-    return applyWithoutTarget<true>(target, anno, state);
-
-  target.ref.getInnerSym(state.getNamespace(target.ref.getModule()));
+/// Just drop the annotation.  This is intended for Annotations which are known,
+/// but can be safely ignored.
+static LogicalResult drop(const AnnoPathValue &target, DictionaryAttr anno,
+                          ApplyState &state) {
   return success();
 }
 
@@ -279,6 +273,22 @@ struct AnnoRecord {
                                    ApplyState &)>
       applier;
 };
+
+/// Resolution and application of a "firrtl.annotations.NoTargetAnnotation".
+/// This should be used for any Annotation which does not apply to anything in
+/// the FIRRTL Circuit, i.e., an Annotation which has no target.  Historically,
+/// NoTargetAnnotations were used to control the Scala FIRRTL Compiler (SFC) or
+/// its passes, e.g., to set the output directory or to turn on a pass.
+/// Examplesof these in the SFC are "firrtl.options.TargetDirAnnotation" to set
+/// the output directory or "firrtl.stage.RunFIRRTLTransformAnnotation" to
+/// casuse the SFC to schedule a specified pass.  Instead of leaving these
+/// floating or attaching them to the top-level MLIR module (which is a purer
+/// interpretation of "no target"), we choose to attach them to the Circuit even
+/// they do not "apply" to the Circuit.  This gives later passes a common place,
+/// the Circuit, to search for these control Annotations.
+static AnnoRecord NoTargetAnnotation = {noResolve,
+                                        applyWithoutTarget<false, CircuitOp>};
+
 } // end anonymous namespace
 
 static const llvm::StringMap<AnnoRecord> annotationRecords{{
@@ -287,8 +297,10 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
     {"circt.test", {stdResolve, applyWithoutTarget<true>}},
     {"circt.testLocalOnly", {stdResolve, applyWithoutTarget<>}},
     {"circt.testNT", {noResolve, applyWithoutTarget<>}},
-    {"circt.missing", {tryResolve, applyWithoutTarget<>}},
+    {"circt.missing", {tryResolve, applyWithoutTarget<true>}},
     // Grand Central Views/Interfaces Annotations
+    {extractGrandCentralClass, NoTargetAnnotation},
+    {grandCentralHierarchyFileAnnoClass, NoTargetAnnotation},
     {serializedViewAnnoClass, {noResolve, applyGCTView}},
     {viewAnnoClass, {noResolve, applyGCTView}},
     {companionAnnoClass, {stdResolve, applyWithoutTarget<>}},
@@ -312,8 +324,67 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
     {signalDriverAnnoClass, {noResolve, applyGCTSignalMappings}},
     {signalDriverTargetAnnoClass, {stdResolve, applyWithoutTarget<true>}},
     {signalDriverModuleAnnoClass, {stdResolve, applyWithoutTarget<true>}},
+    // OMIR Annotations
+    {omirAnnoClass, {noResolve, applyOMIR}},
+    {omirTrackerAnnoClass, {stdResolve, applyWithoutTarget<true>}},
+    {omirFileAnnoClass, NoTargetAnnotation},
     // Miscellaneous Annotations
-    {dontTouchAnnoClass, {stdResolve, applyDontTouch}}
+    {dontTouchAnnoClass,
+     {stdResolve, applyWithoutTarget<true, true, WireOp, NodeOp, RegOp,
+                                     RegResetOp, InstanceOp, MemOp, CombMemOp,
+                                     MemoryPortOp, SeqMemOp>}},
+    {prefixModulesAnnoClass,
+     {stdResolve,
+      applyWithoutTarget<true, FModuleOp, FExtModuleOp, InstanceOp>}},
+    {dutAnnoClass, {stdResolve, applyWithoutTarget<false, FModuleOp>}},
+    {extractSeqMemsAnnoClass, NoTargetAnnotation},
+    {injectDUTHierarchyAnnoClass, NoTargetAnnotation},
+    {convertMemToRegOfVecAnnoClass, NoTargetAnnotation},
+    {excludeMemToRegAnnoClass,
+     {stdResolve, applyWithoutTarget<true, MemOp, CombMemOp>}},
+    {sitestBlackBoxAnnoClass, NoTargetAnnotation},
+    {enumComponentAnnoClass, {noResolve, drop}},
+    {enumDefAnnoClass, {noResolve, drop}},
+    {enumVecAnnoClass, {noResolve, drop}},
+    {forceNameAnnoClass,
+     {stdResolve, applyWithoutTarget<true, FModuleOp, FExtModuleOp>}},
+    {flattenAnnoClass, {stdResolve, applyWithoutTarget<false, FModuleOp>}},
+    {inlineAnnoClass, {stdResolve, applyWithoutTarget<false, FModuleOp>}},
+    {noDedupAnnoClass,
+     {stdResolve, applyWithoutTarget<false, FModuleOp, FExtModuleOp>}},
+    {blackBoxInlineAnnoClass,
+     {stdResolve, applyWithoutTarget<false, FExtModuleOp>}},
+    {dontObfuscateModuleAnnoClass,
+     {stdResolve, applyWithoutTarget<false, FModuleOp>}},
+    {verifBlackBoxAnnoClass,
+     {stdResolve, applyWithoutTarget<false, FExtModuleOp>}},
+    {elaborationArtefactsDirectoryAnnoClass, NoTargetAnnotation},
+    {subCircuitsTargetDirectoryAnnoClass, NoTargetAnnotation},
+    {retimeModulesFileAnnoClass, NoTargetAnnotation},
+    {retimeModuleAnnoClass,
+     {stdResolve, applyWithoutTarget<false, FModuleOp, FExtModuleOp>}},
+    {metadataDirectoryAttrName, NoTargetAnnotation},
+    {moduleHierAnnoClass, NoTargetAnnotation},
+    {sitestTestHarnessBlackBoxAnnoClass, NoTargetAnnotation},
+    {testBenchDirAnnoClass, NoTargetAnnotation},
+    {testHarnessHierAnnoClass, NoTargetAnnotation},
+    {testHarnessPathAnnoClass, NoTargetAnnotation},
+    {prefixInterfacesAnnoClass, NoTargetAnnotation},
+    {subCircuitDirAnnotation, NoTargetAnnotation},
+    {extractAssertAnnoClass, NoTargetAnnotation},
+    {extractAssumeAnnoClass, NoTargetAnnotation},
+    {extractCoverageAnnoClass, NoTargetAnnotation},
+    {dftTestModeEnableAnnoClass, {stdResolve, applyWithoutTarget<true>}},
+    {runFIRRTLTransformAnnoClass, {noResolve, drop}},
+    {mustDedupAnnoClass, NoTargetAnnotation},
+    {addSeqMemPortAnnoClass, NoTargetAnnotation},
+    {addSeqMemPortsFileAnnoClass, NoTargetAnnotation},
+    {extractClockGatesAnnoClass, NoTargetAnnotation},
+    {fullAsyncResetAnnoClass, {stdResolve, applyWithoutTarget<true>}},
+    {ignoreFullAsyncResetAnnoClass,
+     {stdResolve, applyWithoutTarget<true, FModuleOp>}},
+    {decodeTableAnnotation, {noResolve, drop}},
+    {blackBoxTargetDirAnnoClass, NoTargetAnnotation}
 
 }};
 
@@ -360,14 +431,16 @@ LogicalResult LowerAnnotationsPass::applyAnnotation(DictionaryAttr anno,
   else if (ignoreClasslessAnno)
     annoClassVal = "circt.missing";
   else
-    return state.circuit.emitError("Annotation without a class: ") << anno;
+    return mlir::emitError(state.circuit.getLoc())
+           << "Annotation without a class: " << anno;
 
   // See if we handle the class
   auto *record = getAnnotationHandler(annoClassVal, false);
   if (!record) {
     ++numUnhandled;
     if (!ignoreUnhandledAnno)
-      return state.circuit->emitWarning("Unhandled annotation: ") << anno;
+      return mlir::emitWarning(state.circuit.getLoc())
+             << "Unhandled annotation: " << anno;
 
     // Try again, requesting the fallback handler.
     record = getAnnotationHandler(annoClassVal, ignoreUnhandledAnno);
@@ -404,8 +477,10 @@ void LowerAnnotationsPass::runOnOperation() {
     return;
   circuit->removeAttr(rawAnnotations);
 
-  // Grab the annotations.
-  for (auto anno : annotations)
+  // Populate the worklist in reverse order.  This has the effect of causing
+  // annotations to be processed in the order in which they appear in the
+  // original JSON.
+  for (auto anno : llvm::reverse(annotations.getValue()))
     worklistAttrs.push_back(anno.cast<DictionaryAttr>());
 
   size_t numFailures = 0;

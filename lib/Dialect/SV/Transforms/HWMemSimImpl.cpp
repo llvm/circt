@@ -46,7 +46,6 @@ struct FirMemory {
 namespace {
 
 class HWMemSimImpl {
-  MLIRContext &ctx;
   bool ignoreReadEnableMem;
 
   SmallVector<sv::RegOp> registers;
@@ -54,10 +53,11 @@ class HWMemSimImpl {
   Value addPipelineStages(ImplicitLocOpBuilder &b,
                           ModuleNamespace &moduleNamespace, size_t stages,
                           Value clock, Value data, Value gate = {});
+  sv::AlwaysOp lastPipelineAlwaysOp;
 
 public:
-  HWMemSimImpl(MLIRContext &ctx, bool replSeqMem, bool ignoreReadEnableMem)
-      : ctx(ctx), ignoreReadEnableMem(ignoreReadEnableMem) {}
+  HWMemSimImpl(bool ignoreReadEnableMem)
+      : ignoreReadEnableMem(ignoreReadEnableMem) {}
 
   void generateMemory(HWModuleOp op, FirMemory mem);
 };
@@ -65,12 +65,10 @@ public:
 struct HWMemSimImplPass : public sv::HWMemSimImplBase<HWMemSimImplPass> {
   void runOnOperation() override;
 
-public:
-  HWMemSimImplPass(bool e, bool ignoreEn) {
-    replSeqMem = e;
-    ignoreReadEnableMem = ignoreEn;
-  }
+  using sv::HWMemSimImplBase<HWMemSimImplPass>::ignoreReadEnableMem;
+  using sv::HWMemSimImplBase<HWMemSimImplPass>::replSeqMem;
 };
+
 } // end anonymous namespace
 
 static FirMemory analyzeMemOp(HWModuleGeneratedOp op) {
@@ -98,6 +96,19 @@ static FirMemory analyzeMemOp(HWModuleGeneratedOp op) {
   return mem;
 }
 
+/// A helper that returns true if a value definition (or block argument) is
+/// visible to another operation, either because it's a block argument or
+/// because the defining op is before that other op.
+static bool valueDefinedBeforeOp(Value value, Operation *op) {
+  Operation *valueOp = value.getDefiningOp();
+  Block *valueBlock =
+      valueOp ? valueOp->getBlock() : value.cast<BlockArgument>().getOwner();
+  while (op->getBlock() && op->getBlock() != valueBlock)
+    op = op->getParentOp();
+  return valueBlock == op->getBlock() &&
+         (!valueOp || valueOp->isBeforeInBlock(op));
+}
+
 Value HWMemSimImpl::addPipelineStages(ImplicitLocOpBuilder &b,
                                       ModuleNamespace &moduleNamespace,
                                       size_t stages, Value clock, Value data,
@@ -105,28 +116,51 @@ Value HWMemSimImpl::addPipelineStages(ImplicitLocOpBuilder &b,
   if (!stages)
     return data;
 
-  while (stages--) {
-    auto reg =
-        b.create<sv::RegOp>(data.getType(), StringAttr{},
-                            b.getStringAttr(moduleNamespace.newName("_GEN")));
-    registers.push_back(reg);
+  // Try to reuse the previous always block. This is only possible if the clocks
+  // agree and the data and gate all dominate the always block.
+  auto alwaysOp = lastPipelineAlwaysOp;
+  if (alwaysOp) {
+    if (alwaysOp.getClocks() != ValueRange{clock} ||
+        !valueDefinedBeforeOp(data, alwaysOp) ||
+        (gate && !valueDefinedBeforeOp(gate, alwaysOp)))
+      alwaysOp = {};
+  }
+  if (!alwaysOp)
+    alwaysOp = b.create<sv::AlwaysOp>(sv::EventControl::AtPosEdge, clock);
 
-    // pipeline stage
-    b.create<sv::AlwaysOp>(sv::EventControl::AtPosEdge, clock, [&]() {
-      if (gate) {
-        b.create<sv::IfOp>(gate, [&]() { b.create<sv::PAssignOp>(reg, data); });
-      } else {
-        b.create<sv::PAssignOp>(reg, data);
-      }
-    });
-    data = b.create<sv::ReadInOutOp>(reg);
+  // Add the necessary registers.
+  auto savedIP = b.saveInsertionPoint();
+  SmallVector<sv::RegOp> regs;
+  b.setInsertionPoint(alwaysOp);
+  for (unsigned i = 0; i < stages; ++i) {
+    auto regName = b.getStringAttr(moduleNamespace.newName("_GEN"));
+    auto reg = b.create<sv::RegOp>(data.getType(), StringAttr{}, regName);
+    regs.push_back(reg);
+    registers.push_back(reg);
   }
 
+  // Populate the assignments in the always block.
+  b.setInsertionPointToEnd(alwaysOp.getBodyBlock());
+  for (unsigned i = 0; i < stages; ++i) {
+    if (i > 0)
+      data = b.create<sv::ReadInOutOp>(data);
+    auto emitAssign = [&] { b.create<sv::PAssignOp>(regs[i], data); };
+    if (gate)
+      b.create<sv::IfOp>(gate, [&]() { emitAssign(); });
+    else
+      emitAssign();
+    data = regs[i];
+    gate = {};
+  }
+  b.restoreInsertionPoint(savedIP);
+  data = b.create<sv::ReadInOutOp>(data);
+
+  lastPipelineAlwaysOp = alwaysOp;
   return data;
 }
 
 void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
-  ImplicitLocOpBuilder b(UnknownLoc::get(&ctx), op.getBody());
+  ImplicitLocOpBuilder b(op.getLoc(), op.getBody());
 
   ModuleNamespace moduleNamespace(op);
 
@@ -146,9 +180,9 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
 
   size_t inArg = 0;
   for (size_t i = 0; i < mem.numReadPorts; ++i) {
-    Value addr = op.body().getArgument(inArg++);
-    Value en = op.body().getArgument(inArg++);
-    Value clock = op.body().getArgument(inArg++);
+    Value addr = op.getBody().getArgument(inArg++);
+    Value en = op.getBody().getArgument(inArg++);
+    Value clock = op.getBody().getArgument(inArg++);
     // Add pipeline stages
     if (ignoreReadEnableMem) {
       for (size_t j = 0, e = mem.readLatency; j != e; ++j) {
@@ -168,34 +202,55 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
         b.create<sv::ReadInOutOp>(b.create<sv::ArrayIndexInOutOp>(reg, addr));
     if (!ignoreReadEnableMem) {
       Value x = b.create<sv::ConstantXOp>(rdata.getType());
-      rdata = b.create<comb::MuxOp>(en, rdata, x);
+      rdata = b.create<comb::MuxOp>(en, rdata, x, false);
     }
     outputs.push_back(rdata);
   }
 
   for (size_t i = 0; i < mem.numReadWritePorts; ++i) {
-    auto numStages = std::max(mem.readLatency, mem.writeLatency) - 1;
-    Value addr = op.body().getArgument(inArg++);
-    Value en = op.body().getArgument(inArg++);
-    Value clock = op.body().getArgument(inArg++);
-    Value wmode = op.body().getArgument(inArg++);
-    Value wdataIn = op.body().getArgument(inArg++);
+    auto numReadStages = mem.readLatency;
+    auto numWriteStages = mem.writeLatency - 1;
+    auto numCommonStages = std::min(numReadStages, numWriteStages);
+    Value addr = op.getBody().getArgument(inArg++);
+    Value en = op.getBody().getArgument(inArg++);
+    Value clock = op.getBody().getArgument(inArg++);
+    Value wmode = op.getBody().getArgument(inArg++);
+    Value wdataIn = op.getBody().getArgument(inArg++);
     Value wmaskBits;
     // There are no input mask ports, if maskBits =1. Create a dummy true value
     // for mask.
     if (isMasked)
-      wmaskBits = op.body().getArgument(inArg++);
+      wmaskBits = op.getBody().getArgument(inArg++);
     else
       wmaskBits = b.create<ConstantOp>(b.getIntegerAttr(en.getType(), 1));
 
-    // Add pipeline stages
-    addr = addPipelineStages(b, moduleNamespace, numStages, clock, addr);
-    en = addPipelineStages(b, moduleNamespace, numStages, clock, en);
-    wmode = addPipelineStages(b, moduleNamespace, numStages, clock, wmode);
-    wdataIn = addPipelineStages(b, moduleNamespace, numStages, clock, wdataIn);
+    // Add common pipeline stages.
+    addr = addPipelineStages(b, moduleNamespace, numCommonStages, clock, addr);
+    en = addPipelineStages(b, moduleNamespace, numCommonStages, clock, en);
+    wmode =
+        addPipelineStages(b, moduleNamespace, numCommonStages, clock, wmode);
+
+    // Add read-only pipeline stages.
+    auto read_addr = addPipelineStages(
+        b, moduleNamespace, numReadStages - numCommonStages, clock, addr);
+    auto read_en = addPipelineStages(
+        b, moduleNamespace, numReadStages - numCommonStages, clock, en);
+    auto read_wmode = addPipelineStages(
+        b, moduleNamespace, numReadStages - numCommonStages, clock, wmode);
+
+    // Add write-only pipeline stages.
+    auto write_addr = addPipelineStages(
+        b, moduleNamespace, numWriteStages - numCommonStages, clock, addr);
+    auto write_en = addPipelineStages(
+        b, moduleNamespace, numWriteStages - numCommonStages, clock, en);
+    auto write_wmode = addPipelineStages(
+        b, moduleNamespace, numWriteStages - numCommonStages, clock, wmode);
+    wdataIn =
+        addPipelineStages(b, moduleNamespace, numWriteStages, clock, wdataIn);
     if (isMasked)
-      wmaskBits =
-          addPipelineStages(b, moduleNamespace, numStages, clock, wmaskBits);
+      wmaskBits = addPipelineStages(b, moduleNamespace, numWriteStages, clock,
+                                    wmaskBits);
+
     SmallVector<Value, 4> maskValues(maskBits);
     SmallVector<Value, 4> dataValues(maskBits);
     // For multi-bit mask, extract corresponding write data bits of
@@ -213,20 +268,25 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
 
     // Read logic.
     Value rcond = b.createOrFold<comb::AndOp>(
-        en, b.createOrFold<comb::ICmpOp>(
-                comb::ICmpPredicate::eq, wmode,
-                b.createOrFold<ConstantOp>(wmode.getType(), 0)));
-    Value slotReg = b.create<sv::ArrayIndexInOutOp>(reg, addr);
+        read_en,
+        b.createOrFold<comb::ICmpOp>(
+            comb::ICmpPredicate::eq, read_wmode,
+            b.createOrFold<ConstantOp>(read_wmode.getType(), 0), false),
+        false);
+    Value slotReg = b.create<sv::ArrayIndexInOutOp>(reg, read_addr);
     Value slot = b.create<sv::ReadInOutOp>(slotReg);
     Value x = b.create<sv::ConstantXOp>(slot.getType());
-    b.create<sv::AssignOp>(rWire, b.create<comb::MuxOp>(rcond, slot, x));
+    b.create<sv::AssignOp>(rWire, b.create<comb::MuxOp>(rcond, slot, x, false));
 
     // Write logic gaurded by the corresponding mask bit.
     for (auto wmask : llvm::enumerate(maskValues)) {
       b.create<sv::AlwaysOp>(sv::EventControl::AtPosEdge, clock, [&]() {
         auto wcond = b.createOrFold<comb::AndOp>(
-            en, b.createOrFold<comb::AndOp>(wmask.value(), wmode));
+            write_en,
+            b.createOrFold<comb::AndOp>(wmask.value(), write_wmode, false),
+            false);
         b.create<sv::IfOp>(wcond, [&]() {
+          Value slotReg = b.create<sv::ArrayIndexInOutOp>(reg, write_addr);
           b.create<sv::PAssignOp>(
               b.createOrFold<sv::IndexedPartSelectInOutOp>(
                   slotReg,
@@ -243,15 +303,15 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
   DenseMap<unsigned, Operation *> writeProcesses;
   for (size_t i = 0; i < mem.numWritePorts; ++i) {
     auto numStages = mem.writeLatency - 1;
-    Value addr = op.body().getArgument(inArg++);
-    Value en = op.body().getArgument(inArg++);
-    Value clock = op.body().getArgument(inArg++);
-    Value wdataIn = op.body().getArgument(inArg++);
+    Value addr = op.getBody().getArgument(inArg++);
+    Value en = op.getBody().getArgument(inArg++);
+    Value clock = op.getBody().getArgument(inArg++);
+    Value wdataIn = op.getBody().getArgument(inArg++);
     Value wmaskBits;
     // There are no input mask ports, if maskBits =1. Create a dummy true value
     // for mask.
     if (isMasked)
-      wmaskBits = op.body().getArgument(inArg++);
+      wmaskBits = op.getBody().getArgument(inArg++);
     else
       wmaskBits = b.create<ConstantOp>(b.getIntegerAttr(en.getType(), 1));
     // Add pipeline stages
@@ -278,7 +338,7 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
       // data into it.
       for (auto wmask : llvm::enumerate(maskValues)) {
         // Guard by corresponding mask bit.
-        auto wcond = b.createOrFold<comb::AndOp>(en, wmask.value());
+        auto wcond = b.createOrFold<comb::AndOp>(en, wmask.value(), false);
         b.create<sv::IfOp>(wcond, [&]() {
           auto slot = b.create<sv::ArrayIndexInOutOp>(reg, addr);
           b.create<sv::PAssignOp>(
@@ -379,7 +439,7 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
         b.create<sv::VerbatimOp>(
             verbatimForLoop, ValueRange{},
             b.getArrayAttr({hw::InnerRefAttr::get(
-                op.getNameAttr(), randomMemReg.inner_symAttr())}));
+                op.getNameAttr(), randomMemReg.getInnerSymAttr())}));
       });
 
       // Register randomization logic.  Randomize every register to a random
@@ -390,10 +450,10 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
       b.create<sv::IfDefProceduralOp>("RANDOMIZE_REG_INIT", [&]() {
         unsigned bits = randomWidth;
         for (sv::RegOp &reg : randRegs)
-          b.create<sv::VerbatimOp>(b.getStringAttr("{{0}} = {`RANDOM};"),
-                                   ValueRange{},
-                                   b.getArrayAttr(hw::InnerRefAttr::get(
-                                       op.getNameAttr(), reg.inner_symAttr())));
+          b.create<sv::VerbatimOp>(
+              b.getStringAttr("{{0}} = {`RANDOM};"), ValueRange{},
+              b.getArrayAttr(hw::InnerRefAttr::get(op.getNameAttr(),
+                                                   reg.getInnerSymAttr())));
         auto randRegIdx = 0;
         for (sv::RegOp &reg : registers) {
           SmallVector<std::pair<Attribute, std::pair<size_t, size_t>>> values;
@@ -405,7 +465,7 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
               bits = 0;
             }
             auto innerRef = hw::InnerRefAttr::get(op.getNameAttr(),
-                                                  randReg.inner_symAttr());
+                                                  randReg.getInnerSymAttr());
             if (widthRemaining <= randomWidth - bits) {
               values.push_back({innerRef, {bits + widthRemaining - 1, bits}});
               bits += widthRemaining;
@@ -418,9 +478,9 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
           }
           SmallString<32> rhs("{{0}} = ");
           unsigned idx = 1;
-          assert(reg.inner_symAttr());
+          assert(reg.getInnerSymAttr());
           SmallVector<Attribute, 4> symbols(
-              {hw::InnerRefAttr::get(op.getNameAttr(), reg.inner_symAttr())});
+              {hw::InnerRefAttr::get(op.getNameAttr(), reg.getInnerSymAttr())});
           if (values.size() > 1)
             rhs.append("{");
           for (auto &v : values) {
@@ -464,11 +524,11 @@ void HWMemSimImplPass::runOnOperation() {
   for (auto op :
        llvm::make_early_inc_range(topModule->getOps<HWModuleGeneratedOp>())) {
     auto oldModule = cast<HWModuleGeneratedOp>(op);
-    auto gen = oldModule.generatorKind();
+    auto gen = oldModule.getGeneratorKind();
     auto genOp = cast<HWGeneratorSchemaOp>(
         SymbolTable::lookupSymbolIn(getOperation(), gen));
 
-    if (genOp.descriptor() == "FIRRTL_Memory") {
+    if (genOp.getDescriptor() == "FIRRTL_Memory") {
       auto mem = analyzeMemOp(oldModule);
 
       OpBuilder builder(oldModule);
@@ -489,11 +549,10 @@ void HWMemSimImplPass::runOnOperation() {
             oldModule.getLoc(), nameAttr, oldModule.getPorts());
         if (auto outdir = oldModule->getAttr("output_file"))
           newModule->setAttr("output_file", outdir);
-        newModule.commentAttr(
+        newModule.setCommentAttr(
             builder.getStringAttr("VCS coverage exclude_file"));
 
-        HWMemSimImpl(getContext(), replSeqMem, ignoreReadEnableMem)
-            .generateMemory(newModule, mem);
+        HWMemSimImpl(ignoreReadEnableMem).generateMemory(newModule, mem);
       }
 
       oldModule.erase();
@@ -505,7 +564,10 @@ void HWMemSimImplPass::runOnOperation() {
     markAllAnalysesPreserved();
 }
 
-std::unique_ptr<Pass> circt::sv::createHWMemSimImplPass(bool replSeqMem,
-                                                        bool ignoreReadEnable) {
-  return std::make_unique<HWMemSimImplPass>(replSeqMem, ignoreReadEnable);
+std::unique_ptr<Pass>
+circt::sv::createHWMemSimImplPass(bool replSeqMem, bool ignoreReadEnableMem) {
+  auto pass = std::make_unique<HWMemSimImplPass>();
+  pass->replSeqMem = replSeqMem;
+  pass->ignoreReadEnableMem = ignoreReadEnableMem;
+  return pass;
 }

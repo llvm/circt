@@ -24,6 +24,7 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/SymbolTable.h"
+#include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/CommandLine.h"
 
 namespace circt {
@@ -36,7 +37,7 @@ struct PortInfo {
   StringAttr name;
   FIRRTLType type;
   Direction direction;
-  StringAttr sym = {};
+  InnerSymAttr sym = {};
   Location loc = UnknownLoc::get(type.getContext());
   AnnotationSet annotations = AnnotationSet(type.getContext());
 
@@ -44,30 +45,56 @@ struct PortInfo {
 
   /// Return true if this is a simple output-only port.  If you want the
   /// direction of the port, use the \p direction parameter.
-  bool isOutput() {
-    auto flags = type.getRecursiveTypeProperties();
-    return flags.isPassive && !flags.containsAnalog &&
-           direction == Direction::Out;
-  }
+  bool isOutput() { return direction == Direction::Out && !isInOut(); }
 
   /// Return true if this is a simple input-only port.  If you want the
   /// direction of the port, use the \p direction parameter.
-  bool isInput() {
-    auto flags = type.getRecursiveTypeProperties();
-    return flags.isPassive && !flags.containsAnalog &&
-           direction == Direction::In;
-  }
+  bool isInput() { return direction == Direction::In && !isInOut(); }
 
   /// Return true if this is an inout port.  This will be true if the port
   /// contains either bi-directional signals or analog types.
-  bool isInOut() { return !isOutput() && !isInput(); }
+  bool isInOut() {
+    auto flags = TypeSwitch<FIRRTLType, RecursiveTypeProperties>(type)
+                     .Case<FIRRTLBaseType>([](auto base) {
+                       return base.getRecursiveTypeProperties();
+                     })
+                     .Case<RefType>([](auto ref) {
+                       return ref.getType().getRecursiveTypeProperties();
+                     })
+                     .Default([](auto) {
+                       llvm_unreachable("unsupported type");
+                       return RecursiveTypeProperties{};
+                     });
+    return !flags.isPassive || flags.containsAnalog;
+  }
+
+  /// Default constructors
+  PortInfo(StringAttr name, FIRRTLType type, Direction dir,
+           StringAttr symName = {}, Optional<Location> location = {},
+           Optional<AnnotationSet> annos = {})
+      : name(name), type(type), direction(dir) {
+    if (symName)
+      sym = InnerSymAttr::get(symName);
+    if (location)
+      loc = *location;
+    if (annos)
+      annotations = *annos;
+  };
+  PortInfo(StringAttr name, FIRRTLType type, Direction dir, InnerSymAttr sym,
+           Location loc, AnnotationSet annos)
+      : name(name), type(type), direction(dir), sym(sym), loc(loc),
+        annotations(annos) {}
 };
 
 /// Verification hook for verifying module like operations.
 LogicalResult verifyModuleLikeOpInterface(FModuleLike module);
 
+class InnerSymbolOpInterface;
+/// Verification hook for verifying InnerSym Attribute.
+LogicalResult verifyInnerSymAttr(InnerSymbolOpInterface op);
+
 namespace detail {
-LogicalResult verifyInnerRefs(Operation *op);
+LogicalResult verifyInnerRefNamespace(Operation *op);
 } // namespace detail
 
 } // namespace firrtl
@@ -91,8 +118,8 @@ public:
     if (!op->getRegion(0).hasOneBlock())
       return op->emitError("expected operation to have a single block");
 
-    // Verify all InnerRef users.
-    return ::circt::firrtl::detail::verifyInnerRefs(op);
+    // Verify all InnerSymbolTable's and InnerRef users.
+    return ::circt::firrtl::detail::verifyInnerRefNamespace(op);
   }
 };
 
@@ -106,11 +133,6 @@ public:
     static_assert(
         ConcreteType::template hasTrait<::mlir::SymbolOpInterface::Trait>(),
         "expected operation to define a Symbol");
-
-    if (op->getNumRegions() != 1)
-      return op->emitError("expected operation to have a single region");
-    if (!op->getRegion(0).hasOneBlock())
-      return op->emitError("expected operation to have a single block");
 
     // InnerSymbolTable's must be directly nested within an InnerRefNamespace.
     auto *parent = op->getParentOp();
