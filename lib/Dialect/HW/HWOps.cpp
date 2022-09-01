@@ -178,6 +178,40 @@ StringAttr hw::getResultSym(Operation *op, unsigned i) {
   return sym;
 }
 
+HWModulePortAccessor::HWModulePortAccessor(Location loc, OpBuilder &b,
+                                           const ModulePortInfo &info,
+                                           Region &bodyRegion)
+    : bb(b, loc) {
+
+  for (auto [barg, inputInfo] :
+       llvm::zip(bodyRegion.getArguments(), info.inputs))
+    ports.try_emplace(inputInfo.name.str(), PortValue(barg));
+
+  auto outputOp = cast<hw::OutputOp>(bodyRegion.front().getTerminator());
+  assert(outputOp.getNumOperands() == 0);
+
+  b.setInsertionPoint(outputOp);
+  llvm::SmallVector<Value> outputOpArgs;
+  for (auto &outputInfo : info.outputs) {
+    auto be = std::make_shared<Backedge>(bb.get(outputInfo.type));
+    outputBackedges.push_back(be);
+    assert(ports.count(outputInfo.name.str()) == 0 &&
+           "output port already exists");
+    ports[outputInfo.name.str()] = PortValue(be);
+    outputOpArgs.push_back(*be.get());
+  }
+
+  b.create<hw::OutputOp>(outputOp.getLoc(), outputOpArgs);
+  outputOp.erase();
+}
+
+void HWModulePortAccessor::PortValue::assign(Value rhs) {
+  auto *backedge = std::get_if<std::shared_ptr<Backedge>>(&valueOrBackedge);
+  assert(backedge && "Cannot assign to a value.");
+  assert(!(*backedge)->isSet() && "backedge already assigned.");
+  (*backedge)->setValue(rhs);
+}
+
 //===----------------------------------------------------------------------===//
 // ConstantOp
 //===----------------------------------------------------------------------===//
@@ -574,6 +608,21 @@ void HWModuleOp::build(OpBuilder &builder, OperationState &result,
                        StringAttr comment) {
   build(builder, result, name, ModulePortInfo(ports), parameters, attributes,
         comment);
+}
+
+void HWModuleOp::build(OpBuilder &builder, OperationState &result,
+                       StringAttr name, const ModulePortInfo &ports,
+                       HWModuleBuilder modBuilder, ArrayAttr parameters,
+                       ArrayRef<NamedAttribute> attributes,
+                       StringAttr comment) {
+  build(builder, result, name, ports, parameters, attributes, comment);
+  auto *bodyRegion = result.regions[0].get();
+  OpBuilder::InsertionGuard guard(builder);
+  builder.setInsertionPointToStart(&bodyRegion->front());
+  auto accessor =
+      HWModulePortAccessor(result.location, builder, ports, *bodyRegion);
+  builder.setInsertionPoint(bodyRegion->front().getTerminator());
+  modBuilder(builder, accessor);
 }
 
 void HWModuleOp::modifyPorts(

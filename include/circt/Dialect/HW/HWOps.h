@@ -16,6 +16,7 @@
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "circt/Dialect/HW/HWTypes.h"
+#include "circt/Support/BackedgeBuilder.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/FunctionInterfaces.h"
 #include "mlir/IR/OpImplementation.h"
@@ -24,6 +25,8 @@
 #include "mlir/Interfaces/ControlFlowInterfaces.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "llvm/ADT/StringExtras.h"
+
+#include <variant>
 
 namespace circt {
 namespace hw {
@@ -187,6 +190,51 @@ StringAttr getArgSym(Operation *op, unsigned i);
 /// Return the symbol (if any, else null) on the corresponding output port
 /// argument.
 StringAttr getResultSym(Operation *op, unsigned i);
+
+// A class for providing backedge-based access to the in- and output ports of
+// a module.
+class HWModulePortAccessor {
+
+  class PortValue {
+  public:
+    PortValue() {}
+    PortValue(Value v) : valueOrBackedge(v) {}
+    PortValue(const std::shared_ptr<Backedge> &b) : valueOrBackedge(b) {}
+
+    // An explicit function for backedge assignment instead of overloading the
+    // '=' operator.
+    // By this, we avoid aliasing with the implicit copy constructor + don't mix
+    // C++ and the underlying op generation semantics.
+    void assign(Value rhs);
+    operator Value() const {
+      auto *value = std::get_if<Value>(&valueOrBackedge);
+      if (value)
+        return *value;
+      return **std::get_if<std::shared_ptr<Backedge>>(&valueOrBackedge);
+    }
+
+  protected:
+    std::variant<Value, std::shared_ptr<Backedge>> valueOrBackedge;
+  };
+
+public:
+  HWModulePortAccessor(Location loc, OpBuilder &b, const ModulePortInfo &info,
+                       Region &bodyRegion);
+
+  PortValue operator[](llvm::StringRef name) {
+    auto it = ports.find(name.str());
+    assert(it != ports.end() && "Port not found.");
+    return it->second;
+  }
+
+private:
+  BackedgeBuilder bb;
+  std::map<std::string, PortValue> ports;
+  std::vector<std::shared_ptr<Backedge>> outputBackedges;
+};
+
+using HWModuleBuilder =
+    llvm::function_ref<void(OpBuilder &, HWModulePortAccessor &)>;
 
 } // namespace hw
 } // namespace circt

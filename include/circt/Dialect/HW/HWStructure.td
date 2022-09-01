@@ -61,6 +61,11 @@ def HWModuleOp : HWModuleOpBase<"module",
     OpBuilder<(ins "StringAttr":$name, "const ModulePortInfo &":$ports,
                    CArg<"ArrayAttr", "{}">:$parameters,
                    CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes,
+                   CArg<"StringAttr", "{}">:$comment)>,
+    OpBuilder<(ins "StringAttr":$name, "const ModulePortInfo &":$ports,
+                   "HWModuleBuilder":$modBuilder,
+                   CArg<"ArrayAttr", "{}">:$parameters,
+                   CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes,
                    CArg<"StringAttr", "{}">:$comment)>
   ];
 
