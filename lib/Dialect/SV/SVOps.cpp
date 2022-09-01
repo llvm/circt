@@ -31,8 +31,8 @@ using mlir::TypedAttr;
 /// Return true if the specified operation is an expression.
 bool sv::isExpression(Operation *op) {
   return isa<VerbatimExprOp, VerbatimExprSEOp, GetModportOp,
-             ReadInterfaceSignalOp, ConstantXOp, ConstantZOp, MacroRefExprOp>(
-      op);
+             ReadInterfaceSignalOp, ConstantXOp, ConstantZOp, MacroRefExprOp,
+             MacroRefExprSEOp>(op);
 }
 
 LogicalResult sv::verifyInProceduralRegion(Operation *op) {
@@ -173,6 +173,11 @@ void VerbatimExprSEOp::getAsmResultNames(
 //===----------------------------------------------------------------------===//
 
 void MacroRefExprOp::getAsmResultNames(
+    function_ref<void(Value, StringRef)> setNameFn) {
+  setNameFn(getResult(), getIdent().getName());
+}
+
+void MacroRefExprSEOp::getAsmResultNames(
     function_ref<void(Value, StringRef)> setNameFn) {
   setNameFn(getResult(), getIdent().getName());
 }
@@ -1609,7 +1614,7 @@ ParseResult parseXMRPath(::mlir::OpAsmParser &parser, ArrayAttr &pathAttr,
   });
   if (succeeded(ret)) {
     pathAttr = parser.getBuilder().getArrayAttr(
-        ArrayRef(strings.begin(), strings.end() - 1));
+        ArrayRef<Attribute>(strings).drop_back());
     terminalAttr = (*strings.rbegin()).cast<StringAttr>();
   }
   return ret;

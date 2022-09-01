@@ -197,8 +197,8 @@ void FirRegLower::lower() {
                 auto lhs =
                     builder.create<sv::LogicOp>(loc, builder.getIntegerType(32),
                                                 "_RANDOM_" + llvm::utostr(x));
-                auto rhs = builder.create<sv::VerbatimExprSEOp>(
-                    loc, builder.getIntegerType(32), "`RANDOM");
+                auto rhs = builder.create<sv::MacroRefExprSEOp>(
+                    loc, builder.getIntegerType(32), "RANDOM");
                 builder.create<sv::BPAssignOp>(loc, lhs, rhs);
                 randValues.push_back(lhs.getResult());
               }
@@ -248,8 +248,7 @@ FirRegLower::RegLowerInfo FirRegLower::lower(FirRegOp reg) {
 
   ImplicitLocOpBuilder builder(reg.getLoc(), reg);
   RegLowerInfo svReg{nullptr, nullptr, nullptr, -1, 0};
-  svReg.reg = builder.create<sv::RegOp>(loc, reg.getType(),
-                                        reg.getNameAttr());
+  svReg.reg = builder.create<sv::RegOp>(loc, reg.getType(), reg.getNameAttr());
   svReg.width = hw::getBitWidth(reg.getResult().getType());
   if (auto attr = reg->getAttrOfType<IntegerAttr>("firrtl.random_init_start"))
     svReg.randStart = attr.getUInt();

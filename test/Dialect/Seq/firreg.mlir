@@ -71,28 +71,28 @@ hw.module @lowering(%clk: i1, %rst: i1, %in: i32) -> (a: i32, b: i32, c: i32, d:
   // CHECK-NEXT:       }
   // CHECK-NEXT:       sv.ifdef.procedural  "RANDOMIZE_REG_INIT" {
   // CHECK-NEXT:          %_RANDOM_0 = sv.logic  : !hw.inout<i32>
-  // CHECK-NEXT:          %RANDOM = sv.verbatim.expr.se "`RANDOM" : () -> i32 {symbols = []}
+  // CHECK-NEXT:          %RANDOM = sv.macro.ref.se< "RANDOM"> : i32
   // CHECK-NEXT:          sv.bpassign %_RANDOM_0, %RANDOM : i32
   // CHECK-NEXT:          %_RANDOM_1 = sv.logic  : !hw.inout<i32>
-  // CHECK-NEXT:          %RANDOM_0 = sv.verbatim.expr.se "`RANDOM" : () -> i32 {symbols = []}
+  // CHECK-NEXT:          %RANDOM_0 = sv.macro.ref.se< "RANDOM"> : i32
   // CHECK-NEXT:          sv.bpassign %_RANDOM_1, %RANDOM_0 : i32
   // CHECK-NEXT:          %_RANDOM_2 = sv.logic  : !hw.inout<i32>
-  // CHECK-NEXT:          %RANDOM_1 = sv.verbatim.expr.se "`RANDOM" : () -> i32 {symbols = []}
+  // CHECK-NEXT:          %RANDOM_1 = sv.macro.ref.se< "RANDOM"> : i32
   // CHECK-NEXT:          sv.bpassign %_RANDOM_2, %RANDOM_1 : i32
   // CHECK-NEXT:          %_RANDOM_3 = sv.logic  : !hw.inout<i32>
-  // CHECK-NEXT:          %RANDOM_2 = sv.verbatim.expr.se "`RANDOM" : () -> i32 {symbols = []}
+  // CHECK-NEXT:          %RANDOM_2 = sv.macro.ref.se< "RANDOM"> : i32
   // CHECK-NEXT:          sv.bpassign %_RANDOM_3, %RANDOM_2 : i32
   // CHECK-NEXT:          %_RANDOM_4 = sv.logic  : !hw.inout<i32>
-  // CHECK-NEXT:          %RANDOM_3 = sv.verbatim.expr.se "`RANDOM" : () -> i32 {symbols = []}
+  // CHECK-NEXT:          %RANDOM_3 = sv.macro.ref.se< "RANDOM"> : i32
   // CHECK-NEXT:          sv.bpassign %_RANDOM_4, %RANDOM_3 : i32
   // CHECK-NEXT:          %_RANDOM_5 = sv.logic  : !hw.inout<i32>
-  // CHECK-NEXT:          %RANDOM_4 = sv.verbatim.expr.se "`RANDOM" : () -> i32 {symbols = []}
+  // CHECK-NEXT:          %RANDOM_4 = sv.macro.ref.se< "RANDOM"> : i32
   // CHECK-NEXT:          sv.bpassign %_RANDOM_5, %RANDOM_4 : i32
   // CHECK-NEXT:          %_RANDOM_6 = sv.logic  : !hw.inout<i32>
-  // CHECK-NEXT:          %RANDOM_5 = sv.verbatim.expr.se "`RANDOM" : () -> i32 {symbols = []}
+  // CHECK-NEXT:          %RANDOM_5 = sv.macro.ref.se< "RANDOM"> : i32
   // CHECK-NEXT:          sv.bpassign %_RANDOM_6, %RANDOM_5 : i32
   // CHECK-NEXT:          %_RANDOM_7 = sv.logic  : !hw.inout<i32>
-  // CHECK-NEXT:          %RANDOM_6 = sv.verbatim.expr.se "`RANDOM" : () -> i32 {symbols = []}
+  // CHECK-NEXT:          %RANDOM_6 = sv.macro.ref.se< "RANDOM"> : i32
   // CHECK-NEXT:          sv.bpassign %_RANDOM_7, %RANDOM_6 : i32
   // CHECK-NEXT:          %8 = sv.read_inout %_RANDOM_0 : !hw.inout<i32>
   // CHECK-NEXT:          sv.bpassign %rA, %8 : i32
@@ -156,7 +156,7 @@ hw.module private @UninitReg1(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
   // CHECK-NEXT:       }
   // CHECK-NEXT:     sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
   // CHECK-NEXT:        %_RANDOM_0 = sv.logic  : !hw.inout<i32>
-  // CHECK-NEXT:        %RANDOM = sv.verbatim.expr.se "`RANDOM" : () -> i32 {symbols = []}
+  // CHECK-NEXT:        %RANDOM = sv.macro.ref.se< "RANDOM"> : i32
   // CHECK-NEXT:        sv.bpassign %_RANDOM_0, %RANDOM : i32
   // CHECK-NEXT:        %3 = sv.read_inout %_RANDOM_0 : !hw.inout<i32>
   // CHECK-NEXT:        %4 = comb.extract %3 from 0 : (i32) -> i2
@@ -237,13 +237,13 @@ hw.module private @InitReg1(%clock: i1, %reset: i1, %io_d: i32, %io_en: i1) -> (
   // CHECK-NEXT:       }
   // CHECK-NEXT:       sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
   // CHECK-NEXT:         %_RANDOM_0 = sv.logic  : !hw.inout<i32>
-  // CHECK-NEXT:         %RANDOM = sv.verbatim.expr.se "`RANDOM" : () -> i32 {symbols = []}
+  // CHECK-NEXT:         %RANDOM = sv.macro.ref.se< "RANDOM"> : i32
   // CHECK-NEXT:         sv.bpassign %_RANDOM_0, %RANDOM : i32
   // CHECK-NEXT:         %_RANDOM_1 = sv.logic  : !hw.inout<i32>
-  // CHECK-NEXT:         %RANDOM_0 = sv.verbatim.expr.se "`RANDOM" : () -> i32 {symbols = []}
+  // CHECK-NEXT:         %RANDOM_0 = sv.macro.ref.se< "RANDOM"> : i32
   // CHECK-NEXT:         sv.bpassign %_RANDOM_1, %RANDOM_0 : i32
   // CHECK-NEXT:         %_RANDOM_2 = sv.logic  : !hw.inout<i32>
-  // CHECK-NEXT:         %RANDOM_1 = sv.verbatim.expr.se "`RANDOM" : () -> i32 {symbols = []}
+  // CHECK-NEXT:         %RANDOM_1 = sv.macro.ref.se< "RANDOM"> : i32
   // CHECK-NEXT:         sv.bpassign %_RANDOM_2, %RANDOM_1 : i32
   // CHECK-NEXT:         %8 = sv.read_inout %_RANDOM_0 : !hw.inout<i32>
   // CHECK-NEXT:         sv.bpassign %reg, %8 : i32
@@ -288,10 +288,10 @@ hw.module private @UninitReg42(%clock: i1, %reset: i1, %cond: i1, %value: i42) {
   // CHECK-NEXT:       }
   // CHECK-NEXT:       sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
   // CHECK-NEXT:         %_RANDOM_0 = sv.logic  : !hw.inout<i32>
-  // CHECK-NEXT:         %RANDOM = sv.verbatim.expr.se "`RANDOM" : () -> i32 {symbols = []}
+  // CHECK-NEXT:         %RANDOM = sv.macro.ref.se< "RANDOM"> : i32
   // CHECK-NEXT:         sv.bpassign %_RANDOM_0, %RANDOM : i32
   // CHECK-NEXT:         %_RANDOM_1 = sv.logic  : !hw.inout<i32>
-  // CHECK-NEXT:         %RANDOM_0 = sv.verbatim.expr.se "`RANDOM" : () -> i32 {symbols = []}
+  // CHECK-NEXT:         %RANDOM_0 = sv.macro.ref.se< "RANDOM"> : i32
   // CHECK-NEXT:         sv.bpassign %_RANDOM_1, %RANDOM_0 : i32
   // CHECK-NEXT:         %3 = sv.read_inout %_RANDOM_0 : !hw.inout<i32>
   // CHECK-NEXT:         %4 = sv.read_inout %_RANDOM_1 : !hw.inout<i32>

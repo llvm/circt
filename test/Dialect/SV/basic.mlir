@@ -20,7 +20,7 @@ hw.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
   sv.always posedge  %arg0 {
     sv.ifdef.procedural "SYNTHESIS" {
     } else {
-      %tmp = sv.macro.ref<"PRINTF_COND_">: i1
+      %tmp = sv.macro.ref< "PRINTF_COND_" > : i1
       %tmpx = sv.constantX : i1
       %tmpz = sv.constantZ : i1
       %tmp2 = comb.and %tmp, %tmpx, %tmpz, %arg1 : i1
