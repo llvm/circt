@@ -599,13 +599,12 @@ firrtl.module @subword_assign_4(in %x: !firrtl.sint<4>, in %y: !firrtl.uint<2>, 
 }
 
 // CHECK-LABEL: firrtl.module @subword_assign_4(in %x: !firrtl.sint<4>, in %y: !firrtl.uint<2>, in %en: !firrtl.uint<1>, out %out: !firrtl.sint<4>) {
-// CHECK-NEXT: %0 = firrtl.bits %out 1 to 0 : (!firrtl.sint<4>) -> !firrtl.uint<2>
-// CHECK-NEXT: %1 = firrtl.bits %x 3 to 2 : (!firrtl.sint<4>) -> !firrtl.uint<2>
-// CHECK-NEXT: %2 = firrtl.cat %1, %y : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<4>
-// CHECK-NEXT: %3 = firrtl.asSInt %2 : (!firrtl.uint<4>) -> !firrtl.sint<4>
-// CHECK-NEXT: %4 = firrtl.mux(%en, %3, %x) : (!firrtl.uint<1>, !firrtl.sint<4>, !firrtl.sint<4>) -> !firrtl.sint<4>
-// CHECK-NEXT: firrtl.connect %out, %4 : !firrtl.sint<4>, !firrtl.sint<4>
-// CHECK-NEXT: }
+// CHECK: [[TMP1:%.+]] = firrtl.bits %x 3 to 2 : (!firrtl.sint<4>) -> !firrtl.uint<2>
+// CHECK: [[TMP2:%.+]] = firrtl.cat [[TMP1]], %y : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<4>
+// CHECK: [[TMP3:%.+]] = firrtl.asSInt [[TMP2]] : (!firrtl.uint<4>) -> !firrtl.sint<4>
+// CHECK: [[TMP4:%.+]] = firrtl.mux(%en, [[TMP3]], %x) : (!firrtl.uint<1>, !firrtl.sint<4>, !firrtl.sint<4>) -> !firrtl.sint<4>
+// CHECK: firrtl.connect %out, [[TMP4]] : !firrtl.sint<4>, !firrtl.sint<4>
+// CHECK: }
 
 // Test subword assignment with multiple LHS bits ops.
 firrtl.module @subword_assign_5(in %b: !firrtl.uint<1>, out %o: !firrtl.uint<2>) {
