@@ -1,7 +1,7 @@
 ; RUN: firtool -preserve-values=all -verilog %s | FileCheck %s --check-prefix=ALL
 ; RUN: firtool -preserve-values=named -verilog %s | FileCheck %s --check-prefix=NAMED
 ; RUN: firtool -preserve-values=none -verilog %s | FileCheck %s --check-prefix=NONE
-; RUN: firtool -preserve-values=all -verilog %s --lowering-options=disallowLocalVariables| FileCheck %s --check-prefix=ALL
+; RUN: firtool -preserve-values=all -verilog %s --lowering-options=disallowLocalVariables| FileCheck %s --check-prefix=LOCAL
 
 circuit Foo:
   module Foo:
@@ -17,6 +17,7 @@ circuit Foo:
     ; ALL:       _r <= d;
     ; NAMED-NOT: _r = {{.*}};
     ; NONE-NOT:  _r = {{.*}};
+    ; LOCAL:     _r <= d;
     reg _r: UInt<33>, clock
     _r <= d
 
