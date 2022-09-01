@@ -2755,7 +2755,8 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
             else
               a->eraseOperand(0);
           }
-          wire = builder.createOrFold<comb::AndOp>(wire, getReadInOutOp(wire2));
+          wire = builder.createOrFold<comb::AndOp>(wire, getReadInOutOp(wire2),
+                                                   true);
         }
 
         operands.push_back(wire);
@@ -3078,7 +3079,7 @@ LogicalResult FIRRTLLowering::visitExpr(NotPrimOp op) {
   // ~x  ---> x ^ 0xFF
   auto allOnes = getOrCreateIntConstant(
       APInt::getAllOnes(operand.getType().getIntOrFloatBitWidth()));
-  return setLoweringTo<comb::XorOp>(op, operand, allOnes);
+  return setLoweringTo<comb::XorOp>(op, operand, allOnes, true);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(NegPrimOp op) {
@@ -3091,7 +3092,7 @@ LogicalResult FIRRTLLowering::visitExpr(NegPrimOp op) {
   auto resultType = lowerType(op.getType());
 
   auto zero = getOrCreateIntConstant(resultType.getIntOrFloatBitWidth(), 0);
-  return setLoweringTo<comb::SubOp>(op, zero, operand);
+  return setLoweringTo<comb::SubOp>(op, zero, operand, true);
 }
 
 // Pad is a noop or extension operation.
@@ -3126,7 +3127,8 @@ LogicalResult FIRRTLLowering::visitExpr(AndRPrimOp op) {
   return setLoweringTo<comb::ICmpOp>(
       op, ICmpPredicate::eq, operand,
       getOrCreateIntConstant(
-          APInt::getAllOnes(operand.getType().getIntOrFloatBitWidth())));
+          APInt::getAllOnes(operand.getType().getIntOrFloatBitWidth())),
+      true);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(OrRPrimOp op) {
@@ -3141,7 +3143,8 @@ LogicalResult FIRRTLLowering::visitExpr(OrRPrimOp op) {
   // Lower OrR to != 0
   return setLoweringTo<comb::ICmpOp>(
       op, ICmpPredicate::ne, operand,
-      getOrCreateIntConstant(operand.getType().getIntOrFloatBitWidth(), 0));
+      getOrCreateIntConstant(operand.getType().getIntOrFloatBitWidth(), 0),
+      true);
 }
 
 //===----------------------------------------------------------------------===//
@@ -3156,7 +3159,7 @@ LogicalResult FIRRTLLowering::lowerBinOpToVariadic(Operation *op) {
   if (!lhs || !rhs)
     return failure();
 
-  return setLoweringTo<ResultOpType>(op, lhs, rhs);
+  return setLoweringTo<ResultOpType>(op, lhs, rhs, true);
 }
 
 /// lowerBinOp extends each operand to the destination type, then performs the
@@ -3172,8 +3175,8 @@ LogicalResult FIRRTLLowering::lowerBinOp(Operation *op) {
 
   // Emit the result operation.
   if (resultType.cast<IntType>().isSigned())
-    return setLoweringTo<ResultSignedOpType>(op, lhs, rhs);
-  return setLoweringTo<ResultUnsignedOpType>(op, lhs, rhs);
+    return setLoweringTo<ResultSignedOpType>(op, lhs, rhs, true);
+  return setLoweringTo<ResultUnsignedOpType>(op, lhs, rhs, true);
 }
 
 /// lowerCmpOp extends each operand to the longest type, then performs the
@@ -3197,7 +3200,8 @@ LogicalResult FIRRTLLowering::lowerCmpOp(Operation *op, ICmpPredicate signedOp,
   // Emit the result operation.
   Type resultType = builder.getIntegerType(1);
   return setLoweringTo<comb::ICmpOp>(
-      op, resultType, lhsIntType.isSigned() ? signedOp : unsignedOp, lhs, rhs);
+      op, resultType, lhsIntType.isSigned() ? signedOp : unsignedOp, lhs, rhs,
+      true);
 }
 
 /// Lower a divide or dynamic shift, where the operation has to be performed
@@ -3220,9 +3224,9 @@ LogicalResult FIRRTLLowering::lowerDivLikeOp(Operation *op) {
 
   Value result;
   if (opType.isSigned())
-    result = builder.createOrFold<SignedOp>(lhs, rhs);
+    result = builder.createOrFold<SignedOp>(lhs, rhs, true);
   else
-    result = builder.createOrFold<UnsignedOp>(lhs, rhs);
+    result = builder.createOrFold<UnsignedOp>(lhs, rhs, true);
 
   if (resultType == opType)
     return setLowering(op->getResult(0), result);
@@ -3259,7 +3263,7 @@ LogicalResult FIRRTLLowering::visitExpr(IsXVerifOp op) {
 
   return setLoweringTo<comb::ICmpOp>(
       op, ICmpPredicate::ceq, input,
-      getOrCreateXConstant(input.getType().getIntOrFloatBitWidth()));
+      getOrCreateXConstant(input.getType().getIntOrFloatBitWidth()), true);
 }
 
 //===----------------------------------------------------------------------===//
@@ -3382,8 +3386,8 @@ LogicalResult FIRRTLLowering::visitExpr(MuxPrimOp op) {
   if (!cond || !ifTrue || !ifFalse)
     return failure();
 
-  return setLoweringTo<comb::MuxOp>(op, ifTrue.getType(), cond, ifTrue,
-                                    ifFalse);
+  return setLoweringTo<comb::MuxOp>(op, ifTrue.getType(), cond, ifTrue, ifFalse,
+                                    true);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(MultibitMuxOp op) {
@@ -3444,9 +3448,10 @@ LogicalResult FIRRTLLowering::visitExpr(MultibitMuxOp op) {
   Value isOutOfBounds = builder.create<comb::ICmpOp>(
       ICmpPredicate::uge, index,
       getOrCreateIntConstant(index.getType().getIntOrFloatBitWidth(),
-                             op.getInputs().size()));
+                             op.getInputs().size()),
+      true);
   return setLoweringTo<comb::MuxOp>(op, inBoundsRead.getType(), isOutOfBounds,
-                                    zerothRead, inBoundsRead);
+                                    zerothRead, inBoundsRead, true);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(VerbatimExprOp op) {
@@ -3673,7 +3678,7 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
       // Emit an "sv.if '`PRINTF_COND_ & cond' into the #ifndef.
       Value ifCond =
           builder.create<sv::MacroRefExprOp>(cond.getType(), "PRINTF_COND_");
-      ifCond = builder.createOrFold<comb::AndOp>(ifCond, cond);
+      ifCond = builder.createOrFold<comb::AndOp>(ifCond, cond, true);
 
       addIfProceduralBlock(ifCond, [&]() {
         // Emit the sv.fwrite, writing to stderr by default.
@@ -3703,7 +3708,7 @@ LogicalResult FIRRTLLowering::visitStmt(StopOp op) {
       // Emit an "sv.if '`STOP_COND_ & cond' into the #ifndef.
       Value ifCond =
           builder.create<sv::MacroRefExprOp>(cond.getType(), "STOP_COND_");
-      ifCond = builder.createOrFold<comb::AndOp>(ifCond, cond);
+      ifCond = builder.createOrFold<comb::AndOp>(ifCond, cond, true);
       addIfProceduralBlock(ifCond, [&]() {
         // Emit the sv.fatal or sv.finish.
         if (op.getExitCode())
@@ -3830,7 +3835,7 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
     if (format && (format.getValue() == "ifElseFatal" &&
                    !circuitState.emitChiselAssertsAsSVA)) {
       predicate = comb::createOrFoldNot(predicate, builder);
-      predicate = builder.createOrFold<comb::AndOp>(enable, predicate);
+      predicate = builder.createOrFold<comb::AndOp>(enable, predicate, true);
       addToIfDefBlock("SYNTHESIS", {}, [&]() {
         addToAlwaysBlock(clock, [&]() {
           addIfProceduralBlock(predicate, [&]() {
@@ -3853,9 +3858,9 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
     // Except for covers, combine them: enable & predicate
     if (!isCover) {
       auto notEnable = comb::createOrFoldNot(enable, builder);
-      predicate = builder.createOrFold<comb::OrOp>(notEnable, predicate);
+      predicate = builder.createOrFold<comb::OrOp>(notEnable, predicate, true);
     } else {
-      predicate = builder.createOrFold<comb::AndOp>(enable, predicate);
+      predicate = builder.createOrFold<comb::AndOp>(enable, predicate, true);
     }
 
     // Handle the regular SVA case.

@@ -120,10 +120,10 @@ struct DivOpLowering : public OpConversionPattern<DivOp> {
 
     Value divResult;
     if (signedDivision)
-      divResult = rewriter.create<comb::DivSOp>(loc, lhsValue, rhsValue)
+      divResult = rewriter.create<comb::DivSOp>(loc, lhsValue, rhsValue, false)
                       ->getOpResult(0);
     else
-      divResult = rewriter.create<comb::DivUOp>(loc, lhsValue, rhsValue)
+      divResult = rewriter.create<comb::DivUOp>(loc, lhsValue, rhsValue, false)
                       ->getOpResult(0);
 
     // finally truncate back to the expected result size!
@@ -222,7 +222,8 @@ struct ICmpOpLowering : public OpConversionPattern<ICmpOp> {
     Value rhsValue = extendTypeWidth(rewriter, loc, adaptor.rhs(), cmpWidth,
                                      rhsType.isSigned());
 
-    rewriter.replaceOpWithNewOp<comb::ICmpOp>(op, combPred, lhsValue, rhsValue);
+    rewriter.replaceOpWithNewOp<comb::ICmpOp>(op, combPred, lhsValue, rhsValue,
+                                              false);
 
     return success();
   }
@@ -252,7 +253,7 @@ struct BinaryOpLowering : public OpConversionPattern<BinOp> {
                                      targetWidth, isLhsTypeSigned);
     Value rhsValue = extendTypeWidth(rewriter, loc, adaptor.inputs()[1],
                                      targetWidth, isRhsTypeSigned);
-    rewriter.replaceOpWithNewOp<ReplaceOp>(op, lhsValue, rhsValue);
+    rewriter.replaceOpWithNewOp<ReplaceOp>(op, lhsValue, rhsValue, false);
     return success();
   }
 };

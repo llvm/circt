@@ -162,7 +162,7 @@ static size_t bitsEncoding(::capnp::schema::Type::Reader type) {
   case ty::TEXT:
     return 6;
   default:
-    assert(false && "Type not yet supported");
+    llvm_unreachable("Type not yet supported");
   }
 }
 
@@ -222,6 +222,7 @@ TypeSchemaImpl::TypeSchemaImpl(Type t) : type(t) {
   emitId(os, 0xFFFFFFFFFFFFFFFF) << ";\n";
   auto rc = write(os);
   assert(succeeded(rc) && "Failed schema text output.");
+  (void)rc;
   os.str();
 
   // Write `schemaText` to an in-memory filesystem then parse it. Yes, this is
@@ -248,7 +249,7 @@ TypeSchemaImpl::TypeSchemaImpl(Type t) : type(t) {
       return typeSchema;
     }
   }
-  assert(false && "A node with a matching ID should always be found.");
+  llvm_unreachable("A node with a matching ID should always be found.");
 }
 
 // We compute a deterministic hash based on the type. Since llvm::hash_value
@@ -759,7 +760,8 @@ private:
   void assertPred(Value val, ICmpPredicate pred, int64_t expected) {
     auto expectedVal = create<hw::ConstantOp>(loc, val.getType(), expected);
     create<sv::AssertOp>(
-        loc, create<comb::ICmpOp>(loc, getI1Type(), pred, val, expectedVal),
+        loc,
+        create<comb::ICmpOp>(loc, getI1Type(), pred, val, expectedVal, false),
         sv::DeferAssertAttr::get(loc.getContext(), sv::DeferAssert::Immediate));
   }
   Location loc;
@@ -1048,7 +1050,7 @@ static GasketComponent decodeList(hw::ArrayType type,
     expectedElemSizeField = 5;
     break;
   default:
-    assert(false && "bits() returned unexpected value");
+    llvm_unreachable("bits() returned unexpected value");
   }
   asserts.assertEqual(elemSize, expectedElemSizeField);
 
@@ -1065,7 +1067,7 @@ static GasketComponent decodeList(hw::ArrayType type,
       b, b.create<comb::ConcatOp>(loc, offset, gb.zero(6)));
   GasketComponent listOffset(
       b, b.create<comb::AddOp>(loc, offsetInBits,
-                               gb.constant(36, *ptrOffset + 64)));
+                               gb.constant(36, *ptrOffset + 64), false));
   listOffset.name(field.getName(), "_listOffset");
   auto listSlice =
       msg.slice(listOffset, type.getSize() * expectedElemSizeBits).name("list");
@@ -1148,6 +1150,8 @@ hw::HWModuleOp TypeSchemaImpl::buildDecoder(Value clk, Value valid,
   hw::ArrayType operandType = operandVal.getType().dyn_cast<hw::ArrayType>();
   assert(operandType && operandType.getSize() == size &&
          "Operand type and length must match the type's capnp size.");
+  (void)size;
+  (void)operandType;
 
   Slice operand(b, operandVal);
   operand.setLoc(loc);

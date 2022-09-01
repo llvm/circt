@@ -33,6 +33,9 @@ namespace {
 struct SeqToSVPass : public LowerSeqToSVBase<SeqToSVPass> {
   void runOnOperation() override;
 };
+struct SeqFIRRTLToSVPass : public LowerSeqFIRRTLToSVBase<SeqFIRRTLToSVPass> {
+  void runOnOperation() override;
+};
 } // anonymous namespace
 
 namespace {
@@ -549,9 +552,6 @@ void FirRegLower::addToAlwaysBlock(sv::EventControl clockEdge, Value clock,
 void SeqToSVPass::runOnOperation() {
   ModuleOp top = getOperation();
 
-  for (auto module : top.getOps<hw::HWModuleOp>())
-    FirRegLower(module).lower();
-
   MLIRContext &ctxt = getContext();
   ConversionTarget target(ctxt);
   target.addIllegalDialect<SeqDialect>();
@@ -563,6 +563,17 @@ void SeqToSVPass::runOnOperation() {
     signalPassFailure();
 }
 
+void SeqFIRRTLToSVPass::runOnOperation() {
+  ModuleOp top = getOperation();
+
+  for (auto module : top.getOps<hw::HWModuleOp>())
+    FirRegLower(module).lower();
+}
+
 std::unique_ptr<Pass> circt::seq::createSeqLowerToSVPass() {
   return std::make_unique<SeqToSVPass>();
+}
+
+std::unique_ptr<Pass> circt::seq::createSeqFIRRTLLowerToSVPass() {
+  return std::make_unique<SeqFIRRTLToSVPass>();
 }

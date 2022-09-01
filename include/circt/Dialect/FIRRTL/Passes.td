@@ -376,9 +376,8 @@ def BlackBoxReader : Pass<"firrtl-blackbox-reader", "CircuitOp"> {
 }
 
 def PrefixModules : Pass<"firrtl-prefix-modules", "firrtl::CircuitOp"> {
-  let summary = "Prefixes names of modules and mems in a hiearchy";
+  let summary = "Prefixes names of modules and mems in a hierarchy";
   let description = [{
-
     This pass looks for modules annotated with the
     `NestedPrefixModulesAnnotation` and prefixes the names of all modules
     instantiated underneath it.  If `inclusive` is true, it includes the target
@@ -533,7 +532,7 @@ def ExtractInstances : Pass<"firrtl-extract-instances", "firrtl::CircuitOp"> {
 }
 
 def MemToRegOfVec : Pass<"firrtl-mem-to-reg-of-vec", "firrtl::CircuitOp"> {
-  let summary = "Convert the memory to a Register vector";
+  let summary = "Convert combinational memories to a vector of registers";
   let description = [{
     This pass generates the logic to implement a memory using Registers.
   }];

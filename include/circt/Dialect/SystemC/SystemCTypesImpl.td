@@ -14,16 +14,6 @@ include "mlir/IR/EnumAttr.td"
 
 class SystemCTypeDef<string name> : TypeDef<SystemCDialect, name> { }
 
-// A handle to a systemc::SCFuncOp. Declares the systemc::FuncHandleType in C++.
-def FuncHandleTypeImpl : SystemCTypeDef<"FuncHandle"> {
-  let summary = "A function handle type";
-  let description = [{
-    Represents a handle to a SystemC module's member function that
-    can be used in places like SC_METHOD, SC_THREAD, etc.
-  }];
-  let mnemonic = "func_handle";
-}
-
 class SignalTypesImplBase<string name> : SystemCTypeDef<name> {
   let parameters = (ins "::mlir::Type":$baseType);
   let assemblyFormat = "`<` $baseType `>`";
@@ -77,4 +67,27 @@ def SignalTypeImpl : SignalTypesImplBase<"Signal"> {
     IEEE 1666-2011 §6.4.
   }];
   let mnemonic = "signal";
+}
+
+// A type to represent systemc::SCModuleOp instances.
+// Declares the systemc::ModuleType in C++.
+def ModuleTypeImpl : SystemCTypeDef<"Module"> {
+  let summary = "SystemC module type";
+  let description = [{
+    Represents a SystemC module instantiation. Example:
+    `!systemc.module<moduleName(portName1: type1, portName2: type2)>`
+  }];
+  let mnemonic = "module";
+
+  let hasCustomAssemblyFormat = 1;
+
+  let parameters = (ins
+    "mlir::StringAttr":$moduleName,
+    ArrayRefParameter<
+      "::circt::systemc::ModuleType::PortInfo", "module ports">:$ports
+  );
+
+  let extraClassDeclaration = [{
+    using PortInfo = ::circt::systemc::detail::PortInfo;
+  }];
 }

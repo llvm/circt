@@ -1,5 +1,5 @@
-; RUN: rm -rf %t && mkdir %t && firtool --firrtl-grand-central --split-verilog --annotation-file %s.anno.json --annotation-file %s.extract.anno.json -o %t %s && cd %t && verilator --sv --lint-only Top.sv bindings.sv
-; RUN: firtool --firrtl-grand-central --verilog --annotation-file %s.anno.json %s > %t.one-file.sv && verilator --sv --lint-only %t.one-file.sv
+; RUN: rm -rf %t && mkdir %t && firtool --split-verilog --annotation-file %s.anno.json --annotation-file %s.extract.anno.json -o %t %s && cd %t && verilator --sv --lint-only Top.sv bindings.sv
+; RUN: firtool --verilog --annotation-file %s.anno.json %s > %t.one-file.sv && verilator --sv --lint-only %t.one-file.sv
 ; REQUIRES: verilator
 
 circuit Top :

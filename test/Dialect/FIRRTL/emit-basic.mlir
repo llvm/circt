@@ -1,6 +1,6 @@
 // RUN: circt-translate --export-firrtl --verify-diagnostics %s -o %t
 // RUN: cat %t | FileCheck %s --strict-whitespace
-// Wire preservation breaks this: circt-translate --import-firrtl %t --mlir-print-debuginfo | circt-translate --export-firrtl | diff - %t
+// RUN: circt-translate --import-firrtl %t --mlir-print-debuginfo | circt-translate --export-firrtl | diff - %t
 
 // CHECK-LABEL: circuit Foo :
 firrtl.circuit "Foo" {

@@ -44,6 +44,12 @@ circuit test :
 
 ;// -----
 
+; expected-error @below {{'circuit' must be first token on its line}}
+FIRRTL version 1.1.0 circuit test :
+  module test :
+
+;// -----
+
 circuit test test : ; expected-error {{expected ':' in circuit definition}}
 
 ;// -----

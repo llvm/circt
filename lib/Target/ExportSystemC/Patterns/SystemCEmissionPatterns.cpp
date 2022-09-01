@@ -177,6 +177,26 @@ struct SignalEmitter : OpEmissionPattern<SignalOp> {
     p << " " << op.getName() << ";\n";
   }
 };
+
+/// Emit a systemc.instance.decl operation.
+struct InstanceDeclEmitter : OpEmissionPattern<InstanceDeclOp> {
+  using OpEmissionPattern::OpEmissionPattern;
+
+  MatchResult matchInlinable(Value value) override {
+    if (value.getDefiningOp<InstanceDeclOp>())
+      return Precedence::VAR;
+    return {};
+  }
+
+  void emitInlined(Value value, EmissionPrinter &p) override {
+    p << value.getDefiningOp<InstanceDeclOp>().getName();
+  }
+
+  void emitStatement(InstanceDeclOp op, EmissionPrinter &p) override {
+    p.emitType(op.getInstanceType());
+    p << " " << op.getName() << ";\n";
+  }
+};
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -194,6 +214,14 @@ struct SignalTypeEmitter : public TypeEmissionPattern<Ty> {
     p << ">";
   }
 };
+
+/// Emit a systemc::ModuleType by just printing the module name as we are
+/// dealing with a nominal type system.
+struct ModuleTypeEmitter : public TypeEmissionPattern<ModuleType> {
+  void emitType(ModuleType type, EmissionPrinter &p) override {
+    p << type.getModuleName().getValue();
+  }
+};
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -204,7 +232,7 @@ void circt::ExportSystemC::populateSystemCOpEmitters(
     OpEmissionPatternSet &patterns, MLIRContext *context) {
   patterns.add<BuiltinModuleEmitter, SCModuleEmitter, SignalWriteEmitter,
                SignalReadEmitter, CtorEmitter, SCFuncEmitter, MethodEmitter,
-               ThreadEmitter, SignalEmitter>(context);
+               ThreadEmitter, SignalEmitter, InstanceDeclEmitter>(context);
 }
 
 void circt::ExportSystemC::populateSystemCTypeEmitters(
@@ -218,6 +246,7 @@ void circt::ExportSystemC::populateSystemCTypeEmitters(
   patterns.add<SignalTypeEmitter<InputType, in>, 
                SignalTypeEmitter<InOutType, inout>,
                SignalTypeEmitter<OutputType, out>,
-               SignalTypeEmitter<SignalType, signal>>();
+               SignalTypeEmitter<SignalType, signal>,
+               ModuleTypeEmitter>();
   // clang-format on
 }
