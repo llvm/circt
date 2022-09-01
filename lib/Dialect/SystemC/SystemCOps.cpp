@@ -451,6 +451,37 @@ LogicalResult DestructorOp::verify() {
 }
 
 //===----------------------------------------------------------------------===//
+// BindPortOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult BindPortOp::verify() {
+  auto ports = getInstance().getType().cast<ModuleType>().getPorts();
+  auto *searchIter =
+      std::find_if(ports.begin(), ports.end(), [&](ModuleType::PortInfo port) {
+        return port.name == getPortNameAttr();
+      });
+  if (searchIter == ports.end())
+    return emitOpError("port name ")
+           << getPortNameAttr() << " not found in module";
+
+  // Verify that the base types match.
+  Type portType = searchIter->type;
+  Type channelType = getChannel().getType();
+  if (getSignalBaseType(portType) != getSignalBaseType(channelType))
+    return emitOpError() << portType << " port cannot be bound to "
+                         << channelType << " channel due to base type mismatch";
+
+  // Verify that the port/channel directions are valid.
+  if ((portType.isa<InputType>() && channelType.isa<OutputType>()) ||
+      (portType.isa<OutputType>() && channelType.isa<InputType>()))
+    return emitOpError() << portType << " port cannot be bound to "
+                         << channelType
+                         << " channel due to port direction mismatch";
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 
