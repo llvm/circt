@@ -127,6 +127,11 @@ def BindPortOp : SystemCOp<"instance.bind_port", [HasParent<"CtorOp">]> {
                        IndexAttr:$portId,
                        ChannelType:$channel);
 
+  let extraClassDeclaration = [{
+    /// Get the name of the port to be bound.
+    StringRef getPortName();
+  }];
+
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
 }

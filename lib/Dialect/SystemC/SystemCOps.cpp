@@ -541,6 +541,14 @@ LogicalResult BindPortOp::verify() {
   return success();
 }
 
+StringRef BindPortOp::getPortName() {
+  return getInstance()
+      .getType()
+      .cast<ModuleType>()
+      .getPorts()[getPortId().getZExtValue()]
+      .name.getValue();
+}
+
 //===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//

@@ -199,6 +199,29 @@ struct InstanceDeclEmitter : OpEmissionPattern<InstanceDeclOp> {
 };
 } // namespace
 
+/// Emit a systemc.instance.bind_port operation using the operator() rather than
+/// .bind() variant.
+struct BindPortEmitter : OpEmissionPattern<BindPortOp> {
+  using OpEmissionPattern::OpEmissionPattern;
+
+  void emitStatement(BindPortOp op, EmissionPrinter &p) override {
+    auto instEmitter = p.getInlinable(op.getInstance());
+    bool parenthesize = instEmitter.getPrecedence() > Precedence::MEMBER_ACCESS;
+
+    if (parenthesize)
+      p << "(";
+
+    instEmitter.emit();
+
+    if (parenthesize)
+      p << ")";
+
+    p << "." << op.getPortName() << "(";
+    p.getInlinable(op.getChannel()).emit();
+    p << ");\n";
+  }
+};
+
 //===----------------------------------------------------------------------===//
 // Type emission patterns.
 //===----------------------------------------------------------------------===//
@@ -230,9 +253,11 @@ struct ModuleTypeEmitter : public TypeEmissionPattern<ModuleType> {
 
 void circt::ExportSystemC::populateSystemCOpEmitters(
     OpEmissionPatternSet &patterns, MLIRContext *context) {
-  patterns.add<BuiltinModuleEmitter, SCModuleEmitter, SignalWriteEmitter,
-               SignalReadEmitter, CtorEmitter, SCFuncEmitter, MethodEmitter,
-               ThreadEmitter, SignalEmitter, InstanceDeclEmitter>(context);
+  patterns
+      .add<BuiltinModuleEmitter, SCModuleEmitter, SignalWriteEmitter,
+           SignalReadEmitter, CtorEmitter, SCFuncEmitter, MethodEmitter,
+           ThreadEmitter, SignalEmitter, InstanceDeclEmitter, BindPortEmitter>(
+          context);
 }
 
 void circt::ExportSystemC::populateSystemCTypeEmitters(
