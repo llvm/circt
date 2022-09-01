@@ -4,7 +4,10 @@
 
 emitc.include <"systemc">
 
+systemc.module @submodule (%in0: !systemc.in<i32>, %in1: !systemc.in<i32>, %out0: !systemc.out<i32>) {}
+
 systemc.module @module (%port0: !systemc.in<i1>, %port1: !systemc.inout<i64>, %port2: !systemc.out<i512>, %port3: !systemc.out<i1024>, %port4: !systemc.out<i1>) {
+  %submoduleInstance = systemc.instance.decl @submodule : !systemc.module<submodule(in0: !systemc.in<i32>, in1: !systemc.in<i32>, out0: !systemc.out<i32>)>
   %sig = systemc.signal : !systemc.signal<i64>
   systemc.ctor {
     systemc.method %add
