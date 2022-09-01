@@ -11,6 +11,7 @@
 // DIALECT-NEXT: cf
 // DIALECT-NEXT: chirrtl
 // DIALECT-NEXT: comb
+// DIALECT-NEXT: emitc
 // DIALECT-NEXT: esi
 // DIALECT-NEXT: firrtl
 // DIALECT-NEXT: fsm
