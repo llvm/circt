@@ -79,10 +79,130 @@ circuit Qux: %[[{
 ;CHECK-SAME:        (%[[multbit_mux_wire]], %[[array_get]])
 ;CHECK:    %[[v7:.+]] = sv.read_inout %[[multbit_mux_wire]] : !hw.inout<i8>
 ;CHECK:    sv.always posedge %clock {
-;CHECK-NEXT:      sv.passign %[[memory_0]]
-;CHECK-NEXT:      sv.passign %[[memory_1]]
-;CHECK-NEXT:      sv.passign %[[memory_2]]
-;CHECK-NEXT:      sv.passign %[[memory_3]]
+;CHECK-NEXT:      sv.if %wEn {
+;CHECK-NEXT:        sv.if %wMask {
+;CHECK-NEXT:          sv.if %16 {
+;CHECK-NEXT:            sv.passign %memory_0, %wData : i8
+;CHECK-NEXT:          } else {
+;CHECK-NEXT:            sv.if %rwEn {
+;CHECK-NEXT:              sv.if %rwMode {
+;CHECK-NEXT:                sv.if %rwMask {
+;CHECK-NEXT:                  sv.if %12 {
+;CHECK-NEXT:                    sv.passign %memory_0, %rwDataIn : i8
+;CHECK-NEXT:                  } else {
+;CHECK-NEXT:                  }
+;CHECK-NEXT:                } else {
+;CHECK-NEXT:                }
+;CHECK-NEXT:              } else {
+;CHECK-NEXT:              }
+;CHECK-NEXT:            } else {
+;CHECK-NEXT:            }
+;CHECK-NEXT:          }
+;CHECK-NEXT:          sv.if %17 {
+;CHECK-NEXT:            sv.passign %memory_1, %wData : i8
+;CHECK-NEXT:          } else {
+;CHECK-NEXT:            sv.if %rwEn {
+;CHECK-NEXT:              sv.if %rwMode {
+;CHECK-NEXT:                sv.if %rwMask {
+;CHECK-NEXT:                  sv.if %13 {
+;CHECK-NEXT:                    sv.passign %memory_1, %rwDataIn : i8
+;CHECK-NEXT:                  } else {
+;CHECK-NEXT:                  }
+;CHECK-NEXT:                } else {
+;CHECK-NEXT:                }
+;CHECK-NEXT:              } else {
+;CHECK-NEXT:              }
+;CHECK-NEXT:            } else {
+;CHECK-NEXT:            }
+;CHECK-NEXT:          }
+;CHECK-NEXT:          sv.if %18 {
+;CHECK-NEXT:            sv.passign %memory_2, %wData : i8
+;CHECK-NEXT:          } else {
+;CHECK-NEXT:            sv.if %rwEn {
+;CHECK-NEXT:              sv.if %rwMode {
+;CHECK-NEXT:                sv.if %rwMask {
+;CHECK-NEXT:                  sv.if %14 {
+;CHECK-NEXT:                    sv.passign %memory_2, %rwDataIn : i8
+;CHECK-NEXT:                  } else {
+;CHECK-NEXT:                  }
+;CHECK-NEXT:                } else {
+;CHECK-NEXT:                }
+;CHECK-NEXT:              } else {
+;CHECK-NEXT:              }
+;CHECK-NEXT:            } else {
+;CHECK-NEXT:            }
+;CHECK-NEXT:          }
+;CHECK-NEXT:          sv.if %19 {
+;CHECK-NEXT:            sv.passign %memory_3, %wData : i8
+;CHECK-NEXT:          } else {
+;CHECK-NEXT:            sv.if %rwEn {
+;CHECK-NEXT:              sv.if %rwMode {
+;CHECK-NEXT:                sv.if %rwMask {
+;CHECK-NEXT:                  sv.if %15 {
+;CHECK-NEXT:                    sv.passign %memory_3, %rwDataIn : i8
+;CHECK-NEXT:                  } else {
+;CHECK-NEXT:                  }
+;CHECK-NEXT:                } else {
+;CHECK-NEXT:                }
+;CHECK-NEXT:              } else {
+;CHECK-NEXT:              }
+;CHECK-NEXT:            } else {
+;CHECK-NEXT:            }
+;CHECK-NEXT:          }
+;CHECK-NEXT:        } else {
+;CHECK-NEXT:          sv.if %rwEn {
+;CHECK-NEXT:            sv.if %rwMode {
+;CHECK-NEXT:              sv.if %rwMask {
+;CHECK-NEXT:                sv.if %12 {
+;CHECK-NEXT:                  sv.passign %memory_0, %rwDataIn : i8
+;CHECK-NEXT:                } else {
+;CHECK-NEXT:                }
+;CHECK-NEXT:                sv.if %13 {
+;CHECK-NEXT:                  sv.passign %memory_1, %rwDataIn : i8
+;CHECK-NEXT:                } else {
+;CHECK-NEXT:                }
+;CHECK-NEXT:                sv.if %14 {
+;CHECK-NEXT:                  sv.passign %memory_2, %rwDataIn : i8
+;CHECK-NEXT:                } else {
+;CHECK-NEXT:                }
+;CHECK-NEXT:                sv.if %15 {
+;CHECK-NEXT:                  sv.passign %memory_3, %rwDataIn : i8
+;CHECK-NEXT:                } else {
+;CHECK-NEXT:                }
+;CHECK-NEXT:              } else {
+;CHECK-NEXT:              }
+;CHECK-NEXT:            } else {
+;CHECK-NEXT:            }
+;CHECK-NEXT:          } else {
+;CHECK-NEXT:          }
+;CHECK-NEXT:        }
+;CHECK-NEXT:      } else {
+;CHECK-NEXT:        sv.if %rwEn {
+;CHECK-NEXT:          sv.if %rwMode {
+;CHECK-NEXT:            sv.if %rwMask {
+;CHECK-NEXT:              sv.if %12 {
+;CHECK-NEXT:                sv.passign %memory_0, %rwDataIn : i8
+;CHECK-NEXT:              } else {
+;CHECK-NEXT:              }
+;CHECK-NEXT:              sv.if %13 {
+;CHECK-NEXT:                sv.passign %memory_1, %rwDataIn : i8
+;CHECK-NEXT:              } else {
+;CHECK-NEXT:              }
+;CHECK-NEXT:              sv.if %14 {
+;CHECK-NEXT:                sv.passign %memory_2, %rwDataIn : i8
+;CHECK-NEXT:              } else {
+;CHECK-NEXT:              }
+;CHECK-NEXT:              sv.if %15 {
+;CHECK-NEXT:                sv.passign %memory_3, %rwDataIn : i8
+;CHECK-NEXT:              } else {
+;CHECK-NEXT:              }
+;CHECK-NEXT:            } else {
+;CHECK-NEXT:            }
+;CHECK-NEXT:          } else {
+;CHECK-NEXT:          }
+;CHECK-NEXT:        } else {
+;CHECK-NEXT:        }
+;CHECK-NEXT:      }
 ;CHECK-NEXT:      sv.passign %[[addr]], %rAddr : i2
 ;CHECK-NEXT:    }
 ;CHECK:    hw.output %[[v6]], %[[v7]]
