@@ -89,11 +89,9 @@ namespace {
 /// Lower FirRegOp to `sv.reg` and `sv.always`.
 class FirRegLower {
 public:
-  FirRegLower(hw::HWModuleOp module) : module(module), ns(module) {}
+  FirRegLower() {}
 
-  void lower();
-
-  using SymbolAndRange = std::pair<Attribute, std::pair<uint64_t, uint64_t>>;
+  void lower(hw::HWModuleOp module);
 
 private:
   struct RegLowerInfo {
@@ -104,14 +102,12 @@ private:
     size_t width;
   };
 
-  using AsyncResetSignal = std::pair<Value, Value>;
-
-  RegLowerInfo lower(FirRegOp reg);
+  RegLowerInfo lower(hw::HWModuleOp module, FirRegOp reg);
 
   void initialize(OpBuilder &builder, RegLowerInfo reg, ArrayRef<Value> rands);
 
-  void addToAlwaysBlock(sv::EventControl clockEdge, Value clock,
-                        std::function<void(OpBuilder &)> body,
+  void addToAlwaysBlock(hw::HWModuleOp module, sv::EventControl clockEdge,
+                        Value clock, std::function<void(OpBuilder &)> body,
                         ResetType resetStyle = {},
                         sv::EventControl resetEdge = {}, Value reset = {},
                         std::function<void(OpBuilder &)> resetBody = {});
@@ -120,18 +116,10 @@ private:
                                    sv::EventControl, Value>;
   llvm::SmallDenseMap<AlwaysKeyType, std::pair<sv::AlwaysOp, sv::IfOp>>
       alwaysBlocks;
-
-  hw::HWModuleOp module;
-  hw::ModuleNamespace ns;
-
-  /// This is a map from block to a pair of a random value and its unused
-  /// bits. It is used to reduce the number of random value.
-  std::pair<Value, uint64_t> randomValueAndRemain;
-  SmallDenseMap<StringAttr, sv::RegOp> presetRandomValues;
 };
 } // namespace
 
-void FirRegLower::lower() {
+void FirRegLower::lower(hw::HWModuleOp module) {
   // Find all registers to lower in the module.
   auto regs = module.getOps<seq::FirRegOp>();
   if (regs.empty())
@@ -140,7 +128,7 @@ void FirRegLower::lower() {
   // Lower the regs to SV regs.
   SmallVector<RegLowerInfo> toInit;
   for (auto reg : llvm::make_early_inc_range(regs))
-    toInit.push_back(lower(reg));
+    toInit.push_back(lower(module, reg));
 
   // Compute total width of random space.  Place non-chisel registers at the end
   // of the space.  The Random space is unique to the initial block, due to
@@ -243,7 +231,8 @@ void FirRegLower::lower() {
   module->removeAttr("firrtl.random_init_width");
 }
 
-FirRegLower::RegLowerInfo FirRegLower::lower(FirRegOp reg) {
+FirRegLower::RegLowerInfo FirRegLower::lower(hw::HWModuleOp module,
+                                             FirRegOp reg) {
   Location loc = reg.getLoc();
 
   ImplicitLocOpBuilder builder(reg.getLoc(), reg);
@@ -269,10 +258,9 @@ FirRegLower::RegLowerInfo FirRegLower::lower(FirRegOp reg) {
       builder.create<sv::PAssignOp>(loc, svReg.reg, reg.getNext());
   };
 
-  llvm::Optional<AsyncResetSignal> asyncReset;
   if (reg.hasReset()) {
     addToAlwaysBlock(
-        sv::EventControl::AtPosEdge, reg.getClk(), setInput,
+        module, sv::EventControl::AtPosEdge, reg.getClk(), setInput,
         reg.getIsAsync() ? ResetType::AsyncReset : ResetType::SyncReset,
         sv::EventControl::AtPosEdge, reg.getReset(), [&](OpBuilder &builder) {
           builder.create<sv::PAssignOp>(loc, svReg.reg, reg.getResetValue());
@@ -282,7 +270,8 @@ FirRegLower::RegLowerInfo FirRegLower::lower(FirRegOp reg) {
       svReg.asyncResetValue = reg.getResetValue();
     }
   } else {
-    addToAlwaysBlock(sv::EventControl::AtPosEdge, reg.getClk(), setInput);
+    addToAlwaysBlock(module, sv::EventControl::AtPosEdge, reg.getClk(),
+                     setInput);
   }
 
   reg.replaceAllUsesWith(regVal.getResult());
@@ -317,12 +306,13 @@ void FirRegLower::initialize(OpBuilder &builder, RegLowerInfo reg,
   builder.create<sv::BPAssignOp>(loc, reg.reg, bitcast);
 }
 
-void FirRegLower::addToAlwaysBlock(sv::EventControl clockEdge, Value clock,
+void FirRegLower::addToAlwaysBlock(hw::HWModuleOp module,
+                                   sv::EventControl clockEdge, Value clock,
                                    std::function<void(OpBuilder &)> body,
                                    ::ResetType resetStyle,
                                    sv::EventControl resetEdge, Value reset,
                                    std::function<void(OpBuilder &)> resetBody) {
-  auto loc = module.getLoc();
+  auto loc = clock.getLoc();
   auto builder =
       ImplicitLocOpBuilder::atBlockTerminator(loc, module.getBodyBlock());
 
@@ -402,10 +392,8 @@ void SeqToSVPass::runOnOperation() {
 }
 
 void SeqFIRRTLToSVPass::runOnOperation() {
-  ModuleOp top = getOperation();
-
-  for (auto module : top.getOps<hw::HWModuleOp>())
-    FirRegLower(module).lower();
+  hw::HWModuleOp module = getOperation();
+  FirRegLower().lower(module);
 }
 
 std::unique_ptr<Pass> circt::seq::createSeqLowerToSVPass() {
