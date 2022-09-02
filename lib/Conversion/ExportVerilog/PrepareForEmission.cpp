@@ -576,8 +576,8 @@ void ExportVerilog::prepareHWModule(Block &block,
       if (options.disallowLocalVariables) {
         // When `disallowLocalVariables` is enabled, "automatic logic" is
         // prohibited so hoist the op to a non-procedural region.
-        auto moveOp = findParentInNonProceduralRegion(&op);
-        op.moveBefore(moveOp);
+        auto *parentOp = findParentInNonProceduralRegion(&op);
+        op.moveBefore(parentOp);
       } else {
         // Otherwise, move the logic op to the beggining of the block.
         auto [block, it] = findLogicOpInsertionPoint(&op);
