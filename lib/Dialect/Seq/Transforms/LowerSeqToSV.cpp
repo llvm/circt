@@ -89,7 +89,7 @@ namespace {
 /// Lower FirRegOp to `sv.reg` and `sv.always`.
 class FirRegLower {
 public:
-  FirRegLower() {}
+  FirRegLower() = default;
 
   void lower(hw::HWModuleOp module);
 
