@@ -270,6 +270,10 @@ class BitVectorValue(PyCDEValue):
   def __len__(self):
     return self.type.width
 
+  def __iter__(self):
+    for idx in range(self.type.width):
+      yield self[idx]
+
   #  === Casting ===
 
   def _exec_cast(self, targetValueType, type_getter, width: int = None):
