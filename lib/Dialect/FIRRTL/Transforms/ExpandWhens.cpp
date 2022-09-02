@@ -706,7 +706,7 @@ public:
 
   bool run(FModuleOp op);
   LogicalResult checkInitialization();
-  bool usesSubwordUninit(SmallVector<Operation *> ops);
+  bool usesSubwordUninit(SmallVector<Operation *> &ops);
 
 private:
   /// The outermost scope of the module body.
@@ -755,7 +755,7 @@ void ModuleVisitor::visitStmt(WhenOp whenOp) {
 }
 
 // Returns true if any ops in the list use an uninitialized subword value.
-bool ModuleVisitor::usesSubwordUninit(SmallVector<Operation *> ops) {
+bool ModuleVisitor::usesSubwordUninit(SmallVector<Operation *> &ops) {
   if (subwordUninit.empty())
     return false;
   while (!ops.empty()) {
