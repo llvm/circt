@@ -163,7 +163,6 @@ void GlobalNameResolver::legalizeModuleNames(HWModuleOp module) {
   NameCollisionResolver nameResolver;
   auto verilogNameAttr = StringAttr::get(ctxt, "hw.verilogName");
   // Legalize the port names.
-  size_t portIdx = 0;
   SmallVector<Attribute, 4> argNames, resultNames;
   for (const PortInfo &port : getAllModulePortInfos(module)) {
     auto newName = nameResolver.getLegalName(port.name);
@@ -175,7 +174,6 @@ void GlobalNameResolver::legalizeModuleNames(HWModuleOp module) {
         module.setArgAttr(port.argNum, verilogNameAttr,
                           StringAttr::get(ctxt, newName));
     }
-    ++portIdx;
   }
 
   // Legalize the parameter names.
