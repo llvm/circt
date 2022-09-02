@@ -95,7 +95,30 @@ def MacroRefExprOp : SVOp<"macro.ref", [NoSideEffect, HasCustomSSAName]> {
   let arguments = (ins MacroIdentAttr:$ident);
   let results = (outs HWValueOrInOutType:$result);
 
-  let assemblyFormat = "`<` $ident `>` attr-dict `:` qualified(type($result))";
+  let assemblyFormat = "`<` $ident `>` attr-dict `:` type($result)";
+
+  let builders = [
+    OpBuilder<(ins "Type":$resultType, "StringRef":$ident),
+               "build(odsBuilder, odsState, resultType, "
+                 "::circt::sv::MacroIdentAttr::get("
+                   "$_builder.getContext(), ident));">
+  ];
+}
+
+def MacroRefExprSEOp : SVOp<"macro.ref.se", [HasCustomSSAName]> {
+  let summary = "Expression to refer to a SystemVerilog macro";
+  let description = [{
+    This operation produces a value by referencing a named macro.
+
+    Presently, it is assumed that the referenced macro is not constant and has
+    side effects.  This expression is not subject to CSE.  It can not be
+    duplicated, but can be emitted inline by the Verilog emitter.
+    }];
+
+  let arguments = (ins MacroIdentAttr:$ident);
+  let results = (outs HWValueOrInOutType:$result);
+
+  let assemblyFormat = "`<` $ident `>` attr-dict `:` type($result)";
 
   let builders = [
     OpBuilder<(ins "Type":$resultType, "StringRef":$ident),
