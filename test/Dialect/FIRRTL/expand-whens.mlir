@@ -641,4 +641,28 @@ firrtl.module @subword_assign_6(in %c: !firrtl.uint<2>, out %x: !firrtl.sint<2>)
 // CHECK: firrtl.strictconnect %x, [[TMP12]] : !firrtl.sint<2>
 // CHECK: }
 
+// Test subword assignment with the expand-whens invalid value optimization.
+firrtl.module @subword_assign_7(in %p: !firrtl.uint<1>, out %o: !firrtl.uint<8>) {
+  %w = firrtl.wire interesting_name  : !firrtl.uint<8>
+  %0 = firrtl.bits %w 0 to 0 : (!firrtl.uint<8>) -> !firrtl.uint<1>
+  %1 = firrtl.bits %w 0 to 0 : (!firrtl.uint<8>) -> !firrtl.uint<1>
+  %invalid_ui8 = firrtl.invalidvalue : !firrtl.uint<8>
+  firrtl.strictconnect %w, %invalid_ui8 : !firrtl.uint<8>
+  %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+  firrtl.when %p {
+    firrtl.strictconnect %1, %c1_ui1 : !firrtl.uint<1>
+  } else {
+    %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
+    firrtl.strictconnect %0, %invalid_ui1 : !firrtl.uint<1>
+  }
+  firrtl.strictconnect %o, %w : !firrtl.uint<8>
+}
+
+// CHECK-LABEL: firrtl.module @subword_assign_7(in %p: !firrtl.uint<1>, out %o: !firrtl.uint<8>) {
+// CHECK: %w = firrtl.wire [[NAME:.*]] : !firrtl.uint<8>
+// CHECK: %c1_ui8 = firrtl.constant 1 : !firrtl.uint<8>
+// CHECK: firrtl.connect %w, %c1_ui8 : !firrtl.uint<8>, !firrtl.uint<8>
+// CHECK: firrtl.strictconnect %o, %w : !firrtl.uint<8>
+// CHECK: }
+
 }
