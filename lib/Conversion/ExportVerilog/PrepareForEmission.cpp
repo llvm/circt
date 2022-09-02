@@ -386,8 +386,8 @@ static Operation *findParentInNonProceduralRegion(Operation *op) {
 /// This function is invoked on side effecting Verilog expressions when we're in
 /// 'disallowLocalVariables' mode for old Verilog clients.  This ensures that
 /// any side effecting expressions are only used by a single BPAssign to a
-/// sv.reg operation.  This ensures that the verilog emitter doesn't have to
-/// worry about spilling them.
+/// sv.reg or sv.logic operation.  This ensures that the verilog emitter doesn't
+/// have to worry about spilling them.
 ///
 /// This returns true if the op was rewritten, false otherwise.
 static bool rewriteSideEffectingExpr(Operation *op) {
@@ -396,7 +396,7 @@ static bool rewriteSideEffectingExpr(Operation *op) {
   // Check to see if this is already rewritten.
   if (op->hasOneUse()) {
     if (auto assign = dyn_cast<BPAssignOp>(*op->user_begin()))
-      if (assign.getDest().getDefiningOp<RegOp>())
+      if (isa_and_nonnull<RegOp, LogicOp>(assign.getDest().getDefiningOp()))
         return false;
   }
 
@@ -571,9 +571,17 @@ void ExportVerilog::prepareHWModule(Block &block,
       lowerBoundInstance(instance);
     }
 
-    if (isProceduralRegion) {
-      if (auto logic = dyn_cast<LogicOp>(op)) {
-        auto [block, it] = findLogicOpInsertionPoint(logic);
+    // If logic op is located in a procedural region, we have to move the logic
+    // op declaration to a valid program point.
+    if (isProceduralRegion && isa<LogicOp>(op)) {
+      if (options.disallowLocalVariables) {
+        // When `disallowLocalVariables` is enabled, "automatic logic" is
+        // prohibited so hoist the op to a non-procedural region.
+        auto *parentOp = findParentInNonProceduralRegion(&op);
+        op.moveBefore(parentOp);
+      } else {
+        // Otherwise, move the logic op to the beggining of the block.
+        auto [block, it] = findLogicOpInsertionPoint(&op);
         op.moveBefore(block, it);
       }
     }
