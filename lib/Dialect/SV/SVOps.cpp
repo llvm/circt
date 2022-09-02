@@ -314,14 +314,15 @@ void LogicOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 void IfDefOp::build(OpBuilder &builder, OperationState &result, StringRef cond,
                     std::function<void()> thenCtor,
                     std::function<void()> elseCtor) {
-  build(builder, result, builder.getStringAttr(cond), thenCtor, elseCtor);
+  build(builder, result, builder.getStringAttr(cond), std::move(thenCtor),
+        std::move(elseCtor));
 }
 
 void IfDefOp::build(OpBuilder &builder, OperationState &result, StringAttr cond,
                     std::function<void()> thenCtor,
                     std::function<void()> elseCtor) {
   build(builder, result, MacroIdentAttr::get(builder.getContext(), cond),
-        thenCtor, elseCtor);
+        std::move(thenCtor), std::move(elseCtor));
 }
 
 void IfDefOp::build(OpBuilder &builder, OperationState &result,
@@ -367,14 +368,15 @@ LogicalResult IfDefOp::canonicalize(IfDefOp op, PatternRewriter &rewriter) {
 void IfDefProceduralOp::build(OpBuilder &builder, OperationState &result,
                               StringRef cond, std::function<void()> thenCtor,
                               std::function<void()> elseCtor) {
-  build(builder, result, builder.getStringAttr(cond), thenCtor, elseCtor);
+  build(builder, result, builder.getStringAttr(cond), std::move(thenCtor),
+        std::move(elseCtor));
 }
 
 void IfDefProceduralOp::build(OpBuilder &builder, OperationState &result,
                               StringAttr cond, std::function<void()> thenCtor,
                               std::function<void()> elseCtor) {
   build(builder, result, MacroIdentAttr::get(builder.getContext(), cond),
-        thenCtor, elseCtor);
+        std::move(thenCtor), std::move(elseCtor));
 }
 
 void IfDefProceduralOp::build(OpBuilder &builder, OperationState &result,
