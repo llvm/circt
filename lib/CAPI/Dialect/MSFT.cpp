@@ -85,7 +85,7 @@ MlirOperation circtMSFTPlacementDBPlace(CirctMSFTPlacementDB db,
     return wrap(unwrap(db)->place(inst, pla, unwrap(subpath), srcLoc));
   if (auto locVec = locAttr.dyn_cast<LocationVectorAttr>())
     return wrap(unwrap(db)->place(inst, locVec, srcLoc));
-  assert(false && "Can only place PDPhysLocationOp and PDRegPhysLocationOp");
+  llvm_unreachable("Can only place PDPhysLocationOp and PDRegPhysLocationOp");
 }
 void circtMSFTPlacementDBRemovePlacement(CirctMSFTPlacementDB db,
                                          MlirOperation clocOp) {
@@ -108,7 +108,7 @@ MlirLogicalResult circtMSFTPlacementDBMovePlacement(CirctMSFTPlacementDB db,
   if (auto regPhysLocOp = dyn_cast<PDRegPhysLocationOp>(locOp))
     return wrap(unwrap(db)->movePlacement(regPhysLocOp,
                                           newLoc.cast<LocationVectorAttr>()));
-  assert(false && "Can only move PDPhysLocationOp and PDRegPhysLocationOp");
+  llvm_unreachable("Can only move PDPhysLocationOp and PDRegPhysLocationOp");
 }
 MlirOperation circtMSFTPlacementDBGetInstanceAt(CirctMSFTPlacementDB db,
                                                 MlirAttribute loc) {
