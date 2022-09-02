@@ -1418,8 +1418,32 @@ SmallVector<Direction> PrimitiveOp::portDirections() {
 
 SmallVector<DictionaryAttr> PrimitiveOp::portAttributes() {
   SmallVector<DictionaryAttr> portAttributes;
-  for (size_t i = 0; i < getReferencedPrimitive().getAllPorts().size(); ++i)
-    portAttributes.push_back(DictionaryAttr());
+  OpBuilder builder(getContext());
+  auto cleanAttrs = [&](DictionaryAttr dict){
+    if (dict) {
+      llvm::SmallVector<NamedAttribute> attrs;
+      for (NamedAttribute attr : dict) {
+        Dialect *dialect = attr.getNameDialect();
+        if (dialect != nullptr && isa<CalyxDialect>(*dialect)) {
+          StringRef name = attr.getName().strref();
+          StringAttr newName =
+              builder.getStringAttr(std::get<1>(name.split(".")));
+          attr.setName(newName);
+          attrs.push_back(attr);
+        }
+      }
+      return builder.getDictionaryAttr(attrs);
+    }
+    return dict;
+  };
+  for (size_t i = 0; i < getReferencedPrimitive().getNumArguments(); ++i) {
+    DictionaryAttr dict = cleanAttrs(getReferencedPrimitive().getArgAttrDict(i));
+    portAttributes.push_back(dict);
+  }
+  for (size_t i = 0; i < getReferencedPrimitive().getNumResults(); ++i) {
+    DictionaryAttr dict = cleanAttrs(getReferencedPrimitive().getResultAttrDict(i));
+    portAttributes.push_back(dict);
+  }
   return portAttributes;
 }
 
