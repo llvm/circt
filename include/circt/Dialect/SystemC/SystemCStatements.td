@@ -88,6 +88,16 @@ def InstanceDeclOp : SystemCOp<"instance.decl", [
     `:` type($instanceHandle)
   }];
 
+  let builders = [
+    OpBuilder<(ins "StringAttr":$instanceName,
+                   "FlatSymbolRefAttr":$moduleRef,
+                   "ArrayRef<ModuleType::PortInfo>":$ports), [{
+      build($_builder, $_state,
+            ModuleType::get($_builder.getContext(), moduleRef.getAttr(), ports),
+            instanceName, moduleRef);
+    }]>
+  ];
+
   let extraClassDeclaration = [{
     /// Get the systemc::ModuleType that represents the instantiated module.
     systemc::ModuleType getInstanceType() {
