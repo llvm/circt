@@ -137,6 +137,15 @@ public:
         if (!inputOp)
           continue;
       }
+      // bits(invalid, ..., ...) -> invalid
+      if (auto invalid = dyn_cast<InvalidValueOp>(inputOp)) {
+        auto newOp = builder.create<InvalidValueOp>(
+            UIntType::get(invalid->getContext(), op.getHi() - op.getLo() + 1));
+        op->replaceAllUsesWith(newOp);
+        if (op == bits)
+          replacedVal = newOp;
+        continue;
+      }
       // bits(bits(x, ...), ...) -> bits(x, ...).
       if (auto innerBits = dyn_cast<BitsPrimOp>(inputOp)) {
         auto newLo = op.getLo() + innerBits.getLo();
@@ -205,6 +214,24 @@ public:
     return replacedVal;
   }
 
+  // Creates a CatPrimOp, and applies a special fold if lhs and rhs are both
+  // InvalidValues. In that case, it returns an InvalidValue with the sum of
+  // the widths. We cannot use createOrFold for this purpose because it will
+  // combine the InvalidValues and convert them to a 0 constant.
+  Value createCat(ImplicitLocOpBuilder &builder, Value lhs, Value rhs) {
+    if (auto lhsInvalid =
+            dyn_cast_or_null<InvalidValueOp>(lhs.getDefiningOp())) {
+      if (auto rhsInvalid =
+              dyn_cast_or_null<InvalidValueOp>(rhs.getDefiningOp())) {
+        return builder.create<InvalidValueOp>(UIntType::get(
+            lhs.getContext(),
+            lhs.getType().cast<IntType>().getWidthOrSentinel() +
+                rhs.getType().cast<IntType>().getWidthOrSentinel()));
+      }
+    }
+    return builder.createOrFold<CatPrimOp>(lhs, rhs);
+  }
+
   // Rewrites a connection where the dest is the bitindex. An expression that
   // looks like `x[hi:lo] <= e` gets rewritten to `x <= cat(xprev[x.w-1:hi+1],
   // e, xprev[lo-1:0])`, where xprev is the most recent connection to x in any
@@ -243,8 +270,7 @@ public:
     if (top[0] >= top[1]) {
       // Build `cat(xprev[x.w-1:hi], e)`.
       auto x = b.create<BitsPrimOp>(xprev, (uint32_t)top[0], (uint32_t)top[1]);
-      cat = b.createOrFold<CatPrimOp>(canonicalizeBits(x, ops, b),
-                                      connection.getSrc());
+      cat = createCat(b, canonicalizeBits(x, ops, b), connection.getSrc());
     } else {
       // The assignment is assigning all the high bits, so no need to get them
       // from xprev.
@@ -254,7 +280,7 @@ public:
     if (bot[0] >= bot[1]) {
       // Build cat(cat, xprev[lo-1:0]).
       auto x = b.create<BitsPrimOp>(xprev, (uint32_t)bot[0], (uint32_t)bot[1]);
-      cat = b.createOrFold<CatPrimOp>(cat, canonicalizeBits(x, ops, b));
+      cat = createCat(b, cat, canonicalizeBits(x, ops, b));
     }
     if (bits.getInput().getType().isa<SIntType>())
       cat = b.create<AsSIntPrimOp>(cat);
