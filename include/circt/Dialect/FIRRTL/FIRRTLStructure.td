@@ -100,7 +100,7 @@ def FModuleOp : FIRRTLOp<"module", [IsolatedFromAbove, Symbol, SingleBlock,
 
     /// Erases the ports listed in `portIndices`.  `portIndices` is expected to
     /// be in order and unique.
-    void erasePorts(ArrayRef<unsigned> portIndices);
+    void erasePorts(const llvm::BitVector &portIndices);
 
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);

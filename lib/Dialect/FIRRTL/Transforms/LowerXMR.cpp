@@ -15,6 +15,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/EquivalenceClasses.h"
 #include "llvm/ADT/PostOrderIterator.h"
@@ -135,9 +136,11 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
           return signalPassFailure();
 
       // Record all the RefType ports to be removed later.
-      for (size_t portNum = 0, e = module.getNumPorts(); portNum < e; ++portNum)
+      size_t numPorts = module.getNumPorts();
+      refPortsToRemoveMap[module].resize(numPorts);
+      for (size_t portNum = 0; portNum < numPorts; ++portNum)
         if (module.getPortType(portNum).isa<RefType>())
-          refPortsToRemoveMap[module].push_back(portNum);
+          refPortsToRemoveMap[module].set(portNum);
     }
 
     LLVM_DEBUG({
@@ -208,7 +211,9 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
       if (!refMod)
         return inst.emitOpError("cannot lower ext modules with RefType ports");
       // Reference ports must be removed.
-      refPortsToRemoveMap[inst].push_back(portNum);
+      if (refPortsToRemoveMap[inst].size() < portNum + 1)
+        refPortsToRemoveMap[inst].resize(portNum + 1);
+      refPortsToRemoveMap[inst].set(portNum);
       // Drop the dead-instance-ports.
       if (instanceResult.use_empty())
         continue;
@@ -351,7 +356,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
 
   llvm::EquivalenceClasses<Value, ValueComparator> dataFlowClasses;
   // Instance and module ref ports that needs to be removed.
-  DenseMap<Operation *, SmallVector<unsigned>> refPortsToRemoveMap;
+  DenseMap<Operation *, llvm::BitVector> refPortsToRemoveMap;
 
   /// RefResolve, RefSend, and Connects involving them that will be removed.
   SmallVector<Operation *> opsToRemove;
