@@ -1416,34 +1416,38 @@ SmallVector<Direction> PrimitiveOp::portDirections() {
   return portDirections;
 }
 
+/// Returns a new DictionaryAttr containing only the calyx dialect attrs
+/// in the input DictionaryAttr. Also strips the calyx. prefix from these attrs.
+static DictionaryAttr cleanCalyxPortAttrs(OpBuilder builder,
+                                          DictionaryAttr dict) {
+  if (!dict) {
+    return dict;
+  }
+  llvm::SmallVector<NamedAttribute> attrs;
+  for (NamedAttribute attr : dict) {
+    Dialect *dialect = attr.getNameDialect();
+    if (dialect == nullptr || !isa<CalyxDialect>(*dialect))
+      continue;
+    StringRef name = attr.getName().strref();
+    StringAttr newName = builder.getStringAttr(std::get<1>(name.split(".")));
+    attr.setName(newName);
+    attrs.push_back(attr);
+  }
+  return builder.getDictionaryAttr(attrs);
+}
+
+// Grabs calyx port attributes from the HWModuleExternOp arg/result attributes
 SmallVector<DictionaryAttr> PrimitiveOp::portAttributes() {
   SmallVector<DictionaryAttr> portAttributes;
   OpBuilder builder(getContext());
-  auto cleanAttrs = [&](DictionaryAttr dict) {
-    if (dict) {
-      llvm::SmallVector<NamedAttribute> attrs;
-      for (NamedAttribute attr : dict) {
-        Dialect *dialect = attr.getNameDialect();
-        if (dialect != nullptr && isa<CalyxDialect>(*dialect)) {
-          StringRef name = attr.getName().strref();
-          StringAttr newName =
-              builder.getStringAttr(std::get<1>(name.split(".")));
-          attr.setName(newName);
-          attrs.push_back(attr);
-        }
-      }
-      return builder.getDictionaryAttr(attrs);
-    }
-    return dict;
-  };
-  for (size_t i = 0; i < getReferencedPrimitive().getNumArguments(); ++i) {
-    DictionaryAttr dict =
-        cleanAttrs(getReferencedPrimitive().getArgAttrDict(i));
+  hw::HWModuleExternOp prim = getReferencedPrimitive();
+  for (size_t i = 0, e = prim.getNumArguments(); i != e; ++i) {
+    DictionaryAttr dict = cleanCalyxPortAttrs(builder, prim.getArgAttrDict(i));
     portAttributes.push_back(dict);
   }
-  for (size_t i = 0; i < getReferencedPrimitive().getNumResults(); ++i) {
+  for (size_t i = 0, e = prim.getNumResults(); i != e; ++i) {
     DictionaryAttr dict =
-        cleanAttrs(getReferencedPrimitive().getResultAttrDict(i));
+        cleanCalyxPortAttrs(builder, prim.getResultAttrDict(i));
     portAttributes.push_back(dict);
   }
   return portAttributes;
