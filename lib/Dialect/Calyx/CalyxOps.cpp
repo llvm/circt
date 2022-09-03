@@ -1419,7 +1419,7 @@ SmallVector<Direction> PrimitiveOp::portDirections() {
 SmallVector<DictionaryAttr> PrimitiveOp::portAttributes() {
   SmallVector<DictionaryAttr> portAttributes;
   OpBuilder builder(getContext());
-  auto cleanAttrs = [&](DictionaryAttr dict){
+  auto cleanAttrs = [&](DictionaryAttr dict) {
     if (dict) {
       llvm::SmallVector<NamedAttribute> attrs;
       for (NamedAttribute attr : dict) {
@@ -1437,11 +1437,13 @@ SmallVector<DictionaryAttr> PrimitiveOp::portAttributes() {
     return dict;
   };
   for (size_t i = 0; i < getReferencedPrimitive().getNumArguments(); ++i) {
-    DictionaryAttr dict = cleanAttrs(getReferencedPrimitive().getArgAttrDict(i));
+    DictionaryAttr dict =
+        cleanAttrs(getReferencedPrimitive().getArgAttrDict(i));
     portAttributes.push_back(dict);
   }
   for (size_t i = 0; i < getReferencedPrimitive().getNumResults(); ++i) {
-    DictionaryAttr dict = cleanAttrs(getReferencedPrimitive().getResultAttrDict(i));
+    DictionaryAttr dict =
+        cleanAttrs(getReferencedPrimitive().getResultAttrDict(i));
     portAttributes.push_back(dict);
   }
   return portAttributes;
