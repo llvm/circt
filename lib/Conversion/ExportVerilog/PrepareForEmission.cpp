@@ -543,13 +543,13 @@ private:
   // For declarations, use a name attribute if exist. Otherwise, estimate the
   // size assuming that the name is `GEN_`.
   unsigned visitSV(WireOp op) {
-    return op.getName().size() ? op.getName().size() : 4;
+    return op.getName().empty() ? 4 : op.getName().size();
   }
   unsigned visitSV(RegOp op) {
-    return op.getName().size() ? op.getName().size() : 4;
+    return op.getName().empty() ? 4 : op.getName().size();
   }
   unsigned visitSV(LogicOp op) {
-    return op.getName().size() ? op.getName().size() : 4;
+    return op.getName().empty() ? 4 : op.getName().size();
   }
 
   unsigned visitSV(ReadInOutOp op) {
