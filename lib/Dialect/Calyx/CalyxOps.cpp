@@ -1417,7 +1417,8 @@ SmallVector<Direction> PrimitiveOp::portDirections() {
 }
 
 /// Returns a new DictionaryAttr containing only the calyx dialect attrs
-/// in the input DictionaryAttr. Also strips the calyx. prefix from these attrs.
+/// in the input DictionaryAttr. Also strips the 'calyx.' prefix from these
+/// attrs.
 static DictionaryAttr cleanCalyxPortAttrs(OpBuilder builder,
                                           DictionaryAttr dict) {
   if (!dict) {
