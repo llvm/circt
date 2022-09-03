@@ -107,7 +107,7 @@ void CompileControlVisitor::visit(SeqOp seq, ComponentOp &component) {
     // TODO(Calyx): Eventually, we should canonicalize the GroupDoneOp's guard
     // and source.
     auto guard = groupOp.getDoneOp().guard();
-    auto source = groupOp.getDoneOp().src();
+    Value source = groupOp.getDoneOp().src();
     auto doneOpValue = !guard ? source
                               : builder.create<comb::AndOp>(
                                     wires->getLoc(), guard, source, false);

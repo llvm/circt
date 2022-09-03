@@ -3497,9 +3497,8 @@ void FIRRTLLowering::lowerRegConnect(const FieldRef &fieldRef, Value dest,
   // outermost ones, the new value is computed by updating one of its
   // fields. The value of the field itself is determined by updating the
   // previous value according to the subsequent access operation.
-  std::function<Value(Value, Type, unsigned)> inject = [&](Value base,
-                                                           Type type,
-                                                           unsigned fieldID) {
+  std::function<Value(Value, Type, unsigned)> inject =
+      [&](Value base, Type type, unsigned fieldID) -> Value {
     if (auto bundle = type.dyn_cast<BundleType>()) {
       auto index = bundle.getIndexForFieldID(fieldID);
       fieldID -= bundle.getFieldID(index);
