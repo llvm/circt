@@ -1436,7 +1436,7 @@ static DictionaryAttr cleanCalyxPortAttrs(OpBuilder builder,
   return builder.getDictionaryAttr(attrs);
 }
 
-// Grabs calyx port attributes from the HWModuleExternOp arg/result attributes
+// Grabs calyx port attributes from the HWModuleExternOp arg/result attributes.
 SmallVector<DictionaryAttr> PrimitiveOp::portAttributes() {
   SmallVector<DictionaryAttr> portAttributes;
   OpBuilder builder(getContext());
