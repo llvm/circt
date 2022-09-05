@@ -1,4 +1,4 @@
-from cocotb.triggers import RisingEdge
+from cocotb.triggers import RisingEdge, ReadWrite
 
 
 class HandshakePort:
@@ -32,6 +32,8 @@ class HandshakePort:
       await RisingEdge(self.dut.clock)
 
   async def awaitHandshake(self):
+    # Make sure that changes to ready are propagated before it is checked.
+    await ReadWrite()
     directSend = self.isReady()
     await self.waitUntilReady()
 
@@ -115,7 +117,7 @@ def _findPort(dut, name):
   validName = f"{name}_valid"
   dataName = f"{name}_data"
   if (not hasattr(dut, readyName) or not hasattr(dut, validName)):
-    raise Exception(f"dut does not have a port named {n}")
+    raise Exception(f"dut does not have a port named {name}")
 
   ready = getattr(dut, readyName)
   valid = getattr(dut, validName)
