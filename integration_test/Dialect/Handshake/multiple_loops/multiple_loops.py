@@ -2,6 +2,7 @@ import cocotb
 import cocotb.clock
 from cocotb.triggers import FallingEdge, RisingEdge
 from helper import HandshakePort, getPorts
+import math
 
 
 async def initDut(dut):
@@ -24,11 +25,12 @@ async def initDut(dut):
   await RisingEdge(dut.clock)
   return ins, outs
 
+
 @cocotb.test()
 async def oneInput(dut):
   [in0, inCtrl], [out0, out1, outCtrl] = await initDut(dut)
   out0Check = cocotb.start_soon(out0.checkOutputs([15]))
-  #out1Check = cocotb.start_soon(out1.checkOutputs([120]))
+  out1Check = cocotb.start_soon(out1.checkOutputs([120]))
 
   in0Send = cocotb.start_soon(in0.send(5))
   inCtrlSend = cocotb.start_soon(inCtrl.send())
@@ -37,17 +39,21 @@ async def oneInput(dut):
   await inCtrlSend
 
   await out0Check
-  #await out1Check
+  await out1Check
 
 
 @cocotb.test()
 async def sendMultiple(dut):
   [in0, inCtrl], [out0, out1, outCtrl] = await initDut(dut)
 
-  out0Check = cocotb.start_soon(out0.checkOutputs([1,3,6,10,15,21,28]))
-  #out1Check = cocotb.start_soon(out1.checkOutputs([1,2,6,24,120,720,5040]))
+  N = 10
+  res0 = [i * (i + 1) / 2 for i in range(N)]
+  res1 = [math.factorial(i) for i in range(N)]
 
-  for i in [1,2,3,4,5,6,7]:
+  out0Check = cocotb.start_soon(out0.checkOutputs(res0))
+  out1Check = cocotb.start_soon(out1.checkOutputs(res1))
+
+  for i in range(N):
     in0Send = cocotb.start_soon(in0.send(i))
     inCtrlSend = cocotb.start_soon(inCtrl.send())
 
@@ -55,4 +61,4 @@ async def sendMultiple(dut):
     await inCtrlSend
 
   await out0Check
-  #await out1Check
+  await out1Check
