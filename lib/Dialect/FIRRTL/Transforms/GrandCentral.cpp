@@ -789,14 +789,15 @@ private:
 /// `nonlocalPath`. Emit error and return None, if there are multiple paths
 /// between `parentModule` and `targetModule`. The caller must handle the None
 /// return value and error out.
-Optional<ArrayRef<InstanceOp>> getPath(FModuleLike targetModule,
-                                       FModuleOp parentModule,
-                                       SmallVector<InstanceOp> &nonlocalPath,
-                                       ApplyState &state) {
+static Optional<ArrayRef<InstanceOp>>
+getPath(FModuleLike targetModule, FModuleOp parentModule,
+        SmallVector<InstanceOp> &nonlocalPath, ApplyState &state) {
+  ArrayRef<InstanceOp> pathToSend;
+  if (targetModule == parentModule)
+    return pathToSend;
   auto isInstanceInParentModule = [&](InstanceOp inst) {
     return (inst->getParentOfType<FModuleOp>() == parentModule);
   };
-  ArrayRef<InstanceOp> pathToSend;
   if (nonlocalPath.empty()) {
     // For all paths from root to `targetModule`. Get the path that passes
     // through the `parentModule`. Only one such path must exist.
@@ -822,13 +823,37 @@ Optional<ArrayRef<InstanceOp>> getPath(FModuleLike targetModule,
   return pathToSend;
 }
 
+static LogicalResult
+setSrcDstInstancePath(AnnoPathValue &srcTarget, AnnoPathValue &companionTarget,
+                      SmallVector<InstanceOp> &pathFromSrcToCompanion,
+                      FModuleOp &lcaModule, ApplyState &state) {
+  auto srcModule = cast<FModuleOp>(srcTarget.ref.getModule());
+  auto companionModule = cast<FModuleOp>(companionTarget.ref.getModule());
+  assert(srcModule != companionModule);
+  auto pathToSrc = getPath(srcModule, lcaModule, srcTarget.instances, state);
+  if (!pathToSrc)
+    return mlir::emitError(lcaModule.getLoc(),
+                           "cannot find path from parent to src");
+  auto pathToCompanion =
+      getPath(companionModule, lcaModule, companionTarget.instances, state);
+  if (!pathToCompanion)
+    return mlir::emitError(lcaModule.getLoc(),
+                           "cannot find path from parent to companion");
+
+  pathFromSrcToCompanion.append(pathToSrc->rbegin(), pathToSrc->rend());
+  pathFromSrcToCompanion.append(pathToCompanion->begin(),
+                                pathToCompanion->end());
+  return success();
+}
+
 /// Add a RefType cross-module connection from the `refSendTarget` to the
 /// `parentModule`. The assumption is that `refSendTarget` has a path from
 /// `parentModule`.
-static Value borePortsToRefSend(AnnoPathValue &refSendTarget,
-                                FModuleOp parentModule, ApplyState &state,
-                                AnnoPathValue &companionTarget,
-                                StringAttr viewName) {
+static StringAttr borePortsFromViewToCompanion(AnnoPathValue &refSendTarget,
+                                               FModuleOp parentModule,
+                                               ApplyState &state,
+                                               AnnoPathValue &companionTarget,
+                                               StringAttr viewName) {
   auto refSendModule = dyn_cast<FModuleOp>(refSendTarget.ref.getModule());
   Value refSendBase;
   if (refSendTarget.ref.getImpl().isOp())
@@ -838,101 +863,39 @@ static Value borePortsToRefSend(AnnoPathValue &refSendTarget,
         refSendModule.getArgument(refSendTarget.ref.getImpl().getPortNo());
   auto refSendBuilder = ImplicitLocOpBuilder::atBlockEnd(
       refSendModule.getLoc(), refSendModule.getBodyBlock());
-  // If the target value is a field of an aggregate. Create the
-  // subfield/subaccess into it.
-  auto refSendBaseType =
-      refSendBase.getType().cast<FIRRTLBaseType>().getFinalTypeByFieldID(
-          refSendTarget.fieldIdx);
-  auto refSendRefType = RefType::get(refSendBaseType);
   refSendBase =
       getValueByFieldID(refSendBuilder, refSendBase, refSendTarget.fieldIdx);
   // Note: No DontTouch added to refSendTarget.
   auto sendVal = refSendBuilder.create<RefSendOp>(refSendBase);
-
-  Value parentModRefPort = sendVal;
-  // Get the paths from the parent to the refSendModule.
-  if (refSendModule != parentModule) {
-    auto targetInstancePath =
-        getPath(refSendModule, parentModule, refSendTarget.instances, state);
-    if (!targetInstancePath || targetInstancePath.value().empty())
-      return nullptr;
-    for (auto refInst : targetInstancePath.value()) {
-      LLVM_DEBUG(llvm::dbgs() << "\n RefPath::" << refInst);
-      auto refInstTargetMod = cast<FModuleOp>(
-          state.instancePathcache.instanceGraph.getReferencedModule(refInst));
-      auto clonedInst = addPortsToModule(
-          refInstTargetMod, refInst, refSendRefType, Direction::Out,
-          viewName.getValue(), state.instancePathcache,
-          state.circuit.getContext(),
-          [&](FModuleLike mod) -> ModuleNamespace & {
-            return state.getNamespace(mod);
-          },
-          &companionTarget, &state.targetCaches);
-      auto instParentMod = clonedInst->getParentOfType<FModuleOp>();
-      ImplicitLocOpBuilder refConnectBuilder(clonedInst.getLoc(), clonedInst);
-      refConnectBuilder.setInsertionPointAfter(clonedInst);
-      if (instParentMod == parentModule)
-        parentModRefPort = clonedInst.getResults().back();
-      else
-        refConnectBuilder.create<ConnectOp>(instParentMod.getArguments().back(),
-                                            clonedInst.getResults().back());
-    }
-    refSendBuilder.create<ConnectOp>(refSendModule.getArguments().back(),
-                                     sendVal);
-  }
-  return parentModRefPort;
-}
-
-/// Add the RefType ports from the parent to the companion and add the
-/// RefResolve to the companion. Connect the RefResolve to a wire and return the
-/// name of the wire.
-static StringAttr boreRefResolveToCompanion(Value refSendVal,
-                                            FModuleOp parentModule,
-                                            AnnoPathValue &companionTarget,
-                                            ApplyState &state,
-                                            StringAttr viewName) {
-
+  FModuleOp lcaModule = parentModule;
+  SmallVector<InstanceOp> pathFromSrcToCompanion;
+  if (setSrcDstInstancePath(refSendTarget, companionTarget,
+                            pathFromSrcToCompanion, lcaModule, state)
+          .failed())
+    return {};
+  // Now drill ports to connect the `sendVal` to the `wireTarget`.
+  auto remoteXMR = borePortsOnPath(
+      pathFromSrcToCompanion, lcaModule, sendVal, viewName.getValue(),
+      state.instancePathcache,
+      [&](FModuleLike mod) -> ModuleNamespace & {
+        return state.getNamespace(mod);
+      },
+      &state.targetCaches);
   FModuleOp companionModule = cast<FModuleOp>(companionTarget.ref.getOp());
-  auto companionPath = companionTarget.instances;
-  auto portName = [&](FModuleOp nameForMod) {
+  auto compBuilder = ImplicitLocOpBuilder::atBlockEnd(
+      companionModule.getLoc(), companionModule.getBodyBlock());
+  auto refResolve = compBuilder.create<RefResolveOp>(remoteXMR);
+  auto newName = [&](FModuleOp nameForMod) {
     return StringAttr::get(
         state.circuit.getContext(),
         state.getNamespace(nameForMod)
             .newName("view_" + viewName.getValue() + "refPort"));
   };
-  auto forwardRefPort = refSendVal;
-
-  for (auto companionPathInst : companionTarget.instances) {
-    auto instTargetMod = cast<FModuleOp>(
-        state.instancePathcache.instanceGraph.getReferencedModule(
-            companionPathInst));
-    unsigned portNo = instTargetMod.getNumPorts();
-    auto clonedInst = addPortsToModule(
-        instTargetMod, companionPathInst, refSendVal.getType().cast<RefType>(),
-        Direction::In, viewName.getValue(), state.instancePathcache,
-        state.circuit.getContext(),
-        [&](FModuleLike mod) -> ModuleNamespace & {
-          return state.getNamespace(mod);
-        },
-        &companionTarget, &state.targetCaches);
-    auto newInstRes = clonedInst.getResult(portNo);
-    auto thisMod = clonedInst->getParentOfType<FModuleOp>();
-    ImplicitLocOpBuilder builderTemp = ImplicitLocOpBuilder::atBlockEnd(
-        thisMod.getLoc(), thisMod.getBodyBlock());
-    builderTemp.create<ConnectOp>(newInstRes, forwardRefPort);
-    forwardRefPort = instTargetMod.getArgument(portNo);
-  }
-  auto compBuilder = ImplicitLocOpBuilder::atBlockEnd(
-      companionModule.getLoc(), companionModule.getBodyBlock());
-  auto refResolve =
-      compBuilder.create<RefResolveOp>(companionModule.getArguments().back());
   auto node = compBuilder.create<NodeOp>(refResolve.getResult().getType(),
-                                         refResolve, portName(companionModule));
+                                         refResolve, newName(companionModule));
   node.dropName();
   state.targetCaches.insertOp(node);
   AnnotationSet::addDontTouch(node);
-  LLVM_DEBUG(llvm::dbgs() << "\n refresol:" << refResolve);
-
   return node.getNameAttr();
 }
 
@@ -945,7 +908,7 @@ static Optional<DictionaryAttr> parseAugmentedType(
     ApplyState &state, DictionaryAttr augmentedType, DictionaryAttr root,
     StringRef companion, StringAttr name, StringAttr defName,
     Optional<IntegerAttr> id, Optional<StringAttr>(description), Twine clazz,
-    FModuleOp parentModule, AnnoPathValue &companionTarget, Twine path = {}) {
+    FModuleOp parentModule, StringAttr &companionAttr, Twine path = {}) {
 
   auto *context = state.circuit.getContext();
   auto loc = state.circuit.getLoc();
@@ -1117,7 +1080,7 @@ static Optional<DictionaryAttr> parseAugmentedType(
         description = maybeDescription.cast<StringAttr>();
       auto eltAttr = parseAugmentedType(state, tpe, root, companion, name,
                                         defName, None, description, clazz,
-                                        parentModule, companionTarget, path);
+                                        parentModule, companionAttr, path);
       if (!name || !tpe || !eltAttr)
         return None;
 
@@ -1176,25 +1139,24 @@ static Optional<DictionaryAttr> parseAugmentedType(
     elementScattered.append("id", id);
     // If there are sub-targets, then add these.
     auto targetAttr = StringAttr::get(context, target);
-    auto targetPath = resolvePath(targetAttr.getValue(), state.circuit,
+    auto xmrSrcPath = resolvePath(targetAttr.getValue(), state.circuit,
                                   state.symTbl, state.targetCaches);
-    if (!targetPath) {
+    if (!xmrSrcPath) {
       mlir::emitError(loc, "Failed to resolve target ") << targetAttr;
       return None;
     }
-    // If the target for the view is not in the Companion module, then add the
-    // RefType port from the parent module to the target module and insert the
-    // RefSend at the target and RefResolve in the companion module.
-    if (targetPath->ref.getModule() !=
-        cast<FModuleOp>(companionTarget.ref.getOp())) {
+    auto companionTarget = resolvePath(companionAttr.getValue(), state.circuit,
+                                       state.symTbl, state.targetCaches);
+    if (xmrSrcPath->ref.getModule() !=
+        cast<FModuleOp>(companionTarget->ref.getOp())) {
       // Add the refSend and get the RefType val through the ports from the
       // target. Note: The remote signal to which the XMR is being generated,
       // does not contain any DontTouch. Which implies the remote signal can be
       // optimized away, but the XMR should still point to a legal value  or a
       // constant after the optimization.
-      auto refSendVal = borePortsToRefSend(*targetPath, parentModule, state,
-                                           companionTarget, name);
-      if (!refSendVal) {
+      auto resolveTargetName = borePortsFromViewToCompanion(
+          *xmrSrcPath, parentModule, state, *companionTarget, name);
+      if (!resolveTargetName) {
         mlir::emitError(loc, "Failed to resolve target, cannot find unique "
                              "path from parent module `" +
                                  parentModule.getName() + "` to target`" +
@@ -1203,13 +1165,7 @@ static Optional<DictionaryAttr> parseAugmentedType(
             << "See the full Annotation here: " << root;
         return None;
       }
-      // Given the refType val from the refSend, pass it through the ports to
-      // the companion module and add the refResolve in the companion module,
-      // then read the remote value into a wire, and return the name of the
-      // wire.
-      auto resolveTargetName = boreRefResolveToCompanion(
-          refSendVal, parentModule, companionTarget, state, name);
-      // Now the view target can be added to the local wire created inside the
+      // Now the view target can be added to the local node created inside the
       // compaion. Add the annotation. This essentially moves the annotation
       // from the remote XMR signal to a local wire, which in-turn reads the
       // XMR.
@@ -1237,7 +1193,7 @@ static Optional<DictionaryAttr> parseAugmentedType(
       auto eltAttr =
           parseAugmentedType(state, elt.cast<DictionaryAttr>(), root, companion,
                              name, StringAttr::get(context, ""), id, None,
-                             clazz, parentModule, companionTarget, path);
+                             clazz, parentModule, companionAttr, path);
       if (!eltAttr)
         return None;
       elements.push_back(*eltAttr);
@@ -1305,34 +1261,16 @@ LogicalResult circt::firrtl::applyGCTView(const AnnoPathValue &target,
     return failure();
   auto parentTarget = resolvePath(parentAttr.getValue(), state.circuit,
                                   state.symTbl, state.targetCaches);
-  auto companionTarget = resolvePath(companionAttr.getValue(), state.circuit,
-                                     state.symTbl, state.targetCaches);
   parentAttrs.append("class", StringAttr::get(context, parentAnnoClass));
   parentAttrs.append("id", id);
   parentAttrs.append("name", name);
   parentAttrs.append("target", parentAttr);
   parentAttrs.append("type", StringAttr::get(context, "parent"));
   state.addToWorklistFn(DictionaryAttr::get(context, parentAttrs));
-  if (!isa<FModuleOp>(companionTarget->ref.getOp()))
-    return companionTarget->ref.getOp()->emitOpError(
-        "only FModuleOp can be a view companion");
-  // Ensure that a unique path from parentModule to the companionTarget can be
-  // resolved.
-  if (auto path = getPath(cast<FModuleOp>(companionTarget->ref.getOp()),
-                          cast<FModuleOp>(parentTarget->ref.getOp()),
-                          companionTarget->instances, state))
-    // Update the instances vector to store a unique path from the parentModule
-    // to the companionModule.
-    companionTarget->instances = SmallVector<InstanceOp>(path.value());
-  else
-    return companionTarget->ref.getOp()->emitOpError(
-        "cannot determine a unique path from parent module to the companion "
-        "module ");
-
   auto prunedAttr = parseAugmentedType(
       state, viewAttr, anno, companionAttr.getValue(), name, {}, id, {},
-      viewAnnoClass, cast<FModuleOp>(parentTarget->ref.getOp()),
-      companionTarget.value(), "view");
+      viewAnnoClass, cast<FModuleOp>(parentTarget->ref.getOp()), companionAttr,
+      "view");
   if (!prunedAttr)
     return failure();
 
