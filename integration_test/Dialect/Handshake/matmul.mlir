@@ -1,11 +1,10 @@
 // REQUIRES: ieee-sim
-// UNSUPPORTED: ieee-sim-iverilog
 // RUN: circt-opt %s --lower-std-to-handshake \
 // RUN:   --canonicalize='top-down=true region-simplify=true' \
 // RUN:   --handshake-materialize-forks-sinks --canonicalize \
 // RUN:   --handshake-insert-buffers=strategy=all --lower-handshake-to-firrtl | \
-// RUN: firtool --format=mlir --verilog > %matmul-export.sv
-// RUN: circt-rtl-sim.py %matmul-export.sv %S/driver.sv --sim %ieee-sim --no-default-driver --top driver | FileCheck %s
+// RUN: firtool --format=mlir --verilog --lowering-options=disallowLocalVariables > %t.sv && \
+// RUN: circt-rtl-sim.py %t.sv %S/driver.sv --sim %ieee-sim --no-default-driver --top driver | FileCheck %s
 // CHECK: Result={{.*}}448704
 
 module {

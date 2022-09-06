@@ -26,6 +26,7 @@ module driver();
 
     // Hold valid high for one clock cycle.
     @(posedge clock);
+    #0.1
     inCtrl_valid = 0;
 
     wait(out0_valid == 1);

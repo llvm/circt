@@ -1,11 +1,11 @@
 // REQUIRES: ieee-sim
-// UNSUPPORTED: ieee-sim-iverilog
+
 // RUN: circt-opt %s \ 
 // RUN:   --canonicalize='top-down=true region-simplify=true' \
 // RUN:   --handshake-materialize-forks-sinks --canonicalize \
 // RUN:   --handshake-insert-buffers=strategy=all --lower-handshake-to-firrtl | \
-// RUN: firtool --format=mlir --verilog > %tuples-packing-export.sv
-// RUN: circt-rtl-sim.py %tuples-packing-export.sv %S/driver.sv --sim %ieee-sim --no-default-driver --top driver | FileCheck %s
+// RUN: firtool --format=mlir --verilog --lowering-options=disallowLocalVariables > %t.sv && \
+// RUN: circt-rtl-sim.py %t.sv %S/driver.sv --sim %ieee-sim --no-default-driver --top driver | FileCheck %s
 // CHECK: Result={{.*}}579
 
 module {
