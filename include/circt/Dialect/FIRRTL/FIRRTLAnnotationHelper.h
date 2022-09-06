@@ -284,11 +284,18 @@ A tryGetAs(DictionaryAttr &dict, const Attribute &root, StringRef key,
 InstanceOp addPortsToModule(
     FModuleOp mod, InstanceOp instOnPath, FIRRTLType portType, Direction dir,
     StringRef newName, InstancePathCache &instancePathcache,
-    MLIRContext *context,
     llvm::function_ref<ModuleNamespace &(FModuleLike)> getNamespace,
-    AnnoPathValue *instancePathToUpdate = nullptr,
     CircuitTargetCache *targetCaches = nullptr);
 
+/// Add a port to each instance on the path `instancePath` and forward the
+/// `fromVal` through them. It returns the port added to the last module on the
+/// given path. The module referenced by the first instance on the path must
+/// contain `fromVal`.
+Value borePortsOnPath(
+    SmallVector<InstanceOp> &instancePath, FModuleOp lcaModule, Value fromVal,
+    StringRef newNameHint, InstancePathCache &instancePathcache,
+    llvm::function_ref<ModuleNamespace &(FModuleLike)> getNamespace,
+    CircuitTargetCache *targetCachesInstancePathCache);
 } // namespace firrtl
 } // namespace circt
 

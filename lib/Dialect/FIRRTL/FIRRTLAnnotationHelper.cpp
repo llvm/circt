@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotationHelper.h"
+#include "mlir/IR/ImplicitLocOpBuilder.h"
 
 using namespace circt;
 using namespace firrtl;
@@ -315,14 +316,13 @@ Optional<AnnoPathValue> firrtl::resolvePath(StringRef rawPath,
 InstanceOp firrtl::addPortsToModule(
     FModuleOp mod, InstanceOp instOnPath, FIRRTLType portType, Direction dir,
     StringRef newName, InstancePathCache &instancePathcache,
-    MLIRContext *context,
     llvm::function_ref<ModuleNamespace &(FModuleLike)> getNamespace,
-    AnnoPathValue *instancePathToUpdate, CircuitTargetCache *targetCaches) {
+    CircuitTargetCache *targetCaches) {
   // To store the cloned version of `instOnPath`.
   InstanceOp clonedInstOnPath;
   // Get a new port name from the Namespace.
   auto portName = [&](FModuleOp nameForMod) {
-    return StringAttr::get(context,
+    return StringAttr::get(nameForMod.getContext(),
                            getNamespace(nameForMod).newName("_gen_" + newName));
   };
   // The port number for the new port.
@@ -341,15 +341,80 @@ InstanceOp firrtl::addPortsToModule(
     instancePathcache.replaceInstance(useInst, clonedInst);
     if (targetCaches)
       targetCaches->replaceOp(useInst, clonedInst);
-    if (instancePathToUpdate) {
-      auto *iter = llvm::find(instancePathToUpdate->instances, useInst);
-      if (iter != instancePathToUpdate->instances.end())
-        *iter = clonedInst;
-    }
     useInst->replaceAllUsesWith(clonedInst.getResults().drop_back());
     useInst->erase();
   }
   return clonedInstOnPath;
+}
+
+Value firrtl::borePortsOnPath(
+    SmallVector<InstanceOp> &instancePath, FModuleOp lcaModule, Value fromVal,
+    StringRef newNameHint, InstancePathCache &instancePathcache,
+    llvm::function_ref<ModuleNamespace &(FModuleLike)> getNamespace,
+    CircuitTargetCache *targetCachesInstancePathCache) {
+  // Create connections of the `fromVal` by adding ports through all the
+  // instances of `instancePath`. `instancePath` specifies a path from a source
+  // module through the lcaModule till a target module. source module is the
+  // parent module of `fromval` and target module is the referenced target
+  // module of the last instance in the instancePath.
+
+  // If instancePath empty then just return the `fromVal`.
+  if (instancePath.empty())
+    return fromVal;
+
+  FModuleOp srcModule;
+  if (auto block = fromVal.dyn_cast<BlockArgument>())
+    srcModule = cast<FModuleOp>(block.getOwner()->getParentOp());
+  else
+    srcModule = fromVal.getDefiningOp()->getParentOfType<FModuleOp>();
+
+  // If the `srcModule` is the `lcaModule`, then we only need to drill input
+  // ports starting from the `lcaModule` till the end of `instancePath`. For all
+  // other cases, we start to drill output ports from the `srcModule` till the
+  // `lcaModule`, and then input ports from `lcaModule` till the end of
+  // `instancePath`.
+  Direction dir = Direction::Out;
+  if (srcModule == lcaModule)
+    dir = Direction::In;
+
+  auto valType = fromVal.getType().cast<FIRRTLType>();
+  auto forwardVal = fromVal;
+  for (auto instOnPath : instancePath) {
+    auto referencedModule = cast<FModuleOp>(
+        instancePathcache.instanceGraph.getReferencedModule(instOnPath));
+    unsigned portNo = referencedModule.getNumPorts();
+    // Add a new port to referencedModule, and all its uses/instances.
+    InstanceOp clonedInst = addPortsToModule(
+        referencedModule, instOnPath, valType, dir, newNameHint,
+        instancePathcache, getNamespace, targetCachesInstancePathCache);
+    //  `instOnPath` will be erased and replaced with `clonedInst`. So, there
+    //  should be no more use of `instOnPath`.
+    auto clonedInstRes = clonedInst.getResult(portNo);
+    auto referencedModNewPort = referencedModule.getArgument(portNo);
+    // If out direction, then connect `forwardVal` to the `referencedModNewPort`
+    // (the new port of referenced module) else set the new input port of the
+    // cloned instance with `forwardVal`. If out direction, then set the
+    // `forwardVal` to the result of the cloned instance, else set the
+    // `forwardVal` to the new port of the referenced module.
+    if (dir == Direction::Out) {
+      auto builder = ImplicitLocOpBuilder::atBlockEnd(
+          forwardVal.getLoc(), forwardVal.isa<BlockArgument>()
+                                   ? referencedModule.getBodyBlock()
+                                   : forwardVal.getDefiningOp()->getBlock());
+      builder.create<ConnectOp>(referencedModNewPort, forwardVal);
+      forwardVal = clonedInstRes;
+    } else {
+      auto builder = ImplicitLocOpBuilder::atBlockEnd(clonedInst.getLoc(),
+                                                      clonedInst->getBlock());
+      builder.create<ConnectOp>(clonedInstRes, forwardVal);
+      forwardVal = referencedModNewPort;
+    }
+
+    // Switch direction of reached the `lcaModule`.
+    if (clonedInst->getParentOfType<FModuleOp>() == lcaModule)
+      dir = Direction::In;
+  }
+  return forwardVal;
 }
 
 //===----------------------------------------------------------------------===//
