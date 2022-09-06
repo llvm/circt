@@ -320,3 +320,27 @@ systemc.module @baseTypeMismatch () {
     systemc.instance.bind_port %instance["out0"] to %signal : !systemc.module<submodule(out0: !systemc.out<i32>)>, !systemc.signal<i8>
   }
 }
+
+// -----
+
+systemc.module @submodule (%out0: !systemc.out<i32>) {}
+
+systemc.module @baseTypeMismatch (%out0: !systemc.out<i32>) {
+  %instance = systemc.instance.decl @submodule : !systemc.module<submodule(out0: !systemc.out<i32>)>
+  systemc.ctor {
+    // expected-error @+1 {{expected a list of exactly 2 types, but got 1}}
+    systemc.instance.bind_port %instance["out0"] to %out0 : !systemc.module<submodule(out0: !systemc.out<i32>)>
+  }
+}
+
+// -----
+
+systemc.module @submodule (%out0: !systemc.out<i32>) {}
+
+systemc.module @baseTypeMismatch (%out0: !systemc.out<i32>) {
+  %instance = systemc.instance.decl @submodule : !systemc.module<submodule(out0: !systemc.out<i32>)>
+  systemc.ctor {
+    // expected-error @+1 {{port #1 does not exist, there are only 1 ports}}
+    "systemc.instance.bind_port"(%instance, %out0) {portId = 1 : index} : (!systemc.module<submodule(out0: !systemc.out<i32>)>, !systemc.out<i32>) -> ()
+  }
+}

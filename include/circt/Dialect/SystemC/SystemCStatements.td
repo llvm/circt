@@ -123,14 +123,10 @@ def BindPortOp : SystemCOp<"instance.bind_port", [HasParent<"CtorOp">]> {
   }];
 
   let arguments = (ins ModuleType:$instance,
-                       StrAttr:$portName,
+                       IndexAttr:$portId,
                        ChannelType:$channel);
 
-  let assemblyFormat = [{
-    $instance `[` $portName `]` `to` $channel attr-dict `:`
-    type($instance) `,` type($channel)
-  }];
-
+  let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
 }
 
