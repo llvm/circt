@@ -8,7 +8,7 @@ class BasicSystemTester(esi_cosim.CosimBase):
   """Provides methods to test the 'basic' simulation."""
 
   def testIntAcc(self, num_msgs):
-    ep = self.openEP("TOP.top.ints.TestEP",
+    ep = self.openEP("top.ints.TestEP",
                      sendType=self.schema.I32,
                      recvType=self.schema.I32)
     sum = 0
@@ -22,7 +22,7 @@ class BasicSystemTester(esi_cosim.CosimBase):
       assert (result.i == sum)
 
   def testVectorSum(self, num_msgs):
-    ep = self.openEP("TOP.top.array.TestEP",
+    ep = self.openEP("top.array.TestEP",
                      sendType=self.schema.ArrayOf2xUi24,
                      recvType=self.schema.ArrayOf4xSi13)
     for _ in range(num_msgs):
@@ -42,10 +42,10 @@ class BasicSystemTester(esi_cosim.CosimBase):
       assert (result.l[1] == arr[2] + arr[3])
 
   def testCrypto(self, num_msgs):
-    ep = self.openEP("TOP.top.structs.CryptoData",
+    ep = self.openEP("top.structs.CryptoData",
                      sendType=self.schema.Struct15822124641382404136,
                      recvType=self.schema.Struct15822124641382404136)
-    cfg = self.openEP("TOP.top.structs.CryptoConfig",
+    cfg = self.openEP("top.structs.CryptoConfig",
                       sendType=self.schema.I1,
                       recvType=self.schema.Struct14745270011869700302)
 
