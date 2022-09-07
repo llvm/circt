@@ -784,61 +784,78 @@ private:
 // Code related to handling Grand Central View annotations
 //===----------------------------------------------------------------------===//
 
-/// Get the path from `parentModule` to `targetModule`. If `nonlocalPath` is
-/// empty, get the path from InstanceGraph, else get the path from the
-/// `nonlocalPath`. Emit error and return None, if there are multiple paths
-/// between `parentModule` and `targetModule`. The caller must handle the None
-/// return value and error out.
+/// Get the path from `lcaModule` to `targetModule`.  The last `InstanceOp` in
+/// the path must instantiate `targetModule` and the first must be inside the
+/// `lcaModule`. If `nonlocalPath` is empty, get the path from InstanceGraph,
+/// else get the path from the `nonlocalPath`. Emit error and return None, if
+/// there are multiple paths between `lcaModule` and `targetModule`. The caller
+/// must handle the None return value and error out.
 static Optional<ArrayRef<InstanceOp>>
-getPath(FModuleLike targetModule, FModuleOp parentModule,
+getPath(FModuleLike targetModule, FModuleOp lcaModule,
         SmallVector<InstanceOp> &nonlocalPath, ApplyState &state) {
   ArrayRef<InstanceOp> pathToSend;
-  if (targetModule == parentModule)
+  if (targetModule == lcaModule)
     return pathToSend;
-  auto isInstanceInParentModule = [&](InstanceOp inst) {
-    return (inst->getParentOfType<FModuleOp>() == parentModule);
+  auto isInstanceInlcaModule = [&](InstanceOp inst) {
+    return (inst->getParentOfType<FModuleOp>() == lcaModule);
   };
   if (nonlocalPath.empty()) {
     // For all paths from root to `targetModule`. Get the path that passes
-    // through the `parentModule`. Only one such path must exist.
+    // through the `lcaModule`. Only one such path must exist.
     for (auto path : state.instancePathcache.getAbsolutePaths(targetModule)) {
-      // If `parentModule` exists in the path
-      if (llvm::find_if(path, isInstanceInParentModule) != path.end()) {
+      // If `lcaModule` exists in the path
+      if (llvm::find_if(path, isInstanceInlcaModule) != path.end()) {
         // If already found one path, and another path exists, emit error.
         if (!pathToSend.empty()) {
           targetModule.emitOpError(
               "cannot handle multiple paths from the parent module ")
-              << parentModule.moduleNameAttr()
+              << lcaModule.moduleNameAttr()
               << " till the GrandCentral view target";
           return None;
         }
 
-        pathToSend = path.drop_until(isInstanceInParentModule);
+        // Store the path from `lcaModule`.
+        pathToSend = path.drop_until(isInstanceInlcaModule);
       }
     }
-  } else // Get the path from the `parentModule` in the `nonlocalPath`.
+  } else // Get the path from the `lcaModule` in the `nonlocalPath`.
     pathToSend = ArrayRef<InstanceOp>(
-        llvm::find_if(nonlocalPath, isInstanceInParentModule),
-        nonlocalPath.end());
+        llvm::find_if(nonlocalPath, isInstanceInlcaModule), nonlocalPath.end());
   return pathToSend;
 }
 
+/// Set the `pathFromSrcToCompanion` with the path from `srcTarget` to
+/// `companionTarget` via the `lcaModule`. The `lcaModule` denotes the least
+/// common ancestor for the source and destination modules. The first
+/// `InstanceOp` in the `pathFromSrcToCompanion` must instantiate the module of
+/// `srcTarget` and the last must instantiate the module `companionTarget`.
 static LogicalResult
-setSrcDstInstancePath(AnnoPathValue &srcTarget, AnnoPathValue &companionTarget,
-                      SmallVector<InstanceOp> &pathFromSrcToCompanion,
-                      FModuleOp &lcaModule, ApplyState &state) {
+computeRefPortsPathViaLCA(AnnoPathValue &srcTarget,
+                          AnnoPathValue &companionTarget,
+                          SmallVector<InstanceOp> &pathFromSrcToCompanion,
+                          FModuleOp &lcaModule, ApplyState &state) {
+  if (isa<FExtModuleOp>(srcTarget.ref.getOp()))
+    return srcTarget.ref.getOp()->emitError(
+        "RefType source cannot be an extern module port, it must be moved to "
+        "the instance of the extern module");
+  pathFromSrcToCompanion.clear();
+
   auto srcModule = cast<FModuleOp>(srcTarget.ref.getModule());
   auto companionModule = cast<FModuleOp>(companionTarget.ref.getModule());
-  assert(srcModule != companionModule);
+  if (srcModule == companionModule)
+    return success();
   auto pathToSrc = getPath(srcModule, lcaModule, srcTarget.instances, state);
   if (!pathToSrc)
     return mlir::emitError(lcaModule.getLoc(),
-                           "cannot find path from parent to src");
+                           "cannot find a unique path from parent to src");
   auto pathToCompanion =
       getPath(companionModule, lcaModule, companionTarget.instances, state);
   if (!pathToCompanion)
     return mlir::emitError(lcaModule.getLoc(),
                            "cannot find path from parent to companion");
+  // The paths can be empty, if
+  // 1. `srcModule` == `lcaModule`, or
+  // 2. `lcaModule` == `companionModule`.
 
   pathFromSrcToCompanion.append(pathToSrc->rbegin(), pathToSrc->rend());
   pathFromSrcToCompanion.append(pathToCompanion->begin(),
@@ -847,30 +864,48 @@ setSrcDstInstancePath(AnnoPathValue &srcTarget, AnnoPathValue &companionTarget,
 }
 
 /// Add a RefType cross-module connection from the `refSendTarget` to the
-/// `parentModule`. The assumption is that `refSendTarget` has a path from
-/// `parentModule`.
+/// `companionTarget`, via the `parentModule`. Add the RefSendOp and the
+/// corresponding RefResolveOps for the RefType connection. Return the name for
+/// the NodeOp, that captures the result of the RefResolveOp. The assumption is
+/// that `parentModule` is the least common ancestor between `refSendTarget` and
+/// `companionModule`.
 static StringAttr borePortsFromViewToCompanion(AnnoPathValue &refSendTarget,
                                                FModuleOp parentModule,
                                                ApplyState &state,
                                                AnnoPathValue &companionTarget,
                                                StringAttr viewName) {
-  auto refSendModule = dyn_cast<FModuleOp>(refSendTarget.ref.getModule());
+  if (isa<FExtModuleOp>(refSendTarget.ref.getOp())) {
+    refSendTarget.ref.getOp()->emitError(
+        "RefType source cannot be an extern module port, it must be moved to "
+        "the instance of the extern module");
+    return {};
+  }
+
+  auto refSendModule = cast<FModuleOp>(refSendTarget.ref.getModule());
+  // The value that must be the argument to the RefSendOp. This can either be a
+  // module port or the result of any namable operation.
   Value refSendBase;
   if (refSendTarget.ref.getImpl().isOp())
     refSendBase = refSendTarget.ref.getImpl().getOp()->getResult(0);
+  // Note: This assumes that only the result 0 of the op must be connected.
+  // There is no mechanism currently to handle mulitple result operations.
   else if (refSendTarget.ref.getImpl().isPort())
     refSendBase =
         refSendModule.getArgument(refSendTarget.ref.getImpl().getPortNo());
   auto refSendBuilder = ImplicitLocOpBuilder::atBlockEnd(
       refSendModule.getLoc(), refSendModule.getBodyBlock());
+  // If it is an aggregate, and only a subfield is required, then insert the
+  // appropriate number of Subfield and SubIndex to get the subfield value.
   refSendBase =
       getValueByFieldID(refSendBuilder, refSendBase, refSendTarget.fieldIdx);
-  // Note: No DontTouch added to refSendTarget.
+  // Create the refSend, a remote XMR to read `refSendBase`.
+  // Note: No DontTouch added, so constant-prop and cse are allowed.
   auto sendVal = refSendBuilder.create<RefSendOp>(refSendBase);
   FModuleOp lcaModule = parentModule;
   SmallVector<InstanceOp> pathFromSrcToCompanion;
-  if (setSrcDstInstancePath(refSendTarget, companionTarget,
-                            pathFromSrcToCompanion, lcaModule, state)
+  // Compute the path and set `pathFromSrcToCompanion`.
+  if (computeRefPortsPathViaLCA(refSendTarget, companionTarget,
+                                pathFromSrcToCompanion, lcaModule, state)
           .failed())
     return {};
   // Now drill ports to connect the `sendVal` to the `wireTarget`.
@@ -881,6 +916,7 @@ static StringAttr borePortsFromViewToCompanion(AnnoPathValue &refSendTarget,
         return state.getNamespace(mod);
       },
       &state.targetCaches);
+  // Create the RefResolveOp in the companion.
   FModuleOp companionModule = cast<FModuleOp>(companionTarget.ref.getOp());
   auto compBuilder = ImplicitLocOpBuilder::atBlockEnd(
       companionModule.getLoc(), companionModule.getBodyBlock());
@@ -891,10 +927,12 @@ static StringAttr borePortsFromViewToCompanion(AnnoPathValue &refSendTarget,
         state.getNamespace(nameForMod)
             .newName("view_" + viewName.getValue() + "refPort"));
   };
+
   auto node = compBuilder.create<NodeOp>(refResolve.getResult().getType(),
                                          refResolve, newName(companionModule));
   node.dropName();
   state.targetCaches.insertOp(node);
+  // This node must be preserved till the GrandCentral pass.
   AnnotationSet::addDontTouch(node);
   return node.getNameAttr();
 }
@@ -1139,23 +1177,53 @@ static Optional<DictionaryAttr> parseAugmentedType(
     elementScattered.append("id", id);
     // If there are sub-targets, then add these.
     auto targetAttr = StringAttr::get(context, target);
-    auto xmrSrcPath = resolvePath(targetAttr.getValue(), state.circuit,
-                                  state.symTbl, state.targetCaches);
-    if (!xmrSrcPath) {
+    auto xmrSrcTarget = resolvePath(targetAttr.getValue(), state.circuit,
+                                    state.symTbl, state.targetCaches);
+    if (!xmrSrcTarget) {
       mlir::emitError(loc, "Failed to resolve target ") << targetAttr;
       return None;
     }
+    if (auto extMod = dyn_cast<FExtModuleOp>(xmrSrcTarget->ref.getOp())) {
+      // Move the target to the InstanceOp for the extern module.
+      auto portNo = xmrSrcTarget->ref.getImpl().getPortNo();
+      if (xmrSrcTarget->instances.empty()) {
+        auto paths =
+            state.instancePathcache.getAbsolutePaths(xmrSrcTarget->ref.getOp());
+        if (paths.size() > 1) {
+          extMod.emitError("cannot resolve a unique instance path from the "
+                           "external module '")
+              << targetAttr << "'";
+          return None;
+        }
+        xmrSrcTarget->instances.insert(xmrSrcTarget->instances.begin(),
+                                       paths.back().begin(),
+                                       paths.back().end());
+      }
+      auto lastInst = xmrSrcTarget->instances.pop_back_val();
+      auto builder = ImplicitLocOpBuilder::atBlockEnd(lastInst.getLoc(),
+                                                      lastInst->getBlock());
+      builder.setInsertionPointAfter(lastInst);
+      auto node = builder.create<NodeOp>(lastInst.getType(portNo),
+                                         lastInst.getResult(portNo));
+      AnnotationSet::addDontTouch(node);
+      // Move the anno target to a node that captures the corresponding port of
+      // the instance op for the extern module.
+      xmrSrcTarget->ref =
+          AnnoTarget(circt::firrtl::detail::AnnoTargetImpl(node));
+    }
     auto companionTarget = resolvePath(companionAttr.getValue(), state.circuit,
                                        state.symTbl, state.targetCaches);
-    if (xmrSrcPath->ref.getModule() !=
+    if (xmrSrcTarget->ref.getModule() !=
         cast<FModuleOp>(companionTarget->ref.getOp())) {
-      // Add the refSend and get the RefType val through the ports from the
-      // target. Note: The remote signal to which the XMR is being generated,
-      // does not contain any DontTouch. Which implies the remote signal can be
-      // optimized away, but the XMR should still point to a legal value  or a
-      // constant after the optimization.
+      // Get the name of the node op that reads the remote value from
+      // xmrSrcTarget. This adds the refsend, drills the ports and adds the ref
+      // resolve and then reads the output from resolve into a node. Note: The
+      // remote signal to which the XMR is being generated, does not contain any
+      // DontTouch. Which implies the remote signal can be optimized away, but
+      // the XMR should still point to a legal value  or a constant after the
+      // optimization.
       auto resolveTargetName = borePortsFromViewToCompanion(
-          *xmrSrcPath, parentModule, state, *companionTarget, name);
+          *xmrSrcTarget, parentModule, state, *companionTarget, name);
       if (!resolveTargetName) {
         mlir::emitError(loc, "Failed to resolve target, cannot find unique "
                              "path from parent module `" +
