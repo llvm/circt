@@ -928,6 +928,7 @@ void ExtractInstancesPass::groupInstances() {
     // Create the wrapper module.
     auto wrapper = builder.create<FModuleOp>(
         builder.getUnknownLoc(), builder.getStringAttr(wrapperName), ports);
+    SymbolTable::setSymbolVisibility(wrapper, SymbolTable::Visibility::Private);
 
     // Instantiate the wrapper module in the parent and replace uses of the
     // extracted instances' ports with the corresponding wrapper module ports.

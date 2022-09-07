@@ -215,7 +215,7 @@ firrtl.circuit "ExtractBlackBoxesIntoDUTSubmodule"  {
     firrtl.connect %bb2_in, %bb1_out : !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.connect %bb1_in, %in : !firrtl.uint<8>, !firrtl.uint<8>
   }
-  // CHECK-LABEL: firrtl.module @BlackBoxes(
+  // CHECK-LABEL: firrtl.module private @BlackBoxes(
   // CHECK-SAME:    in %bb_0_in: !firrtl.uint<8>
   // CHECK-SAME:    out %bb_0_out: !firrtl.uint<8>
   // CHECK-SAME:    in %bb_1_in: !firrtl.uint<8>

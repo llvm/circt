@@ -99,26 +99,27 @@ circuit Top : %[[
     inst DataTap_2 of DataTap_2
     DataTap_2._0 is invalid
     DataTap_2._1 is invalid
-    in <= DataTap_2._0
-    out <= DataTap_2._1
     node _child_io_in_T = and(io.in, in)
     unsigned.io.in <= _child_io_in_T
     node _io_out_T = and(unsigned.io.out, out)
     io.out <= _io_out_T
     inst MemTap_2 of MemTap_2
 
+    in <= or(DataTap_2._0, MemTap_2._0)
+    out <= or(DataTap_2._1, MemTap_2._1)
+
 ; CHECK: module DataTap_2_impl_0(
 ; CHECK:   output _1,
 ; CHECK:          _0);
-; CHECK:   assign _1 = Top.unsigned_0.signed_0.localparam_0.foo.bar.out;
-; CHECK:   assign _0 = Top.unsigned_0.signed_0.localparam_0.foo.bar.in;
+; CHECK:   assign _1 = Top.unsigned_1.signed_0.localparam_0.foo.bar.out;
+; CHECK:   assign _0 = Top.unsigned_1.signed_0.localparam_0.foo.bar.in;
 ; CHECK: endmodule
 
 ; CHECK: module MemTap_2_impl_0(
 ; CHECK:   output  _1,
 ; CHECK:           _0);
-; CHECK:   assign _1 = Top.unsigned_0.signed_0.always_ext.Memory[1];
-; CHECK:   assign _0 = Top.unsigned_0.signed_0.always_ext.Memory[0];
+; CHECK:   assign _1 = Top.unsigned_1.signed_0.always_ext.Memory[1];
+; CHECK:   assign _0 = Top.unsigned_1.signed_0.always_ext.Memory[0];
 ; CHECK: endmodule
 
 ; // -----
@@ -169,6 +170,8 @@ circuit Top : %[[
     f <= inv
 
   module Top:
+    output io : { b : UInt<1>, c : UInt<1>, d: UInt<1> }
+
     inst foo of Foo
     inst bar of Foo
     inst dataTap of DataTap
@@ -176,6 +179,9 @@ circuit Top : %[[
     inv is invalid
     wire k : UInt<1>
     k <= inv
+    io.b <= dataTap.b
+    io.c <= dataTap.c
+    io.d <= dataTap.d
 
 ; CHECK: module DataTap_impl_0(
 ; CHECK:   output b,
@@ -207,15 +213,21 @@ circuit TestHarness : %[[
   }
 ]]
   module TestHarness :
+    output io : UInt<1>
     inst system of Top
+    io <= system.io
   module Top :
+    output io : UInt<1>
     inst test of Test
     inst Companion of Companion
+    io <= Companion.io
   extmodule DataTap :
     output _0 : UInt<8>
     defname = DataTap
   module Companion :
+    output io : UInt<1>
     inst DataTap of DataTap
+    io <= DataTap._0
   module Test :
     wire inv: UInt<1>
     inv is invalid
@@ -386,6 +398,7 @@ circuit Top : %[[
     wire_Submodule <= inv
 
     inst tap of DataTap_Submodule
+    port_Submodule <= or(tap._0, or(tap._1, or(tap._2, or(tap._3, or(tap._4, tap._5)))))
 
   module DUT :
     output port_DUT: UInt<1>
@@ -400,6 +413,7 @@ circuit Top : %[[
     inst submodule of Submodule
 
     inst tap of DataTap_DUT
+    port_DUT <= or(tap._0, or(tap._1, or(tap._2, or(tap._3, or(tap._4, tap._5)))))
 
   module Top :
     output port_Top : UInt<1>
@@ -413,6 +427,7 @@ circuit Top : %[[
 
     inst dut of DUT
     inst tap of DataTap_Top
+    port_Top <= or(tap._0, or(tap._1, or(tap._2, or(tap._3, or(tap._4, tap._5)))))
 
     ; CHECK:      module DataTap_Submodule
     ; CHECK:      assign _0 = Submodule.wire_Submodule

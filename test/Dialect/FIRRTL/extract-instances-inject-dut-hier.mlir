@@ -21,7 +21,7 @@ firrtl.circuit "ExtractClockGatesMultigrouping" attributes {annotations = [{clas
   // CHECK: firrtl.instance inst0 sym [[INST0_SYM:@.+]] @SomeModule
   // CHECK: firrtl.instance inst1 sym [[INST1_SYM:@.+]] @SomeModule
 
-  // CHECK-LABEL: firrtl.module @ClockGatesGroup
+  // CHECK-LABEL: firrtl.module private @ClockGatesGroup
   // CHECK: firrtl.instance gate sym [[CKG0_SYM:@.+]] @EICG_wrapper
   // CHECK: firrtl.instance gate sym [[CKG1_SYM:@.+]] @EICG_wrapper
 
