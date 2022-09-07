@@ -459,3 +459,59 @@ circuit ConstantSinking : %[[
   module ConstantSinking:
     inst dataTap of DataTap
     node w = UInt<1>(1)
+
+; // -----
+
+circuit Top : %[[
+  {
+    "class":"firrtl.transforms.DontTouchAnnotation",
+    "target":"~Top|Child>sum"
+  },
+  {
+    "class":"sifive.enterprise.grandcentral.DataTapsAnnotation",
+    "blackBox":"~Top|DataTap",
+    "keys":[
+      {
+        "class":"sifive.enterprise.grandcentral.DataTapModuleSignalKey",
+        "module":"~Top|Child",
+        "internalPath":"sum",
+        "portName":"~Top|DataTap>_0"
+      },
+      {
+        "class":"sifive.enterprise.grandcentral.DataTapModuleSignalKey",
+        "module":"~Top|Child",
+        "internalPath":"not.a.real.path",
+        "portName":"~Top|DataTap>_1"
+      }
+    ]
+  }
+]]
+  module Child :
+    output io : { flip in : UInt<8>, out : UInt<8>}
+
+    node sum = tail(add(io.in, UInt<1>(1)), 1)
+
+    io.out <= sum
+
+  extmodule DataTap :
+    output _0 : UInt<8>
+    output _1 : UInt<8>
+    defname = DataTap
+
+  module Top :
+    output io : { flip in : UInt<8>, out : UInt<8>}
+    output taps : UInt<8>[2]
+
+    inst child of Child
+    io <= child.io
+
+    inst dt of DataTap
+    taps[0] <= dt._0
+    taps[1] <= dt._1
+
+; CHECK: module DataTap_impl_0(
+; CHECK:   output [7:0] _0,
+; CHECK:                _1);
+; CHECK:   assign _0 = Top.child.sum;
+; CHECK:   assign _1 = Top.child.not.a.real.path;
+; CHECK: endmodule
