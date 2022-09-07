@@ -119,10 +119,10 @@ firrtl.circuit "TestHarness" {
 firrtl.circuit "EnableOutsideDUT" {
   firrtl.extmodule @EICG_wrapper(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock) attributes {defname = "EICG_wrapper"}
 
-  // CHECK: firrtl.module @A(in %test_en: !firrtl.uint<1>)
+  // CHECK: firrtl.module @A(in %port_en: !firrtl.uint<1>)
   firrtl.module @A() attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
     %in, %test_en, %en, %out = firrtl.instance eicg @EICG_wrapper(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock)
-    // CHECK: firrtl.connect %eicg_test_en, %test_en : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: firrtl.connect %eicg_test_en, %port_en : !firrtl.uint<1>, !firrtl.uint<1>
   }
 
   // Regardless of enable signal origin, leave clocks outside DUT alone.
@@ -137,9 +137,9 @@ firrtl.circuit "EnableOutsideDUT" {
     // CHECK: firrtl.instance o @OutsideDUT
     firrtl.instance o @OutsideDUT()
 
-    // CHECK: %a_test_en = firrtl.instance a  @A(in test_en: !firrtl.uint<1>)
+    // CHECK: %a_port_en = firrtl.instance a  @A(in port_en: !firrtl.uint<1>)
     firrtl.instance a @A()
-    // CHECK: firrtl.connect %a_test_en, %port_en
+    // CHECK: firrtl.connect %a_port_en, %port_en
   }
 }
 
@@ -148,10 +148,10 @@ firrtl.circuit "EnableOutsideDUT" {
 firrtl.circuit "EnableOutsideDUT2" {
   firrtl.extmodule @EICG_wrapper(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock) attributes {defname = "EICG_wrapper"}
 
-  // CHECK: firrtl.module @A(in %test_en: !firrtl.uint<1>)
+  // CHECK: firrtl.module @A(in %test_signal: !firrtl.uint<1>)
   firrtl.module @A() attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
     %in, %test_en, %en, %out = firrtl.instance eicg @EICG_wrapper(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock)
-    // CHECK: firrtl.connect %eicg_test_en, %test_en : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: firrtl.connect %eicg_test_en, %test_signal : !firrtl.uint<1>, !firrtl.uint<1>
   }
 
   // Regardless of enable signal origin, leave clocks outside DUT alone.
@@ -163,7 +163,7 @@ firrtl.circuit "EnableOutsideDUT2" {
 
   // CHECK-LABEL: @enableSignal
   firrtl.module @enableSignal() {
-    %test_en = firrtl.wire {annotations = [{class = "sifive.enterprise.firrtl.DFTTestModeEnableAnnotation"}]} : !firrtl.uint<1>
+    %test_signal = firrtl.wire {annotations = [{class = "sifive.enterprise.firrtl.DFTTestModeEnableAnnotation"}]} : !firrtl.uint<1>
   }
 
   // CHECK-LABEL: @EnableOutsideDUT2
@@ -173,7 +173,7 @@ firrtl.circuit "EnableOutsideDUT2" {
     // CHECK: firrtl.instance o @OutsideDUT
     firrtl.instance o @OutsideDUT()
 
-    // CHECK: %[[a_en:.+]] = firrtl.instance a  @A(in test_en: !firrtl.uint<1>)
+    // CHECK: %[[a_en:.+]] = firrtl.instance a  @A(in test_signal: !firrtl.uint<1>)
     firrtl.instance a @A()
     // CHECK: firrtl.connect %[[a_en]], %[[en]]
   }

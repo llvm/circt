@@ -281,11 +281,26 @@ void WireDFTPass::runOnOperation() {
     return signalPassFailure();
   }
 
+  /// Use enable signal name for ports added for plumbing.
+  auto getPortName = [](Value signal) {
+    // If port, use port name.
+    if (auto arg = signal.dyn_cast<BlockArgument>()) {
+      auto parentMod = cast<FModuleLike>(arg.getParentRegion()->getParentOp());
+      return parentMod.getPortNameAttr(arg.getArgNumber());
+    }
+    // Else, try to get name from the defining operation.
+    if (auto *op = signal.getDefiningOp())
+      if (auto name = op->getAttrOfType<StringAttr>("name"))
+        return name;
+
+    // Fallback to something reasonable.
+    return StringAttr::get(signal.getContext(), "test_en");
+  };
+
   // Stash some useful things.
-  auto *context = &getContext();
   auto uint1Type = enableSignal.getType().cast<FIRRTLType>();
   auto loc = lca->getModule().getLoc();
-  auto portName = StringAttr::get(context, "test_en");
+  auto portName = getPortName(enableSignal);
 
   // This maps an enable signal to each module.
   DenseMap<InstanceGraphNode *, Value> signals;
