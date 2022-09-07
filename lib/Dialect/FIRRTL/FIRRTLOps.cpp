@@ -1421,6 +1421,8 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 
 StringRef InstanceOp::instanceName() { return getName(); }
 
+StringAttr InstanceOp::instanceNameAttr() { return getNameAttr(); }
+
 void InstanceOp::print(OpAsmPrinter &p) {
   // Print the instance name.
   p << " ";
