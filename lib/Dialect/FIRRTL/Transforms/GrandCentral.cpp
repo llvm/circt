@@ -1459,8 +1459,8 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
           if (!leafValue.isa<BlockArgument>() &&
               isa<NodeOp>(leafValue.getDefiningOp()) &&
               !leafValue.getDefiningOp()->getOperand(0).isa<BlockArgument>()) {
-            auto nodeOp = leafValue.getDefiningOp();
-            auto nodeDef = nodeOp->getOperand(0).getDefiningOp();
+            auto *nodeOp = leafValue.getDefiningOp();
+            auto *nodeDef = nodeOp->getOperand(0).getDefiningOp();
             if (isa<RefResolveOp>(nodeDef) || isa<ConstantOp>(nodeDef)) {
               // This is the new style of XMRs using RefTypes.
               refTypeLowering = true;
