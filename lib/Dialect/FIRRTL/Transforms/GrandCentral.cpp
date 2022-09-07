@@ -1454,17 +1454,22 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
         // If the leaf is inside the companionModule, then no path needs to be
         // generated, only the leaf.
 
-        if (companionModule == enclosing) {
-          // This is the new style of XMRs using RefTypes.
+        bool refTypeLowering = false;
+        if (companionModule == enclosing)
           if (!leafValue.isa<BlockArgument>() &&
-              isa<NodeOp>(leafValue.getDefiningOp())) {
-            auto *nodeOp = leafValue.getDefiningOp();
-            path.addValue(nodeOp->getOperand(0));
-            AnnotationSet::removeDontTouch(nodeOp);
-          } else
-            path.addValue(leafValue);
+              isa<NodeOp>(leafValue.getDefiningOp()) &&
+              !leafValue.getDefiningOp()->getOperand(0).isa<BlockArgument>()) {
+            auto nodeOp = leafValue.getDefiningOp();
+            auto nodeDef = nodeOp->getOperand(0).getDefiningOp();
+            if (isa<RefResolveOp>(nodeDef) || isa<ConstantOp>(nodeDef)) {
+              // This is the new style of XMRs using RefTypes.
+              refTypeLowering = true;
+              path.addValue(nodeOp->getOperand(0));
+              AnnotationSet::removeDontTouch(nodeOp);
+            }
+          }
 
-        } else {
+        if (!refTypeLowering) {
           // This case can only occur if ref.resolve is not introduced during
           // LowerAnnotations. The following code can be eventually removed.
           //
