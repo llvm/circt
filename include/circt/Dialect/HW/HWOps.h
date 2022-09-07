@@ -221,15 +221,21 @@ public:
   HWModulePortAccessor(Location loc, OpBuilder &b, const ModulePortInfo &info,
                        Region &bodyRegion);
 
+  // By-name access.
   PortValue operator[](llvm::StringRef name) {
     auto it = ports.find(name.str());
     assert(it != ports.end() && "Port not found.");
     return it->second;
   }
 
+  // By-index access.
+  PortValue input(unsigned i) { return inPorts[i]->second; }
+  PortValue output(unsigned i) { return outPorts[i]->second; }
+
 private:
   BackedgeBuilder bb;
   std::map<std::string, PortValue> ports;
+  std::vector<std::map<std::string, PortValue>::iterator> inPorts, outPorts;
   std::vector<std::shared_ptr<Backedge>> outputBackedges;
 };
 

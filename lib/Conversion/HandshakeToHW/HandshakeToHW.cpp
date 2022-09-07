@@ -12,12 +12,14 @@
 
 #include "circt/Conversion/HandshakeToHW.h"
 #include "../PassDetail.h"
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/ESI/ESIOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/Handshake/HandshakePasses.h"
 #include "circt/Dialect/Handshake/Visitor.h"
+#include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Support/BackedgeBuilder.h"
 #include "circt/Support/ValueMapper.h"
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
@@ -311,18 +313,105 @@ getPortInfoForOp(ConversionPatternRewriter &rewriter, Operation *op) {
                           op->getResultTypes());
 }
 
+namespace {
+class HandshakeBuilder
+    : public HandshakeVisitor<HandshakeBuilder, FailureOr<hw::HWModuleLike>> {
+public:
+  HandshakeBuilder(Operation *op, ConversionPatternRewriter &rewriter)
+      : loc(op->getLoc()), rewriter(rewriter) {
+    rewriter.setInsertionPointToStart(
+        op->getParentOfType<mlir::ModuleOp>().getBody());
+  }
+  using HandshakeVisitor::visitHandshake;
+  FailureOr<hw::HWModuleLike> visitHandshake(ForkOp op);
+
+  // Creates extern modules for anything not yet handled by the builder.
+  FailureOr<hw::HWModuleLike> visitUnhandledOp(Operation *op);
+  FailureOr<hw::HWModuleLike> visitInvalidOp(Operation *op);
+
+private:
+  Value constant(unsigned width, int64_t value) {
+    return rewriter.create<hw::ConstantOp>(loc, APInt(width, value));
+  }
+
+  std::pair<Value, Value> wrap(Value data, Value valid) {
+    auto wrapOp = rewriter.create<esi::WrapValidReadyOp>(loc, data, valid);
+    return {wrapOp.getResult(0), wrapOp.getResult(1)};
+  }
+
+  std::pair<Value, Value> unwrap(Value channel, Value ready) {
+    auto unwrapOp =
+        rewriter.create<esi::UnwrapValidReadyOp>(loc, channel, ready);
+    return {unwrapOp.getResult(0), unwrapOp.getResult(1)};
+  }
+
+  Value reg(StringRef name, Value in, Value rstValue, Value clk, Value rst) {
+    return rewriter.create<seq::CompRegOp>(loc, in.getType(), in, clk, name,
+                                           rst, rstValue, mlir::StringAttr());
+  }
+
+  Location loc;
+  ConversionPatternRewriter &rewriter;
+};
+
+static hw::HWModuleLike buildExternModule(Operation *op,
+                                          ConversionPatternRewriter &rewriter,
+                                          Location loc) {
+  auto ports = getPortInfoForOp(rewriter, op);
+  return rewriter.create<HWModuleExternOp>(
+      loc, rewriter.getStringAttr(getSubModuleName(op)), ports);
+}
+
+FailureOr<hw::HWModuleLike> HandshakeBuilder::visitUnhandledOp(Operation *op) {
+  return {buildExternModule(op, rewriter, loc)};
+}
+
+FailureOr<hw::HWModuleLike> HandshakeBuilder::visitInvalidOp(Operation *op) {
+  return {buildExternModule(op, rewriter, loc)};
+}
+
+FailureOr<hw::HWModuleLike> HandshakeBuilder::visitHandshake(ForkOp op) {
+  auto portInfo = ModulePortInfo(getPortInfoForOp(rewriter, op));
+  size_t n = op.getNumResults();
+
+  auto mod = rewriter.create<hw::HWModuleOp>(
+      op.getLoc(), rewriter.getStringAttr(getSubModuleName(op)), portInfo,
+      [&](OpBuilder &b, hw::HWModulePortAccessor &ports) {
+        BackedgeBuilder bb(b, op.getLoc());
+        auto c0_i1 = constant(1, 0);
+        auto allDone = bb.get(b.getI1Type());
+        auto [inData, inValid] = unwrap(ports.input(0), allDone);
+        llvm::SmallVector<Value> doneWires;
+        for (size_t i = 0; i < n; i++) {
+          auto done = bb.get(b.getI1Type());
+          auto emitted = b.create<comb::AndOp>(
+              loc, done, comb::createOrFoldNot(loc, allDone, b));
+          auto emitted_reg = reg("emitted_" + std::to_string(i), emitted, c0_i1,
+                                 ports["clock"], ports["reset"]);
+          auto outValid = b.create<comb::AndOp>(
+              loc, comb::createOrFoldNot(loc, emitted_reg, b), inValid);
+          auto [outCh, outReady] = wrap(inData, outValid);
+          ports.output(i).assign(outCh);
+          auto validReady = b.create<comb::AndOp>(loc, outReady, inValid);
+          done.setValue(b.create<comb::AndOp>(loc, validReady, emitted_reg));
+          doneWires.push_back(done);
+        }
+        allDone.setValue(b.create<comb::AndOp>(loc, doneWires));
+      });
+  mod.dump();
+  return {buildExternModule(op, rewriter, loc)};
+}
+
+} // namespace
+
 /// All standard expressions and handshake elastic components will be converted
 /// to a HW sub-module and be instantiated in the top-module.
-static HWModuleExternOp createSubModuleOp(ModuleOp parentModule,
-                                          Operation *oldOp,
-                                          ConversionPatternRewriter &rewriter) {
+static FailureOr<hw::HWModuleLike>
+createSubModuleOp(ModuleOp parentModule, Operation *oldOp,
+                  ConversionPatternRewriter &rewriter) {
   OpBuilder::InsertionGuard g(rewriter);
   rewriter.setInsertionPointToStart(parentModule.getBody());
-  auto ports = getPortInfoForOp(rewriter, oldOp);
-  // todo: HWModuleOp; for this initial commit we'll leave this as an extern op.
-  return rewriter.create<HWModuleExternOp>(
-      parentModule.getLoc(), rewriter.getStringAttr(getSubModuleName(oldOp)),
-      ports);
+  return HandshakeBuilder(oldOp, rewriter).dispatchHandshakeVisitor(oldOp);
 }
 
 //===----------------------------------------------------------------------===//
@@ -371,9 +460,9 @@ struct HandshakeLoweringState {
   Value reset;
 };
 
-static Operation *createOpInHWModule(ConversionPatternRewriter &rewriter,
-                                     HandshakeLoweringState &ls,
-                                     Operation *op) {
+static FailureOr<hw::InstanceOp>
+createOpInHWModule(ConversionPatternRewriter &rewriter,
+                   HandshakeLoweringState &ls, Operation *op) {
   OpBuilder::InsertionGuard g(rewriter);
   rewriter.setInsertionPointToEnd(ls.hwModuleOp.getBodyBlock());
 
@@ -387,11 +476,13 @@ static Operation *createOpInHWModule(ConversionPatternRewriter &rewriter,
     hwOperands.append({ls.clock, ls.reset});
 
   // Check if a sub-module for the operation already exists.
+  // @todo(mortbopet): this should be "getOrCreateSubModuleOp".
   Operation *subModuleSymOp = checkSubModuleOp(ls.parentModule, op);
   if (!subModuleSymOp) {
-    subModuleSymOp = createSubModuleOp(ls.parentModule, op, rewriter);
-    // TODO: fill the subModuleSymOp with the meat of the handshake
-    // operations.
+    auto newSubModuleOp = createSubModuleOp(ls.parentModule, op, rewriter);
+    if (failed(newSubModuleOp))
+      return failure();
+    subModuleSymOp = newSubModuleOp->getOperation();
   }
 
   // Instantiate the new created sub-module.
@@ -426,7 +517,6 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
       return failure();
 
     ModuleOp parentModule = funcOp->getParentOfType<ModuleOp>();
-    rewriter.setInsertionPointToStart(funcOp->getBlock());
     HWModuleOp topModuleOp = createTopModuleOp(funcOp, rewriter);
     Value clockPort =
         topModuleOp.getArgument(topModuleOp.getNumArguments() - 2);
@@ -456,6 +546,7 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
 
     // Extend value mapper with input arguments. Drop the 2 last inputs from
     // the HW module (clock and reset).
+    rewriter.setInsertionPointToStart(topModuleOp.getBodyBlock());
     valuemapper.set(funcOp.getArguments(),
                     topModuleOp.getArguments().drop_back(2));
 
@@ -469,9 +560,11 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
         convertReturnOp(returnOp, ls, rewriter);
       } else {
         // Regular operation.
-        createOpInHWModule(rewriter, ls, &op);
+        if (failed(createOpInHWModule(rewriter, ls, &op)))
+          return failure();
       }
     }
+
     rewriter.eraseOp(funcOp);
     return success();
   }

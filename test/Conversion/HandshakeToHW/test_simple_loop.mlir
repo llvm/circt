@@ -68,6 +68,6 @@ handshake.func @main(%arg0: none, ...) -> (i64, none) attributes {argNames = ["i
   %trueResult_2, %falseResult_3 = cond_br %13#2, %6 : none
   %trueResult_4, %falseResult_5 = cond_br %13#1, %11#1 : i64
   %14:2 = fork [2] %trueResult_0 : i64
-  %15 = arith.addi %trueResult_4, %14#1 : i64
+  %15 = comb.add %trueResult_4, %14#1 : i64
   return %falseResult_5, %falseResult_3 : i64, none
 }

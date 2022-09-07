@@ -185,7 +185,8 @@ HWModulePortAccessor::HWModulePortAccessor(Location loc, OpBuilder &b,
 
   for (auto [barg, inputInfo] :
        llvm::zip(bodyRegion.getArguments(), info.inputs))
-    ports.try_emplace(inputInfo.name.str(), PortValue(barg));
+    inPorts.push_back(
+        ports.try_emplace(inputInfo.name.str(), PortValue(barg)).first);
 
   auto outputOp = cast<hw::OutputOp>(bodyRegion.front().getTerminator());
   assert(outputOp.getNumOperands() == 0);
@@ -197,7 +198,8 @@ HWModulePortAccessor::HWModulePortAccessor(Location loc, OpBuilder &b,
     outputBackedges.push_back(be);
     assert(ports.count(outputInfo.name.str()) == 0 &&
            "output port already exists");
-    ports[outputInfo.name.str()] = PortValue(be);
+    outPorts.push_back(
+        ports.try_emplace(outputInfo.name.str(), PortValue(be)).first);
     outputOpArgs.push_back(*be);
   }
 
