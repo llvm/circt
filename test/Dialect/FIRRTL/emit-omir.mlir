@@ -287,8 +287,8 @@ firrtl.circuit "SRAMPaths" attributes {annotations = [{
     }
   ]
 }]} {
-  firrtl.extmodule @MySRAM()
-  firrtl.module @Submodule() {
+  firrtl.extmodule private @MySRAM()
+  firrtl.module private @Submodule() {
     firrtl.instance mem1 {annotations = [{class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 0}]} @MySRAM()
     %mem2_port = firrtl.mem Undefined {annotations = [{class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 1}], depth = 8, name = "mem2", portNames = ["port"], readLatency = 0 : i32, writeLatency = 1 : i32 } : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: uint<42>>
   }
@@ -297,8 +297,8 @@ firrtl.circuit "SRAMPaths" attributes {annotations = [{
   }
 }
 // CHECK-LABEL: firrtl.circuit "SRAMPaths" {
-// CHECK:         firrtl.extmodule @MySRAM()
-// CHECK-NEXT:    firrtl.module @Submodule() {
+// CHECK:         firrtl.extmodule private @MySRAM()
+// CHECK-NEXT:    firrtl.module private @Submodule() {
 // CHECK-NEXT:      firrtl.instance mem1 sym [[SYMMEM1:@[a-zA-Z0-9_]+]]
 // CHECK-SAME:        @MySRAM()
 // CHECK-NEXT:      firrtl.mem sym [[SYMMEM2:@[a-zA-Z0-9_]+]]
@@ -448,11 +448,11 @@ firrtl.circuit "SRAMPathsWithNLA" attributes {annotations = [{
   ]
 }]} {
   firrtl.hierpath @nla [@SRAMPaths::@sub, @Submodule]
-  firrtl.extmodule @MySRAM()
-  firrtl.module @Submodule() {
+  firrtl.extmodule private @MySRAM()
+  firrtl.module private @Submodule() {
     firrtl.instance mem1 {annotations = [{circt.nonlocal = @nla, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 0}]} @MySRAM()
   }
-  firrtl.module @SRAMPaths() {
+  firrtl.module private @SRAMPaths() {
     firrtl.instance sub sym @sub @Submodule()
   }
   firrtl.module @SRAMPathsWithNLA() {

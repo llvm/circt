@@ -774,6 +774,9 @@ void GrandCentralTapsPass::runOnOperation() {
                  << blackBox.extModule.getName() << " for " << path << ")\n");
       auto impl =
           builder.create<FModuleOp>(name, ports, blackBox.filteredModuleAnnos);
+      SymbolTable::setSymbolVisibility(
+          impl, SymbolTable::getSymbolVisibility(blackBox.extModule));
+
       // If extraction information was provided via an
       // `ExtractGrandCentralAnnotation`, put the created data or memory taps
       // inside this directory.
