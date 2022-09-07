@@ -33,7 +33,12 @@ using namespace circt;
 using namespace circt::handshake;
 using namespace circt::hw;
 
+namespace {
 using NameUniquer = std::function<std::string(Operation *)>;
+using DiscriminatingTypes = std::pair<SmallVector<Type>, SmallVector<Type>>;
+} // namespace
+
+static bool isMemrefType(Type t) { return t.isa<mlir::MemRefType>(); }
 
 /// Returns a submodule name resulting from an operation, without discriminating
 /// type information.
@@ -71,7 +76,6 @@ static SmallVector<Type> filterNoneTypes(ArrayRef<Type> input) {
 
 /// Returns a set of types which may uniquely identify the provided op. Return
 /// value is <inputTypes, outputTypes>.
-using DiscriminatingTypes = std::pair<SmallVector<Type>, SmallVector<Type>>;
 static DiscriminatingTypes getHandshakeDiscriminatingTypes(Operation *op) {
   return TypeSwitch<Operation *, DiscriminatingTypes>(op)
       .Case<MemoryOp>([&](auto memOp) {
@@ -118,6 +122,8 @@ static std::string getTypeName(Location loc, Type type) {
 
   return typeName;
 }
+
+namespace {
 
 /// A class to be used with getPortInfoForOp. Provides an opaque interface for
 /// generating the port names of an operation; handshake operations generate
@@ -177,6 +183,7 @@ private:
   llvm::SmallVector<StringAttr> inputs;
   llvm::SmallVector<StringAttr> outputs;
 };
+} // namespace
 
 /// Construct a name for creating HW sub-module.
 static std::string getSubModuleName(Operation *oldOp) {
@@ -249,32 +256,9 @@ static std::string getSubModuleName(Operation *oldOp) {
 // HW Sub-module Related Functions
 //===----------------------------------------------------------------------===//
 
-/// Check whether a submodule with the same name has been created elsewhere in
-/// the top level module. Return the matched module operation if true, otherwise
-/// return nullptr.
-static Operation *checkSubModuleOp(mlir::ModuleOp parentModule,
-                                   StringRef modName) {
-  if (auto mod = parentModule.lookupSymbol<HWModuleOp>(modName))
-    return mod;
-  if (auto mod = parentModule.lookupSymbol<HWModuleExternOp>(modName))
-    return mod;
-  return nullptr;
-}
-
-static Operation *checkSubModuleOp(mlir::ModuleOp parentModule,
-                                   Operation *oldOp) {
-  auto *moduleOp = checkSubModuleOp(parentModule, getSubModuleName(oldOp));
-
-  if (isa<handshake::InstanceOp>(oldOp))
-    assert(moduleOp &&
-           "handshake.instance target modules should always have been lowered "
-           "before the modules that reference them!");
-  return moduleOp;
-}
-
-static llvm::SmallVector<PortInfo>
-getPortInfoForOp(ConversionPatternRewriter &rewriter, Operation *op,
-                 TypeRange inputs, TypeRange outputs) {
+static llvm::SmallVector<PortInfo> getPortInfoForOp(OpBuilder &b, Operation *op,
+                                                    TypeRange inputs,
+                                                    TypeRange outputs) {
   llvm::SmallVector<PortInfo> ports;
   HandshakePortNameGenerator portNames(op);
 
@@ -294,60 +278,74 @@ getPortInfoForOp(ConversionPatternRewriter &rewriter, Operation *op,
 
   // Add clock and reset signals.
   if (op->hasTrait<mlir::OpTrait::HasClock>()) {
-    ports.push_back({rewriter.getStringAttr("clock"), PortDirection::INPUT,
-                     rewriter.getI1Type(), inIdx++, StringAttr{}});
-    ports.push_back({rewriter.getStringAttr("reset"), PortDirection::INPUT,
-                     rewriter.getI1Type(), inIdx, StringAttr{}});
+    ports.push_back({b.getStringAttr("clock"), PortDirection::INPUT,
+                     b.getI1Type(), inIdx++, StringAttr{}});
+    ports.push_back({b.getStringAttr("reset"), PortDirection::INPUT,
+                     b.getI1Type(), inIdx, StringAttr{}});
   }
 
   return ports;
 }
 
-/// Returns a vector of PortInfo's which defines the FIRRTL interface of the
-/// to-be-converted op.
-static llvm::SmallVector<PortInfo>
-getPortInfoForOp(ConversionPatternRewriter &rewriter, Operation *op) {
-  return getPortInfoForOp(rewriter, op, op->getOperandTypes(),
-                          op->getResultTypes());
+static llvm::SmallVector<PortInfo> getPortInfoForOp(OpBuilder &b,
+                                                    Operation *op) {
+  return getPortInfoForOp(b, op, op->getOperandTypes(), op->getResultTypes());
 }
 
 /// All standard expressions and handshake elastic components will be converted
 /// to a HW sub-module and be instantiated in the top-module.
-static HWModuleExternOp createSubModuleOp(ModuleOp parentModule,
-                                          Operation *oldOp,
-                                          ConversionPatternRewriter &rewriter) {
-  OpBuilder::InsertionGuard g(rewriter);
-  rewriter.setInsertionPointToStart(parentModule.getBody());
-  auto ports = getPortInfoForOp(rewriter, oldOp);
+static HWModuleExternOp
+createSubModuleOp(ModuleOp parentModule, Operation *oldOp, OpBuilder &builder) {
+  OpBuilder::InsertionGuard g(builder);
+  builder.setInsertionPointToStart(parentModule.getBody());
+  auto ports = getPortInfoForOp(builder, oldOp);
   // todo: HWModuleOp; for this initial commit we'll leave this as an extern op.
-  return rewriter.create<HWModuleExternOp>(
-      parentModule.getLoc(), rewriter.getStringAttr(getSubModuleName(oldOp)),
+  return builder.create<HWModuleExternOp>(
+      parentModule.getLoc(), builder.getStringAttr(getSubModuleName(oldOp)),
       ports);
 }
 
+/// Check whether a submodule with the same name has been created elsewhere in
+/// the top level module. Return the matched module operation if true, else,
+/// create the module, and return the created module.
+static hw::HWModuleLike getOrCreateSubModuleForOp(OpBuilder &builder,
+                                                  mlir::ModuleOp parentModule,
+                                                  Operation *op) {
+  auto submoduleName = getSubModuleName(op);
+  if (auto mod = parentModule.lookupSymbol<HWModuleOp>(submoduleName))
+    return mod;
+  if (auto mod = parentModule.lookupSymbol<HWModuleExternOp>(submoduleName))
+    return mod;
+
+  assert(!isa<handshake::InstanceOp>(op) &&
+         "handshake.instance target modules should always have been lowered "
+         "before the modules that reference them!");
+
+  return createSubModuleOp(parentModule, op, builder);
+}
+
 //===----------------------------------------------------------------------===//
-// HW Top-module Related Functions
+// HW top-module related functions
 //===----------------------------------------------------------------------===//
 
 static hw::HWModuleOp createTopModuleOp(handshake::FuncOp funcOp,
-                                        ConversionPatternRewriter &rewriter) {
+                                        OpBuilder &b) {
   llvm::SmallVector<PortInfo, 8> ports = getPortInfoForOp(
-      rewriter, funcOp, funcOp.getArgumentTypes(), funcOp.getResultTypes());
+      b, funcOp, funcOp.getArgumentTypes(), funcOp.getResultTypes());
 
   // Create a HW module.
-  auto hwModuleOp = rewriter.create<hw::HWModuleOp>(
-      funcOp.getLoc(), rewriter.getStringAttr(funcOp.getName()), ports);
+  auto hwModuleOp = b.create<hw::HWModuleOp>(
+      funcOp.getLoc(), b.getStringAttr(funcOp.getName()), ports);
 
   // Remove the default created hw_output operation.
   auto outputOps = hwModuleOp.getOps<hw::OutputOp>();
   assert(std::distance(outputOps.begin(), outputOps.end()) == 1 &&
          "Expected exactly 1 default created hw_output operation");
-  rewriter.eraseOp(*outputOps.begin());
+  (*outputOps.begin()).erase();
 
   return hwModuleOp;
 }
 
-static bool isMemrefType(Type t) { return t.isa<mlir::MemRefType>(); }
 static LogicalResult verifyHandshakeFuncOp(handshake::FuncOp &funcOp) {
   // @TODO: memory I/O is not yet supported. Figure out how to support memory
   // services in ESI.
@@ -371,11 +369,12 @@ struct HandshakeLoweringState {
   Value reset;
 };
 
-static Operation *createOpInHWModule(ConversionPatternRewriter &rewriter,
-                                     HandshakeLoweringState &ls,
+} // namespace
+
+static Operation *createOpInHWModule(OpBuilder &b, HandshakeLoweringState &ls,
                                      Operation *op) {
-  OpBuilder::InsertionGuard g(rewriter);
-  rewriter.setInsertionPointToEnd(ls.hwModuleOp.getBodyBlock());
+  OpBuilder::InsertionGuard g(b);
+  b.setInsertionPointToEnd(ls.hwModuleOp.getBodyBlock());
 
   // Create a mapper between the operands of 'op' and the replacement operands
   // in the target hwModule. For any missing operands, we create a new backedge.
@@ -386,19 +385,13 @@ static Operation *createOpInHWModule(ConversionPatternRewriter &rewriter,
   if (op->hasTrait<mlir::OpTrait::HasClock>())
     hwOperands.append({ls.clock, ls.reset});
 
-  // Check if a sub-module for the operation already exists.
-  Operation *subModuleSymOp = checkSubModuleOp(ls.parentModule, op);
-  if (!subModuleSymOp) {
-    subModuleSymOp = createSubModuleOp(ls.parentModule, op, rewriter);
-    // TODO: fill the subModuleSymOp with the meat of the handshake
-    // operations.
-  }
-
-  // Instantiate the new created sub-module.
-  rewriter.setInsertionPointToEnd(ls.hwModuleOp.getBodyBlock());
-  auto submoduleInstanceOp = rewriter.create<hw::InstanceOp>(
-      op->getLoc(), subModuleSymOp, rewriter.getStringAttr(ls.nameUniquer(op)),
-      hwOperands);
+  // Instantiate the sub-module.
+  hw::HWModuleLike subModuleOp =
+      getOrCreateSubModuleForOp(b, ls.parentModule, op);
+  b.setInsertionPointToEnd(ls.hwModuleOp.getBodyBlock());
+  auto submoduleInstanceOp =
+      b.create<hw::InstanceOp>(op->getLoc(), subModuleOp,
+                               b.getStringAttr(ls.nameUniquer(op)), hwOperands);
 
   // Resolve any previously created backedges that referred to the results of
   // 'op'.
@@ -408,127 +401,117 @@ static Operation *createOpInHWModule(ConversionPatternRewriter &rewriter,
 }
 
 static void convertReturnOp(handshake::ReturnOp op, HandshakeLoweringState &ls,
-                            ConversionPatternRewriter &rewriter) {
-  OpBuilder::InsertionGuard g(rewriter);
-  rewriter.setInsertionPointToEnd(ls.hwModuleOp.getBodyBlock());
-  rewriter.create<hw::OutputOp>(op.getLoc(), ls.mapper.get(op.getOperands()));
+                            OpBuilder &b) {
+  OpBuilder::InsertionGuard g(b);
+  b.setInsertionPointToEnd(ls.hwModuleOp.getBodyBlock());
+  b.create<hw::OutputOp>(op.getLoc(), ls.mapper.get(op.getOperands()));
 }
 
-struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
-  using OpConversionPattern<handshake::FuncOp>::OpConversionPattern;
-  HandshakeFuncOpLowering(MLIRContext *context)
-      : OpConversionPattern<handshake::FuncOp>(context) {}
+static LogicalResult convertHandshakeFuncOp(handshake::FuncOp funcOp,
+                                            OpBuilder &b) {
+  if (failed(verifyHandshakeFuncOp(funcOp)))
+    return failure();
+  OpBuilder::InsertionGuard g(b);
 
-  LogicalResult
-  matchAndRewrite(handshake::FuncOp funcOp, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    if (failed(verifyHandshakeFuncOp(funcOp)))
-      return failure();
+  ModuleOp parentModule = funcOp->getParentOfType<ModuleOp>();
+  b.setInsertionPointToStart(parentModule.getBody());
+  HWModuleOp topModuleOp = createTopModuleOp(funcOp, b);
+  Value clockPort = topModuleOp.getArgument(topModuleOp.getNumArguments() - 2);
+  Value resetPort = topModuleOp.getArgument(topModuleOp.getNumArguments() - 1);
 
-    ModuleOp parentModule = funcOp->getParentOfType<ModuleOp>();
-    rewriter.setInsertionPointToStart(funcOp->getBlock());
-    HWModuleOp topModuleOp = createTopModuleOp(funcOp, rewriter);
-    Value clockPort =
-        topModuleOp.getArgument(topModuleOp.getNumArguments() - 2);
-    Value resetPort =
-        topModuleOp.getArgument(topModuleOp.getNumArguments() - 1);
-
-    // Create a uniquer function for creating instance names.
-    NameUniquer instanceUniquer = [&](Operation *op) {
-      std::string instName = getCallName(op);
-      if (auto idAttr = op->getAttrOfType<IntegerAttr>("handshake_id");
-          idAttr) {
-        // We use a special naming convention for operations which have a
-        // 'handshake_id' attribute.
-        instName += "_id" + std::to_string(idAttr.getValue().getZExtValue());
-      } else {
-        // Fallback to just prefixing with an integer.
-        instName += std::to_string(instanceNameCntr[instName]++);
-      }
-      return instName;
-    };
-
-    // Initialize the Handshake lowering state.
-    BackedgeBuilder bb(rewriter, funcOp.getLoc());
-    ValueMapper valuemapper(&bb);
-    auto ls = HandshakeLoweringState{valuemapper,     parentModule, topModuleOp,
-                                     instanceUniquer, clockPort,    resetPort};
-
-    // Extend value mapper with input arguments. Drop the 2 last inputs from
-    // the HW module (clock and reset).
-    valuemapper.set(funcOp.getArguments(),
-                    topModuleOp.getArguments().drop_back(2));
-
-    // Traverse and convert each operation in funcOp.
-    for (Operation &op : funcOp.front()) {
-      if (isa<hw::OutputOp>(op)) {
-        // Skip the default created HWModule terminator, for now.
-        continue;
-      }
-      if (auto returnOp = dyn_cast<handshake::ReturnOp>(op)) {
-        convertReturnOp(returnOp, ls, rewriter);
-      } else {
-        // Regular operation.
-        createOpInHWModule(rewriter, ls, &op);
-      }
-    }
-    rewriter.eraseOp(funcOp);
-    return success();
-  }
-
-private:
   /// Maintain a map from module names to the # of times the module has been
   /// instantiated inside this module. This is used to generate unique names for
   /// each instance.
-  mutable std::map<std::string, unsigned> instanceNameCntr;
-};
+  std::map<std::string, unsigned> instanceNameCntr;
+
+  // Create a uniquer function for creating instance names.
+  NameUniquer instanceUniquer = [&](Operation *op) {
+    std::string instName = getCallName(op);
+    if (auto idAttr = op->getAttrOfType<IntegerAttr>("handshake_id"); idAttr) {
+      // We use a special naming convention for operations which have a
+      // 'handshake_id' attribute.
+      instName += "_id" + std::to_string(idAttr.getValue().getZExtValue());
+    } else {
+      // Fallback to just prefixing with an integer.
+      instName += std::to_string(instanceNameCntr[instName]++);
+    }
+    return instName;
+  };
+
+  // Initialize the Handshake lowering state.
+  BackedgeBuilder bb(b, funcOp.getLoc());
+  ValueMapper valuemapper(&bb);
+  auto ls = HandshakeLoweringState{valuemapper,     parentModule, topModuleOp,
+                                   instanceUniquer, clockPort,    resetPort};
+
+  // Extend value mapper with input arguments. Drop the 2 last inputs from
+  // the HW module (clock and reset).
+  valuemapper.set(funcOp.getArguments(),
+                  topModuleOp.getArguments().drop_back(2));
+
+  // Traverse and convert each operation in funcOp.
+  for (Operation &op : funcOp.front()) {
+    if (isa<hw::OutputOp>(op)) {
+      // Skip the default created HWModule terminator, for now.
+      continue;
+    }
+    if (auto returnOp = dyn_cast<handshake::ReturnOp>(op)) {
+      convertReturnOp(returnOp, ls, b);
+    } else {
+      // Regular operation.
+      createOpInHWModule(b, ls, &op);
+    }
+  }
+  funcOp->erase();
+  return success();
+}
+
+namespace {
 
 class HandshakeToHWPass : public HandshakeToHWBase<HandshakeToHWPass> {
 public:
-  void runOnOperation() override {
-    auto op = getOperation();
+  void runOnOperation() override;
+};
 
-    // Lowering to HW requires that every value is used exactly once. Check
-    // whether this precondition is met, and if not, exit.
-    if (llvm::any_of(op.getOps<handshake::FuncOp>(), [](auto f) {
-          return failed(verifyAllValuesHasOneUse(f));
-        })) {
+void HandshakeToHWPass::runOnOperation() {
+  auto op = getOperation();
+  OpBuilder builder(op->getContext());
+
+  // Lowering to HW requires that every value is used exactly once. Check
+  // whether this precondition is met, and if not, exit.
+  if (llvm::any_of(op.getOps<handshake::FuncOp>(), [](auto f) {
+        return failed(verifyAllValuesHasOneUse(f));
+      })) {
+    signalPassFailure();
+    return;
+  }
+
+  // Resolve the instance graph to get a top-level module.
+  std::string topLevel;
+  handshake::InstanceGraph uses;
+  SmallVector<std::string> sortedFuncs;
+  if (resolveInstanceGraph(op, uses, topLevel, sortedFuncs).failed()) {
+    signalPassFailure();
+    return;
+  }
+
+  // Convert the handshake.func operations in post-order wrt. the instance
+  // graph. This ensures that any referenced submodules (through
+  // handshake.instance) has already been lowered, and their HW module
+  // equivalents are available.
+  std::map<std::string, hw::HWModuleLike> opNameToModule;
+  for (auto &funcName : llvm::reverse(sortedFuncs)) {
+    auto funcOp = op.lookupSymbol<handshake::FuncOp>(funcName);
+    assert(funcOp && "Symbol not found in module!");
+    if (failed(convertHandshakeFuncOp(funcOp, builder))) {
       signalPassFailure();
+      funcOp->emitOpError() << "error during conversion";
       return;
-    }
-
-    // Resolve the instance graph to get a top-level module.
-    std::string topLevel;
-    handshake::InstanceGraph uses;
-    SmallVector<std::string> sortedFuncs;
-    if (resolveInstanceGraph(op, uses, topLevel, sortedFuncs).failed()) {
-      signalPassFailure();
-      return;
-    }
-
-    ConversionTarget target(getContext());
-    target.addLegalDialect<HWDialect>();
-    target.addIllegalDialect<handshake::HandshakeDialect>();
-
-    // Convert the handshake.func operations in post-order wrt. the instance
-    // graph. This ensures that any referenced submodules (through
-    // handshake.instance) has already been lowered, and their HW module
-    // equivalents are available.
-    for (auto &funcName : llvm::reverse(sortedFuncs)) {
-      RewritePatternSet patterns(op.getContext());
-      patterns.insert<HandshakeFuncOpLowering>(op.getContext());
-      auto *funcOp = op.lookupSymbol(funcName);
-      assert(funcOp && "Symbol not found in module!");
-      if (failed(applyPartialConversion(funcOp, target, std::move(patterns)))) {
-        signalPassFailure();
-        funcOp->emitOpError() << "error during conversion";
-        return;
-      }
     }
   }
-};
-} // end anonymous namespace
+}
 
+} // namespace
 std::unique_ptr<mlir::Pass> circt::createHandshakeToHWPass() {
   return std::make_unique<HandshakeToHWPass>();
 }
