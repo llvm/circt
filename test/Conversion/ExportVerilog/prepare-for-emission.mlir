@@ -93,3 +93,19 @@ module attributes {circt.loweringOptions = "disallowLocalVariables"} {
     hw.output %0, %0 : i4, i4
   }
 }
+
+// -----
+module attributes {circt.loweringOptions =
+                  "emittedLineLength=40,wireSpillingHeuristic=spillNamehintsIfShort"} {
+  // CHECK-LABEL: namehints
+  hw.module @namehints(%a: i8) -> (b: i8, c: i8) {
+    // The output of `comb.add %a, %a, %a` is "a + a + a" so the size is 9 including whitespaces.
+    // "long_namehint" has 13 characters so no spill.
+    // CHECK-NOT: %long_namehint = sv.wire
+    %0 = comb.add %a, %a, %a {sv.namehint = "long_namehint" } : i8
+    // CHECK: %bar = sv.wire
+    // "bar" has 3 characters so spill a wire.
+    %1 = comb.add %a, %a, %a {sv.namehint = "bar" } : i8
+    hw.output %0, %1 : i8, i8
+  }
+}
