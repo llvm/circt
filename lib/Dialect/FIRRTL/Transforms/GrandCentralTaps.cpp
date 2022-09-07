@@ -935,8 +935,12 @@ void GrandCentralTapsPass::gatherAnnotations(Operation *op) {
     };
     AnnotationSet::removePortAnnotations(op, gather);
 
-    // Handle internal data taps on extmodule ops.
-    if (isa<FExtModuleOp>(op)) {
+    // Handle internal data taps.
+    // Note that these work for both extmodules AND regular modules.
+    // Note also that we do NOT currently check that the String target of an
+    // internalKeySourceClass actually corresponds to anything in regular
+    // modules.
+    if (isa<FModuleOp, FExtModuleOp>(op)) {
       auto gather = [&](Annotation anno) {
         if (anno.isClass(internalKeySourceClass)) {
           gatherTap(anno, op);
