@@ -314,14 +314,15 @@ void LogicOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 void IfDefOp::build(OpBuilder &builder, OperationState &result, StringRef cond,
                     std::function<void()> thenCtor,
                     std::function<void()> elseCtor) {
-  build(builder, result, builder.getStringAttr(cond), thenCtor, elseCtor);
+  build(builder, result, builder.getStringAttr(cond), std::move(thenCtor),
+        std::move(elseCtor));
 }
 
 void IfDefOp::build(OpBuilder &builder, OperationState &result, StringAttr cond,
                     std::function<void()> thenCtor,
                     std::function<void()> elseCtor) {
   build(builder, result, MacroIdentAttr::get(builder.getContext(), cond),
-        thenCtor, elseCtor);
+        std::move(thenCtor), std::move(elseCtor));
 }
 
 void IfDefOp::build(OpBuilder &builder, OperationState &result,
@@ -367,16 +368,35 @@ LogicalResult IfDefOp::canonicalize(IfDefOp op, PatternRewriter &rewriter) {
 void IfDefProceduralOp::build(OpBuilder &builder, OperationState &result,
                               StringRef cond, std::function<void()> thenCtor,
                               std::function<void()> elseCtor) {
-  IfDefOp::build(builder, result, cond, std::move(thenCtor),
-                 std::move(elseCtor));
+  build(builder, result, builder.getStringAttr(cond), std::move(thenCtor),
+        std::move(elseCtor));
+}
+
+void IfDefProceduralOp::build(OpBuilder &builder, OperationState &result,
+                              StringAttr cond, std::function<void()> thenCtor,
+                              std::function<void()> elseCtor) {
+  build(builder, result, MacroIdentAttr::get(builder.getContext(), cond),
+        std::move(thenCtor), std::move(elseCtor));
 }
 
 void IfDefProceduralOp::build(OpBuilder &builder, OperationState &result,
                               MacroIdentAttr cond,
                               std::function<void()> thenCtor,
                               std::function<void()> elseCtor) {
-  IfDefOp::build(builder, result, cond, std::move(thenCtor),
-                 std::move(elseCtor));
+  OpBuilder::InsertionGuard guard(builder);
+
+  result.addAttribute("cond", cond);
+  builder.createBlock(result.addRegion());
+
+  // Fill in the body of the #ifdef.
+  if (thenCtor)
+    thenCtor();
+
+  Region *elseRegion = result.addRegion();
+  if (elseCtor) {
+    builder.createBlock(elseRegion);
+    elseCtor();
+  }
 }
 
 LogicalResult IfDefProceduralOp::canonicalize(IfDefProceduralOp op,

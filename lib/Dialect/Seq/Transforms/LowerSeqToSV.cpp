@@ -106,8 +106,8 @@ private:
 
   void initialize(OpBuilder &builder, RegLowerInfo reg, ArrayRef<Value> rands);
 
-  void addToAlwaysBlock(hw::HWModuleOp module, sv::EventControl clockEdge,
-                        Value clock, std::function<void(OpBuilder &)> body,
+  void addToAlwaysBlock(Block *block, sv::EventControl clockEdge, Value clock,
+                        std::function<void(OpBuilder &)> body,
                         ResetType resetStyle = {},
                         sv::EventControl resetEdge = {}, Value reset = {},
                         std::function<void(OpBuilder &)> resetBody = {});
@@ -231,6 +231,21 @@ void FirRegLower::lower(hw::HWModuleOp module) {
   module->removeAttr("firrtl.random_init_width");
 }
 
+static void createTree(OpBuilder &builder, sv::RegOp reg, Value term,
+                       Value next) {
+  if (term == next)
+    return;
+  auto mux = next.getDefiningOp<comb::MuxOp>();
+  if (mux && mux.getTwoState()) {
+    builder.create<sv::IfOp>(
+        mux.getLoc(), mux.getCond(),
+        [&]() { createTree(builder, reg, term, mux.getTrueValue()); },
+        [&]() { createTree(builder, reg, term, mux.getFalseValue()); });
+  } else {
+    builder.create<sv::PAssignOp>(term.getLoc(), reg, next);
+  }
+}
+
 FirRegLower::RegLowerInfo FirRegLower::lower(hw::HWModuleOp module,
                                              FirRegOp reg) {
   Location loc = reg.getLoc();
@@ -253,14 +268,11 @@ FirRegLower::RegLowerInfo FirRegLower::lower(hw::HWModuleOp module,
 
   auto regVal = builder.create<sv::ReadInOutOp>(loc, svReg.reg);
 
-  auto setInput = [&](OpBuilder &builder) {
-    if (reg.getNext() != reg)
-      builder.create<sv::PAssignOp>(loc, svReg.reg, reg.getNext());
-  };
-
   if (reg.hasReset()) {
     addToAlwaysBlock(
-        module, sv::EventControl::AtPosEdge, reg.getClk(), setInput,
+        module.getBodyBlock(), sv::EventControl::AtPosEdge, reg.getClk(),
+        std::bind(createTree, std::placeholders::_1, svReg.reg, reg,
+                  reg.getNext()),
         reg.getIsAsync() ? ResetType::AsyncReset : ResetType::SyncReset,
         sv::EventControl::AtPosEdge, reg.getReset(), [&](OpBuilder &builder) {
           builder.create<sv::PAssignOp>(loc, svReg.reg, reg.getResetValue());
@@ -270,8 +282,10 @@ FirRegLower::RegLowerInfo FirRegLower::lower(hw::HWModuleOp module,
       svReg.asyncResetValue = reg.getResetValue();
     }
   } else {
-    addToAlwaysBlock(module, sv::EventControl::AtPosEdge, reg.getClk(),
-                     setInput);
+    addToAlwaysBlock(module.getBodyBlock(), sv::EventControl::AtPosEdge,
+                     reg.getClk(),
+                     std::bind(createTree, std::placeholders::_1, svReg.reg,
+                               reg, reg.getNext()));
   }
 
   reg.replaceAllUsesWith(regVal.getResult());
@@ -306,15 +320,14 @@ void FirRegLower::initialize(OpBuilder &builder, RegLowerInfo reg,
   builder.create<sv::BPAssignOp>(loc, reg.reg, bitcast);
 }
 
-void FirRegLower::addToAlwaysBlock(hw::HWModuleOp module,
-                                   sv::EventControl clockEdge, Value clock,
+void FirRegLower::addToAlwaysBlock(Block *block, sv::EventControl clockEdge,
+                                   Value clock,
                                    std::function<void(OpBuilder &)> body,
                                    ::ResetType resetStyle,
                                    sv::EventControl resetEdge, Value reset,
                                    std::function<void(OpBuilder &)> resetBody) {
   auto loc = clock.getLoc();
-  auto builder =
-      ImplicitLocOpBuilder::atBlockTerminator(loc, module.getBodyBlock());
+  auto builder = ImplicitLocOpBuilder::atBlockTerminator(loc, block);
 
   auto &op = alwaysBlocks[{builder.getBlock(), clockEdge, clock, resetStyle,
                            resetEdge, reset}];
