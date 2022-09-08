@@ -407,6 +407,14 @@ static void addSignatureConversion(ConversionTarget &target,
 // Pass driver
 //===----------------------------------------------------------------------===//
 
+void circt::populateHWArithToHWConversionPatterns(RewritePatternSet &patterns) {
+  patterns.add<ConstantOpLowering, CastOpLowering, ICmpOpLowering,
+               BinaryOpLowering<AddOp, comb::AddOp>,
+               BinaryOpLowering<SubOp, comb::SubOp>,
+               BinaryOpLowering<MulOp, comb::MulOp>, DivOpLowering>(
+      patterns.getContext());
+}
+
 namespace {
 
 class HWArithToHWPass : public HWArithToHWBase<HWArithToHWPass> {
@@ -433,11 +441,7 @@ public:
         hw::StructExplodeOp, hw::StructExtractOp, hw::StructInjectOp,
         hw::UnionCreateOp, hw::UnionExtractOp>(target, patterns, typeConverter);
 
-    patterns.add<ConstantOpLowering, CastOpLowering, ICmpOpLowering,
-                 BinaryOpLowering<AddOp, comb::AddOp>,
-                 BinaryOpLowering<SubOp, comb::SubOp>,
-                 BinaryOpLowering<MulOp, comb::MulOp>, DivOpLowering>(
-        patterns.getContext());
+    populateHWArithToHWConversionPatterns(patterns);
 
     if (failed(applyPartialConversion(module, target, std::move(patterns))))
       return signalPassFailure();
