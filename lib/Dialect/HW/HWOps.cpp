@@ -1710,6 +1710,12 @@ LogicalResult ArrayCreateOp::verify() {
   return success();
 }
 
+Value ArrayCreateOp::getUniformElement() {
+  if (!getInputs().empty() && llvm::all_equal(getInputs()))
+    return getInputs()[0];
+  return {};
+}
+
 static Optional<uint64_t> getUIntFromValue(Value value) {
   auto idxOp = dyn_cast_or_null<ConstantOp>(value.getDefiningOp());
   if (!idxOp)
@@ -2287,12 +2293,17 @@ void ArrayGetOp::build(OpBuilder &builder, OperationState &result, Value input,
 }
 
 // An array_get of an array_create with a constant index can just be the
-// array_create operand at the constant index.
+// array_create operand at the constant index. If the array_create has a single
+// uniform value for each element, just return that value regardless of the
+// index.
 OpFoldResult ArrayGetOp::fold(ArrayRef<Attribute> operands) {
   auto inputCreate =
       dyn_cast_or_null<ArrayCreateOp>(getInput().getDefiningOp());
   if (!inputCreate)
     return {};
+
+  if (auto uniformValue = inputCreate.getUniformElement())
+    return uniformValue;
 
   IntegerAttr constIdx = operands[1].dyn_cast_or_null<IntegerAttr>();
   if (!constIdx || constIdx.getValue().getBitWidth() > 64)

@@ -39,6 +39,14 @@ def ArrayCreateOp : HWOp<"array_create", [NoSideEffect, SameTypeOperands]> {
     // ValueRange needs to contain at least one element.
     OpBuilder<(ins "ValueRange":$input)>
   ];
+
+  let extraClassDeclaration = [{
+    /// If the all elements of the array are identical, returns that element
+    /// value. Otherwise returns a null value.
+    Value getUniformElement();
+    /// Returns true if all array elements are identical.
+    bool isUniform() { return !!getUniformElement(); }
+  }];
 }
 
 def ArrayConcatOp : HWOp<"array_concat", [NoSideEffect]> {
