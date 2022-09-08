@@ -101,7 +101,7 @@ def InstanceOp : ReferableDeclOp<"instance", [HasParent<"firrtl::FModuleOp, firr
     /// Builds a new `InstanceOp` with the ports listed in `portIndices` erased,
     /// and updates any users of the remaining ports to point at the new
     /// instance.
-    InstanceOp erasePorts(OpBuilder &builder, ArrayRef<unsigned> portIndices);
+    InstanceOp erasePorts(OpBuilder &builder, const llvm::BitVector &portIndices);
 
     /// Clone the instance op and add ports.  This is usually used in
     /// conjuction with adding ports to the referenced module. This will emit

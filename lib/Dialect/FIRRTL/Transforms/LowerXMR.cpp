@@ -15,6 +15,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/EquivalenceClasses.h"
 #include "llvm/ADT/PostOrderIterator.h"
@@ -135,9 +136,13 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
           return signalPassFailure();
 
       // Record all the RefType ports to be removed later.
-      for (size_t portNum = 0, e = module.getNumPorts(); portNum < e; ++portNum)
-        if (module.getPortType(portNum).isa<RefType>())
-          refPortsToRemoveMap[module].push_back(portNum);
+      size_t numPorts = module.getNumPorts();
+      for (size_t portNum = 0; portNum < numPorts; ++portNum)
+        if (module.getPortType(portNum).isa<RefType>()) {
+          if (refPortsToRemoveMap[module].size() < numPorts)
+            refPortsToRemoveMap[module].resize(numPorts);
+          refPortsToRemoveMap[module].set(portNum);
+        }
     }
 
     LLVM_DEBUG({
@@ -201,14 +206,17 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
   LogicalResult handleInstanceOp(InstanceOp inst) {
     auto refMod = dyn_cast<FModuleOp>(inst.getReferencedModule());
     bool multiplyInstantiated = !visitedModules.insert(refMod).second;
-    for (size_t portNum = 0, e = inst.getNumResults(); portNum < e; ++portNum) {
+    for (size_t portNum = 0, numPorts = inst.getNumResults();
+         portNum < numPorts; ++portNum) {
       auto instanceResult = inst.getResult(portNum);
       if (!instanceResult.getType().isa<RefType>())
         continue;
       if (!refMod)
         return inst.emitOpError("cannot lower ext modules with RefType ports");
       // Reference ports must be removed.
-      refPortsToRemoveMap[inst].push_back(portNum);
+      if (refPortsToRemoveMap[inst].size() < numPorts)
+        refPortsToRemoveMap[inst].resize(numPorts);
+      refPortsToRemoveMap[inst].set(portNum);
       // Drop the dead-instance-ports.
       if (instanceResult.use_empty())
         continue;
@@ -351,7 +359,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
 
   llvm::EquivalenceClasses<Value, ValueComparator> dataFlowClasses;
   // Instance and module ref ports that needs to be removed.
-  DenseMap<Operation *, SmallVector<unsigned>> refPortsToRemoveMap;
+  DenseMap<Operation *, llvm::BitVector> refPortsToRemoveMap;
 
   /// RefResolve, RefSend, and Connects involving them that will be removed.
   SmallVector<Operation *> opsToRemove;
