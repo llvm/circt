@@ -50,8 +50,12 @@ struct ConvertHWModule : public OpConversionPattern<HWModuleOp> {
       return emitError(module->getLoc(), "inout arguments not supported yet");
 
     // Create the SystemC module.
-    auto scModule = rewriter.create<SCModuleOp>(
-        module.getLoc(), module.getNameAttr(), module.getAllPorts());
+    SmallVector<PortInfo> ports = module.getAllPorts();
+    for (size_t i = 0; i < ports.size(); ++i)
+      ports[i].type = typeConverter->convertType(ports[i].type);
+
+    auto scModule = rewriter.create<SCModuleOp>(module.getLoc(),
+                                                module.getNameAttr(), ports);
     auto *outputOp = module.getBodyBlock()->getTerminator();
     scModule.setVisibility(module.getVisibility());
 
@@ -94,7 +98,9 @@ struct ConvertHWModule : public OpConversionPattern<HWModuleOp> {
           rewriter
               .create<SignalReadOp>(scFunc.getLoc(), scModule.getArgument(i))
               .getResult();
-      scFuncBody.getArgument(0).replaceAllUsesWith(inputRead);
+      auto converted = typeConverter->materializeSourceConversion(
+          rewriter, scModule.getLoc(), module.getAllPorts()[i].type, inputRead);
+      scFuncBody.getArgument(0).replaceAllUsesWith(converted);
       scFuncBody.eraseArgument(0);
     }
 
@@ -108,9 +114,13 @@ struct ConvertHWModule : public OpConversionPattern<HWModuleOp> {
     }
 
     rewriter.setInsertionPoint(outputOp);
-    for (auto args : llvm::zip(outPorts, outputOp->getOperands()))
-      rewriter.create<SignalWriteOp>(outputOp->getLoc(), std::get<0>(args),
-                                     std::get<1>(args));
+    for (auto args : llvm::zip(outPorts, outputOp->getOperands())) {
+      Value portValue = std::get<0>(args);
+      auto converted = typeConverter->materializeTargetConversion(
+          rewriter, scModule.getLoc(), getSignalBaseType(portValue.getType()),
+          std::get<1>(args));
+      rewriter.create<SignalWriteOp>(outputOp->getLoc(), portValue, converted);
+    }
 
     // Erase the HW OutputOp.
     outputOp->dropAllReferences();
@@ -139,7 +149,7 @@ private:
       if (ty.isa<hw::InOutType>())
         return failure();
 
-      info.type = PortTy::get(ty);
+      info.type = typeConverter->convertType(PortTy::get(ty));
       info.name = std::get<1>(inPort).cast<StringAttr>();
       portInfo.push_back(info);
     }
@@ -257,8 +267,61 @@ static void populateLegality(ConversionTarget &target) {
   target.addLegalOp<hw::ConstantOp>();
 }
 
-static void populateOpConversion(RewritePatternSet &patterns) {
-  patterns.add<ConvertHWModule, ConvertInstance>(patterns.getContext());
+static void populateOpConversion(RewritePatternSet &patterns,
+                                 TypeConverter &typeConverter) {
+  patterns.add<ConvertHWModule, ConvertInstance>(typeConverter,
+                                                 patterns.getContext());
+}
+
+static void populateTypeConversion(TypeConverter &converter) {
+  converter.addConversion([](Type type) { return type; });
+  converter.addConversion([&](SignalType type) {
+    return SignalType::get(converter.convertType(type.getBaseType()));
+  });
+  converter.addConversion([&](InputType type) {
+    return InputType::get(converter.convertType(type.getBaseType()));
+  });
+  converter.addConversion([&](systemc::InOutType type) {
+    return systemc::InOutType::get(converter.convertType(type.getBaseType()));
+  });
+  converter.addConversion([&](OutputType type) {
+    return OutputType::get(converter.convertType(type.getBaseType()));
+  });
+  converter.addConversion([](IntegerType type) -> Type {
+    auto bw = type.getIntOrFloatBitWidth();
+    if (bw == 1)
+      return type;
+
+    if (bw <= 64) {
+      if (type.isSigned())
+        return systemc::IntType::get(type.getContext(), bw);
+
+      return UIntType::get(type.getContext(), bw);
+    }
+
+    if (bw <= 512) {
+      if (type.isSigned())
+        return BigIntType::get(type.getContext(), bw);
+
+      return BigUIntType::get(type.getContext(), bw);
+    }
+
+    return BitVectorType::get(type.getContext(), bw);
+  });
+
+  converter.addSourceMaterialization(
+      [](OpBuilder &builder, Type type, ValueRange values, Location loc) {
+        assert(values.size() == 1);
+        auto op = builder.create<ConvertOp>(loc, type, values[0]);
+        return op.getResult();
+      });
+
+  converter.addTargetMaterialization(
+      [](OpBuilder &builder, Type type, ValueRange values, Location loc) {
+        assert(values.size() == 1);
+        auto op = builder.create<ConvertOp>(loc, type, values[0]);
+        return op.getResult();
+      });
 }
 
 //===----------------------------------------------------------------------===//
@@ -287,9 +350,11 @@ void HWToSystemCPass::runOnOperation() {
   builder.create<emitc::IncludeOp>(module->getLoc(), "systemc.h", true);
 
   ConversionTarget target(context);
+  TypeConverter typeConverter;
   RewritePatternSet patterns(&context);
   populateLegality(target);
-  populateOpConversion(patterns);
+  populateTypeConversion(typeConverter);
+  populateOpConversion(patterns, typeConverter);
 
   if (failed(applyFullConversion(module, target, std::move(patterns))))
     signalPassFailure();

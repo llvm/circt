@@ -23,7 +23,7 @@ def SignalReadOp : SystemCOp<"signal.read", [NoSideEffect,
 
   let arguments = (ins AnyTypeOf<[InputType, InOutType, SignalType]>:$input);
   let results = (outs AnyType:$result);
-  let assemblyFormat = "$input attr-dict `:` type($input)";
+  let assemblyFormat = "$input attr-dict `:` qualified(type($input))";
 
   let extraClassDeclaration = [{
     /// Infer the return types of this operation.
@@ -37,6 +37,29 @@ def SignalReadOp : SystemCOp<"signal.read", [NoSideEffect,
       return success();
     }
   }];
+}
+
+def ConvertOp : SystemCOp<"convert", [NoSideEffect]> {
+  let summary = "Converts between various integer and bit vector types.";
+  let description = [{
+    Allows conversions between the various integer and bit vector types in
+    SystemC, including MLIRs signless integers that are used to represent the
+    primitive C integer types, according to the explicit and implicit
+    constructors, implicit access operators and explicit conversion member
+    functions defined in the respective data type class in the SystemC spec
+    (refer to the description of the supported types and the spec chapters
+    listed there for more information).
+  }];
+
+  let arguments = (ins AnyTypeOf<[AnySystemCInteger,
+                                  AnySystemCVector,
+                                  LogicType]>:$input);
+
+  let results = (outs AnyTypeOf<[AnySystemCInteger,
+                                 AnySystemCVector,
+                                 LogicType]>:$result);
+
+  let assemblyFormat = "$input attr-dict `:` functional-type($input, $result)";
 }
 
 //===----------------------------------------------------------------------===//

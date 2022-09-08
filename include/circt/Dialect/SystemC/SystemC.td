@@ -38,7 +38,6 @@ def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface,
                          ["getAsmResultNames"]>;
 
 include "circt/Dialect/SystemC/SystemCAttributesImpl.td"
-include "circt/Dialect/SystemC/SystemCTypesImpl.td"
 include "circt/Dialect/SystemC/SystemCTypes.td"
 include "circt/Dialect/SystemC/SystemCExpressions.td"
 include "circt/Dialect/SystemC/SystemCStatements.td"
