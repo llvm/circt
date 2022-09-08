@@ -1219,7 +1219,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
 /// updates any users of the remaining ports to point at the new instance.
 InstanceOp InstanceOp::erasePorts(OpBuilder &builder,
                                   const llvm::BitVector &portIndices) {
-  assert(portIndices.size() <= getNumResults() &&
+  assert(portIndices.size() >= getNumResults() &&
          "portIndices is not at least as large as getNumResults()");
 
   if (portIndices.none())
