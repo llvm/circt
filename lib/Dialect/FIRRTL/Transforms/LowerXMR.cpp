@@ -137,10 +137,12 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
 
       // Record all the RefType ports to be removed later.
       size_t numPorts = module.getNumPorts();
-      refPortsToRemoveMap[module].resize(numPorts);
       for (size_t portNum = 0; portNum < numPorts; ++portNum)
-        if (module.getPortType(portNum).isa<RefType>())
+        if (module.getPortType(portNum).isa<RefType>()) {
+          if (refPortsToRemoveMap[module].size() < numPorts)
+            refPortsToRemoveMap[module].resize(numPorts);
           refPortsToRemoveMap[module].set(portNum);
+        }
     }
 
     LLVM_DEBUG({
@@ -204,15 +206,16 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
   LogicalResult handleInstanceOp(InstanceOp inst) {
     auto refMod = dyn_cast<FModuleOp>(inst.getReferencedModule());
     bool multiplyInstantiated = !visitedModules.insert(refMod).second;
-    for (size_t portNum = 0, e = inst.getNumResults(); portNum < e; ++portNum) {
+    for (size_t portNum = 0, numPorts = inst.getNumResults();
+         portNum < numPorts; ++portNum) {
       auto instanceResult = inst.getResult(portNum);
       if (!instanceResult.getType().isa<RefType>())
         continue;
       if (!refMod)
         return inst.emitOpError("cannot lower ext modules with RefType ports");
       // Reference ports must be removed.
-      if (refPortsToRemoveMap[inst].size() < portNum + 1)
-        refPortsToRemoveMap[inst].resize(portNum + 1);
+      if (refPortsToRemoveMap[inst].size() < numPorts)
+        refPortsToRemoveMap[inst].resize(numPorts);
       refPortsToRemoveMap[inst].set(portNum);
       // Drop the dead-instance-ports.
       if (instanceResult.use_empty())
