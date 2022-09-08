@@ -1163,8 +1163,10 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
         unsigned fieldID = fieldRef.getFieldID();
         assert(leafValue && "leafValue not found");
 
-        auto builder = OpBuilder::atBlockEnd(
-            companionIDMap.lookup(id).companion.getBodyBlock());
+        auto companionModule = companionIDMap.lookup(id).companion;
+        FModuleLike enclosing = getEnclosingModule(leafValue, sym);
+        auto builder = OpBuilder::atBlockEnd(companionModule.getBodyBlock());
+        auto uloc = builder.getUnknownLoc();
 
         auto tpe = leafValue.getType().cast<FIRRTLBaseType>();
 
@@ -1175,6 +1177,69 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
         // Generate the path from the LCA to the module that contains the leaf.
         path += " = ";
 
+        /// Increment all the indices inside `{{`, `}}` by one. This is to
+        /// indicate that a value is added to the `substitutions` of the
+        /// verbatim op, other than the symbols.
+        auto getStrAndIncrementIds = [&](StringRef base) -> StringAttr {
+          SmallString<128> replStr;
+          StringRef begin = "{{";
+          StringRef end = "}}";
+          // The replacement string.
+          size_t from = 0;
+          while (from < base.size()) {
+            // Search for the first `{{` and `}}`.
+            size_t beginAt = base.find(begin, from);
+            size_t endAt = base.find(end, from);
+            // If not found, then done.
+            if (beginAt == StringRef::npos || endAt == StringRef::npos ||
+                (beginAt > endAt)) {
+              replStr.append(base.substr(from));
+              break;
+            }
+            // Copy the string as is, until the `{{`.
+            replStr.append(base.substr(from, beginAt - from));
+            // Advance `from` to the character after the `}}`.
+            from = endAt + 2;
+            auto idChar = base.substr(beginAt + 2, endAt - beginAt - 2);
+            int idNum;
+            bool failed = idChar.getAsInteger(10, idNum);
+            assert(!failed && "failed to parse integer from verbatim string");
+            // Now increment the id and append.
+            replStr.append("{{");
+            Twine(idNum + 1).toVector(replStr);
+            replStr.append("}}");
+          }
+          return StringAttr::get(&getContext(), "assign " + replStr + ";");
+        };
+
+        // If the leaf is inside the companionModule and the leaf is a NodeOp
+        // and the NodeOp input is a RefResolveOp, then no path needs to be
+        // generated, only the RefResolveOp result can be used as a value
+        // substitution into the verbatim.
+        if (companionModule == enclosing && !leafValue.isa<BlockArgument>() &&
+            isa<NodeOp>(leafValue.getDefiningOp()) &&
+            !leafValue.getDefiningOp()->getOperand(0).isa<BlockArgument>()) {
+          auto *nodeOp = leafValue.getDefiningOp();
+          auto *nodeDef = nodeOp->getOperand(0).getDefiningOp();
+          if (isa<RefResolveOp>(nodeDef) || isa<ConstantOp>(nodeDef)) {
+            // This is the new style of XMRs using RefTypes.
+            // The value subsitution index is set to -1, as it will be
+            // incremented when generating the string.
+            path += "{{-1}}";
+            AnnotationSet::removeDontTouch(nodeOp);
+            // Assemble the verbatim op.
+            builder.create<sv::VerbatimOp>(
+                uloc, getStrAndIncrementIds(path.getString()),
+                nodeOp->getOperand(0),
+                ArrayAttr::get(&getContext(), path.getSymbols()));
+            ++numXMRs;
+            return true;
+          }
+        }
+
+        // This case can only occur if ref.resolve is not introduced during
+        // LowerAnnotations.
+        //
         // There are two posisibilites for what this is tapping:
         //   1. This is a constant that will be synced into the mappings file.
         //   2. This is something else and we need an XMR.
@@ -1205,7 +1270,6 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
           fullLeafPath.append(nla.getNamepath().begin(),
                               nla.getNamepath().end());
         } else {
-          FModuleLike enclosing = getEnclosingModule(leafValue, sym);
           auto enclosingPaths = instancePaths->getAbsolutePaths(enclosing);
           assert(enclosingPaths.size() == 1 &&
                  "Unable to handle multiply instantiated companions");
@@ -1238,7 +1302,6 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
         }
 
         // Add the leaf value to the path.
-        auto uloc = builder.getUnknownLoc();
         path += '.';
         if (auto blockArg = leafValue.dyn_cast<BlockArgument>()) {
           auto module = cast<FModuleOp>(blockArg.getOwner()->getParentOp());
