@@ -237,10 +237,15 @@ static void createTree(OpBuilder &builder, sv::RegOp reg, Value term,
     return;
   auto mux = next.getDefiningOp<comb::MuxOp>();
   if (mux && mux.getTwoState()) {
-    builder.create<sv::IfOp>(
-        mux.getLoc(), mux.getCond(),
-        [&]() { createTree(builder, reg, term, mux.getTrueValue()); },
-        [&]() { createTree(builder, reg, term, mux.getFalseValue()); });
+    if (mux.getFalseValue() == term)
+      builder.createOrFold<sv::IfOp>(mux.getLoc(), mux.getCond(), [&]() {
+        createTree(builder, reg, term, mux.getTrueValue());
+      });
+    else
+      builder.createOrFold<sv::IfOp>(
+          mux.getLoc(), mux.getCond(),
+          [&]() { createTree(builder, reg, term, mux.getTrueValue()); },
+          [&]() { createTree(builder, reg, term, mux.getFalseValue()); });
   } else {
     builder.create<sv::PAssignOp>(term.getLoc(), reg, next);
   }
