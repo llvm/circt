@@ -10,6 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "circt/Dialect/HWArith/HWArithDialect.td"
+
 // Type constraint to enforce signedness semantics
 def HWArithIntegerType : DialectType<HWArithDialect,
     CPred<"isHWArithIntegerType($_self)">,
