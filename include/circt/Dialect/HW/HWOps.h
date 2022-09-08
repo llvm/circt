@@ -25,6 +25,8 @@
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "llvm/ADT/StringExtras.h"
 
+#include <map>
+
 namespace circt {
 namespace hw {
 
@@ -187,6 +189,38 @@ StringAttr getArgSym(Operation *op, unsigned i);
 /// Return the symbol (if any, else null) on the corresponding output port
 /// argument.
 StringAttr getResultSym(Operation *op, unsigned i);
+
+// A class for providing access to the in- and output ports of a module through
+// use of the HWModuleBuilder.
+class HWModulePortAccessor {
+
+public:
+  HWModulePortAccessor(Location loc, const ModulePortInfo &info,
+                       Region &bodyRegion);
+
+  // Returns the i'th/named input port of the module.
+  Value getInput(unsigned i) { return inputArgs.find(i)->second; }
+  Value getInput(StringRef name) {
+    return getInput(inputIdx.find(name.str())->second);
+  }
+  // Assigns the i'th/named output port of the module.
+  void setOutput(unsigned i, Value v);
+  void setOutput(StringRef name, Value v) {
+    setOutput(outputIdx.find(name.str())->second, v);
+  }
+
+  const DenseMap<unsigned, Value> &getOutputOperands() const {
+    return outputOperands;
+  }
+
+private:
+  std::map<std::string, unsigned> inputIdx, outputIdx;
+  DenseMap<unsigned, Value> inputArgs;
+  DenseMap<unsigned, Value> outputOperands;
+};
+
+using HWModuleBuilder =
+    llvm::function_ref<void(OpBuilder &, HWModulePortAccessor &)>;
 
 } // namespace hw
 } // namespace circt
