@@ -178,40 +178,26 @@ StringAttr hw::getResultSym(Operation *op, unsigned i) {
   return sym;
 }
 
-HWModulePortAccessor::HWModulePortAccessor(Location loc, OpBuilder &b,
+HWModulePortAccessor::HWModulePortAccessor(Location loc,
                                            const ModulePortInfo &info,
-                                           Region &bodyRegion)
-    : bb(b, loc) {
-
+                                           Region &bodyRegion) {
   for (auto [barg, inputInfo] :
-       llvm::zip(bodyRegion.getArguments(), info.inputs))
-    inPorts.push_back(
-        ports.try_emplace(inputInfo.name.str(), PortValue(barg)).first);
-
-  auto outputOp = cast<hw::OutputOp>(bodyRegion.front().getTerminator());
-  assert(outputOp.getNumOperands() == 0);
-
-  b.setInsertionPoint(outputOp);
-  llvm::SmallVector<Value> outputOpArgs;
-  for (auto &outputInfo : info.outputs) {
-    auto be = std::make_shared<Backedge>(bb.get(outputInfo.type));
-    outputBackedges.push_back(be);
-    assert(ports.count(outputInfo.name.str()) == 0 &&
-           "output port already exists");
-    outPorts.push_back(
-        ports.try_emplace(outputInfo.name.str(), PortValue(be)).first);
-    outputOpArgs.push_back(*be);
+       llvm::zip(bodyRegion.getArguments(), info.inputs)) {
+    inputIdx[inputInfo.name.str()] = inputInfo.argNum;
+    inputArgs[inputInfo.argNum] = barg;
   }
 
-  b.create<hw::OutputOp>(outputOp.getLoc(), outputOpArgs);
-  outputOp.erase();
+  llvm::SmallVector<Value> outputOpArgs;
+  for (auto &outputInfo : info.outputs) {
+    outputIdx[outputInfo.name.str()] = outputInfo.argNum;
+    outputOperands[outputInfo.argNum] = Value();
+  }
 }
 
-void HWModulePortAccessor::PortValue::assign(Value rhs) {
-  auto *backedge = std::get_if<std::shared_ptr<Backedge>>(&valueOrBackedge);
-  assert(backedge && "Cannot assign to a value.");
-  assert(!(*backedge)->isSet() && "backedge already assigned.");
-  (*backedge)->setValue(rhs);
+void HWModulePortAccessor::setOutput(unsigned i, Value v) {
+  assert(outputOperands.count(i) && "invalid output index");
+  assert(outputOperands.find(i)->second == Value() && "output already set");
+  outputOperands[i] = v;
 }
 
 //===----------------------------------------------------------------------===//
@@ -621,10 +607,18 @@ void HWModuleOp::build(OpBuilder &builder, OperationState &odsState,
   auto *bodyRegion = odsState.regions[0].get();
   OpBuilder::InsertionGuard guard(builder);
   builder.setInsertionPointToStart(&bodyRegion->front());
-  auto accessor =
-      HWModulePortAccessor(odsState.location, builder, ports, *bodyRegion);
+  auto accessor = HWModulePortAccessor(odsState.location, ports, *bodyRegion);
   builder.setInsertionPoint(bodyRegion->front().getTerminator());
   modBuilder(builder, accessor);
+  // Replace output operands.
+  auto outputOp = cast<hw::OutputOp>(bodyRegion->front().getTerminator());
+  llvm::SmallVector<Value> outputOperands;
+  for (auto [idx, operand] : accessor.getOutputOperands()) {
+    assert(operand != Value() && "Output operand not set");
+    outputOperands.push_back(operand);
+  }
+  builder.create<hw::OutputOp>(outputOp.getLoc(), outputOperands);
+  outputOp.erase();
 }
 
 void HWModuleOp::modifyPorts(

@@ -26,7 +26,7 @@
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "llvm/ADT/StringExtras.h"
 
-#include <variant>
+#include <map>
 
 namespace circt {
 namespace hw {
@@ -191,52 +191,33 @@ StringAttr getArgSym(Operation *op, unsigned i);
 /// argument.
 StringAttr getResultSym(Operation *op, unsigned i);
 
-// A class for providing backedge-based access to the in- and output ports of
-// a module.
+// A class for providing access to the in- and output ports of a module through
+// use of the HWModuleBuilder.
 class HWModulePortAccessor {
 
-  class PortValue {
-  public:
-    PortValue() = default;
-    PortValue(Value v) : valueOrBackedge(v) {}
-    PortValue(const std::shared_ptr<Backedge> &b) : valueOrBackedge(b) {}
-
-    // An explicit function for backedge assignment instead of overloading the
-    // '=' operator.
-    // By this, we avoid aliasing with the implicit copy constructor + don't mix
-    // C++ and the underlying op generation semantics.
-    void assign(Value rhs);
-    operator Value() const {
-      auto *value = std::get_if<Value>(&valueOrBackedge);
-      if (value)
-        return *value;
-      return **std::get_if<std::shared_ptr<Backedge>>(&valueOrBackedge);
-    }
-
-  protected:
-    std::variant<Value, std::shared_ptr<Backedge>> valueOrBackedge;
-  };
-
 public:
-  HWModulePortAccessor(Location loc, OpBuilder &b, const ModulePortInfo &info,
+  HWModulePortAccessor(Location loc, const ModulePortInfo &info,
                        Region &bodyRegion);
 
-  // By-name access.
-  PortValue operator[](llvm::StringRef name) {
-    auto it = ports.find(name.str());
-    assert(it != ports.end() && "Port not found.");
-    return it->second;
+  // Returns the i'th/named input port of the module.
+  Value getInput(unsigned i) { return inputArgs.find(i)->second; }
+  Value getInput(StringRef name) {
+    return getInput(inputIdx.find(name.str())->second);
+  }
+  // Assigns the i'th/named output port of the module.
+  void setOutput(unsigned i, Value v);
+  void setOutput(StringRef name, Value v) {
+    setOutput(outputIdx.find(name.str())->second, v);
   }
 
-  // By-index access.
-  PortValue input(unsigned i) { return inPorts[i]->second; }
-  PortValue output(unsigned i) { return outPorts[i]->second; }
+  const DenseMap<unsigned, Value> &getOutputOperands() const {
+    return outputOperands;
+  }
 
 private:
-  BackedgeBuilder bb;
-  std::map<std::string, PortValue> ports;
-  std::vector<std::map<std::string, PortValue>::iterator> inPorts, outPorts;
-  std::vector<std::shared_ptr<Backedge>> outputBackedges;
+  std::map<std::string, unsigned> inputIdx, outputIdx;
+  DenseMap<unsigned, Value> inputArgs;
+  DenseMap<unsigned, Value> outputOperands;
 };
 
 using HWModuleBuilder =
