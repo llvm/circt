@@ -180,7 +180,8 @@ StringAttr hw::getResultSym(Operation *op, unsigned i) {
 
 HWModulePortAccessor::HWModulePortAccessor(Location loc,
                                            const ModulePortInfo &info,
-                                           Region &bodyRegion) {
+                                           Region &bodyRegion)
+    : info(info) {
   inputArgs.resize(info.inputs.size());
   for (auto [i, barg] : llvm::enumerate(bodyRegion.getArguments())) {
     inputIdx[info.inputs[i].name.str()] = i;

@@ -274,7 +274,8 @@ def HandshakeToHW : Pass<"lower-handshake-to-hw", "mlir::ModuleOp"> {
     Lower Handshake to ESI/HW/Comb/Seq.
   }];
   let constructor = "circt::createHandshakeToHWPass()";
-  let dependentDialects = ["hw::HWDialect", "esi::ESIDialect"];
+  let dependentDialects = ["hw::HWDialect", "esi::ESIDialect", "comb::CombDialect",
+                           "seq::SeqDialect"];
 }
 
 //===----------------------------------------------------------------------===//

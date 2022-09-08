@@ -199,10 +199,13 @@ public:
   // Returns the i'th/named input port of the module.
   Value getInput(unsigned i);
   Value getInput(StringRef name);
+  ValueRange getInputs() { return inputArgs; }
 
   // Assigns the i'th/named output port of the module.
   void setOutput(unsigned i, Value v);
   void setOutput(StringRef name, Value v);
+
+  const ModulePortInfo &getModulePortInfo() const { return info; }
   const llvm::SmallVector<Value> &getOutputOperands() const {
     return outputOperands;
   }
@@ -211,6 +214,7 @@ private:
   llvm::StringMap<unsigned> inputIdx, outputIdx;
   llvm::SmallVector<Value> inputArgs;
   llvm::SmallVector<Value> outputOperands;
+  ModulePortInfo info;
 };
 
 using HWModuleBuilder =
