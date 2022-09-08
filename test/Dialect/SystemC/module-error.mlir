@@ -147,7 +147,7 @@ systemc.module @signalFuncNameConflict () {
 // -----
 
 systemc.module @cannotReadFromOutPort (%port0: !systemc.out<i32>) {
-  // expected-error @+1 {{op operand #0 must be InputType or InOutType or SignalType, but got '!systemc.out<i32>'}}
+  // expected-error @+1 {{operand #0 must be a SystemC sc_in<T> type or a SystemC sc_inout<T> type or a SystemC sc_signal<T> type, but got '!systemc.out<i32>'}}
   %0 = systemc.signal.read %port0 : !systemc.out<i32>
 }
 
@@ -162,14 +162,14 @@ systemc.module @inferredTypeDoesNotMatch (%port0: !systemc.in<i32>) {
 
 systemc.module @cannotWriteToInputPort (%port0: !systemc.in<i32>) {
   %0 = hw.constant 0 : i32
-  // expected-error @+1 {{'dest' must be OutputType or InOutType or SignalType, but got '!systemc.in<i32>'}}
+  // expected-error @+1 {{'dest' must be a SystemC sc_out<T> type or a SystemC sc_inout<T> type or a SystemC sc_signal<T> type, but got '!systemc.in<i32>'}}
   systemc.signal.write %port0, %0 : !systemc.in<i32>
 }
 
 // -----
 
 systemc.module @invalidSignalOpReturnType () {
-  // expected-error @+1 {{invalid kind of type specified}}
+  // expected-error @+1 {{result #0 must be a SystemC sc_signal<T> type, but got 'i32'}}
   %signal0 = systemc.signal : i32
 }
 

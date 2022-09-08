@@ -50,8 +50,12 @@ struct ConvertHWModule : public OpConversionPattern<HWModuleOp> {
       return emitError(module->getLoc(), "inout arguments not supported yet");
 
     // Create the SystemC module.
-    auto scModule = rewriter.create<SCModuleOp>(
-        module.getLoc(), module.getNameAttr(), module.getAllPorts());
+    SmallVector<PortInfo> ports = module.getAllPorts();
+    for (size_t i = 0; i < ports.size(); ++i)
+      ports[i].type = typeConverter->convertType(ports[i].type);
+
+    auto scModule = rewriter.create<SCModuleOp>(module.getLoc(),
+                                                module.getNameAttr(), ports);
     scModule.setVisibility(module.getVisibility());
 
     SmallVector<Attribute> portAttrs;
@@ -93,7 +97,9 @@ struct ConvertHWModule : public OpConversionPattern<HWModuleOp> {
           rewriter
               .create<SignalReadOp>(scFunc.getLoc(), scModule.getArgument(i))
               .getResult();
-      scFuncBody.getArgument(0).replaceAllUsesWith(inputRead);
+      auto converted = typeConverter->materializeSourceConversion(
+          rewriter, scModule.getLoc(), module.getAllPorts()[i].type, inputRead);
+      scFuncBody.getArgument(0).replaceAllUsesWith(converted);
       scFuncBody.eraseArgument(0);
     }
 
@@ -115,7 +121,7 @@ struct ConvertOutput : public OpConversionPattern<OutputOp> {
 
     if (auto scModule = outputOp->getParentOfType<SCModuleOp>()) {
       for (auto args :
-           llvm::zip(scModule.getOutputPorts(), outputOp.getOperands())) {
+           llvm::zip(scModule.getOutputPorts(), adaptor.getOperands())) {
         rewriter.create<SignalWriteOp>(outputOp->getLoc(), std::get<0>(args),
                                        std::get<1>(args));
       }
@@ -142,10 +148,44 @@ static void populateLegality(ConversionTarget &target) {
   target.addLegalDialect<comb::CombDialect>();
   target.addLegalDialect<emitc::EmitCDialect>();
   target.addLegalOp<hw::ConstantOp>();
+  target.addLegalOp<UnrealizedConversionCastOp>();
 }
 
-static void populateOpConversion(RewritePatternSet &patterns) {
-  patterns.add<ConvertHWModule, ConvertOutput>(patterns.getContext());
+static void populateOpConversion(RewritePatternSet &patterns,
+                                 TypeConverter &typeConverter) {
+  patterns.add<ConvertHWModule, ConvertOutput>(typeConverter,
+                                               patterns.getContext());
+}
+
+static void populateTypeConversion(TypeConverter &converter) {
+  converter.addConversion([](IntegerType type) -> Type {
+    auto bw = type.getIntOrFloatBitWidth();
+    if (bw == 1)
+      return type;
+    if (bw <= 64 && type.isSigned())
+      return systemc::IntType::get(type.getContext(), bw);
+    if (bw <= 64)
+      return UIntType::get(type.getContext(), bw);
+    if (bw <= 512 && type.isSigned())
+      return BigIntType::get(type.getContext(), bw);
+    if (bw <= 512)
+      return BigUIntType::get(type.getContext(), bw);
+
+    return BitVectorType::get(type.getContext(), bw);
+  });
+  converter.addConversion([](UIntType type) { return type; });
+  converter.addSourceMaterialization(
+      [](OpBuilder &builder, Type type, ValueRange values, Location loc) {
+        assert(values.size() == 1);
+        auto op = builder.create<ConvertOp>(loc, type, values[0]);
+        return op.getResult();
+      });
+  converter.addTargetMaterialization(
+      [](OpBuilder &builder, Type type, ValueRange values, Location loc) {
+        assert(values.size() == 1);
+        auto op = builder.create<ConvertOp>(loc, type, values[0]);
+        return op.getResult();
+      });
 }
 
 //===----------------------------------------------------------------------===//
@@ -177,7 +217,8 @@ void HWToSystemCPass::runOnOperation() {
   TypeConverter typeConverter;
   RewritePatternSet patterns(&context);
   populateLegality(target);
-  populateOpConversion(patterns);
+  populateTypeConversion(typeConverter);
+  populateOpConversion(patterns, typeConverter);
 
   if (failed(applyFullConversion(module, target, std::move(patterns))))
     signalPassFailure();

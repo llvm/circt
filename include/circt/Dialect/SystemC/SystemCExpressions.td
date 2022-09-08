@@ -23,7 +23,7 @@ def SignalReadOp : SystemCOp<"signal.read", [NoSideEffect,
 
   let arguments = (ins AnyTypeOf<[InputType, InOutType, SignalType]>:$input);
   let results = (outs AnyType:$result);
-  let assemblyFormat = "$input attr-dict `:` type($input)";
+  let assemblyFormat = "$input attr-dict `:` qualified(type($input))";
 
   let extraClassDeclaration = [{
     /// Infer the return types of this operation.
@@ -38,6 +38,66 @@ def SignalReadOp : SystemCOp<"signal.read", [NoSideEffect,
     }
   }];
 }
+
+def ConvertOp : SystemCOp<"convert", [NoSideEffect]> {
+  let summary = "Converts between various integer and bit vector types.";
+  let description = [{
+    Allows conversions between the various integer and bit vector types in
+    SystemC, including MLIRs signless integers that are used to represent the
+    primitive C integer types, according to the explicit and implicit
+    constructors, implicit access operators and explicit conversion member
+    functions defined in the respective data type class in the SystemC spec
+    (refer to the description of the supported types and the spec chapters
+    listed there for more information).
+  }];
+
+  let arguments = (ins AnyTypeOf<[AnySystemCInteger,
+                                  BitVectorType]>:$input);
+  let results = (outs AnyTypeOf<[AnySystemCInteger,
+                                 BitVectorType]>:$result);
+
+  let assemblyFormat = "$input attr-dict `:` functional-type($input, $result)";
+}
+
+class ArithmeticOp<string mnemonic> : SystemCOp<mnemonic, [NoSideEffect, DeclareOpInterfaceMethods<InferTypeOpInterface>]> {
+  let summary = "";
+  let description = [{
+
+  }];
+
+  let arguments = (ins AnySystemCInteger:$lhs, AnySystemCInteger:$rhs);
+  let results = (outs AnyType:$result);
+
+  let assemblyFormat = [{
+    $lhs `,` $rhs attr-dict `:` qualified(type($lhs)) `,` qualified(type($rhs))
+  }];
+}
+
+class BitwiseOp<string mnemonic> : SystemCOp<mnemonic, [NoSideEffect, DeclareOpInterfaceMethods<InferTypeOpInterface>]> {
+  let summary = "";
+  let description = [{
+
+  }];
+
+  let arguments = (ins AnyTypeOf<[AnySystemCInteger, BitVectorType]>:$lhs, AnyTypeOf<[AnySystemCInteger, BitVectorType]>:$rhs);
+  let results = (outs AnyType:$result);
+
+  let assemblyFormat = [{
+    $lhs `,` $rhs attr-dict `:` qualified(type($lhs)) `,` qualified(type($rhs))
+  }];
+}
+
+def AddOp : ArithmeticOp<"add">;
+def SubOp : ArithmeticOp<"sub">;
+// def MulOp : ArithmeticOp<"mul">;
+// def DivOp : ArithmeticOp<"div">;
+// def ModOp : ArithmeticOp<"mod">;
+
+// def AndOp : BitwiseOp<"and">;
+// def OrOp : BitwiseOp<"or">;
+// def XorOp : BitwiseOp<"xor">;
+// def ShlOp : BitwiseOp<"shl">;
+// def ShrOp : BitwiseOp<"shr">;
 
 //===----------------------------------------------------------------------===//
 // Operations that model C++-level features.

@@ -451,6 +451,41 @@ LogicalResult DestructorOp::verify() {
 }
 
 //===----------------------------------------------------------------------===//
+// Arithmetic operations
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+AddOp::inferReturnTypes(MLIRContext *context, Optional<Location> location,
+                        ValueRange operands, DictionaryAttr attributes,
+                        mlir::RegionRange regions,
+                        SmallVectorImpl<Type> &inferredReturnTypes) {
+  Type lhsTy = operands[0].getType();
+  Type rhsTy = operands[1].getType();
+
+  if (lhsTy.isa<SignedType>() || rhsTy.isa<SignedType>()) {
+    inferredReturnTypes.push_back(SignedType::get(context));
+    return success();
+  }
+
+  inferredReturnTypes.push_back(UnsignedType::get(context));
+
+  return success();
+}
+
+LogicalResult
+SubOp::inferReturnTypes(MLIRContext *context, Optional<Location> location,
+                        ValueRange operands, DictionaryAttr attributes,
+                        mlir::RegionRange regions,
+                        SmallVectorImpl<Type> &inferredReturnTypes) {
+  inferredReturnTypes.push_back(SignedType::get(context));
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// Bitwise operations
+//===----------------------------------------------------------------------===//
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 
