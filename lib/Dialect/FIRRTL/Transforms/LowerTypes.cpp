@@ -435,7 +435,9 @@ private:
 /// unless `preservePublicTypes` flag is disabled.
 PreserveAggregate::PreserveMode
 TypeLoweringVisitor::getPreservatinoModeForModule(FModuleLike module) {
-
+  // We cannot preserve external module ports.
+  if (!isa<FModuleOp>(module))
+    return PreserveAggregate::None;
   if (aggregatePreservationMode != PreserveAggregate::None &&
       preservePublicTypes && cast<hw::HWModuleLike>(*module).isPublic())
     return PreserveAggregate::None;

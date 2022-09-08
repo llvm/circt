@@ -21,7 +21,7 @@ class ReferableDeclOp<string mnemonic, list<Trait> traits = []> :
 
 def InstanceOp : ReferableDeclOp<"instance", [HasParent<"firrtl::FModuleOp, firrtl::WhenOp">,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>, 
-    DeclareOpInterfaceMethods<HWInstanceLike, ["instanceName"]>]> {
+    DeclareOpInterfaceMethods<HWInstanceLike, ["instanceName", "instanceNameAttr"]>]> {
   let summary = "Instantiate an instance of a module";
   let description = [{
     This represents an instance of a module.  The results are the modules inputs

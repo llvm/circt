@@ -31,14 +31,14 @@ firrtl.circuit "NonGroundType" attributes {
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
      directory = "gct-dir",
      filename = "gct-dir/bindings.sv"}]} {
-  firrtl.module @View_companion() attributes {
+  firrtl.module private @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
        defName = "Foo",
        id = 0 : i64,
        name = "View",
        type = "companion"}]} {}
-  firrtl.module @DUT() attributes {
+  firrtl.module private @DUT() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
        id = 0 : i64,
@@ -83,15 +83,15 @@ firrtl.circuit "Foo" attributes {
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
      directory = "gct-dir",
      filename = "gct-dir/bindings.sv"}]}  {
-  firrtl.module @View_companion() attributes {
+  firrtl.module private @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
        defName = "Foo",
        id = 0 : i64,
        name = "View",
        type = "companion"}]} {}
-  firrtl.module @Bar(in %a: !firrtl.uint<1>) {}
-  firrtl.module @DUT(in %a: !firrtl.uint<1>) attributes {
+  firrtl.module private @Bar(in %a: !firrtl.uint<1>) {}
+  firrtl.module private @DUT(in %a: !firrtl.uint<1>) attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
        id = 0 : i64,
@@ -123,14 +123,14 @@ firrtl.circuit "Foo" attributes {
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
      directory = "gct-dir",
      filename = "gct-dir/bindings.sv"}]}  {
-  firrtl.module @View_companion() attributes {
+  firrtl.module private @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
        defName = "Foo",
        id = 0 : i64,
        name = "View",
        type = "companion"}]} {}
-  firrtl.module @DUT(in %a: !firrtl.uint<1>) attributes {
+  firrtl.module private @DUT(in %a: !firrtl.uint<1>) attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
        id = 0 : i64,
@@ -169,14 +169,14 @@ firrtl.circuit "Foo" attributes {
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
      directory = "gct-dir",
      filename = "gct-dir/bindings.sv"}]}  {
-  firrtl.module @View_companion() attributes {
+  firrtl.module private @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
        defName = "Foo",
        id = 0 : i64,
        name = "View",
        type = "companion"}]} {}
-  firrtl.module @DUT() attributes {
+  firrtl.module private @DUT() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
        id = 0 : i64,
@@ -190,7 +190,7 @@ firrtl.circuit "Foo" attributes {
 }
 
 
-// ----- 
+// -----
 // expected-error @+1 {{'firrtl.circuit' op contains a 'companion' with id '0', but does not contain a GrandCentral 'parent' with the same id}}
 firrtl.circuit "multiInstance2" attributes {
   annotations = [
@@ -201,7 +201,7 @@ firrtl.circuit "multiInstance2" attributes {
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
      directory = "gct-dir",
      filename = "gct-dir/bindings.sv"}]} {
-  firrtl.module @View_companion() attributes {
+  firrtl.module private @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
        defName = "Foo",
@@ -209,7 +209,7 @@ firrtl.circuit "multiInstance2" attributes {
        name = "View",
        type = "companion"}]} {}
   // expected-error @+1 {{'firrtl.module' op is marked as a GrandCentral 'parent', but it is instantiated more than once}}
-  firrtl.module @DUTE() attributes {
+  firrtl.module private @DUTE() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
        id = 0 : i64,
@@ -238,14 +238,14 @@ firrtl.circuit "InvalidFieldID" attributes {
         name = "foo"}],
      id = 0 : i64}
     ]} {
-  firrtl.module @View_companion() attributes {
+  firrtl.module private @View_companion() attributes {
      annotations = [
        {class = "sifive.enterprise.grandcentral.ViewAnnotation",
         defName = "Foo",
         id = 0 : i64,
         name = "View",
         type = "companion"}]} {}
-  firrtl.module @DUT() attributes {
+  firrtl.module private @DUT() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
        id = 0 : i64,

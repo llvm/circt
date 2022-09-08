@@ -396,6 +396,8 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
       markInstanceOp(instance);
     else if (auto mem = dyn_cast<MemOp>(op))
       markMemOp(mem);
+    else if (isAggregate(&op))
+      markOverdefined(op.getResult(0));
   }
 }
 
@@ -537,6 +539,11 @@ void IMConstPropPass::visitConnect(ConnectOp connect) {
       return;
   }
 
+  // Skip if the dest is an aggregate value. Aggregate values are firstly marked
+  // overdefined.
+  if (isAggregate(dest.getOwner()))
+    return;
+
   connect.emitError("connect unhandled by IMConstProp")
           .attachNote(connect.getDest().getLoc())
       << "connect destination is here";
@@ -590,11 +597,10 @@ void IMConstPropPass::visitStrictConnect(StrictConnectOp connect) {
       return;
   }
 
-  // Make aggregates overdefined for now.  Fix when context sensitive.
-  if (isAggregate(dest.getOwner())) {
-    markOverdefined(connect.getSrc());
-    return markOverdefined(connect.getDest());
-  }
+  // Skip if the dest is an aggregate value. Aggregate values are firstly marked
+  // overdefined.
+  if (isAggregate(dest.getOwner()))
+    return;
 
   connect.emitError("strictconnect unhandled by IMConstProp")
           .attachNote(connect.getDest().getLoc())

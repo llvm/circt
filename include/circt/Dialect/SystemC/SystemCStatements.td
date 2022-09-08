@@ -95,6 +95,7 @@ def InstanceDeclOp : SystemCOp<"instance.decl", [
     }
 
     StringRef getInstanceName() { return getName(); }
+    StringAttr getInstanceNameAttr() { return getNameAttr(); }
 
     /// Lookup the module for the symbol. This returns null on invalid IR.
     Operation *getReferencedModule(const hw::HWSymbolCache *cache);

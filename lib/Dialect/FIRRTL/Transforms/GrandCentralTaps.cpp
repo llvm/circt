@@ -774,6 +774,9 @@ void GrandCentralTapsPass::runOnOperation() {
                  << blackBox.extModule.getName() << " for " << path << ")\n");
       auto impl =
           builder.create<FModuleOp>(name, ports, blackBox.filteredModuleAnnos);
+      SymbolTable::setSymbolVisibility(
+          impl, SymbolTable::getSymbolVisibility(blackBox.extModule));
+
       // If extraction information was provided via an
       // `ExtractGrandCentralAnnotation`, put the created data or memory taps
       // inside this directory.
@@ -935,8 +938,12 @@ void GrandCentralTapsPass::gatherAnnotations(Operation *op) {
     };
     AnnotationSet::removePortAnnotations(op, gather);
 
-    // Handle internal data taps on extmodule ops.
-    if (isa<FExtModuleOp>(op)) {
+    // Handle internal data taps.
+    // Note that these work for both extmodules AND regular modules.
+    // Note also that we do NOT currently check that the String target of an
+    // internalKeySourceClass actually corresponds to anything in regular
+    // modules.
+    if (isa<FModuleOp, FExtModuleOp>(op)) {
       auto gather = [&](Annotation anno) {
         if (anno.isClass(internalKeySourceClass)) {
           gatherTap(anno, op);

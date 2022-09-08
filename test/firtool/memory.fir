@@ -69,14 +69,11 @@ circuit Qux: %[[{
 ;CHECK:    %[[v4:.+]] = sv.read_inout %[[addr]]
 ;CHECK:    %[[v5:.+]] = hw.array_create
 ;CHECK:    %[[multbit_mux_wire:.+]] = sv.wire  : !hw.inout<i8>
-;CHECK:    %[[array_get:.+]] = hw.array_get %[[v5]][%[[v4]]] : !hw.array<4xi8>
-;CHECK{LITERAL}:    sv.verbatim "assign {{0}} = {{1}} /* cadence map_to_mux */; /* synopsys infer_mux_override */"
-;CHECK-SAME:        (%[[multbit_mux_wire]], %[[array_get]])
+;CHECK:    %[[array_get:.+]] = hw.array_get %[[v5]][%[[v4]]]
+;CHECK:    sv.assign %[[multbit_mux_wire]], %[[array_get]]
 ;CHECK:    %[[v6:.+]] = sv.read_inout %[[multbit_mux_wire]] : !hw.inout<i8>
 ;CHECK:    %[[multbit_mux_wire:.+]] = sv.wire  : !hw.inout<i8>
 ;CHECK:    %[[array_get:.+]] = hw.array_get %[[v5]][%rwAddr]
-;CHECK{LITERAL}:    sv.verbatim "assign {{0}} = {{1}} /* cadence map_to_mux */; /* synopsys infer_mux_override */"
-;CHECK-SAME:        (%[[multbit_mux_wire]], %[[array_get]])
 ;CHECK:    %[[v7:.+]] = sv.read_inout %[[multbit_mux_wire]] : !hw.inout<i8>
 ;CHECK:    sv.always posedge %clock {
 ;CHECK-NEXT:      sv.if %wEn {

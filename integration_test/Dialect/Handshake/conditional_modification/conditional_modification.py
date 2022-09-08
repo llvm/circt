@@ -1,49 +1,14 @@
 import cocotb
-import cocotb.clock
-from cocotb.triggers import FallingEdge, RisingEdge
+from helper import initDut
 
-# Hack to allow imports from parent directory
-import sys
-import os
-
-currentdir = os.path.dirname(os.path.abspath(__file__))
-parentdir = os.path.dirname(currentdir)
-sys.path.append(parentdir)
-
-from helper import HandshakePort, getPorts
-
-
-async def initDut(dut):
-  ins, outs = getPorts(dut, ["in0", "in1", "in2", "inCtrl"],
-                       ["out0", "out1", "outCtrl"])
-
-  [in0, in1, in2, inCtrl] = ins
-  [out0, out1, outCtrl] = outs
-  # Create a 10us period clock on port clock
-  clock = cocotb.clock.Clock(dut.clock, 10, units="us")
-  cocotb.start_soon(clock.start())  # Start the clock
-
-  in0.setValid(0)
-  in1.setValid(0)
-  in2.setValid(0)
-  inCtrl.setValid(0)
-
-  out0.setReady(1)
-  out1.setReady(1)
-  outCtrl.setReady(1)
-
-  # Reset
-  dut.reset.value = 1
-  await RisingEdge(dut.clock)
-  dut.reset.value = 0
-  await RisingEdge(dut.clock)
-
-  return ins, outs
+inNames = ["in0", "in1", "in2", "inCtrl"]
+outNames = ["out0", "out1", "outCtrl"]
 
 
 @cocotb.test()
 async def oneInput(dut):
-  [in0, in1, in2, inCtrl], [out0, out1, outCtrl] = await initDut(dut)
+  [in0, in1, in2, inCtrl], [out0, out1,
+                            outCtrl] = await initDut(dut, inNames, outNames)
 
   out0Check = cocotb.start_soon(out0.checkOutputs([18]))
   out1Check = cocotb.start_soon(out1.checkOutputs([24]))
@@ -64,7 +29,8 @@ async def oneInput(dut):
 
 @cocotb.test()
 async def multiple(dut):
-  [in0, in1, in2, inCtrl], [out0, out1, outCtrl] = await initDut(dut)
+  [in0, in1, in2, inCtrl], [out0, out1,
+                            outCtrl] = await initDut(dut, inNames, outNames)
 
   out0Check = cocotb.start_soon(out0.checkOutputs([18, 42, 42]))
   # COCOTB treats all integers as unsigned, thus we have to compare with the
