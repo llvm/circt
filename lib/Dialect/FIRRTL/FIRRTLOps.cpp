@@ -42,9 +42,8 @@ using namespace chirrtl;
 // Utilities
 //===----------------------------------------------------------------------===//
 
-/// Remove elements at the specified indices from the input array, returning the
-/// elements not mentioned.  The indices array is expected to be sorted and
-/// unique.
+/// Remove elements from the input array corresponding to set bits in
+/// `indicesToDrop`, returning the elements not mentioned.
 template <typename T>
 static SmallVector<T>
 removeElementsAtIndices(ArrayRef<T> input,
@@ -575,8 +574,7 @@ void FMemModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
   (*this).setPortSymbols(newSyms);
 }
 
-/// Erases the ports listed in `portIndices`.  `portIndices` is expected to
-/// be in order and unique.
+/// Erases the ports that have their corresponding bit set in `portIndices`.
 void FModuleOp::erasePorts(const llvm::BitVector &portIndices) {
   if (portIndices.none())
     return;
