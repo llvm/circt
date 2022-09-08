@@ -22,7 +22,6 @@ add_circt_dialect_library(
   
   LINK_LIBS PUBLIC
   MLIRIR
-  CIRCTSupport
 )
 
 add_subdirectory(Transforms)
