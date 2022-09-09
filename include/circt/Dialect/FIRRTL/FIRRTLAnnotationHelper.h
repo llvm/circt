@@ -197,15 +197,15 @@ struct ApplyState {
   using AddToWorklistFn = llvm::function_ref<void(DictionaryAttr)>;
   ApplyState(CircuitOp circuit, SymbolTable &symTbl,
              AddToWorklistFn addToWorklistFn,
-             InstancePathCache &instancePathcache)
+             InstancePathCache &instancePathCache)
       : circuit(circuit), symTbl(symTbl), addToWorklistFn(addToWorklistFn),
-        instancePathcache(instancePathcache) {}
+        instancePathCache(instancePathCache) {}
 
   CircuitOp circuit;
   SymbolTable &symTbl;
   CircuitTargetCache targetCaches;
   AddToWorklistFn addToWorklistFn;
-  InstancePathCache &instancePathcache;
+  InstancePathCache &instancePathCache;
 
   ModuleNamespace &getNamespace(FModuleLike module) {
     auto &ptr = namespaces[module];

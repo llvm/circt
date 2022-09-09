@@ -411,59 +411,9 @@ struct VerbatimBuilder {
   struct Base {
     SmallString<128> string;
     SmallVector<Attribute> symbols;
-    SmallVector<Value, 2> subst;
     VerbatimBuilder builder() { return VerbatimBuilder(*this); }
     operator VerbatimBuilder() { return builder(); }
   };
-
-  /// Increment all the indices inside `{{`, `}}` by one. This is to indicate
-  /// that a value is added to the `substitutions` of the verbatim op, other
-  /// than the symbols.
-  void incrementIds() {
-    StringRef begin = "{{";
-    StringRef end = "}}";
-    // The replacement string.
-    size_t from = 0;
-    replStr.clear();
-    while (from < base.string.size()) {
-      // Search for the first `{{` and `}}`.
-      auto beginAt = base.string.find(begin, from);
-      auto endAt = base.string.find(end, beginAt);
-      // Copy the string as is, until the `{{`.
-      replStr.append(base.string.substr(from, beginAt - from));
-      // If not found, then done.
-      if (beginAt == StringRef::npos || endAt == StringRef::npos)
-        break;
-      // Advance `from` to the character after the `}}`.
-      from = endAt + 2;
-      auto idChar = base.string.substr(beginAt + 2, endAt - beginAt - 2);
-      unsigned idNum;
-      bool failed = idChar.getAsInteger(10, idNum);
-      assert(!failed && "failed to parse integer from verbatim string");
-      // Now increment the id and append.
-      replStr.append("{{");
-      Twine(idNum + 1).toVector(replStr);
-      replStr.append("}}");
-    }
-  }
-
-  /// Add Value for substitution. Since the value precedes the symbols in the
-  /// index, increment all the ids in the string, and then append the value for
-  /// index 0. The original base.string is not updated, but a copy replStr is
-  /// maintained for value sustitution. The original base.string is not updated,
-  /// since the snapshot should still return the original un-modified string.
-  VerbatimBuilder &addValue(Value s) {
-    // Add the value to be used for substitution.
-    base.subst.push_back(s);
-    // Create a copy of the base.string into replStr, and increment all the
-    // index integers by 1.
-    incrementIds();
-    // Append the index for the value into the replStr.
-    Twine("{{" + Twine(0) + "}}").toVector(replStr);
-    return *this;
-  }
-
-  bool hasOnlySymbolSubst() { return base.subst.empty(); }
 
   /// Constructing a builder will snapshot the `Base` which holds the actual
   /// string and symbols.
@@ -476,7 +426,6 @@ struct VerbatimBuilder {
   ~VerbatimBuilder() {
     base.string.resize(stringBaseSize);
     base.symbols.resize(symbolsBaseSize);
-    base.subst.clear();
   }
 
   // Disallow copying.
@@ -489,16 +438,9 @@ struct VerbatimBuilder {
   VerbatimBuilder snapshot() { return VerbatimBuilder(base); }
 
   /// Get the current string.
-  StringRef getString() const {
-    if (base.subst.empty())
-      return base.string;
-    return replStr;
-  }
+  StringRef getString() const { return base.string; }
   /// Get the current symbols;
   ArrayRef<Attribute> getSymbols() const { return base.symbols; }
-
-  /// Get the current values;
-  ArrayRef<Value> getValues() const { return base.subst; }
 
   /// Append to the string.
   VerbatimBuilder &append(char c) {
@@ -528,7 +470,6 @@ private:
   Base &base;
   size_t stringBaseSize;
   size_t symbolsBaseSize;
-  SmallString<128> replStr;
 };
 
 /// A wrapper around a string that is used to encode a type which cannot be
@@ -692,7 +633,7 @@ private:
 
   /// Store of an instance paths analysis.  This is constructed inside
   /// `runOnOperation`, to work around the deleted copy constructor of
-  /// `InstancePathCache`'s internal `BumpPtrAllocator`.
+  /// `instancePathCache`'s internal `BumpPtrAllocator`.
   ///
   /// TODO: Investigate a way to not use a pointer here like how `getNamespace`
   /// works below.
@@ -802,7 +743,7 @@ getPath(FModuleLike targetModule, FModuleOp lcaModule,
   if (nonlocalPath.empty()) {
     // For all paths from root to `targetModule`. Get the path that passes
     // through the `lcaModule`. Only one such path must exist.
-    for (auto path : state.instancePathcache.getAbsolutePaths(targetModule)) {
+    for (auto path : state.instancePathCache.getAbsolutePaths(targetModule)) {
       // If `lcaModule` exists in the path
       if (llvm::find_if(path, isInstanceInlcaModule) != path.end()) {
         // If already found one path, and another path exists, emit error.
@@ -846,13 +787,11 @@ computeRefPortsPathViaLCA(AnnoPathValue &srcTarget,
     return success();
   auto pathToSrc = getPath(srcModule, lcaModule, srcTarget.instances, state);
   if (!pathToSrc)
-    return mlir::emitError(lcaModule.getLoc(),
-                           "cannot find a unique path from parent to src");
+    return lcaModule.emitError("cannot find a unique path from parent to src");
   auto pathToCompanion =
       getPath(companionModule, lcaModule, companionTarget.instances, state);
   if (!pathToCompanion)
-    return mlir::emitError(lcaModule.getLoc(),
-                           "cannot find path from parent to companion");
+    return lcaModule.emitError("cannot find path from parent to companion");
   // The paths can be empty, if
   // 1. `srcModule` == `lcaModule`, or
   // 2. `lcaModule` == `companionModule`.
@@ -888,7 +827,7 @@ static StringAttr borePortsFromViewToCompanion(AnnoPathValue &refSendTarget,
   if (refSendTarget.ref.getImpl().isOp())
     refSendBase = refSendTarget.ref.getImpl().getOp()->getResult(0);
   // Note: This assumes that only the result 0 of the op must be connected.
-  // There is no mechanism currently to handle mulitple result operations.
+  // There is no mechanism currently to handle multiple result operations.
   else if (refSendTarget.ref.getImpl().isPort())
     refSendBase =
         refSendModule.getArgument(refSendTarget.ref.getImpl().getPortNo());
@@ -911,7 +850,7 @@ static StringAttr borePortsFromViewToCompanion(AnnoPathValue &refSendTarget,
   // Now drill ports to connect the `sendVal` to the `wireTarget`.
   auto remoteXMR = borePortsOnPath(
       pathFromSrcToCompanion, lcaModule, sendVal, viewName.getValue(),
-      state.instancePathcache,
+      state.instancePathCache,
       [&](FModuleLike mod) -> ModuleNamespace & {
         return state.getNamespace(mod);
       },
@@ -945,8 +884,8 @@ static StringAttr borePortsFromViewToCompanion(AnnoPathValue &refSendTarget,
 static Optional<DictionaryAttr> parseAugmentedType(
     ApplyState &state, DictionaryAttr augmentedType, DictionaryAttr root,
     StringRef companion, StringAttr name, StringAttr defName,
-    Optional<IntegerAttr> id, Optional<StringAttr>(description), Twine clazz,
-    FModuleOp parentModule, StringAttr &companionAttr, Twine path = {}) {
+    Optional<IntegerAttr> id, Optional<StringAttr> description, Twine clazz,
+    FModuleOp parentModule, StringAttr companionAttr, Twine path = {}) {
 
   auto *context = state.circuit.getContext();
   auto loc = state.circuit.getLoc();
@@ -1188,7 +1127,7 @@ static Optional<DictionaryAttr> parseAugmentedType(
       auto portNo = xmrSrcTarget->ref.getImpl().getPortNo();
       if (xmrSrcTarget->instances.empty()) {
         auto paths =
-            state.instancePathcache.getAbsolutePaths(xmrSrcTarget->ref.getOp());
+            state.instancePathCache.getAbsolutePaths(xmrSrcTarget->ref.getOp());
         if (paths.size() > 1) {
           extMod.emitError("cannot resolve a unique instance path from the "
                            "external module '")
@@ -1208,8 +1147,7 @@ static Optional<DictionaryAttr> parseAugmentedType(
       AnnotationSet::addDontTouch(node);
       // Move the anno target to a node that captures the corresponding port of
       // the instance op for the extern module.
-      xmrSrcTarget->ref =
-          AnnoTarget(circt::firrtl::detail::AnnoTargetImpl(node));
+      xmrSrcTarget->ref = OpAnnoTarget(node);
     }
     auto companionTarget = resolvePath(companionAttr.getValue(), state.circuit,
                                        state.symTbl, state.targetCaches);
@@ -1220,21 +1158,22 @@ static Optional<DictionaryAttr> parseAugmentedType(
       // resolve and then reads the output from resolve into a node. Note: The
       // remote signal to which the XMR is being generated, does not contain any
       // DontTouch. Which implies the remote signal can be optimized away, but
-      // the XMR should still point to a legal value  or a constant after the
+      // the XMR should still point to a legal value or a constant after the
       // optimization.
       auto resolveTargetName = borePortsFromViewToCompanion(
           *xmrSrcTarget, parentModule, state, *companionTarget, name);
       if (!resolveTargetName) {
-        mlir::emitError(loc, "Failed to resolve target, cannot find unique "
-                             "path from parent module `" +
-                                 parentModule.getName() + "` to target`" +
-                                 targetAttr.getValue())
+        (mlir::emitError(loc, "Failed to resolve target, cannot find unique "
+                              "path from parent module `")
+         << parentModule.getName() << "` to target `" << targetAttr.getValue()
+         << "`")
                 .attachNote()
             << "See the full Annotation here: " << root;
+        ;
         return None;
       }
       // Now the view target can be added to the local node created inside the
-      // compaion. Add the annotation. This essentially moves the annotation
+      // companion. Add the annotation. This essentially moves the annotation
       // from the remote XMR signal to a local wire, which in-turn reads the
       // XMR.
       elementScattered.append(
@@ -1439,7 +1378,9 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
         assert(leafValue && "leafValue not found");
 
         auto companionModule = companionIDMap.lookup(id).companion;
+        FModuleLike enclosing = getEnclosingModule(leafValue, sym);
         auto builder = OpBuilder::atBlockEnd(companionModule.getBodyBlock());
+        auto uloc = builder.getUnknownLoc();
 
         auto tpe = leafValue.getType().cast<FIRRTLBaseType>();
 
@@ -1450,104 +1391,139 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
         // Generate the path from the LCA to the module that contains the leaf.
         path += " = ";
 
-        FModuleLike enclosing = getEnclosingModule(leafValue, sym);
-        // If the leaf is inside the companionModule, then no path needs to be
-        // generated, only the leaf.
-
-        bool refTypeLowering = false;
-        if (companionModule == enclosing)
-          if (!leafValue.isa<BlockArgument>() &&
-              isa<NodeOp>(leafValue.getDefiningOp()) &&
-              !leafValue.getDefiningOp()->getOperand(0).isa<BlockArgument>()) {
-            auto *nodeOp = leafValue.getDefiningOp();
-            auto *nodeDef = nodeOp->getOperand(0).getDefiningOp();
-            if (isa<RefResolveOp>(nodeDef) || isa<ConstantOp>(nodeDef)) {
-              // This is the new style of XMRs using RefTypes.
-              refTypeLowering = true;
-              path.addValue(nodeOp->getOperand(0));
-              AnnotationSet::removeDontTouch(nodeOp);
+        /// Increment all the indices inside `{{`, `}}` by one. This is to
+        /// indicate that a value is added to the `substitutions` of the
+        /// verbatim op, other than the symbols.
+        auto getStrAndIncrementIds = [&](StringRef base) -> StringAttr {
+          SmallString<128> replStr;
+          StringRef begin = "{{";
+          StringRef end = "}}";
+          // The replacement string.
+          size_t from = 0;
+          while (from < base.size()) {
+            // Search for the first `{{` and `}}`.
+            size_t beginAt = base.find(begin, from);
+            size_t endAt = base.find(end, from);
+            // If not found, then done.
+            if (beginAt == StringRef::npos || endAt == StringRef::npos ||
+                (beginAt > endAt)) {
+              replStr.append(base.substr(from));
+              break;
             }
+            // Copy the string as is, until the `{{`.
+            replStr.append(base.substr(from, beginAt - from));
+            // Advance `from` to the character after the `}}`.
+            from = endAt + 2;
+            auto idChar = base.substr(beginAt + 2, endAt - beginAt - 2);
+            int idNum;
+            bool failed = idChar.getAsInteger(10, idNum);
+            assert(!failed && "failed to parse integer from verbatim string");
+            // Now increment the id and append.
+            replStr.append("{{");
+            Twine(idNum + 1).toVector(replStr);
+            replStr.append("}}");
           }
+          return StringAttr::get(&getContext(), "assign " + replStr + ";");
+        };
 
-        if (!refTypeLowering) {
-          // This case can only occur if ref.resolve is not introduced during
-          // LowerAnnotations. The following code can be eventually removed.
-          //
-          // There are two posisibilites for what this is tapping:
-          //   1. This is a constant that will be synced into the mappings
-          //   file.
-          //   2. This is something else and we need an XMR.
-          // Handle case (1) here and exit.  Handle case (2) following.
-          auto driver = getDriverFromConnect(leafValue);
-          if (driver) {
-            if (auto constant =
-                    dyn_cast_or_null<ConstantOp>(driver.getDefiningOp())) {
-              path.append(Twine(constant.getValue().getBitWidth()));
-              path += "'h";
-              SmallString<32> valueStr;
-              constant.getValue().toStringUnsigned(valueStr, 16);
-              path.append(valueStr);
-              builder.create<sv::VerbatimOp>(
-                  constant.getLoc(),
-                  StringAttr::get(&getContext(),
-                                  "assign " + path.getString() + ";"),
-                  ValueRange{},
-                  ArrayAttr::get(&getContext(), path.getSymbols()));
-              return true;
-            }
+        // If the leaf is inside the companionModule and the leaf is a NodeOp
+        // and the NodeOp input is a RefResolveOp, then no path needs to be
+        // generated, only the RefResolveOp result can be used as a value
+        // substitution into the verbatim.
+        if (companionModule == enclosing && !leafValue.isa<BlockArgument>() &&
+            isa<NodeOp>(leafValue.getDefiningOp()) &&
+            !leafValue.getDefiningOp()->getOperand(0).isa<BlockArgument>()) {
+          auto *nodeOp = leafValue.getDefiningOp();
+          auto *nodeDef = nodeOp->getOperand(0).getDefiningOp();
+          if (isa<RefResolveOp>(nodeDef) || isa<ConstantOp>(nodeDef)) {
+            // This is the new style of XMRs using RefTypes.
+            // The value subsitution index is set to -1, as it will be
+            // incremented when generating the string.
+            path += "{{-1}}";
+            AnnotationSet::removeDontTouch(nodeOp);
+            // Assemble the verbatim op.
+            builder.create<sv::VerbatimOp>(
+                uloc, getStrAndIncrementIds(path.getString()),
+                nodeOp->getOperand(0),
+                ArrayAttr::get(&getContext(), path.getSymbols()));
+            ++numXMRs;
+            return true;
           }
-
-          // Populate a hierarchical path to the leaf.  For an NLA this is
-          // just the namepath of the associated hierarchical path.  For a
-          // local annotation, this is computed from the instance path.
-          SmallVector<Attribute> fullLeafPath;
-          if (nla) {
-            fullLeafPath.append(nla.getNamepath().begin(),
-                                nla.getNamepath().end());
-          } else {
-            auto enclosingPaths = instancePaths->getAbsolutePaths(enclosing);
-            assert(enclosingPaths.size() == 1 &&
-                   "Unable to handle multiply instantiated companions");
-            if (enclosingPaths.size() != 1)
-              return false;
-            StringAttr root = instancePaths->instanceGraph.getTopLevelModule()
-                                  .moduleNameAttr();
-            for (auto segment : enclosingPaths[0]) {
-              fullLeafPath.push_back(getInnerRefTo(segment));
-              root = segment.getModuleNameAttr().getAttr();
-            }
-            fullLeafPath.push_back(FlatSymbolRefAttr::get(root));
-          }
-
-          // Compute the lowest common ancestor (LCA) of the leaf path and the
-          // parent module.  This enables the generated XMR to be as short as
-          // possible while not losing specificity.
-          ArrayRef<Attribute> minimalLeafPath(fullLeafPath);
-          StringAttr parentNameAttr =
-              parentIDMap.lookup(id).second.moduleNameAttr();
-          minimalLeafPath = minimalLeafPath.drop_until([&](Attribute attr) {
-            return getModPart(attr) == parentNameAttr;
-          });
-
-          path += FlatSymbolRefAttr::get(getModPart(minimalLeafPath.front()));
-          if (!minimalLeafPath.empty()) {
-            for (auto segment : minimalLeafPath.drop_back()) {
-              path += ".";
-              path += segment;
-            }
-          }
-
-          path += '.';
         }
+
+        // This case can only occur if ref.resolve is not introduced during
+        // LowerAnnotations.
+        //
+        // There are two possibilities for what this is tapping:
+        //   1. This is a constant that will be synced into the mappings file.
+        //   2. This is something else and we need an XMR.
+        // Handle case (1) here and exit.  Handle case (2) following.
+        auto driver = getDriverFromConnect(leafValue);
+        if (driver) {
+          if (auto constant =
+                  dyn_cast_or_null<ConstantOp>(driver.getDefiningOp())) {
+            path.append(Twine(constant.getValue().getBitWidth()));
+            path += "'h";
+            SmallString<32> valueStr;
+            constant.getValue().toStringUnsigned(valueStr, 16);
+            path.append(valueStr);
+            builder.create<sv::VerbatimOp>(
+                constant.getLoc(),
+                StringAttr::get(&getContext(),
+                                "assign " + path.getString() + ";"),
+                ValueRange{}, ArrayAttr::get(&getContext(), path.getSymbols()));
+            return true;
+          }
+        }
+
+        // Populate a hierarchical path to the leaf.  For an NLA this is just
+        // the namepath of the associated hierarchical path.  For a local
+        // annotation, this is computed from the instance path.
+        SmallVector<Attribute> fullLeafPath;
+        if (nla) {
+          fullLeafPath.append(nla.getNamepath().begin(),
+                              nla.getNamepath().end());
+        } else {
+          auto enclosingPaths = instancePaths->getAbsolutePaths(enclosing);
+          assert(enclosingPaths.size() == 1 &&
+                 "Unable to handle multiply instantiated companions");
+          if (enclosingPaths.size() != 1)
+            return false;
+          StringAttr root =
+              instancePaths->instanceGraph.getTopLevelModule().moduleNameAttr();
+          for (auto segment : enclosingPaths[0]) {
+            fullLeafPath.push_back(getInnerRefTo(segment));
+            root = segment.getModuleNameAttr().getAttr();
+          }
+          fullLeafPath.push_back(FlatSymbolRefAttr::get(root));
+        }
+
+        // Compute the lowest common ancestor (LCA) of the leaf path and the
+        // parent module.  This enables the generated XMR to be as short as
+        // possible while not losing specificity.
+        ArrayRef<Attribute> minimalLeafPath(fullLeafPath);
+        StringAttr parentNameAttr =
+            parentIDMap.lookup(id).second.moduleNameAttr();
+        minimalLeafPath = minimalLeafPath.drop_until(
+            [&](Attribute attr) { return getModPart(attr) == parentNameAttr; });
+
+        path += FlatSymbolRefAttr::get(getModPart(minimalLeafPath.front()));
+        if (minimalLeafPath.size() > 0) {
+          for (auto segment : minimalLeafPath.drop_back()) {
+            path += ".";
+            path += segment;
+          }
+        }
+
         // Add the leaf value to the path.
-        if (path.hasOnlySymbolSubst()) {
-          if (auto blockArg = leafValue.dyn_cast<BlockArgument>()) {
-            auto module = cast<FModuleOp>(blockArg.getOwner()->getParentOp());
-            path += getInnerRefTo(module, blockArg.getArgNumber());
-          } else {
-            path += getInnerRefTo(leafValue.getDefiningOp());
-          }
+        path += '.';
+        if (auto blockArg = leafValue.dyn_cast<BlockArgument>()) {
+          auto module = cast<FModuleOp>(blockArg.getOwner()->getParentOp());
+          path += getInnerRefTo(module, blockArg.getArgNumber());
+        } else {
+          path += getInnerRefTo(leafValue.getDefiningOp());
         }
+
         if (fieldID > tpe.getMaxFieldID()) {
           leafValue.getDefiningOp()->emitError()
               << "subannotation with fieldID=" << fieldID
@@ -1580,12 +1556,11 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
               });
         }
 
-        auto uloc = builder.getUnknownLoc();
         // Assemble the verbatim op.
         builder.create<sv::VerbatimOp>(
             uloc,
             StringAttr::get(&getContext(), "assign " + path.getString() + ";"),
-            path.getValues(), ArrayAttr::get(&getContext(), path.getSymbols()));
+            ValueRange{}, ArrayAttr::get(&getContext(), path.getSymbols()));
         ++numXMRs;
         return true;
       })
