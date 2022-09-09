@@ -1,12 +1,10 @@
 # REQUIRES: esi-cosim
 # RUN: rm -rf %t
 # RUN: %PYTHON% %s %t 2>&1
-# RUN: esi-cosim-runner.py --schema %t/schema.capnp %s %t/*.sv
-# PY: import support.loopback as test
-# PY: rpc = test.LoopbackTester(rpcschemapath, simhostport)
-# PY: print(rpc.list())
-# PY: rpc.test_two_chan_loopback(25)
-# PY: rpc.test_one_chan_loopback(25)
+# RUN: esi-cosim-runner.py --tmpdir %t --schema %t/schema.capnp %s %t/*.sv
+# : --sim questa
+# PY: from esi_test import run_cosim
+# PY: run_cosim(tmpdir, rpcschemapath, simhostport)
 
 import pycde
 from pycde import (Clock, Input, InputChannel, OutputChannel, module, generator,
@@ -87,10 +85,19 @@ class top:
     Mid(clk=ports.clk, rst=ports.rst)
 
 
-s = pycde.System([top], name="ESILoopback", output_directory=sys.argv[1])
-s.generate()
-s.emit_outputs()
-s.build_api("python")
+if __name__ == "__main__":
+  s = pycde.System([top], name="ESILoopback", output_directory=sys.argv[1])
+  s.generate()
+  s.emit_outputs()
+  s.build_api("python")
 
-sys.path.append(sys.argv[1])
-from esi_rt.ESILoopback import top
+
+def run_cosim(tmpdir, schema_path, rpchostport):
+  print(tmpdir)
+  sys.path.append(tmpdir)
+  import esi_rt.ESILoopback as esi_sys
+  from esi_rt.common import Cosim
+
+  top = esi_sys.top(Cosim(schema_path, rpchostport))
+  import IPython
+  IPython.embed(locals=locals())

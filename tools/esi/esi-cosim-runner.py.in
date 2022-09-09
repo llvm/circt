@@ -28,16 +28,18 @@ class CosimTestRunner:
   """The main class responsible for running a cosim test. We use a separate
     class to allow for per-test mutable state variables."""
 
-  def __init__(self, testFile, schema, addlArgs):
+  def __init__(self, testFile, schema, tmpdir, addlArgs, interactive: bool):
     """Parse a test file. Look for comments we recognize anywhere in the
         file. Assemble a list of sources."""
 
     self.args = addlArgs
     self.file = testFile
+    self.interactive = interactive
     self.runs = list()
     self.srcdir = os.path.dirname(self.file)
     self.sources = list()
     self.top = "top"
+    self.tmpdir = tmpdir
 
     if "@ESI_COSIM_PATH@" == "" or not os.path.exists("@ESI_COSIM_PATH@"):
       raise Exception("The ESI cosimulation DPI library must be " +
@@ -125,6 +127,7 @@ class CosimTestRunner:
       script.write(f"sys.path.append(\"{os.path.dirname(self.file)}\")\n")
       script.write(f"sys.path.append(\"{os.path.dirname(__file__)}\")\n")
       script.write("\n\n")
+      script.write(f"tmpdir = '{self.tmpdir}'\n")
       script.write("simhostport = f'{os.uname()[1]}:" + str(port) + "'\n")
 
       # Run the lines specified in the test file.
@@ -145,8 +148,12 @@ class CosimTestRunner:
       # Open log files
       simStdout = open("sim_stdout.log", "w")
       simStderr = open("sim_stderr.log", "w")
-      testStdout = open("test_stdout.log", "w")
-      testStderr = open("test_stderr.log", "w")
+      if self.interactive:
+        testStdout = None
+        testStderr = None
+      else:
+        testStdout = open("test_stdout.log", "w")
+        testStderr = open("test_stderr.log", "w")
 
       # Erase the config file if it exists. We don't want to read
       # an old config.
@@ -211,8 +218,9 @@ class CosimTestRunner:
                                 stderr=testStderr,
                                 cwd=os.getcwd(),
                                 env=testEnv)
-      testStdout.close()
-      testStderr.close()
+      if not self.interactive:
+        testStdout.close()
+        testStderr.close()
     finally:
       # Make sure to stop the simulation no matter what.
       if simProc:
@@ -279,7 +287,15 @@ def isPortOpen(port):
 def __main__(args):
   argparser = argparse.ArgumentParser(
       description="HW cosimulation runner for ESI")
+  argparser.add_argument("-i",
+                         "--interactive",
+                         action="store_true",
+                         help="Run the script in the foreground.")
   argparser.add_argument("--schema", default="", help="The schema file to use.")
+  argparser.add_argument(
+      "--tmpdir",
+      default="",
+      help="A temp dir to which files may have been generated.")
   argparser.add_argument("source", help="The source run spec file")
   argparser.add_argument("addlArgs",
                          nargs=argparse.REMAINDER,
@@ -298,7 +314,8 @@ def __main__(args):
     os.mkdir(testDir)
   os.chdir(testDir)
 
-  runner = CosimTestRunner(args.source, args.schema, args.addlArgs)
+  runner = CosimTestRunner(args.source, args.schema, args.tmpdir, args.addlArgs,
+                           args.interactive)
   rc = runner.compile()
   if rc != 0:
     return rc

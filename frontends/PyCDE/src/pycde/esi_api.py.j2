@@ -46,7 +46,7 @@ class {{ svc['name' ]}}:
   {% for port in svc.ports if port['to-server-type'] is defined -%}
   def {{port.name}}_read_any(self):
     for p in self.{{port.name}}:
-      rc = p.read(block=False)
+      rc = p.read(blocking_timeout=None)
       if rc is not None:
         return rc
     return None
@@ -85,9 +85,10 @@ class DesignModules:
 {% for mod in modules %}
   class {{mod.name}}:
 
-    def __init__(self):
+    def __init__(self, backend):
+      self._backend = backend
       {%- for inst_name, child_mod in mod.instances.items() %}
-      self.{{camel_to_snake(inst_name)}} = DesignModules.{{child_mod.name}}()
+      self.{{camel_to_snake(inst_name)}} = DesignModules.{{child_mod.name}}(backend.get_child("{{inst_name}}"))
       {%- endfor %}
       {%- for svc in mod.services %}
       {%- set ports = get_ports_for_clients(svc.clients) -%}
@@ -95,11 +96,11 @@ class DesignModules:
       {{port_name}} = [
         {% for pc in port_clients -%}
           {% if pc.to_client_type is defined and pc.to_server_type is defined -%}
-          ReadWritePort({{pc.client_name}}, read_type=ESITypes.{{get_type_name(pc.to_server_type)}}, write_type=ESITypes.{{get_type_name(pc.to_client_type)}})
+          ReadWritePort({{pc.client_name}}, backend, read_type=ESITypes.{{get_type_name(pc.to_server_type)}}, write_type=ESITypes.{{get_type_name(pc.to_client_type)}})
           {%- elif pc.to_client_type is defined -%}
-          WritePort({{pc.client_name}}, write_type=ESITypes.{{get_type_name(pc.to_client_type)}})
+          WritePort({{pc.client_name}}, backend, write_type=ESITypes.{{get_type_name(pc.to_client_type)}})
           {%- elif pc.to_server_type is defined -%}
-          ReadPort({{pc.client_name}}, read_type=ESITypes.{{get_type_name(pc.to_server_type)}})
+          ReadPort({{pc.client_name}}, backend, read_type=ESITypes.{{get_type_name(pc.to_server_type)}})
           {%- endif -%}
           {%- if not loop.last %}, {% endif %}
         {%- if not loop.last %}
@@ -126,6 +127,9 @@ class ESITypes:
 class ESITypes:
 {% for type_name, type_dict in types.items() %}
   {{type_name}} = {{type_str_of(type_dict)}}
+  {%- if type_dict.capnp_name is defined %}
+  {{type_name}}.capnp_name = "{{type_dict.capnp_name}}"
+  {% endif -%}
 {%- endfor %}
 
 {# Instantiate the top modules. E.g.: 
@@ -136,5 +140,5 @@ top = DesignModules.top()
 
 #}
 {% for top in tops %}
-{{camel_to_snake(top.name)}} = DesignModules.{{top.name}}()
+{{top.name}} = lambda backend: DesignModules.{{top.name}}(backend.get_child("{{top.name}}"))
 {%- endfor %}

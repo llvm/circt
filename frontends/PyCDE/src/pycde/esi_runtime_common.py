@@ -2,6 +2,8 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+import capnp
+import time
 import typing
 
 
@@ -41,8 +43,10 @@ class Port:
 
   def __init__(self,
                client_path: typing.List[str],
+               backend,
                read_type: typing.Optional[Type] = None,
                write_type: typing.Optional[Type] = None):
+    self._backend = backend.get_port(client_path, read_type, write_type)
     self.client_path = client_path
     self.read_type = read_type
     self.write_type = write_type
@@ -50,26 +54,146 @@ class Port:
 
 class WritePort(Port):
 
-  def write(self, msg):
+  def write(self, msg) -> bool:
     assert self.write_type is not None, "Expected non-None write_type"
     if not self.write_type.is_valid(msg):
       raise ValueError(f"'{msg}' cannot be converted to '{self.write_type}'")
-    assert False, "Unimplemented"
+    return self._backend.write(msg)
 
 
 class ReadPort(Port):
 
-  def read(self, block=True):
-    assert False, "Unimplemented"
+  def read(self, blocking_time: typing.Optional[float] = 0.01):
+    return self._backend.read(blocking_time)
 
 
 class ReadWritePort(Port):
 
-  def write(self, msg):
+  def write(self, msg) -> bool:
     assert self.write_type is not None, "Expected non-None write_type"
     if not self.write_type.is_valid(msg):
       raise ValueError(f"'{msg}' cannot be converted to '{self.write_type}'")
-    assert False, "Unimplemented"
+    return self._backend.write(msg)
 
-  def read(self, block=True):
-    assert False, "Unimplemented"
+  def read(self, blocking_timeout: typing.Optional[float] = 1.0):
+    return self._backend.read(blocking_timeout)
+
+
+class _CosimNode:
+  """Provides a capnp-based co-simulation backend."""
+
+  def __init__(self, root, prefix: typing.List[str]):
+    self._root: Cosim = root
+    self._endpoint_prefix = prefix
+
+  def get_child(self, child_name: str):
+    child_path = self._endpoint_prefix + [child_name]
+    return _CosimNode(self._root, child_path)
+
+  def get_port(self,
+               client_path: typing.List[str],
+               read_type: typing.Optional[Type] = None,
+               write_type: typing.Optional[Type] = None):
+    path = ".".join(self._endpoint_prefix) + "." + "_".join(client_path)
+    ep = self._root._open_endpoint(
+        path,
+        write_type=write_type.type_id if write_type is not None else None,
+        read_type=read_type.type_id if read_type is not None else None)
+    return _CosimPort(self, ep, read_type, write_type)
+
+
+class Cosim(_CosimNode):
+  """Connect to a Cap'N Proto RPC co-simulation and provide a cosim backend
+  service."""
+
+  def __init__(self, schemaPath, hostPort):
+    """Load the schema and connect to the RPC server"""
+    self._schema = capnp.load(schemaPath)
+    self._rpc_client = capnp.TwoPartyClient(hostPort)
+    self._cosim = self._rpc_client.bootstrap().cast_as(
+        self._schema.CosimDpiServer)
+    ifaces = self.list()
+    print(ifaces)
+    prefix = [] if len(ifaces) == 0 else ifaces[0].endpointID.split(".")[:1]
+    super().__init__(self, prefix)
+
+  def list(self):
+    """List the available interfaces"""
+    return self._cosim.list().wait().ifaces
+
+  def _open_endpoint(self, epid: str, write_type=None, read_type=None):
+    """Open the endpoint, optionally checking the send and recieve types"""
+    for iface in self.list():
+      if iface.endpointID == epid:
+        # Optionally check that the type IDs match.
+        if write_type is not None:
+          assert iface.sendTypeID == write_type.schema.node.id
+        else:
+          assert write_type is None
+        if read_type is not None:
+          assert iface.recvTypeID == read_type.schema.node.id
+        else:
+          assert read_type is None
+
+        openResp = self._cosim.open(iface).wait()
+        assert openResp.iface is not None
+        return openResp.iface
+    assert False, f"Could not find specified EndpointID: {epid}"
+
+
+class _CosimPort:
+
+  class _TypeConverter:
+
+    def __init__(self, schema, esi_type: Type):
+      self.esi_type = esi_type
+      assert hasattr(esi_type, "capnp_name")
+      assert hasattr(schema, esi_type.capnp_name)
+      self.capnp_type = getattr(schema, esi_type.capnp_name)
+
+  class _IntConverter(_TypeConverter):
+
+    def write(self, py_int: int):
+      return self.capnp_type.new_message(i=py_int)
+
+    def read(self, capnp_resp) -> int:
+      return capnp_resp.as_struct(self.capnp_type).i
+
+  ConvertLookup = {IntType: _IntConverter}
+
+  def __init__(self, node: _CosimNode, endpoint,
+               read_type: typing.Optional[Type],
+               write_type: typing.Optional[Type]):
+    self._endpoint = endpoint
+    schema = node._root._schema
+    if read_type is not None:
+      converter = _CosimPort.ConvertLookup[type(read_type)]
+      self._read_convert = converter(schema, read_type)
+    if write_type is not None:
+      converter = _CosimPort.ConvertLookup[type(write_type)]
+      self._write_convert = converter(schema, write_type)
+
+  def write(self, msg) -> bool:
+    self._endpoint.send(self._write_convert.write(msg))
+    return True
+
+  def read(self, blocking_time: typing.Optional[float]):
+    """Cosim doesn't currently support blocking reads. Implement a blocking
+           read via polling."""
+    if blocking_time is None:
+      # Non-blocking
+      recvResp = self._endpoint.recv(False).wait()
+    else:
+      # Blocking
+      e = time.time() + blocking_time
+      recvResp = None
+      while recvResp is None or e > time.time():
+        recvResp = self._endpoint.recv(False).wait()
+        if recvResp.hasData:
+          break
+        else:
+          time.sleep(0.001)
+    if not recvResp.hasData:
+      return None
+    assert recvResp.resp is not None
+    return self._read_convert.read(recvResp.resp)

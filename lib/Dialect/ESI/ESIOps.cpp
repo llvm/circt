@@ -334,5 +334,55 @@ LogicalResult ServiceHierarchyMetadataOp::verifySymbolUses(
   return success();
 }
 
+void ServiceImplementReqOp::gatherPairedReqs(
+    llvm::SmallVectorImpl<std::pair<RequestToServerConnectionOp,
+                                    RequestToClientConnectionOp>> &reqPairs) {
+
+  // Build a mapping of client names to request.
+  DenseMap<ArrayAttr, SmallVector<RequestToServerConnectionOp, 0>>
+      clientNameToServer;
+  DenseMap<ArrayAttr, SmallVector<RequestToClientConnectionOp, 0>>
+      clientNameToClient;
+  for (auto &op : getOps())
+    if (auto req = dyn_cast<RequestToClientConnectionOp>(op))
+      clientNameToClient[req.clientNamePathAttr()].push_back(req);
+    else if (auto req = dyn_cast<RequestToServerConnectionOp>(op))
+      clientNameToServer[req.clientNamePathAttr()].push_back(req);
+
+  // For any client names with two requests of opposite directions, mark a
+  // paired.
+  for (auto opsForClientName : clientNameToServer) {
+    const SmallVector<RequestToServerConnectionOp, 0> &ops =
+        opsForClientName.second;
+    if (ops.size() == 1) {
+      auto toClientF = clientNameToClient.find(opsForClientName.getFirst());
+      if (toClientF != clientNameToClient.end() &&
+          toClientF->getSecond().size() == 1) {
+        reqPairs.push_back(
+            std::make_pair(ops.front(), toClientF->getSecond().front()));
+        continue;
+      }
+    }
+
+    for (auto op : ops)
+      reqPairs.push_back(std::make_pair(op, nullptr));
+  }
+
+  for (auto opsForClientName : clientNameToClient) {
+    const SmallVector<RequestToClientConnectionOp, 0> &ops =
+        opsForClientName.second;
+    if (ops.size() == 1) {
+      // If this toClient request has already been emitted in a pair, skip it.
+      auto toServerF = clientNameToServer.find(opsForClientName.getFirst());
+      if (toServerF != clientNameToServer.end() &&
+          toServerF->getSecond().size() == 1)
+        continue;
+    }
+
+    for (auto op : ops)
+      reqPairs.push_back(std::make_pair(nullptr, op));
+  }
+}
+
 #define GET_OP_CLASSES
 #include "circt/Dialect/ESI/ESI.cpp.inc"
