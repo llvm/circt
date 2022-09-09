@@ -2432,4 +2432,17 @@ firrtl.module @Verification(in %clock: !firrtl.clock, in %p: !firrtl.uint<1>) {
   // CHECK-NOT: firrtl.cover
   firrtl.cover %clock, %c0, %p, "cover0"
 }
+
+// CHECK-LABEL: firrtl.module @ForwardWireSource
+firrtl.module @ForwardWireSource(in %in0: !firrtl.uint<1>, in %in1: !firrtl.uint<1>, in %address: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
+  %0 = firrtl.or %in0, %in1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  %sourceStall_0 = firrtl.wire   : !firrtl.uint<1>
+  %sourceStall_1 = firrtl.wire   : !firrtl.uint<1>
+  firrtl.strictconnect %sourceStall_0, %0 : !firrtl.uint<1>
+  firrtl.strictconnect %sourceStall_1, %0 : !firrtl.uint<1>
+  // CHECK: %sourceStall_0 = firrtl.or %in0, %in1
+  // CHECK-NEXT: firrtl.strictconnect %out, %sourceStall_0 : !firrtl.uint<1>
+  %1 = firrtl.multibit_mux %address, %sourceStall_1, %sourceStall_0 : !firrtl.uint<1>, !firrtl.uint<1>
+  firrtl.strictconnect %out, %1 : !firrtl.uint<1>
+}
 }

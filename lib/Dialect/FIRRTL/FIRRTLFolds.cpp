@@ -1446,7 +1446,7 @@ StrictConnectOp firrtl::getSingleConnectUserOf(Value value) {
   return connect;
 }
 
-// Forward simple values through wire's and reg's.
+// Forward values through wire's and reg's.
 static LogicalResult canonicalizeSingleSetConnect(StrictConnectOp op,
                                                   PatternRewriter &rewriter) {
   // While we can do this for nearly all wires, we currently limit it to simple
@@ -1479,12 +1479,34 @@ static LogicalResult canonicalizeSingleSetConnect(StrictConnectOp op,
       return failure();
 
   } else {
-    // Constants/invalids in the same block are ok to forward, even through
+    // Values in the same block are ok to forward, even through
     // reg's since the clocking doesn't matter for constants.
-    if (!isa<ConstantOp>(srcValueOp) && !isa<InvalidValueOp>(srcValueOp))
-      return failure();
     if (srcValueOp->getBlock() != declBlock)
       return failure();
+
+    if (isa<ConstantOp, InvalidValueOp>(srcValueOp)) {
+      // Make sure the constant dominates all users.
+      srcValueOp->moveBefore(&declBlock->front());
+    } else if (isa<WireOp>(connectedDecl)) {
+      // If the decl is a wire, we can forward the value if the connection
+      // dominates the users.
+      // FIXME: There was a regression possibly related to `isBeforeInBlock`, so
+      // currently we limit the number of users.
+      bool isFirstNonConnectUser = true;
+      for (auto *user : connectedDecl->getUsers()) {
+        if (user == op)
+          continue;
+        if (!isFirstNonConnectUser)
+          return failure();
+        isFirstNonConnectUser = false;
+        if (user->isBeforeInBlock(op))
+          return failure();
+      }
+    } else {
+      // Otherwise, the decl is a register. We cannot forward non-constant
+      // values through registers.
+      return failure();
+    }
   }
 
   // Ok, we know we are doing the transformation.
@@ -1504,14 +1526,9 @@ static LogicalResult canonicalizeSingleSetConnect(StrictConnectOp op,
             op.getSrc().getLoc(), op.getDest().getType(),
             getIntZerosAttr(op.getDest().getType()));
     }
-    // This will be replaced with the constant source.  First, make sure the
-    // constant dominates all users.
-    else if (srcValueOp != &declBlock->front()) {
-      srcValueOp->moveBefore(&declBlock->front());
-    }
   }
 
-  // Replace all things *using* the decl with the constant/port, and
+  // Replace all things *using* the decl with the source value, and
   // remove the declaration.
   replaceOpAndCopyName(rewriter, connectedDecl, replacement);
 
