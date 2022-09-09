@@ -33,9 +33,6 @@ using mlir::TypedAttr;
 /// wants, but for now, it is just looking at the single value.
 bool sv::is2StateExpression(Value v) {
   if (auto *op = v.getDefiningOp()) {
-    llvm::errs() << "\n**\n";
-    op->dump();
-    llvm::errs() << "\n**\n";
     if (auto attr = op->getAttrOfType<UnitAttr>("twoState"))
       return (bool)attr;
   }
