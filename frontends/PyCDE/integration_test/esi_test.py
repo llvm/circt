@@ -45,7 +45,7 @@ class Consumer:
 
 
 @module
-class LoopbackInOut:
+class LoopbackInOutAdd7:
 
   @generator
   def construct(ports):
@@ -54,6 +54,8 @@ class LoopbackInOut:
     ready = Wire(types.i1)
     wide_data, valid = from_host.unwrap(ready)
     data = wide_data[0:16]
+    # TODO: clean this up with PyCDE overloads (they're currently a little bit
+    # broken for this use-case).
     data = comb.AddOp(data, types.i16(7))
     data_chan, data_ready = loopback.type.wrap(data, valid)
     ready.assign(data_ready)
@@ -70,7 +72,7 @@ class Mid:
     p = Producer(clk=ports.clk)
     Consumer(clk=ports.clk, int_in=p.int_out)
 
-    LoopbackInOut()
+    LoopbackInOutAdd7()
 
     # Use Cosim to implement the standard 'HostComms' service.
     esi.Cosim(HostComms, ports.clk, ports.rst)
