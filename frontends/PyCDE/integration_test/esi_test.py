@@ -1,8 +1,7 @@
-# REQUIRES: esi-cosim
+# REQUIRES: esi-cosim, rtl-sim
 # RUN: rm -rf %t
 # RUN: %PYTHON% %s %t 2>&1
 # RUN: esi-cosim-runner.py --tmpdir %t --schema %t/schema.capnp %s %t/*.sv
-# : --sim questa
 # PY: from esi_test import run_cosim
 # PY: run_cosim(tmpdir, rpcschemapath, simhostport)
 
@@ -95,7 +94,6 @@ if __name__ == "__main__":
 
 
 def run_cosim(tmpdir, schema_path, rpchostport):
-  print(tmpdir)
   sys.path.append(tmpdir)
   import esi_rt.ESILoopback as esi_sys
   from esi_rt.common import Cosim
@@ -133,6 +131,3 @@ def run_cosim(tmpdir, schema_path, rpchostport):
   assert top.mid.host_comms.to_host_read_any() is None
 
   print("Success: all tests pass!")
-
-  # import IPython
-  # IPython.embed(locals=locals())

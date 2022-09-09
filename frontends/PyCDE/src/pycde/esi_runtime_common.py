@@ -2,6 +2,7 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+from multiprocessing.sharedctypes import Value
 import capnp
 import time
 import typing
@@ -87,6 +88,8 @@ class _CosimNode:
     self._endpoint_prefix = prefix
 
   def get_child(self, child_name: str):
+    """When instantiating a child instance, get the backend node with which it
+    is associated."""
     child_path = self._endpoint_prefix + [child_name]
     return _CosimNode(self._root, child_path)
 
@@ -94,6 +97,8 @@ class _CosimNode:
                client_path: typing.List[str],
                read_type: typing.Optional[Type] = None,
                write_type: typing.Optional[Type] = None):
+    """When building a service port, get the backend port which it should use
+    for interactions."""
     path = ".".join(self._endpoint_prefix) + "." + "_".join(client_path)
     ep = self._root._open_endpoint(
         path,
@@ -112,8 +117,9 @@ class Cosim(_CosimNode):
     self._rpc_client = capnp.TwoPartyClient(hostPort)
     self._cosim = self._rpc_client.bootstrap().cast_as(
         self._schema.CosimDpiServer)
+
+    # Find the simulation prefix and use it in our parent constructor.
     ifaces = self.list()
-    print(ifaces)
     prefix = [] if len(ifaces) == 0 else ifaces[0].endpointID.split(".")[:1]
     super().__init__(self, prefix)
 
@@ -142,16 +148,20 @@ class Cosim(_CosimNode):
 
 
 class _CosimPort:
+  """Cosim backend for service ports. This is where the real meat is buried."""
 
   class _TypeConverter:
+    """Parent class for Capnp type converters."""
 
     def __init__(self, schema, esi_type: Type):
       self.esi_type = esi_type
       assert hasattr(esi_type, "capnp_name")
-      assert hasattr(schema, esi_type.capnp_name)
+      if not hasattr(schema, esi_type.capnp_name):
+        raise ValueError("Cosim does not support non-capnp types.")
       self.capnp_type = getattr(schema, esi_type.capnp_name)
 
   class _IntConverter(_TypeConverter):
+    """Convert python ints to and from capnp messages."""
 
     def write(self, py_int: int):
       return self.capnp_type.new_message(i=py_int)
@@ -159,6 +169,7 @@ class _CosimPort:
     def read(self, capnp_resp) -> int:
       return capnp_resp.as_struct(self.capnp_type).i
 
+  # Lookup table for getting the correct type converter for a given type.
   ConvertLookup = {IntType: _IntConverter}
 
   def __init__(self, node: _CosimNode, endpoint,
@@ -166,6 +177,8 @@ class _CosimPort:
                write_type: typing.Optional[Type]):
     self._endpoint = endpoint
     schema = node._root._schema
+    # For each type, lookup the type converter and store that instead of the
+    # type itself.
     if read_type is not None:
       converter = _CosimPort.ConvertLookup[type(read_type)]
       self._read_convert = converter(schema, read_type)
@@ -174,17 +187,21 @@ class _CosimPort:
       self._write_convert = converter(schema, write_type)
 
   def write(self, msg) -> bool:
+    """Write a message to this port."""
     self._endpoint.send(self._write_convert.write(msg))
     return True
 
   def read(self, blocking_time: typing.Optional[float]):
-    """Cosim doesn't currently support blocking reads. Implement a blocking
-           read via polling."""
+    """Read a message from this port. If 'blocking_timeout' is None, return
+    immediately. Otherwise, wait up to 'blocking_timeout' for a message. Returns
+    the message if found, None if no message was read."""
+
     if blocking_time is None:
-      # Non-blocking
+      # Non-blocking.
       recvResp = self._endpoint.recv(False).wait()
     else:
-      # Blocking
+      # Blocking. Since our cosim rpc server doesn't currently support blocking
+      # reads, use polling instead.
       e = time.time() + blocking_time
       recvResp = None
       while recvResp is None or e > time.time():
