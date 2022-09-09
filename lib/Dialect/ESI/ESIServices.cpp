@@ -19,6 +19,7 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 
+#include <map>
 #include <memory>
 
 using namespace circt;
@@ -68,80 +69,45 @@ static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp req) {
   for (unsigned i = 0, e = portReqs->getArguments().size(); i < e; ++i)
     argMap.map(portReqs->getArgument(i), req->getOperand(i + 2));
 
-  // Build a mapping of client names to request.
-  DenseMap<ArrayAttr, SmallVector<Operation *, 0>> clientNameToOps;
-  for (auto &op : req.getOps())
-    if (auto req = dyn_cast<RequestToClientConnectionOp>(op))
-      clientNameToOps[req.clientNamePathAttr()].push_back(&op);
-    else if (auto req = dyn_cast<RequestToServerConnectionOp>(op))
-      clientNameToOps[req.clientNamePathAttr()].push_back(&op);
+  llvm::DenseMap<RequestToClientConnectionOp, unsigned> toClientResultNum;
+  for (auto toClient : req.getOps<RequestToClientConnectionOp>())
+    toClientResultNum[toClient] = toClientResultNum.size();
 
-  // For any client names with two requests of opposite directions, mark a
-  // paired.
-  DenseMap<RequestToServerConnectionOp, RequestToClientConnectionOp> pairs;
-  for (auto opsForClientName : clientNameToOps) {
-    const SmallVector<Operation *, 0> &ops = opsForClientName.second;
-    if (ops.size() != 2)
-      continue;
+  // Get the request pairs.
+  llvm::SmallVector<
+      std::pair<RequestToServerConnectionOp, RequestToClientConnectionOp>, 8>
+      reqPairs;
+  req.gatherPairedReqs(reqPairs);
 
-    // Only proceed if a to_client and to_server are found.
-    RequestToClientConnectionOp to_client;
-    RequestToServerConnectionOp to_server;
-    if ((to_client = dyn_cast<RequestToClientConnectionOp>(ops[0]))) {
-      if (!(to_server = dyn_cast<RequestToServerConnectionOp>(ops[1])))
-        continue;
-    } else if ((to_server = dyn_cast<RequestToServerConnectionOp>(ops[0]))) {
-      if (!(to_client = dyn_cast<RequestToClientConnectionOp>(ops[1])))
-        continue;
-    }
-    assert(to_client);
-    assert(to_server);
-    pairs[to_server] = to_client;
-  }
+  // Iterate through them, building a cosim endpoint for each one.
+  for (auto [toServer, toClient] : reqPairs) {
+    assert((toServer || toClient) &&
+           "At least one in all pairs must be non-null");
+    Location loc = toServer ? toServer.getLoc() : toClient.getLoc();
+    ArrayAttr clientNamePathAttr = toServer ? toServer.clientNamePathAttr()
+                                            : toClient.clientNamePathAttr();
 
-  // Create output Cosim endpoints. If the request is one half of a pair, store
-  // it.
-  DenseMap<RequestToClientConnectionOp, CosimEndpointOp> pairedCosimEndpoints;
-  for (auto toServerReq :
-       llvm::make_early_inc_range(req.getOps<RequestToServerConnectionOp>())) {
-
-    Type resType;
-    auto foundClient = pairs.find(toServerReq);
-    if (foundClient != pairs.end())
-      resType = foundClient->second.receiving().getType();
+    Value toServerValue;
+    if (toServer)
+      toServerValue = argMap.lookup(toServer.sending());
     else
-      resType = ChannelType::get(ctxt, b.getI1Type());
+      toServerValue =
+          b.create<NullSourceOp>(loc, ChannelType::get(ctxt, b.getI1Type()));
+
+    Type toClientType;
+    if (toClient)
+      toClientType = toClient.receiving().getType();
+    else
+      toClientType = ChannelType::get(ctxt, b.getI1Type());
 
     auto cosim =
-        b.create<CosimEndpointOp>(toServerReq.getLoc(), resType, clk, rst,
-                                  argMap.lookup(toServerReq.sending()),
-                                  toStringAttr(toServerReq.clientNamePath()));
-    toServerReq.erase();
+        b.create<CosimEndpointOp>(loc, toClientType, clk, rst, toServerValue,
+                                  toStringAttr(clientNamePathAttr));
 
-    if (foundClient != pairs.end())
-      pairedCosimEndpoints[foundClient->second] = cosim;
-  }
-
-  // Create Cosim endpoints for the incoming data requests.
-  unsigned clientReqIdx = 0;
-  for (auto toClientReq :
-       llvm::make_early_inc_range(req.getOps<RequestToClientConnectionOp>())) {
-    CosimEndpointOp cosim;
-
-    // If this is a paired request, use the paired endpoint.
-    auto epFound = pairedCosimEndpoints.find(toClientReq);
-    if (epFound != pairedCosimEndpoints.end()) {
-      cosim = epFound->second;
-    } else {
-      auto cosimIn = b.create<NullSourceOp>(
-          toClientReq.getLoc(), ChannelType::get(ctxt, b.getI1Type()));
-      cosim = b.create<CosimEndpointOp>(
-          toClientReq.getLoc(), toClientReq.receiving().getType(), clk, rst,
-          cosimIn, toStringAttr(toClientReq.clientNamePath()));
+    if (toClient) {
+      unsigned clientReqIdx = toClientResultNum[toClient];
+      req.getResult(clientReqIdx).replaceAllUsesWith(cosim.recv());
     }
-    req.getResult(clientReqIdx).replaceAllUsesWith(cosim.recv());
-    toClientReq.erase();
-    ++clientReqIdx;
   }
 
   // Erase the generation request.
@@ -327,22 +293,32 @@ void ESIConnectServicesPass::copyMetadata(hw::HWMutableModuleLike mod) {
 /// software API creation).
 static void emitServiceMetadata(ServiceImplementReqOp implReqOp) {
   ImplicitLocOpBuilder b(implReqOp.getLoc(), implReqOp);
+
+  llvm::SmallVector<
+      std::pair<RequestToServerConnectionOp, RequestToClientConnectionOp>, 8>
+      reqPairs;
+  implReqOp.gatherPairedReqs(reqPairs);
+
   SmallVector<Attribute, 8> clients;
-  for (auto *clientOp : llvm::make_pointer_range(implReqOp.getOps())) {
-    SmallVector<NamedAttribute> clientAttrs;
-    if (auto client = dyn_cast<RequestToClientConnectionOp>(clientOp)) {
-      clientAttrs.push_back(b.getNamedAttr("port", client.servicePortAttr()));
-      clientAttrs.push_back(
-          b.getNamedAttr("client_name", client.clientNamePathAttr()));
+  for (auto [toServer, toClient] : reqPairs) {
+    SmallVector<NamedAttribute, 4> clientAttrs;
+    Attribute servicePort, clientNamePath;
+    if (toServer) {
+      clientNamePath = toServer.clientNamePathAttr();
+      servicePort = toServer.servicePortAttr();
       clientAttrs.push_back(b.getNamedAttr(
-          "to_client_type", TypeAttr::get(client.receiving().getType())));
-    } else if (auto client = dyn_cast<RequestToServerConnectionOp>(clientOp)) {
-      clientAttrs.push_back(
-          b.getNamedAttr("client_name", client.clientNamePathAttr()));
-      clientAttrs.push_back(b.getNamedAttr("port", client.servicePortAttr()));
-      clientAttrs.push_back(b.getNamedAttr(
-          "to_server_type", TypeAttr::get(client.sending().getType())));
+          "to_server_type", TypeAttr::get(toServer.sending().getType())));
     }
+    if (toClient) {
+      clientNamePath = toClient.clientNamePathAttr();
+      servicePort = toClient.servicePortAttr();
+      clientAttrs.push_back(b.getNamedAttr(
+          "to_client_type", TypeAttr::get(toClient.receiving().getType())));
+    }
+
+    clientAttrs.push_back(b.getNamedAttr("port", servicePort));
+    clientAttrs.push_back(b.getNamedAttr("client_name", clientNamePath));
+
     clients.push_back(b.getDictionaryAttr(clientAttrs));
   }
 
