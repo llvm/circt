@@ -60,8 +60,12 @@ static void replaceOpAndCopyName(PatternRewriter &rewriter, Operation *op,
                                  Value newValue) {
   if (auto *newOp = newValue.getDefiningOp()) {
     auto name = op->getAttrOfType<StringAttr>("name");
-    if (name && newOp && !newOp->hasAttr("name") && !isUselessName(name))
-      rewriter.updateRootInPlace(newOp, [&] { newOp->setAttr("name", name); });
+    if (name && !name.getValue().empty()) {
+      auto newOpName = newOp->getAttrOfType<StringAttr>("name");
+      if (!newOpName || isUselessName(newOpName))
+        rewriter.updateRootInPlace(newOp,
+                                   [&] { newOp->setAttr("name", name); });
+    }
   }
   rewriter.replaceOp(op, newValue);
 }
@@ -75,9 +79,11 @@ static OpTy replaceOpWithNewOpAndCopyName(PatternRewriter &rewriter,
   auto name = op->getAttrOfType<StringAttr>("name");
   auto newOp =
       rewriter.replaceOpWithNewOp<OpTy>(op, std::forward<Args>(args)...);
-  if (name && newOp && !newOp->hasAttr("name") && !isUselessName(name))
-    rewriter.updateRootInPlace(newOp, [&] { newOp->setAttr("name", name); });
-
+  if (name && !name.getValue().empty()) {
+    auto newOpName = newOp->template getAttrOfType<StringAttr>("name");
+    if (!newOpName || isUselessName(newOpName))
+      rewriter.updateRootInPlace(newOp, [&] { newOp->setAttr("name", name); });
+  }
   return newOp;
 }
 
@@ -1674,10 +1680,14 @@ struct FoldNodeName : public mlir::RewritePattern {
     if (!node.hasDroppableName() || node.getInnerSym() ||
         !node.getAnnotations().empty())
       return failure();
-    auto *expr = node.getInput().getDefiningOp();
+    auto *newOp = node.getInput().getDefiningOp();
     // Best effort
-    if (name && !name.getValue().empty() && expr && !expr->hasAttr("name"))
-      rewriter.updateRootInPlace(expr, [&] { expr->setAttr("name", name); });
+    if (name && !name.getValue().empty() && newOp) {
+      auto newOpName = newOp->getAttrOfType<StringAttr>("name");
+      if (!newOpName || isUselessName(newOpName))
+        rewriter.updateRootInPlace(newOp,
+                                   [&] { newOp->setAttr("name", name); });
+    }
     rewriter.replaceOp(node, node.getInput());
     return success();
   }
