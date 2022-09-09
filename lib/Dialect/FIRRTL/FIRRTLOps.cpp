@@ -24,6 +24,7 @@
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/PatternMatch.h"
+#include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/STLExtras.h"
@@ -41,18 +42,17 @@ using namespace chirrtl;
 // Utilities
 //===----------------------------------------------------------------------===//
 
-/// Remove elements at the specified indices from the input array, returning the
-/// elements not mentioned.  The indices array is expected to be sorted and
-/// unique.
+/// Remove elements from the input array corresponding to set bits in
+/// `indicesToDrop`, returning the elements not mentioned.
 template <typename T>
 static SmallVector<T>
-removeElementsAtIndices(ArrayRef<T> input, ArrayRef<unsigned> indicesToDrop) {
-#ifndef NDEBUG // Check sortedness.
+removeElementsAtIndices(ArrayRef<T> input,
+                        const llvm::BitVector &indicesToDrop) {
+#ifndef NDEBUG
   if (!input.empty()) {
-    for (size_t i = 1, e = indicesToDrop.size(); i != e; ++i)
-      assert(indicesToDrop[i - 1] < indicesToDrop[i] &&
-             "indicesToDrop isn't sorted and unique");
-    assert(indicesToDrop.back() < input.size() && "index out of range");
+    int lastIndex = indicesToDrop.find_last();
+    if (lastIndex >= 0)
+      assert((size_t)lastIndex < input.size() && "index out of range");
   }
 #endif
 
@@ -64,9 +64,9 @@ removeElementsAtIndices(ArrayRef<T> input, ArrayRef<unsigned> indicesToDrop) {
   // Copy over the live chunks.
   size_t lastCopied = 0;
   SmallVector<T> result;
-  result.reserve(input.size() - indicesToDrop.size());
+  result.reserve(input.size() - indicesToDrop.count());
 
-  for (unsigned indexToDrop : indicesToDrop) {
+  for (unsigned indexToDrop : indicesToDrop.set_bits()) {
     // If we skipped over some valid elements, copy them over.
     if (indexToDrop > lastCopied) {
       result.append(input.begin() + lastCopied, input.begin() + indexToDrop);
@@ -574,10 +574,9 @@ void FMemModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
   (*this).setPortSymbols(newSyms);
 }
 
-/// Erases the ports listed in `portIndices`.  `portIndices` is expected to
-/// be in order and unique.
-void FModuleOp::erasePorts(ArrayRef<unsigned> portIndices) {
-  if (portIndices.empty())
+/// Erases the ports that have their corresponding bit set in `portIndices`.
+void FModuleOp::erasePorts(const llvm::BitVector &portIndices) {
+  if (portIndices.none())
     return;
 
   // Drop the direction markers for dead ports.
@@ -1219,8 +1218,11 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
 /// Builds a new `InstanceOp` with the ports listed in `portIndices` erased, and
 /// updates any users of the remaining ports to point at the new instance.
 InstanceOp InstanceOp::erasePorts(OpBuilder &builder,
-                                  ArrayRef<unsigned> portIndices) {
-  if (portIndices.empty())
+                                  const llvm::BitVector &portIndices) {
+  assert(portIndices.size() >= getNumResults() &&
+         "portIndices is not at least as large as getNumResults()");
+
+  if (portIndices.none())
     return *this;
 
   SmallVector<Type> newResultTypes = removeElementsAtIndices<Type>(
@@ -1237,10 +1239,9 @@ InstanceOp InstanceOp::erasePorts(OpBuilder &builder,
       newPortDirections, newPortNames, getAnnotations().getValue(),
       newPortAnnotations, getLowerToBind(), getInnerSymAttr());
 
-  SmallDenseSet<unsigned> portSet(portIndices.begin(), portIndices.end());
   for (unsigned oldIdx = 0, newIdx = 0, numOldPorts = getNumResults();
        oldIdx != numOldPorts; ++oldIdx) {
-    if (portSet.contains(oldIdx)) {
+    if (portIndices.test(oldIdx)) {
       assert(getResult(oldIdx).use_empty() && "removed instance port has uses");
       continue;
     }

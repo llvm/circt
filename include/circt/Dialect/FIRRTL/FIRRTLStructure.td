@@ -98,9 +98,8 @@ def FModuleOp : FIRRTLOp<"module", [IsolatedFromAbove, Symbol, SingleBlock,
     /// Inserts the given ports.
     void insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports);
 
-    /// Erases the ports listed in `portIndices`.  `portIndices` is expected to
-    /// be in order and unique.
-    void erasePorts(ArrayRef<unsigned> portIndices);
+    /// Erases the ports that have their corresponding bit set in `portIndices`.
+    void erasePorts(const llvm::BitVector &portIndices);
 
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);

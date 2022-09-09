@@ -23,6 +23,7 @@
 #include "mlir/Support/FileUtilities.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "mlir/Transforms/Passes.h"
+#include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/Support/Debug.h"
 
@@ -772,10 +773,11 @@ struct RootPortPruner : public Reduction {
   LogicalResult rewrite(Operation *op) override {
     assert(match(op));
     auto module = cast<firrtl::FModuleOp>(op);
-    SmallVector<unsigned> dropPorts;
-    for (unsigned i = 0, e = module.getNumPorts(); i != e; ++i) {
+    size_t numPorts = module.getNumPorts();
+    llvm::BitVector dropPorts(numPorts);
+    for (unsigned i = 0; i != numPorts; ++i) {
       if (onlyInvalidated(module.getArgument(i))) {
-        dropPorts.push_back(i);
+        dropPorts.set(i);
         for (auto *user :
              llvm::make_early_inc_range(module.getArgument(i).getUsers()))
           user->erase();

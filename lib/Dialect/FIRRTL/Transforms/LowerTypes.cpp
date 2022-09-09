@@ -42,6 +42,7 @@
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
 #include "llvm/ADT/APSInt.h"
+#include "llvm/ADT/BitVector.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Parallel.h"
 
@@ -919,7 +920,7 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
   lowerBlock(body);
 
   // Lower the module block arguments.
-  SmallVector<unsigned> argsToRemove;
+  llvm::BitVector argsToRemove;
   auto newArgs = module.getPorts();
   for (size_t argIndex = 0, argsRemoved = 0; argIndex < newArgs.size();
        ++argIndex) {
@@ -927,15 +928,17 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
     if (lowerArg(module, argIndex, argsRemoved, newArgs, lowerings)) {
       auto arg = module.getArgument(argIndex);
       processUsers(arg, lowerings);
-      argsToRemove.push_back(argIndex);
+      argsToRemove.push_back(true);
       ++argsRemoved;
-    }
+    } else
+      argsToRemove.push_back(false);
     // lowerArg might have invalidated any reference to newArgs, be careful
   }
 
   // Remove block args that have been lowered.
   body->eraseArguments(argsToRemove);
-  for (auto deadArg : llvm::reverse(argsToRemove))
+  for (auto deadArg = argsToRemove.find_last(); deadArg != -1;
+       deadArg = argsToRemove.find_prev(deadArg))
     newArgs.erase(newArgs.begin() + deadArg);
 
   SmallVector<NamedAttribute, 8> newModuleAttrs;

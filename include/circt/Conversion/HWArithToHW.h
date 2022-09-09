@@ -14,6 +14,7 @@
 #ifndef CIRCT_CONVERSION_HWARITHTOHW_HWARITHTOHW_H
 #define CIRCT_CONVERSION_HWARITHTOHW_HWARITHTOHW_H
 
+#include "circt/Support/LLVM.h"
 #include <memory>
 
 namespace mlir {
@@ -21,6 +22,9 @@ class Pass;
 } // namespace mlir
 
 namespace circt {
+/// Get the HWArith to HW conversion patterns.
+void populateHWArithToHWConversionPatterns(RewritePatternSet &patterns);
+
 std::unique_ptr<mlir::Pass> createHWArithToHWPass();
 } // namespace circt
 
