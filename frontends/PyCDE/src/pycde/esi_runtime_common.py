@@ -63,8 +63,8 @@ class WritePort(Port):
 
 class ReadPort(Port):
 
-  def read(self, blocking_time: typing.Optional[float] = 0.01):
-    return self._backend.read(blocking_time)
+  def read(self, blocking_timeout: typing.Optional[float] = 1.0):
+    return self._backend.read(blocking_timeout)
 
 
 class ReadWritePort(Port):

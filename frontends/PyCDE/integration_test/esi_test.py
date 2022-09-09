@@ -11,6 +11,7 @@ from pycde import (Clock, Input, InputChannel, OutputChannel, module, generator,
                    types)
 from pycde import esi
 from pycde.constructs import Wire
+from pycde.dialects import comb
 
 import sys
 
@@ -54,6 +55,7 @@ class LoopbackInOut:
     ready = Wire(types.i1)
     wide_data, valid = from_host.unwrap(ready)
     data = wide_data[0:16]
+    data = comb.AddOp(data, types.i16(7))
     data_chan, data_ready = loopback.type.wrap(data, valid)
     ready.assign(data_ready)
     loopback.assign(data_chan)
@@ -99,5 +101,38 @@ def run_cosim(tmpdir, schema_path, rpchostport):
   from esi_rt.common import Cosim
 
   top = esi_sys.top(Cosim(schema_path, rpchostport))
-  import IPython
-  IPython.embed(locals=locals())
+
+  assert top.mid.host_comms.req_resp_read_any() is None
+  assert top.mid.host_comms.req_resp[0].read(blocking_timeout=None) is None
+  assert top.mid.host_comms.to_host_read_any() is None
+  assert top.mid.host_comms.to_host[0].read(blocking_timeout=None) is None
+
+  assert top.mid.host_comms.req_resp[0].write(5) is True
+  assert top.mid.host_comms.to_host_read_any() is None
+  assert top.mid.host_comms.to_host[0].read(blocking_timeout=None) is None
+  assert top.mid.host_comms.req_resp[0].read() == 12
+  assert top.mid.host_comms.req_resp[0].read(blocking_timeout=None) is None
+
+  assert top.mid.host_comms.req_resp[0].write(9) is True
+  assert top.mid.host_comms.to_host_read_any() is None
+  assert top.mid.host_comms.to_host[0].read(blocking_timeout=None) is None
+  assert top.mid.host_comms.req_resp_read_any() == 16
+  assert top.mid.host_comms.req_resp_read_any() is None
+  assert top.mid.host_comms.req_resp[0].read(blocking_timeout=None) is None
+
+  assert top.mid.host_comms.from_host[0].write(9) is True
+  assert top.mid.host_comms.req_resp_read_any() is None
+  assert top.mid.host_comms.req_resp[0].read(blocking_timeout=None) is None
+  assert top.mid.host_comms.to_host_read_any() == 9
+  assert top.mid.host_comms.to_host[0].read(blocking_timeout=None) is None
+
+  assert top.mid.host_comms.from_host[0].write(9) is True
+  assert top.mid.host_comms.req_resp_read_any() is None
+  assert top.mid.host_comms.req_resp[0].read(blocking_timeout=None) is None
+  assert top.mid.host_comms.to_host[0].read() == 9
+  assert top.mid.host_comms.to_host_read_any() is None
+
+  print("Success: all tests pass!")
+
+  # import IPython
+  # IPython.embed(locals=locals())
