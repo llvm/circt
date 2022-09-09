@@ -725,17 +725,167 @@ private:
 // Code related to handling Grand Central View annotations
 //===----------------------------------------------------------------------===//
 
+/// Get the path from `lcaModule` to `targetModule`.  The last `InstanceOp` in
+/// the path must instantiate `targetModule` and the first must be inside the
+/// `lcaModule`. If `nonlocalPath` is empty, get the path from InstanceGraph,
+/// else get the path from the `nonlocalPath`. Emit error and return None, if
+/// there are multiple paths between `lcaModule` and `targetModule`. The caller
+/// must handle the None return value and error out.
+static Optional<ArrayRef<InstanceOp>>
+getPath(FModuleLike targetModule, FModuleOp lcaModule,
+        SmallVector<InstanceOp> &nonlocalPath, ApplyState &state) {
+  ArrayRef<InstanceOp> pathToSend;
+  if (targetModule == lcaModule)
+    return pathToSend;
+  auto isInstanceInlcaModule = [&](InstanceOp inst) {
+    return (inst->getParentOfType<FModuleOp>() == lcaModule);
+  };
+  if (nonlocalPath.empty()) {
+    // For all paths from root to `targetModule`. Get the path that passes
+    // through the `lcaModule`. Only one such path must exist.
+    for (auto path : state.instancePathCache.getAbsolutePaths(targetModule)) {
+      // If `lcaModule` exists in the path
+      if (llvm::find_if(path, isInstanceInlcaModule) != path.end()) {
+        // If already found one path, and another path exists, emit error.
+        if (!pathToSend.empty()) {
+          targetModule.emitOpError(
+              "cannot handle multiple paths from the parent module ")
+              << lcaModule.moduleNameAttr()
+              << " till the GrandCentral view target";
+          return None;
+        }
+
+        // Store the path from `lcaModule`.
+        pathToSend = path.drop_until(isInstanceInlcaModule);
+      }
+    }
+  } else // Get the path from the `lcaModule` in the `nonlocalPath`.
+    pathToSend = ArrayRef<InstanceOp>(
+        llvm::find_if(nonlocalPath, isInstanceInlcaModule), nonlocalPath.end());
+  return pathToSend;
+}
+
+/// Set the `pathFromSrcToCompanion` with the path from `srcTarget` to
+/// `companionTarget` via the `lcaModule`. The `lcaModule` denotes the least
+/// common ancestor for the source and destination modules. The first
+/// `InstanceOp` in the `pathFromSrcToCompanion` must instantiate the module of
+/// `srcTarget` and the last must instantiate the module `companionTarget`.
+static LogicalResult
+computeRefPortsPathViaLCA(AnnoPathValue &srcTarget,
+                          AnnoPathValue &companionTarget,
+                          SmallVector<InstanceOp> &pathFromSrcToCompanion,
+                          FModuleOp &lcaModule, ApplyState &state) {
+  if (isa<FExtModuleOp>(srcTarget.ref.getOp()))
+    return srcTarget.ref.getOp()->emitError(
+        "RefType source cannot be an extern module port, it must be moved to "
+        "the instance of the extern module");
+  pathFromSrcToCompanion.clear();
+
+  auto srcModule = cast<FModuleOp>(srcTarget.ref.getModule());
+  auto companionModule = cast<FModuleOp>(companionTarget.ref.getModule());
+  if (srcModule == companionModule)
+    return success();
+  auto pathToSrc = getPath(srcModule, lcaModule, srcTarget.instances, state);
+  if (!pathToSrc)
+    return lcaModule.emitError("cannot find a unique path from parent to src");
+  auto pathToCompanion =
+      getPath(companionModule, lcaModule, companionTarget.instances, state);
+  if (!pathToCompanion)
+    return lcaModule.emitError("cannot find path from parent to companion");
+  // The paths can be empty, if
+  // 1. `srcModule` == `lcaModule`, or
+  // 2. `lcaModule` == `companionModule`.
+
+  pathFromSrcToCompanion.append(pathToSrc->rbegin(), pathToSrc->rend());
+  pathFromSrcToCompanion.append(pathToCompanion->begin(),
+                                pathToCompanion->end());
+  return success();
+}
+
+/// Add a RefType cross-module connection from the `refSendTarget` to the
+/// `companionTarget`, via the `parentModule`. Add the RefSendOp and the
+/// corresponding RefResolveOps for the RefType connection. Return the name for
+/// the NodeOp, that captures the result of the RefResolveOp. The assumption is
+/// that `parentModule` is the least common ancestor between `refSendTarget` and
+/// `companionModule`.
+static StringAttr borePortsFromViewToCompanion(AnnoPathValue &refSendTarget,
+                                               FModuleOp parentModule,
+                                               ApplyState &state,
+                                               AnnoPathValue &companionTarget,
+                                               StringAttr viewName) {
+  if (isa<FExtModuleOp>(refSendTarget.ref.getOp())) {
+    refSendTarget.ref.getOp()->emitError(
+        "RefType source cannot be an extern module port, it must be moved to "
+        "the instance of the extern module");
+    return {};
+  }
+
+  auto refSendModule = cast<FModuleOp>(refSendTarget.ref.getModule());
+  // The value that must be the argument to the RefSendOp. This can either be a
+  // module port or the result of any namable operation.
+  Value refSendBase;
+  if (refSendTarget.ref.getImpl().isOp())
+    refSendBase = refSendTarget.ref.getImpl().getOp()->getResult(0);
+  // Note: This assumes that only the result 0 of the op must be connected.
+  // There is no mechanism currently to handle multiple result operations.
+  else if (refSendTarget.ref.getImpl().isPort())
+    refSendBase =
+        refSendModule.getArgument(refSendTarget.ref.getImpl().getPortNo());
+  auto refSendBuilder = ImplicitLocOpBuilder::atBlockEnd(
+      refSendModule.getLoc(), refSendModule.getBodyBlock());
+  // If it is an aggregate, and only a subfield is required, then insert the
+  // appropriate number of Subfield and SubIndex to get the subfield value.
+  refSendBase =
+      getValueByFieldID(refSendBuilder, refSendBase, refSendTarget.fieldIdx);
+  // Create the refSend, a remote XMR to read `refSendBase`.
+  // Note: No DontTouch added, so constant-prop and cse are allowed.
+  auto sendVal = refSendBuilder.create<RefSendOp>(refSendBase);
+  FModuleOp lcaModule = parentModule;
+  SmallVector<InstanceOp> pathFromSrcToCompanion;
+  // Compute the path and set `pathFromSrcToCompanion`.
+  if (computeRefPortsPathViaLCA(refSendTarget, companionTarget,
+                                pathFromSrcToCompanion, lcaModule, state)
+          .failed())
+    return {};
+  // Now drill ports to connect the `sendVal` to the `wireTarget`.
+  auto remoteXMR = borePortsOnPath(
+      pathFromSrcToCompanion, lcaModule, sendVal, viewName.getValue(),
+      state.instancePathCache,
+      [&](FModuleLike mod) -> ModuleNamespace & {
+        return state.getNamespace(mod);
+      },
+      &state.targetCaches);
+  // Create the RefResolveOp in the companion.
+  FModuleOp companionModule = cast<FModuleOp>(companionTarget.ref.getOp());
+  auto compBuilder = ImplicitLocOpBuilder::atBlockEnd(
+      companionModule.getLoc(), companionModule.getBodyBlock());
+  auto refResolve = compBuilder.create<RefResolveOp>(remoteXMR);
+  auto newName = [&](FModuleOp nameForMod) {
+    return StringAttr::get(
+        state.circuit.getContext(),
+        state.getNamespace(nameForMod)
+            .newName("view_" + viewName.getValue() + "refPort"));
+  };
+
+  auto node = compBuilder.create<NodeOp>(refResolve.getResult().getType(),
+                                         refResolve, newName(companionModule));
+  node.dropName();
+  state.targetCaches.insertOp(node);
+  // This node must be preserved till the GrandCentral pass.
+  AnnotationSet::addDontTouch(node);
+  return node.getNameAttr();
+}
+
 /// Recursively walk a sifive.enterprise.grandcentral.AugmentedType to extract
 /// any annotations it may contain.  This is going to generate two types of
 /// annotations:
 ///   1) Annotations necessary to build interfaces and store them at "~"
 ///   2) Scattered annotations for how components bind to interfaces
-static Optional<DictionaryAttr>
-parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
-                   DictionaryAttr root, StringRef companion, StringAttr name,
-                   StringAttr defName, Optional<IntegerAttr> id,
-                   Optional<StringAttr>(description), Twine clazz,
-                   Twine path = {}) {
+static Optional<DictionaryAttr> parseAugmentedType(
+    ApplyState &state, DictionaryAttr augmentedType, DictionaryAttr root,
+    StringRef companion, StringAttr name, StringAttr defName,
+    Optional<IntegerAttr> id, Optional<StringAttr> description, Twine clazz,
+    FModuleOp parentModule, StringAttr companionAttr, Twine path = {}) {
 
   auto *context = state.circuit.getContext();
   auto loc = state.circuit.getLoc();
@@ -905,9 +1055,9 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
       Optional<StringAttr> description = None;
       if (auto maybeDescription = field.get("description"))
         description = maybeDescription.cast<StringAttr>();
-      auto eltAttr =
-          parseAugmentedType(state, tpe, root, companion, name, defName, None,
-                             description, clazz, path);
+      auto eltAttr = parseAugmentedType(state, tpe, root, companion, name,
+                                        defName, None, description, clazz,
+                                        parentModule, companionAttr, path);
       if (!name || !tpe || !eltAttr)
         return None;
 
@@ -951,9 +1101,6 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
 
     auto id = state.newID();
 
-    // TODO: We don't support non-local annotations, so force this annotation
-    // into a local annotation.  This does not properly check that the
-    // non-local and local targets are totally equivalent.
     auto target = *maybeTarget;
 
     NamedAttrList elementIface, elementScattered;
@@ -969,7 +1116,71 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
     elementScattered.append("id", id);
     // If there are sub-targets, then add these.
     auto targetAttr = StringAttr::get(context, target);
-    elementScattered.append("target", targetAttr);
+    auto xmrSrcTarget = resolvePath(targetAttr.getValue(), state.circuit,
+                                    state.symTbl, state.targetCaches);
+    if (!xmrSrcTarget) {
+      mlir::emitError(loc, "Failed to resolve target ") << targetAttr;
+      return None;
+    }
+    if (auto extMod = dyn_cast<FExtModuleOp>(xmrSrcTarget->ref.getOp())) {
+      // Move the target to the InstanceOp for the extern module.
+      auto portNo = xmrSrcTarget->ref.getImpl().getPortNo();
+      if (xmrSrcTarget->instances.empty()) {
+        auto paths =
+            state.instancePathCache.getAbsolutePaths(xmrSrcTarget->ref.getOp());
+        if (paths.size() > 1) {
+          extMod.emitError("cannot resolve a unique instance path from the "
+                           "external module '")
+              << targetAttr << "'";
+          return None;
+        }
+        xmrSrcTarget->instances.insert(xmrSrcTarget->instances.begin(),
+                                       paths.back().begin(),
+                                       paths.back().end());
+      }
+      auto lastInst = xmrSrcTarget->instances.pop_back_val();
+      auto builder = ImplicitLocOpBuilder::atBlockEnd(lastInst.getLoc(),
+                                                      lastInst->getBlock());
+      builder.setInsertionPointAfter(lastInst);
+      auto node = builder.create<NodeOp>(lastInst.getType(portNo),
+                                         lastInst.getResult(portNo));
+      AnnotationSet::addDontTouch(node);
+      // Move the anno target to a node that captures the corresponding port of
+      // the instance op for the extern module.
+      xmrSrcTarget->ref = OpAnnoTarget(node);
+    }
+    auto companionTarget = resolvePath(companionAttr.getValue(), state.circuit,
+                                       state.symTbl, state.targetCaches);
+    if (xmrSrcTarget->ref.getModule() !=
+        cast<FModuleOp>(companionTarget->ref.getOp())) {
+      // Get the name of the node op that reads the remote value from
+      // xmrSrcTarget. This adds the refsend, drills the ports and adds the ref
+      // resolve and then reads the output from resolve into a node. Note: The
+      // remote signal to which the XMR is being generated, does not contain any
+      // DontTouch. Which implies the remote signal can be optimized away, but
+      // the XMR should still point to a legal value or a constant after the
+      // optimization.
+      auto resolveTargetName = borePortsFromViewToCompanion(
+          *xmrSrcTarget, parentModule, state, *companionTarget, name);
+      if (!resolveTargetName) {
+        (mlir::emitError(loc, "Failed to resolve target, cannot find unique "
+                              "path from parent module `")
+         << parentModule.getName() << "` to target `" << targetAttr.getValue()
+         << "`")
+                .attachNote()
+            << "See the full Annotation here: " << root;
+        ;
+        return None;
+      }
+      // Now the view target can be added to the local node created inside the
+      // companion. Add the annotation. This essentially moves the annotation
+      // from the remote XMR signal to a local wire, which in-turn reads the
+      // XMR.
+      elementScattered.append(
+          "target", StringAttr::get(context, companion + ">" +
+                                                 resolveTargetName.getValue()));
+    } else
+      elementScattered.append("target", targetAttr);
 
     state.addToWorklistFn(
         DictionaryAttr::getWithSorted(context, elementScattered));
@@ -986,9 +1197,10 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
       return None;
     SmallVector<Attribute> elements;
     for (auto elt : elementsAttr) {
-      auto eltAttr = parseAugmentedType(
-          state, elt.cast<DictionaryAttr>(), root, companion, name,
-          StringAttr::get(context, ""), id, None, clazz, path);
+      auto eltAttr =
+          parseAugmentedType(state, elt.cast<DictionaryAttr>(), root, companion,
+                             name, StringAttr::get(context, ""), id, None,
+                             clazz, parentModule, companionAttr, path);
       if (!eltAttr)
         return None;
       elements.push_back(*eltAttr);
@@ -1054,16 +1266,18 @@ LogicalResult circt::firrtl::applyGCTView(const AnnoPathValue &target,
       tryGetAs<StringAttr>(anno, anno, "parent", loc, viewAnnoClass);
   if (!parentAttr)
     return failure();
+  auto parentTarget = resolvePath(parentAttr.getValue(), state.circuit,
+                                  state.symTbl, state.targetCaches);
   parentAttrs.append("class", StringAttr::get(context, parentAnnoClass));
   parentAttrs.append("id", id);
   parentAttrs.append("name", name);
   parentAttrs.append("target", parentAttr);
   parentAttrs.append("type", StringAttr::get(context, "parent"));
   state.addToWorklistFn(DictionaryAttr::get(context, parentAttrs));
-
-  auto prunedAttr =
-      parseAugmentedType(state, viewAttr, anno, companionAttr.getValue(), name,
-                         {}, id, {}, viewAnnoClass, "view");
+  auto prunedAttr = parseAugmentedType(
+      state, viewAttr, anno, companionAttr.getValue(), name, {}, id, {},
+      viewAnnoClass, cast<FModuleOp>(parentTarget->ref.getOp()), companionAttr,
+      "view");
   if (!prunedAttr)
     return failure();
 
@@ -1240,7 +1454,7 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
         // This case can only occur if ref.resolve is not introduced during
         // LowerAnnotations.
         //
-        // There are two posisibilites for what this is tapping:
+        // There are two possibilities for what this is tapping:
         //   1. This is a constant that will be synced into the mappings file.
         //   2. This is something else and we need an XMR.
         // Handle case (1) here and exit.  Handle case (2) following.
