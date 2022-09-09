@@ -7,38 +7,36 @@
 // RUN:   --handshake-materialize-forks-sinks --canonicalize \
 // RUN:   --handshake-insert-buffers=strategy=all --lower-handshake-to-firrtl | \
 // RUN: firtool --format=mlir --verilog --lowering-options=disallowLocalVariables > %t.sv && \
-// RUN: %PYTHON% %S/../cocotb_driver.py --objdir=%T --topLevel=top --pythonModule=tuple_packing --pythonFolder=%S %t.sv 2>&1 | FileCheck %s
+// RUN: %PYTHON% %S/../cocotb_driver.py --objdir=%T --topLevel=top --pythonModule=buffer_initial_values --pythonFolder=%S %t.sv 2>&1 | FileCheck %s
 
 // RUN: circt-opt %s \
 // RUN:   --canonicalize='top-down=true region-simplify=true' \
 // RUN:   --handshake-materialize-forks-sinks --canonicalize \
 // RUN:   --handshake-insert-buffers=strategy=allFIFO --lower-handshake-to-firrtl | \
 // RUN: firtool --format=mlir --verilog --lowering-options=disallowLocalVariables > %t.sv && \
-// RUN: %PYTHON% %S/../cocotb_driver.py --objdir=%T --topLevel=top --pythonModule=tuple_packing --pythonFolder=%S %t.sv 2>&1 | FileCheck %s
+// RUN: %PYTHON% %S/../cocotb_driver.py --objdir=%T --topLevel=top --pythonModule=buffer_initial_values --pythonFolder=%S %t.sv 2>&1 | FileCheck %s
 
 // RUN: circt-opt %s \
 // RUN:   --canonicalize='top-down=true region-simplify=true' \
 // RUN:   --handshake-materialize-forks-sinks --canonicalize \
 // RUN:   --handshake-insert-buffers=strategy=cycles --lower-handshake-to-firrtl | \
 // RUN: firtool --format=mlir --verilog --lowering-options=disallowLocalVariables > %t.sv && \
-// RUN: %PYTHON% %S/../cocotb_driver.py --objdir=%T --topLevel=top --pythonModule=tuple_packing --pythonFolder=%S %t.sv 2>&1 | FileCheck %s
+// RUN: %PYTHON% %S/../cocotb_driver.py --objdir=%T --topLevel=top --pythonModule=buffer_initial_values --pythonFolder=%S %t.sv 2>&1 | FileCheck %s
 
 // CHECK: ** TEST
 // CHECK: ** TESTS=[[N:.*]] PASS=[[N]] FAIL=0 SKIP=0
 
 module {
-  handshake.func @top(%arg0: none, ...) -> (i32, none) attributes {argNames = ["inCtrl"], resNames = ["out0", "outCtrl"]} {
-    %0:4 = fork [4] %arg0 : none
-    %const0 = constant %0#0 {value = 123 : i32} : i32
-    %const1 = constant %0#1 {value = 456 : i32} : i32
-    %const2 = constant %0#2 {value = 0 : i32} : i32
+  handshake.func @top(%arg0: none) -> (i32, none) attributes {argNames = ["inCtrl"], resNames = ["out0", "outCtrl"]} {
+    %d = buffer [2] seq %dTrue {initValues = [20, 10]} : i32
+    %ctrl = merge %arg0, %cTrue : none
 
-    %tuple = handshake.pack %const0, %const1, %const2 : tuple<i32, i32, i32>
-    %res:3 = handshake.unpack %tuple : tuple<i32, i32, i32>
+    %6 = constant %ctrl {value = 10 : i32} : i32
+    %cond = arith.cmpi ne, %d, %6 : i32
 
-    %sum = arith.addi %res#0, %res#1 : i32
-    sink %res#2 : i32
+    %dTrue, %dFalse = cond_br %cond, %d : i32
+    %cTrue, %cFalse = cond_br %cond, %ctrl : none
 
-    return %sum, %0#3 : i32, none
+    return %dFalse, %cFalse : i32, none
   }
 }
