@@ -1575,3 +1575,36 @@ firrtl.circuit "NoInterfaces" attributes {
 // CHECK-LABEL: module {
 // CHECK:         sv.verbatim
 // CHECK-SAME:      []
+
+// -----
+
+firrtl.circuit "Top"  attributes {annotations = [{class = "sifive.enterprise.grandcentral.AugmentedBundleType", defName = "MyInterface", elements = [{class = "sifive.enterprise.grandcentral.AugmentedGroundType", description = "a wire called 'uint'", id = 1 : i64, name = "uint"}, {class = "sifive.enterprise.grandcentral.AugmentedVectorType", description = "a vector called 'vec'", elements = [{class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 2 : i64, name = "vec"}, {class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 3 : i64, name = "vec"}], name = "vec"}, {class = "sifive.enterprise.grandcentral.AugmentedGroundType", description = "a wire called 'uint'", id = 4 : i64, name = "old"}], id = 0 : i64, name = "MyView"}]} {
+  firrtl.extmodule private @Tap(out clock: !firrtl.clock, out a: !firrtl.uint<1>, in b: !firrtl.uint<1>)
+  // CHECK-LABEL: firrtl.module private @MyView_companion
+  firrtl.module private @MyView_companion(in %_gen_uint: !firrtl.ref<uint<1>>, in %_gen_vec: !firrtl.ref<uint<1>>, in %_gen_vec_0: !firrtl.ref<uint<1>>) attributes {annotations = [{class = "sifive.enterprise.grandcentral.ViewAnnotation.companion", id = 0 : i64, name = "MyView", type = "companion"}]} {
+    %0 = firrtl.ref.resolve %_gen_uint : !firrtl.ref<uint<1>>
+    %view_uintrefPort = firrtl.node  %0  {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}, {class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 1 : i64}]} : !firrtl.uint<1>
+    %1 = firrtl.ref.resolve %_gen_vec : !firrtl.ref<uint<1>>
+    %view_vecrefPort = firrtl.node  %1  {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}, {class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 2 : i64}]} : !firrtl.uint<1>
+    %2 = firrtl.ref.resolve %_gen_vec_0 : !firrtl.ref<uint<1>>
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %view_vecrefPort_0 = firrtl.node  %c1_ui1  {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}, {class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 3 : i64}]} : !firrtl.uint<1>
+    %b = firrtl.wire: !firrtl.uint<1>
+    %v1 = firrtl.node sym @v1 %b  {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}, {class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 4 : i64}]} : !firrtl.uint<1>
+    // CHECK:  %0 = sv.interface.instance sym @__MyView_MyInterface__  {name = "MyView"} : !sv.interface<@MyInterface>
+    // CHECK: %view_uintrefPort = firrtl.node %1  : !firrtl.uint<1>
+    // CHECK: %view_vecrefPort = firrtl.node %2  : !firrtl.uint<1>
+    // CHECK: %view_vecrefPort_0 = firrtl.node %c1_ui1 : !firrtl.uint<1>
+    // CHECK{LITERAL}: sv.verbatim "assign {{1}}.uint = {{0}};"(%1) : !firrtl.uint<1> {symbols = [#hw.innerNameRef<@MyView_companion::@__MyView_MyInterface__>]}
+    // CHECK{LITERAL}: sv.verbatim "assign {{1}}.vec[0] = {{0}};"(%2) : !firrtl.uint<1> {symbols = [#hw.innerNameRef<@MyView_companion::@__MyView_MyInterface__>]}
+    // CHECK{LITERAL}: sv.verbatim "assign {{1}}.vec[1] = {{0}};"(%c1_ui1) : !firrtl.uint<1> {symbols = [#hw.innerNameRef<@MyView_companion::@__MyView_MyInterface__>]}
+    // CHECK{LITERAL}: sv.verbatim "assign {{0}}.old = {{1}}.{{2}}.{{3}};" {symbols = [#hw.innerNameRef<@MyView_companion::@__MyView_MyInterface__>, @DUT, #hw.innerNameRef<@DUT::@MyView_companion>, #hw.innerNameRef<@MyView_companion::@v1>]}
+  }
+  firrtl.module private @DUT(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %in_uint: !firrtl.uint<1>, in %in_vec_0: !firrtl.uint<1>, in %in_vec_1: !firrtl.uint<1>, out %out_uint: !firrtl.uint<1>, out %out_vec_0: !firrtl.uint<1>, out %out_vec_1: !firrtl.uint<1>) attributes {annotations = [{class = "sifive.enterprise.grandcentral.ViewAnnotation.parent", id = 0 : i64, name = "MyView", type = "parent"}]} {
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %MyView_companion__gen_uint, %MyView_companion__gen_vec, %MyView_companion__gen_vec_0 = firrtl.instance MyView_companion  @MyView_companion(in _gen_uint: !firrtl.ref<uint<1>>, in _gen_vec: !firrtl.ref<uint<1>>, in _gen_vec_0: !firrtl.ref<uint<1>>)
+  }
+  firrtl.module @Top(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %in_uint: !firrtl.uint<1>, in %in_vec_0: !firrtl.uint<1>, in %in_vec_1: !firrtl.uint<1>, out %out_uint: !firrtl.uint<1>, out %out_vec_0: !firrtl.uint<1>, out %out_vec_1: !firrtl.uint<1>) {
+    %dut_clock, %dut_reset, %dut_in_uint, %dut_in_vec_0, %dut_in_vec_1, %dut_out_uint, %dut_out_vec_0, %dut_out_vec_1 = firrtl.instance dut  @DUT(in clock: !firrtl.clock, in reset: !firrtl.uint<1>, in in_uint: !firrtl.uint<1>, in in_vec_0: !firrtl.uint<1>, in in_vec_1: !firrtl.uint<1>, out out_uint: !firrtl.uint<1>, out out_vec_0: !firrtl.uint<1>, out out_vec_1: !firrtl.uint<1>)
+  }
+}
