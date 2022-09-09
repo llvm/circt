@@ -25,8 +25,6 @@
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "llvm/ADT/StringExtras.h"
 
-#include <map>
-
 namespace circt {
 namespace hw {
 
@@ -199,24 +197,20 @@ public:
                        Region &bodyRegion);
 
   // Returns the i'th/named input port of the module.
-  Value getInput(unsigned i) { return inputArgs.find(i)->second; }
-  Value getInput(StringRef name) {
-    return getInput(inputIdx.find(name.str())->second);
-  }
+  Value getInput(unsigned i);
+  Value getInput(StringRef name);
+
   // Assigns the i'th/named output port of the module.
   void setOutput(unsigned i, Value v);
-  void setOutput(StringRef name, Value v) {
-    setOutput(outputIdx.find(name.str())->second, v);
-  }
-
-  const DenseMap<unsigned, Value> &getOutputOperands() const {
+  void setOutput(StringRef name, Value v);
+  const llvm::SmallVector<Value> &getOutputOperands() const {
     return outputOperands;
   }
 
 private:
-  std::map<std::string, unsigned> inputIdx, outputIdx;
-  DenseMap<unsigned, Value> inputArgs;
-  DenseMap<unsigned, Value> outputOperands;
+  llvm::StringMap<unsigned> inputIdx, outputIdx;
+  llvm::SmallVector<Value> inputArgs;
+  llvm::SmallVector<Value> outputOperands;
 };
 
 using HWModuleBuilder =

@@ -89,7 +89,6 @@ public:
   explicit operator bool() const { return !!value; }
   operator mlir::Value() const { return value; }
   void setValue(mlir::Value);
-  bool isSet() { return set; }
 
 private:
   mlir::Value value;
