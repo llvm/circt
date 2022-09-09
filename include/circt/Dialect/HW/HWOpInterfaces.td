@@ -129,6 +129,11 @@ def HWInstanceLike : OpInterface<"HWInstanceLike"> {
     /*methodBody=*/[{}],
     /*defaultImplementation=*/[{ return $_op.getInstanceName(); }]>,
 
+    InterfaceMethod<"Get the name of the instance",
+    "::mlir::StringAttr", "instanceNameAttr", (ins),
+    /*methodBody=*/[{}],
+    /*defaultImplementation=*/[{ return $_op.getInstanceNameAttr(); }]>,
+
     InterfaceMethod<"Get the name of the instantiated module",
     "::llvm::StringRef", "referencedModuleName", (ins),
     /*methodBody=*/[{}],

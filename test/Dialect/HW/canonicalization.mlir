@@ -1467,3 +1467,11 @@ hw.module @SliceOfCreate(%a0: i1, %a1: i1, %a2: i1, %a3: i1) -> (out: !hw.array<
 
   hw.output %slice : !hw.array<2xi1>
 }
+
+// CHECK-LABEL: hw.module @GetOfUniformArray
+hw.module @GetOfUniformArray(%in: i42, %address: i2) -> (out: i42) {
+  // CHECK: hw.output %in : i42
+  %0 = hw.array_create %in, %in, %in, %in : i42
+  %1 = hw.array_get %0[%address] : !hw.array<4xi42>
+  hw.output %1 : i42
+}

@@ -8,8 +8,8 @@ firrtl.circuit "Top" attributes {annotations = [{
     finalPath = {info = #loc, index = 1, value = {omir.tracker, id = 0, type = "OMMemberReferenceTarget"}}
   }}]
 }]} {
-  firrtl.extmodule @MySRAM()
-  firrtl.module @Submodule() {
+  firrtl.extmodule private @MySRAM()
+  firrtl.module private @Submodule() {
     // expected-error @+1 {{OMIR node targets uninstantiated component `mem`}}
     firrtl.instance mem {annotations = [{class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 0}]} @MySRAM()
   }
@@ -26,8 +26,8 @@ firrtl.circuit "Top" attributes {annotations = [{
     finalPath = {info = #loc, index = 1, value = {omir.tracker, id = 0, type = "OMMemberReferenceTarget"}}
   }}]
 }]} {
-  firrtl.extmodule @MySRAM()
-  firrtl.module @Submodule() {
+  firrtl.extmodule private @MySRAM()
+  firrtl.module private @Submodule() {
     // expected-error @+4 {{OMIR node targets ambiguous component `mem`}}
     // expected-note @+3 {{may refer to the following paths:}}
     // expected-note @+2 {{- $root/sub1:Submodule}}

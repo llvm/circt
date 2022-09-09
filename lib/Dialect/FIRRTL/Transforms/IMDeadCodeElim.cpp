@@ -11,6 +11,7 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
+#include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/TinyPtrVector.h"
 #include "llvm/Support/Debug.h"
@@ -370,8 +371,8 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
       instanceGraph->lookup(module.moduleNameAttr());
   LLVM_DEBUG(llvm::dbgs() << "Prune ports of module: " << module.getName()
                           << "\n");
-  SmallVector<unsigned> deadPortIndexes;
   unsigned numOldPorts = module.getNumPorts();
+  llvm::BitVector deadPortIndexes(numOldPorts);
 
   ImplicitLocOpBuilder builder(module.getLoc(), module.getContext());
   builder.setInsertionPointToStart(module.getBodyBlock());
@@ -408,7 +409,7 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
       liveSet.erase(argument);
       liveSet.insert(wire);
       argument.replaceAllUsesWith(wire);
-      deadPortIndexes.push_back(index);
+      deadPortIndexes.set(index);
       continue;
     }
 
@@ -417,11 +418,11 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
     WireOp wire = builder.create<WireOp>(argument.getType());
     argument.replaceAllUsesWith(wire);
     assert(isAssumedDead(wire) && "dummy wire must be dead");
-    deadPortIndexes.push_back(index);
+    deadPortIndexes.set(index);
   }
 
   // If there is nothing to remove, abort.
-  if (deadPortIndexes.empty())
+  if (deadPortIndexes.none())
     return;
 
   // Erase arguments of the old module from liveSet to prevent from creating
@@ -446,7 +447,7 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
       liveSet.erase(oldResult);
 
     // Replace old instance results with dummy wires.
-    for (auto index : deadPortIndexes) {
+    for (auto index : deadPortIndexes.set_bits()) {
       auto result = instance.getResult(index);
       assert(isAssumedDead(result) &&
              "instance results of dead ports must be dead");
@@ -466,7 +467,7 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
     instance.erase();
   }
 
-  numRemovedPorts += deadPortIndexes.size();
+  numRemovedPorts += deadPortIndexes.count();
 }
 
 void IMDeadCodeElimPass::eraseEmptyModule(FModuleOp module) {

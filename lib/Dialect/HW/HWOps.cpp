@@ -178,6 +178,38 @@ StringAttr hw::getResultSym(Operation *op, unsigned i) {
   return sym;
 }
 
+HWModulePortAccessor::HWModulePortAccessor(Location loc,
+                                           const ModulePortInfo &info,
+                                           Region &bodyRegion) {
+  inputArgs.resize(info.inputs.size());
+  for (auto [i, barg] : llvm::enumerate(bodyRegion.getArguments())) {
+    inputIdx[info.inputs[i].name.str()] = i;
+    inputArgs[i] = barg;
+  }
+
+  outputOperands.resize(info.outputs.size());
+  for (auto [i, outputInfo] : llvm::enumerate(info.outputs)) {
+    outputIdx[outputInfo.name.str()] = i;
+  }
+}
+
+void HWModulePortAccessor::setOutput(unsigned i, Value v) {
+  assert(outputOperands.size() > i && "invalid output index");
+  assert(outputOperands[i] == Value() && "output already set");
+  outputOperands[i] = v;
+}
+
+Value HWModulePortAccessor::getInput(unsigned i) {
+  assert(inputArgs.size() > i && "invalid input index");
+  return inputArgs[i];
+}
+Value HWModulePortAccessor::getInput(StringRef name) {
+  return getInput(inputIdx.find(name.str())->second);
+}
+void HWModulePortAccessor::setOutput(StringRef name, Value v) {
+  setOutput(outputIdx.find(name.str())->second, v);
+}
+
 //===----------------------------------------------------------------------===//
 // ConstantOp
 //===----------------------------------------------------------------------===//
@@ -574,6 +606,23 @@ void HWModuleOp::build(OpBuilder &builder, OperationState &result,
                        StringAttr comment) {
   build(builder, result, name, ModulePortInfo(ports), parameters, attributes,
         comment);
+}
+
+void HWModuleOp::build(OpBuilder &builder, OperationState &odsState,
+                       StringAttr name, const ModulePortInfo &ports,
+                       HWModuleBuilder modBuilder, ArrayAttr parameters,
+                       ArrayRef<NamedAttribute> attributes,
+                       StringAttr comment) {
+  build(builder, odsState, name, ports, parameters, attributes, comment);
+  auto *bodyRegion = odsState.regions[0].get();
+  OpBuilder::InsertionGuard guard(builder);
+  auto accessor = HWModulePortAccessor(odsState.location, ports, *bodyRegion);
+  builder.setInsertionPoint(bodyRegion->front().getTerminator());
+  modBuilder(builder, accessor);
+  // Replace output operands.
+  auto outputOp = cast<hw::OutputOp>(bodyRegion->front().getTerminator());
+  builder.create<hw::OutputOp>(outputOp.getLoc(), accessor.getOutputOperands());
+  outputOp.erase();
 }
 
 void HWModuleOp::modifyPorts(
@@ -1665,6 +1714,12 @@ LogicalResult ArrayCreateOp::verify() {
   return success();
 }
 
+Value ArrayCreateOp::getUniformElement() {
+  if (!getInputs().empty() && llvm::all_equal(getInputs()))
+    return getInputs()[0];
+  return {};
+}
+
 static Optional<uint64_t> getUIntFromValue(Value value) {
   auto idxOp = dyn_cast_or_null<ConstantOp>(value.getDefiningOp());
   if (!idxOp)
@@ -2242,12 +2297,17 @@ void ArrayGetOp::build(OpBuilder &builder, OperationState &result, Value input,
 }
 
 // An array_get of an array_create with a constant index can just be the
-// array_create operand at the constant index.
+// array_create operand at the constant index. If the array_create has a single
+// uniform value for each element, just return that value regardless of the
+// index.
 OpFoldResult ArrayGetOp::fold(ArrayRef<Attribute> operands) {
   auto inputCreate =
       dyn_cast_or_null<ArrayCreateOp>(getInput().getDefiningOp());
   if (!inputCreate)
     return {};
+
+  if (auto uniformValue = inputCreate.getUniformElement())
+    return uniformValue;
 
   IntegerAttr constIdx = operands[1].dyn_cast_or_null<IntegerAttr>();
   if (!constIdx || constIdx.getValue().getBitWidth() > 64)

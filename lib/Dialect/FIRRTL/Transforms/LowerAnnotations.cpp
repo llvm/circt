@@ -18,6 +18,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotationHelper.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
+#include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
@@ -489,7 +490,8 @@ void LowerAnnotationsPass::runOnOperation() {
     ++numAdded;
     worklistAttrs.push_back(anno);
   };
-  ApplyState state{circuit, modules, addToWorklist};
+  InstancePathCache instancePathCache(getAnalysis<InstanceGraph>());
+  ApplyState state{circuit, modules, addToWorklist, instancePathCache};
   LLVM_DEBUG(llvm::dbgs() << "Processing annotations:\n");
   while (!worklistAttrs.empty()) {
     auto attr = worklistAttrs.pop_back_val();

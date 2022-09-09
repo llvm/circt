@@ -3412,20 +3412,24 @@ LogicalResult FIRRTLLowering::visitExpr(MultibitMuxOp op) {
   // following form.
   //
   // wire GEN;
-  // assign GEN = array[index] /* cadence map_to_mux */;
   // /* synopsys infer_mux_override */
+  // assign GEN = array[index] /* cadence map_to_mux */;
 
   Value array = builder.create<hw::ArrayCreateOp>(loweredInputs);
   auto valWire = builder.create<sv::WireOp>(lowerType(op.getType()));
   auto arrayGet = builder.create<hw::ArrayGetOp>(array, index);
 
-  // FIXME: We currently use verbatim op to add pragams. Use comment attributes
-  // once they are supported.
-  builder.create<sv::VerbatimOp>(
-      arrayGet.getLoc(),
-      builder.getStringAttr("assign {{0}} = {{1}} /* cadence map_to_mux */; /* "
-                            "synopsys infer_mux_override */"),
-      ValueRange{valWire, arrayGet}, builder.getArrayAttr({}));
+  // Use SV attributes to annotate pragmas.
+  circt::sv::setSVAttributes(
+      arrayGet,
+      sv::SVAttributesAttr::get(builder.getContext(), {"cadence map_to_mux"},
+                                /*emitAsComments=*/true));
+
+  auto assignOp = builder.create<sv::AssignOp>(valWire, arrayGet);
+  sv::setSVAttributes(assignOp,
+                      sv::SVAttributesAttr::get(builder.getContext(),
+                                                {"synopsys infer_mux_override"},
+                                                /*emitAsComments=*/true));
 
   Value inBoundsRead = builder.create<sv::ReadInOutOp>(valWire);
 
