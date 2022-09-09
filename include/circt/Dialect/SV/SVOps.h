@@ -34,6 +34,9 @@ namespace sv {
 /// Return true if the specified operation is an expression.
 bool isExpression(Operation *op);
 
+/// Returns if the expression is known to be 2-state (binary)
+bool is2StateExpression(Value v);
+
 //===----------------------------------------------------------------------===//
 // CaseOp Support
 //===----------------------------------------------------------------------===//

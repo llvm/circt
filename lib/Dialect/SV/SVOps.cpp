@@ -28,6 +28,21 @@ using namespace circt;
 using namespace sv;
 using mlir::TypedAttr;
 
+/// Return true if the specified expression is 2-state.  This is determined by
+/// looking at the defining op.  This can look as far through the dataflow as it
+/// wants, but for now, it is just looking at the single value.
+bool sv::is2StateExpression(Value v) {
+  if (auto *op = v.getDefiningOp()) {
+    llvm::errs() << "\n**\n";
+    op->dump();
+    llvm::errs() << "\n**\n";
+    if (auto attr = op->getAttrOfType<UnitAttr>("twoState"))
+      return (bool)attr;
+  }
+  // Plain constants are obviously safe
+  return v.getDefiningOp<hw::ConstantOp>();
+}
+
 /// Return true if the specified operation is an expression.
 bool sv::isExpression(Operation *op) {
   return isa<VerbatimExprOp, VerbatimExprSEOp, GetModportOp,
@@ -378,6 +393,7 @@ void IfDefProceduralOp::build(OpBuilder &builder, OperationState &result,
   build(builder, result, MacroIdentAttr::get(builder.getContext(), cond),
         std::move(thenCtor), std::move(elseCtor));
 }
+
 void IfDefProceduralOp::build(OpBuilder &builder, OperationState &result,
                               MacroIdentAttr cond,
                               std::function<void()> thenCtor,
@@ -415,7 +431,7 @@ void IfOp::build(OpBuilder &builder, OperationState &result, Value cond,
   result.addOperands(cond);
   builder.createBlock(result.addRegion());
 
-  // Fill in the body of the #ifdef.
+  // Fill in the body of the if.
   if (thenCtor)
     thenCtor();
 
@@ -466,17 +482,21 @@ LogicalResult IfOp::canonicalize(IfOp op, PatternRewriter &rewriter) {
   }
 
   // Otherwise, invert the condition and move the 'else' block to the 'then'
-  // region.
-  auto cond = comb::createOrFoldNot(op.getLoc(), op.getCond(), rewriter);
-  op.setOperand(cond);
+  // region if the condition is a 2-state operation.  This changes x prop
+  // behavior so it needs to be guarded.
+  if (is2StateExpression(op.getCond())) {
+    auto cond = comb::createOrFoldNot(op.getLoc(), op.getCond(), rewriter);
+    op.setOperand(cond);
 
-  auto *thenBlock = op.getThenBlock(), *elseBlock = op.getElseBlock();
+    auto *thenBlock = op.getThenBlock(), *elseBlock = op.getElseBlock();
 
-  // Move the body of the then block over to the else.
-  thenBlock->getOperations().splice(thenBlock->end(),
-                                    elseBlock->getOperations());
-  rewriter.eraseBlock(elseBlock);
-  return success();
+    // Move the body of the then block over to the else.
+    thenBlock->getOperations().splice(thenBlock->end(),
+                                      elseBlock->getOperations());
+    rewriter.eraseBlock(elseBlock);
+    return success();
+  }
+  return failure();
 }
 
 //===----------------------------------------------------------------------===//
