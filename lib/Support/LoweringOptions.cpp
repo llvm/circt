@@ -202,7 +202,8 @@ struct LoweringCLOptions {
           "maximumNumberOfVariadicOperands=<n>, "
           "emitReplicatedOpsToHeader, "
           "locationInfoStyle={plain,wrapInAtSquareBracket,none}, "
-          "disallowPortDeclSharing, printDebugInfo"),
+          "disallowPortDeclSharing, printDebugInfo, useOldEmissionMode, "
+          "disallowExpressionInliningInPorts"),
       llvm::cl::value_desc("option")};
 };
 } // namespace
