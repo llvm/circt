@@ -182,7 +182,7 @@ LogicalResult ReplicateOp::verify() {
   // The source must be equal or smaller than the dest type, and an even
   // multiple of it.  Both are already known to be signless integers.
   auto srcWidth = getOperand().getType().cast<IntegerType>().getWidth();
-  auto dstWidth = getType().getWidth();
+  auto dstWidth = getType().cast<IntegerType>().getWidth();
   if (srcWidth == 0)
     return emitOpError("replicate does not take zero bit integer");
 
@@ -241,7 +241,7 @@ static unsigned getTotalWidth(ValueRange inputs) {
 }
 
 LogicalResult ConcatOp::verify() {
-  unsigned tyWidth = getType().getWidth();
+  unsigned tyWidth = getType().cast<IntegerType>().getWidth();
   unsigned operandsTotalWidth = getTotalWidth(getInputs());
   if (tyWidth != operandsTotalWidth)
     return emitOpError("ConcatOp requires operands total width to "
@@ -277,7 +277,7 @@ LogicalResult ConcatOp::inferReturnTypes(MLIRContext *context,
 
 LogicalResult ExtractOp::verify() {
   unsigned srcWidth = getInput().getType().cast<IntegerType>().getWidth();
-  unsigned dstWidth = getType().getWidth();
+  unsigned dstWidth = getType().cast<IntegerType>().getWidth();
   if (getLowBit() >= srcWidth || srcWidth - getLowBit() < dstWidth)
     return emitOpError("from bit too large for input"), failure();
 

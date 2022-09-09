@@ -279,7 +279,7 @@ def ReplicateOp : CombOp<"replicate", [NoSideEffect]> {
     /// Returns the number of times the operand is replicated.
     size_t getMultiple() {
       auto opWidth = getInput().getType().cast<IntegerType>().getWidth();
-      return getType().getWidth()/opWidth;
+      return getType().cast<IntegerType>().getWidth()/opWidth;
     }
   }];
 }
