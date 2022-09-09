@@ -127,9 +127,9 @@ struct LoweringOptions {
   /// deprecated once the old emission mode is no longer necessary.
   bool useOldEmissionMode = false;
 
-  /// If true, every expression passed to instance ports is derived by a wire.
-  /// Some LINT tool dislikes expressions being inlined into input ports so this
-  /// option surpasses that warning.
+  /// If true, every expression passed to an instance port is driven by a wire.
+  /// Some lint tools dislike expressions being inlined into input ports so this
+  /// option avoids such warnings.
   bool disallowExpressionInliningInPorts = false;
 };
 
