@@ -68,13 +68,8 @@ circuit Qux: %[[{
 ;CHECK:    %[[addr:.+]] = sv.reg
 ;CHECK:    %[[v4:.+]] = sv.read_inout %[[addr]]
 ;CHECK:    %[[v5:.+]] = hw.array_create
-;CHECK:    %[[multbit_mux_wire:.+]] = sv.wire  : !hw.inout<i8>
-;CHECK:    %[[array_get:.+]] = hw.array_get %[[v5]][%[[v4]]]
-;CHECK:    sv.assign %[[multbit_mux_wire]], %[[array_get]]
-;CHECK:    %[[v6:.+]] = sv.read_inout %[[multbit_mux_wire]] : !hw.inout<i8>
-;CHECK:    %[[multbit_mux_wire:.+]] = sv.wire  : !hw.inout<i8>
-;CHECK:    %[[array_get:.+]] = hw.array_get %[[v5]][%rwAddr]
-;CHECK:    %[[v7:.+]] = sv.read_inout %[[multbit_mux_wire]] : !hw.inout<i8>
+;CHECK:    %[[v6:.+]] = hw.array_get %[[v5]][%[[v4]]] {sv.hint.emit_as_mux}
+;CHECK:    %[[v7:.+]] = hw.array_get %[[v5]][%rwAddr] {sv.hint.emit_as_mux}
 ;CHECK:    sv.always posedge %clock {
 ;CHECK-NEXT:      sv.passign %[[memory_0]]
 ;CHECK-NEXT:      sv.passign %[[memory_1]]

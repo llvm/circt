@@ -586,6 +586,32 @@ void ExportVerilog::prepareHWModule(Block &block,
       }
     }
 
+    // Add backend tool lowering hints for `array_get` that should be emitted as
+    // a multiplexers, in the following form:
+    //
+    // wire GEN;
+    // /* synopsys infer_mux_override */
+    // assign GEN = array[index] /* cadence map_to_mux */;
+    //
+    if (auto arrayGet = dyn_cast<ArrayGetOp>(op);
+        arrayGet && !isProceduralRegion && op.hasAttr("sv.hint.emit_as_mux")) {
+      ImplicitLocOpBuilder builder(arrayGet.getLoc(), arrayGet);
+      builder.setInsertionPointAfter(arrayGet);
+      auto wire = builder.create<sv::WireOp>(arrayGet.getType());
+      auto wireRead = builder.create<sv::ReadInOutOp>(wire);
+      arrayGet.replaceAllUsesWith(wireRead.getResult());
+      auto wireAssign = builder.create<sv::AssignOp>(wire, arrayGet);
+      circt::sv::setSVAttributes(
+          arrayGet, sv::SVAttributesAttr::get(builder.getContext(),
+                                              {"cadence map_to_mux"},
+                                              /*emitAsComments=*/true));
+      sv::setSVAttributes(
+          wireAssign, sv::SVAttributesAttr::get(builder.getContext(),
+                                                {"synopsys infer_mux_override"},
+                                                /*emitAsComments=*/true));
+      op.removeAttr("sv.hint.emit_as_mux");
+    }
+
     // Force any expression used in the event control of an always process to be
     // a trivial wire, if the corresponding option is set.
     if (!options.allowExprInEventControl) {

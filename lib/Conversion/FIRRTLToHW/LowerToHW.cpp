@@ -3408,35 +3408,18 @@ LogicalResult FIRRTLLowering::visitExpr(MultibitMuxOp op) {
     loweredInputs.push_back(lowered);
   }
 
-  // We lower multbit mux into array indexing with vendor pragmas in the
-  // following form.
-  //
-  // wire GEN;
-  // /* synopsys infer_mux_override */
-  // assign GEN = array[index] /* cadence map_to_mux */;
-
+  // We lower multbit mux into array. Adding the `sv.hint.emit_as_mux` attribute
+  // causes Verilog emission to contain additional vendor pragmas indicating
+  // the array access is intended to be implemnted as a mux tree. See
+  // `PrepareForEmission` for details.
   Value array = builder.create<hw::ArrayCreateOp>(loweredInputs);
-  auto valWire = builder.create<sv::WireOp>(lowerType(op.getType()));
   auto arrayGet = builder.create<hw::ArrayGetOp>(array, index);
-
-  // Use SV attributes to annotate pragmas.
-  circt::sv::setSVAttributes(
-      arrayGet,
-      sv::SVAttributesAttr::get(builder.getContext(), {"cadence map_to_mux"},
-                                /*emitAsComments=*/true));
-
-  auto assignOp = builder.create<sv::AssignOp>(valWire, arrayGet);
-  sv::setSVAttributes(assignOp,
-                      sv::SVAttributesAttr::get(builder.getContext(),
-                                                {"synopsys infer_mux_override"},
-                                                /*emitAsComments=*/true));
-
-  Value inBoundsRead = builder.create<sv::ReadInOutOp>(valWire);
+  arrayGet->setAttr("sv.hint.emit_as_mux", builder.getUnitAttr());
 
   // If the multi-bit mux can never have an out-of-bounds read, then lower it
   // into a HW multi-bit mux.
   if (llvm::isPowerOf2_64(op.getInputs().size()))
-    return setLowering(op, inBoundsRead);
+    return setLowering(op, arrayGet);
 
   // If the multi-bit mux can have an out-of-bounds read (the size of the array
   // is not a power-of-two), then generate a mux that will return the zeroth
@@ -3454,8 +3437,8 @@ LogicalResult FIRRTLLowering::visitExpr(MultibitMuxOp op) {
       getOrCreateIntConstant(index.getType().getIntOrFloatBitWidth(),
                              op.getInputs().size()),
       true);
-  return setLoweringTo<comb::MuxOp>(op, inBoundsRead.getType(), isOutOfBounds,
-                                    zerothRead, inBoundsRead, true);
+  return setLoweringTo<comb::MuxOp>(op, arrayGet.getType(), isOutOfBounds,
+                                    zerothRead, arrayGet, true);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(VerbatimExprOp op) {

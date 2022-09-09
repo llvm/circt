@@ -9,6 +9,19 @@ hw.module @namehint_variadic(%a: i3) -> (b: i3) {
   hw.output %0 : i3
 }
 
+// CHECK-LABEL: hw.module @MuxEmissionHints
+hw.module @MuxEmissionHints(%in: !hw.array<4xi42>, %index: i2) -> (outA: i42, outB: i42) {
+  %0 = hw.array_get %in[%index] : !hw.array<4xi42>
+  // CHECK-NEXT: [[GET0:%.+]] = hw.array_get %in[%index] :
+  %1 = hw.array_get %in[%index] {sv.hint.emit_as_mux} : !hw.array<4xi42>
+  // CHECK-NEXT: [[GET1:%.+]] = hw.array_get %in[%index] {sv.attributes = #sv.attributes<[#sv.attribute<"cadence map_to_mux">], emitAsComments>} :
+  // CHECK-NEXT: [[WIRE:%.+]] = sv.wire
+  // CHECK-NEXT: [[READ:%.+]] = sv.read_inout [[WIRE]]
+  // CHECK-NEXT: sv.assign [[WIRE]], [[GET1]] {sv.attributes = #sv.attributes<[#sv.attribute<"synopsys infer_mux_override">], emitAsComments>}
+  hw.output %0, %1 : i42, i42
+  // CHECK-NEXT: hw.output [[GET0]], [[READ]]
+}
+
 // -----
 
 module {
