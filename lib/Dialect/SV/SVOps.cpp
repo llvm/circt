@@ -32,11 +32,9 @@ using mlir::TypedAttr;
 /// looking at the defining op.  This can look as far through the dataflow as it
 /// wants, but for now, it is just looking at the single value.
 bool sv::is2StateExpression(Value v) {
-  if (auto* op = v.getDefiningOp()) {
-  auto attr = op->getAttrOfType<UnitAttr>("twoState");
-  if (!attr)
-    return false; 
-  return (bool)attr;
+  if (auto *op = v.getDefiningOp()) {
+    if (auto attr = op->getAttrOfType<UnitAttr>("twoState"))
+      return (bool)attr;
   }
   // Plain constants are obviously safe
   return v.getDefiningOp<hw::ConstantOp>();
@@ -481,7 +479,7 @@ LogicalResult IfOp::canonicalize(IfOp op, PatternRewriter &rewriter) {
   }
 
   // Otherwise, invert the condition and move the 'else' block to the 'then'
-  // region if the condition is a 2-state operation.  This changes x prop 
+  // region if the condition is a 2-state operation.  This changes x prop
   // behavior so it needs to be guarded.
   if (is2StateExpression(op.getCond())) {
     auto cond = comb::createOrFoldNot(op.getLoc(), op.getCond(), rewriter);
@@ -491,7 +489,7 @@ LogicalResult IfOp::canonicalize(IfOp op, PatternRewriter &rewriter) {
 
     // Move the body of the then block over to the else.
     thenBlock->getOperations().splice(thenBlock->end(),
-                                    elseBlock->getOperations());
+                                      elseBlock->getOperations());
     rewriter.eraseBlock(elseBlock);
     return success();
   }
