@@ -3,6 +3,7 @@ add_circt_dialect_library(CIRCTHandshakeTransforms
   PassHelpers.cpp
   Materialization.cpp
   Buffers.cpp
+  LockFunctions.cpp
 
   DEPENDS
   CIRCTHandshakeTransformsIncGen
