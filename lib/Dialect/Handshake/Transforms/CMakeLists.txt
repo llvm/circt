@@ -10,6 +10,7 @@ add_circt_dialect_library(CIRCTHandshakeTransforms
 
   LINK_LIBS PUBLIC
   CIRCTHandshake
+  CIRCTSupport
   MLIRIR
   MLIRPass
   MLIRTransformUtils
