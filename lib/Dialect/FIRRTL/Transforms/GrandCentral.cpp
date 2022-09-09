@@ -633,7 +633,7 @@ private:
 
   /// Store of an instance paths analysis.  This is constructed inside
   /// `runOnOperation`, to work around the deleted copy constructor of
-  /// `instancePathCache`'s internal `BumpPtrAllocator`.
+  /// `InstancePathCache`'s internal `BumpPtrAllocator`.
   ///
   /// TODO: Investigate a way to not use a pointer here like how `getNamespace`
   /// works below.
