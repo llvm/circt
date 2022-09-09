@@ -68,7 +68,7 @@ struct ConvertComponentOp : public OpConversionPattern<ComponentOp> {
           }
         });
 
-    auto outputOp = hwMod.getBodyBlock()->getTerminator();
+    auto *outputOp = hwMod.getBodyBlock()->getTerminator();
     rewriter.mergeBlocks(component.getBody(), hwMod.getBodyBlock(), argValues);
     outputOp->moveAfter(&hwMod.getBodyBlock()->back());
     rewriter.eraseOp(component);
