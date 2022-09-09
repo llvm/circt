@@ -15,9 +15,9 @@ esi.service.decl @HostComms {
 // CHECK:         hw.instance "m1" @Loopback(clk: %clk: i1) -> ()
 
 // CONN-LABEL: hw.module @Top(%clk: i1, %rst: i1) {
-// CONN:         [[R2:%.+]] = esi.cosim %clk, %rst, %m1.loopback_fromhw, "m1.loopback_fromhw" : !esi.channel<i8> -> !esi.channel<i1>
-// CONN:         [[R0:%.+]] = esi.null : !esi.channel<i1>
-// CONN:         [[R1:%.+]] = esi.cosim %clk, %rst, [[R0]], "m1.loopback_tohw" : !esi.channel<i1> -> !esi.channel<i8>
+// CONN-DAG:     [[R2:%.+]] = esi.cosim %clk, %rst, %m1.loopback_fromhw, "m1.loopback_fromhw" : !esi.channel<i8> -> !esi.channel<i1>
+// CONN-DAG:     [[R0:%.+]] = esi.null : !esi.channel<i1>
+// CONN-DAG:     [[R1:%.+]] = esi.cosim %clk, %rst, [[R0]], "m1.loopback_tohw" : !esi.channel<i1> -> !esi.channel<i8>
 // CONN:         %m1.loopback_fromhw = hw.instance "m1" @Loopback(clk: %clk: i1, loopback_tohw: [[R1]]: !esi.channel<i8>) -> (loopback_fromhw: !esi.channel<i8>)
 hw.module @Top (%clk: i1, %rst: i1) {
   esi.service.instance @HostComms impl as  "cosim" (%clk, %rst) : (i1, i1) -> ()

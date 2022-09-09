@@ -73,11 +73,13 @@ static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp req) {
   for (auto toClient : req.getOps<RequestToClientConnectionOp>())
     toClientResultNum[toClient] = toClientResultNum.size();
 
+  // Get the request pairs.
   llvm::SmallVector<
       std::pair<RequestToServerConnectionOp, RequestToClientConnectionOp>, 8>
       reqPairs;
   req.gatherPairedReqs(reqPairs);
 
+  // Iterate through them, building a cosim endpoint for each one.
   for (auto [toServer, toClient] : reqPairs) {
     assert((toServer || toClient) &&
            "At least one in all pairs must be non-null");
@@ -102,12 +104,9 @@ static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp req) {
         b.create<CosimEndpointOp>(loc, toClientType, clk, rst, toServerValue,
                                   toStringAttr(clientNamePathAttr));
 
-    // if (toServer)
-    // toServer.erase();
     if (toClient) {
       unsigned clientReqIdx = toClientResultNum[toClient];
       req.getResult(clientReqIdx).replaceAllUsesWith(cosim.recv());
-      // toClient.erase();
     }
   }
 
