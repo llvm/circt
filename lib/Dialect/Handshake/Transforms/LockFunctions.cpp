@@ -42,10 +42,13 @@ LogicalResult handshake::lockRegion(Region &r, OpBuilder &rewriter) {
   auto join = rewriter.create<JoinOp>(loc, ValueRange({ctrl, buff}));
   ctrl.replaceAllUsesExcept(join, join);
 
-  auto ret = *r.getOps<handshake::ReturnOp>().begin();
+  auto ret = dyn_cast<handshake::ReturnOp>(r.front().getTerminator());
+  if (!ret)
+    return r.getParentOp()->emitError(
+        "expected a handshake return operation as terminator");
   rewriter.setInsertionPoint(ret);
 
-  backEdge.setValue(ret.control());
+  backEdge.setValue(ret.operands().back());
   return success();
 }
 
