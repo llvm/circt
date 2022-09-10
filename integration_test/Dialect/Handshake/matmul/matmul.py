@@ -7,7 +7,7 @@ async def oneInput(dut):
   [inCtrl], [out0, outCtrl] = await initDut(dut, ["inCtrl"],
                                             ["out0", "outCtrl"])
 
-  out0Check = cocotb.start_soon(out0.checkOutputs([579]))
+  out0Check = cocotb.start_soon(out0.checkOutputs([448704]))
   inCtrlSend = cocotb.start_soon(inCtrl.send())
   await inCtrlSend
 

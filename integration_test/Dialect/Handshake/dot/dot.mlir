@@ -1,12 +1,30 @@
-// REQUIRES: ieee-sim
-// UNSUPPORTED: ieee-sim-iverilog
+// REQUIRES: iverilog,cocotb
+
+// This test is executed with all different buffering strategies
+
 // RUN: circt-opt %s --lower-std-to-handshake \
 // RUN:   --canonicalize='top-down=true region-simplify=true' \
 // RUN:   --handshake-materialize-forks-sinks --canonicalize \
 // RUN:   --handshake-insert-buffers=strategy=all --lower-handshake-to-firrtl | \
-// RUN: firtool --format=mlir --verilog > %dot-export.sv
-// RUN: circt-rtl-sim.py %dot-export.sv %S/driver.sv --sim %ieee-sim --no-default-driver --top driver | FileCheck %s
-// CHECK: Result={{.*}}3589632
+// RUN: firtool --format=mlir --verilog --lowering-options=disallowLocalVariables > %t.sv && \
+// RUN: %PYTHON% %S/../cocotb_driver.py --objdir=%T --topLevel=top --pythonModule=dot --pythonFolder=%S %t.sv 2>&1 | FileCheck %s
+
+// RUN: circt-opt %s --lower-std-to-handshake \
+// RUN:   --canonicalize='top-down=true region-simplify=true' \
+// RUN:   --handshake-materialize-forks-sinks --canonicalize \
+// RUN:   --handshake-insert-buffers=strategy=allFIFO --lower-handshake-to-firrtl | \
+// RUN: firtool --format=mlir --verilog --lowering-options=disallowLocalVariables > %t.sv && \
+// RUN: %PYTHON% %S/../cocotb_driver.py --objdir=%T --topLevel=top --pythonModule=dot --pythonFolder=%S %t.sv 2>&1 | FileCheck %s
+
+// RUN: circt-opt %s --lower-std-to-handshake \
+// RUN:   --canonicalize='top-down=true region-simplify=true' \
+// RUN:   --handshake-materialize-forks-sinks --canonicalize \
+// RUN:   --handshake-insert-buffers=strategy=cycles --lower-handshake-to-firrtl | \
+// RUN: firtool --format=mlir --verilog --lowering-options=disallowLocalVariables > %t.sv && \
+// RUN: %PYTHON% %S/../cocotb_driver.py --objdir=%T --topLevel=top --pythonModule=dot --pythonFolder=%S %t.sv 2>&1 | FileCheck %s
+
+// CHECK: ** TEST
+// CHECK: ** TESTS=[[N:.*]] PASS=[[N]] FAIL=0 SKIP=0
 
 module {
   func.func @top() -> i32 {
