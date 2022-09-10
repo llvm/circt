@@ -2440,7 +2440,7 @@ firrtl.module @NameProp(in %in0: !firrtl.uint<1>, in %in1: !firrtl.uint<1>, out 
   %useful_name = firrtl.node  %_useless_name_1  : !firrtl.uint<1>
   %_useless_name_2 = firrtl.node  %usefull_name  : !firrtl.uint<1>
   // CHECK-NEXT: %useful_name = firrtl.or %in0, %in1
-  // CHECK-NEXT: firrtl.strictconnect %out, %usefull_name
+  // CHECK-NEXT: firrtl.strictconnect %out, %useful_name
   firrtl.strictconnect %out, %_useless_name_2 : !firrtl.uint<1>
 }
 
