@@ -890,13 +890,13 @@ bool Inliner::shouldInline(Operation *op) {
 // NOLINTNEXTLINE(misc-no-recursion)
 void Inliner::flattenInto(StringRef prefix, OpBuilder &b,
                           BlockAndValueMapping &mapper, BackedgeBuilder &beb,
-                          SmallVectorImpl<Backedge> &edges, FModuleOp parent,
+                          SmallVectorImpl<Backedge> &edges, FModuleOp target,
                           DenseSet<Attribute> localSymbols,
                           ModuleNamespace &moduleNamespace) {
-  auto moduleName = parent.getNameAttr();
+  auto moduleName = target.getNameAttr();
   DenseMap<Attribute, Attribute> symbolRenames;
   SmallVector<Value> wires;
-  for (auto &op : *parent.getBodyBlock()) {
+  for (auto &op : *target.getBodyBlock()) {
     // If it's not an instance op, clone it and continue.
     auto instance = dyn_cast<InstanceOp>(op);
     if (!instance) {
@@ -907,8 +907,8 @@ void Inliner::flattenInto(StringRef prefix, OpBuilder &b,
 
     // If it's not a regular module we can't inline it. Mark it as live.
     auto *module = symbolTable.lookup(instance.getModuleName());
-    auto target = dyn_cast<FModuleOp>(module);
-    if (!target) {
+    auto childModule = dyn_cast<FModuleOp>(module);
+    if (!childModule) {
       liveModules.insert(module);
       cloneAndRename(prefix, b, mapper, op, symbolRenames, localSymbols,
                      moduleNamespace);
@@ -918,7 +918,7 @@ void Inliner::flattenInto(StringRef prefix, OpBuilder &b,
     // Add any NLAs which start at this instance to the localSymbols set.
     // Anything in this set will be made local during the recursive flattenInto
     // walk.
-    llvm::set_union(localSymbols, rootMap[target.getNameAttr()]);
+    llvm::set_union(localSymbols, rootMap[childModule.getNameAttr()]);
     auto instInnerSym = getInnerSymName(instance);
     auto parentActivePaths = activeHierpaths;
     setActiveHierPaths(moduleName, instInnerSym);
@@ -926,12 +926,12 @@ void Inliner::flattenInto(StringRef prefix, OpBuilder &b,
 
     // Create the wire mapping for results + ports.
     auto nestedPrefix = (prefix + instance.getName() + "_").str();
-    mapPortsToWires(nestedPrefix, b, mapper, beb, target, localSymbols,
+    mapPortsToWires(nestedPrefix, b, mapper, beb, childModule, localSymbols,
                     moduleNamespace, wires, edges);
     mapResultsToWires(mapper, wires, instance);
 
     // Unconditionally flatten all instance operations.
-    flattenInto(nestedPrefix, b, mapper, beb, edges, target, localSymbols,
+    flattenInto(nestedPrefix, b, mapper, beb, edges, childModule, localSymbols,
                 moduleNamespace);
     currentPath.pop_back();
     activeHierpaths = parentActivePaths;
@@ -1010,13 +1010,13 @@ void Inliner::flattenInstances(FModuleOp module) {
 // NOLINTNEXTLINE(misc-no-recursion)
 void Inliner::inlineInto(StringRef prefix, OpBuilder &b,
                          BlockAndValueMapping &mapper, BackedgeBuilder &beb,
-                         SmallVectorImpl<Backedge> &edges, FModuleOp parent,
+                         SmallVectorImpl<Backedge> &edges, FModuleOp target,
                          DenseMap<Attribute, Attribute> &symbolRenames,
                          ModuleNamespace &moduleNamespace) {
-  auto moduleName = parent.getNameAttr();
+  auto moduleName = target.getNameAttr();
   // Inline everything in the module's body.
   SmallVector<Value> wires;
-  for (auto &op : *parent.getBodyBlock()) {
+  for (auto &op : *target.getBodyBlock()) {
     // If it's not an instance op, clone it and continue.
     auto instance = dyn_cast<InstanceOp>(op);
     if (!instance) {
@@ -1026,23 +1026,23 @@ void Inliner::inlineInto(StringRef prefix, OpBuilder &b,
 
     // If it's not a regular module we can't inline it. Mark it as live.
     auto *module = symbolTable.lookup(instance.getModuleName());
-    auto target = dyn_cast<FModuleOp>(module);
-    if (!target) {
+    auto childModule = dyn_cast<FModuleOp>(module);
+    if (!childModule) {
       liveModules.insert(module);
       cloneAndRename(prefix, b, mapper, op, symbolRenames, {}, moduleNamespace);
       continue;
     }
 
     // If we aren't inlining the target, add it to the work list.
-    if (!shouldInline(target)) {
-      if (liveModules.insert(target).second) {
-        worklist.push_back(target);
+    if (!shouldInline(childModule)) {
+      if (liveModules.insert(childModule).second) {
+        worklist.push_back(childModule);
       }
       cloneAndRename(prefix, b, mapper, op, symbolRenames, {}, moduleNamespace);
       continue;
     }
 
-    auto toBeFlattened = shouldFlatten(target);
+    auto toBeFlattened = shouldFlatten(childModule);
     if (auto instSym = getInnerSymName(instance)) {
       auto innerRef = InnerRefAttr::get(moduleName, instSym);
       // Preorder update of any non-local annotations this instance participates
@@ -1050,9 +1050,9 @@ void Inliner::inlineInto(StringRef prefix, OpBuilder &b,
       // non-local annotations can be deleted if they are now local.
       for (auto sym : instOpHierPaths[innerRef]) {
         if (toBeFlattened)
-          nlaMap[sym].flattenModule(target);
+          nlaMap[sym].flattenModule(childModule);
         else
-          nlaMap[sym].inlineModule(target);
+          nlaMap[sym].inlineModule(childModule);
       }
     }
 
@@ -1064,10 +1064,10 @@ void Inliner::inlineInto(StringRef prefix, OpBuilder &b,
     // and add an annotation on the instance saying that this now participates
     // in this new NLA.
     DenseMap<Attribute, Attribute> symbolRenames;
-    if (!rootMap[target.getNameAttr()].empty()) {
-      for (auto sym : rootMap[target.getNameAttr()]) {
+    if (!rootMap[childModule.getNameAttr()].empty()) {
+      for (auto sym : rootMap[childModule.getNameAttr()]) {
         auto &mnla = nlaMap[sym];
-        sym = mnla.reTop(parent);
+        sym = mnla.reTop(target);
         StringAttr instSym = getInnerSymName(instance);
         if (!instSym) {
           instSym = StringAttr::get(
@@ -1090,17 +1090,17 @@ void Inliner::inlineInto(StringRef prefix, OpBuilder &b,
 
     // Create the wire mapping for results + ports.
     auto nestedPrefix = (prefix + instance.getName() + "_").str();
-    mapPortsToWires(nestedPrefix, b, mapper, beb, target, {}, moduleNamespace,
-                    wires, edges);
+    mapPortsToWires(nestedPrefix, b, mapper, beb, childModule, {},
+                    moduleNamespace, wires, edges);
     mapResultsToWires(mapper, wires, instance);
 
     // Inline the module, it can be marked as flatten and inline.
     if (toBeFlattened) {
-      flattenInto(nestedPrefix, b, mapper, beb, edges, target, {},
+      flattenInto(nestedPrefix, b, mapper, beb, edges, childModule, {},
                   moduleNamespace);
     } else {
-      inlineInto(nestedPrefix, b, mapper, beb, edges, target, symbolRenames,
-                 moduleNamespace);
+      inlineInto(nestedPrefix, b, mapper, beb, edges, childModule,
+                 symbolRenames, moduleNamespace);
     }
     currentPath.pop_back();
     activeHierpaths = parentActivePaths;
