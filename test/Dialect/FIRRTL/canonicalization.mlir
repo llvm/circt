@@ -2437,9 +2437,9 @@ firrtl.module @Verification(in %clock: !firrtl.clock, in %p: !firrtl.uint<1>) {
 firrtl.module @NameProp(in %in0: !firrtl.uint<1>, in %in1: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
   %0 = firrtl.or %in0, %in1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
   %_useless_name_1 = firrtl.node  %0  : !firrtl.uint<1>
-  %usefull_name = firrtl.node  %_useless_name_1  : !firrtl.uint<1>
+  %useful_name = firrtl.node  %_useless_name_1  : !firrtl.uint<1>
   %_useless_name_2 = firrtl.node  %usefull_name  : !firrtl.uint<1>
-  // CHECK-NEXT: %usefull_name = firrtl.or %in0, %in1
+  // CHECK-NEXT: %useful_name = firrtl.or %in0, %in1
   // CHECK-NEXT: firrtl.strictconnect %out, %usefull_name
   firrtl.strictconnect %out, %_useless_name_2 : !firrtl.uint<1>
 }
