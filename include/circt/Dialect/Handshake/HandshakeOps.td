@@ -805,10 +805,10 @@ def JoinOp : Handshake_Op<"join", [
 
     Example:
     ```mlir
-    %0 = join %a, %b, %c : i32
+    %0 = join %a, %b, %c : i32, i1, none
     ```
   }];
-  let arguments = (ins Variadic<NoneType> : $data);
+  let arguments = (ins Variadic<AnyType> : $data);
   let results = (outs NoneType : $result);
 
   let skipDefaultBuilders = 1;
