@@ -42,36 +42,40 @@ struct ConvertComponentOp : public OpConversionPattern<ComponentOp> {
   matchAndRewrite(ComponentOp component, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     SmallVector<hw::PortInfo> hwInputInfo;
-    auto portInfo = component.getPortInfo();
-    for (auto [name, type, direction, _] : portInfo)
+    for (auto [name, type, direction, _] : component.getPortInfo())
       hwInputInfo.push_back({name, hwDirection(direction), type});
-    ModulePortInfo hwPortInfo(hwInputInfo);
+
+    auto hwMod = rewriter.create<HWModuleOp>(
+        component.getLoc(), component.getNameAttr(), hwInputInfo);
+
+    rewriter.eraseOp(hwMod.getBodyBlock()->getTerminator());
+    ConversionPatternRewriter::InsertionGuard g(rewriter);
+    rewriter.setInsertionPointToEnd(hwMod.getBodyBlock());
 
     SmallVector<Value> argValues;
-    auto hwMod = rewriter.create<HWModuleOp>(
-        component.getLoc(), component.getNameAttr(), hwPortInfo,
-        [&](OpBuilder &b, HWModulePortAccessor &ports) {
-          for (auto [name, type, direction, _] : portInfo) {
-            switch (direction) {
-            case calyx::Direction::Input:
-              assert(ports.getInput(name).getType() == type);
-              argValues.push_back(ports.getInput(name));
-              break;
-            case calyx::Direction::Output:
-              auto wire = b.create<sv::WireOp>(component.getLoc(), type, name);
-              auto wireRead =
-                  b.create<sv::ReadInOutOp>(component.getLoc(), wire);
-              argValues.push_back(wireRead);
-              ports.setOutput(name, wireRead);
-              break;
-            }
-          }
-        });
+    SmallVector<Value> outputWires;
+    size_t portIdx = 0;
+    for (auto [name, type, direction, _] : component.getPortInfo()) {
+      switch (direction) {
+      case calyx::Direction::Input:
+        assert(hwMod.getArgument(portIdx).getType() == type);
+        argValues.push_back(hwMod.getArgument(portIdx));
+        break;
+      case calyx::Direction::Output:
+        auto wire = rewriter.create<sv::WireOp>(component.getLoc(), type, name);
+        auto wireRead =
+            rewriter.create<sv::ReadInOutOp>(component.getLoc(), wire);
+        argValues.push_back(wireRead);
+        outputWires.push_back(wireRead);
+        break;
+      }
+      ++portIdx;
+    }
 
-    auto *outputOp = hwMod.getBodyBlock()->getTerminator();
     rewriter.mergeBlocks(component.getBody(), hwMod.getBodyBlock(), argValues);
-    outputOp->moveAfter(&hwMod.getBodyBlock()->back());
+    rewriter.create<OutputOp>(component.getLoc(), outputWires);
     rewriter.eraseOp(component);
+
     return success();
   }
 
