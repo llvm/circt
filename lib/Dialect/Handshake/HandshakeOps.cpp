@@ -1428,9 +1428,7 @@ void JoinOp::build(OpBuilder &builder, OperationState &result,
   result.types.push_back(type);
 
   result.addOperands(operands);
-  if (llvm::all_of(operands.getTypes(),
-                   [](Type t) { return t.isa<NoneType>(); }))
-    result.addAttribute("control", BoolAttr::get(result.getContext(), true));
+  result.addAttribute("control", BoolAttr::get(result.getContext(), true));
 }
 
 ParseResult JoinOp::parse(OpAsmParser &parser, OperationState &result) {
@@ -1446,8 +1444,7 @@ ParseResult JoinOp::parse(OpAsmParser &parser, OperationState &result) {
   if (parser.resolveOperands(operands, types, allOperandLoc, result.operands))
     return failure();
 
-  bool isCtrl = llvm::all_of(types, [](Type t) { return t.isa<NoneType>(); });
-  if (isCtrl && !result.attributes.get("control"))
+  if (!result.attributes.get("control"))
     result.addAttribute("control", BoolAttr::get(result.getContext(), true));
 
   result.addTypes(NoneType::get(result.getContext()));

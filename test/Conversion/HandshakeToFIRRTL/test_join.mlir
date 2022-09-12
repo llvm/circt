@@ -23,7 +23,7 @@ handshake.func @test_join(%arg0: none, %arg1: none, %arg2: none, ...) -> (none, 
 
 // -----
 
-// CHECK-LABEL:   firrtl.module @handshake_join_in_ui32_ui1(
+// CHECK-LABEL:   firrtl.module @handshake_join_in_ui32_ui1_3ins_1outs_ctrl(
 // CHECK-SAME:      in %[[VAL_0:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<32>>,
 // CHECK-SAME:      in %[[VAL_1:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<1>>,
 // CHECK-SAME:      in %[[VAL_2:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>,
