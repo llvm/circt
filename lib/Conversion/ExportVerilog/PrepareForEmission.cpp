@@ -85,11 +85,8 @@ static bool shouldSpillWire(Operation &op, const LoweringOptions &options) {
   return false;
 }
 
-// Given an invisible instance, make sure all inputs are driven from
-// wires or ports.
-static void lowerBoundInstance(InstanceOp op) {
-  if (!op->hasAttr("doNotPrint"))
-    return;
+// Given an instance, make sure all inputs are driven from wires or ports.
+static void spillWiresForInstanceInputs(InstanceOp op) {
   Block *block = op->getParentOfType<HWModuleOp>().getBodyBlock();
   auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), block);
 
@@ -567,8 +564,11 @@ void ExportVerilog::prepareHWModule(Block &block,
     if (auto instance = dyn_cast<InstanceOp>(op)) {
       // Anchor return values to wires early
       lowerInstanceResults(instance);
-      // Anchor ports of bound instances
-      lowerBoundInstance(instance);
+      // Anchor ports of instances when the instance is bound by bind op, or
+      // forced by the option.
+      if (instance->hasAttr("doNotPrint") ||
+          options.disallowExpressionInliningInPorts)
+        spillWiresForInstanceInputs(instance);
     }
 
     // If logic op is located in a procedural region, we have to move the logic

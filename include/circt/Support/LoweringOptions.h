@@ -126,6 +126,11 @@ struct LoweringOptions {
   /// If true, ExportVerilog uses an old emission. This flag should be
   /// deprecated once the old emission mode is no longer necessary.
   bool useOldEmissionMode = false;
+
+  /// If true, every expression passed to an instance port is driven by a wire.
+  /// Some lint tools dislike expressions being inlined into input ports so this
+  /// option avoids such warnings.
+  bool disallowExpressionInliningInPorts = false;
 };
 
 /// Register commandline options for the verilog emitter.
