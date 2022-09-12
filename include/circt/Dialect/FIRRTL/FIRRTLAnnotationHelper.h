@@ -206,6 +206,7 @@ struct ApplyState {
   CircuitTargetCache targetCaches;
   AddToWorklistFn addToWorklistFn;
   InstancePathCache &instancePathCache;
+  DenseMap<Attribute, FlatSymbolRefAttr> instPathToNLAMap;
 
   ModuleNamespace &getNamespace(FModuleLike module) {
     auto &ptr = namespaces[module];
