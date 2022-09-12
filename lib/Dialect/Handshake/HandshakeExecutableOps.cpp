@@ -47,7 +47,7 @@ fetchValues(ArrayRef<mlir::Value> values,
             llvm::DenseMap<mlir::Value, llvm::Any> &valueMap) {
   std::vector<llvm::Any> ins;
   for (auto &value : values) {
-    assert(valueMap[value].hasValue());
+    assert(valueMap[value].has_value());
     ins.push_back(valueMap[value]);
     valueMap.erase(value);
   }
