@@ -200,8 +200,10 @@ public:
       else
         namepath.push_back(FlatSymbolRefAttr::get(modPart));
 
-      return b.create<HierPathOp>(b.getUnknownLoc(), sym,
-                                  b.getArrayAttr(namepath));
+      auto hp = b.create<HierPathOp>(b.getUnknownLoc(), sym,
+                                     b.getArrayAttr(namepath));
+      hp.setVisibility(nla.getVisibility());
+      return hp;
     };
 
     HierPathOp last;
