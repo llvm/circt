@@ -98,9 +98,6 @@ static cl::opt<bool>
                               cl::desc("Allow unknown dialects in the input"),
                               cl::init(false), cl::Hidden);
 
-static cl::opt<bool> lowerFIRRTL("lower-firrtl", cl::desc("Lower FIRRTL to HW"),
-                                 cl::init(false), cl::Hidden);
-
 enum HLSFlow { HLSFlowDynamic };
 
 static cl::opt<HLSFlow> hlsFlow(
