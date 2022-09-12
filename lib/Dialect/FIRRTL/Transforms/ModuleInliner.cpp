@@ -20,6 +20,7 @@
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Support/BackedgeBuilder.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "llvm/ADT/BitVector.h"
@@ -401,6 +402,74 @@ static void mapResultsToWires(BlockAndValueMapping &mapper,
   }
 }
 
+/// Resolve RefType 'backedge' placeholder values.
+/// These should have at most one driver that isn't self-connect,
+/// replace each with their driver and remove connections to them.
+/// Also clears out 'edges'.
+static void replaceRefEdges(SmallVectorImpl<Backedge> &edges) {
+  /// Find connections to `val` and:
+  /// * Mark for removal.
+  /// * Identify the single non-self-connect as driver, return it.
+  /// * Check for other drivers and error.
+  auto getDriverAndRemoveConnects = [&](Value val) -> Value {
+    Value driver;
+    llvm::SmallPtrSet<Operation *, 16> toRemove;
+    for (Operation *use : val.getUsers())
+      if (auto connect = dyn_cast<FConnectLike>(use))
+        if (connect.getDest() == val) {
+          auto newdriver = connect.getSrc();
+
+          // Mark for removal all connections to the placeholder value.
+          toRemove.insert(connect);
+
+          // Self-connections are not drivers.
+          if (newdriver == val)
+            continue;
+          if (driver) {
+            auto diag = val.getDefiningOp()->emitError(
+                "refty should not have multiple drivers");
+            diag.attachNote(driver.getLoc()) << "first driver here";
+            diag.attachNote(newdriver.getLoc()) << "second driver here";
+            diag.attachNote(connect.getLoc()) << "second driver connected here";
+          }
+          assert(!driver && "unable to resolve through multiple drivers");
+          driver = newdriver;
+        }
+
+    // Drop connections to placeholder values.
+    for (auto *op : toRemove)
+      op->erase();
+
+    return driver;
+  };
+
+  // Ensure that all users of the `opToRemove` are defined after the driver.
+  // This is required to ensure the driver dominates the users.
+  auto moveUseAfterDef = [&](Operation *opToRemove, Operation *driver) {
+    for (Operation *user : opToRemove->getUsers())
+      if (user->isBeforeInBlock(driver))
+        user->moveAfter(driver);
+  };
+
+  for (auto &edge : edges) {
+    Value v = edge;
+    assert(v.getType().isa<RefType>());
+
+    auto driver = getDriverAndRemoveConnects(v);
+    if (!driver) {
+      v.getDefiningOp()->emitError(
+          "unable to find driver for refty placeholder");
+      continue;
+    }
+    if (!driver.isa<BlockArgument>())
+      moveUseAfterDef(v.getDefiningOp(), driver.getDefiningOp());
+    // Resolve the edge (RAUW to driver).
+    edge.setValue(driver);
+  }
+
+  edges.clear();
+}
+
 /// Wrapper for llvm::parallelTransformReduce that performs the transform_reduce
 /// serially when MLIR multi-threading is disabled.
 /// Does not add a ParallelDiagnosticHandler like mlir::parallelFor.
@@ -483,11 +552,13 @@ private:
 
   /// Rewrite the ports of a module as wires.  This is similar to
   /// cloneAndRename, but operating on ports.
-  SmallVector<Value> mapPortsToWires(StringRef prefix, OpBuilder &b,
-                                     BlockAndValueMapping &mapper,
-                                     FModuleOp target,
-                                     const DenseSet<Attribute> &localSymbols,
-                                     ModuleNamespace &moduleNamespace);
+  void mapPortsToWires(StringRef prefix, OpBuilder &b,
+                       BlockAndValueMapping &mapper, BackedgeBuilder &beb,
+                       FModuleOp target,
+                       const DenseSet<Attribute> &localSymbols,
+                       ModuleNamespace &moduleNamespace,
+                       SmallVectorImpl<Value> &wires,
+                       SmallVectorImpl<Backedge> &edges);
 
   /// Returns true if the operation is annotated to be flattened.
   bool shouldFlatten(Operation *op);
@@ -499,6 +570,7 @@ private:
   /// renaming all operations using the prefix.  This clones all operations from
   /// the target, and does not trigger inlining on the target itself.
   void flattenInto(StringRef prefix, OpBuilder &b, BlockAndValueMapping &mapper,
+                   BackedgeBuilder &beb, SmallVectorImpl<Backedge> &edges,
                    FModuleOp target, DenseSet<Attribute> localSymbols,
                    ModuleNamespace &moduleNamespace);
 
@@ -506,6 +578,7 @@ private:
   /// prefixing all operations with prefix.  This clones all operations from
   /// the target, and does not trigger inlining on the target itself.
   void inlineInto(StringRef prefix, OpBuilder &b, BlockAndValueMapping &mapper,
+                  BackedgeBuilder &beb, SmallVectorImpl<Backedge> &edges,
                   FModuleOp target,
                   DenseMap<Attribute, Attribute> &symbolRenames,
                   ModuleNamespace &moduleNamespace);
@@ -656,12 +729,15 @@ void Inliner::rename(StringRef prefix, Operation *op,
 /// module, create a wire, and assign a mapping from each module port to the
 /// wire. When the body of the module is cloned, the value of the wire will be
 /// used instead of the module's ports.
-SmallVector<Value>
-Inliner::mapPortsToWires(StringRef prefix, OpBuilder &b,
-                         BlockAndValueMapping &mapper, FModuleOp target,
-                         const DenseSet<Attribute> &localSymbols,
-                         ModuleNamespace &moduleNamespace) {
-  SmallVector<Value> wires;
+/// Cannot have a RefType wire, so create backedge and put in 'edges' for
+/// resolution later.  Mapper and 'wires' will have the placeholder value.
+void Inliner::mapPortsToWires(StringRef prefix, OpBuilder &b,
+                              BlockAndValueMapping &mapper,
+                              BackedgeBuilder &beb, FModuleOp target,
+                              const DenseSet<Attribute> &localSymbols,
+                              ModuleNamespace &moduleNamespace,
+                              SmallVectorImpl<Value> &wires,
+                              SmallVectorImpl<Backedge> &edges) {
   auto portInfo = target.getPorts();
   for (unsigned i = 0, e = target.getNumPorts(); i < e; ++i) {
     auto arg = target.getArgument(i);
@@ -694,14 +770,37 @@ Inliner::mapPortsToWires(StringRef prefix, OpBuilder &b,
       newAnnotations.push_back(anno.getAttr());
     }
 
-    auto wire = b.create<WireOp>(
-        target.getLoc(), type, (prefix + portInfo[i].getName()).str(),
-        NameKindEnum::DroppableName, ArrayAttr::get(context, newAnnotations),
-        newSym);
+    Value wire =
+        TypeSwitch<FIRRTLType, Value>(type)
+            .Case<FIRRTLBaseType>([&](auto base) {
+              return b.create<WireOp>(
+                  target.getLoc(), base, (prefix + portInfo[i].getName()).str(),
+                  NameKindEnum::DroppableName,
+                  ArrayAttr::get(context, newAnnotations), newSym);
+            })
+            .Case<RefType>([&](auto refty) {
+              // Symbols and annotations are not allowed, warn if dropping.
+              if (oldSym)
+                target.emitWarning("unexpected symbol ")
+                    .append(oldSym)
+                    .append(" on ref port ")
+                    .append(target.getPortName(arg.getArgNumber()))
+                    .append(" dropped during inlining")
+                    .attachNote(arg.getLoc())
+                    .append("ref port with symbol here");
+
+              if (!newAnnotations.empty())
+                target.emitWarning("unexpected annotations found on ref port ")
+                    .append(target.getPortName(arg.getArgNumber()))
+                    .append(" dropped during inlining")
+                    .attachNote(arg.getLoc())
+                    .append("ref port with annotations here");
+              edges.push_back(beb.get(refty, arg.getLoc()));
+              return edges.back();
+            });
     wires.push_back(wire);
-    mapper.map(arg, wire.getResult());
+    mapper.map(arg, wire);
   }
-  return wires;
 }
 
 /// Clone an operation, mapping used values and results with the mapper, and
@@ -790,12 +889,14 @@ bool Inliner::shouldInline(Operation *op) {
 
 // NOLINTNEXTLINE(misc-no-recursion)
 void Inliner::flattenInto(StringRef prefix, OpBuilder &b,
-                          BlockAndValueMapping &mapper, FModuleOp parent,
+                          BlockAndValueMapping &mapper, BackedgeBuilder &beb,
+                          SmallVectorImpl<Backedge> &edges, FModuleOp target,
                           DenseSet<Attribute> localSymbols,
                           ModuleNamespace &moduleNamespace) {
-  auto moduleName = parent.getNameAttr();
+  auto moduleName = target.getNameAttr();
   DenseMap<Attribute, Attribute> symbolRenames;
-  for (auto &op : *parent.getBodyBlock()) {
+  SmallVector<Value> wires;
+  for (auto &op : *target.getBodyBlock()) {
     // If it's not an instance op, clone it and continue.
     auto instance = dyn_cast<InstanceOp>(op);
     if (!instance) {
@@ -806,8 +907,8 @@ void Inliner::flattenInto(StringRef prefix, OpBuilder &b,
 
     // If it's not a regular module we can't inline it. Mark it as live.
     auto *module = symbolTable.lookup(instance.getModuleName());
-    auto target = dyn_cast<FModuleOp>(module);
-    if (!target) {
+    auto childModule = dyn_cast<FModuleOp>(module);
+    if (!childModule) {
       liveModules.insert(module);
       cloneAndRename(prefix, b, mapper, op, symbolRenames, localSymbols,
                      moduleNamespace);
@@ -817,7 +918,7 @@ void Inliner::flattenInto(StringRef prefix, OpBuilder &b,
     // Add any NLAs which start at this instance to the localSymbols set.
     // Anything in this set will be made local during the recursive flattenInto
     // walk.
-    llvm::set_union(localSymbols, rootMap[target.getNameAttr()]);
+    llvm::set_union(localSymbols, rootMap[childModule.getNameAttr()]);
     auto instInnerSym = getInnerSymName(instance);
     auto parentActivePaths = activeHierpaths;
     setActiveHierPaths(moduleName, instInnerSym);
@@ -825,14 +926,16 @@ void Inliner::flattenInto(StringRef prefix, OpBuilder &b,
 
     // Create the wire mapping for results + ports.
     auto nestedPrefix = (prefix + instance.getName() + "_").str();
-    auto wires = mapPortsToWires(nestedPrefix, b, mapper, target, localSymbols,
-                                 moduleNamespace);
+    mapPortsToWires(nestedPrefix, b, mapper, beb, childModule, localSymbols,
+                    moduleNamespace, wires, edges);
     mapResultsToWires(mapper, wires, instance);
 
     // Unconditionally flatten all instance operations.
-    flattenInto(nestedPrefix, b, mapper, target, localSymbols, moduleNamespace);
+    flattenInto(nestedPrefix, b, mapper, beb, edges, childModule, localSymbols,
+                moduleNamespace);
     currentPath.pop_back();
     activeHierpaths = parentActivePaths;
+    wires.clear();
   }
 }
 
@@ -841,6 +944,10 @@ void Inliner::flattenInstances(FModuleOp module) {
   // Namespace used to generate new symbol names.
   ModuleNamespace moduleNamespace(module);
 
+  SmallVector<Value> wires;
+  SmallVector<Backedge> edges;
+  OpBuilder b(module.getContext());
+  BackedgeBuilder beb(b, module.getLoc());
   for (auto &op : llvm::make_early_inc_range(*module.getBodyBlock())) {
     // If it's not an instance op, skip it.
     auto instance = dyn_cast<InstanceOp>(op);
@@ -877,31 +984,39 @@ void Inliner::flattenInstances(FModuleOp module) {
     // Create the wire mapping for results + ports. We RAUW the results instead
     // of mapping them.
     BlockAndValueMapping mapper;
-    OpBuilder b(instance);
+    b.setInsertionPoint(instance);
+
     auto nestedPrefix = (instance.getName() + "_").str();
-    auto wires = mapPortsToWires(nestedPrefix, b, mapper, target, localSymbols,
-                                 moduleNamespace);
+    mapPortsToWires(nestedPrefix, b, mapper, beb, target, localSymbols,
+                    moduleNamespace, wires, edges);
     for (unsigned i = 0, e = instance.getNumResults(); i < e; ++i)
       instance.getResult(i).replaceAllUsesWith(wires[i]);
 
     // Recursively flatten the target module.
-    flattenInto(nestedPrefix, b, mapper, target, localSymbols, moduleNamespace);
+    flattenInto(nestedPrefix, b, mapper, beb, edges, target, localSymbols,
+                moduleNamespace);
     currentPath.pop_back();
     activeHierpaths = parentActivePaths;
 
     // Erase the replaced instance.
     instance.erase();
+    wires.clear();
   }
+
+  // Fixup edges for ref types.
+  replaceRefEdges(edges);
 }
 
 // NOLINTNEXTLINE(misc-no-recursion)
 void Inliner::inlineInto(StringRef prefix, OpBuilder &b,
-                         BlockAndValueMapping &mapper, FModuleOp parent,
+                         BlockAndValueMapping &mapper, BackedgeBuilder &beb,
+                         SmallVectorImpl<Backedge> &edges, FModuleOp target,
                          DenseMap<Attribute, Attribute> &symbolRenames,
                          ModuleNamespace &moduleNamespace) {
-  auto moduleName = parent.getNameAttr();
+  auto moduleName = target.getNameAttr();
   // Inline everything in the module's body.
-  for (auto &op : *parent.getBodyBlock()) {
+  SmallVector<Value> wires;
+  for (auto &op : *target.getBodyBlock()) {
     // If it's not an instance op, clone it and continue.
     auto instance = dyn_cast<InstanceOp>(op);
     if (!instance) {
@@ -911,23 +1026,23 @@ void Inliner::inlineInto(StringRef prefix, OpBuilder &b,
 
     // If it's not a regular module we can't inline it. Mark it as live.
     auto *module = symbolTable.lookup(instance.getModuleName());
-    auto target = dyn_cast<FModuleOp>(module);
-    if (!target) {
+    auto childModule = dyn_cast<FModuleOp>(module);
+    if (!childModule) {
       liveModules.insert(module);
       cloneAndRename(prefix, b, mapper, op, symbolRenames, {}, moduleNamespace);
       continue;
     }
 
     // If we aren't inlining the target, add it to the work list.
-    if (!shouldInline(target)) {
-      if (liveModules.insert(target).second) {
-        worklist.push_back(target);
+    if (!shouldInline(childModule)) {
+      if (liveModules.insert(childModule).second) {
+        worklist.push_back(childModule);
       }
       cloneAndRename(prefix, b, mapper, op, symbolRenames, {}, moduleNamespace);
       continue;
     }
 
-    auto toBeFlattened = shouldFlatten(target);
+    auto toBeFlattened = shouldFlatten(childModule);
     if (auto instSym = getInnerSymName(instance)) {
       auto innerRef = InnerRefAttr::get(moduleName, instSym);
       // Preorder update of any non-local annotations this instance participates
@@ -935,9 +1050,9 @@ void Inliner::inlineInto(StringRef prefix, OpBuilder &b,
       // non-local annotations can be deleted if they are now local.
       for (auto sym : instOpHierPaths[innerRef]) {
         if (toBeFlattened)
-          nlaMap[sym].flattenModule(target);
+          nlaMap[sym].flattenModule(childModule);
         else
-          nlaMap[sym].inlineModule(target);
+          nlaMap[sym].inlineModule(childModule);
       }
     }
 
@@ -949,10 +1064,10 @@ void Inliner::inlineInto(StringRef prefix, OpBuilder &b,
     // and add an annotation on the instance saying that this now participates
     // in this new NLA.
     DenseMap<Attribute, Attribute> symbolRenames;
-    if (!rootMap[target.getNameAttr()].empty()) {
-      for (auto sym : rootMap[target.getNameAttr()]) {
+    if (!rootMap[childModule.getNameAttr()].empty()) {
+      for (auto sym : rootMap[childModule.getNameAttr()]) {
         auto &mnla = nlaMap[sym];
-        sym = mnla.reTop(parent);
+        sym = mnla.reTop(target);
         StringAttr instSym = getInnerSymName(instance);
         if (!instSym) {
           instSym = StringAttr::get(
@@ -975,19 +1090,21 @@ void Inliner::inlineInto(StringRef prefix, OpBuilder &b,
 
     // Create the wire mapping for results + ports.
     auto nestedPrefix = (prefix + instance.getName() + "_").str();
-    auto wires =
-        mapPortsToWires(nestedPrefix, b, mapper, target, {}, moduleNamespace);
+    mapPortsToWires(nestedPrefix, b, mapper, beb, childModule, {},
+                    moduleNamespace, wires, edges);
     mapResultsToWires(mapper, wires, instance);
 
     // Inline the module, it can be marked as flatten and inline.
     if (toBeFlattened) {
-      flattenInto(nestedPrefix, b, mapper, target, {}, moduleNamespace);
+      flattenInto(nestedPrefix, b, mapper, beb, edges, childModule, {},
+                  moduleNamespace);
     } else {
-      inlineInto(nestedPrefix, b, mapper, target, symbolRenames,
-                 moduleNamespace);
+      inlineInto(nestedPrefix, b, mapper, beb, edges, childModule,
+                 symbolRenames, moduleNamespace);
     }
     currentPath.pop_back();
     activeHierpaths = parentActivePaths;
+    wires.clear();
   }
 }
 
@@ -995,6 +1112,11 @@ void Inliner::inlineInstances(FModuleOp parent) {
   // Generate a namespace for this module so that we can safely inline symbols.
   ModuleNamespace moduleNamespace(parent);
   auto moduleName = parent.getNameAttr();
+
+  SmallVector<Value> wires;
+  SmallVector<Backedge> edges;
+  OpBuilder b(parent.getContext());
+  BackedgeBuilder beb(b, parent.getLoc());
 
   for (auto &op : llvm::make_early_inc_range(*parent.getBodyBlock())) {
     // If it's not an instance op, skip it.
@@ -1062,18 +1184,19 @@ void Inliner::inlineInstances(FModuleOp parent) {
     // Create the wire mapping for results + ports. We RAUW the results instead
     // of mapping them.
     BlockAndValueMapping mapper;
-    OpBuilder b(instance);
+    b.setInsertionPoint(instance);
     auto nestedPrefix = (instance.getName() + "_").str();
-    auto wires =
-        mapPortsToWires(nestedPrefix, b, mapper, target, {}, moduleNamespace);
+    mapPortsToWires(nestedPrefix, b, mapper, beb, target, {}, moduleNamespace,
+                    wires, edges);
     for (unsigned i = 0, e = instance.getNumResults(); i < e; ++i)
       instance.getResult(i).replaceAllUsesWith(wires[i]);
 
     // Inline the module, it can be marked as flatten and inline.
     if (toBeFlattened) {
-      flattenInto(nestedPrefix, b, mapper, target, {}, moduleNamespace);
+      flattenInto(nestedPrefix, b, mapper, beb, edges, target, {},
+                  moduleNamespace);
     } else {
-      inlineInto(nestedPrefix, b, mapper, target, symbolRenames,
+      inlineInto(nestedPrefix, b, mapper, beb, edges, target, symbolRenames,
                  moduleNamespace);
     }
     currentPath.pop_back();
@@ -1081,7 +1204,11 @@ void Inliner::inlineInstances(FModuleOp parent) {
 
     // Erase the replaced instance.
     instance.erase();
+    wires.clear();
   }
+
+  // Fixup edges for ref types.
+  replaceRefEdges(edges);
 }
 
 void Inliner::identifyNLAsTargetingOnlyModules() {
@@ -1226,44 +1353,10 @@ void Inliner::run() {
   for (auto &nla : nlaMap)
     nla.getSecond().applyUpdates();
 
-  llvm::SetVector<Operation *> opsToRemove;
-
-  // Get the driver for this val, and mark the corresponding connect for
-  // removal.
-  auto getDriverAndMarkConnectForRemoval = [&](Value val) -> Value {
-    Value driver;
-    for (Operation *use : val.getUsers())
-      if (auto connect = dyn_cast<FConnectLike>(use))
-        if (connect.getDest() == val) {
-          driver = connect.getSrc();
-          opsToRemove.insert(connect);
-        }
-    return driver;
-  };
-
-  // Ensure that all users of the `wireToRemove` are defined after the driver.
-  // This is required to ensure the driver dominates the users.
-  auto moveUseAfterDef = [&](Operation *wireToRemove, Operation *driver) {
-    for (Operation *user : wireToRemove->getUsers())
-      if (user->isBeforeInBlock(driver))
-        user->moveAfter(driver);
-  };
   // Garbage collect any annotations which are now dead.  Duplicate annotations
   // which are now split.
   for (auto fmodule : circuit.getBodyBlock()->getOps<FModuleOp>()) {
     for (auto &op : *fmodule.getBodyBlock()) {
-      // Remove all the temporary wires of RefType, created during inlining.
-      if (auto wire = dyn_cast<WireOp>(op))
-        if (wire.getResult().getType().isa<RefType>()) {
-          auto driver = getDriverAndMarkConnectForRemoval(wire);
-          if (!driver.isa<BlockArgument>())
-            moveUseAfterDef(wire, driver.getDefiningOp());
-          wire.getResult().replaceAllUsesExcept(
-              driver, llvm::SmallPtrSet<Operation *, 16>(opsToRemove.begin(),
-                                                         opsToRemove.end()));
-          opsToRemove.insert(wire);
-          continue;
-        }
       AnnotationSet annotations(&op);
       // Early exit to avoid adding an empty annotations attribute to operations
       // which did not previously have annotations.
@@ -1333,8 +1426,6 @@ void Inliner::run() {
                        ArrayAttr::get(op.getContext(), newPortAnnotations));
     }
   }
-  for (auto *op : opsToRemove)
-    op->erase();
 }
 
 //===----------------------------------------------------------------------===//
