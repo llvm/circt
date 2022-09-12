@@ -376,6 +376,19 @@ def ConvertHWToLLHD : Pass<"convert-hw-to-llhd", "mlir::ModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
+// CombToSystemC
+//===----------------------------------------------------------------------===//
+
+def ConvertCombToSystemC : Pass<"convert-comb-to-systemc", "mlir::ModuleOp"> {
+  let summary = "Convert Comb to SystemC";
+  let description = [{
+    This pass translates a HW design into an equivalent SystemC design.
+  }];
+  let constructor = "circt::createConvertCombToSystemCPass()";
+  let dependentDialects = ["systemc::SystemCDialect"];
+}
+
+//===----------------------------------------------------------------------===//
 // HWToSystemC
 //===----------------------------------------------------------------------===//
 
