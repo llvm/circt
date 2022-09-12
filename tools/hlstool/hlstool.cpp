@@ -224,6 +224,15 @@ static LogicalResult
 doHLSFlowDynamic(PassManager &pm, ModuleOp module,
                  Optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
 
+  if (irInputLevel < 0)
+    irInputLevel = HLSFlowDynamicIRLevel::High; // Default to highest level
+
+  if (irOutputLevel < 0)
+    irInputLevel = HLSFlowDynamicIRLevel::Rtl; // Default to lowest level
+
+  if (outputFormat == OutputIR && irOutputLevel < 0)
+    llvm::errs() << "No output IR level specified - required for --ir.";
+
   if (irInputLevel < HLSFlowDynamicIRLevel::High ||
       irInputLevel > HLSFlowDynamicIRLevel::Rtl) {
     llvm::errs() << "Invalid IR input level: " << irInputLevel << "\n";
@@ -312,12 +321,6 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     llvm::errs() << "[hlstool] -- Done in " << llvm::format("%.3f", elpased)
                  << " sec\n";
   }
-
-  if (irInputLevel < 0)
-    llvm::errs() << "No input IR level specified.";
-
-  if (outputFormat == OutputIR && irOutputLevel < 0)
-    llvm::errs() << "No output IR level specified - required for --ir.";
 
   // Apply any pass manager command line options.
   PassManager pm(&context);
@@ -426,8 +429,7 @@ int main(int argc, char **argv) {
   cl::ParseCommandLineOptions(argc, argv, "CIRCT HLS tool\n");
 
   DialectRegistry registry;
-  circt::registerAllPasses();
-  circt::registerAllDialects(registry);
+  // Register MLIR dialects.
   registry.insert<mlir::AffineDialect>();
   registry.insert<mlir::memref::MemRefDialect>();
   registry.insert<mlir::func::FuncDialect>();
@@ -435,10 +437,16 @@ int main(int argc, char **argv) {
   registry.insert<mlir::cf::ControlFlowDialect>();
   registry.insert<mlir::scf::SCFDialect>();
 
+  // Register MLIR passes.
   mlir::registerCSEPass();
   mlir::registerSCCPPass();
   mlir::registerInlinerPass();
   mlir::registerCanonicalizerPass();
+
+  // Register CIRCT dialects.
+  registry
+      .insert<firrtl::FIRRTLDialect, hw::HWDialect, comb::CombDialect,
+              seq::SeqDialect, sv::SVDialect, handshake::HandshakeDialect>();
 
   // Do the guts of the hlstool process.
   MLIRContext context(registry);
