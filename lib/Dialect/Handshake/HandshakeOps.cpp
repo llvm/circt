@@ -1428,28 +1428,34 @@ void JoinOp::build(OpBuilder &builder, OperationState &result,
   result.types.push_back(type);
 
   result.addOperands(operands);
-  sost::addAttributes(result, operands.size(), type);
+  result.addAttribute("control", BoolAttr::get(result.getContext(), true));
 }
 
 ParseResult JoinOp::parse(OpAsmParser &parser, OperationState &result) {
-  SmallVector<OpAsmParser::UnresolvedOperand, 4> allOperands;
-  Type type;
-  ArrayRef<Type> operandTypes(type);
-  SmallVector<Type, 1> dataOperandsTypes;
+  SmallVector<OpAsmParser::UnresolvedOperand, 4> operands;
+  SmallVector<Type> types;
+
   llvm::SMLoc allOperandLoc = parser.getCurrentLocation();
-  int size;
-  if (sost::parseOperation(parser, allOperands, result, size, type, false))
+  if (parser.parseOperandList(operands) ||
+      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+      parser.parseTypeList(types))
     return failure();
 
-  dataOperandsTypes.assign(size, type);
-  result.addTypes({type});
-  if (parser.resolveOperands(allOperands, dataOperandsTypes, allOperandLoc,
-                             result.operands))
+  if (parser.resolveOperands(operands, types, allOperandLoc, result.operands))
     return failure();
+
+  if (!result.attributes.get("control"))
+    result.addAttribute("control", BoolAttr::get(result.getContext(), true));
+
+  result.addTypes(NoneType::get(result.getContext()));
   return success();
 }
 
-void JoinOp::print(OpAsmPrinter &p) { sost::printOp(p, *this, false); }
+void JoinOp::print(OpAsmPrinter &p) {
+  p << " " << data();
+  p.printOptionalAttrDict((*this)->getAttrs(), {"control"});
+  p << " : " << data().getTypes();
+}
 
 /// Based on mlir::func::CallOp::verifySymbolUses
 LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
