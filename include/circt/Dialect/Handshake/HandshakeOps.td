@@ -200,13 +200,11 @@ def ReturnOp : Handshake_Op<"return", [Terminator]> {
     only operand(exit point of control - only network).
   }];
 
-  let arguments = (ins Variadic<AnyType> : $operands, NoneType : $control);
-
-  let skipDefaultBuilders = 1;
-  let builders = [OpBuilder<(ins "ValueRange":$operands)>];
+  let arguments = (ins Variadic<AnyType> : $operands);
 
   let hasVerifier = 1;
-  let assemblyFormat = [{ operands attr-dict `:` qualified(type(operands)) }];
+  let assemblyFormat =
+    [{  attr-dict ($operands^ `:` type($operands))? }];
 }
 
 // Here use I32EnumAttr to better suit the BufferOp sequential
