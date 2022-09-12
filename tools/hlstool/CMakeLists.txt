@@ -1,0 +1,70 @@
+set(LLVM_LINK_COMPONENTS
+  Support
+  )
+
+add_llvm_tool(hlstool
+ hlstool.cpp
+)
+llvm_update_compile_flags(hlstool)
+target_link_libraries(hlstool
+  PRIVATE
+
+  CIRCTAffineToPipeline
+  CIRCTAnalysisTestPasses
+  CIRCTCalyx
+  CIRCTCalyxToHW
+  CIRCTCalyxToFSM
+  CIRCTCalyxTransforms
+  CIRCTESI
+  CIRCTExportChiselInterface
+  CIRCTExportVerilog
+  CIRCTFIRRTL
+  CIRCTFIRRTLToHW
+  CIRCTFIRRTLTransforms
+  CIRCTFSM
+  CIRCTFSMTransforms
+  CIRCTFSMToSV
+  CIRCTHandshake
+  CIRCTHandshakeToFIRRTL
+  CIRCTHandshakeToHW
+  CIRCTHandshakeTransforms
+  CIRCTLLHD
+  CIRCTLLHDToLLVM
+  CIRCTHWToLLVM
+  CIRCTCombToLLVM
+  CIRCTLLHDTransforms
+  CIRCTMoore
+  CIRCTMooreToCore
+  CIRCTMSFT
+  CIRCTMSFTTransforms
+  CIRCTHW
+  CIRCTHWArith
+  CIRCTHWArithToHW
+  CIRCTHWToLLHD
+  CIRCTHWToSystemC
+  CIRCTHWTransforms
+  CIRCTSCFToCalyx
+  CIRCTScheduling
+  CIRCTSchedulingTestPasses
+  CIRCTSeq
+  CIRCTSeqTransforms
+  CIRCTSSP
+  CIRCTStandardToHandshake
+  CIRCTPipelineOps
+  CIRCTPipelineToCalyx
+  CIRCTSV
+  CIRCTSVTransforms
+  CIRCTHWArith
+  CIRCTSystemC
+  CIRCTTransforms
+  
+  MLIRIR
+  MLIRLLVMDialect
+  MLIRMemRefDialect
+  MLIROptLib
+  MLIRParser
+  MLIRControlFlowDialect
+  MLIRSupport
+  MLIRTransforms
+  MLIRSCFToControlFlow
+  )
