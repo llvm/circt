@@ -911,11 +911,6 @@ void EndOp::build(OpBuilder &builder, OperationState &result, Value operand) {
   result.addOperands(operand);
 }
 
-void handshake::ReturnOp::build(OpBuilder &builder, OperationState &result,
-                                ValueRange operands) {
-  result.addOperands(operands);
-}
-
 void SinkOp::build(OpBuilder &builder, OperationState &result, Value operand) {
   result.addOperands(operand);
   sost::addAttributes(result, 1, operand.getType());
