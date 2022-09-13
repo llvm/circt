@@ -1,7 +1,6 @@
 // RUN: circt-opt -pass-pipeline='firrtl.circuit(firrtl.module(firrtl-lower-chirrtl))'  %s | FileCheck %s
 
 firrtl.circuit "Empty" {
-
 // Memories with no ports should be deleted.
 firrtl.module @Empty(in %clock: !firrtl.clock) {
   %ram = chirrtl.combmem : !chirrtl.cmemory<uint<1>, 2>
@@ -300,6 +299,22 @@ firrtl.module @LargeMem(in %clock: !firrtl.clock, in %addr: !firrtl.uint<35>, ou
   %addr_node = firrtl.node %addr  : !firrtl.uint<35>
   chirrtl.memoryport.access %r_port[%addr_node], %clock : !chirrtl.cmemoryport, !firrtl.uint<35>, !firrtl.clock
   firrtl.connect %out, %r_data : !firrtl.uint<1>, !firrtl.uint<1>
+}
+
+firrtl.module @DbgsMemPort(in %clock: !firrtl.clock, in %addr : !firrtl.uint<1>, out %_a: !firrtl.ref<uint<1>>, in %cond : !firrtl.uint<1>) {
+  %ram = chirrtl.combmem : !chirrtl.cmemory<vector<uint<1>, 2>, 2>
+  // This port should be deleted.
+  %port0_data, %port0_port = chirrtl.memoryport Debug %ram {name = "port0"} : (!chirrtl.cmemory<vector<uint<1>, 2>, 2>) -> (!firrtl.vector<uint<1>, 2>, !chirrtl.cmemoryport)
+  %ramport_data, %ramport_port = chirrtl.memoryport Read %ram {name = "ramport"} : (!chirrtl.cmemory<vector<uint<1>, 2>, 2>) -> (!firrtl.vector<uint<1>, 2>, !chirrtl.cmemoryport)
+
+  firrtl.when %cond {
+    chirrtl.memoryport.access %ramport_port[%addr], %clock : !chirrtl.cmemoryport, !firrtl.uint<1>, !firrtl.clock
+  }
+  %0 = firrtl.subindex %port0_data[1] : !firrtl.vector<uint<1>, 2>
+  %1 = firrtl.ref.send %0 : !firrtl.uint<1>
+  // CHECK:    %ram_port0, %ram_ramport = firrtl.mem  Undefined  {depth = 2 : i64, name = "ram", portNames = ["port0", "ramport"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.vector<uint<1>, 2>, !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: vector<uint<1>, 2>>
+  // CHECK:    %4 = firrtl.subindex %ram_port0[1] : !firrtl.vector<uint<1>, 2>
+  // CHECK:    %5 = firrtl.ref.send %4 : !firrtl.uint<1>
 }
 
 }
