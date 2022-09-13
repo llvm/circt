@@ -114,10 +114,10 @@ struct FlattenMemoryPass : public FlattenMemoryBase<FlattenMemoryPass> {
         auto rType = result.getType().dyn_cast<BundleType>();
         auto newResult = flatMem.getResult(index);
         if (memOp.getPortKind(index) == MemOp::PortKind::Debug) {
-            // Cast the memory read data from flat type to aggregate.
-            newResult = builder.createOrFold<BitCastOp>(
-                result.getType().cast<FIRRTLType>(), newResult);
-            // Write the aggregate read data.
+          // Cast the memory read data from flat type to aggregate.
+          newResult = builder.createOrFold<BitCastOp>(
+              result.getType().cast<FIRRTLType>(), newResult);
+          // Write the aggregate read data.
           result.replaceAllUsesWith(newResult);
           continue;
         }
