@@ -387,7 +387,7 @@ struct UnwrappedIO {
   llvm::SmallVector<OutputHandshake> outputs;
 
   template <typename T, typename TInner>
-  llvm::SmallVector<T> IOAccessor(llvm::SmallVector<TInner> &container,
+  llvm::SmallVector<T> ioAccessor(llvm::SmallVector<TInner> &container,
                                   llvm::function_ref<T(TInner &)> extractor) {
     llvm::SmallVector<T> result;
     llvm::transform(container, std::back_inserter(result), extractor);
@@ -395,27 +395,27 @@ struct UnwrappedIO {
   }
 
   llvm::SmallVector<Value> getInputValids() {
-    return IOAccessor<Value, InputHandshake>(inputs,
+    return ioAccessor<Value, InputHandshake>(inputs,
                                              [](auto &hs) { return hs.valid; });
   }
   llvm::SmallVector<std::shared_ptr<Backedge>> getInputReadys() {
-    return IOAccessor<std::shared_ptr<Backedge>, InputHandshake>(
+    return ioAccessor<std::shared_ptr<Backedge>, InputHandshake>(
         inputs, [](auto &hs) { return hs.ready; });
   }
   llvm::SmallVector<Value> getInputDatas() {
-    return IOAccessor<Value, InputHandshake>(inputs,
+    return ioAccessor<Value, InputHandshake>(inputs,
                                              [](auto &hs) { return hs.data; });
   }
   llvm::SmallVector<std::shared_ptr<Backedge>> getOutputValids() {
-    return IOAccessor<std::shared_ptr<Backedge>, OutputHandshake>(
+    return ioAccessor<std::shared_ptr<Backedge>, OutputHandshake>(
         outputs, [](auto &hs) { return hs.valid; });
   }
   llvm::SmallVector<Value> getOutputReadys() {
-    return IOAccessor<Value, OutputHandshake>(
+    return ioAccessor<Value, OutputHandshake>(
         outputs, [](auto &hs) { return hs.ready; });
   }
   llvm::SmallVector<std::shared_ptr<Backedge>> getOutputDatas() {
-    return IOAccessor<std::shared_ptr<Backedge>, OutputHandshake>(
+    return ioAccessor<std::shared_ptr<Backedge>, OutputHandshake>(
         outputs, [](auto &hs) { return hs.data; });
   }
 };
@@ -447,11 +447,13 @@ struct RTLBuilder {
                                     rst, rstValue, mlir::StringAttr());
   }
 
-  Value And(ValueRange values, Location *extLoc = nullptr) {
+  // Bitwise 'and'.
+  Value bAnd(ValueRange values, Location *extLoc = nullptr) {
     return b.create<comb::AndOp>(getLoc(extLoc), values).getResult();
   }
 
-  Value Not(Value value, Location *extLoc = nullptr) {
+  // Bitwise 'not'.
+  Value bNot(Value value, Location *extLoc = nullptr) {
     return comb::createOrFoldNot(getLoc(extLoc), value, b);
   }
 
@@ -550,7 +552,7 @@ public:
 
   void setAllReadyWithCond(RTLBuilder &s, ArrayRef<InputHandshake> inputs,
                            OutputHandshake &output, Value cond) const {
-    auto validAndReady = s.And({output.ready, cond});
+    auto validAndReady = s.bAnd({output.ready, cond});
     for (auto &input : inputs)
       input.ready->setValue(validAndReady);
   }
@@ -560,7 +562,7 @@ public:
     llvm::SmallVector<Value> valids;
     for (auto &input : inputs)
       valids.push_back(input.valid);
-    Value allValid = s.And(valids);
+    Value allValid = s.bAnd(valids);
     setAllReadyWithCond(s, inputs, output, allValid);
   }
 
@@ -570,22 +572,21 @@ public:
   void buildForkLogic(RTLBuilder &s, BackedgeBuilder &bb, InputHandshake &input,
                       ArrayRef<OutputHandshake> outputs,
                       hw::HWModulePortAccessor &ports) const {
-    auto c0_i1 = s.constant(1, 0);
+    auto c0I1 = s.constant(1, 0);
     llvm::SmallVector<Value> doneWires;
     for (auto [i, output] : llvm::enumerate(outputs)) {
       auto done = bb.get(s.b.getI1Type());
-      auto emitted = s.And({done, s.Not(*input.ready)});
-      auto emitted_reg =
-          s.reg("emitted_" + std::to_string(i), emitted, c0_i1,
-                ports.getInput("clock"), ports.getInput("reset"));
-      auto outValid = s.And({s.Not(emitted_reg), input.valid});
+      auto emitted = s.bAnd({done, s.bNot(*input.ready)});
+      auto emittedReg = s.reg("emitted_" + std::to_string(i), emitted, c0I1,
+                              ports.getInput("clock"), ports.getInput("reset"));
+      auto outValid = s.bAnd({s.bNot(emittedReg), input.valid});
       output.data->setValue(input.data);
       output.valid->setValue(outValid);
-      auto validReady = s.And({output.ready, input.valid});
-      done.setValue(s.And({validReady, emitted_reg}));
+      auto validReady = s.bAnd({output.ready, input.valid});
+      done.setValue(s.bAnd({validReady, emittedReg}));
       doneWires.push_back(done);
     }
-    input.ready->setValue(s.And(doneWires));
+    input.ready->setValue(s.bAnd(doneWires));
   }
 
 private:
