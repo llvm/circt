@@ -1067,7 +1067,8 @@ StringAttr ExportVerilog::inferStructuralNameForTemporary(Value expr) {
           .Case([&result](ExtractOp extract) {
             if (auto operandName =
                     inferStructuralNameForTemporary(extract.getInput())) {
-              unsigned numBits = extract.getType().getWidth();
+              unsigned numBits =
+                  extract.getType().cast<IntegerType>().getWidth();
               if (numBits == 1)
                 result = StringAttr::get(extract.getContext(),
                                          operandName.strref() + "_" +
@@ -2104,7 +2105,7 @@ SubExprInfo ExprEmitter::visitComb(ExtractOp op) {
     emitError(op, "SV attributes emission is unimplemented for the op");
 
   unsigned loBit = op.getLowBit();
-  unsigned hiBit = loBit + op.getType().getWidth() - 1;
+  unsigned hiBit = loBit + op.getType().cast<IntegerType>().getWidth() - 1;
 
   auto x = emitSubExpr(op.getInput(), LowestPrecedence);
   assert((x.precedence == Symbol ||
@@ -2213,7 +2214,7 @@ SubExprInfo ExprEmitter::visitTypeOp(ConstantOp op) {
     isNegated = true;
   }
 
-  os << op.getType().getWidth() << '\'';
+  os << op.getType().cast<IntegerType>().getWidth() << '\'';
 
   // Emit this as a signed constant if the caller would prefer that.
   if (signPreference == RequireSigned)

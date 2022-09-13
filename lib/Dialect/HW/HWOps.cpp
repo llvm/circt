@@ -234,7 +234,7 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
 
 LogicalResult ConstantOp::verify() {
   // If the result type has a bitwidth, then the attribute must match its width.
-  if (getValue().getBitWidth() != getType().getWidth())
+  if (getValue().getBitWidth() != getType().cast<IntegerType>().getWidth())
     return emitError(
         "hw.constant attribute bitwidth doesn't match return type");
 
@@ -274,7 +274,7 @@ void ConstantOp::getAsmResultNames(
   auto intCst = getValue();
 
   // Sugar i1 constants with 'true' and 'false'.
-  if (intTy.getWidth() == 1)
+  if (intTy.cast<IntegerType>().getWidth() == 1)
     return setNameFn(getResult(), intCst.isZero() ? "false" : "true");
 
   // Otherwise, build a complex name with the value and type.
