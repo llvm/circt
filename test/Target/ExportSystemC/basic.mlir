@@ -29,11 +29,15 @@ systemc.module @basic (%port0: !systemc.in<i1>, %port1: !systemc.inout<i64>, %po
   // CHECK-NEXT: sc_out<bool> port4;
   // CHECK-NEXT: sc_signal<sc_uint<64>> sig;
   %sig = systemc.signal : !systemc.signal<i64>
+  // CHECK-NEXT: sc_signal<sc_uint<32>> channel;
+  %channel = systemc.signal : !systemc.signal<i32>
   // CHECK-NEXT: submodule submoduleInstance;
   %submoduleInstance = systemc.instance.decl @submodule : !systemc.module<submodule(in0: !systemc.in<i32>, in1: !systemc.in<i32>, out0: !systemc.out<i32>)>
   // CHECK-EMPTY: 
   // CHECK-NEXT: SC_CTOR(basic) {
   systemc.ctor {
+    // CHECK-NEXT: submoduleInstance.in0(channel);
+    systemc.instance.bind_port %submoduleInstance["in0"] to %channel : !systemc.module<submodule(in0: !systemc.in<i32>, in1: !systemc.in<i32>, out0: !systemc.out<i32>)>, !systemc.signal<i32>
     // CHECK-NEXT: SC_METHOD(add);
     systemc.method %add
     // CHECK-NEXT: SC_THREAD(add);
