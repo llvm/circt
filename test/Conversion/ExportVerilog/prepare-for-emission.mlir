@@ -9,28 +9,40 @@ hw.module @namehint_variadic(%a: i3) -> (b: i3) {
   hw.output %0 : i3
 }
 
-// -----
-
-module {
-  // CHECK-LABEL:  hw.module @SpillTemporaryInProceduralRegion
-  hw.module @SpillTemporaryInProceduralRegion(%a: i4, %b: i4, %fd: i32) -> () {
-    // CHECK-NEXT: %r = sv.reg
-    // CHECK-NEXT: sv.initial {
-    // CHECK-NEXT:   %0 = sv.logic
-    // CHECK-NEXT:   %1 = comb.add %a, %b
-    // CHECK-NEXT:   sv.bpassign %0, %1
-    // CHECK-NEXT:   %2 = sv.read_inout %0
-    // CHECK-NEXT:   %3 = comb.extract %2 from 3
-    // CHECK-NEXT:   sv.passign %r, %3
-    // CHECK-NEXT: }
-    // CHECK-NEXT: hw.output
-    %r = sv.reg : !hw.inout<i1>
-    sv.initial {
-      %0 = comb.add %a, %b : i4
-      %1 = comb.extract %0 from 3 : (i4) -> i1
-      sv.passign %r, %1: i1
-    }
+// CHECK-LABEL:  hw.module @SpillTemporaryInProceduralRegion
+hw.module @SpillTemporaryInProceduralRegion(%a: i4, %b: i4, %fd: i32) -> () {
+  // CHECK-NEXT: %r = sv.reg
+  // CHECK-NEXT: sv.initial {
+  // CHECK-NEXT:   %0 = sv.logic
+  // CHECK-NEXT:   %1 = comb.add %a, %b
+  // CHECK-NEXT:   sv.bpassign %0, %1
+  // CHECK-NEXT:   %2 = sv.read_inout %0
+  // CHECK-NEXT:   %3 = comb.extract %2 from 3
+  // CHECK-NEXT:   sv.passign %r, %3
+  // CHECK-NEXT: }
+  // CHECK-NEXT: hw.output
+  %r = sv.reg : !hw.inout<i1>
+  sv.initial {
+    %0 = comb.add %a, %b : i4
+    %1 = comb.extract %0 from 3 : (i4) -> i1
+    sv.passign %r, %1: i1
   }
+}
+
+// CHECK-LABEL:  hw.module @outOfOrderInoutOperations
+hw.module @outOfOrderInoutOperations(%a: i4) -> (c: i4) {
+  // CHECK: %wire = sv.wire
+  // CHECK-NEXT: %0 = sv.array_index_inout %wire[%false]
+  // CHECK-NEXT: %1 = sv.array_index_inout %0[%false]
+  // CHECK-NEXT: %2 = sv.array_index_inout %1[%false]
+  // CHECK-NEXT: %3 = sv.read_inout %2
+  %false = hw.constant false
+  %0 = sv.read_inout %3 : !hw.inout<i4>
+  %3 = sv.array_index_inout %2[%false] : !hw.inout<array<1xi4>>, i1
+  %2 = sv.array_index_inout %1[%false] : !hw.inout<array<1xarray<1xi4>>>, i1
+  %1 = sv.array_index_inout %wire[%false] : !hw.inout<array<1xarray<1xarray<1xi4>>>>, i1
+  %wire = sv.wire  : !hw.inout<array<1xarray<1xarray<1xi4>>>>
+  hw.output %0: i4
 }
 
 // -----
