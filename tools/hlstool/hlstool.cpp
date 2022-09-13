@@ -225,7 +225,7 @@ doHLSFlowDynamic(PassManager &pm, ModuleOp module,
     irInputLevel = HLSFlowDynamicIRLevel::High; // Default to highest level
 
   if (irOutputLevel < 0)
-    irInputLevel = HLSFlowDynamicIRLevel::Rtl; // Default to lowest level
+    irOutputLevel = HLSFlowDynamicIRLevel::Rtl; // Default to lowest level
 
   if (irInputLevel > HLSFlowDynamicIRLevel::Rtl) {
     llvm::errs() << "Invalid IR input level: " << irInputLevel << "\n";
