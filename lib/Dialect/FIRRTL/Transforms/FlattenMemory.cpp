@@ -111,14 +111,22 @@ struct FlattenMemoryPass : public FlattenMemoryBase<FlattenMemoryPass> {
       for (size_t index = 0, rend = memOp.getNumResults(); index < rend;
            ++index) {
         auto result = memOp.getResult(index);
+        auto rType = result.getType().dyn_cast<BundleType>();
+        auto newResult = flatMem.getResult(index);
+        if (memOp.getPortKind(index) == MemOp::PortKind::Debug) {
+            // Cast the memory read data from flat type to aggregate.
+            newResult = builder.createOrFold<BitCastOp>(
+                result.getType().cast<FIRRTLType>(), newResult);
+            // Write the aggregate read data.
+          result.replaceAllUsesWith(newResult);
+          continue;
+        }
         auto wire = builder.create<WireOp>(
             result.getType(),
             (memOp.getName() + "_" + memOp.getPortName(index).getValue())
                 .str());
         result.replaceAllUsesWith(wire.getResult());
         result = wire;
-        auto newResult = flatMem.getResult(index);
-        auto rType = result.getType().cast<BundleType>();
         for (size_t fieldIndex = 0, fend = rType.getNumElements();
              fieldIndex != fend; ++fieldIndex) {
           auto name = rType.getElement(fieldIndex).name.getValue();
