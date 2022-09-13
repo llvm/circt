@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_CONVERSION_PIPELINETOHW_PIPELINETOHW_H
-#define CIRCT_CONVERSION_PIPELINETOHW_PIPELINETOHW_H
+#ifndef CIRCT_CONVERSION_PIPELINETOHW_H
+#define CIRCT_CONVERSION_PIPELINETOHW_H
 
 #include "circt/Support/LLVM.h"
 #include <memory>
@@ -24,4 +24,4 @@ std::unique_ptr<mlir::Pass> createPipelineToHWPass();
 
 } // namespace circt
 
-#endif // CIRCT_CONVERSION_PIPELINETOHW_PIPELINETOHW_H
+#endif // CIRCT_CONVERSION_PIPELINETOHW_H
