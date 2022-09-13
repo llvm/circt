@@ -709,6 +709,9 @@ void Emitter::emitAttribute(MemDirAttr attr) {
   case MemDirAttr::ReadWrite:
     os << "rdwr";
     break;
+  case MemDirAttr::Debug:
+    os << "dbg";
+    break;
   }
 }
 

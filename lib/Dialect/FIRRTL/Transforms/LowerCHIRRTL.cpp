@@ -166,6 +166,8 @@ static MemOp::PortKind memDirAttrToPortKind(MemDirAttr direction) {
     return MemOp::PortKind::Write;
   case MemDirAttr::ReadWrite:
     return MemOp::PortKind::ReadWrite;
+  case MemDirAttr::Debug:
+    return MemOp::PortKind::Debug;
   default:
     llvm_unreachable(
         "Unhandled MemDirAttr, was the port direction not inferred?");
@@ -197,6 +199,7 @@ MemDirAttr LowerCHIRRTLPass::inferMemoryPortKind(MemoryPortOp memPort) {
     Value::use_iterator iterator;
     MemDirAttr mode;
   };
+  bool isDebug = memPort.getDirection() == MemDirAttr::Debug;
 
   SmallVector<StackElement> stack;
   stack.emplace_back(memPort.getData(), memPort.getData().use_begin(),
@@ -259,7 +262,8 @@ MemDirAttr LowerCHIRRTLPass::inferMemoryPortKind(MemoryPortOp memPort) {
     // Store the direction of the current operation in the global map. This will
     // be used later to determine if this subaccess operation needs to be cloned
     // into rdata, wdata, and wmask.
-    subfieldDirs[stack.back().value.getDefiningOp()] = mode;
+    subfieldDirs[stack.back().value.getDefiningOp()] =
+        isDebug ? memPort.getDirection() : mode;
     stack.pop_back();
   }
 
@@ -354,6 +358,10 @@ void LowerCHIRRTLPass::replaceMem(Operation *cmem, StringRef name,
     auto cmemoryPortAccess = cmemoryPort.getAccess();
     auto memoryPort = memory.getResult(i);
     auto portKind = ports[i].portKind;
+    if (portKind == MemOp::PortKind::Debug) {
+      rdataValues[cmemoryPort.getData()] = memoryPort;
+      continue;
+    }
 
     // Most fields on the newly created memory will be assigned an initial value
     // immediately following the memory decl, and then will be assigned a second
@@ -565,7 +573,8 @@ void LowerCHIRRTLPass::cloneSubindexOpForMemory(OpType op, Value input,
 
   // If the subaccess operation is used to read from a memory port, we need to
   // clone it to read from the rdata field.
-  if (direction == MemDirAttr::Read || direction == MemDirAttr::ReadWrite) {
+  if (direction == MemDirAttr::Read || direction == MemDirAttr::ReadWrite ||
+      direction == MemDirAttr::Debug) {
     rdataValues[op] = builder.create<OpType>(rdataValues[input], operands...);
   }
 
