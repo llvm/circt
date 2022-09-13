@@ -155,6 +155,7 @@ static Type wrapPortType(Type type, hw::PortDirection direction) {
   case hw::PortDirection::OUTPUT:
     return OutputType::get(type);
   }
+  llvm_unreachable("Impossible port direction");
 }
 
 void SCModuleOp::build(OpBuilder &odsBuilder, OperationState &odsState,
