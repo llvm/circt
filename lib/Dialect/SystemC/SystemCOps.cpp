@@ -451,6 +451,97 @@ LogicalResult DestructorOp::verify() {
 }
 
 //===----------------------------------------------------------------------===//
+// BindPortOp
+//===----------------------------------------------------------------------===//
+
+ParseResult BindPortOp::parse(OpAsmParser &parser, OperationState &result) {
+  OpAsmParser::UnresolvedOperand instance, channel;
+  std::string portName;
+  if (parser.parseOperand(instance) || parser.parseLSquare() ||
+      parser.parseString(&portName))
+    return failure();
+
+  auto portNameLoc = parser.getCurrentLocation();
+
+  if (parser.parseRSquare() || parser.parseKeyword("to") ||
+      parser.parseOperand(channel))
+    return failure();
+
+  if (parser.parseOptionalAttrDict(result.attributes))
+    return failure();
+
+  auto typeListLoc = parser.getCurrentLocation();
+  SmallVector<Type> types;
+  if (parser.parseColonTypeList(types))
+    return failure();
+
+  if (types.size() != 2)
+    return parser.emitError(typeListLoc,
+                            "expected a list of exactly 2 types, but got ")
+           << types.size();
+
+  if (parser.resolveOperand(instance, types[0], result.operands))
+    return failure();
+  if (parser.resolveOperand(channel, types[1], result.operands))
+    return failure();
+
+  if (auto moduleType = types[0].dyn_cast<ModuleType>()) {
+    auto ports = moduleType.getPorts();
+    uint64_t index = 0;
+    for (auto port : ports) {
+      if (port.name == portName)
+        break;
+      index++;
+    }
+    if (index >= ports.size())
+      return parser.emitError(portNameLoc, "port name \"")
+             << portName << "\" not found in module";
+
+    result.addAttribute("portId", parser.getBuilder().getIndexAttr(index));
+
+    return success();
+  }
+
+  return failure();
+}
+
+void BindPortOp::print(OpAsmPrinter &p) {
+  p << " " << getInstance() << "["
+    << getInstance()
+           .getType()
+           .cast<ModuleType>()
+           .getPorts()[getPortId().getZExtValue()]
+           .name
+    << "] to " << getChannel();
+  p.printOptionalAttrDict((*this)->getAttrs(), {"portId"});
+  p << " : " << getInstance().getType() << ", " << getChannel().getType();
+}
+
+LogicalResult BindPortOp::verify() {
+  auto ports = getInstance().getType().cast<ModuleType>().getPorts();
+  if (getPortId().getZExtValue() >= ports.size())
+    return emitOpError("port #")
+           << getPortId().getZExtValue() << " does not exist, there are only "
+           << ports.size() << " ports";
+
+  // Verify that the base types match.
+  Type portType = ports[getPortId().getZExtValue()].type;
+  Type channelType = getChannel().getType();
+  if (getSignalBaseType(portType) != getSignalBaseType(channelType))
+    return emitOpError() << portType << " port cannot be bound to "
+                         << channelType << " channel due to base type mismatch";
+
+  // Verify that the port/channel directions are valid.
+  if ((portType.isa<InputType>() && channelType.isa<OutputType>()) ||
+      (portType.isa<OutputType>() && channelType.isa<InputType>()))
+    return emitOpError() << portType << " port cannot be bound to "
+                         << channelType
+                         << " channel due to port direction mismatch";
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 

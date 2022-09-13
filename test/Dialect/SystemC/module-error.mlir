@@ -207,6 +207,16 @@ systemc.module @instanceDeclMustBeDirectChildOfModule () {
 
 // -----
 
+systemc.module @submodule (%in0: !systemc.in<i32>) {}
+
+systemc.module @bindPortMustBeDirectChildOfCtor (%input0: !systemc.in<i32>) {
+  %instance = systemc.instance.decl @submodule : !systemc.module<submodule(in0: !systemc.in<i32>)>
+  // expected-error @+1 {{expects parent op 'systemc.ctor'}}
+  systemc.instance.bind_port %instance["in0"] to %input0 : !systemc.module<submodule(in0: !systemc.in<i32>)>, !systemc.in<i32>
+}
+
+// -----
+
 // expected-note @+1 {{module declared here}}
 systemc.module @adder (%summand_a: !systemc.in<i32>, %summand_b: !systemc.in<i32>, %sum: !systemc.out<i32>) {}
 
@@ -260,4 +270,77 @@ systemc.module @adder (%summand_a: !systemc.in<i32>, %summand_b: !systemc.in<i32
 systemc.module @instanceDeclPortNumMismatch () {
   // expected-error @+1 {{module names must match; expected 'adder' but got 'wrongname'}}
   %moduleInstance = systemc.instance.decl @adder : !systemc.module<wrongname(summand_a: !systemc.in<i32>, summand_b: !systemc.in<i32>)>
+}
+
+// -----
+
+systemc.module @submodule (%in0: !systemc.in<i32>) {}
+
+systemc.module @invalidPortName (%input0: !systemc.in<i32>) {
+  %instance = systemc.instance.decl @submodule : !systemc.module<submodule(in0: !systemc.in<i32>)>
+  systemc.ctor {
+    // expected-error @+1 {{port name "out" not found in module}}
+    systemc.instance.bind_port %instance["out"] to %input0 : !systemc.module<submodule(in0: !systemc.in<i32>)>, !systemc.in<i32>
+  }
+}
+
+// -----
+
+systemc.module @submodule (%in0: !systemc.in<i32>) {}
+
+systemc.module @directionOfPortAndChannelMismatch (%output0: !systemc.out<i32>) {
+  %instance = systemc.instance.decl @submodule : !systemc.module<submodule(in0: !systemc.in<i32>)>
+  systemc.ctor {
+    // expected-error @+1 {{'!systemc.in<i32>' port cannot be bound to '!systemc.out<i32>' channel due to port direction mismatch}}
+    systemc.instance.bind_port %instance["in0"] to %output0 : !systemc.module<submodule(in0: !systemc.in<i32>)>, !systemc.out<i32>
+  }
+}
+
+// -----
+
+systemc.module @submodule (%out0: !systemc.out<i32>) {}
+
+systemc.module @directionOfPortAndChannelMismatch (%input0: !systemc.in<i32>) {
+  %instance = systemc.instance.decl @submodule : !systemc.module<submodule(out0: !systemc.out<i32>)>
+  systemc.ctor {
+    // expected-error @+1 {{'!systemc.out<i32>' port cannot be bound to '!systemc.in<i32>' channel due to port direction mismatch}}
+    systemc.instance.bind_port %instance["out0"] to %input0 : !systemc.module<submodule(out0: !systemc.out<i32>)>, !systemc.in<i32>
+  }
+}
+
+// -----
+
+systemc.module @submodule (%out0: !systemc.out<i32>) {}
+
+systemc.module @baseTypeMismatch () {
+  %signal = systemc.signal : !systemc.signal<i8>
+  %instance = systemc.instance.decl @submodule : !systemc.module<submodule(out0: !systemc.out<i32>)>
+  systemc.ctor {
+    // expected-error @+1 {{'!systemc.out<i32>' port cannot be bound to '!systemc.signal<i8>' channel due to base type mismatch}}
+    systemc.instance.bind_port %instance["out0"] to %signal : !systemc.module<submodule(out0: !systemc.out<i32>)>, !systemc.signal<i8>
+  }
+}
+
+// -----
+
+systemc.module @submodule (%out0: !systemc.out<i32>) {}
+
+systemc.module @baseTypeMismatch (%out0: !systemc.out<i32>) {
+  %instance = systemc.instance.decl @submodule : !systemc.module<submodule(out0: !systemc.out<i32>)>
+  systemc.ctor {
+    // expected-error @+1 {{expected a list of exactly 2 types, but got 1}}
+    systemc.instance.bind_port %instance["out0"] to %out0 : !systemc.module<submodule(out0: !systemc.out<i32>)>
+  }
+}
+
+// -----
+
+systemc.module @submodule (%out0: !systemc.out<i32>) {}
+
+systemc.module @baseTypeMismatch (%out0: !systemc.out<i32>) {
+  %instance = systemc.instance.decl @submodule : !systemc.module<submodule(out0: !systemc.out<i32>)>
+  systemc.ctor {
+    // expected-error @+1 {{port #1 does not exist, there are only 1 ports}}
+    "systemc.instance.bind_port"(%instance, %out0) {portId = 1 : index} : (!systemc.module<submodule(out0: !systemc.out<i32>)>, !systemc.out<i32>) -> ()
+  }
 }

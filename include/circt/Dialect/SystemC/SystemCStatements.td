@@ -109,6 +109,28 @@ def InstanceDeclOp : SystemCOp<"instance.decl", [
   }];
 }
 
+def BindPortOp : SystemCOp<"instance.bind_port", [HasParent<"CtorOp">]> {
+  let summary = "Binds a port of a module instance to a channel.";
+  let description = [{
+    The ports of a submodule have to be bound to channels in a module further
+    up in the instance hierarchy (as opposed to `sc_export` where the channel
+    has to reside in the same module or a submodule). Therefore, a port can be
+    bound to either a signal declared by the `systemc.signal` operation or to
+    a port with matching direction (and thus bound to a channel further up in
+    the hierarchy).
+    More information on ports can be found in IEEE 1666-2011 §5.12.,
+    in particular IEEE 1666-2011 §5.12.7. is about port binding.
+    More information on predefined channels can be found in IEEE 1666-2011 §6.
+  }];
+
+  let arguments = (ins ModuleType:$instance,
+                       IndexAttr:$portId,
+                       ChannelType:$channel);
+
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+}
+
 //===----------------------------------------------------------------------===//
 // Operations that model C++-level features.
 //===----------------------------------------------------------------------===//
