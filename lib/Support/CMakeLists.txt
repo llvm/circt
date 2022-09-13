@@ -7,6 +7,7 @@ set_source_files_properties("${VERSION_CPP}" PROPERTIES GENERATED TRUE)
 
 add_circt_library(CIRCTSupport
   BackedgeBuilder.cpp
+  RTLBuilder.cpp
   FieldRef.cpp
   LoweringOptions.cpp
   Path.cpp

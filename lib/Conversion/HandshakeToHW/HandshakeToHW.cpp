@@ -21,6 +21,7 @@
 #include "circt/Dialect/Handshake/Visitor.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Support/BackedgeBuilder.h"
+#include "circt/Support/RTLBuilder.h"
 #include "circt/Support/ValueMapper.h"
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
@@ -420,14 +421,10 @@ struct UnwrappedIO {
   }
 };
 
-// A class containing a bunch of syntactic sugar to reduce builder function
-// verbosity.
-// @todo: should be moved to support.
-struct RTLBuilder {
-  RTLBuilder(OpBuilder &b, Location loc) : b(b), loc(loc) {}
-  Value constant(unsigned width, int64_t value, Location *extLoc = nullptr) {
-    return b.create<hw::ConstantOp>(getLoc(extLoc), APInt(width, value));
-  }
+// RTLBuilder extension which provides ESI wrap/unwrap sugar.
+class ESIRTLBuilder : public RTLBuilder {
+public:
+  using RTLBuilder::RTLBuilder;
   std::pair<Value, Value> wrap(Value data, Value valid,
                                Location *extLoc = nullptr) {
     auto wrapOp = b.create<esi::WrapValidReadyOp>(getLoc(extLoc), data, valid);
@@ -439,27 +436,6 @@ struct RTLBuilder {
         b.create<esi::UnwrapValidReadyOp>(getLoc(extLoc), channel, ready);
     return {unwrapOp.getResult(0), unwrapOp.getResult(1)};
   }
-
-  // Various syntactic sugar functions.
-  Value reg(StringRef name, Value in, Value rstValue, Value clk, Value rst,
-            Location *extLoc = nullptr) {
-    return b.create<seq::CompRegOp>(getLoc(extLoc), in.getType(), in, clk, name,
-                                    rst, rstValue, mlir::StringAttr());
-  }
-
-  // Bitwise 'and'.
-  Value bAnd(ValueRange values, Location *extLoc = nullptr) {
-    return b.create<comb::AndOp>(getLoc(extLoc), values).getResult();
-  }
-
-  // Bitwise 'not'.
-  Value bNot(Value value, Location *extLoc = nullptr) {
-    return comb::createOrFoldNot(getLoc(extLoc), value, b);
-  }
-
-  Location getLoc(Location *extLoc) { return extLoc ? *extLoc : loc; }
-  OpBuilder &b;
-  Location loc;
 };
 
 static void
@@ -499,7 +475,16 @@ public:
           op.getLoc(), submoduleBuilder.getStringAttr(getSubModuleName(op)),
           portInfo, [&](OpBuilder &b, hw::HWModulePortAccessor &ports) {
             BackedgeBuilder bb(b, op.getLoc());
-            RTLBuilder s(b, op.getLoc());
+
+            // if 'op' has clock trait, extract these and provide them to the
+            // RTL builder.
+            Value clk, rst;
+            if (op->template hasTrait<mlir::OpTrait::HasClock>()) {
+              clk = ports.getInput("clock");
+              rst = ports.getInput("reset");
+            }
+
+            ESIRTLBuilder s(b, op.getLoc(), clk, rst);
             this->buildModule(op, bb, s, ports);
           });
     }
@@ -512,14 +497,14 @@ public:
     return success();
   }
 
-  virtual void buildModule(T op, BackedgeBuilder &bb, RTLBuilder &builder,
+  virtual void buildModule(T op, BackedgeBuilder &bb, ESIRTLBuilder &builder,
                            hw::HWModulePortAccessor &ports) const = 0;
 
   // Syntactic sugar functions.
   // Unwraps an ESI-interfaced module into its constituent handshake signals.
   // Backedges are created for the to-be-resolved signals, and output ports
   // are assigned to their wrapped counterparts.
-  UnwrappedIO unwrapIO(RTLBuilder &s, BackedgeBuilder &bb,
+  UnwrappedIO unwrapIO(ESIRTLBuilder &s, BackedgeBuilder &bb,
                        hw::HWModulePortAccessor &ports) const {
     UnwrappedIO unwrapped;
     for (auto port : ports.getInputs()) {
@@ -550,14 +535,14 @@ public:
     return unwrapped;
   }
 
-  void setAllReadyWithCond(RTLBuilder &s, ArrayRef<InputHandshake> inputs,
+  void setAllReadyWithCond(ESIRTLBuilder &s, ArrayRef<InputHandshake> inputs,
                            OutputHandshake &output, Value cond) const {
     auto validAndReady = s.bAnd({output.ready, cond});
     for (auto &input : inputs)
       input.ready->setValue(validAndReady);
   }
 
-  void buildJoinLogic(RTLBuilder &s, ArrayRef<InputHandshake> inputs,
+  void buildJoinLogic(ESIRTLBuilder &s, ArrayRef<InputHandshake> inputs,
                       OutputHandshake &output) const {
     llvm::SmallVector<Value> valids;
     for (auto &input : inputs)
@@ -566,19 +551,18 @@ public:
     setAllReadyWithCond(s, inputs, output, allValid);
   }
 
-  void buildMuxLogic(RTLBuilder &s, ArrayRef<InputHandshake> inputs,
+  void buildMuxLogic(ESIRTLBuilder &s, ArrayRef<InputHandshake> inputs,
                      InputHandshake &cond, OutputHandshake &output) const {}
 
-  void buildForkLogic(RTLBuilder &s, BackedgeBuilder &bb, InputHandshake &input,
-                      ArrayRef<OutputHandshake> outputs,
+  void buildForkLogic(ESIRTLBuilder &s, BackedgeBuilder &bb,
+                      InputHandshake &input, ArrayRef<OutputHandshake> outputs,
                       hw::HWModulePortAccessor &ports) const {
     auto c0I1 = s.constant(1, 0);
     llvm::SmallVector<Value> doneWires;
     for (auto [i, output] : llvm::enumerate(outputs)) {
       auto done = bb.get(s.b.getI1Type());
       auto emitted = s.bAnd({done, s.bNot(*input.ready)});
-      auto emittedReg = s.reg("emitted_" + std::to_string(i), emitted, c0I1,
-                              ports.getInput("clock"), ports.getInput("reset"));
+      auto emittedReg = s.reg("emitted_" + std::to_string(i), emitted, c0I1);
       auto outValid = s.bAnd({s.bNot(emittedReg), input.valid});
       output.data->setValue(input.data);
       output.valid->setValue(outValid);
@@ -597,7 +581,7 @@ private:
 class ForkConversionPattern : public HandshakeConversionPattern<ForkOp> {
 public:
   using HandshakeConversionPattern<ForkOp>::HandshakeConversionPattern;
-  void buildModule(ForkOp op, BackedgeBuilder &bb, RTLBuilder &s,
+  void buildModule(ForkOp op, BackedgeBuilder &bb, ESIRTLBuilder &s,
                    hw::HWModulePortAccessor &ports) const override {
     auto unwrapped = unwrapIO(s, bb, ports);
     buildForkLogic(s, bb, unwrapped.inputs[0], unwrapped.outputs, ports);
@@ -607,7 +591,7 @@ public:
 class JoinConversionPattern : public HandshakeConversionPattern<JoinOp> {
 public:
   using HandshakeConversionPattern<JoinOp>::HandshakeConversionPattern;
-  void buildModule(JoinOp op, BackedgeBuilder &bb, RTLBuilder &s,
+  void buildModule(JoinOp op, BackedgeBuilder &bb, ESIRTLBuilder &s,
                    hw::HWModulePortAccessor &ports) const override {
     auto unwrappedIO = unwrapIO(s, bb, ports);
     buildJoinLogic(s, unwrappedIO.inputs, unwrappedIO.outputs[0]);
