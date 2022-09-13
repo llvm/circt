@@ -26,6 +26,10 @@ include "mlir/IR/EnumAttr.td"
 def Pipeline_Dialect : Dialect {
   let name = "pipeline";
   let cppNamespace = "::circt::pipeline";
+
+  // TODO: This needs to be flipped to kEmitAccessorPrefix_Prefixed
+  // https://discourse.llvm.org/t/psa-ods-generated-accessors-will-change-to-have-a-get-prefix-update-you-apis/4476
+  let emitAccessorPrefix = kEmitAccessorPrefix_Raw;
 }
 
 def PipelineOp : Op<Pipeline_Dialect, "pipeline", [
