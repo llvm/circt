@@ -181,23 +181,33 @@ StringAttr hw::getResultSym(Operation *op, unsigned i) {
 HWModulePortAccessor::HWModulePortAccessor(Location loc,
                                            const ModulePortInfo &info,
                                            Region &bodyRegion) {
-  for (auto [barg, inputInfo] :
-       llvm::zip(bodyRegion.getArguments(), info.inputs)) {
-    inputIdx[inputInfo.name.str()] = inputInfo.argNum;
-    inputArgs[inputInfo.argNum] = barg;
+  inputArgs.resize(info.inputs.size());
+  for (auto [i, barg] : llvm::enumerate(bodyRegion.getArguments())) {
+    inputIdx[info.inputs[i].name.str()] = i;
+    inputArgs[i] = barg;
   }
 
-  llvm::SmallVector<Value> outputOpArgs;
-  for (auto &outputInfo : info.outputs) {
-    outputIdx[outputInfo.name.str()] = outputInfo.argNum;
-    outputOperands[outputInfo.argNum] = Value();
+  outputOperands.resize(info.outputs.size());
+  for (auto [i, outputInfo] : llvm::enumerate(info.outputs)) {
+    outputIdx[outputInfo.name.str()] = i;
   }
 }
 
 void HWModulePortAccessor::setOutput(unsigned i, Value v) {
-  assert(outputOperands.count(i) && "invalid output index");
-  assert(outputOperands.find(i)->second == Value() && "output already set");
+  assert(outputOperands.size() > i && "invalid output index");
+  assert(outputOperands[i] == Value() && "output already set");
   outputOperands[i] = v;
+}
+
+Value HWModulePortAccessor::getInput(unsigned i) {
+  assert(inputArgs.size() > i && "invalid input index");
+  return inputArgs[i];
+}
+Value HWModulePortAccessor::getInput(StringRef name) {
+  return getInput(inputIdx.find(name.str())->second);
+}
+void HWModulePortAccessor::setOutput(StringRef name, Value v) {
+  setOutput(outputIdx.find(name.str())->second, v);
 }
 
 //===----------------------------------------------------------------------===//
@@ -608,16 +618,11 @@ void HWModuleOp::build(OpBuilder &builder, OperationState &odsState,
         /*shouldEnsureTerminator=*/false);
   auto *bodyRegion = odsState.regions[0].get();
   OpBuilder::InsertionGuard guard(builder);
-  builder.setInsertionPointToStart(&bodyRegion->front());
   auto accessor = HWModulePortAccessor(odsState.location, ports, *bodyRegion);
   builder.setInsertionPointToEnd(&bodyRegion->front());
   modBuilder(builder, accessor);
   // Create output operands.
-  llvm::SmallVector<Value> outputOperands;
-  for (auto [idx, operand] : accessor.getOutputOperands()) {
-    assert(operand != Value() && "Output operand not set");
-    outputOperands.push_back(operand);
-  }
+  llvm::SmallVector<Value> outputOperands = accessor.getOutputOperands();
   builder.create<hw::OutputOp>(odsState.location, outputOperands);
 }
 
