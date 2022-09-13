@@ -69,9 +69,9 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
           portAnnotations.push_back(portAnno);
           continue;
         }
-      // Append the annotations from the two ports.
-      if (!portAnno.cast<ArrayAttr>().empty())
-        portAtts.push_back(memOp.getPortAnnotation(portIt.index()));
+        // Append the annotations from the two ports.
+        if (!portAnno.cast<ArrayAttr>().empty())
+          portAtts.push_back(memOp.getPortAnnotation(portIt.index()));
         // Get the port value.
         Value portVal = portIt.value();
         // Get the port kind.
@@ -175,7 +175,8 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
         // Get the port value.
         Value portVal = portIt.value();
         if (memOp.getPortKind(portIt.index()) == MemOp::PortKind::Debug) {
-          memOp.getResult(portIt.index()).replaceAllUsesWith(rwMem.getResult(dbgsIndex));
+          memOp.getResult(portIt.index())
+              .replaceAllUsesWith(rwMem.getResult(dbgsIndex));
           dbgsIndex++;
           continue;
         }
@@ -318,7 +319,8 @@ private:
     // connected to a multi-bit constant 1.
     for (const auto &portIt : llvm::enumerate(memOp.getResults())) {
       // Read ports donot have the mask field.
-      if (memOp.getPortKind(portIt.index()) == MemOp::PortKind::Read || memOp.getPortKind(portIt.index()) == MemOp::PortKind::Debug)
+      if (memOp.getPortKind(portIt.index()) == MemOp::PortKind::Read ||
+          memOp.getPortKind(portIt.index()) == MemOp::PortKind::Debug)
         continue;
       Value portVal = portIt.value();
       // Iterate over all users of the write/rw port.
@@ -370,7 +372,8 @@ private:
         // New result.
         auto newPortVal = newMem->getResult(portIt.index());
         // If read port, then blindly replace.
-        if (memOp.getPortKind(portIt.index()) == MemOp::PortKind::Read|| memOp.getPortKind(portIt.index()) == MemOp::PortKind::Debug) {
+        if (memOp.getPortKind(portIt.index()) == MemOp::PortKind::Read ||
+            memOp.getPortKind(portIt.index()) == MemOp::PortKind::Debug) {
           oldPort.replaceAllUsesWith(newPortVal);
           continue;
         }
