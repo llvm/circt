@@ -57,7 +57,7 @@ class LowerLatencySensitivePipelinePattern
                 Value(), StringAttr());
             stage.valid().replaceAllUsesWith(validReg);
 
-            for (auto it : llvm::enumerate(stage.regIns())) {
+            for (auto &it : llvm::enumerate(stage.regIns())) {
               auto regIdx = it.index();
               auto regIn = it.value();
               auto regName =
