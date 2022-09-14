@@ -1404,6 +1404,20 @@ LogicalResult MultibitMuxOp::canonicalize(MultibitMuxOp op,
     return success();
   }
 
+  // If the op is a vector indexing (e.g. `multbit_mux idx, a[n-1], a[n-2], ...,
+  // a[0]`), we can fold the op into subaccess op `a[idx]`.
+  if (auto lastSubindex = op.getInputs().back().getDefiningOp<SubindexOp>()) {
+    if (llvm::all_of(llvm::enumerate(op.getInputs()), [&](auto e) {
+          auto subindex = e.value().template getDefiningOp<SubindexOp>();
+          return subindex && lastSubindex.getInput() == subindex.getInput() &&
+                 subindex.getIndex() + e.index() + 1 == op.getInputs().size();
+        })) {
+      replaceOpWithNewOpAndCopyName<SubaccessOp>(
+          rewriter, op, lastSubindex.getInput(), op.getIndex());
+      return success();
+    }
+  }
+
   // If the size is 2, canonicalize into a normal mux to introduce more folds.
   if (op.getInputs().size() != 2)
     return failure();
