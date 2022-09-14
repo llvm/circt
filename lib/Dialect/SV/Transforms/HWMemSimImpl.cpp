@@ -32,6 +32,7 @@ struct FirMemory {
   size_t numReadPorts;
   size_t numWritePorts;
   size_t numReadWritePorts;
+  size_t numDebugPorts;
   size_t dataWidth;
   size_t depth;
   size_t maskGran;
@@ -78,6 +79,11 @@ static FirMemory analyzeMemOp(HWModuleGeneratedOp op) {
   mem.numWritePorts = op->getAttrOfType<IntegerAttr>("numWritePorts").getUInt();
   mem.numReadWritePorts =
       op->getAttrOfType<IntegerAttr>("numReadWritePorts").getUInt();
+  if (op->getAttrOfType<IntegerAttr>("numDebugPorts"))
+    mem.numDebugPorts =
+        op->getAttrOfType<IntegerAttr>("numDebugPorts").getUInt();
+  else
+    mem.numDebugPorts = 0;
   mem.readLatency = op->getAttrOfType<IntegerAttr>("readLatency").getUInt();
   mem.writeLatency = op->getAttrOfType<IntegerAttr>("writeLatency").getUInt();
   mem.dataWidth = op->getAttrOfType<IntegerAttr>("width").getUInt();
@@ -377,6 +383,10 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
         writeProcesses[i] = alwaysBlock();
       }
     }
+  }
+
+  for (size_t i = 0; i < mem.numDebugPorts; ++i) {
+    outputs.push_back(b.create<sv::ReadInOutOp>(reg));
   }
 
   // Add logic to initialize the memory and any internal registers to random
