@@ -170,8 +170,9 @@ LowerMemoryPass::getMemoryModulePorts(const FirMemory &mem) {
     if (mem.isMasked)
       addPort("W" + Twine(i) + "_mask", maskType, Direction::In);
   }
+  auto debugType = FVectorType::get(dataType.cast<FIRRTLBaseType>(), mem.depth);
   for (size_t i = 0, e = mem.numDebugPorts; i != e; ++i) {
-    addPort("dbg_" + Twine(i), dataType, Direction::Out);
+    addPort("dbg_" + Twine(i), debugType, Direction::Out);
   }
 
   return ports;
@@ -443,12 +444,10 @@ InstanceOp LowerMemoryPass::emitMemoryInstance(MemOp op, FModuleOp module,
 
       if (memportKind == MemOp::PortKind::Debug) {
         returnDebugHolder[op.getResult(i)] = portTypes.size();
-        portTypes.push_back(dataType);
+        portTypes.push_back(op.getResult(i).getType());
         portDirections.push_back(Direction::Out);
         portNames.push_back(
             builder.getStringAttr(portLabel + Twine(portNumber)));
-        llvm::errs() << "\n returnDebugHolder::" << op.getResult(i)
-                     << "::i=" << i << " instance :" << portTypes.size();
       } else if (memportKind == MemOp::PortKind::Read) {
         addPort(Direction::In, "addr", addressType);
         addPort(Direction::In, "en", ui1Type);
