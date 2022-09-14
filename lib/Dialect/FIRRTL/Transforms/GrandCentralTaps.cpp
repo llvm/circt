@@ -281,8 +281,8 @@ findLCAandSetPath(AnnoPathValue &srcTarget, AnnoPathValue &wireTarget,
                   SmallVector<InstanceOp> &pathFromSrcToWire,
                   FModuleOp &lcaModule, ApplyState &state) {
 
-  auto srcModule = cast<FModuleOp>(srcTarget.ref.getModule());
-  auto wireModule = cast<FModuleOp>(wireTarget.ref.getModule());
+  auto srcModule = cast<FModuleOp>(srcTarget.ref.getModule().getOperation());
+  auto wireModule = cast<FModuleOp>(wireTarget.ref.getModule().getOperation());
   // Get the path from top to `srcModule` and `wireModule`, and then compare the
   // path to find the lca. Then use that to get the path from `srcModule` to the
   // `wireModule`.
@@ -292,7 +292,7 @@ findLCAandSetPath(AnnoPathValue &srcTarget, AnnoPathValue &wireTarget,
     return success();
   }
   auto *top = state.instancePathCache.instanceGraph.getTopLevelNode();
-  lcaModule = cast<FModuleOp>(top->getModule());
+  lcaModule = cast<FModuleOp>(top->getModule().getOperation());
   if (wireTarget.instances.empty()) {
     auto wireInstancePathsFromTop =
         state.instancePathCache.getAbsolutePaths(wireTarget.ref.getModule());
@@ -318,7 +318,8 @@ findLCAandSetPath(AnnoPathValue &srcTarget, AnnoPathValue &wireTarget,
   // the Top.
   for (auto srcInstPath : llvm::reverse(srcTarget.instances)) {
     auto refModule = cast<FModuleOp>(
-        state.instancePathCache.instanceGraph.getReferencedModule(srcInstPath));
+        state.instancePathCache.instanceGraph.getReferencedModule(srcInstPath)
+            .getOperation());
     auto mapIter = wirePathMap.find(refModule);
     // If `refModule` exists on the wire path, then this is the Lowest Common
     // Ancestor between the source and wire module.
@@ -465,7 +466,8 @@ LogicalResult static applyNoBlackBoxStyleDataTaps(const AnnoPathValue &target,
       return mlir::emitError(loc, "Annotation '" + Twine(dataTapsClass) +
                                       "' source path couldnot be resolved.");
 
-    auto wireModule = cast<FModuleOp>(wireTarget->ref.getModule());
+    auto wireModule =
+        cast<FModuleOp>(wireTarget->ref.getModule().getOperation());
 
     if (auto extMod = dyn_cast<FExtModuleOp>(srcTarget->ref.getOp())) {
       // If the source is a port on extern module, then move the source to the
@@ -498,7 +500,8 @@ LogicalResult static applyNoBlackBoxStyleDataTaps(const AnnoPathValue &target,
                << "\n"
                << i->getParentOfType<FModuleOp>().getNameAttr() << ">"
                << i.getNameAttr(););
-    auto srcModule = dyn_cast<FModuleOp>(srcTarget->ref.getModule());
+    auto srcModule =
+        dyn_cast<FModuleOp>(srcTarget->ref.getModule().getOperation());
     Value refSendBase;
     ImplicitLocOpBuilder refSendBuilder(srcModule.getLoc(), srcModule);
     // Set the insertion point for the RefSend, it should be dominated by the
