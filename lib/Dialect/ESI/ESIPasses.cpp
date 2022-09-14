@@ -1231,8 +1231,9 @@ CosimLowering::matchAndRewrite(CosimEndpointOp ep, OpAdaptor adaptor,
   auto sendReady = bb.get(rewriter.getI1Type());
   UnwrapValidReadyOp unwrapSend =
       rewriter.create<UnwrapValidReadyOp>(loc, send, sendReady);
-  auto encodeData = rewriter.create<CapnpEncodeOp>(
-      loc, egestBitArrayType, clk, unwrapSend.getValid(), unwrapSend.getRawOutput());
+  auto encodeData = rewriter.create<CapnpEncodeOp>(loc, egestBitArrayType, clk,
+                                                   unwrapSend.getValid(),
+                                                   unwrapSend.getRawOutput());
 
   // Get information necessary for injest path.
   auto recvReady = bb.get(rewriter.getI1Type());
