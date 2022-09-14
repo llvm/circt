@@ -1919,11 +1919,16 @@ FirMemory MemOp::getSummary() {
   size_t numReadPorts = 0;
   size_t numWritePorts = 0;
   size_t numReadWritePorts = 0;
+  size_t numDebugPorts = 0;
   llvm::SmallDenseMap<Value, unsigned> clockToLeader;
   SmallVector<int32_t> writeClockIDs;
 
   for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
     auto portKind = op.getPortKind(i);
+    if (portKind == MemOp::PortKind::Debug){
+      ++numDebugPorts;
+      continue;
+    }
     if (portKind == MemOp::PortKind::Read)
       ++numReadPorts;
     else if (portKind == MemOp::PortKind::Write) {
@@ -1978,7 +1983,7 @@ FirMemory MemOp::getSummary() {
             op.getMaskBits(), (size_t)op.getRuw(), (unsigned)hw::WUW::PortOrder,
             groupID, clocks.empty() ? "" : "_" + clocks));
   }
-  return {numReadPorts,         numWritePorts,    numReadWritePorts,
+  return {numReadPorts,         numWritePorts,    numReadWritePorts, numDebugPorts,
           (size_t)width,        op.getDepth(),    op.getReadLatency(),
           op.getWriteLatency(), op.getMaskBits(), (size_t)op.getRuw(),
           hw::WUW::PortOrder,   writeClockIDs,    modName,

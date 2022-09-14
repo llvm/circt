@@ -178,6 +178,7 @@ struct FirMemory {
   size_t numReadPorts;
   size_t numWritePorts;
   size_t numReadWritePorts;
+  size_t numDebugPorts;
   size_t dataWidth;
   size_t depth;
   size_t readLatency;
@@ -198,10 +199,10 @@ struct FirMemory {
   // The original MemOp, only used in LowerToHW.  Also not part of the identity.
   Operation *op = nullptr;
 
-  std::tuple<size_t, size_t, size_t, size_t, size_t, size_t, size_t, size_t,
+  std::tuple<size_t, size_t, size_t, size_t, size_t, size_t, size_t, size_t, size_t,
              size_t, hw::WUW, SmallVector<int32_t>, uint32_t>
   getTuple() const {
-    return std::tie(numReadPorts, numWritePorts, numReadWritePorts, dataWidth,
+    return std::tie(numReadPorts, numWritePorts, numReadWritePorts, numDebugPorts, dataWidth,
                     depth, readLatency, writeLatency, maskBits, readUnderWrite,
                     writeUnderWrite, writeClockIDs, groupID);
   }
