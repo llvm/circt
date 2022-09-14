@@ -26,7 +26,7 @@ def SignalWriteOp : SystemCOp<"signal.write", [
 
   let arguments = (ins AnyTypeOf<[OutputType, InOutType, SignalType]>:$dest,
                        AnyType:$src);
-  let assemblyFormat = "$dest `,` $src attr-dict `:` type($dest)";
+  let assemblyFormat = "$dest `,` $src attr-dict `:` qualified(type($dest))";
 }
 
 def SignalOp : SystemCOp<"signal", [HasCustomSSAName,
@@ -41,7 +41,7 @@ def SignalOp : SystemCOp<"signal", [HasCustomSSAName,
   let results = (outs SignalType:$signal);
 
   let assemblyFormat = [{
-    custom<ImplicitSSAName>($name) attr-dict `:` type($signal)
+    custom<ImplicitSSAName>($name) attr-dict `:` qualified(type($signal))
   }];
 }
 
@@ -85,7 +85,7 @@ def InstanceDeclOp : SystemCOp<"instance.decl", [
 
   let assemblyFormat = [{
     custom<ImplicitSSAName>($name) $moduleName attr-dict
-    `:` type($instanceHandle)
+    `:` qualified(type($instanceHandle))
   }];
 
   let builders = [
