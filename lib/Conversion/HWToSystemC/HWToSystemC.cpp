@@ -194,7 +194,7 @@ public:
     for (size_t i = 0, numInputs = adaptor.getInputs().size(); i < numInputs;
          ++i) {
       Value input = adaptor.getInputs()[i];
-      APInt portId = APInt(32, i);
+      auto portId = rewriter.getIndexAttr(i);
       StringAttr signalName = rewriter.getStringAttr(
           instanceName.getValue() + "_" + portInfo[i].name.getValue());
 
@@ -218,7 +218,7 @@ public:
          ++i) {
       size_t numInputs = adaptor.getInputs().size();
       Value output = instanceOp->getResult(i);
-      APInt portId = APInt(32, i + numInputs);
+      auto portId = rewriter.getIndexAttr(i + numInputs);
       StringAttr signalName =
           rewriter.getStringAttr(instanceName.getValue() + "_" +
                                  portInfo[i + numInputs].name.getValue());
