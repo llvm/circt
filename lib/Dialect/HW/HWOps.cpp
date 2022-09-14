@@ -679,6 +679,9 @@ void HWModuleExternOp::modifyPorts(
                         eraseOutputs);
 }
 
+void HWModuleExternOp::appendOutputs(
+    ArrayRef<std::pair<StringAttr, Value>> outputs) {}
+
 void HWModuleGeneratedOp::build(OpBuilder &builder, OperationState &result,
                                 FlatSymbolRefAttr genKind, StringAttr name,
                                 const ModulePortInfo &ports,
@@ -706,6 +709,9 @@ void HWModuleGeneratedOp::modifyPorts(
   hw::modifyModulePorts(*this, insertInputs, insertOutputs, eraseInputs,
                         eraseOutputs);
 }
+
+void HWModuleGeneratedOp::appendOutputs(
+    ArrayRef<std::pair<StringAttr, Value>> outputs) {}
 
 /// Return an encapsulated set of information about input and output ports of
 /// the specified module or instance.  The input ports always come before the
