@@ -736,18 +736,6 @@ void ExportVerilog::prepareHWModule(Block &block,
     SmallPtrSet<Operation *, 32> seenOperations;
 
     for (auto &op : llvm::make_early_inc_range(block)) {
-      // Move the inout operation after its operand position before actually
-      // resolving out-of-order uses. This reordering makes it simple to resolve
-      // the dependency from inout operations to their operands as well.
-      if (isa<ReadInOutOp, StructFieldInOutOp, ArrayIndexInOutOp,
-              IndexedPartSelectInOutOp>(&op)) {
-        if (auto *defOp = op.getOperand(0).getDefiningOp()) {
-          if (op.getBlock() != defOp->getBlock() || op.isBeforeInBlock(defOp)) {
-            op.moveAfter(defOp);
-            continue;
-          }
-        }
-      }
       // Check the users of any expressions to see if they are
       // lexically below the operation itself.  If so, it is being used out
       // of order.
