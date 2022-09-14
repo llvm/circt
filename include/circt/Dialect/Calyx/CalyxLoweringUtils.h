@@ -70,7 +70,7 @@ template <typename TGroup>
 TGroup createGroup(OpBuilder &builder, calyx::ComponentOp compOp, Location loc,
                    Twine uniqueName) {
   mlir::IRRewriter::InsertionGuard guard(builder);
-  builder.setInsertionPointToEnd(&compOp.getWiresOp().getBody().front());
+  builder.setInsertionPointToEnd(compOp.getWiresOp().getBodyBlock());
   return builder.create<TGroup>(loc, uniqueName.str());
 }
 

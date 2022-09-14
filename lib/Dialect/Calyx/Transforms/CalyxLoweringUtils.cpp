@@ -148,7 +148,7 @@ void buildAssignmentsForRegisterWrite(OpBuilder &builder,
                                       Value inputValue) {
   mlir::IRRewriter::InsertionGuard guard(builder);
   auto loc = inputValue.getLoc();
-  builder.setInsertionPointToEnd(&groupOp.getBody().front());
+  builder.setInsertionPointToEnd(groupOp.getBodyBlock());
   builder.create<calyx::AssignOp>(loc, reg.getIn(), inputValue);
   builder.create<calyx::AssignOp>(
       loc, reg.getWriteEn(), createConstant(loc, builder, componentOp, 1, 1));
@@ -456,7 +456,7 @@ LogicalResult
 MultipleGroupDonePattern::matchAndRewrite(calyx::GroupOp groupOp,
                                           PatternRewriter &rewriter) const {
   auto groupDoneOps = SmallVector<calyx::GroupDoneOp>(
-      groupOp.getBody().front().getOps<calyx::GroupDoneOp>());
+      groupOp.getBodyBlock()->getOps<calyx::GroupDoneOp>());
 
   if (groupDoneOps.size() <= 1)
     return failure();
@@ -658,7 +658,7 @@ BuildReturnRegs::partiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
     getState().addReturnReg(reg, argType.index());
 
     rewriter.setInsertionPointToStart(
-        &getComponent().getWiresOp().getBody().front());
+        getComponent().getWiresOp().getBodyBlock());
     rewriter.create<calyx::AssignOp>(
         funcOp->getLoc(),
         calyx::getComponentOutput(

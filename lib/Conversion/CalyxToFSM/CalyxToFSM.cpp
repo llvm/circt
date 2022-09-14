@@ -219,7 +219,7 @@ LogicalResult CompileFSMVisitor::visit(StateOp currentState, WhileOp whileOp,
                        (whileStateGuard.getName() + "_entry").str())
           ->getState();
   sc.addSymbol(whileBodyEntryState);
-  Operation *whileBodyOp = &whileOp.getBody().getBlocks().front().front();
+  Operation *whileBodyOp = &whileOp.getBodyBlock()->front();
   if (failed(dispatch(whileBodyEntryState, whileBodyOp, whileHeaderState)))
     return failure();
 
@@ -277,9 +277,9 @@ void CalyxToFSMPass::runOnOperation() {
   ComponentOp component = getOperation();
   OpBuilder builder(&getContext());
   auto ctrlOp = component.getControlOp();
-  assert(ctrlOp.getBody().front().getOperations().size() == 1 &&
+  assert(ctrlOp.getBodyBlock()->getOperations().size() == 1 &&
          "Expected a single top-level operation in the schedule");
-  Operation &topLevelCtrlOp = ctrlOp.getBody().front().front();
+  Operation &topLevelCtrlOp = ctrlOp.getBodyBlock()->front();
   builder.setInsertionPoint(&topLevelCtrlOp);
 
   // Create a side-effect-only FSM (no inputs, no outputs) which will strictly
