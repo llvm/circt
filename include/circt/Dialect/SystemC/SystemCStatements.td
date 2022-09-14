@@ -160,3 +160,36 @@ def DeleteOp : SystemCOp<"cpp.delete", []> {
   let arguments = (ins EmitC_PointerType:$pointer);
   let assemblyFormat = "$pointer attr-dict `:` qualified(type($pointer))";
 }
+
+def AssignOp : SystemCOp<"cpp.assign", [SameTypeOperands]> {
+  let summary = "A C++ assignment.";
+  let description = [{
+    Assigns one SSA value to another. Note that there is no notion of lvalues
+    and rvalues. This means that one can assign to a value that is the result
+    of, e.g., an addition, which is not allowed in C++. It is the responsibility
+    of the user and the implementor of a lowering pass that creates this
+    operation to make sure that the operands are valid according to C++
+    semantics. Rationale for that: implementing these constraints would add
+    quite some complexity, but still does not guarantee that the assignment
+    is valid because we also make use of non-verifyable verbatim types, etc.
+  }];
+
+  let arguments = (ins AnyType:$dest, AnyType:$source);
+  let assemblyFormat = "$dest `=` $source attr-dict `:` type($dest)";
+}
+
+def VariableOp : SystemCOp<"cpp.variable", [HasCustomSSAName,
+                                            SystemCNameDeclOpInterface]> {
+  let summary = "Declare a C++ variable with optional initialization value.";
+  let description = [{
+    Declares a variable according to C++ semantics. If an initialization value
+    is present, the variable will be assigned that value at the declaration,
+    e.g, `int varname = 0;`.
+  }];
+
+  let arguments = (ins StrAttr:$name, Optional<AnyType>:$init);
+  let results = (outs AnyType:$variable);
+
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+}

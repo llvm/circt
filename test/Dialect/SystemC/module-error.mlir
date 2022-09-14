@@ -344,3 +344,36 @@ systemc.module @baseTypeMismatch (%out0: !systemc.out<i32>) {
     "systemc.instance.bind_port"(%instance, %out0) {portId = 1 : index} : (!systemc.module<submodule(out0: !systemc.out<i32>)>, !systemc.out<i32>) -> ()
   }
 }
+
+// -----
+
+systemc.module @assignOperandTypeMismatch () {
+  %var = systemc.cpp.variable : i32
+  systemc.ctor {
+    %0 = hw.constant 0 : i8
+    // expected-error @+1 {{requires all operands to have the same type}}
+    "systemc.cpp.assign"(%var, %0) : (i32, i8) -> ()
+  }
+}
+
+// -----
+
+systemc.module @variableOperandTypeMismatch () {
+  systemc.ctor {
+    %0 = hw.constant 0 : i8
+    // expected-error @+1 {{'init' and 'variable' must have the same type, but got 'i8' and 'i32'}}
+    %1 = "systemc.cpp.variable"(%0) {name = "var"} : (i8) -> i32
+  }
+}
+
+// -----
+
+// expected-note @+1 {{in module '@variableNameCollision'}}
+systemc.module @variableNameCollision () {
+  systemc.ctor {
+    // expected-note @+1 {{'var' first defined here}}
+    %0 = "systemc.cpp.variable"() {name = "var"} : () -> i32
+    // expected-error @+1 {{redefines name 'var'}}
+    %1 = "systemc.cpp.variable"() {name = "var"} : () -> i32
+  }
+}

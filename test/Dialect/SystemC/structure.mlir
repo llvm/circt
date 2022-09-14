@@ -99,3 +99,20 @@ systemc.module @attributes () {
   systemc.cpp.destructor attributes {systemc.someattr = 0 : i64} {}
   // CHECK-NEXT: }
 }
+
+// CHECK-LABEL: systemc.module @variableAndAssign
+systemc.module @variableAndAssign () {
+  // CHECK-NEXT: %varname = systemc.cpp.variable : i32
+  %varname = systemc.cpp.variable : i32
+  // CHECK-NEXT: systemc.ctor {
+  systemc.ctor {
+    // CHECK-NEXT: %c42_i32 = hw.constant 42 : i32
+    %c42_i32 = hw.constant 42 : i32
+    // CHECK-NEXT: systemc.cpp.assign %varname = %c42_i32 : i32
+    systemc.cpp.assign %varname = %c42_i32 : i32
+    // CHECK-NEXT: %varwithinit = systemc.cpp.variable %varname : i32
+    %varwithinit = systemc.cpp.variable %varname : i32
+    // CHECK-NEXT: systemc.cpp.assign %varwithinit = %varname : i32
+    systemc.cpp.assign %varwithinit = %varname : i32
+  }
+}
