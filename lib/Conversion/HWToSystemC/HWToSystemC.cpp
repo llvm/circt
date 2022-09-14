@@ -185,8 +185,8 @@ public:
          ++i) {
       Value input = adaptor.getInputs()[i];
       APInt portId = APInt(32, i);
-      std::string signalName =
-          (instanceName.getValue() + "_" + portInfo[i].name.getValue()).str();
+      StringAttr signalName = rewriter.getStringAttr(
+          instanceName.getValue() + "_" + portInfo[i].name.getValue());
 
       if (auto readOp = input.getDefiningOp<SignalReadOp>()) {
         // Use the read channel directly without adding an
@@ -209,9 +209,9 @@ public:
       size_t numInputs = adaptor.getInputs().size();
       Value output = instanceOp->getResult(i);
       APInt portId = APInt(32, i + numInputs);
-      std::string signalName = (instanceName.getValue() + "_" +
-                                portInfo[i + numInputs].name.getValue())
-                                   .str();
+      StringAttr signalName =
+          rewriter.getStringAttr(instanceName.getValue() + "_" +
+                                 portInfo[i + numInputs].name.getValue());
 
       if (output.hasOneUse()) {
         if (auto writeOp = dyn_cast<SignalWriteOp>(*output.user_begin())) {
