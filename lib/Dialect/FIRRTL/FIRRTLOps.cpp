@@ -1687,7 +1687,9 @@ LogicalResult MemOp::verify() {
     // found.
       FIRRTLBaseType dataType;
       if (portKind == MemOp::PortKind::Debug) {
-        dataType = getResult(i).getType().dyn_cast<FIRRTLBaseType>();
+        if (!getResult(i).getType().isa<FVectorType>())
+          return emitOpError() << "debug ports must be of FVectorType";
+        dataType = getResult(i).getType().cast<FVectorType>().getElementType();
       } else {
         auto dataTypeOption = portBundleType.getElement("data");
         if (!dataTypeOption && portKind == MemOp::PortKind::ReadWrite)
@@ -1784,7 +1786,7 @@ FIRRTLType MemOp::getTypeForPort(uint64_t depth, FIRRTLBaseType dataType,
 
   auto *context = dataType.getContext();
   if (portKind == PortKind::Debug)
-    return dataType;
+    return FVectorType::get(dataType, depth);
   FIRRTLBaseType maskType;
   // maskBits not specified (==0), then get the mask type from the dataType.
   if (maskBits == 0)
@@ -1881,7 +1883,7 @@ FIRRTLBaseType MemOp::getDataType() {
 
   auto firstPortType = getResult(0).getType().cast<FIRRTLBaseType>();
   if (getMemPortKindFromType(firstPortType) == PortKind::Debug)
-    return firstPortType;
+    return firstPortType.cast<FVectorType>().getElementType();
 
   StringRef dataFieldName = "data";
   if (getMemPortKindFromType(firstPortType) == PortKind::ReadWrite)
