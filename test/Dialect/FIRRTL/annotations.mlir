@@ -1342,3 +1342,71 @@ firrtl.circuit "Top"  attributes {rawAnnotations = [{
     %dut_clock, %dut_reset, %dut_in, %dut_out = firrtl.instance dut interesting_name  @DUT(in clock: !firrtl.clock, in reset: !firrtl.reset, in in: !firrtl.bundle<uint: uint<1>, vec: vector<uint<1>, 2>>, out out: !firrtl.bundle<uint: uint<1>, vec: vector<uint<1>, 2>>)
   }
 }
+
+// -----
+
+
+firrtl.circuit "Top"  attributes {rawAnnotations = [{
+  class = "sifive.enterprise.grandcentral.DataTapsAnnotation",
+  keys = [
+    {
+       class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
+       source = "~Top|Top/foo:Foo/b:Bar>inv", wireName = "~Top|Top>tap"
+    }
+  ]}]} {
+  // CHECK-LABEL: firrtl.circuit "Top"  {
+  // CHECK-NOT:   "sifive.enterprise.grandcentral.DataTapsAnnotation"
+  // CHECK:  firrtl.module private @Bar(out %_gen_tap: !firrtl.ref<uint<1>>)
+  firrtl.module private @Bar() {
+    %inv = firrtl.wire interesting_name  : !firrtl.uint<1>
+    // CHECK:  %0 = firrtl.ref.send %inv : !firrtl.uint<1>
+    // CHECK:  firrtl.connect %_gen_tap, %0 : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
+  }
+  // CHECK-LABEL: firrtl.module private @Foo
+  firrtl.module private @Foo() {
+    firrtl.instance b interesting_name  @Bar()
+    // CHECK:  %b__gen_tap = firrtl.instance b interesting_name  @Bar(out _gen_tap: !firrtl.ref<uint<1>>)
+    // CHECK:  firrtl.connect %_gen_tap, %b__gen_tap : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
+  }
+  firrtl.module @Top() {
+    firrtl.instance foo interesting_name  @Foo()
+    %tap = firrtl.wire interesting_name  : !firrtl.uint<1>
+    // CHECK:  %foo__gen_tap = firrtl.instance foo interesting_name  @Foo(out _gen_tap: !firrtl.ref<uint<1>>)
+    // CHECK:  %0 = firrtl.ref.resolve %foo__gen_tap : !firrtl.ref<uint<1>>
+    // CHECK:  %tap = firrtl.wire interesting_name  : !firrtl.uint<1>
+    // CHECK:  firrtl.connect %tap, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+}
+
+// -----
+
+
+firrtl.circuit "Top"  attributes {rawAnnotations = [
+  {
+    class = "sifive.enterprise.grandcentral.DataTapsAnnotation",
+    keys = [
+      { 
+        class = "sifive.enterprise.grandcentral.DataTapModuleSignalKey",
+        internalPath = "random.something",
+        module = "~Top|Bar",
+        wireName = "~Top|Top>tap"
+      }
+    ]}]} {
+  firrtl.module private @Bar() {
+  }
+  // CHECK-LABEL:  firrtl.module private @Foo(out %_gen_tap: !firrtl.ref<uint<1>>)
+  firrtl.module private @Foo() {
+    firrtl.instance b interesting_name  @Bar()
+    // CHECK:  firrtl.instance b sym @extModXMR interesting_name  @Bar()
+    // CHECK{LITERAL}:  %0 = firrtl.verbatim.expr "{{0}}.random.something" : () -> !firrtl.uint<1> {name = "tap_internalPath", symbols = [#hw.innerNameRef<@Foo::@extModXMR>]}
+  }
+  // CHECK-LABEL firrtl.module @Top()
+  firrtl.module @Top() {
+    firrtl.instance foo interesting_name  @Foo()
+    %tap = firrtl.wire interesting_name  : !firrtl.uint<1>
+    // CHECK:  %foo__gen_tap = firrtl.instance foo interesting_name  @Foo(out _gen_tap: !firrtl.ref<uint<1>>)
+    // CHECK:  %0 = firrtl.ref.resolve %foo__gen_tap : !firrtl.ref<uint<1>>
+    // CHECK:  %tap = firrtl.wire interesting_name  : !firrtl.uint<1>
+    // CHECK:  firrtl.connect %tap, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+}
