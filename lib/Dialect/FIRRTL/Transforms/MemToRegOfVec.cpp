@@ -390,12 +390,14 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
       // simpler to delete the memOp.
       auto wire = builder.create<WireOp>(
           result.getType(),
-          (memOp.getName() + "_" + memOp.getPortName(index).getValue()).str(),
+          moduleNamespace.newName(memOp.getName() + "_" +
+                                  memOp.getPortName(index).getValue()),
           memOp.getNameKind());
       result.replaceAllUsesWith(wire.getResult());
       result = wire;
       if (memOp.getPortKind(index) == MemOp::PortKind::Debug) {
         debugPorts.push_back(result);
+        continue;
       }
       // Create an access to all the common subfields.
       auto adr = getAddr(builder, result);
