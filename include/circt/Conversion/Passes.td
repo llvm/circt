@@ -168,6 +168,21 @@ def PipelineToCalyx : Pass<"lower-static-logic-to-calyx", "mlir::ModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
+// PipelineTHW
+//===----------------------------------------------------------------------===//
+
+def PipelineToHW : Pass<"lower-pipeline-to-hw", "hw::HWModuleOp"> {
+  let summary = "Lower Pipeline to HW";
+  let description = [{
+    This pass lowers `pipeline.rtp` operations to HW.
+  }];
+  let constructor = "circt::createPipelineToHWPass()";
+  let dependentDialects = [
+    "hw::HWDialect", "comb::CombDialect", "seq::SeqDialect"
+  ];
+}
+
+//===----------------------------------------------------------------------===//
 // CalyxToHW
 //===----------------------------------------------------------------------===//
 

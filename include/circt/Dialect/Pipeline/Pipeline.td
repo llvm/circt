@@ -26,6 +26,10 @@ include "mlir/IR/EnumAttr.td"
 def Pipeline_Dialect : Dialect {
   let name = "pipeline";
   let cppNamespace = "::circt::pipeline";
+
+  // TODO: This needs to be flipped to kEmitAccessorPrefix_Prefixed
+  // https://discourse.llvm.org/t/psa-ods-generated-accessors-will-change-to-have-a-get-prefix-update-you-apis/4476
+  let emitAccessorPrefix = kEmitAccessorPrefix_Raw;
 }
 
 def PipelineOp : Op<Pipeline_Dialect, "pipeline", [
@@ -149,6 +153,14 @@ def PipelineStageOp : Op<Pipeline_Dialect, "stage", [
   let assemblyFormat = [{
     `when` $when attr-dict
   }];
+
+  let extraClassDeclaration = [{
+    // Returns the index of this stage in the pipeline.
+    unsigned index() {
+      auto stageOps = getOperation()->getParentOfType<PipelineOp>().getOps<PipelineStageOp>();
+      return std::distance(stageOps.begin(), llvm::find(stageOps, *this));
+    }
+  }];
 }
 
 def PipelineStageRegisterOp : Op<Pipeline_Dialect, "stage.register", [
@@ -171,6 +183,14 @@ def PipelineStageRegisterOp : Op<Pipeline_Dialect, "stage.register", [
 
   let assemblyFormat = [{
     `when` $when (`regs` $regIns^)? attr-dict (`:` type($regIns)^)?
+  }];
+
+  let extraClassDeclaration = [{
+    // Returns the index of this stage in the pipeline.
+    unsigned index() {
+      auto stageOps = getOperation()->getParentOfType<PipelineOp>().getOps<PipelineStageRegisterOp>();
+      return std::distance(stageOps.begin(), llvm::find(stageOps, *this));
+    }
   }];
 }
 

@@ -1182,7 +1182,11 @@ static LogicalResult canonicalizeMux(MuxPrimOp op, PatternRewriter &rewriter) {
   if (width < 0)
     return failure();
 
+<<<<<<< HEAD
   auto pad = [&](auto input) -> Value {
+=======
+  auto pad = [&](Value input) -> Value {
+>>>>>>> origin/main
     auto inputWidth =
         input.getType().template cast<FIRRTLBaseType>().getBitWidthOrSentinel();
     if (inputWidth < 0 || width == inputWidth)

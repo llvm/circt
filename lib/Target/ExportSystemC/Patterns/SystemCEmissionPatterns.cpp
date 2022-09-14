@@ -300,6 +300,24 @@ struct ModuleTypeEmitter : public TypeEmissionPattern<ModuleType> {
     p << type.getModuleName().getValue();
   }
 };
+
+/// Emit SystemC integer and bit-vector types with known-at-compile-time
+/// bit-width according to the specification listed in their class description.
+template <typename Ty>
+struct IntegerTypeEmitter : public TypeEmissionPattern<Ty> {
+  void emitType(Ty type, EmissionPrinter &p) override {
+    p << "sc_" << Ty::getMnemonic() << "<" << type.getWidth() << ">";
+  }
+};
+
+/// Emit SystemC integer and bit-vector types without known bit-width according
+/// to the specification listed in their class description.
+template <typename Ty>
+struct DynIntegerTypeEmitter : public TypeEmissionPattern<Ty> {
+  void emitType(Ty type, EmissionPrinter &p) override {
+    p << "sc_" << Ty::getMnemonic();
+  }
+};
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -326,6 +344,19 @@ void circt::ExportSystemC::populateSystemCTypeEmitters(
                SignalTypeEmitter<InOutType, inout>,
                SignalTypeEmitter<OutputType, out>,
                SignalTypeEmitter<SignalType, signal>,
+               IntegerTypeEmitter<IntType>,
+               IntegerTypeEmitter<UIntType>,
+               IntegerTypeEmitter<BigIntType>,
+               IntegerTypeEmitter<BigUIntType>,
+               IntegerTypeEmitter<BitVectorType>,
+               IntegerTypeEmitter<LogicVectorType>,
+               DynIntegerTypeEmitter<IntBaseType>,
+               DynIntegerTypeEmitter<UIntBaseType>,
+               DynIntegerTypeEmitter<SignedType>,
+               DynIntegerTypeEmitter<UnsignedType>,
+               DynIntegerTypeEmitter<BitVectorBaseType>,
+               DynIntegerTypeEmitter<LogicVectorBaseType>,
+               DynIntegerTypeEmitter<LogicType>,
                ModuleTypeEmitter>();
   // clang-format on
 }

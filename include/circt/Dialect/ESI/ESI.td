@@ -30,6 +30,10 @@ def ESI_Dialect : Dialect {
     /// Register all ESI types.
     void registerTypes();
   }];
+
+  // TODO: This needs to be flipped to kEmitAccessorPrefix_Prefixed
+  // https://discourse.llvm.org/t/psa-ods-generated-accessors-will-change-to-have-a-get-prefix-update-you-apis/4476
+  let emitAccessorPrefix = kEmitAccessorPrefix_Raw;
 }
 
 class ESI_Op<string mnemonic, list<Trait> traits = []> :
