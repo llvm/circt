@@ -22,10 +22,6 @@ def HWArithDialect : Dialect {
     This dialect defines the `HWArith` dialect, modeling bit-width aware
     arithmetic operations.
   }];
-
-  // TODO: This needs to be flipped to kEmitAccessorPrefix_Prefixed
-  // https://discourse.llvm.org/t/psa-ods-generated-accessors-will-change-to-have-a-get-prefix-update-you-apis/4476
-  let emitAccessorPrefix = kEmitAccessorPrefix_Raw;
 }
 
 #endif // HWARITHDIALECT_TD

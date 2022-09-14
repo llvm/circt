@@ -24,7 +24,6 @@ def FIRRTLDialect : Dialect {
   let hasConstantMaterializer = 1;
   let useDefaultTypePrinterParser = 0;
   let useDefaultAttributePrinterParser = 1;
-  int emitAccessorPrefix = kEmitAccessorPrefix_Prefixed;
 
   let dependentDialects = [
     "circt::hw::HWDialect"

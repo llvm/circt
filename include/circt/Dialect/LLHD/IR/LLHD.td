@@ -45,8 +45,6 @@ def LLHD_Dialect : Dialect {
     /// Register all LLHD attributes.
     void registerAttributes();
   }];
-
-  int emitAccessorPrefix = kEmitAccessorPrefix_Prefixed;
 }
 
 //===----------------------------------------------------------------------===//

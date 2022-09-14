@@ -24,10 +24,6 @@ def FSMDialect : Dialect {
   }];
 
   let useDefaultTypePrinterParser = 1;
-
-  // TODO: This needs to be flipped to kEmitAccessorPrefix_Prefixed
-  // https://discourse.llvm.org/t/psa-ods-generated-accessors-will-change-to-have-a-get-prefix-update-you-apis/4476
-  let emitAccessorPrefix = kEmitAccessorPrefix_Raw;
 }
 
 // Base class for the types in this dialect.

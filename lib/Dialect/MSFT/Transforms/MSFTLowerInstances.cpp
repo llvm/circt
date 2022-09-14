@@ -127,7 +127,7 @@ LogicalResult LowerInstancesPass::lower(DynamicInstanceOp inst,
   }
 
   // Relocate all my children.
-  OpBuilder hierBlock(&hier.body().getBlocks().front().front());
+  OpBuilder hierBlock(&hier.getBody().front().front());
   for (Operation &op : llvm::make_early_inc_range(inst.getOps())) {
     // Child instances should have been lowered already.
     assert(!isa<DynamicInstanceOp>(op));

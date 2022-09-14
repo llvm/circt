@@ -95,7 +95,7 @@ def LinearOp : MSFTOp<"hlc.linear", [
   let regions = (region SizedRegion<1>:$datapath);
 
   let extraClassDeclaration = [{
-    Block *getBodyBlock() { return &datapath().front(); }
+    Block *getBodyBlock() { return &getDatapath().front(); }
   }];
 
   let hasVerifier = 1;

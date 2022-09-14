@@ -37,7 +37,7 @@ StringRef circt::msft::getValueName(Value v, const SymbolCache &syms,
                                     std::string &buff) {
   Operation *defOp = v.getDefiningOp();
   if (auto inst = dyn_cast_or_null<InstanceOp>(defOp)) {
-    Operation *modOp = syms.getDefinition(inst.moduleNameAttr());
+    Operation *modOp = syms.getDefinition(inst.getModuleNameAttr());
     if (modOp) { // If modOp isn't in the cache, it's probably a new module;
       assert(isAnyModule(modOp) && "Instance must point to a module");
       OpResult instResult = v.cast<OpResult>();
@@ -78,7 +78,7 @@ void PassCommon::getAndSortModules(ModuleOp topMod,
 
 LogicalResult PassCommon::verifyInstances(mlir::ModuleOp mod) {
   WalkResult r = mod.walk([&](InstanceOp inst) {
-    Operation *modOp = topLevelSyms.getDefinition(inst.moduleNameAttr());
+    Operation *modOp = topLevelSyms.getDefinition(inst.getModuleNameAttr());
     if (!isAnyModule(modOp))
       return WalkResult::interrupt();
 
