@@ -72,18 +72,41 @@ func.func @empy_op(%arg0: i1) {
   return
 }
 
-// CHECK-LABEL: func @invert_if(%arg0: i1) {
+// CHECK-LABEL: func @invert_if(%arg0: i1, %arg1: i1) {
 // CHECK-NEXT:    %true = hw.constant true
 // CHECK-NEXT:    [[FD:%.*]] = hw.constant -2147483646 : i32
 // CHECK-NEXT:    sv.initial  {
-// CHECK-NEXT:      %0 = comb.xor %arg0, %true : i1
+// CHECK-NEXT:        %0 = comb.xor %arg0, %arg1, %true : i1
 // CHECK-NEXT:      sv.if %0  {
 // CHECK-NEXT:        sv.fwrite [[FD]], "Foo"
 // CHECK-NEXT:      }
 // CHECK-NEXT:    }
 // CHECK-NEXT:    return
 // CHECK-NEXT:  }
-func.func @invert_if(%arg0: i1) {
+func.func @invert_if(%arg0: i1, %arg1 : i1) {
+  sv.initial {
+    %false = hw.constant false
+    %0 = comb.xor bin %arg0, %arg1 : i1
+    sv.if %0 {
+    } else {
+      %fd = hw.constant 0x80000002 : i32
+      sv.fwrite %fd, "Foo"
+    }
+  }
+  return
+}
+
+// CHECK-LABEL: func @no_invert_if(%arg0: i1) {
+// CHECK-NEXT:    [[FD:%.*]] = hw.constant -2147483646 : i32
+// CHECK-NEXT:    sv.initial  {
+// CHECK-NEXT:      sv.if %arg0  {
+// CHECK-NEXT:      } else {  
+// CHECK-NEXT:        sv.fwrite [[FD]], "Foo"
+// CHECK-NEXT:      }
+// CHECK-NEXT:    }
+// CHECK-NEXT:    return
+// CHECK-NEXT:  }
+func.func @no_invert_if(%arg0: i1) {
   sv.initial {
     sv.if %arg0 {
     } else {

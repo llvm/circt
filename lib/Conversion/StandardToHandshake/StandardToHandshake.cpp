@@ -1300,7 +1300,7 @@ static Value getBlockControlValue(Block *block) {
       if (BranchOp.isControl())
         return BranchOp.dataOperand();
     if (auto endOp = dyn_cast<handshake::ReturnOp>(op))
-      return endOp.control();
+      return endOp.getOperands().back();
   }
   return nullptr;
 }

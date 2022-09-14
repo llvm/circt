@@ -1407,6 +1407,7 @@ Direction convertHWDirectionToCalyx(hw::PortDirection direction) {
   case hw::PortDirection::INOUT:
     llvm_unreachable("InOut ports not supported by Calyx");
   }
+  llvm_unreachable("Impossible port type");
 }
 
 SmallVector<Direction> PrimitiveOp::portDirections() {

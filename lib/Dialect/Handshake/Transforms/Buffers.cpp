@@ -173,29 +173,27 @@ struct HandshakeInsertBuffersPass
   // Returns true if 'src' is within a cycle. 'breaksCycle' is a function which
   // determines whether an operation breaks a cycle.
   bool inCycle(Operation *src,
-               llvm::function_ref<bool(Operation *)> breaksCycle,
-               Operation *curr = nullptr, SetVector<Operation *> path = {}) {
-    // If visiting the source node, then we're in a cycle.
-    if (curr == src)
-      return true;
+               llvm::function_ref<bool(Operation *)> breaksCycle) {
+    SetVector<Operation *> visited;
+    SmallVector<Operation *> stack = {src};
 
-    // Initial case; set current node to source node
-    if (curr == nullptr) {
-      curr = src;
-    }
+    while (!stack.empty()) {
+      Operation *curr = stack.pop_back_val();
 
-    path.insert(curr);
-    for (auto &operand : curr->getUses()) {
-      auto *user = operand.getOwner();
-
-      // We might encounter a cycle, but we only care about the case when such
-      // cycles include 'src'.
-      if (path.count(user) && user != src)
+      if (visited.contains(curr))
         continue;
+      visited.insert(curr);
+
       if (breaksCycle(curr))
         continue;
-      if (inCycle(src, breaksCycle, user, path))
-        return true;
+
+      for (auto *user : curr->getUsers()) {
+        // If visiting the source node, then we're in a cycle.
+        if (src == user)
+          return true;
+
+        stack.push_back(user);
+      }
     }
     return false;
   }

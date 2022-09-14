@@ -29,11 +29,20 @@ systemc.module @basic (%port0: !systemc.in<i1>, %port1: !systemc.inout<i64>, %po
   // CHECK-NEXT: sc_out<bool> port4;
   // CHECK-NEXT: sc_signal<sc_uint<64>> sig;
   %sig = systemc.signal : !systemc.signal<i64>
+  // CHECK-NEXT: sc_signal<sc_uint<32>> channel;
+  %channel = systemc.signal : !systemc.signal<i32>
   // CHECK-NEXT: submodule submoduleInstance;
   %submoduleInstance = systemc.instance.decl @submodule : !systemc.module<submodule(in0: !systemc.in<i32>, in1: !systemc.in<i32>, out0: !systemc.out<i32>)>
+  // CHECK-NEXT: sc_uint<32> testvar;
+  %testvar = systemc.cpp.variable : i32
+  // CHECK-NEXT: sc_uint<32> testvarwithinit = 42;
+  %c42_i32 = hw.constant 42 : i32
+  %testvarwithinit = systemc.cpp.variable %c42_i32 : i32
   // CHECK-EMPTY: 
   // CHECK-NEXT: SC_CTOR(basic) {
   systemc.ctor {
+    // CHECK-NEXT: submoduleInstance.in0(channel);
+    systemc.instance.bind_port %submoduleInstance["in0"] to %channel : !systemc.module<submodule(in0: !systemc.in<i32>, in1: !systemc.in<i32>, out0: !systemc.out<i32>)>, !systemc.signal<i32>
     // CHECK-NEXT: SC_METHOD(add);
     systemc.method %add
     // CHECK-NEXT: SC_THREAD(add);
@@ -55,6 +64,10 @@ systemc.module @basic (%port0: !systemc.in<i1>, %port1: !systemc.inout<i64>, %po
     // CHECK-NEXT: port4.write(false);
     %3 = hw.constant 0 : i1
     systemc.signal.write %port4, %3 : !systemc.out<i1>
+    // CHECK-NEXT: testvar = 42;
+    systemc.cpp.assign %testvar = %c42_i32 : i32
+    // CHECK-NEXT: testvarwithinit = testvar;
+    systemc.cpp.assign %testvarwithinit = %testvar : i32
   // CHECK-NEXT: }
   }
 // CHECK-NEXT: };

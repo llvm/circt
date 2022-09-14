@@ -2370,17 +2370,18 @@ bool HandshakeBuilder::buildSeqBufferLogic(int64_t numStage, ValueVector *input,
     // Create registers for data signal.
     Value dataReg = nullptr;
     Value initValue = zeroDataConst;
-    if (isInitialized) {
-      assert(dataType.isa<IntType>() &&
-             "initial values are only supported for integer buffers");
-      initValue = createConstantOp(
-          dataType, APInt(dataType.getBitWidthOrSentinel(), initValues[i]),
-          insertLoc, rewriter);
-    }
-    if (!isControl)
+    if (!isControl) {
+      if (isInitialized) {
+        assert(dataType.isa<IntType>() &&
+               "initial values are only supported for integer buffers");
+        initValue = createConstantOp(
+            dataType, APInt(dataType.getBitWidthOrSentinel(), initValues[i]),
+            insertLoc, rewriter);
+      }
       dataReg =
           rewriter.create<RegResetOp>(insertLoc, dataType, clock, reset,
                                       initValue, "dataReg" + std::to_string(i));
+    }
 
     // Create wires for valid, ready and data signal coming from the control
     // buffer stage.

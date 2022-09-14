@@ -180,24 +180,35 @@ StringAttr hw::getResultSym(Operation *op, unsigned i) {
 
 HWModulePortAccessor::HWModulePortAccessor(Location loc,
                                            const ModulePortInfo &info,
-                                           Region &bodyRegion) {
-  for (auto [barg, inputInfo] :
-       llvm::zip(bodyRegion.getArguments(), info.inputs)) {
-    inputIdx[inputInfo.name.str()] = inputInfo.argNum;
-    inputArgs[inputInfo.argNum] = barg;
+                                           Region &bodyRegion)
+    : info(info) {
+  inputArgs.resize(info.inputs.size());
+  for (auto [i, barg] : llvm::enumerate(bodyRegion.getArguments())) {
+    inputIdx[info.inputs[i].name.str()] = i;
+    inputArgs[i] = barg;
   }
 
-  llvm::SmallVector<Value> outputOpArgs;
-  for (auto &outputInfo : info.outputs) {
-    outputIdx[outputInfo.name.str()] = outputInfo.argNum;
-    outputOperands[outputInfo.argNum] = Value();
+  outputOperands.resize(info.outputs.size());
+  for (auto [i, outputInfo] : llvm::enumerate(info.outputs)) {
+    outputIdx[outputInfo.name.str()] = i;
   }
 }
 
 void HWModulePortAccessor::setOutput(unsigned i, Value v) {
-  assert(outputOperands.count(i) && "invalid output index");
-  assert(outputOperands.find(i)->second == Value() && "output already set");
+  assert(outputOperands.size() > i && "invalid output index");
+  assert(outputOperands[i] == Value() && "output already set");
   outputOperands[i] = v;
+}
+
+Value HWModulePortAccessor::getInput(unsigned i) {
+  assert(inputArgs.size() > i && "invalid input index");
+  return inputArgs[i];
+}
+Value HWModulePortAccessor::getInput(StringRef name) {
+  return getInput(inputIdx.find(name.str())->second);
+}
+void HWModulePortAccessor::setOutput(StringRef name, Value v) {
+  setOutput(outputIdx.find(name.str())->second, v);
 }
 
 //===----------------------------------------------------------------------===//
@@ -223,7 +234,7 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
 
 LogicalResult ConstantOp::verify() {
   // If the result type has a bitwidth, then the attribute must match its width.
-  if (getValue().getBitWidth() != getType().getWidth())
+  if (getValue().getBitWidth() != getType().cast<IntegerType>().getWidth())
     return emitError(
         "hw.constant attribute bitwidth doesn't match return type");
 
@@ -263,7 +274,7 @@ void ConstantOp::getAsmResultNames(
   auto intCst = getValue();
 
   // Sugar i1 constants with 'true' and 'false'.
-  if (intTy.getWidth() == 1)
+  if (intTy.cast<IntegerType>().getWidth() == 1)
     return setNameFn(getResult(), intCst.isZero() ? "false" : "true");
 
   // Otherwise, build a complex name with the value and type.
@@ -573,8 +584,8 @@ void hw::modifyModulePorts(
 void HWModuleOp::build(OpBuilder &builder, OperationState &result,
                        StringAttr name, const ModulePortInfo &ports,
                        ArrayAttr parameters,
-                       ArrayRef<NamedAttribute> attributes,
-                       StringAttr comment) {
+                       ArrayRef<NamedAttribute> attributes, StringAttr comment,
+                       bool shouldEnsureTerminator) {
   buildModule(builder, result, name, ports, parameters, attributes, comment);
 
   // Create a region and a block for the body.
@@ -586,7 +597,8 @@ void HWModuleOp::build(OpBuilder &builder, OperationState &result,
   for (auto elt : ports.inputs)
     body->addArgument(elt.type, builder.getUnknownLoc());
 
-  HWModuleOp::ensureTerminator(*bodyRegion, builder, result.location);
+  if (shouldEnsureTerminator)
+    HWModuleOp::ensureTerminator(*bodyRegion, builder, result.location);
 }
 
 void HWModuleOp::build(OpBuilder &builder, OperationState &result,
@@ -603,22 +615,16 @@ void HWModuleOp::build(OpBuilder &builder, OperationState &odsState,
                        HWModuleBuilder modBuilder, ArrayAttr parameters,
                        ArrayRef<NamedAttribute> attributes,
                        StringAttr comment) {
-  build(builder, odsState, name, ports, parameters, attributes, comment);
+  build(builder, odsState, name, ports, parameters, attributes, comment,
+        /*shouldEnsureTerminator=*/false);
   auto *bodyRegion = odsState.regions[0].get();
   OpBuilder::InsertionGuard guard(builder);
-  builder.setInsertionPointToStart(&bodyRegion->front());
   auto accessor = HWModulePortAccessor(odsState.location, ports, *bodyRegion);
-  builder.setInsertionPoint(bodyRegion->front().getTerminator());
+  builder.setInsertionPointToEnd(&bodyRegion->front());
   modBuilder(builder, accessor);
-  // Replace output operands.
-  auto outputOp = cast<hw::OutputOp>(bodyRegion->front().getTerminator());
-  llvm::SmallVector<Value> outputOperands;
-  for (auto [idx, operand] : accessor.getOutputOperands()) {
-    assert(operand != Value() && "Output operand not set");
-    outputOperands.push_back(operand);
-  }
-  builder.create<hw::OutputOp>(outputOp.getLoc(), outputOperands);
-  outputOp.erase();
+  // Create output operands.
+  llvm::SmallVector<Value> outputOperands = accessor.getOutputOperands();
+  builder.create<hw::OutputOp>(odsState.location, outputOperands);
 }
 
 void HWModuleOp::modifyPorts(

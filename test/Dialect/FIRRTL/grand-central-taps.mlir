@@ -71,6 +71,15 @@ firrtl.circuit "TestHarness" attributes {
       class = "firrtl.transforms.DontTouchAnnotation"
     }]} : !firrtl.reset, !firrtl.uint<1>, !firrtl.uint<1>
 
+    %array = firrtl.wire {annotations = [{
+      class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.source",
+      id = 0 : i64,
+      portID = 12 : i64,
+      circt.fieldID = 2
+    }, {
+      class = "firrtl.transforms.DontTouchAnnotation"
+    }]} : !firrtl.vector<uint<1>, 2>
+
     %mem_0 = firrtl.reg %clock  {annotations = [{class = "sifive.enterprise.grandcentral.MemTapAnnotation.source", id = 4 : i64, portID = 0 : i64}, {class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<1>
     %mem_1 = firrtl.reg %clock  {annotations = [{class = "sifive.enterprise.grandcentral.MemTapAnnotation.source", id = 4 : i64, portID = 1 : i64}, {class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<1>
     // CHECK:   %mem_0 = firrtl.reg sym @[[gct_sym_5:.+]] %clock  {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<1>
@@ -123,6 +132,11 @@ firrtl.circuit "TestHarness" attributes {
   // CHECK-SAME: out %_1: !firrtl.clock
   // CHECK-SAME: out %_0: !firrtl.uint<1>
   // CHECK-SAME: #hw.output_file<"outputDirectory/[[DT]].sv">
+  // CHECK-NEXT: [[V11:%.+]] = firrtl.verbatim.expr
+  // CHECK-SAME{LITERAL}: "{{0}}.{{1}}.{{2}}.{{3}}[1]"
+  // CHECK-SAME:   @TestHarness,
+  // CHECK-SAME:   #hw.innerNameRef<@TestHarness::[[HARNESSWIRE:@[0-9a-zA-Z_]+]]>
+  // CHECK-NEXT: firrtl.connect %_11, [[V11]]
   // CHECK-NEXT: [[V10:%.+]] = firrtl.verbatim.expr "{{[{][{]0[}][}]}}.{{[{][{]1[}][}]}}"
   // CHECK-SAME:   @TestHarness,
   // CHECK-SAME:   #hw.innerNameRef<@TestHarness::[[HARNESSWIRE:@[0-9a-zA-Z_]+]]>
@@ -177,6 +191,7 @@ firrtl.circuit "TestHarness" attributes {
   // CHECK-SAME:   #hw.innerNameRef<@Bar::[[WIRE]]>
   // CHECK-NEXT: firrtl.connect %_0, [[V0]]
   firrtl.extmodule private @DataTap(
+    out _11: !firrtl.uint<1>,
     out _10: !firrtl.uint<4>,
     out _9: !firrtl.uint<1>,
     out _8: !firrtl.sint<8>,
@@ -194,6 +209,7 @@ firrtl.circuit "TestHarness" attributes {
       { class = "firrtl.transforms.NoDedupAnnotation" }
     ],
     portAnnotations = [
+      [{class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.port", id = 0 : i64, portID = 12 : i64}],
       [{class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.port", id = 0 : i64, portID = 11 : i64}],
       [{class = "sifive.enterprise.grandcentral.LiteralDataTapKey", literal = "UInt<1>(\"h0\")", id = 0 : i64, portID = 10 : i64 }],
       [{class = "sifive.enterprise.grandcentral.LiteralDataTapKey", literal = "SInt<8>(\"h-2A\")", id = 0 : i64, portID = 9 : i64 }],
@@ -315,7 +331,7 @@ firrtl.circuit "TestHarness" attributes {
     // CHECK: firrtl.instance extmoduleWithTappedPort sym [[EXTMODULEWITHTAPPEDPORT]]
     %0 = firrtl.instance extmoduleWithTappedPort @ExtmoduleWithTappedPort(out out: !firrtl.uint<1>)
     // CHECK: firrtl.instance dataTap @[[DT]]
-    %DataTap_10, %DataTap_9, %DataTap_8, %DataTap_7, %DataTap_6, %DataTap_5, %DataTap_4, %DataTap_3, %DataTap_2, %DataTap_1, %DataTap_0 = firrtl.instance dataTap @DataTap(out _10: !firrtl.uint<4>, out _9: !firrtl.uint<1>, out _8: !firrtl.sint<8>, out _7: !firrtl.uint<1>, out _6: !firrtl.uint<1>, out _5: !firrtl.uint<1>, out _4: !firrtl.uint<1>, out _3: !firrtl.uint<1>, out _2: !firrtl.uint<1>, out _1: !firrtl.clock, out _0: !firrtl.uint<1>)
+    %DataTap_11, %DataTap_10, %DataTap_9, %DataTap_8, %DataTap_7, %DataTap_6, %DataTap_5, %DataTap_4, %DataTap_3, %DataTap_2, %DataTap_1, %DataTap_0 = firrtl.instance dataTap @DataTap(out _11: !firrtl.uint<1>, out _10: !firrtl.uint<4>, out _9: !firrtl.uint<1>, out _8: !firrtl.sint<8>, out _7: !firrtl.uint<1>, out _6: !firrtl.uint<1>, out _5: !firrtl.uint<1>, out _4: !firrtl.uint<1>, out _3: !firrtl.uint<1>, out _2: !firrtl.uint<1>, out _1: !firrtl.clock, out _0: !firrtl.uint<1>)
     // CHECK: firrtl.instance memTap @[[MT]]
     // CHECK: firrtl.instance memTap2 @[[MT2]]
     %MemTap_mem_0, %MemTap_mem_1 = firrtl.instance memTap @MemTap(out mem_0: !firrtl.uint<1>, out mem_1: !firrtl.uint<1>)

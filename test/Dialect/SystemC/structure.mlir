@@ -75,11 +75,16 @@ systemc.module @argAttrs (%port0: !systemc.in<i32> {hw.attrname = "sometext"}, %
 systemc.module @resultAttrs (%port0: !systemc.in<i32>, %out0: !systemc.out<i32> {hw.attrname = "sometext"}) {}
 
 // CHECK-LABEL: systemc.module @instanceDecl
-systemc.module @instanceDecl () {
+systemc.module @instanceDecl (%input0: !systemc.in<i32>) {
   // CHECK-NEXT: %moduleInstance0 = systemc.instance.decl @adder : !systemc.module<adder(summand_a: !systemc.in<i32>, summand_b: !systemc.in<i32>, sum: !systemc.out<i32>)>
   %moduleInstance0 = systemc.instance.decl @adder : !systemc.module<adder(summand_a: !systemc.in<i32>, summand_b: !systemc.in<i32>, sum: !systemc.out<i32>)>
   // CHECK-NEXT: %moduleInstance1 = systemc.instance.decl @moduleVisibility : !systemc.module<moduleVisibility()>
   %moduleInstance1 = systemc.instance.decl @moduleVisibility : !systemc.module<moduleVisibility()>
+  // CHECK-NEXT: systemc.ctor
+  systemc.ctor {
+    // CHECK-NEXT: systemc.instance.bind_port %moduleInstance0["summand_a"] to %input0 : !systemc.module<adder(summand_a: !systemc.in<i32>, summand_b: !systemc.in<i32>, sum: !systemc.out<i32>)>, !systemc.in<i32>
+    systemc.instance.bind_port %moduleInstance0["summand_a"] to %input0 : !systemc.module<adder(summand_a: !systemc.in<i32>, summand_b: !systemc.in<i32>, sum: !systemc.out<i32>)>, !systemc.in<i32>
+  }
 }
 
 // CHECK-LABEL: systemc.module @attributes
@@ -93,4 +98,21 @@ systemc.module @attributes () {
   // CHECK-NEXT: systemc.cpp.destructor attributes {systemc.someattr = 0 : i64} {
   systemc.cpp.destructor attributes {systemc.someattr = 0 : i64} {}
   // CHECK-NEXT: }
+}
+
+// CHECK-LABEL: systemc.module @variableAndAssign
+systemc.module @variableAndAssign () {
+  // CHECK-NEXT: %varname = systemc.cpp.variable : i32
+  %varname = systemc.cpp.variable : i32
+  // CHECK-NEXT: systemc.ctor {
+  systemc.ctor {
+    // CHECK-NEXT: %c42_i32 = hw.constant 42 : i32
+    %c42_i32 = hw.constant 42 : i32
+    // CHECK-NEXT: systemc.cpp.assign %varname = %c42_i32 : i32
+    systemc.cpp.assign %varname = %c42_i32 : i32
+    // CHECK-NEXT: %varwithinit = systemc.cpp.variable %varname : i32
+    %varwithinit = systemc.cpp.variable %varname : i32
+    // CHECK-NEXT: systemc.cpp.assign %varwithinit = %varname : i32
+    systemc.cpp.assign %varwithinit = %varname : i32
+  }
 }

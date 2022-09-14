@@ -18,6 +18,18 @@ using namespace circt;
 using namespace circt::systemc;
 using namespace circt::ExportSystemC;
 
+static void parenthesizeOnLowerPrecedence(InlineEmitter &emitter,
+                                          Precedence prec, EmissionPrinter &p) {
+  bool needParens = emitter.getPrecedence() >= prec;
+  if (needParens)
+    p << "(";
+
+  emitter.emit();
+
+  if (needParens)
+    p << ")";
+}
+
 //===----------------------------------------------------------------------===//
 // Operation emission patterns.
 //===----------------------------------------------------------------------===//
@@ -199,6 +211,72 @@ struct InstanceDeclEmitter : OpEmissionPattern<InstanceDeclOp> {
 };
 } // namespace
 
+/// Emit a systemc.instance.bind_port operation using the operator() rather than
+/// .bind() variant.
+struct BindPortEmitter : OpEmissionPattern<BindPortOp> {
+  using OpEmissionPattern::OpEmissionPattern;
+
+  void emitStatement(BindPortOp op, EmissionPrinter &p) override {
+    auto instEmitter = p.getInlinable(op.getInstance());
+    bool parenthesize = instEmitter.getPrecedence() > Precedence::MEMBER_ACCESS;
+
+    if (parenthesize)
+      p << "(";
+
+    instEmitter.emit();
+
+    if (parenthesize)
+      p << ")";
+
+    p << "." << op.getPortName() << "(";
+    p.getInlinable(op.getChannel()).emit();
+    p << ");\n";
+  }
+};
+
+/// Emit a systemc.cpp.assign operation.
+struct AssignEmitter : OpEmissionPattern<AssignOp> {
+  using OpEmissionPattern::OpEmissionPattern;
+
+  void emitStatement(AssignOp op, EmissionPrinter &p) override {
+    auto sourceEmitter = p.getInlinable(op.getSource());
+    auto destEmitter = p.getInlinable(op.getDest());
+
+    parenthesizeOnLowerPrecedence(destEmitter, Precedence::ASSIGN, p);
+    p << " = ";
+    parenthesizeOnLowerPrecedence(sourceEmitter, Precedence::ASSIGN, p);
+    p << ";\n";
+  }
+};
+
+/// Emit a systemc.cpp.variable operation.
+struct VariableEmitter : OpEmissionPattern<VariableOp> {
+  using OpEmissionPattern::OpEmissionPattern;
+
+  MatchResult matchInlinable(Value value) override {
+    if (value.getDefiningOp<VariableOp>())
+      return Precedence::VAR;
+    return {};
+  }
+
+  void emitInlined(Value value, EmissionPrinter &p) override {
+    p << value.getDefiningOp<VariableOp>().getName();
+  }
+
+  void emitStatement(VariableOp op, EmissionPrinter &p) override {
+    p.emitType(op.getVariable().getType());
+    p << " " << op.getName();
+
+    if (op.getInit()) {
+      p << " = ";
+      auto initEmitter = p.getInlinable(op.getInit());
+      parenthesizeOnLowerPrecedence(initEmitter, Precedence::ASSIGN, p);
+    }
+
+    p << ";\n";
+  }
+};
+
 //===----------------------------------------------------------------------===//
 // Type emission patterns.
 //===----------------------------------------------------------------------===//
@@ -232,7 +310,8 @@ void circt::ExportSystemC::populateSystemCOpEmitters(
     OpEmissionPatternSet &patterns, MLIRContext *context) {
   patterns.add<BuiltinModuleEmitter, SCModuleEmitter, SignalWriteEmitter,
                SignalReadEmitter, CtorEmitter, SCFuncEmitter, MethodEmitter,
-               ThreadEmitter, SignalEmitter, InstanceDeclEmitter>(context);
+               ThreadEmitter, SignalEmitter, InstanceDeclEmitter,
+               BindPortEmitter, AssignEmitter, VariableEmitter>(context);
 }
 
 void circt::ExportSystemC::populateSystemCTypeEmitters(

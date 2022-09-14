@@ -93,3 +93,19 @@ module attributes {circt.loweringOptions = "disallowLocalVariables"} {
     hw.output %0, %0 : i4, i4
   }
 }
+
+// -----
+
+module attributes {circt.loweringOptions = "disallowExpressionInliningInPorts"} {
+ hw.module.extern @MyExtModule(%in: i8)
+ // CHECK-LABEL: @MoveInstances
+ hw.module @MoveInstances(%a_in: i8) -> (){
+  // CHECK-NEXT: %_xyz3_in = sv.wire
+  // CHECK-NEXT: %0 = comb.add %a_in, %a_in
+  // CHECK-NEXT: %1 = sv.read_inout %_xyz3_in
+  // CHECK-NEXT: sv.assign %_xyz3_in, %0
+  // CHECK-NEXT: hw.instance "xyz3" @MyExtModule(in: %1: i8) -> ()
+  %0 = comb.add %a_in, %a_in : i8
+  hw.instance "xyz3" @MyExtModule(in: %0: i8) -> ()
+ }
+}

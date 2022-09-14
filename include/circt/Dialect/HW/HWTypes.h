@@ -110,6 +110,21 @@ BaseTy type_dyn_cast(Type type) {
   return type_cast<BaseTy>(type);
 }
 
+/// Utility type that wraps a type that may be one of several possible Types.
+/// This is similar to std::variant but is implemented for mlir::Type, and it
+/// understands how to handle type aliases.
+template <typename... Types>
+class TypeVariant
+    : public ::mlir::Type::TypeBase<TypeVariant<Types...>, mlir::Type,
+                                    mlir::TypeStorage> {
+  using mlir::Type::TypeBase<TypeVariant<Types...>, mlir::Type,
+                             mlir::TypeStorage>::Base::Base;
+
+public:
+  // Support LLVM isa/cast/dyn_cast to one of the possible types.
+  static bool classof(Type other) { return type_isa<Types...>(other); }
+};
+
 template <typename BaseTy>
 class TypeAliasOr
     : public ::mlir::Type::TypeBase<TypeAliasOr<BaseTy>, mlir::Type,

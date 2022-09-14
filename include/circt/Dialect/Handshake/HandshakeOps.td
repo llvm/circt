@@ -200,13 +200,11 @@ def ReturnOp : Handshake_Op<"return", [Terminator]> {
     only operand(exit point of control - only network).
   }];
 
-  let arguments = (ins Variadic<AnyType> : $operands, NoneType : $control);
-
-  let skipDefaultBuilders = 1;
-  let builders = [OpBuilder<(ins "ValueRange":$operands)>];
+  let arguments = (ins Variadic<AnyType> : $operands);
 
   let hasVerifier = 1;
-  let assemblyFormat = [{ operands attr-dict `:` qualified(type(operands)) }];
+  let assemblyFormat =
+    [{  attr-dict ($operands^ `:` type($operands))? }];
 }
 
 // Here use I32EnumAttr to better suit the BufferOp sequential
@@ -805,10 +803,10 @@ def JoinOp : Handshake_Op<"join", [
 
     Example:
     ```mlir
-    %0 = join %a, %b, %c : i32
+    %0 = join %a, %b, %c : i32, i1, none
     ```
   }];
-  let arguments = (ins Variadic<NoneType> : $data);
+  let arguments = (ins Variadic<AnyType> : $data);
   let results = (outs NoneType : $result);
 
   let skipDefaultBuilders = 1;
