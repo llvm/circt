@@ -1249,7 +1249,7 @@ CosimLowering::matchAndRewrite(CosimEndpointOp ep, OpAdaptor adaptor,
   StringAttr nameAttr = ep->getAttr("name").dyn_cast_or_null<StringAttr>();
   StringRef name = nameAttr ? nameAttr.getValue() : "CosimEndpointOp";
   Value epInstInputs[] = {
-      clk, rst, recvReady, unwrapSend.getValid(), encodeData.capnpBits(),
+      clk, rst, recvReady, unwrapSend.getValid(), encodeData.getCapnpBits(),
   };
 
   auto cosimEpModule =
@@ -1264,7 +1264,7 @@ CosimLowering::matchAndRewrite(CosimEndpointOp ep, OpAdaptor adaptor,
       rewriter.create<CapnpDecodeOp>(loc, recvTypeSchema.getType(), clk,
                                      recvValidFromCosim, recvDataFromCosim);
   WrapValidReadyOp wrapRecv = rewriter.create<WrapValidReadyOp>(
-      loc, decodeData.decodedData(), recvValidFromCosim);
+      loc, decodeData.getDecodedData(), recvValidFromCosim);
   recvReady.setValue(wrapRecv.getReady());
 
   // Replace the CosimEndpointOp op.
@@ -1288,7 +1288,7 @@ public:
                                        "encode.capnp lowering requires the ESI "
                                        "capnp plugin, which was disabled.");
 #else
-    capnp::TypeSchema encodeType(enc.dataToEncode().getType());
+    capnp::TypeSchema encodeType(enc.getDataToEncode().getType());
     if (!encodeType.isSupported())
       return rewriter.notifyMatchFailure(enc, "Type not supported yet");
     auto operands = adaptor.getOperands();
@@ -1316,7 +1316,7 @@ public:
                                        "decode.capnp lowering requires the ESI "
                                        "capnp plugin, which was disabled.");
 #else
-    capnp::TypeSchema decodeType(dec.decodedData().getType());
+    capnp::TypeSchema decodeType(dec.getDecodedData().getType());
     if (!decodeType.isSupported())
       return rewriter.notifyMatchFailure(dec, "Type not supported yet");
     auto operands = adaptor.getOperands();
