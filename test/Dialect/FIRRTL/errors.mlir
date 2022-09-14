@@ -81,6 +81,13 @@ firrtl.module @foo(in %a : !firrtl.uint<1>) attributes {portNames=[1 : i1]} {}
 // -----
 
 firrtl.circuit "foo" {
+// expected-error @below {{port names should be unique}}
+firrtl.module @foo(in %a : !firrtl.uint<1>, in %b: !firrtl.uint<1>) attributes {portNames=["a", "a"]} {}
+}
+
+// -----
+
+firrtl.circuit "foo" {
 // expected-error @+1 {{op requires 1 port annotations}}
 firrtl.module @foo(in %a : !firrtl.uint<1>) attributes {portAnnotations=[[], []]} {}
 }
