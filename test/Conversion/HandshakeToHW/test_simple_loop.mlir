@@ -16,7 +16,7 @@
 // CHECK:           %[[VAL_22:.*]] = hw.instance "handshake_mux2" @handshake_mux_in_ui1_ui64_ui64_out_ui64(select: %[[VAL_13]]: !esi.channel<i1>, in0: %[[VAL_9]]: !esi.channel<i64>, in1: %[[VAL_23:.*]]: !esi.channel<i64>) -> (out0: !esi.channel<i64>)
 // CHECK:           %[[VAL_24:.*]] = hw.instance "handshake_mux3" @handshake_mux_in_ui1_ui64_ui64_out_ui64(select: %[[VAL_12]]: !esi.channel<i1>, in0: %[[VAL_7]]: !esi.channel<i64>, in1: %[[VAL_25:.*]]: !esi.channel<i64>) -> (out0: !esi.channel<i64>)
 // CHECK:           %[[VAL_26:.*]], %[[VAL_27:.*]] = hw.instance "handshake_fork3" @handshake_fork_in_ui64_out_ui64_ui64(in0: %[[VAL_24]]: !esi.channel<i64>, clock: %[[VAL_1]]: i1, reset: %[[VAL_2]]: i1) -> (out0: !esi.channel<i64>, out1: !esi.channel<i64>)
-// CHECK:           %[[VAL_28:.*]] = hw.instance "comb_icmp0" @comb_icmp_in_ui64_ui64_out_ui1(in0: %[[VAL_26]]: !esi.channel<i64>, in1: %[[VAL_20]]: !esi.channel<i64>) -> (out0: !esi.channel<i1>)
+// CHECK:           %[[VAL_28:.*]] = hw.instance "arith_cmpi0" @arith_cmpi_in_ui64_ui64_out_ui1_slt(in0: %[[VAL_26]]: !esi.channel<i64>, in1: %[[VAL_20]]: !esi.channel<i64>) -> (out0: !esi.channel<i1>)
 // CHECK:           %[[VAL_11]], %[[VAL_29:.*]], %[[VAL_30:.*]], %[[VAL_31:.*]], %[[VAL_32:.*]] = hw.instance "handshake_fork4" @handshake_fork_in_ui1_out_ui1_ui1_ui1_ui1_ui1(in0: %[[VAL_28]]: !esi.channel<i1>, clock: %[[VAL_1]]: i1, reset: %[[VAL_2]]: i1) -> (out0: !esi.channel<i1>, out1: !esi.channel<i1>, out2: !esi.channel<i1>, out3: !esi.channel<i1>, out4: !esi.channel<i1>)
 // CHECK:           %[[VAL_19]], %[[VAL_33:.*]] = hw.instance "handshake_cond_br0" @handshake_cond_br_in_ui1_ui64_out_ui64_ui64(cond: %[[VAL_32]]: !esi.channel<i1>, data: %[[VAL_21]]: !esi.channel<i64>) -> (outTrue: !esi.channel<i64>, outFalse: !esi.channel<i64>)
 // CHECK:           hw.instance "handshake_sink0" @handshake_sink_in_ui64(in0: %[[VAL_33]]: !esi.channel<i64>) -> ()
@@ -25,7 +25,7 @@
 // CHECK:           %[[VAL_17]], %[[VAL_36:.*]] = hw.instance "handshake_cond_br2" @handshake_cond_br_in_ui1_2ins_2outs_ctrl(cond: %[[VAL_30]]: !esi.channel<i1>, data: %[[VAL_16]]: !esi.channel<none>) -> (outTrue: !esi.channel<none>, outFalse: !esi.channel<none>)
 // CHECK:           %[[VAL_37:.*]], %[[VAL_38:.*]] = hw.instance "handshake_cond_br3" @handshake_cond_br_in_ui1_ui64_out_ui64_ui64(cond: %[[VAL_29]]: !esi.channel<i1>, data: %[[VAL_27]]: !esi.channel<i64>) -> (outTrue: !esi.channel<i64>, outFalse: !esi.channel<i64>)
 // CHECK:           %[[VAL_23]], %[[VAL_39:.*]] = hw.instance "handshake_fork5" @handshake_fork_in_ui64_out_ui64_ui64(in0: %[[VAL_34]]: !esi.channel<i64>, clock: %[[VAL_1]]: i1, reset: %[[VAL_2]]: i1) -> (out0: !esi.channel<i64>, out1: !esi.channel<i64>)
-// CHECK:           %[[VAL_25]] = hw.instance "comb_add0" @comb_add_in_ui64_ui64_out_ui64(in0: %[[VAL_37]]: !esi.channel<i64>, in1: %[[VAL_39]]: !esi.channel<i64>) -> (out0: !esi.channel<i64>)
+// CHECK:           %[[VAL_25]] = hw.instance "arith_addi0" @arith_addi_in_ui64_ui64_out_ui64(in0: %[[VAL_37]]: !esi.channel<i64>, in1: %[[VAL_39]]: !esi.channel<i64>) -> (out0: !esi.channel<i64>)
 // CHECK:           hw.output %[[VAL_38]], %[[VAL_36]] : !esi.channel<i64>, !esi.channel<none>
 // CHECK:         }
 
@@ -42,7 +42,7 @@ handshake.func @main(%arg0: none, ...) -> (i64, none) attributes {argNames = ["i
   %9 = mux %5#1 [%3, %14#0] : i1, i64
   %10 = mux %5#0 [%1, %15] : i1, i64
   %11:2 = fork [2] %10 : i64
-  %12 = comb.icmp slt %11#0, %8#0 : i64
+  %12 = arith.cmpi slt, %11#0, %8#0 : i64
   %13:5 = fork [5] %12 : i1
   %trueResult, %falseResult = cond_br %13#4, %8#1 : i64
   sink %falseResult : i64
@@ -51,6 +51,6 @@ handshake.func @main(%arg0: none, ...) -> (i64, none) attributes {argNames = ["i
   %trueResult_2, %falseResult_3 = cond_br %13#2, %6 : none
   %trueResult_4, %falseResult_5 = cond_br %13#1, %11#1 : i64
   %14:2 = fork [2] %trueResult_0 : i64
-  %15 = comb.add %trueResult_4, %14#1 : i64
+  %15 = arith.addi %trueResult_4, %14#1 : i64
   return %falseResult_5, %falseResult_3 : i64, none
 }
