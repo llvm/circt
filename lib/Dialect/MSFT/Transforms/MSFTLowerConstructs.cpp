@@ -177,7 +177,7 @@ public:
     for (uint64_t stageNum = 0, e = chan.defaultStages(); stageNum < e;
          ++stageNum)
       v = rewriter.create<seq::CompRegOp>(loc, v, clk,
-                                          ns.newName(chan.sym_name()));
+                                          ns.newName(chan.getSymName()));
     rewriter.replaceOp(chan, {v});
     return success();
   }

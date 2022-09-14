@@ -51,13 +51,13 @@ ParseResult ChannelBufferOp::parse(OpAsmParser &parser,
 }
 
 void ChannelBufferOp::print(OpAsmPrinter &p) {
-  p << " " << clk() << ", " << rst() << ", " << input() << " ";
+  p << " " << getClk() << ", " << getRst() << ", " << getInput() << " ";
   p.printOptionalAttrDict((*this)->getAttrs());
   p << " : " << innerType();
 }
 
 circt::esi::ChannelType ChannelBufferOp::channelType() {
-  return input().getType().cast<circt::esi::ChannelType>();
+  return getInput().getType().cast<circt::esi::ChannelType>();
 }
 
 //===----------------------------------------------------------------------===//
@@ -86,13 +86,13 @@ ParseResult PipelineStageOp::parse(OpAsmParser &parser,
 }
 
 void PipelineStageOp::print(OpAsmPrinter &p) {
-  p << " " << clk() << ", " << rst() << ", " << input() << " ";
+  p << " " << getClk() << ", " << getRst() << ", " << getInput() << " ";
   p.printOptionalAttrDict((*this)->getAttrs());
   p << " : " << innerType();
 }
 
 circt::esi::ChannelType PipelineStageOp::channelType() {
-  return input().getType().cast<circt::esi::ChannelType>();
+  return getInput().getType().cast<circt::esi::ChannelType>();
 }
 
 //===----------------------------------------------------------------------===//
@@ -121,7 +121,7 @@ ParseResult WrapValidReadyOp::parse(OpAsmParser &parser,
 }
 
 void WrapValidReadyOp::print(OpAsmPrinter &p) {
-  p << " " << rawInput() << ", " << valid();
+  p << " " << getRawInput() << ", " << getValid();
   p.printOptionalAttrDict((*this)->getAttrs());
   p << " : " << innerType();
 }
@@ -156,13 +156,13 @@ ParseResult UnwrapValidReadyOp::parse(OpAsmParser &parser,
 }
 
 void UnwrapValidReadyOp::print(OpAsmPrinter &p) {
-  p << " " << chanInput() << ", " << ready();
+  p << " " << getChanInput() << ", " << getReady();
   p.printOptionalAttrDict((*this)->getAttrs());
-  p << " : " << rawOutput().getType();
+  p << " : " << getRawOutput().getType();
 }
 
 circt::esi::ChannelType WrapValidReadyOp::channelType() {
-  return chanOutput().getType().cast<circt::esi::ChannelType>();
+  return getChanOutput().getType().cast<circt::esi::ChannelType>();
 }
 
 void UnwrapValidReadyOp::build(OpBuilder &b, OperationState &state,
@@ -172,7 +172,7 @@ void UnwrapValidReadyOp::build(OpBuilder &b, OperationState &state,
 }
 
 circt::esi::ChannelType UnwrapValidReadyOp::channelType() {
-  return chanInput().getType().cast<circt::esi::ChannelType>();
+  return getChanInput().getType().cast<circt::esi::ChannelType>();
 }
 
 /// If 'iface' looks like an ESI interface, return the inner data type.
@@ -212,23 +212,25 @@ static LogicalResult verifySVInterface(Operation *op,
 }
 
 LogicalResult WrapSVInterfaceOp::verify() {
-  auto modportType = interfaceSink().getType().cast<circt::sv::ModportType>();
-  auto chanType = output().getType().cast<ChannelType>();
+  auto modportType =
+      getInterfaceSink().getType().cast<circt::sv::ModportType>();
+  auto chanType = getOutput().getType().cast<ChannelType>();
   return verifySVInterface(*this, modportType, chanType);
 }
 
 circt::esi::ChannelType WrapSVInterfaceOp::channelType() {
-  return output().getType().cast<circt::esi::ChannelType>();
+  return getOutput().getType().cast<circt::esi::ChannelType>();
 }
 
 LogicalResult UnwrapSVInterfaceOp::verify() {
-  auto modportType = interfaceSource().getType().cast<circt::sv::ModportType>();
-  auto chanType = chanInput().getType().cast<ChannelType>();
+  auto modportType =
+      getInterfaceSource().getType().cast<circt::sv::ModportType>();
+  auto chanType = getChanInput().getType().cast<ChannelType>();
   return verifySVInterface(*this, modportType, chanType);
 }
 
 circt::esi::ChannelType UnwrapSVInterfaceOp::channelType() {
-  return chanInput().getType().cast<circt::esi::ChannelType>();
+  return getChanInput().getType().cast<circt::esi::ChannelType>();
 }
 
 /// Get the port declaration op for the specified service decl, port name.
@@ -247,7 +249,7 @@ static OpType getServicePortDecl(Operation *op,
 
   StringAttr innerSym = servicePort.getName();
   for (auto portDecl : serviceDeclOp.getOps<OpType>())
-    if (portDecl.inner_symAttr() == innerSym)
+    if (portDecl.getInnerSymAttr() == innerSym)
       return portDecl;
   return {};
 }
@@ -257,7 +259,7 @@ static OpType getServicePortDecl(Operation *op,
 template <class PortTypeOp, class OpType>
 static LogicalResult
 reqPortMatches(OpType op, SymbolTableCollection &symbolTable, Type t) {
-  hw::InnerRefAttr port = op.servicePort();
+  hw::InnerRefAttr port = op.getServicePort();
   auto portDecl = getServicePortDecl<PortTypeOp>(op, symbolTable, port);
   auto inoutPortDecl =
       getServicePortDecl<ServiceDeclInOutOp>(op, symbolTable, port);
@@ -268,40 +270,42 @@ reqPortMatches(OpType op, SymbolTableCollection &symbolTable, Type t) {
   auto *ctxt = op.getContext();
   auto anyChannelType = ChannelType::get(ctxt, AnyType::get(ctxt));
   if (portDecl) {
-    if (portDecl.type() != t && portDecl.type() != anyChannelType)
+    if (portDecl.getType() != t && portDecl.getType() != anyChannelType)
       return op.emitOpError("Request type does not match port type ")
-             << portDecl.type();
+             << portDecl.getType();
     return success();
   }
 
   assert(inoutPortDecl);
   if (isa<ToClientOp>(op)) {
-    if (inoutPortDecl.inType() != t && inoutPortDecl.inType() != anyChannelType)
+    if (inoutPortDecl.getInType() != t &&
+        inoutPortDecl.getInType() != anyChannelType)
       return op.emitOpError("Request type does not match port type ")
-             << inoutPortDecl.inType();
+             << inoutPortDecl.getInType();
   } else if (isa<ToServerOp>(op)) {
-    if (inoutPortDecl.outType() != t &&
-        inoutPortDecl.outType() != anyChannelType)
+    if (inoutPortDecl.getOutType() != t &&
+        inoutPortDecl.getOutType() != anyChannelType)
       return op.emitOpError("Request type does not match port type ")
-             << inoutPortDecl.outType();
+             << inoutPortDecl.getOutType();
   }
   return success();
 }
 
 LogicalResult RequestToClientConnectionOp::verifySymbolUses(
     SymbolTableCollection &symbolTable) {
-  return reqPortMatches<ToClientOp>(*this, symbolTable, receiving().getType());
+  return reqPortMatches<ToClientOp>(*this, symbolTable,
+                                    getReceiving().getType());
 }
 
 LogicalResult RequestToServerConnectionOp::verifySymbolUses(
     SymbolTableCollection &symbolTable) {
-  return reqPortMatches<ToServerOp>(*this, symbolTable, sending().getType());
+  return reqPortMatches<ToServerOp>(*this, symbolTable, getSending().getType());
 }
 
 LogicalResult
 RequestInOutChannelOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto portDecl = getServicePortDecl<ServiceDeclInOutOp>(
-      this->getOperation(), symbolTable, servicePort());
+      this->getOperation(), symbolTable, getServicePort());
   if (!portDecl)
     return emitOpError("Could not find inout service port declaration.");
 
@@ -309,16 +313,16 @@ RequestInOutChannelOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto anyChannelType = ChannelType::get(ctxt, AnyType::get(ctxt));
 
   // Check the input port type.
-  if (portDecl.inType() != sending().getType() &&
-      portDecl.inType() != anyChannelType)
+  if (portDecl.getInType() != getSending().getType() &&
+      portDecl.getInType() != anyChannelType)
     return emitOpError("Request to_server type does not match port type ")
-           << portDecl.inType();
+           << portDecl.getInType();
 
   // Check the output port type.
-  if (portDecl.outType() != receiving().getType() &&
-      portDecl.outType() != anyChannelType)
+  if (portDecl.getOutType() != getReceiving().getType() &&
+      portDecl.getOutType() != anyChannelType)
     return emitOpError("Request to_client type does not match port type ")
-           << portDecl.outType();
+           << portDecl.getOutType();
 
   return success();
 }
@@ -327,10 +331,11 @@ LogicalResult ServiceHierarchyMetadataOp::verifySymbolUses(
     SymbolTableCollection &symbolTable) {
   ModuleOp top = getOperation()->getParentOfType<mlir::ModuleOp>();
   SymbolTable topSyms = symbolTable.getSymbolTable(top);
-  ServiceDeclOp serviceDeclOp = topSyms.lookup<ServiceDeclOp>(service_symbol());
+  ServiceDeclOp serviceDeclOp =
+      topSyms.lookup<ServiceDeclOp>(getServiceSymbol());
   if (!serviceDeclOp)
     return emitOpError("Could not find service declaration ")
-           << service_symbol();
+           << getServiceSymbol();
   return success();
 }
 
@@ -345,14 +350,14 @@ void ServiceImplementReqOp::gatherPairedReqs(
       clientNameToClient;
   for (auto &op : getOps())
     if (auto req = dyn_cast<RequestToClientConnectionOp>(op))
-      clientNameToClient[req.clientNamePathAttr()].push_back(req);
+      clientNameToClient[req.getClientNamePathAttr()].push_back(req);
     else if (auto req = dyn_cast<RequestToServerConnectionOp>(op))
-      clientNameToServer[req.clientNamePathAttr()].push_back(req);
+      clientNameToServer[req.getClientNamePathAttr()].push_back(req);
 
   // Find all of the pairs and emit them.
   DenseSet<Operation *> emittedOps;
   for (auto op : getOps<RequestToServerConnectionOp>()) {
-    ArrayAttr clientName = op.clientNamePathAttr();
+    ArrayAttr clientName = op.getClientNamePathAttr();
     const SmallVector<RequestToServerConnectionOp, 0> &ops =
         clientNameToServer[clientName];
 

@@ -103,7 +103,7 @@ def ComponentOp : CalyxOp<"component", [
       }
 
       /// Returns the body of a Calyx component.
-      Block *getBody() {
+      Block *getBodyBlock() {
         Region* region = &getOperation()->getRegion(0);
         assert(region->hasOneBlock() && "The body should have one Block.");
         return &region->front();
@@ -176,6 +176,14 @@ def WiresOp : CalyxContainer<"wires", [
   let extraClassDeclaration = [{
     /// Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
+
+    /// Returns the body of a Calyx component.
+    Block *getBodyBlock() {
+      Region* region = &getOperation()->getRegion(0);
+      assert(region->hasOneBlock() && "The body should have one Block.");
+      return &region->front();
+    }
+
   }];
 
   let hasVerifier = 1;
@@ -276,6 +284,14 @@ def GroupOp : CalyxOp<"group", [
 
     /// Returns the GroupDoneOp for this group.
     GroupDoneOp getDoneOp();
+
+    /// Returns the body of a Calyx component.
+    Block *getBodyBlock() {
+      Region* region = &getOperation()->getRegion(0);
+      assert(region->hasOneBlock() && "The body should have one Block.");
+      return &region->front();
+    }
+
   }];
 
   let regions = (region SizedRegion<1>:$body);
@@ -324,6 +340,13 @@ def CombGroupOp : CalyxOp<"comb_group", [
   let extraClassDeclaration = [{
     // Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
+
+    /// Returns the body of a Calyx component.
+    Block *getBodyBlock() {
+      Region* region = &getOperation()->getRegion(0);
+      assert(region->hasOneBlock() && "The body should have one Block.");
+      return &region->front();
+    }
   }];
 
   let regions = (region SizedRegion<1>:$body);

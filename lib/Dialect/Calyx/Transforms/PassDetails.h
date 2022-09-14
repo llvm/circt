@@ -31,11 +31,11 @@ template <typename Op>
 static void updateGroupAssignmentGuards(OpBuilder &builder, GroupOp &group,
                                         Op &op) {
   group.walk([&](AssignOp assign) {
-    if (assign.guard())
+    if (assign.getGuard())
       // If the assignment is guarded already, take the bitwise & of the current
       // guard and the group's go signal.
       assign->setOperand(2, builder.create<comb::AndOp>(
-                                group.getLoc(), assign.guard(), op, false));
+                                group.getLoc(), assign.getGuard(), op, false));
     else
       // Otherwise, just insert it as the guard.
       assign->insertOperands(2, {op});

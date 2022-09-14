@@ -44,7 +44,7 @@ StringRef circt::msft::getValueName(Value v, const SymbolCache &syms,
       hw::ModulePortInfo ports = getModulePortInfo(modOp);
       buff.clear();
       llvm::raw_string_ostream os(buff);
-      os << inst.sym_name() << ".";
+      os << inst.getSymName() << ".";
       StringAttr name = ports.outputs[instResult.getResultNumber()].name;
       if (name)
         os << name.getValue();

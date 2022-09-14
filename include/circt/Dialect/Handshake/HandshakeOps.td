@@ -158,7 +158,6 @@ def InstanceOp : Handshake_Op<"instance", [
   }]>];
 
   let extraClassDeclaration = [{
-    StringRef getModule() { return module(); }
     FunctionType getModuleType();
 
     /// Get the argument operands to the called function.
@@ -250,13 +249,13 @@ def BufferOp : Handshake_Op<"buffer", [NoSideEffect, HasClock,
 
   let extraClassDeclaration = [{
     bool isSequential() {
-      return this->bufferType() == BufferTypeEnum::seq;
+      return this->getBufferType() == BufferTypeEnum::seq;
     }
     int getNumSlots() {
       return (*this)->getAttrOfType<IntegerAttr>("size").getValue().getZExtValue();
     }
-    SmallVector<int64_t> getInitValues() {
-      assert(initValues() && "initValues attribute not set");
+    SmallVector<int64_t> getInitValueArray() {
+      assert(getInitValues() && "initValues attribute not set");
       SmallVector<int64_t> values;
       for (auto value : (*this)->getAttrOfType<ArrayAttr>("initValues"))
         values.push_back(value.cast<IntegerAttr>().getValue().getSExtValue());
@@ -600,9 +599,6 @@ def ConstantOp : Handshake_Op<"constant", [
   let skipDefaultBuilders = 1;
 
   let hasCanonicalizer = 1;
-  let extraClassDeclaration = [{
-    mlir::TypedAttr getValue() { return value(); }
-  }];
   let assemblyFormat = [{ $ctrl attr-dict `:` qualified(type($result))}];
   let hasVerifier = 1;
 }

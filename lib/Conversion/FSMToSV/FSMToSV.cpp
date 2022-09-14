@@ -406,7 +406,7 @@ LogicalResult MachineOpConverter::dispatch() {
   // 1) Get the port info of the machine and create a new HW module for it.
   SmallVector<hw::PortInfo, 16> ports;
   auto clkRstIdxs = getMachinePortInfo(ports, machineOp, b);
-  hwModuleOp = b.create<hw::HWModuleOp>(loc, machineOp.sym_nameAttr(), ports);
+  hwModuleOp = b.create<hw::HWModuleOp>(loc, machineOp.getSymNameAttr(), ports);
   b.setInsertionPointToStart(&hwModuleOp.front());
 
   // Replace all uses of the machine arguments with the arguments of the
@@ -435,18 +435,18 @@ LogicalResult MachineOpConverter::dispatch() {
 
   llvm::DenseMap<VariableOp, sv::RegOp> variableNextStateWires;
   for (auto variableOp : machineOp.front().getOps<fsm::VariableOp>()) {
-    auto initValueAttr = variableOp.initValueAttr().dyn_cast<IntegerAttr>();
+    auto initValueAttr = variableOp.getInitValueAttr().dyn_cast<IntegerAttr>();
     if (!initValueAttr)
       return variableOp.emitOpError() << "expected an integer attribute "
                                          "for the initial value.";
     Type varType = variableOp.getType();
     auto varLoc = variableOp.getLoc();
     auto varNextState = b.create<sv::RegOp>(
-        varLoc, varType, b.getStringAttr(variableOp.name() + "_next"));
+        varLoc, varType, b.getStringAttr(variableOp.getName() + "_next"));
     auto varResetVal = b.create<hw::ConstantOp>(varLoc, initValueAttr);
     auto variableReg = b.create<seq::CompRegOp>(
         varLoc, varType, b.create<sv::ReadInOutOp>(varLoc, varNextState), clock,
-        b.getStringAttr(variableOp.name() + "_reg"), reset, varResetVal,
+        b.getStringAttr(variableOp.getName() + "_reg"), reset, varResetVal,
         nullptr);
     variableToRegister[variableOp] = variableReg;
     variableNextStateWires[variableOp] = varNextState;
@@ -583,26 +583,26 @@ MachineOpConverter::convertTransitions( // NOLINT(misc-no-recursion)
   } else {
     // Recursive case - transition to a named state.
     auto transition = cast<fsm::TransitionOp>(transitions.front());
-    nextState = encoding->encode(transition.getNextState());
+    nextState = encoding->encode(transition.getNextStateOp());
 
     // Action conversion
     if (transition.hasAction()) {
       // Move any ops from the action region to the general scope, excluding
       // variable update ops.
       auto actionMoveOpsRes =
-          moveOps(&transition.action().front(),
+          moveOps(&transition.getAction().front(),
                   [](Operation *op) { return isa<fsm::UpdateOp>(op); });
       if (failed(actionMoveOpsRes))
         return failure();
 
       // Gather variable updates during the action.
       DenseMap<fsm::VariableOp, Value> variableUpdates;
-      for (auto updateOp : transition.action().getOps<fsm::UpdateOp>()) {
-        VariableOp variableOp = updateOp.getVariable();
-        variableUpdates[variableOp] = updateOp.value();
+      for (auto updateOp : transition.getAction().getOps<fsm::UpdateOp>()) {
+        VariableOp variableOp = updateOp.getVariableOp();
+        variableUpdates[variableOp] = updateOp.getValue();
       }
 
-      stateToVariableUpdates[currentState][transition.getNextState()] =
+      stateToVariableUpdates[currentState][transition.getNextStateOp()] =
           variableUpdates;
     }
 
@@ -610,11 +610,11 @@ MachineOpConverter::convertTransitions( // NOLINT(misc-no-recursion)
     if (transition.hasGuard()) {
       // Not always taken; recurse and mux between the targeted next state and
       // the recursion result, selecting based on the provided guard.
-      auto guardOpRes = moveOps(&transition.guard().front());
+      auto guardOpRes = moveOps(&transition.getGuard().front());
       if (failed(guardOpRes))
         return failure();
 
-      auto guard = cast<ReturnOp>(*guardOpRes).getOperand(0);
+      auto guard = cast<ReturnOp>(*guardOpRes).getOperand();
       auto otherNextState =
           convertTransitions(currentState, transitions.drop_front());
       if (failed(otherNextState))
@@ -635,8 +635,8 @@ MachineOpConverter::convertState(StateOp state) {
 
   // 3.1) Convert the output region by moving the operations into the module
   // scope and gathering the operands of the output op.
-  if (!state.output().empty()) {
-    auto outputOpRes = moveOps(&state.output().front());
+  if (!state.getOutput().empty()) {
+    auto outputOpRes = moveOps(&state.getOutput().front());
     if (failed(outputOpRes))
       return failure();
 
@@ -645,7 +645,7 @@ MachineOpConverter::convertState(StateOp state) {
   }
 
   auto transitions = llvm::SmallVector<TransitionOp>(
-      state.transitions().getOps<TransitionOp>());
+      state.getTransitions().getOps<TransitionOp>());
   // 3.3, 3.4) Convert the transitions and record the next-state value
   // derived from the transitions being selected in a priority-encoded manner.
   auto nextStateRes = convertTransitions(state, transitions);
@@ -691,7 +691,8 @@ void FSMToSVPass::runOnOperation() {
   llvm::SmallVector<HWInstanceOp> instances;
   module.walk([&](HWInstanceOp instance) { instances.push_back(instance); });
   for (auto instance : instances) {
-    auto fsmHWModule = module.lookupSymbol<hw::HWModuleOp>(instance.machine());
+    auto fsmHWModule =
+        module.lookupSymbol<hw::HWModuleOp>(instance.getMachine());
     assert(fsmHWModule &&
            "FSM machine should have been converted to a hw.module");
 

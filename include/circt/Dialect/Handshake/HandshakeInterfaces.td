@@ -33,7 +33,7 @@ def MergeLikeOpInterface : OpInterface<"MergeLikeOpInterface"> {
   let verify = [{
     auto concreteOp = cast<ConcreteOp>($_op);
 
-    auto operands = concreteOp.dataOperands();
+    auto operands = concreteOp.getDataOperands();
 
     if (!operands.size())
       return concreteOp.emitOpError("must have at least one data operand");
