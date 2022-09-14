@@ -131,7 +131,14 @@ LogicalResult MemoryPortOp::inferReturnTypes(MLIRContext *context,
       mlir::emitError(*loc, "memory port requires memory operand");
     return failure();
   }
-  results.push_back(memType.getElementType());
+  auto dir = attrs.get("direction");
+  if (!dir)
+    return mlir::emitError(*loc, "memory port requires the direction");
+  if (dir.cast<::MemDirAttrAttr>().getValue() == MemDirAttr::Debug)
+    results.push_back(
+        FVectorType::get(memType.getElementType(), memType.getNumElements()));
+  else
+    results.push_back(memType.getElementType());
   results.push_back(CMemoryPortType::get(context));
   return success();
 }
