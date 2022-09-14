@@ -134,7 +134,7 @@ def InstanceOp : Handshake_Op<"instance", [
     ```
   }];
 
-  let arguments = (ins FlatSymbolRefAttr:$module, Variadic<AnyType>:$operands);
+  let arguments = (ins FlatSymbolRefAttr:$module, Variadic<AnyType>:$opOperands);
   let results = (outs Variadic<AnyType>);
   let skipDefaultBuilders = 1;
   let builders = [OpBuilder<
@@ -180,7 +180,7 @@ def InstanceOp : Handshake_Op<"instance", [
   }];
 
   let assemblyFormat = [{
-    $module `(` $operands `)` attr-dict `:` functional-type($operands, results)
+    $module `(` $opOperands `)` attr-dict `:` functional-type($opOperands, results)
   }];
 
   let hasVerifier = 1;
@@ -199,11 +199,11 @@ def ReturnOp : Handshake_Op<"return", [Terminator]> {
     only operand(exit point of control - only network).
   }];
 
-  let arguments = (ins Variadic<AnyType> : $operands);
+  let arguments = (ins Variadic<AnyType> : $opOperands);
 
   let hasVerifier = 1;
   let assemblyFormat =
-    [{  attr-dict ($operands^ `:` type($operands))? }];
+    [{  attr-dict ($opOperands^ `:` type($opOperands))? }];
 }
 
 // Here use I32EnumAttr to better suit the BufferOp sequential
@@ -612,11 +612,11 @@ def EndOp
     all memory accesses have completed.  Currently not used(data
     returned through ReturnOp).
   }];
-  let arguments = (ins AnyType : $control, Variadic<AnyType> : $operands);
+  let arguments = (ins AnyType : $control, Variadic<AnyType> : $opOperands);
 
   let skipDefaultBuilders = 1;
   let builders = [OpBuilder<(ins "Value":$operand)>];
-  let assemblyFormat = [{ operands attr-dict `:` qualified(type($control)) `,` qualified(type($operands))}];
+  let assemblyFormat = [{ operands attr-dict `:` qualified(type($control)) `,` qualified(type($opOperands))}];
 }
 
 def StartOp : Handshake_Op<"start", [

@@ -26,7 +26,7 @@ def MergeLikeOpInterface : OpInterface<"MergeLikeOpInterface"> {
     InterfaceMethod<[{
         Returns an operand range over the data signals being merged.
       }],
-      "OperandRange", "dataOperands", (ins)
+      "OperandRange", "getDataOperands", (ins)
     >,
   ];
 

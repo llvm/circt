@@ -1417,6 +1417,7 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
             auto idChar = base.substr(beginAt + 2, endAt - beginAt - 2);
             int idNum;
             bool failed = idChar.getAsInteger(10, idNum);
+            (void)failed;
             assert(!failed && "failed to parse integer from verbatim string");
             // Now increment the id and append.
             replStr.append("{{");
@@ -2083,22 +2084,22 @@ void GrandCentralPass::runOnOperation() {
         })
         .Case<FModuleOp>([&](FModuleOp op) {
           // Handle annotations on the ports.
-          AnnotationSet::removePortAnnotations(
-              op, [&](unsigned i, Annotation annotation) {
-                if (!annotation.isClass(augmentedGroundTypeClass))
-                  return false;
-                auto maybeID = getID(op, annotation);
-                if (!maybeID)
-                  return false;
-                auto sym =
-                    annotation.getMember<FlatSymbolRefAttr>("circt.nonlocal");
-                leafMap[*maybeID] = {
-                    {op.getArgument(i), annotation.getFieldID()}, sym};
-                if (sym)
-                  deadNLAs.insert(sym.getAttr());
-                ++numAnnosRemoved;
-                return true;
-              });
+          AnnotationSet::removePortAnnotations(op, [&](unsigned i,
+                                                       Annotation annotation) {
+            if (!annotation.isClass(augmentedGroundTypeClass))
+              return false;
+            auto maybeID = getID(op, annotation);
+            if (!maybeID)
+              return false;
+            auto sym =
+                annotation.getMember<FlatSymbolRefAttr>("circt.nonlocal");
+            leafMap[*maybeID] = {{op.getArgument(i), annotation.getFieldID()},
+                                 sym};
+            if (sym)
+              deadNLAs.insert(sym.getAttr());
+            ++numAnnosRemoved;
+            return true;
+          });
 
           // Handle annotations on the module.
           AnnotationSet::removeAnnotations(op, [&](Annotation annotation) {
