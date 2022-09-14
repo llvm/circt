@@ -1,17 +1,20 @@
 // RUN: circt-opt -pass-pipeline='firrtl.circuit(firrtl-mem-to-reg-of-vec)' %s | FileCheck  %s
 
 firrtl.circuit "Mem" attributes {annotations = [{class = "sifive.enterprise.firrtl.ConvertMemToRegOfVecAnnotation$"}]}{
-  firrtl.module public @Mem() attributes {annotations = [
+  firrtl.module public @Mem(out %d : !firrtl.vector<uint<8>, 8>, out %d2 : !firrtl.vector<uint<8>, 8>) attributes {annotations = [
     {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}
   ]} {
-    %mem_read, %mem_write = firrtl.mem Undefined {
+    %dbg, %mem_read, %mem_write, %debug = firrtl.mem Undefined {
       depth = 8 : i64,
       name = "mem",
-      portNames = ["read", "write"],
+      portNames = ["dbg", "read", "write", "debug"],
       readLatency = 0 : i32,
       writeLatency = 1 : i32
-    } : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: uint<8>>,
-        !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
+    } : !firrtl.vector<uint<8>, 8>, !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: uint<8>>,
+        !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>,
+        !firrtl.vector<uint<8>, 8>
+    firrtl.strictconnect %d, %debug : !firrtl.vector<uint<8>, 8>
+    firrtl.strictconnect %d2, %dbg : !firrtl.vector<uint<8>, 8>
   }
     // CHECK-LABEL: firrtl.circuit "Mem" {
     // CHECK:         firrtl.module public @Mem(
@@ -39,6 +42,11 @@ firrtl.circuit "Mem" attributes {annotations = [{class = "sifive.enterprise.firr
     // CHECK:               firrtl.strictconnect %[[v10]], %[[v8]] : !firrtl.uint<8>
     // CHECK:             }
     // CHECK:           }
+    // CHECK:           %mem_debug = firrtl.wire   : !firrtl.vector<uint<8>, 8>
+    // CHECK:           firrtl.strictconnect %mem_dbg, %mem : !firrtl.vector<uint<8>, 8>
+    // CHECK:           firrtl.strictconnect %mem_debug, %mem : !firrtl.vector<uint<8>, 8>
+    // CHECK:           firrtl.strictconnect %d, %mem_debug : !firrtl.vector<uint<8>, 8>
+    // CHECK:           firrtl.strictconnect %d2, %mem_dbg : !firrtl.vector<uint<8>, 8>
 
 
 }
@@ -164,12 +172,12 @@ firrtl.circuit "WriteMask" attributes {annotations = [
         !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: vector<uint<8>, 2>, mask: vector<uint<1>, 2>>
     // CHECK-LABEL: firrtl.module public @WriteMask()
     // CHECK:         %mem = firrtl.reg %2  : !firrtl.vector<vector<uint<8>, 2>, 8>
-    // CHECK:         %mem_write = firrtl.wire  : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: vector<uint<8>, 2>, mask: vector<uint<1>, 2>>
-    // CHECK:         %[[v5:.+]] = firrtl.subfield %mem_write(0)
-    // CHECK:         %[[v6:.+]] = firrtl.subfield %mem_write(1)
-    // CHECK:         %[[v7:.+]] = firrtl.subfield %mem_write(2)
-    // CHECK:         %[[v8:.+]] = firrtl.subfield %mem_write(3)
-    // CHECK:         %[[v9:.+]] = firrtl.subfield %mem_write(4)
+    // CHECK:         %[[mem_write:.+]] = firrtl.wire  : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: vector<uint<8>, 2>, mask: vector<uint<1>, 2>>
+    // CHECK:         %[[v5:.+]] = firrtl.subfield %[[mem_write]](0)
+    // CHECK:         %[[v6:.+]] = firrtl.subfield %[[mem_write]](1)
+    // CHECK:         %[[v7:.+]] = firrtl.subfield %[[mem_write]](2)
+    // CHECK:         %[[v8:.+]] = firrtl.subfield %[[mem_write]](3)
+    // CHECK:         %[[v9:.+]] = firrtl.subfield %[[mem_write]](4)
     // CHECK:         %[[v10:.+]] = firrtl.subaccess %mem[%5] : !firrtl.vector<vector<uint<8>, 2>, 8>, !firrtl.uint<3>
     // CHECK:         %[[v11:.+]] = firrtl.subindex
     // CHECK:         %[[v12:.+]] = firrtl.subindex
@@ -195,7 +203,7 @@ firrtl.circuit "WriteMask" attributes {annotations = [
       writeLatency = 1 : i32
     } : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: vector<uint<8>, 2>>,
         !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: vector<uint<8>, 2>, mask: vector<uint<1>, 2>>
-    // CHECK: %mem_read_0, %mem_write_1 = firrtl.mem Undefined {depth = 8 :
+    // %[[mem_read:.+]], %[[mem_write:.+]] = firrtl.mem Undefined {depth = 8 : i64, name = "mem", portNames = ["read", "write"], readLatency = 0 : i32, writeLatency = 1 : i32}
   }
 }
 
