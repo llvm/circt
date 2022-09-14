@@ -20,6 +20,7 @@
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
+#include <numeric>
 
 #define DEBUG_TYPE "lower-memory"
 
@@ -76,7 +77,7 @@ struct FlattenMemoryPass : public FlattenMemoryBase<FlattenMemoryPass> {
       maskGran = memWidths[0];
       // Compute the GCD of all data bitwidths.
       for (auto w : memWidths) {
-        maskGran = llvm::GreatestCommonDivisor64(maskGran, w);
+        maskGran = std::gcd(maskGran, (uint64_t)w);
       }
       for (auto w : memWidths) {
         // How many mask bits required for each flattened field.

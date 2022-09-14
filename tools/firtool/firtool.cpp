@@ -472,7 +472,7 @@ static bool checkBytecodeOutputToConsole(raw_ostream &os) {
 /// requested and politely avoiding dumping to terminal unless forced.
 static void printOp(Operation *op, raw_ostream &os) {
   if (emitBytecode && (force || !checkBytecodeOutputToConsole(os)))
-    writeBytecodeToFile(op, os, getCirctVersion());
+    writeBytecodeToFile(op, os, BytecodeWriterConfig(getCirctVersion()));
   else
     op->print(os);
 }

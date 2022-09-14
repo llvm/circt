@@ -1182,7 +1182,7 @@ static LogicalResult canonicalizeMux(MuxPrimOp op, PatternRewriter &rewriter) {
   if (width < 0)
     return failure();
 
-  auto pad = [&](Value input) {
+  auto pad = [&](Value input) -> Value {
     auto inputWidth =
         input.getType().cast<FIRRTLBaseType>().getBitWidthOrSentinel();
     if (inputWidth < 0 || width == inputWidth)
@@ -1882,8 +1882,8 @@ static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
   }
   auto pt = rewriter.saveInsertionPoint();
   rewriter.setInsertionPoint(con);
-  replaceOpWithNewOpAndCopyName<ConnectOp>(rewriter, con, con.getDest(),
-                                           constReg ? constOp : mux.getLow());
+  replaceOpWithNewOpAndCopyName<ConnectOp>(
+      rewriter, con, con.getDest(), constReg ? (Value)constOp : mux.getLow());
   rewriter.restoreInsertionPoint(pt);
   return success();
 }
