@@ -34,6 +34,7 @@ configure_lit_site_cfg(
 add_lit_testsuite(check-circt-integration "Running the CIRCT integration tests"
   ${CMAKE_CURRENT_BINARY_DIR}
   DEPENDS ${CIRCT_INTEGRATION_TEST_DEPENDS}
+  ARGS "--show-unsupported"
   )
 set_target_properties(check-circt-integration PROPERTIES FOLDER "IntegrationTests")
 
