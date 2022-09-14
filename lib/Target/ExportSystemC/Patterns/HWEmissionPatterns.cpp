@@ -56,29 +56,31 @@ struct ConstantEmitter : OpEmissionPattern<ConstantOp> {
 //===----------------------------------------------------------------------===//
 
 namespace {
-/// Emit integer types. There are several datatypes to represent integers in
-/// SystemC. In contrast to HW and Comb, SystemC chooses the signedness
-/// semantics of operations not by the operation itself, but by the type of the
-/// operands. We generally map the signless integers of HW to unsigned integers
-/// in SystemC and cast to/from signed integers whenever needed. SystemC also
-/// uses different types depending on the bit-width of the integer. For 1-bit
-/// integers it simply uses 'bool', for integers with up to 64 bits it uses
-/// 'sc_uint<>' which maps to native C types for performance reasons. For bigger
-/// integers 'sc_biguint<>' is used. However, often a limit of 512 bits is
-/// configured for this datatype to improve performance. In that case, we have
-/// to fall back to 'sc_bv' bit-vectors which have the disadvantage that many
-/// operations such as arithmetics are not supported.
+/// Emit the builtin integer type to native C integer types.
 struct IntegerTypeEmitter : TypeEmissionPattern<IntegerType> {
+  bool match(Type type) override {
+    if (!type.isa<IntegerType>())
+      return false;
+
+    unsigned bw = type.getIntOrFloatBitWidth();
+    return bw == 1 || bw == 8 || bw == 16 || bw == 32 || bw == 64;
+  }
+
   void emitType(IntegerType type, EmissionPrinter &p) override {
     unsigned bitWidth = type.getIntOrFloatBitWidth();
-    if (bitWidth == 1)
+    switch (bitWidth) {
+    case 1:
       p << "bool";
-    else if (bitWidth <= 64)
-      p << "sc_uint<" << bitWidth << ">";
-    else if (bitWidth <= 512)
-      p << "sc_biguint<" << bitWidth << ">";
-    else
-      p << "sc_bv<" << bitWidth << ">";
+      break;
+    case 8:
+    case 16:
+    case 32:
+    case 64:
+      p << (type.isSigned() ? "" : "u") << "int" << bitWidth << "_t";
+      break;
+    default:
+      assert(false && "All cases allowed by match function must be covered.");
+    }
   }
 };
 } // namespace
