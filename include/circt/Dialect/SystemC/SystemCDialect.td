@@ -28,9 +28,13 @@ def SystemCDialect : Dialect {
     void registerAttributes();
     /// Register all SystemC types.
     void registerTypes();
+
+    /// Type parsing and printing.
+    mlir::Type parseType(mlir::DialectAsmParser &parser) const override;
+    void printType(mlir::Type, mlir::DialectAsmPrinter &) const override;
   }];
 
-  let useDefaultTypePrinterParser = 1;
+  let useDefaultTypePrinterParser = 0;
 
   let emitAccessorPrefix = kEmitAccessorPrefix_Prefixed;
 }

@@ -147,7 +147,7 @@ systemc.module @signalFuncNameConflict () {
 // -----
 
 systemc.module @cannotReadFromOutPort (%port0: !systemc.out<i32>) {
-  // expected-error @+1 {{op operand #0 must be InputType or InOutType or SignalType, but got '!systemc.out<i32>'}}
+  // expected-error @+1 {{operand #0 must be a SystemC sc_in<T> type or a SystemC sc_inout<T> type or a SystemC sc_signal<T> type, but got '!systemc.out<i32>'}}
   %0 = systemc.signal.read %port0 : !systemc.out<i32>
 }
 
@@ -162,14 +162,14 @@ systemc.module @inferredTypeDoesNotMatch (%port0: !systemc.in<i32>) {
 
 systemc.module @cannotWriteToInputPort (%port0: !systemc.in<i32>) {
   %0 = hw.constant 0 : i32
-  // expected-error @+1 {{'dest' must be OutputType or InOutType or SignalType, but got '!systemc.in<i32>'}}
+  // expected-error @+1 {{'dest' must be a SystemC sc_out<T> type or a SystemC sc_inout<T> type or a SystemC sc_signal<T> type, but got '!systemc.in<i32>'}}
   systemc.signal.write %port0, %0 : !systemc.in<i32>
 }
 
 // -----
 
 systemc.module @invalidSignalOpReturnType () {
-  // expected-error @+1 {{invalid kind of type specified}}
+  // expected-error @+1 {{result #0 must be a SystemC sc_signal<T> type, but got 'i32'}}
   %signal0 = systemc.signal : i32
 }
 
@@ -344,3 +344,41 @@ systemc.module @baseTypeMismatch (%out0: !systemc.out<i32>) {
     "systemc.instance.bind_port"(%instance, %out0) {portId = 1 : index} : (!systemc.module<submodule(out0: !systemc.out<i32>)>, !systemc.out<i32>) -> ()
   }
 }
+
+// -----
+
+systemc.module @assignOperandTypeMismatch () {
+  %var = systemc.cpp.variable : i32
+  systemc.ctor {
+    %0 = hw.constant 0 : i8
+    // expected-error @+1 {{requires all operands to have the same type}}
+    "systemc.cpp.assign"(%var, %0) : (i32, i8) -> ()
+  }
+}
+
+// -----
+
+systemc.module @variableOperandTypeMismatch () {
+  systemc.ctor {
+    %0 = hw.constant 0 : i8
+    // expected-error @+1 {{'init' and 'variable' must have the same type, but got 'i8' and 'i32'}}
+    %1 = "systemc.cpp.variable"(%0) {name = "var"} : (i8) -> i32
+  }
+}
+
+// -----
+
+// expected-note @+1 {{in module '@variableNameCollision'}}
+systemc.module @variableNameCollision () {
+  systemc.ctor {
+    // expected-note @+1 {{'var' first defined here}}
+    %0 = "systemc.cpp.variable"() {name = "var"} : () -> i32
+    // expected-error @+1 {{redefines name 'var'}}
+    %1 = "systemc.cpp.variable"() {name = "var"} : () -> i32
+  }
+}
+
+// -----
+
+// expected-error @+1 {{unknown type `value_base` in dialect `systemc`}}
+func.func @invalidType (%arg0: !systemc.value_base>) {}

@@ -551,6 +551,58 @@ StringRef BindPortOp::getPortName() {
 }
 
 //===----------------------------------------------------------------------===//
+// VariableOp
+//===----------------------------------------------------------------------===//
+
+void VariableOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getVariable(), getName());
+}
+
+ParseResult VariableOp::parse(OpAsmParser &parser, OperationState &result) {
+  StringAttr nameAttr;
+  if (parseImplicitSSAName(parser, nameAttr))
+    return failure();
+  result.addAttribute("name", nameAttr);
+
+  OpAsmParser::UnresolvedOperand init;
+  auto initResult = parser.parseOptionalOperand(init);
+
+  if (parser.parseOptionalAttrDict(result.attributes))
+    return failure();
+
+  Type variableType;
+  if (parser.parseColonType(variableType))
+    return failure();
+
+  if (initResult.has_value()) {
+    if (parser.resolveOperand(init, variableType, result.operands))
+      return failure();
+  }
+  result.addTypes({variableType});
+
+  return success();
+}
+
+void VariableOp::print(::mlir::OpAsmPrinter &p) {
+  p << " ";
+
+  if (getInit())
+    p << getInit() << " ";
+
+  p.printOptionalAttrDict(getOperation()->getAttrs(), {"name"});
+  p << ": " << getVariable().getType();
+}
+
+LogicalResult VariableOp::verify() {
+  if (getInit() && getInit().getType() != getVariable().getType())
+    return emitOpError(
+               "'init' and 'variable' must have the same type, but got ")
+           << getInit().getType() << " and " << getVariable().getType();
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 

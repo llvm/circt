@@ -26,7 +26,7 @@ def SignalWriteOp : SystemCOp<"signal.write", [
 
   let arguments = (ins AnyTypeOf<[OutputType, InOutType, SignalType]>:$dest,
                        AnyType:$src);
-  let assemblyFormat = "$dest `,` $src attr-dict `:` type($dest)";
+  let assemblyFormat = "$dest `,` $src attr-dict `:` qualified(type($dest))";
 }
 
 def SignalOp : SystemCOp<"signal", [HasCustomSSAName,
@@ -41,7 +41,7 @@ def SignalOp : SystemCOp<"signal", [HasCustomSSAName,
   let results = (outs SignalType:$signal);
 
   let assemblyFormat = [{
-    custom<ImplicitSSAName>($name) attr-dict `:` type($signal)
+    custom<ImplicitSSAName>($name) attr-dict `:` qualified(type($signal))
   }];
 }
 
@@ -85,8 +85,18 @@ def InstanceDeclOp : SystemCOp<"instance.decl", [
 
   let assemblyFormat = [{
     custom<ImplicitSSAName>($name) $moduleName attr-dict
-    `:` type($instanceHandle)
+    `:` qualified(type($instanceHandle))
   }];
+
+  let builders = [
+    OpBuilder<(ins "StringAttr":$instanceName,
+                   "FlatSymbolRefAttr":$moduleRef,
+                   "ArrayRef<ModuleType::PortInfo>":$ports), [{
+      build($_builder, $_state,
+            ModuleType::get($_builder.getContext(), moduleRef.getAttr(), ports),
+            instanceName, moduleRef);
+    }]>
+  ];
 
   let extraClassDeclaration = [{
     /// Get the systemc::ModuleType that represents the instantiated module.
@@ -149,4 +159,37 @@ def DeleteOp : SystemCOp<"cpp.delete", []> {
 
   let arguments = (ins EmitC_PointerType:$pointer);
   let assemblyFormat = "$pointer attr-dict `:` qualified(type($pointer))";
+}
+
+def AssignOp : SystemCOp<"cpp.assign", [SameTypeOperands]> {
+  let summary = "A C++ assignment.";
+  let description = [{
+    Assigns one SSA value to another. Note that there is no notion of lvalues
+    and rvalues. This means that one can assign to a value that is the result
+    of, e.g., an addition, which is not allowed in C++. It is the responsibility
+    of the user and the implementor of a lowering pass that creates this
+    operation to make sure that the operands are valid according to C++
+    semantics. Rationale for that: implementing these constraints would add
+    quite some complexity, but still does not guarantee that the assignment
+    is valid because we also make use of non-verifyable verbatim types, etc.
+  }];
+
+  let arguments = (ins AnyType:$dest, AnyType:$source);
+  let assemblyFormat = "$dest `=` $source attr-dict `:` type($dest)";
+}
+
+def VariableOp : SystemCOp<"cpp.variable", [HasCustomSSAName,
+                                            SystemCNameDeclOpInterface]> {
+  let summary = "Declare a C++ variable with optional initialization value.";
+  let description = [{
+    Declares a variable according to C++ semantics. If an initialization value
+    is present, the variable will be assigned that value at the declaration,
+    e.g, `int varname = 0;`.
+  }];
+
+  let arguments = (ins StrAttr:$name, Optional<AnyType>:$init);
+  let results = (outs AnyType:$variable);
+
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
 }
