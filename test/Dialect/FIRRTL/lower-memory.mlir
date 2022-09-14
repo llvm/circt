@@ -278,20 +278,20 @@ firrtl.module @DUT() {
 
 
 firrtl.circuit "Debug" {
-firrtl.module @Debug(out %d1: !firrtl.uint<42>, out %d2: !firrtl.uint<42>, out %d3: !firrtl.uint<42>) {
-  %dbg, %MDebug_read, %dbg2, %MDebug_write, %dbg3= firrtl.mem Undefined {depth = 12 : i64, name = "MDebug", portNames = ["dbg", "read", "dbg2", "write", "dbg3"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.uint<42>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>,!firrtl.uint<42>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>,!firrtl.uint<42>
-  firrtl.strictconnect %d1, %dbg : !firrtl.uint<42> 
-  firrtl.strictconnect %d2, %dbg2 : !firrtl.uint<42> 
-  firrtl.strictconnect %d3, %dbg3 : !firrtl.uint<42> 
-  // CHECK:    %MDebug_R0_addr, %MDebug_R0_en, %MDebug_R0_clk, %MDebug_R0_data, %MDebug_W0_addr, %MDebug_W0_en, %MDebug_W0_clk, %MDebug_W0_data, %MDebug_dbg_0, %MDebug_dbg_1, %MDebug_dbg_2 = firrtl.instance MDebug  @MDebug(in R0_addr: !firrtl.uint<4>, in R0_en: !firrtl.uint<1>, in R0_clk: !firrtl.clock, out R0_data: !firrtl.uint<42>, in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>, out dbg_0: !firrtl.uint<42>, out dbg_1: !firrtl.uint<42>, out dbg_2: !firrtl.uint<42>)
-  // CHECK:    firrtl.strictconnect %d1, %MDebug_dbg_0 : !firrtl.uint<42>
-  // CHECK:    firrtl.strictconnect %d2, %MDebug_dbg_1 : !firrtl.uint<42>
-  // CHECK:    firrtl.strictconnect %d3, %MDebug_dbg_2 : !firrtl.uint<42>
+firrtl.module @Debug(out %d1: !firrtl.vector<uint<42>, 12>, out %d2: !firrtl.vector<uint<42>, 12>, out %d3: !firrtl.vector<uint<42>, 12>) {
+  %dbg, %MDebug_read, %dbg2, %MDebug_write, %dbg3 = firrtl.mem Undefined {depth = 12 : i64, name = "MDebug", portNames = ["dbg", "read", "dbg2", "write", "dbg3"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.vector<uint<42>, 12>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>,!firrtl.vector<uint<42>, 12>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>,!firrtl.vector<uint<42>, 12>
+  firrtl.strictconnect %d1, %dbg : !firrtl.vector<uint<42>, 12>
+  firrtl.strictconnect %d2, %dbg2 : !firrtl.vector<uint<42>, 12>
+  firrtl.strictconnect %d3, %dbg3 : !firrtl.vector<uint<42>, 12>
+  // CHECK:    %MDebug_R0_addr, %MDebug_R0_en, %MDebug_R0_clk, %MDebug_R0_data, %MDebug_W0_addr, %MDebug_W0_en, %MDebug_W0_clk, %MDebug_W0_data, %MDebug_dbg_0, %MDebug_dbg_1, %MDebug_dbg_2 = firrtl.instance MDebug  @MDebug(in R0_addr: !firrtl.uint<4>, in R0_en: !firrtl.uint<1>, in R0_clk: !firrtl.clock, out R0_data: !firrtl.uint<42>, in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>, out dbg_0: !firrtl.vector<uint<42>, 12>, out dbg_1: !firrtl.vector<uint<42>, 12>, out dbg_2: !firrtl.vector<uint<42>, 12>)
+  // CHECK:    firrtl.strictconnect %d1, %MDebug_dbg_0
+  // CHECK:    firrtl.strictconnect %d2, %MDebug_dbg_1
+  // CHECK:    firrtl.strictconnect %d3, %MDebug_dbg_2
 }
-  // CHECK:  firrtl.module private @MDebug(in %R0_addr: !firrtl.uint<4>, in %R0_en: !firrtl.uint<1>, in %R0_clk: !firrtl.clock, out %R0_data: !firrtl.uint<42>, in %W0_addr: !firrtl.uint<4>, in %W0_en: !firrtl.uint<1>, in %W0_clk: !firrtl.clock, in %W0_data: !firrtl.uint<42>, out %dbg_0: !firrtl.uint<42>, out %dbg_1: !firrtl.uint<42>, out %dbg_2: !firrtl.uint<42>)
-  // CHECK:    %MDebug_ext_R0_addr, %MDebug_ext_R0_en, %MDebug_ext_R0_clk, %MDebug_ext_R0_data, %MDebug_ext_W0_addr, %MDebug_ext_W0_en, %MDebug_ext_W0_clk, %MDebug_ext_W0_data, %MDebug_ext_dbg_0, %MDebug_ext_dbg_1, %MDebug_ext_dbg_2 = firrtl.instance MDebug_ext  @MDebug_ext(in R0_addr: !firrtl.uint<4>, in R0_en: !firrtl.uint<1>, in R0_clk: !firrtl.clock, out R0_data: !firrtl.uint<42>, in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>, out dbg_0: !firrtl.uint<42>, out dbg_1: !firrtl.uint<42>, out dbg_2: !firrtl.uint<42>)
-  // CHECK:    firrtl.strictconnect %dbg_0, %MDebug_ext_dbg_0 : !firrtl.uint<42>
-  // CHECK:    firrtl.strictconnect %dbg_1, %MDebug_ext_dbg_1 : !firrtl.uint<42>
-  // CHECK:    firrtl.strictconnect %dbg_2, %MDebug_ext_dbg_2 : !firrtl.uint<42>
-  // CHECK:    firrtl.memmodule private @MDebug_ext(in R0_addr: !firrtl.uint<4>, in R0_en: !firrtl.uint<1>, in R0_clk: !firrtl.clock, out R0_data: !firrtl.uint<42>, in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>, out dbg_0: !firrtl.uint<42>, out dbg_1: !firrtl.uint<42>, out dbg_2: !firrtl.uint<42>) attributes {dataWidth = 42 : ui32, depth = 12 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
+  // CHECK:  firrtl.module private @MDebug(in %R0_addr: !firrtl.uint<4>, in %R0_en: !firrtl.uint<1>, in %R0_clk: !firrtl.clock, out %R0_data: !firrtl.uint<42>, in %W0_addr: !firrtl.uint<4>, in %W0_en: !firrtl.uint<1>, in %W0_clk: !firrtl.clock, in %W0_data: !firrtl.uint<42>, out %dbg_0: !firrtl.vector<uint<42>, 12>, out %dbg_1: !firrtl.vector<uint<42>, 12>, out %dbg_2: !firrtl.vector<uint<42>, 12>)
+  // CHECK:    %MDebug_ext_R0_addr, %MDebug_ext_R0_en, %MDebug_ext_R0_clk, %MDebug_ext_R0_data, %MDebug_ext_W0_addr, %MDebug_ext_W0_en, %MDebug_ext_W0_clk, %MDebug_ext_W0_data, %MDebug_ext_dbg_0, %MDebug_ext_dbg_1, %MDebug_ext_dbg_2 = firrtl.instance MDebug_ext  @MDebug_ext(in R0_addr: !firrtl.uint<4>, in R0_en: !firrtl.uint<1>, in R0_clk: !firrtl.clock, out R0_data: !firrtl.uint<42>, in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>, out dbg_0: !firrtl.vector<uint<42>, 12>, out dbg_1: !firrtl.vector<uint<42>, 12>, out dbg_2: !firrtl.vector<uint<42>, 12>)
+  // CHECK:    firrtl.strictconnect %dbg_0, %MDebug_ext_dbg_0
+  // CHECK:    firrtl.strictconnect %dbg_1, %MDebug_ext_dbg_1
+  // CHECK:    firrtl.strictconnect %dbg_2, %MDebug_ext_dbg_2
+  // CHECK:    firrtl.memmodule private @MDebug_ext(in R0_addr: !firrtl.uint<4>, in R0_en: !firrtl.uint<1>, in R0_clk: !firrtl.clock, out R0_data: !firrtl.uint<42>, in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>, out dbg_0: !firrtl.vector<uint<42>, 12>, out dbg_1: !firrtl.vector<uint<42>, 12>, out dbg_2: !firrtl.vector<uint<42>, 12>) attributes {dataWidth = 42 : ui32, depth = 12 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
 }
