@@ -380,6 +380,7 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
     auto dataType = memOp.getDataType();
 
     auto innerSym = memOp.getInnerSym();
+    SmallVector<Value> debugPorts;
 
     RegOp regOfVec = {};
     for (size_t index = 0, rend = memOp.getNumResults(); index < rend;
@@ -393,6 +394,9 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
           memOp.getNameKind());
       result.replaceAllUsesWith(wire.getResult());
       result = wire;
+      if (memOp.getPortKind(index) == MemOp::PortKind::Debug) {
+        debugPorts.push_back(result);
+      }
       // Create an access to all the common subfields.
       auto adr = getAddr(builder, result);
       auto enb = getEnable(builder, result);
@@ -423,6 +427,10 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
         generateReadWrite(firMem, clk, adr, enb, mask, wDta, dta, wmode,
                           regOfVec, builder);
       }
+    }
+    if (regOfVec) {
+      for (auto r : debugPorts)
+        builder.create<StrictConnectOp>(r, regOfVec);
     }
   }
 
