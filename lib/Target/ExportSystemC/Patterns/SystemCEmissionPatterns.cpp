@@ -20,12 +20,13 @@ using namespace circt::ExportSystemC;
 
 static void parenthesizeOnLowerPrecedence(InlineEmitter &emitter,
                                           Precedence prec, EmissionPrinter &p) {
-  if (emitter.getPrecedence() >= prec)
+  bool needParens = emitter.getPrecedence() >= prec;
+  if (needParens)
     p << "(";
 
   emitter.emit();
 
-  if (emitter.getPrecedence() >= prec)
+  if (needParens)
     p << ")";
 }
 
