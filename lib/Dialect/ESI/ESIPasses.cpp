@@ -1201,7 +1201,7 @@ CosimLowering::matchAndRewrite(CosimEndpointOp ep, OpAdaptor adaptor,
   capnp::TypeSchema sendTypeSchema(send.getType());
   if (!sendTypeSchema.isSupported())
     return rewriter.notifyMatchFailure(ep, "Send type not supported yet");
-  capnp::TypeSchema recvTypeSchema(ep.recv().getType());
+  capnp::TypeSchema recvTypeSchema(ep.getRecv().getType());
   if (!recvTypeSchema.isSupported())
     return rewriter.notifyMatchFailure(ep, "Recv type not supported yet");
 
@@ -1232,7 +1232,7 @@ CosimLowering::matchAndRewrite(CosimEndpointOp ep, OpAdaptor adaptor,
   UnwrapValidReadyOp unwrapSend =
       rewriter.create<UnwrapValidReadyOp>(loc, send, sendReady);
   auto encodeData = rewriter.create<CapnpEncodeOp>(
-      loc, egestBitArrayType, clk, unwrapSend.valid(), unwrapSend.rawOutput());
+      loc, egestBitArrayType, clk, unwrapSend.getValid(), unwrapSend.getRawOutput());
 
   // Get information necessary for injest path.
   auto recvReady = bb.get(rewriter.getI1Type());
@@ -1248,7 +1248,7 @@ CosimLowering::matchAndRewrite(CosimEndpointOp ep, OpAdaptor adaptor,
   StringAttr nameAttr = ep->getAttr("name").dyn_cast_or_null<StringAttr>();
   StringRef name = nameAttr ? nameAttr.getValue() : "CosimEndpointOp";
   Value epInstInputs[] = {
-      clk, rst, recvReady, unwrapSend.valid(), encodeData.capnpBits(),
+      clk, rst, recvReady, unwrapSend.getValid(), encodeData.capnpBits(),
   };
 
   auto cosimEpModule =
@@ -1264,10 +1264,10 @@ CosimLowering::matchAndRewrite(CosimEndpointOp ep, OpAdaptor adaptor,
                                      recvValidFromCosim, recvDataFromCosim);
   WrapValidReadyOp wrapRecv = rewriter.create<WrapValidReadyOp>(
       loc, decodeData.decodedData(), recvValidFromCosim);
-  recvReady.setValue(wrapRecv.ready());
+  recvReady.setValue(wrapRecv.getReady());
 
   // Replace the CosimEndpointOp op.
-  rewriter.replaceOp(ep, wrapRecv.chanOutput());
+  rewriter.replaceOp(ep, wrapRecv.getChanOutput());
 
   return success();
 #endif // CAPNP
