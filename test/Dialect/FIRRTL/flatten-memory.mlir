@@ -2,9 +2,9 @@
 
 
 firrtl.circuit "Mem" {
-  firrtl.module public  @Mem(in %clock: !firrtl.clock, in %rAddr: !firrtl.uint<4>, in %rEn: !firrtl.uint<1>, out %rData: !firrtl.bundle<a: uint<8>, b: uint<8>>, in %wAddr: !firrtl.uint<4>, in %wEn: !firrtl.uint<1>, in %wMask: !firrtl.bundle<a: uint<1>, b: uint<1>>, in %wData: !firrtl.bundle<a: uint<8>, b: uint<8>>, out %dbgsData: !firrtl.bundle<a: uint<8>, b: uint<8>>) {
-    %memory_r, %debug, %memory_w = firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["r", "dbgs", "w"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: bundle<a: uint<8>, b: uint<8>>>, !firrtl.bundle<a: uint<8>, b: uint<8>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: bundle<a: uint<8>, b: uint<8>>, mask: bundle<a: uint<1>, b: uint<1>>>
-    firrtl.strictconnect %dbgsData, %debug : !firrtl.bundle<a: uint<8>, b: uint<8>>
+  firrtl.module public  @Mem(in %clock: !firrtl.clock, in %rAddr: !firrtl.uint<4>, in %rEn: !firrtl.uint<1>, out %rData: !firrtl.bundle<a: uint<8>, b: uint<8>>, in %wAddr: !firrtl.uint<4>, in %wEn: !firrtl.uint<1>, in %wMask: !firrtl.bundle<a: uint<1>, b: uint<1>>, in %wData: !firrtl.bundle<a: uint<8>, b: uint<8>>, out %dbgsData: !firrtl.vector<bundle<a: uint<8>, b: uint<8>>, 16>) {
+    %memory_r, %debug, %memory_w = firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["r", "dbgs", "w"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: bundle<a: uint<8>, b: uint<8>>>, !firrtl.vector<bundle<a: uint<8>, b: uint<8>>, 16>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: bundle<a: uint<8>, b: uint<8>>, mask: bundle<a: uint<1>, b: uint<1>>>
+    firrtl.strictconnect %dbgsData, %debug : !firrtl.vector<bundle<a: uint<8>, b: uint<8>>, 16>
     %0 = firrtl.subfield %memory_r(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: bundle<a: uint<8>, b: uint<8>>>) -> !firrtl.clock
     firrtl.strictconnect %0, %clock : !firrtl.clock
     %1 = firrtl.subfield %memory_r(1) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: bundle<a: uint<8>, b: uint<8>>>) -> !firrtl.uint<1>
@@ -26,7 +26,7 @@ firrtl.circuit "Mem" {
     // ---------------------------------------------------------------------------------
     // After flattenning the memory data
     // CHECK: %[[memory_r:.+]], %[[dbgs:.+]], %[[memory_w:.+]] = firrtl.mem Undefined  {depth = 16 : i64, name = "memory", portNames = ["r", "dbgs", "w"], readLatency = 0 : i32, writeLatency = 1 : i32}
-    // CHECK-SAME: !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<16>>, !firrtl.uint<16>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<16>, mask: uint<2>>
+    // CHECK-SAME: !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<16>>, !firrtl.vector<uint<16>, 16>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<16>, mask: uint<2>>
     // CHECK: %[[memory_r_0:.+]] = firrtl.wire  {name = "memory_r"} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: bundle<a: uint<8>, b: uint<8>>>
     // CHECK: %[[v0:.+]] = firrtl.subfield %[[memory_r]](0)
     // CHECK: firrtl.strictconnect %[[v0]], %[[memory_r_addr:.+]] :
@@ -42,7 +42,7 @@ firrtl.circuit "Mem" {
     // CHECK:  firrtl.strictconnect %[[memory_r_data:.+]], %[[v4]] :
     // --------------------------------------------------------------------------------
     // Debug Ports
-    // CHECK:  %[[v91:.+]] = firrtl.bitcast %[[dbgs]] : (!firrtl.uint<16>) -> !firrtl.bundle<a: uint<8>, b: uint<8>>
+    // CHECK:  %[[v91:.+]] = firrtl.bitcast %[[dbgs]] : (!firrtl.vector<uint<16>, 16>) -> !firrtl.vector<bundle<a: uint<8>, b: uint<8>>, 16>
     // --------------------------------------------------------------------------------
     // Write Ports
     // CHECK:  %[[memory_w_1:.+]] = firrtl.wire  {name = "memory_w"} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: bundle<a: uint<8>, b: uint<8>>, mask: bundle<a: uint<1>, b: uint<1>>>
@@ -57,7 +57,7 @@ firrtl.circuit "Mem" {
     //  CHECK: firrtl.strictconnect %[[v11]], %[[v12]]
     // --------------------------------------------------------------------------------
     // Connections to module ports
-    // CHECK:  firrtl.strictconnect %dbgsData, %[[v91]] : !firrtl.bundle<a: uint<8>, b: uint<8>>
+    // CHECK:  firrtl.strictconnect %dbgsData, %[[v91]] : !firrtl.vector<bundle<a: uint<8>, b: uint<8>>, 16> 
     // CHECK:  %[[v21:.+]] = firrtl.subfield %[[memory_r_0]](2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: bundle<a: uint<8>, b: uint<8>>>) -> !firrtl.clock
     // CHECK:  firrtl.strictconnect %[[v21]], %clock :
     // CHECK:  %[[v22:.+]]  = firrtl.subfield %[[memory_r_0]](1) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: bundle<a: uint<8>, b: uint<8>>>) -> !firrtl.uint<1>
