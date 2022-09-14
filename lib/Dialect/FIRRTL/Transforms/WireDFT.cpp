@@ -301,7 +301,7 @@ void WireDFTPass::runOnOperation() {
     // This is not expected to happen often.
     auto name = defaultName;
     while (llvm::is_contained(mod.getPortNames(), name))
-        name = StringAttr::get(name.getContext(), name.strref() + "_0");
+      name = StringAttr::get(name.getContext(), name.strref() + "_0");
     return name;
   };
 
