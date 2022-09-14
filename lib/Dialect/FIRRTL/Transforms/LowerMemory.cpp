@@ -34,11 +34,16 @@ FirMemory getSummary(MemOp op) {
   size_t numReadPorts = 0;
   size_t numWritePorts = 0;
   size_t numReadWritePorts = 0;
+  size_t numDebugPorts = 0;
   llvm::SmallDenseMap<Value, unsigned> clockToLeader;
   SmallVector<int32_t> writeClockIDs;
 
   for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
     auto portKind = op.getPortKind(i);
+    if (portKind == MemOp::PortKind::Debug) {
+      ++numDebugPorts;
+      continue;
+    }
     if (portKind == MemOp::PortKind::Read)
       ++numReadPorts;
     else if (portKind == MemOp::PortKind::Write) {
@@ -75,11 +80,12 @@ FirMemory getSummary(MemOp op) {
   uint32_t groupID = 0;
   if (auto gID = op.getGroupIDAttr())
     groupID = gID.getUInt();
-  return {numReadPorts,         numWritePorts,    numReadWritePorts,
-          (size_t)width,        op.getDepth(),    op.getReadLatency(),
-          op.getWriteLatency(), op.getMaskBits(), (size_t)op.getRuw(),
-          hw::WUW::PortOrder,   writeClockIDs,    op.getNameAttr(),
-          op.getMaskBits() > 1, groupID,          op.getLoc()};
+  return {numReadPorts,        numWritePorts,        numReadWritePorts,
+          numDebugPorts,       (size_t)width,        op.getDepth(),
+          op.getReadLatency(), op.getWriteLatency(), op.getMaskBits(),
+          (size_t)op.getRuw(), hw::WUW::PortOrder,   writeClockIDs,
+          op.getNameAttr(),    op.getMaskBits() > 1, groupID,
+          op.getLoc()};
 }
 
 namespace {
@@ -163,6 +169,9 @@ LowerMemoryPass::getMemoryModulePorts(const FirMemory &mem) {
     // Ignore mask port, if maskBits =1
     if (mem.isMasked)
       addPort("W" + Twine(i) + "_mask", maskType, Direction::In);
+  }
+  for (size_t i = 0, e = mem.numDebugPorts; i != e; ++i) {
+    addPort("dbg_" + Twine(i), dataType, Direction::Out);
   }
 
   return ports;
@@ -333,12 +342,13 @@ InstanceOp LowerMemoryPass::emitMemoryInstance(MemOp op, FModuleOp module,
   SmallVector<Direction> portDirections;
   SmallVector<Attribute> portNames;
   DenseMap<Operation *, size_t> returnHolder;
+  DenseMap<Value, size_t> returnDebugHolder;
   mlir::DominanceInfo domInfo(op->getParentOfType<FModuleOp>());
 
   // The result values of the memory are not necessarily in the same order as
   // the memory module that we're lowering to.  We need to lower the read
   // ports before the read/write ports, before the write ports.
-  for (unsigned memportKindIdx = 0; memportKindIdx != 3; ++memportKindIdx) {
+  for (unsigned memportKindIdx = 0; memportKindIdx != 4; ++memportKindIdx) {
     MemOp::PortKind memportKind = MemOp::PortKind::Read;
     auto *portLabel = "R";
     switch (memportKindIdx) {
@@ -351,6 +361,10 @@ InstanceOp LowerMemoryPass::emitMemoryInstance(MemOp op, FModuleOp module,
     case 2:
       memportKind = MemOp::PortKind::Write;
       portLabel = "W";
+      break;
+    case 3:
+      memportKind = MemOp::PortKind::Debug;
+      portLabel = "dbg_";
       break;
     }
 
@@ -427,7 +441,15 @@ InstanceOp LowerMemoryPass::emitMemoryInstance(MemOp op, FModuleOp module,
         maskField->erase();
       };
 
-      if (memportKind == MemOp::PortKind::Read) {
+      if (memportKind == MemOp::PortKind::Debug) {
+        returnDebugHolder[op.getResult(i)] = portTypes.size();
+        portTypes.push_back(dataType);
+        portDirections.push_back(Direction::Out);
+        portNames.push_back(
+            builder.getStringAttr(portLabel + Twine(portNumber)));
+        llvm::errs() << "\n returnDebugHolder::" << op.getResult(i)
+                     << "::i=" << i << " instance :" << portTypes.size();
+      } else if (memportKind == MemOp::PortKind::Read) {
         addPort(Direction::In, "addr", addressType);
         addPort(Direction::In, "en", ui1Type);
         addPort(Direction::In, "clk", clockType);
@@ -474,6 +496,10 @@ InstanceOp LowerMemoryPass::emitMemoryInstance(MemOp op, FModuleOp module,
   for (auto [subfield, result] : returnHolder) {
     subfield->getResult(0).replaceAllUsesWith(inst.getResult(result));
     subfield->erase();
+  }
+  // Update all users of the result of read ports
+  for (auto [val, result] : returnDebugHolder) {
+    val.replaceAllUsesWith(inst.getResult(result));
   }
 
   return inst;
