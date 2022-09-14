@@ -79,7 +79,7 @@ struct IntegerTypeEmitter : TypeEmissionPattern<IntegerType> {
       p << (type.isSigned() ? "" : "u") << "int" << bitWidth << "_t";
       break;
     default:
-      assert(false && "This bit-width not supported!");
+      assert(false && "All cases allowed by match function must be covered.");
     }
   }
 };
