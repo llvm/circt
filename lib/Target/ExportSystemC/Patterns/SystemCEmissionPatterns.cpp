@@ -91,6 +91,36 @@ struct SignalReadEmitter : OpEmissionPattern<SignalReadOp> {
   }
 };
 
+/// Emit a systemc.cpp.new operation.
+struct NewEmitter : OpEmissionPattern<NewOp> {
+  using OpEmissionPattern::OpEmissionPattern;
+
+  MatchResult matchInlinable(Value value) override {
+    if (value.getDefiningOp<NewOp>())
+      return Precedence::NEW;
+    return {};
+  }
+
+  void emitInlined(Value value, EmissionPrinter &p) override {
+    p << "new ";
+    p.emitType(value.getType().cast<mlir::emitc::PointerType>().getPointee());
+
+    auto newOp = value.getDefiningOp<NewOp>();
+    if (!newOp.getArgs().empty()) {
+      p << "(";
+      bool first = true;
+      for (auto arg : newOp.getArgs()) {
+        if (!first)
+          p << ", ";
+
+        p.getInlinable(arg).emitWithParensOnLowerPrecedence(Precedence::COMMA);
+        first = false;
+      }
+      p << ")";
+    }
+  }
+};
+
 /// Emit a systemc.ctor operation by using the SC_CTOR macro.
 struct CtorEmitter : OpEmissionPattern<CtorOp> {
   using OpEmissionPattern::OpEmissionPattern;
@@ -100,6 +130,23 @@ struct CtorEmitter : OpEmissionPattern<CtorOp> {
     // readability.
     p << "\nSC_CTOR(" << op->getParentOfType<SCModuleOp>().getModuleName()
       << ") ";
+    p.emitRegion(op.getBody());
+  }
+};
+
+/// Emit a systemc.cpp.destructor operation.
+struct DestructorEmitter : OpEmissionPattern<DestructorOp> {
+  using OpEmissionPattern::OpEmissionPattern;
+
+  void emitStatement(DestructorOp op, EmissionPrinter &p) override {
+    // Emit a new line before the destructor to ensure an empty line for better
+    // readability.
+    // TODO: the 'override' keyword is hardcoded here because the destructor can
+    // only be inside a class inheriting from 'sc_module', if we ever support
+    // custom classes the override should probably be a unitAttr on the
+    // destructor operation.
+    p << "\n~" << op->getParentOfType<SCModuleOp>().getModuleName()
+      << "() override ";
     p.emitRegion(op.getBody());
   }
 };
@@ -145,6 +192,18 @@ struct ThreadEmitter : OpEmissionPattern<ThreadOp> {
     p << "SC_THREAD(";
     p.getInlinable(op.getFuncHandle()).emit();
     p << ");\n";
+  }
+};
+
+/// Emit a systemc.cpp.delete operation.
+struct DeleteEmitter : OpEmissionPattern<DeleteOp> {
+  using OpEmissionPattern::OpEmissionPattern;
+
+  void emitStatement(DeleteOp op, EmissionPrinter &p) override {
+    p << "delete ";
+    p.getInlinable(op.getPointer())
+        .emitWithParensOnLowerPrecedence(Precedence::DELETE);
+    p << ";\n";
   }
 };
 
@@ -295,10 +354,23 @@ struct DynIntegerTypeEmitter : public TypeEmissionPattern<Ty> {
 
 void circt::ExportSystemC::populateSystemCOpEmitters(
     OpEmissionPatternSet &patterns, MLIRContext *context) {
-  patterns.add<SCModuleEmitter, SignalWriteEmitter, SignalReadEmitter,
-               CtorEmitter, SCFuncEmitter, MethodEmitter, ThreadEmitter,
-               SignalEmitter, InstanceDeclEmitter, BindPortEmitter,
-               AssignEmitter, VariableEmitter>(context);
+  // clang-format off
+  patterns.add<SCModuleEmitter,
+               SignalWriteEmitter,
+               SignalReadEmitter,
+               CtorEmitter,
+               SCFuncEmitter,
+               MethodEmitter,
+               ThreadEmitter,
+               SignalEmitter,
+               InstanceDeclEmitter,
+               BindPortEmitter,
+               AssignEmitter,
+               VariableEmitter,
+               NewEmitter,
+               DestructorEmitter,
+               DeleteEmitter>(context);
+  // clang-format on
 }
 
 void circt::ExportSystemC::populateSystemCTypeEmitters(

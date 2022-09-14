@@ -199,4 +199,31 @@ systemc.module @emitcEmission () {
   }
 }
 
+// CHECK-LABEL: SC_MODULE(CppEmission)
+systemc.module @CppEmission () {
+  // CHECK-EMPTY:
+  // CHECK-NEXT: ~CppEmission() override {
+  systemc.cpp.destructor {
+    // CHECK-NEXT: delete (new submodule);
+    %0 = systemc.cpp.new() : () -> !emitc.ptr<!emitc.opaque<"submodule">>
+    systemc.cpp.delete %0 : !emitc.ptr<!emitc.opaque<"submodule">>
+
+    // CHECK-NEXT: int* arr = (int*) (new int[5]);
+    %1 = systemc.cpp.new() : () -> !emitc.ptr<!emitc.opaque<"int[5]">>
+    %2 = emitc.cast %1 : !emitc.ptr<!emitc.opaque<"int[5]">> to !emitc.ptr<!emitc.opaque<"int">>
+    %arr = systemc.cpp.variable %2 : !emitc.ptr<!emitc.opaque<"int">>
+    // CHECK-NEXT: delete arr;
+    systemc.cpp.delete %arr : !emitc.ptr<!emitc.opaque<"int">>
+
+    // CHECK-NEXT: std::tuple<uint32_t, uint32_t>* tup = new std::tuple<uint32_t, uint32_t>(1, 2);
+    %3 = hw.constant 1 : i32
+    %4 = hw.constant 2 : i32
+    %5 = systemc.cpp.new(%3, %4) : (i32, i32) -> !emitc.ptr<!emitc.opaque<"std::tuple<uint32_t, uint32_t>">>
+    %tup = systemc.cpp.variable %5 : !emitc.ptr<!emitc.opaque<"std::tuple<uint32_t, uint32_t>">>
+    // CHECK-NEXT: delete tup;
+    systemc.cpp.delete %tup : !emitc.ptr<!emitc.opaque<"std::tuple<uint32_t, uint32_t>">>
+  // CHECK-NEXT: }
+  }
+}
+
 // CHECK: #endif // STDOUT_H
