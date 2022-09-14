@@ -92,7 +92,7 @@ void ExplicitRegsPass::runOnOperation() {
   SmallVector<PipelineStageOp> stageList;
   PipelineStageOp currStage = nullptr;
   // Iterate over the pipeline body in-order (!).
-  for (auto &op : *pipeline.getBody()) {
+  for (auto &op : *pipeline.getBodyBlock()) {
     if (auto stageOp = dyn_cast<PipelineStageOp>(&op)) {
       stagePredecessor[stageOp] = currStage;
       currStage = stageOp;
@@ -131,15 +131,15 @@ void ExplicitRegsPass::runOnOperation() {
       regIns.push_back(value);
     }
 
-    auto newStageOp = b.create<PipelineStageRegisterOp>(stageOp.getLoc(),
-                                                        stageOp.when(), regIns);
-    stageOp.valid().replaceAllUsesWith(newStageOp.valid());
+    auto newStageOp = b.create<PipelineStageRegisterOp>(
+        stageOp.getLoc(), stageOp.getWhen(), regIns);
+    stageOp.getValid().replaceAllUsesWith(newStageOp.getValid());
 
     // Replace backedges with the outputs of the new stage.
     for (auto &it : llvm::enumerate(regMap)) {
       auto index = it.index();
       auto &[value, backedge] = it.value();
-      backedge.setValue(newStageOp.regOuts()[index]);
+      backedge.setValue(newStageOp.getRegOuts()[index]);
     }
     stageOp.erase();
   }
