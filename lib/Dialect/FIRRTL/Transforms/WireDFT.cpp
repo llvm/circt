@@ -282,7 +282,7 @@ void WireDFTPass::runOnOperation() {
   }
 
   /// Use enable signal name for ports added for plumbing.
-  auto getPortName = [](Value signal) {
+  auto getDefaultPortName = [](Value signal) {
     // If port, use port name.
     if (auto arg = signal.dyn_cast<BlockArgument>()) {
       auto parentMod = cast<FModuleLike>(arg.getParentRegion()->getParentOp());
@@ -296,11 +296,19 @@ void WireDFTPass::runOnOperation() {
     // Fallback to something reasonable.
     return StringAttr::get(signal.getContext(), "test_en");
   };
+  auto getUniqPortNameforMod = [](FModuleLike mod, StringAttr defaultName) {
+    // Ensure port name is unique, add "_0" until it is.
+    // This is not expected to happen often.
+    auto name = defaultName;
+    while (llvm::is_contained(mod.getPortNames(), name))
+        name = StringAttr::get(name.getContext(), name.strref() + "_0");
+    return name;
+  };
 
   // Stash some useful things.
   auto uint1Type = enableSignal.getType().cast<FIRRTLType>();
   auto loc = lca->getModule().getLoc();
-  auto portName = getPortName(enableSignal);
+  auto portName = getDefaultPortName(enableSignal);
 
   // This maps an enable signal to each module.
   DenseMap<InstanceGraphNode *, Value> signals;
@@ -346,6 +354,7 @@ void WireDFTPass::runOnOperation() {
     // Create an output port to this module.
     auto module = cast<FModuleOp>(*node->getModule());
     unsigned portNo = module.getNumPorts();
+    portInfo.name = getUniqPortNameforMod(module, portName);
     module.insertPorts({{portNo, portInfo}});
     auto builder = ImplicitLocOpBuilder::atBlockEnd(module.getLoc(),
                                                     module.getBodyBlock());
@@ -379,6 +388,7 @@ void WireDFTPass::runOnOperation() {
     // Add an input signal to this module.
     auto module = cast<FModuleOp>(*node->getModule());
     unsigned portNo = module.getNumPorts();
+    portInfo.name = getUniqPortNameforMod(module, portName);
     module.insertPorts({{portNo, portInfo}});
     auto arg = module.getArgument(portNo);
 

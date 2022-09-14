@@ -179,3 +179,26 @@ firrtl.circuit "EnableOutsideDUT2" {
   }
 }
 
+// Check signal name conflict w/existing port names
+
+// CHECK-LABEL: firrtl.circuit "PortName" {
+firrtl.circuit "PortName" {
+  firrtl.extmodule @EICG_wrapper(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock) attributes {defname = "EICG_wrapper"}
+
+  // CHECK: firrtl.module @PortName
+  firrtl.module @PortName(in %in: !firrtl.uint<5>) attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
+    // CHECK: firrtl.instance a @A
+    // CHECK-SAME: enable_signal: !firrtl.uint<5>
+    // CHECK-SAME: _0: !firrtl.uint<1>
+    %a_enable = firrtl.instance a @A(in enable_signal: !firrtl.uint<5>) // existing port name conflicts
+    %enable_signal = firrtl.wire {annotations = [{class = "sifive.enterprise.firrtl.DFTTestModeEnableAnnotation"}]} : !firrtl.uint<1>
+    firrtl.strictconnect %a_enable, %in : !firrtl.uint<5>
+  }
+
+  // CHECK: firrtl.module @A
+  // CHECK-SAME: enable_signal: !firrtl.uint<5>
+  // CHECK-SAME: _0: !firrtl.uint<1>
+  firrtl.module @A(in %enable_signal: !firrtl.uint<5>) {
+    %in, %test_en, %en, %out = firrtl.instance eicg @EICG_wrapper(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock)
+  }
+}
