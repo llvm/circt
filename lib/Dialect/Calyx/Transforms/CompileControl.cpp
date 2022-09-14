@@ -107,12 +107,10 @@ void CompileControlVisitor::visit(SeqOp seq, ComponentOp &component) {
     // TODO(Calyx): Eventually, we should canonicalize the GroupDoneOp's guard
     // and source.
     auto guard = groupOp.getDoneOp().getGuard();
-    auto source = groupOp.getDoneOp().getSrc();
-    auto doneOpValue =
-        !guard
-            ? source
-            : builder.create<comb::AndOp>(wires->getLoc(), guard, source, false)
-                  .getResult();
+    Value source = groupOp.getDoneOp().getSrc();
+    auto doneOpValue = !guard ? source
+                              : builder.create<comb::AndOp>(
+                                    wires->getLoc(), guard, source, false);
 
     // Build the Guard for the `go` signal of the current group being walked.
     // The group should begin when:
