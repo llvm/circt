@@ -676,10 +676,10 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
   // Insert memories at the bottom of the file.
   OpBuilder b(state.circuitOp);
   b.setInsertionPointAfter(state.circuitOp);
-  std::array<StringRef, 11> schemaFields = {
-      "depth",          "numReadPorts",    "numWritePorts", "numReadWritePorts",
-      "readLatency",    "writeLatency",    "width",         "maskGran",
-      "readUnderWrite", "writeUnderWrite", "writeClockIDs"};
+  std::array<StringRef, 12> schemaFields = {
+      "depth",         "numReadPorts",   "numWritePorts",   "numReadWritePorts",
+      "numDebugPorts", "readLatency",    "writeLatency",    "width",
+      "maskGran",      "readUnderWrite", "writeUnderWrite", "writeClockIDs"};
   auto schemaFieldsAttr = b.getStrArrayAttr(schemaFields);
   auto schema = b.create<hw::HWGeneratorSchemaOp>(
       mems.front().loc, "FIRRTLMem", "FIRRTL_Memory", schemaFieldsAttr);
@@ -738,6 +738,12 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
         ports.push_back({b.getStringAttr("W" + Twine(i) + "_mask"),
                          PortDirection::INPUT, maskType, inputPin++});
     }
+    auto dbgType = hw::UnpackedArrayType::get(bDataType, mem.depth);
+
+    for (size_t i = 0, e = mem.numDebugPorts; i != e; ++i) {
+      ports.push_back({b.getStringAttr("dbg_" + Twine(i)),
+                       PortDirection::OUTPUT, dbgType, inputPin++});
+    }
 
     // Mask granularity is the number of data bits that each mask bit can
     // guard. By default it is equal to the data bitwidth.
@@ -749,6 +755,8 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
                        b.getUI32IntegerAttr(mem.numWritePorts)),
         b.getNamedAttr("numReadWritePorts",
                        b.getUI32IntegerAttr(mem.numReadWritePorts)),
+        b.getNamedAttr("numDebugPorts",
+                       b.getUI32IntegerAttr(mem.numDebugPorts)),
         b.getNamedAttr("readLatency", b.getUI32IntegerAttr(mem.readLatency)),
         b.getNamedAttr("writeLatency", b.getUI32IntegerAttr(mem.writeLatency)),
         b.getNamedAttr("width", b.getUI32IntegerAttr(mem.dataWidth)),
@@ -2684,12 +2692,13 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
   SmallVector<Type, 8> resultTypes;
   SmallVector<Value, 8> operands;
   DenseMap<Operation *, size_t> returnHolder;
+  DenseMap<Value, size_t> returnDebugHolder;
   SmallVector<Attribute> argNames, resultNames;
 
   // The result values of the memory are not necessarily in the same order as
   // the memory module that we're lowering to.  We need to lower the read
   // ports before the read/write ports, before the write ports.
-  for (unsigned memportKindIdx = 0; memportKindIdx != 3; ++memportKindIdx) {
+  for (unsigned memportKindIdx = 0; memportKindIdx != 4; ++memportKindIdx) {
     MemOp::PortKind memportKind;
     switch (memportKindIdx) {
     default:
@@ -2703,6 +2712,9 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       break;
     case 2:
       memportKind = MemOp::PortKind::Write;
+      break;
+    case 3:
+      memportKind = MemOp::PortKind::Debug;
       break;
     }
 
@@ -2804,7 +2816,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
         // Ignore mask port, if maskBits =1
         if (memSummary.isMasked)
           addInput("RW", "_wmask", "wmask", memSummary.maskBits);
-      } else {
+      } else if (memportKind == MemOp::PortKind::Write) {
         addInput("W", "_addr", "addr", llvm::Log2_64_Ceil(memSummary.depth));
         // If maskBits =1, then And the mask field with enable, and update the
         // enable. Else keep mask port.
@@ -2817,6 +2829,15 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
         // Ignore mask port, if maskBits =1
         if (memSummary.isMasked)
           addInput("W", "_mask", "mask", memSummary.maskBits);
+      } else if (memportKind == MemOp::PortKind::Debug) {
+        auto dbgType = hw::UnpackedArrayType::get(
+            IntegerType::get(op.getContext(),
+                             std::max((size_t)1, memSummary.dataWidth)),
+            memSummary.depth);
+        returnDebugHolder[op.getResult(i)] = resultTypes.size();
+        resultTypes.push_back(dbgType);
+        resultNames.push_back(
+            builder.getStringAttr("dbg_" + Twine(portNumber)));
       }
 
       ++portNumber;
@@ -2836,6 +2857,10 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
   // Update all users of the result of read ports
   for (auto &ret : returnHolder)
     (void)setLowering(ret.first->getResult(0), inst.getResult(ret.second));
+  for (auto &ret : returnDebugHolder)
+    (void)setLowering(ret.getFirst(), builder.create<hw::BitcastOp>(
+                                          lowerType(ret.getFirst().getType()),
+                                          inst.getResult(ret.getSecond())));
   return success();
 }
 
