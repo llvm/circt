@@ -59,6 +59,7 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
     input a: UInt<1>
     input b: UInt<2>
     output c: UInt<1>
+    output out_subwordAssign: UInt<4>
     input vec: UInt<1>[3]
     output out_implicitTrunc: UInt<1>
     output out_prettifyExample: UInt<1>
@@ -77,6 +78,10 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
     prettifyExample.inp_1 <= cat.d
     prettifyExample.inp_2 <= cat.d
     prettifyExample.inp_3 <= cat.d
+
+    inst subwordAssign of SubwordAssign
+    subwordAssign.c <= a
+    out_subwordAssign <= subwordAssign.out
 
     inst flipFlop of FlipFlop
     flipFlop.clock <= clock
@@ -101,7 +106,7 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
     out_multibitMux <= multibitMux.b
 
 
-; MLIR-LABEL: firrtl.module @test_mod(in %clock: !firrtl.clock, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<2>, out %c: !firrtl.uint<1>, in %vec_0: !firrtl.uint<1>, in %vec_1: !firrtl.uint<1>, in %vec_2: !firrtl.uint<1>, out %out_implicitTrunc: !firrtl.uint<1>, out %out_prettifyExample: !firrtl.uint<1>, out %out_multibitMux: !firrtl.uint<1>) {{.*}}{
+; MLIR-LABEL: firrtl.module @test_mod(in %clock: !firrtl.clock, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<2>, out %c: !firrtl.uint<1>, out %out_subwordAssign: !firrtl.uint<4>, in %vec_0: !firrtl.uint<1>, in %vec_1: !firrtl.uint<1>, in %vec_2: !firrtl.uint<1>, out %out_implicitTrunc: !firrtl.uint<1>, out %out_prettifyExample: !firrtl.uint<1>, out %out_multibitMux: !firrtl.uint<1>) {{.*}}{
 ; MLIR-NEXT:    %cat_a, %cat_b, %cat_c, %cat_d = firrtl.instance cat @Cat(in a: !firrtl.uint<2>, in b: !firrtl.uint<2>, in c: !firrtl.uint<2>, out d: !firrtl.uint<6>)
 ; MLIR-NEXT:    firrtl.strictconnect %cat_a, %b : !firrtl.uint<2>
 ; MLIR-NEXT:    firrtl.strictconnect %cat_b, %b : !firrtl.uint<2>
@@ -117,6 +122,9 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
 ; MLIR-NEXT:    firrtl.strictconnect %prettifyExample_inp_1, %3 : !firrtl.uint<5>
 ; MLIR-NEXT:    firrtl.strictconnect %prettifyExample_inp_2, %3 : !firrtl.uint<5>
 ; MLIR-NEXT:    firrtl.strictconnect %prettifyExample_inp_3, %3 : !firrtl.uint<5>
+; MLIR-NEXT:    %subwordAssign_c, %subwordAssign_out = firrtl.instance subwordAssign @SubwordAssign(in c: !firrtl.uint<1>, out out: !firrtl.uint<4>)
+; MLIR-NEXT:    firrtl.strictconnect %subwordAssign_c, %a : !firrtl.uint<1>
+; MLIR-NEXT:    firrtl.strictconnect %out_subwordAssign, %subwordAssign_out : !firrtl.uint<4>
 ; MLIR-NEXT:    %flipFlop_clock, %flipFlop_a_d, %flipFlop_a_q = firrtl.instance flipFlop @FlipFlop(in clock: !firrtl.clock, in a_d: !firrtl.uint<1>, out a_q: !firrtl.uint<1>)
 ; MLIR-NEXT:    firrtl.strictconnect %flipFlop_clock, %clock : !firrtl.clock
 ; MLIR-NEXT:    firrtl.strictconnect %flipFlop_a_d, %a : !firrtl.uint<1>
@@ -141,7 +149,8 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
 ; VERILOG-NEXT:          vec_1,
 ; VERILOG-NEXT:          vec_2,
 ; VERILOG-NEXT:    output       c,
-; VERILOG-NEXT:                 out_implicitTrunc,
+; VERILOG-NEXT:    output [3:0] out_subwordAssign,
+; VERILOG-NEXT:    output       out_implicitTrunc,
 ; VERILOG-NEXT:                 out_prettifyExample,
 ; VERILOG-NEXT:                 out_multibitMux);
 ; VERILOG-EMPTY:
@@ -168,6 +177,10 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
 ; VERILOG-NEXT:      .inp_3 (_cat_d[4:0]),
 ; VERILOG-NEXT:      .out1  (_prettifyExample_out1),
 ; VERILOG-NEXT:      .out2  (_prettifyExample_out2)
+; VERILOG-NEXT:    );
+; VERILOG-NEXT:    SubwordAssign subwordAssign (
+; VERILOG-NEXT:      .c   (a),
+; VERILOG-NEXT:      .out (out_subwordAssign)
 ; VERILOG-NEXT:    );
 ; VERILOG-NEXT:    FlipFlop flipFlop (
 ; VERILOG-NEXT:      .clock (clock),
@@ -246,6 +259,23 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
 ; VERILOG:         assign out1 = {~inp_1, inp_2};
 ; VERILOG:         assign out2 = {~inp_1, inp_3};
 
+
+; Check subword assignment
+
+  module SubwordAssign:
+    input c : UInt<1>
+    output out : UInt<4>
+
+    out[1:0] <= UInt("b11")
+    when c :
+      out[2:1] <= UInt("b00")
+    out[3:2] <= UInt<2>("b11")
+
+; VERILOG-LABEL: module SubwordAssign(
+; VERILOG-NEXT:    input c,
+; VERILOG-NEXT:    output [3:0] out);
+; VERILOG:         assign out = {2'h3, ~c, 1'h1};
+; VERILOG-NEXT: endmodule
 
 ; Check output of a simple flip-flop.
 

@@ -1400,6 +1400,7 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
 ///
 ///  exp ::= exp '.' fieldId
 ///      ::= exp '[' intLit ']'
+///      ::= exp '[' intLit ':' intLit ']'
 /// XX   ::= exp '.' DoubleLit // TODO Workaround for #470
 ///      ::= exp '[' exp ']'
 ParseResult FIRStmtParser::parseOptionalExpPostscript(Value &result) {
@@ -1414,7 +1415,9 @@ ParseResult FIRStmtParser::parseOptionalExpPostscript(Value &result) {
       continue;
     }
 
-    // Subindex: exp ::= exp '[' intLit ']' | exp '[' exp ']'
+    // Subindex: exp ::= exp '[' intLit ']'
+    //               ::= exp '[' intLit ':' intLit ']'
+    //               ::= exp '[' exp ']'
     if (consumeIf(FIRToken::l_square)) {
       if (getToken().isAny(FIRToken::integer, FIRToken::string)) {
         if (parsePostFixIntSubscript(result))
@@ -1481,17 +1484,15 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result) {
   return success();
 }
 
-/// exp ::= exp '[' intLit ']'
+/// exp ::= exp '[' intLit ']' | exp '[' intLit ':' intLit ']'
 ///
 /// The "exp '['" part of the production has already been parsed.
 ///
 ParseResult FIRStmtParser::parsePostFixIntSubscript(Value &result) {
   auto loc = getToken().getLoc();
   int32_t indexNo;
-  if (parseIntLit(indexNo, "expected index") ||
-      parseToken(FIRToken::r_square, "expected ']'"))
+  if (parseIntLit(indexNo, "expected index"))
     return failure();
-
   if (indexNo < 0)
     return emitError(loc, "invalid index specifier"), failure();
 
@@ -1499,33 +1500,63 @@ ParseResult FIRStmtParser::parsePostFixIntSubscript(Value &result) {
   // expression.
   // TODO: This should ideally be folded into a `tryCreate` method on the
   // builder (https://llvm.discourse.group/t/3504).
-  NamedAttribute attrs = {getConstants().indexIdentifier,
-                          builder.getI32IntegerAttr(indexNo)};
-  auto resultType = SubindexOp::inferReturnType({result}, attrs, {});
-  if (!resultType) {
-    // Emit the error at the right location.  translateLocation is expensive.
-    (void)SubindexOp::inferReturnType({result}, attrs, translateLocation(loc));
-    return failure();
-  }
 
-  // Check if we already have created this Subindex op.
-  auto &value = moduleContext.getCachedSubaccess(result, indexNo);
-  if (value) {
-    result = value;
+  if (result.getType().isa<IntType>()) {
+    NamedAttrList bitAttrs;
+    bitAttrs.append(getConstants().hiIdentifier,
+                    builder.getI32IntegerAttr(indexNo));
+    if (consumeIf(FIRToken::colon)) {
+      if (parseIntLit(indexNo, "expected low index"))
+        return failure();
+    }
+    if (parseToken(FIRToken::r_square, "expected ']'"))
+      return failure();
+    bitAttrs.append(getConstants().loIdentifier,
+                    builder.getI32IntegerAttr(indexNo));
+
+    auto resultType = BitsPrimOp::inferReturnType({result}, bitAttrs, {});
+    if (!resultType) {
+      (void)BitsPrimOp::inferReturnType({result}, bitAttrs,
+                                        translateLocation(loc));
+      return failure();
+    }
+    locationProcessor.setLoc(loc);
+    OpBuilder::InsertionGuard guard(builder);
+    builder.setInsertionPointAfterValue(result);
+    auto op = builder.create<BitsPrimOp>(resultType, result, bitAttrs);
+    result = op.getResult();
     return success();
+  } else {
+    if (parseToken(FIRToken::r_square, "expected ']'"))
+      return failure();
+    NamedAttribute attrs = {getConstants().indexIdentifier,
+                            builder.getI32IntegerAttr(indexNo)};
+    auto resultType = SubindexOp::inferReturnType({result}, attrs, {});
+    if (!resultType) {
+      (void)SubindexOp::inferReturnType({result}, attrs,
+                                        translateLocation(loc));
+      return failure();
+    }
+    // Check if we already have created this Subindex op.
+    auto &value = moduleContext.getCachedSubaccess(result, indexNo);
+    if (value) {
+      result = value;
+      return success();
+    }
+
+    // Create the result operation, inserting at the location of the
+    // declaration. This will cache the subindex operation for further uses.
+    locationProcessor.setLoc(loc);
+    OpBuilder::InsertionGuard guard(builder);
+    builder.setInsertionPointAfterValue(result);
+
+    auto op = builder.create<SubindexOp>(resultType, result, attrs);
+
+    // Insert the newly created operation into the cache.
+    value = op.getResult();
+    result = value;
   }
 
-  // Create the result operation, inserting at the location of the declaration.
-  // This will cache the subindex operation for further uses.
-  locationProcessor.setLoc(loc);
-  OpBuilder::InsertionGuard guard(builder);
-  builder.setInsertionPointAfterValue(result);
-  auto op = builder.create<SubindexOp>(resultType, result, attrs);
-
-  // Insert the newly creatd operation into the cache.
-  value = op.getResult();
-
-  result = value;
   return success();
 }
 

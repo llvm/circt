@@ -17,6 +17,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Support/FieldRef.h"
+#include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/STLExtras.h"
 
@@ -78,7 +79,7 @@ private:
 
 /// This is a determistic mapping of a FieldRef to the last operation which set
 /// a value to it.
-using ScopedDriverMap = HashTableStack<FieldRef, Operation *>;
+using ScopedDriverMap = HashTableStack<FieldRef, FConnectLike>;
 using DriverMap = ScopedDriverMap::ScopeT;
 
 //===----------------------------------------------------------------------===//
@@ -95,18 +96,211 @@ protected:
   /// the current scope. This is used for resolving last connect semantics, and
   /// for retrieving the responsible connect operation.
   ScopedDriverMap &driverMap;
+  /// A set containing all uninitialized wire ops that were created as part of a
+  /// subword assignment. If any of these are reachable after all connections
+  /// have been resolved, then the this indicates an initialization failure.
+  llvm::SmallDenseSet<Value> &subwordUninit;
 
 public:
-  LastConnectResolver(ScopedDriverMap &driverMap) : driverMap(driverMap) {}
+  LastConnectResolver(ScopedDriverMap &driverMap,
+                      llvm::SmallDenseSet<Value> &subwordUninit)
+      : driverMap(driverMap), subwordUninit(subwordUninit) {}
 
   using FIRRTLVisitor<ConcreteT>::visitExpr;
   using FIRRTLVisitor<ConcreteT>::visitDecl;
   using FIRRTLVisitor<ConcreteT>::visitStmt;
 
+  // This function simplifies bitindex expressions by pushing them through cat
+  // and mux ops. For example `cat(a, b)[1:0]` where b's width is >= 2 is just
+  // b[1:0]. And `mux(sel, a, b)[3:0]` is `mux(sel, a[3:0], b[3:0])`. This
+  // canonicalization is necessary to eliminate uses of subword uninitialized
+  // wire ops so that initialization checking only signals a failure if a bit
+  // is truly not assigned.
+  // A vector is provided to allow the caller to re-use storage. The initial
+  // bits op will be added to the vector and then any additional bits ops
+  // created by canonicalizations will be added to the vector and canonicalized
+  // repeatedly until there are no more bits ops to canonicalize.
+  Value canonicalizeBits(BitsPrimOp bits, SmallVector<BitsPrimOp> &ops,
+                         ImplicitLocOpBuilder builder) {
+    ops.push_back(bits);
+    // By default don't make a replacement.
+    Value replacedVal = bits;
+    while (!ops.empty()) {
+      auto op = ops.pop_back_val();
+      if (!op.getInput().getDefiningOp())
+        continue;
+      auto *inputOp = op.getInput().getDefiningOp();
+      // canonicalize through asSInt primOps
+      // bits(asSInt(x), ..., ...) -> bits(x, ..., ...)
+      if (auto asSInt = dyn_cast<AsSIntPrimOp>(inputOp)) {
+        inputOp = asSInt.getInput().getDefiningOp();
+        if (!inputOp)
+          continue;
+      }
+      // bits(invalid, ..., ...) -> invalid
+      if (auto invalid = dyn_cast<InvalidValueOp>(inputOp)) {
+        auto newOp = builder.create<InvalidValueOp>(
+            UIntType::get(invalid->getContext(), op.getHi() - op.getLo() + 1));
+        op->replaceAllUsesWith(newOp);
+        if (op == bits)
+          replacedVal = newOp;
+        continue;
+      }
+      // bits(bits(x, ...), ...) -> bits(x, ...).
+      if (auto innerBits = dyn_cast<BitsPrimOp>(inputOp)) {
+        auto newLo = op.getLo() + innerBits.getLo();
+        auto newHi = newLo + op.getHi() - op.getLo();
+        auto newOp =
+            builder.create<BitsPrimOp>(innerBits.getInput(), newHi, newLo);
+        ops.push_back(newOp);
+        op->replaceAllUsesWith(newOp);
+        if (op == bits)
+          replacedVal = newOp;
+        continue;
+      }
+      // bits(cat(a, b), ...) -> bits(a, ...), or bits(b, ...), or cat(bits(a,
+      // ...), bits(b, ...)).
+      if (auto cat = dyn_cast<CatPrimOp>(inputOp)) {
+        auto rhsT = cat.getRhs().getType().cast<IntType>();
+        if (!rhsT.hasWidth())
+          continue;
+        uint32_t lhsLo = rhsT.getWidth().value();
+        uint32_t rhsHi = lhsLo - 1;
+        Value newVal;
+        if (op.getLo() >= lhsLo) {
+          // Only indexing the lhs.
+          auto bitsOp = builder.create<BitsPrimOp>(
+              cat.getLhs(), op.getHi() - lhsLo, op.getLo() - lhsLo);
+          ops.push_back(bitsOp);
+          newVal = bitsOp;
+        } else if (op.getHi() <= rhsHi) {
+          // Only indexing the rhs.
+          auto bitsOp =
+              builder.create<BitsPrimOp>(cat.getRhs(), op.getHi(), op.getLo());
+          ops.push_back(bitsOp);
+          newVal = bitsOp;
+        } else {
+          auto bitsLhs =
+              builder.create<BitsPrimOp>(cat.getLhs(), op.getHi() - lhsLo, 0);
+          ops.push_back(bitsLhs);
+          auto bitsRhs =
+              builder.create<BitsPrimOp>(cat.getRhs(), rhsHi, op.getLo());
+          ops.push_back(bitsRhs);
+          auto newOp = builder.create<CatPrimOp>(bitsLhs, bitsRhs);
+          builder.setInsertionPoint(newOp);
+          newVal = newOp;
+        }
+        op.replaceAllUsesWith(newVal);
+        if (op == bits)
+          replacedVal = newVal;
+        continue;
+      }
+      // bits(mux(sel, a, b), ...) -> mux(sel, bits(a, ...), bits(b, ...)).
+      if (auto mux = dyn_cast<MuxPrimOp>(op.getInput().getDefiningOp())) {
+        auto bitsHigh =
+            builder.create<BitsPrimOp>(mux.getHigh(), op.getHi(), op.getLo());
+        ops.push_back(bitsHigh);
+        auto bitsLow =
+            builder.create<BitsPrimOp>(mux.getLow(), op.getHi(), op.getLo());
+        ops.push_back(bitsLow);
+        auto newOp = builder.create<MuxPrimOp>(mux.getSel(), bitsHigh, bitsLow);
+        builder.setInsertionPoint(newOp);
+        op->replaceAllUsesWith(newOp);
+        if (op == bits)
+          replacedVal = newOp;
+        continue;
+      }
+    }
+    return replacedVal;
+  }
+
+  // Creates a CatPrimOp, and applies a special fold if lhs and rhs are both
+  // InvalidValues. In that case, it returns an InvalidValue with the sum of
+  // the widths. We cannot use createOrFold for this purpose because it will
+  // combine the InvalidValues and convert them to a 0 constant.
+  Value createCat(ImplicitLocOpBuilder &builder, Value lhs, Value rhs) {
+    if (auto lhsInvalid =
+            dyn_cast_or_null<InvalidValueOp>(lhs.getDefiningOp())) {
+      if (auto rhsInvalid =
+              dyn_cast_or_null<InvalidValueOp>(rhs.getDefiningOp())) {
+        return builder.create<InvalidValueOp>(UIntType::get(
+            lhs.getContext(),
+            lhs.getType().cast<IntType>().getWidthOrSentinel() +
+                rhs.getType().cast<IntType>().getWidthOrSentinel()));
+      }
+    }
+    return builder.createOrFold<CatPrimOp>(lhs, rhs);
+  }
+
+  // Rewrites a connection where the dest is the bitindex. An expression that
+  // looks like `x[hi:lo] <= e` gets rewritten to `x <= cat(xprev[x.w-1:hi+1],
+  // e, xprev[lo-1:0])`, where xprev is the most recent connection to x in any
+  // scope.
+  void rewriteBitsConnect(BitsPrimOp bits, FieldRef &dest,
+                          FConnectLike &connection) {
+
+    // Find the previous connection to x, search across scopes.
+    ImplicitLocOpBuilder b(connection.getLoc(), connection.getContext());
+    b.setInsertionPointAfter(connection);
+    // Since bits is the dest here, canonicalizing it is guaranteed to return a
+    // BitsPrimOp.
+    SmallVector<BitsPrimOp> ops;
+    bits = cast<BitsPrimOp>(canonicalizeBits(bits, ops, b).getDefiningOp());
+
+    // Get x's width.
+    int w = bits.getInput().getType().dyn_cast<IntType>().getWidth().value();
+    auto it = driverMap.find(getFieldRefFromValue(bits.getInput()));
+
+    Value xprev;
+    if (it == driverMap.end() || !it.base()->second) {
+      // x had no previous connection, so set xprev to an uninitialized wire
+      // with x's type and insert it into the set of uninitialized values
+      // created for subword assignments.
+      xprev = b.create<WireOp>(bits.getInput().getType());
+      subwordUninit.insert(xprev);
+    } else {
+      // x had a previous connection -- extract its source.
+      xprev = it.base()->second.getSrc();
+    }
+
+    int top[2] = {w - 1, (int)bits.getHi() + 1};
+    int bot[2] = {(int)bits.getLo() - 1, 0};
+    Value cat;
+    // Build the high bits.
+    if (top[0] >= top[1]) {
+      // Build `cat(xprev[x.w-1:hi], e)`.
+      auto x = b.create<BitsPrimOp>(xprev, (uint32_t)top[0], (uint32_t)top[1]);
+      cat = createCat(b, canonicalizeBits(x, ops, b), connection.getSrc());
+    } else {
+      // The assignment is assigning all the high bits, so no need to get them
+      // from xprev.
+      cat = connection.getSrc();
+    }
+    // Build the low bits if they are not completely assigned.
+    if (bot[0] >= bot[1]) {
+      // Build cat(cat, xprev[lo-1:0]).
+      auto x = b.create<BitsPrimOp>(xprev, (uint32_t)bot[0], (uint32_t)bot[1]);
+      cat = createCat(b, cat, canonicalizeBits(x, ops, b));
+    }
+    if (bits.getInput().getType().isa<SIntType>())
+      cat = b.create<AsSIntPrimOp>(cat);
+
+    // The dest needs to be transformed from a bitindex `x[hi:lo] <=` to just
+    // `x <=`.
+    dest = getFieldRefFromValue(bits.getInput());
+    // Erase the old connection and use a new one with the new dest.
+    connection.erase();
+    connection = b.create<StrictConnectOp>(bits.getInput(), cat);
+  }
+
   /// Records a connection to a destination in the current scope. This will
   /// delete a previous connection to a destination if there was one. Returns
   /// true if an old connect was erased.
-  bool setLastConnect(FieldRef dest, Operation *connection) {
+  bool setLastConnect(FieldRef dest, FConnectLike connection) {
+    // if we see `x[hi:lo] <= e`, we have to transform this into a
+    // read-modify-write
+    if (auto bits = dyn_cast<BitsPrimOp>(dest.getDefiningOp()))
+      rewriteBitsConnect(bits, dest, connection);
     // Try to insert, if it doesn't insert, replace the previous value.
     auto itAndInserted = driverMap.getLastScope().insert({dest, connection});
     if (!std::get<1>(itAndInserted)) {
@@ -114,7 +308,7 @@ public:
       auto changed = false;
       // Delete the old connection if it exists. Null connections are inserted
       // on declarations.
-      if (auto *oldConnect = iterator->second) {
+      if (auto oldConnect = iterator->second) {
         oldConnect->erase();
         changed = true;
       }
@@ -231,7 +425,7 @@ public:
 
   void visitDecl(RegOp op) {
     // Registers are initialized to themselves. If the register has an
-    // aggergate type, connect each ground type element.
+    // aggregate type, connect each ground type element.
     auto builder = OpBuilder(op->getBlock(), ++Block::iterator(op));
     auto fn = [&](Value value) {
       auto connect = builder.create<ConnectOp>(value.getLoc(), value, value);
@@ -242,7 +436,7 @@ public:
 
   void visitDecl(RegResetOp op) {
     // Registers are initialized to themselves. If the register has an
-    // aggergate type, connect each ground type element.
+    // aggregate type, connect each ground type element.
     auto builder = OpBuilder(op->getBlock(), ++Block::iterator(op));
     auto fn = [&](Value value) {
       auto connect = builder.create<ConnectOp>(value.getLoc(), value, value);
@@ -333,7 +527,7 @@ public:
 
       auto &outerConnect = std::get<1>(*outerIt);
       if (!outerConnect) {
-        // `dest` is null in the outer scope. This indicate an initialization
+        // `dest` is null in the outer scope. This indicates an initialization
         // problem: `mux(p, then, nullptr)`. Just delete the broken connect.
         thenConnect->erase();
         continue;
@@ -398,8 +592,10 @@ namespace {
 class WhenOpVisitor : public LastConnectResolver<WhenOpVisitor> {
 
 public:
-  WhenOpVisitor(ScopedDriverMap &driverMap, Value condition)
-      : LastConnectResolver<WhenOpVisitor>(driverMap), condition(condition) {}
+  WhenOpVisitor(ScopedDriverMap &driverMap,
+                llvm::SmallDenseSet<Value> &subwordUninit, Value condition)
+      : LastConnectResolver<WhenOpVisitor>(driverMap, subwordUninit),
+        condition(condition) {}
 
   using LastConnectResolver<WhenOpVisitor>::visitExpr;
   using LastConnectResolver<WhenOpVisitor>::visitDecl;
@@ -489,7 +685,7 @@ void LastConnectResolver<ConcreteT>::processWhenOp(WhenOp whenOp,
 
   auto &thenBlock = whenOp.getThenBlock();
   driverMap.pushScope();
-  WhenOpVisitor(driverMap, thenCondition).process(thenBlock);
+  WhenOpVisitor(driverMap, subwordUninit, thenCondition).process(thenBlock);
   mergeBlock(*parentBlock, Block::iterator(whenOp), thenBlock);
   auto thenScope = driverMap.popScope();
 
@@ -505,7 +701,7 @@ void LastConnectResolver<ConcreteT>::processWhenOp(WhenOp whenOp,
                                                 elseCondition);
     auto &elseBlock = whenOp.getElseBlock();
     driverMap.pushScope();
-    WhenOpVisitor(driverMap, elseCondition).process(elseBlock);
+    WhenOpVisitor(driverMap, subwordUninit, elseCondition).process(elseBlock);
     mergeBlock(*parentBlock, Block::iterator(whenOp), elseBlock);
     elseScope = driverMap.popScope();
   }
@@ -524,7 +720,8 @@ namespace {
 /// This extends the LastConnectResolver to track if anything has changed.
 class ModuleVisitor : public LastConnectResolver<ModuleVisitor> {
 public:
-  ModuleVisitor() : LastConnectResolver<ModuleVisitor>(driverMap) {}
+  ModuleVisitor()
+      : LastConnectResolver<ModuleVisitor>(driverMap, subwordUninit) {}
 
   using LastConnectResolver<ModuleVisitor>::visitExpr;
   using LastConnectResolver<ModuleVisitor>::visitDecl;
@@ -535,10 +732,15 @@ public:
 
   bool run(FModuleOp op);
   LogicalResult checkInitialization();
+  bool usesSubwordUninit(SmallVector<Operation *> &ops);
 
 private:
   /// The outermost scope of the module body.
   ScopedDriverMap driverMap;
+  /// A memoization table for computing reachable subword uninitialized ops.
+  DenseSet<Operation *> subwordInitChecked;
+  // Uninitialized wire ops used in subword assignments.
+  llvm::SmallDenseSet<Value> subwordUninit;
 
   /// Tracks if anything in the IR has changed.
   bool anythingChanged = false;
@@ -578,14 +780,37 @@ void ModuleVisitor::visitStmt(WhenOp whenOp) {
   processWhenOp(whenOp, /*outerCondition=*/{});
 }
 
+// Returns true if any ops in the list use an uninitialized subword value.
+bool ModuleVisitor::usesSubwordUninit(SmallVector<Operation *> &ops) {
+  if (subwordUninit.empty())
+    return false;
+  while (!ops.empty()) {
+    auto *op = ops.pop_back_val();
+
+    if (!op || subwordInitChecked.contains(op))
+      continue;
+    for (auto val : op->getOperands()) {
+      if (subwordUninit.contains(val))
+        return true;
+      ops.push_back(val.getDefiningOp());
+    }
+    subwordInitChecked.insert(op);
+  }
+
+  return false;
+}
+
 /// Perform initialization checking.  This uses the built up state from
 /// running on a module. Returns failure in the event of bad initialization.
 LogicalResult ModuleVisitor::checkInitialization() {
   bool failed = false;
+  SmallVector<Operation *> ops;
   for (auto destAndConnect : driverMap.getLastScope()) {
     // If there is valid connection to this destination, everything is good.
-    auto *connect = std::get<1>(destAndConnect);
-    if (connect)
+    auto connect = std::get<1>(destAndConnect);
+    ops.clear();
+    ops.push_back(connect);
+    if (connect && !usesSubwordUninit(ops))
       continue;
 
     // Get the op which defines the sink, and emit an error.

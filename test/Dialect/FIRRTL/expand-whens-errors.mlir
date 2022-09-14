@@ -135,3 +135,31 @@ firrtl.module @CheckInitialization(in %p : !firrtl.uint<1>, out %out: !firrtl.ve
   // expected-error @above {{port "out[0].b" not fully initialized in module "CheckInitialization"}}
 }
 }
+
+// -----
+
+// Check subword initialization.
+firrtl.circuit "CheckInitialization" {
+firrtl.module @CheckInitialization(in %y: !firrtl.uint<1>, in %z: !firrtl.uint<2>, out %out: !firrtl.uint<4>) {
+  // expected-error @-1 {{port "out" not fully initialized in module "CheckInitialization"}}
+  %0 = firrtl.bits %out 3 to 3 : (!firrtl.uint<4>) -> !firrtl.uint<1>
+  %1 = firrtl.bits %out 1 to 0 : (!firrtl.uint<4>) -> !firrtl.uint<2>
+  firrtl.strictconnect %1, %z : !firrtl.uint<2>
+  firrtl.strictconnect %0, %y : !firrtl.uint<1>
+}
+}
+
+// -----
+
+// Check subword initialization with when block.
+firrtl.circuit "CheckInitialization"  {
+firrtl.module @CheckInitialization(in %sel: !firrtl.uint<1>, in %a: !firrtl.uint<2>, in %b: !firrtl.uint<4>, out %y: !firrtl.uint<4>) {
+  // expected-error @-1 {{port "y" not fully initialized in module "CheckInitialization"}}
+  %0 = firrtl.bits %y 1 to 0 : (!firrtl.uint<4>) -> !firrtl.uint<2>
+  firrtl.when %sel {
+    firrtl.strictconnect %0, %a : !firrtl.uint<2>
+  } else {
+    firrtl.strictconnect %y, %b : !firrtl.uint<4>
+  }
+}
+}

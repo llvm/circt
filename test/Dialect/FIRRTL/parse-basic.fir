@@ -12,6 +12,22 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
   ; CHECK: }
 
+  ; CHECK-LABEL: firrtl.module private @Subword(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
+  module Subword :
+    input in: UInt<8>
+    output out: UInt<8>
+
+    ; CHECK: %0 = firrtl.bits %in 4 to 4 : (!firrtl.uint<8>) -> !firrtl.uint<1>
+    ; CHECK: %1 = firrtl.bits %out 5 to 5 : (!firrtl.uint<8>) -> !firrtl.uint<1>
+    ; CHECK: %2 = firrtl.bits %in 7 to 6 : (!firrtl.uint<8>) -> !firrtl.uint<2>
+    ; CHECK: %3 = firrtl.bits %out 1 to 0 : (!firrtl.uint<8>) -> !firrtl.uint<2>
+    ; CHECK: firrtl.strictconnect %3, %2 : !firrtl.uint<2>
+    ; CHECK: firrtl.strictconnect %1, %0 : !firrtl.uint<1>
+    out[1:0] <= in[7:6]
+    out[5] <= in[4]
+
+  ; CHECK: }
+
 
   ; CHECK-LABEL: firrtl.module private @circuit(in %in: !firrtl.uint<80>) {
   module circuit :    ; Module with a keyword id.
