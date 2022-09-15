@@ -2573,7 +2573,9 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
 
   // Add symbol if DontTouch annotation present.
   auto symName = getInnerSymName(op);
-  if (AnnotationSet::removeAnnotations(op, dontTouchAnnoClass) && !symName)
+  if ((AnnotationSet::removeAnnotations(op, dontTouchAnnoClass) ||
+       op.getNameKind() == NameKindEnum::InterestingName) &&
+      !symName)
     symName = op.getNameAttr();
 
   // Create a reg op, wiring itself to its input.
@@ -2613,7 +2615,9 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
     return failure();
 
   auto symName = getInnerSymName(op);
-  if (AnnotationSet::removeAnnotations(op, dontTouchAnnoClass) && !symName)
+  if ((AnnotationSet::removeAnnotations(op, dontTouchAnnoClass) ||
+       op.getNameKind() == NameKindEnum::InterestingName) &&
+      !symName)
     symName = op.getNameAttr();
 
   // Create a reg op, wiring itself to its input.
