@@ -131,6 +131,14 @@ struct LoweringOptions {
   /// Some lint tools dislike expressions being inlined into input ports so this
   /// option avoids such warnings.
   bool disallowExpressionInliningInPorts = false;
+
+  /// This controls extra wire spilling performed in PrepareForEmission to
+  /// improve readablitiy and debuggability.
+  enum WireSpillingHeuristic {
+    SpillNone,            // Default
+    SpillNamehintsIfShort // Spill a wire if its namehint is shorter than the
+                          // expression size.
+  } wireSpillingHeuristic = SpillNone;
 };
 
 /// Register commandline options for the verilog emitter.

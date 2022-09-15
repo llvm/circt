@@ -9,9 +9,12 @@
 #ifndef CONVERSION_EXPORTVERILOG_EXPORTVERILOGINTERNAL_H
 #define CONVERSION_EXPORTVERILOG_EXPORTVERILOGINTERNAL_H
 
+#include "circt/Dialect/Comb/CombVisitors.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWSymCache.h"
+#include "circt/Dialect/HW/HWVisitors.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "circt/Dialect/SV/SVVisitors.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include <atomic>
@@ -29,6 +32,8 @@ bool isSimpleReadOrPort(Value v);
 /// name. For things like wires and registers this will be the `name` attribute,
 /// for instances this is `instanceName`, etc.
 StringAttr getDeclarationName(Operation *op);
+
+StringRef getPortVerilogName(Operation *module, size_t portArgNum);
 
 /// Given an expression that is spilled into a temporary wire, try to
 /// synthesize a better name than "_T_42" based on the structure of the
@@ -300,10 +305,16 @@ bool isExpressionEmittedInline(Operation *op);
 /// For each module we emit, do a prepass over the structure, pre-lowering and
 /// otherwise rewriting operations we don't want to emit.
 void prepareHWModule(Block &block, const LoweringOptions &options);
+void prepareHWModule(hw::HWModuleOp module, const LoweringOptions &options);
 
 /// Rewrite module names and interfaces to not conflict with each other or with
 /// Verilog keywords.
 GlobalNameTable legalizeGlobalNames(ModuleOp topLevel);
+
+/// Return the verilog name of the operations that can define a symbol.
+/// Except for <WireOp, RegOp, LogicOp, LocalParamOp, InstanceOp>, check global
+/// state `getDeclarationVerilogName` for them.
+StringRef getSymOpName(Operation *symOp);
 
 } // namespace ExportVerilog
 } // namespace circt

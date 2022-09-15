@@ -23,8 +23,12 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Support/LoweringOptions.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/Debug.h"
+
+#define DEBUG_TYPE "prepare-for-emission"
 
 using namespace circt;
 using namespace comb;
@@ -282,6 +286,7 @@ static void lowerUsersToTemporaryWire(Operation &op,
   // value.
   if (op.getNumResults() == 1) {
     auto namehint = inferStructuralNameForTemporary(op.getResult(0));
+    op.removeAttr("sv.namehint");
     createWireForResult(op.getResult(0), namehint);
     operandMap[op.getResult(0)] = 1;
     return;
@@ -475,6 +480,229 @@ static bool isMovableDeclaration(Operation *op) {
          op->getNumOperands() == 0;
 }
 
+//===----------------------------------------------------------------------===//
+// EmittedExpressionSizeEstimator
+//===----------------------------------------------------------------------===//
+
+template <class T>
+static unsigned getNumOfDigits(T t) {
+  std::string resultStr;
+  llvm::raw_string_ostream sstr(resultStr);
+  sstr << t;
+  return resultStr.size();
+}
+
+class EmittedExpressionSizeEstimator
+    : public hw::TypeOpVisitor<EmittedExpressionSizeEstimator, unsigned>,
+      public comb::CombinationalVisitor<EmittedExpressionSizeEstimator,
+                                        unsigned>,
+      public sv::Visitor<EmittedExpressionSizeEstimator, unsigned> {
+public:
+  EmittedExpressionSizeEstimator() = default;
+
+  // Estimate the expression size.
+  unsigned getExpressionSize(Value value);
+
+private:
+  friend class TypeOpVisitor<EmittedExpressionSizeEstimator, unsigned>;
+  friend class CombinationalVisitor<EmittedExpressionSizeEstimator, unsigned>;
+  friend class Visitor<EmittedExpressionSizeEstimator, unsigned>;
+  unsigned visitUnhandledExpr(Operation *op) {
+    // If the operation is unhandled, estimate the size with `getOperandSum`.
+    // TODO: Ideally all operations should be handled.
+    LLVM_DEBUG(op->emitWarning() << "unhandled");
+    return getOperandSum(op, 2);
+  }
+  unsigned visitInvalidComb(Operation *op) { return dispatchTypeOpVisitor(op); }
+  unsigned visitUnhandledComb(Operation *op) { return visitUnhandledExpr(op); }
+  unsigned visitInvalidTypeOp(Operation *op) { return dispatchSVVisitor(op); }
+  unsigned visitUnhandledTypeOp(Operation *op) {
+    return visitUnhandledExpr(op);
+  }
+  unsigned visitUnhandledSV(Operation *op) { return visitUnhandledExpr(op); }
+  unsigned visitSV(GetModportOp op) {
+    // operand `.` field
+    return getExpressionSize(op.getOperand()) + op.getField().size() + 1;
+  }
+  unsigned visitSV(ReadInterfaceSignalOp op) {
+    // interface `.` field
+    return op.getSignalName().size() + 1 + getExpressionSize(op.getIface());
+  }
+  unsigned visitSV(VerbatimExprOp op) {
+    // FIXME: This estimation is inaccurate.
+    return getOperandSum(op, 0) + op.getFormatString().size();
+  }
+  unsigned visitSV(VerbatimExprSEOp op) {
+    // FIXME: This estimation is inaccurate.
+    return getOperandSum(op, 0) + op.getFormatString().size();
+  }
+
+  // For declarations, use a name attribute if exist. Otherwise, estimate the
+  // size assuming that the name is `GEN_`.
+  unsigned visitSV(WireOp op) {
+    return op.getName().empty() ? 4 : op.getName().size();
+  }
+  unsigned visitSV(RegOp op) {
+    return op.getName().empty() ? 4 : op.getName().size();
+  }
+  unsigned visitSV(LogicOp op) {
+    return op.getName().empty() ? 4 : op.getName().size();
+  }
+
+  unsigned visitSV(ReadInOutOp op) {
+    // Noop.
+    return getExpressionSize(op.getInput());
+  }
+  unsigned visitSV(ArrayIndexInOutOp op) {
+    // input `[` index `]`
+    return getExpressionSize(op.getInput()) + getExpressionSize(op.getIndex()) +
+           2;
+  }
+  unsigned visitSV(IndexedPartSelectInOutOp op) {
+    // `[` base ` +: ` width `]`
+    return getExpressionSize(op.getBase()) + getNumOfDigits(op.getWidth()) + 6;
+  }
+  unsigned visitSV(IndexedPartSelectOp op) {
+    // `[` base ` +: ` width `]`
+    return getExpressionSize(op.getBase()) + getNumOfDigits(op.getWidth()) + 6;
+  }
+  unsigned visitSV(StructFieldInOutOp op) {
+    // input `.` field
+    return getExpressionSize(op.getInput()) + op.getField().size() + 1;
+  }
+
+  // Other
+  using TypeOpVisitor::visitTypeOp;
+  unsigned visitTypeOp(ConstantOp op) { return getNumOfDigits(op.getValue()); }
+  unsigned visitTypeOp(BitcastOp op) {
+    // Noop
+    return getExpressionSize(op.getOperand());
+  }
+
+  unsigned visitTypeOp(ArrayCreateOp op) {
+    // `{` op1, op2, ..., op_n `}`
+    return 2 + getOperandSum(op, /*separaterSize=*/2);
+  }
+
+  unsigned visitTypeOp(ArrayGetOp op) {
+    // input `[` index `]`
+    return getExpressionSize(op.getInput()) + getExpressionSize(op.getIndex()) +
+           2;
+  }
+
+  // Comb Dialect Operations
+  using CombinationalVisitor::visitComb;
+  unsigned visitComb(MuxOp op) {
+    return getOperandSum(op, /*separaterSize=*/3);
+  }
+  unsigned visitComb(AddOp op) {
+    return getOperandSum(op, /*separaterSize=*/3);
+  }
+  unsigned visitComb(SubOp op) {
+    return getOperandSum(op, /*separaterSize=*/3);
+  }
+  unsigned visitComb(MulOp op) {
+    return getOperandSum(op, /*separaterSize=*/3);
+  }
+  unsigned visitComb(DivUOp op) {
+    return getOperandSum(op, /*separaterSize=*/3);
+  }
+  unsigned visitComb(DivSOp op) {
+    return getOperandSum(op, /*separaterSize=*/3);
+  }
+  unsigned visitComb(ModUOp op) {
+    return getOperandSum(op, /*separaterSize=*/3);
+  }
+  unsigned visitComb(ModSOp op) {
+    return getOperandSum(op, /*separaterSize=*/3);
+  }
+  unsigned visitComb(ShlOp op) {
+    return getOperandSum(op, /*separaterSize=*/4);
+  }
+  unsigned visitComb(ShrUOp op) {
+    return getOperandSum(op, /*separaterSize=*/4);
+  }
+  unsigned visitComb(ShrSOp op) {
+    return getOperandSum(op, /*separaterSize=*/4);
+  }
+  unsigned visitComb(AndOp op) {
+    return getOperandSum(op, /*separaterSize=*/3);
+  }
+  unsigned visitComb(OrOp op) { return getOperandSum(op, /*separaterSize=*/3); }
+  unsigned visitComb(XorOp op) {
+    if (op.isBinaryNot())
+      return 1 + getExpressionSize(op.getOperand(0));
+    return getOperandSum(op, 3);
+  }
+  unsigned visitComb(ParityOp op) {
+    return getExpressionSize(op.getOperand()) + 1;
+  }
+  unsigned visitComb(ReplicateOp op) {
+    // {num{operand}}
+    return getExpressionSize(op.getOperand()) + 3 +
+           getNumOfDigits(op.getMultiple());
+  }
+  unsigned visitComb(ConcatOp op) {
+    return getOperandSum(op, /*separaterSize=*/2) + 2;
+  }
+  unsigned visitComb(ExtractOp op) {
+    unsigned size = getExpressionSize(op.getInput()) + 2;
+
+    if (op.getType().isInteger(1))
+      size += getNumOfDigits(op.getLowBit());
+    else
+      size += getNumOfDigits(op.getLowBit()) +
+              getNumOfDigits(op.getLowBit() +
+                             op.getType().cast<IntegerType>().getWidth());
+    return size;
+  }
+
+  unsigned visitComb(ICmpOp op) {
+    // TODO: Consider handle "&", "|" or "!==".
+    if (op.isEqualAllOnes() || op.isNotEqualZero())
+      return getExpressionSize(op.getOperand(0)) + 1;
+    return getOperandSum(op,
+                         stringifyICmpPredicate(op.getPredicate()).size() + 2);
+  }
+
+  using Visitor::visitSV;
+
+  // A helper function to estimate the expression size by caluculating the sum
+  // of its operand sizes.
+  unsigned getOperandSum(Operation *op, unsigned separaterSize);
+
+  DenseMap<Value, size_t> expressionSizes;
+};
+
+unsigned EmittedExpressionSizeEstimator::getExpressionSize(Value v) {
+  auto it = expressionSizes.find(v);
+  if (it != expressionSizes.end())
+    return it->second;
+
+  // Ports.
+  if (auto blockArg = v.dyn_cast<BlockArgument>()) {
+    auto moduleOp = cast<HWModuleOp>(blockArg.getOwner()->getParentOp());
+    return ExportVerilog::getPortVerilogName(moduleOp, blockArg.getArgNumber())
+        .size();
+  }
+
+  unsigned size = dispatchCombinationalVisitor(v.getDefiningOp());
+  expressionSizes[v] = size;
+  return size;
+}
+
+unsigned EmittedExpressionSizeEstimator::getOperandSum(Operation *op,
+                                                       unsigned separaterSize) {
+  unsigned size = 0;
+  if (op->getNumOperands() > 1)
+    size += (op->getNumOperands() - 1) * separaterSize;
+
+  for (auto operand : op->getOperands())
+    size += getExpressionSize(operand);
+
+  return size;
+}
+
 /// If exactly one use of this op is an assign, replace the other uses with a
 /// read from the assigned wire or reg. This assumes the preconditions for doing
 /// so are met: op must be an expression in a non-procedural region.
@@ -523,10 +751,80 @@ static bool reuseExistingInOut(Operation *op) {
   return true;
 }
 
+/// Return true if this is something that will get printed as a unary operator
+/// by the Verilog printer.
+/// TODO: This is copied from PrettifyVerilog. Create a common library for
+/// verilog expression stuffs.
+static bool isVerilogUnaryOperator(Operation *op) {
+  if (isa<comb::ParityOp>(op))
+    return true;
+
+  if (auto xorOp = dyn_cast<comb::XorOp>(op))
+    return xorOp.isBinaryNot();
+
+  if (auto icmpOp = dyn_cast<comb::ICmpOp>(op))
+    return icmpOp.isEqualAllOnes() || icmpOp.isNotEqualZero();
+
+  return false;
+}
+
+/// Return true if it is beneficial to spill the operation under the specified
+/// spilling heuristic.
+bool shouldSpillWire(Operation &op, const LoweringOptions &options,
+                     EmittedExpressionSizeEstimator &estimator) {
+  // Simple expressions like unary operations or reads might be cloned by
+  // PrettifyVerilog, so don't spill wires to prevent name duplications.
+  if (isVerilogUnaryOperator(&op) || isa<ReadInOutOp, ConstantOp>(op))
+    return false;
+
+  if (options.emittedLineLength < estimator.getExpressionSize(op.getResult(0)))
+    return true;
+
+  switch (options.wireSpillingHeuristic) {
+  case LoweringOptions::SpillNamehintsIfShort:
+    if (auto namehint = op.getAttrOfType<StringAttr>("sv.namehint"))
+      if (2 * namehint.size() < estimator.getExpressionSize(op.getResult(0)))
+        return true;
+    return false;
+  default:
+    llvm_unreachable("unhandled option");
+  }
+}
+
+/// After the legalization, we are able to know accurate verilog AST structures.
+/// So this function walks and prettifies verilog IR with a heuristic method
+/// specified by `options.wireSpillingHeuristic` based on the structures.
+static void
+prettifyAfterLegalization(Block &block, const LoweringOptions &options,
+                          EmittedExpressionSizeEstimator &estimator) {
+  // If disallowLocalVariables is enabled, we don't spill wires in procedural
+  // regions.
+  if (options.disallowLocalVariables &&
+      block.getParentOp()->hasTrait<ProceduralRegion>())
+    return;
+
+  DenseMap<Value, size_t> operandMap;
+  for (auto &op : llvm::make_early_inc_range(block)) {
+    if (!isVerilogExpression(&op))
+      continue;
+    if (shouldSpillWire(op, options, estimator)) {
+      lowerUsersToTemporaryWire(op, operandMap);
+      continue;
+    }
+  }
+
+  for (auto &op : block) {
+    // If the operations has regions, visit each of the region bodies.
+    for (auto &region : op.getRegions()) {
+      if (!region.empty())
+        prettifyAfterLegalization(region.front(), options, estimator);
+    }
+  }
+}
+
 /// For each module we emit, do a prepass over the structure, pre-lowering and
 /// otherwise rewriting operations we don't want to emit.
-void ExportVerilog::prepareHWModule(Block &block,
-                                    const LoweringOptions &options) {
+static void legalizeHWModule(Block &block, const LoweringOptions &options) {
 
   /// A cache of the number of operands that feed into an operation.  This
   /// avoids the need to look backwards across ops repeatedly.
@@ -538,7 +836,7 @@ void ExportVerilog::prepareHWModule(Block &block,
     // If the operations has regions, prepare each of the region bodies.
     for (auto &region : op.getRegions()) {
       if (!region.empty())
-        prepareHWModule(region.front(), options);
+        legalizeHWModule(region.front(), options);
     }
   }
 
@@ -789,6 +1087,18 @@ void ExportVerilog::prepareHWModule(Block &block,
   }
 }
 
+void ExportVerilog::prepareHWModule(hw::HWModuleOp module,
+                                    const LoweringOptions &options) {
+  // Legalization.
+  legalizeHWModule(*module.getBodyBlock(), options);
+
+  if (options.wireSpillingHeuristic != LoweringOptions::SpillNone) {
+    EmittedExpressionSizeEstimator estimator;
+    // Spill wires to prettify verilog outputs.
+    prettifyAfterLegalization(*module.getBodyBlock(), options, estimator);
+  }
+}
+
 namespace {
 
 struct TestPrepareForEmissionPass
@@ -799,7 +1109,7 @@ struct TestPrepareForEmissionPass
     LoweringOptions options = getLoweringCLIOption(
         cast<mlir::ModuleOp>(module->getParentOp()),
         [&](llvm::Twine twine) { module.emitError(twine); });
-    prepareHWModule(*module.getBodyBlock(), options);
+    prepareHWModule(module, options);
   }
 };
 } // end anonymous namespace
