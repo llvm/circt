@@ -80,7 +80,8 @@ jobs:
             -DLLVM_TARGETS_TO_BUILD="host" \
             -DLLVM_USE_LINKER=lld \
             -DMLIR_ENABLE_BINDINGS_PYTHON=ON \
-            -DCIRCT_BINDINGS_PYTHON_ENABLED=ON
+            -DCIRCT_BINDINGS_PYTHON_ENABLED=ON \
+            -DLLVM_LIT_ARGS='-sv --show-unsupported'
       - name: Test CIRCT
         run: |
           ninja -C build check-circt -j$(nproc)
