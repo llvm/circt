@@ -82,6 +82,7 @@ static OpTy replaceOpWithNewOpAndCopyName(PatternRewriter &rewriter,
   return newOp;
 }
 
+
 namespace {
 struct ConstantIntMatcher {
   APInt &value;
@@ -1671,6 +1672,16 @@ OpFoldResult MuxOp::fold(ArrayRef<Attribute> constants) {
       return getFalseValue();
     return getTrueValue();
   }
+
+  // mux(cond, c1, v)
+  APInt valueT, valueF;
+
+  if (matchPattern(getTrueValue(), m_RConstant(valueT)) &&
+  matchPattern(getFalseValue(), m_RConstant(valueF))) {
+      // mux(cond, 1, 0) -> cond
+      if (valueT.isOne() && valueF.isZero() && hw::getBitWidth(getType()) == 1)
+        return getCond();
+    }
 
   return {};
 }
