@@ -121,7 +121,7 @@ def MemOp : ReferableDeclOp<"mem"> {
          PortAnnotationsAttr:$portAnnotations,
          OptionalAttr<InnerSymAttr>:$inner_sym,
          OptionalAttr<UI32Attr>:$groupID);
-  let results = (outs Variadic<FIRRTLBaseType>:$results);
+  let results = (outs Variadic<FIRRTLType>:$results);
 
   let assemblyFormat = [{
     (`sym` $inner_sym^)? custom<NameKind>($nameKind)
@@ -151,12 +151,12 @@ def MemOp : ReferableDeclOp<"mem"> {
   let hasCanonicalizeMethod = true;
 
   let extraClassDeclaration = [{
-    enum class PortKind { Read, Write, ReadWrite };
+    enum class PortKind { Read, Write, ReadWrite, Debug };
 
     using NamedPort = std::pair<StringAttr, MemOp::PortKind>;
 
     /// Return the type of a port given the memory depth, type, and kind
-    static BundleType getTypeForPort(uint64_t depth, FIRRTLBaseType dataType,
+    static FIRRTLType getTypeForPort(uint64_t depth, FIRRTLBaseType dataType,
                                      PortKind portKind, size_t maskBits = 0);
 
     /// Return the name and kind of ports supported by this memory.
