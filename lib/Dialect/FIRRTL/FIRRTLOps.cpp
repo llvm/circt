@@ -1812,14 +1812,31 @@ BundleType MemOp::getTypeForPort(uint64_t depth, FIRRTLBaseType dataType,
 /// Return the kind of port this is given the port type from a 'mem' decl.
 static MemOp::PortKind getMemPortKindFromType(FIRRTLType type) {
   auto portType = type.dyn_cast<BundleType>();
-  switch (portType.getNumElements()) {
-  case 4:
-    return MemOp::PortKind::Read;
-  case 5:
-    return MemOp::PortKind::Write;
-  default:
-    return MemOp::PortKind::ReadWrite;
+  unsigned fields = 0;
+  // Get the kind of port based on the fields of the Bundle.
+  for (auto elem : portType.getElements()) {
+    fields |= llvm::StringSwitch<unsigned>(elem.name.getValue())
+                  .Case("addr", 1)
+                  .Case("en", 2)
+                  .Case("clk", 4)
+                  .Case("data", 8)
+                  .Case("mask", 16)
+                  .Case("rdata", 32)
+                  .Case("wdata", 64)
+                  .Case("wmask", 128)
+                  .Case("wmode", 256)
+                  .Default(512);
   }
+  // addr, en, clk, data
+  if (fields == 15)
+    return MemOp::PortKind::Read;
+  // addr, en, clk, data, mask
+  if (fields == 31)
+    return MemOp::PortKind::Write;
+  // This check is required once we add a Debug port kind.
+  // addr, en, clk, wdata, wmask, rdata, wmode
+  // if (fields == 487)
+  return MemOp::PortKind::ReadWrite;
 }
 
 /// Return the name and kind of ports supported by this memory.
