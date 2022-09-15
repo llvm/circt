@@ -3207,6 +3207,8 @@ LogicalResult FIRRTLLowering::lowerDivLikeOp(Operation *op) {
   else
     result = builder.createOrFold<UnsignedOp>(lhs, rhs, true);
 
+  tryCopyName(result.getDefiningOp(), op);
+
   if (resultType == opType)
     return setLowering(op->getResult(0), result);
   return setLoweringTo<comb::ExtractOp>(op, lowerType(opType), result, 0);
