@@ -40,6 +40,7 @@ struct LowerCHIRRTLPass : public LowerCHIRRTLPassBase<LowerCHIRRTLPass>,
   void visitCHIRRTL(CombMemOp op);
   void visitCHIRRTL(SeqMemOp op);
   void visitCHIRRTL(MemoryPortOp op);
+  void visitCHIRRTL(MemoryDebugPortOp op);
   void visitCHIRRTL(MemoryPortAccessOp op);
   void visitExpr(SubaccessOp op);
   void visitExpr(SubfieldOp op);
@@ -483,6 +484,11 @@ void LowerCHIRRTLPass::visitCHIRRTL(SeqMemOp seqmem) {
 }
 
 void LowerCHIRRTLPass::visitCHIRRTL(MemoryPortOp memPort) {
+  // The memory port is mostly handled while processing the memory.
+  opsToDelete.push_back(memPort);
+}
+
+void LowerCHIRRTLPass::visitCHIRRTL(MemoryDebugPortOp memPort) {
   // The memory port is mostly handled while processing the memory.
   opsToDelete.push_back(memPort);
 }
