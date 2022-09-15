@@ -484,6 +484,10 @@ static bool isMovableDeclaration(Operation *op) {
 // EmittedExpressionSizeEstimator
 //===----------------------------------------------------------------------===//
 
+struct EmittedExpressionState {
+  size_t size;
+};
+
 template <class T>
 static unsigned getNumOfDigits(T t) {
   std::string resultStr;
@@ -493,160 +497,215 @@ static unsigned getNumOfDigits(T t) {
 }
 
 class EmittedExpressionSizeEstimator
-    : public hw::TypeOpVisitor<EmittedExpressionSizeEstimator, unsigned>,
+    : public hw::TypeOpVisitor<EmittedExpressionSizeEstimator,
+                               EmittedExpressionState>,
       public comb::CombinationalVisitor<EmittedExpressionSizeEstimator,
-                                        unsigned>,
-      public sv::Visitor<EmittedExpressionSizeEstimator, unsigned> {
+                                        EmittedExpressionState>,
+      public sv::Visitor<EmittedExpressionSizeEstimator,
+                         EmittedExpressionState> {
 public:
   EmittedExpressionSizeEstimator() = default;
 
   // Estimate the expression size.
-  unsigned getExpressionSize(Value value);
+  EmittedExpressionState getExpressionState(Value value);
 
 private:
-  friend class TypeOpVisitor<EmittedExpressionSizeEstimator, unsigned>;
-  friend class CombinationalVisitor<EmittedExpressionSizeEstimator, unsigned>;
-  friend class Visitor<EmittedExpressionSizeEstimator, unsigned>;
-  unsigned visitUnhandledExpr(Operation *op) {
+  friend class TypeOpVisitor<EmittedExpressionSizeEstimator,
+                             EmittedExpressionState>;
+  friend class CombinationalVisitor<EmittedExpressionSizeEstimator,
+                                    EmittedExpressionState>;
+  friend class Visitor<EmittedExpressionSizeEstimator, EmittedExpressionState>;
+  EmittedExpressionState visitUnhandledExpr(Operation *op) {
     // If the operation is unhandled, estimate the size with `getOperandSum`.
     // TODO: Ideally all operations should be handled.
     LLVM_DEBUG(op->emitWarning() << "unhandled");
-    return getOperandSum(op, 2);
+    auto size = getOperandSum(op, 2);
+    return {size};
   }
-  unsigned visitInvalidComb(Operation *op) { return dispatchTypeOpVisitor(op); }
-  unsigned visitUnhandledComb(Operation *op) { return visitUnhandledExpr(op); }
-  unsigned visitInvalidTypeOp(Operation *op) { return dispatchSVVisitor(op); }
-  unsigned visitUnhandledTypeOp(Operation *op) {
+  EmittedExpressionState visitInvalidComb(Operation *op) {
+    return dispatchTypeOpVisitor(op);
+  }
+  EmittedExpressionState visitUnhandledComb(Operation *op) {
     return visitUnhandledExpr(op);
   }
-  unsigned visitUnhandledSV(Operation *op) { return visitUnhandledExpr(op); }
-  unsigned visitSV(GetModportOp op) {
+  EmittedExpressionState visitInvalidTypeOp(Operation *op) {
+    return dispatchSVVisitor(op);
+  }
+  EmittedExpressionState visitUnhandledTypeOp(Operation *op) {
+    return visitUnhandledExpr(op);
+  }
+  EmittedExpressionState visitUnhandledSV(Operation *op) {
+    return visitUnhandledExpr(op);
+  }
+  EmittedExpressionState visitSV(GetModportOp op) {
     // operand `.` field
-    return getExpressionSize(op.getOperand()) + op.getField().size() + 1;
+    auto size =
+        getExpressionState(op.getOperand()).size + op.getField().size() + 1;
+    return {size};
   }
-  unsigned visitSV(ReadInterfaceSignalOp op) {
+  EmittedExpressionState visitSV(ReadInterfaceSignalOp op) {
     // interface `.` field
-    return op.getSignalName().size() + 1 + getExpressionSize(op.getIface());
+    auto size =
+        op.getSignalName().size() + 1 + getExpressionState(op.getIface()).size;
+    return {size};
   }
-  unsigned visitSV(VerbatimExprOp op) {
+  EmittedExpressionState visitSV(VerbatimExprOp op) {
     // FIXME: This estimation is inaccurate.
-    return getOperandSum(op, 0) + op.getFormatString().size();
+    auto size = getOperandSum(op, 0) + op.getFormatString().size();
+    return {size};
   }
-  unsigned visitSV(VerbatimExprSEOp op) {
+  EmittedExpressionState visitSV(VerbatimExprSEOp op) {
     // FIXME: This estimation is inaccurate.
-    return getOperandSum(op, 0) + op.getFormatString().size();
+    auto size = getOperandSum(op, 0) + op.getFormatString().size();
+    return {size};
   }
 
   // For declarations, use a name attribute if exist. Otherwise, estimate the
   // size assuming that the name is `GEN_`.
-  unsigned visitSV(WireOp op) {
-    return op.getName().empty() ? 4 : op.getName().size();
+  EmittedExpressionState visitSV(WireOp op) {
+    auto size = op.getName().empty() ? 4 : op.getName().size();
+    return {size};
   }
-  unsigned visitSV(RegOp op) {
-    return op.getName().empty() ? 4 : op.getName().size();
+  EmittedExpressionState visitSV(RegOp op) {
+    auto size = op.getName().empty() ? 4 : op.getName().size();
+    return {size};
   }
-  unsigned visitSV(LogicOp op) {
-    return op.getName().empty() ? 4 : op.getName().size();
+  EmittedExpressionState visitSV(LogicOp op) {
+    auto size = op.getName().empty() ? 4 : op.getName().size();
+    return {size};
   }
 
-  unsigned visitSV(ReadInOutOp op) {
+  EmittedExpressionState visitSV(ReadInOutOp op) {
     // Noop.
-    return getExpressionSize(op.getInput());
+    return getExpressionState(op.getInput());
   }
-  unsigned visitSV(ArrayIndexInOutOp op) {
+  EmittedExpressionState visitSV(ArrayIndexInOutOp op) {
     // input `[` index `]`
-    return getExpressionSize(op.getInput()) + getExpressionSize(op.getIndex()) +
-           2;
+    auto size = getExpressionState(op.getInput()).size +
+                getExpressionState(op.getIndex()).size + 2;
+    return {size};
   }
-  unsigned visitSV(IndexedPartSelectInOutOp op) {
+  EmittedExpressionState visitSV(IndexedPartSelectInOutOp op) {
     // `[` base ` +: ` width `]`
-    return getExpressionSize(op.getBase()) + getNumOfDigits(op.getWidth()) + 6;
+    auto size = getExpressionState(op.getBase()).size +
+                getNumOfDigits(op.getWidth()) + 6;
+    return {size};
   }
-  unsigned visitSV(IndexedPartSelectOp op) {
+  EmittedExpressionState visitSV(IndexedPartSelectOp op) {
     // `[` base ` +: ` width `]`
-    return getExpressionSize(op.getBase()) + getNumOfDigits(op.getWidth()) + 6;
+    auto size = getExpressionState(op.getBase()).size +
+                getNumOfDigits(op.getWidth()) + 6;
+    return {size};
   }
-  unsigned visitSV(StructFieldInOutOp op) {
+  EmittedExpressionState visitSV(StructFieldInOutOp op) {
     // input `.` field
-    return getExpressionSize(op.getInput()) + op.getField().size() + 1;
+    auto size =
+        getExpressionState(op.getInput()).size + op.getField().size() + 1;
+    return {size};
   }
 
   // Other
   using TypeOpVisitor::visitTypeOp;
-  unsigned visitTypeOp(ConstantOp op) { return getNumOfDigits(op.getValue()); }
-  unsigned visitTypeOp(BitcastOp op) {
+  EmittedExpressionState visitTypeOp(ConstantOp op) {
+    auto size = getNumOfDigits(op.getValue());
+    return {size};
+  }
+  EmittedExpressionState visitTypeOp(BitcastOp op) {
     // Noop
-    return getExpressionSize(op.getOperand());
+    return getExpressionState(op.getOperand());
   }
 
-  unsigned visitTypeOp(ArrayCreateOp op) {
+  EmittedExpressionState visitTypeOp(ArrayCreateOp op) {
     // `{` op1, op2, ..., op_n `}`
-    return 2 + getOperandSum(op, /*separaterSize=*/2);
+    auto size = 2 + getOperandSum(op, /*separaterSize=*/2);
+    return {size};
   }
 
-  unsigned visitTypeOp(ArrayGetOp op) {
+  EmittedExpressionState visitTypeOp(ArrayGetOp op) {
     // input `[` index `]`
-    return getExpressionSize(op.getInput()) + getExpressionSize(op.getIndex()) +
-           2;
+    auto size = getExpressionState(op.getInput()).size +
+                getExpressionState(op.getIndex()).size + 2;
+    return {size};
   }
 
   // Comb Dialect Operations
   using CombinationalVisitor::visitComb;
-  unsigned visitComb(MuxOp op) {
-    return getOperandSum(op, /*separaterSize=*/3);
+  EmittedExpressionState visitComb(MuxOp op) {
+    auto size = getOperandSum(op, /*separaterSize=*/3);
+    return {size};
   }
-  unsigned visitComb(AddOp op) {
-    return getOperandSum(op, /*separaterSize=*/3);
+  EmittedExpressionState visitComb(AddOp op) {
+    auto size = getOperandSum(op, /*separaterSize=*/3);
+    return {size};
   }
-  unsigned visitComb(SubOp op) {
-    return getOperandSum(op, /*separaterSize=*/3);
+  EmittedExpressionState visitComb(SubOp op) {
+    auto size = getOperandSum(op, /*separaterSize=*/3);
+    return {size};
   }
-  unsigned visitComb(MulOp op) {
-    return getOperandSum(op, /*separaterSize=*/3);
+  EmittedExpressionState visitComb(MulOp op) {
+    auto size = getOperandSum(op, /*separaterSize=*/3);
+    return {size};
   }
-  unsigned visitComb(DivUOp op) {
-    return getOperandSum(op, /*separaterSize=*/3);
+  EmittedExpressionState visitComb(DivUOp op) {
+    auto size = getOperandSum(op, /*separaterSize=*/3);
+    return {size};
   }
-  unsigned visitComb(DivSOp op) {
-    return getOperandSum(op, /*separaterSize=*/3);
+  EmittedExpressionState visitComb(DivSOp op) {
+    auto size = getOperandSum(op, /*separaterSize=*/3);
+    return {size};
   }
-  unsigned visitComb(ModUOp op) {
-    return getOperandSum(op, /*separaterSize=*/3);
+  EmittedExpressionState visitComb(ModUOp op) {
+    auto size = getOperandSum(op, /*separaterSize=*/3);
+    return {size};
   }
-  unsigned visitComb(ModSOp op) {
-    return getOperandSum(op, /*separaterSize=*/3);
+  EmittedExpressionState visitComb(ModSOp op) {
+    auto size = getOperandSum(op, /*separaterSize=*/3);
+    return {size};
   }
-  unsigned visitComb(ShlOp op) {
-    return getOperandSum(op, /*separaterSize=*/4);
+  EmittedExpressionState visitComb(ShlOp op) {
+    auto size = getOperandSum(op, /*separaterSize=*/4);
+    return {size};
   }
-  unsigned visitComb(ShrUOp op) {
-    return getOperandSum(op, /*separaterSize=*/4);
+  EmittedExpressionState visitComb(ShrUOp op) {
+    auto size = getOperandSum(op, /*separaterSize=*/4);
+    return {size};
   }
-  unsigned visitComb(ShrSOp op) {
-    return getOperandSum(op, /*separaterSize=*/4);
+  EmittedExpressionState visitComb(ShrSOp op) {
+    auto size = getOperandSum(op, /*separaterSize=*/4);
+    return {size};
   }
-  unsigned visitComb(AndOp op) {
-    return getOperandSum(op, /*separaterSize=*/3);
+  EmittedExpressionState visitComb(AndOp op) {
+    auto size = getOperandSum(op, /*separaterSize=*/3);
+    return {size};
   }
-  unsigned visitComb(OrOp op) { return getOperandSum(op, /*separaterSize=*/3); }
-  unsigned visitComb(XorOp op) {
-    if (op.isBinaryNot())
-      return 1 + getExpressionSize(op.getOperand(0));
-    return getOperandSum(op, 3);
+  EmittedExpressionState visitComb(OrOp op) {
+    auto size = getOperandSum(op, /*separaterSize=*/3);
+    return {size};
   }
-  unsigned visitComb(ParityOp op) {
-    return getExpressionSize(op.getOperand()) + 1;
+  EmittedExpressionState visitComb(XorOp op) {
+    if (op.isBinaryNot()) {
+      auto size = 1 + getExpressionState(op.getOperand(0)).size;
+      return {size};
+    }
+    auto size = getOperandSum(op, 3);
+    return {size};
   }
-  unsigned visitComb(ReplicateOp op) {
+  EmittedExpressionState visitComb(ParityOp op) {
+    auto size = getExpressionState(op.getOperand()).size + 1;
+    return {size};
+  }
+  EmittedExpressionState visitComb(ReplicateOp op) {
     // {num{operand}}
-    return getExpressionSize(op.getOperand()) + 3 +
-           getNumOfDigits(op.getMultiple());
+    auto size = getExpressionState(op.getOperand()).size + 3 +
+                getNumOfDigits(op.getMultiple());
+    return {size};
   }
-  unsigned visitComb(ConcatOp op) {
-    return getOperandSum(op, /*separaterSize=*/2) + 2;
+  EmittedExpressionState visitComb(ConcatOp op) {
+    auto size = getOperandSum(op, /*separaterSize=*/2) + 2;
+    return {size};
   }
-  unsigned visitComb(ExtractOp op) {
-    unsigned size = getExpressionSize(op.getInput()) + 2;
+  EmittedExpressionState visitComb(ExtractOp op) {
+    unsigned size = getExpressionState(op.getInput()).size + 2;
 
     if (op.getType().isInteger(1))
       size += getNumOfDigits(op.getLowBit());
@@ -654,15 +713,18 @@ private:
       size += getNumOfDigits(op.getLowBit()) +
               getNumOfDigits(op.getLowBit() +
                              op.getType().cast<IntegerType>().getWidth());
-    return size;
+    return {size};
   }
 
-  unsigned visitComb(ICmpOp op) {
+  EmittedExpressionState visitComb(ICmpOp op) {
     // TODO: Consider handle "&", "|" or "!==".
-    if (op.isEqualAllOnes() || op.isNotEqualZero())
-      return getExpressionSize(op.getOperand(0)) + 1;
-    return getOperandSum(op,
-                         stringifyICmpPredicate(op.getPredicate()).size() + 2);
+    if (op.isEqualAllOnes() || op.isNotEqualZero()) {
+      auto size = getExpressionState(op.getOperand(0)).size + 1;
+      return {size};
+    }
+    auto size =
+        getOperandSum(op, stringifyICmpPredicate(op.getPredicate()).size() + 2);
+    return {size};
   }
 
   using Visitor::visitSV;
@@ -671,23 +733,26 @@ private:
   // of its operand sizes.
   unsigned getOperandSum(Operation *op, unsigned separaterSize);
 
-  DenseMap<Value, size_t> expressionSizes;
+  DenseMap<Value, EmittedExpressionState> expressionStates;
 };
 
-unsigned EmittedExpressionSizeEstimator::getExpressionSize(Value v) {
-  auto it = expressionSizes.find(v);
-  if (it != expressionSizes.end())
+EmittedExpressionState
+EmittedExpressionSizeEstimator::getExpressionState(Value v) {
+  auto it = expressionStates.find(v);
+  if (it != expressionStates.end())
     return it->second;
 
   // Ports.
   if (auto blockArg = v.dyn_cast<BlockArgument>()) {
     auto moduleOp = cast<HWModuleOp>(blockArg.getOwner()->getParentOp());
-    return ExportVerilog::getPortVerilogName(moduleOp, blockArg.getArgNumber())
-        .size();
+    auto size =
+        ExportVerilog::getPortVerilogName(moduleOp, blockArg.getArgNumber())
+            .size();
+    return {size};
   }
 
-  unsigned size = dispatchCombinationalVisitor(v.getDefiningOp());
-  expressionSizes[v] = size;
+  EmittedExpressionState size = dispatchCombinationalVisitor(v.getDefiningOp());
+  expressionStates[v] = size;
   return size;
 }
 
@@ -698,7 +763,7 @@ unsigned EmittedExpressionSizeEstimator::getOperandSum(Operation *op,
     size += (op->getNumOperands() - 1) * separaterSize;
 
   for (auto operand : op->getOperands())
-    size += getExpressionSize(operand);
+    size += getExpressionState(operand).size;
 
   return size;
 }
@@ -777,13 +842,15 @@ bool shouldSpillWire(Operation &op, const LoweringOptions &options,
   if (isVerilogUnaryOperator(&op) || isa<ReadInOutOp, ConstantOp>(op))
     return false;
 
-  if (options.emittedLineLength < estimator.getExpressionSize(op.getResult(0)))
+  if (options.emittedLineLength <
+      estimator.getExpressionState(op.getResult(0)).size)
     return true;
 
   switch (options.wireSpillingHeuristic) {
   case LoweringOptions::SpillNamehintsIfShort:
     if (auto namehint = op.getAttrOfType<StringAttr>("sv.namehint"))
-      if (2 * namehint.size() < estimator.getExpressionSize(op.getResult(0)))
+      if (2 * namehint.size() <
+          estimator.getExpressionState(op.getResult(0)).size)
         return true;
     return false;
   default:
