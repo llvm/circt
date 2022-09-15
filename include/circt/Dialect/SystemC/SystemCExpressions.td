@@ -82,3 +82,24 @@ def NewOp : SystemCOp<"cpp.new", [NoSideEffect]> {
     `(` $args `)` attr-dict `:` functional-type($args, $result)
   }];
 }
+
+def MemberAccessOp : SystemCOp<"cpp.member_access", [NoSideEffect]> {
+  let summary = "A C++ member access expression.";
+  let description = [{
+    Represents the C++ member access operators `.` and `->`.
+    The member name is passed as a plain string and is not checked for validity.
+    Additional qualifications (`A::E1`) or template disambiguation
+    (`template E1`) can be manually added to this plain member name string for
+    emission.
+    The type of the object and result cannot be verified as it is allowed to use
+    varbatim types such as `emitc.opaque`.
+  }];
+
+  let arguments = (ins AnyType:$object, StrAttr:$memberName, UnitAttr:$deref);
+  let results = (outs AnyType:$result);
+
+  let assemblyFormat = [{
+    $object `[` $memberName `]` (`deref` $deref^)? attr-dict `:`
+    functional-type($object, $result)
+  }];
+}

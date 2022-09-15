@@ -259,6 +259,25 @@ struct BindPortEmitter : OpEmissionPattern<BindPortOp> {
   }
 };
 
+/// Emit a systemc.cpp.member_access operation.
+struct MemberAccessEmitter : OpEmissionPattern<MemberAccessOp> {
+  using OpEmissionPattern::OpEmissionPattern;
+
+  MatchResult matchInlinable(Value value) override {
+    if (value.getDefiningOp<MemberAccessOp>())
+      return Precedence::MEMBER_ACCESS;
+    return {};
+  }
+
+  void emitInlined(Value value, EmissionPrinter &p) override {
+    auto op = value.getDefiningOp<MemberAccessOp>();
+    p.getInlinable(op.getObject())
+        .emitWithParensOnLowerPrecedence(Precedence::MEMBER_ACCESS);
+    p << (op.getDeref() ? "->" : ".");
+    p << op.getMemberName();
+  }
+};
+
 /// Emit a systemc.cpp.assign operation.
 struct AssignEmitter : OpEmissionPattern<AssignOp> {
   using OpEmissionPattern::OpEmissionPattern;
@@ -358,7 +377,7 @@ void circt::ExportSystemC::populateSystemCOpEmitters(
                InstanceDeclEmitter, BindPortEmitter,
                // CPP-level operation emitters
                AssignEmitter, VariableEmitter, NewEmitter, DestructorEmitter,
-               DeleteEmitter>(context);
+               DeleteEmitter, MemberAccessEmitter>(context);
 }
 
 void circt::ExportSystemC::populateSystemCTypeEmitters(
