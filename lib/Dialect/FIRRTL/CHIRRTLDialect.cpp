@@ -229,7 +229,7 @@ static ParseResult parseMemoryDebugPortOp(OpAsmParser &parser,
 /// if it is empty.
 static void printMemoryDebugPortOp(OpAsmPrinter &p, Operation *op,
                                    DictionaryAttr attr) {
-  SmallVector<StringRef,1> elides;
+  SmallVector<StringRef, 1> elides;
   // Annotations elided if empty.
   if (op->getAttrOfType<ArrayAttr>("annotations").empty())
     elides.push_back("annotations");
