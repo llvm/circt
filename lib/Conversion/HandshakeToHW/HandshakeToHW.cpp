@@ -484,18 +484,24 @@ struct RTLBuilder {
   }
 
   // Truncates 'value' to its lower 'width' bits.
-  Value truncate(Value value, unsigned width) {
-    return extract(value, 0, width - 1);
+  Value truncate(Value value, unsigned width, Location *extLoc = nullptr) {
+    return extract(value, 0, width - 1, extLoc);
   }
 
-  Value zext(Value value, unsigned outWidth) {
+  Value zext(Value value, unsigned outWidth, Location *extLoc = nullptr) {
     unsigned inWidth = value.getType().getIntOrFloatBitWidth();
     assert(inWidth < outWidth &&
            "zext: input width must be smaller than output "
            "width.");
     if (inWidth == outWidth)
       return value;
-    return concat({constant(outWidth - inWidth, 0), value});
+    auto c0 = constant(outWidth - inWidth, 0, extLoc);
+    return concat({c0, value}, extLoc);
+  }
+
+  Value sext(Value value, unsigned outWidth, Location *extLoc = nullptr) {
+    return comb::createOrFoldSExt(getLoc(extLoc), value,
+                                  b.getIntegerType(outWidth), b);
   }
 
   // Extracts a single bit v[bit].
@@ -652,7 +658,9 @@ public:
     Value truncatedSelect = select.data.getType().getIntOrFloatBitWidth() > size
                                 ? s.truncate(select.data, size)
                                 : select.data;
-    auto select1h = s.shl(s.constant(size, 1), s.zext(truncatedSelect, size));
+    auto c1s = s.constant(size, 1);
+    auto truncSelectZext = s.zext(truncatedSelect, size);
+    auto select1h = s.shl(c1s, truncSelectZext);
     auto &res = unwrapped.outputs[0];
 
     // Mux input valid signals.
@@ -725,8 +733,7 @@ public:
                           .getIntOrFloatBitWidth();
     buildUnitRateLogic(s, unwrappedIO, [&](ValueRange inputs) {
       if (signExtend)
-        return comb::createOrFoldSExt(s.getLoc(), inputs[0],
-                                      s.b.getIntegerType(outWidth), s.b);
+        return s.sext(inputs[0], outWidth);
       return s.zext(inputs[0], outWidth);
     });
   }
