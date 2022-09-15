@@ -309,18 +309,18 @@ LogicalResult ChannelBufferLowering::matchAndRewrite(
   auto type = buffer.getType();
 
   // Expand 'abstract' buffer into 'physical' stages.
-  auto stages = buffer.stagesAttr();
+  auto stages = buffer.getStagesAttr();
   uint64_t numStages = 1;
   if (stages) {
     // Guaranteed positive by the parser.
     numStages = stages.getValue().getLimitedValue();
   }
-  Value input = buffer.input();
-  StringAttr bufferName = buffer.nameAttr();
+  Value input = buffer.getInput();
+  StringAttr bufferName = buffer.getNameAttr();
   for (uint64_t i = 0; i < numStages; ++i) {
     // Create the stages, connecting them up as we build.
-    auto stage = rewriter.create<PipelineStageOp>(loc, type, buffer.clk(),
-                                                  buffer.rst(), input);
+    auto stage = rewriter.create<PipelineStageOp>(loc, type, buffer.getClk(),
+                                                  buffer.getRst(), input);
     if (bufferName) {
       SmallString<64> stageName(
           {bufferName.getValue(), "_stage", std::to_string(i)});
@@ -478,12 +478,14 @@ bool ESIPortsPass::updateFunc(HWModuleOp mod) {
     // they were. (A later pass takes care of eliminating the ESI ops.)
     auto wrap = modBuilder.create<WrapValidReadyOp>(data, valid);
     // Replace uses of the old ESI port argument with the new one from the wrap.
-    mod.front().getArgument(blockArgNum).replaceAllUsesWith(wrap.chanOutput());
+    mod.front()
+        .getArgument(blockArgNum)
+        .replaceAllUsesWith(wrap.getChanOutput());
     // Delete the ESI port block argument.
     mod.front().eraseArgument(blockArgNum);
     --blockArgNum;
-    newReadySignals.push_back(
-        std::make_pair(wrap.ready(), appendToRtlName(argNameAttr, "_ready")));
+    newReadySignals.push_back(std::make_pair(
+        wrap.getReady(), appendToRtlName(argNameAttr, "_ready")));
     updated = true;
   }
 
@@ -513,13 +515,13 @@ bool ESIPortsPass::updateFunc(HWModuleOp mod) {
         i1, modBuilder.getUnknownLoc()); // Ready block arg.
     auto unwrap = modBuilder.create<UnwrapValidReadyOp>(oldOutputValue, ready);
     if (unwrap.hasData()) {
-      newOutputOperands.push_back(unwrap.rawOutput());
+      newOutputOperands.push_back(unwrap.getRawOutput());
       newResultTypes.push_back(chanTy.getInner()); // Raw data.
       newResultNames.push_back(oldResultName);
     }
 
     newResultTypes.push_back(i1); // Valid.
-    newOutputOperands.push_back(unwrap.valid());
+    newOutputOperands.push_back(unwrap.getValid());
     newResultNames.push_back(appendToRtlName(oldResultName, "_valid"));
 
     newArgTypes.push_back(i1); // Ready func arg.
@@ -574,8 +576,8 @@ void ESIPortsPass::updateInstance(HWModuleOp mod, InstanceOp inst) {
     inputReadysToConnect.push_back(ready);
     auto unwrap = b.create<UnwrapValidReadyOp>(operand, ready);
     if (unwrap.hasData())
-      newOperands.push_back(unwrap.rawOutput());
-    newOperands.push_back(unwrap.valid());
+      newOperands.push_back(unwrap.getRawOutput());
+    newOperands.push_back(unwrap.getValid());
   }
 
   // -----
@@ -630,8 +632,8 @@ void ESIPortsPass::updateInstance(HWModuleOp mod, InstanceOp inst) {
                                         newInst.getResult(newInstResNum));
       newInstResNum += 1;
     }
-    res.replaceAllUsesWith(wrap.chanOutput());
-    outputReadysToConnect[readyIdx].setValue(wrap.ready());
+    res.replaceAllUsesWith(wrap.getChanOutput());
+    outputReadysToConnect[readyIdx].setValue(wrap.getReady());
     readyIdx++;
   }
 
@@ -899,7 +901,7 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
     PipelineStageOp stage, OpAdaptor adaptor,
     ConversionPatternRewriter &rewriter) const {
   auto loc = stage.getLoc();
-  auto chPort = stage.input().getType().dyn_cast<ChannelType>();
+  auto chPort = stage.getInput().getType().dyn_cast<ChannelType>();
   if (!chPort)
     return rewriter.notifyMatchFailure(stage, "stage had wrong type");
   Operation *symTable = stage->getParentWithTrait<OpTrait::SymbolTable>();
@@ -916,7 +918,7 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
   circt::BackedgeBuilder back(rewriter, loc);
   circt::Backedge wrapReady = back.get(rewriter.getI1Type());
   auto unwrap =
-      rewriter.create<UnwrapValidReadyOp>(loc, stage.input(), wrapReady);
+      rewriter.create<UnwrapValidReadyOp>(loc, stage.getInput(), wrapReady);
 
   StringRef pipeStageName = "pipelineStage";
   if (auto name = stage->getAttrOfType<StringAttr>("name"))
@@ -924,10 +926,10 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
 
   // Instantiate the "ESI_PipelineStage" external module.
   circt::Backedge stageReady = back.get(rewriter.getI1Type());
-  llvm::SmallVector<Value> operands = {stage.clk(), stage.rst()};
+  llvm::SmallVector<Value> operands = {stage.getClk(), stage.getRst()};
   if (stage.hasData())
-    operands.push_back(unwrap.rawOutput());
-  operands.push_back(unwrap.valid());
+    operands.push_back(unwrap.getRawOutput());
+  operands.push_back(unwrap.getValid());
   operands.push_back(stageReady);
   auto stageInst = rewriter.create<InstanceOp>(loc, stageModule, pipeStageName,
                                                operands, stageParams);
@@ -950,9 +952,9 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
   auto wrap = rewriter.create<WrapValidReadyOp>(
       loc, chPort, rewriter.getI1Type(), x, xValid);
   // Set the stages x_ready backedge correctly.
-  stageReady.setValue(wrap.ready());
+  stageReady.setValue(wrap.getReady());
 
-  rewriter.replaceOp(stage, wrap.chanOutput());
+  rewriter.replaceOp(stage, wrap.getChanOutput());
   return success();
 }
 
@@ -971,7 +973,7 @@ public:
 LogicalResult NullSourceOpLowering::matchAndRewrite(
     NullSourceOp nullop, OpAdaptor adaptor,
     ConversionPatternRewriter &rewriter) const {
-  auto innerType = nullop.out().getType().cast<ChannelType>().getInner();
+  auto innerType = nullop.getOut().getType().cast<ChannelType>().getInner();
   Location loc = nullop.getLoc();
   int64_t width = hw::getBitWidth(innerType);
   if (width == -1)
@@ -984,7 +986,7 @@ LogicalResult NullSourceOpLowering::matchAndRewrite(
   auto typedZero = rewriter.create<hw::BitcastOp>(loc, innerType, zero);
   auto wrap = rewriter.create<WrapValidReadyOp>(loc, typedZero, valid);
   wrap->setAttr("name", rewriter.getStringAttr("nullsource"));
-  rewriter.replaceOp(nullop, {wrap.chanOutput()});
+  rewriter.replaceOp(nullop, {wrap.getChanOutput()});
   return success();
 }
 
@@ -1022,16 +1024,16 @@ public:
     WrapValidReadyOp wrap = dyn_cast<WrapValidReadyOp>(op);
     UnwrapValidReadyOp unwrap = dyn_cast<UnwrapValidReadyOp>(op);
     if (wrap) {
-      if (!wrap.chanOutput().hasOneUse() ||
+      if (!wrap.getChanOutput().hasOneUse() ||
           !(unwrap = dyn_cast<UnwrapValidReadyOp>(
-                wrap.chanOutput().use_begin()->getOwner())))
+                wrap.getChanOutput().use_begin()->getOwner())))
         return rewriter.notifyMatchFailure(
             wrap, "This conversion only supports wrap-unwrap back-to-back. "
                   "Could not find 'unwrap'.");
 
       data = operands[0];
       valid = operands[1];
-      ready = unwrap.ready();
+      ready = unwrap.getReady();
     } else if (unwrap) {
       wrap = dyn_cast<WrapValidReadyOp>(operands[0].getDefiningOp());
       if (!wrap)
@@ -1039,14 +1041,14 @@ public:
             operands[0].getDefiningOp(),
             "This conversion only supports wrap-unwrap back-to-back. "
             "Could not find 'wrap'.");
-      valid = wrap.valid();
-      data = wrap.rawInput();
+      valid = wrap.getValid();
+      data = wrap.getRawInput();
       ready = operands[1];
     } else {
       return failure();
     }
 
-    if (!wrap.chanOutput().hasOneUse())
+    if (!wrap.getChanOutput().hasOneUse())
       return rewriter.notifyMatchFailure(wrap, [](Diagnostic &d) {
         d << "This conversion only supports wrap-unwrap back-to-back. "
              "Wrap didn't have exactly one use.";
@@ -1107,8 +1109,8 @@ WrapInterfaceLower::matchAndRewrite(WrapSVInterfaceOp wrap, OpAdaptor adaptor,
   }
   auto wrapVR = rewriter.create<WrapValidReadyOp>(loc, dataSignal, validSignal);
   rewriter.create<AssignInterfaceSignalOp>(
-      loc, ifaceInstance, ESIHWBuilder::readyStr, wrapVR.ready());
-  rewriter.replaceOp(wrap, {wrapVR.chanOutput()});
+      loc, ifaceInstance, ESIHWBuilder::readyStr, wrapVR.getReady());
+  rewriter.replaceOp(wrap, {wrapVR.getChanOutput()});
   return success();
 }
 
@@ -1150,11 +1152,11 @@ LogicalResult UnwrapInterfaceLower::matchAndRewrite(
   auto unwrapVR =
       rewriter.create<UnwrapValidReadyOp>(loc, operands[0], readySignal);
   rewriter.create<AssignInterfaceSignalOp>(
-      loc, ifaceInstance, ESIHWBuilder::validStr, unwrapVR.valid());
+      loc, ifaceInstance, ESIHWBuilder::validStr, unwrapVR.getValid());
 
   if (unwrap.hasData())
     rewriter.create<AssignInterfaceSignalOp>(
-        loc, ifaceInstance, ESIHWBuilder::dataStr, unwrapVR.rawOutput());
+        loc, ifaceInstance, ESIHWBuilder::dataStr, unwrapVR.getRawOutput());
   rewriter.eraseOp(unwrap);
   return success();
 }
@@ -1199,7 +1201,7 @@ CosimLowering::matchAndRewrite(CosimEndpointOp ep, OpAdaptor adaptor,
   capnp::TypeSchema sendTypeSchema(send.getType());
   if (!sendTypeSchema.isSupported())
     return rewriter.notifyMatchFailure(ep, "Send type not supported yet");
-  capnp::TypeSchema recvTypeSchema(ep.recv().getType());
+  capnp::TypeSchema recvTypeSchema(ep.getRecv().getType());
   if (!recvTypeSchema.isSupported())
     return rewriter.notifyMatchFailure(ep, "Recv type not supported yet");
 
@@ -1229,8 +1231,9 @@ CosimLowering::matchAndRewrite(CosimEndpointOp ep, OpAdaptor adaptor,
   auto sendReady = bb.get(rewriter.getI1Type());
   UnwrapValidReadyOp unwrapSend =
       rewriter.create<UnwrapValidReadyOp>(loc, send, sendReady);
-  auto encodeData = rewriter.create<CapnpEncodeOp>(
-      loc, egestBitArrayType, clk, unwrapSend.valid(), unwrapSend.rawOutput());
+  auto encodeData = rewriter.create<CapnpEncodeOp>(loc, egestBitArrayType, clk,
+                                                   unwrapSend.getValid(),
+                                                   unwrapSend.getRawOutput());
 
   // Get information necessary for injest path.
   auto recvReady = bb.get(rewriter.getI1Type());
@@ -1246,7 +1249,7 @@ CosimLowering::matchAndRewrite(CosimEndpointOp ep, OpAdaptor adaptor,
   StringAttr nameAttr = ep->getAttr("name").dyn_cast_or_null<StringAttr>();
   StringRef name = nameAttr ? nameAttr.getValue() : "CosimEndpointOp";
   Value epInstInputs[] = {
-      clk, rst, recvReady, unwrapSend.valid(), encodeData.capnpBits(),
+      clk, rst, recvReady, unwrapSend.getValid(), encodeData.getCapnpBits(),
   };
 
   auto cosimEpModule =
@@ -1261,11 +1264,11 @@ CosimLowering::matchAndRewrite(CosimEndpointOp ep, OpAdaptor adaptor,
       rewriter.create<CapnpDecodeOp>(loc, recvTypeSchema.getType(), clk,
                                      recvValidFromCosim, recvDataFromCosim);
   WrapValidReadyOp wrapRecv = rewriter.create<WrapValidReadyOp>(
-      loc, decodeData.decodedData(), recvValidFromCosim);
-  recvReady.setValue(wrapRecv.ready());
+      loc, decodeData.getDecodedData(), recvValidFromCosim);
+  recvReady.setValue(wrapRecv.getReady());
 
   // Replace the CosimEndpointOp op.
-  rewriter.replaceOp(ep, wrapRecv.chanOutput());
+  rewriter.replaceOp(ep, wrapRecv.getChanOutput());
 
   return success();
 #endif // CAPNP
@@ -1285,7 +1288,7 @@ public:
                                        "encode.capnp lowering requires the ESI "
                                        "capnp plugin, which was disabled.");
 #else
-    capnp::TypeSchema encodeType(enc.dataToEncode().getType());
+    capnp::TypeSchema encodeType(enc.getDataToEncode().getType());
     if (!encodeType.isSupported())
       return rewriter.notifyMatchFailure(enc, "Type not supported yet");
     auto operands = adaptor.getOperands();
@@ -1313,7 +1316,7 @@ public:
                                        "decode.capnp lowering requires the ESI "
                                        "capnp plugin, which was disabled.");
 #else
-    capnp::TypeSchema decodeType(dec.decodedData().getType());
+    capnp::TypeSchema decodeType(dec.getDecodedData().getType());
     if (!decodeType.isSupported())
       return rewriter.notifyMatchFailure(dec, "Type not supported yet");
     auto operands = adaptor.getOperands();
@@ -1478,18 +1481,18 @@ void ESIEmitCollateralPass::emitServiceJSON() {
 
   // Emit the list of ports of a service declaration.
   auto emitPorts = [&](ServiceDeclOp decl) {
-    for (auto *portOp : llvm::make_pointer_range(decl.ports().getOps())) {
+    for (auto *portOp : llvm::make_pointer_range(decl.getPorts().getOps())) {
       j.object([&] {
         if (auto port = dyn_cast<ToServerOp>(portOp)) {
-          j.attribute("name", port.inner_sym());
-          j.attribute("to-server-type", toJSON(port.type()));
+          j.attribute("name", port.getInnerSym());
+          j.attribute("to-server-type", toJSON(port.getType()));
         } else if (auto port = dyn_cast<ToClientOp>(portOp)) {
-          j.attribute("name", port.inner_sym());
-          j.attribute("to-client-type", toJSON(port.type()));
+          j.attribute("name", port.getInnerSym());
+          j.attribute("to-client-type", toJSON(port.getType()));
         } else if (auto port = dyn_cast<ServiceDeclInOutOp>(portOp)) {
-          j.attribute("name", port.inner_sym());
-          j.attribute("to-client-type", toJSON(port.outType()));
-          j.attribute("to-server-type", toJSON(port.inType()));
+          j.attribute("name", port.getInnerSym());
+          j.attribute("to-client-type", toJSON(port.getOutType()));
+          j.attribute("to-server-type", toJSON(port.getInType()));
         }
       });
     }
@@ -1501,7 +1504,7 @@ void ESIEmitCollateralPass::emitServiceJSON() {
       for (auto *op : llvm::make_pointer_range(mod.getOps())) {
         if (auto decl = dyn_cast<ServiceDeclOp>(op)) {
           j.object([&] {
-            j.attribute("name", decl.sym_name());
+            j.attribute("name", decl.getSymName());
             j.attributeArray("ports", [&] { emitPorts(decl); });
           });
         }
@@ -1517,8 +1520,9 @@ void ESIEmitCollateralPass::emitServiceJSON() {
           j.attributeArray("services", [&] {
             hwMod->walk([&](ServiceHierarchyMetadataOp md) {
               j.object([&] {
-                j.attribute("service", md.service_symbol());
-                j.attribute("instance_path", toJSON(md.serverNamePathAttr()));
+                j.attribute("service", md.getServiceSymbol());
+                j.attribute("instance_path",
+                            toJSON(md.getServerNamePathAttr()));
               });
             });
           });
@@ -1532,7 +1536,7 @@ void ESIEmitCollateralPass::emitServiceJSON() {
     for (auto hwmod : mod.getOps<hw::HWModuleLike>()) {
       SmallVector<ServiceHierarchyMetadataOp, 0> metadataOps;
       hwmod.walk([&metadataOps](ServiceHierarchyMetadataOp md) {
-        if (md.serverNamePath().empty())
+        if (md.getServerNamePath().empty())
           metadataOps.push_back(md);
       });
       if (!metadataOps.empty())
@@ -1547,13 +1551,13 @@ void ESIEmitCollateralPass::emitServiceJSON() {
           j.attributeArray("services", [&] {
             for (ServiceHierarchyMetadataOp metadata : modWithSvc.getSecond()) {
               j.object([&] {
-                j.attribute("service", metadata.service_symbol());
-                j.attribute("impl_type", metadata.impl_type());
-                if (metadata.impl_detailsAttr())
+                j.attribute("service", metadata.getServiceSymbol());
+                j.attribute("impl_type", metadata.getImplType());
+                if (metadata.getImplDetailsAttr())
                   j.attribute("impl_details",
-                              toJSON(metadata.impl_detailsAttr()));
+                              toJSON(metadata.getImplDetailsAttr()));
                 j.attributeArray("clients", [&] {
-                  for (auto client : metadata.clients())
+                  for (auto client : metadata.getClients())
                     j.value(toJSON(client));
                 });
               });
@@ -1578,10 +1582,10 @@ void ESIEmitCollateralPass::emitServiceJSON() {
   // still valid.
   DenseSet<StringAttr> stillUsed;
   mod.walk([&](ServiceImplementReqOp req) {
-    stillUsed.insert(StringAttr::get(req.getContext(), req.service_symbol()));
+    stillUsed.insert(StringAttr::get(req.getContext(), req.getServiceSymbol()));
   });
   mod.walk([&](ServiceDeclOp decl) {
-    if (!stillUsed.contains(decl.sym_nameAttr()))
+    if (!stillUsed.contains(decl.getSymNameAttr()))
       decl.erase();
   });
 }

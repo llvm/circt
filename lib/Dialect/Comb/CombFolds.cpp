@@ -187,7 +187,8 @@ getLowestBitAndHighestBitRequired(Operation *op, bool narrowTrailingBits,
   for (auto *user : users) {
     if (auto extractOp = dyn_cast<ExtractOp>(user)) {
       size_t lowBit = extractOp.getLowBit();
-      size_t highBit = extractOp.getType().getWidth() + lowBit - 1;
+      size_t highBit =
+          extractOp.getType().cast<IntegerType>().getWidth() + lowBit - 1;
       highestBitRequired = std::max(highestBitRequired, highBit);
       lowestBitRequired = std::min(lowestBitRequired, lowBit);
       continue;
@@ -246,15 +247,20 @@ static bool narrowOperationWidth(OpTy op, bool narrowTrailingBits,
 
 OpFoldResult ReplicateOp::fold(ArrayRef<Attribute> constants) {
   // Replicate one time -> noop.
-  if (getType().getWidth() == getInput().getType().getIntOrFloatBitWidth())
+  if (getType().cast<IntegerType>().getWidth() ==
+      getInput().getType().getIntOrFloatBitWidth())
     return getInput();
 
   // Constant fold.
   if (auto input = constants[0].dyn_cast_or_null<IntegerAttr>()) {
     if (input.getValue().getBitWidth() == 1) {
       if (input.getValue().isZero())
-        return getIntAttr(APInt::getZero(getType().getWidth()), getContext());
-      return getIntAttr(APInt::getAllOnes(getType().getWidth()), getContext());
+        return getIntAttr(
+            APInt::getZero(getType().cast<IntegerType>().getWidth()),
+            getContext());
+      return getIntAttr(
+          APInt::getAllOnes(getType().cast<IntegerType>().getWidth()),
+          getContext());
     }
 
     APInt result = APInt::getZeroWidth();
@@ -416,7 +422,7 @@ OpFoldResult ExtractOp::fold(ArrayRef<Attribute> constants) {
 
   // Constant fold.
   if (auto input = constants[0].dyn_cast_or_null<IntegerAttr>()) {
-    unsigned dstWidth = getType().getWidth();
+    unsigned dstWidth = getType().cast<IntegerType>().getWidth();
     return getIntAttr(input.getValue().lshr(getLowBit()).trunc(dstWidth),
                       getContext());
   }
@@ -472,7 +478,7 @@ static LogicalResult extractConcatToConcatExtract(ExtractOp op,
          "lowBit");
 
   SmallVector<Value> reverseConcatArgs;
-  size_t widthRemaining = op.getType().getWidth();
+  size_t widthRemaining = op.getType().cast<IntegerType>().getWidth();
   size_t extractLo = lowBit - beginOfFirstRelevantElement;
 
   // Transform individual arguments of innerCat(..., a, b, c,) into
@@ -509,7 +515,7 @@ static LogicalResult extractConcatToConcatExtract(ExtractOp op,
 // Transforms extract(lo, replicate(a, N)) into replicate(a, N-c).
 static bool extractFromReplicate(ExtractOp op, ReplicateOp replicate,
                                  PatternRewriter &rewriter) {
-  auto extractResultWidth = op.getType().getWidth();
+  auto extractResultWidth = op.getType().cast<IntegerType>().getWidth();
   auto replicateEltWidth =
       replicate.getOperand().getType().getIntOrFloatBitWidth();
 
@@ -542,7 +548,8 @@ LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
 
   // If the extracted bits are all known, then return the result.
   auto knownBits = computeKnownBits(op.getInput())
-                       .extractBits(op.getType().getWidth(), op.getLowBit());
+                       .extractBits(op.getType().cast<IntegerType>().getWidth(),
+                                    op.getLowBit());
   if (knownBits.isConstant()) {
     replaceOpWithNewOpAndCopyName<hw::ConstantOp>(rewriter, op,
                                                   knownBits.getConstant());
@@ -571,8 +578,8 @@ LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
   if (inputOp && inputOp->getNumOperands() == 2 &&
       isa<AndOp, OrOp, XorOp>(inputOp)) {
     if (auto cstRHS = inputOp->getOperand(1).getDefiningOp<hw::ConstantOp>()) {
-      auto extractedCst = cstRHS.getValue().extractBits(op.getType().getWidth(),
-                                                        op.getLowBit());
+      auto extractedCst = cstRHS.getValue().extractBits(
+          op.getType().cast<IntegerType>().getWidth(), op.getLowBit());
       if (isa<OrOp, XorOp>(inputOp) && extractedCst.isZero()) {
         replaceOpWithNewOpAndCopyName<ExtractOp>(
             rewriter, op, op.getType(), inputOp->getOperand(0), op.getLowBit());
@@ -610,7 +617,7 @@ LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
 
   // `extract(lowBit, shl(1, x))` -> `x == lowBit` when a single bit is
   // extracted.
-  if (op.getType().getWidth() == 1 && inputOp)
+  if (op.getType().cast<IntegerType>().getWidth() == 1 && inputOp)
     if (auto shlOp = dyn_cast<ShlOp>(inputOp))
       if (auto lhsCst = shlOp.getOperand(0).getDefiningOp<hw::ConstantOp>())
         if (lhsCst.getValue().isOne()) {
@@ -743,7 +750,7 @@ static bool canonicalizeLogicalCstWithConcat(Operation *logicalOp,
 }
 
 OpFoldResult AndOp::fold(ArrayRef<Attribute> constants) {
-  APInt value = APInt::getAllOnes(getType().getWidth());
+  APInt value = APInt::getAllOnes(getType().cast<IntegerType>().getWidth());
 
   // and(x, 01, 10) -> 00 -- annulment.
   for (auto operand : constants) {
@@ -770,7 +777,9 @@ OpFoldResult AndOp::fold(ArrayRef<Attribute> constants) {
     if (matchPattern(arg, m_Complement(m_Any(&subExpr)))) {
       for (Value arg2 : getInputs())
         if (arg2 == subExpr)
-          return getIntAttr(APInt::getZero(getType().getWidth()), getContext());
+          return getIntAttr(
+              APInt::getZero(getType().cast<IntegerType>().getWidth()),
+              getContext());
     }
   }
 
@@ -924,7 +933,7 @@ LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
 }
 
 OpFoldResult OrOp::fold(ArrayRef<Attribute> constants) {
-  auto value = APInt::getZero(getType().getWidth());
+  auto value = APInt::getZero(getType().cast<IntegerType>().getWidth());
 
   // or(x, 10, 01) -> 11
   for (auto operand : constants) {
@@ -951,8 +960,9 @@ OpFoldResult OrOp::fold(ArrayRef<Attribute> constants) {
     if (matchPattern(arg, m_Complement(m_Any(&subExpr)))) {
       for (Value arg2 : getInputs())
         if (arg2 == subExpr)
-          return getIntAttr(APInt::getAllOnes(getType().getWidth()),
-                            getContext());
+          return getIntAttr(
+              APInt::getAllOnes(getType().cast<IntegerType>().getWidth()),
+              getContext());
     }
   }
 
@@ -1394,7 +1404,7 @@ OpFoldResult MulOp::fold(ArrayRef<Attribute> constants) {
   if (size == 1u)
     return getInputs()[0];
 
-  auto width = getType().getWidth();
+  auto width = getType().cast<IntegerType>().getWidth();
   APInt value(/*numBits=*/width, 1, /*isSigned=*/false);
 
   // mul(x, 0, 1) -> 0 -- annulment
@@ -1631,7 +1641,7 @@ LogicalResult ConcatOp::canonicalize(ConcatOp op, PatternRewriter &rewriter) {
       if (auto extract = inputs[i].getDefiningOp<ExtractOp>()) {
         if (auto prevExtract = inputs[i - 1].getDefiningOp<ExtractOp>()) {
           if (extract.getInput() == prevExtract.getInput()) {
-            auto thisWidth = extract.getType().getWidth();
+            auto thisWidth = extract.getType().cast<IntegerType>().getWidth();
             if (prevExtract.getLowBit() == extract.getLowBit() + thisWidth) {
               auto prevWidth = prevExtract.getType().getIntOrFloatBitWidth();
               auto resType = rewriter.getIntegerType(thisWidth + prevWidth);

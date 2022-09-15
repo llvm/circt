@@ -34,7 +34,7 @@ struct GroupInvariantCodeMotionPass
       for (auto &op : llvm::make_early_inc_range(groupOp.getOps())) {
         if (isa<GroupDoneOp, AssignOp, GroupGoOp>(op))
           continue;
-        op.moveBefore(wires.getBody(), wires.getBody()->begin());
+        op.moveBefore(wires.getBodyBlock(), wires.getBodyBlock()->begin());
       }
     }
   }

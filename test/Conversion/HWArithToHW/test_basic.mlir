@@ -326,3 +326,20 @@ hw.module @structAndArrays(%a: ui8, %b: ui8) -> (out: !hw.struct<foo: !hw.array<
 
 // CHECK: msft.module.extern @externModule(%a: i8, %b: i8) -> (out: !hw.struct<foo: !hw.array<2xi8>>)
 msft.module.extern @externModule(%a: ui8, %b: ui8) -> (out: !hw.struct<foo: !hw.array<2xui8>>) 
+
+// -----
+
+
+// CHECK-LABEL:   hw.module @backedges() {
+// CHECK-NEXT:      %[[VAL_0:.*]] = hw.constant false
+// CHECK-NEXT:      %[[VAL_1:.*]] = comb.concat %[[VAL_0]], %[[VAL_2:.*]] : i1, i1
+// CHECK-NEXT:      %[[VAL_3:.*]] = hw.constant false
+// CHECK-NEXT:      %[[VAL_4:.*]] = comb.concat %[[VAL_3]], %[[VAL_2]] : i1, i1
+// CHECK-NEXT:      %[[VAL_5:.*]] = comb.add %[[VAL_1]], %[[VAL_4]] : i2
+// CHECK-NEXT:      %[[VAL_2]] = hw.constant true
+// CHECK-NEXT:      hw.output
+// CHECK-NEXT:    }
+hw.module @backedges() {
+  %res = hwarith.add %arg, %arg : (ui1, ui1) -> ui2
+  %arg = hwarith.constant 1 : ui1
+}

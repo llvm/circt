@@ -19,3 +19,13 @@ handshake.func private @private_func(%arg0 : i32, %ctrl: none) -> (i32, none) {
 handshake.func public @public_func(%arg0 : i32, %ctrl: none) -> (i32, none) {
   return %arg0, %ctrl : i32, none
 }
+
+// -----
+
+// CHECK-LABEL:   handshake.func public @no_none_type(
+// CHECK-SAME:                   ...) attributes {argNames = [], resNames = []} {
+// CHECK:           return
+// CHECK:         }
+handshake.func public @no_none_type() {
+  return
+}

@@ -26,7 +26,7 @@ def SignalWriteOp : SystemCOp<"signal.write", [
 
   let arguments = (ins AnyTypeOf<[OutputType, InOutType, SignalType]>:$dest,
                        AnyType:$src);
-  let assemblyFormat = "$dest `,` $src attr-dict `:` type($dest)";
+  let assemblyFormat = "$dest `,` $src attr-dict `:` qualified(type($dest))";
 }
 
 def SignalOp : SystemCOp<"signal", [HasCustomSSAName,
@@ -41,7 +41,7 @@ def SignalOp : SystemCOp<"signal", [HasCustomSSAName,
   let results = (outs SignalType:$signal);
 
   let assemblyFormat = [{
-    custom<ImplicitSSAName>($name) attr-dict `:` type($signal)
+    custom<ImplicitSSAName>($name) attr-dict `:` qualified(type($signal))
   }];
 }
 
@@ -85,8 +85,18 @@ def InstanceDeclOp : SystemCOp<"instance.decl", [
 
   let assemblyFormat = [{
     custom<ImplicitSSAName>($name) $moduleName attr-dict
-    `:` type($instanceHandle)
+    `:` qualified(type($instanceHandle))
   }];
+
+  let builders = [
+    OpBuilder<(ins "StringAttr":$instanceName,
+                   "FlatSymbolRefAttr":$moduleRef,
+                   "ArrayRef<ModuleType::PortInfo>":$ports), [{
+      build($_builder, $_state,
+            ModuleType::get($_builder.getContext(), moduleRef.getAttr(), ports),
+            instanceName, moduleRef);
+    }]>
+  ];
 
   let extraClassDeclaration = [{
     /// Get the systemc::ModuleType that represents the instantiated module.
@@ -109,6 +119,33 @@ def InstanceDeclOp : SystemCOp<"instance.decl", [
   }];
 }
 
+def BindPortOp : SystemCOp<"instance.bind_port", [HasParent<"CtorOp">]> {
+  let summary = "Binds a port of a module instance to a channel.";
+  let description = [{
+    The ports of a submodule have to be bound to channels in a module further
+    up in the instance hierarchy (as opposed to `sc_export` where the channel
+    has to reside in the same module or a submodule). Therefore, a port can be
+    bound to either a signal declared by the `systemc.signal` operation or to
+    a port with matching direction (and thus bound to a channel further up in
+    the hierarchy).
+    More information on ports can be found in IEEE 1666-2011 §5.12.,
+    in particular IEEE 1666-2011 §5.12.7. is about port binding.
+    More information on predefined channels can be found in IEEE 1666-2011 §6.
+  }];
+
+  let arguments = (ins ModuleType:$instance,
+                       IndexAttr:$portId,
+                       ChannelType:$channel);
+
+  let extraClassDeclaration = [{
+    /// Get the name of the port to be bound.
+    StringRef getPortName();
+  }];
+
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+}
+
 //===----------------------------------------------------------------------===//
 // Operations that model C++-level features.
 //===----------------------------------------------------------------------===//
@@ -122,4 +159,37 @@ def DeleteOp : SystemCOp<"cpp.delete", []> {
 
   let arguments = (ins EmitC_PointerType:$pointer);
   let assemblyFormat = "$pointer attr-dict `:` qualified(type($pointer))";
+}
+
+def AssignOp : SystemCOp<"cpp.assign", [SameTypeOperands]> {
+  let summary = "A C++ assignment.";
+  let description = [{
+    Assigns one SSA value to another. Note that there is no notion of lvalues
+    and rvalues. This means that one can assign to a value that is the result
+    of, e.g., an addition, which is not allowed in C++. It is the responsibility
+    of the user and the implementor of a lowering pass that creates this
+    operation to make sure that the operands are valid according to C++
+    semantics. Rationale for that: implementing these constraints would add
+    quite some complexity, but still does not guarantee that the assignment
+    is valid because we also make use of non-verifyable verbatim types, etc.
+  }];
+
+  let arguments = (ins AnyType:$dest, AnyType:$source);
+  let assemblyFormat = "$dest `=` $source attr-dict `:` type($dest)";
+}
+
+def VariableOp : SystemCOp<"cpp.variable", [HasCustomSSAName,
+                                            SystemCNameDeclOpInterface]> {
+  let summary = "Declare a C++ variable with optional initialization value.";
+  let description = [{
+    Declares a variable according to C++ semantics. If an initialization value
+    is present, the variable will be assigned that value at the declaration,
+    e.g, `int varname = 0;`.
+  }];
+
+  let arguments = (ins StrAttr:$name, Optional<AnyType>:$init);
+  let results = (outs AnyType:$variable);
+
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
 }

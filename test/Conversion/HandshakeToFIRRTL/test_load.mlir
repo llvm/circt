@@ -31,7 +31,7 @@
 handshake.func @main(%arg0: index, %arg1: none, ...) -> none {
   %0:2 = memory [ld = 1, st= 0] (%addressResults) {id = 0 : i32, lsq = false} : memref<10xi8>, (index) -> (i8, none)
   %1:2 = fork [2] %arg1 : none
-  %2 = join %1#1, %0#1 : none
+  %2 = join %1#1, %0#1 : none, none
   %3, %addressResults = load [%arg0] %0#0, %1#0 : index, i8
   sink %3 : i8
   return %2 : none

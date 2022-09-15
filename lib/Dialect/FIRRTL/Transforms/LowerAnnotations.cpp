@@ -18,6 +18,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotationHelper.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
+#include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
@@ -111,10 +112,21 @@ static FlatSymbolRefAttr buildNLA(const AnnoPathValue &target,
 
   insts.push_back(
       FlatSymbolRefAttr::get(target.ref.getModule().moduleNameAttr()));
+
   auto instAttr = ArrayAttr::get(state.circuit.getContext(), insts);
+
+  // Re-use NLA for this path if already created.
+  auto it = state.instPathToNLAMap.find(instAttr);
+  if (it != state.instPathToNLAMap.end())
+    return it->second;
+
+  // Create the NLA
   auto nla = b.create<HierPathOp>(state.circuit.getLoc(), "nla", instAttr);
   state.symTbl.insert(nla);
-  return FlatSymbolRefAttr::get(nla);
+  nla.setVisibility(SymbolTable::Visibility::Private);
+  auto sym = FlatSymbolRefAttr::get(nla);
+  state.instPathToNLAMap.insert({instAttr, sym});
+  return sym;
 }
 
 /// Scatter breadcrumb annotations corresponding to non-local annotations
@@ -489,7 +501,8 @@ void LowerAnnotationsPass::runOnOperation() {
     ++numAdded;
     worklistAttrs.push_back(anno);
   };
-  ApplyState state{circuit, modules, addToWorklist};
+  InstancePathCache instancePathCache(getAnalysis<InstanceGraph>());
+  ApplyState state{circuit, modules, addToWorklist, instancePathCache};
   LLVM_DEBUG(llvm::dbgs() << "Processing annotations:\n");
   while (!worklistAttrs.empty()) {
     auto attr = worklistAttrs.pop_back_val();

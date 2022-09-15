@@ -112,16 +112,6 @@ msft.module @LoopbackCosimTop {} (%clk: i1, %rst: i1) {
 // CHECK-NEXT:                   },
 // CHECK-NEXT:                   "mnemonic": "channel"
 // CHECK-NEXT:                 }
-// CHECK-NEXT:               }
-// CHECK-NEXT:             },
-// CHECK-NEXT:             {
-// CHECK-NEXT:               "client_name": [
-// CHECK-NEXT:                 "m1",
-// CHECK-NEXT:                 "loopback_inout"
-// CHECK-NEXT:               ],
-// CHECK-NEXT:               "port": {
-// CHECK-NEXT:                 "inner": "ReqResp",
-// CHECK-NEXT:                 "outer_sym": "HostComms"
 // CHECK-NEXT:               },
 // CHECK-NEXT:               "to_server_type": {
 // CHECK-NEXT:                 "capnp_name": "I8",

@@ -37,10 +37,10 @@ def InstanceOp : MSFTOp<"instance", [
     /// Instance name is the same as the symbol name. This may change in the
     /// future.
     StringRef instanceName() {
-      return sym_name();
+      return getSymName();
     }
     StringAttr instanceNameAttr() {
-      return sym_nameAttr();
+      return getSymNameAttr();
     }
     /// Check that the operands and results match the module specified.
     LogicalResult verifySignatureMatch(const circt::hw::ModulePortInfo&);
@@ -113,7 +113,7 @@ class MSFTModuleOpBase<string mnemonic, list<Trait> traits = []> :
       if (region.empty())
         return;
       Block *block = getBodyBlock();
-      ArrayAttr argNames = argNamesAttr();
+      ArrayAttr argNames = getArgNamesAttr();
       for (size_t i = 0, e = block->getNumArguments(); i != e; ++i) {
         auto name = argNames[i].cast<StringAttr>().getValue();
         if (!name.empty())
@@ -174,7 +174,7 @@ def MSFTModuleOp : MSFTModuleOpBase<"module",
     SmallVector<unsigned>
     removePorts(llvm::BitVector inputs, llvm::BitVector outputs);
 
-    Block *getBodyBlock() { return &body().front(); }
+    Block *getBodyBlock() { return &getBody().front(); }
   }];
 
   let hasCustomAssemblyFormat = 1;

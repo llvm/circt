@@ -31,8 +31,8 @@ namespace hwarith {
 //===----------------------------------------------------------------------===//
 
 LogicalResult CastOp::verify() {
-  auto inType = in().getType();
-  auto outType = out().getType();
+  auto inType = getIn().getType();
+  auto outType = getOut().getType();
   bool isInSignless = !isHWArithIntegerType(inType);
   bool isOutSignless = !isHWArithIntegerType(outType);
 
@@ -58,24 +58,24 @@ void CastOp::getCanonicalizationPatterns(RewritePatternSet &results,
 // ConstantOp
 //===----------------------------------------------------------------------===//
 
-APSInt ConstantOp::getConstantValue() { return rawValueAttr().getAPSInt(); }
+APSInt ConstantOp::getConstantValue() { return getRawValueAttr().getAPSInt(); }
 
 OpFoldResult ConstantOp::fold(ArrayRef<Attribute> constants) {
   assert(constants.empty() && "constant has no operands");
-  return rawValueAttr();
+  return getRawValueAttr();
 }
 
 void ConstantOp::print(OpAsmPrinter &p) {
   p << " ";
-  p.printAttribute(rawValueAttr());
+  p.printAttribute(getRawValueAttr());
   p.printOptionalAttrDict(getOperation()->getAttrs(),
-                          /*elidedAttrs=*/{rawValueAttrName()});
+                          /*elidedAttrs=*/{getRawValueAttrName()});
 }
 
 ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
   IntegerAttr valueAttr;
 
-  if (parser.parseAttribute(valueAttr, rawValueAttrName(result.name),
+  if (parser.parseAttribute(valueAttr, getRawValueAttrName(result.name),
                             result.attributes) ||
       parser.parseOptionalAttrDict(result.attributes))
     return failure();

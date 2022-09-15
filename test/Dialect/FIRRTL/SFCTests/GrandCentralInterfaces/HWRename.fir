@@ -28,11 +28,15 @@ circuit Top:
 
     ; CHECK:      module Companion();
     ; CHECK-NEXT:   MyInterface MyView();
-    ; CHECK-NEXT:   assign MyView.[[elementName:.+]] = DUT.[[wireName:.+]];
+    ; CHECK-NEXT:   assign MyView.[[elementName:.+]] = DUT.a;
     ; CHECK-NEXT: endmodule
 
     ; CHECK:      module DUT
-    ; CHECK:        wire [[wireName]]
+    ; CHECK:        input a
+    ; CHECK:        output b
+    ; CHECK:          Companion companion ();
+    ; Wire got optimized away!!
+    ; CHECK:          assign b = a;
     ; CHECK:      endmodule
 
     ; CHECK:      module Top

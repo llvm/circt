@@ -72,6 +72,6 @@ handshake.func @main(%ldAddr: index, %stAddr: index, %v: i32, %mem : memref<10xi
   %loadData, %loadAddr = load [%ldAddr] %ldData, %fCtrl#0 : index, i32
   %storeData, %storeAddr = store [%stAddr] %v, %fCtrl#1 : index, i32
   sink %loadData : i32
-  %finCtrl = join %stCtrl, %ldCtrl : none
+  %finCtrl = join %stCtrl, %ldCtrl : none, none
   return %finCtrl : none
 }

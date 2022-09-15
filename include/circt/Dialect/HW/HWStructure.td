@@ -61,7 +61,8 @@ def HWModuleOp : HWModuleOpBase<"module",
     OpBuilder<(ins "StringAttr":$name, "const ModulePortInfo &":$ports,
                    CArg<"ArrayAttr", "{}">:$parameters,
                    CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes,
-                   CArg<"StringAttr", "{}">:$comment)>,
+                   CArg<"StringAttr", "{}">:$comment,
+		   CArg<"bool", "true">:$shouldEnsureTerminator)>,
     OpBuilder<(ins "StringAttr":$name, "const ModulePortInfo &":$ports,
                    "HWModuleBuilder":$modBuilder,
                    CArg<"ArrayAttr", "{}">:$parameters,
@@ -101,10 +102,6 @@ def HWModuleOp : HWModuleOpBase<"module",
     /// to return the associated values.
     void insertOutputs(unsigned index,
                        ArrayRef<std::pair<StringAttr, Value>> outputs);
-
-    /// Appends output ports to the module with the specified names and
-    /// rewrites the output op to return the associated values.
-    void appendOutputs(ArrayRef<std::pair<StringAttr, Value>> outputs);
 
     // TODO(mlir): FunctionLike shouldn't produce a getBody() helper, it is
     // squatting on the name.

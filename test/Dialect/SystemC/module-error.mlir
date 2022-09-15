@@ -147,7 +147,7 @@ systemc.module @signalFuncNameConflict () {
 // -----
 
 systemc.module @cannotReadFromOutPort (%port0: !systemc.out<i32>) {
-  // expected-error @+1 {{op operand #0 must be InputType or InOutType or SignalType, but got '!systemc.out<i32>'}}
+  // expected-error @+1 {{operand #0 must be a SystemC sc_in<T> type or a SystemC sc_inout<T> type or a SystemC sc_signal<T> type, but got '!systemc.out<i32>'}}
   %0 = systemc.signal.read %port0 : !systemc.out<i32>
 }
 
@@ -162,14 +162,14 @@ systemc.module @inferredTypeDoesNotMatch (%port0: !systemc.in<i32>) {
 
 systemc.module @cannotWriteToInputPort (%port0: !systemc.in<i32>) {
   %0 = hw.constant 0 : i32
-  // expected-error @+1 {{'dest' must be OutputType or InOutType or SignalType, but got '!systemc.in<i32>'}}
+  // expected-error @+1 {{'dest' must be a SystemC sc_out<T> type or a SystemC sc_inout<T> type or a SystemC sc_signal<T> type, but got '!systemc.in<i32>'}}
   systemc.signal.write %port0, %0 : !systemc.in<i32>
 }
 
 // -----
 
 systemc.module @invalidSignalOpReturnType () {
-  // expected-error @+1 {{invalid kind of type specified}}
+  // expected-error @+1 {{result #0 must be a SystemC sc_signal<T> type, but got 'i32'}}
   %signal0 = systemc.signal : i32
 }
 
@@ -203,6 +203,16 @@ systemc.module @instanceDeclMustBeDirectChildOfModule () {
     // expected-error @+1 {{expects parent op 'systemc.module'}}
     %instance = systemc.instance.decl @submodule : !systemc.module<submodule(in0: !systemc.in<i32>)>
   }
+}
+
+// -----
+
+systemc.module @submodule (%in0: !systemc.in<i32>) {}
+
+systemc.module @bindPortMustBeDirectChildOfCtor (%input0: !systemc.in<i32>) {
+  %instance = systemc.instance.decl @submodule : !systemc.module<submodule(in0: !systemc.in<i32>)>
+  // expected-error @+1 {{expects parent op 'systemc.ctor'}}
+  systemc.instance.bind_port %instance["in0"] to %input0 : !systemc.module<submodule(in0: !systemc.in<i32>)>, !systemc.in<i32>
 }
 
 // -----
@@ -261,3 +271,114 @@ systemc.module @instanceDeclPortNumMismatch () {
   // expected-error @+1 {{module names must match; expected 'adder' but got 'wrongname'}}
   %moduleInstance = systemc.instance.decl @adder : !systemc.module<wrongname(summand_a: !systemc.in<i32>, summand_b: !systemc.in<i32>)>
 }
+
+// -----
+
+systemc.module @submodule (%in0: !systemc.in<i32>) {}
+
+systemc.module @invalidPortName (%input0: !systemc.in<i32>) {
+  %instance = systemc.instance.decl @submodule : !systemc.module<submodule(in0: !systemc.in<i32>)>
+  systemc.ctor {
+    // expected-error @+1 {{port name "out" not found in module}}
+    systemc.instance.bind_port %instance["out"] to %input0 : !systemc.module<submodule(in0: !systemc.in<i32>)>, !systemc.in<i32>
+  }
+}
+
+// -----
+
+systemc.module @submodule (%in0: !systemc.in<i32>) {}
+
+systemc.module @directionOfPortAndChannelMismatch (%output0: !systemc.out<i32>) {
+  %instance = systemc.instance.decl @submodule : !systemc.module<submodule(in0: !systemc.in<i32>)>
+  systemc.ctor {
+    // expected-error @+1 {{'!systemc.in<i32>' port cannot be bound to '!systemc.out<i32>' channel due to port direction mismatch}}
+    systemc.instance.bind_port %instance["in0"] to %output0 : !systemc.module<submodule(in0: !systemc.in<i32>)>, !systemc.out<i32>
+  }
+}
+
+// -----
+
+systemc.module @submodule (%out0: !systemc.out<i32>) {}
+
+systemc.module @directionOfPortAndChannelMismatch (%input0: !systemc.in<i32>) {
+  %instance = systemc.instance.decl @submodule : !systemc.module<submodule(out0: !systemc.out<i32>)>
+  systemc.ctor {
+    // expected-error @+1 {{'!systemc.out<i32>' port cannot be bound to '!systemc.in<i32>' channel due to port direction mismatch}}
+    systemc.instance.bind_port %instance["out0"] to %input0 : !systemc.module<submodule(out0: !systemc.out<i32>)>, !systemc.in<i32>
+  }
+}
+
+// -----
+
+systemc.module @submodule (%out0: !systemc.out<i32>) {}
+
+systemc.module @baseTypeMismatch () {
+  %signal = systemc.signal : !systemc.signal<i8>
+  %instance = systemc.instance.decl @submodule : !systemc.module<submodule(out0: !systemc.out<i32>)>
+  systemc.ctor {
+    // expected-error @+1 {{'!systemc.out<i32>' port cannot be bound to '!systemc.signal<i8>' channel due to base type mismatch}}
+    systemc.instance.bind_port %instance["out0"] to %signal : !systemc.module<submodule(out0: !systemc.out<i32>)>, !systemc.signal<i8>
+  }
+}
+
+// -----
+
+systemc.module @submodule (%out0: !systemc.out<i32>) {}
+
+systemc.module @baseTypeMismatch (%out0: !systemc.out<i32>) {
+  %instance = systemc.instance.decl @submodule : !systemc.module<submodule(out0: !systemc.out<i32>)>
+  systemc.ctor {
+    // expected-error @+1 {{expected a list of exactly 2 types, but got 1}}
+    systemc.instance.bind_port %instance["out0"] to %out0 : !systemc.module<submodule(out0: !systemc.out<i32>)>
+  }
+}
+
+// -----
+
+systemc.module @submodule (%out0: !systemc.out<i32>) {}
+
+systemc.module @baseTypeMismatch (%out0: !systemc.out<i32>) {
+  %instance = systemc.instance.decl @submodule : !systemc.module<submodule(out0: !systemc.out<i32>)>
+  systemc.ctor {
+    // expected-error @+1 {{port #1 does not exist, there are only 1 ports}}
+    "systemc.instance.bind_port"(%instance, %out0) {portId = 1 : index} : (!systemc.module<submodule(out0: !systemc.out<i32>)>, !systemc.out<i32>) -> ()
+  }
+}
+
+// -----
+
+systemc.module @assignOperandTypeMismatch () {
+  %var = systemc.cpp.variable : i32
+  systemc.ctor {
+    %0 = hw.constant 0 : i8
+    // expected-error @+1 {{requires all operands to have the same type}}
+    "systemc.cpp.assign"(%var, %0) : (i32, i8) -> ()
+  }
+}
+
+// -----
+
+systemc.module @variableOperandTypeMismatch () {
+  systemc.ctor {
+    %0 = hw.constant 0 : i8
+    // expected-error @+1 {{'init' and 'variable' must have the same type, but got 'i8' and 'i32'}}
+    %1 = "systemc.cpp.variable"(%0) {name = "var"} : (i8) -> i32
+  }
+}
+
+// -----
+
+// expected-note @+1 {{in module '@variableNameCollision'}}
+systemc.module @variableNameCollision () {
+  systemc.ctor {
+    // expected-note @+1 {{'var' first defined here}}
+    %0 = "systemc.cpp.variable"() {name = "var"} : () -> i32
+    // expected-error @+1 {{redefines name 'var'}}
+    %1 = "systemc.cpp.variable"() {name = "var"} : () -> i32
+  }
+}
+
+// -----
+
+// expected-error @+1 {{unknown type `value_base` in dialect `systemc`}}
+func.func @invalidType (%arg0: !systemc.value_base>) {}

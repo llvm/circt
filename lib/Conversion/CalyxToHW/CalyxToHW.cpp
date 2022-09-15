@@ -69,7 +69,8 @@ struct ConvertComponentOp : public OpConversionPattern<ComponentOp> {
         });
 
     auto *outputOp = hwMod.getBodyBlock()->getTerminator();
-    rewriter.mergeBlocks(component.getBody(), hwMod.getBodyBlock(), argValues);
+    rewriter.mergeBlocks(component.getBodyBlock(), hwMod.getBodyBlock(),
+                         argValues);
     outputOp->moveAfter(&hwMod.getBodyBlock()->back());
     rewriter.eraseOp(component);
     return success();
@@ -94,7 +95,7 @@ struct ConvertWiresOp : public OpConversionPattern<WiresOp> {
   matchAndRewrite(WiresOp wires, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     HWModuleOp hwMod = wires->getParentOfType<HWModuleOp>();
-    rewriter.inlineRegionBefore(wires.body(), hwMod.getBodyRegion(),
+    rewriter.inlineRegionBefore(wires.getBody(), hwMod.getBodyRegion(),
                                 hwMod.getBodyRegion().end());
     rewriter.eraseOp(wires);
     rewriter.mergeBlockBefore(&hwMod.getBodyRegion().getBlocks().back(),
@@ -109,7 +110,7 @@ struct ConvertControlOp : public OpConversionPattern<ControlOp> {
   LogicalResult
   matchAndRewrite(ControlOp control, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    if (!control.getBody()->empty())
+    if (!control.getBodyBlock()->empty())
       return control.emitOpError("calyx control must be structural");
     rewriter.eraseOp(control);
     return success();
@@ -122,17 +123,18 @@ struct ConvertAssignOp : public OpConversionPattern<calyx::AssignOp> {
   LogicalResult
   matchAndRewrite(calyx::AssignOp assign, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    Value dest = adaptor.dest();
+    Value dest = adaptor.getDest();
 
     // To make life easy in ConvertComponentOp, we read from the output wires so
     // the dialect conversion block argument mapping would work without a type
     // converter. This means assigns to ComponentOp outputs will try to assign
     // to a read from a wire, so we need to map to the wire.
-    if (auto readInOut = dyn_cast<ReadInOutOp>(adaptor.dest().getDefiningOp()))
+    if (auto readInOut =
+            dyn_cast<ReadInOutOp>(adaptor.getDest().getDefiningOp()))
       dest = readInOut.getInput();
 
-    Value src = adaptor.src();
-    if (auto guard = adaptor.guard()) {
+    Value src = adaptor.getSrc();
+    if (auto guard = adaptor.getGuard()) {
       auto zero =
           rewriter.create<hw::ConstantOp>(assign.getLoc(), src.getType(), 0);
       src = rewriter.create<MuxOp>(assign.getLoc(), guard, src, zero, false);
@@ -245,13 +247,14 @@ private:
         })
         // Sequential operations.
         .Case([&](RegisterOp op) {
-          auto in = wireIn(op.in(), op.instanceName(), op.portName(op.in()), b);
-          auto writeEn = wireIn(op.write_en(), op.instanceName(),
-                                op.portName(op.write_en()), b);
-          auto clk =
-              wireIn(op.clk(), op.instanceName(), op.portName(op.clk()), b);
-          auto reset =
-              wireIn(op.reset(), op.instanceName(), op.portName(op.reset()), b);
+          auto in =
+              wireIn(op.getIn(), op.instanceName(), op.portName(op.getIn()), b);
+          auto writeEn = wireIn(op.getWriteEn(), op.instanceName(),
+                                op.portName(op.getWriteEn()), b);
+          auto clk = wireIn(op.getClk(), op.instanceName(),
+                            op.portName(op.getClk()), b);
+          auto reset = wireIn(op.getReset(), op.instanceName(),
+                              op.portName(op.getReset()), b);
 
           auto outReg = reg(in, clk, reset, op.instanceName() + "_reg", b);
           auto doneReg =
@@ -259,50 +262,54 @@ private:
 
           auto out = wireOut(outReg, op.instanceName(), "", b);
           auto done =
-              wireOut(doneReg, op.instanceName(), op.portName(op.done()), b);
+              wireOut(doneReg, op.instanceName(), op.portName(op.getDone()), b);
           wires.append({in.getInput(), writeEn.getInput(), clk.getInput(),
                         reset.getInput(), out, done});
         })
         // Unary operqations.
         .Case([&](SliceLibOp op) {
-          auto in = wireIn(op.in(), op.instanceName(), op.portName(op.in()), b);
-          auto outWidth = op.out().getType().getIntOrFloatBitWidth();
+          auto in =
+              wireIn(op.getIn(), op.instanceName(), op.portName(op.getIn()), b);
+          auto outWidth = op.getOut().getType().getIntOrFloatBitWidth();
 
           auto extract = b.create<ExtractOp>(in, 0, outWidth);
 
           auto out =
-              wireOut(extract, op.instanceName(), op.portName(op.out()), b);
+              wireOut(extract, op.instanceName(), op.portName(op.getOut()), b);
           wires.append({in.getInput(), out});
         })
         .Case([&](NotLibOp op) {
-          auto in = wireIn(op.in(), op.instanceName(), op.portName(op.in()), b);
-          auto one = b.create<hw::ConstantOp>(op.in().getType(), 0);
+          auto in =
+              wireIn(op.getIn(), op.instanceName(), op.portName(op.getIn()), b);
+          auto one = b.create<hw::ConstantOp>(op.getIn().getType(), 0);
 
           auto xorOp = b.create<XorOp>(in, one, false);
 
           auto out =
-              wireOut(xorOp, op.instanceName(), op.portName(op.out()), b);
+              wireOut(xorOp, op.instanceName(), op.portName(op.getOut()), b);
           wires.append({in.getInput(), out});
         })
         .Case([&](WireLibOp op) {
-          auto wire = wireIn(op.in(), op.instanceName(), "", b);
+          auto wire = wireIn(op.getIn(), op.instanceName(), "", b);
           wires.append({wire.getInput(), wire});
         })
         .Case([&](PadLibOp op) {
-          auto in = wireIn(op.in(), op.instanceName(), op.portName(op.in()), b);
+          auto in =
+              wireIn(op.getIn(), op.instanceName(), op.portName(op.getIn()), b);
           auto srcWidth = in.getType().getIntOrFloatBitWidth();
-          auto destWidth = op.out().getType().getIntOrFloatBitWidth();
+          auto destWidth = op.getOut().getType().getIntOrFloatBitWidth();
           auto zero = b.create<hw::ConstantOp>(op.getLoc(),
                                                APInt(destWidth - srcWidth, 0));
           auto padded = wireOut(b.createOrFold<comb::ConcatOp>(zero, in),
-                                op.instanceName(), op.portName(op.out()), b);
+                                op.instanceName(), op.portName(op.getOut()), b);
           wires.append({in.getInput(), padded});
         })
         .Case([&](ExtSILibOp op) {
-          auto in = wireIn(op.in(), op.instanceName(), op.portName(op.in()), b);
-          auto extsi =
-              wireOut(createOrFoldSExt(op.getLoc(), in, op.out().getType(), b),
-                      op.instanceName(), op.portName(op.out()), b);
+          auto in =
+              wireIn(op.getIn(), op.instanceName(), op.portName(op.getIn()), b);
+          auto extsi = wireOut(
+              createOrFoldSExt(op.getLoc(), in, op.getOut().getType(), b),
+              op.instanceName(), op.portName(op.getOut()), b);
           wires.append({in.getInput(), extsi});
         })
         .Default([](Operation *) { return SmallVector<Value>(); });
@@ -311,13 +318,14 @@ private:
   template <typename OpTy, typename ResultTy>
   void convertArithBinaryOp(OpTy op, SmallVectorImpl<Value> &wires,
                             ImplicitLocOpBuilder &b) const {
-    auto left = wireIn(op.left(), op.instanceName(), op.portName(op.left()), b);
+    auto left =
+        wireIn(op.getLeft(), op.instanceName(), op.portName(op.getLeft()), b);
     auto right =
-        wireIn(op.right(), op.instanceName(), op.portName(op.right()), b);
+        wireIn(op.getRight(), op.instanceName(), op.portName(op.getRight()), b);
 
     auto add = b.create<ResultTy>(left, right, false);
 
-    auto out = wireOut(add, op.instanceName(), op.portName(op.out()), b);
+    auto out = wireOut(add, op.instanceName(), op.portName(op.getOut()), b);
     wires.append({left.getInput(), right.getInput(), out});
   }
 
@@ -325,26 +333,29 @@ private:
   void convertCompareBinaryOp(OpTy op, ICmpPredicate pred,
                               SmallVectorImpl<Value> &wires,
                               ImplicitLocOpBuilder &b) const {
-    auto left = wireIn(op.left(), op.instanceName(), op.portName(op.left()), b);
+    auto left =
+        wireIn(op.getLeft(), op.instanceName(), op.portName(op.getLeft()), b);
     auto right =
-        wireIn(op.right(), op.instanceName(), op.portName(op.right()), b);
+        wireIn(op.getRight(), op.instanceName(), op.portName(op.getRight()), b);
 
     auto add = b.create<ICmpOp>(pred, left, right, false);
 
-    auto out = wireOut(add, op.instanceName(), op.portName(op.out()), b);
+    auto out = wireOut(add, op.instanceName(), op.portName(op.getOut()), b);
     wires.append({left.getInput(), right.getInput(), out});
   }
 
   template <typename SrcOpTy, typename TargetOpTy>
   void convertPipelineOp(SrcOpTy op, SmallVectorImpl<Value> &wires,
                          ImplicitLocOpBuilder &b) const {
-    auto clk = wireIn(op.clk(), op.instanceName(), op.portName(op.clk()), b);
+    auto clk =
+        wireIn(op.getClk(), op.instanceName(), op.portName(op.getClk()), b);
     auto reset =
-        wireIn(op.reset(), op.instanceName(), op.portName(op.reset()), b);
-    auto go = wireIn(op.go(), op.instanceName(), op.portName(op.go()), b);
-    auto left = wireIn(op.left(), op.instanceName(), op.portName(op.left()), b);
+        wireIn(op.getReset(), op.instanceName(), op.portName(op.getReset()), b);
+    auto go = wireIn(op.getGo(), op.instanceName(), op.portName(op.getGo()), b);
+    auto left =
+        wireIn(op.getLeft(), op.instanceName(), op.portName(op.getLeft()), b);
     auto right =
-        wireIn(op.right(), op.instanceName(), op.portName(op.right()), b);
+        wireIn(op.getRight(), op.instanceName(), op.portName(op.getRight()), b);
     wires.append({clk.getInput(), reset.getInput(), go.getInput(),
                   left.getInput(), right.getInput()});
 
@@ -358,8 +369,9 @@ private:
     }
 
     auto doneReg = reg(go, clk, reset,
-                       op.instanceName() + "_" + op.portName(op.done()), b);
-    auto done = wireOut(doneReg, op.instanceName(), op.portName(op.done()), b);
+                       op.instanceName() + "_" + op.portName(op.getDone()), b);
+    auto done =
+        wireOut(doneReg, op.instanceName(), op.portName(op.getDone()), b);
     wires.push_back(done);
   }
 

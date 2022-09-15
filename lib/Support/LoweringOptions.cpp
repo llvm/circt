@@ -90,6 +90,8 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
       printDebugInfo = true;
     } else if (option == "useOldEmissionMode") {
       useOldEmissionMode = true;
+    } else if (option == "disallowExpressionInliningInPorts") {
+      disallowExpressionInliningInPorts = true;
     } else if (option.consume_front("maximumNumberOfVariadicOperands=")) {
       if (option.getAsInteger(10, maximumNumberOfVariadicOperands)) {
         errorHandler("expected integer for number of variadic operands");
@@ -129,6 +131,8 @@ std::string LoweringOptions::toString() const {
     options += "printDebugInfo,";
   if (useOldEmissionMode)
     options += "useOldEmissionMode,";
+  if (disallowExpressionInliningInPorts)
+    options += "disallowExpressionInliningInPorts,";
 
   if (emittedLineLength != DEFAULT_LINE_LENGTH)
     options += "emittedLineLength=" + std::to_string(emittedLineLength) + ',';
@@ -198,7 +202,8 @@ struct LoweringCLOptions {
           "maximumNumberOfVariadicOperands=<n>, "
           "emitReplicatedOpsToHeader, "
           "locationInfoStyle={plain,wrapInAtSquareBracket,none}, "
-          "disallowPortDeclSharing, printDebugInfo"),
+          "disallowPortDeclSharing, printDebugInfo, useOldEmissionMode, "
+          "disallowExpressionInliningInPorts"),
       llvm::cl::value_desc("option")};
 };
 } // namespace

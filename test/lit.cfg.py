@@ -57,7 +57,7 @@ tool_dirs = [
 ]
 tools = [
     'firtool', 'circt-opt', 'circt-reduce', 'circt-translate',
-    'circt-capi-ir-test', 'esi-tester'
+    'circt-capi-ir-test', 'esi-tester', 'hlstool'
 ]
 
 # Enable Verilator if it has been detected.

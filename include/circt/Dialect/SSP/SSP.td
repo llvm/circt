@@ -29,7 +29,6 @@ def SSPDialect : Dialect {
   }];
 
   let cppNamespace = "::circt::ssp";
-  let emitAccessorPrefix = kEmitAccessorPrefix_Prefixed;
 
   let useDefaultAttributePrinterParser = true;
   let extraClassDeclaration = [{

@@ -8,7 +8,9 @@ set(CIRCT_INTEGRATION_TEST_DEPENDS
   circt-translate
   circt-rtl-sim
   esi-cosim-runner
-  firtool)
+  firtool
+  hlstool
+  )
 
 # If Python bindings are available to build then enable the tests.
 if(CIRCT_BINDINGS_PYTHON_ENABLED)
@@ -34,6 +36,7 @@ configure_lit_site_cfg(
 add_lit_testsuite(check-circt-integration "Running the CIRCT integration tests"
   ${CMAKE_CURRENT_BINARY_DIR}
   DEPENDS ${CIRCT_INTEGRATION_TEST_DEPENDS}
+  ARGS "--show-unsupported"
   )
 set_target_properties(check-circt-integration PROPERTIES FOLDER "IntegrationTests")
 

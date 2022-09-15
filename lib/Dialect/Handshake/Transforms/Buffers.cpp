@@ -28,7 +28,7 @@ struct RemoveHandshakeBuffers : public OpRewritePattern<handshake::BufferOp> {
 
   LogicalResult matchAndRewrite(handshake::BufferOp bufferOp,
                                 PatternRewriter &rewriter) const override {
-    rewriter.replaceOp(bufferOp, bufferOp.operand());
+    rewriter.replaceOp(bufferOp, bufferOp.getOperand());
     return success();
   }
 };

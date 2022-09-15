@@ -25,6 +25,7 @@ set(CIRCT_TEST_DEPENDS
   esi-tester
   handshake-runner
   firtool
+  hlstool
   )
 
 if (CIRCT_GTEST_AVAILABLE)

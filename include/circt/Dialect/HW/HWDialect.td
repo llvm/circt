@@ -25,7 +25,6 @@ def HWDialect : Dialect {
 
   let hasConstantMaterializer = 1;
   let useDefaultTypePrinterParser = 1;
-  int emitAccessorPrefix = kEmitAccessorPrefix_Prefixed;
 
   let extraClassDeclaration = [{
     /// Register all HW types.
