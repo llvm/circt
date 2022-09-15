@@ -97,10 +97,10 @@ bool firrtl::isDuplexValue(Value val) {
 
 /// Return the kind of port this is given the port type from a 'mem' decl.
 static MemOp::PortKind getMemPortKindFromType(FIRRTLType type) {
-  if (type.isa<RefType>())
-    return MemOp::PortKind::Debug;
   // Get the kind of port based on the fields of the Bundle.
   auto portType = type.dyn_cast<BundleType>();
+  if (!portType)
+    return MemOp::PortKind::Debug;
   unsigned fields = 0;
   // Get the kind of port based on the fields of the Bundle.
   for (auto elem : portType.getElements()) {
@@ -123,8 +123,9 @@ static MemOp::PortKind getMemPortKindFromType(FIRRTLType type) {
   if (fields == 31)
     return MemOp::PortKind::Write;
   // addr, en, clk, wdata, wmask, rdata, wmode
-  // if (fields == 487)
-  return MemOp::PortKind::ReadWrite;
+  if (fields == 487)
+    return MemOp::PortKind::ReadWrite;
+  return MemOp::PortKind::Debug;
 }
 
 Flow firrtl::swapFlow(Flow flow) {
@@ -1687,9 +1688,8 @@ LogicalResult MemOp::verify() {
     auto firrtlType = elt.getType().cast<FIRRTLType>();
     MemOp::PortKind portKind = getMemPortKindFromType(firrtlType);
 
-    if ((!portBundleType && portKind != MemOp::PortKind::Debug) ||
-        (portKind == MemOp::PortKind::Debug &&
-         !getResult(i).getType().isa<RefType>()))
+    if (portKind == MemOp::PortKind::Debug &&
+        !getResult(i).getType().isa<RefType>())
       return emitOpError() << "has an invalid type on port " << portName
                            << " (expected Read/Write/ReadWrite/Debug)";
     if (firrtlType.isa<RefType>() && e == 1)
