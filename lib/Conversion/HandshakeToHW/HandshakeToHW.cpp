@@ -382,40 +382,39 @@ struct OutputHandshake {
   std::shared_ptr<Backedge> data;
 };
 
+template <typename T, typename TInner>
+llvm::SmallVector<T> extractValues(llvm::SmallVector<TInner> &container,
+                                   llvm::function_ref<T(TInner &)> extractor) {
+  llvm::SmallVector<T> result;
+  llvm::transform(container, std::back_inserter(result), extractor);
+  return result;
+}
 struct UnwrappedIO {
   llvm::SmallVector<InputHandshake> inputs;
   llvm::SmallVector<OutputHandshake> outputs;
 
-  template <typename T, typename TInner>
-  llvm::SmallVector<T> ioAccessor(llvm::SmallVector<TInner> &container,
-                                  llvm::function_ref<T(TInner &)> extractor) {
-    llvm::SmallVector<T> result;
-    llvm::transform(container, std::back_inserter(result), extractor);
-    return result;
-  }
-
   llvm::SmallVector<Value> getInputValids() {
-    return ioAccessor<Value, InputHandshake>(inputs,
-                                             [](auto &hs) { return hs.valid; });
+    return extractValues<Value, InputHandshake>(
+        inputs, [](auto &hs) { return hs.valid; });
   }
   llvm::SmallVector<std::shared_ptr<Backedge>> getInputReadys() {
-    return ioAccessor<std::shared_ptr<Backedge>, InputHandshake>(
+    return extractValues<std::shared_ptr<Backedge>, InputHandshake>(
         inputs, [](auto &hs) { return hs.ready; });
   }
   llvm::SmallVector<Value> getInputDatas() {
-    return ioAccessor<Value, InputHandshake>(inputs,
-                                             [](auto &hs) { return hs.data; });
+    return extractValues<Value, InputHandshake>(
+        inputs, [](auto &hs) { return hs.data; });
   }
   llvm::SmallVector<std::shared_ptr<Backedge>> getOutputValids() {
-    return ioAccessor<std::shared_ptr<Backedge>, OutputHandshake>(
+    return extractValues<std::shared_ptr<Backedge>, OutputHandshake>(
         outputs, [](auto &hs) { return hs.valid; });
   }
   llvm::SmallVector<Value> getOutputReadys() {
-    return ioAccessor<Value, OutputHandshake>(
+    return extractValues<Value, OutputHandshake>(
         outputs, [](auto &hs) { return hs.ready; });
   }
   llvm::SmallVector<std::shared_ptr<Backedge>> getOutputDatas() {
-    return ioAccessor<std::shared_ptr<Backedge>, OutputHandshake>(
+    return extractValues<std::shared_ptr<Backedge>, OutputHandshake>(
         outputs, [](auto &hs) { return hs.data; });
   }
 };
@@ -424,7 +423,10 @@ struct UnwrappedIO {
 // verbosity.
 // @todo: should be moved to support.
 struct RTLBuilder {
-  RTLBuilder(OpBuilder &b, Location loc) : b(b), loc(loc) {}
+  RTLBuilder(OpBuilder &builder, Location loc, Value clk = Value(),
+             Value rst = Value())
+      : b(builder), loc(loc), clk(clk), rst(rst) {}
+
   Value constant(unsigned width, int64_t value, Location *extLoc = nullptr) {
     return b.create<hw::ConstantOp>(getLoc(extLoc), APInt(width, value));
   }
@@ -441,10 +443,20 @@ struct RTLBuilder {
   }
 
   // Various syntactic sugar functions.
-  Value reg(StringRef name, Value in, Value rstValue, Value clk, Value rst,
-            Location *extLoc = nullptr) {
-    return b.create<seq::CompRegOp>(getLoc(extLoc), in.getType(), in, clk, name,
-                                    rst, rstValue, mlir::StringAttr());
+  Value reg(StringRef name, Value in, Value rstValue, Value clk = Value(),
+            Value rst = Value(), Location *extLoc = nullptr) {
+    Value resolvedClk = clk ? clk : this->clk;
+    Value resolvedRst = rst ? rst : this->rst;
+    assert(resolvedClk &&
+           "No global clock provided to this RTLBuilder - a clock "
+           "signal must be provided to the reg(...) function.");
+    assert(resolvedRst &&
+           "No global reset provided to this RTLBuilder - a reset "
+           "signal must be provided to the reg(...) function.");
+
+    return b.create<seq::CompRegOp>(getLoc(extLoc), in.getType(), in,
+                                    resolvedClk, name, resolvedRst, rstValue,
+                                    StringAttr());
   }
 
   // Bitwise 'and'.
@@ -457,9 +469,70 @@ struct RTLBuilder {
     return comb::createOrFoldNot(getLoc(extLoc), value, b);
   }
 
-  Location getLoc(Location *extLoc) { return extLoc ? *extLoc : loc; }
+  Value shl(Value value, Value shift, Location *extLoc = nullptr) {
+    return b.create<comb::ShlOp>(getLoc(extLoc), value, shift).getResult();
+  }
+
+  Value concat(ValueRange values, Location *extLoc = nullptr) {
+    return b.create<comb::ConcatOp>(getLoc(extLoc), values).getResult();
+  }
+
+  // Extract bits v[hi:lo] (inclusive).
+  Value extract(Value v, unsigned lo, unsigned hi, Location *extLoc = nullptr) {
+    unsigned width = hi - lo + 1;
+    return b.create<comb::ExtractOp>(getLoc(extLoc), v, lo, width).getResult();
+  }
+
+  // Truncates 'value' to its lower 'width' bits.
+  Value truncate(Value value, unsigned width, Location *extLoc = nullptr) {
+    return extract(value, 0, width - 1, extLoc);
+  }
+
+  Value zext(Value value, unsigned outWidth, Location *extLoc = nullptr) {
+    unsigned inWidth = value.getType().getIntOrFloatBitWidth();
+    assert(inWidth < outWidth &&
+           "zext: input width must be smaller than output "
+           "width.");
+    if (inWidth == outWidth)
+      return value;
+    auto c0 = constant(outWidth - inWidth, 0, extLoc);
+    return concat({c0, value}, extLoc);
+  }
+
+  Value sext(Value value, unsigned outWidth, Location *extLoc = nullptr) {
+    return comb::createOrFoldSExt(getLoc(extLoc), value,
+                                  b.getIntegerType(outWidth), b);
+  }
+
+  // Extracts a single bit v[bit].
+  Value bit(Value v, unsigned index, Location *extLoc = nullptr) {
+    return extract(v, index, index, extLoc);
+  }
+
+  // Creates a hw.array of the given values.
+  Value arrayCreate(ValueRange values, Location *extLoc = nullptr) {
+    return b.create<hw::ArrayCreateOp>(getLoc(extLoc), values).getResult();
+  }
+
+  // Extract the 'index'th value from the input array.
+  Value arrayGet(Value array, Value index, Location *extLoc = nullptr) {
+    return b.create<hw::ArrayGetOp>(getLoc(extLoc), array, index).getResult();
+  }
+
+  // Muxes a range of values.
+  // The select signal is expected to be a decimal value which selects starting
+  // from the lowest index of value.
+  Value mux(ValueRange values, Value index, Location *extLoc = nullptr) {
+    if (values.size() == 2)
+      return b.create<comb::MuxOp>(getLoc(extLoc), index, values[1], values[0]);
+
+    return arrayGet(arrayCreate(values, extLoc), index, extLoc);
+  }
+
+  Location getLoc(Location *extLoc = nullptr) { return extLoc ? *extLoc : loc; }
   OpBuilder &b;
   Location loc;
+  Value clk, rst;
 };
 
 static void
@@ -498,8 +571,16 @@ public:
       implModule = submoduleBuilder.create<hw::HWModuleOp>(
           op.getLoc(), submoduleBuilder.getStringAttr(getSubModuleName(op)),
           portInfo, [&](OpBuilder &b, hw::HWModulePortAccessor &ports) {
+            // if 'op' has clock trait, extract these and provide them to the
+            // RTL builder.
+            Value clk, rst;
+            if (op->template hasTrait<mlir::OpTrait::HasClock>()) {
+              clk = ports.getInput("clock");
+              rst = ports.getInput("reset");
+            }
+
             BackedgeBuilder bb(b, op.getLoc());
-            RTLBuilder s(b, op.getLoc());
+            RTLBuilder s(b, op.getLoc(), clk, rst);
             this->buildModule(op, bb, s, ports);
           });
     }
@@ -566,8 +647,47 @@ public:
     setAllReadyWithCond(s, inputs, output, allValid);
   }
 
-  void buildMuxLogic(RTLBuilder &s, ArrayRef<InputHandshake> inputs,
-                     InputHandshake &cond, OutputHandshake &output) const {}
+  // Builds mux logic for the given inputs and outputs.
+  // Note: it is assumed that the caller has removed the 'select' signal from
+  // the 'unwrapped' inputs and provide it as a separate argument.
+  void buildMuxLogic(RTLBuilder &s, UnwrappedIO &unwrapped,
+                     InputHandshake &select) const {
+    // ============================= Control logic =============================
+    // Decimal-to-1-hot decoder. 'shl' operands must be identical in size.
+    size_t size = unwrapped.inputs.size();
+    Value truncatedSelect = select.data.getType().getIntOrFloatBitWidth() > size
+                                ? s.truncate(select.data, size)
+                                : select.data;
+    auto c1s = s.constant(size, 1);
+    auto truncSelectZext = s.zext(truncatedSelect, size);
+    auto select1h = s.shl(c1s, truncSelectZext);
+    auto &res = unwrapped.outputs[0];
+
+    // Mux input valid signals.
+    auto selectedInputValid = s.mux(unwrapped.getInputValids(), select.data);
+    // Result is valid when the selected input and the select input is valid.
+    auto selAndInputValid = s.bAnd({selectedInputValid, select.valid});
+    res.valid->setValue(selAndInputValid);
+    auto resValidAndReady = s.bAnd({selAndInputValid, res.ready});
+
+    // Select is ready when result is valid and ready (result transacting).
+    select.ready->setValue(resValidAndReady);
+
+    // Assign each input ready signal if it is currently selected.
+    for (auto [inIdx, in] : llvm::enumerate(unwrapped.inputs)) {
+      // Extract the selection bit for this input.
+      auto isSelected = s.bit(select1h, inIdx);
+
+      // '&' that with the result valid and ready, and assign to the input ready
+      // signal.
+      auto activeAndResultValidAndReady =
+          s.bAnd({isSelected, resValidAndReady});
+      in.ready->setValue(activeAndResultValidAndReady);
+    }
+
+    // ============================== Data logic ===============================
+    res.data->setValue(s.mux(unwrapped.getInputDatas(), select.data));
+  }
 
   void buildForkLogic(RTLBuilder &s, BackedgeBuilder &bb, InputHandshake &input,
                       ArrayRef<OutputHandshake> outputs,
@@ -577,8 +697,7 @@ public:
     for (auto [i, output] : llvm::enumerate(outputs)) {
       auto done = bb.get(s.b.getI1Type());
       auto emitted = s.bAnd({done, s.bNot(*input.ready)});
-      auto emittedReg = s.reg("emitted_" + std::to_string(i), emitted, c0I1,
-                              ports.getInput("clock"), ports.getInput("reset"));
+      auto emittedReg = s.reg("emitted_" + std::to_string(i), emitted, c0I1);
       auto outValid = s.bAnd({s.bNot(emittedReg), input.valid});
       output.data->setValue(input.data);
       output.valid->setValue(outValid);
@@ -587,6 +706,46 @@ public:
       doneWires.push_back(done);
     }
     input.ready->setValue(s.bAnd(doneWires));
+  }
+
+  // Builds a unit-rate actor around an inner operation. 'unitBuilder' is a
+  // function which takes the set of unwrapped data inputs, and returns a value
+  // which should be assigned to the output data value.
+  void
+  buildUnitRateLogic(RTLBuilder &s, UnwrappedIO &unwrappedIO,
+                     llvm::function_ref<Value(ValueRange)> unitBuilder) const {
+    assert(unwrappedIO.outputs.size() == 1 &&
+           "Expected exactly one output for unit-rate actor");
+    // Control logic.
+    this->buildJoinLogic(s, unwrappedIO.inputs, unwrappedIO.outputs[0]);
+    unwrappedIO.outputs[0].valid->setValue(
+        s.bAnd(unwrappedIO.getInputValids()));
+
+    // Data logic.
+    auto unitRes = unitBuilder(unwrappedIO.getInputDatas());
+    unwrappedIO.outputs[0].data->setValue(unitRes);
+  }
+
+  void buildExtendLogic(RTLBuilder &s, UnwrappedIO &unwrappedIO,
+                        bool signExtend) const {
+    size_t outWidth = static_cast<Value>(*unwrappedIO.outputs[0].data)
+                          .getType()
+                          .getIntOrFloatBitWidth();
+    buildUnitRateLogic(s, unwrappedIO, [&](ValueRange inputs) {
+      if (signExtend)
+        return s.sext(inputs[0], outWidth);
+      return s.zext(inputs[0], outWidth);
+    });
+  }
+
+  void buildTruncateLogic(RTLBuilder &s, UnwrappedIO &unwrappedIO,
+                          unsigned targetWidth) const {
+    size_t outWidth = static_cast<Value>(*unwrappedIO.outputs[0].data)
+                          .getType()
+                          .getIntOrFloatBitWidth();
+    buildUnitRateLogic(s, unwrappedIO, [&](ValueRange inputs) {
+      return s.truncate(inputs[0], outWidth);
+    });
   }
 
 private:
@@ -614,6 +773,38 @@ public:
   };
 };
 
+class MuxConversionPattern : public HandshakeConversionPattern<MuxOp> {
+public:
+  using HandshakeConversionPattern<MuxOp>::HandshakeConversionPattern;
+  void buildModule(MuxOp op, BackedgeBuilder &bb, RTLBuilder &s,
+                   hw::HWModulePortAccessor &ports) const override {
+    auto unwrappedIO = unwrapIO(s, bb, ports);
+
+    // Extract select signal from the unwrapped IO.
+    auto select = unwrappedIO.inputs[0];
+    unwrappedIO.inputs.erase(unwrappedIO.inputs.begin());
+    buildMuxLogic(s, unwrappedIO, select);
+  };
+};
+
+class SelectConversionPattern
+    : public HandshakeConversionPattern<arith::SelectOp> {
+public:
+  using HandshakeConversionPattern<arith::SelectOp>::HandshakeConversionPattern;
+  void buildModule(arith::SelectOp op, BackedgeBuilder &bb, RTLBuilder &s,
+                   hw::HWModulePortAccessor &ports) const override {
+    auto unwrappedIO = unwrapIO(s, bb, ports);
+
+    // Extract select signal from the unwrapped IO.
+    auto select = unwrappedIO.inputs[0];
+    unwrappedIO.inputs.erase(unwrappedIO.inputs.begin());
+
+    // Swap order of inputs to match MuxOp (0 => input[0], 1 => input[1]).
+    std::swap(unwrappedIO.inputs[0], unwrappedIO.inputs[1]);
+    buildMuxLogic(s, unwrappedIO, select);
+  };
+};
+
 class ReturnConversionPattern
     : public OpConversionPattern<handshake::ReturnOp> {
 public:
@@ -630,6 +821,103 @@ public:
     rewriter.eraseOp(op);
     return success();
   }
+};
+
+// Converts an arbitrary operation into a unit rate actor. A unit rate actor
+// will transact once all inputs are valid and its output is ready.
+template <typename TIn, typename TOut = TIn>
+class UnitRateConversionPattern : public HandshakeConversionPattern<TIn> {
+public:
+  using HandshakeConversionPattern<TIn>::HandshakeConversionPattern;
+  void buildModule(TIn op, BackedgeBuilder &bb, RTLBuilder &s,
+                   hw::HWModulePortAccessor &ports) const override {
+    auto unwrappedIO = this->unwrapIO(s, bb, ports);
+    this->buildUnitRateLogic(s, unwrappedIO, [&](ValueRange inputs) {
+      // Create TOut - it is assumed that TOut trivially
+      // constructs from the input data signals of TIn.
+      return s.b.create<TOut>(op.getLoc(), inputs);
+    });
+  };
+};
+
+template <typename TIn, bool signExtend>
+class ExtendConversionPattern : public HandshakeConversionPattern<TIn> {
+public:
+  using HandshakeConversionPattern<TIn>::HandshakeConversionPattern;
+  void buildModule(TIn op, BackedgeBuilder &bb, RTLBuilder &s,
+                   hw::HWModulePortAccessor &ports) const override {
+    auto unwrappedIO = this->unwrapIO(s, bb, ports);
+    this->buildExtendLogic(s, unwrappedIO, /*signExtend=*/signExtend);
+  };
+};
+
+class ComparisonConversionPattern
+    : public HandshakeConversionPattern<arith::CmpIOp> {
+public:
+  using HandshakeConversionPattern<arith::CmpIOp>::HandshakeConversionPattern;
+  void buildModule(arith::CmpIOp op, BackedgeBuilder &bb, RTLBuilder &s,
+                   hw::HWModulePortAccessor &ports) const override {
+    auto unwrappedIO = this->unwrapIO(s, bb, ports);
+    auto buildCompareLogic = [&](comb::ICmpPredicate predicate) {
+      return buildUnitRateLogic(s, unwrappedIO, [&](ValueRange inputs) {
+        return s.b.create<comb::ICmpOp>(op.getLoc(), predicate, inputs[0],
+                                        inputs[1]);
+      });
+    };
+
+    switch (op.getPredicate()) {
+    case arith::CmpIPredicate::eq:
+      return buildCompareLogic(comb::ICmpPredicate::eq);
+    case arith::CmpIPredicate::ne:
+      return buildCompareLogic(comb::ICmpPredicate::ne);
+    case arith::CmpIPredicate::slt:
+      return buildCompareLogic(comb::ICmpPredicate::slt);
+    case arith::CmpIPredicate::ult:
+      return buildCompareLogic(comb::ICmpPredicate::ult);
+    case arith::CmpIPredicate::sle:
+      return buildCompareLogic(comb::ICmpPredicate::sle);
+    case arith::CmpIPredicate::ule:
+      return buildCompareLogic(comb::ICmpPredicate::ule);
+    case arith::CmpIPredicate::sgt:
+      return buildCompareLogic(comb::ICmpPredicate::sgt);
+    case arith::CmpIPredicate::ugt:
+      return buildCompareLogic(comb::ICmpPredicate::ugt);
+    case arith::CmpIPredicate::sge:
+      return buildCompareLogic(comb::ICmpPredicate::sge);
+    case arith::CmpIPredicate::uge:
+      return buildCompareLogic(comb::ICmpPredicate::uge);
+    }
+    assert(false && "invalid CmpIOp");
+  };
+};
+
+class TruncateConversionPattern
+    : public HandshakeConversionPattern<arith::TruncIOp> {
+public:
+  using HandshakeConversionPattern<arith::TruncIOp>::HandshakeConversionPattern;
+  void buildModule(arith::TruncIOp op, BackedgeBuilder &bb, RTLBuilder &s,
+                   hw::HWModulePortAccessor &ports) const override {
+    auto unwrappedIO = this->unwrapIO(s, bb, ports);
+    unsigned targetBits = op.getResult().getType().getIntOrFloatBitWidth();
+    buildTruncateLogic(s, unwrappedIO, targetBits);
+  };
+};
+
+class IndexCastConversionPattern
+    : public HandshakeConversionPattern<arith::IndexCastOp> {
+public:
+  using HandshakeConversionPattern<
+      arith::IndexCastOp>::HandshakeConversionPattern;
+  void buildModule(arith::IndexCastOp op, BackedgeBuilder &bb, RTLBuilder &s,
+                   hw::HWModulePortAccessor &ports) const override {
+    auto unwrappedIO = this->unwrapIO(s, bb, ports);
+    unsigned sourceBits = op.getIn().getType().getIntOrFloatBitWidth();
+    unsigned targetBits = op.getResult().getType().getIntOrFloatBitWidth();
+    if (targetBits < sourceBits)
+      buildTruncateLogic(s, unwrappedIO, targetBits);
+    else
+      buildExtendLogic(s, unwrappedIO, /*signExtend=*/true);
+  };
 };
 
 template <typename T>
@@ -729,15 +1017,28 @@ static LogicalResult convertFuncOp(ESITypeConverter &typeConverter,
   patterns.insert<JoinConversionPattern, ForkConversionPattern>(
       typeConverter, op.getContext(), moduleBuilder, ls);
 
-  // All other patterns are (for this commit only!) unit rate actors. This
-  // allows CI to pass, and we'll implement the meat of these later.
-  patterns.insert<ExtModuleConversionPattern<comb::AddOp>,
-                  ExtModuleConversionPattern<comb::ICmpOp>,
-                  ExtModuleConversionPattern<handshake::ConstantOp>,
+  patterns.insert<ExtModuleConversionPattern<handshake::ConstantOp>,
                   ExtModuleConversionPattern<handshake::BufferOp>,
-                  ExtModuleConversionPattern<handshake::MuxOp>,
                   ExtModuleConversionPattern<handshake::SinkOp>,
-                  ExtModuleConversionPattern<handshake::ConditionalBranchOp>>(
+                  ExtModuleConversionPattern<handshake::ConditionalBranchOp>,
+                  MuxConversionPattern, SelectConversionPattern,
+                  UnitRateConversionPattern<arith::AddIOp, comb::AddOp>,
+                  UnitRateConversionPattern<arith::SubIOp, comb::SubOp>,
+                  UnitRateConversionPattern<arith::MulIOp, comb::MulOp>,
+                  UnitRateConversionPattern<arith::DivUIOp, comb::DivSOp>,
+                  UnitRateConversionPattern<arith::DivSIOp, comb::DivUOp>,
+                  UnitRateConversionPattern<arith::RemUIOp, comb::ModUOp>,
+                  UnitRateConversionPattern<arith::RemSIOp, comb::ModSOp>,
+                  UnitRateConversionPattern<arith::AndIOp, comb::AndOp>,
+                  UnitRateConversionPattern<arith::OrIOp, comb::OrOp>,
+                  UnitRateConversionPattern<arith::XOrIOp, comb::XorOp>,
+                  UnitRateConversionPattern<arith::ShLIOp, comb::OrOp>,
+                  UnitRateConversionPattern<arith::ShRUIOp, comb::ShrUOp>,
+                  UnitRateConversionPattern<arith::ShRSIOp, comb::ShrSOp>,
+                  ComparisonConversionPattern,
+                  ExtendConversionPattern<arith::ExtUIOp, /*signExtend=*/false>,
+                  ExtendConversionPattern<arith::ExtSIOp, /*signExtend=*/true>,
+                  TruncateConversionPattern, IndexCastConversionPattern>(
       typeConverter, op.getContext(), moduleBuilder, ls);
 
   if (failed(applyPartialConversion(op, target, std::move(patterns))))
