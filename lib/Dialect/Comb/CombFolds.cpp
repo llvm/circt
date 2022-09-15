@@ -1682,6 +1682,13 @@ OpFoldResult MuxOp::fold(ArrayRef<Attribute> constants) {
     return getTrueValue();
   }
 
+  // mux(cond, 1, 0) -> cond
+  if (auto tv = constants[1].dyn_cast_or_null<IntegerAttr>())
+    if (auto fv = constants[2].dyn_cast_or_null<IntegerAttr>())
+      if (tv.getValue().isOne() && fv.getValue().isZero() &&
+          hw::getBitWidth(getType()) == 1)
+        return getCond();
+
   return {};
 }
 
