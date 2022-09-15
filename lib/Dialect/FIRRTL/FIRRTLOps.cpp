@@ -100,19 +100,24 @@ static MemOp::PortKind getMemPortKindFromType(FIRRTLType type) {
   auto portType = type.dyn_cast<BundleType>();
   if (!portType)
     return MemOp::PortKind::Debug;
-  // TODO: Avoid set comparisons.
-  SmallDenseSet<StringRef> readFields = {"addr", "en", "clk", "data"};
-  SmallDenseSet<StringRef> writeFields = {"addr", "en", "clk", "data", "mask"};
-  SmallDenseSet<StringRef> readWriteFields = {"addr",  "en",    "clk",  "rdata",
-                                              "wmode", "wdata", "wmask"};
-  SmallDenseSet<StringRef> fieldNames;
-  for (auto elem : portType.getElements())
-    fieldNames.insert(elem.name.getValue());
-  if (fieldNames == readFields)
+  unsigned fields = 0;
+  for (auto elem : portType.getElements()) {
+    fields |= llvm::StringSwitch<unsigned>(elem.name.getValue())
+                  .Case("addr", 1)
+                  .Case("en", 2)
+                  .Case("clk", 4)
+                  .Case("data", 8)
+                  .Case("mask", 16)
+                  .Case("rdata", 32)
+                  .Case("wdata", 64)
+                  .Case("wmask", 128)
+                  .Default(256);
+  }
+  if (fields == 15)
     return MemOp::PortKind::Read;
-  if (fieldNames == writeFields)
+  if (fields == 31)
     return MemOp::PortKind::Write;
-  if (fieldNames == readWriteFields)
+  if (fields == 487)
     return MemOp::PortKind::ReadWrite;
   return MemOp::PortKind::Debug;
 }
@@ -153,7 +158,7 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
       .Case<SubindexOp, SubaccessOp>(
           [&](auto op) { return foldFlow(op.getInput(), accumulatedFlow); })
       // Registers, Wires, and behavioral memory ports are always Duplex.
-      .Case<RegOp, RegResetOp, WireOp, MemoryPortOp>(
+      .Case<RegOp, RegResetOp, WireOp, MemoryPortOp, MemoryDebugPortOp>(
           [](auto) { return Flow::Duplex; })
       .Case<InstanceOp>([&](auto inst) {
         auto resultNo = val.cast<OpResult>().getResultNumber();
@@ -162,8 +167,7 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
         return swap();
       })
       .Case<MemOp>([&](auto op) {
-        if (getMemPortKindFromType(val.getType().cast<FIRRTLType>()) ==
-            MemOp::PortKind::Debug)
+        if (val.getType().isa<RefType>())
           return Flow::Source;
         return swap();
       })
@@ -1687,9 +1691,11 @@ LogicalResult MemOp::verify() {
     // found.
       FIRRTLBaseType dataType;
       if (portKind == MemOp::PortKind::Debug) {
-        if (!getResult(i).getType().isa<FVectorType>())
-          return emitOpError() << "debug ports must be of FVectorType";
-        dataType = getResult(i).getType().cast<FVectorType>().getElementType();
+        auto resType = getResult(i).getType().dyn_cast<RefType>();
+        if (!(resType && resType.getType().isa<FVectorType>()))
+          return emitOpError()
+                 << "debug ports must be a RefType of FVectorType";
+        dataType = resType.getType().cast<FVectorType>().getElementType();
       } else {
         auto dataTypeOption = portBundleType.getElement("data");
         if (!dataTypeOption && portKind == MemOp::PortKind::ReadWrite)
@@ -1786,7 +1792,7 @@ FIRRTLType MemOp::getTypeForPort(uint64_t depth, FIRRTLBaseType dataType,
 
   auto *context = dataType.getContext();
   if (portKind == PortKind::Debug)
-    return FVectorType::get(dataType, depth);
+    return RefType::get(FVectorType::get(dataType, depth));
   FIRRTLBaseType maskType;
   // maskBits not specified (==0), then get the mask type from the dataType.
   if (maskBits == 0)
@@ -1859,9 +1865,10 @@ MemOp::PortKind MemOp::getPortKind(size_t resultNo) {
 size_t MemOp::getMaskBits() {
 
   for (auto res : getResults()) {
+    if (res.getType().isa<RefType>())
+      continue;
     auto firstPortType = res.getType().cast<FIRRTLBaseType>();
-    if (getMemPortKindFromType(firstPortType) == PortKind::Read ||
-        getMemPortKindFromType(firstPortType) == PortKind::Debug)
+    if (getMemPortKindFromType(firstPortType) == PortKind::Read)
       continue;
 
     FIRRTLBaseType mType;
@@ -1881,9 +1888,9 @@ size_t MemOp::getMaskBits() {
 FIRRTLBaseType MemOp::getDataType() {
   assert(getNumResults() != 0 && "Mems with no read/write ports are illegal");
 
+  if (auto refType = getResult(0).getType().dyn_cast<RefType>())
+    return refType.getType().cast<FVectorType>().getElementType();
   auto firstPortType = getResult(0).getType().cast<FIRRTLBaseType>();
-  if (getMemPortKindFromType(firstPortType) == PortKind::Debug)
-    return firstPortType.cast<FVectorType>().getElementType();
 
   StringRef dataFieldName = "data";
   if (getMemPortKindFromType(firstPortType) == PortKind::ReadWrite)

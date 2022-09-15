@@ -161,8 +161,7 @@ def MemDir_Infer    : I32EnumAttrCase<"Infer", 0>;
 def MemDir_Read     : I32EnumAttrCase<"Read", 1>;
 def MemDir_Write    : I32EnumAttrCase<"Write", 2>;
 def MemDir_ReadWrite: I32EnumAttrCase<"ReadWrite", 3>;
-def MemDir_Debug    : I32EnumAttrCase<"Debug", 4>;
 
 def MemDirAttr: I32EnumAttr<"MemDirAttr", "Memory Direction Enum",
                             [MemDir_Infer, MemDir_Read, MemDir_Write,
-                              MemDir_ReadWrite, MemDir_Debug]>;
+                              MemDir_ReadWrite]>;

@@ -131,14 +131,7 @@ LogicalResult MemoryPortOp::inferReturnTypes(MLIRContext *context,
       mlir::emitError(*loc, "memory port requires memory operand");
     return failure();
   }
-  auto dir = attrs.get("direction");
-  if (!dir)
-    return mlir::emitError(*loc, "memory port requires the direction");
-  if (dir.cast<::MemDirAttrAttr>().getValue() == MemDirAttr::Debug)
-    results.push_back(
-        FVectorType::get(memType.getElementType(), memType.getNumElements()));
-  else
-    results.push_back(memType.getElementType());
+  results.push_back(memType.getElementType());
   results.push_back(CMemoryPortType::get(context));
   return success();
 }
@@ -146,10 +139,7 @@ LogicalResult MemoryPortOp::inferReturnTypes(MLIRContext *context,
 LogicalResult MemoryPortOp::verify() {
   // MemoryPorts require exactly 1 access. Right now there are no other
   // operations that could be using that value due to the types.
-  if (getDirection() == MemDirAttr::Debug && !getPort().getUses().empty())
-    return emitOpError(
-        "debug port cannot be used by chirrtl.memoryport.access");
-  if (getDirection() != MemDirAttr::Debug && !getPort().hasOneUse())
+  if (!getPort().hasOneUse())
     return emitOpError("port should be used by a chirrtl.memoryport.access");
   return success();
 }
@@ -185,6 +175,62 @@ static void printMemoryPortOp(OpAsmPrinter &p, Operation *op,
                               DictionaryAttr attr) {
   // "direction" is always elided.
   SmallVector<StringRef> elides = {"direction"};
+  // Annotations elided if empty.
+  if (op->getAttrOfType<ArrayAttr>("annotations").empty())
+    elides.push_back("annotations");
+  p.printOptionalAttrDict(op->getAttrs(), elides);
+}
+
+//===----------------------------------------------------------------------===//
+// MemoryDebugPortOp
+//===----------------------------------------------------------------------===//
+
+void MemoryDebugPortOp::build(OpBuilder &builder, OperationState &result,
+                              Type dataType, Value memory, StringRef name,
+                              ArrayRef<Attribute> annotations) {
+  build(builder, result, dataType, memory, name,
+        builder.getArrayAttr(annotations));
+}
+
+LogicalResult MemoryDebugPortOp::inferReturnTypes(
+    MLIRContext *context, Optional<Location> loc, ValueRange operands,
+    DictionaryAttr attrs, mlir::RegionRange regions,
+    SmallVectorImpl<Type> &results) {
+  auto inType = operands[0].getType();
+  auto memType = inType.dyn_cast<CMemoryType>();
+  if (!memType) {
+    if (loc)
+      mlir::emitError(*loc, "memory port requires memory operand");
+    return failure();
+  }
+  results.push_back(RefType::get(
+      FVectorType::get(memType.getElementType(), memType.getNumElements())));
+  return success();
+}
+
+void MemoryDebugPortOp::getAsmResultNames(
+    function_ref<void(Value, StringRef)> setNameFn) {
+  StringRef base = getName();
+  if (base.empty())
+    base = "memport";
+  setNameFn(getData(), (base + "_data").str());
+}
+
+static ParseResult parseMemoryDebugPortOp(OpAsmParser &parser,
+                                          NamedAttrList &resultAttrs) {
+  // Add an empty annotation array if none were parsed.
+  auto result = parser.parseOptionalAttrDict(resultAttrs);
+  if (!resultAttrs.get("annotations"))
+    resultAttrs.append("annotations", parser.getBuilder().getArrayAttr({}));
+  return result;
+}
+
+/// Always elide "direction" and elide "annotations" if it exists or
+/// if it is empty.
+static void printMemoryDebugPortOp(OpAsmPrinter &p, Operation *op,
+                                   DictionaryAttr attr) {
+  // "direction" is always elided.
+  SmallVector<StringRef> elides;
   // Annotations elided if empty.
   if (op->getAttrOfType<ArrayAttr>("annotations").empty())
     elides.push_back("annotations");

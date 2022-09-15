@@ -121,7 +121,7 @@ def MemOp : ReferableDeclOp<"mem"> {
          PortAnnotationsAttr:$portAnnotations,
          OptionalAttr<InnerSymAttr>:$inner_sym,
          OptionalAttr<UI32Attr>:$groupID);
-  let results = (outs Variadic<FIRRTLBaseType>:$results);
+  let results = (outs Variadic<FIRRTLType>:$results);
 
   let assemblyFormat = [{
     (`sym` $inner_sym^)? custom<NameKind>($nameKind)

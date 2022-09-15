@@ -40,6 +40,7 @@ struct LowerCHIRRTLPass : public LowerCHIRRTLPassBase<LowerCHIRRTLPass>,
   void visitCHIRRTL(CombMemOp op);
   void visitCHIRRTL(SeqMemOp op);
   void visitCHIRRTL(MemoryPortOp op);
+  void visitCHIRRTL(MemoryDebugPortOp op);
   void visitCHIRRTL(MemoryPortAccessOp op);
   void visitExpr(SubaccessOp op);
   void visitExpr(SubfieldOp op);
@@ -166,8 +167,6 @@ static MemOp::PortKind memDirAttrToPortKind(MemDirAttr direction) {
     return MemOp::PortKind::Write;
   case MemDirAttr::ReadWrite:
     return MemOp::PortKind::ReadWrite;
-  case MemDirAttr::Debug:
-    return MemOp::PortKind::Debug;
   default:
     llvm_unreachable(
         "Unhandled MemDirAttr, was the port direction not inferred?");
@@ -199,7 +198,6 @@ MemDirAttr LowerCHIRRTLPass::inferMemoryPortKind(MemoryPortOp memPort) {
     Value::use_iterator iterator;
     MemDirAttr mode;
   };
-  bool isDebug = memPort.getDirection() == MemDirAttr::Debug;
 
   SmallVector<StackElement> stack;
   stack.emplace_back(memPort.getData(), memPort.getData().use_begin(),
@@ -262,8 +260,7 @@ MemDirAttr LowerCHIRRTLPass::inferMemoryPortKind(MemoryPortOp memPort) {
     // Store the direction of the current operation in the global map. This will
     // be used later to determine if this subaccess operation needs to be cloned
     // into rdata, wdata, and wmask.
-    subfieldDirs[stack.back().value.getDefiningOp()] =
-        isDebug ? memPort.getDirection() : mode;
+    subfieldDirs[stack.back().value.getDefiningOp()] = mode;
     stack.pop_back();
   }
 
@@ -290,26 +287,37 @@ void LowerCHIRRTLPass::replaceMem(Operation *cmem, StringRef name,
     Type type;
     Attribute annotations;
     MemOp::PortKind portKind;
-    MemoryPortOp cmemPort;
+    Operation *cmemPort;
   };
   SmallVector<PortInfo, 4> ports;
   for (auto *user : cmem->getUsers()) {
-    auto cmemoryPort = cast<MemoryPortOp>(user);
+    MemOp::PortKind portKind;
+    StringAttr portName;
+    ArrayAttr portAnnos;
+    if (auto cmemoryPort = dyn_cast<MemoryPortOp>(user)) {
+      // Infer the type of memory port we need to create.
+      auto portDirection = inferMemoryPortKind(cmemoryPort);
 
-    // Infer the type of memory port we need to create.
-    auto portDirection = inferMemoryPortKind(cmemoryPort);
-
-    // If the memory port is never used, it will have the Infer type and should
-    // just be deleted. TODO: this is mirroring SFC, but should we be checking
-    // for annotations on the memory port before removing it?
-    if (portDirection == MemDirAttr::Infer)
-      continue;
-    auto portKind = memDirAttrToPortKind(portDirection);
+      // If the memory port is never used, it will have the Infer type and
+      // should just be deleted. TODO: this is mirroring SFC, but should we be
+      // checking for annotations on the memory port before removing it?
+      if (portDirection == MemDirAttr::Infer)
+        continue;
+      portKind = memDirAttrToPortKind(portDirection);
+      portName = cmemoryPort.getNameAttr();
+      portAnnos = cmemoryPort.getAnnotationsAttr();
+    } else if (auto dPort = dyn_cast<MemoryDebugPortOp>(user)) {
+      portKind = MemOp::PortKind::Debug;
+      portName = dPort.getNameAttr();
+      portAnnos = dPort.getAnnotationsAttr();
+    } else {
+      user->emitOpError("unhandled user of chirrtl memory");
+      return;
+    }
 
     // Add the new port.
-    ports.push_back({cmemoryPort.getNameAttr(),
-                     MemOp::getTypeForPort(depth, type, portKind),
-                     cmemoryPort.getAnnotationsAttr(), portKind, cmemoryPort});
+    ports.push_back({portName, MemOp::getTypeForPort(depth, type, portKind),
+                     portAnnos, portKind, user});
   }
 
   // If there are no valid memory ports, don't create a memory.
@@ -354,14 +362,14 @@ void LowerCHIRRTLPass::replaceMem(Operation *cmem, StringRef name,
   // Process each memory port, initializing the memory port and inferring when
   // to set the enable signal high.
   for (unsigned i = 0, e = memory.getNumResults(); i < e; ++i) {
-    auto cmemoryPort = ports[i].cmemPort;
-    auto cmemoryPortAccess = cmemoryPort.getAccess();
     auto memoryPort = memory.getResult(i);
     auto portKind = ports[i].portKind;
     if (portKind == MemOp::PortKind::Debug) {
-      rdataValues[cmemoryPort.getData()] = memoryPort;
+      rdataValues[ports[i].cmemPort->getResult(0)] = memoryPort;
       continue;
     }
+    auto cmemoryPort = cast<MemoryPortOp>(ports[i].cmemPort);
+    auto cmemoryPortAccess = cmemoryPort.getAccess();
 
     // Most fields on the newly created memory will be assigned an initial value
     // immediately following the memory decl, and then will be assigned a second
@@ -495,6 +503,11 @@ void LowerCHIRRTLPass::visitCHIRRTL(MemoryPortOp memPort) {
   opsToDelete.push_back(memPort);
 }
 
+void LowerCHIRRTLPass::visitCHIRRTL(MemoryDebugPortOp memPort) {
+  // The memory port is mostly handled while processing the memory.
+  opsToDelete.push_back(memPort);
+}
+
 void LowerCHIRRTLPass::visitCHIRRTL(MemoryPortAccessOp memPortAccess) {
   // The memory port access is mostly handled while processing the memory.
   opsToDelete.push_back(memPortAccess);
@@ -559,8 +572,15 @@ void LowerCHIRRTLPass::cloneSubindexOpForMemory(OpType op, Value input,
   // If the subaccess operation has no direction recorded, then it does not
   // index a CHIRRTL memory and will be left alone.
   auto it = subfieldDirs.find(op);
-  if (it == subfieldDirs.end())
+  if (it == subfieldDirs.end()) {
+    auto iter = rdataValues.find(input);
+    if (iter != rdataValues.end()) {
+      opsToDelete.push_back(op);
+      ImplicitLocOpBuilder builder(op->getLoc(), op);
+      rdataValues[op] = builder.create<OpType>(rdataValues[input], operands...);
+    }
     return;
+  }
 
   // All uses of this op will be updated to use the appropriate clone.  If the
   // recorded direction of this subfield is Infer, then the value is not
@@ -573,8 +593,7 @@ void LowerCHIRRTLPass::cloneSubindexOpForMemory(OpType op, Value input,
 
   // If the subaccess operation is used to read from a memory port, we need to
   // clone it to read from the rdata field.
-  if (direction == MemDirAttr::Read || direction == MemDirAttr::ReadWrite ||
-      direction == MemDirAttr::Debug) {
+  if (direction == MemDirAttr::Read || direction == MemDirAttr::ReadWrite) {
     rdataValues[op] = builder.create<OpType>(rdataValues[input], operands...);
   }
 

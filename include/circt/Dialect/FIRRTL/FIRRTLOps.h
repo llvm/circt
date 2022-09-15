@@ -85,8 +85,6 @@ enum class ReadWritePortSubfield { addr, en, clk, rdata, wmode, wdata, wmask };
 /// Allow 'or'ing MemDirAttr.  This allows combining Read and Write into
 /// ReadWrite.
 inline MemDirAttr operator|(MemDirAttr lhs, MemDirAttr rhs) {
-  if (lhs == MemDirAttr::Debug || rhs == MemDirAttr::Debug)
-    return MemDirAttr::Debug;
   return static_cast<MemDirAttr>(
       static_cast<std::underlying_type<MemDirAttr>::type>(lhs) |
       static_cast<std::underlying_type<MemDirAttr>::type>(rhs));
