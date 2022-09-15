@@ -20,6 +20,16 @@ def PrintInstanceGraph : Pass<"hw-print-instance-graph", "mlir::ModuleOp"> {
   let constructor =  "circt::hw::createPrintInstanceGraphPass()";
 }
 
+def PrintHWModuleGraph : Pass<"hw-print-module-graph", "mlir::ModuleOp"> {
+  let summary = "Print a DOT graph of the HWModule's within a top-level module.";
+  let constructor =  "circt::hw::createPrintHWModuleGraphPass()";
+  
+  let options = [
+    Option<"verboseEdges", "verbose-edges", "bool", "false",
+      "Print information on SSA edges (types, operand #, ...)">,
+  ];
+}
+
 def HWSpecialize : Pass<"hw-specialize", "mlir::ModuleOp"> {
   let summary = "Specializes instances of parametric hw.modules";
   let constructor = "circt::hw::createHWSpecializePass()";
