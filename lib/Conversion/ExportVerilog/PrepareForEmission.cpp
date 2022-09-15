@@ -308,6 +308,7 @@ static void lowerUsersToTemporaryWire(
 
 /// Lower a variadic fully-associative operation into an expression tree.  This
 /// enables long-line splitting to work with them.
+/// NOLINTNEXTLINE(misc-no-recursion)
 static Value lowerFullyAssociativeOp(
     Operation &op, OperandRange operands, SmallVector<Operation *> &newOps,
     DenseMap<Value, size_t> &operandMap,
