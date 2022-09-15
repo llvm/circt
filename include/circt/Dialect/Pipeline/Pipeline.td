@@ -197,9 +197,9 @@ def ReturnOp : Op<Pipeline_Dialect, "return", [Terminator]> {
   }];
 
   let hasVerifier = 1;
-  let arguments = (ins Variadic<AnyType>: $operands, I1:$valid);
+  let arguments = (ins Variadic<AnyType>:$outputs, I1:$valid);
   let builders = [OpBuilder<(ins), [{ return; }]>];
-  let assemblyFormat = [{ ($operands^)? `valid` $valid attr-dict (`:` type($operands)^)? }];
+  let assemblyFormat = [{ ($outputs^)? `valid` $valid attr-dict (`:` type($outputs)^)? }];
 }
 
 def PipelineWhileOp : Op<Pipeline_Dialect, "while", []> {

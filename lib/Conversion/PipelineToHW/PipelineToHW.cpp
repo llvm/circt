@@ -63,7 +63,7 @@ static LogicalResult lowerPipeline(PipelineOp pipeline, OpBuilder &builder) {
             stage.getRegOuts()[regIdx].replaceAllUsesWith(reg);
           }
         })
-        .Case<pipeline::ReturnOp>([&](auto ret) { retVals = ret.operands(); })
+        .Case<pipeline::ReturnOp>([&](auto ret) { retVals = ret.getOutputs(); })
         .Default([&](auto op) { op->moveBefore(pipeline); });
   }
 
