@@ -940,8 +940,8 @@ firrtl.circuit "MyView" {
 // Ref types must be ground
 
 firrtl.circuit "RefBundle" {
-  // expected-error @+1 {{reference base type must be ground}}
-  firrtl.module @RefBundle(in %in1 : !firrtl.ref<bundle<valid: uint<1>>>) {
+  // expected-error @+1 {{reference base type must be passive}}
+  firrtl.module @RefBundle(in %in1 : !firrtl.ref<bundle<valid flip : uint<1>>>) {
   }
 }
 
