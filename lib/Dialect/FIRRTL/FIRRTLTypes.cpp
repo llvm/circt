@@ -1083,8 +1083,8 @@ auto RefType::getType() -> FIRRTLBaseType { return getImpl()->value; }
 
 auto RefType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
                      FIRRTLBaseType base) -> LogicalResult {
-  if (!base.isGround())
-    return emitErrorFn() << "reference base type must be ground";
+  if (!base.isPassive())
+    return emitErrorFn() << "reference base type must be passive";
   return success();
 }
 
