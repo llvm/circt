@@ -32,6 +32,15 @@ hw.module @muxConstantInputs2(%cond: i1) -> (o: i2) {
   hw.output %0 : i2
 }
 
+// CHECK-LABEL: @muxTF
+hw.module @muxTF(%cond: i1) -> (o: i1) {
+// CHECK-NEXT: hw.output %cond
+  %c0 = hw.constant 0 : i1
+  %c1 = hw.constant 1 : i1
+  %0 = comb.mux %cond, %c1, %c0: i1
+  hw.output %0 : i1
+}
+
 // CHECK-LABEL: @muxConstantInputsNegated
 hw.module @muxConstantInputsNegated(%cond: i1) -> (o: i2) {
 // CHECK-NEXT: %true = hw.constant true
