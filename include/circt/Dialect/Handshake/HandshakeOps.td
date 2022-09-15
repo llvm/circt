@@ -814,6 +814,32 @@ def JoinOp : Handshake_Op<"join", [
   let hasCustomAssemblyFormat = 1;
 }
 
+def SyncOp : Handshake_Op<"sync", [
+  HasClock, DeclareOpInterfaceMethods<ExecutableOpInterface>,
+  DeclareOpInterfaceMethods<GeneralOpInterface>,
+  AllTypesMatch<["operands", "results"]>
+]> {
+  let summary = "sync operation";
+  let description = [{
+    Produces valid outputs with the same data once all inputs become available.
+
+    Example:
+    ```mlir
+    %aSynced, %bSynced, %cSynced = join %a, %b, %c : i32, i1, none
+    ```
+  }];
+  let arguments = (ins Variadic<AnyType> : $operands);
+  let results = (outs Variadic<AnyType> : $results);
+
+  let skipDefaultBuilders = 1;
+  let builders = [OpBuilder<
+    (ins "ValueRange":$operands), [{
+      $_state.addOperands(operands);
+      $_state.addTypes(operands.getTypes());
+  }]>];
+  let assemblyFormat = [{ $operands attr-dict `:` type($operands)}];
+}
+
 def I4 : I<4>;
 def I4Attr : SignlessIntegerAttrBase<I4, "4-bit integer attribute">;
 
