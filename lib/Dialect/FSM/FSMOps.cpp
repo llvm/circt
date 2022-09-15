@@ -49,18 +49,18 @@ void MachineOp::build(OpBuilder &builder, OperationState &state, StringRef name,
 
 /// Get the initial state of the machine.
 StateOp MachineOp::getInitialStateOp() {
-  return dyn_cast_or_null<StateOp>(lookupSymbol(initialState()));
+  return dyn_cast_or_null<StateOp>(lookupSymbol(getInitialState()));
 }
 
 StringAttr MachineOp::getArgName(size_t i) {
-  if (auto args = argNames())
+  if (auto args = getArgNames())
     return (*args)[i].cast<StringAttr>();
   else
     return StringAttr::get(getContext(), "in" + std::to_string(i));
 }
 
 StringAttr MachineOp::getResName(size_t i) {
-  if (auto resNameAttrs = resNames())
+  if (auto resNameAttrs = getResNames())
     return (*resNameAttrs)[i].cast<StringAttr>();
   else
     return StringAttr::get(getContext(), "out" + std::to_string(i));
@@ -107,12 +107,9 @@ static LogicalResult compareTypes(TypeRange rangeA, TypeRange rangeB) {
   if (rangeA.size() != rangeB.size())
     return failure();
 
-  int64_t index = 0;
-  for (auto zip : llvm::zip(rangeA, rangeB)) {
+  for (auto zip : llvm::zip(rangeA, rangeB))
     if (std::get<0>(zip) != std::get<1>(zip))
       return failure();
-    ++index;
-  }
 
   return success();
 }
@@ -135,24 +132,24 @@ LogicalResult MachineOp::verify() {
 
   // Verify that the initial state exists
   if (!getInitialStateOp())
-    return emitOpError("initial state '" + initialState() +
+    return emitOpError("initial state '" + getInitialState() +
                        "' was not defined in the machine");
 
-  if (argNames() && argNames()->size() != getArgumentTypes().size())
+  if (getArgNames() && getArgNames()->size() != getArgumentTypes().size())
     return emitOpError() << "number of machine arguments ("
                          << getArgumentTypes().size()
                          << ") does "
                             "not match the provided number "
                             "of argument names ("
-                         << argNames()->size() << ")";
+                         << getArgNames()->size() << ")";
 
-  if (resNames() && resNames()->size() != getResultTypes().size())
+  if (getResNames() && getResNames()->size() != getResultTypes().size())
     return emitOpError() << "number of machine results ("
                          << getResultTypes().size()
                          << ") does "
                             "not match the provided number "
                             "of result names ("
-                         << resNames()->size() << ")";
+                         << getResNames()->size() << ")";
 
   return success();
 }
@@ -162,22 +159,22 @@ LogicalResult MachineOp::verify() {
 //===----------------------------------------------------------------------===//
 
 /// Lookup the machine for the symbol.  This returns null on invalid IR.
-MachineOp InstanceOp::getMachine() {
+MachineOp InstanceOp::getMachineOp() {
   auto module = (*this)->getParentOfType<ModuleOp>();
-  return module.lookupSymbol<MachineOp>(machine());
+  return module.lookupSymbol<MachineOp>(getMachine());
 }
 
 LogicalResult InstanceOp::verify() {
-  auto m = getMachine();
+  auto m = getMachineOp();
   if (!m)
-    return emitError("cannot find machine definition '") << machine() << "'";
+    return emitError("cannot find machine definition '") << getMachine() << "'";
 
   return success();
 }
 
 void InstanceOp::getAsmResultNames(
     function_ref<void(Value, StringRef)> setNameFn) {
-  setNameFn(instance(), sym_name());
+  setNameFn(getInstance(), getSymName());
 }
 
 //===----------------------------------------------------------------------===//
@@ -186,13 +183,13 @@ void InstanceOp::getAsmResultNames(
 
 template <typename OpType>
 static LogicalResult verifyCallerTypes(OpType op) {
-  auto machine = op.getMachine();
+  auto machine = op.getMachineOp();
   if (!machine)
     return op.emitError("cannot find machine definition");
 
   // Check operand types first.
-  if (failed(
-          compareTypes(machine.getArgumentTypes(), op.inputs().getTypes()))) {
+  if (failed(compareTypes(machine.getArgumentTypes(),
+                          op.getInputs().getTypes()))) {
     auto diag =
         op.emitOpError("operand types must match the machine input types");
     diag.attachNote(machine->getLoc()) << "original machine declared here";
@@ -200,7 +197,8 @@ static LogicalResult verifyCallerTypes(OpType op) {
   }
 
   // Check result types.
-  if (failed(compareTypes(machine.getResultTypes(), op.outputs().getTypes()))) {
+  if (failed(
+          compareTypes(machine.getResultTypes(), op.getOutputs().getTypes()))) {
     auto diag =
         op.emitOpError("result types must match the machine output types");
     diag.attachNote(machine->getLoc()) << "original machine declared here";
@@ -211,12 +209,12 @@ static LogicalResult verifyCallerTypes(OpType op) {
 }
 
 /// Lookup the machine for the symbol.  This returns null on invalid IR.
-MachineOp TriggerOp::getMachine() {
-  auto instanceOp = instance().getDefiningOp<InstanceOp>();
+MachineOp TriggerOp::getMachineOp() {
+  auto instanceOp = getInstance().getDefiningOp<InstanceOp>();
   if (!instanceOp)
     return nullptr;
 
-  return instanceOp.getMachine();
+  return instanceOp.getMachineOp();
 }
 
 LogicalResult TriggerOp::verify() { return verifyCallerTypes(*this); }
@@ -225,12 +223,12 @@ LogicalResult TriggerOp::verify() { return verifyCallerTypes(*this); }
 // HWInstanceOp
 //===----------------------------------------------------------------------===//
 
-Operation *HWInstanceOp::getReferencedModule() { return getMachine(); }
+Operation *HWInstanceOp::getReferencedModule() { return getMachineOp(); }
 
 /// Lookup the machine for the symbol.  This returns null on invalid IR.
-MachineOp HWInstanceOp::getMachine() {
+MachineOp HWInstanceOp::getMachineOp() {
   auto module = (*this)->getParentOfType<ModuleOp>();
-  return module.lookupSymbol<MachineOp>(machine());
+  return module.lookupSymbol<MachineOp>(getMachine());
 }
 
 LogicalResult HWInstanceOp::verify() { return verifyCallerTypes(*this); }
@@ -254,9 +252,9 @@ void StateOp::build(OpBuilder &builder, OperationState &state,
 SetVector<StateOp> StateOp::getNextStates() {
   SmallVector<StateOp> nextStates;
   llvm::transform(
-      transitions().getOps<TransitionOp>(),
+      getTransitions().getOps<TransitionOp>(),
       std::inserter(nextStates, nextStates.begin()),
-      [](TransitionOp transition) { return transition.getNextState(); });
+      [](TransitionOp transition) { return transition.getNextStateOp(); });
   return SetVector<StateOp>(nextStates.begin(), nextStates.end());
 }
 
@@ -264,7 +262,7 @@ LogicalResult StateOp::canonicalize(StateOp op, PatternRewriter &rewriter) {
   bool hasAlwaysTakenTransition = false;
   SmallVector<TransitionOp, 4> transitionsToErase;
   // Remove all transitions after an "always-taken" transition.
-  for (auto transition : op.transitions().getOps<TransitionOp>()) {
+  for (auto transition : op.getTransitions().getOps<TransitionOp>()) {
     if (!hasAlwaysTakenTransition)
       hasAlwaysTakenTransition = transition.isAlwaysTaken();
     else
@@ -280,13 +278,13 @@ LogicalResult StateOp::canonicalize(StateOp op, PatternRewriter &rewriter) {
 LogicalResult StateOp::verify() {
   MachineOp parent = getOperation()->getParentOfType<MachineOp>();
 
-  if (parent.getNumResults() != 0 && (output().empty()))
+  if (parent.getNumResults() != 0 && (getOutput().empty()))
     return emitOpError("state must have a non-empty output region when the "
                        "machine has results.");
 
-  if (!output().empty()) {
+  if (!getOutput().empty()) {
     // Ensure that the output block has a single OutputOp terminator.
-    Block *outputBlock = &output().front();
+    Block *outputBlock = &getOutput().front();
     if (outputBlock->empty() || !isa<fsm::OutputOp>(outputBlock->back()))
       return emitOpError("output block must have a single OutputOp terminator");
   }
@@ -295,14 +293,14 @@ LogicalResult StateOp::verify() {
 }
 
 Block *StateOp::ensureOutput(OpBuilder &builder) {
-  if (output().empty()) {
+  if (getOutput().empty()) {
     OpBuilder::InsertionGuard g(builder);
     auto *block = new Block();
-    output().push_back(block);
+    getOutput().push_back(block);
     builder.setInsertionPointToStart(block);
     builder.create<fsm::OutputOp>(getLoc());
   }
-  return &output().front();
+  return &getOutput().front();
 }
 
 //===----------------------------------------------------------------------===//
@@ -311,7 +309,7 @@ Block *StateOp::ensureOutput(OpBuilder &builder) {
 
 LogicalResult OutputOp::verify() {
   if ((*this)->getParentRegion() ==
-      &(*this)->getParentOfType<StateOp>().transitions()) {
+      &(*this)->getParentOfType<StateOp>().getTransitions()) {
     if (getNumOperands() != 0)
       emitOpError("transitions region must not output any value");
     return success();
@@ -344,29 +342,29 @@ void TransitionOp::build(OpBuilder &builder, OperationState &state,
 }
 
 Block *TransitionOp::ensureGuard(OpBuilder &builder) {
-  if (guard().empty()) {
+  if (getGuard().empty()) {
     OpBuilder::InsertionGuard g(builder);
     auto *block = new Block();
-    guard().push_back(block);
+    getGuard().push_back(block);
     builder.setInsertionPointToStart(block);
     builder.create<fsm::ReturnOp>(getLoc());
   }
-  return &guard().front();
+  return &getGuard().front();
 }
 
 Block *TransitionOp::ensureAction(OpBuilder &builder) {
-  if (action().empty())
-    action().push_back(new Block());
-  return &action().front();
+  if (getAction().empty())
+    getAction().push_back(new Block());
+  return &getAction().front();
 }
 
 /// Lookup the next state for the symbol. This returns null on invalid IR.
-StateOp TransitionOp::getNextState() {
+StateOp TransitionOp::getNextStateOp() {
   auto machineOp = (*this)->getParentOfType<MachineOp>();
   if (!machineOp)
     return nullptr;
 
-  return machineOp.lookupSymbol<StateOp>(nextState());
+  return machineOp.lookupSymbol<StateOp>(getNextState());
 }
 
 bool TransitionOp::isAlwaysTaken() {
@@ -378,7 +376,7 @@ bool TransitionOp::isAlwaysTaken() {
     return true;
 
   if (auto constantOp =
-          guardReturn.getOperand(0).getDefiningOp<mlir::arith::ConstantOp>())
+          guardReturn.getOperand().getDefiningOp<mlir::arith::ConstantOp>())
     return constantOp.getValue().cast<BoolAttr>().getValue();
 
   return false;
@@ -389,7 +387,7 @@ LogicalResult TransitionOp::canonicalize(TransitionOp op,
   if (op.hasGuard()) {
     auto guardReturn = op.getGuardReturn();
     if (guardReturn.getNumOperands() == 1)
-      if (auto constantOp = guardReturn.getOperand(0)
+      if (auto constantOp = guardReturn.getOperand()
                                 .getDefiningOp<mlir::arith::ConstantOp>()) {
         // Simplify when the guard region returns a constant value.
         if (constantOp.getValue().cast<BoolAttr>().getValue()) {
@@ -411,19 +409,19 @@ LogicalResult TransitionOp::canonicalize(TransitionOp op,
 }
 
 LogicalResult TransitionOp::verify() {
-  if (!getNextState())
+  if (!getNextStateOp())
     return emitOpError("cannot find the definition of the next state `")
-           << nextState() << "`";
+           << getNextState() << "`";
 
   // Verify the action region, if present.
   if (hasGuard()) {
-    if (guard().front().empty() ||
-        !isa_and_nonnull<fsm::ReturnOp>(&guard().front().back()))
+    if (getGuard().front().empty() ||
+        !isa_and_nonnull<fsm::ReturnOp>(&getGuard().front().back()))
       return emitOpError("guard region must terminate with a ReturnOp");
   }
 
   // Verify the transition is located in the correct region.
-  if ((*this)->getParentRegion() != &getCurrentState().transitions())
+  if ((*this)->getParentRegion() != &getCurrentState().getTransitions())
     return emitOpError("must only be located in the transitions region");
 
   return success();
@@ -435,7 +433,7 @@ LogicalResult TransitionOp::verify() {
 
 void VariableOp::getAsmResultNames(
     function_ref<void(Value, StringRef)> setNameFn) {
-  setNameFn(result(), name());
+  setNameFn(getResult(), getName());
 }
 
 //===----------------------------------------------------------------------===//
@@ -443,7 +441,7 @@ void VariableOp::getAsmResultNames(
 //===----------------------------------------------------------------------===//
 
 void ReturnOp::setOperand(Value value) {
-  if (operand())
+  if (getOperand())
     getOperation()->setOperand(0, value);
   else
     getOperation()->insertOperands(0, {value});
@@ -454,20 +452,20 @@ void ReturnOp::setOperand(Value value) {
 //===----------------------------------------------------------------------===//
 
 /// Get the targeted variable operation. This returns null on invalid IR.
-VariableOp UpdateOp::getVariable() {
-  return variable().getDefiningOp<VariableOp>();
+VariableOp UpdateOp::getVariableOp() {
+  return getVariable().getDefiningOp<VariableOp>();
 }
 
 LogicalResult UpdateOp::verify() {
   if (!getVariable())
     return emitOpError("destination is not a variable operation");
 
-  if (!(*this)->getParentOfType<TransitionOp>().action().isAncestor(
+  if (!(*this)->getParentOfType<TransitionOp>().getAction().isAncestor(
           (*this)->getParentRegion()))
     return emitOpError("must only be located in the action region");
 
   auto transition = (*this)->getParentOfType<TransitionOp>();
-  for (auto otherUpdateOp : transition.action().getOps<UpdateOp>()) {
+  for (auto otherUpdateOp : transition.getAction().getOps<UpdateOp>()) {
     if (otherUpdateOp == *this)
       continue;
     if (otherUpdateOp.getVariable() == getVariable())

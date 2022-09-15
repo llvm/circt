@@ -30,16 +30,16 @@ static LogicalResult lowerPipeline(PipelineOp pipeline, OpBuilder &builder) {
 
   // Simply move the ops from the pipeline to the enclosing hw.module scope,
   // converting any stage ops to seq registers.
-  Value clk = pipeline.clock();
-  Value rst = pipeline.reset();
+  Value clk = pipeline.getClock();
+  Value rst = pipeline.getReset();
   llvm::SmallVector<Value, 4> retVals;
   builder.setInsertionPoint(pipeline);
 
-  for (auto [arg, barg] :
-       llvm::zip(pipeline.getOperands(), pipeline.getBody()->getArguments()))
+  for (auto [arg, barg] : llvm::zip(pipeline.getOperands(),
+                                    pipeline.getBodyBlock()->getArguments()))
     barg.replaceAllUsesWith(arg);
 
-  for (auto &op : llvm::make_early_inc_range(*pipeline.getBody())) {
+  for (auto &op : llvm::make_early_inc_range(*pipeline.getBodyBlock())) {
     auto loc = op.getLoc();
     llvm::TypeSwitch<Operation *, void>(&op)
         .Case<PipelineStageRegisterOp>([&](auto stage) {
@@ -47,11 +47,11 @@ static LogicalResult lowerPipeline(PipelineOp pipeline, OpBuilder &builder) {
           auto validRegName =
               builder.getStringAttr("s" + std::to_string(stageIdx) + "_valid");
           auto validReg = builder.create<seq::CompRegOp>(
-              loc, builder.getI1Type(), stage.when(), clk, validRegName, rst,
+              loc, builder.getI1Type(), stage.getWhen(), clk, validRegName, rst,
               Value(), StringAttr());
-          stage.valid().replaceAllUsesWith(validReg);
+          stage.getValid().replaceAllUsesWith(validReg);
 
-          for (auto &it : llvm::enumerate(stage.regIns())) {
+          for (auto &it : llvm::enumerate(stage.getRegIns())) {
             auto regIdx = it.index();
             auto regIn = it.value();
             auto regName =
@@ -60,7 +60,7 @@ static LogicalResult lowerPipeline(PipelineOp pipeline, OpBuilder &builder) {
             auto reg = builder.create<seq::CompRegOp>(loc, regIn.getType(),
                                                       regIn, clk, regName, rst,
                                                       Value(), StringAttr());
-            stage.regOuts()[regIdx].replaceAllUsesWith(reg);
+            stage.getRegOuts()[regIdx].replaceAllUsesWith(reg);
           }
         })
         .Case<pipeline::ReturnOp>([&](auto ret) { retVals = ret.operands(); })

@@ -104,7 +104,7 @@ public:
   /// E.g. if `primitives/core.futil` is used, returns { "core" }.
   FailureOr<llvm::SmallSet<StringRef, 4>> getLibraryNames(ModuleOp module) {
     auto walkRes = module.walk([&](ComponentOp component) {
-      for (auto &op : *component.getBody()) {
+      for (auto &op : *component.getBodyBlock()) {
         if (!isa<CellInterface>(op) || isa<InstanceOp, PrimitiveOp>(op))
           // It is not a primitive.
           continue;
@@ -451,11 +451,11 @@ private:
            "Required to be a group port.");
     indent() << group.symName().getValue() << LSquare() << portHole << RSquare()
              << space() << equals() << space();
-    if (op.guard()) {
-      emitValue(op.guard(), /*isIndented=*/false);
+    if (op.getGuard()) {
+      emitValue(op.getGuard(), /*isIndented=*/false);
       os << questionMark();
     }
-    emitValue(op.src(), /*isIndented=*/false);
+    emitValue(op.getSrc(), /*isIndented=*/false);
     os << semicolonEndL();
   }
 
@@ -482,26 +482,26 @@ private:
       TypeSwitch<Operation *>(&op)
           .Case<SeqOp>([&](auto op) {
             emitCalyxSection(prependAttributes(op, "seq"),
-                             [&]() { emitCalyxControl(op.getBody()); });
+                             [&]() { emitCalyxControl(op.getBodyBlock()); });
           })
           .Case<ParOp>([&](auto op) {
             emitCalyxSection(prependAttributes(op, "par"),
-                             [&]() { emitCalyxControl(op.getBody()); });
+                             [&]() { emitCalyxControl(op.getBodyBlock()); });
           })
           .Case<WhileOp>([&](auto op) {
             indent() << prependAttributes(op, "while ");
-            emitValue(op.cond(), /*isIndented=*/false);
+            emitValue(op.getCond(), /*isIndented=*/false);
 
-            if (auto groupName = op.groupName())
+            if (auto groupName = op.getGroupName())
               os << " with " << *groupName;
 
-            emitCalyxBody([&]() { emitCalyxControl(op.getBody()); });
+            emitCalyxBody([&]() { emitCalyxControl(op.getBodyBlock()); });
           })
           .Case<IfOp>([&](auto op) {
             indent() << prependAttributes(op, "if ");
-            emitValue(op.cond(), /*isIndented=*/false);
+            emitValue(op.getCond(), /*isIndented=*/false);
 
-            if (auto groupName = op.groupName())
+            if (auto groupName = op.getGroupName())
               os << " with " << *groupName;
 
             emitCalyxBody([&]() { emitCalyxControl(op.getThenBody()); });
@@ -555,7 +555,7 @@ void Emitter::emitComponent(ComponentOp op) {
 
   // Emit cells.
   emitCalyxSection("cells", [&]() {
-    for (auto &&bodyOp : *op.getBody()) {
+    for (auto &&bodyOp : *op.getBodyBlock()) {
       TypeSwitch<Operation *>(&bodyOp)
           .Case<WiresOp>([&](auto op) { wires = op; })
           .Case<ControlOp>([&](auto op) { control = op; })
@@ -672,16 +672,16 @@ void Emitter::emitPrimitivePorts(hw::HWModuleExternOp op) {
 
 void Emitter::emitInstance(InstanceOp op) {
   indent() << getAttributes(op) << op.instanceName() << space() << equals()
-           << space() << op.componentName() << LParen() << RParen()
+           << space() << op.getComponentName() << LParen() << RParen()
            << semicolonEndL();
 }
 
 void Emitter::emitPrimitive(PrimitiveOp op) {
   indent() << getAttributes(op) << op.instanceName() << space() << equals()
-           << space() << op.primitiveName() << LParen();
+           << space() << op.getPrimitiveName() << LParen();
 
-  if (op.parameters().has_value()) {
-    llvm::interleaveComma(*op.parameters(), os, [&](Attribute param) {
+  if (op.getParameters().has_value()) {
+    llvm::interleaveComma(*op.getParameters(), os, [&](Attribute param) {
       auto paramAttr = param.cast<hw::ParamDeclAttr>();
       auto value = paramAttr.getValue();
       if (auto intAttr = value.dyn_cast<IntegerAttr>()) {
@@ -698,14 +698,14 @@ void Emitter::emitPrimitive(PrimitiveOp op) {
 }
 
 void Emitter::emitRegister(RegisterOp reg) {
-  size_t bitWidth = reg.in().getType().getIntOrFloatBitWidth();
+  size_t bitWidth = reg.getIn().getType().getIntOrFloatBitWidth();
   indent() << getAttributes(reg) << reg.instanceName() << space() << equals()
            << space() << "std_reg" << LParen() << std::to_string(bitWidth)
            << RParen() << semicolonEndL();
 }
 
 void Emitter::emitMemory(MemoryOp memory) {
-  size_t dimension = memory.sizes().size();
+  size_t dimension = memory.getSizes().size();
   if (dimension < 1 || dimension > 4) {
     emitOpError(memory, "Only memories with dimensionality in range [1, 4] are "
                         "supported by the native Calyx compiler.");
@@ -713,14 +713,14 @@ void Emitter::emitMemory(MemoryOp memory) {
   }
   indent() << getAttributes(memory) << memory.instanceName() << space()
            << equals() << space() << "std_mem_d" << std::to_string(dimension)
-           << LParen() << memory.width() << comma();
-  for (Attribute size : memory.sizes()) {
+           << LParen() << memory.getWidth() << comma();
+  for (Attribute size : memory.getSizes()) {
     APInt memSize = size.cast<IntegerAttr>().getValue();
     memSize.print(os, /*isSigned=*/false);
     os << comma();
   }
 
-  ArrayAttr addrSizes = memory.addrSizes();
+  ArrayAttr addrSizes = memory.getAddrSizes();
   for (size_t i = 0, e = addrSizes.size(); i != e; ++i) {
     APInt addrSize = addrSizes[i].cast<IntegerAttr>().getValue();
     addrSize.print(os, /*isSigned=*/false);
@@ -770,19 +770,19 @@ void Emitter::emitLibraryPrimTypedByFirstOutputPort(
 
 void Emitter::emitAssignment(AssignOp op) {
 
-  emitValue(op.dest(), /*isIndented=*/true);
+  emitValue(op.getDest(), /*isIndented=*/true);
   os << space() << equals() << space();
-  if (op.guard()) {
-    emitValue(op.guard(), /*isIndented=*/false);
+  if (op.getGuard()) {
+    emitValue(op.getGuard(), /*isIndented=*/false);
     os << questionMark();
   }
-  emitValue(op.src(), /*isIndented=*/false);
+  emitValue(op.getSrc(), /*isIndented=*/false);
   os << semicolonEndL();
 }
 
 void Emitter::emitWires(WiresOp op) {
   emitCalyxSection("wires", [&]() {
-    for (auto &&bodyOp : *op.getBody()) {
+    for (auto &&bodyOp : *op.getBodyBlock()) {
       TypeSwitch<Operation *>(&bodyOp)
           .Case<GroupInterface>([&](auto op) { emitGroup(op); })
           .Case<AssignOp>([&](auto op) { emitAssignment(op); })
@@ -816,11 +816,12 @@ void Emitter::emitGroup(GroupInterface group) {
 }
 
 void Emitter::emitEnable(EnableOp enable) {
-  indent() << getAttributes(enable) << enable.groupName() << semicolonEndL();
+  indent() << getAttributes(enable) << enable.getGroupName() << semicolonEndL();
 }
 
 void Emitter::emitControl(ControlOp control) {
-  emitCalyxSection("control", [&]() { emitCalyxControl(control.getBody()); });
+  emitCalyxSection("control",
+                   [&]() { emitCalyxControl(control.getBodyBlock()); });
 }
 
 //===----------------------------------------------------------------------===//

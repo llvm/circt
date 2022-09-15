@@ -27,7 +27,7 @@ def DynInstDataOpInterface : OpInterface<"DynInstDataOpInterface"> {
       /*args=*/(ins "::circt::hw::GlobalRefOp":$ref),
       /*methodBody=*/[{}],
       /*defaultImplementation=*/[{
-        $_op.refAttr(FlatSymbolRefAttr::get(ref));
+        $_op.setRefAttr(FlatSymbolRefAttr::get(ref));
       }]
     >,
     InterfaceMethod<
@@ -39,7 +39,7 @@ def DynInstDataOpInterface : OpInterface<"DynInstDataOpInterface"> {
       /*args=*/(ins),
       /*methodBody=*/[{}],
       /*defaultImplementation=*/[{
-        return $_op.refAttr();
+        return $_op.getRefAttr();
       }]
     >,
     InterfaceMethod<

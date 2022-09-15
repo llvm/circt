@@ -357,7 +357,7 @@ ArrayAttr DynamicInstanceOp::globalRefPath() {
   SmallVector<Attribute, 16> path;
   DynamicInstanceOp next = *this;
   do {
-    path.push_back(next.instanceRefAttr());
+    path.push_back(next.getInstanceRefAttr());
     next = next->getParentOfType<DynamicInstanceOp>();
   } while (next);
   std::reverse(path.begin(), path.end());
@@ -369,15 +369,17 @@ ArrayAttr DynamicInstanceOp::globalRefPath() {
 //===----------------------------------------------------------------------===//
 
 LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  auto *module = symbolTable.lookupNearestSymbolFrom(*this, moduleNameAttr());
+  auto *module =
+      symbolTable.lookupNearestSymbolFrom(*this, getModuleNameAttr());
   if (module == nullptr)
-    return emitError("Cannot find module definition '") << moduleName() << "'";
+    return emitError("Cannot find module definition '")
+           << getModuleName() << "'";
 
   // It must be some sort of module.
   if (!hw::isAnyModule(module) &&
       !isa<MSFTModuleOp, MSFTModuleExternOp>(module))
     return emitError("symbol reference '")
-           << moduleName() << "' isn't a module";
+           << getModuleName() << "' isn't a module";
   return success();
 }
 
@@ -387,7 +389,7 @@ Operation *InstanceOp::getReferencedModule() {
   auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
   if (!topLevelModuleOp)
     return nullptr;
-  return topLevelModuleOp.lookupSymbol(moduleName());
+  return topLevelModuleOp.lookupSymbol(getModuleName());
 }
 
 StringAttr InstanceOp::getResultName(size_t idx) {
@@ -456,7 +458,7 @@ hw::ModulePortInfo MSFTModuleOp::getPorts() {
   SmallVector<hw::PortInfo> inputs, outputs;
   auto argTypes = getArgumentTypes();
 
-  auto argNames = this->argNames();
+  auto argNames = this->getArgNames();
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
     bool isInOut = false;
     auto type = argTypes[i];
@@ -471,7 +473,7 @@ hw::ModulePortInfo MSFTModuleOp::getPorts() {
     inputs.push_back({argNames[i].cast<StringAttr>(), direction, type, i});
   }
 
-  auto resultNames = this->resultNames();
+  auto resultNames = this->getResultNames();
   auto resultTypes = getResultTypes();
   for (unsigned i = 0, e = resultTypes.size(); i < e; ++i) {
     outputs.push_back({resultNames[i].cast<StringAttr>(),
@@ -489,7 +491,8 @@ MSFTModuleOp::addPorts(ArrayRef<std::pair<StringAttr, Type>> inputs,
   // Append new inputs.
   SmallVector<Type, 32> modifiedArgs(getArgumentTypes().begin(),
                                      getArgumentTypes().end());
-  SmallVector<Attribute> modifiedArgNames(argNames().getAsRange<Attribute>());
+  SmallVector<Attribute> modifiedArgNames(
+      getArgNames().getAsRange<Attribute>());
   SmallVector<BlockArgument> newBlockArgs;
   for (auto ttPair : inputs) {
     modifiedArgNames.push_back(ttPair.first);
@@ -497,13 +500,13 @@ MSFTModuleOp::addPorts(ArrayRef<std::pair<StringAttr, Type>> inputs,
     newBlockArgs.push_back(
         body->addArgument(ttPair.second, Builder(ctxt).getUnknownLoc()));
   }
-  argNamesAttr(ArrayAttr::get(ctxt, modifiedArgNames));
+  setArgNamesAttr(ArrayAttr::get(ctxt, modifiedArgNames));
 
   // Append new outputs.
   SmallVector<Type, 32> modifiedResults(getResultTypes().begin(),
                                         getResultTypes().end());
   SmallVector<Attribute> modifiedResultNames(
-      resultNames().getAsRange<Attribute>());
+      getResultNames().getAsRange<Attribute>());
   Operation *terminator = body->getTerminator();
   SmallVector<Value, 32> modifiedOutputs(terminator->getOperands());
   for (auto tvPair : outputs) {
@@ -511,7 +514,7 @@ MSFTModuleOp::addPorts(ArrayRef<std::pair<StringAttr, Type>> inputs,
     modifiedResults.push_back(tvPair.second.getType());
     modifiedOutputs.push_back(tvPair.second);
   }
-  resultNamesAttr(ArrayAttr::get(ctxt, modifiedResultNames));
+  setResultNamesAttr(ArrayAttr::get(ctxt, modifiedResultNames));
   terminator->setOperands(modifiedOutputs);
 
   // Finalize and return.
@@ -530,7 +533,7 @@ SmallVector<unsigned> MSFTModuleOp::removePorts(llvm::BitVector inputs,
   SmallVector<Type, 4> newInputTypes;
   SmallVector<Attribute, 4> newArgNames;
   unsigned originalNumArgs = ftype.getNumInputs();
-  ArrayRef<Attribute> origArgNames = argNamesAttr().getValue();
+  ArrayRef<Attribute> origArgNames = getArgNamesAttr().getValue();
   assert(origArgNames.size() == originalNumArgs);
   for (size_t i = 0; i < originalNumArgs; ++i) {
     if (!inputs.test(i)) {
@@ -542,7 +545,7 @@ SmallVector<unsigned> MSFTModuleOp::removePorts(llvm::BitVector inputs,
   SmallVector<Type, 4> newResultTypes;
   SmallVector<Attribute, 4> newResultNames;
   unsigned originalNumResults = getNumResults();
-  ArrayRef<Attribute> origResNames = resultNamesAttr().getValue();
+  ArrayRef<Attribute> origResNames = getResultNamesAttr().getValue();
   assert(origResNames.size() == originalNumResults);
   for (size_t i = 0; i < originalNumResults; ++i) {
     if (!outputs.test(i)) {
@@ -552,8 +555,8 @@ SmallVector<unsigned> MSFTModuleOp::removePorts(llvm::BitVector inputs,
   }
 
   setType(FunctionType::get(ctxt, newInputTypes, newResultTypes));
-  resultNamesAttr(ArrayAttr::get(ctxt, newResultNames));
-  argNamesAttr(ArrayAttr::get(ctxt, newArgNames));
+  setResultNamesAttr(ArrayAttr::get(ctxt, newResultNames));
+  setArgNamesAttr(ArrayAttr::get(ctxt, newArgNames));
 
   // Build new operand list for output op. Construct an output mapping to
   // return as a side-effect.
@@ -616,7 +619,7 @@ ParseResult MSFTModuleOp::parse(OpAsmParser &parser, OperationState &result) {
 }
 
 void MSFTModuleOp::print(OpAsmPrinter &p) {
-  printModuleLikeOp(*this, p, parametersAttr());
+  printModuleLikeOp(*this, p, getParametersAttr());
 }
 
 //===----------------------------------------------------------------------===//
@@ -958,30 +961,31 @@ ParseResult SystolicArrayOp::parse(OpAsmParser &parser,
 }
 
 void SystolicArrayOp::print(OpAsmPrinter &p) {
-  hw::ArrayType rowInputType = rowInputs().getType().cast<hw::ArrayType>();
-  hw::ArrayType columnInputType = colInputs().getType().cast<hw::ArrayType>();
+  hw::ArrayType rowInputType = getRowInputs().getType().cast<hw::ArrayType>();
+  hw::ArrayType columnInputType =
+      getColInputs().getType().cast<hw::ArrayType>();
   p << " [";
-  p.printOperand(rowInputs());
+  p.printOperand(getRowInputs());
   p << " : " << rowInputType.getSize() << " x ";
   p.printType(rowInputType.getElementType());
   p << "] [";
-  p.printOperand(colInputs());
+  p.printOperand(getColInputs());
   p << " : " << columnInputType.getSize() << " x ";
   p.printType(columnInputType.getElementType());
 
   p << "] pe (";
-  p.printOperand(pe().getArgument(0));
+  p.printOperand(getPe().getArgument(0));
   p << ", ";
-  p.printOperand(pe().getArgument(1));
+  p.printOperand(getPe().getArgument(1));
   p << ") -> (";
-  p.printType(peOutputs()
+  p.printType(getPeOutputs()
                   .getType()
                   .cast<hw::ArrayType>()
                   .getElementType()
                   .cast<hw::ArrayType>()
                   .getElementType());
   p << ") ";
-  p.printRegion(pe(), false);
+  p.printRegion(getPe(), false);
 }
 
 //===----------------------------------------------------------------------===//

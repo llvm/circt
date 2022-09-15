@@ -28,7 +28,7 @@ using namespace circt::pipeline;
 //===----------------------------------------------------------------------===//
 
 LogicalResult PipelineOp::verify() {
-  bool anyInputIsAChannel = llvm::any_of(inputs(), [](Value operand) {
+  bool anyInputIsAChannel = llvm::any_of(getInputs(), [](Value operand) {
     return operand.getType().isa<esi::ChannelType>();
   });
   bool anyOutputIsAChannel = llvm::any_of(
@@ -39,14 +39,15 @@ LogicalResult PipelineOp::verify() {
                        "ports must be ESI channels.");
   }
 
-  if (getBody()->getNumArguments() != inputs().size())
+  if (getBodyBlock()->getNumArguments() != getInputs().size())
     return emitOpError("expected ")
-           << inputs().size() << " arguments in the pipeline body block, got "
-           << getBody()->getNumArguments() << ".";
+           << getInputs().size()
+           << " arguments in the pipeline body block, got "
+           << getBodyBlock()->getNumArguments() << ".";
 
-  for (size_t i = 0; i < inputs().size(); i++) {
-    Type expectedInArg = inputs()[i].getType();
-    Type bodyArg = getBody()->getArgument(i).getType();
+  for (size_t i = 0; i < getInputs().size(); i++) {
+    Type expectedInArg = getInputs()[i].getType();
+    Type bodyArg = getBodyBlock()->getArgument(i).getType();
 
     if (isLatencyInsensitive())
       expectedInArg = expectedInArg.cast<esi::ChannelType>().getInner();
@@ -71,7 +72,7 @@ LogicalResult PipelineOp::verify() {
 }
 
 bool PipelineOp::isLatencyInsensitive() {
-  bool allInputsAreChannels = llvm::all_of(inputs(), [](Value operand) {
+  bool allInputsAreChannels = llvm::all_of(getInputs(), [](Value operand) {
     return operand.getType().isa<esi::ChannelType>();
   });
   bool allOutputsAreChannels = llvm::all_of(
@@ -85,13 +86,13 @@ bool PipelineOp::isLatencyInsensitive() {
 
 LogicalResult ReturnOp::verify() {
   PipelineOp parent = getOperation()->getParentOfType<PipelineOp>();
-  if (operands().size() != parent.results().size())
+  if (operands().size() != parent.getResults().size())
     return emitOpError("expected ")
-           << parent.results().size() << " return values, got "
+           << parent.getResults().size() << " return values, got "
            << operands().size() << ".";
 
   bool isLatencyInsensitive = parent.isLatencyInsensitive();
-  for (size_t i = 0; i < parent.results().size(); i++) {
+  for (size_t i = 0; i < parent.getResults().size(); i++) {
     Type expectedType = parent.getResultTypes()[i];
     Type actualType = getOperandTypes()[i];
     if (isLatencyInsensitive)
@@ -167,38 +168,38 @@ ParseResult PipelineWhileOp::parse(OpAsmParser &parser,
 
 void PipelineWhileOp::print(OpAsmPrinter &p) {
   // Print the initiation interval.
-  p << " II = " << ' ' << II();
+  p << " II = " << ' ' << getII();
 
   // Print the optional tripCount.
-  if (tripCount())
-    p << " trip_count = " << ' ' << *tripCount();
+  if (getTripCount())
+    p << " trip_count = " << ' ' << *getTripCount();
 
   // Print iter_args assignment list.
   p << " iter_args(";
   llvm::interleaveComma(
-      llvm::zip(stages().getArguments(), iterArgs()), p,
+      llvm::zip(getStages().getArguments(), getIterArgs()), p,
       [&](auto it) { p << std::get<0>(it) << " = " << std::get<1>(it); });
   p << ") : ";
 
   // Print function type from iter_args to results.
-  auto type = FunctionType::get(getContext(), stages().getArgumentTypes(),
+  auto type = FunctionType::get(getContext(), getStages().getArgumentTypes(),
                                 getResultTypes());
   p.printType(type);
 
   // Print condition region.
   p << ' ';
-  p.printRegion(condition(), /*printEntryBlockArgs=*/false);
+  p.printRegion(getCondition(), /*printEntryBlockArgs=*/false);
   p << " do";
 
   // Print stages region.
   p << ' ';
-  p.printRegion(stages(), /*printEntryBlockArgs=*/false);
+  p.printRegion(getStages(), /*printEntryBlockArgs=*/false);
 }
 
 LogicalResult PipelineWhileOp::verify() {
   // Verify the condition block is "combinational" based on an allowlist of
   // Arithmetic ops.
-  Block &conditionBlock = condition().front();
+  Block &conditionBlock = getCondition().front();
   Operation *nonCombinational;
   WalkResult conditionWalk = conditionBlock.walk([&](Operation *op) {
     if (isa<PipelineDialect>(op->getDialect()))
@@ -234,7 +235,7 @@ LogicalResult PipelineWhileOp::verify() {
            << conditionResults.front();
 
   // Verify the stages block contains at least one stage and a terminator.
-  Block &stagesBlock = stages().front();
+  Block &stagesBlock = getStages().front();
   if (stagesBlock.getOperations().size() < 2)
     return emitOpError("stages must contain at least one stage");
 
@@ -250,15 +251,15 @@ LogicalResult PipelineWhileOp::verify() {
     // Verify the stage start times are monotonically increasing.
     if (auto stage = dyn_cast<PipelineWhileStageOp>(inner)) {
       if (lastStartTime == -1) {
-        lastStartTime = stage.start();
+        lastStartTime = stage.getStart();
         continue;
       }
 
-      if (lastStartTime >= stage.start())
+      if (lastStartTime >= stage.getStart())
         return stage.emitOpError("'start' must be after previous 'start' (")
                << lastStartTime << ')';
 
-      lastStartTime = stage.start();
+      lastStartTime = stage.getStart();
     }
   }
 
@@ -300,7 +301,7 @@ void PipelineWhileOp::build(OpBuilder &builder, OperationState &state,
 //===----------------------------------------------------------------------===//
 
 LogicalResult PipelineWhileStageOp::verify() {
-  if (start() < 0)
+  if (getStart() < 0)
     return emitOpError("'start' must be non-negative");
 
   return success();
@@ -361,9 +362,9 @@ LogicalResult PipelineTerminatorOp::verify() {
   PipelineWhileOp pipeline = (*this)->getParentOfType<PipelineWhileOp>();
 
   // Verify pipeline terminates with the same `iter_args` types as the pipeline.
-  auto iterArgs = iter_args();
+  auto iterArgs = getIterArgs();
   TypeRange terminatorArgTypes = iterArgs.getTypes();
-  TypeRange pipelineArgTypes = pipeline.iterArgs().getTypes();
+  TypeRange pipelineArgTypes = pipeline.getIterArgs().getTypes();
   if (terminatorArgTypes != pipelineArgTypes)
     return emitOpError("'iter_args' types (")
            << terminatorArgTypes << ") must match pipeline 'iter_args' types ("
@@ -376,7 +377,7 @@ LogicalResult PipelineTerminatorOp::verify() {
           "'iter_args' must be defined by a 'pipeline.while.stage'");
 
   // Verify pipeline terminates with the same result types as the pipeline.
-  auto opResults = results();
+  auto opResults = getResults();
   TypeRange terminatorResultTypes = opResults.getTypes();
   TypeRange pipelineResultTypes = pipeline.getResultTypes();
   if (terminatorResultTypes != pipelineResultTypes)

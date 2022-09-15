@@ -61,7 +61,7 @@ void MSFTPassCommon::dedupInputs(MSFTModuleOp mod) {
     newArgNames.push_back(StringAttr::get(
         mod.getContext(), getValueName(oper, topLevelSyms, buff)));
   }
-  mod.argNamesAttr(ArrayAttr::get(mod.getContext(), newArgNames));
+  mod.setArgNamesAttr(ArrayAttr::get(mod.getContext(), newArgNames));
 }
 
 /// Sink all the instance connections which are loops.

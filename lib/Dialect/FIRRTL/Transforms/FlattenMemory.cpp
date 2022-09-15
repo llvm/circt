@@ -77,7 +77,7 @@ struct FlattenMemoryPass : public FlattenMemoryBase<FlattenMemoryPass> {
       maskGran = memWidths[0];
       // Compute the GCD of all data bitwidths.
       for (auto w : memWidths) {
-        maskGran = std::gcd(maskGran, (uint64_t)w);
+        maskGran = std::gcd(maskGran, w);
       }
       for (auto w : memWidths) {
         // How many mask bits required for each flattened field.

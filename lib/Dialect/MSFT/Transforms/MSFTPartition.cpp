@@ -302,7 +302,7 @@ static StringRef getOperandName(OpOperand &oper, const SymbolCache &syms,
                                 std::string &buff) {
   Operation *op = oper.getOwner();
   if (auto inst = dyn_cast<InstanceOp>(op)) {
-    Operation *modOp = syms.getDefinition(inst.moduleNameAttr());
+    Operation *modOp = syms.getDefinition(inst.getModuleNameAttr());
     if (modOp) { // If modOp isn't in the cache, it's probably a new module;
       assert(isAnyModule(modOp) && "Instance must point to a module");
       hw::ModulePortInfo ports = getModulePortInfo(modOp);
@@ -421,7 +421,7 @@ void PartitionPass::pushDownGlobalRefs(
     auto partAttr = op->getAttrOfType<SymbolRefAttr>("targetDesignPartition");
     auto partMod = partAttr.getRootReference();
     auto partName = partAttr.getLeafReference();
-    auto partModName = partOp.verilogNameAttr();
+    auto partModName = partOp.getVerilogNameAttr();
     assert(partModName);
 
     // Find the index of the node in the path that points to the innerSym.
@@ -734,7 +734,7 @@ MSFTModuleOp PartitionPass::partition(DesignPartitionOp partOp,
   hw::ModulePortInfo modPortInfo(inputPorts, outputPorts);
   auto partMod =
       OpBuilder(partOp->getParentOfType<MSFTModuleOp>())
-          .create<MSFTModuleOp>(loc, partOp.verilogNameAttr(), modPortInfo,
+          .create<MSFTModuleOp>(loc, partOp.getVerilogNameAttr(), modPortInfo,
                                 ArrayRef<NamedAttribute>{});
   partBlock->moveBefore(partMod.getBodyBlock());
   partMod.getBlocks().back().erase();
@@ -766,7 +766,7 @@ MSFTModuleOp PartitionPass::partition(DesignPartitionOp partOp,
                                          newGlobalRefs.end());
   auto newRefsAttr = ArrayAttr::get(partInst->getContext(), newGlobalRefVec);
   partInst->setAttr(hw::GlobalRefAttr::DialectAttrName, newRefsAttr);
-  partInst->setAttr("inner_sym", partInst.sym_nameAttr());
+  partInst->setAttr("inner_sym", partInst.getSymNameAttr());
 
   return partMod;
 }

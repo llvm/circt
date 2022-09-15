@@ -26,10 +26,6 @@ include "mlir/IR/EnumAttr.td"
 def Pipeline_Dialect : Dialect {
   let name = "pipeline";
   let cppNamespace = "::circt::pipeline";
-
-  // TODO: This needs to be flipped to kEmitAccessorPrefix_Prefixed
-  // https://discourse.llvm.org/t/psa-ods-generated-accessors-will-change-to-have-a-get-prefix-update-you-apis/4476
-  let emitAccessorPrefix = kEmitAccessorPrefix_Raw;
 }
 
 def PipelineOp : Op<Pipeline_Dialect, "pipeline", [
@@ -122,6 +118,14 @@ def PipelineOp : Op<Pipeline_Dialect, "pipeline", [
     // ESI channel.
     bool isLatencyInsensitive(); 
     bool isLatencySensitive() { return !isLatencyInsensitive(); }
+
+    /// Returns the body of a Pipeline component.
+    Block *getBodyBlock() {
+      Region* region = &getOperation()->getRegion(0);
+      assert(region->hasOneBlock() && "The body should have one Block.");
+      return &region->front();
+    }
+
   }];
 }
 
@@ -265,8 +269,8 @@ def PipelineWhileOp : Op<Pipeline_Dialect, "while", []> {
   ];
 
   let extraClassDeclaration = [{
-    Block &getCondBlock() { return condition().front(); }
-    Block &getStagesBlock() { return stages().front(); }
+    Block &getCondBlock() { return getCondition().front(); }
+    Block &getStagesBlock() { return getStages().front(); }
   }];
 }
 
@@ -323,7 +327,7 @@ def PipelineWhileStageOp : Op<Pipeline_Dialect, "while.stage",
   ];
 
   let extraClassDeclaration = [{
-    Block &getBodyBlock() { return body().front(); }
+    Block &getBodyBlock() { return getBody().front(); }
     unsigned getStageNumber();
   }];
 }

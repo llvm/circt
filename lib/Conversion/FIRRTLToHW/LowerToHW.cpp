@@ -1441,9 +1441,6 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   void addToIfDefBlock(StringRef cond, std::function<void(void)> thenCtor,
                        std::function<void(void)> elseCtor = {});
   void addToInitialBlock(std::function<void(void)> body);
-  void addToIfDefProceduralBlock(StringRef cond,
-                                 std::function<void(void)> thenCtor,
-                                 std::function<void(void)> elseCtor = {});
   void addIfProceduralBlock(Value cond, std::function<void(void)> thenCtor,
                             std::function<void(void)> elseCtor = {});
   Value getExtOrTruncAggregateValue(Value array, FIRRTLBaseType sourceType,
@@ -2324,24 +2321,6 @@ void FIRRTLLowering::addToInitialBlock(std::function<void(void)> body) {
   } else {
     initialBlocks[builder.getBlock()] = builder.create<sv::InitialOp>(body);
   }
-}
-
-void FIRRTLLowering::addToIfDefProceduralBlock(
-    StringRef cond, std::function<void(void)> thenCtor,
-    std::function<void(void)> elseCtor) {
-  // Check to see if we already have an ifdef on this condition immediately
-  // before the insertion point.  If so, extend it.
-  auto insertIt = builder.getInsertionPoint();
-  if (insertIt != builder.getBlock()->begin())
-    if (auto ifdef = dyn_cast<sv::IfDefProceduralOp>(*--insertIt)) {
-      if (ifdef.getCond().getIdent() == cond) {
-        runWithInsertionPointAtEndOfBlock(thenCtor, ifdef.getThenRegion());
-        runWithInsertionPointAtEndOfBlock(elseCtor, ifdef.getElseRegion());
-        return;
-      }
-    }
-
-  builder.create<sv::IfDefProceduralOp>(cond, thenCtor, elseCtor);
 }
 
 void FIRRTLLowering::addIfProceduralBlock(Value cond,

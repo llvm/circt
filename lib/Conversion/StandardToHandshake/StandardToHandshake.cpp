@@ -387,7 +387,7 @@ Operation *HandshakeLowering::insertMerge(Block *block, Value val,
     if (isa<StartOp>(val.getDefiningOp())) {
       auto cmerge = rewriter.create<handshake::ControlMergeOp>(
           block->front().getLoc(), val, numPredecessors);
-      setBlockEntryControl(block, cmerge.result());
+      setBlockEntryControl(block, cmerge.getResult());
       return cmerge;
     }
   }
@@ -776,15 +776,15 @@ BufferOp FeedForwardNetworkRewriter::buildSplitNetwork(
              std::back_inserter(branches));
 
   auto *findRes = llvm::find_if(branches, [](auto br) {
-    return br.dataOperand().getType().template isa<NoneType>();
+    return br.getDataOperand().getType().template isa<NoneType>();
   });
 
   assert(findRes && "expected one branch for the ctrl signal");
   ctrlBr = *findRes;
 
-  Value cond = ctrlBr.conditionOperand();
+  Value cond = ctrlBr.getConditionOperand();
   assert(llvm::all_of(branches, [&](auto branch) {
-    return branch.conditionOperand() == cond;
+    return branch.getConditionOperand() == cond;
   }));
 
   Location loc = cond.getLoc();
@@ -823,7 +823,7 @@ void FeedForwardNetworkRewriter::buildMergeNetwork(
 
   Value newCtrl = rewriter.create<handshake::MuxOp>(loc, buf, muxOperands);
 
-  Value cond = buf.result();
+  Value cond = buf.getResult();
   if (requiresFlip) {
     // As the mux operand order is the flipped cmerge input order, the index
     // which replaces the output of the cmerge has to be flipped/negated as
@@ -851,12 +851,12 @@ bool FeedForwardNetworkRewriter::requiresOperandFlip(
 
   Value fstOperand = ctrlMerge.getOperand(0);
 
-  assert(ctrlBr.trueResult().hasOneUse() &&
+  assert(ctrlBr.getTrueResult().hasOneUse() &&
          "expected the result of a branch to only have one user");
-  Operation *trueUser = *ctrlBr.trueResult().user_begin();
+  Operation *trueUser = *ctrlBr.getTrueResult().user_begin();
   if (trueUser == ctrlBr)
     // The cmerge directly consumes the cond_br output.
-    return ctrlBr.trueResult() == fstOperand;
+    return ctrlBr.getTrueResult() == fstOperand;
 
   // The cmerge is consumed in an intermediate block. Find out if this block is
   // a predecessor of the "true" successor of the cmerge.
@@ -945,7 +945,7 @@ LoopNetworkRewriter::processRegion(Region &r,
 
 // Returns the operand of the 'mux' operation which originated from 'block'.
 static Value getOperandFromBlock(MuxOp mux, Block *block) {
-  auto inValueIt = llvm::find_if(mux.dataOperands(), [&](Value operand) {
+  auto inValueIt = llvm::find_if(mux.getDataOperands(), [&](Value operand) {
     return block == operand.getParentBlock();
   });
   assert(
@@ -1028,7 +1028,7 @@ BufferOp LoopNetworkRewriter::buildContinueNetwork(Block *loopHeader,
   // the loop from any external block or the single loop backedge.
   auto loopCtrlMux = rewriter->create<MuxOp>(
       loc, primingRegister.getResult(),
-      llvm::SmallVector<Value>{externalCtrlMerge.result(), loopCtrl});
+      llvm::SmallVector<Value>{externalCtrlMerge.getResult(), loopCtrl});
 
   // Replace the existing control merge 'result' output with the loop control
   // mux.
@@ -1055,7 +1055,7 @@ BufferOp LoopNetworkRewriter::buildContinueNetwork(Block *loopHeader,
     externalDataInputs[muxOp] = getSortedInputs(externalCtrlMerge, muxOp);
     loopDataInputs[muxOp] = getOperandFromBlock(muxOp, loopLatch);
     assert(/*loop latch input*/ 1 + externalDataInputs[muxOp].size() ==
-               muxOp.dataOperands().size() &&
+               muxOp.getDataOperands().size() &&
            "Expected all mux operands to be partitioned between loop and "
            "external data inputs");
   }
@@ -1067,7 +1067,7 @@ BufferOp LoopNetworkRewriter::buildContinueNetwork(Block *loopHeader,
   // priming register.
   for (MuxOp mux : muxesToReplace) {
     auto externalDataMux = rewriter->create<MuxOp>(
-        loc, externalCtrlMerge.index(), externalDataInputs[mux]);
+        loc, externalCtrlMerge.getIndex(), externalDataInputs[mux]);
 
     rewriter->replaceOp(
         mux, rewriter
@@ -1103,15 +1103,15 @@ void LoopNetworkRewriter::buildExitNetwork(
     assert(
         condBr &&
         "Expected a conditional control branch op in the loop condition block");
-    Operation *trueUser = *condBr.trueResult().getUsers().begin();
+    Operation *trueUser = *condBr.getTrueResult().getUsers().begin();
     bool isTrueParity = trueUser->getBlock() == exitBlock;
     assert(isTrueParity ^
-               ((*condBr.falseResult().getUsers().begin())->getBlock() ==
+               ((*condBr.getFalseResult().getUsers().begin())->getBlock() ==
                 exitBlock) &&
            "The user of either the true or the false result should be in the "
            "exit block");
 
-    Value condValue = condBr.conditionOperand();
+    Value condValue = condBr.getConditionOperand();
     if (isTrueParity) {
       // This goes against the convention, and we have to invert the condition
       // value before connecting it to the exit network.
@@ -1179,10 +1179,10 @@ static Value getSuccResult(Operation *termOp, Operation *newOp,
   // For conditional block, check if result goes to true or to false successor
   if (auto condBranchOp = dyn_cast<mlir::cf::CondBranchOp>(termOp)) {
     if (condBranchOp.getTrueDest() == succBlock)
-      return dyn_cast<handshake::ConditionalBranchOp>(newOp).trueResult();
+      return dyn_cast<handshake::ConditionalBranchOp>(newOp).getTrueResult();
     else {
       assert(condBranchOp.getFalseDest() == succBlock);
-      return dyn_cast<handshake::ConditionalBranchOp>(newOp).falseResult();
+      return dyn_cast<handshake::ConditionalBranchOp>(newOp).getFalseResult();
     }
   }
   // If the block is unconditional, newOp has only one result
@@ -1295,10 +1295,10 @@ static Value getBlockControlValue(Block *block) {
   for (Operation &op : *block) {
     if (auto BranchOp = dyn_cast<handshake::BranchOp>(op))
       if (BranchOp.isControl())
-        return BranchOp.dataOperand();
+        return BranchOp.getDataOperand();
     if (auto BranchOp = dyn_cast<handshake::ConditionalBranchOp>(op))
       if (BranchOp.isControl())
-        return BranchOp.dataOperand();
+        return BranchOp.getDataOperand();
     if (auto endOp = dyn_cast<handshake::ReturnOp>(op))
       return endOp.getOperands().back();
   }
@@ -1399,7 +1399,7 @@ HandshakeLowering::replaceMemoryOps(ConversionPatternRewriter &rewriter,
                 auto loadOp = rewriter.create<handshake::LoadOp>(
                     op.getLoc(), access.memref, *operands);
                 newOp = loadOp;
-                op.getResult(0).replaceAllUsesWith(loadOp.dataResult());
+                op.getResult(0).replaceAllUsesWith(loadOp.getDataResult());
               } else {
                 newOp = rewriter.create<handshake::StoreOp>(
                     op.getLoc(), op.getOperand(0), *operands);
@@ -1432,7 +1432,7 @@ static SmallVector<Value, 8> getResultsToMemory(Operation *op) {
   if (handshake::LoadOp loadOp = dyn_cast<handshake::LoadOp>(op)) {
     // For load, get all address outputs/indices
     // (load also has one data output which goes to successor operation)
-    SmallVector<Value, 8> results(loadOp.addressResults());
+    SmallVector<Value, 8> results(loadOp.getAddressResults());
     return results;
 
   } else {

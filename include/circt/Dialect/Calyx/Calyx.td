@@ -39,10 +39,6 @@ def CalyxDialect : Dialect {
   // Depends on the HWDialect to support external primitives using hw.module.extern
   let dependentDialects = ["circt::hw::HWDialect"];
   let cppNamespace = "::circt::calyx";
-
-  // TODO: This needs to be flipped to kEmitAccessorPrefix_Prefixed
-  // https://discourse.llvm.org/t/psa-ods-generated-accessors-will-change-to-have-a-get-prefix-update-you-apis/4476
-  let emitAccessorPrefix = kEmitAccessorPrefix_Raw;
 }
 
 class SameTypeConstraint<string lhs, string rhs>
@@ -73,7 +69,7 @@ class CalyxContainer<string mnemonic, list<Trait> traits = []> :
 
   let extraClassDeclaration = [{
     /// Returns the body of a Calyx container.
-    Block *getBody() {
+    Block *getBodyBlock() {
       Region* region = &getOperation()->getRegion(0);
       assert(region->hasOneBlock() && "The body should have one Block.");
       return &region->front();

@@ -96,7 +96,7 @@ struct DivOpLowering : public OpConversionPattern<DivOp> {
     auto isLhsTypeSigned =
         op.getOperand(0).getType().template cast<IntegerType>().isSigned();
     auto rhsType = op.getOperand(1).getType().template cast<IntegerType>();
-    auto targetType = op.result().getType().template cast<IntegerType>();
+    auto targetType = op.getResult().getType().template cast<IntegerType>();
 
     // comb.div* needs identical bitwidths for its operands and its result.
     // Hence, we need to calculate the minimal bitwidth that can be used to
@@ -113,9 +113,9 @@ struct DivOpLowering : public OpConversionPattern<DivOp> {
         rhsType.getWidth() + (signedDivision && !rhsType.isSigned() ? 1 : 0));
 
     // Extend the operands
-    Value lhsValue = extendTypeWidth(rewriter, loc, adaptor.inputs()[0],
+    Value lhsValue = extendTypeWidth(rewriter, loc, adaptor.getInputs()[0],
                                      extendSize, isLhsTypeSigned);
-    Value rhsValue = extendTypeWidth(rewriter, loc, adaptor.inputs()[1],
+    Value rhsValue = extendTypeWidth(rewriter, loc, adaptor.getInputs()[1],
                                      extendSize, rhsType.isSigned());
 
     Value divResult;
@@ -143,24 +143,24 @@ struct CastOpLowering : public OpConversionPattern<CastOp> {
   LogicalResult
   matchAndRewrite(CastOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    auto sourceType = op.in().getType().cast<IntegerType>();
+    auto sourceType = op.getIn().getType().cast<IntegerType>();
     auto sourceWidth = sourceType.getWidth();
     bool isSourceTypeSigned = sourceType.isSigned();
-    auto targetWidth = op.out().getType().cast<IntegerType>().getWidth();
+    auto targetWidth = op.getOut().getType().cast<IntegerType>().getWidth();
 
     Value replaceValue;
     if (sourceWidth == targetWidth) {
       // the width does not change, we are done here and can directly use the
       // lowering input value
-      replaceValue = adaptor.in();
+      replaceValue = adaptor.getIn();
     } else if (sourceWidth < targetWidth) {
       // bit extensions needed, the type of extension required is determined by
       // the source type only!
-      replaceValue = extendTypeWidth(rewriter, op.getLoc(), adaptor.in(),
+      replaceValue = extendTypeWidth(rewriter, op.getLoc(), adaptor.getIn(),
                                      targetWidth, isSourceTypeSigned);
     } else {
       // bit truncation needed
-      replaceValue = extractBits(rewriter, op.getLoc(), adaptor.in(),
+      replaceValue = extractBits(rewriter, op.getLoc(), adaptor.getIn(),
                                  /*startBit=*/0, /*bitWidth=*/targetWidth);
     }
     rewriter.replaceOp(op, replaceValue);
@@ -206,20 +206,20 @@ struct ICmpOpLowering : public OpConversionPattern<ICmpOp> {
   LogicalResult
   matchAndRewrite(ICmpOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    auto lhsType = op.lhs().getType().cast<IntegerType>();
-    auto rhsType = op.rhs().getType().cast<IntegerType>();
+    auto lhsType = op.getLhs().getType().cast<IntegerType>();
+    auto rhsType = op.getRhs().getType().cast<IntegerType>();
     IntegerType::SignednessSemantics cmpSignedness;
     const unsigned cmpWidth =
         inferAddResultType(cmpSignedness, lhsType, rhsType) - 1;
 
-    ICmpPredicate pred = op.predicate();
+    ICmpPredicate pred = op.getPredicate();
     comb::ICmpPredicate combPred = lowerPredicate(
         pred, cmpSignedness == IntegerType::SignednessSemantics::Signed);
 
     const auto loc = op.getLoc();
-    Value lhsValue = extendTypeWidth(rewriter, loc, adaptor.lhs(), cmpWidth,
+    Value lhsValue = extendTypeWidth(rewriter, loc, adaptor.getLhs(), cmpWidth,
                                      lhsType.isSigned());
-    Value rhsValue = extendTypeWidth(rewriter, loc, adaptor.rhs(), cmpWidth,
+    Value rhsValue = extendTypeWidth(rewriter, loc, adaptor.getRhs(), cmpWidth,
                                      rhsType.isSigned());
 
     rewriter.replaceOpWithNewOp<comb::ICmpOp>(op, combPred, lhsValue, rhsValue,
@@ -247,11 +247,11 @@ struct BinaryOpLowering : public OpConversionPattern<BinOp> {
     auto isRhsTypeSigned =
         op.getOperand(1).getType().template cast<IntegerType>().isSigned();
     auto targetWidth =
-        op.result().getType().template cast<IntegerType>().getWidth();
+        op.getResult().getType().template cast<IntegerType>().getWidth();
 
-    Value lhsValue = extendTypeWidth(rewriter, loc, adaptor.inputs()[0],
+    Value lhsValue = extendTypeWidth(rewriter, loc, adaptor.getInputs()[0],
                                      targetWidth, isLhsTypeSigned);
-    Value rhsValue = extendTypeWidth(rewriter, loc, adaptor.inputs()[1],
+    Value rhsValue = extendTypeWidth(rewriter, loc, adaptor.getInputs()[1],
                                      targetWidth, isRhsTypeSigned);
     rewriter.replaceOpWithNewOp<ReplaceOp>(op, lhsValue, rhsValue, false);
     return success();

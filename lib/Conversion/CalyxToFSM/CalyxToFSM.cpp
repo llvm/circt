@@ -133,7 +133,7 @@ LogicalResult CompileFSMVisitor::visit(StateOp currentState, IfOp ifOp,
     transitionOp.ensureGuard(builder);
     fsm::ReturnOp returnOp = transitionOp.getGuardReturn();
     OpBuilder::InsertionGuard g(builder);
-    builder.setInsertionPointToStart(&transitionOp.guard().front());
+    builder.setInsertionPointToStart(&transitionOp.getGuard().front());
     Value branchTaken = cond;
     if (invert) {
       OpBuilder::InsertionGuard g(builder);
@@ -150,13 +150,13 @@ LogicalResult CompileFSMVisitor::visit(StateOp currentState, IfOp ifOp,
   };
 
   // Then branch.
-  if (failed(lowerBranch(ifOp.cond(), "then", /*invert=*/false,
+  if (failed(lowerBranch(ifOp.getCond(), "then", /*invert=*/false,
                          &ifOp.getThenBody()->front())))
     return failure();
 
   // Else branch.
   if (ifOp.elseBodyExists() &&
-      failed(lowerBranch(ifOp.cond(), "else", /*invert=*/true,
+      failed(lowerBranch(ifOp.getCond(), "else", /*invert=*/true,
                          &ifOp.getElseBody()->front())))
     return failure();
 
@@ -169,14 +169,14 @@ LogicalResult CompileFSMVisitor::visit(StateOp currentState, SeqOp seqOp,
   auto seqStateGuard = pushStateScope("seq");
 
   // Create a new state for each nested operation within this seqOp.
-  auto &seqOps = seqOp.getBody()->getOperations();
+  auto &seqOps = seqOp.getBodyBlock()->getOperations();
   llvm::SmallVector<std::pair<Operation *, StateOp>> seqStates;
 
   // Iterate over the operations within the sequence. We do this in reverse
   // order to ensure that we always know the next state.
   StateOp currentOpNextState = nextState;
   int n = seqOps.size() - 1;
-  for (auto &op : llvm::reverse(*seqOp.getBody())) {
+  for (auto &op : llvm::reverse(*seqOp.getBodyBlock())) {
     auto subStateGuard = pushStateScope(std::to_string(n--));
     auto thisStateOp =
         graph.createState(builder, op.getLoc(), subStateGuard.getName())
@@ -219,7 +219,7 @@ LogicalResult CompileFSMVisitor::visit(StateOp currentState, WhileOp whileOp,
                        (whileStateGuard.getName() + "_entry").str())
           ->getState();
   sc.addSymbol(whileBodyEntryState);
-  Operation *whileBodyOp = &whileOp.getBody()->front();
+  Operation *whileBodyOp = &whileOp.getBodyBlock()->front();
   if (failed(dispatch(whileBodyEntryState, whileBodyOp, whileHeaderState)))
     return failure();
 
@@ -234,11 +234,11 @@ LogicalResult CompileFSMVisitor::visit(StateOp currentState, WhileOp whileOp,
           ->getTransition();
 
   bodyTransition.ensureGuard(builder);
-  bodyTransition.getGuardReturn().setOperand(whileOp.cond());
+  bodyTransition.getGuardReturn().setOperand(whileOp.getCond());
   nextStateTransition.ensureGuard(builder);
   builder.setInsertionPoint(nextStateTransition.getGuardReturn());
   nextStateTransition.getGuardReturn().setOperand(
-      comb::createOrFoldNot(loc, whileOp.cond(), builder));
+      comb::createOrFoldNot(loc, whileOp.getCond(), builder));
   return success();
 }
 
@@ -248,22 +248,22 @@ LogicalResult CompileFSMVisitor::visit(StateOp currentState, EnableOp enableOp,
          "Expected this enableOp to be nested into some provided state");
 
   // Rename the current state now that we know it's an enable state.
-  auto enableStateGuard = pushStateScope(enableOp.groupName());
+  auto enableStateGuard = pushStateScope(enableOp.getGroupName());
   graph.renameState(currentState, enableStateGuard.getName());
 
   // Create a new calyx.enable in the output state referencing the enabled
   // group. We create a new op here as opposed to moving the existing, to make
   // callers iterating over nested ops safer.
   OpBuilder::InsertionGuard g(builder);
-  builder.setInsertionPointToStart(&currentState.output().front());
-  builder.create<calyx::EnableOp>(enableOp.getLoc(), enableOp.groupName());
+  builder.setInsertionPointToStart(&currentState.getOutput().front());
+  builder.create<calyx::EnableOp>(enableOp.getLoc(), enableOp.getGroupName());
 
   if (nextState)
     graph.createTransition(builder, enableOp.getLoc(), currentState, nextState);
 
   // Append this group to the set of compiled groups.
   compiledGroups.push_back(
-      SymbolRefAttr::get(builder.getContext(), enableOp.groupName()));
+      SymbolRefAttr::get(builder.getContext(), enableOp.getGroupName()));
 
   return success();
 }
@@ -277,9 +277,9 @@ void CalyxToFSMPass::runOnOperation() {
   ComponentOp component = getOperation();
   OpBuilder builder(&getContext());
   auto ctrlOp = component.getControlOp();
-  assert(ctrlOp.getBody()->getOperations().size() == 1 &&
+  assert(ctrlOp.getBodyBlock()->getOperations().size() == 1 &&
          "Expected a single top-level operation in the schedule");
-  Operation &topLevelCtrlOp = ctrlOp.getBody()->front();
+  Operation &topLevelCtrlOp = ctrlOp.getBodyBlock()->front();
   builder.setInsertionPoint(&topLevelCtrlOp);
 
   // Create a side-effect-only FSM (no inputs, no outputs) which will strictly

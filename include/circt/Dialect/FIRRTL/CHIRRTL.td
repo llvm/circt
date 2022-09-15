@@ -35,7 +35,6 @@ def CHIRRTLDialect : Dialect {
   let dependentDialects = ["circt::firrtl::FIRRTLDialect"];
 
   let useDefaultTypePrinterParser = 1;
-  int emitAccessorPrefix = kEmitAccessorPrefix_Prefixed;
 }
 
 //===----------------------------------------------------------------------===//

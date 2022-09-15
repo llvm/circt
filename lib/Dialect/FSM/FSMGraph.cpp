@@ -52,8 +52,8 @@ FSMGraph::FSMGraph(Operation *op) {
     // Add an edge to indicate that this state transitions to some other state.
     auto *currentStateNode = getOrAddState(stateOp);
 
-    for (auto transitionOp : stateOp.transitions().getOps<TransitionOp>()) {
-      auto *nextStateNode = getOrAddState(transitionOp.getNextState());
+    for (auto transitionOp : stateOp.getTransitions().getOps<TransitionOp>()) {
+      auto *nextStateNode = getOrAddState(transitionOp.getNextStateOp());
       currentStateNode->addTransitionEdge(nextStateNode, transitionOp);
     }
   }
@@ -84,7 +84,7 @@ FSMStateNode *FSMGraph::getOrAddState(StateOp state) {
 FSMStateNode *FSMGraph::createState(OpBuilder &builder, Location loc,
                                     StringRef name) {
   OpBuilder::InsertionGuard g(builder);
-  builder.setInsertionPointToEnd(&getMachine().body().front());
+  builder.setInsertionPointToEnd(&getMachine().getBody().front());
   auto stateOp = builder.create<StateOp>(loc, name);
   return getOrAddState(stateOp);
 }
@@ -95,7 +95,7 @@ FSMTransitionEdge *FSMGraph::createTransition(OpBuilder &builder, Location loc,
   auto *nextStateNode = getOrAddState(to);
   OpBuilder::InsertionGuard g(builder);
   // Set the insertion point to the end of the transitions.
-  builder.setInsertionPointToEnd(&from.transitions().getBlocks().front());
+  builder.setInsertionPointToEnd(&from.getTransitions().getBlocks().front());
   auto transition = builder.create<TransitionOp>(loc, to);
   return currentStateNode->addTransitionEdge(nextStateNode, transition);
 }
@@ -122,7 +122,7 @@ void FSMGraph::renameState(StateOp state, StringRef name) {
   auto updateTransitions = [&](auto &&transitionRange) {
     for (auto *transition : transitionRange) {
       auto transitionOp = transition->getTransition();
-      transitionOp->setAttr(transitionOp.nextStateAttrName(), nameStrAttr);
+      transitionOp->setAttr(transitionOp.getNextStateAttrName(), nameStrAttr);
     }
   };
 

@@ -35,8 +35,6 @@ def SystemCDialect : Dialect {
   }];
 
   let useDefaultTypePrinterParser = 0;
-
-  let emitAccessorPrefix = kEmitAccessorPrefix_Prefixed;
 }
 
 #endif // CIRCT_DIALECT_SYSTEMC_SYSTEMCDIALECT

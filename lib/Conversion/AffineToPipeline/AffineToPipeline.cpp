@@ -498,8 +498,8 @@ LogicalResult AffineToPipeline::createPipelinePipeline(
     termResults.push_back(valueMap.lookup(value));
   }
 
-  stagesTerminator.iter_argsMutable().append(termIterArgs);
-  stagesTerminator.resultsMutable().append(termResults);
+  stagesTerminator.getIterArgsMutable().append(termIterArgs);
+  stagesTerminator.getResultsMutable().append(termResults);
 
   // Replace loop results with pipeline results.
   for (size_t i = 0; i < forOp.getNumResults(); ++i)

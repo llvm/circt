@@ -60,7 +60,7 @@ InstanceOpLowering::matchAndRewrite(InstanceOp msftInst, OpAdaptor adaptor,
 
   ArrayAttr paramValues;
   if (isa<hw::HWModuleExternOp>(referencedModule)) {
-    paramValues = msftInst.parametersAttr();
+    paramValues = msftInst.getParametersAttr();
     if (!paramValues)
       paramValues = rewriter.getArrayAttr({});
   } else {
@@ -68,7 +68,7 @@ InstanceOpLowering::matchAndRewrite(InstanceOp msftInst, OpAdaptor adaptor,
         hw::PEO::StrConcat,
         {hw::ParamDeclRefAttr::get(rewriter.getStringAttr("__INST_HIER"),
                                    rewriter.getNoneType()),
-         rewriter.getStringAttr("."), msftInst.sym_nameAttr()});
+         rewriter.getStringAttr("."), msftInst.getSymNameAttr()});
     paramValues = rewriter.getArrayAttr(
         {hw::ParamDeclAttr::get("__INST_HIER", instAppendParam)});
   }
@@ -77,7 +77,7 @@ InstanceOpLowering::matchAndRewrite(InstanceOp msftInst, OpAdaptor adaptor,
       msftInst.getLoc(), referencedModule, msftInst.instanceNameAttr(),
       SmallVector<Value>(adaptor.getOperands().begin(),
                          adaptor.getOperands().end()),
-      paramValues, msftInst.sym_nameAttr());
+      paramValues, msftInst.getSymNameAttr());
   hwInst->setDialectAttrs(msftInst->getDialectAttrs());
   rewriter.replaceOp(msftInst, hwInst.getResults());
   return success();
@@ -103,11 +103,11 @@ private:
 LogicalResult
 ModuleOpLowering::matchAndRewrite(MSFTModuleOp mod, OpAdaptor adaptor,
                                   ConversionPatternRewriter &rewriter) const {
-  if (mod.body().empty()) {
+  if (mod.getBody().empty()) {
     std::string comment;
     llvm::raw_string_ostream(comment)
         << "// Module not generated: \"" << mod.getName() << "\" params "
-        << mod.parameters();
+        << mod.getParameters();
     // TODO: replace this with proper comment op when it's created.
     rewriter.replaceOpWithNewOp<sv::VerbatimOp>(mod, comment);
     return success();
@@ -122,7 +122,7 @@ ModuleOpLowering::matchAndRewrite(MSFTModuleOp mod, OpAdaptor adaptor,
   rewriter.inlineRegionBefore(mod.getBody(), hwmod.getBody(),
                               hwmod.getBody().end());
 
-  auto opOutputFile = mod.fileName();
+  auto opOutputFile = mod.getFileName();
   if (opOutputFile) {
     auto outputFileAttr = hw::OutputFileAttr::getFromFilename(
         rewriter.getContext(), *opOutputFile, false, true);
@@ -157,8 +157,8 @@ LogicalResult ModuleExternOpLowering::matchAndRewrite(
     MSFTModuleExternOp mod, OpAdaptor adaptor,
     ConversionPatternRewriter &rewriter) const {
   auto hwMod = rewriter.replaceOpWithNewOp<hw::HWModuleExternOp>(
-      mod, mod.getNameAttr(), mod.getPorts(), mod.verilogName().value_or(""),
-      mod.parameters());
+      mod, mod.getNameAttr(), mod.getPorts(), mod.getVerilogName().value_or(""),
+      mod.getParameters());
 
   if (!outputFile.empty()) {
     auto outputFileAttr = hw::OutputFileAttr::getFromFilename(

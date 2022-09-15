@@ -60,9 +60,9 @@ private:
 /// to the new Seq GroupOp.
 void CompileControlVisitor::visit(SeqOp seq, ComponentOp &component) {
   auto wires = component.getWiresOp();
-  Block *wiresBody = wires.getBody();
+  Block *wiresBody = wires.getBodyBlock();
 
-  auto &seqOps = seq.getBody()->getOperations();
+  auto &seqOps = seq.getBodyBlock()->getOperations();
   if (!llvm::all_of(seqOps, [](auto &&op) { return isa<EnableOp>(op); })) {
     seq.emitOpError("should only contain EnableOps in this pass.");
     return;
@@ -75,9 +75,9 @@ void CompileControlVisitor::visit(SeqOp seq, ComponentOp &component) {
   OpBuilder builder(component->getRegion(0));
   auto fsmRegister =
       createRegister(seq.getLoc(), builder, component, fsmBitWidth, "fsm");
-  Value fsmIn = fsmRegister.in();
-  Value fsmWriteEn = fsmRegister.write_en();
-  Value fsmOut = fsmRegister.out();
+  Value fsmIn = fsmRegister.getIn();
+  Value fsmWriteEn = fsmRegister.getWriteEn();
+  Value fsmOut = fsmRegister.getOut();
 
   builder.setInsertionPointToStart(wiresBody);
   auto oneConstant = createConstant(wires.getLoc(), builder, component, 1, 1);
@@ -95,7 +95,7 @@ void CompileControlVisitor::visit(SeqOp seq, ComponentOp &component) {
   SmallVector<Attribute, 8> compiledGroups;
   Value fsmNextState;
   seq.walk([&](EnableOp enable) {
-    StringRef groupName = enable.groupName();
+    StringRef groupName = enable.getGroupName();
     compiledGroups.push_back(
         SymbolRefAttr::get(builder.getContext(), groupName));
     auto groupOp = symTable.lookup<GroupOp>(groupName);
@@ -106,8 +106,8 @@ void CompileControlVisitor::visit(SeqOp seq, ComponentOp &component) {
 
     // TODO(Calyx): Eventually, we should canonicalize the GroupDoneOp's guard
     // and source.
-    auto guard = groupOp.getDoneOp().guard();
-    Value source = groupOp.getDoneOp().src();
+    auto guard = groupOp.getDoneOp().getGuard();
+    Value source = groupOp.getDoneOp().getSrc();
     auto doneOpValue = !guard ? source
                               : builder.create<comb::AndOp>(
                                     wires->getLoc(), guard, source, false);
@@ -137,7 +137,7 @@ void CompileControlVisitor::visit(SeqOp seq, ComponentOp &component) {
     // Add guarded assignments to the fsm register `in` and `write_en` ports.
     fsmNextState = createConstant(wires->getLoc(), builder, component,
                                   fsmBitWidth, fsmIndex + 1);
-    builder.setInsertionPointToEnd(seqGroup.getBody());
+    builder.setInsertionPointToEnd(seqGroup.getBodyBlock());
     builder.create<AssignOp>(wires->getLoc(), fsmIn, fsmNextState,
                              groupDoneGuard);
     builder.create<AssignOp>(wires->getLoc(), fsmWriteEn, oneConstant,
@@ -153,7 +153,7 @@ void CompileControlVisitor::visit(SeqOp seq, ComponentOp &component) {
       wires->getLoc(), comb::ICmpPredicate::eq, fsmOut, fsmNextState, false);
 
   // Insert the respective GroupDoneOp.
-  builder.setInsertionPointToEnd(seqGroup.getBody());
+  builder.setInsertionPointToEnd(seqGroup.getBodyBlock());
   builder.create<GroupDoneOp>(seqGroup->getLoc(), oneConstant, isFinalState);
 
   // Add continuous wires to reset the `in` and `write_en` ports of the fsm
@@ -168,7 +168,7 @@ void CompileControlVisitor::visit(SeqOp seq, ComponentOp &component) {
   // Replace the SeqOp with an EnableOp.
   builder.setInsertionPoint(seq);
   builder.create<EnableOp>(
-      seq->getLoc(), seqGroup.sym_name(),
+      seq->getLoc(), seqGroup.getSymName(),
       ArrayAttr::get(builder.getContext(), compiledGroups));
 
   seq->erase();

@@ -82,10 +82,10 @@ void DiscoverAppIDsPass::processMod(MSFTModuleOp mod) {
     // number of instances which contain a base name.
     if (auto inst = dyn_cast<InstanceOp>(op)) {
       auto targetMod = dyn_cast<MSFTModuleOp>(
-          topLevelSyms.getDefinition(inst.moduleNameAttr()));
-      if (targetMod && targetMod.childAppIDBases())
+          topLevelSyms.getDefinition(inst.getModuleNameAttr()));
+      if (targetMod && targetMod.getChildAppIDBases())
         for (auto base :
-             targetMod.childAppIDBasesAttr().getAsRange<StringAttr>())
+             targetMod.getChildAppIDBasesAttr().getAsRange<StringAttr>())
           appBaseCounts[base] += 1;
     }
   });
@@ -108,7 +108,7 @@ void DiscoverAppIDsPass::processMod(MSFTModuleOp mod) {
   if (finalModBases.empty())
     return;
   ArrayAttr childrenBases = ArrayAttr::get(mod.getContext(), finalModBases);
-  mod.childAppIDBasesAttr(childrenBases);
+  mod.setChildAppIDBasesAttr(childrenBases);
 }
 
 std::unique_ptr<Pass> circt::msft::createDiscoverAppIDsPass() {

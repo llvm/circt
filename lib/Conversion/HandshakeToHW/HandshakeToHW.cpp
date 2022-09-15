@@ -130,7 +130,8 @@ using DiscriminatingTypes = std::pair<SmallVector<Type>, SmallVector<Type>>;
 static DiscriminatingTypes getHandshakeDiscriminatingTypes(Operation *op) {
   return TypeSwitch<Operation *, DiscriminatingTypes>(op)
       .Case<MemoryOp>([&](auto memOp) {
-        return DiscriminatingTypes{{}, {memOp.memRefType().getElementType()}};
+        return DiscriminatingTypes{{},
+                                   {memOp.getMemRefType().getElementType()}};
       })
       .Default([&](auto) {
         // By default, all in- and output types which is not a control type
@@ -261,7 +262,7 @@ static std::string getSubModuleName(Operation *oldOp) {
 
   // Add memory ID.
   if (auto memOp = dyn_cast<handshake::MemoryOp>(oldOp))
-    subModuleName += "_id" + std::to_string(memOp.id());
+    subModuleName += "_id" + std::to_string(memOp.getId());
 
   // Add compare kind.
   if (auto comOp = dyn_cast<mlir::arith::CmpIOp>(oldOp))

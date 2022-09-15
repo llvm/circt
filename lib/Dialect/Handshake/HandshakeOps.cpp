@@ -167,7 +167,7 @@ struct EliminateUnusedForkResultsPattern : mlir::OpRewritePattern<ForkOp> {
       unsigned i = 0;
       for (auto oldRes : llvm::enumerate(op.getResults()))
         if (unusedIndexes.count(oldRes.index()) == 0)
-          oldRes.value().replaceAllUsesWith(newFork.getResult(i++));
+          oldRes.value().replaceAllUsesWith(newFork.getResults()[i++]);
     });
     rewriter.eraseOp(op);
     return success();
@@ -187,7 +187,7 @@ struct EliminateForkToForkPattern : mlir::OpRewritePattern<ForkOp> {
     /// Keeping the op.operand() output may or may not be redundant (dependning
     /// on if op is the single user of the value), but we'll let
     /// EliminateUnusedForkResultsPattern apply in that case.
-    unsigned totalNumOuts = op.size() + parentForkOp.size();
+    unsigned totalNumOuts = op.getSize() + parentForkOp.getSize();
     rewriter.updateRootInPlace(parentForkOp, [&] {
       /// Create a new parent fork op which produces all of the fork outputs and
       /// replace all of the uses of the old results.
@@ -201,7 +201,8 @@ struct EliminateForkToForkPattern : mlir::OpRewritePattern<ForkOp> {
 
       /// Replace the results of the matches fork op with the corresponding
       /// results of the new parent fork op.
-      rewriter.replaceOp(op, newParentForkOp.getResults().take_back(op.size()));
+      rewriter.replaceOp(op,
+                         newParentForkOp.getResults().take_back(op.getSize()));
     });
     return success();
   }
@@ -304,8 +305,8 @@ struct EliminateSimpleMuxesPattern : mlir::OpRewritePattern<MuxOp> {
   using mlir::OpRewritePattern<MuxOp>::OpRewritePattern;
   LogicalResult matchAndRewrite(MuxOp op,
                                 PatternRewriter &rewriter) const override {
-    Value firstDataOperand = getDematerialized(op.dataOperands()[0]);
-    if (!llvm::all_of(op.dataOperands(), [&](Value operand) {
+    Value firstDataOperand = getDematerialized(op.getDataOperands()[0]);
+    if (!llvm::all_of(op.getDataOperands(), [&](Value operand) {
           return getDematerialized(operand) == firstDataOperand;
         }))
       return failure();
@@ -318,10 +319,10 @@ struct EliminateUnaryMuxesPattern : OpRewritePattern<MuxOp> {
   using mlir::OpRewritePattern<MuxOp>::OpRewritePattern;
   LogicalResult matchAndRewrite(MuxOp op,
                                 PatternRewriter &rewriter) const override {
-    if (op.dataOperands().size() != 1)
+    if (op.getDataOperands().size() != 1)
       return failure();
 
-    rewriter.replaceOp(op, op.dataOperands()[0]);
+    rewriter.replaceOp(op, op.getDataOperands()[0]);
     return success();
   }
 };
@@ -391,19 +392,19 @@ ParseResult MuxOp::parse(OpAsmParser &parser, OperationState &result) {
 }
 
 void MuxOp::print(OpAsmPrinter &p) {
-  Type selectType = selectOperand().getType();
+  Type selectType = getSelectOperand().getType();
   auto ops = getOperands();
   p << ' ' << ops.front();
   p << " [";
   p.printOperands(ops.drop_front());
   p << "]";
   p.printOptionalAttrDict((*this)->getAttrs(), {"dataType", "size", "control"});
-  p << " : " << selectType << ", " << dataType();
+  p << " : " << selectType << ", " << getDataType();
 }
 
 LogicalResult MuxOp::verify() {
-  unsigned numDataOperands = static_cast<int>(dataOperands().size());
-  auto selectType = selectOperand().getType();
+  unsigned numDataOperands = static_cast<int>(getDataOperands().size());
+  auto selectType = getSelectOperand().getType();
 
   unsigned selectBits;
   if (auto integerType = selectType.dyn_cast<IntegerType>())
@@ -695,8 +696,8 @@ struct EliminateSimpleControlMergesPattern
 
 LogicalResult EliminateSimpleControlMergesPattern::matchAndRewrite(
     ControlMergeOp op, PatternRewriter &rewriter) const {
-  auto dataResult = op.result();
-  auto choiceResult = op.index();
+  auto dataResult = op.getResult();
+  auto choiceResult = op.getIndex();
   auto choiceUnused = choiceResult.use_empty();
   if (!choiceUnused && !choiceResult.hasOneUse())
     return failure();
@@ -708,7 +709,7 @@ LogicalResult EliminateSimpleControlMergesPattern::matchAndRewrite(
       return failure();
   }
 
-  auto merge = rewriter.create<MergeOp>(op.getLoc(), op.dataOperands());
+  auto merge = rewriter.create<MergeOp>(op.getLoc(), op.getDataOperands());
 
   for (auto &use : dataResult.getUses()) {
     auto *user = use.getOwner();
@@ -804,7 +805,7 @@ ParseResult ConditionalBranchOp::parse(OpAsmParser &parser,
 }
 
 void ConditionalBranchOp::print(OpAsmPrinter &p) {
-  Type type = dataOperand().getType();
+  Type type = getDataOperand().getType();
   p << " " << getOperands();
   p.printOptionalAttrDict((*this)->getAttrs(), {"size", "dataType", "control"});
   p << " : " << type;
@@ -868,7 +869,7 @@ ParseResult SelectOp::parse(OpAsmParser &parser, OperationState &result) {
 }
 
 void SelectOp::print(OpAsmPrinter &p) {
-  Type type = trueOperand().getType();
+  Type type = getTrueOperand().getType();
   p << " " << getOperands();
   p.printOptionalAttrDict((*this)->getAttrs(), {"size", "dataType", "control"});
   p << " : " << type;
@@ -970,10 +971,10 @@ void SourceOp::print(OpAsmPrinter &p) {
 
 LogicalResult ConstantOp::verify() {
   // Verify that the type of the provided value is equal to the result type.
-  auto typedValue = value().dyn_cast<mlir::TypedAttr>();
+  auto typedValue = getValue().dyn_cast<mlir::TypedAttr>();
   if (!typedValue)
     return emitOpError("constant value must be a typed attribute; value is ")
-           << value();
+           << getValue();
   if (typedValue.getType() != getResult().getType())
     return emitOpError() << "constant value type " << typedValue.getType()
                          << " differs from operation result type "
@@ -1006,15 +1007,15 @@ void handshake::TerminatorOp::build(OpBuilder &builder, OperationState &result,
 LogicalResult BufferOp::verify() {
   // Verify that exactly 'size' number of initial values have been provided, if
   // an initializer list have been provided.
-  if (auto initVals = initValues()) {
+  if (auto initVals = getInitValues()) {
     if (!isSequential())
       return emitOpError()
              << "only bufferType buffers are allowed to have initial values.";
 
     auto nInits = initVals->size();
-    if (nInits != size())
-      return emitOpError() << "expected " << size() << " init values but got "
-                           << nInits << ".";
+    if (nInits != getSize())
+      return emitOpError() << "expected " << getSize()
+                           << " init values but got " << nInits << ".";
   }
 
   return success();
@@ -1067,7 +1068,7 @@ void BufferOp::print(OpAsmPrinter &p) {
   int size =
       (*this)->getAttrOfType<IntegerAttr>("size").getValue().getZExtValue();
   p << " [" << size << "]";
-  p << " " << stringifyEnum(bufferType());
+  p << " " << stringifyEnum(getBufferType());
   Type type = (*this)->getAttrOfType<TypeAttr>("dataType").getValue();
   p << " " << (*this)->getOperands();
   p.printOptionalAttrDict((*this)->getAttrs(),
@@ -1089,7 +1090,7 @@ static std::string getMemoryOperandName(unsigned nStores, unsigned idx) {
 }
 
 std::string handshake::MemoryOp::getOperandName(unsigned int idx) {
-  return getMemoryOperandName(stCount(), idx);
+  return getMemoryOperandName(getStCount(), idx);
 }
 
 static std::string getMemoryResultName(unsigned nLoads, unsigned nStores,
@@ -1105,11 +1106,11 @@ static std::string getMemoryResultName(unsigned nLoads, unsigned nStores,
 }
 
 std::string handshake::MemoryOp::getResultName(unsigned int idx) {
-  return getMemoryResultName(ldCount(), stCount(), idx);
+  return getMemoryResultName(getLdCount(), getStCount(), idx);
 }
 
 LogicalResult MemoryOp::verify() {
-  auto memrefType = memRefType();
+  auto memrefType = getMemRefType();
 
   if (memrefType.getNumDynamicDims() != 0)
     return emitOpError()
@@ -1117,16 +1118,16 @@ LogicalResult MemoryOp::verify() {
   if (memrefType.getShape().size() != 1)
     return emitOpError() << "memref must have only a single dimension.";
 
-  unsigned opStCount = stCount();
-  unsigned opLdCount = ldCount();
+  unsigned opStCount = getStCount();
+  unsigned opLdCount = getLdCount();
   int addressCount = memrefType.getShape().size();
 
-  auto inputType = inputs().getType();
-  auto outputType = outputs().getType();
+  auto inputType = getInputs().getType();
+  auto outputType = getOutputs().getType();
   Type dataType = memrefType.getElementType();
 
-  unsigned numOperands = static_cast<int>(inputs().size());
-  unsigned numResults = static_cast<int>(outputs().size());
+  unsigned numOperands = static_cast<int>(getInputs().size());
+  unsigned numResults = static_cast<int>(getOutputs().size());
   if (numOperands != (1 + addressCount) * opStCount + addressCount * opLdCount)
     return emitOpError("number of operands ")
            << numOperands << " does not match number expected of "
@@ -1184,11 +1185,11 @@ std::string handshake::ExternalMemoryOp::getOperandName(unsigned int idx) {
   if (idx == 0)
     return "extmem";
 
-  return getMemoryOperandName(stCount(), idx - 1);
+  return getMemoryOperandName(getStCount(), idx - 1);
 }
 
 std::string handshake::ExternalMemoryOp::getResultName(unsigned int idx) {
-  return getMemoryResultName(ldCount(), stCount(), idx);
+  return getMemoryResultName(getLdCount(), getStCount(), idx);
 }
 
 void ExternalMemoryOp::build(OpBuilder &builder, OperationState &result,
@@ -1244,10 +1245,10 @@ bool handshake::MemoryOp::allocateMemory(
     llvm::DenseMap<unsigned, unsigned> &memoryMap,
     std::vector<std::vector<llvm::Any>> &store,
     std::vector<double> &storeTimes) {
-  if (memoryMap.count(id()))
+  if (memoryMap.count(getId()))
     return false;
 
-  auto type = memRefType();
+  auto type = getMemRefType();
   std::vector<llvm::Any> in;
 
   ArrayRef<int64_t> shape = type.getShape();
@@ -1278,12 +1279,12 @@ bool handshake::MemoryOp::allocateMemory(
     }
   }
 
-  memoryMap[id()] = ptr;
+  memoryMap[getId()] = ptr;
   return true;
 }
 
 std::string handshake::LoadOp::getOperandName(unsigned int idx) {
-  unsigned nAddresses = addresses().size();
+  unsigned nAddresses = getAddresses().size();
   std::string opName;
   if (idx < nAddresses)
     opName = "addrIn" + std::to_string(idx);
@@ -1350,10 +1351,11 @@ static ParseResult parseMemoryAccessOp(OpAsmParser &parser,
 template <typename MemOp>
 static void printMemoryAccessOp(OpAsmPrinter &p, MemOp op) {
   p << " [";
-  p << op.addresses();
-  p << "] " << op.data() << ", " << op.ctrl() << " : ";
-  llvm::interleaveComma(op.addresses(), p, [&](Value v) { p << v.getType(); });
-  p << ", " << op.data().getType();
+  p << op.getAddresses();
+  p << "] " << op.getData() << ", " << op.getCtrl() << " : ";
+  llvm::interleaveComma(op.getAddresses(), p,
+                        [&](Value v) { p << v.getType(); });
+  p << ", " << op.getData().getType();
 }
 
 ParseResult LoadOp::parse(OpAsmParser &parser, OperationState &result) {
@@ -1363,7 +1365,7 @@ ParseResult LoadOp::parse(OpAsmParser &parser, OperationState &result) {
 void LoadOp::print(OpAsmPrinter &p) { printMemoryAccessOp(p, *this); }
 
 std::string handshake::StoreOp::getOperandName(unsigned int idx) {
-  unsigned nAddresses = addresses().size();
+  unsigned nAddresses = getAddresses().size();
   std::string opName;
   if (idx < nAddresses)
     opName = "addrIn" + std::to_string(idx);
@@ -1376,7 +1378,7 @@ std::string handshake::StoreOp::getOperandName(unsigned int idx) {
 
 template <typename TMemoryOp>
 static LogicalResult verifyMemoryAccessOp(TMemoryOp op) {
-  if (op.addresses().size() == 0)
+  if (op.getAddresses().size() == 0)
     return op.emitOpError() << "No addresses were specified";
 
   return success();
@@ -1447,15 +1449,15 @@ ParseResult JoinOp::parse(OpAsmParser &parser, OperationState &result) {
 }
 
 void JoinOp::print(OpAsmPrinter &p) {
-  p << " " << data();
+  p << " " << getData();
   p.printOptionalAttrDict((*this)->getAttrs(), {"control"});
-  p << " : " << data().getTypes();
+  p << " : " << getData().getTypes();
 }
 
 /// Based on mlir::func::CallOp::verifySymbolUses
 LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   // Check that the module attribute was specified.
-  auto fnAttr = this->moduleAttr();
+  auto fnAttr = this->getModuleAttr();
   assert(fnAttr && "requires a 'module' symbol reference attribute");
 
   FuncOp fn = symbolTable.lookupNearestSymbolFrom<FuncOp>(*this, fnAttr);
@@ -1521,9 +1523,9 @@ ParseResult UnpackOp::parse(OpAsmParser &parser, OperationState &result) {
 }
 
 void UnpackOp::print(OpAsmPrinter &p) {
-  p << " " << input();
+  p << " " << getInput();
   p.printOptionalAttrDict((*this)->getAttrs());
-  p << " : " << input().getType();
+  p << " : " << getInput().getType();
 }
 
 ParseResult PackOp::parse(OpAsmParser &parser, OperationState &result) {
@@ -1546,9 +1548,9 @@ ParseResult PackOp::parse(OpAsmParser &parser, OperationState &result) {
 }
 
 void PackOp::print(OpAsmPrinter &p) {
-  p << " " << inputs();
+  p << " " << getInputs();
   p.printOptionalAttrDict((*this)->getAttrs());
-  p << " : " << result().getType();
+  p << " : " << getResult().getType();
 }
 
 //===----------------------------------------------------------------------===//

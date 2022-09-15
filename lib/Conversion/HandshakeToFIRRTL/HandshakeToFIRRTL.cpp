@@ -333,7 +333,8 @@ using DiscriminatingTypes = std::pair<SmallVector<Type>, SmallVector<Type>>;
 static DiscriminatingTypes getHandshakeDiscriminatingTypes(Operation *op) {
   return TypeSwitch<Operation *, DiscriminatingTypes>(op)
       .Case<MemoryOp>([&](auto memOp) {
-        return DiscriminatingTypes{{}, {memOp.memRefType().getElementType()}};
+        return DiscriminatingTypes{{},
+                                   {memOp.getMemRefType().getElementType()}};
       })
       .Default([&](auto) {
         // By default, all in- and output types which is not a control type
@@ -431,7 +432,7 @@ static std::string getSubModuleName(Operation *oldOp) {
 
   // Add memory ID.
   if (auto memOp = dyn_cast<handshake::MemoryOp>(oldOp))
-    subModuleName += "_id" + std::to_string(memOp.id());
+    subModuleName += "_id" + std::to_string(memOp.getId());
 
   // Add compare kind.
   if (auto comOp = dyn_cast<mlir::arith::CmpIOp>(oldOp))
@@ -445,7 +446,7 @@ static std::string getSubModuleName(Operation *oldOp) {
     else
       subModuleName += "_fifo";
 
-    if (auto initValues = bufferOp.initValues()) {
+    if (auto initValues = bufferOp.getInitValues()) {
       subModuleName += "_init";
       for (const Attribute e : *initValues) {
         assert(e.isa<IntegerAttr>());
@@ -704,7 +705,7 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
                              "firrtl.transforms.FlattenAnnotation"))})));
   }
 
-  rewriter.inlineRegionBefore(funcOp.body(), topModuleOp.getBody(),
+  rewriter.inlineRegionBefore(funcOp.getBody(), topModuleOp.getBody(),
                               topModuleOp.getBody().end());
 
   // In the following section, we manually merge the two regions and manually
@@ -2430,8 +2431,8 @@ bool HandshakeBuilder::visitHandshake(BufferOp op) {
   // For now, we only support sequential buffers.
   if (op.isSequential()) {
     SmallVector<int64_t> initValues = {};
-    if (op.initValues())
-      initValues = op.getInitValues();
+    if (op.getInitValues())
+      initValues = op.getInitValueArray();
     return buildSeqBufferLogic(op.getNumSlots(), &input, &output, clock, reset,
                                op.isControl(), initValues);
   }
@@ -2492,7 +2493,7 @@ bool HandshakeBuilder::visitHandshake(ExternalMemoryOp op) {
 
 bool HandshakeBuilder::visitHandshake(MemoryOp op) {
   // Get the memory type and element type.
-  MemRefType type = op.memRefType();
+  MemRefType type = op.getMemRefType();
   Type elementType = type.getElementType();
   if (!elementType.isSignlessInteger()) {
     op.emitError("only memrefs of signless ints are supported");
@@ -2506,7 +2507,7 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
   RUWAttr ruw = RUWAttr::Old;
   uint64_t depth = type.getNumElements();
   FIRRTLBaseType dataType = getFIRRTLType(elementType);
-  auto name = "mem" + std::to_string(op.id());
+  auto name = "mem" + std::to_string(op.getId());
 
   // Helpers to get port identifiers.
   auto loadIdentifier = [&](size_t i) {
@@ -2518,8 +2519,8 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
   };
 
   // Collect the port info for each port.
-  uint64_t numLoads = op.ldCount();
-  uint64_t numStores = op.stCount();
+  uint64_t numLoads = op.getLdCount();
+  uint64_t numStores = op.getStCount();
   SmallVector<std::pair<StringAttr, MemOp::PortKind>, 8> ports;
   for (size_t i = 0; i < numLoads; ++i) {
     auto portName = loadIdentifier(i);

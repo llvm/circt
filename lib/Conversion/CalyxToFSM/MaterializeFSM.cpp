@@ -61,13 +61,14 @@ struct MaterializeCalyxToFSMPass
       if (enabledGroups.contains(groupIt.value()))
         doneGuards.push_back(machineOp.getArgument(groupIt.index()));
 
-    for (auto transition : stateOp.transitions().getOps<fsm::TransitionOp>()) {
+    for (auto transition :
+         stateOp.getTransitions().getOps<fsm::TransitionOp>()) {
       transition.ensureGuard(b);
       auto guardOp = transition.getGuardReturn();
       llvm::SmallVector<Value> guards;
       llvm::append_range(guards, doneGuards);
       if (guardOp.getNumOperands() != 0)
-        guards.push_back(guardOp.operand());
+        guards.push_back(guardOp.getOperand());
 
       if (guards.empty())
         continue;
@@ -117,7 +118,8 @@ void MaterializeCalyxToFSMPass::runOnOperation() {
   auto *ctx = &getContext();
   auto b = OpBuilder(ctx);
   auto controlOp = component.getControlOp();
-  machineOp = dyn_cast_or_null<fsm::MachineOp>(controlOp.getBody()->front());
+  machineOp =
+      dyn_cast_or_null<fsm::MachineOp>(controlOp.getBodyBlock()->front());
   if (!machineOp) {
     controlOp.emitOpError()
         << "expected an 'fsm.machine' operation as the top-level operation "
@@ -143,8 +145,8 @@ void MaterializeCalyxToFSMPass::runOnOperation() {
   // the groups which they enable as well as the set of all enabled states.
   for (auto stateOp : machineOp.getOps<fsm::StateOp>()) {
     for (auto enableOp : llvm::make_early_inc_range(
-             stateOp.output().getOps<calyx::EnableOp>())) {
-      auto groupName = enableOp.groupNameAttr().getAttr();
+             stateOp.getOutput().getOps<calyx::EnableOp>())) {
+      auto groupName = enableOp.getGroupNameAttr().getAttr();
       stateEnables[stateOp].insert(groupName);
       referencedGroups.insert(groupName);
       // Erase the enable op now that we've recorded the information.

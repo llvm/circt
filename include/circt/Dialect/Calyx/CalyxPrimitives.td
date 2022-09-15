@@ -101,7 +101,7 @@ def MemoryOp : CalyxPrimitive<"memory", []> {
   ];
 
   let extraClassDeclaration = [{
-    size_t getNumDimensions() { return addrSizes().size(); }
+    size_t getNumDimensions() { return getAddrSizes().size(); }
 
     ValueRange addrPorts() { return getResults().take_front(getNumDimensions()); }
     Value addrPort(size_t i) {
