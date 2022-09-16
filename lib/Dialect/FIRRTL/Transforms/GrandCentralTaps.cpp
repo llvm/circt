@@ -742,7 +742,8 @@ LogicalResult applyGCTMemTapsWithWires(const AnnoPathValue &target,
     return mlir::emitError(loc, "wireName must have at least one entry");
   if (auto combMem = dyn_cast<chirrtl::CombMemOp>(srcTarget->ref.getOp())) {
     if (!combMem.getType().getElementType().isGround())
-      return combMem.emitOpError("cannot generate MemTap to a memory with aggregate data type");
+      return combMem.emitOpError(
+          "cannot generate MemTap to a memory with aggregate data type");
     ImplicitLocOpBuilder builder(combMem->getLoc(), combMem);
     builder.setInsertionPointAfter(combMem);
     // Construct the type for the debug port.
