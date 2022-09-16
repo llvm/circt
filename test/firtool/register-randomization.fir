@@ -27,7 +27,7 @@ circuit Foo:
     reg s: UInt<33>, clock
     s <= d
 
-    q <= s
+    q <= r
 
     ; ALL:   automatic logic [31:0] _RANDOM_0;
     ; ALL:   automatic logic [31:0] _RANDOM_1;
@@ -67,7 +67,7 @@ circuit Foo:
 
     ; ALL:       s = {_RANDOM_2[31:2], _RANDOM_3[2:0]};
     ; NAMED:     s = {_RANDOM_2[31:2], _RANDOM_3[2:0]};
-    ; NONE:      s = {_RANDOM_2[31:2], _RANDOM_3[2:0]};
+    ; NONE-NOT:  s = {{.*}};
 
     inst i0 of TwoLargeRegisters
     i0.clock <= clock
