@@ -9,8 +9,9 @@
 include "circt/Dialect/HW/HWTypes.td"
 include "mlir/IR/RegionKindInterface.td"
 
-def ServiceDeclOp : ESI_Op<"service.decl",
-          [SingleBlock, NoTerminator, HasParent<"::mlir::ModuleOp">, Symbol]> {
+def CustomServiceDeclOp : ESI_Op<"service.decl",
+          [SingleBlock, NoTerminator, HasParent<"::mlir::ModuleOp">,
+          Symbol, DeclareOpInterfaceMethods<ServiceDeclOpInterface>]> {
   let summary = "An ESI service interface declaration";
   let description = [{
     A declaration of an ESI service interface. Defines a contract between a
@@ -35,33 +36,34 @@ def ServiceDeclOp : ESI_Op<"service.decl",
 }
 
 def ToServerOp : ESI_Op<"service.to_server",
-                        [HasParent<"::circt::esi::ServiceDeclOp">]> {
+                        [HasParent<"::circt::esi::CustomServiceDeclOp">]> {
   let summary = "An ESI service port headed to the service";
 
-  let arguments = (ins SymbolNameAttr:$inner_sym, TypeAttr:$type);
+  let arguments = (ins SymbolNameAttr:$inner_sym, TypeAttr:$toServerType);
   let assemblyFormat = [{
-    $inner_sym attr-dict `:` $type
+    $inner_sym attr-dict `:` $toServerType
   }];
 }
 
 def ToClientOp : ESI_Op<"service.to_client",
-                        [HasParent<"::circt::esi::ServiceDeclOp">]> {
+                        [HasParent<"::circt::esi::CustomServiceDeclOp">]> {
   let summary = "An ESI service port headed to a particular client";
 
-  let arguments = (ins SymbolNameAttr:$inner_sym, TypeAttr:$type);
+  let arguments = (ins SymbolNameAttr:$inner_sym, TypeAttr:$toClientType);
   let assemblyFormat = [{
-    $inner_sym  attr-dict `:` $type
+    $inner_sym  attr-dict `:` $toClientType
   }];
 }
 
 def ServiceDeclInOutOp : ESI_Op<"service.inout",
-                        [HasParent<"::circt::esi::ServiceDeclOp">]> {
+                        [HasParent<"::circt::esi::CustomServiceDeclOp">]> {
   let summary = "An ESI service port which has both directions";
 
   let arguments = (ins SymbolNameAttr:$inner_sym,
-                       TypeAttr:$inType, TypeAttr:$outType);
+                       TypeAttr:$toServerType, TypeAttr:$toClientType);
   let assemblyFormat = [{
-    $inner_sym attr-dict `:` qualified($inType) `->` qualified($outType)
+    $inner_sym attr-dict
+    `:` qualified($toServerType) `->` qualified($toClientType)
   }];
 }
 

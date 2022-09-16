@@ -21,6 +21,16 @@
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
+namespace circt {
+namespace esi {
+struct ServicePortInfo {
+  StringAttr name;
+  Type toServerType;
+  Type toClientType;
+};
+} // namespace esi
+} // namespace circt
+
 #include "circt/Dialect/ESI/ESIInterfaces.h.inc"
 
 #define GET_OP_CLASSES

@@ -13,6 +13,7 @@
 include "mlir/IR/OpBase.td"
 
 def ChannelOpInterface : OpInterface<"ChannelOpInterface"> {
+  let cppNamespace = "circt::esi";
   let description =
       [{"An interface for operations which carries channel semantics."}];
 
@@ -43,5 +44,30 @@ def ChannelOpInterface : OpInterface<"ChannelOpInterface"> {
             return mlir::NoneType::get($_op.getContext());
           return $_op.channelType().getInner();
         }]>
+  ];
+}
+
+//===----------------------------------------------------------------------===//
+//
+// Service-related interfaces.
+//
+//===----------------------------------------------------------------------===//
+
+def ServiceDeclOpInterface : OpInterface<"ServiceDeclOpInterface"> {
+  let cppNamespace = "circt::esi";
+  let description = [{
+    Allows multiple ops to be service declarations.
+  }];
+
+  let methods = [
+    InterfaceMethod<
+      "Returns the list of interface ports for this service interface.",
+      "void", "getPortList",
+      (ins "llvm::SmallVectorImpl<ServicePortInfo>&":$ports)
+    >,
+    InterfaceMethod<
+        "Validate this service request against this service decl.",
+        "mlir::LogicalResult", "validateRequest", (ins "mlir::Operation*":$req)
+    >
   ];
 }
