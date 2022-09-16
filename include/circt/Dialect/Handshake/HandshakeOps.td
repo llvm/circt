@@ -821,11 +821,12 @@ def SyncOp : Handshake_Op<"sync", [
 ]> {
   let summary = "sync operation";
   let description = [{
-    Produces valid outputs with the same data once all inputs become available.
+    Synchronizes an arbitrary set of inputs. Synchronization implies applying
+    join semantics in between all in- and output ports.
 
     Example:
     ```mlir
-    %aSynced, %bSynced, %cSynced = join %a, %b, %c : i32, i1, none
+    %aSynced, %bSynced, %cSynced = sync %a, %b, %c : i32, i1, none
     ```
   }];
   let arguments = (ins Variadic<AnyType> : $operands);
