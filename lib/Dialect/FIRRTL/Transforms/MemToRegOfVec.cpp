@@ -380,11 +380,16 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
     auto dataType = memOp.getDataType();
 
     auto innerSym = memOp.getInnerSym();
+    SmallVector<Value> debugPorts;
 
     RegOp regOfVec = {};
     for (size_t index = 0, rend = memOp.getNumResults(); index < rend;
          ++index) {
       auto result = memOp.getResult(index);
+      if (result.getType().cast<FIRRTLType>().isa<RefType>()) {
+        debugPorts.push_back(result);
+        continue;
+      }
       // Create a temporary wire to replace the memory port. This makes it
       // simpler to delete the memOp.
       auto wire = builder.create<WireOp>(
@@ -424,6 +429,12 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
                           regOfVec, builder);
       }
     }
+    // If a valid register is created, then replace all the debug port users
+    // with a RefType of the register. The RefType is obtained by using a
+    // RefSend on the register.
+    if (regOfVec)
+      for (auto r : debugPorts)
+        r.replaceAllUsesWith(builder.create<RefSendOp>(regOfVec));
   }
 
 private:
