@@ -47,6 +47,8 @@ parseWireSpillingHeuristic(StringRef option) {
              llvm::Optional<LoweringOptions::WireSpillingHeuristic>>(option)
       .Case("spillNone", LoweringOptions::SpillNone)
       .Case("spillNamehintsIfShort", LoweringOptions::SpillNamehintsIfShort)
+      .Case("spillConsecutiveNamedLines",
+            LoweringOptions::SpillConsecutiveNamedLines)
       .Default(llvm::None);
 }
 
@@ -110,7 +112,8 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
       if (auto heuristic = parseWireSpillingHeuristic(option)) {
         wireSpillingHeuristic = *heuristic;
       } else {
-        errorHandler("expected 'spillNone' or 'spillNamehintsIfShort'");
+        errorHandler("expected 'spillNone', 'spillNamehintsIfShort', or "
+                     "'spillConsecutiveNamedLines'");
       }
     } else {
       errorHandler(llvm::Twine("unknown style option \'") + option + "\'");
@@ -150,6 +153,9 @@ std::string LoweringOptions::toString() const {
     options += "disallowExpressionInliningInPorts,";
   if (wireSpillingHeuristic == WireSpillingHeuristic::SpillNamehintsIfShort)
     options += "wireSpillingHeuristic=spillNamehintsIfShort,";
+  if (wireSpillingHeuristic ==
+      WireSpillingHeuristic::SpillConsecutiveNamedLines)
+    options += "wireSpillingHeuristic=spillConsecutiveNamedLines,";
 
   if (emittedLineLength != DEFAULT_LINE_LENGTH)
     options += "emittedLineLength=" + std::to_string(emittedLineLength) + ',';

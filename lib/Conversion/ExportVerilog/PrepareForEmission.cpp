@@ -486,6 +486,15 @@ static bool isMovableDeclaration(Operation *op) {
 
 struct EmittedExpressionState {
   size_t size;
+  bool hasConsecutiveLines;
+  bool hasMeaningfulName;
+
+  bool shouldSpill(const LoweringOptions &options) {
+    if (hasConsecutiveLines && hasMeaningfulName)
+      return true;
+
+    return size > options.emittedLineLength;
+  }
 };
 
 template <class T>
@@ -494,6 +503,16 @@ static unsigned getNumOfDigits(T t) {
   llvm::raw_string_ostream sstr(resultStr);
   sstr << t;
   return resultStr.size();
+}
+
+static bool hasMeaningfulName(Operation *op) {
+  auto name = op->getAttrOfType<StringAttr>("name");
+  if (!name)
+    name = op->getAttrOfType<StringAttr>("sv.namehint");
+  if (!name)
+    return false;
+
+  return !name.getValue().startswith("_");
 }
 
 class EmittedExpressionSizeEstimator
@@ -520,7 +539,7 @@ private:
     // TODO: Ideally all operations should be handled.
     LLVM_DEBUG(op->emitWarning() << "unhandled");
     auto size = getOperandSum(op, 2);
-    return {size};
+    return {size, hasConsecutiveLines(op), hasMeaningfulName(op)};
   }
   EmittedExpressionState visitInvalidComb(Operation *op) {
     return dispatchTypeOpVisitor(op);
@@ -541,38 +560,38 @@ private:
     // operand `.` field
     auto size =
         getExpressionState(op.getOperand()).size + op.getField().size() + 1;
-    return {size};
+    return {size, hasConsecutiveLines(op), hasMeaningfulName(op)};
   }
   EmittedExpressionState visitSV(ReadInterfaceSignalOp op) {
     // interface `.` field
     auto size =
         op.getSignalName().size() + 1 + getExpressionState(op.getIface()).size;
-    return {size};
+    return {size, hasConsecutiveLines(op), hasMeaningfulName(op)};
   }
   EmittedExpressionState visitSV(VerbatimExprOp op) {
     // FIXME: This estimation is inaccurate.
     auto size = getOperandSum(op, 0) + op.getFormatString().size();
-    return {size};
+    return {size, hasConsecutiveLines(op), hasMeaningfulName(op)};
   }
   EmittedExpressionState visitSV(VerbatimExprSEOp op) {
     // FIXME: This estimation is inaccurate.
     auto size = getOperandSum(op, 0) + op.getFormatString().size();
-    return {size};
+    return {size, hasConsecutiveLines(op), hasMeaningfulName(op)};
   }
 
   // For declarations, use a name attribute if exist. Otherwise, estimate the
   // size assuming that the name is `GEN_`.
   EmittedExpressionState visitSV(WireOp op) {
     auto size = op.getName().empty() ? 4 : op.getName().size();
-    return {size};
+    return {size, hasConsecutiveLines(op), hasMeaningfulName(op)};
   }
   EmittedExpressionState visitSV(RegOp op) {
     auto size = op.getName().empty() ? 4 : op.getName().size();
-    return {size};
+    return {size, hasConsecutiveLines(op), hasMeaningfulName(op)};
   }
   EmittedExpressionState visitSV(LogicOp op) {
     auto size = op.getName().empty() ? 4 : op.getName().size();
-    return {size};
+    return {size, hasConsecutiveLines(op), hasMeaningfulName(op)};
   }
 
   EmittedExpressionState visitSV(ReadInOutOp op) {
@@ -583,32 +602,32 @@ private:
     // input `[` index `]`
     auto size = getExpressionState(op.getInput()).size +
                 getExpressionState(op.getIndex()).size + 2;
-    return {size};
+    return {size, hasConsecutiveLines(op), hasMeaningfulName(op)};
   }
   EmittedExpressionState visitSV(IndexedPartSelectInOutOp op) {
     // `[` base ` +: ` width `]`
     auto size = getExpressionState(op.getBase()).size +
                 getNumOfDigits(op.getWidth()) + 6;
-    return {size};
+    return {size, hasConsecutiveLines(op), hasMeaningfulName(op)};
   }
   EmittedExpressionState visitSV(IndexedPartSelectOp op) {
     // `[` base ` +: ` width `]`
     auto size = getExpressionState(op.getBase()).size +
                 getNumOfDigits(op.getWidth()) + 6;
-    return {size};
+    return {size, hasConsecutiveLines(op), hasMeaningfulName(op)};
   }
   EmittedExpressionState visitSV(StructFieldInOutOp op) {
     // input `.` field
     auto size =
         getExpressionState(op.getInput()).size + op.getField().size() + 1;
-    return {size};
+    return {size, hasConsecutiveLines(op), hasMeaningfulName(op)};
   }
 
   // Other
   using TypeOpVisitor::visitTypeOp;
   EmittedExpressionState visitTypeOp(ConstantOp op) {
     auto size = getNumOfDigits(op.getValue());
-    return {size};
+    return {size, hasConsecutiveLines(op), hasMeaningfulName(op)};
   }
   EmittedExpressionState visitTypeOp(BitcastOp op) {
     // Noop
@@ -618,91 +637,92 @@ private:
   EmittedExpressionState visitTypeOp(ArrayCreateOp op) {
     // `{` op1, op2, ..., op_n `}`
     auto size = 2 + getOperandSum(op, /*separaterSize=*/2);
-    return {size};
+    return {size, hasConsecutiveLines(op), hasMeaningfulName(op)};
   }
 
   EmittedExpressionState visitTypeOp(ArrayGetOp op) {
     // input `[` index `]`
     auto size = getExpressionState(op.getInput()).size +
                 getExpressionState(op.getIndex()).size + 2;
-    return {size};
+    return {size, hasConsecutiveLines(op), hasMeaningfulName(op)};
   }
 
   // Comb Dialect Operations
   using CombinationalVisitor::visitComb;
   EmittedExpressionState visitComb(MuxOp op) {
     auto size = getOperandSum(op, /*separaterSize=*/3);
-    return {size};
+    return {size, hasConsecutiveLines(op), hasMeaningfulName(op)};
   }
   EmittedExpressionState visitComb(AddOp op) {
     auto size = getOperandSum(op, /*separaterSize=*/3);
-    return {size};
+    return {size, hasConsecutiveLines(op), hasMeaningfulName(op)};
   }
   EmittedExpressionState visitComb(SubOp op) {
     auto size = getOperandSum(op, /*separaterSize=*/3);
-    return {size};
+    return {size, hasConsecutiveLines(op), hasMeaningfulName(op)};
   }
   EmittedExpressionState visitComb(MulOp op) {
     auto size = getOperandSum(op, /*separaterSize=*/3);
-    return {size};
+    return {size, hasConsecutiveLines(op), hasMeaningfulName(op)};
   }
   EmittedExpressionState visitComb(DivUOp op) {
     auto size = getOperandSum(op, /*separaterSize=*/3);
-    return {size};
+    return {size, hasConsecutiveLines(op), hasMeaningfulName(op)};
   }
   EmittedExpressionState visitComb(DivSOp op) {
     auto size = getOperandSum(op, /*separaterSize=*/3);
-    return {size};
+    return {size, hasConsecutiveLines(op), hasMeaningfulName(op)};
   }
   EmittedExpressionState visitComb(ModUOp op) {
     auto size = getOperandSum(op, /*separaterSize=*/3);
-    return {size};
+    return {size, hasConsecutiveLines(op), hasMeaningfulName(op)};
   }
   EmittedExpressionState visitComb(ModSOp op) {
     auto size = getOperandSum(op, /*separaterSize=*/3);
-    return {size};
+    return {size, hasConsecutiveLines(op), hasMeaningfulName(op)};
   }
   EmittedExpressionState visitComb(ShlOp op) {
     auto size = getOperandSum(op, /*separaterSize=*/4);
-    return {size};
+    return {size, hasConsecutiveLines(op), hasMeaningfulName(op)};
   }
   EmittedExpressionState visitComb(ShrUOp op) {
     auto size = getOperandSum(op, /*separaterSize=*/4);
-    return {size};
+    return {size, hasConsecutiveLines(op), hasMeaningfulName(op)};
   }
   EmittedExpressionState visitComb(ShrSOp op) {
     auto size = getOperandSum(op, /*separaterSize=*/4);
-    return {size};
+    return {size, hasConsecutiveLines(op), hasMeaningfulName(op)};
   }
   EmittedExpressionState visitComb(AndOp op) {
     auto size = getOperandSum(op, /*separaterSize=*/3);
-    return {size};
+    return {size, hasConsecutiveLines(op), hasMeaningfulName(op)};
   }
   EmittedExpressionState visitComb(OrOp op) {
     auto size = getOperandSum(op, /*separaterSize=*/3);
-    return {size};
+    return {size, hasConsecutiveLines(op), hasMeaningfulName(op)};
   }
   EmittedExpressionState visitComb(XorOp op) {
     if (op.isBinaryNot()) {
       auto size = 1 + getExpressionState(op.getOperand(0)).size;
-      return {size};
+      return {size, hasConsecutiveLines(op), hasMeaningfulName(op)};
     }
     auto size = getOperandSum(op, 3);
-    return {size};
+    return {size, hasConsecutiveLines(op), hasMeaningfulName(op)};
   }
   EmittedExpressionState visitComb(ParityOp op) {
     auto size = getExpressionState(op.getOperand()).size + 1;
-    return {size};
+    return {size, hasConsecutiveLines(op), hasMeaningfulName(op)};
   }
-  EmittedExpressionState visitComb(ReplicateOp op) {
+  EmittedExpressionState visitComb(ReplicateOp op,
+                                   bool parentHasMeaningfulName) {
     // {num{operand}}
     auto size = getExpressionState(op.getOperand()).size + 3 +
                 getNumOfDigits(op.getMultiple());
-    return {size};
+    return {size, hasConsecutiveLines(op), hasMeaningfulName(op)};
   }
   EmittedExpressionState visitComb(ConcatOp op) {
     auto size = getOperandSum(op, /*separaterSize=*/2) + 2;
-    return {size};
+    return {size, hasConsecutiveLines(op), hasMeaningfulName(op)};
   }
   EmittedExpressionState visitComb(ExtractOp op) {
     unsigned size = getExpressionState(op.getInput()).size + 2;
@@ -713,18 +733,18 @@ private:
       size += getNumOfDigits(op.getLowBit()) +
               getNumOfDigits(op.getLowBit() +
                              op.getType().cast<IntegerType>().getWidth());
-    return {size};
+    return {size, hasConsecutiveLines(op), hasMeaningfulName(op)};
   }
 
   EmittedExpressionState visitComb(ICmpOp op) {
     // TODO: Consider handle "&", "|" or "!==".
     if (op.isEqualAllOnes() || op.isNotEqualZero()) {
       auto size = getExpressionState(op.getOperand(0)).size + 1;
-      return {size};
+      return {size, hasConsecutiveLines(op), hasMeaningfulName(op)};
     }
     auto size =
         getOperandSum(op, stringifyICmpPredicate(op.getPredicate()).size() + 2);
-    return {size};
+    return {size, hasConsecutiveLines(op), hasMeaningfulName(op)};
   }
 
   using Visitor::visitSV;
@@ -734,6 +754,8 @@ private:
   unsigned getOperandSum(Operation *op, unsigned separaterSize);
 
   DenseMap<Value, EmittedExpressionState> expressionStates;
+
+  bool hasConsecutiveLines(Operation *op);
 };
 
 EmittedExpressionState
@@ -748,12 +770,13 @@ EmittedExpressionSizeEstimator::getExpressionState(Value v) {
     auto size =
         ExportVerilog::getPortVerilogName(moduleOp, blockArg.getArgNumber())
             .size();
-    return {size};
+    return {size, false, false};
   }
 
-  EmittedExpressionState size = dispatchCombinationalVisitor(v.getDefiningOp());
-  expressionStates[v] = size;
-  return size;
+  EmittedExpressionState state =
+      dispatchCombinationalVisitor(v.getDefiningOp());
+  expressionStates.insert(std::make_pair(v, state));
+  return state;
 }
 
 unsigned EmittedExpressionSizeEstimator::getOperandSum(Operation *op,
@@ -766,6 +789,37 @@ unsigned EmittedExpressionSizeEstimator::getOperandSum(Operation *op,
     size += getExpressionState(operand).size;
 
   return size;
+}
+
+bool EmittedExpressionSizeEstimator::hasConsecutiveLines(Operation *op) {
+  SmallVector<unsigned> lines;
+
+  std::function<void(Location)> addLines = [&](Location loc) {
+    TypeSwitch<Location, void>(loc)
+        .Case([&](mlir::CallSiteLoc l) { addLines(l.getCaller()); })
+        .Case([&](FileLineColLoc l) { lines.push_back(l.getLine()); })
+        .Case([&](FusedLoc l) {
+          for (auto childLoc : l.getLocations())
+            addLines(childLoc);
+        })
+        .Case([&](mlir::NameLoc l) { addLines(l.getChildLoc()); });
+  };
+
+  // Collect all source lines.
+  for (auto operand : op->getOperands())
+    addLines(operand.getLoc());
+
+  // Sort and unique the list of source lines.
+  std::sort(lines.begin(), lines.end());
+  auto *end = std::unique(lines.begin(), lines.end());
+
+  // Check that the list of lines is monotonically increasing.
+  bool result = true;
+  for (auto *it = lines.begin(); it < std::prev(end); ++it)
+    if (*it + 1 != *std::next(it))
+      result = false;
+
+  return result;
 }
 
 /// If exactly one use of this op is an assign, replace the other uses with a
@@ -842,16 +896,19 @@ bool shouldSpillWire(Operation &op, const LoweringOptions &options,
   if (isVerilogUnaryOperator(&op) || isa<ReadInOutOp, ConstantOp>(op))
     return false;
 
-  if (options.emittedLineLength <
-      estimator.getExpressionState(op.getResult(0)).size)
-    return true;
-
   switch (options.wireSpillingHeuristic) {
   case LoweringOptions::SpillNamehintsIfShort:
+    if (options.emittedLineLength <
+        estimator.getExpressionState(op.getResult(0)).size)
+      return true;
     if (auto namehint = op.getAttrOfType<StringAttr>("sv.namehint"))
       if (2 * namehint.size() <
           estimator.getExpressionState(op.getResult(0)).size)
         return true;
+    return false;
+  case LoweringOptions::SpillConsecutiveNamedLines:
+    if (estimator.getExpressionState(op.getResult(0)).shouldSpill(options))
+      return true;
     return false;
   default:
     llvm_unreachable("unhandled option");
