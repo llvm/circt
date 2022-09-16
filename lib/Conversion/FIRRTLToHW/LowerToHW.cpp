@@ -2431,7 +2431,13 @@ LogicalResult FIRRTLLowering::visitExpr(SubaccessOp op) {
 
   auto resultType = lowerType(op->getResult(0).getType());
   Value value = getPossiblyInoutLoweredValue(op.getInput());
-  Value valueIdx = getLoweredValue(op.getIndex());
+  Value valueIdx = getLoweredAndExtOrTruncValue(
+      op.getIndex(),
+      UIntType::get(
+          op.getContext(),
+          getBitWidthFromVectorSize(
+              op.getInput().getType().cast<FVectorType>().getNumElements())));
+
   if (!resultType || !value || !valueIdx) {
     op.emitError() << "input lowering failed";
     return failure();

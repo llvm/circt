@@ -1124,16 +1124,18 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   }
 
   // CHECK-LABEL: hw.module private @SubAccessDestination
-  firrtl.module private @SubAccessDestination(in %x: !firrtl.uint<2>, in %y: !firrtl.uint<2>, in %clock: !firrtl.clock, in %a: !firrtl.vector<uint<1>, 3>, out %b: !firrtl.vector<uint<1>, 3>) {
-    %0 = firrtl.subaccess %b[%x] : !firrtl.vector<uint<1>, 3>, !firrtl.uint<2>
-    %1 = firrtl.subaccess %a[%y] : !firrtl.vector<uint<1>, 3>, !firrtl.uint<2>
+  firrtl.module private @SubAccessDestination(in %x: !firrtl.uint<2>, in %y: !firrtl.uint<2>, in %clock: !firrtl.clock, in %a: !firrtl.vector<uint<1>, 5>, out %b: !firrtl.vector<uint<1>, 5>) {
+    %0 = firrtl.subaccess %b[%x] : !firrtl.vector<uint<1>, 5>, !firrtl.uint<2>
+    %1 = firrtl.subaccess %a[%y] : !firrtl.vector<uint<1>, 5>, !firrtl.uint<2>
     firrtl.connect %0, %1 : !firrtl.uint<1>, !firrtl.uint<1>
-    // CHECK-NEXT: %.b.output = sv.wire
-    // CHECK-NEXT: %0 = sv.read_inout %.b.output : !hw.inout<array<3xi1>>
-    // CHECK-NEXT: %1 = sv.array_index_inout %.b.output[%x] : !hw.inout<array<3xi1>>, i2
-    // CHECK-NEXT: %2 = hw.array_get %a[%y] : !hw.array<3xi1>
-    // CHECK-NEXT: sv.assign %1, %2 : i1
-    // CHECK-NEXT: hw.output %0 : !hw.array<3xi1>
+    // CHECK:      %.b.output = sv.wire  : !hw.inout<array<5xi1>>
+    // CHECK-NEXT: %0 = sv.read_inout %.b.output : !hw.inout<array<5xi1>>
+    // CHECK-NEXT: %1 = comb.concat %false, %x : i1, i2
+    // CHECK-NEXT: %2 = sv.array_index_inout %.b.output[%1] : !hw.inout<array<5xi1>>, i3
+    // CHECK-NEXT: %3 = comb.concat %false, %y : i1, i2
+    // CHECK-NEXT: %4 = hw.array_get %a[%3] : !hw.array<5xi1>
+    // CHECK-NEXT: sv.assign %2, %4 : i1
+    // CHECK-NEXT: hw.output %0 : !hw.array<5xi1>
   }
 
   // CHECK-LABEL: hw.module private @zero_width_constant()
