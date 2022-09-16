@@ -256,8 +256,8 @@ static LogicalResult reqPortMatches(OpType op,
   hw::InnerRefAttr port = op.getServicePort();
   auto serviceDecl = getServiceDecl(op, symbolTable, port);
   if (!serviceDecl)
-    return op.emitOpError("Could not find service declaration '")
-           << port.getModuleRef() << "'";
+    return op.emitOpError("Could not find service declaration ")
+           << port.getModuleRef();
   return serviceDecl.validateRequest(op);
 }
 
@@ -300,8 +300,8 @@ LogicalResult validateRequest(ServiceDeclOpInterface svc, OpType req) {
       break;
     }
   if (!portDecl.name)
-    req.emitOpError("Could not locate port '")
-        << req.getServicePort().getName() << "'";
+    return req.emitOpError("Could not locate port ")
+           << req.getServicePort().getName();
 
   auto *ctxt = req.getContext();
   auto anyChannelType = ChannelType::get(ctxt, AnyType::get(ctxt));
