@@ -82,7 +82,6 @@ static OpTy replaceOpWithNewOpAndCopyName(PatternRewriter &rewriter,
   return newOp;
 }
 
-
 namespace {
 struct ConstantIntMatcher {
   APInt &value;
