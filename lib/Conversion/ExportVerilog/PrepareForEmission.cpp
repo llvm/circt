@@ -792,12 +792,12 @@ unsigned EmittedExpressionSizeEstimator::getOperandSum(Operation *op,
 }
 
 bool EmittedExpressionSizeEstimator::hasConsecutiveLines(Operation *op) {
-  SmallVector<unsigned> lines;
+  SmallVector<FileLineColLoc> lines;
 
   std::function<void(Location)> addLines = [&](Location loc) {
     TypeSwitch<Location, void>(loc)
         .Case([&](mlir::CallSiteLoc l) { addLines(l.getCaller()); })
-        .Case([&](FileLineColLoc l) { lines.push_back(l.getLine()); })
+        .Case([&](FileLineColLoc l) { lines.push_back(l); })
         .Case([&](FusedLoc l) {
           for (auto childLoc : l.getLocations())
             addLines(childLoc);
@@ -810,13 +810,23 @@ bool EmittedExpressionSizeEstimator::hasConsecutiveLines(Operation *op) {
     addLines(operand.getLoc());
 
   // Sort and unique the list of source lines.
-  std::sort(lines.begin(), lines.end());
+  std::sort(lines.begin(), lines.end(),
+            [](FileLineColLoc left, FileLineColLoc right) {
+              int fileCompare = left.getFilename().compare(right.getFilename());
+              if (fileCompare < 0)
+                return true;
+              if (fileCompare > 0)
+                return false;
+
+              return left.getLine() < right.getLine();
+            });
   auto *end = std::unique(lines.begin(), lines.end());
 
-  // Check that the list of lines is monotonically increasing.
+  // Check that the list of lines is monotonically increasing in the same file.
   bool result = true;
   for (auto *it = lines.begin(); it < std::prev(end); ++it)
-    if (*it + 1 != *std::next(it))
+    if ((*it).getLine() + 1 != (*std::next(it)).getLine() &&
+        (*it).getFilename() != (*std::next(it)).getFilename())
       result = false;
 
   return result;
@@ -907,8 +917,11 @@ bool shouldSpillWire(Operation &op, const LoweringOptions &options,
         return true;
     return false;
   case LoweringOptions::SpillConsecutiveNamedLines:
-    if (estimator.getExpressionState(op.getResult(0)).shouldSpill(options))
+    if (estimator.getExpressionState(op.getResult(0)).shouldSpill(options)) {
+      LLVM_DEBUG(llvm::dbgs()
+                 << "spilling for consecutive lines: " << op << '\n');
       return true;
+    }
     return false;
   default:
     llvm_unreachable("unhandled option");
