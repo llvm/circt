@@ -22,14 +22,14 @@ llvm.func @convert_const() {
 // CHECK-SAME:                          %[[VAL_0:.*]]: i1,
 // CHECK-SAME:                          %[[VAL_1:.*]]: i32) {
 // CHECK:           %[[VAL_2:.*]] = llvm.mlir.undef : !llvm.array<3 x i1>
-// CHECK:           %[[VAL_3:.*]] = llvm.insertvalue %[[VAL_0]], %[[VAL_2]][0 : i32] : !llvm.array<3 x i1>
-// CHECK:           %[[VAL_4:.*]] = llvm.insertvalue %[[VAL_0]], %[[VAL_3]][1 : i32] : !llvm.array<3 x i1>
-// CHECK:           %[[VAL_5:.*]] = llvm.insertvalue %[[VAL_0]], %[[VAL_4]][2 : i32] : !llvm.array<3 x i1>
+// CHECK:           %[[VAL_3:.*]] = llvm.insertvalue %[[VAL_0]], %[[VAL_2]][0] : !llvm.array<3 x i1>
+// CHECK:           %[[VAL_4:.*]] = llvm.insertvalue %[[VAL_0]], %[[VAL_3]][1] : !llvm.array<3 x i1>
+// CHECK:           %[[VAL_5:.*]] = llvm.insertvalue %[[VAL_0]], %[[VAL_4]][2] : !llvm.array<3 x i1>
 // CHECK:           %[[VAL_6:.*]] = llvm.mlir.undef : !llvm.array<4 x i32>
-// CHECK:           %[[VAL_7:.*]] = llvm.insertvalue %[[VAL_1]], %[[VAL_6]][0 : i32] : !llvm.array<4 x i32>
-// CHECK:           %[[VAL_8:.*]] = llvm.insertvalue %[[VAL_1]], %[[VAL_7]][1 : i32] : !llvm.array<4 x i32>
-// CHECK:           %[[VAL_9:.*]] = llvm.insertvalue %[[VAL_1]], %[[VAL_8]][2 : i32] : !llvm.array<4 x i32>
-// CHECK:           %[[VAL_10:.*]] = llvm.insertvalue %[[VAL_1]], %[[VAL_9]][3 : i32] : !llvm.array<4 x i32>
+// CHECK:           %[[VAL_7:.*]] = llvm.insertvalue %[[VAL_1]], %[[VAL_6]][0] : !llvm.array<4 x i32>
+// CHECK:           %[[VAL_8:.*]] = llvm.insertvalue %[[VAL_1]], %[[VAL_7]][1] : !llvm.array<4 x i32>
+// CHECK:           %[[VAL_9:.*]] = llvm.insertvalue %[[VAL_1]], %[[VAL_8]][2] : !llvm.array<4 x i32>
+// CHECK:           %[[VAL_10:.*]] = llvm.insertvalue %[[VAL_1]], %[[VAL_9]][3] : !llvm.array<4 x i32>
 // CHECK:           llvm.return
 // CHECK:         }
 func.func @convert_array(%ci1 : i1, %ci32 : i32) {
@@ -44,9 +44,9 @@ func.func @convert_array(%ci1 : i1, %ci32 : i32) {
 // CHECK-SAME:                             %[[VAL_1:.*]]: i2,
 // CHECK-SAME:                             %[[VAL_2:.*]]: i3) {
 // CHECK:           %[[VAL_3:.*]] = llvm.mlir.undef : !llvm.struct<(i3, i2, i1)>
-// CHECK:           %[[VAL_4:.*]] = llvm.insertvalue %[[VAL_2]], %[[VAL_3]][0 : i32] : !llvm.struct<(i3, i2, i1)>
-// CHECK:           %[[VAL_5:.*]] = llvm.insertvalue %[[VAL_1]], %[[VAL_4]][1 : i32] : !llvm.struct<(i3, i2, i1)>
-// CHECK:           %[[VAL_6:.*]] = llvm.insertvalue %[[VAL_0]], %[[VAL_5]][2 : i32] : !llvm.struct<(i3, i2, i1)>
+// CHECK:           %[[VAL_4:.*]] = llvm.insertvalue %[[VAL_2]], %[[VAL_3]][0] : !llvm.struct<(i3, i2, i1)>
+// CHECK:           %[[VAL_5:.*]] = llvm.insertvalue %[[VAL_1]], %[[VAL_4]][1] : !llvm.struct<(i3, i2, i1)>
+// CHECK:           %[[VAL_6:.*]] = llvm.insertvalue %[[VAL_0]], %[[VAL_5]][2] : !llvm.struct<(i3, i2, i1)>
 // CHECK:           llvm.return
 // CHECK:         }
 func.func @convert_tuple(%ci1 : i1, %ci2 : i2, %ci3 : i3) {

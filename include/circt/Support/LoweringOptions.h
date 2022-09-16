@@ -86,6 +86,12 @@ struct LoweringOptions {
   enum { DEFAULT_TERM_LIMIT = 256 };
   unsigned maximumNumberOfTermsPerExpression = DEFAULT_TERM_LIMIT;
 
+  /// This is the maximum number of terms allow in a variadic expression before
+  /// it will spill to a wire.  This is used to break up large product-of-sums
+  /// or sum-of-products for improved simulator performance.
+  enum { DEFAULT_VARIADIC_OPERAND_LIMIT = 32 };
+  unsigned maximumNumberOfVariadicOperands = DEFAULT_VARIADIC_OPERAND_LIMIT;
+
   /// This is the maximum number of terms in an expression used in a concat
   /// before that expression spills a wire.
   enum { DEFAULT_CONCAT_TERM_LIMIT = 10 };
@@ -104,8 +110,9 @@ struct LoweringOptions {
 
   /// This option controls emitted location information style.
   enum LocationInfoStyle {
-    Plain,                // Default.
-    WrapInAtSquareBracket // Wrap location info in @[..].
+    Plain,                 // Default.
+    WrapInAtSquareBracket, // Wrap location info in @[..].
+    None,                  // No location info comment.
   } locationInfoStyle = Plain;
 
   /// If true, every port is declared separately
@@ -115,6 +122,15 @@ struct LoweringOptions {
 
   /// Print debug info.
   bool printDebugInfo = false;
+
+  /// If true, ExportVerilog uses an old emission. This flag should be
+  /// deprecated once the old emission mode is no longer necessary.
+  bool useOldEmissionMode = false;
+
+  /// If true, every expression passed to an instance port is driven by a wire.
+  /// Some lint tools dislike expressions being inlined into input ports so this
+  /// option avoids such warnings.
+  bool disallowExpressionInliningInPorts = false;
 };
 
 /// Register commandline options for the verilog emitter.
@@ -123,6 +139,13 @@ void registerLoweringCLOptions();
 /// Apply any command line specified style options to the mlir module.
 void applyLoweringCLOptions(ModuleOp module);
 
+/// Get a lowering option from CLI option or module op. This function first
+/// tries constructing a lowering option from cli, and if it failed, lowering
+/// option associated with `module` is used. This function doesn't change an
+/// attribute of `module` so that it can be used by child operations of
+/// mlir::ModuleOp in multi-threading environment.
+LoweringOptions getLoweringCLIOption(ModuleOp module,
+                                     LoweringOptions::ErrorHandlerT);
 } // namespace circt
 
 #endif // CIRCT_SUPPORT_LOWERINGOPTIONS_H

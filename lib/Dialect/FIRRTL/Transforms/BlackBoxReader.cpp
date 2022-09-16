@@ -159,17 +159,16 @@ void BlackBoxReaderPass::runOnOperation() {
   auto builder = OpBuilder::atBlockEnd(circuitOp->getBlock());
 
   // Gather the relevant annotations on all modules in the circuit.
-  for (auto &op : *circuitOp.getBody()) {
+  for (auto &op : *circuitOp.getBodyBlock()) {
     if (!isa<FModuleOp>(op) && !isa<FExtModuleOp>(op))
       continue;
 
-    StringRef verifBBClass =
-        "freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation";
     SmallVector<Attribute, 4> filteredAnnos;
     auto annos = AnnotationSet(&op);
-    // If the cover directory is set and it has the verifBBClass annotation,
-    // then output directory should be cover dir.
-    auto isCover = !coverDir.empty() && annos.hasAnnotation(verifBBClass);
+    // If the cover directory is set and it has the verifBlackBoxAnnoClass
+    // annotation, then output directory should be cover dir.
+    auto isCover =
+        !coverDir.empty() && annos.hasAnnotation(verifBlackBoxAnnoClass);
     for (auto anno : annos) {
       if (runOnAnnotation(&op, anno, builder, isCover))
         // Since the annotation was consumed, add a `BlackBox` annotation to
@@ -177,7 +176,7 @@ void BlackBoxReaderPass::runOnOperation() {
         // annotations. This is useful for metadata generation.
         filteredAnnos.push_back(builder.getDictionaryAttr(
             {{builder.getStringAttr("class"),
-              builder.getStringAttr("firrtl.transforms.BlackBox")}}));
+              builder.getStringAttr(blackBoxAnnoClass)}}));
       else
         filteredAnnos.push_back(anno.getDict());
     }
@@ -234,15 +233,12 @@ void BlackBoxReaderPass::runOnOperation() {
 /// annotation (even if it was incomplete) and should be removed from the op.
 bool BlackBoxReaderPass::runOnAnnotation(Operation *op, Annotation anno,
                                          OpBuilder &builder, bool isCover) {
-  StringRef inlineAnnoClass = "firrtl.transforms.BlackBoxInlineAnno";
-  StringRef pathAnnoClass = "firrtl.transforms.BlackBoxPathAnno";
-
   // Handle inline annotation.
-  if (anno.isClass(inlineAnnoClass)) {
+  if (anno.isClass(blackBoxInlineAnnoClass)) {
     auto name = anno.getMember<StringAttr>("name");
     auto text = anno.getMember<StringAttr>("text");
     if (!name || !text) {
-      op->emitError(inlineAnnoClass)
+      op->emitError(blackBoxInlineAnnoClass)
           << " annotation missing \"name\" or \"text\" attribute";
       signalPassFailure();
       return true;
@@ -263,10 +259,11 @@ bool BlackBoxReaderPass::runOnAnnotation(Operation *op, Annotation anno,
   }
 
   // Handle path annotation.
-  if (anno.isClass(pathAnnoClass)) {
+  if (anno.isClass(blackBoxPathAnnoClass)) {
     auto path = anno.getMember<StringAttr>("path");
     if (!path) {
-      op->emitError(pathAnnoClass) << " annotation missing \"path\" attribute";
+      op->emitError(blackBoxPathAnnoClass)
+          << " annotation missing \"path\" attribute";
       signalPassFailure();
       return true;
     }
@@ -368,10 +365,9 @@ bool BlackBoxReaderPass::isDut(Operation *module) {
   auto iter = dutModuleMap.find(module);
   if (iter != dutModuleMap.end())
     return iter->getSecond();
-  const StringRef dutAnno = "sifive.enterprise.firrtl.MarkDUTAnnotation";
   AnnotationSet annos(module);
   // Any module with the dutAnno, is the DUT.
-  if (annos.hasAnnotation(dutAnno)) {
+  if (annos.hasAnnotation(dutAnnoClass)) {
     dutModuleMap[module] = true;
     return true;
   }

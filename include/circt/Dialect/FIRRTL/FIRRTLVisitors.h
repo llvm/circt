@@ -42,12 +42,15 @@ public:
             // Unary operators.
             AsSIntPrimOp, AsUIntPrimOp, AsAsyncResetPrimOp, AsClockPrimOp,
             CvtPrimOp, NegPrimOp, NotPrimOp, AndRPrimOp, OrRPrimOp, XorRPrimOp,
+            // Verif Expressions.
+            IsXVerifOp,
             // Miscellaneous.
             BitsPrimOp, HeadPrimOp, MuxPrimOp, PadPrimOp, ShlPrimOp, ShrPrimOp,
-            TailPrimOp, VerbatimExprOp, HWStructCastOp, BitCastOp,
-            mlir::UnrealizedConversionCastOp>([&](auto expr) -> ResultType {
-          return thisCast->visitExpr(expr, args...);
-        })
+            TailPrimOp, VerbatimExprOp, HWStructCastOp, BitCastOp, RefSendOp,
+            RefResolveOp, mlir::UnrealizedConversionCastOp>(
+            [&](auto expr) -> ResultType {
+              return thisCast->visitExpr(expr, args...);
+            })
         .Default([&](auto expr) -> ResultType {
           return thisCast->visitInvalidExpr(op, args...);
         });
@@ -127,6 +130,9 @@ public:
   HANDLE(OrRPrimOp, Unary);
   HANDLE(XorRPrimOp, Unary);
 
+  // Verif Expr.
+  HANDLE(IsXVerifOp, Unhandled);
+
   // Miscellaneous.
   HANDLE(BitsPrimOp, Unhandled);
   HANDLE(HeadPrimOp, Unhandled);
@@ -137,6 +143,8 @@ public:
   HANDLE(ShrPrimOp, Unhandled);
   HANDLE(TailPrimOp, Unhandled);
   HANDLE(VerbatimExprOp, Unhandled);
+  HANDLE(RefSendOp, Unhandled);
+  HANDLE(RefResolveOp, Unhandled);
 
   // Conversions.
   HANDLE(HWStructCastOp, Unhandled);

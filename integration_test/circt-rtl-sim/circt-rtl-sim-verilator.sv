@@ -3,11 +3,11 @@
 
 module top(
   input clk,
-  input rstn
+  input rst
 );
 
   always@(posedge clk)
-    if (rstn)
+    if (~rst)
       $display("tock");
   // CHECK:      tock
   // CHECK-NEXT: tock

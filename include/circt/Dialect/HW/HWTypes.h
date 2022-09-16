@@ -41,9 +41,15 @@ struct FieldInfo {
 namespace circt {
 namespace hw {
 
+// Returns the canonical type of a HW type (inner type of a type alias).
+mlir::Type getCanonicalType(mlir::Type type);
+
 /// Return true if the specified type is a value HW Integer type.  This checks
 /// that it is a signless standard dialect type and that it isn't zero bits.
 bool isHWIntegerType(mlir::Type type);
+
+/// Return true if the specified type is a HW Enum type.
+bool isHWEnumType(mlir::Type type);
 
 /// Return true if the specified type can be used as an HW value type, that is
 /// the set of types that can be composed together to represent synthesized,
@@ -63,25 +69,25 @@ int64_t getBitWidth(mlir::Type type);
 /// false on known InOut types, rather than any unknown types.
 bool hasHWInOutType(mlir::Type type);
 
-template <typename BaseTy>
+template <typename... BaseTy>
 bool type_isa(Type type) {
   // First check if the type is the requested type.
-  if (type.isa<BaseTy>())
+  if (type.isa<BaseTy...>())
     return true;
 
   // Then check if it is a type alias wrapping the requested type.
   if (auto alias = type.dyn_cast<TypeAliasType>())
-    return alias.getInnerType().isa<BaseTy>();
+    return alias.getInnerType().isa<BaseTy...>();
 
   return false;
 }
 
 // type_isa for a nullable argument.
-template <typename BaseTy>
+template <typename... BaseTy>
 bool type_isa_and_nonnull(Type type) { // NOLINT(readability-identifier-naming)
   if (!type)
     return false;
-  return type_isa<BaseTy>(type);
+  return type_isa<BaseTy...>(type);
 }
 
 template <typename BaseTy>
@@ -103,6 +109,21 @@ BaseTy type_dyn_cast(Type type) {
 
   return type_cast<BaseTy>(type);
 }
+
+/// Utility type that wraps a type that may be one of several possible Types.
+/// This is similar to std::variant but is implemented for mlir::Type, and it
+/// understands how to handle type aliases.
+template <typename... Types>
+class TypeVariant
+    : public ::mlir::Type::TypeBase<TypeVariant<Types...>, mlir::Type,
+                                    mlir::TypeStorage> {
+  using mlir::Type::TypeBase<TypeVariant<Types...>, mlir::Type,
+                             mlir::TypeStorage>::Base::Base;
+
+public:
+  // Support LLVM isa/cast/dyn_cast to one of the possible types.
+  static bool classof(Type other) { return type_isa<Types...>(other); }
+};
 
 template <typename BaseTy>
 class TypeAliasOr

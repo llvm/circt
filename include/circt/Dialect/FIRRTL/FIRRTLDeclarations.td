@@ -21,7 +21,7 @@ class ReferableDeclOp<string mnemonic, list<Trait> traits = []> :
 
 def InstanceOp : ReferableDeclOp<"instance", [HasParent<"firrtl::FModuleOp, firrtl::WhenOp">,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>, 
-    DeclareOpInterfaceMethods<HWInstanceLike, ["instanceName"]>]> {
+    DeclareOpInterfaceMethods<HWInstanceLike, ["instanceName", "instanceNameAttr"]>]> {
   let summary = "Instantiate an instance of a module";
   let description = [{
     This represents an instance of a module.  The results are the modules inputs
@@ -37,8 +37,8 @@ def InstanceOp : ReferableDeclOp<"instance", [HasParent<"firrtl::FModuleOp, firr
                        APIntAttr:$portDirections, StrArrayAttr:$portNames,
                        AnnotationArrayAttr:$annotations,
                        PortAnnotationsAttr:$portAnnotations,
-                       BoolAttr:$lowerToBind,
-                       OptionalAttr<SymbolNameAttr>:$inner_sym);
+                       UnitAttr:$lowerToBind,
+                       OptionalAttr<InnerSymAttr>:$inner_sym);
 
   let results = (outs Variadic<FIRRTLType>:$results);
 
@@ -55,6 +55,16 @@ def InstanceOp : ReferableDeclOp<"instance", [HasParent<"firrtl::FModuleOp, firr
                    CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
                    CArg<"bool","false">:$lowerToBind,
                    CArg<"StringAttr", "StringAttr()">:$inner_sym)>,
+    OpBuilder<(ins "::mlir::TypeRange":$resultTypes,
+                   "::mlir::StringRef":$moduleName,
+                   "::mlir::StringRef":$name,
+                   "::circt::firrtl::NameKindEnum":$nameKind,
+                   "::mlir::ArrayRef<Direction>":$portDirections,
+                   "::mlir::ArrayRef<Attribute>":$portNames,
+                   "ArrayRef<Attribute>":$annotations,
+                   "ArrayRef<Attribute>":$portAnnotations,
+                   "bool":$lowerToBind,
+                   "InnerSymAttr":$inner_sym)>,
 
     /// Constructor when you have the target module in hand.
     OpBuilder<(ins "FModuleLike":$module,
@@ -69,17 +79,16 @@ def InstanceOp : ReferableDeclOp<"instance", [HasParent<"firrtl::FModuleOp, firr
   let extraClassDeclaration = [{
     /// Lookup the module or extmodule for the symbol.  This returns null on
     /// invalid IR.
-    FModuleLike getReferencedModule();
     FModuleLike getReferencedModule(SymbolTable& symtbl);
 
     /// Return the port direction for the specified result number.
     Direction getPortDirection(size_t resultNo) {
-      return direction::get(portDirections()[resultNo]);
+      return direction::get(getPortDirections()[resultNo]);
     }
 
     /// Return the port name for the specified result number.
     StringAttr getPortName(size_t resultNo) {
-      return portNames()[resultNo].cast<StringAttr>();
+      return getPortNames()[resultNo].cast<StringAttr>();
     }
     StringRef getPortNameStr(size_t resultNo) {
       return getPortName(resultNo).getValue();
@@ -92,7 +101,7 @@ def InstanceOp : ReferableDeclOp<"instance", [HasParent<"firrtl::FModuleOp, firr
     /// Builds a new `InstanceOp` with the ports listed in `portIndices` erased,
     /// and updates any users of the remaining ports to point at the new
     /// instance.
-    InstanceOp erasePorts(OpBuilder &builder, ArrayRef<unsigned> portIndices);
+    InstanceOp erasePorts(OpBuilder &builder, const llvm::BitVector &portIndices);
 
     /// Clone the instance op and add ports.  This is usually used in
     /// conjuction with adding ports to the referenced module. This will emit
@@ -104,13 +113,13 @@ def InstanceOp : ReferableDeclOp<"instance", [HasParent<"firrtl::FModuleOp, firr
 def MemOp : ReferableDeclOp<"mem"> {
   let summary = "Define a new mem";
   let arguments =
-    (ins Confined<I32Attr, [IntMinValue<0>]>:$readLatency,
-         Confined<I32Attr, [IntMinValue<1>]>:$writeLatency,
-         Confined<I64Attr, [IntMinValue<1>]>:$depth, RUWAttr:$ruw,
+    (ins ConfinedAttr<I32Attr, [IntMinValue<0>]>:$readLatency,
+         ConfinedAttr<I32Attr, [IntMinValue<1>]>:$writeLatency,
+         ConfinedAttr<I64Attr, [IntMinValue<1>]>:$depth, RUWAttr:$ruw,
          StrArrayAttr:$portNames, StrAttr:$name, NameKindAttr:$nameKind,
          AnnotationArrayAttr:$annotations,
          PortAnnotationsAttr:$portAnnotations,
-         OptionalAttr<SymbolNameAttr>:$inner_sym,
+         OptionalAttr<InnerSymAttr>:$inner_sym,
          OptionalAttr<UI32Attr>:$groupID);
   let results = (outs Variadic<FIRRTLType>:$results);
 
@@ -128,7 +137,13 @@ def MemOp : ReferableDeclOp<"mem"> {
                    CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
                    CArg<"ArrayRef<Attribute>", "{}">:$annotations,
                    CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
-                   CArg<"StringAttr", "StringAttr()">:$inner_sym)>
+                   CArg<"StringAttr", "StringAttr()">:$inner_sym)>,
+    OpBuilder<(ins "::mlir::TypeRange":$resultTypes, "uint32_t":$readLatency,
+                   "uint32_t":$writeLatency, "uint64_t":$depth, "RUWAttr":$ruw,
+                   "ArrayRef<Attribute>":$portNames, "StringRef":$name,
+                   "NameKindEnum":$nameKind, "ArrayRef<Attribute>":$annotations,
+                   "ArrayRef<Attribute>":$portAnnotations,
+                   "InnerSymAttr":$inner_sym)>
   ];
 
   let hasVerifier = 1;
@@ -136,12 +151,12 @@ def MemOp : ReferableDeclOp<"mem"> {
   let hasCanonicalizeMethod = true;
 
   let extraClassDeclaration = [{
-    enum class PortKind { Read, Write, ReadWrite };
+    enum class PortKind { Read, Write, ReadWrite, Debug };
 
     using NamedPort = std::pair<StringAttr, MemOp::PortKind>;
 
     /// Return the type of a port given the memory depth, type, and kind
-    static BundleType getTypeForPort(uint64_t depth, FIRRTLType dataType,
+    static FIRRTLType getTypeForPort(uint64_t depth, FIRRTLBaseType dataType,
                                      PortKind portKind, size_t maskBits = 0);
 
     /// Return the name and kind of ports supported by this memory.
@@ -154,7 +169,7 @@ def MemOp : ReferableDeclOp<"mem"> {
     PortKind getPortKind(size_t resultNo);
 
     /// Return the data-type field of the memory, the type of each element.
-    FIRRTLType getDataType();
+    FIRRTLBaseType getDataType();
 
     /// Return the number of mask bits.
     size_t getMaskBits();
@@ -166,7 +181,7 @@ def MemOp : ReferableDeclOp<"mem"> {
     }
 
     /// Return the port type for the specified result number.
-    FIRRTLType getPortType(size_t resultNo);
+    FIRRTLBaseType getPortType(size_t resultNo);
 
     // Return the result for this instance that corresponds to the specified
     // port name.
@@ -180,7 +195,8 @@ def MemOp : ReferableDeclOp<"mem"> {
     void setAllPortAnnotations(ArrayRef<Attribute> annotations);
 
     /// Get the number of read ports, write ports and read write ports.
-    void getNumPorts(size_t &numReadPorts, size_t &numWritePorts, size_t &numReadWritePorts);
+    void getNumPorts(size_t &numReadPorts, size_t &numWritePorts,
+                      size_t &numReadWritePorts, size_t &numDbgsPorts);
 
     // Extract the relevant attributes from the MemOp and return a FirMemory object.
     FirMemory getSummary();
@@ -204,8 +220,8 @@ def NodeOp : ReferableDeclOp<"node",
   let arguments = (ins PassiveType:$input, StrAttr:$name,
                        NameKindAttr:$nameKind,
                        AnnotationArrayAttr:$annotations,
-                       OptionalAttr<SymbolNameAttr>:$inner_sym);
-  let results = (outs FIRRTLType:$result);
+                       OptionalAttr<InnerSymAttr>:$inner_sym);
+  let results = (outs FIRRTLBaseType:$result);
 
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$input,
@@ -214,7 +230,16 @@ def NodeOp : ReferableDeclOp<"node",
                   CArg<"ArrayRef<Attribute>", "{}">:$annotations,
                   CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
       return build($_builder, $_state, elementType, input, name, nameKind,
-                   $_builder.getArrayAttr(annotations), inner_sym);
+                   $_builder.getArrayAttr(annotations),
+                   inner_sym ? InnerSymAttr::get(inner_sym): InnerSymAttr());
+    }]>,
+    OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$input,
+                  "StringRef":$name, "NameKindEnum":$nameKind,
+                  "::mlir::ArrayAttr":$annotations,
+                  CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
+      return build($_builder, $_state, elementType, input, name, nameKind,
+                   annotations,
+                   inner_sym ? InnerSymAttr::get(inner_sym): InnerSymAttr());
     }]>
   ];
 
@@ -239,7 +264,7 @@ def RegOp : ReferableDeclOp<"reg"> {
   let arguments = (
     ins ClockType:$clockVal, StrAttr:$name, NameKindAttr:$nameKind,
         AnnotationArrayAttr:$annotations,
-        OptionalAttr<SymbolNameAttr>:$inner_sym);
+        OptionalAttr<InnerSymAttr>:$inner_sym);
   let results = (outs AnyRegisterType:$result);
 
   let builders = [
@@ -249,7 +274,15 @@ def RegOp : ReferableDeclOp<"reg"> {
                    CArg<"ArrayRef<Attribute>","{}">:$annotations,
                    CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
       return build($_builder, $_state, elementType, clockVal, name,
-                   nameKind, $_builder.getArrayAttr(annotations), inner_sym);
+                   nameKind, $_builder.getArrayAttr(annotations),
+                   inner_sym ? InnerSymAttr::get(inner_sym): InnerSymAttr());
+    }]>,
+    OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$clockVal,
+                   "StringRef":$name, "NameKindEnum":$nameKind,
+                   "::mlir::ArrayAttr":$annotation, "StringAttr":$inner_sym), [{
+      return build($_builder, $_state, elementType, clockVal, name,
+                   nameKind, annotation,
+                   inner_sym ? InnerSymAttr::get(inner_sym): InnerSymAttr());
     }]>
   ];
 
@@ -274,7 +307,7 @@ def RegResetOp : ReferableDeclOp<"regreset"> {
         AnyRegisterType:$resetValue,
         StrAttr:$name, NameKindAttr:$nameKind,
         AnnotationArrayAttr:$annotations,
-        OptionalAttr<SymbolNameAttr>:$inner_sym);
+        OptionalAttr<InnerSymAttr>:$inner_sym);
   let results = (outs AnyRegisterType:$result);
 
   let builders = [
@@ -285,7 +318,17 @@ def RegResetOp : ReferableDeclOp<"regreset"> {
                    CArg<"ArrayRef<Attribute>","{}">:$annotations,
                    CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
       return build($_builder, $_state, elementType, clockVal, resetSignal,
-                   resetValue, name, nameKind, $_builder.getArrayAttr(annotations), inner_sym);
+                   resetValue, name, nameKind,
+                   $_builder.getArrayAttr(annotations),
+                   inner_sym ? InnerSymAttr::get(inner_sym): InnerSymAttr());
+    }]>,
+    OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$clockVal,
+                   "::mlir::Value":$resetSignal, "::mlir::Value":$resetValue,
+                   "StringRef":$name, "NameKindEnum":$nameKind,
+                    "::mlir::ArrayAttr":$annotation, "StringAttr":$inner_sym), [{
+      return build($_builder, $_state, elementType, clockVal, resetSignal,
+                   resetValue, name, nameKind, annotation,
+                   inner_sym ? InnerSymAttr::get(inner_sym): InnerSymAttr());
     }]>
   ];
 
@@ -310,8 +353,8 @@ def WireOp : ReferableDeclOp<"wire"> {
 
   let arguments = (ins StrAttr:$name, NameKindAttr:$nameKind,
                        AnnotationArrayAttr:$annotations,
-                       OptionalAttr<SymbolNameAttr>:$inner_sym);
-  let results = (outs FIRRTLType:$result);
+                       OptionalAttr<InnerSymAttr>:$inner_sym);
+  let results = (outs FIRRTLBaseType:$result);
 
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType,
@@ -320,8 +363,15 @@ def WireOp : ReferableDeclOp<"wire"> {
                       CArg<"ArrayRef<Attribute>","{}">:$annotations,
                       CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
       return build($_builder, $_state, elementType, name, nameKind,
-                   $_builder.getArrayAttr(annotations), inner_sym);
+                   $_builder.getArrayAttr(annotations),
+                   inner_sym ? InnerSymAttr::get(inner_sym): InnerSymAttr());
     }]>,
+    OpBuilder<(ins "::mlir::Type":$elementType, "StringRef":$name,
+                   "NameKindEnum":$nameKind, "::mlir::ArrayAttr":$annotations,
+                   CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
+      return build($_builder, $_state, elementType, name, nameKind, annotations,
+                   inner_sym ? InnerSymAttr::get(inner_sym): InnerSymAttr());
+    }]>
   ];
 
   let assemblyFormat = [{

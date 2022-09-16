@@ -17,7 +17,9 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "../PassDetail.h"
 #include "ExportVerilogInternals.h"
+#include "circt/Conversion/ExportVerilog.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Support/LoweringOptions.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -40,7 +42,7 @@ bool ExportVerilog::isSimpleReadOrPort(Value v) {
   auto read = dyn_cast<ReadInOutOp>(vOp);
   if (!read)
     return false;
-  auto readSrc = read.input().getDefiningOp();
+  auto readSrc = read.getInput().getDefiningOp();
   if (!readSrc)
     return false;
   return isa<WireOp, RegOp>(readSrc);
@@ -55,6 +57,12 @@ static bool shouldSpillWire(Operation &op, const LoweringOptions &options) {
 
   if (!isVerilogExpression(&op))
     return false;
+
+  // In the new emission mode, spill temporary wires if it is not possible to
+  // inline.
+  if (!options.useOldEmissionMode &&
+      !ExportVerilog::isExpressionEmittedInline(&op))
+    return true;
 
   // If there are more than the maximum number of terms in this single result
   // expression, and it hasn't already been spilled, this should spill.
@@ -77,11 +85,8 @@ static bool shouldSpillWire(Operation &op, const LoweringOptions &options) {
   return false;
 }
 
-// Given an invisible instance, make sure all inputs are driven from
-// wires or ports.
-static void lowerBoundInstance(InstanceOp op) {
-  if (!op->hasAttr("doNotPrint"))
-    return;
+// Given an instance, make sure all inputs are driven from wires or ports.
+static void spillWiresForInstanceInputs(InstanceOp op) {
   Block *block = op->getParentOfType<HWModuleOp>().getBodyBlock();
   auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), block);
 
@@ -207,10 +212,108 @@ static void lowerAlwaysInlineOperation(Operation *op) {
   return;
 }
 
+// Find a nearest insertion point where logic op can be declared.
+// Logic ops are emitted as "automatic logic" in procedural regions, but
+// they must be declared at beginning of blocks.
+static std::pair<Block *, Block::iterator>
+findLogicOpInsertionPoint(Operation *op) {
+  // We have to skip `ifdef.procedural` because it is a just macro.
+  if (isa<IfDefProceduralOp>(op->getParentOp()))
+    return findLogicOpInsertionPoint(op->getParentOp());
+  return {op->getBlock(), op->getBlock()->begin()};
+}
+
+// Move the logic op to the givein insertion point. Modify the insertion point
+// if necessary.
+static void setLogicOpToValidInsertionPoint(
+    LogicOp logicOp, std::pair<Block *, Block::iterator> &insertionPoint) {
+  // If the logic op is already located at the given point, increment the
+  // iterator to keep the order of logic operations in the block.
+  if (insertionPoint.second == logicOp->getIterator()) {
+    ++insertionPoint.second;
+    return;
+  }
+  // Otherwise, move the op to the insertion point.
+  logicOp->moveBefore(insertionPoint.first, insertionPoint.second);
+}
+
+/// Emit an explicit wire or logic to assign operation's result. This function
+/// is used to create a temporary to legalize a verilog epression or to
+/// resolve use-before-def in a graph region. If `emitWireAtBlockBegin` is true,
+/// a temporary wire will be created at the beggining of the block. Otherwise,
+/// a wire is created just after op's position so that we can inline the
+/// assignement into its wire declaration.
+static void lowerUsersToTemporaryWire(
+    Operation &op, DenseMap<Value, size_t> &operandMap,
+    std::pair<Block *, Block::iterator> &logicOpInsertionPoint,
+    bool emitWireAtBlockBegin = false) {
+  Block *block = op.getBlock();
+  auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), block);
+  bool isProceduralRegion = op.getParentOp()->hasTrait<ProceduralRegion>();
+
+  auto createWireForResult = [&](Value result, StringAttr name) {
+    Value newWire;
+    // If the op is in a procedural region, use logic op.
+    if (isProceduralRegion)
+      newWire = builder.create<LogicOp>(result.getType(), name);
+    else
+      newWire = builder.create<WireOp>(result.getType(), name);
+
+    while (!result.use_empty()) {
+      auto newWireRead = builder.create<ReadInOutOp>(newWire);
+      OpOperand &use = *result.getUses().begin();
+      use.set(newWireRead);
+      newWireRead->moveBefore(use.getOwner());
+    }
+
+    Operation *connect;
+    if (isProceduralRegion)
+      connect = builder.create<BPAssignOp>(newWire, result);
+    else
+      connect = builder.create<AssignOp>(newWire, result);
+    connect->moveAfter(&op);
+
+    // Move the temporary to the appropriate place.
+    if (isProceduralRegion) {
+      // In a procedural region, "automatic logic" is allowed only at the
+      // beggining of statements. Hence, move the op to the insertion point we
+      // are managing locally.
+      setLogicOpToValidInsertionPoint(newWire.getDefiningOp<LogicOp>(),
+                                      logicOpInsertionPoint);
+    } else if (!emitWireAtBlockBegin) {
+      // `emitWireAtBlockBegin` is intendend to be used for resovling cyclic
+      // dependencies. So when `emitWireAtBlockBegin` is true, we keep the
+      // position of the wire. Otherwise, we move the wire to immediately after
+      // the expression so that the wire and assignment are next to each other.
+      // This ordering will be used by the heurstic to inline assignments.
+      newWire.getDefiningOp()->moveAfter(&op);
+    }
+  };
+
+  // If the op has a single result, infer a meaningfull name from the
+  // value.
+  if (op.getNumResults() == 1) {
+    auto namehint = inferStructuralNameForTemporary(op.getResult(0));
+    createWireForResult(op.getResult(0), namehint);
+    operandMap[op.getResult(0)] = 1;
+    return;
+  }
+
+  // If the op has multiple results, create wires for each result.
+  for (auto result : op.getResults()) {
+    createWireForResult(result, StringAttr());
+    operandMap[result] = 1;
+  }
+}
+
 /// Lower a variadic fully-associative operation into an expression tree.  This
 /// enables long-line splitting to work with them.
-static Value lowerFullyAssociativeOp(Operation &op, OperandRange operands,
-                                     SmallVector<Operation *> &newOps) {
+/// NOLINTNEXTLINE(misc-no-recursion)
+static Value lowerFullyAssociativeOp(
+    Operation &op, OperandRange operands, SmallVector<Operation *> &newOps,
+    DenseMap<Value, size_t> &operandMap,
+    std::pair<Block *, Block::iterator> &logicOpInsertionPoint,
+    const LoweringOptions &options) {
   // save the top level name
   auto name = op.getAttr("sv.namehint");
   if (name)
@@ -228,9 +331,21 @@ static Value lowerFullyAssociativeOp(Operation &op, OperandRange operands,
     break;
   default:
     auto firstHalf = operands.size() / 2;
-    lhs = lowerFullyAssociativeOp(op, operands.take_front(firstHalf), newOps);
-    rhs = lowerFullyAssociativeOp(op, operands.drop_front(firstHalf), newOps);
+    lhs = lowerFullyAssociativeOp(op, operands.take_front(firstHalf), newOps,
+                                  operandMap, logicOpInsertionPoint, options);
+    rhs = lowerFullyAssociativeOp(op, operands.drop_front(firstHalf), newOps,
+                                  operandMap, logicOpInsertionPoint, options);
     break;
+  }
+
+  if (operandMap[lhs] + operandMap[rhs] >
+      options.maximumNumberOfVariadicOperands) {
+    if (lhs.getDefiningOp())
+      lowerUsersToTemporaryWire(*lhs.getDefiningOp(), operandMap,
+                                logicOpInsertionPoint);
+    if (rhs.getDefiningOp())
+      lowerUsersToTemporaryWire(*rhs.getDefiningOp(), operandMap,
+                                logicOpInsertionPoint);
   }
 
   OperationState state(op.getLoc(), op.getName());
@@ -241,58 +356,26 @@ static Value lowerFullyAssociativeOp(Operation &op, OperandRange operands,
   newOps.push_back(newOp);
   if (name)
     newOp->setAttr("sv.namehint", name);
+  size_t size = 0;
+  for (auto a : newOp->getOperands())
+    size += operandMap[a];
+  operandMap[newOp->getResult(0)] = size;
   return newOp->getResult(0);
-}
-
-/// When we find that an operation is used before it is defined in a graph
-/// region, we emit an explicit wire to resolve the issue.
-static void lowerUsersToTemporaryWire(Operation &op) {
-  Block *block = op.getBlock();
-  auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), block);
-
-  auto createWireForResult = [&](Value result, StringAttr name) {
-    Value newWire;
-    if (name)
-      newWire = builder.create<WireOp>(result.getType(), name);
-    else
-      newWire = builder.create<WireOp>(result.getType());
-
-    while (!result.use_empty()) {
-      auto newWireRead = builder.create<ReadInOutOp>(newWire);
-      OpOperand &use = *result.getUses().begin();
-      use.set(newWireRead);
-      newWireRead->moveBefore(use.getOwner());
-    }
-    auto connect = builder.create<AssignOp>(newWire, result);
-    connect->moveAfter(&op);
-  };
-
-  // If the op has a single result and a namehint, give the name to its
-  // temporary wire.
-  if (op.getNumResults() == 1) {
-    auto namehint = op.getAttrOfType<StringAttr>("sv.namehint");
-    // Remove a namehint from the op because the name is moved to the wire.
-    if (namehint)
-      op.removeAttr("sv.namehint");
-    createWireForResult(op.getResult(0), namehint);
-    return;
-  }
-
-  // If the op has multiple results, create wires for each result.
-  for (auto result : op.getResults())
-    createWireForResult(result, StringAttr());
 }
 
 /// Transform "a + -cst" ==> "a - cst" for prettier output.  This returns the
 /// first operation emitted.
-static Operation *rewriteAddWithNegativeConstant(comb::AddOp add,
-                                                 hw::ConstantOp rhsCst) {
+static Operation *
+rewriteAddWithNegativeConstant(comb::AddOp add, hw::ConstantOp rhsCst,
+                               DenseMap<Value, size_t> &operandMap) {
   ImplicitLocOpBuilder builder(add.getLoc(), add);
 
   // Get the positive constant.
   auto negCst = builder.create<hw::ConstantOp>(-rhsCst.getValue());
-  auto sub = builder.create<comb::SubOp>(add.getOperand(0), negCst);
+  auto sub =
+      builder.create<comb::SubOp>(add.getOperand(0), negCst, add.getTwoState());
   add.getResult().replaceAllUsesWith(sub);
+  operandMap.erase(add.getResult());
   add.erase();
   if (rhsCst.use_empty())
     rhsCst.erase();
@@ -316,8 +399,8 @@ static Operation *findParentInNonProceduralRegion(Operation *op) {
 /// This function is invoked on side effecting Verilog expressions when we're in
 /// 'disallowLocalVariables' mode for old Verilog clients.  This ensures that
 /// any side effecting expressions are only used by a single BPAssign to a
-/// sv.reg operation.  This ensures that the verilog emitter doesn't have to
-/// worry about spilling them.
+/// sv.reg or sv.logic operation.  This ensures that the verilog emitter doesn't
+/// have to worry about spilling them.
 ///
 /// This returns true if the op was rewritten, false otherwise.
 static bool rewriteSideEffectingExpr(Operation *op) {
@@ -326,7 +409,7 @@ static bool rewriteSideEffectingExpr(Operation *op) {
   // Check to see if this is already rewritten.
   if (op->hasOneUse()) {
     if (auto assign = dyn_cast<BPAssignOp>(*op->user_begin()))
-      if (assign.dest().getDefiningOp<RegOp>())
+      if (isa_and_nonnull<RegOp, LogicOp>(assign.getDest().getDefiningOp()))
         return false;
   }
 
@@ -411,7 +494,7 @@ static bool isMovableDeclaration(Operation *op) {
 /// If exactly one use of this op is an assign, replace the other uses with a
 /// read from the assigned wire or reg. This assumes the preconditions for doing
 /// so are met: op must be an expression in a non-procedural region.
-static void reuseExistingInOut(Operation *op) {
+static bool reuseExistingInOut(Operation *op) {
   // Try to collect a single assign and all the other uses of op.
   sv::AssignOp assign;
   SmallVector<OpOperand *> uses;
@@ -422,7 +505,12 @@ static void reuseExistingInOut(Operation *op) {
     if (auto assignUse = dyn_cast<AssignOp>(use.getOwner())) {
       // If there are multiple assigns, bail out.
       if (assign)
-        return;
+        return false;
+
+      // If the assign is not at the top level, it might be conditionally
+      // executed. So bail out.
+      if (!isa<HWModuleOp>(assignUse->getParentOp()))
+        return false;
 
       // Remember this assign for later.
       assign = assignUse;
@@ -435,25 +523,30 @@ static void reuseExistingInOut(Operation *op) {
 
   // If we didn't find anything, bail out.
   if (!assign || uses.empty())
-    return;
+    return false;
 
-  if (auto *cop = assign.src().getDefiningOp())
+  if (auto *cop = assign.getSrc().getDefiningOp())
     if (isa<ConstantOp>(cop))
-      return;
+      return false;
 
   // Replace all saved uses with a read from the assigned destination.
-  ImplicitLocOpBuilder builder(assign.dest().getLoc(), op->getContext());
+  ImplicitLocOpBuilder builder(assign.getDest().getLoc(), op->getContext());
   for (OpOperand *use : uses) {
     builder.setInsertionPoint(use->getOwner());
-    auto read = builder.create<ReadInOutOp>(assign.dest());
+    auto read = builder.create<ReadInOutOp>(assign.getDest());
     use->set(read);
   }
+  return true;
 }
 
 /// For each module we emit, do a prepass over the structure, pre-lowering and
 /// otherwise rewriting operations we don't want to emit.
 void ExportVerilog::prepareHWModule(Block &block,
                                     const LoweringOptions &options) {
+
+  /// A cache of the number of operands that feed into an operation.  This
+  /// avoids the need to look backwards across ops repeatedly.
+  DenseMap<Value, size_t> operandMap;
 
   // First step, check any nested blocks that exist in this region.  This walk
   // can pull things out to our level of the hierarchy.
@@ -469,9 +562,21 @@ void ExportVerilog::prepareHWModule(Block &block,
 
   // True if these operations are in a procedural region.
   bool isProceduralRegion = block.getParentOp()->hasTrait<ProceduralRegion>();
+
+  // This keeps tracks of an insertion point of logic op.
+  std::pair<Block *, Block::iterator> logicOpInsertionPoint =
+      block.empty() ? std::make_pair<Block *, Block::iterator>(nullptr, {})
+                    : findLogicOpInsertionPoint(&block.front());
+
   for (Block::iterator opIterator = block.begin(), e = block.end();
        opIterator != e;) {
     auto &op = *opIterator++;
+
+    size_t totalOperands = 0;
+    for (auto a : op.getOperands())
+      totalOperands += operandMap.count(a) ? operandMap[a] : 1;
+    if (op.getNumResults() == 1)
+      operandMap[op.getResult(0)] = totalOperands;
 
     // Name legalization should have happened in a different pass for these sv
     // elements and we don't want to change their name through re-legalization
@@ -481,8 +586,27 @@ void ExportVerilog::prepareHWModule(Block &block,
     if (auto instance = dyn_cast<InstanceOp>(op)) {
       // Anchor return values to wires early
       lowerInstanceResults(instance);
-      // Anchor ports of bound instances
-      lowerBoundInstance(instance);
+      // Anchor ports of instances when the instance is bound by bind op, or
+      // forced by the option.
+      if (instance->hasAttr("doNotPrint") ||
+          options.disallowExpressionInliningInPorts)
+        spillWiresForInstanceInputs(instance);
+    }
+
+    // If logic op is located in a procedural region, we have to move the logic
+    // op declaration to a valid program point.
+    if (isProceduralRegion && isa<LogicOp>(op)) {
+      if (options.disallowLocalVariables) {
+        // When `disallowLocalVariables` is enabled, "automatic logic" is
+        // prohibited so hoist the op to a non-procedural region.
+        auto *parentOp = findParentInNonProceduralRegion(&op);
+        op.moveBefore(parentOp);
+      } else {
+        // Otherwise, move the logic op to the point specified by
+        // `logicOpInsertionPoint`.
+        setLogicOpToValidInsertionPoint(cast<LogicOp>(&op),
+                                        logicOpInsertionPoint);
+      }
     }
 
     // Force any expression used in the event control of an always process to be
@@ -509,13 +633,13 @@ void ExportVerilog::prepareHWModule(Block &block,
         lowerAlwaysInlineOperation(newWireRead);
       };
       if (auto always = dyn_cast<AlwaysOp>(op)) {
-        for (auto clock : always.clocks())
+        for (auto clock : always.getClocks())
           enforceWire(clock);
         continue;
       }
       if (auto always = dyn_cast<AlwaysFFOp>(op)) {
-        enforceWire(always.clock());
-        if (auto reset = always.reset())
+        enforceWire(always.getClock());
+        if (auto reset = always.getReset())
           enforceWire(reset);
         continue;
       }
@@ -555,18 +679,32 @@ void ExportVerilog::prepareHWModule(Block &block,
 
     // If this expression is deemed worth spilling into a wire, do it here.
     if (shouldSpillWire(op, options)) {
-      // If we're not in a procedural region, or we are, but we can hoist out of
-      // it, we are good to generate a wire.
-      if (!isProceduralRegion ||
-          (isProceduralRegion && hoistNonSideEffectExpr(&op))) {
-        lowerUsersToTemporaryWire(op);
+      // We first check that it is possible to reuse existing wires as a spilled
+      // wire. Otherwise, create a new wire op.
+      if (isProceduralRegion || !reuseExistingInOut(&op)) {
+        if (options.disallowLocalVariables) {
+          // If we're not in a procedural region, or we are, but we can hoist
+          // out of it, we are good to generate a wire.
+          if (!isProceduralRegion ||
+              (isProceduralRegion && hoistNonSideEffectExpr(&op))) {
+            // If op is moved to a non-procedural region, create a temporary
+            // wire.
+            if (!op.getParentOp()->hasTrait<ProceduralRegion>())
+              lowerUsersToTemporaryWire(op, operandMap, logicOpInsertionPoint);
 
-        // If we're in a procedural region, we move on to the next op in the
-        // block. The expression splitting and canonicalization below will
-        // happen after we recurse back up. If we're not in a procedural region,
-        // the expression can continue being worked on.
-        if (isProceduralRegion)
-          continue;
+            // If we're in a procedural region, we move on to the next op in the
+            // block. The expression splitting and canonicalization below will
+            // happen after we recurse back up. If we're not in a procedural
+            // region, the expression can continue being worked on.
+            if (isProceduralRegion)
+              continue;
+          }
+        } else {
+          // If `disallowLocalVariables` is not enabled, we can spill the
+          // expression to automatic logic declarations even when the op is in a
+          // procedural region.
+          lowerUsersToTemporaryWire(op, operandMap, logicOpInsertionPoint);
+        }
       }
     }
 
@@ -583,7 +721,10 @@ void ExportVerilog::prepareHWModule(Block &block,
          (op.getAttrs().size() == 1 && op.hasAttr("sv.namehint")))) {
       // Lower this operation to a balanced binary tree of the same operation.
       SmallVector<Operation *> newOps;
-      auto result = lowerFullyAssociativeOp(op, op.getOperands(), newOps);
+      auto result =
+          lowerFullyAssociativeOp(op, op.getOperands(), newOps, operandMap,
+                                  logicOpInsertionPoint, options);
+      operandMap.erase(op.getResult(0));
       op.getResult(0).replaceAllUsesWith(result);
       op.erase();
 
@@ -597,7 +738,8 @@ void ExportVerilog::prepareHWModule(Block &block,
       if (auto cst = addOp.getOperand(1).getDefiningOp<hw::ConstantOp>()) {
         assert(addOp.getNumOperands() == 2 && "commutative lowering is done");
         if (cst.getValue().isNegative()) {
-          Operation *firstOp = rewriteAddWithNegativeConstant(addOp, cst);
+          Operation *firstOp =
+              rewriteAddWithNegativeConstant(addOp, cst, operandMap);
           opIterator = Block::iterator(firstOp);
           continue;
         }
@@ -608,7 +750,7 @@ void ExportVerilog::prepareHWModule(Block &block,
     // inout, and re-use an existing inout when possible. This is legal when op
     // is an expression in a non-procedural region.
     if (!isProceduralRegion && isVerilogExpression(&op))
-      reuseExistingInOut(&op);
+      (void)reuseExistingInOut(&op);
   }
 
   // Now that all the basic ops are settled, check for any use-before def issues
@@ -657,7 +799,7 @@ void ExportVerilog::prepareHWModule(Block &block,
       // If this is a an operation reading from a declaration, move it up,
       // along with the corresponding declaration.
       if (auto readInOut = dyn_cast<ReadInOutOp>(op)) {
-        auto *def = readInOut.input().getDefiningOp();
+        auto *def = readInOut.getInput().getDefiningOp();
         if (isMovableDeclaration(def)) {
           op.moveBefore(&block.front());
           def->moveBefore(&block.front());
@@ -666,7 +808,27 @@ void ExportVerilog::prepareHWModule(Block &block,
       }
 
       // Otherwise, we need to lower this to a wire to resolve this.
-      lowerUsersToTemporaryWire(op);
+      lowerUsersToTemporaryWire(op, operandMap, logicOpInsertionPoint,
+                                /*emitWireAtBlockBegin=*/true);
     }
   }
+}
+
+namespace {
+
+struct TestPrepareForEmissionPass
+    : public TestPrepareForEmissionBase<TestPrepareForEmissionPass> {
+  TestPrepareForEmissionPass() {}
+  void runOnOperation() override {
+    HWModuleOp module = getOperation();
+    LoweringOptions options = getLoweringCLIOption(
+        cast<mlir::ModuleOp>(module->getParentOp()),
+        [&](llvm::Twine twine) { module.emitError(twine); });
+    prepareHWModule(*module.getBodyBlock(), options);
+  }
+};
+} // end anonymous namespace
+
+std::unique_ptr<mlir::Pass> circt::createTestPrepareForEmissionPass() {
+  return std::make_unique<TestPrepareForEmissionPass>();
 }

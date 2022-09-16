@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 ##===- utils/get-verilator.sh - Install Verilator ------------*- Script -*-===##
 # 
 # Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.

@@ -17,7 +17,7 @@
 #include "mlir/Dialect/Affine/LoopUtils.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
-#include "mlir/Dialect/SCF/SCF.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/AnalysisManager.h"
 #include <limits>
@@ -72,7 +72,7 @@ void circt::analysis::CyclicSchedulingAnalysis::analyzeForOp(
       // assumes outer loops execute sequentially, i.e. one iteration of the
       // inner loop completes before the next iteration is initiated. With
       // proper analysis and lowerings, this can be relaxed.
-      unsigned distance = memoryDep.dependenceComponents.back().lb.getValue();
+      unsigned distance = memoryDep.dependenceComponents.back().lb.value();
       if (distance > 0)
         problem.setDistance(dep, distance);
     }

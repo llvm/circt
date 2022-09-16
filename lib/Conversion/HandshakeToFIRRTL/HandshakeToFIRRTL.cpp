@@ -44,7 +44,7 @@ static void legalizeFModule(FModuleOp moduleOp) {
   SmallVector<Operation *, 8> connectOps;
   moduleOp.walk([&](ConnectOp op) { connectOps.push_back(op); });
   for (auto op : connectOps)
-    op->moveBefore(&moduleOp.getBody()->back());
+    op->moveBefore(&moduleOp.getBodyBlock()->back());
 }
 
 /// Return the number of bits needed to index the given number of values.
@@ -55,10 +55,10 @@ static size_t getNumIndexBits(uint64_t numValues) {
 /// Get the corresponding FIRRTL type given the built-in data type. Current
 /// supported data types are integer (signed, unsigned, and signless), index,
 /// and none.
-static FIRRTLType getFIRRTLType(Type type) {
+static FIRRTLBaseType getFIRRTLType(Type type) {
   MLIRContext *context = type.getContext();
-  return TypeSwitch<Type, FIRRTLType>(type)
-      .Case<IntegerType>([&](IntegerType integerType) -> FIRRTLType {
+  return TypeSwitch<Type, FIRRTLBaseType>(type)
+      .Case<IntegerType>([&](IntegerType integerType) -> FIRRTLBaseType {
         unsigned width = integerType.getWidth();
 
         switch (integerType.getSignedness()) {
@@ -73,12 +73,12 @@ static FIRRTLType getFIRRTLType(Type type) {
         }
         llvm_unreachable("invalid IntegerType");
       })
-      .Case<IndexType>([&](IndexType indexType) -> FIRRTLType {
+      .Case<IndexType>([&](IndexType indexType) -> FIRRTLBaseType {
         // Currently we consider index type as 64-bits unsigned integer.
         unsigned width = indexType.kInternalStorageBitWidth;
         return UIntType::get(context, width);
       })
-      .Case<TupleType>([&](TupleType tupleType) -> FIRRTLType {
+      .Case<TupleType>([&](TupleType tupleType) -> FIRRTLBaseType {
         using BundleElement = BundleType::BundleElement;
         llvm::SmallVector<BundleElement> elements;
         for (auto it : llvm::enumerate(tupleType.getTypes()))
@@ -87,28 +87,29 @@ static FIRRTLType getFIRRTLType(Type type) {
               false, getFIRRTLType(it.value())));
         return BundleType::get(elements, context);
       })
-      .Default([&](Type) { return FIRRTLType(); });
+      .Default([&](Type) { return FIRRTLBaseType(); });
 }
 
 /// Creates a new FIRRTL bundle type based on an array of port infos.
-static FIRRTLType portInfosToBundleType(MLIRContext *ctx,
-                                        ArrayRef<PortInfo> ports) {
+static FIRRTLBaseType portInfosToBundleType(MLIRContext *ctx,
+                                            ArrayRef<PortInfo> ports) {
   using BundleElement = BundleType::BundleElement;
   llvm::SmallVector<BundleElement, 4> elements;
   for (auto &port : ports) {
-    elements.push_back(
-        BundleElement(port.name, port.direction == Direction::Out, port.type));
+    elements.push_back(BundleElement(port.name,
+                                     port.direction == Direction::Out,
+                                     port.type.cast<FIRRTLBaseType>()));
   }
   return BundleType::get(elements, ctx);
 }
 
 /// Return a FIRRTL bundle type (with data, valid, and ready subfields) given a
 /// standard data type.
-static FIRRTLType getBundleType(Type type) {
+static FIRRTLBaseType getBundleType(Type type) {
   // If the input is already converted to a bundle type elsewhere, itself will
   // be returned after cast.
-  if (auto firrtlType = type.dyn_cast<FIRRTLType>())
-    return firrtlType;
+  if (auto bundleType = type.dyn_cast<BundleType>())
+    return bundleType;
 
   MLIRContext *context = type.getContext();
   using BundleElement = BundleType::BundleElement;
@@ -226,8 +227,8 @@ getPortInfoForOp(ConversionPatternRewriter &rewriter, Operation *op) {
 /// Returns the bundle type associated with an external memory (memref
 /// input argument). The bundle type is deduced from the handshake.extmemory
 /// operator which references the memref input argument.
-static FIRRTLType getMemrefBundleType(ConversionPatternRewriter &rewriter,
-                                      Value blockArg, bool flip) {
+static FIRRTLBaseType getMemrefBundleType(ConversionPatternRewriter &rewriter,
+                                          Value blockArg, bool flip) {
   assert(blockArg.getType().isa<MemRefType>() &&
          "expected blockArg to be a memref");
 
@@ -253,7 +254,7 @@ static FIRRTLType getMemrefBundleType(ConversionPatternRewriter &rewriter,
   return portInfosToBundleType(rewriter.getContext(), extmemPortInfo);
 }
 
-static Value createConstantOp(FIRRTLType opType, APInt value,
+static Value createConstantOp(FIRRTLBaseType opType, APInt value,
                               Location insertLoc, OpBuilder &builder) {
   assert(opType.isa<IntType>() && "can only create constants from IntTypes");
   if (auto intOpType = opType.dyn_cast<firrtl::IntType>()) {
@@ -268,7 +269,7 @@ static Value createConstantOp(FIRRTLType opType, APInt value,
 
 /// Creates a Value that has an assigned zero value. For bundles, this
 /// corresponds to assigning zero to each element recursively.
-static Value createZeroDataConst(FIRRTLType dataType, Location insertLoc,
+static Value createZeroDataConst(FIRRTLBaseType dataType, Location insertLoc,
                                  OpBuilder &builder) {
   return TypeSwitch<Type, Value>(dataType)
       .Case<IntType>([&](auto dataType) {
@@ -332,7 +333,8 @@ using DiscriminatingTypes = std::pair<SmallVector<Type>, SmallVector<Type>>;
 static DiscriminatingTypes getHandshakeDiscriminatingTypes(Operation *op) {
   return TypeSwitch<Operation *, DiscriminatingTypes>(op)
       .Case<MemoryOp>([&](auto memOp) {
-        return DiscriminatingTypes{{}, {memOp.memRefType().getElementType()}};
+        return DiscriminatingTypes{{},
+                                   {memOp.getMemRefType().getElementType()}};
       })
       .Default([&](auto) {
         // By default, all in- and output types which is not a control type
@@ -430,7 +432,7 @@ static std::string getSubModuleName(Operation *oldOp) {
 
   // Add memory ID.
   if (auto memOp = dyn_cast<handshake::MemoryOp>(oldOp))
-    subModuleName += "_id" + std::to_string(memOp.id());
+    subModuleName += "_id" + std::to_string(memOp.getId());
 
   // Add compare kind.
   if (auto comOp = dyn_cast<mlir::arith::CmpIOp>(oldOp))
@@ -444,10 +446,9 @@ static std::string getSubModuleName(Operation *oldOp) {
     else
       subModuleName += "_fifo";
 
-    if (bufferOp.initValues().hasValue()) {
+    if (auto initValues = bufferOp.getInitValues()) {
       subModuleName += "_init";
-      ArrayAttr values = bufferOp.initValues().getValue();
-      for (const Attribute e : values) {
+      for (const Attribute e : *initValues) {
         assert(e.isa<IntegerAttr>());
         subModuleName +=
             "_" + std::to_string(e.dyn_cast<IntegerAttr>().getInt());
@@ -507,7 +508,7 @@ static Value createMuxTree(ArrayRef<Value> inputs, Value select,
           retVal = builder
                        .create<MuxPrimOp>(insertLoc, muxDataType, layerSelect,
                                           upperTree, lowerTree)
-                       .result();
+                       .getResult();
         }
         return retVal;
       };
@@ -526,7 +527,7 @@ static Value createOneHotMuxTree(ArrayRef<Value> inputs, Value select,
          "one-hot select can't mux inputs");
 
   // Start the mux tree with zero value.
-  auto inputType = inputs[0].getType().cast<FIRRTLType>();
+  auto inputType = inputs[0].getType().cast<FIRRTLBaseType>();
   auto inputWidth = inputType.getBitWidthOrSentinel();
   auto muxValue =
       createConstantOp(inputType, APInt(inputWidth, 0), insertLoc, rewriter);
@@ -640,7 +641,7 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
   // Add all inputs of funcOp.
   for (auto &arg : llvm::enumerate(funcOp.getArguments())) {
     auto portName = funcOp.getArgName(arg.index());
-    FIRRTLType bundlePortType;
+    FIRRTLBaseType bundlePortType;
     if (arg.value().getType().isa<MemRefType>())
       bundlePortType =
           getMemrefBundleType(rewriter, arg.value(), /*flip=*/true);
@@ -704,8 +705,8 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
                              "firrtl.transforms.FlattenAnnotation"))})));
   }
 
-  rewriter.inlineRegionBefore(funcOp.body(), topModuleOp.body(),
-                              topModuleOp.body().end());
+  rewriter.inlineRegionBefore(funcOp.getBody(), topModuleOp.getBody(),
+                              topModuleOp.getBody().end());
 
   // In the following section, we manually merge the two regions and manually
   // replace arguments. This is an alternative to using rewriter.mergeBlocks; we
@@ -714,7 +715,7 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
 
   // Merge the second block (inlined from funcOp) of the top-module into the
   // entry block.
-  auto &blockIterator = topModuleOp.body().getBlocks();
+  auto &blockIterator = topModuleOp.getBody().getBlocks();
   Block *entryBlock = &blockIterator.front();
   Block *secondBlock = &*std::next(blockIterator.begin());
 
@@ -770,7 +771,7 @@ static ValueVectorList extractSubfields(FModuleOp subModuleOp,
   ValueVectorList portList;
   for (auto &arg : subModuleOp.getArguments()) {
     ValueVector subfields;
-    auto type = arg.getType().cast<FIRRTLType>();
+    auto type = arg.getType().cast<FIRRTLBaseType>();
     if (auto bundleType = type.dyn_cast<BundleType>()) {
       // Extract all subfields of all bundle ports.
       for (size_t i = 0, e = bundleType.getNumElements(); i < e; ++i) {
@@ -949,8 +950,9 @@ bool StdExprBuilder::visitStdExpr(arith::TruncIOp op) {
 }
 
 bool StdExprBuilder::visitStdExpr(arith::IndexCastOp op) {
-  FIRRTLType sourceType = getFIRRTLType(getOperandDataType(op.getOperand()));
-  FIRRTLType targetType = getFIRRTLType(getOperandDataType(op.getResult()));
+  FIRRTLBaseType sourceType =
+      getFIRRTLType(getOperandDataType(op.getOperand()));
+  FIRRTLBaseType targetType = getFIRRTLType(getOperandDataType(op.getResult()));
   unsigned targetBits = targetType.getBitWidthOrSentinel();
   unsigned sourceBits = sourceType.getBitWidthOrSentinel();
   return (targetBits < sourceBits ? buildTruncateOp(targetBits)
@@ -982,11 +984,11 @@ void StdExprBuilder::buildBinaryLogic() {
 
   // Carry out the binary operation.
   Value resultDataOp = rewriter.create<OpType>(insertLoc, arg0Data, arg1Data);
-  auto resultTy = resultDataOp.getType().cast<FIRRTLType>();
+  auto resultTy = resultDataOp.getType().cast<FIRRTLBaseType>();
 
   // Truncate the result type down if needed.
   auto resultWidth = resultData.getType()
-                         .cast<FIRRTLType>()
+                         .cast<FIRRTLBaseType>()
                          .getPassiveType()
                          .getBitWidthOrSentinel();
 
@@ -1044,6 +1046,7 @@ public:
   bool visitHandshake(handshake::SelectOp op);
   bool visitHandshake(SinkOp op);
   bool visitHandshake(SourceOp op);
+  bool visitHandshake(SyncOp op);
   bool visitHandshake(handshake::StoreOp op);
   bool visitHandshake(PackOp op);
   bool visitHandshake(UnpackOp op);
@@ -1092,7 +1095,7 @@ bool HandshakeBuilder::visitHandshake(SinkOp op) {
   Value argReady = argSubfields[1];
 
   // A Sink operation is always ready to accept tokens.
-  auto signalType = argValid.getType().cast<FIRRTLType>();
+  auto signalType = argValid.getType().cast<FIRRTLBaseType>();
   Value highSignal =
       createConstantOp(signalType, APInt(1, 1), insertLoc, rewriter);
   rewriter.create<ConnectOp>(insertLoc, argReady, highSignal);
@@ -1117,7 +1120,7 @@ bool HandshakeBuilder::visitHandshake(SourceOp op) {
   Value argReady = argSubfields[1];
 
   // A Source operation is always ready to provide tokens.
-  auto signalType = argValid.getType().cast<FIRRTLType>();
+  auto signalType = argValid.getType().cast<FIRRTLBaseType>();
   Value highSignal =
       createConstantOp(signalType, APInt(1, 1), insertLoc, rewriter);
   rewriter.create<ConnectOp>(insertLoc, argValid, highSignal);
@@ -1198,6 +1201,48 @@ bool HandshakeBuilder::visitHandshake(JoinOp op) {
   return buildJoinLogic(inputs, output);
 }
 
+// Joins all the input control signals and connects the resulting control
+// signals in a fork like manner to the outputs. Data logic is forwarded
+// directly between in- and outputs.
+bool HandshakeBuilder::visitHandshake(SyncOp op) {
+  size_t numRes = op->getNumResults();
+  unsigned portNum = portList.size();
+  assert(portNum == 2 * numRes + 2);
+
+  // Create wires that will be used to connect the join and the fork logic
+  auto bitType = UIntType::get(op->getContext(), 1);
+  ValueVector connector;
+  connector.push_back(rewriter.create<WireOp>(insertLoc, bitType, "allValid"));
+  connector.push_back(rewriter.create<WireOp>(insertLoc, bitType, "allReady"));
+
+  // Collect all input ports.
+  SmallVector<ValueVector *, 4> inputs;
+  for (unsigned i = 0, e = numRes; i < e; ++i)
+    inputs.push_back(&portList[i]);
+
+  // Collect all output ports.
+  SmallVector<ValueVector *, 4> outputs;
+  for (unsigned i = numRes, e = 2 * numRes; i < e; ++i)
+    outputs.push_back(&portList[i]);
+
+  // connect data ports
+  for (auto [in, out] : llvm::zip(inputs, outputs)) {
+    if (in->size() == 2)
+      continue;
+
+    rewriter.create<ConnectOp>(insertLoc, (*out)[2], (*in)[2]);
+  }
+
+  if (!buildJoinLogic(inputs, &connector))
+    return false;
+
+  // The clock and reset signals will be used for registers.
+  auto clock = portList[portNum - 2][0];
+  auto reset = portList[portNum - 1][0];
+
+  return buildForkLogic(&connector, outputs, clock, reset, true);
+}
+
 /// Please refer to test_mux.mlir test case.
 /// Lowers the MuxOp into primitive FIRRTL ops.
 /// See http://www.cs.columbia.edu/~sedwards/papers/edwards2019compositional.pdf
@@ -1258,7 +1303,7 @@ bool HandshakeBuilder::visitHandshake(MuxOp op) {
   // width used to index into the decoder.
   size_t bitsNeeded = getNumIndexBits(argValid.size());
   size_t selectBits =
-      selectData.getType().cast<FIRRTLType>().getBitWidthOrSentinel();
+      selectData.getType().cast<FIRRTLBaseType>().getBitWidthOrSentinel();
 
   if (selectBits > bitsNeeded) {
     auto tailAmount = selectBits - bitsNeeded;
@@ -1850,7 +1895,7 @@ bool HandshakeBuilder::visitHandshake(handshake::ConstantOp op) {
   Value resultReady = resultSubfields[1];
   Value resultData = resultSubfields[2];
 
-  auto constantType = resultData.getType().cast<FIRRTLType>();
+  auto constantType = resultData.getType().cast<FIRRTLBaseType>();
   auto constantValue = op->getAttrOfType<IntegerAttr>("value").getValue();
 
   rewriter.create<ConnectOp>(insertLoc, resultValid, controlValid);
@@ -1905,7 +1950,7 @@ void HandshakeBuilder::buildControlBufferLogic(Value predValid, Value predReady,
 
   // Add same logic for the data path if necessary.
   if (predData) {
-    auto dataType = predData.getType().cast<FIRRTLType>();
+    auto dataType = predData.getType().cast<FIRRTLBaseType>();
     auto ctrlDataRegWire =
         rewriter.create<WireOp>(insertLoc, dataType, "ctrlDataRegWire");
 
@@ -1954,7 +1999,7 @@ void HandshakeBuilder::buildDataBufferLogic(Value predValid, Value validReg,
 
   // If data is not nullptr, create data logic.
   if (predData && dataReg) {
-    auto dataType = predData.getType().cast<FIRRTLType>();
+    auto dataType = predData.getType().cast<FIRRTLBaseType>();
 
     // Create a mux that drives the date register.
     auto dataRegMux = rewriter.create<MuxPrimOp>(
@@ -1979,7 +2024,7 @@ static void connectSrcToAllElements(ImplicitLocOpBuilder &builder, Value dest,
 
 FModuleOp buildInnerFIFO(CircuitOp circuit, StringRef moduleName,
                          unsigned depth, bool isControl,
-                         FIRRTLType dataType = FIRRTLType()) {
+                         FIRRTLBaseType dataType = FIRRTLBaseType()) {
   ImplicitLocOpBuilder builder(circuit.getLoc(), circuit.getContext());
   SmallVector<PortInfo> ports;
   auto bitType = UIntType::get(builder.getContext(), 1);
@@ -2010,9 +2055,9 @@ FModuleOp buildInnerFIFO(CircuitOp circuit, StringRef moduleName,
   ports.push_back({strAttr("reset"), builder.getType<UIntType>(1),
                    Direction::In, StringAttr{}, loc});
 
-  builder.setInsertionPointToStart(circuit.getBody());
+  builder.setInsertionPointToStart(circuit.getBodyBlock());
   auto moduleOp = builder.create<FModuleOp>(strAttr(moduleName), ports);
-  builder.setInsertionPointToStart(moduleOp.getBody());
+  builder.setInsertionPointToStart(moduleOp.getBodyBlock());
 
   // Unpack module arguments.
   int portIdx = 0;
@@ -2042,7 +2087,7 @@ FModuleOp buildInnerFIFO(CircuitOp circuit, StringRef moduleName,
   /// Returns a constant value 'value' width a width equal to that of
   /// 'refValue'.
   auto getConstantOfEqWidth = [&](uint64_t value, Value refValue) {
-    FIRRTLType type = refValue.getType().cast<FIRRTLType>();
+    FIRRTLBaseType type = refValue.getType().cast<FIRRTLBaseType>();
     return createConstantOp(type, APInt(type.getBitWidthOrSentinel(), value),
                             loc, builder);
   };
@@ -2066,9 +2111,9 @@ FModuleOp buildInnerFIFO(CircuitOp circuit, StringRef moduleName,
       builder.create<RegResetOp>(depthType, clk, rst, zeroConst, "count_reg");
 
   // Function for truncating results to a given types' width.
-  auto trunc = [&](Value v, FIRRTLType toType) {
+  auto trunc = [&](Value v, FIRRTLBaseType toType) {
     unsigned truncBits =
-        v.getType().cast<FIRRTLType>().getBitWidthOrSentinel() -
+        v.getType().cast<FIRRTLBaseType>().getBitWidthOrSentinel() -
         toType.getBitWidthOrSentinel();
     return builder.create<TailPrimOp>(v, truncBits);
   };
@@ -2120,24 +2165,25 @@ FModuleOp buildInnerFIFO(CircuitOp circuit, StringRef moduleName,
 
     // Extract the port bundles.
     auto readBundle = memOp.getPortNamed("read");
-    auto readType = readBundle.getType().cast<FIRRTLType>().cast<BundleType>();
+    auto readType =
+        readBundle.getType().cast<FIRRTLBaseType>().cast<BundleType>();
     auto writeBundle = memOp.getPortNamed("write");
     auto writeType =
-        writeBundle.getType().cast<FIRRTLType>().cast<BundleType>();
+        writeBundle.getType().cast<FIRRTLBaseType>().cast<BundleType>();
 
     // Get the clock out of the bundle and connect them.
     auto readClock = builder.create<SubfieldOp>(
-        readBundle, readType.getElementIndex("clk").getValue());
+        readBundle, readType.getElementIndex("clk").value());
     builder.create<ConnectOp>(readClock, clk);
     auto writeClock = builder.create<SubfieldOp>(
-        writeBundle, writeType.getElementIndex("clk").getValue());
+        writeBundle, writeType.getElementIndex("clk").value());
     builder.create<ConnectOp>(writeClock, clk);
 
     // Get the addresses out of the bundle
     auto readAddr = builder.create<SubfieldOp>(
-        readBundle, readType.getElementIndex("addr").getValue());
+        readBundle, readType.getElementIndex("addr").value());
     auto writeAddr = builder.create<SubfieldOp>(
-        writeBundle, readType.getElementIndex("addr").getValue());
+        writeBundle, readType.getElementIndex("addr").value());
 
     // Connect read and write to head and tail registers.
     builder.create<ConnectOp>(readAddr, head);
@@ -2145,9 +2191,9 @@ FModuleOp buildInnerFIFO(CircuitOp circuit, StringRef moduleName,
 
     // Get the memory enable out of the bundles.
     auto memReadEn = builder.create<SubfieldOp>(
-        readBundle, readType.getElementIndex("en").getValue());
+        readBundle, readType.getElementIndex("en").value());
     auto memWriteEn = builder.create<SubfieldOp>(
-        writeBundle, writeType.getElementIndex("en").getValue());
+        writeBundle, writeType.getElementIndex("en").value());
     // Always read
     builder.create<ConnectOp>(memReadEn, oneConst);
     // Write on writeEn
@@ -2155,15 +2201,15 @@ FModuleOp buildInnerFIFO(CircuitOp circuit, StringRef moduleName,
 
     // Connect read and write data.
     auto readData = builder.create<SubfieldOp>(
-        readBundle, readType.getElementIndex("data").getValue());
+        readBundle, readType.getElementIndex("data").value());
     auto writeData = builder.create<SubfieldOp>(
-        writeBundle, writeType.getElementIndex("data").getValue());
+        writeBundle, writeType.getElementIndex("data").value());
     builder.create<ConnectOp>(dataOut, readData);
     builder.create<ConnectOp>(writeData, dataIn);
 
     // Get the store mask out of the bundle.
     auto writeMask = builder.create<SubfieldOp>(
-        writeBundle, writeType.getElementIndex("mask").getValue());
+        writeBundle, writeType.getElementIndex("mask").value());
 
     // We might be storing bundles. Therefore, we have to ensure that writeEn is
     // connected to all elements of the mask.
@@ -2218,10 +2264,10 @@ bool HandshakeBuilder::buildFIFOBufferLogic(int64_t numStage,
   auto inputValid = inputSubfields[0];
   auto inputReady = inputSubfields[1];
   Value inputData = nullptr;
-  FIRRTLType dataType = nullptr;
+  FIRRTLBaseType dataType = nullptr;
   if (!isControl) {
     inputData = inputSubfields[2];
-    dataType = inputData.getType().cast<FIRRTLType>();
+    dataType = inputData.getType().cast<FIRRTLBaseType>();
   }
 
   auto outputSubfields = *output;
@@ -2333,7 +2379,7 @@ bool HandshakeBuilder::buildSeqBufferLogic(int64_t numStage, ValueVector *input,
   auto trueConst = createConstantOp(bitType, APInt(1, 1), insertLoc, rewriter);
 
   // Create useful value and type for data signal.
-  FIRRTLType dataType = nullptr;
+  FIRRTLBaseType dataType = nullptr;
   Value zeroDataConst = nullptr;
 
   // Temporary values for storing the valid, ready, and data signals in the
@@ -2346,7 +2392,7 @@ bool HandshakeBuilder::buildSeqBufferLogic(int64_t numStage, ValueVector *input,
   if (!isControl) {
     auto inputData = inputSubfields[2];
 
-    dataType = inputData.getType().cast<FIRRTLType>();
+    dataType = inputData.getType().cast<FIRRTLBaseType>();
 
     zeroDataConst = createZeroDataConst(dataType, insertLoc, rewriter);
     currentData = inputData;
@@ -2368,17 +2414,18 @@ bool HandshakeBuilder::buildSeqBufferLogic(int64_t numStage, ValueVector *input,
     // Create registers for data signal.
     Value dataReg = nullptr;
     Value initValue = zeroDataConst;
-    if (isInitialized) {
-      assert(dataType.isa<IntType>() &&
-             "initial values are only supported for integer buffers");
-      initValue = createConstantOp(
-          dataType, APInt(dataType.getBitWidthOrSentinel(), initValues[i]),
-          insertLoc, rewriter);
-    }
-    if (!isControl)
+    if (!isControl) {
+      if (isInitialized) {
+        assert(dataType.isa<IntType>() &&
+               "initial values are only supported for integer buffers");
+        initValue = createConstantOp(
+            dataType, APInt(dataType.getBitWidthOrSentinel(), initValues[i]),
+            insertLoc, rewriter);
+      }
       dataReg =
           rewriter.create<RegResetOp>(insertLoc, dataType, clock, reset,
                                       initValue, "dataReg" + std::to_string(i));
+    }
 
     // Create wires for valid, ready and data signal coming from the control
     // buffer stage.
@@ -2427,8 +2474,8 @@ bool HandshakeBuilder::visitHandshake(BufferOp op) {
   // For now, we only support sequential buffers.
   if (op.isSequential()) {
     SmallVector<int64_t> initValues = {};
-    if (op.initValues())
-      initValues = op.getInitValues();
+    if (op.getInitValues())
+      initValues = op.getInitValueArray();
     return buildSeqBufferLogic(op.getNumSlots(), &input, &output, clock, reset,
                                op.isControl(), initValues);
   }
@@ -2489,7 +2536,7 @@ bool HandshakeBuilder::visitHandshake(ExternalMemoryOp op) {
 
 bool HandshakeBuilder::visitHandshake(MemoryOp op) {
   // Get the memory type and element type.
-  MemRefType type = op.memRefType();
+  MemRefType type = op.getMemRefType();
   Type elementType = type.getElementType();
   if (!elementType.isSignlessInteger()) {
     op.emitError("only memrefs of signless ints are supported");
@@ -2502,8 +2549,8 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
   uint32_t writeLatency = 1;
   RUWAttr ruw = RUWAttr::Old;
   uint64_t depth = type.getNumElements();
-  FIRRTLType dataType = getFIRRTLType(elementType);
-  auto name = "mem" + std::to_string(op.id());
+  FIRRTLBaseType dataType = getFIRRTLType(elementType);
+  auto name = "mem" + std::to_string(op.getId());
 
   // Helpers to get port identifiers.
   auto loadIdentifier = [&](size_t i) {
@@ -2515,8 +2562,8 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
   };
 
   // Collect the port info for each port.
-  uint64_t numLoads = op.ldCount();
-  uint64_t numStores = op.stCount();
+  uint64_t numLoads = op.getLdCount();
+  uint64_t numStores = op.getStCount();
   SmallVector<std::pair<StringAttr, MemOp::PortKind>, 8> ports;
   for (size_t i = 0; i < numLoads; ++i) {
     auto portName = loadIdentifier(i);
@@ -2570,18 +2617,18 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
 
     // Get the clock out of the bundle and connect it.
     auto memClock = rewriter.create<SubfieldOp>(
-        insertLoc, memBundle, memType.getElementIndex("clk").getValue());
+        insertLoc, memBundle, memType.getElementIndex("clk").value());
     rewriter.create<ConnectOp>(insertLoc, memClock, clock);
 
     // Get the load address out of the bundle.
     auto memAddr = rewriter.create<SubfieldOp>(
-        insertLoc, memBundle, memType.getElementIndex("addr").getValue());
+        insertLoc, memBundle, memType.getElementIndex("addr").value());
 
     // Since addresses coming from Handshake are IndexType and have a hardcoded
     // 64-bit width in this pass, we may need to truncate down to the actual
     // size of the address port used by the FIRRTL memory.
-    auto memAddrType = memAddr.getType().cast<FIRRTLType>();
-    auto loadAddrType = loadAddrData.getType().cast<FIRRTLType>();
+    auto memAddrType = memAddr.getType().cast<FIRRTLBaseType>();
+    auto loadAddrType = loadAddrData.getType().cast<FIRRTLBaseType>();
     if (memAddrType != loadAddrType) {
       auto memAddrPassiveType = memAddrType.getPassiveType();
       auto tailAmount = loadAddrType.getBitWidthOrSentinel() -
@@ -2595,14 +2642,14 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
 
     // Get the load data out of the bundle.
     auto memData = rewriter.create<SubfieldOp>(
-        insertLoc, memBundle, memType.getElementIndex("data").getValue());
+        insertLoc, memBundle, memType.getElementIndex("data").value());
 
     // Connect the memory to the load data.
     rewriter.create<ConnectOp>(insertLoc, loadDataData, memData);
 
     // Get the load enable out of the bundle.
     auto memEnable = rewriter.create<SubfieldOp>(
-        insertLoc, memBundle, memType.getElementIndex("en").getValue());
+        insertLoc, memBundle, memType.getElementIndex("en").value());
 
     // Connect the address valid signal to the memory enable.
     rewriter.create<ConnectOp>(insertLoc, memEnable, loadAddrValid);
@@ -2634,22 +2681,22 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
 
     auto fieldName = storeIdentifier(i);
     auto memBundle = memOp.getPortNamed(fieldName);
-    auto memType = memBundle.getType().cast<FIRRTLType>().cast<BundleType>();
+    auto memType = memBundle.getType().cast<BundleType>();
 
     // Get the clock out of the bundle and connect it.
     auto memClock = rewriter.create<SubfieldOp>(
-        insertLoc, memBundle, memType.getElementIndex("clk").getValue());
+        insertLoc, memBundle, memType.getElementIndex("clk").value());
     rewriter.create<ConnectOp>(insertLoc, memClock, clock);
 
     // Get the store address out of the bundle.
     auto memAddr = rewriter.create<SubfieldOp>(
-        insertLoc, memBundle, memType.getElementIndex("addr").getValue());
+        insertLoc, memBundle, memType.getElementIndex("addr").value());
 
     // Since addresses coming from Handshake are IndexType and have a hardcoded
     // 64-bit width in this pass, we may need to truncate down to the actual
     // size of the address port used by the FIRRTL memory.
     auto memAddrType = memAddr.getType();
-    auto storeAddrType = storeAddrData.getType().cast<FIRRTLType>();
+    auto storeAddrType = storeAddrData.getType().cast<FIRRTLBaseType>();
     if (memAddrType != storeAddrType) {
       auto memAddrPassiveType = memAddrType.getPassiveType();
       auto tailAmount = storeAddrType.getBitWidthOrSentinel() -
@@ -2663,7 +2710,7 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
 
     // Get the store data out of the bundle.
     auto memData = rewriter.create<SubfieldOp>(
-        insertLoc, memBundle, memType.getElementIndex("data").getValue());
+        insertLoc, memBundle, memType.getElementIndex("data").value());
 
     // Connect the store data to the memory.
     rewriter.create<ConnectOp>(insertLoc, memData, storeDataData);
@@ -2717,14 +2764,14 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
 
     // Get the store enable out of the bundle.
     auto memEnable = rewriter.create<SubfieldOp>(
-        insertLoc, memBundle, memType.getElementIndex("en").getValue());
+        insertLoc, memBundle, memType.getElementIndex("en").value());
 
     // Connect the write valid signal to the memory enable.
     rewriter.create<ConnectOp>(insertLoc, memEnable, writeValid);
 
     // Get the store mask out of the bundle.
     auto memMask = rewriter.create<SubfieldOp>(
-        insertLoc, memBundle, memType.getElementIndex("mask").getValue());
+        insertLoc, memBundle, memType.getElementIndex("mask").value());
 
     // Since we are not storing bundles in the memory, we can assume the mask is
     // a single bit.
@@ -2913,7 +2960,7 @@ static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
     unsigned numIns = oldOp->getNumOperands();
     unsigned numArgs = numIns + oldOp->getNumResults();
 
-    auto topArgs = topModuleOp.getBody()->getArguments();
+    auto topArgs = topModuleOp.getBodyBlock()->getArguments();
     auto firstClock = std::find_if(topArgs.begin(), topArgs.end(),
                                    [](BlockArgument &arg) -> bool {
                                      return arg.getType().isa<ClockType>();
@@ -3003,7 +3050,7 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
   LogicalResult
   matchAndRewrite(handshake::FuncOp funcOp, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.setInsertionPointToStart(circuitOp.getBody());
+    rewriter.setInsertionPointToStart(circuitOp.getBodyBlock());
     auto topModuleOp =
         createTopModuleOp(funcOp, /*numClocks=*/1, rewriter, setFlattenAttr);
 
@@ -3024,7 +3071,7 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
     };
 
     // Traverse and convert each operation in funcOp.
-    for (Operation &op : *topModuleOp.getBody()) {
+    for (Operation &op : *topModuleOp.getBodyBlock()) {
       if (isa<handshake::ReturnOp>(op))
         convertReturnOp(&op, topModuleOp, funcOp, rewriter);
 
@@ -3038,7 +3085,7 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
           subModuleOp = createSubModuleOp(topModuleOp, &op, rewriter);
 
           Location insertLoc = subModuleOp.getLoc();
-          auto *bodyBlock = subModuleOp.getBody();
+          auto *bodyBlock = subModuleOp.getBodyBlock();
           rewriter.setInsertionPoint(bodyBlock, bodyBlock->end());
 
           ValueVectorList portList =

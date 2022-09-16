@@ -95,6 +95,15 @@ inline MemDirAttr &operator|=(MemDirAttr &lhs, MemDirAttr rhs) {
   return lhs;
 }
 
+/// Return the StringAttr for the inner_sym name, if it exists.
+inline StringAttr getInnerSymName(Operation *op) {
+  InnerSymAttr s = op->getAttrOfType<InnerSymAttr>(
+      InnerSymbolTable::getInnerSymbolAttrName());
+  if (s)
+    return s.getSymName();
+  return StringAttr();
+}
+
 /// Check whether a block argument ("port") or the operation defining a value
 /// has a `DontTouch` annotation, or a symbol that should prevent certain types
 /// of canonicalizations.

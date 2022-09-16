@@ -28,6 +28,8 @@
 namespace circt {
 namespace hw {
 
+class EnumFieldAttr;
+
 /// A module port direction.
 enum class PortDirection {
   INPUT = 1,
@@ -185,6 +187,38 @@ StringAttr getArgSym(Operation *op, unsigned i);
 /// Return the symbol (if any, else null) on the corresponding output port
 /// argument.
 StringAttr getResultSym(Operation *op, unsigned i);
+
+// A class for providing access to the in- and output ports of a module through
+// use of the HWModuleBuilder.
+class HWModulePortAccessor {
+
+public:
+  HWModulePortAccessor(Location loc, const ModulePortInfo &info,
+                       Region &bodyRegion);
+
+  // Returns the i'th/named input port of the module.
+  Value getInput(unsigned i);
+  Value getInput(StringRef name);
+  ValueRange getInputs() { return inputArgs; }
+
+  // Assigns the i'th/named output port of the module.
+  void setOutput(unsigned i, Value v);
+  void setOutput(StringRef name, Value v);
+
+  const ModulePortInfo &getModulePortInfo() const { return info; }
+  const llvm::SmallVector<Value> &getOutputOperands() const {
+    return outputOperands;
+  }
+
+private:
+  llvm::StringMap<unsigned> inputIdx, outputIdx;
+  llvm::SmallVector<Value> inputArgs;
+  llvm::SmallVector<Value> outputOperands;
+  ModulePortInfo info;
+};
+
+using HWModuleBuilder =
+    llvm::function_ref<void(OpBuilder &, HWModulePortAccessor &)>;
 
 } // namespace hw
 } // namespace circt

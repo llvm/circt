@@ -79,12 +79,12 @@ def _obj_to_value(x, type, result_type=None):
   if x is None:
     raise ValueError(
         "Encountered 'None' when trying to build hardware for python value.")
-  from .value import Value
+  from .value import PyCDEValue
   from .dialects import hw
   from .pycde_types import (TypeAliasType, ArrayType, StructType, BitVectorType,
                             Type)
 
-  if isinstance(x, Value):
+  if isinstance(x, PyCDEValue):
     return x
 
   type = Type(type)
@@ -142,15 +142,15 @@ def _obj_to_value(x, type, result_type=None):
 def _infer_type(x):
   """Infer the CIRCT type from a python object. Only works on lists."""
   from .pycde_types import types
-  from .value import Value
-  if isinstance(x, Value):
+  from .value import PyCDEValue
+  if isinstance(x, PyCDEValue):
     return x.type
 
   if isinstance(x, (list, tuple)):
     list_types = [_infer_type(i) for i in x]
     list_type = list_types[0]
     if not all([i == list_type for i in list_types]):
-      raise ValueError(f"CIRCT array must be homogenous, unlike object")
+      raise ValueError("CIRCT array must be homogenous, unlike object")
     return types.array(list_type, len(x))
   if isinstance(x, int):
     raise ValueError(f"Cannot infer width of {x}")
@@ -176,3 +176,8 @@ def create_type_string(ty):
   if isinstance(ty, hw.ArrayType):
     return f"{ty.size}x" + create_type_string(ty.element_type)
   return str(ty)
+
+
+def attributes_of_type(o, T):
+  """Filter the attributes of an object 'o' to only those of type 'T'."""
+  return {a: getattr(o, a) for a in dir(o) if isinstance(getattr(o, a), T)}

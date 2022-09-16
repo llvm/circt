@@ -10,13 +10,13 @@ add_circt_conversion_library(CIRCTSCFToCalyx
   LINK_LIBS PUBLIC
   CIRCTCalyx
   CIRCTCalyxTransforms
-  CIRCTStaticLogicOps
+  CIRCTPipelineOps
   MLIRIR
   MLIRPass
-  MLIRArithmetic
-  MLIRFunc
+  MLIRArithmeticDialect
+  MLIRFuncDialect
   MLIRSupport
   MLIRTransforms
   MLIRAffineToStandard
-  MLIRSCF
+  MLIRSCFDialect
 )

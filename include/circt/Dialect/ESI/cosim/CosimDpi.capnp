@@ -31,7 +31,7 @@ struct EsiDpiInterfaceDesc @0xd2584d2506f01c8c {
   # Capn'Proto ID of the struct type being sent _from_ the simulator.
   recvTypeID @1 :UInt64;
   # Numerical identifier of the endpoint. Defined in the design.
-  endpointID @2 :Int32;
+  endpointID @2 :Text;
 }
 
 # Interactions with an open endpoint. Optionally typed.

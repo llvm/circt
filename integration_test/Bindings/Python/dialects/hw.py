@@ -22,7 +22,7 @@ with Context() as ctx, Location.unknown():
       constI2 = hw.ConstantOp(IntegerAttr.get(i2, 1))
       constI1 = hw.ConstantOp.create(i1, 1)
 
-      # CHECK: All arguments must be the same type to create an array
+      # CHECK: Argument 1 has a different element type (i32) than the element type of the array (i1)
       try:
         hw.ArrayCreateOp.create([constI1, constI32])
       except TypeError as e:
@@ -74,14 +74,21 @@ with Context() as ctx, Location.unknown():
   print(typeAlias.scope)
   print(typeAlias.name)
 
-  pdecl = hw.ParamDeclAttr.get("param1", TypeAttr.get(i32),
-                               IntegerAttr.get(i32, 13))
-  # CHECK: #hw.param.decl<"param1": i32 = 13 : i32>
+  pdecl = hw.ParamDeclAttr.get("param1", i32, IntegerAttr.get(i32, 13))
+  # CHECK: #hw.param.decl<"param1": i32 = 13>
   print(pdecl)
 
-  pdecl = hw.ParamDeclAttr.get_nodefault("param2", TypeAttr.get(i32))
+  pdecl = hw.ParamDeclAttr.get_nodefault("param2", i32)
   # CHECK: #hw.param.decl<"param2": i32>
   print(pdecl)
+
+  # CHECK: #hw.param.decl.ref<"param2"> : i32
+  pdeclref = hw.ParamDeclRefAttr.get(ctx, "param2")
+  print(pdeclref)
+
+  # CHECK: !hw.int<#hw.param.decl.ref<"param2">>
+  pinttype = hw.ParamIntType.get_from_param(ctx, pdeclref)
+  print(pinttype)
 
   pverbatim = hw.ParamVerbatimAttr.get(StringAttr.get("this is verbatim"))
   # CHECK: #hw.param.verbatim<"this is verbatim">

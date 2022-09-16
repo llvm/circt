@@ -21,7 +21,6 @@
 
 // Pull in all enum type definitions, attributes,
 // and utility function declarations.
-#include "circt/Dialect/Handshake/HandshakeAttrs.h.inc"
 #include "circt/Dialect/Handshake/HandshakeEnums.h.inc"
 
 #endif // CIRCT_DIALECT_HANDSHAKE_HANDSHAKEDIALECT_H

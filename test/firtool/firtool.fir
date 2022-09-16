@@ -2,22 +2,30 @@
 ; RUN: firtool %s --format=fir --ir-fir --annotation-file %s.anno.json,%s.anno.1.json | circt-opt | FileCheck %s --check-prefix=ANNOTATIONS
 ; RUN: firtool %s --format=fir --ir-fir --annotation-file %s.anno.json --annotation-file %s.anno.1.json | circt-opt | FileCheck %s --check-prefix=ANNOTATIONS
 ; RUN: firtool %s --format=fir --ir-hw | circt-opt | FileCheck %s --check-prefix=MLIRLOWER
-; RUN: firtool %s --format=fir -verilog |             FileCheck %s --check-prefix=VERILOG
-; RUN: firtool %s --annotation-file %s.anno.json,%s.anno.1.json --parse-only | FileCheck %s --check-prefix=ANNOTATIONS
-; RUN: firtool %s --omir-file %s.omir.anno.json --parse-only | FileCheck %s --check-prefix=OMIR
+; RUN: firtool %s --format=fir -verilog | FileCheck %s --check-prefix=VERILOG
+; RUN: firtool %s --annotation-file %s.anno.json,%s.anno.1.json --parse-only | FileCheck %s --check-prefix=RAWANNOTATIONS
+; RUN: firtool %s --omir-file %s.omir.anno.json --parse-only | circt-opt -firrtl-lower-annotations | FileCheck %s --check-prefix=OMIR
 ; RUN: firtool %s --omir-file %s.omir.anno.json --output-omir meta.omir.json --verilog | FileCheck %s --check-prefix=OMIROUT
 ; RUN: firtool %s --format=fir --ir-verilog | circt-opt | FileCheck %s --check-prefix=VERILOG-IR
 
 
-circuit test_mod : %[[{"a": "a"}]]
+circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
 
 ; MLIR: firrtl.circuit "test_mod"
 
 ; ANNOTATIONS-LABEL: firrtl.circuit "test_mod"
-; ANNOTATIONS-SAME: a = "a"
-; ANNOTATIONS-SAME: info = "a NoTargetAnnotation"
-; ANNOTATIONS-SAME: info = "a CircuitTarget Annotation
-; ANNOTATIONS-SAME: info = "a CircuitName Annotation"
+; ANNOTATIONS-SAME: {class = "circt.testNT", data = "a"}
+; ANNOTATIONS-SAME: {class = "circt.testNT", info = "a NoTargetAnnotation"}
+; ANNOTATIONS-SAME: {class = "circt.test", info = "a CircuitTarget Annotation"}
+; ANNOTATIONS-SAME: {class = "circt.test", info = "a CircuitName Annotation"}
+
+; RAWANNOTATIONS-LABEL: firrtl.circuit "test_mod"
+; RAWANNOTATIONS-SAME: {class = "circt.testNT", data = "a"}
+; RAWANNOTATIONS-SAME: {class = "circt.testNT", info = "a NoTargetAnnotation"}
+; RAWANNOTATIONS-SAME: {class = "circt.test", info = "a CircuitTarget Annotation", target = "~test_mod"}
+; RAWANNOTATIONS-SAME: {class = "circt.test", info = "a ModuleTarget Annotation", target = "~test_mod|test_mod"}
+; RAWANNOTATIONS-SAME: {class = "circt.test", info = "a CircuitName Annotation", target = "test_mod"}
+; RAWANNOTATIONS-SAME: {class = "circt.test", info = "a ModuleName Annotation", target = "test_mod.test_mod"}
 
 ; OMIR:       #loc0 = loc(fused["Foo.scala":64:64, "Bar.scala":128:128])
 ; OMIR-NEXT:  #loc1 = loc("Foo.scala":32:32)
@@ -93,39 +101,39 @@ circuit test_mod : %[[{"a": "a"}]]
     out_multibitMux <= multibitMux.b
 
 
-; MLIR-LABEL: firrtl.module @test_mod(in %clock: !firrtl.clock, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<2>, out %c: !firrtl.uint<1>, in %vec_0: !firrtl.uint<1>, in %vec_1: !firrtl.uint<1>, in %vec_2: !firrtl.uint<1>, out %out_implicitTrunc: !firrtl.uint<1>, out %out_prettifyExample: !firrtl.uint<1>, out %out_multibitMux: !firrtl.uint<1>) {
-; MLIR-NEXT:    %cat_a, %cat_b, %cat_c, %cat_d = firrtl.instance cat interesting_name  @Cat(in a: !firrtl.uint<2>, in b: !firrtl.uint<2>, in c: !firrtl.uint<2>, out d: !firrtl.uint<6>)
+; MLIR-LABEL: firrtl.module @test_mod(in %clock: !firrtl.clock, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<2>, out %c: !firrtl.uint<1>, in %vec_0: !firrtl.uint<1>, in %vec_1: !firrtl.uint<1>, in %vec_2: !firrtl.uint<1>, out %out_implicitTrunc: !firrtl.uint<1>, out %out_prettifyExample: !firrtl.uint<1>, out %out_multibitMux: !firrtl.uint<1>) {{.*}}{
+; MLIR-NEXT:    %cat_a, %cat_b, %cat_c, %cat_d = firrtl.instance cat @Cat(in a: !firrtl.uint<2>, in b: !firrtl.uint<2>, in c: !firrtl.uint<2>, out d: !firrtl.uint<6>)
 ; MLIR-NEXT:    firrtl.strictconnect %cat_a, %b : !firrtl.uint<2>
 ; MLIR-NEXT:    firrtl.strictconnect %cat_b, %b : !firrtl.uint<2>
 ; MLIR-NEXT:    firrtl.strictconnect %cat_c, %b : !firrtl.uint<2>
-; MLIR-NEXT:    %implicitTrunc_inp_1, %implicitTrunc_inp_2, %implicitTrunc_out1, %implicitTrunc_out2 = firrtl.instance implicitTrunc interesting_name @ImplicitTrunc(in inp_1: !firrtl.uint<1>, in inp_2: !firrtl.sint<5>, out out1: !firrtl.sint<3>, out out2: !firrtl.sint<3>)
+; MLIR-NEXT:    %implicitTrunc_inp_1, %implicitTrunc_inp_2, %implicitTrunc_out1, %implicitTrunc_out2 = firrtl.instance implicitTrunc @ImplicitTrunc(in inp_1: !firrtl.uint<1>, in inp_2: !firrtl.sint<5>, out out1: !firrtl.sint<3>, out out2: !firrtl.sint<3>)
 ; MLIR-NEXT:    firrtl.strictconnect %implicitTrunc_inp_1, %a : !firrtl.uint<1>
 ; MLIR-NEXT:    %0 = firrtl.asSInt %cat_d : (!firrtl.uint<6>) -> !firrtl.sint<6>
 ; MLIR-NEXT:    %1 = firrtl.bits %0 4 to 0 : (!firrtl.sint<6>) -> !firrtl.uint<5>
 ; MLIR-NEXT:    %2 = firrtl.asSInt %1 : (!firrtl.uint<5>) -> !firrtl.sint<5>
 ; MLIR-NEXT:    firrtl.strictconnect %implicitTrunc_inp_2, %2 : !firrtl.sint<5>
-; MLIR:         %prettifyExample_inp_1, %prettifyExample_inp_2, %prettifyExample_inp_3, %prettifyExample_out1, %prettifyExample_out2 = firrtl.instance prettifyExample interesting_name @PrettifyExample(in inp_1: !firrtl.uint<5>, in inp_2: !firrtl.uint<5>, in inp_3: !firrtl.uint<5>, out out1: !firrtl.uint<10>, out out2: !firrtl.uint<10>)
+; MLIR:         %prettifyExample_inp_1, %prettifyExample_inp_2, %prettifyExample_inp_3, %prettifyExample_out1, %prettifyExample_out2 = firrtl.instance prettifyExample @PrettifyExample(in inp_1: !firrtl.uint<5>, in inp_2: !firrtl.uint<5>, in inp_3: !firrtl.uint<5>, out out1: !firrtl.uint<10>, out out2: !firrtl.uint<10>)
 ; MLIR-NEXT:    %3 = firrtl.bits %cat_d 4 to 0 : (!firrtl.uint<6>) -> !firrtl.uint<5>
 ; MLIR-NEXT:    firrtl.strictconnect %prettifyExample_inp_1, %3 : !firrtl.uint<5>
 ; MLIR-NEXT:    firrtl.strictconnect %prettifyExample_inp_2, %3 : !firrtl.uint<5>
 ; MLIR-NEXT:    firrtl.strictconnect %prettifyExample_inp_3, %3 : !firrtl.uint<5>
-; MLIR-NEXT:    %flipFlop_clock, %flipFlop_a_d, %flipFlop_a_q = firrtl.instance flipFlop interesting_name @FlipFlop(in clock: !firrtl.clock, in a_d: !firrtl.uint<1>, out a_q: !firrtl.uint<1>)
+; MLIR-NEXT:    %flipFlop_clock, %flipFlop_a_d, %flipFlop_a_q = firrtl.instance flipFlop @FlipFlop(in clock: !firrtl.clock, in a_d: !firrtl.uint<1>, out a_q: !firrtl.uint<1>)
 ; MLIR-NEXT:    firrtl.strictconnect %flipFlop_clock, %clock : !firrtl.clock
 ; MLIR-NEXT:    firrtl.strictconnect %flipFlop_a_d, %a : !firrtl.uint<1>
 ; MLIR-NEXT:    firrtl.strictconnect %c, %flipFlop_a_q : !firrtl.uint<1>
-; MLIR-NEXT:    %multibitMux_a_0, %multibitMux_a_1, %multibitMux_a_2, %multibitMux_sel, %multibitMux_b = firrtl.instance multibitMux interesting_name @MultibitMux(in a_0: !firrtl.uint<1>, in a_1: !firrtl.uint<1>, in a_2: !firrtl.uint<1>, in sel: !firrtl.uint<2>, out b: !firrtl.uint<1>)
+; MLIR-NEXT:    %multibitMux_a_0, %multibitMux_a_1, %multibitMux_a_2, %multibitMux_sel, %multibitMux_b = firrtl.instance multibitMux @MultibitMux(in a_0: !firrtl.uint<1>, in a_1: !firrtl.uint<1>, in a_2: !firrtl.uint<1>, in sel: !firrtl.uint<2>, out b: !firrtl.uint<1>)
 ; MLIR-NEXT:    firrtl.strictconnect %multibitMux_a_0, %vec_0 : !firrtl.uint<1>
 ; MLIR-NEXT:    firrtl.strictconnect %multibitMux_a_1, %vec_1 : !firrtl.uint<1>
 ; MLIR-NEXT:    firrtl.strictconnect %multibitMux_a_2, %vec_2 : !firrtl.uint<1>
 ; MLIR-NEXT:    firrtl.strictconnect %multibitMux_sel, %b : !firrtl.uint<2>
-; MLIR-NEXT:    %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
-; MLIR-NEXT:    firrtl.instance unusedPortsMod interesting_name @UnusedPortsMod()
 
 ; ANNOTATIONS-LABEL: firrtl.module @test_mod
-; ANNOTATIONS-SAME: info = "a ModuleTarget Annotation"
-; ANNOTATIONS-SAME: info = "a ModuleName Annotation"
+; ANNOTATIONS-SAME: {class = "circt.test", info = "a ModuleTarget Annotation"}
+; ANNOTATIONS-SAME: {class = "circt.test", info = "a ModuleName Annotation"}
 
 ; VERILOG-LABEL: module test_mod(
+; Check that a fir location is stripped.
+; VERILOG-NOT:   .fir
 ; VERILOG-NEXT:    input        clock,
 ; VERILOG-NEXT:                 a,
 ; VERILOG-NEXT:    input  [1:0] b,
@@ -142,7 +150,6 @@ circuit test_mod : %[[{"a": "a"}]]
 ; VERILOG-NEXT:    wire [2:0] _implicitTrunc_out1;
 ; VERILOG-NEXT:    wire [2:0] _implicitTrunc_out2;
 ; VERILOG-NEXT:    wire [5:0] _cat_d;
-; VERILOG-EMPTY:
 ; VERILOG-NEXT:    Cat cat (
 ; VERILOG-NEXT:      .a (b),
 ; VERILOG-NEXT:      .b (b),
@@ -174,7 +181,6 @@ circuit test_mod : %[[{"a": "a"}]]
 ; VERILOG-NEXT:     .sel (b),
 ; VERILOG-NEXT:     .b   (out_multibitMux)
 ; VERILOG-NEXT:    );
-; VERILOG-NEXT:    UnusedPortsMod unusedPortsMod ();
 ; VERILOG:       endmodule
 
 ; Check that we canonicalize the HW output of lowering.
@@ -207,7 +213,7 @@ circuit test_mod : %[[{"a": "a"}]]
 ; MLIRLOWER-NEXT:    %0 = comb.extract %inp_2 from 4 : (i5) -> i1
 ; MLIRLOWER-NEXT:    %1 = comb.concat %0, %inp_2 : i1, i5
 ; MLIRLOWER-NEXT:    %2 = comb.concat %c0_i5, %inp_1 : i5, i1
-; MLIRLOWER-NEXT:    %3 = comb.shl %1, %2 : i6
+; MLIRLOWER-NEXT:    %3 = comb.shl bin %1, %2 : i6
 ; MLIRLOWER-NEXT:    %4 = comb.extract %3 from 0 : (i6) -> i3
 ; MLIRLOWER-NEXT:    %5 = comb.extract %inp_2 from 0 : (i5) -> i3
 ; MLIRLOWER-NEXT:    hw.output %4, %5 : i3, i3
@@ -259,7 +265,7 @@ circuit test_mod : %[[{"a": "a"}]]
 ; VERILOG-NEXT:    output a_q);
 ; VERILOG:         always @(posedge clock)
 ; VERILOG-NEXT:      r <= a_d;
-; VERILOG-NEXT:    assign a_q = r;
+; VERILOG:         assign a_q = r;
 
   module MultibitMux :
     input a : UInt<1>[3]
@@ -267,11 +273,14 @@ circuit test_mod : %[[{"a": "a"}]]
     output b : UInt<1>
     b <= a[sel]
 ; VERILOG-LABEL: module MultibitMux(
-; VERILOG-CHECK: wire [2:0] [[T:.*]] = {{a_2}, {a_1}, {a_0}};
-; VERILOG-CHECK-NEXT: assign b = [[T]][sel];
+; VERILOG:  wire [2:0] [[T2:.*]] =
+; VERILOG-SAME{LITERAL}: {{a_2}, {a_1}, {a_0}};
+; VERILOG-NEXT:  wire [[T1:.*]];
+; VERILOG-NEXT:  /* synopsys infer_mux_override */
+; VERILOG-NEXT:  assign [[T1]] = [[T2]][sel] /* cadence map_to_mux */;
+; VERILOG-NEXT:  assign b = &sel ? a_0 : [[T1]];
 
   module UnusedPortsMod :
     input in : UInt<1>
     output out : UInt<1>
     out is invalid
-; VERILOG-LABEL: module UnusedPortsMod();

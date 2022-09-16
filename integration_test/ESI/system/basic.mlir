@@ -3,12 +3,12 @@
 // RUN: circt-opt %t1.mlir -export-verilog -verify-diagnostics -o t3.mlir > %t2.sv
 // RUN: circt-rtl-sim.py %t2.sv %INC%/circt/Dialect/ESI/ESIPrimitives.sv %S/../supplements/integers.sv --cycles 150 | FileCheck %s
 
-hw.module.extern @IntCountProd(%clk: i1, %rstn: i1) -> (ints: !esi.channel<i32>)
-hw.module.extern @IntAcc(%clk: i1, %rstn: i1, %ints: !esi.channel<i32>) -> (totalOut: i32)
-hw.module @top(%clk: i1, %rstn: i1) -> (totalOut: i32) {
-  %intStream = hw.instance "prod" @IntCountProd(clk: %clk: i1, rstn: %rstn: i1) -> (ints: !esi.channel<i32>)
-  %intStreamBuffered = esi.buffer %clk, %rstn, %intStream {stages=2, name="intChan"} : i32
-  %totalOut = hw.instance "acc" @IntAcc(clk: %clk: i1, rstn: %rstn: i1, ints: %intStreamBuffered: !esi.channel<i32>) -> (totalOut: i32)
+hw.module.extern @IntCountProd(%clk: i1, %rst: i1) -> (ints: !esi.channel<i32>)
+hw.module.extern @IntAcc(%clk: i1, %rst: i1, %ints: !esi.channel<i32>) -> (totalOut: i32)
+hw.module @top(%clk: i1, %rst: i1) -> (totalOut: i32) {
+  %intStream = hw.instance "prod" @IntCountProd(clk: %clk: i1, rst: %rst: i1) -> (ints: !esi.channel<i32>)
+  %intStreamBuffered = esi.buffer %clk, %rst, %intStream {stages=2, name="intChan"} : i32
+  %totalOut = hw.instance "acc" @IntAcc(clk: %clk: i1, rst: %rst: i1, ints: %intStreamBuffered: !esi.channel<i32>) -> (totalOut: i32)
   hw.output %totalOut : i32
 }
 // CHECK:      [driver] Starting simulation

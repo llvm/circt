@@ -30,6 +30,11 @@ bool isSimpleReadOrPort(Value v);
 /// for instances this is `instanceName`, etc.
 StringAttr getDeclarationName(Operation *op);
 
+/// Given an expression that is spilled into a temporary wire, try to
+/// synthesize a better name than "_T_42" based on the structure of the
+/// expression.
+StringAttr inferStructuralNameForTemporary(Value expr);
+
 /// This class keeps track of global names at the module/interface level.
 /// It is built in a global pass over the entire design and then frozen to allow
 /// concurrent accesses.
@@ -287,6 +292,10 @@ static inline bool isConstantExpression(Operation *op) {
 /// result, but may have side effects (e.g. `sv.verbatim.expr.se`).
 /// MemoryEffects should be checked if a client cares.
 bool isVerilogExpression(Operation *op);
+
+/// Return true if this expression should be emitted inline into any statement
+/// that uses it.
+bool isExpressionEmittedInline(Operation *op);
 
 /// For each module we emit, do a prepass over the structure, pre-lowering and
 /// otherwise rewriting operations we don't want to emit.

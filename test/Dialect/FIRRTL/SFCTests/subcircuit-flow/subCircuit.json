@@ -31,10 +31,6 @@
       {
         "_1": "~Top|Foo>dataOut.w",
         "_2": "~Sub|Sub>data_source.v"
-      },
-      {
-        "_1": "~Top|Foo>dataOut.p",
-        "_2": "~Sub|Sub>data_source.w"
       }
     ],
     "circuit": "circuit empty :\n  module empty :\n\n    skip\n",

@@ -56,7 +56,7 @@ template <typename T>
 inline static T &formatInstancePath(T &into, const InstancePath &path) {
   into << "$root";
   for (auto inst : path)
-    into << "/" << inst.name() << ":" << inst.moduleName();
+    into << "/" << inst.getName() << ":" << inst.getModuleName();
   return into;
 }
 
@@ -74,6 +74,15 @@ struct InstancePathCache {
   explicit InstancePathCache(InstanceGraph &instanceGraph)
       : instanceGraph(instanceGraph) {}
   ArrayRef<InstancePath> getAbsolutePaths(Operation *op);
+
+  /// Clear the cache.
+  void invalidate() {
+    allocator.Reset();
+    absolutePathsCache.clear();
+  }
+
+  /// Replace an InstanceOp. This is required to keep the cache updated.
+  void replaceInstance(InstanceOp oldOp, InstanceOp newOp);
 
 private:
   /// An allocator for individual instance paths and entire path lists.

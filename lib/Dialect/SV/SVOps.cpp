@@ -16,6 +16,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/HW/HWTypes.h"
+#include "circt/Dialect/SV/SVAttributes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/PatternMatch.h"
@@ -25,12 +26,25 @@
 
 using namespace circt;
 using namespace sv;
+using mlir::TypedAttr;
+
+/// Return true if the specified expression is 2-state.  This is determined by
+/// looking at the defining op.  This can look as far through the dataflow as it
+/// wants, but for now, it is just looking at the single value.
+bool sv::is2StateExpression(Value v) {
+  if (auto *op = v.getDefiningOp()) {
+    if (auto attr = op->getAttrOfType<UnitAttr>("twoState"))
+      return (bool)attr;
+  }
+  // Plain constants are obviously safe
+  return v.getDefiningOp<hw::ConstantOp>();
+}
 
 /// Return true if the specified operation is an expression.
 bool sv::isExpression(Operation *op) {
   return isa<VerbatimExprOp, VerbatimExprSEOp, GetModportOp,
-             ReadInterfaceSignalOp, ConstantXOp, ConstantZOp, MacroRefExprOp>(
-      op);
+             ReadInterfaceSignalOp, ConstantXOp, ConstantZOp, MacroRefExprOp,
+             MacroRefExprSEOp>(op);
 }
 
 LogicalResult sv::verifyInProceduralRegion(Operation *op) {
@@ -147,7 +161,7 @@ getVerbatimExprAsmResultNames(Operation *op,
   // string up to a weird character (like a paren) and currently ignore
   // parenthesized expressions.
   auto isOkCharacter = [](char c) { return llvm::isAlnum(c) || c == '_'; };
-  auto name = op->getAttrOfType<StringAttr>("string").getValue();
+  auto name = op->getAttrOfType<StringAttr>("format_string").getValue();
   // Ignore a leading ` in macro name.
   if (name.startswith("`"))
     name = name.drop_front();
@@ -172,7 +186,12 @@ void VerbatimExprSEOp::getAsmResultNames(
 
 void MacroRefExprOp::getAsmResultNames(
     function_ref<void(Value, StringRef)> setNameFn) {
-  setNameFn(getResult(), ident().getName());
+  setNameFn(getResult(), getIdent().getName());
+}
+
+void MacroRefExprSEOp::getAsmResultNames(
+    function_ref<void(Value, StringRef)> setNameFn) {
+  setNameFn(getResult(), getIdent().getName());
 }
 
 //===----------------------------------------------------------------------===//
@@ -223,7 +242,7 @@ void LocalParamOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 LogicalResult LocalParamOp::verify() {
   // Verify that this is a valid parameter value.
   return hw::checkParameterInContext(
-      value(), (*this)->getParentOfType<hw::HWModuleOp>(), *this);
+      getValue(), (*this)->getParentOfType<hw::HWModuleOp>(), *this);
 }
 
 //===----------------------------------------------------------------------===//
@@ -251,8 +270,12 @@ void RegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 // If this reg is only written to, delete the reg and all writers.
 LogicalResult RegOp::canonicalize(RegOp op, PatternRewriter &rewriter) {
+  // Block if op has SV attributes.
+  if (hasSVAttributes(op))
+    return failure();
+
   // If the reg has a symbol, then we can't delete it.
-  if (op.inner_symAttr())
+  if (op.getInnerSymAttr())
     return failure();
   // Check that all operations on the wire are sv.assigns. All other wire
   // operations will have been handled by other canonicalization.
@@ -270,6 +293,29 @@ LogicalResult RegOp::canonicalize(RegOp op, PatternRewriter &rewriter) {
 }
 
 //===----------------------------------------------------------------------===//
+// LogicOp
+//===----------------------------------------------------------------------===//
+
+void LogicOp::build(OpBuilder &builder, OperationState &odsState,
+                    Type elementType, StringAttr name, StringAttr sym_name) {
+  if (!name)
+    name = builder.getStringAttr("");
+  odsState.addAttribute("name", name);
+  if (sym_name)
+    odsState.addAttribute(hw::InnerName::getInnerNameAttrName(), sym_name);
+  odsState.addTypes(hw::InOutType::get(elementType));
+}
+
+/// Suggest a name for each result value based on the saved result names
+/// attribute.
+void LogicOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  // If the logic has an optional 'name' attribute, use it.
+  auto nameAttr = (*this)->getAttrOfType<StringAttr>("name");
+  if (!nameAttr.getValue().empty())
+    setNameFn(getResult(), nameAttr.getValue());
+}
+
+//===----------------------------------------------------------------------===//
 // Control flow like-operations
 //===----------------------------------------------------------------------===//
 
@@ -280,14 +326,15 @@ LogicalResult RegOp::canonicalize(RegOp op, PatternRewriter &rewriter) {
 void IfDefOp::build(OpBuilder &builder, OperationState &result, StringRef cond,
                     std::function<void()> thenCtor,
                     std::function<void()> elseCtor) {
-  build(builder, result, builder.getStringAttr(cond), thenCtor, elseCtor);
+  build(builder, result, builder.getStringAttr(cond), std::move(thenCtor),
+        std::move(elseCtor));
 }
 
 void IfDefOp::build(OpBuilder &builder, OperationState &result, StringAttr cond,
                     std::function<void()> thenCtor,
                     std::function<void()> elseCtor) {
   build(builder, result, MacroIdentAttr::get(builder.getContext(), cond),
-        thenCtor, elseCtor);
+        std::move(thenCtor), std::move(elseCtor));
 }
 
 void IfDefOp::build(OpBuilder &builder, OperationState &result,
@@ -333,16 +380,35 @@ LogicalResult IfDefOp::canonicalize(IfDefOp op, PatternRewriter &rewriter) {
 void IfDefProceduralOp::build(OpBuilder &builder, OperationState &result,
                               StringRef cond, std::function<void()> thenCtor,
                               std::function<void()> elseCtor) {
-  IfDefOp::build(builder, result, cond, std::move(thenCtor),
-                 std::move(elseCtor));
+  build(builder, result, builder.getStringAttr(cond), std::move(thenCtor),
+        std::move(elseCtor));
+}
+
+void IfDefProceduralOp::build(OpBuilder &builder, OperationState &result,
+                              StringAttr cond, std::function<void()> thenCtor,
+                              std::function<void()> elseCtor) {
+  build(builder, result, MacroIdentAttr::get(builder.getContext(), cond),
+        std::move(thenCtor), std::move(elseCtor));
 }
 
 void IfDefProceduralOp::build(OpBuilder &builder, OperationState &result,
                               MacroIdentAttr cond,
                               std::function<void()> thenCtor,
                               std::function<void()> elseCtor) {
-  IfDefOp::build(builder, result, cond, std::move(thenCtor),
-                 std::move(elseCtor));
+  OpBuilder::InsertionGuard guard(builder);
+
+  result.addAttribute("cond", cond);
+  builder.createBlock(result.addRegion());
+
+  // Fill in the body of the #ifdef.
+  if (thenCtor)
+    thenCtor();
+
+  Region *elseRegion = result.addRegion();
+  if (elseCtor) {
+    builder.createBlock(elseRegion);
+    elseCtor();
+  }
 }
 
 LogicalResult IfDefProceduralOp::canonicalize(IfDefProceduralOp op,
@@ -362,7 +428,7 @@ void IfOp::build(OpBuilder &builder, OperationState &result, Value cond,
   result.addOperands(cond);
   builder.createBlock(result.addRegion());
 
-  // Fill in the body of the #ifdef.
+  // Fill in the body of the if.
   if (thenCtor)
     thenCtor();
 
@@ -384,12 +450,16 @@ static void replaceOpWithRegion(PatternRewriter &rewriter, Operation *op,
 }
 
 LogicalResult IfOp::canonicalize(IfOp op, PatternRewriter &rewriter) {
-  if (auto constant = op.cond().getDefiningOp<hw::ConstantOp>()) {
+  // Block if op has SV attributes.
+  if (hasSVAttributes(op))
+    return failure();
+
+  if (auto constant = op.getCond().getDefiningOp<hw::ConstantOp>()) {
 
     if (constant.getValue().isAllOnesValue())
-      replaceOpWithRegion(rewriter, op, op.thenRegion());
-    else if (!op.elseRegion().empty())
-      replaceOpWithRegion(rewriter, op, op.elseRegion());
+      replaceOpWithRegion(rewriter, op, op.getThenRegion());
+    else if (!op.getElseRegion().empty())
+      replaceOpWithRegion(rewriter, op, op.getElseRegion());
 
     rewriter.eraseOp(op);
 
@@ -409,17 +479,21 @@ LogicalResult IfOp::canonicalize(IfOp op, PatternRewriter &rewriter) {
   }
 
   // Otherwise, invert the condition and move the 'else' block to the 'then'
-  // region.
-  auto cond = comb::createOrFoldNot(op.getLoc(), op.cond(), rewriter);
-  op.setOperand(cond);
+  // region if the condition is a 2-state operation.  This changes x prop
+  // behavior so it needs to be guarded.
+  if (is2StateExpression(op.getCond())) {
+    auto cond = comb::createOrFoldNot(op.getLoc(), op.getCond(), rewriter);
+    op.setOperand(cond);
 
-  auto *thenBlock = op.getThenBlock(), *elseBlock = op.getElseBlock();
+    auto *thenBlock = op.getThenBlock(), *elseBlock = op.getElseBlock();
 
-  // Move the body of the then block over to the else.
-  thenBlock->getOperations().splice(thenBlock->end(),
-                                    elseBlock->getOperations());
-  rewriter.eraseBlock(elseBlock);
-  return success();
+    // Move the body of the then block over to the else.
+    thenBlock->getOperations().splice(thenBlock->end(),
+                                      elseBlock->getOperations());
+    rewriter.eraseBlock(elseBlock);
+    return success();
+  }
+  return failure();
 }
 
 //===----------------------------------------------------------------------===//
@@ -427,7 +501,7 @@ LogicalResult IfOp::canonicalize(IfOp op, PatternRewriter &rewriter) {
 //===----------------------------------------------------------------------===//
 
 AlwaysOp::Condition AlwaysOp::getCondition(size_t idx) {
-  return Condition{EventControl(events()[idx].cast<IntegerAttr>().getInt()),
+  return Condition{EventControl(getEvents()[idx].cast<IntegerAttr>().getInt()),
                    getOperand(idx)};
 }
 
@@ -455,7 +529,7 @@ void AlwaysOp::build(OpBuilder &builder, OperationState &result,
 
 /// Ensure that the symbol being instantiated exists and is an InterfaceOp.
 LogicalResult AlwaysOp::verify() {
-  if (events().size() != getNumOperands())
+  if (getEvents().size() != getNumOperands())
     return emitError("different number of operands and events");
   return success();
 }
@@ -472,9 +546,9 @@ static ParseResult parseEventList(
   if (!p.parseOptionalKeyword(&keyword)) {
     while (1) {
       auto kind = symbolizeEventControl(keyword);
-      if (!kind.hasValue())
+      if (!kind.has_value())
         return p.emitError(loc, "expected 'posedge', 'negedge', or 'edge'");
-      auto eventEnum = static_cast<int32_t>(kind.getValue());
+      auto eventEnum = static_cast<int32_t>(*kind);
       events.push_back(p.getBuilder().getI32IntegerAttr(eventEnum));
 
       clocksOperands.push_back({});
@@ -607,29 +681,24 @@ char sv::getLetter(CasePatternBit bit) {
 }
 
 /// Return the specified bit, bit 0 is the least significant bit.
-auto CasePattern::getBit(size_t bitNumber) const -> CasePatternBit {
-  return CasePatternBit(unsigned(attr.getValue()[bitNumber * 2]) +
-                        2 * unsigned(attr.getValue()[bitNumber * 2 + 1]));
+auto CaseBitPattern::getBit(size_t bitNumber) const -> CasePatternBit {
+  return CasePatternBit(unsigned(intAttr.getValue()[bitNumber * 2]) +
+                        2 * unsigned(intAttr.getValue()[bitNumber * 2 + 1]));
 }
 
-bool CasePattern::isDefault() const {
-  return attr.getValue().getBitWidth() % 2;
-}
-
-bool CasePattern::hasX() const {
+bool CaseBitPattern::hasX() const {
   for (size_t i = 0, e = getWidth(); i != e; ++i)
     if (getBit(i) == CasePatternBit::AnyX)
       return true;
   return false;
 }
 
-bool CasePattern::hasZ() const {
+bool CaseBitPattern::hasZ() const {
   for (size_t i = 0, e = getWidth(); i != e; ++i)
     if (getBit(i) == CasePatternBit::AnyZ)
       return true;
   return false;
 }
-
 static SmallVector<CasePatternBit> getPatternBitsForValue(const APInt &value) {
   SmallVector<CasePatternBit> result;
   result.reserve(value.getBitWidth());
@@ -639,43 +708,56 @@ static SmallVector<CasePatternBit> getPatternBitsForValue(const APInt &value) {
   return result;
 }
 
-// Get a CasePattern from a specified list of PatternBits.  Bits are
+// Get a CaseBitPattern from a specified list of PatternBits.  Bits are
 // specified in most least significant order - element zero is the least
 // significant bit.
-CasePattern::CasePattern(const APInt &value, MLIRContext *context)
-    : CasePattern(getPatternBitsForValue(value), context) {}
+CaseBitPattern::CaseBitPattern(const APInt &value, MLIRContext *context)
+    : CaseBitPattern(getPatternBitsForValue(value), context) {}
 
-CasePattern::CasePattern(size_t width, DefaultPatternTag,
-                         MLIRContext *context) {
-  APInt pattern(width * 2 + 1, 0);
-  auto patternType = IntegerType::get(context, width * 2 + 1);
-  attr = IntegerAttr::get(patternType, pattern);
-}
-
-// Get a CasePattern from a specified list of PatternBits.  Bits are
+// Get a CaseBitPattern from a specified list of PatternBits.  Bits are
 // specified in most least significant order - element zero is the least
 // significant bit.
-CasePattern::CasePattern(ArrayRef<CasePatternBit> bits, MLIRContext *context) {
+CaseBitPattern::CaseBitPattern(ArrayRef<CasePatternBit> bits,
+                               MLIRContext *context)
+    : CasePattern(CPK_bit) {
   APInt pattern(bits.size() * 2, 0);
   for (auto elt : llvm::reverse(bits)) {
     pattern <<= 2;
     pattern |= unsigned(elt);
   }
   auto patternType = IntegerType::get(context, bits.size() * 2);
-  attr = IntegerAttr::get(patternType, pattern);
+  intAttr = IntegerAttr::get(patternType, pattern);
 }
 
 auto CaseOp::getCases() -> SmallVector<CaseInfo, 4> {
   SmallVector<CaseInfo, 4> result;
-  assert(casePatterns().size() == getNumRegions() &&
+  assert(getCasePatterns().size() == getNumRegions() &&
          "case pattern / region count mismatch");
   size_t nextRegion = 0;
-  for (auto elt : casePatterns()) {
-    result.push_back({CasePattern(elt.cast<IntegerAttr>()),
-                      &getRegion(nextRegion++).front()});
+  for (auto elt : getCasePatterns()) {
+    llvm::TypeSwitch<Attribute>(elt)
+        .Case<hw::EnumFieldAttr>([&](auto enumAttr) {
+          result.push_back({std::make_unique<CaseEnumPattern>(enumAttr),
+                            &getRegion(nextRegion++).front()});
+        })
+        .Case<IntegerAttr>([&](auto intAttr) {
+          result.push_back({std::make_unique<CaseBitPattern>(intAttr),
+                            &getRegion(nextRegion++).front()});
+        })
+        .Case<CaseDefaultPattern::AttrType>([&](auto) {
+          result.push_back({std::make_unique<CaseDefaultPattern>(getContext()),
+                            &getRegion(nextRegion++).front()});
+        })
+        .Default([](auto) {
+          assert(false && "invalid case pattern attribute type");
+        });
   }
 
   return result;
+}
+
+StringRef CaseEnumPattern::getFieldValue() const {
+  return enumAttr.cast<hw::EnumFieldAttr>().getField();
 }
 
 /// Parse case op.
@@ -696,7 +778,7 @@ ParseResult CaseOp::parse(OpAsmParser &parser, OperationState &result) {
   StringRef keyword;
   if (!parser.parseOptionalKeyword(&keyword, {"case", "casex", "casez"})) {
     auto kind = symbolizeCaseStmtType(keyword);
-    auto caseEnum = static_cast<int32_t>(kind.getValue());
+    auto caseEnum = static_cast<int32_t>(kind.value());
     result.addAttribute("caseStyle", builder.getI32IntegerAttr(caseEnum));
   }
 
@@ -706,7 +788,7 @@ ParseResult CaseOp::parse(OpAsmParser &parser, OperationState &result) {
     auto kind = symbolizeValidationQualifierTypeEnum(keyword);
     result.addAttribute("validationQualifier",
                         ValidationQualifierTypeEnumAttr::get(
-                            builder.getContext(), kind.getValue()));
+                            builder.getContext(), kind.value()));
   }
 
   if (parser.parseOperand(condOperand) || parser.parseColonType(condType) ||
@@ -715,23 +797,41 @@ ParseResult CaseOp::parse(OpAsmParser &parser, OperationState &result) {
     return failure();
 
   // Check the integer type.
-  if (!result.operands[0].getType().isSignlessInteger())
-    return parser.emitError(loc, "condition must have signless integer type");
-  auto condWidth = condType.getIntOrFloatBitWidth();
+  Type canonicalCondType = hw::getCanonicalType(condType);
+  hw::EnumType enumType = canonicalCondType.dyn_cast<hw::EnumType>();
+  unsigned condWidth = 0;
+  if (!enumType) {
+    if (!result.operands[0].getType().isSignlessInteger())
+      return parser.emitError(loc, "condition must have signless integer type");
+    condWidth = condType.getIntOrFloatBitWidth();
+  }
 
   // Parse all the cases.
   SmallVector<Attribute> casePatterns;
   SmallVector<CasePatternBit, 16> caseBits;
-  bool defaultElem = false;
   while (1) {
     if (succeeded(parser.parseOptionalKeyword("default"))) {
-      // Fill the pattern with Any.
-      defaultElem = true;
+      casePatterns.push_back(CaseDefaultPattern(parser.getContext()).attr());
     } else if (failed(parser.parseOptionalKeyword("case"))) {
       // Not default or case, must be the end of the cases.
       break;
+    } else if (enumType) {
+      // Enumerated case; parse the case value.
+      StringRef caseVal;
+
+      if (parser.parseKeyword(&caseVal))
+        return failure();
+
+      if (!enumType.contains(caseVal))
+        return parser.emitError(loc)
+               << "case value '" + caseVal + "' is not a member of enum type "
+               << enumType;
+      casePatterns.push_back(
+          hw::EnumFieldAttr::get(parser.getEncodedSourceLoc(loc),
+                                 builder.getStringAttr(caseVal), enumType));
     } else {
-      // Parse the pattern.  It always starts with b, so it is an MLIR keyword.
+      // Parse the pattern.  It always starts with b, so it is an MLIR
+      // keyword.
       StringRef caseVal;
       loc = parser.getCurrentLocation();
       if (parser.parseKeyword(&caseVal))
@@ -771,14 +871,11 @@ ParseResult CaseOp::parse(OpAsmParser &parser, OperationState &result) {
       // High zeros may be missing.
       if (caseBits.size() < condWidth)
         caseBits.append(condWidth - caseBits.size(), CasePatternBit::Zero);
-    }
 
-    auto resultPattern =
-        defaultElem ? CasePattern(condWidth, CasePattern::DefaultPatternTag(),
-                                  builder.getContext())
-                    : CasePattern(caseBits, builder.getContext());
-    casePatterns.push_back(resultPattern.attr);
-    caseBits.clear();
+      auto resultPattern = CaseBitPattern(caseBits, builder.getContext());
+      casePatterns.push_back(resultPattern.attr());
+      caseBits.clear();
+    }
 
     // Parse the case body.
     auto caseRegion = std::make_unique<Region>();
@@ -793,30 +890,35 @@ ParseResult CaseOp::parse(OpAsmParser &parser, OperationState &result) {
 
 void CaseOp::print(OpAsmPrinter &p) {
   p << ' ';
-  if (caseStyle() == CaseStmtType::CaseXStmt)
+  if (getCaseStyle() == CaseStmtType::CaseXStmt)
     p << "casex ";
-  else if (caseStyle() == CaseStmtType::CaseZStmt)
+  else if (getCaseStyle() == CaseStmtType::CaseZStmt)
     p << "casez ";
 
-  if (validationQualifier() !=
+  if (getValidationQualifier() !=
       ValidationQualifierTypeEnum::ValidationQualifierPlain)
-    p << stringifyValidationQualifierTypeEnum(validationQualifier()) << ' ';
+    p << stringifyValidationQualifierTypeEnum(getValidationQualifier()) << ' ';
 
-  p << cond() << " : " << cond().getType();
+  p << getCond() << " : " << getCond().getType();
   p.printOptionalAttrDict(
       (*this)->getAttrs(),
       /*elidedAttrs=*/{"casePatterns", "caseStyle", "validationQualifier"});
 
-  for (auto caseInfo : getCases()) {
+  for (auto &caseInfo : getCases()) {
     p.printNewline();
-    auto pattern = caseInfo.pattern;
-    if (pattern.isDefault()) {
-      p << "default";
-    } else {
-      p << "case b";
-      for (size_t i = 0, e = pattern.getWidth(); i != e; ++i)
-        p << getLetter(pattern.getBit(e - i - 1));
-    }
+    auto &pattern = caseInfo.pattern;
+
+    llvm::TypeSwitch<CasePattern *>(pattern.get())
+        .Case<CaseBitPattern>([&](auto bitPattern) {
+          p << "case b";
+          for (size_t bit = 0, e = bitPattern->getWidth(); bit != e; ++bit)
+            p << getLetter(bitPattern->getBit(e - bit - 1));
+        })
+        .Case<CaseEnumPattern>([&](auto enumPattern) {
+          p << "case " << enumPattern->getFieldValue();
+        })
+        .Case<CaseDefaultPattern>([&](auto) { p << "default"; })
+        .Default([&](auto) { assert(false && "unhandled case pattern"); });
 
     p << ": ";
     p.printRegion(*caseInfo.block->getParent(), /*printEntryBlockArgs=*/false,
@@ -825,19 +927,23 @@ void CaseOp::print(OpAsmPrinter &p) {
 }
 
 LogicalResult CaseOp::verify() {
+  if (!(hw::isHWIntegerType(getCond().getType()) ||
+        hw::isHWEnumType(getCond().getType())))
+    return emitError("condition must have either integer or enum type");
+
   // Ensure that the number of regions and number of case values match.
-  if (casePatterns().size() != getNumRegions())
+  if (getCasePatterns().size() != getNumRegions())
     return emitOpError("case pattern / region count mismatch");
   return success();
 }
 
 /// This ctor allows you to build a CaseZ with some number of cases, getting
 /// a callback for each case.
-void CaseOp::build(OpBuilder &builder, OperationState &result,
-                   CaseStmtType caseStyle,
-                   ValidationQualifierTypeEnum validationQualifier, Value cond,
-                   size_t numCases,
-                   std::function<CasePattern(size_t)> caseCtor) {
+void CaseOp::build(
+    OpBuilder &builder, OperationState &result, CaseStmtType caseStyle,
+    ValidationQualifierTypeEnum validationQualifier, Value cond,
+    size_t numCases,
+    std::function<std::unique_ptr<CasePattern>(size_t)> caseCtor) {
   result.addOperands(cond);
   result.addAttribute("caseStyle",
                       CaseStmtTypeAttr::get(builder.getContext(), caseStyle));
@@ -851,7 +957,7 @@ void CaseOp::build(OpBuilder &builder, OperationState &result,
   // Fill in the cases with the callback.
   for (size_t i = 0, e = numCases; i != e; ++i) {
     builder.createBlock(result.addRegion());
-    casePatterns.push_back(caseCtor(i).attr);
+    casePatterns.push_back(caseCtor(i)->attr());
   }
 
   result.addAttribute("casePatterns", builder.getArrayAttr(casePatterns));
@@ -859,38 +965,46 @@ void CaseOp::build(OpBuilder &builder, OperationState &result,
 
 // Strength reduce case styles based on the bit patterns.
 LogicalResult CaseOp::canonicalize(CaseOp op, PatternRewriter &rewriter) {
-  if (op.caseStyle() == CaseStmtType::CaseStmt)
+  if (op.getCaseStyle() == CaseStmtType::CaseStmt)
+    return failure();
+  if (op.getCond().getType().isa<hw::EnumType>())
     return failure();
 
   auto caseInfo = op.getCases();
   bool noXZ = llvm::all_of(caseInfo, [](const CaseInfo &ci) {
-    return !ci.pattern.hasX() && !ci.pattern.hasZ();
+    return !ci.pattern.get()->hasX() && !ci.pattern.get()->hasZ();
   });
-  bool noX = llvm::all_of(
-      caseInfo, [](const CaseInfo &ci) { return !ci.pattern.hasX(); });
-  bool noZ = llvm::all_of(
-      caseInfo, [](const CaseInfo &ci) { return !ci.pattern.hasZ(); });
+  bool noX = llvm::all_of(caseInfo, [](const CaseInfo &ci) {
+    if (isa<CaseDefaultPattern>(ci.pattern))
+      return true;
+    return !ci.pattern.get()->hasX();
+  });
+  bool noZ = llvm::all_of(caseInfo, [](const CaseInfo &ci) {
+    if (isa<CaseDefaultPattern>(ci.pattern))
+      return true;
+    return !ci.pattern.get()->hasZ();
+  });
 
-  if (op.caseStyle() == CaseStmtType::CaseXStmt) {
+  if (op.getCaseStyle() == CaseStmtType::CaseXStmt) {
     if (noXZ) {
       rewriter.updateRootInPlace(op, [&]() {
-        op.caseStyleAttr(
+        op.setCaseStyleAttr(
             CaseStmtTypeAttr::get(op.getContext(), CaseStmtType::CaseStmt));
       });
       return success();
     }
     if (noX) {
       rewriter.updateRootInPlace(op, [&]() {
-        op.caseStyleAttr(
+        op.setCaseStyleAttr(
             CaseStmtTypeAttr::get(op.getContext(), CaseStmtType::CaseZStmt));
       });
       return success();
     }
   }
 
-  if (op.caseStyle() == CaseStmtType::CaseZStmt && noZ) {
+  if (op.getCaseStyle() == CaseStmtType::CaseZStmt && noZ) {
     rewriter.updateRootInPlace(op, [&]() {
-      op.caseStyleAttr(
+      op.setCaseStyleAttr(
           CaseStmtTypeAttr::get(op.getContext(), CaseStmtType::CaseStmt));
     });
     return success();
@@ -919,7 +1033,7 @@ void OrderedOutputOp::build(OpBuilder &builder, OperationState &result,
 //===----------------------------------------------------------------------===//
 
 LogicalResult BPAssignOp::verify() {
-  if (isa<sv::WireOp>(dest().getDefiningOp()))
+  if (isa<sv::WireOp>(getDest().getDefiningOp()))
     return emitOpError(
         "Verilog disallows procedural assignment to a net type (did you intend "
         "to use a variable type, e.g., sv.reg?)");
@@ -927,7 +1041,7 @@ LogicalResult BPAssignOp::verify() {
 }
 
 LogicalResult PAssignOp::verify() {
-  if (isa<sv::WireOp>(dest().getDefiningOp()))
+  if (isa<sv::WireOp>(getDest().getDefiningOp()))
     return emitOpError(
         "Verilog disallows procedural assignment to a net type (did you intend "
         "to use a variable type, e.g., sv.reg?)");
@@ -955,14 +1069,14 @@ ModportType InterfaceOp::getModportType(StringRef modportName) {
   auto *ctxt = getContext();
   return ModportType::get(
       getContext(),
-      SymbolRefAttr::get(ctxt, sym_name(),
+      SymbolRefAttr::get(ctxt, getSymName(),
                          {SymbolRefAttr::get(ctxt, modportName)}));
 }
 
 Type InterfaceOp::getSignalType(StringRef signalName) {
   InterfaceSignalOp signal = lookupSymbol<InterfaceSignalOp>(signalName);
   assert(signal && "Interface signal symbol not found.");
-  return signal.type();
+  return signal.getType();
 }
 
 static ParseResult parseModportStructs(OpAsmParser &parser,
@@ -1078,7 +1192,8 @@ void GetModportOp::build(OpBuilder &builder, OperationState &state, Value value,
 /// IR.
 InterfaceModportOp
 GetModportOp::getReferencedDecl(const hw::HWSymbolCache &cache) {
-  return dyn_cast_or_null<InterfaceModportOp>(cache.getDefinition(fieldAttr()));
+  return dyn_cast_or_null<InterfaceModportOp>(
+      cache.getDefinition(getFieldAttr()));
 }
 
 void ReadInterfaceSignalOp::build(OpBuilder &builder, OperationState &state,
@@ -1098,7 +1213,7 @@ void ReadInterfaceSignalOp::build(OpBuilder &builder, OperationState &state,
 InterfaceSignalOp
 ReadInterfaceSignalOp::getReferencedDecl(const hw::HWSymbolCache &cache) {
   return dyn_cast_or_null<InterfaceSignalOp>(
-      cache.getDefinition(signalNameAttr()));
+      cache.getDefinition(getSignalNameAttr()));
 }
 
 ParseResult parseIfaceTypeAndSignal(OpAsmParser &p, Type &ifaceTy,
@@ -1152,11 +1267,11 @@ InterfaceInstanceOp::getReferencedInterface(const hw::HWSymbolCache *cache) {
 }
 
 LogicalResult AssignInterfaceSignalOp::verify() {
-  return verifySignalExists(iface(), signalNameAttr());
+  return verifySignalExists(getIface(), getSignalNameAttr());
 }
 
 LogicalResult ReadInterfaceSignalOp::verify() {
-  return verifySignalExists(iface(), signalNameAttr());
+  return verifySignalExists(getIface(), getSignalNameAttr());
 }
 
 //===----------------------------------------------------------------------===//
@@ -1185,8 +1300,12 @@ void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 // If this wire is only written to, delete the wire and all writers.
 LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
+  // Block if op has SV attributes.
+  if (hasSVAttributes(wire))
+    return failure();
+
   // If the wire has a symbol, then we can't delete it.
-  if (wire.inner_symAttr())
+  if (wire.getInnerSymAttr())
     return failure();
 
   // Wires have inout type, so they'll have assigns and read_inout operations
@@ -1206,6 +1325,12 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
     // AssignOp and ReadInOutOp), then can't optimize.
     if (!assign || write)
       return failure();
+
+    // If the assign op has SV attributes, we don't want to delete the
+    // assignment.
+    if (hasSVAttributes(assign))
+      return failure();
+
     write = assign;
   }
 
@@ -1216,7 +1341,7 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
         wire.getLoc(),
         wire.getResult().getType().cast<InOutType>().getElementType());
   } else if (isa<hw::HWModuleOp>(write->getParentOp()))
-    connected = write.src();
+    connected = write.getSrc();
   else
     // If the write is happening at the module level then we don't have any
     // use-before-def checking to do, so we only handle that for now.
@@ -1282,9 +1407,9 @@ LogicalResult IndexedPartSelectInOutOp::inferReturnTypes(
 
 LogicalResult IndexedPartSelectInOutOp::verify() {
   unsigned inputWidth = 0, resultWidth = 0;
-  auto opWidth = width();
+  auto opWidth = getWidth();
 
-  if (auto i = input()
+  if (auto i = getInput()
                    .getType()
                    .cast<InOutType>()
                    .getElementType()
@@ -1307,8 +1432,8 @@ LogicalResult IndexedPartSelectInOutOp::verify() {
 }
 
 OpFoldResult IndexedPartSelectInOutOp::fold(ArrayRef<Attribute> constants) {
-  if (getType() == input().getType())
-    return input();
+  if (getType() == getInput().getType())
+    return getInput();
   return {};
 }
 
@@ -1337,10 +1462,10 @@ LogicalResult IndexedPartSelectOp::inferReturnTypes(
 }
 
 LogicalResult IndexedPartSelectOp::verify() {
-  auto opWidth = width();
+  auto opWidth = getWidth();
 
   unsigned resultWidth = getType().cast<IntegerType>().getWidth();
-  unsigned inputWidth = input().getType().cast<IntegerType>().getWidth();
+  unsigned inputWidth = getInput().getType().cast<IntegerType>().getWidth();
 
   if (opWidth > inputWidth)
     return emitError("slice width should not be greater than input width");
@@ -1376,63 +1501,9 @@ LogicalResult StructFieldInOutOp::inferReturnTypes(
 
 LogicalResult AliasOp::verify() {
   // Must have at least two operands.
-  if (operands().size() < 2)
+  if (getAliases().size() < 2)
     return emitOpError("alias must have at least two operands");
 
-  return success();
-}
-
-//===----------------------------------------------------------------------===//
-// PAssignOp
-//===----------------------------------------------------------------------===//
-
-// reg s <= cond ? val : s simplification.
-// Don't assign a register's value to itself, conditionally assign the new value
-// instead.
-LogicalResult PAssignOp::canonicalize(PAssignOp op, PatternRewriter &rewriter) {
-  auto mux = op.src().getDefiningOp<comb::MuxOp>();
-  if (!mux)
-    return failure();
-
-  auto reg = dyn_cast<sv::RegOp>(op.dest().getDefiningOp());
-  if (!reg)
-    return failure();
-
-  bool trueBranch; // did we find the register on the true branch?
-  auto tvread = mux.trueValue().getDefiningOp<sv::ReadInOutOp>();
-  auto fvread = mux.falseValue().getDefiningOp<sv::ReadInOutOp>();
-  if (tvread && reg == tvread.input().getDefiningOp<sv::RegOp>())
-    trueBranch = true;
-  else if (fvread && reg == fvread.input().getDefiningOp<sv::RegOp>())
-    trueBranch = false;
-  else
-    return failure();
-
-  // Check that this is the only write of the register
-  for (auto &use : reg->getUses()) {
-    if (isa<ReadInOutOp>(use.getOwner()))
-      continue;
-    if (use.getOwner() == op)
-      continue;
-    return failure();
-  }
-
-  // Replace a non-blocking procedural assign in a procedural region with a
-  // conditional procedural assign.  We've ensured that this is the only write
-  // of the register.
-  if (trueBranch) {
-    auto cond = comb::createOrFoldNot(mux.getLoc(), mux.cond(), rewriter);
-    rewriter.create<sv::IfOp>(mux.getLoc(), cond, [&]() {
-      rewriter.create<PAssignOp>(op.getLoc(), reg, mux.falseValue());
-    });
-  } else {
-    rewriter.create<sv::IfOp>(mux.getLoc(), mux.cond(), [&]() {
-      rewriter.create<PAssignOp>(op.getLoc(), reg, mux.trueValue());
-    });
-  }
-
-  // Remove the wire.
-  rewriter.eraseOp(op);
   return success();
 }
 
@@ -1446,8 +1517,8 @@ template <class Op>
 static Op findInstanceSymbolInBlock(StringAttr name, Block *body) {
   for (auto &op : llvm::reverse(body->getOperations())) {
     if (auto instance = dyn_cast<Op>(op)) {
-      if (instance.inner_sym() &&
-          instance.inner_sym().getValue() == name.getValue())
+      if (instance.getInnerSym() &&
+          instance.getInnerSym().value() == name.getValue())
         return instance;
     }
 
@@ -1467,7 +1538,7 @@ static Op findInstanceSymbolInBlock(StringAttr name, Block *body) {
 hw::InstanceOp BindOp::getReferencedInstance(const hw::HWSymbolCache *cache) {
   // If we have a cache, directly look up the referenced instance.
   if (cache) {
-    auto result = cache->getInnerDefinition(instance());
+    auto result = cache->getInnerDefinition(getInstance());
     return cast<hw::InstanceOp>(result.getOp());
   }
 
@@ -1477,12 +1548,12 @@ hw::InstanceOp BindOp::getReferencedInstance(const hw::HWSymbolCache *cache) {
     return {};
 
   auto hwModule = dyn_cast_or_null<hw::HWModuleOp>(
-      topLevelModuleOp.lookupSymbol(instance().getModule()));
+      topLevelModuleOp.lookupSymbol(getInstance().getModule()));
   if (!hwModule)
     return {};
 
   // ... then look up the instance within it.
-  return findInstanceSymbolInBlock<hw::InstanceOp>(instance().getName(),
+  return findInstanceSymbolInBlock<hw::InstanceOp>(getInstance().getName(),
                                                    hwModule.getBodyBlock());
 }
 
@@ -1490,16 +1561,16 @@ hw::InstanceOp BindOp::getReferencedInstance(const hw::HWSymbolCache *cache) {
 LogicalResult BindOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto module = (*this)->getParentOfType<mlir::ModuleOp>();
   auto hwModule = dyn_cast_or_null<hw::HWModuleOp>(
-      symbolTable.lookupSymbolIn(module, instance().getModule()));
+      symbolTable.lookupSymbolIn(module, getInstance().getModule()));
   if (!hwModule)
     return emitError("Referenced module doesn't exist ")
-           << instance().getModule() << "::" << instance().getName();
+           << getInstance().getModule() << "::" << getInstance().getName();
 
   auto inst = findInstanceSymbolInBlock<hw::InstanceOp>(
-      instance().getName(), hwModule.getBodyBlock());
+      getInstance().getName(), hwModule.getBodyBlock());
   if (!inst)
     return emitError("Referenced instance doesn't exist ")
-           << instance().getModule() << "::" << instance().getName();
+           << getInstance().getModule() << "::" << getInstance().getName();
   if (!inst->getAttr("doNotPrint"))
     return emitError("Referenced instance isn't marked as doNotPrint");
   return success();
@@ -1519,7 +1590,7 @@ sv::InterfaceInstanceOp
 BindInterfaceOp::getReferencedInstance(const hw::HWSymbolCache *cache) {
   // If we have a cache, directly look up the referenced instance.
   if (cache) {
-    auto result = cache->getInnerDefinition(instance());
+    auto result = cache->getInnerDefinition(getInstance());
     return cast<sv::InterfaceInstanceOp>(result.getOp());
   }
 
@@ -1528,29 +1599,29 @@ BindInterfaceOp::getReferencedInstance(const hw::HWSymbolCache *cache) {
   if (!symbolTable)
     return {};
   auto *parentOp =
-      lookupSymbolInNested(symbolTable, instance().getModule().getValue());
+      lookupSymbolInNested(symbolTable, getInstance().getModule().getValue());
   if (!parentOp)
     return {};
 
   // ... then look up the instance within it.
   return findInstanceSymbolInBlock<sv::InterfaceInstanceOp>(
-      instance().getName(), &parentOp->getRegion(0).front());
+      getInstance().getName(), &parentOp->getRegion(0).front());
 }
 
 /// Ensure that the symbol being instantiated exists and is an InterfaceOp.
 LogicalResult
 BindInterfaceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto parentOp =
-      symbolTable.lookupNearestSymbolFrom(*this, instance().getModule());
+      symbolTable.lookupNearestSymbolFrom(*this, getInstance().getModule());
   if (!parentOp)
     return emitError("Referenced module doesn't exist ")
-           << instance().getModule() << "::" << instance().getName();
+           << getInstance().getModule() << "::" << getInstance().getName();
 
   auto inst = findInstanceSymbolInBlock<sv::InterfaceInstanceOp>(
-      instance().getName(), &parentOp->getRegion(0).front());
+      getInstance().getName(), &parentOp->getRegion(0).front());
   if (!inst)
     return emitError("Referenced interface doesn't exist ")
-           << instance().getModule() << "::" << instance().getName();
+           << getInstance().getModule() << "::" << getInstance().getName();
   if (!inst->getAttr("doNotPrint"))
     return emitError("Referenced interface isn't marked as doNotPrint");
   return success();
@@ -1579,7 +1650,7 @@ ParseResult parseXMRPath(::mlir::OpAsmParser &parser, ArrayAttr &pathAttr,
   });
   if (succeeded(ret)) {
     pathAttr = parser.getBuilder().getArrayAttr(
-        ArrayRef(strings.begin(), strings.end() - 1));
+        ArrayRef<Attribute>(strings).drop_back());
     terminalAttr = (*strings.rbegin()).cast<StringAttr>();
   }
   return ret;
@@ -1610,7 +1681,7 @@ static LogicalResult eraseIfZeroOrNotZero(Operation *op, Value value,
 template <class Op, bool EraseIfZero = false>
 static LogicalResult canonicalizeImmediateVerifOp(Op op,
                                                   PatternRewriter &rewriter) {
-  return eraseIfZeroOrNotZero(op, op.expression(), rewriter, EraseIfZero);
+  return eraseIfZeroOrNotZero(op, op.getExpression(), rewriter, EraseIfZero);
 }
 
 void AssertOp::getCanonicalizationPatterns(RewritePatternSet &results,
@@ -1631,7 +1702,7 @@ void CoverOp::getCanonicalizationPatterns(RewritePatternSet &results,
 template <class Op, bool EraseIfZero = false>
 static LogicalResult canonicalizeConcurrentVerifOp(Op op,
                                                    PatternRewriter &rewriter) {
-  return eraseIfZeroOrNotZero(op, op.property(), rewriter, EraseIfZero);
+  return eraseIfZeroOrNotZero(op, op.getProperty(), rewriter, EraseIfZero);
 }
 
 void AssertConcurrentOp::getCanonicalizationPatterns(RewritePatternSet &results,
@@ -1648,6 +1719,78 @@ void CoverConcurrentOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                                     MLIRContext *context) {
   results.add(
       canonicalizeConcurrentVerifOp<CoverConcurrentOp, /* EraseIfZero */ true>);
+}
+
+//===----------------------------------------------------------------------===//
+// SV generate ops
+//===----------------------------------------------------------------------===//
+
+/// Parse cases formatted like:
+///  case (pattern, "name") { ... }
+bool parseCaseRegions(OpAsmParser &p, ArrayAttr &patternsArray,
+                      ArrayAttr &caseNamesArray,
+                      SmallVectorImpl<std::unique_ptr<Region>> &caseRegions) {
+  SmallVector<Attribute> patterns;
+  SmallVector<Attribute> names;
+  while (!p.parseOptionalKeyword("case")) {
+    Attribute pattern;
+    StringAttr name;
+    std::unique_ptr<Region> region = std::make_unique<Region>();
+    if (p.parseLParen() || p.parseAttribute(pattern) || p.parseComma() ||
+        p.parseAttribute(name) || p.parseRParen() || p.parseRegion(*region))
+      return true;
+    patterns.push_back(pattern);
+    names.push_back(name);
+    if (region->empty())
+      region->push_back(new Block());
+    caseRegions.push_back(std::move(region));
+  }
+  patternsArray = p.getBuilder().getArrayAttr(patterns);
+  caseNamesArray = p.getBuilder().getArrayAttr(names);
+  return false;
+}
+
+/// Print cases formatted like:
+///  case (pattern, "name") { ... }
+void printCaseRegions(OpAsmPrinter &p, Operation *, ArrayAttr patternsArray,
+                      ArrayAttr namesArray,
+                      MutableArrayRef<Region> caseRegions) {
+  assert(patternsArray.size() == caseRegions.size());
+  assert(patternsArray.size() == namesArray.size());
+  for (size_t i = 0, e = caseRegions.size(); i < e; ++i) {
+    p.printNewline();
+    p << "case (" << patternsArray[i] << ", " << namesArray[i] << ") ";
+    p.printRegion(caseRegions[i]);
+  }
+  p.printNewline();
+}
+
+LogicalResult GenerateCaseOp::verify() {
+  size_t numPatterns = getCasePatterns().size();
+  if (getCaseRegions().size() != numPatterns ||
+      getCaseNames().size() != numPatterns)
+    return emitOpError(
+        "Size of caseRegions, patterns, and caseNames must match");
+
+  StringSet<> usedNames;
+  for (Attribute name : getCaseNames()) {
+    StringAttr nameStr = name.dyn_cast<StringAttr>();
+    if (!nameStr)
+      return emitOpError("caseNames must all be string attributes");
+    if (usedNames.contains(nameStr.getValue()))
+      return emitOpError("caseNames must be unique");
+    usedNames.insert(nameStr.getValue());
+  }
+
+  // mlir::FailureOr<Type> condType = evaluateParametricType();
+
+  return success();
+}
+
+ModportStructAttr ModportStructAttr::get(MLIRContext *context,
+                                         ModportDirection direction,
+                                         FlatSymbolRefAttr signal) {
+  return get(context, ModportDirectionAttr::get(context, direction), signal);
 }
 
 //===----------------------------------------------------------------------===//

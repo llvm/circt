@@ -6,8 +6,8 @@
 ; RUN: rm -rf %t && mkdir -p %t/default %t/inline
 
 ; 1) Run on main circuit, with signal mapping annotations
-; RUN: firtool %S/main.fir --annotation-file %S/subCircuit.json --firrtl-grand-central --split-verilog -o %t/default
-; RUN: firtool %S/main.fir --annotation-file %S/subCircuit.json --firrtl-grand-central --split-verilog -o %t/inline  --annotation-file %S/inline.json
+; RUN: firtool %S/main.fir --annotation-file %S/subCircuit.json --split-verilog -o %t/default
+; RUN: firtool %S/main.fir --annotation-file %S/subCircuit.json --split-verilog -o %t/inline  --annotation-file %S/inline.json
 
 ; Check the generated file
 ; RUN: FileCheck %s --input-file=%t/default/sigdrive.json --check-prefix=JSONDEFAULT
@@ -43,8 +43,8 @@
 
 
 ; 2) Run on sub circuit, with updated annotation file (sigdrive.json) from (1):
-; RUN: firtool %S/subcircuit.fir --annotation-file %t/default/sigdrive.json --firrtl-grand-central | FileCheck %s --check-prefix=MAPPINGDEFAULT
-; RUN: firtool %S/subcircuit.fir --annotation-file %t/inline/sigdrive.json  --firrtl-grand-central | FileCheck %s --check-prefix=MAPPINGINLINE
+; RUN: firtool %S/subcircuit.fir --annotation-file %t/default/sigdrive.json | FileCheck %s --check-prefix=MAPPINGDEFAULT
+; RUN: firtool %S/subcircuit.fir --annotation-file %t/inline/sigdrive.json  | FileCheck %s --check-prefix=MAPPINGINLINE
 
 ; MAPPINGDEFAULT-LABEL: module Sub_signal_mappings(
 ; MAPPINGDEFAULT-NEXT:   input           clock_sink,
@@ -56,8 +56,6 @@
 ; MAPPINGDEFAULT-NEXT:   output [41:0]   data_source_u,
 ; MAPPINGDEFAULT-NEXT:   output [9000:0] data_source_v);
 ; (Don't preserve mappings to values that don't exist)
-; MAPPINGDEFAULT-NOT:                    data_source_w_0
-; MAPPINGDEFAULT-NOT:                    data_source_w_1
 ; MAPPINGDEFAULT:       `ifndef VERILATOR
 ; MAPPINGDEFAULT-NEXT:   initial begin
 ; MAPPINGDEFAULT-NEXT:     force Foo.clock = clock_sink;
@@ -72,8 +70,6 @@
 ; MAPPINGDEFAULT-NEXT:   assign clock_source = Top.clock;
 ; MAPPINGDEFAULT-NEXT:   assign data_source_u = Foo.dataOut_x_y_z;
 ; MAPPINGDEFAULT-NEXT:   assign data_source_v = Foo.dataOut_w;
-; MAPPINGDEFAULT-NOT:           data_source_w_0
-; MAPPINGDEFAULT-NOT:           data_source_w_1
 ; MAPPINGDEFAULT-NEXT: endmodule
 
 ; MAPPINGINLINE-LABEL: module Sub_signal_mappings(
@@ -85,9 +81,6 @@
 ; MAPPINGINLINE-NEXT:   output          clock_source,
 ; MAPPINGINLINE-NEXT:   output [41:0]   data_source_u,
 ; MAPPINGINLINE-NEXT:   output [9000:0] data_source_v);
-; (Don't preserve mappings to values that don't exist)
-; MAPPINGINLINE-NOT:                    data_source_w_0
-; MAPPINGINLINE-NOT:                    data_source_w_1
 ; MAPPINGINLINE:       `ifndef VERILATOR
 ; MAPPINGINLINE-NEXT:   initial begin
 ; MAPPINGINLINE-NEXT:     force Top.foo_clock = clock_sink;
@@ -102,8 +95,4 @@
 ; MAPPINGINLINE-NEXT:   assign clock_source = Top.clock;
 ; MAPPINGINLINE-NEXT:   assign data_source_u = Top.foo_dataOut_x_y_z;
 ; MAPPINGINLINE-NEXT:   assign data_source_v = Top.foo_dataOut_w;
-; MAPPINGINLINE-NOT:           data_source_w_0
-; MAPPINGINLINE-NOT:           data_source_w_1
 ; MAPPINGINLINE-NEXT: endmodule
-
-

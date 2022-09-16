@@ -39,6 +39,14 @@ def ArrayCreateOp : HWOp<"array_create", [NoSideEffect, SameTypeOperands]> {
     // ValueRange needs to contain at least one element.
     OpBuilder<(ins "ValueRange":$input)>
   ];
+
+  let extraClassDeclaration = [{
+    /// If the all elements of the array are identical, returns that element
+    /// value. Otherwise returns a null value.
+    Value getUniformElement();
+    /// Returns true if all array elements are identical.
+    bool isUniform() { return !!getUniformElement(); }
+  }];
 }
 
 def ArrayConcatOp : HWOp<"array_concat", [NoSideEffect]> {
@@ -67,6 +75,8 @@ def ArrayConcatOp : HWOp<"array_concat", [NoSideEffect]> {
     // ValueRange needs to contain at least one element.
     OpBuilder<(ins "ValueRange":$inputs)>
   ];
+
+  let hasCanonicalizeMethod = 1;
 }
 
 def ArraySliceOp : HWOp<"array_slice", [NoSideEffect]> {
@@ -99,6 +109,7 @@ def ArraySliceOp : HWOp<"array_slice", [NoSideEffect]> {
   let results = (outs ArrayType:$dst);
 
   let hasVerifier = 1;
+  let hasCanonicalizeMethod = 1;
 
   let assemblyFormat = [{
     $input`[`$lowIndex`]` attr-dict `:`
@@ -137,6 +148,7 @@ def ArrayGetOp : HWOp<"array_get",
   ];
 
   let hasFolder = 1;
+  let hasCanonicalizeMethod = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -148,6 +160,7 @@ def StructCreateOp : HWOp<"struct_create", [NoSideEffect]> {
   let arguments = (ins Variadic<HWNonInOutType>:$input);
   let results = (outs StructType:$result);
   let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
 }
 
 // Extract the value of a field of a structure.
@@ -169,6 +182,7 @@ def StructExtractOp : HWOp<"struct_extract", [NoSideEffect]> {
   ];
 
   let hasFolder = 1;
+  let hasCanonicalizeMethod = 1;
 }
 
 // Create a structure by replacing a field with a value in an existing one.
@@ -186,6 +200,8 @@ def StructInjectOp : HWOp<"struct_inject", [NoSideEffect,
                    HWNonInOutType:$newValue);
   let results = (outs StructType:$result);
   let hasCustomAssemblyFormat = 1;
+
+  let hasCanonicalizeMethod = 1;
 }
 
 def StructExplodeOp : HWOp<"struct_explode", [NoSideEffect]> {

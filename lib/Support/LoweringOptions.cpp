@@ -37,6 +37,7 @@ parseLocationInfoStyle(StringRef option) {
              option)
       .Case("plain", LoweringOptions::Plain)
       .Case("wrapInAtSquareBracket", LoweringOptions::WrapInAtSquareBracket)
+      .Case("none", LoweringOptions::None)
       .Default(llvm::None);
 }
 
@@ -81,12 +82,21 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
       if (auto style = parseLocationInfoStyle(option)) {
         locationInfoStyle = *style;
       } else {
-        errorHandler("expected 'plain' or 'wrapInAtSquareBracket'");
+        errorHandler("expected 'plain', 'wrapInAtSquareBracket', or 'none'");
       }
     } else if (option == "disallowPortDeclSharing") {
       disallowPortDeclSharing = true;
     } else if (option == "printDebugInfo") {
       printDebugInfo = true;
+    } else if (option == "useOldEmissionMode") {
+      useOldEmissionMode = true;
+    } else if (option == "disallowExpressionInliningInPorts") {
+      disallowExpressionInliningInPorts = true;
+    } else if (option.consume_front("maximumNumberOfVariadicOperands=")) {
+      if (option.getAsInteger(10, maximumNumberOfVariadicOperands)) {
+        errorHandler("expected integer for number of variadic operands");
+        maximumNumberOfVariadicOperands = DEFAULT_VARIADIC_OPERAND_LIMIT;
+      }
     } else {
       errorHandler(llvm::Twine("unknown style option \'") + option + "\'");
       // We continue parsing options after a failure.
@@ -113,10 +123,16 @@ std::string LoweringOptions::toString() const {
     options += "emitReplicatedOpsToHeader,";
   if (locationInfoStyle == LocationInfoStyle::WrapInAtSquareBracket)
     options += "locationInfoStyle=wrapInAtSquareBracket,";
+  if (locationInfoStyle == LocationInfoStyle::None)
+    options += "locationInfoStyle=none,";
   if (disallowPortDeclSharing)
     options += "disallowPortDeclSharing,";
   if (printDebugInfo)
     options += "printDebugInfo,";
+  if (useOldEmissionMode)
+    options += "useOldEmissionMode,";
+  if (disallowExpressionInliningInPorts)
+    options += "disallowExpressionInliningInPorts,";
 
   if (emittedLineLength != DEFAULT_LINE_LENGTH)
     options += "emittedLineLength=" + std::to_string(emittedLineLength) + ',';
@@ -126,6 +142,9 @@ std::string LoweringOptions::toString() const {
   if (maximumNumberOfTermsInConcat != DEFAULT_CONCAT_TERM_LIMIT)
     options += "maximumNumberOfTermsInConcat=" +
                std::to_string(maximumNumberOfTermsInConcat) + ',';
+  if (maximumNumberOfVariadicOperands != DEFAULT_VARIADIC_OPERAND_LIMIT)
+    options += "maximumNumberOfVariadicOperands=" +
+               std::to_string(maximumNumberOfVariadicOperands) + ',';
 
   // Remove a trailing comma if present.
   if (!options.empty()) {
@@ -180,9 +199,11 @@ struct LoweringCLOptions {
           "disallowLocalVariables, verifLabels, emittedLineLength=<n>, "
           "maximumNumberOfTermsPerExpression=<n>, "
           "maximumNumberOfTermsInConcat=<n>, explicitBitcast, "
+          "maximumNumberOfVariadicOperands=<n>, "
           "emitReplicatedOpsToHeader, "
-          "locationInfoStyle={plain,wrapInAtSquareBracket}, "
-          "disallowPortDeclSharing, printDebugInfo"),
+          "locationInfoStyle={plain,wrapInAtSquareBracket,none}, "
+          "disallowPortDeclSharing, printDebugInfo, useOldEmissionMode, "
+          "disallowExpressionInliningInPorts"),
       llvm::cl::value_desc("option")};
 };
 } // namespace
@@ -203,4 +224,20 @@ void circt::applyLoweringCLOptions(ModuleOp module) {
   if (clOptions->loweringOptions.getNumOccurrences()) {
     clOptions->loweringOptions.setAsAttribute(module);
   }
+}
+
+LoweringOptions
+circt::getLoweringCLIOption(mlir::ModuleOp module,
+                            LoweringOptions::ErrorHandlerT errorHandler) {
+  // If the command line options were not registered in the first place, use the
+  // lowering option associated with module op.
+  if (!clOptions.isConstructed() ||
+      !clOptions->loweringOptions.getNumOccurrences()) {
+    if (auto styleAttr = LoweringOptions::getAttributeFrom(module))
+      return LoweringOptions(styleAttr, errorHandler);
+    // If the module doesn't have a lowering option, then use the default value.
+    return LoweringOptions();
+  }
+
+  return clOptions->loweringOptions.getValue();
 }

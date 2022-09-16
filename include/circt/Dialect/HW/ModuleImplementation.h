@@ -27,7 +27,7 @@ namespace module_like_impl {
 /// number.
 StringAttr getPortNameAttr(MLIRContext *context, StringRef name);
 
-/// This is a variant of mlor::parseFunctionSignature that allows names on
+/// This is a variant of mlir::parseFunctionSignature that allows names on
 /// result arguments.
 ParseResult parseModuleFunctionSignature(
     OpAsmParser &parser, SmallVectorImpl<OpAsmParser::Argument> &args,

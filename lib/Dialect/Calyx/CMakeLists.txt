@@ -14,16 +14,15 @@ set(Calyx_LinkLibs
   CIRCTComb
   CIRCTSV
   CIRCTHW
-  MLIRArithmetic
+  MLIRArithmeticDialect
   MLIRIR
-  MLIRMemRef
+  MLIRMemRefDialect
   MLIRTransforms
   )
 
 set(Calyx_Deps
   ${Calyx_LinkLibs}
   MLIRCalyxEnumsIncGen
-  MLIRCalyxAttrsIncGen
   MLIRCalyxInterfacesIncGen
   )
 

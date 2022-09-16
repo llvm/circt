@@ -30,7 +30,7 @@ def TypeScopeOp : HWOp<"type_scope",
   let assemblyFormat = "$sym_name $body attr-dict";
 
   let extraClassDeclaration = [{
-    Block *getBodyBlock() { return &body().front(); }
+    Block *getBodyBlock() { return &getBody().front(); }
   }];
 }
 

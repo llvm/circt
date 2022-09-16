@@ -17,7 +17,7 @@ add_circt_library(CIRCTCalyxToHW
   CIRCTHW
   MLIRIR
   MLIRPass
-  MLIRFunc
+  MLIRFuncDialect
   MLIRSupport
   MLIRTransforms
   )

@@ -96,7 +96,7 @@ module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFrom
 }
 
 // -----
-// Check extracted modules and their instantations use same name
+// Check extracted modules and their instantiations use same name
 
 // CHECK-LABEL: @InstanceName(
 // CHECK:      hw.instance "[[name:.+]]_assert" sym @{{[^ ]+}} @[[name]]_assert
@@ -108,6 +108,27 @@ module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFrom
       sv.assert %cond, immediate
       sv.assume %cond, immediate
       sv.cover %cond, immediate
+    }
+  }
+}
+
+
+// -----
+// Check wires are extracted once
+
+// CHECK-LABEL: @MultiRead(
+// CHECK: hw.instance "[[name:.+]]_cover"  sym @{{[^ ]+}} @[[name]]_cover(foo: %0: i1, clock: %clock: i1)
+module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>} {
+  hw.module @MultiRead(%clock: i1, %cond: i1) -> () {
+    %foo = sv.wire : !hw.inout<i1>
+    sv.assign %foo, %cond : i1
+    %cond1 = sv.read_inout %foo : !hw.inout<i1>
+    %cond2 = sv.read_inout %foo : !hw.inout<i1>
+    %cond3 = sv.read_inout %foo : !hw.inout<i1>
+    sv.always posedge %clock  {
+      sv.cover %cond1, immediate
+      sv.cover %cond2, immediate
+      sv.cover %cond3, immediate
     }
   }
 }

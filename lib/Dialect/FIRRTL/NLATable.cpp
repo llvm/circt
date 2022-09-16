@@ -22,7 +22,7 @@ NLATable::NLATable(Operation *operation) {
   auto circuit = cast<CircuitOp>(operation);
   // We are assuming it's faster to iterate over the top level twice than cache
   // a large number of options.
-  for (auto &op : *circuit.getBody()) {
+  for (auto &op : *circuit.getBodyBlock()) {
     if (auto module = dyn_cast<FModuleLike>(op))
       symToOp[module.moduleNameAttr()] = module;
     if (auto nla = dyn_cast<HierPathOp>(op))
@@ -55,8 +55,8 @@ FModuleLike NLATable::getModule(StringAttr name) {
 }
 
 void NLATable::addNLA(HierPathOp nla) {
-  symToOp[nla.sym_nameAttr()] = nla;
-  for (auto ent : nla.namepath()) {
+  symToOp[nla.getSymNameAttr()] = nla;
+  for (auto ent : nla.getNamepath()) {
     if (auto mod = ent.dyn_cast<FlatSymbolRefAttr>())
       nodeMap[mod.getAttr()].push_back(nla);
     else if (auto inr = ent.dyn_cast<hw::InnerRefAttr>())
@@ -65,8 +65,8 @@ void NLATable::addNLA(HierPathOp nla) {
 }
 
 void NLATable::erase(HierPathOp nla, SymbolTable *symbolTable) {
-  symToOp.erase(nla.sym_nameAttr());
-  for (auto ent : nla.namepath())
+  symToOp.erase(nla.getSymNameAttr());
+  for (auto ent : nla.getNamepath())
     if (auto mod = ent.dyn_cast<FlatSymbolRefAttr>())
       llvm::erase_value(nodeMap[mod.getAttr()], nla);
     else if (auto inr = ent.dyn_cast<hw::InnerRefAttr>())

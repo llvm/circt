@@ -18,7 +18,7 @@ set(SCHEDULING_SOURCES
 
 set(SCHEDULING_LIBS
   MLIRIR
-  MLIRFunc
+  MLIRFuncDialect
   MLIRSupport
   )
 
@@ -43,6 +43,7 @@ add_circt_library(CIRCTSchedulingTestPasses
 
   LINK_LIBS PUBLIC
   CIRCTScheduling
+  CIRCTSSP
   MLIRPass
   )
 

@@ -10,6 +10,7 @@ set(srcs
   ESIFolds.cpp
   ESIOps.cpp
   ESIPasses.cpp
+  ESIServices.cpp
   ESITranslations.cpp
   ESITypes.cpp
 )
@@ -17,19 +18,22 @@ set(srcs
 set(ESI_LinkLibs
   CIRCTSupport
   CIRCTComb
+  CIRCTMSFT
+  CIRCTMSFTTransforms
   CIRCTSV
   CIRCTHW
   MLIRIR
   MLIRTransforms
-  MLIRControlFlow
-  MLIRFunc
-  MLIRArithmetic
+  MLIRControlFlowDialect
+  MLIRFuncDialect
+  MLIRArithmeticDialect
   MLIRTranslateLib
 )
 
 set(ESI_Deps
   ${ESI_LinkLibs}
-  MLIRESIEnumsIncGen
+  MLIRESITransformsIncGen
+  MLIRESIInterfacesIncGen
 )
 
 if(CapnProto_FOUND)
@@ -48,7 +52,7 @@ add_circt_dialect_library(CIRCTESI
   ${srcs}
 
   DEPENDS
-  MLIRESIEnumsIncGen
+  MLIRESITransformsIncGen
   ${ESI_Deps}
 
   LINK_COMPONENTS

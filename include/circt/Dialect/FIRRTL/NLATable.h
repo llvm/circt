@@ -24,12 +24,12 @@ namespace firrtl {
 /// This table tracks nlas and what modules participate in them.
 ///
 /// To use this class, retrieve a cached copy from the analysis manager:
-///   auto &nlaTable = getAnalysis<NLTATable>(getOperation());
+///   auto &nlaTable = getAnalysis<NLATable>(getOperation());
 class NLATable {
 
 public:
   /// Create a new NLA table of a circuit. This must be called on a FIRRTL
-  /// CircuitOp or MLIR ModuleOp. To esnure that the analysis does not return
+  /// CircuitOp or MLIR ModuleOp. To ensure that the analysis does not return
   /// stale data while a pass is running, it should be kept up-to-date when
   /// modules are added or renamed and NLAs are updated.
   explicit NLATable(Operation *operation);
@@ -68,7 +68,7 @@ public:
   /// Get the NLAs that the InstanceOp participates in, insert it to the
   /// DenseSet `nlas`.
   void getInstanceNLAs(InstanceOp inst, DenseSet<HierPathOp> &nlas) {
-    auto instSym = inst.inner_symAttr();
+    auto instSym = getInnerSymName(inst);
     // If there is no inner sym on the InstanceOp, then it does not participate
     // in any NLA.
     if (!instSym)
@@ -78,7 +78,7 @@ public:
     // module. This should contain the NLAs that this InstanceOp participates
     // in.
     commonNLAs(inst->getParentOfType<FModuleOp>().getNameAttr(),
-               inst.moduleNameAttr().getAttr(), nlas);
+               inst.getModuleNameAttr().getAttr(), nlas);
     // Handle the case when there are more than one Instances for the same
     // target module. Getting the `commonNLA`, in that case is not enough,
     // remove the NLAs that donot have the InstanceOp as the innerSym.

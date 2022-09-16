@@ -1,5 +1,5 @@
-// RUN: circt-opt %s -export-verilog -verify-diagnostics -o %t.mlir | FileCheck %s --strict-whitespace
-// RUN: circt-opt %s -export-verilog -o %t.mlir && cat %t.mlir | FileCheck %s --check-prefix=IR
+// RUN: circt-opt %s -export-verilog -verify-diagnostics -o %t.mlir --lowering-options=useOldEmissionMode | FileCheck %s --strict-whitespace --check-prefixes=CHECK,OLD
+// RUN: circt-opt %s -export-verilog -verify-diagnostics -o %t.mlir | FileCheck %s --check-prefixes=CHECK,NEW
 
 // CHECK-LABEL: // external module E
 hw.module.extern @E(%a: i1, %b: i1, %c: i1)
@@ -65,20 +65,20 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
   %allone = hw.constant 15 : i4
   %34 = comb.xor %a, %allone : i4
 
-  %arrCreated = hw.array_create %allone, %allone, %allone, %allone, %allone, %allone, %allone, %allone, %allone : i4
+  // Having "sv.namehint" (and checking that it works) anywhere will inherently
+  // make tests brittle. This line breaking does not mean your change is no
+  // good! You'll just have to find a new place for `sv.namehint`.
+  %arrCreated = hw.array_create %allone, %allone, %allone, %allone, %allone, %allone, %allone, %allone, %allone { sv.namehint="name_hint" } : i4
   %slice1 = hw.array_slice %arrCreated[%a] : (!hw.array<9xi4>) -> !hw.array<3xi4>
   %slice2 = hw.array_slice %arrCreated[%b] : (!hw.array<9xi4>) -> !hw.array<3xi4>
   %35 = comb.mux %cond, %slice1, %slice2 : !hw.array<3xi4>
 
   %ab = comb.add %a, %b : i4
   %subArr = hw.array_create %allone, %ab, %allone : i4
-  %38 = hw.array_concat %subArr, %subArr : !hw.array<3 x i4>, !hw.array<3 x i4>
 
-  // Having "sv.namehint" (and checking that it works) anywhere will inherently
-  // make tests brittle. This line breaking does not mean your change is no
-  // good! You'll just have to find a new place for `sv.namehint`.
-  %elem2d = hw.array_get %array2d[%a] { sv.namehint="array2d_idx_0_name" } : !hw.array<12 x array<10xi4>>
-  %37 = hw.array_get %elem2d[%b] : !hw.array<10xi4>
+  %38 = hw.array_concat %subArr, %subArr : !hw.array<3 x i4>, !hw.array<3 x i4>
+  %elem2d = hw.array_get %array2d[%a] : !hw.array<12 x array<10xi4>>
+  %37 = hw.array_get %elem2d[%b] {sv.attributes=#sv.attributes<[#sv.attribute<"svAttr">]>}: !hw.array<10xi4>
 
   %36 = comb.replicate %a : (i4) -> i12
 
@@ -146,11 +146,9 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
 // CHECK-NEXT:   output struct packed {logic [1:0] foo; logic [3:0] bar; } r40,
 // CHECK-NEXT:                                                             r41,
 // CHECK-NEXT:   output                                                    r42);
-// CHECK-EMPTY:
-// CHECK-NEXT:   wire [8:0][3:0] [[WIRE0:.+]] = {{[{}][{}]}}4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}};
-// CHECK-NEXT:   wire [2:0][3:0] [[WIRE1:.+]] = {{[{}][{}]}}4'hF}, {a + b}, {4'hF}};
-// CHECK-NEXT:   wire [9:0][3:0] [[WIRE2:array2d_idx_0_name]] = array2d[a];
-// CHECK-NEXT:   wire struct packed {logic [1:0] foo; logic [3:0] bar; } [[WIRE3:.+]] = '{foo: c, bar: a};
+// CHECK:        wire [8:0][3:0] name_hint = {{[{}][{}]}}4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}};
+// CHECK-NEXT:   wire [2:0][3:0] [[WIRE0:.+]] = {{[{}][{}]}}4'hF}, {a + b}, {4'hF}};
+// CHECK-NEXT:   wire struct packed {logic [1:0] foo; logic [3:0] bar; } [[WIRE1:.+]] = '{foo: c, bar: a};
 // CHECK-NEXT:   assign r0 = a + b;
 // CHECK-NEXT:   assign r2 = a - b;
 // CHECK-NEXT:   assign r4 = a * b;
@@ -182,12 +180,12 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
 // CHECK-NEXT:   assign r31 = {{[{}][{}]}}5{a[3]}}, a};
 // CHECK-NEXT:   assign r33 = cond ? a : b;
 // CHECK-NEXT:   assign r34 = ~a;
-// CHECK-NEXT:   assign r35 = cond ? [[WIRE0]][a +: 3] : [[WIRE0]][b +: 3];
+// CHECK-NEXT:   assign r35 = cond ? name_hint[a +: 3] : name_hint[b +: 3];
 // CHECK-NEXT:   assign r36 = {3{a}};
-// CHECK-NEXT:   assign r37 = [[WIRE2]][b];
-// CHECK-NEXT:   assign r38 = {[[WIRE1]], [[WIRE1]]};
+// CHECK-NEXT:   assign r37 = array2d[a][b] (* svAttr *);
+// CHECK-NEXT:   assign r38 = {[[WIRE0]], [[WIRE0]]};
 // CHECK-NEXT:   assign r40 = '{foo: structA.foo, bar: a};
-// CHECK-NEXT:   assign r41 = '{foo: [[WIRE3]].foo, bar: b};
+// CHECK-NEXT:   assign r41 = '{foo: [[WIRE1]].foo, bar: b};
 // CHECK-NEXT:   assign r42 = array1[1'h0];
 // CHECK-NEXT: endmodule
 
@@ -264,8 +262,7 @@ hw.module @AB(%w: i1, %x: i1, %i2: i2, %i3: i0) -> (y: i1, z: i1, p: i1, p2: i1)
 // CHECK-EMPTY:
 // CHECK-NEXT:   wire _b1_b;
 // CHECK-NEXT:   wire _a1_f;
-// CHECK-EMPTY:
-// CHECK-NEXT:   AAA a1 (
+// CHECK:        AAA a1 (
 // CHECK-NEXT:     .d (w),
 // CHECK-NEXT:     .e (_b1_b),
 // CHECK-NEXT:     .f (_a1_f)
@@ -346,7 +343,8 @@ hw.module @wires(%in4: i4, %in8: i8) -> (a: i4, b: i8, c: i8) {
   // CHECK-EMPTY:
 
   // Wires.
-  // CHECK-NEXT: wire [3:0]            myWire;
+  // NEW-NEXT: wire [3:0]            myWire = in4;
+  // OLD-NEXT: wire [3:0]            myWire;
   %myWire = sv.wire : !hw.inout<i4>
 
   // Packed arrays.
@@ -364,11 +362,9 @@ hw.module @wires(%in4: i4, %in8: i8) -> (a: i4, b: i8, c: i8) {
   // CHECK-NEXT: wire [9:0][7:0]       myUArray2[0:13][0:11];
   %myUArray2 = sv.wire : !hw.inout<uarray<14 x uarray<12 x array<10 x i8>>>>
 
-  // CHECK-EMPTY:
-
   // Wires.
 
-  // CHECK-NEXT: assign myWire = in4;
+  // OLD: assign myWire = in4;
   sv.assign %myWire, %in4 : i4
   %wireout = sv.read_inout %myWire : !hw.inout<i4>
 
@@ -597,8 +593,7 @@ hw.module @longvariadic(%a: i8) -> (b: i8) {
 // CHECK-NEXT:    input clock);
 // CHECK-EMPTY:
 // CHECK-NEXT:   reg memory_r_en_pipe[0:0];
-// CHECK-EMPTY:
-// CHECK-NEXT:   always_ff @(posedge clock)
+// CHECK:        always_ff @(posedge clock)
 // CHECK-NEXT:     memory_r_en_pipe[1'h0] <= 1'h0;
 // CHECK-NEXT:   initial
 // CHECK-NEXT:     memory_r_en_pipe[1'h0] = 1'h0;
@@ -672,6 +667,17 @@ hw.module @StrurctExtractInline(%a: !hw.struct<v: i1>) -> (b: i1, c: i1) {
   hw.output %0, %0 : i1, i1
 }
 
+// CHECK-LABEL: NoExtraTemporaryWireForAssign
+hw.module @NoExtraTemporaryWireForAssign(%a: i2, %b: i4) {
+  // OLD: wire struct packed {logic [1:0] foo; logic [3:0] bar; } _GEN;
+  // OLD-EMPTY:
+  // OLD-NEXT: assign _GEN = '{foo: a, bar: b};
+  // NEW: wire struct packed {logic [1:0] foo; logic [3:0] bar; } _GEN = '{foo: a, bar: b};
+  %0 = hw.struct_create (%a, %b) : !hw.struct<foo: i2, bar: i4>
+  %1 = sv.wire : !hw.inout<!hw.struct<foo: i2, bar: i4>>
+  sv.assign %1, %0: !hw.struct<foo: i2, bar: i4>
+}
+
 hw.module.extern @DifferentResultMod() -> (out1: i1, out2: i2)
 
 // CHECK-LABEL: module out_of_order_multi_result(
@@ -692,8 +698,7 @@ hw.module.extern @single_result() -> (res: i3)
 // CHECK-LABEL: module instance_result_reuse_wires(
 hw.module @instance_result_reuse_wires() -> (b: i3) {
   // CHECK:       wire {{.*}} some_wire;
-  // CHECK-EMPTY:
-  // CHECK-NEXT:  single_result b1 (
+  // CHECK:       single_result b1 (
   // CHECK-NEXT:  .res (some_wire)
   // CHECK-NEXT:  );
   // CHECK-NEXT:  assign b = some_wire;
@@ -706,15 +711,6 @@ hw.module @instance_result_reuse_wires() -> (b: i3) {
   hw.output %read : i3
 }
 
-// IR: @namehint_variadic
-hw.module @namehint_variadic(%a: i3) -> (b: i3) {
-  // IR-NEXT: %0 = comb.add %a, %a : i3
-  // IR-NEXT: %1 = comb.add %a, %0 {sv.namehint = "bar"} : i3
-  // IR-NEXT: hw.output %1
-  %0 = comb.add %a, %a, %a { sv.namehint = "bar" } : i3
-  hw.output %0 : i3
-}
-
 hw.module.extern @ExternDestMod(%a: i1, %b: i2) -> (c: i3, d: i4)
 hw.module @InternalDestMod(%a: i1, %b: i3) {}
 // CHECK-LABEL module ABC
@@ -725,8 +721,7 @@ hw.module @ABC(%a: i1, %b: i2) -> (c: i4) {
 }
 
 // CHECK:   wire [2:0] _whatever_c;
-// CHECK-EMPTY:
-// CHECK-NEXT:   /* This instance is elsewhere emitted as a bind statement
+// CHECK:        /* This instance is elsewhere emitted as a bind statement
 // CHECK-NEXT:      ExternDestMod whatever (
 // CHECK-NEXT:        .a (a),
 // CHECK-NEXT:        .b (b),
@@ -750,7 +745,6 @@ hw.module.extern @Owo(%owo_in : i32) -> ()
 hw.module @Nya() -> (nya_output : i32) {
   %0 = hw.instance "uwu" @Uwu() -> (uwu_output: i32)
   // CHECK: wire [31:0] _uwu_uwu_output;
-  // CHECK-EMPTY:
   // CHECK: Uwu uwu (
   // CHECK: .uwu_output (_uwu_uwu_output)
   // CHECK: );
@@ -943,8 +937,7 @@ hw.module @renameKeyword(%a: !hw.struct<repeat: i1, repeat_0: i1>) -> (r1: !hw.s
 // CHECK-NEXT:                                                            r2,
 // CHECK-NEXT:  output struct packed {logic repeat_0; logic repeat_0_1; } r3);
 hw.module @useRenamedStruct(%a: !hw.inout<struct<repeat: i1, repeat_0: i1>>) -> (r1: i1, r2: i1, r3: !hw.struct<repeat: i1, repeat_0: i1>) {
-  // CHECK-EMPTY:
-  // CHECK-NEXT: wire struct packed {logic repeat_0; logic repeat_0_1; } _inst1_r1;
+  // CHECK: wire struct packed {logic repeat_0; logic repeat_0_1; } _inst1_r1;
   %read = sv.read_inout %a : !hw.inout<struct<repeat: i1, repeat_0: i1>>
 
   %i0 = hw.instance "inst1" @renameKeyword(a: %read: !hw.struct<repeat: i1, repeat_0: i1>) -> (r1: !hw.struct<repeat: i1, repeat_0: i1>)
@@ -953,12 +946,11 @@ hw.module @useRenamedStruct(%a: !hw.inout<struct<repeat: i1, repeat_0: i1>>) -> 
   // CHECK-NEXT:   .r1 (_inst1_r1)
   // CHECK-NEXT: )
 
-  // CHECK: wire struct packed {logic repeat_0; logic repeat_0_1; } [[WIREA:.+]] = a;
   %0 = sv.struct_field_inout %a["repeat"] : !hw.inout<struct<repeat: i1, repeat_0: i1>>
   %1 = sv.read_inout %0 : !hw.inout<i1>
   // assign r1 = a.repeat_0;
   %2 = hw.struct_extract %read["repeat_0"] : !hw.struct<repeat: i1, repeat_0: i1>
-  // assign r2 = [[WIREA]].repeat_0_1;
+  // assign r2 = a.repeat_0_1;
   %true = hw.constant true
   %3 = hw.struct_inject %read["repeat_0"], %true : !hw.struct<repeat: i1, repeat_0: i1>
   // assign r3 = '{repeat_0: a.repeat_0, repeat_0_1: (1'h1)};
@@ -1106,7 +1098,9 @@ hw.module @UseParameterValue<xx: i42>(%arg0: i8)
   // CHECK-NEXT: ) inst3 (
   %c = hw.instance "inst3" @parameters2<p1: i42 = #hw.param.expr.mul<#hw.param.expr.add<#hw.param.verbatim<"xx">, 17>, #hw.param.verbatim<"yy">>, p2: i1 = 0>(arg0: %arg0: i8) -> (out: i8)
 
-  // CHECK: localparam [41:0] _GEN = xx + 42'd17;
+  // OLD: localparam [41:0] _GEN = xx + 42'd17;
+  // FIXME: Decl word should be localparam.
+  // NEW: wire [41:0] _GEN = xx + 42'd17;
   // CHECK-NEXT: assign out3 = _GEN[7:0] + _GEN[7:0];
   %d = hw.param.value i42 = #hw.param.expr.add<#hw.param.decl.ref<"xx">, 17>
   %e = comb.extract %d from 0 : (i42) -> i8
@@ -1219,4 +1213,13 @@ hw.module @NoneTypeParam<p1: none>() -> () {}
 // CHECK:       endmodule
 hw.module @ParamConcatInst<name: none = "top">() -> () {
   hw.instance "inst" @NoneTypeParam<p1: none = #hw.param.expr.str.concat<".", #hw.param.decl.ref<"name">, ".", "child">>() -> ()
+}
+
+// CHECK-LABEL: module ArrayGetInline
+hw.module @ArrayGetInline(%a: !hw.array<4xstruct<a: i32>>) -> (out: i32) {
+  %c0_i2 = hw.constant 0 : i2
+  %x = hw.array_get %a[%c0_i2] : !hw.array<4xstruct<a: i32>>
+  %y = hw.struct_extract %x["a"] : !hw.struct<a: i32>
+  // CHECK: assign out = a[2'h0].a;
+  hw.output %y : i32
 }

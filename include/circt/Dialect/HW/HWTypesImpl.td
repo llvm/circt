@@ -27,7 +27,7 @@ def IntTypeImpl : HWType<"Int"> {
   }];
 
   let mnemonic = "int";
-  let parameters = (ins "::mlir::Attribute":$width);
+  let parameters = (ins "::mlir::TypedAttr":$width);
 
   let hasCustomAssemblyFormat = 1;
 
@@ -36,7 +36,7 @@ def IntTypeImpl : HWType<"Int"> {
   let extraClassDeclaration = [{
     /// Get an integer type for the specified width.  Note that this may return
     /// a builtin integer type if the width is a known-constant value.
-    static Type get(::mlir::Attribute width);
+    static Type get(::mlir::TypedAttr width);
   }];
 }
 
@@ -136,6 +136,31 @@ def StructTypeImpl : HWType<"Struct"> {
     llvm::Optional<unsigned> getFieldIndex(mlir::StringRef fieldName);
     llvm::Optional<unsigned> getFieldIndex(mlir::StringAttr fieldName);
   }];
+}
+
+// An enum type. Declares the hw::EnumType in C++.
+def EnumTypeImpl : HWType<"Enum"> {
+  let summary = "HW Enum type";
+  let description = [{
+    Represents an enumeration of values. Enums are interpreted as integers with
+    a synthesis-defined encoding.
+    !hw.enum<field1, field2>
+  }];
+  let mnemonic = "enum";
+  let parameters = (
+    ins "mlir::ArrayAttr":$fields
+  );
+
+  let extraClassDeclaration = [{
+    /// Returns true if the requested field is part of this enum
+    bool contains(mlir::StringRef field);
+
+    /// Returns the index of the requested field, or a nullopt if the field is
+    // not part of this enum.
+    llvm::Optional<size_t> indexOf(mlir::StringRef field);
+  }];
+  
+  let hasCustomAssemblyFormat = 1;
 }
 
 // An untagged union. Declares the hw::UnionType in C++.

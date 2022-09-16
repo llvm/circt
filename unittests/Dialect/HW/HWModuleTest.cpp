@@ -69,10 +69,10 @@ TEST(HWModuleOpTest, AddOutputs) {
   auto output = cast<OutputOp>(top.getBodyBlock()->getTerminator());
   ASSERT_EQ(output->getNumOperands(), 4);
 
-  EXPECT_EQ(output->getOperand(0), wireA.result());
-  EXPECT_EQ(output->getOperand(1), wireB.result());
-  EXPECT_EQ(output->getOperand(2), wireC.result());
-  EXPECT_EQ(output->getOperand(3), wireD.result());
+  EXPECT_EQ(output->getOperand(0), wireA.getResult());
+  EXPECT_EQ(output->getOperand(1), wireB.getResult());
+  EXPECT_EQ(output->getOperand(2), wireC.getResult());
+  EXPECT_EQ(output->getOperand(3), wireD.getResult());
 }
 
 } // namespace

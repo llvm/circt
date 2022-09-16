@@ -39,7 +39,7 @@ module ESI_PipelineStage # (
   int WIDTH = 8
 ) (
   input logic clk,
-  input logic rstn,
+  input logic rst,
 
   // Input LI channel.
   input logic a_valid,
@@ -61,7 +61,7 @@ module ESI_PipelineStage # (
 
   // Register the backpressure.
   always_ff @(posedge clk)
-    x_ready_reg <= rstn ? x_ready : 1'b0;
+    x_ready_reg <= rst ? 1'b0 : x_ready;
 
   // We are transmitting a token on this cycle.
   wire xmit = x_valid && x_ready;
@@ -81,7 +81,7 @@ module ESI_PipelineStage # (
   wire a_rcv = a_ready && a_valid;
 
   always_ff @(posedge clk) begin
-    if (~rstn) begin
+    if (rst) begin
       l_valid <= 1'b0;
       x_valid_reg <= 1'b0;
     end else begin

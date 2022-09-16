@@ -10,6 +10,14 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "mlir/IR/EnumAttr.td"
+
+// "Forward-declare" these HW attributes rather than including or duplicating
+// them here. This lets us to refer to them in ODS, but delegates to HW in C++.
+// These are used to represent parameters for the PrimitiveOp.
+def ParamDeclAttr : Attr<CPred<"$_self.isa<hw::ParamDeclAttr>()">>;
+def ParamDeclArrayAttr : TypedArrayAttrBase<ParamDeclAttr, "parameter array">;
+
 def UndefinedOp : CalyxOp<"undef", [
     NoSideEffect
   ]> {
@@ -29,35 +37,8 @@ def UndefinedOp : CalyxOp<"undef", [
   let assemblyFormat = "attr-dict `:` qualified(type($res))";
 }
 
-def ProgramOp : CalyxContainer<"program", [
-    IsolatedFromAbove,
-    SymbolTable /* contains ComponentOp names. */
-  ]> {
-  let summary = "Calyx Program";
-  let description = [{
-    The "calyx.program" operation represents an overall Calyx
-    program, containing a list of Calyx components. This must
-    include an entry-point component.
-
-      ```mlir
-      calyx.program "main" { ... }
-      ```
-  }];
-  let arguments = (ins StrAttr:$entryPointName);
-
-  let extraClassDeclaration = [{
-    /// Returns the entry-point component into the
-    /// Calyx program.
-    ComponentOp getEntryPointComponent() {
-      return lookupSymbol<ComponentOp>(entryPointName());
-    }
-  }];
-  let assemblyFormat = "$entryPointName $body attr-dict";
-  let hasVerifier = 1;
-}
-
 def ComponentOp : CalyxOp<"component", [
-    HasParent<"ProgramOp">,
+    HasParent<"mlir::ModuleOp">,
     SymbolTable, /* contains Cell names. */
     Symbol,
     FunctionOpInterface,
@@ -122,7 +103,7 @@ def ComponentOp : CalyxOp<"component", [
       }
 
       /// Returns the body of a Calyx component.
-      Block *getBody() {
+      Block *getBodyBlock() {
         Region* region = &getOperation()->getRegion(0);
         assert(region->hasOneBlock() && "The body should have one Block.");
         return &region->front();
@@ -195,6 +176,14 @@ def WiresOp : CalyxContainer<"wires", [
   let extraClassDeclaration = [{
     /// Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
+
+    /// Returns the body of a Calyx component.
+    Block *getBodyBlock() {
+      Region* region = &getOperation()->getRegion(0);
+      assert(region->hasOneBlock() && "The body should have one Block.");
+      return &region->front();
+    }
+
   }];
 
   let hasVerifier = 1;
@@ -228,6 +217,37 @@ def InstanceOp : CalyxCell<"instance", [
     $sym_name `of` $componentName attr-dict (`:` qualified(type($results))^)?
   }];
 }
+
+def PrimitiveOp : CalyxCell<"primitive", [
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>
+  ]> {
+  let summary = "Calyx Primitive Instance";
+  let description = [{
+    Represents an instance of a Calyx primitive.
+
+    ```mlir
+      %c.in, %c.out = calyx.primitive @c of @MyExternalPrimitive : i64, i16
+    ```
+  }];
+
+  let extraClassDeclaration = [{
+    /// Lookup the component for the symbol. This returns null on
+    /// invalid IR.
+    hw::HWModuleExternOp getReferencedPrimitive();
+  }];
+
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<ParamDeclArrayAttr>:$parameters,
+    FlatSymbolRefAttr:$primitiveName
+  );
+  let results = (outs Variadic<AnyType>:$results);
+
+  let assemblyFormat = [{
+    $sym_name `of` $primitiveName``custom<ParameterList>($parameters) attr-dict (`:` qualified(type($results))^)?
+  }];
+}
+
 
 def GroupOp : CalyxOp<"group", [
     HasParent<"WiresOp">,
@@ -264,6 +284,14 @@ def GroupOp : CalyxOp<"group", [
 
     /// Returns the GroupDoneOp for this group.
     GroupDoneOp getDoneOp();
+
+    /// Returns the body of a Calyx component.
+    Block *getBodyBlock() {
+      Region* region = &getOperation()->getRegion(0);
+      assert(region->hasOneBlock() && "The body should have one Block.");
+      return &region->front();
+    }
+
   }];
 
   let regions = (region SizedRegion<1>:$body);
@@ -312,6 +340,13 @@ def CombGroupOp : CalyxOp<"comb_group", [
   let extraClassDeclaration = [{
     // Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
+
+    /// Returns the body of a Calyx component.
+    Block *getBodyBlock() {
+      Region* region = &getOperation()->getRegion(0);
+      assert(region->hasOneBlock() && "The body should have one Block.");
+      return &region->front();
+    }
   }];
 
   let regions = (region SizedRegion<1>:$body);

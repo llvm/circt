@@ -9,6 +9,7 @@
 #include "circt/Dialect/MSFT/MSFTAttributes.h"
 #include "circt/Dialect/MSFT/MSFTDialect.h"
 #include "circt/Dialect/MSFT/MSFTOps.h"
+#include "circt/Dialect/MSFT/MSFTPasses.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/CAPI/IR.h"
 #include "mlir/CAPI/Registration.h"
@@ -26,7 +27,11 @@ using namespace circt::msft;
 
 void mlirMSFTRegisterPasses() {
   mlir::registerCanonicalizerPass();
-  circt::msft::registerMSFTPasses();
+  registerPasses();
+}
+
+void circtMSFTReplaceAllUsesWith(MlirValue value, MlirValue newValue) {
+  unwrap(value).replaceAllUsesWith(unwrap(newValue));
 }
 
 //===----------------------------------------------------------------------===//
@@ -80,7 +85,7 @@ MlirOperation circtMSFTPlacementDBPlace(CirctMSFTPlacementDB db,
     return wrap(unwrap(db)->place(inst, pla, unwrap(subpath), srcLoc));
   if (auto locVec = locAttr.dyn_cast<LocationVectorAttr>())
     return wrap(unwrap(db)->place(inst, locVec, srcLoc));
-  assert(false && "Can only place PDPhysLocationOp and PDRegPhysLocationOp");
+  llvm_unreachable("Can only place PDPhysLocationOp and PDRegPhysLocationOp");
 }
 void circtMSFTPlacementDBRemovePlacement(CirctMSFTPlacementDB db,
                                          MlirOperation clocOp) {
@@ -103,7 +108,7 @@ MlirLogicalResult circtMSFTPlacementDBMovePlacement(CirctMSFTPlacementDB db,
   if (auto regPhysLocOp = dyn_cast<PDRegPhysLocationOp>(locOp))
     return wrap(unwrap(db)->movePlacement(regPhysLocOp,
                                           newLoc.cast<LocationVectorAttr>()));
-  assert(false && "Can only move PDPhysLocationOp and PDRegPhysLocationOp");
+  llvm_unreachable("Can only move PDPhysLocationOp and PDRegPhysLocationOp");
 }
 MlirOperation circtMSFTPlacementDBGetInstanceAt(CirctMSFTPlacementDB db,
                                                 MlirAttribute loc) {
@@ -225,4 +230,20 @@ intptr_t circtMSFTLocationVectorAttrGetNumElements(MlirAttribute attr) {
 MlirAttribute circtMSFTLocationVectorAttrGetElement(MlirAttribute attr,
                                                     intptr_t pos) {
   return wrap(unwrap(attr).cast<LocationVectorAttr>().getLocs()[pos]);
+}
+
+bool circtMSFTAttributeIsAnAppIDAttr(MlirAttribute attr) {
+  return unwrap(attr).isa<AppIDAttr>();
+}
+
+MlirAttribute circtMSFTAppIDAttrGet(MlirContext ctxt, MlirStringRef name,
+                                    uint64_t index) {
+  return wrap(AppIDAttr::get(
+      unwrap(ctxt), StringAttr::get(unwrap(ctxt), unwrap(name)), index));
+}
+MlirStringRef circtMSFTAppIDAttrGetName(MlirAttribute attr) {
+  return wrap(unwrap(attr).cast<AppIDAttr>().getName().getValue());
+}
+uint64_t circtMSFTAppIDAttrGetIndex(MlirAttribute attr) {
+  return unwrap(attr).cast<AppIDAttr>().getIndex();
 }

@@ -128,10 +128,10 @@ static SetVector<Operation *> computeCloneSet(SetVector<Operation *> &roots) {
 
 static StringRef getNameForPort(Value val, ArrayAttr modulePorts) {
   if (auto readinout = dyn_cast_or_null<ReadInOutOp>(val.getDefiningOp())) {
-    if (auto wire = dyn_cast<WireOp>(readinout.input().getDefiningOp()))
-      return wire.name();
-    if (auto reg = dyn_cast<RegOp>(readinout.input().getDefiningOp()))
-      return reg.name();
+    if (auto wire = dyn_cast<WireOp>(readinout.getInput().getDefiningOp()))
+      return wire.getName();
+    if (auto reg = dyn_cast<RegOp>(readinout.getInput().getDefiningOp()))
+      return reg.getName();
   } else if (auto bv = val.dyn_cast<BlockArgument>()) {
     return modulePorts[bv.getArgNumber()].cast<StringAttr>().getValue();
   }
@@ -146,14 +146,32 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
                                          BlockAndValueMapping &cutMap,
                                          StringRef suffix, Attribute path,
                                          Attribute fileName) {
+  // Filter duplicates and track duplicate reads of elements so we don't
+  // make ports for them
+  SmallVector<Value> realInputs;
+  DenseMap<Value, Value> dups; // wire,reg,lhs -> read
+  DenseMap<Value, SmallVector<Value>>
+      realReads; // port mapped read -> dup reads
+  for (auto v : inputs) {
+    if (auto readinout = dyn_cast_or_null<ReadInOutOp>(v.getDefiningOp())) {
+      auto op = readinout.getInput();
+      if (dups.count(op)) {
+        realReads[dups[op]].push_back(v);
+        continue;
+      }
+      dups[op] = v;
+    }
+    realInputs.push_back(v);
+  }
+
   // Create the extracted module right next to the original one.
   OpBuilder b(op);
 
   // Construct the ports, this is just the input Values
   SmallVector<hw::PortInfo> ports;
   {
-    auto srcPorts = op.argNames();
-    for (auto port : llvm::enumerate(inputs)) {
+    auto srcPorts = op.getArgNames();
+    for (auto &port : llvm::enumerate(realInputs)) {
       auto name = getNameForPort(port.value(), srcPorts);
       ports.push_back({b.getStringAttr(name), hw::PortDirection::INPUT,
                        port.value().getType(), port.index()});
@@ -166,25 +184,28 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
       b.getStringAttr(getVerilogModuleNameAttr(op).getValue() + suffix), ports);
   if (path)
     newMod->setAttr("output_file", path);
-  newMod.commentAttr(b.getStringAttr("VCS coverage exclude_file"));
+  newMod.setCommentAttr(b.getStringAttr("VCS coverage exclude_file"));
 
   // Update the mapping from old values to cloned values
-  for (auto port : llvm::enumerate(inputs))
-    cutMap.map(port.value(), newMod.body().getArgument(port.index()));
+  for (auto &port : llvm::enumerate(realInputs)) {
+    cutMap.map(port.value(), newMod.getBody().getArgument(port.index()));
+    for (auto extra : realReads[port.value()])
+      cutMap.map(extra, newMod.getBody().getArgument(port.index()));
+  }
   cutMap.map(op.getBodyBlock(), newMod.getBodyBlock());
 
   // Add an instance in the old module for the extracted module
   b = OpBuilder::atBlockTerminator(op.getBodyBlock());
   auto inst = b.create<hw::InstanceOp>(
-      op.getLoc(), newMod, newMod.getName(), inputs.getArrayRef(), ArrayAttr(),
+      op.getLoc(), newMod, newMod.getName(), realInputs, ArrayAttr(),
       b.getStringAttr(
           ("__ETC_" + getVerilogModuleNameAttr(op).getValue() + suffix).str()));
   inst->setAttr("doNotPrint", b.getBoolAttr(true));
   b = OpBuilder::atBlockEnd(
       &op->getParentOfType<mlir::ModuleOp>()->getRegion(0).front());
 
-  auto bindOp =
-      b.create<sv::BindOp>(op.getLoc(), op.getNameAttr(), inst.inner_symAttr());
+  auto bindOp = b.create<sv::BindOp>(op.getLoc(), op.getNameAttr(),
+                                     inst.getInnerSymAttr());
   if (fileName)
     bindOp->setAttr("output_file", fileName);
   return newMod;
@@ -330,7 +351,7 @@ void SVExtractTestCodeImplPass::runOnOperation() {
   // phase and are not instances that could possibly have extract flags on them.
   auto isAssert = [&symCache](Operation *op) -> bool {
     if (auto inst = dyn_cast<hw::InstanceOp>(op))
-      if (auto mod = symCache.getDefinition(inst.moduleNameAttr()))
+      if (auto mod = symCache.getDefinition(inst.getModuleNameAttr()))
         if (mod->getAttr("firrtl.extract.assert.extra"))
           return true;
 
@@ -338,11 +359,11 @@ void SVExtractTestCodeImplPass::runOnOperation() {
     // ErrorOp. So we have to check message contents whether they encode
     // verifications. See FIRParserAsserts for more details.
     if (auto error = dyn_cast<ErrorOp>(op)) {
-      if (auto message = error.message())
-        return message.getValue().startswith("assert:") ||
-               message.getValue().startswith("Assertion failed") ||
-               message.getValue().startswith("assertNotX:") ||
-               message.getValue().contains("[verif-library-assert]");
+      if (auto message = error.getMessage())
+        return message->startswith("assert:") ||
+               message->startswith("Assertion failed") ||
+               message->startswith("assertNotX:") ||
+               message->contains("[verif-library-assert]");
       return false;
     }
 
@@ -351,14 +372,14 @@ void SVExtractTestCodeImplPass::runOnOperation() {
   };
   auto isAssume = [&symCache](Operation *op) -> bool {
     if (auto inst = dyn_cast<hw::InstanceOp>(op))
-      if (auto mod = symCache.getDefinition(inst.moduleNameAttr()))
+      if (auto mod = symCache.getDefinition(inst.getModuleNameAttr()))
         if (mod->getAttr("firrtl.extract.assume.extra"))
           return true;
     return isa<AssumeOp>(op) || isa<AssumeConcurrentOp>(op);
   };
   auto isCover = [&symCache](Operation *op) -> bool {
     if (auto inst = dyn_cast<hw::InstanceOp>(op))
-      if (auto mod = symCache.getDefinition(inst.moduleNameAttr()))
+      if (auto mod = symCache.getDefinition(inst.getModuleNameAttr()))
         if (mod->getAttr("firrtl.extract.cover.extra"))
           return true;
     return isa<CoverOp>(op) || isa<CoverConcurrentOp>(op);

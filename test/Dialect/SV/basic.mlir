@@ -20,7 +20,7 @@ hw.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
   sv.always posedge  %arg0 {
     sv.ifdef.procedural "SYNTHESIS" {
     } else {
-      %tmp = sv.macro.ref<"PRINTF_COND_">: i1
+      %tmp = sv.macro.ref< "PRINTF_COND_" > : i1
       %tmpx = sv.constantX : i1
       %tmpz = sv.constantZ : i1
       %tmp2 = comb.and %tmp, %tmpx, %tmpz, %arg1 : i1
@@ -185,10 +185,10 @@ hw.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
     }
   }
 
-  // CHECK-NEXT: %combWire = sv.reg svattrs [#sv.attribute<"dont_merge">] : !hw.inout<i1>
-  %combWire = sv.reg svattrs [#sv.attribute<"dont_merge">] : !hw.inout<i1>
-  // CHECK-NEXT: %selReg = sv.reg svattrs [#sv.attribute<"dont_merge">, #sv.attribute<"dont_retime" = "true">] : !hw.inout<i10>
-  %selReg = sv.reg svattrs [#sv.attribute<"dont_merge">, #sv.attribute<"dont_retime" ="true">] : !hw.inout<i10>
+  // CHECK-NEXT: %combWire = sv.reg {sv.attributes = [#sv.attribute<"dont_merge">]} : !hw.inout<i1>
+  %combWire = sv.reg {sv.attributes=[#sv.attribute<"dont_merge">]} : !hw.inout<i1>
+  // CHECK-NEXT: %selReg = sv.reg {sv.attributes = [#sv.attribute<"dont_merge">, #sv.attribute<"dont_retime" = "true">]} : !hw.inout<i10>
+  %selReg = sv.reg {sv.attributes = [#sv.attribute<"dont_merge">, #sv.attribute<"dont_retime" ="true">]} : !hw.inout<i10>
   // CHECK-NEXT: %combWire2 = sv.wire : !hw.inout<i1>
   %combWire2 = sv.wire : !hw.inout<i1>
   // CHECK-NEXT: %regForce = sv.reg : !hw.inout<i1>

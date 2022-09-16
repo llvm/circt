@@ -37,12 +37,13 @@ def InterfaceOp : SVOp<"interface",
   }];
 
   let arguments = (ins
-    SymbolNameAttr:$sym_name
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$comment
   );
 
   let regions = (region SizedRegion<1>:$body);
 
-  let assemblyFormat = "attr-dict $sym_name $body";
+  let assemblyFormat = "$sym_name attr-dict-with-keyword $body";
 
   let skipDefaultBuilders = 1;
   let builders = [
@@ -51,12 +52,12 @@ def InterfaceOp : SVOp<"interface",
   ];
 
   let extraClassDeclaration = [{
-    Block *getBodyBlock() { return &body().front(); }
+    Block *getBodyBlock() { return &getBody().front(); }
 
     ModportType getModportType(::llvm::StringRef);
     InterfaceType getInterfaceType() {
       return InterfaceType::get(getContext(),
-        ::mlir::SymbolRefAttr::get(getContext(), sym_name()));
+        ::mlir::SymbolRefAttr::get(getContext(), getSymName()));
     }
     Type getSignalType(StringRef signalName);
 
@@ -116,6 +117,7 @@ def ModportDirection : I32EnumAttr<"ModportDirection",
   "Defines direction in a modport",
   [ModportDirectionInput, ModportDirectionOutput, ModportDirectionInOut]> {
   let genSpecializedAttr = 0;
+  let cppNamespace = "::circt::sv";
 }
 
 def ModportDirectionAttr : EnumAttr<SVDialect, ModportDirection,
@@ -127,11 +129,15 @@ class SV_Attr<string attrName, string attrMnemonic, list<Trait> traits = []>
 }
 
 def ModportStruct : SV_Attr<"ModportStruct", "mod_port"> {
-	let parameters = (ins
-                    ModportDirectionAttr:$direction,
+  let parameters = (ins
+                    "::circt::sv::ModportDirectionAttr":$direction,
                     "mlir::FlatSymbolRefAttr":$signal);
 
   let assemblyFormat = "`<` struct(params) `>`";
+
+  let builders = [
+    AttrOrTypeBuilder<(ins "ModportDirection":$dir, "mlir::FlatSymbolRefAttr":$sig)>
+  ];
 }
 
 def ModportStructArrayAttr : TypedArrayAttrBase<ModportStruct,

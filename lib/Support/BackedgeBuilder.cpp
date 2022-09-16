@@ -24,7 +24,12 @@ void Backedge::setValue(mlir::Value newValue) {
   assert(value.getType() == newValue.getType());
   assert(!set && "backedge already set to a value!");
   value.replaceAllUsesWith(newValue);
+  value = newValue; // In case the backedge is still referred to after setting.
   set = true;
+
+  // If the backedge is referenced again, it should now point to the updated
+  // value.
+  value = newValue;
 }
 
 BackedgeBuilder::~BackedgeBuilder() { (void)clearOrEmitError(); }
@@ -33,8 +38,10 @@ LogicalResult BackedgeBuilder::clearOrEmitError() {
   unsigned numInUse = 0;
   for (Operation *op : edges) {
     if (!op->use_empty()) {
-      op->emitError("backedge of type `")
-          << op->getResult(0).getType() << "`still in use";
+      auto diag = op->emitError("backedge of type `")
+                  << op->getResult(0).getType() << "`still in use";
+      for (auto user : op->getUsers())
+        diag.attachNote(user->getLoc()) << "used by " << *user;
       ++numInUse;
       continue;
     }

@@ -18,6 +18,8 @@
 
 namespace circt {
 
+std::unique_ptr<mlir::Pass> createTestPrepareForEmissionPass();
+
 std::unique_ptr<mlir::Pass> createExportVerilogPass(llvm::raw_ostream &os);
 std::unique_ptr<mlir::Pass> createExportVerilogPass();
 

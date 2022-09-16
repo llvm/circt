@@ -35,7 +35,6 @@ config.substitutions.append(('%PATH%', config.environment['PATH']))
 config.substitutions.append(('%shlibext', config.llvm_shlib_ext))
 config.substitutions.append(('%shlibdir', config.circt_shlib_dir))
 config.substitutions.append(('%INC%', config.circt_include_dir))
-config.substitutions.append(('%PYTHON%', config.python_executable))
 config.substitutions.append(
     ('%TCL_PATH%', config.circt_src_root + '/build/lib/Bindings/Tcl/'))
 config.substitutions.append(('%CIRCT_SOURCE%', config.circt_src_root))
@@ -79,8 +78,14 @@ tool_dirs = [
 ]
 tools = [
     'circt-opt', 'circt-translate', 'firtool', 'circt-rtl-sim.py',
-    'esi-cosim-runner.py', 'equiv-rtl.sh'
+    'esi-cosim-runner.py', 'equiv-rtl.sh', 'handshake-runner', 'hlstool'
 ]
+
+# Enable python if its path was configured
+if config.python_executable != "":
+  tool_dirs.append(os.path.dirname(config.python_executable))
+  config.available_features.add('python')
+  config.substitutions.append(('%PYTHON%', config.python_executable))
 
 # Enable yosys if it has been detected.
 if config.yosys_path != "":
@@ -149,6 +154,10 @@ if len(ieee_sims) > 1:
   warnings.warn(
       f"You have multiple ieee-sim simulators configured, choosing: {ieee_sims[-1][1]}"
   )
+  # remove all other subsitution entries
+  config.substitutions = list(
+      filter(lambda x: x[0] != '%ieee-sim' or x == ieee_sims[-1],
+             config.substitutions))
 
 # If the ieee-sim was selected to be iverilog in case no other simulators are
 # available, define a feature flag to allow tests which cannot be simulated
@@ -173,4 +182,22 @@ if config.bindings_python_enabled:
 if config.bindings_tcl_enabled:
   config.available_features.add('bindings_tcl')
 
+# Enable clang-tidy if it has been detected.
+if config.clang_tidy_path != "":
+  tool_dirs.append(config.clang_tidy_path)
+  tools.append('clang-tidy')
+  config.available_features.add('clang-tidy')
+
+# Enable systemc if it has been detected.
+if config.have_systemc != "":
+  config.available_features.add('systemc')
+
 llvm_config.add_tool_substitutions(tools, tool_dirs)
+
+# cocotb availability
+try:
+  import cocotb
+  import cocotb_test
+  config.available_features.add('cocotb')
+except ImportError:
+  pass

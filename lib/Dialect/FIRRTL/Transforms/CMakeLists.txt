@@ -13,6 +13,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   GrandCentralTaps.cpp
   GrandCentralSignalMappings.cpp
   IMConstProp.cpp
+  IMDeadCodeElim.cpp
   InferResets.cpp
   InferReadWrite.cpp
   InferWidths.cpp
@@ -21,12 +22,14 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   LowerCHIRRTL.cpp
   LowerMemory.cpp
   LowerTypes.cpp
+  LowerXMR.cpp
   MergeConnections.cpp
   MemToRegOfVec.cpp
   ModuleInliner.cpp
   PrefixModules.cpp
   PrintInstanceGraph.cpp
   PrintNLATable.cpp
+  RandomizeRegisterInit.cpp
   RemoveUnusedPorts.cpp
   SFCCompat.cpp
   WireDFT.cpp

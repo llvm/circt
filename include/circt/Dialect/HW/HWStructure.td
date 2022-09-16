@@ -14,7 +14,9 @@
 /// the module-like operations.
 class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
     HWOp<mnemonic, traits # [
-      DeclareOpInterfaceMethods<HWModuleLike>, FunctionOpInterface, Symbol,
+      DeclareOpInterfaceMethods<HWModuleLike>,
+      DeclareOpInterfaceMethods<HWMutableModuleLike>,
+      FunctionOpInterface, Symbol,
       OpAsmOpInterface, HasParent<"mlir::ModuleOp">]> {
   /// Additional class declarations inside the module op.
   code extraModuleClassDeclaration = ?;
@@ -32,20 +34,6 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
       ArrayRef<unsigned> eraseInputs,
       ArrayRef<unsigned> eraseOutputs
     );
-
-    /// Insert ports into the module. Does not modify the block arguments of the
-    /// module body.
-    void insertPorts(
-      ArrayRef<std::pair<unsigned, PortInfo>> insertInputs,
-      ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs
-    ) { modifyPorts(insertInputs, insertOutputs, {}, {}); }
-
-    /// Erase ports from the module. Does not modify the block arguments of the
-    /// module body.
-    void erasePorts(
-      ArrayRef<unsigned> eraseInputs,
-      ArrayRef<unsigned> eraseOutputs
-    ) { modifyPorts({}, {}, eraseInputs, eraseOutputs); }
   }];
 }
 
@@ -71,6 +59,12 @@ def HWModuleOp : HWModuleOpBase<"module",
                    CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes,
                    CArg<"StringAttr", "{}">:$comment)>,
     OpBuilder<(ins "StringAttr":$name, "const ModulePortInfo &":$ports,
+                   CArg<"ArrayAttr", "{}">:$parameters,
+                   CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes,
+                   CArg<"StringAttr", "{}">:$comment,
+		   CArg<"bool", "true">:$shouldEnsureTerminator)>,
+    OpBuilder<(ins "StringAttr":$name, "const ModulePortInfo &":$ports,
+                   "HWModuleBuilder":$modBuilder,
                    CArg<"ArrayAttr", "{}">:$parameters,
                    CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes,
                    CArg<"StringAttr", "{}">:$comment)>
@@ -109,13 +103,9 @@ def HWModuleOp : HWModuleOpBase<"module",
     void insertOutputs(unsigned index,
                        ArrayRef<std::pair<StringAttr, Value>> outputs);
 
-    /// Appends output ports to the module with the specified names and
-    /// rewrites the output op to return the associated values.
-    void appendOutputs(ArrayRef<std::pair<StringAttr, Value>> outputs);
-
     // TODO(mlir): FunctionLike shouldn't produce a getBody() helper, it is
     // squatting on the name.
-    Block *getBodyBlock() { return &body().front(); }
+    Block *getBodyBlock() { return &getBody().front(); }
 
     // Get the module's symbolic name as StringAttr.
     StringAttr getNameAttr() {
@@ -430,26 +420,26 @@ def InstanceOp : HWOp<"instance", [
 
     /// Change the names of all the input ports.
     void setArgumentNames(ArrayAttr names) {
-      argNamesAttr(names);
+      setArgNamesAttr(names);
     }
 
     /// Change the names of all the result ports.
     void setResultNames(ArrayAttr names) {
-      resultNamesAttr(names);
+      setResultNamesAttr(names);
     }
 
     /// Lookup the module or extmodule for the symbol.  This returns null on
     /// invalid IR.
-    Operation *getReferencedModule(const HWSymbolCache *cache = nullptr);
+    Operation *getReferencedModule(const HWSymbolCache *cache);
 
     /// Get the instances's name.
     StringAttr getName() {
-      return instanceNameAttr();
+      return getInstanceNameAttr();
     }
 
     /// Set the instance's name.
     void setName(StringAttr name) {
-      instanceNameAttr(name);
+      setInstanceNameAttr(name);
     }
 
     //===------------------------------------------------------------------===//
@@ -472,13 +462,13 @@ def OutputOp : HWOp<"output", [Terminator, HasParent<"HWModuleOp">,
     to put on the output ports.
   }];
 
-  let arguments = (ins Variadic<AnyType>:$operands);
+  let arguments = (ins Variadic<AnyType>:$outputs);
 
   let builders = [
     OpBuilder<(ins), "build($_builder, $_state, llvm::None);">
   ];
 
-  let assemblyFormat = "attr-dict ($operands^ `:` qualified(type($operands)))?";
+  let assemblyFormat = "attr-dict ($outputs^ `:` qualified(type($outputs)))?";
 
   let hasVerifier = 1;
 }
@@ -509,9 +499,11 @@ def ProbeOp : HWOp<"probe", []> {
   }];
 
   let arguments = (ins SymbolNameAttr:$inner_sym,
-                       Variadic<AnyType>:$operands);
+                       Variadic<AnyType>:$captured);
   let results = (outs);
 
-  let assemblyFormat = "$inner_sym attr-dict (`,` $operands^ `:` qualified(type($operands)))?";
+  let assemblyFormat = [{
+    $inner_sym attr-dict (`,` $captured^ `:` qualified(type($captured)))?
+  }];
 
 }

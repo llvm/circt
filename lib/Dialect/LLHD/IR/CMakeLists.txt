@@ -18,5 +18,5 @@ add_circt_dialect_library(CIRCTLLHD
   MLIRControlFlowInterfaces
   MLIRInferTypeOpInterface
   MLIRCallInterfaces
-  MLIRFunc
+  MLIRFuncDialect
 )

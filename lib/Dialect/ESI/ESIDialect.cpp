@@ -220,7 +220,7 @@ circt::esi::buildESIWrapper(OpBuilder &b, Operation *pearl,
 
     hw::PortInfo newPort = port;
     if (dataPortMap.find(port.name.getValue()) != dataPortMap.end())
-      newPort.type = esi::ChannelPort::get(ctxt, port.type);
+      newPort.type = esi::ChannelType::get(ctxt, port.type);
 
     if (port.isOutput()) {
       newPort.argNum = outputPortMap.size();
@@ -277,9 +277,9 @@ circt::esi::buildESIWrapper(OpBuilder &b, Operation *pearl,
 
     Backedge ready = bb.get(modBuilder.getI1Type());
     backedges.insert(std::make_pair(esiPort->second.ready.argNum, ready));
-    auto unwrap = modBuilder.create<UnwrapValidReady>(arg, ready);
-    pearlOperands[esiPort->second.data.argNum] = unwrap.rawOutput();
-    pearlOperands[esiPort->second.valid.argNum] = unwrap.valid();
+    auto unwrap = modBuilder.create<UnwrapValidReadyOp>(arg, ready);
+    pearlOperands[esiPort->second.data.argNum] = unwrap.getRawOutput();
+    pearlOperands[esiPort->second.valid.argNum] = unwrap.getValid();
   }
 
   // Iterate through the shell output ports, identify the ESI channels, and
@@ -294,11 +294,11 @@ circt::esi::buildESIWrapper(OpBuilder &b, Operation *pearl,
 
     Backedge data = bb.get(esiPort->second.data.type);
     Backedge valid = bb.get(modBuilder.getI1Type());
-    auto wrap = modBuilder.create<WrapValidReady>(data, valid);
+    auto wrap = modBuilder.create<WrapValidReadyOp>(data, valid);
     backedges.insert(std::make_pair(esiPort->second.data.argNum, data));
     backedges.insert(std::make_pair(esiPort->second.valid.argNum, valid));
-    outputs[port.argNum] = wrap.chanOutput();
-    pearlOperands[esiPort->second.ready.argNum] = wrap.ready();
+    outputs[port.argNum] = wrap.getChanOutput();
+    pearlOperands[esiPort->second.ready.argNum] = wrap.getReady();
   }
 
   // -----
@@ -330,5 +330,4 @@ circt::esi::buildESIWrapper(OpBuilder &b, Operation *pearl,
   return shell;
 }
 
-#include "circt/Dialect/ESI/ESIAttrs.cpp.inc"
 #include "circt/Dialect/ESI/ESIDialect.cpp.inc"

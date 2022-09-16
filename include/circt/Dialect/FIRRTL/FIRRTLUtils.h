@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_FIRRTL_FIRRTLUTILS_H
 
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/Namespace.h"
 #include "mlir/IR/BuiltinOps.h"
 
 namespace circt {
@@ -31,7 +32,14 @@ IntegerAttr getIntZerosAttr(Type type);
 /// Return the module-scoped driver of a value only looking through one connect.
 Value getDriverFromConnect(Value val);
 
-/// Return the module-scoped driver of a value
+/// Return the value that drives another FIRRTL value within module scope.  This
+/// is parameterized by looking through or not through certain constructs.
+Value getValueSource(Value val, bool lookThroughWires, bool lookThroughNodes,
+                     bool lookThroughCasts);
+
+/// Return the value that drives another FIRRTL value within module scope.  This
+/// is parameterized by looking through or not through certain constructs.  This
+/// assumes a single driver and should only be run after `ExpandWhens`.
 Value getModuleScopedDriver(Value val, bool lookThroughWires,
                             bool lookThroughNodes, bool lookThroughCasts);
 
@@ -54,6 +62,16 @@ static bool isModuleScopedDrivenBy(Value val, bool lookThroughWires,
   return isa<A, B...>(op);
 }
 
+/// Walk all the drivers of a value, passing in the connect operations drive the
+/// value. If the value is an aggregate it will find connects to subfields. If
+/// the callback returns false, this function will stop walking.  Returns false
+/// if walking was broken, and true otherwise.
+using WalkDriverCallback =
+    llvm::function_ref<bool(const FieldRef &dst, const FieldRef &src)>;
+bool walkDrivers(Value value, bool lookThroughWires,
+                 bool lookTWalkDriverCallbackhroughNodes, bool lookThroughCasts,
+                 WalkDriverCallback callback);
+
 /// Get the FieldRef from a value.  This will travel backwards to through the
 /// IR, following Subfield and Subindex to find the op which declares the
 /// location.
@@ -65,6 +83,65 @@ std::string getFieldName(const FieldRef &fieldRef, bool &rootKnown);
 
 Value getValueByFieldID(ImplicitLocOpBuilder builder, Value value,
                         unsigned fieldID);
+
+//===----------------------------------------------------------------------===//
+// Inner symbol and InnerRef helpers.
+//===----------------------------------------------------------------------===//
+
+/// Returns an operation's `inner_sym`, adding one if necessary.
+StringAttr
+getOrAddInnerSym(Operation *op, StringRef nameHint, FModuleOp mod,
+                 std::function<ModuleNamespace &(FModuleOp)> getNamespace);
+
+/// Obtain an inner reference to an operation, possibly adding an `inner_sym`
+/// to that operation.
+hw::InnerRefAttr
+getInnerRefTo(Operation *op, StringRef nameHint,
+              std::function<ModuleNamespace &(FModuleOp)> getNamespace);
+
+/// Returns a port's `inner_sym`, adding one if necessary.
+StringAttr
+getOrAddInnerSym(FModuleLike mod, size_t portIdx, StringRef nameHint,
+                 std::function<ModuleNamespace &(FModuleLike)> getNamespace);
+
+/// Obtain an inner reference to a port, possibly adding an `inner_sym`
+/// to the port.
+hw::InnerRefAttr
+getInnerRefTo(FModuleLike mod, size_t portIdx, StringRef nameHint,
+              std::function<ModuleNamespace &(FModuleLike)> getNamespace);
+
+//===----------------------------------------------------------------------===//
+// RefType and BaseType utilities.
+//===----------------------------------------------------------------------===//
+
+/// If reftype, return wrapped base type.  Otherwise (if base), return as-is.
+inline FIRRTLBaseType getBaseType(FIRRTLType type) {
+  return TypeSwitch<FIRRTLType, FIRRTLBaseType>(type)
+      .Case<FIRRTLBaseType>([](auto base) { return base; })
+      .Case<RefType>([](auto ref) { return ref.getType(); });
+}
+
+/// Return a FIRRTLType with its base type component mutated by the given
+/// function. (i.e., ref<T> -> ref<f(T)> and T -> f(T)).
+inline FIRRTLType mapBaseType(FIRRTLType type,
+                              function_ref<FIRRTLBaseType(FIRRTLBaseType)> fn) {
+  return TypeSwitch<FIRRTLType, FIRRTLType>(type)
+      .Case<FIRRTLBaseType>([&](auto base) { return fn(base); })
+      .Case<RefType>([&](auto ref) { return RefType::get(fn(ref.getType())); });
+}
+
+//===----------------------------------------------------------------------===//
+// Parser-related utilities
+//
+// These cannot always be relegated to the parser and sometimes need to be
+// available for passes.  This has specifically come up for Annotation lowering
+// where there is FIRRTL stuff that needs to be parsed out of an annotation.
+//===----------------------------------------------------------------------===//
+
+/// Parse a string that may encode a FIRRTL location into a LocationAttr.
+std::pair<bool, Optional<mlir::LocationAttr>> maybeStringToLocation(
+    StringRef spelling, bool skipParsing, StringAttr &locatorFilenameCache,
+    FileLineColLoc &fileLineColLocCache, MLIRContext *context);
 
 } // namespace firrtl
 } // namespace circt
