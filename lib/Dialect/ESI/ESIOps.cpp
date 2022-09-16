@@ -323,13 +323,15 @@ LogicalResult validateRequest(ServiceDeclOpInterface svc, OpType req) {
   return success();
 }
 
-LogicalResult CustomServiceDeclOp::validateRequest(Operation *reqOp) {
+LogicalResult
+circt::esi::validateServiceConnectionRequest(ServiceDeclOpInterface decl,
+                                             Operation *reqOp) {
   if (auto req = dyn_cast<RequestToClientConnectionOp>(reqOp))
-    return ::validateRequest(*this, req);
+    return ::validateRequest(decl, req);
   if (auto req = dyn_cast<RequestToServerConnectionOp>(reqOp))
-    return ::validateRequest(*this, req);
+    return ::validateRequest(decl, req);
   if (auto req = dyn_cast<RequestInOutChannelOp>(reqOp))
-    return ::validateRequest(*this, req);
+    return ::validateRequest(decl, req);
   assert(false && "Did not recognize request op");
 }
 

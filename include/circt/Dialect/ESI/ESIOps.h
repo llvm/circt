@@ -23,11 +23,19 @@
 
 namespace circt {
 namespace esi {
+/// Describes a service port. In the unidirection case, either (but not both)
+/// type fields will be null.
 struct ServicePortInfo {
   StringAttr name;
   Type toServerType;
   Type toClientType;
 };
+
+class ServiceDeclOpInterface;
+/// Validate a connection request against a service decl by comparing against
+/// the port list.
+LogicalResult validateServiceConnectionRequest(ServiceDeclOpInterface decl,
+                                               Operation *reqOp);
 } // namespace esi
 } // namespace circt
 

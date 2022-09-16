@@ -56,7 +56,8 @@ def ChannelOpInterface : OpInterface<"ChannelOpInterface"> {
 def ServiceDeclOpInterface : OpInterface<"ServiceDeclOpInterface"> {
   let cppNamespace = "circt::esi";
   let description = [{
-    Allows multiple ops to be service declarations.
+    Any op which represents a service declaration should implement this
+    interface.
   }];
 
   let methods = [
@@ -67,7 +68,10 @@ def ServiceDeclOpInterface : OpInterface<"ServiceDeclOpInterface"> {
     >,
     InterfaceMethod<
         "Validate this service request against this service decl.",
-        "mlir::LogicalResult", "validateRequest", (ins "mlir::Operation*":$req)
-    >
+        "mlir::LogicalResult", "validateRequest", (ins "mlir::Operation*":$req),
+        /*methodBody=*/"",
+        /*defaultImplementation=*/[{
+          return circt::esi::validateServiceConnectionRequest($_op, req);
+        }]>,
   ];
 }
