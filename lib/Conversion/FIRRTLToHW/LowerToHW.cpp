@@ -1009,6 +1009,8 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
   auto parameters = getHWParameters(oldModule, /*ignoreValues=*/true);
   auto newModule = builder.create<hw::HWModuleExternOp>(
       oldModule.getLoc(), nameAttr, ports, verilogName, parameters);
+  SymbolTable::setSymbolVisibility(newModule,
+                                   SymbolTable::getSymbolVisibility(oldModule));
 
   bool hasOutputPort =
       llvm::any_of(firrtlPorts, [&](auto p) { return p.isOutput(); });
@@ -2429,7 +2431,13 @@ LogicalResult FIRRTLLowering::visitExpr(SubaccessOp op) {
 
   auto resultType = lowerType(op->getResult(0).getType());
   Value value = getPossiblyInoutLoweredValue(op.getInput());
-  Value valueIdx = getLoweredValue(op.getIndex());
+  Value valueIdx = getLoweredAndExtOrTruncValue(
+      op.getIndex(),
+      UIntType::get(
+          op.getContext(),
+          getBitWidthFromVectorSize(
+              op.getInput().getType().cast<FVectorType>().getNumElements())));
+
   if (!resultType || !value || !valueIdx) {
     op.emitError() << "input lowering failed";
     return failure();
@@ -2573,7 +2581,9 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
 
   // Add symbol if DontTouch annotation present.
   auto symName = getInnerSymName(op);
-  if (AnnotationSet::removeAnnotations(op, dontTouchAnnoClass) && !symName)
+  if ((AnnotationSet::removeAnnotations(op, dontTouchAnnoClass) ||
+       op.getNameKind() == NameKindEnum::InterestingName) &&
+      !symName)
     symName = op.getNameAttr();
 
   // Create a reg op, wiring itself to its input.
@@ -2613,7 +2623,9 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
     return failure();
 
   auto symName = getInnerSymName(op);
-  if (AnnotationSet::removeAnnotations(op, dontTouchAnnoClass) && !symName)
+  if ((AnnotationSet::removeAnnotations(op, dontTouchAnnoClass) ||
+       op.getNameKind() == NameKindEnum::InterestingName) &&
+      !symName)
     symName = op.getNameAttr();
 
   // Create a reg op, wiring itself to its input.
@@ -3206,6 +3218,8 @@ LogicalResult FIRRTLLowering::lowerDivLikeOp(Operation *op) {
     result = builder.createOrFold<SignedOp>(lhs, rhs, true);
   else
     result = builder.createOrFold<UnsignedOp>(lhs, rhs, true);
+
+  tryCopyName(result.getDefiningOp(), op);
 
   if (resultType == opType)
     return setLowering(op->getResult(0), result);

@@ -213,17 +213,28 @@ static void lowerAlwaysInlineOperation(Operation *op) {
 }
 
 // Find a nearest insertion point where logic op can be declared.
-// Basically this function returns the first operation that is not logic op
-// within the same block. "automatic logic" must be declared at beginning of
-// statements.
+// Logic ops are emitted as "automatic logic" in procedural regions, but
+// they must be declared at beginning of blocks.
 static std::pair<Block *, Block::iterator>
 findLogicOpInsertionPoint(Operation *op) {
   // We have to skip `ifdef.procedural` because it is a just macro.
   if (isa<IfDefProceduralOp>(op->getParentOp()))
     return findLogicOpInsertionPoint(op->getParentOp());
-  return {op->getBlock(),
-          std::find_if(op->getBlock()->begin(), op->getIterator(),
-                       [](Operation &it) { return !isa<LogicOp>(&it); })};
+  return {op->getBlock(), op->getBlock()->begin()};
+}
+
+// Move the logic op to the givein insertion point. Modify the insertion point
+// if necessary.
+static void setLogicOpToValidInsertionPoint(
+    LogicOp logicOp, std::pair<Block *, Block::iterator> &insertionPoint) {
+  // If the logic op is already located at the given point, increment the
+  // iterator to keep the order of logic operations in the block.
+  if (insertionPoint.second == logicOp->getIterator()) {
+    ++insertionPoint.second;
+    return;
+  }
+  // Otherwise, move the op to the insertion point.
+  logicOp->moveBefore(insertionPoint.first, insertionPoint.second);
 }
 
 /// Emit an explicit wire or logic to assign operation's result. This function
@@ -232,9 +243,10 @@ findLogicOpInsertionPoint(Operation *op) {
 /// a temporary wire will be created at the beggining of the block. Otherwise,
 /// a wire is created just after op's position so that we can inline the
 /// assignement into its wire declaration.
-static void lowerUsersToTemporaryWire(Operation &op,
-                                      DenseMap<Value, size_t> &operandMap,
-                                      bool emitWireAtBlockBegin = false) {
+static void lowerUsersToTemporaryWire(
+    Operation &op, DenseMap<Value, size_t> &operandMap,
+    std::pair<Block *, Block::iterator> &logicOpInsertionPoint,
+    bool emitWireAtBlockBegin = false) {
   Block *block = op.getBlock();
   auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), block);
   bool isProceduralRegion = op.getParentOp()->hasTrait<ProceduralRegion>();
@@ -264,10 +276,10 @@ static void lowerUsersToTemporaryWire(Operation &op,
     // Move the temporary to the appropriate place.
     if (isProceduralRegion) {
       // In a procedural region, "automatic logic" is allowed only at the
-      // beggining of statements. `findLogicOpInsertionPoint` returns a nearst
-      // insertion point.
-      auto [block, it] = findLogicOpInsertionPoint(&op);
-      newWire.getDefiningOp()->moveBefore(block, it);
+      // beggining of statements. Hence, move the op to the insertion point we
+      // are managing locally.
+      setLogicOpToValidInsertionPoint(newWire.getDefiningOp<LogicOp>(),
+                                      logicOpInsertionPoint);
     } else if (!emitWireAtBlockBegin) {
       // `emitWireAtBlockBegin` is intendend to be used for resovling cyclic
       // dependencies. So when `emitWireAtBlockBegin` is true, we keep the
@@ -296,10 +308,12 @@ static void lowerUsersToTemporaryWire(Operation &op,
 
 /// Lower a variadic fully-associative operation into an expression tree.  This
 /// enables long-line splitting to work with them.
-static Value lowerFullyAssociativeOp(Operation &op, OperandRange operands,
-                                     SmallVector<Operation *> &newOps,
-                                     DenseMap<Value, size_t> &operandMap,
-                                     const LoweringOptions &options) {
+/// NOLINTNEXTLINE(misc-no-recursion)
+static Value lowerFullyAssociativeOp(
+    Operation &op, OperandRange operands, SmallVector<Operation *> &newOps,
+    DenseMap<Value, size_t> &operandMap,
+    std::pair<Block *, Block::iterator> &logicOpInsertionPoint,
+    const LoweringOptions &options) {
   // save the top level name
   auto name = op.getAttr("sv.namehint");
   if (name)
@@ -318,18 +332,20 @@ static Value lowerFullyAssociativeOp(Operation &op, OperandRange operands,
   default:
     auto firstHalf = operands.size() / 2;
     lhs = lowerFullyAssociativeOp(op, operands.take_front(firstHalf), newOps,
-                                  operandMap, options);
+                                  operandMap, logicOpInsertionPoint, options);
     rhs = lowerFullyAssociativeOp(op, operands.drop_front(firstHalf), newOps,
-                                  operandMap, options);
+                                  operandMap, logicOpInsertionPoint, options);
     break;
   }
 
   if (operandMap[lhs] + operandMap[rhs] >
       options.maximumNumberOfVariadicOperands) {
     if (lhs.getDefiningOp())
-      lowerUsersToTemporaryWire(*lhs.getDefiningOp(), operandMap);
+      lowerUsersToTemporaryWire(*lhs.getDefiningOp(), operandMap,
+                                logicOpInsertionPoint);
     if (rhs.getDefiningOp())
-      lowerUsersToTemporaryWire(*rhs.getDefiningOp(), operandMap);
+      lowerUsersToTemporaryWire(*rhs.getDefiningOp(), operandMap,
+                                logicOpInsertionPoint);
   }
 
   OperationState state(op.getLoc(), op.getName());
@@ -546,6 +562,12 @@ void ExportVerilog::prepareHWModule(Block &block,
 
   // True if these operations are in a procedural region.
   bool isProceduralRegion = block.getParentOp()->hasTrait<ProceduralRegion>();
+
+  // This keeps tracks of an insertion point of logic op.
+  std::pair<Block *, Block::iterator> logicOpInsertionPoint =
+      block.empty() ? std::make_pair<Block *, Block::iterator>(nullptr, {})
+                    : findLogicOpInsertionPoint(&block.front());
+
   for (Block::iterator opIterator = block.begin(), e = block.end();
        opIterator != e;) {
     auto &op = *opIterator++;
@@ -580,9 +602,10 @@ void ExportVerilog::prepareHWModule(Block &block,
         auto *parentOp = findParentInNonProceduralRegion(&op);
         op.moveBefore(parentOp);
       } else {
-        // Otherwise, move the logic op to the beggining of the block.
-        auto [block, it] = findLogicOpInsertionPoint(&op);
-        op.moveBefore(block, it);
+        // Otherwise, move the logic op to the point specified by
+        // `logicOpInsertionPoint`.
+        setLogicOpToValidInsertionPoint(cast<LogicOp>(&op),
+                                        logicOpInsertionPoint);
       }
     }
 
@@ -667,7 +690,7 @@ void ExportVerilog::prepareHWModule(Block &block,
             // If op is moved to a non-procedural region, create a temporary
             // wire.
             if (!op.getParentOp()->hasTrait<ProceduralRegion>())
-              lowerUsersToTemporaryWire(op, operandMap);
+              lowerUsersToTemporaryWire(op, operandMap, logicOpInsertionPoint);
 
             // If we're in a procedural region, we move on to the next op in the
             // block. The expression splitting and canonicalization below will
@@ -680,7 +703,7 @@ void ExportVerilog::prepareHWModule(Block &block,
           // If `disallowLocalVariables` is not enabled, we can spill the
           // expression to automatic logic declarations even when the op is in a
           // procedural region.
-          lowerUsersToTemporaryWire(op, operandMap);
+          lowerUsersToTemporaryWire(op, operandMap, logicOpInsertionPoint);
         }
       }
     }
@@ -698,8 +721,9 @@ void ExportVerilog::prepareHWModule(Block &block,
          (op.getAttrs().size() == 1 && op.hasAttr("sv.namehint")))) {
       // Lower this operation to a balanced binary tree of the same operation.
       SmallVector<Operation *> newOps;
-      auto result = lowerFullyAssociativeOp(op, op.getOperands(), newOps,
-                                            operandMap, options);
+      auto result =
+          lowerFullyAssociativeOp(op, op.getOperands(), newOps, operandMap,
+                                  logicOpInsertionPoint, options);
       operandMap.erase(op.getResult(0));
       op.getResult(0).replaceAllUsesWith(result);
       op.erase();
@@ -784,7 +808,8 @@ void ExportVerilog::prepareHWModule(Block &block,
       }
 
       // Otherwise, we need to lower this to a wire to resolve this.
-      lowerUsersToTemporaryWire(op, operandMap, /*emitWireAtBlockBegin=*/true);
+      lowerUsersToTemporaryWire(op, operandMap, logicOpInsertionPoint,
+                                /*emitWireAtBlockBegin=*/true);
     }
   }
 }

@@ -87,13 +87,6 @@ firrtl.circuit "TopLevel" {
     firrtl.connect %out2, %3 : !firrtl.sint<64>, !firrtl.sint<64>
   }
 
-  // CHECK-LABEL: firrtl.module private @Uniquification
-  // CHECK-SAME: in %[[FLATTENED_ARG:a_b]]: [[FLATTENED_TYPE:!firrtl.uint<1>]],
-  // CHECK-NOT: %[[FLATTENED_ARG]]
-  // CHECK-SAME: in %[[RENAMED_ARG:a_b.+]]: [[RENAMED_TYPE:!firrtl.uint<1>]]
-  // CHECK-SAME: {portNames = ["a_b", "a_b"]}
-  firrtl.module private @Uniquification(in %a: !firrtl.bundle<b: uint<1>>, in %a_b: !firrtl.uint<1>) {
-  }
 
   // CHECK-LABEL: firrtl.module private @Top
   firrtl.module private @Top(in %in : !firrtl.bundle<a: uint<1>, b: uint<1>>,

@@ -112,21 +112,11 @@ static FlatSymbolRefAttr buildNLA(const AnnoPathValue &target,
 
   insts.push_back(
       FlatSymbolRefAttr::get(target.ref.getModule().moduleNameAttr()));
-
   auto instAttr = ArrayAttr::get(state.circuit.getContext(), insts);
-
-  // Re-use NLA for this path if already created.
-  auto it = state.instPathToNLAMap.find(instAttr);
-  if (it != state.instPathToNLAMap.end())
-    return it->second;
-
-  // Create the NLA
   auto nla = b.create<HierPathOp>(state.circuit.getLoc(), "nla", instAttr);
   state.symTbl.insert(nla);
   nla.setVisibility(SymbolTable::Visibility::Private);
-  auto sym = FlatSymbolRefAttr::get(nla);
-  state.instPathToNLAMap.insert({instAttr, sym});
-  return sym;
+  return FlatSymbolRefAttr::get(nla);
 }
 
 /// Scatter breadcrumb annotations corresponding to non-local annotations

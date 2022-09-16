@@ -121,7 +121,7 @@ def MemOp : ReferableDeclOp<"mem"> {
          PortAnnotationsAttr:$portAnnotations,
          OptionalAttr<InnerSymAttr>:$inner_sym,
          OptionalAttr<UI32Attr>:$groupID);
-  let results = (outs Variadic<FIRRTLBaseType>:$results);
+  let results = (outs Variadic<FIRRTLType>:$results);
 
   let assemblyFormat = [{
     (`sym` $inner_sym^)? custom<NameKind>($nameKind)
@@ -151,12 +151,12 @@ def MemOp : ReferableDeclOp<"mem"> {
   let hasCanonicalizeMethod = true;
 
   let extraClassDeclaration = [{
-    enum class PortKind { Read, Write, ReadWrite };
+    enum class PortKind { Read, Write, ReadWrite, Debug };
 
     using NamedPort = std::pair<StringAttr, MemOp::PortKind>;
 
     /// Return the type of a port given the memory depth, type, and kind
-    static BundleType getTypeForPort(uint64_t depth, FIRRTLBaseType dataType,
+    static FIRRTLType getTypeForPort(uint64_t depth, FIRRTLBaseType dataType,
                                      PortKind portKind, size_t maskBits = 0);
 
     /// Return the name and kind of ports supported by this memory.
@@ -195,7 +195,8 @@ def MemOp : ReferableDeclOp<"mem"> {
     void setAllPortAnnotations(ArrayRef<Attribute> annotations);
 
     /// Get the number of read ports, write ports and read write ports.
-    void getNumPorts(size_t &numReadPorts, size_t &numWritePorts, size_t &numReadWritePorts);
+    void getNumPorts(size_t &numReadPorts, size_t &numWritePorts,
+                      size_t &numReadWritePorts, size_t &numDbgsPorts);
 
     // Extract the relevant attributes from the MemOp and return a FirMemory object.
     FirMemory getSummary();

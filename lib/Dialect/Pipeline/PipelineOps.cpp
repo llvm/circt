@@ -86,10 +86,10 @@ bool PipelineOp::isLatencyInsensitive() {
 
 LogicalResult ReturnOp::verify() {
   PipelineOp parent = getOperation()->getParentOfType<PipelineOp>();
-  if (operands().size() != parent.getResults().size())
+  if (getOutputs().size() != parent.getResults().size())
     return emitOpError("expected ")
            << parent.getResults().size() << " return values, got "
-           << operands().size() << ".";
+           << getOutputs().size() << ".";
 
   bool isLatencyInsensitive = parent.isLatencyInsensitive();
   for (size_t i = 0; i < parent.getResults().size(); i++) {
@@ -294,6 +294,17 @@ void PipelineWhileOp::build(OpBuilder &builder, OperationState &state,
   builder.setInsertionPointToEnd(&stagesBlock);
   builder.create<PipelineTerminatorOp>(builder.getUnknownLoc(), ValueRange(),
                                        ValueRange());
+}
+
+//===----------------------------------------------------------------------===//
+// PipelineStageRegisterOp
+//===----------------------------------------------------------------------===//
+
+void PipelineStageRegisterOp::build(OpBuilder &builder, OperationState &state,
+                                    Value when, ValueRange regIns) {
+  PipelineStageRegisterOp::build(builder, state, regIns.getTypes(), regIns,
+                                 when);
+  state.addTypes({when.getType()});
 }
 
 //===----------------------------------------------------------------------===//

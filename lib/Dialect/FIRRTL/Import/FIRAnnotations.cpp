@@ -42,9 +42,14 @@ static Attribute convertJSONToAttribute(MLIRContext *context,
     // that the Scala FIRRTL Compiler doesn't know about.
     auto unquotedValue = json::parse(*a);
     auto err = unquotedValue.takeError();
-    // If this parsed without an error, then it's more JSON and recurse on
-    // that.
-    if (!err)
+    // If this parsed without an error and we didn't just unquote a number, then
+    // it's more JSON and recurse on that.
+    //
+    // We intentionally do not want to unquote a number as, in JSON, the string
+    // "0" is different from the number 0.  If we conflate these, then later
+    // expectations about annotation structure may be broken.  I.e., an
+    // annotation expecting a string may see a number.
+    if (!err && !unquotedValue.get().getAsNumber())
       return convertJSONToAttribute(context, unquotedValue.get(), p);
     // If there was an error, then swallow it and handle this as a string.
     handleAllErrors(std::move(err), [&](const json::ParseError &a) {});

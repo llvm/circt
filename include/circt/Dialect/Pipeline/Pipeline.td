@@ -177,6 +177,8 @@ def PipelineStageRegisterOp : Op<Pipeline_Dialect, "stage.register", [
   let arguments = (ins Variadic<AnyType>:$regIns, I1:$when);
   let results = (outs Variadic<AnyType>:$regOuts, I1:$valid);
 
+  let builders = [OpBuilder<(ins "mlir::Value":$when, "mlir::ValueRange":$regIns)>];
+
   let assemblyFormat = [{
     `when` $when (`regs` $regIns^)? attr-dict (`:` type($regIns)^)?
   }];
@@ -197,9 +199,9 @@ def ReturnOp : Op<Pipeline_Dialect, "return", [Terminator]> {
   }];
 
   let hasVerifier = 1;
-  let arguments = (ins Variadic<AnyType>: $operands, I1:$valid);
+  let arguments = (ins Variadic<AnyType>:$outputs, I1:$valid);
   let builders = [OpBuilder<(ins), [{ return; }]>];
-  let assemblyFormat = [{ ($operands^)? `valid` $valid attr-dict (`:` type($operands)^)? }];
+  let assemblyFormat = [{ ($outputs^)? `valid` $valid attr-dict (`:` type($outputs)^)? }];
 }
 
 def PipelineWhileOp : Op<Pipeline_Dialect, "while", []> {

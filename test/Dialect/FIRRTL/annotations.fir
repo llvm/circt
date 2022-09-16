@@ -47,6 +47,18 @@ circuit Foo: %[[{"class":"circt.testNT","a":"{\"b\":null}"}]]
     ; CHECK: firrtl.circuit "Foo" attributes {rawAnnotations = [{a = {b}, class = "circt.testNT"}]}
 
 ; // -----
+; JSON with a JSON-quoted number should stay as a number.
+circuit Foo: %[[{"class":"circt.testNT","a":"0","b":0,"c":"\"0\""}]]
+  module Foo:
+    skip
+
+    ; CHECK-LABEL: module {
+    ; CHECK:         firrtl.circuit "Foo"
+    ; CHECK-SAME:      a = "0"
+    ; CHECK-SAME:      b = 0
+    ; CHECK-SAME:      c = "0"
+
+; // -----
 ;
 ; A numeric "class" shouldn't crash the parser.
 

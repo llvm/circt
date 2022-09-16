@@ -20,3 +20,5 @@ add_circt_dialect_library(CIRCTPipelineOps
   DEPENDS
   MLIRPipelineIncGen
 )
+
+add_subdirectory(Transforms)

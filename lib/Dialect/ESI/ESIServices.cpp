@@ -513,10 +513,7 @@ LogicalResult ESIConnectServicesPass::surfaceReqs(
   return success();
 }
 
-namespace circt {
-namespace esi {
-std::unique_ptr<OperationPass<ModuleOp>> createESIConnectServicesPass() {
+std::unique_ptr<OperationPass<ModuleOp>>
+circt::esi::createESIConnectServicesPass() {
   return std::make_unique<ESIConnectServicesPass>();
 }
-} // namespace esi
-} // namespace circt

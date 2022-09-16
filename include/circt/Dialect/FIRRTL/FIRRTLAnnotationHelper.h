@@ -91,7 +91,7 @@ struct AnnoTargetCache {
     TypeSwitch<Operation *>(op)
         .Case<InstanceOp, MemOp, NodeOp, RegOp, RegResetOp, WireOp,
               chirrtl::CombMemOp, chirrtl::SeqMemOp, chirrtl::MemoryPortOp,
-              PrintFOp>([&](auto op) {
+              chirrtl::MemoryDebugPortOp, PrintFOp>([&](auto op) {
           // To be safe, check attribute and non-empty name before adding.
           if (auto name = op.getNameAttr(); name && !name.getValue().empty())
             targets.insert({name, OpAnnoTarget(op)});
@@ -206,7 +206,6 @@ struct ApplyState {
   CircuitTargetCache targetCaches;
   AddToWorklistFn addToWorklistFn;
   InstancePathCache &instancePathCache;
-  DenseMap<Attribute, FlatSymbolRefAttr> instPathToNLAMap;
 
   ModuleNamespace &getNamespace(FModuleLike module) {
     auto &ptr = namespaces[module];

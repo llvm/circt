@@ -207,4 +207,40 @@ def MemoryPortAccessOp : CHIRRTLOp<"memoryport.access"> {
   }];
 }
 
+def MemoryDebugPortOp : CHIRRTLOp<"debugport", [InferTypeOpInterface,
+      HasCustomSSAName]> {
+  let summary = "Declares a memory debug port on a memory";
+
+  let summary = "Defines a debug memory port on CHIRRTL memory";
+  let description = [{
+    This operation defines a new debug memory port on a `combmem`CHISEL.
+    `data` is the data returned from the memory port.
+  }];
+
+  let arguments = (ins CMemoryType:$memory,
+                    StrAttr:$name, AnnotationArrayAttr:$annotations);
+
+  let results = (outs RefType:$data);
+
+  let assemblyFormat = [{
+    $memory custom<MemoryDebugPortOp>(attr-dict) `:`
+       functional-type(operands, results)
+  }];
+
+  let builders = [
+    OpBuilder<(ins "::mlir::Type":$dataType, "::mlir::Value":$memory,
+                   CArg<"StringRef", "{}">:$name,
+                   CArg<"ArrayRef<Attribute>","{}">:$annotations)>
+  ];
+
+  let extraClassDeclaration = [{
+    /// Infer the return types of this operation.
+    static LogicalResult inferReturnTypes(MLIRContext *context,
+                                          Optional<Location> loc,
+                                          ValueRange operands,
+                                          DictionaryAttr attrs,
+                                          mlir::RegionRange regions,
+                                          SmallVectorImpl<Type> &results);
+  }];
+}
 #endif // CHIRRTL_TD
