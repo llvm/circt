@@ -1632,13 +1632,16 @@ void MemOp::setAllPortAnnotations(ArrayRef<Attribute> annotations) {
 
 // Get the number of read, write and read-write ports.
 void MemOp::getNumPorts(size_t &numReadPorts, size_t &numWritePorts,
-                        size_t &numReadWritePorts) {
+                        size_t &numReadWritePorts, size_t &numDbgsPorts) {
   numReadPorts = 0;
   numWritePorts = 0;
   numReadWritePorts = 0;
+  numDbgsPorts = 0;
   for (size_t i = 0, e = getNumResults(); i != e; ++i) {
     auto portKind = getPortKind(i);
-    if (portKind == MemOp::PortKind::Read)
+    if (portKind == MemOp::PortKind::Debug)
+      ++numDbgsPorts;
+    else if (portKind == MemOp::PortKind::Read)
       ++numReadPorts;
     else if (portKind == MemOp::PortKind::Write) {
       ++numWritePorts;
@@ -1877,7 +1880,8 @@ size_t MemOp::getMaskBits() {
     if (res.getType().isa<RefType>())
       continue;
     auto firstPortType = res.getType().cast<FIRRTLBaseType>();
-    if (getMemPortKindFromType(firstPortType) == PortKind::Read)
+    if (getMemPortKindFromType(firstPortType) == PortKind::Read ||
+        getMemPortKindFromType(firstPortType) == PortKind::Debug)
       continue;
 
     FIRRTLBaseType mType;
