@@ -137,10 +137,10 @@ def RequestToServerConnectionOp : ESI_Op<"service.req.to_server", [
   let summary = "Request a connection to send data";
 
   let arguments = (ins HWInnerRefAttr:$servicePort,
-                       ChannelType:$sending, StrArrayAttr:$clientNamePath);
+                       ChannelType:$toServer, StrArrayAttr:$clientNamePath);
   let assemblyFormat = [{
-    $sending `->` $servicePort `(` $clientNamePath `)`
-      attr-dict `:` qualified(type($sending))
+    $toServer `->` $servicePort `(` $clientNamePath `)`
+      attr-dict `:` qualified(type($toServer))
   }];
 }
 
@@ -150,10 +150,10 @@ def RequestToClientConnectionOp : ESI_Op<"service.req.to_client", [
 
   let arguments = (ins HWInnerRefAttr:$servicePort,
                        StrArrayAttr:$clientNamePath);
-  let results = (outs ChannelType:$receiving);
+  let results = (outs ChannelType:$toClient);
   let assemblyFormat = [{
     $servicePort `(` $clientNamePath `)`
-      attr-dict `:` qualified(type($receiving))
+      attr-dict `:` qualified(type($toClient))
   }];
 }
 
@@ -162,13 +162,13 @@ def RequestInOutChannelOp : ESI_Op<"service.req.inout", [
   let summary = "Request a bidirectional channel";
 
   let arguments = (ins HWInnerRefAttr:$servicePort,
-                       ChannelType:$sending,
+                       ChannelType:$toServer,
                        StrArrayAttr:$clientNamePath);
-  let results = (outs ChannelType:$receiving);
+  let results = (outs ChannelType:$toClient);
 
   let assemblyFormat = [{
-    $sending `->` $servicePort `(` $clientNamePath `)` attr-dict `:`
-      qualified(type($sending)) `->` qualified(type($receiving))
+    $toServer `->` $servicePort `(` $clientNamePath `)` attr-dict `:`
+      qualified(type($toServer)) `->` qualified(type($toClient))
   }];
 }
 

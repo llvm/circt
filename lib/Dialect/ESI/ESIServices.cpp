@@ -89,14 +89,14 @@ static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp req) {
 
     Value toServerValue;
     if (toServer)
-      toServerValue = argMap.lookup(toServer.getSending());
+      toServerValue = argMap.lookup(toServer.getToServer());
     else
       toServerValue =
           b.create<NullSourceOp>(loc, ChannelType::get(ctxt, b.getI1Type()));
 
     Type toClientType;
     if (toClient)
-      toClientType = toClient.getReceiving().getType();
+      toClientType = toClient.getToClient().getType();
     else
       toClientType = ChannelType::get(ctxt, b.getI1Type());
 
@@ -208,12 +208,12 @@ LogicalResult ESIConnectServicesPass::process(hw::HWMutableModuleLike mod) {
   mod.walk([&](RequestInOutChannelOp reqInOut) {
     ImplicitLocOpBuilder b(reqInOut.getLoc(), reqInOut);
     b.create<RequestToServerConnectionOp>(reqInOut.getServicePortAttr(),
-                                          reqInOut.getSending(),
+                                          reqInOut.getToServer(),
                                           reqInOut.getClientNamePathAttr());
     auto toClientReq = b.create<RequestToClientConnectionOp>(
-        reqInOut.getReceiving().getType(), reqInOut.getServicePortAttr(),
+        reqInOut.getToClient().getType(), reqInOut.getServicePortAttr(),
         reqInOut.getClientNamePathAttr());
-    reqInOut.getReceiving().replaceAllUsesWith(toClientReq.getReceiving());
+    reqInOut.getToClient().replaceAllUsesWith(toClientReq.getToClient());
     reqInOut.erase();
   });
 
@@ -307,13 +307,13 @@ static void emitServiceMetadata(ServiceImplementReqOp implReqOp) {
       clientNamePath = toServer.getClientNamePathAttr();
       servicePort = toServer.getServicePortAttr();
       clientAttrs.push_back(b.getNamedAttr(
-          "to_server_type", TypeAttr::get(toServer.getSending().getType())));
+          "to_server_type", TypeAttr::get(toServer.getToServer().getType())));
     }
     if (toClient) {
       clientNamePath = toClient.getClientNamePathAttr();
       servicePort = toClient.getServicePortAttr();
       clientAttrs.push_back(b.getNamedAttr(
-          "to_client_type", TypeAttr::get(toClient.getReceiving().getType())));
+          "to_client_type", TypeAttr::get(toClient.getToClient().getType())));
     }
 
     clientAttrs.push_back(b.getNamedAttr("port", servicePort));
@@ -338,16 +338,16 @@ LogicalResult ESIConnectServicesPass::replaceInst(ServiceInstanceOp instOp,
   SmallVector<Type, 8> resultTypes(instOp.getResultTypes().begin(),
                                    instOp.getResultTypes().end());
   for (auto toClient : portReqs->getOps<RequestToClientConnectionOp>())
-    resultTypes.push_back(toClient.getReceiving().getType());
+    resultTypes.push_back(toClient.getToClient().getType());
 
   // Compute the operands for the new op -- the instance op's operands + the
   // to_server types. Reassign the reqs' operand to the new blocks arguments.
   SmallVector<Value, 8> operands(instOp.getOperands().begin(),
                                  instOp.getOperands().end());
   for (auto toServer : portReqs->getOps<RequestToServerConnectionOp>()) {
-    Value sending = toServer.getSending();
+    Value sending = toServer.getToServer();
     operands.push_back(sending);
-    toServer.getSendingMutable().assign(
+    toServer.getToServerMutable().assign(
         portReqs->addArgument(sending.getType(), toServer.getLoc()));
   }
 
@@ -365,7 +365,7 @@ LogicalResult ESIConnectServicesPass::replaceInst(ServiceInstanceOp instOp,
   unsigned instOpNumResults = instOp.getNumResults();
   for (auto e :
        llvm::enumerate(portReqs->getOps<RequestToClientConnectionOp>()))
-    e.value().getReceiving().replaceAllUsesWith(
+    e.value().getToClient().replaceAllUsesWith(
         implOp.getResult(e.index() + instOpNumResults));
 
   emitServiceMetadata(implOp);
@@ -413,7 +413,7 @@ LogicalResult ESIConnectServicesPass::surfaceReqs(
             StringAttr::get(ctxt, getPortName(toClient.getClientNamePath())),
             hw::PortDirection::INPUT, toClient.getType(), inputCounter++}));
     toClient.replaceAllUsesWith(modBlock.addArgument(
-        toClient.getReceiving().getType(), toClient.getLoc()));
+        toClient.getToClient().getType(), toClient.getLoc()));
   }
   // Append output ports to new port list and redirect toServer inputs to
   // output op.
@@ -423,10 +423,10 @@ LogicalResult ESIConnectServicesPass::surfaceReqs(
         origNumOutputs,
         hw::PortInfo{
             StringAttr::get(ctxt, getPortName(toServer.getClientNamePath())),
-            hw::PortDirection::OUTPUT, toServer.getSending().getType(),
+            hw::PortDirection::OUTPUT, toServer.getToServer().getType(),
             outputCounter++}));
     modTerminator->insertOperands(modTerminator->getNumOperands(),
-                                  toServer.getSending());
+                                  toServer.getToServer());
   }
 
   // Insert new module ESI ports.
@@ -460,7 +460,7 @@ LogicalResult ESIConnectServicesPass::surfaceReqs(
       auto instToClient = cast<RequestToClientConnectionOp>(b.clone(*toClient));
       instToClient.setClientNamePathAttr(prependNamePart(
           instToClient.getClientNamePath(), inst.instanceName()));
-      newOperands.push_back(instToClient.getReceiving());
+      newOperands.push_back(instToClient.getToClient());
     }
 
     // Append the results for the to_server requests.

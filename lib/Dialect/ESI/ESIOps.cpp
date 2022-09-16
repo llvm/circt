@@ -277,16 +277,16 @@ RequestInOutChannelOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 }
 
 std::pair<Type, Type> getToServerToClientTypes(RequestInOutChannelOp req) {
-  return std::make_pair(req.getSending().getType(),
-                        req.getReceiving().getType());
+  return std::make_pair(req.getToServer().getType(),
+                        req.getToClient().getType());
 }
 std::pair<Type, Type>
 getToServerToClientTypes(RequestToClientConnectionOp req) {
-  return std::make_pair(Type(), req.getType());
+  return std::make_pair(Type(), req.getToClient().getType());
 }
 std::pair<Type, Type>
 getToServerToClientTypes(RequestToServerConnectionOp req) {
-  return std::make_pair(req.getSending().getType(), Type());
+  return std::make_pair(req.getToServer().getType(), Type());
 }
 
 template <class OpType>
@@ -308,13 +308,15 @@ LogicalResult validateRequest(ServiceDeclOpInterface svc, OpType req) {
 
   auto [toServerType, toClientType] = getToServerToClientTypes(req);
   // Check the input port type.
-  if (portDecl.toServerType != toServerType &&
+  if (!isa<RequestToClientConnectionOp>(req) &&
+      portDecl.toServerType != toServerType &&
       portDecl.toServerType != anyChannelType)
     return req.emitOpError("Request to_server type does not match port type ")
            << portDecl.toServerType;
 
   // Check the output port type.
-  if (portDecl.toClientType != toClientType &&
+  if (!isa<RequestToServerConnectionOp>(req) &&
+      portDecl.toClientType != toClientType &&
       portDecl.toClientType != anyChannelType)
     return req.emitOpError("Request to_client type does not match port type ")
            << portDecl.toClientType;
