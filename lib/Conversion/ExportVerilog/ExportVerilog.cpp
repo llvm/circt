@@ -1843,23 +1843,12 @@ SubExprInfo ExprEmitter::emitUnary(Operation *op, const char *syntax,
                                    bool resultAlwaysUnsigned) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
-  // Introduce extra parentheses if `syntax[0]` is emitted immediately before.
-  // This avoids emitting an expression like `a & &b`, which is syntactically
-  // valid but some tool produces LINT warnings.
-
-  // Find a last non-space character in outBuffer.
-  auto it = std::find_if(outBuffer.rbegin(), outBuffer.rend(),
-                         [&](char c) { return c != ' '; });
-  bool emitExtraParentheses = it != outBuffer.rend() && *it == syntax[0];
-  if (emitExtraParentheses)
-    os << '(';
 
   os << syntax;
   auto signedness = emitSubExpr(op->getOperand(0), Selection).signedness;
-  if (emitExtraParentheses)
-    os << ')';
-  return {emitExtraParentheses ? Selection : Unary,
-          resultAlwaysUnsigned ? IsUnsigned : signedness};
+  // Make precedence lowest to avoid emitting an expression like `a & &b`, which
+  // is syntactically valid but some tool produces LINT warnings.
+  return {LowestPrecedence, resultAlwaysUnsigned ? IsUnsigned : signedness};
 }
 
 /// Emit SystemVerilog attributes attached to the expression op as dialect
