@@ -49,32 +49,23 @@ private:
 
 // NOLINTNEXTLINE(misc-no-recursion)
 Value ExplicitRegsPass::routeThroughStage(OpOperand &v, PipelineStageOp stage) {
+  Value retVal = v.get();
   if (!stage) {
     // Recursive base case - nothing to route (v is a block operand).
-    return v.get();
+    return retVal;
   }
 
-  auto regIt = stageRegMap[stage].find(v.get());
+  auto regIt = stageRegMap[stage].find(retVal);
   if (regIt != stageRegMap[stage].end()) {
     // 'v' is already registered in 'stage'.
     return regIt->second;
   }
 
-  auto *definingOp = v.get().getDefiningOp();
-  auto blockPos = [&](Operation *op) {
-    return std::distance(op->getBlock()->begin(), op->getIterator());
-  };
-
-  // If no defining op (a block operand), define the defining position as a
-  // negative value (indicating "earliest possible position").
-  int pDef = definingOp ? blockPos(definingOp) : -1;
-  int pStage = blockPos(stage);
-
-  Value retVal = v.get();
-  if (pDef < pStage) {
+  auto *definingOp = retVal.getDefiningOp();
+  if (!definingOp || definingOp->isBeforeInBlock(stage)) {
     // Value is defined before the provided stage - route it through the stage.
-    auto regBackedge = bb->get(v.get().getType());
-    stageRegMap[stage].insert({v.get(), regBackedge});
+    auto regBackedge = bb->get(retVal.getType());
+    stageRegMap[stage].insert({retVal, regBackedge});
     retVal = regBackedge;
   } else {
     // Value is defined after the provided stage - early exit here.
