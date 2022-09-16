@@ -14,6 +14,7 @@
 
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/ESI/ESIOps.h"
+#include "circt/Dialect/ESI/ESIPasses.h"
 #include "circt/Dialect/ESI/ESIServices.h"
 #include "circt/Dialect/ESI/ESITypes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
@@ -1621,26 +1622,20 @@ void ESIEmitCollateralPass::runOnOperation() {
   }
 }
 
-namespace circt {
-namespace esi {
-std::unique_ptr<OperationPass<ModuleOp>> createESIEmitCollateralPass() {
+std::unique_ptr<OperationPass<ModuleOp>>
+circt::esi::createESIEmitCollateralPass() {
   return std::make_unique<ESIEmitCollateralPass>();
 }
-std::unique_ptr<OperationPass<ModuleOp>> createESIPhysicalLoweringPass() {
+std::unique_ptr<OperationPass<ModuleOp>>
+circt::esi::createESIPhysicalLoweringPass() {
   return std::make_unique<ESIToPhysicalPass>();
 }
-std::unique_ptr<OperationPass<ModuleOp>> createESIPortLoweringPass() {
+std::unique_ptr<OperationPass<ModuleOp>>
+circt::esi::createESIPortLoweringPass() {
   return std::make_unique<ESIPortsPass>();
 }
-std::unique_ptr<OperationPass<ModuleOp>> createESItoHWPass() {
+std::unique_ptr<OperationPass<ModuleOp>> circt::esi::createESItoHWPass() {
   return std::make_unique<ESItoHWPass>();
 }
-} // namespace esi
-} // namespace circt
-
-namespace {
-#define GEN_PASS_REGISTRATION
-#include "circt/Dialect/ESI/ESIPasses.h.inc"
-} // namespace
 
 void circt::esi::registerESIPasses() { registerPasses(); }
