@@ -1,17 +1,20 @@
 // RUN: circt-opt -pass-pipeline='firrtl.circuit(firrtl-mem-to-reg-of-vec)' %s | FileCheck  %s
 
 firrtl.circuit "Mem" attributes {annotations = [{class = "sifive.enterprise.firrtl.ConvertMemToRegOfVecAnnotation$"}]}{
-  firrtl.module public @Mem() attributes {annotations = [
+  firrtl.module public @Mem(out %d : !firrtl.ref<vector<uint<8>, 8>>, out %d2 : !firrtl.ref<vector<uint<8>, 8>>) attributes {annotations = [
     {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}
   ]} {
-    %mem_read, %mem_write = firrtl.mem Undefined {
+    %dbg, %mem_read, %mem_write, %debug = firrtl.mem Undefined {
       depth = 8 : i64,
       name = "mem",
-      portNames = ["read", "write"],
+      portNames = ["dbg", "read", "write", "debug"],
       readLatency = 0 : i32,
       writeLatency = 1 : i32
-    } : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: uint<8>>,
-        !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
+    } : !firrtl.ref<vector<uint<8>, 8>>, !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: uint<8>>,
+        !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>,
+        !firrtl.ref<vector<uint<8>, 8>>
+    firrtl.strictconnect %d, %debug : !firrtl.ref<vector<uint<8>, 8>>
+    firrtl.strictconnect %d2, %dbg : !firrtl.ref<vector<uint<8>, 8>>
   }
     // CHECK-LABEL: firrtl.circuit "Mem" {
     // CHECK:         firrtl.module public @Mem(
@@ -39,6 +42,10 @@ firrtl.circuit "Mem" attributes {annotations = [{class = "sifive.enterprise.firr
     // CHECK:               firrtl.strictconnect %[[v10]], %[[v8]] : !firrtl.uint<8>
     // CHECK:             }
     // CHECK:           }
+    // CHECK:           %11 = firrtl.ref.send %mem : !firrtl.vector<uint<8>, 8>
+    // CHECK:           %12 = firrtl.ref.send %mem : !firrtl.vector<uint<8>, 8>
+    // CHECK:           firrtl.strictconnect %d, %12 : !firrtl.ref<vector<uint<8>, 8>>
+    // CHECK:           firrtl.strictconnect %d2, %11 : !firrtl.ref<vector<uint<8>, 8>>
 
 
 }
