@@ -193,3 +193,126 @@ def VariableOp : SystemCOp<"cpp.variable", [HasCustomSSAName,
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
 }
+
+def CallIndirectOp : SystemCOp<"cpp.call_indirect", [
+      CallOpInterface,
+      TypesMatchWith<"callee input types match argument types",
+                     "callee", "callee_operands",
+                     "$_self.cast<FunctionType>().getInputs()">,
+      TypesMatchWith<"callee result types match result types",
+                     "callee", "results",
+                     "$_self.cast<FunctionType>().getResults()">
+    ]> {
+  let summary = "indirect call operation";
+  let description = [{
+    The `systemc.cpp.call_indirect` operation represents an indirect call to a
+    value of function type. The operands and result types of the call must match
+    the specified function type.
+
+    Example:
+
+    ```mlir
+    %func = systemc.cpp.member_access %object dot "func" : () -> i32
+    %result = systemc.cpp.call_indirect %func() : () -> i32
+    ```
+  }];
+
+  let arguments = (ins FunctionType:$callee,
+                       Variadic<AnyType>:$callee_operands);
+  let results = (outs Variadic<AnyType>:$results);
+
+  let builders = [
+    OpBuilder<(ins "Value":$callee, CArg<"ValueRange", "{}">:$operands), [{
+      $_state.operands.push_back(callee);
+      $_state.addOperands(operands);
+      $_state.addTypes(callee.getType().cast<FunctionType>().getResults());
+    }]>];
+
+  let extraClassDeclaration = [{
+    /// Get the argument operands to the called function.
+    operand_range getArgOperands() {
+      return {arg_operand_begin(), arg_operand_end()};
+    }
+
+    operand_iterator arg_operand_begin() { return ++operand_begin(); }
+    operand_iterator arg_operand_end() { return operand_end(); }
+
+    /// Return the callee of this operation.
+    CallInterfaceCallable getCallableForCallee() { return getCallee(); }
+  }];
+
+  let assemblyFormat = [{
+    $callee `(` $callee_operands `)` attr-dict `:` type($callee)
+  }];
+
+  let hasVerifier = 1;
+}
+
+def CallOp : SystemCOp<"cpp.call", [
+  CallOpInterface,
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>
+]> {
+  let summary = "call operation";
+  let description = [{
+    The `systemc.cpp.call` operation represents a direct call to a function that
+    is within the same symbol scope as the call. The operands and result types
+    of the call must match the specified function type. The callee is encoded as
+    a symbol reference attribute named "callee".
+
+    Example:
+
+    ```mlir
+    %2 = systemc.cpp.call @my_add(%0, %1) : (i32, i32) -> i32
+    ```
+  }];
+
+  let arguments = (ins FlatSymbolRefAttr:$callee,
+                       Variadic<AnyType>:$callee_operands);
+  let results = (outs Variadic<AnyType>:$results);
+
+  let builders = [
+    OpBuilder<(ins "FuncOp":$callee, CArg<"ValueRange", "{}">:$operands), [{
+      $_state.addOperands(operands);
+      $_state.addAttribute("callee", SymbolRefAttr::get(callee));
+      $_state.addTypes(callee.getFunctionType().getResults());
+    }]>,
+    OpBuilder<(ins "SymbolRefAttr":$callee, "Type":$result,
+      CArg<"ValueRange", "{}">:$operands), [{
+      $_state.addOperands(operands);
+      $_state.addAttribute("callee", callee);
+      $_state.addTypes(result);
+    }]>,
+    OpBuilder<(ins "StringAttr":$callee, "Type":$result,
+      CArg<"ValueRange", "{}">:$operands), [{
+      build($_builder, $_state, SymbolRefAttr::get(callee), result, operands);
+    }]>,
+    OpBuilder<(ins "StringRef":$callee, "Type":$result,
+      CArg<"ValueRange", "{}">:$operands), [{
+      build($_builder, $_state, StringAttr::get($_builder.getContext(), callee),
+            result, operands);
+    }]>];
+
+  let extraClassDeclaration = [{
+    FunctionType getCalleeType();
+
+    /// Get the argument operands to the called function.
+    operand_range getArgOperands() {
+      return {arg_operand_begin(), arg_operand_end()};
+    }
+
+    operand_iterator arg_operand_begin() { return operand_begin(); }
+    operand_iterator arg_operand_end() { return operand_end(); }
+
+    /// Return the callee of this operation.
+    CallInterfaceCallable getCallableForCallee() {
+      return (*this)->getAttrOfType<SymbolRefAttr>("callee");
+    }
+  }];
+
+  let assemblyFormat = [{
+    $callee `(` $callee_operands `)` attr-dict `:`
+    functional-type($callee_operands, $results)
+  }];
+
+  let hasVerifier = 1;
+}
