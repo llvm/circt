@@ -1046,6 +1046,7 @@ public:
   bool visitHandshake(handshake::SelectOp op);
   bool visitHandshake(SinkOp op);
   bool visitHandshake(SourceOp op);
+  bool visitHandshake(SyncOp op);
   bool visitHandshake(handshake::StoreOp op);
   bool visitHandshake(PackOp op);
   bool visitHandshake(UnpackOp op);
@@ -1198,6 +1199,48 @@ bool HandshakeBuilder::visitHandshake(JoinOp op) {
     inputs.push_back(&portList[i]);
 
   return buildJoinLogic(inputs, output);
+}
+
+// Joins all the input control signals and connects the resulting control
+// signals in a fork like manner to the outputs. Data logic is forwarded
+// directly between in- and outputs.
+bool HandshakeBuilder::visitHandshake(SyncOp op) {
+  size_t numRes = op->getNumResults();
+  unsigned portNum = portList.size();
+  assert(portNum == 2 * numRes + 2);
+
+  // Create wires that will be used to connect the join and the fork logic
+  auto bitType = UIntType::get(op->getContext(), 1);
+  ValueVector connector;
+  connector.push_back(rewriter.create<WireOp>(insertLoc, bitType, "allValid"));
+  connector.push_back(rewriter.create<WireOp>(insertLoc, bitType, "allReady"));
+
+  // Collect all input ports.
+  SmallVector<ValueVector *, 4> inputs;
+  for (unsigned i = 0, e = numRes; i < e; ++i)
+    inputs.push_back(&portList[i]);
+
+  // Collect all output ports.
+  SmallVector<ValueVector *, 4> outputs;
+  for (unsigned i = numRes, e = 2 * numRes; i < e; ++i)
+    outputs.push_back(&portList[i]);
+
+  // connect data ports
+  for (auto [in, out] : llvm::zip(inputs, outputs)) {
+    if (in->size() == 2)
+      continue;
+
+    rewriter.create<ConnectOp>(insertLoc, (*out)[2], (*in)[2]);
+  }
+
+  if (!buildJoinLogic(inputs, &connector))
+    return false;
+
+  // The clock and reset signals will be used for registers.
+  auto clock = portList[portNum - 2][0];
+  auto reset = portList[portNum - 1][0];
+
+  return buildForkLogic(&connector, outputs, clock, reset, true);
 }
 
 /// Please refer to test_mux.mlir test case.
