@@ -57,7 +57,7 @@ class ServiceDecl(_PyProxy):
     if sym_name is None:
       sym_name, install = op_cache.create_symbol(self)
       with curr_sys._get_ip():
-        decl = raw_esi.ServiceDeclOp(ir.StringAttr.get(sym_name))
+        decl = raw_esi.CustomServiceDeclOp(ir.StringAttr.get(sym_name))
         install(decl)
       ports_block = ir.Block.create_at_start(decl.ports, [])
       with ir.InsertionPoint.at_block_begin(ports_block):
@@ -163,7 +163,7 @@ class _OutputChannelSetter:
 
   def __init__(self, req: raw_esi.RequestToClientConnectionOp,
                old_chan_to_replace: ChannelValue):
-    self.type = ChannelType(req.receiving.type)
+    self.type = ChannelType(req.toClient.type)
     self.client_name = req.clientNamePath
     self._chan_to_replace = old_chan_to_replace
 

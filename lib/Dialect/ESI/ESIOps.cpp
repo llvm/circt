@@ -233,106 +233,133 @@ circt::esi::ChannelType UnwrapSVInterfaceOp::channelType() {
   return getChanInput().getType().cast<circt::esi::ChannelType>();
 }
 
+//===----------------------------------------------------------------------===//
+// Services ops.
+//===----------------------------------------------------------------------===//
+
 /// Get the port declaration op for the specified service decl, port name.
-template <class OpType>
-static OpType getServicePortDecl(Operation *op,
-                                 SymbolTableCollection &symbolTable,
-                                 hw::InnerRefAttr servicePort) {
+static ServiceDeclOpInterface getServiceDecl(Operation *op,
+                                             SymbolTableCollection &symbolTable,
+                                             hw::InnerRefAttr servicePort) {
   ModuleOp top = op->getParentOfType<mlir::ModuleOp>();
   SymbolTable topSyms = symbolTable.getSymbolTable(top);
 
   StringAttr modName = servicePort.getModule();
-  ServiceDeclOp serviceDeclOp = topSyms.lookup<ServiceDeclOp>(modName);
-  if (!serviceDeclOp) {
-    return {};
-  }
-
-  StringAttr innerSym = servicePort.getName();
-  for (auto portDecl : serviceDeclOp.getOps<OpType>())
-    if (portDecl.getInnerSymAttr() == innerSym)
-      return portDecl;
-  return {};
+  return topSyms.lookup<ServiceDeclOpInterface>(modName);
 }
 
 /// Check that the type of a given service request matches the services port
 /// type.
-template <class PortTypeOp, class OpType>
-static LogicalResult
-reqPortMatches(OpType op, SymbolTableCollection &symbolTable, Type t) {
-  hw::InnerRefAttr port = op.getServicePort();
-  auto portDecl = getServicePortDecl<PortTypeOp>(op, symbolTable, port);
-  auto inoutPortDecl =
-      getServicePortDecl<ServiceDeclInOutOp>(op, symbolTable, port);
-  if (!portDecl && !inoutPortDecl)
-    return op.emitOpError("Could not find service port declaration ")
-           << port.getModuleRef() << "::" << port.getName().getValue();
-
-  auto *ctxt = op.getContext();
-  auto anyChannelType = ChannelType::get(ctxt, AnyType::get(ctxt));
-  if (portDecl) {
-    if (portDecl.getType() != t && portDecl.getType() != anyChannelType)
-      return op.emitOpError("Request type does not match port type ")
-             << portDecl.getType();
-    return success();
-  }
-
-  assert(inoutPortDecl);
-  if (isa<ToClientOp>(op)) {
-    if (inoutPortDecl.getInType() != t &&
-        inoutPortDecl.getInType() != anyChannelType)
-      return op.emitOpError("Request type does not match port type ")
-             << inoutPortDecl.getInType();
-  } else if (isa<ToServerOp>(op)) {
-    if (inoutPortDecl.getOutType() != t &&
-        inoutPortDecl.getOutType() != anyChannelType)
-      return op.emitOpError("Request type does not match port type ")
-             << inoutPortDecl.getOutType();
-  }
-  return success();
+static LogicalResult reqPortMatches(Operation *op, hw::InnerRefAttr port,
+                                    SymbolTableCollection &symbolTable) {
+  auto serviceDecl = getServiceDecl(op, symbolTable, port);
+  if (!serviceDecl)
+    return op->emitOpError("Could not find service declaration ")
+           << port.getModuleRef();
+  return serviceDecl.validateRequest(op);
 }
 
 LogicalResult RequestToClientConnectionOp::verifySymbolUses(
     SymbolTableCollection &symbolTable) {
-  return reqPortMatches<ToClientOp>(*this, symbolTable,
-                                    getReceiving().getType());
+  return reqPortMatches(getOperation(), getServicePortAttr(), symbolTable);
 }
 
 LogicalResult RequestToServerConnectionOp::verifySymbolUses(
     SymbolTableCollection &symbolTable) {
-  return reqPortMatches<ToServerOp>(*this, symbolTable, getSending().getType());
+  return reqPortMatches(getOperation(), getServicePortAttr(), symbolTable);
 }
 
 LogicalResult
 RequestInOutChannelOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  auto portDecl = getServicePortDecl<ServiceDeclInOutOp>(
-      this->getOperation(), symbolTable, getServicePort());
-  if (!portDecl)
-    return emitOpError("Could not find inout service port declaration.");
+  return reqPortMatches(getOperation(), getServicePortAttr(), symbolTable);
+}
 
-  auto *ctxt = getContext();
+/// Overloads to get the two types from a number of supported ops.
+std::pair<Type, Type> getToServerToClientTypes(RequestInOutChannelOp req) {
+  return std::make_pair(req.getToServer().getType(),
+                        req.getToClient().getType());
+}
+std::pair<Type, Type>
+getToServerToClientTypes(RequestToClientConnectionOp req) {
+  return std::make_pair(Type(), req.getToClient().getType());
+}
+std::pair<Type, Type>
+getToServerToClientTypes(RequestToServerConnectionOp req) {
+  return std::make_pair(req.getToServer().getType(), Type());
+}
+
+/// Validate a connection request against a service decl by comparing against
+/// the port list.
+template <class OpType>
+LogicalResult validateRequest(ServiceDeclOpInterface svc, OpType req) {
+  ServicePortInfo portDecl;
+  SmallVector<ServicePortInfo> ports;
+  svc.getPortList(ports);
+  for (ServicePortInfo portFromList : ports)
+    if (portFromList.name == req.getServicePort().getName()) {
+      portDecl = portFromList;
+      break;
+    }
+  if (!portDecl.name)
+    return req.emitOpError("Could not locate port ")
+           << req.getServicePort().getName();
+
+  auto *ctxt = req.getContext();
   auto anyChannelType = ChannelType::get(ctxt, AnyType::get(ctxt));
+  auto [toServerType, toClientType] = getToServerToClientTypes(req);
+
+  // TODO: Because `inout` requests get broken in two pretty early on, we can't
+  // tell if a to_client/to_server request was initially part of an inout
+  // request, so we can't check that an inout port is only accessed by an inout
+  // request. Consider a different way to do this.
 
   // Check the input port type.
-  if (portDecl.getInType() != getSending().getType() &&
-      portDecl.getInType() != anyChannelType)
-    return emitOpError("Request to_server type does not match port type ")
-           << portDecl.getInType();
+  if (!isa<RequestToClientConnectionOp>(req) &&
+      portDecl.toServerType != toServerType &&
+      portDecl.toServerType != anyChannelType)
+    return req.emitOpError("Request to_server type does not match port type ")
+           << portDecl.toServerType;
 
   // Check the output port type.
-  if (portDecl.getOutType() != getReceiving().getType() &&
-      portDecl.getOutType() != anyChannelType)
-    return emitOpError("Request to_client type does not match port type ")
-           << portDecl.getOutType();
-
+  if (!isa<RequestToServerConnectionOp>(req) &&
+      portDecl.toClientType != toClientType &&
+      portDecl.toClientType != anyChannelType)
+    return req.emitOpError("Request to_client type does not match port type ")
+           << portDecl.toClientType;
   return success();
+}
+
+LogicalResult
+circt::esi::validateServiceConnectionRequest(ServiceDeclOpInterface decl,
+                                             Operation *reqOp) {
+  if (auto req = dyn_cast<RequestToClientConnectionOp>(reqOp))
+    return ::validateRequest(decl, req);
+  if (auto req = dyn_cast<RequestToServerConnectionOp>(reqOp))
+    return ::validateRequest(decl, req);
+  if (auto req = dyn_cast<RequestInOutChannelOp>(reqOp))
+    return ::validateRequest(decl, req);
+  assert(false && "Did not recognize request op");
+}
+
+void CustomServiceDeclOp::getPortList(SmallVectorImpl<ServicePortInfo> &ports) {
+  for (auto toServer : getOps<ToServerOp>())
+    ports.push_back(ServicePortInfo{
+        toServer.getInnerSymAttr(), toServer.getToServerType(), {}});
+  for (auto toClient : getOps<ToClientOp>())
+    ports.push_back(ServicePortInfo{
+        toClient.getInnerSymAttr(), {}, toClient.getToClientType()});
+  for (auto inoutPort : getOps<ServiceDeclInOutOp>())
+    ports.push_back(ServicePortInfo{inoutPort.getInnerSymAttr(),
+                                    inoutPort.getToServerType(),
+                                    inoutPort.getToClientType()});
 }
 
 LogicalResult ServiceHierarchyMetadataOp::verifySymbolUses(
     SymbolTableCollection &symbolTable) {
   ModuleOp top = getOperation()->getParentOfType<mlir::ModuleOp>();
   SymbolTable topSyms = symbolTable.getSymbolTable(top);
-  ServiceDeclOp serviceDeclOp =
-      topSyms.lookup<ServiceDeclOp>(getServiceSymbol());
+  auto serviceDeclOp =
+      topSyms.lookup<ServiceDeclOpInterface>(getServiceSymbol());
   if (!serviceDeclOp)
     return emitOpError("Could not find service declaration ")
            << getServiceSymbol();
@@ -389,3 +416,5 @@ void ServiceImplementReqOp::gatherPairedReqs(
 
 #define GET_OP_CLASSES
 #include "circt/Dialect/ESI/ESI.cpp.inc"
+
+#include "circt/Dialect/ESI/ESIInterfaces.cpp.inc"

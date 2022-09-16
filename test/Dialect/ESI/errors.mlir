@@ -53,7 +53,7 @@ esi.service.decl @HostComms {
 
 hw.module @Loopback (%clk: i1) -> () {
   %dataIn = esi.service.req.to_client <@HostComms::@Recv> (["loopback_tohw"]) : !esi.channel<i32>
-  // expected-error @+1 {{'esi.service.req.to_server' op Request type does not match port type '!esi.channel<i16>'}}
+  // expected-error @+1 {{'esi.service.req.to_server' op Request to_server type does not match port type '!esi.channel<i16>'}}
   esi.service.req.to_server %dataIn -> <@HostComms::@Send> (["loopback_fromhw"]) : !esi.channel<i32>
 }
 
@@ -63,7 +63,7 @@ esi.service.decl @HostComms {
 }
 
 hw.module @Loopback (%clk: i1) -> () {
-  // expected-error @+1 {{'esi.service.req.to_client' op Could not find service port declaration @HostComms::Recv}}
+  // expected-error @+1 {{'esi.service.req.to_client' op Could not locate port "Recv"}}
   %dataIn = esi.service.req.to_client <@HostComms::@Recv> (["loopback_tohw"]) : !esi.channel<i32>
 }
 // -----
@@ -73,7 +73,7 @@ esi.service.decl @HostComms {
 }
 
 hw.module @Loopback (%clk: i1) -> () {
-  // expected-error @+1 {{'esi.service.req.to_client' op Request type does not match port type '!esi.channel<i8>'}}
+  // expected-error @+1 {{'esi.service.req.to_client' op Request to_client type does not match port type '!esi.channel<i8>'}}
   %dataIn = esi.service.req.to_client <@HostComms::@Recv> (["loopback_tohw"]) : !esi.channel<i32>
 }
 
@@ -102,7 +102,7 @@ hw.module @Loopback (%clk: i1, %s: !esi.channel<i8>) -> () {
 // -----
 
 hw.module @Loopback (%clk: i1) -> () {
-  // expected-error @+1 {{'esi.service.req.to_client' op Could not find service port declaration @HostComms::Recv}}
+  // expected-error @+1 {{'esi.service.req.to_client' op Could not find service declaration @HostComms}}
   %dataIn = esi.service.req.to_client <@HostComms::@Recv> (["loopback_tohw"]) : !esi.channel<i32>
 }
 

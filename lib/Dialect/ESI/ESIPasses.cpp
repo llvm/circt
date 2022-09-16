@@ -21,11 +21,13 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Support/BackedgeBuilder.h"
+#include "circt/Support/LLVM.h"
 #include "circt/Support/SymCache.h"
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/IR/SymbolTable.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 
@@ -1481,20 +1483,16 @@ void ESIEmitCollateralPass::emitServiceJSON() {
   llvm::json::OStream j(os, 2);
 
   // Emit the list of ports of a service declaration.
-  auto emitPorts = [&](ServiceDeclOp decl) {
-    for (auto *portOp : llvm::make_pointer_range(decl.getPorts().getOps())) {
+  auto emitPorts = [&](ServiceDeclOpInterface decl) {
+    SmallVector<ServicePortInfo> ports;
+    decl.getPortList(ports);
+    for (ServicePortInfo port : ports) {
       j.object([&] {
-        if (auto port = dyn_cast<ToServerOp>(portOp)) {
-          j.attribute("name", port.getInnerSym());
-          j.attribute("to-server-type", toJSON(port.getType()));
-        } else if (auto port = dyn_cast<ToClientOp>(portOp)) {
-          j.attribute("name", port.getInnerSym());
-          j.attribute("to-client-type", toJSON(port.getType()));
-        } else if (auto port = dyn_cast<ServiceDeclInOutOp>(portOp)) {
-          j.attribute("name", port.getInnerSym());
-          j.attribute("to-client-type", toJSON(port.getOutType()));
-          j.attribute("to-server-type", toJSON(port.getInType()));
-        }
+        j.attribute("name", port.name.getValue());
+        if (port.toClientType)
+          j.attribute("to-client-type", toJSON(port.toClientType));
+        if (port.toServerType)
+          j.attribute("to-server-type", toJSON(port.toServerType));
       });
     }
   };
@@ -1503,9 +1501,9 @@ void ESIEmitCollateralPass::emitServiceJSON() {
     // Emit a list of the service declarations in a design.
     j.attributeArray("declarations", [&] {
       for (auto *op : llvm::make_pointer_range(mod.getOps())) {
-        if (auto decl = dyn_cast<ServiceDeclOp>(op)) {
+        if (auto decl = dyn_cast<ServiceDeclOpInterface>(op)) {
           j.object([&] {
-            j.attribute("name", decl.getSymName());
+            j.attribute("name", SymbolTable::getSymbolName(op).getValue());
             j.attributeArray("ports", [&] { emitPorts(decl); });
           });
         }
@@ -1585,9 +1583,9 @@ void ESIEmitCollateralPass::emitServiceJSON() {
   mod.walk([&](ServiceImplementReqOp req) {
     stillUsed.insert(StringAttr::get(req.getContext(), req.getServiceSymbol()));
   });
-  mod.walk([&](ServiceDeclOp decl) {
-    if (!stillUsed.contains(decl.getSymNameAttr()))
-      decl.erase();
+  mod.walk([&](ServiceDeclOpInterface decl) {
+    if (!stillUsed.contains(SymbolTable::getSymbolName(decl)))
+      decl.getOperation()->erase();
   });
 }
 
