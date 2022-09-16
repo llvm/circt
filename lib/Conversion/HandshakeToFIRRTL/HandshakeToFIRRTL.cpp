@@ -1227,8 +1227,6 @@ bool HandshakeBuilder::visitHandshake(SyncOp op) {
 
   // connect data ports
   for (auto [in, out] : llvm::zip(inputs, outputs)) {
-    assert(in->size() == out->size() &&
-           "expected SyncOp's input and output types to match");
     if (in->size() == 2)
       continue;
 
