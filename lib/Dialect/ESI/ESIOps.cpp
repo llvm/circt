@@ -250,32 +250,31 @@ static ServiceDeclOpInterface getServiceDecl(Operation *op,
 
 /// Check that the type of a given service request matches the services port
 /// type.
-template <class OpType>
-static LogicalResult reqPortMatches(OpType op,
+static LogicalResult reqPortMatches(Operation *op, hw::InnerRefAttr port,
                                     SymbolTableCollection &symbolTable) {
-  hw::InnerRefAttr port = op.getServicePort();
   auto serviceDecl = getServiceDecl(op, symbolTable, port);
   if (!serviceDecl)
-    return op.emitOpError("Could not find service declaration ")
+    return op->emitOpError("Could not find service declaration ")
            << port.getModuleRef();
   return serviceDecl.validateRequest(op);
 }
 
 LogicalResult RequestToClientConnectionOp::verifySymbolUses(
     SymbolTableCollection &symbolTable) {
-  return reqPortMatches(*this, symbolTable);
+  return reqPortMatches(getOperation(), getServicePortAttr(), symbolTable);
 }
 
 LogicalResult RequestToServerConnectionOp::verifySymbolUses(
     SymbolTableCollection &symbolTable) {
-  return reqPortMatches(*this, symbolTable);
+  return reqPortMatches(getOperation(), getServicePortAttr(), symbolTable);
 }
 
 LogicalResult
 RequestInOutChannelOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  return reqPortMatches(*this, symbolTable);
+  return reqPortMatches(getOperation(), getServicePortAttr(), symbolTable);
 }
 
+/// Overloads to get the two types from a number of supported ops.
 std::pair<Type, Type> getToServerToClientTypes(RequestInOutChannelOp req) {
   return std::make_pair(req.getToServer().getType(),
                         req.getToClient().getType());
@@ -289,6 +288,8 @@ getToServerToClientTypes(RequestToServerConnectionOp req) {
   return std::make_pair(req.getToServer().getType(), Type());
 }
 
+/// Validate a connection request against a service decl by comparing against
+/// the port list.
 template <class OpType>
 LogicalResult validateRequest(ServiceDeclOpInterface svc, OpType req) {
   ServicePortInfo portDecl;
@@ -305,8 +306,13 @@ LogicalResult validateRequest(ServiceDeclOpInterface svc, OpType req) {
 
   auto *ctxt = req.getContext();
   auto anyChannelType = ChannelType::get(ctxt, AnyType::get(ctxt));
-
   auto [toServerType, toClientType] = getToServerToClientTypes(req);
+
+  // TODO: Because `inout` requests get broken in two pretty early on, we can't
+  // tell if a to_client/to_server request was initially part of an inout
+  // request, so we can't check that an inout port is only accessed by an inout
+  // request. Consider a different way to do this.
+
   // Check the input port type.
   if (!isa<RequestToClientConnectionOp>(req) &&
       portDecl.toServerType != toServerType &&
