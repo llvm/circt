@@ -55,6 +55,12 @@ struct FlattenMemoryPass : public FlattenMemoryBase<FlattenMemoryPass> {
       // How many mask bits each field type requires.
       SmallVector<unsigned> maskWidths;
 
+      // Cannot flatten a memory if it has debug ports, because debug port
+      // implies a memtap and we cannot transform the datatype for a memory that
+      // is tapped.
+      for (auto res : memOp.getResults())
+        if (res.getType().cast<FIRRTLType>().isa<RefType>())
+          return;
       // If subannotations present on aggregate fields, we cannot flatten the
       // memory. It must be split into one memory per aggregate field.
       // Do not overwrite the pass flag!
