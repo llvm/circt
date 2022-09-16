@@ -359,7 +359,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
         SmallVector<Type, 4> resultTypes;
         SmallVector<Attribute, 4> portAnnotations;
         SmallVector<Value, 4> oldResults;
-        for (auto res : llvm::enumerate(mem.getResults())) {
+        for (const auto &res : llvm::enumerate(mem.getResults())) {
           if (mem.getResult(res.index())
                   .getType()
                   .cast<FIRRTLType>()
