@@ -90,13 +90,11 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
             return success();
           })
           .Case<MemOp>([&](MemOp mem) {
-
             // MemOp can produce debug ports of RefType. Each debug port
             // represents the RefType for the corresponding register of the
             // memory. Since the memory is not yet generated the register name
             // is assumed to be "Memory". Note that MemOp creates RefType
             // without a RefSend.
-
             for (const auto &res : llvm::enumerate(mem.getResults()))
               if (mem.getResult(res.index())
                       .getType()
@@ -104,7 +102,6 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
                       .isa<RefType>()) {
                 auto inRef = getInnerRefTo(mem);
                 addReachingSendsEntry(res.value(), inRef);
-
                 xmrPathSuffix[inRef] = ".Memory";
                 // Just node that all the debug ports of memory must be removed.
                 // So this does not record the port index.
@@ -219,7 +216,6 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
       xmrString += '.';
     }
     ("{{" + Twine(index) + "}}").toVector(xmrString);
-    if (lastInnerRef && stringXMR.find(lastInnerRef) != stringXMR.end())
     auto iter = xmrPathSuffix.find(lastInnerRef);
     // If this xmr has a suffix string (internal path into a module, that is not
     // yet generated).
