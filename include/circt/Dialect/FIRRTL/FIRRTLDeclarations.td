@@ -195,7 +195,8 @@ def MemOp : ReferableDeclOp<"mem"> {
     void setAllPortAnnotations(ArrayRef<Attribute> annotations);
 
     /// Get the number of read ports, write ports and read write ports.
-    void getNumPorts(size_t &numReadPorts, size_t &numWritePorts, size_t &numReadWritePorts);
+    void getNumPorts(size_t &numReadPorts, size_t &numWritePorts,
+                      size_t &numReadWritePorts, size_t &numDbgsPorts);
 
     // Extract the relevant attributes from the MemOp and return a FirMemory object.
     FirMemory getSummary();
