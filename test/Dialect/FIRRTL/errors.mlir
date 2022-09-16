@@ -81,6 +81,13 @@ firrtl.module @foo(in %a : !firrtl.uint<1>) attributes {portNames=[1 : i1]} {}
 // -----
 
 firrtl.circuit "foo" {
+// expected-error @below {{port names should be unique}}
+firrtl.module @foo(in %a : !firrtl.uint<1>, in %b: !firrtl.uint<1>) attributes {portNames=["a", "a"]} {}
+}
+
+// -----
+
+firrtl.circuit "foo" {
 // expected-error @+1 {{op requires 1 port annotations}}
 firrtl.module @foo(in %a : !firrtl.uint<1>) attributes {portAnnotations=[[], []]} {}
 }
@@ -523,7 +530,7 @@ firrtl.circuit "MemoryZeroDepth" {
 
 firrtl.circuit "MemoryBadPortType" {
   firrtl.module @MemoryBadPortType() {
-    // expected-error @+1 {{'firrtl.mem' op has an invalid type on port "r" (expected '!firrtl.bundle<...>'}}
+    // expected-error @+1 {{'firrtl.mem' op has an invalid type on port "r"}}
     %memory_r = firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.uint<1>
   }
 }
@@ -541,7 +548,7 @@ firrtl.circuit "MemoryPortNamesCollide" {
 
 firrtl.circuit "MemoryUnexpectedNumberOfFields" {
   firrtl.module @MemoryUnexpectedNumberOfFields() {
-    // expected-error @+1 {{'firrtl.mem' op has an invalid number of fields on port "r" (expected 4 for read, 5 for write, or 7 for read/write)}}
+    // expected-error @+1 {{'firrtl.mem' op has an invalid type on port "r"}}
     %memory_r = firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<a: uint<1>>
   }
 }
@@ -550,7 +557,7 @@ firrtl.circuit "MemoryUnexpectedNumberOfFields" {
 
 firrtl.circuit "MemoryMissingDataField" {
   firrtl.module @MemoryMissingDataField() {
-    // expected-error @+1 {{'firrtl.mem' op has no data field on port "r" (expected to see "data" for a read or write port or "rdata" for a read/write port)}}
+    // expected-error @+1 {{'firrtl.mem' op has an invalid type on port}}
     %memory_r = firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<8>>
   }
 }
@@ -559,7 +566,7 @@ firrtl.circuit "MemoryMissingDataField" {
 
 firrtl.circuit "MemoryMissingDataField2" {
   firrtl.module @MemoryMissingDataField2() {
-    // expected-error @+1 {{'firrtl.mem' op has no data field on port "rw" (expected to see "data" for a read or write port or "rdata" for a read/write port)}}
+    // expected-error @+1 {{'firrtl.mem' op has an invalid type on port}}
     %memory_rw = firrtl.mem Undefined {depth = 16 : i64, name = "memory2", portNames = ["rw"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<8>, wmode: uint<1>, writedata: uint<8>, wmask: uint<1>>
   }
 }
@@ -586,7 +593,7 @@ firrtl.circuit "MemoryDataContainsAnalog" {
 
 firrtl.circuit "MemoryPortInvalidReadKind" {
   firrtl.module @MemoryPortInvalidReadKind() {
-    // expected-error @+1 {{'firrtl.mem' op has an invalid type for port "r" of determined kind "read" (expected '!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>', but got '!firrtl.bundle<BAD: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>')}}
+    // expected-error @+1 {{'firrtl.mem' op has an invalid type on port}}
     %memory_r= firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<BAD: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>
   }
 }
@@ -595,7 +602,7 @@ firrtl.circuit "MemoryPortInvalidReadKind" {
 
 firrtl.circuit "MemoryPortInvalidWriteKind" {
   firrtl.module @MemoryPortInvalidWriteKind() {
-    // expected-error @+1 {{'firrtl.mem' op has an invalid type for port "w" of determined kind "write" (expected '!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>', but got '!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, BAD: uint<1>>')}}
+    // expected-error @+1 {{'firrtl.mem' op has an invalid type on port}}
     %memory_r= firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["w"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, BAD: uint<1>>
   }
 }
@@ -604,7 +611,7 @@ firrtl.circuit "MemoryPortInvalidWriteKind" {
 
 firrtl.circuit "MemoryPortInvalidReadWriteKind" {
   firrtl.module @MemoryPortInvalidReadWriteKind() {
-    // expected-error @+1 {{'firrtl.mem' op has an invalid type for port "rw" of determined kind "readwrite" (expected '!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<8>, wmode: uint<1>, wdata: uint<8>, wmask: uint<1>>', but got '!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<8>, wmode: uint<1>, wdata: uint<8>, BAD: uint<1>>')}}
+    // expected-error @+1 {{'firrtl.mem' op has an invalid type on port}}
     %memory_r= firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["rw"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<8>, wmode: uint<1>, wdata: uint<8>, BAD: uint<1>>
   }
 }

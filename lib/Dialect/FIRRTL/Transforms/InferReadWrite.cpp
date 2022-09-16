@@ -46,17 +46,32 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
     for (MemOp memOp : llvm::make_early_inc_range(
              getOperation().getBodyBlock()->getOps<MemOp>())) {
       inferUnmasked(memOp, opsToErase);
-      size_t nReads, nWrites, nRWs;
-      memOp.getNumPorts(nReads, nWrites, nRWs);
+      size_t nReads, nWrites, nRWs, nDbgs;
+      memOp.getNumPorts(nReads, nWrites, nRWs, nDbgs);
       // Run the analysis only for Seq memories (latency=1) and a single read
       // and write ports.
       if (!(nReads == 1 && nWrites == 1 && nRWs == 0) ||
           !(memOp.getReadLatency() == 1 && memOp.getWriteLatency() == 1))
         continue;
+      SmallVector<Attribute, 4> resultNames;
+      SmallVector<Type, 4> resultTypes;
+      SmallVector<Attribute> portAtts;
+      SmallVector<Attribute, 4> portAnnotations;
       Value rClock, wClock;
       // The memory has exactly two ports.
       SmallVector<Value> readTerms, writeTerms;
       for (const auto &portIt : llvm::enumerate(memOp.getResults())) {
+        Attribute portAnno;
+        portAnno = memOp.getPortAnnotation(portIt.index());
+        if (memOp.getPortKind(portIt.index()) == MemOp::PortKind::Debug) {
+          resultNames.push_back(memOp.getPortName(portIt.index()));
+          resultTypes.push_back(memOp.getResult(portIt.index()).getType());
+          portAnnotations.push_back(portAnno);
+          continue;
+        }
+        // Append the annotations from the two ports.
+        if (!portAnno.cast<ArrayAttr>().empty())
+          portAtts.push_back(memOp.getPortAnnotation(portIt.index()));
         // Get the port value.
         Value portVal = portIt.value();
         // Get the port kind.
@@ -106,9 +121,6 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
       if (!complementTerm)
         continue;
 
-      SmallVector<Attribute, 4> resultNames;
-      SmallVector<Type, 4> resultTypes;
-      SmallVector<Attribute, 4> portAnnotations;
       // Create the merged rw port for the new memory.
       resultNames.push_back(
           StringAttr::get(memOp.getContext(), modNamespace.newName("rw")));
@@ -116,12 +128,6 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
       resultTypes.push_back(MemOp::getTypeForPort(
           memOp.getDepth(), memOp.getDataType(), MemOp::PortKind::ReadWrite,
           memOp.getMaskBits()));
-      SmallVector<Attribute> portAtts;
-      // Append the annotations from the two ports.
-      if (!memOp.getPortAnnotations()[0].cast<ArrayAttr>().empty())
-        portAtts.push_back(memOp.getPortAnnotations()[0]);
-      if (!memOp.getPortAnnotations()[1].cast<ArrayAttr>().empty())
-        portAtts.push_back(memOp.getPortAnnotations()[1]);
       ImplicitLocOpBuilder builder(memOp.getLoc(), memOp);
       portAnnotations.push_back(builder.getArrayAttr(portAtts));
       // Create the new rw memory.
@@ -133,7 +139,7 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
           builder.getArrayAttr(portAnnotations), memOp.getInnerSymAttr(),
           memOp.getGroupIDAttr());
       ++numRWPortMemoriesInferred;
-      auto rwPort = rwMem->getResult(0);
+      auto rwPort = rwMem->getResult(nDbgs);
       // Create the subfield access to all fields of the port.
       // The addr should be connected to read/write address depending on the
       // read/write mode.
@@ -164,9 +170,16 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
       builder.setInsertionPointToEnd(wmode->getBlock());
       builder.create<StrictConnectOp>(wmode, complementTerm);
       // Now iterate over the original memory read and write ports.
+      size_t dbgsIndex = 0;
       for (const auto &portIt : llvm::enumerate(memOp.getResults())) {
         // Get the port value.
         Value portVal = portIt.value();
+        if (memOp.getPortKind(portIt.index()) == MemOp::PortKind::Debug) {
+          memOp.getResult(portIt.index())
+              .replaceAllUsesWith(rwMem.getResult(dbgsIndex));
+          dbgsIndex++;
+          continue;
+        }
         // Get the port kind.
         bool isReadPort =
             memOp.getPortKind(portIt.index()) == MemOp::PortKind::Read;
@@ -306,7 +319,8 @@ private:
     // connected to a multi-bit constant 1.
     for (const auto &portIt : llvm::enumerate(memOp.getResults())) {
       // Read ports donot have the mask field.
-      if (memOp.getPortKind(portIt.index()) == MemOp::PortKind::Read)
+      if (memOp.getPortKind(portIt.index()) == MemOp::PortKind::Read ||
+          memOp.getPortKind(portIt.index()) == MemOp::PortKind::Debug)
         continue;
       Value portVal = portIt.value();
       // Iterate over all users of the write/rw port.
@@ -358,7 +372,8 @@ private:
         // New result.
         auto newPortVal = newMem->getResult(portIt.index());
         // If read port, then blindly replace.
-        if (memOp.getPortKind(portIt.index()) == MemOp::PortKind::Read) {
+        if (memOp.getPortKind(portIt.index()) == MemOp::PortKind::Read ||
+            memOp.getPortKind(portIt.index()) == MemOp::PortKind::Debug) {
           oldPort.replaceAllUsesWith(newPortVal);
           continue;
         }

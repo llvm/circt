@@ -62,7 +62,7 @@ def CompRegOp : SeqOp<"compreg",
 
 def FirRegOp : SeqOp<"firreg",
     [NoSideEffect, AllTypesMatch<["next", "data"/*, "resetValue"*/]>,
-     SameVariadicOperandSize,
+     SameVariadicOperandSize, MemoryEffects<[MemWrite, MemRead, MemAlloc]>,
      DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
       // AllTypesMatch doesn't work with Optional types yet.
 

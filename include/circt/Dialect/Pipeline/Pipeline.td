@@ -177,6 +177,8 @@ def PipelineStageRegisterOp : Op<Pipeline_Dialect, "stage.register", [
   let arguments = (ins Variadic<AnyType>:$regIns, I1:$when);
   let results = (outs Variadic<AnyType>:$regOuts, I1:$valid);
 
+  let builders = [OpBuilder<(ins "mlir::Value":$when, "mlir::ValueRange":$regIns)>];
+
   let assemblyFormat = [{
     `when` $when (`regs` $regIns^)? attr-dict (`:` type($regIns)^)?
   }];

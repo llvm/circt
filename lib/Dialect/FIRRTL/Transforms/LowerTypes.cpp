@@ -796,6 +796,10 @@ bool TypeLoweringVisitor::visitDecl(MemOp op) {
   // Wires for old ports
   for (unsigned int index = 0, end = op.getNumResults(); index < end; ++index) {
     auto result = op.getResult(index);
+    if (op.getPortKind(index) == MemOp::PortKind::Debug) {
+      op.emitOpError("cannot lower memory with debug port");
+      return false;
+    }
     auto wire = builder->create<WireOp>(
         result.getType(),
         (op.getName() + "_" + op.getPortName(index).getValue()).str());

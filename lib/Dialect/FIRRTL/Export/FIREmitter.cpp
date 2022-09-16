@@ -73,6 +73,7 @@ struct Emitter {
   void emitStatement(CombMemOp op);
   void emitStatement(SeqMemOp op);
   void emitStatement(MemoryPortOp op);
+  void emitStatement(MemoryDebugPortOp op);
   void emitStatement(MemoryPortAccessOp op);
 
   template <class T>
@@ -321,7 +322,7 @@ void Emitter::emitStatementsInBlock(Block &block) {
         .Case<WhenOp, WireOp, RegOp, RegResetOp, NodeOp, StopOp, SkipOp,
               PrintFOp, AssertOp, AssumeOp, CoverOp, ConnectOp, StrictConnectOp,
               InstanceOp, AttachOp, MemOp, InvalidValueOp, SeqMemOp, CombMemOp,
-              MemoryPortOp, MemoryPortAccessOp>(
+              MemoryPortOp, MemoryDebugPortOp, MemoryPortAccessOp>(
             [&](auto op) { emitStatement(op); })
         .Default([&](auto op) {
           indent() << "// operation " << op->getName() << "\n";
@@ -567,6 +568,11 @@ void Emitter::emitStatement(CombMemOp op) {
 }
 
 void Emitter::emitStatement(MemoryPortOp op) {
+  // Nothing to output for this operation.
+  addValueName(op.getData(), op.getName());
+}
+
+void Emitter::emitStatement(MemoryDebugPortOp op) {
   // Nothing to output for this operation.
   addValueName(op.getData(), op.getName());
 }

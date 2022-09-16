@@ -726,6 +726,109 @@ LogicalResult circt::firrtl::applyGCTDataTaps(const AnnoPathValue &target,
   return success();
 }
 
+LogicalResult applyGCTMemTapsWithWires(const AnnoPathValue &target,
+                                       DictionaryAttr anno,
+                                       std::string &sourceTargetStr,
+                                       ApplyState &state) {
+  auto loc = state.circuit.getLoc();
+  Value memDbgPort;
+  Optional<AnnoPathValue> srcTarget = resolvePath(
+      sourceTargetStr, state.circuit, state.symTbl, state.targetCaches);
+  if (!srcTarget)
+    return mlir::emitError(loc, "cannot resolve source target path '")
+           << sourceTargetStr << "'";
+  auto tapsAttr = tryGetAs<ArrayAttr>(anno, anno, "wireName", loc, memTapClass);
+  if (!tapsAttr || tapsAttr.empty())
+    return mlir::emitError(loc, "wireName must have at least one entry");
+  if (auto combMem = dyn_cast<chirrtl::CombMemOp>(srcTarget->ref.getOp())) {
+    if (!combMem.getType().getElementType().isGround())
+      return combMem.emitOpError(
+          "cannot generate MemTap to a memory with aggregate data type");
+    ImplicitLocOpBuilder builder(combMem->getLoc(), combMem);
+    builder.setInsertionPointAfter(combMem);
+    // Construct the type for the debug port.
+    auto debugType =
+        RefType::get(FVectorType::get(combMem.getType().getElementType(),
+                                      combMem.getType().getNumElements()));
+
+    auto debugPort = builder.create<chirrtl::MemoryDebugPortOp>(
+        debugType, combMem,
+        state.getNamespace(srcTarget->ref.getModule()).newName("memTap"));
+
+    memDbgPort = debugPort.getResult();
+    if (srcTarget->instances.empty()) {
+      auto path = state.instancePathCache.getAbsolutePaths(
+          combMem->getParentOfType<FModuleOp>());
+      if (path.size() > 1)
+        return combMem.emitOpError(
+            "cannot be resolved as source for MemTap, multiple paths from top "
+            "exist and unique instance cannot be resolved");
+      srcTarget->instances.append(path.back().begin(), path.back().end());
+    }
+    if (tapsAttr.size() != combMem.getType().getNumElements())
+      return mlir::emitError(
+          loc,
+          "wireName cannot specify more taps than the depth of the memory");
+  } else
+    return srcTarget->ref.getOp()->emitOpError(
+        "unsupported operation, only CombMem can be used as the source of "
+        "MemTap");
+
+  auto tap = tapsAttr[0].dyn_cast_or_null<StringAttr>();
+  if (!tap) {
+    return mlir::emitError(
+               loc, "Annotation '" + Twine(memTapClass) +
+                        "' with path '.taps[0" +
+                        "]' contained an unexpected type (expected a string).")
+               .attachNote()
+           << "The full Annotation is reprodcued here: " << anno << "\n";
+  }
+  auto wireTargetStr = canonicalizeTarget(tap.getValue());
+  if (!tokenizePath(wireTargetStr))
+    return failure();
+  Optional<AnnoPathValue> wireTarget = resolvePath(
+      wireTargetStr, state.circuit, state.symTbl, state.targetCaches);
+  SmallVector<InstanceOp> pathFromSrcToWire;
+  FModuleOp lcaModule;
+  // Find the lca and get the path from source to wire through that lca.
+  if (findLCAandSetPath(*srcTarget, *wireTarget, pathFromSrcToWire, lcaModule,
+                        state)
+          .failed())
+    return mlir::emitError(loc,
+                           "Failed to find a uinque path from source to wire.");
+  LLVM_DEBUG(llvm::dbgs() << "\n lca :" << lcaModule.getNameAttr();
+             for (auto i
+                  : pathFromSrcToWire) llvm::dbgs()
+             << "\n"
+             << i->getParentOfType<FModuleOp>().getNameAttr() << ">"
+             << i.getNameAttr(););
+  auto srcModule = dyn_cast<FModuleOp>(srcTarget->ref.getModule());
+  ImplicitLocOpBuilder refSendBuilder(srcModule.getLoc(), srcModule);
+  auto sendVal = memDbgPort;
+  // Now drill ports to connect the `sendVal` to the `wireTarget`.
+  auto remoteXMR = borePortsOnPath(
+      pathFromSrcToWire, lcaModule, sendVal, "memTap", state.instancePathCache,
+      [&](FModuleLike mod) -> ModuleNamespace & {
+        return state.getNamespace(mod);
+      },
+      &state.targetCaches);
+  auto wireModule = cast<FModuleOp>(wireTarget->ref.getModule());
+  ImplicitLocOpBuilder refResolveBuilder(wireModule.getLoc(), wireModule);
+  if (remoteXMR.isa<BlockArgument>())
+    refResolveBuilder.setInsertionPointToStart(wireModule.getBodyBlock());
+  else
+    refResolveBuilder.setInsertionPointAfter(remoteXMR.getDefiningOp());
+  auto refResolve = refResolveBuilder.create<RefResolveOp>(remoteXMR);
+  refResolveBuilder.setInsertionPointToEnd(wireTarget->ref.getOp()->getBlock());
+  if (wireTarget->ref.getOp()->getResult(0).getType() != refResolve.getType())
+    return wireTarget->ref.getOp()->emitError(
+        "cannot generate the MemTap, wiretap Type does not match the memory "
+        "type");
+  refResolveBuilder.create<StrictConnectOp>(
+      wireTarget->ref.getOp()->getResult(0), refResolve.getResult());
+  return success();
+}
+
 LogicalResult circt::firrtl::applyGCTMemTaps(const AnnoPathValue &target,
                                              DictionaryAttr anno,
                                              ApplyState &state) {
@@ -745,11 +848,11 @@ LogicalResult circt::firrtl::applyGCTMemTaps(const AnnoPathValue &target,
   attrs.append("class", StringAttr::get(context, memTapSourceClass));
   attrs.append("id", id);
   attrs.append("target", StringAttr::get(context, sourceTarget));
-  state.addToWorklistFn(DictionaryAttr::get(context, attrs));
 
+  if (!anno.contains("taps"))
+    return applyGCTMemTapsWithWires(target, anno, sourceTarget, state);
   auto tapsAttr = tryGetAs<ArrayAttr>(anno, anno, "taps", loc, memTapClass);
-  if (!tapsAttr)
-    return failure();
+  state.addToWorklistFn(DictionaryAttr::get(context, attrs));
   StringSet<> memTapBlackboxes;
   for (size_t i = 0, e = tapsAttr.size(); i != e; ++i) {
     auto tap = tapsAttr[i].dyn_cast_or_null<StringAttr>();
