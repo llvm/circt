@@ -166,25 +166,21 @@ struct llvm::DOTGraphTraits<circt::hw::HWModuleOp>
 
   template <typename Iterator>
   static std::string getEdgeAttributes(circt::hw::detail::HWOperation *node,
-                                       Iterator it,
-                                       circt::hw::HWModuleOp module) {
-
-    bool verboseEdges =
-        module.getAttrOfType<mlir::BoolAttr>("dot_verboseEdges");
-
-    if (!verboseEdges.getValue())
-      return "";
+                                       Iterator it, circt::hw::HWModuleOp mod) {
 
     mlir::OpOperand &operand = *it.getCurrent();
     mlir::Value v = operand.get();
     std::string str;
     llvm::raw_string_ostream os(str);
-    os << "label=\"" << operand.getOperandNumber() << " (" << v.getType()
-       << ")\"";
+    auto verboseEdges = mod->getAttrOfType<mlir::BoolAttr>("dot_verboseEdges");
+    if (verboseEdges.getValue()) {
+      os << "label=\"" << operand.getOperandNumber() << " (" << v.getType()
+         << ")\"";
+    }
 
     int64_t width = circt::hw::getBitWidth(v.getType());
     if (width > 1)
-      os << ",style=bold";
+      os << " style=bold";
 
     return os.str();
   };
