@@ -9,7 +9,7 @@
 // CHECK-NEXT:  } else  {
 firrtl.circuit "Simple" {
 
-   // CHECK-LABEL: hw.module.extern @MyParameterizedExtModule
+   // CHECK-LABEL: hw.module.extern private @MyParameterizedExtModule
    // CHECK-SAME: <DEFAULT: i64, DEPTH: f64, FORMAT: none, WIDTH: i8>
    // CHECK-SAME: (%in: i1) -> (out: i8)
    // CHECK: attributes {verilogName = "name_thing"}

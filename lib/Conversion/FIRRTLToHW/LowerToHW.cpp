@@ -1009,6 +1009,8 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
   auto parameters = getHWParameters(oldModule, /*ignoreValues=*/true);
   auto newModule = builder.create<hw::HWModuleExternOp>(
       oldModule.getLoc(), nameAttr, ports, verilogName, parameters);
+  SymbolTable::setSymbolVisibility(newModule,
+                                   SymbolTable::getSymbolVisibility(oldModule));
 
   bool hasOutputPort =
       llvm::any_of(firrtlPorts, [&](auto p) { return p.isOutput(); });
