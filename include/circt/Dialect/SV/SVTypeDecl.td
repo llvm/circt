@@ -37,12 +37,13 @@ def InterfaceOp : SVOp<"interface",
   }];
 
   let arguments = (ins
-    SymbolNameAttr:$sym_name
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$comment
   );
 
   let regions = (region SizedRegion<1>:$body);
 
-  let assemblyFormat = "attr-dict $sym_name $body";
+  let assemblyFormat = "$sym_name attr-dict-with-keyword $body";
 
   let skipDefaultBuilders = 1;
   let builders = [
