@@ -207,6 +207,7 @@ enum HLSFlowDynamicIRLevel {
   Handshake = 1,
   Firrtl = 2,
   Rtl = 3,
+  Sv = 4,
 };
 
 static void printHLSFlowDynamic() {
@@ -214,7 +215,8 @@ static void printHLSFlowDynamic() {
   llvm::errs() << HLSFlowDynamicIRLevel::High << ": 'cf/scf/affine' level IR\n";
   llvm::errs() << HLSFlowDynamicIRLevel::Handshake << ": 'handshake' IR\n";
   llvm::errs() << HLSFlowDynamicIRLevel::Firrtl << ": 'firrtl'\n";
-  llvm::errs() << HLSFlowDynamicIRLevel::Rtl << ": 'hw/comb' IR\n";
+  llvm::errs() << HLSFlowDynamicIRLevel::Rtl << ": 'hw/comb/seq' IR\n";
+  llvm::errs() << HLSFlowDynamicIRLevel::Sv << ": 'hw/comb/sv' IR\n";
 }
 
 static LogicalResult
@@ -225,16 +227,15 @@ doHLSFlowDynamic(PassManager &pm, ModuleOp module,
     irInputLevel = HLSFlowDynamicIRLevel::High; // Default to highest level
 
   if (irOutputLevel < 0)
-    irOutputLevel = HLSFlowDynamicIRLevel::Rtl; // Default to lowest level
+    irOutputLevel = HLSFlowDynamicIRLevel::Sv; // Default to lowest level
 
-  if (irInputLevel > HLSFlowDynamicIRLevel::Rtl) {
+  if (irInputLevel > HLSFlowDynamicIRLevel::Sv) {
     llvm::errs() << "Invalid IR input level: " << irInputLevel << "\n";
     printHLSFlowDynamic();
     return failure();
   }
 
-  if (outputFormat == OutputIR &&
-      (irOutputLevel > HLSFlowDynamicIRLevel::Rtl)) {
+  if (outputFormat == OutputIR && (irOutputLevel > HLSFlowDynamicIRLevel::Sv)) {
     llvm::errs() << "Invalid IR output level: " << irOutputLevel << "\n";
     printHLSFlowDynamic();
     return failure();
@@ -271,8 +272,8 @@ doHLSFlowDynamic(PassManager &pm, ModuleOp module,
   addIRLevel(HLSFlowDynamicIRLevel::Rtl, [&]() {
     pm.addPass(createLowerFIRRTLToHWPass(/*enableAnnotationWarning=*/false,
                                          /*emitChiselAssertsAsSVA=*/false));
-    loadHWLoweringPipeline(pm);
   });
+  addIRLevel(HLSFlowDynamicIRLevel::Sv, [&]() { loadHWLoweringPipeline(pm); });
 
   if (outputFormat == OutputVerilog) {
     applyLoweringCLOptions(module);
