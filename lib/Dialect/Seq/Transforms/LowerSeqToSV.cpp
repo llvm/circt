@@ -106,9 +106,7 @@ private:
 
   void initialize(OpBuilder &builder, RegLowerInfo reg, ArrayRef<Value> rands);
 
-void createTree(OpBuilder &builder, sv::RegOp reg, Value term,
-                       Value next);
-
+  void createTree(OpBuilder &builder, sv::RegOp reg, Value term, Value next);
 
   void addToAlwaysBlock(Block *block, sv::EventControl clockEdge, Value clock,
                         std::function<void(OpBuilder &)> body,
@@ -116,37 +114,36 @@ void createTree(OpBuilder &builder, sv::RegOp reg, Value term,
                         sv::EventControl resetEdge = {}, Value reset = {},
                         std::function<void(OpBuilder &)> resetBody = {});
 
-  void addToIfBlock(OpBuilder &builder, Value cond, 
-  std::function<void()> trueSide, 
-  std::function<void()> falseSide);
+  void addToIfBlock(OpBuilder &builder, Value cond,
+                    std::function<void()> trueSide,
+                    std::function<void()> falseSide);
 
   using AlwaysKeyType = std::tuple<Block *, sv::EventControl, Value, ResetType,
                                    sv::EventControl, Value>;
   llvm::SmallDenseMap<AlwaysKeyType, std::pair<sv::AlwaysOp, sv::IfOp>>
       alwaysBlocks;
 
-  using IfKeyType = std::pair<Block*, Value>;
+  using IfKeyType = std::pair<Block *, Value>;
   llvm::SmallDenseMap<IfKeyType, sv::IfOp> ifCache;
 };
 } // namespace
 
-void FirRegLower::addToIfBlock(OpBuilder &builder, Value cond, 
-  std::function<void()> trueSide, 
-  std::function<void()> falseSide) {
-  sv::IfOp& op = ifCache[std::make_pair(builder.getBlock(), cond)];
-  //always build both sides of the if, in case we want to use an empty else 
-  // later.  This way we don't have to build a new if and replace it.
+void FirRegLower::addToIfBlock(OpBuilder &builder, Value cond,
+                               std::function<void()> trueSide,
+                               std::function<void()> falseSide) {
+  sv::IfOp &op = ifCache[std::make_pair(builder.getBlock(), cond)];
+  // always build both sides of the if, in case we want to use an empty else
+  //  later.  This way we don't have to build a new if and replace it.
   if (!op) {
-      builder.create<sv::IfOp>(
-        cond.getLoc(), cond, trueSide, falseSide);
+    builder.create<sv::IfOp>(cond.getLoc(), cond, trueSide, falseSide);
   } else {
     OpBuilder::InsertionGuard guard(builder);
     builder.setInsertionPointToEnd(op.getThenBlock());
     trueSide();
     builder.setInsertionPointToEnd(op.getElseBlock());
-    falseSide();    
+    falseSide();
   }
-  }
+}
 
 void FirRegLower::lower(hw::HWModuleOp module) {
   // Find all registers to lower in the module.
@@ -261,12 +258,13 @@ void FirRegLower::lower(hw::HWModuleOp module) {
 }
 
 void FirRegLower::createTree(OpBuilder &builder, sv::RegOp reg, Value term,
-                       Value next) {
+                             Value next) {
   if (term == next)
     return;
   auto mux = next.getDefiningOp<comb::MuxOp>();
   if (mux && mux.getTwoState()) {
-    addToIfBlock(builder, mux.getCond(), 
+    addToIfBlock(
+        builder, mux.getCond(),
         [&]() { createTree(builder, reg, term, mux.getTrueValue()); },
         [&]() { createTree(builder, reg, term, mux.getFalseValue()); });
   } else {
@@ -299,10 +297,10 @@ FirRegLower::RegLowerInfo FirRegLower::lower(hw::HWModuleOp module,
   if (reg.hasReset()) {
     addToAlwaysBlock(
         module.getBodyBlock(), sv::EventControl::AtPosEdge, reg.getClk(),
-        [&] (OpBuilder& b) {createTree( b, svReg.reg, reg,
-                  reg.getNext()); },
+        [&](OpBuilder &b) { createTree(b, svReg.reg, reg, reg.getNext()); },
         reg.getIsAsync() ? ResetType::AsyncReset : ResetType::SyncReset,
-        sv::EventControl::AtPosEdge, reg.getReset(), [&](OpBuilder &builder) {
+        sv::EventControl::AtPosEdge, reg.getReset(),
+        [&](OpBuilder &builder) {
           builder.create<sv::PAssignOp>(loc, svReg.reg, reg.getResetValue());
         });
     if (reg.getIsAsync()) {
@@ -310,10 +308,9 @@ FirRegLower::RegLowerInfo FirRegLower::lower(hw::HWModuleOp module,
       svReg.asyncResetValue = reg.getResetValue();
     }
   } else {
-    addToAlwaysBlock(module.getBodyBlock(), sv::EventControl::AtPosEdge,
-                     reg.getClk(),
-        [&] (OpBuilder& b) {createTree( b, svReg.reg, reg,
-                  reg.getNext()); });
+    addToAlwaysBlock(
+        module.getBodyBlock(), sv::EventControl::AtPosEdge, reg.getClk(),
+        [&](OpBuilder &b) { createTree(b, svReg.reg, reg, reg.getNext()); });
   }
 
   reg.replaceAllUsesWith(regVal.getResult());
