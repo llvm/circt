@@ -385,34 +385,34 @@ firrtl.circuit "Top"  {
     firrtl.strictconnect %dut_io_addr, %io_addr : !firrtl.uint<3>
     %1 = firrtl.subindex %0[0] : !firrtl.vector<uint<8>, 8>
     firrtl.strictconnect %memTap_0, %1 : !firrtl.uint<8>
-    %2 = firrtl.subindex %0[1] : !firrtl.vector<uint<8>, 8>
-    firrtl.strictconnect %memTap_1, %2 : !firrtl.uint<8>
-    %3 = firrtl.subindex %0[2] : !firrtl.vector<uint<8>, 8>
-    firrtl.strictconnect %memTap_2, %3 : !firrtl.uint<8>
-    %4 = firrtl.subindex %0[3] : !firrtl.vector<uint<8>, 8>
-    firrtl.strictconnect %memTap_3, %4 : !firrtl.uint<8>
-    %5 = firrtl.subindex %0[4] : !firrtl.vector<uint<8>, 8>
-    firrtl.strictconnect %memTap_4, %5 : !firrtl.uint<8>
-    %6 = firrtl.subindex %0[5] : !firrtl.vector<uint<8>, 8>
-    firrtl.strictconnect %memTap_5, %6 : !firrtl.uint<8>
-    %7 = firrtl.subindex %0[6] : !firrtl.vector<uint<8>, 8>
-    firrtl.strictconnect %memTap_6, %7 : !firrtl.uint<8>
-    %8 = firrtl.subindex %0[7] : !firrtl.vector<uint<8>, 8>
-    firrtl.strictconnect %memTap_7, %8 : !firrtl.uint<8>
     // CHECK{LITERAL}:  %0 = firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}.Memory[0]" : () -> !firrtl.uint<8> {symbols = [@Top, #hw.innerNameRef<@Top::@xmr_sym>, #hw.innerNameRef<@DUTModule::@xmr_sym>]}
     // CHECK:  firrtl.strictconnect %memTap_0, %0 : !firrtl.uint<8>
+    %2 = firrtl.subindex %0[1] : !firrtl.vector<uint<8>, 8>
+    firrtl.strictconnect %memTap_1, %2 : !firrtl.uint<8>
     // CHECK{LITERAL}:  %1 = firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}.Memory[1]" : () -> !firrtl.uint<8> {symbols = [@Top, #hw.innerNameRef<@Top::@xmr_sym>, #hw.innerNameRef<@DUTModule::@xmr_sym>]}
     // CHECK:  firrtl.strictconnect %memTap_1, %1 : !firrtl.uint<8>
+    %3 = firrtl.subindex %0[2] : !firrtl.vector<uint<8>, 8>
+    firrtl.strictconnect %memTap_2, %3 : !firrtl.uint<8>
     // CHECK{LITERAL}:  %2 = firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}.Memory[2]" : () -> !firrtl.uint<8> {symbols = [@Top, #hw.innerNameRef<@Top::@xmr_sym>, #hw.innerNameRef<@DUTModule::@xmr_sym>]}
     // CHECK:  firrtl.strictconnect %memTap_2, %2 : !firrtl.uint<8>
+    %4 = firrtl.subindex %0[3] : !firrtl.vector<uint<8>, 8>
+    firrtl.strictconnect %memTap_3, %4 : !firrtl.uint<8>
     // CHECK{LITERAL}:  %3 = firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}.Memory[3]" : () -> !firrtl.uint<8> {symbols = [@Top, #hw.innerNameRef<@Top::@xmr_sym>, #hw.innerNameRef<@DUTModule::@xmr_sym>]}
     // CHECK:  firrtl.strictconnect %memTap_3, %3 : !firrtl.uint<8>
+    %5 = firrtl.subindex %0[4] : !firrtl.vector<uint<8>, 8>
+    firrtl.strictconnect %memTap_4, %5 : !firrtl.uint<8>
     // CHECK{LITERAL}:  %4 = firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}.Memory[4]" : () -> !firrtl.uint<8> {symbols = [@Top, #hw.innerNameRef<@Top::@xmr_sym>, #hw.innerNameRef<@DUTModule::@xmr_sym>]}
     // CHECK:  firrtl.strictconnect %memTap_4, %4 : !firrtl.uint<8>
+    %6 = firrtl.subindex %0[5] : !firrtl.vector<uint<8>, 8>
+    firrtl.strictconnect %memTap_5, %6 : !firrtl.uint<8>
     // CHECK{LITERAL}:  %5 = firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}.Memory[5]" : () -> !firrtl.uint<8> {symbols = [@Top, #hw.innerNameRef<@Top::@xmr_sym>, #hw.innerNameRef<@DUTModule::@xmr_sym>]}
     // CHECK:  firrtl.strictconnect %memTap_5, %5 : !firrtl.uint<8>
+    %7 = firrtl.subindex %0[6] : !firrtl.vector<uint<8>, 8>
+    firrtl.strictconnect %memTap_6, %7 : !firrtl.uint<8>
     // CHECK{LITERAL}:  %6 = firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}.Memory[6]" : () -> !firrtl.uint<8> {symbols = [@Top, #hw.innerNameRef<@Top::@xmr_sym>, #hw.innerNameRef<@DUTModule::@xmr_sym>]}
     // CHECK:  firrtl.strictconnect %memTap_6, %6 : !firrtl.uint<8>
+    %8 = firrtl.subindex %0[7] : !firrtl.vector<uint<8>, 8>
+    firrtl.strictconnect %memTap_7, %8 : !firrtl.uint<8>
     // CHECK{LITERAL}:  %7 = firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}.Memory[7]" : () -> !firrtl.uint<8> {symbols = [@Top, #hw.innerNameRef<@Top::@xmr_sym>, #hw.innerNameRef<@DUTModule::@xmr_sym>]}
     // CHECK:  firrtl.strictconnect %memTap_7, %7 : !firrtl.uint<8>
   }
