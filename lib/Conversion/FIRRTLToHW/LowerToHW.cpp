@@ -1448,6 +1448,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   Value getExtOrTruncAggregateValue(Value array, FIRRTLBaseType sourceType,
                                     FIRRTLBaseType destType,
                                     bool allowTruncate);
+  Value createArrayIndexing(Value array, Value index);
 
   // Create a temporary wire at the current insertion point, and try to
   // eliminate it later as part of lowering post processing.
@@ -2446,8 +2447,8 @@ LogicalResult FIRRTLLowering::visitExpr(SubaccessOp op) {
   // If the value has an inout type, we need to lower to ArrayIndexInOutOp.
   if (value.getType().isa<sv::InOutType>())
     return setLoweringTo<sv::ArrayIndexInOutOp>(op, value, valueIdx);
-  // Otherwise, hw::ArrayGetOp
-  return setLoweringTo<hw::ArrayGetOp>(op, value, valueIdx);
+  // Otherwise, lower the op to array indexing.
+  return setLowering(op, createArrayIndexing(value, valueIdx));
 }
 
 LogicalResult FIRRTLLowering::visitExpr(SubfieldOp op) {
@@ -3383,33 +3384,19 @@ LogicalResult FIRRTLLowering::visitExpr(MuxPrimOp op) {
                                     true);
 }
 
-LogicalResult FIRRTLLowering::visitExpr(MultibitMuxOp op) {
-  // Lower and resize to the index width.
-  auto index = getLoweredAndExtOrTruncValue(
-      op.getIndex(),
-      UIntType::get(op.getContext(),
-                    getBitWidthFromVectorSize(op.getInputs().size())));
+// Construct array indexing annotated with vendor pragmas to get
+// better synthesis results. Specifically we annotate pragmas in the following
+// form.
+// ```
+//   wire GEN;
+//   /* synopsys infer_mux_override */
+//   assign GEN = array[index] /* cadence map_to_mux */;
+// ```
+Value FIRRTLLowering::createArrayIndexing(Value array, Value index) {
 
-  if (!index)
-    return failure();
-  SmallVector<Value> loweredInputs;
-  loweredInputs.reserve(op.getInputs().size());
-  for (auto input : op.getInputs()) {
-    auto lowered = getLoweredAndExtendedValue(input, op.getType());
-    if (!lowered)
-      return failure();
-    loweredInputs.push_back(lowered);
-  }
-
-  // We lower multbit mux into array indexing with vendor pragmas in the
-  // following form.
-  //
-  // wire GEN;
-  // /* synopsys infer_mux_override */
-  // assign GEN = array[index] /* cadence map_to_mux */;
-
-  Value array = builder.create<hw::ArrayCreateOp>(loweredInputs);
-  auto valWire = builder.create<sv::WireOp>(lowerType(op.getType()));
+  auto size = hw::type_cast<hw::ArrayType>(array.getType()).getSize();
+  auto valWire = builder.create<sv::WireOp>(
+      hw::type_cast<hw::ArrayType>(array.getType()).getElementType());
   auto arrayGet = builder.create<hw::ArrayGetOp>(array, index);
 
   // Use SV attributes to annotate pragmas.
@@ -3428,8 +3415,8 @@ LogicalResult FIRRTLLowering::visitExpr(MultibitMuxOp op) {
 
   // If the multi-bit mux can never have an out-of-bounds read, then lower it
   // into a HW multi-bit mux.
-  if (llvm::isPowerOf2_64(op.getInputs().size()))
-    return setLowering(op, inBoundsRead);
+  if (llvm::isPowerOf2_64(size))
+    return inBoundsRead;
 
   // If the multi-bit mux can have an out-of-bounds read (the size of the array
   // is not a power-of-two), then generate a mux that will return the zeroth
@@ -3444,11 +3431,32 @@ LogicalResult FIRRTLLowering::visitExpr(MultibitMuxOp op) {
       getOrCreateIntConstant(index.getType().getIntOrFloatBitWidth(), 0));
   Value isOutOfBounds = builder.create<comb::ICmpOp>(
       ICmpPredicate::uge, index,
-      getOrCreateIntConstant(index.getType().getIntOrFloatBitWidth(),
-                             op.getInputs().size()),
+      getOrCreateIntConstant(index.getType().getIntOrFloatBitWidth(), size),
       true);
-  return setLoweringTo<comb::MuxOp>(op, inBoundsRead.getType(), isOutOfBounds,
-                                    zerothRead, inBoundsRead, true);
+  return builder.create<comb::MuxOp>(inBoundsRead.getType(), isOutOfBounds,
+                                     zerothRead, inBoundsRead, true);
+}
+
+LogicalResult FIRRTLLowering::visitExpr(MultibitMuxOp op) {
+  // Lower and resize to the index width.
+  auto index = getLoweredAndExtOrTruncValue(
+      op.getIndex(),
+      UIntType::get(op.getContext(),
+                    getBitWidthFromVectorSize(op.getInputs().size())));
+
+  if (!index)
+    return failure();
+  SmallVector<Value> loweredInputs;
+  loweredInputs.reserve(op.getInputs().size());
+  for (auto input : op.getInputs()) {
+    auto lowered = getLoweredAndExtendedValue(input, op.getType());
+    if (!lowered)
+      return failure();
+    loweredInputs.push_back(lowered);
+  }
+
+  Value array = builder.create<hw::ArrayCreateOp>(loweredInputs);
+  return setLowering(op, createArrayIndexing(array, index));
 }
 
 LogicalResult FIRRTLLowering::visitExpr(VerbatimExprOp op) {
