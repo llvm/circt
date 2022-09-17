@@ -14,6 +14,7 @@
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/MSFT/MSFTPasses.h"
+#include "circt/Dialect/SV/SVOps.h"
 
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -25,7 +26,9 @@
 using namespace circt;
 using namespace circt::esi;
 
-LogicalResult ServiceGeneratorDispatcher::generate(ServiceImplementReqOp req) {
+LogicalResult
+ServiceGeneratorDispatcher::generate(ServiceImplementReqOp req,
+                                     ServiceDeclOpInterface decl) {
   // Lookup based on 'impl_type' attribute and pass through the generate request
   // if found.
   auto genF = genLookupTable.find(req.getImplTypeAttr().getValue());
@@ -35,11 +38,12 @@ LogicalResult ServiceGeneratorDispatcher::generate(ServiceImplementReqOp req) {
              << req.getImplTypeAttr() << "'";
     return success();
   }
-  return genF->second(req);
+  return genF->second(req, decl);
 }
 
 /// The generator for the "cosim" impl_type.
-static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp req) {
+static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp req,
+                                                 ServiceDeclOpInterface decl) {
   auto *ctxt = req.getContext();
   OpBuilder b(req);
   Block *portReqs = &req.getPortReqs().getBlocks().front();
@@ -115,8 +119,57 @@ static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp req) {
   return success();
 }
 
+// Generator for "sv_mem" implementation type. Emits SV ops for an unpacked
+// array, hopefully inferred as a memory to the SV compiler.
+static LogicalResult
+instantiateSystemVerilogMemory(ServiceImplementReqOp req,
+                               ServiceDeclOpInterface decl) {
+  ImplicitLocOpBuilder b(req.getLoc(), req);
+
+  RandomAccessMemoryDeclOp ramDecl =
+      dyn_cast<RandomAccessMemoryDeclOp>(decl.getOperation());
+  if (!ramDecl)
+    return req.emitOpError("'sv_mem' implementation type can only be used to "
+                           "implement RandomAccessMemory declarations");
+
+  if (req.getNumOperands() < 2)
+    return req.emitOpError("Implementation requires clk and rst operands");
+  auto clk = req.getOperand(0);
+  auto rst = req.getOperand(1);
+  auto write = b.getStringAttr("write");
+  auto read = b.getStringAttr("read");
+  auto ready = b.create<hw::ConstantOp>(IntegerAttr::get(b.getI1Type(), 1));
+
+  hw::UnpackedArrayType memType =
+      hw::UnpackedArrayType::get(ramDecl.getInnerType(), ramDecl.getDepth());
+  auto mem = b.create<sv::RegOp>(memType, req.getServiceSymbolAttr().getAttr());
+
+  // Get the request pairs.
+  llvm::SmallVector<
+      std::pair<RequestToServerConnectionOp, RequestToClientConnectionOp>, 8>
+      reqPairs;
+  req.gatherPairedReqs(reqPairs);
+
+  for (auto [toServerReq, toClientReq] : reqPairs) {
+    assert(toServerReq && toClientReq); // All of our interfaces are inout.
+    assert(toServerReq.getServicePort() == toClientReq.getServicePort());
+
+    if (toServerReq.getServicePort().getName() == write)
+      auto unwrap =
+          b.create<UnwrapValidReadyOp>(toServerReq.getToServer(), ready);
+  }
+
+  b.create<sv::AlwaysFFOp>(sv::EventControl::AtPosEdge, clk,
+                           ResetType::SyncReset, sv::EventControl::AtPosEdge,
+                           rst, [&] {});
+
+  return success();
+}
+
 static ServiceGeneratorDispatcher
-    globalDispatcher({{"cosim", instantiateCosimEndpointOps}}, false);
+    globalDispatcher({{"cosim", instantiateCosimEndpointOps},
+                      {"sv_mem", instantiateSystemVerilogMemory}},
+                     false);
 
 ServiceGeneratorDispatcher &ServiceGeneratorDispatcher::globalDispatcher() {
   return ::globalDispatcher;
@@ -333,6 +386,10 @@ LogicalResult ESIConnectServicesPass::replaceInst(ServiceInstanceOp instOp,
                                                   Block *portReqs) {
   assert(portReqs);
 
+  Operation *declOp = topLevelSyms.getDefinition(instOp.getServiceSymbolAttr());
+  ServiceDeclOpInterface decl = dyn_cast<ServiceDeclOpInterface>(declOp);
+  assert(decl);
+
   // Compute the result types for the new op -- the instance op's output types
   // + the to_client types.
   SmallVector<Type, 8> resultTypes(instOp.getResultTypes().begin(),
@@ -371,7 +428,7 @@ LogicalResult ESIConnectServicesPass::replaceInst(ServiceInstanceOp instOp,
   emitServiceMetadata(implOp);
 
   // Try to generate the service provider.
-  if (failed(genDispatcher.generate(implOp)))
+  if (failed(genDispatcher.generate(implOp, decl)))
     return instOp.emitOpError("failed to generate server");
 
   instOp.erase();

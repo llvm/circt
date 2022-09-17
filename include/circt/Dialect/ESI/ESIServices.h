@@ -23,8 +23,8 @@ namespace esi {
 class ServiceGeneratorDispatcher {
 public:
   // All generators must support this function pointer signature.
-  using ServiceGeneratorFunc =
-      std::function<LogicalResult(ServiceImplementReqOp)>;
+  using ServiceGeneratorFunc = std::function<LogicalResult(
+      ServiceImplementReqOp, ServiceDeclOpInterface)>;
 
   // Since passes don't have access to a context at creation time (and
   // Attributes are tied to the context), we need to delay lookup table creation
@@ -43,7 +43,7 @@ public:
 
   /// Generate a service implementation if a generator exists in this registry.
   /// If one is not found, return failure if the `failIfNotFound` flag is set.
-  LogicalResult generate(ServiceImplementReqOp);
+  LogicalResult generate(ServiceImplementReqOp, ServiceDeclOpInterface);
 
   /// Add a generator to this registry.
   void registerGenerator(StringRef name, ServiceGeneratorFunc func);
