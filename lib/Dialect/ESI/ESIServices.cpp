@@ -15,17 +15,17 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/MSFT/MSFTPasses.h"
 
-#include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 
-#include <map>
 #include <memory>
 
 using namespace circt;
 using namespace circt::esi;
 
-LogicalResult ServiceGeneratorDispatcher::generate(ServiceImplementReqOp req) {
+LogicalResult
+ServiceGeneratorDispatcher::generate(ServiceImplementReqOp req,
+                                     ServiceDeclOpInterface decl) {
   // Lookup based on 'impl_type' attribute and pass through the generate request
   // if found.
   auto genF = genLookupTable.find(req.getImplTypeAttr().getValue());
@@ -35,11 +35,12 @@ LogicalResult ServiceGeneratorDispatcher::generate(ServiceImplementReqOp req) {
              << req.getImplTypeAttr() << "'";
     return success();
   }
-  return genF->second(req);
+  return genF->second(req, decl);
 }
 
 /// The generator for the "cosim" impl_type.
-static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp req) {
+static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp req,
+                                                 ServiceDeclOpInterface decl) {
   auto *ctxt = req.getContext();
   OpBuilder b(req);
   Value clk = req.getOperand(0);
@@ -282,8 +283,8 @@ void ESIConnectServicesPass::copyMetadata(hw::HWMutableModuleLike mod) {
 }
 
 /// Create an op which contains metadata about the soon-to-be implemented
-/// service. To be used by later passes which require these data (e.g. automated
-/// software API creation).
+/// service. To be used by later passes which require these data (e.g.
+/// automated software API creation).
 static void emitServiceMetadata(ServiceImplementReqOp implReqOp) {
   ImplicitLocOpBuilder b(implReqOp.getLoc(), implReqOp);
 
@@ -326,6 +327,12 @@ LogicalResult ESIConnectServicesPass::replaceInst(ServiceInstanceOp instOp,
                                                   Block *portReqs) {
   assert(portReqs);
 
+  auto decl = dyn_cast_or_null<ServiceDeclOpInterface>(
+      topLevelSyms.getDefinition(instOp.getServiceSymbolAttr()));
+  if (!decl)
+    return instOp.emitOpError("Could not find service declaration ")
+           << instOp.getServiceSymbolAttr();
+
   // Compute the result types for the new op -- the instance op's output types
   // + the to_client types.
   SmallVector<Type, 8> resultTypes(instOp.getResultTypes().begin(),
@@ -353,7 +360,7 @@ LogicalResult ESIConnectServicesPass::replaceInst(ServiceInstanceOp instOp,
   emitServiceMetadata(implOp);
 
   // Try to generate the service provider.
-  if (failed(genDispatcher.generate(implOp)))
+  if (failed(genDispatcher.generate(implOp, decl)))
     return instOp.emitOpError("failed to generate server");
 
   instOp.erase();
