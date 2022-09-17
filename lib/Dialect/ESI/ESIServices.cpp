@@ -8,6 +8,7 @@
 
 #include "PassDetails.h"
 
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/ESI/ESIOps.h"
 #include "circt/Dialect/ESI/ESIServices.h"
 #include "circt/Dialect/ESI/ESITypes.h"
@@ -155,7 +156,7 @@ instantiateSystemVerilogMemory(ServiceImplementReqOp req,
       reqPairs;
   req.gatherPairedReqs(reqPairs);
 
-  SmallVector<std::tuple<Value, Value, Value>> writeValidAddressData;
+  SmallVector<std::tuple<Value, Value, Value>> writeGoAddressData;
   for (auto [toServerReq, toClientReq] : reqPairs) {
     assert(toServerReq && toClientReq); // All of our interfaces are inout.
     assert(toServerReq.getServicePort() == toClientReq.getServicePort());
@@ -167,15 +168,18 @@ instantiateSystemVerilogMemory(ServiceImplementReqOp req,
           doneWrap.getChanOutput());
       auto unwrap = b.create<UnwrapValidReadyOp>(toServerReq.getToServer(),
                                                  doneWrap.getReady());
-      doneValid.setValue(b.create<seq::CompRegOp>(unwrap.getValid(), clk, rst,
-                                                  c0, "write_done"));
 
       Value address = b.create<hw::StructExtractOp>(unwrap.getRawOutput(),
                                                     b.getStringAttr("address"));
       Value data = b.create<hw::StructExtractOp>(unwrap.getRawOutput(),
                                                  b.getStringAttr("data"));
-      writeValidAddressData.push_back(
-          std::make_tuple(unwrap.getValid(), address, data));
+      auto go = b.create<comb::AndOp>(unwrap.getValid(), unwrap.getReady());
+      go->setAttr("sv.namehint", b.getStringAttr("write_go"));
+
+      doneValid.setValue(
+          b.create<seq::CompRegOp>(go, clk, rst, c0, "write_done"));
+
+      writeGoAddressData.push_back(std::make_tuple(go, address, data));
 
     } else if (port == read) {
       auto dataValid = bb.get(i1);
@@ -195,9 +199,9 @@ instantiateSystemVerilogMemory(ServiceImplementReqOp req,
   b.create<sv::AlwaysFFOp>(
       sv::EventControl::AtPosEdge, clk, ResetType::SyncReset,
       sv::EventControl::AtPosEdge, rst, [&] {
-        for (auto [valid, address, data] : writeValidAddressData) {
+        for (auto [go, address, data] : writeGoAddressData) {
           Value a = address, d = data;
-          b.create<sv::IfOp>(valid, [&] {
+          b.create<sv::IfOp>(go, [&] {
             Value memLoc = b.create<sv::ArrayIndexInOutOp>(mem, a);
             b.create<sv::PAssignOp>(memLoc, d);
           });
