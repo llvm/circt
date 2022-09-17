@@ -356,6 +356,7 @@ static void emitName(Type type, uint64_t id, llvm::raw_ostream &os) {
         os << "ArrayOf" << arrTy.getSize() << 'x';
         emitName(arrTy.getElementType(), 0, os);
       })
+      .Case([&os](NoneType) { os << "None"; })
       .Case([&os, id](hw::StructType t) { os << "Struct" << id; })
       .Default([](Type) {
         assert(false && "Type not supported. Please check support first with "

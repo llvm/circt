@@ -57,6 +57,12 @@ def CompRegOp : SeqOp<"compreg",
                    input, clk, sym_name, Value(), Value(),
                    StringAttr::get($_builder.getContext(), sym_name));
     }]>,
+    OpBuilder<(ins "Value":$input, "Value":$clk, "Value":$rst,
+                   "Value":$rstValue, "StringRef":$sym_name), [{
+      return build($_builder, $_state, input.getType(),
+                   input, clk, sym_name, rst, rstValue,
+                   StringAttr::get($_builder.getContext(), sym_name));
+    }]>,
   ];
 }
 

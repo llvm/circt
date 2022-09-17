@@ -30,7 +30,8 @@ namespace py = pybind11;
 // Mapping from unique identifier to python callback. We use std::string
 // pointers since we also need to allocate memory for the string.
 llvm::DenseMap<std::string *, PyObject *> serviceGenFuncLookup;
-static MlirLogicalResult serviceGenFunc(MlirOperation reqOp, void *userData) {
+static MlirLogicalResult serviceGenFunc(MlirOperation reqOp,
+                                        MlirOperation declOp, void *userData) {
   std::string *name = static_cast<std::string *>(userData);
   py::handle genFunc(serviceGenFuncLookup[name]);
   py::gil_scoped_acquire();

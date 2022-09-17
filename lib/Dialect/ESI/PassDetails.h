@@ -19,6 +19,7 @@
 #include "circt/Dialect/ESI/ESIDialect.h"
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/SV/SVDialect.h"
+#include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Support/LLVM.h"
 
 #include "mlir/IR/DialectRegistry.h"

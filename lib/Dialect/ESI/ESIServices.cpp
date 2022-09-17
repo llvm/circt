@@ -15,12 +15,12 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/MSFT/MSFTPasses.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "circt/Dialect/Seq/SeqOps.h"
+#include "circt/Support/BackedgeBuilder.h"
 
-#include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 
-#include <map>
 #include <memory>
 
 using namespace circt;
@@ -118,6 +118,7 @@ static LogicalResult
 instantiateSystemVerilogMemory(ServiceImplementReqOp req,
                                ServiceDeclOpInterface decl) {
   ImplicitLocOpBuilder b(req.getLoc(), req);
+  BackedgeBuilder bb(b, req.getLoc());
 
   RandomAccessMemoryDeclOp ramDecl =
       dyn_cast<RandomAccessMemoryDeclOp>(decl.getOperation());
@@ -125,17 +126,28 @@ instantiateSystemVerilogMemory(ServiceImplementReqOp req,
     return req.emitOpError("'sv_mem' implementation type can only be used to "
                            "implement RandomAccessMemory declarations");
 
-  if (req.getNumOperands() < 2)
+  if (req.getNumOperands() != 2)
     return req.emitOpError("Implementation requires clk and rst operands");
   auto clk = req.getOperand(0);
   auto rst = req.getOperand(1);
   auto write = b.getStringAttr("write");
   auto read = b.getStringAttr("read");
-  auto ready = b.create<hw::ConstantOp>(IntegerAttr::get(b.getI1Type(), 1));
+  auto none = b.create<esi::NoneSourceOp>();
+  auto i1 = b.getI1Type();
+  auto c0 = b.create<hw::ConstantOp>(i1, 0);
+
+  DenseMap<Value, Value> outputMap;
+  for (auto [bout, reqout] : llvm::zip_longest(
+           req.getOps<RequestToClientConnectionOp>(), req.getResults())) {
+    assert(bout.has_value());
+    assert(reqout.has_value());
+    outputMap[*bout] = *reqout;
+  }
 
   hw::UnpackedArrayType memType =
       hw::UnpackedArrayType::get(ramDecl.getInnerType(), ramDecl.getDepth());
-  auto mem = b.create<sv::RegOp>(memType, req.getServiceSymbolAttr().getAttr());
+  auto mem = b.create<sv::RegOp>(memType, req.getServiceSymbolAttr().getAttr())
+                 .getResult();
 
   // Get the request pairs.
   llvm::SmallVector<
@@ -143,19 +155,56 @@ instantiateSystemVerilogMemory(ServiceImplementReqOp req,
       reqPairs;
   req.gatherPairedReqs(reqPairs);
 
+  SmallVector<std::tuple<Value, Value, Value>> writeValidAddressData;
   for (auto [toServerReq, toClientReq] : reqPairs) {
     assert(toServerReq && toClientReq); // All of our interfaces are inout.
     assert(toServerReq.getServicePort() == toClientReq.getServicePort());
+    auto port = toServerReq.getServicePort().getName();
+    if (port == write) {
+      auto doneValid = bb.get(i1);
+      auto doneWrap = b.create<WrapValidReadyOp>(none, doneValid);
+      outputMap[toClientReq.getToClient()].replaceAllUsesWith(
+          doneWrap.getChanOutput());
+      auto unwrap = b.create<UnwrapValidReadyOp>(toServerReq.getToServer(),
+                                                 doneWrap.getReady());
+      doneValid.setValue(b.create<seq::CompRegOp>(unwrap.getValid(), clk, rst,
+                                                  c0, "write_done"));
 
-    if (toServerReq.getServicePort().getName() == write)
-      auto unwrap =
-          b.create<UnwrapValidReadyOp>(toServerReq.getToServer(), ready);
+      Value address = b.create<hw::StructExtractOp>(unwrap.getRawOutput(),
+                                                    b.getStringAttr("address"));
+      Value data = b.create<hw::StructExtractOp>(unwrap.getRawOutput(),
+                                                 b.getStringAttr("data"));
+      writeValidAddressData.push_back(
+          std::make_tuple(unwrap.getValid(), address, data));
+
+    } else if (port == read) {
+      auto dataValid = bb.get(i1);
+      auto data = bb.get(ramDecl.getInnerType());
+      auto dataWrap = b.create<WrapValidReadyOp>(data, dataValid);
+      outputMap[toClientReq.getToClient()].replaceAllUsesWith(
+          dataWrap.getChanOutput());
+      auto addressUnwrap = b.create<UnwrapValidReadyOp>(
+          toServerReq.getToServer(), dataWrap.getReady());
+      Value memLoc =
+          b.create<sv::ArrayIndexInOutOp>(mem, addressUnwrap.getRawOutput());
+      auto readData = b.create<sv::ReadInOutOp>(memLoc);
+      data.setValue(readData);
+      dataValid.setValue(addressUnwrap.getValid());
+    }
   }
+  b.create<sv::AlwaysFFOp>(
+      sv::EventControl::AtPosEdge, clk, ResetType::SyncReset,
+      sv::EventControl::AtPosEdge, rst, [&] {
+        for (auto [valid, address, data] : writeValidAddressData) {
+          Value a = address, d = data;
+          b.create<sv::IfOp>(valid, [&] {
+            Value memLoc = b.create<sv::ArrayIndexInOutOp>(mem, a);
+            b.create<sv::PAssignOp>(memLoc, d);
+          });
+        }
+      });
 
-  b.create<sv::AlwaysFFOp>(sv::EventControl::AtPosEdge, clk,
-                           ResetType::SyncReset, sv::EventControl::AtPosEdge,
-                           rst, [&] {});
-
+  req.erase();
   return success();
 }
 
@@ -335,8 +384,8 @@ void ESIConnectServicesPass::copyMetadata(hw::HWMutableModuleLike mod) {
 }
 
 /// Create an op which contains metadata about the soon-to-be implemented
-/// service. To be used by later passes which require these data (e.g. automated
-/// software API creation).
+/// service. To be used by later passes which require these data (e.g.
+/// automated software API creation).
 static void emitServiceMetadata(ServiceImplementReqOp implReqOp) {
   ImplicitLocOpBuilder b(implReqOp.getLoc(), implReqOp);
 
@@ -379,9 +428,11 @@ LogicalResult ESIConnectServicesPass::replaceInst(ServiceInstanceOp instOp,
                                                   Block *portReqs) {
   assert(portReqs);
 
-  Operation *declOp = topLevelSyms.getDefinition(instOp.getServiceSymbolAttr());
-  ServiceDeclOpInterface decl = dyn_cast<ServiceDeclOpInterface>(declOp);
-  assert(decl);
+  auto decl = dyn_cast_or_null<ServiceDeclOpInterface>(
+      topLevelSyms.getDefinition(instOp.getServiceSymbolAttr()));
+  if (!decl)
+    return instOp.emitOpError("Could not find service declaration ")
+           << instOp.getServiceSymbolAttr();
 
   // Compute the result types for the new op -- the instance op's output types
   // + the to_client types.
