@@ -189,16 +189,10 @@ class _ServiceGeneratorChannels:
     portReqsBlock = req.portReqs.blocks[0]
 
     # Find the input channel requests and store named versions of the values.
-    input_req_ops = [
-        x for x in portReqsBlock
-        if isinstance(x, raw_esi.RequestToServerConnectionOp)
-    ]
-    start_inputs_chan_num = len(mod.input_port_lookup)
-    assert len(input_req_ops) == len(req.inputs) - len(mod.input_port_lookup)
     self._input_reqs = [
-        NamedChannelValue(input_value, req.clientNamePath)
-        for input_value, req in zip(
-            list(req.inputs)[start_inputs_chan_num:], input_req_ops)
+        NamedChannelValue(x.toServer, x.clientNamePath)
+        for x in portReqsBlock
+        if isinstance(x, raw_esi.RequestToServerConnectionOp)
     ]
 
     # Find the output channel requests and store the settable proxies.
