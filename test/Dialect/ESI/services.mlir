@@ -147,3 +147,18 @@ msft.module @LoopbackCosimTop {} (%clk: i1, %rst: i1) {
   msft.instance @m1 @InOutLoopback(%clk) : (i1) -> ()
   msft.output
 }
+
+// CHECK-LABEL: esi.mem.ram @MemA i64 x 20
+// CHECK-LABEL: hw.module @MemoryAccess1(%clk: i1, %rst: i1, %write: !esi.channel<!hw.struct<address: i5, data: i64>>, %readAddress: !esi.channel<i5>) -> (readData: !esi.channel<i64>) {
+// CHECK:         esi.service.instance @MemA impl as "sv_mem"(%clk, %rst) : (i1, i1) -> ()
+// CHECK:         [[DONE:%.+]] = esi.service.req.inout %write -> <@MemA::@write>([]) : !esi.channel<!hw.struct<address: i5, data: i64>> -> !esi.channel<none>
+// CHECK:         [[READ_DATA:%.+]] = esi.service.req.inout %readAddress -> <@MemA::@read>([]) : !esi.channel<i5> -> !esi.channel<i64>
+// CHECK:         hw.output [[READ_DATA]] : !esi.channel<i64>
+esi.mem.ram @MemA i64 x 20
+!write = !hw.struct<address: i5, data: i64>
+hw.module @MemoryAccess1(%clk: i1, %rst: i1, %write: !esi.channel<!write>, %readAddress: !esi.channel<i5>) -> (readData: !esi.channel<i64>) {
+  esi.service.instance @MemA impl as "sv_mem" (%clk, %rst) : (i1, i1) -> ()
+  %done = esi.service.req.inout %write -> <@MemA::@write> ([]) : !esi.channel<!write> -> !esi.channel<none>
+  %readData = esi.service.req.inout %readAddress -> <@MemA::@read> ([]) : !esi.channel<i5> -> !esi.channel<i64>
+  hw.output %readData : !esi.channel<i64>
+}
