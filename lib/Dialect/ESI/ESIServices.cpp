@@ -137,6 +137,7 @@ instantiateSystemVerilogMemory(ServiceImplementReqOp req,
   auto i1 = b.getI1Type();
   auto c0 = b.create<hw::ConstantOp>(i1, 0);
 
+  // Assemble a mapping of toClient results to actual consumers.
   DenseMap<Value, Value> outputMap;
   for (auto [bout, reqout] : llvm::zip_longest(
            req.getOps<RequestToClientConnectionOp>(), req.getResults())) {
@@ -145,6 +146,7 @@ instantiateSystemVerilogMemory(ServiceImplementReqOp req,
     outputMap[*bout] = *reqout;
   }
 
+  // Create the SV memory.
   hw::UnpackedArrayType memType =
       hw::UnpackedArrayType::get(ramDecl.getInnerType(), ramDecl.getDepth());
   auto mem = b.create<sv::RegOp>(memType, req.getServiceSymbolAttr().getAttr())
@@ -156,51 +158,73 @@ instantiateSystemVerilogMemory(ServiceImplementReqOp req,
       reqPairs;
   req.gatherPairedReqs(reqPairs);
 
+  // Do everything which doesn't actually write to the memory, store the signals
+  // needed for the actual memory writes for later.
   SmallVector<std::tuple<Value, Value, Value>> writeGoAddressData;
   for (auto [toServerReq, toClientReq] : reqPairs) {
     assert(toServerReq && toClientReq); // All of our interfaces are inout.
     assert(toServerReq.getServicePort() == toClientReq.getServicePort());
     auto port = toServerReq.getServicePort().getName();
+    WrapValidReadyOp toClientResp;
+
     if (port == write) {
+      // If this pair is doing a write...
+
+      // Construct the response channel.
       auto doneValid = bb.get(i1);
-      auto doneWrap = b.create<WrapValidReadyOp>(none, doneValid);
-      outputMap[toClientReq.getToClient()].replaceAllUsesWith(
-          doneWrap.getChanOutput());
+      toClientResp = b.create<WrapValidReadyOp>(none, doneValid);
+
+      // Unwrap the write request and 'explode' the struct.
       auto unwrap = b.create<UnwrapValidReadyOp>(toServerReq.getToServer(),
-                                                 doneWrap.getReady());
+                                                 toClientResp.getReady());
 
       Value address = b.create<hw::StructExtractOp>(unwrap.getRawOutput(),
                                                     b.getStringAttr("address"));
       Value data = b.create<hw::StructExtractOp>(unwrap.getRawOutput(),
                                                  b.getStringAttr("data"));
+
+      // Determine if the write should occur this cycle.
       auto go = b.create<comb::AndOp>(unwrap.getValid(), unwrap.getReady());
       go->setAttr("sv.namehint", b.getStringAttr("write_go"));
-
+      // Register the 'go' signal and use it as the done message.
       doneValid.setValue(
           b.create<seq::CompRegOp>(go, clk, rst, c0, "write_done"));
-
+      // Store the necessary data for the 'always' memory writing block.
       writeGoAddressData.push_back(std::make_tuple(go, address, data));
 
     } else if (port == read) {
+      // If it's a read...
+
+      // Construct the response channel.
       auto dataValid = bb.get(i1);
       auto data = bb.get(ramDecl.getInnerType());
-      auto dataWrap = b.create<WrapValidReadyOp>(data, dataValid);
-      outputMap[toClientReq.getToClient()].replaceAllUsesWith(
-          dataWrap.getChanOutput());
+      toClientResp = b.create<WrapValidReadyOp>(data, dataValid);
+
+      // Unwrap the requested address and read from that memory location.
       auto addressUnwrap = b.create<UnwrapValidReadyOp>(
-          toServerReq.getToServer(), dataWrap.getReady());
+          toServerReq.getToServer(), toClientResp.getReady());
       Value memLoc =
           b.create<sv::ArrayIndexInOutOp>(mem, addressUnwrap.getRawOutput());
       auto readData = b.create<sv::ReadInOutOp>(memLoc);
+
+      // Set the data on the response.
       data.setValue(readData);
       dataValid.setValue(addressUnwrap.getValid());
+    } else {
+      assert(false && "Port should be either 'read' or 'write'");
     }
+
+    outputMap[toClientReq.getToClient()].replaceAllUsesWith(
+        toClientResp.getChanOutput());
   }
+
+  // Now construct the memory writes.
   b.create<sv::AlwaysFFOp>(
       sv::EventControl::AtPosEdge, clk, ResetType::SyncReset,
       sv::EventControl::AtPosEdge, rst, [&] {
         for (auto [go, address, data] : writeGoAddressData) {
-          Value a = address, d = data;
+          Value a = address, d = data; // So the lambda can capture.
+          // If we're told to go, do the write.
           b.create<sv::IfOp>(go, [&] {
             Value memLoc = b.create<sv::ArrayIndexInOutOp>(mem, a);
             b.create<sv::PAssignOp>(memLoc, d);
