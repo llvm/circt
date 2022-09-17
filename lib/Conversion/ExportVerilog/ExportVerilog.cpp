@@ -1846,9 +1846,10 @@ SubExprInfo ExprEmitter::emitUnary(Operation *op, const char *syntax,
 
   os << syntax;
   auto signedness = emitSubExpr(op->getOperand(0), Selection).signedness;
-  // Make precedence lowest to avoid emitting an expression like `a & &b`, which
-  // is syntactically valid but some tool produces LINT warnings.
-  return {isa<ICmpOp>(op) ? AndShortCircuit : Unary,
+  // For reduction operator "&" and "|", make precedence lowest to avoid
+  // emitting an expression like `a & &b`, which is syntactically valid but some
+  // tool produces LINT warnings.
+  return {isa<ICmpOp>(op) ? LowestPrecedence : Unary,
           resultAlwaysUnsigned ? IsUnsigned : signedness};
 }
 
