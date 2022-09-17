@@ -36,13 +36,12 @@ hw.module @Loopback (%clk: i1) -> () {
 }
 
 // CONN-LABEL: hw.module @Top2(%clk: i1) -> (chksum: i8) {
-// CONN:         [[r0:%.+]]:3 = esi.service.impl_req @HostComms impl as "topComms2"(%clk, %r1.m1.loopback_fromhw, %r1.p1.producedMsgChan, %r1.p2.producedMsgChan) : (i1, !esi.channel<i8>, !esi.channel<i8>, !esi.channel<i8>) -> (i8, !esi.channel<i8>, !esi.channel<i8>) {
-// CONN:         ^bb0(%arg0: !esi.channel<i8>, %arg1: !esi.channel<i8>, %arg2: !esi.channel<i8>):
+// CONN:         [[r0:%.+]]:3 = esi.service.impl_req @HostComms impl as "topComms2"(%clk) : (i1) -> (i8, !esi.channel<i8>, !esi.channel<i8>) {
 // CONN:           %1 = esi.service.req.to_client <@HostComms::@Recv>(["r1", "m1", "loopback_tohw"]) : !esi.channel<i8>
 // CONN:           %2 = esi.service.req.to_client <@HostComms::@Recv>(["r1", "c1", "consumingFromChan"]) : !esi.channel<i8>
-// CONN:           esi.service.req.to_server %arg0 -> <@HostComms::@Send>(["r1", "m1", "loopback_fromhw"]) : !esi.channel<i8>
-// CONN:           esi.service.req.to_server %arg1 -> <@HostComms::@Send>(["r1", "p1", "producedMsgChan"]) : !esi.channel<i8>
-// CONN:           esi.service.req.to_server %arg2 -> <@HostComms::@Send>(["r1", "p2", "producedMsgChan"]) : !esi.channel<i8>
+// CONN:           esi.service.req.to_server %r1.m1.loopback_fromhw -> <@HostComms::@Send>(["r1", "m1", "loopback_fromhw"]) : !esi.channel<i8>
+// CONN:           esi.service.req.to_server %r1.p1.producedMsgChan -> <@HostComms::@Send>(["r1", "p1", "producedMsgChan"]) : !esi.channel<i8>
+// CONN:           esi.service.req.to_server %r1.p2.producedMsgChan -> <@HostComms::@Send>(["r1", "p2", "producedMsgChan"]) : !esi.channel<i8>
 // CONN:         }
 // CONN:         %r1.m1.loopback_fromhw, %r1.p1.producedMsgChan, %r1.p2.producedMsgChan = hw.instance "r1" @Rec(clk: %clk: i1, m1.loopback_tohw: [[r0]]#1: !esi.channel<i8>, c1.consumingFromChan: [[r0]]#2: !esi.channel<i8>) -> (m1.loopback_fromhw: !esi.channel<i8>, p1.producedMsgChan: !esi.channel<i8>, p2.producedMsgChan: !esi.channel<i8>)
 // CONN:         hw.output [[r0]]#0 : i8
@@ -89,10 +88,9 @@ hw.module @Producer(%clk: i1) -> () {
 }
 
 // CONN-LABEL: msft.module @MsTop {} (%clk: i1) -> (chksum: i8)
-// CONN:         [[r1:%.+]]:2 = esi.service.impl_req @HostComms impl as "topComms"(%clk, %m1.loopback_fromhw) : (i1, !esi.channel<i8>) -> (i8, !esi.channel<i8>) {
-// CONN:         ^bb0(%arg0: !esi.channel<i8>):
+// CONN:         [[r1:%.+]]:2 = esi.service.impl_req @HostComms impl as "topComms"(%clk) : (i1) -> (i8, !esi.channel<i8>) {
 // CONN:           [[r2:%.+]] = esi.service.req.to_client <@HostComms::@Recv>(["m1", "loopback_tohw"]) : !esi.channel<i8>
-// CONN:           esi.service.req.to_server %arg0 -> <@HostComms::@Send>(["m1", "loopback_fromhw"]) : !esi.channel<i8>
+// CONN:           esi.service.req.to_server %m1.loopback_fromhw -> <@HostComms::@Send>(["m1", "loopback_fromhw"]) : !esi.channel<i8>
 // CONN:         }
 // CONN:         %m1.loopback_fromhw = msft.instance @m1 @MsLoopback(%clk, [[r1]]#1) : (i1, !esi.channel<i8>) -> !esi.channel<i8>
 // CONN:         msft.output [[r1]]#0 : i8
@@ -113,10 +111,9 @@ msft.module @MsLoopback {} (%clk: i1) -> () {
 
 
 // CONN-LABEL: msft.module @InOutTop {} (%clk: i1) -> (chksum: i8) {
-// CONN:          %0:2 = esi.service.impl_req @HostComms impl as "topComms"(%clk, %m1.loopback_inout) : (i1, !esi.channel<i8>) -> (i8, !esi.channel<i16>) {
-// CONN:          ^bb0(%arg0: !esi.channel<i8>):
+// CONN:          %0:2 = esi.service.impl_req @HostComms impl as "topComms"(%clk) : (i1) -> (i8, !esi.channel<i16>) {
 // CONN:            %1 = esi.service.req.to_client <@HostComms::@ReqResp>(["m1", "loopback_inout"]) : !esi.channel<i16>
-// CONN:            esi.service.req.to_server %arg0 -> <@HostComms::@ReqResp>(["m1", "loopback_inout"]) : !esi.channel<i8>
+// CONN:            esi.service.req.to_server %m1.loopback_inout -> <@HostComms::@ReqResp>(["m1", "loopback_inout"]) : !esi.channel<i8>
 // CONN:          }
 // CONN:          %m1.loopback_inout = msft.instance @m1 @InOutLoopback(%clk, %0#1)  : (i1, !esi.channel<i16>) -> !esi.channel<i8>
 // CONN:          msft.output %0#0 : i8
