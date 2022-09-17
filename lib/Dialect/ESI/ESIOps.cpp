@@ -371,20 +371,27 @@ void ServiceImplementReqOp::gatherPairedReqs(
                                     RequestToClientConnectionOp>> &reqPairs) {
 
   // Build a mapping of client path names to requests.
-  DenseMap<ArrayAttr, SmallVector<RequestToServerConnectionOp, 0>>
+  DenseMap<std::pair<hw::InnerRefAttr, ArrayAttr>,
+           SmallVector<RequestToServerConnectionOp, 0>>
       clientNameToServer;
-  DenseMap<ArrayAttr, SmallVector<RequestToClientConnectionOp, 0>>
+  DenseMap<std::pair<hw::InnerRefAttr, ArrayAttr>,
+           SmallVector<RequestToClientConnectionOp, 0>>
       clientNameToClient;
   for (auto &op : getOps())
     if (auto req = dyn_cast<RequestToClientConnectionOp>(op))
-      clientNameToClient[req.getClientNamePathAttr()].push_back(req);
+      clientNameToClient[std::make_pair(req.getServicePort(),
+                                        req.getClientNamePathAttr())]
+          .push_back(req);
     else if (auto req = dyn_cast<RequestToServerConnectionOp>(op))
-      clientNameToServer[req.getClientNamePathAttr()].push_back(req);
+      clientNameToServer[std::make_pair(req.getServicePort(),
+                                        req.getClientNamePathAttr())]
+          .push_back(req);
 
   // Find all of the pairs and emit them.
   DenseSet<Operation *> emittedOps;
   for (auto op : getOps<RequestToServerConnectionOp>()) {
-    ArrayAttr clientName = op.getClientNamePathAttr();
+    std::pair<hw::InnerRefAttr, ArrayAttr> clientName =
+        std::make_pair(op.getServicePort(), op.getClientNamePathAttr());
     const SmallVector<RequestToServerConnectionOp, 0> &ops =
         clientNameToServer[clientName];
 
