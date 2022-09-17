@@ -22,24 +22,29 @@
 using namespace circt;
 using namespace circt::esi;
 
+/// Wrap types in esi channels and return the port info struct.
+static ServicePortInfo createPort(StringRef name, Type toServerInner,
+                                  Type toClientInner) {
+  assert(toServerInner || toClientInner);
+  auto *ctxt =
+      toServerInner ? toServerInner.getContext() : toClientInner.getContext();
+  return {StringAttr::get(ctxt, name), ChannelType::get(ctxt, toServerInner),
+          ChannelType::get(ctxt, toClientInner)};
+}
+
 void RandomAccessMemoryDeclOp::getPortList(
     SmallVectorImpl<ServicePortInfo> &ports) {
   auto *ctxt = getContext();
   auto addressType = IntegerType::get(ctxt, llvm::Log2_64_Ceil(getDepth()));
+
   // Write port
   hw::StructType writeType = hw::StructType::get(
       ctxt,
       {hw::StructType::FieldInfo{StringAttr::get(ctxt, "address"), addressType},
        hw::StructType::FieldInfo{StringAttr::get(ctxt, "data"),
                                  getInnerType()}});
-  ServicePortInfo write = {StringAttr::get(ctxt, "write"),
-                           ChannelType::get(ctxt, writeType),
-                           ChannelType::get(ctxt, NoneType::get(ctxt))};
-  ports.push_back(write);
+  ports.push_back(createPort("write", writeType, NoneType::get(ctxt)));
 
   // Read port
-  ServicePortInfo read = {StringAttr::get(ctxt, "read"),
-                          ChannelType::get(ctxt, addressType),
-                          ChannelType::get(ctxt, getInnerType())};
-  ports.push_back(read);
+  ports.push_back(createPort("read", addressType, getInnerType()));
 }
