@@ -9,6 +9,7 @@ add_circt_library(CIRCTSupport
   BackedgeBuilder.cpp
   FieldRef.cpp
   LoweringOptions.cpp
+  Passes.cpp
   Path.cpp
   APInt.cpp
   ValueMapper.cpp

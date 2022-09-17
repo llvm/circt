@@ -15,6 +15,7 @@ target_link_libraries(firtool PRIVATE
   CIRCTHWTransforms
   CIRCTSeq
   CIRCTSeqTransforms
+  CIRCTSupport
   CIRCTSVTransforms
   CIRCTTransforms
 
