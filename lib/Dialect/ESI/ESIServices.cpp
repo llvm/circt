@@ -46,7 +46,6 @@ static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp req,
                                                  ServiceDeclOpInterface decl) {
   auto *ctxt = req.getContext();
   OpBuilder b(req);
-  Block *portReqs = &req.getPortReqs().getBlocks().front();
   Value clk = req.getOperand(0);
   Value rst = req.getOperand(1);
 
@@ -66,12 +65,6 @@ static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp req,
     llvm::interleave(strArr.getAsValueRange<StringAttr>(), os, ".");
     return StringAttr::get(ctxt, os.str());
   };
-
-  // Since outgoing data gets passed in through block args, we need to translate
-  // internal Values (with the block) to the external Values driving them.
-  BlockAndValueMapping argMap;
-  for (unsigned i = 0, e = portReqs->getArguments().size(); i < e; ++i)
-    argMap.map(portReqs->getArgument(i), req->getOperand(i + 2));
 
   llvm::DenseMap<RequestToClientConnectionOp, unsigned> toClientResultNum;
   for (auto toClient : req.getOps<RequestToClientConnectionOp>())
@@ -93,7 +86,7 @@ static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp req,
 
     Value toServerValue;
     if (toServer)
-      toServerValue = argMap.lookup(toServer.getToServer());
+      toServerValue = toServer.getToServer();
     else
       toServerValue =
           b.create<NullSourceOp>(loc, ChannelType::get(ctxt, b.getI1Type()));
@@ -397,22 +390,11 @@ LogicalResult ESIConnectServicesPass::replaceInst(ServiceInstanceOp instOp,
   for (auto toClient : portReqs->getOps<RequestToClientConnectionOp>())
     resultTypes.push_back(toClient.getToClient().getType());
 
-  // Compute the operands for the new op -- the instance op's operands + the
-  // to_server types. Reassign the reqs' operand to the new blocks arguments.
-  SmallVector<Value, 8> operands(instOp.getOperands().begin(),
-                                 instOp.getOperands().end());
-  for (auto toServer : portReqs->getOps<RequestToServerConnectionOp>()) {
-    Value sending = toServer.getToServer();
-    operands.push_back(sending);
-    toServer.getToServerMutable().assign(
-        portReqs->addArgument(sending.getType(), toServer.getLoc()));
-  }
-
   // Create the generation request op.
   OpBuilder b(instOp);
   auto implOp = b.create<ServiceImplementReqOp>(
       instOp.getLoc(), resultTypes, instOp.getServiceSymbolAttr(),
-      instOp.getImplTypeAttr(), instOp.getImplOptsAttr(), operands);
+      instOp.getImplTypeAttr(), instOp.getImplOptsAttr(), instOp.getOperands());
   implOp->setDialectAttrs(instOp->getDialectAttrs());
   implOp.getPortReqs().push_back(portReqs);
 
