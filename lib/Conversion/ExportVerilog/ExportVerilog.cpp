@@ -1812,22 +1812,6 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
   if (!isa<AddOp, MulOp, AndOp, OrOp, XorOp>(op))
     rhsPrec = VerilogPrecedence(prec - 1);
 
-  // Introduce extra parentheses to specific patterns of expressions.
-  // If op is "AndOp", and rhs is Reduction And, the output is like `a & &b`.
-  // This is syntactically valid but some tool produces LINT warnings. Also it
-  // would be confusing for users to read such expressions.
-  bool emitRhsParentheses = false;
-  if (auto rhsICmp = op->getOperand(1).getDefiningOp<ICmpOp>()) {
-    if ((rhsICmp.isEqualAllOnes() && isa<AndOp>(op)) ||
-        (rhsICmp.isNotEqualZero() && isa<OrOp>(op))) {
-      if (isExpressionEmittedInline(rhsICmp)) {
-        os << '(';
-        emitRhsParentheses = true;
-        rhsPrec = LowestPrecedence;
-      }
-    }
-  }
-
   // If the RHS operand has self-determined width and always treated as
   // unsigned, inform emitSubExpr of this.  This is true for the shift amount in
   // a shift operation.
@@ -1839,8 +1823,6 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
 
   auto rhsInfo = emitSubExpr(op->getOperand(1), rhsPrec, operandSignReq,
                              rhsIsUnsignedValueWithSelfDeterminedWidth);
-  if (emitRhsParentheses)
-    os << ')';
 
   // SystemVerilog 11.8.1 says that the result of a binary expression is signed
   // only if both operands are signed.
@@ -1864,7 +1846,11 @@ SubExprInfo ExprEmitter::emitUnary(Operation *op, const char *syntax,
 
   os << syntax;
   auto signedness = emitSubExpr(op->getOperand(0), Selection).signedness;
-  return {Unary, resultAlwaysUnsigned ? IsUnsigned : signedness};
+  // For reduction operators "&" and "|", make precedence lowest to avoid
+  // emitting an expression like `a & &b`, which is syntactically valid but some
+  // tools produce LINT warnings.
+  return {isa<ICmpOp>(op) ? LowestPrecedence : Unary,
+          resultAlwaysUnsigned ? IsUnsigned : signedness};
 }
 
 /// Emit SystemVerilog attributes attached to the expression op as dialect
