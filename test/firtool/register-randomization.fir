@@ -47,11 +47,9 @@ circuit Foo:
     ; NONE:   automatic logic [31:0] _RANDOM_0;
     ; NONE:   automatic logic [31:0] _RANDOM_1;
     ; NONE:   automatic logic [31:0] _RANDOM_2;
-    ; NONE-NOT:   automatic logic [31:0] _RANDOM_3;
     ; NONE:   _RANDOM_0 = `RANDOM;
     ; NONE:   _RANDOM_1 = `RANDOM;
     ; NONE:   _RANDOM_2 = `RANDOM;
-    ; NONE-NOT: _RANDOM_3 = `RANDOM;
 
     ; ALL:       _r = {_RANDOM_0, _RANDOM_1[0]}; 
     ; NAMED-NOT: _r = 
