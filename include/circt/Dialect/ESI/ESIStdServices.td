@@ -19,6 +19,10 @@ def RandomAccessMemoryDeclOp: ESI_Op<"mem.ram",
     Ports:
       read(address: clog2(depth)) -> data: innerType
       write({address: clog2(depth), data: innerType}) -> done: none
+
+    Users can ensure R/W ordering by waiting for the write "done" message before
+    issuing a potentially dependant read. Ordering of R/W messages in flight is
+    undefined.
   }];
 
   let arguments = (ins SymbolNameAttr:$sym_name,
