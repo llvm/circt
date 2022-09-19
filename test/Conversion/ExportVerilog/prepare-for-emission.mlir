@@ -9,6 +9,22 @@ hw.module @namehint_variadic(%a: i3) -> (b: i3) {
   hw.output %0 : i3
 }
 
+// CHECK-LABEL:  hw.module @outOfOrderInoutOperations
+hw.module @outOfOrderInoutOperations(%a: i4) -> (c: i4) {
+  // CHECK: %wire = sv.wire
+  // CHECK-NEXT: %0 = sv.array_index_inout %wire[%false]
+  // CHECK-NEXT: %1 = sv.array_index_inout %0[%false]
+  // CHECK-NEXT: %2 = sv.array_index_inout %1[%false]
+  // CHECK-NEXT: %3 = sv.read_inout %2
+  %false = hw.constant false
+  %0 = sv.read_inout %3 : !hw.inout<i4>
+  %3 = sv.array_index_inout %2[%false] : !hw.inout<array<1xi4>>, i1
+  %2 = sv.array_index_inout %1[%false] : !hw.inout<array<1xarray<1xi4>>>, i1
+  %1 = sv.array_index_inout %wire[%false] : !hw.inout<array<1xarray<1xarray<1xi4>>>>, i1
+  %wire = sv.wire  : !hw.inout<array<1xarray<1xarray<1xi4>>>>
+  hw.output %0: i4
+}
+
 // -----
 
 module {

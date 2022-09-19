@@ -202,13 +202,11 @@ static void lowerAlwaysInlineOperation(Operation *op) {
   // Finally, ensures the op is in the same block as its user so it can be
   // inlined.
   Operation *user = *op->getUsers().begin();
-  if (op->getBlock() != user->getBlock()) {
-    op->moveBefore(user);
+  op->moveBefore(user);
 
-    // If any of the operations of the moved op are always inline, recursively
-    // move/clone them too.
-    recursivelyHandleOperands(op);
-  }
+  // If any of the operations of the moved op are always inline, recursively
+  // move/clone them too.
+  recursivelyHandleOperands(op);
   return;
 }
 
@@ -487,7 +485,7 @@ static bool hoistNonSideEffectExpr(Operation *op) {
 /// Check whether an op is a declaration that can be moved.
 static bool isMovableDeclaration(Operation *op) {
   return op->getNumResults() == 1 &&
-         op->getResult(0).getType().isa<InOutType>() &&
+         op->getResult(0).getType().isa<InOutType, sv::InterfaceType>() &&
          op->getNumOperands() == 0;
 }
 
@@ -536,6 +534,9 @@ static bool reuseExistingInOut(Operation *op) {
     auto read = builder.create<ReadInOutOp>(assign.getDest());
     use->set(read);
   }
+  if (auto *destOp = assign.getDest().getDefiningOp())
+    if (isExpressionAlwaysInline(destOp))
+      lowerAlwaysInlineOperation(destOp);
   return true;
 }
 
@@ -562,6 +563,10 @@ void ExportVerilog::prepareHWModule(Block &block,
 
   // True if these operations are in a procedural region.
   bool isProceduralRegion = block.getParentOp()->hasTrait<ProceduralRegion>();
+
+  // This tracks "always inline" operation already visited in the iterations to
+  // avoid processing same operations infinitely.
+  DenseSet<Operation *> visitedAlwaysInlineOperations;
 
   // This keeps tracks of an insertion point of logic op.
   std::pair<Block *, Block::iterator> logicOpInsertionPoint =
@@ -671,8 +676,10 @@ void ExportVerilog::prepareHWModule(Block &block,
     }
 
     // Duplicate "always inline" expression for each of their users and move
-    // them to be next to their users.
-    if (isExpressionAlwaysInline(&op)) {
+    // them to be next to their users. Process the op only when the op is never
+    // processed from the top-level loop.
+    if (isExpressionAlwaysInline(&op) &&
+        visitedAlwaysInlineOperations.insert(&op).second) {
       lowerAlwaysInlineOperation(&op);
       continue;
     }
