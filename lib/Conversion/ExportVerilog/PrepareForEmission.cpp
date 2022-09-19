@@ -485,7 +485,7 @@ static bool hoistNonSideEffectExpr(Operation *op) {
 /// Check whether an op is a declaration that can be moved.
 static bool isMovableDeclaration(Operation *op) {
   return op->getNumResults() == 1 &&
-         op->getResult(0).getType().isa<InOutType>() &&
+         op->getResult(0).getType().isa<InOutType, sv::InterfaceType>() &&
          op->getNumOperands() == 0;
 }
 
