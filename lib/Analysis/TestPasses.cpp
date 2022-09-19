@@ -13,6 +13,7 @@
 #include "circt/Analysis/ControlFlowLoopAnalysis.h"
 #include "circt/Analysis/DependenceAnalysis.h"
 #include "circt/Analysis/SchedulingAnalysis.h"
+#include "circt/Analysis/SignalTracingAnalysis.h"
 #include "circt/Dialect/HW/HWInstanceGraph.h"
 #include "circt/Scheduling/Problems.h"
 #include "mlir/Dialect/Affine/IR/AffineMemoryOpInterfaces.h"
@@ -20,6 +21,7 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/Support/Debug.h"
+#include <mlir/Analysis/DataFlow/DeadCodeAnalysis.h>
 
 using namespace mlir;
 using namespace circt::analysis;
@@ -205,6 +207,54 @@ void InferTopModulePass::runOnOperation() {
 }
 
 //===----------------------------------------------------------------------===//
+// SignalTracingAnalysis passes.
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct SignalTracingAnalysisPass
+    : public PassWrapper<SignalTracingAnalysisPass,
+                         OperationPass<mlir::ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(SignalTracingAnalysisPass)
+
+  void runOnOperation() override;
+  StringRef getArgument() const override {
+    return "test-signal-tracing-analysis";
+  }
+  StringRef getDescription() const override {
+    return "Perform the SignalTracingAnalysis, and print the analysis results.";
+  }
+};
+} // namespace
+
+void SignalTracingAnalysisPass::runOnOperation() {
+  ModuleOp mod = getOperation();
+
+  DenseSet<Operation *> sources;
+  DenseSet<Operation *> sinks;
+  mod.walk([&](Operation *op) {
+    if (op->hasAttrOfType<UnitAttr>("source"))
+      sources.insert(op);
+    if (op->hasAttrOfType<UnitAttr>("sink"))
+      sinks.insert(op);
+  });
+
+  DataFlowSolver solver;
+  solver.load<DeadCodeAnalysis>(); // needed to mark blocks as "live"
+  solver.load<SignalTracingAnalysis>(sources, sinks);
+
+  if (failed(solver.initializeAndRun(mod))) {
+    mod.emitError("analysis failed");
+    return signalPassFailure();
+  }
+
+  mod->walk([&](Operation *op) {
+    const SignalState *signalState = solver.lookupState<SignalState>(op);
+    if (signalState)
+      llvm::outs() << *op << " : " << *signalState;
+  });
+}
+
+//===----------------------------------------------------------------------===//
 // Pass registration
 //===----------------------------------------------------------------------===//
 
@@ -222,6 +272,9 @@ void registerAnalysisTestPasses() {
   });
   mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
     return std::make_unique<InferTopModulePass>();
+  });
+  mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
+    return std::make_unique<SignalTracingAnalysisPass>();
   });
 }
 } // namespace test

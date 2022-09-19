@@ -2,6 +2,7 @@ set(LLVM_OPTIONAL_SOURCES
   ControlFlowLoopAnalysis.cpp
   DependenceAnalysis.cpp
   SchedulingAnalysis.cpp
+  SignalTracingAnalysis.cpp
   TestPasses.cpp
   )
 
@@ -32,6 +33,15 @@ add_circt_library(CIRCTSchedulingAnalysis
   CIRCTScheduling
   )
 
+add_circt_library(CIRCTSignalTracingAnalysis
+  SignalTracingAnalysis.cpp
+
+  LINK_LIBS PUBLIC
+  MLIRIR
+  MLIRAnalysis
+  CIRCTHW
+  )
+
 add_circt_library(CIRCTAnalysisTestPasses
   TestPasses.cpp
 
@@ -39,6 +49,7 @@ add_circt_library(CIRCTAnalysisTestPasses
   CIRCTControlFlowLoopAnalysis
   CIRCTDependenceAnalysis
   CIRCTSchedulingAnalysis
+  CIRCTSignalTracingAnalysis
   CIRCTHW
   MLIRPass
   )
