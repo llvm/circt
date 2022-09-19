@@ -176,7 +176,7 @@ static void addPruningPattern(ConversionTarget &target,
 
 struct PruneZeroValuedLogicPass
     : public PruneZeroValuedLogicBase<PruneZeroValuedLogicPass> {
-  PruneZeroValuedLogicPass() {}
+  PruneZeroValuedLogicPass() = default;
   void runOnOperation() override {
     ModuleOp module = getOperation();
     ConversionTarget target(getContext());
