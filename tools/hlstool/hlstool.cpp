@@ -41,6 +41,7 @@
 
 #include "circt/Conversion/ExportVerilog.h"
 #include "circt/Conversion/Passes.h"
+#include "circt/Dialect/ESI/ESIDialect.h"
 #include "circt/Dialect/ESI/ESIPasses.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
@@ -461,9 +462,9 @@ int main(int argc, char **argv) {
   mlir::registerCanonicalizerPass();
 
   // Register CIRCT dialects.
-  registry
-      .insert<firrtl::FIRRTLDialect, hw::HWDialect, comb::CombDialect,
-              seq::SeqDialect, sv::SVDialect, handshake::HandshakeDialect>();
+  registry.insert<firrtl::FIRRTLDialect, hw::HWDialect, comb::CombDialect,
+                  seq::SeqDialect, sv::SVDialect, handshake::HandshakeDialect,
+                  esi::ESIDialect>();
 
   // Do the guts of the hlstool process.
   MLIRContext context(registry);
