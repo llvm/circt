@@ -802,7 +802,8 @@ LogicalResult applyGCTMemTapsWithWires(const AnnoPathValue &target,
              << "\n"
              << i->getParentOfType<FModuleOp>().getNameAttr() << ">"
              << i.getNameAttr(););
-  auto srcModule = dyn_cast<FModuleOp>(srcTarget->ref.getModule());
+  auto srcModule =
+      dyn_cast<FModuleOp>(srcTarget->ref.getModule().getOperation());
   ImplicitLocOpBuilder refSendBuilder(srcModule.getLoc(), srcModule);
   auto sendVal = memDbgPort;
   // Now drill ports to connect the `sendVal` to the `wireTarget`.

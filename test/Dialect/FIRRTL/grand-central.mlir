@@ -952,10 +952,10 @@ firrtl.circuit "DedupedPath" attributes {
      name = "View"}]} {
   // TODO: Remove @nla_0 and @nla once NLAs are fully migrated to use hierpaths
   // that end at the module.
-  firrtl.hierpath @nla_0 [@DUT::@tile1, @Tile::@w]
-  firrtl.hierpath @nla [@DUT::@tile2, @Tile::@w]
-  firrtl.hierpath @nla_new_0 [@DUT::@tile1, @Tile]
-  firrtl.hierpath @nla_new_1 [@DUT::@tile2, @Tile]
+  firrtl.hierpath private @nla_0 [@DUT::@tile1, @Tile::@w]
+  firrtl.hierpath private @nla [@DUT::@tile2, @Tile::@w]
+  firrtl.hierpath private @nla_new_0 [@DUT::@tile1, @Tile]
+  firrtl.hierpath private @nla_new_1 [@DUT::@tile2, @Tile]
   firrtl.module private @Tile() {
     %w = firrtl.wire sym @w {
       annotations = [

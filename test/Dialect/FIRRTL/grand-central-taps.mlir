@@ -349,9 +349,9 @@ firrtl.circuit "NLAGarbageCollection" {
   // CHECK-NOT: @nla_1
   // CHECK-NOT: @nla_2
   // CHECK-NOT: @nla_3
-  firrtl.hierpath @nla_1 [@NLAGarbageCollection::@dut, @DUT::@submodule, @Submodule::@foo]
-  firrtl.hierpath @nla_2 [@NLAGarbageCollection::@dut, @DUT::@submodule, @Submodule::@port]
-  firrtl.hierpath @nla_3 [@NLAGarbageCollection::@dut, @DUT::@submodule, @Submodule::@bar_0]
+  firrtl.hierpath private @nla_1 [@NLAGarbageCollection::@dut, @DUT::@submodule, @Submodule::@foo]
+  firrtl.hierpath private @nla_2 [@NLAGarbageCollection::@dut, @DUT::@submodule, @Submodule::@port]
+  firrtl.hierpath private @nla_3 [@NLAGarbageCollection::@dut, @DUT::@submodule, @Submodule::@bar_0]
   firrtl.module private @Submodule(
     in %port: !firrtl.uint<1> sym @port [
       {circt.nonlocal = @nla_2,
@@ -435,8 +435,8 @@ firrtl.circuit "NLAGarbageCollection" {
 firrtl.circuit "NLAUsedInWiring"  {
   // CHECK-NOT: @nla_1
   // CHECK-NOT: @nla_2
-  firrtl.hierpath @nla_1 [@NLAUsedInWiring::@foo, @Foo::@f]
-  firrtl.hierpath @nla_2 [@NLAUsedInWiring::@foo, @Foo::@g]
+  firrtl.hierpath private @nla_1 [@NLAUsedInWiring::@foo, @Foo::@f]
+  firrtl.hierpath private @nla_2 [@NLAUsedInWiring::@foo, @Foo::@g]
 
   // CHECK-LABEL: firrtl.module private @DataTap
   // CHECK-NEXT: [[TMP:%.+]] = firrtl.verbatim.expr
@@ -506,8 +506,8 @@ firrtl.circuit "NLAUsedInWiring"  {
 // See https://github.com/llvm/circt/issues/2767.
 
 firrtl.circuit "Top" {
-  firrtl.hierpath @nla_0 [@DUT::@submodule_1, @Submodule::@bar_0]
-  firrtl.hierpath @nla [@DUT::@submodule_2, @Submodule::@bar_0]
+  firrtl.hierpath private @nla_0 [@DUT::@submodule_1, @Submodule::@bar_0]
+  firrtl.hierpath private @nla [@DUT::@submodule_2, @Submodule::@bar_0]
   firrtl.module private @Submodule(in %clock: !firrtl.clock, out %out: !firrtl.uint<1>) {
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>

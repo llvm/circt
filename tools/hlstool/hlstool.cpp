@@ -41,6 +41,8 @@
 
 #include "circt/Conversion/ExportVerilog.h"
 #include "circt/Conversion/Passes.h"
+#include "circt/Dialect/ESI/ESIDialect.h"
+#include "circt/Dialect/ESI/ESIPasses.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
@@ -98,11 +100,14 @@ static cl::opt<bool>
                               cl::desc("Allow unknown dialects in the input"),
                               cl::init(false), cl::Hidden);
 
-enum HLSFlow { HLSFlowDynamic };
+enum HLSFlow { HLSFlowDynamicFIRRTL, HLSFlowDynamicHW };
 
-static cl::opt<HLSFlow> hlsFlow(
-    cl::desc("HLS flow"),
-    cl::values(clEnumValN(HLSFlowDynamic, "dynamic", "Dynamically scheduled")));
+static cl::opt<HLSFlow>
+    hlsFlow(cl::desc("HLS flow"),
+            cl::values(clEnumValN(HLSFlowDynamicFIRRTL, "dynamic-firrtl",
+                                  "Dynamically scheduled (FIRRTL path)"),
+                       clEnumValN(HLSFlowDynamicHW, "dynamic-hw",
+                                  "Dynamically scheduled (HW path)")));
 
 enum OutputFormatKind { OutputIR, OutputVerilog };
 
@@ -155,6 +160,12 @@ static void loadHandshakeTransformsPipeline(OpPassManager &pm) {
   pm.nest<handshake::FuncOp>().addPass(
       handshake::createHandshakeInsertBuffersPass());
   pm.nest<handshake::FuncOp>().addPass(createSimpleCanonicalizerPass());
+}
+
+static void loadESILoweringPipeline(OpPassManager &pm) {
+  pm.addPass(circt::esi::createESIPortLoweringPass());
+  pm.addPass(circt::esi::createESIPhysicalLoweringPass());
+  pm.addPass(circt::esi::createESItoHWPass());
 }
 
 static void loadFIRRTLLoweringPipeline(OpPassManager &pm) {
@@ -265,14 +276,26 @@ doHLSFlowDynamic(PassManager &pm, ModuleOp module,
   addIRLevel(HLSFlowDynamicIRLevel::High, [&]() { loadDHLSPipeline(pm); });
   addIRLevel(HLSFlowDynamicIRLevel::Handshake,
              [&]() { loadHandshakeTransformsPipeline(pm); });
-  addIRLevel(HLSFlowDynamicIRLevel::Firrtl, [&]() {
-    pm.addPass(circt::createHandshakeToFIRRTLPass());
-    loadFIRRTLLoweringPipeline(pm);
-  });
-  addIRLevel(HLSFlowDynamicIRLevel::Rtl, [&]() {
-    pm.addPass(createLowerFIRRTLToHWPass(/*enableAnnotationWarning=*/false,
-                                         /*emitChiselAssertsAsSVA=*/false));
-  });
+
+  if (hlsFlow == HLSFlowDynamicFIRRTL) {
+    // FIRRTL path.
+    addIRLevel(HLSFlowDynamicIRLevel::Firrtl, [&]() {
+      pm.addPass(circt::createHandshakeToFIRRTLPass());
+      loadFIRRTLLoweringPipeline(pm);
+    });
+    addIRLevel(HLSFlowDynamicIRLevel::Rtl, [&]() {
+      pm.addPass(createLowerFIRRTLToHWPass(/*enableAnnotationWarning=*/false,
+                                           /*emitChiselAssertsAsSVA=*/false));
+    });
+  } else {
+    // HW path.
+    addIRLevel(HLSFlowDynamicIRLevel::Firrtl,
+               [&]() { pm.addPass(circt::createHandshakeToHWPass()); });
+
+    addIRLevel(HLSFlowDynamicIRLevel::Rtl,
+               [&]() { loadESILoweringPipeline(pm); });
+  }
+
   addIRLevel(HLSFlowDynamicIRLevel::Sv, [&]() { loadHWLoweringPipeline(pm); });
 
   if (outputFormat == OutputVerilog) {
@@ -321,9 +344,11 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   pm.enableTiming(ts);
   applyPassManagerCLOptions(pm);
 
-  if (hlsFlow == HLSFlow::HLSFlowDynamic)
+  if (hlsFlow == HLSFlow::HLSFlowDynamicFIRRTL ||
+      hlsFlow == HLSFlow::HLSFlowDynamicHW) {
     if (failed(doHLSFlowDynamic(pm, module.get(), outputFile)))
       return failure();
+  }
 
   // We intentionally "leak" the Module into the MLIRContext instead of
   // deallocating it.  There is no need to deallocate it right before process
@@ -437,9 +462,9 @@ int main(int argc, char **argv) {
   mlir::registerCanonicalizerPass();
 
   // Register CIRCT dialects.
-  registry
-      .insert<firrtl::FIRRTLDialect, hw::HWDialect, comb::CombDialect,
-              seq::SeqDialect, sv::SVDialect, handshake::HandshakeDialect>();
+  registry.insert<firrtl::FIRRTLDialect, hw::HWDialect, comb::CombDialect,
+                  seq::SeqDialect, sv::SVDialect, handshake::HandshakeDialect,
+                  esi::ESIDialect>();
 
   // Do the guts of the hlstool process.
   MLIRContext context(registry);

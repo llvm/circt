@@ -240,10 +240,10 @@ firrtl.module @Annotations() attributes {annotations = [{class = "sifive.enterpr
 // CHECK-LABEL: firrtl.circuit "NonLocalAnnotation"
 firrtl.circuit "NonLocalAnnotation" {
 
-// CHECK:  firrtl.hierpath @[[nla_0:.+]] [@NonLocalAnnotation::@dut, @DUT::@mem0, @mem0]
-firrtl.hierpath @nla0 [@NonLocalAnnotation::@dut, @DUT::@mem0]
-// CHECK:  firrtl.hierpath @[[nla_1:.+]] [@NonLocalAnnotation::@dut, @DUT::@mem1, @mem1]
-firrtl.hierpath @nla1 [@NonLocalAnnotation::@dut, @DUT]
+// CHECK:  firrtl.hierpath private @[[nla_0:.+]] [@NonLocalAnnotation::@dut, @DUT::@mem0, @mem0]
+firrtl.hierpath private @nla0 [@NonLocalAnnotation::@dut, @DUT::@mem0]
+// CHECK:  firrtl.hierpath private @[[nla_1:.+]] [@NonLocalAnnotation::@dut, @DUT::@mem1, @mem1]
+firrtl.hierpath private @nla1 [@NonLocalAnnotation::@dut, @DUT]
 
 // CHECK: firrtl.module @NonLocalAnnotation()
 firrtl.module @NonLocalAnnotation()  {
