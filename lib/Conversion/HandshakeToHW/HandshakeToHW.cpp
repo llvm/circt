@@ -465,6 +465,10 @@ struct RTLBuilder {
     return b.create<comb::AndOp>(getLoc(extLoc), values).getResult();
   }
 
+  Value bOr(ValueRange values, Location *extLoc = nullptr) {
+    return b.create<comb::OrOp>(getLoc(extLoc), values).getResult();
+  }
+
   // Bitwise 'not'.
   Value bNot(Value value, Location *extLoc = nullptr) {
     return comb::createOrFoldNot(getLoc(extLoc), value, b);
@@ -523,7 +527,7 @@ struct RTLBuilder {
   // Muxes a range of values.
   // The select signal is expected to be a decimal value which selects starting
   // from the lowest index of value.
-  Value mux(ValueRange values, Value index, Location *extLoc = nullptr) {
+  Value mux(Value index, ValueRange values, Location *extLoc = nullptr) {
     if (values.size() == 2)
       return b.create<comb::MuxOp>(getLoc(extLoc), index, values[1], values[0]);
 
@@ -665,7 +669,7 @@ public:
     auto &res = unwrapped.outputs[0];
 
     // Mux input valid signals.
-    auto selectedInputValid = s.mux(unwrapped.getInputValids(), select.data);
+    auto selectedInputValid = s.mux(select.data, unwrapped.getInputValids());
     // Result is valid when the selected input and the select input is valid.
     auto selAndInputValid = s.bAnd({selectedInputValid, select.valid});
     res.valid->setValue(selAndInputValid);
@@ -687,7 +691,7 @@ public:
     }
 
     // ============================== Data logic ===============================
-    res.data->setValue(s.mux(unwrapped.getInputDatas(), select.data));
+    res.data->setValue(s.mux(select.data, unwrapped.getInputDatas()));
   }
 
   void buildForkLogic(RTLBuilder &s, BackedgeBuilder &bb, InputHandshake &input,
@@ -904,6 +908,141 @@ public:
   };
 };
 
+class BufferConversionPattern : public HandshakeConversionPattern<BufferOp> {
+public:
+  using HandshakeConversionPattern<BufferOp>::HandshakeConversionPattern;
+  void buildModule(BufferOp op, BackedgeBuilder &bb, RTLBuilder &s,
+                   hw::HWModulePortAccessor &ports) const override {
+    auto unwrappedIO = this->unwrapIO(s, bb, ports);
+    auto input = unwrappedIO.inputs[0];
+    auto output = unwrappedIO.outputs[0];
+    if (op.isSequential()) {
+      SmallVector<int64_t> initValues;
+      if (op.getInitValues())
+        initValues = op.getInitValueArray();
+      return buildSeqBufferLogic(s, bb, op.getNumSlots(), input, output,
+                                 initValues);
+    }
+
+    assert(false && "FIFO buffer not yet implemented.");
+  };
+
+  struct SeqBufferStage {
+    SeqBufferStage(InputHandshake &preStage, BackedgeBuilder &bb, RTLBuilder &s,
+                   size_t index, std::optional<int64_t> initValue)
+        : preStage(preStage), s(s), bb(bb), index(index) {
+      dataType = preStage.data.getType();
+      width = dataType.getIntOrFloatBitWidth();
+      c0s = s.constant(width, 0);
+      currentStage.ready = std::make_shared<Backedge>(bb.get(s.b.getI1Type()));
+
+      auto hasInitValue = s.constant(1, initValue.has_value());
+      auto validBE = bb.get(s.b.getI1Type());
+      auto validReg = s.reg(getRegName("valid"), validBE, hasInitValue);
+      auto readyBE = bb.get(s.b.getI1Type());
+
+      // This could/should be revised but needs a larger rethinking to avoid
+      // introducing new bugs. Implement similarly to HandshakeToFIRRTL.
+      buildDataBufferLogic(validReg, initValue, validBE, readyBE);
+      buildControlBufferLogic(validReg, readyBE);
+    }
+
+    StringAttr getRegName(StringRef name) {
+      return s.b.getStringAttr(name + std::to_string(index) + "_reg");
+    }
+
+    void buildControlBufferLogic(Value validReg, Backedge &readyBE) {
+      auto c0I1 = s.constant(1, 0);
+      auto readyRegWire = bb.get(s.b.getI1Type());
+      auto readyReg = s.reg(getRegName("ready"), readyRegWire, c0I1);
+
+      // Create the logic to drive the current stage valid and potentially data.
+      currentStage.valid = s.mux(readyReg, {validReg, readyReg});
+
+      // Create the logic to drive the current stage ready.
+      auto notReadyReg = s.bNot(readyReg);
+      readyBE.setValue(notReadyReg);
+
+      auto succNotReady = s.bNot(*currentStage.ready);
+      auto neitherReady = s.bAnd({succNotReady, notReadyReg});
+      auto ctrlNotReady = s.mux(neitherReady, {readyReg, validReg});
+      auto bothReady = s.bAnd({*currentStage.ready, readyReg});
+
+      // Create a mux for emptying the register when both are ready.
+      auto resetSignal = s.mux(bothReady, {ctrlNotReady, c0I1});
+      readyRegWire.setValue(resetSignal);
+
+      // Add same logic for the data path if necessary.
+      auto ctrlDataRegBE = bb.get(dataType);
+      auto ctrlDataReg = s.reg(getRegName("ctrl_data"), ctrlDataRegBE, c0s);
+      auto dataResult = s.mux(readyReg, {preStage.data, ctrlDataReg});
+      currentStage.data = dataResult;
+
+      auto dataNotReadyMux = s.mux(neitherReady, {ctrlDataReg, preStage.data});
+      auto dataResetSignal = s.mux(bothReady, {dataNotReadyMux, c0s});
+      ctrlDataRegBE.setValue(dataResetSignal);
+    }
+
+    void buildDataBufferLogic(Value validReg, std::optional<int64_t> initValue,
+                              Backedge &validBE, Backedge &readyBE) {
+      // Create a signal for when the valid register is empty or the successor
+      // is ready to accept new token.
+      auto notValidReg = s.bNot(validReg);
+      auto emptyOrReady = s.bOr({notValidReg, readyBE});
+      preStage.ready->setValue(emptyOrReady);
+
+      // Create a mux that drives the register input. If the emptyOrReady signal
+      // is asserted, the mux selects the predValid signal. Otherwise, it
+      // selects the register output, keeping the output registered unchanged.
+      auto validRegMux = s.mux(emptyOrReady, {validReg, preStage.valid});
+
+      // Now we can drive the valid register.
+      validBE.setValue(validRegMux);
+
+      // Create a mux that drives the date register.
+      auto dataRegBE = bb.get(dataType);
+      auto dataReg =
+          s.reg(getRegName("data"),
+                s.mux(emptyOrReady, {dataRegBE, preStage.data}), c0s);
+      dataRegBE.setValue(dataReg);
+    }
+
+    InputHandshake getOutput() { return currentStage; }
+
+    InputHandshake &preStage;
+    InputHandshake currentStage;
+    RTLBuilder &s;
+    BackedgeBuilder &bb;
+    size_t index;
+    Type dataType;
+
+    // A zero-valued constant of the same width as the data type.
+    Value c0s;
+    unsigned width;
+  };
+
+  void buildSeqBufferLogic(RTLBuilder &s, BackedgeBuilder &bb, unsigned size,
+                           InputHandshake &input, OutputHandshake &output,
+                           llvm::ArrayRef<int64_t> initValues) const {
+    // Prime the buffer building logic with an initial stage, which just
+    // wraps the input handshake.
+    InputHandshake currentStage = input;
+
+    for (unsigned i = 0; i < size; ++i) {
+      bool isInitialized = i < initValues.size();
+      auto initValue =
+          isInitialized ? std::optional<int64_t>(initValues[i]) : std::nullopt;
+      currentStage =
+          SeqBufferStage(currentStage, bb, s, i, initValue).getOutput();
+    }
+
+    // Connect the last stage to the output handshake.
+    output.data->setValue(currentStage.data);
+    output.valid->setValue(currentStage.valid);
+    currentStage.ready->setValue(output.ready);
+  };
+};
+
 class IndexCastConversionPattern
     : public HandshakeConversionPattern<arith::IndexCastOp> {
 public:
@@ -1036,7 +1175,7 @@ static LogicalResult convertFuncOp(ESITypeConverter &typeConverter,
                   UnitRateConversionPattern<arith::ShLIOp, comb::OrOp>,
                   UnitRateConversionPattern<arith::ShRUIOp, comb::ShrUOp>,
                   UnitRateConversionPattern<arith::ShRSIOp, comb::ShrSOp>,
-                  ComparisonConversionPattern,
+                  ComparisonConversionPattern, BufferConversionPattern,
                   ExtendConversionPattern<arith::ExtUIOp, /*signExtend=*/false>,
                   ExtendConversionPattern<arith::ExtSIOp, /*signExtend=*/true>,
                   TruncateConversionPattern, IndexCastConversionPattern>(
