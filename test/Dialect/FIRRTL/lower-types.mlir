@@ -1067,7 +1067,7 @@ firrtl.circuit "DontTouch" {
 
 // Check that we don't create symbols for non-local annotations.
 firrtl.circuit "Foo"  {
-  firrtl.hierpath @nla [@Foo::@bar, @Bar]
+  firrtl.hierpath private @nla [@Foo::@bar, @Bar]
   // CHECK:       firrtl.module private @Bar(in %a_b:
   // CHECK-SAME:    !firrtl.uint<1> [{circt.nonlocal = @nla, class = "circt.test"}])
   firrtl.module private @Bar(in %a: !firrtl.bundle<b: uint<1>>
