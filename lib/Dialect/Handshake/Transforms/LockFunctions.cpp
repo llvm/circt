@@ -29,7 +29,7 @@ LogicalResult handshake::lockRegion(Region &r, OpBuilder &rewriter) {
   if (entry->getNumArguments() == 0)
     return r.getParentOp()->emitError("cannot lock a region without arguments");
 
-  auto ret = r.front().getTerminator();
+  auto *ret = r.front().getTerminator();
   if (ret->getNumOperands() == 0)
     return r.getParentOp()->emitError("cannot lock a region without results");
 
