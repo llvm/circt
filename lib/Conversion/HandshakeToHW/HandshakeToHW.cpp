@@ -624,8 +624,8 @@ public:
       if (!isa<esi::ChannelType>(outputInfo.type))
         continue;
       OutputHandshake hs;
-      auto data = std::make_shared<Backedge>(
-          bb.get(cast<esi::ChannelType>(outputInfo.type).getInner()));
+      Type innerType = cast<esi::ChannelType>(outputInfo.type).getInner();
+      auto data = std::make_shared<Backedge>(bb.get(innerType));
       auto valid = std::make_shared<Backedge>(bb.get(s.b.getI1Type()));
       auto [dataCh, ready] = s.wrap(*data, *valid);
       hs.data = data;
@@ -650,6 +650,7 @@ public:
     for (auto &input : inputs)
       valids.push_back(input.valid);
     Value allValid = s.bAnd(valids);
+    output.valid->setValue(allValid);
     setAllReadyWithCond(s, inputs, output, allValid);
   }
 
@@ -776,6 +777,8 @@ public:
                    hw::HWModulePortAccessor &ports) const override {
     auto unwrappedIO = unwrapIO(s, bb, ports);
     buildJoinLogic(s, unwrappedIO.inputs, unwrappedIO.outputs[0]);
+    unwrappedIO.outputs[0].data->setValue(
+        s.b.create<esi::NoneSourceOp>(s.getLoc()));
   };
 };
 
@@ -917,15 +920,19 @@ public:
     auto unwrappedIO = this->unwrapIO(s, bb, ports);
     auto input = unwrappedIO.inputs[0];
     auto output = unwrappedIO.outputs[0];
-    if (op.isSequential()) {
-      SmallVector<int64_t> initValues;
-      if (op.getInitValues())
-        initValues = op.getInitValueArray();
-      return buildSeqBufferLogic(s, bb, op.getDataType(), op.getNumSlots(),
-                                 input, output, initValues);
-    }
+    InputHandshake lastStage;
+    SmallVector<int64_t> initValues;
 
-    assert(false && "FIFO buffer not yet implemented.");
+    // For now, always build seq buffers.
+    if (op.getInitValues())
+      initValues = op.getInitValueArray();
+    lastStage = buildSeqBufferLogic(s, bb, op.getDataType(), op.getNumSlots(),
+                                    input, output, initValues);
+
+    // Connect the last stage to the output handshake.
+    output.data->setValue(lastStage.data);
+    output.valid->setValue(lastStage.valid);
+    lastStage.ready->setValue(output.ready);
   };
 
   struct SeqBufferStage {
@@ -933,8 +940,12 @@ public:
                    RTLBuilder &s, size_t index,
                    std::optional<int64_t> initValue)
         : dataType(dataType), preStage(preStage), s(s), bb(bb), index(index) {
-      width = dataType.getIntOrFloatBitWidth();
-      c0s = s.constant(width, 0);
+
+      // Todo: Change when i0 support is added.
+      if (dataType.isa<NoneType>())
+        c0s = s.b.create<esi::NoneSourceOp>(s.getLoc());
+      else
+        c0s = s.constant(dataType.getIntOrFloatBitWidth(), 0);
       currentStage.ready = std::make_shared<Backedge>(bb.get(s.b.getI1Type()));
 
       auto hasInitValue = s.constant(1, initValue.has_value());
@@ -1017,15 +1028,15 @@ public:
     BackedgeBuilder &bb;
     size_t index;
 
-    // A zero-valued constant of the same width as the data type.
+    // A zero-valued constant of equal type as the data type of this buffer.
     Value c0s;
-    unsigned width;
   };
 
-  void buildSeqBufferLogic(RTLBuilder &s, BackedgeBuilder &bb, Type dataType,
-                           unsigned size, InputHandshake &input,
-                           OutputHandshake &output,
-                           llvm::ArrayRef<int64_t> initValues) const {
+  InputHandshake buildSeqBufferLogic(RTLBuilder &s, BackedgeBuilder &bb,
+                                     Type dataType, unsigned size,
+                                     InputHandshake &input,
+                                     OutputHandshake &output,
+                                     llvm::ArrayRef<int64_t> initValues) const {
     // Prime the buffer building logic with an initial stage, which just
     // wraps the input handshake.
     InputHandshake currentStage = input;
@@ -1038,10 +1049,7 @@ public:
                          .getOutput();
     }
 
-    // Connect the last stage to the output handshake.
-    output.data->setValue(currentStage.data);
-    output.valid->setValue(currentStage.valid);
-    currentStage.ready->setValue(output.ready);
+    return currentStage;
   };
 };
 
