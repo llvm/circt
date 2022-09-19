@@ -921,18 +921,18 @@ public:
       SmallVector<int64_t> initValues;
       if (op.getInitValues())
         initValues = op.getInitValueArray();
-      return buildSeqBufferLogic(s, bb, op.getNumSlots(), input, output,
-                                 initValues);
+      return buildSeqBufferLogic(s, bb, op.getDataType(), op.getNumSlots(),
+                                 input, output, initValues);
     }
 
     assert(false && "FIFO buffer not yet implemented.");
   };
 
   struct SeqBufferStage {
-    SeqBufferStage(InputHandshake &preStage, BackedgeBuilder &bb, RTLBuilder &s,
-                   size_t index, std::optional<int64_t> initValue)
-        : preStage(preStage), s(s), bb(bb), index(index) {
-      dataType = preStage.data.getType();
+    SeqBufferStage(Type dataType, InputHandshake &preStage, BackedgeBuilder &bb,
+                   RTLBuilder &s, size_t index,
+                   std::optional<int64_t> initValue)
+        : dataType(dataType), preStage(preStage), s(s), bb(bb), index(index) {
       width = dataType.getIntOrFloatBitWidth();
       c0s = s.constant(width, 0);
       currentStage.ready = std::make_shared<Backedge>(bb.get(s.b.getI1Type()));
@@ -1010,20 +1010,21 @@ public:
 
     InputHandshake getOutput() { return currentStage; }
 
+    Type dataType;
     InputHandshake &preStage;
     InputHandshake currentStage;
     RTLBuilder &s;
     BackedgeBuilder &bb;
     size_t index;
-    Type dataType;
 
     // A zero-valued constant of the same width as the data type.
     Value c0s;
     unsigned width;
   };
 
-  void buildSeqBufferLogic(RTLBuilder &s, BackedgeBuilder &bb, unsigned size,
-                           InputHandshake &input, OutputHandshake &output,
+  void buildSeqBufferLogic(RTLBuilder &s, BackedgeBuilder &bb, Type dataType,
+                           unsigned size, InputHandshake &input,
+                           OutputHandshake &output,
                            llvm::ArrayRef<int64_t> initValues) const {
     // Prime the buffer building logic with an initial stage, which just
     // wraps the input handshake.
@@ -1033,8 +1034,8 @@ public:
       bool isInitialized = i < initValues.size();
       auto initValue =
           isInitialized ? std::optional<int64_t>(initValues[i]) : std::nullopt;
-      currentStage =
-          SeqBufferStage(currentStage, bb, s, i, initValue).getOutput();
+      currentStage = SeqBufferStage(dataType, currentStage, bb, s, i, initValue)
+                         .getOutput();
     }
 
     // Connect the last stage to the output handshake.
