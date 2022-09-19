@@ -135,7 +135,7 @@ void FirRegLower::addToIfBlock(OpBuilder &builder, Value cond,
   // always build both sides of the if, in case we want to use an empty else
   //  later.  This way we don't have to build a new if and replace it.
   if (!op) {
-    builder.create<sv::IfOp>(cond.getLoc(), cond, trueSide, falseSide);
+    op = builder.create<sv::IfOp>(cond.getLoc(), cond, trueSide, falseSide);
   } else {
     OpBuilder::InsertionGuard guard(builder);
     builder.setInsertionPointToEnd(op.getThenBlock());
