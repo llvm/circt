@@ -3778,6 +3778,13 @@ LogicalResult HierPathOp::verifyInnerRefs(InnerRefNamespace &ns) {
 
 void HierPathOp::print(OpAsmPrinter &p) {
   p << " ";
+
+  // Print visibility if present.
+  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  if (auto visibility =
+          getOperation()->getAttrOfType<StringAttr>(visibilityAttrName))
+    p << visibility.getValue() << ' ';
+
   p.printSymbolName(getSymName());
   p << " [";
   llvm::interleaveComma(getNamepath().getValue(), p, [&](Attribute attr) {
@@ -3790,11 +3797,15 @@ void HierPathOp::print(OpAsmPrinter &p) {
     }
   });
   p << "]";
-  p.printOptionalAttrDict((*this)->getAttrs(),
-                          {SymbolTable::getSymbolAttrName(), "namepath"});
+  p.printOptionalAttrDict(
+      (*this)->getAttrs(),
+      {SymbolTable::getSymbolAttrName(), "namepath", visibilityAttrName});
 }
 
 ParseResult HierPathOp::parse(OpAsmParser &parser, OperationState &result) {
+  // Parse the visibility attribute.
+  (void)mlir::impl::parseOptionalVisibilityKeyword(parser, result.attributes);
+
   // Parse the symbol name.
   StringAttr symName;
   if (parser.parseSymbolName(symName, SymbolTable::getSymbolAttrName(),
