@@ -10,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_RTL_HWMODULEGRAPH_H
-#define CIRCT_DIALECT_RTL_HWMODULEGRAPH_H
+#ifndef CIRCT_DIALECT_HW_HWMODULEGRAPH_H
+#define CIRCT_DIALECT_HW_HWMODULEGRAPH_H
 
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
@@ -107,9 +107,10 @@ struct llvm::DOTGraphTraits<circt::hw::HWModuleOp>
           case circt::comb::ICmpPredicate::slt:
             return "<";
           }
-          assert(false && "unhandled ICmp predicate");
+          llvm_unreachable("unhandled ICmp predicate");
         })
-        .Case<circt::seq::CompRegOp>([&](auto) { return "reg"; })
+        .Case<circt::seq::CompRegOp, circt::seq::FirReg>(
+            [&](auto) { return "reg"; })
         .Case<circt::hw::ConstantOp>([&](auto op) {
           llvm::SmallString<64> valueString;
           op.getValue().toString(valueString, 10, false);
@@ -120,27 +121,24 @@ struct llvm::DOTGraphTraits<circt::hw::HWModuleOp>
 
   std::string getNodeAttributes(circt::hw::detail::HWOperation *node,
                                 circt::hw::HWModuleOp) {
-    std::string attrs;
-
-    llvm::TypeSwitch<mlir::Operation *>(node)
+    return llvm::TypeSwitch<mlir::Operation *, std::string>(node)
         .Case<circt::hw::ConstantOp>(
-            [&](auto) { attrs = "fillcolor=darkgoldenrod1,style=filled"; })
+            [&](auto) { return "fillcolor=darkgoldenrod1,style=filled"; })
         .Case<circt::comb::MuxOp>([&](auto) {
-          attrs = "shape=invtrapezium,fillcolor=bisque,style=filled";
+          return "shape=invtrapezium,fillcolor=bisque,style=filled";
         })
         .Case<circt::hw::OutputOp>(
-            [&](auto) { attrs = "fillcolor=lightblue,style=filled"; })
+            [&](auto) { return "fillcolor=lightblue,style=filled"; })
         .Default([&](auto op) {
           llvm::TypeSwitch<mlir::Dialect *>(op->getDialect())
               .Case<circt::comb::CombDialect>([&](auto) {
-                attrs = "shape=oval,fillcolor=bisque,style=filled";
+                return "shape=oval,fillcolor=bisque,style=filled";
               })
               .template Case<circt::seq::SeqDialect>([&](auto) {
-                attrs = "shape=folder,fillcolor=gainsboro,style=filled";
+                return "shape=folder,fillcolor=gainsboro,style=filled";
               })
-              .Default([&](auto) {});
+              .Default([&](auto) { return ""; });
         });
-    return attrs;
   }
 
   static void
@@ -186,4 +184,4 @@ struct llvm::DOTGraphTraits<circt::hw::HWModuleOp>
   };
 };
 
-#endif // CIRCT_DIALECT_RTL_HWMODULEGRAPH_H
+#endif // CIRCT_DIALECT_HW_HWMODULEGRAPH_H
