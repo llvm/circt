@@ -106,18 +106,44 @@ private:
 
   void initialize(OpBuilder &builder, RegLowerInfo reg, ArrayRef<Value> rands);
 
-  void addToAlwaysBlock(hw::HWModuleOp module, sv::EventControl clockEdge,
-                        Value clock, std::function<void(OpBuilder &)> body,
+  void createTree(OpBuilder &builder, sv::RegOp reg, Value term, Value next);
+
+  void addToAlwaysBlock(Block *block, sv::EventControl clockEdge, Value clock,
+                        std::function<void(OpBuilder &)> body,
                         ResetType resetStyle = {},
                         sv::EventControl resetEdge = {}, Value reset = {},
                         std::function<void(OpBuilder &)> resetBody = {});
+
+  void addToIfBlock(OpBuilder &builder, Value cond,
+                    const std::function<void()> &trueSide,
+                    const std::function<void()> &falseSide);
 
   using AlwaysKeyType = std::tuple<Block *, sv::EventControl, Value, ResetType,
                                    sv::EventControl, Value>;
   llvm::SmallDenseMap<AlwaysKeyType, std::pair<sv::AlwaysOp, sv::IfOp>>
       alwaysBlocks;
+
+  using IfKeyType = std::pair<Block *, Value>;
+  llvm::SmallDenseMap<IfKeyType, sv::IfOp> ifCache;
 };
 } // namespace
+
+void FirRegLower::addToIfBlock(OpBuilder &builder, Value cond,
+                               const std::function<void()> &trueSide,
+                               const std::function<void()> &falseSide) {
+  sv::IfOp &op = ifCache[std::make_pair(builder.getBlock(), cond)];
+  // Always build both sides of the if, in case we want to use an empty else
+  // later. This way we don't have to build a new if and replace it.
+  if (!op) {
+    op = builder.create<sv::IfOp>(cond.getLoc(), cond, trueSide, falseSide);
+  } else {
+    OpBuilder::InsertionGuard guard(builder);
+    builder.setInsertionPointToEnd(op.getThenBlock());
+    trueSide();
+    builder.setInsertionPointToEnd(op.getElseBlock());
+    falseSide();
+  }
+}
 
 void FirRegLower::lower(hw::HWModuleOp module) {
   // Find all registers to lower in the module.
@@ -231,6 +257,21 @@ void FirRegLower::lower(hw::HWModuleOp module) {
   module->removeAttr("firrtl.random_init_width");
 }
 
+void FirRegLower::createTree(OpBuilder &builder, sv::RegOp reg, Value term,
+                             Value next) {
+  if (term == next)
+    return;
+  auto mux = next.getDefiningOp<comb::MuxOp>();
+  if (mux && mux.getTwoState()) {
+    addToIfBlock(
+        builder, mux.getCond(),
+        [&]() { createTree(builder, reg, term, mux.getTrueValue()); },
+        [&]() { createTree(builder, reg, term, mux.getFalseValue()); });
+  } else {
+    builder.create<sv::PAssignOp>(term.getLoc(), reg, next);
+  }
+}
+
 FirRegLower::RegLowerInfo FirRegLower::lower(hw::HWModuleOp module,
                                              FirRegOp reg) {
   Location loc = reg.getLoc();
@@ -253,16 +294,13 @@ FirRegLower::RegLowerInfo FirRegLower::lower(hw::HWModuleOp module,
 
   auto regVal = builder.create<sv::ReadInOutOp>(loc, svReg.reg);
 
-  auto setInput = [&](OpBuilder &builder) {
-    if (reg.getNext() != reg)
-      builder.create<sv::PAssignOp>(loc, svReg.reg, reg.getNext());
-  };
-
   if (reg.hasReset()) {
     addToAlwaysBlock(
-        module, sv::EventControl::AtPosEdge, reg.getClk(), setInput,
+        module.getBodyBlock(), sv::EventControl::AtPosEdge, reg.getClk(),
+        [&](OpBuilder &b) { createTree(b, svReg.reg, reg, reg.getNext()); },
         reg.getIsAsync() ? ResetType::AsyncReset : ResetType::SyncReset,
-        sv::EventControl::AtPosEdge, reg.getReset(), [&](OpBuilder &builder) {
+        sv::EventControl::AtPosEdge, reg.getReset(),
+        [&](OpBuilder &builder) {
           builder.create<sv::PAssignOp>(loc, svReg.reg, reg.getResetValue());
         });
     if (reg.getIsAsync()) {
@@ -270,8 +308,9 @@ FirRegLower::RegLowerInfo FirRegLower::lower(hw::HWModuleOp module,
       svReg.asyncResetValue = reg.getResetValue();
     }
   } else {
-    addToAlwaysBlock(module, sv::EventControl::AtPosEdge, reg.getClk(),
-                     setInput);
+    addToAlwaysBlock(
+        module.getBodyBlock(), sv::EventControl::AtPosEdge, reg.getClk(),
+        [&](OpBuilder &b) { createTree(b, svReg.reg, reg, reg.getNext()); });
   }
 
   reg.replaceAllUsesWith(regVal.getResult());
@@ -306,15 +345,14 @@ void FirRegLower::initialize(OpBuilder &builder, RegLowerInfo reg,
   builder.create<sv::BPAssignOp>(loc, reg.reg, bitcast);
 }
 
-void FirRegLower::addToAlwaysBlock(hw::HWModuleOp module,
-                                   sv::EventControl clockEdge, Value clock,
+void FirRegLower::addToAlwaysBlock(Block *block, sv::EventControl clockEdge,
+                                   Value clock,
                                    std::function<void(OpBuilder &)> body,
                                    ::ResetType resetStyle,
                                    sv::EventControl resetEdge, Value reset,
                                    std::function<void(OpBuilder &)> resetBody) {
   auto loc = clock.getLoc();
-  auto builder =
-      ImplicitLocOpBuilder::atBlockTerminator(loc, module.getBodyBlock());
+  auto builder = ImplicitLocOpBuilder::atBlockTerminator(loc, block);
 
   auto &op = alwaysBlocks[{builder.getBlock(), clockEdge, clock, resetStyle,
                            resetEdge, reset}];

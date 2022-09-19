@@ -134,15 +134,22 @@ hw.module private @UninitReg1(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
   %c0_i2 = hw.constant 0 : i2
   // CHECK-NEXT: %count = sv.reg sym @count : !hw.inout<i2>
   // CHECK-NEXT: %0 = sv.read_inout %count : !hw.inout<i2>
-  // CHECK-NEXT: %1 = comb.mux %cond, %value, %0 : i2
-  // CHECK-NEXT: %2 = comb.mux %reset, %c0_i2, %1 : i2
+  // CHECK-NEXT: %1 = comb.mux bin %cond, %value, %0 : i2
+  // CHECK-NEXT: %2 = comb.mux bin %reset, %c0_i2, %1 : i2
   // CHECK-NEXT: sv.always posedge %clock {
-  // CHECK-NEXT:   sv.passign %count, %2 : i2
+  // CHECK-NEXT:   sv.if %reset {
+  // CHECK-NEXT:     sv.passign %count, %c0_i2
+  // CHECK-NEXT:   } else {
+  // CHECK-NEXT:     sv.if %cond {
+  // CHECK-NEXT:       sv.passign %count, %value
+  // CHECK-NEXT:     } else {
+  // CHECK-NEXT:     }
+  // CHECK-NEXT:   }
   // CHECK-NEXT: }
 
   %count = seq.firreg %2 clock %clock sym @count : i2
-  %1 = comb.mux %cond, %value, %count : i2
-  %2 = comb.mux %reset, %c0_i2, %1 : i2
+  %1 = comb.mux bin %cond, %value, %count : i2
+  %2 = comb.mux bin %reset, %c0_i2, %1 : i2
 
   // CHECK-NEXT: sv.ifdef "SYNTHESIS"  {
   // CHECK-NEXT: } else {
@@ -169,9 +176,28 @@ hw.module private @UninitReg1(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
 
-  // CHECK-NEXT: hw.output
+  // CHECK: hw.output
   hw.output
 }
+// CHECK-LABEL: hw.module private @UninitReg1_nonbin(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
+hw.module private @UninitReg1_nonbin(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
+  // CHECK: %c0_i2 = hw.constant 0 : i2
+  %c0_i2 = hw.constant 0 : i2
+  // CHECK-NEXT: %count = sv.reg sym @count : !hw.inout<i2>
+  // CHECK-NEXT: %0 = sv.read_inout %count : !hw.inout<i2>
+  // CHECK-NEXT: %1 = comb.mux %cond, %value, %0 : i2
+  // CHECK-NEXT: %2 = comb.mux %reset, %c0_i2, %1 : i2
+  // CHECK-NEXT: sv.always posedge %clock {
+  // CHECK-NEXT:   sv.passign %count, %2
+  // CHECK-NEXT: }
+
+  %count = seq.firreg %2 clock %clock sym @count : i2
+  %1 = comb.mux %cond, %value, %count : i2
+  %2 = comb.mux %reset, %c0_i2, %1 : i2
+  // CHECK: hw.output
+  hw.output
+}
+
 
 // module InitReg1 :
 //     input clock : Clock
@@ -198,7 +224,7 @@ hw.module private @InitReg1(%clock: i1, %reset: i1, %io_d: i32, %io_en: i1) -> (
   %1 = comb.concat %false, %reg2 : i1, i32
   %2 = comb.add %0, %1 : i33
   %3 = comb.extract %2 from 1 : (i33) -> i32
-  %4 = comb.mux %io_en, %io_d, %3 : i32
+  %4 = comb.mux bin %io_en, %io_d, %3 : i32
 
   // CHECK:      %reg = sv.reg sym @[[reg_sym:.+]] : !hw.inout<i32>
   // CHECK-NEXT: %0 = sv.read_inout %reg : !hw.inout<i32>
@@ -210,13 +236,17 @@ hw.module private @InitReg1(%clock: i1, %reset: i1, %io_d: i32, %io_en: i1) -> (
   // CHECK-NEXT: %4 = comb.concat %false, %1 : i1, i32
   // CHECK-NEXT: %5 = comb.add %3, %4 : i33
   // CHECK-NEXT: %6 = comb.extract %5 from 1 : (i33) -> i32
-  // CHECK-NEXT: %7 = comb.mux %io_en, %io_d, %6 : i32
+  // CHECK-NEXT: %7 = comb.mux bin %io_en, %io_d, %6 : i32
   // CHECK-NEXT: sv.always posedge %clock, posedge %reset  {
-  // CHECK-NEXT:   sv.if %reset  {
-  // CHECK-NEXT:     sv.passign %reg, %c0_i32 : i32
-  // CHECK-NEXT:     sv.passign %reg3, %c1_i32 : i32
-  // CHECK-NEXT:   } else  {
-  // CHECK-NEXT:     sv.passign %reg, %7 : i32
+  // CHECK-NEXT:   sv.if %reset { 
+  // CHECK-NEXT:     sv.passign %reg, %c0_i32 : i32 
+  // CHECK-NEXT:     sv.passign %reg3, %c1_i32 : i32 
+  // CHECK-NEXT:   } else { 
+  // CHECK-NEXT:     sv.if %io_en { 
+  // CHECK-NEXT:       sv.passign %reg, %io_d : i32 
+  // CHECK-NEXT:     } else { 
+  // CHECK-NEXT:       sv.passign %reg, %6 : i32 
+  // CHECK-NEXT:     }
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
   // CHECK-NEXT: sv.always posedge %clock  {

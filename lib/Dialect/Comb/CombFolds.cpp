@@ -1948,7 +1948,7 @@ static bool foldCommonMuxValue(MuxOp op, bool isTrueOperand,
       cond = createOrFoldNot(op.getLoc(), cond, rewriter);
     cond = rewriter.createOrFold<OrOp>(op.getLoc(), cond, subCond, false);
     replaceOpWithNewOpAndCopyName<MuxOp>(rewriter, op, cond, commonValue,
-                                         otherValue, false);
+                                         otherValue, op.getTwoState());
     return true;
   }
 
@@ -2052,8 +2052,8 @@ static bool foldCommonMuxOperation(MuxOp mux, Operation *trueOp,
         rewriter.createOrFold<ConcatOp>(falseOp->getLoc(), operands);
     // Merge the LSBs with a new mux and concat the MSB with the LSB to be
     // done.
-    Value lsb = rewriter.createOrFold<MuxOp>(mux->getLoc(), mux.getCond(),
-                                             trueLSB, falseLSB, false);
+    Value lsb = rewriter.createOrFold<MuxOp>(
+        mux->getLoc(), mux.getCond(), trueLSB, falseLSB, mux.getTwoState());
     replaceOpWithNewOpAndCopyName<ConcatOp>(rewriter, mux, sharedMSB, lsb);
     return true;
   }
@@ -2081,8 +2081,8 @@ static bool foldCommonMuxOperation(MuxOp mux, Operation *trueOp,
     Value falseMSB =
         rewriter.createOrFold<ConcatOp>(falseOp->getLoc(), operands);
     // Merge the MSBs with a new mux and concat the MSB with the LSB to be done.
-    Value msb = rewriter.createOrFold<MuxOp>(mux->getLoc(), mux.getCond(),
-                                             trueMSB, falseMSB, false);
+    Value msb = rewriter.createOrFold<MuxOp>(
+        mux->getLoc(), mux.getCond(), trueMSB, falseMSB, mux.getTwoState());
     replaceOpWithNewOpAndCopyName<ConcatOp>(rewriter, mux, msb, sharedLSB);
     return true;
   }
@@ -2182,10 +2182,11 @@ LogicalResult MuxOp::canonicalize(MuxOp op, PatternRewriter &rewriter) {
   // mux(!a, b, c) -> mux(a, c, b)
   Value subExpr;
   Operation *condOp = op.getCond().getDefiningOp();
-  if (condOp && matchPattern(condOp, m_Complement(m_Any(&subExpr)))) {
+  if (condOp && matchPattern(condOp, m_Complement(m_Any(&subExpr))) &&
+      op.getTwoState()) {
     replaceOpWithNewOpAndCopyName<MuxOp>(rewriter, op, op.getType(), subExpr,
                                          op.getFalseValue(), op.getTrueValue(),
-                                         false);
+                                         true);
     return success();
   }
 
@@ -2209,15 +2210,17 @@ LogicalResult MuxOp::canonicalize(MuxOp op, PatternRewriter &rewriter) {
 
     if (isa<AndOp>(condOp) && getInvertedOperands()) {
       auto newOr = rewriter.createOrFold<OrOp>(op.getLoc(), invertedOperands);
-      replaceOpWithNewOpAndCopyName<MuxOp>(
-          rewriter, op, newOr, op.getFalseValue(), op.getTrueValue(), false);
+      replaceOpWithNewOpAndCopyName<MuxOp>(rewriter, op, newOr,
+                                           op.getFalseValue(),
+                                           op.getTrueValue(), op.getTwoState());
       return success();
     }
     if (isa<OrOp>(condOp) && getInvertedOperands()) {
       auto newAnd =
           rewriter.createOrFold<AndOp>(op.getLoc(), invertedOperands, false);
-      replaceOpWithNewOpAndCopyName<MuxOp>(
-          rewriter, op, newAnd, op.getFalseValue(), op.getTrueValue(), false);
+      replaceOpWithNewOpAndCopyName<MuxOp>(rewriter, op, newAnd,
+                                           op.getFalseValue(),
+                                           op.getTrueValue(), op.getTwoState());
       return success();
     }
   }
@@ -2226,9 +2229,9 @@ LogicalResult MuxOp::canonicalize(MuxOp op, PatternRewriter &rewriter) {
           dyn_cast_or_null<MuxOp>(op.getFalseValue().getDefiningOp())) {
     // mux(selector, x, mux(selector, y, z) = mux(selector, x, z)
     if (op.getCond() == falseMux.getCond()) {
-      replaceOpWithNewOpAndCopyName<MuxOp>(rewriter, op, op.getCond(),
-                                           op.getTrueValue(),
-                                           falseMux.getFalseValue(), false);
+      replaceOpWithNewOpAndCopyName<MuxOp>(
+          rewriter, op, op.getCond(), op.getTrueValue(),
+          falseMux.getFalseValue(), op.getTwoState());
       return success();
     }
 
@@ -2241,9 +2244,9 @@ LogicalResult MuxOp::canonicalize(MuxOp op, PatternRewriter &rewriter) {
           dyn_cast_or_null<MuxOp>(op.getTrueValue().getDefiningOp())) {
     // mux(selector, mux(selector, a, b), c) = mux(selector, a, c)
     if (op.getCond() == trueMux.getCond()) {
-      replaceOpWithNewOpAndCopyName<MuxOp>(rewriter, op, op.getCond(),
-                                           trueMux.getTrueValue(),
-                                           op.getFalseValue(), false);
+      replaceOpWithNewOpAndCopyName<MuxOp>(
+          rewriter, op, op.getCond(), trueMux.getTrueValue(),
+          op.getFalseValue(), op.getTwoState());
       return success();
     }
 
