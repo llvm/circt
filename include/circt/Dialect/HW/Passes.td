@@ -43,4 +43,12 @@ def HWSpecialize : Pass<"hw-specialize", "mlir::ModuleOp"> {
   }];
 }
 
+def PruneZeroValuedLogic : Pass<"hw-prune-zero-logic", "mlir::ModuleOp"> {
+  let summary = "Prune zero-valued logic";
+  let constructor = "circt::hw::createPruneZeroValuedLogicPass()";
+  let description = [{
+    This pass removes zero-valued logic from the IR.
+  }];
+}
+
 #endif // CIRCT_DIALECT_HW_PASSES_TD
