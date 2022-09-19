@@ -107,7 +107,9 @@ static bool isOneDimVectorType(FIRRTLType type) {
   return TypeSwitch<FIRRTLType, bool>(type)
       .Case<BundleType>([&](auto bundle) { return false; })
       .Case<FVectorType>([&](FVectorType vector) {
-        return vector.getElementType().isGround();
+        // When the size is 1, lower the vector into a scalar.
+        return vector.getElementType().isGround() &&
+               vector.getNumElements() > 1;
       })
       .Default([](auto groundType) { return true; });
 }
