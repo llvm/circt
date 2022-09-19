@@ -151,7 +151,8 @@ firrtl.circuit  "GCTModule" attributes {annotations = [
       // CHECK-SAME:      {circt.fieldID = 5 : i64, class = "firrtl.transforms.DontTouchAnnotation"},
       // CHECK-SAME:      {circt.fieldID = 6 : i64, class = "firrtl.transforms.DontTouchAnnotation"},
       // CHECK-SAME:      {circt.fieldID = 7 : i64, class = "firrtl.transforms.DontTouchAnnotation"},
-      // CHECK-SAME:      {circt.fieldID = 8 : i64, class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.vector<uint<8>, 8>
+      // CHECK-SAME:      {circt.fieldID = 8 : i64, class = "firrtl.transforms.DontTouchAnnotation"}
+      // CHECK-SAME:       preserve_type = true} : !firrtl.vector<uint<8>, 8>
   }
 }
 
@@ -229,8 +230,8 @@ firrtl.circuit "MemTap" attributes {annotations = [
     // CHECK-SAME:      [{circt.fieldID = 1 : i64, class = "sifive.enterprise.grandcentral.MemTapAnnotation.source", id = 11 : i64, portID = 0 : i64}
     // CHECK-SAME:       {circt.fieldID = 2 : i64, class = "sifive.enterprise.grandcentral.MemTapAnnotation.source", id = 11 : i64, portID = 1 : i64},
     // CHECK-SAME:       {circt.fieldID = 3 : i64, class = "sifive.enterprise.grandcentral.MemTapAnnotation.source", id = 11 : i64, portID = 2 : i64},
-    // CHECK-SAME:       {circt.fieldID = 4 : i64, class = "sifive.enterprise.grandcentral.MemTapAnnotation.source", id = 11 : i64, portID = 3 : i64}]}
-    // CHECK-SAME:      : !firrtl.vector<uint<32>, 4>
+    // CHECK-SAME:       {circt.fieldID = 4 : i64, class = "sifive.enterprise.grandcentral.MemTapAnnotation.source", id = 11 : i64, portID = 3 : i64}]
+    // CHECK-SAME:      preserve_type = true} : !firrtl.vector<uint<32>, 4>
 	}
 
 }

@@ -5,10 +5,16 @@
 
 ; CHECK-LABEL: firrtl.module @Issue794
 ; CHECK-SAME: (in %clock: !firrtl.clock,
-; CHECK:       %[[memory_0:.+]] = firrtl.reg %clock {{.*}}: !firrtl.uint<8>
-; CHECK:       firrtl.mux(%[[v14:.+]], %wData_0, %[[memory_0]])
-; CHECK:       firrtl.mux(%[[v19:.+]], %wData_1, %[[v5:.+]])
-; CHECK:       firrtl.strictconnect %[[memory_0]], %[[v22:.+]]
+; CHECK:       %memory = firrtl.reg  %clock  {firrtl.random_init_start = 0 : ui64, preserve_type = true} : !firrtl.vector<uint<8>, 4>
+; CHECK:      %[[v0:.+]] = firrtl.subaccess %memory[%rAddr] : !firrtl.vector<uint<8>, 4>, !firrtl.uint<2>
+; CHECK:      firrtl.strictconnect %memory_r_data, %[[v0]] : !firrtl.uint<8>
+; CHECK:      %[[v1:.+]] = firrtl.orr %wAddr_1 : (!firrtl.uint<2>) -> !firrtl.uint<1>
+; CHECK:      %[[v2:.+]] = firrtl.not %[[v1]] : (!firrtl.uint<1>) -> !firrtl.uint<1>
+; CHECK:      %[[v3:.+]] = firrtl.subindex %memory[0] : !firrtl.vector<uint<8>, 4>
+; CHECK:      %[[v4:.+]] = firrtl.mux(%[[v2]], %wData_1, %wData_0) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
+; CHECK:      %[[v5:.+]] = firrtl.mux(%wMask_1, %[[v4]], %wData_0) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
+; CHECK:      %[[v6:.+]] = firrtl.mux(%wEn_1, %[[v5]], %wData_0) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
+; CHECK:      firrtl.strictconnect %[[v3]], %[[v6]] : !firrtl.uint<8>
 circuit Issue794: %[[{
     "class": "sifive.enterprise.firrtl.MarkDUTAnnotation",
     "target":"~Issue794|Issue794"

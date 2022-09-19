@@ -125,4 +125,4 @@ circuit Qux: %[[{
 ;CHECK:      }
 ;CHECK:      sv.passign %addr, %rAddr : i2
 ;CHECK:    }
-;CHECK:    hw.output %[[v6]], %[[v7]]
+;CHECK:    hw.output %[[v2]], %[[v3]]

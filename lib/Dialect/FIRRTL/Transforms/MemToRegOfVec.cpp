@@ -408,6 +408,8 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
         // Create the register corresponding to the memory.
         regOfVec = builder.create<RegOp>(
             FVectorType::get(dataType, firMem.depth), clk, memOp.getNameAttr());
+        if (dataType.isGround())
+          regOfVec->setAttr("preserve_type", builder.getBoolAttr(true));
 
         // Copy all the memory annotations.
         if (!memOp.getAnnotationsAttr().empty())

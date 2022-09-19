@@ -233,6 +233,10 @@ public:
     // Registers are initialized to themselves. If the register has an
     // aggergate type, connect each ground type element.
     auto builder = OpBuilder(op->getBlock(), ++Block::iterator(op));
+    if (op->hasAttr("preserve_type")) {
+      builder.create<ConnectOp>(op.getLoc(), op.getResult(), op.getResult());
+      return;
+    }
     auto fn = [&](Value value) {
       auto connect = builder.create<ConnectOp>(value.getLoc(), value, value);
       driverMap[getFieldRefFromValue(value)] = connect;
