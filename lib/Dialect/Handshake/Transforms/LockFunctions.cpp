@@ -26,6 +26,13 @@ LogicalResult handshake::lockRegion(Region &r, OpBuilder &rewriter) {
   Block *entry = &r.front();
   Location loc = r.getLoc();
 
+  if (entry->getNumArguments() == 0)
+    return r.getParentOp()->emitError("cannot lock a region without arguments");
+
+  auto ret = r.front().getTerminator();
+  if (ret->getNumOperands() == 0)
+    return r.getParentOp()->emitError("cannot lock a region without results");
+
   rewriter.setInsertionPointToStart(entry);
   BackedgeBuilder bebuilder(rewriter, loc);
   auto backEdge = bebuilder.get(rewriter.getNoneType());
@@ -38,17 +45,24 @@ LogicalResult handshake::lockRegion(Region &r, OpBuilder &rewriter) {
   // semantic meaning.
   buff->setAttr("initValues", rewriter.getI64ArrayAttr({0}));
 
-  auto ctrl = entry->getArguments().back();
-  auto join = rewriter.create<JoinOp>(loc, ValueRange({ctrl, buff}));
-  ctrl.replaceAllUsesExcept(join, join);
+  SmallVector<Value> inSyncOperands =
+      llvm::to_vector_of<Value>(entry->getArguments());
+  inSyncOperands.push_back(buff);
+  auto sync = rewriter.create<SyncOp>(loc, inSyncOperands);
 
-  auto ret = dyn_cast<handshake::ReturnOp>(r.front().getTerminator());
-  if (!ret)
-    return r.getParentOp()->emitError(
-        "expected a handshake return operation as terminator");
+  // replace all func arg usages with the synced ones
+  // TODO is this UB?
+  for (auto &&[arg, synced] :
+       llvm::drop_end(llvm::zip(inSyncOperands, sync.getResults())))
+    arg.replaceAllUsesExcept(synced, sync);
+
   rewriter.setInsertionPoint(ret);
+  SmallVector<Value> endJoinOperands = llvm::to_vector(ret->getOperands());
+  // Add the axilirary control signal output to the end-join
+  endJoinOperands.push_back(sync.getResults().back());
+  auto endJoin = rewriter.create<JoinOp>(loc, endJoinOperands);
 
-  backEdge.setValue(ret.operands().back());
+  backEdge.setValue(endJoin);
   return success();
 }
 
