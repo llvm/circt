@@ -429,3 +429,72 @@ void AnnoTargetCache::gatherTargets(FModuleLike mod) {
   // And named things
   mod.walk([&](Operation *op) { insertOp(op); });
 }
+
+LogicalResult
+firrtl::findLCAandSetPath(AnnoPathValue &srcTarget, AnnoPathValue &dstTarget,
+                          SmallVector<InstanceOp> &pathFromSrcToDst,
+                          FModuleOp &lcaModule, ApplyState &state) {
+
+  auto srcModule = cast<FModuleOp>(srcTarget.ref.getModule().getOperation());
+  auto dstModule = cast<FModuleOp>(dstTarget.ref.getModule().getOperation());
+  // Get the path from top to `srcModule` and `dstModule`, and then compare the
+  // path to find the lca. Then use that to get the path from `srcModule` to the
+  // `dstModule`.
+  pathFromSrcToDst.clear();
+  if (srcModule == dstModule) {
+    lcaModule = srcModule;
+    return success();
+  }
+  auto *top = state.instancePathCache.instanceGraph.getTopLevelNode();
+  lcaModule = cast<FModuleOp>(top->getModule().getOperation());
+  if (dstTarget.instances.empty()) {
+    auto dstInstancePathsFromTop =
+        state.instancePathCache.getAbsolutePaths(dstTarget.ref.getModule());
+    if (dstInstancePathsFromTop.size() > 1)
+      return dstTarget.ref.getOp()->emitError(
+          "cannot handle multiple paths to target");
+
+    // Get the path from top to dst
+    ArrayRef<InstanceOp> p = dstInstancePathsFromTop.back();
+    dstTarget.instances.append(SmallVector<InstanceOp>(p.begin(), p.end()));
+  }
+  if (srcTarget.instances.empty()) {
+    auto srcInstancePathsFromTop =
+        state.instancePathCache.getAbsolutePaths(srcTarget.ref.getModule());
+    if (srcInstancePathsFromTop.size() > 1)
+      return srcModule->emitError("cannot handle multiple paths from source");
+
+    // Get the path from top to dst
+    ArrayRef<InstanceOp> p = srcInstancePathsFromTop.back();
+    srcTarget.instances.append(SmallVector<InstanceOp>(p.begin(), p.end()));
+  }
+  auto &dstPathFromTop = dstTarget.instances;
+  // A map of the modules in the path from top to dst to its index into the
+  // `dstPathFromTop`.
+  DenseMap<FModuleOp, size_t> dstPathMap;
+  // Initialize the leaf module, to end of path.
+  dstPathMap[dstModule] = dstPathFromTop.size();
+  for (auto &dstInstance : llvm::enumerate(dstPathFromTop))
+    dstPathMap[dstInstance.value()->getParentOfType<FModuleOp>()] =
+        dstInstance.index();
+  auto *dstPathIterator = dstPathFromTop.begin();
+  // Now, reverse iterate over the path of the source, from the source module to
+  // the Top.
+  for (auto srcInstPath : llvm::reverse(srcTarget.instances)) {
+    auto refModule = cast<FModuleOp>(
+        state.instancePathCache.instanceGraph.getReferencedModule(srcInstPath)
+            .getOperation());
+    auto mapIter = dstPathMap.find(refModule);
+    // If `refModule` exists on the dst path, then this is the Lowest Common
+    // Ancestor between the source and dst module.
+    if (mapIter != dstPathMap.end()) {
+      lcaModule = refModule;
+      dstPathIterator += mapIter->getSecond();
+      break;
+    }
+    pathFromSrcToDst.push_back(srcInstPath);
+  }
+  pathFromSrcToDst.insert(pathFromSrcToDst.end(), dstPathIterator,
+                          dstPathFromTop.end());
+  return success();
+}
