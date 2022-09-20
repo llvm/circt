@@ -97,15 +97,16 @@ bool firrtl::isDuplexValue(Value val) {
 
 /// Return the kind of port this is given the port type from a 'mem' decl.
 static MemOp::PortKind getMemPortKindFromType(FIRRTLType type) {
-  constexpr unsigned int addr = 1;
-  constexpr unsigned int en = 2;
-  constexpr unsigned int clk = 4;
-  constexpr unsigned int data = 8;
-  constexpr unsigned int mask = 16;
-  constexpr unsigned int rdata = 32;
-  constexpr unsigned int wdata = 64;
-  constexpr unsigned int wmask = 128;
-  constexpr unsigned int wmode = 256;
+  constexpr unsigned int addr = 1 << 0;
+  constexpr unsigned int en = 1 << 1;
+  constexpr unsigned int clk = 1 << 2;
+  constexpr unsigned int data = 1 << 3;
+  constexpr unsigned int mask = 1 << 4;
+  constexpr unsigned int rdata = 1 << 5;
+  constexpr unsigned int wdata = 1 << 6;
+  constexpr unsigned int wmask = 1 << 7;
+  constexpr unsigned int wmode = 1 << 8;
+  constexpr unsigned int def = 1 << 9;
   // Get the kind of port based on the fields of the Bundle.
   auto portType = type.dyn_cast<BundleType>();
   if (!portType)
@@ -123,15 +124,12 @@ static MemOp::PortKind getMemPortKindFromType(FIRRTLType type) {
                   .Case("wdata", wdata)
                   .Case("wmask", wmask)
                   .Case("wmode", wmode)
-                  .Default(512);
+                  .Default(def);
   }
-  // addr, en, clk, data
   if (fields == (addr | en | clk | data))
     return MemOp::PortKind::Read;
-  // addr, en, clk, data, mask
   if (fields == (addr | en | clk | data | mask))
     return MemOp::PortKind::Write;
-  // addr, en, clk, wdata, wmask, rdata, wmode
   if (fields == (addr | en | clk | wdata | wmask | rdata | wmode))
     return MemOp::PortKind::ReadWrite;
   return MemOp::PortKind::Debug;
