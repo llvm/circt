@@ -97,6 +97,16 @@ bool firrtl::isDuplexValue(Value val) {
 
 /// Return the kind of port this is given the port type from a 'mem' decl.
 static MemOp::PortKind getMemPortKindFromType(FIRRTLType type) {
+  constexpr unsigned int addr = 1 << 0;
+  constexpr unsigned int en = 1 << 1;
+  constexpr unsigned int clk = 1 << 2;
+  constexpr unsigned int data = 1 << 3;
+  constexpr unsigned int mask = 1 << 4;
+  constexpr unsigned int rdata = 1 << 5;
+  constexpr unsigned int wdata = 1 << 6;
+  constexpr unsigned int wmask = 1 << 7;
+  constexpr unsigned int wmode = 1 << 8;
+  constexpr unsigned int def = 1 << 9;
   // Get the kind of port based on the fields of the Bundle.
   auto portType = type.dyn_cast<BundleType>();
   if (!portType)
@@ -105,25 +115,22 @@ static MemOp::PortKind getMemPortKindFromType(FIRRTLType type) {
   // Get the kind of port based on the fields of the Bundle.
   for (auto elem : portType.getElements()) {
     fields |= llvm::StringSwitch<unsigned>(elem.name.getValue())
-                  .Case("addr", 1)
-                  .Case("en", 2)
-                  .Case("clk", 4)
-                  .Case("data", 8)
-                  .Case("mask", 16)
-                  .Case("rdata", 32)
-                  .Case("wdata", 64)
-                  .Case("wmask", 128)
-                  .Case("wmode", 256)
-                  .Default(512);
+                  .Case("addr", addr)
+                  .Case("en", en)
+                  .Case("clk", clk)
+                  .Case("data", data)
+                  .Case("mask", mask)
+                  .Case("rdata", rdata)
+                  .Case("wdata", wdata)
+                  .Case("wmask", wmask)
+                  .Case("wmode", wmode)
+                  .Default(def);
   }
-  // addr, en, clk, data
-  if (fields == 15)
+  if (fields == (addr | en | clk | data))
     return MemOp::PortKind::Read;
-  // addr, en, clk, data, mask
-  if (fields == 31)
+  if (fields == (addr | en | clk | data | mask))
     return MemOp::PortKind::Write;
-  // addr, en, clk, wdata, wmask, rdata, wmode
-  if (fields == 487)
+  if (fields == (addr | en | clk | wdata | wmask | rdata | wmode))
     return MemOp::PortKind::ReadWrite;
   return MemOp::PortKind::Debug;
 }
