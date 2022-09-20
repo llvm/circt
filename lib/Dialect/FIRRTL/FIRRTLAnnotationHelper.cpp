@@ -447,27 +447,24 @@ firrtl::findLCAandSetPath(AnnoPathValue &srcTarget, AnnoPathValue &dstTarget,
   }
   auto *top = state.instancePathCache.instanceGraph.getTopLevelNode();
   lcaModule = cast<FModuleOp>(top->getModule().getOperation());
-  if (dstTarget.instances.empty()) {
-    auto dstInstancePathsFromTop =
-        state.instancePathCache.getAbsolutePaths(dstTarget.ref.getModule());
-    if (dstInstancePathsFromTop.size() > 1)
-      return dstTarget.ref.getOp()->emitError(
-          "cannot handle multiple paths to target");
+  auto initializeInstances = [&](SmallVector<InstanceOp> &instances,
+                                 FModuleLike targetModule) -> LogicalResult {
+    if (!instances.empty())
+      return success();
+    auto instancePathsFromTop =
+        state.instancePathCache.getAbsolutePaths(targetModule);
+    if (instancePathsFromTop.size() > 1)
+      return targetModule->emitError("cannot handle multiple paths to target");
 
     // Get the path from top to dst
-    ArrayRef<InstanceOp> p = dstInstancePathsFromTop.back();
-    dstTarget.instances.append(SmallVector<InstanceOp>(p.begin(), p.end()));
-  }
-  if (srcTarget.instances.empty()) {
-    auto srcInstancePathsFromTop =
-        state.instancePathCache.getAbsolutePaths(srcTarget.ref.getModule());
-    if (srcInstancePathsFromTop.size() > 1)
-      return srcModule->emitError("cannot handle multiple paths from source");
+    ArrayRef<InstanceOp> p = instancePathsFromTop.back();
+    instances.append(SmallVector<InstanceOp>(p.begin(), p.end()));
+    return success();
+  };
+  if (initializeInstances(dstTarget.instances, dstModule).failed() ||
+      initializeInstances(srcTarget.instances, srcModule).failed())
+    return failure();
 
-    // Get the path from top to dst
-    ArrayRef<InstanceOp> p = srcInstancePathsFromTop.back();
-    srcTarget.instances.append(SmallVector<InstanceOp>(p.begin(), p.end()));
-  }
   auto &dstPathFromTop = dstTarget.instances;
   // A map of the modules in the path from top to dst to its index into the
   // `dstPathFromTop`.
