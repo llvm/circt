@@ -131,11 +131,13 @@ private:
 void FirRegLower::addToIfBlock(OpBuilder &builder, Value cond,
                                const std::function<void()> &trueSide,
                                const std::function<void()> &falseSide) {
-  sv::IfOp &op = ifCache[std::make_pair(builder.getBlock(), cond)];
+  auto op = ifCache.lookup({builder.getBlock(), cond});
   // Always build both sides of the if, in case we want to use an empty else
   // later. This way we don't have to build a new if and replace it.
   if (!op) {
-    op = builder.create<sv::IfOp>(cond.getLoc(), cond, trueSide, falseSide);
+    auto newIfOp =
+        builder.create<sv::IfOp>(cond.getLoc(), cond, trueSide, falseSide);
+    ifCache.insert({{builder.getBlock(), cond}, newIfOp});
   } else {
     OpBuilder::InsertionGuard guard(builder);
     builder.setInsertionPointToEnd(op.getThenBlock());
