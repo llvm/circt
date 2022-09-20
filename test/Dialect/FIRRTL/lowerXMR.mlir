@@ -53,14 +53,14 @@ firrtl.circuit "Top" {
   firrtl.module @Top(in %bar_a : !firrtl.ref<uint<0>>, in %bar_b : !firrtl.ref<vector<uint<0>,10>>) {
     %a = firrtl.wire : !firrtl.uint<0>
     %0 = firrtl.ref.resolve %bar_a : !firrtl.ref<uint<0>>
-    // CHECK:  %c0_ui0 = firrtl.constant 0 : !firrtl.uint<0>
+    // CHECK:  %[[c0_ui0:.+]] = firrtl.constant 0 : !firrtl.uint<0>
     firrtl.strictconnect %a, %0 : !firrtl.uint<0>
-    // CHECK:  firrtl.strictconnect %a, %c0_ui0 : !firrtl.uint<0>
+    // CHECK:  firrtl.strictconnect %a, %[[c0_ui0]] : !firrtl.uint<0>
     %b = firrtl.wire : !firrtl.vector<uint<0>,10>
     %1 = firrtl.ref.resolve %bar_b : !firrtl.ref<vector<uint<0>,10>>
     firrtl.strictconnect %b, %1 : !firrtl.vector<uint<0>,10>
-		// CHECK:	%c0_ui0_0 = firrtl.constant 0 : !firrtl.uint<0>
-    // CHECK:  %[[v2:.+]] = firrtl.bitcast %c0_ui0_0 : (!firrtl.uint<0>) -> !firrtl.vector<uint<0>, 10>
+    // CHECK:	%[[c0_ui0_0:.+]] = firrtl.constant 0 : !firrtl.uint<0>
+    // CHECK:  %[[v2:.+]] = firrtl.bitcast %[[c0_ui0_0]] : (!firrtl.uint<0>) -> !firrtl.vector<uint<0>, 10>
     // CHECK:  firrtl.strictconnect %b, %[[v2]] : !firrtl.vector<uint<0>, 10>
   }
 }
