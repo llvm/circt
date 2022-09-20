@@ -240,7 +240,7 @@ void SignalTracingAnalysisPass::runOnOperation() {
 
   DataFlowSolver solver;
   solver.load<DeadCodeAnalysis>(); // needed to mark blocks as "live"
-  solver.load<SignalTracingAnalysis>(sources, sinks);
+  solver.load<SignalTracingAnalysis>(mod, sources, sinks);
 
   if (failed(solver.initializeAndRun(mod))) {
     mod.emitError("analysis failed");
@@ -248,9 +248,12 @@ void SignalTracingAnalysisPass::runOnOperation() {
   }
 
   mod->walk([&](Operation *op) {
-    const SignalState *signalState = solver.lookupState<SignalState>(op);
-    if (signalState)
-      llvm::outs() << *op << " : " << *signalState;
+    for (auto result : op->getResults()) {
+      const auto *signalState =
+          solver.lookupState<Lattice<SignalState>>(result);
+      if (signalState)
+        llvm::outs() << result << " : " << *signalState;
+    }
   });
 }
 

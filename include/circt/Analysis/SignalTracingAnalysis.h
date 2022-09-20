@@ -14,9 +14,10 @@
 #ifndef CIRCT_ANALYSIS_SIGNAL_TRACING_ANALYSIS_H
 #define CIRCT_ANALYSIS_SIGNAL_TRACING_ANALYSIS_H
 
-#include "mlir/Analysis/DataFlow/DenseAnalysis.h"
-// #include "mlir/Analysis/DataFlow/SparseAnalysis.h"
+#include "circt/Dialect/HW/HWInstanceGraph.h"
+#include "mlir/Analysis/DataFlow/SparseAnalysis.h"
 #include "mlir/Analysis/DataFlowFramework.h"
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/Support/LLVM.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -26,56 +27,45 @@ using namespace mlir::dataflow;
 namespace circt {
 namespace analysis {
 
-struct SignalState : public AbstractDenseLattice {
-  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(SignalState)
-
-  using AbstractDenseLattice::AbstractDenseLattice;
+struct SignalState {
+  explicit SignalState() = default;
+  explicit SignalState(bool isTraced) : traced(isTraced) {}
 
   ChangeResult reset();
 
-  ChangeResult join(const AbstractDenseLattice &lattice) override;
+  bool operator==(const SignalState &rhs) const;
+
+  static SignalState join(const SignalState &lhs, const SignalState &rhs);
 
   ChangeResult setTraced(bool isTraced);
 
   bool getTraced() const;
 
-  void print(llvm::raw_ostream &os) const override;
+  void print(llvm::raw_ostream &os) const;
 
 private:
   bool traced = false;
 };
 
-struct SignalTracingAnalysis : public DenseDataFlowAnalysis<SignalState> {
-  SignalTracingAnalysis(DataFlowSolver &solver, DenseSet<Operation *> &sources,
+struct SignalTracingAnalysis
+    : public SparseDataFlowAnalysis<Lattice<SignalState>> {
+  SignalTracingAnalysis(DataFlowSolver &solver, ModuleOp top,
+                        DenseSet<Operation *> &sources,
                         DenseSet<Operation *> &sinks)
-      : DenseDataFlowAnalysis(solver), sources(sources), sinks(sinks) {}
+      : SparseDataFlowAnalysis(solver), instanceGraph(hw::InstanceGraph(top)),
+        sources(sources), sinks(sinks) {}
 
-  void visitOperation(Operation *op, const SignalState &before,
-                      SignalState *after) override;
+  void visitOperation(Operation *op,
+                      ArrayRef<const Lattice<SignalState> *> operands,
+                      ArrayRef<Lattice<SignalState> *> results) override;
 
-  void setToEntryState(SignalState *lattice) override;
+  void setToEntryState(Lattice<SignalState> *lattice) override;
 
 private:
+  hw::InstanceGraph instanceGraph;
   DenseSet<Operation *> &sources;
   DenseSet<Operation *> &sinks;
 };
-
-// struct SignalState {
-//   void print(llvm::raw_ostream &os) const;
-//   bool operator==(const SignalState &rhs) const;
-//   static SignalState join(const SignalState &lhs, const SignalState &rhs);
-// };
-
-// struct SignalTracingAnalysis
-//     : public SparseDataFlowAnalysis<Lattice<SignalState>> {
-//   using SparseDataFlowAnalysis::SparseDataFlowAnalysis;
-
-//   void visitOperation(Operation *op,
-//                       ArrayRef<const Lattice<SignalState> *> operands,
-//                       ArrayRef<Lattice<SignalState> *> results) override;
-
-//   void setToEntryState(Lattice<SignalState> *lattice) override;
-// };
 
 } // namespace analysis
 } // namespace circt

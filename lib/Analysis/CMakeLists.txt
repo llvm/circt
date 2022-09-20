@@ -40,6 +40,7 @@ add_circt_library(CIRCTSignalTracingAnalysis
   MLIRIR
   MLIRAnalysis
   CIRCTHW
+  CIRCTSV
   )
 
 add_circt_library(CIRCTAnalysisTestPasses
