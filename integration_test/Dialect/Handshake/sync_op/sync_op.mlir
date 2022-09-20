@@ -2,7 +2,7 @@
 
 // This test is executed with all different buffering strategies
 
-// RUN: hlstool %s --dynamic --ir-input-level 1 --verilog --lowering-options=disallowLocalVariables > %t.sv && \
+// RUN: hlstool %s --dynamic-firrtl --ir-input-level 1 --verilog --lowering-options=disallowLocalVariables > %t.sv && \
 // RUN: %PYTHON% %S/../cocotb_driver.py --objdir=%T --topLevel=top --pythonModule=sync_op --pythonFolder=%S %t.sv 2>&1 | FileCheck %s
 
 // RUN: circt-opt %s \
