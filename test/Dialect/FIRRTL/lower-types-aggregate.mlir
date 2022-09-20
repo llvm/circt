@@ -17,4 +17,7 @@ firrtl.circuit "TopLevel" {
   // 1D_VEC: @Foo(in %a_a_0: !firrtl.vector<uint<1>, 2>, in %a_a_1: !firrtl.vector<uint<1>, 2>)
   firrtl.module private @Foo(in %a: !firrtl.bundle<a: vector<vector<uint<1>, 2>, 2>>) {
   }
+  // 1D_VEC: %a_0: !firrtl.uint<1>
+  firrtl.module private @Bar(in %a: !firrtl.vector<uint<1>, 1>) {
+  }
 }
