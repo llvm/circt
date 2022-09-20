@@ -621,10 +621,12 @@ public:
       unwrapped.inputs.push_back(hs);
     }
     for (auto &outputInfo : ports.getModulePortInfo().outputs) {
-      if (!isa<esi::ChannelType>(outputInfo.type))
+      esi::ChannelType channelType =
+          dyn_cast<esi::ChannelType>(outputInfo.type);
+      if (!channelType)
         continue;
       OutputHandshake hs;
-      Type innerType = cast<esi::ChannelType>(outputInfo.type).getInner();
+      Type innerType = channelType.getInner();
       auto data = std::make_shared<Backedge>(bb.get(innerType));
       auto valid = std::make_shared<Backedge>(bb.get(s.b.getI1Type()));
       auto [dataCh, ready] = s.wrap(*data, *valid);
@@ -696,6 +698,8 @@ public:
     res.data->setValue(s.mux(select.data, unwrapped.getInputDatas()));
   }
 
+  // Builds fork logic between the single input and multiple outputs' control
+  // networks. Caller is expected to handle data separately.
   void buildForkLogic(RTLBuilder &s, BackedgeBuilder &bb, InputHandshake &input,
                       ArrayRef<OutputHandshake> outputs,
                       hw::HWModulePortAccessor &ports) const {
@@ -706,7 +710,6 @@ public:
       auto emitted = s.bAnd({done, s.bNot(*input.ready)});
       auto emittedReg = s.reg("emitted_" + std::to_string(i), emitted, c0I1);
       auto outValid = s.bAnd({s.bNot(emittedReg), input.valid});
-      output.data->setValue(input.data);
       output.valid->setValue(outValid);
       auto validReady = s.bAnd({output.ready, input.valid});
       done.setValue(s.bAnd({validReady, emittedReg}));
@@ -725,8 +728,6 @@ public:
            "Expected exactly one output for unit-rate actor");
     // Control logic.
     this->buildJoinLogic(s, unwrappedIO.inputs, unwrappedIO.outputs[0]);
-    unwrappedIO.outputs[0].valid->setValue(
-        s.bAnd(unwrappedIO.getInputValids()));
 
     // Data logic.
     auto unitRes = unitBuilder(unwrappedIO.getInputDatas());
@@ -767,6 +768,10 @@ public:
                    hw::HWModulePortAccessor &ports) const override {
     auto unwrapped = unwrapIO(s, bb, ports);
     buildForkLogic(s, bb, unwrapped.inputs[0], unwrapped.outputs, ports);
+
+    // Data logic.
+    for (auto &out : unwrapped.outputs)
+      out.data->setValue(unwrapped.inputs[0].data);
   }
 };
 
