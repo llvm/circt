@@ -541,6 +541,7 @@ struct RTLBuilder {
     return b.create<hw::StructCreateOp>(getLoc(extLoc), structType, values);
   }
 
+  // Unpacks a hw.struct into a list of values.
   ValueRange unpack(Value value, Location *extLoc = nullptr) {
     auto structType = value.getType().cast<hw::StructType>();
     llvm::SmallVector<Type> innerTypes;
