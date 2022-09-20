@@ -1240,6 +1240,12 @@ bool HandshakeBuilder::visitHandshake(SyncOp op) {
   auto clock = portList[portNum - 2][0];
   auto reset = portList[portNum - 1][0];
 
+  // The state-keeping fork logic is required here, as the circuit isn't allowed
+  // to wait for all the consumers to be ready.
+  // Connecting the ready signals of the outputs to their corresponding valid
+  // signals leads to combinatorial cycles. The paper which introduced
+  // compositional dataflow circuits explicitly mentions this limitation:
+  // http://arcade.cs.columbia.edu/df-memocode17.pdf
   return buildForkLogic(&connector, outputs, clock, reset, true);
 }
 
