@@ -140,11 +140,9 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
             // same reaching RefSend. This condition is true for upward scoped
             // XMRs. That is, RefResolveOp can be visited before the
             // corresponding RefSendOp is recorded.
-            // Donot emit 0 width XMRs
-            if (resolve.getType().getBitWidthOrSentinel()) {
-              dataFlowClasses.unionSets(resolve.getRef(), resolve.getResult());
-              resolveOps.push_back(resolve);
-            }
+
+            dataFlowClasses.unionSets(resolve.getRef(), resolve.getResult());
+            resolveOps.push_back(resolve);
             markForRemoval(resolve);
             return success();
           })
@@ -199,6 +197,17 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
 
   // Replace the RefResolveOp with verbatim op representing the XMR.
   LogicalResult handleRefResolve(RefResolveOp resolve) {
+    auto resWidth = getBitWidth(resolve.getType());
+    if (resWidth.has_value() && resWidth.value() == 0) {
+      // Donot emit 0 width XMRs, replace it with constant 0.
+      ImplicitLocOpBuilder builder(resolve.getLoc(), resolve);
+      auto zeroUintType = UIntType::get(builder.getContext(), 0);
+      auto zeroC = builder.createOrFold<BitCastOp>(
+          resolve.getType(), builder.create<ConstantOp>(
+                                 zeroUintType, getIntZerosAttr(zeroUintType)));
+      resolve.getResult().replaceAllUsesWith(zeroC);
+      return success();
+    }
     auto remoteOpPath = getRemoteRefSend(resolve.getRef());
     if (!remoteOpPath)
       return failure();
