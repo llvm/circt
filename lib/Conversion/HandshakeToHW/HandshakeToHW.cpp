@@ -577,9 +577,7 @@ struct RTLBuilder {
 
   Value zext(Value value, unsigned outWidth, Location *extLoc = nullptr) {
     unsigned inWidth = value.getType().getIntOrFloatBitWidth();
-    assert(inWidth < outWidth &&
-           "zext: input width must be smaller than output "
-           "width.");
+    assert(inWidth <= outWidth && "zext: input width must be <- output width.");
     if (inWidth == outWidth)
       return value;
     auto c0 = constant(outWidth - inWidth, 0, extLoc);
@@ -744,18 +742,21 @@ public:
   void buildMuxLogic(RTLBuilder &s, UnwrappedIO &unwrapped,
                      InputHandshake &select) const {
     // ============================= Control logic =============================
+    size_t numInputs = unwrapped.inputs.size();
+    size_t selectWidth = llvm::Log2_64_Ceil(numInputs);
+    Value truncatedSelect =
+        select.data.getType().getIntOrFloatBitWidth() > selectWidth
+            ? s.truncate(select.data, selectWidth)
+            : select.data;
+
     // Decimal-to-1-hot decoder. 'shl' operands must be identical in size.
-    size_t size = unwrapped.inputs.size();
-    Value truncatedSelect = select.data.getType().getIntOrFloatBitWidth() > size
-                                ? s.truncate(select.data, size)
-                                : select.data;
-    auto c1s = s.constant(size, 1);
-    auto truncSelectZext = s.zext(truncatedSelect, size);
-    auto select1h = s.shl(c1s, truncSelectZext);
+    auto selectZext = s.zext(truncatedSelect, numInputs);
+    auto select1h = s.shl(s.constant(numInputs, 1), selectZext);
     auto &res = unwrapped.outputs[0];
 
     // Mux input valid signals.
-    auto selectedInputValid = s.mux(select.data, unwrapped.getInputValids());
+    auto selectedInputValid =
+        s.mux(truncatedSelect, unwrapped.getInputValids());
     // Result is valid when the selected input and the select input is valid.
     auto selAndInputValid = s.bAnd({selectedInputValid, select.valid});
     res.valid->setValue(selAndInputValid);
@@ -777,7 +778,7 @@ public:
     }
 
     // ============================== Data logic ===============================
-    res.data->setValue(s.mux(select.data, unwrapped.getInputDatas()));
+    res.data->setValue(s.mux(truncatedSelect, unwrapped.getInputDatas()));
   }
 
   // Builds fork logic between the single input and multiple outputs' control
