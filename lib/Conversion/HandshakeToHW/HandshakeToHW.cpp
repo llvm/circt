@@ -47,18 +47,45 @@ struct HandshakeLoweringState {
   NameUniquer nameUniquer;
 };
 
+static Type tupleToStruct(TupleType tuple) {
+  auto ctx = tuple.getContext();
+  mlir::SmallVector<hw::StructType::FieldInfo, 8> hwfields;
+  for (auto [i, innerType] : llvm::enumerate(tuple))
+    hwfields.push_back(
+        {StringAttr::get(ctx, "field" + std::to_string(i)), innerType});
+
+  return hw::StructType::get(ctx, hwfields);
+}
+
+static Type tupleToStruct(TypeRange types) {
+  return tupleToStruct(mlir::TupleType::get(types[0].getContext(), types));
+}
+
+// Converts 't' into a valid HW type. This is strictly used for converting
+// 'index' types into a fixed-width type.
+static Type toValidType(Type t) {
+  return TypeSwitch<Type, Type>(t)
+      .Case<IndexType>(
+          [&](IndexType it) { return IntegerType::get(it.getContext(), 64); })
+      .Case<TupleType>([&](TupleType tt) {
+        llvm::SmallVector<Type> types;
+        for (auto innerType : tt)
+          types.push_back(toValidType(innerType));
+        return mlir::TupleType::get(types[0].getContext(), types);
+      })
+      .Default([&](Type t) { return t; });
+}
+
 // Wraps a type into an ESI ChannelType type. The inner type is converted to
 // ensure comprehensability by the RTL dialects.
-static Type esiWrapper(Type t) {
-  // Translate index types to something HW understands.
-  if (t.isa<IndexType>())
-    t = IntegerType::get(t.getContext(), 64);
-
-  // Already a channel type.
-  if (t.isa<esi::ChannelType>())
-    return t;
-
-  return esi::ChannelType::get(t.getContext(), t);
+static esi::ChannelType esiWrapper(Type t) {
+  return TypeSwitch<Type, esi::ChannelType>(t)
+      .Case<esi::ChannelType>([](auto t) { return t; })
+      .Case<TupleType>(
+          [&](TupleType tt) { return esiWrapper(tupleToStruct(tt)); })
+      .Default([](auto t) {
+        return esi::ChannelType::get(t.getContext(), toValidType(t));
+      });
 }
 
 // A type converter is needed to perform the in-flight materialization of "raw"
@@ -160,6 +187,10 @@ static std::string getTypeName(Location loc, Type type) {
       typeName += "_si" + std::to_string(type.getIntOrFloatBitWidth());
     else
       typeName += "_ui" + std::to_string(type.getIntOrFloatBitWidth());
+  } else if (auto tupleType = type.dyn_cast<TupleType>()) {
+    typeName += "_tuple";
+    for (auto elementType : tupleType.getTypes())
+      typeName += getTypeName(loc, elementType);
   } else
     emitError(loc) << "unsupported data type '" << type << "'";
 
@@ -504,6 +535,20 @@ struct RTLBuilder {
     return b.create<comb::ConcatOp>(getLoc(extLoc), values).getResult();
   }
 
+  // Packs a list of values into a hw.struct.
+  Value pack(ValueRange values, Location *extLoc = nullptr) {
+    Type structType = tupleToStruct(values.getTypes());
+    return b.create<hw::StructCreateOp>(getLoc(extLoc), structType, values);
+  }
+
+  ValueRange unpack(Value value, Location *extLoc = nullptr) {
+    auto structType = value.getType().cast<hw::StructType>();
+    llvm::SmallVector<Type> innerTypes;
+    structType.getInnerTypes(innerTypes);
+    return b.create<hw::StructExplodeOp>(getLoc(extLoc), innerTypes, value)
+        .getResults();
+  }
+
   // Extract bits v[hi:lo] (inclusive).
   Value extract(Value v, unsigned lo, unsigned hi, Location *extLoc = nullptr) {
     unsigned width = hi - lo + 1;
@@ -722,8 +767,7 @@ public:
   // Builds fork logic between the single input and multiple outputs' control
   // networks. Caller is expected to handle data separately.
   void buildForkLogic(RTLBuilder &s, BackedgeBuilder &bb, InputHandshake &input,
-                      ArrayRef<OutputHandshake> outputs,
-                      hw::HWModulePortAccessor &ports) const {
+                      ArrayRef<OutputHandshake> outputs) const {
     auto c0I1 = s.constant(1, 0);
     llvm::SmallVector<Value> doneWires;
     for (auto [i, output] : llvm::enumerate(outputs)) {
@@ -742,11 +786,11 @@ public:
   // Builds a unit-rate actor around an inner operation. 'unitBuilder' is a
   // function which takes the set of unwrapped data inputs, and returns a value
   // which should be assigned to the output data value.
-  void
-  buildUnitRateLogic(RTLBuilder &s, UnwrappedIO &unwrappedIO,
-                     llvm::function_ref<Value(ValueRange)> unitBuilder) const {
+  void buildUnitRateJoinLogic(
+      RTLBuilder &s, UnwrappedIO &unwrappedIO,
+      llvm::function_ref<Value(ValueRange)> unitBuilder) const {
     assert(unwrappedIO.outputs.size() == 1 &&
-           "Expected exactly one output for unit-rate actor");
+           "Expected exactly one output for unit-rate join actor");
     // Control logic.
     this->buildJoinLogic(s, unwrappedIO.inputs, unwrappedIO.outputs[0]);
 
@@ -755,12 +799,28 @@ public:
     unwrappedIO.outputs[0].data->setValue(unitRes);
   }
 
+  void buildUnitRateForkLogic(
+      RTLBuilder &s, BackedgeBuilder &bb, UnwrappedIO &unwrappedIO,
+      llvm::function_ref<llvm::SmallVector<Value>(Value)> unitBuilder) const {
+    assert(unwrappedIO.inputs.size() == 1 &&
+           "Expected exactly one input for unit-rate fork actor");
+    // Control logic.
+    this->buildForkLogic(s, bb, unwrappedIO.inputs[0], unwrappedIO.outputs);
+
+    // Data logic.
+    auto unitResults = unitBuilder(unwrappedIO.inputs[0].data);
+    assert(unitResults.size() == unwrappedIO.outputs.size() &&
+           "Expected unit builder to return one result per output");
+    for (auto [res, outport] : llvm::zip(unitResults, unwrappedIO.outputs))
+      outport.data->setValue(res);
+  }
+
   void buildExtendLogic(RTLBuilder &s, UnwrappedIO &unwrappedIO,
                         bool signExtend) const {
     size_t outWidth = static_cast<Value>(*unwrappedIO.outputs[0].data)
                           .getType()
                           .getIntOrFloatBitWidth();
-    buildUnitRateLogic(s, unwrappedIO, [&](ValueRange inputs) {
+    buildUnitRateJoinLogic(s, unwrappedIO, [&](ValueRange inputs) {
       if (signExtend)
         return s.sext(inputs[0], outWidth);
       return s.zext(inputs[0], outWidth);
@@ -772,7 +832,7 @@ public:
     size_t outWidth = static_cast<Value>(*unwrappedIO.outputs[0].data)
                           .getType()
                           .getIntOrFloatBitWidth();
-    buildUnitRateLogic(s, unwrappedIO, [&](ValueRange inputs) {
+    buildUnitRateJoinLogic(s, unwrappedIO, [&](ValueRange inputs) {
       return s.truncate(inputs[0], outWidth);
     });
   }
@@ -788,11 +848,9 @@ public:
   void buildModule(ForkOp op, BackedgeBuilder &bb, RTLBuilder &s,
                    hw::HWModulePortAccessor &ports) const override {
     auto unwrapped = unwrapIO(s, bb, ports);
-    buildForkLogic(s, bb, unwrapped.inputs[0], unwrapped.outputs, ports);
-
-    // Data logic.
-    for (auto &out : unwrapped.outputs)
-      out.data->setValue(unwrapped.inputs[0].data);
+    buildUnitRateForkLogic(s, bb, unwrapped, [&](Value input) {
+      return llvm::SmallVector<Value>(unwrapped.outputs.size(), input);
+    });
   }
 };
 
@@ -897,11 +955,33 @@ public:
   void buildModule(TIn op, BackedgeBuilder &bb, RTLBuilder &s,
                    hw::HWModulePortAccessor &ports) const override {
     auto unwrappedIO = this->unwrapIO(s, bb, ports);
-    this->buildUnitRateLogic(s, unwrappedIO, [&](ValueRange inputs) {
+    this->buildUnitRateJoinLogic(s, unwrappedIO, [&](ValueRange inputs) {
       // Create TOut - it is assumed that TOut trivially
       // constructs from the input data signals of TIn.
       return s.b.create<TOut>(op.getLoc(), inputs);
     });
+  };
+};
+
+class PackConversionPattern : public HandshakeConversionPattern<PackOp> {
+public:
+  using HandshakeConversionPattern<PackOp>::HandshakeConversionPattern;
+  void buildModule(PackOp op, BackedgeBuilder &bb, RTLBuilder &s,
+                   hw::HWModulePortAccessor &ports) const override {
+    auto unwrappedIO = unwrapIO(s, bb, ports);
+    buildUnitRateJoinLogic(s, unwrappedIO,
+                           [&](ValueRange inputs) { return s.pack(inputs); });
+  };
+};
+
+class UnpackConversionPattern : public HandshakeConversionPattern<UnpackOp> {
+public:
+  using HandshakeConversionPattern<UnpackOp>::HandshakeConversionPattern;
+  void buildModule(UnpackOp op, BackedgeBuilder &bb, RTLBuilder &s,
+                   hw::HWModulePortAccessor &ports) const override {
+    auto unwrappedIO = unwrapIO(s, bb, ports);
+    buildUnitRateForkLogic(s, bb, unwrappedIO,
+                           [&](Value input) { return s.unpack(input); });
   };
 };
 
@@ -924,7 +1004,7 @@ public:
                    hw::HWModulePortAccessor &ports) const override {
     auto unwrappedIO = this->unwrapIO(s, bb, ports);
     auto buildCompareLogic = [&](comb::ICmpPredicate predicate) {
-      return buildUnitRateLogic(s, unwrappedIO, [&](ValueRange inputs) {
+      return buildUnitRateJoinLogic(s, unwrappedIO, [&](ValueRange inputs) {
         return s.b.create<comb::ICmpOp>(op.getLoc(), predicate, inputs[0],
                                         inputs[1]);
       });
@@ -1242,6 +1322,7 @@ static LogicalResult convertFuncOp(ESITypeConverter &typeConverter,
                   UnitRateConversionPattern<arith::ShLIOp, comb::OrOp>,
                   UnitRateConversionPattern<arith::ShRUIOp, comb::ShrUOp>,
                   UnitRateConversionPattern<arith::ShRSIOp, comb::ShrSOp>,
+                  PackConversionPattern, UnpackConversionPattern,
                   ComparisonConversionPattern, BufferConversionPattern,
                   ExtendConversionPattern<arith::ExtUIOp, /*signExtend=*/false>,
                   ExtendConversionPattern<arith::ExtSIOp, /*signExtend=*/true>,
