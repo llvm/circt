@@ -158,7 +158,7 @@ struct llvm::DOTGraphTraits<circt::hw::HWModuleOp>
     os << "}\n";
     for (auto [info, arg] :
          llvm::zip(mod.getPorts().inputs, mod.getArguments())) {
-      for (auto user : arg.getUsers()) {
+      for (auto *user : arg.getUsers()) {
         g.emitEdge(reinterpret_cast<void *>(&arg), 0, user, -1, "");
       }
     }
