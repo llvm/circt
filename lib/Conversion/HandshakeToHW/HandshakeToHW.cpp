@@ -386,8 +386,8 @@ struct OutputHandshake {
 
 /// A helper struct that acts like a wire. Can be used to interact with the
 /// RTLBuilder when multiple built components should be connected.
-struct Wire {
-  Wire(BackedgeBuilder &bb, Type dataType) {
+struct HandshakeWire {
+  HandshakeWire(BackedgeBuilder &bb, Type dataType) {
     MLIRContext *ctx = dataType.getContext();
     auto i1Type = IntegerType::get(ctx, 1);
     valid = std::make_shared<Backedge>(bb.get(i1Type));
@@ -816,7 +816,7 @@ public:
     auto unwrappedIO = unwrapIO(s, bb, ports);
 
     // A helper wire that will be used to connect the two built logics
-    Wire wire(bb, s.b.getNoneType());
+    HandshakeWire wire(bb, s.b.getNoneType());
 
     OutputHandshake output = wire.getAsOutput();
     buildJoinLogic(s, unwrappedIO.inputs, output);
