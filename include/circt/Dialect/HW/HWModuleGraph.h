@@ -109,8 +109,8 @@ struct llvm::DOTGraphTraits<circt::hw::HWModuleOp>
           }
           llvm_unreachable("unhandled ICmp predicate");
         })
-        .Case<circt::seq::CompRegOp, circt::seq::FirReg>(
-            [&](auto) { return "reg"; })
+        .Case<circt::seq::CompRegOp, circt::seq::FirRegOp>(
+            [&](auto op) { return op.getName().str(); })
         .Case<circt::hw::ConstantOp>([&](auto op) {
           llvm::SmallString<64> valueString;
           op.getValue().toString(valueString, 10, false);
@@ -130,7 +130,8 @@ struct llvm::DOTGraphTraits<circt::hw::HWModuleOp>
         .Case<circt::hw::OutputOp>(
             [&](auto) { return "fillcolor=lightblue,style=filled"; })
         .Default([&](auto op) {
-          llvm::TypeSwitch<mlir::Dialect *>(op->getDialect())
+          return llvm::TypeSwitch<mlir::Dialect *, std::string>(
+                     op->getDialect())
               .Case<circt::comb::CombDialect>([&](auto) {
                 return "shape=oval,fillcolor=bisque,style=filled";
               })
@@ -149,15 +150,16 @@ struct llvm::DOTGraphTraits<circt::hw::HWModuleOp>
     auto &os = g.getOStream();
     os << "subgraph cluster_entry_args {\n";
     os << "label=\"Input arguments\";\n";
-    for (auto arg : mod.getPorts().inputs) {
-      g.emitSimpleNode(reinterpret_cast<void *>(arg.getId()), "",
-                       arg.getName().str());
+    for (auto [info, arg] :
+         llvm::zip(mod.getPorts().inputs, mod.getArguments())) {
+      g.emitSimpleNode(reinterpret_cast<void *>(&arg), "",
+                       info.getName().str());
     }
     os << "}\n";
     for (auto [info, arg] :
          llvm::zip(mod.getPorts().inputs, mod.getArguments())) {
       for (auto user : arg.getUsers()) {
-        g.emitEdge(reinterpret_cast<void *>(info.getId()), 0, user, -1, "");
+        g.emitEdge(reinterpret_cast<void *>(&arg), 0, user, -1, "");
       }
     }
   }
