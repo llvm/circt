@@ -384,6 +384,27 @@ struct OutputHandshake {
   std::shared_ptr<Backedge> data;
 };
 
+/// A helper struct that acts like a wire. Can be used to interact with the
+/// RTLBuilder when multiple built components should be connected.
+struct Wire {
+  Wire(BackedgeBuilder &bb, Type dataType) {
+    MLIRContext *ctx = dataType.getContext();
+    auto i1Type = IntegerType::get(ctx, 1);
+    valid = std::make_shared<Backedge>(bb.get(i1Type));
+    ready = std::make_shared<Backedge>(bb.get(i1Type));
+    data = std::make_shared<Backedge>(bb.get(dataType));
+  }
+
+  // Functions that allow to treat a wire like an input or output port.
+  // **Careful**: Such a port will not be updated when backedges are resolved.
+  InputHandshake getAsInput() { return {*valid, ready, *data}; }
+  OutputHandshake getAsOutput() { return {valid, *ready, data}; }
+
+  std::shared_ptr<Backedge> valid;
+  std::shared_ptr<Backedge> ready;
+  std::shared_ptr<Backedge> data;
+};
+
 template <typename T, typename TInner>
 llvm::SmallVector<T> extractValues(llvm::SmallVector<TInner> &container,
                                    llvm::function_ref<T(TInner &)> extractor) {
@@ -794,16 +815,13 @@ public:
                    hw::HWModulePortAccessor &ports) const override {
     auto unwrappedIO = unwrapIO(s, bb, ports);
 
-    // Create something like a wire which can be feed to the builders
-    auto i1Type = s.b.getI1Type();
-    auto valid = std::make_shared<Backedge>(bb.get(i1Type));
-    auto ready = std::make_shared<Backedge>(bb.get(i1Type));
-    auto data = std::make_shared<Backedge>(bb.get(s.b.getNoneType()));
+    // A helper wire that will be used to connect the two built logics
+    Wire wire(bb, s.b.getNoneType());
 
-    OutputHandshake output = {valid, *ready, data};
+    OutputHandshake output = wire.getAsOutput();
     buildJoinLogic(s, unwrappedIO.inputs, output);
 
-    InputHandshake input = {*valid, ready, *data};
+    InputHandshake input = wire.getAsInput();
 
     // The state-keeping fork logic is required here, as the circuit isn't
     // allowed to wait for all the consumers to be ready. Connecting the ready
