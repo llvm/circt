@@ -44,8 +44,8 @@ FIRRTL specification and is actively maintained, tracking new enhancements. The
 FIRRTL dialect supports some undocumented features and the "CHIRRTL" flavor of
 FIRRTL IR that is produced from Chisel.  The FIRRTL dialect has support for
 parsing an SFC Annotation file consisting of only local annotations and
-converting this to operation or argument attributes.  Non-local annotations
-are also supported.
+converting this to operation or argument attributes.  Non-local annotations are
+also supported.
 
 There are some exceptions to the above:
 
@@ -59,63 +59,63 @@ community that would benefit from adding support for these, we can do so.
 
 ## Naming
 
-Names in Verilog form part of the public API of a design and are used for many 
-purposes and flows.  Many things in verilog may have names, and those names 
+Names in Verilog form part of the public API of a design and are used for many
+purposes and flows.  Many things in verilog may have names, and those names
 specify points of interaction with the design.  For example, a wire has a name,
 and one can monitor the value on the wire from a testbench by knowing this name.
-Instances have names and form the core of hierarchical references through 
+Instances have names and form the core of hierarchical references through
 designs.  Even always blocks and loops can have names, which are required and
 used.
 
-It is therefore
-critical that Chisel, and by extension FIRRTL, have language-level semantics
-about how entities are named and how named entities are used and transformed.  
-This must specify which entities with names in Chisel generate predictable 
-output.  Since names serve multiple purposes in a design, for example, 
-debugging, test-bench attachment, hooks for physical layout, etc, we must 
-balance multiple needs.  This section describes the base semantics, which are 
-conservative and aimed at enabling debugging.  _It is expected that the 
-compiler provide flags to relax these rules to produce more synthesis-friendly
-or production-ready output_.
+It is therefore critical that Chisel, and by extension FIRRTL, have
+language-level semantics about how entities are named and how named entities are
+used and transformed.  This must specify which entities with names in Chisel
+generate predictable output.  Since names serve multiple purposes in a design,
+for example, debugging, test-bench attachment, hooks for physical layout, etc,
+we must balance multiple needs.  This section describes the base semantics,
+which are conservative and aimed at enabling debugging.  _It is expected that
+the compiler provide flags to relax these rules to produce more
+synthesis-friendly or production-ready output_.
 
-Modules shall use the name given in Chisel, unless they conflict with a Verilog 
-reserved word, not withstanding de-duplication or relevant annotations on the module.
+Modules shall use the name given in Chisel, unless they conflict with a Verilog
+reserved word, not withstanding de-duplication or relevant annotations on the
+module.
 
-Instances shall use the name given in Chisel, unless they conflict with a 
-Verilog reserved word.  Instances have preferential use of the name in the output in 
-case of a conflict, after ports.
+Instances shall use the name given in Chisel, unless they conflict with a
+Verilog reserved word.  Instances have preferential use of the name in the
+output in case of a conflict, after ports.
 
-Chisel provides a "Don't Touch" annotation to protect entities from 
-transformation.  A "Don't Touch" on a wire or node produces a wire in Verilog and 
-preserves the data-flow through that wire.  Even a wire driven by a constant 
-shall not have the constant forwarded around the wire.  This is because a 
-"Don't Touch" annotation signals the possible public use of a wire and one 
-common use is to provide a place to drive a new value into the logic from an 
-external test-bench.  If the node or wire is named (and it always should be for 
-Chisel "Don't Touch"), this name is used, unless it conflicts with a Verilog 
-reserved word.  This wire has preferential use of the name in the output in 
-case of a conflict, after ports and instances.
+Chisel provides a "Don't Touch" annotation to protect entities from
+transformation.  A "Don't Touch" on a wire or node produces a wire in Verilog
+and preserves the data-flow through that wire.  Even a wire driven by a constant
+shall not have the constant forwarded around the wire.  This is because a "Don't
+Touch" annotation signals the possible public use of a wire and one common use
+is to provide a place to drive a new value into the logic from an external
+test-bench.  If the node or wire is named (and it always should be for Chisel
+"Don't Touch"), this name is used, unless it conflicts with a Verilog reserved
+word.  This wire has preferential use of the name in the output in case of a
+conflict, after ports and instances.
 
-Named wires and nodes in FIRRTL shall appear as a wire in the output verilog.  
-There is no requirement that data-flow through a wire be maintained, only that 
-the data-flow into a wire be maintained.  This allows bypassing and forwarding 
-around wires who exist solely because of their name.  An implementation may 
-choose to not bypass trivial wires to reduce unused wire lint warnings, but 
-shouldn't cause other lint warnings to avoid unused wire warnings.  A named 
-wire without a symbol is thus equivalent to a named read-probe in the circuit.
+Named wires and nodes in FIRRTL shall appear as a wire in the output verilog.
+There is no requirement that data-flow through a wire be maintained, only that
+the data-flow into a wire be maintained.  This allows bypassing and forwarding
+around wires who exist solely because of their name.  An implementation may
+choose to not bypass trivial wires to reduce unused wire lint warnings, but
+shouldn't cause other lint warnings to avoid unused wire warnings.  A named wire
+without a symbol is thus equivalent to a named read-probe in the circuit.
 
-Any name of an entity inside a module which starts with `_` may be discarded.  
-This name pattern indicates the name is for convenience in the Chisel code 
-(often temporaries are required) and there is no expectation it exist in the 
+Any name of an entity inside a module which starts with `_` may be discarded.
+This name pattern indicates the name is for convenience in the Chisel code
+(often temporaries are required) and there is no expectation it exist in the
 output.
 
 ### Mandatory Renaming
 
-We want the naming of Verilog objects to match the names used in
-the original Chisel, but in several passes, there is mandatory renaming.  It is 
-important that this be a predictable transformation.  For example, after 
-bundles are replaced with scalars in the lower-types pass, each field should be 
-prefixed with the bundle name:
+We want the naming of Verilog objects to match the names used in the original
+Chisel, but in several passes, there is mandatory renaming.  It is important
+that this be a predictable transformation.  For example, after bundles are
+replaced with scalars in the lower-types pass, each field should be prefixed
+with the bundle name:
 
 ```scala
 circuit Example
@@ -128,70 +128,70 @@ circuit Example
     reg myreg_b: UInt<1>, clock
 ```
 
-The name transformations applied by the SFC have become part of the
-documented API, and people rely on the final names to take a certain form.
+The name transformations applied by the SFC have become part of the documented
+API, and people rely on the final names to take a certain form.
 
 ### Temporaries
 
-There are names for temporaries generated by the Chisel and FIRRTL tooling
-which are not important to maintain. These names are discarded when parsing,
-which saves memory during compilation. New names are generated at Verilog
-export time, which has the effect of renumbering intermediate value names.
-Names generated by Chisel typically look like `_T_12`, and names generated by
-the SFC look like `_GEN_12`. The FIRRTL compiler will not discard these names
-if the object has an array attribute `annotations` containing the attribute
-`{class = "firrtl.transforms.DontTouchAnnotation}`.
+There are names for temporaries generated by the Chisel and FIRRTL tooling which
+are not important to maintain. These names are discarded when parsing, which
+saves memory during compilation. New names are generated at Verilog export time,
+which has the effect of renumbering intermediate value names.  Names generated
+by Chisel typically look like `_T_12`, and names generated by the SFC look like
+`_GEN_12`. The FIRRTL compiler will not discard these names if the object has an
+array attribute `annotations` containing the attribute `{class =
+"firrtl.transforms.DontTouchAnnotation}`.
 
 
 ## Symbols and Inner Symbols
 
-Symbols and Inner Symbols are documented in the [symbol rationale](RationaleSymbols.md).
-This section documents how symbols are used, their interaction with "Don't 
-Touch", and the semantics imposed by them.
+Symbols and Inner Symbols are documented in the [symbol
+rationale](RationaleSymbols.md).  This section documents how symbols are used,
+their interaction with "Don't Touch", and the semantics imposed by them.
 
-Public Symbols indicate there are uses of an entity outside the analysis scope 
-of the compiler.  This requires the entity be preserved in such a way as 
-the operations possible in the target language have the expected effect.  For 
-example, a wire or port with a public symbol may be used by name in a test 
-bench to read or write new values into the circuit.  Therefore, these wires 
-cannot be detached form their original dataflow as this would break the remote 
-write case, nor can their input dataflow be changed, as this would break the 
-remote read case.  They cannot be renamed, as this would break all remote access.
+Public Symbols indicate there are uses of an entity outside the analysis scope
+of the compiler.  This requires the entity be preserved in such a way as the
+operations possible in the target language have the expected effect.  For
+example, a wire or port with a public symbol may be used by name in a test bench
+to read or write new values into the circuit.  Therefore, these wires cannot be
+detached form their original dataflow as this would break the remote write case,
+nor can their input dataflow be changed, as this would break the remote read
+case.  They cannot be renamed, as this would break all remote access.
 
-Private Symbols indicate there are symbolic references to the entity, but they 
-are all within the scope of the compiler's IR and analysis.  An entity with a 
-private symbol may be arbitrarily transformed, so long as the transformation is 
-semantic preserving with respect to all uses of the private symbol.  If it can 
-be proved a wire with a private symbol is only read from via its symbol and 
-not written to, for example, the input can forwarded to the output (bypassing 
-the wire) safely.  If a private symbol is unused, it may be removed.  Private 
-symbols impose no restriction on output; they only exist to enable non-local 
+Private Symbols indicate there are symbolic references to the entity, but they
+are all within the scope of the compiler's IR and analysis.  An entity with a
+private symbol may be arbitrarily transformed, so long as the transformation is
+semantic preserving with respect to all uses of the private symbol.  If it can
+be proved a wire with a private symbol is only read from via its symbol and not
+written to, for example, the input can forwarded to the output (bypassing the
+wire) safely.  If a private symbol is unused, it may be removed.  Private
+symbols impose no restriction on output; they only exist to enable non-local
 effects in the IR.
 
-"Don't Touch" is implemented as a public symbol on an entity.  A conservative 
-interpretation of "Don't Touch", and a common use case, is that the entity is 
-referred to by a testbench in unknown ways.  This implies no transformation 
-which would change observed behavior if the entity was arbitrarily read or 
-written to remotely.  This further implies the existence of the entity in the 
+"Don't Touch" is implemented as a public symbol on an entity.  A conservative
+interpretation of "Don't Touch", and a common use case, is that the entity is
+referred to by a testbench in unknown ways.  This implies no transformation
+which would change observed behavior if the entity was arbitrarily read or
+written to remotely.  This further implies the existence of the entity in the
 output.
 
-Importantly, the existence of a symbol doesn't specify whether something is 
-read-only, write-only, or read-write.  Without analysis, a pass must assume the 
-most conservative case, and in the case of public symbols, must always assume 
-the most conservative case.  To do better, all uses must be analyzed and 
+Importantly, the existence of a symbol doesn't specify whether something is
+read-only, write-only, or read-write.  Without analysis, a pass must assume the
+most conservative case, and in the case of public symbols, must always assume
+the most conservative case.  To do better, all uses must be analyzed and
 understood (e.g. a symbol used by a verbatim has unknown use).
 
 ### Hierarchical Path
 
 In the FIRRTL dialect, it might be necessary to identify specific instances of
 operations in the instance hierarchy. The FIRRTL `HierPathOp` operation
-(`firrtl.hierpath`) can be used to describe the path through an instance hierarchy to
-a declaration, which can be used by other operations or non-local annotations.
-Non-local anchors can refer to most declarations, such as modules, instances,
-wires, registers, and memories.
+(`firrtl.hierpath`) can be used to describe the path through an instance
+hierarchy to a declaration, which can be used by other operations or non-local
+annotations.  Non-local anchors can refer to most declarations, such as modules,
+instances, wires, registers, and memories.
 
-The `firrtl.hierpath` operations defines a symbol and contains a namepath, which is
-a list of `InnerRefAttr` and `FlatSymbolRefAttr` attributes. A
+The `firrtl.hierpath` operations defines a symbol and contains a namepath, which
+is a list of `InnerRefAttr` and `FlatSymbolRefAttr` attributes. A
 `FlatSymbolRefAttr` is used to identify modules, and is printed as `@Module`.
 `InnerRefAttr` identifies a declaration inside a module, and is printed as
 `@Module::@wire`. Each element along the Paths's namepath carries an annotation
@@ -200,8 +200,8 @@ pointing to the global op. Thus instances participating in nonlocal paths are
 readily apparent.
 
 In the following example, `@nla` specifies instance `@bar` in module `@Foo`,
-followed by instance `@baz` in module `@Bar`, followed by the wire named `@w`
-in module `@Baz`.
+followed by instance `@baz` in module `@Bar`, followed by the wire named `@w` in
+module `@Baz`.
 
 ``` mlir
 firrtl.circuit "Foo"   {
@@ -224,9 +224,8 @@ firrtl.circuit "Foo"   {
 
 At one point we tried to use the integer types in the standard dialect, like
 `si42` instead of `!firrtl.sint<42>`, but we backed away from this.  While it
-originally seemed appealing to use those types, FIRRTL
-operations generally need to work with "unknown width" integer types (i.e.
-`!firrtl.sint`).
+originally seemed appealing to use those types, FIRRTL operations generally need
+to work with "unknown width" integer types (i.e.  `!firrtl.sint`).
 
 Having the known width and unknown width types implemented with two different
 C++ classes was awkward, led to casting bugs, and prevented having a
@@ -423,12 +422,12 @@ For a historical discussion of this issue and its development see:
 - [`llvm/circt#992`](https://github.com/llvm/circt/pull/992)
 
 ### `firrtl.bitcast`
+
 The bitcast operation represents a bitwise reinterpretation (cast) of a value.
 It can be used to cast a vector or bundle type to an int type or vice-versa.
-The bit width of input and result types must be known.
-For an aggregate type, the bit width of every field must be known.
-This always synthesizes away in hardware, and follows the same endianness
-policy as `hw.bitcast`.
+The bit width of input and result types must be known.  For an aggregate type,
+the bit width of every field must be known.  This always synthesizes away in
+hardware, and follows the same endianness policy as `hw.bitcast`.
 
 ### `firrtl.mem`
 
@@ -437,9 +436,9 @@ result value of the `firrtl.mem` operation.  Also, the `firrtl.mem` node does
 not allow zero port memories for simplicity.  Zero port memories are dropped by
 the .fir file parser.
 
-In the FIRRTL pipeline, the `firrtl.mem` op can be lowered into either a external
-module for macro replacement or a register of vector type. The conditions for
-macro replacement are as follows:
+In the FIRRTL pipeline, the `firrtl.mem` op can be lowered into either a
+external module for macro replacement or a register of vector type. The
+conditions for macro replacement are as follows:
 
 1. `–replSeqMem` option is passed and
 2. `readLatency == 1`  and
@@ -450,20 +449,23 @@ macro replacement are as follows:
 
 Any `MemOp` not satisfying the above conditions is lowered to Register vector.
 
-#### MemToRegOfVec transformation outline: 
+#### MemToRegOfVec transformation outline:
 
 The `MemToRegOfVec` pass runs early in the pipeline, after the `LowerCHIRRTL`
 pass and right before the `InferResets` pass.
 
-1. Select all MemOps that are not candidates for macro replacement, 
+1. Select all MemOps that are not candidates for macro replacement,
 2. Create a reg
 3. Read ports return the value at the address when the enable signal is high.
+
 ```c++
 if (enable) {
   readOut = register[address]
 }
 ```
+
 4. Write ports store the value at the address when the mask signal is high.
+
 ```c++
 if (enable) {
   if (mask[0])
@@ -476,29 +478,30 @@ if (enable) {
 #### Handling of MemTaps
 
 The `sifive.enterprise.grandcentral.MemTapAnnotation` annotation is attached to
-the `MemOp` and the corresponding Memtap module ports. After lowering the
-memory to registers, this annotation must be properly scattered such that
+the `MemOp` and the corresponding Memtap module ports. After lowering the memory
+to registers, this annotation must be properly scattered such that
 GrandCentralTaps can generate the appropriate code.
 
 The memtap module has memtap annotations, where the number of ports with the
 annotation is equal to the memory depth. In the `MemToRegOfVec` transformation,
-after lowering the memory to the register vector, a subannotation is created
-for each sub-field of the data and the
-  `sifive.enterprise.grandcentral.MemTapAnnotation` annotation is copied from
-  the original `MemOp`. The `LowerTypes` pass will handle the subannotations
-  appropriately.
+after lowering the memory to the register vector, a subannotation is created for
+each sub-field of the data and the
+`sifive.enterprise.grandcentral.MemTapAnnotation` annotation is copied from the
+original `MemOp`. The `LowerTypes` pass will handle the subannotations
+appropriately.
 
 #### Interaction with AsyncReset Inference
 
-The `AsyncReset` pass runs right after the `MemToRegOfVec`.
-It will transform the memory registers to async registers if the corresponding
-annotations are present.
-Only if a `MemOp` had `sifive.enterprise.firrtl.ExcludeMemFromMemToRegOfVec`,
-annotation, then it is not converted to an async reset register.
+The `AsyncReset` pass runs right after the `MemToRegOfVec`.  It will transform
+the memory registers to async registers if the corresponding annotations are
+present.  Only if a `MemOp` had
+`sifive.enterprise.firrtl.ExcludeMemFromMemToRegOfVec`, annotation, then it is
+not converted to an async reset register.
 
 #### `firrtl.mem` Attributes
 
-A `firrtl.mem` has the following properties
+A `firrtl.mem` has the following properties:
+
 1. Data type
 2. Mask bitwidth
 3. Depth
@@ -516,8 +519,8 @@ bitwidth. And we define the property granularity as: `mask granularity = (Data
 bitwidth)/(Mask bitwidth)`.
 
 Each mask bit can guard the write to `mask granularity` number of data bits.
-For a single-bit mask, one-bit guards write to the data, hence `mask
-granularity = data bitwidth`.
+For a single-bit mask, one-bit guards write to the data, hence `mask granularity
+= data bitwidth`.
 
 #### Macro replacement
 
@@ -558,8 +561,8 @@ The main difference between Chisel and FIRRTL memories is that Chisel memories
 have an operation to add a memory port to a memory, while FIRRTL memories
 require all ports to be defined up front. Another difference is that Chisel
 memories have "enable inferrence", and are usually inferred to be enabled where
-they are declared. The following example shows a CHIRRTL memory declaration,
-and the standard FIRRTL memory equivalent.
+they are declared. The following example shows a CHIRRTL memory declaration, and
+the standard FIRRTL memory equivalent.
 
 ```firrtl
 smem mymemory : UInt<4>[8]
@@ -582,12 +585,12 @@ mymemory.port0.addr <= address
 ```
 
 FIRRTL memory operations were created because it was thought that a concrete
-memory primitive, that looks like an instance, is a better design for a
-compiler IR.  It was originally intended that Chisel would be modified to emit
-FIRRTL memory operations directly, and the CHIRRTL operations would be retired.
-The lowering from Chisel memories to FIRRTL memories proved far more
-complicated than originally envisioned, specifically surrounding the type of
-ports, inference of enable signals, and inference of clocks.
+memory primitive, that looks like an instance, is a better design for a compiler
+IR.  It was originally intended that Chisel would be modified to emit FIRRTL
+memory operations directly, and the CHIRRTL operations would be retired.  The
+lowering from Chisel memories to FIRRTL memories proved far more complicated
+than originally envisioned, specifically surrounding the type of ports,
+inference of enable signals, and inference of clocks.
 
 CHIRRTL operations have since stuck around, but their strange behavior has lead
 to discussions to remove, improve, or totally redesign them.  For some current
@@ -598,17 +601,17 @@ for Chisel memories. Instead, we are trying to implement what exists today.
 There is, however, a major compatibility issue with the existing implementation
 of Chisel memories which made them difficult to support in CIRCT.  The FIRRTL
 specification disallows using any declaration outside of the scope where it is
-created.  This means that a Chisel memory port declared inside of a `when`
-block can only be used inside the scope of the `when` block.  Unfortunately,
-this invariant is not enforced for memory ports, and this leniency has been
-abused by the Chisel standard library. Due to the way clock and enable
-inference works, we couldn't just hoist the declaration into the outer scope.
+created.  This means that a Chisel memory port declared inside of a `when` block
+can only be used inside the scope of the `when` block.  Unfortunately, this
+invariant is not enforced for memory ports, and this leniency has been abused by
+the Chisel standard library. Due to the way clock and enable inference works, we
+couldn't just hoist the declaration into the outer scope.
 
-To support escaping memory port definitions, we decided to split the memory
-port operation into two operations.  We created a `chirrtl.memoryport` operation
-to declare the memory port, and a `chirrtl.memoryport.access` operation to
-enable the memory port. The following is an example of how FIRRTL translates
-into the CIRCT dialect:
+To support escaping memory port definitions, we decided to split the memory port
+operation into two operations.  We created a `chirrtl.memoryport` operation to
+declare the memory port, and a `chirrtl.memoryport.access` operation to enable
+the memory port. The following is an example of how FIRRTL translates into the
+CIRCT dialect:
 
 ```firrtl
 smem mymem : UInt<1>[8]
@@ -627,11 +630,11 @@ firrtl.connect %out, %myport_data : !firrtl.uint<1>, !firrtl.uint<1
 ```
 
 The CHIRRTL operations and types are contained in the CHIRRTL dialect.  The is
-primary reason to move them into their own dialect was to keep the CHIRRTL
-types out of the FIRRTL dialect type hierarchy. We tried to have the CHIRRTL
-dialect depend on the FIRRTL dialect, but the flow checking in FIRRTL had to
-know about CHIRRTL operations, which created a circular dependency.  To
-simplify how this is handled, both dialects are contained in the same library.
+primary reason to move them into their own dialect was to keep the CHIRRTL types
+out of the FIRRTL dialect type hierarchy. We tried to have the CHIRRTL dialect
+depend on the FIRRTL dialect, but the flow checking in FIRRTL had to know about
+CHIRRTL operations, which created a circular dependency.  To simplify how this
+is handled, both dialects are contained in the same library.
 
 For a historical discussion of this issue and its development see
 [`llvm/circt#1561`](https://github.com/llvm/circt/issues/1561).
@@ -641,12 +644,12 @@ For a historical discussion of this issue and its development see
 
 ### More things are represented as primitives
 
-We describe the `mux` expression as "primitive", whereas the IR
-spec and grammar implement it as a special kind of expression.
+We describe the `mux` expression as "primitive", whereas the IR spec and grammar
+implement it as a special kind of expression.
 
-We do this to simplify the implementation: These expressions
-have the same structure as primitives, and modeling them as such allows reuse
-of the parsing logic instead of duplication of grammar rules.
+We do this to simplify the implementation: These expressions have the same
+structure as primitives, and modeling them as such allows reuse of the parsing
+logic instead of duplication of grammar rules.
 
 ### `invalid` Invalidate Operation is an expression
 
@@ -743,7 +746,8 @@ firrtl.module @Magic (out %n : !firrtl.uint<32>) {
 }
 ```
 
-This would lower through the other dialects to SystemVerilog as you would expect:
+This would lower through the other dialects to SystemVerilog as you would
+expect:
 
 ```systemverilog
 module Magic (output [31:0] n);
@@ -756,8 +760,8 @@ endmodule
 The [FIRRTL
 Specification](https://github.com/chipsalliance/firrtl/blob/master/spec/spec.pdf)
 has undefined behavior for certain features.  For compatibility reasons, FIRRTL
-dialect _always_ chooses to implement undefined behavior in the same manner
-as the SFC.
+dialect _always_ chooses to implement undefined behavior in the same manner as
+the SFC.
 
 ### Invalid
 
