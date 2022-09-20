@@ -488,7 +488,14 @@ struct RTLBuilder {
       : b(builder), loc(loc), clk(clk), rst(rst) {}
 
   Value constant(unsigned width, int64_t value, Location *extLoc = nullptr) {
-    return b.create<hw::ConstantOp>(getLoc(extLoc), APInt(width, value));
+    APInt apv = APInt(width, value);
+    auto it = constants.find(apv);
+    if (it != constants.end())
+      return it->second;
+
+    auto cval = b.create<hw::ConstantOp>(getLoc(extLoc), apv);
+    constants[apv] = cval;
+    return cval;
   }
   std::pair<Value, Value> wrap(Value data, Value valid,
                                Location *extLoc = nullptr) {
@@ -530,7 +537,8 @@ struct RTLBuilder {
 
   // Bitwise 'not'.
   Value bNot(Value value, Location *extLoc = nullptr) {
-    return comb::createOrFoldNot(getLoc(extLoc), value, b);
+    auto allOnes = constant(value.getType().getIntOrFloatBitWidth(), -1);
+    return b.createOrFold<comb::XorOp>(loc, value, allOnes, false);
   }
 
   Value shl(Value value, Value shift, Location *extLoc = nullptr) {
@@ -612,6 +620,7 @@ struct RTLBuilder {
   OpBuilder &b;
   Location loc;
   Value clk, rst;
+  DenseMap<APInt, Value> constants;
 };
 
 static void
