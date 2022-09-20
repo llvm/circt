@@ -134,7 +134,7 @@ void FirRegLower::addToIfBlock(OpBuilder &builder, Value cond,
   auto op = ifCache.lookup({builder.getBlock(), cond});
   // Always build both sides of the if, in case we want to use an empty else
   // later. This way we don't have to build a new if and replace it.
-  if (op) {
+  if (!op) {
     auto newIfOp =
         builder.create<sv::IfOp>(cond.getLoc(), cond, trueSide, falseSide);
     ifCache.insert({{builder.getBlock(), cond}, newIfOp});
