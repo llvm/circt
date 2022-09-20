@@ -1469,7 +1469,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
       .Case<MemOp>([&](MemOp op) {
         // Create constraint variables for all ports.
         unsigned nonDebugPort = 0;
-        for (auto result : llvm::enumerate(op.getResults())) {
+        for (const auto &result : llvm::enumerate(op.getResults())) {
           declareVars(result.value(), op.getLoc());
           if (!result.value().getType().cast<FIRRTLType>().isa<RefType>())
             nonDebugPort = result.index();
