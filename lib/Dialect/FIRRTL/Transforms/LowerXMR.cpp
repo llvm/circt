@@ -199,17 +199,13 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
   LogicalResult handleRefResolve(RefResolveOp resolve) {
     auto resWidth = getBitWidth(resolve.getType());
     if (resWidth.has_value() && resWidth.value() == 0) {
-      // Donot emit 0 width XMRs, instead rely on `LowerToHW` to remove these
-      // temporary 0-width wires.
+      // Donot emit 0 width XMRs, replace it with constant 0.
       ImplicitLocOpBuilder builder(resolve.getLoc(), resolve);
-      auto dummyWire = builder.create<WireOp>(resolve.getType());
-      resolve.getResult().replaceAllUsesWith(dummyWire);
       auto zeroUintType = UIntType::get(builder.getContext(), 0);
-      builder.create<ConnectOp>(
-          dummyWire, builder.createOrFold<BitCastOp>(
-                         resolve.getType(),
-                         builder.create<ConstantOp>(
-                             zeroUintType, getIntZerosAttr(zeroUintType))));
+      auto zeroC = builder.createOrFold<BitCastOp>(
+          resolve.getType(), builder.create<ConstantOp>(
+                                 zeroUintType, getIntZerosAttr(zeroUintType)));
+      resolve.getResult().replaceAllUsesWith(zeroC);
       return success();
     }
     auto remoteOpPath = getRemoteRefSend(resolve.getRef());
