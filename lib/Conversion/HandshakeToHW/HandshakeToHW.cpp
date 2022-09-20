@@ -621,11 +621,13 @@ public:
       unwrapped.inputs.push_back(hs);
     }
     for (auto &outputInfo : ports.getModulePortInfo().outputs) {
-      if (!isa<esi::ChannelType>(outputInfo.type))
+      esi::ChannelType channelType =
+          dyn_cast<esi::ChannelType>(outputInfo.type);
+      if (!channelType)
         continue;
       OutputHandshake hs;
-      auto data = std::make_shared<Backedge>(
-          bb.get(cast<esi::ChannelType>(outputInfo.type).getInner()));
+      Type innerType = channelType.getInner();
+      auto data = std::make_shared<Backedge>(bb.get(innerType));
       auto valid = std::make_shared<Backedge>(bb.get(s.b.getI1Type()));
       auto [dataCh, ready] = s.wrap(*data, *valid);
       hs.data = data;
@@ -650,6 +652,7 @@ public:
     for (auto &input : inputs)
       valids.push_back(input.valid);
     Value allValid = s.bAnd(valids);
+    output.valid->setValue(allValid);
     setAllReadyWithCond(s, inputs, output, allValid);
   }
 
@@ -695,6 +698,8 @@ public:
     res.data->setValue(s.mux(select.data, unwrapped.getInputDatas()));
   }
 
+  // Builds fork logic between the single input and multiple outputs' control
+  // networks. Caller is expected to handle data separately.
   void buildForkLogic(RTLBuilder &s, BackedgeBuilder &bb, InputHandshake &input,
                       ArrayRef<OutputHandshake> outputs,
                       hw::HWModulePortAccessor &ports) const {
@@ -705,7 +710,6 @@ public:
       auto emitted = s.bAnd({done, s.bNot(*input.ready)});
       auto emittedReg = s.reg("emitted_" + std::to_string(i), emitted, c0I1);
       auto outValid = s.bAnd({s.bNot(emittedReg), input.valid});
-      output.data->setValue(input.data);
       output.valid->setValue(outValid);
       auto validReady = s.bAnd({output.ready, input.valid});
       done.setValue(s.bAnd({validReady, emittedReg}));
@@ -724,8 +728,6 @@ public:
            "Expected exactly one output for unit-rate actor");
     // Control logic.
     this->buildJoinLogic(s, unwrappedIO.inputs, unwrappedIO.outputs[0]);
-    unwrappedIO.outputs[0].valid->setValue(
-        s.bAnd(unwrappedIO.getInputValids()));
 
     // Data logic.
     auto unitRes = unitBuilder(unwrappedIO.getInputDatas());
@@ -766,6 +768,10 @@ public:
                    hw::HWModulePortAccessor &ports) const override {
     auto unwrapped = unwrapIO(s, bb, ports);
     buildForkLogic(s, bb, unwrapped.inputs[0], unwrapped.outputs, ports);
+
+    // Data logic.
+    for (auto &out : unwrapped.outputs)
+      out.data->setValue(unwrapped.inputs[0].data);
   }
 };
 
@@ -776,6 +782,8 @@ public:
                    hw::HWModulePortAccessor &ports) const override {
     auto unwrappedIO = unwrapIO(s, bb, ports);
     buildJoinLogic(s, unwrappedIO.inputs, unwrappedIO.outputs[0]);
+    unwrappedIO.outputs[0].data->setValue(
+        s.b.create<esi::NoneSourceOp>(s.getLoc()));
   };
 };
 
@@ -917,15 +925,19 @@ public:
     auto unwrappedIO = this->unwrapIO(s, bb, ports);
     auto input = unwrappedIO.inputs[0];
     auto output = unwrappedIO.outputs[0];
-    if (op.isSequential()) {
-      SmallVector<int64_t> initValues;
-      if (op.getInitValues())
-        initValues = op.getInitValueArray();
-      return buildSeqBufferLogic(s, bb, op.getDataType(), op.getNumSlots(),
-                                 input, output, initValues);
-    }
+    InputHandshake lastStage;
+    SmallVector<int64_t> initValues;
 
-    assert(false && "FIFO buffer not yet implemented.");
+    // For now, always build seq buffers.
+    if (op.getInitValues())
+      initValues = op.getInitValueArray();
+    lastStage = buildSeqBufferLogic(s, bb, op.getDataType(), op.getNumSlots(),
+                                    input, output, initValues);
+
+    // Connect the last stage to the output handshake.
+    output.data->setValue(lastStage.data);
+    output.valid->setValue(lastStage.valid);
+    lastStage.ready->setValue(output.ready);
   };
 
   struct SeqBufferStage {
@@ -933,8 +945,12 @@ public:
                    RTLBuilder &s, size_t index,
                    std::optional<int64_t> initValue)
         : dataType(dataType), preStage(preStage), s(s), bb(bb), index(index) {
-      width = dataType.getIntOrFloatBitWidth();
-      c0s = s.constant(width, 0);
+
+      // Todo: Change when i0 support is added.
+      if (dataType.isa<NoneType>())
+        c0s = s.b.create<esi::NoneSourceOp>(s.getLoc());
+      else
+        c0s = s.constant(dataType.getIntOrFloatBitWidth(), 0);
       currentStage.ready = std::make_shared<Backedge>(bb.get(s.b.getI1Type()));
 
       auto hasInitValue = s.constant(1, initValue.has_value());
@@ -1017,15 +1033,15 @@ public:
     BackedgeBuilder &bb;
     size_t index;
 
-    // A zero-valued constant of the same width as the data type.
+    // A zero-valued constant of equal type as the data type of this buffer.
     Value c0s;
-    unsigned width;
   };
 
-  void buildSeqBufferLogic(RTLBuilder &s, BackedgeBuilder &bb, Type dataType,
-                           unsigned size, InputHandshake &input,
-                           OutputHandshake &output,
-                           llvm::ArrayRef<int64_t> initValues) const {
+  InputHandshake buildSeqBufferLogic(RTLBuilder &s, BackedgeBuilder &bb,
+                                     Type dataType, unsigned size,
+                                     InputHandshake &input,
+                                     OutputHandshake &output,
+                                     llvm::ArrayRef<int64_t> initValues) const {
     // Prime the buffer building logic with an initial stage, which just
     // wraps the input handshake.
     InputHandshake currentStage = input;
@@ -1038,10 +1054,7 @@ public:
                          .getOutput();
     }
 
-    // Connect the last stage to the output handshake.
-    output.data->setValue(currentStage.data);
-    output.valid->setValue(currentStage.valid);
-    currentStage.ready->setValue(output.ready);
+    return currentStage;
   };
 };
 
