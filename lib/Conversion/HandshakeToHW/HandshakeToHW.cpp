@@ -894,7 +894,7 @@ public:
     // combinatorial cycles. The paper which introduced compositional dataflow
     // circuits explicitly mentions this limitation:
     // http://arcade.cs.columbia.edu/df-memocode17.pdf
-    buildForkLogic(s, bb, input, unwrappedIO.outputs, ports);
+    buildForkLogic(s, bb, input, unwrappedIO.outputs);
 
     // Directly connect the data wires, only the control signals need to be
     // combined.
