@@ -48,7 +48,7 @@ struct HandshakeLoweringState {
 };
 
 static Type tupleToStruct(TupleType tuple) {
-  auto ctx = tuple.getContext();
+  auto *ctx = tuple.getContext();
   mlir::SmallVector<hw::StructType::FieldInfo, 8> hwfields;
   for (auto [i, innerType] : llvm::enumerate(tuple))
     hwfields.push_back(
@@ -177,6 +177,7 @@ static DiscriminatingTypes getHandshakeDiscriminatingTypes(Operation *op) {
 /// Get type name. Currently we only support integer or index types.
 /// The emitted type aligns with the getFIRRTLType() method. Thus all integers
 /// other than signed integers will be emitted as unsigned.
+// NOLINTNEXTLINE(misc-no-recursion)
 static std::string getTypeName(Location loc, Type type) {
   std::string typeName;
   // Builtin types
