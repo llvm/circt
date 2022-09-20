@@ -927,10 +927,11 @@ public:
 };
 
 class SelectConversionPattern
-    : public HandshakeConversionPattern<arith::SelectOp> {
+    : public HandshakeConversionPattern<handshake::SelectOp> {
 public:
-  using HandshakeConversionPattern<arith::SelectOp>::HandshakeConversionPattern;
-  void buildModule(arith::SelectOp op, BackedgeBuilder &bb, RTLBuilder &s,
+  using HandshakeConversionPattern<
+      handshake::SelectOp>::HandshakeConversionPattern;
+  void buildModule(handshake::SelectOp op, BackedgeBuilder &bb, RTLBuilder &s,
                    hw::HWModulePortAccessor &ports) const override {
     auto unwrappedIO = unwrapIO(s, bb, ports);
 
