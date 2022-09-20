@@ -61,6 +61,8 @@ struct SignalTracingAnalysis
 
   void setToEntryState(Lattice<SignalState> *lattice) override;
 
+  bool shouldVisitZeroResultOperations() override { return true; }
+
 private:
   hw::InstanceGraph instanceGraph;
   DenseSet<Operation *> &sources;
