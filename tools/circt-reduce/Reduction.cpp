@@ -549,18 +549,23 @@ struct MemoryStubber : public Reduction {
         input = builder.createOrFold<firrtl::SubfieldOp>(wire, 5);
         output = builder.createOrFold<firrtl::SubfieldOp>(wire, 3);
         break;
+      case firrtl::MemOp::PortKind::Debug:
+        output = wire;
+        break;
       }
 
-      // Reduce all input ports to a single one through an XOR tree.
-      unsigned numFields =
-          wire.getType().cast<firrtl::BundleType>().getNumElements();
-      for (unsigned i = 0; i != numFields; ++i) {
-        if (i != 2 && i != 3 && i != 5)
-          reduceXor(builder, xorInputs,
-                    builder.createOrFold<firrtl::SubfieldOp>(wire, i));
+      if (!result.getType().cast<firrtl::FIRRTLType>().isa<firrtl::RefType>()) {
+        // Reduce all input ports to a single one through an XOR tree.
+        unsigned numFields =
+            wire.getType().cast<firrtl::BundleType>().getNumElements();
+        for (unsigned i = 0; i != numFields; ++i) {
+          if (i != 2 && i != 3 && i != 5)
+            reduceXor(builder, xorInputs,
+                      builder.createOrFold<firrtl::SubfieldOp>(wire, i));
+        }
+        if (input)
+          reduceXor(builder, xorInputs, input);
       }
-      if (input)
-        reduceXor(builder, xorInputs, input);
 
       // Track the output port to hook it up to the XORd input later.
       if (output)
