@@ -47,12 +47,17 @@ struct HandshakeLoweringState {
   NameUniquer nameUniquer;
 };
 
+// NOLINTNEXTLINE(misc-no-recursion)
 static Type tupleToStruct(TupleType tuple) {
   auto *ctx = tuple.getContext();
   mlir::SmallVector<hw::StructType::FieldInfo, 8> hwfields;
-  for (auto [i, innerType] : llvm::enumerate(tuple))
-    hwfields.push_back(
-        {StringAttr::get(ctx, "field" + std::to_string(i)), innerType});
+  for (auto [i, innerType] : llvm::enumerate(tuple)) {
+    Type convertedInnerType = innerType;
+    if (auto tupleInnerType = innerType.dyn_cast<TupleType>())
+      convertedInnerType = tupleToStruct(tupleInnerType);
+    hwfields.push_back({StringAttr::get(ctx, "field" + std::to_string(i)),
+                        convertedInnerType});
+  }
 
   return hw::StructType::get(ctx, hwfields);
 }
