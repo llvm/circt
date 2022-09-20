@@ -140,8 +140,11 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
             // same reaching RefSend. This condition is true for upward scoped
             // XMRs. That is, RefResolveOp can be visited before the
             // corresponding RefSendOp is recorded.
-            dataFlowClasses.unionSets(resolve.getRef(), resolve.getResult());
-            resolveOps.push_back(resolve);
+            // Donot emit 0 width XMRs
+            if (resolve.getType().getBitWidthOrSentinel()) {
+              dataFlowClasses.unionSets(resolve.getRef(), resolve.getResult());
+              resolveOps.push_back(resolve);
+            }
             markForRemoval(resolve);
             return success();
           })
