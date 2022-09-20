@@ -273,68 +273,6 @@ static FailureOr<Literal> parseIntegerLiteral(MLIRContext *context,
   return lit;
 }
 
-/// Find the lowest-common-ancestor `lcaModule`, between `srcTarget` and
-/// `wireTarget`, and set `pathFromSrcToWire` with the path between them through
-/// the `lcaModule`.
-static LogicalResult
-findLCAandSetPath(AnnoPathValue &srcTarget, AnnoPathValue &wireTarget,
-                  SmallVector<InstanceOp> &pathFromSrcToWire,
-                  FModuleOp &lcaModule, ApplyState &state) {
-
-  auto srcModule = cast<FModuleOp>(srcTarget.ref.getModule().getOperation());
-  auto wireModule = cast<FModuleOp>(wireTarget.ref.getModule().getOperation());
-  // Get the path from top to `srcModule` and `wireModule`, and then compare the
-  // path to find the lca. Then use that to get the path from `srcModule` to the
-  // `wireModule`.
-  pathFromSrcToWire.clear();
-  if (srcModule == wireModule) {
-    lcaModule = srcModule;
-    return success();
-  }
-  auto *top = state.instancePathCache.instanceGraph.getTopLevelNode();
-  lcaModule = cast<FModuleOp>(top->getModule().getOperation());
-  if (wireTarget.instances.empty()) {
-    auto wireInstancePathsFromTop =
-        state.instancePathCache.getAbsolutePaths(wireTarget.ref.getModule());
-    if (wireInstancePathsFromTop.size() > 1)
-      return wireTarget.ref.getOp()->emitError(
-          "cannot handle multiple paths to DataTaps wire");
-
-    // Get the path from top to wire
-    ArrayRef<InstanceOp> p = wireInstancePathsFromTop.back();
-    wireTarget.instances.append(SmallVector<InstanceOp>(p.begin(), p.end()));
-  }
-  auto &wirePathFromTop = wireTarget.instances;
-  // A map of the modules in the path from top to wire to its index into the
-  // `wirePathFromTop`.
-  DenseMap<FModuleOp, size_t> wirePathMap;
-  // Initialize the leaf module, to end of path.
-  wirePathMap[wireModule] = wirePathFromTop.size();
-  for (auto &wireInstance : llvm::enumerate(wirePathFromTop))
-    wirePathMap[wireInstance.value()->getParentOfType<FModuleOp>()] =
-        wireInstance.index();
-  auto *wirePathIterator = wirePathFromTop.begin();
-  // Now, reverse iterate over the path of the source, from the source module to
-  // the Top.
-  for (auto srcInstPath : llvm::reverse(srcTarget.instances)) {
-    auto refModule = cast<FModuleOp>(
-        state.instancePathCache.instanceGraph.getReferencedModule(srcInstPath)
-            .getOperation());
-    auto mapIter = wirePathMap.find(refModule);
-    // If `refModule` exists on the wire path, then this is the Lowest Common
-    // Ancestor between the source and wire module.
-    if (mapIter != wirePathMap.end()) {
-      lcaModule = refModule;
-      wirePathIterator += mapIter->getSecond();
-      break;
-    }
-    pathFromSrcToWire.push_back(srcInstPath);
-  }
-  pathFromSrcToWire.insert(pathFromSrcToWire.end(), wirePathIterator,
-                           wirePathFromTop.end());
-
-  return success();
-}
 
 LogicalResult static applyNoBlackBoxStyleDataTaps(const AnnoPathValue &target,
                                                   DictionaryAttr anno,

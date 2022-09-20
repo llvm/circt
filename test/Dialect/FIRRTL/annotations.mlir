@@ -1410,3 +1410,47 @@ firrtl.circuit "Top"  attributes {rawAnnotations = [
     // CHECK:  firrtl.connect %tap, %0 : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
+
+// -----
+// Test with Parent module not being the LCA.
+
+firrtl.circuit "Top"  attributes {
+  rawAnnotations = [
+  {class = "sifive.enterprise.grandcentral.ViewAnnotation", 
+  companion = "~Top|Companion", 
+  name = "MyView", 
+  parent = "~Top|DUT", 
+  view = {class = "sifive.enterprise.grandcentral.AugmentedBundleType", defName = "MyInterface", 
+  elements = [{ 
+    name = "signed",
+    tpe = {class = "sifive.enterprise.grandcentral.AugmentedGroundType", 
+    ref = {circuit = "Top", component = [], module = "Bar", path = [], ref = "signed"},
+    tpe = {class = "sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$"}
+    }}]}}]} {
+
+  firrtl.module @Bar() {
+  // CHECK-LABEL:   firrtl.module @Bar(out %_gen_signed: !firrtl.ref<uint<1>>)
+    %signed = firrtl.wire interesting_name  : !firrtl.uint<1>
+  // CHECK:    %0 = firrtl.ref.send %signed : !firrtl.uint<1>
+  // CHECK:    firrtl.connect %_gen_signed, %0 : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
+  }
+  firrtl.module private @Companion(out %io: !firrtl.bundle<>) {
+  // CHECK-LABEL: firrtl.module private @Companion(out %io: !firrtl.bundle<>)
+    %_WIRE = firrtl.wire interesting_name  : !firrtl.uint<1>
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    firrtl.strictconnect %_WIRE, %c0_ui1 : !firrtl.uint<1>
+    firrtl.instance Bar interesting_name  @Bar()
+    // CHECK:  %Bar__gen_signed = firrtl.instance Bar interesting_name  @Bar(out _gen_signed: !firrtl.ref<uint<1>>)
+    // CHECK:  %0 = firrtl.ref.resolve %Bar__gen_signed : !firrtl.ref<uint<1>>
+    // CHECK:  %view_signedrefPort = firrtl.node  %0  {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}, {class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 1 : i64}]} : !firrtl.uint<1>
+  }
+  firrtl.module private @DUT(in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
+    %companion_io = firrtl.instance companion interesting_name  @Companion(out io: !firrtl.bundle<>)
+  }
+  firrtl.module @Top(in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
+    %signed_a, %signed_b = firrtl.instance signed interesting_name  @DUT(in a: !firrtl.uint<1>, out b: !firrtl.uint<1>)
+    firrtl.strictconnect %signed_a, %a : !firrtl.uint<1>
+    firrtl.strictconnect %b, %signed_b : !firrtl.uint<1>
+  }
+}
+
