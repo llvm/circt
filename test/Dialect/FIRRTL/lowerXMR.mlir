@@ -47,6 +47,20 @@ firrtl.circuit "Top" {
 
 // -----
 
+// Test 0-width xmrs are handled
+// CHECK-LABEL: firrtl.circuit "Top" {
+firrtl.circuit "Top" {
+  firrtl.module @Top(in %bar_a : !firrtl.ref<uint<0>>) {
+    %a = firrtl.wire : !firrtl.uint<0>
+    %0 = firrtl.ref.resolve %bar_a : !firrtl.ref<uint<0>>
+    // CHECK:  %0 = firrtl.wire   : !firrtl.uint<0>
+    firrtl.strictconnect %a, %0 : !firrtl.uint<0>
+    // CHECK:  firrtl.strictconnect %a, %0 : !firrtl.uint<0>
+  }
+}
+
+// -----
+
 // Test the correct xmr path to port is generated
 // CHECK-LABEL: firrtl.circuit "Top" {
 firrtl.circuit "Top" {
