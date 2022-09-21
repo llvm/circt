@@ -16,9 +16,7 @@
 #include "mlir/Parser/Parser.h"
 #include "mlir/Support/FileUtilities.h"
 #include "llvm/Support/CommandLine.h"
-#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/InitLLVM.h"
-#include "llvm/Support/Path.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/Support/WithColor.h"
@@ -30,46 +28,37 @@ using namespace mlir;
 using namespace circt;
 
 static cl::opt<std::string>
-    inputFilename(cl::Positional, cl::desc("<input file>"), cl::init("-"));
+    inputFilename(cl::Positional, cl::desc("<input .mlirbc file>"), cl::init("-"));
 
-static cl::opt<std::string> outputFilename("o", cl::desc("Output filename"),
+static cl::opt<std::string> outputFilename("o", cl::desc("Override output filename"),
                                            cl::value_desc("filename"));
-
-static cl::opt<bool> forceOutput("f",
-                                 cl::desc("Replace output file if it exists"),
-                                 cl::init(false));
 
 static constexpr const char toolName[] = "circt-dis";
 
+/// Print error and return failure.
 static LogicalResult emitError(const Twine &err) {
   WithColor::error(errs(), toolName) << err << "\n";
   return failure();
 }
 
+namespace {
+/// Wrapper for OwningOpRef that leaks the module.
 struct LeakModule {
   OwningOpRef<ModuleOp> module;
   ~LeakModule() { (void)module.release(); }
 };
+} // end anonymous namespace
 
 static LogicalResult execute(MLIRContext &context) {
   // Figure out where we're writing the output.
   if (outputFilename.empty()) {
     StringRef input = inputFilename;
     if (input == "-")
-      return emitError("no output filename given");
-    SmallString<64> outputStr{input};
-    sys::path::replace_extension(outputStr, "mlir");
-    outputFilename = outputStr.str().str();
-  }
-  if (inputFilename == outputFilename)
-    return emitError("input and output must be different files");
-  if (sys::fs::exists(outputFilename)) {
-    // Reject directory path.
-    if (sys::fs::is_directory(outputFilename))
-      return emitError("output path is a directory");
-    // Reject file path if `-f` is not specified.
-    if (!forceOutput)
-      return emitError("output file exists.  Use -f flag to force overwrite");
+      outputFilename = "-";
+    else {
+      input.consume_back(".mlirbc");
+      outputFilename = (input + ".mlir").str();
+    }
   }
 
   // Open output for writing, early error if problem.
@@ -101,7 +90,7 @@ int main(int argc, char **argv) {
 
   circt::registerAllDialects(registry);
 
-  cl::ParseCommandLineOptions(argc, argv, "CIRCT disassembler\n");
+  cl::ParseCommandLineOptions(argc, argv, "CIRCT .mlirbc -> .mlir disassembler\n");
 
   MLIRContext context;
   context.appendDialectRegistry(registry);
