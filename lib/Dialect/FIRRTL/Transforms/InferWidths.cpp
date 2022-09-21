@@ -1509,7 +1509,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         for (unsigned i = 0, e = op.getResults().size(); i < e; ++i) {
           auto result = op.getResult(i);
           if (result.getType().cast<FIRRTLType>().isa<RefType>()) {
-            // Debug ports are firrtl.ref<vector<data-type>, depth>
+            // Debug ports are firrtl.ref<vector<data-type, depth>>
             // Use FieldRef of 1, to indicate the first vector element must be
             // of the dataType.
             unifyTypes(firstData, FieldRef(result, 1), dataType);
