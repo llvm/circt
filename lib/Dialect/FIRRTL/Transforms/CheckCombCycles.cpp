@@ -358,7 +358,23 @@ public:
           return InstanceNodeIterator(instance, node, end);
         })
         .Case<SubfieldOp>([&](SubfieldOp subfield) {
-          return SubfieldNodeIterator(subfield, node, end);
+          if (isa_and_nonnull<MemOp>(subfield.getInput().getDefiningOp()))
+            return static_cast<variant_iterator>(
+                SubfieldNodeIterator(subfield, node, end));
+          // This is required to explicitly ignore self initialization connects
+          // for registers.
+          if (isa_and_nonnull<RegOp, RegResetOp>(
+                  getFieldRefFromValue(subfield).getDefiningOp()))
+            return static_cast<variant_iterator>(NodeIterator(node, true));
+          return static_cast<variant_iterator>(NodeIterator(node, end));
+        })
+        .Case<SubindexOp>([&](SubindexOp sub) {
+          // This is required to explicitly ignore self initialization connects
+          // for registers.
+          if (isa_and_nonnull<RegOp, RegResetOp>(
+                  getFieldRefFromValue(sub).getDefiningOp()))
+            return NodeIterator(node, true);
+          return NodeIterator(node, end);
         })
         // The children of reg or regreset op are not iterated.
         .Case<RegOp, RegResetOp>([&](auto) { return NodeIterator(node, true); })
