@@ -176,3 +176,23 @@ firrtl.circuit "strictConnectAndConnect" {
     firrtl.strictconnect %b, %a : !firrtl.uint<11>
   }
 }
+
+// -----
+
+firrtl.circuit "vectorRegInit"   {
+  firrtl.module @vectorRegInit(in %clk: !firrtl.clock) {
+    %reg = firrtl.reg %clk : !firrtl.vector<uint<8>, 2>
+    %0 = firrtl.subindex %reg[0] : !firrtl.vector<uint<8>, 2>
+    firrtl.connect %0, %0 : !firrtl.uint<8>, !firrtl.uint<8>
+  }
+}
+
+// -----
+
+firrtl.circuit "bundleRegInit"   {
+  firrtl.module @bundleRegInit(in %clk: !firrtl.clock) {
+    %reg = firrtl.reg %clk : !firrtl.bundle<a: uint<1>>
+    %0 = firrtl.subfield %reg(0) : (!firrtl.bundle<a: uint<1>>) -> !firrtl.uint<1>
+    firrtl.connect %0, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+}
