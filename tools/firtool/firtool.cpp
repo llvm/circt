@@ -725,7 +725,15 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
         modulePM.addPass(createSimpleCanonicalizerPass());
       }
     } else {
-      pm.addPass(seq::createSeqFIRRTLLowerToSVPass());
+      // If enabled, run the optimizer.
+      if (!disableOptimization) {
+        auto &modulePM = pm.nest<hw::HWModuleOp>();
+        modulePM.addPass(createCSEPass());
+        modulePM.addPass(createSimpleCanonicalizerPass());
+        modulePM.addPass(createCSEPass());
+      }
+
+      pm.nest<hw::HWModuleOp>().addPass(seq::createSeqFIRRTLLowerToSVPass());
       pm.addPass(sv::createHWMemSimImplPass(replSeqMem, ignoreReadEnableMem));
 
       if (extractTestCode)

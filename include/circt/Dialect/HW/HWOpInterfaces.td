@@ -115,6 +115,12 @@ def HWMutableModuleLike : OpInterface<"HWMutableModuleLike"> {
     /*defaultImplementation=*/[{
       $_op.modifyPorts({}, {}, eraseInputs, eraseOutputs);
     }]>,
+
+    /// Appends output ports to the module with the specified names and rewrites
+    /// the output op to return the associated values.
+    InterfaceMethod<"Append output values to this module",
+    "void", "appendOutputs", (ins
+      "ArrayRef<std::pair<StringAttr, Value>>":$outputs)>
   ];
 }
 
@@ -128,6 +134,11 @@ def HWInstanceLike : OpInterface<"HWInstanceLike"> {
     "::llvm::StringRef", "instanceName", (ins),
     /*methodBody=*/[{}],
     /*defaultImplementation=*/[{ return $_op.getInstanceName(); }]>,
+
+    InterfaceMethod<"Get the name of the instance",
+    "::mlir::StringAttr", "instanceNameAttr", (ins),
+    /*methodBody=*/[{}],
+    /*defaultImplementation=*/[{ return $_op.getInstanceNameAttr(); }]>,
 
     InterfaceMethod<"Get the name of the instantiated module",
     "::llvm::StringRef", "referencedModuleName", (ins),

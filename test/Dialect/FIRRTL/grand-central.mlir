@@ -21,14 +21,14 @@ firrtl.circuit "InterfaceGroundType" attributes {
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
      directory = "gct-dir",
      filename = "gct-dir/bindings.sv"}]} {
-  firrtl.module @View_companion() attributes {
+  firrtl.module private @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
        defName = "Foo",
        id = 0 : i64,
        name = "View",
        type = "companion"}]} {}
-  firrtl.module @DUT() attributes {
+  firrtl.module private @DUT() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
        id = 0 : i64,
@@ -60,7 +60,7 @@ firrtl.circuit "InterfaceGroundType" attributes {
 // CHECK-NOT: class = "sifive.enterprise.grandcentral.AugmentedBundleType"
 // CHECK-SAME: {
 
-// CHECK: firrtl.module @View_companion
+// CHECK: firrtl.module private @View_companion
 // CHECK-SAME: output_file = #hw.output_file<"gct-dir/View_companion.sv"
 // CHECK-NEXT: sv.interface.instance sym @__View_Foo__ {name = "View"} : !sv.interface<@Foo>
 // CHECK-NEXT: sv.verbatim "assign {{[{][{]0[}][}]}}.foo = {{[{][{]1[}][}]}}.{{[{][{]2[}][}]}};"
@@ -77,7 +77,7 @@ firrtl.circuit "InterfaceGroundType" attributes {
 // CHECK-SAME:   #hw.innerNameRef<@DUT::@c>]
 
 // All Grand Central annotations are removed from the wires.
-// CHECK: firrtl.module @DUT
+// CHECK: firrtl.module private @DUT
 // CHECK: %a = firrtl.wire
 // CHECK-SAME: annotations = [{a}]
 // CHECK: %b = firrtl.wire
@@ -115,14 +115,14 @@ firrtl.circuit "InterfaceVectorType" attributes {
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
      directory = "gct-dir",
      filename = "gct-dir/bindings.sv"}]} {
-  firrtl.module @View_companion() attributes {
+  firrtl.module private @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
        defName = "Foo",
        id = 0 : i64,
        name = "View",
        type = "companion"}]} {}
-  firrtl.module @DUT(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) attributes {
+  firrtl.module private @DUT(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
        id = 0 : i64,
@@ -153,11 +153,11 @@ firrtl.circuit "InterfaceVectorType" attributes {
 // CHECK-NOT: class = "sifive.enterprise.grandcentral.AugmentedBundleType"
 // CHECK-SAME: {
 
-// CHECK: firrtl.module @View_companion
+// CHECK: firrtl.module private @View_companion
 // CHECK-SAME: output_file = #hw.output_file<"gct-dir/View_companion.sv"
 
 // All Grand Central annotations are removed from the registers.
-// CHECK: firrtl.module @DUT
+// CHECK: firrtl.module private @DUT
 // CHECK: %a_0 = firrtl.reg
 // CHECK-SAME: annotations = [{a}]
 // CHECK: %a_1 = firrtl.regreset
@@ -192,14 +192,14 @@ firrtl.circuit "InterfaceBundleType" attributes {
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
      directory = "gct-dir",
      filename = "gct-dir/bindings.sv"}]}  {
-  firrtl.module @View_companion() attributes {
+  firrtl.module private @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
        defName = "Foo",
        id = 0 : i64,
        name = "View",
        type = "companion"}]} {}
-  firrtl.module @DUT() attributes {
+  firrtl.module private @DUT() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
        id = 0 : i64,
@@ -230,7 +230,7 @@ firrtl.circuit "InterfaceBundleType" attributes {
 // CHECK-SAME: {
 
 // All Grand Central annotations are removed from the wires.
-// CHECK-LABEL: firrtl.module @DUT
+// CHECK-LABEL: firrtl.module private @DUT
 // CHECK: %x = firrtl.wire
 // CHECK-SAME: annotations = [{a}]
 // CHECK: %y = firrtl.wire
@@ -267,14 +267,14 @@ firrtl.circuit "InterfaceVecOfBundleType" attributes {
         name = "bar"}],
      id = 0 : i64,
      name = "View"}]}  {
-  firrtl.module @View_companion() attributes {
+  firrtl.module private @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
        defName = "Foo",
        id = 0 : i64,
        name = "View",
        type = "companion"}]} {}
-  firrtl.module @DUT() attributes {
+  firrtl.module private @DUT() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
        id = 0 : i64,
@@ -326,14 +326,14 @@ firrtl.circuit "VecOfVec" attributes {
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
      directory = "gct-dir",
      filename = "gct-dir/bindings.sv"}]} {
-  firrtl.module @View_companion() attributes {
+  firrtl.module private @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
        defName = "Foo",
        id = 0 : i64,
        name = "View",
        type = "companion"}]} {}
-  firrtl.module @DUT() attributes {
+  firrtl.module private @DUT() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
        id = 0 : i64,
@@ -354,7 +354,7 @@ firrtl.circuit "VecOfVec" attributes {
 
 // CHECK-LABEL: firrtl.circuit "VecOfVec"
 
-// CHECK:      firrtl.module @View_companion
+// CHECK:      firrtl.module private @View_companion
 // CHECK-NEXT:    sv.interface.instance sym @__View_Foo__ {name = "View"} : !sv.interface<@Foo>
 // CHECK-NEXT:    assign {{[{][{]0[}][}]}}.foo[0][0]
 // CHECK-SAME:      #hw.innerNameRef<@View_companion::@__View_Foo__>
@@ -380,14 +380,14 @@ firrtl.circuit "InterfaceNode" attributes {
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
      directory = "gct-dir",
      filename = "gct-dir/bindings.sv"}]} {
-  firrtl.module @View_companion() attributes {
+  firrtl.module private @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
        defName = "Foo",
        id = 0 : i64,
        name = "View",
        type = "companion"}]} {}
-  firrtl.module @DUT() attributes {
+  firrtl.module private @DUT() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
        id = 0 : i64,
@@ -442,14 +442,14 @@ firrtl.circuit "InterfacePort" attributes {
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
      directory = "gct-dir",
      filename = "gct-dir/bindings.sv"}]} {
-  firrtl.module @View_companion() attributes {
+  firrtl.module private @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
        defName = "Foo",
        id = 0 : i64,
        name = "View",
        type = "companion"}]} {}
-  firrtl.module @DUT(in %a : !firrtl.uint<4>) attributes {
+  firrtl.module private @DUT(in %a : !firrtl.uint<4>) attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
        id = 0 : i64,
@@ -474,7 +474,7 @@ firrtl.circuit "InterfacePort" attributes {
 // CHECK-SAME: {
 
 // The Grand Central annotations are removed.
-// CHECK: firrtl.module @DUT
+// CHECK: firrtl.module private @DUT
 // CHECK-SAME: %a: !firrtl.uint<4> sym @a [{a}]
 
 // CHECK: sv.interface @Foo
@@ -504,14 +504,14 @@ firrtl.circuit "UnsupportedTypes" attributes {
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
      directory = "gct-dir",
      filename = "gct-dir/bindings.sv"}]} {
-  firrtl.module @View_companion() attributes {
+  firrtl.module private @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
        defName = "Foo",
        id = 0 : i64,
        name = "View",
        type = "companion"}]} {}
-  firrtl.module @DUT() attributes {
+  firrtl.module private @DUT() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
        id = 0 : i64,
@@ -557,14 +557,14 @@ firrtl.circuit "BindInterfaceTest"  attributes {
   {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
      directory = "gct-dir",
      filename = "gct-dir/bindings.sv"}]} {
-  firrtl.module @View_companion() attributes {
+  firrtl.module private @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
        defName = "Foo",
        id = 0 : i64,
        name = "View",
        type = "companion"}]} {}
-  firrtl.module @DUT(
+  firrtl.module private @DUT(
     in %a: !firrtl.uint<8>, out %b: !firrtl.uint<8>) attributes {
       annotations = [{
         class = "sifive.enterprise.grandcentral.ViewAnnotation",
@@ -598,11 +598,11 @@ firrtl.circuit "BindInterfaceTest"  attributes {
 // CHECK-NOT: annotations
 // CHECK-SAME: {
 
-// CHECK: firrtl.module @View_companion()
+// CHECK: firrtl.module private @View_companion()
 // CHECK-NEXT: sv.interface.instance sym @[[INTERFACE_INSTANCE_SYMBOL:.+]]
 
 // Annotations are removed from the module.
-// CHECK: firrtl.module @DUT
+// CHECK: firrtl.module private @DUT
 // CHECK-NOT: annotations
 // CHECK-SAME: %a
 
@@ -635,7 +635,7 @@ firrtl.circuit "MultipleGroundTypeInterfaces" attributes {
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
      directory = "gct-dir",
      filename = "gct-dir/bindings.sv"}]} {
-  firrtl.module @View_companion() attributes {
+  firrtl.module private @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
        defName = "Foo",
@@ -647,7 +647,7 @@ firrtl.circuit "MultipleGroundTypeInterfaces" attributes {
        id = 2 : i64,
        name = "View2",
        type = "companion"}]} {}
-  firrtl.module @DUT() attributes {
+  firrtl.module private @DUT() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
        id = 0 : i64,
@@ -694,13 +694,13 @@ firrtl.circuit "PrefixInterfacesAnnotation"
      name = "MyView"},
     {class = "sifive.enterprise.grandcentral.PrefixInterfacesAnnotation",
      prefix = "PREFIX_"}]}  {
-  firrtl.module @MyView_companion()
+  firrtl.module private @MyView_companion()
     attributes {annotations = [{
       class = "sifive.enterprise.grandcentral.ViewAnnotation",
       id = 0 : i64,
       name = "MyView",
       type = "companion"}]} {}
-  firrtl.module @DUT()
+  firrtl.module private @DUT()
     attributes {annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
        id = 0 : i64,
@@ -767,11 +767,11 @@ firrtl.circuit "NestedInterfaceVectorTypes" attributes {annotations = [
   }
 ]} {
 
-  firrtl.module @View_companion() attributes {annotations = [
+  firrtl.module private @View_companion() attributes {annotations = [
     {class = "sifive.enterprise.grandcentral.ViewAnnotation", defName = "Foo", id = 0, name = "View", type = "companion"}
   ]} {}
 
-  firrtl.module @DUT() attributes {annotations = [
+  firrtl.module private @DUT() attributes {annotations = [
     {class = "sifive.enterprise.grandcentral.ViewAnnotation", id = 0, name = "view", type = "parent"}
   ]} {
     %a0 = firrtl.wire {annotations = [{class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 1}]} : !firrtl.uint<1>
@@ -789,7 +789,7 @@ firrtl.circuit "NestedInterfaceVectorTypes" attributes {annotations = [
 }
 
 // CHECK-LABEL: firrtl.circuit "NestedInterfaceVectorTypes"
-// CHECK:         firrtl.module @View_companion
+// CHECK:         firrtl.module private @View_companion
 // CHECK-NEXT:      sv.interface.instance sym @__View_Foo__ {name = "View"} : !sv.interface<@Foo>
 // CHECK-NEXT:      sv.verbatim "assign {{[{][{]0[}][}]}}.bar[0][0] = {{[{][{]1[}][}]}}.{{[{][{]2[}][}]}};"
 // CHECK-SAME:        #hw.innerNameRef<@View_companion::@__View_Foo__>
@@ -862,11 +862,11 @@ firrtl.circuit "VerbatimTypesInVector" attributes {annotations = [
   }
 ]} {
 
-  firrtl.module @View_companion() attributes {annotations = [
+  firrtl.module private @View_companion() attributes {annotations = [
     {class = "sifive.enterprise.grandcentral.ViewAnnotation", defName = "Foo", id = 0, name = "View", type = "companion"}
   ]} {}
 
-  firrtl.module @DUT() attributes {annotations = [
+  firrtl.module private @DUT() attributes {annotations = [
     {class = "sifive.enterprise.grandcentral.ViewAnnotation", id = 0, name = "view", type = "parent"}
   ]} {
     firrtl.instance View_companion @View_companion()
@@ -897,7 +897,7 @@ firrtl.circuit "ParentIsMainModule" attributes {
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
      directory = "gct-dir",
      filename = "gct-dir/bindings.sv"}]} {
-  firrtl.module @View_companion() attributes {
+  firrtl.module private @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
        defName = "Foo",
@@ -922,7 +922,7 @@ firrtl.circuit "ParentIsMainModule" attributes {
 // Check that this doesn't error out and that the XMR is generated correctly.
 //
 // CHECK-LABEL: firrtl.circuit "ParentIsMainModule"
-// CHECK:       firrtl.module @View_companion
+// CHECK:       firrtl.module private @View_companion
 // CHECK-NEXT:    sv.interface.instance sym @__View_Foo__ {name = "View"} : !sv.interface<@Foo>
 // CHECK-NEXT:    sv.verbatim "assign {{[{][{]0[}][}]}}.foo = {{[{][{]1[}][}]}}.{{[{][{]2[}][}]}};"
 // CHECK-SAME:      #hw.innerNameRef<@View_companion::@__View_Foo__>
@@ -952,11 +952,11 @@ firrtl.circuit "DedupedPath" attributes {
      name = "View"}]} {
   // TODO: Remove @nla_0 and @nla once NLAs are fully migrated to use hierpaths
   // that end at the module.
-  firrtl.hierpath @nla_0 [@DUT::@tile1, @Tile::@w]
-  firrtl.hierpath @nla [@DUT::@tile2, @Tile::@w]
-  firrtl.hierpath @nla_new_0 [@DUT::@tile1, @Tile]
-  firrtl.hierpath @nla_new_1 [@DUT::@tile2, @Tile]
-  firrtl.module @Tile() {
+  firrtl.hierpath private @nla_0 [@DUT::@tile1, @Tile::@w]
+  firrtl.hierpath private @nla [@DUT::@tile2, @Tile::@w]
+  firrtl.hierpath private @nla_new_0 [@DUT::@tile1, @Tile]
+  firrtl.hierpath private @nla_new_1 [@DUT::@tile2, @Tile]
+  firrtl.module private @Tile() {
     %w = firrtl.wire sym @w {
       annotations = [
         {
@@ -986,14 +986,14 @@ firrtl.circuit "DedupedPath" attributes {
           id = 4 : i64
         }]} : !firrtl.uint<8>
   }
-  firrtl.module @MyView_companion() attributes {
+  firrtl.module private @MyView_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
        id = 0 : i64,
        name = "MyView",
        type = "companion"},
       {class = "firrtl.transforms.NoDedupAnnotation"}]} {}
-  firrtl.module @DUT() attributes {
+  firrtl.module private @DUT() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
        id = 0 : i64,
@@ -1016,9 +1016,9 @@ firrtl.circuit "DedupedPath" attributes {
 //
 // CHECK-LABEL:          firrtl.circuit "DedupedPath"
 // CHECK-NOT:              firrtl.hierpath
-// CHECK-NEXT:             firrtl.module @Tile()
+// CHECK-NEXT:             firrtl.module private @Tile()
 // CHECK-NOT:                circt.nonlocal
-// CHECK:                  firrtl.module @MyView_companion
+// CHECK:                  firrtl.module private @MyView_companion
 // CHECK-NEXT:               sv.interface.instance sym @__MyView_Foo__ {name = "MyView"} : !sv.interface<@Foo>
 // CHECK-NEXT{LITERAL}:      sv.verbatim "assign {{0}}.foo = {{1}}.{{2}}.{{3}};"
 // CHECK-SAME:                 symbols = [#hw.innerNameRef<@MyView_companion::@__MyView_Foo__>,
@@ -1040,7 +1040,7 @@ firrtl.circuit "DedupedPath" attributes {
 // CHECK-SAME:                   @DUT,
 // CHECK-SAME:                   #hw.innerNameRef<@DUT::@tile2>,
 // CHECK-SAME:                   #hw.innerNameRef<@Tile::@x>]
-// CHECK:                  firrtl.module @DUT()
+// CHECK:                  firrtl.module private @DUT()
 // CHECK-NOT:                circt.nonlocal
 // CHECK:                  firrtl.module @DedupedPath
 // CHECK-NEXT:               firrtl.instance dut
@@ -1058,10 +1058,10 @@ firrtl.circuit "BlackBoxDirectoryBehavior" attributes {
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
      directory = "gct-dir",
      filename = "gct-dir/bindings.sv"}]} {
-  firrtl.extmodule @BlackBox_DUT() attributes {annotations = [{class = "firrtl.transforms.BlackBoxInlineAnno", name = "DUTOnly.v", text = ""}]}
-  firrtl.extmodule @BlackBox_GCT() attributes {annotations = [{class = "firrtl.transforms.BlackBoxInlineAnno", name = "GCTOnly.v", text = ""}]}
-  firrtl.extmodule @BlackBox_DUTAndGCT() attributes {annotations = [{class = "firrtl.transforms.BlackBoxInlineAnno", name = "DUTAndGCT.v", text = ""}]}
-  firrtl.module @View_companion() attributes {
+  firrtl.extmodule private @BlackBox_DUT() attributes {annotations = [{class = "firrtl.transforms.BlackBoxInlineAnno", name = "DUTOnly.v", text = ""}]}
+  firrtl.extmodule private @BlackBox_GCT() attributes {annotations = [{class = "firrtl.transforms.BlackBoxInlineAnno", name = "GCTOnly.v", text = ""}]}
+  firrtl.extmodule private @BlackBox_DUTAndGCT() attributes {annotations = [{class = "firrtl.transforms.BlackBoxInlineAnno", name = "DUTAndGCT.v", text = ""}]}
+  firrtl.module private @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
        defName = "Foo",
@@ -1071,7 +1071,7 @@ firrtl.circuit "BlackBoxDirectoryBehavior" attributes {
     firrtl.instance bbox1 @BlackBox_GCT()
     firrtl.instance bbox2 @BlackBox_DUTAndGCT()
   }
-  firrtl.module @DUT() attributes {
+  firrtl.module private @DUT() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
        id = 0 : i64,
@@ -1094,10 +1094,10 @@ firrtl.circuit "BlackBoxDirectoryBehavior" attributes {
 // Central.
 //
 // CHECK-LABEL: "BlackBoxDirectoryBehavior"
-// CHECK:      firrtl.extmodule @BlackBox_DUT()
+// CHECK:      firrtl.extmodule private @BlackBox_DUT()
 // CHECK-NOT:    output_file
-// CHECK-NEXT: firrtl.extmodule @BlackBox_GCT() {{.+}} output_file = #hw.output_file<"gct-dir/">
-// CHECK-NEXT: firrtl.extmodule @BlackBox_DUTAndGCT() {{.+}} output_file = #hw.output_file<"gct-dir/">
+// CHECK-NEXT: firrtl.extmodule private @BlackBox_GCT() {{.+}} output_file = #hw.output_file<"gct-dir/">
+// CHECK-NEXT: firrtl.extmodule private @BlackBox_DUTAndGCT() {{.+}} output_file = #hw.output_file<"gct-dir/">
 
 // -----
 
@@ -1291,14 +1291,14 @@ firrtl.circuit "YAMLOutputEmptyInterface" attributes {
      filename = "gct-dir/bindings.sv"},
     {class = "sifive.enterprise.grandcentral.GrandCentralHierarchyFileAnnotation",
      filename = "gct-dir/gct.yaml"}]} {
-  firrtl.module @View_companion() attributes {
+  firrtl.module private @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
        defName = "Foo",
        id = 0 : i64,
        name = "View",
        type = "companion"}]} {}
-  firrtl.module @DUT() attributes {
+  firrtl.module private @DUT() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
        id = 0 : i64,
@@ -1340,7 +1340,7 @@ firrtl.circuit "YAMLOutputTwoInterfaces" attributes {
      filename = "gct-dir/bindings.sv"},
     {class = "sifive.enterprise.grandcentral.GrandCentralHierarchyFileAnnotation",
      filename = "gct-dir/gct.yaml"}]} {
-  firrtl.module @View_companion() attributes {
+  firrtl.module private @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
        defName = "Foo",
@@ -1352,7 +1352,7 @@ firrtl.circuit "YAMLOutputTwoInterfaces" attributes {
        id = 1 : i64,
        name = "View2",
        type = "companion"}]} {}
-  firrtl.module @DUT() attributes {
+  firrtl.module private @DUT() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
        id = 0 : i64,
@@ -1397,14 +1397,14 @@ firrtl.circuit "YAMLOutputScalarField" attributes {
      filename = "gct-dir/bindings.sv"},
     {class = "sifive.enterprise.grandcentral.GrandCentralHierarchyFileAnnotation",
      filename = "gct-dir/gct.yaml"}]} {
-  firrtl.module @View_companion() attributes {
+  firrtl.module private @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
        defName = "Foo",
        id = 0 : i64,
        name = "View",
        type = "companion"}]} {}
-  firrtl.module @DUT() attributes {
+  firrtl.module private @DUT() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
        id = 0 : i64,
@@ -1466,14 +1466,14 @@ firrtl.circuit "YAMLOutputVectorField" attributes {
      filename = "gct-dir/bindings.sv"},
     {class = "sifive.enterprise.grandcentral.GrandCentralHierarchyFileAnnotation",
      filename = "gct-dir/gct.yaml"}]} {
-  firrtl.module @View_companion() attributes {
+  firrtl.module private @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
        defName = "Foo",
        id = 0 : i64,
        name = "View",
        type = "companion"}]} {}
-  firrtl.module @DUT() attributes {
+  firrtl.module private @DUT() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
        id = 0 : i64,
@@ -1522,14 +1522,14 @@ firrtl.circuit "YAMLOutputInstance" attributes {
      filename = "gct-dir/bindings.sv"},
     {class = "sifive.enterprise.grandcentral.GrandCentralHierarchyFileAnnotation",
      filename = "gct-dir/gct.yaml"}]} {
-  firrtl.module @View_companion() attributes {
+  firrtl.module private @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
        defName = "Foo",
        id = 0 : i64,
        name = "View",
        type = "companion"}]} {}
-  firrtl.module @DUT() attributes {
+  firrtl.module private @DUT() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
        id = 0 : i64,
@@ -1575,3 +1575,36 @@ firrtl.circuit "NoInterfaces" attributes {
 // CHECK-LABEL: module {
 // CHECK:         sv.verbatim
 // CHECK-SAME:      []
+
+// -----
+
+firrtl.circuit "Top"  attributes {annotations = [{class = "sifive.enterprise.grandcentral.AugmentedBundleType", defName = "MyInterface", elements = [{class = "sifive.enterprise.grandcentral.AugmentedGroundType", description = "a wire called 'uint'", id = 1 : i64, name = "uint"}, {class = "sifive.enterprise.grandcentral.AugmentedVectorType", description = "a vector called 'vec'", elements = [{class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 2 : i64, name = "vec"}, {class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 3 : i64, name = "vec"}], name = "vec"}, {class = "sifive.enterprise.grandcentral.AugmentedGroundType", description = "a wire called 'uint'", id = 4 : i64, name = "old"}], id = 0 : i64, name = "MyView"}]} {
+  firrtl.extmodule private @Tap(out clock: !firrtl.clock, out a: !firrtl.uint<1>, in b: !firrtl.uint<1>)
+  // CHECK-LABEL: firrtl.module private @MyView_companion
+  firrtl.module private @MyView_companion(in %_gen_uint: !firrtl.ref<uint<1>>, in %_gen_vec: !firrtl.ref<uint<1>>, in %_gen_vec_0: !firrtl.ref<uint<1>>) attributes {annotations = [{class = "sifive.enterprise.grandcentral.ViewAnnotation.companion", id = 0 : i64, name = "MyView", type = "companion"}]} {
+    %0 = firrtl.ref.resolve %_gen_uint : !firrtl.ref<uint<1>>
+    %view_uintrefPort = firrtl.node  %0  {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}, {class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 1 : i64}]} : !firrtl.uint<1>
+    %1 = firrtl.ref.resolve %_gen_vec : !firrtl.ref<uint<1>>
+    %view_vecrefPort = firrtl.node  %1  {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}, {class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 2 : i64}]} : !firrtl.uint<1>
+    %2 = firrtl.ref.resolve %_gen_vec_0 : !firrtl.ref<uint<1>>
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %view_vecrefPort_0 = firrtl.node  %c1_ui1  {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}, {class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 3 : i64}]} : !firrtl.uint<1>
+    %b = firrtl.wire: !firrtl.uint<1>
+    %v1 = firrtl.node sym @v1 %b  {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}, {class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 4 : i64}]} : !firrtl.uint<1>
+    // CHECK:  %0 = sv.interface.instance sym @__MyView_MyInterface__  {name = "MyView"} : !sv.interface<@MyInterface>
+    // CHECK: %view_uintrefPort = firrtl.node %1  : !firrtl.uint<1>
+    // CHECK: %view_vecrefPort = firrtl.node %2  : !firrtl.uint<1>
+    // CHECK: %view_vecrefPort_0 = firrtl.node %c1_ui1 : !firrtl.uint<1>
+    // CHECK{LITERAL}: sv.verbatim "assign {{1}}.uint = {{0}};"(%1) : !firrtl.uint<1> {symbols = [#hw.innerNameRef<@MyView_companion::@__MyView_MyInterface__>]}
+    // CHECK{LITERAL}: sv.verbatim "assign {{1}}.vec[0] = {{0}};"(%2) : !firrtl.uint<1> {symbols = [#hw.innerNameRef<@MyView_companion::@__MyView_MyInterface__>]}
+    // CHECK{LITERAL}: sv.verbatim "assign {{1}}.vec[1] = {{0}};"(%c1_ui1) : !firrtl.uint<1> {symbols = [#hw.innerNameRef<@MyView_companion::@__MyView_MyInterface__>]}
+    // CHECK{LITERAL}: sv.verbatim "assign {{0}}.old = {{1}}.{{2}}.{{3}};" {symbols = [#hw.innerNameRef<@MyView_companion::@__MyView_MyInterface__>, @DUT, #hw.innerNameRef<@DUT::@MyView_companion>, #hw.innerNameRef<@MyView_companion::@v1>]}
+  }
+  firrtl.module private @DUT(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %in_uint: !firrtl.uint<1>, in %in_vec_0: !firrtl.uint<1>, in %in_vec_1: !firrtl.uint<1>, out %out_uint: !firrtl.uint<1>, out %out_vec_0: !firrtl.uint<1>, out %out_vec_1: !firrtl.uint<1>) attributes {annotations = [{class = "sifive.enterprise.grandcentral.ViewAnnotation.parent", id = 0 : i64, name = "MyView", type = "parent"}]} {
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %MyView_companion__gen_uint, %MyView_companion__gen_vec, %MyView_companion__gen_vec_0 = firrtl.instance MyView_companion  @MyView_companion(in _gen_uint: !firrtl.ref<uint<1>>, in _gen_vec: !firrtl.ref<uint<1>>, in _gen_vec_0: !firrtl.ref<uint<1>>)
+  }
+  firrtl.module @Top(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %in_uint: !firrtl.uint<1>, in %in_vec_0: !firrtl.uint<1>, in %in_vec_1: !firrtl.uint<1>, out %out_uint: !firrtl.uint<1>, out %out_vec_0: !firrtl.uint<1>, out %out_vec_1: !firrtl.uint<1>) {
+    %dut_clock, %dut_reset, %dut_in_uint, %dut_in_vec_0, %dut_in_vec_1, %dut_out_uint, %dut_out_vec_0, %dut_out_vec_1 = firrtl.instance dut  @DUT(in clock: !firrtl.clock, in reset: !firrtl.uint<1>, in in_uint: !firrtl.uint<1>, in in_vec_0: !firrtl.uint<1>, in in_vec_1: !firrtl.uint<1>, out out_uint: !firrtl.uint<1>, out out_vec_0: !firrtl.uint<1>, out out_vec_1: !firrtl.uint<1>)
+  }
+}

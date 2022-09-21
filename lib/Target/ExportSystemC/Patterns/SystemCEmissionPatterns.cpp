@@ -18,6 +18,18 @@ using namespace circt;
 using namespace circt::systemc;
 using namespace circt::ExportSystemC;
 
+static void parenthesizeOnLowerPrecedence(InlineEmitter &emitter,
+                                          Precedence prec, EmissionPrinter &p) {
+  bool needParens = emitter.getPrecedence() >= prec;
+  if (needParens)
+    p << "(";
+
+  emitter.emit();
+
+  if (needParens)
+    p << ")";
+}
+
 //===----------------------------------------------------------------------===//
 // Operation emission patterns.
 //===----------------------------------------------------------------------===//
@@ -177,7 +189,93 @@ struct SignalEmitter : OpEmissionPattern<SignalOp> {
     p << " " << op.getName() << ";\n";
   }
 };
+
+/// Emit a systemc.instance.decl operation.
+struct InstanceDeclEmitter : OpEmissionPattern<InstanceDeclOp> {
+  using OpEmissionPattern::OpEmissionPattern;
+
+  MatchResult matchInlinable(Value value) override {
+    if (value.getDefiningOp<InstanceDeclOp>())
+      return Precedence::VAR;
+    return {};
+  }
+
+  void emitInlined(Value value, EmissionPrinter &p) override {
+    p << value.getDefiningOp<InstanceDeclOp>().getName();
+  }
+
+  void emitStatement(InstanceDeclOp op, EmissionPrinter &p) override {
+    p.emitType(op.getInstanceType());
+    p << " " << op.getName() << ";\n";
+  }
+};
 } // namespace
+
+/// Emit a systemc.instance.bind_port operation using the operator() rather than
+/// .bind() variant.
+struct BindPortEmitter : OpEmissionPattern<BindPortOp> {
+  using OpEmissionPattern::OpEmissionPattern;
+
+  void emitStatement(BindPortOp op, EmissionPrinter &p) override {
+    auto instEmitter = p.getInlinable(op.getInstance());
+    bool parenthesize = instEmitter.getPrecedence() > Precedence::MEMBER_ACCESS;
+
+    if (parenthesize)
+      p << "(";
+
+    instEmitter.emit();
+
+    if (parenthesize)
+      p << ")";
+
+    p << "." << op.getPortName() << "(";
+    p.getInlinable(op.getChannel()).emit();
+    p << ");\n";
+  }
+};
+
+/// Emit a systemc.cpp.assign operation.
+struct AssignEmitter : OpEmissionPattern<AssignOp> {
+  using OpEmissionPattern::OpEmissionPattern;
+
+  void emitStatement(AssignOp op, EmissionPrinter &p) override {
+    auto sourceEmitter = p.getInlinable(op.getSource());
+    auto destEmitter = p.getInlinable(op.getDest());
+
+    parenthesizeOnLowerPrecedence(destEmitter, Precedence::ASSIGN, p);
+    p << " = ";
+    parenthesizeOnLowerPrecedence(sourceEmitter, Precedence::ASSIGN, p);
+    p << ";\n";
+  }
+};
+
+/// Emit a systemc.cpp.variable operation.
+struct VariableEmitter : OpEmissionPattern<VariableOp> {
+  using OpEmissionPattern::OpEmissionPattern;
+
+  MatchResult matchInlinable(Value value) override {
+    if (value.getDefiningOp<VariableOp>())
+      return Precedence::VAR;
+    return {};
+  }
+
+  void emitInlined(Value value, EmissionPrinter &p) override {
+    p << value.getDefiningOp<VariableOp>().getName();
+  }
+
+  void emitStatement(VariableOp op, EmissionPrinter &p) override {
+    p.emitType(op.getVariable().getType());
+    p << " " << op.getName();
+
+    if (op.getInit()) {
+      p << " = ";
+      auto initEmitter = p.getInlinable(op.getInit());
+      parenthesizeOnLowerPrecedence(initEmitter, Precedence::ASSIGN, p);
+    }
+
+    p << ";\n";
+  }
+};
 
 //===----------------------------------------------------------------------===//
 // Type emission patterns.
@@ -189,9 +287,35 @@ namespace {
 template <typename Ty, const char Mn[]>
 struct SignalTypeEmitter : public TypeEmissionPattern<Ty> {
   void emitType(Ty type, EmissionPrinter &p) override {
-    p << "sc_core::" << Mn << "<";
+    p << Mn << "<";
     p.emitType(type.getBaseType());
     p << ">";
+  }
+};
+
+/// Emit a systemc::ModuleType by just printing the module name as we are
+/// dealing with a nominal type system.
+struct ModuleTypeEmitter : public TypeEmissionPattern<ModuleType> {
+  void emitType(ModuleType type, EmissionPrinter &p) override {
+    p << type.getModuleName().getValue();
+  }
+};
+
+/// Emit SystemC integer and bit-vector types with known-at-compile-time
+/// bit-width according to the specification listed in their class description.
+template <typename Ty>
+struct IntegerTypeEmitter : public TypeEmissionPattern<Ty> {
+  void emitType(Ty type, EmissionPrinter &p) override {
+    p << "sc_" << Ty::getMnemonic() << "<" << type.getWidth() << ">";
+  }
+};
+
+/// Emit SystemC integer and bit-vector types without known bit-width according
+/// to the specification listed in their class description.
+template <typename Ty>
+struct DynIntegerTypeEmitter : public TypeEmissionPattern<Ty> {
+  void emitType(Ty type, EmissionPrinter &p) override {
+    p << "sc_" << Ty::getMnemonic();
   }
 };
 } // namespace
@@ -204,7 +328,8 @@ void circt::ExportSystemC::populateSystemCOpEmitters(
     OpEmissionPatternSet &patterns, MLIRContext *context) {
   patterns.add<BuiltinModuleEmitter, SCModuleEmitter, SignalWriteEmitter,
                SignalReadEmitter, CtorEmitter, SCFuncEmitter, MethodEmitter,
-               ThreadEmitter, SignalEmitter>(context);
+               ThreadEmitter, SignalEmitter, InstanceDeclEmitter,
+               BindPortEmitter, AssignEmitter, VariableEmitter>(context);
 }
 
 void circt::ExportSystemC::populateSystemCTypeEmitters(
@@ -218,6 +343,20 @@ void circt::ExportSystemC::populateSystemCTypeEmitters(
   patterns.add<SignalTypeEmitter<InputType, in>, 
                SignalTypeEmitter<InOutType, inout>,
                SignalTypeEmitter<OutputType, out>,
-               SignalTypeEmitter<SignalType, signal>>();
+               SignalTypeEmitter<SignalType, signal>,
+               IntegerTypeEmitter<IntType>,
+               IntegerTypeEmitter<UIntType>,
+               IntegerTypeEmitter<BigIntType>,
+               IntegerTypeEmitter<BigUIntType>,
+               IntegerTypeEmitter<BitVectorType>,
+               IntegerTypeEmitter<LogicVectorType>,
+               DynIntegerTypeEmitter<IntBaseType>,
+               DynIntegerTypeEmitter<UIntBaseType>,
+               DynIntegerTypeEmitter<SignedType>,
+               DynIntegerTypeEmitter<UnsignedType>,
+               DynIntegerTypeEmitter<BitVectorBaseType>,
+               DynIntegerTypeEmitter<LogicVectorBaseType>,
+               DynIntegerTypeEmitter<LogicType>,
+               ModuleTypeEmitter>();
   // clang-format on
 }

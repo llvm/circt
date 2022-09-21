@@ -70,7 +70,7 @@ template <typename TGroup>
 TGroup createGroup(OpBuilder &builder, calyx::ComponentOp compOp, Location loc,
                    Twine uniqueName) {
   mlir::IRRewriter::InsertionGuard guard(builder);
-  builder.setInsertionPointToEnd(compOp.getWiresOp().getBody());
+  builder.setInsertionPointToEnd(compOp.getWiresOp().getBodyBlock());
   return builder.create<TGroup>(loc, uniqueName.str());
 }
 
@@ -357,7 +357,7 @@ public:
   TLibraryOp getNewLibraryOpInstance(OpBuilder &builder, Location loc,
                                      TypeRange resTypes) {
     mlir::IRRewriter::InsertionGuard guard(builder);
-    Block *body = component.getBody();
+    Block *body = component.getBodyBlock();
     builder.setInsertionPoint(body, body->begin());
     auto name = TLibraryOp::getOperationName().split(".").second;
     return builder.create<TLibraryOp>(loc, getUniqueName(name), resTypes);

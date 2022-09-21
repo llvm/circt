@@ -16,7 +16,7 @@ using namespace circt::esi;
 
 LogicalResult WrapValidReadyOp::fold(ArrayRef<Attribute> operands,
                                      SmallVectorImpl<OpFoldResult> &results) {
-  if (!chanOutput().getUsers().empty())
+  if (!getChanOutput().getUsers().empty())
     return failure();
   results.push_back(mlir::UnitAttr::get(getContext()));
   results.push_back(IntegerAttr::get(IntegerType::get(getContext(), 1), 1));

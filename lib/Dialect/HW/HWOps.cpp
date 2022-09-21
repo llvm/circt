@@ -178,6 +178,39 @@ StringAttr hw::getResultSym(Operation *op, unsigned i) {
   return sym;
 }
 
+HWModulePortAccessor::HWModulePortAccessor(Location loc,
+                                           const ModulePortInfo &info,
+                                           Region &bodyRegion)
+    : info(info) {
+  inputArgs.resize(info.inputs.size());
+  for (auto [i, barg] : llvm::enumerate(bodyRegion.getArguments())) {
+    inputIdx[info.inputs[i].name.str()] = i;
+    inputArgs[i] = barg;
+  }
+
+  outputOperands.resize(info.outputs.size());
+  for (auto [i, outputInfo] : llvm::enumerate(info.outputs)) {
+    outputIdx[outputInfo.name.str()] = i;
+  }
+}
+
+void HWModulePortAccessor::setOutput(unsigned i, Value v) {
+  assert(outputOperands.size() > i && "invalid output index");
+  assert(outputOperands[i] == Value() && "output already set");
+  outputOperands[i] = v;
+}
+
+Value HWModulePortAccessor::getInput(unsigned i) {
+  assert(inputArgs.size() > i && "invalid input index");
+  return inputArgs[i];
+}
+Value HWModulePortAccessor::getInput(StringRef name) {
+  return getInput(inputIdx.find(name.str())->second);
+}
+void HWModulePortAccessor::setOutput(StringRef name, Value v) {
+  setOutput(outputIdx.find(name.str())->second, v);
+}
+
 //===----------------------------------------------------------------------===//
 // ConstantOp
 //===----------------------------------------------------------------------===//
@@ -201,7 +234,7 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
 
 LogicalResult ConstantOp::verify() {
   // If the result type has a bitwidth, then the attribute must match its width.
-  if (getValue().getBitWidth() != getType().getWidth())
+  if (getValue().getBitWidth() != getType().cast<IntegerType>().getWidth())
     return emitError(
         "hw.constant attribute bitwidth doesn't match return type");
 
@@ -241,7 +274,7 @@ void ConstantOp::getAsmResultNames(
   auto intCst = getValue();
 
   // Sugar i1 constants with 'true' and 'false'.
-  if (intTy.getWidth() == 1)
+  if (intTy.cast<IntegerType>().getWidth() == 1)
     return setNameFn(getResult(), intCst.isZero() ? "false" : "true");
 
   // Otherwise, build a complex name with the value and type.
@@ -551,8 +584,8 @@ void hw::modifyModulePorts(
 void HWModuleOp::build(OpBuilder &builder, OperationState &result,
                        StringAttr name, const ModulePortInfo &ports,
                        ArrayAttr parameters,
-                       ArrayRef<NamedAttribute> attributes,
-                       StringAttr comment) {
+                       ArrayRef<NamedAttribute> attributes, StringAttr comment,
+                       bool shouldEnsureTerminator) {
   buildModule(builder, result, name, ports, parameters, attributes, comment);
 
   // Create a region and a block for the body.
@@ -564,7 +597,8 @@ void HWModuleOp::build(OpBuilder &builder, OperationState &result,
   for (auto elt : ports.inputs)
     body->addArgument(elt.type, builder.getUnknownLoc());
 
-  HWModuleOp::ensureTerminator(*bodyRegion, builder, result.location);
+  if (shouldEnsureTerminator)
+    HWModuleOp::ensureTerminator(*bodyRegion, builder, result.location);
 }
 
 void HWModuleOp::build(OpBuilder &builder, OperationState &result,
@@ -574,6 +608,23 @@ void HWModuleOp::build(OpBuilder &builder, OperationState &result,
                        StringAttr comment) {
   build(builder, result, name, ModulePortInfo(ports), parameters, attributes,
         comment);
+}
+
+void HWModuleOp::build(OpBuilder &builder, OperationState &odsState,
+                       StringAttr name, const ModulePortInfo &ports,
+                       HWModuleBuilder modBuilder, ArrayAttr parameters,
+                       ArrayRef<NamedAttribute> attributes,
+                       StringAttr comment) {
+  build(builder, odsState, name, ports, parameters, attributes, comment,
+        /*shouldEnsureTerminator=*/false);
+  auto *bodyRegion = odsState.regions[0].get();
+  OpBuilder::InsertionGuard guard(builder);
+  auto accessor = HWModulePortAccessor(odsState.location, ports, *bodyRegion);
+  builder.setInsertionPointToEnd(&bodyRegion->front());
+  modBuilder(builder, accessor);
+  // Create output operands.
+  llvm::SmallVector<Value> outputOperands = accessor.getOutputOperands();
+  builder.create<hw::OutputOp>(odsState.location, outputOperands);
 }
 
 void HWModuleOp::modifyPorts(
@@ -628,6 +679,9 @@ void HWModuleExternOp::modifyPorts(
                         eraseOutputs);
 }
 
+void HWModuleExternOp::appendOutputs(
+    ArrayRef<std::pair<StringAttr, Value>> outputs) {}
+
 void HWModuleGeneratedOp::build(OpBuilder &builder, OperationState &result,
                                 FlatSymbolRefAttr genKind, StringAttr name,
                                 const ModulePortInfo &ports,
@@ -655,6 +709,9 @@ void HWModuleGeneratedOp::modifyPorts(
   hw::modifyModulePorts(*this, insertInputs, insertOutputs, eraseInputs,
                         eraseOutputs);
 }
+
+void HWModuleGeneratedOp::appendOutputs(
+    ArrayRef<std::pair<StringAttr, Value>> outputs) {}
 
 /// Return an encapsulated set of information about input and output ports of
 /// the specified module or instance.  The input ports always come before the
@@ -1665,6 +1722,12 @@ LogicalResult ArrayCreateOp::verify() {
   return success();
 }
 
+Value ArrayCreateOp::getUniformElement() {
+  if (!getInputs().empty() && llvm::all_equal(getInputs()))
+    return getInputs()[0];
+  return {};
+}
+
 static Optional<uint64_t> getUIntFromValue(Value value) {
   auto idxOp = dyn_cast_or_null<ConstantOp>(value.getDefiningOp());
   if (!idxOp)
@@ -2242,12 +2305,17 @@ void ArrayGetOp::build(OpBuilder &builder, OperationState &result, Value input,
 }
 
 // An array_get of an array_create with a constant index can just be the
-// array_create operand at the constant index.
+// array_create operand at the constant index. If the array_create has a single
+// uniform value for each element, just return that value regardless of the
+// index.
 OpFoldResult ArrayGetOp::fold(ArrayRef<Attribute> operands) {
   auto inputCreate =
       dyn_cast_or_null<ArrayCreateOp>(getInput().getDefiningOp());
   if (!inputCreate)
     return {};
+
+  if (auto uniformValue = inputCreate.getUniformElement())
+    return uniformValue;
 
   IntegerAttr constIdx = operands[1].dyn_cast_or_null<IntegerAttr>();
   if (!constIdx || constIdx.getValue().getBitWidth() > 64)

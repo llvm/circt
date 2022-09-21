@@ -42,6 +42,7 @@
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
 #include "llvm/ADT/APSInt.h"
+#include "llvm/ADT/BitVector.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Parallel.h"
 
@@ -106,7 +107,9 @@ static bool isOneDimVectorType(FIRRTLType type) {
   return TypeSwitch<FIRRTLType, bool>(type)
       .Case<BundleType>([&](auto bundle) { return false; })
       .Case<FVectorType>([&](FVectorType vector) {
-        return vector.getElementType().isGround();
+        // When the size is 1, lower the vector into a scalar.
+        return vector.getElementType().isGround() &&
+               vector.getNumElements() > 1;
       })
       .Default([](auto groundType) { return true; });
 }
@@ -435,7 +438,9 @@ private:
 /// unless `preservePublicTypes` flag is disabled.
 PreserveAggregate::PreserveMode
 TypeLoweringVisitor::getPreservatinoModeForModule(FModuleLike module) {
-
+  // We cannot preserve external module ports.
+  if (!isa<FModuleOp>(module))
+    return PreserveAggregate::None;
   if (aggregatePreservationMode != PreserveAggregate::None &&
       preservePublicTypes && cast<hw::HWModuleLike>(*module).isPublic())
     return PreserveAggregate::None;
@@ -793,6 +798,10 @@ bool TypeLoweringVisitor::visitDecl(MemOp op) {
   // Wires for old ports
   for (unsigned int index = 0, end = op.getNumResults(); index < end; ++index) {
     auto result = op.getResult(index);
+    if (op.getPortKind(index) == MemOp::PortKind::Debug) {
+      op.emitOpError("cannot lower memory with debug port");
+      return false;
+    }
     auto wire = builder->create<WireOp>(
         result.getType(),
         (op.getName() + "_" + op.getPortName(index).getValue()).str());
@@ -917,7 +926,7 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
   lowerBlock(body);
 
   // Lower the module block arguments.
-  SmallVector<unsigned> argsToRemove;
+  llvm::BitVector argsToRemove;
   auto newArgs = module.getPorts();
   for (size_t argIndex = 0, argsRemoved = 0; argIndex < newArgs.size();
        ++argIndex) {
@@ -925,15 +934,17 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
     if (lowerArg(module, argIndex, argsRemoved, newArgs, lowerings)) {
       auto arg = module.getArgument(argIndex);
       processUsers(arg, lowerings);
-      argsToRemove.push_back(argIndex);
+      argsToRemove.push_back(true);
       ++argsRemoved;
-    }
+    } else
+      argsToRemove.push_back(false);
     // lowerArg might have invalidated any reference to newArgs, be careful
   }
 
   // Remove block args that have been lowered.
   body->eraseArguments(argsToRemove);
-  for (auto deadArg : llvm::reverse(argsToRemove))
+  for (auto deadArg = argsToRemove.find_last(); deadArg != -1;
+       deadArg = argsToRemove.find_prev(deadArg))
     newArgs.erase(newArgs.begin() + deadArg);
 
   SmallVector<NamedAttribute, 8> newModuleAttrs;

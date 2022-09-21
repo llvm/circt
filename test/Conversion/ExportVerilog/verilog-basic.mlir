@@ -465,7 +465,7 @@ hw.module @Print(%clock: i1, %reset: i1, %a: i4, %b: i4) {
   %0 = comb.concat %false, %a : i1, i4
   %1 = comb.shl %0, %c1_i5 : i5
   sv.always posedge %clock  {
-    %2 = sv.macro.ref<"PRINTF_COND_"> : i1
+    %2 = sv.macro.ref< "PRINTF_COND_" > : i1
     %3 = comb.and %2, %reset : i1
     sv.if %3  {
       sv.fwrite %fd, "Hi %x %x\0A"(%1, %b) : i5, i4

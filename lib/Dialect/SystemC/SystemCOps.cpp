@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/SystemC/SystemCOps.h"
+#include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/HW/ModuleImplementation.h"
 #include "mlir/IR/FunctionImplementation.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -154,45 +155,46 @@ static Type wrapPortType(Type type, hw::PortDirection direction) {
   case hw::PortDirection::OUTPUT:
     return OutputType::get(type);
   }
+  llvm_unreachable("Impossible port direction");
 }
 
-void SCModuleOp::build(OpBuilder &builder, OperationState &result,
+void SCModuleOp::build(OpBuilder &odsBuilder, OperationState &odsState,
                        StringAttr name, ArrayAttr portNames,
                        ArrayRef<Type> portTypes,
                        ArrayRef<NamedAttribute> attributes) {
-  result.addAttribute(getPortNamesAttrName(result.name), portNames);
-  Region *region = result.addRegion();
+  odsState.addAttribute(getPortNamesAttrName(odsState.name), portNames);
+  Region *region = odsState.addRegion();
 
-  auto moduleType = builder.getFunctionType(portTypes, {});
-  result.addAttribute(getTypeAttrName(), TypeAttr::get(moduleType));
+  auto moduleType = odsBuilder.getFunctionType(portTypes, {});
+  odsState.addAttribute(getTypeAttrName(), TypeAttr::get(moduleType));
 
-  result.addAttribute(SymbolTable::getSymbolAttrName(), name);
+  odsState.addAttribute(SymbolTable::getSymbolAttrName(), name);
   region->push_back(new Block);
   region->addArguments(
       portTypes,
-      SmallVector<Location>(portTypes.size(), builder.getUnknownLoc()));
-  result.addAttributes(attributes);
+      SmallVector<Location>(portTypes.size(), odsBuilder.getUnknownLoc()));
+  odsState.addAttributes(attributes);
 }
 
-void SCModuleOp::build(OpBuilder &builder, OperationState &result,
+void SCModuleOp::build(OpBuilder &odsBuilder, OperationState &odsState,
                        StringAttr name, ArrayRef<hw::PortInfo> ports,
                        ArrayRef<NamedAttribute> attributes) {
-  MLIRContext *ctxt = builder.getContext();
+  MLIRContext *ctxt = odsBuilder.getContext();
   SmallVector<Attribute> portNames;
   SmallVector<Type> portTypes;
   for (auto port : ports) {
     portNames.push_back(StringAttr::get(ctxt, port.getName()));
     portTypes.push_back(wrapPortType(port.type, port.direction));
   }
-  build(builder, result, name, ArrayAttr::get(ctxt, portNames), portTypes);
+  build(odsBuilder, odsState, name, ArrayAttr::get(ctxt, portNames), portTypes);
 }
 
-void SCModuleOp::build(OpBuilder &builder, OperationState &result,
+void SCModuleOp::build(OpBuilder &odsBuilder, OperationState &odsState,
                        StringAttr name, const hw::ModulePortInfo &ports,
                        ArrayRef<NamedAttribute> attributes) {
   SmallVector<hw::PortInfo> portInfos(ports.inputs);
   portInfos.append(ports.outputs);
-  build(builder, result, name, portInfos, attributes);
+  build(odsBuilder, odsState, name, portInfos, attributes);
 }
 
 void SCModuleOp::getAsmBlockArgumentNames(mlir::Region &region,
@@ -221,9 +223,8 @@ LogicalResult SCModuleOp::verify() {
           "module port must be of type 'sc_in', 'sc_out', or 'sc_inout'");
   }
 
-  ArrayAttr portNames = getPortNames();
-  for (auto *iter = portNames.begin(); iter != portNames.end(); ++iter) {
-    if (iter->cast<StringAttr>().getValue().empty())
+  for (auto portName : getPortNames()) {
+    if (portName.cast<StringAttr>().getValue().empty())
       return emitOpError("port name must not be empty");
   }
 
@@ -291,6 +292,36 @@ LogicalResult SCModuleOp::verifyRegions() {
   return success();
 }
 
+CtorOp SCModuleOp::getOrCreateCtor() {
+  CtorOp ctor;
+  getBody().walk([&](Operation *op) {
+    if ((ctor = dyn_cast<CtorOp>(op)))
+      return WalkResult::interrupt();
+
+    return WalkResult::skip();
+  });
+
+  if (ctor)
+    return ctor;
+
+  return OpBuilder(getBody()).create<CtorOp>(getLoc());
+}
+
+DestructorOp SCModuleOp::getOrCreateDestructor() {
+  DestructorOp destructor;
+  getBody().walk([&](Operation *op) {
+    if ((destructor = dyn_cast<DestructorOp>(op)))
+      return WalkResult::interrupt();
+
+    return WalkResult::skip();
+  });
+
+  if (destructor)
+    return destructor;
+
+  return OpBuilder::atBlockEnd(getBodyBlock()).create<DestructorOp>(getLoc());
+}
+
 //===----------------------------------------------------------------------===//
 // SignalOp
 //===----------------------------------------------------------------------===//
@@ -321,6 +352,252 @@ void SCFuncOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 LogicalResult SCFuncOp::verify() {
   if (getBody().getNumArguments() != 0)
     return emitOpError("must not have any arguments");
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// InstanceDeclOp
+//===----------------------------------------------------------------------===//
+
+void InstanceDeclOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getInstanceHandle(), getName());
+}
+
+Operation *InstanceDeclOp::getReferencedModule(const hw::HWSymbolCache *cache) {
+  if (cache)
+    if (auto *result = cache->getDefinition(getModuleNameAttr()))
+      return result;
+
+  auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
+  return topLevelModuleOp.lookupSymbol(getModuleName());
+}
+
+Operation *InstanceDeclOp::getReferencedModule() {
+  return getReferencedModule(/*cache=*/nullptr);
+}
+
+LogicalResult
+InstanceDeclOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto *module =
+      symbolTable.lookupNearestSymbolFrom(*this, getModuleNameAttr());
+  if (module == nullptr)
+    return emitError("cannot find module definition '")
+           << getModuleName() << "'";
+
+  auto emitError = [&](const std::function<void(InFlightDiagnostic & diag)> &fn)
+      -> LogicalResult {
+    auto diag = emitOpError();
+    fn(diag);
+    diag.attachNote(module->getLoc()) << "module declared here";
+    return failure();
+  };
+
+  // It must be a systemc module.
+  if (!isa<SCModuleOp>(module))
+    return emitError([&](auto &diag) {
+      diag << "symbol reference '" << getModuleName()
+           << "' isn't a systemc module";
+    });
+
+  auto scModule = cast<SCModuleOp>(module);
+
+  // Check that the module name of the symbol and instance type match.
+  if (scModule.getModuleName() != getInstanceType().getModuleName())
+    return emitError([&](auto &diag) {
+      diag << "module names must match; expected '" << scModule.getModuleName()
+           << "' but got '" << getInstanceType().getModuleName().getValue()
+           << "'";
+    });
+
+  // Check that port types and names are consistent with the referenced module.
+  ArrayRef<ModuleType::PortInfo> ports = getInstanceType().getPorts();
+  ArrayAttr modArgNames = scModule.getPortNames();
+  auto numPorts = ports.size();
+  auto expectedPortTypes = scModule.getArgumentTypes();
+
+  if (expectedPortTypes.size() != numPorts)
+    return emitError([&](auto &diag) {
+      diag << "has a wrong number of ports; expected "
+           << expectedPortTypes.size() << " but got " << numPorts;
+    });
+
+  for (size_t i = 0; i != numPorts; ++i) {
+    if (ports[i].type != expectedPortTypes[i]) {
+      return emitError([&](auto &diag) {
+        diag << "port type #" << i << " must be " << expectedPortTypes[i]
+             << ", but got " << ports[i].type;
+      });
+    }
+
+    if (ports[i].name != modArgNames[i])
+      return emitError([&](auto &diag) {
+        diag << "port name #" << i << " must be " << modArgNames[i]
+             << ", but got " << ports[i].name;
+      });
+  }
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// DestructorOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult DestructorOp::verify() {
+  if (getBody().getNumArguments() != 0)
+    return emitOpError("must not have any arguments");
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// BindPortOp
+//===----------------------------------------------------------------------===//
+
+ParseResult BindPortOp::parse(OpAsmParser &parser, OperationState &result) {
+  OpAsmParser::UnresolvedOperand instance, channel;
+  std::string portName;
+  if (parser.parseOperand(instance) || parser.parseLSquare() ||
+      parser.parseString(&portName))
+    return failure();
+
+  auto portNameLoc = parser.getCurrentLocation();
+
+  if (parser.parseRSquare() || parser.parseKeyword("to") ||
+      parser.parseOperand(channel))
+    return failure();
+
+  if (parser.parseOptionalAttrDict(result.attributes))
+    return failure();
+
+  auto typeListLoc = parser.getCurrentLocation();
+  SmallVector<Type> types;
+  if (parser.parseColonTypeList(types))
+    return failure();
+
+  if (types.size() != 2)
+    return parser.emitError(typeListLoc,
+                            "expected a list of exactly 2 types, but got ")
+           << types.size();
+
+  if (parser.resolveOperand(instance, types[0], result.operands))
+    return failure();
+  if (parser.resolveOperand(channel, types[1], result.operands))
+    return failure();
+
+  if (auto moduleType = types[0].dyn_cast<ModuleType>()) {
+    auto ports = moduleType.getPorts();
+    uint64_t index = 0;
+    for (auto port : ports) {
+      if (port.name == portName)
+        break;
+      index++;
+    }
+    if (index >= ports.size())
+      return parser.emitError(portNameLoc, "port name \"")
+             << portName << "\" not found in module";
+
+    result.addAttribute("portId", parser.getBuilder().getIndexAttr(index));
+
+    return success();
+  }
+
+  return failure();
+}
+
+void BindPortOp::print(OpAsmPrinter &p) {
+  p << " " << getInstance() << "["
+    << getInstance()
+           .getType()
+           .cast<ModuleType>()
+           .getPorts()[getPortId().getZExtValue()]
+           .name
+    << "] to " << getChannel();
+  p.printOptionalAttrDict((*this)->getAttrs(), {"portId"});
+  p << " : " << getInstance().getType() << ", " << getChannel().getType();
+}
+
+LogicalResult BindPortOp::verify() {
+  auto ports = getInstance().getType().cast<ModuleType>().getPorts();
+  if (getPortId().getZExtValue() >= ports.size())
+    return emitOpError("port #")
+           << getPortId().getZExtValue() << " does not exist, there are only "
+           << ports.size() << " ports";
+
+  // Verify that the base types match.
+  Type portType = ports[getPortId().getZExtValue()].type;
+  Type channelType = getChannel().getType();
+  if (getSignalBaseType(portType) != getSignalBaseType(channelType))
+    return emitOpError() << portType << " port cannot be bound to "
+                         << channelType << " channel due to base type mismatch";
+
+  // Verify that the port/channel directions are valid.
+  if ((portType.isa<InputType>() && channelType.isa<OutputType>()) ||
+      (portType.isa<OutputType>() && channelType.isa<InputType>()))
+    return emitOpError() << portType << " port cannot be bound to "
+                         << channelType
+                         << " channel due to port direction mismatch";
+
+  return success();
+}
+
+StringRef BindPortOp::getPortName() {
+  return getInstance()
+      .getType()
+      .cast<ModuleType>()
+      .getPorts()[getPortId().getZExtValue()]
+      .name.getValue();
+}
+
+//===----------------------------------------------------------------------===//
+// VariableOp
+//===----------------------------------------------------------------------===//
+
+void VariableOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getVariable(), getName());
+}
+
+ParseResult VariableOp::parse(OpAsmParser &parser, OperationState &result) {
+  StringAttr nameAttr;
+  if (parseImplicitSSAName(parser, nameAttr))
+    return failure();
+  result.addAttribute("name", nameAttr);
+
+  OpAsmParser::UnresolvedOperand init;
+  auto initResult = parser.parseOptionalOperand(init);
+
+  if (parser.parseOptionalAttrDict(result.attributes))
+    return failure();
+
+  Type variableType;
+  if (parser.parseColonType(variableType))
+    return failure();
+
+  if (initResult.has_value()) {
+    if (parser.resolveOperand(init, variableType, result.operands))
+      return failure();
+  }
+  result.addTypes({variableType});
+
+  return success();
+}
+
+void VariableOp::print(::mlir::OpAsmPrinter &p) {
+  p << " ";
+
+  if (getInit())
+    p << getInit() << " ";
+
+  p.printOptionalAttrDict(getOperation()->getAttrs(), {"name"});
+  p << ": " << getVariable().getType();
+}
+
+LogicalResult VariableOp::verify() {
+  if (getInit() && getInit().getType() != getVariable().getType())
+    return emitOpError(
+               "'init' and 'variable' must have the same type, but got ")
+           << getInit().getType() << " and " << getVariable().getType();
 
   return success();
 }

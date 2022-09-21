@@ -115,6 +115,8 @@ jobs:
             -DLLVM_ENABLE_TERMINFO=OFF \
             -DLLVM_STATIC_LINK_CXX_STDLIB=ON \
             -DLLVM_PARALLEL_LINK_JOBS=1 \
+            -DCIRCT_RELEASE_TAG_ENABLED=ON \
+            -DCIRCT_RELEASE_TAG=${{ github.ref_name }} \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=OFF
           ninja
           ninja check-circt

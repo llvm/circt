@@ -24,6 +24,7 @@
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/PatternMatch.h"
+#include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/STLExtras.h"
@@ -41,18 +42,17 @@ using namespace chirrtl;
 // Utilities
 //===----------------------------------------------------------------------===//
 
-/// Remove elements at the specified indices from the input array, returning the
-/// elements not mentioned.  The indices array is expected to be sorted and
-/// unique.
+/// Remove elements from the input array corresponding to set bits in
+/// `indicesToDrop`, returning the elements not mentioned.
 template <typename T>
 static SmallVector<T>
-removeElementsAtIndices(ArrayRef<T> input, ArrayRef<unsigned> indicesToDrop) {
-#ifndef NDEBUG // Check sortedness.
+removeElementsAtIndices(ArrayRef<T> input,
+                        const llvm::BitVector &indicesToDrop) {
+#ifndef NDEBUG
   if (!input.empty()) {
-    for (size_t i = 1, e = indicesToDrop.size(); i != e; ++i)
-      assert(indicesToDrop[i - 1] < indicesToDrop[i] &&
-             "indicesToDrop isn't sorted and unique");
-    assert(indicesToDrop.back() < input.size() && "index out of range");
+    int lastIndex = indicesToDrop.find_last();
+    if (lastIndex >= 0)
+      assert((size_t)lastIndex < input.size() && "index out of range");
   }
 #endif
 
@@ -64,9 +64,9 @@ removeElementsAtIndices(ArrayRef<T> input, ArrayRef<unsigned> indicesToDrop) {
   // Copy over the live chunks.
   size_t lastCopied = 0;
   SmallVector<T> result;
-  result.reserve(input.size() - indicesToDrop.size());
+  result.reserve(input.size() - indicesToDrop.count());
 
-  for (unsigned indexToDrop : indicesToDrop) {
+  for (unsigned indexToDrop : indicesToDrop.set_bits()) {
     // If we skipped over some valid elements, copy them over.
     if (indexToDrop > lastCopied) {
       result.append(input.begin() + lastCopied, input.begin() + indexToDrop);
@@ -93,6 +93,46 @@ bool firrtl::isDuplexValue(Value val) {
           [](auto op) { return isDuplexValue(op.getInput()); })
       .Case<RegOp, RegResetOp, WireOp>([](auto) { return true; })
       .Default([](auto) { return false; });
+}
+
+/// Return the kind of port this is given the port type from a 'mem' decl.
+static MemOp::PortKind getMemPortKindFromType(FIRRTLType type) {
+  constexpr unsigned int addr = 1 << 0;
+  constexpr unsigned int en = 1 << 1;
+  constexpr unsigned int clk = 1 << 2;
+  constexpr unsigned int data = 1 << 3;
+  constexpr unsigned int mask = 1 << 4;
+  constexpr unsigned int rdata = 1 << 5;
+  constexpr unsigned int wdata = 1 << 6;
+  constexpr unsigned int wmask = 1 << 7;
+  constexpr unsigned int wmode = 1 << 8;
+  constexpr unsigned int def = 1 << 9;
+  // Get the kind of port based on the fields of the Bundle.
+  auto portType = type.dyn_cast<BundleType>();
+  if (!portType)
+    return MemOp::PortKind::Debug;
+  unsigned fields = 0;
+  // Get the kind of port based on the fields of the Bundle.
+  for (auto elem : portType.getElements()) {
+    fields |= llvm::StringSwitch<unsigned>(elem.name.getValue())
+                  .Case("addr", addr)
+                  .Case("en", en)
+                  .Case("clk", clk)
+                  .Case("data", data)
+                  .Case("mask", mask)
+                  .Case("rdata", rdata)
+                  .Case("wdata", wdata)
+                  .Case("wmask", wmask)
+                  .Case("wmode", wmode)
+                  .Default(def);
+  }
+  if (fields == (addr | en | clk | data))
+    return MemOp::PortKind::Read;
+  if (fields == (addr | en | clk | data | mask))
+    return MemOp::PortKind::Write;
+  if (fields == (addr | en | clk | wdata | wmask | rdata | wmode))
+    return MemOp::PortKind::ReadWrite;
+  return MemOp::PortKind::Debug;
 }
 
 Flow firrtl::swapFlow(Flow flow) {
@@ -139,7 +179,12 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
           return accumulatedFlow;
         return swap();
       })
-      .Case<MemOp>([&](auto op) { return swap(); })
+      .Case<MemOp>([&](auto op) {
+        // only debug ports with RefType have source flow.
+        if (val.getType().isa<RefType>())
+          return Flow::Source;
+        return swap();
+      })
       // Anything else acts like a universal source.
       .Default([&](auto) { return accumulatedFlow; });
 }
@@ -574,10 +619,9 @@ void FMemModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
   (*this).setPortSymbols(newSyms);
 }
 
-/// Erases the ports listed in `portIndices`.  `portIndices` is expected to
-/// be in order and unique.
-void FModuleOp::erasePorts(ArrayRef<unsigned> portIndices) {
-  if (portIndices.empty())
+/// Erases the ports that have their corresponding bit set in `portIndices`.
+void FModuleOp::erasePorts(const llvm::BitVector &portIndices) {
+  if (portIndices.none())
     return;
 
   // Drop the direction markers for dead ports.
@@ -1219,8 +1263,11 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
 /// Builds a new `InstanceOp` with the ports listed in `portIndices` erased, and
 /// updates any users of the remaining ports to point at the new instance.
 InstanceOp InstanceOp::erasePorts(OpBuilder &builder,
-                                  ArrayRef<unsigned> portIndices) {
-  if (portIndices.empty())
+                                  const llvm::BitVector &portIndices) {
+  assert(portIndices.size() >= getNumResults() &&
+         "portIndices is not at least as large as getNumResults()");
+
+  if (portIndices.none())
     return *this;
 
   SmallVector<Type> newResultTypes = removeElementsAtIndices<Type>(
@@ -1237,10 +1284,9 @@ InstanceOp InstanceOp::erasePorts(OpBuilder &builder,
       newPortDirections, newPortNames, getAnnotations().getValue(),
       newPortAnnotations, getLowerToBind(), getInnerSymAttr());
 
-  SmallDenseSet<unsigned> portSet(portIndices.begin(), portIndices.end());
   for (unsigned oldIdx = 0, newIdx = 0, numOldPorts = getNumResults();
        oldIdx != numOldPorts; ++oldIdx) {
-    if (portSet.contains(oldIdx)) {
+    if (portIndices.test(oldIdx)) {
       assert(getResult(oldIdx).use_empty() && "removed instance port has uses");
       continue;
     }
@@ -1421,6 +1467,8 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 
 StringRef InstanceOp::instanceName() { return getName(); }
 
+StringAttr InstanceOp::instanceNameAttr() { return getNameAttr(); }
+
 void InstanceOp::print(OpAsmPrinter &p) {
   // Print the instance name.
   p << " ";
@@ -1591,13 +1639,16 @@ void MemOp::setAllPortAnnotations(ArrayRef<Attribute> annotations) {
 
 // Get the number of read, write and read-write ports.
 void MemOp::getNumPorts(size_t &numReadPorts, size_t &numWritePorts,
-                        size_t &numReadWritePorts) {
+                        size_t &numReadWritePorts, size_t &numDbgsPorts) {
   numReadPorts = 0;
   numWritePorts = 0;
   numReadWritePorts = 0;
+  numDbgsPorts = 0;
   for (size_t i = 0, e = getNumResults(); i != e; ++i) {
     auto portKind = getPortKind(i);
-    if (portKind == MemOp::PortKind::Read)
+    if (portKind == MemOp::PortKind::Debug)
+      ++numDbgsPorts;
+    else if (portKind == MemOp::PortKind::Read)
       ++numReadPorts;
     else if (portKind == MemOp::PortKind::Write) {
       ++numWritePorts;
@@ -1628,11 +1679,6 @@ LogicalResult MemOp::verify() {
             getResult(i).getType().cast<FIRRTLType>())
             .Case<BundleType>([](BundleType a) { return a; })
             .Default([](auto) { return nullptr; });
-    if (!portBundleType) {
-      emitOpError() << "has an invalid type on port " << portName
-                    << " (expected '!firrtl.bundle<...>')";
-      return failure();
-    }
 
     // Require that all port names are unique.
     if (!portNamesSet.insert(portName).second) {
@@ -1643,37 +1689,33 @@ LogicalResult MemOp::verify() {
     // Determine the kind of the memory.  If the kind cannot be
     // determined, then it's indicative of the wrong number of fields
     // in the type (but we don't know any more just yet).
-    MemOp::PortKind portKind;
-    {
-      auto elt = getPortNamed(portName);
-      if (!elt) {
-        emitOpError() << "could not get port with name " << portName;
-        return failure();
-      }
-      auto firrtlType = elt.getType().cast<FIRRTLType>();
-      auto portType = firrtlType.dyn_cast<BundleType>();
-      switch (portType.getNumElements()) {
-      case 4:
-        portKind = MemOp::PortKind::Read;
-        break;
-      case 5:
-        portKind = MemOp::PortKind::Write;
-        break;
-      case 7:
-        portKind = MemOp::PortKind::ReadWrite;
-        break;
-      default:
-        emitOpError()
-            << "has an invalid number of fields on port " << portName
-            << " (expected 4 for read, 5 for write, or 7 for read/write)";
-        return failure();
-      }
+
+    auto elt = getPortNamed(portName);
+    if (!elt) {
+      emitOpError() << "could not get port with name " << portName;
+      return failure();
     }
+    auto firrtlType = elt.getType().cast<FIRRTLType>();
+    MemOp::PortKind portKind = getMemPortKindFromType(firrtlType);
+
+    if (portKind == MemOp::PortKind::Debug &&
+        !getResult(i).getType().isa<RefType>())
+      return emitOpError() << "has an invalid type on port " << portName
+                           << " (expected Read/Write/ReadWrite/Debug)";
+    if (firrtlType.isa<RefType>() && e == 1)
+      return emitOpError()
+             << "cannot have only one port of debug type. Debug port can only "
+                "exist alongside other read/write/read-write port";
 
     // Safely search for the "data" field, erroring if it can't be
     // found.
     FIRRTLBaseType dataType;
-    {
+    if (portKind == MemOp::PortKind::Debug) {
+      auto resType = getResult(i).getType().dyn_cast<RefType>();
+      if (!(resType && resType.getType().isa<FVectorType>()))
+        return emitOpError() << "debug ports must be a RefType of FVectorType";
+      dataType = resType.getType().cast<FVectorType>().getElementType();
+    } else {
       auto dataTypeOption = portBundleType.getElement("data");
       if (!dataTypeOption && portKind == MemOp::PortKind::ReadWrite)
         dataTypeOption = portBundleType.getElement("wdata");
@@ -1726,6 +1768,9 @@ LogicalResult MemOp::verify() {
       case MemOp::PortKind::ReadWrite:
         portKindName = "readwrite";
         break;
+      case MemOp::PortKind::Debug:
+        portKindName = "dbg";
+        break;
       }
       emitOpError() << "has an invalid type for port " << portName
                     << " of determined kind \"" << portKindName
@@ -1761,10 +1806,12 @@ LogicalResult MemOp::verify() {
   return success();
 }
 
-BundleType MemOp::getTypeForPort(uint64_t depth, FIRRTLBaseType dataType,
+FIRRTLType MemOp::getTypeForPort(uint64_t depth, FIRRTLBaseType dataType,
                                  PortKind portKind, size_t maskBits) {
 
   auto *context = dataType.getContext();
+  if (portKind == PortKind::Debug)
+    return RefType::get(FVectorType::get(dataType, depth));
   FIRRTLBaseType maskType;
   // maskBits not specified (==0), then get the mask type from the dataType.
   if (maskBits == 0)
@@ -1801,22 +1848,12 @@ BundleType MemOp::getTypeForPort(uint64_t depth, FIRRTLBaseType dataType,
     portFields.push_back({getId("wdata"), false, dataType});
     portFields.push_back({getId("wmask"), false, maskType});
     break;
+  default:
+    llvm::report_fatal_error("memory port kind not handled");
+    break;
   }
 
   return BundleType::get(portFields, context).cast<BundleType>();
-}
-
-/// Return the kind of port this is given the port type from a 'mem' decl.
-static MemOp::PortKind getMemPortKindFromType(FIRRTLType type) {
-  auto portType = type.dyn_cast<BundleType>();
-  switch (portType.getNumElements()) {
-  case 4:
-    return MemOp::PortKind::Read;
-  case 5:
-    return MemOp::PortKind::Write;
-  default:
-    return MemOp::PortKind::ReadWrite;
-  }
 }
 
 /// Return the name and kind of ports supported by this memory.
@@ -1847,8 +1884,11 @@ MemOp::PortKind MemOp::getPortKind(size_t resultNo) {
 size_t MemOp::getMaskBits() {
 
   for (auto res : getResults()) {
+    if (res.getType().isa<RefType>())
+      continue;
     auto firstPortType = res.getType().cast<FIRRTLBaseType>();
-    if (getMemPortKindFromType(firstPortType) == PortKind::Read)
+    if (getMemPortKindFromType(firstPortType) == PortKind::Read ||
+        getMemPortKindFromType(firstPortType) == PortKind::Debug)
       continue;
 
     FIRRTLBaseType mType;
@@ -1868,6 +1908,8 @@ size_t MemOp::getMaskBits() {
 FIRRTLBaseType MemOp::getDataType() {
   assert(getNumResults() != 0 && "Mems with no read/write ports are illegal");
 
+  if (auto refType = getResult(0).getType().dyn_cast<RefType>())
+    return refType.getType().cast<FVectorType>().getElementType();
   auto firstPortType = getResult(0).getType().cast<FIRRTLBaseType>();
 
   StringRef dataFieldName = "data";
@@ -3743,6 +3785,13 @@ LogicalResult HierPathOp::verifyInnerRefs(InnerRefNamespace &ns) {
 
 void HierPathOp::print(OpAsmPrinter &p) {
   p << " ";
+
+  // Print visibility if present.
+  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  if (auto visibility =
+          getOperation()->getAttrOfType<StringAttr>(visibilityAttrName))
+    p << visibility.getValue() << ' ';
+
   p.printSymbolName(getSymName());
   p << " [";
   llvm::interleaveComma(getNamepath().getValue(), p, [&](Attribute attr) {
@@ -3755,11 +3804,15 @@ void HierPathOp::print(OpAsmPrinter &p) {
     }
   });
   p << "]";
-  p.printOptionalAttrDict((*this)->getAttrs(),
-                          {SymbolTable::getSymbolAttrName(), "namepath"});
+  p.printOptionalAttrDict(
+      (*this)->getAttrs(),
+      {SymbolTable::getSymbolAttrName(), "namepath", visibilityAttrName});
 }
 
 ParseResult HierPathOp::parse(OpAsmParser &parser, OperationState &result) {
+  // Parse the visibility attribute.
+  (void)mlir::impl::parseOptionalVisibilityKeyword(parser, result.attributes);
+
   // Parse the symbol name.
   StringAttr symName;
   if (parser.parseSymbolName(symName, SymbolTable::getSymbolAttrName(),

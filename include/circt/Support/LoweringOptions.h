@@ -134,6 +134,11 @@ struct LoweringOptions {
     SpillNamehintsIfShort // Spill a wire if its namehint is shorter than the
                           // expression size.
   } wireSpillingHeuristic = SpillNone;
+
+  /// If true, every expression passed to an instance port is driven by a wire.
+  /// Some lint tools dislike expressions being inlined into input ports so this
+  /// option avoids such warnings.
+  bool disallowExpressionInliningInPorts = false;
 };
 
 /// Register commandline options for the verilog emitter.

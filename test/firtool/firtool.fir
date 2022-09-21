@@ -276,8 +276,9 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
 ; VERILOG:  wire [2:0] [[T2:.*]] =
 ; VERILOG-SAME{LITERAL}: {{a_2}, {a_1}, {a_0}};
 ; VERILOG-NEXT:  wire [[T1:.*]];
-; VERILOG-NEXT:  assign [[T1]] = [[T2]][sel] /* cadence map_to_mux */; /* synopsys infer_mux_override */
-; VERILOG-NEXT:  assign b = &sel ? a_0 : [[T1]];
+; VERILOG-NEXT:  /* synopsys infer_mux_override */
+; VERILOG-NEXT:  assign [[T1]] = [[T2]][sel] /* cadence map_to_mux */;
+; VERILOG-NEXT:  assign b = (&sel) ? a_0 : [[T1]];
 
   module UnusedPortsMod :
     input in : UInt<1>

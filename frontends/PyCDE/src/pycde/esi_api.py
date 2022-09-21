@@ -120,7 +120,9 @@ class PythonApiBuilder(SoftwareApiBuilder):
     init_file = libdir / "__init__.py"
     init_file.touch()
     common_file = libdir / "common.py"
-    common_file.write_text((__dir__ / "esi_runtime_common.py").read_text())
+    if common_file.exists():
+      common_file.unlink()
+    common_file.hardlink_to(__dir__ / "esi_runtime_common.py")
 
     # Emit the system-specific API.
     main = libdir / f"{system_name}.py"

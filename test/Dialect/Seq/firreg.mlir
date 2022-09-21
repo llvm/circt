@@ -31,7 +31,7 @@ hw.module @lowering(%clk: i1, %rst: i1, %in: i32) -> (a: i32, b: i32, c: i32, d:
   // CHECK: %rAnamed = sv.reg sym @regA : !hw.inout<i32>
   %r = seq.firreg %in clock %clk sym @regA { "name" = "rAnamed" }: i32
 
-  // CHECK: %rNoSym = sv.reg sym @__rNoSym__ : !hw.inout<i32>
+  // CHECK: %rNoSym = sv.reg : !hw.inout<i32>
   %rNoSym = seq.firreg %in clock %clk : i32
 
   // CHECK:      sv.always posedge %clk {
@@ -62,16 +62,6 @@ hw.module @lowering(%clk: i1, %rst: i1, %in: i32) -> (a: i32, b: i32, c: i32, d:
   // CHECK:      sv.ifdef  "SYNTHESIS" {
   // CHECK-NEXT: } else {
   // CHECK-NEXT:   sv.ordered {
-  // CHECK-NEXT:     sv.ifdef  "RANDOMIZE_REG_INIT" {
-  // CHECK-NEXT:       %_RANDOM = sv.reg sym @_RANDOM  : !hw.inout<i32>
-  // CHECK-NEXT:       %_RANDOM_0 = sv.reg sym @_RANDOM_0  {name = "_RANDOM"} : !hw.inout<i32>
-  // CHECK-NEXT:       %_RANDOM_1 = sv.reg sym @_RANDOM_1  {name = "_RANDOM"} : !hw.inout<i32>
-  // CHECK-NEXT:       %_RANDOM_2 = sv.reg sym @_RANDOM_2  {name = "_RANDOM"} : !hw.inout<i32>
-  // CHECK-NEXT:       %_RANDOM_3 = sv.reg sym @_RANDOM_3  {name = "_RANDOM"} : !hw.inout<i32>
-  // CHECK-NEXT:       %_RANDOM_4 = sv.reg sym @_RANDOM_4  {name = "_RANDOM"} : !hw.inout<i32>
-  // CHECK-NEXT:       %_RANDOM_5 = sv.reg sym @_RANDOM_5  {name = "_RANDOM"} : !hw.inout<i32>
-  // CHECK-NEXT:       %_RANDOM_6 = sv.reg sym @_RANDOM_6  {name = "_RANDOM"} : !hw.inout<i32>
-  // CHECK-NEXT:     }
   // CHECK-NEXT:     sv.ifdef  "FIRRTL_BEFORE_INITIAL" {
   // CHECK-NEXT:       sv.verbatim "`FIRRTL_BEFORE_INITIAL" {symbols = []}
   // CHECK-NEXT:     }
@@ -80,22 +70,46 @@ hw.module @lowering(%clk: i1, %rst: i1, %in: i32) -> (a: i32, b: i32, c: i32, d:
   // CHECK-NEXT:         sv.verbatim "`INIT_RANDOM_PROLOG_" {symbols = []}
   // CHECK-NEXT:       }
   // CHECK-NEXT:       sv.ifdef.procedural  "RANDOMIZE_REG_INIT" {
-  // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@lowering::@_RANDOM>]}
-  // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {{[{][{]1[}][}]}};" {symbols = [#hw.innerNameRef<@lowering::@regA>, #hw.innerNameRef<@lowering::@_RANDOM>]}
-  // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@lowering::@_RANDOM_0>]}
-  // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {{[{][{]1[}][}]}};" {symbols = [#hw.innerNameRef<@lowering::@regB>, #hw.innerNameRef<@lowering::@_RANDOM_0>]}
-  // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@lowering::@_RANDOM_1>]}
-  // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {{[{][{]1[}][}]}};" {symbols = [#hw.innerNameRef<@lowering::@regC>, #hw.innerNameRef<@lowering::@_RANDOM_1>]}
-  // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@lowering::@_RANDOM_2>]}
-  // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {{[{][{]1[}][}]}};" {symbols = [#hw.innerNameRef<@lowering::@regD>, #hw.innerNameRef<@lowering::@_RANDOM_2>]}
-  // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@lowering::@_RANDOM_3>]}
-  // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {{[{][{]1[}][}]}};" {symbols = [#hw.innerNameRef<@lowering::@regE>, #hw.innerNameRef<@lowering::@_RANDOM_3>]}
-  // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@lowering::@_RANDOM_4>]}
-  // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {{[{][{]1[}][}]}};" {symbols = [#hw.innerNameRef<@lowering::@regF>, #hw.innerNameRef<@lowering::@_RANDOM_4>]}
-  // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@lowering::@_RANDOM_5>]}
-  // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {{[{][{]1[}][}]}};" {symbols = [#hw.innerNameRef<@lowering::@regA>, #hw.innerNameRef<@lowering::@_RANDOM_5>]}
-  // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@lowering::@_RANDOM_6>]}
-  // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {{[{][{]1[}][}]}};" {symbols = [#hw.innerNameRef<@lowering::@__rNoSym__>, #hw.innerNameRef<@lowering::@_RANDOM_6>]}
+  // CHECK-NEXT:          %_RANDOM_0 = sv.logic  : !hw.inout<i32>
+  // CHECK-NEXT:          %RANDOM = sv.macro.ref.se< "RANDOM"> : i32
+  // CHECK-NEXT:          sv.bpassign %_RANDOM_0, %RANDOM : i32
+  // CHECK-NEXT:          %_RANDOM_1 = sv.logic  : !hw.inout<i32>
+  // CHECK-NEXT:          %RANDOM_0 = sv.macro.ref.se< "RANDOM"> : i32
+  // CHECK-NEXT:          sv.bpassign %_RANDOM_1, %RANDOM_0 : i32
+  // CHECK-NEXT:          %_RANDOM_2 = sv.logic  : !hw.inout<i32>
+  // CHECK-NEXT:          %RANDOM_1 = sv.macro.ref.se< "RANDOM"> : i32
+  // CHECK-NEXT:          sv.bpassign %_RANDOM_2, %RANDOM_1 : i32
+  // CHECK-NEXT:          %_RANDOM_3 = sv.logic  : !hw.inout<i32>
+  // CHECK-NEXT:          %RANDOM_2 = sv.macro.ref.se< "RANDOM"> : i32
+  // CHECK-NEXT:          sv.bpassign %_RANDOM_3, %RANDOM_2 : i32
+  // CHECK-NEXT:          %_RANDOM_4 = sv.logic  : !hw.inout<i32>
+  // CHECK-NEXT:          %RANDOM_3 = sv.macro.ref.se< "RANDOM"> : i32
+  // CHECK-NEXT:          sv.bpassign %_RANDOM_4, %RANDOM_3 : i32
+  // CHECK-NEXT:          %_RANDOM_5 = sv.logic  : !hw.inout<i32>
+  // CHECK-NEXT:          %RANDOM_4 = sv.macro.ref.se< "RANDOM"> : i32
+  // CHECK-NEXT:          sv.bpassign %_RANDOM_5, %RANDOM_4 : i32
+  // CHECK-NEXT:          %_RANDOM_6 = sv.logic  : !hw.inout<i32>
+  // CHECK-NEXT:          %RANDOM_5 = sv.macro.ref.se< "RANDOM"> : i32
+  // CHECK-NEXT:          sv.bpassign %_RANDOM_6, %RANDOM_5 : i32
+  // CHECK-NEXT:          %_RANDOM_7 = sv.logic  : !hw.inout<i32>
+  // CHECK-NEXT:          %RANDOM_6 = sv.macro.ref.se< "RANDOM"> : i32
+  // CHECK-NEXT:          sv.bpassign %_RANDOM_7, %RANDOM_6 : i32
+  // CHECK-NEXT:          %8 = sv.read_inout %_RANDOM_0 : !hw.inout<i32>
+  // CHECK-NEXT:          sv.bpassign %rA, %8 : i32
+  // CHECK-NEXT:          %9 = sv.read_inout %_RANDOM_1 : !hw.inout<i32>
+  // CHECK-NEXT:          sv.bpassign %rB, %9 : i32
+  // CHECK-NEXT:          %10 = sv.read_inout %_RANDOM_2 : !hw.inout<i32>
+  // CHECK-NEXT:          sv.bpassign %rC, %10 : i32
+  // CHECK-NEXT:          %11 = sv.read_inout %_RANDOM_3 : !hw.inout<i32>
+  // CHECK-NEXT:          sv.bpassign %rD, %11 : i32
+  // CHECK-NEXT:          %12 = sv.read_inout %_RANDOM_4 : !hw.inout<i32>
+  // CHECK-NEXT:          sv.bpassign %rE, %12 : i32
+  // CHECK-NEXT:          %13 = sv.read_inout %_RANDOM_5 : !hw.inout<i32>
+  // CHECK-NEXT:          sv.bpassign %rF, %13 : i32
+  // CHECK-NEXT:          %14 = sv.read_inout %_RANDOM_6 : !hw.inout<i32>
+  // CHECK-NEXT:          sv.bpassign %rAnamed, %14 : i32
+  // CHECK-NEXT:          %15 = sv.read_inout %_RANDOM_7 : !hw.inout<i32>
+  // CHECK-NEXT:          sv.bpassign %rNoSym, %15 : i32
   // CHECK-NEXT:       }
   // CHECK-NEXT:       sv.ifdef.procedural  "RANDOMIZE" {
   // CHECK-NEXT:         sv.if %rst {
@@ -120,22 +134,26 @@ hw.module private @UninitReg1(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
   %c0_i2 = hw.constant 0 : i2
   // CHECK-NEXT: %count = sv.reg sym @count : !hw.inout<i2>
   // CHECK-NEXT: %0 = sv.read_inout %count : !hw.inout<i2>
-  // CHECK-NEXT: %1 = comb.mux %cond, %value, %0 : i2
-  // CHECK-NEXT: %2 = comb.mux %reset, %c0_i2, %1 : i2
+  // CHECK-NEXT: %1 = comb.mux bin %cond, %value, %0 : i2
+  // CHECK-NEXT: %2 = comb.mux bin %reset, %c0_i2, %1 : i2
   // CHECK-NEXT: sv.always posedge %clock {
-  // CHECK-NEXT:   sv.passign %count, %2 : i2
+  // CHECK-NEXT:   sv.if %reset {
+  // CHECK-NEXT:     sv.passign %count, %c0_i2
+  // CHECK-NEXT:   } else {
+  // CHECK-NEXT:     sv.if %cond {
+  // CHECK-NEXT:       sv.passign %count, %value
+  // CHECK-NEXT:     } else {
+  // CHECK-NEXT:     }
+  // CHECK-NEXT:   }
   // CHECK-NEXT: }
 
   %count = seq.firreg %2 clock %clock sym @count : i2
-  %1 = comb.mux %cond, %value, %count : i2
-  %2 = comb.mux %reset, %c0_i2, %1 : i2
+  %1 = comb.mux bin %cond, %value, %count : i2
+  %2 = comb.mux bin %reset, %c0_i2, %1 : i2
 
   // CHECK-NEXT: sv.ifdef "SYNTHESIS"  {
   // CHECK-NEXT: } else {
   // CHECK-NEXT:   sv.ordered {
-  // CHECK-NEXT:     sv.ifdef "RANDOMIZE_REG_INIT" {
-  // CHECK-NEXT:       %[[RANDOM:.+]] = sv.reg sym @[[RANDOM_SYM:[_A-Za-z0-9]+]] {{.+}}
-  // CHECK-NEXT:     }
   // CHECK-NEXT:     sv.ifdef "FIRRTL_BEFORE_INITIAL" {
   // CHECK-NEXT:       sv.verbatim "`FIRRTL_BEFORE_INITIAL" {symbols = []}
   // CHECK-NEXT:     }
@@ -144,8 +162,12 @@ hw.module private @UninitReg1(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
   // CHECK-NEXT:         sv.verbatim "`INIT_RANDOM_PROLOG_" {symbols = []}
   // CHECK-NEXT:       }
   // CHECK-NEXT:     sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
-  // CHECK-NEXT:        sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@UninitReg1::@[[RANDOM_SYM]]>]}
-  // CHECK-NEXT:        sv.verbatim "{{[{][{]0[}][}]}} = {{[{][{]1[}][}]}}[1:0];" {symbols = [#hw.innerNameRef<@UninitReg1::@count>, #hw.innerNameRef<@UninitReg1::@[[RANDOM_SYM]]>]}
+  // CHECK-NEXT:        %_RANDOM_0 = sv.logic  : !hw.inout<i32>
+  // CHECK-NEXT:        %RANDOM = sv.macro.ref.se< "RANDOM"> : i32
+  // CHECK-NEXT:        sv.bpassign %_RANDOM_0, %RANDOM : i32
+  // CHECK-NEXT:        %3 = sv.read_inout %_RANDOM_0 : !hw.inout<i32>
+  // CHECK-NEXT:        %4 = comb.extract %3 from 0 : (i32) -> i2
+  // CHECK-NEXT:        sv.bpassign %count, %4 : i2
   // CHECK-NEXT:      }
   // CHECK-NEXT:     }
   // CHECK-NEXT:     sv.ifdef "FIRRTL_AFTER_INITIAL" {
@@ -154,9 +176,28 @@ hw.module private @UninitReg1(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
 
-  // CHECK-NEXT: hw.output
+  // CHECK: hw.output
   hw.output
 }
+// CHECK-LABEL: hw.module private @UninitReg1_nonbin(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
+hw.module private @UninitReg1_nonbin(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
+  // CHECK: %c0_i2 = hw.constant 0 : i2
+  %c0_i2 = hw.constant 0 : i2
+  // CHECK-NEXT: %count = sv.reg sym @count : !hw.inout<i2>
+  // CHECK-NEXT: %0 = sv.read_inout %count : !hw.inout<i2>
+  // CHECK-NEXT: %1 = comb.mux %cond, %value, %0 : i2
+  // CHECK-NEXT: %2 = comb.mux %reset, %c0_i2, %1 : i2
+  // CHECK-NEXT: sv.always posedge %clock {
+  // CHECK-NEXT:   sv.passign %count, %2
+  // CHECK-NEXT: }
+
+  %count = seq.firreg %2 clock %clock sym @count : i2
+  %1 = comb.mux %cond, %value, %count : i2
+  %2 = comb.mux %reset, %c0_i2, %1 : i2
+  // CHECK: hw.output
+  hw.output
+}
+
 
 // module InitReg1 :
 //     input clock : Clock
@@ -183,7 +224,7 @@ hw.module private @InitReg1(%clock: i1, %reset: i1, %io_d: i32, %io_en: i1) -> (
   %1 = comb.concat %false, %reg2 : i1, i32
   %2 = comb.add %0, %1 : i33
   %3 = comb.extract %2 from 1 : (i33) -> i32
-  %4 = comb.mux %io_en, %io_d, %3 : i32
+  %4 = comb.mux bin %io_en, %io_d, %3 : i32
 
   // CHECK:      %reg = sv.reg sym @[[reg_sym:.+]] : !hw.inout<i32>
   // CHECK-NEXT: %0 = sv.read_inout %reg : !hw.inout<i32>
@@ -195,13 +236,17 @@ hw.module private @InitReg1(%clock: i1, %reset: i1, %io_d: i32, %io_en: i1) -> (
   // CHECK-NEXT: %4 = comb.concat %false, %1 : i1, i32
   // CHECK-NEXT: %5 = comb.add %3, %4 : i33
   // CHECK-NEXT: %6 = comb.extract %5 from 1 : (i33) -> i32
-  // CHECK-NEXT: %7 = comb.mux %io_en, %io_d, %6 : i32
+  // CHECK-NEXT: %7 = comb.mux bin %io_en, %io_d, %6 : i32
   // CHECK-NEXT: sv.always posedge %clock, posedge %reset  {
-  // CHECK-NEXT:   sv.if %reset  {
-  // CHECK-NEXT:     sv.passign %reg, %c0_i32 : i32
-  // CHECK-NEXT:     sv.passign %reg3, %c1_i32 : i32
-  // CHECK-NEXT:   } else  {
-  // CHECK-NEXT:     sv.passign %reg, %7 : i32
+  // CHECK-NEXT:   sv.if %reset { 
+  // CHECK-NEXT:     sv.passign %reg, %c0_i32 : i32 
+  // CHECK-NEXT:     sv.passign %reg3, %c1_i32 : i32 
+  // CHECK-NEXT:   } else { 
+  // CHECK-NEXT:     sv.if %io_en { 
+  // CHECK-NEXT:       sv.passign %reg, %io_d : i32 
+  // CHECK-NEXT:     } else { 
+  // CHECK-NEXT:       sv.passign %reg, %6 : i32 
+  // CHECK-NEXT:     }
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
   // CHECK-NEXT: sv.always posedge %clock  {
@@ -213,11 +258,6 @@ hw.module private @InitReg1(%clock: i1, %reset: i1, %io_d: i32, %io_en: i1) -> (
   // CHECK-NEXT: sv.ifdef "SYNTHESIS"  {
   // CHECK-NEXT: } else {
   // CHECK-NEXT:   sv.ordered {
-  // CHECK-NEXT:     sv.ifdef "RANDOMIZE_REG_INIT" {
-  // CHECK-NEXT:       %[[RANDOM:.+]] = sv.reg sym @[[RANDOM_SYM:[_A-Za-z0-9]+]] {{.+}}
-  // CHECK-NEXT:       %[[RANDOM_2:.+]] = sv.reg sym @[[RANDOM_2_SYM:[_A-Za-z0-9]+]] {{.+}}
-  // CHECK-NEXT:       %[[RANDOM_3:.+]] = sv.reg sym @[[RANDOM_3_SYM:[_A-Za-z0-9]+]] {{.+}}
-  // CHECK-NEXT:     }
   // CHECK-NEXT:     sv.ifdef  "FIRRTL_BEFORE_INITIAL" {
   // CHECK-NEXT:       sv.verbatim "`FIRRTL_BEFORE_INITIAL" {symbols = []}
   // CHECK-NEXT:     }
@@ -226,12 +266,21 @@ hw.module private @InitReg1(%clock: i1, %reset: i1, %io_d: i32, %io_en: i1) -> (
   // CHECK-NEXT:         sv.verbatim "`INIT_RANDOM_PROLOG_" {symbols = []}
   // CHECK-NEXT:       }
   // CHECK-NEXT:       sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
-  // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@InitReg1::@[[RANDOM_SYM]]>]}
-  // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {{[{][{]1[}][}]}};" {symbols = [#hw.innerNameRef<@InitReg1::@[[reg_sym]]>, #hw.innerNameRef<@InitReg1::@[[RANDOM_SYM]]>]}
-  // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@InitReg1::@[[RANDOM_2_SYM]]>]}
-  // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {{[{][{]1[}][}]}};" {symbols = [#hw.innerNameRef<@InitReg1::@[[reg2_sym]]>, #hw.innerNameRef<@InitReg1::@[[RANDOM_2_SYM]]>]}
-  // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@InitReg1::@[[RANDOM_3_SYM]]>]}
-  // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {{[{][{]1[}][}]}};" {symbols = [#hw.innerNameRef<@InitReg1::@[[reg3_sym]]>, #hw.innerNameRef<@InitReg1::@[[RANDOM_3_SYM]]>]}
+  // CHECK-NEXT:         %_RANDOM_0 = sv.logic  : !hw.inout<i32>
+  // CHECK-NEXT:         %RANDOM = sv.macro.ref.se< "RANDOM"> : i32
+  // CHECK-NEXT:         sv.bpassign %_RANDOM_0, %RANDOM : i32
+  // CHECK-NEXT:         %_RANDOM_1 = sv.logic  : !hw.inout<i32>
+  // CHECK-NEXT:         %RANDOM_0 = sv.macro.ref.se< "RANDOM"> : i32
+  // CHECK-NEXT:         sv.bpassign %_RANDOM_1, %RANDOM_0 : i32
+  // CHECK-NEXT:         %_RANDOM_2 = sv.logic  : !hw.inout<i32>
+  // CHECK-NEXT:         %RANDOM_1 = sv.macro.ref.se< "RANDOM"> : i32
+  // CHECK-NEXT:         sv.bpassign %_RANDOM_2, %RANDOM_1 : i32
+  // CHECK-NEXT:         %8 = sv.read_inout %_RANDOM_0 : !hw.inout<i32>
+  // CHECK-NEXT:         sv.bpassign %reg, %8 : i32
+  // CHECK-NEXT:         %9 = sv.read_inout %_RANDOM_1 : !hw.inout<i32>
+  // CHECK-NEXT:         sv.bpassign %reg2, %9 : i32
+  // CHECK-NEXT:         %10 = sv.read_inout %_RANDOM_2 : !hw.inout<i32>
+  // CHECK-NEXT:         sv.bpassign %reg3, %10 : i32
   // CHECK-NEXT:       }
   // CHECK-NEXT:       sv.ifdef.procedural "RANDOMIZE"  {
   // CHECK-NEXT:         sv.if %reset {
@@ -260,10 +309,6 @@ hw.module private @UninitReg42(%clock: i1, %reset: i1, %cond: i1, %value: i42) {
   // CHECK:      sv.ifdef "SYNTHESIS"  {
   // CHECK-NEXT: } else {
   // CHECK-NEXT:   sv.ordered {
-  // CHECK-NEXT:     sv.ifdef "RANDOMIZE_REG_INIT" {
-  // CHECK-NEXT:       %[[RANDOM_0:.+]] = sv.reg sym @[[RANDOM_0_SYM:[_A-Za-z0-9]+]] {{.+}}
-  // CHECK-NEXT:       %[[RANDOM_1:.+]] = sv.reg sym @[[RANDOM_1_SYM:[_A-Za-z0-9]+]] {{.+}}
-  // CHECK-NEXT:     }
   // CHECK-NEXT:     sv.ifdef  "FIRRTL_BEFORE_INITIAL" {
   // CHECK-NEXT:       sv.verbatim "`FIRRTL_BEFORE_INITIAL" {symbols = []}
   // CHECK-NEXT:     }
@@ -272,9 +317,17 @@ hw.module private @UninitReg42(%clock: i1, %reset: i1, %cond: i1, %value: i42) {
   // CHECK-NEXT:         sv.verbatim "`INIT_RANDOM_PROLOG_" {symbols = []}
   // CHECK-NEXT:       }
   // CHECK-NEXT:       sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
-  // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@UninitReg42::@[[RANDOM_0_SYM]]>]}
-  // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@UninitReg42::@[[RANDOM_1_SYM]]>]}
-  // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {{[{][{][{]1[}][}]}}[9:0], {{[{][{]2[}][}][}]}};" {symbols = [#hw.innerNameRef<@UninitReg42::@count>, #hw.innerNameRef<@UninitReg42::@[[RANDOM_1_SYM]]>, #hw.innerNameRef<@UninitReg42::@[[RANDOM_0_SYM]]>]}
+  // CHECK-NEXT:         %_RANDOM_0 = sv.logic  : !hw.inout<i32>
+  // CHECK-NEXT:         %RANDOM = sv.macro.ref.se< "RANDOM"> : i32
+  // CHECK-NEXT:         sv.bpassign %_RANDOM_0, %RANDOM : i32
+  // CHECK-NEXT:         %_RANDOM_1 = sv.logic  : !hw.inout<i32>
+  // CHECK-NEXT:         %RANDOM_0 = sv.macro.ref.se< "RANDOM"> : i32
+  // CHECK-NEXT:         sv.bpassign %_RANDOM_1, %RANDOM_0 : i32
+  // CHECK-NEXT:         %3 = sv.read_inout %_RANDOM_0 : !hw.inout<i32>
+  // CHECK-NEXT:         %4 = sv.read_inout %_RANDOM_1 : !hw.inout<i32>
+  // CHECK-NEXT:         %5 = comb.extract %4 from 0 : (i32) -> i10
+  // CHECK-NEXT:         %6 = comb.concat %3, %5 : i32, i10
+  // CHECK-NEXT:         sv.bpassign %count, %6 : i42
   // CHECK-NEXT:       }
   // CHECK-NEXT:     }
   // CHECK-NEXT:     sv.ifdef  "FIRRTL_AFTER_INITIAL" {
@@ -307,13 +360,6 @@ hw.module private @regInitRandomReuse(%clock: i1, %a: i1) -> (o1: i2, o2: i4, o3
   // CHECK:      sv.ifdef "SYNTHESIS" {
   // CHECK-NEXT: } else {
   // CHECK-NEXT:   sv.ordered {
-  // CHECK-NEXT:     sv.ifdef "RANDOMIZE_REG_INIT" {
-  // CHECK-NEXT:       %[[RANDOM_0:.+]] = sv.reg sym @[[RANDOM_0_SYM:[_A-Za-z0-9]+]]
-  // CHECK-NEXT:       %[[RANDOM_1:.+]] = sv.reg sym @[[RANDOM_1_SYM:[_A-Za-z0-9]+]]
-  // CHECK-NEXT:       %[[RANDOM_2:.+]] = sv.reg sym @[[RANDOM_2_SYM:[_A-Za-z0-9]+]]
-  // CHECK-NEXT:       %[[RANDOM_3:.+]] = sv.reg sym @[[RANDOM_3_SYM:[_A-Za-z0-9]+]]
-  // CHECK-NEXT:       %[[RANDOM_4:.+]] = sv.reg sym @[[RANDOM_4_SYM:[_A-Za-z0-9]+]]{{.+}}
-  // CHECK-NEXT:     }
   // CHECK-NEXT:     sv.ifdef  "FIRRTL_BEFORE_INITIAL" {
   // CHECK-NEXT:       sv.verbatim "`FIRRTL_BEFORE_INITIAL" {symbols = []}
   // CHECK-NEXT:     }
@@ -322,16 +368,15 @@ hw.module private @regInitRandomReuse(%clock: i1, %a: i1) -> (o1: i2, o2: i4, o3
   // CHECK-NEXT:         sv.verbatim "`INIT_RANDOM_PROLOG_" {symbols = []}
   // CHECK-NEXT:       }
   // CHECK-NEXT:       sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
-  // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_0_SYM]]>]}
-  // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {{[{][{]1[}][}]}}[1:0];" {symbols = [#hw.innerNameRef<@regInitRandomReuse::@[[r1_sym]]>, #hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_0_SYM]]>]}
-  // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {{[{][{]1[}][}]}}[5:2];" {symbols = [#hw.innerNameRef<@regInitRandomReuse::@[[r2_sym]]>, #hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_0_SYM]]>]}
-  // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_1_SYM]]>]}
-  // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {{[{]}}{{[{][{]1[}][}]}}[5:0], {{[{][{]2[}][}]}}[31:6]{{[}]}};" {symbols = [#hw.innerNameRef<@regInitRandomReuse::@[[r3_sym]]>, #hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_1_SYM]]>, #hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_0_SYM]]>]}
-  // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_2_SYM]]>]}
-  // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_3_SYM]]>]}
-  // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_4_SYM]]>]}
-  // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {{[{]}}{{[{][{]1[}][}]}}[9:0], {{[{][{]2[}][}]}}, {{[{][{]3[}][}]}}, {{[{][{]4[}][}]}}[31:6]{{[}]}};" {symbols = [#hw.innerNameRef<@regInitRandomReuse::@[[r4_sym]]>, #hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_4_SYM]]>, #hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_3_SYM]]>, #hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_2_SYM]]>, #hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_1_SYM]]>]}
-  // CHECK-NEXT:       }
+  // CHECK:              %9 = comb.extract %8 from 0 : (i32) -> i2
+  // CHECK:              %11 = comb.extract %10 from 2 : (i32) -> i4
+  // CHECK:              %13 = comb.extract %12 from 6 : (i32) -> i26
+  // CHECK:              %15 = comb.extract %14 from 0 : (i32) -> i6
+  // CHECK:              %16 = comb.concat %13, %15 : i26, i6
+  // CHECK:              %18 = comb.extract %17 from 6 : (i32) -> i26
+  // CHECK:              %22 = comb.extract %21 from 0 : (i32) -> i10
+  // CHECK:              %23 = comb.concat %18, %19, %20, %22 : i26, i32, i32, i10
+  // CHECK:           }
   // CHECK-NEXT:     }
   // CHECK-NEXT:     sv.ifdef "FIRRTL_AFTER_INITIAL" {
   // CHECK-NEXT:       sv.verbatim "`FIRRTL_AFTER_INITIAL" {symbols = []}
@@ -354,9 +399,6 @@ hw.module private @init1DVector(%clock: i1, %a: !hw.array<2xi1>) -> (b: !hw.arra
   // CHECK:      sv.ifdef "SYNTHESIS" {
   // CHECK-NEXT: } else {
   // CHECK-NEXT:   sv.ordered {
-  // CHECK-NEXT:     sv.ifdef "RANDOMIZE_REG_INIT" {
-  // CHECK-NEXT:       %[[RANDOM:.+]] = sv.reg sym @[[RANDOM_SYM:[_A-Za-z0-9]+]]{{.+}}
-  // CHECK-NEXT:     }
   // CHECK-NEXT:     sv.ifdef  "FIRRTL_BEFORE_INITIAL" {
   // CHECK-NEXT:       sv.verbatim "`FIRRTL_BEFORE_INITIAL" {symbols = []}
   // CHECK-NEXT:     }
@@ -365,10 +407,9 @@ hw.module private @init1DVector(%clock: i1, %a: !hw.array<2xi1>) -> (b: !hw.arra
   // CHECK-NEXT:         sv.verbatim "`INIT_RANDOM_PROLOG_" {symbols = []}
   // CHECK-NEXT:       }
   // CHECK-NEXT:       sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
-  // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@init1DVector::@[[RANDOM_SYM]]>]}
-  // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}}[0] = {{[{][{]1[}][}]}}[0];" {symbols = [#hw.innerNameRef<@init1DVector::@[[r_sym]]>, #hw.innerNameRef<@init1DVector::@[[RANDOM_SYM]]>]}
-  // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}}[1] = {{[{][{]1[}][}]}}[1];" {symbols = [#hw.innerNameRef<@init1DVector::@[[r_sym]]>, #hw.innerNameRef<@init1DVector::@[[RANDOM_SYM]]>]}
-  // CHECK-NEXT:       }
+  // CHECK:              %2 = comb.extract %1 from 0 : (i32) -> i2
+  // CHECK:              %3 = hw.bitcast %2 : (i2) -> !hw.array<2xi1>
+  // CHECK:            }
   // CHECK-NEXT:     }
   // CHECK-NEXT:     sv.ifdef "FIRRTL_AFTER_INITIAL" {
   // CHECK-NEXT:       sv.verbatim "`FIRRTL_AFTER_INITIAL" {symbols = []}
@@ -390,9 +431,6 @@ hw.module private @init2DVector(%clock: i1, %a: !hw.array<1xarray<1xi1>>) -> (b:
   // CHECK-NEXT: sv.ifdef  "SYNTHESIS" {
   // CHECK-NEXT: } else {
   // CHECK-NEXT:   sv.ordered {
-  // CHECK-NEXT:     sv.ifdef  "RANDOMIZE_REG_INIT" {
-  // CHECK-NEXT:       %_RANDOM = sv.reg sym @_RANDOM  : !hw.inout<i32>
-  // CHECK-NEXT:     }
   // CHECK-NEXT:     sv.ifdef  "FIRRTL_BEFORE_INITIAL" {
   // CHECK-NEXT:       sv.verbatim "`FIRRTL_BEFORE_INITIAL" {symbols = []}
   // CHECK-NEXT:     }
@@ -401,9 +439,9 @@ hw.module private @init2DVector(%clock: i1, %a: !hw.array<1xarray<1xi1>>) -> (b:
   // CHECK-NEXT:         sv.verbatim "`INIT_RANDOM_PROLOG_" {symbols = []}
   // CHECK-NEXT:       }
   // CHECK-NEXT:       sv.ifdef.procedural  "RANDOMIZE_REG_INIT" {
-  // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@init2DVector::@_RANDOM>]}
-  // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}}[0][0] = {{[{][{]1[}][}]}}[0];" {symbols = [#hw.innerNameRef<@init2DVector::@__r__>, #hw.innerNameRef<@init2DVector::@_RANDOM>]}
-  // CHECK-NEXT:       }
+  // CHECK:              %2 = comb.extract %1 from 0 : (i32) -> i1
+  // CHECK:              %3 = hw.bitcast %2 : (i1) -> !hw.array<1xarray<1xi1>>
+  // CHECK:            }
   // CHECK-NEXT:     }
   // CHECK-NEXT:     sv.ifdef "FIRRTL_AFTER_INITIAL" {
   // CHECK-NEXT:       sv.verbatim "`FIRRTL_AFTER_INITIAL" {symbols = []}
@@ -423,9 +461,6 @@ hw.module private @initStruct(%clock: i1) {
   // CHECK:      sv.ifdef "SYNTHESIS" {
   // CHECK-NEXT: } else {
   // CHECK-NEXT:   sv.ordered {
-  // CHECK-NEXT:     sv.ifdef "RANDOMIZE_REG_INIT" {
-  // CHECK-NEXT:       %[[RANDOM:.+]] = sv.reg sym @[[RANDOM_SYM:[_A-Za-z0-9]+]]{{.+}}
-  // CHECK-NEXT:     }
   // CHECK-NEXT:     sv.ifdef  "FIRRTL_BEFORE_INITIAL" {
   // CHECK-NEXT:       sv.verbatim "`FIRRTL_BEFORE_INITIAL" {symbols = []}
   // CHECK-NEXT:     }
@@ -434,9 +469,9 @@ hw.module private @initStruct(%clock: i1) {
   // CHECK-NEXT:         sv.verbatim "`INIT_RANDOM_PROLOG_" {symbols = []}
   // CHECK-NEXT:       }
   // CHECK-NEXT:       sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
-  // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@initStruct::@[[RANDOM_SYM]]>]}
-  // CHECK-NEXT:         sv.verbatim "{{[{][{]0[}][}]}}.a = {{[{][{]1[}][}]}}[0];" {symbols = [#hw.innerNameRef<@initStruct::@[[r_sym]]>, #hw.innerNameRef<@initStruct::@[[RANDOM_SYM]]>]}
-  // CHECK-NEXT:       }
+  // CHECK:              %2 = comb.extract %1 from 0 : (i32) -> i1
+  // CHECK:              %3 = hw.bitcast %2 : (i1) -> !hw.struct<a: i1>
+  // CHECK:            }
   // CHECK-NEXT:     }
   // CHECK-NEXT:     sv.ifdef "FIRRTL_AFTER_INITIAL" {
   // CHECK-NEXT:       sv.verbatim "`FIRRTL_AFTER_INITIAL" {symbols = []}
@@ -461,4 +496,65 @@ hw.module @issue1594(%clock: i1, %reset: i1, %a: i1) -> (b: i1) {
   // CHECK-NOT: sv.always
   // CHECK: hw.output
   hw.output %r : i1
+}
+
+// Check that deeply nested if statement creation doesn't cause any issue.
+// CHECK-LABEL: @DeeplyNestedIfs
+// CHECK-COUNT-17: sv.if
+hw.module @DeeplyNestedIfs(%a_0: i1, %a_1: i1, %a_2: i1, %c_0_0: i1, %c_0_1: i1, %c_1_0: i1, %c_1_1: i1, %c_2_0: i1, %c_2_1: i1, %clock: i1) -> (out_0: i1, out_1: i1) {
+  %r_0 = seq.firreg %25 clock %clock {firrtl.random_init_start = 0 : ui64} : i1
+  %r_1 = seq.firreg %51 clock %clock {firrtl.random_init_start = 1 : ui64} : i1
+  %0 = comb.mux bin %a_1, %c_1_0, %c_0_0 : i1
+  %1 = comb.mux bin %a_0, %0, %c_2_0 : i1
+  %2 = comb.mux bin %a_2, %1, %c_1_0 : i1
+  %3 = comb.mux bin %a_1, %2, %c_0_0 : i1
+  %4 = comb.mux bin %a_0, %3, %c_2_0 : i1
+  %5 = comb.mux bin %a_2, %4, %c_1_0 : i1
+  %6 = comb.mux bin %a_1, %5, %c_0_0 : i1
+  %7 = comb.mux bin %a_0, %6, %c_2_0 : i1
+  %8 = comb.mux bin %a_2, %7, %c_1_0 : i1
+  %9 = comb.mux bin %a_1, %8, %c_0_0 : i1
+  %10 = comb.mux bin %a_0, %9, %c_2_0 : i1
+  %11 = comb.mux bin %a_2, %10, %c_1_0 : i1
+  %12 = comb.mux bin %a_1, %11, %c_0_0 : i1
+  %13 = comb.mux bin %a_0, %12, %c_2_0 : i1
+  %14 = comb.mux bin %a_2, %13, %c_1_0 : i1
+  %15 = comb.mux bin %a_1, %14, %c_0_0 : i1
+  %16 = comb.mux bin %a_0, %15, %c_2_0 : i1
+  %17 = comb.mux bin %a_2, %16, %c_1_0 : i1
+  %18 = comb.mux bin %a_1, %17, %c_0_0 : i1
+  %19 = comb.mux bin %a_0, %18, %c_2_0 : i1
+  %20 = comb.mux bin %a_2, %19, %c_1_0 : i1
+  %21 = comb.mux bin %a_1, %20, %c_0_0 : i1
+  %22 = comb.mux bin %a_0, %21, %c_2_0 : i1
+  %23 = comb.mux bin %a_2, %22, %c_1_0 : i1
+  %24 = comb.mux bin %a_1, %23, %c_0_0 : i1
+  %25 = comb.mux bin %a_0, %24, %r_0 : i1
+  %26 = comb.mux bin %a_1, %c_1_1, %c_0_1 : i1
+  %27 = comb.mux bin %a_0, %26, %c_2_1 : i1
+  %28 = comb.mux bin %a_2, %27, %c_1_1 : i1
+  %29 = comb.mux bin %a_1, %28, %c_0_1 : i1
+  %30 = comb.mux bin %a_0, %29, %c_2_1 : i1
+  %31 = comb.mux bin %a_2, %30, %c_1_1 : i1
+  %32 = comb.mux bin %a_1, %31, %c_0_1 : i1
+  %33 = comb.mux bin %a_0, %32, %c_2_1 : i1
+  %34 = comb.mux bin %a_2, %33, %c_1_1 : i1
+  %35 = comb.mux bin %a_1, %34, %c_0_1 : i1
+  %36 = comb.mux bin %a_0, %35, %c_2_1 : i1
+  %37 = comb.mux bin %a_2, %36, %c_1_1 : i1
+  %38 = comb.mux bin %a_1, %37, %c_0_1 : i1
+  %39 = comb.mux bin %a_0, %38, %c_2_1 : i1
+  %40 = comb.mux bin %a_2, %39, %c_1_1 : i1
+  %41 = comb.mux bin %a_1, %40, %c_0_1 : i1
+  %42 = comb.mux bin %a_0, %41, %c_2_1 : i1
+  %43 = comb.mux bin %a_2, %42, %c_1_1 : i1
+  %44 = comb.mux bin %a_1, %43, %c_0_1 : i1
+  %45 = comb.mux bin %a_0, %44, %c_2_1 : i1
+  %46 = comb.mux bin %a_2, %45, %c_1_1 : i1
+  %47 = comb.mux bin %a_1, %46, %c_0_1 : i1
+  %48 = comb.mux bin %a_0, %47, %c_2_1 : i1
+  %49 = comb.mux bin %a_2, %48, %c_1_1 : i1
+  %50 = comb.mux bin %a_1, %49, %c_0_1 : i1
+  %51 = comb.mux bin %a_0, %50, %r_1 : i1
+  hw.output %r_0, %r_1 : i1, i1
 }

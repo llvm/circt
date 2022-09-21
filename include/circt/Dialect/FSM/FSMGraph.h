@@ -320,13 +320,13 @@ struct llvm::DOTGraphTraits<circt::fsm::FSMGraph *>
   static std::string getNodeLabel(circt::fsm::FSMStateNode *node,
                                   circt::fsm::FSMGraph *) {
     // The name of the graph node is the state name.
-    return node->getState().sym_name().str();
+    return node->getState().getSymName().str();
   }
 
   static std::string getNodeDescription(circt::fsm::FSMStateNode *node,
                                         circt::fsm::FSMGraph *) {
     // The description of the node is the dump of its Output region.
-    return circt::fsm::detail::dumpOps(node->getState().output().getOps());
+    return circt::fsm::detail::dumpOps(node->getState().getOutput().getOps());
   }
 
   template <typename Iterator>
@@ -341,7 +341,7 @@ struct llvm::DOTGraphTraits<circt::fsm::FSMGraph *>
 
     std::string attrs = "label=\"";
     attrs += circt::fsm::detail::dotSafeDumpOps(llvm::make_filter_range(
-        transition.guard().getOps(), [](mlir::Operation &op) {
+        transition.getGuard().getOps(), [](mlir::Operation &op) {
           // Ignore implicit fsm.return/fsm.output operations with no operands.
           if (isa<circt::fsm::ReturnOp, circt::fsm::OutputOp>(op))
             return op.getNumOperands() != 0;

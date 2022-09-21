@@ -32,6 +32,7 @@ std::unique_ptr<mlir::Pass> createHandshakeRemoveBuffersPass();
 std::unique_ptr<mlir::Pass> createHandshakeAddIDsPass();
 std::unique_ptr<mlir::OperationPass<handshake::FuncOp>>
 createHandshakeInsertBuffersPass();
+std::unique_ptr<mlir::Pass> createHandshakeLockFunctionsPass();
 
 /// Iterates over the handshake::FuncOp's in the program to build an instance
 /// graph. In doing so, we detect whether there are any cycles in this graph, as
@@ -53,6 +54,9 @@ LogicalResult addSinkOps(Region &r, OpBuilder &rewriter);
 // Adds fork operations to any value with multiple uses in f.
 LogicalResult addForkOps(Region &r, OpBuilder &rewriter);
 void insertFork(Value result, bool isLazy, OpBuilder &rewriter);
+
+// Adds a locking mechanism around the region.
+LogicalResult lockRegion(Region &r, OpBuilder &rewriter);
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION

@@ -9,6 +9,22 @@ hw.module @namehint_variadic(%a: i3) -> (b: i3) {
   hw.output %0 : i3
 }
 
+// CHECK-LABEL:  hw.module @outOfOrderInoutOperations
+hw.module @outOfOrderInoutOperations(%a: i4) -> (c: i4) {
+  // CHECK: %wire = sv.wire
+  // CHECK-NEXT: %0 = sv.array_index_inout %wire[%false]
+  // CHECK-NEXT: %1 = sv.array_index_inout %0[%false]
+  // CHECK-NEXT: %2 = sv.array_index_inout %1[%false]
+  // CHECK-NEXT: %3 = sv.read_inout %2
+  %false = hw.constant false
+  %0 = sv.read_inout %3 : !hw.inout<i4>
+  %3 = sv.array_index_inout %2[%false] : !hw.inout<array<1xi4>>, i1
+  %2 = sv.array_index_inout %1[%false] : !hw.inout<array<1xarray<1xi4>>>, i1
+  %1 = sv.array_index_inout %wire[%false] : !hw.inout<array<1xarray<1xarray<1xi4>>>>, i1
+  %wire = sv.wire  : !hw.inout<array<1xarray<1xarray<1xi4>>>>
+  hw.output %0: i4
+}
+
 // -----
 
 module {
@@ -95,17 +111,17 @@ module attributes {circt.loweringOptions = "disallowLocalVariables"} {
 }
 
 // -----
-module attributes {circt.loweringOptions =
-                  "emittedLineLength=40,wireSpillingHeuristic=spillNamehintsIfShort"} {
-  // CHECK-LABEL: namehints
-  hw.module @namehints(%a: i8) -> (b: i8, c: i8) {
-    // The output of `comb.add %a, %a, %a` is "a + a + a" so the size is 9 including whitespaces.
-    // "long_namehint" has 13 characters so no spill.
-    // CHECK-NOT: %long_namehint = sv.wire
-    %0 = comb.add %a, %a, %a {sv.namehint = "long_namehint" } : i8
-    // CHECK: %bar = sv.wire
-    // "bar" has 3 characters so spill a wire.
-    %1 = comb.add %a, %a, %a {sv.namehint = "bar" } : i8
-    hw.output %0, %1 : i8, i8
-  }
+
+module attributes {circt.loweringOptions = "disallowExpressionInliningInPorts"} {
+ hw.module.extern @MyExtModule(%in: i8)
+ // CHECK-LABEL: @MoveInstances
+ hw.module @MoveInstances(%a_in: i8) -> (){
+  // CHECK-NEXT: %_xyz3_in = sv.wire
+  // CHECK-NEXT: %0 = comb.add %a_in, %a_in
+  // CHECK-NEXT: %1 = sv.read_inout %_xyz3_in
+  // CHECK-NEXT: sv.assign %_xyz3_in, %0
+  // CHECK-NEXT: hw.instance "xyz3" @MyExtModule(in: %1: i8) -> ()
+  %0 = comb.add %a_in, %a_in : i8
+  hw.instance "xyz3" @MyExtModule(in: %0: i8) -> ()
+ }
 }

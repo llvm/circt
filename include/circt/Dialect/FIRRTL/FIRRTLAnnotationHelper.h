@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_FIRRTL_FIRRTLANNOTATIONHELPER_H
 
 #include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
+#include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -90,7 +91,7 @@ struct AnnoTargetCache {
     TypeSwitch<Operation *>(op)
         .Case<InstanceOp, MemOp, NodeOp, RegOp, RegResetOp, WireOp,
               chirrtl::CombMemOp, chirrtl::SeqMemOp, chirrtl::MemoryPortOp,
-              PrintFOp>([&](auto op) {
+              chirrtl::MemoryDebugPortOp, PrintFOp>([&](auto op) {
           // To be safe, check attribute and non-empty name before adding.
           if (auto name = op.getNameAttr(); name && !name.getValue().empty())
             targets.insert({name, OpAnnoTarget(op)});
@@ -195,13 +196,16 @@ bool isAnnoClassLowered(StringRef className);
 struct ApplyState {
   using AddToWorklistFn = llvm::function_ref<void(DictionaryAttr)>;
   ApplyState(CircuitOp circuit, SymbolTable &symTbl,
-             AddToWorklistFn addToWorklistFn)
-      : circuit(circuit), symTbl(symTbl), addToWorklistFn(addToWorklistFn) {}
+             AddToWorklistFn addToWorklistFn,
+             InstancePathCache &instancePathCache)
+      : circuit(circuit), symTbl(symTbl), addToWorklistFn(addToWorklistFn),
+        instancePathCache(instancePathCache) {}
 
   CircuitOp circuit;
   SymbolTable &symTbl;
   CircuitTargetCache targetCaches;
   AddToWorklistFn addToWorklistFn;
+  InstancePathCache &instancePathCache;
 
   ModuleNamespace &getNamespace(FModuleLike module) {
     auto &ptr = namespaces[module];
@@ -277,6 +281,34 @@ A tryGetAs(DictionaryAttr &dict, const Attribute &root, StringRef key,
   return valueA;
 }
 
+/// Add ports to the module and all its instances and return the clone for
+/// `instOnPath`. This does not connect the new ports to anything. Replace
+/// the old instances with the new cloned instance in all the caches.
+InstanceOp addPortsToModule(
+    FModuleOp mod, InstanceOp instOnPath, FIRRTLType portType, Direction dir,
+    StringRef newName, InstancePathCache &instancePathcache,
+    llvm::function_ref<ModuleNamespace &(FModuleLike)> getNamespace,
+    CircuitTargetCache *targetCaches = nullptr);
+
+/// Add a port to each instance on the path `instancePath` and forward the
+/// `fromVal` through them. It returns the port added to the last module on the
+/// given path. The module referenced by the first instance on the path must
+/// contain `fromVal`.
+Value borePortsOnPath(
+    SmallVector<InstanceOp> &instancePath, FModuleOp lcaModule, Value fromVal,
+    StringRef newNameHint, InstancePathCache &instancePathcache,
+    llvm::function_ref<ModuleNamespace &(FModuleLike)> getNamespace,
+    CircuitTargetCache *targetCachesInstancePathCache);
+
+/// Find the lowest-common-ancestor `lcaModule`, between `srcTarget` and
+/// `dstTarget`, and set `pathFromSrcToWire` with the path between them through
+/// the `lcaModule`. The assumption here is that the srcTarget and dstTarget can
+/// be uniquely identified. Either the instnaces field of their AnnoPathValue is
+/// set or there exists a single path from Top.
+LogicalResult findLCAandSetPath(AnnoPathValue &srcTarget,
+                                AnnoPathValue &dstTarget,
+                                SmallVector<InstanceOp> &pathFromSrcToWire,
+                                FModuleOp &lcaModule, ApplyState &state);
 } // namespace firrtl
 } // namespace circt
 

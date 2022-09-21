@@ -333,7 +333,8 @@ using DiscriminatingTypes = std::pair<SmallVector<Type>, SmallVector<Type>>;
 static DiscriminatingTypes getHandshakeDiscriminatingTypes(Operation *op) {
   return TypeSwitch<Operation *, DiscriminatingTypes>(op)
       .Case<MemoryOp>([&](auto memOp) {
-        return DiscriminatingTypes{{}, {memOp.memRefType().getElementType()}};
+        return DiscriminatingTypes{{},
+                                   {memOp.getMemRefType().getElementType()}};
       })
       .Default([&](auto) {
         // By default, all in- and output types which is not a control type
@@ -431,7 +432,7 @@ static std::string getSubModuleName(Operation *oldOp) {
 
   // Add memory ID.
   if (auto memOp = dyn_cast<handshake::MemoryOp>(oldOp))
-    subModuleName += "_id" + std::to_string(memOp.id());
+    subModuleName += "_id" + std::to_string(memOp.getId());
 
   // Add compare kind.
   if (auto comOp = dyn_cast<mlir::arith::CmpIOp>(oldOp))
@@ -445,7 +446,7 @@ static std::string getSubModuleName(Operation *oldOp) {
     else
       subModuleName += "_fifo";
 
-    if (auto initValues = bufferOp.initValues()) {
+    if (auto initValues = bufferOp.getInitValues()) {
       subModuleName += "_init";
       for (const Attribute e : *initValues) {
         assert(e.isa<IntegerAttr>());
@@ -704,7 +705,7 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
                              "firrtl.transforms.FlattenAnnotation"))})));
   }
 
-  rewriter.inlineRegionBefore(funcOp.body(), topModuleOp.getBody(),
+  rewriter.inlineRegionBefore(funcOp.getBody(), topModuleOp.getBody(),
                               topModuleOp.getBody().end());
 
   // In the following section, we manually merge the two regions and manually
@@ -1045,6 +1046,7 @@ public:
   bool visitHandshake(handshake::SelectOp op);
   bool visitHandshake(SinkOp op);
   bool visitHandshake(SourceOp op);
+  bool visitHandshake(SyncOp op);
   bool visitHandshake(handshake::StoreOp op);
   bool visitHandshake(PackOp op);
   bool visitHandshake(UnpackOp op);
@@ -1197,6 +1199,54 @@ bool HandshakeBuilder::visitHandshake(JoinOp op) {
     inputs.push_back(&portList[i]);
 
   return buildJoinLogic(inputs, output);
+}
+
+// Joins all the input control signals and connects the resulting control
+// signals in a fork like manner to the outputs. Data logic is forwarded
+// directly between in- and outputs.
+bool HandshakeBuilder::visitHandshake(SyncOp op) {
+  size_t numRes = op->getNumResults();
+  unsigned portNum = portList.size();
+  assert(portNum == 2 * numRes + 2);
+
+  // Create wires that will be used to connect the join and the fork logic
+  auto bitType = UIntType::get(op->getContext(), 1);
+  ValueVector connector;
+  connector.push_back(rewriter.create<WireOp>(insertLoc, bitType, "allValid"));
+  connector.push_back(rewriter.create<WireOp>(insertLoc, bitType, "allReady"));
+
+  // Collect all input ports.
+  SmallVector<ValueVector *, 4> inputs;
+  for (unsigned i = 0, e = numRes; i < e; ++i)
+    inputs.push_back(&portList[i]);
+
+  // Collect all output ports.
+  SmallVector<ValueVector *, 4> outputs;
+  for (unsigned i = numRes, e = 2 * numRes; i < e; ++i)
+    outputs.push_back(&portList[i]);
+
+  // connect data ports
+  for (auto [in, out] : llvm::zip(inputs, outputs)) {
+    if (in->size() == 2)
+      continue;
+
+    rewriter.create<ConnectOp>(insertLoc, (*out)[2], (*in)[2]);
+  }
+
+  if (!buildJoinLogic(inputs, &connector))
+    return false;
+
+  // The clock and reset signals will be used for registers.
+  auto clock = portList[portNum - 2][0];
+  auto reset = portList[portNum - 1][0];
+
+  // The state-keeping fork logic is required here, as the circuit isn't allowed
+  // to wait for all the consumers to be ready.
+  // Connecting the ready signals of the outputs to their corresponding valid
+  // signals leads to combinatorial cycles. The paper which introduced
+  // compositional dataflow circuits explicitly mentions this limitation:
+  // http://arcade.cs.columbia.edu/df-memocode17.pdf
+  return buildForkLogic(&connector, outputs, clock, reset, true);
 }
 
 /// Please refer to test_mux.mlir test case.
@@ -2370,17 +2420,18 @@ bool HandshakeBuilder::buildSeqBufferLogic(int64_t numStage, ValueVector *input,
     // Create registers for data signal.
     Value dataReg = nullptr;
     Value initValue = zeroDataConst;
-    if (isInitialized) {
-      assert(dataType.isa<IntType>() &&
-             "initial values are only supported for integer buffers");
-      initValue = createConstantOp(
-          dataType, APInt(dataType.getBitWidthOrSentinel(), initValues[i]),
-          insertLoc, rewriter);
-    }
-    if (!isControl)
+    if (!isControl) {
+      if (isInitialized) {
+        assert(dataType.isa<IntType>() &&
+               "initial values are only supported for integer buffers");
+        initValue = createConstantOp(
+            dataType, APInt(dataType.getBitWidthOrSentinel(), initValues[i]),
+            insertLoc, rewriter);
+      }
       dataReg =
           rewriter.create<RegResetOp>(insertLoc, dataType, clock, reset,
                                       initValue, "dataReg" + std::to_string(i));
+    }
 
     // Create wires for valid, ready and data signal coming from the control
     // buffer stage.
@@ -2429,8 +2480,8 @@ bool HandshakeBuilder::visitHandshake(BufferOp op) {
   // For now, we only support sequential buffers.
   if (op.isSequential()) {
     SmallVector<int64_t> initValues = {};
-    if (op.initValues())
-      initValues = op.getInitValues();
+    if (op.getInitValues())
+      initValues = op.getInitValueArray();
     return buildSeqBufferLogic(op.getNumSlots(), &input, &output, clock, reset,
                                op.isControl(), initValues);
   }
@@ -2491,7 +2542,7 @@ bool HandshakeBuilder::visitHandshake(ExternalMemoryOp op) {
 
 bool HandshakeBuilder::visitHandshake(MemoryOp op) {
   // Get the memory type and element type.
-  MemRefType type = op.memRefType();
+  MemRefType type = op.getMemRefType();
   Type elementType = type.getElementType();
   if (!elementType.isSignlessInteger()) {
     op.emitError("only memrefs of signless ints are supported");
@@ -2505,7 +2556,7 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
   RUWAttr ruw = RUWAttr::Old;
   uint64_t depth = type.getNumElements();
   FIRRTLBaseType dataType = getFIRRTLType(elementType);
-  auto name = "mem" + std::to_string(op.id());
+  auto name = "mem" + std::to_string(op.getId());
 
   // Helpers to get port identifiers.
   auto loadIdentifier = [&](size_t i) {
@@ -2517,8 +2568,8 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
   };
 
   // Collect the port info for each port.
-  uint64_t numLoads = op.ldCount();
-  uint64_t numStores = op.stCount();
+  uint64_t numLoads = op.getLdCount();
+  uint64_t numStores = op.getStCount();
   SmallVector<std::pair<StringAttr, MemOp::PortKind>, 8> ports;
   for (size_t i = 0; i < numLoads; ++i) {
     auto portName = loadIdentifier(i);

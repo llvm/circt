@@ -182,6 +182,61 @@ static void printMemoryPortOp(OpAsmPrinter &p, Operation *op,
 }
 
 //===----------------------------------------------------------------------===//
+// MemoryDebugPortOp
+//===----------------------------------------------------------------------===//
+
+void MemoryDebugPortOp::build(OpBuilder &builder, OperationState &result,
+                              Type dataType, Value memory, StringRef name,
+                              ArrayRef<Attribute> annotations) {
+  build(builder, result, dataType, memory, name,
+        builder.getArrayAttr(annotations));
+}
+
+LogicalResult MemoryDebugPortOp::inferReturnTypes(
+    MLIRContext *context, Optional<Location> loc, ValueRange operands,
+    DictionaryAttr attrs, mlir::RegionRange regions,
+    SmallVectorImpl<Type> &results) {
+  auto inType = operands[0].getType();
+  auto memType = inType.dyn_cast<CMemoryType>();
+  if (!memType) {
+    if (loc)
+      mlir::emitError(*loc, "memory port requires memory operand");
+    return failure();
+  }
+  results.push_back(RefType::get(
+      FVectorType::get(memType.getElementType(), memType.getNumElements())));
+  return success();
+}
+
+void MemoryDebugPortOp::getAsmResultNames(
+    function_ref<void(Value, StringRef)> setNameFn) {
+  StringRef base = getName();
+  if (base.empty())
+    base = "memport";
+  setNameFn(getData(), (base + "_data").str());
+}
+
+static ParseResult parseMemoryDebugPortOp(OpAsmParser &parser,
+                                          NamedAttrList &resultAttrs) {
+  // Add an empty annotation array if none were parsed.
+  auto result = parser.parseOptionalAttrDict(resultAttrs);
+  if (!resultAttrs.get("annotations"))
+    resultAttrs.append("annotations", parser.getBuilder().getArrayAttr({}));
+  return result;
+}
+
+/// Always elide "direction" and elide "annotations" if it exists or
+/// if it is empty.
+static void printMemoryDebugPortOp(OpAsmPrinter &p, Operation *op,
+                                   DictionaryAttr attr) {
+  SmallVector<StringRef, 1> elides;
+  // Annotations elided if empty.
+  if (op->getAttrOfType<ArrayAttr>("annotations").empty())
+    elides.push_back("annotations");
+  p.printOptionalAttrDict(op->getAttrs(), elides);
+}
+
+//===----------------------------------------------------------------------===//
 // CombMemOp
 //===----------------------------------------------------------------------===//
 

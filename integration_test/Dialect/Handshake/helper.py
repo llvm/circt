@@ -1,4 +1,5 @@
-from cocotb.triggers import RisingEdge
+import cocotb.clock
+from cocotb.triggers import RisingEdge, ReadWrite
 
 
 class HandshakePort:
@@ -32,6 +33,8 @@ class HandshakePort:
       await RisingEdge(self.dut.clock)
 
   async def awaitHandshake(self):
+    # Make sure that changes to ready are propagated before it is checked.
+    await ReadWrite()
     directSend = self.isReady()
     await self.waitUntilReady()
 
@@ -115,7 +118,7 @@ def _findPort(dut, name):
   validName = f"{name}_valid"
   dataName = f"{name}_data"
   if (not hasattr(dut, readyName) or not hasattr(dut, validName)):
-    raise Exception(f"dut does not have a port named {n}")
+    raise Exception(f"dut does not have a port named {name}")
 
   ready = getattr(dut, readyName)
   valid = getattr(dut, validName)
@@ -146,4 +149,29 @@ def getPorts(dut, inNames, outNames):
   """
   ins = [_findPort(dut, name) for name in inNames]
   outs = [_findPort(dut, name) for name in outNames]
+  return ins, outs
+
+
+async def initDut(dut, inNames, outNames):
+  """
+  Initializes a dut by adding a clock, setting initial valid and ready flags,
+  and performing a reset.
+  """
+  ins, outs = getPorts(dut, inNames, outNames)
+
+  # Create a 10us period clock on port clock
+  clock = cocotb.clock.Clock(dut.clock, 10, units="us")
+  cocotb.start_soon(clock.start())  # Start the clock
+
+  for i in ins:
+    i.setValid(0)
+
+  for o in outs:
+    o.setReady(1)
+
+  # Reset
+  dut.reset.value = 1
+  await RisingEdge(dut.clock)
+  dut.reset.value = 0
+  await RisingEdge(dut.clock)
   return ins, outs

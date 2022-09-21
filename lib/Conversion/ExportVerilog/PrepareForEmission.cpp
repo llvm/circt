@@ -89,11 +89,8 @@ static bool shouldSpillWire(Operation &op, const LoweringOptions &options) {
   return false;
 }
 
-// Given an invisible instance, make sure all inputs are driven from
-// wires or ports.
-static void lowerBoundInstance(InstanceOp op) {
-  if (!op->hasAttr("doNotPrint"))
-    return;
+// Given an instance, make sure all inputs are driven from wires or ports.
+static void spillWiresForInstanceInputs(InstanceOp op) {
   Block *block = op->getParentOfType<HWModuleOp>().getBodyBlock();
   auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), block);
 
@@ -209,28 +206,23 @@ static void lowerAlwaysInlineOperation(Operation *op) {
   // Finally, ensures the op is in the same block as its user so it can be
   // inlined.
   Operation *user = *op->getUsers().begin();
-  if (op->getBlock() != user->getBlock()) {
-    op->moveBefore(user);
+  op->moveBefore(user);
 
-    // If any of the operations of the moved op are always inline, recursively
-    // move/clone them too.
-    recursivelyHandleOperands(op);
-  }
+  // If any of the operations of the moved op are always inline, recursively
+  // move/clone them too.
+  recursivelyHandleOperands(op);
   return;
 }
 
 // Find a nearest insertion point where logic op can be declared.
-// Basically this function returns the first operation that is not logic op
-// within the same block. "automatic logic" must be declared at beginning of
-// statements.
+// Logic ops are emitted as "automatic logic" in procedural regions, but
+// they must be declared at beginning of blocks.
 static std::pair<Block *, Block::iterator>
 findLogicOpInsertionPoint(Operation *op) {
   // We have to skip `ifdef.procedural` because it is a just macro.
   if (isa<IfDefProceduralOp>(op->getParentOp()))
     return findLogicOpInsertionPoint(op->getParentOp());
-  return {op->getBlock(),
-          std::find_if(op->getBlock()->begin(), op->getIterator(),
-                       [](Operation &it) { return !isa<LogicOp>(&it); })};
+  return {op->getBlock(), op->getBlock()->begin()};
 }
 
 /// Emit an explicit wire or logic to assign operation's result. This function
@@ -269,13 +261,7 @@ static void lowerUsersToTemporaryWire(Operation &op,
     connect->moveAfter(&op);
 
     // Move the temporary to the appropriate place.
-    if (isProceduralRegion) {
-      // In a procedural region, "automatic logic" is allowed only at the
-      // beggining of statements. `findLogicOpInsertionPoint` returns a nearst
-      // insertion point.
-      auto [block, it] = findLogicOpInsertionPoint(&op);
-      newWire.getDefiningOp()->moveBefore(block, it);
-    } else if (!emitWireAtBlockBegin) {
+    if (!emitWireAtBlockBegin) {
       // `emitWireAtBlockBegin` is intendend to be used for resovling cyclic
       // dependencies. So when `emitWireAtBlockBegin` is true, we keep the
       // position of the wire. Otherwise, we move the wire to immediately after
@@ -304,6 +290,7 @@ static void lowerUsersToTemporaryWire(Operation &op,
 
 /// Lower a variadic fully-associative operation into an expression tree.  This
 /// enables long-line splitting to work with them.
+/// NOLINTNEXTLINE(misc-no-recursion)
 static Value lowerFullyAssociativeOp(Operation &op, OperandRange operands,
                                      SmallVector<Operation *> &newOps,
                                      DenseMap<Value, size_t> &operandMap,
@@ -391,8 +378,8 @@ static Operation *findParentInNonProceduralRegion(Operation *op) {
 /// This function is invoked on side effecting Verilog expressions when we're in
 /// 'disallowLocalVariables' mode for old Verilog clients.  This ensures that
 /// any side effecting expressions are only used by a single BPAssign to a
-/// sv.reg operation.  This ensures that the verilog emitter doesn't have to
-/// worry about spilling them.
+/// sv.reg or sv.logic operation.  This ensures that the verilog emitter doesn't
+/// have to worry about spilling them.
 ///
 /// This returns true if the op was rewritten, false otherwise.
 static bool rewriteSideEffectingExpr(Operation *op) {
@@ -401,7 +388,7 @@ static bool rewriteSideEffectingExpr(Operation *op) {
   // Check to see if this is already rewritten.
   if (op->hasOneUse()) {
     if (auto assign = dyn_cast<BPAssignOp>(*op->user_begin()))
-      if (assign.getDest().getDefiningOp<RegOp>())
+      if (isa_and_nonnull<RegOp, LogicOp>(assign.getDest().getDefiningOp()))
         return false;
   }
 
@@ -479,7 +466,7 @@ static bool hoistNonSideEffectExpr(Operation *op) {
 /// Check whether an op is a declaration that can be moved.
 static bool isMovableDeclaration(Operation *op) {
   return op->getNumResults() == 1 &&
-         op->getResult(0).getType().isa<InOutType>() &&
+         op->getResult(0).getType().isa<InOutType, sv::InterfaceType>() &&
          op->getNumOperands() == 0;
 }
 
@@ -751,6 +738,9 @@ static bool reuseExistingInOut(Operation *op) {
     auto read = builder.create<ReadInOutOp>(assign.getDest());
     use->set(read);
   }
+  if (auto *destOp = assign.getDest().getDefiningOp())
+    if (isExpressionAlwaysInline(destOp))
+      lowerAlwaysInlineOperation(destOp);
   return true;
 }
 
@@ -847,6 +837,11 @@ static void legalizeHWModule(Block &block, const LoweringOptions &options) {
 
   // True if these operations are in a procedural region.
   bool isProceduralRegion = block.getParentOp()->hasTrait<ProceduralRegion>();
+
+  // This tracks "always inline" operation already visited in the iterations to
+  // avoid processing same operations infinitely.
+  DenseSet<Operation *> visitedAlwaysInlineOperations;
+
   for (Block::iterator opIterator = block.begin(), e = block.end();
        opIterator != e;) {
     auto &op = *opIterator++;
@@ -865,14 +860,21 @@ static void legalizeHWModule(Block &block, const LoweringOptions &options) {
     if (auto instance = dyn_cast<InstanceOp>(op)) {
       // Anchor return values to wires early
       lowerInstanceResults(instance);
-      // Anchor ports of bound instances
-      lowerBoundInstance(instance);
+      // Anchor ports of instances when the instance is bound by bind op, or
+      // forced by the option.
+      if (instance->hasAttr("doNotPrint") ||
+          options.disallowExpressionInliningInPorts)
+        spillWiresForInstanceInputs(instance);
     }
 
-    if (isProceduralRegion) {
-      if (auto logic = dyn_cast<LogicOp>(op)) {
-        auto [block, it] = findLogicOpInsertionPoint(logic);
-        op.moveBefore(block, it);
+    // If logic op is located in a procedural region, we have to move the logic
+    // op declaration to a valid program point.
+    if (isProceduralRegion && isa<LogicOp>(op)) {
+      if (options.disallowLocalVariables) {
+        // When `disallowLocalVariables` is enabled, "automatic logic" is
+        // prohibited so hoist the op to a non-procedural region.
+        auto *parentOp = findParentInNonProceduralRegion(&op);
+        op.moveBefore(parentOp);
       }
     }
 
@@ -938,8 +940,10 @@ static void legalizeHWModule(Block &block, const LoweringOptions &options) {
     }
 
     // Duplicate "always inline" expression for each of their users and move
-    // them to be next to their users.
-    if (isExpressionAlwaysInline(&op)) {
+    // them to be next to their users. Process the op only when the op is never
+    // processed from the top-level loop.
+    if (isExpressionAlwaysInline(&op) &&
+        visitedAlwaysInlineOperations.insert(&op).second) {
       lowerAlwaysInlineOperation(&op);
       continue;
     }
@@ -1019,63 +1023,90 @@ static void legalizeHWModule(Block &block, const LoweringOptions &options) {
       (void)reuseExistingInOut(&op);
   }
 
+  if (isProceduralRegion) {
+    // If there is no operation, there is nothing to do.
+    if (block.empty())
+      return;
+
+    // In a procedural region, logic operations needs to be top of blocks so
+    // mvoe logic operations to valid program points.
+
+    // This keeps tracks of an insertion point of logic op.
+    std::pair<Block *, Block::iterator> logicOpInsertionPoint =
+        findLogicOpInsertionPoint(&block.front());
+    for (auto &op : llvm::make_early_inc_range(block)) {
+      if (auto logic = dyn_cast<LogicOp>(&op)) {
+        // If the logic op is already located at the given point, increment the
+        // iterator to keep the order of logic operations in the block.
+        if (logicOpInsertionPoint.second == logic->getIterator()) {
+          ++logicOpInsertionPoint.second;
+          continue;
+        }
+        // Otherwise, move the op to the insertion point.
+        logic->moveBefore(logicOpInsertionPoint.first,
+                          logicOpInsertionPoint.second);
+      }
+    }
+    return;
+  }
+
   // Now that all the basic ops are settled, check for any use-before def issues
   // in graph regions.  Lower these into explicit wires to keep the emitter
   // simple.
-  if (!isProceduralRegion) {
-    SmallPtrSet<Operation *, 32> seenOperations;
 
-    for (auto &op : llvm::make_early_inc_range(block)) {
-      // Check the users of any expressions to see if they are
-      // lexically below the operation itself.  If so, it is being used out
-      // of order.
-      bool haveAnyOutOfOrderUses = false;
-      for (auto *userOp : op.getUsers()) {
-        // If the user is in a suboperation like an always block, then zip up
-        // to the operation that uses it.
-        while (&block != &userOp->getParentRegion()->front())
-          userOp = userOp->getParentOp();
+  SmallPtrSet<Operation *, 32> seenOperations;
 
-        if (seenOperations.count(userOp)) {
-          haveAnyOutOfOrderUses = true;
-          break;
-        }
+  for (auto &op : llvm::make_early_inc_range(block)) {
+    // Check the users of any expressions to see if they are
+    // lexically below the operation itself.  If so, it is being used out
+    // of order.
+    bool haveAnyOutOfOrderUses = false;
+    for (auto *userOp : op.getUsers()) {
+      // If the user is in a suboperation like an always block, then zip up
+      // to the operation that uses it.
+      while (&block != &userOp->getParentRegion()->front())
+        userOp = userOp->getParentOp();
+
+      if (seenOperations.count(userOp)) {
+        haveAnyOutOfOrderUses = true;
+        break;
       }
-
-      // Remember that we've seen this operation.
-      seenOperations.insert(&op);
-
-      // If all the uses of the operation are below this, then we're ok.
-      if (!haveAnyOutOfOrderUses)
-        continue;
-
-      // If this is a reg/wire declaration, then we move it to the top of the
-      // block.  We can't abstract the inout result.
-      if (isMovableDeclaration(&op)) {
-        op.moveBefore(&block.front());
-        continue;
-      }
-
-      // If this is a constant, then we move it to the top of the block.
-      if (isConstantExpression(&op)) {
-        op.moveBefore(&block.front());
-        continue;
-      }
-
-      // If this is a an operation reading from a declaration, move it up,
-      // along with the corresponding declaration.
-      if (auto readInOut = dyn_cast<ReadInOutOp>(op)) {
-        auto *def = readInOut.getInput().getDefiningOp();
-        if (isMovableDeclaration(def)) {
-          op.moveBefore(&block.front());
-          def->moveBefore(&block.front());
-          continue;
-        }
-      }
-
-      // Otherwise, we need to lower this to a wire to resolve this.
-      lowerUsersToTemporaryWire(op, operandMap, /*emitWireAtBlockBegin=*/true);
     }
+
+    // Remember that we've seen this operation.
+    seenOperations.insert(&op);
+
+    // If all the uses of the operation are below this, then we're ok.
+    if (!haveAnyOutOfOrderUses)
+      continue;
+
+    // If this is a reg/wire declaration, then we move it to the top of the
+    // block.  We can't abstract the inout result.
+    if (isMovableDeclaration(&op)) {
+      op.moveBefore(&block.front());
+      continue;
+    }
+
+    // If this is a constant, then we move it to the top of the block.
+    if (isConstantExpression(&op)) {
+      op.moveBefore(&block.front());
+      continue;
+    }
+
+    // If this is a an operation reading from a declaration, move it up,
+    // along with the corresponding declaration.
+    if (auto readInOut = dyn_cast<ReadInOutOp>(op)) {
+      auto *def = readInOut.getInput().getDefiningOp();
+      if (isMovableDeclaration(def)) {
+        op.moveBefore(&block.front());
+        def->moveBefore(&block.front());
+        continue;
+      }
+    }
+
+    // Otherwise, we need to lower this to a wire to resolve this.
+    lowerUsersToTemporaryWire(op, operandMap,
+                              /*emitWireAtBlockBegin=*/true);
   }
 }
 

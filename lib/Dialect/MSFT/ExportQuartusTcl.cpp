@@ -50,8 +50,8 @@ LogicalResult TclEmitter::populate() {
 
   // Look in InstanceHierarchyOps to get the instance named ones.
   for (auto hier : topLevel.getOps<InstanceHierarchyOp>()) {
-    Operation *mod = topLevelSymbols.getDefinition(hier.topModuleRefAttr());
-    auto &tclOps = tclOpsForModInstance[mod][hier.instNameAttr()];
+    Operation *mod = topLevelSymbols.getDefinition(hier.getTopModuleRefAttr());
+    auto &tclOps = tclOpsForModInstance[mod][hier.getInstNameAttr()];
     for (auto tclOp : hier.getOps<DynInstDataOpInterface>()) {
       assert(tclOp.getTopModule(topLevelSymbols) == mod &&
              "Referenced mod does does not match");
@@ -189,14 +189,14 @@ TclOutputState::emitLocationAssignment(DynInstDataOpInterface refOp,
 }
 
 LogicalResult TclOutputState::emit(PDPhysLocationOp loc) {
-  if (failed(emitLocationAssignment(loc, loc.loc(), loc.subPath())))
+  if (failed(emitLocationAssignment(loc, loc.getLoc(), loc.getSubPath())))
     return failure();
   os << '\n';
   return success();
 }
 
 LogicalResult TclOutputState::emit(PDRegPhysLocationOp locs) {
-  ArrayRef<PhysLocationAttr> locArr = locs.locs().getLocs();
+  ArrayRef<PhysLocationAttr> locArr = locs.getLocs().getLocs();
   for (size_t i = 0, e = locArr.size(); i < e; ++i) {
     PhysLocationAttr pla = locArr[i];
     if (!pla)
@@ -212,12 +212,12 @@ LogicalResult TclOutputState::emit(PDRegPhysLocationOp locs) {
 /// "set_global_assignment -name NAME VALUE -to $parent|fooInst|entityName"
 LogicalResult TclOutputState::emit(DynamicInstanceVerbatimAttrOp attr) {
   GlobalRefOp ref = getRefOp(attr);
-  indent() << "set_instance_assignment -name " << attr.name() << " "
-           << attr.value();
+  indent() << "set_instance_assignment -name " << attr.getName() << " "
+           << attr.getValue();
 
   // To which entity does this apply?
   os << " -to $parent|";
-  emitPath(ref, attr.subPath());
+  emitPath(ref, attr.getSubPath());
   os << '\n';
   return success();
 }
@@ -231,16 +231,16 @@ LogicalResult TclOutputState::emit(PDPhysRegionOp region) {
   GlobalRefOp ref = getRefOp(region);
 
   auto physicalRegion = dyn_cast_or_null<DeclPhysicalRegionOp>(
-      emitter.getDefinition(region.physRegionRefAttr()));
+      emitter.getDefinition(region.getPhysRegionRefAttr()));
   if (!physicalRegion)
     return region.emitOpError(
                "could not find physical region declaration named ")
-           << region.physRegionRefAttr();
+           << region.getPhysRegionRefAttr();
 
   // PLACE_REGION directive.
   indent() << "set_instance_assignment -name PLACE_REGION \"";
   auto physicalBounds =
-      physicalRegion.bounds().getAsRange<PhysicalBoundsAttr>();
+      physicalRegion.getBounds().getAsRange<PhysicalBoundsAttr>();
   llvm::interleave(
       physicalBounds, os,
       [&](PhysicalBoundsAttr bounds) {
@@ -253,26 +253,26 @@ LogicalResult TclOutputState::emit(PDPhysRegionOp region) {
   os << '"';
 
   os << " -to $parent|";
-  emitPath(ref, region.subPath());
+  emitPath(ref, region.getSubPath());
   os << '\n';
 
   // RESERVE_PLACE_REGION directive.
   indent() << "set_instance_assignment -name RESERVE_PLACE_REGION OFF";
   os << " -to $parent|";
-  emitPath(ref, region.subPath());
+  emitPath(ref, region.getSubPath());
   os << '\n';
 
   // CORE_ONLY_PLACE_REGION directive.
   indent() << "set_instance_assignment -name CORE_ONLY_PLACE_REGION ON";
   os << " -to $parent|";
-  emitPath(ref, region.subPath());
+  emitPath(ref, region.getSubPath());
   os << '\n';
 
   // REGION_NAME directive.
   indent() << "set_instance_assignment -name REGION_NAME ";
   os << physicalRegion.getName();
   os << " -to $parent|";
-  emitPath(ref, region.subPath());
+  emitPath(ref, region.getSubPath());
   os << '\n';
   return success();
 }

@@ -2432,4 +2432,27 @@ firrtl.module @Verification(in %clock: !firrtl.clock, in %p: !firrtl.uint<1>) {
   // CHECK-NOT: firrtl.cover
   firrtl.cover %clock, %c0, %p, "cover0"
 }
+
+// COMMON-LABEL:  firrtl.module @MultibitMux
+// COMMON-NEXT:      %0 = firrtl.subaccess %a[%sel] : !firrtl.vector<uint<1>, 3>, !firrtl.uint<2>
+// COMMON-NEXT:      firrtl.strictconnect %b, %0 : !firrtl.uint<1>
+firrtl.module @MultibitMux(in %a: !firrtl.vector<uint<1>, 3>, in %sel: !firrtl.uint<2>, out %b: !firrtl.uint<1>) {
+  %0 = firrtl.subindex %a[2] : !firrtl.vector<uint<1>, 3>
+  %1 = firrtl.subindex %a[1] : !firrtl.vector<uint<1>, 3>
+  %2 = firrtl.subindex %a[0] : !firrtl.vector<uint<1>, 3>
+  %3 = firrtl.multibit_mux %sel, %0, %1, %2 : !firrtl.uint<2>, !firrtl.uint<1>
+  firrtl.strictconnect %b, %3 : !firrtl.uint<1>
+}
+
+// CHECK-LABEL: firrtl.module @NameProp
+firrtl.module @NameProp(in %in0: !firrtl.uint<1>, in %in1: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
+  %0 = firrtl.or %in0, %in1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  %_useless_name_1 = firrtl.node  %0  : !firrtl.uint<1>
+  %useful_name = firrtl.node  %_useless_name_1  : !firrtl.uint<1>
+  %_useless_name_2 = firrtl.node  %useful_name  : !firrtl.uint<1>
+  // CHECK-NEXT: %useful_name = firrtl.or %in0, %in1
+  // CHECK-NEXT: firrtl.strictconnect %out, %useful_name
+  firrtl.strictconnect %out, %_useless_name_2 : !firrtl.uint<1>
+}
+
 }

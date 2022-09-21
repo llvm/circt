@@ -87,13 +87,6 @@ firrtl.circuit "TopLevel" {
     firrtl.connect %out2, %3 : !firrtl.sint<64>, !firrtl.sint<64>
   }
 
-  // CHECK-LABEL: firrtl.module private @Uniquification
-  // CHECK-SAME: in %[[FLATTENED_ARG:a_b]]: [[FLATTENED_TYPE:!firrtl.uint<1>]],
-  // CHECK-NOT: %[[FLATTENED_ARG]]
-  // CHECK-SAME: in %[[RENAMED_ARG:a_b.+]]: [[RENAMED_TYPE:!firrtl.uint<1>]]
-  // CHECK-SAME: {portNames = ["a_b", "a_b"]}
-  firrtl.module private @Uniquification(in %a: !firrtl.bundle<b: uint<1>>, in %a_b: !firrtl.uint<1>) {
-  }
 
   // CHECK-LABEL: firrtl.module private @Top
   firrtl.module private @Top(in %in : !firrtl.bundle<a: uint<1>, b: uint<1>>,
@@ -1074,7 +1067,7 @@ firrtl.circuit "DontTouch" {
 
 // Check that we don't create symbols for non-local annotations.
 firrtl.circuit "Foo"  {
-  firrtl.hierpath @nla [@Foo::@bar, @Bar]
+  firrtl.hierpath private @nla [@Foo::@bar, @Bar]
   // CHECK:       firrtl.module private @Bar(in %a_b:
   // CHECK-SAME:    !firrtl.uint<1> [{circt.nonlocal = @nla, class = "circt.test"}])
   firrtl.module private @Bar(in %a: !firrtl.bundle<b: uint<1>>

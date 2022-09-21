@@ -388,3 +388,26 @@ firrtl.circuit "dntOutput"  {
     firrtl.strictconnect %0, %c1_ui3 : !firrtl.uint<3>
   }
 }
+
+// -----
+// Issue #3820.
+firrtl.circuit "Foo"  {
+  // CHECK-LABEL: firrtl.module private @Bar
+  firrtl.module private @Bar(in %a: !firrtl.vector<uint<1>, 1>, in %clock: !firrtl.clock, out %b: !firrtl.uint<1>) {
+    %0 = firrtl.subindex %a[0] : !firrtl.vector<uint<1>, 1>
+    %r = firrtl.reg  %clock  {firrtl.random_init_start = 0 : ui64} : !firrtl.uint<1>
+    firrtl.strictconnect %r, %0 : !firrtl.uint<1>
+    firrtl.strictconnect %b, %r : !firrtl.uint<1>
+    // CHECK: %r = firrtl.reg
+    // CHECK: firrtl.strictconnect %b, %r
+  }
+  // CHECK-LABEL: firrtl.module @Foo
+  firrtl.module @Foo(in %in: !firrtl.uint<1>, in %clock: !firrtl.clock, out %out: !firrtl.uint<1>) {
+    %bar_a, %bar_clock, %bar_b = firrtl.instance bar  @Bar(in a: !firrtl.vector<uint<1>, 1>, in clock: !firrtl.clock, out b: !firrtl.uint<1>)
+    %0 = firrtl.subindex %bar_a[0] : !firrtl.vector<uint<1>, 1>
+    firrtl.strictconnect %0, %in : !firrtl.uint<1>
+    firrtl.strictconnect %bar_clock, %clock : !firrtl.clock
+    firrtl.strictconnect %out, %bar_b : !firrtl.uint<1>
+    // CHECK: firrtl.strictconnect %out, %bar_b
+  }
+}

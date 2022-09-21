@@ -790,8 +790,8 @@ HandshakeExecuter::HandshakeExecuter(
 
   // Initialize the value map for buffers with initial values.
   for (auto bufferOp : func.getOps<handshake::BufferOp>()) {
-    if (bufferOp.initValues().has_value()) {
-      auto initValues = bufferOp.getInitValues();
+    if (bufferOp.getInitValues().has_value()) {
+      auto initValues = bufferOp.getInitValueArray();
       assert(initValues.size() == 1 &&
              "Handshake-runner only supports buffer initialization with a "
              "single buffer value.");

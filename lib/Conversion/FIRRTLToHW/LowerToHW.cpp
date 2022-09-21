@@ -1009,6 +1009,8 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
   auto parameters = getHWParameters(oldModule, /*ignoreValues=*/true);
   auto newModule = builder.create<hw::HWModuleExternOp>(
       oldModule.getLoc(), nameAttr, ports, verilogName, parameters);
+  SymbolTable::setSymbolVisibility(newModule,
+                                   SymbolTable::getSymbolVisibility(oldModule));
 
   bool hasOutputPort =
       llvm::any_of(firrtlPorts, [&](auto p) { return p.isOutput(); });
@@ -1441,9 +1443,6 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   void addToIfDefBlock(StringRef cond, std::function<void(void)> thenCtor,
                        std::function<void(void)> elseCtor = {});
   void addToInitialBlock(std::function<void(void)> body);
-  void addToIfDefProceduralBlock(StringRef cond,
-                                 std::function<void(void)> thenCtor,
-                                 std::function<void(void)> elseCtor = {});
   void addIfProceduralBlock(Value cond, std::function<void(void)> thenCtor,
                             std::function<void(void)> elseCtor = {});
   Value getExtOrTruncAggregateValue(Value array, FIRRTLBaseType sourceType,
@@ -2326,24 +2325,6 @@ void FIRRTLLowering::addToInitialBlock(std::function<void(void)> body) {
   }
 }
 
-void FIRRTLLowering::addToIfDefProceduralBlock(
-    StringRef cond, std::function<void(void)> thenCtor,
-    std::function<void(void)> elseCtor) {
-  // Check to see if we already have an ifdef on this condition immediately
-  // before the insertion point.  If so, extend it.
-  auto insertIt = builder.getInsertionPoint();
-  if (insertIt != builder.getBlock()->begin())
-    if (auto ifdef = dyn_cast<sv::IfDefProceduralOp>(*--insertIt)) {
-      if (ifdef.getCond().getIdent() == cond) {
-        runWithInsertionPointAtEndOfBlock(thenCtor, ifdef.getThenRegion());
-        runWithInsertionPointAtEndOfBlock(elseCtor, ifdef.getElseRegion());
-        return;
-      }
-    }
-
-  builder.create<sv::IfDefProceduralOp>(cond, thenCtor, elseCtor);
-}
-
 void FIRRTLLowering::addIfProceduralBlock(Value cond,
                                           std::function<void(void)> thenCtor,
                                           std::function<void(void)> elseCtor) {
@@ -2450,7 +2431,13 @@ LogicalResult FIRRTLLowering::visitExpr(SubaccessOp op) {
 
   auto resultType = lowerType(op->getResult(0).getType());
   Value value = getPossiblyInoutLoweredValue(op.getInput());
-  Value valueIdx = getLoweredValue(op.getIndex());
+  Value valueIdx = getLoweredAndExtOrTruncValue(
+      op.getIndex(),
+      UIntType::get(
+          op.getContext(),
+          getBitWidthFromVectorSize(
+              op.getInput().getType().cast<FVectorType>().getNumElements())));
+
   if (!resultType || !value || !valueIdx) {
     op.emitError() << "input lowering failed";
     return failure();
@@ -2594,7 +2581,9 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
 
   // Add symbol if DontTouch annotation present.
   auto symName = getInnerSymName(op);
-  if (AnnotationSet::removeAnnotations(op, dontTouchAnnoClass) && !symName)
+  if ((AnnotationSet::removeAnnotations(op, dontTouchAnnoClass) ||
+       op.getNameKind() == NameKindEnum::InterestingName) &&
+      !symName)
     symName = op.getNameAttr();
 
   // Create a reg op, wiring itself to its input.
@@ -2634,7 +2623,9 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
     return failure();
 
   auto symName = getInnerSymName(op);
-  if (AnnotationSet::removeAnnotations(op, dontTouchAnnoClass) && !symName)
+  if ((AnnotationSet::removeAnnotations(op, dontTouchAnnoClass) ||
+       op.getNameKind() == NameKindEnum::InterestingName) &&
+      !symName)
     symName = op.getNameAttr();
 
   // Create a reg op, wiring itself to its input.
@@ -3228,6 +3219,8 @@ LogicalResult FIRRTLLowering::lowerDivLikeOp(Operation *op) {
   else
     result = builder.createOrFold<UnsignedOp>(lhs, rhs, true);
 
+  tryCopyName(result.getDefiningOp(), op);
+
   if (resultType == opType)
     return setLowering(op->getResult(0), result);
   return setLoweringTo<comb::ExtractOp>(op, lowerType(opType), result, 0);
@@ -3412,20 +3405,24 @@ LogicalResult FIRRTLLowering::visitExpr(MultibitMuxOp op) {
   // following form.
   //
   // wire GEN;
-  // assign GEN = array[index] /* cadence map_to_mux */;
   // /* synopsys infer_mux_override */
+  // assign GEN = array[index] /* cadence map_to_mux */;
 
   Value array = builder.create<hw::ArrayCreateOp>(loweredInputs);
   auto valWire = builder.create<sv::WireOp>(lowerType(op.getType()));
   auto arrayGet = builder.create<hw::ArrayGetOp>(array, index);
 
-  // FIXME: We currently use verbatim op to add pragams. Use comment attributes
-  // once they are supported.
-  builder.create<sv::VerbatimOp>(
-      arrayGet.getLoc(),
-      builder.getStringAttr("assign {{0}} = {{1}} /* cadence map_to_mux */; /* "
-                            "synopsys infer_mux_override */"),
-      ValueRange{valWire, arrayGet}, builder.getArrayAttr({}));
+  // Use SV attributes to annotate pragmas.
+  circt::sv::setSVAttributes(
+      arrayGet,
+      sv::SVAttributesAttr::get(builder.getContext(), {"cadence map_to_mux"},
+                                /*emitAsComments=*/true));
+
+  auto assignOp = builder.create<sv::AssignOp>(valWire, arrayGet);
+  sv::setSVAttributes(assignOp,
+                      sv::SVAttributesAttr::get(builder.getContext(),
+                                                {"synopsys infer_mux_override"},
+                                                /*emitAsComments=*/true));
 
   Value inBoundsRead = builder.create<sv::ReadInOutOp>(valWire);
 
@@ -3493,9 +3490,8 @@ void FIRRTLLowering::lowerRegConnect(const FieldRef &fieldRef, Value dest,
   // outermost ones, the new value is computed by updating one of its
   // fields. The value of the field itself is determined by updating the
   // previous value according to the subsequent access operation.
-  std::function<Value(Value, Type, unsigned)> inject = [&](Value base,
-                                                           Type type,
-                                                           unsigned fieldID) {
+  std::function<Value(Value, Type, unsigned)> inject =
+      [&](Value base, Type type, unsigned fieldID) -> Value {
     if (auto bundle = type.dyn_cast<BundleType>()) {
       auto index = bundle.getIndexForFieldID(fieldID);
       fieldID -= bundle.getFieldID(index);

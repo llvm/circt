@@ -52,6 +52,7 @@ include "circt/Dialect/ESI/ESIPorts.td"
 include "circt/Dialect/ESI/ESITypes.td"
 include "circt/Dialect/ESI/ESIOps.td"
 include "circt/Dialect/ESI/ESIServices.td"
+include "circt/Dialect/ESI/ESIStdServices.td"
 include "circt/Dialect/ESI/ESIPasses.td"
 
 #endif // ESI_TD

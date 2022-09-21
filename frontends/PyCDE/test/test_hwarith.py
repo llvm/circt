@@ -1,11 +1,8 @@
 # RUN: %PYTHON% py-split-input-file.py %s | FileCheck %s
 
-from math import fabs
-from yaml import emit
 from pycde import Input, Output, generator
 from pycde.testing import unittestmodule
-from pycde.dialects import comb
-from pycde.pycde_types import dim, types
+from pycde.pycde_types import types
 
 
 # CHECK: msft.module @InfixArith {} (%in0: si16, %in1: ui16)

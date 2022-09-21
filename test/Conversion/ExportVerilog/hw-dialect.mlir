@@ -984,13 +984,17 @@ hw.module @addParenthesesToSuccessiveOperators(%a: i4, %b: i1, %c: i4) -> (o1:i1
   %zero4 = hw.constant 0 : i4
   // CHECK: wire [[GEN:.+]] = &c;
 
-  %0 = comb.icmp eq %a, %one4 : i4
-  %and = comb.and %b, %0 : i1
-  // CHECK-NEXT: assign o1 = b & (&a);
+  %and1 = comb.icmp eq %a, %one4 : i4
+  %and2 = comb.icmp eq %a, %one4 : i4
+  %and3 = comb.icmp eq %a, %one4 : i4
+  %and = comb.and %and1, %b, %and2, %and3  : i1
+  // CHECK-NEXT: assign o1 = (&a) & b & (&a) & (&a);
 
-  %1 = comb.icmp ne %a, %zero4 : i4
-  %or = comb.or %b, %1 : i1
-  // CHECK-NEXT: assign o2 = b | (|a);
+  %or1 = comb.icmp ne %a, %zero4 : i4
+  %or2 = comb.icmp ne %a, %zero4 : i4
+  %or3 = comb.icmp ne %a, %zero4 : i4
+  %or = comb.or %or1, %b, %or2, %or3  : i1
+  // CHECK-NEXT: assign o2 = (|a) | b | (|a) | (|a);
 
   %3 = comb.icmp eq %c, %one4 : i4
   %multiuse = comb.and %3, %3 : i1

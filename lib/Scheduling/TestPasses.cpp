@@ -689,6 +689,50 @@ void TestLPSchedulerPass::runOnOperation() {
   llvm_unreachable("Unsupported scheduling problem");
 }
 
+namespace {
+struct TestCPSATSchedulerPass
+    : public PassWrapper<TestCPSATSchedulerPass, OperationPass<func::FuncOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TestCPSATSchedulerPass)
+
+  TestCPSATSchedulerPass() = default;
+  TestCPSATSchedulerPass(const TestCPSATSchedulerPass &) {}
+  Option<std::string> problemToTest{*this, "with", llvm::cl::init("Problem")};
+  void runOnOperation() override;
+  StringRef getArgument() const override { return "test-cpsat-scheduler"; }
+  StringRef getDescription() const override {
+    return "Emit a CPSAT scheduler's solution as attributes";
+  }
+};
+} // anonymous namespace
+
+void TestCPSATSchedulerPass::runOnOperation() {
+  auto func = getOperation();
+  Operation *lastOp = func.getBlocks().front().getTerminator();
+  OpBuilder builder(func.getContext());
+
+  if (problemToTest == "SharedOperatorsProblem") {
+    auto prob = SharedOperatorsProblem::get(func);
+    constructProblem(prob, func);
+    constructSharedOperatorsProblem(prob, func);
+    assert(succeeded(prob.check()));
+
+    if (failed(scheduleCPSAT(prob, lastOp))) {
+      func->emitError("scheduling failed");
+      return signalPassFailure();
+    }
+
+    if (failed(prob.verify())) {
+      func->emitError("schedule verification failed");
+      return signalPassFailure();
+    }
+
+    emitSchedule(prob, "cpSatStartTime", builder);
+    return;
+  }
+
+  llvm_unreachable("Unsupported scheduling problem");
+}
+
 #endif // SCHEDULING_OR_TOOLS
 
 //===----------------------------------------------------------------------===//
@@ -725,6 +769,9 @@ void registerSchedulingTestPasses() {
 #ifdef SCHEDULING_OR_TOOLS
   mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
     return std::make_unique<TestLPSchedulerPass>();
+  });
+  mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
+    return std::make_unique<TestCPSATSchedulerPass>();
   });
 #endif
 }

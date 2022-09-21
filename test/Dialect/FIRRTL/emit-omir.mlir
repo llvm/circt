@@ -206,7 +206,7 @@ firrtl.circuit "NonLocalTrackers" attributes {annotations = [{
 }]} {
   // Both OMReferenceTarget1 and OMReferenceTarget2 share the same NLA.  This
   // NLA should not be deleted.
-  firrtl.hierpath @nla_0 [@NonLocalTrackers::@b, @B::@a, @A]
+  firrtl.hierpath private @nla_0 [@NonLocalTrackers::@b, @B::@a, @A]
   // CHECK: firrtl.module @A
   firrtl.module @A() attributes {annotations = [{circt.nonlocal = @nla_0, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 0}]} {
     // CHECK-NEXT: %a = firrtl.wire sym @[[a_sym:[^ ]+]]
@@ -287,8 +287,8 @@ firrtl.circuit "SRAMPaths" attributes {annotations = [{
     }
   ]
 }]} {
-  firrtl.extmodule @MySRAM()
-  firrtl.module @Submodule() {
+  firrtl.extmodule private @MySRAM()
+  firrtl.module private @Submodule() {
     firrtl.instance mem1 {annotations = [{class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 0}]} @MySRAM()
     %mem2_port = firrtl.mem Undefined {annotations = [{class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 1}], depth = 8, name = "mem2", portNames = ["port"], readLatency = 0 : i32, writeLatency = 1 : i32 } : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: uint<42>>
   }
@@ -297,8 +297,8 @@ firrtl.circuit "SRAMPaths" attributes {annotations = [{
   }
 }
 // CHECK-LABEL: firrtl.circuit "SRAMPaths" {
-// CHECK:         firrtl.extmodule @MySRAM()
-// CHECK-NEXT:    firrtl.module @Submodule() {
+// CHECK:         firrtl.extmodule private @MySRAM()
+// CHECK-NEXT:    firrtl.module private @Submodule() {
 // CHECK-NEXT:      firrtl.instance mem1 sym [[SYMMEM1:@[a-zA-Z0-9_]+]]
 // CHECK-SAME:        @MySRAM()
 // CHECK-NEXT:      firrtl.mem sym [[SYMMEM2:@[a-zA-Z0-9_]+]]
@@ -368,8 +368,8 @@ firrtl.circuit "SRAMPathsWithNLA" attributes {annotations = [{
     }
   ]
 }]} {
-  firrtl.hierpath @nla_old [@SRAMPathsWithNLA::@s1, @Submodule::@mem]
-  firrtl.hierpath @nla_new [@SRAMPathsWithNLA::@s1, @Submodule]
+  firrtl.hierpath private @nla_old [@SRAMPathsWithNLA::@s1, @Submodule::@mem]
+  firrtl.hierpath private @nla_new [@SRAMPathsWithNLA::@s1, @Submodule]
   firrtl.module @Submodule() {
     %mem_port = firrtl.mem sym @mem Undefined {
       annotations = [
@@ -447,12 +447,12 @@ firrtl.circuit "SRAMPathsWithNLA" attributes {annotations = [{
     }
   ]
 }]} {
-  firrtl.hierpath @nla [@SRAMPaths::@sub, @Submodule]
-  firrtl.extmodule @MySRAM()
-  firrtl.module @Submodule() {
+  firrtl.hierpath private @nla [@SRAMPaths::@sub, @Submodule]
+  firrtl.extmodule private @MySRAM()
+  firrtl.module private @Submodule() {
     firrtl.instance mem1 {annotations = [{circt.nonlocal = @nla, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 0}]} @MySRAM()
   }
-  firrtl.module @SRAMPaths() {
+  firrtl.module private @SRAMPaths() {
     firrtl.instance sub sym @sub @Submodule()
   }
   firrtl.module @SRAMPathsWithNLA() {
@@ -775,9 +775,9 @@ firrtl.circuit "FixPath"  attributes {annotations = [
       id = "OMID:0",
       info = loc(unknown)}
     ]}]} {
-  firrtl.hierpath @nla_3 [@FixPath::@c, @C::@cd, @D]
-  firrtl.hierpath @nla_2 [@FixPath::@c, @C::@in]
-  firrtl.hierpath @nla_1 [@FixPath::@c, @C]
+  firrtl.hierpath private @nla_3 [@FixPath::@c, @C::@cd, @D]
+  firrtl.hierpath private @nla_2 [@FixPath::@c, @C::@in]
+  firrtl.hierpath private @nla_1 [@FixPath::@c, @C]
   firrtl.module @C(
     in %in: !firrtl.uint<1> sym @in [
       {circt.nonlocal = @nla_2, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 1 : i64}

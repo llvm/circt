@@ -2,11 +2,7 @@
 
 // This test is executed with all different buffering strategies
 
-// RUN: circt-opt %s --lower-std-to-handshake \
-// RUN:   --canonicalize='top-down=true region-simplify=true' \
-// RUN:   --handshake-materialize-forks-sinks --canonicalize \
-// RUN:   --handshake-insert-buffers=strategy=all --lower-handshake-to-firrtl | \
-// RUN: firtool --format=mlir --verilog --lowering-options=disallowLocalVariables > %t.sv && \
+// RUN: hlstool %s --dynamic-firrtl --verilog --lowering-options=disallowLocalVariables > %t.sv && \
 // RUN: %PYTHON% %S/../cocotb_driver.py --objdir=%T --topLevel=top --pythonModule=tp_memory --pythonFolder=%S %t.sv 2>&1 | FileCheck %s
 
 // RUN: circt-opt %s --lower-std-to-handshake \
@@ -18,6 +14,14 @@
 
 // RUN: circt-opt %s --lower-std-to-handshake \
 // RUN:   --canonicalize='top-down=true region-simplify=true' \
+// RUN:   --handshake-materialize-forks-sinks --canonicalize \
+// RUN:   --handshake-insert-buffers=strategy=cycles --lower-handshake-to-firrtl | \
+// RUN: firtool --format=mlir --verilog --lowering-options=disallowLocalVariables > %t.sv && \
+// RUN: %PYTHON% %S/../cocotb_driver.py --objdir=%T --topLevel=top --pythonModule=tp_memory --pythonFolder=%S %t.sv 2>&1 | FileCheck %s
+
+// Locking the circt should yield the same result
+// RUN: circt-opt %s --lower-std-to-handshake=disable-task-pipelining \
+// RUN:   --canonicalize='top-down=true region-simplify=true' --handshake-lock-functions \
 // RUN:   --handshake-materialize-forks-sinks --canonicalize \
 // RUN:   --handshake-insert-buffers=strategy=cycles --lower-handshake-to-firrtl | \
 // RUN: firtool --format=mlir --verilog --lowering-options=disallowLocalVariables > %t.sv && \

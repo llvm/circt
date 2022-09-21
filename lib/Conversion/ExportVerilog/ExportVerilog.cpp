@@ -1068,7 +1068,8 @@ StringAttr ExportVerilog::inferStructuralNameForTemporary(Value expr) {
           .Case([&result](ExtractOp extract) {
             if (auto operandName =
                     inferStructuralNameForTemporary(extract.getInput())) {
-              unsigned numBits = extract.getType().getWidth();
+              unsigned numBits =
+                  extract.getType().cast<IntegerType>().getWidth();
               if (numBits == 1)
                 result = StringAttr::get(extract.getContext(),
                                          operandName.strref() + "_" +
@@ -1531,7 +1532,7 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
   if (expr.getOpcode() == PEO::StrConcat)
     os << '{';
   bool allOperandsSigned = emitOperand(expr.getOperands()[0]);
-  for (auto op : ArrayRef(expr.getOperands()).drop_front()) {
+  for (auto op : expr.getOperands().drop_front()) {
     // Handle the special case of (a + b + -42) as (a + b - 42).
     // TODO: Also handle (a + b + x*-1).
     if (expr.getOpcode() == PEO::Add) {
@@ -1673,6 +1674,7 @@ private:
     return visitVerbatimExprOp(op, op.getSymbols());
   }
   SubExprInfo visitSV(MacroRefExprOp op);
+  SubExprInfo visitSV(MacroRefExprSEOp op);
   SubExprInfo visitSV(ConstantXOp op);
   SubExprInfo visitSV(ConstantZOp op);
 
@@ -1811,22 +1813,6 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
   if (!isa<AddOp, MulOp, AndOp, OrOp, XorOp>(op))
     rhsPrec = VerilogPrecedence(prec - 1);
 
-  // Introduce extra parentheses to specific patterns of expressions.
-  // If op is "AndOp", and rhs is Reduction And, the output is like `a & &b`.
-  // This is syntactically valid but some tool produces LINT warnings. Also it
-  // would be confusing for users to read such expressions.
-  bool emitRhsParentheses = false;
-  if (auto rhsICmp = op->getOperand(1).getDefiningOp<ICmpOp>()) {
-    if ((rhsICmp.isEqualAllOnes() && isa<AndOp>(op)) ||
-        (rhsICmp.isNotEqualZero() && isa<OrOp>(op))) {
-      if (isExpressionEmittedInline(rhsICmp)) {
-        os << '(';
-        emitRhsParentheses = true;
-        rhsPrec = LowestPrecedence;
-      }
-    }
-  }
-
   // If the RHS operand has self-determined width and always treated as
   // unsigned, inform emitSubExpr of this.  This is true for the shift amount in
   // a shift operation.
@@ -1838,8 +1824,6 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
 
   auto rhsInfo = emitSubExpr(op->getOperand(1), rhsPrec, operandSignReq,
                              rhsIsUnsignedValueWithSelfDeterminedWidth);
-  if (emitRhsParentheses)
-    os << ')';
 
   // SystemVerilog 11.8.1 says that the result of a binary expression is signed
   // only if both operands are signed.
@@ -1863,7 +1847,11 @@ SubExprInfo ExprEmitter::emitUnary(Operation *op, const char *syntax,
 
   os << syntax;
   auto signedness = emitSubExpr(op->getOperand(0), Selection).signedness;
-  return {Unary, resultAlwaysUnsigned ? IsUnsigned : signedness};
+  // For reduction operators "&" and "|", make precedence lowest to avoid
+  // emitting an expression like `a & &b`, which is syntactically valid but some
+  // tools produce LINT warnings.
+  return {isa<ICmpOp>(op) ? LowestPrecedence : Unary,
+          resultAlwaysUnsigned ? IsUnsigned : signedness};
 }
 
 /// Emit SystemVerilog attributes attached to the expression op as dialect
@@ -2104,7 +2092,7 @@ SubExprInfo ExprEmitter::visitComb(ExtractOp op) {
     emitError(op, "SV attributes emission is unimplemented for the op");
 
   unsigned loBit = op.getLowBit();
-  unsigned hiBit = loBit + op.getType().getWidth() - 1;
+  unsigned hiBit = loBit + op.getType().cast<IntegerType>().getWidth() - 1;
 
   auto x = emitSubExpr(op.getInput(), LowestPrecedence);
   assert((x.precedence == Symbol ||
@@ -2175,6 +2163,14 @@ SubExprInfo ExprEmitter::visitSV(MacroRefExprOp op) {
   return {LowestPrecedence, IsUnsigned};
 }
 
+SubExprInfo ExprEmitter::visitSV(MacroRefExprSEOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
+  os << "`" << op.getIdent().getName();
+  return {LowestPrecedence, IsUnsigned};
+}
+
 SubExprInfo ExprEmitter::visitSV(ConstantXOp op) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
@@ -2205,7 +2201,7 @@ SubExprInfo ExprEmitter::visitTypeOp(ConstantOp op) {
     isNegated = true;
   }
 
-  os << op.getType().getWidth() << '\'';
+  os << op.getType().cast<IntegerType>().getWidth() << '\'';
 
   // Emit this as a signed constant if the caller would prefer that.
   if (signPreference == RequireSigned)
@@ -2563,7 +2559,7 @@ void NameCollector::collectNames(Block &block) {
     // Recursively process any regions under the op iff this is a procedural
     // #ifdef region: we need to emit automatic logic values at the top of the
     // enclosing region.
-    if (isa<IfDefProceduralOp>(op)) {
+    if (isa<IfDefProceduralOp, OrderedOutputOp>(op)) {
       for (auto &region : op.getRegions()) {
         if (!region.empty())
           collectNames(region.front());

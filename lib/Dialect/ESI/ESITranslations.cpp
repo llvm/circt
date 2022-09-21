@@ -74,15 +74,16 @@ private:
 } // anonymous namespace
 
 LogicalResult ExportCosimSchema::visitEndpoint(CosimEndpointOp ep) {
-  capnp::TypeSchema sendTypeSchema(ep.send().getType());
+  capnp::TypeSchema sendTypeSchema(ep.getSend().getType());
   if (!sendTypeSchema.isSupported())
-    return ep.emitOpError("Type ") << ep.send().getType() << " not supported.";
+    return ep.emitOpError("Type ")
+           << ep.getSend().getType() << " not supported.";
   types.push_back(sendTypeSchema);
 
-  capnp::TypeSchema recvTypeSchema(ep.recv().getType());
+  capnp::TypeSchema recvTypeSchema(ep.getRecv().getType());
   if (!recvTypeSchema.isSupported())
     return ep.emitOpError("Type '")
-           << ep.recv().getType() << "' not supported.";
+           << ep.getRecv().getType() << "' not supported.";
   types.push_back(recvTypeSchema);
 
   os << "# Endpoint ";

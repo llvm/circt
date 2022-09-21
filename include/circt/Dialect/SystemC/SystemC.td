@@ -22,9 +22,13 @@ include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Interfaces/CallInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
+include "circt/Dialect/HW/HWOpInterfaces.td"
 
 include "circt/Dialect/SystemC/SystemCOpInterfaces.td"
 include "circt/Dialect/SystemC/SystemCDialect.td"
+
+// Import EmitC types
+include "mlir/Dialect/EmitC/IR/EmitCTypes.td"
 
 // Base class for the operations in this dialect.
 class SystemCOp<string mnemonic, list<Trait> traits = []> :
@@ -34,7 +38,6 @@ def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface,
                          ["getAsmResultNames"]>;
 
 include "circt/Dialect/SystemC/SystemCAttributesImpl.td"
-include "circt/Dialect/SystemC/SystemCTypesImpl.td"
 include "circt/Dialect/SystemC/SystemCTypes.td"
 include "circt/Dialect/SystemC/SystemCExpressions.td"
 include "circt/Dialect/SystemC/SystemCStatements.td"

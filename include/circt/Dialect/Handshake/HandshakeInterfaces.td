@@ -26,14 +26,14 @@ def MergeLikeOpInterface : OpInterface<"MergeLikeOpInterface"> {
     InterfaceMethod<[{
         Returns an operand range over the data signals being merged.
       }],
-      "OperandRange", "dataOperands", (ins)
+      "OperandRange", "getDataOperands", (ins)
     >,
   ];
 
   let verify = [{
     auto concreteOp = cast<ConcreteOp>($_op);
 
-    auto operands = concreteOp.dataOperands();
+    auto operands = concreteOp.getDataOperands();
 
     if (!operands.size())
       return concreteOp.emitOpError("must have at least one data operand");

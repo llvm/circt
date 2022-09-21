@@ -60,8 +60,12 @@ static void replaceOpAndCopyName(PatternRewriter &rewriter, Operation *op,
                                  Value newValue) {
   if (auto *newOp = newValue.getDefiningOp()) {
     auto name = op->getAttrOfType<StringAttr>("name");
-    if (name && newOp && !newOp->hasAttr("name") && !isUselessName(name))
-      rewriter.updateRootInPlace(newOp, [&] { newOp->setAttr("name", name); });
+    if (name && !name.getValue().empty()) {
+      auto newOpName = newOp->getAttrOfType<StringAttr>("name");
+      if (!newOpName || isUselessName(newOpName))
+        rewriter.updateRootInPlace(newOp,
+                                   [&] { newOp->setAttr("name", name); });
+    }
   }
   rewriter.replaceOp(op, newValue);
 }
@@ -75,9 +79,11 @@ static OpTy replaceOpWithNewOpAndCopyName(PatternRewriter &rewriter,
   auto name = op->getAttrOfType<StringAttr>("name");
   auto newOp =
       rewriter.replaceOpWithNewOp<OpTy>(op, std::forward<Args>(args)...);
-  if (name && newOp && !newOp->hasAttr("name") && !isUselessName(name))
-    rewriter.updateRootInPlace(newOp, [&] { newOp->setAttr("name", name); });
-
+  if (name && !name.getValue().empty()) {
+    auto newOpName = newOp->template getAttrOfType<StringAttr>("name");
+    if (!newOpName || isUselessName(newOpName))
+      rewriter.updateRootInPlace(newOp, [&] { newOp->setAttr("name", name); });
+  }
   return newOp;
 }
 
@@ -1176,9 +1182,9 @@ static LogicalResult canonicalizeMux(MuxPrimOp op, PatternRewriter &rewriter) {
   if (width < 0)
     return failure();
 
-  auto pad = [&](Value input) {
+  auto pad = [&](Value input) -> Value {
     auto inputWidth =
-        input.getType().cast<FIRRTLBaseType>().getBitWidthOrSentinel();
+        input.getType().template cast<FIRRTLBaseType>().getBitWidthOrSentinel();
     if (inputWidth < 0 || width == inputWidth)
       return input;
     return rewriter.create<PadPrimOp>(op.getLoc(), op.getType(), input, width)
@@ -1396,6 +1402,20 @@ LogicalResult MultibitMuxOp::canonicalize(MultibitMuxOp op,
       })) {
     replaceOpAndCopyName(rewriter, op, op.getInputs().front());
     return success();
+  }
+
+  // If the op is a vector indexing (e.g. `multbit_mux idx, a[n-1], a[n-2], ...,
+  // a[0]`), we can fold the op into subaccess op `a[idx]`.
+  if (auto lastSubindex = op.getInputs().back().getDefiningOp<SubindexOp>()) {
+    if (llvm::all_of(llvm::enumerate(op.getInputs()), [&](auto e) {
+          auto subindex = e.value().template getDefiningOp<SubindexOp>();
+          return subindex && lastSubindex.getInput() == subindex.getInput() &&
+                 subindex.getIndex() + e.index() + 1 == op.getInputs().size();
+        })) {
+      replaceOpWithNewOpAndCopyName<SubaccessOp>(
+          rewriter, op, lastSubindex.getInput(), op.getIndex());
+      return success();
+    }
   }
 
   // If the size is 2, canonicalize into a normal mux to introduce more folds.
@@ -1674,10 +1694,14 @@ struct FoldNodeName : public mlir::RewritePattern {
     if (!node.hasDroppableName() || node.getInnerSym() ||
         !node.getAnnotations().empty())
       return failure();
-    auto *expr = node.getInput().getDefiningOp();
+    auto *newOp = node.getInput().getDefiningOp();
     // Best effort
-    if (name && !name.getValue().empty() && expr && !expr->hasAttr("name"))
-      rewriter.updateRootInPlace(expr, [&] { expr->setAttr("name", name); });
+    if (name && !name.getValue().empty() && newOp) {
+      auto newOpName = newOp->getAttrOfType<StringAttr>("name");
+      if (!newOpName || isUselessName(newOpName))
+        rewriter.updateRootInPlace(newOp,
+                                   [&] { newOp->setAttr("name", name); });
+    }
     rewriter.replaceOp(node, node.getInput());
     return success();
   }
@@ -1858,8 +1882,8 @@ static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
   }
   auto pt = rewriter.saveInsertionPoint();
   rewriter.setInsertionPoint(con);
-  replaceOpWithNewOpAndCopyName<ConnectOp>(rewriter, con, con.getDest(),
-                                           constReg ? constOp : mux.getLow());
+  auto v = constReg ? (Value)constOp.getResult() : (Value)mux.getLow();
+  replaceOpWithNewOpAndCopyName<ConnectOp>(rewriter, con, con.getDest(), v);
   rewriter.restoreInsertionPoint(pt);
   return success();
 }

@@ -6,7 +6,7 @@
 firrtl.circuit "TopLevel" {
   // CHECK-LABEL: firrtl.extmodule @External(in source_valid: !firrtl.uint<1>)
   // CHECK-LABEL: firrtl.module @TopLevel(in %source_valid: !firrtl.uint<1>, out %sink_valid: !firrtl.uint<1>)
-  // NOT_PRESERVE_PUBLIC_TYPES-LABEL: firrtl.extmodule @External(in source: !firrtl.bundle<valid: uint<1>>)
+  // NOT_PRESERVE_PUBLIC_TYPES-LABEL: firrtl.extmodule @External(in source_valid: !firrtl.uint<1>)
   // NOT_PRESERVE_PUBLIC_TYPES-LABEL: firrtl.module @TopLevel(in %source: !firrtl.bundle<valid: uint<1>>, out %sink: !firrtl.bundle<valid: uint<1>>)
   firrtl.extmodule @External(in source: !firrtl.bundle<valid: uint<1>>)
   firrtl.module @TopLevel(in %source: !firrtl.bundle<valid: uint<1>>,
@@ -16,5 +16,8 @@ firrtl.circuit "TopLevel" {
   // VEC: @Foo(in %a_a: !firrtl.vector<vector<uint<1>, 2>, 2>)
   // 1D_VEC: @Foo(in %a_a_0: !firrtl.vector<uint<1>, 2>, in %a_a_1: !firrtl.vector<uint<1>, 2>)
   firrtl.module private @Foo(in %a: !firrtl.bundle<a: vector<vector<uint<1>, 2>, 2>>) {
+  }
+  // 1D_VEC: %a_0: !firrtl.uint<1>
+  firrtl.module private @Bar(in %a: !firrtl.vector<uint<1>, 1>) {
   }
 }

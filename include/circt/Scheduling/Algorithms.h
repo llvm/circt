@@ -74,6 +74,12 @@ LogicalResult scheduleLP(Problem &prob, Operation *lastOp);
 /// \p lastOp.
 LogicalResult scheduleLP(CyclicProblem &prob, Operation *lastOp);
 
+/// Solve the acyclic problem with shared operators using constraint programming
+/// and an external SAT solver. The objective is to minimize the start time of
+/// the given \p lastOp. Fails if the dependence graph contains cycles, or \p
+/// prob does not include \p lastOp.
+LogicalResult scheduleCPSAT(SharedOperatorsProblem &prob, Operation *lastOp);
+
 } // namespace scheduling
 } // namespace circt
 

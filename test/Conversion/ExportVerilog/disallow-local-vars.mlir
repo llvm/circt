@@ -11,12 +11,15 @@ hw.module @side_effect_expr(%clock: i1) -> (a: i1, a2: i1) {
   // CHECK: `ifdef FOO_MACRO
   // DISALLOW: `ifdef FOO_MACRO
   sv.ifdef "FOO_MACRO" {
-    // DISALLOW: {{^    }}reg [[SE_REG:[_A-Za-z0-9]+]];
+    // DISALLOW: logic logicOp;
+    // DISALLOW: {{^    }}reg   [[SE_REG:[_A-Za-z0-9]+]];
 
     // CHECK:    always @(posedge clock)
     // DISALLOW: always @(posedge clock)
     sv.always posedge %clock  {
       %0 = sv.verbatim.expr "INLINE_OK" : () -> i1
+      // CHECK: automatic logic logicOp;
+      %logicOp = sv.logic : !hw.inout<i1>
 
       // This shouldn't be pushed into a reg.
       // CHECK: if (INLINE_OK)

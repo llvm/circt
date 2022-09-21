@@ -644,9 +644,10 @@ private:
   /// Look up the instantiations of this module and create an NLA for each
   /// one, appending the baseNamepath to each NLA. This is used to add more
   /// context to an already existing NLA.
-  SmallVector<FlatSymbolRefAttr> createNLAs(StringAttr toModuleName,
-                                            Operation *fromModule,
-                                            ArrayRef<Attribute> baseNamepath) {
+  SmallVector<FlatSymbolRefAttr>
+  createNLAs(StringAttr toModuleName, Operation *fromModule,
+             ArrayRef<Attribute> baseNamepath,
+             SymbolTable::Visibility vis = SymbolTable::Visibility::Private) {
     // Create an attribute array with a placeholder in the first element, where
     // the root refence of the NLA will be inserted.
     SmallVector<Attribute> namepath = {nullptr};
@@ -666,6 +667,7 @@ private:
       auto nlaName = nla.getNameAttr();
       auto nlaRef = FlatSymbolRefAttr::get(nlaName);
       nlas.push_back(nlaRef);
+      nla.setVisibility(vis);
       nlaTable->addNLA(nla);
     }
     return nlas;
@@ -674,11 +676,12 @@ private:
   /// Look up the instantiations of this module and create an NLA for each one.
   /// This returns an array of symbol references which can be used to reference
   /// the NLAs.
-  SmallVector<FlatSymbolRefAttr> createNLAs(FModuleLike toModule,
-                                            StringAttr toModuleName,
-                                            FModuleLike fromModule) {
+  SmallVector<FlatSymbolRefAttr>
+  createNLAs(FModuleLike toModule, StringAttr toModuleName,
+             FModuleLike fromModule,
+             SymbolTable::Visibility vis = SymbolTable::Visibility::Private) {
     return createNLAs(toModuleName, fromModule,
-                      FlatSymbolRefAttr::get(toModule.moduleNameAttr()));
+                      FlatSymbolRefAttr::get(toModule.moduleNameAttr()), vis);
   }
 
   /// Clone the annotation for each NLA in a list. The attribute list should
@@ -728,7 +731,8 @@ private:
         continue;
       // Create the replacement NLAs.
       SmallVector<Attribute> namepath(elements.begin(), elements.end());
-      auto nlaRefs = createNLAs(toName, fromModule, namepath);
+      auto nlaRefs =
+          createNLAs(toName, fromModule, namepath, nla.getVisibility());
       // Replace the uses of the old NLA with the new NLAs.
       for (auto target : targetMap[nla.getSymNameAttr()]) {
         // We have to clone any annotation which uses the old NLA for each new

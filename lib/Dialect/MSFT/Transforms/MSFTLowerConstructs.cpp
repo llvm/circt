@@ -67,13 +67,13 @@ public:
                   ConversionPatternRewriter &rewriter) const final {
     MLIRContext *ctxt = getContext();
     Location loc = array.getLoc();
-    Block &peBlock = array.pe().front();
+    Block &peBlock = array.getPe().front();
     rewriter.setInsertionPointAfter(array);
 
     // For the row broadcasts, break out the row values which must be broadcast
     // to each PE.
     hw::ArrayType rowInputs =
-        hw::type_cast<hw::ArrayType>(array.rowInputs().getType());
+        hw::type_cast<hw::ArrayType>(array.getRowInputs().getType());
     IntegerType rowIdxType = rewriter.getIntegerType(
         std::max(1u, llvm::Log2_64_Ceil(rowInputs.getSize())));
     SmallVector<Value> rowValues;
@@ -82,7 +82,7 @@ public:
       Value rowNumVal =
           rewriter.create<hw::ConstantOp>(loc, rowIdxType, rowNum);
       auto rowValue =
-          rewriter.create<hw::ArrayGetOp>(loc, array.rowInputs(), rowNumVal);
+          rewriter.create<hw::ArrayGetOp>(loc, array.getRowInputs(), rowNumVal);
       rowValue->setAttr("sv.namehint",
                         StringAttr::get(ctxt, "row_" + Twine(rowNum)));
       rowValues.push_back(rowValue);
@@ -91,7 +91,7 @@ public:
     // For the column broadcasts, break out the column values which must be
     // broadcast to each PE.
     hw::ArrayType colInputs =
-        hw::type_cast<hw::ArrayType>(array.colInputs().getType());
+        hw::type_cast<hw::ArrayType>(array.getColInputs().getType());
     IntegerType colIdxType = rewriter.getIntegerType(
         std::max(1u, llvm::Log2_64_Ceil(colInputs.getSize())));
     SmallVector<Value> colValues;
@@ -100,7 +100,7 @@ public:
       Value colNumVal =
           rewriter.create<hw::ConstantOp>(loc, colIdxType, colNum);
       auto colValue =
-          rewriter.create<hw::ArrayGetOp>(loc, array.colInputs(), colNumVal);
+          rewriter.create<hw::ArrayGetOp>(loc, array.getColInputs(), colNumVal);
       colValue->setAttr("sv.namehint",
                         StringAttr::get(ctxt, "col_" + Twine(colNum)));
       colValues.push_back(colValue);
@@ -126,7 +126,7 @@ public:
           // If we see the output op (which should be the block terminator), add
           // its operand to the output matrix.
           if (auto outputOp = dyn_cast<PEOutputOp>(peOperation)) {
-            colPEOutputs.push_back(mapper.lookup(outputOp.output()));
+            colPEOutputs.push_back(mapper.lookup(outputOp.getOutput()));
           } else {
             Operation *clone = rewriter.clone(peOperation, mapper);
 
@@ -172,12 +172,12 @@ public:
     Operation *mod = chan->getParentOfType<MSFTModuleOp>();
     assert(mod && "ChannelOp must be contained by module");
     Namespace &ns = pass.getNamespaceFor(mod);
-    Value clk = chan.clk();
-    Value v = chan.input();
-    for (uint64_t stageNum = 0, e = chan.defaultStages(); stageNum < e;
+    Value clk = chan.getClk();
+    Value v = chan.getInput();
+    for (uint64_t stageNum = 0, e = chan.getDefaultStages(); stageNum < e;
          ++stageNum)
       v = rewriter.create<seq::CompRegOp>(loc, v, clk,
-                                          ns.newName(chan.sym_name()));
+                                          ns.newName(chan.getSymName()));
     rewriter.replaceOp(chan, {v});
     return success();
   }
