@@ -487,8 +487,7 @@ struct RTLBuilder {
              Value rst = Value())
       : b(builder), loc(loc), clk(clk), rst(rst) {}
 
-  Value constant(unsigned width, int64_t value, Location *extLoc = nullptr) {
-    APInt apv = APInt(width, value);
+  Value constant(const APInt &apv, Location *extLoc = nullptr) {
     auto it = constants.find(apv);
     if (it != constants.end())
       return it->second;
@@ -496,6 +495,10 @@ struct RTLBuilder {
     auto cval = b.create<hw::ConstantOp>(getLoc(extLoc), apv);
     constants[apv] = cval;
     return cval;
+  }
+
+  Value constant(unsigned width, int64_t value, Location *extLoc = nullptr) {
+    return constant(APInt(width, value), extLoc);
   }
   std::pair<Value, Value> wrap(Value data, Value valid,
                                Location *extLoc = nullptr) {
@@ -524,6 +527,11 @@ struct RTLBuilder {
     return b.create<seq::CompRegOp>(getLoc(extLoc), in.getType(), in,
                                     resolvedClk, name, resolvedRst, rstValue,
                                     StringAttr());
+  }
+
+  Value cmp(Value lhs, Value rhs, comb::ICmpPredicate predicate,
+            Location *extLoc = nullptr) {
+    return b.create<comb::ICmpOp>(getLoc(extLoc), predicate, lhs, rhs);
   }
 
   // Bitwise 'and'.
@@ -562,6 +570,19 @@ struct RTLBuilder {
     structType.getInnerTypes(innerTypes);
     return b.create<hw::StructExplodeOp>(getLoc(extLoc), innerTypes, value)
         .getResults();
+  }
+
+  llvm::SmallVector<Value> toBits(Value v, Location *extLoc = nullptr) {
+    llvm::SmallVector<Value> bits;
+    for (unsigned i = 0, e = v.getType().getIntOrFloatBitWidth(); i != e; ++i)
+      bits.push_back(
+          b.create<comb::ExtractOp>(getLoc(extLoc), v, i, /*bitWidth=*/1));
+    return bits;
+  }
+
+  // OR-reduction of the bits in 'v'.
+  Value rOr(Value v, Location *extLoc = nullptr) {
+    return bOr(toBits(v, extLoc), extLoc);
   }
 
   // Extract bits v[hi:lo] (inclusive).
@@ -614,6 +635,33 @@ struct RTLBuilder {
     return arrayGet(arrayCreate(values, extLoc), index, extLoc);
   }
 
+  // Muxes a range of values. The select signal is expected to be a 1-hot
+  // encoded value.
+  Value ohMux(Value index, ValueRange inputs, Location *extLoc = nullptr) {
+    // Confirm the select input can be a one-hot encoding for the inputs.
+    unsigned numInputs = inputs.size();
+    assert(numInputs == index.getType().getIntOrFloatBitWidth() &&
+           "one-hot select can't mux inputs");
+
+    // Start the mux tree with zero value.
+    // Todo: clean up when i0 support is available.
+    Value muxValue;
+    auto dataType = inputs[0].getType();
+    if (dataType.isa<NoneType>())
+      muxValue = b.create<esi::NoneSourceOp>(getLoc(extLoc));
+    else
+      muxValue = constant(dataType.getIntOrFloatBitWidth(), 0, extLoc);
+
+    // Iteratively chain together muxes from the high bit to the low bit.
+    for (size_t i = numInputs - 1; i == 0; --i) {
+      Value input = inputs[i];
+      Value selectBit = bit(index, i, extLoc);
+      muxValue = mux(selectBit, {muxValue, input}, extLoc);
+    }
+
+    return muxValue;
+  }
+
   Location getLoc(Location *extLoc = nullptr) { return extLoc ? *extLoc : loc; }
   OpBuilder &b;
   Location loc;
@@ -649,7 +697,8 @@ public:
                   ConversionPatternRewriter &rewriter) const override {
 
     // Check if a submodule has already been created for the op. If so,
-    // instantiate the submodule. Else, run the pattern-defined module builder.
+    // instantiate the submodule. Else, run the pattern-defined module
+    // builder.
     hw::HWModuleLike implModule = checkSubModuleOp(ls.parentModule, op);
     if (!implModule) {
       auto portInfo = ModulePortInfo(getPortInfoForOp(rewriter, op));
@@ -770,8 +819,8 @@ public:
       // Extract the selection bit for this input.
       auto isSelected = s.bit(select1h, inIdx);
 
-      // '&' that with the result valid and ready, and assign to the input ready
-      // signal.
+      // '&' that with the result valid and ready, and assign to the input
+      // ready signal.
       auto activeAndResultValidAndReady =
           s.bAnd({isSelected, resValidAndReady});
       in.ready->setValue(activeAndResultValidAndReady);
@@ -801,8 +850,8 @@ public:
   }
 
   // Builds a unit-rate actor around an inner operation. 'unitBuilder' is a
-  // function which takes the set of unwrapped data inputs, and returns a value
-  // which should be assigned to the output data value.
+  // function which takes the set of unwrapped data inputs, and returns a
+  // value which should be assigned to the output data value.
   void buildUnitRateJoinLogic(
       RTLBuilder &s, UnwrappedIO &unwrappedIO,
       llvm::function_ref<Value(ValueRange)> unitBuilder) const {
@@ -852,6 +901,149 @@ public:
     buildUnitRateJoinLogic(s, unwrappedIO, [&](ValueRange inputs) {
       return s.truncate(inputs[0], outWidth);
     });
+  }
+
+  /// Return the number of bits needed to index the given number of values.
+  static size_t getNumIndexBits(uint64_t numValues) {
+    return numValues > 1 ? llvm::Log2_64_Ceil(numValues) : 1;
+  }
+
+  Value buildPriorityArbiter(RTLBuilder &s, ArrayRef<Value> inputs,
+                             Value defaultValue,
+                             DenseMap<size_t, Value> &indexMapping) const {
+    auto numInputs = inputs.size();
+    auto priorityArb = defaultValue;
+
+    for (size_t i = numInputs; i > 0; --i) {
+      size_t inputIndex = i - 1;
+      size_t oneHotIndex = 1 << inputIndex;
+      auto constIndex = s.constant(numInputs, oneHotIndex);
+      indexMapping[inputIndex] = constIndex;
+      priorityArb = s.mux(inputs[inputIndex], {constIndex, priorityArb});
+    }
+    return priorityArb;
+  }
+
+  // Builds merge-logic. If 'resIndex' is provided, resIndex is assigned the
+  // index of the input which was selected.
+  void buildMergeLogic(RTLBuilder &s, BackedgeBuilder &bb,
+                       UnwrappedIO &unwrappedIO, OutputHandshake &resData,
+                       OutputHandshake *resIndex = nullptr) const {
+    // Define some common types and values that will be used.
+    unsigned numInputs = unwrappedIO.inputs.size();
+    auto indexType = s.b.getIntegerType(numInputs);
+    Value noWinner = s.constant(numInputs, 0);
+    Value c0I1 = s.constant(1, 0);
+
+    // Declare register for storing arbitration winner.
+    auto won = bb.get(indexType);
+    Value wonReg = s.reg("won_reg", won, noWinner);
+
+    // Declare wire for arbitration winner.
+    auto win = bb.get(indexType);
+
+    // Declare wire for whether the circuit just fired and emitted both
+    // outputs.
+    auto fired = bb.get(s.b.getI1Type());
+
+    // Declare registers for storing if each output has been emitted.
+    auto resultEmitted = bb.get(s.b.getI1Type());
+    Value resultEmittedReg = s.reg("result_emitted_reg", resultEmitted, c0I1);
+    std::unique_ptr<Backedge> indexEmitted;
+    Value indexEmittedReg;
+    if (resIndex) {
+      indexEmitted = std::make_unique<Backedge>(bb.get(s.b.getI1Type()));
+      indexEmittedReg = s.reg("index_emitted_reg", *indexEmitted, c0I1);
+    }
+
+    // Declare wires for if each output is done.
+    auto resultDone = bb.get(s.b.getI1Type());
+    std::unique_ptr<Backedge> indexDone;
+    if (resIndex)
+      indexDone = std::make_unique<Backedge>(bb.get(s.b.getI1Type()));
+
+    // Create predicates to assert if the win wire or won register hold a
+    // valid index.
+    auto hasWinnerCondition = s.rOr({win});
+    auto hadWinnerCondition = s.rOr({wonReg});
+
+    // Create an arbiter based on a simple priority-encoding scheme to assign
+    // an index to the win wire. If the won register is set, just use that. In
+    // the case that won is not set and no input is valid, set a sentinel
+    // value to indicate no winner was chosen. The constant values are
+    // remembered in a map so they can be re-used later to assign the arg
+    // ready outputs.
+    DenseMap<size_t, Value> argIndexValues;
+    Value priorityArb = buildPriorityArbiter(s, unwrappedIO.getInputValids(),
+                                             noWinner, argIndexValues);
+    priorityArb = s.mux(hadWinnerCondition, {priorityArb, wonReg});
+    win.setValue(priorityArb);
+
+    // Create the logic to assign the result and index outputs. The result
+    // valid output will always be assigned, and if isControl is not set, the
+    // result data output will also be assigned. The index valid and data
+    // outputs will always be assigned. The win wire from the arbiter is used
+    // to index into a tree of muxes to select the chosen input's signal(s),
+    // and is fed directly to the index output. Both the result and index
+    // valid outputs are gated on the win wire being set to something other
+    // than the sentinel value.
+    auto resultNotEmitted = s.bNot(resultEmittedReg);
+    auto resultValid = s.bAnd({hasWinnerCondition, resultNotEmitted});
+    resData.valid->setValue(resultValid);
+    resData.data->setValue(s.ohMux(win, unwrappedIO.getInputDatas()));
+
+    auto indexNotEmitted = s.bNot(indexEmittedReg);
+    auto indexValid = s.bAnd({hasWinnerCondition, indexNotEmitted});
+    if (resIndex) {
+      resIndex->valid->setValue(indexValid);
+
+      // Use the one-hot win wire to select the index to output in the index
+      // data.
+      SmallVector<Value, 8> indexOutputs;
+      for (size_t i = 0; i < numInputs; ++i)
+        indexOutputs.push_back(s.constant(64, i));
+
+      auto indexOutput = s.ohMux(win, indexOutputs);
+      resIndex->data->setValue(indexOutput);
+    }
+
+    // Create the logic to set the won register. If the fired wire is
+    // asserted, we have finished this round and can and reset the register to
+    // the sentinel value that indicates there is no winner. Otherwise, we
+    // need to hold the value of the win register until we can fire.
+    won.setValue(s.mux(fired, {win, noWinner}));
+
+    // Create the logic to set the done wires for the result and index. For
+    // both outputs, the done wire is asserted when the output is valid and
+    // ready, or the emitted register for that output is set.
+    auto resultValidAndReady = s.bAnd({resultValid, resData.ready});
+    resultDone.setValue(s.bOr({resultValidAndReady, resultEmittedReg}));
+
+    if (resIndex) {
+      auto indexValidAndReady = s.bAnd({indexValid, resIndex->ready});
+      indexDone->setValue(s.bOr({indexValidAndReady, indexEmittedReg}));
+
+      // Create the logic to set the fired wire. It is asserted when both result
+      // and index are done.
+      fired.setValue(s.bAnd({resultDone, *indexDone}));
+    }
+
+    // Create the logic to assign the emitted registers. If the fired wire is
+    // asserted, we have finished this round and can reset the registers to 0.
+    // Otherwise, we need to hold the values of the done registers until we
+    // can fire.
+    resultEmitted.setValue(s.mux(fired, {resultDone, c0I1}));
+    if (resIndex)
+      indexEmitted->setValue(s.mux(fired, {*indexDone, c0I1}));
+
+    // Create the logic to assign the arg ready outputs. The logic is
+    // identical for each arg. If the fired wire is asserted, and the win wire
+    // holds an arg's index, that arg is ready.
+    auto winnerOrDefault = s.mux(fired, {noWinner, win});
+    for (auto [i, ir] : llvm::enumerate(unwrappedIO.getInputReadys())) {
+      auto &indexValue = argIndexValues[i];
+      ir->setValue(s.cmp(winnerOrDefault, indexValue, comb::ICmpPredicate::eq));
+    }
   }
 
 private:
@@ -953,8 +1145,8 @@ public:
   LogicalResult
   matchAndRewrite(ReturnOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    // Locate existing output op, Append operands to output op, and move to the
-    // end of the block.
+    // Locate existing output op, Append operands to output op, and move to
+    // the end of the block.
     auto parent = cast<hw::HWModuleOp>(op->getParentOp());
     auto outputOp = *parent.getBodyBlock()->getOps<hw::OutputOp>().begin();
     outputOp->setOperands(adaptor.getOperands());
@@ -1000,6 +1192,38 @@ public:
     auto unwrappedIO = unwrapIO(s, bb, ports);
     buildUnitRateForkLogic(s, bb, unwrappedIO,
                            [&](Value input) { return s.unpack(input); });
+  };
+};
+
+class ConditionalBranchConversionPattern
+    : public HandshakeConversionPattern<ConditionalBranchOp> {
+public:
+  using HandshakeConversionPattern<
+      ConditionalBranchOp>::HandshakeConversionPattern;
+  void buildModule(ConditionalBranchOp op, BackedgeBuilder &bb, RTLBuilder &s,
+                   hw::HWModulePortAccessor &ports) const override {
+    auto unwrappedIO = unwrapIO(s, bb, ports);
+    auto cond = unwrappedIO.inputs[0];
+    auto arg = unwrappedIO.inputs[1];
+    auto trueRes = unwrappedIO.outputs[0];
+    auto falseRes = unwrappedIO.outputs[1];
+
+    auto condArgValid = s.bAnd({cond.valid, arg.valid});
+
+    // Connect valid signal of both results.
+    trueRes.valid->setValue(s.bAnd({cond.data, condArgValid}));
+    falseRes.valid->setValue(s.bAnd({s.bNot(cond.data), condArgValid}));
+
+    // Connecte data signals of both results.
+    trueRes.data->setValue(arg.data);
+    falseRes.data->setValue(arg.data);
+
+    // Connect ready signal of input and condition.
+    auto selectedResultReady =
+        s.mux(cond.data, {falseRes.ready, trueRes.ready});
+    auto condArgReady = s.bAnd({selectedResultReady, condArgValid});
+    arg.ready->setValue(condArgReady);
+    cond.ready->setValue(condArgReady);
   };
 };
 
@@ -1066,6 +1290,69 @@ public:
   };
 };
 
+class ControlMergeConversionPattern
+    : public HandshakeConversionPattern<ControlMergeOp> {
+public:
+  using HandshakeConversionPattern<ControlMergeOp>::HandshakeConversionPattern;
+  void buildModule(ControlMergeOp op, BackedgeBuilder &bb, RTLBuilder &s,
+                   hw::HWModulePortAccessor &ports) const override {
+    auto unwrappedIO = this->unwrapIO(s, bb, ports);
+    auto resData = unwrappedIO.outputs[0];
+    auto resIndex = unwrappedIO.outputs[1];
+    buildMergeLogic(s, bb, unwrappedIO, resData, &resIndex);
+  };
+};
+
+class MergeConversionPattern : public HandshakeConversionPattern<MergeOp> {
+public:
+  using HandshakeConversionPattern<MergeOp>::HandshakeConversionPattern;
+  void buildModule(MergeOp op, BackedgeBuilder &bb, RTLBuilder &s,
+                   hw::HWModulePortAccessor &ports) const override {
+    auto unwrappedIO = this->unwrapIO(s, bb, ports);
+    auto resData = unwrappedIO.outputs[0];
+    buildMergeLogic(s, bb, unwrappedIO, resData);
+  };
+};
+
+class SinkConversionPattern : public HandshakeConversionPattern<SinkOp> {
+public:
+  using HandshakeConversionPattern<SinkOp>::HandshakeConversionPattern;
+  void buildModule(SinkOp op, BackedgeBuilder &bb, RTLBuilder &s,
+                   hw::HWModulePortAccessor &ports) const override {
+    auto unwrappedIO = this->unwrapIO(s, bb, ports);
+    // A sink is always ready to accept a new value.
+    unwrappedIO.inputs[0].ready->setValue(s.constant(1, 1));
+  };
+};
+
+class SourceConversionPattern : public HandshakeConversionPattern<SourceOp> {
+public:
+  using HandshakeConversionPattern<SourceOp>::HandshakeConversionPattern;
+  void buildModule(SourceOp op, BackedgeBuilder &bb, RTLBuilder &s,
+                   hw::HWModulePortAccessor &ports) const override {
+    auto unwrappedIO = this->unwrapIO(s, bb, ports);
+    // A source always provides a new (none-typed) value.
+    unwrappedIO.outputs[0].valid->setValue(s.constant(1, 1));
+    unwrappedIO.outputs[0].data->setValue(
+        s.b.create<esi::NoneSourceOp>(s.getLoc()));
+  };
+};
+
+class ConstantConversionPattern
+    : public HandshakeConversionPattern<handshake::ConstantOp> {
+public:
+  using HandshakeConversionPattern<
+      handshake::ConstantOp>::HandshakeConversionPattern;
+  void buildModule(handshake::ConstantOp op, BackedgeBuilder &bb, RTLBuilder &s,
+                   hw::HWModulePortAccessor &ports) const override {
+    auto unwrappedIO = this->unwrapIO(s, bb, ports);
+    unwrappedIO.outputs[0].valid->setValue(unwrappedIO.inputs[0].valid);
+    unwrappedIO.inputs[0].ready->setValue(unwrappedIO.outputs[0].ready);
+    auto constantValue = op->getAttrOfType<IntegerAttr>("value").getValue();
+    unwrappedIO.outputs[0].data->setValue(s.constant(constantValue));
+  };
+};
+
 class BufferConversionPattern : public HandshakeConversionPattern<BufferOp> {
 public:
   using HandshakeConversionPattern<BufferOp>::HandshakeConversionPattern;
@@ -1122,7 +1409,8 @@ public:
       auto readyRegWire = bb.get(s.b.getI1Type());
       auto readyReg = s.reg(getRegName("ready"), readyRegWire, c0I1);
 
-      // Create the logic to drive the current stage valid and potentially data.
+      // Create the logic to drive the current stage valid and potentially
+      // data.
       currentStage.valid = s.mux(readyReg, {validReg, readyReg});
 
       // Create the logic to drive the current stage ready.
@@ -1157,9 +1445,10 @@ public:
       auto emptyOrReady = s.bOr({notValidReg, readyBE});
       preStage.ready->setValue(emptyOrReady);
 
-      // Create a mux that drives the register input. If the emptyOrReady signal
-      // is asserted, the mux selects the predValid signal. Otherwise, it
-      // selects the register output, keeping the output registered unchanged.
+      // Create a mux that drives the register input. If the emptyOrReady
+      // signal is asserted, the mux selects the predValid signal. Otherwise,
+      // it selects the register output, keeping the output registered
+      // unchanged.
       auto validRegMux = s.mux(emptyOrReady, {validReg, preStage.valid});
 
       // Now we can drive the valid register.
@@ -1322,11 +1611,8 @@ static LogicalResult convertFuncOp(ESITypeConverter &typeConverter,
                   SyncConversionPattern>(typeConverter, op.getContext(),
                                          moduleBuilder, ls);
 
-  patterns.insert<ExtModuleConversionPattern<handshake::ConstantOp>,
-                  ExtModuleConversionPattern<handshake::BufferOp>,
-                  ExtModuleConversionPattern<handshake::SinkOp>,
-                  ExtModuleConversionPattern<handshake::ConditionalBranchOp>,
-                  MuxConversionPattern, SelectConversionPattern,
+  patterns.insert<ConditionalBranchConversionPattern, MuxConversionPattern,
+                  SelectConversionPattern,
                   UnitRateConversionPattern<arith::AddIOp, comb::AddOp>,
                   UnitRateConversionPattern<arith::SubIOp, comb::SubOp>,
                   UnitRateConversionPattern<arith::MulIOp, comb::MulOp>,
@@ -1342,6 +1628,9 @@ static LogicalResult convertFuncOp(ESITypeConverter &typeConverter,
                   UnitRateConversionPattern<arith::ShRSIOp, comb::ShrSOp>,
                   PackConversionPattern, UnpackConversionPattern,
                   ComparisonConversionPattern, BufferConversionPattern,
+                  SourceConversionPattern, SinkConversionPattern,
+                  ConstantConversionPattern, MergeConversionPattern,
+                  ControlMergeConversionPattern,
                   ExtendConversionPattern<arith::ExtUIOp, /*signExtend=*/false>,
                   ExtendConversionPattern<arith::ExtSIOp, /*signExtend=*/true>,
                   TruncateConversionPattern, IndexCastConversionPattern>(
