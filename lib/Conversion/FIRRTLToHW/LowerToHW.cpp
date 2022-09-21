@@ -3413,12 +3413,12 @@ Value FIRRTLLowering::createArrayIndexing(Value array, Value index) {
 
   Value inBoundsRead = builder.create<sv::ReadInOutOp>(valWire);
 
-  // If the multi-bit mux can never have an out-of-bounds read, then lower it
-  // into a HW multi-bit mux.
+  // If the array indexing can never have an out-of-bounds read, then lower it
+  // into a hw.array_get.
   if (llvm::isPowerOf2_64(size))
     return inBoundsRead;
 
-  // If the multi-bit mux can have an out-of-bounds read (the size of the array
+  // If the array indexing can have an out-of-bounds read (the size of the array
   // is not a power-of-two), then generate a mux that will return the zeroth
   // element for any out-of-bounds reads.  This is done to match SFC behavior
   // for subaccesses.
