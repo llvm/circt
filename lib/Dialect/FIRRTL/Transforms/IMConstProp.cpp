@@ -781,12 +781,8 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
     // Replace all uses of this value with the constant, unless this is the
     // destination of a connect.  We leave those alone to avoid upsetting flow.
     value.replaceUsesWithIf(cstValue, [](OpOperand &operand) {
-      if (isa<ConnectOp>(operand.getOwner()) && operand.getOperandNumber() == 0)
-        return false;
-      if (isa<StrictConnectOp>(operand.getOwner()) &&
-          operand.getOperandNumber() == 0)
-        return false;
-      return true;
+      return !isa<FConnectLike>(operand.getOwner()) ||
+             operand.getOperandNumber() != 0;
     });
     return true;
   };
@@ -803,16 +799,7 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
   // aggressively delete them.
   for (auto &op : llvm::make_early_inc_range(llvm::reverse(*body))) {
     // Connects to values that we found to be constant can be dropped.
-    if (auto connect = dyn_cast<ConnectOp>(op)) {
-      if (auto *destOp = connect.getDest().getDefiningOp()) {
-        if (isDeletableWireOrReg(destOp) && !isOverdefined(connect.getDest())) {
-          connect.erase();
-          ++numErasedOp;
-        }
-      }
-      continue;
-    }
-    if (auto connect = dyn_cast<StrictConnectOp>(op)) {
+    if (auto connect = dyn_cast<FConnectLike>(op)) {
       if (auto *destOp = connect.getDest().getDefiningOp()) {
         if (isDeletableWireOrReg(destOp) && !isOverdefined(connect.getDest())) {
           connect.erase();
