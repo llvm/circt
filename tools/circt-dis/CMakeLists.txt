@@ -3,9 +3,11 @@ set(LLVM_LINK_COMPONENTS
 )
 
 get_property(dialect_libs GLOBAL PROPERTY CIRCT_DIALECT_LIBS)
+get_property(mlir_dialect_libs GLOBAL PROPERTY MLIR_DIALECT_LIBS)
 
 set(LIBS
   ${dialect_libs}
+  ${mlir_dialect_libs}
 
   MLIRIR
   MLIRBytecodeReader
