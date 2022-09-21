@@ -497,3 +497,64 @@ hw.module @issue1594(%clock: i1, %reset: i1, %a: i1) -> (b: i1) {
   // CHECK: hw.output
   hw.output %r : i1
 }
+
+// Check that deeply nested if statement creation doesn't cause any issue.
+// CHECK-LABEL: @DeeplyNestedIfs
+// CHECK-COUNT-17: sv.if
+hw.module @DeeplyNestedIfs(%a_0: i1, %a_1: i1, %a_2: i1, %c_0_0: i1, %c_0_1: i1, %c_1_0: i1, %c_1_1: i1, %c_2_0: i1, %c_2_1: i1, %clock: i1) -> (out_0: i1, out_1: i1) {
+  %r_0 = seq.firreg %25 clock %clock {firrtl.random_init_start = 0 : ui64} : i1
+  %r_1 = seq.firreg %51 clock %clock {firrtl.random_init_start = 1 : ui64} : i1
+  %0 = comb.mux bin %a_1, %c_1_0, %c_0_0 : i1
+  %1 = comb.mux bin %a_0, %0, %c_2_0 : i1
+  %2 = comb.mux bin %a_2, %1, %c_1_0 : i1
+  %3 = comb.mux bin %a_1, %2, %c_0_0 : i1
+  %4 = comb.mux bin %a_0, %3, %c_2_0 : i1
+  %5 = comb.mux bin %a_2, %4, %c_1_0 : i1
+  %6 = comb.mux bin %a_1, %5, %c_0_0 : i1
+  %7 = comb.mux bin %a_0, %6, %c_2_0 : i1
+  %8 = comb.mux bin %a_2, %7, %c_1_0 : i1
+  %9 = comb.mux bin %a_1, %8, %c_0_0 : i1
+  %10 = comb.mux bin %a_0, %9, %c_2_0 : i1
+  %11 = comb.mux bin %a_2, %10, %c_1_0 : i1
+  %12 = comb.mux bin %a_1, %11, %c_0_0 : i1
+  %13 = comb.mux bin %a_0, %12, %c_2_0 : i1
+  %14 = comb.mux bin %a_2, %13, %c_1_0 : i1
+  %15 = comb.mux bin %a_1, %14, %c_0_0 : i1
+  %16 = comb.mux bin %a_0, %15, %c_2_0 : i1
+  %17 = comb.mux bin %a_2, %16, %c_1_0 : i1
+  %18 = comb.mux bin %a_1, %17, %c_0_0 : i1
+  %19 = comb.mux bin %a_0, %18, %c_2_0 : i1
+  %20 = comb.mux bin %a_2, %19, %c_1_0 : i1
+  %21 = comb.mux bin %a_1, %20, %c_0_0 : i1
+  %22 = comb.mux bin %a_0, %21, %c_2_0 : i1
+  %23 = comb.mux bin %a_2, %22, %c_1_0 : i1
+  %24 = comb.mux bin %a_1, %23, %c_0_0 : i1
+  %25 = comb.mux bin %a_0, %24, %r_0 : i1
+  %26 = comb.mux bin %a_1, %c_1_1, %c_0_1 : i1
+  %27 = comb.mux bin %a_0, %26, %c_2_1 : i1
+  %28 = comb.mux bin %a_2, %27, %c_1_1 : i1
+  %29 = comb.mux bin %a_1, %28, %c_0_1 : i1
+  %30 = comb.mux bin %a_0, %29, %c_2_1 : i1
+  %31 = comb.mux bin %a_2, %30, %c_1_1 : i1
+  %32 = comb.mux bin %a_1, %31, %c_0_1 : i1
+  %33 = comb.mux bin %a_0, %32, %c_2_1 : i1
+  %34 = comb.mux bin %a_2, %33, %c_1_1 : i1
+  %35 = comb.mux bin %a_1, %34, %c_0_1 : i1
+  %36 = comb.mux bin %a_0, %35, %c_2_1 : i1
+  %37 = comb.mux bin %a_2, %36, %c_1_1 : i1
+  %38 = comb.mux bin %a_1, %37, %c_0_1 : i1
+  %39 = comb.mux bin %a_0, %38, %c_2_1 : i1
+  %40 = comb.mux bin %a_2, %39, %c_1_1 : i1
+  %41 = comb.mux bin %a_1, %40, %c_0_1 : i1
+  %42 = comb.mux bin %a_0, %41, %c_2_1 : i1
+  %43 = comb.mux bin %a_2, %42, %c_1_1 : i1
+  %44 = comb.mux bin %a_1, %43, %c_0_1 : i1
+  %45 = comb.mux bin %a_0, %44, %c_2_1 : i1
+  %46 = comb.mux bin %a_2, %45, %c_1_1 : i1
+  %47 = comb.mux bin %a_1, %46, %c_0_1 : i1
+  %48 = comb.mux bin %a_0, %47, %c_2_1 : i1
+  %49 = comb.mux bin %a_2, %48, %c_1_1 : i1
+  %50 = comb.mux bin %a_1, %49, %c_0_1 : i1
+  %51 = comb.mux bin %a_0, %50, %r_1 : i1
+  hw.output %r_0, %r_1 : i1, i1
+}
