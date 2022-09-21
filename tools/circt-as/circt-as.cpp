@@ -11,6 +11,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/InitAllDialects.h"
+#include "circt/Support/Version.h"
+#include "mlir/Bytecode/BytecodeWriter.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
@@ -19,8 +21,6 @@
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
-#include "circt/Support/Version.h"
-#include "mlir/Bytecode/BytecodeWriter.h"
 #include "mlir/Parser/Parser.h"
 #include "mlir/Support/FileUtilities.h"
 #include "llvm/Support/CommandLine.h"
@@ -35,10 +35,12 @@ using namespace llvm;
 using namespace mlir;
 using namespace circt;
 
-static cl::opt<std::string>
-    inputFilename(cl::Positional, cl::desc("<input .mlir file>"), cl::init("-"));
+static cl::opt<std::string> inputFilename(cl::Positional,
+                                          cl::desc("<input .mlir file>"),
+                                          cl::init("-"));
 
-static cl::opt<std::string> outputFilename("o", cl::desc("Override output filename"),
+static cl::opt<std::string> outputFilename("o",
+                                           cl::desc("Override output filename"),
                                            cl::value_desc("filename"));
 
 static cl::opt<bool> forceOutput("f",
