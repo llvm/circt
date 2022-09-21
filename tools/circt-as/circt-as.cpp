@@ -133,14 +133,6 @@ int main(int argc, char **argv) {
 
   cl::ParseCommandLineOptions(argc, argv, "CIRCT .mlir -> .mlirbc assembler\n");
 
-  MLIRContext context;
-  context.appendDialectRegistry(registry);
-
-  // Do the guts of the process.
-  auto result = execute(context);
-
-  // Use "exit" instead of return'ing to signal completion.  This avoids
-  // invoking the MLIRContext destructor, which spends a bunch of time
-  // deallocating memory etc which process exit will do for us.
-  exit(failed(result));
+  MLIRContext context(registry);
+  exit(failed(execute(context)));
 }
