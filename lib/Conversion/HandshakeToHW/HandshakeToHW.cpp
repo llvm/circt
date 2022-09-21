@@ -487,7 +487,7 @@ struct RTLBuilder {
              Value rst = Value())
       : b(builder), loc(loc), clk(clk), rst(rst) {}
 
-  Value constant(APInt apv, Location *extLoc = nullptr) {
+  Value constant(const APInt &apv, Location *extLoc = nullptr) {
     auto it = constants.find(apv);
     if (it != constants.end())
       return it->second;
@@ -1001,7 +1001,7 @@ public:
       // data.
       SmallVector<Value, 8> indexOutputs;
       for (size_t i = 0; i < numInputs; ++i)
-        indexOutputs.push_back(s.constant(/*indexType=*/64, i));
+        indexOutputs.push_back(s.constant(64, i));
 
       auto indexOutput = s.ohMux(win, indexOutputs);
       resIndex->data->setValue(indexOutput);
