@@ -58,10 +58,10 @@ static LogicalResult emitError(const Twine &err) {
 static bool checkBytecodeOutputToConsole(raw_ostream &os) {
   if (os.is_displayed()) {
     WithColor::warning(errs(), toolName)
-        << "You're attempting to print out a bytecode file.\n"
-           "This is inadvisable as it may cause display problems. If\n"
-           "you REALLY want to taste MLIR bytecode first-hand, you\n"
-           "can force output with the `-f' option.\n\n";
+        << "you're attempting to print out a bytecode file."
+        << " This is inadvisable as it may cause display problems\n";
+    WithColor::remark(errs(), toolName)
+        << "if you really want to do this, force output with the `-f` option\n";
     return true;
   }
   return false;
@@ -94,7 +94,7 @@ static LogicalResult execute(MLIRContext &context) {
     return emitError(err);
 
   if (!forceOutput && checkBytecodeOutputToConsole(output->os()))
-    return emitError("not writing bytecode to console");
+    return failure();
 
   // Read input MLIR.
   SourceMgr srcMgr;
