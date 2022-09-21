@@ -1,9 +1,8 @@
 ; RUN: firtool %s --format=fir --ir-fir    | circt-opt | FileCheck %s --check-prefix=MLIR
-; RUN: firtool %s --format=fir --ir-fir --annotation-file %s.anno.json,%s.anno.1.json | circt-opt | FileCheck %s --check-prefix=ANNOTATIONS
-; RUN: firtool %s --format=fir --ir-fir --annotation-file %s.anno.json --annotation-file %s.anno.1.json | circt-opt | FileCheck %s --check-prefix=ANNOTATIONS
+; RUN: firtool %s --format=fir --parse-only --annotation-file %s.anno.json,%s.anno.1.json | circt-opt | FileCheck %s --check-prefix=ANNOTATIONS
+; RUN: firtool %s --format=fir --parse-only --annotation-file %s.anno.json --annotation-file %s.anno.1.json | circt-opt | FileCheck %s --check-prefix=ANNOTATIONS
 ; RUN: firtool %s --format=fir --ir-hw | circt-opt | FileCheck %s --check-prefix=MLIRLOWER
 ; RUN: firtool %s --format=fir -verilog | FileCheck %s --check-prefix=VERILOG
-; RUN: firtool %s --annotation-file %s.anno.json,%s.anno.1.json --parse-only | FileCheck %s --check-prefix=RAWANNOTATIONS
 ; RUN: firtool %s --omir-file %s.omir.anno.json --parse-only | circt-opt -firrtl-lower-annotations | FileCheck %s --check-prefix=OMIR
 ; RUN: firtool %s --omir-file %s.omir.anno.json --output-omir meta.omir.json --verilog | FileCheck %s --check-prefix=OMIROUT
 ; RUN: firtool %s --format=fir --ir-verilog | circt-opt | FileCheck %s --check-prefix=VERILOG-IR
@@ -18,14 +17,6 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
 ; ANNOTATIONS-SAME: {class = "circt.testNT", info = "a NoTargetAnnotation"}
 ; ANNOTATIONS-SAME: {class = "circt.test", info = "a CircuitTarget Annotation"}
 ; ANNOTATIONS-SAME: {class = "circt.test", info = "a CircuitName Annotation"}
-
-; RAWANNOTATIONS-LABEL: firrtl.circuit "test_mod"
-; RAWANNOTATIONS-SAME: {class = "circt.testNT", data = "a"}
-; RAWANNOTATIONS-SAME: {class = "circt.testNT", info = "a NoTargetAnnotation"}
-; RAWANNOTATIONS-SAME: {class = "circt.test", info = "a CircuitTarget Annotation", target = "~test_mod"}
-; RAWANNOTATIONS-SAME: {class = "circt.test", info = "a ModuleTarget Annotation", target = "~test_mod|test_mod"}
-; RAWANNOTATIONS-SAME: {class = "circt.test", info = "a CircuitName Annotation", target = "test_mod"}
-; RAWANNOTATIONS-SAME: {class = "circt.test", info = "a ModuleName Annotation", target = "test_mod.test_mod"}
 
 ; OMIR:       #loc0 = loc(fused["Foo.scala":64:64, "Bar.scala":128:128])
 ; OMIR-NEXT:  #loc1 = loc("Foo.scala":32:32)

@@ -322,7 +322,8 @@ static cl::opt<OutputFormatKind> outputFormat(
     cl::desc("Specify output format:"),
     cl::values(
         clEnumValN(OutputParseOnly, "parse-only",
-                   "Emit FIR dialect after parsing"),
+                   "Emit FIR dialect after parsing, verification, and "
+                   "annotation lowering"),
         clEnumValN(OutputIRFir, "ir-fir", "Emit FIR dialect after pipeline"),
         clEnumValN(OutputIRHW, "ir-hw", "Emit HW dialect"),
         clEnumValN(OutputIRSV, "ir-sv", "Emit SV dialect"),
@@ -537,14 +538,6 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
                  << " sec\n";
   }
 
-  // If the user asked for just a parse, stop here.
-  if (outputFormat == OutputParseOnly) {
-    mlir::ModuleOp theModule = module.release();
-    auto outputTimer = ts.nest("Print .mlir output");
-    printOp(theModule, outputFile.value()->os());
-    return success();
-  }
-
   // Apply any pass manager command line options.
   PassManager pm(&context);
   pm.enableVerifier(verifyPasses);
@@ -555,6 +548,15 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerFIRRTLAnnotationsPass(
       disableAnnotationsUnknown, disableAnnotationsClassless));
+
+  // If the user asked for --parse-only, stop after running LowerAnnotations.
+  if (outputFormat == OutputParseOnly) {
+    if (failed(pm.run(module.get())))
+      return failure();
+    auto outputTimer = ts.nest("Print .mlir output");
+    printOp(*module, outputFile.value()->os());
+    return success();
+  }
 
   // TODO: Move this to the O1 pipeline.
   pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
