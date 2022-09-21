@@ -22,12 +22,12 @@ using namespace firrtl;
 
 /// Return true if this is a wire or register.
 static bool isWireOrReg(Operation *op) {
-  return isa<WireOp>(op) || isa<RegResetOp>(op) || isa<RegOp>(op);
+  return isa<WireOp, RegResetOp, RegOp>(op);
 }
 
 /// Return true if this is an aggregate indexer.
 static bool isAggregate(Operation *op) {
-  return isa<SubindexOp>(op) || isa<SubaccessOp>(op) || isa<SubfieldOp>(op);
+  return isa<SubindexOp, SubaccessOp, SubfieldOp>(op);
 }
 
 /// Return true if this is a wire or register we're allowed to delete.
