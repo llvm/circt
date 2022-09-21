@@ -790,8 +790,7 @@ public:
   // the 'unwrapped' inputs and provide it as a separate argument.
   void buildMuxLogic(RTLBuilder &s, UnwrappedIO &unwrapped,
                      InputHandshake &select) const {
-    // ============================= Control logic
-    // =============================
+    // ============================= Control logic =============================
     size_t numInputs = unwrapped.inputs.size();
     size_t selectWidth = llvm::Log2_64_Ceil(numInputs);
     Value truncatedSelect =
@@ -827,8 +826,7 @@ public:
       in.ready->setValue(activeAndResultValidAndReady);
     }
 
-    // ============================== Data logic
-    // ===============================
+    // ============================== Data logic ===============================
     res.data->setValue(s.mux(truncatedSelect, unwrapped.getInputDatas()));
   }
 
