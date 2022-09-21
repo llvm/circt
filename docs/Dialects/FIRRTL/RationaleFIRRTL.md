@@ -245,17 +245,39 @@ It is important to note that the debug/release split was born out of our
 inability to reconcile the goals at the top of this section.  Discussion in the
 subsequent section involves approaches to unify these two approaches.
 
-#### Alternative Approaches to Name Preservation Modes
+#### Alternative Approaches to Name Preservation Modes and Historical Background
 
-The following alternatives were considered instead of the debug/release
-solution.
+The following alternatives were implemented or considered instead of the
+debug/release solution.
 
-First, we originally considered having CIRCT create "debug modules" that
-included all named signals in the design.  An instance of this debug module
-would then be instantiated, via a SystemVerilog `bind` statement, inside the
-original module.  This was an early suggestion.  However, a concern of users of
-any "debug module" is that the debug module would not show usages of the named
-signals.  E.g., the example circuit shown above would compile to something like:
+First, we created dead wire taps _with symbols_ for all "named" things in the
+original FIRRTL design.  We would then try to use these dead wire taps in place
+of unnamed things when possible.  This simple solution produced much more
+readable Verilog.  However, this also had a number of problems.  Namely, leaving
+in dead wire taps would result in situations where ports that downstream users
+were expecting to be removed were not.  E.g., a module with dead wire taps would
+result in more ports at a physical design boundary.  Additionally, leaving in
+dead wire taps may introduce coverage holes for verification teams.  We
+attempted to remove dead wire taps when possible.  However, this was problematic
+as we had given them symbols which indicates that they may have external readers
+(e.g., from a manually written testbench) and was intended to indicate that
+later passes could never remove these.  We considered using an alternative to a
+symbol, but this was rejected due to its highly special-cased nature---it was
+forcing us to communicate a Chisel expectation/semantic all the way to HW/SV
+dialects.
+
+These drawbacks are unfortunate because they stem from learned expectations of
+how the Scala-based FIRRTL Compiler worked.  A negative view of this is that
+some level of optimization was required for a learned definition of correctness.
+If CIRCT was the first FIRRTL compiler, we may have been able to circumvent
+these problems with alternative means that included modifications to Chisel.
+
+Second, we considered having CIRCT create "debug modules" that included all
+named signals in the design.  An instance of this debug module would then be
+instantiated, via a SystemVerilog `bind` statement, inside the original module.
+This was an early suggestion.  However, a concern of users of any "debug module"
+is that the debug module would not show usages of the named signals.  E.g., the
+example circuit shown above would compile to something like:
 
 
 ``` verilog
@@ -279,17 +301,33 @@ endmodule
 
 The main concern is that while users can see the value of `named` in a waveform,
 they cannot trace back its usage in the computation of port `b` in module `Foo`.
+This approach also suffers from the issues of the first approach of leaving in
+ports and dead logic (that is only used when a debug instance is bound in).
 
 This approach may be revisited in the future as it provides benefits of unifying
 debug and release builds into a single release build with run-time debugging
-information that can be bound in.
+information that can be bound in.  Additionally, use of FIRRTL `RefType`s that
+lower to Verilog cross-module references (XMRs) may alleviate some of the issues
+above.
 
-Second, a single build that always preserved names was considered.  At the time,
+Third, a single build that always preserved names was considered.  At the time,
 this introduced long Verilog compilation and simulation times.  We were not able
 to discern an optimization design point which balanced the needs of
 debuggability with compilation and simulation performance.  This does not mean
 that such a point does _not_ exist, only that we were not able to find it.  Such
 a design point may exist and should be investigated.
+
+Since all these efforts happened, other work has occurred which may make
+reviving these efforts a fruitful endeavor.  FIRRTL now has `RefType`s which are
+operations which lower to Verilog cross-module references (XMRs).  This may
+provide a mechanism to implement the "bound debug instance" approach above
+without perturbing port optimizations.  Reliance on symbols to encode
+optimization blocking behavior has been largely rolled back.  A
+`DontTouchAnnotation` is now encoded as an annotation as opposed to a symbol.  A
+new inter-module dead code elimination (IMDCE) pass was implemented which
+handles port removal.  The approaches above, or new approaches, may be able to
+build a better name preservation approach, but with certain optimizations
+enabled.
 
 ## Symbols and Inner Symbols
 
