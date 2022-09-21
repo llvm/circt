@@ -1448,6 +1448,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   Value getExtOrTruncAggregateValue(Value array, FIRRTLBaseType sourceType,
                                     FIRRTLBaseType destType,
                                     bool allowTruncate);
+  Value createArrayIndexing(Value array, Value index);
 
   // Create a temporary wire at the current insertion point, and try to
   // eliminate it later as part of lowering post processing.
@@ -2446,8 +2447,8 @@ LogicalResult FIRRTLLowering::visitExpr(SubaccessOp op) {
   // If the value has an inout type, we need to lower to ArrayIndexInOutOp.
   if (value.getType().isa<sv::InOutType>())
     return setLoweringTo<sv::ArrayIndexInOutOp>(op, value, valueIdx);
-  // Otherwise, hw::ArrayGetOp
-  return setLoweringTo<hw::ArrayGetOp>(op, value, valueIdx);
+  // Otherwise, lower the op to array indexing.
+  return setLowering(op, createArrayIndexing(value, valueIdx));
 }
 
 LogicalResult FIRRTLLowering::visitExpr(SubfieldOp op) {
@@ -3383,6 +3384,59 @@ LogicalResult FIRRTLLowering::visitExpr(MuxPrimOp op) {
                                     true);
 }
 
+// Construct array indexing annotated with vendor pragmas to get
+// better synthesis results. Specifically we annotate pragmas in the following
+// form.
+// ```
+//   wire GEN;
+//   /* synopsys infer_mux_override */
+//   assign GEN = array[index] /* cadence map_to_mux */;
+// ```
+Value FIRRTLLowering::createArrayIndexing(Value array, Value index) {
+
+  auto size = hw::type_cast<hw::ArrayType>(array.getType()).getSize();
+  auto valWire = builder.create<sv::WireOp>(
+      hw::type_cast<hw::ArrayType>(array.getType()).getElementType());
+  auto arrayGet = builder.create<hw::ArrayGetOp>(array, index);
+
+  // Use SV attributes to annotate pragmas.
+  circt::sv::setSVAttributes(
+      arrayGet,
+      sv::SVAttributesAttr::get(builder.getContext(), {"cadence map_to_mux"},
+                                /*emitAsComments=*/true));
+
+  auto assignOp = builder.create<sv::AssignOp>(valWire, arrayGet);
+  sv::setSVAttributes(assignOp,
+                      sv::SVAttributesAttr::get(builder.getContext(),
+                                                {"synopsys infer_mux_override"},
+                                                /*emitAsComments=*/true));
+
+  Value inBoundsRead = builder.create<sv::ReadInOutOp>(valWire);
+
+  // If the array indexing can never have an out-of-bounds read, then lower it
+  // into a hw.array_get.
+  if (llvm::isPowerOf2_64(size))
+    return inBoundsRead;
+
+  // If the array indexing can have an out-of-bounds read (the size of the array
+  // is not a power-of-two), then generate a mux that will return the zeroth
+  // element for any out-of-bounds reads.  This is done to match SFC behavior
+  // for subaccesses.
+  //
+  // TODO: Explore alternatives that don't rely on SFC-exact behavior or guard
+  // against this situation happeneing, e.g., by emitting an SV assertion to
+  // error if an out-of-bounds read ever occurs.
+  Value zerothRead = builder.create<hw::ArrayGetOp>(
+      array,
+      getOrCreateIntConstant(index.getType().getIntOrFloatBitWidth(), 0));
+  Value isOutOfBounds = builder.create<comb::ICmpOp>(
+      ICmpPredicate::uge, index,
+      getOrCreateIntConstant(index.getType().getIntOrFloatBitWidth(), size),
+      true);
+  return builder.create<comb::MuxOp>(inBoundsRead.getType(), isOutOfBounds,
+                                     zerothRead, inBoundsRead, true);
+}
+
 LogicalResult FIRRTLLowering::visitExpr(MultibitMuxOp op) {
   // Lower and resize to the index width.
   auto index = getLoweredAndExtOrTruncValue(
@@ -3401,54 +3455,8 @@ LogicalResult FIRRTLLowering::visitExpr(MultibitMuxOp op) {
     loweredInputs.push_back(lowered);
   }
 
-  // We lower multbit mux into array indexing with vendor pragmas in the
-  // following form.
-  //
-  // wire GEN;
-  // /* synopsys infer_mux_override */
-  // assign GEN = array[index] /* cadence map_to_mux */;
-
   Value array = builder.create<hw::ArrayCreateOp>(loweredInputs);
-  auto valWire = builder.create<sv::WireOp>(lowerType(op.getType()));
-  auto arrayGet = builder.create<hw::ArrayGetOp>(array, index);
-
-  // Use SV attributes to annotate pragmas.
-  circt::sv::setSVAttributes(
-      arrayGet,
-      sv::SVAttributesAttr::get(builder.getContext(), {"cadence map_to_mux"},
-                                /*emitAsComments=*/true));
-
-  auto assignOp = builder.create<sv::AssignOp>(valWire, arrayGet);
-  sv::setSVAttributes(assignOp,
-                      sv::SVAttributesAttr::get(builder.getContext(),
-                                                {"synopsys infer_mux_override"},
-                                                /*emitAsComments=*/true));
-
-  Value inBoundsRead = builder.create<sv::ReadInOutOp>(valWire);
-
-  // If the multi-bit mux can never have an out-of-bounds read, then lower it
-  // into a HW multi-bit mux.
-  if (llvm::isPowerOf2_64(op.getInputs().size()))
-    return setLowering(op, inBoundsRead);
-
-  // If the multi-bit mux can have an out-of-bounds read (the size of the array
-  // is not a power-of-two), then generate a mux that will return the zeroth
-  // element for any out-of-bounds reads.  This is done to match SFC behavior
-  // for subaccesses.
-  //
-  // TODO: Explore alternatives that don't rely on SFC-exact behavior or guard
-  // against this situation happeneing, e.g., by emitting an SV assertion to
-  // error if an out-of-bounds read ever occurs.
-  Value zerothRead = builder.create<hw::ArrayGetOp>(
-      array,
-      getOrCreateIntConstant(index.getType().getIntOrFloatBitWidth(), 0));
-  Value isOutOfBounds = builder.create<comb::ICmpOp>(
-      ICmpPredicate::uge, index,
-      getOrCreateIntConstant(index.getType().getIntOrFloatBitWidth(),
-                             op.getInputs().size()),
-      true);
-  return setLoweringTo<comb::MuxOp>(op, inBoundsRead.getType(), isOutOfBounds,
-                                    zerothRead, inBoundsRead, true);
+  return setLowering(op, createArrayIndexing(array, index));
 }
 
 LogicalResult FIRRTLLowering::visitExpr(VerbatimExprOp op) {
