@@ -33,8 +33,6 @@ bool isSimpleReadOrPort(Value v);
 /// for instances this is `instanceName`, etc.
 StringAttr getDeclarationName(Operation *op);
 
-StringRef getPortVerilogName(Operation *module, size_t portArgNum);
-
 /// Given an expression that is spilled into a temporary wire, try to
 /// synthesize a better name than "_T_42" based on the structure of the
 /// expression.
@@ -310,11 +308,6 @@ void prepareHWModule(hw::HWModuleOp module, const LoweringOptions &options);
 /// Rewrite module names and interfaces to not conflict with each other or with
 /// Verilog keywords.
 GlobalNameTable legalizeGlobalNames(ModuleOp topLevel);
-
-/// Return the verilog name of the operations that can define a symbol.
-/// Except for <WireOp, RegOp, LogicOp, LocalParamOp, InstanceOp>, check global
-/// state `getDeclarationVerilogName` for them.
-StringRef getSymOpName(Operation *symOp);
 
 } // namespace ExportVerilog
 } // namespace circt

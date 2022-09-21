@@ -46,7 +46,8 @@ parseWireSpillingHeuristic(StringRef option) {
   return llvm::StringSwitch<
              llvm::Optional<LoweringOptions::WireSpillingHeuristic>>(option)
       .Case("spillNone", LoweringOptions::SpillNone)
-      .Case("spillNamehintsIfShort", LoweringOptions::SpillNamehintsIfShort)
+      .Case("spillLargeTermsWithNamehints",
+            LoweringOptions::SpillLargeTermsWithNamehints)
       .Default(llvm::None);
 }
 
@@ -110,7 +111,13 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
       if (auto heuristic = parseWireSpillingHeuristic(option)) {
         wireSpillingHeuristic = *heuristic;
       } else {
-        errorHandler("expected 'spillNone' or 'spillNamehintsIfShort'");
+        errorHandler("expected 'spillNone' or 'spillLargeTermsWithNamehints'");
+      }
+    } else if (option.consume_front("wireSpillingNamehintTermLimit=")) {
+      if (option.getAsInteger(10, wireSpillingNamehintTermLimit)) {
+        errorHandler(
+            "expected integer for number of namehint heurstic term limit");
+        wireSpillingNamehintTermLimit = DEFAULT_NAMEHINT_TERM_LIMIT;
       }
     } else {
       errorHandler(llvm::Twine("unknown style option \'") + option + "\'");
@@ -146,8 +153,9 @@ std::string LoweringOptions::toString() const {
     options += "printDebugInfo,";
   if (useOldEmissionMode)
     options += "useOldEmissionMode,";
-  if (wireSpillingHeuristic == WireSpillingHeuristic::SpillNamehintsIfShort)
-    options += "wireSpillingHeuristic=spillNamehintsIfShort,";
+  if (wireSpillingHeuristic ==
+      WireSpillingHeuristic::SpillLargeTermsWithNamehints)
+    options += "wireSpillingHeuristic=spillLargeTermsWithNamehints,";
   if (disallowExpressionInliningInPorts)
     options += "disallowExpressionInliningInPorts,";
 
