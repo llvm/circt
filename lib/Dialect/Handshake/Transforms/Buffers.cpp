@@ -49,7 +49,6 @@ struct HandshakeRemoveBuffersPass
 
 struct HandshakeInsertBuffersPass
     : public HandshakeInsertBuffersBase<HandshakeInsertBuffersPass> {
-  HandshakeInsertBuffersPass() = default;
   HandshakeInsertBuffersPass(const std::string &strategy, unsigned bufferSize) {
     this->strategy = strategy;
     this->bufferSize = bufferSize;
@@ -226,11 +225,6 @@ struct HandshakeInsertBuffersPass
 std::unique_ptr<mlir::Pass>
 circt::handshake::createHandshakeRemoveBuffersPass() {
   return std::make_unique<HandshakeRemoveBuffersPass>();
-}
-
-std::unique_ptr<mlir::OperationPass<handshake::FuncOp>>
-circt::handshake::createHandshakeInsertBuffersPass() {
-  return std::make_unique<HandshakeInsertBuffersPass>();
 }
 
 std::unique_ptr<mlir::OperationPass<handshake::FuncOp>>
