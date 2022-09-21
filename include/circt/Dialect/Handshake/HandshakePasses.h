@@ -32,6 +32,9 @@ std::unique_ptr<mlir::Pass> createHandshakeRemoveBuffersPass();
 std::unique_ptr<mlir::Pass> createHandshakeAddIDsPass();
 std::unique_ptr<mlir::OperationPass<handshake::FuncOp>>
 createHandshakeInsertBuffersPass();
+std::unique_ptr<mlir::OperationPass<handshake::FuncOp>>
+createHandshakeInsertBuffersPass(const std::string &strategy,
+                                 unsigned bufferSize);
 std::unique_ptr<mlir::Pass> createHandshakeLockFunctionsPass();
 
 /// Iterates over the handshake::FuncOp's in the program to build an instance

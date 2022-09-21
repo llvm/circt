@@ -49,6 +49,11 @@ struct HandshakeRemoveBuffersPass
 
 struct HandshakeInsertBuffersPass
     : public HandshakeInsertBuffersBase<HandshakeInsertBuffersPass> {
+  HandshakeInsertBuffersPass() = default;
+  HandshakeInsertBuffersPass(const std::string &strategy, unsigned bufferSize) {
+    this->strategy = strategy;
+    this->bufferSize = bufferSize;
+  }
 
   // Returns true if a block argument should have buffers added to its uses.
   static bool shouldBufferArgument(BlockArgument arg) {
@@ -226,4 +231,10 @@ circt::handshake::createHandshakeRemoveBuffersPass() {
 std::unique_ptr<mlir::OperationPass<handshake::FuncOp>>
 circt::handshake::createHandshakeInsertBuffersPass() {
   return std::make_unique<HandshakeInsertBuffersPass>();
+}
+
+std::unique_ptr<mlir::OperationPass<handshake::FuncOp>>
+circt::handshake::createHandshakeInsertBuffersPass(const std::string &strategy,
+                                                   unsigned bufferSize) {
+  return std::make_unique<HandshakeInsertBuffersPass>(strategy, bufferSize);
 }
