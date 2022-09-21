@@ -57,18 +57,65 @@ private:
   LogicalResult populateOperatorTypes(SmallVectorImpl<AffineForOp> &loopNest);
   LogicalResult solveSchedulingProblem(SmallVectorImpl<AffineForOp> &loopNest);
   LogicalResult createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest);
+  LogicalResult constantCSE();
+  LogicalResult unrollAndForwardStores();
 
   CyclicSchedulingAnalysis *schedulingAnalysis;
 };
 
+static LogicalResult
+forwardStoreToLoad(AffineReadOpInterface loadOp,
+                   SmallVectorImpl<Operation *> &opsToErase) {
+
+  Operation *prevOp = loadOp->getPrevNode();
+  while (prevOp) {
+    if (prevOp->getParentRegion() != loadOp->getParentRegion())
+      return failure();
+
+    auto storeOp = dyn_cast<AffineWriteOpInterface>(prevOp);
+    if (!storeOp) {
+      prevOp = prevOp->getPrevNode();
+      continue;
+    }
+
+    if (storeOp.getMemRef() != loadOp.getMemRef())
+      return failure();
+
+    MemRefAccess srcAccess(storeOp);
+    MemRefAccess dstAccess(loadOp);
+
+    if (srcAccess != dstAccess)
+      return failure();
+
+    // Perform the actual store to load forwarding.
+    Value storeVal = cast<AffineWriteOpInterface>(storeOp).getValueToStore();
+    // Check if 2 values have the same shape. This is needed for affine
+    // vector loads and stores.
+    if (storeVal.getType() != loadOp.getValue().getType())
+      return failure();
+    loadOp.getValue().replaceAllUsesWith(storeVal);
+    // Record this to erase later.
+    opsToErase.push_back(storeOp);
+    // Record this to erase later.
+    opsToErase.push_back(loadOp);
+    return success();
+  }
+  return failure();
+}
+
 } // namespace
 
 void AffineToPipeline::runOnOperation() {
-  // Get dependence analysis for the whole function.
+  if (failed(unrollAndForwardStores()))
+    return signalPassFailure();
+
   auto dependenceAnalysis = getAnalysis<MemoryDependenceAnalysis>();
 
   // After dependence analysis, materialize affine structures.
   if (failed(lowerAffineStructures(dependenceAnalysis)))
+    return signalPassFailure();
+
+  if (failed(constantCSE()))
     return signalPassFailure();
 
   // Get scheduling analysis for the whole function.
@@ -79,10 +126,6 @@ void AffineToPipeline::runOnOperation() {
   for (auto root : llvm::make_early_inc_range(outerLoops)) {
     SmallVector<AffineForOp> nestedLoops;
     getPerfectlyNestedLoops(nestedLoops, root);
-
-    // Restrict to single loops to simplify things for now.
-    if (nestedLoops.size() != 1)
-      continue;
 
     // Populate the target operator types.
     if (failed(populateOperatorTypes(nestedLoops)))
@@ -190,6 +233,22 @@ struct IfOpHoisting : OpConversionPattern<IfOp> {
   }
 };
 
+class AffineApplyLowering : public OpRewritePattern<AffineApplyOp> {
+public:
+  using OpRewritePattern<AffineApplyOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(AffineApplyOp op,
+                                PatternRewriter &rewriter) const override {
+    auto maybeExpandedMap =
+        expandAffineMap(rewriter, op.getLoc(), op.getAffineMap(),
+                        llvm::to_vector<8>(op.getOperands()));
+    if (!maybeExpandedMap)
+      return failure();
+    rewriter.replaceOp(op, *maybeExpandedMap);
+    return success();
+  }
+};
+
 /// Helper to determine if an scf::IfOp is in mux-like form.
 static bool ifOpLegalityCallback(IfOp op) {
   return op.thenBlock()->without_terminator().empty() &&
@@ -217,7 +276,7 @@ LogicalResult AffineToPipeline::lowerAffineStructures(
   ConversionTarget target(*context);
   target.addLegalDialect<AffineDialect, ArithmeticDialect, MemRefDialect,
                          SCFDialect>();
-  target.addIllegalOp<AffineIfOp, AffineLoadOp, AffineStoreOp>();
+  target.addIllegalOp<AffineIfOp, AffineLoadOp, AffineStoreOp, AffineApplyOp>();
   target.addDynamicallyLegalOp<IfOp>(ifOpLegalityCallback);
   target.addDynamicallyLegalOp<AffineYieldOp>(yieldOpLegalityCallback);
 
@@ -226,6 +285,7 @@ LogicalResult AffineToPipeline::lowerAffineStructures(
   patterns.add<AffineLoadLowering>(context, dependenceAnalysis);
   patterns.add<AffineStoreLowering>(context, dependenceAnalysis);
   patterns.add<IfOpHoisting>(context);
+  patterns.add<AffineApplyLowering>(context);
 
   if (failed(applyPartialConversion(op, target, std::move(patterns))))
     return failure();
@@ -334,6 +394,63 @@ LogicalResult AffineToPipeline::solveSchedulingProblem(
     });
   });
 
+  return success();
+}
+
+LogicalResult AffineToPipeline::constantCSE() {
+  auto funcOp = mlir::OperationPass<FuncOp>::getOperation();
+  SmallVector<arith::ConstantOp, 8> constsToRemove;
+  llvm::SmallDenseMap<TypedAttr, arith::ConstantOp> knownConstants;
+  funcOp.walk([&](arith::ConstantOp constOp) {
+    auto val = constOp.getValue();
+    if (!knownConstants.count(val))
+      knownConstants[val] = constOp;
+    else
+      constsToRemove.push_back(constOp);
+  });
+  if (knownConstants.empty())
+    return success();
+
+  auto firstConst = *funcOp.getOps<arith::ConstantOp>().begin();
+  for (auto &item : knownConstants) {
+    auto constOp = item.getSecond();
+    if (constOp != firstConst)
+      constOp->moveAfter(firstConst);
+  }
+  for (auto &constOp : constsToRemove) {
+    constOp->replaceAllUsesWith(knownConstants[constOp.getValue()]);
+  }
+  for (auto &constOp : constsToRemove) {
+    constOp->erase();
+  }
+  return success();
+}
+
+LogicalResult AffineToPipeline::unrollAndForwardStores() {
+  auto outerLoops = getOperation().getOps<AffineForOp>();
+  for (auto root : llvm::make_early_inc_range(outerLoops)) {
+    SmallVector<AffineForOp> nestedLoops;
+    getPerfectlyNestedLoops(nestedLoops, root);
+    if (nestedLoops.size() != 1) {
+      nestedLoops[0].getBody(0)->walk<WalkOrder::PostOrder>(
+          [&](AffineForOp forOp) {
+            if (failed(loopUnrollFull(forOp)))
+              return signalPassFailure();
+          });
+    }
+  }
+
+  SmallVector<Operation *, 8> opsToErase;
+  for (auto forOp : llvm::make_early_inc_range(outerLoops)) {
+    // Walk all load's and perform store to load forwarding.
+    forOp.walk([&](AffineReadOpInterface loadOp) {
+      forwardStoreToLoad(loadOp, opsToErase);
+    });
+    // Erase all load op's whose results were replaced with store fwd'ed ones.
+    for (auto *op : opsToErase)
+      op->erase();
+    opsToErase.clear();
+  }
   return success();
 }
 
