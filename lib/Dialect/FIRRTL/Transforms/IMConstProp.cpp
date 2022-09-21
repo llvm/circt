@@ -270,8 +270,7 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
   void markSpecialConstantOp(SpecialConstantOp specialConstant);
   void markInstanceOp(InstanceOp instance);
 
-  void visitConnect(ConnectOp connect);
-  void visitStrictConnect(StrictConnectOp connect);
+  void visitConnectLike(FConnectLike connect);
   void visitRegResetOp(RegResetOp regReset);
   void visitRefSend(RefSendOp send);
   void visitRefResolve(RefResolveOp resolve);
@@ -491,8 +490,7 @@ void IMConstPropPass::markInstanceOp(InstanceOp instance) {
   }
 }
 
-// We merge the value from the RHS into the value of the LHS.
-void IMConstPropPass::visitConnect(ConnectOp connect) {
+void IMConstPropPass::visitConnectLike(FConnectLike connect) {
   auto destType = getBaseType(connect.getDest().getType().cast<FIRRTLType>())
                       .getPassiveType();
 
@@ -507,8 +505,7 @@ void IMConstPropPass::visitConnect(ConnectOp connect) {
     for (auto userOfResultPort : resultPortToInstanceResultMapping[blockArg])
       mergeLatticeValue(userOfResultPort, srcValue);
     // Output ports are wire-like and may have users.
-    mergeLatticeValue(connect.getDest(), srcValue);
-    return;
+    return mergeLatticeValue(connect.getDest(), srcValue);
   }
 
   auto dest = connect.getDest().cast<mlir::OpResult>();
@@ -544,67 +541,9 @@ void IMConstPropPass::visitConnect(ConnectOp connect) {
   if (isAggregate(dest.getOwner()))
     return;
 
-  connect.emitError("connect unhandled by IMConstProp")
+  connect.emitError("connectlike operation unhandled by IMConstProp")
           .attachNote(connect.getDest().getLoc())
       << "connect destination is here";
-}
-
-// We merge the value from the RHS into the value of the LHS.
-void IMConstPropPass::visitStrictConnect(StrictConnectOp connect) {
-  auto destType = getBaseType(connect.getDest().getType().cast<FIRRTLType>())
-                      .getPassiveType();
-
-  // Handle implicit extensions.
-  auto srcValue = getExtendedLatticeValue(connect.getSrc(), destType);
-  if (srcValue.isUnknown())
-    return;
-
-  // Driving result ports propagates the value to each instance using the
-  // module.
-  if (auto blockArg = connect.getDest().dyn_cast<BlockArgument>()) {
-    for (auto userOfResultPort : resultPortToInstanceResultMapping[blockArg])
-      mergeLatticeValue(userOfResultPort, srcValue);
-    // Output ports are wire-like and may have users.
-    mergeLatticeValue(connect.getDest(), srcValue);
-    return;
-  }
-
-  auto dest = connect.getDest().cast<mlir::OpResult>();
-
-  // For wires and registers, we drive the value of the wire itself, which
-  // automatically propagates to users.
-  if (isWireOrReg(dest.getOwner()))
-    return mergeLatticeValue(connect.getDest(), srcValue);
-
-  // Driving an instance argument port drives the corresponding argument of the
-  // referenced module.
-  if (auto instance = dest.getDefiningOp<InstanceOp>()) {
-    // Update the dest, when its an instance op.
-    mergeLatticeValue(connect.getDest(), srcValue);
-    auto module =
-        dyn_cast<FModuleOp>(*instanceGraph->getReferencedModule(instance));
-    if (!module)
-      return;
-
-    BlockArgument modulePortVal = module.getArgument(dest.getResultNumber());
-    return mergeLatticeValue(modulePortVal, srcValue);
-  }
-
-  // Driving a memory result is ignored because these are always treated as
-  // overdefined.
-  if (auto subfield = dest.getDefiningOp<SubfieldOp>()) {
-    if (subfield.getOperand().getDefiningOp<MemOp>())
-      return;
-  }
-
-  // Skip if the dest is an aggregate value. Aggregate values are firstly marked
-  // overdefined.
-  if (isAggregate(dest.getOwner()))
-    return;
-
-  connect.emitError("strictconnect unhandled by IMConstProp")
-          .attachNote(connect.getDest().getLoc())
-      << "strictconnect destination is here";
 }
 
 void IMConstPropPass::visitRegResetOp(RegResetOp regReset) {
@@ -647,10 +586,8 @@ void IMConstPropPass::visitRefResolve(RefResolveOp resolve) {
 ///
 void IMConstPropPass::visitOperation(Operation *op) {
   // If this is a operation with special handling, handle it specially.
-  if (auto connectOp = dyn_cast<ConnectOp>(op))
-    return visitConnect(connectOp);
-  if (auto strictConnectOp = dyn_cast<StrictConnectOp>(op))
-    return visitStrictConnect(strictConnectOp);
+  if (auto connectLikeOp = dyn_cast<FConnectLike>(op))
+    return visitConnectLike(connectLikeOp);
   if (auto regResetOp = dyn_cast<RegResetOp>(op))
     return visitRegResetOp(regResetOp);
   if (auto sendOp = dyn_cast<RefSendOp>(op))
