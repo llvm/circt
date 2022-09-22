@@ -110,6 +110,8 @@ int main(int argc, char **argv) {
   registry.insert<mlir::scf::SCFDialect>();
   registry.insert<mlir::emitc::EmitCDialect>();
 
+  registerAsmPrinterCLOptions();
+
   cl::ParseCommandLineOptions(argc, argv,
                               "CIRCT .mlirbc -> .mlir disassembler\n");
 
