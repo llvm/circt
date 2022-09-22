@@ -51,13 +51,9 @@ LogicalResult circt::firrtl::verifyModuleLikeOpInterface(FModuleLike module) {
     return module.emitOpError("requires valid port names");
   if (portNames.size() != numPorts)
     return module.emitOpError("requires ") << numPorts << " port names";
-  SmallDenseSet<Attribute> names;
-  for (auto name : portNames.getValue()) {
-    if (!name.isa<StringAttr>())
-      return module.emitOpError("port names should all be string attributes");
-    if (!names.insert(name).second)
-      return module.emitOpError("port names should be unique");
-  }
+  if (llvm::any_of(portNames.getValue(),
+                   [](Attribute attr) { return !attr.isa<StringAttr>(); }))
+    return module.emitOpError("port names should all be string attributes");
 
   // Verify the port annotations.
   auto portAnnotations = module.getPortAnnotationsAttr();
