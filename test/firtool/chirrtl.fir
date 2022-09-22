@@ -31,12 +31,16 @@ circuit test: %[[{
     when p:
       read mport testport1 = testmem[_T_1], clock
     out1 <= testport1
-  ; CHECK: reg [15:0][7:0] testmem;
-  ; CHECK: reg [3:0]       addr_0;
-  ; CHECK: reg [3:0]       addr_0_1;
+  ; CHECK: reg  [15:0][7:0] testmem;
+  ; CHECK: reg  [3:0]       addr_0;
+  ; CHECK: wire [7:0]       _GEN;
+  ; CHECK: assign _GEN = testmem[addr_0]
+  ; CHECK: reg  [3:0]       addr_0_1;
+  ; CHECK: wire [7:0]       _GEN_2;
+  ; CHECK: assign _GEN_2 = testmem[addr_0_1]
   ; CHECK: always @(posedge clock) begin
   ; CHECK:   addr_0 <= addr;
   ; CHECK:   addr_0_1 <= addr;
-  ; CHECK: assign out0 = testmem[addr_0];
-  ; CHECK: assign out1 = testmem[addr_0_1];
+  ; CHECK:  assign out0 = _GEN;
+  ; CHECK:  assign out1 = _GEN_2;
 
