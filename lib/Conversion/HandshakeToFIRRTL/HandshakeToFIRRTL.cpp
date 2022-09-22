@@ -945,7 +945,7 @@ bool StdExprBuilder::visitStdExpr(arith::ExtSIOp op) {
 }
 
 bool StdExprBuilder::visitStdExpr(arith::TruncIOp op) {
-  return buildTruncateOp(getFIRRTLType(getOperandDataType(op.getOperand()))
+  return buildTruncateOp(getFIRRTLType(getOperandDataType(op.getResult()))
                              .getBitWidthOrSentinel());
 }
 
