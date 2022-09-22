@@ -97,21 +97,21 @@ def MuxSameCondHigh : Pat<
 
 // regreset(clock, invalidvalue, resetValue) -> reg(clock)
 def RegResetWithInvalidReset : Pat<
-  (RegResetOp $clock, (InvalidValueOp), $_, $name, $nameKind , $annotations, $inner_sym),
-  (RegOp $clock, $name, $nameKind, $annotations, $inner_sym),
+  (RegResetOp $clock, (InvalidValueOp), $_, $name, $nameKind , $annotations, $inner_sym, $preserve_type),
+  (RegOp $clock, $name, $nameKind, $annotations, $inner_sym, $preserve_type),
   []>;
 
 // regreset(clock, reset, invalidvalue) -> reg(clock)
 // This is handled by the `RemoveReset` pass in the original Scala code.
 def RegResetWithInvalidResetValue : Pat<
-  (RegResetOp $clock, $_, (InvalidValueOp), $name, $nameKind, $annotations, $inner_sym),
-  (RegOp $clock, $name, $nameKind, $annotations, $inner_sym),
+  (RegResetOp $clock, $_, (InvalidValueOp), $name, $nameKind, $annotations, $inner_sym, $preserve_type),
+  (RegOp $clock, $name, $nameKind, $annotations, $inner_sym, $preserve_type),
   []>;
 
 // regreset(clock, constant_zero, resetValue) -> reg(clock)
 def RegResetWithZeroReset : Pat<
-  (RegResetOp $clock, $reset, $_, $name, $nameKind, $annotations, $inner_sym),
-  (RegOp $clock, $name, $nameKind, $annotations, $inner_sym), [(ZeroConstantOp $reset)]>;
+  (RegResetOp $clock, $reset, $_, $name, $nameKind, $annotations, $inner_sym, $preserve_type),
+  (RegOp $clock, $name, $nameKind, $annotations, $inner_sym, $preserve_type), [(ZeroConstantOp $reset)]>;
 
 // Return the width of an operation result as an integer attribute.  This is
 // useful to pad another operation up to the width of the original operation.

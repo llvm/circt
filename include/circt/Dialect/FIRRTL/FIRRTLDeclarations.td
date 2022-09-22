@@ -264,7 +264,7 @@ def RegOp : ReferableDeclOp<"reg"> {
   let arguments = (
     ins ClockType:$clockVal, StrAttr:$name, NameKindAttr:$nameKind,
         AnnotationArrayAttr:$annotations,
-        OptionalAttr<InnerSymAttr>:$inner_sym);
+        OptionalAttr<InnerSymAttr>:$inner_sym, UnitAttr:$preserve_type);
   let results = (outs AnyRegisterType:$result);
 
   let builders = [
@@ -272,17 +272,20 @@ def RegOp : ReferableDeclOp<"reg"> {
                    CArg<"StringRef", "{}">:$name,
                    CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
                    CArg<"ArrayRef<Attribute>","{}">:$annotations,
-                   CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
+                   CArg<"StringAttr", "StringAttr()">:$inner_sym,
+                   CArg<"bool","false">:$preserve_type), [{
       return build($_builder, $_state, elementType, clockVal, name,
                    nameKind, $_builder.getArrayAttr(annotations),
-                   inner_sym ? InnerSymAttr::get(inner_sym): InnerSymAttr());
+                   inner_sym ? InnerSymAttr::get(inner_sym): InnerSymAttr(),
+                   preserve_type);
     }]>,
     OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$clockVal,
                    "StringRef":$name, "NameKindEnum":$nameKind,
                    "::mlir::ArrayAttr":$annotation, "StringAttr":$inner_sym), [{
       return build($_builder, $_state, elementType, clockVal, name,
                    nameKind, annotation,
-                   inner_sym ? InnerSymAttr::get(inner_sym): InnerSymAttr());
+                   inner_sym ? InnerSymAttr::get(inner_sym): InnerSymAttr(),
+                   false);
     }]>
   ];
 
@@ -307,7 +310,7 @@ def RegResetOp : ReferableDeclOp<"regreset"> {
         AnyRegisterType:$resetValue,
         StrAttr:$name, NameKindAttr:$nameKind,
         AnnotationArrayAttr:$annotations,
-        OptionalAttr<InnerSymAttr>:$inner_sym);
+        OptionalAttr<InnerSymAttr>:$inner_sym, UnitAttr:$preserve_type);
   let results = (outs AnyRegisterType:$result);
 
   let builders = [
@@ -316,11 +319,13 @@ def RegResetOp : ReferableDeclOp<"regreset"> {
                    CArg<"StringRef", "{}">:$name,
                    CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
                    CArg<"ArrayRef<Attribute>","{}">:$annotations,
-                   CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
+                   CArg<"StringAttr", "StringAttr()">:$inner_sym,
+                   CArg<"bool","false">:$preserve_type), [{
       return build($_builder, $_state, elementType, clockVal, resetSignal,
                    resetValue, name, nameKind,
                    $_builder.getArrayAttr(annotations),
-                   inner_sym ? InnerSymAttr::get(inner_sym): InnerSymAttr());
+                   inner_sym ? InnerSymAttr::get(inner_sym): InnerSymAttr(),
+                   preserve_type);
     }]>,
     OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$clockVal,
                    "::mlir::Value":$resetSignal, "::mlir::Value":$resetValue,
@@ -328,7 +333,7 @@ def RegResetOp : ReferableDeclOp<"regreset"> {
                     "::mlir::ArrayAttr":$annotation, "StringAttr":$inner_sym), [{
       return build($_builder, $_state, elementType, clockVal, resetSignal,
                    resetValue, name, nameKind, annotation,
-                   inner_sym ? InnerSymAttr::get(inner_sym): InnerSymAttr());
+                   inner_sym ? InnerSymAttr::get(inner_sym): InnerSymAttr(), false);
     }]>
   ];
 
