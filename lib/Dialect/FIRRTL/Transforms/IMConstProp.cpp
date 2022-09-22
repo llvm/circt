@@ -37,6 +37,14 @@ static bool isDeletableWireOrReg(Operation *op) {
   return isWireOrReg(op) && AnnotationSet(op).empty() && !hasDontTouch(op);
 }
 
+/// Return true if this is a register that can be converted to a wire.  This is
+/// a weaker check than isDeletableWireOrReg and will return true if the op is
+/// named.
+static bool isConvertibleReg(Operation *op) {
+  return isa<RegOp, RegResetOp>(op) && AnnotationSet(op).empty() &&
+         !hasDontTouch(op);
+}
+
 //===----------------------------------------------------------------------===//
 // Pass Infrastructure
 //===----------------------------------------------------------------------===//
@@ -738,9 +746,21 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
     // Connects to values that we found to be constant can be dropped.
     if (auto connect = dyn_cast<FConnectLike>(op)) {
       if (auto *destOp = connect.getDest().getDefiningOp()) {
-        if (isDeletableWireOrReg(destOp) && !isOverdefined(connect.getDest())) {
-          connect.erase();
-          ++numErasedOp;
+        if (!isOverdefined(connect.getDest())) {
+          if (isDeletableWireOrReg(destOp)) {
+            connect.erase();
+            ++numErasedOp;
+          } else if (isConvertibleReg(destOp)) {
+            auto *reg = connect.getDest().getDefiningOp();
+            auto nameable = cast<FNamableOp>(reg);
+            builder.setInsertionPoint(reg);
+            auto wire = builder.create<WireOp>(
+                reg->getLoc(), connect.getDest().getType(), nameable.getName(),
+                reg->getAttrOfType<firrtl::NameKindEnumAttr>("nameKind")
+                    .getValue(),
+                AnnotationSet(reg).getArrayAttr(), StringAttr{});
+            connect->setOperand(0, wire);
+          }
         }
       }
       continue;
@@ -753,7 +773,8 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
 
     // If this operation is already dead, then go ahead and remove it.
     if (op.use_empty() &&
-        (wouldOpBeTriviallyDead(&op) || isDeletableWireOrReg(&op))) {
+        (wouldOpBeTriviallyDead(&op) || isDeletableWireOrReg(&op) ||
+         isConvertibleReg(&op))) {
       op.erase();
       continue;
     }
@@ -773,7 +794,8 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
 
     // If the operation folded to a constant then we can probably nuke it.
     if (foldedAny && op.use_empty() &&
-        (wouldOpBeTriviallyDead(&op) || isDeletableWireOrReg(&op))) {
+        (wouldOpBeTriviallyDead(&op) || isDeletableWireOrReg(&op) ||
+         isConvertibleReg(&op))) {
       op.erase();
       ++numErasedOp;
       continue;

@@ -589,3 +589,22 @@ firrtl.circuit "ForwardRef" {
     firrtl.strictconnect %a, %0 : !firrtl.uint<1>
   }
 }
+
+// -----
+
+// CHECK-LABEL: "ConstantNamedReg"
+firrtl.circuit "ConstantNamedReg"  {
+  firrtl.module @ConstantNamedReg(
+    in %clock: !firrtl.clock,
+    in %reset: !firrtl.uint<1>,
+    out %b: !firrtl.uint<1>
+  ) {
+    // CHECK-NOT:  firrtl.reg
+    // CHECK:      %r = firrtl.wire interesting_name
+    // CHECK-NEXT: firrtl.strictconnect %r, %c1_ui1
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %r = firrtl.regreset interesting_name %clock, %reset, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.strictconnect %r, %r : !firrtl.uint<1>
+    firrtl.strictconnect %b, %r : !firrtl.uint<1>
+  }
+}
