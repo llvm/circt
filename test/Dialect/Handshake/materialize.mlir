@@ -29,5 +29,5 @@ handshake.func @missing_arg_sink(%arg0 : i32, %ctrl: none) -> (none) {
 // -----
 
 // CHECK-LABEL:   handshake.func @external(
-// CHECK-SAME:      i32, none, ...) -> none attributes {argNames = ["arg0", "ctrl"], resNames = ["outCtrl"]}
+// CHECK-SAME:      i32, none, ...) -> none
 handshake.func @external(%arg0: i32, %ctrl: none, ...) -> none
