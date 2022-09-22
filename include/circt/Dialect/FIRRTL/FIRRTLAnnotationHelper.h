@@ -207,6 +207,7 @@ struct ApplyState {
   AddToWorklistFn addToWorklistFn;
   InstancePathCache &instancePathCache;
   DenseMap<Attribute, FlatSymbolRefAttr> instPathToNLAMap;
+  size_t numReusedHierPaths = 0;
 
   ModuleNamespace &getNamespace(FModuleLike module) {
     auto &ptr = namespaces[module];

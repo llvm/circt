@@ -117,8 +117,10 @@ static FlatSymbolRefAttr buildNLA(const AnnoPathValue &target,
 
   // Re-use NLA for this path if already created.
   auto it = state.instPathToNLAMap.find(instAttr);
-  if (it != state.instPathToNLAMap.end())
+  if (it != state.instPathToNLAMap.end()) {
+    ++state.numReusedHierPaths;
     return it->second;
+  }
 
   // Create the NLA
   auto nla = b.create<HierPathOp>(state.circuit.getLoc(), "nla", instAttr);
@@ -514,6 +516,7 @@ void LowerAnnotationsPass::runOnOperation() {
   numRawAnnotations += annotations.size();
   numAddedAnnos += numAdded;
   numAnnos += numAdded + annotations.size();
+  numReusedHierPathOps += state.numReusedHierPaths;
 
   if (numFailures)
     signalPassFailure();
