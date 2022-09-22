@@ -559,17 +559,11 @@ parseFuncOpArgs(OpAsmParser &parser,
 
 /// Generates names for a handshake.func input and output arguments, based on
 /// the number of args as well as a prefix.
-static SmallVector<Attribute> getFuncOpNames(Builder &builder, TypeRange types,
+static SmallVector<Attribute> getFuncOpNames(Builder &builder, unsigned cnt,
                                              StringRef prefix) {
   SmallVector<Attribute> resNames;
-  llvm::transform(
-      llvm::enumerate(types), std::back_inserter(resNames), [&](auto it) {
-        bool lastOperand = it.index() == types.size() - 1;
-        std::string suffix = lastOperand && it.value().template isa<NoneType>()
-                                 ? "Ctrl"
-                                 : std::to_string(it.index());
-        return builder.getStringAttr(prefix + suffix);
-      });
+  for (unsigned i = 0; i < cnt; ++i)
+    resNames.push_back(builder.getStringAttr(prefix + std::to_string(i)));
   return resNames;
 }
 
@@ -610,8 +604,8 @@ void handshake::FuncOp::resolveArgAndResNames() {
 
   /// Generate a set of fallback names. These are used in case names are
   /// missing from the currently set arg- and res name attributes.
-  auto fallbackArgNames = getFuncOpNames(builder, getArgumentTypes(), "in");
-  auto fallbackResNames = getFuncOpNames(builder, getResultTypes(), "out");
+  auto fallbackArgNames = getFuncOpNames(builder, getNumArguments(), "in");
+  auto fallbackResNames = getFuncOpNames(builder, getNumResults(), "out");
   auto argNames = getArgNames().getValue();
   auto resNames = getResNames().getValue();
 
@@ -662,7 +656,7 @@ ParseResult FuncOp::parse(OpAsmParser &parser, OperationState &result) {
   bool noSSANames =
       llvm::any_of(args, [](auto arg) { return arg.ssaName.name.empty(); });
   if (noSSANames) {
-    argNames = getFuncOpNames(builder, argTypes, "in");
+    argNames = getFuncOpNames(builder, args.size(), "in");
   } else {
     llvm::transform(args, std::back_inserter(argNames), [&](auto arg) {
       return builder.getStringAttr(arg.ssaName.name.drop_front());
@@ -678,7 +672,7 @@ ParseResult FuncOp::parse(OpAsmParser &parser, OperationState &result) {
   if (!result.attributes.get("argNames"))
     result.addAttribute("argNames", builder.getArrayAttr(argNames));
   if (!result.attributes.get("resNames")) {
-    auto resNames = getFuncOpNames(builder, resTypes, "out");
+    auto resNames = getFuncOpNames(builder, resTypes.size(), "out");
     result.addAttribute("resNames", builder.getArrayAttr(resNames));
   }
 

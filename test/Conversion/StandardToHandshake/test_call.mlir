@@ -2,7 +2,7 @@
 
 // CHECK-LABEL:   handshake.func @bar(
 // CHECK-SAME:                        %[[VAL_0:.*]]: i32,
-// CHECK-SAME:                        %[[VAL_1:.*]]: none, ...) -> (i32, none) attributes {argNames = ["in0", "inCtrl"], resNames = ["out0", "outCtrl"]} {
+// CHECK-SAME:                        %[[VAL_1:.*]]: none, ...) -> (i32, none)
 // CHECK:           %[[VAL_2:.*]] = merge %[[VAL_0]] : i32
 // CHECK:           return %[[VAL_2]], %[[VAL_1]] : i32, none
 // CHECK:         }
@@ -12,7 +12,7 @@ func.func @bar(%0 : i32) -> i32 {
 
 // CHECK-LABEL:   handshake.func @foo(
 // CHECK-SAME:                        %[[VAL_0:.*]]: i32,
-// CHECK-SAME:                        %[[VAL_1:.*]]: none, ...) -> (i32, none) attributes {argNames = ["in0", "inCtrl"], resNames = ["out0", "outCtrl"]} {
+// CHECK-SAME:                        %[[VAL_1:.*]]: none, ...) -> (i32, none)
 // CHECK:           %[[VAL_2:.*]] = merge %[[VAL_0]] : i32
 // CHECK:           %[[VAL_3:.*]]:2 = fork [2] %[[VAL_1]] : none
 // CHECK:           %[[VAL_4:.*]]:2 = instance @bar(%[[VAL_2]], %[[VAL_3]]#0) : (i32, none) -> (i32, none)

@@ -2,7 +2,7 @@
 // RUN: circt-opt -lower-std-to-handshake %s | FileCheck %s
 // CHECK-LABEL:   handshake.func @affine_dma_start(
 // CHECK-SAME:                                     %[[VAL_0:.*]]: index,
-// CHECK-SAME:                                     %[[VAL_1:.*]]: none, ...) -> none attributes {argNames = ["in0", "inCtrl"], resNames = ["outCtrl"]} {
+// CHECK-SAME:                                     %[[VAL_1:.*]]: none, ...) -> none
 // CHECK:           %[[VAL_2:.*]] = merge %[[VAL_0]] : index
 // CHECK:           %[[VAL_3:.*]]:6 = fork [6] %[[VAL_1]] : none
 // CHECK:           %[[VAL_4:.*]] = memref.alloc() : memref<100xf32>

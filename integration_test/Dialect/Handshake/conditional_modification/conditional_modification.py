@@ -1,8 +1,8 @@
 import cocotb
 from helper import initDut
 
-inNames = ["in0", "in1", "in2", "inCtrl"]
-outNames = ["out0", "out1", "outCtrl"]
+inNames = ["in0", "in1", "in2", "in3"]
+outNames = ["out0", "out1", "out2"]
 
 
 @cocotb.test()

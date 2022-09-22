@@ -5,8 +5,8 @@ import random
 
 @cocotb.test()
 async def oneInput(dut):
-  [in0, inCtrl], [out0, outCtrl] = await initDut(dut, ["in0", "inCtrl"],
-                                                 ["out0", "outCtrl"])
+  [in0, inCtrl], [out0, outCtrl] = await initDut(dut, ["in0", "in1"],
+                                                 ["out0", "out1"])
   out0Check = cocotb.start_soon(out0.checkOutputs([0]))
 
   in0Send = cocotb.start_soon(in0.send(10))
@@ -30,8 +30,8 @@ def getResInput(i):
 
 @cocotb.test()
 async def sendMultiple(dut):
-  [in0, inCtrl], [out0, outCtrl] = await initDut(dut, ["in0", "inCtrl"],
-                                                 ["out0", "outCtrl"])
+  [in0, inCtrl], [out0, outCtrl] = await initDut(dut, ["in0", "in1"],
+                                                 ["out0", "out1"])
 
   N = 20
   inputs = [random.randint(0, 300) for _ in range(N)]
