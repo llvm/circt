@@ -65,40 +65,43 @@ using namespace circt;
 // Tool options
 // --------------------------------------------------------------------------
 
-static cl::opt<std::string>
-    inputFilename(cl::Positional, cl::desc("<input file>"), cl::init("-"));
+static cl::OptionCategory mainCategory("hlstool Options");
 
-static cl::opt<std::string>
-    outputFilename("o",
-                   cl::desc("Output filename, or directory for split output"),
-                   cl::value_desc("filename"), cl::init("-"));
+static cl::opt<std::string> inputFilename(cl::Positional,
+                                          cl::desc("<input file>"),
+                                          cl::init("-"), cl::cat(mainCategory));
+
+static cl::opt<std::string> outputFilename(
+    "o", cl::desc("Output filename, or directory for split output"),
+    cl::value_desc("filename"), cl::init("-"), cl::cat(mainCategory));
 
 static cl::opt<bool>
     splitInputFile("split-input-file",
                    cl::desc("Split the input file into pieces and process each "
                             "chunk independently"),
-                   cl::init(false), cl::Hidden);
+                   cl::init(false), cl::Hidden, cl::cat(mainCategory));
 
 static cl::opt<bool>
     verifyDiagnostics("verify-diagnostics",
                       cl::desc("Check that emitted diagnostics match "
                                "expected-* lines on the corresponding line"),
-                      cl::init(false), cl::Hidden);
+                      cl::init(false), cl::Hidden, cl::cat(mainCategory));
 
 static cl::opt<bool>
     verbosePassExecutions("verbose-pass-executions",
                           cl::desc("Log executions of toplevel module passes"),
-                          cl::init(false));
+                          cl::init(false), cl::cat(mainCategory));
 
 static cl::opt<bool>
     verifyPasses("verify-each",
                  cl::desc("Run the verifier after each transformation pass"),
-                 cl::init(true));
+                 cl::init(true), cl::cat(mainCategory));
 
 static cl::opt<bool>
     allowUnregisteredDialects("allow-unregistered-dialects",
                               cl::desc("Allow unknown dialects in the input"),
-                              cl::init(false), cl::Hidden);
+                              cl::init(false), cl::Hidden,
+                              cl::cat(mainCategory));
 
 enum HLSFlow { HLSFlowDynamicFIRRTL, HLSFlowDynamicHW };
 
@@ -107,7 +110,8 @@ static cl::opt<HLSFlow>
             cl::values(clEnumValN(HLSFlowDynamicFIRRTL, "dynamic-firrtl",
                                   "Dynamically scheduled (FIRRTL path)"),
                        clEnumValN(HLSFlowDynamicHW, "dynamic-hw",
-                                  "Dynamically scheduled (HW path)")));
+                                  "Dynamically scheduled (HW path)")),
+            cl::cat(mainCategory));
 
 enum DynamicParallelismKind {
   DynamicParallelismNone,
@@ -128,7 +132,7 @@ static cl::opt<DynamicParallelismKind> dynParallelism(
                    "Add function pipelining mechanism that enables a "
                    "pipelined execution of multiple function invocations while "
                    "preserving correctness.")),
-    cl::init(DynamicParallelismPipelining));
+    cl::init(DynamicParallelismPipelining), cl::cat(mainCategory));
 
 enum OutputFormatKind { OutputIR, OutputVerilog };
 
@@ -136,29 +140,29 @@ static cl::opt<int>
     irInputLevel("ir-input-level",
                  cl::desc("Level at which to input IR at. It is flow-defined "
                           "which value corersponds to which IR level."),
-                 cl::init(-1));
+                 cl::init(-1), cl::cat(mainCategory));
 
 static cl::opt<int>
     irOutputLevel("ir-output-level",
                   cl::desc("Level at which to output IR at. It is flow-defined "
                            "which value corersponds to which IR level."),
-                  cl::init(-1));
+                  cl::init(-1), cl::cat(mainCategory));
 
 static cl::opt<OutputFormatKind> outputFormat(
     cl::desc("Specify output format:"),
     cl::values(clEnumValN(OutputIR, "ir", "Emit post-HLS IR"),
                clEnumValN(OutputVerilog, "verilog", "Emit Verilog")),
-    cl::init(OutputVerilog));
+    cl::init(OutputVerilog), cl::cat(mainCategory));
 
 static cl::opt<std::string>
     bufferingStrategy("buffering-strategy",
                       cl::desc("Strategy to apply. Possible values are: "
                                "cycles, allFIFO, all (default)"),
-                      cl::init("all"));
+                      cl::init("all"), cl::cat(mainCategory));
 
 static cl::opt<unsigned> bufferSize("buffer-size",
                                     cl::desc("Number of slots in each buffer"),
-                                    cl::init(2));
+                                    cl::init(2), cl::cat(mainCategory));
 
 // --------------------------------------------------------------------------
 // (Configurable) pass pipelines
@@ -477,6 +481,10 @@ static LogicalResult executeHlstool(MLIRContext &context) {
 /// MLIRContext and modules inside of it (reducing compile time).
 int main(int argc, char **argv) {
   InitLLVM y(argc, argv);
+
+  // Hide default LLVM options, other than for this tool.
+  // MLIR options are added below.
+  cl::HideUnrelatedOptions(mainCategory);
 
   // Register any pass manager command line options.
   registerMLIRContextCLOptions();
