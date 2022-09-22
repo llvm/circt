@@ -542,22 +542,17 @@ LogicalResult FuncOp::verify() {
 /// Parses a FuncOp signature using
 /// mlir::function_interface_impl::parseFunctionSignature while getting access
 /// to the parsed SSA names to store as attributes.
-static ParseResult parseFuncOpArgs(
-    OpAsmParser &parser, SmallVectorImpl<OpAsmParser::Argument> &entryArgs,
-    SmallVectorImpl<Attribute> &argNames, SmallVectorImpl<Type> &resTypes,
-    SmallVectorImpl<DictionaryAttr> &resAttrs) {
-  auto *context = parser.getContext();
-
+static ParseResult
+parseFuncOpArgs(OpAsmParser &parser,
+                SmallVectorImpl<OpAsmParser::Argument> &entryArgs,
+                SmallVectorImpl<Type> &resTypes,
+                SmallVectorImpl<DictionaryAttr> &resAttrs) {
   bool isVariadic;
   if (mlir::function_interface_impl::parseFunctionSignature(
           parser, /*allowVariadic=*/true, entryArgs, isVariadic, resTypes,
           resAttrs)
           .failed())
     return failure();
-
-  llvm::transform(entryArgs, std::back_inserter(argNames), [&](auto arg) {
-    return StringAttr::get(context, arg.ssaName.name.drop_front());
-  });
 
   return success();
 }
@@ -648,7 +643,7 @@ ParseResult FuncOp::parse(OpAsmParser &parser, OperationState &result) {
   // Parse signature
   if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(),
                              result.attributes) ||
-      parseFuncOpArgs(parser, args, argNames, resTypes, resAttributes))
+      parseFuncOpArgs(parser, args, resTypes, resAttributes))
     return failure();
   mlir::function_interface_impl::addArgAndResultAttrs(builder, result, args,
                                                       resAttributes);
@@ -661,6 +656,18 @@ ParseResult FuncOp::parse(OpAsmParser &parser, OperationState &result) {
   result.addAttribute(
       handshake::FuncOp::getTypeAttrName(),
       TypeAttr::get(builder.getFunctionType(argTypes, resTypes)));
+
+  // Determine the names of the arguments. If no SSA values are present, use
+  // fallback names.
+  bool noSSANames =
+      llvm::any_of(args, [](auto arg) { return arg.ssaName.name.empty(); });
+  if (noSSANames) {
+    argNames = getFuncOpNames(builder, argTypes, "in");
+  } else {
+    llvm::transform(args, std::back_inserter(argNames), [&](auto arg) {
+      return builder.getStringAttr(arg.ssaName.name.drop_front());
+    });
+  }
 
   // Parse attributes
   if (failed(parser.parseOptionalAttrDictWithKeyword(result.attributes)))
@@ -675,9 +682,23 @@ ParseResult FuncOp::parse(OpAsmParser &parser, OperationState &result) {
     result.addAttribute("resNames", builder.getArrayAttr(resNames));
   }
 
-  // Parse region
+  // Parse the optional function body. The printer will not print the body if
+  // its empty, so disallow parsing of empty body in the parser.
   auto *body = result.addRegion();
-  return parser.parseRegion(*body, args);
+  llvm::SMLoc loc = parser.getCurrentLocation();
+  auto parseResult = parser.parseOptionalRegion(*body, args,
+                                                /*enableNameShadowing=*/false);
+  if (!parseResult.has_value())
+    return success();
+
+  if (failed(*parseResult))
+    return failure();
+  // Function body was parsed, make sure its not empty.
+  if (body->empty())
+    return parser.emitError(loc, "expected non-empty function body");
+
+  // If a body was parsed, the arg and res names need to be resolved
+  return success();
 }
 
 void FuncOp::print(OpAsmPrinter &p) {

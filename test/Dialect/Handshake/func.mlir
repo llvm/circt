@@ -29,3 +29,15 @@ handshake.func public @public_func(%arg0 : i32, %ctrl: none) -> (i32, none) {
 handshake.func public @no_none_type() {
   return
 }
+
+// -----
+
+// CHECK-LABEL:   handshake.func @external(
+// CHECK-SAME:      i32, none, ...) -> none attributes {argNames = ["arg0", "ctrl"], resNames = ["outCtrl"]}
+handshake.func @external(%arg0: i32, %ctrl: none, ...) -> none
+
+// ----
+
+// CHECK-LABEL:   handshake.func @no_ssa_names(
+// CHECK-SAME:      i32, none, ...) -> none attributes {argNames = ["in0", "inCtrl"], resNames = ["outCtrl"]}
+handshake.func @no_ssa_names(i32, none, ...) -> none
