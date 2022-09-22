@@ -5,8 +5,8 @@ from helper import initDut
 @cocotb.test()
 async def oneInput(dut):
   [in0, in1, inCtrl], [out0,
-                       outCtrl] = await initDut(dut, ["in0", "in1", "inCtrl"],
-                                                ["out0", "outCtrl"])
+                       outCtrl] = await initDut(dut, ["in0", "in1", "in2"],
+                                                ["out0", "out1"])
 
   resCheck = cocotb.start_soon(out0.checkOutputs([42]))
 
@@ -24,8 +24,8 @@ async def oneInput(dut):
 @cocotb.test()
 async def multipleInputs(dut):
   [in0, in1, inCtrl], [out0,
-                       outCtrl] = await initDut(dut, ["in0", "in1", "inCtrl"],
-                                                ["out0", "outCtrl"])
+                       outCtrl] = await initDut(dut, ["in0", "in1", "in2"],
+                                                ["out0", "out1"])
 
   resCheck = cocotb.start_soon(out0.checkOutputs([42, 42, 10, 10, 10]))
 

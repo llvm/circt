@@ -1,7 +1,7 @@
 // RUN: circt-opt -split-input-file -canonicalize='top-down=true region-simplify=true' %s | FileCheck %s
 
 // CHECK-LABEL:   handshake.func @simple(
-// CHECK-SAME:                           %[[VAL_0:.*]]: none, ...) -> none attributes {argNames = ["arg0"], resNames = ["outCtrl"]} {
+// CHECK-SAME:                           %[[VAL_0:.*]]: none, ...) -> none
 // CHECK:           %[[VAL_1:.*]] = constant %[[VAL_0]] {value = 1 : index} : index
 // CHECK:           %[[VAL_2:.*]]:2 = fork [2] %[[VAL_0]] : none
 // CHECK:           %[[VAL_3:.*]] = constant %[[VAL_2]]#0 {value = 42 : index} : index
@@ -24,7 +24,7 @@ handshake.func @simple(%arg0: none, ...) -> none {
 
 // -----
 
-// CHECK:   handshake.func @cmerge_with_control_used(%[[VAL_0:.*]]: none, %[[VAL_1:.*]]: none, %[[VAL_2:.*]]: none, ...) -> (none, index, none) attributes {argNames = ["arg0", "arg1", "arg2"], resNames = ["out0", "out1", "outCtrl"]} {
+// CHECK:   handshake.func @cmerge_with_control_used(%[[VAL_0:.*]]: none, %[[VAL_1:.*]]: none, %[[VAL_2:.*]]: none, ...) -> (none, index, none)
 // CHECK:           %[[VAL_3:.*]], %[[VAL_4:.*]] = control_merge %[[VAL_0]], %[[VAL_1]] : none
 // CHECK:           return %[[VAL_3]], %[[VAL_4]], %[[VAL_2]] : none, index, none
 // CHECK:         }
@@ -36,7 +36,7 @@ handshake.func @cmerge_with_control_used(%arg0: none, %arg1: none, %arg2: none) 
 
 // -----
 
-// CHECK:   handshake.func @cmerge_with_control_sunk(%[[VAL_0:.*]]: none, %[[VAL_1:.*]]: none, %[[VAL_2:.*]]: none, ...) -> (none, none) attributes {argNames = ["arg0", "arg1", "arg2"], resNames = ["out0", "outCtrl"]} {
+// CHECK:   handshake.func @cmerge_with_control_sunk(%[[VAL_0:.*]]: none, %[[VAL_1:.*]]: none, %[[VAL_2:.*]]: none, ...) -> (none, none)
 // CHECK:           %[[VAL_3:.*]] = merge %[[VAL_0]], %[[VAL_1]] : none
 // CHECK:           return %[[VAL_3]], %[[VAL_2]] : none, none
 // CHECK:         }
@@ -48,7 +48,7 @@ handshake.func @cmerge_with_control_sunk(%arg0: none, %arg1: none, %arg2: none) 
 
 // -----
 
-// CHECK:   handshake.func @cmerge_with_control_ignored(%[[VAL_0:.*]]: none, %[[VAL_1:.*]]: none, %[[VAL_2:.*]]: none, ...) -> (none, none) attributes {argNames = ["arg0", "arg1", "arg2"], resNames = ["out0", "outCtrl"]} {
+// CHECK:   handshake.func @cmerge_with_control_ignored(%[[VAL_0:.*]]: none, %[[VAL_1:.*]]: none, %[[VAL_2:.*]]: none, ...) -> (none, none)
 // CHECK:           %[[VAL_3:.*]] = merge %[[VAL_0]], %[[VAL_1]] : none
 // CHECK:           return %[[VAL_3]], %[[VAL_2]] : none, none
 // CHECK:         }
@@ -60,7 +60,7 @@ handshake.func @cmerge_with_control_ignored(%arg0: none, %arg1: none, %arg2: non
 // -----
 
 // CHECK-LABEL:   handshake.func @sunk_constant(
-// CHECK-SAME:                                  %[[VAL_0:.*]]: none, ...) -> none attributes {argNames = ["arg0"], resNames = ["outCtrl"]} {
+// CHECK-SAME:                                  %[[VAL_0:.*]]: none, ...) -> none
 // CHECK:           return %[[VAL_0]] : none
 // CHECK:         }
 handshake.func @sunk_constant(%arg0: none) -> (none) {
@@ -72,7 +72,7 @@ handshake.func @sunk_constant(%arg0: none) -> (none) {
 // -----
 
 // CHECK-LABEL:   handshake.func @unused_fork_result(
-// CHECK-SAME:                                       %[[VAL_0:.*]]: none, ...) -> (none, none) attributes {argNames = ["arg0"], resNames = ["out0", "outCtrl"]} {
+// CHECK-SAME:                                       %[[VAL_0:.*]]: none, ...) -> (none, none)
 // CHECK:           %[[VAL_1:.*]]:2 = fork [2] %[[VAL_0]] : none
 // CHECK:           return %[[VAL_1]]#0, %[[VAL_1]]#1 : none, none
 // CHECK:         }

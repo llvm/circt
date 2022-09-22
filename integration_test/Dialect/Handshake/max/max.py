@@ -2,7 +2,7 @@ import cocotb
 from helper import initDut
 import random
 
-inNames = [f"in{i}" for i in range(8)] + ["inCtrl"]
+inNames = [f"in{i}" for i in range(8)] + ["in8"]
 
 
 def genInOutPair():
@@ -13,7 +13,7 @@ def genInOutPair():
 
 @cocotb.test()
 async def oneInput(dut):
-  ins, [out0, outCtrl] = await initDut(dut, inNames, ["out0", "outCtrl"])
+  ins, [out0, outCtrl] = await initDut(dut, inNames, ["out0", "out1"])
   inCtrl = ins[-1]
   inPorts = ins[:-1]
 
@@ -35,7 +35,7 @@ async def oneInput(dut):
 
 @cocotb.test()
 async def multipleInputs(dut):
-  ins, [out0, outCtrl] = await initDut(dut, inNames, ["out0", "outCtrl"])
+  ins, [out0, outCtrl] = await initDut(dut, inNames, ["out0", "out1"])
   inCtrl = ins[-1]
   inPorts = ins[:-1]
 

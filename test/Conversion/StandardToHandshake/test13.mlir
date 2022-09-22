@@ -2,7 +2,7 @@
 // RUN: circt-opt -lower-std-to-handshake %s | FileCheck %s
 // CHECK-LABEL:   handshake.func @affine_apply_loops_shorthand(
 // CHECK-SAME:                                                 %[[VAL_0:.*]]: index,
-// CHECK-SAME:                                                 %[[VAL_1:.*]]: none, ...) -> none attributes {argNames = ["in0", "inCtrl"], resNames = ["outCtrl"]} {
+// CHECK-SAME:                                                 %[[VAL_1:.*]]: none, ...) -> none
 // CHECK:           %[[VAL_2:.*]] = merge %[[VAL_0]] : index
 // CHECK:           %[[VAL_3:.*]]:3 = fork [3] %[[VAL_1]] : none
 // CHECK:           %[[VAL_4:.*]] = constant %[[VAL_3]]#1 {value = 0 : index} : index

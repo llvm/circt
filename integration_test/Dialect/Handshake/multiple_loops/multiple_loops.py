@@ -6,8 +6,8 @@ import math
 @cocotb.test()
 async def oneInput(dut):
   [in0, inCtrl], [out0, out1,
-                  outCtrl] = await initDut(dut, ["in0", "inCtrl"],
-                                           ["out0", "out1", "outCtrl"])
+                  outCtrl] = await initDut(dut, ["in0", "in1"],
+                                           ["out0", "out1", "out2"])
   out0Check = cocotb.start_soon(out0.checkOutputs([15]))
   out1Check = cocotb.start_soon(out1.checkOutputs([120]))
 
@@ -24,8 +24,8 @@ async def oneInput(dut):
 @cocotb.test()
 async def sendMultiple(dut):
   [in0, inCtrl], [out0, out1,
-                  outCtrl] = await initDut(dut, ["in0", "inCtrl"],
-                                           ["out0", "out1", "outCtrl"])
+                  outCtrl] = await initDut(dut, ["in0", "in1"],
+                                           ["out0", "out1", "out2"])
 
   N = 10
   res0 = [i * (i + 1) / 2 for i in range(N)]
