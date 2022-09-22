@@ -16,6 +16,7 @@
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/PatternMatch.h"
 
+#include "circt/Dialect/HW/HWTypes.h"
 #include "llvm/ADT/SmallString.h"
 
 using namespace mlir;
@@ -48,6 +49,161 @@ static bool canElideName(OpAsmPrinter &p, Operation *op) {
   p.printOperand(op->getResult(0), tmpStream);
   auto actualName = tmpStream.str().drop_front();
   return actualName == name;
+}
+
+static IntegerType getAddressTypeFromHWArrayType(Builder &b,
+                                                 hw::ArrayType arrType) {
+  return b.getIntegerType(llvm::Log2_64_Ceil(arrType.getSize()));
+}
+
+//===----------------------------------------------------------------------===//
+// ReadPortOp
+//===----------------------------------------------------------------------===//
+
+ParseResult ReadPortOp::parse(OpAsmParser &parser, OperationState &result) {
+  llvm::SMLoc loc = parser.getCurrentLocation();
+  llvm::SmallVector<OpAsmParser::UnresolvedOperand, 2> operands(2);
+  seq::ReadPortType portType;
+
+  if (parser.parseOperand(operands[0]) || parser.parseLSquare() ||
+      parser.parseOperand(operands[1]) || parser.parseRSquare() ||
+      parser.parseColon() || parser.parseType(portType))
+    return failure();
+
+  // Infer address type from port type.
+  Type addressType = getAddressTypeFromHWArrayType(parser.getBuilder(),
+                                                   portType.getMemoryType());
+
+  if (parser.resolveOperands(operands, {portType, addressType}, loc,
+                             result.operands))
+    return failure();
+  result.addTypes(portType.getMemoryType().getElementType());
+
+  return success();
+}
+
+void ReadPortOp::print(OpAsmPrinter &p) {
+  p << " " << getPort() << "[" << getAddress() << "] : " << getPort().getType();
+}
+
+void ReadPortOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getReadData(), "data");
+}
+
+//===----------------------------------------------------------------------===//
+// WritePortOp
+//===----------------------------------------------------------------------===//
+
+ParseResult WritePortOp::parse(OpAsmParser &parser, OperationState &result) {
+  llvm::SMLoc loc = parser.getCurrentLocation();
+  llvm::SmallVector<OpAsmParser::UnresolvedOperand, 2> operands(3);
+  seq::WritePortType portType;
+
+  if (parser.parseOperand(operands[0]) || parser.parseLSquare() ||
+      parser.parseOperand(operands[1]) || parser.parseRSquare() ||
+      parser.parseOperand(operands[2]) || parser.parseColon() ||
+      parser.parseType(portType))
+    return failure();
+
+  // Infer address type from port type.
+  Type addressType = getAddressTypeFromHWArrayType(parser.getBuilder(),
+                                                   portType.getMemoryType());
+  Type dataType = portType.getMemoryType().getElementType();
+
+  if (parser.resolveOperands(operands, {portType, addressType, dataType}, loc,
+                             result.operands))
+    return failure();
+  return success();
+}
+
+void WritePortOp::print(OpAsmPrinter &p) {
+  p << " " << getPort() << "[" << getAddress() << "] " << getInData() << " : "
+    << getPort().getType();
+}
+
+//===----------------------------------------------------------------------===//
+// HLMemOp
+//===----------------------------------------------------------------------===//
+
+ParseResult HLMemOp::parse(OpAsmParser &parser, OperationState &result) {
+  auto *ctx = parser.getContext();
+  llvm::SMLoc loc = parser.getCurrentLocation();
+  StringAttr memoryName;
+
+  if (parser.parseSymbolName(memoryName, SymbolTable::getSymbolAttrName(),
+                             result.attributes))
+    return parser.emitError(loc) << "expected memory name";
+
+  OpAsmParser::UnresolvedOperand clk;
+  if (parser.parseOperand(clk) ||
+      parser.resolveOperand(clk, parser.getBuilder().getI1Type(),
+                            result.operands))
+    return parser.emitError(loc) << "Expected clock operand";
+
+  hw::ArrayType arrayType;
+  if (parser.parseOptionalAttrDict(result.attributes) ||
+      parser.parseColonType(arrayType))
+    return failure();
+
+  result.addAttribute("memoryType", TypeAttr::get(arrayType));
+
+  // Build result port types based on # of read and write ports requested.
+  IntegerAttr readPorts =
+      result.attributes.get("NReadPorts").dyn_cast_or_null<IntegerAttr>();
+  IntegerAttr writePorts =
+      result.attributes.get("NWritePorts").dyn_cast_or_null<IntegerAttr>();
+
+  if (!readPorts && !writePorts)
+    return parser.emitError(
+        loc, "Missing 'readPorts' and 'writePorts' in attribute dict");
+
+  llvm::SmallVector<Type> ports;
+  for (unsigned i = 0, e = readPorts.getInt(); i != e; ++i)
+    ports.push_back(seq::ReadPortType::get(ctx, arrayType));
+
+  for (unsigned i = 0, e = writePorts.getInt(); i != e; ++i)
+    ports.push_back(seq::WritePortType::get(ctx, arrayType));
+
+  result.addTypes(ports);
+  return success();
+}
+
+void HLMemOp::print(::mlir::OpAsmPrinter &p) {
+  p << " ";
+  p.printSymbolName(getSymName());
+  p << " " << getClk();
+  p.printOptionalAttrDict((*this)->getAttrs(),
+                          /*elidedAttrs=*/{"memoryType", "sym_name"});
+  p << " : " << getMemoryType();
+}
+
+void HLMemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  for (unsigned i = 0, e = getNReadPorts(); i != e; ++i)
+    setNameFn(getReadPort(i), "read" + std::to_string(i));
+
+  for (unsigned i = 0, e = getNWritePorts(); i != e; ++i)
+    setNameFn(getWritePort(i), "write" + std::to_string(i));
+}
+
+Value HLMemOp::getReadPort(unsigned idx) {
+  assert(idx < getNReadPorts() && "read port index out of range");
+  return getResult(idx);
+}
+
+Value HLMemOp::getWritePort(unsigned idx) {
+  assert(idx < getNWritePorts() && "write port index out of range");
+  return getResult(getNReadPorts() + idx);
+}
+
+LogicalResult HLMemOp::verify() {
+  // Verify single-use constraint of the memory references.
+  for (auto [i, output] : llvm::enumerate(getResults())) {
+    auto uses = output.getUses();
+    unsigned numUses = std::distance(uses.begin(), uses.end());
+    if (numUses > 1)
+      return emitOpError() << "output port #" << i << " has multiple uses.";
+  }
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
