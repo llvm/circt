@@ -1902,6 +1902,10 @@ struct HandshakeRemoveBlockPass
 
 struct StandardToHandshakePass
     : public StandardToHandshakeBase<StandardToHandshakePass> {
+  StandardToHandshakePass(bool sourceConstants, bool disableTaskPipelining) {
+    this->sourceConstants = sourceConstants;
+    this->disableTaskPipelining = disableTaskPipelining;
+  }
   void runOnOperation() override {
     ModuleOp m = getOperation();
 
@@ -1926,8 +1930,10 @@ struct StandardToHandshakePass
 } // namespace
 
 std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>
-circt::createStandardToHandshakePass() {
-  return std::make_unique<StandardToHandshakePass>();
+circt::createStandardToHandshakePass(bool sourceConstants,
+                                     bool disableTaskPipelining) {
+  return std::make_unique<StandardToHandshakePass>(sourceConstants,
+                                                   disableTaskPipelining);
 }
 
 std::unique_ptr<mlir::OperationPass<handshake::FuncOp>>

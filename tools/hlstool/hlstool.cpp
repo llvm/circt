@@ -109,6 +109,22 @@ static cl::opt<HLSFlow>
                        clEnumValN(HLSFlowDynamicHW, "dynamic-hw",
                                   "Dynamically scheduled (HW path)")));
 
+enum DynamicParallelismKind {
+  DynamicParallelismNone,
+  DynamicParallelismLocking,
+  DynamicParallelismPipelining
+};
+
+static cl::opt<DynamicParallelismKind> dynParallelism(
+    "dynamic-parallelism", cl::desc("Specify the DHLS task parallelism kind"),
+    cl::values(clEnumValN(DynamicParallelismNone, "none",
+                          "Add no protetion mechanisms"),
+               clEnumValN(DynamicParallelismLocking, "locking",
+                          "Add function locking protection mechanism"),
+               clEnumValN(DynamicParallelismPipelining, "pipelining",
+                          "Add function pipelining mechanism")),
+    cl::init(DynamicParallelismPipelining));
+
 enum OutputFormatKind { OutputIR, OutputVerilog };
 
 static cl::opt<int>
@@ -158,7 +174,18 @@ static void loadDHLSPipeline(OpPassManager &pm) {
   pm.addPass(circt::createFlattenMemRefPass());
 
   // DHLS conversion
-  pm.addPass(circt::createStandardToHandshakePass());
+  pm.addPass(circt::createStandardToHandshakePass(
+      /*sourceConstants=*/false,
+      /*disableTaskPipelining=*/dynParallelism !=
+          DynamicParallelismPipelining));
+  if (dynParallelism == DynamicParallelismLocking) {
+    pm.nest<handshake::FuncOp>().addPass(
+        circt::handshake::createHandshakeLockFunctionsPass());
+    // The locking pass does not adapt forks, thus this additional pass is
+    // required
+    pm.nest<handshake::FuncOp>().addPass(
+        handshake::createHandshakeMaterializeForksSinksPass());
+  }
 }
 
 static void loadHandshakeTransformsPipeline(OpPassManager &pm) {
@@ -166,7 +193,6 @@ static void loadHandshakeTransformsPipeline(OpPassManager &pm) {
   pm.nest<handshake::FuncOp>().addPass(
       handshake::createHandshakeMaterializeForksSinksPass());
   pm.nest<handshake::FuncOp>().addPass(createSimpleCanonicalizerPass());
-  // Todo: arguments
   pm.nest<handshake::FuncOp>().addPass(
       handshake::createHandshakeInsertBuffersPass(bufferingStrategy,
                                                   bufferSize));
