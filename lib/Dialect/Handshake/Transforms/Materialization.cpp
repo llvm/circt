@@ -132,6 +132,8 @@ struct HandshakeMaterializeForksSinksPass
           HandshakeMaterializeForksSinksPass> {
   void runOnOperation() override {
     handshake::FuncOp op = getOperation();
+    if (op.isExternal())
+      return;
     OpBuilder builder(op);
     if (addForkOps(op.getRegion(), builder).failed() ||
         addSinkOps(op.getRegion(), builder).failed() ||
@@ -145,6 +147,8 @@ struct HandshakeDematerializeForksSinksPass
           HandshakeDematerializeForksSinksPass> {
   void runOnOperation() override {
     handshake::FuncOp op = getOperation();
+    if (op.isExternal())
+      return;
     for (auto sinkOp :
          llvm::make_early_inc_range(op.getOps<handshake::SinkOp>()))
       sinkOp.erase();

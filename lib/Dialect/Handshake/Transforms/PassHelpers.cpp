@@ -105,6 +105,8 @@ LogicalResult resolveInstanceGraph(ModuleOp moduleOp,
 }
 
 LogicalResult verifyAllValuesHasOneUse(handshake::FuncOp funcOp) {
+  if (funcOp.isExternal())
+    return success();
   for (auto &subOp : funcOp.getOps()) {
     for (auto res : llvm::enumerate(subOp.getResults())) {
       if (!res.value().hasOneUse())

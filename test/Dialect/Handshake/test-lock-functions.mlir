@@ -46,3 +46,9 @@ handshake.func @triangle(%arg0: i32, %arg1: i1, %arg2: none, ...) -> (i32, none)
   %3 = mux %index [%2, %falseResult] : index, i32
   return %3, %result : i32, none
 }
+
+// -----
+
+// CHECK-LABEL:   handshake.func @external(
+// CHECK-SAME:      i32, none, ...) -> none attributes {argNames = ["arg0", "ctrl"], resNames = ["outCtrl"]}
+handshake.func @external(%arg0: i32, %ctrl: none, ...) -> none
