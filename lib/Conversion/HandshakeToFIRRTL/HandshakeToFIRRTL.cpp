@@ -644,7 +644,7 @@ createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
        llvm::enumerate(funcOp.getFunctionType().getInputs())) {
     auto portName = funcOp.getArgName(i);
     FIRRTLBaseType bundlePortType;
-    if (argType.isa<MemRefType>()) {
+    if (argType.template isa<MemRefType>()) {
       if (funcOp.isExternal())
         return funcOp.emitError(
             "external functions with memory arguments are not supported");
