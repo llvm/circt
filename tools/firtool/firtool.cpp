@@ -679,6 +679,9 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
         firrtl::createGrandCentralSignalMappingsPass(outputFilename));
   }
 
+  // Run SymbolDCE after GC for hierpathop's and just for general cleanup.
+  pm.addNestedPass<firrtl::CircuitOp>(mlir::createSymbolDCEPass());
+
   // Read black box source files into the IR.
   StringRef blackBoxRoot = blackBoxRootPath.empty()
                                ? llvm::sys::path::parent_path(inputFilename)
@@ -983,6 +986,7 @@ int main(int argc, char **argv) {
     registerCSEPass();
     registerCanonicalizerPass();
     registerStripDebugInfoPass();
+    registerSymbolDCEPass();
 
     // Dialect passes:
     firrtl::registerPasses();
