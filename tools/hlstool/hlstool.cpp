@@ -129,6 +129,16 @@ static cl::opt<OutputFormatKind> outputFormat(
                clEnumValN(OutputVerilog, "verilog", "Emit Verilog")),
     cl::init(OutputVerilog));
 
+static cl::opt<std::string>
+    bufferingStrategy("buffering-strategy",
+                      cl::desc("Strategy to apply. Possible values are: "
+                               "cycles, allFIFO, all (default)"),
+                      cl::init("all"));
+
+static cl::opt<unsigned> bufferSize("buffer-size",
+                                    cl::desc("Number of slots in each buffer"),
+                                    cl::init(2));
+
 // --------------------------------------------------------------------------
 // (Configurable) pass pipelines
 // --------------------------------------------------------------------------
@@ -158,7 +168,8 @@ static void loadHandshakeTransformsPipeline(OpPassManager &pm) {
   pm.nest<handshake::FuncOp>().addPass(createSimpleCanonicalizerPass());
   // Todo: arguments
   pm.nest<handshake::FuncOp>().addPass(
-      handshake::createHandshakeInsertBuffersPass());
+      handshake::createHandshakeInsertBuffersPass(bufferingStrategy,
+                                                  bufferSize));
   pm.nest<handshake::FuncOp>().addPass(createSimpleCanonicalizerPass());
 }
 
