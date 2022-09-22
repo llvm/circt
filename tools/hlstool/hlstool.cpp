@@ -117,12 +117,17 @@ enum DynamicParallelismKind {
 
 static cl::opt<DynamicParallelismKind> dynParallelism(
     "dynamic-parallelism", cl::desc("Specify the DHLS task parallelism kind"),
-    cl::values(clEnumValN(DynamicParallelismNone, "none",
-                          "Add no protetion mechanisms"),
-               clEnumValN(DynamicParallelismLocking, "locking",
-                          "Add function locking protection mechanism"),
-               clEnumValN(DynamicParallelismPipelining, "pipelining",
-                          "Add function pipelining mechanism")),
+    cl::values(
+        clEnumValN(DynamicParallelismNone, "none",
+                   "Add no protection mechanisms that could prevent data races "
+                   "when a function has multiple active invocations."),
+        clEnumValN(DynamicParallelismLocking, "locking",
+                   "Add function locking protection mechanism which ensures "
+                   "that only one function invocation is active."),
+        clEnumValN(DynamicParallelismPipelining, "pipelining",
+                   "Add function pipelining mechanism that enables a "
+                   "pipelined execution of multiple function invocations while "
+                   "preserving correctness.")),
     cl::init(DynamicParallelismPipelining));
 
 enum OutputFormatKind { OutputIR, OutputVerilog };
