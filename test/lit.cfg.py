@@ -56,9 +56,8 @@ tool_dirs = [
     config.circt_tools_dir, config.mlir_tools_dir, config.llvm_tools_dir
 ]
 tools = [
-    'firtool', 'circt-opt', 'circt-reduce', 'circt-translate',
-    'circt-capi-ir-test', 'esi-tester', 'hlstool',
-    'circt-as', 'circt-dis'
+    'firtool', 'circt-as', 'circt-dis', 'circt-opt', 'circt-reduce',
+    'circt-translate', 'circt-capi-ir-test', 'esi-tester', 'hlstool'
 ]
 
 # Enable Verilator if it has been detected.
