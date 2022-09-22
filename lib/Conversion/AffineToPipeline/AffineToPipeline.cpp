@@ -63,28 +63,47 @@ private:
   CyclicSchedulingAnalysis *schedulingAnalysis;
 };
 
-static LogicalResult
-forwardStoreToLoad(AffineReadOpInterface loadOp,
-                   SmallVectorImpl<Operation *> &opsToErase) {
-
+// This forwards stores to loads for a very specific, particular pattern: store-load pairs on memrefs that accumulate
+// accumulates results in the body of a for loop:
+//  affine.for %arg3 = 0 to 8 {
+//    %3 = affine.load %arg0[%arg1, %arg3] : memref<1x8xi32>
+//    %4 = affine.load %1[%arg3, %arg2] : memref<8x8xi32>
+//    %5 = affine.load %2[%arg1, %arg2] : memref<1x8xi32>
+//    %6 = arith.muli %3, %4 : i32
+//    %7 = arith.addi %5, %6 : i32
+//    affine.store %7, %2[%arg1, %arg2] : memref<1x8xi32>
+//  }
+// After unrolling this looks like
+//  ...
+//  %281 = arith.muli %278, %279 : i32
+//  %282 = arith.addi %280, %281 : i32
+//  affine.store %282, %1[%arg1, %241] : memref<1x8xi32>
+//  %283 = affine.apply #map6(%c0_0)
+//  %284 = affine.load %arg0[%arg1, %283] : memref<1x8xi32>
+//  %285 = affine.load %0[%283, %241] : memref<8x8xi32>
+//  %286 = affine.load %1[%arg1, %241] : memref<1x8xi32>
+//  %287 = arith.muli %284, %285 : i32
+// where we observe that affine.store %282 can be forwarded to %284 = affine.load.
+// Thus, in this method we search for such pairs - a load and its immediately prior store.
+static LogicalResult forwardFullyUnrolledStoreToLoad(AffineReadOpInterface loadOp,
+                                                     SmallVectorImpl<Operation *> &opsToErase) {
   Operation *prevOp = loadOp->getPrevNode();
   while (prevOp) {
-    if (prevOp->getParentRegion() != loadOp->getParentRegion())
-      return failure();
-
     auto storeOp = dyn_cast<AffineWriteOpInterface>(prevOp);
     if (!storeOp) {
       prevOp = prevOp->getPrevNode();
       continue;
     }
 
-    if (storeOp.getMemRef() != loadOp.getMemRef())
-      return failure();
-
     MemRefAccess srcAccess(storeOp);
     MemRefAccess dstAccess(loadOp);
 
     if (srcAccess != dstAccess)
+      return failure();
+
+    // Since we forward only from the immediately prior store, we verify that there are neither intervening
+    // stores nor intervening loads in between.
+    if (!mlir::hasNoInterveningEffect<MemoryEffects::Write>(storeOp, loadOp))
       return failure();
 
     // Perform the actual store to load forwarding.
@@ -109,7 +128,13 @@ void AffineToPipeline::runOnOperation() {
   if (failed(unrollAndForwardStores()))
     return signalPassFailure();
 
-  auto dependenceAnalysis = getAnalysis<MemoryDependenceAnalysis>();
+  // auto dependenceAnalysis = getAnalysis<MemoryDependenceAnalysis>();
+  auto funcOp = getOperation();
+  ImplicitLocOpBuilder builder(funcOp.getLoc(), funcOp);
+  auto dummyFuncOp =
+      builder.create<func::FuncOp>("dummyFuncOp", funcOp.getFunctionType());
+  MemoryDependenceAnalysis dependenceAnalysis(dummyFuncOp);
+  dummyFuncOp.erase();
 
   // After dependence analysis, materialize affine structures.
   if (failed(lowerAffineStructures(dependenceAnalysis)))
@@ -319,11 +344,12 @@ LogicalResult AffineToPipeline::populateOperatorTypes(
   WalkResult result = forOp.getBody()->walk([&](Operation *op) {
     return TypeSwitch<Operation *, WalkResult>(op)
         .Case<AddIOp, IfOp, AffineYieldOp, arith::ConstantOp, CmpIOp,
-              IndexCastOp, memref::AllocaOp, YieldOp>([&](Operation *combOp) {
-          // Some known combinational ops.
-          problem.setLinkedOperatorType(combOp, combOpr);
-          return WalkResult::advance();
-        })
+              IndexCastOp, memref::AllocaOp, YieldOp, arith::SelectOp>(
+            [&](Operation *combOp) {
+              // Some known combinational ops.
+              problem.setLinkedOperatorType(combOp, combOpr);
+              return WalkResult::advance();
+            })
         .Case<AffineLoadOp, AffineStoreOp, memref::LoadOp, memref::StoreOp>(
             [&](Operation *seqOp) {
               // Some known sequential ops. In certain cases, reads may be
@@ -432,11 +458,12 @@ LogicalResult AffineToPipeline::unrollAndForwardStores() {
     SmallVector<AffineForOp> nestedLoops;
     getPerfectlyNestedLoops(nestedLoops, root);
     if (nestedLoops.size() != 1) {
-      nestedLoops[0].getBody(0)->walk<WalkOrder::PostOrder>(
-          [&](AffineForOp forOp) {
-            if (failed(loopUnrollFull(forOp)))
-              return signalPassFailure();
-          });
+      nestedLoops[0].getBody(0)->walk<WalkOrder::PostOrder>([&](AffineForOp forOp) {
+        // TODO(max): figure out a smarter way to compute factor (something something dependence analysis)
+        auto unrollFactor = getConstantTripCount(forOp).value_or(std::numeric_limits<int>::max());
+        if (failed(loopUnrollUpToFactor(forOp, unrollFactor)))
+          return signalPassFailure();
+      });
     }
   }
 
@@ -444,7 +471,7 @@ LogicalResult AffineToPipeline::unrollAndForwardStores() {
   for (auto forOp : llvm::make_early_inc_range(outerLoops)) {
     // Walk all load's and perform store to load forwarding.
     forOp.walk([&](AffineReadOpInterface loadOp) {
-      forwardStoreToLoad(loadOp, opsToErase);
+      forwardFullyUnrolledStoreToLoad(loadOp, opsToErase);
     });
     // Erase all load op's whose results were replaced with store fwd'ed ones.
     for (auto *op : opsToErase)
@@ -547,6 +574,7 @@ LogicalResult AffineToPipeline::createPipelinePipeline(
           opsWithReturns.insert(op);
           stageTypes.append(op->getResultTypes().begin(),
                             op->getResultTypes().end());
+          break;
         }
       }
     }
@@ -565,8 +593,9 @@ LogicalResult AffineToPipeline::createPipelinePipeline(
     builder.setInsertionPointToStart(&stageBlock);
 
     // Sort the group according to original dominance.
-    llvm::sort(group,
-               [&](Operation *a, Operation *b) { return dom.dominates(a, b); });
+    //    llvm::sort(group,
+    //               [&](Operation *a, Operation *b) { return dom.dominates(a,
+    //               b); });
 
     // Move over the operations and add their results to the terminator.
     SmallVector<std::tuple<Operation *, Operation *, unsigned>> movedOps;
