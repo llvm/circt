@@ -633,27 +633,34 @@ static void extractValues(ArrayRef<ValueVector *> valueVectors, size_t index,
 /// circuit is pure combinational logic. If graph cycle exists, at least one
 /// buffer is required to be inserted for breaking the cycle, which will be
 /// supported in the next patch.
-static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
-                                   ConversionPatternRewriter &rewriter,
-                                   bool setFlattenAttr) {
-  llvm::SmallVector<PortInfo, 8> ports;
+template <typename TModuleOp>
+static FailureOr<TModuleOp>
+createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
+                  ConversionPatternRewriter &rewriter, bool setFlattenAttr) {
+  llvm::SmallVector<PortInfo> ports;
 
   // Add all inputs of funcOp.
-  for (auto &arg : llvm::enumerate(funcOp.getArguments())) {
-    auto portName = funcOp.getArgName(arg.index());
+  for (auto &[i, argType] :
+       llvm::enumerate(funcOp.getFunctionType().getInputs())) {
+    auto portName = funcOp.getArgName(i);
     FIRRTLBaseType bundlePortType;
-    if (arg.value().getType().isa<MemRefType>())
-      bundlePortType =
-          getMemrefBundleType(rewriter, arg.value(), /*flip=*/true);
-    else
-      bundlePortType = getBundleType(arg.value().getType());
+    if (argType.isa<MemRefType>()) {
+      if (funcOp.isExternal())
+        return funcOp.emitError(
+            "external functions with memory arguments are not supported");
+
+      BlockArgument arg = funcOp.getArgument(i);
+      bundlePortType = getMemrefBundleType(rewriter, arg, /*flip=*/true);
+    } else
+      bundlePortType = getBundleType(argType);
 
     if (!bundlePortType)
-      funcOp.emitError("Unsupported data type. Supported data types: integer "
-                       "(signed, unsigned, signless), index, none.");
+      return funcOp.emitError(
+          "Unsupported data type. Supported data types: integer "
+          "(signed, unsigned, signless), index, none.");
 
     ports.push_back({portName, bundlePortType, Direction::In, StringAttr{},
-                     arg.value().getLoc()});
+                     funcOp.getLoc()});
   }
 
   auto funcLoc = funcOp.getLoc();
@@ -664,8 +671,9 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
     auto bundlePortType = getBundleType(portType.value());
 
     if (!bundlePortType)
-      funcOp.emitError("Unsupported data type. Supported data types: integer "
-                       "(signed, unsigned, signless), index, none.");
+      return funcOp.emitError(
+          "Unsupported data type. Supported data types: integer "
+          "(signed, unsigned, signless), index, none.");
 
     ports.push_back(
         {portName, bundlePortType, Direction::Out, StringAttr{}, funcLoc});
@@ -691,19 +699,24 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
                        StringAttr{}, funcLoc});
     }
   }
-
   // Create a FIRRTL module and inline the funcOp into the FIRRTL module.
-  auto topModuleOp = rewriter.create<FModuleOp>(
+  auto topModuleOp = rewriter.create<TModuleOp>(
       funcOp.getLoc(), rewriter.getStringAttr(funcOp.getName()), ports);
 
-  if (setFlattenAttr) {
+  if (setFlattenAttr)
     topModuleOp->setAttr(
         "annotations",
         rewriter.getArrayAttr(rewriter.getDictionaryAttr(
             llvm::SmallVector<NamedAttribute>{rewriter.getNamedAttr(
                 "class", rewriter.getStringAttr(
                              "firrtl.transforms.FlattenAnnotation"))})));
-  }
+
+  return topModuleOp;
+}
+
+/// Inlines the region of the handshake function into the FIRRTL module.
+static void inlineFuncRegion(handshake::FuncOp funcOp, FModuleOp topModuleOp,
+                             ConversionPatternRewriter &rewriter) {
 
   rewriter.inlineRegionBefore(funcOp.getBody(), topModuleOp.getBody(),
                               topModuleOp.getBody().end());
@@ -728,7 +741,6 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
   entryBlock->getOperations().splice(entryBlock->end(),
                                      secondBlock->getOperations());
   rewriter.eraseBlock(secondBlock);
-  return topModuleOp;
 }
 
 //===----------------------------------------------------------------------===//
@@ -3057,8 +3069,20 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
   matchAndRewrite(handshake::FuncOp funcOp, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     rewriter.setInsertionPointToStart(circuitOp.getBodyBlock());
-    auto topModuleOp =
-        createTopModuleOp(funcOp, /*numClocks=*/1, rewriter, setFlattenAttr);
+    if (funcOp.isExternal()) {
+      if (failed(createTopModuleOp<FExtModuleOp>(funcOp, /*numClocks=*/1,
+                                                 rewriter, setFlattenAttr)))
+        return failure();
+      rewriter.eraseOp(funcOp);
+      return success();
+    }
+
+    auto maybeTopModuleOp = createTopModuleOp<FModuleOp>(
+        funcOp, /*numClocks=*/1, rewriter, setFlattenAttr);
+    if (failed(maybeTopModuleOp))
+      return failure();
+    auto topModuleOp = maybeTopModuleOp.value();
+    inlineFuncRegion(funcOp, topModuleOp, rewriter);
 
     NameUniquer instanceUniquer = [&](Operation *op) {
       std::string instName = getInstanceName(op);
