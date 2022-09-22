@@ -72,6 +72,8 @@ struct HandshakeLockFunctionsPass
     : public HandshakeLockFunctionsBase<HandshakeLockFunctionsPass> {
   void runOnOperation() override {
     handshake::FuncOp op = getOperation();
+    if (op.isExternal())
+      return;
 
     OpBuilder builder(op);
     if (failed(lockRegion(op.getRegion(), builder)))
