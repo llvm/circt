@@ -751,11 +751,11 @@ static void inlineFuncRegion(handshake::FuncOp funcOp, FModuleOp topModuleOp,
 /// the FIRRTL circt. Return the matched submodule if true, otherwise return
 /// nullptr.
 ///
-static FModuleOp checkSubModuleOp(CircuitOp circuitOp, StringRef modName) {
-  return circuitOp.lookupSymbol<FModuleOp>(modName);
+static FModuleLike checkSubModuleOp(CircuitOp circuitOp, StringRef modName) {
+  return circuitOp.lookupSymbol<FModuleLike>(modName);
 }
 
-static FModuleOp checkSubModuleOp(CircuitOp circuitOp, Operation *oldOp) {
+static FModuleLike checkSubModuleOp(CircuitOp circuitOp, Operation *oldOp) {
   auto moduleOp = checkSubModuleOp(circuitOp, getSubModuleName(oldOp));
 
   if (isa<handshake::InstanceOp>(oldOp))
@@ -2330,7 +2330,7 @@ bool HandshakeBuilder::buildFIFOBufferLogic(int64_t numStage,
 
   // Instantiate the inner FIFO. Check if we already have one of the
   // appropriate type, else, generate it.
-  FModuleOp innerFifoModule = checkSubModuleOp(circuit, innerFifoModName);
+  FModuleLike innerFifoModule = checkSubModuleOp(circuit, innerFifoModName);
   if (!innerFifoModule)
     innerFifoModule = buildInnerFIFO(circuit, innerFifoModName, numStage,
                                      isControl, dataType);
@@ -2961,7 +2961,7 @@ bool HandshakeBuilder::visitHandshake(UnpackOp op) {
 
 /// Create InstanceOp in the top-module. This will be called after the
 /// corresponding sub-module and combinational logic are created.
-static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
+static void createInstOp(Operation *oldOp, FModuleLike subModuleOp,
                          FModuleOp topModuleOp, unsigned clockDomain,
                          ConversionPatternRewriter &rewriter,
                          NameUniquer &instanceNameGen) {
@@ -3108,18 +3108,20 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
       // This branch takes care of all non-timing operations that require to
       // be instantiated in the top-module.
       else if (op.getDialect()->getNamespace() != "firrtl") {
-        FModuleOp subModuleOp = checkSubModuleOp(circuitOp, &op);
+        FModuleLike subModuleOp = checkSubModuleOp(circuitOp, &op);
 
         // Check if the sub-module already exists.
         if (!subModuleOp) {
-          subModuleOp = createSubModuleOp(topModuleOp, &op, rewriter);
+          FModuleOp newSubModuleOp =
+              createSubModuleOp(topModuleOp, &op, rewriter);
+          subModuleOp = newSubModuleOp;
 
-          Location insertLoc = subModuleOp.getLoc();
-          auto *bodyBlock = subModuleOp.getBodyBlock();
+          Location insertLoc = newSubModuleOp.getLoc();
+          auto *bodyBlock = newSubModuleOp.getBodyBlock();
           rewriter.setInsertionPoint(bodyBlock, bodyBlock->end());
 
           ValueVectorList portList =
-              extractSubfields(subModuleOp, insertLoc, rewriter);
+              extractSubfields(newSubModuleOp, insertLoc, rewriter);
 
           if (HandshakeBuilder(circuitOp, portList, insertLoc, rewriter)
                   .dispatchHandshakeVisitor(&op)) {
