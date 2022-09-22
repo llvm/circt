@@ -361,16 +361,14 @@ public:
           if (isa_and_nonnull<MemOp>(subfield.getInput().getDefiningOp()))
             return static_cast<variant_iterator>(
                 SubfieldNodeIterator(subfield, node, end));
-          // This is required to explicitly ignore self initialization connects
-          // for registers.
+          // This is required to explicitly ignore self loops of register.
           if (isa_and_nonnull<RegOp, RegResetOp>(
                   getFieldRefFromValue(subfield).getDefiningOp()))
             return static_cast<variant_iterator>(NodeIterator(node, true));
           return static_cast<variant_iterator>(NodeIterator(node, end));
         })
         .Case<SubindexOp>([&](SubindexOp sub) {
-          // This is required to explicitly ignore self initialization connects
-          // for registers.
+          // This is required to explicitly ignore self loops of register.
           if (isa_and_nonnull<RegOp, RegResetOp>(
                   getFieldRefFromValue(sub).getDefiningOp()))
             return NodeIterator(node, true);
