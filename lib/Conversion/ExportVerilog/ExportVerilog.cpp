@@ -2246,9 +2246,11 @@ SubExprInfo ExprEmitter::visitTypeOp(ArrayGetOp op) {
   emitSubExpr(op.getInput(), Selection);
   os << '[';
   if (isZeroBitType(op.getIndex().getType())) {
-    // Index expression will have been commented out due to its i0 type, and
-    // there is only one syntactically legal way of indexing into this array.
-    // Emit the index expression as a comment for tracability.
+    // Due to the singleton memory, [1'b0] will always be syntactically valid
+    // as an indexing into the provided array.
+    // Emit the index expression as a comment for tracability (all other i0
+    // values referenced within the index expression will similarly be commented
+    // out).
     os << "/*";
     emitSubExpr(op.getIndex(), LowestPrecedence);
     os << "*/ 1\'b0";
