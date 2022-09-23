@@ -48,8 +48,8 @@ with Context() as ctx, Location.unknown():
       # CHECK: [[ARRAY2:%.+]] = hw.array_create %[[CONST]] : i32
       array2 = hw.ArrayCreateOp.create([constI32])
 
-      # CHECK: %false = hw.constant false
-      # CHECK: hw.array_get [[ARRAY2]][%false] : !hw.array<1xi32>
+      # CHECK: %c0_i0 = hw.constant 0 : i0
+      # CHECK: hw.array_get [[ARRAY2]][%c0_i0] : !hw.array<1xi32>
       hw.ArrayGetOp.create(array2, 0)
 
       # CHECK: [[STRUCT1:%.+]] = hw.struct_create (%c1_i32, %true) : !hw.struct<a: i32, b: i1>
