@@ -100,7 +100,6 @@ circuit Qux: %[[{
 ;CHECK:      } else {
 ;CHECK:        sv.if %13 {
 ;CHECK:          sv.passign %memory_0, %rwDataIn : i8
-;CHECK:        } else {
 ;CHECK:        }
 ;CHECK:      }
 ;CHECK:      sv.if %23 {
@@ -108,7 +107,6 @@ circuit Qux: %[[{
 ;CHECK:      } else {
 ;CHECK:        sv.if %15 {
 ;CHECK:          sv.passign %memory_1, %rwDataIn : i8
-;CHECK:        } else {
 ;CHECK:        }
 ;CHECK:      }
 ;CHECK:      sv.if %25 {
@@ -116,7 +114,6 @@ circuit Qux: %[[{
 ;CHECK:      } else {
 ;CHECK:        sv.if %17 {
 ;CHECK:          sv.passign %memory_2, %rwDataIn : i8
-;CHECK:        } else {
 ;CHECK:        }
 ;CHECK:      }
 ;CHECK:      sv.if %27 {
@@ -124,7 +121,6 @@ circuit Qux: %[[{
 ;CHECK:      } else {
 ;CHECK:        sv.if %19 {
 ;CHECK:          sv.passign %memory_3, %rwDataIn : i8
-;CHECK:        } else {
 ;CHECK:        }
 ;CHECK:      }
 ;CHECK:      sv.passign %addr, %rAddr : i2
