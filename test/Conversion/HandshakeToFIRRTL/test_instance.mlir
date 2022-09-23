@@ -1,4 +1,4 @@
-// RUN: circt-opt -lower-handshake-to-firrtl %s | FileCheck %s
+// RUN: circt-opt -lower-handshake-to-firrtl -split-input-file %s | FileCheck %s
 
 // CHECK:           firrtl.module @foo(in %[[VAL_0:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<32>>, in %[[VAL_1:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %[[VAL_2:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<32>>, out %[[VAL_3:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %[[VAL_4:.*]]: !firrtl.clock, in %[[VAL_5:.*]]: !firrtl.uint<1>) {
 // CHECK:             %[[VAL_6:.*]], %[[VAL_7:.*]], %[[VAL_8:.*]], %[[VAL_9:.*]], %[[VAL_10:.*]], %[[VAL_11:.*]] = firrtl.instance bar0  @bar(in a: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<32>>, in ctrl: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out out0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<32>>, out out1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in clock: !firrtl.clock, in reset: !firrtl.uint<1>)
@@ -26,4 +26,13 @@ module {
     %b:2 = handshake.instance @bar(%a, %ctrl) : (i32, none) -> (i32, none)
     return %b#0, %b#1 : i32, none
   }
+}
+
+// -----
+
+handshake.func @external(%arg0: i32, %ctrl: none, ...) -> none
+
+handshake.func @call_external(%a: i32, %ctrl : none) -> none {
+  %b = handshake.instance @external(%a, %ctrl) : (i32, none) -> none
+  return %b : none
 }
