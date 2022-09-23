@@ -613,9 +613,37 @@ void TypeLoweringVisitor::processUsers(Value val, ArrayRef<Value> mapping) {
       sfo.replaceAllUsesWith(repl);
       sfo.erase();
     } else {
-      val.dump();
-      val.getDefiningOp()->getParentOfType<FModuleOp>()->dump();
-      llvm_unreachable("Unknown aggregate user");
+      // This means, we have already processed the user, and it didn't lower its
+      // inputs. This is an opaque user, which will continue to have aggregate
+      // type as input, even after LowerTypes. So, construct the vector/bundle
+      // back from the lowered elements to ensure a valid input into the opaque
+      // op. This only supports Bundle or vector of ground type elements.
+      // Recursive aggregate types are not yet supported.
+
+      // This builder ensures that the aggregate construction happens at the
+      // user location, and the LowerTypes algorithm will not touch them any
+      // more, because LowerTypes was reverse iterating on the block and the
+      // user has already been processed.
+      ImplicitLocOpBuilder b(user->getLoc(), user);
+      // Cat all the field elements.
+      Value accumulate;
+      for (auto v : mapping) {
+        if (!v.getType().cast<FIRRTLBaseType>().isGround()) {
+          user->emitError("cannot handle an opaque user of aggregate types "
+                          "with non-ground type elements");
+          return;
+        }
+        if (val.getType().cast<FIRRTLType>().isa<FVectorType>())
+          accumulate =
+              (accumulate ? b.createOrFold<CatPrimOp>(v, accumulate) : v);
+        else
+          // Bundle subfields are filled from MSB to LSB.
+          accumulate =
+              (accumulate ? b.createOrFold<CatPrimOp>(accumulate, v) : v);
+      }
+      // Cast it back to the original aggregate type.
+      auto input = b.createOrFold<BitCastOp>(val.getType(), accumulate);
+      user->replaceUsesOfWith(val, input);
     }
   }
 }

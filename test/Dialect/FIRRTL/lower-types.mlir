@@ -1057,6 +1057,38 @@ firrtl.module private @is1436_FOO() {
     // CHECK-NEXT: firrtl.connect %z, %0 : !firrtl.uint<10>, !firrtl.uint<10>
   }
 
+  firrtl.module private @RefTypeBundles(in %source: !firrtl.bundle<valid: uint<1>, ready : uint<1>, data: uint<64>>,
+                        out %sink: !firrtl.ref<bundle<valid: uint<1>, ready : uint<1>, data: uint<64>>>) {
+    // CHECK:  %0 = firrtl.cat %source_valid, %source_ready : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
+    // CHECK:  %1 = firrtl.cat %0, %source_data : (!firrtl.uint<2>, !firrtl.uint<64>) -> !firrtl.uint<66>
+    // CHECK:  %2 = firrtl.bitcast %1 : (!firrtl.uint<66>) -> !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>
+    // CHECK:  %3 = firrtl.ref.send %2 : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>
+    %0 = firrtl.ref.send %source: !firrtl.bundle<valid: uint<1>, ready : uint<1>, data: uint<64>>
+    firrtl.strictconnect %sink, %0 : !firrtl.ref<bundle<valid: uint<1>, ready : uint<1>, data: uint<64>>>
+    // CHECK:  %x_a = firrtl.wire   : !firrtl.uint<1>
+    // CHECK:  %x_b = firrtl.wire   : !firrtl.uint<2>
+    %x = firrtl.wire : !firrtl.bundle<a: uint<1>, b: uint<2>>
+    // CHECK:  %4 = firrtl.cat %x_a, %x_b : (!firrtl.uint<1>, !firrtl.uint<2>) -> !firrtl.uint<3>
+    // CHECK:  %5 = firrtl.bitcast %4 : (!firrtl.uint<3>) -> !firrtl.bundle<a: uint<1>, b: uint<2>>
+    // CHECK:  %6 = firrtl.ref.send %5 : !firrtl.bundle<a: uint<1>, b: uint<2>>
+    %1 = firrtl.ref.send %x : !firrtl.bundle<a: uint<1>, b: uint<2>>
+  }
+
+  firrtl.module private @RefTypeVectors(in %a: !firrtl.vector<uint<1>, 2>, out %b: !firrtl.ref<vector<uint<1>, 2>>) {
+    // CHECK:  %0 = firrtl.cat %a_1, %a_0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
+    // CHECK:  %1 = firrtl.bitcast %0 : (!firrtl.uint<2>) -> !firrtl.vector<uint<1>, 2>
+    // CHECK:  %2 = firrtl.ref.send %1 : !firrtl.vector<uint<1>, 2>
+    %0 = firrtl.ref.send %a : !firrtl.vector<uint<1>, 2>
+    firrtl.strictconnect %b, %0: !firrtl.ref<vector<uint<1>, 2>>
+    // CHECK:  %x_0 = firrtl.wire   : !firrtl.uint<1>
+    // CHECK:  %x_1 = firrtl.wire   : !firrtl.uint<1>
+    %x = firrtl.wire : !firrtl.vector<uint<1>, 2>
+    // CHECK:  %3 = firrtl.cat %x_1, %x_0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
+    // CHECK:  %4 = firrtl.bitcast %3 : (!firrtl.uint<2>) -> !firrtl.vector<uint<1>, 2>
+    // CHECK:  %5 = firrtl.ref.send %4 : !firrtl.vector<uint<1>, 2>
+    %1 = firrtl.ref.send %x : !firrtl.vector<uint<1>, 2>
+  }
+
 } // CIRCUIT
 
 // Check that we don't lose the DontTouchAnnotation when it is not the last
