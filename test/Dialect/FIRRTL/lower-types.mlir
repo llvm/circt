@@ -1083,9 +1083,14 @@ firrtl.module private @is1436_FOO() {
     // CHECK:  %x_0 = firrtl.wire   : !firrtl.uint<1>
     // CHECK:  %x_1 = firrtl.wire   : !firrtl.uint<1>
     %x = firrtl.wire : !firrtl.vector<uint<1>, 2>
-    // CHECK:  %3 = firrtl.cat %x_1, %x_0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
-    // CHECK:  %4 = firrtl.bitcast %3 : (!firrtl.uint<2>) -> !firrtl.vector<uint<1>, 2>
-    // CHECK:  %5 = firrtl.ref.send %4 : !firrtl.vector<uint<1>, 2>
+    %x0 = firrtl.subindex %x[0] :!firrtl.vector<uint<1>, 2>
+    %x1 = firrtl.subindex %x[1] :!firrtl.vector<uint<1>, 2>
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    firrtl.strictconnect %x0, %c0_ui1 : !firrtl.uint<1>
+    firrtl.strictconnect %x1, %c0_ui1 : !firrtl.uint<1>
+    // CHECK:  %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
+    // CHECK:  %3 = firrtl.bitcast %c0_ui2 : (!firrtl.uint<2>) -> !firrtl.vector<uint<1>, 2>
+    // CHECK:  %4 = firrtl.ref.send %3 : !firrtl.vector<uint<1>, 2>
     %1 = firrtl.ref.send %x : !firrtl.vector<uint<1>, 2>
   }
 
