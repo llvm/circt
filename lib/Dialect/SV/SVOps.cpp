@@ -466,6 +466,13 @@ LogicalResult IfOp::canonicalize(IfOp op, PatternRewriter &rewriter) {
     return success();
   }
 
+  // Erase empty if-else block.
+  if (!op.getThenBlock()->empty() && op.hasElse() &&
+      op.getElseBlock()->empty()) {
+    rewriter.eraseBlock(op.getElseBlock());
+    return success();
+  }
+
   // Erase empty if's.
 
   // If there is stuff in the then block, leave this operation alone.
