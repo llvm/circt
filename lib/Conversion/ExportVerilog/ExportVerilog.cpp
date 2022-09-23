@@ -2251,7 +2251,7 @@ SubExprInfo ExprEmitter::visitTypeOp(ArrayGetOp op) {
     // Emit the index expression as a comment for tracability (all other i0
     // values referenced within the index expression will similarly be commented
     // out).
-    os << "/*";
+    os << "/*Zero width: ";
     emitSubExpr(op.getIndex(), LowestPrecedence);
     os << "*/ 1\'b0";
   } else
