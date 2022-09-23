@@ -1723,11 +1723,6 @@ public:
     target.addLegalDialect<HWDialect>();
     target.addIllegalDialect<handshake::HandshakeDialect>();
 
-    // External memories are complicated enough to warrant their own lowering
-    // stage (separate analysis, replacing memref arg with both new in- and
-    // outputs, ...).
-    // target.addLegalOp<handshake::ExternalMemoryOp>();
-
     // Convert the handshake.func operations in post-order wrt. the instance
     // graph. This ensures that any referenced submodules (through
     // handshake.instance) has already been lowered, and their HW module
