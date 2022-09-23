@@ -23,8 +23,12 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Support/LoweringOptions.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/Debug.h"
+
+#define DEBUG_TYPE "prepare-for-emission"
 
 using namespace circt;
 using namespace comb;
@@ -50,9 +54,6 @@ bool ExportVerilog::isSimpleReadOrPort(Value v) {
 
 // Check if the value is deemed worth spilling into a wire.
 static bool shouldSpillWire(Operation &op, const LoweringOptions &options) {
-  auto isAssign = [](Operation *op) {
-    return isa<AssignOp, PAssignOp, BPAssignOp, OutputOp>(op);
-  };
   auto isConcat = [](Operation *op) { return isa<ConcatOp>(op); };
 
   if (!isVerilogExpression(&op))
@@ -62,13 +63,6 @@ static bool shouldSpillWire(Operation &op, const LoweringOptions &options) {
   // inline.
   if (!options.useOldEmissionMode &&
       !ExportVerilog::isExpressionEmittedInline(&op))
-    return true;
-
-  // If there are more than the maximum number of terms in this single result
-  // expression, and it hasn't already been spilled, this should spill.
-  if (op.getNumOperands() > options.maximumNumberOfTermsPerExpression &&
-      op.getNumResults() == 1 &&
-      llvm::none_of(op.getResult(0).getUsers(), isAssign))
     return true;
 
   // Work around Verilator #3405. Large expressions inside a concat is worst
@@ -265,6 +259,7 @@ static void lowerUsersToTemporaryWire(Operation &op,
   // value.
   if (op.getNumResults() == 1) {
     auto namehint = inferStructuralNameForTemporary(op.getResult(0));
+    op.removeAttr("sv.namehint");
     createWireForResult(op.getResult(0), namehint);
     operandMap[op.getResult(0)] = 1;
     return;
@@ -459,6 +454,102 @@ static bool isMovableDeclaration(Operation *op) {
          op->getNumOperands() == 0;
 }
 
+//===----------------------------------------------------------------------===//
+// EmittedExpressionStateManager
+//===----------------------------------------------------------------------===//
+
+struct EmittedExpressionState {
+  size_t size = 0;
+  static EmittedExpressionState getBaseState() {
+    return EmittedExpressionState{1};
+  }
+  void mergeState(const EmittedExpressionState &state) { size += state.size; }
+};
+
+/// This class handles information about AST structures of each expressions.
+class EmittedExpressionStateManager
+    : public hw::TypeOpVisitor<EmittedExpressionStateManager,
+                               EmittedExpressionState>,
+      public comb::CombinationalVisitor<EmittedExpressionStateManager,
+                                        EmittedExpressionState>,
+      public sv::Visitor<EmittedExpressionStateManager,
+                         EmittedExpressionState> {
+public:
+  EmittedExpressionStateManager(const LoweringOptions &options)
+      : options(options){};
+
+  // Get or caluculate an emitted expression state.
+  EmittedExpressionState getExpressionState(Value value);
+
+  // Return true if the operation is worth spilling based on the expression
+  // state of the op.
+  bool shouldSpillWireBasedOnState(Operation &op);
+
+private:
+  friend class TypeOpVisitor<EmittedExpressionStateManager,
+                             EmittedExpressionState>;
+  friend class CombinationalVisitor<EmittedExpressionStateManager,
+                                    EmittedExpressionState>;
+  friend class Visitor<EmittedExpressionStateManager, EmittedExpressionState>;
+  EmittedExpressionState visitUnhandledExpr(Operation *op) {
+    LLVM_DEBUG(op->emitWarning() << "unhandled by EmittedExpressionState");
+    if (op->getNumOperands() == 0)
+      return EmittedExpressionState::getBaseState();
+    return mergeOperandsStates(op);
+  }
+  EmittedExpressionState visitInvalidComb(Operation *op) {
+    return dispatchTypeOpVisitor(op);
+  }
+  EmittedExpressionState visitUnhandledComb(Operation *op) {
+    return visitUnhandledExpr(op);
+  }
+  EmittedExpressionState visitInvalidTypeOp(Operation *op) {
+    return dispatchSVVisitor(op);
+  }
+  EmittedExpressionState visitUnhandledTypeOp(Operation *op) {
+    return visitUnhandledExpr(op);
+  }
+  EmittedExpressionState visitUnhandledSV(Operation *op) {
+    return visitUnhandledExpr(op);
+  }
+
+  using CombinationalVisitor::visitComb;
+  using Visitor::visitSV;
+
+  const LoweringOptions &options;
+
+  // A helper function to accumulate states.
+  EmittedExpressionState mergeOperandsStates(Operation *op);
+
+  // This caches the expression states in the module scope.
+  DenseMap<Value, EmittedExpressionState> expressionStates;
+};
+
+EmittedExpressionState
+EmittedExpressionStateManager::getExpressionState(Value v) {
+  auto it = expressionStates.find(v);
+  if (it != expressionStates.end())
+    return it->second;
+
+  // Ports.
+  if (auto blockArg = v.dyn_cast<BlockArgument>())
+    return EmittedExpressionState::getBaseState();
+
+  EmittedExpressionState state =
+      dispatchCombinationalVisitor(v.getDefiningOp());
+  expressionStates.insert({v, state});
+  return state;
+}
+
+EmittedExpressionState
+EmittedExpressionStateManager::mergeOperandsStates(Operation *op) {
+  EmittedExpressionState state;
+  for (auto operand : op->getOperands())
+    state.mergeState(getExpressionState(operand));
+
+  return state;
+}
+
 /// If exactly one use of this op is an assign, replace the other uses with a
 /// read from the assigned wire or reg. This assumes the preconditions for doing
 /// so are met: op must be an expression in a non-procedural region.
@@ -510,10 +601,74 @@ static bool reuseExistingInOut(Operation *op) {
   return true;
 }
 
+/// Return true if it is beneficial to spill the operation under the specified
+/// spilling heuristic.
+bool EmittedExpressionStateManager::shouldSpillWireBasedOnState(Operation &op) {
+  // Don't spill wires for inout operations and simple expressions such as read
+  // or constant.
+  if (op.getNumResults() == 0 ||
+      op.getResult(0).getType().isa<hw::InOutType>() ||
+      isa<ReadInOutOp, ConstantOp>(op))
+    return false;
+
+  // If the operation is only used by an assignment, the op is already spilled
+  // to a wire.
+  if (op.hasOneUse() &&
+      isa<hw::OutputOp, sv::AssignOp, sv::BPAssignOp, sv::PAssignOp>(
+          *op.getUsers().begin()))
+    return false;
+
+  // If the term size is greater than `maximumNumberOfTermsPerExpression`,
+  // we have to spill the wire.
+  if (options.maximumNumberOfTermsPerExpression <
+      getExpressionState(op.getResult(0)).size)
+    return true;
+
+  switch (options.wireSpillingHeuristic) {
+  case LoweringOptions::SpillLargeTermsWithNamehints:
+    if (op.hasAttr("sv.namehint") && getExpressionState(op.getResult(0)).size >=
+                                         options.wireSpillingNamehintTermLimit)
+      return true;
+    break;
+  default:
+    break;
+  }
+
+  return false;
+}
+
+/// After the legalization, we are able to know accurate verilog AST structures.
+/// So this function walks and prettifies verilog IR with a heuristic method
+/// specified by `options.wireSpillingHeuristic` based on the structures.
+static void prettifyAfterLegalization(
+    Block &block, EmittedExpressionStateManager &expressionStateManager) {
+  // TODO: Handle procedural regions as well.
+  if (block.getParentOp()->hasTrait<ProceduralRegion>())
+    return;
+
+  // TODO: Refactor `lowerUsersToTemporaryWire` to remove operandMap.
+  DenseMap<Value, size_t> operandMap;
+  for (auto &op : llvm::make_early_inc_range(block)) {
+    if (!isVerilogExpression(&op))
+      continue;
+    if (expressionStateManager.shouldSpillWireBasedOnState(op)) {
+      lowerUsersToTemporaryWire(op, operandMap);
+      continue;
+    }
+  }
+
+  for (auto &op : block) {
+    // If the operations has regions, visit each of the region bodies.
+    for (auto &region : op.getRegions()) {
+      if (!region.empty())
+        prettifyAfterLegalization(region.front(), expressionStateManager);
+    }
+  }
+}
+
 /// For each module we emit, do a prepass over the structure, pre-lowering and
 /// otherwise rewriting operations we don't want to emit.
-void ExportVerilog::prepareHWModule(Block &block,
-                                    const LoweringOptions &options) {
+static void legalizeHWModule(Block &block, const LoweringOptions &options) {
 
   /// A cache of the number of operands that feed into an operation.  This
   /// avoids the need to look backwards across ops repeatedly.
@@ -525,7 +680,7 @@ void ExportVerilog::prepareHWModule(Block &block,
     // If the operations has regions, prepare each of the region bodies.
     for (auto &region : op.getRegions()) {
       if (!region.empty())
-        prepareHWModule(region.front(), options);
+        legalizeHWModule(region.front(), options);
     }
   }
 
@@ -813,6 +968,16 @@ void ExportVerilog::prepareHWModule(Block &block,
   }
 }
 
+void ExportVerilog::prepareHWModule(hw::HWModuleOp module,
+                                    const LoweringOptions &options) {
+  // Legalization.
+  legalizeHWModule(*module.getBodyBlock(), options);
+
+  EmittedExpressionStateManager expressionStateManager(options);
+  // Spill wires to prettify verilog outputs.
+  prettifyAfterLegalization(*module.getBodyBlock(), expressionStateManager);
+}
+
 namespace {
 
 struct TestPrepareForEmissionPass
@@ -823,7 +988,7 @@ struct TestPrepareForEmissionPass
     LoweringOptions options = getLoweringCLIOption(
         cast<mlir::ModuleOp>(module->getParentOp()),
         [&](llvm::Twine twine) { module.emitError(twine); });
-    prepareHWModule(*module.getBodyBlock(), options);
+    prepareHWModule(module, options);
   }
 };
 } // end anonymous namespace

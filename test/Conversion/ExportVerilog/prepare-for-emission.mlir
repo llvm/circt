@@ -125,3 +125,19 @@ module attributes {circt.loweringOptions = "disallowExpressionInliningInPorts"} 
   hw.instance "xyz3" @MyExtModule(in: %0: i8) -> ()
  }
 }
+
+// -----
+module attributes {circt.loweringOptions =
+                  "wireSpillingHeuristic=spillLargeTermsWithNamehints,wireSpillingNamehintTermLimit=3"} {
+  // CHECK-LABEL: namehints
+  hw.module @namehints(%a: i8) -> (b: i8) {
+    // "foo" should not be spilled because the term size is 2.
+    // CHECK-NOT: %foo = sv.wire
+    %0 = comb.add %a, %a {sv.namehint = "foo" } : i8
+    // "bar" should be spilled because the term size is 3.
+    // CHECK: %bar = sv.wire
+    %1 = comb.add %a, %a, %a {sv.namehint = "bar" } : i8
+    %2 = comb.add %0, %1 : i8
+    hw.output %2 : i8
+  }
+}

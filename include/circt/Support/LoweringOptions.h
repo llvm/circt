@@ -127,6 +127,18 @@ struct LoweringOptions {
   /// deprecated once the old emission mode is no longer necessary.
   bool useOldEmissionMode = false;
 
+  /// This controls extra wire spilling performed in PrepareForEmission to
+  /// improve readablitiy and debuggability.
+  enum WireSpillingHeuristic {
+    SpillNone,                   // Default
+    SpillLargeTermsWithNamehints // Spill wires for expressions with
+                                 // namehints if the term size is greater
+                                 // than `wireSpillingNamehintTermLimit`.
+  } wireSpillingHeuristic = SpillNone;
+
+  enum { DEFAULT_NAMEHINT_TERM_LIMIT = 3 };
+  unsigned wireSpillingNamehintTermLimit = DEFAULT_NAMEHINT_TERM_LIMIT;
+
   /// If true, every expression passed to an instance port is driven by a wire.
   /// Some lint tools dislike expressions being inlined into input ports so this
   /// option avoids such warnings.
