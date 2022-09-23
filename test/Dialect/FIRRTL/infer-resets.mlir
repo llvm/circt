@@ -358,21 +358,22 @@ firrtl.circuit "Top" {
   firrtl.module @Top(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %init: !firrtl.uint<1>, in %in: !firrtl.uint<8>, in %extraReset: !firrtl.asyncreset ) attributes {
     portAnnotations = [[],[],[],[],[{class = "firrtl.transforms.DontTouchAnnotation"}, {class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]]} {
     %c1_ui8 = firrtl.constant 1 : !firrtl.uint<8>
-    // CHECK: %reg1 = firrtl.regreset sym @reg1 %clock, %extraReset, %c0_ui8
-    %reg1 = firrtl.reg sym @reg1 %clock : !firrtl.uint<8>
+    // CHECK: %reg1 = firrtl.regreset sym @reg1 %clock, %extraReset, %c0_ui8 {preserve_type}
+    %reg1 = firrtl.reg sym @reg1 %clock {preserve_type} : !firrtl.uint<8>
     firrtl.connect %reg1, %in : !firrtl.uint<8>, !firrtl.uint<8>
 
     // Existing async reset remains untouched.
-    // CHECK: %reg2 = firrtl.regreset %clock, %reset, %c1_ui8
-    %reg2 = firrtl.regreset %clock, %reset, %c1_ui8 : !firrtl.asyncreset, !firrtl.uint<8>, !firrtl.uint<8>
+    // CHECK: %reg2 = firrtl.regreset %clock, %reset, %c1_ui8 {preserve_type}
+    %reg2 = firrtl.regreset %clock, %reset, %c1_ui8 {preserve_type}: !firrtl.asyncreset, !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.connect %reg2, %in : !firrtl.uint<8>, !firrtl.uint<8>
 
     // Existing sync reset is moved to mux.
     // CHECK: %reg3 = firrtl.regreset %clock, %extraReset, %c0_ui8
+    // CHECK-SAME: {preserve_type}
     // CHECK: %0 = firrtl.mux(%init, %c1_ui8, %reg3)
     // CHECK: %1 = firrtl.mux(%init, %c1_ui8, %in)
     // CHECK: firrtl.connect %reg3, %1
-    %reg3 = firrtl.regreset %clock, %init, %c1_ui8 : !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>
+    %reg3 = firrtl.regreset %clock, %init, %c1_ui8 {preserve_type}: !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.connect %reg3, %in : !firrtl.uint<8>, !firrtl.uint<8>
 
     // Factoring of sync reset into mux works through subfield op.
@@ -737,9 +738,9 @@ firrtl.circuit "SubAccess" {
 firrtl.circuit "ZeroWidthRegister" {
   firrtl.module @ZeroWidthRegister(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset) attributes {
     portAnnotations = [[],[{class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]]} {
-    %reg = firrtl.reg %clock : !firrtl.uint<0>
+    %reg = firrtl.reg %clock {preserve_type}: !firrtl.uint<0>
     // CHECK-NEXT: [[TMP:%.+]] = firrtl.constant 0 : !firrtl.uint<0>
-    // CHECK-NEXT: %reg = firrtl.regreset %clock, %reset, [[TMP]]
+    // CHECK-NEXT: %reg = firrtl.regreset %clock, %reset, [[TMP]] {preserve_type}
   }
 }
 

@@ -1718,7 +1718,9 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
     auto newRegOp = builder.create<RegResetOp>(
         regOp.getType(), regOp.getClockVal(), actualReset, zero,
         regOp.getNameAttr(), regOp.getNameKindAttr(), regOp.getAnnotations(),
-        regOp.getInnerSymAttr(), regOp.getPreserveTypeAttr());
+        regOp.getInnerSymAttr());
+    if (regOp->hasAttr("preserve_type"))
+      newRegOp->setAttr("preserve_type", builder.getUnitAttr());
     regOp.getResult().replaceAllUsesWith(newRegOp);
     regOp->erase();
     return;

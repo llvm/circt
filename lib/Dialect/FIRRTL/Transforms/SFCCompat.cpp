@@ -63,7 +63,7 @@ void SFCCompatPass::runOnOperation() {
       ImplicitLocOpBuilder builder(reg.getLoc(), reg);
       RegOp newReg = builder.create<RegOp>(
           reg.getType(), reg.getClockVal(), reg.getName(), reg.getNameKind(),
-          reg.getAnnotations(), reg.getInnerSymAttr(), reg.getPreserveType());
+          reg.getAnnotations(), reg.getInnerSymAttr());
       reg.replaceAllUsesWith(newReg.getResult());
       reg.erase();
       madeModifications = true;
