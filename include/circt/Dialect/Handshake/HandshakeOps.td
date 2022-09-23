@@ -722,6 +722,12 @@ def ExternalMemoryOp : Handshake_Op<"extmemory", [
       "int":$id)>
   ];
   let assemblyFormat = "`[` `ld` `=` $ldCount `,` `st` `=`  $stCount `]` `(` $memref `:` qualified(type($memref)) `)` `(` $inputs `)` attr-dict `:` functional-type($inputs, $outputs)";
+
+  let extraClassDeclaration = [{
+    mlir::MemRefType getMemRefType() {
+      return getMemref().getType().cast<mlir::MemRefType>();
+    }
+  }];
 }
 
 def LoadOp : Handshake_Op<"load", [

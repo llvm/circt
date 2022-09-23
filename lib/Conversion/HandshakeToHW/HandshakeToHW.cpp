@@ -162,7 +162,7 @@ static SmallVector<Type> filterNoneTypes(ArrayRef<Type> input) {
 using DiscriminatingTypes = std::pair<SmallVector<Type>, SmallVector<Type>>;
 static DiscriminatingTypes getHandshakeDiscriminatingTypes(Operation *op) {
   return TypeSwitch<Operation *, DiscriminatingTypes>(op)
-      .Case<MemoryOp>([&](auto memOp) {
+      .Case<MemoryOp, ExternalMemoryOp>([&](auto memOp) {
         return DiscriminatingTypes{{},
                                    {memOp.getMemRefType().getElementType()}};
       })
@@ -1314,6 +1314,68 @@ public:
   };
 };
 
+class LoadConversionPattern
+    : public HandshakeConversionPattern<handshake::LoadOp> {
+public:
+  using HandshakeConversionPattern<
+      handshake::LoadOp>::HandshakeConversionPattern;
+  void buildModule(handshake::LoadOp op, BackedgeBuilder &bb, RTLBuilder &s,
+                   hw::HWModulePortAccessor &ports) const override {
+    auto unwrappedIO = this->unwrapIO(s, bb, ports);
+    auto addrFromUser = unwrappedIO.inputs[0];
+    auto dataFromMem = unwrappedIO.inputs[1];
+    auto controlIn = unwrappedIO.inputs[2];
+    auto dataToUser = unwrappedIO.outputs[0];
+    auto addrToMem = unwrappedIO.outputs[1];
+
+    addrToMem.data->setValue(addrFromUser.data);
+    dataToUser.data->setValue(dataFromMem.data);
+
+    // The valid/ready logic between user address/control to memoryAddr is
+    // join logic.
+    buildJoinLogic(s, {addrFromUser, controlIn}, addrToMem);
+
+    // The valid/ready logic between memoryData and outputData is a direct
+    // connection.
+    dataToUser.valid->setValue(dataFromMem.valid);
+    dataFromMem.ready->setValue(dataToUser.ready);
+  };
+};
+
+class StoreConversionPattern
+    : public HandshakeConversionPattern<handshake::StoreOp> {
+public:
+  using HandshakeConversionPattern<
+      handshake::StoreOp>::HandshakeConversionPattern;
+  void buildModule(handshake::StoreOp op, BackedgeBuilder &bb, RTLBuilder &s,
+                   hw::HWModulePortAccessor &ports) const override {
+    auto unwrappedIO = this->unwrapIO(s, bb, ports);
+    auto addrFromUser = unwrappedIO.inputs[0];
+    auto dataFromUser = unwrappedIO.inputs[1];
+    auto controlIn = unwrappedIO.inputs[2];
+    auto dataToMem = unwrappedIO.outputs[0];
+    auto addrToMem = unwrappedIO.outputs[1];
+
+    // Create a gate that will be asserted when all outputs are ready.
+    auto outputsReady = s.bAnd({dataToMem.ready, addrToMem.ready});
+
+    // Build the standard join logic from the inputs to the inputsValid and
+    // outputsReady signals.
+    HandshakeWire joinWire(bb, s.b.getNoneType());
+    joinWire.ready->setValue(outputsReady);
+    OutputHandshake joinOutput = joinWire.getAsOutput();
+    buildJoinLogic(s, {dataFromUser, addrFromUser, controlIn}, joinOutput);
+
+    // Output address and data signals are connected directly.
+    addrToMem.data->setValue(addrFromUser.data);
+    dataToMem.data->setValue(dataFromUser.data);
+
+    // Output valid signals are connected from the inputsValid wire.
+    addrToMem.valid->setValue(*joinWire.valid);
+    dataToMem.valid->setValue(*joinWire.valid);
+  };
+};
+
 class SinkConversionPattern : public HandshakeConversionPattern<SinkOp> {
 public:
   using HandshakeConversionPattern<SinkOp>::HandshakeConversionPattern;
@@ -1572,17 +1634,6 @@ public:
 // HW Top-module Related Functions
 //===----------------------------------------------------------------------===//
 
-static bool isMemrefType(Type t) { return t.isa<mlir::MemRefType>(); }
-static LogicalResult verifyHandshakeFuncOp(handshake::FuncOp &funcOp) {
-  // @TODO: memory I/O is not yet supported. Figure out how to support memory
-  // services in ESI.
-  if (llvm::any_of(funcOp.getArgumentTypes(), isMemrefType) ||
-      llvm::any_of(funcOp.getResultTypes(), isMemrefType))
-    return emitError(funcOp.getLoc())
-           << "memref ports are not yet supported in handshake-to-hw lowering.";
-  return success();
-}
-
 static LogicalResult convertFuncOp(ESITypeConverter &typeConverter,
                                    ConversionTarget &target,
                                    handshake::FuncOp op,
@@ -1611,7 +1662,8 @@ static LogicalResult convertFuncOp(ESITypeConverter &typeConverter,
                   SyncConversionPattern>(typeConverter, op.getContext(),
                                          moduleBuilder, ls);
 
-  patterns.insert<ConditionalBranchConversionPattern, MuxConversionPattern,
+  patterns.insert<ExtModuleConversionPattern<handshake::ExternalMemoryOp>,
+                  ConditionalBranchConversionPattern, MuxConversionPattern,
                   SelectConversionPattern,
                   UnitRateConversionPattern<arith::AddIOp, comb::AddOp>,
                   UnitRateConversionPattern<arith::SubIOp, comb::SubOp>,
@@ -1630,7 +1682,8 @@ static LogicalResult convertFuncOp(ESITypeConverter &typeConverter,
                   ComparisonConversionPattern, BufferConversionPattern,
                   SourceConversionPattern, SinkConversionPattern,
                   ConstantConversionPattern, MergeConversionPattern,
-                  ControlMergeConversionPattern,
+                  ControlMergeConversionPattern, LoadConversionPattern,
+                  StoreConversionPattern,
                   ExtendConversionPattern<arith::ExtUIOp, /*signExtend=*/false>,
                   ExtendConversionPattern<arith::ExtSIOp, /*signExtend=*/true>,
                   TruncateConversionPattern, IndexCastConversionPattern>(
@@ -1670,6 +1723,11 @@ public:
     target.addLegalDialect<HWDialect>();
     target.addIllegalDialect<handshake::HandshakeDialect>();
 
+    // External memories are complicated enough to warrant their own lowering
+    // stage (separate analysis, replacing memref arg with both new in- and
+    // outputs, ...).
+    // target.addLegalOp<handshake::ExternalMemoryOp>();
+
     // Convert the handshake.func operations in post-order wrt. the instance
     // graph. This ensures that any referenced submodules (through
     // handshake.instance) has already been lowered, and their HW module
@@ -1679,8 +1737,7 @@ public:
     for (auto &funcName : llvm::reverse(sortedFuncs)) {
       auto funcOp = mod.lookupSymbol<handshake::FuncOp>(funcName);
       assert(funcOp && "handshake.func not found in module!");
-      if (failed(verifyHandshakeFuncOp(funcOp)) ||
-          failed(
+      if (failed(
               convertFuncOp(typeConverter, target, funcOp, submoduleBuilder))) {
         signalPassFailure();
         return;
