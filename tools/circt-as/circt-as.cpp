@@ -35,19 +35,21 @@ using namespace llvm;
 using namespace mlir;
 using namespace circt;
 
+static constexpr const char toolName[] = "circt-as";
+static cl::OptionCategory mainCategory("circt-as Options");
+
 static cl::opt<std::string> inputFilename(cl::Positional,
                                           cl::desc("<input .mlir file>"),
-                                          cl::init("-"));
+                                          cl::init("-"), cl::cat(mainCategory));
 
 static cl::opt<std::string> outputFilename("o",
                                            cl::desc("Override output filename"),
-                                           cl::value_desc("filename"));
+                                           cl::value_desc("filename"),
+                                           cl::cat(mainCategory));
 
 static cl::opt<bool> forceOutput("f",
                                  cl::desc("Enable binary output on terminals"),
-                                 cl::init(false));
-
-static constexpr const char toolName[] = "circt-as";
+                                 cl::init(false), cl::cat(mainCategory));
 
 /// Print error and return failure.
 static LogicalResult emitError(const Twine &err) {
@@ -130,6 +132,9 @@ int main(int argc, char **argv) {
   registry.insert<mlir::cf::ControlFlowDialect>();
   registry.insert<mlir::scf::SCFDialect>();
   registry.insert<mlir::emitc::EmitCDialect>();
+
+  // Hide default LLVM options, other than for this tool.
+  cl::HideUnrelatedOptions({&mainCategory, &llvm::getColorCategory()});
 
   cl::ParseCommandLineOptions(argc, argv, "CIRCT .mlir -> .mlirbc assembler\n");
 

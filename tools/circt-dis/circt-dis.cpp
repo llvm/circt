@@ -35,15 +35,17 @@ using namespace llvm;
 using namespace mlir;
 using namespace circt;
 
+static constexpr const char toolName[] = "circt-dis";
+static cl::OptionCategory mainCategory("circt-dis Options");
+
 static cl::opt<std::string> inputFilename(cl::Positional,
                                           cl::desc("<input .mlirbc file>"),
-                                          cl::init("-"));
+                                          cl::init("-"), cl::cat(mainCategory));
 
 static cl::opt<std::string> outputFilename("o",
                                            cl::desc("Override output filename"),
-                                           cl::value_desc("filename"));
-
-static constexpr const char toolName[] = "circt-dis";
+                                           cl::value_desc("filename"),
+                                           cl::cat(mainCategory));
 
 /// Print error and return failure.
 static LogicalResult emitError(const Twine &err) {
@@ -109,6 +111,10 @@ int main(int argc, char **argv) {
   registry.insert<mlir::cf::ControlFlowDialect>();
   registry.insert<mlir::scf::SCFDialect>();
   registry.insert<mlir::emitc::EmitCDialect>();
+
+  // Hide default LLVM options, other than for this tool.
+  // MLIR options are added below.
+  cl::HideUnrelatedOptions({&mainCategory, &llvm::getColorCategory()});
 
   registerAsmPrinterCLOptions();
 
