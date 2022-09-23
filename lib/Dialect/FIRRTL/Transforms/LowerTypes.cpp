@@ -613,7 +613,7 @@ void TypeLoweringVisitor::processUsers(Value val, ArrayRef<Value> mapping) {
       sfo.replaceAllUsesWith(repl);
       sfo.erase();
     } else {
-      // This means, we have already processed the user, and it didnot lower its
+      // This means, we have already processed the user, and it didn't lower its
       // inputs. This is an opaque user, which will continue to have aggregate
       // type as input, even after LowerTypes. So, construct the vector/bundle
       // back from the lowered elements to ensure a valid input into the opaque
@@ -625,8 +625,6 @@ void TypeLoweringVisitor::processUsers(Value val, ArrayRef<Value> mapping) {
       // more, because LowerTypes was reverse iterating on the block and the
       // user has already been processed.
       ImplicitLocOpBuilder b(user->getLoc(), user);
-      // Get the operand number in the op.
-      auto it = llvm::find(user->getOperands(), val);
       // Cat all the field elements.
       Value accumulate;
       for (auto v : mapping) {
@@ -635,12 +633,17 @@ void TypeLoweringVisitor::processUsers(Value val, ArrayRef<Value> mapping) {
                           "with non-ground type elements");
           return;
         }
-        accumulate =
-            (accumulate ? b.createOrFold<CatPrimOp>(v, accumulate) : v);
+        if (val.getType().cast<FIRRTLType>().isa<FVectorType>())
+          accumulate =
+              (accumulate ? b.createOrFold<CatPrimOp>(v, accumulate) : v);
+        else
+          // Bundle subfields are filled from MSB to LSB.
+          accumulate =
+              (accumulate ? b.createOrFold<CatPrimOp>(accumulate, v) : v);
       }
       // Cast it back to the original aggregate type.
       auto input = b.createOrFold<BitCastOp>(val.getType(), accumulate);
-      user->setOperand(it.getIndex(), input);
+      user->replaceUsesOfWith(val, input);
     }
   }
 }
