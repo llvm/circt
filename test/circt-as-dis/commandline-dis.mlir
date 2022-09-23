@@ -3,6 +3,5 @@
 // CHECK: OVERVIEW: CIRCT .mlirbc -> .mlir disassembler
 // CHECK: Color Options
 // CHECK: General {{[Oo]}}ptions
-// CHECK-NOT: --{{[^m][^l][^i][^r]}}-
 // CHECK: Generic Options
 // CHECK: circt-dis Options
