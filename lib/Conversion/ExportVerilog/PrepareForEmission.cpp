@@ -165,12 +165,6 @@ static void lowerAlwaysInlineOperation(Operation *op) {
   assert(op->getNumResults() == 1 &&
          "only support 'always inline' ops with one result");
 
-  // Nuke use-less operations.
-  if (op->use_empty()) {
-    op->erase();
-    return;
-  }
-
   // Moving/cloning an op should pull along its operand tree with it if they
   // are always inline.  This happens when an array index has a constant
   // operand for example.
@@ -642,11 +636,18 @@ void ExportVerilog::prepareHWModule(Block &block,
     }
 
     // Duplicate "always inline" expression for each of their users and move
-    // them to be next to their users. Process the op only when the op is never
-    // processed from the top-level loop.
-    if (isExpressionAlwaysInline(&op) &&
-        visitedAlwaysInlineOperations.insert(&op).second) {
-      lowerAlwaysInlineOperation(&op);
+    // them to be next to their users.
+    if (isExpressionAlwaysInline(&op)) {
+      // Nuke use-less operations.
+      if (op.use_empty()) {
+        op.erase();
+        continue;
+      }
+      // Process the op only when the op is never processed from the top-level
+      // loop.
+      if (visitedAlwaysInlineOperations.insert(&op).second)
+        lowerAlwaysInlineOperation(&op);
+
       continue;
     }
 
