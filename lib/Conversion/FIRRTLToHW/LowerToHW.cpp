@@ -228,8 +228,12 @@ mergeFIRRTLMemories(const SmallVector<FirMemory> &lhs,
   return retval;
 }
 
-static unsigned getBitWidthFromVectorSize(unsigned size) {
-  return size == 1 ? 1 : llvm::Log2_64_Ceil(size);
+static unsigned getBitWidthFromVectorSize(unsigned size,
+                                          bool allowZeroWidth = false) {
+  unsigned width = llvm::Log2_64_Ceil(size);
+  if (width == 0 && !allowZeroWidth)
+    width = 1;
+  return width;
 }
 
 // Try moving a name from an firrtl expression to a hw expression as a name
@@ -1908,8 +1912,8 @@ Value FIRRTLLowering::getExtOrTruncAggregateValue(Value array,
         .Case<FVectorType>([&](auto srcVectorType) {
           auto destVectorType = destType.cast<FVectorType>();
           unsigned size = resultBuffer.size();
-          unsigned indexWidth =
-              getBitWidthFromVectorSize(srcVectorType.getNumElements());
+          unsigned indexWidth = getBitWidthFromVectorSize(
+              srcVectorType.getNumElements(), /*allowZeroWidth=*/true);
           for (size_t i = 0, e = std::min(srcVectorType.getNumElements(),
                                           destVectorType.getNumElements());
                i != e; ++i) {
@@ -2077,7 +2081,7 @@ Value FIRRTLLowering::getLoweredAndExtOrTruncValue(Value value, Type destType) {
     return result;
 
   if (destWidth == 0)
-    return {};
+    return getOrCreateIntConstant(0, 0);
 
   if (srcWidth > unsigned(destWidth)) {
     auto resultType = builder.getIntegerType(destWidth);
@@ -2416,7 +2420,8 @@ LogicalResult FIRRTLLowering::visitExpr(SubindexOp op) {
 
   auto iIdx = getOrCreateIntConstant(
       getBitWidthFromVectorSize(
-          op.getInput().getType().cast<FVectorType>().getNumElements()),
+          op.getInput().getType().cast<FVectorType>().getNumElements(),
+          /*allowZeroWidth=*/true),
       op.getIndex());
 
   // If the value has an inout type, we need to lower to ArrayIndexInOutOp.
@@ -2437,7 +2442,8 @@ LogicalResult FIRRTLLowering::visitExpr(SubaccessOp op) {
       UIntType::get(
           op.getContext(),
           getBitWidthFromVectorSize(
-              op.getInput().getType().cast<FVectorType>().getNumElements())));
+              op.getInput().getType().cast<FVectorType>().getNumElements(),
+              /*allowZeroWidth=*/true)));
 
   if (!resultType || !value || !valueIdx) {
     op.emitError() << "input lowering failed";

@@ -636,3 +636,4 @@ sv.bind #hw.innerNameRef<@SiFive_MulDiv::@__ETC_SiFive_MulDiv_assert>
 // CHECK-NEXT:  .reset                (reset),
 // CHECK-NEXT:  .clock                (clock)
 
+

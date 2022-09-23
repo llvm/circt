@@ -23,7 +23,7 @@ include "circt/Dialect/HW/HWDialect.td"
 // known, non-directional type.
 def HWIntegerType : DialectType<HWDialect,
     CPred<"::circt::hw::isHWIntegerType($_self)">,
-    "an integer bitvector of one or more bits",
+    "an integer bitvector of zero or more bits",
     "::circt::hw::TypeVariant<::mlir::IntegerType, ::circt::hw::IntType>">;
 
 // Type constraint that indicates that an operand/result may only be a valid,

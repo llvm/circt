@@ -368,13 +368,13 @@ hw.module private @ConnectSubindexMid(%clock: i1, %reset: i1, %value: i2) -> () 
 
 // CHECK-LABEL: hw.module private @ConnectSubindexSingleton
 hw.module private @ConnectSubindexSingleton(%clock: i1, %reset: i1, %value: i2) -> () {
-  %false = hw.constant false
+  %none = hw.constant 0 : i0
   %r = sv.reg : !hw.inout<!hw.array<1xi2>>
   %val = sv.read_inout %r : !hw.inout<!hw.array<1xi2>>
   sv.always posedge %clock {
     sv.passign %r, %1 : !hw.array<1xi2>
   }
-  %0 = hw.array_get %val[%false] : !hw.array<1xi2>
+  %0 = hw.array_get %val[%none] : !hw.array<1xi2>
   %1 = hw.array_create %value : i2
 
   // VERILOG:      always @(posedge clock)

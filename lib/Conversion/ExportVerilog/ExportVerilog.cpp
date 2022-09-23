@@ -2245,7 +2245,15 @@ SubExprInfo ExprEmitter::visitTypeOp(ArraySliceOp op) {
 SubExprInfo ExprEmitter::visitTypeOp(ArrayGetOp op) {
   emitSubExpr(op.getInput(), Selection);
   os << '[';
-  emitSubExpr(op.getIndex(), LowestPrecedence);
+  if (isZeroBitType(op.getIndex().getType())) {
+    // Index expression will have been commented out due to its i0 type, and
+    // there is only one syntactically legal way of indexing into this array.
+    // Emit the index expression as a comment for tracability.
+    os << "/*";
+    emitSubExpr(op.getIndex(), LowestPrecedence);
+    os << "*/ 1\'b0";
+  } else
+    emitSubExpr(op.getIndex(), LowestPrecedence);
   os << ']';
   emitSVAttributes(op);
   return {Selection, IsUnsigned};
