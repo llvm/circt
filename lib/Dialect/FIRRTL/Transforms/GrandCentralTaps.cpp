@@ -855,8 +855,6 @@ class GrandCentralTapsPass : public GrandCentralTapsBase<GrandCentralTapsPass> {
       tappedPorts.insert({key, port});
     else
       zeroWidthTaps.insert(key);
-    if (auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal"))
-      deadNLAs.insert(sym.getAttr());
   }
   void gatherTap(Annotation anno, Operation *op) {
     auto key = getKey(anno);
@@ -872,8 +870,6 @@ class GrandCentralTapsPass : public GrandCentralTapsBase<GrandCentralTapsPass> {
       tappedOps.insert({key, op});
     else
       zeroWidthTaps.insert(key);
-    if (auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal"))
-      deadNLAs.insert(sym.getAttr());
   }
 
   /// Returns a port's `inner_sym`, adding one if necessary.
@@ -906,10 +902,6 @@ class GrandCentralTapsPass : public GrandCentralTapsBase<GrandCentralTapsPass> {
 
   /// Cached module namespaces.
   DenseMap<Operation *, ModuleNamespace> moduleNamespaces;
-
-  /// NLAs which were removed while this pass ran.  These will be garbage
-  /// collected before the pass exits.
-  DenseSet<StringAttr> deadNLAs;
 
   /// The circuit symbol table, used to look up NLAs.
   SymbolTable *circuitSymbols;
@@ -1283,17 +1275,6 @@ void GrandCentralTapsPass::runOnOperation() {
 
     // Drop the original black box module.
     blackBox.extModule.erase();
-  }
-
-  // Garbage collect NLAs which were removed.
-  for (auto &op :
-       llvm::make_early_inc_range(circuitOp.getBodyBlock()->getOperations())) {
-    // Remove NLA anchors whose leaf annotations were removed.
-    if (auto nla = dyn_cast<HierPathOp>(op)) {
-      if (deadNLAs.contains(nla.getNameAttr()))
-        nla.erase();
-      continue;
-    }
   }
 }
 

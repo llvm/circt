@@ -112,11 +112,23 @@ static FlatSymbolRefAttr buildNLA(const AnnoPathValue &target,
 
   insts.push_back(
       FlatSymbolRefAttr::get(target.ref.getModule().moduleNameAttr()));
+
   auto instAttr = ArrayAttr::get(state.circuit.getContext(), insts);
+
+  // Re-use NLA for this path if already created.
+  auto it = state.instPathToNLAMap.find(instAttr);
+  if (it != state.instPathToNLAMap.end()) {
+    ++state.numReusedHierPaths;
+    return it->second;
+  }
+
+  // Create the NLA
   auto nla = b.create<HierPathOp>(state.circuit.getLoc(), "nla", instAttr);
   state.symTbl.insert(nla);
   nla.setVisibility(SymbolTable::Visibility::Private);
-  return FlatSymbolRefAttr::get(nla);
+  auto sym = FlatSymbolRefAttr::get(nla);
+  state.instPathToNLAMap.insert({instAttr, sym});
+  return sym;
 }
 
 /// Scatter breadcrumb annotations corresponding to non-local annotations
@@ -504,6 +516,7 @@ void LowerAnnotationsPass::runOnOperation() {
   numRawAnnotations += annotations.size();
   numAddedAnnos += numAdded;
   numAnnos += numAdded + annotations.size();
+  numReusedHierPathOps += state.numReusedHierPaths;
 
   if (numFailures)
     signalPassFailure();

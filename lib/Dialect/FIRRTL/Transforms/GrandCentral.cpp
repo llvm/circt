@@ -572,10 +572,6 @@ private:
 
   NLATable *nlaTable;
 
-  /// The set of NLAs that are dead after this pass.  These will be removed
-  /// before the pass finishes.
-  DenseSet<StringAttr> deadNLAs;
-
   /// The design-under-test (DUT) as determined by the presence of a
   /// "sifive.enterprise.firrtl.MarkDUTAnnotation".  This will be null if no DUT
   /// was found.
@@ -1971,8 +1967,6 @@ void GrandCentralPass::runOnOperation() {
                 annotation.getMember<FlatSymbolRefAttr>("circt.nonlocal");
             leafMap[*maybeID] = {{op.getResult(), annotation.getFieldID()},
                                  sym};
-            if (sym)
-              deadNLAs.insert(sym.getAttr());
             ++numAnnosRemoved;
             return true;
           });
@@ -2027,8 +2021,6 @@ void GrandCentralPass::runOnOperation() {
                 annotation.getMember<FlatSymbolRefAttr>("circt.nonlocal");
             leafMap[*maybeID] = {{op.getArgument(i), annotation.getFieldID()},
                                  sym};
-            if (sym)
-              deadNLAs.insert(sym.getAttr());
             ++numAnnosRemoved;
             return true;
           });
@@ -2365,38 +2357,6 @@ void GrandCentralPass::runOnOperation() {
                       &getContext(), maybeHierarchyFileYAML->getValue(),
                       /*excludFromFileList=*/true));
     LLVM_DEBUG({ llvm::dbgs() << "Generated YAML:" << yamlString << "\n"; });
-  }
-
-  // Garbage collect dead NLAs.
-  auto symTable = getSymbolTable();
-  for (auto &op :
-       llvm::make_early_inc_range(circuitOp.getBodyBlock()->getOperations())) {
-
-    // Remove NLA operations.
-    if (auto nla = dyn_cast<HierPathOp>(op)) {
-      if (deadNLAs.count(nla.getSymNameAttr())) {
-        nlaTable->erase(nla);
-        symTable.erase(nla);
-      }
-      continue;
-    }
-
-    auto fmodule = dyn_cast<FModuleOp>(op);
-    if (!fmodule)
-      continue;
-
-    auto isDead = [&](Annotation anno) -> bool {
-      auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal");
-      if (!sym)
-        return false;
-      bool remove = deadNLAs.count(sym.getAttr());
-      numAnnosRemoved += remove;
-      return remove;
-    };
-
-    // Visit module bodies to remove any dead NLA breadcrumbs.
-    for (auto op : fmodule.getBodyBlock()->getOps<InstanceOp>())
-      AnnotationSet::removeAnnotations(op, isDead);
   }
 
   // Signal pass failure if any errors were found while examining circuit
