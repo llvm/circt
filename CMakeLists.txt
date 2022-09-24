@@ -390,7 +390,7 @@ else()
 
     string(REGEX MATCH "Icarus Verilog version (([0-9]+)\.([0-9]+)) \.*"
       MATCH ${IVERILOG_VERSION})
-    
+
     if (${CMAKE_MATCH_1} LESS 11.0)
       message(FATAL_ERROR "CIRCT only supports Icarus Verilog version 11.0 and up. \
                            Found version: ${CMAKE_MATCH_1}. You can disable \
@@ -471,6 +471,28 @@ else()
 endif()
 
 llvm_canonicalize_cmake_booleans(CIRCT_LLHD_SIM_ENABLED)
+
+#-------------------------------------------------------------------------------
+# circt-lec Configuration
+#-------------------------------------------------------------------------------
+# If circt-lec hasn't been explicitly disabled, find it.
+option(CIRCT_LEC_DISABLE "Disable the Logical Equivalence Checker")
+if(CIRC_LEC_DISABLE)
+  message (STATUS "Disabling circt-lec")
+else()
+  if(Z3_DIR)
+    # Custom path specified, appending to the runpath for linking
+    list(APPEND CMAKE_INSTALL_RPATH ${Z3_DIR})
+    set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+  endif()
+
+  find_package(Z3 CONFIG)
+  if(Z3_FOUND)
+    message(STATUS "Z3 identified as a logical backend")
+    # Can proceed building circt-lec
+    set(CIRCT_LEC_ENABLED ON)
+  endif()
+endif()
 
 #-------------------------------------------------------------------------------
 # Python Configuration
