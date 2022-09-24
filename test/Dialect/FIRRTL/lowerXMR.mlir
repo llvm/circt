@@ -440,3 +440,31 @@ firrtl.circuit "Top"  {
     // CHECK:  firrtl.strictconnect %memTap_7, %7 : !firrtl.uint<8>
   }
 }
+
+// -----
+
+firrtl.circuit "Top"  {
+  // CHECK-LABEL:  firrtl.module private @DUTModule
+  // CHECK-SAME: in %io_wen: !firrtl.uint<1>, out %io_dataOut: !firrtl.uint<8>)
+  firrtl.module private @DUTModule(in %clock: !firrtl.clock, in %io_addr: !firrtl.uint<3>, in %io_dataIn: !firrtl.uint<8>, in %io_wen: !firrtl.uint<1>, out %io_dataOut: !firrtl.uint<8>, out %_gen_memTap_0: !firrtl.ref<uint<8>>, out %_gen_memTap_1: !firrtl.ref<uint<8>>) attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %rf_memTap, %rf_read, %rf_write = firrtl.mem  Undefined  {depth = 2 : i64, groupID = 1 : ui32, name = "rf", portNames = ["memTap", "read", "write"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.ref<vector<uint<8>, 2>>, !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<8>>, !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
+    // CHECK:  %rf_read, %rf_write = firrtl.mem sym @xmr_sym  Undefined  {depth = 2 : i64, groupID = 1 : ui32, name = "rf", portNames = ["read", "write"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<8>>, !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
+    %9 = firrtl.ref.sub %rf_memTap[0] : !firrtl.ref<vector<uint<8>, 2>>
+    firrtl.strictconnect %_gen_memTap_0, %9 : !firrtl.ref<uint<8>>
+    %10 = firrtl.ref.sub %rf_memTap[1] : !firrtl.ref<vector<uint<8>, 2>>
+    firrtl.strictconnect %_gen_memTap_1, %10 : !firrtl.ref<uint<8>>
+  }
+  firrtl.module @Top(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %io_addr: !firrtl.uint<3>, in %io_dataIn: !firrtl.uint<8>, in %io_wen: !firrtl.uint<1>, out %io_dataOut: !firrtl.uint<8>) {
+    %dut_clock, %dut_io_addr, %dut_io_dataIn, %dut_io_wen, %dut_io_dataOut, %dut__gen_memTap_0, %dut__gen_memTap_1 = firrtl.instance dut  @DUTModule(in clock: !firrtl.clock, in io_addr: !firrtl.uint<3>, in io_dataIn: !firrtl.uint<8>, in io_wen: !firrtl.uint<1>, out io_dataOut: !firrtl.uint<8>, out _gen_memTap_0: !firrtl.ref<uint<8>>, out _gen_memTap_1: !firrtl.ref<uint<8>>)
+    // CHECK{LITERAL}:  %0 = firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}.Memory[0]" : () -> !firrtl.uint<8> {symbols = [@Top, #hw.innerNameRef<@Top::@xmr_sym>, #hw.innerNameRef<@DUTModule::@xmr_sym>]}
+    %0 = firrtl.ref.resolve %dut__gen_memTap_0 : !firrtl.ref<uint<8>>
+    // CHECK{LITERAL}:  %1 = firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}.Memory[1]" : () -> !firrtl.uint<8> {symbols = [@Top, #hw.innerNameRef<@Top::@xmr_sym>, #hw.innerNameRef<@DUTModule::@xmr_sym>]}
+    %1 = firrtl.ref.resolve %dut__gen_memTap_1 : !firrtl.ref<uint<8>>
+    firrtl.strictconnect %dut_clock, %clock : !firrtl.clock
+    %memTap_0 = firrtl.wire   {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<8>
+    %memTap_1 = firrtl.wire   {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<8>
+    firrtl.strictconnect %memTap_0, %0 : !firrtl.uint<8>
+    firrtl.strictconnect %memTap_1, %1 : !firrtl.uint<8>
+  }
+}
