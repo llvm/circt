@@ -168,7 +168,7 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
         return foldFlow(op.getInput(),
                         op.isFieldFlipped() ? swap() : accumulatedFlow);
       })
-      .Case<SubindexOp, SubaccessOp>(
+      .Case<SubindexOp, SubaccessOp, RefSubOp>(
           [&](auto op) { return foldFlow(op.getInput(), accumulatedFlow); })
       // Registers, Wires, and behavioral memory ports are always Duplex.
       .Case<RegOp, RegResetOp, WireOp, MemoryPortOp>(
@@ -4034,6 +4034,43 @@ void RefResolveOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 void RefSendOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
+}
+
+void RefSubOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+
+FIRRTLType RefSubOp::inferReturnType(ValueRange operands,
+                                     ArrayRef<NamedAttribute> attrs,
+                                     Optional<Location> loc) {
+  auto inType = operands[0].getType().cast<RefType>().getType();
+  auto fieldIdx =
+      getAttr<IntegerAttr>(attrs, "index").getValue().getZExtValue();
+
+  if (auto vectorType = inType.dyn_cast<FVectorType>()) {
+    if (fieldIdx < vectorType.getNumElements())
+      return RefType::get(vectorType.getElementType());
+    if (loc)
+      mlir::emitError(*loc, "out of range index '")
+          << fieldIdx << "' in RefType of vector type "
+          << operands[0].getType();
+    return {};
+  }
+  if (auto bundleType = inType.dyn_cast<BundleType>()) {
+    if (fieldIdx >= bundleType.getNumElements()) {
+      if (loc)
+        mlir::emitError(*loc,
+                        "subfield element index is greater than the number "
+                        "of fields in the bundle type");
+      return {};
+    }
+    return RefType::get(bundleType.getElement(fieldIdx).type);
+  }
+
+  if (loc)
+    mlir::emitError(
+        *loc, "ref.sub op requires a RefType of vector or bundle base type");
+  return {};
 }
 
 //===----------------------------------------------------------------------===//
