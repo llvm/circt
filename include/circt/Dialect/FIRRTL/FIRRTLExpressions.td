@@ -736,3 +736,22 @@ def RefSendOp: FIRRTLExprOp<"ref.send", [RefResultTypeConstraint<"base", "result
 
   let assemblyFormat = "$base attr-dict `:` qualified(type($base))";
 }
+
+def RefSubOp : FIRRTLExprOp<"ref.sub"> {
+  let summary = "Extract an element of an aggregate RefType value";
+  let description = [{
+    The refsub expression statically refers, by index, to a sub-element
+    of an expression with a RefType. The index must be a non-negative
+    integer and cannot be equal to or exceed the underlying vector size
+    or number of elements in bundle.
+    ```
+      %result = firrtl.ref.sub %input[index] : t1
+    ```
+    }];
+
+  let arguments = (ins RefType:$input, I32Attr:$index);
+  let results = (outs RefType:$result);
+
+  let assemblyFormat =
+     "$input `[` $index `]` attr-dict `:` qualified(type($input))";
+}

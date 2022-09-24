@@ -113,3 +113,23 @@ firrtl.circuit "DUT" {
     sv.interface.signal @bool : i1
   }
 }
+
+// -----
+
+// RefType of aggregates and RefSub. 
+firrtl.circuit "RefTypeVector" {
+  firrtl.module @RefTypeVector() {
+    %zero = firrtl.constant 0 : !firrtl.uint<4>
+    %z = firrtl.bitcast %zero : (!firrtl.uint<4>) -> !firrtl.vector<uint<1>,4>
+    %1 = firrtl.ref.send %z : !firrtl.vector<uint<1>,4>
+    %10 = firrtl.ref.sub %1[0] : !firrtl.ref<vector<uint<1>,4>>
+    %11 = firrtl.ref.sub %1[1] : !firrtl.ref<vector<uint<1>,4>>
+    %a = firrtl.ref.resolve %10 : !firrtl.ref<uint<1>>
+    %b = firrtl.ref.resolve %11 : !firrtl.ref<uint<1>>
+    %z2 = firrtl.constant 0 : !firrtl.uint<3>
+    %bundle = firrtl.bitcast %z2 : (!firrtl.uint<3>) -> !firrtl.bundle<a: uint<1>, b: uint<2>>
+    %b1 = firrtl.ref.send %bundle : !firrtl.bundle<a: uint<1>, b: uint<2>>
+    %12 = firrtl.ref.sub %b1[1] : !firrtl.ref<bundle<a: uint<1>, b: uint<2>>>
+    %rb = firrtl.ref.resolve %12 : !firrtl.ref<uint<2>>
+  }
+}
