@@ -712,11 +712,13 @@ hw.module @instance_result_reuse_wires() -> (b: i3) {
 }
 
 hw.module.extern @ExternDestMod(%a: i1, %b: i2) -> (c: i3, d: i4)
-hw.module @InternalDestMod(%a: i1, %b: i3) {}
+hw.module @InternalDestMod(%a: i1, %b: i3, %c: i1) {}
 // CHECK-LABEL module ABC
 hw.module @ABC(%a: i1, %b: i2) -> (c: i4) {
   %0,%1 = hw.instance "whatever" sym @a1 @ExternDestMod(a: %a: i1, b: %b: i2) -> (c: i3, d: i4) {doNotPrint=1}
-  hw.instance "yo" sym @b1 @InternalDestMod(a: %a: i1, b: %0: i3) -> () {doNotPrint=1}
+  %2 = sv.xmr "whatever", "a" : !hw.inout<i1>
+  %3 = sv.read_inout %2: !hw.inout<i1>
+  hw.instance "yo" sym @b1 @InternalDestMod(a: %a: i1, b: %0: i3, c: %3: i1) -> () {doNotPrint=1}
   hw.output %1 : i4
 }
 
@@ -733,6 +735,7 @@ hw.module @ABC(%a: i1, %b: i2) -> (c: i4) {
 // CHECK-NEXT:      InternalDestMod yo (
 // CHECK-NEXT:        .a (a),
 // CHECK-NEXT:        .b (_whatever_c)
+// CHECK-NEXT:        .c (whatever.a)
 // CHECK-NEXT:      );
 // CHECK-NEXT:   */
 // CHECK-NEXT: endmodule
