@@ -108,11 +108,13 @@ PortInfo getModuleOutputPort(Operation *op, size_t idx);
 /// be in ascending order. The indices refer to the port positions before any
 /// insertion or removal occurs. Ports inserted at the same index will appear in
 /// the module in the same order as they were listed in the `insert*` array.
+/// If 'body' is provided, additionally inserts/removes the corresponding
+/// block arguments.
 void modifyModulePorts(Operation *op,
                        ArrayRef<std::pair<unsigned, PortInfo>> insertInputs,
                        ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs,
                        ArrayRef<unsigned> removeInputs,
-                       ArrayRef<unsigned> removeOutputs);
+                       ArrayRef<unsigned> removeOutputs, Block *body = nullptr);
 
 // Helpers for working with modules.
 
