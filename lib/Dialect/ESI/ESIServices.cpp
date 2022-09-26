@@ -508,47 +508,46 @@ LogicalResult ESIConnectServicesPass::surfaceReqs(
   unsigned origNumInputs = mod.getNumInputs();
   SmallVector<std::pair<unsigned, hw::PortInfo>> newInputs;
   unsigned origNumOutputs = mod.getNumOutputs();
-  SmallVector<std::pair<unsigned, hw::PortInfo>> newOutputs;
+  SmallVector<std::pair<mlir::StringAttr, Value>> newOutputs;
 
   // Assemble a port name from an array.
-  auto getPortName = [](ArrayAttr namePath) {
+  auto getPortName = [&](ArrayAttr namePath) {
     std::string portName;
     llvm::raw_string_ostream nameOS(portName);
     llvm::interleave(
         namePath.getValue(), nameOS,
         [&](Attribute attr) { nameOS << attr.cast<StringAttr>().getValue(); },
         ".");
-    return nameOS.str();
+    return StringAttr::get(ctxt, nameOS.str());
   };
 
-  // Append input ports to new port list and replace uses with new block args
-  // which will correspond to said ports.
-  unsigned inputCounter = origNumInputs;
+  // Insert new module input ESI ports.
   for (auto toClient : toClientReqs) {
     newInputs.push_back(std::make_pair(
-        origNumInputs,
-        hw::PortInfo{
-            StringAttr::get(ctxt, getPortName(toClient.getClientNamePath())),
-            hw::PortDirection::INPUT, toClient.getType(), inputCounter++}));
-    toClient.replaceAllUsesWith(modBlock.addArgument(
-        toClient.getToClient().getType(), toClient.getLoc()));
+        origNumInputs, hw::PortInfo{getPortName(toClient.getClientNamePath()),
+                                    hw::PortDirection::INPUT,
+                                    toClient.getType(), origNumInputs}));
   }
+  mod.insertPorts(newInputs, {});
+  Block *body = &mod->getRegion(0).front();
+
+  // Replace uses with new block args which will correspond to said ports.
+  // Note: no zip or enumerate here because we need mutable access to
+  // toClientReqs.
+  int i = 0;
+  for (auto toClient : toClientReqs) {
+    toClient.replaceAllUsesWith(body->getArguments()[origNumInputs + i]);
+    ++i;
+  }
+
   // Append output ports to new port list and redirect toServer inputs to
   // output op.
   unsigned outputCounter = origNumOutputs;
-  for (auto toServer : toServerReqs) {
-    newOutputs.push_back(std::make_pair(
-        origNumOutputs,
-        hw::PortInfo{
-            StringAttr::get(ctxt, getPortName(toServer.getClientNamePath())),
-            hw::PortDirection::OUTPUT, toServer.getToServer().getType(),
-            outputCounter++}));
-    modTerminator->insertOperands(modTerminator->getNumOperands(),
-                                  toServer.getToServer());
-  }
+  for (auto toServer : toServerReqs)
+    newOutputs.push_back(
+        {getPortName(toServer.getClientNamePath()), toServer.getToServer()});
 
-  // Insert new module ESI ports.
-  mod.insertPorts(newInputs, newOutputs);
+  mod.appendOutputs(newOutputs);
 
   // Prepend a name to the instance tracking array.
   auto prependNamePart = [&](ArrayAttr namePath, StringRef part) {
@@ -583,7 +582,7 @@ LogicalResult ESIConnectServicesPass::surfaceReqs(
 
     // Append the results for the to_server requests.
     for (auto newPort : newOutputs)
-      newResultTypes.push_back(newPort.second.type);
+      newResultTypes.push_back(newPort.second.getType());
 
     // Create a replacement instance of the same operation type.
     SmallVector<NamedAttribute> newAttrs;
