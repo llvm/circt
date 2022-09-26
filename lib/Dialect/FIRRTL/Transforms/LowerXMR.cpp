@@ -101,8 +101,8 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
                       .cast<FIRRTLType>()
                       .isa<RefType>()) {
                 auto inRef = getInnerRefTo(mem);
-                addReachingSendsEntry(res.value(), inRef);
-                xmrPathSuffix[inRef] = ".Memory";
+                auto ind = addReachingSendsEntry(res.value(), inRef);
+                xmrPathSuffix[ind] = ".Memory";
                 // Just node that all the debug ports of memory must be removed.
                 // So this does not record the port index.
                 refPortsToRemoveMap[mem].resize(1);
@@ -128,6 +128,20 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
             // dataflow at this connect and every value reachable from the
             // destination.
             dataFlowClasses.unionSets(connect.getSrc(), connect.getDest());
+            return success();
+          })
+          .Case<RefSubOp>([&](RefSubOp op) {
+            markForRemoval(op);
+            auto defMem = dyn_cast<MemOp>(op.getInput().getDefiningOp());
+            if (!defMem) {
+              defMem.emitOpError("can only lower RefSubOp of Memory");
+              return failure();
+            }
+            auto inRef = getInnerRefTo(defMem);
+            auto ind = addReachingSendsEntry(op.getResult(), inRef);
+            xmrPathSuffix[ind] =
+                (".Memory[" + Twine(op.getIndex()) + "]").str();
+
             return success();
           })
           .Case<RefResolveOp>([&](RefResolveOp resolve) {
@@ -218,8 +232,10 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
                               .getModuleRef());
     SmallString<128> xmrString;
     Attribute lastInnerRef;
+    size_t lastIndex;
     unsigned index = 0;
     for (; remoteOpPath; ++index) {
+      lastIndex = remoteOpPath.value();
       auto entr = refSendPathList[remoteOpPath.value()];
       refSendPath.push_back(entr.first);
       lastInnerRef = entr.first;
@@ -228,11 +244,11 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
       xmrString += '.';
     }
     ("{{" + Twine(index) + "}}").toVector(xmrString);
-    auto iter = xmrPathSuffix.find(lastInnerRef);
+    auto iter = xmrPathSuffix.find(lastIndex);
     // If this xmr has a suffix string (internal path into a module, that is not
     // yet generated).
     if (iter != xmrPathSuffix.end())
-      xmrString += xmrPathSuffix[lastInnerRef];
+      xmrString += iter->getSecond();
     if (auto vec = resolve.getResult().getType().dyn_cast<FVectorType>()) {
       // If the RefType is a vector, then replace all its users with [i] suffix,
       // instead of creatign a temp wire to the vector xmr, and then followup
@@ -456,7 +472,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
   SmallVector<Operation *> opsToRemove;
 
   /// Record the internal path to an external module or a memory.
-  DenseMap<innerRefToVal, SmallString<128>> xmrPathSuffix;
+  DenseMap<size_t, SmallString<128>> xmrPathSuffix;
 };
 
 std::unique_ptr<mlir::Pass> circt::firrtl::createLowerXMRPass() {
