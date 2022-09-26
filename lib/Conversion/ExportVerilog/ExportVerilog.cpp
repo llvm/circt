@@ -4393,13 +4393,25 @@ StringRef ModuleEmitter::getNameRemotely(Value value,
 
   Operation *valueOp = value.getDefiningOp();
 
-  // Handle wires/registers, likely as instance inputs.
+  // Handle wires/registers/XMR references, likely as instance inputs.
   if (auto readinout = dyn_cast<ReadInOutOp>(valueOp)) {
     auto *wireInput = readinout.getInput().getDefiningOp();
     if (!wireInput)
       return {};
     if (isa<WireOp, RegOp, LogicOp>(wireInput))
       return getSymOpName(wireInput);
+
+    if (auto xmr = dyn_cast<XMROp>(wireInput)) {
+      SmallString<16> xmrString;
+      if (xmr.getIsRooted())
+        xmrString.append("$root.");
+      for (auto s : xmr.getPath()) {
+        xmrString.append(s.cast<StringAttr>().getValue());
+        xmrString.append(".");
+      }
+      xmrString.append(xmr.getTerminal());
+      return StringAttr::get(value.getContext(), xmrString);
+    }
   }
 
   // Handle values being driven onto wires, likely as instance outputs.
