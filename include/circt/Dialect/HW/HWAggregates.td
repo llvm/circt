@@ -118,12 +118,8 @@ def ArraySliceOp : HWOp<"array_slice", [NoSideEffect]> {
 }
 
 class IndexBitWidthConstraint<string index, string input>
-  : TypesMatchWith<"Index width should be exactly clog2 (size of array)",
-                   input, index,
-                   [{
-    IntegerType::get($_self.getContext(),
-                     llvm::Log2_64_Ceil(type_cast<ArrayType>($_self).getSize()))
-                   }]>;
+  : PredOpTrait<"Index width should be exactly clog2 (size of array), or either 0 or 1 if the array is a singleton.",
+                   CPred<"isValidIndexBitWidth($" # index # ", $" # input # ")">>;
 
 class ArrayElementTypeConstraint<string result, string input>
   : TypesMatchWith<"Result must be arrays element type",
@@ -139,7 +135,7 @@ def ArrayGetOp : HWOp<"array_get",
   let results = (outs HWNonInOutType:$result);
 
   let assemblyFormat = [{
-    $input`[`$index`]` attr-dict `:` qualified(type($input))
+    $input`[`$index`]` attr-dict `:` qualified(type($input)) `,` qualified(type($index))
   }];
 
   let builders = [

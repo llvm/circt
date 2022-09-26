@@ -77,8 +77,8 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
   %subArr = hw.array_create %allone, %ab, %allone : i4
 
   %38 = hw.array_concat %subArr, %subArr : !hw.array<3 x i4>, !hw.array<3 x i4>
-  %elem2d = hw.array_get %array2d[%a] : !hw.array<12 x array<10xi4>>
-  %37 = hw.array_get %elem2d[%b] {sv.attributes=#sv.attributes<[#sv.attribute<"svAttr">]>}: !hw.array<10xi4>
+  %elem2d = hw.array_get %array2d[%a] : !hw.array<12 x array<10xi4>>, i4
+  %37 = hw.array_get %elem2d[%b] {sv.attributes=#sv.attributes<[#sv.attribute<"svAttr">]>}: !hw.array<10xi4>, i4
 
   %36 = comb.replicate %a : (i4) -> i12
 
@@ -87,7 +87,7 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
   %41 = hw.struct_create (%c, %a) : !hw.struct<foo: i2, bar: i4>
   %42 = hw.struct_inject %41["bar"], %b : !hw.struct<foo: i2, bar: i4>
   %none = hw.constant 0 : i0
-  %43 = hw.array_get %array1[%none] : !hw.array<1xi1>
+  %43 = hw.array_get %array1[%none] : !hw.array<1xi1>, i0
 
   hw.output %0, %2, %4, %6, %7, %8, %9, %10, %11, %12, %13, %14,
               %15, %16, %17, %18, %19, %20, %21, %22, %23, %24, %25, %26, %27,
@@ -524,10 +524,10 @@ hw.module @TestZeroStructInstance(%structZero: !hw.struct<>, %structZeroNest: !h
 hw.module @testZeroArrayGet(%arg0: i0, %arg1 : !hw.array<1xi32>) -> (out: i32, out1: i32, out2: i0) {
   // Using an expression as index.
   %idx = comb.add %arg0, %arg0 : i0
-  %0 = hw.array_get %arg1[%idx] : !hw.array<1xi32>
+  %0 = hw.array_get %arg1[%idx] : !hw.array<1xi32>, i0
 
   // Using an argument as index.
-  %1 = hw.array_get %arg1[%arg0] : !hw.array<1xi32>
+  %1 = hw.array_get %arg1[%arg0] : !hw.array<1xi32>, i0
   hw.output %0, %1, %arg0 : i32, i32, i0
 }
 
@@ -857,7 +857,7 @@ hw.module @Issue1563(%a: i32) -> (out : i32) {
 // Issue #1587: https://github.com/llvm/circt/issues/1587
 hw.module @Foo1587(%idx: i2, %a_0: i4, %a_1: i4, %a_2: i4, %a_3: i4) -> (b: i4) {
   %0 = hw.array_create %a_0, %a_1, %a_2, %a_3 : i4
-  %1 = hw.array_get %0[%idx] : !hw.array<4xi4>
+  %1 = hw.array_get %0[%idx] : !hw.array<4xi4>, i2
   hw.output %1 : i4
   // CHECK: wire [3:0][3:0] [[WIRE:.+]] = {{[{}][{}]}}a_0}, {a_1}, {a_2}, {a_3}};
   // CHECK-NEXT: assign b = [[WIRE]][idx];
@@ -1230,7 +1230,7 @@ hw.module @ParamConcatInst<name: none = "top">() -> () {
 // CHECK-LABEL: module ArrayGetInline
 hw.module @ArrayGetInline(%a: !hw.array<4xstruct<a: i32>>) -> (out: i32) {
   %c0_i2 = hw.constant 0 : i2
-  %x = hw.array_get %a[%c0_i2] : !hw.array<4xstruct<a: i32>>
+  %x = hw.array_get %a[%c0_i2] : !hw.array<4xstruct<a: i32>>, i2
   %y = hw.struct_extract %x["a"] : !hw.struct<a: i32>
   // CHECK: assign out = a[2'h0].a;
   hw.output %y : i32

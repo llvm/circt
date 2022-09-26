@@ -39,6 +39,16 @@ PortDirection hw::flip(PortDirection direction) {
   llvm_unreachable("unknown PortDirection");
 }
 
+bool hw::isValidIndexBitWidth(Value index, Value array) {
+  hw::ArrayType arrayType =
+      hw::getCanonicalType(array.getType()).dyn_cast<hw::ArrayType>();
+  assert(arrayType && "expected array type");
+  unsigned indexWidth = index.getType().getIntOrFloatBitWidth();
+  auto requiredWidth = llvm::Log2_64_Ceil(arrayType.getSize());
+  return requiredWidth == 0 ? (indexWidth == 0 || indexWidth == 1)
+                            : indexWidth == requiredWidth;
+}
+
 /// Return true if the specified operation is a combinational logic op.
 bool hw::isCombinational(Operation *op) {
   struct IsCombClassifier : public TypeOpVisitor<IsCombClassifier, bool> {

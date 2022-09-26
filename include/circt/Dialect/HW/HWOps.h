@@ -161,6 +161,10 @@ static inline StringRef getModuleResultName(Operation *module,
   return attr ? attr.getValue() : StringRef();
 }
 
+// Index width should be exactly clog2 (size of array), or either 0 or 1 if the
+// array is a singleton.
+bool isValidIndexBitWidth(Value index, Value array);
+
 void setModuleArgumentNames(Operation *module, ArrayRef<Attribute> names);
 void setModuleResultNames(Operation *module, ArrayRef<Attribute> names);
 

@@ -1048,10 +1048,10 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.connect %r1, %a : !firrtl.vector<uint<2>, 1>, !firrtl.vector<uint<1>, 1>
     firrtl.connect %b, %r1 : !firrtl.vector<uint<3>, 1>, !firrtl.vector<uint<2>, 1>
     // CHECK:      %r1 = seq.firreg %3 clock %clock : !hw.array<1xi2>
-    // CHECK-NEXT: %1 = hw.array_get %a[%c0_i0] : !hw.array<1xi1>
+    // CHECK-NEXT: %1 = hw.array_get %a[%false] : !hw.array<1xi1>
     // CHECK-NEXT: %2 = comb.concat %false, %1 : i1, i1
     // CHECK-NEXT: %3 = hw.array_create %2 : i2
-    // CHECK-NEXT: %4 = hw.array_get %r1[%c0_i0] : !hw.array<1xi2>
+    // CHECK-NEXT: %4 = hw.array_get %r1[%false] : !hw.array<1xi2>
     // CHECK-NEXT: %5 = comb.concat %false, %4 : i1, i2
     // CHECK-NEXT: %6 = hw.array_create %5 : i3
     // CHECK-NEXT: sv.assign %.b.output, %6 : !hw.array<1xi3>
@@ -1064,10 +1064,10 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.connect %r1, %a : !firrtl.vector<sint<2>, 1>, !firrtl.vector<sint<1>, 1>
     firrtl.connect %b, %r1 : !firrtl.vector<sint<3>, 1>, !firrtl.vector<sint<2>, 1>
     // CHECK:      %r1 = seq.firreg %3 clock %clock : !hw.array<1xi2>
-    // CHECK-NEXT: %1 = hw.array_get %a[%c0_i0] : !hw.array<1xi1>
+    // CHECK-NEXT: %1 = hw.array_get %a[%false] : !hw.array<1xi1>
     // CHECK-NEXT: %2 = comb.concat %1, %1 : i1, i1
     // CHECK-NEXT: %3 = hw.array_create %2 : i2
-    // CHECK-NEXT: %4 = hw.array_get %r1[%c0_i0] : !hw.array<1xi2>
+    // CHECK-NEXT: %4 = hw.array_get %r1[%false] : !hw.array<1xi2>
     // CHECK-NEXT: %5 = comb.extract %4 from 1 : (i2) -> i1
     // CHECK-NEXT: %6 = comb.concat %5, %4 : i1, i2
     // CHECK-NEXT: %7 = hw.array_create %6 : i3
@@ -1087,8 +1087,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.connect %o2, %r2 : !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>
     // CHECK:      %r1 = seq.firreg %1 clock %clock : i1
     // CHECK-NEXT: %r2 = seq.firreg %0 clock %clock : !hw.array<1xi1>
-    // CHECK-NEXT: %0 = hw.array_get %a[%c0_i0] : !hw.array<1xarray<1xi1>>
-    // CHECK-NEXT: %1 = hw.array_get %0[%c0_i0] : !hw.array<1xi1>
+    // CHECK-NEXT: %0 = hw.array_get %a[%false] : !hw.array<1xarray<1xi1>>
+    // CHECK-NEXT: %1 = hw.array_get %0[%false] : !hw.array<1xi1>
     // CHECK-NEXT: hw.output %r1, %r2 : i1, !hw.array<1xi1>
   }
 
@@ -1102,15 +1102,14 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.connect %r2, %0 : !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>
     firrtl.connect %o1, %r1 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %o2, %r2 : !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>
-    // CHECK:      %c0_i0 = hw.constant 0 : i0
-    // CHECK-NEXT: %r1 = seq.firreg %5 clock %clock : i1
+    // CHECK:      %r1 = seq.firreg %5 clock %clock : i1
     // CHECK-NEXT: %r2 = seq.firreg %2 clock %clock : !hw.array<1xi1>
     // CHECK-NEXT: %0 = sv.wire
-    // CHECK-NEXT: %1 = hw.array_get %a[%c0_i0] {sv.attributes = #sv.attributes<[#sv.attribute<"cadence map_to_mux">], emitAsComments>}
+    // CHECK-NEXT: %1 = hw.array_get %a[%x] {sv.attributes = #sv.attributes<[#sv.attribute<"cadence map_to_mux">], emitAsComments>}
     // CHECK-NEXT: sv.assign %0, %1 {sv.attributes = #sv.attributes<[#sv.attribute<"synopsys infer_mux_override">], emitAsComments>}
     // CHECK-NEXT: %2 = sv.read_inout %0 : !hw.inout<array<1xi1>> 
     // CHECK-NEXT: %3 = sv.wire : !hw.inout<i1>
-    // CHECK-NEXT: %4 = hw.array_get %2[%c0_i0] {sv.attributes = #sv.attributes<[#sv.attribute<"cadence map_to_mux">], emitAsComments>}
+    // CHECK-NEXT: %4 = hw.array_get %2[%y] {sv.attributes = #sv.attributes<[#sv.attribute<"cadence map_to_mux">], emitAsComments>}
     // CHECK-NEXT: sv.assign %3, %4 {sv.attributes = #sv.attributes<[#sv.attribute<"synopsys infer_mux_override">], emitAsComments>}
     // CHECK-NEXT: %5 = sv.read_inout %3 : !hw.inout<i1>
     // CHECK-NEXT: hw.output %r1, %r2 : i1, !hw.array<1xi1>
