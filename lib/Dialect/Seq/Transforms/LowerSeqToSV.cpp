@@ -89,9 +89,9 @@ namespace {
 /// Lower FirRegOp to `sv.reg` and `sv.always`.
 class FirRegLower {
 public:
-  FirRegLower() = default;
+  FirRegLower(hw::HWModuleOp module) : module(module){};
 
-  void lower(hw::HWModuleOp module);
+  void lower();
 
 private:
   struct RegLowerInfo {
@@ -102,11 +102,11 @@ private:
     size_t width;
   };
 
-  RegLowerInfo lower(hw::HWModuleOp module, FirRegOp reg);
+  RegLowerInfo lower(FirRegOp reg);
 
   void initialize(OpBuilder &builder, RegLowerInfo reg, ArrayRef<Value> rands);
 
-  void createTree(OpBuilder &builder, sv::RegOp reg, Value term, Value next);
+  void createTree(OpBuilder &builder, Value reg, Value term, Value next);
 
   void addToAlwaysBlock(Block *block, sv::EventControl clockEdge, Value clock,
                         std::function<void(OpBuilder &)> body,
@@ -118,6 +118,17 @@ private:
                     const std::function<void()> &trueSide,
                     const std::function<void()> &falseSide);
 
+  hw::ConstantOp getOrCreateConstant(const APInt &value) {
+    OpBuilder builder(module.getBody());
+    auto &it = constantCache[value];
+    if (it)
+      return it;
+
+    auto unknown = UnknownLoc::get(module.getContext());
+    it = builder.create<hw::ConstantOp>(unknown, value);
+    return it;
+  }
+
   using AlwaysKeyType = std::tuple<Block *, sv::EventControl, Value, ResetType,
                                    sv::EventControl, Value>;
   llvm::SmallDenseMap<AlwaysKeyType, std::pair<sv::AlwaysOp, sv::IfOp>>
@@ -125,6 +136,11 @@ private:
 
   using IfKeyType = std::pair<Block *, Value>;
   llvm::SmallDenseMap<IfKeyType, sv::IfOp> ifCache;
+
+  llvm::SmallDenseMap<APInt, hw::ConstantOp> constantCache;
+  llvm::SmallDenseMap<std::pair<Value, unsigned>, Value> arrayIndexCache;
+
+  hw::HWModuleOp module;
 };
 } // namespace
 
@@ -147,7 +163,7 @@ void FirRegLower::addToIfBlock(OpBuilder &builder, Value cond,
   }
 }
 
-void FirRegLower::lower(hw::HWModuleOp module) {
+void FirRegLower::lower() {
   // Find all registers to lower in the module.
   auto regs = module.getOps<seq::FirRegOp>();
   if (regs.empty())
@@ -156,7 +172,7 @@ void FirRegLower::lower(hw::HWModuleOp module) {
   // Lower the regs to SV regs.
   SmallVector<RegLowerInfo> toInit;
   for (auto reg : llvm::make_early_inc_range(regs))
-    toInit.push_back(lower(module, reg));
+    toInit.push_back(lower(reg));
 
   // Compute total width of random space.  Place non-chisel registers at the end
   // of the space.  The Random space is unique to the initial block, due to
@@ -259,9 +275,32 @@ void FirRegLower::lower(hw::HWModuleOp module) {
   module->removeAttr("firrtl.random_init_width");
 }
 
-void FirRegLower::createTree(OpBuilder &builder, sv::RegOp reg, Value term,
-                             Value next) {
+// Return true if two arguments are equivalent, or if both of them are the same
+// array indexing.
+// NOLINTNEXTLINE(misc-no-recursion)
+static bool areEquivalentValues(Value term, Value next) {
   if (term == next)
+    return true;
+  // Check whether these values are equivalent array accesses with constant
+  // index. We have to check the equivalence recursively because they might not
+  // be CSEd.
+  if (auto t1 = term.getDefiningOp<hw::ArrayGetOp>())
+    if (auto t2 = next.getDefiningOp<hw::ArrayGetOp>())
+      if (auto c1 = t1.getIndex().getDefiningOp<hw::ConstantOp>())
+        if (auto c2 = t2.getIndex().getDefiningOp<hw::ConstantOp>())
+          return c1.getType() == c2.getType() &&
+                 c1.getValue() == c2.getValue() &&
+                 areEquivalentValues(t1.getInput(), t2.getInput());
+  // Otherwise, regard as different.
+  // TODO: Handle struct if necessary.
+  return false;
+}
+
+void FirRegLower::createTree(OpBuilder &builder, Value reg, Value term,
+                             Value next) {
+  // If term and next values are equivalent, we don't have to create an
+  // assignment.
+  if (areEquivalentValues(term, next))
     return;
   auto mux = next.getDefiningOp<comb::MuxOp>();
   if (mux && mux.getTwoState()) {
@@ -270,12 +309,39 @@ void FirRegLower::createTree(OpBuilder &builder, sv::RegOp reg, Value term,
         [&]() { createTree(builder, reg, term, mux.getTrueValue()); },
         [&]() { createTree(builder, reg, term, mux.getFalseValue()); });
   } else {
+    // If the next value is an array creation, split the value into
+    // invidial elements and construct trees recursively.
+    if (auto array = next.getDefiningOp<hw::ArrayCreateOp>()) {
+      for (auto [idx, value] :
+           llvm::enumerate(llvm::reverse(array.getOperands()))) {
+
+        // Create an index constant.
+        auto idxVal = getOrCreateConstant(APInt(
+            std::max(1u, llvm::Log2_64_Ceil(array.getOperands().size())), idx));
+
+        auto &index = arrayIndexCache[{reg, idx}];
+        if (!index) {
+          // Create an array index op just after `reg`.
+          OpBuilder::InsertionGuard guard(builder);
+          builder.setInsertionPointAfterValue(reg);
+          index =
+              builder.create<sv::ArrayIndexInOutOp>(reg.getLoc(), reg, idxVal);
+        }
+
+        auto termElement =
+            builder.create<hw::ArrayGetOp>(term.getLoc(), term, idxVal);
+        createTree(builder, index, termElement, value);
+        // This value was used to check the equivalence of elements so useless
+        // anymore.
+        termElement.erase();
+      }
+      return;
+    }
     builder.create<sv::PAssignOp>(term.getLoc(), reg, next);
   }
 }
 
-FirRegLower::RegLowerInfo FirRegLower::lower(hw::HWModuleOp module,
-                                             FirRegOp reg) {
+FirRegLower::RegLowerInfo FirRegLower::lower(FirRegOp reg) {
   Location loc = reg.getLoc();
 
   ImplicitLocOpBuilder builder(reg.getLoc(), reg);
@@ -433,7 +499,7 @@ void SeqToSVPass::runOnOperation() {
 
 void SeqFIRRTLToSVPass::runOnOperation() {
   hw::HWModuleOp module = getOperation();
-  FirRegLower().lower(module);
+  FirRegLower(module).lower();
 }
 
 std::unique_ptr<Pass> circt::seq::createSeqLowerToSVPass() {
