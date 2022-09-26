@@ -93,6 +93,14 @@ The current set of "style" Lowering Options is:
  * `printDebugInfo` (default=`false`). If true, emit additional debug information
    (e.g. inner symbols) into comments.
 
+The current set of "lint warnings fix" Lowering Options is:
+
+ * `explicitBitcast` (default=`false`).  If true, add an explicit bitcast for
+   avoiding bitwidth mismatch lint warnings (e.g. `8'(a+b)`).
+ * `disallowExpressionInliningInPorts` (default=`false`).  If true, every expression
+   passed to an instance port is driven by a wire. Some lint tools dislike expressions
+   being inlined into input ports so this option avoids such warnings.
+
 ### Specifying `LoweringOptions` in a front-end HDL tool
 
 The [`circt::LoweringOptions` struct itself](https://github.com/llvm/circt/blob/main/include/circt/Support/LoweringOptions.h) 
