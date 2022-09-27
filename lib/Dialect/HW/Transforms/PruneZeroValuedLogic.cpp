@@ -60,25 +60,8 @@ public:
   }
 };
 
-struct OutputOpConversionPattern : public OpConversionPattern<OutputOp> {
-public:
-  using OpConversionPattern<OutputOp>::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(OutputOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    if (noI0TypedValue(adaptor.getOperands()))
-      return failure();
-
-    auto prunedOperands = removeI0Typed(adaptor.getOperands());
-    rewriter.replaceOpWithNewOp<OutputOp>(op, prunedOperands);
-    return success();
-  }
-};
-
 // The PruningConversionPattern will aggressively remove any operation which has
-// a zero-valued operand. It is therefore implied that any operation which takes
-// part of a chain of logic containing i0 values will be removed.
+// a zero-valued operand.
 template <typename TOp>
 struct PruningConversionPattern : public OpConversionPattern<TOp> {
 public:
@@ -97,123 +80,46 @@ public:
   }
 };
 
-struct ToRemoveArgResNames {
-  Operation *op;
-  llvm::SmallVector<unsigned> argIndices;
-  llvm::SmallVector<unsigned> resIndices;
-
-  static ArrayAttr removeIndices(ArrayAttr attrs, ArrayRef<unsigned> indices) {
-    llvm::SmallVector<Attribute> cleanedAttrs;
-    for (auto [idx, attr] : llvm::enumerate(attrs))
-      if (!llvm::is_contained(indices, idx))
-        cleanedAttrs.push_back(attr);
-    return ArrayAttr::get(attrs.getContext(), cleanedAttrs);
-  }
-
-  void clean() {
-    auto argNames = op->getAttrOfType<ArrayAttr>("argNames");
-    auto resNames = op->getAttrOfType<ArrayAttr>("resultNames");
-    op->setAttr("argNames", removeIndices(argNames, argIndices));
-    op->setAttr("resultNames", removeIndices(resNames, resIndices));
-  }
-};
-
-llvm::SmallVector<ToRemoveArgResNames>
-getToRemoveArgResNames(mlir::ModuleOp module) {
-  llvm::SmallVector<ToRemoveArgResNames> toRemove;
-  for (auto op : module.getOps<HWModuleLike>()) {
-    ToRemoveArgResNames toRemoveForOp;
-    toRemoveForOp.op = op;
-    auto funcIF = cast<FunctionOpInterface>(op.getOperation());
-    for (auto [idx, arg] : llvm::enumerate(funcIF.getArgumentTypes())) {
-      if (isZeroWidthLogic(arg))
-        toRemoveForOp.argIndices.push_back(idx);
-    }
-    for (auto [idx, res] : llvm::enumerate(funcIF.getResultTypes())) {
-      if (isZeroWidthLogic(res))
-        toRemoveForOp.resIndices.push_back(idx);
-    }
-
-    if (!toRemoveForOp.argIndices.empty() || !toRemoveForOp.resIndices.empty())
-      toRemove.push_back(toRemoveForOp);
-  }
-  return toRemove;
-}
-
-template <typename... TOp>
-static void addSignatureConversion(ConversionTarget &target,
-                                   RewritePatternSet &patterns,
-                                   PruneTypeConverter &typeConverter) {
-  (mlir::populateFunctionOpInterfaceTypeConversionPattern<TOp>(patterns,
-                                                               typeConverter),
-   ...);
-
-  target.addDynamicallyLegalOp<TOp...>([&](FunctionOpInterface moduleLikeOp) {
-    // Legal if no results and args have i0 values.
-    bool legalResults = noI0Type(moduleLikeOp.getResultTypes());
-    bool legalArgs = noI0Type(moduleLikeOp.getArgumentTypes());
-    return legalResults && legalArgs;
-  });
-}
-
 template <typename... TOp>
 static void addNoI0TypedOperandsLegalizationPattern(ConversionTarget &target) {
   target.addDynamicallyLegalOp<TOp...>(
       [&](auto op) { return noI0TypedValue(op->getOperands()); });
 }
 
-// Adds a pattern to prune TOp if it contains a zero-valued operand, as well as
-// a dynamic legality check.
-template <typename... TOp>
-static void addPruningPattern(ConversionTarget &target,
-                              RewritePatternSet &patterns,
-                              PruneTypeConverter &typeConverter) {
-  (patterns.add<PruningConversionPattern<TOp>>(typeConverter,
-                                               patterns.getContext()),
-   ...);
-  (addNoI0TypedOperandsLegalizationPattern<TOp>(target), ...);
-}
-
-struct PruneZeroValuedLogicPass
-    : public PruneZeroValuedLogicBase<PruneZeroValuedLogicPass> {
-  PruneZeroValuedLogicPass() = default;
-  void runOnOperation() override {
-    ModuleOp module = getOperation();
-    ConversionTarget target(getContext());
-    RewritePatternSet patterns(&getContext());
-    PruneTypeConverter typeConverter;
-
-    // Record argument and res names which needs to be cleaned up
-    // post-conversion.
-    auto toRemoveArgResNames = getToRemoveArgResNames(module);
-
-    // Signature conversion and legalization patterns.
-    addSignatureConversion<hw::HWModuleOp, hw::HWModuleExternOp>(
-        target, patterns, typeConverter);
-
-    // Generic conversion and legalization patterns for operations that we
-    // expect to be using i0 valued logic.
-    addPruningPattern<comb::AddOp, comb::AndOp, comb::ICmpOp, comb::ConcatOp,
-                      comb::ExtractOp, comb::MuxOp, comb::OrOp, comb::ShlOp,
-                      comb::ShrSOp, comb::SubOp, comb::XorOp, seq::CompRegOp>(
-        target, patterns, typeConverter);
-
-    // Other patterns.
-    patterns.add<OutputOpConversionPattern>(typeConverter,
-                                            patterns.getContext());
-    addNoI0TypedOperandsLegalizationPattern<hw::OutputOp>(target);
-
-    if (failed(applyPartialConversion(module, target, std::move(patterns))))
-      return signalPassFailure();
-
-    // Cleanup argument and result names.
-    for (auto &toRemove : toRemoveArgResNames)
-      toRemove.clean();
+// A generic pruning pattern which prunes any operation which has an operand
+// with an i0 typed value. Similarly, an operation is legal if all of its
+// operands are not i0 typed.
+template <typename TOp>
+struct NoI0OperandPruningPattern {
+  using ConversionPattern = PruningConversionPattern<TOp>;
+  static void addLegalizer(ConversionTarget &target) {
+    addNoI0TypedOperandsLegalizationPattern<TOp>(target);
   }
 };
 
+// Adds a pruning pattern to the conversion target. TPattern is expected to
+// provides ConversionPattern definition and an addLegalizer function.
+template <typename... TPattern>
+static void addPruningPattern(ConversionTarget &target,
+                              RewritePatternSet &patterns,
+                              PruneTypeConverter &typeConverter) {
+  (patterns.add<TPattern::ConversionPattern>(typeConverter,
+                                             patterns.getContext()),
+   ...);
+  (TOp::addLegalizer(target), ...);
+}
 } // namespace
 
-std::unique_ptr<Pass> circt::hw::createPruneZeroValuedLogicPass() {
-  return std::make_unique<PruneZeroValuedLogicPass>();
+LogicalResult ExportVerilog::pruneZeroValuedLogic(hw::HWModuleOp module) {
+  ConversionTarget target(getContext());
+  RewritePatternSet patterns(&getContext());
+  PruneTypeConverter typeConverter;
+
+  // Generic conversion and legalization patterns for operations that we
+  // expect to be using i0 valued logic.
+  addPruningPattern<NoI0OperandPruningPattern<sv::PAssignOp>,
+                    NoI0OperandPruningPattern<sv::BPAssignOp>>(target, patterns,
+                                                               typeConverter);
+
+  return applyPartialConversion(module, target, std::move(patterns));
 }
