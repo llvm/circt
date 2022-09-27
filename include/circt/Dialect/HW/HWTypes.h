@@ -45,7 +45,7 @@ namespace hw {
 mlir::Type getCanonicalType(mlir::Type type);
 
 /// Return true if the specified type is a value HW Integer type.  This checks
-/// that it is a signless standard dialect type and that it isn't zero bits.
+/// that it is a signless standard dialect type.
 bool isHWIntegerType(mlir::Type type);
 
 /// Return true if the specified type is a HW Enum type.

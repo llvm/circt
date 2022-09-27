@@ -23,7 +23,7 @@ include "circt/Dialect/HW/HWDialect.td"
 // known, non-directional type.
 def HWIntegerType : DialectType<HWDialect,
     CPred<"::circt::hw::isHWIntegerType($_self)">,
-    "an integer bitvector of one or more bits",
+    "a signless integer bitvector",
     "::circt::hw::TypeVariant<::mlir::IntegerType, ::circt::hw::IntType>">;
 
 // Type constraint that indicates that an operand/result may only be a valid,
@@ -56,7 +56,7 @@ def UnionType : DialectType<HWDialect,
           "a UnionType", "::circt::hw::TypeAliasOr<hw::UnionType>">;
 
 // A handle to refer to circt::hw::EnumType in ODS.
-def EnumType : DialectType<HWDialect,
+def EnumType : DialectType<HWDialect, 
     CPred<"::circt::hw::type_isa<circt::hw::EnumType>($_self)">,
           "a EnumType", "::circt::hw::TypeAliasOr<circt::hw::EnumType>">;
 

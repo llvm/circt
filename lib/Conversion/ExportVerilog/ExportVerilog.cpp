@@ -2245,7 +2245,17 @@ SubExprInfo ExprEmitter::visitTypeOp(ArraySliceOp op) {
 SubExprInfo ExprEmitter::visitTypeOp(ArrayGetOp op) {
   emitSubExpr(op.getInput(), Selection);
   os << '[';
-  emitSubExpr(op.getIndex(), LowestPrecedence);
+  if (isZeroBitType(op.getIndex().getType())) {
+    // Due to the singleton memory, [1'b0] will always be syntactically valid
+    // as an indexing into the provided array.
+    // Emit the index expression as a comment for tracability (all other i0
+    // values referenced within the index expression will similarly be commented
+    // out).
+    os << "/*Zero width: ";
+    emitSubExpr(op.getIndex(), LowestPrecedence);
+    os << "*/ 1\'b0";
+  } else
+    emitSubExpr(op.getIndex(), LowestPrecedence);
   os << ']';
   emitSVAttributes(op);
   return {Selection, IsUnsigned};

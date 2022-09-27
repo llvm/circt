@@ -50,7 +50,7 @@ func.func @convertArray(%arg0 : i1, %arg1: !hw.array<2xi32>) {
   // CHECK-NEXT: %[[ZEXT:.*]] = llvm.zext %arg0 : i1 to i2
   // CHECK-NEXT: %[[GEP:.*]] = llvm.getelementptr %[[ALLOCA]][%[[ZERO]], %[[ZEXT]]] : (!llvm.ptr<array<2 x i32>>, i32, i2) -> !llvm.ptr<i32>
   // CHECK-NEXT: llvm.load %[[GEP]] : !llvm.ptr<i32>
-  %0 = hw.array_get %arg1[%arg0] : !hw.array<2xi32>
+  %0 = hw.array_get %arg1[%arg0] : !hw.array<2xi32>, i1
 
   // CHECK-NEXT: %[[ZERO1:.*]] = llvm.mlir.constant(0 : i32) : i32
   // CHECK-NEXT: %[[ONE4:.*]] = llvm.mlir.constant(1 : i32) : i32
@@ -92,7 +92,7 @@ func.func @convertConstArray(%arg0 : i1, %arg1: !hw.array<2xi32>) {
   %0 = hw.constant 0 : i32
   %1 = hw.constant 1 : i32
   %2 = hw.array_create %0, %1 : i32
-  %3 = hw.array_get %2[%arg0] : !hw.array<2xi32>
+  %3 = hw.array_get %2[%arg0] : !hw.array<2xi32>, i1
   return
 }
 

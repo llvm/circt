@@ -1059,7 +1059,7 @@ hw.module @bitcast_canonicalization(%arg0: i4) -> (r1: i4, r2: !hw.array<2xi2>) 
 hw.module @array_get1(%a0: i3, %a1: i3, %a2: i3) -> (r0: i3) {
   %c0 = hw.constant 0 : i2
   %arr = hw.array_create %a2, %a1, %a0 : i3
-  %r0 = hw.array_get %arr[%c0] : !hw.array<3xi3>
+  %r0 = hw.array_get %arr[%c0] : !hw.array<3xi3>, i2
   hw.output %r0 : i3
 }
 
@@ -1375,9 +1375,9 @@ hw.module @InjectToCreate(%a: !hw.struct<a: i1, b: i1>, %p: i1, %q: i1) -> (resu
 hw.module @GetOfConcat(%a: !hw.array<5xi1>, %b: !hw.array<2xi1>) -> (out0: i1, out1: i1) {
   %concat = hw.array_concat %a, %b : !hw.array<5xi1>, !hw.array<2xi1>
   %c1_i3 = hw.constant 1 : i3
-  %out0 = hw.array_get %concat[%c1_i3] : !hw.array<7xi1>
+  %out0 = hw.array_get %concat[%c1_i3] : !hw.array<7xi1>, i3
   %c6_i3 = hw.constant 6 : i3
-  %out1 = hw.array_get %concat[%c6_i3] : !hw.array<7xi1>
+  %out1 = hw.array_get %concat[%c6_i3] : !hw.array<7xi1>, i3
   // CHECK: [[OUT0:%.+]] = hw.array_get %b[%true] : !hw.array<2xi1>
   // CHECK: [[OUT1:%.+]] = hw.array_get %a[%c-4_i3] : !hw.array<5xi1>
   // CHECK: hw.output [[OUT0]], [[OUT1]] : i1, i1
@@ -1389,7 +1389,7 @@ hw.module @GetOfSliceStatic(%a: !hw.array<5xi1>) -> (out0: i1) {
   %c1_i3 = hw.constant 1 : i3
   %c1_i2 = hw.constant 1 : i2
   %slice = hw.array_slice %a[%c1_i3] : (!hw.array<5xi1>) -> !hw.array<3xi1>
-  %get = hw.array_get %slice[%c1_i2] : !hw.array<3xi1>
+  %get = hw.array_get %slice[%c1_i2] : !hw.array<3xi1>, i2
 
   // CHECK: [[OUT:%.+]] = hw.array_get %a[%c2_i3] : !hw.array<5xi1>
   // CHECK: hw.output [[OUT]] : i1
@@ -1472,6 +1472,6 @@ hw.module @SliceOfCreate(%a0: i1, %a1: i1, %a2: i1, %a3: i1) -> (out: !hw.array<
 hw.module @GetOfUniformArray(%in: i42, %address: i2) -> (out: i42) {
   // CHECK: hw.output %in : i42
   %0 = hw.array_create %in, %in, %in, %in : i42
-  %1 = hw.array_get %0[%address] : !hw.array<4xi42>
+  %1 = hw.array_get %0[%address] : !hw.array<4xi42>, i2
   hw.output %1 : i42
 }

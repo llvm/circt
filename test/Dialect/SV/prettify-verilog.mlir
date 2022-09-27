@@ -368,13 +368,13 @@ hw.module private @ConnectSubindexMid(%clock: i1, %reset: i1, %value: i2) -> () 
 
 // CHECK-LABEL: hw.module private @ConnectSubindexSingleton
 hw.module private @ConnectSubindexSingleton(%clock: i1, %reset: i1, %value: i2) -> () {
-  %false = hw.constant false
+  %none = hw.constant 0 : i0
   %r = sv.reg : !hw.inout<!hw.array<1xi2>>
   %val = sv.read_inout %r : !hw.inout<!hw.array<1xi2>>
   sv.always posedge %clock {
     sv.passign %r, %1 : !hw.array<1xi2>
   }
-  %0 = hw.array_get %val[%false] : !hw.array<1xi2>
+  %0 = hw.array_get %val[%none] : !hw.array<1xi2>, i0
   %1 = hw.array_create %value : i2
 
   // VERILOG:      always @(posedge clock)
@@ -503,7 +503,7 @@ hw.module private @ConnectNestedSubindex(%clock: i1, %reset: i1, %value: i2) -> 
   sv.always posedge %clock {
     sv.passign %r, %8 : !hw.array<3xarray<3xi2>>
   }
-  %0 = hw.array_get %val[%c1_i2] : !hw.array<3xarray<3xi2>>
+  %0 = hw.array_get %val[%c1_i2] : !hw.array<3xarray<3xi2>>, i2
   %1 = hw.array_slice %val[%c0_i2] : (!hw.array<3xarray<3xi2>>) -> !hw.array<1xarray<3xi2>>
   %2 = hw.array_slice %0[%c0_i2] : (!hw.array<3xi2>) -> !hw.array<1xi2>
   %3 = hw.array_create %value : i2
@@ -538,10 +538,10 @@ hw.module private @ConnectNestedFieldsAndIndices(%clock: i1, %reset: i1, %value:
   }
 
   %c1_i3_0 = hw.constant 1 : i3
-  %5 = hw.array_get %val[%c1_i3_0] : !hw.array<5xstruct<a: !hw.array<3xstruct<b: i2>>>>
+  %5 = hw.array_get %val[%c1_i3_0] : !hw.array<5xstruct<a: !hw.array<3xstruct<b: i2>>>>, i3
   %6 = hw.struct_extract %5["a"] : !hw.struct<a: !hw.array<3xstruct<b: i2>>>
   %c1_i2_1 = hw.constant 1 : i2
-  %7 = hw.array_get %6[%c1_i2_1] : !hw.array<3xstruct<b: i2>>
+  %7 = hw.array_get %6[%c1_i2_1] : !hw.array<3xstruct<b: i2>>, i2
   %8 = hw.struct_inject %7["b"], %value : !hw.struct<b: i2>
   %9 = hw.array_slice %6[%c0_i2] : (!hw.array<3xstruct<b: i2>>) -> !hw.array<1xstruct<b: i2>>
   %10 = hw.array_create %8 : !hw.struct<b: i2>
