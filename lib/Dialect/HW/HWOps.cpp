@@ -2226,7 +2226,6 @@ void StructExtractOp::getAsmResultNames(
       return;
     }
   }
-  llvm_unreachable("field not found");
 }
 
 //===----------------------------------------------------------------------===//
