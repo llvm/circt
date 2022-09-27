@@ -83,20 +83,18 @@ hw.module @testIfaceWrap() {
   // CHECK-NEXT:     esi.unwrap.iface %3 into %6 : (!esi.channel<i32>, !sv.modport<@IData::@Source>)
 }
 
-// CHECK-LABEL: hw.module @NoneTyped(%a: !esi.channel<none>, %clk: i1, %rst: i1) -> (x: !esi.channel<none>) {
-// CHECK-NEXT:    %0 = esi.buffer %clk, %rst, %a  : none
-// CHECK-NEXT:    %1 = esi.stage %clk, %rst, %0  : none
-// CHECK-NEXT:    %rawOutput, %valid = esi.unwrap.vr %1, %ready : none
-// CHECK-NEXT:    %2 = esi.none : none
-// CHECK-NEXT:    %chanOutput, %ready = esi.wrap.vr %2, %valid : none
-// CHECK-NEXT:    hw.output %chanOutput : !esi.channel<none>
+// CHECK-LABEL: hw.module @i0Typed(%a: !esi.channel<i0>, %clk: i1, %rst: i1) -> (x: !esi.channel<i0>) {
+// CHECK-NEXT:    %0 = esi.buffer %clk, %rst, %a  : i0
+// CHECK-NEXT:    %1 = esi.stage %clk, %rst, %0  : i0
+// CHECK-NEXT:    %rawOutput, %valid = esi.unwrap.vr %1, %ready : i0
+// CHECK-NEXT:    %chanOutput, %ready = esi.wrap.vr %rawOutput, %valid : i0
+// CHECK-NEXT:    hw.output %chanOutput : !esi.channel<i0>
 // CHECK-NEXT:  }
 
-hw.module @NoneTyped(%a: !esi.channel<none>, %clk : i1, %rst : i1) -> (x: !esi.channel<none>) {
-  %bufferedA = esi.buffer %clk, %rst, %a : none
-  %stagedA = esi.stage %clk, %rst, %bufferedA : none
-  %none1, %valid = esi.unwrap.vr %stagedA, %rcvrRdy : none
-  %none2 = esi.none : none
-  %ch, %rcvrRdy = esi.wrap.vr %none2, %valid : none
-  hw.output %ch : !esi.channel<none>
+hw.module @i0Typed(%a: !esi.channel<i0>, %clk : i1, %rst : i1) -> (x: !esi.channel<i0>) {
+  %bufferedA = esi.buffer %clk, %rst, %a : i0
+  %stagedA = esi.stage %clk, %rst, %bufferedA : i0
+  %rawOutput, %valid = esi.unwrap.vr %stagedA, %rcvrRdy : i0
+  %ch, %rcvrRdy = esi.wrap.vr %rawOutput, %valid : i0
+  hw.output %ch : !esi.channel<i0>
 }

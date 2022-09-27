@@ -133,7 +133,7 @@ instantiateSystemVerilogMemory(ServiceImplementReqOp req,
   auto rst = req.getOperand(1);
   auto write = b.getStringAttr("write");
   auto read = b.getStringAttr("read");
-  auto none = b.create<esi::NoneSourceOp>();
+  auto none = hw::getI0Constant(b);
   auto i1 = b.getI1Type();
   auto c0 = b.create<hw::ConstantOp>(i1, 0);
 

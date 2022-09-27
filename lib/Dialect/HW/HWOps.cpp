@@ -188,6 +188,14 @@ StringAttr hw::getResultSym(Operation *op, unsigned i) {
   return sym;
 }
 
+Value hw::getI0Constant(OpBuilder &builder, Location loc) {
+  return builder.create<hw::ConstantOp>(
+      loc, APInt(/*numBits*/ 0, /*val*/ 0, /*isSigned*/ false));
+}
+Value hw::getI0Constant(ImplicitLocOpBuilder &builder) {
+  return getI0Constant(builder, builder.getLoc());
+}
+
 HWModulePortAccessor::HWModulePortAccessor(Location loc,
                                            const ModulePortInfo &info,
                                            Region &bodyRegion)

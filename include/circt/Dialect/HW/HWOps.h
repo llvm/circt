@@ -18,6 +18,7 @@
 #include "circt/Dialect/HW/HWTypes.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/FunctionInterfaces.h"
+#include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/RegionKindInterface.h"
 #include "mlir/IR/SymbolTable.h"
@@ -193,6 +194,10 @@ StringAttr getArgSym(Operation *op, unsigned i);
 /// Return the symbol (if any, else null) on the corresponding output port
 /// argument.
 StringAttr getResultSym(Operation *op, unsigned i);
+
+/// Creates an i0-typed constant.
+Value getI0Constant(OpBuilder &builder, Location loc);
+Value getI0Constant(ImplicitLocOpBuilder &builder);
 
 // A class for providing access to the in- and output ports of a module through
 // use of the HWModuleBuilder.

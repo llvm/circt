@@ -3,10 +3,10 @@
 // Test a control merge that is control only.
 
 // CHECK-LABEL:   hw.module @handshake_control_merge_out_ui64_2ins_2outs_ctrl(
-// CHECK-SAME:              %[[VAL_0:.*]]: !esi.channel<none>, %[[VAL_1:.*]]: !esi.channel<none>, %[[VAL_2:.*]]: i1, %[[VAL_3:.*]]: i1) -> (dataOut: !esi.channel<none>, index: !esi.channel<i64>) {
-// CHECK:           %[[VAL_4:.*]], %[[VAL_5:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_6:.*]] : none
-// CHECK:           %[[VAL_7:.*]], %[[VAL_8:.*]] = esi.unwrap.vr %[[VAL_1]], %[[VAL_9:.*]] : none
-// CHECK:           %[[VAL_10:.*]], %[[VAL_11:.*]] = esi.wrap.vr %[[VAL_12:.*]], %[[VAL_13:.*]] : none
+// CHECK-SAME:              %[[VAL_0:.*]]: !esi.channel<i0>, %[[VAL_1:.*]]: !esi.channel<i0>, %[[VAL_2:.*]]: i1, %[[VAL_3:.*]]: i1) -> (dataOut: !esi.channel<i0>, index: !esi.channel<i64>) {
+// CHECK:           %[[VAL_4:.*]], %[[VAL_5:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_6:.*]] : i0
+// CHECK:           %[[VAL_7:.*]], %[[VAL_8:.*]] = esi.unwrap.vr %[[VAL_1]], %[[VAL_9:.*]] : i0
+// CHECK:           %[[VAL_10:.*]], %[[VAL_11:.*]] = esi.wrap.vr %[[VAL_12:.*]], %[[VAL_13:.*]] : i0
 // CHECK:           %[[VAL_14:.*]], %[[VAL_15:.*]] = esi.wrap.vr %[[VAL_16:.*]], %[[VAL_17:.*]] : i64
 // CHECK:           %[[VAL_18:.*]] = hw.constant 0 : i2
 // CHECK:           %[[VAL_19:.*]] = hw.constant false
@@ -27,7 +27,7 @@
 // CHECK:           %[[VAL_37:.*]] = hw.constant true
 // CHECK:           %[[VAL_38:.*]] = comb.xor %[[VAL_22]], %[[VAL_37]] : i1
 // CHECK:           %[[VAL_13]] = comb.and %[[VAL_29]], %[[VAL_38]] : i1
-// CHECK:           %[[VAL_12]] = esi.none : none
+// CHECK:           %[[VAL_12]] = hw.constant 0 : i0
 // CHECK:           %[[VAL_39:.*]] = comb.xor %[[VAL_24]], %[[VAL_37]] : i1
 // CHECK:           %[[VAL_17]] = comb.and %[[VAL_29]], %[[VAL_39]] : i1
 // CHECK:           %[[VAL_16]] = hw.constant 0 : i64
@@ -43,7 +43,7 @@
 // CHECK:           %[[VAL_46:.*]] = comb.mux %[[VAL_41]], %[[VAL_27]], %[[VAL_18]] : i2
 // CHECK:           %[[VAL_6]] = comb.icmp eq %[[VAL_46]], %[[VAL_35]] : i2
 // CHECK:           %[[VAL_9]] = comb.icmp eq %[[VAL_46]], %[[VAL_33]] : i2
-// CHECK:           hw.output %[[VAL_10]], %[[VAL_14]] : !esi.channel<none>, !esi.channel<i64>
+// CHECK:           hw.output %[[VAL_10]], %[[VAL_14]] : !esi.channel<i0>, !esi.channel<i64>
 // CHECK:         }
 
 handshake.func @test_cmerge(%arg0: none, %arg1: none, %arg2: none, ...) -> (none, index, none) {

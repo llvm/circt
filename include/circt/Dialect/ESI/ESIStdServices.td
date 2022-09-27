@@ -18,7 +18,7 @@ def RandomAccessMemoryDeclOp: ESI_Op<"mem.ram",
 
     Ports:
       read(address: clog2(depth)) -> data: innerType
-      write({address: clog2(depth), data: innerType}) -> done: none
+      write({address: clog2(depth), data: innerType}) -> done: i0
 
     Users can ensure R/W ordering by waiting for the write "done" message before
     issuing a potentially dependant read. Ordering of R/W messages in flight is

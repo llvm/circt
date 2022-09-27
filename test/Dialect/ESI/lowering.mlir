@@ -5,7 +5,7 @@
 hw.module.extern @Sender(%clk: i1) -> (x: !esi.channel<i4>, y: i8)
 hw.module.extern @ArrSender() -> (x: !esi.channel<!hw.array<4xi64>>)
 hw.module.extern @Reciever(%a: !esi.channel<i4>, %clk: i1)
-hw.module.extern @NoneSenderReceiver(%in: !esi.channel<none>) -> (out: !esi.channel<none>)
+hw.module.extern @i0SenderReceiver(%in: !esi.channel<i0>) -> (out: !esi.channel<i0>)
 
 // CHECK-LABEL: hw.module.extern @Sender(%clk: i1) -> (x: !esi.channel<i4>, y: i8)
 // CHECK-LABEL: hw.module.extern @Reciever(%a: !esi.channel<i4>, %clk: i1)
@@ -22,15 +22,16 @@ hw.module.extern @NoneSenderReceiver(%in: !esi.channel<none>) -> (out: !esi.chan
 // IFACE-NEXT:    sv.interface.signal @data : !hw.array<4xi64>
 // IFACE-NEXT:    sv.interface.modport @sink  (input @ready, output @valid, output @data)
 // IFACE-NEXT:    sv.interface.modport @source  (input @valid, input @data, output @ready)
-// IFACE-LABEL: sv.interface @IValidReady_none {
+// IFACE-LABEL: sv.interface @IValidReady_i0 {
 // IFACE-NEXT:    sv.interface.signal @valid : i1
 // IFACE-NEXT:    sv.interface.signal @ready : i1
-// IFACE-NEXT:    sv.interface.modport @sink (input @ready, output @valid)
-// IFACE-NEXT:    sv.interface.modport @source (input @valid, output @ready)
+// IFACE-NEXT:    sv.interface.signal @data : i0
+// IFACE-NEXT:    sv.interface.modport @sink (input @ready, output @valid, output @data)
+// IFACE-NEXT:    sv.interface.modport @source (input @valid, input @data, output @ready)
 // IFACE-LABEL: hw.module.extern @Sender(%clk: i1, %x: !sv.modport<@IValidReady_i4::@sink>) -> (y: i8)
 // IFACE-LABEL: hw.module.extern @ArrSender(%x: !sv.modport<@IValidReady_ArrayOf4xi64::@sink>)
 // IFACE-LABEL: hw.module.extern @Reciever(%a: !sv.modport<@IValidReady_i4::@source>, %clk: i1)
-// IFACE-LABEL: hw.module.extern @NoneSenderReceiver(%in: !sv.modport<@IValidReady_none::@source>, %out: !sv.modport<@IValidReady_none::@sink>)
+// IFACE-LABEL: hw.module.extern @i0SenderReceiver(%in: !sv.modport<@IValidReady_i0::@source>, %out: !sv.modport<@IValidReady_i0::@sink>)
 
 hw.module @test(%clk:i1, %rst:i1) {
 
@@ -113,33 +114,32 @@ hw.module @test_constant(%arg0: !esi.channel<i1>, %clock: i1, %reset: i1) -> (ou
   hw.output %handshake_fork0.out1 : !esi.channel<i1>
 }
 
-// HW-LABEL: hw.module @NoneTyped(%a_valid: i1, %clk: i1, %rst: i1, %x_ready: i1) -> (x_valid: i1, a_ready: i1) {
-// HW:         %pipelineStage.a_ready, %pipelineStage.x_valid = hw.instance "pipelineStage" @ESI_PipelineStage1<WIDTH: ui32 = [[DEFAULT_WIDTH:.*]]>(clk: %clk: i1, rst: %rst: i1, a_valid: %a_valid: i1, x_ready: %x_ready: i1) -> (a_ready: i1, x_valid: i1)
-// HW:         hw.output %pipelineStage.x_valid, %pipelineStage.a_ready : i1, i1
+// HW-LABEL: hw.module @i0Typed(%a: i0, %a_valid: i1, %clk: i1, %rst: i1, %x_ready: i1) -> (x: i0, x_valid: i1, a_ready: i1) {
+// HW:         %pipelineStage.a_ready, %pipelineStage.x, %pipelineStage.x_valid = hw.instance "pipelineStage" @ESI_PipelineStage1<WIDTH: ui32 = 0>(clk: %clk: i1, rst: %rst: i1, a: %a: i0, a_valid: %a_valid: i1, x_ready: %x_ready: i1) -> (a_ready: i1, x: i0, x_valid: i1)
+// HW:         hw.output %pipelineStage.x, %pipelineStage.x_valid, %pipelineStage.a_ready : i0, i1, i1
 // HW:       }
-hw.module @NoneTyped(%a: !esi.channel<none>, %clk: i1, %rst: i1) -> (x: !esi.channel<none>) {
-  %0 = esi.buffer %clk, %rst, %a  : none
-  %noneValue, %valid = esi.unwrap.vr %0, %ready : none
-  %noneV2 = esi.none : none
-  %chanOutput, %ready = esi.wrap.vr %noneV2, %valid : none
-  hw.output %chanOutput : !esi.channel<none>
+hw.module @i0Typed(%a: !esi.channel<i0>, %clk: i1, %rst: i1) -> (x: !esi.channel<i0>) {
+  %0 = esi.buffer %clk, %rst, %a  : i0
+  %i0Value, %valid = esi.unwrap.vr %0, %ready : i0
+  %chanOutput, %ready = esi.wrap.vr %i0Value, %valid : i0
+  hw.output %chanOutput : !esi.channel<i0>
 }
 
-// IFACE: hw.module @HandshakeToESIWrapper(%clock: i1, %reset: i1, %in_ctrl_valid: i1, %in0_ld_data0: i32, %in0_ld_data0_valid: i1, %in1_ld_data0: i32, %in1_ld_data0_valid: i1, %out_ctrl_ready: i1, %in0_ld_addr0_ready: i1, %in1_ld_addr0_ready: i1, %out0_ready: i1) -> (out_ctrl_valid: i1, in0_ld_addr0: i64, in0_ld_addr0_valid: i1, in1_ld_addr0: i64, in1_ld_addr0_valid: i1, out0: i32, out0_valid: i1, in_ctrl_ready: i1, in0_ld_data0_ready: i1, in1_ld_data0_ready: i1)
-hw.module @HandshakeToESIWrapper(%clock: i1, %reset: i1, %in_ctrl: !esi.channel<none>, %in0_ld_data0: !esi.channel<i32>, %in1_ld_data0: !esi.channel<i32>) -> (out_ctrl: !esi.channel<none>, in0_ld_addr0: !esi.channel<i64>, in1_ld_addr0: !esi.channel<i64>, out0: !esi.channel<i32>) {
-  %none = esi.none : none
+// IFACE: hw.module @HandshakeToESIWrapper(%clock: i1, %reset: i1, %in_ctrl: i0, %in_ctrl_valid: i1, %in0_ld_data0: i32, %in0_ld_data0_valid: i1, %in1_ld_data0: i32, %in1_ld_data0_valid: i1, %out_ctrl_ready: i1, %in0_ld_addr0_ready: i1, %in1_ld_addr0_ready: i1, %out0_ready: i1) -> (out_ctrl: i0, out_ctrl_valid: i1, in0_ld_addr0: i64, in0_ld_addr0_valid: i1, in1_ld_addr0: i64, in1_ld_addr0_valid: i1, out0: i32, out0_valid: i1, in_ctrl_ready: i1, in0_ld_data0_ready: i1, in1_ld_data0_ready: i1)
+hw.module @HandshakeToESIWrapper(%clock: i1, %reset: i1, %in_ctrl: !esi.channel<i0>, %in0_ld_data0: !esi.channel<i32>, %in1_ld_data0: !esi.channel<i32>) -> (out_ctrl: !esi.channel<i0>, in0_ld_addr0: !esi.channel<i64>, in1_ld_addr0: !esi.channel<i64>, out0: !esi.channel<i32>) {
+  %i0 = hw.constant 0 : i0
   %c1 = hw.constant 1 : i1
   %c32 = hw.constant 1 : i32
   %c64 = hw.constant 1 : i64
-  %chanOutput, %ready = esi.wrap.vr %none, %c1 : none
+  %chanOutput, %ready = esi.wrap.vr %i0, %c1 : i0
   %chanOutput_2, %ready_3 = esi.wrap.vr %c64, %c1 : i64
   %chanOutput_6, %ready_7 = esi.wrap.vr %c64, %c1 : i64
   %chanOutput_8, %ready_9 = esi.wrap.vr %c32, %c1 : i32
-  hw.output %chanOutput, %chanOutput_2, %chanOutput_6, %chanOutput_8 : !esi.channel<none>, !esi.channel<i64>, !esi.channel<i64>, !esi.channel<i32>
+  hw.output %chanOutput, %chanOutput_2, %chanOutput_6, %chanOutput_8 : !esi.channel<i0>, !esi.channel<i64>, !esi.channel<i64>, !esi.channel<i32>
 }
 
-// IFACE: hw.module @ServiceWrapper(%clock: i1, %reset: i1, %ctrl_valid: i1, %port0: i32, %port0_valid: i1, %port1: i32, %port1_valid: i1, %ctrl_ready: i1, %port0_ready: i1, %port1_ready: i1) -> (ctrl_valid: i1, port0: i64, port0_valid: i1, port1: i64, port1_valid: i1, ctrl_ready: i1, port0_ready: i1, port1_ready: i1)
-hw.module @ServiceWrapper(%clock: i1, %reset: i1, %ctrl: !esi.channel<none>, %port0: !esi.channel<i32>, %port1: !esi.channel<i32>) -> (ctrl: !esi.channel<none>, port0: !esi.channel<i64>, port1: !esi.channel<i64>) {
-  %HandshakeToESIWrapper.out_ctrl, %HandshakeToESIWrapper.in0_ld_addr0, %HandshakeToESIWrapper.in1_ld_addr0, %HandshakeToESIWrapper.out0 = hw.instance "HandshakeToESIWrapper" @HandshakeToESIWrapper(clock: %clock: i1, reset: %reset: i1, in_ctrl: %ctrl: !esi.channel<none>, in0_ld_data0: %port0: !esi.channel<i32>, in1_ld_data0: %port1: !esi.channel<i32>) -> (out_ctrl: !esi.channel<none>, in0_ld_addr0: !esi.channel<i64>, in1_ld_addr0: !esi.channel<i64>, out0: !esi.channel<i32>)
-  hw.output %HandshakeToESIWrapper.out_ctrl, %HandshakeToESIWrapper.in0_ld_addr0, %HandshakeToESIWrapper.in1_ld_addr0 : !esi.channel<none>, !esi.channel<i64>, !esi.channel<i64>
+// IFACE: hw.module @ServiceWrapper(%clock: i1, %reset: i1, %ctrl: i0, %ctrl_valid: i1, %port0: i32, %port0_valid: i1, %port1: i32, %port1_valid: i1, %ctrl_ready: i1, %port0_ready: i1, %port1_ready: i1) -> (ctrl: i0, ctrl_valid: i1, port0: i64, port0_valid: i1, port1: i64, port1_valid: i1, ctrl_ready: i1, port0_ready: i1, port1_ready: i1)
+hw.module @ServiceWrapper(%clock: i1, %reset: i1, %ctrl: !esi.channel<i0>, %port0: !esi.channel<i32>, %port1: !esi.channel<i32>) -> (ctrl: !esi.channel<i0>, port0: !esi.channel<i64>, port1: !esi.channel<i64>) {
+  %HandshakeToESIWrapper.out_ctrl, %HandshakeToESIWrapper.in0_ld_addr0, %HandshakeToESIWrapper.in1_ld_addr0, %HandshakeToESIWrapper.out0 = hw.instance "HandshakeToESIWrapper" @HandshakeToESIWrapper(clock: %clock: i1, reset: %reset: i1, in_ctrl: %ctrl: !esi.channel<i0>, in0_ld_data0: %port0: !esi.channel<i32>, in1_ld_data0: %port1: !esi.channel<i32>) -> (out_ctrl: !esi.channel<i0>, in0_ld_addr0: !esi.channel<i64>, in1_ld_addr0: !esi.channel<i64>, out0: !esi.channel<i32>)
+  hw.output %HandshakeToESIWrapper.out_ctrl, %HandshakeToESIWrapper.in0_ld_addr0, %HandshakeToESIWrapper.in1_ld_addr0 : !esi.channel<i0>, !esi.channel<i64>, !esi.channel<i64>
 }
